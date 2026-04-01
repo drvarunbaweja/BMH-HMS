@@ -89,6 +89,11 @@ table.rc-queue-table{width:100%;border-collapse:collapse;font-size:12px}
 .rc-queue-table tr:last-child td{border-bottom:none}
 .rc-queue-table tr:hover td{background:var(--g6)}
 .rc-queue-table .q-actions{white-space:nowrap}
+.rc-queue-table tr.row-vulnerable td{background:linear-gradient(90deg,rgba(255,149,0,.08),transparent)}
+.rc-queue-table tr.row-vulnerable td:first-child{box-shadow:inset 3px 0 0 var(--orange)}
+.rc-queue-table tr.row-vulnerable:hover td{background:linear-gradient(90deg,rgba(255,149,0,.12),var(--g6))}
+.q-vuln-badge{font-size:8px;font-weight:900;padding:2px 6px;border-radius:6px;background:#fff3e0;color:#b45309;border:1px solid #fdba74;margin-left:5px;vertical-align:middle;white-space:nowrap}
+#pg-doctor-queue .dq-queue-main{max-width:100%}
 .rc-queue-tabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px;padding:4px;background:var(--g5);border-radius:10px}
 .rc-queue-tabs button{background:transparent;border:none;padding:6px 10px;border-radius:8px;font-size:11px;font-weight:800;cursor:pointer;color:var(--g1)}
 .rc-queue-tabs button.active{background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.08);color:var(--bmh-blue)}

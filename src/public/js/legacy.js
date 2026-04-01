@@ -7748,7 +7748,7 @@ function filterRcExist(val) {
     if(typeof buildQTableRow === 'function') {
       list.innerHTML = matched.length
         ? matched.map((p,i)=>buildQTableRow(p,i+1)).join('')
-        : '<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--g1);font-size:13px">No patients found</td></tr>';
+        : '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--g1);font-size:13px">No patients found</td></tr>';
     } else {
       list.innerHTML = matched.length ? renderExistingPatients(matched) :
         '<div style="padding:20px;text-align:center;color:var(--g1);font-size:13px">No patients found</div>';
@@ -8962,16 +8962,14 @@ function renderDashboard() {
   setEl('db-apts', todayApts.length);
   setEl('db-stock', INVENTORY ? INVENTORY.filter(i=>i.stock<=i.min).length : 0);
 
-  // Live queue preview (dashboard) — use dash-queue, not doctor-queue tbody ids
-  const dashQ = document.getElementById('dash-queue');
-  if(dashQ && typeof buildQTableRow === 'function') {
+  // Render queue
+  const qEl = document.getElementById('dq-active-list');
+  if(qEl) {
     const qPts = PATIENTS.filter(p => p.status==='waiting' || p.seen);
     if(!qPts.length) {
-      dashQ.innerHTML = '<div style="padding:24px;text-align:center;color:var(--g1);font-size:13px">No patients in queue today</div>';
+      qEl.innerHTML = '<div style="padding:24px;text-align:center;color:var(--g1);font-size:13px">No patients in queue today</div>';
     } else {
-      dashQ.innerHTML = `<div class="rc-queue-table-wrap"><table class="rc-queue-table" aria-label="Live queue"><thead><tr>
-        <th>#</th><th>Patient</th><th>BMSH ID</th><th>Dept</th><th>Doctor</th><th>Purpose</th><th>💧 Dilation</th><th>Wait</th><th>Status</th><th class="q-actions">Actions</th>
-      </tr></thead><tbody>${qPts.map((p,i)=>buildQTableRow(p,i+1)).join('')}</tbody></table></div>`;
+      qEl.innerHTML = qPts.map(p => buildQCard(p)).join('');
     }
   }
 }
@@ -9023,7 +9021,7 @@ function renderReceptionPage() {
     }
     const pts = computeReceptionQueuePts();
     if(!pts.length) {
-      list.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--g1);font-size:13px">No patients in this view</td></tr>';
+      list.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--g1);font-size:13px">No patients in this view</td></tr>';
     } else {
       list.innerHTML = pts.map((p,i)=>buildQTableRow(p,i+1)).join('');
     }
@@ -9317,32 +9315,7 @@ function buildQCard(p, sno) {
   </div>`;
 }
 
-function parsePatientAgeYears(ageStr) {
-  if(ageStr==null||ageStr==='') return null;
-  const m = String(ageStr).match(/(\d+)/);
-  return m ? parseInt(m[1],10) : null;
-}
-function isPatientVulnerable(p) {
-  if(p.vulnerable===true || p.highRisk===true) return true;
-  const y = parsePatientAgeYears(p.age);
-  if(y!==null && y>=65) return true;
-  return false;
-}
-/** Ophthalmology dilation elapsed (— if not eye / not dilated yet). */
-function dilationCellHtml(p) {
-  if(p.dept!=='ophtho') return '<span style="color:var(--g2);font-size:10px">—</span>';
-  if(!p.dilated || !p.dilatedTime) {
-    return '<span style="font-size:10px;color:var(--g2)">—</span>';
-  }
-  const now = Date.now();
-  const dilMin = Math.floor((now - p.dilatedTime)/60000);
-  const dilReady = dilMin >= 20;
-  const color = dilReady ? '#1a8c3c' : 'var(--purple)';
-  const bg = dilReady ? 'var(--green-lt)' : 'var(--purple-lt)';
-  return `<span style="font-size:10px;font-weight:800;padding:3px 8px;border-radius:8px;background:${bg};color:${color}">${dilMin}m ${dilReady ? '✓ Ready' : '/ 20m'}</span>`;
-}
-
-/** Table row for Reception Queue tab and Doctor My Queue (valid <tbody> HTML). */
+/** Table row for Reception Queue tab (valid <tbody> HTML). */
 function buildQTableRow(p, sno) {
   const deptLabel = {ophtho:'Eye',obg:'OBG',psych:'Psych',skin:'Skin',lab:'Lab'}[p.dept]||p.dept||'—';
   const deptColor = {ophtho:'var(--blue)',obg:'#c0004e',psych:'var(--orange)',skin:'var(--purple)',lab:'var(--teal)'}[p.dept]||'var(--g2)';
@@ -9352,7 +9325,6 @@ function buildQTableRow(p, sno) {
   const waitStr = waitMin < 60 ? waitMin+'m' : Math.floor(waitMin/60)+'h '+(waitMin%60)+'m';
   const dilMin = p.dilated && p.dilatedTime ? Math.floor((now - p.dilatedTime)/60000) : 0;
   const dilReady = dilMin >= 20;
-  const vuln = isPatientVulnerable(p);
   const pendingPRs = PAY_REQUESTS.filter(r=>r.bmhId===p.bmhId&&r.status==='pending');
   const pendingAmt = pendingPRs.reduce((s,r)=>s+r.amount,0);
   const paidPRs = PAY_REQUESTS.filter(r=>r.bmhId===p.bmhId&&r.status==='paid');
@@ -9366,17 +9338,15 @@ function buildQTableRow(p, sno) {
   const onRow = p.preRegistered ? `checkInPatient('${p.bmhId}')` : `openPatient('${p.bmhId}')`;
   const nmEsc = (p.name||'').replace(/'/g,"\\'");
   const docShort = (p.doctor||'—').replace(/^Dr\.\s*/,'');
-  const vulnBadge = vuln ? '<span class="q-vuln-badge" title="Vulnerable — elderly (≥65) or flagged">⚠ VUL</span>' : '';
-  return `<tr class="${vuln ? 'row-vulnerable' : ''}" onclick="${onRow}" style="cursor:pointer">
+  return `<tr onclick="${onRow}" style="cursor:pointer">
     <td style="font-weight:900;color:var(--g2)">${sno}</td>
     <td><div style="display:flex;align-items:center;gap:6px"><span style="width:28px;height:28px;border-radius:50%;background:${p.color||'#1A3C6E'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:900;font-size:10px;flex-shrink:0">${p.initials||p.name[0]||'?'}</span>
-      <div><div style="font-weight:800;font-size:12.5px;display:flex;align-items:center;flex-wrap:wrap;gap:4px">${p.name}${vulnBadge}</div>
+      <div><div style="font-weight:800;font-size:12.5px">${p.name}</div>
       <div style="font-size:10px;color:var(--g1)">${p.age||'?'}Y · ${(p.sex||'?')[0]} · ${p.mob||'—'}</div>${chargeHint?`<div style="margin-top:2px">${chargeHint}</div>`:''}</div></div></td>
     <td style="font-family:var(--mono);font-size:10px;color:var(--bmh-teal);font-weight:700">${p.bmhId}</td>
     <td><span style="font-size:9px;padding:2px 6px;border-radius:6px;background:${deptColor}22;color:${deptColor};font-weight:800">${deptLabel}</span></td>
     <td style="font-size:10px;max-width:88px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.doctor||''}">${docShort}</td>
     <td style="font-size:10px;color:var(--g1);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.purpose||''}">${p.purpose||'—'}</td>
-    <td>${dilationCellHtml(p)}</td>
     <td style="font-size:10px;color:var(--g2)">${p.preRegistered?'—':waitStr}</td>
     <td><span style="font-size:9px;padding:2px 6px;border-radius:6px;background:${statusBg};font-weight:800">${statusTxt}</span></td>
     <td class="q-actions" onclick="event.stopPropagation()">
@@ -9569,16 +9539,16 @@ function renderDocQueue() {
   const xrefs   = (window.XREF_LOG||[]).filter(x => !userDept || x.fromDept===userDept || x.toDept===userDept);
   const ipdPts  = (window.IPD_PATIENTS||[]).filter(p => !userDept || p.dept===userDept || CURRENT_USER?.isAdmin);
 
-  const emptyRow = label => `<tr><td colspan="10" style="text-align:center;padding:24px;color:var(--g2);font-size:12.5px">No ${label} patients</td></tr>`;
+  const empty = label => `<div style="padding:24px;text-align:center;color:var(--g2);font-size:12.5px">No ${label} patients</div>`;
 
   const ae = document.getElementById('dq-active-list');
-  if(ae) ae.innerHTML = active.length ? active.map((p,i)=>buildQTableRow(p,i+1)).join('') : emptyRow('active');
+  if(ae) ae.innerHTML = active.length ? active.map(p=>buildQCard(p)).join('') : empty('active');
 
   const de = document.getElementById('dq-dil-list');
-  if(de) de.innerHTML = dilated.length ? dilated.map((p,i)=>buildQTableRow(p,i+1)).join('') : emptyRow('dilated');
+  if(de) de.innerHTML = dilated.length ? dilated.map(p=>buildQCard(p)).join('') : empty('dilated');
 
   const dne = document.getElementById('dq-done-list');
-  if(dne) dne.innerHTML = done.length ? done.map((p,i)=>buildQTableRow(p,i+1)).join('') : emptyRow('done');
+  if(dne) dne.innerHTML = done.length ? done.map(p=>buildQCard(p)).join('') : empty('done');
 
   // Dilated tab visibility — only show for ophtho
   const dilTab = document.getElementById('dq-tab-dil');
