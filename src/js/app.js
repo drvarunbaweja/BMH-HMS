@@ -96,10 +96,20 @@ watchAuthState(
   user => {
     showShell(user)
 
-    // Legacy code expects username + full USER_DB shape for some panels
-    if (window.CURRENT_USER) {
-      window.CURRENT_USER.username =
-        user.email?.split('@')[0] || window.CURRENT_USER.username || 'user'
+    // Set window.CURRENT_USER so legacy.js can read it for centre filtering
+    window.CURRENT_USER = {
+      username:          user.email?.split('@')[0] || 'user',
+      name:              user.name  || user.email || 'User',
+      role:              user.role  || 'reception',
+      dept:              user.dept  || '',
+      centre:            user.centre || 'CHD',
+      isAdmin:           user.role === 'admin',
+      canSeeAllCentres:  user.role === 'admin',
+    }
+
+    // Sync into legacy.js local CURRENT_USER variable
+    if (typeof window.syncLegacyCurrentUserFromFirebase === 'function') {
+      try { window.syncLegacyCurrentUserFromFirebase() } catch (_) { /* noop */ }
     }
 
     if (typeof window.loadDoctorProfilesFromFirebase === 'function') {
@@ -123,6 +133,24 @@ watchAuthState(
     }
 
     watchConnectionStatus('fb-status')
+
+    // ── Start legacy Realtime DB listeners ──────────────────────────────────
+    // These were previously only called from the old username/password login.
+    // With Firebase Auth we must call them explicitly after the user is known.
+    setTimeout(() => {
+      const safe = fn => { try { if (typeof window[fn] === 'function') window[fn]() } catch (_) {} }
+      safe('loadPatientsFromFirebase')
+      safe('listenPayRequests')
+      safe('listenAppointments')
+      safe('loadTodayTransactions')
+      safe('loadCustomPurposes')
+      safe('loadAdviceTemplates')
+      safe('loadDeletionRequests')
+      safe('loadOTCasesFromFirebase')
+      safe('loadIPDPatientsFromFirebase')
+      safe('loadChargesFromFirebase')
+      if (user.role === 'lab') safe('listenLabOrders')
+    }, 300)
 
     // Navigate to role's home page
     const homePages = {
