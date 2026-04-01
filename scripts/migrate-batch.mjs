@@ -17,7 +17,7 @@
 
 import { createRequire } from 'module'
 import { createHash }    from 'crypto'
-import { readFileSync, existsSync } from 'fs'
+import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 
@@ -176,47 +176,72 @@ async function commitWithRetry(batch, label) {
   }
 }
 
-// ── Status command ────────────────────────────────────────────────────────────
-async function showStatus() {
-  // Count total rows in CSV
+// ── Local progress file (no Firestore reads needed) ──────────────────────────
+const PROGRESS_FILE = join(__dir, 'migration-progress.json')
+
+function loadProgress() {
+  if (!existsSync(PROGRESS_FILE)) return { batches: {}, csvTotal: 0 }
+  try { return JSON.parse(readFileSync(PROGRESS_FILE, 'utf8')) } catch { return { batches: {}, csvTotal: 0 } }
+}
+
+function saveProgress(batchNum, written, csvTotal) {
+  const p = loadProgress()
+  p.csvTotal = csvTotal
+  p.batches[batchNum] = {
+    written,
+    completedAt: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
+  }
+  writeFileSync(PROGRESS_FILE, JSON.stringify(p, null, 2))
+}
+
+// ── Status command (reads local progress file — no quota cost) ───────────────
+function showStatus() {
+  const p = loadProgress()
+
+  // Get CSV total from file if available
   const csvPath = existsSync(join(__dir, 'patients.csv'))
     ? join(__dir, 'patients.csv')
     : existsSync(join(__dir, 'patients.tsv'))
       ? join(__dir, 'patients.tsv') : null
 
-  let csvTotal = 0
-  if (csvPath) {
+  let csvTotal = p.csvTotal || 0
+  if (csvPath && !csvTotal) {
     const { rows } = parseFile(readFileSync(csvPath, 'utf8'))
     csvTotal = rows.filter(r => (r['Name'] || '').trim()).length
   }
 
-  // Count docs in Firestore (uses count aggregation — no quota cost)
-  const snap = await db.collection('patients').count().get()
-  const inFirestore = snap.data().count
+  const totalUploaded = Object.values(p.batches).reduce((s, b) => s + (b.written || 0), 0)
+  const pct    = csvTotal ? Math.min(100, Math.round((totalUploaded / csvTotal) * 100)) : 0
+  const filled = Math.round(pct / 5)
+  const bar    = '█'.repeat(filled) + '░'.repeat(20 - filled)
 
-  const pct     = csvTotal ? Math.round((inFirestore / csvTotal) * 100) : 0
-  const filled  = Math.round(pct / 5)   // 20-char bar
-  const bar     = '█'.repeat(filled) + '░'.repeat(20 - filled)
-  const batchDone = Math.floor(inFirestore / BATCH_SIZE)
-  const nextBatch = Math.min(batchDone + 1, 3)
+  const b1 = p.batches[1], b2 = p.batches[2], b3 = p.batches[3]
+  const d1end = Math.min(18000, csvTotal)
+  const d2end = Math.min(36000, csvTotal)
+
+  const status = (b, start, end) => {
+    if (b) return `✓ Done  (${b.written.toLocaleString('en-IN')} patients · ${b.completedAt})`
+    if (totalUploaded >= start) return `⏳ In progress`
+    return '⬜ Not started'
+  }
 
   console.log('\n══════════════════════════════════════════════════════')
-  console.log('  BMH HMS — Migration Status')
+  console.log('  BMH HMS — Migration Progress')
   console.log('══════════════════════════════════════════════════════\n')
+  if (csvTotal) console.log(`  CSV total      : ${csvTotal.toLocaleString('en-IN')} patients`)
+  console.log(`  Uploaded so far: ${totalUploaded.toLocaleString('en-IN')} patients`)
   if (csvTotal) {
-    console.log(`  CSV total      : ${csvTotal.toLocaleString('en-IN')} patients`)
+    console.log(`  Progress       : [${bar}] ${pct}%\n`)
+    console.log(`  Day 1 (rows 1 – ${d1end.toLocaleString('en-IN')})          : ${status(b1, 0, d1end)}`)
+    console.log(`  Day 2 (rows ${(d1end+1).toLocaleString('en-IN')} – ${d2end.toLocaleString('en-IN')})  : ${status(b2, d1end, d2end)}`)
+    console.log(`  Day 3 (rows ${(d2end+1).toLocaleString('en-IN')} – ${csvTotal.toLocaleString('en-IN')})  : ${status(b3, d2end, csvTotal)}`)
   }
-  console.log(`  In Firestore   : ${inFirestore.toLocaleString('en-IN')} patients`)
-  if (csvTotal) {
-    console.log(`  Progress       : [${bar}] ${pct}%`)
-    console.log(`\n  Day 1 (rows 1–18,000)        : ${inFirestore >= 18000 ? '✓ Done' : inFirestore > 0 ? `⏳ In progress (${inFirestore.toLocaleString('en-IN')} uploaded)` : '⬜ Not started'}`)
-    console.log(`  Day 2 (rows 18,001–36,000)   : ${inFirestore >= 36000 ? '✓ Done' : inFirestore >= 18000 ? `⏳ In progress (${(inFirestore - 18000).toLocaleString('en-IN')} of 18,000 uploaded)` : '⬜ Not started'}`)
-    console.log(`  Day 3 (rows 36,001–${csvTotal.toLocaleString('en-IN')})  : ${inFirestore >= csvTotal ? '✓ Done' : inFirestore >= 36000 ? `⏳ In progress (${(inFirestore - 36000).toLocaleString('en-IN')} uploaded)` : '⬜ Not started'}`)
-    if (inFirestore < csvTotal) {
-      console.log(`\n  Next command   : node scripts/migrate-batch.mjs ${nextBatch}`)
-    } else {
-      console.log('\n  ✅ All patients imported!')
-    }
+
+  if (totalUploaded >= csvTotal && csvTotal > 0) {
+    console.log('\n  ✅ All patients imported!')
+  } else {
+    const next = !b1 ? 1 : !b2 ? 2 : 3
+    console.log(`\n  Next command   : node scripts/migrate-batch.mjs ${next}`)
   }
   console.log('\n══════════════════════════════════════════════════════\n')
   process.exit(0)
@@ -226,7 +251,7 @@ async function showStatus() {
 async function main() {
   const arg = process.argv[2]
 
-  if (arg === 'status') { await showStatus(); return }
+  if (arg === 'status') { showStatus(); return }
 
   const batchNum = parseInt(arg)
   if (![1, 2, 3].includes(batchNum)) {
@@ -298,7 +323,9 @@ async function main() {
     await sleep(PAUSE_MS)
   }
 
-  // ── Summary ───────────────────────────────────────────────────────────────
+  // ── Save progress & print summary ─────────────────────────────────────────
+  saveProgress(batchNum, written, totalRows)
+
   const remaining = totalRows - end
   console.log(`\n\n══════════════════════════════════════════════════════`)
   console.log(`  ✓ Batch ${batchNum} done — ${written} patients imported`)
@@ -307,8 +334,9 @@ async function main() {
     console.log(`\n  ${remaining} patients remaining.`)
     console.log(`  Tomorrow run:  node scripts/migrate-batch.mjs ${batchNum + 1}`)
   } else {
-    console.log('\n  All patients from the CSV have been imported!')
+    console.log('\n  ✅ All patients from the CSV have been imported!')
   }
+  console.log(`\n  Check anytime:  node scripts/migrate-batch.mjs status`)
   console.log('══════════════════════════════════════════════════════\n')
 
   process.exit(0)
