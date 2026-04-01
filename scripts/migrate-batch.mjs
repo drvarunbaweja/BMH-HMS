@@ -3,9 +3,10 @@
 //
 // Reads scripts/patients.csv (or .tsv) and imports in daily batches of 18,000.
 //
-//   Day 1 → node scripts/migrate-batch.mjs 1
-//   Day 2 → node scripts/migrate-batch.mjs 2
-//   Day 3 → node scripts/migrate-batch.mjs 3
+//   Day 1  → node scripts/migrate-batch.mjs 1
+//   Day 2  → node scripts/migrate-batch.mjs 2
+//   Day 3  → node scripts/migrate-batch.mjs 3
+//   Status → node scripts/migrate-batch.mjs status
 //
 // Columns expected (tab-separated):
 //   Name, Age, Sex, DOB, Parent Name, Mobile, Email, Address,
@@ -175,14 +176,65 @@ async function commitWithRetry(batch, label) {
   }
 }
 
+// ── Status command ────────────────────────────────────────────────────────────
+async function showStatus() {
+  // Count total rows in CSV
+  const csvPath = existsSync(join(__dir, 'patients.csv'))
+    ? join(__dir, 'patients.csv')
+    : existsSync(join(__dir, 'patients.tsv'))
+      ? join(__dir, 'patients.tsv') : null
+
+  let csvTotal = 0
+  if (csvPath) {
+    const { rows } = parseFile(readFileSync(csvPath, 'utf8'))
+    csvTotal = rows.filter(r => (r['Name'] || '').trim()).length
+  }
+
+  // Count docs in Firestore (uses count aggregation — no quota cost)
+  const snap = await db.collection('patients').count().get()
+  const inFirestore = snap.data().count
+
+  const pct     = csvTotal ? Math.round((inFirestore / csvTotal) * 100) : 0
+  const filled  = Math.round(pct / 5)   // 20-char bar
+  const bar     = '█'.repeat(filled) + '░'.repeat(20 - filled)
+  const batchDone = Math.floor(inFirestore / BATCH_SIZE)
+  const nextBatch = Math.min(batchDone + 1, 3)
+
+  console.log('\n══════════════════════════════════════════════════════')
+  console.log('  BMH HMS — Migration Status')
+  console.log('══════════════════════════════════════════════════════\n')
+  if (csvTotal) {
+    console.log(`  CSV total      : ${csvTotal.toLocaleString('en-IN')} patients`)
+  }
+  console.log(`  In Firestore   : ${inFirestore.toLocaleString('en-IN')} patients`)
+  if (csvTotal) {
+    console.log(`  Progress       : [${bar}] ${pct}%`)
+    console.log(`\n  Day 1 (rows 1–18,000)        : ${inFirestore >= 18000 ? '✓ Done' : inFirestore > 0 ? `⏳ In progress (${inFirestore.toLocaleString('en-IN')} uploaded)` : '⬜ Not started'}`)
+    console.log(`  Day 2 (rows 18,001–36,000)   : ${inFirestore >= 36000 ? '✓ Done' : inFirestore >= 18000 ? `⏳ In progress (${(inFirestore - 18000).toLocaleString('en-IN')} of 18,000 uploaded)` : '⬜ Not started'}`)
+    console.log(`  Day 3 (rows 36,001–${csvTotal.toLocaleString('en-IN')})  : ${inFirestore >= csvTotal ? '✓ Done' : inFirestore >= 36000 ? `⏳ In progress (${(inFirestore - 36000).toLocaleString('en-IN')} uploaded)` : '⬜ Not started'}`)
+    if (inFirestore < csvTotal) {
+      console.log(`\n  Next command   : node scripts/migrate-batch.mjs ${nextBatch}`)
+    } else {
+      console.log('\n  ✅ All patients imported!')
+    }
+  }
+  console.log('\n══════════════════════════════════════════════════════\n')
+  process.exit(0)
+}
+
 // ── MAIN ─────────────────────────────────────────────────────────────────────
 async function main() {
-  const batchNum = parseInt(process.argv[2])
+  const arg = process.argv[2]
+
+  if (arg === 'status') { await showStatus(); return }
+
+  const batchNum = parseInt(arg)
   if (![1, 2, 3].includes(batchNum)) {
     console.error('\nUsage:')
-    console.error('  Day 1:  node scripts/migrate-batch.mjs 1')
-    console.error('  Day 2:  node scripts/migrate-batch.mjs 2')
-    console.error('  Day 3:  node scripts/migrate-batch.mjs 3\n')
+    console.error('  Day 1:   node scripts/migrate-batch.mjs 1')
+    console.error('  Day 2:   node scripts/migrate-batch.mjs 2')
+    console.error('  Day 3:   node scripts/migrate-batch.mjs 3')
+    console.error('  Status:  node scripts/migrate-batch.mjs status\n')
     process.exit(1)
   }
 
