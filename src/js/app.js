@@ -96,15 +96,22 @@ watchAuthState(
   user => {
     showShell(user)
 
-    // Set window.CURRENT_USER so legacy.js can read it for centre filtering
+    // Set window.CURRENT_USER so legacy.js can read it for centre filtering.
+    // Legacy code expects Title-Case role ('Admin','Doctor','Reception','Lab','TPA','Optometrist','Inventory')
+    // but Firebase custom claims use lowercase ('admin','doctor','reception'...) — map here.
+    const roleMap = {
+      admin: 'Admin', doctor: 'Doctor', reception: 'Reception',
+      lab: 'Lab', tpa: 'TPA', optometrist: 'Optometrist', inventory: 'Inventory',
+    }
+    const legacyRole = roleMap[user.role] || 'Reception'
     window.CURRENT_USER = {
       username:          user.email?.split('@')[0] || 'user',
       name:              user.name  || user.email || 'User',
-      role:              user.role  || 'reception',
+      role:              legacyRole,
       dept:              user.dept  || '',
       centre:            user.centre || 'CHD',
       isAdmin:           user.role === 'admin',
-      canSeeAllCentres:  user.role === 'admin',
+      canSeeAllCentres:  user.role === 'admin' || user.centre === 'BOTH',
     }
 
     // Sync into legacy.js local CURRENT_USER variable

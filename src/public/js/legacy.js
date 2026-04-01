@@ -46,9 +46,29 @@ const USER_DB = {
 };
 let CURRENT_USER = null; // set on login
 
-let PATIENTS = [];
-const TRANSACTIONS = [];  // transaction log — moved here to fix TDZ
-const PAY_REQUESTS = [];
+/** Firebase Auth (app.js) sets window.CURRENT_USER; legacy login sets this var — keep in sync. */
+window.syncLegacyCurrentUserFromFirebase = function () {
+  const u = window.CURRENT_USER;
+  if (!u) return;
+  CURRENT_USER = {
+    username: (u.email || '').split('@')[0] || u.username || 'user',
+    name: u.name || u.email || 'User',
+    role: u.role || 'reception',
+    dept: u.dept || '',
+    centre: u.centre || 'CHD',
+    isAdmin: !!u.isAdmin,
+    canSeeAllCentres: !!u.isAdmin || u.centre === 'BOTH',
+  };
+};
+
+// Must be the same array object as firebase/patients.js (module loads after this script).
+window.PATIENTS = window.PATIENTS || [];
+let PATIENTS = window.PATIENTS;
+// Same array as billing.js / Firestore transaction listener (GitHub Pages dashboard totals).
+window.TRANSACTIONS = window.TRANSACTIONS || [];
+const TRANSACTIONS = window.TRANSACTIONS;
+window.PAY_REQUESTS = window.PAY_REQUESTS || [];
+const PAY_REQUESTS = window.PAY_REQUESTS;
 const APPOINTMENTS = [];
 const CENTRE_CHARGES = {
   CHD:{
@@ -402,7 +422,7 @@ function nav(id, el) {
   else if(pageKey==='appointments')    { const d=document.getElementById('apt-date-inp'); if(d)d.value=new Date().toISOString().split('T')[0]; renderAptDay && renderAptDay(); }
   else if(pageKey==='print-templates') renderPrintTemplates && renderPrintTemplates();
   else if(pageKey==='consents')        { renderConsent && renderConsent(); updateConsentPatientHeader(); refreshConsentLibrary && refreshConsentLibrary(); }
-  else if(pageKey==='ophtho')          { initQR && initQR(); renderRxDrugs && renderRxDrugs(); buildRefractionDropdowns && buildRefractionDropdowns(); renderOphthoPayList && renderOphthoPayList(); }
+  else if(pageKey==='ophtho')          { initQR && initQR(); renderRxDrugs && renderRxDrugs(); buildRefractionDropdowns && buildRefractionDropdowns(); renderOphthoPayList && renderOphthoPayList(); typeof initDiagnosisRowsIfEmpty==='function'&&initDiagnosisRowsIfEmpty(); }
   else if(pageKey==='obg')             { renderRxDrugs && renderRxDrugs(); }
   else if(pageKey==='psych')           { renderRxDrugs && renderRxDrugs(); }
   else if(pageKey==='skin')            { renderRxDrugs && renderRxDrugs(); }
@@ -938,7 +958,7 @@ function populateOphthoForm(v) {
     // First reset all to deselected
     document.querySelectorAll('.sl-chip').forEach(c => c.classList.remove('sel'));
     // Restore saved chip state per structure/eye
-    document.querySelectorAll('#oe-slitlamp [style*="grid-template-columns:90px"]').forEach(row => {
+    document.querySelectorAll('#oe-slitlamp .sl-sl-row, #oe-slitlamp [style*="grid-template-columns:90px"]').forEach(row => {
       const label = row.querySelector('[style*="9.5px"]')?.textContent?.trim();
       if(!label || !v.slChips[label]) return;
       const cols = row.querySelectorAll('[style*="background:rgba"]');
@@ -953,18 +973,29 @@ function populateOphthoForm(v) {
   }
   setV('sl-notes-text', v.slNotes);
 
-  // Diagnoses — recreate tags
-  const dxContainer = document.getElementById('rx-diagnosis-list');
-  if(dxContainer && Array.isArray(v.diagnoses) && v.diagnoses.length) {
-    dxContainer.innerHTML = '';
-    v.diagnoses.forEach(dx => {
-      const tag = document.createElement('span');
-      tag.className = 'dx-tag';
-      tag.style.cssText = 'display:inline-flex;align-items:center;gap:5px;background:var(--blue-lt);color:var(--blue);border:1.5px solid var(--blue);border-radius:20px;padding:3px 11px;font-size:11.5px;font-weight:700;margin:3px 4px 3px 0';
-      tag.innerHTML = `${dx} <span onclick="this.closest('.dx-tag').remove()" style="cursor:pointer;font-size:13px;opacity:.7;line-height:1">&times;</span>`;
-      dxContainer.appendChild(tag);
+  setV('rx-diagnosis-text', v.diagnosisText || '');
+  const dxRows = document.getElementById('rx-diagnosis-rows');
+  if(dxRows) {
+    dxRows.innerHTML = '';
+    if(Array.isArray(v.diagnoses) && v.diagnoses.length) v.diagnoses.forEach(dx => addDiagnosisRow(dx));
+    else initDiagnosisRowsIfEmpty();
+  }
+  const PHX_IDS = ['phx-allergy','phx-diabetes_mellit','phx-hypertension','phx-heart_disease__','phx-asthma___copd','phx-headache___migr','phx-thyroid_disease','phx-renal_disease','phx-previous_surger','phx-bleeding_disord'];
+  if(v.phxExtra && typeof v.phxExtra === 'object') {
+    PHX_IDS.forEach(id => {
+      setV(id+'-dur', v.phxExtra[id]?.dur || '');
+      setV(id+'-rx', v.phxExtra[id]?.rx || '');
     });
   }
+  setV('poh-od-text', v.pohOdText || '');
+  setV('poh-os-text', v.pohOsText || '');
+  if(v.hxSpectacles) setSel('hx-spectacles', v.hxSpectacles);
+  setV('hx-last-spec', v.hxLastSpec || '');
+  setV('hx-ocular-meds', v.hxOcularMeds || '');
+  setV('hx-family', v.familyHx || '');
+  setV('hx-other-systemic', v.otherSystemic || '');
+  setV('drug-allergy-spec', v.drugAllergySpec || '');
+  if(v.drugAllergy) setSel('drug-allergy', v.drugAllergy);
 
   // Prescription drugs
   if(Array.isArray(v.rx) && v.rx.length) {
@@ -1203,7 +1234,44 @@ function bookApt() {
   closeM('m-book-apt');
   renderAptDay && renderAptDay();
 }
-function printCaseSheet() {
+
+/** Numbered diagnosis lines (same UX pattern as medicines) + optional notes textarea. */
+function initDiagnosisRowsIfEmpty() {
+  const wrap = document.getElementById('rx-diagnosis-rows');
+  if(!wrap || wrap.querySelector('.rx-dx-row')) return;
+  addDiagnosisRow(); addDiagnosisRow(); addDiagnosisRow();
+}
+function renumberDiagnosisRows() {
+  document.querySelectorAll('#rx-diagnosis-rows .rx-dx-row').forEach((row,i)=>{
+    const sp = row.querySelector('span');
+    if(sp) sp.textContent = String(i+1);
+    const inp = row.querySelector('.rx-dx-line');
+    if(inp && !inp.value.trim()) inp.placeholder = 'Diagnosis '+(i+1);
+  });
+}
+function addDiagnosisRow(prefill) {
+  const wrap = document.getElementById('rx-diagnosis-rows');
+  if(!wrap) return;
+  const esc = (s='') => String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  const n = wrap.querySelectorAll('.rx-dx-row').length + 1;
+  const d = document.createElement('div');
+  d.className = 'rx-dx-row';
+  d.style.cssText = 'display:grid;grid-template-columns:28px 1fr 36px;gap:5px;padding:6px 8px;border-bottom:1px solid var(--g5);align-items:center';
+  d.innerHTML = `<span style="font-weight:900;color:var(--blue);text-align:center">${n}</span>
+    <input type="text" class="rx-dx-line" value="${esc(prefill||'')}" placeholder="Diagnosis ${n}" autocomplete="off" style="font-size:12px;padding:5px 8px;border:1.5px solid var(--g4);border-radius:6px;width:100%;box-sizing:border-box" onkeydown="if(event.key==='Enter'){event.preventDefault();addDiagnosisRow();}">
+    <button type="button" class="btn btn-xs btn-gray" onclick="this.closest('.rx-dx-row').remove();renumberDiagnosisRows()" title="Remove">✕</button>`;
+  wrap.appendChild(d);
+}
+function collectOphthoDiagnosesForPrint() {
+  const lines = [...document.querySelectorAll('#rx-diagnosis-rows .rx-dx-line')].map(i=>i.value.trim()).filter(Boolean);
+  const notes = (document.getElementById('rx-diagnosis-text')?.value||'').trim();
+  const legacyTags = [...document.querySelectorAll('#rx-diagnosis-list .dx-tag')].map(e=>e.textContent.replace(/[×✕]/g,'').trim()).filter(Boolean);
+  const merged = [...lines];
+  legacyTags.forEach(t => { if(t && !merged.includes(t)) merged.push(t); });
+  return { lines: merged, notes };
+}
+
+function buildOphthoCaseSheetHtml() {
   // ── collect patient info ──────────────────────────────────────────────
   const ptName   = document.getElementById('ophtho-pt-nm')?.textContent?.trim() || 'Patient';
   const ptId     = document.getElementById('ophtho-pt-uid')?.textContent?.trim() || '';
@@ -1224,9 +1292,13 @@ function printCaseSheet() {
     if(txt) ccRows.push({text:txt, dur:row.querySelector('.cc-dur')?.value||'', eye:row.querySelector('.cc-eye')?.value||''});
   });
 
-  // ── visual acuity ─────────────────────────────────────────────────────
-  const ucvaOD = document.getElementById('ucva-od-dist')?.value || '—';
-  const ucvaOS = document.getElementById('ucva-os-dist')?.value || '—';
+  // ── visual acuity (merged VA tab + prescription tab) ───────────────────
+  const ucvaOD = document.getElementById('va-od-uc')?.value || document.getElementById('ucva-od-dist')?.value || '—';
+  const ucvaOS = document.getElementById('va-os-uc')?.value || document.getElementById('ucva-os-dist')?.value || '—';
+  const bcvaOD = document.getElementById('va-od-bc')?.value || '—';
+  const bcvaOS = document.getElementById('va-os-bc')?.value || '—';
+  const phOD = document.getElementById('va-od-ph')?.value || '—';
+  const phOS = document.getElementById('va-os-ph')?.value || '—';
 
   // ── refraction ────────────────────────────────────────────────────────
   const rf = {
@@ -1264,9 +1336,8 @@ function printCaseSheet() {
   const corrOS = document.getElementById('iop-corr-os')?.textContent?.trim() || '—';
 
   // ── slit lamp chips ───────────────────────────────────────────────────
-  const SL_NORM = new Set(['Normal','Clear','Deep & Clear','Round & Reacting']);
   const slData = {};
-  document.querySelectorAll('#oe-slitlamp [style*="grid-template-columns:90px"]').forEach(row=>{
+  document.querySelectorAll('#oe-slitlamp .sl-sl-row').forEach(row=>{
     const label = row.querySelector('[style*="9.5px"]')?.textContent?.trim();
     if(!label) return;
     const cols = row.querySelectorAll('[style*="background:rgba"]');
@@ -1277,16 +1348,6 @@ function printCaseSheet() {
     };
   });
   const slNotes = document.getElementById('sl-notes-text')?.value?.trim() || '';
-
-  function getSlText(eye) {
-    return Object.entries(slData).map(([s,v])=>{
-      const chips = v[eye]||[];
-      const abn = chips.filter(c=>!SL_NORM.has(c));
-      if(abn.length) return `${s}: ${abn.join(', ')}`;
-      if(chips.length && chips.every(c=>SL_NORM.has(c))) return null; // normal, skip
-      return null;
-    }).filter(Boolean).join('; ') || 'Normal';
-  }
 
   // ── fundus ────────────────────────────────────────────────────────────
   const fund = {
@@ -1306,75 +1367,73 @@ function printCaseSheet() {
 
   // ── personal history ──────────────────────────────────────────────────
   const PHX_MAP = [
-    ['phx-allergy','Allergy'],['phx-diabetes_mellit','DM'],['phx-hypertension','HTN'],
-    ['phx-heart_disease__','IHD'],['phx-asthma___copd','Asthma'],['phx-headache___migr','Migraine'],
-    ['phx-thyroid_disease','Thyroid'],['phx-renal_disease','Renal'],
-    ['phx-previous_surger','Prev.Surgery'],['phx-bleeding_disord','Bleeding D/O']
+    ['phx-allergy','Allergy'],['phx-diabetes_mellit','Diabetes Mellitus'],['phx-hypertension','Hypertension'],
+    ['phx-heart_disease__','Heart Disease / IHD'],['phx-asthma___copd','Asthma / COPD'],['phx-headache___migr','Headache / Migraine'],
+    ['phx-thyroid_disease','Thyroid Disease'],['phx-renal_disease','Renal Disease'],
+    ['phx-previous_surger','Previous Surgery'],['phx-bleeding_disord','Bleeding Disorder']
   ];
 
   // ── past ocular history ───────────────────────────────────────────────
   const pohOD = document.getElementById('poh-od-type')?.value || '—';
   const pohOS = document.getElementById('poh-os-type')?.value || '—';
+  const pohOdTxt = (document.getElementById('poh-od-text')?.value || '').trim();
+  const pohOsTxt = (document.getElementById('poh-os-text')?.value || '').trim();
+  const hxSpec = document.getElementById('hx-spectacles')?.value || '—';
+  const hxLastSpec = (document.getElementById('hx-last-spec')?.value || '').trim() || '—';
+  const hxOcularMeds = (document.getElementById('hx-ocular-meds')?.value || '').trim() || '—';
+  const drugAl = document.getElementById('drug-allergy')?.value || '—';
+  const drugAlSpec = (document.getElementById('drug-allergy-spec')?.value || '').trim();
+  const famHx = (document.getElementById('hx-family')?.value || '').trim();
+  const othHx = (document.getElementById('hx-other-systemic')?.value || '').trim();
 
   // ── colour vision ─────────────────────────────────────────────────────
   const cvOD = document.getElementById('cv-od')?.value || '—';
   const cvOS = document.getElementById('cv-os')?.value || '—';
 
-  // ── diagnosis ─────────────────────────────────────────────────────────
-  const dxList = [...document.querySelectorAll('#rx-diagnosis-list .dx-tag')].map(e=>e.textContent.replace(/[×✕]/g,'').trim()).filter(Boolean);
+  // ── diagnosis (numbered lines + optional notes) ─────────────────────
+  const dxPack = collectOphthoDiagnosesForPrint();
+  const dxLines = dxPack.lines || [];
+  const dxNotes = dxPack.notes || '';
 
   // ── drugs (for case sheet medicines section) ──────────────────────────
   const drugs = typeof RX_DRUGS !== 'undefined' ? RX_DRUGS : [];
 
-  // ── Circle diagram helpers ────────────────────────────────────────────
-  // 6 circles: 3 pairs — Anterior Segment, Lens, Fundus (OD + OS each)
-  function makeCircle(label, eye, findings) {
-    // findings: array of short text lines to write inside circle
-    const findsHtml = findings.filter(Boolean).map((f,i)=>
-      `<text x="50" y="${38+i*11}" text-anchor="middle" font-size="7" fill="#111" font-family="Arial,sans-serif">${f.length>16?f.slice(0,15)+'…':f}</text>`
-    ).join('');
-    const eyeClr = eye==='OD' ? '#1A3C6E' : '#1a7a3c';
-    return `<div style="display:inline-block;text-align:center;margin:0 4px">
-  <div style="font-size:8px;font-weight:900;color:${eyeClr};text-transform:uppercase;margin-bottom:2px">${eye} ${label}</div>
-  <svg viewBox="0 0 100 100" width="78" height="78" xmlns="http://www.w3.org/2000/svg">
-    <circle cx="50" cy="50" r="46" fill="none" stroke="#333" stroke-width="1.5"/>
-    ${findsHtml || '<text x="50" y="53" text-anchor="middle" font-size="8" fill="#aaa" font-family="Arial,sans-serif">Normal</text>'}
-  </svg>
-</div>`;
-  }
+  const ocularHealthImgSrc = (function () {
+    try { return new URL('assets/ocular-health-exam.png', window.location.href).href; } catch (e) { return 'assets/ocular-health-exam.png'; }
+  })();
 
-  // Anterior Segment findings (slit lamp): cornea, AC, iris, pupil
-  function anteriorFinds(eye) {
-    const structs = ['Cornea','AC','Iris','Pupil','Conjunctiva'];
-    const lines = [];
-    structs.forEach(s=>{
-      const chips = (slData[s]?.[eye]||[]).filter(c=>!SL_NORM.has(c));
-      if(chips.length) lines.push(`${s}: ${chips.slice(0,2).join(',')} `);
-    });
-    return lines.length ? lines : ['Normal'];
-  }
-  // Lens findings
-  function lensFinds(eye) {
-    const chips = (slData['Lens']?.[eye]||[]).filter(c=>!SL_NORM.has(c));
-    return chips.length ? chips.map(c=>[c]) : [['Clear']];
-  }
-  // Fundus findings
-  function fundusFinds(eye) {
-    const d = eye==='od' ? fund : {disc:fund.osDisc,CD:fund.osCD,mac:fund.osMac,ves:fund.osVes,per:fund.osPer};
-    const disc = eye==='od' ? fund.odDisc : fund.osDisc;
-    const cd   = eye==='od' ? fund.odCD   : fund.osCD;
-    const mac  = eye==='od' ? fund.odMac  : fund.osMac;
-    const ves  = eye==='od' ? fund.odVes  : fund.osVes;
-    const per  = eye==='od' ? fund.odPer  : fund.osPer;
-    const txt  = eye==='od' ? fund.odTxt  : fund.osTxt;
-    if(txt) return [txt.slice(0,50)];
-    const lines = [];
-    if(disc) lines.push(`Disc: ${disc}`);
-    if(cd)   lines.push(`C/D: ${cd}`);
-    if(mac && mac!=='Normal') lines.push(`Mac: ${mac}`);
-    if(ves && ves!=='Normal calibre') lines.push(`Ves: ${ves}`);
-    return lines.length ? lines : ['Normal'];
-  }
+  const escHtml = (s) => (s == null ? '' : String(s)).replace(/</g, '&lt;');
+  const fieldLinePrint = (label, val) => `<tr><td style="font-size:9px;font-weight:700;white-space:nowrap;padding:2px 6px;border:none;width:88px;vertical-align:top">${label}</td><td style="font-size:9px;padding:2px 6px;border:none;border-bottom:1px solid #999;min-width:90px">${escHtml(val) || '—'}</td></tr>`;
+  const slJoin = (struct, eye) => (slData[struct]?.[eye] || []).join(', ');
+  const anteriorPrint = (eye) => `<table style="border-collapse:collapse;width:100%">${fieldLinePrint('Lids/Lashes', slJoin('Lids/Lashes', eye))}${fieldLinePrint('Conjunctiva', slJoin('Conjunctiva', eye))}${fieldLinePrint('Cornea', slJoin('Cornea', eye))}${fieldLinePrint('Iris / Pupil', [slJoin('Iris', eye), slJoin('Pupil', eye)].filter(Boolean).join(' · '))}${fieldLinePrint('A/C', slJoin('AC', eye))}${fieldLinePrint('Lens', slJoin('Lens', eye))}</table>`;
+  const posteriorPrint = (eye) => {
+    const disc = eye === 'od' ? fund.odDisc : fund.osDisc;
+    const cd = eye === 'od' ? fund.odCD : fund.osCD;
+    const mac = eye === 'od' ? fund.odMac : fund.osMac;
+    const ves = eye === 'od' ? fund.odVes : fund.osVes;
+    const per = eye === 'od' ? fund.odPer : fund.osPer;
+    const fundTxt = eye === 'od' ? fund.odTxt : fund.osTxt;
+    const vit = slJoin('Vitreous', eye);
+    return `<table style="border-collapse:collapse;width:100%">${fieldLinePrint('Media (vitreous)', vit)}${fieldLinePrint('C/D', cd)}${fieldLinePrint('Disc', disc)}${fieldLinePrint('Macula', mac)}${fieldLinePrint('Vessels (A/V)', ves)}${fieldLinePrint('Periphery', per)}</table>${fundTxt ? `<div style="font-size:8.5px;color:#333;margin-top:6px;white-space:pre-wrap">${escHtml(fundTxt)}</div>` : ''}`;
+  };
+  const lblEye = (e) => (e === 'od' ? 'OD' : 'OS');
+  const ocularBlock = `
+<div style="page-break-inside:avoid;margin-top:6px">
+<h2>Ocular Health Examination</h2>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start">
+  <div><div style="font-size:10px;font-weight:900;text-transform:uppercase;margin-bottom:5px;color:#1a4a8c">${lblEye('od')} — Anterior (lids to lens)</div>${anteriorPrint('od')}</div>
+  <div><div style="font-size:10px;font-weight:900;text-transform:uppercase;margin-bottom:5px;color:#1a7a4a">${lblEye('os')} — Anterior (lids to lens)</div>${anteriorPrint('os')}</div>
+</div>
+<div style="margin:12px 0;padding:10px;border:1.5px solid #222;border-radius:6px;text-align:center;page-break-inside:avoid">
+  <div style="font-size:9.5px;font-weight:900;margin-bottom:8px;color:#333">Diagram — <b>Lids / anterior</b> · <b>Section</b> · <b>Fundus &amp; optic nerve</b></div>
+  <img src="${ocularHealthImgSrc}" alt="Lids, cross-section, fundus" style="width:100%;max-width:580px;height:auto;display:block;margin:0 auto;border:1px solid #bbb;border-radius:4px" />
+  ${slNotes ? `<div style="font-size:9px;color:#333;margin-top:10px;text-align:left;white-space:pre-wrap">${escHtml(slNotes)}</div>` : ''}
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start">
+  <div><div style="font-size:10px;font-weight:900;text-transform:uppercase;margin-bottom:5px;color:#1a4a8c">${lblEye('od')} — Posterior (fundus)</div>${posteriorPrint('od')}</div>
+  <div><div style="font-size:10px;font-weight:900;text-transform:uppercase;margin-bottom:5px;color:#1a7a4a">${lblEye('os')} — Posterior (fundus)</div>${posteriorPrint('os')}</div>
+</div>
+</div>`;
 
   // ── build HTML ────────────────────────────────────────────────────────
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Case Sheet — ${ptName}</title><style>
@@ -1412,20 +1471,40 @@ th{background:#eee;font-weight:900;text-align:center}
   </tr>
 </table>
 
+<div style="margin:8px 0;padding:8px;border:1px solid #ccc;border-radius:4px;background:#f9f9f9;font-size:10px;line-height:1.5">
+  <div><span class="label">Spectacles: </span><span class="val">${(hxSpec||'').replace(/</g,'&lt;')}</span></div>
+  <div><span class="label">Last spectacle change: </span><span class="val">${(hxLastSpec||'').replace(/</g,'&lt;')}</span></div>
+  <div><span class="label">Ocular medications (history): </span><span class="val">${(hxOcularMeds||'').replace(/</g,'&lt;')}</span></div>
+  <div><span class="label">Past ocular — OD: </span><span class="val">${(pohOD||'').replace(/</g,'&lt;')}${pohOdTxt?` — ${pohOdTxt.replace(/</g,'&lt;')}`:''}</span></div>
+  <div><span class="label">Past ocular — OS: </span><span class="val">${(pohOS||'').replace(/</g,'&lt;')}${pohOsTxt?` — ${pohOsTxt.replace(/</g,'&lt;')}`:''}</span></div>
+  <div><span class="label">Drug allergy: </span><span class="val">${(drugAl||'').replace(/</g,'&lt;')}${drugAlSpec?' ('+drugAlSpec.replace(/</g,'&lt;')+')':''}</span></div>
+  <div><span class="label">Family history: </span><span class="val">${(famHx||'—').replace(/</g,'&lt;')}</span></div>
+  <div><span class="label">Other systemics / notes: </span><span class="val">${(othHx||'—').replace(/</g,'&lt;')}</span></div>
+</div>
+
 <!-- PERSONAL HISTORY -->
-<h2>Personal History</h2>
-<table class="phx-table" style="font-size:9.5px">
+<h2>Personal History (Systemic)</h2>
+<table class="phx-table" style="font-size:8.5px;width:100%">
   <thead><tr>
-    ${PHX_MAP.map(([,l])=>`<th>${l}</th>`).join('')}
+    <th style="text-align:left">Condition</th>
+    <th>Y/N/?</th>
+    <th style="text-align:left">Duration</th>
+    <th style="text-align:left">Drugs / Treatment</th>
   </tr></thead>
-  <tbody><tr>
-    ${PHX_MAP.map(([id])=>{
-      const v = document.getElementById(id)?.value || '—';
-      return `<td style="text-align:center;font-weight:900;color:${v==='Y'?'#000':'#aaa'}">${v}</td>`;
-    }).join('')}
-  </tr></tbody>
+  <tbody>
+  ${PHX_MAP.map(([id,shortLabel])=>{
+    const yn = document.getElementById(id)?.value || '—';
+    const dur = (document.getElementById(id+'-dur')?.value || '').trim() || '—';
+    const rx = (document.getElementById(id+'-rx')?.value || '').trim() || '—';
+    return `<tr>
+      <td style="font-weight:700">${shortLabel}</td>
+      <td style="text-align:center;font-weight:900;color:${yn==='Y'?'#000':'#666'}">${yn}</td>
+      <td>${dur.replace(/</g,'&lt;')}</td>
+      <td>${rx.replace(/</g,'&lt;')}</td>
+    </tr>`;
+  }).join('')}
+  </tbody>
 </table>
-<div style="margin-top:4px;font-size:10px"><span class="label">Past Ocular Hx: </span>OD — ${pohOD} &nbsp;|&nbsp; OS — ${pohOS}</div>
 
 <!-- CLINICAL EXAMINATION — two column -->
 <div class="two-col" style="margin-top:6px">
@@ -1435,8 +1514,8 @@ th{background:#eee;font-weight:900;text-align:center}
     <h2>Visual Acuity</h2>
     <table><thead><tr><th>Eye</th><th>UCVA</th><th>BCVA</th><th>PH</th></tr></thead>
     <tbody>
-      <tr><td style="font-weight:900">OD</td><td style="text-align:center">${ucvaOD}</td><td style="text-align:center">—</td><td style="text-align:center">—</td></tr>
-      <tr><td style="font-weight:900">OS</td><td style="text-align:center">${ucvaOS}</td><td style="text-align:center">—</td><td style="text-align:center">—</td></tr>
+      <tr><td style="font-weight:900">OD</td><td style="text-align:center">${ucvaOD}</td><td style="text-align:center">${bcvaOD}</td><td style="text-align:center">${phOD}</td></tr>
+      <tr><td style="font-weight:900">OS</td><td style="text-align:center">${ucvaOS}</td><td style="text-align:center">${bcvaOS}</td><td style="text-align:center">${phOS}</td></tr>
     </tbody></table>
     <div style="margin-top:3px;font-size:9.5px"><b>Colour Vision:</b> OD — ${cvOD} &nbsp;|&nbsp; OS — ${cvOS}</div>
 
@@ -1473,110 +1552,15 @@ th{background:#eee;font-weight:900;text-align:center}
   <div></div>
 </div>
 
-<!-- OCULAR HEALTH — OPTOMETRY FORMAT -->
-<div style="page-break-inside:avoid;margin-top:6px">
-<h2>Ocular Health</h2>
-${['od','os'].map(eye=>{
-  const isOD = eye==='od';
-  const eyeLabel = isOD ? 'OD' : 'OS';
-  // Anterior fields (slit lamp)
-  const slGet = (struct) => {
-    const chips = (slData[struct]?.[eye]||[]);
-    const abn = chips.filter(c=>!SL_NORM.has(c));
-    if(abn.length) return abn.join(', ');
-    if(chips.length && chips.every(c=>SL_NORM.has(c))) return 'WNL';
-    return '';
-  };
-  const lids   = slGet('Lids/Lashes');
-  const conj   = slGet('Conjunctiva');
-  const cornea = slGet('Cornea');
-  const ac     = slGet('AC');
-  const iris   = slGet('Iris');
-  const pupil  = slGet('Pupil');
-  const lens   = slGet('Lens');
-  const vit    = slGet('Vitreous');
-  // Posterior fields (fundus)
-  const disc    = isOD ? fund.odDisc : fund.osDisc;
-  const cd      = isOD ? fund.odCD   : fund.osCD;
-  const mac     = isOD ? fund.odMac  : fund.osMac;
-  const ves     = isOD ? fund.odVes  : fund.osVes;
-  const per     = isOD ? fund.odPer  : fund.osPer;
-  const fundTxt = isOD ? fund.odTxt  : fund.osTxt;
-  // SVG diagrams
-  const antAbn = ['Cornea','AC','Iris','Pupil','Conjunctiva'].some(s=>(slData[s]?.[eye]||[]).some(c=>!SL_NORM.has(c)));
-  const lensAbn = (slData['Lens']?.[eye]||[]).some(c=>!SL_NORM.has(c));
-  const fundAbn = (disc && disc!=='Pink & Healthy') || (mac && mac!=='Normal');
-  const cdNum   = parseFloat(cd||0);
-  // SVG A = anterior segment (almond eye + iris + pupil)
-  const svgA = `<svg viewBox="0 0 80 60" width="72" height="54" xmlns="http://www.w3.org/2000/svg">
-  <path d="M4,30 Q40,5 76,30 Q40,55 4,30 Z" fill="white" stroke="${antAbn?'#c00':'#333'}" stroke-width="1.5"/>
-  <circle cx="40" cy="30" r="14" fill="none" stroke="${antAbn?'#c00':'#555'}" stroke-width="1"/>
-  <circle cx="40" cy="30" r="7" fill="#ccc" stroke="${antAbn?'#c00':'#333'}" stroke-width="1"/>
-  ${antAbn?'<text x="40" y="56" text-anchor="middle" font-size="7" fill="#c00" font-family="Arial">PATH</text>':'<text x="40" y="56" text-anchor="middle" font-size="7" fill="#333" font-family="Arial">WNL</text>'}
-</svg>`;
-  // SVG P = posterior (vertical oval - lens/vitreous)
-  const svgP = `<svg viewBox="0 0 80 60" width="72" height="54" xmlns="http://www.w3.org/2000/svg">
-  <ellipse cx="40" cy="30" rx="16" ry="26" fill="white" stroke="${lensAbn?'#c00':'#333'}" stroke-width="1.5"/>
-  <ellipse cx="40" cy="30" rx="8" ry="16" fill="none" stroke="${lensAbn?'#c00':'#888'}" stroke-width="0.8" stroke-dasharray="2,2"/>
-  ${lensAbn?'<text x="40" y="56" text-anchor="middle" font-size="7" fill="#c00" font-family="Arial">PATH</text>':'<text x="40" y="56" text-anchor="middle" font-size="7" fill="#333" font-family="Arial">WNL</text>'}
-</svg>`;
-  // SVG ONH = optic nerve head (two concentric circles)
-  const svgONH = `<svg viewBox="0 0 80 60" width="72" height="54" xmlns="http://www.w3.org/2000/svg">
-  <circle cx="40" cy="28" r="24" fill="white" stroke="${fundAbn?'#c00':'#333'}" stroke-width="1.5"/>
-  <circle cx="40" cy="28" r="${cdNum>=0.5?Math.round(24*cdNum):10}" fill="none" stroke="${(cdNum>=0.7||fundAbn)?'#c00':'#888'}" stroke-width="1"/>
-  ${cd?`<text x="40" y="30" text-anchor="middle" font-size="6.5" fill="${cdNum>=0.7?'#c00':'#333'}" font-family="Arial" font-weight="bold">${cd}</text>`:''}
-  ${fundAbn?'<text x="40" y="56" text-anchor="middle" font-size="7" fill="#c00" font-family="Arial">PATH</text>':'<text x="40" y="56" text-anchor="middle" font-size="7" fill="#333" font-family="Arial">WNL</text>'}
-</svg>`;
-  const fieldLine = (label, val) => `<tr><td style="font-size:9px;font-weight:700;white-space:nowrap;padding:1px 5px;border:none;width:80px">${label}</td><td style="font-size:9px;padding:1px 4px;border:none;border-bottom:1px solid #999;min-width:80px">${val||''}</td></tr>`;
-  return `<div style="display:grid;grid-template-columns:140px 1fr 140px;gap:6px;align-items:start;margin-bottom:10px;padding:6px;border:1.5px solid #333;border-radius:4px">
-  <!-- Anterior (left) -->
-  <div>
-    <div style="font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.3px;color:#000;margin-bottom:4px">${eyeLabel} Anterior</div>
-    <table style="border-collapse:collapse;width:100%">
-      ${fieldLine('Lids/Lashes', lids)}
-      ${fieldLine('Conjunctiva', conj)}
-      ${fieldLine('Sclera', '')}
-      ${fieldLine('Angles', '')}
-      ${fieldLine('Cornea', cornea)}
-      <tr><td style="padding:3px 0" colspan="2"></td></tr>
-      ${fieldLine('Iris/Pupil', (iris||'')+(iris&&pupil?' / ':'')+( pupil||''))}
-      ${fieldLine('A/C', ac)}
-      ${fieldLine('Lens/Media', (lens||'')+(lens&&vit?' / ':'')+( vit||''))}
-    </table>
-  </div>
-  <!-- Diagrams (center) -->
-  <div style="text-align:center">
-    <div style="display:flex;justify-content:center;gap:4px;align-items:flex-end">
-      <div style="text-align:center"><div style="font-size:9px;font-weight:700;margin-bottom:2px">A</div>${svgA}</div>
-      <div style="text-align:center"><div style="font-size:9px;font-weight:700;margin-bottom:2px">P</div>${svgP}</div>
-      <div style="text-align:center"><div style="font-size:9px;font-weight:700;margin-bottom:2px">ONH</div>${svgONH}</div>
-    </div>
-    ${slNotes && isOD ? `<div style="font-size:8.5px;color:#444;font-style:italic;margin-top:3px;text-align:left">${slNotes}</div>` : ''}
-  </div>
-  <!-- Posterior (right) -->
-  <div>
-    <div style="font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.3px;color:#000;margin-bottom:4px">${eyeLabel} Posterior</div>
-    <table style="border-collapse:collapse;width:100%">
-      ${fieldLine('Media', vit||'')}
-      ${fieldLine("C/D's", cd||'')}
-      ${fieldLine('Shape/Type', '')}
-      ${fieldLine('Rim Tissue', '')}
-      ${fieldLine('VP', '')}
-      <tr><td style="padding:3px 0" colspan="2"></td></tr>
-      ${fieldLine('Post. Pole', mac||'')}
-      ${fieldLine('A/V', ves||'')}
-      ${fieldLine('Macula/FLR', mac||'')}
-      ${fieldLine('Periphery', per||'')}
-    </table>
-    ${fundTxt?`<div style="font-size:8.5px;color:#444;font-style:italic;margin-top:3px">${fundTxt}</div>`:''}
-  </div>
-</div>`;
-}).join('')}
-</div>
+${ocularBlock}
 
 <!-- DIAGNOSIS & PLAN -->
 <h2>Diagnosis</h2>
-<div>${dxList.length ? dxList.map(d=>`<span class="dx">${d}</span>`).join('') : '<span style="color:#aaa">—</span>'}</div>
+${dxLines.length ? `<table style="font-size:11px">
+<thead><tr style="background:#eee"><th style="width:32px;text-align:center;border:1px solid #555">#</th><th style="text-align:left;border:1px solid #555">Diagnosis</th></tr></thead>
+<tbody>${dxLines.map((d,i)=>`<tr><td style="text-align:center;border:1px solid #aaa;font-weight:900">${i+1}</td><td style="border:1px solid #aaa;padding:4px 6px;font-weight:600">${escHtml(d)}</td></tr>`).join('')}</tbody>
+</table>` : '<div style="font-size:11px;color:#666">—</div>'}
+${dxNotes ? `<div style="margin-top:8px;font-size:10.5px;line-height:1.45;border:1px dashed #aaa;border-radius:6px;padding:8px;background:#fafafa"><span style="font-weight:900;text-transform:uppercase;font-size:9px;color:#555">Additional notes</span><div style="margin-top:4px;white-space:pre-wrap">${escHtml(dxNotes)}</div></div>` : ''}
 
 ${drugs.length?`
 <h2>Medications Prescribed</h2>
@@ -1619,6 +1603,16 @@ ${(()=>{
 
 </body></html>`;
 
+  return html;
+}
+function printCaseSheet(opts) {
+  const html = buildOphthoCaseSheetHtml();
+  if(opts && opts.preview) {
+    const w = window.open('', '_blank', 'width=980,height=920');
+    if(w) { w.document.write(html); w.document.close(); w.focus(); }
+    showToast('Preview opened — review layout, then Print from browser if needed', 'i');
+    return;
+  }
   if(typeof safePrint==='function') safePrint(html);
   else {
     const w = window.open('','_blank','width=900,height=750');
@@ -1626,6 +1620,7 @@ ${(()=>{
   }
   showToast('Case sheet ready to print ✓','s');
 }
+function previewCaseSheet() { printCaseSheet({ preview: true }); }
 function printPsychSheet() { if(typeof window.printUnifiedRx === 'function') { window.printUnifiedRx('psych'); } else { showToast('Psychiatry summary printing ✓','s'); setTimeout(()=>window.print(),300); } }
 function printSkinSheet() { if(typeof window.printUnifiedRx === 'function') { window.printUnifiedRx('skin'); } else { showToast('Skin summary printing ✓','s'); setTimeout(()=>window.print(),300); } }
 function printDischarge() { showToast('Discharge card printing ✓','s'); setTimeout(()=>window.print(),300); }
@@ -3427,6 +3422,8 @@ const ICD10_EYE = [
   'S05.0 — Injury of conjunctiva and abrasion','Z01.0 — Routine eye examination',
 ];
 function addDiagnosis() {
+  addDiagnosisRow();
+  return;
   const list = document.getElementById('rx-diagnosis-list'); if(!list) return;
   const uid = 'dx-' + Date.now();
   const d = document.createElement('div');
@@ -6189,9 +6186,10 @@ window.printUnifiedRx = function(deptId) {
   const incInv  = document.getElementById(deptId+'-inc-inv')?.checked ?? true;
   const incPrc  = document.getElementById(deptId+'-inc-proc')?.checked ?? true;
 
-  // ── Collect diagnoses ──
-  const dxTags = document.querySelectorAll('#rx-diagnosis-list .dx-tag');
-  const dxList = Array.from(dxTags).map(e=>e.textContent.replace(/[×✕×]/g,'').trim()).filter(Boolean);
+  // ── Collect diagnoses (numbered lines + notes — same as case sheet) ──
+  const dxPack = typeof collectOphthoDiagnosesForPrint === 'function' ? collectOphthoDiagnosesForPrint() : { lines: [], notes: '' };
+  const dxList = [...(dxPack.lines || [])];
+  if(dxPack.notes) dxList.push(dxPack.notes);
 
   // ── Collect complaints ──
   const cc   = document.getElementById('cc-text')?.value || '';
@@ -6573,10 +6571,18 @@ setTimeout(() => {
 
 document.addEventListener('bmh:patientsUpdated', () => {
   try {
+    if (typeof genRcUID === 'function') genRcUID();
     renderReceptionPage && renderReceptionPage();
     renderDocQueue && renderDocQueue();
     renderDashboard && renderDashboard();
   } catch (e) { console.warn('bmh:patientsUpdated', e); }
+});
+
+document.addEventListener('bmh:transactionsUpdated', () => {
+  try {
+    renderDashboard && renderDashboard();
+    renderCollectionDashboard && renderCollectionDashboard();
+  } catch (e) { console.warn('bmh:transactionsUpdated', e); }
 });
 
 function updateRcDr() {
@@ -6804,17 +6810,22 @@ function _debouncedRenderDash() {
 }
 
 function loadPatientsFromFirebase() {
-  const centre = CURRENT_USER?.centre;
+  if(window._bmhRtdbPatientsListening) return;
+  window._bmhRtdbPatientsListening = true;
+  const cu = (typeof CURRENT_USER !== 'undefined' && CURRENT_USER) || window.CURRENT_USER;
+  const centre = cu?.centre;
+  const isAdmin = cu?.isAdmin || cu?.canSeeAllCentres || cu?.role === 'admin';
   fbOn('patients', data => {
     if(!data) return;
     const all = Object.values(data);
-    if(CURRENT_USER?.isAdmin || CURRENT_USER?.canSeeAllCentres) {
+    if(isAdmin || cu?.canSeeAllCentres) {
       PATIENTS.length = 0;
       all.forEach(p => PATIENTS.push(p));
     } else {
       PATIENTS.length = 0;
       all.forEach(p => {
-        if(p.centre === centre || p.centre === CURRENT_USER?.centre) PATIENTS.push(p);
+        const pc = p.centre || 'CHD';
+        if(!centre || pc === centre) PATIENTS.push(p);
       });
     }
     if(!_fbPatientsLoaded) {
@@ -7675,7 +7686,13 @@ function fbPush(path, data)   { return window.FBDB ? window.FBDB.ref(path).push(
 function fbUpdate(path, data) { return window.FBDB ? window.FBDB.ref(path).update(data) : Promise.resolve(); }
 function fbRemove(path)       { return window.FBDB ? window.FBDB.ref(path).remove()     : Promise.resolve(); }
 function fbOn(path, cb)       { if (window.FBDB) window.FBDB.ref(path).on('value', function(s){ cb(s.val()); }); }
-function fbOnce(path, cb)     { if (window.FBDB) window.FBDB.ref(path).once('value').then(function(s){ cb(s.val()); }); }
+function fbOnce(path, cb) {
+  // Supports BOTH callback: fbOnce(path, fn)  AND  promise: fbOnce(path).then(fn)
+  if (!window.FBDB) { if (typeof cb === 'function') cb(null); return Promise.resolve(null); }
+  var p = window.FBDB.ref(path).once('value').then(function(s){ return s.val(); });
+  if (typeof cb === 'function') { p.then(cb).catch(function(){}); }
+  return p;
+}
 function fbKey()              { return window.FBDB ? window.FBDB.ref().push().key : 'local-' + Date.now(); }
 function todayKey()           { return new Date().toISOString().split('T')[0]; }
 // ═══════════════════════════════════════════════════════════
@@ -7748,7 +7765,7 @@ function filterRcExist(val) {
     if(typeof buildQTableRow === 'function') {
       list.innerHTML = matched.length
         ? matched.map((p,i)=>buildQTableRow(p,i+1)).join('')
-        : '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--g1);font-size:13px">No patients found</td></tr>';
+        : '<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--g1);font-size:13px">No patients found</td></tr>';
     } else {
       list.innerHTML = matched.length ? renderExistingPatients(matched) :
         '<div style="padding:20px;text-align:center;color:var(--g1);font-size:13px">No patients found</div>';
@@ -8945,9 +8962,20 @@ function renderDashboard() {
   const waiting = PATIENTS.filter(p => p.status === 'waiting' && !p.seen).length;
 
   const todayApts = APPOINTMENTS.filter(a => a.date === today);
+  const txnDay = (t) => {
+    const d = (t.date || t.createdAt || '').toString();
+    return d.includes('T') ? d.split('T')[0] : d.slice(0, 10);
+  };
   const todayCollection = TRANSACTIONS
-    .filter(t => t.collected && (t.date||'').startsWith(today))
-    .reduce((s,t) => s + (t.amount||0), 0);
+    .filter(t => {
+      if (txnDay(t) !== today) return false;
+      if (t.isRefund === true) return false;
+      const amt = Number(t.amount) || 0;
+      if (amt <= 0) return false;
+      if (t.collected === false) return false;
+      return true;
+    })
+    .reduce((s, t) => s + (Number(t.amount) || 0), 0);
   const pendingAmt = PAY_REQUESTS
     .filter(r => r.status === 'pending')
     .reduce((s,r) => s + (r.amount||0), 0);
@@ -8962,14 +8990,16 @@ function renderDashboard() {
   setEl('db-apts', todayApts.length);
   setEl('db-stock', INVENTORY ? INVENTORY.filter(i=>i.stock<=i.min).length : 0);
 
-  // Render queue
-  const qEl = document.getElementById('dq-active-list');
-  if(qEl) {
+  // Live queue preview (dashboard) — use dash-queue, not doctor-queue tbody ids
+  const dashQ = document.getElementById('dash-queue');
+  if(dashQ && typeof buildQTableRow === 'function') {
     const qPts = PATIENTS.filter(p => p.status==='waiting' || p.seen);
     if(!qPts.length) {
-      qEl.innerHTML = '<div style="padding:24px;text-align:center;color:var(--g1);font-size:13px">No patients in queue today</div>';
+      dashQ.innerHTML = '<div style="padding:24px;text-align:center;color:var(--g1);font-size:13px">No patients in queue today</div>';
     } else {
-      qEl.innerHTML = qPts.map(p => buildQCard(p)).join('');
+      dashQ.innerHTML = `<div class="rc-queue-table-wrap"><table class="rc-queue-table" aria-label="Live queue"><thead><tr>
+        <th>#</th><th>Patient</th><th>BMSH ID</th><th>Dept</th><th>Doctor</th><th>Purpose</th><th>💧 Dilation</th><th>Wait</th><th>Status</th><th class="q-actions">Actions</th>
+      </tr></thead><tbody>${qPts.map((p,i)=>buildQTableRow(p,i+1)).join('')}</tbody></table></div>`;
     }
   }
 }
@@ -9021,7 +9051,7 @@ function renderReceptionPage() {
     }
     const pts = computeReceptionQueuePts();
     if(!pts.length) {
-      list.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--g1);font-size:13px">No patients in this view</td></tr>';
+      list.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--g1);font-size:13px">No patients in this view</td></tr>';
     } else {
       list.innerHTML = pts.map((p,i)=>buildQTableRow(p,i+1)).join('');
     }
@@ -9315,7 +9345,32 @@ function buildQCard(p, sno) {
   </div>`;
 }
 
-/** Table row for Reception Queue tab (valid <tbody> HTML). */
+function parsePatientAgeYears(ageStr) {
+  if(ageStr==null||ageStr==='') return null;
+  const m = String(ageStr).match(/(\d+)/);
+  return m ? parseInt(m[1],10) : null;
+}
+function isPatientVulnerable(p) {
+  if(p.vulnerable===true || p.highRisk===true) return true;
+  const y = parsePatientAgeYears(p.age);
+  if(y!==null && y>=65) return true;
+  return false;
+}
+/** Ophthalmology dilation elapsed (— if not eye / not dilated yet). */
+function dilationCellHtml(p) {
+  if(p.dept!=='ophtho') return '<span style="color:var(--g2);font-size:10px">—</span>';
+  if(!p.dilated || !p.dilatedTime) {
+    return '<span style="font-size:10px;color:var(--g2)">—</span>';
+  }
+  const now = Date.now();
+  const dilMin = Math.floor((now - p.dilatedTime)/60000);
+  const dilReady = dilMin >= 20;
+  const color = dilReady ? '#1a8c3c' : 'var(--purple)';
+  const bg = dilReady ? 'var(--green-lt)' : 'var(--purple-lt)';
+  return `<span style="font-size:10px;font-weight:800;padding:3px 8px;border-radius:8px;background:${bg};color:${color}">${dilMin}m ${dilReady ? '✓ Ready' : '/ 20m'}</span>`;
+}
+
+/** Table row for Reception Queue tab and Doctor My Queue (valid <tbody> HTML). */
 function buildQTableRow(p, sno) {
   const deptLabel = {ophtho:'Eye',obg:'OBG',psych:'Psych',skin:'Skin',lab:'Lab'}[p.dept]||p.dept||'—';
   const deptColor = {ophtho:'var(--blue)',obg:'#c0004e',psych:'var(--orange)',skin:'var(--purple)',lab:'var(--teal)'}[p.dept]||'var(--g2)';
@@ -9325,6 +9380,7 @@ function buildQTableRow(p, sno) {
   const waitStr = waitMin < 60 ? waitMin+'m' : Math.floor(waitMin/60)+'h '+(waitMin%60)+'m';
   const dilMin = p.dilated && p.dilatedTime ? Math.floor((now - p.dilatedTime)/60000) : 0;
   const dilReady = dilMin >= 20;
+  const vuln = isPatientVulnerable(p);
   const pendingPRs = PAY_REQUESTS.filter(r=>r.bmhId===p.bmhId&&r.status==='pending');
   const pendingAmt = pendingPRs.reduce((s,r)=>s+r.amount,0);
   const paidPRs = PAY_REQUESTS.filter(r=>r.bmhId===p.bmhId&&r.status==='paid');
@@ -9338,15 +9394,17 @@ function buildQTableRow(p, sno) {
   const onRow = p.preRegistered ? `checkInPatient('${p.bmhId}')` : `openPatient('${p.bmhId}')`;
   const nmEsc = (p.name||'').replace(/'/g,"\\'");
   const docShort = (p.doctor||'—').replace(/^Dr\.\s*/,'');
-  return `<tr onclick="${onRow}" style="cursor:pointer">
+  const vulnBadge = vuln ? '<span class="q-vuln-badge" title="Vulnerable — elderly (≥65) or flagged">⚠ VUL</span>' : '';
+  return `<tr class="${vuln ? 'row-vulnerable' : ''}" onclick="${onRow}" style="cursor:pointer">
     <td style="font-weight:900;color:var(--g2)">${sno}</td>
     <td><div style="display:flex;align-items:center;gap:6px"><span style="width:28px;height:28px;border-radius:50%;background:${p.color||'#1A3C6E'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:900;font-size:10px;flex-shrink:0">${p.initials||p.name[0]||'?'}</span>
-      <div><div style="font-weight:800;font-size:12.5px">${p.name}</div>
+      <div><div style="font-weight:800;font-size:12.5px;display:flex;align-items:center;flex-wrap:wrap;gap:4px">${p.name}${vulnBadge}</div>
       <div style="font-size:10px;color:var(--g1)">${p.age||'?'}Y · ${(p.sex||'?')[0]} · ${p.mob||'—'}</div>${chargeHint?`<div style="margin-top:2px">${chargeHint}</div>`:''}</div></div></td>
     <td style="font-family:var(--mono);font-size:10px;color:var(--bmh-teal);font-weight:700">${p.bmhId}</td>
     <td><span style="font-size:9px;padding:2px 6px;border-radius:6px;background:${deptColor}22;color:${deptColor};font-weight:800">${deptLabel}</span></td>
     <td style="font-size:10px;max-width:88px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.doctor||''}">${docShort}</td>
     <td style="font-size:10px;color:var(--g1);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.purpose||''}">${p.purpose||'—'}</td>
+    <td>${dilationCellHtml(p)}</td>
     <td style="font-size:10px;color:var(--g2)">${p.preRegistered?'—':waitStr}</td>
     <td><span style="font-size:9px;padding:2px 6px;border-radius:6px;background:${statusBg};font-weight:800">${statusTxt}</span></td>
     <td class="q-actions" onclick="event.stopPropagation()">
@@ -9539,16 +9597,16 @@ function renderDocQueue() {
   const xrefs   = (window.XREF_LOG||[]).filter(x => !userDept || x.fromDept===userDept || x.toDept===userDept);
   const ipdPts  = (window.IPD_PATIENTS||[]).filter(p => !userDept || p.dept===userDept || CURRENT_USER?.isAdmin);
 
-  const empty = label => `<div style="padding:24px;text-align:center;color:var(--g2);font-size:12.5px">No ${label} patients</div>`;
+  const emptyRow = label => `<tr><td colspan="10" style="text-align:center;padding:24px;color:var(--g2);font-size:12.5px">No ${label} patients</td></tr>`;
 
   const ae = document.getElementById('dq-active-list');
-  if(ae) ae.innerHTML = active.length ? active.map(p=>buildQCard(p)).join('') : empty('active');
+  if(ae) ae.innerHTML = active.length ? active.map((p,i)=>buildQTableRow(p,i+1)).join('') : emptyRow('active');
 
   const de = document.getElementById('dq-dil-list');
-  if(de) de.innerHTML = dilated.length ? dilated.map(p=>buildQCard(p)).join('') : empty('dilated');
+  if(de) de.innerHTML = dilated.length ? dilated.map((p,i)=>buildQTableRow(p,i+1)).join('') : emptyRow('dilated');
 
   const dne = document.getElementById('dq-done-list');
-  if(dne) dne.innerHTML = done.length ? done.map(p=>buildQCard(p)).join('') : empty('done');
+  if(dne) dne.innerHTML = done.length ? done.map((p,i)=>buildQTableRow(p,i+1)).join('') : emptyRow('done');
 
   // Dilated tab visibility — only show for ophtho
   const dilTab = document.getElementById('dq-tab-dil');
@@ -9587,6 +9645,141 @@ function renderDrSettings() {
 }
 
 // ── Init remember-me restore on load ────────────
+// ════════════════════════════════════════════════════════════════════════════
+// saveVisit — persists dept visit to Firebase (visits/{bmhId}/{visitKey})
+// ════════════════════════════════════════════════════════════════════════════
+function saveVisit(dept) {
+  const uidMap = { ophtho:'ophtho-pt-uid', obg:'obg-pt-uid', psych:'psych-pt-uid', skin:'skin-pt-uid' };
+  const nmMap  = { ophtho:'ophtho-pt-nm',  obg:'obg-pt-nm',  psych:'psych-pt-nm',  skin:'skin-pt-nm'  };
+  const bmhId  = document.getElementById(uidMap[dept])?.textContent?.trim();
+  const ptName = document.getElementById(nmMap[dept])?.textContent?.trim();
+  if(!bmhId || bmhId === '—') {
+    showToast('No patient selected — open a patient first','w'); return;
+  }
+  const now = new Date();
+  const visitKey = 'V' + now.getTime();
+  const visit = {
+    id: visitKey,
+    bmhId, ptName, dept,
+    date: now.toISOString(),
+    dateLabel: now.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}),
+    doctor: CURRENT_USER?.name || '—',
+    centre: CURRENT_USER?.centre || 'CHD',
+    savedBy: CURRENT_USER?.name || 'System',
+  };
+  if(dept === 'ophtho') {
+    visit.vaOD   = document.getElementById('ucva-od-dist')?.value || '';
+    visit.vaOS   = document.getElementById('ucva-os-dist')?.value || '';
+    visit.vaODNear = document.getElementById('ucva-od-near')?.value || '';
+    visit.vaOSNear = document.getElementById('ucva-os-near')?.value || '';
+    visit.iopGatOD = document.getElementById('iop-gat-od')?.value || '';
+    visit.iopGatOS = document.getElementById('iop-gat-os')?.value || '';
+    visit.iopNctOD = document.getElementById('iop-nct-od')?.value || '';
+    visit.iopNctOS = document.getElementById('iop-nct-os')?.value || '';
+    visit.pachyOD  = document.getElementById('pachy-od')?.value   || '';
+    visit.pachyOS  = document.getElementById('pachy-os')?.value   || '';
+    visit.gonioOD  = document.getElementById('gonio-od')?.value   || '';
+    visit.gonioOS  = document.getElementById('gonio-os')?.value   || '';
+    visit.rfODsph  = document.getElementById('rf-od-sph2')?.value || '';
+    visit.rfODcyl  = document.getElementById('rf-od-cyl2')?.value || '';
+    visit.rfODax   = document.getElementById('rf-od-ax2')?.value  || '';
+    visit.rfOSsph  = document.getElementById('rf-os-sph2')?.value || '';
+    visit.rfOScyl  = document.getElementById('rf-os-cyl2')?.value || '';
+    visit.rfOSax   = document.getElementById('rf-os-ax2')?.value  || '';
+    visit.cycODsph = document.getElementById('cyc-od-sph')?.value || '';
+    visit.cycODcyl = document.getElementById('cyc-od-cyl')?.value || '';
+    visit.cycODax  = document.getElementById('cyc-od-ax')?.value  || '';
+    visit.cycOSsph = document.getElementById('cyc-os-sph')?.value || '';
+    visit.cycOScyl = document.getElementById('cyc-os-cyl')?.value || '';
+    visit.cycOSax  = document.getElementById('cyc-os-ax')?.value  || '';
+    visit.subjODsph = document.getElementById('subj-od-sph')?.value || '';
+    visit.subjODcyl = document.getElementById('subj-od-cyl')?.value || '';
+    visit.subjODax  = document.getElementById('subj-od-ax')?.value  || '';
+    visit.subjOSsph = document.getElementById('subj-os-sph')?.value || '';
+    visit.subjOScyl = document.getElementById('subj-os-cyl')?.value || '';
+    visit.subjOSax  = document.getElementById('subj-os-ax')?.value  || '';
+    visit.fundODdisc = document.getElementById('fund-od-disc')?.value || '';
+    visit.fundODcd   = document.getElementById('fund-od-cd')?.value   || '';
+    visit.fundODmac  = document.getElementById('fund-od-mac')?.value  || '';
+    visit.fundODves  = document.getElementById('fund-od-ves')?.value  || '';
+    visit.fundODper  = document.getElementById('fund-od-per')?.value  || '';
+    visit.fundODtext = document.getElementById('fundus-od')?.value    || '';
+    visit.fundOSdisc = document.getElementById('fund-os-disc')?.value || '';
+    visit.fundOScd   = document.getElementById('fund-os-cd')?.value   || '';
+    visit.fundOSmac  = document.getElementById('fund-os-mac')?.value  || '';
+    visit.fundOSves  = document.getElementById('fund-os-ves')?.value  || '';
+    visit.fundOSper  = document.getElementById('fund-os-per')?.value  || '';
+    visit.fundOStext = document.getElementById('fundus-os')?.value    || '';
+    const slChips = {};
+    document.querySelectorAll('#oe-slitlamp .sl-sl-row, #oe-slitlamp [style*="grid-template-columns:90px"]').forEach(row => {
+      const label = row.querySelector('[style*="9.5px"]')?.textContent?.trim();
+      if(!label) return;
+      const cols = row.querySelectorAll('[style*="background:rgba"]');
+      if(cols.length < 2) return;
+      slChips[label] = {
+        od: [...cols[0].querySelectorAll('.sl-chip.sel')].map(c=>c.textContent.trim()),
+        os: [...cols[1].querySelectorAll('.sl-chip.sel')].map(c=>c.textContent.trim())
+      };
+    });
+    visit.slChips = slChips;
+    visit.slNotes = document.getElementById('sl-notes-text')?.value || '';
+    const dxLines = [...document.querySelectorAll('#rx-diagnosis-rows .rx-dx-line')].map(e=>e.value.trim()).filter(Boolean);
+    visit.diagnoses = dxLines;
+    visit.diagnosisText = document.getElementById('rx-diagnosis-text')?.value?.trim() || '';
+    visit.procedures = [...document.querySelectorAll('#rx-proc-advised [data-proc]')].map(e=>e.dataset.proc).filter(Boolean);
+    const ccRows = [];
+    document.querySelectorAll('.cc-row').forEach(row=>{
+      const txt = row.querySelector('.cc-inp')?.value?.trim();
+      if(txt) ccRows.push({text:txt, dur:row.querySelector('.cc-dur')?.value||'', eye:row.querySelector('.cc-eye')?.value||''});
+    });
+    visit.ccRows = ccRows;
+    visit.rx = JSON.parse(JSON.stringify(RX_DRUGS || []));
+    visit.hxSpectacles = document.getElementById('hx-spectacles')?.value || '';
+    visit.hxLastSpec = document.getElementById('hx-last-spec')?.value || '';
+    visit.hxOcularMeds = document.getElementById('hx-ocular-meds')?.value || '';
+    visit.familyHx = document.getElementById('hx-family')?.value || '';
+    visit.otherSystemic = document.getElementById('hx-other-systemic')?.value || '';
+    visit.drugAllergy = document.getElementById('drug-allergy')?.value || '';
+    visit.drugAllergySpec = document.getElementById('drug-allergy-spec')?.value || '';
+    visit.pohOdText = document.getElementById('poh-od-text')?.value || '';
+    visit.pohOsText = document.getElementById('poh-os-text')?.value || '';
+    const PHX_IDS = ['phx-allergy','phx-diabetes_mellit','phx-hypertension','phx-heart_disease__','phx-asthma___copd','phx-headache___migr','phx-thyroid_disease','phx-renal_disease','phx-previous_surger','phx-bleeding_disord'];
+    visit.phxExtra = {};
+    PHX_IDS.forEach(id => {
+      visit.phxExtra[id] = {
+        dur: document.getElementById(id+'-dur')?.value || '',
+        rx: document.getElementById(id+'-rx')?.value || ''
+      };
+    });
+    visit.advice = document.getElementById('rx-advice-text')?.value || '';
+  } else if(dept === 'obg') {
+    visit.edd = document.getElementById('obg-edd')?.value || '';
+    visit.gravida = document.getElementById('obg-gravida')?.value || '';
+    visit.bp = document.getElementById('obg-bp')?.value || '';
+    visit.weight = document.getElementById('obg-weight')?.value || '';
+    visit.fhr = document.getElementById('obg-fhr')?.value || '';
+    visit.notes = document.querySelector('#pg-obg textarea')?.value || '';
+    visit.rx = JSON.parse(JSON.stringify(RX_DRUGS || []));
+  } else if(dept === 'psych') {
+    visit.chiefComplaint = document.querySelector('#psych-hx textarea')?.value || '';
+    visit.mse = document.querySelector('#psych-mse textarea')?.value || '';
+    visit.notes = document.querySelector('#psych-notes textarea')?.value || '';
+    visit.rx = JSON.parse(JSON.stringify(RX_DRUGS || []));
+  } else if(dept === 'skin') {
+    visit.chiefComplaint = document.querySelector('#skin-hx textarea')?.value || '';
+    visit.exam = document.querySelector('#skin-exam textarea')?.value || '';
+    visit.procedures = document.querySelector('#skin-procedures textarea')?.value || '';
+    visit.rx = JSON.parse(JSON.stringify(RX_DRUGS || []));
+  }
+  if(typeof fbSet !== 'function') { showToast('Save not available (offline)', 'w'); return; }
+  fbSet(`visits/${bmhId}/${visitKey}`, visit)
+    .then(() => {
+      showToast(`✅ ${ptName} — visit saved (${visit.dateLabel})`, 's');
+      if(typeof loadPastVisits === 'function') loadPastVisits(bmhId, dept);
+    })
+    .catch(e => showToast('Save failed: ' + e.message, 'w'));
+}
+
 window.addEventListener('DOMContentLoaded', function() {
   // Load saved creds
   try {
