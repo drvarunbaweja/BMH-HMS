@@ -7,10 +7,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
-  <script type="module" crossorigin src="/BMH-HMS/assets/main-CV7Mltkm.js"></script>
+  <script type="module" crossorigin src="/BMH-HMS/assets/main-CaaVXWZQ.js"></script>
   <link rel="modulepreload" crossorigin href="/BMH-HMS/assets/firebase-core-tfo9VOpH.js">
   <link rel="modulepreload" crossorigin href="/BMH-HMS/assets/firebase-db-ntSLKB2h.js">
-  <link rel="stylesheet" crossorigin href="/BMH-HMS/assets/main-DVucDePU.css">
+  <link rel="stylesheet" crossorigin href="/BMH-HMS/assets/main-Dha0tA3N.css">
 </head>
 <body>
 
@@ -148,9 +148,28 @@
 
 <!-- ════════════════════ DOCTOR QUEUE ════════════════════ -->
 <div class="page" id="pg-doctor-queue">
-  <div class="g32">
-    <div class="card">
-      <div class="card-hd"><div><div class="card-title" id="dq-title">Dr. Varun Baweja — My Patients</div><div class="card-sub"><span class="live-dot"></span>Click any patient to open case sheet instantly</div></div><button class="btn btn-gold btn-xs" onclick="openM('m-np')">+ Add Patient</button></div>
+  <div class="card dq-queue-main">
+    <div class="card-hd" style="flex-wrap:wrap;gap:10px;align-items:flex-start">
+      <div><div class="card-title" id="dq-title">Dr. Varun Baweja — My Patients</div><div class="card-sub"><span class="live-dot"></span>Click any patient to open case sheet instantly</div></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto">
+        <button type="button" class="btn btn-gold btn-xs" onclick="openM('m-np')">+ Add Patient</button>
+        <button type="button" class="btn btn-outline btn-xs" onclick="nav('ophtho',null)">👁️ Eye Exam</button>
+        <button type="button" class="btn btn-outline btn-xs" onclick="nav('appointments',null)">📅 Appointments</button>
+        <button type="button" class="btn btn-outline btn-xs" onclick="openM('m-print-tpl')">🖨️ Print Template</button>
+        <button type="button" class="btn btn-outline btn-xs" onclick="nav('discharge',null)">🏠 Discharge</button>
+      </div>
+    </div>
+    <div class="dq-toolbar" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;padding:10px 12px;background:var(--g6);border-radius:var(--rsm);margin-bottom:12px;border:1px solid var(--g5)">
+      <div style="flex:1;min-width:160px">
+        <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">💳 Payment status</div>
+        <div id="dq-pay" style="font-size:11px;color:var(--g1);min-height:18px"></div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;flex:2;min-width:260px">
+        <div class="form-group" style="margin:0"><label class="fl">Patient</label><select id="sp-pt" style="font-size:12px"></select></div>
+        <div class="form-group" style="margin:0"><label class="fl">Procedure</label><select id="sp-proc" style="font-size:12px"><option value="1200">Biometry ₹1,200</option><option value="1800">OCT Macula ₹1,800</option><option value="1500">HVF ₹1,500</option><option value="600">Fundus ₹600</option><option value="38000">PMICS Surgery ₹38,000</option></select></div>
+        <button type="button" class="btn btn-orange btn-sm" style="margin-bottom:2px" onclick="sendCharge()">📤 Send to Reception</button>
+      </div>
+    </div>
       <div class="ptabs">
         <div class="ptab active" onclick="ptab(this,'dq-active')">Active</div>
         <div class="ptab" id="dq-tab-dil" onclick="ptab(this,'dq-dil')">💧 Dilated</div>
@@ -158,8 +177,48 @@
         <div class="ptab" onclick="ptab(this,'dq-ipd')">🛏️ IPD</div>
         <div class="ptab" onclick="ptab(this,'dq-done')">✓ Done</div>
       </div>
-      <div class="tab-content active" id="dq-active"><div id="dq-active-list"></div></div>
-      <div class="tab-content" id="dq-dil"><div id="dq-dil-list"></div></div>
+      <div class="tab-content active" id="dq-active">
+        <div class="rc-queue-table-wrap">
+          <table class="rc-queue-table dq-queue-table" aria-label="Active queue">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Patient</th>
+                <th>BMSH ID</th>
+                <th>Dept</th>
+                <th>Doctor</th>
+                <th>Purpose</th>
+                <th>💧 Dilation</th>
+                <th>Wait</th>
+                <th>Status</th>
+                <th class="q-actions">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="dq-active-list"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="tab-content" id="dq-dil">
+        <div class="rc-queue-table-wrap">
+          <table class="rc-queue-table dq-queue-table" aria-label="Dilated queue">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Patient</th>
+                <th>BMSH ID</th>
+                <th>Dept</th>
+                <th>Doctor</th>
+                <th>Purpose</th>
+                <th>💧 Dilation</th>
+                <th>Wait</th>
+                <th>Status</th>
+                <th class="q-actions">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="dq-dil-list"></tbody>
+          </table>
+        </div>
+      </div>
       <div class="tab-content" id="dq-xref">
         <div style="background:var(--blue-lt);border-radius:var(--rsm);padding:10px 12px;margin-bottom:10px;border-left:4px solid var(--blue)">
           <div style="font-size:11px;font-weight:800;color:var(--blue)">↔️ Cross-Department Referrals</div>
@@ -176,27 +235,28 @@
         <button class="btn btn-purple btn-sm" style="margin-bottom:10px" onclick="openM('m-ipd-admit')">+ Admit to IPD</button>
         <div id="dq-ipd-list"></div>
       </div>
-      <div class="tab-content" id="dq-done"><div id="dq-done-list"></div></div>
-    </div>
-    <div class="col">
-      <div class="card"><div class="card-hd"><div class="card-title">💳 Payment Status</div></div><div id="dq-pay"></div>
-        <div class="divider"></div>
-        <div class="fg fg1" style="gap:7px">
-          <div class="form-group"><label class="fl">Patient</label><select id="sp-pt" style="font-size:12px"></select></div>
-          <div class="form-group"><label class="fl">Procedure</label><select id="sp-proc" style="font-size:12px"><option value="1200">Biometry ₹1,200</option><option value="1800">OCT Macula ₹1,800</option><option value="1500">HVF ₹1,500</option><option value="600">Fundus ₹600</option><option value="38000">PMICS Surgery ₹38,000</option></select></div>
-          <button class="btn btn-orange btn-sm" style="justify-content:center" onclick="sendCharge()">📤 Send to Reception</button>
+      <div class="tab-content" id="dq-done">
+        <div class="rc-queue-table-wrap">
+          <table class="rc-queue-table dq-queue-table" aria-label="Done today">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Patient</th>
+                <th>BMSH ID</th>
+                <th>Dept</th>
+                <th>Doctor</th>
+                <th>Purpose</th>
+                <th>💧 Dilation</th>
+                <th>Wait</th>
+                <th>Status</th>
+                <th class="q-actions">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="dq-done-list"></tbody>
+          </table>
         </div>
       </div>
-      <div class="card"><div class="card-hd"><div class="card-title">Quick Actions</div></div>
-        <div style="display:flex;flex-direction:column;gap:6px">
-          <button class="btn btn-outline btn-sm" style="justify-content:center" onclick="nav('ophtho',null)">👁️ Eye Examination</button>
-          <button class="btn btn-outline btn-sm" style="justify-content:center" onclick="nav('appointments',null)">📅 Book Appointment</button>
-          <button class="btn btn-outline btn-sm" style="justify-content:center" onclick="openM('m-print-tpl')">🖨️ Print Template</button>
-          <button class="btn btn-outline btn-sm" style="justify-content:center" onclick="nav('discharge',null)">🏠 Discharge Card</button>
-        </div>
-      </div>
     </div>
-  </div>
 </div>
 
 
@@ -1551,6 +1611,7 @@
                 <th>Dept</th>
                 <th>Doctor</th>
                 <th>Purpose</th>
+                <th>💧 Dilation</th>
                 <th>Wait</th>
                 <th>Status</th>
                 <th class="q-actions">Actions</th>
