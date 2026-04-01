@@ -1,0 +1,637 @@
+HMS V49
+27.54 KB •633 lines
+•
+Formatting may be inconsistent from source
+# BMH HMS — Project Reference Document
+## Baweja Multispeciality Hospital Management System
+### Last Updated: March 2026 | Current Version: v49
+
+---
+
+## Project Overview
+
+A **single-file HTML Hospital Management System** for Baweja Multispeciality Hospital (BMH),
+operating across two branches: Chandigarh (CHD) and Ropar (RPR).
+
+**Architecture:** Everything in one `.html` file — HTML, CSS, JavaScript, Firebase SDK,
+base64 letterhead image (~70KB embedded). No build process, no server, no dependencies
+to install. Open in any modern browser.
+
+**Firebase:** Google Firebase Realtime Database (compat SDK v10.7.0)
+- Project ID: `bmh-hms`
+- Database URL: `https://bmh-hms-default-rtdb.asia-southeast1.firebasedatabase.app`
+- Storage bucket: `bmh-hms.firebasestorage.app`
+
+---
+
+## Departments & Doctors
+
+| Department | Queue Key | Doctor | Username |
+|------------|-----------|--------|----------|
+| Ophthalmology | `ophtho` | Dr. Varun Baweja | `drvarun` |
+| OBG (CHD) | `obg` | Dr. Geeta Baweja | `drgeeta` |
+| OBG (RPR) | `obg` | Dr. Namrata Baweja | `drnamrata` |
+| Neuropsychiatry | `psych` | Dr. Tarun Baweja | `drtarun` |
+| Skin & Cosmetology | `skin` | Dr. Pooja Baweja | `drpooja` |
+| Lab (CHD) | `lab` | Lab Tech CHD | `lab_chd` |
+| Lab (RPR) | `lab` | Lab Tech Ropar | `lab_rpr` |
+| Reception (CHD) | `reception` | Reception CHD | `rec_chd` |
+| Reception (RPR) | `reception` | Reception Ropar | `rec_rpr` |
+| OT Module | `ot` | All surgeons | — |
+| IPD Ward | `ipd` | All doctors | — |
+| TPA / Insurance | `tpa` | TPA Executive CHD | `tpa_chd` |
+| Inventory | — | Inventory Manager | `inventory` |
+| Optometrist | `ophtho` | Optometrist | `optometrist` |
+
+---
+
+## Login Credentials
+
+All credentials live in `USER_DB` (JS object in the main script).
+On login, `userSettings/` is fetched from Firebase to pick up any
+password changes or new users created via the admin panel.
+
+| Username | Password | Role | Centre | isAdmin |
+|----------|----------|------|--------|---------|
+| `drvarun` | `BMH@Varun25` | Admin | BOTH | ✅ |
+| `drbaweja` | `BMH@Admin25` | Admin | BOTH | ✅ |
+| `drtarun` | `BMH@Psych25` | Doctor | CHD | ❌ |
+| `drgeeta` | `BMH@OBG125` | Doctor | CHD | ❌ |
+| `drnamrata` | `BMH@OBG225` | Doctor | RPR | ❌ |
+| `drpooja` | `BMH@Skin25` | Doctor | CHD | ❌ |
+| `rec_chd` | `BMHRec@CHD25` | Reception | CHD | ❌ |
+| `rec_rpr` | `BMHRec@RPR25` | Reception | RPR | ❌ |
+| `lab_chd` | `BMHLab@CHD25` | Lab | CHD | ❌ |
+| `lab_rpr` | `BMHLab@RPR25` | Lab | RPR | ❌ |
+| `tpa_chd` | `BMHTPA@CHD25` | TPA | CHD | ❌ |
+| `inventory` | `BMHInv@2025` | Inventory | BOTH | ❌ |
+| `optometrist` | `BMHOpto@25` | Optometrist | BOTH | ❌ |
+
+**Admin Login Management** (Settings → 🔐 Logins):
+- Any admin can add users, edit roles/centre/dept, reset passwords, enable/disable accounts
+- New users saved to Firebase `userSettings/{username}` and picked up on next login everywhere
+- Disabled accounts blocked at login with friendly error message
+- All users can change their own password via Settings → Logins
+
+---
+
+## Firebase Data Structure
+```
+Firebase Realtime DB
+├── patients/{bmhId}
+│   ├── bmhId, name, age, sex, mob, dob, addr
+│   ├── dept, doctor, centre, status
+│   ├── seen, dilated, dilatedTime
+│   ├── ipdAdmitted, xrefTo, xrefDoctor
+│   ├── balance, advance
+│   ├── color, initials
+│   ├── createdAt, createdBy, lastUpdated, updatedBy
+│   └── lastSeen, lastDoctor
+│
+├── visits/{bmhId}/{visitKey}
+│   ├── id, bmhId, ptName, dept, date, dateLabel
+│   ├── doctor, centre, savedBy
+│   ├── [ophtho fields] vaOD, vaOS, iopOD, iopOS, rxODsph, etc.
+│   ├── [obg fields] edd, gravida, bp, weight, fhr
+│   ├── [psych fields] chiefComplaint, mse, notes
+│   ├── [skin fields] chiefComplaint, exam, procedures
+│   └── rx: [ RX_DRUGS array snapshot ]
+│
+├── payRequests/{id}
+│   ├── id, patient, bmhId, for, amount, status
+│   ├── from, date, centre
+│   ├── xref (bool), xrefDept, xrefDoctor  ← cross-refer paid refs
+│   └── collected (bool)
+│
+├── appointments/{id}
+│   └── patient, bmhId, date, time, doctor, dept, purpose, status
+│
+├── transactions/{id}
+│   ├── amount, mode (Cash|UPI|Card|Insurance)
+│   ├── dept, patient, bmhId
+│   ├── collected (bool), date
+│   └── createdBy
+│
+├── otCases/{id}
+│   ├── id, bmhId, patient, age, sex
+│   ├── dx, procedure, site, surgeon, anaes
+│   ├── date, scheduledTime, room, iol, priority
+│   ├── preop, consent, fasting, status
+│   ├── timings: { patientIn, anaesStart, incision, procEnd, patientOut, rrIn }
+│   ├── signIn, signOut, timeOut (bool)
+│   ├── signInTime, signInBy, timeOutTime, signOutTime (WHO timestamps)
+│   ├── complications, bloodLoss, notes, findings, narrative
+│   ├── scrubNurse, circNurse, anaesDoc
+│   └── createdAt, createdBy, lastUpdated
+│
+├── ipdPatients/{id}
+│   ├── id, bmhId, name, age, sex, dept
+│   ├── ward, type, doctor, room, dx, notes
+│   ├── admittedDate, admittedAt, admittedBy, status
+│   └── vitalSigns[], progressNotes[]
+│
+├── crossReferrals/{key}
+│   ├── id, bmhId, ptName
+│   ├── toDoctor, toDept, fromDept
+│   ├── fee (bool), paid (bool), reason
+│   ├── time, createdBy, createdAt
+│   └── [saved via fbPush]
+│
+├── userSettings/{username}
+│   ├── pw (hashed? NO — plain text currently)
+│   ├── name, role, dept, centre
+│   ├── canSeeAllCentres, isAdmin, disabled
+│   ├── createdAt, createdBy
+│   └── pwChangedAt, pwChangedBy
+│
+└── auditLog/{key}
+    ├── user, role, centre
+    ├── action (LOGIN | IPD_ADMIT | etc.)
+    └── timestamp / at
+```
+
+> ⚠️ **Security Note:** Passwords are currently stored in plain text in Firebase
+> `userSettings/`. Firebase Realtime DB rules should be set to require authentication.
+> This is a known limitation to address in a future version.
+
+---
+
+## Key Global Variables
+```javascript
+// Set at runtime
+window.CURRENT_USER       // Logged-in user object
+window.CURRENT_PATIENT    // Currently open patient (set by openPatient())
+window.FBDB               // Firebase DB reference
+window.LH_SRC             // Base64 JPEG letterhead (~70KB, set in Script 0)
+window.XREF_LOG           // Cross-referral log array (session only)
+window.IPD_PATIENTS       // Alias for const IPD_PATIENTS
+
+// Declared as const in main script (Script 3)
+const USER_DB             // All login profiles
+const PATIENTS            // Active patient array (loaded from Firebase on login)
+const TRANSACTIONS        // Financial transactions
+const PAY_REQUESTS        // Pending payment requests
+const APPOINTMENTS        // Booked appointments
+const RX_DRUGS            // Current prescription (cleared on openPatient())
+const OT_CASES            // Scheduled OT cases
+const IPD_PATIENTS        // Admitted IPD patients
+const INVENTORY           // Stock items
+const DRUG_LIBRARY        // Autocomplete drug database
+const CONSENT_DATA        // Bilingual consent templates (EN/HI/PA)
+```
+
+---
+
+## Patient Object Structure
+```javascript
+{
+  bmhId:        'BMSH-123456',
+  name:         'Patient Full Name',
+  initials:     'PF',
+  color:        '#1A3C6E',          // avatar background colour
+  age:          '34',
+  sex:          'Male' | 'Female',
+  mob:          '+91 XXXXX XXXXX',
+  dob:          'YYYY-MM-DD',
+  addr:         'Address string',
+  dept:         'ophtho' | 'obg' | 'psych' | 'skin',
+  doctor:       'Dr. Varun Baweja',
+  centre:       'CHD' | 'RPR',
+  status:       'waiting' | 'seen' | 'ipd',
+  seen:         false,
+  dilated:      false,              // ophtho only
+  dilatedTime:  1234567890,         // Date.now() timestamp
+  ipdAdmitted:  false,
+  xrefTo:       'dept string',      // set on free cross-refer
+  xrefDoctor:   'Dr. Name',
+  xrefPaid:     false,              // set when paid cross-refer cleared
+  balance:      0,
+  advance:      0,
+  createdAt:    'ISO string',
+  createdBy:    'username'
+}
+```
+
+---
+
+## RX_DRUGS Array — Drug Object Structure
+```javascript
+{
+  name:   'Moxifloxacin 0.5% Eye Drop',   // Generic / display name
+  brand:  'Vigamox',                        // Trade name
+  eye:    ['Both Eyes (OU)'],               // Route — only used in ophtho print
+  freq:   'Four times (QID)',
+  dur:    '1 Week',
+  lang: {
+    en: 'Instil 1 drop in both eyes, four times daily, for 1 week.',
+    hi: 'दोनों आँखों में 1 बूँद डालें, दिन में चार बार, 1 सप्ताह तक।',
+    pa: 'ਦੋਵੇਂ ਅੱਖਾਂ ਵਿੱਚ 1 ਬੂੰਦ ਪਾਓ, ਦਿਨ ਵਿੱਚ ਚਾਰ ਵਾਰ, 1 ਹਫ਼ਤੇ ਲਈ।'
+  },
+  taper: ''                                 // Optional taper schedule
+}
+```
+
+**Important:** The eye/route column in `renderRxDrugs()` is hidden for non-ophtho
+departments. It detects `document.querySelector('.page.active')?.id` to determine
+if the active page is `pg-ophtho`.
+
+---
+
+## Core Function Reference
+
+### Patient Lifecycle
+
+| Function | Signature | What It Does |
+|----------|-----------|-------------|
+| `registerPatient()` | `()` | Reads reception form, creates patient object, pushes to PATIENTS, saves to Firebase `patients/`, generates token number |
+| `openPatient(bmhId)` | `(string)` | Sets `window.CURRENT_PATIENT`, clears ALL form fields/selects/textareas/checkboxes/chips across all dept pages, navigates to patient's dept, loads past visits |
+| `markSeen(bmhId)` | `(string)` | Sets `p.seen=true, p.status='seen', p.dilated=false`, saves to Firebase, re-renders queue |
+| `markDilated(bmhId, name)` | `(string, string)` | Sets `p.dilated=true`, saves timestamp + Firebase, re-renders queue |
+| `saveVisit(dept)` | `('ophtho'\|'obg'\|'psych'\|'skin')` | Collects all dept-specific form data + RX_DRUGS snapshot, saves to `visits/{bmhId}/{key}` |
+| `loadPastVisits(bmhId, dept)` | `(string, string)` | Fetches all visits for patient from Firebase, renders history cards |
+
+### Queue & Navigation
+
+| Function | What It Does |
+|----------|-------------|
+| `renderDocQueue()` | Filters PATIENTS by `CURRENT_USER.dept` (admin sees all). Populates Active / Dilated / Cross-Refer / IPD / Done tabs. Dilated tab hidden for non-ophtho |
+| `buildQCard(p)` | Returns queue card HTML with inline icons: ✓ (all), 💧 (ophtho only), ↔️ (all), 🛏️ (all) |
+| `nav(id, el)` | Navigates to page by ID, triggers page-specific render functions. Multiple nav overrides chained (`_navV38`, `_navV38b`) |
+| `renderDashboard()` | Updates OPD count, collection, pending, appointments, low-stock count |
+
+### Cross-Refer Workflow
+
+| Function | What It Does |
+|----------|-------------|
+| `openXRefModal(bmhId)` | Populates patient selector, opens `#m-xref` modal |
+| `doXRef()` | **Free:** changes `p.dept` immediately, patient appears in target queue. **Paid:** pushes to PAY_REQUESTS with `xref:true, xrefDept, xrefDoctor`; patient moves to queue only after `markPaid()` |
+| `markPaid(id)` | If `pr.xref===true` → routes patient to `pr.xrefDept`, sets `p.status='waiting'`. Always saves to Firebase |
+
+### IPD Workflow
+
+| Function | What It Does |
+|----------|-------------|
+| `openIPDFromQueue(bmhId)` | Pre-selects patient in IPD modal, opens `#m-ipd-admit` |
+| `confirmIPDAdmit()` | Creates IPD entry object, pushes to `window.IPD_PATIENTS`, saves to Firebase `ipdPatients/`, sets `p.ipdAdmitted=true`, logs audit |
+| `renderIPD()` | Syncs `window.IPD_PATIENTS` → local array, renders IPD list page |
+
+### OT Module
+
+| Function | What It Does |
+|----------|-------------|
+| `renderOTList()` | Renders OT cases with `otCaseCard()`. Filters by date/surgeon selectors |
+| `renderOTListSafe()` | Safe wrapper around `renderOTList()`, called by nav override |
+| `openOTCase(id)` | Sets `activeOTCase`, prefills timer inputs from `c.timings`, prefills notes (no hardcoded text), renders detail panel with WHO status |
+| `addOTCase()` | Creates case object, pushes to `OT_CASES`, saves to Firebase `otCases/` |
+| `signOffWHO(phase)` | Validates all `.who-cb[data-checked="1"]` in tab, marks phase complete with timestamp + user, saves to Firebase |
+| `toggleWHO(el)` | Toggles `data-checked` attribute on WHO checklist checkbox |
+| `stampTime(id)` | Sets input to current time, saves to `activeOTCase.timings[key]`, syncs Firebase |
+| `calcOTDurations()` | Calculates anaes→incision, procedure time, total OT time from time inputs |
+| `saveOTNotes()` | Reads notes/complications/bloodLoss from form, saves to Firebase |
+| `updateOTStatus(id, status)` | Updates case status + `lastUpdated`, saves to Firebase |
+
+### Printing
+
+| Function | Source Fields | Output |
+|----------|--------------|--------|
+| `printOphthoSheet()` | `ucva-od-dist`, `ucva-os-dist`, `iop-gat-od/os`, `iop-nct-od/os`, `rf-od-sph2/cyl2/ax2`, `pachy-od/os`, `cc-text`, `dur-text`, `ipd-val`, `RX_DRUGS` | A4 case sheet with VA table, IOP, refraction grid, **8 diagrams (Lids/Cornea/Lens/Fundus ×2 eyes)**, diagnosis, medication, follow-up |
+| `printUnifiedRx(deptId)` | `RX_DRUGS`, diagnosis inputs, `CURRENT_USER`, `window.LH_SRC` | Professional prescription with letterhead, patient bar, diagnosis, drug table (with trilingual instructions), follow-up box, doctor signature |
+| `printPsychSheet()` | — | Calls `printUnifiedRx('psych')` |
+| `printSkinSheet()` | — | Calls `printUnifiedRx('skin')` |
+| `printOBGCard()` | OBG form fields | ANC card with visit table |
+| `printOTCard(id)` | OT_CASES entry | OT scheduling card |
+| `printWHOChecklist()` | WHO checkbox states | WHO Safe Surgery checklist print |
+
+### Login & User Management
+
+| Function | What It Does |
+|----------|-------------|
+| `loginUser()` | Validates USER_DB, checks `disabled` flag, hides gate/shows shell, loads Firebase `userSettings/` to sync password changes and new users |
+| `changeMyPassword()` | Validates current password, updates `USER_DB[uname].pw`, saves to Firebase `userSettings/`, updates localStorage remember-me |
+| `renderAdminUsersList()` | Admin only — renders all USER_DB entries with role badges, active/disabled status, Edit + Enable/Disable buttons |
+| `openAddUserModal()` | Admin only — opens `#m-add-user` modal |
+| `saveNewUser()` | Validates, adds to USER_DB, saves to Firebase `userSettings/` |
+| `openEditUser(uname)` | Pre-fills `#m-edit-user` modal |
+| `saveEditUser()` | Updates USER_DB entry, optionally resets password, saves to Firebase |
+| `setUserDisabled(uname, bool)` | Toggles disabled flag, saves to Firebase, re-renders list |
+
+### Firebase Helpers
+```javascript
+fbSet(path, data)       // FBDB.ref(path).set(data) — returns Promise
+fbUpdate(path, data)    // FBDB.ref(path).update(data) — returns Promise
+fbPush(path, data)      // FBDB.ref(path).push(data) — returns Promise (auto-key)
+fbOnce(path, cb)        // FBDB.ref(path).once('value') → cb(val)
+fbOn(path, cb)          // FBDB.ref(path).on('value') → real-time listener
+```
+
+All helpers silently resolve if `window.FBDB` is undefined (Firebase not loaded),
+so offline use doesn't throw errors.
+
+---
+
+## UI Architecture
+
+### Page IDs (nav targets)
+```
+dashboard, reception, appointments, payments,
+doctor-queue, ophtho, obg, psych, skin,
+lab, ipd, ot, print-templates, consents,
+discharge, brochures, reports, billing, tpa,
+inventory, centres, settings
+```
+
+### Examination Page IDs
+- `pg-ophtho` — Eye Examination
+- `pg-obg` — OBG Clinic
+- `pg-psych` — Neuropsychiatry
+- `pg-skin` — Skin & Cosmetology
+
+### Key Element IDs — Ophtho Examination Form
+```
+cc-text, dur-text                           — Chief complaint, duration
+va-od-uc, va-os-uc                          — UCVA (quick entry selects)
+ucva-od-dist, ucva-os-dist                  — UCVA distance (refraction table)
+ucva-od-near, ucva-os-near                  — UCVA near
+iop-gat-od, iop-gat-os                      — IOP GAT
+iop-nct-od, iop-nct-os                      — IOP NCT
+pachy-od, pachy-os                          — Pachymetry
+rf-od-sph2, rf-od-cyl2, rf-od-ax2          — Final Rx OD (subjective refraction)
+rf-os-sph2, rf-os-cyl2, rf-os-ax2          — Final Rx OS
+cc-od-sph, cc-od-cyl, cc-od-axis           — Cycloplegic refraction OD
+cc-os-sph, cc-os-cyl, cc-os-axis           — Cycloplegic refraction OS
+final-rx-od-sph/cyl/axis                    — Alternate final Rx fields
+ipd-val                                     — Inter-pupillary distance
+cv-od-plates, cv-os-plates                  — Colour vision plates
+cv-blind-od, cv-blind-os                    — Colour blindness checkboxes
+ophtho-pt-nm, ophtho-pt-uid                 — Patient name and BMSH ID display
+rx-fu-date                                  — Follow-up date
+```
+
+### Doctor Queue Tabs (pg-doctor-queue)
+```
+dq-active        → Active patients (waiting, not dilated)
+dq-dil           → Dilated patients (ophtho only, hidden for others)
+dq-xref          → Cross-refer log for today
+dq-ipd           → IPD patients from this dept
+dq-done          → Seen/done patients
+
+List containers:
+dq-active-list, dq-dil-list, dq-xref-log, dq-ipd-list, dq-done-list
+```
+
+### Cross-Refer Modal (`#m-xref`)
+```
+xref-pt-sel      → Patient selector (populated by openXRefModal())
+xref-to          → Target doctor/dept dropdown
+xref-fee-sel     → 'no' = Free | 'yes' = With new consultation fee
+xref-reason      → Textarea for clinical reason
+```
+
+### IPD Admit Modal (`#m-ipd-admit`)
+```
+ipd-pt-sel       → Patient selector
+ipd-ward         → Ward / Bed (text)
+ipd-type         → Surgical|Medical|Obstetric|Newborn|Paediatric
+ipd-doctor       → Admitting doctor
+ipd-room         → Room number
+ipd-dx           → Diagnosis at admission
+ipd-notes        → Special instructions
+```
+
+### Settings Page Tabs
+```
+set-general, set-charges, set-logins, set-doctors,
+set-consents, set-drugs, set-import
+```
+
+---
+
+## CSS Variables (Design System)
+```css
+--bmh-blue: #1A3C6E     /* Primary navy */
+--bmh-gold: #D4A017     /* Accent gold */
+--bmh-teal: #0B7B8C     /* Secondary teal */
+--blue: #007AFF         /* Action blue */
+--green: #34C759        /* Success */
+--red: #FF3B30          /* Danger */
+--orange: #FF9500       /* Warning */
+--purple: #AF52DE       /* Psychiatry */
+--indigo: #5856D6
+--g1–g6                 /* Grey scale */
+--tx: #1C1C1E           /* Primary text */
+--font: 'Nunito', sans-serif
+--mono: 'JetBrains Mono', monospace
+--r: 14px               /* Border radius */
+--rsm: 10px
+--sh, --sh-md, --sh-lg  /* Box shadows */
+```
+
+---
+
+## Script Block Structure
+
+The HTML file has **7 `<script>` blocks**:
+
+| # | Size | Content |
+|---|------|---------|
+| 0 | ~70KB | Letterhead base64 image assignment + DOMContentLoaded show letterhead |
+| 1 | empty | (Firebase CDN) |
+| 2 | empty | (Firebase CDN) |
+| 3 | ~405KB | **Main application** — all data, all functions, all logic |
+| 4 | empty | |
+| 5 | empty | |
+| 6 | ~21KB | Firebase init + `initFirebase()` IIFE |
+
+The main script (block 3) is a single `<script>` tag with no `type="module"` —
+everything is global scope. Function declarations are hoisted, so order largely
+doesn't matter, but several functions use `window.nav` overrides chained via
+`_navV38`, `_navV38b` etc.
+
+---
+
+## Version History & What Was Fixed
+
+### v47 → v48
+- **Root cause of login "Script error":** Missing comma after `ivt:` key in
+  `CONSENT_DATA` object — caused JS `SyntaxError` killing the entire 380KB
+  main script block before any code ran
+- Removed duplicate function definitions:
+  `saveVisit`, `loadPastVisits`, `renderPastVisitCard`, `registerPatient`
+  (old copies at lines ~8269–8469 removed; correct versions at ~10xxx kept)
+- Added `renderOTListSafe()` as safe wrapper (was called but never defined)
+- Fixed `printPsychSheet()` / `printSkinSheet()` to call `printUnifiedRx()`
+  instead of just `window.print()`
+- Removed "Include in printout" checkboxes from OBG, Psych, Skin prescription
+  tabs (kept only in Ophthalmology)
+- Added **← Queue** back button to all 4 examination pages
+- `renderRxDrugs()` now detects active page — hides Eye/Route selector column
+  for non-ophtho departments
+- `openPatient()` now stamps `obg/psych/skin-rx-ptname/ptid/agesex` spans
+- Added Admin Login Management panel in Settings → Logins:
+  - Change My Password (all users)
+  - View/enable/disable all users (admin only)
+  - Add new user (admin only)
+  - Edit user details + reset password (admin only)
+- Firebase `userSettings/` sync on login — picks up password changes and new
+  users created on other devices
+- OT `saveOTNotes()` now actually saves to Firebase
+- OT `addOTCase()` saves new cases to Firebase
+- OT `updateOTStatus()` saves status changes to Firebase
+- OT `signOffWHO()` saves WHO completion to Firebase
+
+### v48 → v49
+- **Doctor Queue** — added Dilated / Cross-Refer / IPD tabs (previously missing)
+- **Dilated tab** hidden for non-ophtho doctors automatically
+- **Inline action icons** on every queue card:
+  - ✓ Mark Seen (all depts)
+  - 💧 Mark Dilated (ophtho only, disappears after dilating)
+  - ↔️ Cross-Refer (all depts)
+  - 🛏️ Admit to IPD (all depts)
+- **Cross-refer routing** actually works:
+  - Free → patient dept changes immediately, appears in target queue
+  - Paid → pulsating reception request; on `markPaid()`, patient routed to dest
+- **IPD Admit** `confirmIPDAdmit()` actually pushes to `IPD_PATIENTS` + Firebase
+- **Dept queue filtering** — each doctor sees only own dept patients
+- **`window.CURRENT_PATIENT`** set by `openPatient()` — `printOphthoSheet()` now
+  gets correct patient data
+- **`printOphthoSheet()` field IDs fixed** — now reads correct DOM IDs:
+  `ucva-od-dist`, `iop-gat-od`, `rf-od-sph2`, etc. (previously used
+  non-existent IDs like `va-od-dis`)
+- **Diagrams changed** from Ant.Seg/Fundus (4 circles) to
+  **Lids / Cornea / Lens / Fundus × 2 eyes = 8 circles**,
+  RE in blue, LE in green, with slit lamp findings auto-populated below
+- **Clean slate on patient open** — clears all inputs, textareas, selects,
+  checkboxes, chips, DX list items, IOP alert banner across all 4 dept pages
+- **Hardcoded collection figures removed** — `₹48,200`, `₹22,050`, `₹74,000`,
+  `₹2,400` replaced with dynamic IDs updated by `renderCollectionDashboard()`
+- **Phone search** — now pre-fills form only, does NOT auto-add to queue;
+  user must click Register button
+- **OT WHO checklist** — `toggleWHO()` uses `data-checked` attribute;
+  `signOffWHO()` validates all items checked before allowing sign-off
+- **OT timer** — `stampTime()` saves each entry to `activeOTCase.timings`
+  and syncs to Firebase
+- **OT pre-filled values removed** — findings/narrative textareas no longer
+  have hardcoded surgical narrative; OT procedure input no longer pre-filled
+- `markSeen()` and `markDilated()` both call `renderDocQueue()` + Firebase
+- `markPaid()` routes cross-refer patients to target dept on payment clearance
+
+---
+
+## Known Limitations & Future Work
+
+### Security
+- [ ] Passwords stored in plain text in Firebase `userSettings/` — should use
+      Firebase Authentication or at minimum server-side hashing
+- [ ] Firebase Realtime DB rules should restrict read/write to authenticated users
+- [ ] No session timeout — browser refresh keeps user logged in via localStorage
+
+### Features Incomplete / Partially Done
+- [ ] **Taper medicines** — `addTaperRow()` exists in JS but taper UI on
+      prescription is not fully implemented
+- [ ] **Discharge summary** — builder exists but doesn't auto-populate from
+      visit data; patient info partially hardcoded in `printOBGCard()`
+- [ ] **Reports page** — some collection figures still static in
+      `generateDailyReport()` function
+- [ ] **Two-centre view** — mostly UI placeholder; no true Firebase data
+      partitioning between CHD and RPR
+- [ ] **Appointment booking** — sends toast but no double-booking prevention
+- [ ] **Biometry / IOL power calculation** — not integrated into the system
+- [ ] **Lab results → prescription** integration not implemented
+- [ ] **ANC card print** (`printOBGCard()`) — patient info partially hardcoded
+- [ ] **Prescription taper** — `addTaperRow(i, taperSchedule)` scaffolded but
+      taper display in print not complete
+- [ ] **OBG ANC visit table** — stored in Firebase but the print table is
+      static HTML
+
+### Performance
+- [ ] Single 890KB HTML file — consider splitting into modules for maintainability
+- [ ] All patients loaded into memory on login — no pagination for large datasets
+- [ ] `renderDocQueue()` re-renders entire list on every change
+
+---
+
+## Bugs to Watch For in Future Development
+
+1. **Nav override chain** — `window.nav` is overridden multiple times via
+   `_navV38`, `_navV38b`. Adding more overrides must follow the same pattern
+   to avoid breaking navigation
+
+2. **`renderRxDrugs()` dept detection** — detects dept by
+   `document.querySelector('.page.active')?.id`. If called before nav completes,
+   may read wrong dept. Use `setTimeout` if calling immediately after `nav()`
+
+3. **IPD_PATIENTS dual reference** — exists as both `const IPD_PATIENTS = []`
+   and `window.IPD_PATIENTS`. Always use `window.IPD_PATIENTS` when adding
+   from outside the main script closure. `renderIPD()` syncs them
+
+4. **XREF_LOG** — session-only (not persisted to Firebase on page load, only
+   written). Cross-referrals won't show in the tab after page refresh unless
+   fetched from `crossReferrals/` on login
+
+5. **printOphthoSheet field IDs** — the refraction table has two overlapping
+   sets of IDs. Use these confirmed working IDs:
+   - UCVA: `ucva-od-dist`, `ucva-os-dist`, `ucva-od-near`, `ucva-os-near`
+   - IOP: `iop-gat-od`, `iop-gat-os`, `iop-nct-od`, `iop-nct-os`
+   - Final Rx: `rf-od-sph2`, `rf-od-cyl2`, `rf-od-ax2` (and OS equivalents)
+   - Cycloplegic: `cc-od-sph`, `cc-od-cyl`, `cc-od-axis`
+
+6. **CONSENT_DATA object** — must have commas after every key-value pair.
+   Previously missing comma after `ivt:` block caused the entire app to fail.
+   Always validate with `node --check` after editing this section
+
+---
+
+## Development Workflow
+
+### Making Changes
+1. Open `BMH_HMS_v49.html` in a text editor
+2. Make changes
+3. Validate JS syntax: extract `<script>` blocks and run `node --check script.js`
+4. Test in browser (Chrome/Edge recommended)
+5. Increment version in `<title>` tag and internal comments
+
+### Syntax Validation (Python)
+```python
+import re, subprocess, tempfile, os
+
+with open('BMH_HMS_v49.html', 'r', encoding='utf-8') as f:
+    content = f.read()
+
+scripts = re.findall(r'<script(?:[^>]*)>(.*?)</script>', content, re.DOTALL)
+for i, s in enumerate(scripts):
+    if len(s) < 10:
+        continue
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.js',
+                                      delete=False, encoding='utf-8') as tf:
+        tf.write(s)
+        name = tf.name
+    result = subprocess.run(['node', '--check', name],
+                             capture_output=True, text=True)
+    os.unlink(name)
+    status = "OK" if result.returncode == 0 else f"ERROR: {result.stderr[:300]}"
+    print(f"Script {i}: {status} ({len(s)} chars)")
+```
+
+### Adding a New Department
+1. Add dept key to `deptMap` in `renderDocQueue()`
+2. Add dept page HTML: `<div class="page" id="pg-newdept">`
+3. Add back button: `<button onclick="nav('doctor-queue',null)">← Queue</button>`
+4. Add to `openPatient()` dept page map
+5. Add to `saveVisit()` dept-specific fields section
+6. Add to `loadPastVisits()` container ID map
+7. Add to `printUnifiedRx()` dept label map
+8. Add user to `USER_DB` with correct dept string
+
+---
+
+## File Delivery
+
+| Version | Filename | Size | Lines |
+|---------|----------|------|-------|
+| v47 | `BMH_HMS_v47.html` | 869KB | 10,505 |
+| v48 | `BMH_HMS_v48.html` | 875KB | 10,617 |
+| v49 | `BMH_HMS_v49.html` | 890KB | 10,915 |
+
+---
+
+*End of reference document. Next session: start from BMH_HMS_v49.html*

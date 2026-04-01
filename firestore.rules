@@ -1,0 +1,149 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// BMH HMS — Firestore Security Rules
+// Deploy with:  firebase deploy --only firestore:rules
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Role hierarchy (stored as Firebase Auth custom claims):
+//   admin       → full access (drvarun, drbaweja)
+//   doctor      → read/write their own dept; read patient records
+//   reception   → read/write patients, appointments; read billing
+//   lab         → read/write lab results only
+//   tpa         → read billing/transactions; write TPA notes
+//   inventory   → read/write inventory, purchaseOrders
+// ─────────────────────────────────────────────────────────────────────────────
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper functions ─────────────────────────────────────────────────────
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function role() {
+      return request.auth.token.role;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && role() == 'admin';
+    }
+
+    function isDoctor() {
+      return isSignedIn() && role() in ['admin', 'doctor'];
+    }
+
+    function isClinical() {
+      return isSignedIn() && role() in ['admin', 'doctor', 'optometrist'];
+    }
+
+    function isFrontDesk() {
+      return isSignedIn() && role() in ['admin', 'reception'];
+    }
+
+    function sameCenter(resource) {
+      // Admins see both centres; others see only their own.
+      return isAdmin()
+        || request.auth.token.centre == resource.data.centre
+        || !('centre' in resource.data);
+    }
+
+    // ── /users ───────────────────────────────────────────────────────────────
+    // User profiles (name, role, centre). Separate from Firebase Auth record.
+    match /users/{uid} {
+      allow read:   if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow write:  if isAdmin();
+    }
+
+    // ── /patients ────────────────────────────────────────────────────────────
+    match /patients/{bmhId} {
+      allow read:   if isSignedIn() && sameCenter(resource);
+      allow create: if isFrontDesk() || isClinical();
+      allow update: if isFrontDesk() || isClinical();
+      allow delete: if isAdmin();
+    }
+
+    // ── /visits ──────────────────────────────────────────────────────────────
+    match /visits/{visitId} {
+      allow read:   if isSignedIn();
+      allow create: if isClinical() || isFrontDesk();
+      allow update: if isClinical() || isFrontDesk();
+      allow delete: if isAdmin();
+    }
+
+    // ── /appointments ────────────────────────────────────────────────────────
+    match /appointments/{apptId} {
+      allow read:   if isSignedIn();
+      allow create: if isFrontDesk() || isClinical();
+      allow update: if isFrontDesk() || isClinical();
+      allow delete: if isFrontDesk() || isAdmin();
+    }
+
+    // ── /leads (CRM) ─────────────────────────────────────────────────────────
+    match /leads/{leadId} {
+      allow read:   if isSignedIn() && (isFrontDesk() || isAdmin());
+      allow create: if isSignedIn();  // API / webhook can create leads
+      allow update: if isFrontDesk() || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ── /transactions ────────────────────────────────────────────────────────
+    match /transactions/{txnId} {
+      allow read:   if isSignedIn() && role() in ['admin', 'reception', 'tpa'];
+      allow create: if isFrontDesk();
+      allow update: if isFrontDesk() || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ── /ledger ──────────────────────────────────────────────────────────────
+    match /ledger/{entryId} {
+      allow read:   if isAdmin();
+      allow create: if isFrontDesk() || isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ── /payRequests ─────────────────────────────────────────────────────────
+    match /payRequests/{reqId} {
+      allow read:   if isFrontDesk() || isAdmin();
+      allow write:  if isFrontDesk() || isAdmin();
+    }
+
+    // ── /inventory ───────────────────────────────────────────────────────────
+    match /inventory/{itemId} {
+      allow read:   if isSignedIn();
+      allow write:  if isAdmin() || role() == 'inventory';
+    }
+
+    // ── /purchaseOrders ──────────────────────────────────────────────────────
+    match /purchaseOrders/{orderId} {
+      allow read:   if isSignedIn() && role() in ['admin', 'inventory'];
+      allow write:  if isAdmin() || role() == 'inventory';
+    }
+
+    // ── /settings ────────────────────────────────────────────────────────────
+    match /settings/{doc} {
+      allow read:   if isSignedIn();
+      allow write:  if isAdmin();
+    }
+
+    // ── /consentLibrary ──────────────────────────────────────────────────────
+    match /consentLibrary/{id} {
+      allow read:   if isSignedIn();
+      allow write:  if isAdmin();
+    }
+
+    // ── /xrefLog ─────────────────────────────────────────────────────────────
+    match /xrefLog/{entryId} {
+      allow read:   if isClinical() || isAdmin();
+      allow create: if isClinical();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ── Deny everything else ─────────────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

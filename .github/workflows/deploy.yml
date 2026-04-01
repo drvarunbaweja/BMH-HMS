@@ -1,0 +1,55 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# BMH HMS — Auto-deploy to GitHub Pages
+#
+# Triggers on every push to main branch.
+# Builds with Vite and deploys the dist/ folder to the gh-pages branch.
+# Live URL: https://YOUR_USERNAME.github.io/BMH-HMS/
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:   # allows manual trigger from GitHub Actions tab
+
+permissions:
+  contents: write      # needed to push to gh-pages branch
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Check out the repo
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 2. Set up Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # 3. Install dependencies
+      - name: Install dependencies
+        run: npm ci
+
+      # 4. Build with Vite
+      - name: Build
+        run: npm run build
+
+      # 5. Add a .nojekyll file so GitHub Pages serves files starting with _
+      - name: Add .nojekyll
+        run: touch dist/.nojekyll
+
+      # 6. Deploy dist/ to the gh-pages branch
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir:  ./dist
+          publish_branch: gh-pages
+          commit_message: 'deploy: ${{ github.event.head_commit.message }}'

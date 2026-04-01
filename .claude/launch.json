@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "BMH HMS — Static File Server",
+      "runtimeExecutable": "/usr/bin/python3",
+      "runtimeArgs": ["/tmp/bmh_serve.py"],
+      "port": 5500
+    },
+    {
+      "name": "bmh-hms-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 3000
+    }
+  ]
+}
