@@ -3,7 +3,7 @@
 // Modular SDK v11 · Firestore + Auth + Realtime DB (kept during migration)
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { initializeApp }                    from 'firebase/app'
+import { initializeApp, getApps, getApp }   from 'firebase/app'
 import { getAuth, onAuthStateChanged }      from 'firebase/auth'
 import {
   initializeFirestore,
@@ -23,7 +23,9 @@ const firebaseConfig = {
 }
 
 // ── Initialise ───────────────────────────────────────────────────────────────
-const app  = initializeApp(firebaseConfig)
+// The compat SDK (index.html inline script) may have already initialised the
+// default app before this module runs.  Re-use it to share the same Auth instance.
+const app  = getApps().length ? getApp() : initializeApp(firebaseConfig)
 const auth = getAuth(app)
 const rtdb = getDatabase(app)   // Realtime DB — only used by migration script
 
