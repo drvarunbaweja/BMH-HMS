@@ -14,9 +14,12 @@ import {
 import { showToast, initials, avatarColor, newBmhId } from './utils.js'
 import { CURRENT_USER }               from './auth.js'
 
-// ── In-memory cache (mirrors old global PATIENTS array) ──────────────────────
-export let PATIENTS = []
-window.PATIENTS = PATIENTS
+// ── In-memory cache — MUST share the same array as legacy.js (loaded before this module) ──
+export let PATIENTS =
+  typeof window !== 'undefined' && Array.isArray(window.PATIENTS)
+    ? window.PATIENTS
+    : []
+if (typeof window !== 'undefined') window.PATIENTS = PATIENTS
 
 // ── Real-time listener ───────────────────────────────────────────────────────
 // Call once after login. Keeps PATIENTS in sync with Firestore.
@@ -29,6 +32,10 @@ export function watchPatients(centre) {
   )
 
   return onSnapshot(q, snap => {
+    if (snap.empty) {
+      // Firestore has no patients yet (migration pending) — leave RTDB-populated data alone
+      return
+    }
     PATIENTS.length = 0
     snap.forEach(d => PATIENTS.push({ id: d.id, ...d.data() }))
     window.PATIENTS = PATIENTS
@@ -103,15 +110,17 @@ export async function getPatient(bmhId) {
   return snap.exists() ? { id: snap.id, ...snap.data() } : null
 }
 
-// ── Open patient (navigate to their record) ───────────────────────────────────
+// ── Open patient — intentionally NOT overriding window.openPatient ────────────
+// Legacy.js defines the full openPatient() that navigates to the correct dept
+// exam page, fills all form fields, and sets CURRENT_PATIENT.  The modular
+// version here is kept for future use but must NOT override the legacy global.
 export function openPatient(bmhId) {
   const p = PATIENTS.find(x => x.bmhId === bmhId)
-  if (!p) { showToast('Patient not found', 'e'); return }
+  if (!p) return null
   window.CURRENT_PATIENT = p
-  window.dispatchEvent(new CustomEvent('bmh:openPatient', { detail: p }))
-  window.nav('patient-detail')
+  return p
 }
-window.openPatient = openPatient  // legacy global
+// Do NOT set window.openPatient here — legacy.js's version handles navigation
 
 // ── Search ───────────────────────────────────────────────────────────────────
 export function searchPatients(query_) {

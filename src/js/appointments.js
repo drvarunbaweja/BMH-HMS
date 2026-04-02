@@ -12,8 +12,12 @@ import { showToast }            from './utils.js'
 import { CURRENT_USER }         from './auth.js'
 import { updateLead }           from './leads.js'
 
-export let APPOINTMENTS = []
-window.APPOINTMENTS = APPOINTMENTS
+// Share the SAME array as legacy.js — do NOT assign a fresh [] here
+export let APPOINTMENTS =
+  typeof window !== 'undefined' && Array.isArray(window.APPOINTMENTS)
+    ? window.APPOINTMENTS
+    : []
+if (typeof window !== 'undefined') window.APPOINTMENTS = APPOINTMENTS
 
 // ── Watch today's appointments ────────────────────────────────────────────────
 export function watchAppointments(centre, date) {
@@ -24,6 +28,7 @@ export function watchAppointments(centre, date) {
     orderBy('apptTime', 'asc')
   )
   return onSnapshot(q, snap => {
+    if (snap.empty) return  // Firestore empty — leave RTDB-populated data alone
     APPOINTMENTS.length = 0
     snap.forEach(d => APPOINTMENTS.push({ id: d.id, ...d.data() }))
     window.APPOINTMENTS = APPOINTMENTS

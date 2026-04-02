@@ -12,10 +12,18 @@ import { showToast, todayKey }  from './utils.js'
 import { CURRENT_USER }         from './auth.js'
 import { updatePatient }        from './patients.js'
 
-export let TRANSACTIONS  = []
-export let PAY_REQUESTS  = []
-window.TRANSACTIONS = TRANSACTIONS
-window.PAY_REQUESTS = PAY_REQUESTS
+export let TRANSACTIONS =
+  typeof window !== 'undefined' && Array.isArray(window.TRANSACTIONS)
+    ? window.TRANSACTIONS
+    : []
+export let PAY_REQUESTS =
+  typeof window !== 'undefined' && Array.isArray(window.PAY_REQUESTS)
+    ? window.PAY_REQUESTS
+    : []
+if (typeof window !== 'undefined') {
+  window.TRANSACTIONS = TRANSACTIONS
+  window.PAY_REQUESTS = PAY_REQUESTS
+}
 
 // ── Watch today's transactions ────────────────────────────────────────────────
 export function watchTransactions(centre, date) {
@@ -26,6 +34,7 @@ export function watchTransactions(centre, date) {
     orderBy('createdAt', 'desc')
   )
   return onSnapshot(q, snap => {
+    if (snap.empty) return  // Firestore empty — leave RTDB-populated data alone
     TRANSACTIONS.length = 0
     snap.forEach(d => TRANSACTIONS.push({ id: d.id, ...d.data() }))
     window.TRANSACTIONS = TRANSACTIONS
@@ -42,6 +51,7 @@ export function watchPayRequests(centre) {
     orderBy('createdAt', 'desc')
   )
   return onSnapshot(q, snap => {
+    if (snap.empty) return  // Firestore empty — leave RTDB-populated data alone
     PAY_REQUESTS.length = 0
     snap.forEach(d => PAY_REQUESTS.push({ id: d.id, ...d.data() }))
     window.PAY_REQUESTS = PAY_REQUESTS
