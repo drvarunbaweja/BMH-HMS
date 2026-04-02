@@ -122,25 +122,67 @@
 <div class="page active" id="pg-dashboard">
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;padding:12px 16px;background:linear-gradient(135deg,var(--bmh-blue),var(--bmh-teal));border-radius:var(--r);color:#fff">
     <div style="font-size:22px">🏥</div>
-    <div><div style="font-size:14px;font-weight:900">Baweja Multispeciality Hospital</div><div style="font-size:11px;opacity:.7"><span class="live-dot"></span>Live · Chandigarh Centre · <span id="tb-date2"></span></div></div>
-    <div style="margin-left:auto;display:flex;gap:8px">
+    <div><div style="font-size:14px;font-weight:900">Baweja Multispeciality Hospital</div><div style="font-size:11px;opacity:.7"><span id="dash-subtitle">Chandigarh Centre · <span id="tb-date2"></span></span></div></div>
+    <div style="margin-left:auto;display:flex;gap:8px" id="dash-hero-stats">
       <div style="text-align:center;background:rgba(255,255,255,.12);border-radius:8px;padding:7px 12px"><div style="font-size:20px;font-weight:900" id="db-opd">0</div><div style="font-size:9px;opacity:.7;font-weight:700">OPD TODAY</div></div>
       <div style="text-align:center;background:rgba(212,160,23,.2);border-radius:8px;padding:7px 12px"><div style="font-size:20px;font-weight:900" id="db-collection">₹0</div><div style="font-size:9px;opacity:.7;font-weight:700">COLLECTED</div></div>
     </div>
   </div>
-  <div class="sg4">
-    <div class="sc blue"><div class="sc-lbl">OPD Today</div><div class="sc-val blue">0</div><div class="sc-icon">🩺</div></div>
-    <div class="sc orange"><div class="sc-lbl">Pay Pending</div><div class="sc-val orange" id="db-pending">₹0</div><div class="sc-icon">⏳</div></div>
-    <div class="sc green"><div class="sc-lbl">Appointments</div><div class="sc-val green" id="db-apts">0</div><div class="sc-icon">📅</div></div>
-    <div class="sc gold"><div class="sc-lbl">Low Stock</div><div class="sc-val gold" id="db-stock">0</div><div class="sc-icon">📦</div></div>
-  </div>
-  <div class="g32">
-    <div class="card"><div class="card-hd"><div><div class="card-title">Live Queue</div><div class="card-sub"><span class="live-dot"></span>Click any patient to open their record</div></div></div>
-      <div id="dash-queue"></div>
+
+  <!-- Admin / finance dashboard (no live queue) -->
+  <div id="dash-view-admin" style="display:none">
+    <div class="sg4">
+      <div class="sc orange"><div class="sc-lbl">Bills overdue / due</div><div class="sc-val orange" id="db-admin-overdue-amt">₹0</div><div class="sc-icon">📑</div></div>
+      <div class="sc red"><div class="sc-lbl">Patients with balance</div><div class="sc-val red" id="db-admin-overdue-ct">0</div><div class="sc-icon">⚠️</div></div>
+      <div class="sc gold"><div class="sc-lbl">Low stock SKUs</div><div class="sc-val gold" id="db-stock">0</div><div class="sc-icon">📦</div></div>
+      <div class="sc green"><div class="sc-lbl">Vendor bills pending</div><div class="sc-val green" id="db-admin-vendor-pend">₹0</div><div class="sc-icon">🏪</div></div>
     </div>
-    <div class="col">
-      <div class="card"><div class="card-hd"><div class="card-title">💳 Payment Requests</div></div><div id="dash-pay"></div></div>
-      <div class="card"><div class="card-hd"><div class="card-title">📅 Today's Appointments</div><button class="btn btn-gold btn-xs" onclick="nav('appointments',null)">View All →</button></div><div id="dash-apts"></div></div>
+    <div class="g32">
+      <div class="card"><div class="card-hd"><div><div class="card-title">Overdue &amp; pending balances</div><div class="card-sub">Patients with outstanding amount (from queue balances + pending payment requests)</div></div><button class="btn btn-gold btn-sm" onclick="nav('billing',null)">Open Billing →</button></div>
+        <div id="dash-admin-overdue-list"></div>
+      </div>
+      <div class="col">
+        <div class="card"><div class="card-hd"><div><div class="card-title">Low stock — suggested PO</div><div class="card-sub">Review and print purchase order</div></div></div>
+          <div id="dash-admin-po-preview" style="font-size:12px;color:var(--tx3);max-height:220px;overflow:auto"></div>
+          <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+            <button type="button" class="btn btn-gold btn-sm" onclick="bmhGeneratePurchaseOrderDraft()">Regenerate draft</button>
+            <button type="button" class="btn btn-outline btn-sm" onclick="bmhPrintPurchaseOrder()">Print PO (after confirm)</button>
+          </div>
+        </div>
+        <div class="card"><div class="card-hd"><div class="card-title">💳 Pending payment requests</div></div><div id="dash-pay"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Clinical dashboard (doctors & similar roles) -->
+  <div id="dash-view-clinical">
+    <div class="sg4">
+      <div class="sc blue"><div class="sc-lbl">OPD today</div><div class="sc-val blue" id="db-cl-opd">0</div><div class="sc-icon">🩺</div></div>
+      <div class="sc gold"><div class="sc-lbl">IPD</div><div class="sc-val gold" id="db-cl-ipd">0</div><div class="sc-icon">🛏️</div></div>
+      <div class="sc blue"><div class="sc-lbl">Diagnostics (lines)</div><div class="sc-val blue" id="db-cl-diag">0</div><div class="sc-icon">🔬</div></div>
+      <div class="sc green"><div class="sc-lbl">Appointments</div><div class="sc-val green" id="db-apts">0</div><div class="sc-icon">📅</div></div>
+    </div>
+    <div class="sg4" style="margin-top:10px">
+      <div class="sc orange"><div class="sc-lbl">Checked in / active</div><div class="sc-val orange" id="db-cl-checked">0</div><div class="sc-icon">✅</div></div>
+      <div class="sc gold"><div class="sc-lbl">Collection today</div><div class="sc-val gold" id="db-cl-collection">₹0</div><div class="sc-icon">💰</div></div>
+      <div class="sc blue"><div class="sc-lbl">Pay pending</div><div class="sc-val blue" id="db-pending">₹0</div><div class="sc-icon">⏳</div></div>
+      <div class="sc gold"><div class="sc-lbl">Low stock</div><div class="sc-val gold" id="db-stock-dup">0</div><div class="sc-icon">📦</div></div>
+    </div>
+    <div class="g32" style="margin-top:14px">
+      <div class="card"><div class="card-hd"><div><div class="card-title">Collection by payment mode (today)</div><div class="card-sub">Cash, UPI, card, etc.</div></div></div><div id="dash-cl-modes"></div></div>
+      <div class="card"><div class="card-hd"><div><div class="card-title">Collection trend</div><div class="card-sub">Last 7 days vs previous week (bars)</div></div>
+        <div style="display:flex;gap:10px;margin-bottom:8px;font-size:10px;color:var(--g1)"><span>■ This week</span><span style="opacity:.6">□ Prev week</span></div></div>
+        <div id="dash-cl-chart-week" style="min-height:140px;padding:8px 4px"></div>
+      </div>
+    </div>
+    <div class="g32">
+      <div class="card"><div class="card-hd"><div><div class="card-title">Today’s snapshot</div><div class="card-sub">Use Patient Queue for live list</div></div><button class="btn btn-outline btn-sm" onclick="nav('doctor-queue',null)">Open queue →</button></div>
+        <div style="font-size:12px;color:var(--g1);padding:10px">OPD counts waiting + seen today; IPD from ward census; diagnostics from billed charge lines tagged diagnostic.</div>
+      </div>
+      <div class="col">
+        <div class="card"><div class="card-hd"><div class="card-title">💳 Payment requests</div></div><div id="dash-pay-clinical"></div></div>
+        <div class="card"><div class="card-hd"><div class="card-title">📅 Today’s appointments</div><button class="btn btn-gold btn-xs" onclick="nav('appointments',null)">View all →</button></div><div id="dash-apts"></div></div>
+      </div>
     </div>
   </div>
 </div><!-- /pg-dashboard -->
@@ -2515,6 +2557,8 @@
         <div class="ptab active" onclick="ptab(this,'inv-in')">📥 Stock In</div>
         <div class="ptab" onclick="ptab(this,'inv-use')">💊 Patient Usage</div>
         <div class="ptab" onclick="ptab(this,'inv-stock')">📋 Current Stock</div>
+        <div class="ptab" onclick="ptab(this,'inv-vendor')">🏪 Vendors</div>
+        <div class="ptab" onclick="ptab(this,'inv-ocr')">📷 Photo / OCR</div>
       </div>
       <div class="tab-content active" id="inv-in">
         <div class="scanner-box" onclick="scanBC('in')" style="margin-bottom:12px">
@@ -2536,10 +2580,23 @@
         <div id="use-log" style="margin-top:10px"></div>
       </div>
       <div class="tab-content" id="inv-stock"><div id="inv-stock-list"></div></div>
+      <div class="tab-content" id="inv-vendor">
+        <div style="font-size:12px;color:var(--g1);margin-bottom:10px">Vendor invoices added here also appear under <strong>Billing → Vendors &amp; expenses</strong> with pending dues.</div>
+        <div id="inv-vendor-mini" style="font-size:12px"></div>
+        <button type="button" class="btn btn-outline btn-sm" style="margin-top:10px" onclick="nav('billing',null);setTimeout(function(){var t=document.querySelector('#pg-billing .ptab:nth-child(2)');if(t)t.click();},200)">Open full vendor screen →</button>
+      </div>
+      <div class="tab-content" id="inv-ocr">
+        <div style="background:var(--g6);border-radius:8px;padding:10px;margin-bottom:10px;font-size:12px;color:var(--tx3)">Take a photo of a label or invoice. Paste extracted text below (use your phone OCR or Google Lens), then split into lines to add stock or patient items.</div>
+        <div class="form-group"><label class="fl">Paste OCR / barcode text</label><textarea id="inv-ocr-text" rows="4" style="width:100%;font-family:var(--mono);font-size:11px" placeholder="e.g. MFX-001 Vigamox batch…"></textarea></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button type="button" class="btn btn-blue btn-sm" onclick="bmhOcrApplyToStockIn()">Use first line as stock-in barcode</button>
+          <button type="button" class="btn btn-orange btn-sm" onclick="bmhOcrApplyToPatientUse()">Use first line for selected patient (usage)</button>
+        </div>
+      </div>
     </div>
   </div>
   <div class="col">
-    <div class="card"><div class="card-hd"><div><div class="card-title">Auto-Billing Log</div><div class="card-sub">Items billed with MRP + time → added to patient bill</div></div></div><div id="auto-bill-log"><div style="padding:14px;text-align:center;color:var(--g1);font-size:12px">No items billed yet</div></div></div>
+    <div class="card"><div class="card-hd"><div><div class="card-title">Auto-Billing Log</div><div class="card-sub">Items billed with MRP + time → patient bill + inventory deduction</div></div></div><div id="auto-bill-log"><div style="padding:14px;text-align:center;color:var(--g1);font-size:12px">No items billed yet</div></div></div>
     <div class="card"><div class="card-hd"><div class="card-title">Inventory Stats</div></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
         <div style="background:var(--green-lt);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:#1a8c3c;font-weight:800">Total Items</div><div style="font-size:18px;font-weight:900;color:#1a8c3c">284</div></div>
@@ -2550,42 +2607,107 @@
 </div>
 </div>
 <div class="page" id="pg-billing">
+<div class="ptabs" style="margin-bottom:12px">
+  <div class="ptab active" onclick="ptab(this,'bmh-bill-tab-patients')">👥 Patients &amp; bills</div>
+  <div class="ptab" onclick="ptab(this,'bmh-bill-tab-vendor')">🏪 Vendors &amp; expenses</div>
+  <div class="ptab" onclick="ptab(this,'bmh-bill-tab-ledger')">📒 Day book / ledger</div>
+</div>
+<div class="tab-content active" id="bmh-bill-tab-patients">
 <div class="g32">
   <div class="card">
-    <div class="card-hd"><div><div class="card-title">💳 Invoice — Test Patient A</div><div style="font-family:var(--mono);font-size:9px;color:var(--bmh-teal)">BMSH-000001 · INV-2025-460847</div></div><span class="badge bd-gold">Auto-billing Active</span></div>
-    <div id="bill-items-list"></div>
-    <button class="btn btn-outline btn-sm" style="margin:8px 0" onclick="addBillItem()">+ Add Item</button>
+    <div class="card-hd"><div><div class="card-title" id="bmh-bill-card-title">💳 Billing — select a patient</div><div style="font-family:var(--mono);font-size:9px;color:var(--bmh-teal)" id="bmh-bill-card-sub">Today’s visits by department</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <label style="font-size:11px;color:var(--g1)">Paper</label>
+        <select id="bmh-print-size" style="font-size:11px;padding:4px 8px;border-radius:6px" onchange="BMH_BILL_PRINT_SIZE=this.value">
+          <option value="A4">A4 full width</option>
+          <option value="A5">Half A4 (A5)</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center">
+      <span style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase">Department</span>
+      <button type="button" class="btn btn-xs btn-outline" onclick="bmhSetBillDeptFilter('all')">All</button>
+      <button type="button" class="btn btn-xs btn-outline" onclick="bmhSetBillDeptFilter('ophtho')">Eye</button>
+      <button type="button" class="btn btn-xs btn-outline" onclick="bmhSetBillDeptFilter('obg')">OBG</button>
+      <button type="button" class="btn btn-xs btn-outline" onclick="bmhSetBillDeptFilter('psych')">Psych</button>
+      <button type="button" class="btn btn-xs btn-outline" onclick="bmhSetBillDeptFilter('skin')">Skin</button>
+    </div>
+    <div id="bmh-bill-pt-list" style="max-height:200px;overflow:auto;border:1px solid var(--g5);border-radius:8px;margin-bottom:12px"></div>
+    <div class="form-group" style="margin-bottom:10px"><label class="fl">Selected patient</label><select id="bmh-bill-pt-select" onchange="bmhSelectBillPatient(this.value)"></select></div>
+    <div id="bmh-bill-items-wrap">
+      <div style="font-size:10px;font-weight:800;color:var(--bmh-blue);text-transform:uppercase;margin-bottom:6px">Charge lines (investigations, diagnostics, surgery, consumables, pharmacy, OT, reception…)</div>
+      <div id="bmh-bill-lines"></div>
+    </div>
+    <button type="button" class="btn btn-outline btn-sm" style="margin:8px 0" onclick="bmhAddManualBillLine()">+ Add manual line</button>
     <div style="background:var(--g6);border-radius:var(--rsm);padding:12px;margin-bottom:12px">
-      <div style="font-size:11px;font-weight:800;color:var(--bmh-blue);margin-bottom:8px">📦 Scan Item / Injection → Auto-add to Bill</div>
+      <div style="font-size:11px;font-weight:800;color:var(--bmh-blue);margin-bottom:8px">📦 Scan / type item → add to this patient’s bill</div>
       <div style="display:flex;gap:8px">
-        <input type="text" id="bill-scan-input" placeholder="Scan barcode or type item name / barcode…" style="flex:1">
-        <button class="btn btn-gold btn-sm" onclick="scanToBill()">📷 Scan/Add</button>
+        <input type="text" id="bill-scan-input" placeholder="Barcode or item name…" style="flex:1">
+        <button type="button" class="btn btn-gold btn-sm" onclick="scanToBill()">Add</button>
       </div>
       <div id="bill-scan-log" style="margin-top:8px"></div>
     </div>
     <div style="background:var(--g6);border-radius:8px;padding:12px" id="bill-totals">
-      <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:12.5px"><span>Subtotal</span><span style="font-weight:800" id="bill-sub">₹40,000</span></div>
-      <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:12.5px"><span>GST (5%)</span><span style="font-weight:700;color:var(--g1)" id="bill-gst">₹2,000</span></div>
-      <div style="display:flex;justify-content:space-between;font-size:15px;font-weight:900;color:var(--bmh-blue);border-top:1px solid var(--g4);padding-top:8px;margin-top:6px"><span>Net Total</span><span id="bill-total">₹42,000</span></div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:12.5px"><span>Subtotal</span><span style="font-weight:800" id="bill-sub">₹0</span></div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:12.5px"><span>GST (5%)</span><span style="font-weight:700;color:var(--g1)" id="bill-gst">₹0</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:15px;font-weight:900;color:var(--bmh-blue);border-top:1px solid var(--g4);padding-top:8px;margin-top:6px"><span>Net total</span><span id="bill-total">₹0</span></div>
     </div>
     <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-      <select style="flex:1"><option>Cash</option><option>UPI/GPay</option><option>Card</option><option>PMJAY</option><option>Insurance</option></select>
-      <button class="btn btn-gold" onclick="printReceipt()">🖨️ Generate &amp; Print</button>
-      <button class="wa-btn" onclick="showToast('Bill sent via WhatsApp ✓','s')">📱</button>
+      <button type="button" class="btn btn-blue" onclick="printBmhPatientBill()">🖨️ Print full bill</button>
+      <button type="button" class="btn btn-outline btn-sm" onclick="showToast('Share via WhatsApp from print preview','i')">📱</button>
+    </div>
+    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--g5)">
+      <div style="font-size:11px;font-weight:800;color:var(--g1);margin-bottom:8px">Record payment &amp; print acknowledgement</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <div class="form-group" style="margin:0"><label class="fl">Amount ₹</label><input type="number" id="bmh-pay-amt" placeholder="Amount"></div>
+        <div class="form-group" style="margin:0"><label class="fl">Mode</label>
+          <select id="bmh-pay-mode"><option value="Cash">Cash</option><option value="UPI">UPI</option><option value="Card">Card</option><option value="NEFT">NEFT</option><option value="Cheque">Cheque</option></select>
+        </div>
+        <div class="form-group" style="margin:0;grid-column:1/-1"><label class="fl">Cheque no. / UTR / ref no.</label><input type="text" id="bmh-pay-ref" placeholder="Required for bank / UPI reconciliation"></div>
+      </div>
+      <button type="button" class="btn btn-gold" onclick="bmhRecordPatientPayment()">✓ Record payment &amp; print receipt</button>
     </div>
   </div>
   <div class="col">
-    <div class="card"><div class="card-hd"><div class="card-title">Recent Bills</div></div>
-      <table><thead><tr><th>Invoice</th><th>Patient</th><th>Amount</th><th>Status</th></tr></thead>
-      <tbody>
-        <tr><td style="font-family:var(--mono);font-size:10px">INV-0847</td><td>Test Patient A</td><td>₹42,000</td><td><span class="badge bd-orange">Partial</span></td></tr>
-        <tr><td style="font-family:var(--mono);font-size:10px">INV-0848</td><td>Test Patient B</td><td>₹1,200</td><td><span class="badge bd-green">Paid</span></td></tr>
-        <tr><td style="font-family:var(--mono);font-size:10px">INV-0849</td><td>Test Patient C</td><td>₹600</td><td><span class="badge bd-orange">Pending</span></td></tr>
-      </tbody></table>
+    <div class="card"><div class="card-hd"><div class="card-title">Pending vendor dues (inventory)</div><div class="card-sub">Link bills under Inventory → Vendors</div></div>
+      <div id="bmh-bill-vendor-summary" style="font-size:12px"></div>
     </div>
-    <div class="card"><div class="card-hd"><div class="card-title">Cross-Refer Charges</div><div class="card-sub">Checked at billing — with or without fee</div></div>
+    <div class="card"><div class="card-hd"><div class="card-title">Cross-refer &amp; notes</div></div>
       <div style="display:flex;flex-direction:column;gap:6px" id="xref-log"><div style="font-size:12px;color:var(--g1);padding:8px;text-align:center">No cross-referrals today</div></div>
     </div>
+  </div>
+</div>
+</div>
+<div class="tab-content" id="bmh-bill-tab-vendor">
+  <div class="g32">
+    <div class="card">
+      <div class="card-hd"><div class="card-title">🏪 Vendor invoices (pending / paid)</div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+        <div class="form-group"><label class="fl">Vendor</label><input type="text" id="bmh-vend-name" placeholder="Supplier name"></div>
+        <div class="form-group"><label class="fl">Invoice no.</label><input type="text" id="bmh-vend-inv" placeholder="Invoice #"></div>
+        <div class="form-group"><label class="fl">Amount ₹</label><input type="number" id="bmh-vend-amt" placeholder="0"></div>
+        <div class="form-group"><label class="fl">Due date</label><input type="date" id="bmh-vend-due"></div>
+      </div>
+      <div class="form-group"><label class="fl">Upload scan / PDF (stored as filename for now)</label><input type="file" id="bmh-vend-file" accept="image/*,.pdf"></div>
+      <button type="button" class="btn btn-blue btn-sm" onclick="bmhAddVendorBill()">+ Add vendor bill</button>
+      <div id="bmh-vendor-table" style="margin-top:12px;font-size:12px"></div>
+    </div>
+    <div class="card">
+      <div class="card-hd"><div class="card-title">📤 Expenses</div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="form-group"><label class="fl">Description</label><input type="text" id="bmh-exp-desc" placeholder="e.g. Stationery"></div>
+        <div class="form-group"><label class="fl">Amount ₹</label><input type="number" id="bmh-exp-amt"></div>
+        <div class="form-group" style="grid-column:1/-1"><label class="fl">Category</label><input type="text" id="bmh-exp-cat" placeholder="Admin / OT / Marketing"></div>
+      </div>
+      <button type="button" class="btn btn-orange btn-sm" onclick="bmhAddExpense()">+ Post expense</button>
+      <div id="bmh-exp-list" style="margin-top:12px;font-size:12px"></div>
+    </div>
+  </div>
+</div>
+<div class="tab-content" id="bmh-bill-tab-ledger">
+  <div class="card">
+    <div class="card-hd"><div class="card-title">📒 Day book (receipts, payments, expenses)</div><button type="button" class="btn btn-outline btn-sm" onclick="bmhExportLedgerCsv()">Export CSV</button></div>
+    <div style="overflow-x:auto"><table class="rc-queue-table" style="min-width:720px"><thead><tr><th>Date</th><th>Type</th><th>Narration</th><th>Party</th><th style="text-align:right">Debit ₹</th><th style="text-align:right">Credit ₹</th><th>Ref</th></tr></thead><tbody id="bmh-ledger-body"></tbody></table></div>
   </div>
 </div>
 </div>
@@ -2669,9 +2791,17 @@
     </div>
   </div>
   <div class="col">
-    <div class="card"><div class="card-hd"><div class="card-title">Doctors</div><button class="btn btn-gold btn-xs" onclick="openM('m-add-doctor')">+ Add</button></div>
-      <div id="set-doctors-list">
-        ${[['Dr. Varun Baweja','MS (Ophth)','Ophthalmology','CHD & RPR','#1A3C6E'],['Dr. Tarun Baweja','MD (Psychiatry)','Neuropsychiatry','CHD & RPR','#FF9500'],['Dr. Geeta Baweja','MS (OBG)','OBG','CHD','#FF2D55'],['Dr. Namrata Baweja','MS (OBG)','OBG · Fertility','RPR','#AF52DE'],['Dr. Pooja Baweja','MD (Derm)','Skin & Cosmetology','CHD & RPR','#5856D6']].map(([n,q,d,c,col])=>`<div style="display:flex;align-items:center;gap:9px;padding:9px;background:var(--g6);border-radius:8px;margin-bottom:6px"><div class="u-av" style="background:${col};font-size:10px">${n.replace('Dr. ','').split(' ').map(x=>x[0]).join('').substring(0,2)}</div><div style="flex:1"><div style="font-size:12.5px;font-weight:800">${n} <span style="font-size:10px;color:var(--g1);font-weight:600">${q}</span></div><div style="font-size:11px;color:var(--g1)">${d} · ${c}</div></div><button class="btn btn-xs btn-gray" onclick="showToast('Edit opened ✓','i')">✏️</button></div>`).join('')}
+    <div class="card"><div class="card-hd"><div class="card-title">Prescription print — header &amp; footer</div></div>
+      <div style="font-size:11px;color:var(--g1);margin-bottom:10px">Images are embedded in printed prescriptions (and surgery packs). Manage doctor degrees and signatures under the <strong>Doctors</strong> tab.</div>
+      <div class="form-group"><label class="fl">Header image (letterhead top)</label>
+        <input type="file" accept="image/*" id="print-header-file" onchange="onPickPrintHeader(this)" style="font-size:11px">
+        <div style="margin-top:8px"><img id="print-header-preview" alt="Header preview" style="display:none;max-width:100%;max-height:120px;border-radius:8px;border:1px solid var(--g4)"></div>
+        <button type="button" class="btn btn-xs btn-outline" style="margin-top:6px" onclick="clearPrintHeader()">Remove header</button>
+      </div>
+      <div class="form-group" style="margin-top:12px"><label class="fl">Footer image</label>
+        <input type="file" accept="image/*" id="print-footer-file" onchange="onPickPrintFooter(this)" style="font-size:11px">
+        <div style="margin-top:8px"><img id="print-footer-preview" alt="Footer preview" style="display:none;max-width:100%;max-height:120px;border-radius:8px;border:1px solid var(--g4)"></div>
+        <button type="button" class="btn btn-xs btn-outline" style="margin-top:6px" onclick="clearPrintFooter()">Remove footer</button>
       </div>
     </div>
     <div class="card"><div class="card-hd"><div class="card-title">System</div></div>
@@ -2716,7 +2846,7 @@
           <div class="form-group" style="margin-bottom:6px"><label class="fl">Import from CSV / Excel</label>
             <input type="file" id="drug-import-file" accept=".csv,.txt,text/csv" style="font-size:11px" onchange="handleDrugImportCsv(this)">
           </div>
-          <div style="font-size:10px;color:var(--g1)">Save Excel as <strong>CSV</strong> with columns: Trade / Brand, Generic, Company (optional). First row = headers.</div>
+          <div style="font-size:10px;color:var(--g1)">Save Excel as <strong>CSV</strong> with columns: Trade / Brand, Generic, <strong>Type / form</strong> (e.g. eye drops, tablet, ointment), Company (optional). First row = headers.</div>
         </div>
       </div>
     </div>
@@ -2750,7 +2880,7 @@
     <div class="card"><div class="card-hd"><div class="card-title">Create Template</div></div>
       <div class="fg fg1" style="gap:8px">
         <div class="form-group"><label class="fl">Template Name</label><input type="text" id="rx-tpl-name" placeholder="e.g. Post Phaco Day 1"></div>
-        <div class="form-group"><label class="fl">Department</label><select><option>Ophthalmology</option><option>OBG</option><option>Psychiatry</option><option>Skin</option><option>All</option></select></div>
+        <div class="form-group"><label class="fl">Department</label><select id="rx-tpl-dept-settings"><option value="Ophthalmology">Ophthalmology</option><option value="OBG">OBG</option><option value="Psychiatry">Psychiatry</option><option value="Skin">Skin</option><option value="All">All</option></select></div>
         <div class="form-group full"><label class="fl">Drugs (one per line)</label><textarea id="rx-tpl-drugs" placeholder="Moxifloxacin 0.5% — 4x/day — 7 days&#10;Prednisolone 1% — 4x/day taper — 4 weeks&#10;CMC 0.5% — PRN — 1 month" style="min-height:80px"></textarea></div>
         <button class="btn btn-gold" onclick="saveRxTemplate()">💾 Save Template</button>
       </div>
@@ -2769,7 +2899,7 @@
   <div class="col">
     <div class="card"><div class="card-hd"><div class="card-title">IOL / Implant Catalogue</div><button class="btn btn-gold btn-xs" onclick="openM('m-add-iol')">+ Add IOL</button></div>
       <div id="set-iol-list">
-        ${[['AcrySof SN60WF','Monofocal','Alcon','18500'],['AcrySof IQ PanOptix','Trifocal','Alcon','55000'],['Tecnis Monofocal ZCB00','Monofocal','J&J','16000'],['ZEISS AT TORBI','Toric','Zeiss','38000']].map(([n,t,m,p])=>`<div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--g6);border-radius:8px;margin-bottom:6px;font-size:12px"><div style="flex:1"><div style="font-weight:800">${n}</div><div style="font-size:10.5px;color:var(--g1)">${t} · ${m}</div></div><div style="font-weight:900;color:var(--blue)">₹${parseInt(p).toLocaleString('en-IN')}</div></div>`).join('')}
+        <div style="font-size:11px;color:var(--g1);margin-bottom:8px">List is saved on this device and synced to the cloud when available. Inventory barcodes remain in the <strong>Inventory</strong> module.</div>
       </div>
     </div>
   </div>
@@ -2890,6 +3020,18 @@
         <div style="font-size:9.5px;color:var(--g1);margin-top:3px">Print full consent pack</div>
       </div>`).join('')}
     </div>
+  </div>
+  <div class="card" style="margin-top:12px">
+    <div class="card-hd">
+      <div><div class="card-title">Custom consent &amp; form stubs</div><div class="card-sub">Editable short templates for quick printing (bilingual consents remain in the library above)</div></div>
+      <button class="btn btn-gold btn-xs" onclick="addConsentTemplate()">+ Add</button>
+    </div>
+    <div style="display:flex;gap:7px;margin-bottom:12px;flex-wrap:wrap">
+      <button class="btn btn-xs btn-gold" id="cf-all" onclick="filterConsentType('all')">All</button>
+      <button class="btn btn-xs btn-outline" id="cf-consent" onclick="filterConsentType('consent')">Consents</button>
+      <button class="btn btn-xs btn-outline" id="cf-template" onclick="filterConsentType('template')">Templates</button>
+    </div>
+    <div id="set-consent-stub-list"></div>
   </div>
 </div>
 
@@ -3017,37 +3159,9 @@
   </div>
 </div>
 
-<!-- CONSENTS & FORMS TAB -->
+<!-- CONSENTS & FORMS TAB (legacy duplicate — use Consents & Forms main tab) -->
 <div class="tab-content" id="set-consents-mgr">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-    <div style="font-size:13px;font-weight:800">Consent Forms & Surgery Templates</div>
-    <button class="btn btn-gold btn-sm" onclick="addConsentTemplate()">+ Add New</button>
-  </div>
-  <div id="consent-templates-list">
-    <div style="border:1px solid var(--g4);border-radius:var(--rsm);padding:10px 14px;margin-bottom:7px;display:flex;align-items:center;gap:10px">
-      <div style="font-size:18px">📋</div>
-      <div style="flex:1"><div style="font-weight:700">Cataract Surgery Consent</div><div style="font-size:11px;color:var(--g1)">Pre-operative consent for PMICS + IOL</div></div>
-      <button class="btn btn-xs btn-outline" onclick="editConsentTemplate('cataract')">Edit</button>
-      <button class="btn btn-xs btn-outline" onclick="printConsentTemplate('cataract')">Print</button>
-    </div>
-    <div style="border:1px solid var(--g4);border-radius:var(--rsm);padding:10px 14px;margin-bottom:7px;display:flex;align-items:center;gap:10px">
-      <div style="font-size:18px">📋</div>
-      <div style="flex:1"><div style="font-weight:700">IVT Injection Consent</div><div style="font-size:11px;color:var(--g1)">Anti-VEGF / Bevacizumab consent</div></div>
-      <button class="btn btn-xs btn-outline" onclick="editConsentTemplate('ivt')">Edit</button>
-      <button class="btn btn-xs btn-outline" onclick="printConsentTemplate('ivt')">Print</button>
-    </div>
-    <div style="border:1px solid var(--g4);border-radius:var(--rsm);padding:10px 14px;margin-bottom:7px;display:flex;align-items:center;gap:10px">
-      <div style="font-size:18px">📋</div>
-      <div style="flex:1"><div style="font-weight:700">LSCS Consent</div><div style="font-size:11px;color:var(--g1)">Lower Segment Caesarean Section</div></div>
-      <button class="btn btn-xs btn-outline" onclick="editConsentTemplate('lscs')">Edit</button>
-      <button class="btn btn-xs btn-outline" onclick="printConsentTemplate('lscs')">Print</button>
-    </div>
-    <div style="border:1px solid var(--g4);border-radius:var(--rsm);padding:10px 14px;margin-bottom:7px;display:flex;align-items:center;gap:10px">
-      <div style="font-size:18px">📝</div>
-      <div style="flex:1"><div style="font-weight:700">Custom Form Builder</div><div style="font-size:11px;color:var(--g1)">Create your own intake / assessment form</div></div>
-      <button class="btn btn-xs btn-gold" onclick="addConsentTemplate()">+ Create</button>
-    </div>
-  </div>
+  <div style="padding:20px;text-align:center;color:var(--g1);font-size:13px">Use <strong>Settings → Consents &amp; Forms</strong> for the consent library and custom stubs.</div>
 </div>
 
 <!-- SURGERY / PROCEDURE REPORT -->
@@ -3377,13 +3491,28 @@
 <!-- New Template -->
 <div class="modal-ov" id="m-new-tpl">
 <div class="modal">
-<div class="modal-hd"><div class="modal-title">Create New Print Template</div><button class="modal-close" onclick="closeM('m-new-tpl')">✕</button></div>
+<div class="modal-hd"><div class="modal-title">Create surgery document pack</div><button class="modal-close" onclick="closeM('m-new-tpl')">✕</button></div>
 <div class="fg fg1" style="gap:9px">
-  <div class="form-group"><label class="fl">Template Name</label><input type="text" placeholder="e.g. Retinal Surgery Pack"></div>
-  <div class="form-group"><label class="fl">Department</label><select><option>Ophthalmology</option><option>OBG</option><option>Neuropsychiatry</option><option>Skin</option><option>General</option></select></div>
-  <div style="font-size:11px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px;margin-top:4px">Select Documents to Include:</div>
-  <div id="new-tpl-docs"></div>
-  <button class="btn btn-gold" onclick="showToast('Template saved ✓','s');closeM('m-new-tpl')">Save Template</button>
+  <div class="form-group"><label class="fl">Pack name</label><input type="text" id="new-pack-name" placeholder="e.g. DCR + lacrimal pack"></div>
+  <div class="form-group"><label class="fl">Department label</label><select id="new-pack-dept"><option>Ophthalmology</option><option>OBG</option><option>Neuropsychiatry</option><option>Skin</option><option>General</option></select></div>
+  <div style="font-size:11px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px;margin-top:4px">Consent forms to include</div>
+  <div id="new-tpl-docs" style="max-height:220px;overflow-y:auto"></div>
+  <button class="btn btn-gold" onclick="saveSurgeryPackFromModal()">💾 Save pack</button>
+</div>
+</div>
+</div>
+
+<!-- Add IOL to catalogue -->
+<div class="modal-ov" id="m-add-iol">
+<div class="modal">
+<div class="modal-hd"><div class="modal-title">Add IOL / implant</div><button class="modal-close" onclick="closeM('m-add-iol')">✕</button></div>
+<div class="fg fg1" style="gap:9px">
+  <div class="form-group"><label class="fl">Lens name &amp; power</label><input type="text" id="iol-add-name" placeholder="e.g. AcrySof IQ +21.0 D"></div>
+  <div class="form-group"><label class="fl">Type</label><input type="text" id="iol-add-type" placeholder="Monofocal / Toric / Trifocal / EDOF"></div>
+  <div class="form-group"><label class="fl">Manufacturer</label><input type="text" id="iol-add-mfr" placeholder="Alcon / J&amp;J / Zeiss"></div>
+  <div class="form-group"><label class="fl">Indicative price (₹)</label><input type="number" id="iol-add-price" placeholder="0" min="0"></div>
+  <div class="form-group"><label class="fl">Barcode / SKU (optional)</label><input type="text" id="iol-add-barcode" placeholder="IOL-…"></div>
+  <button class="btn btn-gold" onclick="addIolFromModal()">💾 Add to catalogue</button>
 </div>
 </div>
 </div>
