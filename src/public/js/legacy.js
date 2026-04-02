@@ -7529,10 +7529,20 @@ function handleConsentFileUpload(inp) {
 
 function _getConsentPatientHeader() {
   const ptNm = document.getElementById('ophtho-pt-nm')?.textContent || document.getElementById('obg-pt-nm')?.textContent || '—';
-  const ptId = document.getElementById('ophtho-pt-uid')?.textContent || '—';
-  const ptObj = PATIENTS.find(p=>p.bmhId===ptId) || {};
+  const ptId = document.getElementById('ophtho-pt-uid')?.textContent?.trim() || '—';
+  const ptObj = PATIENTS.find(p=>p.bmhId===ptId) || window.CURRENT_PATIENT || {};
   const today = new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
-  return { name:ptNm, id:ptId, age:ptObj.age||'—', sex:ptObj.sex||'—', mob:ptObj.mob||'—', date:today, doctor:CURRENT_USER?.name||'—' };
+  return {
+    name:    ptNm,
+    id:      ptId,
+    age:     ptObj.age    || '—',
+    sex:     ptObj.sex    || '—',
+    mob:     ptObj.mob    || '—',
+    date:    today,
+    doctor:  CURRENT_USER?.name || '—',
+    surgery: ptObj.surgery || ptObj.surgeryAdvised || ptObj.procedure || '—',
+    eye:     ptObj.eye    || ptObj.opEye || ptObj.surgEye || ptObj.operatingEye || '—',
+  };
 }
 
 function previewConsentWithHeader() {
@@ -7551,59 +7561,76 @@ function printConsentWithHeader() {
   const imgSrc = thumb?._dataUrl;
   const pt = _getConsentPatientHeader();
   const win = window.open('','_blank','width=900,height=700');
-  const imgHTML = imgSrc ? `<img src="${imgSrc}" style="max-width:100%;margin-top:16px;border-radius:6px">` : '<p style="color:grey">[PDF — attach separately]</p>';
-  win.document.write(_consentPrintHTML(pt, name, imgHTML, null));
+  const imgHTML = imgSrc
+    ? `<img src="${imgSrc}" style="width:100%;height:100%;object-fit:contain;display:block">`
+    : '<p style="color:#888;padding:20mm;text-align:center">[PDF — attach separately]</p>';
+  win.document.write(_consentPrintHTML(pt, name, imgHTML, null, true));
   win.document.close();
 }
 
-function _consentPrintHTML(pt, consentName, bodyHTML, sigBlock) {
+function _consentPrintHTML(pt, consentName, bodyHTML, sigBlock, isImageMode) {
+  const lhSrc = window.LH_SRC || '';
+  const logoHtml = lhSrc
+    ? `<img src="${lhSrc}" style="height:20px;width:auto;display:block" alt="BMH">`
+    : `<div style="font-size:12px;font-weight:900;letter-spacing:-.5px;line-height:1.1;color:#000">Baweja<br><span style="font-size:7.5px;font-weight:700;letter-spacing:.8px">MULTISPECIALITY HOSPITAL</span></div>`;
+
+  // Compact patient detail line — skip '—' fields for surgery/eye to save space
+  const ptParts = [
+    `<strong>${pt.name}</strong>`,
+    `${pt.age}/${pt.sex}`,
+    `Mob: ${pt.mob}`,
+    pt.surgery !== '—' ? `Surgery: ${pt.surgery}` : null,
+    pt.eye     !== '—' ? `Eye: ${pt.eye}`         : null,
+    `ID: ${pt.id}`,
+    `Date: ${pt.date}`,
+  ].filter(Boolean).join(' &nbsp;·&nbsp; ');
+
+  const pageStyle = isImageMode
+    ? `@page{size:A4 portrait;margin:0}`
+    : `@page{size:A4 portrait;margin:8mm 12mm 10mm 12mm}`;
+
+  const imgBodyCSS = isImageMode ? `
+    .body-wrap{height:calc(297mm - 24mm);overflow:hidden}
+    .body-wrap img{width:100%;height:100%;object-fit:contain;display:block}` : `
+    .body-wrap{padding-top:10px}
+    .body-wrap pre{font-family:Arial,sans-serif;white-space:pre-wrap;font-size:12px;line-height:1.8}`;
+
+  const sigHTML = (!isImageMode && !sigBlock) ? `
+  <div class="sig-row">
+    <div class="sig-box"><div class="sig-line"></div><div class="sig-label">Patient / Guardian Signature</div><div class="sig-label">Name &amp; Relationship</div></div>
+    <div class="sig-box"><div class="sig-line"></div><div class="sig-label">Witness Signature</div></div>
+    <div class="sig-box"><div class="sig-line"></div><div class="sig-label">Doctor / ${pt.doctor}</div></div>
+  </div>` : (sigBlock || '');
+
   return `<!DOCTYPE html><html><head><meta charset="UTF-8">
-  <title>${consentName}</title>
-  <style>
-    body{font-family:Arial,sans-serif;margin:0;padding:0;color:#111}
-    .header{background:linear-gradient(135deg,#1A3C6E,#0B7B8C);color:#fff;padding:14px 20px;display:flex;align-items:center;justify-content:space-between}
-    .hospital-name{font-size:18px;font-weight:900}
-    .hospital-sub{font-size:10px;opacity:.7;margin-top:2px}
-    .pt-pill{background:rgba(255,255,255,.15);border-radius:8px;padding:10px 14px;min-width:220px;font-size:11px}
-    .pt-nm{font-size:14px;font-weight:900;margin-bottom:4px;color:#FFD600}
-    .pt-row{display:flex;gap:14px;flex-wrap:wrap;margin-top:3px;font-size:10.5px;opacity:.85}
-    .consent-title{font-size:16px;font-weight:900;color:#1A3C6E;border-bottom:3px solid #D4A017;padding-bottom:6px;margin:18px 20px 12px}
-    .body{padding:0 20px 20px}
-    .sig-row{display:flex;justify-content:space-between;margin-top:28px;padding-top:12px;border-top:1px solid #ccc}
-    .sig-box{text-align:center;min-width:160px}
-    .sig-line{border-bottom:1px solid #333;height:36px;margin-bottom:4px}
-    .sig-label{font-size:10px;color:#555}
-    @media print{button{display:none}}
-  </style></head><body>
-  <div class="header">
-    <div>
-      <div class="hospital-name">Baweja Multispeciality Hospital</div>
-      <div class="hospital-sub">Chandigarh &amp; Ropar · +91-81466 22802</div>
-    </div>
-    <div class="pt-pill">
-      <div class="pt-nm">${pt.name}</div>
-      <div class="pt-row">
-        <span>🪪 ${pt.id}</span>
-        <span>👤 ${pt.age} / ${pt.sex}</span>
-        <span>📞 ${pt.mob}</span>
-      </div>
-      <div class="pt-row" style="margin-top:6px">
-        <span>🩺 ${pt.doctor}</span>
-        <span>📅 ${pt.date}</span>
-      </div>
-    </div>
+<title>${consentName}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;color:#000;filter:grayscale(1)}
+${pageStyle}
+.hdr{display:flex;align-items:center;gap:8px;padding:3mm 5mm 2.5mm;border-bottom:1.5px solid #000;background:#fff}
+.hdr-info{flex:1;font-size:8.5px;line-height:1.5;color:#000}
+.hdr-info .ctitle{font-size:9.5px;font-weight:900;margin-top:1px;border-top:1px solid #ccc;padding-top:1px}
+.sig-row{display:flex;justify-content:space-between;margin-top:22px;padding-top:8px;border-top:1px solid #aaa}
+.sig-box{text-align:center;min-width:140px}
+.sig-line{border-bottom:1px solid #444;height:30px;margin-bottom:3px}
+.sig-label{font-size:8.5px;color:#444}
+${imgBodyCSS}
+@media print{button{display:none}}
+</style></head><body>
+<div class="hdr">
+  ${logoHtml}
+  <div class="hdr-info">
+    <div>${ptParts}</div>
+    <div class="ctitle">📋 ${consentName}</div>
   </div>
-  <div class="consent-title">📋 ${consentName}</div>
-  <div class="body">
-    ${bodyHTML}
-    <div class="sig-row">
-      <div class="sig-box"><div class="sig-line"></div><div class="sig-label">Patient / Guardian Signature</div><div class="sig-label" style="margin-top:2px">Name & Relationship</div></div>
-      <div class="sig-box"><div class="sig-line"></div><div class="sig-label">Witness Signature</div></div>
-      <div class="sig-box"><div class="sig-line"></div><div class="sig-label">Doctor Signature</div><div class="sig-label" style="margin-top:2px">${pt.doctor}</div></div>
-    </div>
-  </div>
-  <script>window.onload=()=>window.print()<\/script>
-  </body></html>`;
+</div>
+<div class="body-wrap">
+  ${bodyHTML}
+</div>
+${sigHTML}
+<script>window.onload=()=>window.print()<\/script>
+</body></html>`;
 }
 
 function saveConsentFromText() {
@@ -7624,15 +7651,18 @@ function saveConsentFromText() {
 }
 
 function saveConsentFromImage() {
-  const name = document.getElementById('cup-img-name')?.value?.trim();
+  const name  = document.getElementById('cup-img-name')?.value?.trim();
+  const dept  = document.getElementById('cup-img-dept')?.value || 'all';
   const thumb = document.getElementById('cup-img-thumb');
   const imgSrc = thumb?._dataUrl;
   if(!name) { showToast('Please enter consent name','w'); return; }
   const key = fbKey();
-  fbSet('consentLibrary/' + key, { id:key, name, imgSrc:imgSrc||null, type:'image', createdAt:new Date().toISOString(), createdBy:CURRENT_USER?.name||'Admin' })
+  fbSet('consentLibrary/' + key, { id:key, name, dept, imgSrc:imgSrc||null, type:'image', createdAt:new Date().toISOString(), createdBy:CURRENT_USER?.name||'Admin' })
     .then(() => {
       showToast('Consent image "' + name + '" saved ✓','s');
       closeM('m-consent-upload');
+      refreshConsentLibrary && refreshConsentLibrary();
+      loadCustomConsentsForSettings && loadCustomConsentsForSettings();
     })
     .catch(e => showToast('Save failed: ' + e.message,'w'));
 }
@@ -7688,10 +7718,16 @@ function printCustomConsent(id) {
     if(!data) { showToast('Consent not found','w'); return; }
     const pt = _getConsentPatientHeader();
     const win = window.open('','_blank','width=900,height=700');
-    let bodyHTML = data.text
-      ? `<pre style="font-family:inherit;white-space:pre-wrap;font-size:12.5px;line-height:1.8">${data.text}</pre>`
-      : (data.imgSrc ? `<img src="${data.imgSrc}" style="max-width:100%;margin-top:16px;border-radius:6px">` : '');
-    win.document.write(_consentPrintHTML(pt, data.name, bodyHTML, null));
+    let bodyHTML, isImgMode = false;
+    if (data.text) {
+      bodyHTML = `<pre>${data.text}</pre>`;
+    } else if (data.imgSrc) {
+      bodyHTML = `<img src="${data.imgSrc}" style="width:100%;height:100%;object-fit:contain;display:block">`;
+      isImgMode = true;
+    } else {
+      bodyHTML = '';
+    }
+    win.document.write(_consentPrintHTML(pt, data.name, bodyHTML, null, isImgMode));
     win.document.close();
   });
 }
