@@ -785,16 +785,17 @@ function addCustomChip(triggerEl, eye) {
 // QR
 // ═══════════════════════════════════════
 function initQR() {
-  if(!document.getElementById("qr-canvas")) return;
-  const canvas = document.getElementById('qr-canvas'); if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#fff'; ctx.fillRect(0,0,80,80);
-  const S = 4;
-  const pattern = [[1,1,1,1,1,1,1,0,0,1,0,1,1,0,1,1,1,1,1,1,1],[1,0,0,0,0,0,1,0,1,0,0,1,0,0,1,0,0,0,0,0,1],[1,0,1,1,1,0,1,0,0,0,1,0,0,0,1,0,1,1,1,0,1],[1,0,1,1,1,0,1,0,1,1,0,1,1,0,1,0,1,1,1,0,1],[1,0,0,0,0,0,1,0,0,1,0,0,1,0,1,0,0,0,0,0,1],[1,1,1,1,1,1,1,0,1,0,1,0,1,0,1,1,1,1,1,1,1]];
-  ctx.fillStyle = '#1A3C6E';
-  for (let r=0;r<pattern.length;r++) for (let c=0;c<pattern[r].length;c++) if(pattern[r][c]) ctx.fillRect(4+c*S,4+r*S,S,S);
-  // More random dots for decoration
-  for (let i=0;i<60;i++){ctx.fillRect(Math.floor(Math.random()*18)*4+4,Math.floor(Math.random()*18)*4+4,4,4);}
+  // Replace canvas with a real QR code image that encodes the patient's BMSH ID
+  const canvas = document.getElementById('qr-canvas');
+  if (!canvas) return;
+  const bmhId = window.CURRENT_PATIENT?.bmhId || document.getElementById('ophtho-pt-uid')?.textContent || 'BMSH';
+  // Use qrserver.com API — renders a real scannable QR code
+  const img = document.createElement('img');
+  img.src = 'https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=' + encodeURIComponent(bmhId) + '&color=1A3C6E&bgcolor=ffffff&margin=2';
+  img.width = 80; img.height = 80;
+  img.style.cssText = 'display:block;border-radius:4px';
+  img.alt = bmhId;
+  canvas.parentNode.replaceChild(img, canvas);
 }
 
 // ═══════════════════════════════════════
@@ -1398,11 +1399,37 @@ function buildOphthoCaseSheetHtml() {
   // ── drugs (for case sheet medicines section) ──────────────────────────
   const drugs = typeof RX_DRUGS !== 'undefined' ? RX_DRUGS : [];
 
+  // Absolute URL so images load in preview/print windows (about:blank has no base for relative paths)
   const ocularHealthImgSrc = (function () {
-    try { return new URL('assets/ocular-health-exam.png', window.location.href).href; } catch (e) { return 'assets/ocular-health-exam.png'; }
+    const probe = document.querySelector('#oe-slitlamp img[src*="ocular"], #pg-ophtho img[src*="ocular-health"], img[alt*="Ocular"]');
+    if (probe && probe.src && /^https?:/i.test(probe.src)) return probe.src;
+    try {
+      return new URL('assets/ocular-health-exam.png', window.location.href).href;
+    } catch (e) {
+      const base = window.location.origin + (window.location.pathname.replace(/[^/]+$/, ''));
+      return base + 'assets/ocular-health-exam.png';
+    }
   })();
 
   const escHtml = (s) => (s == null ? '' : String(s)).replace(/</g, '&lt;');
+  const PHX_SHORT = ['Allerg','DM','HTN','IHD','Asthma','Migr','Thyroid','Renal','Surg','Bleed'];
+  const rfOneLine = [
+    `OD — Auto/Cyc: ${rf.cycODsph}/${rf.cycODcyl}×${rf.cycODax} · Subj: ${rf.subjODsph}/${rf.subjODcyl}×${rf.subjODax} · Specs: ${rf.odSph2}/${rf.odCyl2}×${rf.odAx2}`,
+    `OS — Auto/Cyc: ${rf.cycOSsph}/${rf.cycOScyl}×${rf.cycOSax} · Subj: ${rf.subjOSsph}/${rf.subjOScyl}×${rf.subjOSax} · Specs: ${rf.osSph2}/${rf.osCyl2}×${rf.osAx2}`
+  ].join(' &nbsp;|&nbsp; ');
+  const ccStr = ccRows.map(c => c.text + (c.dur ? ' (' + c.dur + ')' : '') + (c.eye ? ' ' + c.eye : '')).join('; ') || '—';
+  const phxRowsHtml = PHX_MAP.map(([id], i) => {
+    const yn = document.getElementById(id)?.value || '—';
+    const dur = (document.getElementById(id + '-dur')?.value || '').trim() || '—';
+    const rx = (document.getElementById(id + '-rx')?.value || '').trim() || '—';
+    const shortL = PHX_SHORT[i] || '—';
+    return `<tr>
+      <td style="border:1px solid #aaa;padding:2px 3px;font-weight:700;white-space:nowrap;font-size:6.5px">${escHtml(shortL)}</td>
+      <td style="border:1px solid #aaa;padding:2px;text-align:center;font-weight:900;font-size:6.5px;color:${yn === 'Y' ? '#000' : '#666'}">${escHtml(yn)}</td>
+      <td style="border:1px solid #aaa;padding:2px 3px;font-size:6.5px">${escHtml(dur)}</td>
+      <td style="border:1px solid #aaa;padding:2px 3px;font-size:6.5px">${escHtml(rx)}</td>
+    </tr>`;
+  }).join('');
   const fieldLinePrint = (label, val) => `<tr><td style="font-size:9px;font-weight:700;white-space:nowrap;padding:2px 6px;border:none;width:88px;vertical-align:top">${label}</td><td style="font-size:9px;padding:2px 6px;border:none;border-bottom:1px solid #999;min-width:90px">${escHtml(val) || '—'}</td></tr>`;
   const slJoin = (struct, eye) => (slData[struct]?.[eye] || []).join(', ');
   const anteriorPrint = (eye) => `<table style="border-collapse:collapse;width:100%">${fieldLinePrint('Lids/Lashes', slJoin('Lids/Lashes', eye))}${fieldLinePrint('Conjunctiva', slJoin('Conjunctiva', eye))}${fieldLinePrint('Cornea', slJoin('Cornea', eye))}${fieldLinePrint('Iris / Pupil', [slJoin('Iris', eye), slJoin('Pupil', eye)].filter(Boolean).join(' · '))}${fieldLinePrint('A/C', slJoin('AC', eye))}${fieldLinePrint('Lens', slJoin('Lens', eye))}</table>`;
@@ -1455,56 +1482,41 @@ th{background:#eee;font-weight:900;text-align:center}
 .sig-line{border-bottom:1px solid #555;margin-top:20px;width:140px;display:inline-block}
 </style></head><body>
 
-<!-- HEADER -->
-<h1>Baweja Multispeciality Hospital &mdash; Out Patient Clinic</h1>
-<table style="margin-bottom:6px;font-size:10.5px">
-  <tr>
-    <td style="border:none;width:40%"><span class="label">Patient: </span><span class="val">${ptName}</span></td>
-    <td style="border:none;width:20%"><span class="label">Age/Sex: </span><span class="val">${ptAge||'—'}${ptSex?' / '+ptSex:''}</span></td>
-    <td style="border:none;width:20%"><span class="label">BMH ID: </span><span class="val" style="font-family:monospace">${ptId}</span></td>
-    <td style="border:none;width:20%;text-align:right"><span class="label">Date: </span><span class="val">${today}</span></td>
-  </tr>
-  <tr>
-    <td colspan="2" style="border:none"><span class="label">Chief Complaints: </span><span class="val">${ccRows.map(c=>c.text+(c.dur?' ('+c.dur+')':'')).join('; ')||'—'}</span></td>
-    <td style="border:none"><span class="label">Centre: </span><span class="val">${centre==='CHD'?'Chandigarh':'Rupnagar'}</span></td>
-    <td style="border:none;text-align:right"><span class="label">Dr: </span><span class="val">${drName}</span></td>
-  </tr>
-</table>
-
-<div style="margin:8px 0;padding:8px;border:1px solid #ccc;border-radius:4px;background:#f9f9f9;font-size:10px;line-height:1.5">
-  <div><span class="label">Spectacles: </span><span class="val">${(hxSpec||'').replace(/</g,'&lt;')}</span></div>
-  <div><span class="label">Last spectacle change: </span><span class="val">${(hxLastSpec||'').replace(/</g,'&lt;')}</span></div>
-  <div><span class="label">Ocular medications (history): </span><span class="val">${(hxOcularMeds||'').replace(/</g,'&lt;')}</span></div>
-  <div><span class="label">Past ocular — OD: </span><span class="val">${(pohOD||'').replace(/</g,'&lt;')}${pohOdTxt?` — ${pohOdTxt.replace(/</g,'&lt;')}`:''}</span></div>
-  <div><span class="label">Past ocular — OS: </span><span class="val">${(pohOS||'').replace(/</g,'&lt;')}${pohOsTxt?` — ${pohOsTxt.replace(/</g,'&lt;')}`:''}</span></div>
-  <div><span class="label">Drug allergy: </span><span class="val">${(drugAl||'').replace(/</g,'&lt;')}${drugAlSpec?' ('+drugAlSpec.replace(/</g,'&lt;')+')':''}</span></div>
-  <div><span class="label">Family history: </span><span class="val">${(famHx||'—').replace(/</g,'&lt;')}</span></div>
-  <div><span class="label">Other systemics / notes: </span><span class="val">${(othHx||'—').replace(/</g,'&lt;')}</span></div>
+<!-- HEADER: title + patient line + BMH ID top-right -->
+<div style="border-bottom:2px solid #111;padding-bottom:8px;margin-bottom:8px">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+    <div style="flex:1;min-width:0;text-align:center">
+      <h1 style="font-size:14px;font-weight:900;letter-spacing:1px;text-transform:uppercase;margin:0 0 8px 0;padding:0;border:none">Baweja Multispeciality Hospital &mdash; Out Patient Clinic</h1>
+      <div style="font-size:10px;line-height:1.45"><b>Patient:</b> ${escHtml(ptName)} &nbsp; <b>Age/Sex:</b> ${escHtml(String(ptAge || '—'))}${ptSex ? ' / ' + escHtml(ptSex) : ''} &nbsp; <b>Date:</b> ${escHtml(today)} &nbsp; <b>Centre:</b> ${centre === 'CHD' ? 'Chandigarh' : 'Rupnagar'} &nbsp; <b>Dr:</b> ${escHtml(drName)}</div>
+    </div>
+    <div style="text-align:right;flex-shrink:0;padding:2px 4px 2px 12px;border-left:3px solid #1A3C6E;min-width:118px">
+      <div style="font-size:18px;font-weight:900;font-family:Consolas,ui-monospace,monospace;letter-spacing:.05em;color:#000;line-height:1.05">${escHtml(ptId || '—')}</div>
+      <div style="font-size:8px;font-weight:800;color:#1A3C6E;text-transform:uppercase;letter-spacing:.5px;margin-top:5px">BMH ID</div>
+    </div>
+  </div>
 </div>
 
-<!-- PERSONAL HISTORY -->
-<h2>Personal History (Systemic)</h2>
-<table class="phx-table" style="font-size:8.5px;width:100%">
-  <thead><tr>
-    <th style="text-align:left">Condition</th>
-    <th>Y/N/?</th>
-    <th style="text-align:left">Duration</th>
-    <th style="text-align:left">Drugs / Treatment</th>
-  </tr></thead>
-  <tbody>
-  ${PHX_MAP.map(([id,shortLabel])=>{
-    const yn = document.getElementById(id)?.value || '—';
-    const dur = (document.getElementById(id+'-dur')?.value || '').trim() || '—';
-    const rx = (document.getElementById(id+'-rx')?.value || '').trim() || '—';
-    return `<tr>
-      <td style="font-weight:700">${shortLabel}</td>
-      <td style="text-align:center;font-weight:900;color:${yn==='Y'?'#000':'#666'}">${yn}</td>
-      <td>${dur.replace(/</g,'&lt;')}</td>
-      <td>${rx.replace(/</g,'&lt;')}</td>
-    </tr>`;
-  }).join('')}
-  </tbody>
-</table>
+<!-- Personal history (left, compact) | Chief complaints + spectacles (right, small) -->
+<div style="display:grid;grid-template-columns:1fr 34%;gap:8px;align-items:start;margin-bottom:8px">
+  <div style="border:1px solid #bbb;border-radius:4px;padding:5px 6px;background:#f8f8f8">
+    <div style="font-size:7.5px;font-weight:900;text-transform:uppercase;letter-spacing:.3px;border-bottom:1px solid #ccc;margin-bottom:3px;padding-bottom:2px;color:#333">Personal history (systemic)</div>
+    <table style="width:100%;border-collapse:collapse;line-height:1.15">
+      <thead><tr style="background:#eaeaea"><th style="border:1px solid #aaa;padding:2px;text-align:left;font-size:6.5px">Cond</th><th style="border:1px solid #aaa;padding:2px;font-size:6.5px">?</th><th style="border:1px solid #aaa;padding:2px;text-align:left;font-size:6.5px">Dur</th><th style="border:1px solid #aaa;padding:2px;text-align:left;font-size:6.5px">Rx</th></tr></thead>
+      <tbody>${phxRowsHtml}</tbody>
+    </table>
+    <div style="font-size:7px;line-height:1.35;margin-top:5px;color:#222">
+      <b>Past ocular</b> OD ${escHtml(pohOD)}${pohOdTxt ? ' — ' + escHtml(pohOdTxt) : ''} · OS ${escHtml(pohOS)}${pohOsTxt ? ' — ' + escHtml(pohOsTxt) : ''}<br/>
+      <b>Allergy</b> ${escHtml(drugAl)}${drugAlSpec ? ' (' + escHtml(drugAlSpec) + ')' : ''} · <b>Family</b> ${escHtml(famHx || '—')} · <b>Other</b> ${escHtml(othHx || '—')}
+    </div>
+  </div>
+  <div style="border:1px solid #b8c8dc;border-radius:4px;padding:5px 7px;background:#f2f6fc;font-size:7.5px;line-height:1.4">
+    <div style="font-size:7.5px;font-weight:900;color:#1A3C6E;text-transform:uppercase;margin-bottom:4px;letter-spacing:.2px">Chief complaints &amp; spectacle history</div>
+    <div style="margin-bottom:5px"><b>CC:</b> ${escHtml(ccStr)}</div>
+    <div><b>Spectacles:</b> ${escHtml(hxSpec)}</div>
+    <div><b>Last change:</b> ${escHtml(hxLastSpec)}</div>
+    <div><b>Ocular meds (hx):</b> ${escHtml(hxOcularMeds)}</div>
+  </div>
+</div>
 
 <!-- CLINICAL EXAMINATION — two column -->
 <div class="two-col" style="margin-top:6px">
@@ -1520,23 +1532,7 @@ th{background:#eee;font-weight:900;text-align:center}
     <div style="margin-top:3px;font-size:9.5px"><b>Colour Vision:</b> OD — ${cvOD} &nbsp;|&nbsp; OS — ${cvOS}</div>
 
     <h2>Refraction</h2>
-    <table style="font-size:9px"><thead>
-      <tr><th rowspan="2">Eye</th><th colspan="3">Auto / Cycloplegic</th><th colspan="3">Subjective</th><th colspan="3">Current Specs</th></tr>
-      <tr><th>Sph</th><th>Cyl</th><th>Ax</th><th>Sph</th><th>Cyl</th><th>Ax</th><th>Sph</th><th>Cyl</th><th>Ax</th></tr>
-    </thead><tbody>
-      <tr>
-        <td style="font-weight:900">OD</td>
-        <td>${rf.cycODsph}</td><td>${rf.cycODcyl}</td><td>${rf.cycODax}</td>
-        <td>${rf.subjODsph}</td><td>${rf.subjODcyl}</td><td>${rf.subjODax}</td>
-        <td>${rf.odSph2}</td><td>${rf.odCyl2}</td><td>${rf.odAx2}</td>
-      </tr>
-      <tr>
-        <td style="font-weight:900">OS</td>
-        <td>${rf.cycOSsph}</td><td>${rf.cycOScyl}</td><td>${rf.cycOSax}</td>
-        <td>${rf.subjOSsph}</td><td>${rf.subjOScyl}</td><td>${rf.subjOSax}</td>
-        <td>${rf.osSph2}</td><td>${rf.osCyl2}</td><td>${rf.osAx2}</td>
-      </tr>
-    </tbody></table>
+    <div style="font-size:7px;line-height:1.35;color:#111;border:1px solid #ddd;padding:4px 6px;border-radius:3px;background:#fafafa;word-break:break-word;letter-spacing:-0.015em">${escHtml(rfOneLine)}</div>
 
     <h2>Intraocular Pressure</h2>
     <table style="font-size:9px"><thead>
@@ -3735,16 +3731,25 @@ function genRcUID() {
     const m = p.bmhId && String(p.bmhId).trim().match(/^BMSH-(\d{1,9})$/);
     if(m){ const n=parseInt(m[1],10); if(n>maxNum) maxNum=n; }
   });
+
+  // Also check localStorage so the counter survives page reloads even if RTDB is slow
+  try {
+    const ls = parseInt(localStorage.getItem('bmh_last_patient_num') || '0', 10);
+    if(ls > maxNum) maxNum = ls;
+  } catch(_) {}
+
   let localNext = maxNum + 1;
   window._nextPatientNum = localNext;
   const el = document.getElementById('rc-uid');
   if(el) el.textContent = 'BMSH-' + String(localNext).padStart(6,'0');
 
+  // Also check RTDB in case another device registered a patient
   if(window.fbOnce) {
     fbOnce('settings/lastPatientNum').then(num => {
       if(typeof num === 'number' && num >= localNext) {
         const fbNext = num + 1;
         window._nextPatientNum = fbNext;
+        try { localStorage.setItem('bmh_last_patient_num', num); } catch(_) {}
         const el2 = document.getElementById('rc-uid');
         if(el2) el2.textContent = 'BMSH-' + String(fbNext).padStart(6,'0');
       }
@@ -3838,7 +3843,10 @@ function registerPatient() {
   savePatientToFirebase(patient);
 
   const numFromId = parseInt(String(uid).replace(/^BMSH-/,''),10);
-  if(!isNaN(numFromId)) { fbSet && fbSet('settings/lastPatientNum', numFromId); }
+  if(!isNaN(numFromId)) {
+    fbSet && fbSet('settings/lastPatientNum', numFromId);
+    try { localStorage.setItem('bmh_last_patient_num', numFromId); } catch(_) {}
+  }
 
   let fee = parseFloat(document.getElementById('rc-fee')?.value||200)||0;
   if(noFee) fee = 0;
@@ -5278,6 +5286,14 @@ function printUnifiedRx(deptId) {
   const fuDate = document.getElementById('rx-fu-date')?.value;
   const advice = document.querySelector(`#pg-${deptId} textarea[placeholder*="Advice"]`)?.value || document.querySelector('#pg-ophtho textarea[placeholder*="Advice"]')?.value || '';
 
+  // Always read from CURRENT_PATIENT set by openPatient()
+  const pt = window.CURRENT_PATIENT || {};
+  const ptName   = pt.name   || document.getElementById('ophtho-pt-nm')?.textContent  || document.getElementById(deptId+'-pt-nm')?.textContent || 'Patient';
+  const ptBmhId  = pt.bmhId  || document.getElementById('ophtho-pt-uid')?.textContent || document.getElementById(deptId+'-pt-uid')?.textContent || '—';
+  const ptAgeSex = (pt.age || '?') + 'Y / ' + (pt.sex || '?');
+  const ptMob    = pt.mob || '';
+  const qrUrl    = `https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(ptBmhId)}&color=1A3C6E&bgcolor=ffffff&margin=2`;
+
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>
 *{margin:0;padding:0;box-sizing:border-box;print-color-adjust:exact;-webkit-print-color-adjust:exact}
@@ -5320,14 +5336,20 @@ body{font-family:'Nunito',sans-serif;font-size:11.5px;color:#1C1C1E;padding:12mm
   </div>
 </div>
 
-<!-- PATIENT BAR -->
-<div class="pt-bar">
-  <div><div class="pt-lbl">Patient</div><div class="pt-val">Test Patient A</div></div>
-  <div><div class="pt-lbl">BMSH ID</div><div class="pt-val" style="font-family:monospace;color:#1A3C6E">BMSH-000001</div></div>
-  <div><div class="pt-lbl">Date</div><div class="pt-val">${today}</div></div>
-  <div><div class="pt-lbl">Age / Sex</div><div class="pt-val">34Y / Male</div></div>
-  <div><div class="pt-lbl">Doctor</div><div class="pt-val">${document.getElementById('sbnm')?.textContent||'Dr. Varun Baweja'}</div></div>
-  <div><div class="pt-lbl">Department</div><div class="pt-val">${{oe:'Ophthalmology',obg:'OBG',psych:'Neuropsychiatry',skin:'Skin & Cosmetology'}[deptId]||'General'}</div></div>
+<!-- PATIENT BAR + QR -->
+<div style="display:flex;align-items:stretch;gap:10px;margin-bottom:14px">
+  <div class="pt-bar" style="flex:1;margin-bottom:0">
+    <div><div class="pt-lbl">Patient</div><div class="pt-val">${ptName}</div></div>
+    <div><div class="pt-lbl">BMSH ID</div><div class="pt-val" style="font-family:monospace;color:#1A3C6E">${ptBmhId}</div></div>
+    <div><div class="pt-lbl">Date</div><div class="pt-val">${today}</div></div>
+    <div><div class="pt-lbl">Age / Sex</div><div class="pt-val">${ptAgeSex}</div></div>
+    <div><div class="pt-lbl">Doctor</div><div class="pt-val">${document.getElementById('sbnm')?.textContent||'Dr. Varun Baweja'}</div></div>
+    <div><div class="pt-lbl">Department</div><div class="pt-val">${{oe:'Ophthalmology',obg:'OBG',psych:'Neuropsychiatry',skin:'Skin & Cosmetology'}[deptId]||'General'}</div></div>
+  </div>
+  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f2f4f8;border-radius:6px;padding:8px;min-width:96px">
+    <img src="${qrUrl}" width="80" height="80" alt="QR" style="display:block;border-radius:4px">
+    <div style="font-size:7.5px;color:#666;margin-top:3px;text-align:center;font-weight:700">Scan to register</div>
+  </div>
 </div>
 
 <!-- CLINICAL FINDINGS (Eye only if checked) -->
@@ -8633,6 +8655,7 @@ function fillPatientFromPhone(bmhId) {
 function logoutUser() {
   if(window.FBDB) window.FBDB.ref().off();
   _fbPatientsLoaded = false;
+  window._bmhRtdbPatientsListening = false; // allow listener to re-attach on next login
   CURRENT_USER = null;
   // Clear form data
   RX_DRUGS && (RX_DRUGS.length = 0);

@@ -7,9 +7,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
-  <script type="module" crossorigin src="/BMH-HMS/assets/main-CH4bDqPC.js"></script>
-  <link rel="modulepreload" crossorigin href="/BMH-HMS/assets/firebase-core-tfo9VOpH.js">
-  <link rel="modulepreload" crossorigin href="/BMH-HMS/assets/firebase-db-ntSLKB2h.js">
+  <script type="module" crossorigin src="/BMH-HMS/assets/main-C1dH4nS3.js"></script>
+  <link rel="modulepreload" crossorigin href="/BMH-HMS/assets/firebase-core-CsWAQJdo.js">
+  <link rel="modulepreload" crossorigin href="/BMH-HMS/assets/firebase-db-DJhyJ2pn.js">
   <link rel="stylesheet" crossorigin href="/BMH-HMS/assets/main-Dha0tA3N.css">
 </head>
 <body>
@@ -270,6 +270,7 @@
         <div style="display:flex;gap:5px;flex-wrap:wrap">
           <button class="btn btn-sm btn-gray" onclick="nav('doctor-queue',null)" title="Back to Queue">← Queue</button>
           <button class="btn btn-sm btn-gray" onclick="openM('m-consents')">📋 Consents</button>
+          <button class="btn btn-sm btn-outline" onclick="previewCaseSheet()">👁 Preview</button>
           <button class="btn btn-sm btn-outline" onclick="printCaseSheet()">🖨️ Print Case Sheet</button>
           <button class="btn btn-sm btn-gold" onclick="saveVisit('ophtho')">💾 Save</button>
         </div>
@@ -408,9 +409,9 @@
               </div>
             </div>
           </div>
-          <div class="form-group"><label class="fl">Spectacles</label><select><option>Not using</option><option>Using — Distance</option><option>Using — Near</option><option>Using — Bifocal</option><option>Using — Progressive</option></select></div>
-          <div class="form-group"><label class="fl">Last Spectacle Change</label><input type="text" placeholder="e.g. 2 years ago"></div>
-          <div class="form-group"><label class="fl">Ocular Medications</label><input type="text" placeholder="Current eye drops / medications"></div>
+          <div class="form-group"><label class="fl">Spectacles</label><select id="hx-spectacles"><option>Not using</option><option>Using — Distance</option><option>Using — Near</option><option>Using — Bifocal</option><option>Using — Progressive</option></select></div>
+          <div class="form-group"><label class="fl">Last Spectacle Change</label><input type="text" id="hx-last-spec" placeholder="e.g. 2 years ago"></div>
+          <div class="form-group"><label class="fl">Ocular Medications</label><input type="text" id="hx-ocular-meds" placeholder="Current eye drops / medications"></div>
         </div>
 
         <!-- Personal / Systemic History -->
@@ -435,10 +436,10 @@
                   </select>
                 </td>
                 <td style="padding:4px 8px;border:1px solid var(--g5)">
-                  <input type="text" placeholder="e.g. 5 years" style="font-size:11.5px;width:100%">
+                  <input type="text" id="phx-allergy-dur" placeholder="e.g. 5 years" style="font-size:11.5px;width:100%">
                 </td>
                 <td style="padding:4px 8px;border:1px solid var(--g5)">
-                  <input type="text" placeholder="Medication / treatment" style="font-size:11.5px;width:100%">
+                  <input type="text" id="phx-allergy-rx" placeholder="Medication / treatment" style="font-size:11.5px;width:100%">
                 </td>
               </tr>
               <tr style="background:var(--g6)">
@@ -452,10 +453,10 @@
                   </select>
                 </td>
                 <td style="padding:4px 8px;border:1px solid var(--g5)">
-                  <input type="text" placeholder="e.g. 5 years" style="font-size:11.5px;width:100%">
+                  <input type="text" id="phx-diabetes_mellit-dur" placeholder="e.g. 5 years" style="font-size:11.5px;width:100%">
                 </td>
                 <td style="padding:4px 8px;border:1px solid var(--g5)">
-                  <input type="text" placeholder="Medication / treatment" style="font-size:11.5px;width:100%">
+                  <input type="text" id="phx-diabetes_mellit-rx" placeholder="Medication / treatment" style="font-size:11.5px;width:100%">
                 </td>
               </tr>
               <tr style="background:#fff">
@@ -469,10 +470,10 @@
                   </select>
                 </td>
                 <td style="padding:4px 8px;border:1px solid var(--g5)">
-                  <input type="text" placeholder="e.g. 5 years" style="font-size:11.5px;width:100%">
+                  <input type="text" id="phx-hypertension-dur" placeholder="e.g. 5 years" style="font-size:11.5px;width:100%">
                 </td>
                 <td style="padding:4px 8px;border:1px solid var(--g5)">
-                  <input type="text" placeholder="Medication / treatment" style="font-size:11.5px;width:100%">
+                  <input type="text" id="phx-hypertension-rx" placeholder="Medication / treatment" style="font-size:11.5px;width:100%">
                 </td>
               </tr>
               <tr style="background:var(--g6)">
@@ -486,10 +487,10 @@
                   </select>
                 </td>
                 <td style="padding:4px 8px;border:1px solid var(--g5)">
-                  <input type="text" placeholder="e.g. 5 years" style="font-size:11.5px;width:100%">
+                  <input type="text" id="phx-heart_disease__-dur" placeholder="e.g. 5 years" style="font-size:11.5px;width:100%">
                 </td>
                 <td style="padding:4px 8px;border:1px solid var(--g5)">
-                  <input type="text" placeholder="Medication / treatment" style="font-size:11.5px;width:100%">
+                  <input type="text" id="phx-heart_disease__-rx" placeholder="Medication / treatment" style="font-size:11.5px;width:100%">
                 </td>
               </tr>
               <tr style="background:#fff">
@@ -503,10 +504,10 @@
                   </select>
                 </td>
                 <td style="padding:4px 8px;border:1px solid var(--g5)">
-                  <input type="text" placeholder="e.g. 5 years" style="font-size:11.5px;width:100%">
+                  <input type="text" id="phx-asthma___copd-dur" placeholder="e.g. 5 years" style="font-size:11.5px;width:100%">
                 </td>
                 <td style="padding:4px 8px;border:1px solid var(--g5)">
-                  <input type="text" placeholder="Medication / treatment" style="font-size:11.5px;width:100%">
+                  <input type="text" id="phx-asthma___copd-rx" placeholder="Medication / treatment" style="font-size:11.5px;width:100%">
                 </td>
               </tr>
               <tr style="background:var(--g6)">
@@ -520,10 +521,10 @@
                   </select>
                 </td>
                 <td style="padding:4px 8px;border:1px solid var(--g5)">
-                  <input type="text" placeholder="e.g. 5 years" style="font-size:11.5px;width:100%">
+                  <input type="text" id="phx-headache___migr-dur" placeholder="e.g. 5 years" style="font-size:11.5px;width:100%">
                 </td>
                 <td style="padding:4px 8px;border:1px solid var(--g5)">
-                  <input type="text" placeholder="Medication / treatment" style="font-size:11.5px;width:100%">
+                  <input type="text" id="phx-headache___migr-rx" placeholder="Medication / treatment" style="font-size:11.5px;width:100%">
                 </td>
               </tr>
               <tr style="background:#fff">
@@ -537,10 +538,10 @@
                   </select>
                 </td>
                 <td style="padding:4px 8px;border:1px solid var(--g5)">
-                  <input type="text" placeholder="e.g. 5 years" style="font-size:11.5px;width:100%">
+                  <input type="text" id="phx-thyroid_disease-dur" placeholder="e.g. 5 years" style="font-size:11.5px;width:100%">
                 </td>
                 <td style="padding:4px 8px;border:1px solid var(--g5)">
-                  <input type="text" placeholder="Medication / treatment" style="font-size:11.5px;width:100%">
+                  <input type="text" id="phx-thyroid_disease-rx" placeholder="Medication / treatment" style="font-size:11.5px;width:100%">
                 </td>
               </tr>
               <tr style="background:var(--g6)">
@@ -554,10 +555,10 @@
                   </select>
                 </td>
                 <td style="padding:4px 8px;border:1px solid var(--g5)">
-                  <input type="text" placeholder="e.g. 5 years" style="font-size:11.5px;width:100%">
+                  <input type="text" id="phx-renal_disease-dur" placeholder="e.g. 5 years" style="font-size:11.5px;width:100%">
                 </td>
                 <td style="padding:4px 8px;border:1px solid var(--g5)">
-                  <input type="text" placeholder="Medication / treatment" style="font-size:11.5px;width:100%">
+                  <input type="text" id="phx-renal_disease-rx" placeholder="Medication / treatment" style="font-size:11.5px;width:100%">
                 </td>
               </tr>
               <tr style="background:#fff">
@@ -571,10 +572,10 @@
                   </select>
                 </td>
                 <td style="padding:4px 8px;border:1px solid var(--g5)">
-                  <input type="text" placeholder="e.g. 5 years" style="font-size:11.5px;width:100%">
+                  <input type="text" id="phx-previous_surger-dur" placeholder="e.g. 5 years" style="font-size:11.5px;width:100%">
                 </td>
                 <td style="padding:4px 8px;border:1px solid var(--g5)">
-                  <input type="text" placeholder="Medication / treatment" style="font-size:11.5px;width:100%">
+                  <input type="text" id="phx-previous_surger-rx" placeholder="Medication / treatment" style="font-size:11.5px;width:100%">
                 </td>
               </tr>
               <tr style="background:var(--g6)">
@@ -588,10 +589,10 @@
                   </select>
                 </td>
                 <td style="padding:4px 8px;border:1px solid var(--g5)">
-                  <input type="text" placeholder="e.g. 5 years" style="font-size:11.5px;width:100%">
+                  <input type="text" id="phx-bleeding_disord-dur" placeholder="e.g. 5 years" style="font-size:11.5px;width:100%">
                 </td>
                 <td style="padding:4px 8px;border:1px solid var(--g5)">
-                  <input type="text" placeholder="Medication / treatment" style="font-size:11.5px;width:100%">
+                  <input type="text" id="phx-bleeding_disord-rx" placeholder="Medication / treatment" style="font-size:11.5px;width:100%">
                 </td>
               </tr>
             </tbody>
@@ -606,10 +607,10 @@
               <option>Penicillin</option><option>Sulfonamides</option><option>NSAIDs / Aspirin</option>
               <option>Local Anaesthetic</option><option>Cyclopentolate</option><option>Atropine</option><option>Other (specify below)</option>
             </select>
-            <input type="text" placeholder="Specify if Other…" style="margin-top:4px">
+            <input type="text" id="drug-allergy-spec" placeholder="Specify if Other…" style="margin-top:4px">
           </div>
-          <div class="form-group full"><label class="fl">Family History</label><textarea placeholder="Glaucoma, diabetes, hypertension in family…"></textarea></div>
-          <div class="form-group full"><label class="fl">Other Systemics / Additional Notes</label><textarea placeholder="Any other relevant systemic history…"></textarea></div>
+          <div class="form-group full"><label class="fl">Family History</label><textarea id="hx-family" placeholder="Glaucoma, diabetes, hypertension in family…"></textarea></div>
+          <div class="form-group full"><label class="fl">Other Systemics / Additional Notes</label><textarea id="hx-other-systemic" placeholder="Any other relevant systemic history…"></textarea></div>
         </div>
       </div>
 
@@ -848,13 +849,18 @@
       <!-- SLIT LAMP TAB -->
       <div class="tab-content" id="oe-slitlamp">
         <div style="background:#12131a;border-radius:var(--r);padding:14px">
+          <div style="margin-bottom:14px;padding:12px;background:rgba(255,255,255,.06);border-radius:10px;border:1px solid rgba(255,255,255,.12)">
+            <div style="font-size:11px;font-weight:900;color:#fff;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Ocular Health Examination</div>
+            <img src="./assets/ocular-health-exam.png" alt="Ocular health diagram — anterior, section, optic nerve" style="width:100%;max-width:820px;height:auto;display:block;margin:0 auto;border-radius:8px;border:1px solid rgba(255,255,255,.15)" />
+            <div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:8px">Reference diagram for orientation. Record structured findings in the rows below — they flow into the printed case sheet beside each label.</div>
+          </div>
           <!-- OD / OS column headers -->
           <div style="display:grid;grid-template-columns:90px 1fr 1fr;gap:8px;margin-bottom:10px;border-bottom:1px solid rgba(255,255,255,.1);padding-bottom:8px">
             <div></div>
             <div style="text-align:center;font-size:11px;font-weight:900;color:rgba(100,180,255,.9);text-transform:uppercase;letter-spacing:1px;background:rgba(30,80,200,.3);border-radius:6px;padding:5px">RIGHT EYE (OD)</div>
             <div style="text-align:center;font-size:11px;font-weight:900;color:rgba(100,220,140,.9);text-transform:uppercase;letter-spacing:1px;background:rgba(30,160,80,.25);border-radius:6px;padding:5px">LEFT EYE (OS)</div>
           </div>
-          <div style="display:grid;grid-template-columns:90px 1fr 1fr;gap:8px;margin-bottom:10px;align-items:start">
+          <div class="sl-sl-row" style="display:grid;grid-template-columns:90px 1fr 1fr;gap:8px;margin-bottom:10px;align-items:start">
               <div style="font-size:9.5px;font-weight:900;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.8px;padding-top:4px">Lids/Lashes</div>
               <div style="background:rgba(30,80,200,.2);border-radius:6px;padding:6px 8px">
                 <div style="font-size:8.5px;font-weight:800;color:rgba(100,180,255,.8);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">OD</div>
@@ -864,7 +870,7 @@
                 <div style="font-size:8.5px;font-weight:800;color:rgba(100,220,140,.8);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">OS</div>
                 <div style="display:flex;gap:4px;flex-wrap:wrap"><span class="sl-chip sel" onclick="toggleChipEye(this,'os')">Normal</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Entropion</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Ectropion</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Ptosis</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Trichiasis</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Lagophthalmos</span></div>
               </div>
-            </div><div style="display:grid;grid-template-columns:90px 1fr 1fr;gap:8px;margin-bottom:10px;align-items:start">
+            </div><div class="sl-sl-row" style="display:grid;grid-template-columns:90px 1fr 1fr;gap:8px;margin-bottom:10px;align-items:start">
               <div style="font-size:9.5px;font-weight:900;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.8px;padding-top:4px">Conjunctiva</div>
               <div style="background:rgba(30,80,200,.2);border-radius:6px;padding:6px 8px">
                 <div style="font-size:8.5px;font-weight:800;color:rgba(100,180,255,.8);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">OD</div>
@@ -874,7 +880,7 @@
                 <div style="font-size:8.5px;font-weight:800;color:rgba(100,220,140,.8);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">OS</div>
                 <div style="display:flex;gap:4px;flex-wrap:wrap"><span class="sl-chip sel" onclick="toggleChipEye(this,'os')">Normal</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Congested</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Follicles</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Papillae</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Chemosis</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Subconj Haem</span></div>
               </div>
-            </div><div style="display:grid;grid-template-columns:90px 1fr 1fr;gap:8px;margin-bottom:10px;align-items:start">
+            </div><div class="sl-sl-row" style="display:grid;grid-template-columns:90px 1fr 1fr;gap:8px;margin-bottom:10px;align-items:start">
               <div style="font-size:9.5px;font-weight:900;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.8px;padding-top:4px">Cornea</div>
               <div style="background:rgba(30,80,200,.2);border-radius:6px;padding:6px 8px">
                 <div style="font-size:8.5px;font-weight:800;color:rgba(100,180,255,.8);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">OD</div>
@@ -884,7 +890,7 @@
                 <div style="font-size:8.5px;font-weight:800;color:rgba(100,220,140,.8);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">OS</div>
                 <div style="display:flex;gap:4px;flex-wrap:wrap"><span class="sl-chip sel" onclick="toggleChipEye(this,'os')">Clear</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Oedema</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Ulcer</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">KPs</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Scar</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Epithelial defect</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Band keratopathy</span></div>
               </div>
-            </div><div style="display:grid;grid-template-columns:90px 1fr 1fr;gap:8px;margin-bottom:10px;align-items:start">
+            </div><div class="sl-sl-row" style="display:grid;grid-template-columns:90px 1fr 1fr;gap:8px;margin-bottom:10px;align-items:start">
               <div style="font-size:9.5px;font-weight:900;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.8px;padding-top:4px">AC</div>
               <div style="background:rgba(30,80,200,.2);border-radius:6px;padding:6px 8px">
                 <div style="font-size:8.5px;font-weight:800;color:rgba(100,180,255,.8);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">OD</div>
@@ -894,7 +900,7 @@
                 <div style="font-size:8.5px;font-weight:800;color:rgba(100,220,140,.8);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">OS</div>
                 <div style="display:flex;gap:4px;flex-wrap:wrap"><span class="sl-chip sel" onclick="toggleChipEye(this,'os')">Deep & Clear</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Shallow</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Cells+</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Flare</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Hyphaema</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Hypopyon</span></div>
               </div>
-            </div><div style="display:grid;grid-template-columns:90px 1fr 1fr;gap:8px;margin-bottom:10px;align-items:start">
+            </div><div class="sl-sl-row" style="display:grid;grid-template-columns:90px 1fr 1fr;gap:8px;margin-bottom:10px;align-items:start">
               <div style="font-size:9.5px;font-weight:900;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.8px;padding-top:4px">Iris</div>
               <div style="background:rgba(30,80,200,.2);border-radius:6px;padding:6px 8px">
                 <div style="font-size:8.5px;font-weight:800;color:rgba(100,180,255,.8);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">OD</div>
@@ -904,7 +910,7 @@
                 <div style="font-size:8.5px;font-weight:800;color:rgba(100,220,140,.8);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">OS</div>
                 <div style="display:flex;gap:4px;flex-wrap:wrap"><span class="sl-chip sel" onclick="toggleChipEye(this,'os')">Normal</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Rubeosis</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Atrophy</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Synechiae PAS</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Synechiae Post</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Heterochromia</span></div>
               </div>
-            </div><div style="display:grid;grid-template-columns:90px 1fr 1fr;gap:8px;margin-bottom:10px;align-items:start">
+            </div><div class="sl-sl-row" style="display:grid;grid-template-columns:90px 1fr 1fr;gap:8px;margin-bottom:10px;align-items:start">
               <div style="font-size:9.5px;font-weight:900;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.8px;padding-top:4px">Pupil</div>
               <div style="background:rgba(30,80,200,.2);border-radius:6px;padding:6px 8px">
                 <div style="font-size:8.5px;font-weight:800;color:rgba(100,180,255,.8);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">OD</div>
@@ -914,7 +920,7 @@
                 <div style="font-size:8.5px;font-weight:800;color:rgba(100,220,140,.8);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">OS</div>
                 <div style="display:flex;gap:4px;flex-wrap:wrap"><span class="sl-chip sel" onclick="toggleChipEye(this,'os')">Round & Reacting</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">RAPD</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Fixed & Dilated</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Irregular</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Peaked</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Secluded</span></div>
               </div>
-            </div><div style="display:grid;grid-template-columns:90px 1fr 1fr;gap:8px;margin-bottom:10px;align-items:start">
+            </div><div class="sl-sl-row" style="display:grid;grid-template-columns:90px 1fr 1fr;gap:8px;margin-bottom:10px;align-items:start">
               <div style="font-size:9.5px;font-weight:900;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.8px;padding-top:4px">Lens</div>
               <div style="background:rgba(30,80,200,.2);border-radius:6px;padding:6px 8px">
                 <div style="font-size:8.5px;font-weight:800;color:rgba(100,180,255,.8);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">OD</div>
@@ -924,7 +930,7 @@
                 <div style="font-size:8.5px;font-weight:800;color:rgba(100,220,140,.8);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">OS</div>
                 <div style="display:flex;gap:4px;flex-wrap:wrap"><span class="sl-chip sel" onclick="toggleChipEye(this,'os')">Clear</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">NSC Grade I</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">NSC Grade II</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">NSC Grade III</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">PSC</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Cortical</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Mature</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">IOL in situ</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Aphakic</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Part. absorbed</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Subluxated</span></div>
               </div>
-            </div><div style="display:grid;grid-template-columns:90px 1fr 1fr;gap:8px;margin-bottom:10px;align-items:start">
+            </div><div class="sl-sl-row" style="display:grid;grid-template-columns:90px 1fr 1fr;gap:8px;margin-bottom:10px;align-items:start">
               <div style="font-size:9.5px;font-weight:900;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.8px;padding-top:4px">Vitreous</div>
               <div style="background:rgba(30,80,200,.2);border-radius:6px;padding:6px 8px">
                 <div style="font-size:8.5px;font-weight:800;color:rgba(100,180,255,.8);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">OD</div>
@@ -1055,8 +1061,16 @@
           <div style="text-align:right"><div style="font-family:var(--mono);font-size:11px;color:var(--bmh-teal);font-weight:700">BMSH-000001</div><div style="font-size:11px;color:var(--g1)" id="rx-date"></div></div>
         </div>
         <div style="margin-bottom:8px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px"><div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px">Diagnosis</div><button class="btn btn-xs btn-outline" onclick="addDiagnosis()">+ Add</button></div>
-          <div id="rx-diagnosis-list"></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:6px">
+            <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px">Diagnosis</div>
+            <button type="button" class="btn btn-xs btn-blue" onclick="addDiagnosisRow()">+ Add diagnosis line</button>
+          </div>
+          <div style="display:grid;grid-template-columns:28px 1fr 36px;gap:5px;padding:5px 8px;background:var(--g6);border-radius:6px;margin-bottom:6px;font-size:9px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px;align-items:center">
+            <span>#</span><span>Diagnosis (type ICD-10 or free text — same as medicines)</span><span></span>
+          </div>
+          <div id="rx-diagnosis-rows" style="margin-bottom:6px"></div>
+          <textarea id="rx-diagnosis-text" rows="2" placeholder="Extra diagnosis notes (optional)…" style="width:100%;font-size:12px;border:1.5px solid var(--g4);border-radius:8px;padding:8px 10px;margin-bottom:4px;font-family:var(--font);resize:vertical;min-height:40px;box-sizing:border-box"></textarea>
+          <div id="rx-diagnosis-list" style="display:none" aria-hidden="true"></div>
         </div>
         <!-- Investigation ordered display -->
         <div style="margin-bottom:10px" id="oe-inv-display-wrap">
@@ -3909,8 +3923,10 @@
       messagingSenderId: '675093131811',
       appId:             '1:675093131811:web:669ea0eafd0a27bc73f796'
     };
-    // Use a named app 'legacy' to avoid collision with the modular SDK default app
-    var legacyApp = firebase.initializeApp(cfg, 'legacy');
+    // Use the DEFAULT app (no second arg) so this FBDB instance shares
+    // the same Firebase Auth state as the modular SDK in app.js.
+    // app.js calls getApp() to reuse this same instance.
+    var legacyApp = firebase.initializeApp(cfg);
     window.FBDB = legacyApp.database();
     window.BMH_FB_READY = true;
     // Connection dot wired by app.js via modular SDK
