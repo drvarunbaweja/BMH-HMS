@@ -4151,11 +4151,17 @@ function addRxDrugFromModal() {
     drugType: type,
     eye:[eye.replace(/\s.*$/,'')],freq,dur,
     dateFrom: today, dateTo: '',
-    lang:{en:inst||(generic+' '+freq+' in '+eye+' for '+dur+'.')},taper
+    lang:{en:inst||(generic+' '+freq+' in '+eye+' for '+dur+'.')}
   });
   renderRxDrugs();
-  if(taper){
-    RX_DRUGS[RX_DRUGS.length-1].taperRow = { freq: suggestTaperFreqFromMain(freq), dur: taper, dateFrom: '', dateTo: '' };
+  if (taper) {
+    const taperDurMap = { '1w': '7 days', '2w': '14 days', '4w': '14 days' };
+    RX_DRUGS[RX_DRUGS.length - 1].taperRow = {
+      freq: suggestTaperFreqFromMain(freq),
+      dur: taperDurMap[taper] || '7 days',
+      dateFrom: '',
+      dateTo: ''
+    };
   }
   renderRxDrugs();
   showToast(`💊 ${trade||generic} added to prescription ✓`,'s');
