@@ -397,6 +397,178 @@ const CONSENT_LIBRARY = [
    body:`I consent to sclerotherapy for treatment of spider veins or small varicose veins.\n\nProcedure: A sclerosant solution is injected into the targeted vessels, causing them to collapse and fade.\n\nRisks: Bruising, temporary skin staining (haemosiderin), matting (fine new vessels), allergic reaction, deep vein thrombosis (rare), ulceration at injection site.`},
 ];
 
+// ── Consent text DB (overrides built-in CONSENT_DATA / library — no runtime translation) ──
+let CONSENT_DATA_OVERRIDES = {};
+let CONSENT_LIBRARY_OVERRIDES = {};
+function loadConsentDataOverridesFromStorage() {
+  try {
+    const ls = localStorage.getItem('bmh_consent_data_db');
+    if (ls) {
+      const o = JSON.parse(ls);
+      if (o && typeof o === 'object') CONSENT_DATA_OVERRIDES = o;
+    }
+  } catch (e) { /* noop */ }
+  try {
+    const ls2 = localStorage.getItem('bmh_consent_library_db');
+    if (ls2) {
+      const o2 = JSON.parse(ls2);
+      if (o2 && typeof o2 === 'object') CONSENT_LIBRARY_OVERRIDES = o2;
+    }
+  } catch (e) { /* noop */ }
+  if (window.FBDB) {
+    window.FBDB.ref('consentDataDb').once('value').then(function (snap) {
+      const v = snap.val();
+      if (v && typeof v === 'object') {
+        CONSENT_DATA_OVERRIDES = v;
+        try { localStorage.setItem('bmh_consent_data_db', JSON.stringify(v)); } catch (e) {}
+      }
+    }).catch(function () {});
+    window.FBDB.ref('consentLibraryDb').once('value').then(function (snap) {
+      const v = snap.val();
+      if (v && typeof v === 'object') {
+        CONSENT_LIBRARY_OVERRIDES = v;
+        try { localStorage.setItem('bmh_consent_library_db', JSON.stringify(v)); } catch (e) {}
+      }
+    }).catch(function () {});
+  }
+}
+window.loadConsentDataOverridesFromStorage = loadConsentDataOverridesFromStorage;
+function saveConsentDataOverridesToStorage() {
+  try { localStorage.setItem('bmh_consent_data_db', JSON.stringify(CONSENT_DATA_OVERRIDES)); } catch (e) {}
+  if (window.FBDB) window.FBDB.ref('consentDataDb').set(CONSENT_DATA_OVERRIDES).catch(function () {});
+}
+function saveConsentLibraryOverridesToStorage() {
+  try { localStorage.setItem('bmh_consent_library_db', JSON.stringify(CONSENT_LIBRARY_OVERRIDES)); } catch (e) {}
+  if (window.FBDB) window.FBDB.ref('consentLibraryDb').set(CONSENT_LIBRARY_OVERRIDES).catch(function () {});
+}
+function getMergedConsentData() {
+  const out = {};
+  Object.keys(CONSENT_DATA).forEach(function (k) {
+    out[k] = JSON.parse(JSON.stringify(CONSENT_DATA[k]));
+  });
+  Object.keys(CONSENT_DATA_OVERRIDES).forEach(function (k) {
+    const ov = CONSENT_DATA_OVERRIDES[k];
+    if (!ov) return;
+    if (!out[k]) out[k] = { title: ov.title || k, paras: Array.isArray(ov.paras) ? JSON.parse(JSON.stringify(ov.paras)) : [] };
+    else {
+      if (ov.title) out[k].title = ov.title;
+      if (Array.isArray(ov.paras)) out[k].paras = JSON.parse(JSON.stringify(ov.paras));
+    }
+  });
+  return out;
+}
+function getConsentEntry(key) {
+  return getMergedConsentData()[key] || CONSENT_DATA[key];
+}
+function getMergedLibraryItem(id) {
+  const base = CONSENT_LIBRARY.find(function (x) { return x.id === id; });
+  if (!base) return null;
+  const ov = CONSENT_LIBRARY_OVERRIDES[id] || {};
+  return Object.assign({}, base, ov);
+}
+function escapeHtmlConsent(s) {
+  return (s == null ? '' : String(s)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+function resolvePrintHeaderSrc() {
+  if (window.PRINT_HEADER_SRC && String(window.PRINT_HEADER_SRC).trim()) return window.PRINT_HEADER_SRC;
+  if (window.LH_SRC && String(window.LH_SRC).trim()) return window.LH_SRC;
+  const tag = document.querySelector('.lh-img-tag');
+  if (tag && tag.src) return tag.src;
+  try {
+    const base = document.querySelector('base')?.href || window.location.href;
+    const local = new URL('assets/hospital-header.jpg', base).href;
+    if (local) return local;
+  } catch (e) { /* noop */ }
+  return 'https://bawejahospital.com/img/logo.png';
+}
+function buildConsentParasHtml(cd, variant) {
+  const paras = cd.paras || [];
+  return paras.map(function (p, i) {
+    const en = escapeHtmlConsent(p.en).replace(/\n/g, '<br>');
+    const n = i + 1;
+    if (variant === 'en') {
+      return '<p style="margin-bottom:10px;font-size:12.5px;line-height:1.85"><strong>' + n + '. </strong>' + en + '</p>';
+    }
+    if (variant === 'en-pa') {
+      const pa = escapeHtmlConsent(p.pa || '').replace(/\n/g, '<br>');
+      return '<div style="margin-bottom:14px"><p style="margin-bottom:6px;font-size:12.5px;line-height:1.85"><strong>' + n + '. </strong>' + en + '</p>'
+        + '<p style="color:#333;font-size:11.5px;line-height:1.85;padding-left:12px;border-left:3px solid #D4A017">' + pa + '</p></div>';
+    }
+    const hi = escapeHtmlConsent(p.hi || '').replace(/\n/g, '<br>');
+    return '<div style="margin-bottom:14px"><p style="margin-bottom:6px;font-size:12.5px;line-height:1.85"><strong>' + n + '. </strong>' + en + '</p>'
+      + '<p style="color:#333;font-size:11.5px;line-height:1.85;padding-left:12px;border-left:3px solid #b85c00">' + hi + '</p></div>';
+  }).join('');
+}
+function consentVariantSubtitle(variant) {
+  if (variant === 'en') return '';
+  if (variant === 'en-pa') return '<div style="font-size:10px;font-weight:800;color:#555;text-align:center;margin:-2px 0 10px">Bilingual: English — ਪੰਜਾਬੀ (stored text)</div>';
+  return '<div style="font-size:10px;font-weight:800;color:#555;text-align:center;margin:-2px 0 10px">Bilingual: English — हिंदी (stored text)</div>';
+}
+function buildConsentPageShell(cd, lhSrc, ptStripHtml, variant) {
+  const title = escapeHtmlConsent(cd.title);
+  const sub = variant === 'en' ? '' : consentVariantSubtitle(variant);
+  return '<div style="page-break-after:always;padding:12mm 14mm;font-family:\'Lato\',Arial,sans-serif">'
+    + (lhSrc ? '<img src="' + escapeHtmlConsent(lhSrc) + '" style="width:100%;height:auto;margin-bottom:10px" alt="">' : '<div style="font-size:16px;font-weight:900;color:#1A3C6E;margin-bottom:8px">Baweja Multispeciality Hospital</div>')
+    + '<div style="font-size:14px;font-weight:900;color:#1A3C6E;text-transform:uppercase;text-align:center;border-bottom:2px solid #D4A017;padding-bottom:8px;margin-bottom:8px">' + title + '</div>'
+    + sub
+    + ptStripHtml
+    + '<div style="font-size:12px;line-height:1.85">' + buildConsentParasHtml(cd, variant) + '</div>'
+    + '<div style="display:flex;justify-content:space-between;margin-top:32px">'
+    + '<div style="text-align:center"><div style="border-bottom:1px solid #333;width:160px;margin-bottom:4px"></div><div style="font-size:10px;color:#666">Patient / Guardian Signature & Date</div></div>'
+    + '<div style="text-align:center"><div style="border-bottom:1px solid #333;width:160px;margin-bottom:4px"></div><div style="font-size:10px;color:#666">Witness Signature & Date</div></div>'
+    + '<div style="text-align:center"><div style="border-bottom:1px solid #333;width:160px;margin-bottom:4px"></div><div style="font-size:10px;color:#666">Doctor\'s Signature & Date</div></div>'
+    + '</div></div>';
+}
+function buildConsentPatientStripHtml(ptNm, ptId, ptAge, ptSex, ptMob, today, procLine, doctorName) {
+  const esc = escapeHtmlConsent;
+  const sx = (ptSex || '?')[0] || '?';
+  return '<div style="background:linear-gradient(135deg,#1A3C6E,#0B7B8C);border-radius:6px;padding:8px 14px;color:#fff;font-size:11.5px;display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px">'
+    + '<span style="font-weight:900;font-size:13px;color:#FFD600">' + esc(ptNm) + '</span>'
+    + '<span>🪪 ' + esc(ptId) + '</span>'
+    + (ptAge ? '<span>👤 ' + esc(ptAge) + '/' + esc(sx) + '</span>' : '')
+    + (ptMob ? '<span>📞 ' + esc(ptMob) + '</span>' : '')
+    + '<span>📅 ' + esc(today) + '</span>'
+    + '<span>🩺 ' + esc(doctorName) + '</span>'
+    + (procLine ? '<span style="flex-basis:100%;font-size:11px;opacity:.95;border-top:1px solid rgba(255,255,255,.25);padding-top:6px;margin-top:2px">🔬 ' + esc(procLine) + '</span>' : '')
+    + '</div>';
+}
+function collectConsentPrintContext() {
+  const ptIds = ['ophtho-pt-uid', 'obg-pt-uid', 'psych-pt-uid', 'skin-pt-uid'];
+  const ptNms = ['ophtho-pt-nm', 'obg-pt-nm', 'psych-pt-nm', 'skin-pt-nm'];
+  let ptId = '—'; let ptNm = '_______________';
+  for (let i = 0; i < ptIds.length; i++) {
+    const v = document.getElementById(ptIds[i])?.textContent?.trim();
+    if (v && v !== '—' && v.startsWith('BMSH-')) { ptId = v; ptNm = document.getElementById(ptNms[i])?.textContent || ptNm; break; }
+  }
+  const pt = (typeof PATIENTS !== 'undefined' && PATIENTS.find) ? PATIENTS.find(function (p) { return p.bmhId === ptId; }) || {} : {};
+  const today = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+  const otList = (typeof OT_CASES !== 'undefined' && OT_CASES.length)
+    ? OT_CASES.filter(function (c) { return c.bmhId === ptId; }).sort(function (a, b) { return (b.scheduledTime || b.date || '').localeCompare(a.scheduledTime || a.date || ''); })
+    : [];
+  const ot = otList[0] || null;
+  const procLine = ot ? (String(ot.procedure || 'Procedure') + ' · ' + String(ot.site || 'Eye/ Site') + ' · OT ' + String(ot.scheduledTime || ot.date || '')) : '';
+  const doctorName = window.CURRENT_USER?.name || 'Dr. Varun Baweja';
+  return {
+    ptId: ptId, ptNm: ptNm, ptAge: pt.age || '', ptSex: pt.sex || '', ptMob: pt.mob || pt.phone || '',
+    today: today, procLine: procLine, doctorName: doctorName,
+    stripHtml: buildConsentPatientStripHtml(ptNm, ptId, pt.age || '', pt.sex || '', pt.mob || pt.phone || '', today, procLine, doctorName),
+  };
+}
+function printStructuredConsentThreeVariants(cd) {
+  if (!cd || !cd.paras || !cd.paras.length) { showToast('No consent text to print', 'w'); return; }
+  const lhSrc = resolvePrintHeaderSrc();
+  const ctx = collectConsentPrintContext();
+  const pages = ['en', 'en-pa', 'en-hi'].map(function (v) { return buildConsentPageShell(cd, lhSrc, ctx.stripHtml, v); }).join('');
+  const footerSrc = window.PRINT_FOOTER_SRC || '';
+  const footerHtml = footerSrc ? '<div style="padding:8mm 14mm;text-align:center;border-top:1px solid #eee"><img src="' + escapeHtmlConsent(footerSrc) + '" style="max-width:100%;height:auto" alt=""></div>' : '';
+  const html = '<!DOCTYPE html><html><head><meta charset="UTF-8">'
+    + '<style>@import url(\'https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap\');'
+    + '*{margin:0;padding:0;box-sizing:border-box}body{font-family:\'Lato\',Arial,sans-serif;font-size:12px}'
+    + '@page{size:A4;margin:0}</style></head><body>' + pages + footerHtml + '</body></html>';
+  safePrint(html);
+  showToast('Printing 3 variants: English · English+ਪੰਜਾਬੀ · English+हिंदी ✓', 's');
+}
+
 function renderConsentLibrary(filterDept) {
   const el = document.getElementById('consent-library-list'); if(!el) return;
   const items = filterDept && filterDept!=='all' ? CONSENT_LIBRARY.filter(c=>c.dept===filterDept) : CONSENT_LIBRARY;
@@ -427,41 +599,20 @@ function openConsentFromLibrary(id) {
   printConsentFromLibrary(id);
 }
 
+function libraryMergedToConsentData(merged) {
+  const enParts = String(merged.body || '').split(/\n\n+/).map(function (s) { return s.trim(); }).filter(Boolean);
+  const paParts = String(merged.bodyPa || '').split(/\n\n+/).map(function (s) { return s.trim(); });
+  const hiParts = String(merged.bodyHi || '').split(/\n\n+/).map(function (s) { return s.trim(); });
+  const paras = enParts.map(function (en, i) {
+    return { en: en, pa: paParts[i] || '', hi: hiParts[i] || '' };
+  });
+  return { title: (merged.name || 'Consent').toUpperCase(), paras: paras };
+}
 function printConsentFromLibrary(id) {
-  const c = CONSENT_LIBRARY.find(x=>x.id===id); if(!c) return;
-  const pt = window.CURRENT_PATIENT || {};
-  const today = new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'});
-  const otPick = (typeof OT_CASES !== 'undefined' && OT_CASES.length && pt.bmhId)
-    ? OT_CASES.filter(x => x.bmhId === pt.bmhId).sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0]
-    : null;
-  const otExtra = otPick
-    ? `<div style="font-size:10.5px;margin-top:4px"><strong>Procedure:</strong> ${otPick.procedure||'—'} &nbsp; <strong>Eye / site:</strong> ${otPick.site||'—'}</div>`
-    : '';
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
-    *{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:11px;padding:12mm;line-height:1.6}
-    @page{size:A4;margin:0}h1{font-size:14px;font-weight:900;margin-bottom:8px}
-    .hdr{border-bottom:2px solid #1A3C6E;margin-bottom:8mm;padding-bottom:4mm}
-    .body{white-space:pre-line;margin-bottom:8mm;font-size:11px}
-    .sig{display:grid;grid-template-columns:1fr 1fr;gap:20mm;margin-top:12mm}
-    .sig-line{border-bottom:1px solid #000;height:24px;margin-bottom:4px}
-  </style></head><body>
-    <div class="hdr">
-      <div style="font-size:16px;font-weight:900;color:#1A3C6E">Baweja Multispeciality Hospital</div>
-      <div style="font-size:10px;color:#555">SCO #100, Sector 40C, Chandigarh | +91-81466 22802</div>
-    </div>
-    <h1>CONSENT FORM — ${c.name.toUpperCase()}</h1>
-    <div style="margin-bottom:6mm;font-size:11px">
-      <div><strong>Patient Name:</strong> ${pt.name||'_________________________'}</div>
-      <div><strong>BMSH ID:</strong> ${pt.bmhId||'_______________'} &nbsp;&nbsp; <strong>Date:</strong> ${today}</div>
-      ${otExtra}
-    </div>
-    <div class="body">${c.body}</div>
-    <div class="sig">
-      <div><div class="sig-line"></div><div style="font-size:10px">Signature of Patient / Guardian</div><div style="font-size:9px;color:#555">Date: _______________</div></div>
-      <div><div class="sig-line"></div><div style="font-size:10px">Signature of Witness</div><div style="font-size:9px;color:#555">Relationship: _______________</div></div>
-    </div>
-  </body></html>`;
-  safePrint(html);
+  const merged = getMergedLibraryItem(id);
+  if (!merged || !merged.body) { showToast('Consent not found', 'w'); return; }
+  const cd = libraryMergedToConsentData(merged);
+  printStructuredConsentThreeVariants(cd);
 }
 
 // ═══════════════════════════════════════
@@ -737,9 +888,79 @@ function printSelectedDocs() {
 function renderConsent() {
   const type = document.getElementById('consent-type-sel')?.value || 'cataract';
   const lang = document.getElementById('consent-lang-sel')?.value || 'pa';
-  const data = CONSENT_DATA[type] || CONSENT_DATA.cataract;
+  const data = getConsentEntry(type) || getConsentEntry('cataract');
   const el = document.getElementById('consent-content'); if (!el) return;
   el.innerHTML = buildConsentHTML(data, lang);
+}
+
+function _getConsentPatientHeader() {
+  const ptIds = ['ophtho-pt-uid', 'obg-pt-uid', 'psych-pt-uid', 'skin-pt-uid'];
+  const ptNms = ['ophtho-pt-nm', 'obg-pt-nm', 'psych-pt-nm', 'skin-pt-nm'];
+  let ptId = '—'; let ptNm = '— Select Patient —';
+  for (let i = 0; i < ptIds.length; i++) {
+    const v = document.getElementById(ptIds[i])?.textContent?.trim();
+    if (v && v !== '—' && v.startsWith('BMSH-')) { ptId = v; ptNm = document.getElementById(ptNms[i])?.textContent || ptNm; break; }
+  }
+  const pt = (typeof PATIENTS !== 'undefined' && PATIENTS.find) ? PATIENTS.find(function (p) { return p.bmhId === ptId; }) || {} : {};
+  const today = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  return { name: ptNm, id: ptId, age: pt.age || '—', sex: pt.sex || '—', mob: pt.mob || '', date: today, doctor: window.CURRENT_USER?.name || '—' };
+}
+function buildConsentHTML(data, lang, pt) {
+  const localKey = lang === 'pa' ? 'pa' : 'hi';
+  const p = pt || _getConsentPatientHeader();
+  const ptName = p.name || document.getElementById('ophtho-pt-nm')?.textContent || '—';
+  const ptId = p.id || document.getElementById('ophtho-pt-uid')?.textContent || '—';
+  const today = p.date || new Date().toLocaleDateString('en-IN');
+  const doc = p.doctor || window.CURRENT_USER?.name || '—';
+  const paras = data.paras || [];
+  return '<div style="margin-bottom:14px;padding-bottom:10px;border-bottom:2px solid var(--bmh-gold)">'
+    + '<div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">'
+    + '<img src="https://bawejahospital.com/img/logo.png" style="height:32px;object-fit:contain" alt="BMH" onerror="this.style.display=\'none\'">'
+    + '<div><div style="font-size:15px;font-weight:900;color:var(--bmh-blue)">Baweja Multispeciality Hospital</div>'
+    + '<div style="font-size:11px;color:var(--g1)">Chandigarh & Ropar · +91-81466 22802</div></div></div>'
+    + '<div style="font-size:14px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px">' + String(data.title || '') + '</div>'
+    + '<div style="margin-top:6px;background:linear-gradient(135deg,#1A3C6E,#0B7B8C);border-radius:7px;padding:7px 12px;color:#fff;font-size:11px;display:flex;gap:14px;flex-wrap:wrap;align-items:center">'
+    + '<span style="font-weight:900;font-size:13px;color:#FFD600">' + String(ptName) + '</span>'
+    + '<span>🪪 ' + String(ptId) + '</span>'
+    + (p.age ? '<span>👤 ' + String(p.age) + ' / ' + String(p.sex || '—') + '</span>' : '')
+    + (p.mob ? '<span>📞 ' + String(p.mob) + '</span>' : '')
+    + '<span>📅 ' + String(today) + '</span><span>🩺 ' + String(doc) + '</span></div></div>'
+    + paras.map(function (p0, i) {
+      return '<div class="consent-para"><div class="consent-eng" style="font-size:12.5px;line-height:1.7;color:var(--tx)">' + (i + 1) + '. ' + String(p0.en || '') + '</div>'
+        + '<div class="consent-local" style="font-size:12px;color:var(--g1);margin-top:2px">' + String(p0[localKey] || '') + '</div></div>';
+    }).join('')
+    + '<div style="margin-top:16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">'
+    + '<div><div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:24px">Patient / Attendant Signature</div><div style="border-bottom:1px solid var(--tx);margin-bottom:4px"></div><div style="font-size:10px;color:var(--g1)">Name, Relationship & Date</div></div>'
+    + '<div><div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:24px">Witness Signature</div><div style="border-bottom:1px solid var(--tx);margin-bottom:4px"></div><div style="font-size:10px;color:var(--g1)">Name & Date</div></div>'
+    + '<div><div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:24px">Doctor\'s Signature</div><div style="border-bottom:1px solid var(--tx);margin-bottom:4px"></div><div style="font-size:10px;color:var(--g1)">' + String(doc) + ' · ' + String(today) + '</div></div></div>';
+}
+function renderConsentModal() {
+  const ptIds = ['ophtho-pt-uid', 'obg-pt-uid', 'psych-pt-uid', 'skin-pt-uid'];
+  const ptNms = ['ophtho-pt-nm', 'obg-pt-nm', 'psych-pt-nm', 'skin-pt-nm'];
+  let ptId = '—'; let ptNm = '—';
+  for (let i = 0; i < ptIds.length; i++) {
+    const v = document.getElementById(ptIds[i])?.textContent?.trim();
+    if (v && v !== '—' && v.startsWith('BMSH-')) { ptId = v; ptNm = document.getElementById(ptNms[i])?.textContent || ptNm; break; }
+  }
+  const pt = (typeof PATIENTS !== 'undefined' && PATIENTS.find) ? PATIENTS.find(function (p) { return p.bmhId === ptId; }) || {} : {};
+  const today = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  const nb = document.getElementById('cmb-name'); if (nb) nb.textContent = ptNm;
+  const ib = document.getElementById('cmb-id'); if (ib) ib.textContent = ptId;
+  const ab = document.getElementById('cmb-age'); if (ab) ab.textContent = pt.age || '—';
+  const sb = document.getElementById('cmb-sex'); if (sb) sb.textContent = pt.sex || '—';
+  const mb = document.getElementById('cmb-mob'); if (mb) mb.textContent = pt.mob || '—';
+  const db = document.getElementById('cmb-date'); if (db) db.textContent = today;
+  const xb = document.getElementById('cmb-doc'); if (xb) xb.textContent = window.CURRENT_USER?.name || '—';
+  const type = document.getElementById('mc-type')?.value || 'cataract';
+  const lang = document.getElementById('mc-lang')?.value || 'pa';
+  const data = getConsentEntry(type) || getConsentEntry('cataract');
+  const el = document.getElementById('modal-consent-content'); if (!el) return;
+  el.innerHTML = buildConsentHTML(data, lang, { name: ptNm, id: ptId, age: pt.age || '—', sex: pt.sex || '—', mob: pt.mob || '—', date: today, doctor: window.CURRENT_USER?.name || '—' });
+}
+function printConsentModal() {
+  const type = document.getElementById('mc-type')?.value || 'cataract';
+  const data = getConsentEntry(type) || getConsentEntry('cataract');
+  printStructuredConsentThreeVariants(data);
 }
 
 // renderConsentModal and buildConsentHTML defined below (upgraded versions)
@@ -3542,6 +3763,52 @@ function printOphthoSheet() {
   safePrint(html);
 }
 
+/** Full A4: anterior (left), posterior (right), diagram bottom-centre — uses oe-anterior-findings / oe-posterior-findings */
+function printEyeExaminationCaseSheetA4() {
+  const p = window.CURRENT_PATIENT || {};
+  const ptName = p.name || document.getElementById('ophtho-pt-nm')?.textContent?.trim() || 'Patient';
+  const ptId = p.bmhId || document.getElementById('ophtho-pt-uid')?.textContent?.trim() || '—';
+  const today = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+  const ant = document.getElementById('oe-anterior-findings')?.value?.trim() || '—';
+  const post = document.getElementById('oe-posterior-findings')?.value?.trim() || '—';
+  let imgJpg = '';
+  let imgPng = '';
+  try {
+    const base = document.querySelector('base')?.href || window.location.href;
+    imgJpg = new URL('assets/eye-examination.jpg', base).href;
+    imgPng = new URL('assets/eye-examination.png', base).href;
+  } catch (e) {
+    imgJpg = 'assets/eye-examination.jpg';
+    imgPng = 'assets/eye-examination.png';
+  }
+  const lh = resolvePrintHeaderSrc();
+  const html = '<!DOCTYPE html><html><head><meta charset="UTF-8">'
+    + '<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:11px;color:#111}'
+    + '@page{size:A4;margin:8mm}.sheet{min-height:280mm;display:flex;flex-direction:column}'
+    + '.row-main{flex:1;display:grid;grid-template-columns:1fr 240px 1fr;gap:12px;align-items:stretch;min-height:140mm}'
+    + '.find{border:1px solid #bbb;border-radius:10px;padding:12px;white-space:pre-wrap;line-height:1.55;font-size:11px;overflow:hidden}'
+    + '.find h3{font-size:11px;margin:0 0 10px;color:#1A3C6E;text-transform:uppercase;letter-spacing:.4px}'
+    + '.dia-row{display:flex;justify-content:center;align-items:flex-end;padding:10px 0 0;margin-top:auto}'
+    + '.dia-row img{max-width:min(240px,42vw);height:auto;object-fit:contain}'
+    + '.dia-cap{font-size:9px;color:#666;margin-top:6px;text-align:center}</style></head><body>'
+    + '<div class="sheet">'
+    + (lh ? '<div style="margin-bottom:8px"><img src="' + escapeHtmlConsent(lh) + '" style="width:100%;max-height:72px;object-fit:contain" alt=""></div>'
+      : '<div style="font-weight:900;font-size:15px;color:#1A3C6E;margin-bottom:8px">Baweja Multispeciality Hospital</div>')
+    + '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:8px">'
+    + '<div><strong>' + escapeHtmlConsent(ptName) + '</strong> · BMSH ' + escapeHtmlConsent(ptId) + '</div>'
+    + '<div>' + escapeHtmlConsent(today) + '</div></div>'
+    + '<div style="text-align:center;font-weight:900;font-size:12px;color:#1A3C6E;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px">Eye examination</div>'
+    + '<div class="row-main">'
+    + '<div class="find"><h3>Anterior findings</h3>' + escapeHtmlConsent(ant).replace(/\n/g, '<br>') + '</div>'
+    + '<div style="display:flex;flex-direction:column;justify-content:flex-end;align-items:center;padding:6px">'
+    + '<img src="' + escapeHtmlConsent(imgJpg) + '" alt="Eye examination" style="max-width:100%;height:auto" onerror="this.onerror=null;this.src=\'' + escapeHtmlConsent(imgPng) + '\'">'
+    + '<div class="dia-cap">Diagram (eye examination)</div></div>'
+    + '<div class="find"><h3>Posterior findings</h3>' + escapeHtmlConsent(post).replace(/\n/g, '<br>') + '</div>'
+    + '</div></div></body></html>';
+  safePrint(html);
+  showToast('Eye examination A4 sheet sent to printer ✓', 's');
+}
+
 // ANC CARD PRINT
 function printOBGCard() {
   const pt = window.CURRENT_PATIENT || {};
@@ -3723,9 +3990,111 @@ function renderSetRxTplList() {
     return '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--g6);border-radius:8px;margin-bottom:6px;font-size:12px">' +
       '<div style="flex:1"><div style="font-weight:800">' + n + '</div>' +
       '<div style="font-size:10.5px;color:var(--g1)">' + deptLab + ' · ' + cnt + ' drug(s)</div></div>' +
+      '<button type="button" class="btn btn-xs btn-gold" onclick="openEditRxTemplateModal(' + JSON.stringify(k) + ')">✏️ Edit</button>' +
       '<button type="button" class="btn btn-xs btn-gray" onclick="deleteRxTemplate(' + JSON.stringify(k) + ')">🗑️</button></div>';
   });
   el.innerHTML = rows.length ? rows.join('') : '<div style="padding:16px;color:var(--g1);font-size:12px">No templates yet</div>';
+}
+function openEditRxTemplateModal(key) {
+  if (!key || !RX_TEMPLATES_DATA[key]) return;
+  const meta = RX_TEMPLATES_META[key] || { dept: 'all', name: key, notes: '' };
+  const kInp = document.getElementById('edit-rx-tpl-key');
+  const nInp = document.getElementById('edit-rx-tpl-name');
+  const dInp = document.getElementById('edit-rx-tpl-dept');
+  const notesInp = document.getElementById('edit-rx-tpl-notes');
+  const jInp = document.getElementById('edit-rx-tpl-json');
+  if (kInp) kInp.value = key;
+  if (nInp) nInp.value = meta.name || key;
+  if (dInp) dInp.value = meta.dept || 'all';
+  if (notesInp) notesInp.value = meta.notes || '';
+  if (jInp) jInp.value = JSON.stringify(RX_TEMPLATES_DATA[key], null, 2);
+  openM('m-edit-rx-tpl');
+}
+function saveRxTemplateFromModal() {
+  const key = document.getElementById('edit-rx-tpl-key')?.value;
+  if (!key || !RX_TEMPLATES_DATA[key]) { showToast('Invalid template', 'w'); return; }
+  const name = document.getElementById('edit-rx-tpl-name')?.value?.trim() || key;
+  const dept = document.getElementById('edit-rx-tpl-dept')?.value || 'all';
+  const notes = document.getElementById('edit-rx-tpl-notes')?.value?.trim() || '';
+  let arr;
+  try {
+    arr = JSON.parse(document.getElementById('edit-rx-tpl-json')?.value || '[]');
+  } catch (e) {
+    showToast('Invalid JSON — check drug list', 'w');
+    return;
+  }
+  if (!Array.isArray(arr)) { showToast('Template must be a JSON array', 'w'); return; }
+  RX_TEMPLATES_DATA[key] = arr;
+  RX_TEMPLATES_META[key] = { dept: dept, name: name, notes: notes };
+  saveRxTemplatesToStorage();
+  refreshRxTemplateSelects();
+  renderSetRxTplList();
+  closeM('m-edit-rx-tpl');
+  showToast('Rx template saved ✓', 's');
+}
+function renderStructuredConsentList() {
+  const el = document.getElementById('set-consent-data-list');
+  if (!el) return;
+  const m = getMergedConsentData();
+  const keys = Object.keys(m).sort();
+  el.innerHTML = keys.map(function (k) {
+    const d = m[k];
+    const title = d.title || k;
+    const n = (d.paras || []).length;
+    const hasOv = !!CONSENT_DATA_OVERRIDES[k];
+    return '<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--g6);border-radius:8px;margin-bottom:5px;font-size:12px">'
+      + '<div style="flex:1;min-width:0"><div style="font-weight:800">' + String(title).replace(/</g, '&lt;') + '</div>'
+      + '<div style="font-size:10px;color:var(--g1)">' + n + ' paragraph pair(s)' + (hasOv ? ' · saved override' : '') + '</div></div>'
+      + '<button type="button" class="btn btn-xs btn-gold" onclick="openEditConsentDataModal(' + JSON.stringify(k) + ')">✏️</button>'
+      + (hasOv ? '<button type="button" class="btn btn-xs btn-gray" onclick="deleteConsentDataOverride(' + JSON.stringify(k) + ')">↺ Reset</button>' : '')
+      + '</div>';
+  }).join('');
+}
+function openEditConsentDataModal(key) {
+  const d = getConsentEntry(key);
+  if (!d) return;
+  const kEl = document.getElementById('edit-cd-key');
+  const tEl = document.getElementById('edit-cd-title');
+  const enEl = document.getElementById('edit-cd-en');
+  const paEl = document.getElementById('edit-cd-pa');
+  const hiEl = document.getElementById('edit-cd-hi');
+  if (kEl) kEl.value = key;
+  if (tEl) tEl.value = d.title || '';
+  const paras = d.paras || [];
+  if (enEl) enEl.value = paras.map(function (p) { return p.en || ''; }).join('\n\n');
+  if (paEl) paEl.value = paras.map(function (p) { return p.pa || ''; }).join('\n\n');
+  if (hiEl) hiEl.value = paras.map(function (p) { return p.hi || ''; }).join('\n\n');
+  openM('m-edit-consent-data');
+}
+function saveStructuredConsentFromModal() {
+  const key = document.getElementById('edit-cd-key')?.value;
+  if (!key) return;
+  const title = document.getElementById('edit-cd-title')?.value?.trim() || key;
+  const enText = document.getElementById('edit-cd-en')?.value || '';
+  const paText = document.getElementById('edit-cd-pa')?.value || '';
+  const hiText = document.getElementById('edit-cd-hi')?.value || '';
+  const en = String(enText).split(/\n\n+/).map(function (s) { return s.trim(); }).filter(Boolean);
+  const pa = String(paText).split(/\n\n+/).map(function (s) { return s.trim(); });
+  const hi = String(hiText).split(/\n\n+/).map(function (s) { return s.trim(); });
+  const n = Math.max(en.length, pa.length, hi.length);
+  const paras = [];
+  for (let i = 0; i < n; i++) {
+    paras.push({ en: en[i] || '', pa: pa[i] || '', hi: hi[i] || '' });
+  }
+  if (!paras.length) { showToast('Add at least one English block (paragraphs separated by a blank line)', 'w'); return; }
+  CONSENT_DATA_OVERRIDES[key] = { title: title, paras: paras };
+  saveConsentDataOverridesToStorage();
+  renderStructuredConsentList();
+  closeM('m-edit-consent-data');
+  showToast('Consent text saved (local + cloud) ✓', 's');
+}
+function deleteConsentDataOverride(key) {
+  if (!key || !CONSENT_DATA_OVERRIDES[key]) { showToast('No saved override to reset', 'w'); return; }
+  if (!confirm('Reset “' + key + '” to the built-in default text?')) return;
+  delete CONSENT_DATA_OVERRIDES[key];
+  saveConsentDataOverridesToStorage();
+  renderStructuredConsentList();
+  showToast('Restored built-in default ✓', 's');
 }
 function deleteRxTemplate(key) {
   if (!key || !RX_TEMPLATES_DATA[key]) return;
@@ -4991,10 +5360,10 @@ function getAllSurgeryPacks() {
 function populateNewPackModal() {
   const host = document.getElementById('new-tpl-docs');
   if (!host || typeof CONSENT_DATA === 'undefined') return;
-  const keys = Object.keys(CONSENT_DATA);
+  const keys = Object.keys(getMergedConsentData());
   host.innerHTML = '<div style="font-size:10px;font-weight:800;color:var(--g1);margin-bottom:6px">Select consent forms to include (each prints as its own page)</div>' +
     keys.map(function (k) {
-      const data = CONSENT_DATA[k];
+      const data = getConsentEntry(k);
       const title = data && data.title ? data.title : k;
       return '<label style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;font-size:11.5px;cursor:pointer;border-bottom:1px solid var(--g5)"><input type="checkbox" name="new-pack-consent" value="' + k + '"><span>' + title + '</span></label>';
     }).join('');
@@ -5023,78 +5392,68 @@ function deleteSurgeryPack(id) {
   renderSetPacksList();
   showToast('Pack deleted ✓', 's');
 }
-function printSurgeryPack(packOrDept) {
+function printSurgeryPackWithKeys(keys, deptLabel) {
+  if (!keys || !keys.length) { showToast('No consent forms selected', 'w'); return; }
+  const lhSrc = resolvePrintHeaderSrc();
+  const ctx = collectConsentPrintContext();
+  const consentPages = keys.map(function (k) {
+    const cd = getConsentEntry(k);
+    if (!cd || !cd.paras) return '';
+    return ['en', 'en-pa', 'en-hi'].map(function (v) { return buildConsentPageShell(cd, lhSrc, ctx.stripHtml, v); }).join('');
+  }).join('');
+  if (!consentPages.trim()) { showToast('No consent templates found for ' + (deptLabel || 'pack'), 'w'); return; }
+  const footerSrc = window.PRINT_FOOTER_SRC || '';
+  const footerHtml = footerSrc ? '<div style="padding:8mm 14mm;text-align:center;border-top:1px solid #eee"><img src="' + escapeHtmlConsent(footerSrc) + '" style="max-width:100%;height:auto" alt=""></div>' : '';
+  const html = '<!DOCTYPE html><html><head><meta charset="UTF-8">'
+    + '<style>@import url(\'https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap\');'
+    + '*{margin:0;padding:0;box-sizing:border-box}body{font-family:\'Lato\',Arial,sans-serif;font-size:12px}'
+    + '@page{size:A4;margin:0}</style></head><body>' + consentPages + footerHtml + '</body></html>';
+  safePrint(html);
+  showToast('📋 ' + (deptLabel || 'Pack') + ' — ' + keys.length + ' form(s) × 3 variants (EN / EN+PA / EN+HI) ✓', 's');
+}
+function openSurgeryPackPrintModal(packOrDept) {
   const fallbackDeptKeys = {
-    ophtho: ['cataract','ivt','lasik','pterygium'],
-    obg: ['obg-lscs','obg-normal','obg-lap','obg-mtp'],
-    psych: ['psych-gen','psych-ect'],
-    skin: ['skin-peel','skin-laser','skin-prp'],
+    ophtho: ['cataract', 'ivt', 'lasik', 'pterygium'],
+    obg: ['obg-lscs', 'obg-normal', 'obg-lap', 'obg-mtp'],
+    psych: ['psych-gen', 'psych-ect'],
+    skin: ['skin-peel', 'skin-laser', 'skin-prp'],
   };
   const packs = getAllSurgeryPacks();
   const pack = packs.find(function (p) { return p.id === packOrDept; });
   const keys = pack && pack.consentKeys && pack.consentKeys.length
-    ? pack.consentKeys
+    ? pack.consentKeys.slice()
     : (fallbackDeptKeys[packOrDept] || []);
   const deptLabel = pack
-    ? pack.dept
-    : ({ ophtho:'Ophthalmology', obg:'OBG / Obstetrics', psych:'Neuropsychiatry', skin:'Skin & Cosmetology' }[packOrDept] || packOrDept);
-  const lhSrc = window.PRINT_HEADER_SRC || window.LH_SRC || '';
-  const today = new Date().toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'});
-
-  // Find a current patient for the header
-  const ptIds = ['ophtho-pt-uid','obg-pt-uid','psych-pt-uid','skin-pt-uid'];
-  const ptNms = ['ophtho-pt-nm','obg-pt-nm','psych-pt-nm','skin-pt-nm'];
-  let ptId='—', ptNm='_______________', ptAge='', ptSex='';
-  for(let i=0;i<ptIds.length;i++){
-    const v=document.getElementById(ptIds[i])?.textContent?.trim();
-    if(v&&v!=='—'&&v.startsWith('BMSH-')){ptId=v;ptNm=document.getElementById(ptNms[i])?.textContent||ptNm;break;}
+    ? (pack.label || pack.dept)
+    : ({ ophtho: 'Ophthalmology', obg: 'OBG / Obstetrics', psych: 'Neuropsychiatry', skin: 'Skin & Cosmetology' }[packOrDept] || packOrDept);
+  window._SP_PACK_LABEL = deptLabel;
+  const host = document.getElementById('sp-pack-print-checklist');
+  if (!host) {
+    printSurgeryPackWithKeys(keys, deptLabel);
+    return;
   }
-  const pt = PATIENTS.find(p=>p.bmhId===ptId)||{};
-  ptAge=pt.age||''; ptSex=pt.sex||'';
-  const otList = (typeof OT_CASES !== 'undefined' && OT_CASES.length)
-    ? OT_CASES.filter(c => c.bmhId === ptId).sort((a, b) => (b.scheduledTime || b.date || '').localeCompare(a.scheduledTime || a.date || ''))
-    : [];
-  const ot = otList[0] || null;
-  const procLine = ot ? `${ot.procedure || 'Procedure'} · ${ot.site || 'Eye/ Site'} · OT ${ot.scheduledTime || ot.date || ''}` : '';
-
-  const consentPages = keys.map(k => {
-    const data = CONSENT_DATA[k]; if(!data) return '';
-    const parasHtml = data.paras.map((p,i) =>
-      `<p style="margin-bottom:6px"><strong>${i+1}. ${p.en}</strong></p>
-       <p style="color:#444;font-size:11px;margin-bottom:10px;padding-left:12px;border-left:3px solid #D4A017">${p.pa||''}</p>
-       ${p.hi?`<p style="color:#555;font-size:10.5px;margin-bottom:12px;padding-left:12px">${p.hi}</p>`:''}`
-    ).join('');
-    return `<div style="page-break-after:always;padding:12mm 14mm;font-family:'Lato',Arial,sans-serif">
-      ${lhSrc?`<img src="${lhSrc}" style="width:100%;height:auto;margin-bottom:10px">`:'<div style="font-size:16px;font-weight:900;color:#1A3C6E;margin-bottom:8px">Baweja Multispeciality Hospital</div>'}
-      <div style="font-size:14px;font-weight:900;color:#1A3C6E;text-transform:uppercase;text-align:center;border-bottom:2px solid #D4A017;padding-bottom:8px;margin-bottom:12px">${data.title}</div>
-      <div style="background:linear-gradient(135deg,#1A3C6E,#0B7B8C);border-radius:6px;padding:8px 14px;color:#fff;font-size:11.5px;display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px">
-        <span style="font-weight:900;font-size:13px;color:#FFD600">${ptNm}</span>
-        <span>🪪 ${ptId}</span>
-        ${ptAge?`<span>👤 ${ptAge}/${(ptSex||'?')[0]}</span>`:''}
-        <span>📅 ${today}</span>
-        <span>🩺 ${CURRENT_USER?.name||'Dr. Baweja'}</span>
-        ${procLine ? `<span style="flex-basis:100%;font-size:11px;opacity:.95;border-top:1px solid rgba(255,255,255,.25);padding-top:6px;margin-top:2px">🔬 ${procLine}</span>` : ''}
-      </div>
-      <div style="font-size:12px;line-height:1.9">${parasHtml}</div>
-      <div style="display:flex;justify-content:space-between;margin-top:32px">
-        <div style="text-align:center"><div style="border-bottom:1px solid #333;width:160px;margin-bottom:4px"></div><div style="font-size:10px;color:#666">Patient / Guardian Signature & Date</div></div>
-        <div style="text-align:center"><div style="border-bottom:1px solid #333;width:160px;margin-bottom:4px"></div><div style="font-size:10px;color:#666">Witness Signature & Date</div></div>
-        <div style="text-align:center"><div style="border-bottom:1px solid #333;width:160px;margin-bottom:4px"></div><div style="font-size:10px;color:#666">Doctor's Signature & Date</div></div>
-      </div>
-    </div>`;
-  }).join('');
-
-  if(!consentPages.trim()) { showToast('No consent templates found for '+deptLabel,'w'); return; }
-
-  const footerSrc = window.PRINT_FOOTER_SRC || '';
-  const footerHtml = footerSrc ? `<div style="padding:8mm 14mm;text-align:center;border-top:1px solid #eee"><img src="${footerSrc}" style="max-width:100%;height:auto" alt=""></div>` : '';
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
-<style>@import url('https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap');
-*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Lato',Arial,sans-serif;font-size:12px}
-@page{size:A4;margin:0}
-</style></head><body>${consentPages}${footerHtml}</body></html>`;
-  safePrint(html);
-  showToast(`📋 ${deptLabel} surgery pack sent to printer (${keys.length} forms) ✓`,'s');
+  const merged = getMergedConsentData();
+  if (!keys.length) {
+    host.innerHTML = '<div style="padding:12px;color:var(--g1);font-size:12px">No consent keys in this pack.</div>';
+  } else {
+    host.innerHTML = keys.map(function (k) {
+      const data = merged[k];
+      const title = data && data.title ? data.title : k;
+      return '<label style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;font-size:12px;cursor:pointer;border-bottom:1px solid var(--g5)">'
+        + '<input type="checkbox" name="sp-pack-k" value="' + String(k).replace(/"/g, '&quot;') + '" checked>'
+        + '<span>' + String(title).replace(/</g, '&lt;') + '</span></label>';
+    }).join('');
+  }
+  openM('m-sp-pack-print');
+}
+function confirmSurgeryPackPrint() {
+  const boxes = document.querySelectorAll('#sp-pack-print-checklist input[name="sp-pack-k"]:checked');
+  const keys = Array.from(boxes).map(function (b) { return b.value; });
+  closeM('m-sp-pack-print');
+  printSurgeryPackWithKeys(keys, window._SP_PACK_LABEL || 'Pack');
+}
+function printSurgeryPack(packOrDept) {
+  openSurgeryPackPrintModal(packOrDept);
 }
 
 // ── renderInsuranceTab — TPA/cashless pending claims ──────────
@@ -5865,6 +6224,56 @@ function lookupRxGeneric(idx, tradeName) {
 }
 
 const RX_TAPER_SEGMENT_DURS = ['½ day','1 day','2 days','3 days','5 days','7 days','14 days'];
+function addDaysToIsoDate(iso, days) {
+  if (!iso) return '';
+  const d = new Date(iso + 'T12:00:00');
+  if (Number.isNaN(d.getTime())) return iso;
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split('T')[0];
+}
+function durationLabelToDays(label) {
+  const s = String(label || '').trim().toLowerCase();
+  if (!s) return 7;
+  if (s.includes('ongoing')) return 90;
+  if (s.includes('6 month')) return 180;
+  if (s.includes('3 month')) return 90;
+  if (s.includes('1 month')) return 30;
+  if (s.includes('2 week')) return 14;
+  if (s.includes('1 week')) return 7;
+  if (/14\s*days?/.test(s)) return 14;
+  if (/7\s*days?/.test(s)) return 7;
+  if (/5\s*days?/.test(s)) return 5;
+  if (/3\s*days?/.test(s)) return 3;
+  if (/2\s*days?/.test(s)) return 2;
+  if (/1\s*days?/.test(s) || s === '1 day') return 1;
+  if (s.includes('½') || s.includes('half')) return 1;
+  const n = parseInt(s, 10);
+  if (!isNaN(n)) return n;
+  return 7;
+}
+function computeRxEndAndTaperDates(d) {
+  if (!d) return;
+  if (!d.dateFrom) d.dateFrom = new Date().toISOString().split('T')[0];
+  const n = durationLabelToDays(d.dur);
+  const half = String(d.dur || '').includes('½') || String(d.dur || '').toLowerCase().includes('half');
+  if (n <= 1 && half) {
+    d.dateTo = d.dateFrom;
+  } else {
+    d.dateTo = addDaysToIsoDate(d.dateFrom, Math.max(0, Math.round(n) - 1));
+  }
+  if (d.taperRow) {
+    const tr = d.taperRow;
+    const tn = durationLabelToDays(tr.dur);
+    tr.dateFrom = addDaysToIsoDate(d.dateTo, 1);
+    tr.dateTo = addDaysToIsoDate(tr.dateFrom, Math.max(0, Math.round(tn) - 1));
+  }
+}
+function syncRxDrugDates(idx) {
+  const d = RX_DRUGS[idx];
+  if (!d) return;
+  computeRxEndAndTaperDates(d);
+  renderRxDrugs();
+}
 function suggestTaperFreqFromMain(mainFreq) {
   const order = ['Six times (6x/day)','Four times daily (QID)','Three times daily (TDS)','Twice daily (BD)','Once daily (OD)','At bedtime (HS)'];
   const i = order.indexOf(mainFreq);
@@ -5876,14 +6285,17 @@ function suggestTaperFreqFromMain(mainFreq) {
 function addTaperRow(idx, taperDur) {
   const orig = RX_DRUGS[idx];
   if (!orig) return;
+  if (!orig.dateFrom) orig.dateFrom = new Date().toISOString().split('T')[0];
+  computeRxEndAndTaperDates(orig);
   orig.taperRow = {
     freq: suggestTaperFreqFromMain(orig.freq || ''),
     dur: taperDur || '7 days',
-    dateFrom: orig.dateTo || '',
+    dateFrom: '',
     dateTo: ''
   };
+  computeRxEndAndTaperDates(orig);
   renderRxDrugs();
-  showToast('Taper line added under this drug — adjust as needed ✓', 'i');
+  showToast('Taper segment added below — reduced frequency after main course ✓', 'i');
 }
 function clearTaperRow(idx) {
   if (RX_DRUGS[idx]) { delete RX_DRUGS[idx].taperRow; delete RX_DRUGS[idx].taper; renderRxDrugs(); }
@@ -6633,11 +7045,11 @@ function renderRxDrugs() {
       </div>
       <div>
         <div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:3px">Duration</div>
-        <select onchange="RX_DRUGS[${i}].dur=this.value" style="font-size:10px;padding:3px;width:100%;border-radius:6px">${durOpts.map(f=>`<option${d.dur===f?' selected':''}>${f}</option>`).join('')}</select>
+        <select onchange="RX_DRUGS[${i}].dur=this.value;syncRxDrugDates(${i})" style="font-size:10px;padding:3px;width:100%;border-radius:6px">${durOpts.map(f=>`<option${d.dur===f?' selected':''}>${f}</option>`).join('')}</select>
       </div>
       <div style="display:flex;flex-direction:column;gap:4px">
         <div style="font-size:9px;font-weight:800;color:var(--g1)">From / To</div>
-        <input type="date" value="${d.dateFrom||''}" onchange="RX_DRUGS[${i}].dateFrom=this.value" style="font-size:10px;padding:2px;border-radius:4px;width:100%;box-sizing:border-box">
+        <input type="date" value="${d.dateFrom||''}" onchange="RX_DRUGS[${i}].dateFrom=this.value;syncRxDrugDates(${i})" style="font-size:10px;padding:2px;border-radius:4px;width:100%;box-sizing:border-box">
         <input type="date" value="${d.dateTo||''}" onchange="RX_DRUGS[${i}].dateTo=this.value" style="font-size:10px;padding:2px;border-radius:4px;width:100%;box-sizing:border-box">
       </div>
       <div style="display:flex;flex-direction:column;gap:4px;align-items:stretch">
@@ -6657,7 +7069,7 @@ function renderRxDrugs() {
         </div>
         <div>
           <div style="font-size:9px;font-weight:700;color:var(--g1)">Duration</div>
-          <select onchange="RX_DRUGS[${i}].taperRow.dur=this.value" style="font-size:10px;padding:3px;width:100%;border-radius:6px">${RX_TAPER_SEGMENT_DURS.map(f=>`<option${tap.dur===f?' selected':''}>${f}</option>`).join('')}</select>
+          <select onchange="RX_DRUGS[${i}].taperRow.dur=this.value;syncRxDrugDates(${i})" style="font-size:10px;padding:3px;width:100%;border-radius:6px">${RX_TAPER_SEGMENT_DURS.map(f=>`<option${tap.dur===f?' selected':''}>${f}</option>`).join('')}</select>
         </div>
         <div>
           <div style="font-size:9px;font-weight:700;color:var(--g1)">From</div>
@@ -7120,6 +7532,55 @@ function addProcItem(procName, price) {
   addProcItemToContainer(c, procName, price);
 }
 
+function rxFreqPlainEn(freq) {
+  const f = String(freq || '');
+  if (/QID|Four times/i.test(f)) return '4 times a day';
+  if (/TDS|Three times/i.test(f)) return '3 times a day';
+  if (/BD|Twice/i.test(f)) return 'twice a day';
+  if (/Once daily|\(OD\)/i.test(f) && !/Overdrive/i.test(f)) return 'once a day';
+  if (/6x|Six times/i.test(f)) return '6 times a day';
+  if (/PRN|As needed/i.test(f)) return 'as needed';
+  if (/HS|bedtime/i.test(f)) return 'at bedtime';
+  if (/Hourly/i.test(f)) return 'hourly';
+  if (/Weekly/i.test(f)) return 'weekly';
+  return f || 'as directed';
+}
+function rxEyePlainEn(eye) {
+  const e = String(eye || '');
+  if (/Right Eye|\(OD\)/i.test(e)) return 'the right eye';
+  if (/Left Eye|\(OS\)/i.test(e)) return 'the left eye';
+  if (/Both Eyes|\(OU\)/i.test(e)) return 'both eyes';
+  if (/Oral/i.test(e)) return 'by mouth';
+  if (/Topical/i.test(e)) return 'topically';
+  return (e || 'as directed').toLowerCase();
+}
+function buildRxPlainInstructionLine(d, lang, fmtIN) {
+  const trade = (typeof rxDrugTradeName === 'function' ? rxDrugTradeName(d) : (d.brand || d.trade || d.name)) || 'Medicine';
+  const generic = (typeof rxDrugGenericName === 'function' ? rxDrugGenericName(d) : (d.name || d.generic || '')) || '';
+  const eye = Array.isArray(d.eye) ? d.eye[0] : d.eye;
+  const freq = rxFreqPlainEn(d.freq);
+  const eyeTxt = rxEyePlainEn(eye);
+  const df = fmtIN(d.dateFrom);
+  const dt = fmtIN(d.dateTo);
+  const form = String(d.drugType || d.type || '').toLowerCase();
+  const isDrop = /drop|ointment|eye|gel/i.test(form);
+  const sub = (generic && generic !== trade) ? ' (' + generic + ')' : '';
+  let line = '';
+  if (lang === 'hi') {
+    line = trade + sub + ' — ' + freq + ', ' + eyeTxt.replace(/^the /, '') + ', ' + df + ' से ' + dt + ' तक।';
+  } else if (lang === 'pa') {
+    line = trade + sub + ' — ' + freq + ', ' + eyeTxt + ', ' + df + ' ਤੋਂ ' + dt + ' ਤੱਕ।';
+  } else {
+    const inst = isDrop ? 'Instill' : 'Take';
+    line = trade + sub + ' — ' + inst + ' in ' + eyeTxt + ', ' + freq + ', from ' + df + ' to ' + dt + '.';
+  }
+  if (d.taperRow && d.taperRow.freq) {
+    const tr = d.taperRow;
+    line += (lang === 'en' ? ' Then taper: ' : ' ') + rxFreqPlainEn(tr.freq) + ' (' + fmtIN(tr.dateFrom) + ' – ' + fmtIN(tr.dateTo) + ').';
+  }
+  return line;
+}
+
 // ─── UPDATED printUnifiedRx with doctor degrees + safePrint ─────────────
 window.printUnifiedRx = function(deptId) {
   const today = new Date().toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'});
@@ -7151,6 +7612,10 @@ window.printUnifiedRx = function(deptId) {
 
   // ── Collect drugs ──
   const drugs = typeof RX_DRUGS !== 'undefined' ? RX_DRUGS : [];
+  const rxPlainLang = typeof rxLang !== 'undefined' ? rxLang : 'en';
+  const plainInstrBlocks = drugs.length ? drugs.map(function (d) {
+    return buildRxPlainInstructionLine(d, rxPlainLang, fmtIN);
+  }).filter(Boolean) : [];
 
   // ── Collect procedures ──
   const _pc1 = document.getElementById('rx-proc-advised-'+deptId);
@@ -7203,8 +7668,8 @@ window.printUnifiedRx = function(deptId) {
   const ptAge   = document.getElementById(deptId+'-rx-agesex')?.textContent || ((cpt.age != null && cpt.sex) ? `${cpt.age}Y / ${cpt.sex}` : '—');
   const ptMob   = cpt.mob || PATIENTS?.find(p=>p.bmhId===ptId)?.mob || '';
 
-  // ── LH image (base64 embedded) — hospital print settings override global LH_SRC ──
-  const lhImgSrc = window.PRINT_HEADER_SRC || window.LH_SRC || document.querySelector('.lh-img-tag')?.src || '';
+  // ── Letterhead: uploaded header, LH, or same-origin asset (fixes missing header on GitHub Pages) ──
+  const lhImgSrc = resolvePrintHeaderSrc();
   const footerSrc = window.PRINT_FOOTER_SRC || '';
 
   const showVA = incVA && deptId==='oe' && (vaOD||vaOS);
@@ -7313,6 +7778,10 @@ ${drugs.length ? `
     }).join('')}
   </tbody>
 </table>` : ''}
+
+${plainInstrBlocks.length ? `
+<div class="sec-title">Patient instructions (plain language)</div>
+${plainInstrBlocks.map(function (p) { return '<div class="rx-instr">' + escapeHtmlConsent(p) + '</div>'; }).join('')}` : ''}
 
 ${advice ? `<div class="lbl-row" style="margin:6px 0"><span class="lbl">Instructions:</span><span class="lbl-val">${advice}</span></div>` : ''}
 
@@ -9680,66 +10149,33 @@ function editConsentTemplate(id) {
 }
 
 function printConsentTemplate(id) {
-  // Try CONSENT_DATA first (bilingual paras) — fallback to CONSENT_TEMPLATES (stub text)
-  const lhSrc = window.PRINT_HEADER_SRC || window.LH_SRC || '';
-  const today = new Date().toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'});
-  // resolve patient header from currently open patient
-  const ptIds = ['ophtho-pt-uid','obg-pt-uid','psych-pt-uid','skin-pt-uid'];
-  const ptNms = ['ophtho-pt-nm','obg-pt-nm','psych-pt-nm','skin-pt-nm'];
-  let ptId='—', ptNm='_______________';
-  for(let i=0;i<ptIds.length;i++){const v=document.getElementById(ptIds[i])?.textContent?.trim();if(v&&v!=='—'&&v.startsWith('BMSH-')){ptId=v;ptNm=document.getElementById(ptNms[i])?.textContent||ptNm;break;}}
-  const pt = PATIENTS.find(p=>p.bmhId===ptId)||{};
-
-  const cd = CONSENT_DATA[id];
-  if(cd && cd.paras) {
-    // Render bilingual consent from CONSENT_DATA
-    const parasHtml = cd.paras.map((p,i)=>
-      `<p style="margin-bottom:6px;font-size:12.5px;line-height:1.8"><strong>${i+1}. ${p.en}</strong></p>
-       <p style="color:#444;font-size:11px;margin-bottom:8px;padding-left:14px;border-left:3px solid #D4A017">${p.pa||''}</p>
-       ${p.hi?`<p style="color:#555;font-size:10.5px;margin-bottom:12px;padding-left:14px">${p.hi}</p>`:''}`
-    ).join('');
-    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
-<style>@import url('https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap');
-*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Lato',Arial,sans-serif;font-size:12px;padding:12mm 14mm}
-@page{size:A4;margin:0}
-</style></head><body>
-${lhSrc?`<img src="${lhSrc}" style="width:100%;height:auto;margin-bottom:10px">`:'<div style="font-size:17px;font-weight:900;color:#1A3C6E;margin-bottom:8px">Baweja Multispeciality Hospital</div>'}
-<div style="font-size:14px;font-weight:900;color:#1A3C6E;text-transform:uppercase;text-align:center;border-bottom:2px solid #D4A017;padding-bottom:8px;margin-bottom:12px">${cd.title}</div>
-<div style="background:linear-gradient(135deg,#1A3C6E,#0B7B8C);border-radius:6px;padding:7px 14px;color:#fff;font-size:11.5px;display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px">
-  <span style="font-weight:900;font-size:13px;color:#FFD600">${ptNm}</span>
-  <span>🪪 ${ptId}</span>
-  ${pt.age?`<span>👤 ${pt.age}/${(pt.sex||'?')[0]}</span>`:''}
-  ${pt.mob?`<span>📞 ${pt.mob}</span>`:''}
-  <span>📅 ${today}</span>
-  <span>🩺 ${CURRENT_USER?.name||'Dr. Baweja'}</span>
-</div>
-${parasHtml}
-<div style="display:flex;justify-content:space-between;margin-top:36px">
-  <div style="text-align:center"><div style="border-bottom:1px solid #333;width:160px;margin-bottom:4px"></div><div style="font-size:10px;color:#666">Patient / Guardian Signature & Date</div></div>
-  <div style="text-align:center"><div style="border-bottom:1px solid #333;width:160px;margin-bottom:4px"></div><div style="font-size:10px;color:#666">Witness Signature & Date</div></div>
-  <div style="text-align:center"><div style="border-bottom:1px solid #333;width:160px;margin-bottom:4px"></div><div style="font-size:10px;color:#666">Doctor's Signature & Date</div></div>
-</div>
-</body></html>`;
-    safePrint(html); return;
+  const cd = getConsentEntry(id);
+  if (cd && cd.paras && cd.paras.length) {
+    printStructuredConsentThreeVariants(cd);
+    return;
   }
-  // Fallback: CONSENT_TEMPLATES stub text
-  const t = CONSENT_TEMPLATES.find(c=>c.id===id); if(!t) return;
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
-<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:12px;padding:15mm}
-@page{size:A4;margin:0}.title{font-size:16px;font-weight:700;text-align:center;margin:20px 0 10px;text-decoration:underline}
-.content{line-height:2;margin:16px 0}.sig{display:flex;justify-content:space-between;margin-top:40px}
-.sig-line{border-bottom:1px solid #333;width:180px;text-align:center;padding-top:5px;font-size:10px;color:#666}
-</style></head><body>
-${lhSrc?`<img src="${lhSrc}" style="width:100%;height:auto;margin-bottom:14px">`:''}
-<div class="title">${t.name.toUpperCase()}</div>
-<div style="margin-bottom:10px"><strong>Patient Name:</strong> ${ptNm} &nbsp;&nbsp; <strong>Date:</strong> ${today}</div>
-<div class="content">${t.content}</div>
-<div class="sig">
-  <div class="sig-line">Patient / Guardian Signature</div>
-  <div class="sig-line">Witness Signature</div>
-  <div class="sig-line">Doctor Signature</div>
-</div>
-</body></html>`;
+  const lhSrc = resolvePrintHeaderSrc();
+  const today = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+  const ptIds = ['ophtho-pt-uid', 'obg-pt-uid', 'psych-pt-uid', 'skin-pt-uid'];
+  const ptNms = ['ophtho-pt-nm', 'obg-pt-nm', 'psych-pt-nm', 'skin-pt-nm'];
+  let ptId = '—'; let ptNm = '_______________';
+  for (let i = 0; i < ptIds.length; i++) {
+    const v = document.getElementById(ptIds[i])?.textContent?.trim();
+    if (v && v !== '—' && v.startsWith('BMSH-')) { ptId = v; ptNm = document.getElementById(ptNms[i])?.textContent || ptNm; break; }
+  }
+  const t = CONSENT_TEMPLATES.find(function (c) { return c.id === id; });
+  if (!t) return;
+  const html = '<!DOCTYPE html><html><head><meta charset="UTF-8">'
+    + '<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:12px;padding:15mm}'
+    + '@page{size:A4;margin:0}.title{font-size:16px;font-weight:700;text-align:center;margin:20px 0 10px;text-decoration:underline}'
+    + '.content{line-height:2;margin:16px 0;white-space:pre-wrap}.sig{display:flex;justify-content:space-between;margin-top:40px}'
+    + '.sig-line{border-bottom:1px solid #333;width:180px;text-align:center;padding-top:5px;font-size:10px;color:#666}</style></head><body>'
+    + (lhSrc ? '<img src="' + escapeHtmlConsent(lhSrc) + '" style="width:100%;height:auto;margin-bottom:14px">' : '')
+    + '<div class="title">' + escapeHtmlConsent(t.name.toUpperCase()) + '</div>'
+    + '<div style="margin-bottom:10px"><strong>Patient Name:</strong> ' + escapeHtmlConsent(ptNm) + ' &nbsp;&nbsp; <strong>Date:</strong> ' + escapeHtmlConsent(today) + '</div>'
+    + '<div class="content">' + escapeHtmlConsent(t.content) + '</div>'
+    + '<div class="sig"><div class="sig-line">Patient / Guardian Signature</div><div class="sig-line">Witness Signature</div><div class="sig-line">Doctor Signature</div></div>'
+    + '</body></html>';
   safePrint(html);
 }
 
@@ -9783,6 +10219,7 @@ ${apts.length ? `<table>
 // ── SETTINGS INIT ─────────────────────────────────
 function renderSettingsPage() {
   loadPrintLetterheadFromStorage && loadPrintLetterheadFromStorage();
+  loadConsentDataOverridesFromStorage && loadConsentDataOverridesFromStorage();
   loadRxTemplatesFromStorage && loadRxTemplatesFromStorage(function () {});
   loadConsentTemplatesFromStorage && loadConsentTemplatesFromStorage();
   loadIolCatalogFromStorage && loadIolCatalogFromStorage();
@@ -9804,6 +10241,7 @@ function renderSettingsPage() {
   renderSetRxTplList && renderSetRxTplList();
   renderIolCatalogList && renderIolCatalogList();
   renderConsentLibrary && renderConsentLibrary('all');
+  renderStructuredConsentList && renderStructuredConsentList();
   loadCustomConsentsForSettings && loadCustomConsentsForSettings();
   const sc = document.getElementById('import-status-count');
   if(sc) sc.textContent = PATIENTS.length.toLocaleString('en-IN') + ' patients in database';
@@ -10363,7 +10801,7 @@ function renderSetPacksList() {
   const packs = getAllSurgeryPacks();
   el.innerHTML = packs.map(function (p) {
     const keyLines = (p.consentKeys || []).map(function (k) {
-      const data = typeof CONSENT_DATA !== 'undefined' && CONSENT_DATA[k];
+      const data = getConsentEntry(k);
       const title = data && data.title ? data.title : k;
       return '<li style="margin:2px 0;font-size:11px">' + title + '</li>';
     }).join('');

@@ -125,6 +125,9 @@ watchAuthState(
     if (typeof window.loadDrugLibraryFromStorage === 'function') {
       try { window.loadDrugLibraryFromStorage() } catch (_) { /* noop */ }
     }
+    if (typeof window.loadConsentDataOverridesFromStorage === 'function') {
+      try { window.loadConsentDataOverridesFromStorage() } catch (_) { /* noop */ }
+    }
 
     const centre = user.centre || 'CHD'
     const today  = todayKey()
