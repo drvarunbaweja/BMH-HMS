@@ -7442,57 +7442,116 @@ function addDcFollowup() {
 // ════════════════════════════════════════════════════════════════
 // CONSENT UPLOAD — text or image with patient details header
 // ════════════════════════════════════════════════════════════════
+
+// ── MyMemory translation (free, no API key) ───────────────────────────────────
+async function _translateText(text, lang) {
+  if(!text || !lang) return text;
+  const MAX = 450;
+  const chunks = [];
+  if(text.length <= MAX) {
+    chunks.push(text);
+  } else {
+    const parts = text.split(/(?<=[.!?।])\s+/);
+    let cur = '';
+    for(const p of parts) {
+      if(cur && (cur + ' ' + p).length > MAX) { chunks.push(cur); cur = p; }
+      else { cur = cur ? cur + ' ' + p : p; }
+    }
+    if(cur) chunks.push(cur);
+  }
+  const out = [];
+  for(const chunk of chunks) {
+    try {
+      const r = await fetch('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(chunk) + '&langpair=en|' + lang);
+      const d = await r.json();
+      out.push(d?.responseData?.translatedText || chunk);
+    } catch(_) { out.push(chunk); }
+  }
+  return out.join(' ');
+}
+
+// ── Interleave English paragraphs with translated paragraphs ─────────────────
+async function _buildBilingualHTML(text, lang) {
+  const paras = text.split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
+  const parts = [];
+  for(const para of paras) {
+    const translated = await _translateText(para, lang);
+    parts.push(
+      '<div style="margin-bottom:11px;padding-bottom:9px;border-bottom:1px dotted #bbb">' +
+        '<div style="font-size:11.5px;line-height:1.75">' + para.replace(/\n/g, '<br>') + '</div>' +
+        '<div style="font-size:11.5px;line-height:1.75;margin-top:4px;padding-left:8px;border-left:2px solid #888">' + translated + '</div>' +
+      '</div>'
+    );
+  }
+  return parts.join('');
+}
+
 function openConsentUploadModal() {
-  const deptOptions = `
+  // Always rebuild — ensures latest fields are present every time
+  const prev = document.getElementById('m-consent-upload');
+  if(prev) prev.remove();
+
+  const SS  = 'width:100%;font-size:13px;padding:8px;border-radius:8px;border:1.5px solid var(--g4)';
+  const LBL = (t) => `<div style="font-size:11px;font-weight:800;color:var(--blue);margin-bottom:5px;text-transform:uppercase">${t}</div>`;
+  const deptOpts = `
     <option value="ophtho">Ophthalmology</option>
     <option value="obg">OBG</option>
     <option value="psych">Psychiatry / Neurology</option>
-    <option value="skin">Skin & Cosmetology</option>
+    <option value="skin">Skin &amp; Cosmetology</option>
     <option value="all">All Departments</option>`;
-  let existing = document.getElementById('m-consent-upload');
-  if(!existing) {
-    existing = document.createElement('div');
-    existing.className = 'modal-ov'; existing.id = 'm-consent-upload';
-    existing.innerHTML = `
+  const typeOpts = `<option value="consent">Consent</option><option value="form">Form</option>`;
+  const langOpts = `<option value="hi">English + Hindi (हिंदी)</option><option value="pa">English + Punjabi (ਪੰਜਾਬੀ)</option>`;
+
+  const el = document.createElement('div');
+  el.className = 'modal-ov'; el.id = 'm-consent-upload';
+  el.innerHTML = `
 <div class="modal modal-lg">
   <div class="modal-hd">
-    <div class="modal-title">📎 Upload / Create Consent Form</div>
+    <div class="modal-title">📎 Upload / Create Consent or Form</div>
     <button class="modal-close" onclick="closeM('m-consent-upload')">✕</button>
   </div>
   <div class="ptabs" style="margin-bottom:12px">
     <div class="ptab active" onclick="ptab(this,'cup-text')">📝 Type / Paste Text</div>
     <div class="ptab" onclick="ptab(this,'cup-image')">🖼️ Upload Image / PDF</div>
   </div>
+
   <!-- TEXT TAB -->
   <div class="tab-content active" id="cup-text">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-      <div>
-        <div style="font-size:11px;font-weight:800;color:var(--blue);margin-bottom:5px;text-transform:uppercase">Department</div>
-        <select id="cup-consent-dept" style="width:100%;font-size:13px;padding:8px;border-radius:8px;border:1.5px solid var(--g4)">${deptOptions}</select>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">
+      <div>${LBL('Type')}
+        <select id="cup-consent-type" style="${SS}" onchange="_cupTypeChange('text')">${typeOpts}</select>
       </div>
-      <div>
-        <div style="font-size:11px;font-weight:800;color:var(--blue);margin-bottom:5px;text-transform:uppercase">Consent Name</div>
-        <input id="cup-consent-name" type="text" placeholder="e.g. Cataract Surgery Consent" style="width:100%;font-size:13px;padding:8px;border-radius:8px;border:1.5px solid var(--g4)">
+      <div>${LBL('Department')}
+        <select id="cup-consent-dept" style="${SS}">${deptOpts}</select>
+      </div>
+      <div>${LBL('Name')}
+        <input id="cup-consent-name" type="text" placeholder="e.g. Cataract Surgery Consent" style="${SS}">
       </div>
     </div>
-    <div style="font-size:11px;font-weight:800;color:var(--blue);margin-bottom:6px;text-transform:uppercase">Consent Text</div>
+    <div id="cup-text-lang-row" style="margin-bottom:10px">
+      ${LBL('Translation Language')}
+      <select id="cup-consent-lang" style="width:260px;font-size:13px;padding:8px;border-radius:8px;border:1.5px solid var(--g4)">${langOpts}</select>
+    </div>
+    ${LBL('Consent / Form Text')}
     <textarea id="cup-consent-text" style="width:100%;min-height:180px;font-size:12px;line-height:1.7"
-      placeholder="Paste or type the full consent text here…&#10;&#10;I, the undersigned, hereby give my consent for the procedure…"></textarea>
+      placeholder="Paste or type the full text here…&#10;&#10;I, the undersigned, hereby give my consent for the procedure…"></textarea>
     <div style="display:flex;gap:8px;margin-top:10px">
-      <button class="btn btn-gold" onclick="saveConsentFromText()">💾 Save & Add to Library</button>
-      <button class="btn btn-outline" onclick="previewConsentWithHeader()">👁️ Preview with Patient Header</button>
+      <button class="btn btn-gold" onclick="saveConsentFromText()">💾 Save to Library</button>
+      <button class="btn btn-outline" onclick="previewConsentWithHeader()">👁️ Preview &amp; Print</button>
     </div>
   </div>
+
   <!-- IMAGE TAB -->
   <div class="tab-content" id="cup-image">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-      <div>
-        <div style="font-size:11px;font-weight:800;color:var(--blue);margin-bottom:5px;text-transform:uppercase">Department</div>
-        <select id="cup-img-dept" style="width:100%;font-size:13px;padding:8px;border-radius:8px;border:1.5px solid var(--g4)">${deptOptions}</select>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">
+      <div>${LBL('Type')}
+        <select id="cup-img-type" style="${SS}">${typeOpts}</select>
       </div>
-      <div>
-        <div style="font-size:11px;font-weight:800;color:var(--blue);margin-bottom:5px;text-transform:uppercase">Consent Name</div>
-        <input id="cup-img-name" type="text" placeholder="e.g. Cataract Surgery Consent" style="width:100%;font-size:13px;padding:8px;border-radius:8px;border:1.5px solid var(--g4)">
+      <div>${LBL('Department')}
+        <select id="cup-img-dept" style="${SS}">${deptOpts}</select>
+      </div>
+      <div>${LBL('Name')}
+        <input id="cup-img-name" type="text" placeholder="e.g. Cataract Surgery Consent" style="${SS}">
       </div>
     </div>
     <div style="border:2px dashed var(--g4);border-radius:10px;padding:20px;text-align:center;margin-bottom:10px;cursor:pointer;background:var(--g6)" onclick="document.getElementById('cup-file-inp').click()">
@@ -7504,15 +7563,22 @@ function openConsentUploadModal() {
     <div id="cup-file-preview" style="display:none">
       <div id="cup-img-thumb" style="text-align:center;margin-bottom:10px"></div>
       <div style="display:flex;gap:8px">
-        <button class="btn btn-gold" onclick="saveConsentFromImage()">💾 Save & Add to Library</button>
+        <button class="btn btn-gold" onclick="saveConsentFromImage()">💾 Save to Library</button>
         <button class="btn btn-outline" onclick="printConsentWithHeader()">🖨️ Print with Patient Header</button>
       </div>
     </div>
   </div>
 </div>`;
-    document.body.appendChild(existing);
-  }
-  existing.classList.add('open');
+  document.body.appendChild(el);
+  el.classList.add('open');
+}
+
+// Show/hide translation language row based on Type selection
+function _cupTypeChange(tab) {
+  if(tab !== 'text') return;
+  const typeVal = document.getElementById('cup-consent-type')?.value;
+  const row = document.getElementById('cup-text-lang-row');
+  if(row) row.style.display = typeVal === 'form' ? 'none' : '';
 }
 
 function handleConsentFileUpload(inp) {
@@ -7556,13 +7622,22 @@ function _getConsentPatientHeader() {
   };
 }
 
-function previewConsentWithHeader() {
-  const text = document.getElementById('cup-consent-text')?.value?.trim();
-  const name = document.getElementById('cup-consent-name')?.value?.trim() || 'Consent';
+async function previewConsentWithHeader() {
+  const text    = document.getElementById('cup-consent-text')?.value?.trim();
+  const name    = document.getElementById('cup-consent-name')?.value?.trim() || 'Consent';
+  const docType = document.getElementById('cup-consent-type')?.value || 'consent';
+  const lang    = document.getElementById('cup-consent-lang')?.value || 'hi';
   if(!text) { showToast('Please enter consent text first','w'); return; }
-  const pt = _getConsentPatientHeader();
+  const pt  = _getConsentPatientHeader();
+  // Open window synchronously (before any async work) to satisfy popup blockers
   const win = window.open('','_blank','width=900,height=700');
-  win.document.write(_consentPrintHTML(pt, name, `<pre style="font-family:inherit;white-space:pre-wrap;font-size:12.5px;line-height:1.8">${text}</pre>`, null));
+  if(!win) { showToast('Allow popups to preview / print','w'); return; }
+  win.document.write('<html><body style="font-family:Arial,sans-serif;padding:40px;text-align:center;color:#555"><p style="font-size:16px">Translating… ⏳ please wait</p></body></html>');
+  const bodyHTML = (docType === 'consent')
+    ? await _buildBilingualHTML(text, lang)
+    : `<pre>${text}</pre>`;
+  win.document.open();
+  win.document.write(_consentPrintHTML(pt, name, bodyHTML, null, false));
   win.document.close();
 }
 
@@ -7617,7 +7692,7 @@ function _consentPrintHTML(pt, consentName, bodyHTML, sigBlock, isImageMode) {
 <title>${consentName}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:Arial,sans-serif;color:#000;filter:grayscale(1)}
+body{font-family:'Arial Unicode MS','Noto Sans','Noto Sans Devanagari','Noto Sans Gurmukhi',Arial,sans-serif;color:#000;filter:grayscale(1)}
 ${pageStyle}
 .hdr{display:flex;align-items:center;gap:8px;padding:3mm 5mm 2.5mm;border-bottom:1.5px solid #000;background:#fff}
 .hdr-info{flex:1;font-size:8.5px;line-height:1.5;color:#000}
@@ -7645,15 +7720,16 @@ ${sigHTML}
 }
 
 function saveConsentFromText() {
-  const text = document.getElementById('cup-consent-text')?.value?.trim();
-  const name = document.getElementById('cup-consent-name')?.value?.trim();
-  const dept = document.getElementById('cup-consent-dept')?.value || 'all';
-  if(!text || !name) { showToast('Please enter both name and consent text','w'); return; }
-  // Save to Firebase
+  const text    = document.getElementById('cup-consent-text')?.value?.trim();
+  const name    = document.getElementById('cup-consent-name')?.value?.trim();
+  const dept    = document.getElementById('cup-consent-dept')?.value || 'all';
+  const docType = document.getElementById('cup-consent-type')?.value || 'consent';
+  const lang    = document.getElementById('cup-consent-lang')?.value || 'hi';
+  if(!text || !name) { showToast('Please enter both name and text','w'); return; }
   const key = fbKey();
-  fbSet('consentLibrary/' + key, { id:key, name, text, type:'text', dept, createdAt:new Date().toISOString(), createdBy:CURRENT_USER?.name||'Admin' })
+  fbSet('consentLibrary/' + key, { id:key, name, text, type:'text', dept, docType, lang, createdAt:new Date().toISOString(), createdBy:CURRENT_USER?.name||'Admin' })
     .then(() => {
-      showToast('Consent "' + name + '" saved to library ✓','s');
+      showToast((docType==='form'?'Form':'Consent') + ' "' + name + '" saved ✓','s');
       closeM('m-consent-upload');
       refreshConsentLibrary && refreshConsentLibrary();
       loadCustomConsentsForSettings && loadCustomConsentsForSettings();
@@ -7662,15 +7738,16 @@ function saveConsentFromText() {
 }
 
 function saveConsentFromImage() {
-  const name  = document.getElementById('cup-img-name')?.value?.trim();
-  const dept  = document.getElementById('cup-img-dept')?.value || 'all';
-  const thumb = document.getElementById('cup-img-thumb');
-  const imgSrc = thumb?._dataUrl;
-  if(!name) { showToast('Please enter consent name','w'); return; }
+  const name    = document.getElementById('cup-img-name')?.value?.trim();
+  const dept    = document.getElementById('cup-img-dept')?.value || 'all';
+  const docType = document.getElementById('cup-img-type')?.value || 'consent';
+  const thumb   = document.getElementById('cup-img-thumb');
+  const imgSrc  = thumb?._dataUrl;
+  if(!name) { showToast('Please enter name','w'); return; }
   const key = fbKey();
-  fbSet('consentLibrary/' + key, { id:key, name, dept, imgSrc:imgSrc||null, type:'image', createdAt:new Date().toISOString(), createdBy:CURRENT_USER?.name||'Admin' })
+  fbSet('consentLibrary/' + key, { id:key, name, dept, docType, imgSrc:imgSrc||null, type:'image', createdAt:new Date().toISOString(), createdBy:CURRENT_USER?.name||'Admin' })
     .then(() => {
-      showToast('Consent image "' + name + '" saved ✓','s');
+      showToast((docType==='form'?'Form':'Consent') + ' "' + name + '" saved ✓','s');
       closeM('m-consent-upload');
       refreshConsentLibrary && refreshConsentLibrary();
       loadCustomConsentsForSettings && loadCustomConsentsForSettings();
@@ -7714,30 +7791,45 @@ function refreshConsentLibrary() {
     const sec = existingCustom || document.createElement('div');
     sec.className = 'custom-consents-section';
     sec.innerHTML = '<div style="font-size:10px;font-weight:800;color:var(--blue);text-transform:uppercase;letter-spacing:.5px;margin:10px 0 6px">Custom / Uploaded Consents</div>' +
-      items.map(c=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--g6);border-radius:8px;margin-bottom:5px">
-        <span>${c.type==='image'?'🖼️':'📝'}</span>
-        <span style="flex:1;font-size:12.5px;font-weight:700">${c.name}</span>
-        <button class="btn btn-xs btn-outline" onclick="printCustomConsent('${c.id}')">🖨️ Print</button>
-        <button class="btn btn-xs btn-gray" onclick="deleteCustomConsent('${c.id}')">🗑️</button>
-      </div>`).join('');
+      items.map(c => {
+        const icon   = c.type==='image' ? '🖼️' : '📝';
+        const dtBadge = c.docType==='form'
+          ? '<span style="font-size:9px;background:#e8e8e8;color:#555;border-radius:4px;padding:1px 5px;font-weight:700">FORM</span>'
+          : '<span style="font-size:9px;background:#e8f0ff;color:#1A3C6E;border-radius:4px;padding:1px 5px;font-weight:700">CONSENT</span>';
+        const langBadge = (c.docType==='consent' && c.lang)
+          ? `<span style="font-size:9px;color:#888">${c.lang==='pa'?'EN+PA':'EN+HI'}</span>` : '';
+        return `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--g6);border-radius:8px;margin-bottom:5px">
+          <span>${icon}</span>
+          <span style="flex:1;font-size:12.5px;font-weight:700">${c.name}</span>
+          ${dtBadge} ${langBadge}
+          <button class="btn btn-xs btn-outline" onclick="printCustomConsent('${c.id}')">🖨️ Print</button>
+          <button class="btn btn-xs btn-gray" onclick="deleteCustomConsent('${c.id}')">🗑️</button>
+        </div>`;
+      }).join('');
     if(!existingCustom) list.appendChild(sec);
   });
 }
 
 function printCustomConsent(id) {
-  fbOnce('consentLibrary/' + id, data => {
-    if(!data) { showToast('Consent not found','w'); return; }
+  // Open window synchronously before any async work (avoids popup blockers)
+  const win = window.open('','_blank','width=900,height=700');
+  if(!win) { showToast('Allow popups to print','w'); return; }
+  win.document.write('<html><body style="font-family:Arial,sans-serif;padding:40px;text-align:center;color:#555"><p style="font-size:16px">Loading… ⏳</p></body></html>');
+  fbOnce('consentLibrary/' + id, async data => {
+    if(!data) { showToast('Consent not found','w'); win.close(); return; }
     const pt = _getConsentPatientHeader();
-    const win = window.open('','_blank','width=900,height=700');
     let bodyHTML, isImgMode = false;
-    if (data.text) {
-      bodyHTML = `<pre>${data.text}</pre>`;
-    } else if (data.imgSrc) {
+    if(data.text) {
+      bodyHTML = (data.docType === 'consent' && data.lang)
+        ? await _buildBilingualHTML(data.text, data.lang)
+        : `<pre>${data.text}</pre>`;
+    } else if(data.imgSrc) {
       bodyHTML = `<img src="${data.imgSrc}" style="width:100%;height:100%;object-fit:contain;display:block">`;
       isImgMode = true;
     } else {
       bodyHTML = '';
     }
+    win.document.open();
     win.document.write(_consentPrintHTML(pt, data.name, bodyHTML, null, isImgMode));
     win.document.close();
   });
