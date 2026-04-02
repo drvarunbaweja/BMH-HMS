@@ -1051,6 +1051,8 @@ function populateOphthoForm(v) {
     });
   }
   setV('sl-notes-text', v.slNotes);
+  setV('oe-anterior-findings', v.oeAnteriorFindings || '');
+  setV('oe-posterior-findings', v.oePosteriorFindings || '');
 
   setV('rx-diagnosis-text', v.diagnosisText || '');
   const dxRows = document.getElementById('rx-diagnosis-rows');
@@ -1358,6 +1360,20 @@ function collectOphthoDiagnosesForPrint() {
   const merged = [...lines];
   legacyTags.forEach(t => { if(t && !merged.includes(t)) merged.push(t); });
   return { lines: merged, notes };
+}
+
+/** Diagnosis lines for prescription print — Ophthalmology uses numbered rows; other depts use *-dx-list */
+function collectDeptDiagnosesForPrint(deptId) {
+  if (deptId === 'oe') return collectOphthoDiagnosesForPrint();
+  const listEl = document.getElementById(deptId + '-dx-list');
+  const lines = listEl ? [...listEl.querySelectorAll('.dx-inp')].map(e => e.value.trim()).filter(Boolean) : [];
+  return { lines, notes: '' };
+}
+
+function rxDrugTradeName(d) { return (d && (d.trade || d.brand)) ? String(d.trade || d.brand) : ''; }
+function rxDrugGenericName(d) { return (d && (d.generic || d.name)) ? String(d.generic || d.name) : ''; }
+function getRxDoctorDisplayName() {
+  return window.CURRENT_USER?.name || document.getElementById('sbnm')?.textContent?.trim() || 'Dr. Varun Baweja';
 }
 
 function buildOphthoCaseSheetHtml() {
@@ -1769,7 +1785,7 @@ function previewCaseSheet() { printCaseSheet({ preview: true }); }
 function printPsychSheet() { if(typeof window.printUnifiedRx === 'function') { window.printUnifiedRx('psych'); } else { showToast('Psychiatry summary printing ✓','s'); setTimeout(()=>window.print(),300); } }
 function printSkinSheet() { if(typeof window.printUnifiedRx === 'function') { window.printUnifiedRx('skin'); } else { showToast('Skin summary printing ✓','s'); setTimeout(()=>window.print(),300); } }
 function printDischarge() { showToast('Discharge card printing ✓','s'); setTimeout(()=>window.print(),300); }
-function printRx() { printUnifiedRx('oe'); }
+function printRx() { if (typeof window.printUnifiedRx === 'function') window.printUnifiedRx('oe'); }
 
 function doPrint(type) {
   const titles = {'case-sheet':'Ophthalmology Case Sheet','ophtho':'Eye Examination Sheet','rx':'Prescription','obg-anc-card':'ANC Card','psych-summary':'Psychiatry Summary','skin-summary':'Skin & Cosmetology Summary'};
@@ -3835,9 +3851,52 @@ function renderSettingsDrugs() {
     <div style="width:28px;height:28px;border-radius:6px;background:${d.type==='Eye Drop'?'var(--blue-lt)':d.type==='Tablet'?'var(--green-lt)':'var(--purple-lt)'};display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0">${d.type==='Eye Drop'?'💧':d.type==='Tablet'?'💊':'🧴'}</div>
     <div style="flex:1"><div style="font-size:12.5px;font-weight:800">${d.trade} <span style="font-size:10.5px;color:var(--g1);font-weight:500">(${d.generic})</span>${d.company ? ` <span style="font-size:10px;color:var(--bmh-teal)">${d.company}</span>` : ''}</div>
     <div style="font-size:10.5px;color:var(--g1)">${d.type} · ${d.freq} · ${d.dur} · ${d.dept}</div></div>
+    <button type="button" class="btn btn-xs btn-outline" onclick="openEditDrugLibrary(${i})" title="Edit type, form, defaults">✎</button>
     <button class="btn btn-xs btn-gray" onclick="removeDrugLib(${i})">✕</button>
   </div>`).join('');
   rebuildDrugGenericDatalist();
+}
+function addDrugToLibraryFromModal() {
+  const type = document.getElementById('md-add-type')?.value;
+  const trade = document.getElementById('md-add-trade')?.value?.trim();
+  const generic = document.getElementById('md-add-generic')?.value?.trim();
+  const freq = document.getElementById('md-add-freq')?.value;
+  const dur = document.getElementById('md-add-dur')?.value;
+  const dept = document.getElementById('md-add-dept')?.value;
+  if (!trade || !generic) { showToast('Enter trade and generic name', 'w'); return; }
+  DRUG_LIBRARY.push({ type, trade, generic, freq, dur, dept });
+  saveDrugLibraryToStorage();
+  renderSettingsDrugs();
+  showToast('💊 ' + trade + ' added to library ✓', 's');
+  closeM('m-add-drug');
+  ['md-add-trade','md-add-generic'].forEach(id => { const x = document.getElementById(id); if (x) x.value = ''; });
+}
+function openEditDrugLibrary(i) {
+  const d = DRUG_LIBRARY[i];
+  if (!d) return;
+  document.getElementById('md-edit-idx').value = String(i);
+  document.getElementById('md-edit-type').value = d.type || 'Tablet';
+  document.getElementById('md-edit-trade').value = d.trade || '';
+  document.getElementById('md-edit-generic').value = d.generic || '';
+  document.getElementById('md-edit-freq').value = d.freq || 'Twice daily (BD)';
+  document.getElementById('md-edit-dur').value = d.dur || '1 Week';
+  document.getElementById('md-edit-dept').value = d.dept || 'All';
+  openM('m-edit-drug');
+}
+function saveEditDrugLibrary() {
+  const i = parseInt(document.getElementById('md-edit-idx')?.value, 10);
+  if (Number.isNaN(i) || !DRUG_LIBRARY[i]) return;
+  DRUG_LIBRARY[i].type = document.getElementById('md-edit-type')?.value;
+  DRUG_LIBRARY[i].trade = document.getElementById('md-edit-trade')?.value?.trim();
+  DRUG_LIBRARY[i].generic = document.getElementById('md-edit-generic')?.value?.trim();
+  DRUG_LIBRARY[i].freq = document.getElementById('md-edit-freq')?.value;
+  DRUG_LIBRARY[i].dur = document.getElementById('md-edit-dur')?.value;
+  DRUG_LIBRARY[i].dept = document.getElementById('md-edit-dept')?.value;
+  saveDrugLibraryToStorage();
+  renderSettingsDrugs();
+  rebuildDrugGenericDatalist();
+  closeM('m-edit-drug');
+  showToast('Drug library updated ✓', 's');
 }
 
 function addDrugToLibrary() {
@@ -3869,6 +3928,7 @@ function filterDrugs(v) {
     <div style="width:28px;height:28px;border-radius:6px;background:${d.type==='Eye Drop'?'var(--blue-lt)':d.type==='Tablet'?'var(--green-lt)':'var(--purple-lt)'};display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0">${d.type==='Eye Drop'?'💧':d.type==='Tablet'?'💊':'🧴'}</div>
     <div style="flex:1"><div style="font-size:12.5px;font-weight:800">${d.trade} <span style="font-size:10.5px;color:var(--g1);font-weight:500">(${d.generic})</span>${d.company ? ` <span style="font-size:10px;color:var(--bmh-teal)">${d.company}</span>` : ''}</div>
     <div style="font-size:10.5px;color:var(--g1)">${d.type} · ${d.freq} · ${d.dur} · ${d.dept}</div></div>
+    <button type="button" class="btn btn-xs btn-outline" onclick="openEditDrugLibrary(${i})">✎</button>
     <button class="btn btn-xs btn-gray" onclick="removeDrugLib(${i})">✕</button>
   </div>`).join('');
 }
@@ -4085,9 +4145,18 @@ function addRxDrugFromModal() {
   const taper = document.getElementById('new-rx-taper')?.value||'';
   const inst = document.getElementById('new-rx-inst')?.value||'';
   if(!trade&&!generic){showToast('Enter drug name','w');return;}
-  RX_DRUGS.push({name:generic,brand:trade,eye:[eye.replace(/\s.*$/,'')],freq,dur,lang:{en:inst||(generic+' '+freq+' in '+eye+' for '+dur+'.')},taper});
+  const today = new Date().toISOString().split('T')[0];
+  RX_DRUGS.push({
+    trade, brand: trade, generic, name: generic,
+    drugType: type,
+    eye:[eye.replace(/\s.*$/,'')],freq,dur,
+    dateFrom: today, dateTo: '',
+    lang:{en:inst||(generic+' '+freq+' in '+eye+' for '+dur+'.')},taper
+  });
   renderRxDrugs();
-  if(taper){RX_DRUGS.push({name:generic+' (taper)',brand:trade,eye:[eye.replace(/\s.*$/,'')],freq:'Tapering',dur:taper,lang:{en:generic+' — tapered dose over '+taper+'.'}});}
+  if(taper){
+    RX_DRUGS[RX_DRUGS.length-1].taperRow = { freq: suggestTaperFreqFromMain(freq), dur: taper, dateFrom: '', dateTo: '' };
+  }
   renderRxDrugs();
   showToast(`💊 ${trade||generic} added to prescription ✓`,'s');
   closeM('m-add-rx-drug');
@@ -4113,12 +4182,15 @@ function applyRxTemplate(tplId) {
     const gen = d.generic || d.trade;
     if(!trade || RX_DRUGS.find(r=>r.brand===trade || (gen && r.name===gen))) return;
     const eyeArr = normalizeEyeLabelForRx(d.eye);
+    const today = new Date().toISOString().split('T')[0];
     RX_DRUGS.push({
-      name: gen,
-      brand: trade,
+      trade, brand: trade, generic: gen, name: gen,
+      drugType: d.type || 'Eye Drop',
       eye: eyeArr,
-      freq: d.freq || 'BD',
+      freq: d.freq || 'Twice daily (BD)',
       dur: d.dur || '1 Week',
+      dateFrom: today,
+      dateTo: '',
       lang:{en:gen+' '+(d.freq||'')+' '+eyeArr[0]+' '+(d.dur||''),hi:'',pa:''}
     });
   });
@@ -5775,25 +5847,40 @@ document.addEventListener('click', function(e) { if(!e.target.classList.contains
 function lookupRxGeneric(idx, tradeName) {
   const drug = DRUG_LIBRARY.find(d=>d.trade.toLowerCase()===tradeName.toLowerCase()||d.trade.toLowerCase().startsWith(tradeName.toLowerCase()));
   if(drug && RX_DRUGS[idx]) {
-    RX_DRUGS[idx].brand = drug.generic;
+    RX_DRUGS[idx].trade = drug.trade;
+    RX_DRUGS[idx].brand = drug.trade;
+    RX_DRUGS[idx].generic = drug.generic;
+    RX_DRUGS[idx].name = drug.generic;
+    RX_DRUGS[idx].drugType = drug.type || RX_DRUGS[idx].drugType;
     RX_DRUGS[idx].freq = drug.freq;
     RX_DRUGS[idx].dur = drug.dur;
     renderRxDrugs();
   }
 }
 
-function addTaperRow(idx, duration) {
+const RX_TAPER_SEGMENT_DURS = ['½ day','1 day','2 days','3 days','5 days','7 days','14 days'];
+function suggestTaperFreqFromMain(mainFreq) {
+  const order = ['Six times (6x/day)','Four times daily (QID)','Three times daily (TDS)','Twice daily (BD)','Once daily (OD)','At bedtime (HS)'];
+  const i = order.indexOf(mainFreq);
+  if (i >= 0 && i < order.length - 1) return order[i + 1];
+  if (/QID/i.test(mainFreq || '')) return 'Three times daily (TDS)';
+  if (/TDS|Three times/i.test(mainFreq || '')) return 'Twice daily (BD)';
+  return 'Twice daily (BD)';
+}
+function addTaperRow(idx, taperDur) {
   const orig = RX_DRUGS[idx];
-  const taperSchedules = {
-    '1w': 'Days 1–3: 3x/day → Days 4–5: 2x/day → Days 6–7: 1x/day',
-    '2w': 'Week 1: 4x/day → Week 2: 2x/day then stop',
-    '4w': 'Week 1: 4x/day → Week 2: 3x/day → Week 3: 2x/day → Week 4: 1x/day',
+  if (!orig) return;
+  orig.taperRow = {
+    freq: suggestTaperFreqFromMain(orig.freq || ''),
+    dur: taperDur || '7 days',
+    dateFrom: orig.dateTo || '',
+    dateTo: ''
   };
-  const schedule = taperSchedules[duration] || ('Tapering over '+duration);
-  const taperEn = orig.name + ' — taper: ' + schedule + '.';
-  RX_DRUGS[idx] = { ...orig, taper: schedule };
   renderRxDrugs();
-  showToast('Taper schedule set ✓','i');
+  showToast('Taper line added under this drug — adjust as needed ✓', 'i');
+}
+function clearTaperRow(idx) {
+  if (RX_DRUGS[idx]) { delete RX_DRUGS[idx].taperRow; delete RX_DRUGS[idx].taper; renderRxDrugs(); }
 }
 
 // ─── SURGERY / PROCEDURE SAVE + REPORT ─────────────────
@@ -6146,187 +6233,7 @@ function renderInvestigationOrders() {
   </div>`).join('');
 }
 
-// ─── UNIFIED PRESCRIPTION PRINT ─────────────
-function printUnifiedRx(deptId) {
-  const today = new Date().toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'});
-  const rxDateEl = document.getElementById(deptId+'-rx-date'); if(rxDateEl) rxDateEl.textContent = today;
-  const incIOP = document.getElementById(deptId+'-inc-iop')?.checked;
-  const incVA  = document.getElementById(deptId+'-inc-va')?.checked;
-  const incGL  = document.getElementById(deptId+'-inc-gl')?.checked;
-  const incInv = document.getElementById(deptId+'-inc-inv')?.checked;
-  const incPrc = document.getElementById(deptId+'-inc-proc')?.checked;
-
-  // Collect diagnoses
-  const dxEls = document.querySelectorAll(`#${deptId}-dx-list .dx-inp`);
-  const dxList = Array.from(dxEls).map(e=>e.value).filter(Boolean);
-
-  // Collect drugs
-  const drugRows = document.querySelectorAll('#rx-drugs .rx-drug-row');
-  const drugs = Array.from(drugRows).map((row,i) => {
-    const inputs = row.querySelectorAll('input,select');
-    return {num:i+1, name:inputs[0]?.value||'', route:inputs[1]?.value||'', freq:inputs[2]?.value||'', dur:inputs[3]?.value||''};
-  });
-
-  // Collect procedures
-  const procInps = document.querySelectorAll('#rx-proc-advised input[type=text]');
-  const procs = Array.from(procInps).map(e=>e.value).filter(Boolean);
-
-  // IOP values
-  const iopGatOD = document.getElementById('iop-gat-od')?.value||'';
-  const iopGatOS = document.getElementById('iop-gat-os')?.value||'';
-  const iopNctOD = document.getElementById('iop-nct-od')?.value||'';
-  const iopNctOS = document.getElementById('iop-nct-os')?.value||'';
-
-  // VA values
-  const vaOD = document.getElementById('ucva-od-dist')?.value || document.getElementById('va-od-uc')?.value||'';
-  const vaOS = document.getElementById('ucva-os-dist')?.value || document.getElementById('va-os-uc')?.value||'';
-
-  const fuDate = document.getElementById('rx-fu-date')?.value;
-  const advice = document.querySelector(`#pg-${deptId} textarea[placeholder*="Advice"]`)?.value || document.querySelector('#pg-ophtho textarea[placeholder*="Advice"]')?.value || '';
-
-  // Always read from CURRENT_PATIENT set by openPatient()
-  const pt = window.CURRENT_PATIENT || {};
-  const ptName   = pt.name   || document.getElementById('ophtho-pt-nm')?.textContent  || document.getElementById(deptId+'-pt-nm')?.textContent || 'Patient';
-  const ptBmhId  = pt.bmhId  || document.getElementById('ophtho-pt-uid')?.textContent || document.getElementById(deptId+'-pt-uid')?.textContent || '—';
-  const ptAgeSex = (pt.age || '?') + 'Y / ' + (pt.sex || '?');
-  const ptMob    = pt.mob || '';
-  const qrUrl    = `https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(ptBmhId)}&color=1A3C6E&bgcolor=ffffff&margin=2`;
-
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
-<style>
-*{margin:0;padding:0;box-sizing:border-box;print-color-adjust:exact;-webkit-print-color-adjust:exact}
-body{font-family:'Nunito',sans-serif;font-size:11.5px;color:#1C1C1E;padding:12mm}
-@page{size:A4 portrait;margin:8mm}
-.hdr{display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:8px;padding-bottom:10px;border-bottom:2.5px solid #1A3C6E;margin-bottom:14px}
-.baweja{font-size:20px;font-weight:900;color:#1A3C6E;letter-spacing:2px;border-bottom:2px solid #CC0000;padding-bottom:2px;margin-bottom:2px;display:block}
-.bmh-sub{font-size:9.5px;font-weight:800;color:#1A3C6E;letter-spacing:2.5px;text-transform:uppercase}
-.bmh-addr{font-size:8.5px;color:#555;margin-top:3px;line-height:1.7}
-.bmh-logo{font-size:26px;font-weight:900;letter-spacing:-1px;line-height:1}
-.pt-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;background:#f2f4f8;border-radius:6px;padding:8px 10px;margin-bottom:14px;font-size:11px}
-.pt-lbl{font-size:8.5px;font-weight:700;color:#666;text-transform:uppercase;letter-spacing:.3px}
-.pt-val{font-weight:800;margin-top:1px}
-.section-hd{font-size:10px;font-weight:900;color:#1A3C6E;text-transform:uppercase;letter-spacing:.5px;border-left:3px solid #1A3C6E;padding-left:7px;margin:10px 0 6px}
-.rx-header{display:grid;grid-template-columns:24px 1fr 65px 115px 80px;background:#1A3C6E;color:#fff;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;padding:4px 8px;border-radius:4px 4px 0 0;gap:4px}
-.rx-row{display:grid;grid-template-columns:24px 1fr 65px 115px 80px;padding:6px 8px;border-bottom:1px solid #eee;gap:4px;align-items:center;font-size:11.5px}
-.rx-row:nth-child(even){background:#f9f9f9}
-.rx-num{font-weight:900;color:#1A3C6E;text-align:center}
-.rx-name{font-weight:800}
-.rx-generic{font-size:9.5px;color:#666;font-style:italic}
-.inv-item{display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid #eee;font-size:11px}
-.fu-box{background:#f2f4f8;border-radius:6px;padding:8px 12px;margin-top:12px;display:flex;justify-content:space-between;align-items:center}
-.sig-area{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:24px}
-.sig-line{border-bottom:1px solid #333;margin-top:28px}
-.sig-lbl{font-size:9px;color:#888;margin-top:3px}
-.finding-row{display:flex;gap:16px;font-size:11px;margin-bottom:6px}
-.finding-cell{text-align:center;min-width:60px}
-.finding-lbl{font-size:8.5px;color:#666;font-weight:700;text-transform:uppercase;margin-bottom:2px}
-.finding-val{font-size:13px;font-weight:900}
-</style>
-<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
-</head><body>
-
-<!-- LETTERHEAD -->
-<div class="hdr">
-  <div style=\"display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding-bottom:12px;border-bottom:2.5px solid #1A3C6E;margin-bottom:15px\"><div style=\"display:flex;align-items:flex-start;gap:9px\"><svg viewBox=\"0 0 60 75\" xmlns=\"http://www.w3.org/2000/svg\" style=\"height:72px;width:auto;flex-shrink:0\"><path d=\",55 5,42 12,30 C16,22 22,16 25,8 C27,3 26,0 30,0 C28,8 32,14 30,22 C28,28 22,34 25,42 C28,50 34,58 30,70Z\" fill=\"#CC0000\"/><path d=\"M25,70 C22,58 20,46 26,36 C29,30 35,26 36,18 C38,12 36,6 40,4 C38,12 40,20 37,28 C34,34 28,40 31,50 C33,58 36,63 34,70Z\" fill=\"#CC0000\" opacity=\"0.75\"/><path d=\"M8,70 C12,58 8,46 14,36 C17,29 22,25 22,18 C22,12 19,7 22,5 C24,12 22,20 24,28 C22,36 17,42 20,52 C21,58 24,63 22,70Z\" fill=\"#CC0000\" opacity=\"0.5\"/><circle cx=\"46\" cy=\"10\" r=\"9\" fill=\"#1A3C6E\"/><rect x=\"43.5\" y=\"5.5\" width=\"5\" height=\"9\" rx=\"1.5\" fill=\"white\"/><rect x=\"41\" y=\"8\" width=\"10\" height=\"4\" rx=\"1.5\" fill=\"white\"/></svg><div><div style=\"font-size:26px;font-weight:900;color:#1A3C6E;letter-spacing:4px;line-height:1;border-bottom:3px solid #CC0000;padding-bottom:3px;margin-bottom:3px;font-family:Arial Black,Arial,sans-serif\">BAWEJA</div><div style=\"font-size:11px;font-weight:800;color:#1A3C6E;letter-spacing:3px;text-transform:uppercase\">MULTI SPECIALITY HOSPITAL</div><div style=\"font-size:9px;color:#333;margin-top:4px;line-height:2\">Ropar Branch: 1571/39, Preet Colony Rupnagar, Ropar, Punjab &#9990;: 8146622802<br>Chandigarh Branch: SCO 100, Sec 40-C, Near DPS, Chandigarh &#9990;: 6280048805</div></div></div><div style=\"text-align:right;flex-shrink:0\"><div style=\"font-size:9px;color:#444;margin-bottom:6px\">&#9993; info&#64;bawejahospital.com</div><div style=\"font-size:9px;color:#333;margin-top:4px;line-height:2\">&#127760; : www.bawejahospital.com<br>&#127760; : www.bmhchandigarh.com</div></div></div>
-  <div style="text-align:right">
-    <div class="bmh-logo"><span style="color:#1A3C6E">B</span><span style="color:#CC0000;font-size:20px">M</span><span style="color:#1A3C6E">H</span></div>
-    <div class="bmh-addr" style="margin-top:4px">&#x2709; info&#64;bawejahospital.com<br>&#x1F310; www.bawejahospital.com &nbsp;|&nbsp; www.bmhchandigarh.com</div>
-  </div>
-</div>
-
-<!-- PATIENT BAR + QR -->
-<div style="display:flex;align-items:stretch;gap:10px;margin-bottom:14px">
-  <div class="pt-bar" style="flex:1;margin-bottom:0">
-    <div><div class="pt-lbl">Patient</div><div class="pt-val">${ptName}</div></div>
-    <div><div class="pt-lbl">BMSH ID</div><div class="pt-val" style="font-family:monospace;color:#1A3C6E">${ptBmhId}</div></div>
-    <div><div class="pt-lbl">Date</div><div class="pt-val">${today}</div></div>
-    <div><div class="pt-lbl">Age / Sex</div><div class="pt-val">${ptAgeSex}</div></div>
-    <div><div class="pt-lbl">Doctor</div><div class="pt-val">${document.getElementById('sbnm')?.textContent||'Dr. Varun Baweja'}</div></div>
-    <div><div class="pt-lbl">Department</div><div class="pt-val">${{oe:'Ophthalmology',obg:'OBG',psych:'Neuropsychiatry',skin:'Skin & Cosmetology'}[deptId]||'General'}</div></div>
-  </div>
-  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f2f4f8;border-radius:6px;padding:8px;min-width:96px">
-    <img src="${qrUrl}" width="80" height="80" alt="QR" style="display:block;border-radius:4px">
-    <div style="font-size:7.5px;color:#666;margin-top:3px;text-align:center;font-weight:700">Scan to register</div>
-  </div>
-</div>
-
-<!-- CLINICAL FINDINGS (Eye only if checked) -->
-${(incVA || incIOP) && deptId==='oe' ? `
-<div class="section-hd">Clinical Findings</div>
-<div style="background:#f9f9fb;border-radius:6px;padding:8px 12px;margin-bottom:6px">
-  ${incVA ? `<div style="margin-bottom:6px"><div style="font-size:9px;font-weight:800;color:#1A3C6E;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Visual Acuity</div>
-  <div style="display:flex;gap:20px">
-    <div class="finding-row"><div class="finding-cell"><div class="finding-lbl">OD UCVA</div><div class="finding-val" style="color:#1A3C6E">${vaOD}</div></div>
-    <div class="finding-cell"><div class="finding-lbl">OS UCVA</div><div class="finding-val" style="color:#1a8c3c">${vaOS}</div></div></div>
-  </div></div>` : ''}
-  ${incIOP ? `<div><div style="font-size:9px;font-weight:800;color:#1A3C6E;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">IOP</div>
-  <div style="display:flex;gap:20px">
-    <div class="finding-row">
-      ${iopGatOD||iopGatOS ? `<div class="finding-cell"><div class="finding-lbl">GAT OD</div><div class="finding-val" style="color:${parseFloat(iopGatOD)>21?'#cc0000':'#1a8c3c'}">${iopGatOD||'—'}</div></div>
-      <div class="finding-cell"><div class="finding-lbl">GAT OS</div><div class="finding-val" style="color:${parseFloat(iopGatOS)>21?'#cc0000':'#1a8c3c'}">${iopGatOS||'—'}</div></div>` : ''}
-      ${iopNctOD||iopNctOS ? `<div class="finding-cell"><div class="finding-lbl">NCT OD</div><div class="finding-val">${iopNctOD||'—'}</div></div>
-      <div class="finding-cell"><div class="finding-lbl">NCT OS</div><div class="finding-val">${iopNctOS||'—'}</div></div>` : ''}
-    </div>
-  </div></div>` : ''}
-</div>` : ''}
-
-<!-- DIAGNOSIS -->
-${dxList.length ? `<div class="section-hd">Diagnosis</div>
-<div style="margin-bottom:8px">${dxList.map((d,i)=>`<div style="padding:4px 0;border-bottom:1px solid #f0f0f0;font-size:12px;font-weight:${i===0?800:600}">${i+1}. ${d}</div>`).join('')}</div>` : ''}
-
-<!-- PRESCRIPTION -->
-${drugs.length ? `<div class="section-hd">&#8478; Prescription</div>
-<div class="rx-header"><span>#</span><span>Drug</span><span>Route</span><span>Frequency</span><span>Duration</span></div>
-${drugs.map((d,i)=>`<div class="rx-row"><span class="rx-num">${i+1}</span>
-  <div><div class="rx-name">${d.name}</div>${RX_DRUGS[i]?.brand&&RX_DRUGS[i].brand!==d.name?`<div class="rx-generic">(${RX_DRUGS[i].brand})</div>`:''}
-  ${RX_DRUGS[i]?.lang?.en?`<div style="font-size:9.5px;color:#555;margin-top:1px;line-height:1.5">${RX_DRUGS[i].lang.en}</div>`:''}
-  ${RX_DRUGS[i]?.taper?`<div style="font-size:9.5px;color:#b55a00;font-weight:700;background:#fff5e0;border-radius:3px;padding:1px 5px;margin-top:2px;display:inline-block">⬇️ Taper: ${RX_DRUGS[i].taper}</div>`:''}</div>
-  <span style="font-size:11px">${d.route}</span>
-  <span style="font-size:11px;font-weight:700">${d.freq}</span>
-  <span style="font-size:11px">${d.dur}</span></div>`).join('')}` : ''}
-
-<!-- INVESTIGATIONS -->
-${incInv && INVESTIGATION_ORDERS.filter(o=>!o.done).length ? `<div class="section-hd">Investigations Ordered</div>
-${INVESTIGATION_ORDERS.filter(o=>!o.done).map(o=>`<div class="inv-item"><span>&#129514;</span><div style="flex:1"><span style="font-weight:700">${o.name}</span>${o.notes?` <span style="color:#666;font-size:10.5px">— ${o.notes}</span>`:''}</div></div>`).join('')}` : ''}
-
-<!-- PROCEDURES / SURGERY -->
-${incPrc && procs.length ? `<div class="section-hd">Procedure / Surgery Advised</div>
-${procs.map(p=>`<div class="inv-item"><span>&#9877;</span><span style="font-weight:700">${p}</span></div>`).join('')}` : ''}
-
-<!-- GLASSES -->
-${incGL ? `<div class="section-hd">Glasses Prescription</div>
-<div style="font-size:11.5px;padding:6px 10px;background:#f9f9fb;border-radius:6px">
-  Type: <strong>${document.getElementById('glasses-type')?.value||'—'}</strong> &nbsp;&bull;&nbsp;
-  OD: ${document.getElementById('rf-od-sph2')?.value||'Plano'} / ${document.getElementById('rf-od-cyl2')?.value||'—'} × ${document.getElementById('rf-od-ax2')?.value||'—'} &nbsp;&bull;&nbsp;
-  OS: ${document.getElementById('rf-os-sph2')?.value||'Plano'} / ${document.getElementById('rf-os-cyl2')?.value||'—'} × ${document.getElementById('rf-os-ax2')?.value||'—'}
-  &nbsp;&bull;&nbsp; IPD: ${document.getElementById('ipd-val')?.value||'—'} mm
-</div>` : ''}
-
-<!-- ADVICE -->
-${advice ? `<div class="section-hd">Advice</div><div style="font-size:12px;padding:7px 10px;background:#f9f9fb;border-radius:6px;line-height:1.8">${advice}</div>` : ''}
-
-<!-- FOLLOW-UP -->
-${fuDate ? `<div class="fu-box"><div style="font-size:12px;font-weight:800">&#x1F4C5; Next Appointment: <strong>${new Date(fuDate).toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'})}</strong></div><div style="font-size:10px;color:#666">Please bring this prescription to your follow-up</div></div>` : ''}
-
-<!-- SIGNATURES -->
-<div class="sig-area">
-  <div><div class="sig-line"></div><div class="sig-lbl">Patient / Guardian Signature</div></div>
-  <div style="text-align:right">
-    <div style="font-size:12px;font-weight:900;color:#1A3C6E">${document.getElementById('sbnm')?.textContent||'Dr. Varun Baweja'}</div>
-    <div style="font-size:10px;color:#666">Baweja Multispeciality Hospital</div>
-    <div class="sig-line"></div>
-    <div class="sig-lbl">Doctor's Signature &amp; Stamp</div>
-  </div>
-</div>
-
-<div style="margin-top:12px;padding:7px;background:#f2f4f8;border-radius:6px;font-size:9px;color:#888;text-align:center">
-  This prescription is valid for 30 days from the date of issue &nbsp;&bull;&nbsp; Emergency: 8146622802 / 6280048805
-</div>
-</body></html>`;
-
-  safePrint(html);
-  showToast('Printed ✓','s');
-}
+// (Legacy duplicate printUnifiedRx removed — use window.printUnifiedRx below.)
 
 // ─── LAB MODULE V18 ─────────────────
 const LAB_ORDERS = [];
@@ -6588,73 +6495,177 @@ const RX_COMMON_EXTRA = [
 
 function addRxFromQuick() {
   let drug = rxQuickSelectedDrug;
-  if(!drug) {
+  if (!drug) {
     const inp = document.getElementById('rx-quick-search');
     const val = inp?.value?.trim();
-    if(!val){ showToast('Type a drug name first','w'); return; }
-    // Search DRUG_LIBRARY_FULL first, then fall back
-    drug = (typeof DRUG_LIBRARY_FULL !== 'undefined' ? DRUG_LIBRARY_FULL : [])
-      .find(d => d.name.toLowerCase().includes(val.toLowerCase()) || d.brand.toLowerCase().includes(val.toLowerCase()))
-      || { name: val, brand: val, type:'Drug', freq:'As directed', dur:'As directed', eye:'Both Eyes (OU)', dept:'all' };
+    if (!val) { showToast('Type a drug name first', 'w'); return; }
+    const v = val.toLowerCase();
+    const fromSettings = (typeof DRUG_LIBRARY !== 'undefined' ? DRUG_LIBRARY : []).find(d =>
+      String(d.trade).toLowerCase().includes(v) || String(d.generic).toLowerCase().includes(v));
+    if (fromSettings) {
+      drug = { _from: 'settings', trade: fromSettings.trade, generic: fromSettings.generic, type: fromSettings.type, freq: fromSettings.freq, dur: fromSettings.dur, dept: fromSettings.dept };
+    } else {
+      const fromFull = (typeof DRUG_LIBRARY_FULL !== 'undefined' ? DRUG_LIBRARY_FULL : []).find(d =>
+        d.name.toLowerCase().includes(v) || d.brand.toLowerCase().includes(v));
+      if (fromFull) drug = Object.assign({ _from: 'full' }, fromFull);
+      else drug = { _from: 'free', name: val, brand: val, type: 'Tablet', freq: 'Twice daily (BD)', dur: '1 Week', eye: 'Oral' };
+    }
   }
-  // Build drug record using unified field names
-  const drugName  = drug.name  || drug.trade  || 'Unknown Drug';
-  const drugBrand = drug.brand || drug.generic || '';
-  const eyeVal    = drug.eye   || (drug.type==='Eye Drop' ? 'Both Eyes (OU)' : 'Oral');
-  const freq      = drug.freq  || 'As directed';
-  const dur       = drug.dur   || 'As directed';
 
+  const isSettings = drug._from === 'settings';
+  let trade, generic, drugType, eyeVal, freq, dur;
+  if (isSettings) {
+    trade = drug.trade || '';
+    generic = drug.generic || '';
+    drugType = drug.type || 'Tablet';
+    freq = drug.freq || 'Twice daily (BD)';
+    dur = drug.dur || '1 Week';
+    eyeVal = drugType === 'Eye Drop' ? 'Both Eyes (OU)' : 'Oral';
+  } else if (drug._from === 'full') {
+    generic = drug.name;
+    trade = drug.brand || '';
+    drugType = drug.type || 'Drug';
+    let ev = drug.eye || 'Oral';
+    eyeVal = typeof ev === 'string' ? ev : (Array.isArray(ev) ? ev[0] : 'Oral');
+    if (/Eye|OU|OD|OS/i.test(eyeVal) && !eyeVal.includes('(')) {
+      if (/both|OU/i.test(eyeVal)) eyeVal = 'Both Eyes (OU)';
+      else if (/OS|left/i.test(eyeVal)) eyeVal = 'Left Eye (OS)';
+      else if (/OD|right/i.test(eyeVal)) eyeVal = 'Right Eye (OD)';
+    }
+    freq = drug.freq || 'Twice daily (BD)';
+    dur = drug.dur || '1 Week';
+  } else if (drug._from === 'free') {
+    trade = drug.brand || '';
+    generic = drug.name || trade;
+    drugType = drug.type || 'Tablet';
+    eyeVal = drugType === 'Eye Drop' ? 'Both Eyes (OU)' : 'Oral';
+    freq = drug.freq || 'Twice daily (BD)';
+    dur = drug.dur || '1 Week';
+  } else {
+    trade = drug.brand || drug.trade || '';
+    generic = drug.name || drug.generic || trade;
+    drugType = drug.type || 'Tablet';
+    let ev = drug.eye || (drugType === 'Eye Drop' ? 'Both Eyes (OU)' : 'Oral');
+    eyeVal = typeof ev === 'string' ? ev : (Array.isArray(ev) ? ev[0] : 'Oral');
+    freq = drug.freq || 'Twice daily (BD)';
+    dur = drug.dur || '1 Week';
+  }
+
+  const today = new Date().toISOString().split('T')[0];
   RX_DRUGS.push({
-    name:  drugName,
-    brand: drugBrand,
-    eye:   [eyeVal],
-    freq:  freq,
-    dur:   dur,
-    lang:  { en: '', hi: '', pa: '' }
+    trade, brand: trade, generic, name: generic,
+    drugType: drugType || 'Tablet',
+    eye: [eyeVal],
+    freq, dur,
+    dateFrom: today,
+    dateTo: '',
+    lang: { en: '', hi: '', pa: '' }
   });
 
   renderRxDrugs();
-  const inp = document.getElementById('rx-quick-search');
-  if(inp) inp.value = '';
+  const inp2 = document.getElementById('rx-quick-search');
+  if (inp2) inp2.value = '';
   rxQuickSelectedDrug = null;
-  const dd = document.getElementById('rx-quick-dropdown'); if(dd) dd.style.display='none';
-  showToast('💊 ' + drugName + ' added ✓', 's');
+  const dd = document.getElementById('rx-quick-dropdown'); if (dd) dd.style.display = 'none';
+  showToast('💊 ' + (trade || generic) + ' added ✓', 's');
 }
-document.addEventListener('click',e=>{if(!e.target.closest('#rx-quick-search')&&!e.target.closest('#rx-quick-dropdown')){const dd=document.getElementById('rx-quick-dropdown');if(dd)dd.style.display='none';}});
+document.addEventListener('click',e=>{if(!e.target.closest('#rx-quick-search')&&!e.target.closest('#rx-quick-dropdown')){document.querySelectorAll('#rx-quick-dropdown').forEach(dd=>{dd.style.display='none';});}});
 
-// ─── RENDER RX DRUGS (Trade bold + generic italic) ─────────────
+// ─── RENDER RX DRUGS (Trade — Generic — route — dates — taper) ─────────────
 function renderRxDrugs() {
   const activePage = document.querySelector('.page.active') || document.querySelector('.page');
   const el = activePage ? activePage.querySelector('[id="rx-drugs"]') : document.getElementById('rx-drugs');
   if(!el) return;
   if(!RX_DRUGS||!RX_DRUGS.length){
-    el.innerHTML='<div style="padding:14px;text-align:center;color:var(--g1);font-size:12px">No drugs added — type above to search and add</div>';
+    el.innerHTML='<div style="padding:14px;text-align:center;color:var(--g1);font-size:12px">No drugs added — type above to search (Settings library + built-in list)</div>';
     return;
   }
-  // Detect active dept to decide whether to show the eye/route column
   const activePageId = activePage?.id || '';
   const isOphtho = activePageId === 'pg-ophtho' || activePageId.includes('ophtho');
-  const freqOpts=['Once daily (OD)','Twice daily (BD)','Three times (TDS)','Four times (QID)','Six times (6x/day)','Hourly','At bedtime (HS)','As needed (PRN)','Weekly','Tapering'];
-  const durOpts=['1 Day','3 Days','5 Days','1 Week','2 Weeks','1 Month','3 Months','6 Months','Ongoing'];
+  const freqOpts=['Once daily (OD)','Twice daily (BD)','Three times daily (TDS)','Four times daily (QID)','Six times (6x/day)','Hourly','At bedtime (HS)','As needed (PRN)','Weekly','Tapering'];
+  const durOpts=['½ day','1 day','2 days','3 days','5 days','7 days','14 days','1 Week','2 Weeks','1 Month','3 Months','6 Months','Ongoing'];
+  const typeOpts=['Eye Drop','Tablet','Capsule','Ointment','Cream','Gel','Syrup','Injection','Pessary','Other'];
   const eyeOpts=['Left Eye (OS)','Right Eye (OD)','Both Eyes (OU)','Oral','Topical','IM / IV'];
   const lang = typeof rxLang!=='undefined'?rxLang:'en';
-  const gridCols = isOphtho ? '26px 1fr 75px 120px 90px 55px 32px' : '26px 1fr 120px 90px 55px 32px';
-  el.innerHTML = RX_DRUGS.map((d,i)=>`<div style="display:grid;grid-template-columns:${gridCols};gap:4px;padding:7px 8px;border-bottom:1px solid var(--g5);align-items:start">
-    <div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-align:center;padding-top:6px">${i+1}</div>
-    <div>
-      <div style="font-size:13px;font-weight:900;color:var(--bmh-blue)">${d.name}</div>
-      ${d.brand&&d.brand!==d.name?`<div style="font-size:10.5px;color:var(--g1);font-style:italic;margin-top:1px">${d.brand}</div>`:''}
-      ${d.lang&&d.lang[lang]?`<div style="font-size:10px;color:var(--tx3);margin-top:2px;line-height:1.5">${d.lang[lang]}</div>`:''}
-      ${d.taper?`<div style="font-size:10px;color:#b55a00;background:var(--orange-lt);border-radius:4px;padding:2px 6px;margin-top:3px;font-weight:700">⬇️ Taper: ${d.taper}</div>`:''}
+
+  RX_DRUGS.forEach((d,i)=>{
+    if (!d.dateFrom) d.dateFrom = new Date().toISOString().split('T')[0];
+    if (!d.drugType && d.type) d.drugType = d.type;
+    if (!d.trade && d.brand) d.trade = d.brand;
+    if (!d.generic && d.name) d.generic = d.name;
+  });
+
+  el.innerHTML = RX_DRUGS.map((d,i)=>{
+    const tr = rxDrugTradeName(d) || '';
+    const gen = rxDrugGenericName(d) || '';
+    const dt = d.drugType || d.type || 'Tablet';
+    const eye0 = (d.eye && d.eye[0]) || 'Oral';
+    const tap = d.taperRow;
+    return `<div class="rx-drug-row" style="border-bottom:1px solid var(--g5);padding:10px 8px;background:var(--g6);border-radius:8px;margin-bottom:8px">
+    <div style="display:grid;grid-template-columns:22px 1fr 88px 72px 72px 100px 100px 36px;gap:6px;align-items:start">
+      <div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-align:center;padding-top:6px">${i+1}</div>
+      <div style="min-width:0">
+        <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:3px">Trade — Generic</div>
+        <input value="${String(tr).replace(/"/g,'&quot;')}" onchange="RX_DRUGS[${i}].trade=this.value;RX_DRUGS[${i}].brand=this.value" placeholder="Trade name" style="width:100%;font-size:12px;font-weight:800;margin-bottom:4px;border:1px solid var(--g4);border-radius:6px;padding:4px 6px;box-sizing:border-box">
+        <input value="${String(gen).replace(/"/g,'&quot;')}" onchange="RX_DRUGS[${i}].generic=this.value;RX_DRUGS[${i}].name=this.value" placeholder="Generic" style="width:100%;font-size:11px;font-style:italic;border:1px solid var(--g4);border-radius:6px;padding:4px 6px;box-sizing:border-box">
+        ${d.lang&&d.lang[lang]?`<div style="font-size:10px;color:var(--tx3);margin-top:4px;line-height:1.4">${d.lang[lang]}</div>`:''}
+      </div>
+      <div>
+        <div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:3px">Form</div>
+        <select onchange="RX_DRUGS[${i}].drugType=this.value;RX_DRUGS[${i}].type=this.value" style="font-size:10px;padding:3px;width:100%;border-radius:6px">${typeOpts.map(t=>`<option${dt===t?' selected':''}>${t}</option>`).join('')}</select>
+      </div>
+      ${isOphtho?`<div>
+        <div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:3px">Eye</div>
+        <select onchange="RX_DRUGS[${i}].eye=[this.value]" style="font-size:10px;padding:3px;width:100%;border-radius:6px">${eyeOpts.map(e=>`<option${eye0===e?' selected':''}>${e}</option>`).join('')}</select>
+      </div>`:`<div>
+        <div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:3px">Route</div>
+        <select onchange="RX_DRUGS[${i}].eye=[this.value]" style="font-size:10px;padding:3px;width:100%;border-radius:6px">${eyeOpts.map(e=>`<option${eye0===e?' selected':''}>${e}</option>`).join('')}</select>
+      </div>`}
+      <div>
+        <div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:3px">Frequency</div>
+        <select onchange="RX_DRUGS[${i}].freq=this.value" style="font-size:10px;padding:3px;width:100%;border-radius:6px">${freqOpts.map(f=>`<option${(d.freq===f)?' selected':''}>${f}</option>`).join('')}</select>
+      </div>
+      <div>
+        <div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:3px">Duration</div>
+        <select onchange="RX_DRUGS[${i}].dur=this.value" style="font-size:10px;padding:3px;width:100%;border-radius:6px">${durOpts.map(f=>`<option${d.dur===f?' selected':''}>${f}</option>`).join('')}</select>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <div style="font-size:9px;font-weight:800;color:var(--g1)">From / To</div>
+        <input type="date" value="${d.dateFrom||''}" onchange="RX_DRUGS[${i}].dateFrom=this.value" style="font-size:10px;padding:2px;border-radius:4px;width:100%;box-sizing:border-box">
+        <input type="date" value="${d.dateTo||''}" onchange="RX_DRUGS[${i}].dateTo=this.value" style="font-size:10px;padding:2px;border-radius:4px;width:100%;box-sizing:border-box">
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;align-items:stretch">
+        <button type="button" class="btn btn-xs btn-gray" onclick="removeDrug(${i})" title="Remove">✕</button>
+        <select onchange="if(this.value){addTaperRow(${i},this.value);this.value=''}" style="font-size:9px;padding:2px;border-radius:4px;max-width:100%">
+          <option value="">+ Taper segment</option>
+          ${RX_TAPER_SEGMENT_DURS.map(t=>`<option value="${t}">${t}</option>`).join('')}
+        </select>
+      </div>
     </div>
-    ${isOphtho?`<select onchange="RX_DRUGS[${i}].eye=[this.value]" style="font-size:10px;padding:2px 3px">${eyeOpts.map(e=>`<option${(d.eye&&d.eye[0]===e)?' selected':''}>${e}</option>`).join('')}</select>`:''}
-    <select onchange="RX_DRUGS[${i}].freq=this.value" style="font-size:10px;padding:2px 3px">${freqOpts.map(f=>`<option${d.freq===f?' selected':''}>${f}</option>`).join('')}</select>
-    <select onchange="RX_DRUGS[${i}].dur=this.value" style="font-size:10px;padding:2px 3px">${durOpts.map(f=>`<option${d.dur===f?' selected':''}>${f}</option>`).join('')}</select>
-    <select onchange="if(this.value)addTaperRow(${i},this.value)" style="font-size:10px;padding:2px 3px;${d.taper?'background:var(--orange-lt);color:#b55a00;font-weight:800':''}">
-      <option value="">${d.taper?'✓ Set':'—'}</option><option value="1w">1W</option><option value="2w">2W</option><option value="4w">4W</option>
-    </select>
-    <button class="btn btn-xs btn-gray" onclick="removeDrug(${i})" style="padding:2px 5px;margin-top:4px">✕</button>
-  </div>`).join('');
+    ${tap?`<div style="margin-top:8px;margin-left:26px;padding:8px 10px;background:var(--orange-lt);border-radius:8px;border-left:3px solid var(--orange)">
+      <div style="font-size:10px;font-weight:900;color:#8a4200;margin-bottom:6px;text-transform:uppercase">Taper (same drug — reduced frequency)</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 100px 100px 70px;gap:6px;align-items:end">
+        <div>
+          <div style="font-size:9px;font-weight:700;color:var(--g1)">Frequency</div>
+          <select onchange="RX_DRUGS[${i}].taperRow.freq=this.value" style="font-size:10px;padding:3px;width:100%;border-radius:6px">${freqOpts.map(f=>`<option${tap.freq===f?' selected':''}>${f}</option>`).join('')}</select>
+        </div>
+        <div>
+          <div style="font-size:9px;font-weight:700;color:var(--g1)">Duration</div>
+          <select onchange="RX_DRUGS[${i}].taperRow.dur=this.value" style="font-size:10px;padding:3px;width:100%;border-radius:6px">${RX_TAPER_SEGMENT_DURS.map(f=>`<option${tap.dur===f?' selected':''}>${f}</option>`).join('')}</select>
+        </div>
+        <div>
+          <div style="font-size:9px;font-weight:700;color:var(--g1)">From</div>
+          <input type="date" value="${tap.dateFrom||''}" onchange="RX_DRUGS[${i}].taperRow.dateFrom=this.value" style="font-size:10px;width:100%;box-sizing:border-box">
+        </div>
+        <div>
+          <div style="font-size:9px;font-weight:700;color:var(--g1)">To</div>
+          <input type="date" value="${tap.dateTo||''}" onchange="RX_DRUGS[${i}].taperRow.dateTo=this.value" style="font-size:10px;width:100%;box-sizing:border-box">
+        </div>
+        <div><button type="button" class="btn btn-xs btn-gray" onclick="clearTaperRow(${i})">Clear</button></div>
+      </div>
+    </div>`:''}
+  </div>`;
+  }).join('');
 }
 
 // ─── TEMPLATE SAVE ─────────────
@@ -7106,7 +7117,15 @@ function addProcItem(procName, price) {
 // ─── UPDATED printUnifiedRx with doctor degrees + safePrint ─────────────
 window.printUnifiedRx = function(deptId) {
   const today = new Date().toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'});
-  ['oe','obg','psych','skin'].forEach(d=>{const e=document.getElementById(d+'-rx-date');if(e)e.textContent=today;});
+  const rxDateOe = document.getElementById('rx-date');
+  if (rxDateOe) rxDateOe.textContent = today;
+  ['obg','psych','skin'].forEach(d=>{const e=document.getElementById(d+'-rx-date');if(e)e.textContent=today;});
+
+  const fmtIN = (iso) => {
+    if (!iso) return '—';
+    const t = Date.parse(iso);
+    return Number.isNaN(t) ? String(iso) : new Date(t).toLocaleDateString('en-IN',{day:'2-digit',month:'2-digit',year:'numeric'});
+  };
 
   // ── Collect checkboxes ──
   const incIOP  = document.getElementById(deptId+'-inc-iop')?.checked ?? true;
@@ -7115,8 +7134,8 @@ window.printUnifiedRx = function(deptId) {
   const incInv  = document.getElementById(deptId+'-inc-inv')?.checked ?? true;
   const incPrc  = document.getElementById(deptId+'-inc-proc')?.checked ?? true;
 
-  // ── Collect diagnoses (numbered lines + notes — same as case sheet) ──
-  const dxPack = typeof collectOphthoDiagnosesForPrint === 'function' ? collectOphthoDiagnosesForPrint() : { lines: [], notes: '' };
+  // ── Collect diagnoses — Ophthalmology: numbered rows; other depts: *-dx-list ──
+  const dxPack = typeof collectDeptDiagnosesForPrint === 'function' ? collectDeptDiagnosesForPrint(deptId) : { lines: [], notes: '' };
   const dxList = [...(dxPack.lines || [])];
   if(dxPack.notes) dxList.push(dxPack.notes);
 
@@ -7159,10 +7178,12 @@ window.printUnifiedRx = function(deptId) {
   // ── Follow-up ──
   const fuDate  = document.getElementById('rx-fu-date')?.value;
   const fuFormatted = fuDate ? new Date(fuDate).toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'}) : '';
-  const advice  = document.getElementById(deptId+'-advice')?.value || document.querySelector('#pg-ophtho textarea[placeholder*="Advice"]')?.value || '';
+  const advice  = (deptId === 'oe'
+    ? (document.getElementById('rx-advice-text')?.value || '')
+    : (document.getElementById(deptId+'-advice')?.value || '')) || '';
 
-  // ── Doctor info ──
-  const doctorName    = CURRENT_USER?.name || 'Dr. Varun Baweja';
+  // ── Doctor info (logged-in doctor on prescription) ──
+  const doctorName    = typeof getRxDoctorDisplayName === 'function' ? getRxDoctorDisplayName() : (CURRENT_USER?.name || 'Dr. Varun Baweja');
   const doctorProfile = (typeof DOCTOR_PROFILES!=='undefined' && DOCTOR_PROFILES[doctorName]) || {};
   const doctorDegrees = doctorProfile.degrees || CURRENT_USER?.degrees || 'MBBS,DO,DNB,Ex Cons Cambridgeshire(UK)';
   const doctorSpec    = {oe:'Ophthalmologist',obg:'Obstetrician & Gynaecologist',psych:'Psychiatrist',skin:'Dermatologist'}[deptId]||'Specialist';
@@ -7170,10 +7191,11 @@ window.printUnifiedRx = function(deptId) {
   const doctorPhone   = '6280048805';
 
   // ── Patient info ──
-  const ptName  = document.getElementById(deptId+'-rx-ptname')?.textContent || document.getElementById('ophtho-pt-nm')?.textContent || 'Patient';
-  const ptId    = document.getElementById(deptId+'-rx-ptid')?.textContent   || document.getElementById('ophtho-pt-uid')?.textContent || '—';
-  const ptAge   = document.getElementById(deptId+'-rx-agesex')?.textContent || '—';
-  const ptMob   = PATIENTS?.find(p=>p.bmhId===ptId)?.mob || '';
+  const cpt = window.CURRENT_PATIENT || {};
+  const ptName  = cpt.name || document.getElementById(deptId+'-rx-ptname')?.textContent || document.getElementById('ophtho-pt-nm')?.textContent || 'Patient';
+  const ptId    = cpt.bmhId || document.getElementById(deptId+'-rx-ptid')?.textContent   || document.getElementById('ophtho-pt-uid')?.textContent || '—';
+  const ptAge   = document.getElementById(deptId+'-rx-agesex')?.textContent || ((cpt.age != null && cpt.sex) ? `${cpt.age}Y / ${cpt.sex}` : '—');
+  const ptMob   = cpt.mob || PATIENTS?.find(p=>p.bmhId===ptId)?.mob || '';
 
   // ── LH image (base64 embedded) — hospital print settings override global LH_SRC ──
   const lhImgSrc = window.PRINT_HEADER_SRC || window.LH_SRC || document.querySelector('.lh-img-tag')?.src || '';
@@ -7257,45 +7279,32 @@ ${showGL ? `
 ${drugs.length ? `
 <div class="sec-title">Medicine (Rx):</div>
 <table>
-  <thead><tr><th style="width:28px">Rx</th><th class="left">Drug &amp; Instructions</th></tr></thead>
+  <thead><tr><th>#</th><th class="left">Trade — Generic</th><th>Form</th><th>Route / Eye</th><th>Frequency</th><th>Duration</th><th>From</th><th>To</th></tr></thead>
   <tbody>
     ${drugs.map((d,i)=>{
-      const eye0 = (d.eye&&d.eye[0])||'';
-      // Date range
-      const sd = new Date();
-      const durNum = d.dur?((d.dur.includes('Week')||d.dur.includes('week'))?parseInt(d.dur)*7:(d.dur.includes('Month')||d.dur.includes('month'))?parseInt(d.dur)*30:parseInt(d.dur)||7):7;
-      const ed = new Date(sd); ed.setDate(ed.getDate()+durNum);
-      const fmt = dt=>dt.toLocaleDateString('en-IN',{day:'2-digit',month:'2-digit',year:'numeric'});
-      const sds=fmt(sd), eds=fmt(ed);
-      // Eye text in 3 langs
-      const eyeMap = {
-        'Both Eyes (OU)':   ['both eyes',      'दोनों आँखों में', 'ਦੋਵੇਂ ਅੱਖਾਂ ਵਿੱਚ'],
-        'Left Eye (OS)':    ['left eye',        'बाईं आँख में',    'ਖੱਬੀ ਅੱਖ ਵਿੱਚ'],
-        'Right Eye (OD)':   ['right eye',       'दाईं आँख में',    'ਸੱਜੀ ਅੱਖ ਵਿੱਚ'],
-        'Oral':             ['orally',           'मुँह से',         'ਮੂੰਹ ਤੋਂ'],
-        'Topical':          ['topically',        'लगाएं',           'ਲਗਾਓ'],
-      };
-      const [eEN,eHI,ePA] = eyeMap[eye0]||[eye0,eye0,eye0];
-      const isEyeDrop = eye0.includes('Eye')||(d.name&&d.name.toLowerCase().includes('drop'));
-      const instrEN = isEyeDrop
-        ? `Instil 1 drop in ${eEN}, ${d.freq||''}, for ${d.dur||''} (${sds} to ${eds})`
-        : `${d.freq||''} ${eEN}, for ${d.dur||''} (${sds} to ${eds})`;
-      const instrHI = isEyeDrop
-        ? `${eHI} 1 बूँद डालें, ${d.freq||''}, ${d.dur||''} (${sds} से ${eds} तक)`
-        : `${eHI} ${d.freq||''} लें, ${d.dur||''} (${sds} से ${eds} तक)`;
-      const instrPA = isEyeDrop
-        ? `${ePA} 1 ਬੂੰਦ ਪਾਓ, ${d.freq||''}, ${d.dur||''} (${sds} ਤੋਂ ${eds} ਤੱਕ)`
-        : `${ePA} ${d.freq||''} ਲਓ, ${d.dur||''} (${sds} ਤੋਂ ${eds} ਤੱਕ)`;
-      return `<tr>
-        <td style="font-weight:700;color:#1A3C6E;vertical-align:top;width:28px">${i+1}.</td>
-        <td class="left" colspan="4">
-          <div class="rx-name">${d.name||''}</div>
-          ${d.brand&&d.brand!==d.name?`<div class="rx-gen">(${d.brand})</div>`:''}
-          <div class="rx-instr">
-            ${rxLang==='hi' ? instrHI : rxLang==='pa' ? instrPA : instrEN}
-          </div>
-        </td>
-      </tr>`;}).join('')}
+      const trade = (typeof rxDrugTradeName === 'function' ? rxDrugTradeName(d) : (d.brand||d.trade||'')) || '—';
+      const gen = (typeof rxDrugGenericName === 'function' ? rxDrugGenericName(d) : (d.name||d.generic||'')) || '—';
+      const form = d.drugType || d.type || '—';
+      const route = (d.eye && d.eye[0]) || '—';
+      const tap = d.taperRow;
+      let rows = `<tr>
+        <td style="font-weight:700;color:#1A3C6E">${i+1}</td>
+        <td class="left"><div class="rx-name">${trade}</div><div class="rx-gen">${gen}</div></td>
+        <td>${form}</td>
+        <td>${route}</td>
+        <td>${d.freq||'—'}</td>
+        <td>${d.dur||'—'}</td>
+        <td>${fmtIN(d.dateFrom)}</td>
+        <td>${fmtIN(d.dateTo)}</td>
+      </tr>`;
+      if (tap) {
+        rows += `<tr style="background:#fff8e6"><td style="vertical-align:top">↳</td>
+        <td class="left" colspan="7" style="font-size:11px;padding-top:8px;padding-bottom:8px">
+          <strong>Taper</strong> — ${tap.freq||'—'} · ${tap.dur||'—'} · ${fmtIN(tap.dateFrom)} → ${fmtIN(tap.dateTo)}
+        </td></tr>`;
+      }
+      return rows;
+    }).join('')}
   </tbody>
 </table>` : ''}
 
@@ -8947,49 +8956,90 @@ const DRUG_LIBRARY_FULL = [
   {name:'Pantoprazole 40mg',brand:'Pan / Pantodac',type:'Tablet',dept:'all',freq:'Once daily (OD)',dur:'4 Weeks',eye:'Oral'},
 ];
 
-// ── Enhanced drug quick search using DRUG_LIBRARY_FULL ───────
+// ── Drug quick search: Settings DRUG_LIBRARY + built-in DRUG_LIBRARY_FULL ───────
+let rxQuickPickList = [];
 function rxQuickSearch(val) {
   val = (val || '').trim();
-  const container = document.getElementById('rx-quick-dropdown') ||
-                    document.querySelector('[id$="-rx"] #rx-quick-dropdown');
-  // Find dropdown in active rx tab
   const activeRxTab = document.querySelector('.tab-content.active[id$="-rx"], .tab-content.active[id="oe-rx"]');
   const dd = activeRxTab ? activeRxTab.querySelector('[id="rx-quick-dropdown"]') : null;
   const targetDd = dd || document.getElementById('rx-quick-dropdown');
-  if(!targetDd) return;
+  if (!targetDd) return;
 
-  if(val.length < 2) { targetDd.style.display='none'; return; }
+  if (val.length < 2) { targetDd.style.display = 'none'; rxQuickPickList = []; return; }
 
   const v = val.toLowerCase();
-  const dept = activeRxTab?.id?.replace('-rx','') || 'oe';
-  const deptMap = {oe:'ophtho', obg:'obg', psych:'psych', skin:'skin'};
-  const deptKey = deptMap[dept] || 'ophtho';
+  const tabId = activeRxTab?.id?.replace('-rx', '') || 'oe';
+  const deptMap = { oe: 'ophtho', obg: 'obg', psych: 'psych', skin: 'skin' };
+  const deptKey = deptMap[tabId] || 'ophtho';
+  const deptLabel = { oe: 'Ophthalmology', obg: 'OBG', psych: 'Neuropsychiatry', skin: 'Skin' }[tabId] || '';
 
-  const matches = DRUG_LIBRARY_FULL.filter(d =>
+  const libSettings = typeof DRUG_LIBRARY !== 'undefined' ? DRUG_LIBRARY : [];
+  const fromSettings = libSettings.filter(d => {
+    const okDept = !d.dept || d.dept === 'All' || !deptLabel || d.dept === deptLabel;
+    if (!okDept) return false;
+    return String(d.trade || '').toLowerCase().includes(v) || String(d.generic || '').toLowerCase().includes(v);
+  }).slice(0, 8);
+
+  const fromFull = (typeof DRUG_LIBRARY_FULL !== 'undefined' ? DRUG_LIBRARY_FULL : []).filter(d =>
     (d.dept === deptKey || d.dept === 'all') &&
     (d.name.toLowerCase().includes(v) || d.brand.toLowerCase().includes(v))
   ).slice(0, 8);
 
-  if(!matches.length) { targetDd.style.display='none'; return; }
+  rxQuickPickList = [
+    ...fromSettings.map(d => ({ kind: 'settings', d })),
+    ...fromFull.map(d => ({ kind: 'full', d }))
+  ].slice(0, 14);
+
+  if (!rxQuickPickList.length) { targetDd.style.display = 'none'; return; }
 
   targetDd.style.display = 'block';
-  targetDd.innerHTML = matches.map((d,i) => `
-    <div onclick="selectRxQuickDrug(${DRUG_LIBRARY_FULL.indexOf(d)})"
-      style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--g5)"
-      onmouseover="this.style.background='var(--blue-lt)'" onmouseout="this.style.background=''">
-      <div style="font-size:12.5px;font-weight:800;color:#1A3C6E">${d.name}</div>
-      <div style="font-size:10.5px;color:var(--g1);font-style:italic">${d.brand} · ${d.type} · ${d.freq}</div>
-    </div>`).join('');
+  targetDd.innerHTML = rxQuickPickList.map((item, i) => {
+    if (item.kind === 'settings') {
+      const d = item.d;
+      return `<div onclick="selectRxQuickPick(${i})" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--g5)" onmouseover="this.style.background='var(--blue-lt)'" onmouseout="this.style.background=''">
+        <div style="font-size:10px;font-weight:800;color:var(--green);text-transform:uppercase">Settings</div>
+        <div style="font-size:12.5px;font-weight:800;color:#1A3C6E">${d.trade} — ${d.generic}</div>
+        <div style="font-size:10.5px;color:var(--g1)">${d.type} · ${d.freq} · ${d.dur}</div>
+      </div>`;
+    }
+    const d = item.d;
+    return `<div onclick="selectRxQuickPick(${i})" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--g5)" onmouseover="this.style.background='var(--blue-lt)'" onmouseout="this.style.background=''">
+      <div style="font-size:10px;font-weight:800;color:var(--bmh-teal);text-transform:uppercase">Built-in</div>
+      <div style="font-size:12.5px;font-weight:800;color:#1A3C6E">${d.brand} — ${d.name}</div>
+      <div style="font-size:10.5px;color:var(--g1);font-style:italic">${d.type} · ${d.freq}</div>
+    </div>`;
+  }).join('');
+}
+
+function selectRxQuickPick(i) {
+  const item = rxQuickPickList[i];
+  if (!item) return;
+  if (item.kind === 'settings') {
+    const d = item.d;
+    rxQuickSelectedDrug = { _from: 'settings', trade: d.trade, generic: d.generic, type: d.type, freq: d.freq, dur: d.dur, dept: d.dept };
+    const inp = document.getElementById('rx-quick-search');
+    if (inp) inp.value = d.trade + ' — ' + d.generic;
+  } else {
+    rxQuickSelectedDrug = Object.assign({ _from: 'full' }, item.d);
+    const inp = document.getElementById('rx-quick-search');
+    if (inp) inp.value = item.d.name;
+  }
+  const activeRxTab = document.querySelector('.tab-content.active[id$="-rx"], .tab-content.active[id="oe-rx"]');
+  const dd = activeRxTab ? activeRxTab.querySelector('[id="rx-quick-dropdown"]') : document.getElementById('rx-quick-dropdown');
+  if (dd) dd.style.display = 'none';
+  addRxFromQuick();
 }
 
 function selectRxQuickDrug(idx) {
   const lib = typeof DRUG_LIBRARY_FULL !== 'undefined' ? DRUG_LIBRARY_FULL : [];
   const d = lib[idx];
-  if(!d) return;
-  rxQuickSelectedDrug = d;
+  if (!d) return;
+  rxQuickSelectedDrug = Object.assign({ _from: 'full' }, d);
   const inp = document.getElementById('rx-quick-search');
-  if(inp) inp.value = d.name;
-  const dd = document.getElementById('rx-quick-dropdown'); if(dd) dd.style.display='none';
+  if (inp) inp.value = d.name;
+  const activeRxTab = document.querySelector('.tab-content.active[id$="-rx"], .tab-content.active[id="oe-rx"]');
+  const dd = activeRxTab ? activeRxTab.querySelector('[id="rx-quick-dropdown"]') : document.getElementById('rx-quick-dropdown');
+  if (dd) dd.style.display = 'none';
   addRxFromQuick();
 }
 
@@ -10908,6 +10958,8 @@ function saveVisit(dept) {
     });
     visit.slChips = slChips;
     visit.slNotes = document.getElementById('sl-notes-text')?.value || '';
+    visit.oeAnteriorFindings = document.getElementById('oe-anterior-findings')?.value || '';
+    visit.oePosteriorFindings = document.getElementById('oe-posterior-findings')?.value || '';
     const dxLines = [...document.querySelectorAll('#rx-diagnosis-rows .rx-dx-line')].map(e=>e.value.trim()).filter(Boolean);
     visit.diagnoses = dxLines;
     visit.diagnosisText = document.getElementById('rx-diagnosis-text')?.value?.trim() || '';

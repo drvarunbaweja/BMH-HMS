@@ -887,19 +887,30 @@
 
       <!-- SLIT LAMP TAB -->
       <div class="tab-content" id="oe-slitlamp">
-        <div style="background:#12131a;border-radius:var(--r);padding:14px">
-          <div style="margin-bottom:14px;padding:12px;background:rgba(255,255,255,.06);border-radius:10px;border:1px solid rgba(255,255,255,.12)">
-            <div style="font-size:11px;font-weight:900;color:#fff;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Ocular Health Examination</div>
-            <img src="./assets/ocular-health-exam.png" alt="Ocular health diagram — anterior, section, optic nerve" style="width:100%;max-width:820px;height:auto;display:block;margin:0 auto;border-radius:8px;border:1px solid rgba(255,255,255,.15)" />
-            <div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:8px">Reference diagram for orientation. Record structured findings in the rows below — they flow into the printed case sheet beside each label.</div>
+        <div style="background:#12131a;border-radius:var(--r);padding:18px">
+          <div style="font-size:12px;font-weight:900;color:#fff;margin-bottom:16px;text-transform:uppercase;letter-spacing:.5px">Slit lamp &amp; ocular health</div>
+          <div style="display:grid;grid-template-columns:minmax(200px,1fr) minmax(240px,400px) minmax(200px,1fr);gap:22px;align-items:start;margin-bottom:28px">
+            <div style="padding:14px;background:rgba(255,255,255,.05);border-radius:12px;border:1px solid rgba(255,255,255,.12)">
+              <label class="fl" style="display:block;font-size:11px;font-weight:800;color:rgba(100,180,255,.95);margin-bottom:10px;text-transform:uppercase;letter-spacing:.4px">Anterior findings</label>
+              <textarea id="oe-anterior-findings" rows="12" placeholder="OD / OS — lids, conjunctiva, cornea, anterior chamber, iris, pupil, lens…" style="width:100%;min-height:300px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:10px;color:#fff;font-size:12px;padding:12px 14px;resize:vertical;box-sizing:border-box;line-height:1.6;font-family:var(--font)"></textarea>
+            </div>
+            <div style="text-align:center;padding:10px 6px 0">
+              <div style="font-size:10px;font-weight:800;color:rgba(255,255,255,.5);margin-bottom:12px;text-transform:uppercase;letter-spacing:.6px">Examination diagram</div>
+              <img src="./assets/eye-examination.png" alt="Eye examination diagram — anterior and posterior" style="width:100%;max-width:380px;height:auto;display:block;margin:0 auto;border-radius:12px;border:1px solid rgba(255,255,255,.22);background:#fff;box-shadow:0 8px 28px rgba(0,0,0,.35)" onerror="this.src='./assets/ocular-health-exam.png'" />
+              <div style="font-size:10px;color:rgba(255,255,255,.45);margin-top:12px;line-height:1.5">Annotate on paper or describe key findings here; structured chips follow below.</div>
+            </div>
+            <div style="padding:14px;background:rgba(255,255,255,.05);border-radius:12px;border:1px solid rgba(255,255,255,.12)">
+              <label class="fl" style="display:block;font-size:11px;font-weight:800;color:rgba(100,220,140,.95);margin-bottom:10px;text-transform:uppercase;letter-spacing:.4px">Posterior findings</label>
+              <textarea id="oe-posterior-findings" rows="12" placeholder="Vitreous, optic disc, macula, vessels, periphery…" style="width:100%;min-height:300px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:10px;color:#fff;font-size:12px;padding:12px 14px;resize:vertical;box-sizing:border-box;line-height:1.6;font-family:var(--font)"></textarea>
+            </div>
           </div>
           <!-- OD / OS column headers -->
-          <div style="display:grid;grid-template-columns:90px 1fr 1fr;gap:8px;margin-bottom:10px;border-bottom:1px solid rgba(255,255,255,.1);padding-bottom:8px">
+          <div style="display:grid;grid-template-columns:90px 1fr 1fr;gap:8px;margin-bottom:14px;border-bottom:1px solid rgba(255,255,255,.1);padding-bottom:10px">
             <div></div>
             <div style="text-align:center;font-size:11px;font-weight:900;color:rgba(100,180,255,.9);text-transform:uppercase;letter-spacing:1px;background:rgba(30,80,200,.3);border-radius:6px;padding:5px">RIGHT EYE (OD)</div>
             <div style="text-align:center;font-size:11px;font-weight:900;color:rgba(100,220,140,.9);text-transform:uppercase;letter-spacing:1px;background:rgba(30,160,80,.25);border-radius:6px;padding:5px">LEFT EYE (OS)</div>
           </div>
-          <div class="sl-sl-row" style="display:grid;grid-template-columns:90px 1fr 1fr;gap:8px;margin-bottom:10px;align-items:start">
+          <div class="sl-sl-row" style="display:grid;grid-template-columns:90px 1fr 1fr;gap:10px;margin-bottom:16px;align-items:start">
               <div style="font-size:9.5px;font-weight:900;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.8px;padding-top:4px">Lids/Lashes</div>
               <div style="background:rgba(30,80,200,.2);border-radius:6px;padding:6px 8px">
                 <div style="font-size:8.5px;font-weight:800;color:rgba(100,180,255,.8);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">OD</div>
@@ -909,7 +920,7 @@
                 <div style="font-size:8.5px;font-weight:800;color:rgba(100,220,140,.8);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">OS</div>
                 <div style="display:flex;gap:4px;flex-wrap:wrap"><span class="sl-chip sel" onclick="toggleChipEye(this,'os')">Normal</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Entropion</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Ectropion</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Ptosis</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Trichiasis</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Lagophthalmos</span></div>
               </div>
-            </div><div class="sl-sl-row" style="display:grid;grid-template-columns:90px 1fr 1fr;gap:8px;margin-bottom:10px;align-items:start">
+            </div><div class="sl-sl-row" style="display:grid;grid-template-columns:90px 1fr 1fr;gap:10px;margin-bottom:16px;align-items:start">
               <div style="font-size:9.5px;font-weight:900;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.8px;padding-top:4px">Conjunctiva</div>
               <div style="background:rgba(30,80,200,.2);border-radius:6px;padding:6px 8px">
                 <div style="font-size:8.5px;font-weight:800;color:rgba(100,180,255,.8);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">OD</div>
@@ -919,7 +930,7 @@
                 <div style="font-size:8.5px;font-weight:800;color:rgba(100,220,140,.8);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">OS</div>
                 <div style="display:flex;gap:4px;flex-wrap:wrap"><span class="sl-chip sel" onclick="toggleChipEye(this,'os')">Normal</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Congested</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Follicles</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Papillae</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Chemosis</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Subconj Haem</span></div>
               </div>
-            </div><div class="sl-sl-row" style="display:grid;grid-template-columns:90px 1fr 1fr;gap:8px;margin-bottom:10px;align-items:start">
+            </div><div class="sl-sl-row" style="display:grid;grid-template-columns:90px 1fr 1fr;gap:10px;margin-bottom:16px;align-items:start">
               <div style="font-size:9.5px;font-weight:900;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.8px;padding-top:4px">Cornea</div>
               <div style="background:rgba(30,80,200,.2);border-radius:6px;padding:6px 8px">
                 <div style="font-size:8.5px;font-weight:800;color:rgba(100,180,255,.8);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">OD</div>
@@ -929,7 +940,7 @@
                 <div style="font-size:8.5px;font-weight:800;color:rgba(100,220,140,.8);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">OS</div>
                 <div style="display:flex;gap:4px;flex-wrap:wrap"><span class="sl-chip sel" onclick="toggleChipEye(this,'os')">Clear</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Oedema</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Ulcer</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">KPs</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Scar</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Epithelial defect</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Band keratopathy</span></div>
               </div>
-            </div><div class="sl-sl-row" style="display:grid;grid-template-columns:90px 1fr 1fr;gap:8px;margin-bottom:10px;align-items:start">
+            </div><div class="sl-sl-row" style="display:grid;grid-template-columns:90px 1fr 1fr;gap:10px;margin-bottom:16px;align-items:start">
               <div style="font-size:9.5px;font-weight:900;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.8px;padding-top:4px">AC</div>
               <div style="background:rgba(30,80,200,.2);border-radius:6px;padding:6px 8px">
                 <div style="font-size:8.5px;font-weight:800;color:rgba(100,180,255,.8);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">OD</div>
@@ -939,7 +950,7 @@
                 <div style="font-size:8.5px;font-weight:800;color:rgba(100,220,140,.8);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">OS</div>
                 <div style="display:flex;gap:4px;flex-wrap:wrap"><span class="sl-chip sel" onclick="toggleChipEye(this,'os')">Deep & Clear</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Shallow</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Cells+</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Flare</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Hyphaema</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Hypopyon</span></div>
               </div>
-            </div><div class="sl-sl-row" style="display:grid;grid-template-columns:90px 1fr 1fr;gap:8px;margin-bottom:10px;align-items:start">
+            </div><div class="sl-sl-row" style="display:grid;grid-template-columns:90px 1fr 1fr;gap:10px;margin-bottom:16px;align-items:start">
               <div style="font-size:9.5px;font-weight:900;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.8px;padding-top:4px">Iris</div>
               <div style="background:rgba(30,80,200,.2);border-radius:6px;padding:6px 8px">
                 <div style="font-size:8.5px;font-weight:800;color:rgba(100,180,255,.8);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">OD</div>
@@ -949,7 +960,7 @@
                 <div style="font-size:8.5px;font-weight:800;color:rgba(100,220,140,.8);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">OS</div>
                 <div style="display:flex;gap:4px;flex-wrap:wrap"><span class="sl-chip sel" onclick="toggleChipEye(this,'os')">Normal</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Rubeosis</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Atrophy</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Synechiae PAS</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Synechiae Post</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Heterochromia</span></div>
               </div>
-            </div><div class="sl-sl-row" style="display:grid;grid-template-columns:90px 1fr 1fr;gap:8px;margin-bottom:10px;align-items:start">
+            </div><div class="sl-sl-row" style="display:grid;grid-template-columns:90px 1fr 1fr;gap:10px;margin-bottom:16px;align-items:start">
               <div style="font-size:9.5px;font-weight:900;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.8px;padding-top:4px">Pupil</div>
               <div style="background:rgba(30,80,200,.2);border-radius:6px;padding:6px 8px">
                 <div style="font-size:8.5px;font-weight:800;color:rgba(100,180,255,.8);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">OD</div>
@@ -959,7 +970,7 @@
                 <div style="font-size:8.5px;font-weight:800;color:rgba(100,220,140,.8);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">OS</div>
                 <div style="display:flex;gap:4px;flex-wrap:wrap"><span class="sl-chip sel" onclick="toggleChipEye(this,'os')">Round & Reacting</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">RAPD</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Fixed & Dilated</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Irregular</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Peaked</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Secluded</span></div>
               </div>
-            </div><div class="sl-sl-row" style="display:grid;grid-template-columns:90px 1fr 1fr;gap:8px;margin-bottom:10px;align-items:start">
+            </div><div class="sl-sl-row" style="display:grid;grid-template-columns:90px 1fr 1fr;gap:10px;margin-bottom:16px;align-items:start">
               <div style="font-size:9.5px;font-weight:900;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.8px;padding-top:4px">Lens</div>
               <div style="background:rgba(30,80,200,.2);border-radius:6px;padding:6px 8px">
                 <div style="font-size:8.5px;font-weight:800;color:rgba(100,180,255,.8);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">OD</div>
@@ -969,7 +980,7 @@
                 <div style="font-size:8.5px;font-weight:800;color:rgba(100,220,140,.8);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">OS</div>
                 <div style="display:flex;gap:4px;flex-wrap:wrap"><span class="sl-chip sel" onclick="toggleChipEye(this,'os')">Clear</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">NSC Grade I</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">NSC Grade II</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">NSC Grade III</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">PSC</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Cortical</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Mature</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">IOL in situ</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Aphakic</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Part. absorbed</span><span class="sl-chip" onclick="toggleChipEye(this,'os')">Subluxated</span></div>
               </div>
-            </div><div class="sl-sl-row" style="display:grid;grid-template-columns:90px 1fr 1fr;gap:8px;margin-bottom:10px;align-items:start">
+            </div><div class="sl-sl-row" style="display:grid;grid-template-columns:90px 1fr 1fr;gap:10px;margin-bottom:16px;align-items:start">
               <div style="font-size:9.5px;font-weight:900;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.8px;padding-top:4px">Vitreous</div>
               <div style="background:rgba(30,80,200,.2);border-radius:6px;padding:6px 8px">
                 <div style="font-size:8.5px;font-weight:800;color:rgba(100,180,255,.8);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">OD</div>
@@ -2836,7 +2847,7 @@
         <datalist id="drug-generic-datalist"></datalist>
         <div class="form-group"><label class="fl">Generic Name</label><input type="text" id="new-drug-generic" list="drug-generic-datalist" placeholder="e.g. Moxifloxacin 0.5%" autocomplete="off"></div>
         <div class="form-group"><label class="fl">Default Frequency</label><select id="new-drug-freq"><option>Once daily (OD)</option><option>Twice daily (BD)</option><option>Three times daily (TDS)</option><option>Four times daily (QID)</option><option>Six times daily (6x/day)</option><option>Hourly</option><option>At bedtime (HS)</option><option>As needed (PRN)</option><option>Taper</option></select></div>
-        <div class="form-group"><label class="fl">Default Duration</label><select id="new-drug-dur"><option>1 Week</option><option>2 Weeks</option><option>1 Month</option><option>3 Months</option><option>6 Months</option><option>Ongoing</option></select></div>
+        <div class="form-group"><label class="fl">Default Duration</label><select id="new-drug-dur"><option>½ day</option><option>1 day</option><option>2 days</option><option>3 days</option><option>5 days</option><option>7 days</option><option>14 days</option><option>1 Week</option><option>2 Weeks</option><option>1 Month</option><option>3 Months</option><option>6 Months</option><option>Ongoing</option></select></div>
         <div class="form-group"><label class="fl">Department</label><select id="new-drug-dept"><option>All</option><option>Ophthalmology</option><option>OBG</option><option>Neuropsychiatry</option><option>Skin</option></select></div>
         <button class="btn btn-blue" onclick="addDrugToLibrary()">+ Add to Library</button>
         <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--g4)">
@@ -3695,6 +3706,32 @@
     <button class="btn btn-gold" style="flex:1" onclick="addRxDrugFromModal()">+ Add to Prescription</button>
     <button class="btn btn-gray" onclick="closeM('m-add-rx-drug')">Cancel</button>
   </div>
+</div></div></div>
+
+<!-- SETTINGS: ADD / EDIT DRUG LIBRARY -->
+<div class="modal-ov" id="m-add-drug">
+<div class="modal"><div class="modal-hd"><div class="modal-title">💊 Add to Drug Library</div><button class="modal-close" onclick="closeM('m-add-drug')">✕</button></div>
+<div class="fg fg1" style="gap:9px">
+  <div class="form-group"><label class="fl">Type / Form</label><select id="md-add-type"><option>Eye Drop</option><option>Tablet</option><option>Capsule</option><option>Ointment</option><option>Injection</option><option>Syrup</option><option>Pessary</option><option>Gel</option><option>Cream</option></select></div>
+  <div class="form-group"><label class="fl">Trade Name</label><input type="text" id="md-add-trade" placeholder="e.g. Vigamox"></div>
+  <div class="form-group"><label class="fl">Generic Name</label><input type="text" id="md-add-generic" placeholder="e.g. Moxifloxacin 0.5%"></div>
+  <div class="form-group"><label class="fl">Default Frequency</label><select id="md-add-freq"><option>Once daily (OD)</option><option>Twice daily (BD)</option><option>Three times daily (TDS)</option><option>Four times daily (QID)</option><option>Six times (6x/day)</option><option>Hourly</option><option>At bedtime (HS)</option><option>As needed (PRN)</option></select></div>
+  <div class="form-group"><label class="fl">Default Duration</label><select id="md-add-dur"><option>½ day</option><option>1 day</option><option>2 days</option><option>3 days</option><option>5 days</option><option>7 days</option><option>14 days</option><option>1 Week</option><option>2 Weeks</option><option>1 Month</option><option>3 Months</option><option>6 Months</option><option>Ongoing</option></select></div>
+  <div class="form-group"><label class="fl">Department</label><select id="md-add-dept"><option>All</option><option>Ophthalmology</option><option>OBG</option><option>Neuropsychiatry</option><option>Skin</option></select></div>
+  <div style="display:flex;gap:8px"><button class="btn btn-gold" style="flex:1" onclick="addDrugToLibraryFromModal()">+ Save to library</button><button class="btn btn-gray" onclick="closeM('m-add-drug')">Cancel</button></div>
+</div></div></div>
+
+<div class="modal-ov" id="m-edit-drug">
+<div class="modal"><div class="modal-hd"><div class="modal-title">✎ Edit Drug (Library)</div><button class="modal-close" onclick="closeM('m-edit-drug')">✕</button></div>
+<input type="hidden" id="md-edit-idx" value="">
+<div class="fg fg1" style="gap:9px">
+  <div class="form-group"><label class="fl">Type / Form</label><select id="md-edit-type"><option>Eye Drop</option><option>Tablet</option><option>Capsule</option><option>Ointment</option><option>Injection</option><option>Syrup</option><option>Pessary</option><option>Gel</option><option>Cream</option></select></div>
+  <div class="form-group"><label class="fl">Trade Name</label><input type="text" id="md-edit-trade"></div>
+  <div class="form-group"><label class="fl">Generic Name</label><input type="text" id="md-edit-generic"></div>
+  <div class="form-group"><label class="fl">Default Frequency</label><select id="md-edit-freq"><option>Once daily (OD)</option><option>Twice daily (BD)</option><option>Three times daily (TDS)</option><option>Four times daily (QID)</option><option>Six times (6x/day)</option><option>Hourly</option><option>At bedtime (HS)</option><option>As needed (PRN)</option></select></div>
+  <div class="form-group"><label class="fl">Default Duration</label><select id="md-edit-dur"><option>½ day</option><option>1 day</option><option>2 days</option><option>3 days</option><option>5 days</option><option>7 days</option><option>14 days</option><option>1 Week</option><option>2 Weeks</option><option>1 Month</option><option>3 Months</option><option>6 Months</option><option>Ongoing</option></select></div>
+  <div class="form-group"><label class="fl">Department</label><select id="md-edit-dept"><option>All</option><option>Ophthalmology</option><option>OBG</option><option>Neuropsychiatry</option><option>Skin</option></select></div>
+  <div style="display:flex;gap:8px"><button class="btn btn-gold" style="flex:1" onclick="saveEditDrugLibrary()">💾 Save changes</button><button class="btn btn-gray" onclick="closeM('m-edit-drug')">Cancel</button></div>
 </div></div></div>
 
 <!-- ORDER INVESTIGATIONS MODAL -->
