@@ -298,6 +298,28 @@ tbody td{padding:8px 9px;font-weight:500;vertical-align:middle}
 .sb-fill{height:100%;border-radius:3px;transition:width .3s}
 /* ═══ IPD ROW ═══ */
 .ipd-row{background:var(--card);border-radius:10px;padding:9px 12px;margin-bottom:5px;display:flex;align-items:center;gap:10px;box-shadow:var(--sh);border-left:4px solid var(--blue);cursor:pointer;transition:all .2s}
+
+/* ═══ IMPROVED PRESCRIPTION UI ═══ */
+.rx-section{background:#fff;border-radius:12px;padding:16px;margin-bottom:12px;border:1px solid var(--g4);box-shadow:0 2px 8px rgba(0,0,0,0.05);transition:all 0.2s}
+.rx-section:hover{box-shadow:0 4px 16px rgba(0,0,0,0.08);transform:translateY(-1px)}
+
+#rx-drugs{background:#f8f9fa;border-radius:8px;padding:8px;margin-top:12px;border:1px solid var(--g4);box-shadow:inset 0 1px 3px rgba(0,0,0,0.1)}
+
+.adv-chip{border-radius:16px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;user-select:none;transition:all 0.2s ease;white-space:nowrap;display:inline-flex;align-items:center;gap:4px}
+.adv-chip:hover{transform:scale(1.05)}
+.adv-chip.active{background:var(--orange)!important;color:#fff!important;border-color:var(--orange)!important;transform:scale(1.05);box-shadow:0 2px 6px rgba(255,149,0,0.3)}
+
+#rx-diagnosis-list{background:#f8f9fa;border-radius:8px;padding:10px;border:1px solid var(--g4);min-height:44px;display:flex;flex-direction:column;gap:6px}
+
+#oe-inv-ordered-list{background:#f8f9fa;border-radius:8px;padding:10px;border:1px solid var(--g4);min-height:44px}
+
+#rx-proc-advised{background:#f8f9fa;border-radius:8px;padding:10px;border:1px solid var(--g4);min-height:44px}
+
+@media(max-width:768px){
+  .rx-section{margin-bottom:8px;padding:12px}
+  #rx-drugs{margin-top:8px}
+  .adv-chip{font-size:10px;padding:4px 8px}
+}
 .ipd-row:hover{box-shadow:var(--sh-md);transform:translateY(-1px)}
 .ipd-row.critical{border-left-color:var(--red)}
 .ipd-row.stable{border-left-color:var(--green)}
@@ -1373,60 +1395,117 @@ tbody td{padding:8px 9px;font-weight:500;vertical-align:middle}
 
       <!-- PRESCRIPTION + QR TAB -->
       <div class="tab-content" id="oe-rx">
-        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;background:var(--g6);padding:8px 10px;border-radius:var(--rsm)">
-          <button class="btn btn-xs btn-blue" onclick="applyLastRx()">📋 Apply Last Rx</button>
-          <select id="rx-tpl-sel" style="font-size:11px;flex:1" onchange="applyRxTemplate(this.value)">
+        <!-- Header Actions -->
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;background:linear-gradient(135deg,var(--g6),var(--g5));padding:10px 12px;border-radius:10px;border:1px solid var(--g4)">
+          <button class="btn btn-xs btn-blue" onclick="applyLastRx()" style="display:flex;align-items:center;gap:4px">
+            <span>📋</span> Apply Last Rx
+          </button>
+          <select id="rx-tpl-sel" style="font-size:11px;flex:1;min-width:160px;border-radius:6px;padding:4px 8px" onchange="applyRxTemplate(this.value)">
             <option value="">— Apply Template —</option>
             <option value="post-phaco">Post Phaco Day 1</option>
             <option value="post-ivt">Post IVT</option>
             <option value="dry-eye">Dry Eye Protocol</option>
           </select>
-          <button class="btn btn-xs btn-outline" onclick="openM('m-order-invest')">🧪 Order Investigations</button>
-          <div class="lang-sel" style="margin-bottom:0"><button class="lang-btn active" onclick="setLang('en',this)">EN</button><button class="lang-btn" onclick="setLang('hi',this)">हिं</button><button class="lang-btn" onclick="setLang('pa',this)">ਪੰ</button></div>
-        </div>
-        <div style="border-bottom:2px solid var(--bmh-blue);padding-bottom:8px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-          <div style="display:flex;align-items:center;gap:8px">
-            <img src="https://bawejahospital.com/img/logo.png" style="height:22px;width:auto;object-fit:contain" alt="BMH" onerror="this.style.display='none'">
-            <div><div style="font-size:13px;font-weight:900;color:var(--bmh-blue)">Baweja Multispeciality Hospital</div><div style="font-size:10px;color:var(--g1)">Dr. Varun Baweja · MS (Ophth)</div></div>
+          <button class="btn btn-xs btn-outline" onclick="openM('m-order-invest')" style="display:flex;align-items:center;gap:4px">
+            <span>🧪</span> Order Labs
+          </button>
+          <div class="lang-sel" style="margin-bottom:0">
+            <button class="lang-btn active" onclick="setLang('en',this)">EN</button>
+            <button class="lang-btn" onclick="setLang('hi',this)">हिं</button>
+            <button class="lang-btn" onclick="setLang('pa',this)">ਪੰ</button>
           </div>
-          <div style="text-align:right"><div style="font-family:var(--mono);font-size:11px;color:var(--bmh-teal);font-weight:700">BMSH-000001</div><div style="font-size:11px;color:var(--g1)" id="rx-date"></div></div>
         </div>
-        <div style="margin-bottom:8px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px"><div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px">Diagnosis</div><button class="btn btn-xs btn-outline" onclick="addDiagnosis()">+ Add</button></div>
-          <div id="rx-diagnosis-list"></div>
-        </div>
-        <!-- Investigation ordered display -->
-        <div style="margin-bottom:10px" id="oe-inv-display-wrap">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
-            <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px">🧪 Investigations Ordered</div>
-            <button class="btn btn-xs btn-outline" onclick="openM('m-order-invest')">+ Order More</button>
+
+        <!-- Hospital Header -->
+        <div style="border-bottom:3px solid var(--bmh-blue);padding-bottom:10px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;background:linear-gradient(135deg,#f8f9fa,#e9ecef);padding:12px;border-radius:8px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <img src="https://bawejahospital.com/img/logo.png" style="height:28px;width:auto;object-fit:contain;border-radius:4px" alt="BMH" onerror="this.style.display='none'">
+            <div>
+              <div style="font-size:14px;font-weight:900;color:var(--bmh-blue)">Baweja Multispeciality Hospital</div>
+              <div style="font-size:10px;color:var(--g1)">Dr. Varun Baweja · MS (Ophth)</div>
+            </div>
           </div>
-          <div id="oe-inv-ordered-list" style="min-height:24px;font-size:11.5px;color:var(--g1);font-style:italic">None ordered</div>
-        </div>
-        <!-- Drug table header -->
-        <div style="position:relative;margin-bottom:6px">
-          <div style="display:flex;align-items:center;gap:6px;background:var(--blue-lt);border:2px solid var(--blue);border-radius:var(--rsm);padding:7px 10px">
-            <span style="font-size:14px">💊</span>
-            <input type="text" id="rx-quick-search" placeholder="Type drug name to add (e.g. Vigamox, Timolol)…"
-              oninput="rxQuickSearch(this.value)" autocomplete="off"
-              style="flex:1;border:none;background:transparent;outline:none;font-size:13px;font-family:var(--font);font-weight:600">
-            <button class="btn btn-blue btn-xs" onclick="addRxFromQuick()">+ Add</button>
+          <div style="text-align:right">
+            <div style="font-family:var(--mono);font-size:12px;color:var(--bmh-teal);font-weight:700">BMSH-000001</div>
+            <div style="font-size:11px;color:var(--g1)" id="rx-date"></div>
           </div>
-          <div id="rx-quick-dropdown" style="display:none;position:absolute;z-index:200;background:#fff;border:2px solid var(--blue);border-top:none;border-radius:0 0 var(--rsm) var(--rsm);width:100%;max-height:220px;overflow-y:auto;box-shadow:var(--sh-md)"></div>
         </div>
-        <div style="display:grid;grid-template-columns:28px 1fr 80px 110px 90px 60px 60px 36px;gap:5px;padding:5px 8px;background:var(--g6);border-radius:6px;margin-bottom:6px;font-size:9px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px;align-items:center">
-          <span>#</span><span>Drug (Trade → Generic)</span><span>Eye</span><span>Frequency</span><span>Duration</span><span>Taper</span><span>Near</span><span style="cursor:pointer" onclick="openM('m-add-rx-drug')" title="Add drug">➕</span>
+
+        <!-- Diagnosis Section -->
+        <div class="rx-section" style="margin-bottom:12px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <div style="font-size:11px;font-weight:800;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;gap:6px">
+              <span>🔍</span> Diagnosis
+            </div>
+            <button class="btn btn-xs btn-outline" onclick="addDiagnosis()" style="display:flex;align-items:center;gap:4px">
+              <span>+</span> Add
+            </button>
+          </div>
+          <div id="rx-diagnosis-list" style="min-height:40px;padding:8px;background:var(--g6);border-radius:6px;border:1px solid var(--g4)"></div>
         </div>
-        <div id="rx-drugs" style="margin-bottom:4px"></div>
-        <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px">
-          <button class="btn btn-outline btn-sm" onclick="openM('m-add-rx-drug')">+ Full Drug Form</button>
-          <button class="btn btn-gold btn-sm" onclick="openSaveRxTemplate()">📋 Save as Template</button>
+
+        <!-- Investigations Section -->
+        <div class="rx-section" style="margin-bottom:12px" id="oe-inv-display-wrap">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <div style="font-size:11px;font-weight:800;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;gap:6px">
+              <span>🧪</span> Investigations Ordered
+            </div>
+            <button class="btn btn-xs btn-outline" onclick="openM('m-order-invest')" style="display:flex;align-items:center;gap:4px">
+              <span>+</span> Order More
+            </button>
+          </div>
+          <div id="oe-inv-ordered-list" style="min-height:40px;font-size:12px;color:var(--g1);font-style:italic;padding:8px;background:var(--g6);border-radius:6px;border:1px solid var(--g4)">None ordered</div>
         </div>
-        <div style="margin-bottom:10px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
-            <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px">⚕️ Surgery / Procedure Advised</div>
-            <div style="display:flex;gap:5px">
-              <select id="proc-add-dropdown" style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:180px" onchange="addProcFromDropdown(this)">
+
+        <!-- Medications Section -->
+        <div class="rx-section" style="margin-bottom:12px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <div style="font-size:11px;font-weight:800;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;gap:6px">
+              <span>💊</span> Medications
+            </div>
+          </div>
+
+          <!-- Enhanced Quick Search -->
+          <div style="position:relative;margin-bottom:10px">
+            <div style="display:flex;align-items:center;gap:8px;background:linear-gradient(135deg,var(--blue-lt),#e3f2fd);border:2px solid var(--blue);border-radius:8px;padding:8px 12px;box-shadow:0 2px 4px rgba(0,0,0,0.1)">
+              <span style="font-size:16px">💊</span>
+              <input type="text" id="rx-quick-search" placeholder="Type drug name (e.g. Vigamox, Timolol, Pred Forte)…"
+                oninput="rxQuickSearch(this.value)" autocomplete="off"
+                style="flex:1;border:none;background:transparent;outline:none;font-size:14px;font-family:var(--font);font-weight:600;color:var(--tx)">
+              <button class="btn btn-blue btn-sm" onclick="addRxFromQuick()" style="display:flex;align-items:center;gap:4px">
+                <span>+</span> Add
+              </button>
+            </div>
+            <div id="rx-quick-dropdown" style="display:none;position:absolute;z-index:200;background:#fff;border:2px solid var(--blue);border-top:none;border-radius:0 0 8px 8px;width:100%;max-height:240px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.15)"></div>
+          </div>
+
+          <!-- Enhanced Drug Table Header -->
+          <div style="display:grid;grid-template-columns:32px 1fr 85px 125px 95px 65px 40px;gap:6px;padding:8px 10px;background:linear-gradient(135deg,var(--bmh-blue),var(--bmh-teal));border-radius:8px;margin-bottom:8px;font-size:10px;font-weight:800;color:#fff;text-transform:uppercase;letter-spacing:.4px;align-items:center">
+            <span>#</span><span>Drug (Trade → Generic)</span><span>Eye</span><span>Frequency</span><span>Duration</span><span>Taper</span><span style="cursor:pointer;text-align:center" onclick="openM('m-add-rx-drug')" title="Add drug manually">➕</span>
+          </div>
+
+          <!-- Drug List Container -->
+          <div id="rx-drugs" style="border-radius:8px;overflow:hidden;border:1px solid var(--g4);box-shadow:0 1px 3px rgba(0,0,0,0.1)"></div>
+
+          <!-- Action Buttons -->
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+            <button class="btn btn-outline btn-sm" onclick="openM('m-add-rx-drug')" style="display:flex;align-items:center;gap:4px">
+              <span>📝</span> Full Drug Form
+            </button>
+            <button class="btn btn-gold btn-sm" onclick="openSaveRxTemplate()" style="display:flex;align-items:center;gap:4px">
+              <span>📋</span> Save as Template
+            </button>
+          </div>
+        </div>
+
+        <!-- Surgery/Procedure Section -->
+        <div class="rx-section" style="margin-bottom:12px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <div style="font-size:11px;font-weight:800;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;gap:6px">
+              <span>⚕️</span> Surgery / Procedure Advised
+            </div>
+            <div style="display:flex;gap:6px">
+              <select id="proc-add-dropdown" style="font-size:11px;padding:4px 8px;border-radius:6px;min-width:180px;border:1px solid var(--g4)" onchange="addProcFromDropdown(this)">
                 <option value="">— Select from list —</option>
                 <optgroup label="Eye Procedures">
                   <option value="PMICS + IOL Implantation (Left Eye)">PMICS + IOL (Left Eye)</option>
@@ -1458,73 +1537,162 @@ tbody td{padding:8px 9px;font-weight:500;vertical-align:middle}
                 </optgroup>
                 <option value="__custom__">+ Add New Procedure…</option>
               </select>
-              <button class="btn btn-xs btn-orange" onclick="addProcAdvised()">+ Custom</button>
+              <button class="btn btn-xs btn-orange" onclick="addProcAdvised()" style="display:flex;align-items:center;gap:4px">
+                <span>+</span> Custom
+              </button>
             </div>
           </div>
+
           <!-- AI suggested quick-add chips -->
-          <div id="ai-proc-suggestions" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px"></div>
-          <!-- Added procedures list — bold, no charges -->
-          <div id="rx-proc-advised" style="min-height:32px">
-            <div style="font-size:11px;color:var(--g1);padding:5px 8px;font-style:italic;background:var(--g6);border-radius:6px">No procedure advised yet</div>
+          <div id="ai-proc-suggestions" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"></div>
+
+          <!-- Added procedures list -->
+          <div id="rx-proc-advised" style="min-height:44px;padding:10px;background:linear-gradient(135deg,var(--g6),#f8f9fa);border-radius:8px;border:1px solid var(--g4)">
+            <div style="font-size:12px;color:var(--g1);font-style:italic">No procedure advised yet</div>
           </div>
         </div>
-        <!-- Advice section with common options and save template -->
-        <div style="background:#fffbeb;border-radius:var(--rsm);padding:10px 12px;margin-bottom:8px;border:1.5px solid rgba(212,160,23,.4)">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px">
-            <div style="font-size:10px;font-weight:800;color:#8a4200;text-transform:uppercase;letter-spacing:.5px">📋 Advice to Patient</div>
-            <div style="display:flex;gap:5px">
-              <button class="btn btn-xs btn-outline" onclick="openSaveAdviceTemplate()">💾 Save as Template</button>
-              <button class="btn btn-xs" style="background:var(--orange-lt);color:#8a4200;border:1px solid rgba(212,160,23,.5)" onclick="openLoadAdviceTemplate()">📂 Load Template</button>
+
+        <!-- Advice Section -->
+        <div class="rx-section" style="margin-bottom:12px">
+          <div style="background:linear-gradient(135deg,#fffbeb,#fef3c7);border-radius:10px;padding:12px;border:2px solid rgba(212,160,23,.3)">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+              <div style="font-size:11px;font-weight:800;color:#92400e;text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;gap:6px">
+                <span>📋</span> Advice to Patient
+              </div>
+              <div style="display:flex;gap:6px">
+                <button class="btn btn-xs btn-outline" onclick="openSaveAdviceTemplate()" style="display:flex;align-items:center;gap:4px">
+                  <span>💾</span> Save Template
+                </button>
+                <button class="btn btn-xs" style="background:var(--orange-lt);color:#92400e;border:1px solid rgba(212,160,23,.5);display:flex;align-items:center;gap:4px" onclick="openLoadAdviceTemplate()">
+                  <span>📂</span> Load Template
+                </button>
+              </div>
+            </div>
+
+            <!-- Categorized Advice Chips -->
+            <div style="margin-bottom:10px">
+              <div style="font-size:10px;font-weight:700;color:#92400e;margin-bottom:6px;text-transform:uppercase">Eye Care:</div>
+              <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px" id="adv-chips-eye">
+                <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:4px 10px;border-radius:12px;background:#fef3c7;border:1px solid #f59e0b;cursor:pointer;user-select:none;transition:all 0.2s">Avoid rubbing eyes</span>
+                <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:4px 10px;border-radius:12px;background:#fef3c7;border:1px solid #f59e0b;cursor:pointer;user-select:none;transition:all 0.2s">Use dark glasses outdoors</span>
+                <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:4px 10px;border-radius:12px;background:#fef3c7;border:1px solid #f59e0b;cursor:pointer;user-select:none;transition:all 0.2s">Complete eye drops course</span>
+                <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:4px 10px;border-radius:12px;background:#fef3c7;border:1px solid #f59e0b;cursor:pointer;user-select:none;transition:all 0.2s">Avoid swimming</span>
+                <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:4px 10px;border-radius:12px;background:#fef3c7;border:1px solid #f59e0b;cursor:pointer;user-select:none;transition:all 0.2s">Rest eyes — limit screen time</span>
+                <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:4px 10px;border-radius:12px;background:#fef3c7;border:1px solid #f59e0b;cursor:pointer;user-select:none;transition:all 0.2s">No driving after dilation</span>
+              </div>
+
+              <div style="font-size:10px;font-weight:700;color:#92400e;margin-bottom:6px;text-transform:uppercase">General Health:</div>
+              <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px" id="adv-chips-health">
+                <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:4px 10px;border-radius:12px;background:#fef3c7;border:1px solid #f59e0b;cursor:pointer;user-select:none;transition:all 0.2s">Control blood sugar</span>
+                <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:4px 10px;border-radius:12px;background:#fef3c7;border:1px solid #f59e0b;cursor:pointer;user-select:none;transition:all 0.2s">Control blood pressure</span>
+                <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:4px 10px;border-radius:12px;background:#fef3c7;border:1px solid #f59e0b;cursor:pointer;user-select:none;transition:all 0.2s">Pre-op fasting (after midnight)</span>
+                <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:4px 10px;border-radius:12px;background:#fef3c7;border:1px solid #f59e0b;cursor:pointer;user-select:none;transition:all 0.2s">Head elevated post-op</span>
+                <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:4px 10px;border-radius:12px;background:#fef3c7;border:1px solid #f59e0b;cursor:pointer;user-select:none;transition:all 0.2s">Protective shield at night</span>
+              </div>
+            </div>
+
+            <textarea id="rx-advice-text" placeholder="Type additional advice or load from template…" style="width:100%;min-height:56px;font-size:12px;border:2px solid rgba(212,160,23,.3);border-radius:8px;padding:10px 12px;background:#fff;font-family:var(--font);resize:vertical"></textarea>
+          </div>
+        </div>
+
+        <!-- Next Appointment Section -->
+        <div class="rx-section" style="margin-bottom:12px">
+          <div style="background:linear-gradient(135deg,var(--g6),#f1f5f9);border-radius:10px;padding:12px;border:1px solid var(--g4)">
+            <div style="font-size:11px;font-weight:800;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;display:flex;align-items:center;gap:6px">
+              <span>📅</span> Next Appointment
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+              <span style="font-size:10px;color:var(--g1);font-weight:700;align-self:center">Days:</span>
+              <button class="btn btn-xs btn-gray" onclick="setFollowupDays(1,'day')">1D</button>
+              <button class="btn btn-xs btn-gray" onclick="setFollowupDays(2,'day')">2D</button>
+              <button class="btn btn-xs btn-gray" onclick="setFollowupDays(3,'day')">3D</button>
+              <button class="btn btn-xs btn-gray" onclick="setFollowupDays(4,'day')">4D</button>
+              <button class="btn btn-xs btn-gray" onclick="setFollowupDays(5,'day')">5D</button>
+              <span style="font-size:10px;color:var(--g1);font-weight:700;align-self:center;margin-left:6px">Weeks:</span>
+              <button class="btn btn-xs btn-gray" onclick="setFollowupDays(1,'week')">1W</button>
+              <button class="btn btn-xs btn-gray" onclick="setFollowupDays(2,'week')">2W</button>
+              <button class="btn btn-xs btn-gray" onclick="setFollowupDays(3,'week')">3W</button>
+              <button class="btn btn-xs btn-gray" onclick="setFollowupDays(4,'week')">4W</button>
+              <button class="btn btn-xs btn-gray" onclick="setFollowupDays(5,'week')">5W</button>
+              <button class="btn btn-xs btn-gray" onclick="setFollowupDays(6,'week')">6W</button>
+              <span style="font-size:10px;color:var(--g1);font-weight:700;align-self:center;margin-left:6px">Months:</span>
+              <button class="btn btn-xs btn-gray" onclick="setFollowupDays(1,'month')">1M</button>
+              <button class="btn btn-xs btn-gray" onclick="setFollowupDays(2,'month')">2M</button>
+              <button class="btn btn-xs btn-gray" onclick="setFollowupDays(3,'month')">3M</button>
+              <button class="btn btn-xs btn-gray" onclick="setFollowupDays(4,'month')">4M</button>
+              <button class="btn btn-xs btn-gray" onclick="setFollowupDays(5,'month')">5M</button>
+              <button class="btn btn-xs btn-gray" onclick="setFollowupDays(6,'month')">6M</button>
+              <button class="btn btn-xs btn-gray" onclick="setFollowupDays(12,'month')">12M</button>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <input type="date" id="rx-fu-date" style="flex:1;min-width:140px;border-radius:6px;padding:6px;border:1px solid var(--g4)">
+              <button class="btn btn-blue btn-sm" onclick="bookFollowup()" style="display:flex;align-items:center;gap:4px">
+                <span>📅</span> Book
+              </button>
+              <div id="rx-fu-display" style="font-size:12px;color:var(--green);font-weight:700;margin-top:6px"></div>
             </div>
           </div>
-          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:7px" id="adv-chips">
-            <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:3px 8px;border-radius:10px;background:var(--g5);border:1px solid var(--g4);cursor:pointer;user-select:none">Avoid rubbing eyes</span>
-            <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:3px 8px;border-radius:10px;background:var(--g5);border:1px solid var(--g4);cursor:pointer;user-select:none">Use dark glasses outdoors</span>
-            <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:3px 8px;border-radius:10px;background:var(--g5);border:1px solid var(--g4);cursor:pointer;user-select:none">Complete eye drops course</span>
-            <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:3px 8px;border-radius:10px;background:var(--g5);border:1px solid var(--g4);cursor:pointer;user-select:none">Avoid swimming</span>
-            <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:3px 8px;border-radius:10px;background:var(--g5);border:1px solid var(--g4);cursor:pointer;user-select:none">Rest eyes — limit screen time</span>
-            <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:3px 8px;border-radius:10px;background:var(--g5);border:1px solid var(--g4);cursor:pointer;user-select:none">No driving after dilation</span>
-            <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:3px 8px;border-radius:10px;background:var(--g5);border:1px solid var(--g4);cursor:pointer;user-select:none">Control blood sugar</span>
-            <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:3px 8px;border-radius:10px;background:var(--g5);border:1px solid var(--g4);cursor:pointer;user-select:none">Control blood pressure</span>
-            <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:3px 8px;border-radius:10px;background:var(--g5);border:1px solid var(--g4);cursor:pointer;user-select:none">Pre-op fasting (after midnight)</span>
-            <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:3px 8px;border-radius:10px;background:var(--g5);border:1px solid var(--g4);cursor:pointer;user-select:none">Head elevated post-op</span>
-            <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:3px 8px;border-radius:10px;background:var(--g5);border:1px solid var(--g4);cursor:pointer;user-select:none">Protective shield at night</span>
+        </div>
+
+        <!-- Print Options Section -->
+        <div class="rx-section" style="margin-bottom:12px">
+          <div style="background:linear-gradient(135deg,var(--g6),#f8fafc);border-radius:10px;padding:12px;border:1px solid var(--g4)">
+            <div style="font-size:11px;font-weight:800;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;display:flex;align-items:center;gap:6px">
+              <span>🖨️</span> Include in Printout
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px">
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;user-select:none;padding:6px 8px;border-radius:6px;background:#fff;border:1px solid var(--g4);transition:all 0.2s">
+                <input type="checkbox" id="oe-inc-va" checked style="margin:0">
+                <span>👁️ Visual Acuity</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;user-select:none;padding:6px 8px;border-radius:6px;background:#fff;border:1px solid var(--g4);transition:all 0.2s">
+                <input type="checkbox" id="oe-inc-iop" checked style="margin:0">
+                <span>📊 IOP</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;user-select:none;padding:6px 8px;border-radius:6px;background:#fff;border:1px solid var(--g4);transition:all 0.2s">
+                <input type="checkbox" id="oe-inc-refr" checked style="margin:0">
+                <span>🔍 Refraction</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;user-select:none;padding:6px 8px;border-radius:6px;background:#fff;border:1px solid var(--g4);transition:all 0.2s">
+                <input type="checkbox" id="oe-inc-diag" checked style="margin:0">
+                <span>📋 Diagrams</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;user-select:none;padding:6px 8px;border-radius:6px;background:#fff;border:1px solid var(--g4);transition:all 0.2s">
+                <input type="checkbox" id="oe-inc-rx" checked style="margin:0">
+                <span>💊 Medications</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;user-select:none;padding:6px 8px;border-radius:6px;background:#fff;border:1px solid var(--g4);transition:all 0.2s">
+                <input type="checkbox" id="oe-inc-proc" checked style="margin:0">
+                <span>⚕️ Procedures</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;user-select:none;padding:6px 8px;border-radius:6px;background:#fff;border:1px solid var(--g4);transition:all 0.2s">
+                <input type="checkbox" id="oe-inc-gl" style="margin:0">
+                <span>👓 Glass Rx</span>
+              </label>
+            </div>
           </div>
-          <textarea id="rx-advice-text" placeholder="Type additional advice or load from template…" style="width:100%;min-height:52px;font-size:12px;border:1.5px solid rgba(212,160,23,.4);border-radius:6px;padding:7px 9px;background:#fff;font-family:var(--font);resize:vertical"></textarea>
         </div>
-        <div style="background:var(--g6);border-radius:var(--rsm);padding:8px;margin-bottom:8px">
-          <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Next Appointment</div>
-          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">
-            <span style="font-size:9px;color:var(--g1);font-weight:700;align-self:center">D:</span>
-            <button class="btn btn-xs btn-gray" onclick="setFollowupDays(1,'day')">1D</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(2,'day')">2D</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(3,'day')">3D</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(4,'day')">4D</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(5,'day')">5D</button>
-            <span style="font-size:9px;color:var(--g1);font-weight:700;align-self:center;margin-left:4px">W:</span>
-            <button class="btn btn-xs btn-gray" onclick="setFollowupDays(1,'week')">1W</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(2,'week')">2W</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(3,'week')">3W</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(4,'week')">4W</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(5,'week')">5W</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(6,'week')">6W</button>
-            <span style="font-size:9px;color:var(--g1);font-weight:700;align-self:center;margin-left:4px">M:</span>
-            <button class="btn btn-xs btn-gray" onclick="setFollowupDays(1,'month')">1M</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(2,'month')">2M</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(3,'month')">3M</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(4,'month')">4M</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(5,'month')">5M</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(6,'month')">6M</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(12,'month')">12M</button>
-          </div>
-          <div style="display:flex;gap:8px"><input type="date" id="rx-fu-date" style="flex:1"><button class="btn btn-blue btn-sm" onclick="bookFollowup()">📅 Book</button>
-              <div id="rx-fu-display" style="font-size:12px;color:var(--green);font-weight:700;margin-top:5px"></div></div>
-        </div>
-        <div style="background:var(--g6);border-radius:var(--rsm);padding:8px 11px;margin-bottom:10px;border:1.5px solid var(--g4)">
-          <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px">🖨️ Include in Printout</div>
-          <div style="display:flex;gap:14px;flex-wrap:wrap">
-            <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-va" checked> Visual Acuity</label>
-            <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-iop" checked> IOP</label>
-            <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-refr" checked> Refraction</label>
-            <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-diag" checked> Diagrams</label>
-            <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-rx" checked> Medications</label>
-            <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-proc" checked> Procedures Advised</label>
-            <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-gl"> Glass Prescription</label>
+
+        <!-- QR Code and Actions -->
+        <div style="background:linear-gradient(135deg,#0a1628,#1a2d5a);border-radius:12px;padding:14px;display:flex;align-items:center;gap:14px;margin-bottom:12px;flex-wrap:wrap">
+          <canvas id="qr-canvas" width="70" height="70" style="border-radius:8px;background:#fff;padding:4px;flex-shrink:0"></canvas>
+          <div style="color:#fff;flex:1">
+            <div style="font-size:12px;font-weight:900">BMSH-000001 · Test Patient A</div>
+            <div style="font-size:10px;opacity:.7;margin-top:3px">Scan for full record</div>
           </div>
         </div>
-        <div style="background:linear-gradient(135deg,#0a1628,#1a2d5a);border-radius:var(--r);padding:10px;display:flex;align-items:center;gap:12px;margin-bottom:8px;flex-wrap:wrap">
-          <canvas id="qr-canvas" width="66" height="66" style="border-radius:7px;background:#fff;padding:3px;flex-shrink:0"></canvas>
-          <div style="color:#fff;flex:1"><div style="font-size:11.5px;font-weight:900">BMSH-000001 · Test Patient A</div><div style="font-size:10px;opacity:.6;margin-top:2px">Scan for full record</div></div>
-        </div>
-        <div style="display:flex;gap:7px;flex-wrap:wrap">
-          <button class="btn btn-gold" style="flex:1;justify-content:center" onclick="printRx()">🖨️ Print</button>
-          <button class="wa-btn" onclick="showToast('Sent via WhatsApp ✓','s')">📱</button>
-          <button class="btn btn-gray btn-sm" onclick="showToast('SMS sent ✓','s')">📨</button>
+
+        <!-- Final Action Buttons -->
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-gold" style="flex:1;justify-content:center;display:flex;align-items:center;gap:6px;font-size:14px;padding:10px">
+            <span>🖨️</span> Print Prescription
+          </button>
+          <button class="wa-btn" onclick="showToast('Sent via WhatsApp ✓','s')" style="display:flex;align-items:center;gap:4px">
+            <span>📱</span> WhatsApp
+          </button>
+          <button class="btn btn-gray btn-sm" onclick="showToast('SMS sent ✓','s')" style="display:flex;align-items:center;gap:4px">
+            <span>📨</span> SMS
+          </button>
         </div>
       </div>
 
@@ -9614,7 +9782,7 @@ function renderRxDrugs() {
   const el = activePage ? activePage.querySelector('[id="rx-drugs"]') : document.getElementById('rx-drugs');
   if(!el) return;
   if(!RX_DRUGS||!RX_DRUGS.length){
-    el.innerHTML='<div style="padding:14px;text-align:center;color:var(--g1);font-size:12px">No drugs added — type above to search and add</div>';
+    el.innerHTML='<div style="padding:16px;text-align:center;color:var(--g1);font-size:13px;font-style:italic;background:linear-gradient(135deg,var(--g6),#f8f9fa);border-radius:8px;border:1px solid var(--g4)">No medications added — type above to search and add</div>';
     return;
   }
   // Detect active dept to decide whether to show the eye/route column
@@ -9624,22 +9792,22 @@ function renderRxDrugs() {
   const durOpts=['1 Day','3 Days','5 Days','1 Week','2 Weeks','1 Month','3 Months','6 Months','Ongoing'];
   const eyeOpts=['Left Eye (OS)','Right Eye (OD)','Both Eyes (OU)','Oral','Topical','IM / IV'];
   const lang = typeof rxLang!=='undefined'?rxLang:'en';
-  const gridCols = isOphtho ? '26px 1fr 75px 120px 90px 55px 32px' : '26px 1fr 120px 90px 55px 32px';
-  el.innerHTML = RX_DRUGS.map((d,i)=>`<div style="display:grid;grid-template-columns:${gridCols};gap:4px;padding:7px 8px;border-bottom:1px solid var(--g5);align-items:start">
-    <div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-align:center;padding-top:6px">${i+1}</div>
-    <div>
-      <div style="font-size:13px;font-weight:900;color:var(--bmh-blue)">${d.name}</div>
-      ${d.brand&&d.brand!==d.name?`<div style="font-size:10.5px;color:var(--g1);font-style:italic;margin-top:1px">${d.brand}</div>`:''}
-      ${d.lang&&d.lang[lang]?`<div style="font-size:10px;color:var(--tx3);margin-top:2px;line-height:1.5">${d.lang[lang]}</div>`:''}
-      ${d.taper?`<div style="font-size:10px;color:#b55a00;background:var(--orange-lt);border-radius:4px;padding:2px 6px;margin-top:3px;font-weight:700">⬇️ Taper: ${d.taper}</div>`:''}
+  const gridCols = isOphtho ? '32px 1fr 85px 125px 95px 65px 40px' : '32px 1fr 125px 95px 65px 40px';
+  el.innerHTML = RX_DRUGS.map((d,i)=>`<div style="display:grid;grid-template-columns:${gridCols};gap:6px;padding:10px 12px;border-bottom:1px solid var(--g4);align-items:center;background:#fff;transition:all 0.2s hover;hover:background:#f8f9fa">
+    <div style="font-size:12px;font-weight:900;color:var(--bmh-blue);text-align:center;background:var(--bmh-blue);color:#fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;margin:0 auto">${i+1}</div>
+    <div style="padding:4px 0">
+      <div style="font-size:14px;font-weight:900;color:var(--bmh-blue);margin-bottom:2px">${d.name}</div>
+      ${d.brand&&d.brand!==d.name?`<div style="font-size:11px;color:var(--g1);font-style:italic;margin-bottom:2px">${d.brand}</div>`:''}
+      ${d.lang&&d.lang[lang]?`<div style="font-size:10px;color:var(--tx3);line-height:1.4">${d.lang[lang]}</div>`:''}
+      ${d.taper?`<div style="font-size:10px;color:#b55a00;background:var(--orange-lt);border-radius:4px;padding:2px 6px;margin-top:4px;font-weight:700;display:inline-block">⬇️ Taper: ${d.taper}</div>`:''}
     </div>
-    ${isOphtho?`<select onchange="RX_DRUGS[${i}].eye=[this.value]" style="font-size:10px;padding:2px 3px">${eyeOpts.map(e=>`<option${(d.eye&&d.eye[0]===e)?' selected':''}>${e}</option>`).join('')}</select>`:''}
-    <select onchange="RX_DRUGS[${i}].freq=this.value" style="font-size:10px;padding:2px 3px">${freqOpts.map(f=>`<option${d.freq===f?' selected':''}>${f}</option>`).join('')}</select>
-    <select onchange="RX_DRUGS[${i}].dur=this.value" style="font-size:10px;padding:2px 3px">${durOpts.map(f=>`<option${d.dur===f?' selected':''}>${f}</option>`).join('')}</select>
-    <select onchange="if(this.value)addTaperRow(${i},this.value)" style="font-size:10px;padding:2px 3px;${d.taper?'background:var(--orange-lt);color:#b55a00;font-weight:800':''}">
+    ${isOphtho?`<select onchange="RX_DRUGS[${i}].eye=[this.value]" style="font-size:11px;padding:4px 6px;border-radius:6px;border:1px solid var(--g4);background:#fff" title="Select eye or route">${eyeOpts.map(e=>`<option${(d.eye&&d.eye[0]===e)?' selected':''}>${e}</option>`).join('')}</select>`:''}
+    <select onchange="RX_DRUGS[${i}].freq=this.value" style="font-size:11px;padding:4px 6px;border-radius:6px;border:1px solid var(--g4);background:#fff" title="Select frequency">${freqOpts.map(f=>`<option${d.freq===f?' selected':''}>${f}</option>`).join('')}</select>
+    <select onchange="RX_DRUGS[${i}].dur=this.value" style="font-size:11px;padding:4px 6px;border-radius:6px;border:1px solid var(--g4);background:#fff" title="Select duration">${durOpts.map(f=>`<option${d.dur===f?' selected':''}>${f}</option>`).join('')}</select>
+    <select onchange="if(this.value)addTaperRow(${i},this.value)" style="font-size:11px;padding:4px 6px;border-radius:6px;border:1px solid var(--g4);background:${d.taper?'var(--orange-lt)':'#fff'};color:${d.taper?'#b55a00':''};font-weight:${d.taper?'800':''}" title="Set tapering schedule">
       <option value="">${d.taper?'✓ Set':'—'}</option><option value="1w">1W</option><option value="2w">2W</option><option value="4w">4W</option>
     </select>
-    <button class="btn btn-xs btn-gray" onclick="removeDrug(${i})" style="padding:2px 5px;margin-top:4px">✕</button>
+    <button class="btn btn-xs btn-gray" onclick="removeDrug(${i})" style="padding:4px 8px;border-radius:6px;display:flex;align-items:center;justify-content:center" title="Remove drug">✕</button>
   </div>`).join('');
 }
 
@@ -10797,16 +10965,31 @@ function submitDeleteRequest() {
 window.ADVICE_TEMPLATES = window.ADVICE_TEMPLATES || [];
 function toggleAdvChip(el) {
   const active = el.classList.toggle('active');
-  if(active) { el.style.background='var(--orange)'; el.style.color='#fff'; el.style.borderColor='var(--orange)'; }
-  else { el.style.background='var(--g5)'; el.style.color=''; el.style.borderColor='var(--g4)'; }
-  // Update advice textarea with all active chips
-  const chips = [...document.querySelectorAll('#adv-chips .adv-chip.active')].map(c=>c.textContent.trim());
+  if(active) {
+    el.style.background='var(--orange)';
+    el.style.color='#fff';
+    el.style.borderColor='var(--orange)';
+    el.style.transform='scale(1.05)';
+  } else {
+    el.style.background='#fef3c7';
+    el.style.color='#92400e';
+    el.style.borderColor='#f59e0b';
+    el.style.transform='scale(1)';
+  }
+  // Update advice textarea with all active chips from both containers
+  const eyeChips = [...document.querySelectorAll('#adv-chips-eye .adv-chip.active')].map(c=>c.textContent.trim());
+  const healthChips = [...document.querySelectorAll('#adv-chips-health .adv-chip.active')].map(c=>c.textContent.trim());
+  const allChips = [...eyeChips, ...healthChips];
   const ta = document.getElementById('rx-advice-text');
   if(ta) {
-    const existing = ta.value.split('\n').filter(l=>!document.querySelectorAll('#adv-chips .adv-chip').length||true);
-    // Only prepend chip lines
-    const manualText = ta.value.replace(/^• .+(\n|$)/gm,'').trim();
-    ta.value = chips.map(c=>'• '+c).join('\n') + (manualText ? '\n'+manualText : '');
+    // Get existing manual text (anything after the chip list)
+    const currentValue = ta.value;
+    const chipLines = currentValue.split('\n').filter(line => line.startsWith('• '));
+    const manualText = currentValue.split('\n').filter(line => !line.startsWith('• ')).join('\n').trim();
+
+    // Update with new chip list
+    const newChipText = allChips.map(c=>'• '+c).join('\n');
+    ta.value = newChipText + (manualText ? '\n\n'+manualText : '');
   }
 }
 function openSaveAdviceTemplate() {
