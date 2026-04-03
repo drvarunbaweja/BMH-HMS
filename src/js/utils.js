@@ -24,10 +24,6 @@ export function showToast(msg, type = 'i', duration = 3000) {
 }
 window.showToast = showToast  // legacy global
 
-// Page navigation lives in legacy.js (`nav` / `window.nav`). Do not assign
-// window.nav here — ES modules load after legacy and would replace the full
-// nav chain (sidebar uses short ids like 'reception'; post-login uses 'pg-*').
-
 // ── Modal helpers ────────────────────────────────────────────────────────────
 export function openModal(id) {
   const el = document.getElementById(id)
@@ -58,9 +54,26 @@ export function formatTime(iso) {
   return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
 }
 
-// ── ID generators ────────────────────────────────────────────────────────────
+// ── ID generators (UPGRADED - CHRONOLOGICAL) ─────────────────────────────────
 export function newBmhId() {
-  return 'BMSH-' + Math.floor(Math.random() * 900000 + 100000)
+  // Base starting ID. If no patients exist, it starts at BMSH-461001
+  const BASE_ID = 461000;
+  let maxId = BASE_ID;
+
+  // Scan all existing patients to find the highest chronological number
+  if (typeof window !== 'undefined' && Array.isArray(window.PATIENTS)) {
+    for (const p of window.PATIENTS) {
+      if (p.bmhId && p.bmhId.startsWith('BMSH-')) {
+        const num = parseInt(p.bmhId.replace('BMSH-', ''), 10);
+        if (!isNaN(num) && num > maxId) {
+          maxId = num;
+        }
+      }
+    }
+  }
+  
+  // Return the absolute highest ID + 1
+  return 'BMSH-' + (maxId + 1);
 }
 
 // ── String helpers ───────────────────────────────────────────────────────────
