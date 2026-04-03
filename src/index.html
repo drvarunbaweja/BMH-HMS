@@ -3751,24 +3751,21 @@
 <div class="modal-ov" id="m-add-rx-drug">
 <div class="modal"><div class="modal-hd"><div class="modal-title">💊 Add Drug / Drop</div><button class="modal-close" onclick="closeM('m-add-rx-drug')">✕</button></div>
 <div class="fg fg1" style="gap:9px">
-  <div class="form-group"><label class="fl">Type</label><select id="new-rx-type"><option>Eye Drop</option><option>Tablet</option><option>Capsule</option><option>Ointment</option><option>Injection</option><option>Syrup</option><option>Pessary</option><option>Gel</option><option>Cream</option></select></div>
+  <div class="form-group"><label class="fl">Type</label><select id="new-rx-type"><option>Eye Drop</option><option>Tablet</option><option>Capsule</option><option>Ointment</option><option>Injection</option><option>Syrup</option><option>Pessary</option><option>Gel</option><option>Cream</option><option>Lotion</option><option>Spray</option></select></div>
   <div class="form-group"><label class="fl">Trade Name (Brand)</label>
     <input type="text" id="new-rx-trade" placeholder="e.g. Vigamox" oninput="lookupGeneric(this.value)" list="drug-trade-list">
     <datalist id="drug-trade-list"></datalist>
   </div>
   <div class="form-group"><label class="fl">Generic Name (auto-fills)</label><input type="text" id="new-rx-generic" placeholder="Generic name (auto)"></div>
   <div class="fg">
-    <div class="form-group"><label class="fl">Eye / Site</label><select id="new-rx-eye"><option>Left Eye (OS)</option><option>Right Eye (OD)</option><option>Both Eyes (OU)</option><option>Oral</option><option>Topical</option><option>IM / IV</option></select></div>
+    <div class="form-group"><label class="fl">Eye / Site</label><select id="new-rx-eye"><option>Right Eye (OD)</option><option>Left Eye (OS)</option><option>Both Eyes (OU)</option><option>Oral</option><option>Topical</option><option>IM / IV</option><option>Nasal</option><option>Ear</option><option>Vaginal</option></select></div>
     <div class="form-group"><label class="fl">Frequency</label><select id="new-rx-freq">
-      <option>Once daily (OD)</option><option>Twice daily (BD)</option><option>Three times (TDS)</option>
-      <option>Four times (QID)</option><option>Six times (6x/day)</option><option>Hourly</option>
-      <option>At bedtime (HS)</option><option>As needed (PRN)</option>
+      <option>Half-hourly</option><option>Hourly</option><option>Every 2 hours</option><option>Every 3 hours</option><option>Every 4 hours</option><option>Six times daily (6x/day)</option><option>Four times daily (QID)</option><option>Three times daily (TDS)</option><option>Twice daily (BD)</option><option>Once daily (OD)</option><option>At bedtime (HS)</option><option>Once weekly</option><option>As needed (PRN)</option>
     </select></div>
     <div class="form-group"><label class="fl">Duration</label><select id="new-rx-dur">
-      <option>1 Day</option><option>3 Days</option><option>5 Days</option><option>1 Week</option>
-      <option>2 Weeks</option><option>1 Month</option><option>3 Months</option><option>6 Months</option><option>Ongoing</option>
+      <option>½ day</option><option>1 day</option><option>2 days</option><option>3 days</option><option>4 days</option><option>5 days</option><option>6 days</option><option>7 days</option><option>1 week</option><option>2 weeks</option><option>3 weeks</option><option>4 weeks</option><option>6 weeks</option><option>1 month</option><option>2 months</option><option>3 months</option><option>4 months</option><option>5 months</option><option>6 months</option><option>12 months</option><option>Ongoing</option>
     </select></div>
-    <div class="form-group"><label class="fl">Taper?</label><select id="new-rx-taper"><option value="">No taper</option><option value="1w">Weekly taper</option><option value="2w">2-weekly taper</option></select></div>
+    <div class="form-group"><label class="fl">Taper?</label><select id="new-rx-taper"><option value="">No taper</option><option value="same">Add taper row</option></select></div>
   </div>
   <div class="form-group"><label class="fl">Instructions</label><input type="text" id="new-rx-inst" placeholder="e.g. Apply pea-sized amount at night"></div>
   <div style="display:flex;gap:8px">
@@ -3824,19 +3821,13 @@
   <div class="ptab" onclick="ptab(this,'inv-eye')">👁️ Eye Investigations</div>
 </div>
 <div class="tab-content active" id="inv-blood">
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="inv-blood-list">
-    ${[['CBC (Complete Blood Count)','850'],['Fasting Blood Sugar','250'],['HbA1c','600'],['Serum Creatinine','350'],['Urea & Electrolytes','700'],['Liver Function Tests','900'],['Coagulation Profile','1200'],['HIV','400'],['HbsAg','300'],['VDRL','300']].map(([n,p])=>`<div data-price="${p}" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--g6);border-radius:8px;cursor:pointer" onclick="toggleInvestigation(this,'${n}',${p})"><input type="checkbox" style="width:16px;height:16px;flex-shrink:0"><div style="flex:1"><div style="font-size:12px;font-weight:700">${n}</div><div style="font-size:10px;color:var(--g1)">₹${parseInt(p).toLocaleString('en-IN')}</div></div></div>`).join('')}
-  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="inv-blood-list"></div>
 </div>
 <div class="tab-content" id="inv-diag">
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-    ${[['Chest X-Ray','600'],['ECG','350'],['Echocardiography','2500'],['USG Abdomen','1200'],['MRI Brain','8000'],['CT Scan Head','5000']].map(([n,p])=>`<div data-price="${p}" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--g6);border-radius:8px;cursor:pointer" onclick="toggleInvestigation(this,'${n}',${p})"><input type="checkbox" style="width:16px;height:16px;flex-shrink:0"><div style="flex:1"><div style="font-size:12px;font-weight:700">${n}</div><div style="font-size:10px;color:var(--g1)">₹${parseInt(p).toLocaleString('en-IN')}</div></div></div>`).join('')}
-  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="inv-diag-list"></div>
 </div>
 <div class="tab-content" id="inv-eye">
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-    ${[['Biometry (IOL Master)','1200'],['OCT Macula OU','1800'],['OCT Optic Disc OU','1800'],['HVF Visual Fields','1500'],['Fundus Photography','600'],['Corneal Topography','1500'],['Specular Microscopy','1200'],['ERG / VEP','2500'],['Fluorescein Angiography','4000']].map(([n,p])=>`<div data-price="${p}" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--g6);border-radius:8px;cursor:pointer" onclick="toggleInvestigation(this,'${n}',${p})"><input type="checkbox" style="width:16px;height:16px;flex-shrink:0"><div style="flex:1"><div style="font-size:12px;font-weight:700">${n}</div><div style="font-size:10px;color:var(--g1)">₹${parseInt(p).toLocaleString('en-IN')}</div></div></div>`).join('')}
-  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="inv-eye-list"></div>
 </div>
 <div style="margin-top:12px;padding:10px;background:var(--g6);border-radius:var(--rsm)">
   <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:6px">Selected Investigations</div>
