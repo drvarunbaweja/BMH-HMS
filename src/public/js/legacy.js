@@ -1751,6 +1751,8 @@ function buildOphthoCaseSheetHtml() {
   const nctTOS = document.getElementById('iop-nct-os-t')?.value || '—';
   const pachOD = document.getElementById('pachy-od')?.value    || '—';
   const pachOS = document.getElementById('pachy-os')?.value    || '—';
+  const gonioOD = document.getElementById('gonio-od')?.value   || '—';
+  const gonioOS = document.getElementById('gonio-os')?.value   || '—';
   const corrOD = document.getElementById('iop-corr-od')?.textContent?.trim() || '—';
   const corrOS = document.getElementById('iop-corr-os')?.textContent?.trim() || '—';
 
@@ -1834,63 +1836,100 @@ function buildOphthoCaseSheetHtml() {
       <td style="border:1px solid #aaa;padding:1px 2px;font-size:5.5px;line-height:1.15">${escHtml(rx)}</td>
     </tr>`;
   }).join('');
-  const tdExam = (v) => `<td style="text-align:center;padding:1px 2px;border:1px solid #888;font-size:6px;line-height:1.15;word-break:break-all">${escHtml(v)}</td>`;
-  const examTableHtml = `<table style="width:100%;border-collapse:collapse;table-layout:fixed;margin-top:2px">
-<colgroup><col style="width:4%"><col style="width:5%"><col style="width:5%"><col style="width:5%"><col style="width:5%"><col style="width:5%"><col style="width:5%"><col style="width:5%"><col style="width:5%"><col style="width:5%"><col style="width:5%"><col style="width:5%"><col style="width:5%"></colgroup>
+  const examHead = (label, bg, fg) => `<th style="border:1px solid #555;padding:4px 3px;font-size:8px;background:${bg};color:${fg};text-transform:uppercase;letter-spacing:.2px">${label}</th>`;
+  const examCell = (v) => `<td style="text-align:center;padding:5px 4px;border:1px solid #777;font-size:8.5px;font-weight:700;line-height:1.2">${escHtml(v)}</td>`;
+  const examBlank = () => `<td style="text-align:center;padding:7px 4px;border:1px solid #777;font-size:8px;font-weight:700;line-height:1.2;color:#666">____________</td>`;
+  const examTableHtml = `<table style="width:100%;border-collapse:collapse;table-layout:fixed;margin-top:3px">
+<colgroup>
+  <col style="width:6.5%"><col style="width:6.5%"><col style="width:6.5%"><col style="width:6.5%">
+  <col style="width:7.5%"><col style="width:7.5%"><col style="width:6.5%">
+  <col style="width:7.5%"><col style="width:7.5%"><col style="width:6.5%">
+  <col style="width:7.5%"><col style="width:7.5%"><col style="width:6.5%"><col style="width:8%">
+</colgroup>
 <thead>
-<tr style="background:#e8e8e8">
-  <th rowspan="2" style="border:1px solid #666;padding:2px 1px;font-size:6px;vertical-align:middle">Eye</th>
-  <th colspan="3" style="border:1px solid #666;padding:2px;font-size:6.5px">Visual acuity</th>
-  <th colspan="3" style="border:1px solid #666;padding:2px;font-size:6.5px">Spectacle glasses</th>
-  <th colspan="3" style="border:1px solid #666;padding:2px;font-size:6.5px">AR / Cycloplegic</th>
-  <th colspan="3" style="border:1px solid #666;padding:2px;font-size:6.5px">Subjective</th>
+<tr>
+  <th rowspan="2" style="border:1px solid #555;padding:5px 3px;font-size:8px;background:#e9edf3">Eye</th>
+  <th colspan="4" style="border:1px solid #555;padding:5px 3px;font-size:8.5px;background:#dfeeff;color:#0f4c81">VA</th>
+  <th colspan="3" style="border:1px solid #555;padding:5px 3px;font-size:8.5px;background:#e8f5e9;color:#165b2f">Current Glasses</th>
+  <th colspan="3" style="border:1px solid #555;padding:5px 3px;font-size:8.5px;background:#efe6ff;color:#5c2a9d">AR / Cycloplegic</th>
+  <th colspan="4" style="border:1px solid #555;padding:5px 3px;font-size:8.5px;background:#fff1df;color:#8a4200">Subjective Refraction</th>
 </tr>
 <tr>
-  ${['UC','BC','PH'].map(h => `<th style="border:1px solid #666;padding:1px;font-size:5.5px">${h}</th>`).join('')}
-  ${['Sph','Cyl','Ax'].map(h => `<th style="border:1px solid #666;padding:1px;font-size:5.5px">G${h[0]}</th>`).join('')}
-  ${['Sph','Cyl','Ax'].map(h => `<th style="border:1px solid #666;padding:1px;font-size:5.5px">C${h[0]}</th>`).join('')}
-  ${['Sph','Cyl','Ax'].map(h => `<th style="border:1px solid #666;padding:1px;font-size:5.5px">S${h[0]}</th>`).join('')}
+  ${examHead('UCVA','#dfeeff','#0f4c81')}
+  ${examHead('BCVA','#dfeeff','#0f4c81')}
+  ${examHead('PH','#dfeeff','#0f4c81')}
+  ${examHead('Near','#dfeeff','#0f4c81')}
+  ${examHead('Sph','#e8f5e9','#165b2f')}
+  ${examHead('Cyl','#e8f5e9','#165b2f')}
+  ${examHead('Axis','#e8f5e9','#165b2f')}
+  ${examHead('Sph','#efe6ff','#5c2a9d')}
+  ${examHead('Cyl','#efe6ff','#5c2a9d')}
+  ${examHead('Axis','#efe6ff','#5c2a9d')}
+  ${examHead('Sph','#fff1df','#8a4200')}
+  ${examHead('Cyl','#fff1df','#8a4200')}
+  ${examHead('Axis','#fff1df','#8a4200')}
+  ${examHead('VA','#fff1df','#8a4200')}
 </tr>
 </thead>
 <tbody>
 <tr>
-  <td style="font-weight:900;text-align:center;border:1px solid #666;padding:2px 1px;font-size:6px">OD</td>
-  ${tdExam(ucvaOD)}${tdExam(bcvaOD)}${tdExam(phOD)}
-  ${tdExam(rf.odSph2)}${tdExam(rf.odCyl2)}${tdExam(rf.odAx2)}
-  ${tdExam(rf.cycODsph)}${tdExam(rf.cycODcyl)}${tdExam(rf.cycODax)}
-  ${tdExam(rf.subjODsph)}${tdExam(rf.subjODcyl)}${tdExam(rf.subjODax)}
+  <td style="font-weight:900;text-align:center;border:1px solid #555;padding:6px 3px;font-size:9px;background:#eef5ff;color:#0f4c81">OD</td>
+  ${examCell(ucvaOD)}${examCell(bcvaOD)}${examCell(phOD)}${examCell(document.getElementById('ucva-od-near')?.value || '—')}
+  ${examCell(rf.odSph2)}${examCell(rf.odCyl2)}${examCell(rf.odAx2)}
+  ${examCell(rf.cycODsph)}${examCell(rf.cycODcyl)}${examCell(rf.cycODax)}
+  ${examCell(rf.subjODsph)}${examCell(rf.subjODcyl)}${examCell(rf.subjODax)}${examBlank()}
 </tr>
 <tr>
-  <td style="font-weight:900;text-align:center;border:1px solid #666;padding:2px 1px;font-size:6px">OS</td>
-  ${tdExam(ucvaOS)}${tdExam(bcvaOS)}${tdExam(phOS)}
-  ${tdExam(rf.osSph2)}${tdExam(rf.osCyl2)}${tdExam(rf.osAx2)}
-  ${tdExam(rf.cycOSsph)}${tdExam(rf.cycOScyl)}${tdExam(rf.cycOSax)}
-  ${tdExam(rf.subjOSsph)}${tdExam(rf.subjOScyl)}${tdExam(rf.subjOSax)}
+  <td style="font-weight:900;text-align:center;border:1px solid #555;padding:6px 3px;font-size:9px;background:#edf9f0;color:#165b2f">OS</td>
+  ${examCell(ucvaOS)}${examCell(bcvaOS)}${examCell(phOS)}${examCell(document.getElementById('ucva-os-near')?.value || '—')}
+  ${examCell(rf.osSph2)}${examCell(rf.osCyl2)}${examCell(rf.osAx2)}
+  ${examCell(rf.cycOSsph)}${examCell(rf.cycOScyl)}${examCell(rf.cycOSax)}
+  ${examCell(rf.subjOSsph)}${examCell(rf.subjOScyl)}${examCell(rf.subjOSax)}${examBlank()}
 </tr>
 </tbody>
 </table>
-<div style="font-size:6.5px;margin-top:3px;line-height:1.3"><b>Colour vision:</b> OD ${escHtml(cvOD)} · OS ${escHtml(cvOS)}</div>`;
-  const tdIop = (v) => `<td style="text-align:center;padding:1px 2px;border:1px solid #888;font-size:5.5px;line-height:1.1;word-break:break-all">${escHtml(v)}</td>`;
-  const iopTableHtml = `<table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:5.5px;line-height:1.1;margin-top:2px">
-<thead><tr style="background:#eee">
-  <th style="border:1px solid #888;padding:1px 2px;width:11%">Method</th>
-  <th style="border:1px solid #888;padding:1px 2px">OD</th>
-  <th style="border:1px solid #888;padding:1px 2px">OS</th>
-  <th style="border:1px solid #888;padding:1px 2px">Time OD</th>
-  <th style="border:1px solid #888;padding:1px 2px">Time OS</th>
+<div style="font-size:8.2px;margin-top:5px;line-height:1.35"><b>Colour vision:</b> OD ${escHtml(cvOD)} · OS ${escHtml(cvOS)}</div>`;
+  const tdIop = (v) => `<td style="text-align:center;padding:5px 4px;border:1px solid #777;font-size:8.3px;font-weight:700;line-height:1.2">${escHtml(v)}</td>`;
+  const iopTableHtml = `<table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:8.2px;line-height:1.18;margin-top:3px">
+<thead><tr style="background:#eef1f6">
+  <th style="border:1px solid #777;padding:4px 5px;width:20%">Method</th>
+  <th style="border:1px solid #777;padding:4px 5px">OD</th>
+  <th style="border:1px solid #777;padding:4px 5px">OS</th>
+  <th style="border:1px solid #777;padding:4px 5px">Time OD</th>
+  <th style="border:1px solid #777;padding:4px 5px">Time OS</th>
 </tr></thead>
 <tbody>
 <tr>
-  <td style="border:1px solid #888;padding:1px 2px;font-weight:700">GAT</td>
+  <td style="border:1px solid #777;padding:5px 4px;font-weight:800;background:#fff7e0;color:#8a4200">GAT</td>
   ${tdIop(gatOD)}${tdIop(gatOS)}${tdIop(gatTOD)}${tdIop(gatTOS)}
 </tr>
 <tr>
-  <td style="border:1px solid #888;padding:1px 2px;font-weight:700">NCT</td>
+  <td style="border:1px solid #777;padding:5px 4px;font-weight:800;background:#e8f0fe;color:#0f4c81">NCT</td>
   ${tdIop(nctOD)}${tdIop(nctOS)}${tdIop(nctTOD)}${tdIop(nctTOS)}
 </tr>
+</tbody>
+</table>`;
+  const gonioPachyHtml = `<table style="width:100%;border-collapse:collapse;table-layout:fixed;margin-top:3px">
+<thead><tr style="background:#f4edff">
+  <th style="border:1px solid #777;padding:4px 5px;font-size:8px">Item</th>
+  <th style="border:1px solid #777;padding:4px 5px;font-size:8px">OD</th>
+  <th style="border:1px solid #777;padding:4px 5px;font-size:8px">OS</th>
+</tr></thead>
+<tbody>
 <tr>
-  <td style="border:1px solid #888;padding:1px 2px;font-weight:700">Pachy (μm)</td>
-  ${tdIop(pachOD)}${tdIop(pachOS)}<td style="border:1px solid #888;padding:1px 3px;text-align:center;font-size:5px;line-height:1.15" colspan="2">Ehlers OD ${escHtml(corrOD)} · OS ${escHtml(corrOS)}</td>
+  <td style="border:1px solid #777;padding:5px 4px;font-weight:800;background:#f7f2ff;color:#5c2a9d">Pachymetry</td>
+  ${tdIop(pachOD)}
+  ${tdIop(pachOS)}
+</tr>
+<tr>
+  <td style="border:1px solid #777;padding:5px 4px;font-weight:800;background:#f7f2ff;color:#5c2a9d">Corrected IOP</td>
+  ${tdIop(corrOD)}
+  ${tdIop(corrOS)}
+</tr>
+<tr>
+  <td style="border:1px solid #777;padding:5px 4px;font-weight:800;background:#f7f2ff;color:#5c2a9d">Gonioscopy</td>
+  ${tdIop(gonioOD)}
+  ${tdIop(gonioOS)}
 </tr>
 </tbody>
 </table>`;
@@ -1919,7 +1958,7 @@ function buildOphthoCaseSheetHtml() {
   const ocularBlock = `
 <div style="margin-top:3px;page-break-inside:avoid">
 <h2 style="font-size:8px;margin:2px 0 1px;padding:0">Slit lamp &amp; fundus</h2>
-<div style="display:grid;grid-template-columns:minmax(0,.96fr) 196px minmax(0,.96fr);grid-template-rows:auto auto;gap:2px 4px;align-items:start;width:100%">
+<div style="display:grid;grid-template-columns:minmax(0,1fr) 232px minmax(0,1fr);grid-template-rows:auto auto;gap:3px 6px;align-items:start;width:100%">
   <div style="grid-column:1;grid-row:1;min-width:0">
     <div style="font-size:6px;font-weight:900;margin:0 0 1px;color:#1a4a8c">${lblEye('od')} — Ant.</div>
     ${anteriorPrint('od')}
@@ -1936,10 +1975,10 @@ function buildOphthoCaseSheetHtml() {
     <div style="font-size:6px;font-weight:900;margin:0 0 1px;color:#1a7a4a">${lblEye('os')} — Post.</div>
     ${posteriorPrint('os')}
   </div>
-  <div style="grid-column:2;grid-row:1 / span 2;align-self:center;justify-self:center;padding:3px;border:1px solid #333;border-radius:3px;background:#fff;max-width:196px;width:100%">
-    <div style="font-size:5.9px;font-weight:900;text-align:center;margin-bottom:2px;line-height:1.18">Lids · Cornea · Lens · Fundus</div>
+  <div style="grid-column:2;grid-row:1 / span 2;align-self:center;justify-self:center;padding:4px;border:1px solid #333;border-radius:3px;background:#fff;max-width:232px;width:100%">
+    <div style="font-size:6.8px;font-weight:900;text-align:center;margin-bottom:2px;line-height:1.18">Lids · Cornea · Lens · Fundus</div>
     ${ocularDiagramsHtml}
-    ${slNotes ? `<div style="font-size:5px;color:#222;margin-top:3px;text-align:left;line-height:1.15;white-space:pre-wrap;border-top:1px solid #ddd;padding-top:2px">${escHtml(slNotes)}</div>` : ''}
+    ${slNotes ? `<div style="font-size:5.8px;color:#222;margin-top:3px;text-align:left;line-height:1.15;white-space:pre-wrap;border-top:1px solid #ddd;padding-top:2px">${escHtml(slNotes)}</div>` : ''}
   </div>
 </div>
 </div>`;
@@ -1947,14 +1986,14 @@ function buildOphthoCaseSheetHtml() {
   // ── build HTML ────────────────────────────────────────────────────────
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Case Sheet — ${ptName}</title><style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-body{font-family:Arial,Helvetica,sans-serif;color:#111;padding:1mm 1.8mm;font-size:8.2px;line-height:1.18}
-@page{size:A4 portrait;margin:1.2mm}
+body{font-family:Arial,Helvetica,sans-serif;color:#111;padding:1.2mm 2mm;font-size:9.2px;line-height:1.2}
+@page{size:A4 portrait;margin:1.5mm}
 @media print{body{padding:0}}
 h1{font-size:12px;font-weight:900;text-align:center;letter-spacing:.5px;text-transform:uppercase;border-bottom:1.5px solid #111;padding-bottom:2px;margin-bottom:3px}
-h2{font-size:8px;font-weight:900;text-transform:uppercase;letter-spacing:.3px;border-bottom:1px solid #111;padding-bottom:1px;margin-bottom:2px;margin-top:4px}
-table{width:100%;border-collapse:collapse;font-size:7.3px}
-th,td{border:1px solid #555;padding:1px 2px}
-th{background:#eee;font-weight:900;text-align:center;font-size:6.7px}
+h2{font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.3px;border-bottom:1px solid #111;padding-bottom:1px;margin-bottom:2px;margin-top:4px}
+table{width:100%;border-collapse:collapse;font-size:8.2px}
+th,td{border:1px solid #555;padding:2px 3px}
+th{background:#eee;font-weight:900;text-align:center;font-size:7.6px}
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:4px}
 .label{font-weight:700;font-size:6px;color:#555;text-transform:uppercase}
 .val{font-size:7px;font-weight:900}
@@ -2001,19 +2040,23 @@ th{background:#eee;font-weight:900;text-align:center;font-size:6.7px}
   </div>
 </div>
 
-<!-- VA + IOP side-by-side to save vertical space -->
-<div style="margin-top:2px;display:grid;grid-template-columns:1fr 1fr;gap:4px;align-items:start">
+<div style="margin-top:3px">
+  <h2 style="margin:0 0 2px;font-size:8.8px">VA / refraction</h2>
+  ${examTableHtml}
+</div>
+
+<div style="margin-top:4px;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);gap:6px;align-items:start">
   <div>
-    <h2 style="margin:0 0 1px;font-size:7.5px">VA / refraction</h2>
-    ${examTableHtml}
+    <h2 style="margin:0 0 2px;font-size:8.8px">IOP</h2>
+    ${iopTableHtml}
   </div>
   <div>
-    <h2 style="margin:0 0 1px;font-size:7.5px">IOP</h2>
-    ${iopTableHtml}
+    <h2 style="margin:0 0 2px;font-size:8.8px">Gonioscopy & pachymetry</h2>
+    ${gonioPachyHtml}
   </div>
 </div>
 
-${positiveFindingsEnabled ? ocularBlock : ''}
+${ocularBlock}
 
 <!-- DIAGNOSIS & PLAN -->
 <h2 style="font-size:7.5px;margin-top:3px">Diagnosis</h2>
@@ -7734,8 +7777,8 @@ function addRxFromQuick() {
     dur = normalizeRxDurationLabel(drug.dur || '1 week');
     eyeVal = drugType === 'Eye Drop' ? 'Both Eyes (OU)' : 'Oral';
   } else if (drug._from === 'full') {
-    trade = drug.name || '';
-    generic = drug.brand || '';
+    trade = drug.brand || drug.trade || drug.name || '';
+    generic = drug.name || drug.generic || trade;
     drugType = drug.type || 'Drug';
     let ev = drug.eye || 'Oral';
     eyeVal = typeof ev === 'string' ? ev : (Array.isArray(ev) ? ev[0] : 'Oral');
@@ -7814,41 +7857,44 @@ function renderRxDrugs() {
     }
   });
 
-  el.innerHTML = RX_DRUGS.map((d,i)=>{
+  el.innerHTML = `<div style="border:1px solid var(--g5);border-radius:12px;overflow:hidden;background:#fff">
+    <div style="display:grid;grid-template-columns:34px minmax(220px,1.4fr) minmax(95px,.7fr) minmax(110px,.7fr) minmax(150px,.9fr) minmax(120px,.7fr) minmax(210px,1fr) 80px;gap:0;background:var(--bmh-blue);color:#fff;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.4px">
+      <div style="padding:10px 8px;border-right:1px solid rgba(255,255,255,.14)">#</div>
+      <div style="padding:10px 8px;border-right:1px solid rgba(255,255,255,.14)">Medicine</div>
+      <div style="padding:10px 8px;border-right:1px solid rgba(255,255,255,.14)">Type</div>
+      <div style="padding:10px 8px;border-right:1px solid rgba(255,255,255,.14)">${isOphtho ? 'Eye' : 'Route'}</div>
+      <div style="padding:10px 8px;border-right:1px solid rgba(255,255,255,.14)">Frequency</div>
+      <div style="padding:10px 8px;border-right:1px solid rgba(255,255,255,.14)">Duration</div>
+      <div style="padding:10px 8px;border-right:1px solid rgba(255,255,255,.14)">Dates</div>
+      <div style="padding:10px 8px">Action</div>
+    </div>
+    ${RX_DRUGS.map((d,i)=>{
     const tr = rxDrugTradeName(d) || '';
     const gen = rxDrugGenericName(d) || '';
     const dt = d.drugType || d.type || 'Tablet';
     const eye0 = (d.eye && d.eye[0]) || 'Oral';
     const tap = d.taperRow;
-    const eyeCol = isOphtho ? 'Eye' : 'Route';
     const taperOpen = tap ? ' open' : '';
-    return `<div class="rx-drug-row" style="border:1px solid var(--g5);border-radius:12px;margin-bottom:12px;background:#fff;overflow:hidden;box-shadow:0 1px 0 rgba(0,0,0,.04)">
-    <div style="padding:14px 16px;background:var(--g6)">
-      <div style="display:grid;grid-template-columns:minmax(0,1.25fr) repeat(4,minmax(110px,.55fr)) minmax(190px,.9fr) auto;gap:10px 12px;align-items:end">
-        <div style="min-width:0">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-            <div style="font-size:13px;font-weight:900;color:var(--bmh-blue);min-width:18px">${i+1}</div>
-            <div style="font-size:9px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.45px">Medicine</div>
-          </div>
-          <input value="${String(tr).replace(/"/g,'&quot;')}" onchange="RX_DRUGS[${i}].trade=this.value;RX_DRUGS[${i}].brand=this.value" placeholder="Trade name" style="width:100%;font-size:16px;font-weight:900;border:none;background:#fff;border-radius:8px;padding:8px 10px;box-sizing:border-box">
-          <input value="${String(gen).replace(/"/g,'&quot;')}" onchange="RX_DRUGS[${i}].generic=this.value;RX_DRUGS[${i}].name=this.value" placeholder="(Generic name)" style="width:100%;font-size:12px;color:var(--g1);font-style:italic;border:none;background:#fff;border-radius:8px;padding:7px 10px;box-sizing:border-box;margin-top:6px">
-        </div>
-        <div style="min-width:0"><div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:4px">Type</div>
-          <select onchange="RX_DRUGS[${i}].drugType=this.value;RX_DRUGS[${i}].type=this.value" style="font-size:11px;padding:8px 8px;width:100%;border-radius:8px;border:1px solid var(--g4)">${typeOpts.map(t=>`<option${dt===t?' selected':''}>${t}</option>`).join('')}</select></div>
-        <div style="min-width:0"><div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:4px">${eyeCol}</div>
-          <select onchange="RX_DRUGS[${i}].eye=[this.value]" style="font-size:11px;padding:8px 8px;width:100%;border-radius:8px;border:1px solid var(--g4)">${eyeOpts.map(e=>`<option${eye0===e?' selected':''}>${e}</option>`).join('')}</select></div>
-        <div style="min-width:0"><div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:4px">Frequency</div>
-          <select onchange="RX_DRUGS[${i}].freq=this.value" style="font-size:11px;padding:8px 8px;width:100%;border-radius:8px;border:1px solid var(--g4)">${freqOpts.map(f=>`<option${(d.freq===f)?' selected':''}>${f}</option>`).join('')}</select></div>
-        <div style="min-width:0"><div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:4px">Duration</div>
-          <select onchange="RX_DRUGS[${i}].dur=this.value;syncRxDrugDates(${i})" style="font-size:11px;padding:8px 8px;width:100%;border-radius:8px;border:1px solid var(--g4)">${durOpts.map(f=>`<option${d.dur===f?' selected':''}>${f}</option>`).join('')}</select></div>
-        <div style="min-width:0"><div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:4px">Dates</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px"><input type="date" value="${d.dateFrom||''}" onchange="RX_DRUGS[${i}].dateFrom=this.value;syncRxDrugDates(${i})" style="font-size:11px;padding:7px 8px;border-radius:8px;border:1px solid var(--g4);width:100%"><input type="date" value="${d.dateTo||''}" onchange="RX_DRUGS[${i}].dateTo=this.value" style="font-size:11px;padding:7px 8px;border-radius:8px;border:1px solid var(--g4);width:100%"></div></div>
-        <div style="display:flex;flex-direction:column;gap:8px;align-items:stretch;min-width:88px">
-          <button type="button" class="btn btn-xs btn-gray" onclick="removeDrug(${i})" title="Remove">✕ Remove</button>
-          <button type="button" class="btn btn-xs btn-outline" onclick="addTaperRow(${i}, RX_DRUGS[${i}].dur || '1 week')">⚖️ Taper</button>
-        </div>
+    return `<div class="rx-drug-row" style="border-top:${i ? '1px solid var(--g5)' : 'none'};background:#fff">
+    <div style="display:grid;grid-template-columns:34px minmax(220px,1.4fr) minmax(95px,.7fr) minmax(110px,.7fr) minmax(150px,.9fr) minmax(120px,.7fr) minmax(210px,1fr) 80px;gap:0;align-items:stretch">
+      <div style="padding:12px 8px;border-right:1px solid var(--g5);font-size:13px;font-weight:900;color:var(--bmh-blue);display:flex;align-items:flex-start;justify-content:center">${i+1}</div>
+      <div style="padding:10px 8px;border-right:1px solid var(--g5)">
+        <input value="${String(tr).replace(/"/g,'&quot;')}" onchange="RX_DRUGS[${i}].trade=this.value;RX_DRUGS[${i}].brand=this.value" placeholder="Trade name" style="width:100%;font-size:15px;font-weight:900;border:none;background:transparent;padding:0;box-sizing:border-box">
+        <input value="${String(gen).replace(/"/g,'&quot;')}" onchange="RX_DRUGS[${i}].generic=this.value;RX_DRUGS[${i}].name=this.value" placeholder="(Generic name)" style="width:100%;font-size:12px;color:var(--g1);font-style:italic;border:none;background:transparent;padding:0;box-sizing:border-box;margin-top:4px">
+        ${d.lang&&d.lang[lang]?`<div style="font-size:10px;color:var(--tx3);margin-top:8px;line-height:1.45">${d.lang[lang]}</div>`:''}
       </div>
-      ${d.lang&&d.lang[lang]?`<div style="font-size:10px;color:var(--tx3);margin-top:10px;line-height:1.45;border-left:3px solid var(--g4);padding-left:8px">${d.lang[lang]}</div>`:''}
+      <div style="padding:10px 8px;border-right:1px solid var(--g5);display:flex;align-items:center"><select onchange="RX_DRUGS[${i}].drugType=this.value;RX_DRUGS[${i}].type=this.value" style="font-size:11px;padding:8px;width:100%;border-radius:8px;border:1px solid var(--g4)">${typeOpts.map(t=>`<option${dt===t?' selected':''}>${t}</option>`).join('')}</select></div>
+      <div style="padding:10px 8px;border-right:1px solid var(--g5);display:flex;align-items:center"><select onchange="RX_DRUGS[${i}].eye=[this.value]" style="font-size:11px;padding:8px;width:100%;border-radius:8px;border:1px solid var(--g4)">${eyeOpts.map(e=>`<option${eye0===e?' selected':''}>${e}</option>`).join('')}</select></div>
+      <div style="padding:10px 8px;border-right:1px solid var(--g5);display:flex;align-items:center"><select onchange="RX_DRUGS[${i}].freq=this.value" style="font-size:11px;padding:8px;width:100%;border-radius:8px;border:1px solid var(--g4)">${freqOpts.map(f=>`<option${(d.freq===f)?' selected':''}>${f}</option>`).join('')}</select></div>
+      <div style="padding:10px 8px;border-right:1px solid var(--g5);display:flex;align-items:center"><select onchange="RX_DRUGS[${i}].dur=this.value;syncRxDrugDates(${i})" style="font-size:11px;padding:8px;width:100%;border-radius:8px;border:1px solid var(--g4)">${durOpts.map(f=>`<option${d.dur===f?' selected':''}>${f}</option>`).join('')}</select></div>
+      <div style="padding:10px 8px;border-right:1px solid var(--g5);display:grid;grid-template-columns:1fr;gap:6px;align-content:center">
+        <input type="date" value="${d.dateFrom||''}" onchange="RX_DRUGS[${i}].dateFrom=this.value;syncRxDrugDates(${i})" style="font-size:11px;padding:7px 8px;border-radius:8px;border:1px solid var(--g4);width:100%">
+        <input type="date" value="${d.dateTo||''}" onchange="RX_DRUGS[${i}].dateTo=this.value" style="font-size:11px;padding:7px 8px;border-radius:8px;border:1px solid var(--g4);width:100%">
+      </div>
+      <div style="padding:10px 8px;display:flex;flex-direction:column;gap:8px;justify-content:center">
+        <button type="button" class="btn btn-xs btn-outline" onclick="addTaperRow(${i}, RX_DRUGS[${i}].dur || '1 week')">⚖️ Taper</button>
+        <button type="button" class="btn btn-xs btn-gray" onclick="removeDrug(${i})" title="Remove">✕</button>
+      </div>
     </div>
     <details class="rx-taper-details" style="border-top:1px solid var(--g5);background:#fff"${taperOpen}>
       <summary style="cursor:pointer;font-size:11px;font-weight:900;color:var(--orange);padding:10px 16px;list-style:none;user-select:none;display:flex;justify-content:space-between;align-items:center;gap:8px">
@@ -7879,7 +7925,8 @@ function renderRxDrugs() {
       </div>
     </details>
   </div>`;
-  }).join('');
+  }).join('')}
+  </div>`;
 }
 
 // ─── TEMPLATE SAVE ─────────────
@@ -10324,8 +10371,8 @@ function rxQuickSearch(val) {
     const d = item.d;
     return `<div onclick="selectRxQuickPick(${i})" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--g5)" onmouseover="this.style.background='var(--blue-lt)'" onmouseout="this.style.background=''">
       <div style="font-size:10px;font-weight:800;color:var(--bmh-teal);text-transform:uppercase">Built-in</div>
-      <div style="font-size:13px;font-weight:900;color:#1A3C6E">${d.name}</div>
-      <div style="font-size:10.5px;color:var(--g1);font-style:italic">${d.brand ? '('+d.brand+')' : ''}</div>
+      <div style="font-size:13px;font-weight:900;color:#1A3C6E">${d.brand || d.name}</div>
+      <div style="font-size:10.5px;color:var(--g1);font-style:italic">${d.name ? '('+d.name+')' : ''}</div>
       <div style="font-size:10.5px;color:var(--g1)">${d.type} · ${d.freq} · ${d.dur}</div>
     </div>`;
   }).join('');
@@ -10342,7 +10389,7 @@ function selectRxQuickPick(i) {
   } else {
     rxQuickSelectedDrug = Object.assign({ _from: 'full' }, item.d);
     const inp = document.getElementById('rx-quick-search');
-    if (inp) inp.value = item.d.name;
+    if (inp) inp.value = item.d.brand || item.d.name;
   }
   const activeRxTab = document.querySelector('.tab-content.active[id$="-rx"], .tab-content.active[id="oe-rx"]');
   const dd = activeRxTab ? activeRxTab.querySelector('[id="rx-quick-dropdown"]') : document.getElementById('rx-quick-dropdown');
@@ -10356,7 +10403,7 @@ function selectRxQuickDrug(idx) {
   if (!d) return;
   rxQuickSelectedDrug = Object.assign({ _from: 'full' }, d);
   const inp = document.getElementById('rx-quick-search');
-  if (inp) inp.value = d.name;
+  if (inp) inp.value = d.brand || d.name;
   const activeRxTab = document.querySelector('.tab-content.active[id$="-rx"], .tab-content.active[id="oe-rx"]');
   const dd = activeRxTab ? activeRxTab.querySelector('[id="rx-quick-dropdown"]') : document.getElementById('rx-quick-dropdown');
   if (dd) dd.style.display = 'none';
