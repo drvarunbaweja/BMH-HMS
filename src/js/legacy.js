@@ -5057,6 +5057,31 @@ function genRcUID() {
 }
 window.genRcUID = genRcUID;
 
+function reserveNextBmhId() {
+  const localId = (typeof genRcUID === 'function' && genRcUID()) || ('BMSH-' + String((window._nextPatientNum || 461001)).padStart(6,'0'));
+  if(!window.FBDB) return Promise.resolve(localId);
+
+  return window.FBDB.ref('settings/lastPatientNum').transaction(function(current) {
+    const base = (typeof current === 'number' && current >= 461000) ? current : 461000;
+    return base + 1;
+  }).then(function(result) {
+    const committed = result && result.committed;
+    const snap = result && result.snapshot;
+    const nextNum = committed && snap ? snap.val() : null;
+    if(typeof nextNum === 'number' && nextNum >= 461001) {
+      window._nextPatientNum = nextNum;
+      try { localStorage.setItem('bmh_last_patient_num', String(nextNum)); } catch(_) {}
+      const reservedId = 'BMSH-' + String(nextNum).padStart(6,'0');
+      const el = document.getElementById('rc-uid');
+      if(el) el.textContent = reservedId;
+      return reservedId;
+    }
+    return localId;
+  }).catch(function() {
+    return localId;
+  });
+}
+
 window._rcDeptFilter = window._rcDeptFilter || 'all';
 window._rcQueueSubtab = window._rcQueueSubtab || 'waiting';
 
@@ -5094,7 +5119,7 @@ function ensureDailyReceptionReset() {
 }
 
 /** Reception — Register & Generate Token (full-width form) */
-function registerPatient() {
+async function registerPatient() {
   const fn  = (document.getElementById('rc-fn')?.value  || '').trim();
   const ln  = (document.getElementById('rc-ln')?.value  || '').trim();
   const mob = (document.getElementById('rc-mob-inp')?.value || document.getElementById('rc-mob')?.value || '').trim();
@@ -5105,17 +5130,14 @@ function registerPatient() {
   const dr  = document.getElementById('rc-dr')?.value   || '';
   const centre = document.getElementById('rc-centre')?.value || CURRENT_USER?.centre || 'CHD';
   const addr= document.getElementById('rc-addr')?.value || '';
-  let uid = (document.getElementById('rc-uid')?.textContent || '').trim();
-  if(!/^BMSH-\d{6,9}$/.test(uid)) {
-    uid = (typeof genRcUID === 'function' && genRcUID()) || ('BMSH-' + String((window._nextPatientNum||461001)).padStart(6,'0'));
-    const uidEl = document.getElementById('rc-uid');
-    if(uidEl) uidEl.textContent = uid;
-  }
   const noFee = document.getElementById('rc-no-fee')?.checked;
   const advAmt = parseFloat(document.getElementById('rc-advance-amt')?.value)||0;
   const advPurpose = (document.getElementById('rc-advance-purpose')?.value||'').trim();
 
   if(!fn) { showToast('Please enter patient first name','w'); return; }
+
+  const uid = await reserveNextBmhId();
+  if(!/^BMSH-\d{6,9}$/.test(uid)) { showToast('Could not generate a valid BMSH ID','e'); return; }
 
   const name = (fn + ' ' + ln).trim();
   const initials = name.split(' ').map(w=>w[0]||'').join('').toUpperCase().substring(0,2);
@@ -5149,8 +5171,8 @@ function registerPatient() {
 
   const numFromId = parseInt(String(uid).replace(/^BMSH-/,''),10);
   if(!isNaN(numFromId)) {
-    fbSet && fbSet('settings/lastPatientNum', numFromId);
     try { localStorage.setItem('bmh_last_patient_num', numFromId); } catch(_) {}
+    window._nextPatientNum = numFromId + 1;
   }
 
   let fee = parseFloat(document.getElementById('rc-fee')?.value||200)||0;
@@ -5239,9 +5261,15 @@ function registerPatient() {
 }
 window.registerPatient = registerPatient;
 
-window.addEventListener('DOMContentLoaded', () => {
+function initReceptionIdSeed() {
   if(typeof genRcUID === 'function') genRcUID();
-});
+}
+
+if(document.readyState === 'loading') {
+  window.addEventListener('DOMContentLoaded', initReceptionIdSeed);
+} else {
+  initReceptionIdSeed();
+}
 
 window.addEventListener('bmh:patientsUpdated', () => {
   if(typeof genRcUID === 'function') genRcUID();
