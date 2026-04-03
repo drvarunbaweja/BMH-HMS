@@ -5052,7 +5052,10 @@ function genRcUID() {
       }
     }).catch(()=>{});
   }
+
+  return 'BMSH-' + String(window._nextPatientNum || localNext).padStart(6,'0');
 }
+window.genRcUID = genRcUID;
 
 window._rcDeptFilter = window._rcDeptFilter || 'all';
 window._rcQueueSubtab = window._rcQueueSubtab || 'waiting';
@@ -5102,7 +5105,12 @@ function registerPatient() {
   const dr  = document.getElementById('rc-dr')?.value   || '';
   const centre = document.getElementById('rc-centre')?.value || CURRENT_USER?.centre || 'CHD';
   const addr= document.getElementById('rc-addr')?.value || '';
-  const uid = (document.getElementById('rc-uid')?.textContent || '').trim() || ('BMSH-' + String((window._nextPatientNum||461001)).padStart(6,'0'));
+  let uid = (document.getElementById('rc-uid')?.textContent || '').trim();
+  if(!/^BMSH-\d{6,9}$/.test(uid)) {
+    uid = (typeof genRcUID === 'function' && genRcUID()) || ('BMSH-' + String((window._nextPatientNum||461001)).padStart(6,'0'));
+    const uidEl = document.getElementById('rc-uid');
+    if(uidEl) uidEl.textContent = uid;
+  }
   const noFee = document.getElementById('rc-no-fee')?.checked;
   const advAmt = parseFloat(document.getElementById('rc-advance-amt')?.value)||0;
   const advPurpose = (document.getElementById('rc-advance-purpose')?.value||'').trim();
@@ -5230,6 +5238,14 @@ function registerPatient() {
   renderReceptionPage && renderReceptionPage();
 }
 window.registerPatient = registerPatient;
+
+window.addEventListener('DOMContentLoaded', () => {
+  if(typeof genRcUID === 'function') genRcUID();
+});
+
+window.addEventListener('bmh:patientsUpdated', () => {
+  if(typeof genRcUID === 'function') genRcUID();
+});
 
 function resetRegistrationForm() {
   ['rc-fn','rc-ln','rc-rel','rc-age','rc-addr','rc-dob','rc-mob-inp','rc-mob2','rc-email','rc-bmhid-search','rc-ref-name','rc-ref-mobile','rc-ins-name','rc-policy','rc-advance-amt','rc-advance-purpose'].forEach(id=>{
