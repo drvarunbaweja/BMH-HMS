@@ -8353,8 +8353,7 @@ function loadPatientsFromFirebase() {
   const centre = cu?.centre;
   const isAdmin = cu?.isAdmin || cu?.canSeeAllCentres || cu?.role === 'admin';
   fbOn('patients', data => {
-    if(!data) return;
-    const all = Object.values(data);
+    const all = data ? Object.values(data) : [];
     if(isAdmin || cu?.canSeeAllCentres) {
       PATIENTS.length = 0;
       all.forEach(p => PATIENTS.push(p));
@@ -8369,6 +8368,7 @@ function loadPatientsFromFirebase() {
       _fbPatientsLoaded = true;
       showToast('Connected to database ✓','s');
     }
+    genRcUID && genRcUID();
     _debouncedRenderDash();
   });
 }
@@ -11600,4 +11600,3 @@ window.addEventListener('DOMContentLoaded', function() {
     }
   } catch(e){}
 });
-

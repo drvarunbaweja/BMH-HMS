@@ -1,25 +1,30 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// BMH HMS — Patients Module
-// CRUD for /patients collection. Mirrors old PATIENTS array + openPatient().
+// BMH HMS — Patients Module (CLEAN VERSION)
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { db }                         from './firebase.js'
 import {
   collection, doc,
-  addDoc, setDoc, updateDoc, deleteDoc,
-  getDocs, getDoc,
+  setDoc, updateDoc,
+  getDoc,
   query, where, orderBy, limit,
   onSnapshot
 }                                     from 'firebase/firestore'
 import { showToast, initials, avatarColor, newBmhId } from './utils.js'
 import { CURRENT_USER }               from './auth.js'
 
-// ── In-memory cache — MUST share the same array as legacy.js (loaded before this module) ──
+// ── In-memory cache ──
 export let PATIENTS =
   typeof window !== 'undefined' && Array.isArray(window.PATIENTS)
     ? window.PATIENTS
     : []
 if (typeof window !== 'undefined') window.PATIENTS = PATIENTS
+
+// ── Helper: Capitalize names properly ──
+function formatName(str) {
+  if (!str) return '';
+  return str.trim().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
+}
 
 // ── Real-time listener ───────────────────────────────────────────────────────
 export function watchPatients(centre) {
@@ -31,15 +36,31 @@ export function watchPatients(centre) {
   )
 
   return onSnapshot(q, snap => {
-    if (snap.empty) return;
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+    // 1. Update the patient list
+    if (!snap.empty) {
+      PATIENTS.length = 0
+      snap.forEach(d => PATIENTS.push({ id: d.id, ...d.data() }))
+      window.PATIENTS = PATIENTS
+    }
+    
+    // 2. Refresh the UI
+=======
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
     PATIENTS.length = 0
     snap.forEach(d => PATIENTS.push({ id: d.id, ...d.data() }))
     window.PATIENTS = PATIENTS
+>>>>>>> theirs
     window.dispatchEvent(new CustomEvent('bmh:patientsUpdated'))
 
-    // 🚀 THE FIX: Wait for DB to load, then update the screen automatically
+    // 3. 🚀 FIXED: Update the ID display immediately
     const uidEl = document.getElementById('rc-uid');
-    if (uidEl && (uidEl.textContent === 'Loading ID...' || uidEl.textContent === 'BMSH-461001')) {
+    if (uidEl) {
       uidEl.textContent = newBmhId();
     }
 
@@ -48,14 +69,14 @@ export function watchPatients(centre) {
     showToast('Error syncing patients with database.', 'e')
   })
 }
-    PATIENTS.length = 0
-    snap.forEach(d => PATIENTS.push({ id: d.id, ...d.data() }))
-    window.PATIENTS = PATIENTS
-    window.dispatchEvent(new CustomEvent('bmh:patientsUpdated'))
-  }, err => {
-    console.error('watchPatients error:', err)
-  })
-}
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+=======
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
 
 /** Full document upsert — used by legacy registration (same source of truth as watchPatients). */
 export async function upsertPatientFirestore(patient) {
@@ -70,71 +91,81 @@ export async function upsertPatientFirestore(patient) {
   }
   await setDoc(doc(db, 'patients', patient.bmhId), payload, { merge: true })
 }
+>>>>>>> theirs
 
 // ── Register (create) ────────────────────────────────────────────────────────
 export async function registerPatient(data) {
-  const bmhId = data.bmhId || newBmhId()
-  const patient = {
-    bmhId,
-    name:          (data.firstName + ' ' + (data.lastName || '')).trim(),
-    initials:      initials((data.firstName + ' ' + (data.lastName || '')).trim()),
-    color:         avatarColor(data.firstName),
-    age:           data.age    || '',
-    sex:           data.sex    || 'Male',
-    mob:           data.mob    || '',
-    mob2:          data.mob2   || '',
-    email:         data.email  || '',
-    dob:           data.dob    || '',
-    addr:          data.addr   || '',
-    dept:          data.dept   || 'ophtho',
-    doctor:        data.doctor || '',
-    centre:        data.centre || CURRENT_USER?.centre || 'CHD',
-    status:        data.preRegistered ? 'pre-registered' : 'waiting',
-    balance:       0,
-    advance:       0,
-    seen:          false,
-    dilated:       false,
-    preRegistered: !!data.preRegistered,
-    createdAt:     new Date().toISOString(),
-    createdBy:     CURRENT_USER?.name || 'Reception',
-    // CRM
-    leadId:        data.leadId || null,
-    source:        data.source || 'walk-in',
+  try {
+    if (!data.firstName || data.firstName.trim() === '') {
+      showToast('First Name is required.', 'e');
+      return null;
+    }
+
+    const cleanFirstName = formatName(data.firstName);
+    const cleanLastName = formatName(data.lastName);
+    const fullName = (cleanFirstName + ' ' + cleanLastName).trim();
+    const bmhId = data.bmhId || newBmhId();
+
+    const patient = {
+      bmhId,
+      name:          fullName,
+      initials:      initials(fullName),
+      color:         avatarColor(cleanFirstName),
+      age:           data.age    || '',
+      sex:           data.sex    || 'Male',
+      mob:           data.mob    || '',
+      mob2:          data.mob2   || '',
+      email:         data.email  ? data.email.trim().toLowerCase() : '',
+      dob:           data.dob    || '',
+      addr:          data.addr   || '',
+      dept:          data.dept   || 'ophtho',
+      doctor:        data.doctor || '',
+      centre:        data.centre || CURRENT_USER?.centre || 'CHD',
+      status:        data.preRegistered ? 'pre-registered' : 'waiting',
+      balance:       0,
+      advance:       0,
+      seen:          false,
+      dilated:       false,
+      preRegistered: !!data.preRegistered,
+      createdAt:     new Date().toISOString(),
+      createdBy:     CURRENT_USER?.name || 'Reception',
+    }
+
+    await setDoc(doc(db, 'patients', bmhId), patient)
+    showToast(`Success: ${patient.name} registered!`, 's')
+    return patient
+
+  } catch (error) {
+    console.error("Error registering patient: ", error);
+    showToast('Failed to register patient.', 'e');
+    return null;
   }
-
-  await setDoc(doc(db, 'patients', bmhId), patient)
-  showToast(`Patient registered: ${patient.name}`, 's')
-  return patient
 }
 
-// ── Update ───────────────────────────────────────────────────────────────────
 export async function updatePatient(bmhId, updates) {
-  await updateDoc(doc(db, 'patients', bmhId), {
-    ...updates,
-    updatedAt: new Date().toISOString(),
-    updatedBy: CURRENT_USER?.name || ''
-  })
+  try {
+    await updateDoc(doc(db, 'patients', bmhId), {
+      ...updates,
+      updatedAt: new Date().toISOString(),
+      updatedBy: CURRENT_USER?.name || ''
+    })
+  } catch (error) {
+    console.error("Error updating patient: ", error);
+  }
 }
 
-// ── Get one patient ──────────────────────────────────────────────────────────
 export async function getPatient(bmhId) {
   const snap = await getDoc(doc(db, 'patients', bmhId))
   return snap.exists() ? { id: snap.id, ...snap.data() } : null
 }
 
-// ── Open patient — intentionally NOT overriding window.openPatient ────────────
-// Legacy.js defines the full openPatient() that navigates to the correct dept
-// exam page, fills all form fields, and sets CURRENT_PATIENT.  The modular
-// version here is kept for future use but must NOT override the legacy global.
 export function openPatient(bmhId) {
   const p = PATIENTS.find(x => x.bmhId === bmhId)
   if (!p) return null
   window.CURRENT_PATIENT = p
   return p
 }
-// Do NOT set window.openPatient here — legacy.js's version handles navigation
 
-// ── Search ───────────────────────────────────────────────────────────────────
 export function searchPatients(query_) {
   if (!query_) return PATIENTS
   const q = query_.toLowerCase()

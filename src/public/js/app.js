@@ -13,6 +13,28 @@ import { watchTransactions,
 import { watchLeads }           from './leads.js'
 import { todayKey }             from './utils.js'
 
+const SAVED_LOGIN_KEY = 'bmh_saved_login_v1'
+
+function loadSavedLogin() {
+  try {
+    const raw = localStorage.getItem(SAVED_LOGIN_KEY)
+    if (!raw) return
+    const saved = JSON.parse(raw)
+    const emailEl = document.getElementById('lg-email')
+    const passEl = document.getElementById('lg-pass')
+    const rememberEl = document.getElementById('lg-remember')
+    if (emailEl && saved.email) emailEl.value = saved.email
+    if (passEl && saved.password) passEl.value = saved.password
+    if (rememberEl) rememberEl.checked = !!(saved.email || saved.password)
+  } catch (_) { /* ignore storage parsing errors */ }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', loadSavedLogin)
+} else {
+  loadSavedLogin()
+}
+
 // Legacy hooks — registration saves to RTDB + must mirror to Firestore for live PATIENTS[]
 window.upsertPatientFirestore = upsertPatientFirestore
 window.patchPatientFirestore = (bmhId, data) => updatePatient(bmhId, data)
@@ -65,6 +87,7 @@ function showShell(user) {
 window._loginUser = async function () {
   const email    = (document.getElementById('lg-email')?.value || '').trim()
   const password = document.getElementById('lg-pass')?.value || ''
+  const remember = !!document.getElementById('lg-remember')?.checked
   const errEl    = document.getElementById('lg-err')
 
   if (!email || !password) {
@@ -78,6 +101,13 @@ window._loginUser = async function () {
 
   try {
     await loginUser(email, password)
+    try {
+      if (remember) {
+        localStorage.setItem(SAVED_LOGIN_KEY, JSON.stringify({ email, password }))
+      } else {
+        localStorage.removeItem(SAVED_LOGIN_KEY)
+      }
+    } catch (_) { /* ignore storage errors */ }
     // watchAuthState below will handle the rest
   } catch {
     if (errEl) { errEl.textContent = 'Invalid email or password. Please try again.'; errEl.style.display = 'block' }

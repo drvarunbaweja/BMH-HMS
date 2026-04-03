@@ -1659,8 +1659,16 @@ tbody td{padding:8px 9px;font-weight:500;vertical-align:middle}
     <div class="col">
       <div class="card"><div class="card-hd"><div class="card-title">Available Consents</div><button class="btn btn-xs btn-outline" onclick="openConsentUploadModal()">+ Upload New</button></div>
         <div style="display:flex;flex-direction:column;gap:6px" id="consent-forms-list">
-          ${['Cataract Surgery','IVT Injection','LASIK','Glaucoma Surgery','Anaesthesia','LSCS','Normal Delivery','Blood Transfusion'].map(c=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--g6);border-radius:8px;cursor:pointer" onclick="document.getElementById('consent-type-sel').value='${c.toLowerCase().replace(/ /g,'').replace('/','').substring(0,10)}';renderConsent()"><span>📋</span><span style="font-size:12.5px;font-weight:700;flex:1">${c}</span><button class="btn btn-xs btn-outline" onclick="event.stopPropagation();printConsentPageWithHeader()">Print</button></div>`).join('')}
-        </div>
+${['Cataract Surgery','IVT Injection','LASIK','Glaucoma Surgery','Anaesthesia','LSCS','Normal Delivery','Blood Transfusion'].map(c => {
+  const safeId = c.toLowerCase().replace(/\s+/g, '').replace(/,/g, '').substring(0, 10);
+  return `
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--g6);border-radius:8px;cursor:pointer" 
+         onclick="document.getElementById('consent-type-sel').value='${safeId}'; renderConsent()">
+      <span>📋</span>
+      <span style="font-size:12.5px;font-weight:700;flex:1">${c}</span>
+      <button class="btn btn-xs btn-outline" onclick="event.stopPropagation(); printConsentPageWithHeader()">Print</button>
+    </div>`;
+}).join('')}        </div>
       </div>
       <div style="background:var(--g6);border-radius:var(--r);padding:14px;margin-top:12px">
         <div style="font-size:11px;font-weight:900;color:var(--blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Patient Signature Block</div>
