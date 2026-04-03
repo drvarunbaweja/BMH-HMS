@@ -36,32 +36,14 @@ export function watchPatients(centre) {
   )
 
   return onSnapshot(q, snap => {
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-    // 1. Update the patient list
-    if (!snap.empty) {
-      PATIENTS.length = 0
-      snap.forEach(d => PATIENTS.push({ id: d.id, ...d.data() }))
-      window.PATIENTS = PATIENTS
-    }
-    
-    // 2. Refresh the UI
-=======
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
     PATIENTS.length = 0
     snap.forEach(d => PATIENTS.push({ id: d.id, ...d.data() }))
     window.PATIENTS = PATIENTS
->>>>>>> theirs
     window.dispatchEvent(new CustomEvent('bmh:patientsUpdated'))
 
-    // 3. 🚀 FIXED: Update the ID display immediately
-    const uidEl = document.getElementById('rc-uid');
+    const uidEl = document.getElementById('rc-uid')
     if (uidEl) {
-      uidEl.textContent = newBmhId();
+      uidEl.textContent = newBmhId()
     }
 
   }, err => {
@@ -69,14 +51,6 @@ export function watchPatients(centre) {
     showToast('Error syncing patients with database.', 'e')
   })
 }
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-=======
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
 
 /** Full document upsert — used by legacy registration (same source of truth as watchPatients). */
 export async function upsertPatientFirestore(patient) {
@@ -91,7 +65,6 @@ export async function upsertPatientFirestore(patient) {
   }
   await setDoc(doc(db, 'patients', patient.bmhId), payload, { merge: true })
 }
->>>>>>> theirs
 
 // ── Register (create) ────────────────────────────────────────────────────────
 export async function registerPatient(data) {
