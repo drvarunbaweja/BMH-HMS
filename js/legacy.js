@@ -1689,6 +1689,7 @@ function buildOphthoCaseSheetHtml() {
   const ptName   = currentPt.name || document.getElementById('ophtho-pt-nm')?.textContent?.trim() || 'Patient';
   const ptId     = currentPt.bmhId || document.getElementById('ophtho-pt-uid')?.textContent?.trim() || '';
   const today    = new Date().toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'});
+  const printDate = new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'2-digit',year:'numeric'});
   const drName   = window.CURRENT_USER?.name || 'Dr. Varun Baweja';
   const centre   = window.CURRENT_USER?.centre || 'CHD';
 
@@ -1812,6 +1813,8 @@ function buildOphthoCaseSheetHtml() {
   const dxPack = collectOphthoDiagnosesForPrint();
   const dxLines = dxPack.lines || [];
   const dxNotes = dxPack.notes || '';
+  const chiefComplaintsEnabled = document.getElementById('oe-inc-cc')?.checked ?? true;
+  const positiveFindingsEnabled = document.getElementById('oe-inc-posfind')?.checked ?? true;
 
   // ── drugs (for case sheet medicines section) ──────────────────────────
   const drugs = typeof RX_DRUGS !== 'undefined' ? RX_DRUGS : [];
@@ -1944,14 +1947,14 @@ function buildOphthoCaseSheetHtml() {
   // ── build HTML ────────────────────────────────────────────────────────
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Case Sheet — ${ptName}</title><style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-body{font-family:Arial,Helvetica,sans-serif;color:#111;padding:1.2mm 2.1mm;font-size:7.7px;line-height:1.16}
-@page{size:A4 portrait;margin:1.5mm}
+body{font-family:Arial,Helvetica,sans-serif;color:#111;padding:1mm 1.8mm;font-size:8.2px;line-height:1.18}
+@page{size:A4 portrait;margin:1.2mm}
 @media print{body{padding:0}}
 h1{font-size:12px;font-weight:900;text-align:center;letter-spacing:.5px;text-transform:uppercase;border-bottom:1.5px solid #111;padding-bottom:2px;margin-bottom:3px}
 h2{font-size:8px;font-weight:900;text-transform:uppercase;letter-spacing:.3px;border-bottom:1px solid #111;padding-bottom:1px;margin-bottom:2px;margin-top:4px}
-table{width:100%;border-collapse:collapse;font-size:6.9px}
+table{width:100%;border-collapse:collapse;font-size:7.3px}
 th,td{border:1px solid #555;padding:1px 2px}
-th{background:#eee;font-weight:900;text-align:center;font-size:6.4px}
+th{background:#eee;font-weight:900;text-align:center;font-size:6.7px}
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:4px}
 .label{font-weight:700;font-size:6px;color:#555;text-transform:uppercase}
 .val{font-size:7px;font-weight:900}
@@ -1966,7 +1969,7 @@ th{background:#eee;font-weight:900;text-align:center;font-size:6.4px}
   <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px">
     <div style="flex:1;min-width:0;text-align:center">
       <h1 style="font-size:11px;font-weight:900;letter-spacing:.5px;text-transform:uppercase;margin:0 0 3px 0;padding:0;border:none">Baweja Multispeciality Hospital — OPD</h1>
-      <div style="font-size:7.5px;line-height:1.38"><b>Pt:</b> ${escHtml(ptName)} · <b>Age/Sex:</b> ${escHtml(String(ptAge || '—'))}${ptSex ? '/' + escHtml(ptSex) : ''} · <b>Date:</b> ${escHtml(today)} · <b>Centre:</b> ${centre === 'CHD' ? 'CHD' : 'RPR'} · <b>Dr:</b> ${escHtml(drName)}</div>
+      <div style="font-size:7.9px;line-height:1.4"><b>Pt:</b> ${escHtml(ptName)} · <b>Age/Sex:</b> ${escHtml(String(ptAge || '—'))}${ptSex ? '/' + escHtml(ptSex) : ''} · <b>Date:</b> ${escHtml(today)} · <b>Printed:</b> ${escHtml(printDate)} · <b>Centre:</b> ${centre === 'CHD' ? 'CHD' : 'RPR'} · <b>Dr:</b> ${escHtml(drName)}</div>
       <div style="font-size:7px;line-height:1.34;margin-top:2px"><b>Ph:</b> ${escHtml(ptMob || '—')} · <b>Addr:</b> ${escHtml(ptAddr || '—')}</div>
     </div>
     <div style="text-align:right;flex-shrink:0;padding:1px 2px 1px 8px;border-left:2px solid #1A3C6E;min-width:92px">
@@ -1977,7 +1980,7 @@ th{background:#eee;font-weight:900;text-align:center;font-size:6.4px}
 </div>
 
 <!-- Personal history | Chief complaints -->
-<div style="display:grid;grid-template-columns:minmax(0,34%) minmax(0,66%);gap:4px;align-items:stretch;margin-bottom:3px">
+<div style="display:grid;grid-template-columns:minmax(0,36%) minmax(0,64%);gap:5px;align-items:stretch;margin-bottom:4px">
   <div style="border:1px solid #bbb;border-radius:4px;padding:4px 5px;background:#f8f8f8;display:flex;flex-direction:column">
     <div style="font-size:6.5px;font-weight:900;text-transform:uppercase;letter-spacing:.2px;border-bottom:1px solid #ccc;margin-bottom:2px;padding-bottom:2px;color:#333">Personal history (systemic)</div>
     <table style="width:100%;border-collapse:collapse;line-height:1.1;flex:1">
@@ -1989,9 +1992,9 @@ th{background:#eee;font-weight:900;text-align:center;font-size:6.4px}
       <b>Allergy</b> ${escHtml(drugAl)}${drugAlSpec ? ' (' + escHtml(drugAlSpec) + ')' : ''} · <b>Family</b> ${escHtml(famHx || '—')} · <b>Other</b> ${escHtml(othHx || '—')}
     </div>
   </div>
-  <div style="border:1px solid #b8c8dc;border-radius:4px;padding:7px 9px;background:#f2f6fc;font-size:9px;line-height:1.45;display:flex;flex-direction:column;min-height:100%">
-    <div style="font-size:9.5px;font-weight:900;color:#1A3C6E;text-transform:uppercase;margin-bottom:6px;letter-spacing:.2px;border-bottom:1px solid rgba(26,60,110,.2);padding-bottom:4px">Chief complaints &amp; spectacle history</div>
-    <div style="margin-bottom:6px"><b>CC:</b> ${escHtml(ccStr)}</div>
+  <div style="border:1px solid #b8c8dc;border-radius:4px;padding:8px 10px;background:#f2f6fc;font-size:9.8px;line-height:1.5;display:flex;flex-direction:column;min-height:100%">
+    <div style="font-size:10px;font-weight:900;color:#1A3C6E;text-transform:uppercase;margin-bottom:6px;letter-spacing:.2px;border-bottom:1px solid rgba(26,60,110,.2);padding-bottom:4px">Chief complaints &amp; spectacle history</div>
+    ${chiefComplaintsEnabled ? `<div style="margin-bottom:6px"><b>CC:</b> ${escHtml(ccStr)}</div>` : ''}
     <div><b>Spectacles:</b> ${escHtml(hxSpec)}</div>
     <div><b>Last spectacle change:</b> ${escHtml(hxLastSpec)}</div>
     <div><b>Ocular meds (history):</b> ${escHtml(hxOcularMeds)}</div>
@@ -2010,7 +2013,7 @@ th{background:#eee;font-weight:900;text-align:center;font-size:6.4px}
   </div>
 </div>
 
-${ocularBlock}
+${positiveFindingsEnabled ? ocularBlock : ''}
 
 <!-- DIAGNOSIS & PLAN -->
 <h2 style="font-size:7.5px;margin-top:3px">Diagnosis</h2>
@@ -5130,6 +5133,15 @@ function applyRxTemplate(tplId) {
       dateTo: '',
       lang:{en:gen+' '+(d.freq||'')+' '+eyeArr[0]+' '+(d.dur||''),hi:'',pa:''}
     });
+    if(d.taperRow) {
+      RX_DRUGS[RX_DRUGS.length - 1].taperRow = {
+        freq: normalizeRxFreqLabel(d.taperRow.freq || suggestTaperFreqFromMain(d.freq || '')),
+        dur: normalizeRxDurationLabel(d.taperRow.dur || d.dur || '1 week'),
+        dateFrom: '',
+        dateTo: ''
+      };
+    }
+    computeRxEndAndTaperDates(RX_DRUGS[RX_DRUGS.length - 1]);
   });
   renderRxDrugs();
   showToast('Template applied ✓','s');
@@ -7262,11 +7274,19 @@ function autoStampTime(inputId) {
 // ─── FILE UPLOAD FOR BIOMETRY TAB ─────────────
 const INVESTIGATION_FILES = [];
 const INVESTIGATION_ORDERS = [];
+function currentPatientVisitInvestigationBucket() {
+  const pt = window.CURRENT_PATIENT || PATIENTS.find(p => p.bmhId === (document.getElementById('ophtho-pt-uid')?.textContent || '').trim());
+  if(!pt) return null;
+  if(!pt.lastVisit || typeof pt.lastVisit !== 'object') pt.lastVisit = {};
+  if(!Array.isArray(pt.lastVisit.investigations)) pt.lastVisit.investigations = [];
+  return { pt, list: pt.lastVisit.investigations };
+}
 
 function handleInvestigationUpload(input) {
   const files = Array.from(input.files);
   const bmhId = window.CURRENT_PATIENT?.bmhId || document.getElementById('ophtho-pt-uid')?.textContent || 'unknown';
   const list = document.getElementById('bio-uploads-list');
+  const visitBucket = currentPatientVisitInvestigationBucket();
   files.forEach(file => {
     const isImage = file.type.startsWith('image/');
     if(isImage) {
@@ -7286,7 +7306,11 @@ function handleInvestigationUpload(input) {
           const key = 'inv_' + Date.now();
           const entry = { key, name: file.name, type: 'image/jpeg', data: compressed, bmhId, date: new Date().toISOString(), sizKB };
           // Save to Firebase
-          if(window.fbSet) fbSet(`investigations/${bmhId}/${key}`, { key, name: file.name, type: 'image/jpeg', bmhId, date: entry.date, sizKB });
+          if(window.fbSet) fbSet(`investigations/${bmhId}/${key}`, { key, name: file.name, type: 'image/jpeg', bmhId, date: entry.date, sizKB, data: compressed });
+          if(visitBucket) {
+            visitBucket.list.push({ key, name: file.name, type: 'image/jpeg', date: entry.date, sizKB });
+            fbUpdate && fbUpdate('patients/' + visitBucket.pt.bmhId, { lastVisit: visitBucket.pt.lastVisit }).catch(()=>{});
+          }
           // Store compressed data in session for display
           window.INV_UPLOADS = window.INV_UPLOADS || {};
           window.INV_UPLOADS[key] = entry;
@@ -7303,7 +7327,11 @@ function handleInvestigationUpload(input) {
         const key = 'inv_' + Date.now();
         const sizKB = Math.round(file.size / 1024);
         const entry = { key, name: file.name, type: file.type, data: e.target.result, bmhId, date: new Date().toISOString(), sizKB };
-        if(window.fbSet) fbSet(`investigations/${bmhId}/${key}`, { key, name: file.name, type: file.type, bmhId, date: entry.date, sizKB });
+        if(window.fbSet) fbSet(`investigations/${bmhId}/${key}`, { key, name: file.name, type: file.type, bmhId, date: entry.date, sizKB, data: e.target.result });
+        if(visitBucket) {
+          visitBucket.list.push({ key, name: file.name, type: file.type, date: entry.date, sizKB });
+          fbUpdate && fbUpdate('patients/' + visitBucket.pt.bmhId, { lastVisit: visitBucket.pt.lastVisit }).catch(()=>{});
+        }
         window.INV_UPLOADS = window.INV_UPLOADS || {};
         window.INV_UPLOADS[key] = entry;
         addBioUploadCard(entry, list);
@@ -7324,6 +7352,21 @@ function addBioUploadCard(entry, list) {
     <div style="flex:1"><div style="font-size:12px;font-weight:700">${entry.name}</div><div style="font-size:10px;color:var(--g1)">${entry.sizKB} KB · ${new Date(entry.date).toLocaleDateString('en-IN')}</div></div>
     ${entry.type?.startsWith('image') ? `<button onclick="window.open(window.INV_UPLOADS?.['${entry.key}']?.data,'_blank')" style="background:var(--blue-lt);color:var(--blue);border:1px solid var(--blue);border-radius:5px;padding:3px 8px;font-size:10px;cursor:pointer">👁 View</button>` : ''}`;
   list.prepend(d);
+}
+function viewStoredInvestigation(bmhId, key) {
+  const cached = window.INV_UPLOADS?.[key];
+  if(cached?.data) {
+    window.open(cached.data, '_blank');
+    return;
+  }
+  if(window.fbOnce) {
+    fbOnce(`investigations/${bmhId}/${key}`).then(data => {
+      if(!data?.data) { showToast('File data not found','w'); return; }
+      window.INV_UPLOADS = window.INV_UPLOADS || {};
+      window.INV_UPLOADS[key] = data;
+      window.open(data.data, '_blank');
+    }).catch(() => showToast('Could not open investigation','w'));
+  }
 }
 function handleDropUpload(e) {
   e.preventDefault();
@@ -7779,30 +7822,33 @@ function renderRxDrugs() {
     const tap = d.taperRow;
     const eyeCol = isOphtho ? 'Eye' : 'Route';
     const taperOpen = tap ? ' open' : '';
-    return `<div class="rx-drug-row" style="border:1px solid var(--g5);border-radius:10px;margin-bottom:12px;background:#fff;overflow:hidden;box-shadow:0 1px 0 rgba(0,0,0,.04)">
-    <div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px 14px;padding:14px 16px;background:var(--g6)">
-      <div style="font-size:13px;font-weight:900;color:var(--bmh-blue);min-width:24px;padding-top:2px">${i+1}</div>
-      <div style="flex:1.2;min-width:240px;max-width:100%">
-        <div style="font-size:14px;font-weight:900;color:var(--tx);line-height:1.3"><input value="${String(tr).replace(/"/g,'&quot;')}" onchange="RX_DRUGS[${i}].trade=this.value;RX_DRUGS[${i}].brand=this.value" placeholder="Trade name" style="width:100%;font-size:15px;font-weight:900;border:none;background:transparent;border-bottom:2px solid var(--g4);padding:2px 0;box-sizing:border-box"></div>
-        <input value="${String(gen).replace(/"/g,'&quot;')}" onchange="RX_DRUGS[${i}].generic=this.value;RX_DRUGS[${i}].name=this.value" placeholder="Generic name" style="width:100%;font-size:12px;color:var(--g1);font-style:italic;border:none;background:transparent;margin-top:5px;padding:2px 0;box-sizing:border-box">
-        ${d.lang&&d.lang[lang]?`<div style="font-size:10px;color:var(--tx3);margin-top:8px;line-height:1.45;border-left:3px solid var(--g4);padding-left:8px">${d.lang[lang]}</div>`:''}
+    return `<div class="rx-drug-row" style="border:1px solid var(--g5);border-radius:12px;margin-bottom:12px;background:#fff;overflow:hidden;box-shadow:0 1px 0 rgba(0,0,0,.04)">
+    <div style="padding:14px 16px;background:var(--g6)">
+      <div style="display:grid;grid-template-columns:minmax(0,1.25fr) repeat(4,minmax(110px,.55fr)) minmax(190px,.9fr) auto;gap:10px 12px;align-items:end">
+        <div style="min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+            <div style="font-size:13px;font-weight:900;color:var(--bmh-blue);min-width:18px">${i+1}</div>
+            <div style="font-size:9px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.45px">Medicine</div>
+          </div>
+          <input value="${String(tr).replace(/"/g,'&quot;')}" onchange="RX_DRUGS[${i}].trade=this.value;RX_DRUGS[${i}].brand=this.value" placeholder="Trade name" style="width:100%;font-size:16px;font-weight:900;border:none;background:#fff;border-radius:8px;padding:8px 10px;box-sizing:border-box">
+          <input value="${String(gen).replace(/"/g,'&quot;')}" onchange="RX_DRUGS[${i}].generic=this.value;RX_DRUGS[${i}].name=this.value" placeholder="(Generic name)" style="width:100%;font-size:12px;color:var(--g1);font-style:italic;border:none;background:#fff;border-radius:8px;padding:7px 10px;box-sizing:border-box;margin-top:6px">
+        </div>
+        <div style="min-width:0"><div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:4px">Type</div>
+          <select onchange="RX_DRUGS[${i}].drugType=this.value;RX_DRUGS[${i}].type=this.value" style="font-size:11px;padding:8px 8px;width:100%;border-radius:8px;border:1px solid var(--g4)">${typeOpts.map(t=>`<option${dt===t?' selected':''}>${t}</option>`).join('')}</select></div>
+        <div style="min-width:0"><div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:4px">${eyeCol}</div>
+          <select onchange="RX_DRUGS[${i}].eye=[this.value]" style="font-size:11px;padding:8px 8px;width:100%;border-radius:8px;border:1px solid var(--g4)">${eyeOpts.map(e=>`<option${eye0===e?' selected':''}>${e}</option>`).join('')}</select></div>
+        <div style="min-width:0"><div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:4px">Frequency</div>
+          <select onchange="RX_DRUGS[${i}].freq=this.value" style="font-size:11px;padding:8px 8px;width:100%;border-radius:8px;border:1px solid var(--g4)">${freqOpts.map(f=>`<option${(d.freq===f)?' selected':''}>${f}</option>`).join('')}</select></div>
+        <div style="min-width:0"><div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:4px">Duration</div>
+          <select onchange="RX_DRUGS[${i}].dur=this.value;syncRxDrugDates(${i})" style="font-size:11px;padding:8px 8px;width:100%;border-radius:8px;border:1px solid var(--g4)">${durOpts.map(f=>`<option${d.dur===f?' selected':''}>${f}</option>`).join('')}</select></div>
+        <div style="min-width:0"><div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:4px">Dates</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px"><input type="date" value="${d.dateFrom||''}" onchange="RX_DRUGS[${i}].dateFrom=this.value;syncRxDrugDates(${i})" style="font-size:11px;padding:7px 8px;border-radius:8px;border:1px solid var(--g4);width:100%"><input type="date" value="${d.dateTo||''}" onchange="RX_DRUGS[${i}].dateTo=this.value" style="font-size:11px;padding:7px 8px;border-radius:8px;border:1px solid var(--g4);width:100%"></div></div>
+        <div style="display:flex;flex-direction:column;gap:8px;align-items:stretch;min-width:88px">
+          <button type="button" class="btn btn-xs btn-gray" onclick="removeDrug(${i})" title="Remove">✕ Remove</button>
+          <button type="button" class="btn btn-xs btn-outline" onclick="addTaperRow(${i}, RX_DRUGS[${i}].dur || '1 week')">⚖️ Taper</button>
+        </div>
       </div>
-      <div style="display:flex;flex-wrap:wrap;gap:10px 14px;flex:1;min-width:260px;align-items:flex-end">
-        <div style="min-width:92px"><div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:4px">Form</div>
-        <select onchange="RX_DRUGS[${i}].drugType=this.value;RX_DRUGS[${i}].type=this.value" style="font-size:11px;padding:5px 8px;width:100%;border-radius:8px;border:1px solid var(--g4)">${typeOpts.map(t=>`<option${dt===t?' selected':''}>${t}</option>`).join('')}</select></div>
-        <div style="min-width:120px"><div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:4px">${eyeCol}</div>
-        <select onchange="RX_DRUGS[${i}].eye=[this.value]" style="font-size:11px;padding:5px 8px;width:100%;border-radius:8px;border:1px solid var(--g4)">${eyeOpts.map(e=>`<option${eye0===e?' selected':''}>${e}</option>`).join('')}</select></div>
-        <div style="min-width:130px"><div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:4px">Frequency</div>
-        <select onchange="RX_DRUGS[${i}].freq=this.value" style="font-size:11px;padding:5px 8px;width:100%;border-radius:8px;border:1px solid var(--g4)">${freqOpts.map(f=>`<option${(d.freq===f)?' selected':''}>${f}</option>`).join('')}</select></div>
-        <div style="min-width:110px"><div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:4px">Duration</div>
-        <select onchange="RX_DRUGS[${i}].dur=this.value;syncRxDrugDates(${i})" style="font-size:11px;padding:5px 8px;width:100%;border-radius:8px;border:1px solid var(--g4)">${durOpts.map(f=>`<option${d.dur===f?' selected':''}>${f}</option>`).join('')}</select></div>
-        <div style="min-width:200px"><div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:4px">Dates (from → to)</div>
-        <div style="display:flex;gap:6px;align-items:center"><input type="date" value="${d.dateFrom||''}" onchange="RX_DRUGS[${i}].dateFrom=this.value;syncRxDrugDates(${i})" style="font-size:11px;padding:4px;border-radius:6px;border:1px solid var(--g4);flex:1;min-width:0">
-        <span style="color:var(--g1)">→</span><input type="date" value="${d.dateTo||''}" onchange="RX_DRUGS[${i}].dateTo=this.value" style="font-size:11px;padding:4px;border-radius:6px;border:1px solid var(--g4);flex:1;min-width:0"></div></div>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:8px;align-items:stretch;min-width:100px">
-        <button type="button" class="btn btn-xs btn-gray" onclick="removeDrug(${i})" title="Remove">✕ Remove</button>
-      </div>
+      ${d.lang&&d.lang[lang]?`<div style="font-size:10px;color:var(--tx3);margin-top:10px;line-height:1.45;border-left:3px solid var(--g4);padding-left:8px">${d.lang[lang]}</div>`:''}
     </div>
     <details class="rx-taper-details" style="border-top:1px solid var(--g5);background:#fff"${taperOpen}>
       <summary style="cursor:pointer;font-size:11px;font-weight:900;color:var(--orange);padding:10px 16px;list-style:none;user-select:none;display:flex;justify-content:space-between;align-items:center;gap:8px">
@@ -7840,7 +7886,7 @@ function renderRxDrugs() {
 function openSaveRxTemplate() {
   const preview = document.getElementById('tpl-preview-drugs');
   if(preview) preview.innerHTML = RX_DRUGS.length
-    ? RX_DRUGS.map((d,i)=>`<div style="padding:3px 0;border-bottom:1px solid var(--g5);font-size:11.5px"><strong>${i+1}. ${d.name}</strong> <em style="color:var(--g1);font-size:10px">(${d.brand||d.name})</em> — ${d.freq} — ${d.dur}</div>`).join('')
+    ? RX_DRUGS.map((d,i)=>`<div style="padding:5px 0;border-bottom:1px solid var(--g5);font-size:11.5px"><strong>${i+1}. ${rxDrugTradeName(d)||d.name}</strong> <em style="color:var(--g1);font-size:10px">${rxDrugGenericName(d)&&rxDrugGenericName(d)!==rxDrugTradeName(d)?'('+rxDrugGenericName(d)+')':''}</em> — ${d.freq} — ${d.dur}${d.taperRow?`<div style="font-size:10px;color:var(--orange);margin-top:3px">Taper: ${d.taperRow.freq} · ${d.taperRow.dur}</div>`:''}</div>`).join('')
     : '<span style="color:var(--g1)">No drugs in prescription</span>';
   openM('m-save-rx-tpl');
 }
@@ -7852,7 +7898,15 @@ function saveRxAsTemplate() {
   const key = name.toLowerCase().replace(/\s+/g,'-');
   if(typeof RX_TEMPLATES_DATA!=='undefined') RX_TEMPLATES_DATA[key] = RX_DRUGS.map(d=>{
     const eyeVal = Array.isArray(d.eye) ? d.eye[0] : d.eye;
-    return { trade:d.brand||d.name, generic:d.name, eye:eyeVal, freq:d.freq, dur:d.dur };
+    return {
+      trade:d.trade||d.brand||d.name,
+      generic:d.generic||d.name||'',
+      type:d.drugType||d.type||'Tablet',
+      eye:eyeVal,
+      freq:d.freq,
+      dur:d.dur,
+      taperRow:d.taperRow ? {...d.taperRow} : null
+    };
   });
   if (typeof RX_TEMPLATES_META !== 'undefined') RX_TEMPLATES_META[key] = { dept, name, notes };
   saveRxTemplatesToStorage();
@@ -8376,6 +8430,8 @@ window.printUnifiedRx = function(deptId) {
   const incGL   = document.getElementById(deptId+'-inc-gl')?.checked  ?? false;
   const incInv  = document.getElementById(deptId+'-inc-inv')?.checked ?? true;
   const incPrc  = document.getElementById(deptId+'-inc-proc')?.checked ?? true;
+  const incCC   = document.getElementById('oe-inc-cc')?.checked ?? true;
+  const incPos  = document.getElementById('oe-inc-posfind')?.checked ?? true;
 
   // ── Collect diagnoses — Ophthalmology: numbered rows; other depts: *-dx-list ──
   const dxPack = typeof collectDeptDiagnosesForPrint === 'function' ? collectDeptDiagnosesForPrint(deptId) : { lines: [], notes: '' };
@@ -8487,6 +8543,7 @@ tr:nth-child(even) td{background:#f8f9fc}
 .flag-h{color:#CC0000;font-weight:700}
 .flag-n{color:#1a8c3c;font-weight:600}
 .watermark{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-30deg);font-size:80px;font-weight:900;color:rgba(26,60,110,.04);font-family:'Playfair Display','Georgia',serif;white-space:nowrap;pointer-events:none;z-index:0}
+.diag-banner{margin:0 auto 10px;max-width:92%;padding:8px 16px;border:1.5px solid rgba(26,60,110,.22);border-radius:999px;background:#f0f4ff;text-align:center;font-size:13px;font-weight:800;color:#1A3C6E}
 </style></head><body>
 
 ${lhImgSrc ? `<img src="${lhImgSrc}" class="lh-img" alt="Baweja Multispeciality Hospital">` : '<div style="height:80px;background:#f2f4f8;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#888;font-size:13px;margin-bottom:10px">Baweja Multispeciality Hospital Letterhead</div>'}
@@ -8499,10 +8556,11 @@ ${lhImgSrc ? `<img src="${lhImgSrc}" class="lh-img" alt="Baweja Multispeciality 
   <div class="pt-date">${today}</div>
 </div>
 
+${dxList.length ? `<div class="diag-banner">${dxList.join(' · ')}</div>` : ''}
+
 ${ptMob ? `<div class="phone-line">&#9990; ${ptMob} &nbsp;&nbsp;|&nbsp;&nbsp; BMSH ID: ${ptId}</div>` : `<div class="phone-line">BMSH ID: ${ptId}</div>`}
 
-${cc ? `<div class="lbl-row" style="margin-top:8px"><span class="lbl">Complaints:</span><span class="lbl-val">${cc}${ccDur?' ('+ccDur+')':''}</span></div>` : ''}
-${dxList.length ? `<div class="lbl-row"><span class="lbl">Diagnosis:</span><span class="lbl-val">${dxList.join('; ')}</span></div>` : ''}
+${incCC && cc ? `<div class="lbl-row" style="margin-top:8px"><span class="lbl">Complaints:</span><span class="lbl-val">${cc}${ccDur?' ('+ccDur+')':''}</span></div>` : ''}
 
 ${showVA ? `
 <div class="sec-title">Visual Acuity Test:</div>
@@ -8523,6 +8581,14 @@ ${showGL ? `
     <tr><td><b>Left Eye</b></td><td>${rfOSSph||'0'}</td><td>${rfOSCyl||'0'}</td><td>${rfOSAx||'0°'}</td><td>${addOS||'—'}</td><td>${vaOS||'—'}</td><td>${nvOS||'—'}</td></tr>
   </tbody>
 </table>` : ''}
+
+${incPos && deptId==='oe' ? `<div class="lbl-row" style="margin:6px 0"><span class="lbl">Positive Findings:</span><span class="lbl-val">${[
+  document.getElementById('fund-od-disc')?.value,
+  document.getElementById('fund-os-disc')?.value,
+  document.getElementById('fundus-od')?.value,
+  document.getElementById('fundus-os')?.value,
+  document.getElementById('sl-notes-text')?.value
+].filter(v => String(v||'').trim() && String(v).trim() !== 'Normal').map(v => String(v).trim()).join(' ; ') || '—'}</span></div>` : ''}
 
 ${drugs.length ? `
 <div class="sec-title">Medicine (Rx):</div>
@@ -12197,6 +12263,7 @@ function saveVisit(dept) {
     });
     visit.ccRows = ccRows;
     visit.rx = JSON.parse(JSON.stringify(RX_DRUGS || []));
+    visit.investigations = JSON.parse(JSON.stringify(window.CURRENT_PATIENT?.lastVisit?.investigations || []));
     visit.hxSpectacles = document.getElementById('hx-spectacles')?.value || '';
     visit.hxLastSpec = document.getElementById('hx-last-spec')?.value || '';
     visit.hxOcularMeds = document.getElementById('hx-ocular-meds')?.value || '';
@@ -12241,6 +12308,38 @@ function saveVisit(dept) {
       if(typeof loadPastVisits === 'function') loadPastVisits(bmhId, dept);
     })
     .catch(e => showToast('Save failed: ' + e.message, 'w'));
+}
+
+function loadPastVisits(bmhId, dept) {
+  const container = document.getElementById(dept === 'ophtho' ? 'past-visits-ophtho' : `past-visits-${dept}`);
+  if(!container) return;
+  const renderVisits = (visitsObj) => {
+    const visits = Object.entries(visitsObj || {}).map(([id, v]) => ({ id, ...(v||{}) }))
+      .sort((a,b) => String(b.date || b.createdAt || '').localeCompare(String(a.date || a.createdAt || '')));
+    if(!visits.length) {
+      container.innerHTML = `<div style="text-align:center;padding:30px;color:var(--g2);font-size:12px"><div style="font-size:28px;margin-bottom:8px">📋</div>No past visits saved yet</div>`;
+      return;
+    }
+    container.innerHTML = visits.map(v => {
+      const invs = Array.isArray(v.investigations) ? v.investigations : [];
+      const cc = Array.isArray(v.ccRows) ? v.ccRows.map(r => r.text).filter(Boolean).join(', ') : '';
+      const dx = Array.isArray(v.diagnoses) ? v.diagnoses.join(', ') : (v.diagnosisText || '');
+      return `<div style="border:1px solid var(--g5);border-radius:10px;background:#fff;padding:12px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+          <div style="font-size:13px;font-weight:900;color:var(--bmh-blue)">${v.dateLabel || new Date(v.date || Date.now()).toLocaleDateString('en-IN')}</div>
+          <div style="font-size:10px;color:var(--g1)">${v.savedBy || v.doctor || ''}</div>
+        </div>
+        ${cc ? `<div style="font-size:11px;margin-bottom:5px"><strong>Chief complaints:</strong> ${cc}</div>` : ''}
+        ${dx ? `<div style="font-size:11px;margin-bottom:5px"><strong>Diagnosis:</strong> ${dx}</div>` : ''}
+        ${invs.length ? `<div style="margin-top:8px"><div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:5px">Investigations</div>${invs.map(inv => `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;background:var(--g6);border-radius:8px;margin-bottom:5px"><div><div style="font-size:11px;font-weight:700">${inv.name}</div><div style="font-size:10px;color:var(--g1)">${Math.round((inv.sizKB||0))} KB · ${new Date(inv.date||Date.now()).toLocaleDateString('en-IN')}</div></div><button class="btn btn-xs btn-outline" onclick="viewStoredInvestigation('${bmhId}','${inv.key}')">Open</button></div>`).join('')}</div>` : ''}
+      </div>`;
+    }).join('');
+  };
+  if(typeof fbOnce === 'function') {
+    fbOnce(`visits/${bmhId}`).then(renderVisits).catch(() => renderVisits({}));
+  } else {
+    renderVisits({});
+  }
 }
 
 window.addEventListener('DOMContentLoaded', function() {
