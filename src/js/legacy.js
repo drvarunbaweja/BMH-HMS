@@ -688,8 +688,7 @@ function nav(id, el) {
 // ═══════════════════════════════════════
 function qCard(p, sno) {
   const dilMin = p.dilated && p.dilatedTime ? Math.floor((Date.now()-p.dilatedTime)/60000) : 0;
-  const dilReady = dilMin >= 20;
-  const dilHtml = p.dilated ? `<div class="dil-badge ${dilReady?'ready':'w'}" id="dt-${p.bmhId.replace(/-/g,'')}">💧 ${dilMin}m${dilReady?' ✓ READY':''}</div>` : '';
+  const dilHtml = p.dilated ? `<div class="dil-badge w" id="dt-${p.bmhId.replace(/-/g,'')}">💧 ${dilMin}m</div>` : '';
   const payHtml = p.balance>0 ? `<div class="pay-badge-r">⚠️ Due ₹${p.balance.toLocaleString('en-IN')}</div>` : p.advance>0 ? `<div class="adv-badge">💙 Adv ₹${p.advance.toLocaleString('en-IN')}</div>` : '';
   const deptLabel = {ophtho:'Ophthalmology',obg:'OBG',psych:'Psychiatry',skin:'Skin'}[p.dept]||p.dept;
   const snoDiv = sno!==undefined ? `<div style="font-size:10px;font-weight:900;color:var(--g2);width:20px;text-align:center;flex-shrink:0;padding-top:2px">${sno}</div>` : '';
@@ -1198,8 +1197,13 @@ function openPatient(bmhId) {
 
   // ── 3. Reset prescription ──────────────────────────────────────
   if(typeof RX_DRUGS !== 'undefined') RX_DRUGS.length = 0;
+  if(typeof SELECTED_INVESTIGATIONS !== 'undefined') SELECTED_INVESTIGATIONS.length = 0;
   typeof renderRxDrugs === 'function' && renderRxDrugs();
   const rxAdvice = document.getElementById('rx-advice-text'); if(rxAdvice) rxAdvice.value='';
+  syncCurrentPatientInvestigationOrders();
+  syncSelectedInvestigationCheckboxes && syncSelectedInvestigationCheckboxes();
+  renderOeInvOrderedList && renderOeInvOrderedList();
+  renderInvestigationOrders && renderInvestigationOrders();
 
   // ── 4. Navigate to dept ────────────────────────────────────────
   const deptPage = { ophtho:'ophtho', obg:'obg', psych:'psych', skin:'skin' }[p.dept] || 'ophtho';
@@ -1348,8 +1352,6 @@ function populateOphthoForm(v) {
     });
   }
   setV('sl-notes-text', v.slNotes);
-  setV('oe-anterior-findings', v.oeAnteriorFindings || '');
-  setV('oe-posterior-findings', v.oePosteriorFindings || '');
 
   setV('rx-diagnosis-text', v.diagnosisText || '');
   const dxRows = document.getElementById('rx-diagnosis-rows');
@@ -1417,6 +1419,14 @@ function markDilated(id, name) {
   fbUpdate && fbUpdate('patients/'+id,{dilated:true,dilatedTime:p.dilatedTime}).catch(()=>{});
   showToast((name||p.name)+' 💧 Dilation recorded — timer started ✓','s');
   renderDocQueue && renderDocQueue();
+}
+function markCurrentPatientDilated() {
+  const p = window.CURRENT_PATIENT || PATIENTS.find(x=>x.bmhId === (document.getElementById('ophtho-pt-uid')?.textContent || '').trim());
+  if(!p) {
+    showToast('Open the patient record first','w');
+    return;
+  }
+  markDilated(p.bmhId, p.name);
 }
 function markPaid(id) {
   const pr = PAY_REQUESTS.find(x=>x.id===id); if (!pr) return;
@@ -1675,14 +1685,15 @@ function getRxDoctorDisplayName() {
 
 function buildOphthoCaseSheetHtml() {
   // ── collect patient info ──────────────────────────────────────────────
-  const ptName   = document.getElementById('ophtho-pt-nm')?.textContent?.trim() || 'Patient';
-  const ptId     = document.getElementById('ophtho-pt-uid')?.textContent?.trim() || '';
+  const currentPt = window.CURRENT_PATIENT || PATIENTS.find(p => p.bmhId === document.getElementById('ophtho-pt-uid')?.textContent?.trim()) || {};
+  const ptName   = currentPt.name || document.getElementById('ophtho-pt-nm')?.textContent?.trim() || 'Patient';
+  const ptId     = currentPt.bmhId || document.getElementById('ophtho-pt-uid')?.textContent?.trim() || '';
   const today    = new Date().toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'});
   const drName   = window.CURRENT_USER?.name || 'Dr. Varun Baweja';
   const centre   = window.CURRENT_USER?.centre || 'CHD';
 
   // ── Age/Sex/Address from patient record ──────────────────────────────
-  const pt = (window.PATIENTS||[]).find(p=>p.bmhId===ptId)||{};
+  const pt = currentPt.bmhId ? currentPt : ((window.PATIENTS||[]).find(p=>p.bmhId===ptId)||{});
   const ptAge  = pt.age  || '';
   const ptSex  = pt.sex  || pt.gender || '';
   const ptMob  = pt.mob  || pt.phone  || '';
@@ -1880,7 +1891,7 @@ function buildOphthoCaseSheetHtml() {
 </tr>
 </tbody>
 </table>`;
-  const ocularField = (label, val) => `<tr><td style="font-size:5px;font-weight:700;padding:1px 2px;border:1px solid #bbb;width:38%;vertical-align:top;background:#f2f2f2;line-height:1.1">${escHtml(label)}</td><td style="font-size:5px;padding:1px 2px;border:1px solid #bbb;word-break:break-word;line-height:1.15">${escHtml(val) || '—'}</td></tr>`;
+  const ocularField = (label, val) => `<tr><td style="font-size:5px;font-weight:700;padding:1px 2px;border:1px solid #bbb;width:30%;vertical-align:top;background:#f2f2f2;line-height:1.1">${escHtml(label)}</td><td style="font-size:5px;padding:1px 2px;border:1px solid #bbb;word-break:break-word;line-height:1.15">${escHtml(val) || '—'}</td></tr>`;
   const fieldLinePrint = (label, val) => ocularField(label, val);
   const slJoin = (struct, eye) => (slData[struct]?.[eye] || []).join(', ');
   const anteriorPrint = (eye) => `<table style="border-collapse:collapse;width:100%">${fieldLinePrint('Lids/Lashes', slJoin('Lids/Lashes', eye))}${fieldLinePrint('Conjunctiva', slJoin('Conjunctiva', eye))}${fieldLinePrint('Cornea', slJoin('Cornea', eye))}${fieldLinePrint('Iris / Pupil', [slJoin('Iris', eye), slJoin('Pupil', eye)].filter(Boolean).join(' · '))}${fieldLinePrint('A/C', slJoin('AC', eye))}${fieldLinePrint('Lens', slJoin('Lens', eye))}</table>`;
@@ -1899,13 +1910,13 @@ function buildOphthoCaseSheetHtml() {
   try {
     ocularDiagramPrintSrc = new URL('assets/ocular-health-exam.png', document.querySelector('base')?.href || window.location.href).href;
   } catch (e) { /* keep relative */ }
-  const ocularDiagramsHtml = '<div style="width:100%;max-width:118px;margin:0 auto;text-align:center">'
+  const ocularDiagramsHtml = '<div style="width:100%;max-width:165px;margin:0 auto;text-align:center">'
     + '<img src="' + ocularDiagramPrintSrc + '" alt="Ocular health examination diagram" style="width:100%;height:auto;display:block;border:1px solid #333;border-radius:4px;background:#fff" onerror="this.style.display=\'none\'"/>'
     + '<div style="font-size:5px;color:#555;margin-top:2px;line-height:1.1">Ocular health (diagram)</div></div>';
   const ocularBlock = `
 <div style="margin-top:3px;page-break-inside:avoid">
 <h2 style="font-size:8px;margin:2px 0 1px;padding:0">Slit lamp &amp; fundus</h2>
-<div style="display:grid;grid-template-columns:minmax(0,1fr) 120px minmax(0,1fr);grid-template-rows:auto auto;gap:2px 4px;align-items:start;width:100%">
+<div style="display:grid;grid-template-columns:minmax(0,.92fr) 172px minmax(0,.92fr);grid-template-rows:auto auto;gap:2px 4px;align-items:start;width:100%">
   <div style="grid-column:1;grid-row:1;min-width:0">
     <div style="font-size:6px;font-weight:900;margin:0 0 1px;color:#1a4a8c">${lblEye('od')} — Ant.</div>
     ${anteriorPrint('od')}
@@ -1922,7 +1933,7 @@ function buildOphthoCaseSheetHtml() {
     <div style="font-size:6px;font-weight:900;margin:0 0 1px;color:#1a7a4a">${lblEye('os')} — Post.</div>
     ${posteriorPrint('os')}
   </div>
-  <div style="grid-column:2;grid-row:1 / span 2;align-self:center;justify-self:center;padding:3px;border:1px solid #333;border-radius:3px;background:#fff;max-width:120px">
+  <div style="grid-column:2;grid-row:1 / span 2;align-self:center;justify-self:center;padding:3px;border:1px solid #333;border-radius:3px;background:#fff;max-width:172px;width:100%">
     <div style="font-size:5.5px;font-weight:900;text-align:center;margin-bottom:2px;line-height:1.15">Lids · Cornea · Lens · Fundus</div>
     ${ocularDiagramsHtml}
     ${slNotes ? `<div style="font-size:5px;color:#222;margin-top:3px;text-align:left;line-height:1.15;white-space:pre-wrap;border-top:1px solid #ddd;padding-top:2px">${escHtml(slNotes)}</div>` : ''}
@@ -1933,8 +1944,8 @@ function buildOphthoCaseSheetHtml() {
   // ── build HTML ────────────────────────────────────────────────────────
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Case Sheet — ${ptName}</title><style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-body{font-family:Arial,Helvetica,sans-serif;color:#111;padding:2mm 3mm;font-size:7px;line-height:1.12}
-@page{size:A4 portrait;margin:2.5mm}
+body{font-family:Arial,Helvetica,sans-serif;color:#111;padding:1.5mm 2.5mm;font-size:7.1px;line-height:1.13}
+@page{size:A4 portrait;margin:1.8mm}
 @media print{body{padding:0}}
 h1{font-size:11px;font-weight:900;text-align:center;letter-spacing:.5px;text-transform:uppercase;border-bottom:1.5px solid #111;padding-bottom:2px;margin-bottom:3px}
 h2{font-size:7.5px;font-weight:900;text-transform:uppercase;letter-spacing:.3px;border-bottom:1px solid #111;padding-bottom:1px;margin-bottom:2px;margin-top:4px}
@@ -2326,7 +2337,20 @@ function ptab(el, cId) {
   el.classList.add('active');
   const tgt = document.getElementById(cId); if (tgt) tgt.classList.add('active');
 }
-function openM(id){const m=document.getElementById(id);if(m)m.classList.add('open');if(id==='m-print-tpl')loadTplDocs();if(id==='m-consents')renderConsentModal();if(id==='m-new-tpl')populateNewPackModal();}
+function openM(id){
+  const m=document.getElementById(id);
+  if(m)m.classList.add('open');
+  if(id==='m-print-tpl')loadTplDocs();
+  if(id==='m-consents')renderConsentModal();
+  if(id==='m-new-tpl')populateNewPackModal();
+  if(id==='m-order-invest') {
+    const modal = document.getElementById('m-order-invest');
+    modal?.querySelectorAll('.ptabs .ptab').forEach((tab, idx) => tab.classList.toggle('active', idx === 0));
+    modal?.querySelectorAll('.tab-content').forEach((tab, idx) => tab.classList.toggle('active', tab.id === 'inv-blood'));
+    refreshInvestigationTemplateSelect && refreshInvestigationTemplateSelect();
+    syncSelectedInvestigationCheckboxes && syncSelectedInvestigationCheckboxes();
+  }
+}
 function closeM(id){const m=document.getElementById(id);if(m)m.classList.remove('open')}
 document.addEventListener('click',e=>{document.querySelectorAll('.modal-ov').forEach(m=>{if(e.target===m)m.classList.remove('open')})});
 function showToast(msg,type){const t=document.getElementById('toast'),tm=document.getElementById('t-msg'),ti=document.getElementById('t-ic');if(!t||!tm)return;t.className='toast '+(type||'');ti.textContent=type==='s'?'✅':type==='w'?'⚠️':'ℹ️';tm.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3200);}
@@ -2499,7 +2523,7 @@ function renderOphthoPayList() {
   const myPay = PAY_REQUESTS.filter(p => p.bmhId === 'BMSH-000001');
   el.innerHTML = myPay.length ? myPay.map(payCardHtml).join('') : `<div style="font-size:12px;color:var(--g1);padding:8px 0;text-align:center">No pending charges</div>`;
 }
-setInterval(()=>PATIENTS.filter(p=>p.dilated&&p.dilatedTime).forEach(p=>{const el=document.getElementById('dt-'+p.bmhId.replace(/-/g,''));if(el){const m=Math.floor((Date.now()-p.dilatedTime)/60000);el.textContent='💧 '+m+'m'+(m>=20?' ✓ READY':'');}}),15000);
+setInterval(()=>PATIENTS.filter(p=>p.dilated&&p.dilatedTime).forEach(p=>{const el=document.getElementById('dt-'+p.bmhId.replace(/-/g,''));if(el){const m=Math.floor((Date.now()-p.dilatedTime)/60000);el.textContent='💧 '+m+'m';}}),15000);
 
 // ═══ OBG ═══
 function calcEDD(){
@@ -4138,49 +4162,8 @@ function printOphthoSheet() {
   safePrint(html);
 }
 
-/** Full A4: anterior (left), posterior (right), diagram bottom-centre — uses oe-anterior-findings / oe-posterior-findings */
 function printEyeExaminationCaseSheetA4() {
-  const p = window.CURRENT_PATIENT || {};
-  const ptName = p.name || document.getElementById('ophtho-pt-nm')?.textContent?.trim() || 'Patient';
-  const ptId = p.bmhId || document.getElementById('ophtho-pt-uid')?.textContent?.trim() || '—';
-  const today = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
-  const ant = document.getElementById('oe-anterior-findings')?.value?.trim() || '—';
-  const post = document.getElementById('oe-posterior-findings')?.value?.trim() || '—';
-  let imgJpg = '';
-  let imgPng = '';
-  try {
-    const base = document.querySelector('base')?.href || window.location.href;
-    imgJpg = new URL('assets/ocular-health-exam.jpg', base).href;
-    imgPng = new URL('assets/ocular-health-exam.png', base).href;
-  } catch (e) {
-    imgJpg = 'assets/ocular-health-exam.jpg';
-    imgPng = 'assets/ocular-health-exam.png';
-  }
-  const lh = resolvePrintHeaderSrc();
-  const html = '<!DOCTYPE html><html><head><meta charset="UTF-8">'
-    + '<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:11px;color:#111}'
-    + '@page{size:A4;margin:8mm}.sheet{min-height:297mm;display:flex;flex-direction:column;box-sizing:border-box}'
-    + '.row-main{flex:1;display:grid;grid-template-columns:1fr minmax(200px,280px) 1fr;gap:12px;align-items:stretch;min-height:220mm}'
-    + '.find{border:1px solid #bbb;border-radius:10px;padding:12px;white-space:pre-wrap;line-height:1.55;font-size:11px;overflow:hidden}'
-    + '.find h3{font-size:11px;margin:0 0 10px;color:#1A3C6E;text-transform:uppercase;letter-spacing:.4px}'
-    + '.dia-row{display:flex;justify-content:center;align-items:flex-end;padding:10px 0 0;margin-top:auto}'
-    + '.dia-row img{max-width:min(240px,42vw);height:auto;object-fit:contain}'
-    + '.dia-cap{font-size:9px;color:#666;margin-top:6px;text-align:center}</style></head><body>'
-    + '<div class="sheet">'
-    + (lh ? '<div style="margin-bottom:8px"><img src="' + escapeHtmlConsent(lh) + '" style="width:100%;max-height:72px;object-fit:contain" alt=""></div>'
-      : '<div style="font-weight:900;font-size:15px;color:#1A3C6E;margin-bottom:8px">Baweja Multispeciality Hospital</div>')
-    + '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:8px">'
-    + '<div><strong>' + escapeHtmlConsent(ptName) + '</strong> · BMSH ' + escapeHtmlConsent(ptId) + '</div>'
-    + '<div>' + escapeHtmlConsent(today) + '</div></div>'
-    + '<div style="text-align:center;font-weight:900;font-size:12px;color:#1A3C6E;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px">Eye examination</div>'
-    + '<div class="row-main">'
-    + '<div class="find"><h3>Anterior findings</h3>' + escapeHtmlConsent(ant).replace(/\n/g, '<br>') + '</div>'
-    + '<div style="display:flex;flex-direction:column;justify-content:flex-end;align-items:center;padding:6px">'
-    + '<img src="' + escapeHtmlConsent(imgPng) + '" alt="Ocular health examination" style="width:100%;max-width:280px;height:auto;object-fit:contain" onerror="this.onerror=null;this.src=\'' + escapeHtmlConsent(imgJpg) + '\'">'
-    + '<div class="dia-cap">Ocular health diagram</div></div>'
-    + '<div class="find"><h3>Posterior findings</h3>' + escapeHtmlConsent(post).replace(/\n/g, '<br>') + '</div>'
-    + '</div></div></body></html>';
-  safePrint(html);
+  safePrint(buildOphthoCaseSheetHtml());
   showToast('Eye examination A4 sheet sent to printer ✓', 's');
 }
 
@@ -4283,6 +4266,122 @@ const DRUG_LIBRARY = [
 ];
 
 const SELECTED_INVESTIGATIONS = [];
+let INVESTIGATION_TEMPLATES_DATA = {
+  'baseline-lab': ['CBC (Complete Blood Count)', 'Fasting Blood Sugar', 'HbA1c', 'Serum Creatinine'],
+  'pre-op-eye': ['CBC (Complete Blood Count)', 'Fasting Blood Sugar', 'ECG', 'Chest X-Ray'],
+  'retina-workup': ['OCT Macula OU', 'Fundus Photography', 'HbA1c']
+};
+const INVESTIGATION_TEMPLATES_META = {
+  'baseline-lab': { dept: 'all', name: 'Baseline blood work' },
+  'pre-op-eye': { dept: 'ophtho', name: 'Eye pre-op workup' },
+  'retina-workup': { dept: 'ophtho', name: 'Retina workup' }
+};
+function getCurrentInvestigationDeptKey() {
+  const dept = (window.CURRENT_PATIENT?.dept || CURRENT_USER?.dept || '').toLowerCase();
+  if(dept.includes('obg')) return 'obg';
+  if(dept.includes('psych')) return 'psych';
+  if(dept.includes('skin')) return 'skin';
+  return 'ophtho';
+}
+function saveInvestigationTemplatesToStorage() {
+  try {
+    localStorage.setItem('bmh_investigation_templates', JSON.stringify({
+      data: INVESTIGATION_TEMPLATES_DATA,
+      meta: INVESTIGATION_TEMPLATES_META
+    }));
+  } catch (e) {}
+}
+function loadInvestigationTemplatesFromStorage() {
+  try {
+    const raw = localStorage.getItem('bmh_investigation_templates');
+    if(!raw) return;
+    const parsed = JSON.parse(raw);
+    if(parsed?.data && typeof parsed.data === 'object') Object.assign(INVESTIGATION_TEMPLATES_DATA, parsed.data);
+    if(parsed?.meta && typeof parsed.meta === 'object') Object.assign(INVESTIGATION_TEMPLATES_META, parsed.meta);
+  } catch (e) {}
+}
+function getCurrentPatientInvestigationOrders() {
+  const pt = window.CURRENT_PATIENT || PATIENTS.find(p => p.bmhId === (document.getElementById('ophtho-pt-uid')?.textContent || '').trim());
+  if(!pt) return [];
+  if(!Array.isArray(pt.investigationOrders)) pt.investigationOrders = [];
+  return pt.investigationOrders;
+}
+function syncCurrentPatientInvestigationOrders() {
+  const orders = getCurrentPatientInvestigationOrders();
+  INVESTIGATION_ORDERS.length = 0;
+  orders.forEach(o => INVESTIGATION_ORDERS.push(o));
+  return orders;
+}
+function persistCurrentPatientInvestigationOrders() {
+  const pt = window.CURRENT_PATIENT;
+  if(pt?.bmhId) {
+    fbUpdate && fbUpdate('patients/' + pt.bmhId, { investigationOrders: pt.investigationOrders || [] }).catch(()=>{});
+  }
+}
+function syncSelectedInvestigationCheckboxes() {
+  const selectedNames = new Set(SELECTED_INVESTIGATIONS.map(i => i.name));
+  document.querySelectorAll('#m-order-invest [onclick^="toggleInvestigation"]').forEach(el => {
+    const label = el.querySelector('div div')?.textContent?.trim();
+    const cb = el.querySelector('input[type=checkbox]');
+    const checked = !!label && selectedNames.has(label);
+    if(cb) cb.checked = checked;
+    el.style.background = checked ? 'var(--blue-lt)' : 'var(--g6)';
+  });
+  const sl = document.getElementById('selected-invest-list');
+  if(sl) {
+    sl.innerHTML = SELECTED_INVESTIGATIONS.length
+      ? SELECTED_INVESTIGATIONS.map(i=>`<span style="display:inline-block;margin:2px 4px 2px 0;background:var(--blue-lt);color:var(--blue);padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">${i.name} ₹${i.price.toLocaleString('en-IN')}</span>`).join('')
+      : 'None selected';
+  }
+}
+function clearSelectedInvestigations() {
+  SELECTED_INVESTIGATIONS.length = 0;
+  syncSelectedInvestigationCheckboxes();
+}
+function refreshInvestigationTemplateSelect() {
+  const sel = document.getElementById('inv-template-sel');
+  if(!sel) return;
+  const dept = getCurrentInvestigationDeptKey();
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">— Select template —</option>';
+  Object.keys(INVESTIGATION_TEMPLATES_DATA).forEach(key => {
+    const meta = INVESTIGATION_TEMPLATES_META[key] || { dept: 'all', name: key };
+    if(meta.dept !== 'all' && meta.dept !== dept) return;
+    const opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = meta.name || key;
+    sel.appendChild(opt);
+  });
+  if([...sel.options].some(o => o.value === cur)) sel.value = cur;
+}
+function applyInvestigationTemplate(key) {
+  if(!key || !INVESTIGATION_TEMPLATES_DATA[key]) return;
+  clearSelectedInvestigations();
+  const names = new Set(INVESTIGATION_TEMPLATES_DATA[key] || []);
+  document.querySelectorAll('#m-order-invest [onclick^="toggleInvestigation"]').forEach(el => {
+    const label = el.querySelector('div div')?.textContent?.trim();
+    if(!label || !names.has(label)) return;
+    const cb = el.querySelector('input[type=checkbox]');
+    if(cb && !cb.checked) toggleInvestigation(el, label, Number(el.getAttribute('data-price')) || 0);
+  });
+}
+function saveInvestigationTemplateFromSelection() {
+  if(!SELECTED_INVESTIGATIONS.length) {
+    showToast('Select investigations first','w');
+    return;
+  }
+  const name = prompt('Template name?');
+  if(!name) return;
+  const deptSpecific = confirm('Make this template department-specific? Click Cancel to save as a general template.');
+  const key = name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') || ('investigation-template-' + Date.now());
+  INVESTIGATION_TEMPLATES_DATA[key] = SELECTED_INVESTIGATIONS.map(i => i.name);
+  INVESTIGATION_TEMPLATES_META[key] = { dept: deptSpecific ? getCurrentInvestigationDeptKey() : 'all', name: name.trim() };
+  saveInvestigationTemplatesToStorage();
+  refreshInvestigationTemplateSelect();
+  const sel = document.getElementById('inv-template-sel');
+  if(sel) sel.value = key;
+  showToast('Investigation template saved ✓','s');
+}
 let RX_TEMPLATES_DATA = {
   'post-phaco': [{trade:'Vigamox',generic:'Moxifloxacin 0.5%',type:'Eye Drop',eye:'OS',freq:'QID',dur:'1 Week'},{trade:'Pred Forte',generic:'Prednisolone 1%',type:'Eye Drop',eye:'OS',freq:'QID→Taper',dur:'4 Weeks'},{trade:'Refresh Tears',generic:'CMC 0.5%',type:'Eye Drop',eye:'OU',freq:'PRN',dur:'1 Month'}],
   'post-ivt': [{trade:'Vigamox',generic:'Moxifloxacin 0.5%',type:'Eye Drop',eye:'OS',freq:'QID',dur:'3 Days'},{trade:'Refresh Tears',generic:'CMC 0.5%',type:'Eye Drop',eye:'OU',freq:'PRN',dur:'1 Month'}],
@@ -4842,6 +4941,8 @@ window.addEventListener('DOMContentLoaded', function() {
   try { renderIPD && renderIPD(); } catch(e) {}
   try { initQR && initQR(); } catch(e) {}
   try { renderRxDrugs && renderRxDrugs(); } catch(e) {}
+  try { loadInvestigationTemplatesFromStorage && loadInvestigationTemplatesFromStorage(); } catch(e) {}
+  try { refreshInvestigationTemplateSelect && refreshInvestigationTemplateSelect(); } catch(e) {}
   try { buildRefractionDropdowns && buildRefractionDropdowns(); } catch(e) {}
   try { buildRatingScales && buildRatingScales(); } catch(e) {}
   try { calcEDD && calcEDD(); } catch(e) {}
@@ -5107,17 +5208,50 @@ function toggleInvestigation(el, name, price) {
   const idx = SELECTED_INVESTIGATIONS.findIndex(i=>i.name===name);
   if(cb.checked && idx===-1) SELECTED_INVESTIGATIONS.push({name,price});
   else if(!cb.checked && idx>-1) SELECTED_INVESTIGATIONS.splice(idx,1);
-  const sl = document.getElementById('selected-invest-list');
-  if(sl) sl.innerHTML = SELECTED_INVESTIGATIONS.length ? SELECTED_INVESTIGATIONS.map(i=>`<span style="display:inline-block;margin:2px 4px 2px 0;background:var(--blue-lt);color:var(--blue);padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">${i.name} ₹${i.price.toLocaleString('en-IN')}</span>`).join('') : 'None selected';
+  syncSelectedInvestigationCheckboxes();
 }
 function confirmInvestigations() {
   if(!SELECTED_INVESTIGATIONS.length){showToast('No investigations selected','w');return;}
-  SELECTED_INVESTIGATIONS.forEach(inv => {
-    PAY_REQUESTS.push({id:'PR'+Date.now()+Math.random(),patient:'Test Patient',bmhId:'BMSH-000001',for:inv.name,amount:inv.price,status:'pending',from:document.getElementById('sbnm')?.textContent||'Doctor'});
+  const pt = window.CURRENT_PATIENT || PATIENTS.find(p => p.bmhId === (document.getElementById('ophtho-pt-uid')?.textContent || '').trim());
+  if(!pt) { showToast('Open the patient record first','w'); return; }
+  const orders = getCurrentPatientInvestigationOrders();
+  const centre = pt.centre || CURRENT_USER?.centre || 'CHD';
+  const doctor = document.getElementById('sbnm')?.textContent || CURRENT_USER?.name || 'Doctor';
+  SELECTED_INVESTIGATIONS.forEach((inv, idx) => {
+    const existing = orders.find(o => !o.done && o.name === inv.name);
+    if(existing) return;
+    const order = {
+      id: 'INV' + Date.now() + idx,
+      name: inv.name,
+      notes: '',
+      price: Number(inv.price) || 0,
+      date: new Date().toLocaleDateString('en-IN'),
+      done: false,
+      patient: pt.name,
+      bmhId: pt.bmhId,
+      dept: pt.dept || CURRENT_USER?.dept || 'ophtho',
+      centre,
+      orderedBy: doctor
+    };
+    orders.push(order);
+    PAY_REQUESTS.push({
+      id:'PR'+Date.now()+Math.random(),
+      patient:pt.name,
+      bmhId:pt.bmhId,
+      for:inv.name,
+      amount:Number(inv.price)||0,
+      status:'pending',
+      from:doctor,
+      dept:order.dept,
+      centre,
+      date:new Date().toISOString()
+    });
   });
+  syncCurrentPatientInvestigationOrders();
+  persistCurrentPatientInvestigationOrders();
   showToast(`🧪 ${SELECTED_INVESTIGATIONS.length} investigation(s) ordered & sent to reception ✓`,'s');
   closeM('m-order-invest');
-  SELECTED_INVESTIGATIONS.length = 0;
+  clearSelectedInvestigations();
   renderOeInvOrderedList && renderOeInvOrderedList();
   renderInvestigationOrders && renderInvestigationOrders();
   renderDashboard();
@@ -7134,35 +7268,42 @@ function viewInvestFile(url, name) {
   window.open(url, '_blank');
 }
 function addInvestigationOrder() {
+  const pt = window.CURRENT_PATIENT || PATIENTS.find(p => p.bmhId === (document.getElementById('ophtho-pt-uid')?.textContent || '').trim());
+  if(!pt) { showToast('Open the patient record first','w'); return; }
   const name = document.getElementById('add-inv-name')?.value?.trim();
   const notes = document.getElementById('add-inv-notes')?.value?.trim();
   if(!name) { showToast('Enter investigation name','w'); return; }
-  INVESTIGATION_ORDERS.push({name, notes, date: new Date().toLocaleDateString('en-IN'), done: false});
+  const orders = getCurrentPatientInvestigationOrders();
+  orders.push({id:'INV'+Date.now(), name, notes, date: new Date().toLocaleDateString('en-IN'), done: false, patient: pt.name, bmhId: pt.bmhId, dept: pt.dept || 'ophtho', centre: pt.centre || CURRENT_USER?.centre || 'CHD'});
+  syncCurrentPatientInvestigationOrders();
+  persistCurrentPatientInvestigationOrders();
   renderInvestigationOrders();
   document.getElementById('add-inv-name').value = '';
   document.getElementById('add-inv-notes').value = '';
   // Also add to PAY_REQUESTS so reception can collect
-  PAY_REQUESTS.push({id:'PR'+Date.now(), patient:'Test Patient', bmhId:'BMSH-000001', for:name, amount:CENTRE_CHARGES.CHD[name]||0, status:'pending', from:document.getElementById('sbnm')?.textContent||'Doctor'});
+  const centre = pt.centre || CURRENT_USER?.centre || 'CHD';
+  PAY_REQUESTS.push({id:'PR'+Date.now(), patient:pt.name, bmhId:pt.bmhId, for:name, amount:(CENTRE_CHARGES[centre]?.[name]||0), status:'pending', from:document.getElementById('sbnm')?.textContent||'Doctor', dept:pt.dept||'ophtho', centre});
   showToast(`🧪 ${name} ordered ✓`, 's');
   renderOeInvOrderedList && renderOeInvOrderedList();
 }
 function renderOeInvOrderedList() {
   const el = document.getElementById('oe-inv-ordered-list'); if(!el) return;
-  const pending = (typeof INVESTIGATION_ORDERS !== 'undefined') ? INVESTIGATION_ORDERS.filter(o=>!o.done) : [];
+  const pending = syncCurrentPatientInvestigationOrders().filter(o=>!o.done);
   if(!pending.length) { el.innerHTML = '<span style="color:var(--g1);font-style:italic">None ordered</span>'; return; }
   el.innerHTML = pending.map((o,i) => `<div style="display:inline-flex;align-items:center;gap:5px;background:var(--orange-lt);color:#8a4200;border:1px solid rgba(212,160,23,.5);border-radius:20px;padding:2px 10px;font-size:11px;font-weight:700;margin:2px 4px 2px 0">
     🧪 ${o.name}${o.notes?' ('+o.notes+')':''}
-    <span onclick="INVESTIGATION_ORDERS.splice(${i},1);renderOeInvOrderedList();renderInvestigationOrders()" style="cursor:pointer;opacity:.6;font-size:12px">&times;</span>
+    <span onclick="(function(){const orders=getCurrentPatientInvestigationOrders();const idx=orders.findIndex(x=>x.id===${JSON.stringify(o.id)});if(idx>-1)orders.splice(idx,1);syncCurrentPatientInvestigationOrders();persistCurrentPatientInvestigationOrders();renderOeInvOrderedList();renderInvestigationOrders();})();" style="cursor:pointer;opacity:.6;font-size:12px">&times;</span>
   </div>`).join('');
 }
 function renderInvestigationOrders() {
   const el = document.getElementById('inv-order-list'); if(!el) return;
-  el.innerHTML = INVESTIGATION_ORDERS.map((o,i) => `<div style="display:flex;align-items:center;gap:7px;padding:6px 8px;background:${o.done?'var(--green-lt)':'var(--orange-lt)'};border-radius:7px;margin-top:5px;font-size:12px">
+  const orders = syncCurrentPatientInvestigationOrders();
+  el.innerHTML = orders.map((o,i) => `<div style="display:flex;align-items:center;gap:7px;padding:6px 8px;background:${o.done?'var(--green-lt)':'var(--orange-lt)'};border-radius:7px;margin-top:5px;font-size:12px">
     <span style="font-size:14px">${o.done?'✅':'🧪'}</span>
     <div style="flex:1"><div style="font-weight:700">${o.name}</div>${o.notes?`<div style="font-size:10.5px;color:var(--g1)">${o.notes}</div>`:''}
     <div style="font-size:9.5px;color:var(--g1)">${o.date}</div></div>
-    <button class="btn btn-xs ${o.done?'btn-gray':'btn-green'}" onclick="INVESTIGATION_ORDERS[${i}].done=!INVESTIGATION_ORDERS[${i}].done;renderInvestigationOrders()">${o.done?'Undo':'Done ✓'}</button>
-    <button class="btn btn-xs btn-gray" onclick="INVESTIGATION_ORDERS.splice(${i},1);renderInvestigationOrders()">&#x2715;</button>
+    <button class="btn btn-xs ${o.done?'btn-gray':'btn-green'}" onclick="getCurrentPatientInvestigationOrders()[${i}].done=!getCurrentPatientInvestigationOrders()[${i}].done;syncCurrentPatientInvestigationOrders();persistCurrentPatientInvestigationOrders();renderOeInvOrderedList();renderInvestigationOrders()">${o.done?'Undo':'Done ✓'}</button>
+    <button class="btn btn-xs btn-gray" onclick="getCurrentPatientInvestigationOrders().splice(${i},1);syncCurrentPatientInvestigationOrders();persistCurrentPatientInvestigationOrders();renderOeInvOrderedList();renderInvestigationOrders()">&#x2715;</button>
   </div>`).join('');
 }
 
@@ -8185,6 +8326,7 @@ window.printUnifiedRx = function(deptId) {
   const ptId    = cpt.bmhId || document.getElementById(deptId+'-rx-ptid')?.textContent   || document.getElementById('ophtho-pt-uid')?.textContent || '—';
   const ptAge   = document.getElementById(deptId+'-rx-agesex')?.textContent || ((cpt.age != null && cpt.sex) ? `${cpt.age}Y / ${cpt.sex}` : '—');
   const ptMob   = cpt.mob || PATIENTS?.find(p=>p.bmhId===ptId)?.mob || '';
+  const patientInvestigationOrders = (Array.isArray(cpt.investigationOrders) ? cpt.investigationOrders : INVESTIGATION_ORDERS).filter(o => !o.done && (!o.bmhId || o.bmhId === ptId));
 
   // ── Letterhead: uploaded header, LH, or same-origin asset (fixes missing header on GitHub Pages) ──
   const lhImgSrc = resolvePrintHeaderSrc();
@@ -8307,9 +8449,9 @@ ${incPrc && procs.length ? `
 <div class="sec-title">Procedure / Surgery Advised:</div>
 ${procs.map(p=>`<div class="proc-item">&#9890; ${p}</div>`).join('')}` : ''}
 
-${incInv && typeof INVESTIGATION_ORDERS!=='undefined' && INVESTIGATION_ORDERS.filter(o=>!o.done).length ? `
+${incInv && patientInvestigationOrders.length ? `
 <div class="sec-title">Investigations Ordered:</div>
-${INVESTIGATION_ORDERS.filter(o=>!o.done).map(o=>`<div class="proc-item">&#9514; ${o.name}${o.notes?' — '+o.notes:''}</div>`).join('')}` : ''}
+${patientInvestigationOrders.map(o=>`<div class="proc-item">&#9514; ${o.name}${o.notes?' — '+o.notes:''}</div>`).join('')}` : ''}
 
 ${fuFormatted ? `<div style="margin:10px 0"><span class="fu-box">&#128197; Next Visit: ${fuFormatted}</span></div>` : ''}
 
@@ -11488,8 +11630,7 @@ function buildQCard(p, sno) {
   const waitStr = waitMin < 60 ? waitMin+'m' : Math.floor(waitMin/60)+'h '+( waitMin%60)+'m';
   // Dilation time
   const dilMin = p.dilated && p.dilatedTime ? Math.floor((now - p.dilatedTime)/60000) : 0;
-  const dilReady = dilMin >= 20;
-  const dilStr = p.dilated ? `💧${dilMin}m${dilReady?' ✓':''}` : '';
+  const dilStr = p.dilated ? `💧${dilMin}m` : '';
   // Visit number (count past visits)
   const visitNo = (p.visitCount||1);
   const isNew = visitNo <= 1;
@@ -11508,7 +11649,7 @@ function buildQCard(p, sno) {
     : p.seen
     ? `<span style="background:var(--green-lt);color:#1a8c3c;border-radius:10px;padding:1px 7px;font-size:9px;font-weight:800">Seen</span>`
     : p.dilated
-    ? `<span style="background:var(--blue-lt);color:var(--blue);border-radius:10px;padding:1px 7px;font-size:9px;font-weight:800;${dilReady?'animation:pulse 1.5s infinite':''}">💧${dilReady?' Ready':'Dilating'}</span>`
+    ? `<span style="background:var(--blue-lt);color:var(--blue);border-radius:10px;padding:1px 7px;font-size:9px;font-weight:800">💧Dilated</span>`
     : `<span style="background:var(--orange-lt);color:#8a4200;border-radius:10px;padding:1px 7px;font-size:9px;font-weight:800">Waiting</span>`;
 
   const cardBg = p.preRegistered ? '#f8f8f8' : '#fff';
@@ -11568,10 +11709,7 @@ function dilationCellHtml(p) {
   }
   const now = Date.now();
   const dilMin = Math.floor((now - p.dilatedTime)/60000);
-  const dilReady = dilMin >= 20;
-  const color = dilReady ? '#1a8c3c' : 'var(--purple)';
-  const bg = dilReady ? 'var(--green-lt)' : 'var(--purple-lt)';
-  return `<span style="font-size:10px;font-weight:800;padding:3px 8px;border-radius:8px;background:${bg};color:${color}">${dilMin}m ${dilReady ? '✓ Ready' : '/ 20m'}</span>`;
+  return `<span style="font-size:10px;font-weight:800;padding:3px 8px;border-radius:8px;background:var(--purple-lt);color:var(--purple)">${dilMin}m elapsed</span>`;
 }
 
 /** Table row for Reception Queue tab and Doctor My Queue (valid <tbody> HTML). */
@@ -11585,7 +11723,6 @@ function buildQTableRow(p, sno, opts) {
   const waitMin = p.checkinAt ? Math.floor((now - p.checkinAt)/60000) : 0;
   const waitStr = waitMin < 60 ? waitMin+'m' : Math.floor(waitMin/60)+'h '+(waitMin%60)+'m';
   const dilMin = p.dilated && p.dilatedTime ? Math.floor((now - p.dilatedTime)/60000) : 0;
-  const dilReady = dilMin >= 20;
   const vuln = isPatientVulnerable(p);
   const pendingPRs = PAY_REQUESTS.filter(r=>r.bmhId===p.bmhId&&r.status==='pending');
   const pendingAmt = pendingPRs.reduce((s,r)=>s+r.amount,0);
@@ -11596,7 +11733,7 @@ function buildQTableRow(p, sno, opts) {
     : paidPRs.length
     ? `<span style="font-size:9px;color:#1a8c3c">Paid</span>${advLbl ? ' · ' + advLbl : ''}`
     : (advLbl || '');
-  const statusTxt = p.preRegistered ? 'Pre-reg' : p.seen ? 'Seen' : p.dilated ? (dilReady ? 'Dilated ✓' : 'Dilating') : 'Waiting';
+  const statusTxt = p.preRegistered ? 'Pre-reg' : p.seen ? 'Seen' : p.dilated ? 'Dilated' : 'Waiting';
   const statusBg = p.preRegistered ? '#f0f0f0' : p.seen ? 'var(--green-lt)' : p.dilated ? 'var(--blue-lt)' : 'var(--orange-lt)';
   const onRow = p.preRegistered ? `checkInPatient('${p.bmhId}')` : (receptionQueue ? `openReceptionPatient('${p.bmhId}')` : `openPatient('${p.bmhId}')`);
   const nmEsc = (p.name||'').replace(/'/g,"\\'");
@@ -11930,8 +12067,6 @@ function saveVisit(dept) {
     });
     visit.slChips = slChips;
     visit.slNotes = document.getElementById('sl-notes-text')?.value || '';
-    visit.oeAnteriorFindings = document.getElementById('oe-anterior-findings')?.value || '';
-    visit.oePosteriorFindings = document.getElementById('oe-posterior-findings')?.value || '';
     const dxLines = [...document.querySelectorAll('#rx-diagnosis-rows .rx-dx-line')].map(e=>e.value.trim()).filter(Boolean);
     visit.diagnoses = dxLines;
     visit.diagnosisText = document.getElementById('rx-diagnosis-text')?.value?.trim() || '';

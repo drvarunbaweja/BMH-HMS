@@ -448,7 +448,7 @@
                   <option>Trauma / Injury</option>
                   <option>Other (specify below)</option>
                 </select>
-                <textarea id="poh-os-text" placeholder="Details, date, surgeon…" style="min-height:50px;font-size:11.5px">Brain surgery 1 month back.</textarea>
+                <textarea id="poh-os-text" placeholder="Details, date, surgeon…" style="min-height:50px;font-size:11.5px"></textarea>
               </div>
             </div>
           </div>
@@ -681,7 +681,7 @@
         </div>
         <div style="padding:9px 12px;background:var(--purple-lt);border-radius:var(--rsm);display:flex;align-items:center;gap:10px;margin-bottom:14px">
           <span>💧</span><div style="flex:1"><div style="font-size:12px;font-weight:800;color:var(--purple)">Pupil Dilation</div><div style="font-size:10.5px;color:var(--tx3)">Record dilation time — timer shows on queue card</div></div>
-          <button class="btn btn-sm" style="background:var(--purple);color:#fff" onclick="markDilated('BMSH-000001','Test Patient')">💧 Mark Dilated Now</button>
+          <button class="btn btn-sm" style="background:var(--purple);color:#fff" onclick="markCurrentPatientDilated()">💧 Mark Dilated Now</button>
         </div>
 
         <div style="height:1px;background:var(--g5);margin-bottom:12px"></div>
@@ -896,15 +896,8 @@
             <div style="font-size:12px;font-weight:900;color:#fff;text-transform:uppercase;letter-spacing:.5px">Slit lamp &amp; ocular health</div>
             <button type="button" class="btn btn-gold btn-sm" onclick="printEyeExaminationCaseSheetA4()">🖨️ Print eye exam sheet (A4)</button>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start;margin-bottom:22px">
-            <div style="padding:14px;background:rgba(255,255,255,.05);border-radius:12px;border:1px solid rgba(255,255,255,.12)">
-              <label class="fl" style="display:block;font-size:11px;font-weight:800;color:rgba(100,180,255,.95);margin-bottom:10px;text-transform:uppercase;letter-spacing:.4px">Anterior findings</label>
-              <textarea id="oe-anterior-findings" rows="12" placeholder="OD / OS — lids, conjunctiva, cornea, anterior chamber, iris, pupil, lens…" style="width:100%;min-height:260px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:10px;color:#fff;font-size:12px;padding:12px 14px;resize:vertical;box-sizing:border-box;line-height:1.6;font-family:var(--font)"></textarea>
-            </div>
-            <div style="padding:14px;background:rgba(255,255,255,.05);border-radius:12px;border:1px solid rgba(255,255,255,.12)">
-              <label class="fl" style="display:block;font-size:11px;font-weight:800;color:rgba(100,220,140,.95);margin-bottom:10px;text-transform:uppercase;letter-spacing:.4px">Posterior findings</label>
-              <textarea id="oe-posterior-findings" rows="12" placeholder="Vitreous, optic disc, macula, vessels, periphery…" style="width:100%;min-height:260px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:10px;color:#fff;font-size:12px;padding:12px 14px;resize:vertical;box-sizing:border-box;line-height:1.6;font-family:var(--font)"></textarea>
-            </div>
+          <div style="margin-bottom:18px;padding:12px 14px;border-radius:12px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);font-size:11px;color:rgba(255,255,255,.76);line-height:1.6">
+            Slit lamp and fundus findings now print directly from the right-eye and left-eye fields below, so only the structured OD / OS entries need to be completed here.
           </div>
           <!-- OD / OS column headers -->
           <div style="display:grid;grid-template-columns:90px 1fr 1fr;gap:8px;margin-bottom:14px;border-bottom:1px solid rgba(255,255,255,.1);padding-bottom:10px">
@@ -3813,6 +3806,18 @@
 <!-- ORDER INVESTIGATIONS MODAL -->
 <div class="modal-ov" id="m-order-invest">
 <div class="modal modal-lg"><div class="modal-hd"><div class="modal-title">🧪 Order Investigations</div><button class="modal-close" onclick="closeM('m-order-invest')">✕</button></div>
+<div style="display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,.8fr);gap:10px;align-items:end;margin-bottom:12px">
+  <div class="form-group" style="margin:0">
+    <label class="fl">Investigation template</label>
+    <select id="inv-template-sel" onchange="applyInvestigationTemplate(this.value)">
+      <option value="">— Select template —</option>
+    </select>
+  </div>
+  <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+    <button class="btn btn-outline btn-sm" type="button" onclick="saveInvestigationTemplateFromSelection()">💾 Save current as template</button>
+    <button class="btn btn-gray btn-sm" type="button" onclick="clearSelectedInvestigations()">Clear selection</button>
+  </div>
+</div>
 <div class="ptabs">
   <div class="ptab active" onclick="ptab(this,'inv-blood')">🩸 Blood</div>
   <div class="ptab" onclick="ptab(this,'inv-diag')">🔬 Diagnostic / Imaging</div>
@@ -3820,17 +3825,17 @@
 </div>
 <div class="tab-content active" id="inv-blood">
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="inv-blood-list">
-    ${[['CBC (Complete Blood Count)','850'],['Fasting Blood Sugar','250'],['HbA1c','600'],['Serum Creatinine','350'],['Urea & Electrolytes','700'],['Liver Function Tests','900'],['Coagulation Profile','1200'],['HIV','400'],['HbsAg','300'],['VDRL','300']].map(([n,p])=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--g6);border-radius:8px;cursor:pointer" onclick="toggleInvestigation(this,'${n}',${p})"><input type="checkbox" style="width:16px;height:16px;flex-shrink:0"><div style="flex:1"><div style="font-size:12px;font-weight:700">${n}</div><div style="font-size:10px;color:var(--g1)">₹${parseInt(p).toLocaleString('en-IN')}</div></div></div>`).join('')}
+    ${[['CBC (Complete Blood Count)','850'],['Fasting Blood Sugar','250'],['HbA1c','600'],['Serum Creatinine','350'],['Urea & Electrolytes','700'],['Liver Function Tests','900'],['Coagulation Profile','1200'],['HIV','400'],['HbsAg','300'],['VDRL','300']].map(([n,p])=>`<div data-price="${p}" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--g6);border-radius:8px;cursor:pointer" onclick="toggleInvestigation(this,'${n}',${p})"><input type="checkbox" style="width:16px;height:16px;flex-shrink:0"><div style="flex:1"><div style="font-size:12px;font-weight:700">${n}</div><div style="font-size:10px;color:var(--g1)">₹${parseInt(p).toLocaleString('en-IN')}</div></div></div>`).join('')}
   </div>
 </div>
 <div class="tab-content" id="inv-diag">
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-    ${[['Chest X-Ray','600'],['ECG','350'],['Echocardiography','2500'],['USG Abdomen','1200'],['MRI Brain','8000'],['CT Scan Head','5000']].map(([n,p])=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--g6);border-radius:8px;cursor:pointer" onclick="toggleInvestigation(this,'${n}',${p})"><input type="checkbox" style="width:16px;height:16px;flex-shrink:0"><div style="flex:1"><div style="font-size:12px;font-weight:700">${n}</div><div style="font-size:10px;color:var(--g1)">₹${parseInt(p).toLocaleString('en-IN')}</div></div></div>`).join('')}
+    ${[['Chest X-Ray','600'],['ECG','350'],['Echocardiography','2500'],['USG Abdomen','1200'],['MRI Brain','8000'],['CT Scan Head','5000']].map(([n,p])=>`<div data-price="${p}" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--g6);border-radius:8px;cursor:pointer" onclick="toggleInvestigation(this,'${n}',${p})"><input type="checkbox" style="width:16px;height:16px;flex-shrink:0"><div style="flex:1"><div style="font-size:12px;font-weight:700">${n}</div><div style="font-size:10px;color:var(--g1)">₹${parseInt(p).toLocaleString('en-IN')}</div></div></div>`).join('')}
   </div>
 </div>
 <div class="tab-content" id="inv-eye">
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-    ${[['Biometry (IOL Master)','1200'],['OCT Macula OU','1800'],['OCT Optic Disc OU','1800'],['HVF Visual Fields','1500'],['Fundus Photography','600'],['Corneal Topography','1500'],['Specular Microscopy','1200'],['ERG / VEP','2500'],['Fluorescein Angiography','4000']].map(([n,p])=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--g6);border-radius:8px;cursor:pointer" onclick="toggleInvestigation(this,'${n}',${p})"><input type="checkbox" style="width:16px;height:16px;flex-shrink:0"><div style="flex:1"><div style="font-size:12px;font-weight:700">${n}</div><div style="font-size:10px;color:var(--g1)">₹${parseInt(p).toLocaleString('en-IN')}</div></div></div>`).join('')}
+    ${[['Biometry (IOL Master)','1200'],['OCT Macula OU','1800'],['OCT Optic Disc OU','1800'],['HVF Visual Fields','1500'],['Fundus Photography','600'],['Corneal Topography','1500'],['Specular Microscopy','1200'],['ERG / VEP','2500'],['Fluorescein Angiography','4000']].map(([n,p])=>`<div data-price="${p}" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--g6);border-radius:8px;cursor:pointer" onclick="toggleInvestigation(this,'${n}',${p})"><input type="checkbox" style="width:16px;height:16px;flex-shrink:0"><div style="flex:1"><div style="font-size:12px;font-weight:700">${n}</div><div style="font-size:10px;color:var(--g1)">₹${parseInt(p).toLocaleString('en-IN')}</div></div></div>`).join('')}
   </div>
 </div>
 <div style="margin-top:12px;padding:10px;background:var(--g6);border-radius:var(--rsm)">
