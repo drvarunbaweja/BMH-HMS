@@ -4166,16 +4166,7 @@
 </script>
 
 <!-- ═══ MAIN APP SCRIPT (legacy — being migrated to modules) ═══ -->
-<script>
-(function() {
-  var legacyPath = window.location.pathname.indexOf('/BMH-HMS/') === 0
-    ? '/BMH-HMS/js/legacy.js'
-    : '/js/legacy.js'
-  var script = document.createElement('script')
-  script.src = legacyPath
-  document.body.appendChild(script)
-})()
-</script>
+<script defer src="/BMH-HMS/js/legacy.js"></script>
 
 <!-- ═══ VITE MODULE ENTRY ═══ -->
 
