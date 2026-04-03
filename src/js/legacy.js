@@ -2297,6 +2297,7 @@ function setCentre(c, btn) {
   btn.classList.add('active');
   document.getElementById('tb-cp').textContent='📍 '+(c==='CHD'?'Chandigarh':'Ropar');
   showToast('Switched to '+(c==='CHD'?'Chandigarh':'Ropar')+' Centre','i');
+  syncReceptionConsultationFee && syncReceptionConsultationFee();
   // Refresh all views after centre switch
   renderReceptionPage && renderReceptionPage();
   renderDocQueue && renderDocQueue();
@@ -3238,6 +3239,7 @@ function loadChargesFromFirebase(){
   loadChargesFromLocalStorage();
   renderChargesList && renderChargesList();
   renderCentresCharges && renderCentresCharges();
+  syncReceptionConsultationFee && syncReceptionConsultationFee();
   if(!window.FBDB) return;
   window.FBDB.ref('centreCharges').once('value').then(snap=>{
     const d=snap.val(); if(!d) return;
@@ -3245,6 +3247,7 @@ function loadChargesFromFirebase(){
     if(d.RPR) Object.assign(CENTRE_CHARGES.RPR, d.RPR);
     saveChargesToLocalStorage();
     renderCentresCharges && renderCentresCharges();
+    syncReceptionConsultationFee && syncReceptionConsultationFee();
   }).catch(()=>{});
   window.FBDB.ref('chargesSchedule').once('value').then(snap => {
     const arr = snap.val();
@@ -3258,6 +3261,7 @@ function loadChargesFromFirebase(){
     saveChargesToLocalStorage();
     renderChargesList && renderChargesList();
     renderCentresCharges && renderCentresCharges();
+    syncReceptionConsultationFee && syncReceptionConsultationFee();
   }).catch(()=>{});
 }
 
@@ -5088,9 +5092,54 @@ window._rcQueueSubtab = window._rcQueueSubtab || 'waiting';
 function toggleRcNoFee(on) {
   const fee = document.getElementById('rc-fee');
   if(!fee) return;
-  if(on) { fee.value = '0'; fee.disabled = true; }
-  else { fee.disabled = false; if(fee.value==='0') fee.value = '200'; }
+  if(on) {
+    fee.value = '0';
+    fee.disabled = true;
+    return;
+  }
+  fee.disabled = false;
+  syncReceptionConsultationFee && syncReceptionConsultationFee();
 }
+
+function getReceptionConsultationServiceName() {
+  const purpose = document.getElementById('rc-purpose')?.value || 'New Consultation';
+  const dept = document.getElementById('rc-dept')?.value || 'ophtho';
+  if(purpose === 'Not Checked In') return null;
+  if(/follow|post-op/i.test(purpose)) return 'Follow-up Consultation';
+  const map = {
+    ophtho: 'Consultation — Eye',
+    obg: 'ANC Consultation',
+    psych: 'Psychiatry Consultation',
+    skin: 'Dermatology Consultation'
+  };
+  return map[dept] || 'Consultation';
+}
+
+function syncReceptionCentreAndFee() {
+  const centreEl = document.getElementById('rc-centre');
+  const feeEl = document.getElementById('rc-fee');
+  if(!centreEl || !feeEl) return;
+
+  const lockedCentre = getUserCentre();
+  const centre = getEffectiveCentre();
+  centreEl.value = centre;
+  centreEl.disabled = !!lockedCentre;
+  centreEl.style.opacity = lockedCentre ? '0.7' : '1';
+
+  if(document.getElementById('rc-no-fee')?.checked) {
+    feeEl.value = '0';
+    feeEl.disabled = true;
+    return;
+  }
+
+  feeEl.disabled = false;
+  const serviceName = getReceptionConsultationServiceName();
+  const amount = serviceName
+    ? (getChargeForProcedure(serviceName, centre) || CENTRE_CHARGES[centre]?.Consultation || 0)
+    : 0;
+  feeEl.value = String(amount);
+}
+window.syncReceptionConsultationFee = syncReceptionCentreAndFee;
 
 function setRcQueueSubtab(mode, btnEl) {
   window._rcQueueSubtab = mode;
@@ -5695,9 +5744,10 @@ function generateAndPrintReceipt() {
 function populateBillItems() {
   const type = document.getElementById('bill-type')?.value;
   const el = document.getElementById('rec-bill-items'); if(!el) return;
-  const items = type==='consultation' ? [['Consultation Fee',1,800]] :
-    type==='investigation' ? [['OCT Macula',1,1800],['Biometry',1,1200]] :
-    type==='surgery' ? [['PMICS (Pinhole Micro Incision Cataract Surgery) + IOL',1,38000],['Pre-op Package',1,3500]] :
+  const centre = getEffectiveCentre();
+  const items = type==='consultation' ? [[getReceptionConsultationServiceName() || 'Consultation Fee',1,getChargeForProcedure(getReceptionConsultationServiceName() || 'Consultation', centre) || CENTRE_CHARGES[centre]?.Consultation || 0]] :
+    type==='investigation' ? [['OCT Macula',1,getChargeForProcedure('OCT Macula OU', centre)],['Biometry',1,getChargeForProcedure('Biometry IOL Master', centre)]] :
+    type==='surgery' ? [['PMICS (Pinhole Micro Incision Cataract Surgery) + IOL',1,getChargeForProcedure('PMICS + IOL Implantation', centre)],['Pre-op Package',1,getChargeForProcedure('Pre-op Package', centre)]] :
     [['IPD Bed Charges (per day)',1,1500],['Nursing Charges',1,500]];
   el.innerHTML = items.map((it,i)=>`<div style="display:flex;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid var(--g5);font-size:12px">
     <span style="flex:1;font-weight:600">${it[0]}</span>
@@ -7620,9 +7670,15 @@ function getUserCentre() {
   if(CURRENT_USER.canSeeAllCentres || CURRENT_USER.isAdmin || CURRENT_USER.centre === 'BOTH') return null;
   return CURRENT_USER.centre;
 }
+function getEffectiveCentre() {
+  const locked = getUserCentre();
+  if(locked) return locked;
+  const activeBtn = document.querySelector('.c-btn.active[data-centre]');
+  return activeBtn?.getAttribute('data-centre') || CURRENT_USER?.centre || 'CHD';
+}
 // Returns true if an item (patient/IPD/OT/transaction) belongs to the user's visible centres
 function centreMatch(item) {
-  const uc = getUserCentre();
+  const uc = getEffectiveCentre();
   if(!uc) return true; // admin/BOTH — see everything
   return (item.centre || 'CHD') === uc;
 }
@@ -8206,7 +8262,7 @@ const DEPT_COLORS = {
 };
 
 function renderCollectionDashboard() {
-  const allTxn = TRANSACTIONS;
+  const allTxn = TRANSACTIONS.filter(t => (t.centre || 'CHD') === getEffectiveCentre());
   const collected = allTxn.filter(t=>t.collected);
 
   // Update summary cards
@@ -10912,6 +10968,7 @@ function computeReceptionQueuePts() {
 // ── renderReceptionPage — live computed ──────────
 function renderReceptionPage() {
   ensureDailyReceptionReset && ensureDailyReceptionReset();
+  syncReceptionConsultationFee && syncReceptionConsultationFee();
 
   const list = document.getElementById('rc-exist-list');
   if(list) {
@@ -10939,17 +10996,18 @@ function renderReceptionPage() {
   }
 
   const prEl = document.getElementById('rc-pay-list');
+  const visiblePayRequests = PAY_REQUESTS.filter(r => (r.centre || 'CHD') === getEffectiveCentre());
   if(prEl) {
-    if(!PAY_REQUESTS.length) {
+    if(!visiblePayRequests.length) {
       prEl.innerHTML = '<div style="padding:16px;text-align:center;color:var(--g1);font-size:12px">No payment requests</div>';
     } else {
-      prEl.innerHTML = PAY_REQUESTS.map(pr => payCardHtml(pr)).join('');
+      prEl.innerHTML = visiblePayRequests.map(pr => payCardHtml(pr)).join('');
     }
   }
 
   const badge = document.getElementById('rc-pr-ct');
   if(badge) {
-    const pending = PAY_REQUESTS.filter(r=>r.status==='pending').length;
+    const pending = visiblePayRequests.filter(r=>r.status==='pending').length;
     badge.textContent = pending + ' pending';
   }
 
@@ -11003,7 +11061,7 @@ function renderRcDeptDues() {
     {k:'psych',l:'Psych',icon:'🧠',color:'var(--orange)'},
     {k:'skin',l:'Skin',icon:'💆',color:'var(--purple)'},
   ];
-  const pending = PAY_REQUESTS.filter(r=>r.status==='pending');
+  const pending = PAY_REQUESTS.filter(r=>r.status==='pending' && (r.centre || 'CHD') === getEffectiveCentre());
   const hasDues = pending.length > 0;
   if(!hasDues) { el.innerHTML='<div style="font-size:11px;color:var(--g1);padding:8px;text-align:center">No pending dues</div>'; return; }
   el.innerHTML = depts.map(d=>{
