@@ -22,7 +22,6 @@ export let PATIENTS =
 if (typeof window !== 'undefined') window.PATIENTS = PATIENTS
 
 // ── Real-time listener ───────────────────────────────────────────────────────
-// Call once after login. Keeps PATIENTS in sync with Firestore.
 export function watchPatients(centre) {
   const q = query(
     collection(db, 'patients'),
@@ -32,10 +31,23 @@ export function watchPatients(centre) {
   )
 
   return onSnapshot(q, snap => {
-    if (snap.empty) {
-      // Firestore has no patients yet (migration pending) — leave RTDB-populated data alone
-      return
+    if (snap.empty) return;
+    PATIENTS.length = 0
+    snap.forEach(d => PATIENTS.push({ id: d.id, ...d.data() }))
+    window.PATIENTS = PATIENTS
+    window.dispatchEvent(new CustomEvent('bmh:patientsUpdated'))
+
+    // 🚀 THE FIX: Wait for DB to load, then update the screen automatically
+    const uidEl = document.getElementById('rc-uid');
+    if (uidEl && (uidEl.textContent === 'Loading ID...' || uidEl.textContent === 'BMSH-461001')) {
+      uidEl.textContent = newBmhId();
     }
+
+  }, err => {
+    console.error('watchPatients error:', err)
+    showToast('Error syncing patients with database.', 'e')
+  })
+}
     PATIENTS.length = 0
     snap.forEach(d => PATIENTS.push({ id: d.id, ...d.data() }))
     window.PATIENTS = PATIENTS
