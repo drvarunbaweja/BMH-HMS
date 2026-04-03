@@ -1261,8 +1261,11 @@ window.openReceptionPatient = openReceptionPatient;
 function rcOpenBillingFor(bmhId) {
   closeM('m-rc-patient');
   nav('billing', null);
+  const tab = Array.from(document.querySelectorAll('#pg-billing .ptab')).find(x => x.textContent.includes('Patients'));
+  if(tab) ptab(tab, 'bmh-bill-tab-patients');
   const sel = document.getElementById('bmh-bill-pt-select');
   if(sel) sel.value = bmhId;
+  window._bmhSelectedBillPatient = bmhId;
   if(typeof bmhSelectBillPatient === 'function') bmhSelectBillPatient(bmhId);
 }
 window.rcOpenBillingFor = rcOpenBillingFor;
@@ -2802,6 +2805,7 @@ function bmhSelectBillPatient(bmhId) {
   const al = document.getElementById('bmh-advance-available');
   if (p && al) al.textContent = '₹' + (Number(p.advance) || 0).toLocaleString('en-IN') + ' available';
   if (aa && p) { aa.checked = (p.advance > 0); aa.disabled = !(p.advance > 0); }
+  bmhRenderPatientFinancialSummary();
   bmhRenderBillLines();
   bmhUpdateBillTotals();
 }
@@ -2835,6 +2839,91 @@ function bmhRenderBillLines() {
       <button type="button" class="btn btn-xs btn-gray" onclick="bmhRemoveChargeLine('${bmhId}','${l.id}')">✕</button>
     </div>`;
   }).join('')}</div>`).join('');
+}
+
+function bmhGetPatientFinancialSummary(bmhId) {
+  const patient = PATIENTS.find(x => x.bmhId === bmhId) || {};
+  const lines = window.BMH_PATIENT_CHARGES[bmhId] || [];
+  const txns = (TRANSACTIONS || []).filter(t => t.bmhId === bmhId).slice().sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+  const payRequests = (PAY_REQUESTS || []).filter(r => r.bmhId === bmhId).slice().sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+  const chargeTotal = lines.reduce((s, x) => s + (Number(x.amount) || 0), 0);
+  const paidTotal = txns.filter(t => t.collected !== false).reduce((s, t) => s + Math.max(0, Number(t.amount) || 0), 0);
+  const advanceTotal = txns.filter(t => t.type === 'advance' || /advance/i.test(t.service || '')).reduce((s, t) => s + Math.max(0, Number(t.amount) || 0), 0);
+  const pendingTotal = payRequests.filter(r => r.status === 'pending').reduce((s, r) => s + Math.max(0, Number(r.amount) || 0), 0);
+  const balance = Math.max(0, Number(patient.balance) || 0);
+  const timeline = [];
+
+  lines.forEach(l => {
+    timeline.push({
+      ts: l.ts || l.date || new Date().toISOString(),
+      kind: 'charge',
+      label: l.desc || 'Charge',
+      meta: [bmhCatLabel(l.cat), l.source].filter(Boolean).join(' · '),
+      amount: Number(l.amount) || 0
+    });
+  });
+  txns.forEach(t => {
+    timeline.push({
+      ts: t.date || new Date().toISOString(),
+      kind: 'payment',
+      label: t.service || 'Payment',
+      meta: [t.mode, t.paymentRef].filter(Boolean).join(' · '),
+      amount: Number(t.amount) || 0
+    });
+  });
+  payRequests.forEach(r => {
+    timeline.push({
+      ts: r.date || new Date().toISOString(),
+      kind: r.status === 'pending' ? 'pending' : 'payment',
+      label: r.for || 'Billing request',
+      meta: [r.mode || r.status, r.ins].filter(Boolean).join(' · '),
+      amount: Number(r.amount) || 0
+    });
+  });
+  timeline.sort((a, b) => new Date(b.ts || 0) - new Date(a.ts || 0));
+
+  return { patient, lines, txns, payRequests, chargeTotal, paidTotal, advanceTotal, pendingTotal, balance, timeline };
+}
+
+function bmhRenderPatientFinancialSummary() {
+  const el = document.getElementById('bmh-bill-summary');
+  const bmhId = document.getElementById('bmh-bill-pt-select')?.value;
+  if (!el) return;
+  if (!bmhId) {
+    el.innerHTML = '<div style="padding:12px;background:var(--g6);border-radius:8px;color:var(--g1);font-size:12px">Select a patient to view the financial summary.</div>';
+    return;
+  }
+  const info = bmhGetPatientFinancialSummary(bmhId);
+  const fmt = n => '₹' + (Number(n) || 0).toLocaleString('en-IN');
+  const timelineHtml = info.timeline.length ? info.timeline.slice(0, 14).map(item => {
+    const tone = item.kind === 'charge' ? 'var(--bmh-blue)' : item.kind === 'pending' ? 'var(--orange)' : 'var(--green)';
+    const badge = item.kind === 'charge' ? 'Charge' : item.kind === 'pending' ? 'Pending' : 'Payment';
+    return `<div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--g5);font-size:12px">
+      <div style="flex:1">
+        <div style="font-weight:800">${item.label}</div>
+        <div style="font-size:10px;color:var(--g1)">${new Date(item.ts).toLocaleString('en-IN')} ${item.meta ? '· ' + item.meta : ''}</div>
+      </div>
+      <div style="text-align:right;min-width:110px">
+        <div style="font-size:10px;font-weight:800;color:${tone};text-transform:uppercase">${badge}</div>
+        <div style="font-weight:900;color:${tone}">${fmt(item.amount)}</div>
+      </div>
+    </div>`;
+  }).join('') : '<div style="color:var(--g1);font-size:12px">No financial activity recorded yet.</div>';
+
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px">
+      <div style="background:var(--g6);border-radius:8px;padding:10px"><div style="font-size:10px;color:var(--g1);font-weight:800;text-transform:uppercase">Charge total</div><div style="font-size:18px;font-weight:900;color:var(--bmh-blue)">${fmt(info.chargeTotal)}</div></div>
+      <div style="background:var(--green-lt);border-radius:8px;padding:10px"><div style="font-size:10px;color:#1a8c3c;font-weight:800;text-transform:uppercase">Received</div><div style="font-size:18px;font-weight:900;color:#1a8c3c">${fmt(info.paidTotal)}</div></div>
+      <div style="background:var(--blue-lt);border-radius:8px;padding:10px"><div style="font-size:10px;color:var(--blue);font-weight:800;text-transform:uppercase">Advance</div><div style="font-size:18px;font-weight:900;color:var(--blue)">${fmt(info.advanceTotal)}</div></div>
+      <div style="background:var(--orange-lt);border-radius:8px;padding:10px"><div style="font-size:10px;color:#8a4200;font-weight:800;text-transform:uppercase">Outstanding</div><div style="font-size:18px;font-weight:900;color:#8a4200">${fmt(Math.max(info.pendingTotal, info.balance))}</div></div>
+    </div>
+    <div style="background:var(--g6);border-radius:8px;padding:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-size:10px;font-weight:800;color:var(--bmh-blue);text-transform:uppercase">Financial timeline</div>
+        <button type="button" class="btn btn-outline btn-xs" onclick="printBmhPatientBill('${bmhId}')">🖨️ Print statement</button>
+      </div>
+      ${timelineHtml}
+    </div>`;
 }
 function bmhRemoveChargeLine(bmhId, lineId) {
   const arr = window.BMH_PATIENT_CHARGES[bmhId]; if (!arr) return;
@@ -2954,7 +3043,8 @@ function bmhRenderBillingVendorSummary() {
 function printBmhPatientBill(bmhIdOpt) {
   const bmhId = bmhIdOpt || document.getElementById('bmh-bill-pt-select')?.value;
   if (!bmhId) { showToast('Select a patient', 'w'); return; }
-  const p = PATIENTS.find(x => x.bmhId === bmhId) || {};
+  const info = bmhGetPatientFinancialSummary(bmhId);
+  const p = info.patient || {};
   const lines = window.BMH_PATIENT_CHARGES[bmhId] || [];
   const { sub, gst, total, discount, advanceApplied, taxable } = bmhTotalsForPatient(bmhId);
   const invNo = 'INV-' + String(Date.now()).slice(-8);
@@ -2968,6 +3058,14 @@ function printBmhPatientBill(bmhIdOpt) {
     const rs = byCat[cat].map((l, i) => `<tr><td>${i + 1}</td><td>${l.desc || ''}</td><td style="text-align:center">${l.qty || 1}</td><td style="text-align:right">₹${(Number(l.rate) || 0).toLocaleString('en-IN')}</td><td style="text-align:right;font-weight:700">₹${(Number(l.amount) || 0).toLocaleString('en-IN')}</td></tr>`).join('');
     return hdr + rs;
   }).join('');
+  const timelineRows = info.timeline.map((item, idx) => `<tr>
+    <td>${idx + 1}</td>
+    <td>${new Date(item.ts).toLocaleDateString('en-IN')}</td>
+    <td>${item.kind === 'charge' ? 'Charge' : item.kind === 'pending' ? 'Pending' : 'Payment'}</td>
+    <td>${item.label}</td>
+    <td>${item.meta || '—'}</td>
+    <td style="text-align:right;font-weight:700">₹${(Number(item.amount) || 0).toLocaleString('en-IN')}</td>
+  </tr>`).join('');
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Bill</title><style>
 *{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',system-ui,sans-serif;padding:0 8mm;font-size:12px;width:100%;max-width:100%}
 @page{${pageCss};margin:8mm}
@@ -2982,6 +3080,12 @@ th{background:#1A3C6E;color:#fff;font-size:10px;text-transform:uppercase}
   <div><strong>${p.name || 'Patient'}</strong><div style="font-size:10px;font-family:monospace;color:#0B7B8C">${bmhId}</div><div style="font-size:10px">${p.age ? p.age + 'Y' : ''} ${p.sex || ''} · ${p.doctor || ''}</div></div>
   <div style="text-align:right;font-size:11px">${p.dept || ''}</div>
 </div>
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px">
+  <div style="background:#f5f5f7;padding:8px;border-radius:8px"><div style="font-size:9px;color:#666;text-transform:uppercase;font-weight:800">Charges</div><div style="font-size:16px;font-weight:900;color:#1A3C6E">₹${info.chargeTotal.toLocaleString('en-IN')}</div></div>
+  <div style="background:#eef9f0;padding:8px;border-radius:8px"><div style="font-size:9px;color:#1a8c3c;text-transform:uppercase;font-weight:800">Received</div><div style="font-size:16px;font-weight:900;color:#1a8c3c">₹${info.paidTotal.toLocaleString('en-IN')}</div></div>
+  <div style="background:#eef4ff;padding:8px;border-radius:8px"><div style="font-size:9px;color:#0B7B8C;text-transform:uppercase;font-weight:800">Advance</div><div style="font-size:16px;font-weight:900;color:#0B7B8C">₹${info.advanceTotal.toLocaleString('en-IN')}</div></div>
+  <div style="background:#fff4e8;padding:8px;border-radius:8px"><div style="font-size:9px;color:#b55a00;text-transform:uppercase;font-weight:800">Balance / due</div><div style="font-size:16px;font-weight:900;color:#b55a00">₹${Math.max(info.pendingTotal, info.balance).toLocaleString('en-IN')}</div></div>
+</div>
 <table><thead><tr><th>#</th><th>Description</th><th>Qty</th><th>Rate ₹</th><th>Amount ₹</th></tr></thead><tbody>${bodyRows || '<tr><td colspan="5">No lines</td></tr>'}</tbody></table>
 <div class="tot" style="flex-direction:column;align-items:flex-end;gap:4px">
 ${discount > 0 ? '<span>Discount ₹' + discount.toLocaleString('en-IN') + '</span>' : ''}
@@ -2990,6 +3094,8 @@ ${advanceApplied > 0 ? '<span>Advance adjusted ₹' + advanceApplied.toLocaleStr
 <span>GST 5% ₹${gst.toLocaleString('en-IN')}</span>
 <span style="color:#1A3C6E">Net ₹${total.toLocaleString('en-IN')}</span>
 </div>
+<div style="margin:16px 0 8px;font-size:11px;font-weight:900;color:#1A3C6E;text-transform:uppercase">Financial transaction history</div>
+<table><thead><tr><th>#</th><th>Date</th><th>Type</th><th>Description</th><th>Details</th><th>Amount ₹</th></tr></thead><tbody>${timelineRows || '<tr><td colspan="6">No financial history</td></tr>'}</tbody></table>
 <div style="margin-top:24px;font-size:10px;color:#777;text-align:center">Computer-generated bill · BMH</div>
 </body></html>`;
   safePrint(html);
@@ -4854,10 +4960,7 @@ function checkSurgeryPurpose() {
   // Show "pre-register" hint when Not Checked In
   const preHint = document.getElementById('rc-pre-hint');
   if(preHint) preHint.style.display = (purpose==='Not Checked In')?'flex':'none';
-  // Adjust fee
-  const feeEl = document.getElementById('rc-fee');
-  if(feeEl && purpose==='Not Checked In' && feeEl.value==='200') feeEl.value='0';
-  else if(feeEl && purpose!=='Not Checked In' && feeEl.value==='0') feeEl.value='200';
+  syncReceptionConsultationFee && syncReceptionConsultationFee();
 }
 function lookupByBMHID(val) {
   const el = document.getElementById('rc-bmhid-result'); if(!el) return;
@@ -5256,13 +5359,16 @@ async function registerPatient() {
     const claim = {id:claimId, patient:name, bmhId:uid, for:purpose, amount:fee, status:'pending', mode:payMode, ins:insName||payMode, dept, centre, date:new Date().toISOString(), from:'Reception'};
     PAY_REQUESTS.push(claim);
     fbSet&&fbSet('payRequests/'+claimId, claim);
+    addBmhPatientCharge(uid, { id: 'chg-' + claimId, cat: inferChargeCategoryFromService(purpose), desc: purpose, qty: 1, rate: fee, amount: fee, source: 'reception', ref: claimId, ts: claim.date });
     patient.ins = insName||payMode;
     showToast(`🏦 TPA/Insurance patient — claim pending ₹${fee.toLocaleString('en-IN')}`,'i');
   } else if(isCreditDue) {
+    addBmhPatientCharge(uid, { id: 'chg-credit-' + Date.now(), cat: inferChargeCategoryFromService(purpose), desc: purpose, qty: 1, rate: fee, amount: fee, source: 'reception', ts: new Date().toISOString() });
     patient.balance = (patient.balance||0) + fee;
     showToast(`📋 ₹${fee} noted as credit/due for ${name}`,'i');
   } else if(fee > 0 || noFee) {
     const txnId = 'TXN'+Date.now();
+    addBmhPatientCharge(uid, { id: 'chg-' + txnId, cat: inferChargeCategoryFromService(purpose), desc: purpose + (noFee?' (no fee)':''), qty: 1, rate: fee, amount: fee, source: 'reception', ref: txnId, ts: new Date().toISOString() });
     const txn = {
       id:txnId, patient:name, bmhId:uid, service: purpose + (noFee?' (no fee)':''), amount:fee,
       mode:payMode, collected:true, dept,
