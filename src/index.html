@@ -2642,6 +2642,11 @@
       <button type="button" class="btn btn-xs btn-outline" onclick="bmhSetBillDeptFilter('psych')">Psych</button>
       <button type="button" class="btn btn-xs btn-outline" onclick="bmhSetBillDeptFilter('skin')">Skin</button>
     </div>
+    <div style="display:grid;grid-template-columns:1.2fr .9fr .9fr;gap:8px;margin-bottom:10px">
+      <div class="form-group" style="margin:0"><label class="fl">Search patient</label><input type="text" id="bmh-bill-patient-search" placeholder="Name / BMSH ID / mobile" oninput="bmhRenderBillPatientList()"></div>
+      <div class="form-group" style="margin:0"><label class="fl">Patient scope</label><select id="bmh-bill-patient-scope" onchange="bmhRenderBillPatientList()"><option value="focus">Selected patient only</option><option value="today">Today's patients</option><option value="date">Selected date</option><option value="admitted">Currently admitted</option><option value="all">All visible patients</option></select></div>
+      <div class="form-group" style="margin:0"><label class="fl">Date</label><input type="date" id="bmh-bill-date-filter" onchange="bmhRenderBillPatientList()"></div>
+    </div>
     <div id="bmh-bill-pt-list" style="max-height:200px;overflow:auto;border:1px solid var(--g5);border-radius:8px;margin-bottom:12px"></div>
     <div class="form-group" style="margin-bottom:10px"><label class="fl">Selected patient</label><select id="bmh-bill-pt-select" onchange="bmhSelectBillPatient(this.value)"></select></div>
     <div id="bmh-bill-summary" style="margin-bottom:12px"></div>
@@ -2687,11 +2692,11 @@
     </div>
   </div>
   <div class="col">
+    <div class="card"><div class="card-hd"><div class="card-title">⚡ Quick Add Charges</div><div class="card-sub">Click once to add directly into the selected patient's bill</div></div>
+      <div id="bmh-quick-charge-panels"></div>
+    </div>
     <div class="card"><div class="card-hd"><div class="card-title">Pending vendor dues (inventory)</div><div class="card-sub">Link bills under Inventory → Vendors</div></div>
       <div id="bmh-bill-vendor-summary" style="font-size:12px"></div>
-    </div>
-    <div class="card"><div class="card-hd"><div class="card-title">Cross-refer &amp; notes</div></div>
-      <div style="display:flex;flex-direction:column;gap:6px" id="xref-log"><div style="font-size:12px;color:var(--g1);padding:8px;text-align:center">No cross-referrals today</div></div>
     </div>
   </div>
 </div>

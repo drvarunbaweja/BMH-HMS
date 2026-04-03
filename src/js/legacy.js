@@ -1263,6 +1263,9 @@ function rcOpenBillingFor(bmhId) {
   nav('billing', null);
   const tab = Array.from(document.querySelectorAll('#pg-billing .ptab')).find(x => x.textContent.includes('Patients'));
   if(tab) ptab(tab, 'bmh-bill-tab-patients');
+  window._bmhBillFocusPatient = bmhId;
+  const scopeEl = document.getElementById('bmh-bill-patient-scope');
+  if (scopeEl) scopeEl.value = 'focus';
   const sel = document.getElementById('bmh-bill-pt-select');
   if(sel) sel.value = bmhId;
   window._bmhSelectedBillPatient = bmhId;
@@ -2791,6 +2794,39 @@ function bmhGetTodayBillPatients() {
   if (df !== 'all') pts = pts.filter(p => p.dept === df);
   return pts;
 }
+function bmhGetBillPatientsForView() {
+  const scope = document.getElementById('bmh-bill-patient-scope')?.value || (window._bmhBillFocusPatient ? 'focus' : 'today');
+  const dateFilter = document.getElementById('bmh-bill-date-filter')?.value || new Date().toISOString().slice(0, 10);
+  const search = (document.getElementById('bmh-bill-patient-search')?.value || '').trim().toLowerCase();
+  let pts = [];
+
+  if (scope === 'focus' && window._bmhBillFocusPatient) {
+    pts = PATIENTS.filter(p => p.bmhId === window._bmhBillFocusPatient);
+  } else if (scope === 'admitted') {
+    const admittedIds = new Set((window.IPD_PATIENTS || []).filter(p => (p.status || 'admitted') !== 'discharged' && centreMatch(p)).map(p => p.bmhId));
+    pts = PATIENTS.filter(p => admittedIds.has(p.bmhId));
+  } else if (scope === 'all') {
+    pts = PATIENTS.filter(p => centreMatch(p));
+  } else if (scope === 'date') {
+    pts = PATIENTS.filter(p => {
+      if (!centreMatch(p)) return false;
+      if (p.createdAt && String(p.createdAt).startsWith(dateFilter)) return true;
+      if (p.checkinAt && new Date(p.checkinAt).toISOString().startsWith(dateFilter)) return true;
+      return false;
+    });
+  } else {
+    pts = bmhGetTodayBillPatients();
+  }
+
+  if (search) {
+    pts = pts.filter(p =>
+      String(p.name || '').toLowerCase().includes(search) ||
+      String(p.bmhId || '').toLowerCase().includes(search) ||
+      String(p.mob || '').toLowerCase().includes(search)
+    );
+  }
+  return pts;
+}
 function bmhSetBillDeptFilter(k) { window._bmhBillDeptFilter = k; renderBillingPage(); }
 function bmhSelectBillPatient(bmhId) {
   if (!bmhId) return;
@@ -2811,7 +2847,13 @@ function bmhSelectBillPatient(bmhId) {
 }
 function bmhRenderBillPatientList() {
   const el = document.getElementById('bmh-bill-pt-list'); if (!el) return;
-  const pts = bmhGetTodayBillPatients();
+  const pts = bmhGetBillPatientsForView();
+  const sel = document.getElementById('bmh-bill-pt-select');
+  if (sel) {
+    sel.innerHTML = pts.map(p => `<option value="${p.bmhId}">${p.name} — ${p.bmhId}</option>`).join('');
+    if (window._bmhSelectedBillPatient && pts.some(p => p.bmhId === window._bmhSelectedBillPatient)) sel.value = window._bmhSelectedBillPatient;
+    else if (pts.length) { sel.value = pts[0].bmhId; window._bmhSelectedBillPatient = sel.value; }
+  }
   if (!pts.length) { el.innerHTML = '<div style="padding:12px;color:var(--g1);font-size:12px">No patients for today in this filter — register or check in from Reception.</div>'; return; }
   el.innerHTML = pts.map(p => {
     const tot = bmhBillPreviewTotal(p.bmhId);
@@ -2924,6 +2966,52 @@ function bmhRenderPatientFinancialSummary() {
       </div>
       ${timelineHtml}
     </div>`;
+}
+function bmhQuickChargeGroups() {
+  const investigations = CHARGES_DATA.filter(c => /oct|biometry|hvf|fundus|topography|specular|cbc|hba1c|thyroid|lipid|urine|x-ray|ecg|scan|test|profile|angiography/i.test(c.name));
+  const surgeries = CHARGES_DATA.filter(c => /surgery|lscs|delivery|laparoscopy|trabeculectomy|lasik|pmics|implantation|capsulotomy|iridotomy|excision/i.test(c.name) || /sx/i.test(c.cat));
+  const procedures = CHARGES_DATA.filter(c => !investigations.includes(c) && !surgeries.includes(c) && !/consultation|follow-up/i.test(c.name));
+  const medicines = (INVENTORY || []).filter(i => (i.stock || 0) > 0).slice(0, 8).map(i => ({ name: i.name, chd: i.mrp || 0, rpr: i.mrp || 0 }));
+  const stay = [
+    { name: 'IPD Bed Charges (per day)', chd: 1500, rpr: 1200 },
+    { name: 'Private Room Charges (per day)', chd: 3000, rpr: 2500 },
+    { name: 'Nursing Charges', chd: 500, rpr: 400 }
+  ];
+  return [
+    { label: 'Investigations', items: investigations.slice(0, 12), cat: 'diagnostic' },
+    { label: 'Procedures', items: procedures.slice(0, 12), cat: 'procedure' },
+    { label: 'Surgeries', items: surgeries.slice(0, 12), cat: 'surgery' },
+    { label: 'Medicines', items: medicines, cat: 'pharmacy' },
+    { label: 'Stay', items: stay, cat: 'stay' }
+  ];
+}
+function bmhQuickAddCharge(name, amount, cat) {
+  const bmhId = document.getElementById('bmh-bill-pt-select')?.value;
+  if (!bmhId) { showToast('Select a patient first', 'w'); return; }
+  const amt = Number(amount) || 0;
+  addBmhPatientCharge(bmhId, { id: 'q' + Date.now() + Math.random().toString(36).slice(2, 5), cat: cat || inferChargeCategoryFromService(name), desc: name, qty: 1, rate: amt, amount: amt, source: 'billing-quick', ts: new Date().toISOString() });
+  bmhRenderBillLines();
+  bmhUpdateBillTotals();
+  bmhRenderBillPatientList();
+  bmhRenderPatientFinancialSummary();
+  showToast(name + ' added to bill ✓', 's');
+}
+window.bmhQuickAddCharge = bmhQuickAddCharge;
+function bmhRenderQuickChargePanels() {
+  const el = document.getElementById('bmh-quick-charge-panels');
+  if (!el) return;
+  const centre = getEffectiveCentre();
+  const groups = bmhQuickChargeGroups();
+  el.innerHTML = groups.map(group => {
+    const items = group.items.map(item => {
+      const amount = item[centre?.toLowerCase?.()] ?? item[centre] ?? item.chd ?? 0;
+      return `<button type="button" class="btn btn-xs btn-outline" style="justify-content:space-between;width:100%;margin-bottom:6px" onclick="bmhQuickAddCharge('${String(item.name).replace(/'/g, "\\'")}', ${Number(amount) || 0}, '${group.cat}')"><span style="text-align:left">${item.name}</span><span>₹${(Number(amount) || 0).toLocaleString('en-IN')}</span></button>`;
+    }).join('');
+    return `<div style="margin-bottom:10px">
+      <div style="font-size:10px;font-weight:800;color:var(--bmh-blue);text-transform:uppercase;margin-bottom:6px">${group.label}</div>
+      ${items || '<div style="font-size:12px;color:var(--g1)">No items</div>'}
+    </div>`;
+  }).join('');
 }
 function bmhRemoveChargeLine(bmhId, lineId) {
   const arr = window.BMH_PATIENT_CHARGES[bmhId]; if (!arr) return;
@@ -3178,15 +3266,24 @@ function bmhOcrApplyToPatientUse() {
 }
 function renderBillingPage() {
   loadBmhFinancials();
+  const dateEl = document.getElementById('bmh-bill-date-filter');
+  if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().slice(0, 10);
+  const scopeEl = document.getElementById('bmh-bill-patient-scope');
+  if (scopeEl && !scopeEl.dataset.initialized) {
+    scopeEl.value = window._bmhBillFocusPatient ? 'focus' : 'today';
+    scopeEl.dataset.initialized = '1';
+  }
+  const candidatePatients = bmhGetBillPatientsForView();
   const sel = document.getElementById('bmh-bill-pt-select');
   if (sel) {
-    sel.innerHTML = PATIENTS.map(p => `<option value="${p.bmhId}">${p.name} — ${p.bmhId}</option>`).join('');
-    if (window._bmhSelectedBillPatient && PATIENTS.some(p => p.bmhId === window._bmhSelectedBillPatient)) sel.value = window._bmhSelectedBillPatient;
-    else if (PATIENTS.length) { sel.selectedIndex = 0; window._bmhSelectedBillPatient = sel.value; }
+    sel.innerHTML = candidatePatients.map(p => `<option value="${p.bmhId}">${p.name} — ${p.bmhId}</option>`).join('');
+    if (window._bmhSelectedBillPatient && candidatePatients.some(p => p.bmhId === window._bmhSelectedBillPatient)) sel.value = window._bmhSelectedBillPatient;
+    else if (candidatePatients.length) { sel.selectedIndex = 0; window._bmhSelectedBillPatient = sel.value; }
   }
   const ps = document.getElementById('bmh-print-size'); if (ps) { ps.value = window.BMH_BILL_PRINT_SIZE || 'A4'; ps.onchange = function () { window.BMH_BILL_PRINT_SIZE = this.value; }; }
   bmhRenderBillPatientList();
-  bmhSelectBillPatient(document.getElementById('bmh-bill-pt-select')?.value || PATIENTS[0]?.bmhId);
+  bmhRenderQuickChargePanels();
+  bmhSelectBillPatient(document.getElementById('bmh-bill-pt-select')?.value || candidatePatients[0]?.bmhId);
   bmhRenderVendorTables();
   bmhRenderExpenseList();
   bmhRenderLedgerBody();
@@ -5241,8 +5338,8 @@ function syncReceptionCentreAndFee() {
   if(!centreEl || !feeEl) return;
 
   const lockedCentre = getUserCentre();
-  const centre = getEffectiveCentre();
-  centreEl.value = centre;
+  const centre = getReceptionSelectedCentre();
+  if(lockedCentre) centreEl.value = centre;
   centreEl.disabled = !!lockedCentre;
   centreEl.style.opacity = lockedCentre ? '0.7' : '1';
 
@@ -5341,7 +5438,7 @@ async function registerPatient() {
     window._nextPatientNum = numFromId + 1;
   }
 
-  let fee = parseFloat(document.getElementById('rc-fee')?.value||200)||0;
+  let fee = parseFloat(document.getElementById('rc-fee')?.value || getReceptionConsultationRate(centre) || 0) || 0;
   if(noFee) fee = 0;
   const payMode = document.getElementById('rc-pay-mode')?.value||'Cash';
   const purpose = document.getElementById('rc-purpose')?.value||'New Consultation';
@@ -7796,6 +7893,11 @@ function getEffectiveCentre() {
   if(locked) return locked;
   const activeBtn = document.querySelector('.c-btn.active[data-centre]');
   return activeBtn?.getAttribute('data-centre') || CURRENT_USER?.centre || 'CHD';
+}
+function getReceptionSelectedCentre() {
+  const locked = getUserCentre();
+  if(locked) return locked;
+  return document.getElementById('rc-centre')?.value || getEffectiveCentre();
 }
 // Returns true if an item (patient/IPD/OT/transaction) belongs to the user's visible centres
 function centreMatch(item) {
