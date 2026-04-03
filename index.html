@@ -364,13 +364,37 @@ tbody td{padding:8px 9px;font-weight:500;vertical-align:middle}
 .rx-drug-row{display:grid;grid-template-columns:28px 1fr 80px 110px 90px 60px 60px 36px;gap:5px;padding:6px 8px;border-radius:var(--rsm);background:var(--g6);margin-bottom:5px;align-items:center;font-size:11.5px}
 .rx-drug-row:hover{background:var(--blue-lt)}
 .rx-drug-row select,.rx-drug-row input{border:1px solid var(--g4);border-radius:5px;padding:3px 5px;font-family:var(--font);font-size:11px;background:#fff;width:100%}
+@media (max-width:900px){
+  #login-grid{grid-template-columns:1fr!important;max-width:420px!important}
+  #login-hero{display:none}
+}
 </style>
 </head>
 <body onload="(function(){try{var s=localStorage.getItem('bmh_creds');if(s){var c=JSON.parse(s);var u=document.getElementById('lg-user');var p=document.getElementById('lg-pass');var r=document.getElementById('lg-remember');if(u)u.value=c.u||'';if(p)p.value=c.p||'';if(r)r.checked=true;}}catch(e){}})()">
 
 <!-- ═══════════════ LOGIN GATE ═══════════════ -->
-<div id="login-gate" style="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:linear-gradient(145deg,#0a1628 0%,#1a3c6e 50%,#0d2447 100%);font-family:var(--font)">
-  <div style="width:100%;max-width:400px;padding:20px">
+<div id="login-gate" style="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:linear-gradient(145deg,#0a1628 0%,#1a3c6e 50%,#0d2447 100%);font-family:var(--font);padding:20px;overflow:auto">
+  <div id="login-grid" style="width:100%;max-width:980px;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(320px,400px);gap:24px;align-items:stretch">
+    <div id="login-hero" style="background:linear-gradient(160deg,rgba(255,255,255,.14),rgba(255,255,255,.04));border:1px solid rgba(255,255,255,.12);border-radius:24px;padding:34px 30px;backdrop-filter:blur(14px);color:#fff;box-shadow:0 24px 60px rgba(0,0,0,.24)">
+      <div style="display:inline-flex;align-items:center;gap:8px;padding:7px 12px;border-radius:999px;background:rgba(240,192,64,.14);border:1px solid rgba(240,192,64,.22);font-size:11px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;color:#ffe08a">BMH HMS Secure Access</div>
+      <div style="font-size:38px;font-weight:900;line-height:1.08;margin-top:18px;max-width:520px">Login once, continue work across reception, doctors, billing and OT.</div>
+      <div style="font-size:14px;line-height:1.7;color:rgba(255,255,255,.74);margin-top:14px;max-width:560px">Use your BMH username and password to enter the hospital management system. If this is your personal workstation, you can save the password for faster sign-in next time.</div>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:26px">
+        <div style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:14px 15px">
+          <div style="font-size:12px;font-weight:900;color:#fff">Role-aware access</div>
+          <div style="font-size:12px;line-height:1.6;color:rgba(255,255,255,.68);margin-top:6px">Admins, reception, doctors and lab users land in their own workspace automatically.</div>
+        </div>
+        <div style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:14px 15px">
+          <div style="font-size:12px;font-weight:900;color:#fff">Centre-aware setup</div>
+          <div style="font-size:12px;line-height:1.6;color:rgba(255,255,255,.68);margin-top:6px">Chandigarh and Ropar accounts stay locked to the correct centre after sign-in.</div>
+        </div>
+        <div style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:14px 15px">
+          <div style="font-size:12px;font-weight:900;color:#fff">Saved passwords</div>
+          <div style="font-size:12px;line-height:1.6;color:rgba(255,255,255,.68);margin-top:6px">Turn on save-password only on trusted devices so returning staff can log in quickly.</div>
+        </div>
+      </div>
+    </div>
+    <div style="width:100%;padding:4px 0">
     <div style="text-align:center;margin-bottom:24px">
       <img id="login-lh" src="" alt="BMH" style="max-width:320px;width:100%;border-radius:8px;display:none">
       <div style="color:rgba(255,255,255,.5);font-size:11px;margin-top:8px">HMS v51 · Chandigarh &amp; Ropar</div>
@@ -378,31 +402,39 @@ tbody td{padding:8px 9px;font-weight:500;vertical-align:middle}
     <div style="background:rgba(255,255,255,.06);border-radius:16px;padding:28px;border:1px solid rgba(255,255,255,.1)">
       <div style="font-size:18px;font-weight:900;color:#fff;margin-bottom:4px">Welcome back</div>
       <div style="font-size:12px;color:rgba(255,255,255,.5);margin-bottom:22px">Sign in with your BMH credentials</div>
+      <form id="login-form" onsubmit="loginUser(event)" autocomplete="on">
       <div style="margin-bottom:14px">
         <label style="display:block;font-size:10.5px;font-weight:700;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Username</label>
-        <input id="lg-user" type="text" placeholder="e.g. drvarun" autocomplete="username"
+        <input id="lg-user" name="username" type="text" placeholder="e.g. drvarun" autocomplete="username"
           onkeydown="if(event.key==='Enter')document.getElementById('lg-pass').focus()"
+          oninput="clearLoginErr()"
           style="width:100%;background:rgba(255,255,255,.1);border:1.5px solid rgba(255,255,255,.15);border-radius:10px;padding:11px 14px;color:#fff;font-size:14px;font-family:var(--font);outline:none;box-sizing:border-box"
           onfocus="this.style.borderColor='rgba(212,160,23,.8)'" onblur="this.style.borderColor='rgba(255,255,255,.15)'">
       </div>
       <div style="margin-bottom:20px">
         <label style="display:block;font-size:10.5px;font-weight:700;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Password</label>
         <div style="position:relative">
-          <input id="lg-pass" type="password" placeholder="••••••••••" autocomplete="current-password"
-            onkeydown="if(event.key==='Enter')loginUser()"
+          <input id="lg-pass" name="password" type="password" placeholder="••••••••••" autocomplete="current-password"
+            onkeydown="if(event.key==='Enter')loginUser(event)"
+            oninput="clearLoginErr()"
             style="width:100%;background:rgba(255,255,255,.1);border:1.5px solid rgba(255,255,255,.15);border-radius:10px;padding:11px 44px 11px 14px;color:#fff;font-size:14px;font-family:var(--font);outline:none;box-sizing:border-box"
             onfocus="this.style.borderColor='rgba(212,160,23,.8)'" onblur="this.style.borderColor='rgba(255,255,255,.15)'">
-          <button onclick="toggleLgPw()" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:rgba(255,255,255,.4);cursor:pointer;font-size:16px">👁</button>
+          <button type="button" onclick="toggleLgPw()" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:rgba(255,255,255,.4);cursor:pointer;font-size:16px">👁</button>
         </div>
       </div>
       <div id="lg-err" style="display:none;background:rgba(255,59,48,.15);border:1px solid rgba(255,59,48,.3);border-radius:8px;padding:9px 12px;font-size:12px;color:#ff6b6b;margin-bottom:14px;text-align:center"></div>
-      <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;cursor:pointer">
+      <label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:16px;cursor:pointer">
         <input type="checkbox" id="lg-remember" style="width:16px;height:16px;cursor:pointer" checked>
-        <span style="font-size:12px;color:rgba(255,255,255,.6)">Remember me on this device</span>
+        <span>
+          <span style="display:block;font-size:12px;font-weight:800;color:rgba(255,255,255,.82)">Save password on this device</span>
+          <span style="display:block;font-size:11px;line-height:1.5;color:rgba(255,255,255,.52);margin-top:2px">Use only on a trusted computer. Your browser may also offer to save the password after sign-in.</span>
+        </span>
       </label>
-      <button onclick="loginUser()" style="width:100%;background:linear-gradient(135deg,#d4a017,#f0c040);color:#1a1a1a;border:none;border-radius:10px;padding:13px;font-size:14px;font-weight:900;cursor:pointer;font-family:var(--font)">
+      <button id="lg-submit" type="submit" style="width:100%;background:linear-gradient(135deg,#d4a017,#f0c040);color:#1a1a1a;border:none;border-radius:10px;padding:13px;font-size:14px;font-weight:900;cursor:pointer;font-family:var(--font)">
         Sign In →
       </button>
+      </form>
+    </div>
     </div>
   </div>
 </div>
@@ -10024,23 +10056,30 @@ function toggleLgPw() {
   p.type = p.type === 'password' ? 'text' : 'password';
 }
 
+function clearLoginErr() {
+  var err = document.getElementById('lg-err');
+  if (err) err.style.display = 'none';
+}
 
-
-function loginUser() {
+function loginUser(evt) {
+  if (evt && typeof evt.preventDefault === 'function') evt.preventDefault();
   try {
     var user = (document.getElementById('lg-user') ? document.getElementById('lg-user').value : '').trim().toLowerCase();
     var pass = (document.getElementById('lg-pass') ? document.getElementById('lg-pass').value : '');
+    var btn = document.getElementById('lg-submit');
     
     if (!user || !pass) {
       showLoginErr('Please enter username and password');
       return;
     }
+    if (btn) { btn.disabled = true; btn.textContent = 'Signing In...'; }
     
     var profile = USER_DB ? USER_DB[user] : null;
     if (!profile || profile.pw !== pass) {
       showLoginErr('Incorrect username or password');
       var pi = document.getElementById('lg-pass');
       if (pi) pi.value = '';
+      if (btn) { btn.disabled = false; btn.textContent = 'Sign In →'; }
       return;
     }
 
@@ -10049,6 +10088,7 @@ function loginUser() {
       showLoginErr('This account has been disabled. Please contact the administrator.');
       var pi2 = document.getElementById('lg-pass');
       if (pi2) pi2.value = '';
+      if (btn) { btn.disabled = false; btn.textContent = 'Sign In →'; }
       return;
     }
     try {
@@ -10159,6 +10199,8 @@ function loginUser() {
   } catch(loginErr) {
     console.error('Login error:', loginErr);
     showLoginErr('Login error: ' + loginErr.message + '. Please refresh and try again.');
+    var btn2 = document.getElementById('lg-submit');
+    if (btn2) { btn2.disabled = false; btn2.textContent = 'Sign In →'; }
   }
 }
 
