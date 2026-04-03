@@ -895,19 +895,14 @@
             <div style="font-size:12px;font-weight:900;color:#fff;text-transform:uppercase;letter-spacing:.5px">Slit lamp &amp; ocular health</div>
             <button type="button" class="btn btn-gold btn-sm" onclick="printEyeExaminationCaseSheetA4()">🖨️ Print eye exam sheet (A4)</button>
           </div>
-          <div style="display:grid;grid-template-columns:minmax(200px,1fr) minmax(240px,400px) minmax(200px,1fr);gap:22px;align-items:start;margin-bottom:28px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start;margin-bottom:22px">
             <div style="padding:14px;background:rgba(255,255,255,.05);border-radius:12px;border:1px solid rgba(255,255,255,.12)">
               <label class="fl" style="display:block;font-size:11px;font-weight:800;color:rgba(100,180,255,.95);margin-bottom:10px;text-transform:uppercase;letter-spacing:.4px">Anterior findings</label>
-              <textarea id="oe-anterior-findings" rows="12" placeholder="OD / OS — lids, conjunctiva, cornea, anterior chamber, iris, pupil, lens…" style="width:100%;min-height:300px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:10px;color:#fff;font-size:12px;padding:12px 14px;resize:vertical;box-sizing:border-box;line-height:1.6;font-family:var(--font)"></textarea>
-            </div>
-            <div style="text-align:center;padding:10px 6px 0">
-              <div style="font-size:10px;font-weight:800;color:rgba(255,255,255,.5);margin-bottom:12px;text-transform:uppercase;letter-spacing:.6px">Examination diagram</div>
-              <img src="./assets/eye-examination.png" alt="Eye examination diagram — anterior and posterior" style="width:100%;max-width:380px;height:auto;display:block;margin:0 auto;border-radius:12px;border:1px solid rgba(255,255,255,.22);background:#fff;box-shadow:0 8px 28px rgba(0,0,0,.35)" onerror="this.src='./assets/ocular-health-exam.png'" />
-              <div style="font-size:10px;color:rgba(255,255,255,.45);margin-top:12px;line-height:1.5">Annotate on paper or describe key findings here; structured chips follow below.</div>
+              <textarea id="oe-anterior-findings" rows="12" placeholder="OD / OS — lids, conjunctiva, cornea, anterior chamber, iris, pupil, lens…" style="width:100%;min-height:260px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:10px;color:#fff;font-size:12px;padding:12px 14px;resize:vertical;box-sizing:border-box;line-height:1.6;font-family:var(--font)"></textarea>
             </div>
             <div style="padding:14px;background:rgba(255,255,255,.05);border-radius:12px;border:1px solid rgba(255,255,255,.12)">
               <label class="fl" style="display:block;font-size:11px;font-weight:800;color:rgba(100,220,140,.95);margin-bottom:10px;text-transform:uppercase;letter-spacing:.4px">Posterior findings</label>
-              <textarea id="oe-posterior-findings" rows="12" placeholder="Vitreous, optic disc, macula, vessels, periphery…" style="width:100%;min-height:300px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:10px;color:#fff;font-size:12px;padding:12px 14px;resize:vertical;box-sizing:border-box;line-height:1.6;font-family:var(--font)"></textarea>
+              <textarea id="oe-posterior-findings" rows="12" placeholder="Vitreous, optic disc, macula, vessels, periphery…" style="width:100%;min-height:260px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:10px;color:#fff;font-size:12px;padding:12px 14px;resize:vertical;box-sizing:border-box;line-height:1.6;font-family:var(--font)"></textarea>
             </div>
           </div>
           <!-- OD / OS column headers -->
@@ -1594,9 +1589,9 @@
           <div class="fg">
             <div class="form-group"><label class="fl">Surgery Type</label><select id="surg-type"><option>PMICS (Pinhole Micro Incision Cataract Surgery) + IOL</option><option>Trabeculectomy</option><option>LASIK</option><option>Pterygium Excision</option><option>Squint Surgery</option><option>DCR</option><option>LSCS (Caesarean)</option><option>Normal Delivery</option><option>Diagnostic Laparoscopy</option><option>Chemical Peel</option><option>Microneedling</option><option>PRP Treatment</option></select></div>
             <div class="form-group"><label class="fl">Operating Surgeon</label><select id="surg-surgeon"><option>Dr. Varun Baweja</option><option>Dr. Geeta Baweja</option><option>Dr. Namrata Baweja</option><option>Dr. Tarun Baweja</option><option>Dr. Pooja Baweja</option></select></div>
-            <div class="form-group"><label class="fl">Eye (if applicable)</label><select><option>N/A</option><option>Right Eye (OD)</option><option>Left Eye (OS)</option><option>Both Eyes (OU)</option></select></div>
+            <div class="form-group"><label class="fl">Eye (if applicable)</label><select id="surg-eye"><option>N/A</option><option>Right Eye (OD)</option><option>Left Eye (OS)</option><option>Both Eyes (OU)</option></select></div>
             <div class="form-group"><label class="fl">IOL / Implant Used</label><input type="text" placeholder="e.g. AcrySof SN60WF +21.0D"></div>
-            <div class="form-group"><label class="fl">Anaesthesia</label><select><option>Topical (Drops)</option><option>Peribulbar Block</option><option>Spinal</option><option>General Anaesthesia</option><option>Local Infiltration</option></select></div>
+            <div class="form-group"><label class="fl">Anaesthesia</label><select id="surg-anaes"><option>Topical (Drops)</option><option>Peribulbar Block</option><option>Spinal</option><option>General Anaesthesia</option><option>Local Infiltration</option></select></div>
             <div class="form-group"><label class="fl">Surgery Fee ₹</label><input type="number" value="38000" id="surg-fee"></div>
             <div class="form-group"><label class="fl">Scheduled Date</label><input type="date" id="surg-date"></div>
             <div class="form-group"><label class="fl">Scheduled Time</label><input type="time" id="surg-time" value="09:00"></div>
@@ -2663,6 +2658,13 @@
     </div>
     <div style="background:var(--g6);border-radius:8px;padding:12px" id="bill-totals">
       <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:12.5px"><span>Subtotal</span><span style="font-weight:800" id="bill-sub">₹0</span></div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:12.5px;align-items:center;gap:8px"><span>Discount ₹</span><input type="number" id="bmh-bill-discount" value="0" min="0" step="1" style="width:88px;text-align:right;font-size:12px" oninput="bmhUpdateBillTotals()"></div>
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;cursor:pointer">
+        <input type="checkbox" id="bmh-apply-advance" onchange="bmhUpdateBillTotals()"> Apply advance <span id="bmh-advance-available" style="font-weight:800;color:var(--blue)">₹0 available</span>
+      </label>
+      <div id="bill-discount-line" style="display:none;justify-content:space-between;margin-bottom:5px;font-size:12.5px;color:var(--orange)"><span>Discount</span><span style="font-weight:800" id="bill-discount-amt">₹0</span></div>
+      <div id="bill-advance-line" style="display:none;justify-content:space-between;margin-bottom:5px;font-size:12.5px;color:var(--blue)"><span>Advance adjusted</span><span style="font-weight:800" id="bill-advance-amt">₹0</span></div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:12.5px"><span>Taxable (after disc. / adv.)</span><span style="font-weight:700" id="bill-taxable">₹0</span></div>
       <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:12.5px"><span>GST (5%)</span><span style="font-weight:700;color:var(--g1)" id="bill-gst">₹0</span></div>
       <div style="display:flex;justify-content:space-between;font-size:15px;font-weight:900;color:var(--bmh-blue);border-top:1px solid var(--g4);padding-top:8px;margin-top:6px"><span>Net total</span><span id="bill-total">₹0</span></div>
     </div>
