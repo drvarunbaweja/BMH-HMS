@@ -8,6 +8,20 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./css/main.css">
+  <style>
+    @media (max-width: 768px) {
+      .shell { display:block !important; }
+      .main { width:100%; min-width:0; }
+      .content, .content-full { padding:10px; }
+      .card, .modal { max-width:100%; }
+      .topbar { gap:8px; flex-wrap:wrap; }
+      .topbar .srch { order:3; width:100%; min-width:0; }
+      .g32, .g2, .sg4, .fg, .fg1 { grid-template-columns:1fr !important; display:grid !important; }
+      table { display:block; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+      #main-content [style*="grid-template-columns"] { grid-template-columns:1fr !important; }
+      #main-content [style*="display:flex"] { max-width:100%; }
+    }
+  </style>
 </head>
 <body>
 
@@ -1230,9 +1244,11 @@
         <div style="background:var(--g6);border-radius:var(--rsm);padding:8px 11px;margin-bottom:10px;border:1.5px solid var(--g4)">
           <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px">🖨️ Include in Printout</div>
           <div style="display:flex;gap:14px;flex-wrap:wrap">
+            <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-cc" checked> Chief Complaints</label>
             <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-va" checked> Visual Acuity</label>
             <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-iop" checked> IOP</label>
             <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-refr" checked> Refraction</label>
+            <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-posfind" checked> Positive Findings</label>
             <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-diag" checked> Diagrams</label>
             <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-rx" checked> Medications</label>
             <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-proc" checked> Procedures Advised</label>
