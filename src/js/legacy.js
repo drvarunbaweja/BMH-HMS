@@ -5022,7 +5022,7 @@ function calcRcAge() {
 }
 function genRcUID() {
   // Only numeric BMSH-###### IDs participate in the sequence (CSV/hash imports are ignored)
-  let maxNum = 461000;
+  let maxNum = 55999;
   (window.PATIENTS||[]).forEach(p => {
     const m = p.bmhId && String(p.bmhId).trim().match(/^BMSH-(\d{1,9})$/);
     if(m){ const n=parseInt(m[1],10); if(n>maxNum) maxNum=n; }
@@ -5042,7 +5042,7 @@ function genRcUID() {
   // Also check RTDB in case another device registered a patient (sequence must never lag server)
   if(window.fbOnce) {
     fbOnce('settings/lastPatientNum').then(num => {
-      if(typeof num !== 'number' || num < 461000) return;
+      if(typeof num !== 'number' || num < 55999) return;
       const nextFromServer = num + 1;
       if(nextFromServer > (window._nextPatientNum || 0)) {
         window._nextPatientNum = nextFromServer;
@@ -5058,17 +5058,17 @@ function genRcUID() {
 window.genRcUID = genRcUID;
 
 function reserveNextBmhId() {
-  const localId = (typeof genRcUID === 'function' && genRcUID()) || ('BMSH-' + String((window._nextPatientNum || 461001)).padStart(6,'0'));
+  const localId = (typeof genRcUID === 'function' && genRcUID()) || ('BMSH-' + String((window._nextPatientNum || 56000)).padStart(6,'0'));
   if(!window.FBDB) return Promise.resolve(localId);
 
   return window.FBDB.ref('settings/lastPatientNum').transaction(function(current) {
-    const base = (typeof current === 'number' && current >= 461000) ? current : 461000;
+    const base = (typeof current === 'number' && current >= 55999) ? current : 55999;
     return base + 1;
   }).then(function(result) {
     const committed = result && result.committed;
     const snap = result && result.snapshot;
     const nextNum = committed && snap ? snap.val() : null;
-    if(typeof nextNum === 'number' && nextNum >= 461001) {
+    if(typeof nextNum === 'number' && nextNum >= 56000) {
       window._nextPatientNum = nextNum;
       try { localStorage.setItem('bmh_last_patient_num', String(nextNum)); } catch(_) {}
       const reservedId = 'BMSH-' + String(nextNum).padStart(6,'0');

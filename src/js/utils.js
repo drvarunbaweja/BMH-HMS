@@ -56,7 +56,7 @@ export function formatTime(iso) {
 
 // ── ID generators (UPGRADED - CHRONOLOGICAL) ─────────────────────────────────
 export function newBmhId() {
-  const BASE_ID = 461000
+  const BASE_ID = 55999
   let maxId = BASE_ID
 
   if (typeof window !== 'undefined' && Array.isArray(window.PATIENTS)) {
