@@ -40,10 +40,10 @@ export function watchPatients(centre) {
     snap.forEach(d => PATIENTS.push({ id: d.id, ...d.data() }))
     window.PATIENTS = PATIENTS
     window.dispatchEvent(new CustomEvent('bmh:patientsUpdated'))
-
-    const uidEl = document.getElementById('rc-uid')
-    if (uidEl) {
-      uidEl.textContent = newBmhId()
+    if (typeof window.genRcUID === 'function') window.genRcUID()
+    else {
+      const uidEl = document.getElementById('rc-uid')
+      if (uidEl) uidEl.textContent = newBmhId()
     }
 
   }, err => {

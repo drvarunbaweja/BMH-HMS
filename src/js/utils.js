@@ -56,24 +56,33 @@ export function formatTime(iso) {
 
 // ── ID generators (UPGRADED - CHRONOLOGICAL) ─────────────────────────────────
 export function newBmhId() {
-  // Base starting ID. If no patients exist, it starts at BMSH-461001
-  const BASE_ID = 461000;
-  let maxId = BASE_ID;
+  const BASE_ID = 461000
+  let maxId = BASE_ID
 
-  // Scan all existing patients to find the highest chronological number
   if (typeof window !== 'undefined' && Array.isArray(window.PATIENTS)) {
     for (const p of window.PATIENTS) {
-      if (p.bmhId && p.bmhId.startsWith('BMSH-')) {
-        const num = parseInt(p.bmhId.replace('BMSH-', ''), 10);
-        if (!isNaN(num) && num > maxId) {
-          maxId = num;
-        }
-      }
+      const match = String(p?.bmhId || '').trim().match(/^BMSH-(\d{1,9})$/)
+      if (!match) continue
+      const num = parseInt(match[1], 10)
+      if (!Number.isNaN(num) && num > maxId) maxId = num
     }
   }
-  
-  // Return the absolute highest ID + 1
-  return 'BMSH-' + (maxId + 1);
+
+  if (typeof window !== 'undefined') {
+    const nextKnown = parseInt(window._nextPatientNum || '0', 10)
+    if (!Number.isNaN(nextKnown) && nextKnown > 0) {
+      maxId = Math.max(maxId, nextKnown - 1)
+    }
+  }
+
+  try {
+    const cachedLast = parseInt(localStorage.getItem('bmh_last_patient_num') || '0', 10)
+    if (!Number.isNaN(cachedLast) && cachedLast > maxId) maxId = cachedLast
+  } catch (_) { /* ignore storage errors */ }
+
+  const nextId = maxId + 1
+  if (typeof window !== 'undefined') window._nextPatientNum = nextId
+  return 'BMSH-' + String(nextId).padStart(6, '0')
 }
 
 // ── String helpers ───────────────────────────────────────────────────────────
