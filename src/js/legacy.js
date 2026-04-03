@@ -5103,16 +5103,33 @@ function toggleRcNoFee(on) {
 
 function getReceptionConsultationServiceName() {
   const purpose = document.getElementById('rc-purpose')?.value || 'New Consultation';
-  const dept = document.getElementById('rc-dept')?.value || 'ophtho';
   if(purpose === 'Not Checked In') return null;
-  if(/follow|post-op/i.test(purpose)) return 'Follow-up Consultation';
-  const map = {
-    ophtho: 'Consultation — Eye',
-    obg: 'ANC Consultation',
-    psych: 'Psychiatry Consultation',
-    skin: 'Dermatology Consultation'
+  if(/follow|post-op/i.test(purpose)) return 'Follow-up';
+  return 'New Consultation';
+}
+
+function getReceptionConsultationRate(centre) {
+  const dept = document.getElementById('rc-dept')?.value || 'ophtho';
+  const serviceName = getReceptionConsultationServiceName();
+  if(!serviceName) return 0;
+
+  const legacyMap = {
+    ophtho: ['Consultation — Eye', 'Consultation'],
+    obg: ['ANC Consultation', 'Consultation'],
+    psych: ['Psychiatry Consultation', 'Consultation'],
+    skin: ['Dermatology Consultation', 'Consultation']
   };
-  return map[dept] || 'Consultation';
+  const names = serviceName === 'Follow-up'
+    ? ['Follow-up', 'Follow-up Consultation']
+    : ['New Consultation'].concat(legacyMap[dept] || ['Consultation']);
+
+  for(const name of names) {
+    const amt = getChargeForProcedure(name, centre);
+    if(amt) return amt;
+    const direct = CENTRE_CHARGES[centre]?.[name];
+    if(direct) return direct;
+  }
+  return 0;
 }
 
 function syncReceptionCentreAndFee() {
@@ -5133,10 +5150,7 @@ function syncReceptionCentreAndFee() {
   }
 
   feeEl.disabled = false;
-  const serviceName = getReceptionConsultationServiceName();
-  const amount = serviceName
-    ? (getChargeForProcedure(serviceName, centre) || CENTRE_CHARGES[centre]?.Consultation || 0)
-    : 0;
+  const amount = getReceptionConsultationRate(centre);
   feeEl.value = String(amount);
 }
 window.syncReceptionConsultationFee = syncReceptionCentreAndFee;
@@ -5329,7 +5343,7 @@ function resetRegistrationForm() {
     const e=document.getElementById(id);
     if(e){ e.value = ''; }
   });
-  const fee=document.getElementById('rc-fee'); if(fee){ fee.value='200'; fee.disabled=false; }
+  const fee=document.getElementById('rc-fee'); if(fee){ fee.value='0'; fee.disabled=false; }
   const nf=document.getElementById('rc-no-fee'); if(nf){ nf.checked=false; }
   const sex=document.getElementById('rc-sex'); if(sex) sex.value='Male';
   const dept=document.getElementById('rc-dept'); if(dept) dept.value='ophtho';
@@ -5343,6 +5357,7 @@ function resetRegistrationForm() {
   const surgPanel=document.getElementById('rc-surgery-panel'); if(surgPanel) surgPanel.style.display='none';
   updateRcDr && updateRcDr();
   updatePurposeOptions && updatePurposeOptions();
+  syncReceptionConsultationFee && syncReceptionConsultationFee();
   genRcUID && genRcUID();
 }
 window.resetRegistrationForm = resetRegistrationForm;
@@ -5745,7 +5760,7 @@ function populateBillItems() {
   const type = document.getElementById('bill-type')?.value;
   const el = document.getElementById('rec-bill-items'); if(!el) return;
   const centre = getEffectiveCentre();
-  const items = type==='consultation' ? [[getReceptionConsultationServiceName() || 'Consultation Fee',1,getChargeForProcedure(getReceptionConsultationServiceName() || 'Consultation', centre) || CENTRE_CHARGES[centre]?.Consultation || 0]] :
+  const items = type==='consultation' ? [[getReceptionConsultationServiceName() || 'New Consultation',1,getReceptionConsultationRate(centre)]] :
     type==='investigation' ? [['OCT Macula',1,getChargeForProcedure('OCT Macula OU', centre)],['Biometry',1,getChargeForProcedure('Biometry IOL Master', centre)]] :
     type==='surgery' ? [['PMICS (Pinhole Micro Incision Cataract Surgery) + IOL',1,getChargeForProcedure('PMICS + IOL Implantation', centre)],['Pre-op Package',1,getChargeForProcedure('Pre-op Package', centre)]] :
     [['IPD Bed Charges (per day)',1,1500],['Nursing Charges',1,500]];
@@ -8234,7 +8249,7 @@ function updatePurposeOptions() {
   const purp=document.getElementById('rc-purpose');
   if(!purp) return;
   const eye=['New Consultation','Follow-up','Cataract Surgery','Glaucoma Review','Post-op','Retina Check','IVT Injection','Laser Treatment','Glasses','Emergency','Surgery','Need to Check In'];
-  const obg=['ANC Visit','New Consultation','Follow-up','LSCS','Normal Delivery','Scan','Emergency','Surgery','Need to Check In'];
+  const obg=['New Consultation','Follow-up','ANC Visit','LSCS','Normal Delivery','Scan','Emergency','Surgery','Need to Check In'];
   const psych=['New Consultation','Follow-up','Therapy Session','ECT','Emergency','Surgery','Need to Check In'];
   const skin=['New Consultation','Follow-up','Chemical Peel','PRP','Laser','Botox','Emergency','Surgery','Need to Check In'];
   const opts={ophtho:eye,obg:obg,psych:psych,skin:skin};
