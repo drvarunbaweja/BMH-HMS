@@ -1891,7 +1891,7 @@ function buildOphthoCaseSheetHtml() {
 </tr>
 </tbody>
 </table>`;
-  const ocularField = (label, val) => `<tr><td style="font-size:5px;font-weight:700;padding:1px 2px;border:1px solid #bbb;width:30%;vertical-align:top;background:#f2f2f2;line-height:1.1">${escHtml(label)}</td><td style="font-size:5px;padding:1px 2px;border:1px solid #bbb;word-break:break-word;line-height:1.15">${escHtml(val) || '—'}</td></tr>`;
+  const ocularField = (label, val) => `<tr><td style="font-size:5.4px;font-weight:700;padding:1px 2px;border:1px solid #bbb;width:25%;vertical-align:top;background:#f2f2f2;line-height:1.12">${escHtml(label)}</td><td style="font-size:5.7px;padding:1px 2px;border:1px solid #bbb;word-break:break-word;line-height:1.2">${escHtml(val) || '—'}</td></tr>`;
   const fieldLinePrint = (label, val) => ocularField(label, val);
   const slJoin = (struct, eye) => (slData[struct]?.[eye] || []).join(', ');
   const anteriorPrint = (eye) => `<table style="border-collapse:collapse;width:100%">${fieldLinePrint('Lids/Lashes', slJoin('Lids/Lashes', eye))}${fieldLinePrint('Conjunctiva', slJoin('Conjunctiva', eye))}${fieldLinePrint('Cornea', slJoin('Cornea', eye))}${fieldLinePrint('Iris / Pupil', [slJoin('Iris', eye), slJoin('Pupil', eye)].filter(Boolean).join(' · '))}${fieldLinePrint('A/C', slJoin('AC', eye))}${fieldLinePrint('Lens', slJoin('Lens', eye))}</table>`;
@@ -1910,13 +1910,13 @@ function buildOphthoCaseSheetHtml() {
   try {
     ocularDiagramPrintSrc = new URL('assets/ocular-health-exam.png', document.querySelector('base')?.href || window.location.href).href;
   } catch (e) { /* keep relative */ }
-  const ocularDiagramsHtml = '<div style="width:100%;max-width:165px;margin:0 auto;text-align:center">'
+  const ocularDiagramsHtml = '<div style="width:100%;max-width:188px;margin:0 auto;text-align:center">'
     + '<img src="' + ocularDiagramPrintSrc + '" alt="Ocular health examination diagram" style="width:100%;height:auto;display:block;border:1px solid #333;border-radius:4px;background:#fff" onerror="this.style.display=\'none\'"/>'
     + '<div style="font-size:5px;color:#555;margin-top:2px;line-height:1.1">Ocular health (diagram)</div></div>';
   const ocularBlock = `
 <div style="margin-top:3px;page-break-inside:avoid">
 <h2 style="font-size:8px;margin:2px 0 1px;padding:0">Slit lamp &amp; fundus</h2>
-<div style="display:grid;grid-template-columns:minmax(0,.92fr) 172px minmax(0,.92fr);grid-template-rows:auto auto;gap:2px 4px;align-items:start;width:100%">
+<div style="display:grid;grid-template-columns:minmax(0,.96fr) 196px minmax(0,.96fr);grid-template-rows:auto auto;gap:2px 4px;align-items:start;width:100%">
   <div style="grid-column:1;grid-row:1;min-width:0">
     <div style="font-size:6px;font-weight:900;margin:0 0 1px;color:#1a4a8c">${lblEye('od')} — Ant.</div>
     ${anteriorPrint('od')}
@@ -1933,8 +1933,8 @@ function buildOphthoCaseSheetHtml() {
     <div style="font-size:6px;font-weight:900;margin:0 0 1px;color:#1a7a4a">${lblEye('os')} — Post.</div>
     ${posteriorPrint('os')}
   </div>
-  <div style="grid-column:2;grid-row:1 / span 2;align-self:center;justify-self:center;padding:3px;border:1px solid #333;border-radius:3px;background:#fff;max-width:172px;width:100%">
-    <div style="font-size:5.5px;font-weight:900;text-align:center;margin-bottom:2px;line-height:1.15">Lids · Cornea · Lens · Fundus</div>
+  <div style="grid-column:2;grid-row:1 / span 2;align-self:center;justify-self:center;padding:3px;border:1px solid #333;border-radius:3px;background:#fff;max-width:196px;width:100%">
+    <div style="font-size:5.9px;font-weight:900;text-align:center;margin-bottom:2px;line-height:1.18">Lids · Cornea · Lens · Fundus</div>
     ${ocularDiagramsHtml}
     ${slNotes ? `<div style="font-size:5px;color:#222;margin-top:3px;text-align:left;line-height:1.15;white-space:pre-wrap;border-top:1px solid #ddd;padding-top:2px">${escHtml(slNotes)}</div>` : ''}
   </div>
@@ -1944,14 +1944,14 @@ function buildOphthoCaseSheetHtml() {
   // ── build HTML ────────────────────────────────────────────────────────
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Case Sheet — ${ptName}</title><style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-body{font-family:Arial,Helvetica,sans-serif;color:#111;padding:1.5mm 2.5mm;font-size:7.1px;line-height:1.13}
-@page{size:A4 portrait;margin:1.8mm}
+body{font-family:Arial,Helvetica,sans-serif;color:#111;padding:1.2mm 2.1mm;font-size:7.7px;line-height:1.16}
+@page{size:A4 portrait;margin:1.5mm}
 @media print{body{padding:0}}
-h1{font-size:11px;font-weight:900;text-align:center;letter-spacing:.5px;text-transform:uppercase;border-bottom:1.5px solid #111;padding-bottom:2px;margin-bottom:3px}
-h2{font-size:7.5px;font-weight:900;text-transform:uppercase;letter-spacing:.3px;border-bottom:1px solid #111;padding-bottom:1px;margin-bottom:2px;margin-top:4px}
-table{width:100%;border-collapse:collapse;font-size:6.5px}
+h1{font-size:12px;font-weight:900;text-align:center;letter-spacing:.5px;text-transform:uppercase;border-bottom:1.5px solid #111;padding-bottom:2px;margin-bottom:3px}
+h2{font-size:8px;font-weight:900;text-transform:uppercase;letter-spacing:.3px;border-bottom:1px solid #111;padding-bottom:1px;margin-bottom:2px;margin-top:4px}
+table{width:100%;border-collapse:collapse;font-size:6.9px}
 th,td{border:1px solid #555;padding:1px 2px}
-th{background:#eee;font-weight:900;text-align:center;font-size:6px}
+th{background:#eee;font-weight:900;text-align:center;font-size:6.4px}
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:4px}
 .label{font-weight:700;font-size:6px;color:#555;text-transform:uppercase}
 .val{font-size:7px;font-weight:900}
@@ -1966,12 +1966,12 @@ th{background:#eee;font-weight:900;text-align:center;font-size:6px}
   <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px">
     <div style="flex:1;min-width:0;text-align:center">
       <h1 style="font-size:11px;font-weight:900;letter-spacing:.5px;text-transform:uppercase;margin:0 0 3px 0;padding:0;border:none">Baweja Multispeciality Hospital — OPD</h1>
-      <div style="font-size:7px;line-height:1.35"><b>Pt:</b> ${escHtml(ptName)} · <b>Age/Sex:</b> ${escHtml(String(ptAge || '—'))}${ptSex ? '/' + escHtml(ptSex) : ''} · <b>Date:</b> ${escHtml(today)} · <b>Centre:</b> ${centre === 'CHD' ? 'CHD' : 'RPR'} · <b>Dr:</b> ${escHtml(drName)}</div>
-      <div style="font-size:6.5px;line-height:1.3;margin-top:2px"><b>Ph:</b> ${escHtml(ptMob || '—')} · <b>Addr:</b> ${escHtml(ptAddr || '—')}</div>
+      <div style="font-size:7.5px;line-height:1.38"><b>Pt:</b> ${escHtml(ptName)} · <b>Age/Sex:</b> ${escHtml(String(ptAge || '—'))}${ptSex ? '/' + escHtml(ptSex) : ''} · <b>Date:</b> ${escHtml(today)} · <b>Centre:</b> ${centre === 'CHD' ? 'CHD' : 'RPR'} · <b>Dr:</b> ${escHtml(drName)}</div>
+      <div style="font-size:7px;line-height:1.34;margin-top:2px"><b>Ph:</b> ${escHtml(ptMob || '—')} · <b>Addr:</b> ${escHtml(ptAddr || '—')}</div>
     </div>
     <div style="text-align:right;flex-shrink:0;padding:1px 2px 1px 8px;border-left:2px solid #1A3C6E;min-width:92px">
-      <div style="font-size:13px;font-weight:900;font-family:Consolas,ui-monospace,monospace;letter-spacing:.04em;line-height:1">${escHtml(ptId || '—')}</div>
-      <div style="font-size:6px;font-weight:800;color:#1A3C6E;text-transform:uppercase;margin-top:2px">BMH ID</div>
+      <div style="font-size:14px;font-weight:900;font-family:Consolas,ui-monospace,monospace;letter-spacing:.04em;line-height:1">${escHtml(ptId || '—')}</div>
+      <div style="font-size:6.4px;font-weight:800;color:#1A3C6E;text-transform:uppercase;margin-top:2px">BMH ID</div>
     </div>
   </div>
 </div>
@@ -4266,6 +4266,55 @@ const DRUG_LIBRARY = [
 ];
 
 const SELECTED_INVESTIGATIONS = [];
+const INVESTIGATION_LIBRARY = {
+  blood: [
+    ['CBC (Complete Blood Count)', 850],
+    ['Fasting Blood Sugar', 250],
+    ['HbA1c', 600],
+    ['Serum Creatinine', 350],
+    ['Urea & Electrolytes', 700],
+    ['Liver Function Tests', 900],
+    ['Coagulation Profile', 1200],
+    ['HIV', 400],
+    ['HbsAg', 300],
+    ['VDRL', 300]
+  ],
+  diag: [
+    ['Chest X-Ray', 600],
+    ['ECG', 350],
+    ['Echocardiography', 2500],
+    ['USG Abdomen', 1200],
+    ['MRI Brain', 8000],
+    ['CT Scan Head', 5000]
+  ],
+  eye: [
+    ['Biometry (IOL Master)', 1200],
+    ['OCT Macula OU', 1800],
+    ['OCT Optic Disc OU', 1800],
+    ['HVF Visual Fields', 1500],
+    ['Fundus Photography', 600],
+    ['Corneal Topography', 1500],
+    ['Specular Microscopy', 1200],
+    ['ERG / VEP', 2500],
+    ['Fluorescein Angiography', 4000]
+  ]
+};
+const RX_FREQ_OPTIONS = ['Half-hourly','Hourly','Every 2 hours','Every 3 hours','Every 4 hours','Six times daily (6x/day)','Four times daily (QID)','Three times daily (TDS)','Twice daily (BD)','Once daily (OD)','At bedtime (HS)','Once weekly','As needed (PRN)'];
+const RX_DURATION_OPTIONS = ['½ day','1 day','2 days','3 days','4 days','5 days','6 days','7 days','1 week','2 weeks','3 weeks','4 weeks','6 weeks','1 month','2 months','3 months','4 months','5 months','6 months','12 months','Ongoing'];
+const RX_TYPE_OPTIONS = ['Eye Drop','Tablet','Capsule','Ointment','Cream','Gel','Syrup','Injection','Pessary','Lotion','Spray','Other'];
+const RX_SITE_OPTIONS = ['Right Eye (OD)','Left Eye (OS)','Both Eyes (OU)','Oral','Topical','IM / IV','Nasal','Ear','Vaginal'];
+function renderInvestigationChooser() {
+  const groups = [
+    ['inv-blood-list', INVESTIGATION_LIBRARY.blood],
+    ['inv-diag-list', INVESTIGATION_LIBRARY.diag],
+    ['inv-eye-list', INVESTIGATION_LIBRARY.eye]
+  ];
+  groups.forEach(([id, items]) => {
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.innerHTML = items.map(([name, price]) => `<div class="invest-option" data-investigation-name="${String(name).replace(/"/g,'&quot;')}" data-price="${price}" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--g6);border-radius:8px;cursor:pointer" onclick="toggleInvestigation(this,${JSON.stringify(name)},${price})"><input type="checkbox" style="width:16px;height:16px;flex-shrink:0"><div style="flex:1"><div style="font-size:12px;font-weight:700">${name}</div><div style="font-size:10px;color:var(--g1)">₹${Number(price).toLocaleString('en-IN')}</div></div></div>`).join('');
+  });
+}
 let INVESTIGATION_TEMPLATES_DATA = {
   'baseline-lab': ['CBC (Complete Blood Count)', 'Fasting Blood Sugar', 'HbA1c', 'Serum Creatinine'],
   'pre-op-eye': ['CBC (Complete Blood Count)', 'Fasting Blood Sugar', 'ECG', 'Chest X-Ray'],
@@ -4320,8 +4369,8 @@ function persistCurrentPatientInvestigationOrders() {
 }
 function syncSelectedInvestigationCheckboxes() {
   const selectedNames = new Set(SELECTED_INVESTIGATIONS.map(i => i.name));
-  document.querySelectorAll('#m-order-invest [onclick^="toggleInvestigation"]').forEach(el => {
-    const label = el.querySelector('div div')?.textContent?.trim();
+  document.querySelectorAll('#m-order-invest .invest-option').forEach(el => {
+    const label = el.getAttribute('data-investigation-name')?.trim();
     const cb = el.querySelector('input[type=checkbox]');
     const checked = !!label && selectedNames.has(label);
     if(cb) cb.checked = checked;
@@ -4358,8 +4407,8 @@ function applyInvestigationTemplate(key) {
   if(!key || !INVESTIGATION_TEMPLATES_DATA[key]) return;
   clearSelectedInvestigations();
   const names = new Set(INVESTIGATION_TEMPLATES_DATA[key] || []);
-  document.querySelectorAll('#m-order-invest [onclick^="toggleInvestigation"]').forEach(el => {
-    const label = el.querySelector('div div')?.textContent?.trim();
+  document.querySelectorAll('#m-order-invest .invest-option').forEach(el => {
+    const label = el.getAttribute('data-investigation-name')?.trim();
     if(!label || !names.has(label)) return;
     const cb = el.querySelector('input[type=checkbox]');
     if(cb && !cb.checked) toggleInvestigation(el, label, Number(el.getAttribute('data-price')) || 0);
@@ -4941,6 +4990,7 @@ window.addEventListener('DOMContentLoaded', function() {
   try { renderIPD && renderIPD(); } catch(e) {}
   try { initQR && initQR(); } catch(e) {}
   try { renderRxDrugs && renderRxDrugs(); } catch(e) {}
+  try { renderInvestigationChooser && renderInvestigationChooser(); } catch(e) {}
   try { loadInvestigationTemplatesFromStorage && loadInvestigationTemplatesFromStorage(); } catch(e) {}
   try { refreshInvestigationTemplateSelect && refreshInvestigationTemplateSelect(); } catch(e) {}
   try { buildRefractionDropdowns && buildRefractionDropdowns(); } catch(e) {}
@@ -4983,10 +5033,10 @@ function lookupGeneric(trade) {
 function addRxDrugFromModal() {
   const type = document.getElementById('new-rx-type')?.value||'Eye Drop';
   const trade = document.getElementById('new-rx-trade')?.value||'';
-  const generic = document.getElementById('new-rx-generic')?.value||trade;
+  const generic = document.getElementById('new-rx-generic')?.value||'';
   const eye = document.getElementById('new-rx-eye')?.value||'OU';
-  const freq = document.getElementById('new-rx-freq')?.value||'QID';
-  const dur = document.getElementById('new-rx-dur')?.value||'1 Week';
+  const freq = normalizeRxFreqLabel(document.getElementById('new-rx-freq')?.value||'Four times daily (QID)');
+  const dur = normalizeRxDurationLabel(document.getElementById('new-rx-dur')?.value||'1 week');
   const taper = document.getElementById('new-rx-taper')?.value||'';
   const inst = document.getElementById('new-rx-inst')?.value||'';
   if(!trade&&!generic){showToast('Enter drug name','w');return;}
@@ -4996,18 +5046,10 @@ function addRxDrugFromModal() {
     drugType: type,
     eye:[eye.replace(/\s.*$/,'')],freq,dur,
     dateFrom: today, dateTo: '',
-    lang:{en:inst||(generic+' '+freq+' in '+eye+' for '+dur+'.')}
+    lang:{en:inst||''}
   });
-  renderRxDrugs();
-  if (taper) {
-    const taperDurMap = { '1w': '7 days', '2w': '14 days', '4w': '14 days' };
-    RX_DRUGS[RX_DRUGS.length - 1].taperRow = {
-      freq: suggestTaperFreqFromMain(freq),
-      dur: taperDurMap[taper] || '7 days',
-      dateFrom: '',
-      dateTo: ''
-    };
-  }
+  computeRxEndAndTaperDates(RX_DRUGS[RX_DRUGS.length - 1]);
+  if (taper) addTaperRow(RX_DRUGS.length - 1, dur);
   renderRxDrugs();
   showToast(`💊 ${trade||generic} added to prescription ✓`,'s');
   closeM('m-add-rx-drug');
@@ -5022,6 +5064,50 @@ function normalizeEyeLabelForRx(eye) {
   if (/both|OU|both eyes/i.test(s)) return ['Both Eyes (OU)'];
   if (s.includes('Eye (')) return [s];
   return [s];
+}
+function normalizeRxFreqLabel(freq) {
+  const f = String(freq || '').trim();
+  if(!f) return 'Twice daily (BD)';
+  if (/Half-hourly/i.test(f)) return 'Half-hourly';
+  if (/Hourly/i.test(f)) return 'Hourly';
+  if (/Every 2 hours/i.test(f)) return 'Every 2 hours';
+  if (/Every 3 hours/i.test(f)) return 'Every 3 hours';
+  if (/Every 4 hours/i.test(f)) return 'Every 4 hours';
+  if (/6x|Six times/i.test(f)) return 'Six times daily (6x/day)';
+  if (/QID|Four times/i.test(f)) return 'Four times daily (QID)';
+  if (/TDS|Three times/i.test(f)) return 'Three times daily (TDS)';
+  if (/BD|Twice/i.test(f)) return 'Twice daily (BD)';
+  if (/Once daily|\(OD\)/i.test(f)) return 'Once daily (OD)';
+  if (/HS|bedtime/i.test(f)) return 'At bedtime (HS)';
+  if (/weekly/i.test(f)) return 'Once weekly';
+  if (/PRN|As needed/i.test(f)) return 'As needed (PRN)';
+  return f;
+}
+function normalizeRxDurationLabel(dur) {
+  const d = String(dur || '').trim();
+  if(!d) return '1 week';
+  if (/ongoing/i.test(d)) return 'Ongoing';
+  if (/12\s*months?/i.test(d)) return '12 months';
+  if (/6\s*months?/i.test(d)) return '6 months';
+  if (/5\s*months?/i.test(d)) return '5 months';
+  if (/4\s*months?/i.test(d)) return '4 months';
+  if (/3\s*months?/i.test(d)) return '3 months';
+  if (/2\s*months?/i.test(d)) return '2 months';
+  if (/1\s*months?/i.test(d)) return '1 month';
+  if (/6\s*weeks?/i.test(d)) return '6 weeks';
+  if (/4\s*weeks?/i.test(d)) return '4 weeks';
+  if (/3\s*weeks?/i.test(d)) return '3 weeks';
+  if (/2\s*weeks?/i.test(d)) return '2 weeks';
+  if (/1\s*weeks?/i.test(d)) return '1 week';
+  if (/7\s*days?/i.test(d)) return '7 days';
+  if (/6\s*days?/i.test(d)) return '6 days';
+  if (/5\s*days?/i.test(d)) return '5 days';
+  if (/4\s*days?/i.test(d)) return '4 days';
+  if (/3\s*days?/i.test(d)) return '3 days';
+  if (/2\s*days?/i.test(d)) return '2 days';
+  if (/1\s*days?/i.test(d)) return '1 day';
+  if (/½|half/i.test(d)) return '½ day';
+  return d;
 }
 // APPLY TEMPLATE
 function applyRxTemplate(tplId) {
@@ -5038,8 +5124,8 @@ function applyRxTemplate(tplId) {
       trade, brand: trade, generic: gen, name: gen,
       drugType: d.type || 'Eye Drop',
       eye: eyeArr,
-      freq: d.freq || 'Twice daily (BD)',
-      dur: d.dur || '1 Week',
+      freq: normalizeRxFreqLabel(d.freq || 'Twice daily (BD)'),
+      dur: normalizeRxDurationLabel(d.dur || '1 week'),
       dateFrom: today,
       dateTo: '',
       lang:{en:gen+' '+(d.freq||'')+' '+eyeArr[0]+' '+(d.dur||''),hi:'',pa:''}
@@ -6884,11 +6970,20 @@ function durationLabelToDays(label) {
   const s = String(label || '').trim().toLowerCase();
   if (!s) return 7;
   if (s.includes('ongoing')) return 90;
+  if (s.includes('12 month')) return 365;
   if (s.includes('6 month')) return 180;
+  if (s.includes('5 month')) return 150;
+  if (s.includes('4 month')) return 120;
   if (s.includes('3 month')) return 90;
+  if (s.includes('2 month')) return 60;
   if (s.includes('1 month')) return 30;
+  if (s.includes('6 week')) return 42;
+  if (s.includes('4 week')) return 28;
+  if (s.includes('3 week')) return 21;
   if (s.includes('2 week')) return 14;
   if (s.includes('1 week')) return 7;
+  if (/6\s*days?/.test(s)) return 6;
+  if (/4\s*days?/.test(s)) return 4;
   if (/14\s*days?/.test(s)) return 14;
   if (/7\s*days?/.test(s)) return 7;
   if (/5\s*days?/.test(s)) return 5;
@@ -6924,7 +7019,7 @@ function syncRxDrugDates(idx) {
   renderRxDrugs();
 }
 function suggestTaperFreqFromMain(mainFreq) {
-  const order = ['Six times (6x/day)','Four times daily (QID)','Three times daily (TDS)','Twice daily (BD)','Once daily (OD)','At bedtime (HS)'];
+  const order = ['Half-hourly','Hourly','Every 2 hours','Every 3 hours','Every 4 hours','Six times daily (6x/day)','Four times daily (QID)','Three times daily (TDS)','Twice daily (BD)','Once daily (OD)','At bedtime (HS)','Once weekly'];
   const i = order.indexOf(mainFreq);
   if (i >= 0 && i < order.length - 1) return order[i + 1];
   if (/QID/i.test(mainFreq || '')) return 'Three times daily (TDS)';
@@ -6938,7 +7033,7 @@ function addTaperRow(idx, taperDur) {
   computeRxEndAndTaperDates(orig);
   orig.taperRow = {
     freq: suggestTaperFreqFromMain(orig.freq || ''),
-    dur: taperDur || '7 days',
+    dur: taperDur || orig.dur || '7 days',
     dateFrom: '',
     dateTo: ''
   };
@@ -7592,12 +7687,12 @@ function addRxFromQuick() {
     trade = drug.trade || '';
     generic = drug.generic || '';
     drugType = drug.type || 'Tablet';
-    freq = drug.freq || 'Twice daily (BD)';
-    dur = drug.dur || '1 Week';
+    freq = normalizeRxFreqLabel(drug.freq || 'Twice daily (BD)');
+    dur = normalizeRxDurationLabel(drug.dur || '1 week');
     eyeVal = drugType === 'Eye Drop' ? 'Both Eyes (OU)' : 'Oral';
   } else if (drug._from === 'full') {
-    generic = drug.name;
-    trade = drug.brand || '';
+    trade = drug.name || '';
+    generic = drug.brand || '';
     drugType = drug.type || 'Drug';
     let ev = drug.eye || 'Oral';
     eyeVal = typeof ev === 'string' ? ev : (Array.isArray(ev) ? ev[0] : 'Oral');
@@ -7606,23 +7701,23 @@ function addRxFromQuick() {
       else if (/OS|left/i.test(eyeVal)) eyeVal = 'Left Eye (OS)';
       else if (/OD|right/i.test(eyeVal)) eyeVal = 'Right Eye (OD)';
     }
-    freq = drug.freq || 'Twice daily (BD)';
-    dur = drug.dur || '1 Week';
+    freq = normalizeRxFreqLabel(drug.freq || 'Twice daily (BD)');
+    dur = normalizeRxDurationLabel(drug.dur || '1 week');
   } else if (drug._from === 'free') {
     trade = drug.brand || '';
     generic = drug.name || trade;
     drugType = drug.type || 'Tablet';
     eyeVal = drugType === 'Eye Drop' ? 'Both Eyes (OU)' : 'Oral';
-    freq = drug.freq || 'Twice daily (BD)';
-    dur = drug.dur || '1 Week';
+    freq = normalizeRxFreqLabel(drug.freq || 'Twice daily (BD)');
+    dur = normalizeRxDurationLabel(drug.dur || '1 week');
   } else {
     trade = drug.brand || drug.trade || '';
     generic = drug.name || drug.generic || trade;
     drugType = drug.type || 'Tablet';
     let ev = drug.eye || (drugType === 'Eye Drop' ? 'Both Eyes (OU)' : 'Oral');
     eyeVal = typeof ev === 'string' ? ev : (Array.isArray(ev) ? ev[0] : 'Oral');
-    freq = drug.freq || 'Twice daily (BD)';
-    dur = drug.dur || '1 Week';
+    freq = normalizeRxFreqLabel(drug.freq || 'Twice daily (BD)');
+    dur = normalizeRxDurationLabel(drug.dur || '1 week');
   }
 
   const today = new Date().toISOString().split('T')[0];
@@ -7635,6 +7730,7 @@ function addRxFromQuick() {
     dateTo: '',
     lang: { en: '', hi: '', pa: '' }
   });
+  computeRxEndAndTaperDates(RX_DRUGS[RX_DRUGS.length - 1]);
 
   renderRxDrugs();
   const inp2 = document.getElementById('rx-quick-search');
@@ -7656,10 +7752,10 @@ function renderRxDrugs() {
   }
   const activePageId = activePage?.id || '';
   const isOphtho = activePageId === 'pg-ophtho' || activePageId.includes('ophtho');
-  const freqOpts=['Once daily (OD)','Twice daily (BD)','Three times daily (TDS)','Four times daily (QID)','Six times (6x/day)','Hourly','At bedtime (HS)','As needed (PRN)','Weekly','Tapering'];
-  const durOpts=['½ day','1 day','2 days','3 days','5 days','7 days','14 days','1 Week','2 Weeks','1 Month','3 Months','6 Months','Ongoing'];
-  const typeOpts=['Eye Drop','Tablet','Capsule','Ointment','Cream','Gel','Syrup','Injection','Pessary','Other'];
-  const eyeOpts=['Left Eye (OS)','Right Eye (OD)','Both Eyes (OU)','Oral','Topical','IM / IV'];
+  const freqOpts=RX_FREQ_OPTIONS;
+  const durOpts=RX_DURATION_OPTIONS;
+  const typeOpts=RX_TYPE_OPTIONS;
+  const eyeOpts=RX_SITE_OPTIONS;
   const lang = typeof rxLang!=='undefined'?rxLang:'en';
 
   RX_DRUGS.forEach((d,i)=>{
@@ -7667,6 +7763,12 @@ function renderRxDrugs() {
     if (!d.drugType && d.type) d.drugType = d.type;
     if (!d.trade && d.brand) d.trade = d.brand;
     if (!d.generic && d.name) d.generic = d.name;
+    d.freq = normalizeRxFreqLabel(d.freq);
+    d.dur = normalizeRxDurationLabel(d.dur);
+    if (d.taperRow) {
+      d.taperRow.freq = normalizeRxFreqLabel(d.taperRow.freq);
+      d.taperRow.dur = normalizeRxDurationLabel(d.taperRow.dur);
+    }
   });
 
   el.innerHTML = RX_DRUGS.map((d,i)=>{
@@ -7681,8 +7783,8 @@ function renderRxDrugs() {
     <div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px 14px;padding:14px 16px;background:var(--g6)">
       <div style="font-size:13px;font-weight:900;color:var(--bmh-blue);min-width:24px;padding-top:2px">${i+1}</div>
       <div style="flex:1.2;min-width:240px;max-width:100%">
-        <div style="font-size:14px;font-weight:900;color:var(--tx);line-height:1.3"><input value="${String(tr).replace(/"/g,'&quot;')}" onchange="RX_DRUGS[${i}].trade=this.value;RX_DRUGS[${i}].brand=this.value" placeholder="Trade name" style="width:100%;font-size:14px;font-weight:900;border:none;background:transparent;border-bottom:2px solid var(--g4);padding:2px 0;box-sizing:border-box"></div>
-        <input value="${String(gen).replace(/"/g,'&quot;')}" onchange="RX_DRUGS[${i}].generic=this.value;RX_DRUGS[${i}].name=this.value" placeholder="Generic name" style="width:100%;font-size:12px;color:var(--g1);font-style:italic;border:none;background:transparent;margin-top:6px;padding:2px 0;box-sizing:border-box">
+        <div style="font-size:14px;font-weight:900;color:var(--tx);line-height:1.3"><input value="${String(tr).replace(/"/g,'&quot;')}" onchange="RX_DRUGS[${i}].trade=this.value;RX_DRUGS[${i}].brand=this.value" placeholder="Trade name" style="width:100%;font-size:15px;font-weight:900;border:none;background:transparent;border-bottom:2px solid var(--g4);padding:2px 0;box-sizing:border-box"></div>
+        <input value="${String(gen).replace(/"/g,'&quot;')}" onchange="RX_DRUGS[${i}].generic=this.value;RX_DRUGS[${i}].name=this.value" placeholder="Generic name" style="width:100%;font-size:12px;color:var(--g1);font-style:italic;border:none;background:transparent;margin-top:5px;padding:2px 0;box-sizing:border-box">
         ${d.lang&&d.lang[lang]?`<div style="font-size:10px;color:var(--tx3);margin-top:8px;line-height:1.45;border-left:3px solid var(--g4);padding-left:8px">${d.lang[lang]}</div>`:''}
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:10px 14px;flex:1;min-width:260px;align-items:flex-end">
@@ -7712,7 +7814,7 @@ function renderRxDrugs() {
           <span style="font-size:10px;color:var(--g1)">Add taper for</span>
           <select onchange="if(this.value){addTaperRow(${i},this.value);this.value=''}" style="font-size:11px;padding:5px 10px;border-radius:8px;border:1px solid var(--orange);max-width:220px">
             <option value="">— duration after main course —</option>
-            ${RX_TAPER_SEGMENT_DURS.map(t=>`<option value="${t}">${t}</option>`).join('')}
+            ${durOpts.map(t=>`<option value="${t}">${t}</option>`).join('')}
           </select>
         </div>
         ${tap?`<div style="padding:12px 14px;background:var(--orange-lt);border-radius:10px;border-left:4px solid var(--orange)">
@@ -7720,7 +7822,7 @@ function renderRxDrugs() {
             <div style="min-width:130px"><div style="font-size:9px;font-weight:700;color:var(--g1)">Taper frequency</div>
             <select onchange="RX_DRUGS[${i}].taperRow.freq=this.value" style="font-size:11px;padding:5px 8px;width:100%;border-radius:8px">${freqOpts.map(f=>`<option${tap.freq===f?' selected':''}>${f}</option>`).join('')}</select></div>
             <div style="min-width:100px"><div style="font-size:9px;font-weight:700;color:var(--g1)">Taper duration</div>
-            <select onchange="RX_DRUGS[${i}].taperRow.dur=this.value;syncRxDrugDates(${i})" style="font-size:11px;padding:5px 8px;width:100%;border-radius:8px">${RX_TAPER_SEGMENT_DURS.map(f=>`<option${tap.dur===f?' selected':''}>${f}</option>`).join('')}</select></div>
+            <select onchange="RX_DRUGS[${i}].taperRow.dur=this.value;syncRxDrugDates(${i})" style="font-size:11px;padding:5px 8px;width:100%;border-radius:8px">${durOpts.map(f=>`<option${tap.dur===f?' selected':''}>${f}</option>`).join('')}</select></div>
             <div style="min-width:120px"><div style="font-size:9px;font-weight:700;color:var(--g1)">From</div>
             <input type="date" value="${tap.dateFrom||''}" onchange="RX_DRUGS[${i}].taperRow.dateFrom=this.value" style="font-size:11px;padding:4px;width:100%;box-sizing:border-box;border-radius:6px;border:1px solid var(--g4)"></div>
             <div style="min-width:120px"><div style="font-size:9px;font-weight:700;color:var(--g1)">To</div>
@@ -8193,6 +8295,11 @@ function addProcItem(procName, price) {
 
 function rxFreqPlainEn(freq) {
   const f = String(freq || '');
+  if (/Half-hourly/i.test(f)) return 'every 30 minutes';
+  if (/Hourly/i.test(f)) return 'every hour';
+  if (/Every 2 hours/i.test(f)) return 'every 2 hours';
+  if (/Every 3 hours/i.test(f)) return 'every 3 hours';
+  if (/Every 4 hours/i.test(f)) return 'every 4 hours';
   if (/QID|Four times/i.test(f)) return '4 times a day';
   if (/TDS|Three times/i.test(f)) return '3 times a day';
   if (/BD|Twice/i.test(f)) return 'twice a day';
@@ -8200,9 +8307,13 @@ function rxFreqPlainEn(freq) {
   if (/6x|Six times/i.test(f)) return '6 times a day';
   if (/PRN|As needed/i.test(f)) return 'as needed';
   if (/HS|bedtime/i.test(f)) return 'at bedtime';
-  if (/Hourly/i.test(f)) return 'hourly';
-  if (/Weekly/i.test(f)) return 'weekly';
+  if (/weekly/i.test(f)) return 'once weekly';
   return f || 'as directed';
+}
+function rxDurationPlainEn(dur) {
+  const d = String(dur || '').trim();
+  if(!d) return 'as directed';
+  return d.replace(/\bOD\b/gi,'day').replace(/\bBD\b/gi,'day');
 }
 function rxEyePlainEn(eye) {
   const e = String(eye || '');
@@ -8218,24 +8329,30 @@ function buildRxPlainInstructionLine(d, lang, fmtIN) {
   const generic = (typeof rxDrugGenericName === 'function' ? rxDrugGenericName(d) : (d.name || d.generic || '')) || '';
   const eye = Array.isArray(d.eye) ? d.eye[0] : d.eye;
   const freq = rxFreqPlainEn(d.freq);
+  const dur = rxDurationPlainEn(d.dur);
   const eyeTxt = rxEyePlainEn(eye);
   const df = fmtIN(d.dateFrom);
   const dt = fmtIN(d.dateTo);
   const form = String(d.drugType || d.type || '').toLowerCase();
-  const isDrop = /drop|ointment|eye|gel/i.test(form);
+  const genericSafe = generic && generic !== trade ? ' (' + generic + ')' : '';
+  let action = 'Take';
+  if (/drop|eye/i.test(form)) action = 'Instill one drop';
+  else if (/ointment|gel|cream|lotion/i.test(form)) action = 'Apply';
+  else if (/spray/i.test(form)) action = 'Use';
+  else if (/injection/i.test(form)) action = 'Administer';
+  else if (/pessary/i.test(form)) action = 'Insert';
   const sub = (generic && generic !== trade) ? ' (' + generic + ')' : '';
   let line = '';
   if (lang === 'hi') {
-    line = trade + sub + ' — ' + freq + ', ' + eyeTxt.replace(/^the /, '') + ', ' + df + ' से ' + dt + ' तक।';
+    line = trade + sub + ' — ' + eyeTxt.replace(/^the /, '') + ' में ' + freq + ', ' + dur + ', ' + df + ' से ' + dt + ' तक।';
   } else if (lang === 'pa') {
-    line = trade + sub + ' — ' + freq + ', ' + eyeTxt + ', ' + df + ' ਤੋਂ ' + dt + ' ਤੱਕ।';
+    line = trade + sub + ' — ' + eyeTxt + ' ਵਿੱਚ ' + freq + ', ' + dur + ', ' + df + ' ਤੋਂ ' + dt + ' ਤੱਕ।';
   } else {
-    const inst = isDrop ? 'Instill' : 'Take';
-    line = trade + sub + ' — ' + inst + ' in ' + eyeTxt + ', ' + freq + ', from ' + df + ' to ' + dt + '.';
+    line = trade + sub + ' — ' + action + ' in ' + eyeTxt + ' ' + freq + ' for ' + dur + ', from ' + df + ' to ' + dt + '.';
   }
   if (d.taperRow && d.taperRow.freq) {
     const tr = d.taperRow;
-    line += (lang === 'en' ? ' Then taper: ' : ' ') + rxFreqPlainEn(tr.freq) + ' (' + fmtIN(tr.dateFrom) + ' – ' + fmtIN(tr.dateTo) + ').';
+    line += (lang === 'en' ? ' Then taper: ' : ' ') + rxFreqPlainEn(tr.freq) + ' for ' + rxDurationPlainEn(tr.dur) + ' (' + fmtIN(tr.dateFrom) + ' – ' + fmtIN(tr.dateTo) + ').';
   }
   return line;
 }
@@ -10133,15 +10250,17 @@ function rxQuickSearch(val) {
       const d = item.d;
       return `<div onclick="selectRxQuickPick(${i})" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--g5)" onmouseover="this.style.background='var(--blue-lt)'" onmouseout="this.style.background=''">
         <div style="font-size:10px;font-weight:800;color:var(--green);text-transform:uppercase">Settings</div>
-        <div style="font-size:12.5px;font-weight:800;color:#1A3C6E">${d.trade} — ${d.generic}</div>
+        <div style="font-size:13px;font-weight:900;color:#1A3C6E">${d.trade}</div>
+        <div style="font-size:10.5px;color:var(--g1);font-style:italic">${d.generic ? '('+d.generic+')' : ''}</div>
         <div style="font-size:10.5px;color:var(--g1)">${d.type} · ${d.freq} · ${d.dur}</div>
       </div>`;
     }
     const d = item.d;
     return `<div onclick="selectRxQuickPick(${i})" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--g5)" onmouseover="this.style.background='var(--blue-lt)'" onmouseout="this.style.background=''">
       <div style="font-size:10px;font-weight:800;color:var(--bmh-teal);text-transform:uppercase">Built-in</div>
-      <div style="font-size:12.5px;font-weight:800;color:#1A3C6E">${d.brand} — ${d.name}</div>
-      <div style="font-size:10.5px;color:var(--g1);font-style:italic">${d.type} · ${d.freq}</div>
+      <div style="font-size:13px;font-weight:900;color:#1A3C6E">${d.name}</div>
+      <div style="font-size:10.5px;color:var(--g1);font-style:italic">${d.brand ? '('+d.brand+')' : ''}</div>
+      <div style="font-size:10.5px;color:var(--g1)">${d.type} · ${d.freq} · ${d.dur}</div>
     </div>`;
   }).join('');
 }
@@ -10153,7 +10272,7 @@ function selectRxQuickPick(i) {
     const d = item.d;
     rxQuickSelectedDrug = { _from: 'settings', trade: d.trade, generic: d.generic, type: d.type, freq: d.freq, dur: d.dur, dept: d.dept };
     const inp = document.getElementById('rx-quick-search');
-    if (inp) inp.value = d.trade + ' — ' + d.generic;
+    if (inp) inp.value = d.trade;
   } else {
     rxQuickSelectedDrug = Object.assign({ _from: 'full' }, item.d);
     const inp = document.getElementById('rx-quick-search');
