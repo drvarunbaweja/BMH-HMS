@@ -460,6 +460,20 @@ function getMergedConsentData() {
 function getConsentEntry(key) {
   return getMergedConsentData()[key] || CONSENT_DATA[key];
 }
+/** Resolve consent key for printing: built-in data, uploaded template id, or library item id. */
+function resolveConsentDataForPrint(key) {
+  const merged = getMergedConsentData();
+  if (merged[key] && merged[key].paras && merged[key].paras.length) return merged[key];
+  if (typeof CONSENT_TEMPLATES !== 'undefined') {
+    const t = CONSENT_TEMPLATES.find(function (c) { return c.id === key; });
+    if (t && t.content && String(t.content).trim()) {
+      return libraryMergedToConsentData({ name: t.name, body: t.content, bodyPa: t.contentPa || '', bodyHi: t.contentHi || '' });
+    }
+  }
+  const lib = getMergedLibraryItem(key);
+  if (lib && lib.body) return libraryMergedToConsentData(lib);
+  return null;
+}
 function getMergedLibraryItem(id) {
   const base = CONSENT_LIBRARY.find(function (x) { return x.id === id; });
   if (!base) return null;
@@ -1197,6 +1211,62 @@ function openPatient(bmhId) {
     if(p.dept === 'ophtho') loadTodayVisitIntoForm(p.bmhId);
   }, 300);
 }
+
+/** Reception queue: open patient finances & visits — does not navigate to doctor examination. */
+function openReceptionPatient(bmhId) {
+  const p = PATIENTS.find(x => x.bmhId === bmhId);
+  if(!p) { showToast('Patient not found', 'w'); return; }
+  window.CURRENT_PATIENT = p;
+  nav('reception', null);
+  let m = document.getElementById('m-rc-patient');
+  if(!m) {
+    m = document.createElement('div');
+    m.id = 'm-rc-patient';
+    m.className = 'modal-ov';
+    document.body.appendChild(m);
+  }
+  const txns = (TRANSACTIONS || []).filter(t => t.bmhId === bmhId).slice().reverse();
+  const prs = (PAY_REQUESTS || []).filter(r => r.bmhId === bmhId);
+  const pend = prs.filter(r => r.status === 'pending');
+  const pendAmt = pend.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+  const adv = Number(p.advance) || 0;
+  const bal = Number(p.balance) || 0;
+  const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  m.innerHTML = '<div class="modal" style="max-width:520px;max-height:90vh;overflow:auto">'
+    + '<div class="modal-hd"><div class="modal-title">🏥 ' + esc(p.name) + '</div><button type="button" class="modal-close" onclick="closeM(\'m-rc-patient\')">✕</button></div>'
+    + '<div style="padding:14px 16px;font-size:12px;line-height:1.5">'
+    + '<div style="font-family:var(--mono);color:var(--bmh-teal);font-weight:800;margin-bottom:6px">' + esc(p.bmhId) + '</div>'
+    + '<div style="color:var(--g1);margin-bottom:10px">' + esc(p.age || '—') + ' · ' + esc(p.sex || '—') + ' · ' + esc(p.mob || '—') + '</div>'
+    + '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">'
+    + '<span class="badge bd-gray">Purpose: ' + esc(p.purpose || '—') + '</span>'
+    + (adv > 0 ? '<span class="badge bd-blue">Advance ₹' + adv.toLocaleString('en-IN') + '</span>' : '')
+    + (pendAmt > 0 ? '<span class="badge bd-orange">Due ₹' + pendAmt.toLocaleString('en-IN') + '</span>' : '')
+    + (bal > 0 ? '<span class="badge bd-orange">Balance ₹' + bal.toLocaleString('en-IN') + '</span>' : '')
+    + '</div>'
+    + '<div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:6px">Payment history</div>'
+    + (txns.length ? '<div style="max-height:200px;overflow:auto;border:1px solid var(--g5);border-radius:8px;padding:8px;background:var(--g6)">' + txns.map(t => {
+      const tag = t.type === 'advance' ? '<span class="badge bd-blue" style="font-size:8px">Adv</span>' : '';
+      return '<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--g5);font-size:11.5px">'
+        + '<div><div style="font-weight:700">' + esc(t.service || '—') + '</div><div style="font-size:10px;color:var(--g1)">' + esc(t.time || '') + ' · ' + esc(t.mode || '') + '</div></div>'
+        + '<div style="text-align:right;font-weight:800">' + tag + ' ₹' + (Number(t.amount) || 0).toLocaleString('en-IN') + '</div></div>';
+    }).join('') + '</div>' : '<div style="color:var(--g1);font-size:12px">No transactions recorded.</div>')
+    + '<div style="margin-top:14px;display:flex;flex-wrap:wrap;gap:8px">'
+    + '<button type="button" class="btn btn-gold btn-sm" onclick="rcOpenBillingFor(\'' + String(bmhId).replace(/'/g, "\\'") + '\')">💳 Billing / charges</button>'
+    + '<button type="button" class="btn btn-outline btn-sm" onclick="closeM(\'m-rc-patient\');openPatient(\'' + String(bmhId).replace(/'/g, "\\'") + '\')">👁️ Open doctor record</button>'
+    + '</div></div></div>';
+  openM('m-rc-patient');
+}
+window.openReceptionPatient = openReceptionPatient;
+
+function rcOpenBillingFor(bmhId) {
+  closeM('m-rc-patient');
+  nav('billing', null);
+  const sel = document.getElementById('bmh-bill-pt-select');
+  if(sel) sel.value = bmhId;
+  if(typeof bmhSelectBillPatient === 'function') bmhSelectBillPatient(bmhId);
+}
+window.rcOpenBillingFor = rcOpenBillingFor;
+
 // ═══════════════════════════════════════════════════════════════════
 // loadTodayVisitIntoForm — if a visit was saved TODAY for this patient,
 // reload it into the form. Next day → form stays blank (fresh start).
@@ -1819,24 +1889,13 @@ function buildOphthoCaseSheetHtml() {
     return `<table style="border-collapse:collapse;width:100%;table-layout:fixed">${fieldLinePrint('Media (vitreous)', vit)}${fieldLinePrint('C/D', cd)}${fieldLinePrint('Disc', disc)}${fieldLinePrint('Macula', mac)}${fieldLinePrint('Vessels (A/V)', ves)}${fieldLinePrint('Periphery', per)}</table>${fundTxt ? `<div style="font-size:5px;color:#333;margin-top:2px;white-space:pre-wrap;line-height:1.15">${escHtml(fundTxt)}</div>` : ''}`;
   };
   const lblEye = (e) => (e === 'od' ? 'OD' : 'OS');
-  const ocularDiagramsHtml = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:2px;width:100%;max-width:112px;margin:0 auto">
-  <div style="border:1px solid #555;border-radius:2px;padding:1px;text-align:center;background:#fafafa">
-    <div style="font-size:5px;font-weight:900;line-height:1">Lids</div>
-    <svg viewBox="0 0 100 54" width="100%" height="26" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"><ellipse cx="50" cy="30" rx="36" ry="20" fill="none" stroke="#111" stroke-width="1.2"/><path d="M14 30 Q50 6 86 30" fill="none" stroke="#111" stroke-width="1.2"/></svg>
-  </div>
-  <div style="border:1px solid #555;border-radius:2px;padding:1px;text-align:center;background:#fafafa">
-    <div style="font-size:5px;font-weight:900;line-height:1">Cornea</div>
-    <svg viewBox="0 0 100 54" width="100%" height="26" xmlns="http://www.w3.org/2000/svg"><path d="M10 40 Q50 4 90 40" fill="#e8f4ff" stroke="#111" stroke-width="1"/><ellipse cx="50" cy="38" rx="28" ry="6" fill="none" stroke="#111" stroke-width="0.8"/></svg>
-  </div>
-  <div style="border:1px solid #555;border-radius:2px;padding:1px;text-align:center;background:#fafafa">
-    <div style="font-size:5px;font-weight:900;line-height:1">Lens</div>
-    <svg viewBox="0 0 100 54" width="100%" height="26" xmlns="http://www.w3.org/2000/svg"><path d="M30 12 Q50 40 70 12" fill="#eef" stroke="#111" stroke-width="1"/><path d="M30 42 Q50 14 70 42" fill="#eef" stroke="#111" stroke-width="1"/></svg>
-  </div>
-  <div style="border:1px solid #555;border-radius:2px;padding:1px;text-align:center;background:#fafafa">
-    <div style="font-size:5px;font-weight:900;line-height:1">Fundus</div>
-    <svg viewBox="0 0 100 54" width="100%" height="26" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="28" r="22" fill="#1a0a0a" stroke="#111" stroke-width="1"/><circle cx="46" cy="26" r="5" fill="#e8d4b8" stroke="#111" stroke-width="0.6"/><path d="M46 26 L62 22 M46 26 L58 32 M46 26 L38 34" stroke="#c00" stroke-width="0.8" fill="none"/></svg>
-  </div>
-</div>`;
+  let ocularDiagramPrintSrc = 'assets/ocular-health-exam.png';
+  try {
+    ocularDiagramPrintSrc = new URL('assets/ocular-health-exam.png', document.querySelector('base')?.href || window.location.href).href;
+  } catch (e) { /* keep relative */ }
+  const ocularDiagramsHtml = '<div style="width:100%;max-width:118px;margin:0 auto;text-align:center">'
+    + '<img src="' + ocularDiagramPrintSrc + '" alt="Ocular health examination diagram" style="width:100%;height:auto;display:block;border:1px solid #333;border-radius:4px;background:#fff" onerror="this.style.display=\'none\'"/>'
+    + '<div style="font-size:5px;color:#555;margin-top:2px;line-height:1.1">Ocular health (diagram)</div></div>';
   const ocularBlock = `
 <div style="margin-top:3px;page-break-inside:avoid">
 <h2 style="font-size:8px;margin:2px 0 1px;padding:0">Slit lamp &amp; fundus</h2>
@@ -2688,11 +2747,26 @@ function syncPayRequestToPatientCharges(pr) {
     ts: pr.date || new Date().toISOString()
   });
 }
+/** Quick total for patient list (does not use another patient’s discount inputs). */
+function bmhBillPreviewTotal(bmhId) {
+  const lines = window.BMH_PATIENT_CHARGES[bmhId] || [];
+  const sub = lines.reduce((s, x) => s + (Number(x.amount) || 0), 0);
+  return sub + Math.round(sub * 0.05);
+}
+
 function bmhTotalsForPatient(bmhId) {
   const lines = window.BMH_PATIENT_CHARGES[bmhId] || [];
   const sub = lines.reduce((s, x) => s + (Number(x.amount) || 0), 0);
-  const gst = Math.round(sub * 0.05);
-  return { sub, gst, total: sub + gst };
+  const disc = Math.max(0, parseFloat(document.getElementById('bmh-bill-discount')?.value) || 0);
+  const afterDisc = Math.max(0, sub - disc);
+  const p = PATIENTS.find(x => x.bmhId === bmhId);
+  const advAvail = Math.max(0, Number(p?.advance) || 0);
+  const applyAdv = document.getElementById('bmh-apply-advance')?.checked;
+  const advanceApplied = applyAdv ? Math.min(advAvail, afterDisc) : 0;
+  const taxable = Math.max(0, afterDisc - advanceApplied);
+  const gst = Math.round(taxable * 0.05);
+  const total = taxable + gst;
+  return { sub, gst, total, discount: disc, advanceApplied, taxable };
 }
 function bmhCatLabel(cat) {
   const m = { investigation: 'Investigation', diagnostic: 'Diagnostic', surgery: 'Surgery / procedure', consumable: 'Consumable', pharmacy: 'Pharmacy / injection', ot: 'OT', reception: 'Reception', consultation: 'Consultation', billing: 'Billing', inventory: 'Inventory', doctor: 'Doctor', other: 'Other' };
@@ -2721,7 +2795,12 @@ function bmhSelectBillPatient(bmhId) {
   const t = document.getElementById('bmh-bill-card-title');
   const s = document.getElementById('bmh-bill-card-sub');
   if (t) t.textContent = p ? '💳 ' + p.name : '💳 Billing';
-  if (s) s.textContent = p ? p.bmhId + ' · ' + (p.dept || '') + ' · ' + (p.doctor || '') : '';
+  const advHint = p && (p.advance > 0) ? ' · Adv ₹' + (Number(p.advance) || 0).toLocaleString('en-IN') + ' (tick below to deduct)' : '';
+  if (s) s.textContent = p ? p.bmhId + ' · ' + (p.dept || '') + ' · ' + (p.doctor || '') + advHint : '';
+  const aa = document.getElementById('bmh-apply-advance');
+  const al = document.getElementById('bmh-advance-available');
+  if (p && al) al.textContent = '₹' + (Number(p.advance) || 0).toLocaleString('en-IN') + ' available';
+  if (aa && p) { aa.checked = (p.advance > 0); aa.disabled = !(p.advance > 0); }
   bmhRenderBillLines();
   bmhUpdateBillTotals();
 }
@@ -2730,10 +2809,11 @@ function bmhRenderBillPatientList() {
   const pts = bmhGetTodayBillPatients();
   if (!pts.length) { el.innerHTML = '<div style="padding:12px;color:var(--g1);font-size:12px">No patients for today in this filter — register or check in from Reception.</div>'; return; }
   el.innerHTML = pts.map(p => {
-    const tot = bmhTotalsForPatient(p.bmhId).total;
+    const tot = bmhBillPreviewTotal(p.bmhId);
     const bal = p.balance > 0 ? ' · Due ₹' + p.balance.toLocaleString('en-IN') : '';
+    const adv = (p.advance > 0) ? ' · Adv ₹' + (Number(p.advance) || 0).toLocaleString('en-IN') : '';
     return `<button type="button" class="btn btn-outline btn-sm" style="width:100%;justify-content:space-between;margin-bottom:4px;text-align:left" onclick="document.getElementById('bmh-bill-pt-select').value='${p.bmhId}';bmhSelectBillPatient('${p.bmhId}')">
-      <span><strong>${p.name}</strong> <span style="font-family:var(--mono);font-size:10px;color:var(--bmh-teal)">${p.bmhId}</span></span>
+      <span><strong>${p.name}</strong> <span style="font-family:var(--mono);font-size:10px;color:var(--bmh-teal)">${p.bmhId}</span>${adv ? '<span style="font-size:10px;color:var(--blue);font-weight:800">' + adv + '</span>' : ''}</span>
       <span style="font-size:11px;color:var(--g1)">Bill ₹${tot.toLocaleString('en-IN')}${bal}</span>
     </button>`;
   }).join('');
@@ -2777,9 +2857,18 @@ function bmhAddManualBillLine() {
 }
 function bmhUpdateBillTotals() {
   const bmhId = document.getElementById('bmh-bill-pt-select')?.value;
-  const { sub, gst, total } = bmhId ? bmhTotalsForPatient(bmhId) : { sub: 0, gst: 0, total: 0 };
+  const z = bmhId ? bmhTotalsForPatient(bmhId) : { sub: 0, gst: 0, total: 0, discount: 0, advanceApplied: 0, taxable: 0 };
+  const { sub, gst, total, discount, advanceApplied, taxable } = z;
   const a = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = '₹' + v.toLocaleString('en-IN'); };
   a('bill-sub', sub);
+  const bd = document.getElementById('bill-discount-line');
+  if (bd) { bd.style.display = discount > 0 ? 'flex' : 'none'; bd.style.justifyContent = 'space-between'; }
+  a('bill-discount-amt', discount);
+  const ba = document.getElementById('bill-advance-line');
+  if (ba) { ba.style.display = advanceApplied > 0 ? 'flex' : 'none'; ba.style.justifyContent = 'space-between'; }
+  a('bill-advance-amt', advanceApplied);
+  const tx = document.getElementById('bill-taxable');
+  if (tx) tx.textContent = '₹' + (taxable || 0).toLocaleString('en-IN');
   a('bill-gst', gst);
   a('bill-total', total);
 }
@@ -2866,7 +2955,7 @@ function printBmhPatientBill(bmhIdOpt) {
   if (!bmhId) { showToast('Select a patient', 'w'); return; }
   const p = PATIENTS.find(x => x.bmhId === bmhId) || {};
   const lines = window.BMH_PATIENT_CHARGES[bmhId] || [];
-  const { sub, gst, total } = bmhTotalsForPatient(bmhId);
+  const { sub, gst, total, discount, advanceApplied, taxable } = bmhTotalsForPatient(bmhId);
   const invNo = 'INV-' + String(Date.now()).slice(-8);
   const today = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
   const sz = document.getElementById('bmh-print-size')?.value || window.BMH_BILL_PRINT_SIZE || 'A4';
@@ -2893,7 +2982,13 @@ th{background:#1A3C6E;color:#fff;font-size:10px;text-transform:uppercase}
   <div style="text-align:right;font-size:11px">${p.dept || ''}</div>
 </div>
 <table><thead><tr><th>#</th><th>Description</th><th>Qty</th><th>Rate ₹</th><th>Amount ₹</th></tr></thead><tbody>${bodyRows || '<tr><td colspan="5">No lines</td></tr>'}</tbody></table>
-<div class="tot"><span>Subtotal ₹${sub.toLocaleString('en-IN')}</span><span>GST 5% ₹${gst.toLocaleString('en-IN')}</span><span style="color:#1A3C6E">Net ₹${total.toLocaleString('en-IN')}</span></div>
+<div class="tot" style="flex-direction:column;align-items:flex-end;gap:4px">
+${discount > 0 ? '<span>Discount ₹' + discount.toLocaleString('en-IN') + '</span>' : ''}
+${advanceApplied > 0 ? '<span>Advance adjusted ₹' + advanceApplied.toLocaleString('en-IN') + '</span>' : ''}
+<span>Taxable ₹${(taxable != null ? taxable : sub - discount - advanceApplied).toLocaleString('en-IN')}</span>
+<span>GST 5% ₹${gst.toLocaleString('en-IN')}</span>
+<span style="color:#1A3C6E">Net ₹${total.toLocaleString('en-IN')}</span>
+</div>
 <div style="margin-top:24px;font-size:10px;color:#777;text-align:center">Computer-generated bill · BMH</div>
 </body></html>`;
   safePrint(html);
@@ -3547,7 +3642,7 @@ function printOphthoSheet() {
 
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>
-*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:9.5px;color:#000;padding:6mm 8mm;line-height:1.3}
+*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:9.5px;color:#000;padding:6mm 8mm;line-height:1.3;min-height:285mm}
 @page{size:A4 portrait;margin:0}
 .hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:3mm}
 .title-box{border:1.5px solid #000;background:#e8e8e8;text-align:center;font-weight:900;font-size:10.5px;padding:2px 6px;margin-bottom:2mm}
@@ -3666,25 +3761,10 @@ function printOphthoSheet() {
         <tr><td style="border:1px solid #ccc;padding:1px 2px">Lens/Media</td><td style="border:1px solid #ccc;padding:1px 2px;text-align:center">${!slFields.odLens?'✓':''}</td><td style="border:1px solid #ccc;padding:1px 2px;text-align:center">${slFields.odLens?'✓':''}</td><td style="border:1px solid #ccc;padding:1px 2px">${slFields.odLens||''}</td></tr>
       </table>
     </div>
-    <div style="text-align:center;padding:1mm">
-      <div style="font-size:7px;font-weight:800;color:#444;margin-bottom:2mm">A &nbsp;&nbsp;&nbsp;&nbsp; P &nbsp;&nbsp;&nbsp;&nbsp; ONH</div>
-      <div style="display:flex;gap:2mm;justify-content:center;align-items:center;margin-bottom:3mm">
-        <div style="position:relative">
-          <svg width="22" height="28" viewBox="0 0 22 28"><ellipse cx="11" cy="14" rx="9" ry="12" fill="none" stroke="#1A3C6E" stroke-width="1.5"/><ellipse cx="11" cy="14" rx="4" ry="5" fill="none" stroke="#1A3C6E" stroke-width="1"/><circle cx="11" cy="14" r="2" fill="none" stroke="#1A3C6E" stroke-width="0.8"/></svg>
-          <div style="font-size:6px;color:#1A3C6E;font-weight:800;text-align:center">RE</div>
-        </div>
-        <div><svg width="22" height="28" viewBox="0 0 22 28"><ellipse cx="11" cy="14" rx="9" ry="12" fill="none" stroke="#1A3C6E" stroke-width="1.5"/><ellipse cx="11" cy="14" rx="5" ry="7" fill="none" stroke="#1A3C6E" stroke-width="1"/></svg></div>
-        <div><svg width="22" height="22" viewBox="0 0 22 22"><circle cx="11" cy="11" r="9" fill="none" stroke="#1A3C6E" stroke-width="1.5"/><circle cx="11" cy="11" r="4" fill="none" stroke="#1A3C6E" stroke-width="0.8"/><circle cx="11" cy="11" r="1.5" fill="#1A3C6E"/></svg></div>
-      </div>
-      <div style="font-size:6px;color:#1A3C6E;margin-bottom:2mm">20D / 78D / Direct</div>
-      <div style="display:flex;gap:2mm;justify-content:center;align-items:center;margin-bottom:1mm">
-        <div>
-          <svg width="22" height="28" viewBox="0 0 22 28"><ellipse cx="11" cy="14" rx="9" ry="12" fill="none" stroke="#1a8c3c" stroke-width="1.5"/><ellipse cx="11" cy="14" rx="4" ry="5" fill="none" stroke="#1a8c3c" stroke-width="1"/><circle cx="11" cy="14" r="2" fill="none" stroke="#1a8c3c" stroke-width="0.8"/></svg>
-          <div style="font-size:6px;color:#1a8c3c;font-weight:800;text-align:center">LE</div>
-        </div>
-        <div><svg width="22" height="28" viewBox="0 0 22 28"><ellipse cx="11" cy="14" rx="9" ry="12" fill="none" stroke="#1a8c3c" stroke-width="1.5"/><ellipse cx="11" cy="14" rx="5" ry="7" fill="none" stroke="#1a8c3c" stroke-width="1"/></svg></div>
-        <div><svg width="22" height="22" viewBox="0 0 22 22"><circle cx="11" cy="11" r="9" fill="none" stroke="#1a8c3c" stroke-width="1.5"/><circle cx="11" cy="11" r="4" fill="none" stroke="#1a8c3c" stroke-width="0.8"/><circle cx="11" cy="11" r="1.5" fill="#1a8c3c"/></svg></div>
-      </div>
+    <div style="text-align:center;padding:1mm 2mm">
+      <div style="font-size:7px;font-weight:800;color:#444;margin-bottom:2mm">Ocular health diagram</div>
+      <img src="assets/ocular-health-exam.png" alt="Ocular health" style="width:100%;max-width:120px;height:auto;display:block;margin:0 auto;border:1px solid #ccc;border-radius:4px;background:#fff"/>
+      <div style="font-size:6px;color:#666;margin-top:2mm">Use for annotation reference · OD/OS detail in tables</div>
     </div>
     <div style="border:1px solid #ddd;border-radius:3px;padding:2mm">
       <div style="font-weight:900;font-size:8px;text-decoration:underline;margin-bottom:1.5mm;color:#1A3C6E">OD Posterior</div>
@@ -3775,17 +3855,17 @@ function printEyeExaminationCaseSheetA4() {
   let imgPng = '';
   try {
     const base = document.querySelector('base')?.href || window.location.href;
-    imgJpg = new URL('assets/eye-examination.jpg', base).href;
-    imgPng = new URL('assets/eye-examination.png', base).href;
+    imgJpg = new URL('assets/ocular-health-exam.jpg', base).href;
+    imgPng = new URL('assets/ocular-health-exam.png', base).href;
   } catch (e) {
-    imgJpg = 'assets/eye-examination.jpg';
-    imgPng = 'assets/eye-examination.png';
+    imgJpg = 'assets/ocular-health-exam.jpg';
+    imgPng = 'assets/ocular-health-exam.png';
   }
   const lh = resolvePrintHeaderSrc();
   const html = '<!DOCTYPE html><html><head><meta charset="UTF-8">'
     + '<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:11px;color:#111}'
-    + '@page{size:A4;margin:8mm}.sheet{min-height:280mm;display:flex;flex-direction:column}'
-    + '.row-main{flex:1;display:grid;grid-template-columns:1fr 240px 1fr;gap:12px;align-items:stretch;min-height:140mm}'
+    + '@page{size:A4;margin:8mm}.sheet{min-height:297mm;display:flex;flex-direction:column;box-sizing:border-box}'
+    + '.row-main{flex:1;display:grid;grid-template-columns:1fr minmax(200px,280px) 1fr;gap:12px;align-items:stretch;min-height:220mm}'
     + '.find{border:1px solid #bbb;border-radius:10px;padding:12px;white-space:pre-wrap;line-height:1.55;font-size:11px;overflow:hidden}'
     + '.find h3{font-size:11px;margin:0 0 10px;color:#1A3C6E;text-transform:uppercase;letter-spacing:.4px}'
     + '.dia-row{display:flex;justify-content:center;align-items:flex-end;padding:10px 0 0;margin-top:auto}'
@@ -3801,8 +3881,8 @@ function printEyeExaminationCaseSheetA4() {
     + '<div class="row-main">'
     + '<div class="find"><h3>Anterior findings</h3>' + escapeHtmlConsent(ant).replace(/\n/g, '<br>') + '</div>'
     + '<div style="display:flex;flex-direction:column;justify-content:flex-end;align-items:center;padding:6px">'
-    + '<img src="' + escapeHtmlConsent(imgJpg) + '" alt="Eye examination" style="max-width:100%;height:auto" onerror="this.onerror=null;this.src=\'' + escapeHtmlConsent(imgPng) + '\'">'
-    + '<div class="dia-cap">Diagram (eye examination)</div></div>'
+    + '<img src="' + escapeHtmlConsent(imgPng) + '" alt="Ocular health examination" style="width:100%;max-width:280px;height:auto;object-fit:contain" onerror="this.onerror=null;this.src=\'' + escapeHtmlConsent(imgJpg) + '\'">'
+    + '<div class="dia-cap">Ocular health diagram</div></div>'
     + '<div class="find"><h3>Posterior findings</h3>' + escapeHtmlConsent(post).replace(/\n/g, '<br>') + '</div>'
     + '</div></div></body></html>';
   safePrint(html);
@@ -4763,9 +4843,10 @@ function toggleRecInsField() {
   if(f) f.style.display = (mode==='Insurance/TPA')?'flex':'none';
 }
 function checkSurgeryPurpose() {
-  const purpose = document.getElementById('rc-purpose')?.value;
+  const purpose = document.getElementById('rc-purpose')?.value || '';
   const panel = document.getElementById('rc-surgery-panel');
-  if(panel) panel.style.display = (purpose==='Surgery'||purpose?.includes('Surgery'))?'block':'none';
+  const showSurg = purpose === 'Surgery' || purpose.includes('Surgery') || /cataract|pmics|phaco|iol|trabec|lasik|pteryg|squint|dcr|lscs|delivery|laparoscopy|ect|peel|prp/i.test(purpose);
+  if(panel) panel.style.display = showSurg ? 'block' : 'none';
   // Show "pre-register" hint when Not Checked In
   const preHint = document.getElementById('rc-pre-hint');
   if(preHint) preHint.style.display = (purpose==='Not Checked In')?'flex':'none';
@@ -4958,15 +5039,16 @@ function genRcUID() {
   const el = document.getElementById('rc-uid');
   if(el) el.textContent = 'BMSH-' + String(localNext).padStart(6,'0');
 
-  // Also check RTDB in case another device registered a patient
+  // Also check RTDB in case another device registered a patient (sequence must never lag server)
   if(window.fbOnce) {
     fbOnce('settings/lastPatientNum').then(num => {
-      if(typeof num === 'number' && num >= localNext) {
-        const fbNext = num + 1;
-        window._nextPatientNum = fbNext;
-        try { localStorage.setItem('bmh_last_patient_num', num); } catch(_) {}
+      if(typeof num !== 'number' || num < 461000) return;
+      const nextFromServer = num + 1;
+      if(nextFromServer > (window._nextPatientNum || 0)) {
+        window._nextPatientNum = nextFromServer;
+        try { localStorage.setItem('bmh_last_patient_num', String(num)); } catch(_) {}
         const el2 = document.getElementById('rc-uid');
-        if(el2) el2.textContent = 'BMSH-' + String(fbNext).padStart(6,'0');
+        if(el2) el2.textContent = 'BMSH-' + String(nextFromServer).padStart(6,'0');
       }
     }).catch(()=>{});
   }
@@ -5132,6 +5214,8 @@ function registerPatient() {
 
   showToast(`✅ ${name} registered — Token #${token}`, 's');
 
+  maybeScheduleSameDaySurgeryOTFromRegistration(patient);
+
   if(!isInsurance && !isCreditDue && !isPreReg && fee>0) {
     setTimeout(()=>{
       if(confirm(`✅ ${name} registered — Token #${token}\nFee: ₹${fee.toLocaleString('en-IN')} (${payMode})\n\nPrint receipt?`)) {
@@ -5169,22 +5253,21 @@ function resetRegistrationForm() {
   genRcUID && genRcUID();
 }
 window.resetRegistrationForm = resetRegistrationForm;
-function scheduleSurgery() {
-  const sType  = document.getElementById('surg-type')?.value||'Surgery';
-  const surgeon= document.getElementById('surg-surgeon')?.value||CURRENT_USER?.name||'Dr. Varun Baweja';
-  const eye    = document.querySelector('#rc-surgery-panel select[id]')?.value||'N/A';
-  const fee    = parseFloat(document.getElementById('surg-fee')?.value)||38000;
-  const sDate  = document.getElementById('surg-date')?.value||new Date().toISOString().split('T')[0];
-  const sTime  = document.getElementById('surg-time')?.value||'09:00';
-  const ptName = (document.getElementById('rc-fn')?.value||'') + ' ' + (document.getElementById('rc-ln')?.value||'');
-  const ptId   = document.getElementById('rc-uid')?.textContent||'BMSH-000000';
-  const anaes  = document.querySelector('#rc-surgery-panel select:last-of-type')?.value||'Topical';
 
-  const caseId = 'OT'+Date.now();
+/** Create OT list entry from reception surgery panel (used by Schedule button and auto after registration). */
+function createOTCaseFromReceptionPanel(ptId, patientNameTrim) {
+  const sType = document.getElementById('surg-type')?.value || 'Surgery';
+  const surgeon = document.getElementById('surg-surgeon')?.value || CURRENT_USER?.name || 'Dr. Varun Baweja';
+  const eye = document.getElementById('surg-eye')?.value || 'N/A';
+  const fee = parseFloat(document.getElementById('surg-fee')?.value) || 38000;
+  const sDate = document.getElementById('surg-date')?.value || new Date().toISOString().split('T')[0];
+  const sTime = document.getElementById('surg-time')?.value || '09:00';
+  const anaes = document.getElementById('surg-anaes')?.value || 'Topical (Drops)';
+  const caseId = 'OT' + Date.now();
   const otCase = {
     id: caseId,
     bmhId: ptId,
-    patient: ptName.trim()||'Pending',
+    patient: patientNameTrim || 'Pending',
     procedure: sType,
     surgeon: surgeon,
     site: eye,
@@ -5198,11 +5281,40 @@ function scheduleSurgery() {
     timings: {},
     signIn: false, signOut: false, timeOut: false,
     createdAt: new Date().toISOString(),
-    createdBy: CURRENT_USER?.username||'reception',
+    createdBy: CURRENT_USER?.username || 'reception',
     surgeryFee: fee
   };
   OT_CASES.push(otCase);
-  fbSet('otCases/'+caseId, otCase);
+  fbSet('otCases/' + caseId, otCase);
+  return otCase;
+}
+
+/** After Register & Token: if surgery panel is open, date is today, and procedure is same-day cataract-type, add to OT list. */
+function maybeScheduleSameDaySurgeryOTFromRegistration(patient) {
+  const panel = document.getElementById('rc-surgery-panel');
+  if(!panel || panel.style.display === 'none') return;
+  const today = new Date().toISOString().slice(0, 10);
+  const sDate = (document.getElementById('surg-date')?.value || '').trim() || today;
+  if(sDate !== today) return;
+  const sType = (document.getElementById('surg-type')?.value || '').trim();
+  const purpose = (patient.purpose || '').trim();
+  const isCataractLike = /pmics|cataract|phaco|iol/i.test(sType) || /cataract|pmics|phaco/i.test(purpose);
+  const purposeOk = purpose === 'Surgery' || /surgery|cataract|pmics|phaco/i.test(purpose);
+  if(patient.dept !== 'ophtho' || !isCataractLike || !purposeOk) return;
+  const nm = (patient.name || '').trim();
+  createOTCaseFromReceptionPanel(patient.bmhId, nm);
+  showToast('⚕️ Same-day surgery — added to OT list & queue ✓', 's');
+  if(typeof renderOTList === 'function') renderOTList();
+}
+
+function scheduleSurgery() {
+  const ptName = (document.getElementById('rc-fn')?.value || '') + ' ' + (document.getElementById('rc-ln')?.value || '');
+  const ptId = document.getElementById('rc-uid')?.textContent || 'BMSH-000000';
+  const fee = parseFloat(document.getElementById('surg-fee')?.value) || 38000;
+  const otCase = createOTCaseFromReceptionPanel(ptId, ptName.trim());
+  const sType = otCase.procedure;
+  const sDate = otCase.date;
+  const sTime = otCase.scheduledTime;
 
   const advanceEl = document.getElementById('surg-advance');
   const advAmt = advanceEl ? parseFloat(advanceEl.value)||0 : 0;
@@ -5229,7 +5341,7 @@ function scheduleSurgery() {
     }
     // Also store advance details on the OT case itself
     otCase.advancePaid = advAmt;
-    fbUpdate && fbUpdate('otCases/'+caseId, {advancePaid:advAmt});
+    fbUpdate && fbUpdate('otCases/'+otCase.id, {advancePaid:advAmt});
     renderCollectionDashboard && renderCollectionDashboard();
     showToast(`💙 Advance ₹${advAmt.toLocaleString('en-IN')} recorded for ${ptName.trim()||'patient'} ✓`,'s');
   }
@@ -5361,12 +5473,24 @@ function populateNewPackModal() {
   const host = document.getElementById('new-tpl-docs');
   if (!host || typeof CONSENT_DATA === 'undefined') return;
   const keys = Object.keys(getMergedConsentData());
-  host.innerHTML = '<div style="font-size:10px;font-weight:800;color:var(--g1);margin-bottom:6px">Select consent forms to include (each prints as its own page)</div>' +
-    keys.map(function (k) {
-      const data = getConsentEntry(k);
-      const title = data && data.title ? data.title : k;
-      return '<label style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;font-size:11.5px;cursor:pointer;border-bottom:1px solid var(--g5)"><input type="checkbox" name="new-pack-consent" value="' + k + '"><span>' + title + '</span></label>';
-    }).join('');
+  const block = function (title, rows) {
+    return '<div style="margin-top:10px"><div style="font-size:10px;font-weight:800;color:var(--bmh-blue);text-transform:uppercase;margin-bottom:6px">' + title + '</div>' + rows + '</div>';
+  };
+  const builtIn = keys.map(function (k) {
+    const data = getConsentEntry(k);
+    const t = data && data.title ? data.title : k;
+    return '<label style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;font-size:11.5px;cursor:pointer;border-bottom:1px solid var(--g5)"><input type="checkbox" name="new-pack-consent" value="' + k + '"><span>' + t + '</span></label>';
+  }).join('');
+  const libRows = (typeof CONSENT_LIBRARY !== 'undefined' ? CONSENT_LIBRARY : []).map(function (c) {
+    return '<label style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;font-size:11.5px;cursor:pointer;border-bottom:1px solid var(--g5)"><input type="checkbox" name="new-pack-consent" value="' + String(c.id).replace(/"/g, '&quot;') + '"><span>📚 ' + String(c.name).replace(/</g, '&lt;') + ' <span style="font-size:9px;color:var(--g1)">(library)</span></span></label>';
+  }).join('');
+  const tplRows = (typeof CONSENT_TEMPLATES !== 'undefined' ? CONSENT_TEMPLATES : []).map(function (t) {
+    return '<label style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;font-size:11.5px;cursor:pointer;border-bottom:1px solid var(--g5)"><input type="checkbox" name="new-pack-consent" value="' + String(t.id).replace(/"/g, '&quot;') + '"><span>📎 ' + String(t.name || t.id).replace(/</g, '&lt;') + ' <span style="font-size:9px;color:var(--g1)">(uploaded / custom)</span></span></label>';
+  }).join('');
+  host.innerHTML = '<div style="font-size:10px;font-weight:800;color:var(--g1);margin-bottom:6px">Select consent forms to include (each prints as bilingual EN / EN+PA / EN+HI)</div>'
+    + block('Built-in consent keys', builtIn)
+    + (libRows ? block('Consent library', libRows) : '')
+    + (tplRows ? block('Uploaded &amp; custom templates', tplRows) : '');
 }
 function saveSurgeryPackFromModal() {
   const name = document.getElementById('new-pack-name')?.value?.trim();
@@ -5397,8 +5521,8 @@ function printSurgeryPackWithKeys(keys, deptLabel) {
   const lhSrc = resolvePrintHeaderSrc();
   const ctx = collectConsentPrintContext();
   const consentPages = keys.map(function (k) {
-    const cd = getConsentEntry(k);
-    if (!cd || !cd.paras) return '';
+    const cd = resolveConsentDataForPrint(k);
+    if (!cd || !cd.paras || !cd.paras.length) return '';
     return ['en', 'en-pa', 'en-hi'].map(function (v) { return buildConsentPageShell(cd, lhSrc, ctx.stripHtml, v); }).join('');
   }).join('');
   if (!consentPages.trim()) { showToast('No consent templates found for ' + (deptLabel || 'pack'), 'w'); return; }
@@ -7019,69 +7143,61 @@ function renderRxDrugs() {
     const dt = d.drugType || d.type || 'Tablet';
     const eye0 = (d.eye && d.eye[0]) || 'Oral';
     const tap = d.taperRow;
-    return `<div class="rx-drug-row" style="border-bottom:1px solid var(--g5);padding:10px 8px;background:var(--g6);border-radius:8px;margin-bottom:8px">
-    <div style="display:grid;grid-template-columns:22px 1fr 88px 72px 72px 100px 100px 36px;gap:6px;align-items:start">
-      <div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-align:center;padding-top:6px">${i+1}</div>
-      <div style="min-width:0">
-        <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:3px">Trade — Generic</div>
-        <input value="${String(tr).replace(/"/g,'&quot;')}" onchange="RX_DRUGS[${i}].trade=this.value;RX_DRUGS[${i}].brand=this.value" placeholder="Trade name" style="width:100%;font-size:12px;font-weight:800;margin-bottom:4px;border:1px solid var(--g4);border-radius:6px;padding:4px 6px;box-sizing:border-box">
-        <input value="${String(gen).replace(/"/g,'&quot;')}" onchange="RX_DRUGS[${i}].generic=this.value;RX_DRUGS[${i}].name=this.value" placeholder="Generic" style="width:100%;font-size:11px;font-style:italic;border:1px solid var(--g4);border-radius:6px;padding:4px 6px;box-sizing:border-box">
-        ${d.lang&&d.lang[lang]?`<div style="font-size:10px;color:var(--tx3);margin-top:4px;line-height:1.4">${d.lang[lang]}</div>`:''}
+    const eyeCol = isOphtho ? 'Eye' : 'Route';
+    const taperOpen = tap ? ' open' : '';
+    return `<div class="rx-drug-row" style="border:1px solid var(--g5);border-radius:10px;margin-bottom:12px;background:#fff;overflow:hidden;box-shadow:0 1px 0 rgba(0,0,0,.04)">
+    <div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px 14px;padding:14px 16px;background:var(--g6)">
+      <div style="font-size:13px;font-weight:900;color:var(--bmh-blue);min-width:24px;padding-top:2px">${i+1}</div>
+      <div style="flex:1.2;min-width:240px;max-width:100%">
+        <div style="font-size:14px;font-weight:900;color:var(--tx);line-height:1.3"><input value="${String(tr).replace(/"/g,'&quot;')}" onchange="RX_DRUGS[${i}].trade=this.value;RX_DRUGS[${i}].brand=this.value" placeholder="Trade name" style="width:100%;font-size:14px;font-weight:900;border:none;background:transparent;border-bottom:2px solid var(--g4);padding:2px 0;box-sizing:border-box"></div>
+        <input value="${String(gen).replace(/"/g,'&quot;')}" onchange="RX_DRUGS[${i}].generic=this.value;RX_DRUGS[${i}].name=this.value" placeholder="Generic name" style="width:100%;font-size:12px;color:var(--g1);font-style:italic;border:none;background:transparent;margin-top:6px;padding:2px 0;box-sizing:border-box">
+        ${d.lang&&d.lang[lang]?`<div style="font-size:10px;color:var(--tx3);margin-top:8px;line-height:1.45;border-left:3px solid var(--g4);padding-left:8px">${d.lang[lang]}</div>`:''}
       </div>
-      <div>
-        <div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:3px">Form</div>
-        <select onchange="RX_DRUGS[${i}].drugType=this.value;RX_DRUGS[${i}].type=this.value" style="font-size:10px;padding:3px;width:100%;border-radius:6px">${typeOpts.map(t=>`<option${dt===t?' selected':''}>${t}</option>`).join('')}</select>
+      <div style="display:flex;flex-wrap:wrap;gap:10px 14px;flex:1;min-width:260px;align-items:flex-end">
+        <div style="min-width:92px"><div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:4px">Form</div>
+        <select onchange="RX_DRUGS[${i}].drugType=this.value;RX_DRUGS[${i}].type=this.value" style="font-size:11px;padding:5px 8px;width:100%;border-radius:8px;border:1px solid var(--g4)">${typeOpts.map(t=>`<option${dt===t?' selected':''}>${t}</option>`).join('')}</select></div>
+        <div style="min-width:120px"><div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:4px">${eyeCol}</div>
+        <select onchange="RX_DRUGS[${i}].eye=[this.value]" style="font-size:11px;padding:5px 8px;width:100%;border-radius:8px;border:1px solid var(--g4)">${eyeOpts.map(e=>`<option${eye0===e?' selected':''}>${e}</option>`).join('')}</select></div>
+        <div style="min-width:130px"><div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:4px">Frequency</div>
+        <select onchange="RX_DRUGS[${i}].freq=this.value" style="font-size:11px;padding:5px 8px;width:100%;border-radius:8px;border:1px solid var(--g4)">${freqOpts.map(f=>`<option${(d.freq===f)?' selected':''}>${f}</option>`).join('')}</select></div>
+        <div style="min-width:110px"><div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:4px">Duration</div>
+        <select onchange="RX_DRUGS[${i}].dur=this.value;syncRxDrugDates(${i})" style="font-size:11px;padding:5px 8px;width:100%;border-radius:8px;border:1px solid var(--g4)">${durOpts.map(f=>`<option${d.dur===f?' selected':''}>${f}</option>`).join('')}</select></div>
+        <div style="min-width:200px"><div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:4px">Dates (from → to)</div>
+        <div style="display:flex;gap:6px;align-items:center"><input type="date" value="${d.dateFrom||''}" onchange="RX_DRUGS[${i}].dateFrom=this.value;syncRxDrugDates(${i})" style="font-size:11px;padding:4px;border-radius:6px;border:1px solid var(--g4);flex:1;min-width:0">
+        <span style="color:var(--g1)">→</span><input type="date" value="${d.dateTo||''}" onchange="RX_DRUGS[${i}].dateTo=this.value" style="font-size:11px;padding:4px;border-radius:6px;border:1px solid var(--g4);flex:1;min-width:0"></div></div>
       </div>
-      ${isOphtho?`<div>
-        <div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:3px">Eye</div>
-        <select onchange="RX_DRUGS[${i}].eye=[this.value]" style="font-size:10px;padding:3px;width:100%;border-radius:6px">${eyeOpts.map(e=>`<option${eye0===e?' selected':''}>${e}</option>`).join('')}</select>
-      </div>`:`<div>
-        <div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:3px">Route</div>
-        <select onchange="RX_DRUGS[${i}].eye=[this.value]" style="font-size:10px;padding:3px;width:100%;border-radius:6px">${eyeOpts.map(e=>`<option${eye0===e?' selected':''}>${e}</option>`).join('')}</select>
-      </div>`}
-      <div>
-        <div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:3px">Frequency</div>
-        <select onchange="RX_DRUGS[${i}].freq=this.value" style="font-size:10px;padding:3px;width:100%;border-radius:6px">${freqOpts.map(f=>`<option${(d.freq===f)?' selected':''}>${f}</option>`).join('')}</select>
-      </div>
-      <div>
-        <div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:3px">Duration</div>
-        <select onchange="RX_DRUGS[${i}].dur=this.value;syncRxDrugDates(${i})" style="font-size:10px;padding:3px;width:100%;border-radius:6px">${durOpts.map(f=>`<option${d.dur===f?' selected':''}>${f}</option>`).join('')}</select>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:4px">
-        <div style="font-size:9px;font-weight:800;color:var(--g1)">From / To</div>
-        <input type="date" value="${d.dateFrom||''}" onchange="RX_DRUGS[${i}].dateFrom=this.value;syncRxDrugDates(${i})" style="font-size:10px;padding:2px;border-radius:4px;width:100%;box-sizing:border-box">
-        <input type="date" value="${d.dateTo||''}" onchange="RX_DRUGS[${i}].dateTo=this.value" style="font-size:10px;padding:2px;border-radius:4px;width:100%;box-sizing:border-box">
-      </div>
-      <div style="display:flex;flex-direction:column;gap:4px;align-items:stretch">
-        <button type="button" class="btn btn-xs btn-gray" onclick="removeDrug(${i})" title="Remove">✕</button>
-        <select onchange="if(this.value){addTaperRow(${i},this.value);this.value=''}" style="font-size:9px;padding:2px;border-radius:4px;max-width:100%">
-          <option value="">+ Taper segment</option>
-          ${RX_TAPER_SEGMENT_DURS.map(t=>`<option value="${t}">${t}</option>`).join('')}
-        </select>
+      <div style="display:flex;flex-direction:column;gap:8px;align-items:stretch;min-width:100px">
+        <button type="button" class="btn btn-xs btn-gray" onclick="removeDrug(${i})" title="Remove">✕ Remove</button>
       </div>
     </div>
-    ${tap?`<div style="margin-top:8px;margin-left:26px;padding:8px 10px;background:var(--orange-lt);border-radius:8px;border-left:3px solid var(--orange)">
-      <div style="font-size:10px;font-weight:900;color:#8a4200;margin-bottom:6px;text-transform:uppercase">Taper (same drug — reduced frequency)</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 100px 100px 70px;gap:6px;align-items:end">
-        <div>
-          <div style="font-size:9px;font-weight:700;color:var(--g1)">Frequency</div>
-          <select onchange="RX_DRUGS[${i}].taperRow.freq=this.value" style="font-size:10px;padding:3px;width:100%;border-radius:6px">${freqOpts.map(f=>`<option${tap.freq===f?' selected':''}>${f}</option>`).join('')}</select>
+    <details class="rx-taper-details" style="border-top:1px solid var(--g5);background:#fff"${taperOpen}>
+      <summary style="cursor:pointer;font-size:11px;font-weight:900;color:var(--orange);padding:10px 16px;list-style:none;user-select:none;display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <span>⚖️ Taper (same medicine — optional step-down)</span>
+        <span style="font-size:10px;font-weight:700;color:var(--g1)">+ segment</span>
+      </summary>
+      <div style="padding:0 16px 14px 16px">
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;align-items:center">
+          <span style="font-size:10px;color:var(--g1)">Add taper for</span>
+          <select onchange="if(this.value){addTaperRow(${i},this.value);this.value=''}" style="font-size:11px;padding:5px 10px;border-radius:8px;border:1px solid var(--orange);max-width:220px">
+            <option value="">— duration after main course —</option>
+            ${RX_TAPER_SEGMENT_DURS.map(t=>`<option value="${t}">${t}</option>`).join('')}
+          </select>
         </div>
-        <div>
-          <div style="font-size:9px;font-weight:700;color:var(--g1)">Duration</div>
-          <select onchange="RX_DRUGS[${i}].taperRow.dur=this.value;syncRxDrugDates(${i})" style="font-size:10px;padding:3px;width:100%;border-radius:6px">${RX_TAPER_SEGMENT_DURS.map(f=>`<option${tap.dur===f?' selected':''}>${f}</option>`).join('')}</select>
-        </div>
-        <div>
-          <div style="font-size:9px;font-weight:700;color:var(--g1)">From</div>
-          <input type="date" value="${tap.dateFrom||''}" onchange="RX_DRUGS[${i}].taperRow.dateFrom=this.value" style="font-size:10px;width:100%;box-sizing:border-box">
-        </div>
-        <div>
-          <div style="font-size:9px;font-weight:700;color:var(--g1)">To</div>
-          <input type="date" value="${tap.dateTo||''}" onchange="RX_DRUGS[${i}].taperRow.dateTo=this.value" style="font-size:10px;width:100%;box-sizing:border-box">
-        </div>
-        <div><button type="button" class="btn btn-xs btn-gray" onclick="clearTaperRow(${i})">Clear</button></div>
+        ${tap?`<div style="padding:12px 14px;background:var(--orange-lt);border-radius:10px;border-left:4px solid var(--orange)">
+          <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">
+            <div style="min-width:130px"><div style="font-size:9px;font-weight:700;color:var(--g1)">Taper frequency</div>
+            <select onchange="RX_DRUGS[${i}].taperRow.freq=this.value" style="font-size:11px;padding:5px 8px;width:100%;border-radius:8px">${freqOpts.map(f=>`<option${tap.freq===f?' selected':''}>${f}</option>`).join('')}</select></div>
+            <div style="min-width:100px"><div style="font-size:9px;font-weight:700;color:var(--g1)">Taper duration</div>
+            <select onchange="RX_DRUGS[${i}].taperRow.dur=this.value;syncRxDrugDates(${i})" style="font-size:11px;padding:5px 8px;width:100%;border-radius:8px">${RX_TAPER_SEGMENT_DURS.map(f=>`<option${tap.dur===f?' selected':''}>${f}</option>`).join('')}</select></div>
+            <div style="min-width:120px"><div style="font-size:9px;font-weight:700;color:var(--g1)">From</div>
+            <input type="date" value="${tap.dateFrom||''}" onchange="RX_DRUGS[${i}].taperRow.dateFrom=this.value" style="font-size:11px;padding:4px;width:100%;box-sizing:border-box;border-radius:6px;border:1px solid var(--g4)"></div>
+            <div style="min-width:120px"><div style="font-size:9px;font-weight:700;color:var(--g1)">To</div>
+            <input type="date" value="${tap.dateTo||''}" onchange="RX_DRUGS[${i}].taperRow.dateTo=this.value" style="font-size:11px;padding:4px;width:100%;box-sizing:border-box;border-radius:6px;border:1px solid var(--g4)"></div>
+            <button type="button" class="btn btn-xs btn-gray" onclick="clearTaperRow(${i})">Clear taper</button>
+          </div>
+        </div>`:'<div style="font-size:11px;color:var(--g1)">No taper segment — add one above to step down after the main duration.</div>'}
       </div>
-    </div>`:''}
+    </details>
   </div>`;
   }).join('');
 }
@@ -8093,7 +8209,7 @@ function renderCollectionDashboard() {
         <div id="${did}" style="display:none;padding:8px 12px">
           ${dTxn.length ? dTxn.map(t=>`
             <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--g5);font-size:12px">
-              <div style="flex:1"><div style="font-weight:700">${t.patient}</div><div style="font-size:10.5px;color:var(--g1)">${t.service||'—'} · ${t.time||'—'}</div></div>
+              <div style="flex:1"><div style="font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap">${t.patient}${t.type==='advance' ? '<span class="badge" style="font-size:8px;background:var(--blue-lt);color:var(--blue);border:1px solid var(--blue)">Advance</span>' : ''}</div><div style="font-size:10.5px;color:var(--g1)">${t.service||'—'} · ${t.time||'—'}</div></div>
               <span class="badge bd-gray" style="font-size:9.5px">${t.mode||'—'}</span>
               <div style="font-weight:800;color:#1a8c3c">${fmt(t.amount)}</div>
               <button title="Delete" onclick="deleteTransaction('${t.id}')" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--red);padding:0 2px">🗑️</button>
@@ -8117,7 +8233,7 @@ function renderCollectionDashboard() {
       <div style="display:flex;align-items:center;gap:9px;padding:8px 12px;background:${t.collected?'#fff':'var(--orange-lt)'};border-radius:var(--rsm);border:1px solid ${t.collected?'var(--g5)':'rgba(255,149,0,.3)'}">
         <div style="font-size:16px">${DEPT_COLORS[t.dept]?.label?.split(' ')[0]||'🏥'}</div>
         <div style="flex:1">
-          <div style="font-size:12.5px;font-weight:700">${t.patient} <span style="font-family:monospace;font-size:10px;color:var(--bmh-teal)">${t.bmhId||''}</span></div>
+          <div style="font-size:12.5px;font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap">${t.patient}${t.type==='advance' ? '<span class="badge" style="font-size:8px;background:var(--blue-lt);color:var(--blue)">Advance</span>' : ''} <span style="font-family:monospace;font-size:10px;color:var(--bmh-teal)">${t.bmhId||''}</span></div>
           <div style="font-size:11px;color:var(--g1)">${t.service||'—'} · ${t.time||'—'}</div>
         </div>
         <span class="badge bd-gray" style="font-size:9.5px">${t.mode||'—'}</span>
@@ -10154,6 +10270,11 @@ function printConsentTemplate(id) {
     printStructuredConsentThreeVariants(cd);
     return;
   }
+  const resolved = resolveConsentDataForPrint(id);
+  if (resolved && resolved.paras && resolved.paras.length) {
+    printStructuredConsentThreeVariants(resolved);
+    return;
+  }
   const lhSrc = resolvePrintHeaderSrc();
   const today = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
   const ptIds = ['ophtho-pt-uid', 'obg-pt-uid', 'psych-pt-uid', 'skin-pt-uid'];
@@ -10769,7 +10890,7 @@ function renderReceptionPage() {
     if(!pts.length) {
       list.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--g1);font-size:13px">No patients in this view</td></tr>';
     } else {
-      list.innerHTML = pts.map((p,i)=>buildQTableRow(p,i+1)).join('');
+      list.innerHTML = pts.map((p,i)=>buildQTableRow(p,i+1,{receptionQueue:true})).join('');
     }
   }
 
@@ -11050,7 +11171,9 @@ function dilationCellHtml(p) {
 }
 
 /** Table row for Reception Queue tab and Doctor My Queue (valid <tbody> HTML). */
-function buildQTableRow(p, sno) {
+function buildQTableRow(p, sno, opts) {
+  opts = opts || {};
+  const receptionQueue = !!opts.receptionQueue;
   const deptLabel = {ophtho:'Eye',obg:'OBG',psych:'Psych',skin:'Skin',lab:'Lab'}[p.dept]||p.dept||'—';
   const deptColor = {ophtho:'var(--blue)',obg:'#c0004e',psych:'var(--orange)',skin:'var(--purple)',lab:'var(--teal)'}[p.dept]||'var(--g2)';
   const isOphtho = p.dept==='ophtho';
@@ -11063,14 +11186,15 @@ function buildQTableRow(p, sno) {
   const pendingPRs = PAY_REQUESTS.filter(r=>r.bmhId===p.bmhId&&r.status==='pending');
   const pendingAmt = pendingPRs.reduce((s,r)=>s+r.amount,0);
   const paidPRs = PAY_REQUESTS.filter(r=>r.bmhId===p.bmhId&&r.status==='paid');
+  const advLbl = (p.advance > 0) ? `<span style="font-size:9px;color:var(--blue);font-weight:800">Adv ₹${(p.advance||0).toLocaleString('en-IN')}</span>` : '';
   const chargeHint = pendingAmt>0
-    ? `<span style="font-size:9px;color:#8a4200;font-weight:800">Due ₹${pendingAmt.toLocaleString('en-IN')}</span>`
+    ? `<span style="font-size:9px;color:#8a4200;font-weight:800">Due ₹${pendingAmt.toLocaleString('en-IN')}</span>${advLbl ? ' · ' + advLbl : ''}`
     : paidPRs.length
-    ? `<span style="font-size:9px;color:#1a8c3c">Paid</span>`
-    : (p.advance>0 ? `<span style="font-size:9px;color:var(--blue)">Adv ₹${(p.advance||0).toLocaleString('en-IN')}</span>` : '');
+    ? `<span style="font-size:9px;color:#1a8c3c">Paid</span>${advLbl ? ' · ' + advLbl : ''}`
+    : (advLbl || '');
   const statusTxt = p.preRegistered ? 'Pre-reg' : p.seen ? 'Seen' : p.dilated ? (dilReady ? 'Dilated ✓' : 'Dilating') : 'Waiting';
   const statusBg = p.preRegistered ? '#f0f0f0' : p.seen ? 'var(--green-lt)' : p.dilated ? 'var(--blue-lt)' : 'var(--orange-lt)';
-  const onRow = p.preRegistered ? `checkInPatient('${p.bmhId}')` : `openPatient('${p.bmhId}')`;
+  const onRow = p.preRegistered ? `checkInPatient('${p.bmhId}')` : (receptionQueue ? `openReceptionPatient('${p.bmhId}')` : `openPatient('${p.bmhId}')`);
   const nmEsc = (p.name||'').replace(/'/g,"\\'");
   const docShort = (p.doctor||'—').replace(/^Dr\.\s*/,'');
   const vulnBadge = vuln ? '<span class="q-vuln-badge" title="Vulnerable — elderly (≥65) or flagged">⚠ VUL</span>' : '';
