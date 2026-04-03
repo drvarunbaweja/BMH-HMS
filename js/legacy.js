@@ -1948,6 +1948,7 @@ function buildOphthoCaseSheetHtml() {
     return `<table style="border-collapse:collapse;width:100%;table-layout:fixed">${fieldLinePrint('Media (vitreous)', vit)}${fieldLinePrint('C/D', cd)}${fieldLinePrint('Disc', disc)}${fieldLinePrint('Macula', mac)}${fieldLinePrint('Vessels (A/V)', ves)}${fieldLinePrint('Periphery', per)}</table>${fundTxt ? `<div style="font-size:5px;color:#333;margin-top:2px;white-space:pre-wrap;line-height:1.15">${escHtml(fundTxt)}</div>` : ''}`;
   };
   const lblEye = (e) => (e === 'od' ? 'OD' : 'OS');
+  const smallLogoSrc = typeof getLetterheadImgSrc === 'function' ? getLetterheadImgSrc() : 'https://bawejahospital.com/img/logo.png';
   let ocularDiagramPrintSrc = 'assets/ocular-health-exam.png';
   try {
     ocularDiagramPrintSrc = new URL('assets/ocular-health-exam.png', document.querySelector('base')?.href || window.location.href).href;
@@ -1957,22 +1958,22 @@ function buildOphthoCaseSheetHtml() {
     + '<div style="font-size:5px;color:#555;margin-top:2px;line-height:1.1">Ocular health (diagram)</div></div>';
   const ocularBlock = `
 <div style="margin-top:3px;page-break-inside:avoid">
-<h2 style="font-size:8px;margin:2px 0 1px;padding:0">Slit lamp &amp; fundus</h2>
-<div style="display:grid;grid-template-columns:minmax(0,1fr) 232px minmax(0,1fr);grid-template-rows:auto auto;gap:3px 6px;align-items:start;width:100%">
+<h2 style="font-size:9px;margin:2px 0 1px;padding:0">Slit lamp &amp; fundus</h2>
+<div style="display:grid;grid-template-columns:minmax(0,.92fr) 220px minmax(0,.92fr);grid-template-rows:auto auto;gap:3px 5px;align-items:start;width:100%">
   <div style="grid-column:1;grid-row:1;min-width:0">
-    <div style="font-size:6px;font-weight:900;margin:0 0 1px;color:#1a4a8c">${lblEye('od')} — Ant.</div>
+    <div style="font-size:7.2px;font-weight:900;margin:0 0 1px;color:#1a4a8c">${lblEye('od')} — Ant.</div>
     ${anteriorPrint('od')}
   </div>
   <div style="grid-column:3;grid-row:1;min-width:0">
-    <div style="font-size:6px;font-weight:900;margin:0 0 1px;color:#1a7a4a">${lblEye('os')} — Ant.</div>
-    ${anteriorPrint('os')}
-  </div>
-  <div style="grid-column:1;grid-row:2;min-width:0">
-    <div style="font-size:6px;font-weight:900;margin:0 0 1px;color:#1a4a8c">${lblEye('od')} — Post.</div>
+    <div style="font-size:7.2px;font-weight:900;margin:0 0 1px;color:#1a4a8c">${lblEye('od')} — Post.</div>
     ${posteriorPrint('od')}
   </div>
+  <div style="grid-column:1;grid-row:2;min-width:0">
+    <div style="font-size:7.2px;font-weight:900;margin:0 0 1px;color:#1a7a4a">${lblEye('os')} — Ant.</div>
+    ${anteriorPrint('os')}
+  </div>
   <div style="grid-column:3;grid-row:2;min-width:0">
-    <div style="font-size:6px;font-weight:900;margin:0 0 1px;color:#1a7a4a">${lblEye('os')} — Post.</div>
+    <div style="font-size:7.2px;font-weight:900;margin:0 0 1px;color:#1a7a4a">${lblEye('os')} — Post.</div>
     ${posteriorPrint('os')}
   </div>
   <div style="grid-column:2;grid-row:1 / span 2;align-self:center;justify-self:center;padding:4px;border:1px solid #333;border-radius:3px;background:#fff;max-width:232px;width:100%">
@@ -1986,14 +1987,14 @@ function buildOphthoCaseSheetHtml() {
   // ── build HTML ────────────────────────────────────────────────────────
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Case Sheet — ${ptName}</title><style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-body{font-family:Arial,Helvetica,sans-serif;color:#111;padding:1.2mm 2mm;font-size:9.2px;line-height:1.2}
+body{font-family:Arial,Helvetica,sans-serif;color:#111;padding:1.1mm 1.8mm;font-size:9.8px;line-height:1.22}
 @page{size:A4 portrait;margin:1.5mm}
 @media print{body{padding:0}}
-h1{font-size:12px;font-weight:900;text-align:center;letter-spacing:.5px;text-transform:uppercase;border-bottom:1.5px solid #111;padding-bottom:2px;margin-bottom:3px}
-h2{font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.3px;border-bottom:1px solid #111;padding-bottom:1px;margin-bottom:2px;margin-top:4px}
-table{width:100%;border-collapse:collapse;font-size:8.2px}
+h1{font-size:12.8px;font-weight:900;text-align:center;letter-spacing:.45px;text-transform:uppercase;border-bottom:1.5px solid #111;padding-bottom:2px;margin-bottom:3px}
+h2{font-size:9.6px;font-weight:900;text-transform:uppercase;letter-spacing:.3px;border-bottom:1px solid #111;padding-bottom:1px;margin-bottom:2px;margin-top:4px}
+table{width:100%;border-collapse:collapse;font-size:8.8px}
 th,td{border:1px solid #555;padding:2px 3px}
-th{background:#eee;font-weight:900;text-align:center;font-size:7.6px}
+th{background:#eee;font-weight:900;text-align:center;font-size:8.1px}
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:4px}
 .label{font-weight:700;font-size:6px;color:#555;text-transform:uppercase}
 .val{font-size:7px;font-weight:900}
@@ -2006,10 +2007,15 @@ th{background:#eee;font-weight:900;text-align:center;font-size:7.6px}
 <!-- HEADER: compact single-page layout -->
 <div style="border-bottom:1.5px solid #111;padding-bottom:3px;margin-bottom:3px">
   <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px">
-    <div style="flex:1;min-width:0;text-align:center">
-      <h1 style="font-size:11px;font-weight:900;letter-spacing:.5px;text-transform:uppercase;margin:0 0 3px 0;padding:0;border:none">Baweja Multispeciality Hospital — OPD</h1>
-      <div style="font-size:7.9px;line-height:1.4"><b>Pt:</b> ${escHtml(ptName)} · <b>Age/Sex:</b> ${escHtml(String(ptAge || '—'))}${ptSex ? '/' + escHtml(ptSex) : ''} · <b>Date:</b> ${escHtml(today)} · <b>Printed:</b> ${escHtml(printDate)} · <b>Centre:</b> ${centre === 'CHD' ? 'CHD' : 'RPR'} · <b>Dr:</b> ${escHtml(drName)}</div>
-      <div style="font-size:7px;line-height:1.34;margin-top:2px"><b>Ph:</b> ${escHtml(ptMob || '—')} · <b>Addr:</b> ${escHtml(ptAddr || '—')}</div>
+    <div style="display:flex;align-items:flex-start;gap:6px;flex:1;min-width:0">
+      <div style="flex-shrink:0;width:46px;display:flex;justify-content:center;padding-top:1px">
+        <img src="${escHtml(smallLogoSrc)}" alt="Baweja Hospital" style="width:40px;height:40px;object-fit:contain" onerror="this.style.display='none'">
+      </div>
+      <div style="flex:1;min-width:0;text-align:center">
+        <h1 style="font-size:11.6px;font-weight:900;letter-spacing:.45px;text-transform:uppercase;margin:0 0 3px 0;padding:0;border:none">Baweja Multispeciality Hospital — OPD</h1>
+        <div style="font-size:8.6px;line-height:1.42"><b>Today:</b> ${escHtml(today)} · <b>Pt:</b> ${escHtml(ptName)} · <b>Age/Sex:</b> ${escHtml(String(ptAge || '—'))}${ptSex ? '/' + escHtml(ptSex) : ''} · <b>Centre:</b> ${centre === 'CHD' ? 'CHD' : 'RPR'} · <b>Dr:</b> ${escHtml(drName)}</div>
+        <div style="font-size:7.8px;line-height:1.35;margin-top:2px"><b>Ph:</b> ${escHtml(ptMob || '—')} · <b>Addr:</b> ${escHtml(ptAddr || '—')} · <b>Printed:</b> ${escHtml(printDate)}</div>
+      </div>
     </div>
     <div style="text-align:right;flex-shrink:0;padding:1px 2px 1px 8px;border-left:2px solid #1A3C6E;min-width:92px">
       <div style="font-size:14px;font-weight:900;font-family:Consolas,ui-monospace,monospace;letter-spacing:.04em;line-height:1">${escHtml(ptId || '—')}</div>
@@ -7874,7 +7880,6 @@ function renderRxDrugs() {
     const dt = d.drugType || d.type || 'Tablet';
     const eye0 = (d.eye && d.eye[0]) || 'Oral';
     const tap = d.taperRow;
-    const taperOpen = tap ? ' open' : '';
     return `<div class="rx-drug-row" style="border-top:${i ? '1px solid var(--g5)' : 'none'};background:#fff">
     <div style="display:grid;grid-template-columns:34px minmax(220px,1.4fr) minmax(95px,.7fr) minmax(110px,.7fr) minmax(150px,.9fr) minmax(120px,.7fr) minmax(210px,1fr) 80px;gap:0;align-items:stretch">
       <div style="padding:12px 8px;border-right:1px solid var(--g5);font-size:13px;font-weight:900;color:var(--bmh-blue);display:flex;align-items:flex-start;justify-content:center">${i+1}</div>
@@ -7892,38 +7897,28 @@ function renderRxDrugs() {
         <input type="date" value="${d.dateTo||''}" onchange="RX_DRUGS[${i}].dateTo=this.value" style="font-size:11px;padding:7px 8px;border-radius:8px;border:1px solid var(--g4);width:100%">
       </div>
       <div style="padding:10px 8px;display:flex;flex-direction:column;gap:8px;justify-content:center">
-        <button type="button" class="btn btn-xs btn-outline" onclick="addTaperRow(${i}, RX_DRUGS[${i}].dur || '1 week')">⚖️ Taper</button>
+        <button type="button" class="btn btn-xs btn-outline" onclick="addTaperRow(${i}, RX_DRUGS[${i}].dur || '1 week');renderRxDrugs()">⚖️ Taper</button>
         <button type="button" class="btn btn-xs btn-gray" onclick="removeDrug(${i})" title="Remove">✕</button>
       </div>
     </div>
-    <details class="rx-taper-details" style="border-top:1px solid var(--g5);background:#fff"${taperOpen}>
-      <summary style="cursor:pointer;font-size:11px;font-weight:900;color:var(--orange);padding:10px 16px;list-style:none;user-select:none;display:flex;justify-content:space-between;align-items:center;gap:8px">
-        <span>⚖️ Taper (same medicine — optional step-down)</span>
-        <span style="font-size:10px;font-weight:700;color:var(--g1)">+ segment</span>
-      </summary>
-      <div style="padding:0 16px 14px 16px">
-        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;align-items:center">
-          <span style="font-size:10px;color:var(--g1)">Add taper for</span>
-          <select onchange="if(this.value){addTaperRow(${i},this.value);this.value=''}" style="font-size:11px;padding:5px 10px;border-radius:8px;border:1px solid var(--orange);max-width:220px">
-            <option value="">— duration after main course —</option>
-            ${durOpts.map(t=>`<option value="${t}">${t}</option>`).join('')}
-          </select>
-        </div>
-        ${tap?`<div style="padding:12px 14px;background:var(--orange-lt);border-radius:10px;border-left:4px solid var(--orange)">
-          <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">
-            <div style="min-width:130px"><div style="font-size:9px;font-weight:700;color:var(--g1)">Taper frequency</div>
-            <select onchange="RX_DRUGS[${i}].taperRow.freq=this.value" style="font-size:11px;padding:5px 8px;width:100%;border-radius:8px">${freqOpts.map(f=>`<option${tap.freq===f?' selected':''}>${f}</option>`).join('')}</select></div>
-            <div style="min-width:100px"><div style="font-size:9px;font-weight:700;color:var(--g1)">Taper duration</div>
-            <select onchange="RX_DRUGS[${i}].taperRow.dur=this.value;syncRxDrugDates(${i})" style="font-size:11px;padding:5px 8px;width:100%;border-radius:8px">${durOpts.map(f=>`<option${tap.dur===f?' selected':''}>${f}</option>`).join('')}</select></div>
-            <div style="min-width:120px"><div style="font-size:9px;font-weight:700;color:var(--g1)">From</div>
-            <input type="date" value="${tap.dateFrom||''}" onchange="RX_DRUGS[${i}].taperRow.dateFrom=this.value" style="font-size:11px;padding:4px;width:100%;box-sizing:border-box;border-radius:6px;border:1px solid var(--g4)"></div>
-            <div style="min-width:120px"><div style="font-size:9px;font-weight:700;color:var(--g1)">To</div>
-            <input type="date" value="${tap.dateTo||''}" onchange="RX_DRUGS[${i}].taperRow.dateTo=this.value" style="font-size:11px;padding:4px;width:100%;box-sizing:border-box;border-radius:6px;border:1px solid var(--g4)"></div>
-            <button type="button" class="btn btn-xs btn-gray" onclick="clearTaperRow(${i})">Clear taper</button>
-          </div>
-        </div>`:'<div style="font-size:11px;color:var(--g1)">No taper segment — add one above to step down after the main duration.</div>'}
+    ${tap ? `<div style="display:grid;grid-template-columns:34px minmax(220px,1.4fr) minmax(95px,.7fr) minmax(110px,.7fr) minmax(150px,.9fr) minmax(120px,.7fr) minmax(210px,1fr) 80px;gap:0;align-items:stretch;border-top:1px dashed var(--g4);background:var(--orange-lt)">
+      <div style="padding:10px 8px;border-right:1px solid var(--g5);font-size:11px;font-weight:900;color:var(--orange);display:flex;align-items:center;justify-content:center">T</div>
+      <div style="padding:10px 8px;border-right:1px solid var(--g5);display:flex;flex-direction:column;justify-content:center">
+        <div style="font-size:12px;font-weight:900;color:#8a4200">${String(tr || gen).replace(/</g,'&lt;')}</div>
+        <div style="font-size:10px;color:var(--g1)">Taper plan</div>
       </div>
-    </details>
+      <div style="padding:10px 8px;border-right:1px solid var(--g5);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700">${dt}</div>
+      <div style="padding:10px 8px;border-right:1px solid var(--g5);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700">${eye0}</div>
+      <div style="padding:10px 8px;border-right:1px solid var(--g5);display:flex;align-items:center"><select onchange="RX_DRUGS[${i}].taperRow.freq=this.value" style="font-size:11px;padding:8px;width:100%;border-radius:8px;border:1px solid var(--orange)">${freqOpts.map(f=>`<option${tap.freq===f?' selected':''}>${f}</option>`).join('')}</select></div>
+      <div style="padding:10px 8px;border-right:1px solid var(--g5);display:flex;align-items:center"><select onchange="RX_DRUGS[${i}].taperRow.dur=this.value;syncRxDrugDates(${i})" style="font-size:11px;padding:8px;width:100%;border-radius:8px;border:1px solid var(--orange)">${durOpts.map(f=>`<option${tap.dur===f?' selected':''}>${f}</option>`).join('')}</select></div>
+      <div style="padding:10px 8px;border-right:1px solid var(--g5);display:grid;grid-template-columns:1fr;gap:6px;align-content:center">
+        <input type="date" value="${tap.dateFrom||''}" onchange="RX_DRUGS[${i}].taperRow.dateFrom=this.value" style="font-size:11px;padding:7px 8px;border-radius:8px;border:1px solid var(--orange);width:100%">
+        <input type="date" value="${tap.dateTo||''}" onchange="RX_DRUGS[${i}].taperRow.dateTo=this.value" style="font-size:11px;padding:7px 8px;border-radius:8px;border:1px solid var(--orange);width:100%">
+      </div>
+      <div style="padding:10px 8px;display:flex;align-items:center;justify-content:center">
+        <button type="button" class="btn btn-xs btn-gray" onclick="clearTaperRow(${i});renderRxDrugs()">✕</button>
+      </div>
+    </div>` : ''}
   </div>`;
   }).join('')}
   </div>`;
