@@ -1261,8 +1261,14 @@ window.openReceptionPatient = openReceptionPatient;
 function rcOpenBillingFor(bmhId) {
   closeM('m-rc-patient');
   nav('billing', null);
+  const tab = Array.from(document.querySelectorAll('#pg-billing .ptab')).find(x => x.textContent.includes('Patients'));
+  if(tab) ptab(tab, 'bmh-bill-tab-patients');
+  window._bmhBillFocusPatient = bmhId;
+  const scopeEl = document.getElementById('bmh-bill-patient-scope');
+  if (scopeEl) scopeEl.value = 'focus';
   const sel = document.getElementById('bmh-bill-pt-select');
   if(sel) sel.value = bmhId;
+  window._bmhSelectedBillPatient = bmhId;
   if(typeof bmhSelectBillPatient === 'function') bmhSelectBillPatient(bmhId);
 }
 window.rcOpenBillingFor = rcOpenBillingFor;
@@ -2297,6 +2303,7 @@ function setCentre(c, btn) {
   btn.classList.add('active');
   document.getElementById('tb-cp').textContent='📍 '+(c==='CHD'?'Chandigarh':'Ropar');
   showToast('Switched to '+(c==='CHD'?'Chandigarh':'Ropar')+' Centre','i');
+  syncReceptionConsultationFee && syncReceptionConsultationFee();
   // Refresh all views after centre switch
   renderReceptionPage && renderReceptionPage();
   renderDocQueue && renderDocQueue();
@@ -2787,6 +2794,39 @@ function bmhGetTodayBillPatients() {
   if (df !== 'all') pts = pts.filter(p => p.dept === df);
   return pts;
 }
+function bmhGetBillPatientsForView() {
+  const scope = document.getElementById('bmh-bill-patient-scope')?.value || (window._bmhBillFocusPatient ? 'focus' : 'today');
+  const dateFilter = document.getElementById('bmh-bill-date-filter')?.value || new Date().toISOString().slice(0, 10);
+  const search = (document.getElementById('bmh-bill-patient-search')?.value || '').trim().toLowerCase();
+  let pts = [];
+
+  if (scope === 'focus' && window._bmhBillFocusPatient) {
+    pts = PATIENTS.filter(p => p.bmhId === window._bmhBillFocusPatient);
+  } else if (scope === 'admitted') {
+    const admittedIds = new Set((window.IPD_PATIENTS || []).filter(p => (p.status || 'admitted') !== 'discharged' && centreMatch(p)).map(p => p.bmhId));
+    pts = PATIENTS.filter(p => admittedIds.has(p.bmhId));
+  } else if (scope === 'all') {
+    pts = PATIENTS.filter(p => centreMatch(p));
+  } else if (scope === 'date') {
+    pts = PATIENTS.filter(p => {
+      if (!centreMatch(p)) return false;
+      if (p.createdAt && String(p.createdAt).startsWith(dateFilter)) return true;
+      if (p.checkinAt && new Date(p.checkinAt).toISOString().startsWith(dateFilter)) return true;
+      return false;
+    });
+  } else {
+    pts = bmhGetTodayBillPatients();
+  }
+
+  if (search) {
+    pts = pts.filter(p =>
+      String(p.name || '').toLowerCase().includes(search) ||
+      String(p.bmhId || '').toLowerCase().includes(search) ||
+      String(p.mob || '').toLowerCase().includes(search)
+    );
+  }
+  return pts;
+}
 function bmhSetBillDeptFilter(k) { window._bmhBillDeptFilter = k; renderBillingPage(); }
 function bmhSelectBillPatient(bmhId) {
   if (!bmhId) return;
@@ -2801,12 +2841,19 @@ function bmhSelectBillPatient(bmhId) {
   const al = document.getElementById('bmh-advance-available');
   if (p && al) al.textContent = '₹' + (Number(p.advance) || 0).toLocaleString('en-IN') + ' available';
   if (aa && p) { aa.checked = (p.advance > 0); aa.disabled = !(p.advance > 0); }
+  bmhRenderPatientFinancialSummary();
   bmhRenderBillLines();
   bmhUpdateBillTotals();
 }
 function bmhRenderBillPatientList() {
   const el = document.getElementById('bmh-bill-pt-list'); if (!el) return;
-  const pts = bmhGetTodayBillPatients();
+  const pts = bmhGetBillPatientsForView();
+  const sel = document.getElementById('bmh-bill-pt-select');
+  if (sel) {
+    sel.innerHTML = pts.map(p => `<option value="${p.bmhId}">${p.name} — ${p.bmhId}</option>`).join('');
+    if (window._bmhSelectedBillPatient && pts.some(p => p.bmhId === window._bmhSelectedBillPatient)) sel.value = window._bmhSelectedBillPatient;
+    else if (pts.length) { sel.value = pts[0].bmhId; window._bmhSelectedBillPatient = sel.value; }
+  }
   if (!pts.length) { el.innerHTML = '<div style="padding:12px;color:var(--g1);font-size:12px">No patients for today in this filter — register or check in from Reception.</div>'; return; }
   el.innerHTML = pts.map(p => {
     const tot = bmhBillPreviewTotal(p.bmhId);
@@ -2834,6 +2881,137 @@ function bmhRenderBillLines() {
       <button type="button" class="btn btn-xs btn-gray" onclick="bmhRemoveChargeLine('${bmhId}','${l.id}')">✕</button>
     </div>`;
   }).join('')}</div>`).join('');
+}
+
+function bmhGetPatientFinancialSummary(bmhId) {
+  const patient = PATIENTS.find(x => x.bmhId === bmhId) || {};
+  const lines = window.BMH_PATIENT_CHARGES[bmhId] || [];
+  const txns = (TRANSACTIONS || []).filter(t => t.bmhId === bmhId).slice().sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+  const payRequests = (PAY_REQUESTS || []).filter(r => r.bmhId === bmhId).slice().sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+  const chargeTotal = lines.reduce((s, x) => s + (Number(x.amount) || 0), 0);
+  const paidTotal = txns.filter(t => t.collected !== false).reduce((s, t) => s + Math.max(0, Number(t.amount) || 0), 0);
+  const advanceTotal = txns.filter(t => t.type === 'advance' || /advance/i.test(t.service || '')).reduce((s, t) => s + Math.max(0, Number(t.amount) || 0), 0);
+  const pendingTotal = payRequests.filter(r => r.status === 'pending').reduce((s, r) => s + Math.max(0, Number(r.amount) || 0), 0);
+  const balance = Math.max(0, Number(patient.balance) || 0);
+  const timeline = [];
+
+  lines.forEach(l => {
+    timeline.push({
+      ts: l.ts || l.date || new Date().toISOString(),
+      kind: 'charge',
+      label: l.desc || 'Charge',
+      meta: [bmhCatLabel(l.cat), l.source].filter(Boolean).join(' · '),
+      amount: Number(l.amount) || 0
+    });
+  });
+  txns.forEach(t => {
+    timeline.push({
+      ts: t.date || new Date().toISOString(),
+      kind: 'payment',
+      label: t.service || 'Payment',
+      meta: [t.mode, t.paymentRef].filter(Boolean).join(' · '),
+      amount: Number(t.amount) || 0
+    });
+  });
+  payRequests.forEach(r => {
+    timeline.push({
+      ts: r.date || new Date().toISOString(),
+      kind: r.status === 'pending' ? 'pending' : 'payment',
+      label: r.for || 'Billing request',
+      meta: [r.mode || r.status, r.ins].filter(Boolean).join(' · '),
+      amount: Number(r.amount) || 0
+    });
+  });
+  timeline.sort((a, b) => new Date(b.ts || 0) - new Date(a.ts || 0));
+
+  return { patient, lines, txns, payRequests, chargeTotal, paidTotal, advanceTotal, pendingTotal, balance, timeline };
+}
+
+function bmhRenderPatientFinancialSummary() {
+  const el = document.getElementById('bmh-bill-summary');
+  const bmhId = document.getElementById('bmh-bill-pt-select')?.value;
+  if (!el) return;
+  if (!bmhId) {
+    el.innerHTML = '<div style="padding:12px;background:var(--g6);border-radius:8px;color:var(--g1);font-size:12px">Select a patient to view the financial summary.</div>';
+    return;
+  }
+  const info = bmhGetPatientFinancialSummary(bmhId);
+  const fmt = n => '₹' + (Number(n) || 0).toLocaleString('en-IN');
+  const timelineHtml = info.timeline.length ? info.timeline.slice(0, 14).map(item => {
+    const tone = item.kind === 'charge' ? 'var(--bmh-blue)' : item.kind === 'pending' ? 'var(--orange)' : 'var(--green)';
+    const badge = item.kind === 'charge' ? 'Charge' : item.kind === 'pending' ? 'Pending' : 'Payment';
+    return `<div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--g5);font-size:12px">
+      <div style="flex:1">
+        <div style="font-weight:800">${item.label}</div>
+        <div style="font-size:10px;color:var(--g1)">${new Date(item.ts).toLocaleString('en-IN')} ${item.meta ? '· ' + item.meta : ''}</div>
+      </div>
+      <div style="text-align:right;min-width:110px">
+        <div style="font-size:10px;font-weight:800;color:${tone};text-transform:uppercase">${badge}</div>
+        <div style="font-weight:900;color:${tone}">${fmt(item.amount)}</div>
+      </div>
+    </div>`;
+  }).join('') : '<div style="color:var(--g1);font-size:12px">No financial activity recorded yet.</div>';
+
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px">
+      <div style="background:var(--g6);border-radius:8px;padding:10px"><div style="font-size:10px;color:var(--g1);font-weight:800;text-transform:uppercase">Charge total</div><div style="font-size:18px;font-weight:900;color:var(--bmh-blue)">${fmt(info.chargeTotal)}</div></div>
+      <div style="background:var(--green-lt);border-radius:8px;padding:10px"><div style="font-size:10px;color:#1a8c3c;font-weight:800;text-transform:uppercase">Received</div><div style="font-size:18px;font-weight:900;color:#1a8c3c">${fmt(info.paidTotal)}</div></div>
+      <div style="background:var(--blue-lt);border-radius:8px;padding:10px"><div style="font-size:10px;color:var(--blue);font-weight:800;text-transform:uppercase">Advance</div><div style="font-size:18px;font-weight:900;color:var(--blue)">${fmt(info.advanceTotal)}</div></div>
+      <div style="background:var(--orange-lt);border-radius:8px;padding:10px"><div style="font-size:10px;color:#8a4200;font-weight:800;text-transform:uppercase">Outstanding</div><div style="font-size:18px;font-weight:900;color:#8a4200">${fmt(Math.max(info.pendingTotal, info.balance))}</div></div>
+    </div>
+    <div style="background:var(--g6);border-radius:8px;padding:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-size:10px;font-weight:800;color:var(--bmh-blue);text-transform:uppercase">Financial timeline</div>
+        <button type="button" class="btn btn-outline btn-xs" onclick="printBmhPatientBill('${bmhId}')">🖨️ Print statement</button>
+      </div>
+      ${timelineHtml}
+    </div>`;
+}
+function bmhQuickChargeGroups() {
+  const investigations = CHARGES_DATA.filter(c => /oct|biometry|hvf|fundus|topography|specular|cbc|hba1c|thyroid|lipid|urine|x-ray|ecg|scan|test|profile|angiography/i.test(c.name));
+  const surgeries = CHARGES_DATA.filter(c => /surgery|lscs|delivery|laparoscopy|trabeculectomy|lasik|pmics|implantation|capsulotomy|iridotomy|excision/i.test(c.name) || /sx/i.test(c.cat));
+  const procedures = CHARGES_DATA.filter(c => !investigations.includes(c) && !surgeries.includes(c) && !/consultation|follow-up/i.test(c.name));
+  const medicines = (INVENTORY || []).filter(i => (i.stock || 0) > 0).slice(0, 8).map(i => ({ name: i.name, chd: i.mrp || 0, rpr: i.mrp || 0 }));
+  const stay = [
+    { name: 'IPD Bed Charges (per day)', chd: 1500, rpr: 1200 },
+    { name: 'Private Room Charges (per day)', chd: 3000, rpr: 2500 },
+    { name: 'Nursing Charges', chd: 500, rpr: 400 }
+  ];
+  return [
+    { label: 'Investigations', items: investigations.slice(0, 12), cat: 'diagnostic' },
+    { label: 'Procedures', items: procedures.slice(0, 12), cat: 'procedure' },
+    { label: 'Surgeries', items: surgeries.slice(0, 12), cat: 'surgery' },
+    { label: 'Medicines', items: medicines, cat: 'pharmacy' },
+    { label: 'Stay', items: stay, cat: 'stay' }
+  ];
+}
+function bmhQuickAddCharge(name, amount, cat) {
+  const bmhId = document.getElementById('bmh-bill-pt-select')?.value;
+  if (!bmhId) { showToast('Select a patient first', 'w'); return; }
+  const amt = Number(amount) || 0;
+  addBmhPatientCharge(bmhId, { id: 'q' + Date.now() + Math.random().toString(36).slice(2, 5), cat: cat || inferChargeCategoryFromService(name), desc: name, qty: 1, rate: amt, amount: amt, source: 'billing-quick', ts: new Date().toISOString() });
+  bmhRenderBillLines();
+  bmhUpdateBillTotals();
+  bmhRenderBillPatientList();
+  bmhRenderPatientFinancialSummary();
+  showToast(name + ' added to bill ✓', 's');
+}
+window.bmhQuickAddCharge = bmhQuickAddCharge;
+function bmhRenderQuickChargePanels() {
+  const el = document.getElementById('bmh-quick-charge-panels');
+  if (!el) return;
+  const centre = getEffectiveCentre();
+  const groups = bmhQuickChargeGroups();
+  el.innerHTML = groups.map(group => {
+    const items = group.items.map(item => {
+      const amount = item[centre?.toLowerCase?.()] ?? item[centre] ?? item.chd ?? 0;
+      return `<button type="button" class="btn btn-xs btn-outline" style="justify-content:space-between;width:100%;margin-bottom:6px" onclick="bmhQuickAddCharge('${String(item.name).replace(/'/g, "\\'")}', ${Number(amount) || 0}, '${group.cat}')"><span style="text-align:left">${item.name}</span><span>₹${(Number(amount) || 0).toLocaleString('en-IN')}</span></button>`;
+    }).join('');
+    return `<div style="margin-bottom:10px">
+      <div style="font-size:10px;font-weight:800;color:var(--bmh-blue);text-transform:uppercase;margin-bottom:6px">${group.label}</div>
+      ${items || '<div style="font-size:12px;color:var(--g1)">No items</div>'}
+    </div>`;
+  }).join('');
 }
 function bmhRemoveChargeLine(bmhId, lineId) {
   const arr = window.BMH_PATIENT_CHARGES[bmhId]; if (!arr) return;
@@ -2953,7 +3131,8 @@ function bmhRenderBillingVendorSummary() {
 function printBmhPatientBill(bmhIdOpt) {
   const bmhId = bmhIdOpt || document.getElementById('bmh-bill-pt-select')?.value;
   if (!bmhId) { showToast('Select a patient', 'w'); return; }
-  const p = PATIENTS.find(x => x.bmhId === bmhId) || {};
+  const info = bmhGetPatientFinancialSummary(bmhId);
+  const p = info.patient || {};
   const lines = window.BMH_PATIENT_CHARGES[bmhId] || [];
   const { sub, gst, total, discount, advanceApplied, taxable } = bmhTotalsForPatient(bmhId);
   const invNo = 'INV-' + String(Date.now()).slice(-8);
@@ -2967,6 +3146,14 @@ function printBmhPatientBill(bmhIdOpt) {
     const rs = byCat[cat].map((l, i) => `<tr><td>${i + 1}</td><td>${l.desc || ''}</td><td style="text-align:center">${l.qty || 1}</td><td style="text-align:right">₹${(Number(l.rate) || 0).toLocaleString('en-IN')}</td><td style="text-align:right;font-weight:700">₹${(Number(l.amount) || 0).toLocaleString('en-IN')}</td></tr>`).join('');
     return hdr + rs;
   }).join('');
+  const timelineRows = info.timeline.map((item, idx) => `<tr>
+    <td>${idx + 1}</td>
+    <td>${new Date(item.ts).toLocaleDateString('en-IN')}</td>
+    <td>${item.kind === 'charge' ? 'Charge' : item.kind === 'pending' ? 'Pending' : 'Payment'}</td>
+    <td>${item.label}</td>
+    <td>${item.meta || '—'}</td>
+    <td style="text-align:right;font-weight:700">₹${(Number(item.amount) || 0).toLocaleString('en-IN')}</td>
+  </tr>`).join('');
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Bill</title><style>
 *{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',system-ui,sans-serif;padding:0 8mm;font-size:12px;width:100%;max-width:100%}
 @page{${pageCss};margin:8mm}
@@ -2981,6 +3168,12 @@ th{background:#1A3C6E;color:#fff;font-size:10px;text-transform:uppercase}
   <div><strong>${p.name || 'Patient'}</strong><div style="font-size:10px;font-family:monospace;color:#0B7B8C">${bmhId}</div><div style="font-size:10px">${p.age ? p.age + 'Y' : ''} ${p.sex || ''} · ${p.doctor || ''}</div></div>
   <div style="text-align:right;font-size:11px">${p.dept || ''}</div>
 </div>
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px">
+  <div style="background:#f5f5f7;padding:8px;border-radius:8px"><div style="font-size:9px;color:#666;text-transform:uppercase;font-weight:800">Charges</div><div style="font-size:16px;font-weight:900;color:#1A3C6E">₹${info.chargeTotal.toLocaleString('en-IN')}</div></div>
+  <div style="background:#eef9f0;padding:8px;border-radius:8px"><div style="font-size:9px;color:#1a8c3c;text-transform:uppercase;font-weight:800">Received</div><div style="font-size:16px;font-weight:900;color:#1a8c3c">₹${info.paidTotal.toLocaleString('en-IN')}</div></div>
+  <div style="background:#eef4ff;padding:8px;border-radius:8px"><div style="font-size:9px;color:#0B7B8C;text-transform:uppercase;font-weight:800">Advance</div><div style="font-size:16px;font-weight:900;color:#0B7B8C">₹${info.advanceTotal.toLocaleString('en-IN')}</div></div>
+  <div style="background:#fff4e8;padding:8px;border-radius:8px"><div style="font-size:9px;color:#b55a00;text-transform:uppercase;font-weight:800">Balance / due</div><div style="font-size:16px;font-weight:900;color:#b55a00">₹${Math.max(info.pendingTotal, info.balance).toLocaleString('en-IN')}</div></div>
+</div>
 <table><thead><tr><th>#</th><th>Description</th><th>Qty</th><th>Rate ₹</th><th>Amount ₹</th></tr></thead><tbody>${bodyRows || '<tr><td colspan="5">No lines</td></tr>'}</tbody></table>
 <div class="tot" style="flex-direction:column;align-items:flex-end;gap:4px">
 ${discount > 0 ? '<span>Discount ₹' + discount.toLocaleString('en-IN') + '</span>' : ''}
@@ -2989,6 +3182,8 @@ ${advanceApplied > 0 ? '<span>Advance adjusted ₹' + advanceApplied.toLocaleStr
 <span>GST 5% ₹${gst.toLocaleString('en-IN')}</span>
 <span style="color:#1A3C6E">Net ₹${total.toLocaleString('en-IN')}</span>
 </div>
+<div style="margin:16px 0 8px;font-size:11px;font-weight:900;color:#1A3C6E;text-transform:uppercase">Financial transaction history</div>
+<table><thead><tr><th>#</th><th>Date</th><th>Type</th><th>Description</th><th>Details</th><th>Amount ₹</th></tr></thead><tbody>${timelineRows || '<tr><td colspan="6">No financial history</td></tr>'}</tbody></table>
 <div style="margin-top:24px;font-size:10px;color:#777;text-align:center">Computer-generated bill · BMH</div>
 </body></html>`;
   safePrint(html);
@@ -3071,15 +3266,24 @@ function bmhOcrApplyToPatientUse() {
 }
 function renderBillingPage() {
   loadBmhFinancials();
+  const dateEl = document.getElementById('bmh-bill-date-filter');
+  if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().slice(0, 10);
+  const scopeEl = document.getElementById('bmh-bill-patient-scope');
+  if (scopeEl && !scopeEl.dataset.initialized) {
+    scopeEl.value = window._bmhBillFocusPatient ? 'focus' : 'today';
+    scopeEl.dataset.initialized = '1';
+  }
+  const candidatePatients = bmhGetBillPatientsForView();
   const sel = document.getElementById('bmh-bill-pt-select');
   if (sel) {
-    sel.innerHTML = PATIENTS.map(p => `<option value="${p.bmhId}">${p.name} — ${p.bmhId}</option>`).join('');
-    if (window._bmhSelectedBillPatient && PATIENTS.some(p => p.bmhId === window._bmhSelectedBillPatient)) sel.value = window._bmhSelectedBillPatient;
-    else if (PATIENTS.length) { sel.selectedIndex = 0; window._bmhSelectedBillPatient = sel.value; }
+    sel.innerHTML = candidatePatients.map(p => `<option value="${p.bmhId}">${p.name} — ${p.bmhId}</option>`).join('');
+    if (window._bmhSelectedBillPatient && candidatePatients.some(p => p.bmhId === window._bmhSelectedBillPatient)) sel.value = window._bmhSelectedBillPatient;
+    else if (candidatePatients.length) { sel.selectedIndex = 0; window._bmhSelectedBillPatient = sel.value; }
   }
   const ps = document.getElementById('bmh-print-size'); if (ps) { ps.value = window.BMH_BILL_PRINT_SIZE || 'A4'; ps.onchange = function () { window.BMH_BILL_PRINT_SIZE = this.value; }; }
   bmhRenderBillPatientList();
-  bmhSelectBillPatient(document.getElementById('bmh-bill-pt-select')?.value || PATIENTS[0]?.bmhId);
+  bmhRenderQuickChargePanels();
+  bmhSelectBillPatient(document.getElementById('bmh-bill-pt-select')?.value || candidatePatients[0]?.bmhId);
   bmhRenderVendorTables();
   bmhRenderExpenseList();
   bmhRenderLedgerBody();
@@ -3238,6 +3442,7 @@ function loadChargesFromFirebase(){
   loadChargesFromLocalStorage();
   renderChargesList && renderChargesList();
   renderCentresCharges && renderCentresCharges();
+  syncReceptionConsultationFee && syncReceptionConsultationFee();
   if(!window.FBDB) return;
   window.FBDB.ref('centreCharges').once('value').then(snap=>{
     const d=snap.val(); if(!d) return;
@@ -3245,6 +3450,7 @@ function loadChargesFromFirebase(){
     if(d.RPR) Object.assign(CENTRE_CHARGES.RPR, d.RPR);
     saveChargesToLocalStorage();
     renderCentresCharges && renderCentresCharges();
+    syncReceptionConsultationFee && syncReceptionConsultationFee();
   }).catch(()=>{});
   window.FBDB.ref('chargesSchedule').once('value').then(snap => {
     const arr = snap.val();
@@ -3258,6 +3464,7 @@ function loadChargesFromFirebase(){
     saveChargesToLocalStorage();
     renderChargesList && renderChargesList();
     renderCentresCharges && renderCentresCharges();
+    syncReceptionConsultationFee && syncReceptionConsultationFee();
   }).catch(()=>{});
 }
 
@@ -4850,10 +5057,7 @@ function checkSurgeryPurpose() {
   // Show "pre-register" hint when Not Checked In
   const preHint = document.getElementById('rc-pre-hint');
   if(preHint) preHint.style.display = (purpose==='Not Checked In')?'flex':'none';
-  // Adjust fee
-  const feeEl = document.getElementById('rc-fee');
-  if(feeEl && purpose==='Not Checked In' && feeEl.value==='200') feeEl.value='0';
-  else if(feeEl && purpose!=='Not Checked In' && feeEl.value==='0') feeEl.value='200';
+  syncReceptionConsultationFee && syncReceptionConsultationFee();
 }
 function lookupByBMHID(val) {
   const el = document.getElementById('rc-bmhid-result'); if(!el) return;
@@ -5022,7 +5226,7 @@ function calcRcAge() {
 }
 function genRcUID() {
   // Only numeric BMSH-###### IDs participate in the sequence (CSV/hash imports are ignored)
-  let maxNum = 461000;
+  let maxNum = 55999;
   (window.PATIENTS||[]).forEach(p => {
     const m = p.bmhId && String(p.bmhId).trim().match(/^BMSH-(\d{1,9})$/);
     if(m){ const n=parseInt(m[1],10); if(n>maxNum) maxNum=n; }
@@ -5042,7 +5246,7 @@ function genRcUID() {
   // Also check RTDB in case another device registered a patient (sequence must never lag server)
   if(window.fbOnce) {
     fbOnce('settings/lastPatientNum').then(num => {
-      if(typeof num !== 'number' || num < 461000) return;
+      if(typeof num !== 'number' || num < 55999) return;
       const nextFromServer = num + 1;
       if(nextFromServer > (window._nextPatientNum || 0)) {
         window._nextPatientNum = nextFromServer;
@@ -5052,6 +5256,34 @@ function genRcUID() {
       }
     }).catch(()=>{});
   }
+
+  return 'BMSH-' + String(window._nextPatientNum || localNext).padStart(6,'0');
+}
+window.genRcUID = genRcUID;
+
+function reserveNextBmhId() {
+  const localId = (typeof genRcUID === 'function' && genRcUID()) || ('BMSH-' + String((window._nextPatientNum || 56000)).padStart(6,'0'));
+  if(!window.FBDB) return Promise.resolve(localId);
+
+  return window.FBDB.ref('settings/lastPatientNum').transaction(function(current) {
+    const base = (typeof current === 'number' && current >= 55999) ? current : 55999;
+    return base + 1;
+  }).then(function(result) {
+    const committed = result && result.committed;
+    const snap = result && result.snapshot;
+    const nextNum = committed && snap ? snap.val() : null;
+    if(typeof nextNum === 'number' && nextNum >= 56000) {
+      window._nextPatientNum = nextNum;
+      try { localStorage.setItem('bmh_last_patient_num', String(nextNum)); } catch(_) {}
+      const reservedId = 'BMSH-' + String(nextNum).padStart(6,'0');
+      const el = document.getElementById('rc-uid');
+      if(el) el.textContent = reservedId;
+      return reservedId;
+    }
+    return localId;
+  }).catch(function() {
+    return localId;
+  });
 }
 
 window._rcDeptFilter = window._rcDeptFilter || 'all';
@@ -5060,9 +5292,68 @@ window._rcQueueSubtab = window._rcQueueSubtab || 'waiting';
 function toggleRcNoFee(on) {
   const fee = document.getElementById('rc-fee');
   if(!fee) return;
-  if(on) { fee.value = '0'; fee.disabled = true; }
-  else { fee.disabled = false; if(fee.value==='0') fee.value = '200'; }
+  if(on) {
+    fee.value = '0';
+    fee.disabled = true;
+    return;
+  }
+  fee.disabled = false;
+  syncReceptionConsultationFee && syncReceptionConsultationFee();
 }
+
+function getReceptionConsultationServiceName() {
+  const purpose = document.getElementById('rc-purpose')?.value || 'New Consultation';
+  if(purpose === 'Not Checked In') return null;
+  if(/follow|post-op/i.test(purpose)) return 'Follow-up';
+  return 'New Consultation';
+}
+
+function getReceptionConsultationRate(centre) {
+  const dept = document.getElementById('rc-dept')?.value || 'ophtho';
+  const serviceName = getReceptionConsultationServiceName();
+  if(!serviceName) return 0;
+
+  const legacyMap = {
+    ophtho: ['Consultation — Eye', 'Consultation'],
+    obg: ['ANC Consultation', 'Consultation'],
+    psych: ['Psychiatry Consultation', 'Consultation'],
+    skin: ['Dermatology Consultation', 'Consultation']
+  };
+  const names = serviceName === 'Follow-up'
+    ? ['Follow-up', 'Follow-up Consultation']
+    : ['New Consultation'].concat(legacyMap[dept] || ['Consultation']);
+
+  for(const name of names) {
+    const amt = getChargeForProcedure(name, centre);
+    if(amt) return amt;
+    const direct = CENTRE_CHARGES[centre]?.[name];
+    if(direct) return direct;
+  }
+  return 0;
+}
+
+function syncReceptionCentreAndFee() {
+  const centreEl = document.getElementById('rc-centre');
+  const feeEl = document.getElementById('rc-fee');
+  if(!centreEl || !feeEl) return;
+
+  const lockedCentre = getUserCentre();
+  const centre = getReceptionSelectedCentre();
+  if(lockedCentre) centreEl.value = centre;
+  centreEl.disabled = !!lockedCentre;
+  centreEl.style.opacity = lockedCentre ? '0.7' : '1';
+
+  if(document.getElementById('rc-no-fee')?.checked) {
+    feeEl.value = '0';
+    feeEl.disabled = true;
+    return;
+  }
+
+  feeEl.disabled = false;
+  const amount = getReceptionConsultationRate(centre);
+  feeEl.value = String(amount);
+}
+window.syncReceptionConsultationFee = syncReceptionCentreAndFee;
 
 function setRcQueueSubtab(mode, btnEl) {
   window._rcQueueSubtab = mode;
@@ -5091,7 +5382,7 @@ function ensureDailyReceptionReset() {
 }
 
 /** Reception — Register & Generate Token (full-width form) */
-function registerPatient() {
+async function registerPatient() {
   const fn  = (document.getElementById('rc-fn')?.value  || '').trim();
   const ln  = (document.getElementById('rc-ln')?.value  || '').trim();
   const mob = (document.getElementById('rc-mob-inp')?.value || document.getElementById('rc-mob')?.value || '').trim();
@@ -5102,12 +5393,14 @@ function registerPatient() {
   const dr  = document.getElementById('rc-dr')?.value   || '';
   const centre = document.getElementById('rc-centre')?.value || CURRENT_USER?.centre || 'CHD';
   const addr= document.getElementById('rc-addr')?.value || '';
-  const uid = (document.getElementById('rc-uid')?.textContent || '').trim() || ('BMSH-' + String((window._nextPatientNum||461001)).padStart(6,'0'));
   const noFee = document.getElementById('rc-no-fee')?.checked;
   const advAmt = parseFloat(document.getElementById('rc-advance-amt')?.value)||0;
   const advPurpose = (document.getElementById('rc-advance-purpose')?.value||'').trim();
 
   if(!fn) { showToast('Please enter patient first name','w'); return; }
+
+  const uid = await reserveNextBmhId();
+  if(!/^BMSH-\d{6,9}$/.test(uid)) { showToast('Could not generate a valid BMSH ID','e'); return; }
 
   const name = (fn + ' ' + ln).trim();
   const initials = name.split(' ').map(w=>w[0]||'').join('').toUpperCase().substring(0,2);
@@ -5141,11 +5434,11 @@ function registerPatient() {
 
   const numFromId = parseInt(String(uid).replace(/^BMSH-/,''),10);
   if(!isNaN(numFromId)) {
-    fbSet && fbSet('settings/lastPatientNum', numFromId);
     try { localStorage.setItem('bmh_last_patient_num', numFromId); } catch(_) {}
+    window._nextPatientNum = numFromId + 1;
   }
 
-  let fee = parseFloat(document.getElementById('rc-fee')?.value||200)||0;
+  let fee = parseFloat(document.getElementById('rc-fee')?.value || getReceptionConsultationRate(centre) || 0) || 0;
   if(noFee) fee = 0;
   const payMode = document.getElementById('rc-pay-mode')?.value||'Cash';
   const purpose = document.getElementById('rc-purpose')?.value||'New Consultation';
@@ -5163,13 +5456,16 @@ function registerPatient() {
     const claim = {id:claimId, patient:name, bmhId:uid, for:purpose, amount:fee, status:'pending', mode:payMode, ins:insName||payMode, dept, centre, date:new Date().toISOString(), from:'Reception'};
     PAY_REQUESTS.push(claim);
     fbSet&&fbSet('payRequests/'+claimId, claim);
+    addBmhPatientCharge(uid, { id: 'chg-' + claimId, cat: inferChargeCategoryFromService(purpose), desc: purpose, qty: 1, rate: fee, amount: fee, source: 'reception', ref: claimId, ts: claim.date });
     patient.ins = insName||payMode;
     showToast(`🏦 TPA/Insurance patient — claim pending ₹${fee.toLocaleString('en-IN')}`,'i');
   } else if(isCreditDue) {
+    addBmhPatientCharge(uid, { id: 'chg-credit-' + Date.now(), cat: inferChargeCategoryFromService(purpose), desc: purpose, qty: 1, rate: fee, amount: fee, source: 'reception', ts: new Date().toISOString() });
     patient.balance = (patient.balance||0) + fee;
     showToast(`📋 ₹${fee} noted as credit/due for ${name}`,'i');
   } else if(fee > 0 || noFee) {
     const txnId = 'TXN'+Date.now();
+    addBmhPatientCharge(uid, { id: 'chg-' + txnId, cat: inferChargeCategoryFromService(purpose), desc: purpose + (noFee?' (no fee)':''), qty: 1, rate: fee, amount: fee, source: 'reception', ref: txnId, ts: new Date().toISOString() });
     const txn = {
       id:txnId, patient:name, bmhId:uid, service: purpose + (noFee?' (no fee)':''), amount:fee,
       mode:payMode, collected:true, dept,
@@ -5231,12 +5527,26 @@ function registerPatient() {
 }
 window.registerPatient = registerPatient;
 
+function initReceptionIdSeed() {
+  if(typeof genRcUID === 'function') genRcUID();
+}
+
+if(document.readyState === 'loading') {
+  window.addEventListener('DOMContentLoaded', initReceptionIdSeed);
+} else {
+  initReceptionIdSeed();
+}
+
+window.addEventListener('bmh:patientsUpdated', () => {
+  if(typeof genRcUID === 'function') genRcUID();
+});
+
 function resetRegistrationForm() {
   ['rc-fn','rc-ln','rc-rel','rc-age','rc-addr','rc-dob','rc-mob-inp','rc-mob2','rc-email','rc-bmhid-search','rc-ref-name','rc-ref-mobile','rc-ins-name','rc-policy','rc-advance-amt','rc-advance-purpose'].forEach(id=>{
     const e=document.getElementById(id);
     if(e){ e.value = ''; }
   });
-  const fee=document.getElementById('rc-fee'); if(fee){ fee.value='200'; fee.disabled=false; }
+  const fee=document.getElementById('rc-fee'); if(fee){ fee.value='0'; fee.disabled=false; }
   const nf=document.getElementById('rc-no-fee'); if(nf){ nf.checked=false; }
   const sex=document.getElementById('rc-sex'); if(sex) sex.value='Male';
   const dept=document.getElementById('rc-dept'); if(dept) dept.value='ophtho';
@@ -5250,6 +5560,7 @@ function resetRegistrationForm() {
   const surgPanel=document.getElementById('rc-surgery-panel'); if(surgPanel) surgPanel.style.display='none';
   updateRcDr && updateRcDr();
   updatePurposeOptions && updatePurposeOptions();
+  syncReceptionConsultationFee && syncReceptionConsultationFee();
   genRcUID && genRcUID();
 }
 window.resetRegistrationForm = resetRegistrationForm;
@@ -5651,9 +5962,10 @@ function generateAndPrintReceipt() {
 function populateBillItems() {
   const type = document.getElementById('bill-type')?.value;
   const el = document.getElementById('rec-bill-items'); if(!el) return;
-  const items = type==='consultation' ? [['Consultation Fee',1,800]] :
-    type==='investigation' ? [['OCT Macula',1,1800],['Biometry',1,1200]] :
-    type==='surgery' ? [['PMICS (Pinhole Micro Incision Cataract Surgery) + IOL',1,38000],['Pre-op Package',1,3500]] :
+  const centre = getEffectiveCentre();
+  const items = type==='consultation' ? [[getReceptionConsultationServiceName() || 'New Consultation',1,getReceptionConsultationRate(centre)]] :
+    type==='investigation' ? [['OCT Macula',1,getChargeForProcedure('OCT Macula OU', centre)],['Biometry',1,getChargeForProcedure('Biometry IOL Master', centre)]] :
+    type==='surgery' ? [['PMICS (Pinhole Micro Incision Cataract Surgery) + IOL',1,getChargeForProcedure('PMICS + IOL Implantation', centre)],['Pre-op Package',1,getChargeForProcedure('Pre-op Package', centre)]] :
     [['IPD Bed Charges (per day)',1,1500],['Nursing Charges',1,500]];
   el.innerHTML = items.map((it,i)=>`<div style="display:flex;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid var(--g5);font-size:12px">
     <span style="flex:1;font-weight:600">${it[0]}</span>
@@ -7576,9 +7888,20 @@ function getUserCentre() {
   if(CURRENT_USER.canSeeAllCentres || CURRENT_USER.isAdmin || CURRENT_USER.centre === 'BOTH') return null;
   return CURRENT_USER.centre;
 }
+function getEffectiveCentre() {
+  const locked = getUserCentre();
+  if(locked) return locked;
+  const activeBtn = document.querySelector('.c-btn.active[data-centre]');
+  return activeBtn?.getAttribute('data-centre') || CURRENT_USER?.centre || 'CHD';
+}
+function getReceptionSelectedCentre() {
+  const locked = getUserCentre();
+  if(locked) return locked;
+  return document.getElementById('rc-centre')?.value || getEffectiveCentre();
+}
 // Returns true if an item (patient/IPD/OT/transaction) belongs to the user's visible centres
 function centreMatch(item) {
-  const uc = getUserCentre();
+  const uc = getEffectiveCentre();
   if(!uc) return true; // admin/BOTH — see everything
   return (item.centre || 'CHD') === uc;
 }
@@ -8134,7 +8457,7 @@ function updatePurposeOptions() {
   const purp=document.getElementById('rc-purpose');
   if(!purp) return;
   const eye=['New Consultation','Follow-up','Cataract Surgery','Glaucoma Review','Post-op','Retina Check','IVT Injection','Laser Treatment','Glasses','Emergency','Surgery','Need to Check In'];
-  const obg=['ANC Visit','New Consultation','Follow-up','LSCS','Normal Delivery','Scan','Emergency','Surgery','Need to Check In'];
+  const obg=['New Consultation','Follow-up','ANC Visit','LSCS','Normal Delivery','Scan','Emergency','Surgery','Need to Check In'];
   const psych=['New Consultation','Follow-up','Therapy Session','ECT','Emergency','Surgery','Need to Check In'];
   const skin=['New Consultation','Follow-up','Chemical Peel','PRP','Laser','Botox','Emergency','Surgery','Need to Check In'];
   const opts={ophtho:eye,obg:obg,psych:psych,skin:skin};
@@ -8162,7 +8485,7 @@ const DEPT_COLORS = {
 };
 
 function renderCollectionDashboard() {
-  const allTxn = TRANSACTIONS;
+  const allTxn = TRANSACTIONS.filter(t => (t.centre || 'CHD') === getEffectiveCentre());
   const collected = allTxn.filter(t=>t.collected);
 
   // Update summary cards
@@ -10868,6 +11191,7 @@ function computeReceptionQueuePts() {
 // ── renderReceptionPage — live computed ──────────
 function renderReceptionPage() {
   ensureDailyReceptionReset && ensureDailyReceptionReset();
+  syncReceptionConsultationFee && syncReceptionConsultationFee();
 
   const list = document.getElementById('rc-exist-list');
   if(list) {
@@ -10895,17 +11219,18 @@ function renderReceptionPage() {
   }
 
   const prEl = document.getElementById('rc-pay-list');
+  const visiblePayRequests = PAY_REQUESTS.filter(r => (r.centre || 'CHD') === getEffectiveCentre());
   if(prEl) {
-    if(!PAY_REQUESTS.length) {
+    if(!visiblePayRequests.length) {
       prEl.innerHTML = '<div style="padding:16px;text-align:center;color:var(--g1);font-size:12px">No payment requests</div>';
     } else {
-      prEl.innerHTML = PAY_REQUESTS.map(pr => payCardHtml(pr)).join('');
+      prEl.innerHTML = visiblePayRequests.map(pr => payCardHtml(pr)).join('');
     }
   }
 
   const badge = document.getElementById('rc-pr-ct');
   if(badge) {
-    const pending = PAY_REQUESTS.filter(r=>r.status==='pending').length;
+    const pending = visiblePayRequests.filter(r=>r.status==='pending').length;
     badge.textContent = pending + ' pending';
   }
 
@@ -10959,7 +11284,7 @@ function renderRcDeptDues() {
     {k:'psych',l:'Psych',icon:'🧠',color:'var(--orange)'},
     {k:'skin',l:'Skin',icon:'💆',color:'var(--purple)'},
   ];
-  const pending = PAY_REQUESTS.filter(r=>r.status==='pending');
+  const pending = PAY_REQUESTS.filter(r=>r.status==='pending' && (r.centre || 'CHD') === getEffectiveCentre());
   const hasDues = pending.length > 0;
   if(!hasDues) { el.innerHTML='<div style="font-size:11px;color:var(--g1);padding:8px;text-align:center">No pending dues</div>'; return; }
   el.innerHTML = depts.map(d=>{
