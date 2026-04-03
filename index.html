@@ -1541,7 +1541,7 @@
           <div class="form-group"><label class="fl">Email</label><input type="email" id="rc-email" placeholder="email@example.com"></div>
           <div id="rc-phone-match" style="grid-column:1/-1"></div>
           <div class="form-group full"><label class="fl">Address</label><input type="text" id="rc-addr" placeholder="Full address"></div>
-          <div class="form-group"><label class="fl">Department</label><select id="rc-dept" onchange="updateRcDr();updatePurposeOptions()"><option value="ophtho">Ophthalmology</option><option value="obg">OBG</option><option value="psych">Neuropsychiatry</option><option value="skin">Skin &amp; Cosmetology</option></select></div>
+          <div class="form-group"><label class="fl">Department</label><select id="rc-dept" onchange="updateRcDr();updatePurposeOptions();syncReceptionConsultationFee&&syncReceptionConsultationFee()"><option value="ophtho">Ophthalmology</option><option value="obg">OBG</option><option value="psych">Neuropsychiatry</option><option value="skin">Skin &amp; Cosmetology</option></select></div>
                     <!-- REFERRED BY - New Patient -->
           <div style="background:var(--blue-lt);border:1.5px solid rgba(0,122,255,.2);border-radius:var(--rsm);padding:9px 12px;margin-bottom:8px">
             <div style="font-size:10px;font-weight:800;color:var(--blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Referred By</div>
@@ -1563,12 +1563,12 @@
 <div class="form-group"><label class="fl">Doctor</label><select id="rc-dr"></select></div>
           <div class="form-group">
             <label class="fl" style="display:flex;align-items:center;justify-content:space-between">Purpose <button onclick="openM('m-add-purpose')" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></label>
-            <select id="rc-purpose" onchange="checkSurgeryPurpose()">
+            <select id="rc-purpose" onchange="checkSurgeryPurpose();syncReceptionConsultationFee&&syncReceptionConsultationFee()">
               <option>New Consultation</option><option>Follow-up</option><option>Post-op (Day 1)</option><option>Post-op (1 Week)</option><option>Post-op (1 Month)</option><option>Post-op (3 Months)</option><option>Emergency</option><option>ANC Visit</option><option>Surgery</option><option>Procedure / Injection</option><option>Investigation Only</option>
             </select>
           </div>
-          <div class="form-group"><label class="fl">Centre</label><select id="rc-centre"><option value="CHD">Chandigarh</option><option value="RPR">Ropar</option></select></div>
-          <div class="form-group"><label class="fl">Consultation Fee ₹</label><input type="number" id="rc-fee" value="200"></div>
+          <div class="form-group"><label class="fl">Centre</label><select id="rc-centre" onchange="syncReceptionConsultationFee&&syncReceptionConsultationFee()"><option value="CHD">Chandigarh</option><option value="RPR">Ropar</option></select></div>
+          <div class="form-group"><label class="fl">Consultation Fee ₹</label><input type="number" id="rc-fee" value="0"></div>
           <div class="form-group full" style="flex-direction:row;align-items:center;gap:10px;padding:8px 10px;background:var(--g6);border-radius:var(--rsm);border:1.5px dashed var(--g4)">
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;font-weight:800;color:var(--bmh-blue);margin:0">
               <input type="checkbox" id="rc-no-fee" onchange="toggleRcNoFee(this.checked)" style="width:auto">
