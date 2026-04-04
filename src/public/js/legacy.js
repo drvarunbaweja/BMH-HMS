@@ -873,7 +873,7 @@ function nav(id, el) {
   else if(pageKey==='ophtho')          { initQR && initQR(); renderRxDrugs && renderRxDrugs(); buildRefractionDropdowns && buildRefractionDropdowns(); renderOphthoPayList && renderOphthoPayList(); typeof initDiagnosisRowsIfEmpty==='function'&&initDiagnosisRowsIfEmpty(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); }
   else if(pageKey==='obg')             { renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); initObgSelects && initObgSelects(); toggleObgWorkflow && toggleObgWorkflow(); populateObgPatientFromCurrent && populateObgPatientFromCurrent(); updateObgComputedFields && updateObgComputedFields(); }
   else if(pageKey==='psych')           { renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); togglePsychTracks && togglePsychTracks(); renderPsychRail && renderPsychRail(); }
-  else if(pageKey==='skin')            { renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); }
+  else if(pageKey==='skin')            { renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); renderSkinRail && renderSkinRail(); }
   else if(pageKey==='reception')       { renderReceptionPage && renderReceptionPage(); setTimeout(()=>{renderCollectionDashboard&&renderCollectionDashboard();loadCustomPurposes&&loadCustomPurposes();},100); }
   else if(pageKey==='lab')             { initLab && initLab(); renderLabOrders && renderLabOrders(); }
   else if(pageKey==='ipd')             renderIPD && renderIPD();
@@ -1360,7 +1360,7 @@ function openPatient(bmhId) {
   // Personal history selects — default to "N" (No)
   document.querySelectorAll('[id^="phx-"]').forEach(el => { if(el.tagName === 'SELECT') el.value = 'N'; });
   // All checkboxes unchecked
-  document.querySelectorAll('#pg-ophtho input[type=checkbox], #pg-obg input[type=checkbox]')
+  document.querySelectorAll('#pg-ophtho input[type=checkbox], #pg-obg input[type=checkbox], #pg-psych input[type=checkbox], #pg-skin input[type=checkbox]')
     .forEach(el => { el.checked = false; });
   // Slit lamp chips — deselect all, then re-select defaults (Normal chips)
   document.querySelectorAll('.sl-chip').forEach(c => {
@@ -1429,6 +1429,8 @@ function openPatient(bmhId) {
     populateObgForm && populateObgForm(p.lastVisit || {});
   } else if(p.dept === 'psych') {
     populatePsychForm && populatePsychForm(p.lastVisit || {});
+  } else if(p.dept === 'skin') {
+    populateSkinForm && populateSkinForm(p.lastVisit || {});
   }
 
   // ── 5. Load past visits list + try to reload today's visit ─────
@@ -1438,6 +1440,7 @@ function openPatient(bmhId) {
     renderCurrentPatientInvestigationUploads && renderCurrentPatientInvestigationUploads();
     renderOphthoRecap && renderOphthoRecap();
     if(p.dept === 'psych') renderPsychRail && renderPsychRail();
+    if(p.dept === 'skin') renderSkinRail && renderSkinRail();
   }, 300);
 }
 
@@ -1601,6 +1604,14 @@ function populateOphthoForm(v) {
   setV('hx-other-systemic', v.otherSystemic || '');
   setV('drug-allergy-spec', v.drugAllergySpec || '');
   if(v.drugAllergy) setSel('drug-allergy', v.drugAllergy);
+  ['refr-age','refr-stable','refr-occupation','refr-topo','refr-dryeye','refr-preg','refr-autoimmune','refr-kc','refr-allergy','refr-flap','refr-od-pachy','refr-os-pachy']
+    .forEach(id => {
+      const val = v[id];
+      const el = document.getElementById(id);
+      if(!el || val == null) return;
+      if(el.tagName === 'SELECT') setSel(id, val);
+      else setV(id, val);
+    });
 
   // Prescription drugs
   if(Array.isArray(v.rx) && v.rx.length) {
@@ -2852,6 +2863,23 @@ function obgSetSelectOptions(id, opts) {
 function initObgSelects() {
   ['obg-g','obg-p','obg-a','obg-l'].forEach(id => obgSetSelectOptions(id, OBG_SELECT_DIGITS));
 }
+function obgChecked(id) {
+  return !!document.getElementById(id)?.checked;
+}
+function toggleObgGuidedSections() {
+  const mapping = {
+    'obg-anc-warning':'obg-anc-guided-warning',
+    'obg-anc-highrisk':'obg-anc-guided-highrisk',
+    'obg-anc-fetal':'obg-anc-guided-fetal',
+    'obg-gyn-aub':'obg-gyn-guided-aub',
+    'obg-gyn-discharge':'obg-gyn-guided-discharge',
+    'obg-gyn-pain':'obg-gyn-guided-pain'
+  };
+  Object.entries(mapping).forEach(([chkId, panelId]) => {
+    const panel = document.getElementById(panelId);
+    if(panel) panel.style.display = obgChecked(chkId) ? '' : 'none';
+  });
+}
 function toggleObgWorkflow() {
   const anc = document.getElementById('obg-track-anc')?.checked;
   const gyn = document.getElementById('obg-track-gynae')?.checked;
@@ -2862,6 +2890,7 @@ function toggleObgWorkflow() {
   if(ancPanel) ancPanel.style.display = anc ? '' : 'none';
   if(gynPanel) gynPanel.style.display = gyn ? '' : 'none';
   if(infPanel) infPanel.style.display = inf ? '' : 'none';
+  toggleObgGuidedSections();
   updateObgComputedFields();
 }
 function calcEDD(){
@@ -2904,8 +2933,18 @@ function computeObgLivingIssueAge() {
   return years > 0 ? `Living issue age: ${years}y ${months}m` : `Living issue age: ${months} months`;
 }
 function computeObgPresumptiveDx() {
+  const guidance = computeObgGuidance();
+  return guidance.diagnoses;
+}
+function computeObgGuidance() {
   const findings = [];
+  const ask = [];
+  const lookFor = [];
+  const investigations = [];
+  const management = [];
+  const procedures = [];
   const anc = document.getElementById('obg-track-anc')?.checked;
+  const gyn = document.getElementById('obg-track-gynae')?.checked;
   const inf = document.getElementById('obg-track-infertility')?.checked;
   const bp = obgVal('obg-bp');
   const protein = obgVal('obg-urine-protein');
@@ -2922,25 +2961,132 @@ function computeObgPresumptiveDx() {
   const semen = obgVal('obg-semen');
   const tubal = obgVal('obg-tubal-risk');
   if(anc) {
+    ask.push('Ask for bleeding, leaking, headache/vision, pain abdomen, reduced fetal movement, fever, swelling.');
+    lookFor.push('BP trend, urine protein, oedema, fundal height, fetal heart, presentation, anaemia and scar tenderness where relevant.');
+    investigations.push('CBC / Hb, blood group & Rh, urine routine / culture, blood sugar / GTT, TSH at booking if indicated.');
+    management.push('Advise danger signs, iron-folic acid / calcium as appropriate, TT / Tdap, and schedule guideline-based ANC follow-up.');
     if((bp === '140/90' || bp === '150/100' || bp === '160/110') && ['1+','2+','3+'].includes(protein)) findings.push('Hypertensive disorder / pre-eclampsia risk');
     else if((bp === '140/90' || bp === '150/100' || bp === '160/110')) findings.push('Gestational hypertension risk');
     if(movement === 'Reduced' || mainComplaint === 'Decreased fetal movements') findings.push('Reduced fetal movement for urgent surveillance');
     if(warning === 'Bleeding PV') findings.push('Antepartum bleeding evaluation');
     if(warning === 'Leaking PV') findings.push('Rule out PROM / PPROM');
     if(risk) findings.push(`High-risk pregnancy: ${risk}`);
+    if(obgChecked('obg-redflag-bleeding')) {
+      investigations.push('Ultrasound for placental location / fetal wellbeing and haemoglobin assessment.');
+      management.push('Urgent obstetric review if active bleeding or unstable vitals.');
+    }
+    if(obgChecked('obg-redflag-leak')) {
+      lookFor.push('Pooling / leaking history, fetal heart, uterine activity, fever and tenderness.');
+      management.push('Assess for PROM / PPROM and refer for admission if confirmed or suspected.');
+    }
+    if(obgChecked('obg-redflag-headache') || obgChecked('obg-redflag-swelling') || obgChecked('obg-redflag-convulsions')) {
+      findings.push('Severe-feature hypertensive disorder to rule out');
+      investigations.push('CBC, LFT, RFT, urine protein quantification as indicated.');
+      management.push('Urgent BP control / admission pathway if severe features are present.');
+    }
+    if(obgChecked('obg-redflag-decreasedfm') || obgChecked('obg-anc-fetal')) {
+      investigations.push('NST / CTG, ultrasound for AFI / BPP / Doppler if decreased movements or growth concern.');
+      management.push('Escalate same day if fetal movements are reduced or absent.');
+    }
+    if(obgChecked('obg-hr-prevlscs')) {
+      findings.push('Previous caesarean pregnancy surveillance');
+      lookFor.push('Scar tenderness, placental location, inter-delivery interval and prior operative notes.');
+      procedures.push('Delivery planning: TOLAC candidacy vs elective repeat LSCS as appropriate.');
+    }
+    if(obgChecked('obg-hr-gdm')) {
+      findings.push('GDM / dysglycaemia review');
+      investigations.push('Fasting / post-prandial sugars or GTT as indicated.');
+      management.push('Dietary counselling and glucose monitoring; insulin referral if uncontrolled.');
+    }
+    if(obgChecked('obg-hr-pih')) {
+      findings.push('Pregnancy-induced hypertension review');
+      management.push('Tighter BP follow-up and maternal-fetal surveillance.');
+    }
+    if(obgChecked('obg-hr-multiple')) {
+      investigations.push('Serial growth scans and cervical length review if clinically indicated.');
+      management.push('High-risk ANC schedule and nutrition counselling.');
+    }
+    if(obgChecked('obg-fetal-growthlag') || obgChecked('obg-hr-iugr')) {
+      findings.push('Fetal growth restriction concern');
+      investigations.push('Growth scan with Doppler and serial fundal height monitoring.');
+      management.push('Increase surveillance frequency and refer if Dopplers abnormal.');
+    }
+    if(obgChecked('obg-fetal-postdates')) {
+      findings.push('Post-dated pregnancy surveillance');
+      management.push('Plan induction / delivery review based on gestation and cervix.');
+      procedures.push('Induction of labour discussion where appropriate.');
+    }
   }
-  if(impression) findings.push(impression);
-  if(cycle === 'Oligomenorrhoea' || ovulation === 'PCOS features') findings.push('PCOS / ovulatory dysfunction');
-  if(discharge === 'White discharge') findings.push('Leucorrhoea / vaginitis');
-  if(pelvicPain === 'Dyspareunia' || tubal === 'Endometriosis risk') findings.push('Endometriosis to consider');
+  if(gyn) {
+    ask.push('Ask about cycle pattern, amount of bleeding, intermenstrual or post-coital bleeding, discharge, pelvic pain and contraception.');
+    lookFor.push('Anaemia, thyroid / endocrine clues, abdominal mass, speculum findings and bimanual tenderness or uterine enlargement.');
+    if(impression) findings.push(impression);
+    if(cycle === 'Oligomenorrhoea' || ovulation === 'PCOS features') findings.push('PCOS / ovulatory dysfunction');
+    if(discharge === 'White discharge') findings.push('Leucorrhoea / vaginitis');
+    if(pelvicPain === 'Dyspareunia' || tubal === 'Endometriosis risk') findings.push('Endometriosis to consider');
+    if(obgChecked('obg-gyn-aub')) {
+      findings.push('Abnormal uterine bleeding workup');
+      investigations.push('CBC, pregnancy test, TSH and pelvic ultrasound; endometrial sampling when indicated by age / risk.');
+      management.push('Stabilise heavy bleeding, treat anaemia, and classify likely PALM-COEIN cause clinically.');
+      if(obgChecked('obg-aub-postcoital')) lookFor.push('Cervical lesion / cervicitis and need for speculum assessment.');
+    }
+    if(obgChecked('obg-gyn-discharge')) {
+      findings.push('Vaginal discharge / cervicitis / vaginitis evaluation');
+      investigations.push('pH / wet mount / culture or STI tests if risk factors or persistent symptoms.');
+      management.push('Treat likely vaginitis / cervicitis and advise partner management where STI suspected.');
+    }
+    if(obgChecked('obg-gyn-pain')) {
+      investigations.push('Pelvic ultrasound and consider endometriosis / PID workup based on history.');
+      management.push('Analgesia, evaluate need for hormonal suppression or laparoscopy referral.');
+      if(obgChecked('obg-pain-severe') || obgChecked('obg-pain-bowel')) findings.push('Endometriosis / deep infiltrating disease concern');
+    }
+    if(obgChecked('obg-gyn-menopause')) {
+      findings.push('Perimenopausal / postmenopausal symptom review');
+      investigations.push('Pelvic ultrasound and endometrial evaluation if postmenopausal bleeding.');
+      management.push('Counsel on red flags, non-hormonal vs hormonal options as appropriate.');
+    }
+  }
   if(inf) {
+    ask.push('Ask duration trying to conceive, cycle regularity, coital frequency, prior pelvic infection / TB, surgeries, prior treatment and male evaluation.');
+    lookFor.push('BMI, hirsutism / acne, thyroid / galactorrhoea, pelvic pain, prior operative scars and semen report availability.');
+    investigations.push('Male semen analysis, ovulation assessment, ovarian reserve tests and tubal patency assessment as indicated.');
+    management.push('Counsel on timing of intercourse, weight optimisation, folic acid, and couple-based evaluation.');
     if(infertilityType) findings.push(infertilityType);
     if(ovulation === 'Oligo/anovulation likely') findings.push('Ovulatory factor infertility');
     if(tubal && tubal !== 'Low') findings.push('Tubal factor infertility risk');
     if(semen === 'Abnormal' || semen === 'Severely abnormal') findings.push('Male factor infertility to address');
+    if(obgChecked('obg-inf-ovulatory') || obgChecked('obg-inf-hirsutism') || ovulation === 'PCOS features') {
+      findings.push('Likely ovulatory dysfunction / PCOS pathway');
+      investigations.push('TSH, prolactin, AMH and TVS pelvis / follicular monitoring where indicated.');
+      management.push('Ovulation induction counselling after full couple evaluation if appropriate.');
+    }
+    if(obgChecked('obg-inf-tubal') || obgChecked('obg-inf-pastpid') || obgChecked('obg-inf-priorsurgery')) {
+      findings.push('Tubal factor infertility to rule out');
+      investigations.push('HSG / SSG and infection / TB workup if clinically suspected.');
+      procedures.push('Diagnostic laparoscopy / hysteroscopy discussion if imaging or symptoms justify it.');
+    }
+    if(obgChecked('obg-inf-endo') || obgChecked('obg-pain-infertility')) {
+      findings.push('Endometriosis-associated infertility to consider');
+      management.push('Pain + fertility counselling and consider laparoscopy referral based on severity / duration.');
+    }
+    if(obgChecked('obg-inf-male') || obgChecked('obg-inf-maleabn') || semen === 'Abnormal' || semen === 'Severely abnormal') {
+      findings.push('Male factor evaluation required');
+      management.push('Andrology / urology referral and repeat semen analysis if needed.');
+    }
+    if(obgChecked('obg-inf-lowreserve')) {
+      findings.push('Diminished ovarian reserve concern');
+      management.push('Early fertility specialist referral.');
+    }
   }
-  const unique = Array.from(new Set(findings.filter(Boolean)));
-  return unique.slice(0, 3);
+  const unique = arr => Array.from(new Set(arr.filter(Boolean)));
+  return {
+    diagnoses: unique(findings).slice(0, 4),
+    ask: unique(ask).slice(0, 5),
+    lookFor: unique(lookFor).slice(0, 5),
+    investigations: unique(investigations).slice(0, 6),
+    management: unique(management).slice(0, 6),
+    procedures: unique(procedures).slice(0, 4)
+  };
 }
 function renderObgInvestigationSummary() {
   const el = document.getElementById('obg-investigation-summary');
@@ -2959,7 +3105,8 @@ function renderObgSummaryRail() {
   const gpal = document.getElementById('obg-gpal-chip')?.textContent || '—';
   const ga = document.getElementById('obg-ga')?.textContent || '—';
   const edd = document.getElementById('obg-edd')?.textContent || '—';
-  const presumptive = document.getElementById('obg-presumptive-chip')?.textContent || '—';
+  const guidance = computeObgGuidance();
+  const presumptive = guidance.diagnoses.join(' • ') || document.getElementById('obg-presumptive-chip')?.textContent || '—';
   const systemic = obgVal('obg-systemic') || 'None declared';
   const usgDue = obgFmtDate(obgVal('obg-usg-due') || obgVal('obg-usg-due-inline'));
   const ttDue = obgFmtDate(obgVal('obg-tt-due') || obgVal('obg-tt-due-inline'));
@@ -2983,6 +3130,18 @@ function renderObgSummaryRail() {
     <div style="padding:9px 10px;border-radius:10px;background:var(--orange-lt);margin-bottom:8px">
       <div style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;margin-bottom:5px">Presumptive diagnosis</div>
       <div style="font-size:11px;font-weight:800;color:#8a4200;line-height:1.45">${presumptive || 'Routine assessment'}</div>
+    </div>
+    <div style="padding:9px 10px;border-radius:10px;background:#fff8e6;margin-bottom:8px;border:1px solid rgba(255,149,0,.18)">
+      <div style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;margin-bottom:5px">What to ask</div>
+      <div style="font-size:10.7px;line-height:1.45">${guidance.ask.length ? guidance.ask.join('<br>') : 'Use ANC / Gynae / Infertility checkboxes to open the relevant proforma.'}</div>
+    </div>
+    <div style="padding:9px 10px;border-radius:10px;background:#eef8ff;margin-bottom:8px;border:1px solid rgba(0,122,255,.14)">
+      <div style="font-size:10px;font-weight:900;color:var(--blue);text-transform:uppercase;margin-bottom:5px">What to look for</div>
+      <div style="font-size:10.7px;line-height:1.45">${guidance.lookFor.length ? guidance.lookFor.join('<br>') : 'Focused examination prompts will appear here.'}</div>
+    </div>
+    <div style="padding:9px 10px;border-radius:10px;background:#f2fff6;margin-bottom:8px;border:1px solid rgba(40,167,69,.16)">
+      <div style="font-size:10px;font-weight:900;color:#1a8c3c;text-transform:uppercase;margin-bottom:5px">Investigations & management</div>
+      <div style="font-size:10.7px;line-height:1.45"><b>Investigations:</b><br>${guidance.investigations.length ? guidance.investigations.join('<br>') : 'Guideline-based tests will appear here.'}<br><br><b>Management:</b><br>${guidance.management.length ? guidance.management.join('<br>') : 'Conservative / medical plan will appear here.'}${guidance.procedures.length ? `<br><br><b>Procedures / injections:</b><br>${guidance.procedures.join('<br>')}` : ''}</div>
     </div>
     <details open style="margin-bottom:8px;background:#fff;border:1px solid var(--g5);border-radius:10px;padding:8px 10px">
       <summary style="font-size:11px;font-weight:800;color:var(--bmh-blue);cursor:pointer">Payment history</summary>
@@ -3021,7 +3180,8 @@ function updateObgComputedFields() {
     const tt = document.getElementById('obg-tt-due'); if(tt) tt.value = v;
     const tt2 = document.getElementById('obg-tt-due-inline'); if(tt2) tt2.value = v;
   }
-  const presumptive = computeObgPresumptiveDx();
+  const guidance = computeObgGuidance();
+  const presumptive = guidance.diagnoses;
   const presumptiveEl = document.getElementById('obg-presumptive-chip');
   if(presumptiveEl) presumptiveEl.textContent = presumptive.length ? presumptive.join(' • ') : 'Routine assessment';
   renderObgInvestigationSummary();
@@ -3066,6 +3226,8 @@ function populateObgForm(visit) {
   const ancChk = document.getElementById('obg-track-anc'); if(ancChk) ancChk.checked = data.workflowAnc !== false;
   const gynChk = document.getElementById('obg-track-gynae'); if(gynChk) gynChk.checked = data.workflowGynae !== false;
   const infChk = document.getElementById('obg-track-infertility'); if(infChk) infChk.checked = !!data.workflowInfertility;
+  ['obg-anc-booking','obg-anc-warning','obg-anc-highrisk','obg-anc-fetal','obg-gyn-aub','obg-gyn-discharge','obg-gyn-pain','obg-gyn-menopause','obg-inf-ovulatory','obg-inf-tubal','obg-inf-endo','obg-inf-male','obg-redflag-bleeding','obg-redflag-leak','obg-redflag-headache','obg-redflag-pain','obg-redflag-fever','obg-redflag-decreasedfm','obg-redflag-swelling','obg-redflag-convulsions','obg-hr-prevlscs','obg-hr-gdm','obg-hr-pih','obg-hr-iugr','obg-hr-multiple','obg-hr-rhneg','obg-hr-placenta','obg-hr-anemia','obg-fetal-growthlag','obg-fetal-malpresentation','obg-fetal-lowliquor','obg-fetal-postdates','obg-aub-clots','obg-aub-intermenstrual','obg-aub-postcoital','obg-aub-anemia','obg-vag-pruritus','obg-vag-foul','obg-vag-dyspareunia','obg-vag-pidrisk','obg-pain-cyclical','obg-pain-severe','obg-pain-bowel','obg-pain-infertility','obg-inf-coital','obg-inf-pastpid','obg-inf-priorsurgery','obg-inf-galactorrhoea','obg-inf-hirsutism','obg-inf-maleabn','obg-inf-lowreserve','obg-inf-rpl']
+    .forEach(id => { const el = document.getElementById(id); if(el && data[id] != null) el.checked = !!data[id]; });
   const labs = Array.isArray(data.investigationChecklist) ? data.investigationChecklist : [];
   document.querySelectorAll('.obg-lab').forEach(box => { box.checked = labs.includes(box.value); });
   toggleObgWorkflow();
@@ -3166,6 +3328,7 @@ function togglePsychTracks() {
 }
 function computePsychGuidance() {
   const tags = [];
+  const ask = [];
   const inv = [];
   const tx = [];
   const therapy = [];
@@ -3179,48 +3342,56 @@ function computePsychGuidance() {
   const suicidality = psychVal('psych-suicidality');
   if(/Depressive/.test(syndrome) || /Very low|low/i.test(psychVal('psych-chief'))) {
     tags.push('Depressive disorder likely');
+    ask.push('Screen severity, anhedonia, hopelessness, suicidality, sleep, appetite, bipolar history');
     inv.push('PHQ-9, CBC, TSH, B12 / Vit D if clinically indicated');
     tx.push('SSRI / SNRI if not bipolar, sleep hygiene, safety review');
     therapy.push('CBT / behavioural activation');
   }
   if(/Anxiety|panic/i.test(syndrome) || /Panic/.test(anxiety)) {
     tags.push('Anxiety spectrum disorder likely');
+    ask.push('Clarify panic attacks, avoidance, autonomic symptoms, caffeine / substance triggers');
     inv.push('GAD-7; rule out thyroid / substance contributors');
     tx.push('SSRI first-line, short-term benzodiazepine only if needed');
     therapy.push('CBT, relaxation, breathing retraining');
   }
   if(/Psychosis/.test(syndrome) || /Hallucinations|Delusions|Both/.test(psychosis)) {
     tags.push('Psychotic disorder to rule out');
+    ask.push('Onset, first-rank symptoms, substance use, delirium / organic red flags, family history');
     inv.push('CBC, LFT, RFT, glucose, thyroid, urine toxicology; neuroimaging if atypical');
     tx.push('Antipsychotic initiation / urgent stabilization if risk present');
     therapy.push('Family psychoeducation, social support');
   }
   if(/Manic/.test(syndrome) || /Manic|Mixed/.test(polarity)) {
     tags.push('Bipolar spectrum likely');
+    ask.push('Reduced need for sleep, spending / grandiosity, episodicity, antidepressant switch history');
     inv.push('CBC, LFT, RFT, thyroid before mood stabilizer');
     tx.push('Mood stabilizer / atypical antipsychotic review');
     therapy.push('Sleep-wake stabilization, family education');
   }
   if(document.getElementById('psych-track-addiction')?.checked) {
     tags.push('Substance use disorder screen positive');
+    ask.push('Quantity, frequency, last use, withdrawal, craving, overdose risk, family / legal harm');
     inv.push('LFT, RFT, viral markers / toxicology as indicated');
     tx.push('Motivational enhancement, withdrawal-risk assessment, de-addiction plan');
     therapy.push('Relapse prevention, group support');
   }
   if(document.getElementById('psych-track-stroke')?.checked) {
     tags.push('Neuropsychiatric sequelae of stroke to evaluate');
+    ask.push('Stroke subtype, deficit timeline, mood/cognition change, swallow / falls, secondary prevention');
     inv.push('MRI / CT review, cognition screen, vascular risk profile');
     tx.push('Secondary prevention review, mood / cognition management');
     therapy.push('Neuro-rehab, caregiver counselling');
   }
   if(document.getElementById('psych-track-epilepsy')?.checked) {
     tags.push('Epilepsy follow-up / breakthrough seizure review');
+    ask.push('Semiology, adherence, sleep deprivation, missed doses, injury, pregnancy plans');
     inv.push('Drug levels if available, EEG / MRI if indicated');
     tx.push('ASM adherence review and trigger avoidance');
     therapy.push('Seizure safety counselling');
   }
   if(document.getElementById('psych-track-child')?.checked) {
     tags.push('Child / adolescent mental health evaluation');
+    ask.push('Perinatal/developmental history, school concerns, autism/ADHD red flags, safeguarding');
     inv.push('Developmental history, school feedback, Vanderbilt / ASD screen as indicated');
     tx.push('Parent guidance and multimodal management');
     therapy.push('Behaviour therapy, remedial input, parent training');
@@ -3233,6 +3404,7 @@ function computePsychGuidance() {
   if(appetite === 'Reduced' && syndrome.includes('Depressive')) tags.push('Biological symptoms support depressive syndrome');
   return {
     tags: Array.from(new Set(tags)).slice(0, 4),
+    ask: Array.from(new Set(ask)).slice(0, 5),
     investigations: Array.from(new Set(inv)).slice(0, 4),
     plan: Array.from(new Set(tx)).slice(0, 4),
     therapy: Array.from(new Set(therapy)).slice(0, 4)
@@ -3264,6 +3436,10 @@ function renderPsychRail() {
     <div style="padding:9px 10px;border-radius:10px;background:var(--orange-lt);margin-bottom:8px">
       <div style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;margin-bottom:5px">Presumptive diagnosis</div>
       <div style="font-size:11px;font-weight:800;color:#8a4200;line-height:1.45">${g.tags.join(' • ') || 'Awaiting structured inputs'}</div>
+    </div>
+    <div style="padding:9px 10px;border-radius:10px;background:#fff7e8;margin-bottom:8px;border:1px solid rgba(212,160,23,.28)">
+      <div style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;margin-bottom:5px">Guided history prompts</div>
+      <div style="font-size:11px;line-height:1.5">${g.ask.join('<br>') || 'Symptom chronology, risk, functioning, substance use, and family history.'}</div>
     </div>
     <div style="padding:9px 10px;border-radius:10px;background:var(--blue-lt);margin-bottom:8px">
       <div style="font-size:10px;font-weight:900;color:var(--blue);text-transform:uppercase;margin-bottom:5px">Initial management</div>
@@ -3300,6 +3476,137 @@ function populatePsychForm(visit) {
 function printPsychRx(){printPsychSheet();}
 
 // ═══ SKIN ═══
+function skinVal(id) {
+  const el = document.getElementById(id);
+  if(!el) return '';
+  if(el.type === 'checkbox') return !!el.checked;
+  return el.value || '';
+}
+function computeSkinGuidance() {
+  const diagnoses = [];
+  const investigations = [];
+  const management = [];
+  const procedures = [];
+  const fit = skinVal('skin-fit');
+  const primary = skinVal('skin-primary-dx');
+  const hormonal = skinVal('skin-hormonal');
+  const pihRisk = skinVal('skin-cosm-pih');
+  const sensitivity = skinVal('skin-cosm-sensitivity');
+  const isotret = skinVal('skin-cosm-isotret');
+  const pregnant = skinVal('skin-cosm-preg');
+  const tan = skinVal('skin-cosm-tan');
+  const fitDark = /IV|V|VI/.test(fit);
+  if(primary) diagnoses.push(primary.replace(/^[A-Z0-9.]+\s+—\s+/, ''));
+  if(skinVal('skin-cosm-melasma') || /Melasma|Chloasma/i.test(primary)) {
+    diagnoses.push('Pigmentary disorder needing strict photoprotection and trigger review');
+    management.push('Daily broad-spectrum tinted sunscreen, barrier repair, and depigmenting topical priming before procedures');
+    procedures.push('Prefer superficial peels only after 2-4 weeks of priming; usually repeat every 3-4 weeks');
+  }
+  if(skinVal('skin-cosm-acne') || /Acne/i.test(primary)) {
+    diagnoses.push('Acne pathway with adjunct cosmetology planning');
+    management.push('Topical retinoid + benzoyl peroxide backbone; reserve oral antibiotics/isotretinoin by severity');
+    procedures.push('Hydrafacial / salicylic or mandelic peel can be adjunctive once inflammation is controlled; review in 4-6 weeks');
+    if(/Moderate|Severe/.test(skinVal('skin-cosm-acne-grade'))) investigations.push('Assess menstrual irregularity / hyperandrogenism; endocrine work-up only if clinically indicated');
+  }
+  if(skinVal('skin-cosm-scar')) {
+    diagnoses.push('Texture / acne scar concern');
+    procedures.push('Microneedling or fractional resurfacing only after acne is controlled; usually spaced 4-6 weeks apart');
+  }
+  if(skinVal('skin-cosm-ageing')) {
+    diagnoses.push('Photoaging / rejuvenation pathway');
+    procedures.push('Hydrating facials monthly; peels every 3-4 weeks if barrier and pigmentation risk allow');
+  }
+  if(skinVal('skin-cosm-sensitive')) {
+    diagnoses.push('Sensitive / rosacea-prone barrier');
+    management.push('Prioritize barrier repair and anti-inflammatory skincare before any peel or device session');
+  }
+  if(/PCOD|On OCP/.test(hormonal)) investigations.push('If acne/hirsutism persists, consider hormonal evaluation with gynecology/endocrine correlation');
+  if(/Alopecia/.test(skinVal('skin-hair'))) investigations.push('CBC, ferritin, TSH, vitamin D / B12 as clinically indicated for hair loss');
+  if(fitDark || /High/.test(pihRisk)) {
+    management.push('Use conservative settings because Fitzpatrick IV-VI / PIH-prone skin needs slower escalation');
+    procedures.push('Avoid aggressive medium/deep peels or high-fluence laser until risk is optimized');
+  }
+  if(/High/.test(sensitivity) || /Heavy/.test(tan)) {
+    management.push('Defer stronger peels/lasers until tan settles and barrier symptoms improve');
+  }
+  if(/Yes/.test(isotret)) {
+    management.push('Avoid resurfacing / medium-depth procedures until adequate post-isotretinoin interval and clinical review');
+  }
+  if(/Yes/.test(pregnant)) {
+    management.push('Limit to pregnancy-safe topicals and conservative facials; avoid teratogenic drugs and aggressive cosmetic interventions');
+  }
+  investigations.push('Routine cosmetic investigations are not required unless systemic/hormonal clues are present');
+  return {
+    diagnoses: Array.from(new Set(diagnoses)).slice(0, 4),
+    investigations: Array.from(new Set(investigations)).slice(0, 4),
+    management: Array.from(new Set(management)).slice(0, 5),
+    procedures: Array.from(new Set(procedures)).slice(0, 5)
+  };
+}
+function renderSkinRail() {
+  const el = document.getElementById('skin-summary-rail');
+  if(!el) return;
+  const pt = window.CURRENT_PATIENT || {};
+  if(!pt.bmhId) {
+    el.innerHTML = '<div style="padding:10px;color:var(--g1);font-size:11px">Open a patient to see cosmetology guidance, billing, and pending requests.</div>';
+    return;
+  }
+  const g = computeSkinGuidance();
+  const txns = (TRANSACTIONS || []).filter(t => t.bmhId === pt.bmhId).slice().sort((a,b)=>new Date(b.date||0)-new Date(a.date||0)).slice(0,8);
+  const reqs = (PAY_REQUESTS || []).filter(r => r.bmhId === pt.bmhId).slice().sort((a,b)=>new Date(b.date||0)-new Date(a.date||0)).slice(0,8);
+  const payHtml = txns.length ? txns.map(t => `<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--g5)"><div><div style="font-weight:800">${t.service || 'Payment'}</div><div style="font-size:10px;color:var(--g1)">${obgFmtDate(t.date)} · ${t.mode || '—'}</div></div><div style="font-weight:900;color:var(--bmh-blue)">₹${Number(t.amount||0).toLocaleString('en-IN')}</div></div>`).join('') : '<div style="font-size:10.5px;color:var(--g1)">No payments recorded.</div>';
+  const reqHtml = reqs.length ? reqs.map(r => `<div style="padding:7px 0;border-bottom:1px solid var(--g5)"><div style="font-weight:800">${r.for || 'Request'}</div><div style="display:flex;justify-content:space-between;gap:8px;font-size:10px;color:var(--g1)"><span>${obgFmtDate(r.date)}</span><span>${r.status || 'pending'}</span></div></div>`).join('') : '<div style="font-size:10.5px;color:var(--g1)">No pending reception requests.</div>';
+  el.innerHTML = `<div style="position:sticky;top:12px;width:100%">
+    <div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;letter-spacing:.45px;margin-bottom:6px">Cosmetology rail</div>
+    <div style="max-height:74vh;overflow:auto;padding-right:4px">
+      <div style="padding:9px 10px;border-radius:10px;background:#fff0f7;margin-bottom:8px;border:1px solid rgba(196,76,124,.18)">
+        <div style="font-size:10px;font-weight:900;color:#a12f61;text-transform:uppercase;margin-bottom:5px">Presumptive diagnosis</div>
+        <div style="font-size:11px;font-weight:800;line-height:1.45;color:#8d2556">${g.diagnoses.join(' • ') || 'Select skin concern, diagnosis, and cosmetology risk factors.'}</div>
+      </div>
+      <div style="padding:9px 10px;border-radius:10px;background:#f7fbff;margin-bottom:8px;border:1px solid rgba(26,60,110,.12)">
+        <div style="font-size:10px;font-weight:900;color:var(--blue);text-transform:uppercase;margin-bottom:5px">Evidence-based next steps</div>
+        <div style="font-size:11px;line-height:1.5">${g.management.join('<br>') || 'Photoprotection, diagnosis confirmation, barrier care, and conservative escalation.'}</div>
+      </div>
+      <div style="padding:9px 10px;border-radius:10px;background:#eefaf1;margin-bottom:8px;border:1px solid rgba(26,140,60,.16)">
+        <div style="font-size:10px;font-weight:900;color:#1a8c3c;text-transform:uppercase;margin-bottom:5px">Investigations / procedure cadence</div>
+        <div style="font-size:11px;line-height:1.5"><b>Investigations:</b><br>${g.investigations.join('<br>') || 'Usually clinical unless systemic clues are present.'}<br><br><b>Procedures:</b><br>${g.procedures.join('<br>') || 'Choose procedure after barrier, PIH risk, and diagnosis review.'}</div>
+      </div>
+      <div style="padding:9px 10px;border-radius:10px;background:var(--g6);margin-bottom:8px">
+        <div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;margin-bottom:5px">Patient factors</div>
+        <div style="font-size:11px;line-height:1.45"><b>Fitzpatrick:</b> ${skinVal('skin-fit') || '—'}<br><b>Hormonal:</b> ${skinVal('skin-hormonal') || '—'}<br><b>Medical:</b> ${skinVal('skin-medical') || '—'}</div>
+      </div>
+      <details open style="margin-bottom:8px;background:#fff;border:1px solid var(--g5);border-radius:10px;padding:8px 10px">
+        <summary style="font-size:11px;font-weight:800;color:var(--bmh-blue);cursor:pointer">Payments made</summary>
+        <div style="margin-top:8px">${payHtml}</div>
+      </details>
+      <details open style="background:#fff;border:1px solid var(--g5);border-radius:10px;padding:8px 10px">
+        <summary style="font-size:11px;font-weight:800;color:var(--bmh-blue);cursor:pointer">Reception requests / pending</summary>
+        <div style="margin-top:8px">${reqHtml}</div>
+      </details>
+    </div>
+  </div>`;
+}
+function populateSkinForm(visit) {
+  const data = visit || window.CURRENT_PATIENT?.lastVisit || {};
+  ['skin-chief','skin-duration','skin-site','skin-fit','skin-primary-dx','skin-secondary-dx','skin-routine','skin-medical','skin-hormonal','skin-lesion','skin-secondary-change','skin-distribution','skin-configuration','skin-hair','skin-nail','skin-dermoscopy','skin-cosm-acne-grade','skin-cosm-sensitivity','skin-cosm-pih','skin-cosm-isotret','skin-cosm-tan','skin-cosm-preg']
+    .forEach(id => {
+      const el = document.getElementById(id);
+      if(!el || data[id] == null) return;
+      if(el.tagName === 'SELECT') {
+        for(let i=0;i<el.options.length;i++) {
+          if(el.options[i].value === data[id] || el.options[i].text === data[id]) { el.selectedIndex = i; break; }
+        }
+      } else {
+        el.value = data[id];
+      }
+    });
+  ['skin-cosm-melasma','skin-cosm-acne','skin-cosm-scar','skin-cosm-ageing','skin-cosm-sensitive','skin-cosm-hair']
+    .forEach(id => {
+      const el = document.getElementById(id);
+      if(el && data[id] != null) el.checked = !!data[id];
+    });
+  renderSkinRail();
+}
 function selectProc(el,name){
   document.querySelectorAll('.procedure-card').forEach(c=>c.classList.remove('selected'));
   el.classList.add('selected');
@@ -6142,10 +6449,13 @@ window.addEventListener('DOMContentLoaded', function() {
   try { initObgSelects && initObgSelects(); } catch(e) {}
   try { calcEDD && calcEDD(); } catch(e) {}
   try { toggleObgWorkflow && toggleObgWorkflow(); } catch(e) {}
+  try { toggleObgGuidedSections && toggleObgGuidedSections(); } catch(e) {}
   try { renderObgInvestigationSummary && renderObgInvestigationSummary(); } catch(e) {}
   try { updateObgComputedFields && updateObgComputedFields(); } catch(e) {}
   try { togglePsychTracks && togglePsychTracks(); } catch(e) {}
   try { renderPsychRail && renderPsychRail(); } catch(e) {}
+  try { renderSkinRail && renderSkinRail(); } catch(e) {}
+  try { renderOphthoRecap && renderOphthoRecap(); } catch(e) {}
   try { populateSelectors && populateSelectors(); } catch(e) {}
   const aptInp = document.getElementById('apt-date-inp');
   if(aptInp) aptInp.value = new Date().toISOString().split('T')[0];
@@ -6169,10 +6479,25 @@ window.addEventListener('DOMContentLoaded', function() {
   document.querySelectorAll('.obg-lab').forEach(box => box.addEventListener('change', renderObgInvestigationSummary));
   ['obg-risk','obg-main-complaint','obg-systemic','obg-bp','obg-urine-protein','obg-fetal-movement','obg-warning','obg-cycle','obg-discharge','obg-pelvic-pain','obg-clinical-impression','obg-infertility-type','obg-ovulation','obg-tubal-risk','obg-semen']
     .forEach(id => document.getElementById(id)?.addEventListener('change', updateObgComputedFields));
+  ['obg-anc-booking','obg-anc-warning','obg-anc-highrisk','obg-anc-fetal','obg-gyn-aub','obg-gyn-discharge','obg-gyn-pain','obg-gyn-menopause','obg-inf-ovulatory','obg-inf-tubal','obg-inf-endo','obg-inf-male','obg-redflag-bleeding','obg-redflag-leak','obg-redflag-headache','obg-redflag-pain','obg-redflag-fever','obg-redflag-decreasedfm','obg-redflag-swelling','obg-redflag-convulsions','obg-hr-prevlscs','obg-hr-gdm','obg-hr-pih','obg-hr-iugr','obg-hr-multiple','obg-hr-rhneg','obg-hr-placenta','obg-hr-anemia','obg-fetal-growthlag','obg-fetal-malpresentation','obg-fetal-lowliquor','obg-fetal-postdates','obg-aub-clots','obg-aub-intermenstrual','obg-aub-postcoital','obg-aub-anemia','obg-vag-pruritus','obg-vag-foul','obg-vag-dyspareunia','obg-vag-pidrisk','obg-pain-cyclical','obg-pain-severe','obg-pain-bowel','obg-pain-infertility','obg-inf-coital','obg-inf-pastpid','obg-inf-priorsurgery','obg-inf-galactorrhoea','obg-inf-hirsutism','obg-inf-maleabn','obg-inf-lowreserve','obg-inf-rpl']
+    .forEach(id => document.getElementById(id)?.addEventListener('change', () => { toggleObgGuidedSections && toggleObgGuidedSections(); updateObgComputedFields && updateObgComputedFields(); }));
   ['psych-chief','psych-duration','psych-onset','psych-trigger','psych-core-syndrome','psych-risk','psych-systemic','psych-sleep','psych-appetite','psych-function','psych-diagnosis','psych-family','psych-personal','psych-pastpsych','psych-medical','psych-substance','psych-suicidality','psych-anxiety','psych-psychosis','psych-polarity','psych-addiction-substance','psych-addiction-pattern','psych-addiction-lastuse','psych-addiction-readiness','psych-stroke-deficit','psych-stroke-timing','psych-stroke-mood','psych-epilepsy-type','psych-epilepsy-last','psych-epilepsy-adherence','psych-epilepsy-trigger','psych-child-concern','psych-child-development','psych-child-school','psych-child-parent','psych-appearance','psych-behaviour','psych-psychomotor','psych-eyecontact','psych-speech-rate','psych-speech-volume','psych-speech-tone','psych-subjective-mood','psych-affect','psych-thought-form','psych-thought-content','psych-hallucinations','psych-orientation','psych-memory','psych-insight','psych-judgement']
     .forEach(id => document.getElementById(id)?.addEventListener('change', renderPsychRail));
   ['psych-chief','psych-trigger','psych-family','psych-personal','psych-pastpsych','psych-medical','psych-substance','psych-child-parent','psych-speech-tone','psych-subjective-mood']
     .forEach(id => document.getElementById(id)?.addEventListener('input', renderPsychRail));
+  ['skin-chief','skin-duration','skin-site','skin-fit','skin-primary-dx','skin-secondary-dx','skin-routine','skin-medical','skin-hormonal','skin-lesion','skin-secondary-change','skin-distribution','skin-configuration','skin-hair','skin-nail','skin-dermoscopy','skin-cosm-acne-grade','skin-cosm-sensitivity','skin-cosm-pih','skin-cosm-isotret','skin-cosm-tan','skin-cosm-preg']
+    .forEach(id => {
+      document.getElementById(id)?.addEventListener('change', renderSkinRail);
+      document.getElementById(id)?.addEventListener('input', renderSkinRail);
+    });
+  ['skin-cosm-melasma','skin-cosm-acne','skin-cosm-scar','skin-cosm-ageing','skin-cosm-sensitive','skin-cosm-hair']
+    .forEach(id => document.getElementById(id)?.addEventListener('change', renderSkinRail));
+  ['refr-age','refr-stable','refr-occupation','refr-topo','refr-dryeye','refr-preg','refr-autoimmune','refr-kc','refr-allergy','refr-flap','refr-od-pachy','refr-os-pachy','subj-od-sph','subj-od-cyl','subj-os-sph','subj-os-cyl','pachy-od','pachy-os','iop-gat-od','iop-gat-os','phx-diabetes_mellit','phx-hypertension']
+    .forEach(id => {
+      document.getElementById(id)?.addEventListener('change', renderOphthoRecap);
+      document.getElementById(id)?.addEventListener('input', renderOphthoRecap);
+    });
+  document.querySelectorAll('.cc-inp').forEach(el => el.addEventListener('input', renderOphthoRecap));
   // Set today's date on all date fields
   try { updateRcDr && updateRcDr(); } catch(e) {}
 });
@@ -14254,6 +14579,8 @@ function saveVisit(dept) {
     visit.otherSystemic = document.getElementById('hx-other-systemic')?.value || '';
     visit.drugAllergy = document.getElementById('drug-allergy')?.value || '';
     visit.drugAllergySpec = document.getElementById('drug-allergy-spec')?.value || '';
+    ['refr-age','refr-stable','refr-occupation','refr-topo','refr-dryeye','refr-preg','refr-autoimmune','refr-kc','refr-allergy','refr-flap','refr-od-pachy','refr-os-pachy']
+      .forEach(id => { visit[id] = document.getElementById(id)?.value || ''; });
     visit.pohOdText = document.getElementById('poh-od-text')?.value || '';
     visit.pohOsText = document.getElementById('poh-os-text')?.value || '';
     const PHX_IDS = ['phx-allergy','phx-diabetes_mellit','phx-hypertension','phx-heart_disease__','phx-asthma___copd','phx-headache___migr','phx-thyroid_disease','phx-renal_disease','phx-previous_surger','phx-bleeding_disord'];
@@ -14266,6 +14593,7 @@ function saveVisit(dept) {
     });
     visit.advice = document.getElementById('rx-advice-text')?.value || '';
   } else if(dept === 'obg') {
+    const obgCheckboxIds = ['obg-anc-booking','obg-anc-warning','obg-anc-highrisk','obg-anc-fetal','obg-gyn-aub','obg-gyn-discharge','obg-gyn-pain','obg-gyn-menopause','obg-inf-ovulatory','obg-inf-tubal','obg-inf-endo','obg-inf-male','obg-redflag-bleeding','obg-redflag-leak','obg-redflag-headache','obg-redflag-pain','obg-redflag-fever','obg-redflag-decreasedfm','obg-redflag-swelling','obg-redflag-convulsions','obg-hr-prevlscs','obg-hr-gdm','obg-hr-pih','obg-hr-iugr','obg-hr-multiple','obg-hr-rhneg','obg-hr-placenta','obg-hr-anemia','obg-fetal-growthlag','obg-fetal-malpresentation','obg-fetal-lowliquor','obg-fetal-postdates','obg-aub-clots','obg-aub-intermenstrual','obg-aub-postcoital','obg-aub-anemia','obg-vag-pruritus','obg-vag-foul','obg-vag-dyspareunia','obg-vag-pidrisk','obg-pain-cyclical','obg-pain-severe','obg-pain-bowel','obg-pain-infertility','obg-inf-coital','obg-inf-pastpid','obg-inf-priorsurgery','obg-inf-galactorrhoea','obg-inf-hirsutism','obg-inf-maleabn','obg-inf-lowreserve','obg-inf-rpl'];
     visit.lmp = obgVal('obg-lmp');
     visit.edd = document.getElementById('obg-edd')?.textContent || '';
     visit.ga = document.getElementById('obg-ga')?.textContent || '';
@@ -14319,7 +14647,14 @@ function saveVisit(dept) {
     visit.nextReview = obgVal('obg-next-review');
     visit.followupPlan = obgVal('obg-followup-plan');
     visit.investigationChecklist = [...document.querySelectorAll('.obg-lab:checked')].map(x => x.value);
-    visit.presumptiveDx = computeObgPresumptiveDx();
+    obgCheckboxIds.forEach(id => { visit[id] = obgChecked(id); });
+    const obgGuidance = computeObgGuidance();
+    visit.presumptiveDx = obgGuidance.diagnoses;
+    visit.askChecklist = obgGuidance.ask;
+    visit.lookForChecklist = obgGuidance.lookFor;
+    visit.planInvestigations = obgGuidance.investigations;
+    visit.planManagement = obgGuidance.management;
+    visit.planProcedures = obgGuidance.procedures;
     visit.notes = [visit.ancNotes, visit.gynNotes, visit.infertilityNotes].filter(Boolean).join(' | ');
     visit.rx = JSON.parse(JSON.stringify(RX_DRUGS || []));
   } else if(dept === 'psych') {
@@ -14337,9 +14672,18 @@ function saveVisit(dept) {
     visit.psychTherapy = guidance.therapy;
     visit.rx = JSON.parse(JSON.stringify(RX_DRUGS || []));
   } else if(dept === 'skin') {
-    visit.chiefComplaint = document.querySelector('#skin-hx textarea')?.value || '';
-    visit.exam = document.querySelector('#skin-exam textarea')?.value || '';
+    ['skin-chief','skin-duration','skin-site','skin-fit','skin-primary-dx','skin-secondary-dx','skin-routine','skin-medical','skin-hormonal','skin-lesion','skin-secondary-change','skin-distribution','skin-configuration','skin-hair','skin-nail','skin-dermoscopy','skin-cosm-acne-grade','skin-cosm-sensitivity','skin-cosm-pih','skin-cosm-isotret','skin-cosm-tan','skin-cosm-preg']
+      .forEach(id => { visit[id] = document.getElementById(id)?.value || ''; });
+    ['skin-cosm-melasma','skin-cosm-acne','skin-cosm-scar','skin-cosm-ageing','skin-cosm-sensitive','skin-cosm-hair']
+      .forEach(id => { visit[id] = !!document.getElementById(id)?.checked; });
+    const skinGuidance = computeSkinGuidance();
+    visit.chiefComplaint = document.getElementById('skin-chief')?.value || '';
+    visit.exam = document.getElementById('skin-dermoscopy')?.value || '';
     visit.procedures = document.querySelector('#skin-procedures textarea')?.value || '';
+    visit.skinPresumptive = skinGuidance.diagnoses;
+    visit.skinInvestigations = skinGuidance.investigations;
+    visit.skinPlan = skinGuidance.management;
+    visit.skinProcedural = skinGuidance.procedures;
     visit.rx = JSON.parse(JSON.stringify(RX_DRUGS || []));
   }
   if(typeof fbSet !== 'function') { showToast('Save not available (offline)', 'w'); return; }
@@ -14359,6 +14703,7 @@ function saveVisit(dept) {
       if(typeof loadPastVisits === 'function') loadPastVisits(bmhId, dept);
       renderCurrentPatientInvestigationUploads && renderCurrentPatientInvestigationUploads(Array.isArray(visit.investigations) ? visit.investigations : []);
       renderOphthoRecap && renderOphthoRecap();
+      renderSkinRail && renderSkinRail();
     })
     .catch(e => showToast('Save failed: ' + e.message, 'w'));
 }
@@ -14409,9 +14754,96 @@ function renderOphthoRecap() {
     el.innerHTML = '<div style="padding:10px;color:var(--g1);font-size:11px">Open a patient to see quick recap.</div>';
     return;
   }
+  const numVal = (id, fallback) => {
+    const raw = document.getElementById(id)?.value;
+    const val = Number(raw);
+    if(Number.isFinite(val) && raw !== '') return val;
+    return Number.isFinite(Number(fallback)) ? Number(fallback) : null;
+  };
+  const seFrom = (sphId, cylId, sphFallback, cylFallback) => {
+    const sph = numVal(sphId, sphFallback);
+    const cyl = numVal(cylId, cylFallback) || 0;
+    if(!Number.isFinite(sph)) return null;
+    return sph + (cyl / 2);
+  };
+  const computeOphthoGuidance = () => {
+    const dx = [];
+    const inv = [];
+    const followup = [];
+    const systemic = [];
+    const refractive = [];
+    const cc = [...document.querySelectorAll('.cc-inp')].map(e => e.value.trim()).filter(Boolean).join(' ').toLowerCase();
+    const phx = (id) => document.getElementById(id)?.value || pt.lastVisit?.[id] || '';
+    const hasDm = phx('phx-diabetes_mellit') === 'Y';
+    const hasHtn = phx('phx-hypertension') === 'Y';
+    if(hasDm) systemic.push('Diabetes mellitus');
+    if(hasHtn) systemic.push('Hypertension');
+    const iopOd = numVal('iop-gat-od', pt.lastVisit?.iopGatOD);
+    const iopOs = numVal('iop-gat-os', pt.lastVisit?.iopGatOS);
+    if((iopOd && iopOd > 21) || (iopOs && iopOs > 21)) {
+      dx.push('Glaucoma / ocular hypertension work-up needed');
+      inv.push('Repeat applanation IOP, gonioscopy, pachymetry, optic disc + RNFL/OCT, and visual fields');
+      followup.push('Glaucoma review within 1-4 weeks depending on pressure and disc status');
+    }
+    if(/decreased vision|blur|cataract/.test(cc)) {
+      dx.push('Media opacity / refractive or retinal cause of visual loss to localize');
+      inv.push('Dilated fundus evaluation and biometry if cataract surgery planning');
+      followup.push('Procedure counselling after cause and visual potential are documented');
+    }
+    if(/pain|redness|photophobia/.test(cc)) {
+      dx.push('Painful red eye pathway');
+      inv.push('Check cornea/anterior chamber, IOP, staining, and fundus if view permits');
+      followup.push('Urgent same-day review if pain/redness is significant');
+    }
+    if(hasDm) {
+      inv.push('Dilated retinal examination, OCT macula if vision reduced, and systemic sugar optimization advice');
+      followup.push('Retina / diabetic eye screening interval based on retinopathy status');
+    }
+    const refrAge = numVal('refr-age', pt.age);
+    const topo = document.getElementById('refr-topo')?.value || pt.lastVisit?.['refr-topo'] || '';
+    const dry = document.getElementById('refr-dryeye')?.value || pt.lastVisit?.['refr-dryeye'] || '';
+    const preg = document.getElementById('refr-preg')?.value || pt.lastVisit?.['refr-preg'] || '';
+    const autoimmune = document.getElementById('refr-autoimmune')?.value || pt.lastVisit?.['refr-autoimmune'] || '';
+    const kc = document.getElementById('refr-kc')?.value || pt.lastVisit?.['refr-kc'] || '';
+    const allergy = document.getElementById('refr-allergy')?.value || pt.lastVisit?.['refr-allergy'] || '';
+    const stable = document.getElementById('refr-stable')?.value || pt.lastVisit?.['refr-stable'] || '';
+    const occupation = document.getElementById('refr-occupation')?.value || pt.lastVisit?.['refr-occupation'] || '';
+    const flap = numVal('refr-flap', pt.lastVisit?.['refr-flap'] || 110) || 110;
+    const pachyOd = numVal('refr-od-pachy', pt.lastVisit?.['refr-od-pachy']) ?? numVal('pachy-od', pt.lastVisit?.pachyOD);
+    const pachyOs = numVal('refr-os-pachy', pt.lastVisit?.['refr-os-pachy']) ?? numVal('pachy-os', pt.lastVisit?.pachyOS);
+    const seOd = seFrom('subj-od-sph','subj-od-cyl', pt.lastVisit?.subjODsph, pt.lastVisit?.subjODcyl);
+    const seOs = seFrom('subj-os-sph','subj-os-cyl', pt.lastVisit?.subjOSsph, pt.lastVisit?.subjOScyl);
+    const ablationFor = (se) => Number.isFinite(se) ? Math.max(0, Math.round(Math.abs(se) * 14)) : null;
+    const rsbFor = (pachy, se) => Number.isFinite(pachy) && Number.isFinite(se) ? Math.round(pachy - flap - ablationFor(se)) : null;
+    const rsbOd = rsbFor(pachyOd, seOd);
+    const rsbOs = rsbFor(pachyOs, seOs);
+    const rsbNodes = { od: document.getElementById('refr-od-rsb'), os: document.getElementById('refr-os-rsb') };
+    if(rsbNodes.od) rsbNodes.od.textContent = Number.isFinite(rsbOd) ? `${rsbOd} µm estimated residual bed` : 'Need pachymetry + subjective refraction';
+    if(rsbNodes.os) rsbNodes.os.textContent = Number.isFinite(rsbOs) ? `${rsbOs} µm estimated residual bed` : 'Need pachymetry + subjective refraction';
+    if(topo || dry || stable || pachyOd || pachyOs) {
+      inv.push('For refractive work-up: stable refraction, topography/tomography, pachymetry, ocular surface review, and dilated fundus exam');
+      if(refrAge != null && refrAge < 18) refractive.push('Not eligible yet because age is below standard refractive surgery threshold');
+      else if(/Abnormal/.test(topo) || /Known KC|ectasia/.test(kc)) refractive.push('Avoid corneal laser now; ectasia / keratoconus risk needs specialist review');
+      else if(/Yes/.test(preg) || /Yes/.test(autoimmune)) refractive.push('Defer refractive surgery until systemic status is suitable and refraction is stable');
+      else if(/No \/ changing/.test(stable)) refractive.push('Defer surgery until refraction is stable for at least 1 year');
+      else if(/Severe/.test(dry) || /Active VKC/.test(allergy)) refractive.push('Treat ocular surface / allergy first before deciding refractive procedure');
+      else if((Number.isFinite(rsbOd) && rsbOd < 300) || (Number.isFinite(rsbOs) && rsbOs < 300)) refractive.push('Corneal laser is not preferred with low estimated residual bed; consider alternative like ICL opinion');
+      else if(/Moderate/.test(dry) || /Contact sports/.test(occupation)) refractive.push('SMILE Pro is generally preferred if topography is normal and thickness is adequate');
+      else if((Number.isFinite(rsbOd) && rsbOd < 320) || (Number.isFinite(rsbOs) && rsbOs < 320)) refractive.push('PRK / surface ablation may be safer than flap-based surgery if topography is normal');
+      else refractive.push('FemtoLASIK or SMILE Pro likely suitable if tomography, tear film, and counselling remain favorable');
+    }
+    return {
+      diagnoses: Array.from(new Set(dx)).slice(0, 4),
+      investigations: Array.from(new Set(inv)).slice(0, 4),
+      followup: Array.from(new Set(followup)).slice(0, 4),
+      systemic: Array.from(new Set(systemic)).slice(0, 4),
+      refractive: Array.from(new Set(refractive)).slice(0, 3)
+    };
+  };
   const txns = (TRANSACTIONS || []).filter(t => t.bmhId === pt.bmhId).slice().sort((a,b)=>new Date(b.date || 0) - new Date(a.date || 0));
   const prs = (PAY_REQUESTS || []).filter(r => r.bmhId === pt.bmhId).slice().sort((a,b)=>new Date(b.date || 0) - new Date(a.date || 0));
   const renderWithVisits = (visitsObj) => {
+    const g = computeOphthoGuidance();
     const visits = Object.values(visitsObj || {})
       .filter(v => v && v.dept === 'ophtho')
       .sort((a,b)=>String(b.date || '').localeCompare(String(a.date || '')))
@@ -14443,6 +14875,22 @@ function renderOphthoRecap() {
     el.innerHTML = `<div style="position:sticky;top:12px;width:100%">
       <div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;letter-spacing:.45px;margin-bottom:6px">Quick recap</div>
       <div style="max-height:70vh;overflow:auto;padding-right:4px">
+        <div style="padding:9px 10px;border-radius:10px;background:#eef7ff;margin-bottom:8px;border:1px solid rgba(26,60,110,.12)">
+          <div style="font-size:10px;font-weight:900;color:var(--blue);text-transform:uppercase;margin-bottom:5px">Diagnostic evaluation</div>
+          <div style="font-size:11px;line-height:1.5">${g.diagnoses.join('<br>') || 'Enter symptoms, IOP, fundus, and systemic history to generate guidance.'}</div>
+        </div>
+        <div style="padding:9px 10px;border-radius:10px;background:#eefaf1;margin-bottom:8px;border:1px solid rgba(26,140,60,.14)">
+          <div style="font-size:10px;font-weight:900;color:#1a8c3c;text-transform:uppercase;margin-bottom:5px">Investigations & follow-up</div>
+          <div style="font-size:11px;line-height:1.5"><b>Investigations:</b><br>${g.investigations.join('<br>') || 'Biometry / imaging as clinically indicated'}<br><br><b>Follow-up:</b><br>${g.followup.join('<br>') || 'Follow-up depends on diagnosis, IOP, retina, and surgical planning.'}</div>
+        </div>
+        <div style="padding:9px 10px;border-radius:10px;background:#fff8e8;margin-bottom:8px;border:1px solid rgba(212,160,23,.24)">
+          <div style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;margin-bottom:5px">Refractive suitability</div>
+          <div style="font-size:11px;line-height:1.5">${g.refractive.join('<br>') || 'Fill the refractive checklist in Biometry to estimate residual bed and preferred procedure.'}</div>
+        </div>
+        <div style="padding:9px 10px;border-radius:10px;background:var(--g6);margin-bottom:8px">
+          <div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;margin-bottom:5px">Systemic history</div>
+          <div style="font-size:11px;line-height:1.45">${g.systemic.join(' • ') || 'No major systemic flags entered yet.'}</div>
+        </div>
         ${visitHtml}
         <details style="margin-top:8px;background:#fff;border:1px solid var(--g5);border-radius:10px;padding:8px 10px">
           <summary style="cursor:pointer;font-size:11px;font-weight:800;color:var(--bmh-blue)">Payments & billing</summary>
