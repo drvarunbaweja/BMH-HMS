@@ -872,7 +872,7 @@ function nav(id, el) {
   else if(pageKey==='consents')        { renderConsent && renderConsent(); updateConsentPatientHeader(); refreshConsentLibrary && refreshConsentLibrary(); }
   else if(pageKey==='ophtho')          { initQR && initQR(); renderRxDrugs && renderRxDrugs(); buildRefractionDropdowns && buildRefractionDropdowns(); renderOphthoPayList && renderOphthoPayList(); typeof initDiagnosisRowsIfEmpty==='function'&&initDiagnosisRowsIfEmpty(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); }
   else if(pageKey==='obg')             { renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); initObgSelects && initObgSelects(); toggleObgWorkflow && toggleObgWorkflow(); populateObgPatientFromCurrent && populateObgPatientFromCurrent(); updateObgComputedFields && updateObgComputedFields(); }
-  else if(pageKey==='psych')           { renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); }
+  else if(pageKey==='psych')           { renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); togglePsychTracks && togglePsychTracks(); renderPsychRail && renderPsychRail(); }
   else if(pageKey==='skin')            { renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); }
   else if(pageKey==='reception')       { renderReceptionPage && renderReceptionPage(); setTimeout(()=>{renderCollectionDashboard&&renderCollectionDashboard();loadCustomPurposes&&loadCustomPurposes();},100); }
   else if(pageKey==='lab')             { initLab && initLab(); renderLabOrders && renderLabOrders(); }
@@ -1427,6 +1427,8 @@ function openPatient(bmhId) {
     populateOphthoForm(p.lastVisit);
   } else if(p.dept === 'obg') {
     populateObgForm && populateObgForm(p.lastVisit || {});
+  } else if(p.dept === 'psych') {
+    populatePsychForm && populatePsychForm(p.lastVisit || {});
   }
 
   // ── 5. Load past visits list + try to reload today's visit ─────
@@ -1435,6 +1437,7 @@ function openPatient(bmhId) {
     if(p.dept === 'ophtho') loadTodayVisitIntoForm(p.bmhId);
     renderCurrentPatientInvestigationUploads && renderCurrentPatientInvestigationUploads();
     renderOphthoRecap && renderOphthoRecap();
+    if(p.dept === 'psych') renderPsychRail && renderPsychRail();
   }, 300);
 }
 
@@ -2629,7 +2632,7 @@ function ptab(el, cId) {
     ptabsEl.querySelectorAll('.ptab').forEach(t => t.classList.remove('active'));
     const container = ptabsEl.parentElement;
     if (container) {
-      container.querySelectorAll(':scope > .tab-content').forEach(tc => tc.classList.remove('active'));
+      container.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
     }
   }
   el.classList.add('active');
@@ -3144,6 +3147,156 @@ function updateScaleScore(type){
   }
 }
 
+function psychVal(id) {
+  return document.getElementById(id)?.value?.trim?.() || '';
+}
+function togglePsychTracks() {
+  const map = {
+    'psych-track-addiction':'psych-panel-addiction',
+    'psych-track-stroke':'psych-panel-stroke',
+    'psych-track-epilepsy':'psych-panel-epilepsy',
+    'psych-track-child':'psych-panel-child',
+    'psych-track-adult':'psych-panel-adult'
+  };
+  Object.entries(map).forEach(([chkId, panelId]) => {
+    const chk = document.getElementById(chkId);
+    const panel = document.getElementById(panelId);
+    if(panel) panel.style.display = chk?.checked ? '' : 'none';
+  });
+}
+function computePsychGuidance() {
+  const tags = [];
+  const inv = [];
+  const tx = [];
+  const therapy = [];
+  const syndrome = psychVal('psych-core-syndrome');
+  const risk = psychVal('psych-risk');
+  const sleep = psychVal('psych-sleep');
+  const appetite = psychVal('psych-appetite');
+  const psychosis = psychVal('psych-psychosis');
+  const polarity = psychVal('psych-polarity');
+  const anxiety = psychVal('psych-anxiety');
+  const suicidality = psychVal('psych-suicidality');
+  if(/Depressive/.test(syndrome) || /Very low|low/i.test(psychVal('psych-chief'))) {
+    tags.push('Depressive disorder likely');
+    inv.push('PHQ-9, CBC, TSH, B12 / Vit D if clinically indicated');
+    tx.push('SSRI / SNRI if not bipolar, sleep hygiene, safety review');
+    therapy.push('CBT / behavioural activation');
+  }
+  if(/Anxiety|panic/i.test(syndrome) || /Panic/.test(anxiety)) {
+    tags.push('Anxiety spectrum disorder likely');
+    inv.push('GAD-7; rule out thyroid / substance contributors');
+    tx.push('SSRI first-line, short-term benzodiazepine only if needed');
+    therapy.push('CBT, relaxation, breathing retraining');
+  }
+  if(/Psychosis/.test(syndrome) || /Hallucinations|Delusions|Both/.test(psychosis)) {
+    tags.push('Psychotic disorder to rule out');
+    inv.push('CBC, LFT, RFT, glucose, thyroid, urine toxicology; neuroimaging if atypical');
+    tx.push('Antipsychotic initiation / urgent stabilization if risk present');
+    therapy.push('Family psychoeducation, social support');
+  }
+  if(/Manic/.test(syndrome) || /Manic|Mixed/.test(polarity)) {
+    tags.push('Bipolar spectrum likely');
+    inv.push('CBC, LFT, RFT, thyroid before mood stabilizer');
+    tx.push('Mood stabilizer / atypical antipsychotic review');
+    therapy.push('Sleep-wake stabilization, family education');
+  }
+  if(document.getElementById('psych-track-addiction')?.checked) {
+    tags.push('Substance use disorder screen positive');
+    inv.push('LFT, RFT, viral markers / toxicology as indicated');
+    tx.push('Motivational enhancement, withdrawal-risk assessment, de-addiction plan');
+    therapy.push('Relapse prevention, group support');
+  }
+  if(document.getElementById('psych-track-stroke')?.checked) {
+    tags.push('Neuropsychiatric sequelae of stroke to evaluate');
+    inv.push('MRI / CT review, cognition screen, vascular risk profile');
+    tx.push('Secondary prevention review, mood / cognition management');
+    therapy.push('Neuro-rehab, caregiver counselling');
+  }
+  if(document.getElementById('psych-track-epilepsy')?.checked) {
+    tags.push('Epilepsy follow-up / breakthrough seizure review');
+    inv.push('Drug levels if available, EEG / MRI if indicated');
+    tx.push('ASM adherence review and trigger avoidance');
+    therapy.push('Seizure safety counselling');
+  }
+  if(document.getElementById('psych-track-child')?.checked) {
+    tags.push('Child / adolescent mental health evaluation');
+    inv.push('Developmental history, school feedback, Vanderbilt / ASD screen as indicated');
+    tx.push('Parent guidance and multimodal management');
+    therapy.push('Behaviour therapy, remedial input, parent training');
+  }
+  if(/Self-harm|attempt|Plan/.test(suicidality) || /Violence/.test(risk)) {
+    tags.push('High-risk safety assessment required');
+    tx.unshift('Do not leave unattended; consider urgent referral / admission');
+  }
+  if(sleep === 'Reduced need for sleep') tags.push('Mania / hypomania should be ruled out');
+  if(appetite === 'Reduced' && syndrome.includes('Depressive')) tags.push('Biological symptoms support depressive syndrome');
+  return {
+    tags: Array.from(new Set(tags)).slice(0, 4),
+    investigations: Array.from(new Set(inv)).slice(0, 4),
+    plan: Array.from(new Set(tx)).slice(0, 4),
+    therapy: Array.from(new Set(therapy)).slice(0, 4)
+  };
+}
+function renderPsychRail() {
+  const el = document.getElementById('psych-summary-content');
+  if(!el) return;
+  togglePsychTracks();
+  const pt = window.CURRENT_PATIENT || {};
+  if(!pt.bmhId) {
+    el.textContent = 'Open a patient to view neuropsychiatry guidance, past history, payments, and pending requests.';
+    return;
+  }
+  const g = computePsychGuidance();
+  const presEl = document.getElementById('psych-presumptive-chip');
+  if(presEl) presEl.textContent = g.tags[0] || 'Clinical review';
+  const riskChip = document.getElementById('psych-risk-chip');
+  if(riskChip) riskChip.textContent = /High-risk/.test(g.tags.join(' ')) ? 'High' : (psychVal('psych-risk') || 'Low');
+  const planChip = document.getElementById('psych-plan-chip');
+  if(planChip) planChip.textContent = g.plan[0] || 'Clinical review';
+  const invChip = document.getElementById('psych-invest-chip');
+  if(invChip) invChip.textContent = g.investigations[0] || 'As indicated';
+  const txns = (TRANSACTIONS || []).filter(t => t.bmhId === pt.bmhId).slice().sort((a,b)=>new Date(b.date||0)-new Date(a.date||0)).slice(0,8);
+  const reqs = (PAY_REQUESTS || []).filter(r => r.bmhId === pt.bmhId).slice().sort((a,b)=>new Date(b.date||0)-new Date(a.date||0)).slice(0,8);
+  const payHtml = txns.length ? txns.map(t => `<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--g5)"><div><div style="font-weight:800">${t.service || 'Payment'}</div><div style="font-size:10px;color:var(--g1)">${obgFmtDate(t.date)} · ${t.mode || '—'}</div></div><div style="font-weight:900;color:var(--bmh-blue)">₹${Number(t.amount||0).toLocaleString('en-IN')}</div></div>`).join('') : '<div style="font-size:10.5px;color:var(--g1)">No payments recorded.</div>';
+  const dueHtml = reqs.length ? reqs.map(r => `<div style="padding:7px 0;border-bottom:1px solid var(--g5)"><div style="font-weight:800">${r.for || 'Request'}</div><div style="display:flex;justify-content:space-between;gap:8px;font-size:10px;color:var(--g1)"><span>${obgFmtDate(r.date)}</span><span>${r.status || 'pending'}</span></div></div>`).join('') : '<div style="font-size:10.5px;color:var(--g1)">No pending reception requests.</div>';
+  el.innerHTML = `
+    <div style="padding:9px 10px;border-radius:10px;background:var(--orange-lt);margin-bottom:8px">
+      <div style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;margin-bottom:5px">Presumptive diagnosis</div>
+      <div style="font-size:11px;font-weight:800;color:#8a4200;line-height:1.45">${g.tags.join(' • ') || 'Awaiting structured inputs'}</div>
+    </div>
+    <div style="padding:9px 10px;border-radius:10px;background:var(--blue-lt);margin-bottom:8px">
+      <div style="font-size:10px;font-weight:900;color:var(--blue);text-transform:uppercase;margin-bottom:5px">Initial management</div>
+      <div style="font-size:11px;line-height:1.5">${g.plan.join('<br>') || 'Clinical interview, MSE, and safety review first.'}</div>
+    </div>
+    <div style="padding:9px 10px;border-radius:10px;background:var(--green-lt);margin-bottom:8px">
+      <div style="font-size:10px;font-weight:900;color:#1a8c3c;text-transform:uppercase;margin-bottom:5px">Investigations & therapies</div>
+      <div style="font-size:11px;line-height:1.5"><b>Investigations:</b><br>${g.investigations.join('<br>') || 'As clinically indicated'}<br><br><b>Therapies:</b><br>${g.therapy.join('<br>') || 'Psychoeducation and supportive therapy'}</div>
+    </div>
+    <div style="padding:9px 10px;border-radius:10px;background:var(--g6);margin-bottom:8px">
+      <div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;margin-bottom:5px">Past / systemic</div>
+      <div style="font-size:11px;line-height:1.45"><b>Family:</b> ${psychVal('psych-family') || '—'}<br><b>Past psych:</b> ${psychVal('psych-pastpsych') || '—'}<br><b>Medical:</b> ${psychVal('psych-medical') || psychVal('psych-systemic') || '—'}</div>
+    </div>
+    <details open style="margin-bottom:8px;background:#fff;border:1px solid var(--g5);border-radius:10px;padding:8px 10px">
+      <summary style="font-size:11px;font-weight:800;color:var(--bmh-blue);cursor:pointer">Payments made</summary>
+      <div style="margin-top:8px">${payHtml}</div>
+    </details>
+    <details open style="background:#fff;border:1px solid var(--g5);border-radius:10px;padding:8px 10px">
+      <summary style="font-size:11px;font-weight:800;color:var(--bmh-blue);cursor:pointer">Payments / requests pending</summary>
+      <div style="margin-top:8px">${dueHtml}</div>
+    </details>`;
+}
+function populatePsychForm(visit) {
+  const data = visit || window.CURRENT_PATIENT?.lastVisit || {};
+  const ids = ['psych-chief','psych-duration','psych-onset','psych-trigger','psych-core-syndrome','psych-risk','psych-systemic','psych-sleep','psych-appetite','psych-function','psych-diagnosis','psych-family','psych-personal','psych-pastpsych','psych-medical','psych-substance','psych-suicidality','psych-anxiety','psych-psychosis','psych-polarity','psych-addiction-substance','psych-addiction-pattern','psych-addiction-lastuse','psych-addiction-readiness','psych-stroke-deficit','psych-stroke-timing','psych-stroke-mood','psych-epilepsy-type','psych-epilepsy-last','psych-epilepsy-adherence','psych-epilepsy-trigger','psych-child-concern','psych-child-development','psych-child-school','psych-child-parent','psych-appearance','psych-behaviour','psych-psychomotor','psych-eyecontact','psych-speech-rate','psych-speech-volume','psych-speech-tone','psych-subjective-mood','psych-affect','psych-thought-form','psych-thought-content','psych-hallucinations','psych-orientation','psych-memory','psych-insight','psych-judgement'];
+  ids.forEach(id => { const el = document.getElementById(id); if(el && data[id] != null) el.value = data[id]; });
+  ['psych-track-addiction','psych-track-stroke','psych-track-epilepsy','psych-track-child','psych-track-adult'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el && data[id] != null) el.checked = !!data[id];
+  });
+  togglePsychTracks();
+  renderPsychRail();
+}
 function printPsychRx(){printPsychSheet();}
 
 // ═══ SKIN ═══
@@ -5991,6 +6144,8 @@ window.addEventListener('DOMContentLoaded', function() {
   try { toggleObgWorkflow && toggleObgWorkflow(); } catch(e) {}
   try { renderObgInvestigationSummary && renderObgInvestigationSummary(); } catch(e) {}
   try { updateObgComputedFields && updateObgComputedFields(); } catch(e) {}
+  try { togglePsychTracks && togglePsychTracks(); } catch(e) {}
+  try { renderPsychRail && renderPsychRail(); } catch(e) {}
   try { populateSelectors && populateSelectors(); } catch(e) {}
   const aptInp = document.getElementById('apt-date-inp');
   if(aptInp) aptInp.value = new Date().toISOString().split('T')[0];
@@ -6014,6 +6169,10 @@ window.addEventListener('DOMContentLoaded', function() {
   document.querySelectorAll('.obg-lab').forEach(box => box.addEventListener('change', renderObgInvestigationSummary));
   ['obg-risk','obg-main-complaint','obg-systemic','obg-bp','obg-urine-protein','obg-fetal-movement','obg-warning','obg-cycle','obg-discharge','obg-pelvic-pain','obg-clinical-impression','obg-infertility-type','obg-ovulation','obg-tubal-risk','obg-semen']
     .forEach(id => document.getElementById(id)?.addEventListener('change', updateObgComputedFields));
+  ['psych-chief','psych-duration','psych-onset','psych-trigger','psych-core-syndrome','psych-risk','psych-systemic','psych-sleep','psych-appetite','psych-function','psych-diagnosis','psych-family','psych-personal','psych-pastpsych','psych-medical','psych-substance','psych-suicidality','psych-anxiety','psych-psychosis','psych-polarity','psych-addiction-substance','psych-addiction-pattern','psych-addiction-lastuse','psych-addiction-readiness','psych-stroke-deficit','psych-stroke-timing','psych-stroke-mood','psych-epilepsy-type','psych-epilepsy-last','psych-epilepsy-adherence','psych-epilepsy-trigger','psych-child-concern','psych-child-development','psych-child-school','psych-child-parent','psych-appearance','psych-behaviour','psych-psychomotor','psych-eyecontact','psych-speech-rate','psych-speech-volume','psych-speech-tone','psych-subjective-mood','psych-affect','psych-thought-form','psych-thought-content','psych-hallucinations','psych-orientation','psych-memory','psych-insight','psych-judgement']
+    .forEach(id => document.getElementById(id)?.addEventListener('change', renderPsychRail));
+  ['psych-chief','psych-trigger','psych-family','psych-personal','psych-pastpsych','psych-medical','psych-substance','psych-child-parent','psych-speech-tone','psych-subjective-mood']
+    .forEach(id => document.getElementById(id)?.addEventListener('input', renderPsychRail));
   // Set today's date on all date fields
   try { updateRcDr && updateRcDr(); } catch(e) {}
 });
@@ -14161,9 +14320,18 @@ function saveVisit(dept) {
     visit.notes = [visit.ancNotes, visit.gynNotes, visit.infertilityNotes].filter(Boolean).join(' | ');
     visit.rx = JSON.parse(JSON.stringify(RX_DRUGS || []));
   } else if(dept === 'psych') {
-    visit.chiefComplaint = document.querySelector('#psych-hx textarea')?.value || '';
-    visit.mse = document.querySelector('#psych-mse textarea')?.value || '';
+    ['psych-chief','psych-duration','psych-onset','psych-trigger','psych-core-syndrome','psych-risk','psych-systemic','psych-sleep','psych-appetite','psych-function','psych-diagnosis','psych-family','psych-personal','psych-pastpsych','psych-medical','psych-substance','psych-suicidality','psych-anxiety','psych-psychosis','psych-polarity','psych-addiction-substance','psych-addiction-pattern','psych-addiction-lastuse','psych-addiction-readiness','psych-stroke-deficit','psych-stroke-timing','psych-stroke-mood','psych-epilepsy-type','psych-epilepsy-last','psych-epilepsy-adherence','psych-epilepsy-trigger','psych-child-concern','psych-child-development','psych-child-school','psych-child-parent','psych-appearance','psych-behaviour','psych-psychomotor','psych-eyecontact','psych-speech-rate','psych-speech-volume','psych-speech-tone','psych-subjective-mood','psych-affect','psych-thought-form','psych-thought-content','psych-hallucinations','psych-orientation','psych-memory','psych-insight','psych-judgement']
+      .forEach(id => { visit[id] = psychVal(id); });
+    ['psych-track-addiction','psych-track-stroke','psych-track-epilepsy','psych-track-child','psych-track-adult']
+      .forEach(id => { visit[id] = !!document.getElementById(id)?.checked; });
+    const guidance = computePsychGuidance();
+    visit.chiefComplaint = psychVal('psych-chief');
+    visit.mse = [psychVal('psych-affect'), psychVal('psych-thought-content'), psychVal('psych-insight')].filter(Boolean).join(' | ');
     visit.notes = document.querySelector('#psych-notes textarea')?.value || '';
+    visit.psychPresumptive = guidance.tags;
+    visit.psychPlan = guidance.plan;
+    visit.psychInvestigations = guidance.investigations;
+    visit.psychTherapy = guidance.therapy;
     visit.rx = JSON.parse(JSON.stringify(RX_DRUGS || []));
   } else if(dept === 'skin') {
     visit.chiefComplaint = document.querySelector('#skin-hx textarea')?.value || '';
