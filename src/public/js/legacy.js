@@ -880,6 +880,7 @@ function nav(id, el) {
   else if(pageKey==='ot')              { renderOTList && renderOTList(); setTimeout(()=>{ const w=document.getElementById('who-signin-list'); const t=document.getElementById('ot-t-in'); if(w) w.style.display=''; if(t&&t.closest('.card')) t.closest('.card').style.display=''; },100); }
   else if(pageKey==='inventory')       initInventory && initInventory();
   else if(pageKey==='billing')         renderBillingPage && renderBillingPage();
+  else if(pageKey==='tpa')             renderTpaPage && renderTpaPage();
   else if(pageKey==='payments')        renderPaymentsPage && renderPaymentsPage();
   else if(pageKey==='reports')         renderReports && renderReports();
   else if(pageKey==='brochures')       renderBrochures && renderBrochures();
@@ -3540,7 +3541,8 @@ function bmhRenderQuickChargePanels() {
   if (!el) return;
   const centre = getEffectiveCentre();
   const groups = bmhQuickChargeGroups();
-  const q = String(document.getElementById('bmh-charge-search')?.value || '').trim().toLowerCase();
+  const rawQ = String(document.getElementById('bmh-charge-search')?.value || '').trim().toLowerCase();
+  const q = rawQ.length >= 2 ? rawQ : '';
   const searchMatches = q ? (CHARGES_DATA || []).filter(function (item) {
     return String(item.name || '').toLowerCase().includes(q);
   }).slice(0, 24) : [];
@@ -3564,12 +3566,46 @@ function bmhRenderQuickChargePanels() {
 }
 function bmhFindChargeAndAdd() {
   const q = String(document.getElementById('bmh-charge-search')?.value || '').trim().toLowerCase();
-  if (!q) { showToast('Type a procedure / investigation / room charge', 'w'); return; }
+  if (q.length < 2) { showToast('Type at least 2 letters', 'w'); return; }
   const centre = getEffectiveCentre();
   const item = (CHARGES_DATA || []).find(function (c) { return String(c.name || '').toLowerCase().includes(q); });
   if (!item) { showToast('No matching charge found', 'w'); return; }
   const amount = item[centre?.toLowerCase?.()] ?? item[centre] ?? item.chd ?? 0;
   bmhQuickAddCharge(item.name, amount, inferChargeCategoryFromService(item.name));
+}
+function renderTpaPage() {
+  const body = document.getElementById('tpa-case-body');
+  if (!body) return;
+  const claims = (PAY_REQUESTS || []).filter(function (r) {
+    return /Insurance|TPA|PMJAY|CGHS|ECHS/i.test(String(r.mode || r.ins || ''));
+  }).sort(function (a, b) { return new Date(b.date || 0) - new Date(a.date || 0); });
+  const totalClaimed = claims.reduce(function (s, r) { return s + (Number(r.amount) || 0); }, 0);
+  const received = (TRANSACTIONS || []).filter(function (t) {
+    return /Insurance|TPA|PMJAY|CGHS|ECHS/i.test(String(t.mode || t.ins || ''));
+  }).reduce(function (s, t) { return s + (Number(t.amount) || 0); }, 0);
+  const pending = claims.filter(function (r) { return r.status === 'pending'; }).reduce(function (s, r) { return s + (Number(r.amount) || 0); }, 0);
+  const rejected = claims.filter(function (r) { return r.status === 'rejected'; }).reduce(function (s, r) { return s + (Number(r.amount) || 0); }, 0);
+  const set = function (id, val) { const el = document.getElementById(id); if (el) el.textContent = '₹' + Number(val || 0).toLocaleString('en-IN'); };
+  set('tpa-total-claimed', totalClaimed);
+  set('tpa-total-received', received);
+  set('tpa-total-pending', pending);
+  set('tpa-total-rejected', rejected);
+  body.innerHTML = claims.length ? claims.map(function (r) {
+    const receivedAmt = (TRANSACTIONS || []).filter(function (t) { return t.bmhId === r.bmhId && /Insurance|TPA|PMJAY|CGHS|ECHS/i.test(String(t.mode || t.ins || '')); }).reduce(function (s, t) { return s + (Number(t.amount) || 0); }, 0);
+    const approvedAmt = Math.max(Number(r.approvedAmount) || 0, Number(r.amount) || 0);
+    const pendingAmt = Math.max(0, approvedAmt - receivedAmt);
+    return `<tr>
+      <td><div style="font-weight:800;font-size:12px">${r.patient || '—'}</div><div style="font-family:var(--mono);font-size:9px;color:var(--bmh-teal)">${r.bmhId || '—'}</div></td>
+      <td><span class="badge bd-blue">${r.ins || r.mode || 'Insurance'}</span></td>
+      <td style="font-family:var(--mono);font-size:10px">${r.policy || '—'}</td>
+      <td>${r.for || 'Hospital bill'}</td>
+      <td>₹${(Number(r.amount) || 0).toLocaleString('en-IN')}</td>
+      <td>₹${approvedAmt.toLocaleString('en-IN')}</td>
+      <td>₹${receivedAmt.toLocaleString('en-IN')}</td>
+      <td style="font-weight:900;color:${pendingAmt > 0 ? 'var(--orange)' : 'var(--green)'}">₹${pendingAmt.toLocaleString('en-IN')}</td>
+      <td><span class="badge ${r.status === 'pending' ? 'bd-orange' : r.status === 'rejected' ? 'bd-red' : 'bd-green'}">${r.status || 'pending'}</span></td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="9" style="text-align:center;color:var(--g1);padding:20px">No TPA / cashless cases yet</td></tr>';
 }
 function bmhRemoveChargeLine(bmhId, lineId) {
   const arr = window.BMH_PATIENT_CHARGES[bmhId]; if (!arr) return;
@@ -9074,7 +9110,7 @@ function renderRxDrugs() {
           instruction:plainLine,
           noTopBorder:true
         })}
-        ${taperRows.map((tap, tapIdx)=>medicineRow(d, i, {
+        ${taperRows.map((tap, tapIdx)=>`<div style="margin-top:4px;border-top:1px solid rgba(255,149,0,.28)">${medicineRow(d, i, {
           prefix:`RX_DRUGS[${i}].taperRows[${tapIdx}]`,
           heading:rxDrugTradeName(d) || d.name || '',
           subheading:rxDrugGenericName(d) || '',
@@ -9092,7 +9128,7 @@ function renderRxDrugs() {
           taperBtn:`<button type="button" class="btn btn-xs btn-outline" style="width:100%;font-weight:800;font-size:10px;white-space:nowrap;padding:6px 8px" onclick="addTaperRow(${i}, RX_DRUGS[${i}].taperRows[${tapIdx}].dur || '1 week', ${tapIdx})">Taper</button>`,
           removeBtn:`<button type="button" class="btn btn-xs btn-gray" onclick="clearTaperRow(${i}, ${tapIdx})">✕</button>`,
           instruction:''
-        })).join('')}
+        })}</div>`).join('')}
       </div>`;
     }).join('')}
   </div>`;
