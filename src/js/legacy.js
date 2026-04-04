@@ -8130,13 +8130,13 @@ function renderRxDrugs() {
     const dt = d.drugType || d.type || 'Tablet';
     const eye0 = (d.eye && d.eye[0]) || 'Oral';
     const taperRows = ensureRxTaperRows(d);
+    const plainLine = d.lang&&d.lang[lang] ? String(d.lang[lang]) : '';
     return `<div class="rx-drug-row" style="border-top:${i ? '1px solid var(--g5)' : 'none'};background:#fff">
     <div style="display:grid;grid-template-columns:30px minmax(220px,1.42fr) minmax(90px,.66fr) minmax(104px,.68fr) minmax(136px,.82fr) minmax(108px,.68fr) minmax(190px,.95fr) 96px;gap:0;align-items:stretch;min-width:980px">
       <div style="padding:10px 6px;border-right:1px solid var(--g5);font-size:12px;font-weight:900;color:var(--bmh-blue);display:flex;align-items:flex-start;justify-content:center">${i+1}</div>
       <div style="padding:8px 7px;border-right:1px solid var(--g5)">
         <input value="${String(tr).replace(/"/g,'&quot;')}" onchange="RX_DRUGS[${i}].trade=this.value;RX_DRUGS[${i}].brand=this.value" placeholder="Trade name" style="width:100%;font-size:13px;font-weight:900;border:none;background:transparent;padding:0;box-sizing:border-box">
         <input value="${String(gen).replace(/"/g,'&quot;')}" onchange="RX_DRUGS[${i}].generic=this.value;RX_DRUGS[${i}].name=this.value" placeholder="(Generic name)" style="width:100%;font-size:10.5px;color:var(--g1);font-style:italic;border:none;background:transparent;padding:0;box-sizing:border-box;margin-top:3px">
-        ${d.lang&&d.lang[lang]?`<div style="font-size:9px;color:var(--tx3);margin-top:6px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${d.lang[lang]}</div>`:''}
       </div>
       <div style="padding:8px 7px;border-right:1px solid var(--g5);display:flex;align-items:center"><select onchange="RX_DRUGS[${i}].drugType=this.value;RX_DRUGS[${i}].type=this.value" style="font-size:10px;padding:6px;width:100%;border-radius:7px;border:1px solid var(--g4)">${typeOpts.map(t=>`<option${dt===t?' selected':''}>${t}</option>`).join('')}</select></div>
       <div style="padding:8px 7px;border-right:1px solid var(--g5);display:flex;align-items:center"><select onchange="RX_DRUGS[${i}].eye=[this.value]" style="font-size:10px;padding:6px;width:100%;border-radius:7px;border:1px solid var(--g4)">${eyeOpts.map(e=>`<option${eye0===e?' selected':''}>${e}</option>`).join('')}</select></div>
@@ -8151,6 +8151,7 @@ function renderRxDrugs() {
         <button type="button" class="btn btn-xs btn-gray" onclick="removeDrug(${i})" title="Remove">✕</button>
       </div>
     </div>
+    ${plainLine ? `<div style="min-width:980px;padding:7px 10px 8px 44px;border-top:1px dashed var(--g5);background:#f7faff;font-size:10px;line-height:1.45;color:#24364f">${plainLine.replace(/</g,'&lt;')}</div>` : ''}
     ${taperRows.map((tap, tapIdx) => `<div style="display:grid;grid-template-columns:30px minmax(220px,1.42fr) minmax(90px,.66fr) minmax(104px,.68fr) minmax(136px,.82fr) minmax(108px,.68fr) minmax(190px,.95fr) 96px;gap:0;align-items:stretch;border-top:1px dashed var(--g4);background:var(--orange-lt);min-width:980px">
       <div style="padding:8px 6px;border-right:1px solid var(--g5);font-size:10px;font-weight:900;color:var(--orange);display:flex;align-items:center;justify-content:center">T${tapIdx+1}</div>
       <div style="padding:8px 7px;border-right:1px solid var(--g5);display:flex;flex-direction:column;justify-content:center">
@@ -8169,7 +8170,7 @@ function renderRxDrugs() {
         <button type="button" class="btn btn-xs btn-outline" style="width:100%;font-weight:800;font-size:10px" onclick="addTaperRow(${i}, RX_DRUGS[${i}].taperRows[${tapIdx}].dur || '1 week', ${tapIdx})">Taper</button>
         <button type="button" class="btn btn-xs btn-gray" onclick="clearTaperRow(${i}, ${tapIdx})">✕</button>
       </div>
-    </div>`).join('')}
+    </div><div style="min-width:980px;padding:6px 10px 8px 44px;border-top:1px dashed #e7c9a3;background:#fffaf0;font-size:10px;line-height:1.45;color:#7a4a10">${buildRxPlainInstructionLine({ ...d, freq: tap.freq, dur: tap.dur, dateFrom: tap.dateFrom, dateTo: tap.dateTo, taperRows: [] }, lang, (x)=>x ? new Date(Date.parse(x)).toLocaleDateString('en-IN',{day:'2-digit',month:'2-digit',year:'numeric'}) : '—').replace(/</g,'&lt;')}</div>`).join('')}
   </div>`;
   }).join('')}
   </div>`;
@@ -8972,48 +8973,49 @@ ${incPos && deptId==='oe' ? `<div class="lbl-row" style="margin:6px 0"><span cla
 
 ${drugs.length ? `
 <div class="sec-title">Medicine (Rx):</div>
-<div style="display:flex;flex-direction:column;gap:8px">
-  ${drugs.map((d,i)=>{
-    const trade = (typeof rxDrugTradeName === 'function' ? rxDrugTradeName(d) : (d.brand||d.trade||'')) || '—';
-    const gen = (typeof rxDrugGenericName === 'function' ? rxDrugGenericName(d) : (d.name||d.generic||'')) || '—';
-    const form = d.drugType || d.type || '—';
-    const route = (d.eye && d.eye[0]) || '—';
-    const plainLine = buildRxPlainInstructionLine(d, rxPlainLang, fmtIN);
-    const taperRows = Array.isArray(d.taperRows) ? d.taperRows : (d.taperRow ? [d.taperRow] : []);
-    const blockRow = (label, freq, dur, dateFrom, dateTo, line, soft) => `
-      <div style="padding:${soft ? '6px 8px' : '7px 9px'};border-top:1px dashed ${soft ? '#e7c9a3' : '#d9e0ea'};background:${soft ? '#fff8e9' : '#fff'}">
-        <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;font-size:10.6px;font-weight:700;color:${soft ? '#8a4200' : '#23344d'};line-height:1.35">
-          <span>${label}</span>
-          <span>${freq||'—'} · ${dur||'—'} · ${fmtIN(dateFrom)} to ${fmtIN(dateTo)}</span>
-        </div>
-        ${line ? `<div style="margin-top:5px;font-size:11px;line-height:1.45;color:#222">${escapeHtmlConsent(line)}</div>` : ''}
-      </div>`;
-    return `<div style="border:1px solid #d7e0eb;border-radius:10px;overflow:hidden;background:#fff">
-      <div style="padding:8px 10px;background:#f5f9ff;border-bottom:1px solid #d7e0eb;display:flex;gap:10px;align-items:flex-start">
-        <div style="font-size:12px;font-weight:900;color:#1A3C6E;min-width:18px">${i+1}.</div>
-        <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:900;color:#132b54">${trade}</div>
-          <div style="font-size:10.5px;font-style:italic;color:#586577">${gen}</div>
-          <div style="font-size:10px;color:#5b6470;margin-top:3px">${form} · ${route}</div>
-        </div>
-      </div>
-      ${blockRow(rxPlainLang === 'hi' ? 'मुख्य दवा' : rxPlainLang === 'pa' ? 'ਮੁੱਖ ਦਵਾ' : 'Main course', d.freq, d.dur, d.dateFrom, d.dateTo, plainLine, false)}
-      ${taperRows.map((tap, tapIdx) => blockRow(
-        rxPlainLang === 'hi' ? `धीरे कम करें ${tapIdx + 1}` : rxPlainLang === 'pa' ? `ਹੌਲੀ ਘਟਾਓ ${tapIdx + 1}` : `Taper ${tapIdx + 1}`,
-        rxFreqPlain(tap.freq, rxPlainLang),
-        rxDurationPlain(tap.dur, rxPlainLang),
-        tap.dateFrom,
-        tap.dateTo,
-        (rxPlainLang === 'hi'
-          ? 'निर्देशानुसार इस चरण पर दवा कम करें।'
-          : rxPlainLang === 'pa'
-          ? 'ਨਿਰਦੇਸ਼ ਅਨੁਸਾਰ ਇਸ ਪੜਾਅ ਤੇ ਦਵਾ ਘਟਾਓ।'
-          : 'Reduce to this step as advised.'),
-        true
-      )).join('')}
-    </div>`;
-  }).join('')}
-</div>` : ''}
+<table>
+  <thead><tr><th>#</th><th class="left">Name</th><th>Form</th><th>Route / Eye</th><th>Frequency</th><th>Duration</th><th>From</th><th>To</th></tr></thead>
+  <tbody>
+    ${drugs.map((d,i)=>{
+      const trade = (typeof rxDrugTradeName === 'function' ? rxDrugTradeName(d) : (d.brand||d.trade||'')) || '—';
+      const gen = (typeof rxDrugGenericName === 'function' ? rxDrugGenericName(d) : (d.name||d.generic||'')) || '—';
+      const form = d.drugType || d.type || '—';
+      const route = (d.eye && d.eye[0]) || '—';
+      const plainLine = buildRxPlainInstructionLine(d, rxPlainLang, fmtIN);
+      const taperRows = Array.isArray(d.taperRows) ? d.taperRows : (d.taperRow ? [d.taperRow] : []);
+      let rows = `<tr>
+        <td style="font-weight:700;color:#1A3C6E">${i+1}</td>
+        <td class="left"><div class="rx-name">${trade}</div><div class="rx-gen">${gen}</div></td>
+        <td>${form}</td>
+        <td>${route}</td>
+        <td>${d.freq||'—'}</td>
+        <td>${d.dur||'—'}</td>
+        <td>${fmtIN(d.dateFrom)}</td>
+        <td>${fmtIN(d.dateTo)}</td>
+      </tr>`;
+      if (plainLine) {
+        rows += `<tr style="background:#f7faff"><td></td><td class="left" colspan="7" style="padding-top:7px;padding-bottom:7px;font-size:11px;line-height:1.5">${escapeHtmlConsent(plainLine)}</td></tr>`;
+      }
+      taperRows.forEach((tap, tapIdx) => {
+        const taperLine = buildRxPlainInstructionLine({ ...d, freq: tap.freq, dur: tap.dur, dateFrom: tap.dateFrom, dateTo: tap.dateTo, taperRows: [] }, rxPlainLang, fmtIN);
+        rows += `<tr style="background:#fff8e6">
+          <td style="font-weight:700;color:#8a4200">↳</td>
+          <td class="left"><div class="rx-name">${trade}</div><div class="rx-gen">${rxPlainLang === 'hi' ? `धीरे कम करें ${tapIdx + 1}` : rxPlainLang === 'pa' ? `ਹੌਲੀ ਘਟਾਓ ${tapIdx + 1}` : `Taper ${tapIdx + 1}`}</div></td>
+          <td>${form}</td>
+          <td>${route}</td>
+          <td>${rxFreqPlain(tap.freq, rxPlainLang)||'—'}</td>
+          <td>${rxDurationPlain(tap.dur, rxPlainLang)||'—'}</td>
+          <td>${fmtIN(tap.dateFrom)}</td>
+          <td>${fmtIN(tap.dateTo)}</td>
+        </tr>`;
+        if (taperLine) {
+          rows += `<tr style="background:#fffaf0"><td></td><td class="left" colspan="7" style="padding-top:7px;padding-bottom:7px;font-size:11px;line-height:1.5">${escapeHtmlConsent(taperLine)}</td></tr>`;
+        }
+      });
+      return rows;
+    }).join('')}
+  </tbody>
+</table>` : ''}
 
 ${advice ? `<div class="lbl-row" style="margin:6px 0"><span class="lbl">Instructions:</span><span class="lbl-val">${advice}</span></div>` : ''}
 
