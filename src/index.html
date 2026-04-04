@@ -1061,7 +1061,14 @@
 
       <!-- BIOMETRY / INVESTIGATIONS TAB — file upload -->
       <div class="tab-content" id="oe-biometry">
-        <div style="background:linear-gradient(135deg,#eef7ff,#f8fbff);border:1.5px solid rgba(26,60,110,.18);border-radius:12px;padding:12px;margin-bottom:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:10px;padding:10px 12px;background:#f6f9ff;border:1px solid rgba(26,60,110,.14);border-radius:10px">
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800;color:var(--bmh-blue);cursor:pointer">
+            <input type="checkbox" id="refr-enable" onchange="toggleRefractivePanel()">
+            Enable refractive suitability assessment
+          </label>
+          <div style="font-size:10px;color:var(--g1)">Keep this off to show only upload and investigation tools.</div>
+        </div>
+        <div id="refr-panel" style="display:none;background:linear-gradient(135deg,#eef7ff,#f8fbff);border:1.5px solid rgba(26,60,110,.18);border-radius:12px;padding:12px;margin-bottom:14px">
           <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:9px">
             <div style="font-size:12px;font-weight:900;color:var(--bmh-blue)">🔎 Refractive Procedure Suitability</div>
             <div style="font-size:10px;color:var(--g1)">SMILE Pro · FemtoLASIK · PRK · LASIK decision support</div>

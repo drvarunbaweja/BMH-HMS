@@ -1604,14 +1604,16 @@ function populateOphthoForm(v) {
   setV('hx-other-systemic', v.otherSystemic || '');
   setV('drug-allergy-spec', v.drugAllergySpec || '');
   if(v.drugAllergy) setSel('drug-allergy', v.drugAllergy);
-  ['refr-age','refr-stable','refr-occupation','refr-topo','refr-dryeye','refr-preg','refr-autoimmune','refr-kc','refr-allergy','refr-flap','refr-od-pachy','refr-os-pachy']
+  ['refr-enable','refr-age','refr-stable','refr-occupation','refr-topo','refr-dryeye','refr-preg','refr-autoimmune','refr-kc','refr-allergy','refr-flap','refr-od-pachy','refr-os-pachy']
     .forEach(id => {
       const val = v[id];
       const el = document.getElementById(id);
       if(!el || val == null) return;
-      if(el.tagName === 'SELECT') setSel(id, val);
+      if(el.type === 'checkbox') el.checked = !!val;
+      else if(el.tagName === 'SELECT') setSel(id, val);
       else setV(id, val);
     });
+  toggleRefractivePanel && toggleRefractivePanel();
 
   // Prescription drugs
   if(Array.isArray(v.rx) && v.rx.length) {
@@ -6454,6 +6456,7 @@ window.addEventListener('DOMContentLoaded', function() {
   try { updateObgComputedFields && updateObgComputedFields(); } catch(e) {}
   try { togglePsychTracks && togglePsychTracks(); } catch(e) {}
   try { renderPsychRail && renderPsychRail(); } catch(e) {}
+  try { toggleRefractivePanel && toggleRefractivePanel(); } catch(e) {}
   try { renderSkinRail && renderSkinRail(); } catch(e) {}
   try { renderOphthoRecap && renderOphthoRecap(); } catch(e) {}
   try { populateSelectors && populateSelectors(); } catch(e) {}
@@ -6492,6 +6495,7 @@ window.addEventListener('DOMContentLoaded', function() {
     });
   ['skin-cosm-melasma','skin-cosm-acne','skin-cosm-scar','skin-cosm-ageing','skin-cosm-sensitive','skin-cosm-hair']
     .forEach(id => document.getElementById(id)?.addEventListener('change', renderSkinRail));
+  document.getElementById('refr-enable')?.addEventListener('change', toggleRefractivePanel);
   ['refr-age','refr-stable','refr-occupation','refr-topo','refr-dryeye','refr-preg','refr-autoimmune','refr-kc','refr-allergy','refr-flap','refr-od-pachy','refr-os-pachy','subj-od-sph','subj-od-cyl','subj-os-sph','subj-os-cyl','pachy-od','pachy-os','iop-gat-od','iop-gat-os','phx-diabetes_mellit','phx-hypertension']
     .forEach(id => {
       document.getElementById(id)?.addEventListener('change', renderOphthoRecap);
@@ -8907,6 +8911,13 @@ function ensureRxTaperRows(d) {
   d.taperRows = [];
   return d.taperRows;
 }
+function toggleRefractivePanel() {
+  const box = document.getElementById('refr-enable');
+  const panel = document.getElementById('refr-panel');
+  if (!panel) return;
+  panel.style.display = box?.checked ? '' : 'none';
+  renderOphthoRecap && renderOphthoRecap();
+}
 function computeRxEndAndTaperDates(d) {
   if (!d) return;
   if (!d.dateFrom) d.dateFrom = new Date().toISOString().split('T')[0];
@@ -9784,113 +9795,68 @@ function renderRxDrugs() {
     });
   });
 
-  const rxLbl = (t) => `<div style="font-size:10px;font-weight:900;color:#48484a;text-transform:uppercase;letter-spacing:.55px;margin:0 0 6px 0;line-height:1.2">${t}</div>`;
-  const selFull = `width:100% !important;max-width:100%;box-sizing:border-box !important;min-height:44px !important;font-size:14px !important;line-height:1.3 !important;padding:10px 12px !important;border:2px solid #c7c7cc !important;border-radius:10px !important;background:#ffffff !important;color:#000000 !important;-webkit-text-fill-color:#000000 !important`;
-  const dateFull = `width:100% !important;max-width:100%;box-sizing:border-box !important;min-height:44px !important;font-size:14px !important;padding:8px 10px !important;border:2px solid #c7c7cc !important;border-radius:10px !important;background:#ffffff !important;color:#000000 !important;-webkit-text-fill-color:#000000 !important`;
-  const nameTradeInp = `width:100% !important;box-sizing:border-box !important;min-height:52px !important;font-size:17px !important;font-weight:800 !important;line-height:1.35 !important;padding:12px 14px !important;border:3px solid #1A3C6E !important;border-radius:10px !important;background:#ffffff !important;color:#1A3C6E !important;-webkit-text-fill-color:#1A3C6E !important`;
-  const nameGenInp = `width:100% !important;box-sizing:border-box !important;min-height:44px !important;font-size:14px !important;line-height:1.35 !important;padding:10px 14px !important;margin-top:10px !important;border:2px solid #8e8e93 !important;border-radius:10px !important;background:#ffffff !important;color:#3a3a3c !important;-webkit-text-fill-color:#3a3a3c !important;font-style:italic !important`;
-
-  const medicineRow = (d, i, options) => {
-    const opts = options || {};
-    const trade = opts.trade || rxDrugTradeName(d) || '';
-    const gen = opts.gen || rxDrugGenericName(d) || '';
-    const dt = opts.dt || d.drugType || d.type || 'Tablet';
-    const eye0 = opts.eye0 || ((d.eye && d.eye[0]) || 'Oral');
-    const freq = opts.freq || d.freq || '';
-    const dur = opts.dur || d.dur || '';
-    const dateFrom = opts.dateFrom || d.dateFrom || '';
-    const dateTo = opts.dateTo || d.dateTo || '';
-    const prefix = opts.prefix || `RX_DRUGS[${i}]`;
-    const badge = opts.badge || `${i+1}`;
-    const bg = opts.bg || '#fff';
-    const border = opts.border || 'var(--g5)';
-    let heading = String(opts.heading || trade || gen || d.name || d.generic || '').trim();
-    if (!heading) heading = 'Tap here — type medicine name';
-    let subheading = String(opts.subheading || gen || '').trim();
-    if (subheading && heading !== 'Tap here — type medicine name' && subheading.toLowerCase() === heading.toLowerCase()) subheading = '';
-    const taperBtn = opts.taperBtn || '';
-    const removeBtn = opts.removeBtn || '';
-    const instruction = opts.instruction || '';
-    const isTaperSeg = !!opts.isTaperSegment;
-    const lockDur = opts.parentMainDur != null ? String(opts.parentMainDur) : dur;
-    const badgeEl = opts.showBadge === false ? '' : `<span style="flex-shrink:0;width:36px;height:36px;border-radius:999px;background:#1A3C6E;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;border:2px solid #0d2244">${badge}</span>`;
-    const nameStripMain = opts.readonlyName
-      ? `<div style="display:flex;align-items:flex-start;gap:14px;padding:14px 16px;text-align:left;background:linear-gradient(180deg,#e8eef8 0%,#f7f9fc 100%);border-bottom:3px solid #1A3C6E">
-          ${badgeEl}
-          <div style="flex:1;min-width:0;text-align:left">
-            ${rxLbl('Medicine (trade / brand)')}
-            <div style="font-size:17px;font-weight:900;color:#1A3C6E;line-height:1.4;word-break:break-word">${String(heading).replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>
-            ${opts.showGeneric !== false && subheading ? `${rxLbl('Generic')}<div style="font-size:14px;color:#3a3a3c;font-style:italic;line-height:1.4;word-break:break-word">${String(subheading).replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>` : ''}
-          </div>
-        </div>`
-      : opts.showName !== false
-      ? `<div style="display:flex;align-items:flex-start;gap:14px;padding:14px 16px;text-align:left;background:linear-gradient(180deg,#e8eef8 0%,#f7f9fc 100%);border-bottom:3px solid #1A3C6E">
-          ${badgeEl}
-          <div style="flex:1;min-width:0;text-align:left">
-            ${rxLbl('Medicine (trade / brand)')}
-            <input value="${String(heading).replace(/"/g,'&quot;')}" onchange="${prefix}.trade=this.value;${prefix}.brand=this.value" placeholder="Type trade or brand name" style="${nameTradeInp}">
-            ${opts.showGeneric !== false ? `${rxLbl('Generic (optional)')}<input value="${String(subheading).replace(/"/g,'&quot;')}" onchange="${prefix}.generic=this.value;${prefix}.name=this.value" placeholder="Generic name" style="${nameGenInp}">` : ''}
-          </div>
-        </div>`
-      : '';
-    const nameStrip = opts.taperIndentOnly ? '' : nameStripMain;
-    const fieldStack = `<div style="padding:14px 16px 16px;background:${isTaperSeg ? '#fffef6' : '#ffffff'};width:100%;box-sizing:border-box;${isTaperSeg ? 'border-left:4px solid #FF9500' : ''}">
-        ${isTaperSeg ? `<div style="font-size:12px;font-weight:800;color:#8a4200;margin-bottom:12px;padding-bottom:8px;border-bottom:1px dashed rgba(255,149,0,.5)">Taper step — same medicine as above · duration follows main row</div>` : ''}
-        <div style="margin-bottom:14px">${rxLbl('Type / form')}<select onchange="${prefix}.drugType=this.value;${prefix}.type=this.value" style="${selFull}">${typeOpts.map(t=>`<option${dt===t?' selected':''}>${t}</option>`).join('')}</select></div>
-        <div style="margin-bottom:14px">${rxLbl(isOphtho ? 'Eye' : 'Route / site')}<select onchange="${prefix}.eye=[this.value]" style="${selFull}">${eyeOpts.map(e=>`<option${eye0===e?' selected':''}>${e}</option>`).join('')}</select></div>
-        <div style="margin-bottom:14px">${rxLbl('Frequency')}<select onchange="${prefix}.freq=this.value;window.syncRxDrugDates(${i})" style="${selFull}">${freqOpts.map(f=>`<option${freq===f?' selected':''}>${f}</option>`).join('')}</select></div>
-        <div style="margin-bottom:14px">${rxLbl('Duration')}${isTaperSeg ? `<div title="Matches main row duration" style="${selFull};display:flex;align-items:center;border-color:#aeaeb2 !important;background:#f2f2f7 !important;color:#1c1c1c !important;font-weight:600">${String(lockDur).replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>` : `<select onchange="${prefix}.dur=this.value;window.syncRxDrugDates(${i})" style="${selFull}">${durOpts.map(f=>`<option${dur===f?' selected':''}>${f}</option>`).join('')}</select>`}</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
-          <div>${rxLbl('Start date')}<input type="date" value="${dateFrom||''}" onchange="${prefix}.dateFrom=this.value;window.syncRxDrugDates(${i})" style="${dateFull}"></div>
-          <div>${rxLbl('End date')}<input type="date" value="${dateTo||''}" onchange="${prefix}.dateTo=this.value" style="${dateFull}"></div>
+  const esc = (s) => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  const inputBase = 'width:100%;box-sizing:border-box;min-height:34px;font-size:12px;padding:6px 8px;border:1.5px solid #c7c7cc;border-radius:8px;background:#fff;color:#111';
+  const nameInput = 'width:100%;box-sizing:border-box;min-height:34px;font-size:13px;padding:6px 8px;border:1.5px solid #1A3C6E;border-radius:8px;background:#fff;color:#1A3C6E;font-weight:800';
+  const subInput = 'width:100%;box-sizing:border-box;min-height:32px;font-size:11px;padding:5px 8px;border:1.5px solid #d1d1d6;border-radius:8px;background:#fff;color:#444;font-style:italic;margin-top:4px';
+  const header = `<div style="display:grid;grid-template-columns:minmax(180px,2.4fr) minmax(100px,1.05fr) minmax(120px,1.15fr) minmax(150px,1.35fr) minmax(110px,1.05fr) minmax(126px,1fr) minmax(126px,1fr) 92px;gap:8px;align-items:end;padding:8px 10px;background:#f2f5fb;border:1px solid #d6dce8;border-radius:10px 10px 0 0;font-size:9.5px;font-weight:900;color:#465066;text-transform:uppercase;letter-spacing:.45px">
+    <div>Name</div><div>Type</div><div>${isOphtho ? 'Eye' : 'Route / Site'}</div><div>Frequency</div><div>Duration</div><div>From</div><div>To</div><div>Actions</div>
+  </div>`;
+  const renderRow = (baseDrug, row, i, prefix, opts = {}) => {
+    const isTaper = !!opts.isTaper;
+    const rowFreq = row.freq || '';
+    const rowDur = row.dur || baseDrug.dur || '';
+    const line = buildRxPlainInstructionLine({
+      ...baseDrug,
+      ...(isTaper ? { trade:'', brand:'', generic:'', name:'' } : {}),
+      drugType: row.drugType || row.type || baseDrug.drugType || baseDrug.type || 'Tablet',
+      eye: row.eye || baseDrug.eye || ['Oral'],
+      freq: rowFreq,
+      dur: rowDur,
+      dateFrom: row.dateFrom || '',
+      dateTo: row.dateTo || ''
+    }, lang, (iso)=> {
+      if (!iso) return '—';
+      const t = Date.parse(iso);
+      return Number.isNaN(t) ? String(iso) : new Date(t).toLocaleDateString('en-IN',{day:'2-digit',month:'2-digit',year:'numeric'});
+    });
+    const taperBtn = `<button type="button" class="btn btn-xs" onclick="${opts.taperOnclick}" style="background:#fff7e8;color:#8a4200;border:1px solid rgba(212,160,23,.55);padding:5px 8px;font-size:10px;font-weight:800;width:100%">Taper</button>`;
+    const removeBtn = `<button type="button" class="btn btn-xs btn-gray" onclick="${opts.removeOnclick}" style="padding:5px 8px;font-size:10px;font-weight:800;width:100%">✕</button>`;
+    return `<div style="border-left:${isTaper ? '3px solid #ff9500' : '3px solid #1A3C6E'};border-right:1px solid #d6dce8;border-bottom:1px solid #d6dce8;border-left-width:${isTaper ? '3px' : '3px'};background:${isTaper ? '#fffaf2' : '#fff'}">
+      <div style="display:grid;grid-template-columns:minmax(180px,2.4fr) minmax(100px,1.05fr) minmax(120px,1.15fr) minmax(150px,1.35fr) minmax(110px,1.05fr) minmax(126px,1fr) minmax(126px,1fr) 92px;gap:8px;align-items:start;padding:8px 10px">
+        <div>
+          ${isTaper
+            ? `<div style="min-height:34px;display:flex;align-items:center;padding:6px 8px;background:#fff4df;border:1px dashed rgba(212,160,23,.6);border-radius:8px;font-size:11px;font-weight:800;color:#8a4200">Taper step</div>`
+            : `<input value="${esc(rxDrugTradeName(baseDrug) || '')}" onchange="${prefix}.trade=this.value;${prefix}.brand=this.value" placeholder="Trade / brand name" style="${nameInput}"><input value="${esc(rxDrugGenericName(baseDrug) || '')}" onchange="${prefix}.generic=this.value;${prefix}.name=this.value" placeholder="Generic name" style="${subInput}">`}
         </div>
-        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding-top:12px;border-top:2px solid #e5e5ea">
-          ${taperBtn}${removeBtn}
-          <span style="font-size:11px;color:#636366;font-weight:600">⏎ Add taper row below</span>
-        </div>
-      </div>`;
-    return `<div style="padding:0;background:${bg}">
-      ${nameStrip}
-      ${fieldStack}
-      ${instruction ? `<div style="margin:0 16px 14px;padding:10px 12px;background:${opts.instructionBg || '#f0f5ff'};border-radius:10px;font-size:12px;line-height:1.5;color:${opts.instructionColor || '#1a2d4a'};border:1px solid #d0d8e8">${instruction.replace(/</g,'&lt;')}</div>` : ''}
+        <div><select onchange="${prefix}.drugType=this.value;${prefix}.type=this.value;renderRxDrugs()" style="${inputBase}">${typeOpts.map(t=>`<option${(row.drugType || row.type || baseDrug.drugType || baseDrug.type || 'Tablet')===t?' selected':''}>${t}</option>`).join('')}</select></div>
+        <div><select onchange="${prefix}.eye=[this.value];renderRxDrugs()" style="${inputBase}">${eyeOpts.map(e=>`<option${(((row.eye && row.eye[0]) || (baseDrug.eye && baseDrug.eye[0]) || 'Oral')===e)?' selected':''}>${e}</option>`).join('')}</select></div>
+        <div><select onchange="${prefix}.freq=this.value;window.syncRxDrugDates(${i})" style="${inputBase}">${freqOpts.map(f=>`<option${rowFreq===f?' selected':''}>${f}</option>`).join('')}</select></div>
+        <div><select onchange="${prefix}.dur=this.value;window.syncRxDrugDates(${i})" style="${inputBase}">${durOpts.map(v=>`<option${rowDur===v?' selected':''}>${v}</option>`).join('')}</select></div>
+        <div><input type="date" value="${esc(row.dateFrom || '')}" onchange="${prefix}.dateFrom=this.value;window.syncRxDrugDates(${i})" style="${inputBase}"></div>
+        <div><input type="date" value="${esc(row.dateTo || '')}" onchange="${prefix}.dateTo=this.value;renderRxDrugs()" style="${inputBase}"></div>
+        <div style="display:flex;flex-direction:column;gap:6px">${taperBtn}${removeBtn}</div>
+      </div>
+      <div style="padding:0 10px 8px 10px">
+        <div style="padding:7px 10px;background:${isTaper ? '#fff7ea' : '#f5f8ff'};border:1px solid ${isTaper ? '#f0d3a3' : '#dbe5f2'};border-radius:8px;font-size:11px;line-height:1.45;color:#24364d">${esc(line)}</div>
+      </div>
     </div>`;
   };
-
-  const taperTabBtn = (onclk, t) => `<button type="button" aria-label="Add taper step" title="${t}" onclick="${onclk}" style="flex:1;min-width:28px;max-width:36px;height:28px;margin:0 auto;padding:0;border-radius:6px 6px 3px 3px;border:1px solid #c97800;border-bottom-width:2px;background:linear-gradient(180deg,#fffaf0,#ffe8c4);color:#6b3a00;font-size:15px;line-height:1;font-weight:900;cursor:pointer;box-sizing:border-box">⏎</button>`;
-  const rxDelBtn = (onclk, t) => `<button type="button" class="btn btn-xs btn-gray" onclick="${onclk}" title="${t}" style="flex:0 0 auto;min-width:26px;max-width:30px;font-size:11px;padding:4px 6px;line-height:1.1">✕</button>`;
-  el.innerHTML = `<div class="rx-drugs-root" style="display:flex;flex-direction:column;gap:14px;width:100%;max-width:100%;min-width:0;box-sizing:border-box">
-    <div style="font-size:11px;color:#48484a;line-height:1.4;padding:4px 6px;background:#f2f2f7;border-radius:8px;border:1px solid #e5e5ea"><strong style="color:#1A3C6E">How it works:</strong> each medicine has a <strong>large name block</strong> at the top, then <strong>separate labeled fields</strong> below. Press <strong>⏎</strong> to add a taper row (same drug, chained dates).</div>
+  el.innerHTML = `<div class="rx-drugs-root" style="display:flex;flex-direction:column;gap:12px;width:100%;max-width:100%;min-width:0;box-sizing:border-box">
     ${RX_DRUGS.map((d,i)=>{
       const taperRows = ensureRxTaperRows(d);
-      const plainLine = d.lang&&d.lang[lang] ? String(d.lang[lang]) : '';
-      return `<div class="rx-drug-row" style="border:2px solid #d1d1d6;border-radius:14px;background:#fff;width:100%;max-width:100%;min-width:0;box-sizing:border-box;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06)">
-        <div style="min-width:0;width:100%;max-width:100%;box-sizing:border-box">
-        ${medicineRow(d, i, {
-          prefix:`RX_DRUGS[${i}]`,
-          badge:`${i+1}`,
-          taperBtn:taperTabBtn(`window.addTaperRow(${i})`, 'Add taper step after main row (lower frequency, same duration)'),
-          removeBtn:rxDelBtn(`window.removeDrug(${i})`, 'Remove medicine'),
-          instruction:plainLine,
-          noTopBorder:true
+      const mainPrefix = `RX_DRUGS[${i}]`;
+      return `<div style="border-radius:10px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.05)">
+        ${header}
+        ${renderRow(d, d, i, mainPrefix, {
+          taperOnclick:`window.addTaperRow(${i})`,
+          removeOnclick:`window.removeDrug(${i})`
         })}
-        ${taperRows.map((tap, tapIdx)=>`<div class="rx-taper-subrow" style="margin-top:0;border-top:2px solid rgba(255,149,0,.55)">${medicineRow(d, i, {
-          prefix:`RX_DRUGS[${i}].taperRows[${tapIdx}]`,
-          dt: tap.drugType || tap.type || d.drugType || d.type || 'Tablet',
-          eye0: ((tap.eye && tap.eye[0]) || (d.eye && d.eye[0]) || 'Oral'),
-          freq: tap.freq || '',
-          dur: tap.dur || '',
-          dateFrom: tap.dateFrom || '',
-          dateTo: tap.dateTo || '',
-          isTaperSegment:true,
-          parentMainDur:d.dur || '',
-          taperIndentOnly:true,
-          bg:'transparent',
-          border:'var(--orange)',
-          taperBtn:taperTabBtn(`window.addTaperRow(${i},null,${tapIdx})`, 'Add another taper step after this one'),
-          removeBtn:rxDelBtn(`window.clearTaperRow(${i},${tapIdx})`, 'Remove this taper step'),
-          instruction:''
-        })}</div>`).join('')}
-        </div>
+        ${taperRows.map((tap, tapIdx) => renderRow(d, tap, i, `RX_DRUGS[${i}].taperRows[${tapIdx}]`, {
+          isTaper:true,
+          taperOnclick:`window.addTaperRow(${i},null,${tapIdx})`,
+          removeOnclick:`window.clearTaperRow(${i},${tapIdx})`
+        })).join('')}
       </div>`;
     }).join('')}
   </div>`;
@@ -14579,6 +14545,7 @@ function saveVisit(dept) {
     visit.otherSystemic = document.getElementById('hx-other-systemic')?.value || '';
     visit.drugAllergy = document.getElementById('drug-allergy')?.value || '';
     visit.drugAllergySpec = document.getElementById('drug-allergy-spec')?.value || '';
+    visit['refr-enable'] = !!document.getElementById('refr-enable')?.checked;
     ['refr-age','refr-stable','refr-occupation','refr-topo','refr-dryeye','refr-preg','refr-autoimmune','refr-kc','refr-allergy','refr-flap','refr-od-pachy','refr-os-pachy']
       .forEach(id => { visit[id] = document.getElementById(id)?.value || ''; });
     visit.pohOdText = document.getElementById('poh-od-text')?.value || '';
@@ -14820,7 +14787,8 @@ function renderOphthoRecap() {
     const rsbNodes = { od: document.getElementById('refr-od-rsb'), os: document.getElementById('refr-os-rsb') };
     if(rsbNodes.od) rsbNodes.od.textContent = Number.isFinite(rsbOd) ? `${rsbOd} µm estimated residual bed` : 'Need pachymetry + subjective refraction';
     if(rsbNodes.os) rsbNodes.os.textContent = Number.isFinite(rsbOs) ? `${rsbOs} µm estimated residual bed` : 'Need pachymetry + subjective refraction';
-    if(topo || dry || stable || pachyOd || pachyOs) {
+    const refrEnabled = !!document.getElementById('refr-enable')?.checked || !!pt.lastVisit?.['refr-enable'];
+    if(refrEnabled && (topo || dry || stable || pachyOd || pachyOs)) {
       inv.push('For refractive work-up: stable refraction, topography/tomography, pachymetry, ocular surface review, and dilated fundus exam');
       if(refrAge != null && refrAge < 18) refractive.push('Not eligible yet because age is below standard refractive surgery threshold');
       else if(/Abnormal/.test(topo) || /Known KC|ectasia/.test(kc)) refractive.push('Avoid corneal laser now; ectasia / keratoconus risk needs specialist review');
@@ -14885,7 +14853,7 @@ function renderOphthoRecap() {
         </div>
         <div style="padding:9px 10px;border-radius:10px;background:#fff8e8;margin-bottom:8px;border:1px solid rgba(212,160,23,.24)">
           <div style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;margin-bottom:5px">Refractive suitability</div>
-          <div style="font-size:11px;line-height:1.5">${g.refractive.join('<br>') || 'Fill the refractive checklist in Biometry to estimate residual bed and preferred procedure.'}</div>
+          <div style="font-size:11px;line-height:1.5">${g.refractive.join('<br>') || 'Enable the refractive suitability checkbox in Biometry to assess candidacy and residual bed.'}</div>
         </div>
         <div style="padding:9px 10px;border-radius:10px;background:var(--g6);margin-bottom:8px">
           <div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;margin-bottom:5px">Systemic history</div>
