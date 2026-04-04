@@ -8967,8 +8967,8 @@ function renderRxDrugs() {
             ${opts.showGeneric !== false ? `<input value="${String(subheading).replace(/"/g,'&quot;')}" onchange="${prefix}.generic=this.value;${prefix}.name=this.value" placeholder="(Generic name)" style="width:100%;font-size:10px;color:var(--g1);font-style:italic;border:none;background:transparent;padding:0;box-sizing:border-box;margin-top:2px">` : ''}
           </div>
         </div>`
-      : `<div style="display:flex;align-items:center;gap:8px;min-height:32px">
-          <div style="font-size:11px;font-weight:800;color:${opts.headingColor || '#8a4200'}">${opts.rowLabel || 'Taper'}</div>
+      : `<div style="min-height:32px;display:flex;align-items:center;${opts.emptyNameCell ? '' : 'gap:8px'}">
+          ${opts.emptyNameCell ? '<div style="width:100%;height:1px"></div>' : `<div style="font-size:11px;font-weight:800;color:${opts.headingColor || '#8a4200'}">${opts.rowLabel || 'Taper'}</div>`}
         </div>`;
     return `<div style="padding:8px;background:${bg};border-top:${opts.noTopBorder ? 'none' : '1px dashed ' + border}">
       <div style="display:grid;grid-template-columns:${gridCols};gap:8px;align-items:center">
@@ -9008,15 +9008,13 @@ function renderRxDrugs() {
           dateFrom: tap.dateFrom || '',
           dateTo: tap.dateTo || '',
           showName:false,
-          rowLabel:'Taper',
+          emptyNameCell:true,
           bg:'#fff7eb',
           border:'var(--orange)',
           headingColor:'#8a4200',
-          instructionBg:'#fffaf0',
-          instructionColor:'#7a4a10',
           taperBtn:`<button type="button" class="btn btn-xs btn-outline" style="width:100%;font-weight:800;font-size:10px;white-space:nowrap;padding:6px 8px" onclick="addTaperRow(${i}, RX_DRUGS[${i}].taperRows[${tapIdx}].dur || '1 week', ${tapIdx})">Taper</button>`,
           removeBtn:`<button type="button" class="btn btn-xs btn-gray" onclick="clearTaperRow(${i}, ${tapIdx})">✕</button>`,
-          instruction:buildRxPlainInstructionLine({ ...d, ...tap, taperRows: [] }, lang, (x)=>x ? new Date(Date.parse(x)).toLocaleDateString('en-IN',{day:'2-digit',month:'2-digit',year:'numeric'}) : '—')
+          instruction:''
         })).join('')}
       </div>`;
     }).join('')}
