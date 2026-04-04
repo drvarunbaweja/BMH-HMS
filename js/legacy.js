@@ -7068,6 +7068,7 @@ function otCaseCard(c, sno) {
         <div style="font-size:10.5px;color:var(--g1);margin-top:2px">${c.dx}</div>
         <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:10.5px;color:var(--g1);margin-top:4px">
           <span>👨‍⚕️ ${c.surgeon}</span>
+          <span>📅 ${formatDateIN(c.date)}</span>
           <span>🕐 ${c.scheduledTime}</span>
           <span>🏥 ${c.room}</span>
           ${surgeryMeta?`<span>${surgeryMeta}</span>`:''}
@@ -7083,6 +7084,7 @@ function otCaseCard(c, sno) {
           <option value="completed" ${c.status==='completed'?'selected':''}>Completed</option>
           <option value="postponed" ${c.status==='postponed'?'selected':''}>Postponed</option>
         </select>
+        <button class="btn btn-xs btn-outline" onclick="event.stopPropagation();openOTCase('${c.id}')">✏️ Edit</button>
         ${pack ? `<button class="btn btn-xs btn-gold" onclick="event.stopPropagation();printSurgeryPackForCase('${c.id}','${pack.id}')">📋 Pack</button>` : ''}
         <button class="btn btn-xs btn-outline" onclick="event.stopPropagation();printOTCard('${c.id}')">🖨️</button>
         <button class="btn btn-xs btn-gray" onclick="event.stopPropagation();deleteOTCase('${c.id}')">🗑️</button>
@@ -7138,7 +7140,7 @@ function openOTCase(id) {
       <span class="badge" style="background:${c.status==='completed'?'var(--green-lt)':c.status==='in-progress'?'var(--blue-lt)':'var(--g5)'};color:${statusColor}">${c.status.replace('-',' ').toUpperCase()}</span>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11.5px;margin-bottom:12px">
-      ${[['Age/Sex',`${c.age}Y / ${c.sex}`],['Procedure',c.procedure],['Surgeon',c.surgeon],['Room',c.room],['Time',c.scheduledTime],['Anaesthesia',c.anaes],['IOL/Implant',c.iol],['Priority',c.priority.toUpperCase()]].map(([l,v])=>`<div><div style="font-size:9px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px">${l}</div><div style="font-weight:700;margin-top:1px">${v}</div></div>`).join('')}
+      ${[['Age/Sex',`${c.age}Y / ${c.sex}`],['Procedure',c.procedure],['OT Date',formatDateIN(c.date)],['Surgeon',c.surgeon],['Room',c.room],['Time',c.scheduledTime],['Anaesthesia',c.anaes],['IOL/Implant',c.iol],['Priority',c.priority.toUpperCase()]].map(([l,v])=>`<div><div style="font-size:9px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px">${l}</div><div style="font-weight:700;margin-top:1px">${v}</div></div>`).join('')}
     </div>
     <div style="background:var(--g6);border-radius:var(--rsm);padding:10px;margin-bottom:10px">
       <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Diagnosis</div>
@@ -7575,6 +7577,15 @@ function lookupRxGeneric(idx, tradeName) {
     RX_DRUGS[idx].dur = drug.dur;
     renderRxDrugs();
   }
+}
+function normalizePersonNameForMatch(name) {
+  return String(name || '').toLowerCase().replace(/\bdr\.?\s*/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+}
+function doctorMatchesPatientQueue(patientDoctor, currentDoctor) {
+  const p = normalizePersonNameForMatch(patientDoctor);
+  const c = normalizePersonNameForMatch(currentDoctor);
+  if(!c || !p) return true;
+  return p === c || p.includes(c) || c.includes(p);
 }
 
 const RX_TAPER_SEGMENT_DURS = ['½ day','1 day','2 days','3 days','5 days','7 days','14 days'];
@@ -8505,18 +8516,20 @@ function renderRxDrugs() {
     const taperBtn = opts.taperBtn || '';
     const removeBtn = opts.removeBtn || '';
     const instruction = opts.instruction || '';
-    const siteLabel = isOphtho ? 'Eye' : 'Route';
+    const nameCell = opts.showName !== false
+      ? `<div style="display:flex;align-items:center;gap:8px">
+          ${opts.showBadge !== false ? `<span style="min-width:24px;height:24px;border-radius:999px;background:${opts.badgeBg || 'var(--bmh-blue)'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:900">${badge}</span>` : ''}
+          <div style="min-width:0;flex:1">
+            <input value="${String(heading).replace(/"/g,'&quot;')}" onchange="${prefix}.trade=this.value;${prefix}.brand=this.value" placeholder="Trade name" style="width:100%;font-size:12.5px;font-weight:900;border:none;background:transparent;padding:0;box-sizing:border-box;color:${opts.headingColor || 'var(--tx)'}">
+            ${opts.showGeneric !== false ? `<input value="${String(subheading).replace(/"/g,'&quot;')}" onchange="${prefix}.generic=this.value;${prefix}.name=this.value" placeholder="(Generic name)" style="width:100%;font-size:10px;color:var(--g1);font-style:italic;border:none;background:transparent;padding:0;box-sizing:border-box;margin-top:2px">` : ''}
+          </div>
+        </div>`
+      : `<div style="display:flex;align-items:center;gap:8px;min-height:32px">
+          <div style="font-size:11px;font-weight:800;color:${opts.headingColor || '#8a4200'}">${opts.rowLabel || 'Taper row'}</div>
+        </div>`;
     return `<div style="padding:8px;background:${bg};border-top:${opts.noTopBorder ? 'none' : '1px dashed ' + border}">
       <div style="display:grid;grid-template-columns:${gridCols};gap:8px;align-items:center">
-        <div style="min-width:0">
-          ${opts.showBadge !== false ? `<div style="display:flex;align-items:center;gap:8px">
-            <span style="min-width:24px;height:24px;border-radius:999px;background:${opts.badgeBg || 'var(--bmh-blue)'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:900">${badge}</span>` : '<div>'}
-            <div style="min-width:0;flex:1">
-              ${opts.showName !== false ? `<input value="${String(heading).replace(/"/g,'&quot;')}" onchange="${prefix}.trade=this.value;${prefix}.brand=this.value" placeholder="Trade name" style="width:100%;font-size:12.5px;font-weight:900;border:none;background:transparent;padding:0;box-sizing:border-box;color:${opts.headingColor || 'var(--tx)'}">` : `<div style="font-size:11px;color:${opts.headingColor || 'var(--g1)'};font-style:italic">${opts.rowLabel || 'Taper step'}</div>`}
-              ${opts.showGeneric !== false ? `<input value="${String(subheading).replace(/"/g,'&quot;')}" onchange="${prefix}.generic=this.value;${prefix}.name=this.value" placeholder="(Generic name)" style="width:100%;font-size:10px;color:var(--g1);font-style:italic;border:none;background:transparent;padding:0;box-sizing:border-box;margin-top:2px">` : ''}
-            </div>
-          </div>
-        </div>
+        <div style="min-width:0">${nameCell}</div>
         <div><select onchange="${prefix}.drugType=this.value;${prefix}.type=this.value" style="font-size:10.5px;padding:7px;width:100%;border-radius:8px;border:1px solid ${border};background:#fff">${typeOpts.map(t=>`<option${dt===t?' selected':''}>${t}</option>`).join('')}</select></div>
         <div><select onchange="${prefix}.eye=[this.value]" style="font-size:10.5px;padding:7px;width:100%;border-radius:8px;border:1px solid ${border};background:#fff">${eyeOpts.map(e=>`<option${eye0===e?' selected':''}>${e}</option>`).join('')}</select></div>
         <div><select onchange="${prefix}.freq=this.value;syncRxDrugDates(${i})" style="font-size:10.5px;padding:7px;width:100%;border-radius:8px;border:1px solid ${border};background:#fff">${freqOpts.map(f=>`<option${freq===f?' selected':''}>${f}</option>`).join('')}</select></div>
@@ -8558,7 +8571,7 @@ function renderRxDrugs() {
           headingColor:'#8a4200',
           showName:false,
           showGeneric:false,
-          rowLabel:'Taper',
+          rowLabel:'Taper row',
           taperBtn:`<button type="button" class="btn btn-xs btn-outline" style="width:100%;font-weight:800;font-size:10px;white-space:nowrap;padding:6px 8px" onclick="addTaperRow(${i}, RX_DRUGS[${i}].taperRows[${tapIdx}].dur || '1 week', ${tapIdx})">Taper</button>`,
           removeBtn:`<button type="button" class="btn btn-xs btn-gray" onclick="clearTaperRow(${i}, ${tapIdx})">✕</button>`,
           instruction:buildRxPlainInstructionLine({ ...d, freq: tap.freq, dur: tap.dur, dateFrom: tap.dateFrom, dateTo: tap.dateTo, taperRows: [] }, lang, (x)=>x ? new Date(Date.parse(x)).toLocaleDateString('en-IN',{day:'2-digit',month:'2-digit',year:'numeric'}) : '—'),
@@ -8957,6 +8970,12 @@ function centreMatch(item) {
   const uc = getEffectiveCentre();
   if(!uc) return true; // admin/BOTH — see everything
   return (item.centre || 'CHD') === uc;
+}
+function formatDateIN(value) {
+  if(!value) return '—';
+  const d = String(value).includes('T') ? new Date(value) : new Date(String(value) + 'T12:00:00');
+  if(Number.isNaN(d.getTime())) return String(value);
+  return d.toLocaleDateString('en-IN',{day:'2-digit',month:'2-digit',year:'numeric'});
 }
 
 function filterPatientsForUser() {
@@ -12930,11 +12949,14 @@ function saveUpdatedPatientDetails() {
     age: document.getElementById('upd-age')?.value?.trim()||p.age||'',
     sex: document.getElementById('upd-sex')?.value||p.sex||'Male',
     dob: document.getElementById('upd-dob')?.value||p.dob||'',
-    mobile: document.getElementById('upd-mob')?.value?.trim()||p.mobile||'',
+    mobile: document.getElementById('upd-mob')?.value?.trim()||p.mobile||p.mob||'',
+    mob: document.getElementById('upd-mob')?.value?.trim()||p.mob||p.mobile||'',
     mob2: document.getElementById('upd-mob2')?.value?.trim()||'',
     email: document.getElementById('upd-email')?.value?.trim()||'',
     address: document.getElementById('upd-addr')?.value?.trim()||'',
+    addr: document.getElementById('upd-addr')?.value?.trim()||'',
     relation: document.getElementById('upd-rel')?.value?.trim()||'',
+    rel: document.getElementById('upd-rel')?.value?.trim()||'',
     refName: document.getElementById('upd-ref-name')?.value?.trim()||''
   };
   // Update initials too
@@ -12989,13 +13011,17 @@ function renderDocQueue() {
 
   // Filter: admin/reception sees all; doctor sees own dept (and optionally own name)
   const validStatuses = p => p.status==='waiting'||p.status==='seen'||p.status==='pre-registered'||p.dilated;
-  const myPts = (CURRENT_USER?.isAdmin || CURRENT_USER?.role === 'Reception')
-    ? PATIENTS.filter(p => validStatuses(p) && centreMatch(p))
-    : PATIENTS.filter(p => {
-        const deptMatch = !userDept || p.dept === userDept;
-        const drMatch = !CURRENT_USER?.name || !p.doctor || p.doctor === CURRENT_USER.name;
-        return deptMatch && drMatch && validStatuses(p) && centreMatch(p);
-      });
+  const myPts = (() => {
+    if (CURRENT_USER?.isAdmin || CURRENT_USER?.role === 'Reception') {
+      return PATIENTS.filter(p => validStatuses(p) && centreMatch(p));
+    }
+    const deptPts = PATIENTS.filter(p => {
+      const deptMatch = !userDept || p.dept === userDept;
+      return deptMatch && validStatuses(p) && centreMatch(p);
+    });
+    const strict = deptPts.filter(p => !CURRENT_USER?.name || !p.doctor || doctorMatchesPatientQueue(p.doctor, CURRENT_USER.name));
+    return strict.length ? strict : deptPts;
+  })();
 
   // Active list keeps all waiting patients visible; dilated patients also remain in dedicated dilated queue.
   const active  = myPts.filter(p => !p.seen);
