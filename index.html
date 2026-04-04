@@ -394,7 +394,7 @@
         <div class="ptab" onclick="ptab(this,'oe-rx')">Prescription + QR</div>
         <div class="ptab" onclick="ptab(this,'oe-past')">Past Visits</div>
       </div>
-      <div id="ophtho-recap-panel" style="float:right;width:280px;margin:8px 0 12px 12px"></div>
+      <div id="ophtho-recap-panel" style="float:right;width:300px;margin:8px 0 12px 12px"></div>
 
       <!-- HISTORY TAB — full case sheet fields -->
       <div class="tab-content active" id="oe-hx">
@@ -1064,6 +1064,36 @@
 
       <!-- BIOMETRY / INVESTIGATIONS TAB — file upload -->
       <div class="tab-content" id="oe-biometry">
+        <div style="background:linear-gradient(135deg,#eef7ff,#f8fbff);border:1.5px solid rgba(26,60,110,.18);border-radius:12px;padding:12px;margin-bottom:14px">
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:9px">
+            <div style="font-size:12px;font-weight:900;color:var(--bmh-blue)">🔎 Refractive Procedure Suitability</div>
+            <div style="font-size:10px;color:var(--g1)">SMILE Pro · FemtoLASIK · PRK · LASIK decision support</div>
+          </div>
+          <div class="fg3">
+            <div class="form-group"><label class="fl">Age</label><input type="number" id="refr-age" placeholder="Years" oninput="renderOphthoRecap()"></div>
+            <div class="form-group"><label class="fl">Refraction stable</label><select id="refr-stable" onchange="renderOphthoRecap()"><option value="">Select</option><option>Yes, stable ≥ 1 year</option><option>No / changing</option></select></div>
+            <div class="form-group"><label class="fl">Occupation / visual priority</label><select id="refr-occupation" onchange="renderOphthoRecap()"><option value="">Select</option><option>General / office work</option><option>Night driving critical</option><option>Dust / field exposure</option><option>Contact sports</option><option>High screen use / dry environment</option></select></div>
+            <div class="form-group"><label class="fl">Topography / tomography</label><select id="refr-topo" onchange="renderOphthoRecap()"><option value="">Select</option><option>Normal</option><option>Borderline suspicious</option><option>Abnormal / ectasia risk</option></select></div>
+            <div class="form-group"><label class="fl">Dry eye status</label><select id="refr-dryeye" onchange="renderOphthoRecap()"><option value="">Select</option><option>None / mild</option><option>Moderate</option><option>Severe / symptomatic</option></select></div>
+            <div class="form-group"><label class="fl">Pregnancy / lactation</label><select id="refr-preg" onchange="renderOphthoRecap()"><option value="">Select</option><option>No</option><option>Yes</option></select></div>
+            <div class="form-group"><label class="fl">Autoimmune / collagen vascular disease</label><select id="refr-autoimmune" onchange="renderOphthoRecap()"><option value="">Select</option><option>No</option><option>Yes / active</option></select></div>
+            <div class="form-group"><label class="fl">Keratoconus / family history</label><select id="refr-kc" onchange="renderOphthoRecap()"><option value="">Select</option><option>No</option><option>Suspicious / family history</option><option>Known KC / ectasia</option></select></div>
+            <div class="form-group"><label class="fl">Allergy / eye rubbing</label><select id="refr-allergy" onchange="renderOphthoRecap()"><option value="">Select</option><option>No major issue</option><option>Seasonal allergy / rubbing</option><option>Active VKC / severe rubbing</option></select></div>
+            <div class="form-group"><label class="fl">Flap / cap thickness</label><select id="refr-flap" onchange="renderOphthoRecap()"><option value="110" selected>110 µm</option><option value="100">100 µm</option><option value="120">120 µm</option><option value="130">130 µm</option></select></div>
+            <div class="form-group"><label class="fl">OD pachymetry µm</label><input type="number" id="refr-od-pachy" placeholder="Use if different from above" oninput="renderOphthoRecap()"></div>
+            <div class="form-group"><label class="fl">OS pachymetry µm</label><input type="number" id="refr-os-pachy" placeholder="Use if different from above" oninput="renderOphthoRecap()"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+            <div style="background:#fff;border:1px solid var(--g5);border-radius:10px;padding:9px">
+              <div style="font-size:10px;font-weight:900;color:var(--blue);text-transform:uppercase;margin-bottom:5px">OD estimated residual bed</div>
+              <div id="refr-od-rsb" style="font-size:12px;font-weight:800;color:var(--bmh-blue)">Enter data</div>
+            </div>
+            <div style="background:#fff;border:1px solid var(--g5);border-radius:10px;padding:9px">
+              <div style="font-size:10px;font-weight:900;color:var(--green);text-transform:uppercase;margin-bottom:5px">OS estimated residual bed</div>
+              <div id="refr-os-rsb" style="font-size:12px;font-weight:800;color:#1a8c3c">Enter data</div>
+            </div>
+          </div>
+        </div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
           <div style="font-size:12px;font-weight:900;color:var(--bmh-blue)">📁 Biometry &amp; Investigations</div>
           <label class="btn btn-gold btn-sm" style="cursor:pointer">
@@ -1842,6 +1872,47 @@
 
             <div id="obg-anc-panel" style="margin-top:14px">
               <div style="font-size:12px;font-weight:900;color:var(--purple);text-transform:uppercase;letter-spacing:.45px;margin-bottom:8px">ANC Assessment</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+                <label style="display:flex;align-items:center;gap:6px;padding:6px 9px;border:1px solid #caa5ff;border-radius:999px;background:#fbf6ff;font-size:11px;font-weight:800;color:#6a0091"><input type="checkbox" id="obg-anc-booking" onchange="updateObgComputedFields()"> Booking visit</label>
+                <label style="display:flex;align-items:center;gap:6px;padding:6px 9px;border:1px solid #caa5ff;border-radius:999px;background:#fbf6ff;font-size:11px;font-weight:800;color:#6a0091"><input type="checkbox" id="obg-anc-warning" onchange="toggleObgGuidedSections();updateObgComputedFields()"> Warning symptoms</label>
+                <label style="display:flex;align-items:center;gap:6px;padding:6px 9px;border:1px solid #caa5ff;border-radius:999px;background:#fbf6ff;font-size:11px;font-weight:800;color:#6a0091"><input type="checkbox" id="obg-anc-highrisk" onchange="toggleObgGuidedSections();updateObgComputedFields()"> High-risk review</label>
+                <label style="display:flex;align-items:center;gap:6px;padding:6px 9px;border:1px solid #caa5ff;border-radius:999px;background:#fbf6ff;font-size:11px;font-weight:800;color:#6a0091"><input type="checkbox" id="obg-anc-fetal" onchange="toggleObgGuidedSections();updateObgComputedFields()"> Fetal wellbeing</label>
+              </div>
+              <div id="obg-anc-guided-warning" style="display:none;background:#fff8e6;border:1px solid rgba(255,149,0,.28);border-radius:10px;padding:10px;margin-bottom:10px">
+                <div style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;margin-bottom:7px">Ask / look for warning symptoms</div>
+                <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;font-size:11px">
+                  <label><input type="checkbox" id="obg-redflag-bleeding" onchange="updateObgComputedFields()"> Bleeding PV</label>
+                  <label><input type="checkbox" id="obg-redflag-leak" onchange="updateObgComputedFields()"> Leaking PV</label>
+                  <label><input type="checkbox" id="obg-redflag-headache" onchange="updateObgComputedFields()"> Severe headache / vision</label>
+                  <label><input type="checkbox" id="obg-redflag-pain" onchange="updateObgComputedFields()"> Pain abdomen</label>
+                  <label><input type="checkbox" id="obg-redflag-fever" onchange="updateObgComputedFields()"> Fever / UTI symptoms</label>
+                  <label><input type="checkbox" id="obg-redflag-decreasedfm" onchange="updateObgComputedFields()"> Decreased fetal movements</label>
+                  <label><input type="checkbox" id="obg-redflag-swelling" onchange="updateObgComputedFields()"> Sudden swelling</label>
+                  <label><input type="checkbox" id="obg-redflag-convulsions" onchange="updateObgComputedFields()"> Convulsions</label>
+                </div>
+              </div>
+              <div id="obg-anc-guided-highrisk" style="display:none;background:#eef8ff;border:1px solid rgba(0,122,255,.22);border-radius:10px;padding:10px;margin-bottom:10px">
+                <div style="font-size:10px;font-weight:900;color:var(--blue);text-transform:uppercase;margin-bottom:7px">High-risk ANC checklist</div>
+                <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;font-size:11px">
+                  <label><input type="checkbox" id="obg-hr-prevlscs" onchange="updateObgComputedFields()"> Previous LSCS</label>
+                  <label><input type="checkbox" id="obg-hr-gdm" onchange="updateObgComputedFields()"> GDM / abnormal sugars</label>
+                  <label><input type="checkbox" id="obg-hr-pih" onchange="updateObgComputedFields()"> PIH / raised BP</label>
+                  <label><input type="checkbox" id="obg-hr-iugr" onchange="updateObgComputedFields()"> FGR / growth lag</label>
+                  <label><input type="checkbox" id="obg-hr-multiple" onchange="updateObgComputedFields()"> Multiple pregnancy</label>
+                  <label><input type="checkbox" id="obg-hr-rhneg" onchange="updateObgComputedFields()"> Rh negative</label>
+                  <label><input type="checkbox" id="obg-hr-placenta" onchange="updateObgComputedFields()"> Placenta previa / bleed</label>
+                  <label><input type="checkbox" id="obg-hr-anemia" onchange="updateObgComputedFields()"> Anaemia</label>
+                </div>
+              </div>
+              <div id="obg-anc-guided-fetal" style="display:none;background:#f2fff6;border:1px solid rgba(40,167,69,.22);border-radius:10px;padding:10px;margin-bottom:10px">
+                <div style="font-size:10px;font-weight:900;color:#1a8c3c;text-transform:uppercase;margin-bottom:7px">Fetal surveillance prompts</div>
+                <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;font-size:11px">
+                  <label><input type="checkbox" id="obg-fetal-growthlag" onchange="updateObgComputedFields()"> Fundal height lag</label>
+                  <label><input type="checkbox" id="obg-fetal-malpresentation" onchange="updateObgComputedFields()"> Malpresentation</label>
+                  <label><input type="checkbox" id="obg-fetal-lowliquor" onchange="updateObgComputedFields()"> Low liquor suspicion</label>
+                  <label><input type="checkbox" id="obg-fetal-postdates" onchange="updateObgComputedFields()"> Post-dated pregnancy</label>
+                </div>
+              </div>
               <div class="fg">
                 <div class="form-group"><label class="fl">Visit Type</label><select id="obg-anc-visit"><option>Booking / First visit</option><option>Routine ANC review</option><option>High-risk ANC review</option><option>Reduced fetal movement review</option><option>Post-dated review</option></select></div>
                 <div class="form-group"><label class="fl">BP</label><select id="obg-bp" onchange="updateObgComputedFields()"><option value="">— Select —</option><option>100/60</option><option>110/70</option><option>120/80</option><option>130/80</option><option>140/90</option><option>150/100</option><option>160/110</option></select></div>
@@ -1861,6 +1932,39 @@
 
             <div id="obg-gynae-panel" style="margin-top:14px">
               <div style="font-size:12px;font-weight:900;color:var(--blue);text-transform:uppercase;letter-spacing:.45px;margin-bottom:8px">Gynae Assessment</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+                <label style="display:flex;align-items:center;gap:6px;padding:6px 9px;border:1px solid rgba(0,122,255,.25);border-radius:999px;background:#eef8ff;font-size:11px;font-weight:800;color:var(--blue)"><input type="checkbox" id="obg-gyn-aub" onchange="toggleObgGuidedSections();updateObgComputedFields()"> AUB / HMB</label>
+                <label style="display:flex;align-items:center;gap:6px;padding:6px 9px;border:1px solid rgba(0,122,255,.25);border-radius:999px;background:#eef8ff;font-size:11px;font-weight:800;color:var(--blue)"><input type="checkbox" id="obg-gyn-discharge" onchange="toggleObgGuidedSections();updateObgComputedFields()"> Discharge / infection</label>
+                <label style="display:flex;align-items:center;gap:6px;padding:6px 9px;border:1px solid rgba(0,122,255,.25);border-radius:999px;background:#eef8ff;font-size:11px;font-weight:800;color:var(--blue)"><input type="checkbox" id="obg-gyn-pain" onchange="toggleObgGuidedSections();updateObgComputedFields()"> Pelvic pain</label>
+                <label style="display:flex;align-items:center;gap:6px;padding:6px 9px;border:1px solid rgba(0,122,255,.25);border-radius:999px;background:#eef8ff;font-size:11px;font-weight:800;color:var(--blue)"><input type="checkbox" id="obg-gyn-menopause" onchange="toggleObgGuidedSections();updateObgComputedFields()"> Peri / post-menopause</label>
+              </div>
+              <div id="obg-gyn-guided-aub" style="display:none;background:#fff8e6;border:1px solid rgba(255,149,0,.28);border-radius:10px;padding:10px;margin-bottom:10px">
+                <div style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;margin-bottom:7px">AUB / HMB prompts</div>
+                <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;font-size:11px">
+                  <label><input type="checkbox" id="obg-aub-clots" onchange="updateObgComputedFields()"> Clots / flooding</label>
+                  <label><input type="checkbox" id="obg-aub-intermenstrual" onchange="updateObgComputedFields()"> Intermenstrual bleeding</label>
+                  <label><input type="checkbox" id="obg-aub-postcoital" onchange="updateObgComputedFields()"> Post-coital bleeding</label>
+                  <label><input type="checkbox" id="obg-aub-anemia" onchange="updateObgComputedFields()"> Anaemia symptoms</label>
+                </div>
+              </div>
+              <div id="obg-gyn-guided-discharge" style="display:none;background:#f2fff6;border:1px solid rgba(40,167,69,.22);border-radius:10px;padding:10px;margin-bottom:10px">
+                <div style="font-size:10px;font-weight:900;color:#1a8c3c;text-transform:uppercase;margin-bottom:7px">Vaginal discharge / infection prompts</div>
+                <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;font-size:11px">
+                  <label><input type="checkbox" id="obg-vag-pruritus" onchange="updateObgComputedFields()"> Pruritus</label>
+                  <label><input type="checkbox" id="obg-vag-foul" onchange="updateObgComputedFields()"> Foul smell</label>
+                  <label><input type="checkbox" id="obg-vag-dyspareunia" onchange="updateObgComputedFields()"> Dyspareunia</label>
+                  <label><input type="checkbox" id="obg-vag-pidrisk" onchange="updateObgComputedFields()"> PID / STI risk</label>
+                </div>
+              </div>
+              <div id="obg-gyn-guided-pain" style="display:none;background:#f6f3ff;border:1px solid rgba(106,0,145,.18);border-radius:10px;padding:10px;margin-bottom:10px">
+                <div style="font-size:10px;font-weight:900;color:#6a0091;text-transform:uppercase;margin-bottom:7px">Pelvic pain / endometriosis prompts</div>
+                <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;font-size:11px">
+                  <label><input type="checkbox" id="obg-pain-cyclical" onchange="updateObgComputedFields()"> Cyclical pain</label>
+                  <label><input type="checkbox" id="obg-pain-severe" onchange="updateObgComputedFields()"> Severe dysmenorrhoea</label>
+                  <label><input type="checkbox" id="obg-pain-bowel" onchange="updateObgComputedFields()"> Bowel / bladder pain</label>
+                  <label><input type="checkbox" id="obg-pain-infertility" onchange="updateObgComputedFields()"> Associated infertility</label>
+                </div>
+              </div>
               <div class="fg">
                 <div class="form-group"><label class="fl">Cycle Pattern</label><select id="obg-cycle" onchange="updateObgComputedFields()"><option value="">— Select —</option><option>Regular 21-35 days</option><option>Irregular</option><option>Oligomenorrhoea</option><option>Amenorrhoea</option><option>Menorrhagia</option><option>Dysmenorrhoea</option></select></div>
                 <div class="form-group"><label class="fl">Flow</label><select id="obg-flow"><option value="">— Select —</option><option>Scanty</option><option>Average</option><option>Heavy</option><option>Clots present</option></select></div>
@@ -1876,6 +1980,25 @@
 
             <div id="obg-infertility-panel" style="margin-top:14px;display:none">
               <div style="font-size:12px;font-weight:900;color:#1a8c3c;text-transform:uppercase;letter-spacing:.45px;margin-bottom:8px">Infertility Workup</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+                <label style="display:flex;align-items:center;gap:6px;padding:6px 9px;border:1px solid rgba(40,167,69,.28);border-radius:999px;background:#f2fff6;font-size:11px;font-weight:800;color:#1a8c3c"><input type="checkbox" id="obg-inf-ovulatory" onchange="toggleObgGuidedSections();updateObgComputedFields()"> Ovulatory factor</label>
+                <label style="display:flex;align-items:center;gap:6px;padding:6px 9px;border:1px solid rgba(40,167,69,.28);border-radius:999px;background:#f2fff6;font-size:11px;font-weight:800;color:#1a8c3c"><input type="checkbox" id="obg-inf-tubal" onchange="toggleObgGuidedSections();updateObgComputedFields()"> Tubal factor</label>
+                <label style="display:flex;align-items:center;gap:6px;padding:6px 9px;border:1px solid rgba(40,167,69,.28);border-radius:999px;background:#f2fff6;font-size:11px;font-weight:800;color:#1a8c3c"><input type="checkbox" id="obg-inf-endo" onchange="toggleObgGuidedSections();updateObgComputedFields()"> Endometriosis</label>
+                <label style="display:flex;align-items:center;gap:6px;padding:6px 9px;border:1px solid rgba(40,167,69,.28);border-radius:999px;background:#f2fff6;font-size:11px;font-weight:800;color:#1a8c3c"><input type="checkbox" id="obg-inf-male" onchange="toggleObgGuidedSections();updateObgComputedFields()"> Male factor</label>
+              </div>
+              <div id="obg-inf-guided" style="background:#eefcf1;border:1px solid rgba(40,167,69,.18);border-radius:10px;padding:10px;margin-bottom:10px">
+                <div style="font-size:10px;font-weight:900;color:#1a8c3c;text-transform:uppercase;margin-bottom:7px">Infertility questions to ask</div>
+                <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;font-size:11px">
+                  <label><input type="checkbox" id="obg-inf-coital" onchange="updateObgComputedFields()"> Infrequent intercourse</label>
+                  <label><input type="checkbox" id="obg-inf-pastpid" onchange="updateObgComputedFields()"> PID / STI / TB</label>
+                  <label><input type="checkbox" id="obg-inf-priorsurgery" onchange="updateObgComputedFields()"> Pelvic surgery history</label>
+                  <label><input type="checkbox" id="obg-inf-galactorrhoea" onchange="updateObgComputedFields()"> Galactorrhoea / endocrine</label>
+                  <label><input type="checkbox" id="obg-inf-hirsutism" onchange="updateObgComputedFields()"> Hirsutism / acne</label>
+                  <label><input type="checkbox" id="obg-inf-maleabn" onchange="updateObgComputedFields()"> Male abnormal semen</label>
+                  <label><input type="checkbox" id="obg-inf-lowreserve" onchange="updateObgComputedFields()"> Low reserve concern</label>
+                  <label><input type="checkbox" id="obg-inf-rpl" onchange="updateObgComputedFields()"> Recurrent loss</label>
+                </div>
+              </div>
               <div class="fg">
                 <div class="form-group"><label class="fl">Duration trying</label><select id="obg-infertility-duration" onchange="updateObgComputedFields()"><option value="">— Select —</option><option>&lt; 6 months</option><option>6-12 months</option><option>1-2 years</option><option>2-5 years</option><option>&gt; 5 years</option></select></div>
                 <div class="form-group"><label class="fl">Type</label><select id="obg-infertility-type" onchange="updateObgComputedFields()"><option value="">— Select —</option><option>Primary infertility</option><option>Secondary infertility</option></select></div>
@@ -2473,19 +2596,20 @@
         <div class="ptab" onclick="ptab(this,'skin-rx')">Prescription</div>
         <div class="ptab" onclick="ptab(this,'skin-cosmetology')">Cosmetology</div>
       </div>
+      <div id="skin-summary-rail" style="float:right;width:300px;margin:8px 0 12px 12px"></div>
 
       <!-- SKIN HISTORY -->
       <div class="tab-content active" id="skin-hx">
         <div class="fg">
-          <div class="form-group full"><label class="fl">Chief Complaint</label><textarea>Dark spots on face, acne scars, uneven skin tone. Wants treatment and consultation.</textarea></div>
-          <div class="form-group"><label class="fl">Duration</label><input type="text" value="2 years"></div>
-          <div class="form-group"><label class="fl">Site Affected</label><select><option selected>Face</option><option>Neck</option><option>Body</option><option>Scalp</option><option>Multiple Sites</option></select></div>
-          <div class="form-group"><label class="fl">Skin Type (Fitzpatrick)</label><select><option>I — Very fair</option><option>II — Fair</option><option>III — Medium</option><option selected>IV — Olive/Brown</option><option>V — Dark brown</option><option>VI — Very dark</option></select></div>
-          <div class="form-group"><label class="fl">Primary Diagnosis</label><select><option selected>L81.1 — Chloasma / Melasma</option><option>L70.0 — Acne Vulgaris</option><option>L90.5 — Acne Scars</option><option>L63.9 — Alopecia Areata</option><option>L40 — Psoriasis</option><option>L20 — Atopic Dermatitis</option><option>L30.9 — Dermatitis NOS</option><option>B35.1 — Tinea Corporis</option><option>L57.0 — Actinic Keratosis</option></select></div>
-          <div class="form-group"><label class="fl">Secondary Diagnosis</label><select><option>None</option><option>L70.0 — Acne</option><option>L81.4 — PIH</option><option>L21 — Seborrhoeic Dermatitis</option></select></div>
-          <div class="form-group full"><label class="fl">Current Skin Care Routine</label><textarea>Using fairness cream (brand unknown), sunscreen not regular. No prescribed medications.</textarea></div>
-          <div class="form-group full"><label class="fl">Medical History / Allergies</label><textarea>No DM. Hormonal — PCOD diagnosed 2 years ago (on metformin). No known drug allergy.</textarea></div>
-          <div class="form-group"><label class="fl">Hormonal Status</label><select><option>Pre-menopausal</option><option selected>PCOD</option><option>Post-menopausal</option><option>On OCP</option><option>Pregnant</option></select></div>
+          <div class="form-group full"><label class="fl">Chief Complaint</label><textarea id="skin-chief">Dark spots on face, acne scars, uneven skin tone. Wants treatment and consultation.</textarea></div>
+          <div class="form-group"><label class="fl">Duration</label><input type="text" id="skin-duration" value="2 years"></div>
+          <div class="form-group"><label class="fl">Site Affected</label><select id="skin-site"><option selected>Face</option><option>Neck</option><option>Body</option><option>Scalp</option><option>Multiple Sites</option></select></div>
+          <div class="form-group"><label class="fl">Skin Type (Fitzpatrick)</label><select id="skin-fit"><option>I — Very fair</option><option>II — Fair</option><option>III — Medium</option><option selected>IV — Olive/Brown</option><option>V — Dark brown</option><option>VI — Very dark</option></select></div>
+          <div class="form-group"><label class="fl">Primary Diagnosis</label><select id="skin-primary-dx"><option selected>L81.1 — Chloasma / Melasma</option><option>L70.0 — Acne Vulgaris</option><option>L90.5 — Acne Scars</option><option>L63.9 — Alopecia Areata</option><option>L40 — Psoriasis</option><option>L20 — Atopic Dermatitis</option><option>L30.9 — Dermatitis NOS</option><option>B35.1 — Tinea Corporis</option><option>L57.0 — Actinic Keratosis</option></select></div>
+          <div class="form-group"><label class="fl">Secondary Diagnosis</label><select id="skin-secondary-dx"><option>None</option><option>L70.0 — Acne</option><option>L81.4 — PIH</option><option>L21 — Seborrhoeic Dermatitis</option></select></div>
+          <div class="form-group full"><label class="fl">Current Skin Care Routine</label><textarea id="skin-routine">Using fairness cream (brand unknown), sunscreen not regular. No prescribed medications.</textarea></div>
+          <div class="form-group full"><label class="fl">Medical History / Allergies</label><textarea id="skin-medical">No DM. Hormonal — PCOD diagnosed 2 years ago (on metformin). No known drug allergy.</textarea></div>
+          <div class="form-group"><label class="fl">Hormonal Status</label><select id="skin-hormonal"><option>Pre-menopausal</option><option selected>PCOD</option><option>Post-menopausal</option><option>On OCP</option><option>Pregnant</option></select></div>
         </div>
       </div>
 
@@ -2495,10 +2619,10 @@
           <div style="background:var(--g6);border-radius:var(--rsm);padding:11px">
             <div style="font-size:10.5px;font-weight:800;color:var(--g1);margin-bottom:8px;text-transform:uppercase">Lesion Description</div>
             <div style="display:flex;flex-direction:column;gap:7px">
-              <div class="form-group"><label class="fl">Primary Lesion</label><select><option selected>Macule</option><option>Papule</option><option>Plaque</option><option>Vesicle</option><option>Pustule</option><option>Nodule</option><option>Wheal</option></select></div>
-              <div class="form-group"><label class="fl">Secondary Changes</label><select><option>None</option><option selected>Pigmentation</option><option>Scale</option><option>Excoriation</option><option>Lichenification</option></select></div>
-              <div class="form-group"><label class="fl">Distribution</label><select><option selected>Bilateral, symmetric</option><option>Unilateral</option><option>Diffuse</option><option>Localised</option></select></div>
-              <div class="form-group"><label class="fl">Configuration</label><select><option selected>Scattered</option><option>Grouped</option><option>Linear</option><option>Annular</option><option>Reticulate</option></select></div>
+              <div class="form-group"><label class="fl">Primary Lesion</label><select id="skin-lesion"><option selected>Macule</option><option>Papule</option><option>Plaque</option><option>Vesicle</option><option>Pustule</option><option>Nodule</option><option>Wheal</option></select></div>
+              <div class="form-group"><label class="fl">Secondary Changes</label><select id="skin-secondary-change"><option>None</option><option selected>Pigmentation</option><option>Scale</option><option>Excoriation</option><option>Lichenification</option></select></div>
+              <div class="form-group"><label class="fl">Distribution</label><select id="skin-distribution"><option selected>Bilateral, symmetric</option><option>Unilateral</option><option>Diffuse</option><option>Localised</option></select></div>
+              <div class="form-group"><label class="fl">Configuration</label><select id="skin-configuration"><option selected>Scattered</option><option>Grouped</option><option>Linear</option><option>Annular</option><option>Reticulate</option></select></div>
             </div>
           </div>
           <div style="background:var(--g6);border-radius:var(--rsm);padding:11px">
@@ -2510,11 +2634,11 @@
               <div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:#fff;border-radius:6px"><input type="checkbox"><label style="font-size:12px;font-weight:600">Auspitz Sign</label></div>
               <div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:#fff;border-radius:6px"><input type="checkbox"><label style="font-size:12px;font-weight:600">Koebner Phenomenon</label></div>
             </div>
-            <div class="form-group" style="margin-top:10px"><label class="fl">Hair Examination</label><select><option selected>Normal</option><option>Alopecia Areata patches</option><option>Diffuse thinning</option><option>AGA — M pattern</option><option>AGA — F pattern</option></select></div>
-            <div class="form-group" style="margin-top:6px"><label class="fl">Nail Examination</label><select><option selected>Normal</option><option>Pitting</option><option>Onycholysis</option><option>Beau's lines</option><option>Leukonychia</option></select></div>
+            <div class="form-group" style="margin-top:10px"><label class="fl">Hair Examination</label><select id="skin-hair"><option selected>Normal</option><option>Alopecia Areata patches</option><option>Diffuse thinning</option><option>AGA — M pattern</option><option>AGA — F pattern</option></select></div>
+            <div class="form-group" style="margin-top:6px"><label class="fl">Nail Examination</label><select id="skin-nail"><option selected>Normal</option><option>Pitting</option><option>Onycholysis</option><option>Beau's lines</option><option>Leukonychia</option></select></div>
           </div>
         </div>
-        <div class="form-group"><label class="fl">Dermoscopy Findings</label><textarea placeholder="Dermoscopy / Wood's lamp / RCM findings…">Melasma — epidermal type. Wood's lamp: enhanced pigmentation bilaterally on cheeks and upper lip.</textarea></div>
+        <div class="form-group"><label class="fl">Dermoscopy Findings</label><textarea id="skin-dermoscopy" placeholder="Dermoscopy / Wood's lamp / RCM findings…">Melasma — epidermal type. Wood's lamp: enhanced pigmentation bilaterally on cheeks and upper lip.</textarea></div>
       </div>
 
       <!-- PROCEDURES -->
@@ -2671,6 +2795,25 @@
 
       <!-- COSMETOLOGY -->
       <div class="tab-content" id="skin-cosmetology">
+        <div style="background:#fff7f6;border:1.5px solid rgba(196,76,124,.18);border-radius:12px;padding:12px;margin-bottom:14px">
+          <div style="font-size:12px;font-weight:900;color:#b1366a;margin-bottom:8px">Guided Cosmetology Proforma</div>
+          <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px">
+            <label style="display:flex;align-items:center;gap:6px;padding:8px 10px;border:1.5px solid rgba(196,76,124,.26);border-radius:999px;background:#fff;font-size:11px;font-weight:800;color:#a12f61"><input type="checkbox" id="skin-cosm-melasma"> Pigmentation / melasma</label>
+            <label style="display:flex;align-items:center;gap:6px;padding:8px 10px;border:1.5px solid rgba(196,76,124,.26);border-radius:999px;background:#fff;font-size:11px;font-weight:800;color:#a12f61"><input type="checkbox" id="skin-cosm-acne"> Acne / oily skin</label>
+            <label style="display:flex;align-items:center;gap:6px;padding:8px 10px;border:1.5px solid rgba(196,76,124,.26);border-radius:999px;background:#fff;font-size:11px;font-weight:800;color:#a12f61"><input type="checkbox" id="skin-cosm-scar"> Acne scars / texture</label>
+            <label style="display:flex;align-items:center;gap:6px;padding:8px 10px;border:1.5px solid rgba(196,76,124,.26);border-radius:999px;background:#fff;font-size:11px;font-weight:800;color:#a12f61"><input type="checkbox" id="skin-cosm-ageing"> Photoaging / rejuvenation</label>
+            <label style="display:flex;align-items:center;gap:6px;padding:8px 10px;border:1.5px solid rgba(196,76,124,.26);border-radius:999px;background:#fff;font-size:11px;font-weight:800;color:#a12f61"><input type="checkbox" id="skin-cosm-sensitive"> Sensitive / rosacea-prone</label>
+            <label style="display:flex;align-items:center;gap:6px;padding:8px 10px;border:1.5px solid rgba(196,76,124,.26);border-radius:999px;background:#fff;font-size:11px;font-weight:800;color:#a12f61"><input type="checkbox" id="skin-cosm-hair"> Hair reduction / laser</label>
+          </div>
+          <div class="fg3">
+            <div class="form-group"><label class="fl">Acne grade / inflammation</label><select id="skin-cosm-acne-grade"><option value="">Select</option><option>Mild comedonal</option><option>Moderate inflammatory</option><option>Severe / nodulocystic</option></select></div>
+            <div class="form-group"><label class="fl">Barrier sensitivity</label><select id="skin-cosm-sensitivity"><option value="">Select</option><option>Low</option><option>Moderate</option><option>High / stinging</option></select></div>
+            <div class="form-group"><label class="fl">PIH tendency</label><select id="skin-cosm-pih"><option value="">Select</option><option>Low</option><option>Moderate</option><option>High / previous PIH</option></select></div>
+            <div class="form-group"><label class="fl">Recent isotretinoin</label><select id="skin-cosm-isotret"><option value="">Select</option><option>No</option><option>Yes within 6 months</option></select></div>
+            <div class="form-group"><label class="fl">Current tan / sun exposure</label><select id="skin-cosm-tan"><option value="">Select</option><option>Minimal</option><option>Moderate</option><option>Heavy / recent tanning</option></select></div>
+            <div class="form-group"><label class="fl">Pregnancy / lactation</label><select id="skin-cosm-preg"><option value="">Select</option><option>No</option><option>Yes</option></select></div>
+          </div>
+        </div>
         <div style="background:linear-gradient(135deg,#f3eeff,#fce4ff);border-radius:var(--rsm);padding:14px;margin-bottom:14px">
           <div style="font-size:14px;font-weight:900;color:var(--purple);margin-bottom:10px">✨ Cosmetology Treatment Plan</div>
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
