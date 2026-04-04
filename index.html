@@ -3590,7 +3590,7 @@
 <div class="modal-hd"><div class="modal-title">Create surgery document pack</div><button class="modal-close" onclick="closeM('m-new-tpl')">✕</button></div>
 <div class="fg fg1" style="gap:9px">
   <div class="form-group"><label class="fl">Pack name</label><input type="text" id="new-pack-name" placeholder="e.g. DCR + lacrimal pack"></div>
-  <div class="form-group"><label class="fl">Department label</label><select id="new-pack-dept"><option>Ophthalmology</option><option>OBG</option><option>Neuropsychiatry</option><option>Skin</option><option>General</option></select></div>
+  <div class="form-group"><label class="fl">Department label</label><select id="new-pack-dept" onchange="populateNewPackModal()"><option>Ophthalmology</option><option>OBG</option><option>Neuropsychiatry</option><option>Skin</option><option>General</option></select></div>
   <div style="font-size:11px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px;margin-top:4px">Consent forms to include</div>
   <div id="new-tpl-docs" style="max-height:220px;overflow-y:auto"></div>
   <button class="btn btn-gold" onclick="saveSurgeryPackFromModal()">💾 Save pack</button>
