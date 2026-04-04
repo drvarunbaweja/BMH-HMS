@@ -1778,6 +1778,7 @@ function bookFollowup() {
   const ptMob  = PATIENTS.find(p=>p.bmhId===ptId)?.mob || '';
   const doc    = CURRENT_USER?.name || 'Doctor';
   const dept   = CURRENT_USER?.dept || 'Ophthalmology';
+  const nearestSlot = getNearestAppointmentSlot(d);
 
   // Add to APPOINTMENTS array
   // Double-booking check
@@ -1792,7 +1793,7 @@ function bookFollowup() {
     mob: ptMob,
     date: d,
     dateFormatted: formatted,
-    time: '09:00 AM',
+    time: nearestSlot,
     doctor: doc,
     dept: dept,
     purpose: 'Follow-up',
@@ -1818,6 +1819,8 @@ function bookFollowup() {
 
 function openBookApt(slot) {
   document.getElementById('book-date').value = document.getElementById('apt-date-inp')?.value || '';
+  const timeEl = document.getElementById('book-time');
+  if (timeEl) timeEl.value = normalizeAptTimeLabel(slot || getNearestAppointmentSlot(document.getElementById('book-date')?.value));
   // Populate patient dropdown with live PATIENTS
   const sel = document.getElementById('book-patient');
   if(sel && PATIENTS && PATIENTS.length) {
@@ -1831,6 +1834,29 @@ function openBookApt(slot) {
     centreEl.value = window.CURRENT_USER.centre === 'RPR' ? 'Ropar' : 'Chandigarh';
   }
   openM('m-book-apt');
+}
+function normalizeAptTimeLabel(slot) {
+  const s = String(slot || '').trim();
+  if (!s) return '9:00 AM';
+  if (/am|pm/i.test(s)) return s.replace(/^0/,'');
+  const [hh, mm] = s.split(':').map(Number);
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return s;
+  const suffix = hh >= 12 ? 'PM' : 'AM';
+  const hr12 = ((hh + 11) % 12) + 1;
+  return `${hr12}:${String(mm).padStart(2,'0')} ${suffix}`;
+}
+function getNearestAppointmentSlot(dateStr) {
+  const TIMES = ['08:30','09:00','09:30','10:00','10:30','11:00','11:30','12:00','14:00','14:30','15:00','15:30','16:00','16:30','17:00'];
+  if (!dateStr) return '9:00 AM';
+  const todayStr = new Date().toISOString().split('T')[0];
+  if (dateStr !== todayStr) return '9:00 AM';
+  const now = new Date();
+  const mins = now.getHours() * 60 + now.getMinutes();
+  const next = TIMES.find(t => {
+    const [h,m] = t.split(':').map(Number);
+    return (h * 60 + m) >= mins;
+  });
+  return normalizeAptTimeLabel(next || TIMES[TIMES.length - 1]);
 }
 function bookApt() {
   const dateEl   = document.getElementById('book-date');
@@ -5751,7 +5777,7 @@ const INVESTIGATION_LIBRARY = {
   ]
 };
 const RX_FREQ_OPTIONS = ['Half-hourly','Hourly','Every 2 hours','Every 3 hours','Every 4 hours','Six times daily (6x/day)','Four times daily (QID)','Three times daily (TDS)','Twice daily (BD)','Once daily (OD)','At bedtime (HS)','Once weekly','As needed (PRN)'];
-const RX_DURATION_OPTIONS = ['½ day','1 day','2 days','3 days','4 days','5 days','6 days','7 days','1 week','2 weeks','3 weeks','4 weeks','6 weeks','1 month','2 months','3 months','4 months','5 months','6 months','12 months','Ongoing'];
+const RX_DURATION_OPTIONS = ['½ day','1 day','2 days','3 days','4 days','5 days','6 days','7 days','13 days','1 week','2 weeks','3 weeks','4 weeks','6 weeks','1 month','2 months','3 months','4 months','5 months','6 months','12 months','Ongoing'];
 const RX_TYPE_OPTIONS = ['Eye Drop','Tablet','Capsule','Ointment','Cream','Gel','Syrup','Injection','Pessary','Lotion','Spray','Other'];
 const RX_SITE_OPTIONS = ['Right Eye (OD)','Left Eye (OS)','Both Eyes (OU)','Oral','Topical','IM / IV','Nasal','Ear','Vaginal'];
 function renderInvestigationChooser() {
@@ -5954,6 +5980,33 @@ function refreshRxTemplateSelects() {
     if ([...sel.options].some(function (o) { return o.value === cur; })) sel.value = cur;
   });
   if (typeof refreshOTNotesTemplateSelect === 'function') refreshOTNotesTemplateSelect();
+}
+function rxDrugMatchesDept(drug, deptKey, deptLabel) {
+  const entry = drug || {};
+  const rawDept = String(entry.dept || '').trim();
+  const normalizedDept = rawDept.toLowerCase();
+  const type = String(entry.type || '').trim().toLowerCase();
+  const trade = String(entry.trade || entry.brand || '').trim().toLowerCase();
+  const generic = String(entry.generic || entry.name || '').trim().toLowerCase();
+  const hay = `${trade} ${generic} ${type}`.trim();
+  const looksEyeSpecific =
+    type.includes('eye drop') ||
+    type.includes('ophthalmic') ||
+    /\b(drop|od|os|ou)\b/.test(hay) ||
+    /\b(pred forte|vigamox|refresh tears|timoptol|cosopt|restasis)\b/.test(hay);
+
+  if (deptKey === 'ophtho') {
+    if (!rawDept) return looksEyeSpecific;
+    return normalizedDept === 'ophtho' || normalizedDept === 'ophthalmology' || normalizedDept === 'all';
+  }
+
+  if (looksEyeSpecific) return false;
+  if (!rawDept || normalizedDept === 'all') return true;
+  if (deptLabel && rawDept === deptLabel) return true;
+  if (deptKey === 'psych' && (normalizedDept === 'psych' || normalizedDept === 'psychiatry' || normalizedDept === 'neuropsychiatry')) return true;
+  if (deptKey === 'obg' && (normalizedDept === 'obg' || normalizedDept.includes('gyn') || normalizedDept.includes('fertility'))) return true;
+  if (deptKey === 'skin' && (normalizedDept === 'skin' || normalizedDept.includes('derm') || normalizedDept.includes('cosmet'))) return true;
+  return normalizedDept === deptKey;
 }
 function renderSetRxTplList() {
   const el = document.getElementById('set-rx-tpl-list');
@@ -6585,6 +6638,7 @@ function normalizeRxDurationLabel(dur) {
   if (/3\s*weeks?/i.test(d)) return '3 weeks';
   if (/2\s*weeks?/i.test(d)) return '2 weeks';
   if (/1\s*weeks?/i.test(d)) return '1 week';
+  if (/13\s*days?/i.test(d)) return '13 days';
   if (/7\s*days?/i.test(d)) return '7 days';
   if (/6\s*days?/i.test(d)) return '6 days';
   if (/5\s*days?/i.test(d)) return '5 days';
@@ -6768,7 +6822,7 @@ function bookFollowupApt(date, n, unit) {
   const apt = {
     id:'APT-'+Date.now(), patient:ptName, bmhId:ptId,
     mob:PATIENTS.find(p=>p.bmhId===ptId)?.mob||'',
-    date:date.toISOString().split('T')[0], time:'09:00 AM',
+    date:date.toISOString().split('T')[0], time:normalizeAptTimeLabel(getNearestAppointmentSlot(date.toISOString().split('T')[0])),
     doctor:CURRENT_USER?.name||'Dr. Varun Baweja',
     dept:CURRENT_USER?.dept||'Ophthalmology', centre:CURRENT_USER?.centre||'CHD',
     purpose:'Follow-up ('+n+' '+unitLabel+(n>1?'s':'')+' review)',
@@ -8862,7 +8916,7 @@ function doctorMatchesPatientQueue(patientDoctor, currentDoctor) {
   return p === c || p.includes(c) || c.includes(p);
 }
 
-const RX_TAPER_SEGMENT_DURS = ['½ day','1 day','2 days','3 days','5 days','7 days','14 days'];
+const RX_TAPER_SEGMENT_DURS = ['½ day','1 day','2 days','3 days','5 days','7 days','13 days','14 days'];
 function addDaysToIsoDate(iso, days) {
   if (!iso) return '';
   const d = new Date(iso + 'T12:00:00');
@@ -8886,6 +8940,7 @@ function durationLabelToDays(label) {
   if (s.includes('3 week')) return 21;
   if (s.includes('2 week')) return 14;
   if (s.includes('1 week')) return 7;
+  if (/13\s*days?/.test(s)) return 13;
   if (/6\s*days?/.test(s)) return 6;
   if (/4\s*days?/.test(s)) return 4;
   if (/14\s*days?/.test(s)) return 14;
@@ -8929,16 +8984,17 @@ function computeRxEndAndTaperDates(d) {
     d.dateTo = addDaysToIsoDate(d.dateFrom, Math.max(0, Math.round(n) - 1));
   }
   const mainDurLabel = normalizeRxDurationLabel(d.dur);
-  const tnMain = durationLabelToDays(mainDurLabel);
-  const halfMain = String(mainDurLabel || '').includes('½') || String(mainDurLabel || '').toLowerCase().includes('half');
   let prevTo = d.dateTo;
   ensureRxTaperRows(d).forEach(tr => {
-    tr.dur = mainDurLabel;
+    if (!tr.dur) tr.dur = mainDurLabel;
+    tr.dur = normalizeRxDurationLabel(tr.dur);
     tr.dateFrom = addDaysToIsoDate(prevTo, 1);
-    if (tnMain <= 1 && halfMain) {
+    const tn = durationLabelToDays(tr.dur);
+    const half = String(tr.dur || '').includes('½') || String(tr.dur || '').toLowerCase().includes('half');
+    if (tn <= 1 && half) {
       tr.dateTo = tr.dateFrom;
     } else {
-      tr.dateTo = addDaysToIsoDate(tr.dateFrom, Math.max(0, Math.round(tnMain) - 1));
+      tr.dateTo = addDaysToIsoDate(tr.dateFrom, Math.max(0, Math.round(tn) - 1));
     }
     prevTo = tr.dateTo;
   });
@@ -9555,13 +9611,23 @@ function addCustomLabTest() {
 function renderAptDay() {
   const date = document.getElementById('apt-date-inp')?.value || new Date().toISOString().split('T')[0];
   const drFilter = document.getElementById('apt-dr-filter')?.value || '';
-  const dayApts = APPOINTMENTS.filter(a => a.date === date && (!drFilter || a.doctor === drFilter));
+  const timeSortVal = (slot) => {
+    const s = normalizeAptTimeLabel(slot);
+    const m = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    if(!m) return 0;
+    let h = Number(m[1]) % 12;
+    if(String(m[3]).toUpperCase() === 'PM') h += 12;
+    return h * 60 + Number(m[2]);
+  };
+  const dayApts = APPOINTMENTS.filter(a => a.date === date && (!drFilter || a.doctor === drFilter))
+    .slice()
+    .sort((a,b) => timeSortVal(a.time || a.scheduledTime) - timeSortVal(b.time || b.scheduledTime));
   const slotsEl = document.getElementById('apt-day-slots');
   if(!slotsEl) return;
 
   const TIMES = ['08:30','09:00','09:30','10:00','10:30','11:00','11:30','12:00','14:00','14:30','15:00','15:30','16:00','16:30','17:00'];
   slotsEl.innerHTML = TIMES.map(t => {
-    const booked = dayApts.find(a => a.time === t || a.scheduledTime === t);
+    const booked = dayApts.find(a => normalizeAptTimeLabel(a.time || a.scheduledTime) === normalizeAptTimeLabel(t));
     if(booked) return `<div class="apt-slot booked" onclick="showToast('${booked.patient} — ${booked.purpose}','i')">
       <div style="font-size:11.5px;font-weight:900;color:var(--bmh-blue);min-width:48px">${t}</div>
       <div style="flex:1"><div style="font-size:13px;font-weight:800">${booked.patient}</div>
@@ -9581,14 +9647,18 @@ function renderAptDay() {
   if(todayEl) todayEl.innerHTML = dayApts.length ? dayApts.map(a=>`<div class="apt-slot booked" style="font-size:12px">
     <div style="font-size:16px">${a.type==='surgery'?'⚕️':a.type==='post-op'?'👁️':a.type==='anc'?'🤰':'🩺'}</div>
     <div style="flex:1"><div style="font-weight:800">${a.patient}</div><div style="font-size:10.5px;color:var(--g1)">${a.doctor} · ${a.purpose||a.type}</div></div>
-    <div style="font-size:12px;font-weight:900;color:var(--bmh-blue)">${a.time}</div>
+      <div style="font-size:12px;font-weight:900;color:var(--bmh-blue)">${normalizeAptTimeLabel(a.time)}</div>
   </div>`).join('') : '<div style="padding:14px;text-align:center;color:var(--g1);font-size:12px">No appointments on this date</div>';
 
   const upcomingEl = document.getElementById('apt-upcoming-list');
-  if(upcomingEl) upcomingEl.innerHTML = APPOINTMENTS.slice(0,5).map(a=>`<div style="display:flex;align-items:center;gap:9px;padding:8px;border-bottom:1px solid var(--g5);font-size:12px;cursor:pointer">
+  if(upcomingEl) upcomingEl.innerHTML = APPOINTMENTS.slice().sort((a,b)=>{
+    const ad = new Date(`${a.date || '1970-01-01'}T00:00:00`).getTime() + (timeSortVal(a.time || a.scheduledTime) * 60000);
+    const bd = new Date(`${b.date || '1970-01-01'}T00:00:00`).getTime() + (timeSortVal(b.time || b.scheduledTime) * 60000);
+    return ad - bd;
+  }).slice(0,5).map(a=>`<div style="display:flex;align-items:center;gap:9px;padding:8px;border-bottom:1px solid var(--g5);font-size:12px;cursor:pointer">
     <div style="font-size:16px">${a.type==='surgery'?'⚕️':a.type==='anc'?'🤰':'🩺'}</div>
     <div style="flex:1"><div style="font-weight:800">${a.patient}</div><div style="font-size:10.5px;color:var(--g1)">${a.purpose||a.type} · ${a.date}</div></div>
-    <span class="badge bd-blue">${a.time}</span>
+    <span class="badge bd-blue">${normalizeAptTimeLabel(a.time)}</span>
   </div>`).join('');
   const ct = document.getElementById('apt-upcoming-ct'); if(ct) ct.textContent = APPOINTMENTS.length;
 }
@@ -12567,13 +12637,12 @@ function rxQuickSearch(val) {
 
   const libSettings = typeof DRUG_LIBRARY !== 'undefined' ? DRUG_LIBRARY : [];
   const fromSettings = libSettings.filter(d => {
-    const okDept = !d.dept || d.dept === 'All' || !deptLabel || d.dept === deptLabel;
-    if (!okDept) return false;
+    if (!rxDrugMatchesDept(d, deptKey, deptLabel)) return false;
     return String(d.trade || '').toLowerCase().includes(v) || String(d.generic || '').toLowerCase().includes(v);
   }).slice(0, 8);
 
   const fromFull = (typeof DRUG_LIBRARY_FULL !== 'undefined' ? DRUG_LIBRARY_FULL : []).filter(d =>
-    (d.dept === deptKey || d.dept === 'all') &&
+    rxDrugMatchesDept(d, deptKey, deptLabel) &&
     (d.name.toLowerCase().includes(v) || d.brand.toLowerCase().includes(v))
   ).slice(0, 8);
 
