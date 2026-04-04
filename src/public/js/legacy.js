@@ -8113,7 +8113,7 @@ function renderRxDrugs() {
     });
   });
 
-  el.innerHTML = `<div style="border:1px solid var(--g5);border-radius:12px;overflow-x:auto;overflow-y:hidden;background:#fff">
+  el.innerHTML = `<div style="border:1px solid var(--g5);border-radius:12px;overflow-x:auto;overflow-y:visible;background:#fff">
     <div style="display:grid;grid-template-columns:30px minmax(220px,1.42fr) minmax(90px,.66fr) minmax(104px,.68fr) minmax(136px,.82fr) minmax(108px,.68fr) minmax(190px,.95fr) 96px;gap:0;background:var(--bmh-blue);color:#fff;font-size:9.4px;font-weight:800;text-transform:uppercase;letter-spacing:.35px">
       <div style="padding:10px 8px;border-right:1px solid rgba(255,255,255,.14)">#</div>
       <div style="padding:10px 8px;border-right:1px solid rgba(255,255,255,.14)">Name</div>
@@ -8170,7 +8170,7 @@ function renderRxDrugs() {
         <button type="button" class="btn btn-xs btn-outline" style="width:100%;font-weight:800;font-size:10px" onclick="addTaperRow(${i}, RX_DRUGS[${i}].taperRows[${tapIdx}].dur || '1 week', ${tapIdx})">Taper</button>
         <button type="button" class="btn btn-xs btn-gray" onclick="clearTaperRow(${i}, ${tapIdx})">✕</button>
       </div>
-    </div><div style="min-width:980px;padding:6px 10px 8px 44px;border-top:1px dashed #e7c9a3;background:#fffaf0;font-size:10px;line-height:1.45;color:#7a4a10">${buildRxPlainInstructionLine({ ...d, freq: tap.freq, dur: tap.dur, dateFrom: tap.dateFrom, dateTo: tap.dateTo, taperRows: [] }, lang, (x)=>x ? new Date(Date.parse(x)).toLocaleDateString('en-IN',{day:'2-digit',month:'2-digit',year:'numeric'}) : '—').replace(/</g,'&lt;')}</div>`).join('')}
+    </div>`).join('')}
   </div>`;
   }).join('')}
   </div>`;
@@ -8994,7 +8994,7 @@ ${drugs.length ? `
         <td>${fmtIN(d.dateTo)}</td>
       </tr>`;
       if (plainLine) {
-        rows += `<tr style="background:#f7faff"><td></td><td class="left" colspan="7" style="padding-top:7px;padding-bottom:7px;font-size:11px;line-height:1.5">${escapeHtmlConsent(plainLine)}</td></tr>`;
+        rows += `<tr style="background:#f7faff"><td class="left" colspan="8" style="padding-top:7px;padding-bottom:7px;font-size:11px;line-height:1.5"><div style="padding-left:8px">${escapeHtmlConsent(plainLine)}</div></td></tr>`;
       }
       taperRows.forEach((tap, tapIdx) => {
         const taperLine = buildRxPlainInstructionLine({ ...d, freq: tap.freq, dur: tap.dur, dateFrom: tap.dateFrom, dateTo: tap.dateTo, taperRows: [] }, rxPlainLang, fmtIN);
@@ -9009,7 +9009,7 @@ ${drugs.length ? `
           <td>${fmtIN(tap.dateTo)}</td>
         </tr>`;
         if (taperLine) {
-          rows += `<tr style="background:#fffaf0"><td></td><td class="left" colspan="7" style="padding-top:7px;padding-bottom:7px;font-size:11px;line-height:1.5">${escapeHtmlConsent(taperLine)}</td></tr>`;
+          rows += `<tr style="background:#fffaf0"><td class="left" colspan="8" style="padding-top:7px;padding-bottom:7px;font-size:11px;line-height:1.5"><div style="padding-left:8px">${escapeHtmlConsent(taperLine)}</div></td></tr>`;
         }
       });
       return rows;
