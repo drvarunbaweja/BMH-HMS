@@ -6870,8 +6870,10 @@ function saveRxTemplate() {
 
 // BMSH ID generator (unified, no centre suffix)
 function genUID() {
-  const n = Math.floor(Math.random()*900000)+100000;
-  const el = document.getElementById('m-uid'); if(el) el.textContent='BMSH-'+n;
+  const fallback = Math.max(56000, Number(window._nextPatientNum || 56000));
+  const nextId = 'BMSH-' + String(fallback).padStart(6,'0');
+  const el = document.getElementById('m-uid'); if(el) el.textContent = nextId;
+  return nextId;
 }
 
 // IPD BED RENAME
@@ -8447,15 +8449,19 @@ function renderRxDrugs() {
     });
   });
 
-  const fieldSelect = (label, value, list, onChange, border) => `
-    <div style="display:flex;flex-direction:column;gap:4px">
-      <div style="font-size:9px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px">${label}</div>
-      <select onchange="${onChange}" style="font-size:11px;padding:7px 8px;width:100%;border-radius:8px;border:1px solid ${border};background:#fff">${list.map(v=>`<option${value===v?' selected':''}>${v}</option>`).join('')}</select>
-    </div>`;
-  const fieldInput = (label, value, onChange, border, type, placeholder) => `
-    <div style="display:flex;flex-direction:column;gap:4px">
-      <div style="font-size:9px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px">${label}</div>
-      <input type="${type || 'text'}" value="${String(value || '').replace(/"/g,'&quot;')}" placeholder="${placeholder || ''}" onchange="${onChange}" style="font-size:11px;padding:7px 8px;width:100%;border-radius:8px;border:1px solid ${border};background:#fff">
+  const gridCols = isOphtho
+    ? 'minmax(230px,1.6fr) minmax(120px,.9fr) minmax(160px,1fr) minmax(175px,1fr) minmax(140px,.9fr) minmax(135px,.9fr) minmax(135px,.9fr) 84px'
+    : 'minmax(250px,1.7fr) minmax(120px,.9fr) minmax(160px,1fr) minmax(175px,1fr) minmax(140px,.9fr) minmax(135px,.9fr) minmax(135px,.9fr) 84px';
+  const gridHead = `
+    <div style="display:grid;grid-template-columns:${gridCols};gap:8px;padding:6px 8px;background:var(--g6);border-radius:10px 10px 0 0;font-size:9px;font-weight:900;color:var(--g1);text-transform:uppercase;letter-spacing:.45px">
+      <div>Name</div>
+      <div>Type</div>
+      <div>${isOphtho ? 'Eye' : 'Route'}</div>
+      <div>Frequency</div>
+      <div>Duration</div>
+      <div>Start</div>
+      <div>End</div>
+      <div>Action</div>
     </div>`;
   const medicineRow = (d, i, options) => {
     const opts = options || {};
@@ -8478,68 +8484,65 @@ function renderRxDrugs() {
     const removeBtn = opts.removeBtn || '';
     const instruction = opts.instruction || '';
     const siteLabel = isOphtho ? 'Eye' : 'Route';
-    return `<div style="padding:10px 12px;background:${bg};border-top:1px dashed ${border};display:flex;flex-direction:column;gap:10px">
-      <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap">
-        <div style="display:flex;align-items:flex-start;gap:10px;min-width:0;flex:1">
-          <span style="min-width:28px;height:28px;border-radius:999px;background:${opts.badgeBg || 'var(--bmh-blue)'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:900;margin-top:2px">${badge}</span>
-          <div style="min-width:0;flex:1">
-            <input value="${String(heading).replace(/"/g,'&quot;')}" onchange="${prefix}.trade=this.value;${prefix}.brand=this.value" placeholder="Trade name" style="width:100%;font-size:13px;font-weight:900;border:none;background:transparent;padding:0;box-sizing:border-box;color:${opts.headingColor || 'var(--tx)'}">
-            <input value="${String(subheading).replace(/"/g,'&quot;')}" onchange="${prefix}.generic=this.value;${prefix}.name=this.value" placeholder="(Generic name)" style="width:100%;font-size:10.5px;color:var(--g1);font-style:italic;border:none;background:transparent;padding:0;box-sizing:border-box;margin-top:2px">
-            ${title ? `<div style="font-size:9px;color:var(--g1);margin-top:3px">${title}</div>` : ''}
+    return `<div style="padding:8px;background:${bg};border-top:${opts.noTopBorder ? 'none' : '1px dashed ' + border}">
+      <div style="display:grid;grid-template-columns:${gridCols};gap:8px;align-items:center">
+        <div style="min-width:0">
+          ${opts.showBadge !== false ? `<div style="display:flex;align-items:center;gap:8px">
+            <span style="min-width:24px;height:24px;border-radius:999px;background:${opts.badgeBg || 'var(--bmh-blue)'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:900">${badge}</span>` : '<div>'}
+            <div style="min-width:0;flex:1">
+              ${opts.showName !== false ? `<input value="${String(heading).replace(/"/g,'&quot;')}" onchange="${prefix}.trade=this.value;${prefix}.brand=this.value" placeholder="Trade name" style="width:100%;font-size:12.5px;font-weight:900;border:none;background:transparent;padding:0;box-sizing:border-box;color:${opts.headingColor || 'var(--tx)'}">` : `<div style="font-size:11px;color:${opts.headingColor || 'var(--g1)'};font-style:italic">${opts.rowLabel || 'Taper step'}</div>`}
+              ${opts.showGeneric !== false ? `<input value="${String(subheading).replace(/"/g,'&quot;')}" onchange="${prefix}.generic=this.value;${prefix}.name=this.value" placeholder="(Generic name)" style="width:100%;font-size:10px;color:var(--g1);font-style:italic;border:none;background:transparent;padding:0;box-sizing:border-box;margin-top:2px">` : ''}
+            </div>
           </div>
         </div>
-        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
-          ${taperBtn}
-          ${removeBtn}
-        </div>
+        <div><select onchange="${prefix}.drugType=this.value;${prefix}.type=this.value" style="font-size:10.5px;padding:7px;width:100%;border-radius:8px;border:1px solid ${border};background:#fff">${typeOpts.map(t=>`<option${dt===t?' selected':''}>${t}</option>`).join('')}</select></div>
+        <div><select onchange="${prefix}.eye=[this.value]" style="font-size:10.5px;padding:7px;width:100%;border-radius:8px;border:1px solid ${border};background:#fff">${eyeOpts.map(e=>`<option${eye0===e?' selected':''}>${e}</option>`).join('')}</select></div>
+        <div><select onchange="${prefix}.freq=this.value;syncRxDrugDates(${i})" style="font-size:10.5px;padding:7px;width:100%;border-radius:8px;border:1px solid ${border};background:#fff">${freqOpts.map(f=>`<option${freq===f?' selected':''}>${f}</option>`).join('')}</select></div>
+        <div><select onchange="${prefix}.dur=this.value;syncRxDrugDates(${i})" style="font-size:10.5px;padding:7px;width:100%;border-radius:8px;border:1px solid ${border};background:#fff">${durOpts.map(f=>`<option${dur===f?' selected':''}>${f}</option>`).join('')}</select></div>
+        <div><input type="date" value="${dateFrom||''}" onchange="${prefix}.dateFrom=this.value;syncRxDrugDates(${i})" style="font-size:10.5px;padding:7px;border-radius:8px;border:1px solid ${border};width:100%;background:#fff"></div>
+        <div><input type="date" value="${dateTo||''}" onchange="${prefix}.dateTo=this.value" style="font-size:10.5px;padding:7px;border-radius:8px;border:1px solid ${border};width:100%;background:#fff"></div>
+        <div style="display:flex;flex-direction:column;gap:6px">${taperBtn}${removeBtn}</div>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(${isOphtho ? '170px' : '180px'},1fr));gap:8px">
-        ${fieldSelect('Type', dt, typeOpts, `${prefix}.drugType=this.value;${prefix}.type=this.value`, border)}
-        ${fieldSelect(siteLabel, eye0, eyeOpts, `${prefix}.eye=[this.value]`, border)}
-        ${fieldSelect('Frequency', freq, freqOpts, `${prefix}.freq=this.value;syncRxDrugDates(${i})`, border)}
-        ${fieldSelect('Duration', dur, durOpts, `${prefix}.dur=this.value;syncRxDrugDates(${i})`, border)}
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px">
-        ${fieldInput('Start', dateFrom, `${prefix}.dateFrom=this.value;syncRxDrugDates(${i})`, border, 'date')}
-        ${fieldInput('End', dateTo, `${prefix}.dateTo=this.value`, border, 'date')}
-      </div>
-      ${instruction ? `<div style="margin-top:8px;padding:8px 10px;background:${opts.instructionBg || '#f7faff'};border-radius:8px;font-size:10px;line-height:1.45;color:${opts.instructionColor || '#24364f'}">${instruction.replace(/</g,'&lt;')}</div>` : ''}
+      ${instruction ? `<div style="margin-top:7px;padding:7px 10px;background:${opts.instructionBg || '#f7faff'};border-radius:8px;font-size:10px;line-height:1.45;color:${opts.instructionColor || '#24364f'}">${instruction.replace(/</g,'&lt;')}</div>` : ''}
     </div>`;
   };
 
-  el.innerHTML = `<div style="display:flex;flex-direction:column;gap:12px">
+  el.innerHTML = `<div style="display:flex;flex-direction:column;gap:10px">
     ${RX_DRUGS.map((d,i)=>{
       const taperRows = ensureRxTaperRows(d);
       const plainLine = d.lang&&d.lang[lang] ? String(d.lang[lang]) : '';
       return `<div class="rx-drug-row" style="border:1px solid var(--g5);border-radius:12px;overflow:hidden;background:#fff">
+        ${gridHead}
         ${medicineRow(d, i, {
           prefix:`RX_DRUGS[${i}]`,
           badge:`${i+1}`,
           taperBtn:`<button type="button" class="btn btn-xs btn-outline" style="width:100%;font-weight:800;font-size:10px" onclick="addTaperRow(${i}, RX_DRUGS[${i}].dur || '1 week')">Taper</button>`,
           removeBtn:`<button type="button" class="btn btn-xs btn-gray" onclick="removeDrug(${i})" title="Remove">✕</button>`,
-          instruction:plainLine
+          instruction:plainLine,
+          noTopBorder:true
         })}
         ${taperRows.map((tap, tapIdx)=>medicineRow({ ...d, ...tap, eye:d.eye, drugType:d.drugType, type:d.type }, i, {
           prefix:`RX_DRUGS[${i}].taperRows[${tapIdx}]`,
-          trade:rxDrugTradeName(d) || '',
-          gen:rxDrugGenericName(d) || '',
           dt:d.drugType || d.type || 'Tablet',
           eye0:(d.eye && d.eye[0]) || 'Oral',
           freq:tap.freq,
           dur:tap.dur,
           dateFrom:tap.dateFrom,
           dateTo:tap.dateTo,
-          badge:`T${tapIdx+1}`,
+          badge:`${i+1}`,
           badgeBg:'var(--orange)',
-          title:`Taper step ${tapIdx + 1}`,
           bg:'var(--orange-lt)',
           border:'var(--orange)',
           headingColor:'#8a4200',
+          showName:false,
+          showGeneric:false,
+          rowLabel:'Taper',
           taperBtn:`<button type="button" class="btn btn-xs btn-outline" style="width:100%;font-weight:800;font-size:10px" onclick="addTaperRow(${i}, RX_DRUGS[${i}].taperRows[${tapIdx}].dur || '1 week', ${tapIdx})">Taper</button>`,
           removeBtn:`<button type="button" class="btn btn-xs btn-gray" onclick="clearTaperRow(${i}, ${tapIdx})">✕</button>`,
           instruction:buildRxPlainInstructionLine({ ...d, freq: tap.freq, dur: tap.dur, dateFrom: tap.dateFrom, dateTo: tap.dateTo, taperRows: [] }, lang, (x)=>x ? new Date(Date.parse(x)).toLocaleDateString('en-IN',{day:'2-digit',month:'2-digit',year:'numeric'}) : '—'),
           instructionBg:'#fffaf0',
-          instructionColor:'#7a4a10'
+          instructionColor:'#7a4a10',
+          showBadge:false
         })).join('')}
       </div>`;
     }).join('')}
@@ -10313,6 +10316,18 @@ function renderDischargeBuilder() {
 
   const sel = document.getElementById('dc-specialty-sel')?.value || 'ophtho';
   const tmpl = DISCHARGE_TEMPLATES[sel] || DISCHARGE_TEMPLATES.ophtho;
+  const lastOtCase = OT_CASES.slice().reverse().map(normalizeOTCaseRecord).find(c => c.bmhId === ptObj.bmhId) || null;
+  const ipdStay = (window.IPD_PATIENTS || []).slice().reverse().find(x => x.bmhId === ptObj.bmhId) || null;
+  const lastRxData = (RX_DRUGS && RX_DRUGS.length)
+    ? JSON.parse(JSON.stringify(RX_DRUGS))
+    : (Array.isArray(ptObj.lastVisit?.rx) && ptObj.lastVisit.rx.length ? JSON.parse(JSON.stringify(ptObj.lastVisit.rx)) : []);
+  const visitDate = ptObj.lastVisit?.date || ptObj.createdAt || new Date().toISOString();
+  const opDate = lastOtCase?.date || lastOtCase?.scheduledDate || ipdStay?.admittedAt || visitDate;
+  const dischargeDate = ipdStay?.dischargedAt || new Date().toISOString();
+  const findings = [ptObj.lastVisit?.positiveFindings, ptObj.positiveFindings, ptObj.lastVisit?.chiefComplaints].filter(Boolean).join('; ') || 'clinical findings noted in the case sheet';
+  const diagnosis = ptObj.lastVisit?.dx || ptObj.dx || lastOtCase?.dx || tmpl.procedure || 'the diagnosed condition';
+  const procedureName = lastOtCase?.procedure || ptObj.lastVisit?.procedure || tmpl.procedure || 'the planned procedure';
+  const joinDate = new Date(new Date(opDate).getTime() + (14 * 24 * 60 * 60 * 1000)).toISOString();
 
   document.getElementById('dc-pt-name').textContent = ptNm;
   document.getElementById('dc-pt-id').textContent   = ptId;
@@ -10322,7 +10337,7 @@ function renderDischargeBuilder() {
   document.getElementById('dc-date').textContent    = new Date().toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
   // Set discharge date to today if blank
   const ddEl = document.getElementById('dc-discharge-date');
-  if(ddEl && !ddEl.textContent.trim()) ddEl.textContent = new Date().toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
+  if(ddEl) ddEl.textContent = new Date(dischargeDate).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
   // Doctor from CURRENT_USER
   const surgEl = document.getElementById('dc-surgeon');
   if(surgEl && (surgEl.textContent==='Dr. Varun Baweja'||!surgEl.textContent.trim())) {
@@ -10355,9 +10370,9 @@ function renderDischargeBuilder() {
   const medEl = document.getElementById('dc-medicine-list');
   if(medEl) {
     let meds;
-    if(RX_DRUGS && RX_DRUGS.length) {
-      meds = RX_DRUGS.map((d,i)=>renderDcMedRow({
-        name: d.name + (d.brand && d.brand!==d.name ? ' ('+d.brand+')' : ''),
+    if(lastRxData && lastRxData.length) {
+      meds = lastRxData.map((d,i)=>renderDcMedRow({
+        name: (rxDrugTradeName(d) || d.name || d.brand || '') + ((rxDrugGenericName(d) && rxDrugGenericName(d)!==rxDrugTradeName(d)) ? ' ('+rxDrugGenericName(d)+')' : ''),
         note: d.freq + ' — ' + d.dur,
         local: (d.lang&&d.lang.pa) ? d.lang.pa : (d.lang&&d.lang.hi ? d.lang.hi : ''),
         freq: d.freq, duration: d.dur
@@ -10387,10 +10402,47 @@ function renderDischargeBuilder() {
     ).join('') +
     `<button onclick="addDcFollowup()" class="btn btn-xs btn-outline" style="margin-top:4px;width:100%">+ Add Follow-up</button>`;
   }
+
+  const surgEl = document.getElementById('dc-surgery-details');
+  if (surgEl) {
+    const rows = [
+      ['Surgery / procedure', procedureName],
+      ['OT date', new Date(opDate).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})],
+      ['Eye / site', lastOtCase?.site || lastOtCase?.eye || ptObj.eye || '—'],
+      ['IOL type / power', [lastOtCase?.iolType, lastOtCase?.iolPower].filter(Boolean).join(' / ') || '—'],
+      ['Admitted on', ipdStay?.admittedAt ? new Date(ipdStay.admittedAt).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}) : '—'],
+      ['Discharged on', new Date(dischargeDate).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})]
+    ];
+    surgEl.innerHTML = rows.map(r => `<div style="display:grid;grid-template-columns:145px 1fr;gap:10px;padding:6px 0;border-bottom:1px solid var(--g5)"><div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase">${r[0]}</div><div style="font-size:12px;font-weight:800;color:var(--tx)">${r[1] || '—'}</div></div>`).join('');
+  }
+
+  const sumEl = document.getElementById('dc-summary-text');
+  if (sumEl) {
+    const vDate = new Date(visitDate).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
+    const oDate = new Date(opDate).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
+    const aDate = ipdStay?.admittedAt ? new Date(ipdStay.admittedAt).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}) : oDate;
+    const dDate = new Date(dischargeDate).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
+    const fitDate = new Date(joinDate).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
+    sumEl.innerHTML = `
+      <div contenteditable="true" spellcheck="false" style="outline:none">
+        This is to certify that <strong>${ptNm}</strong> visited our hospital on <strong>${vDate}</strong>. On examination, it was found that the patient had <strong>${findings}</strong> with diagnosis of <strong>${diagnosis}</strong>.<br><br>
+        The patient was advised <strong>${procedureName}</strong>, which was subsequently performed on <strong>${oDate}</strong>. The operative and post-operative periods were uneventful.<br><br>
+        The patient was admitted to the inpatient ward on <strong>${aDate}</strong> and discharged on <strong>${dDate}</strong>. The patient is advised to continue the prescribed medications and remain on bed rest for <strong>2 weeks</strong>.<br><br>
+        The patient is fit to join his/her duties from <strong>${fitDate}</strong>.
+      </div>`;
+  }
 }
 
 function renderDcMedRow(m,i,color) {
   const TIMES = ['12am','6am','8am','10am','12pm','2pm','4pm','6pm','8pm','10pm'];
+  const freq = String(m.freq || '').toLowerCase();
+  const activeTimes = /every hour|hourly/.test(freq) ? TIMES
+    : /6 times|6x/.test(freq) ? ['6am','10am','2pm','6pm','8pm','10pm']
+    : /4 times|qid/.test(freq) ? ['6am','12pm','6pm','10pm']
+    : /3 times|tds/.test(freq) ? ['8am','2pm','8pm']
+    : /twice|bd/.test(freq) ? ['8am','8pm']
+    : /bedtime|hs/.test(freq) ? ['10pm']
+    : ['8am'];
   return `<div class="drop-item dc-med-row" style="border-left-color:${color};background:${color}11;margin-bottom:8px;position:relative">
     <button onclick="this.closest('.dc-med-row').remove()" style="position:absolute;top:6px;right:6px;background:none;border:none;cursor:pointer;color:var(--red);font-size:12px">✕</button>
     <div contenteditable="true" spellcheck="false" style="font-weight:900;font-size:13px;outline:none;padding-right:20px">${m.name}</div>
@@ -10403,7 +10455,7 @@ function renderDcMedRow(m,i,color) {
       <input value="${m.duration}" style="font-size:11px;border:1px solid var(--g4);border-radius:5px;padding:2px 6px;width:110px">
     </div>
     <div class="drop-freq" style="flex-wrap:wrap;gap:3px">
-      ${TIMES.map(t=>`<div class="drop-time" onclick="this.classList.toggle('active')">${t}</div>`).join('')}
+      ${TIMES.map(t=>`<div class="drop-time ${activeTimes.includes(t)?'active':''}" onclick="this.classList.toggle('active')">${t}</div>`).join('')}
     </div>
   </div>`;
 }
