@@ -834,6 +834,33 @@ function printConsentFromLibrary(id) {
   safePrint(html);
 }
 
+function clearSharedPrescriptionEditor() {
+  if (typeof RX_DRUGS !== 'undefined') RX_DRUGS.length = 0;
+  const quick = document.querySelector('.tab-content.active [id="rx-quick-search"]') || document.getElementById('rx-quick-search');
+  if (quick) quick.value = '';
+  const dd = document.querySelector('.tab-content.active [id="rx-quick-dropdown"]') || document.getElementById('rx-quick-dropdown');
+  if (dd) dd.style.display = 'none';
+  renderRxDrugs && renderRxDrugs();
+}
+
+function updateDepartmentRailVisibility(pageKey, activeTabId) {
+  const activePageKey = pageKey || document.querySelector('.page.active')?.id?.replace(/^pg-/, '') || '';
+  const activeTab = activeTabId || document.querySelector(`#pg-${activePageKey} .tab-content.active`)?.id || '';
+  const railMap = {
+    ophtho: 'ophtho-recap-panel',
+    obg: 'obg-summary-rail',
+    psych: 'psych-summary-rail',
+    skin: 'skin-summary-rail'
+  };
+  Object.entries(railMap).forEach(([dept, id]) => {
+    const rail = document.getElementById(id);
+    if (!rail) return;
+    const isCurrentDept = dept === activePageKey;
+    const hideForRx = isCurrentDept && activeTab === (dept === 'ophtho' ? 'oe-rx' : `${dept}-rx`);
+    rail.style.display = isCurrentDept && !hideForRx ? '' : 'none';
+  });
+}
+
 // ═══════════════════════════════════════
 // NAV
 // ═══════════════════════════════════════
@@ -887,6 +914,12 @@ function nav(id, el) {
   else if(pageKey==='centres')         renderCentresView && renderCentresView();
   else if(pageKey==='settings')        { renderSettingsPage && renderSettingsPage(); setTimeout(()=>renderConsentLibrary&&renderConsentLibrary('all'),100); }
   else if(pageKey==='discharge')       { renderDischargeBuilder && renderDischargeBuilder(); }
+  if(['obg','psych','skin'].includes(pageKey)) clearSharedPrescriptionEditor();
+  if(pageKey==='ophtho') renderOphthoRecap && renderOphthoRecap();
+  if(pageKey==='obg') renderObgSummaryRail && renderObgSummaryRail();
+  if(pageKey==='psych') renderPsychRail && renderPsychRail();
+  if(pageKey==='skin') renderSkinRail && renderSkinRail();
+  updateDepartmentRailVisibility(pageKey);
 }
 
 // ═══════════════════════════════════════
@@ -2676,6 +2709,9 @@ function ptab(el, cId) {
   }
   el.classList.add('active');
   const tgt = document.getElementById(cId); if (tgt) tgt.classList.add('active');
+  const page = el.closest('.page');
+  const pageKey = page?.id?.replace(/^pg-/, '') || '';
+  updateDepartmentRailVisibility(pageKey, cId);
 }
 function openM(id){
   const m=document.getElementById(id);
