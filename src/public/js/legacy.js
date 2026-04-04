@@ -852,12 +852,23 @@ function updateDepartmentRailVisibility(pageKey, activeTabId) {
     psych: 'psych-summary-rail',
     skin: 'skin-summary-rail'
   };
+  const layoutMap = {
+    obg: { id: 'obg-layout', withRail: 'minmax(0,1fr) 300px' },
+    psych: { id: 'psych-layout', withRail: 'minmax(0,1fr) 320px' }
+  };
   Object.entries(railMap).forEach(([dept, id]) => {
     const rail = document.getElementById(id);
     if (!rail) return;
     const isCurrentDept = dept === activePageKey;
     const hideForRx = isCurrentDept && activeTab === (dept === 'ophtho' ? 'oe-rx' : `${dept}-rx`);
     rail.style.display = isCurrentDept && !hideForRx ? '' : 'none';
+  });
+  Object.entries(layoutMap).forEach(([dept, cfg]) => {
+    const layout = document.getElementById(cfg.id);
+    if (!layout) return;
+    const isCurrentDept = dept === activePageKey;
+    const hideForRx = isCurrentDept && activeTab === `${dept}-rx`;
+    layout.style.gridTemplateColumns = isCurrentDept && hideForRx ? 'minmax(0,1fr)' : cfg.withRail;
   });
 }
 
