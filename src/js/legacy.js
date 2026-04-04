@@ -8113,66 +8113,93 @@ function renderRxDrugs() {
     });
   });
 
-  el.innerHTML = `<div style="border:1px solid var(--g5);border-radius:12px;overflow-x:auto;overflow-y:visible;background:#fff">
-    <div style="display:grid;grid-template-columns:30px minmax(220px,1.42fr) minmax(90px,.66fr) minmax(104px,.68fr) minmax(136px,.82fr) minmax(108px,.68fr) minmax(190px,.95fr) 96px;gap:0;background:var(--bmh-blue);color:#fff;font-size:9.4px;font-weight:800;text-transform:uppercase;letter-spacing:.35px">
-      <div style="padding:10px 8px;border-right:1px solid rgba(255,255,255,.14)">#</div>
-      <div style="padding:10px 8px;border-right:1px solid rgba(255,255,255,.14)">Name</div>
-      <div style="padding:10px 8px;border-right:1px solid rgba(255,255,255,.14)">Type</div>
-      <div style="padding:10px 8px;border-right:1px solid rgba(255,255,255,.14)">${isOphtho ? 'Eye' : 'Route'}</div>
-      <div style="padding:10px 8px;border-right:1px solid rgba(255,255,255,.14)">Frequency</div>
-      <div style="padding:10px 8px;border-right:1px solid rgba(255,255,255,.14)">Duration</div>
-      <div style="padding:10px 8px;border-right:1px solid rgba(255,255,255,.14)">Dates</div>
-      <div style="padding:10px 8px">Action</div>
-    </div>
+  const rowGrid = `display:grid;grid-template-columns:${isOphtho ? 'minmax(220px,1.45fr) minmax(110px,.8fr)' : 'minmax(220px,1.55fr) minmax(110px,.8fr)'} minmax(150px,1fr) minmax(120px,.8fr) minmax(210px,1.1fr) 88px;gap:10px;align-items:end`;
+  const medicineRow = (d, i, options) => {
+    const opts = options || {};
+    const trade = opts.trade || rxDrugTradeName(d) || '';
+    const gen = opts.gen || rxDrugGenericName(d) || '';
+    const dt = opts.dt || d.drugType || d.type || 'Tablet';
+    const eye0 = opts.eye0 || ((d.eye && d.eye[0]) || 'Oral');
+    const freq = opts.freq || d.freq || '';
+    const dur = opts.dur || d.dur || '';
+    const dateFrom = opts.dateFrom || d.dateFrom || '';
+    const dateTo = opts.dateTo || d.dateTo || '';
+    const prefix = opts.prefix || `RX_DRUGS[${i}]`;
+    const badge = opts.badge || `${i+1}`;
+    const title = opts.title || '';
+    const bg = opts.bg || '#fff';
+    const border = opts.border || 'var(--g5)';
+    const heading = opts.heading || trade;
+    const subheading = opts.subheading || gen;
+    const taperBtn = opts.taperBtn || '';
+    const removeBtn = opts.removeBtn || '';
+    const instruction = opts.instruction || '';
+    const siteLabel = isOphtho ? 'Eye' : 'Route';
+    return `<div style="border-top:1px dashed ${border};padding:10px 12px;background:${bg}">
+      <div style="${rowGrid}">
+        <div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="min-width:24px;height:24px;border-radius:999px;background:${opts.badgeBg || 'var(--bmh-blue)'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:900">${badge}</span>
+            <div style="min-width:0">
+              <input value="${String(heading).replace(/"/g,'&quot;')}" onchange="${prefix}.trade=this.value;${prefix}.brand=this.value" placeholder="Trade name" style="width:100%;font-size:13px;font-weight:900;border:none;background:transparent;padding:0;box-sizing:border-box;color:${opts.headingColor || 'var(--tx)'}">
+              <input value="${String(subheading).replace(/"/g,'&quot;')}" onchange="${prefix}.generic=this.value;${prefix}.name=this.value" placeholder="(Generic name)" style="width:100%;font-size:10.5px;color:var(--g1);font-style:italic;border:none;background:transparent;padding:0;box-sizing:border-box;margin-top:2px">
+              ${title ? `<div style="font-size:9px;color:var(--g1);margin-top:2px">${title}</div>` : ''}
+            </div>
+          </div>
+        </div>
+        <div><div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:4px">Type</div><select onchange="${prefix}.drugType=this.value;${prefix}.type=this.value" style="font-size:10px;padding:7px;width:100%;border-radius:8px;border:1px solid ${border}">${typeOpts.map(t=>`<option${dt===t?' selected':''}>${t}</option>`).join('')}</select></div>
+        <div><div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:4px">${siteLabel}</div><select onchange="${prefix}.eye=[this.value]" style="font-size:10px;padding:7px;width:100%;border-radius:8px;border:1px solid ${border}">${eyeOpts.map(e=>`<option${eye0===e?' selected':''}>${e}</option>`).join('')}</select></div>
+        <div><div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:4px">Frequency</div><select onchange="${prefix}.freq=this.value;syncRxDrugDates(${i})" style="font-size:10px;padding:7px;width:100%;border-radius:8px;border:1px solid ${border}">${freqOpts.map(f=>`<option${freq===f?' selected':''}>${f}</option>`).join('')}</select></div>
+        <div>
+          <div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:4px">Duration and Dates</div>
+          <div style="display:grid;grid-template-columns:minmax(110px,.9fr) 1fr 1fr;gap:6px">
+            <select onchange="${prefix}.dur=this.value;syncRxDrugDates(${i})" style="font-size:10px;padding:7px;width:100%;border-radius:8px;border:1px solid ${border}">${durOpts.map(f=>`<option${dur===f?' selected':''}>${f}</option>`).join('')}</select>
+            <input type="date" value="${dateFrom||''}" onchange="${prefix}.dateFrom=this.value;syncRxDrugDates(${i})" style="font-size:10px;padding:7px;border-radius:8px;border:1px solid ${border};width:100%">
+            <input type="date" value="${dateTo||''}" onchange="${prefix}.dateTo=this.value" style="font-size:10px;padding:7px;border-radius:8px;border:1px solid ${border};width:100%">
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:7px;justify-content:flex-end">${taperBtn}${removeBtn}</div>
+      </div>
+      ${instruction ? `<div style="margin-top:8px;padding:8px 10px;background:${opts.instructionBg || '#f7faff'};border-radius:8px;font-size:10px;line-height:1.45;color:${opts.instructionColor || '#24364f'}">${instruction.replace(/</g,'&lt;')}</div>` : ''}
+    </div>`;
+  };
+
+  el.innerHTML = `<div style="display:flex;flex-direction:column;gap:12px">
     ${RX_DRUGS.map((d,i)=>{
-    const tr = rxDrugTradeName(d) || '';
-    const gen = rxDrugGenericName(d) || '';
-    const dt = d.drugType || d.type || 'Tablet';
-    const eye0 = (d.eye && d.eye[0]) || 'Oral';
-    const taperRows = ensureRxTaperRows(d);
-    const plainLine = d.lang&&d.lang[lang] ? String(d.lang[lang]) : '';
-    return `<div class="rx-drug-row" style="border-top:${i ? '1px solid var(--g5)' : 'none'};background:#fff">
-    <div style="display:grid;grid-template-columns:30px minmax(220px,1.42fr) minmax(90px,.66fr) minmax(104px,.68fr) minmax(136px,.82fr) minmax(108px,.68fr) minmax(190px,.95fr) 96px;gap:0;align-items:stretch;min-width:980px">
-      <div style="padding:10px 6px;border-right:1px solid var(--g5);font-size:12px;font-weight:900;color:var(--bmh-blue);display:flex;align-items:flex-start;justify-content:center">${i+1}</div>
-      <div style="padding:8px 7px;border-right:1px solid var(--g5)">
-        <input value="${String(tr).replace(/"/g,'&quot;')}" onchange="RX_DRUGS[${i}].trade=this.value;RX_DRUGS[${i}].brand=this.value" placeholder="Trade name" style="width:100%;font-size:13px;font-weight:900;border:none;background:transparent;padding:0;box-sizing:border-box">
-        <input value="${String(gen).replace(/"/g,'&quot;')}" onchange="RX_DRUGS[${i}].generic=this.value;RX_DRUGS[${i}].name=this.value" placeholder="(Generic name)" style="width:100%;font-size:10.5px;color:var(--g1);font-style:italic;border:none;background:transparent;padding:0;box-sizing:border-box;margin-top:3px">
-      </div>
-      <div style="padding:8px 7px;border-right:1px solid var(--g5);display:flex;align-items:center"><select onchange="RX_DRUGS[${i}].drugType=this.value;RX_DRUGS[${i}].type=this.value" style="font-size:10px;padding:6px;width:100%;border-radius:7px;border:1px solid var(--g4)">${typeOpts.map(t=>`<option${dt===t?' selected':''}>${t}</option>`).join('')}</select></div>
-      <div style="padding:8px 7px;border-right:1px solid var(--g5);display:flex;align-items:center"><select onchange="RX_DRUGS[${i}].eye=[this.value]" style="font-size:10px;padding:6px;width:100%;border-radius:7px;border:1px solid var(--g4)">${eyeOpts.map(e=>`<option${eye0===e?' selected':''}>${e}</option>`).join('')}</select></div>
-      <div style="padding:8px 7px;border-right:1px solid var(--g5);display:flex;align-items:center"><select onchange="RX_DRUGS[${i}].freq=this.value;syncRxDrugDates(${i})" style="font-size:10px;padding:6px;width:100%;border-radius:7px;border:1px solid var(--g4)">${freqOpts.map(f=>`<option${(d.freq===f)?' selected':''}>${f}</option>`).join('')}</select></div>
-      <div style="padding:8px 7px;border-right:1px solid var(--g5);display:flex;align-items:center"><select onchange="RX_DRUGS[${i}].dur=this.value;syncRxDrugDates(${i})" style="font-size:10px;padding:6px;width:100%;border-radius:7px;border:1px solid var(--g4)">${durOpts.map(f=>`<option${d.dur===f?' selected':''}>${f}</option>`).join('')}</select></div>
-      <div style="padding:8px 7px;border-right:1px solid var(--g5);display:grid;grid-template-columns:1fr;gap:5px;align-content:center">
-        <input type="date" value="${d.dateFrom||''}" onchange="RX_DRUGS[${i}].dateFrom=this.value;syncRxDrugDates(${i})" style="font-size:10px;padding:6px 7px;border-radius:7px;border:1px solid var(--g4);width:100%">
-        <input type="date" value="${d.dateTo||''}" onchange="RX_DRUGS[${i}].dateTo=this.value" style="font-size:10px;padding:6px 7px;border-radius:7px;border:1px solid var(--g4);width:100%">
-      </div>
-      <div style="padding:8px 7px;display:flex;flex-direction:column;gap:6px;justify-content:center">
-        <button type="button" class="btn btn-xs btn-outline" style="width:100%;font-weight:800;font-size:10px" onclick="addTaperRow(${i}, RX_DRUGS[${i}].dur || '1 week')">Taper</button>
-        <button type="button" class="btn btn-xs btn-gray" onclick="removeDrug(${i})" title="Remove">✕</button>
-      </div>
-    </div>
-    ${plainLine ? `<div style="min-width:980px;padding:7px 10px 8px 44px;border-top:1px dashed var(--g5);background:#f7faff;font-size:10px;line-height:1.45;color:#24364f">${plainLine.replace(/</g,'&lt;')}</div>` : ''}
-    ${taperRows.map((tap, tapIdx) => `<div style="display:grid;grid-template-columns:30px minmax(220px,1.42fr) minmax(90px,.66fr) minmax(104px,.68fr) minmax(136px,.82fr) minmax(108px,.68fr) minmax(190px,.95fr) 96px;gap:0;align-items:stretch;border-top:1px dashed var(--g4);background:var(--orange-lt);min-width:980px">
-      <div style="padding:8px 6px;border-right:1px solid var(--g5);font-size:10px;font-weight:900;color:var(--orange);display:flex;align-items:center;justify-content:center">T${tapIdx+1}</div>
-      <div style="padding:8px 7px;border-right:1px solid var(--g5);display:flex;flex-direction:column;justify-content:center">
-        <div style="font-size:11px;font-weight:900;color:#8a4200">${String(tr || gen).replace(/</g,'&lt;')}</div>
-        <div style="font-size:9px;color:var(--g1)">Taper step ${tapIdx + 1}</div>
-      </div>
-      <div style="padding:8px 7px;border-right:1px solid var(--g5);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700">${dt}</div>
-      <div style="padding:8px 7px;border-right:1px solid var(--g5);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700">${eye0}</div>
-      <div style="padding:8px 7px;border-right:1px solid var(--g5);display:flex;align-items:center"><select onchange="RX_DRUGS[${i}].taperRows[${tapIdx}].freq=this.value;syncRxDrugDates(${i})" style="font-size:10px;padding:6px;width:100%;border-radius:7px;border:1px solid var(--orange)">${freqOpts.map(f=>`<option${tap.freq===f?' selected':''}>${f}</option>`).join('')}</select></div>
-      <div style="padding:8px 7px;border-right:1px solid var(--g5);display:flex;align-items:center"><select onchange="RX_DRUGS[${i}].taperRows[${tapIdx}].dur=this.value;syncRxDrugDates(${i})" style="font-size:10px;padding:6px;width:100%;border-radius:7px;border:1px solid var(--orange)">${durOpts.map(f=>`<option${tap.dur===f?' selected':''}>${f}</option>`).join('')}</select></div>
-      <div style="padding:8px 7px;border-right:1px solid var(--g5);display:grid;grid-template-columns:1fr;gap:5px;align-content:center">
-        <input type="date" value="${tap.dateFrom||''}" onchange="RX_DRUGS[${i}].taperRows[${tapIdx}].dateFrom=this.value" style="font-size:10px;padding:6px 7px;border-radius:7px;border:1px solid var(--orange);width:100%">
-        <input type="date" value="${tap.dateTo||''}" onchange="RX_DRUGS[${i}].taperRows[${tapIdx}].dateTo=this.value" style="font-size:10px;padding:6px 7px;border-radius:7px;border:1px solid var(--orange);width:100%">
-      </div>
-      <div style="padding:8px 7px;display:flex;flex-direction:column;gap:6px;justify-content:center">
-        <button type="button" class="btn btn-xs btn-outline" style="width:100%;font-weight:800;font-size:10px" onclick="addTaperRow(${i}, RX_DRUGS[${i}].taperRows[${tapIdx}].dur || '1 week', ${tapIdx})">Taper</button>
-        <button type="button" class="btn btn-xs btn-gray" onclick="clearTaperRow(${i}, ${tapIdx})">✕</button>
-      </div>
-    </div>`).join('')}
-  </div>`;
-  }).join('')}
+      const taperRows = ensureRxTaperRows(d);
+      const plainLine = d.lang&&d.lang[lang] ? String(d.lang[lang]) : '';
+      return `<div class="rx-drug-row" style="border:1px solid var(--g5);border-radius:12px;overflow:hidden;background:#fff">
+        ${medicineRow(d, i, {
+          prefix:`RX_DRUGS[${i}]`,
+          badge:`${i+1}`,
+          taperBtn:`<button type="button" class="btn btn-xs btn-outline" style="width:100%;font-weight:800;font-size:10px" onclick="addTaperRow(${i}, RX_DRUGS[${i}].dur || '1 week')">Taper</button>`,
+          removeBtn:`<button type="button" class="btn btn-xs btn-gray" onclick="removeDrug(${i})" title="Remove">✕</button>`,
+          instruction:plainLine
+        })}
+        ${taperRows.map((tap, tapIdx)=>medicineRow({ ...d, ...tap, eye:d.eye, drugType:d.drugType, type:d.type }, i, {
+          prefix:`RX_DRUGS[${i}].taperRows[${tapIdx}]`,
+          trade:rxDrugTradeName(d) || '',
+          gen:rxDrugGenericName(d) || '',
+          dt:d.drugType || d.type || 'Tablet',
+          eye0:(d.eye && d.eye[0]) || 'Oral',
+          freq:tap.freq,
+          dur:tap.dur,
+          dateFrom:tap.dateFrom,
+          dateTo:tap.dateTo,
+          badge:`T${tapIdx+1}`,
+          badgeBg:'var(--orange)',
+          title:`Taper step ${tapIdx + 1}`,
+          bg:'var(--orange-lt)',
+          border:'var(--orange)',
+          headingColor:'#8a4200',
+          taperBtn:`<button type="button" class="btn btn-xs btn-outline" style="width:100%;font-weight:800;font-size:10px" onclick="addTaperRow(${i}, RX_DRUGS[${i}].taperRows[${tapIdx}].dur || '1 week', ${tapIdx})">Taper</button>`,
+          removeBtn:`<button type="button" class="btn btn-xs btn-gray" onclick="clearTaperRow(${i}, ${tapIdx})">✕</button>`,
+          instruction:buildRxPlainInstructionLine({ ...d, freq: tap.freq, dur: tap.dur, dateFrom: tap.dateFrom, dateTo: tap.dateTo, taperRows: [] }, lang, (x)=>x ? new Date(Date.parse(x)).toLocaleDateString('en-IN',{day:'2-digit',month:'2-digit',year:'numeric'}) : '—'),
+          instructionBg:'#fffaf0',
+          instructionColor:'#7a4a10'
+        })).join('')}
+      </div>`;
+    }).join('')}
   </div>`;
 }
 
