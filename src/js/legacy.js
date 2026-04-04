@@ -471,7 +471,14 @@ function resolveConsentDataForPrint(key) {
     }
   }
   const lib = getMergedLibraryItem(key);
-  if (lib && lib.body) return libraryMergedToConsentData(lib);
+  if (lib && (lib.body || lib.text)) {
+    return libraryMergedToConsentData({
+      name: lib.name,
+      body: lib.body || lib.text || '',
+      bodyPa: lib.bodyPa || '',
+      bodyHi: lib.bodyHi || ''
+    });
+  }
   return null;
 }
 function getMergedLibraryItem(id) {
@@ -3813,7 +3820,10 @@ function openIPDFromQueue(bmhId) {
 
 function openOTFromQueue(bmhId) {
   openOTAddModal();
-  setTimeout(()=>{ fillOTFromPatient(bmhId); },150);
+  setTimeout(()=>{
+    fillOTFromPatient(bmhId);
+    showToast('Patient prefilled in OT scheduler — choose procedure and save ✓','i');
+  },150);
 }
 
 // ── Confirm IPD Admission ──────────────────────────
@@ -5957,6 +5967,7 @@ function createOTCaseFromReceptionPanel(ptId, patientNameTrim) {
     anaes: anaes,
     date: sDate,
     scheduledTime: sTime,
+    centre: (PATIENTS.find(function (p) { return p.bmhId === ptId; }) || {}).centre || getEffectiveCentre() || CURRENT_USER?.centre || 'CHD',
     room: '1',
     priority: 'Elective',
     status: 'scheduled',
@@ -6156,25 +6167,44 @@ function getAllSurgeryPacks() {
 function populateNewPackModal() {
   const host = document.getElementById('new-tpl-docs');
   if (!host || typeof CONSENT_DATA === 'undefined') return;
+  const deptSel = document.getElementById('new-pack-dept');
+  const deptLabel = deptSel ? deptSel.options[deptSel.selectedIndex].text : 'General';
+  const deptMap = { 'Ophthalmology':'ophtho', 'OBG':'obg', 'Neuropsychiatry':'psych', 'Skin':'skin', 'General':'all' };
+  const deptKey = deptMap[deptLabel] || 'all';
+  const matchesDept = function (v) {
+    if (!v || v === 'all' || deptKey === 'all') return true;
+    const s = String(v).toLowerCase();
+    return s === deptKey || s === String(deptLabel).toLowerCase();
+  };
   const keys = Object.keys(getMergedConsentData());
   const block = function (title, rows) {
     return '<div style="margin-top:10px"><div style="font-size:10px;font-weight:800;color:var(--bmh-blue);text-transform:uppercase;margin-bottom:6px">' + title + '</div>' + rows + '</div>';
   };
-  const builtIn = keys.map(function (k) {
+  const builtIn = keys.filter(function (k) {
+    const libHit = (typeof CONSENT_LIBRARY !== 'undefined' ? CONSENT_LIBRARY.find(function (c) { return c.id === k; }) : null);
+    return matchesDept(libHit?.dept || (k.startsWith('obg-') ? 'obg' : k.startsWith('psych-') ? 'psych' : k.startsWith('skin-') ? 'skin' : 'ophtho'));
+  }).map(function (k) {
     const data = getConsentEntry(k);
     const t = data && data.title ? data.title : k;
     return '<label style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;font-size:11.5px;cursor:pointer;border-bottom:1px solid var(--g5)"><input type="checkbox" name="new-pack-consent" value="' + k + '"><span>' + t + '</span></label>';
   }).join('');
-  const libRows = (typeof CONSENT_LIBRARY !== 'undefined' ? CONSENT_LIBRARY : []).map(function (c) {
-    return '<label style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;font-size:11.5px;cursor:pointer;border-bottom:1px solid var(--g5)"><input type="checkbox" name="new-pack-consent" value="' + String(c.id).replace(/"/g, '&quot;') + '"><span>📚 ' + String(c.name).replace(/</g, '&lt;') + ' <span style="font-size:9px;color:var(--g1)">(library)</span></span></label>';
+  const libRows = (typeof CONSENT_LIBRARY !== 'undefined' ? CONSENT_LIBRARY : []).filter(function (c) {
+    return matchesDept(c.dept);
+  }).map(function (c) {
+    const kind = c.docType === 'form' ? 'form' : 'consent';
+    return '<label style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;font-size:11.5px;cursor:pointer;border-bottom:1px solid var(--g5)"><input type="checkbox" name="new-pack-consent" value="' + String(c.id).replace(/"/g, '&quot;') + '"><span>📚 ' + String(c.name).replace(/</g, '&lt;') + ' <span style="font-size:9px;color:var(--g1)">(' + kind + ' library)</span></span></label>';
   }).join('');
-  const tplRows = (typeof CONSENT_TEMPLATES !== 'undefined' ? CONSENT_TEMPLATES : []).map(function (t) {
-    return '<label style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;font-size:11.5px;cursor:pointer;border-bottom:1px solid var(--g5)"><input type="checkbox" name="new-pack-consent" value="' + String(t.id).replace(/"/g, '&quot;') + '"><span>📎 ' + String(t.name || t.id).replace(/</g, '&lt;') + ' <span style="font-size:9px;color:var(--g1)">(uploaded / custom)</span></span></label>';
+  const tplRows = (typeof CONSENT_TEMPLATES !== 'undefined' ? CONSENT_TEMPLATES : []).filter(function (t) {
+    return matchesDept(t.dept);
+  }).map(function (t) {
+    const kind = t.type === 'template' ? 'form' : 'consent';
+    return '<label style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;font-size:11.5px;cursor:pointer;border-bottom:1px solid var(--g5)"><input type="checkbox" name="new-pack-consent" value="' + String(t.id).replace(/"/g, '&quot;') + '"><span>📎 ' + String(t.name || t.id).replace(/</g, '&lt;') + ' <span style="font-size:9px;color:var(--g1)">(' + kind + ' saved)</span></span></label>';
   }).join('');
-  host.innerHTML = '<div style="font-size:10px;font-weight:800;color:var(--g1);margin-bottom:6px">Select consent forms to include (each prints as bilingual EN / EN+PA / EN+HI)</div>'
-    + block('Built-in consent keys', builtIn)
-    + (libRows ? block('Consent library', libRows) : '')
-    + (tplRows ? block('Uploaded &amp; custom templates', tplRows) : '');
+  host.innerHTML = '<div style="font-size:10px;font-weight:800;color:var(--g1);margin-bottom:6px">Select department-specific consents and forms to include in this pack.</div>'
+    + (builtIn ? block('Built-in bilingual consents', builtIn) : '')
+    + (libRows ? block('Saved consent / form library', libRows) : '')
+    + (tplRows ? block('Saved consent / form templates', tplRows) : '')
+    + (!builtIn && !libRows && !tplRows ? '<div style="padding:10px;background:var(--g6);border-radius:8px;font-size:11px;color:var(--g1)">No saved items found for this department yet.</div>' : '');
 }
 function saveSurgeryPackFromModal() {
   const name = document.getElementById('new-pack-name')?.value?.trim();
@@ -6248,6 +6278,7 @@ function normalizeOTCaseRecord(c) {
     surgeon: src.surgeon || src.doctor || pt.doctor || CURRENT_USER?.name || '—',
     anaes: src.anaes || src.anaesthesia || '—',
     room: src.room || src.otRoom || 'OT-1',
+    centre: src.centre || pt.centre || getEffectiveCentre() || CURRENT_USER?.centre || 'CHD',
     scheduledTime: src.scheduledTime || src.time || '—',
     priority: String(src.priority || 'elective').toLowerCase(),
     status: status,
@@ -6565,6 +6596,7 @@ function processBC(mode, code) {
 
 function otCaseCard(c, sno) {
   c = normalizeOTCaseRecord(c);
+  const timings = c.timings || { incision:'', procEnd:'', anaesStart:'' };
   const statusStyle = {
     pending:{bg:'var(--g6)',border:'var(--g4)',badge:'bd-gray',label:'⏳ Pending'},
     'in-progress':{bg:'var(--blue-lt)',border:'var(--blue)',badge:'bd-blue',label:'🔄 In Progress'},
@@ -6606,7 +6638,7 @@ function otCaseCard(c, sno) {
           ${surgeryMeta?`<span>${surgeryMeta}</span>`:''}
         </div>
         ${whoHTML}
-        ${c.timings.incision&&c.timings.procEnd?`<div style="font-size:10px;color:${c.status==='completed'?'#1a8c3c':'var(--blue)'};font-weight:700;margin-top:4px">✂️ In: ${c.timings.incision} → Out: ${c.timings.procEnd} · Anaes: ${c.timings.anaesStart||'—'}</div>`:''}
+        ${timings.incision&&timings.procEnd?`<div style="font-size:10px;color:${c.status==='completed'?'#1a8c3c':'var(--blue)'};font-weight:700;margin-top:4px">✂️ In: ${timings.incision} → Out: ${timings.procEnd} · Anaes: ${timings.anaesStart||'—'}</div>`:''}
         ${c.complications&&c.complications!=='None'?`<div style="font-size:10px;color:var(--red);font-weight:800;margin-top:3px">⚠️ Complication: ${c.complications}</div>`:''}
       </div>
       <div style="display:flex;flex-direction:column;gap:5px;flex-shrink:0">
@@ -6799,6 +6831,7 @@ function addOTCase() {
     age:pt?.age||'—', sex:pt?.sex||'—',
     dx, procedure:proc, site, surgeon, anaes, anaesDoc:'',
     date, scheduledTime:time, room, iol, priority,
+    centre: pt?.centre || getEffectiveCentre() || CURRENT_USER?.centre || 'CHD',
     preop, consent, fasting, status:'pending',
     timings:{patientIn:'',anaesStart:'',incision:'',procEnd:'',patientOut:'',rrIn:''},
     complications:'', bloodLoss:'', notes,
