@@ -9797,8 +9797,8 @@ function renderRxDrugs() {
 
   const esc = (s) => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
   const inputBase = 'width:100%;box-sizing:border-box;min-height:34px;font-size:12px;padding:6px 8px;border:1.5px solid #c7c7cc;border-radius:8px;background:#fff;color:#111';
-  const nameInput = 'width:100%;box-sizing:border-box;min-height:34px;font-size:13px;padding:6px 8px;border:1.5px solid #1A3C6E;border-radius:8px;background:#fff;color:#1A3C6E;font-weight:800';
-  const subInput = 'width:100%;box-sizing:border-box;min-height:32px;font-size:11px;padding:5px 8px;border:1.5px solid #d1d1d6;border-radius:8px;background:#fff;color:#444;font-style:italic;margin-top:4px';
+  const nameInput = 'width:100%;box-sizing:border-box;min-height:34px;font-size:12.5px;padding:6px 8px;border:1.5px solid #1A3C6E;border-radius:8px;background:#fff;color:#1A3C6E;font-weight:800';
+  const subInput = 'width:100%;box-sizing:border-box;min-height:28px;font-size:10.5px;padding:4px 8px;border:1.5px solid #d1d1d6;border-radius:8px;background:#fff;color:#6a6a6a;font-style:italic;margin-top:4px';
   const header = `<div style="display:grid;grid-template-columns:minmax(180px,2.4fr) minmax(100px,1.05fr) minmax(120px,1.15fr) minmax(150px,1.35fr) minmax(110px,1.05fr) minmax(126px,1fr) minmax(126px,1fr) 92px;gap:8px;align-items:end;padding:8px 10px;background:#f2f5fb;border:1px solid #d6dce8;border-radius:10px 10px 0 0;font-size:9.5px;font-weight:900;color:#465066;text-transform:uppercase;letter-spacing:.45px">
     <div>Name</div><div>Type</div><div>${isOphtho ? 'Eye' : 'Route / Site'}</div><div>Frequency</div><div>Duration</div><div>From</div><div>To</div><div>Actions</div>
   </div>`;
@@ -9820,14 +9820,19 @@ function renderRxDrugs() {
       const t = Date.parse(iso);
       return Number.isNaN(t) ? String(iso) : new Date(t).toLocaleDateString('en-IN',{day:'2-digit',month:'2-digit',year:'numeric'});
     });
+    const tradeName = rxDrugTradeName(baseDrug) || '';
+    const genericName = rxDrugGenericName(baseDrug) || '';
+    const combinedName = genericName && genericName.toLowerCase() !== tradeName.toLowerCase()
+      ? `${tradeName} (${genericName})`
+      : tradeName;
     const taperBtn = `<button type="button" class="btn btn-xs" onclick="${opts.taperOnclick}" style="background:#fff7e8;color:#8a4200;border:1px solid rgba(212,160,23,.55);padding:5px 8px;font-size:10px;font-weight:800;width:100%">Taper</button>`;
     const removeBtn = `<button type="button" class="btn btn-xs btn-gray" onclick="${opts.removeOnclick}" style="padding:5px 8px;font-size:10px;font-weight:800;width:100%">✕</button>`;
     return `<div style="border-left:${isTaper ? '3px solid #ff9500' : '3px solid #1A3C6E'};border-right:1px solid #d6dce8;border-bottom:1px solid #d6dce8;border-left-width:${isTaper ? '3px' : '3px'};background:${isTaper ? '#fffaf2' : '#fff'}">
       <div style="display:grid;grid-template-columns:minmax(180px,2.4fr) minmax(100px,1.05fr) minmax(120px,1.15fr) minmax(150px,1.35fr) minmax(110px,1.05fr) minmax(126px,1fr) minmax(126px,1fr) 92px;gap:8px;align-items:start;padding:8px 10px">
         <div>
           ${isTaper
-            ? `<div style="min-height:34px;display:flex;align-items:center;padding:6px 8px;background:#fff4df;border:1px dashed rgba(212,160,23,.6);border-radius:8px;font-size:11px;font-weight:800;color:#8a4200">Taper step</div>`
-            : `<input value="${esc(rxDrugTradeName(baseDrug) || '')}" onchange="${prefix}.trade=this.value;${prefix}.brand=this.value" placeholder="Trade / brand name" style="${nameInput}"><input value="${esc(rxDrugGenericName(baseDrug) || '')}" onchange="${prefix}.generic=this.value;${prefix}.name=this.value" placeholder="Generic name" style="${subInput}">`}
+            ? `<div style="min-height:34px;display:flex;align-items:center;padding:6px 8px;background:#fff;border:1.5px solid #1A3C6E;border-radius:8px;font-size:12px;font-weight:800;color:#1A3C6E">${esc(combinedName || 'Medicine')}</div><div style="min-height:28px;display:flex;align-items:center;padding:4px 8px;background:#fff4df;border:1px dashed rgba(212,160,23,.6);border-radius:8px;font-size:10.5px;font-weight:800;color:#8a4200;margin-top:4px">Taper step</div>`
+            : `<input value="${esc(combinedName || '')}" onchange="const m=(this.value||'').match(/^(.*?)(?:\\s*\\((.*)\\))?\\s*$/);${prefix}.trade=(m&&m[1]?m[1].trim():this.value.trim());${prefix}.brand=${prefix}.trade;${prefix}.generic=(m&&m[2]?m[2].trim():'');${prefix}.name=${prefix}.generic;renderRxDrugs()" placeholder="Trade name (Generic)" style="${nameInput}"><div style="padding:4px 8px;font-size:10.5px;color:#6a6a6a;line-height:1.25">${genericName ? 'Edit as Trade name (Generic)' : 'Use brackets for generic if needed'}</div>`}
         </div>
         <div><select onchange="${prefix}.drugType=this.value;${prefix}.type=this.value;renderRxDrugs()" style="${inputBase}">${typeOpts.map(t=>`<option${(row.drugType || row.type || baseDrug.drugType || baseDrug.type || 'Tablet')===t?' selected':''}>${t}</option>`).join('')}</select></div>
         <div><select onchange="${prefix}.eye=[this.value];renderRxDrugs()" style="${inputBase}">${eyeOpts.map(e=>`<option${(((row.eye && row.eye[0]) || (baseDrug.eye && baseDrug.eye[0]) || 'Oral')===e)?' selected':''}>${e}</option>`).join('')}</select></div>
@@ -9836,9 +9841,6 @@ function renderRxDrugs() {
         <div><input type="date" value="${esc(row.dateFrom || '')}" onchange="${prefix}.dateFrom=this.value;window.syncRxDrugDates(${i})" style="${inputBase}"></div>
         <div><input type="date" value="${esc(row.dateTo || '')}" onchange="${prefix}.dateTo=this.value;renderRxDrugs()" style="${inputBase}"></div>
         <div style="display:flex;flex-direction:column;gap:6px">${taperBtn}${removeBtn}</div>
-      </div>
-      <div style="padding:0 10px 8px 10px">
-        <div style="padding:7px 10px;background:${isTaper ? '#fff7ea' : '#f5f8ff'};border:1px solid ${isTaper ? '#f0d3a3' : '#dbe5f2'};border-radius:8px;font-size:11px;line-height:1.45;color:#24364d">${esc(line)}</div>
       </div>
     </div>`;
   };
