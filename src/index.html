@@ -1777,100 +1777,174 @@
         </div>
       </div>
       <div class="ptabs">
-        <div class="ptab active" onclick="ptab(this,'obg-basic')">Patient Info</div>
-        <div class="ptab" onclick="ptab(this,'obg-anc')">ANC Visits</div>
+        <div class="ptab active" onclick="ptab(this,'obg-basic')">Assessment</div>
+        <div class="ptab" onclick="ptab(this,'obg-anc')">Visits & Follow-up</div>
         <div class="ptab" onclick="ptab(this,'obg-investigations')">Investigations</div>
         <div class="ptab" onclick="ptab(this,'obg-rx')">Prescription</div>
         <div class="ptab" onclick="ptab(this,'obg-delivery')">Delivery / LSCS</div>
       </div>
+      <div id="obg-layout" style="display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:14px;align-items:start">
+        <div>
+          <!-- BASIC INFO -->
+          <div class="tab-content active" id="obg-basic">
+            <div style="background:linear-gradient(135deg,var(--purple-lt),#fce4ff);border-radius:var(--rsm);padding:12px;margin-bottom:12px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;font-size:12px">
+              <div><div style="font-size:9px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:3px">GPAL</div><div style="font-size:17px;font-weight:900;color:var(--purple)" id="obg-gpal-chip">—</div></div>
+              <div><div style="font-size:9px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:3px">GA</div><div style="font-size:17px;font-weight:900;color:var(--blue)" id="obg-ga">—</div></div>
+              <div><div style="font-size:9px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:3px">EDD</div><div style="font-size:17px;font-weight:900;color:var(--green)" id="obg-edd">—</div></div>
+              <div><div style="font-size:9px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:3px">Presumptive Dx</div><div style="font-size:13px;font-weight:900;color:var(--orange);line-height:1.25" id="obg-presumptive-chip">—</div></div>
+            </div>
 
-      <!-- BASIC INFO -->
-      <div class="tab-content active" id="obg-basic">
-        <div style="background:linear-gradient(135deg,var(--purple-lt),#fce4ff);border-radius:var(--rsm);padding:12px;margin-bottom:12px;display:grid;grid-template-columns:repeat(4,1fr);gap:10px;font-size:12px">
-          <div><div style="font-size:9px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:3px">GPAL</div><div style="font-size:17px;font-weight:900;color:var(--purple)">G2P1A0L1</div></div>
-          <div><div style="font-size:9px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:3px">GA</div><div style="font-size:17px;font-weight:900;color:var(--blue)" id="obg-ga">32+3 weeks</div></div>
-          <div><div style="font-size:9px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:3px">EDD</div><div style="font-size:17px;font-weight:900;color:var(--green)" id="obg-edd">—</div></div>
-          <div><div style="font-size:9px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:3px">ANC</div><div style="font-size:17px;font-weight:900;color:var(--orange)">Visit 4</div></div>
-        </div>
-        <div class="fg">
-          <div class="form-group"><label class="fl">Patient Name</label><input type="text" value="Test Patient"></div>
-          <div class="form-group"><label class="fl">Age</label><input type="text" value="26 Years"></div>
-          <div class="form-group"><label class="fl">LMP</label><input type="date" id="obg-lmp" value="2024-08-15" onchange="calcEDD()"></div>
-          <div class="form-group"><label class="fl">EDD (Naegele's)</label><input type="text" id="obg-edd-inp" value="22 May 2025" readonly style="background:var(--green-lt);color:#1a8c3c;font-weight:800"></div>
-          <div class="form-group"><label class="fl">GPAL</label><input type="text" value="G2P1A0L1"></div>
-          <div class="form-group"><label class="fl">Blood Group</label><select><option>O+ve</option><option>A+ve</option><option>B+ve</option><option>AB+ve</option><option>O-ve</option><option>A-ve</option><option>B-ve</option><option>AB-ve</option></select></div>
-          <div class="form-group"><label class="fl">Husband's Name</label><input type="text" placeholder="Husband name"></div>
-          <div class="form-group"><label class="fl">Mobile</label><input type="tel" id="rc-mob-inp" placeholder="+91 XXXXX XXXXX" oninput="searchPatientByPhone(this.value)"></div>
-          <div class="form-group"><label class="fl">High Risk</label><select><option>No</option><option>Yes — GDM</option><option>Yes — PIH</option><option>Yes — IUGR</option><option>Yes — Multiple Pregnancy</option></select></div>
-          <!-- REFERRED BY — PRO / Doctor / Patient / Direct -->
-          <div class="form-group full" style="flex-direction:column;align-items:flex-start;gap:5px">
-            <label class="fl">Referred By</label>
-            <div style="display:flex;gap:6px;width:100%;flex-wrap:wrap">
-              <select id="rc-ref-type" onchange="toggleRefDetails(this.value)" style="flex:1;min-width:160px">
-                <option value="">Direct / Walk-in</option>
-                <option value="pro">PRO / Marketing Representative</option>
-                <option value="doc">Doctor Referral</option>
-                <option value="patient">Patient Referral</option>
-                <option value="online">Online / Website / Social Media</option>
-                <option value="camp">Camp / OPD Drive / NGO</option>
-                <option value="repeat">Previous Visit (Self)</option>
-              </select>
-              <div id="rc-ref-detail" style="display:none;gap:6px;flex:2;flex-wrap:wrap">
-                <input type="text" id="rc-ref-name" placeholder="PRO name / Doctor name / Patient name…" style="flex:2;min-width:140px">
-                <input type="text" id="rc-ref-mobile" placeholder="Mobile (optional)" style="width:130px">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+              <label style="display:flex;align-items:center;gap:6px;padding:8px 10px;border:1.5px solid var(--purple);border-radius:999px;background:var(--purple-lt);font-size:12px;font-weight:800;color:#6a0091"><input type="checkbox" id="obg-track-anc" checked onchange="toggleObgWorkflow()"> ANC</label>
+              <label style="display:flex;align-items:center;gap:6px;padding:8px 10px;border:1.5px solid var(--blue);border-radius:999px;background:var(--blue-lt);font-size:12px;font-weight:800;color:var(--blue)"><input type="checkbox" id="obg-track-gynae" checked onchange="toggleObgWorkflow()"> Gynae</label>
+              <label style="display:flex;align-items:center;gap:6px;padding:8px 10px;border:1.5px solid var(--green);border-radius:999px;background:var(--green-lt);font-size:12px;font-weight:800;color:#1a8c3c"><input type="checkbox" id="obg-track-infertility" onchange="toggleObgWorkflow()"> Infertility</label>
+            </div>
+
+            <div class="fg">
+              <div class="form-group"><label class="fl">Patient Name</label><input type="text" id="obg-name" readonly></div>
+              <div class="form-group"><label class="fl">Age</label><input type="text" id="obg-age" readonly></div>
+              <div class="form-group"><label class="fl">LMP</label><input type="date" id="obg-lmp" onchange="calcEDD();updateObgComputedFields()"></div>
+              <div class="form-group"><label class="fl">EDD</label><input type="text" id="obg-edd-inp" readonly style="background:var(--green-lt);color:#1a8c3c;font-weight:800"></div>
+              <div class="form-group"><label class="fl">Blood Group</label><select id="obg-blood-grp"><option value="">— Select —</option><option>O+ve</option><option>A+ve</option><option>B+ve</option><option>AB+ve</option><option>O-ve</option><option>A-ve</option><option>B-ve</option><option>AB-ve</option></select></div>
+              <div class="form-group"><label class="fl">High-Risk Tag</label><select id="obg-risk"><option value="">Low risk</option><option>GDM</option><option>Hypertensive disorder</option><option>FGR / SGA</option><option>Previous LSCS</option><option>Multiple pregnancy</option><option>Rh negative</option><option>Placenta previa</option><option>Preterm risk</option></select></div>
+              <div class="form-group"><label class="fl">Primary Complaint</label><select id="obg-main-complaint" onchange="updateObgComputedFields()"><option value="">Routine review</option><option>Amenorrhoea / positive UPT</option><option>ANC routine review</option><option>Bleeding PV</option><option>Abdominal pain</option><option>Decreased fetal movements</option><option>Infertility evaluation</option><option>Irregular cycles</option><option>White discharge</option><option>Pelvic pain</option></select></div>
+              <div class="form-group"><label class="fl">Systemic Disease</label><select id="obg-systemic"><option value="">None declared</option><option>Diabetes mellitus</option><option>Hypertension</option><option>Thyroid disorder</option><option>Epilepsy</option><option>Cardiac disease</option><option>Asthma</option><option>Anaemia</option><option>TB / chronic infection</option><option>Autoimmune disorder</option></select></div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:12px">
+              <div style="background:var(--g6);border-radius:var(--rsm);padding:10px">
+                <div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;margin-bottom:8px">Obstetric Score</div>
+                <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px">
+                  <div><label class="fl">G</label><select id="obg-g" onchange="updateObgComputedFields()"></select></div>
+                  <div><label class="fl">P</label><select id="obg-p" onchange="updateObgComputedFields()"></select></div>
+                  <div><label class="fl">A</label><select id="obg-a" onchange="updateObgComputedFields()"></select></div>
+                  <div><label class="fl">L</label><select id="obg-l" onchange="updateObgComputedFields()"></select></div>
+                </div>
+              </div>
+              <div style="background:var(--g6);border-radius:var(--rsm);padding:10px">
+                <div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;margin-bottom:8px">Previous Delivery</div>
+                <div class="form-group" style="margin:0"><label class="fl">Last delivery date</label><input type="date" id="obg-last-delivery" onchange="updateObgComputedFields()"></div>
+                <div style="font-size:11px;color:var(--bmh-blue);font-weight:800;margin-top:7px" id="obg-living-age">Living issue age: —</div>
+              </div>
+              <div style="background:var(--g6);border-radius:var(--rsm);padding:10px">
+                <div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;margin-bottom:8px">Prior Birth Mode</div>
+                <select id="obg-last-mode" onchange="updateObgComputedFields()"><option value="">— Select —</option><option>FTND / SVD</option><option>VBAC</option><option>LSCS</option><option>Assisted vaginal delivery</option><option>Preterm vaginal delivery</option><option>Stillbirth</option></select>
+              </div>
+              <div style="background:var(--g6);border-radius:var(--rsm);padding:10px">
+                <div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;margin-bottom:8px">Pregnancy Stage</div>
+                <select id="obg-tri" onchange="updateObgComputedFields()"><option value="">Auto</option><option>1st Trimester</option><option>2nd Trimester</option><option>3rd Trimester</option><option>Postpartum / PNC</option></select>
+              </div>
+            </div>
+
+            <div id="obg-anc-panel" style="margin-top:14px">
+              <div style="font-size:12px;font-weight:900;color:var(--purple);text-transform:uppercase;letter-spacing:.45px;margin-bottom:8px">ANC Assessment</div>
+              <div class="fg">
+                <div class="form-group"><label class="fl">Visit Type</label><select id="obg-anc-visit"><option>Booking / First visit</option><option>Routine ANC review</option><option>High-risk ANC review</option><option>Reduced fetal movement review</option><option>Post-dated review</option></select></div>
+                <div class="form-group"><label class="fl">BP</label><select id="obg-bp" onchange="updateObgComputedFields()"><option value="">— Select —</option><option>100/60</option><option>110/70</option><option>120/80</option><option>130/80</option><option>140/90</option><option>150/100</option><option>160/110</option></select></div>
+                <div class="form-group"><label class="fl">Weight (kg)</label><select id="obg-weight"><option value="">— Select —</option><option>45</option><option>50</option><option>55</option><option>60</option><option>65</option><option>70</option><option>75</option><option>80</option><option>85</option><option>90</option></select></div>
+                <div class="form-group"><label class="fl">FHR</label><select id="obg-fhr" onchange="updateObgComputedFields()"><option value="">— Select —</option><option>110-120</option><option>120-140</option><option>140-160</option><option>&gt;160</option><option>Not heard</option></select></div>
+                <div class="form-group"><label class="fl">Fundal Height</label><select id="obg-fh"><option value="">— Select —</option><option>Not palpable</option><option>12 weeks</option><option>20 weeks</option><option>24 weeks</option><option>28 weeks</option><option>32 weeks</option><option>36 weeks</option><option>38 weeks / term</option></select></div>
+                <div class="form-group"><label class="fl">Presentation</label><select id="obg-present"><option value="">— Select —</option><option>Cephalic</option><option>Breech</option><option>Transverse</option><option>Unstable lie</option><option>Not applicable</option></select></div>
+                <div class="form-group"><label class="fl">Urine Protein</label><select id="obg-urine-protein" onchange="updateObgComputedFields()"><option value="">Not done</option><option>Nil</option><option>Trace</option><option>1+</option><option>2+</option><option>3+</option></select></div>
+                <div class="form-group"><label class="fl">Urine Sugar</label><select id="obg-urine-sugar"><option value="">Not done</option><option>Nil</option><option>Trace</option><option>1+</option><option>2+</option></select></div>
+                <div class="form-group"><label class="fl">Fetal Movement</label><select id="obg-fetal-movement" onchange="updateObgComputedFields()"><option value="">Not assessed</option><option>Normal</option><option>Reduced</option><option>Absent</option></select></div>
+                <div class="form-group"><label class="fl">Warning Sign</label><select id="obg-warning"><option value="">None</option><option>Headache / visual symptoms</option><option>Bleeding PV</option><option>Leaking PV</option><option>Pain abdomen</option><option>Severe oedema</option><option>Decreased fetal movement</option></select></div>
+                <div class="form-group"><label class="fl">USG Due</label><input type="date" id="obg-usg-due" onchange="updateObgComputedFields()"></div>
+                <div class="form-group"><label class="fl">TT / Tdap Due</label><input type="date" id="obg-tt-due" onchange="updateObgComputedFields()"></div>
+                <div class="form-group full"><label class="fl">Important ANC Notes</label><textarea id="obg-anc-notes" placeholder="Placenta, scar status, oedema, counselling, fetal surveillance plan…"></textarea></div>
+              </div>
+            </div>
+
+            <div id="obg-gynae-panel" style="margin-top:14px">
+              <div style="font-size:12px;font-weight:900;color:var(--blue);text-transform:uppercase;letter-spacing:.45px;margin-bottom:8px">Gynae Assessment</div>
+              <div class="fg">
+                <div class="form-group"><label class="fl">Cycle Pattern</label><select id="obg-cycle" onchange="updateObgComputedFields()"><option value="">— Select —</option><option>Regular 21-35 days</option><option>Irregular</option><option>Oligomenorrhoea</option><option>Amenorrhoea</option><option>Menorrhagia</option><option>Dysmenorrhoea</option></select></div>
+                <div class="form-group"><label class="fl">Flow</label><select id="obg-flow"><option value="">— Select —</option><option>Scanty</option><option>Average</option><option>Heavy</option><option>Clots present</option></select></div>
+                <div class="form-group"><label class="fl">Discharge</label><select id="obg-discharge"><option value="">None</option><option>White discharge</option><option>Foul smelling</option><option>Pruritus / candidiasis</option><option>Blood stained</option></select></div>
+                <div class="form-group"><label class="fl">Pelvic Pain</label><select id="obg-pelvic-pain" onchange="updateObgComputedFields()"><option value="">None</option><option>Mild</option><option>Moderate</option><option>Severe</option><option>Cyclical</option><option>Dyspareunia</option></select></div>
+                <div class="form-group"><label class="fl">Cervix</label><select id="obg-cervix"><option value="">Not examined</option><option>Healthy</option><option>Erosion</option><option>Hypertrophied</option><option>Polyp</option><option>Suspicious lesion</option></select></div>
+                <div class="form-group"><label class="fl">Uterus</label><select id="obg-uterus"><option value="">Not examined</option><option>Normal size</option><option>Bulky</option><option>12-week size</option><option>Anteverted</option><option>Retroverted</option><option>Tender</option></select></div>
+                <div class="form-group"><label class="fl">Adnexa</label><select id="obg-adnexa"><option value="">Free</option><option>Tender</option><option>Mass right</option><option>Mass left</option><option>Bilateral fullness</option></select></div>
+                <div class="form-group"><label class="fl">Clinical Impression</label><select id="obg-clinical-impression" onchange="updateObgComputedFields()"><option value="">— Select —</option><option>Fibroid uterus</option><option>PID</option><option>PCOS phenotype</option><option>DUB / AUB</option><option>Vaginitis</option><option>Cervicitis</option></select></div>
+                <div class="form-group full"><label class="fl">Gynae Notes</label><textarea id="obg-gyn-notes" placeholder="Speculum findings, bimanual examination, ultrasound correlation…"></textarea></div>
+              </div>
+            </div>
+
+            <div id="obg-infertility-panel" style="margin-top:14px;display:none">
+              <div style="font-size:12px;font-weight:900;color:#1a8c3c;text-transform:uppercase;letter-spacing:.45px;margin-bottom:8px">Infertility Workup</div>
+              <div class="fg">
+                <div class="form-group"><label class="fl">Duration trying</label><select id="obg-infertility-duration" onchange="updateObgComputedFields()"><option value="">— Select —</option><option>&lt; 6 months</option><option>6-12 months</option><option>1-2 years</option><option>2-5 years</option><option>&gt; 5 years</option></select></div>
+                <div class="form-group"><label class="fl">Type</label><select id="obg-infertility-type" onchange="updateObgComputedFields()"><option value="">— Select —</option><option>Primary infertility</option><option>Secondary infertility</option></select></div>
+                <div class="form-group"><label class="fl">Ovulation clue</label><select id="obg-ovulation"><option value="">— Select —</option><option>Regular ovulatory cycles likely</option><option>Oligo/anovulation likely</option><option>PCOS features</option><option>Luteal concern</option></select></div>
+                <div class="form-group"><label class="fl">Tubal risk</label><select id="obg-tubal-risk"><option value="">Low</option><option>PID / STI history</option><option>Past ectopic</option><option>Past pelvic surgery</option><option>Endometriosis risk</option></select></div>
+                <div class="form-group"><label class="fl">Partner Semen</label><select id="obg-semen"><option value="">Not available</option><option>Pending</option><option>Normal</option><option>Abnormal</option><option>Severely abnormal</option></select></div>
+                <div class="form-group"><label class="fl">Ovarian Reserve</label><select id="obg-ovarian-reserve"><option value="">Not assessed</option><option>AMH adequate</option><option>Borderline reserve</option><option>Low reserve</option><option>Age-related concern</option></select></div>
+                <div class="form-group"><label class="fl">Endometriosis Suspicion</label><select id="obg-endo"><option value="">No</option><option>Possible</option><option>Likely</option></select></div>
+                <div class="form-group"><label class="fl">Planned Test</label><select id="obg-infertility-next"><option value="">— Select —</option><option>TVS follicular study</option><option>TSH / Prolactin</option><option>AMH</option><option>HSG / SSG</option><option>Diagnostic laparoscopy</option><option>Male evaluation</option></select></div>
+                <div class="form-group full"><label class="fl">Infertility Notes</label><textarea id="obg-infertility-notes" placeholder="Coital frequency, prior treatment, ART history, endocrine clues, counselling…"></textarea></div>
               </div>
             </div>
           </div>
-          <div class="form-group full"><label class="fl">Previous Obstetric History</label><textarea>Previous LSCS, scar tender, healing good.</textarea></div>
-          <div class="form-group full"><label class="fl">Medical / Surgical History</label><textarea>No DM, No HTN. No known allergy.</textarea></div>
-        </div>
-      </div>
 
-      <!-- ANC VISITS -->
-      <div class="tab-content" id="obg-anc">
-        <div style="display:flex;justify-content:flex-end;margin-bottom:10px"><button class="btn btn-gold btn-sm" onclick="addANCVisit()">+ Add Visit</button></div>
-        <div id="anc-visit-list">
-          <div id="past-visits-obg" style="text-align:center;padding:30px;color:var(--g2);font-size:12px">
-            <div style="font-size:28px;margin-bottom:8px">📋</div>
-            Select a patient to view their ANC visit history
+          <!-- ANC VISITS -->
+          <div class="tab-content" id="obg-anc">
+            <div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:12px">
+              <div class="form-group"><label class="fl">Visit Date</label><input type="date" id="obg-visit-date"></div>
+              <div class="form-group"><label class="fl">Next Review</label><input type="date" id="obg-next-review"></div>
+              <div class="form-group"><label class="fl">USG Due</label><input type="date" id="obg-usg-due-inline" onchange="document.getElementById('obg-usg-due').value=this.value;updateObgComputedFields()"></div>
+              <div class="form-group"><label class="fl">TT Due</label><input type="date" id="obg-tt-due-inline" onchange="document.getElementById('obg-tt-due').value=this.value;updateObgComputedFields()"></div>
+              <div class="form-group"><label class="fl">Follow-up Plan</label><select id="obg-followup-plan"><option>Routine review</option><option>Review in 1 week</option><option>High-risk surveillance</option><option>Admit if symptoms</option><option>Refer to labour room</option></select></div>
+            </div>
+            <div id="anc-visit-list">
+              <div id="past-visits-obg" style="text-align:center;padding:30px;color:var(--g2);font-size:12px">
+                <div style="font-size:28px;margin-bottom:8px">📋</div>
+                Select a patient to view their saved OBG visits
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
 
-      <!-- INVESTIGATIONS -->
-      <div class="tab-content" id="obg-investigations">
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
-          <div style="background:var(--g6);border-radius:var(--rsm);padding:10px"><div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:8px">Haematology</div>
-            <div style="font-size:12px;display:flex;flex-direction:column;gap:5px">
-              <div style="display:flex;justify-content:space-between"><span>Hb</span><span style="font-weight:800;color:#1a8c3c">10.8 g/dL</span></div>
-              <div style="display:flex;justify-content:space-between"><span>Blood Group</span><span style="font-weight:800">O+ve</span></div>
-              <div style="display:flex;justify-content:space-between"><span>Platelets</span><span style="font-weight:800">2.4 Lac</span></div>
-              <div style="display:flex;justify-content:space-between"><span>TLC</span><span style="font-weight:800">8,600</span></div>
+          <!-- INVESTIGATIONS -->
+          <div class="tab-content" id="obg-investigations">
+            <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px">
+              <div style="background:var(--g6);border-radius:var(--rsm);padding:10px">
+                <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:8px">Booking / Routine Labs</div>
+                <div style="display:grid;gap:7px;font-size:12px">
+                  <label><input type="checkbox" class="obg-lab" value="CBC / Hb"> CBC / Hb</label>
+                  <label><input type="checkbox" class="obg-lab" value="Blood group & Rh"> Blood group & Rh</label>
+                  <label><input type="checkbox" class="obg-lab" value="Urine routine / culture"> Urine routine / culture</label>
+                  <label><input type="checkbox" class="obg-lab" value="Blood sugar / GTT"> Blood sugar / GTT</label>
+                  <label><input type="checkbox" class="obg-lab" value="TSH"> TSH</label>
+                  <label><input type="checkbox" class="obg-lab" value="HIV / HBsAg / VDRL"> HIV / HBsAg / VDRL</label>
+                </div>
+              </div>
+              <div style="background:var(--g6);border-radius:var(--rsm);padding:10px">
+                <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:8px">Imaging / Fetal Surveillance</div>
+                <div style="display:grid;gap:7px;font-size:12px">
+                  <label><input type="checkbox" class="obg-lab" value="Dating scan"> Dating scan</label>
+                  <label><input type="checkbox" class="obg-lab" value="NT scan"> NT scan</label>
+                  <label><input type="checkbox" class="obg-lab" value="Anomaly scan"> Anomaly scan</label>
+                  <label><input type="checkbox" class="obg-lab" value="Growth scan"> Growth scan</label>
+                  <label><input type="checkbox" class="obg-lab" value="NST / CTG"> NST / CTG</label>
+                  <label><input type="checkbox" class="obg-lab" value="BPP / Doppler"> BPP / Doppler</label>
+                </div>
+              </div>
+              <div style="background:var(--g6);border-radius:var(--rsm);padding:10px">
+                <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:8px">Infertility / Gynae Workup</div>
+                <div style="display:grid;gap:7px;font-size:12px">
+                  <label><input type="checkbox" class="obg-lab" value="AMH"> AMH</label>
+                  <label><input type="checkbox" class="obg-lab" value="FSH / LH / E2"> FSH / LH / E2</label>
+                  <label><input type="checkbox" class="obg-lab" value="Serum prolactin"> Serum prolactin</label>
+                  <label><input type="checkbox" class="obg-lab" value="TVS pelvis"> TVS pelvis</label>
+                  <label><input type="checkbox" class="obg-lab" value="HSG / SSG"> HSG / SSG</label>
+                  <label><input type="checkbox" class="obg-lab" value="Semen analysis"> Semen analysis</label>
+                </div>
+              </div>
+            </div>
+            <div style="margin-top:10px;background:#fff8e6;border:1.5px solid rgba(212,160,23,.35);border-radius:10px;padding:10px">
+              <div style="font-size:10px;font-weight:800;color:#8a4200;text-transform:uppercase;margin-bottom:5px">Investigation Summary</div>
+              <div id="obg-investigation-summary" style="font-size:12px;color:#8a4200">No investigations selected yet.</div>
             </div>
           </div>
-          <div style="background:var(--g6);border-radius:var(--rsm);padding:10px"><div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:8px">Urine</div>
-            <div style="font-size:12px;display:flex;flex-direction:column;gap:5px">
-              <div style="display:flex;justify-content:space-between"><span>Protein</span><span style="font-weight:800;color:#1a8c3c">Nil</span></div>
-              <div style="display:flex;justify-content:space-between"><span>Sugar</span><span style="font-weight:800;color:#1a8c3c">Nil</span></div>
-              <div style="display:flex;justify-content:space-between"><span>Deposits</span><span style="font-weight:800">NAD</span></div>
-            </div>
-          </div>
-          <div style="background:var(--g6);border-radius:var(--rsm);padding:10px"><div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:8px">Serology / Others</div>
-            <div style="font-size:12px;display:flex;flex-direction:column;gap:5px">
-              <div style="display:flex;justify-content:space-between"><span>HIV</span><span style="font-weight:800;color:#1a8c3c">Non-reactive</span></div>
-              <div style="display:flex;justify-content:space-between"><span>VDRL</span><span style="font-weight:800;color:#1a8c3c">Non-reactive</span></div>
-              <div style="display:flex;justify-content:space-between"><span>HbsAg</span><span style="font-weight:800;color:#1a8c3c">Negative</span></div>
-              <div style="display:flex;justify-content:space-between"><span>GCT</span><span style="font-weight:800">126 mg/dL</span></div>
-            </div>
-          </div>
-          <div style="background:var(--g6);border-radius:var(--rsm);padding:10px;grid-column:1/-1"><div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:8px">Ultrasound Reports</div>
-            <div style="display:flex;flex-direction:column;gap:7px;font-size:12px">
-              <div style="padding:8px;background:#fff;border-radius:7px;border-left:3px solid var(--blue)"><div style="font-weight:800;color:var(--bmh-blue)">Level II USG · 20 Wks · 10 Dec 2024</div><div style="color:var(--tx3);margin-top:3px">Single live intrauterine fetus, cephalic. All fetal organs normal. No anomaly detected. Placenta posterior, grade I. AFI 12 cm.</div></div>
-              <div style="padding:8px;background:#fff;border-radius:7px;border-left:3px solid var(--green)"><div style="font-weight:800;color:var(--bmh-blue)">Growth Scan · 32 Wks · 10 Mar 2025</div><div style="color:var(--tx3);margin-top:3px">EFW 1780g (appropriate for GA). BPP 8/8. Doppler: normal. AFI 14 cm. Placenta posterior grade II.</div></div>
-            </div>
-          </div>
-        </div>
-      </div>
 
       <!-- OBG RX -->
       <div class="tab-content" id="obg-rx"><div style="background:linear-gradient(135deg,#fff7e0,#fff3cc);border-radius:10px;padding:8px 11px;margin-bottom:10px;border:1.5px solid rgba(212,160,23,.3)">
@@ -1889,8 +1963,8 @@
       </div>
         <div style="margin-bottom:10px"><img src="" class="lh-img-tag" data-lhsrc="1" alt="Baweja Multispeciality Hospital" style="width:100%;max-width:680px;height:auto;display:block"></div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:11px;margin-bottom:10px;padding:7px 9px;background:var(--g6);border-radius:var(--rsm)" id="obg-pt-bar">
-          <div><div style="font-size:9px;color:var(--g1);font-weight:800;text-transform:uppercase">Patient</div><div style="font-weight:900" id="obg-rx-ptname">Test Patient A</div></div>
-          <div><div style="font-size:9px;color:var(--g1);font-weight:800;text-transform:uppercase">BMSH ID</div><div style="font-family:var(--mono);color:var(--bmh-teal);font-weight:700" id="obg-rx-ptid">BMSH-000001</div></div>
+          <div><div style="font-size:9px;color:var(--g1);font-weight:800;text-transform:uppercase">Patient</div><div style="font-weight:900" id="obg-rx-ptname">— Select Patient —</div></div>
+          <div><div style="font-size:9px;color:var(--g1);font-weight:800;text-transform:uppercase">BMSH ID</div><div style="font-family:var(--mono);color:var(--bmh-teal);font-weight:700" id="obg-rx-ptid">—</div></div>
           <div><div style="font-size:9px;color:var(--g1);font-weight:800;text-transform:uppercase">Date</div><div style="font-weight:700" id="obg-rx-date"></div></div>
           <div><div style="font-size:9px;color:var(--g1);font-weight:800;text-transform:uppercase">Age/Sex</div><div style="font-weight:700" id="obg-rx-agesex">—</div></div>
           <div><div style="font-size:9px;color:var(--g1);font-weight:800;text-transform:uppercase">Doctor</div><div style="font-weight:700" id="obg-rx-doctor">Dr. Geeta Baweja</div></div>
@@ -1900,8 +1974,9 @@
           <button class="btn btn-xs btn-blue" onclick="applyLastRx()">📋 Last Rx</button>
           <select style="font-size:11px;flex:1" onchange="applyRxTemplate(this.value)">
             <option value="">— Template —</option>
-            <option value="post-phaco">Post PMICS Day 1</option>
-            <option value="dry-eye">Dry Eye Protocol</option>
+            <option value="anc-routine">Routine ANC Supplements</option>
+            <option value="gynae-discharge">White discharge / vaginitis</option>
+            <option value="infertility-workup">Infertility workup follow-up</option>
           </select>
           <button class="btn btn-xs btn-outline" onclick="openM('m-order-invest')">🧪 Investigations</button>
           <button class="btn btn-xs btn-gold" onclick="openSaveRxTemplate()">📋 Save Template</button>
@@ -2009,6 +2084,17 @@
         <div style="margin-top:10px;display:flex;gap:8px">
           <button class="btn btn-gold" onclick="showToast('Delivery record saved ✓','s')">💾 Save Delivery Record</button>
           <button class="btn btn-outline btn-sm" onclick="openM('m-consents');document.getElementById('mc-type').value='obg-lscs';renderConsentModal()">📋 LSCS Consent</button>
+        </div>
+      </div>
+        </div>
+
+        <div id="obg-summary-rail" style="position:sticky;top:12px;align-self:start">
+          <div style="border:1px solid var(--g5);border-radius:12px;background:#fff;padding:12px">
+            <div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;letter-spacing:.45px;margin-bottom:7px">Patient recap</div>
+            <div id="obg-summary-content" style="max-height:72vh;overflow:auto;padding-right:4px;font-size:11px;color:var(--tx3)">
+              Open a patient to view ANC / Gynae / Infertility recap.
+            </div>
+          </div>
         </div>
       </div>
     </div>
