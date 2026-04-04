@@ -8422,11 +8422,18 @@ function computeRxEndAndTaperDates(d) {
   } else {
     d.dateTo = addDaysToIsoDate(d.dateFrom, Math.max(0, Math.round(n) - 1));
   }
+  const mainDurLabel = normalizeRxDurationLabel(d.dur);
+  const tnMain = durationLabelToDays(mainDurLabel);
+  const halfMain = String(mainDurLabel || '').includes('½') || String(mainDurLabel || '').toLowerCase().includes('half');
   let prevTo = d.dateTo;
   ensureRxTaperRows(d).forEach(tr => {
-    const tn = durationLabelToDays(tr.dur);
+    tr.dur = mainDurLabel;
     tr.dateFrom = addDaysToIsoDate(prevTo, 1);
-    tr.dateTo = addDaysToIsoDate(tr.dateFrom, Math.max(0, Math.round(tn) - 1));
+    if (tnMain <= 1 && halfMain) {
+      tr.dateTo = tr.dateFrom;
+    } else {
+      tr.dateTo = addDaysToIsoDate(tr.dateFrom, Math.max(0, Math.round(tnMain) - 1));
+    }
     prevTo = tr.dateTo;
   });
 }
@@ -8444,20 +8451,20 @@ function suggestTaperFreqFromMain(mainFreq) {
   if (/TDS|Three times/i.test(mainFreq || '')) return 'Twice daily (BD)';
   return 'Twice daily (BD)';
 }
-function suggestNextTaperSegment(freq, dur) {
+function suggestNextTaperSegment(freq, mainDur) {
   const normalizedFreq = normalizeRxFreqLabel(freq || '');
-  const normalizedDur = normalizeRxDurationLabel(dur || '1 week');
-  if (/Half-hourly/i.test(normalizedFreq)) return { freq:'Hourly', dur:'1 day' };
-  if (/Hourly/i.test(normalizedFreq)) return { freq:'Six times daily (6x/day)', dur:'1 week' };
-  if (/Every 2 hours/i.test(normalizedFreq)) return { freq:'Four times daily (QID)', dur:'1 week' };
-  if (/Every 3 hours/i.test(normalizedFreq)) return { freq:'Four times daily (QID)', dur:'1 week' };
-  if (/Every 4 hours/i.test(normalizedFreq)) return { freq:'Three times daily (TDS)', dur:'1 week' };
-  if (/Six times daily/i.test(normalizedFreq)) return { freq:'Four times daily (QID)', dur:'1 week' };
-  if (/Four times daily|QID/i.test(normalizedFreq)) return { freq:'Three times daily (TDS)', dur:'1 week' };
-  if (/Three times daily|TDS/i.test(normalizedFreq)) return { freq:'Twice daily (BD)', dur:'1 week' };
-  if (/Twice daily|BD/i.test(normalizedFreq)) return { freq:'Once daily (OD)', dur:'1 week' };
-  if (/Once daily|OD/i.test(normalizedFreq)) return { freq:'At bedtime (HS)', dur:'1 week' };
-  return { freq:suggestTaperFreqFromMain(normalizedFreq), dur:normalizedDur };
+  const md = normalizeRxDurationLabel(mainDur || '1 week');
+  if (/Half-hourly/i.test(normalizedFreq)) return { freq:'Hourly', dur:md };
+  if (/Hourly/i.test(normalizedFreq)) return { freq:'Six times daily (6x/day)', dur:md };
+  if (/Every 2 hours/i.test(normalizedFreq)) return { freq:'Four times daily (QID)', dur:md };
+  if (/Every 3 hours/i.test(normalizedFreq)) return { freq:'Four times daily (QID)', dur:md };
+  if (/Every 4 hours/i.test(normalizedFreq)) return { freq:'Three times daily (TDS)', dur:md };
+  if (/Six times daily/i.test(normalizedFreq)) return { freq:'Four times daily (QID)', dur:md };
+  if (/Four times daily|QID/i.test(normalizedFreq)) return { freq:'Three times daily (TDS)', dur:md };
+  if (/Three times daily|TDS/i.test(normalizedFreq)) return { freq:'Twice daily (BD)', dur:md };
+  if (/Twice daily|BD/i.test(normalizedFreq)) return { freq:'Once daily (OD)', dur:md };
+  if (/Once daily|OD/i.test(normalizedFreq)) return { freq:'At bedtime (HS)', dur:md };
+  return { freq:suggestTaperFreqFromMain(normalizedFreq), dur:md };
 }
 function addTaperRow(idx, taperDur, taperIdx) {
   const orig = RX_DRUGS[idx];
@@ -8466,7 +8473,8 @@ function addTaperRow(idx, taperDur, taperIdx) {
   const rows = ensureRxTaperRows(orig);
   computeRxEndAndTaperDates(orig);
   const source = (typeof taperIdx === 'number' && rows[taperIdx]) ? rows[taperIdx] : orig;
-  const next = suggestNextTaperSegment(source.freq || orig.freq || '', taperDur || source.dur || orig.dur || '1 week');
+  const mainDur = normalizeRxDurationLabel(orig.dur || '1 week');
+  const next = suggestNextTaperSegment(source.freq || orig.freq || '', mainDur);
   rows.splice(typeof taperIdx === 'number' ? taperIdx + 1 : rows.length, 0, {
     freq: next.freq,
     dur: next.dur,
@@ -9265,7 +9273,7 @@ function renderRxDrugs() {
     d.dur = normalizeRxDurationLabel(d.dur);
     d.taperRows.forEach(tr => {
       tr.freq = normalizeRxFreqLabel(tr.freq);
-      tr.dur = normalizeRxDurationLabel(tr.dur);
+      tr.dur = d.dur;
     });
   });
 
@@ -9303,6 +9311,8 @@ function renderRxDrugs() {
     const taperBtn = opts.taperBtn || '';
     const removeBtn = opts.removeBtn || '';
     const instruction = opts.instruction || '';
+    const isTaperSeg = !!opts.isTaperSegment;
+    const lockDur = opts.parentMainDur != null ? String(opts.parentMainDur) : dur;
     const nameCell = opts.readonlyName
       ? `<div style="display:flex;align-items:center;gap:8px">
           ${opts.showBadge !== false ? `<span style="min-width:24px;height:24px;border-radius:999px;background:${opts.badgeBg || 'var(--bmh-blue)'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:900">${badge}</span>` : ''}
@@ -9328,7 +9338,7 @@ function renderRxDrugs() {
         <div><select onchange="${prefix}.drugType=this.value;${prefix}.type=this.value" style="font-size:10.5px;padding:7px;width:100%;border-radius:8px;border:1px solid ${border};background:#fff">${typeOpts.map(t=>`<option${dt===t?' selected':''}>${t}</option>`).join('')}</select></div>
         <div><select onchange="${prefix}.eye=[this.value]" style="font-size:10.5px;padding:7px;width:100%;border-radius:8px;border:1px solid ${border};background:#fff">${eyeOpts.map(e=>`<option${eye0===e?' selected':''}>${e}</option>`).join('')}</select></div>
         <div><select onchange="${prefix}.freq=this.value;syncRxDrugDates(${i})" style="font-size:10.5px;padding:7px;width:100%;border-radius:8px;border:1px solid ${border};background:#fff">${freqOpts.map(f=>`<option${freq===f?' selected':''}>${f}</option>`).join('')}</select></div>
-        <div><select onchange="${prefix}.dur=this.value;syncRxDrugDates(${i})" style="font-size:10.5px;padding:7px;width:100%;border-radius:8px;border:1px solid ${border};background:#fff">${durOpts.map(f=>`<option${dur===f?' selected':''}>${f}</option>`).join('')}</select></div>
+        <div>${isTaperSeg ? `<div title="Same duration as main row" style="font-size:10.5px;padding:7px;border-radius:8px;border:1px solid ${border};width:100%;background:#f3f4f6;color:var(--g1)">${String(lockDur).replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>` : `<select onchange="${prefix}.dur=this.value;syncRxDrugDates(${i})" style="font-size:10.5px;padding:7px;width:100%;border-radius:8px;border:1px solid ${border};background:#fff">${durOpts.map(f=>`<option${dur===f?' selected':''}>${f}</option>`).join('')}</select>`}</div>
         <div><input type="date" value="${dateFrom||''}" onchange="${prefix}.dateFrom=this.value;syncRxDrugDates(${i})" style="font-size:10.5px;padding:7px;border-radius:8px;border:1px solid ${border};width:100%;background:#fff"></div>
         <div><input type="date" value="${dateTo||''}" onchange="${prefix}.dateTo=this.value" style="font-size:10.5px;padding:7px;border-radius:8px;border:1px solid ${border};width:100%;background:#fff"></div>
         <div style="display:flex;flex-direction:column;gap:6px;align-items:stretch;min-width:0">${taperBtn}${removeBtn}</div>
@@ -9346,7 +9356,7 @@ function renderRxDrugs() {
         ${medicineRow(d, i, {
           prefix:`RX_DRUGS[${i}]`,
           badge:`${i+1}`,
-          taperBtn:`<button type="button" class="btn btn-xs btn-outline" style="width:100%;font-weight:800;font-size:10px;white-space:nowrap;padding:6px 8px" onclick="addTaperRow(${i}, RX_DRUGS[${i}].dur || '1 week')">Taper</button>`,
+          taperBtn:`<button type="button" class="btn btn-xs btn-outline" style="width:100%;font-weight:800;font-size:10px;white-space:nowrap;padding:6px 8px" onclick="addTaperRow(${i})">Taper</button>`,
           removeBtn:`<button type="button" class="btn btn-xs btn-gray" onclick="removeDrug(${i})" title="Remove">✕</button>`,
           instruction:plainLine,
           noTopBorder:true
@@ -9361,12 +9371,14 @@ function renderRxDrugs() {
           dur: tap.dur || '',
           dateFrom: tap.dateFrom || '',
           dateTo: tap.dateTo || '',
+          isTaperSegment:true,
+          parentMainDur:d.dur || '',
           readonlyName:true,
           showBadge:false,
           bg:'#fff7eb',
           border:'var(--orange)',
           headingColor:'#8a4200',
-          taperBtn:`<button type="button" class="btn btn-xs btn-outline" style="width:100%;font-weight:800;font-size:10px;white-space:nowrap;padding:6px 8px" onclick="addTaperRow(${i}, RX_DRUGS[${i}].taperRows[${tapIdx}].dur || '1 week', ${tapIdx})">Taper</button>`,
+          taperBtn:`<button type="button" class="btn btn-xs btn-outline" style="width:100%;font-weight:800;font-size:10px;white-space:nowrap;padding:6px 8px" onclick="addTaperRow(${i}, null, ${tapIdx})">Taper</button>`,
           removeBtn:`<button type="button" class="btn btn-xs btn-gray" onclick="clearTaperRow(${i}, ${tapIdx})">✕</button>`,
           instruction:''
         })}</div>`).join('')}
