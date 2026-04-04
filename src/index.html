@@ -2703,6 +2703,10 @@
       <div style="font-size:10px;font-weight:800;color:var(--bmh-blue);text-transform:uppercase;margin-bottom:6px">Charge lines (investigations, diagnostics, surgery, consumables, pharmacy, OT, reception…)</div>
       <div id="bmh-bill-lines"></div>
     </div>
+    <div style="display:flex;gap:8px;align-items:end;margin:10px 0;flex-wrap:wrap">
+      <div class="form-group" style="margin:0;flex:1;min-width:240px"><label class="fl">Search procedures / investigations / room rent</label><input type="text" id="bmh-charge-search" placeholder="Type any charge name..." oninput="bmhRenderQuickChargePanels()"></div>
+      <button type="button" class="btn btn-blue btn-sm" onclick="bmhFindChargeAndAdd()">+ Add searched charge</button>
+    </div>
     <button type="button" class="btn btn-outline btn-sm" style="margin:8px 0" onclick="bmhAddManualBillLine()">+ Add manual line</button>
     <div style="background:var(--g6);border-radius:var(--rsm);padding:12px;margin-bottom:12px">
       <div style="font-size:11px;font-weight:800;color:var(--bmh-blue);margin-bottom:8px">📦 Scan / type item → add to this patient’s bill</div>
@@ -2739,9 +2743,14 @@
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
           <div class="form-group" style="margin:0"><label class="fl">Amount received ₹</label><input type="number" id="bmh-pay-amt" placeholder="Amount"></div>
           <div class="form-group" style="margin:0"><label class="fl">Mode of payment</label>
-            <select id="bmh-pay-mode"><option value="Cash">Cash</option><option value="UPI">UPI</option><option value="Card">Card</option><option value="NEFT">NEFT</option><option value="Cheque">Cheque</option></select>
+            <select id="bmh-pay-mode" onchange="bmhToggleBillingInsuranceFields()"><option value="Cash">Cash</option><option value="UPI">UPI</option><option value="Card">Card</option><option value="NEFT">NEFT</option><option value="Cheque">Cheque</option><option value="Insurance/TPA">Insurance/TPA</option><option value="PMJAY / Ayushman">PMJAY / Ayushman</option><option value="CGHS/ECHS">CGHS/ECHS</option></select>
           </div>
           <div class="form-group" style="margin:0;grid-column:1/-1"><label class="fl">Cheque no. / UTR / ref no.</label><input type="text" id="bmh-pay-ref" placeholder="Required for bank / UPI reconciliation"></div>
+        </div>
+        <div id="bmh-pay-insurance-fields" style="display:none;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <div class="form-group" style="margin:0"><label class="fl">Insurance / TPA</label><input type="text" id="bmh-pay-insurer" placeholder="Insurer / TPA name"></div>
+          <div class="form-group" style="margin:0"><label class="fl">Policy / pre-auth no.</label><input type="text" id="bmh-pay-policy" placeholder="Policy or pre-auth"></div>
+          <div class="form-group" style="margin:0;grid-column:1/-1"><label class="fl">Amount still due to hospital ₹</label><input type="number" id="bmh-pay-insurer-due" placeholder="Pending from insurer / TPA"></div>
         </div>
         <button type="button" class="btn btn-gold" onclick="bmhRecordPatientPayment()">✓ Record payment &amp; print receipt</button>
       </div>

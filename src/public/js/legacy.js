@@ -32,7 +32,7 @@ const USER_DB = {
   // ── TPA ─────────────────────────────────────────────────
   'tpa_chd':   { pw:'BMHTPA@CHD25', name:'TPA Executive CHD',  role:'TPA',       dept:'Insurance/TPA',      centre:'CHD',  degrees:'',                                                      canSeeAllCentres:false, isAdmin:false },
   // ── OPTOMETRIST ─────────────────────────────────────────
-  'optometrist': { pw:'BMHOpto@25',  name:'Optometrist CHD',     role:'Optometrist', dept:'Ophthalmology',    centre:'CHD',  degrees:'B.Optom',                                                   canSeeAllCentres:false, isAdmin:false },
+  'optometrist': { pw:'BMHOpto@25',  name:'Optometrist RPR',     role:'Optometrist', dept:'Ophthalmology',    centre:'RPR',  degrees:'B.Optom',                                                   canSeeAllCentres:false, isAdmin:false },
   // ── OPTOMETRIST RPR ─────────────────────────────
   'opto_rpr':   { pw:'BMHOpto@RPR25', name:'Optometrist RPR',    role:'Optometrist', dept:'Ophthalmology',    centre:'RPR',  degrees:'B.Optom',                                                   canSeeAllCentres:false, isAdmin:false },
   // ── INVENTORY PER CENTRE ────────────────────────
@@ -3362,12 +3362,32 @@ function bmhRenderBillLines() {
   lines.forEach(l => { const c = l.cat || 'other'; if (!byCat[c]) byCat[c] = []; byCat[c].push(l); });
   el.innerHTML = Object.keys(byCat).map(cat => `<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:800;color:var(--bmh-teal);text-transform:uppercase;margin-bottom:4px">${bmhCatLabel(cat)}</div>${byCat[cat].map(l => {
     const amt = Number(l.amount) || 0;
-    return `<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--g5);font-size:12px">
-      <span style="flex:1">${l.desc || '—'} <span style="font-size:10px;color:var(--g1)">(${l.source || '—'})</span></span>
-      <span style="font-weight:800">₹${amt.toLocaleString('en-IN')}</span>
+    return `<div style="display:grid;grid-template-columns:minmax(0,1.6fr) 66px 88px 88px auto;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--g5);font-size:12px">
+      <div style="min-width:0">
+        <input type="text" value="${String(l.desc || '—').replace(/"/g,'&quot;')}" onchange="bmhUpdateChargeLine('${bmhId}','${l.id}','desc',this.value)" style="width:100%;font-size:12px;font-weight:700;border:none;background:transparent;padding:0">
+        <div style="font-size:10px;color:var(--g1)">${l.source || '—'}</div>
+      </div>
+      <input type="number" min="1" step="1" value="${Number(l.qty)||1}" onchange="bmhUpdateChargeLine('${bmhId}','${l.id}','qty',this.value)" style="font-size:11px;padding:6px;border-radius:6px;border:1px solid var(--g4);width:100%">
+      <input type="number" min="0" step="1" value="${Number(l.rate)||amt}" onchange="bmhUpdateChargeLine('${bmhId}','${l.id}','rate',this.value)" style="font-size:11px;padding:6px;border-radius:6px;border:1px solid var(--g4);width:100%">
+      <span style="font-weight:800;text-align:right">₹${amt.toLocaleString('en-IN')}</span>
       <button type="button" class="btn btn-xs btn-gray" onclick="bmhRemoveChargeLine('${bmhId}','${l.id}')">✕</button>
     </div>`;
   }).join('')}</div>`).join('');
+}
+function bmhUpdateChargeLine(bmhId, lineId, field, value) {
+  const arr = window.BMH_PATIENT_CHARGES[bmhId] || [];
+  const row = arr.find(function (x) { return x.id === lineId; });
+  if (!row) return;
+  if (field === 'desc') row.desc = String(value || '').trim() || row.desc;
+  if (field === 'qty') row.qty = Math.max(1, Number(value) || 1);
+  if (field === 'rate') row.rate = Math.max(0, Number(value) || 0);
+  row.amount = (Number(row.qty) || 1) * (Number(row.rate) || 0);
+  saveBmhFinancials();
+  bmhSyncPatientRunningBalance(bmhId);
+  bmhRenderBillLines();
+  bmhUpdateBillTotals();
+  bmhRenderBillPatientList();
+  bmhRenderPatientFinancialSummary();
 }
 
 function bmhGetPatientFinancialSummary(bmhId) {
@@ -3520,7 +3540,18 @@ function bmhRenderQuickChargePanels() {
   if (!el) return;
   const centre = getEffectiveCentre();
   const groups = bmhQuickChargeGroups();
-  el.innerHTML = groups.map(group => {
+  const q = String(document.getElementById('bmh-charge-search')?.value || '').trim().toLowerCase();
+  const searchMatches = q ? (CHARGES_DATA || []).filter(function (item) {
+    return String(item.name || '').toLowerCase().includes(q);
+  }).slice(0, 24) : [];
+  const searchHtml = q ? `<div style="margin-bottom:12px">
+      <div style="font-size:10px;font-weight:800;color:var(--bmh-blue);text-transform:uppercase;margin-bottom:6px">Search results</div>
+      ${searchMatches.length ? searchMatches.map(item => {
+        const amount = item[centre?.toLowerCase?.()] ?? item[centre] ?? item.chd ?? 0;
+        return `<button type="button" class="btn btn-xs btn-outline" style="justify-content:space-between;width:100%;margin-bottom:6px" onclick="bmhQuickAddCharge('${String(item.name).replace(/'/g, "\\'")}', ${Number(amount) || 0}, '${inferChargeCategoryFromService(item.name)}')"><span style="text-align:left">${item.name}<span style="display:block;font-size:9px;color:var(--g1)">${item.cat || 'charge'}</span></span><span>₹${(Number(amount) || 0).toLocaleString('en-IN')}</span></button>`;
+      }).join('') : '<div style="font-size:12px;color:var(--g1)">No matching charges</div>'}
+    </div>` : '';
+  el.innerHTML = searchHtml + groups.map(group => {
     const items = group.items.map(item => {
       const amount = item[centre?.toLowerCase?.()] ?? item[centre] ?? item.chd ?? 0;
       return `<button type="button" class="btn btn-xs btn-outline" style="justify-content:space-between;width:100%;margin-bottom:6px" onclick="bmhQuickAddCharge('${String(item.name).replace(/'/g, "\\'")}', ${Number(amount) || 0}, '${group.cat}')"><span style="text-align:left">${item.name}</span><span>₹${(Number(amount) || 0).toLocaleString('en-IN')}</span></button>`;
@@ -3530,6 +3561,15 @@ function bmhRenderQuickChargePanels() {
       ${items || '<div style="font-size:12px;color:var(--g1)">No items</div>'}
     </div>`;
   }).join('');
+}
+function bmhFindChargeAndAdd() {
+  const q = String(document.getElementById('bmh-charge-search')?.value || '').trim().toLowerCase();
+  if (!q) { showToast('Type a procedure / investigation / room charge', 'w'); return; }
+  const centre = getEffectiveCentre();
+  const item = (CHARGES_DATA || []).find(function (c) { return String(c.name || '').toLowerCase().includes(q); });
+  if (!item) { showToast('No matching charge found', 'w'); return; }
+  const amount = item[centre?.toLowerCase?.()] ?? item[centre] ?? item.chd ?? 0;
+  bmhQuickAddCharge(item.name, amount, inferChargeCategoryFromService(item.name));
 }
 function bmhRemoveChargeLine(bmhId, lineId) {
   const arr = window.BMH_PATIENT_CHARGES[bmhId]; if (!arr) return;
@@ -3754,23 +3794,50 @@ function bmhRecordPatientPayment() {
   if (!(amt > 0)) { showToast('Enter amount', 'w'); return; }
   const mode = document.getElementById('bmh-pay-mode')?.value || 'Cash';
   const ref = document.getElementById('bmh-pay-ref')?.value?.trim() || '';
+  const insName = document.getElementById('bmh-pay-insurer')?.value?.trim() || '';
+  const policy = document.getElementById('bmh-pay-policy')?.value?.trim() || '';
+  const insurerDue = Math.max(0, Number(document.getElementById('bmh-pay-insurer-due')?.value || 0));
   const pt = PATIENTS.find(p => p.bmhId === bmhId);
   const txnId = 'TXN' + Date.now();
-  const txn = { id: txnId, patient: pt?.name || bmhId, bmhId, service: 'Billing payment', amount: amt, mode, collected: true, paymentRef: ref, dept: pt?.dept || 'ophtho', time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }), date: new Date().toISOString(), centre: pt?.centre || CURRENT_USER?.centre || 'CHD', createdBy: CURRENT_USER?.name || 'Billing' };
+  const txn = { id: txnId, patient: pt?.name || bmhId, bmhId, service: 'Billing payment', amount: amt, mode, collected: true, paymentRef: ref, ins: insName, policy, dept: pt?.dept || 'ophtho', time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }), date: new Date().toISOString(), centre: pt?.centre || CURRENT_USER?.centre || 'CHD', createdBy: CURRENT_USER?.name || 'Billing' };
   TRANSACTIONS.push(txn);
   saveTransactionToFirebase && saveTransactionToFirebase(txn);
+  if (insurerDue > 0) {
+    const existing = (PAY_REQUESTS || []).find(r => r.bmhId === bmhId && r.status === 'pending' && /Insurance|TPA|PMJAY|CGHS|ECHS/i.test(String(r.mode || '')));
+    if (existing) {
+      existing.amount = insurerDue;
+      existing.mode = mode;
+      existing.ins = insName || existing.ins || mode;
+      existing.policy = policy || existing.policy || '';
+      existing.date = new Date().toISOString();
+      fbUpdate && fbUpdate('payRequests/' + existing.id, { amount: existing.amount, mode: existing.mode, ins: existing.ins, policy: existing.policy, date: existing.date });
+    } else {
+      const prIns = { id:'PR' + Date.now(), patient: pt?.name || bmhId, bmhId, for:'Insurance / TPA due', amount: insurerDue, status:'pending', from:'Billing', dept: pt?.dept || 'ophtho', centre: pt?.centre || CURRENT_USER?.centre || 'CHD', mode, ins: insName || mode, policy, date:new Date().toISOString() };
+      PAY_REQUESTS.push(prIns);
+      fbSet && fbSet('payRequests/' + prIns.id, prIns);
+    }
+  }
   const updatedDue = bmhSyncPatientRunningBalance(bmhId);
   if (pt) pt.balance = updatedDue;
   bmhAppendLedger({ date: new Date().toISOString(), type: 'Receipt', narration: 'Patient payment (' + mode + ')', dr: 0, cr: amt, party: pt?.name || bmhId, ref: ref || mode });
   saveBmhFinancials();
   const pi = document.getElementById('bmh-pay-amt'); if (pi) pi.value = '';
   const pr = document.getElementById('bmh-pay-ref'); if (pr) pr.value = '';
+  const pin = document.getElementById('bmh-pay-insurer'); if (pin) pin.value = '';
+  const ppo = document.getElementById('bmh-pay-policy'); if (ppo) ppo.value = '';
+  const pdu = document.getElementById('bmh-pay-insurer-due'); if (pdu) pdu.value = '';
   const tog = document.getElementById('bmh-pay-received-toggle'); if (tog) tog.checked = false;
   bmhTogglePaymentForm(false);
   showToast('Payment saved ✓', 's');
   renderBillingPage();
   renderDashboard && renderDashboard();
   printBmhPaymentAck(Object.assign({}, txn, { ref }));
+}
+function bmhToggleBillingInsuranceFields() {
+  const mode = document.getElementById('bmh-pay-mode')?.value || 'Cash';
+  const wrap = document.getElementById('bmh-pay-insurance-fields');
+  if (!wrap) return;
+  wrap.style.display = /Insurance|TPA|PMJAY|CGHS|ECHS/i.test(mode) ? 'grid' : 'none';
 }
 function bmhUseInventoryItemForPatient(bmhId, item, opts) {
   if (!bmhId || !item) return;
@@ -8959,7 +9026,15 @@ function renderRxDrugs() {
     const taperBtn = opts.taperBtn || '';
     const removeBtn = opts.removeBtn || '';
     const instruction = opts.instruction || '';
-    const nameCell = opts.showName !== false
+    const nameCell = opts.readonlyName
+      ? `<div style="display:flex;align-items:center;gap:8px">
+          ${opts.showBadge !== false ? `<span style="min-width:24px;height:24px;border-radius:999px;background:${opts.badgeBg || 'var(--bmh-blue)'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:900">${badge}</span>` : ''}
+          <div style="min-width:0;flex:1">
+            <div style="width:100%;font-size:12.5px;font-weight:900;color:${opts.headingColor || 'var(--tx)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${String(heading).replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>
+            ${opts.showGeneric !== false ? `<div style="width:100%;font-size:10px;color:var(--g1);font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px">${String(subheading).replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>` : ''}
+          </div>
+        </div>`
+      : opts.showName !== false
       ? `<div style="display:flex;align-items:center;gap:8px">
           ${opts.showBadge !== false ? `<span style="min-width:24px;height:24px;border-radius:999px;background:${opts.badgeBg || 'var(--bmh-blue)'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:900">${badge}</span>` : ''}
           <div style="min-width:0;flex:1">
@@ -9001,14 +9076,16 @@ function renderRxDrugs() {
         })}
         ${taperRows.map((tap, tapIdx)=>medicineRow(d, i, {
           prefix:`RX_DRUGS[${i}].taperRows[${tapIdx}]`,
+          heading:rxDrugTradeName(d) || d.name || '',
+          subheading:rxDrugGenericName(d) || '',
           dt: tap.drugType || tap.type || d.drugType || d.type || 'Tablet',
           eye0: ((tap.eye && tap.eye[0]) || (d.eye && d.eye[0]) || 'Oral'),
           freq: tap.freq || '',
           dur: tap.dur || '',
           dateFrom: tap.dateFrom || '',
           dateTo: tap.dateTo || '',
-          showName:false,
-          emptyNameCell:true,
+          readonlyName:true,
+          showBadge:false,
           bg:'#fff7eb',
           border:'var(--orange)',
           headingColor:'#8a4200',
@@ -9326,6 +9403,8 @@ function loginUser() {
 
 function activateUserSession(user, profile, opts) {
   opts = opts || {};
+  if (String(user || '').toLowerCase() === 'rec_rpr') profile = Object.assign({}, profile, { centre: 'RPR', name: 'Reception Ropar' });
+  if (String(user || '').toLowerCase() === 'optometrist') profile = Object.assign({}, profile, { centre: 'RPR', name: 'Optometrist RPR' });
   CURRENT_USER = Object.assign({}, profile, {username: user});
   window.CURRENT_USER = CURRENT_USER;
   try { sessionStorage.setItem('bmh_active_session', JSON.stringify({ u: user })); } catch (e) {}
