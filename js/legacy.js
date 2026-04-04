@@ -6068,6 +6068,7 @@ function normalizeRxFreqLabel(freq) {
   if (/HS|bedtime/i.test(f)) return 'At bedtime (HS)';
   if (/weekly/i.test(f)) return 'Once weekly';
   if (/PRN|As needed/i.test(f)) return 'As needed (PRN)';
+  if (/as\s*directed/i.test(f)) return 'Twice daily (BD)';
   return f;
 }
 function normalizeRxDurationLabel(dur) {
@@ -8493,6 +8494,12 @@ function clearTaperRow(idx, taperIdx) {
   else rows.length = 0;
   renderRxDrugs();
 }
+if (typeof window !== 'undefined') {
+  window.addTaperRow = addTaperRow;
+  window.clearTaperRow = clearTaperRow;
+  window.syncRxDrugDates = syncRxDrugDates;
+  window.removeDrug = removeDrug;
+}
 
 // ─── SURGERY / PROCEDURE SAVE + REPORT ─────────────────
 const PROCEDURE_ADVISED_LOG = [];
@@ -9277,22 +9284,22 @@ function renderRxDrugs() {
     });
   });
 
-  const gGap = '4px';
+  const gGap = '3px';
   const gridCols = isOphtho
-    ? 'minmax(0,1.2fr) minmax(48px,.34fr) minmax(0,.4fr) minmax(0,.75fr) minmax(48px,.36fr) minmax(72px,.42fr) minmax(72px,.42fr) minmax(56px,.3fr)'
-    : 'minmax(0,1.25fr) minmax(48px,.34fr) minmax(0,.4fr) minmax(0,.75fr) minmax(48px,.36fr) minmax(72px,.42fr) minmax(72px,.42fr) minmax(56px,.3fr)';
-  const selSt = `font-size:9px;padding:3px 2px;width:100%;max-width:100%;min-width:0;box-sizing:border-box;border-radius:6px`;
-  const dateSt = `font-size:9px;padding:2px 3px;width:100%;max-width:100%;min-width:0;box-sizing:border-box;border-radius:6px`;
+    ? 'minmax(0,.88fr) minmax(40px,.26fr) minmax(0,.3fr) minmax(0,.58fr) minmax(40px,.26fr) minmax(56px,.28fr) minmax(56px,.28fr) minmax(30px,.2fr)'
+    : 'minmax(0,.92fr) minmax(40px,.26fr) minmax(0,.3fr) minmax(0,.58fr) minmax(40px,.26fr) minmax(56px,.28fr) minmax(56px,.28fr) minmax(30px,.2fr)';
+  const selSt = `font-size:8px;padding:2px 1px;width:100%;max-width:100%;min-width:0;box-sizing:border-box;border-radius:5px`;
+  const dateSt = `font-size:8px;padding:1px 2px;width:100%;max-width:100%;min-width:0;box-sizing:border-box;border-radius:5px`;
   const gridHead = `
-    <div style="display:grid;grid-template-columns:${gridCols};gap:${gGap};padding:4px 6px;background:var(--g6);border-radius:8px 8px 0 0;font-size:7.5px;font-weight:900;color:var(--g1);text-transform:uppercase;letter-spacing:.2px;line-height:1.2">
+    <div style="display:grid;grid-template-columns:${gridCols};gap:${gGap};padding:3px 5px;background:var(--g6);border-radius:8px 8px 0 0;font-size:7px;font-weight:900;color:var(--g1);text-transform:uppercase;letter-spacing:.15px;line-height:1.15">
       <div>Name</div>
-      <div>Type</div>
+      <div>Ty</div>
       <div>${isOphtho ? 'Eye' : 'Rt'}</div>
-      <div>Freq</div>
-      <div>Dur</div>
-      <div>From</div>
+      <div>Frq</div>
+      <div>Du</div>
+      <div>Fr</div>
       <div>To</div>
-      <div>Act</div>
+      <div style="text-align:center" title="Add taper (⏎) / remove">⏎</div>
     </div>`;
   const medicineRow = (d, i, options) => {
     const opts = options || {};
@@ -9316,7 +9323,9 @@ function renderRxDrugs() {
     const instruction = opts.instruction || '';
     const isTaperSeg = !!opts.isTaperSegment;
     const lockDur = opts.parentMainDur != null ? String(opts.parentMainDur) : dur;
-    const nameCell = opts.readonlyName
+    const nameCell = opts.taperIndentOnly
+      ? `<div style="display:flex;align-items:center;justify-content:center;min-height:26px;border-left:3px solid var(--orange);background:linear-gradient(90deg,rgba(255,149,0,.14),transparent);padding:2px 4px" title="Taper step (same drug)"><span style="font-size:16px;line-height:1;color:#a65f00;font-weight:900">↳</span></div>`
+      : opts.readonlyName
       ? `<div style="display:flex;align-items:center;gap:4px">
           ${opts.showBadge !== false ? `<span style="flex-shrink:0;min-width:18px;height:18px;border-radius:999px;background:${opts.badgeBg || 'var(--bmh-blue)'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:8px;font-weight:900">${badge}</span>` : ''}
           <div style="min-width:0;flex:1">
@@ -9335,8 +9344,8 @@ function renderRxDrugs() {
       : `<div style="min-height:26px;display:flex;align-items:center;${opts.emptyNameCell ? '' : 'gap:4px'}">
           ${opts.emptyNameCell ? '<div style="width:100%;height:1px"></div>' : `<div style="font-size:9px;font-weight:800;color:${opts.headingColor || '#8a4200'};line-height:1.2;white-space:nowrap">${opts.rowLabel || 'Taper'}</div>`}
         </div>`;
-    return `<div style="padding:5px 6px;background:${bg};border-top:${opts.noTopBorder ? 'none' : '1px dashed ' + border}">
-      <div style="display:grid;grid-template-columns:${gridCols};gap:${gGap};align-items:center">
+    return `<div style="padding:4px 5px;background:${bg};border-top:${opts.noTopBorder ? 'none' : '1px dashed ' + border}">
+      <div style="display:grid;grid-template-columns:${gridCols};gap:${gGap};align-items:stretch">
         <div style="min-width:0">${nameCell}</div>
         <div style="min-width:0"><select onchange="${prefix}.drugType=this.value;${prefix}.type=this.value" style="${selSt};border:1px solid ${border};background:#fff">${typeOpts.map(t=>`<option${dt===t?' selected':''}>${t}</option>`).join('')}</select></div>
         <div style="min-width:0"><select onchange="${prefix}.eye=[this.value]" style="${selSt};border:1px solid ${border};background:#fff">${eyeOpts.map(e=>`<option${eye0===e?' selected':''}>${e}</option>`).join('')}</select></div>
@@ -9344,31 +9353,31 @@ function renderRxDrugs() {
         <div style="min-width:0">${isTaperSeg ? `<div title="Same duration as main row — dates chain after previous segment" style="font-size:8.5px;padding:3px 4px;border-radius:6px;border:1px solid ${border};width:100%;max-width:100%;min-width:0;box-sizing:border-box;background:#f3f4f6;color:var(--g1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${String(lockDur).replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>` : `<select onchange="${prefix}.dur=this.value;syncRxDrugDates(${i})" style="${selSt};border:1px solid ${border};background:#fff">${durOpts.map(f=>`<option${dur===f?' selected':''}>${f}</option>`).join('')}</select>`}</div>
         <div style="min-width:0"><input type="date" value="${dateFrom||''}" onchange="${prefix}.dateFrom=this.value;syncRxDrugDates(${i})" style="${dateSt};border:1px solid ${border};background:#fff"></div>
         <div style="min-width:0"><input type="date" value="${dateTo||''}" onchange="${prefix}.dateTo=this.value" style="${dateSt};border:1px solid ${border};background:#fff"></div>
-        <div style="display:flex;flex-direction:row;flex-wrap:wrap;gap:3px;align-items:stretch;min-width:0;justify-content:stretch">${taperBtn}${removeBtn}</div>
+        <div style="display:flex;flex-direction:column;flex-wrap:nowrap;gap:2px;align-items:center;justify-content:center;min-width:0;padding:1px 0">${taperBtn}${removeBtn}</div>
       </div>
       ${instruction ? `<div style="margin-top:5px;padding:5px 8px;background:${opts.instructionBg || '#f7faff'};border-radius:6px;font-size:9px;line-height:1.4;color:${opts.instructionColor || '#24364f'}">${instruction.replace(/</g,'&lt;')}</div>` : ''}
     </div>`;
   };
 
-  el.innerHTML = `<div style="display:flex;flex-direction:column;gap:8px;width:100%;max-width:100%;min-width:0;box-sizing:border-box">
-    <div style="font-size:8.5px;color:var(--g1);line-height:1.35;padding:0 2px 2px"><strong style="color:var(--tx)">Taper:</strong> use <strong>＋Tap</strong> on a row — each step uses the <em>same duration</em> as the main medicine; <em>From/To</em> dates continue the day after the previous step ends.</div>
+  const taperTabBtn = (onclk, t) => `<button type="button" aria-label="Add taper step" title="${t}" onclick="${onclk}" style="flex:1;min-width:24px;max-width:32px;height:24px;margin:0 auto;padding:0;border-radius:5px 5px 2px 2px;border:1px solid #c97800;border-bottom-width:2px;background:linear-gradient(180deg,#fffaf0,#ffe8c4);color:#6b3a00;font-size:13px;line-height:1;font-weight:900;cursor:pointer;box-sizing:border-box">⏎</button>`;
+  const rxDelBtn = (onclk, t) => `<button type="button" class="btn btn-xs btn-gray" onclick="${onclk}" title="${t}" style="flex:0 0 auto;min-width:22px;max-width:26px;font-size:9px;padding:2px 4px;line-height:1.1">✕</button>`;
+  el.innerHTML = `<div style="display:flex;flex-direction:column;gap:6px;width:100%;max-width:100%;min-width:0;box-sizing:border-box">
+    <div style="font-size:8px;color:var(--g1);line-height:1.3;padding:0 2px"><strong style="color:var(--tx)">Taper:</strong> press <strong>⏎</strong> in the last column — new row appears below (no name repeat); same duration as main; dates chain day-by-day.</div>
     ${RX_DRUGS.map((d,i)=>{
       const taperRows = ensureRxTaperRows(d);
       const plainLine = d.lang&&d.lang[lang] ? String(d.lang[lang]) : '';
-      const btnTap = 'flex:1;min-width:44px;font-weight:800;font-size:8px;white-space:nowrap;padding:4px 3px;line-height:1.1';
-      const btnX = 'flex:0 0 auto;min-width:26px;font-size:10px;padding:4px 5px;line-height:1';
       return `<div class="rx-drug-row" style="border:1px solid var(--g5);border-radius:10px;background:#fff;max-width:100%;min-width:0;box-sizing:border-box;overflow-x:auto;-webkit-overflow-scrolling:touch">
         <div style="min-width:0;width:100%;max-width:100%">
         ${gridHead}
         ${medicineRow(d, i, {
           prefix:`RX_DRUGS[${i}]`,
           badge:`${i+1}`,
-          taperBtn:`<button type="button" class="btn btn-xs btn-outline" style="${btnTap}" onclick="addTaperRow(${i})" title="Add taper: lower frequency, same days as main, dates chain after this row">＋Tap</button>`,
-          removeBtn:`<button type="button" class="btn btn-xs btn-gray" onclick="removeDrug(${i})" title="Remove medicine" style="${btnX}">✕</button>`,
+          taperBtn:taperTabBtn(`window.addTaperRow(${i})`, 'Add taper step after main row (lower frequency, same duration)'),
+          removeBtn:rxDelBtn(`window.removeDrug(${i})`, 'Remove medicine'),
           instruction:plainLine,
           noTopBorder:true
         })}
-        ${taperRows.map((tap, tapIdx)=>`<div style="margin-top:2px;border-top:1px solid rgba(255,149,0,.28)">${medicineRow(d, i, {
+        ${taperRows.map((tap, tapIdx)=>`<div class="rx-taper-subrow" style="margin-top:0;border-top:2px solid rgba(255,149,0,.45);background:linear-gradient(180deg,rgba(255,149,0,.1),#fff8ef)">${medicineRow(d, i, {
           prefix:`RX_DRUGS[${i}].taperRows[${tapIdx}]`,
           dt: tap.drugType || tap.type || d.drugType || d.type || 'Tablet',
           eye0: ((tap.eye && tap.eye[0]) || (d.eye && d.eye[0]) || 'Oral'),
@@ -9378,15 +9387,11 @@ function renderRxDrugs() {
           dateTo: tap.dateTo || '',
           isTaperSegment:true,
           parentMainDur:d.dur || '',
-          readonlyName:false,
-          showName:false,
-          rowLabel:`↓ Step ${tapIdx + 1}`,
-          showBadge:false,
-          bg:'#fff7eb',
+          taperIndentOnly:true,
+          bg:'transparent',
           border:'var(--orange)',
-          headingColor:'#8a4200',
-          taperBtn:`<button type="button" class="btn btn-xs btn-outline" style="${btnTap}" onclick="addTaperRow(${i}, null, ${tapIdx})" title="Add another taper after this step">＋Tap</button>`,
-          removeBtn:`<button type="button" class="btn btn-xs btn-gray" onclick="clearTaperRow(${i}, ${tapIdx})" title="Remove this taper step" style="${btnX}">✕</button>`,
+          taperBtn:taperTabBtn(`window.addTaperRow(${i},null,${tapIdx})`, 'Add another taper step after this one'),
+          removeBtn:rxDelBtn(`window.clearTaperRow(${i},${tapIdx})`, 'Remove this taper step'),
           instruction:''
         })}</div>`).join('')}
         </div>
