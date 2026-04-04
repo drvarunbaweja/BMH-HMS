@@ -1848,10 +1848,10 @@ function buildOphthoCaseSheetHtml() {
     const rx = (document.getElementById(id + '-rx')?.value || '').trim() || '—';
     const shortL = PHX_SHORT[i] || '—';
     return `<tr>
-      <td style="border:1px solid #aaa;padding:1px 2px;font-weight:700;white-space:nowrap;font-size:5.5px;line-height:1.15">${escHtml(shortL)}</td>
-      <td style="border:1px solid #aaa;padding:1px;text-align:center;font-weight:900;font-size:5.5px;color:${yn === 'Y' ? '#000' : '#666'}">${escHtml(yn)}</td>
-      <td style="border:1px solid #aaa;padding:1px 2px;font-size:5.5px;line-height:1.15">${escHtml(dur)}</td>
-      <td style="border:1px solid #aaa;padding:1px 2px;font-size:5.5px;line-height:1.15">${escHtml(rx)}</td>
+      <td style="border:1px solid #aaa;padding:2px 3px;font-weight:700;white-space:nowrap;font-size:7px;line-height:1.18">${escHtml(shortL)}</td>
+      <td style="border:1px solid #aaa;padding:2px;text-align:center;font-weight:900;font-size:7px;color:${yn === 'Y' ? '#000' : '#666'}">${escHtml(yn)}</td>
+      <td style="border:1px solid #aaa;padding:2px 3px;font-size:7px;line-height:1.18">${escHtml(dur)}</td>
+      <td style="border:1px solid #aaa;padding:2px 3px;font-size:7px;line-height:1.18">${escHtml(rx)}</td>
     </tr>`;
   }).join('');
   const examHead = (label, bg, fg) => `<th style="border:1px solid #555;padding:4px 3px;font-size:8px;background:${bg};color:${fg};text-transform:uppercase;letter-spacing:.2px">${label}</th>`;
@@ -1951,7 +1951,7 @@ function buildOphthoCaseSheetHtml() {
 </tr>
 </tbody>
 </table>`;
-  const ocularField = (label, val) => `<tr><td style="font-size:5.4px;font-weight:700;padding:1px 2px;border:1px solid #bbb;width:25%;vertical-align:top;background:#f2f2f2;line-height:1.12">${escHtml(label)}</td><td style="font-size:5.7px;padding:1px 2px;border:1px solid #bbb;word-break:break-word;line-height:1.2">${escHtml(val) || '—'}</td></tr>`;
+  const ocularField = (label, val) => `<tr><td style="font-size:7.2px;font-weight:700;padding:2px 3px;border:1px solid #bbb;width:23%;vertical-align:top;background:#f2f2f2;line-height:1.18">${escHtml(label)}</td><td style="font-size:7.5px;padding:2px 3px;border:1px solid #bbb;word-break:break-word;line-height:1.22">${escHtml(val) || '—'}</td></tr>`;
   const fieldLinePrint = (label, val) => ocularField(label, val);
   const slJoin = (struct, eye) => (slData[struct]?.[eye] || []).join(', ');
   const anteriorPrint = (eye) => `<table style="border-collapse:collapse;width:100%">${fieldLinePrint('Lids/Lashes', slJoin('Lids/Lashes', eye))}${fieldLinePrint('Conjunctiva', slJoin('Conjunctiva', eye))}${fieldLinePrint('Cornea', slJoin('Cornea', eye))}${fieldLinePrint('Iris / Pupil', [slJoin('Iris', eye), slJoin('Pupil', eye)].filter(Boolean).join(' · '))}${fieldLinePrint('A/C', slJoin('AC', eye))}${fieldLinePrint('Lens', slJoin('Lens', eye))}</table>`;
@@ -1963,7 +1963,7 @@ function buildOphthoCaseSheetHtml() {
     const per = eye === 'od' ? fund.odPer : fund.osPer;
     const fundTxt = eye === 'od' ? fund.odTxt : fund.osTxt;
     const vit = slJoin('Vitreous', eye);
-    return `<table style="border-collapse:collapse;width:100%;table-layout:fixed">${fieldLinePrint('Media (vitreous)', vit)}${fieldLinePrint('C/D', cd)}${fieldLinePrint('Disc', disc)}${fieldLinePrint('Macula', mac)}${fieldLinePrint('Vessels (A/V)', ves)}${fieldLinePrint('Periphery', per)}</table>${fundTxt ? `<div style="font-size:5px;color:#333;margin-top:2px;white-space:pre-wrap;line-height:1.15">${escHtml(fundTxt)}</div>` : ''}`;
+    return `<table style="border-collapse:collapse;width:100%;table-layout:fixed">${fieldLinePrint('Media (vitreous)', vit)}${fieldLinePrint('C/D', cd)}${fieldLinePrint('Disc', disc)}${fieldLinePrint('Macula', mac)}${fieldLinePrint('Vessels (A/V)', ves)}${fieldLinePrint('Periphery', per)}</table>${fundTxt ? `<div style="font-size:7px;color:#333;margin-top:2px;white-space:pre-wrap;line-height:1.18">${escHtml(fundTxt)}</div>` : ''}`;
   };
   const lblEye = (e) => (e === 'od' ? 'OD' : 'OS');
   const smallLogoSrc = typeof getLetterheadImgSrc === 'function' ? getLetterheadImgSrc() : 'https://bawejahospital.com/img/logo.png';
@@ -1971,33 +1971,33 @@ function buildOphthoCaseSheetHtml() {
   try {
     ocularDiagramPrintSrc = new URL('assets/ocular-health-exam.png', document.querySelector('base')?.href || window.location.href).href;
   } catch (e) { /* keep relative */ }
-  const ocularDiagramsHtml = '<div style="width:100%;max-width:188px;margin:0 auto;text-align:center">'
+  const ocularDiagramsHtml = '<div style="width:100%;max-width:204px;margin:0 auto;text-align:center">'
     + '<img src="' + ocularDiagramPrintSrc + '" alt="Ocular health examination diagram" style="width:100%;height:auto;display:block;border:1px solid #333;border-radius:4px;background:#fff" onerror="this.style.display=\'none\'"/>'
-    + '<div style="font-size:5px;color:#555;margin-top:2px;line-height:1.1">Ocular health (diagram)</div></div>';
+    + '<div style="font-size:6.4px;color:#555;margin-top:2px;line-height:1.1">Ocular health (diagram)</div></div>';
   const ocularBlock = `
 <div style="margin-top:3px;page-break-inside:avoid">
 <h2 style="font-size:9px;margin:2px 0 1px;padding:0">Slit lamp &amp; fundus</h2>
-<div style="display:grid;grid-template-columns:minmax(0,.92fr) 220px minmax(0,.92fr);grid-template-rows:auto auto;gap:3px 5px;align-items:start;width:100%">
+<div style="display:grid;grid-template-columns:minmax(0,.84fr) 246px minmax(0,.84fr);grid-template-rows:auto auto;gap:3px 4px;align-items:start;width:100%">
   <div style="grid-column:1;grid-row:1;min-width:0">
-    <div style="font-size:7.2px;font-weight:900;margin:0 0 1px;color:#1a4a8c">${lblEye('od')} — Ant.</div>
+    <div style="font-size:8.4px;font-weight:900;margin:0 0 1px;color:#1a4a8c">${lblEye('od')} — Ant.</div>
     ${anteriorPrint('od')}
   </div>
   <div style="grid-column:3;grid-row:1;min-width:0">
-    <div style="font-size:7.2px;font-weight:900;margin:0 0 1px;color:#1a4a8c">${lblEye('od')} — Post.</div>
+    <div style="font-size:8.4px;font-weight:900;margin:0 0 1px;color:#1a4a8c">${lblEye('od')} — Post.</div>
     ${posteriorPrint('od')}
   </div>
   <div style="grid-column:1;grid-row:2;min-width:0">
-    <div style="font-size:7.2px;font-weight:900;margin:0 0 1px;color:#1a7a4a">${lblEye('os')} — Ant.</div>
+    <div style="font-size:8.4px;font-weight:900;margin:0 0 1px;color:#1a7a4a">${lblEye('os')} — Ant.</div>
     ${anteriorPrint('os')}
   </div>
   <div style="grid-column:3;grid-row:2;min-width:0">
-    <div style="font-size:7.2px;font-weight:900;margin:0 0 1px;color:#1a7a4a">${lblEye('os')} — Post.</div>
+    <div style="font-size:8.4px;font-weight:900;margin:0 0 1px;color:#1a7a4a">${lblEye('os')} — Post.</div>
     ${posteriorPrint('os')}
   </div>
-  <div style="grid-column:2;grid-row:1 / span 2;align-self:center;justify-self:center;padding:4px;border:1px solid #333;border-radius:3px;background:#fff;max-width:232px;width:100%">
-    <div style="font-size:6.8px;font-weight:900;text-align:center;margin-bottom:2px;line-height:1.18">Lids · Cornea · Lens · Fundus</div>
+  <div style="grid-column:2;grid-row:1 / span 2;align-self:center;justify-self:center;padding:4px;border:1px solid #333;border-radius:3px;background:#fff;max-width:252px;width:100%">
+    <div style="font-size:7.8px;font-weight:900;text-align:center;margin-bottom:2px;line-height:1.18">Lids · Cornea · Lens · Fundus</div>
     ${ocularDiagramsHtml}
-    ${slNotes ? `<div style="font-size:5.8px;color:#222;margin-top:3px;text-align:left;line-height:1.15;white-space:pre-wrap;border-top:1px solid #ddd;padding-top:2px">${escHtml(slNotes)}</div>` : ''}
+    ${slNotes ? `<div style="font-size:7px;color:#222;margin-top:3px;text-align:left;line-height:1.18;white-space:pre-wrap;border-top:1px solid #ddd;padding-top:2px">${escHtml(slNotes)}</div>` : ''}
   </div>
 </div>
 </div>`;
@@ -2043,14 +2043,14 @@ th{background:#eee;font-weight:900;text-align:center;font-size:8.1px}
 </div>
 
 <!-- Personal history | Chief complaints -->
-<div style="display:grid;grid-template-columns:minmax(0,36%) minmax(0,64%);gap:5px;align-items:stretch;margin-bottom:4px">
+<div style="display:grid;grid-template-columns:minmax(0,30%) minmax(0,70%);gap:5px;align-items:stretch;margin-bottom:4px">
   <div style="border:1px solid #bbb;border-radius:4px;padding:4px 5px;background:#f8f8f8;display:flex;flex-direction:column">
-    <div style="font-size:6.5px;font-weight:900;text-transform:uppercase;letter-spacing:.2px;border-bottom:1px solid #ccc;margin-bottom:2px;padding-bottom:2px;color:#333">Personal history (systemic)</div>
+    <div style="font-size:8.2px;font-weight:900;text-transform:uppercase;letter-spacing:.2px;border-bottom:1px solid #ccc;margin-bottom:2px;padding-bottom:2px;color:#333">Personal history (systemic)</div>
     <table style="width:100%;border-collapse:collapse;line-height:1.1;flex:1">
-      <thead><tr style="background:#eaeaea"><th style="border:1px solid #aaa;padding:1px;text-align:left;font-size:5.5px">C</th><th style="border:1px solid #aaa;padding:1px;font-size:5.5px">?</th><th style="border:1px solid #aaa;padding:1px;text-align:left;font-size:5.5px">Dur</th><th style="border:1px solid #aaa;padding:1px;text-align:left;font-size:5.5px">Rx</th></tr></thead>
+      <thead><tr style="background:#eaeaea"><th style="border:1px solid #aaa;padding:2px;text-align:left;font-size:7.1px">C</th><th style="border:1px solid #aaa;padding:2px;font-size:7.1px">?</th><th style="border:1px solid #aaa;padding:2px;text-align:left;font-size:7.1px">Dur</th><th style="border:1px solid #aaa;padding:2px;text-align:left;font-size:7.1px">Rx</th></tr></thead>
       <tbody>${phxRowsHtml}</tbody>
     </table>
-    <div style="font-size:6.5px;line-height:1.3;margin-top:4px;color:#222">
+    <div style="font-size:8.1px;line-height:1.34;margin-top:4px;color:#222">
       <b>Past ocular</b> OD ${escHtml(pohOD)}${pohOdTxt ? ' — ' + escHtml(pohOdTxt) : ''} · OS ${escHtml(pohOS)}${pohOsTxt ? ' — ' + escHtml(pohOsTxt) : ''}<br/>
       <b>Allergy</b> ${escHtml(drugAl)}${drugAlSpec ? ' (' + escHtml(drugAlSpec) + ')' : ''} · <b>Family</b> ${escHtml(famHx || '—')} · <b>Other</b> ${escHtml(othHx || '—')}
     </div>
@@ -3873,6 +3873,48 @@ function openOTFromQueue(bmhId) {
     openOTCase(quickCase.id);
   }, 120);
   showToast('Patient added to OT list ✓', 's');
+}
+
+function deleteOTCase(id) {
+  const idx = OT_CASES.findIndex(function (c) { return c.id === id; });
+  if (idx < 0) { showToast('OT case not found', 'w'); return; }
+  const c = normalizeOTCaseRecord(OT_CASES[idx]);
+  if (!confirm('Remove ' + (c.patient || 'this patient') + ' from OT list?')) return;
+  OT_CASES.splice(idx, 1);
+  if (activeOTCase && activeOTCase.id === id) activeOTCase = null;
+  fbRemove('otCases/' + id).catch(function (e) { console.warn('OT delete error:', e); });
+  renderOTListSafe && renderOTListSafe();
+  const detail = document.getElementById('ot-case-detail');
+  if (detail) {
+    detail.innerHTML = '<div style="padding:18px;text-align:center;color:var(--g2);font-size:12px">Select an OT case to view details</div>';
+  }
+  showToast('Removed from OT list ✓', 's');
+}
+
+function removePatientFromQueue(bmhId) {
+  const p = PATIENTS.find(function (x) { return x.bmhId === bmhId; });
+  if (!p) { showToast('Patient not found in queue', 'w'); return; }
+  if (!confirm('Remove ' + (p.name || 'this patient') + ' from today\'s queue?')) return;
+  p.status = 'removed';
+  p.queueRemoved = true;
+  p.queueRemovedAt = Date.now();
+  p.queueRemovedBy = CURRENT_USER?.name || 'System';
+  p.preRegistered = false;
+  p.dilated = false;
+  p.seen = false;
+  fbUpdate && fbUpdate('patients/' + bmhId, {
+    status: 'removed',
+    queueRemoved: true,
+    queueRemovedAt: p.queueRemovedAt,
+    queueRemovedBy: p.queueRemovedBy,
+    preRegistered: false,
+    dilated: false,
+    seen: false
+  }).catch(function (e) { console.warn('Queue remove error:', e); });
+  renderDocQueue && renderDocQueue();
+  renderReceptionPage && renderReceptionPage();
+  renderDashboard && renderDashboard();
+  showToast('Removed from queue ✓', 's');
 }
 
 // ── Confirm IPD Admission ──────────────────────────
@@ -6699,6 +6741,7 @@ function otCaseCard(c, sno) {
         </select>
         ${pack ? `<button class="btn btn-xs btn-gold" onclick="event.stopPropagation();printSurgeryPackForCase('${c.id}','${pack.id}')">📋 Pack</button>` : ''}
         <button class="btn btn-xs btn-outline" onclick="event.stopPropagation();printOTCard('${c.id}')">🖨️</button>
+        <button class="btn btn-xs btn-gray" onclick="event.stopPropagation();deleteOTCase('${c.id}')">🗑️</button>
       </div>
     </div>
   </div>`;
@@ -8035,9 +8078,9 @@ function renderRxDrugs() {
   });
 
   el.innerHTML = `<div style="border:1px solid var(--g5);border-radius:12px;overflow-x:auto;overflow-y:hidden;background:#fff">
-    <div style="display:grid;grid-template-columns:34px minmax(220px,1.4fr) minmax(95px,.7fr) minmax(110px,.7fr) minmax(150px,.9fr) minmax(120px,.7fr) minmax(210px,1fr) 80px;gap:0;background:var(--bmh-blue);color:#fff;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.4px">
+    <div style="display:grid;grid-template-columns:34px minmax(240px,1.45fr) minmax(105px,.72fr) minmax(120px,.74fr) minmax(160px,.92fr) minmax(126px,.74fr) minmax(210px,1fr) 104px;gap:0;background:var(--bmh-blue);color:#fff;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.4px">
       <div style="padding:10px 8px;border-right:1px solid rgba(255,255,255,.14)">#</div>
-      <div style="padding:10px 8px;border-right:1px solid rgba(255,255,255,.14)">Medicine</div>
+      <div style="padding:10px 8px;border-right:1px solid rgba(255,255,255,.14)">Name</div>
       <div style="padding:10px 8px;border-right:1px solid rgba(255,255,255,.14)">Type</div>
       <div style="padding:10px 8px;border-right:1px solid rgba(255,255,255,.14)">${isOphtho ? 'Eye' : 'Route'}</div>
       <div style="padding:10px 8px;border-right:1px solid rgba(255,255,255,.14)">Frequency</div>
@@ -8052,7 +8095,7 @@ function renderRxDrugs() {
     const eye0 = (d.eye && d.eye[0]) || 'Oral';
     const tap = d.taperRow;
     return `<div class="rx-drug-row" style="border-top:${i ? '1px solid var(--g5)' : 'none'};background:#fff">
-    <div style="display:grid;grid-template-columns:34px minmax(220px,1.4fr) minmax(95px,.7fr) minmax(110px,.7fr) minmax(150px,.9fr) minmax(120px,.7fr) minmax(210px,1fr) 80px;gap:0;align-items:stretch;min-width:1020px">
+    <div style="display:grid;grid-template-columns:34px minmax(240px,1.45fr) minmax(105px,.72fr) minmax(120px,.74fr) minmax(160px,.92fr) minmax(126px,.74fr) minmax(210px,1fr) 104px;gap:0;align-items:stretch;min-width:1100px">
       <div style="padding:12px 8px;border-right:1px solid var(--g5);font-size:13px;font-weight:900;color:var(--bmh-blue);display:flex;align-items:flex-start;justify-content:center">${i+1}</div>
       <div style="padding:10px 8px;border-right:1px solid var(--g5)">
         <input value="${String(tr).replace(/"/g,'&quot;')}" onchange="RX_DRUGS[${i}].trade=this.value;RX_DRUGS[${i}].brand=this.value" placeholder="Trade name" style="width:100%;font-size:15px;font-weight:900;border:none;background:transparent;padding:0;box-sizing:border-box">
@@ -8068,11 +8111,11 @@ function renderRxDrugs() {
         <input type="date" value="${d.dateTo||''}" onchange="RX_DRUGS[${i}].dateTo=this.value" style="font-size:11px;padding:7px 8px;border-radius:8px;border:1px solid var(--g4);width:100%">
       </div>
       <div style="padding:10px 8px;display:flex;flex-direction:column;gap:8px;justify-content:center">
-        <button type="button" class="btn btn-xs btn-outline" onclick="addTaperRow(${i}, RX_DRUGS[${i}].dur || '1 week');renderRxDrugs()">⚖️ Taper</button>
+        <button type="button" class="btn btn-xs btn-outline" style="width:100%;font-weight:800" onclick="addTaperRow(${i}, RX_DRUGS[${i}].dur || '1 week');renderRxDrugs()">Taper</button>
         <button type="button" class="btn btn-xs btn-gray" onclick="removeDrug(${i})" title="Remove">✕</button>
       </div>
     </div>
-    ${tap ? `<div style="display:grid;grid-template-columns:34px minmax(220px,1.4fr) minmax(95px,.7fr) minmax(110px,.7fr) minmax(150px,.9fr) minmax(120px,.7fr) minmax(210px,1fr) 80px;gap:0;align-items:stretch;border-top:1px dashed var(--g4);background:var(--orange-lt);min-width:1020px">
+    ${tap ? `<div style="display:grid;grid-template-columns:34px minmax(240px,1.45fr) minmax(105px,.72fr) minmax(120px,.74fr) minmax(160px,.92fr) minmax(126px,.74fr) minmax(210px,1fr) 104px;gap:0;align-items:stretch;border-top:1px dashed var(--g4);background:var(--orange-lt);min-width:1100px">
       <div style="padding:10px 8px;border-right:1px solid var(--g5);font-size:11px;font-weight:900;color:var(--orange);display:flex;align-items:center;justify-content:center">T</div>
       <div style="padding:10px 8px;border-right:1px solid var(--g5);display:flex;flex-direction:column;justify-content:center">
         <div style="font-size:12px;font-weight:900;color:#8a4200">${String(tr || gen).replace(/</g,'&lt;')}</div>
@@ -8577,10 +8620,68 @@ function rxFreqPlainEn(freq) {
   if (/weekly/i.test(f)) return 'once weekly';
   return f || 'as directed';
 }
+function rxFreqPlain(freq, lang) {
+  const en = rxFreqPlainEn(freq);
+  if (lang === 'hi') {
+    const map = {
+      'every 30 minutes':'हर 30 मिनट',
+      'every hour':'हर 1 घंटे',
+      'every 2 hours':'हर 2 घंटे',
+      'every 3 hours':'हर 3 घंटे',
+      'every 4 hours':'हर 4 घंटे',
+      '4 times a day':'दिन में 4 बार',
+      '3 times a day':'दिन में 3 बार',
+      'twice a day':'दिन में 2 बार',
+      'once a day':'दिन में 1 बार',
+      '6 times a day':'दिन में 6 बार',
+      'as needed':'ज़रूरत पड़ने पर',
+      'at bedtime':'रात को सोते समय',
+      'once weekly':'हफ्ते में 1 बार',
+      'as directed':'जैसा बताया गया है'
+    };
+    return map[en] || en;
+  }
+  if (lang === 'pa') {
+    const map = {
+      'every 30 minutes':'ਹਰ 30 ਮਿੰਟ ਬਾਅਦ',
+      'every hour':'ਹਰ 1 ਘੰਟੇ ਬਾਅਦ',
+      'every 2 hours':'ਹਰ 2 ਘੰਟੇ ਬਾਅਦ',
+      'every 3 hours':'ਹਰ 3 ਘੰਟੇ ਬਾਅਦ',
+      'every 4 hours':'ਹਰ 4 ਘੰਟੇ ਬਾਅਦ',
+      '4 times a day':'ਦਿਨ ਵਿੱਚ 4 ਵਾਰ',
+      '3 times a day':'ਦਿਨ ਵਿੱਚ 3 ਵਾਰ',
+      'twice a day':'ਦਿਨ ਵਿੱਚ 2 ਵਾਰ',
+      'once a day':'ਦਿਨ ਵਿੱਚ 1 ਵਾਰ',
+      '6 times a day':'ਦਿਨ ਵਿੱਚ 6 ਵਾਰ',
+      'as needed':'ਲੋੜ ਪੈਣ ਤੇ',
+      'at bedtime':'ਰਾਤ ਸੌਣ ਵੇਲੇ',
+      'once weekly':'ਹਫ਼ਤੇ ਵਿੱਚ 1 ਵਾਰ',
+      'as directed':'ਜਿਵੇਂ ਦੱਸਿਆ ਗਿਆ ਹੈ'
+    };
+    return map[en] || en;
+  }
+  return en;
+}
 function rxDurationPlainEn(dur) {
   const d = String(dur || '').trim();
   if(!d) return 'as directed';
   return d.replace(/\bOD\b/gi,'day').replace(/\bBD\b/gi,'day');
+}
+function rxDurationPlain(dur, lang) {
+  const en = rxDurationPlainEn(dur);
+  if (lang === 'hi') {
+    return en.replace(/(\d+)\s*day/gi, '$1 दिन')
+      .replace(/(\d+)\s*week/gi, '$1 सप्ताह')
+      .replace(/(\d+)\s*month/gi, '$1 महीना')
+      .replace(/as directed/i, 'जैसा बताया गया है');
+  }
+  if (lang === 'pa') {
+    return en.replace(/(\d+)\s*day/gi, '$1 ਦਿਨ')
+      .replace(/(\d+)\s*week/gi, '$1 ਹਫ਼ਤਾ')
+      .replace(/(\d+)\s*month/gi, '$1 ਮਹੀਨਾ')
+      .replace(/as directed/i, 'ਜਿਵੇਂ ਦੱਸਿਆ ਗਿਆ ਹੈ');
+  }
+  return en;
 }
 function rxEyePlainEn(eye) {
   const e = String(eye || '');
@@ -8591,11 +8692,37 @@ function rxEyePlainEn(eye) {
   if (/Topical/i.test(e)) return 'topically';
   return (e || 'as directed').toLowerCase();
 }
+function rxEyePlain(eye, lang) {
+  const en = rxEyePlainEn(eye);
+  if (lang === 'hi') {
+    const map = {
+      'the right eye':'दाहिनी आंख',
+      'the left eye':'बाईं आंख',
+      'both eyes':'दोनों आंखें',
+      'by mouth':'मुंह से',
+      'topically':'बाहरी रूप से',
+      'as directed':'जैसा बताया गया है'
+    };
+    return map[en] || en;
+  }
+  if (lang === 'pa') {
+    const map = {
+      'the right eye':'ਸੱਜੀ ਅੱਖ',
+      'the left eye':'ਖੱਬੀ ਅੱਖ',
+      'both eyes':'ਦੋਵਾਂ ਅੱਖਾਂ',
+      'by mouth':'ਮੂੰਹ ਰਾਹੀਂ',
+      'topically':'ਬਾਹਰੋਂ',
+      'as directed':'ਜਿਵੇਂ ਦੱਸਿਆ ਗਿਆ ਹੈ'
+    };
+    return map[en] || en;
+  }
+  return en;
+}
 function buildRxPlainInstructionLine(d, lang, fmtIN) {
   const eye = Array.isArray(d.eye) ? d.eye[0] : d.eye;
-  const freq = rxFreqPlainEn(d.freq);
-  const dur = rxDurationPlainEn(d.dur);
-  const eyeTxt = rxEyePlainEn(eye);
+  const freq = rxFreqPlain(d.freq, lang);
+  const dur = rxDurationPlain(d.dur, lang);
+  const eyeTxt = rxEyePlain(eye, lang);
   const df = fmtIN(d.dateFrom);
   const dt = fmtIN(d.dateTo);
   const form = String(d.drugType || d.type || '').toLowerCase();
@@ -8607,15 +8734,25 @@ function buildRxPlainInstructionLine(d, lang, fmtIN) {
   else if (/pessary/i.test(form)) action = 'Insert';
   let line = '';
   if (lang === 'hi') {
-    line = eyeTxt.replace(/^the /, '') + ' में ' + freq + ', ' + dur + ', ' + df + ' से ' + dt + ' तक।';
+    if (/drop|eye/i.test(form)) line = eyeTxt + ' में 1 बूंद ' + freq + ', ' + dur + ', ' + df + ' से ' + dt + ' तक।';
+    else if (/ointment|gel|cream|lotion/i.test(form)) line = eyeTxt + ' पर लगाएं, ' + freq + ', ' + dur + ', ' + df + ' से ' + dt + ' तक।';
+    else if (/injection/i.test(form)) line = 'निर्देशानुसार दें, ' + freq + ', ' + dur + ', ' + df + ' से ' + dt + ' तक।';
+    else line = eyeTxt + ' के लिए ' + freq + ', ' + dur + ', ' + df + ' से ' + dt + ' तक।';
   } else if (lang === 'pa') {
-    line = eyeTxt + ' ਵਿੱਚ ' + freq + ', ' + dur + ', ' + df + ' ਤੋਂ ' + dt + ' ਤੱਕ।';
+    if (/drop|eye/i.test(form)) line = eyeTxt + ' ਵਿੱਚ 1 ਬੂੰਦ ' + freq + ', ' + dur + ', ' + df + ' ਤੋਂ ' + dt + ' ਤੱਕ।';
+    else if (/ointment|gel|cream|lotion/i.test(form)) line = eyeTxt + ' ਤੇ ਲਗਾਓ, ' + freq + ', ' + dur + ', ' + df + ' ਤੋਂ ' + dt + ' ਤੱਕ।';
+    else if (/injection/i.test(form)) line = 'ਨਿਰਦੇਸ਼ ਅਨੁਸਾਰ ਦਿਓ, ' + freq + ', ' + dur + ', ' + df + ' ਤੋਂ ' + dt + ' ਤੱਕ।';
+    else line = eyeTxt + ' ਲਈ ' + freq + ', ' + dur + ', ' + df + ' ਤੋਂ ' + dt + ' ਤੱਕ।';
   } else {
     line = action + ' in ' + eyeTxt + ' ' + freq + ' for ' + dur + ', from ' + df + ' to ' + dt + '.';
   }
   if (d.taperRow && d.taperRow.freq) {
     const tr = d.taperRow;
-    line += (lang === 'en' ? ' Then taper: ' : ' ') + rxFreqPlainEn(tr.freq) + ' for ' + rxDurationPlainEn(tr.dur) + ' (' + fmtIN(tr.dateFrom) + ' – ' + fmtIN(tr.dateTo) + ').';
+    const taperFreq = rxFreqPlain(tr.freq, lang);
+    const taperDur = rxDurationPlain(tr.dur, lang);
+    if (lang === 'hi') line += ' फिर कम करें: ' + taperFreq + ', ' + taperDur + ' (' + fmtIN(tr.dateFrom) + ' – ' + fmtIN(tr.dateTo) + ')।';
+    else if (lang === 'pa') line += ' ਫਿਰ ਘਟਾਓ: ' + taperFreq + ', ' + taperDur + ' (' + fmtIN(tr.dateFrom) + ' – ' + fmtIN(tr.dateTo) + ')।';
+    else line += ' Then taper: ' + taperFreq + ' for ' + taperDur + ' (' + fmtIN(tr.dateFrom) + ' – ' + fmtIN(tr.dateTo) + ').';
   }
   return line;
 }
@@ -8803,7 +8940,7 @@ ${incPos && deptId==='oe' ? `<div class="lbl-row" style="margin:6px 0"><span cla
 ${drugs.length ? `
 <div class="sec-title">Medicine (Rx):</div>
 <table>
-  <thead><tr><th>#</th><th class="left">Trade — Generic</th><th>Form</th><th>Route / Eye</th><th>Frequency</th><th>Duration</th><th>From</th><th>To</th></tr></thead>
+  <thead><tr><th>#</th><th class="left">Name</th><th>Form</th><th>Route / Eye</th><th>Frequency</th><th>Duration</th><th>From</th><th>To</th></tr></thead>
   <tbody>
     ${drugs.map((d,i)=>{
       const trade = (typeof rxDrugTradeName === 'function' ? rxDrugTradeName(d) : (d.brand||d.trade||'')) || '—';
@@ -8825,7 +8962,7 @@ ${drugs.length ? `
       if (tap) {
         rows += `<tr style="background:#fff8e6"><td style="vertical-align:top">↳</td>
         <td class="left" colspan="7" style="font-size:11px;padding-top:8px;padding-bottom:8px">
-          <strong>Taper</strong> — ${tap.freq||'—'} · ${tap.dur||'—'} · ${fmtIN(tap.dateFrom)} → ${fmtIN(tap.dateTo)}
+          <strong>${rxPlainLang === 'hi' ? 'धीरे कम करें' : rxPlainLang === 'pa' ? 'ਹੌਲੀ ਘਟਾਓ' : 'Taper'}</strong> — ${rxFreqPlain(tap.freq, rxPlainLang)||'—'} · ${rxDurationPlain(tap.dur, rxPlainLang)||'—'} · ${fmtIN(tap.dateFrom)} → ${fmtIN(tap.dateTo)}
         </td></tr>`;
       }
       return rows;
@@ -12126,7 +12263,8 @@ function buildQCard(p, sno) {
         ${isOphtho&&!p.dilated?`<button title="Dilate" style="background:var(--blue-lt);color:var(--blue);border:1.5px solid var(--blue);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="markDilated('${p.bmhId}','${p.name.replace(/'/g,"\\'")}')">💧</button>`:''}
         <button title="Cross-Refer" style="background:rgba(11,123,140,.1);color:var(--teal);border:1.5px solid var(--teal);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="openXRefModal('${p.bmhId}')">↔️</button>
         <button title="IPD" style="background:rgba(175,82,222,.1);color:var(--purple);border:1.5px solid var(--purple);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="openIPDFromQueue('${p.bmhId}')">🛏️</button>
-        <button title="Add to OT" style="background:rgba(255,149,0,.1);color:var(--orange);border:1.5px solid var(--orange);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="openOTFromQueue('${p.bmhId}')">🔬</button>`
+        <button title="Add to OT" style="background:rgba(255,149,0,.1);color:var(--orange);border:1.5px solid var(--orange);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="openOTFromQueue('${p.bmhId}')">🔬</button>
+        <button title="Remove from Queue" style="background:rgba(204,0,0,.08);color:#c0392b;border:1.5px solid rgba(192,57,43,.45);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="removePatientFromQueue('${p.bmhId}')">🗑️</button>`
         }
       </div>
     </div>
@@ -12201,7 +12339,8 @@ function buildQTableRow(p, sno, opts) {
       ${isOphtho&&!p.dilated&&!p.seen?`<button type="button" title="Dilate" style="background:var(--blue-lt);color:var(--blue);border:1.5px solid var(--blue);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="markDilated('${p.bmhId}','${nmEsc}')">💧</button>`:''}
       <button type="button" title="Cross-ref" style="background:rgba(11,123,140,.1);color:var(--teal);border:1.5px solid var(--teal);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="openXRefModal('${p.bmhId}')">↔️</button>
       <button type="button" title="IPD" style="background:rgba(175,82,222,.1);color:var(--purple);border:1.5px solid var(--purple);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="openIPDFromQueue('${p.bmhId}')">🛏️</button>
-      <button type="button" title="OT" style="background:rgba(255,149,0,.1);color:var(--orange);border:1.5px solid var(--orange);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="openOTFromQueue('${p.bmhId}')">🔬</button>`
+      <button type="button" title="OT" style="background:rgba(255,149,0,.1);color:var(--orange);border:1.5px solid var(--orange);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="openOTFromQueue('${p.bmhId}')">🔬</button>
+      <button type="button" title="Remove" style="background:rgba(204,0,0,.08);color:#c0392b;border:1.5px solid rgba(192,57,43,.45);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="removePatientFromQueue('${p.bmhId}')">🗑️</button>`
       }
     </td>
   </tr>`;
