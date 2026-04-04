@@ -3010,7 +3010,7 @@ function syncPayRequestToPatientCharges(pr) {
 function bmhBillPreviewTotal(bmhId) {
   const lines = window.BMH_PATIENT_CHARGES[bmhId] || [];
   const sub = lines.reduce((s, x) => s + (Number(x.amount) || 0), 0);
-  return sub + Math.round(sub * 0.05);
+  return sub;
 }
 
 function bmhTotalReceivedForPatient(bmhId) {
@@ -3044,8 +3044,8 @@ function bmhTotalsForPatient(bmhId) {
   const applyAdv = document.getElementById('bmh-apply-advance')?.checked;
   const advanceApplied = applyAdv ? Math.min(advAvail, afterDisc) : 0;
   const taxable = Math.max(0, afterDisc - advanceApplied);
-  const gst = Math.round(taxable * 0.05);
-  const total = taxable + gst;
+  const gst = 0;
+  const total = taxable;
   return { sub, gst, total, discount: disc, advanceApplied, taxable };
 }
 function bmhCatLabel(cat) {
@@ -3339,7 +3339,6 @@ function bmhUpdateBillTotals() {
   a('bill-advance-amt', advanceApplied);
   const tx = document.getElementById('bill-taxable');
   if (tx) tx.textContent = '₹' + (taxable || 0).toLocaleString('en-IN');
-  a('bill-gst', gst);
   a('bill-received', received);
   a('bill-balance-due', due);
   a('bill-total', total);
@@ -3439,7 +3438,7 @@ function printBmhPatientBill(bmhIdOpt) {
   const info = bmhGetPatientFinancialSummary(bmhId);
   const p = info.patient || {};
   const lines = window.BMH_PATIENT_CHARGES[bmhId] || [];
-  const { sub, gst, total, discount, advanceApplied, taxable } = bmhTotalsForPatient(bmhId);
+  const { sub, total, discount, advanceApplied, taxable } = bmhTotalsForPatient(bmhId);
   const invNo = 'INV-' + String(Date.now()).slice(-8);
   const today = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
   const sz = document.getElementById('bmh-print-size')?.value || window.BMH_BILL_PRINT_SIZE || 'A4';
@@ -3483,8 +3482,7 @@ th{background:#1A3C6E;color:#fff;font-size:10px;text-transform:uppercase}
 <div class="tot" style="flex-direction:column;align-items:flex-end;gap:4px">
 ${discount > 0 ? '<span>Discount ₹' + discount.toLocaleString('en-IN') + '</span>' : ''}
 ${advanceApplied > 0 ? '<span>Advance adjusted ₹' + advanceApplied.toLocaleString('en-IN') + '</span>' : ''}
-<span>Taxable ₹${(taxable != null ? taxable : sub - discount - advanceApplied).toLocaleString('en-IN')}</span>
-<span>GST 5% ₹${gst.toLocaleString('en-IN')}</span>
+<span>Chargeable total ₹${(taxable != null ? taxable : sub - discount - advanceApplied).toLocaleString('en-IN')}</span>
 <span style="color:#1A3C6E">Net ₹${total.toLocaleString('en-IN')}</span>
 </div>
 <div style="margin:16px 0 8px;font-size:11px;font-weight:900;color:#1A3C6E;text-transform:uppercase">Financial transaction history</div>
@@ -5410,7 +5408,7 @@ window.addEventListener('DOMContentLoaded', function() {
     const saved = localStorage.getItem('bmh_creds');
     if(saved) {
       const creds = JSON.parse(saved);
-      const ui = document.getElementById('lg-user');
+      const ui = document.getElementById('lg-email') || document.getElementById('lg-user');
       const pi = document.getElementById('lg-pass');
       const ri = document.getElementById('lg-remember');
       if(ui && creds.u) ui.value = creds.u;
@@ -6807,10 +6805,8 @@ function calcRecBill() {
     const last = row.querySelector('span:last-of-type'); if(last) last.textContent='₹'+amt.toLocaleString('en-IN');
   });
   const disc = parseFloat(document.getElementById('rec-bill-discount')?.value||0);
-  const gst = Math.round((sub-disc)*0.05);
-  const total = sub-disc+gst;
+  const total = Math.max(0, sub-disc);
   document.getElementById('rec-bill-sub').textContent='₹'+sub.toLocaleString('en-IN');
-  document.getElementById('rec-bill-gst').textContent='₹'+gst.toLocaleString('en-IN');
   document.getElementById('rec-bill-total').textContent='₹'+total.toLocaleString('en-IN');
 }
 
@@ -8787,7 +8783,7 @@ function toggleLgPw() {
 
 function loginUser() {
   try {
-    var user = (document.getElementById('lg-user') ? document.getElementById('lg-user').value : '').trim().toLowerCase();
+    var user = ((document.getElementById('lg-email') || document.getElementById('lg-user')) ? (document.getElementById('lg-email') || document.getElementById('lg-user')).value : '').trim().toLowerCase();
     var pass = (document.getElementById('lg-pass') ? document.getElementById('lg-pass').value : '');
     
     if (!user || !pass) {
@@ -8819,101 +8815,8 @@ function loginUser() {
       }
     } catch(storErr) {}
 
-    CURRENT_USER = Object.assign({}, profile, {username: user});
+    activateUserSession(user, profile, { showToastOnSuccess: true, auditLogin: true });
 
-    // Hide gate, show shell
-    var gate = document.getElementById('login-gate');
-    if (gate) gate.style.display = 'none';
-    var shell = document.getElementById('shell');
-    if (shell) shell.style.display = 'flex';
-
-    // Auto-lock centre based on login — non-admin/non-BOTH users get their centre locked
-    var cSel = document.getElementById('c-sel-row');
-    if(profile.centre === 'CHD' || profile.centre === 'RPR') {
-      // Lock to this centre — hide toggle for non-admin
-      var cLabel = profile.centre === 'CHD' ? 'Chandigarh' : 'Ropar';
-      var tbCp = document.getElementById('tb-cp');
-      if(tbCp) tbCp.textContent = '📍 ' + cLabel;
-      // Highlight correct button, disable toggle for non-admin
-      document.querySelectorAll('.c-btn').forEach(function(b){ b.classList.remove('active'); b.style.opacity = profile.isAdmin ? '1' : '0.5'; b.style.pointerEvents = profile.isAdmin ? '' : 'none'; });
-      var activeBtn = document.querySelector('.c-btn[data-centre="' + profile.centre + '"]');
-      if(activeBtn) { activeBtn.classList.add('active'); activeBtn.style.opacity='1'; }
-      if(cSel && !profile.isAdmin) cSel.style.opacity = '0.6';
-    } else {
-      // BOTH — show toggle normally
-      if(cSel) cSel.style.opacity = '1';
-      document.querySelectorAll('.c-btn').forEach(function(b){ b.style.opacity='1'; b.style.pointerEvents=''; });
-    }
-
-    // Topbar
-    var sbnm = document.getElementById('sbnm'); if (sbnm) sbnm.textContent = profile.name;
-    var cDisp = profile.centre === 'BOTH' ? 'Admin' : profile.centre;
-    var sbrl = document.getElementById('sbrl'); if (sbrl) sbrl.textContent = profile.role + ' · ' + cDisp;
-    var sbav = document.getElementById('sbav');
-    if (sbav) {
-      sbav.textContent = profile.name.replace('Dr. ','').split(' ').map(function(n){return n[0]||'';}).join('').substring(0,2).toUpperCase();
-    }
-
-    // Build sidebar
-    if (typeof buildSidebarForRole === 'function') {
-      buildSidebarForRole(profile.role, profile.dept, profile.name);
-    }
-
-    // Navigate to first page
-    var pageMap = {
-      Admin:       'dashboard',
-      Doctor:      'doctor-queue',
-      Reception:   'reception',
-      Lab:         'lab',
-      TPA:         'tpa',
-      Inventory:   'inventory',
-      Optometrist: 'doctor-queue'
-    };
-    var firstPage = pageMap[profile.role] || 'dashboard';
-    if (typeof nav === 'function') nav(firstPage, null);
-
-    // Firebase listeners after delay
-    setTimeout(function() {
-      try {
-        if (typeof loadPatientsFromFirebase === 'function')  loadPatientsFromFirebase();
-        if (typeof listenPayRequests === 'function')         listenPayRequests();
-        if (typeof listenAppointments === 'function')        listenAppointments();
-        if (typeof loadTodayTransactions === 'function')     loadTodayTransactions();
-        if (typeof loadCustomPurposes === 'function')        loadCustomPurposes();
-        if (typeof loadAdviceTemplates === 'function')       loadAdviceTemplates();
-        if (typeof loadDeletionRequests === 'function')      loadDeletionRequests();
-        if (typeof loadOTCasesFromFirebase === 'function')   loadOTCasesFromFirebase();
-        if (typeof loadIPDPatientsFromFirebase === 'function') loadIPDPatientsFromFirebase();
-        if (typeof loadDoctorProfilesFromFirebase === 'function') loadDoctorProfilesFromFirebase();
-        if (typeof loadChargesFromFirebase === 'function') loadChargesFromFirebase();
-        if (profile.role === 'Lab' && typeof listenLabOrders === 'function') listenLabOrders();
-        // Load persisted user settings (passwords, disabled flags, new users) from Firebase
-        if (window.FBDB) {
-          window.FBDB.ref('userSettings').once('value').then(function(snap) {
-            const settings = snap.val();
-            if(!settings) return;
-            Object.entries(settings).forEach(function([uname, data]) {
-              if(!USER_DB[uname] && data.name && data.role) {
-                // New user created via admin panel — add to local USER_DB
-                USER_DB[uname] = { pw: data.pw||'', name: data.name, role: data.role||'Reception', dept: data.dept||'', centre: data.centre||'CHD', degrees: data.degrees||'', canSeeAllCentres: !!data.canSeeAllCentres, isAdmin: !!data.isAdmin, disabled: !!data.disabled };
-              } else if(USER_DB[uname]) {
-                // Sync password changes and disabled flags
-                if(data.pw) USER_DB[uname].pw = data.pw;
-                if(data.disabled !== undefined) USER_DB[uname].disabled = data.disabled;
-              }
-            });
-          }).catch(function(e){ console.warn('userSettings load error:', e); });
-        }
-        if (typeof fbPush === 'function') {
-          fbPush('auditLog', {
-            user: profile.name, role: profile.role, centre: profile.centre,
-            action: 'LOGIN', timestamp: new Date().toISOString()
-          });
-        }
-      } catch(fbErr) { console.warn('Firebase listener error:', fbErr); }
-    }, 1000);
-
-    if (typeof showToast === 'function') showToast('Welcome, ' + profile.name + ' ✓', 's');
 
   } catch(loginErr) {
     console.error('Login error:', loginErr);
@@ -8921,10 +8824,87 @@ function loginUser() {
   }
 }
 
+function activateUserSession(user, profile, opts) {
+  opts = opts || {};
+  CURRENT_USER = Object.assign({}, profile, {username: user});
+  window.CURRENT_USER = CURRENT_USER;
+  try { sessionStorage.setItem('bmh_active_session', JSON.stringify({ u: user })); } catch (e) {}
+
+  var gate = document.getElementById('login-gate');
+  if (gate) gate.style.display = 'none';
+  var shell = document.getElementById('shell');
+  if (shell) shell.style.display = 'flex';
+
+  var cSel = document.getElementById('c-sel-row');
+  if(profile.centre === 'CHD' || profile.centre === 'RPR') {
+    var cLabel = profile.centre === 'CHD' ? 'Chandigarh' : 'Ropar';
+    var tbCp = document.getElementById('tb-cp');
+    if(tbCp) tbCp.textContent = '📍 ' + cLabel;
+    document.querySelectorAll('.c-btn').forEach(function(b){ b.classList.remove('active'); b.style.opacity = profile.isAdmin ? '1' : '0.5'; b.style.pointerEvents = profile.isAdmin ? '' : 'none'; });
+    var activeBtn = document.querySelector('.c-btn[data-centre="' + profile.centre + '"]');
+    if(activeBtn) { activeBtn.classList.add('active'); activeBtn.style.opacity='1'; }
+    if(cSel && !profile.isAdmin) cSel.style.opacity = '0.6';
+  } else {
+    if(cSel) cSel.style.opacity = '1';
+    document.querySelectorAll('.c-btn').forEach(function(b){ b.style.opacity='1'; b.style.pointerEvents=''; });
+  }
+
+  var sbnm = document.getElementById('sbnm'); if (sbnm) sbnm.textContent = profile.name;
+  var cDisp = profile.centre === 'BOTH' ? 'Admin' : profile.centre;
+  var sbrl = document.getElementById('sbrl'); if (sbrl) sbrl.textContent = profile.role + ' · ' + cDisp;
+  var sbav = document.getElementById('sbav');
+  if (sbav) sbav.textContent = profile.name.replace('Dr. ','').split(' ').map(function(n){return n[0]||'';}).join('').substring(0,2).toUpperCase();
+
+  if (typeof buildSidebarForRole === 'function') buildSidebarForRole(profile.role, profile.dept, profile.name);
+
+  var pageMap = { Admin:'dashboard', Doctor:'doctor-queue', Reception:'reception', Lab:'lab', TPA:'tpa', Inventory:'inventory', Optometrist:'doctor-queue' };
+  var firstPage = pageMap[profile.role] || 'dashboard';
+  if (typeof nav === 'function') nav(firstPage, null);
+
+  setTimeout(function() {
+    try {
+      if (typeof loadPatientsFromFirebase === 'function')  loadPatientsFromFirebase();
+      if (typeof listenPayRequests === 'function')         listenPayRequests();
+      if (typeof listenAppointments === 'function')        listenAppointments();
+      if (typeof loadTodayTransactions === 'function')     loadTodayTransactions();
+      if (typeof loadCustomPurposes === 'function')        loadCustomPurposes();
+      if (typeof loadAdviceTemplates === 'function')       loadAdviceTemplates();
+      if (typeof loadDeletionRequests === 'function')      loadDeletionRequests();
+      if (typeof loadOTCasesFromFirebase === 'function')   loadOTCasesFromFirebase();
+      if (typeof loadIPDPatientsFromFirebase === 'function') loadIPDPatientsFromFirebase();
+      if (typeof loadDoctorProfilesFromFirebase === 'function') loadDoctorProfilesFromFirebase();
+      if (typeof loadChargesFromFirebase === 'function') loadChargesFromFirebase();
+      if (typeof renderDocQueue === 'function') renderDocQueue();
+      if (typeof renderReceptionPage === 'function') renderReceptionPage();
+      if (typeof renderDashboard === 'function') renderDashboard();
+      if (profile.role === 'Lab' && typeof listenLabOrders === 'function') listenLabOrders();
+      if (window.FBDB) {
+        window.FBDB.ref('userSettings').once('value').then(function(snap) {
+          const settings = snap.val();
+          if(!settings) return;
+          Object.entries(settings).forEach(function([uname, data]) {
+            if(!USER_DB[uname] && data.name && data.role) {
+              USER_DB[uname] = { pw: data.pw||'', name: data.name, role: data.role||'Reception', dept: data.dept||'', centre: data.centre||'CHD', degrees: data.degrees||'', canSeeAllCentres: !!data.canSeeAllCentres, isAdmin: !!data.isAdmin, disabled: !!data.disabled };
+            } else if(USER_DB[uname]) {
+              if(data.pw) USER_DB[uname].pw = data.pw;
+              if(data.disabled !== undefined) USER_DB[uname].disabled = data.disabled;
+            }
+          });
+        }).catch(function(e){ console.warn('userSettings load error:', e); });
+      }
+      if (opts.auditLogin && typeof fbPush === 'function') {
+        fbPush('auditLog', { user: profile.name, role: profile.role, centre: profile.centre, action: 'LOGIN', timestamp: new Date().toISOString() });
+      }
+    } catch(fbErr) { console.warn('Firebase listener error:', fbErr); }
+  }, 250);
+
+  if (opts.showToastOnSuccess && typeof showToast === 'function') showToast('Welcome, ' + profile.name + ' ✓', 's');
+}
+
 function showLoginErr(msg) {
   const err = document.getElementById('lg-err');
   if(err) { err.textContent = msg; err.style.display = 'block'; }
-  const inp = document.getElementById('lg-user');
+  const inp = document.getElementById('lg-email') || document.getElementById('lg-user');
   if(inp) { inp.style.borderColor = 'rgba(255,59,48,.6)'; setTimeout(()=>inp.style.borderColor='', 2000); }
 }
 
@@ -10958,7 +10938,7 @@ function todayKey()           { return new Date().toISOString().split('T')[0]; }
     const saved = localStorage.getItem('bmh_saved_creds');
     if(saved) {
       const {u, p} = JSON.parse(saved);
-      const ui = document.getElementById('lg-user');
+      const ui = document.getElementById('lg-email') || document.getElementById('lg-user');
       const pi = document.getElementById('lg-pass');
       const ri = document.getElementById('lg-remember');
       if(ui) ui.value = u || '';
@@ -11985,6 +11965,8 @@ function logoutUser() {
   _fbPatientsLoaded = false;
   window._bmhRtdbPatientsListening = false; // allow listener to re-attach on next login
   CURRENT_USER = null;
+  window.CURRENT_USER = null;
+  try { sessionStorage.removeItem('bmh_active_session'); } catch (e) {}
   // Clear form data
   RX_DRUGS && (RX_DRUGS.length = 0);
   // Show login gate
@@ -12251,7 +12233,7 @@ window.nav = function(id, el) {
     const saved = localStorage.getItem('bmh_creds');
     if(saved) {
       const {u,p} = JSON.parse(saved);
-      const ui = document.getElementById('lg-user');
+      const ui = document.getElementById('lg-email') || document.getElementById('lg-user');
       const pi = document.getElementById('lg-pass');
       const ri = document.getElementById('lg-remember');
       if(ui) ui.value = u||'';
@@ -12821,6 +12803,7 @@ function markSeen(bmhId) {
   if(p) { p.seen=true; p.status='seen'; p.dilated=false; }
   fbUpdate && fbUpdate('patients/'+bmhId,{seen:true,status:'seen'}).catch(()=>{});
   renderDocQueue && renderDocQueue();
+  renderReceptionPage && renderReceptionPage();
   renderDashboard && renderDashboard();
 }
 
@@ -13215,12 +13198,22 @@ window.addEventListener('DOMContentLoaded', function() {
     const saved = localStorage.getItem('bmh_creds');
     if(saved) {
       const {u,p} = JSON.parse(saved);
-      const ui=document.getElementById('lg-user');
+      const ui=document.getElementById('lg-email') || document.getElementById('lg-user');
       const pi=document.getElementById('lg-pass');
       const ri=document.getElementById('lg-remember');
       if(ui&&u) ui.value=u;
       if(pi&&p) pi.value=p;
       if(ri) ri.checked=true;
+    }
+  } catch(e){}
+  try {
+    const sessionRaw = sessionStorage.getItem('bmh_active_session');
+    if(sessionRaw && !CURRENT_USER) {
+      const session = JSON.parse(sessionRaw);
+      const profile = session?.u ? USER_DB?.[String(session.u).toLowerCase()] : null;
+      if (profile && profile.disabled !== true) {
+        activateUserSession(String(session.u).toLowerCase(), profile, { showToastOnSuccess:false, auditLogin:false });
+      }
     }
   } catch(e){}
 });
