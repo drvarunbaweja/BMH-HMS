@@ -918,7 +918,7 @@ function renderConsent() {
   el.innerHTML = buildConsentHTML(data, lang);
 }
 
-function _getConsentPatientHeader() {
+function _getConsentPatientHeaderUpload() {
   const ptIds = ['ophtho-pt-uid', 'obg-pt-uid', 'psych-pt-uid', 'skin-pt-uid'];
   const ptNms = ['ophtho-pt-nm', 'obg-pt-nm', 'psych-pt-nm', 'skin-pt-nm'];
   let ptId = '—'; let ptNm = '— Select Patient —';
@@ -10339,9 +10339,9 @@ function renderDischargeBuilder() {
   const ddEl = document.getElementById('dc-discharge-date');
   if(ddEl) ddEl.textContent = new Date(dischargeDate).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
   // Doctor from CURRENT_USER
-  const surgEl = document.getElementById('dc-surgeon');
-  if(surgEl && (surgEl.textContent==='Dr. Varun Baweja'||!surgEl.textContent.trim())) {
-    surgEl.textContent = ptObj.doctor || window.CURRENT_USER?.name || 'Dr. Varun Baweja';
+  const surgeonEl = document.getElementById('dc-surgeon');
+  if(surgeonEl && (surgeonEl.textContent==='Dr. Varun Baweja'||!surgeonEl.textContent.trim())) {
+    surgeonEl.textContent = ptObj.doctor || window.CURRENT_USER?.name || 'Dr. Varun Baweja';
   }
   const docSigEl = document.getElementById('dc-doc-sig');
   if(docSigEl) {
@@ -10403,8 +10403,8 @@ function renderDischargeBuilder() {
     `<button onclick="addDcFollowup()" class="btn btn-xs btn-outline" style="margin-top:4px;width:100%">+ Add Follow-up</button>`;
   }
 
-  const surgEl = document.getElementById('dc-surgery-details');
-  if (surgEl) {
+  const surgeryDetailsEl = document.getElementById('dc-surgery-details');
+  if (surgeryDetailsEl) {
     const rows = [
       ['Surgery / procedure', procedureName],
       ['OT date', new Date(opDate).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})],
@@ -10413,7 +10413,7 @@ function renderDischargeBuilder() {
       ['Admitted on', ipdStay?.admittedAt ? new Date(ipdStay.admittedAt).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}) : '—'],
       ['Discharged on', new Date(dischargeDate).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})]
     ];
-    surgEl.innerHTML = rows.map(r => `<div style="display:grid;grid-template-columns:145px 1fr;gap:10px;padding:6px 0;border-bottom:1px solid var(--g5)"><div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase">${r[0]}</div><div style="font-size:12px;font-weight:800;color:var(--tx)">${r[1] || '—'}</div></div>`).join('');
+    surgeryDetailsEl.innerHTML = rows.map(r => `<div style="display:grid;grid-template-columns:145px 1fr;gap:10px;padding:6px 0;border-bottom:1px solid var(--g5)"><div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase">${r[0]}</div><div style="font-size:12px;font-weight:800;color:var(--tx)">${r[1] || '—'}</div></div>`).join('');
   }
 
   const sumEl = document.getElementById('dc-summary-text');
@@ -10693,7 +10693,7 @@ async function previewConsentWithHeader() {
   const docType = document.getElementById('cup-consent-type')?.value || 'consent';
   const lang    = document.getElementById('cup-consent-lang')?.value || 'hi';
   if(!text) { showToast('Please enter consent text first','w'); return; }
-  const pt  = _getConsentPatientHeader();
+  const pt  = _getConsentPatientHeaderUpload();
   // Open window synchronously (before any async work) to satisfy popup blockers
   const win = window.open('','_blank','width=900,height=700');
   if(!win) { showToast('Allow popups to preview / print','w'); return; }
@@ -10710,7 +10710,7 @@ function printConsentWithHeader() {
   const name = document.getElementById('cup-img-name')?.value?.trim() || 'Consent';
   const thumb = document.getElementById('cup-img-thumb');
   const imgSrc = thumb?._dataUrl;
-  const pt = _getConsentPatientHeader();
+  const pt = _getConsentPatientHeaderUpload();
   const win = window.open('','_blank','width=900,height=700');
   const imgHTML = imgSrc
     ? `<img src="${imgSrc}" style="width:100%;height:100%;object-fit:contain;display:block">`
