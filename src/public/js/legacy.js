@@ -994,6 +994,10 @@ function editConsentPara(idx) { showToast('Paragraph editor opened — type to e
 // ═══════════════════════════════════════
 const RX_DRUGS = [];
 let rxLang = 'en';
+function setRxLang(lang) {
+  rxLang = lang || 'en';
+  renderRxDrugs && renderRxDrugs();
+}
 function setLang(lang, btn) {
   rxLang = lang;
   document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
@@ -1690,7 +1694,11 @@ function collectDeptDiagnosesForPrint(deptId) {
 function rxDrugTradeName(d) { return (d && (d.trade || d.brand)) ? String(d.trade || d.brand) : ''; }
 function rxDrugGenericName(d) { return (d && (d.generic || d.name)) ? String(d.generic || d.name) : ''; }
 function getRxDoctorDisplayName() {
-  return window.CURRENT_USER?.name || document.getElementById('sbnm')?.textContent?.trim() || 'Dr. Varun Baweja';
+  const active = document.querySelector('.page.active')?.id || '';
+  if (active.includes('obg')) return document.getElementById('obg-rx-doctor')?.textContent?.trim() || window.CURRENT_USER?.name || 'Dr. Geeta Baweja';
+  if (active.includes('psych')) return document.getElementById('psych-rx-doctor')?.textContent?.trim() || window.CURRENT_USER?.name || 'Dr. Tarun Baweja';
+  if (active.includes('skin')) return document.getElementById('skin-rx-doctor')?.textContent?.trim() || window.CURRENT_USER?.name || 'Dr. Pooja Baweja';
+  return document.getElementById('ophtho-rx-doctor')?.textContent?.trim() || window.CURRENT_USER?.name || document.getElementById('sbnm')?.textContent?.trim() || 'Dr. Varun Baweja';
 }
 
 function buildOphthoCaseSheetHtml() {
@@ -3819,11 +3827,52 @@ function openIPDFromQueue(bmhId) {
 }
 
 function openOTFromQueue(bmhId) {
-  openOTAddModal();
-  setTimeout(()=>{
-    fillOTFromPatient(bmhId);
-    showToast('Patient prefilled in OT scheduler — choose procedure and save ✓','i');
-  },150);
+  const p = PATIENTS.find(function (x) { return x.bmhId === bmhId; });
+  if (!p) { showToast('Patient not found for OT', 'w'); return; }
+  const today = new Date().toISOString().split('T')[0];
+  const existing = OT_CASES.find(function (c) {
+    const oc = normalizeOTCaseRecord(c);
+    return oc.bmhId === bmhId && oc.date === today && (oc.status === 'pending' || oc.status === 'in-progress');
+  });
+  if (existing) {
+    nav('ot', null);
+    setTimeout(function () { openOTCase(existing.id); }, 120);
+    showToast('Patient already exists in OT list for today ✓', 'i');
+    return;
+  }
+  const guessedProcedure = /surgery|phaco|pmics|cataract|lasik|ivt|trab|pteryg/i.test(String(p.purpose || ''))
+    ? String(p.purpose).trim()
+    : (p.dept === 'ophtho' ? 'Cataract Surgery' : 'Surgery');
+  const quickCase = normalizeOTCaseRecord({
+    id: 'OT-' + Date.now(),
+    bmhId: p.bmhId,
+    patient: p.name,
+    age: p.age || '—',
+    sex: p.sex || '—',
+    procedure: guessedProcedure,
+    dx: p.dx || p.diagnosis || p.purpose || '—',
+    surgeon: p.doctor || CURRENT_USER?.name || '—',
+    anaes: 'To be planned',
+    date: today,
+    scheduledTime: '09:00',
+    room: 'OT-1',
+    priority: 'elective',
+    status: 'pending',
+    centre: p.centre || getEffectiveCentre() || CURRENT_USER?.centre || 'CHD',
+    site: p.eye || p.opEye || p.surgEye || p.operatingEye || 'N/A',
+    iol: p.iol || p.iolType || p.iolPower || 'N/A',
+    notes: 'Added from patient queue',
+    createdAt: new Date().toISOString(),
+    createdBy: CURRENT_USER?.name || 'System'
+  });
+  OT_CASES.push(quickCase);
+  fbSet('otCases/' + quickCase.id, quickCase).catch(function(e){ console.warn('OT quick-add save error:', e); });
+  nav('ot', null);
+  setTimeout(function () {
+    renderOTListSafe && renderOTListSafe();
+    openOTCase(quickCase.id);
+  }, 120);
+  showToast('Patient added to OT list ✓', 's');
 }
 
 // ── Confirm IPD Admission ──────────────────────────
@@ -7985,7 +8034,7 @@ function renderRxDrugs() {
     }
   });
 
-  el.innerHTML = `<div style="border:1px solid var(--g5);border-radius:12px;overflow:hidden;background:#fff">
+  el.innerHTML = `<div style="border:1px solid var(--g5);border-radius:12px;overflow-x:auto;overflow-y:hidden;background:#fff">
     <div style="display:grid;grid-template-columns:34px minmax(220px,1.4fr) minmax(95px,.7fr) minmax(110px,.7fr) minmax(150px,.9fr) minmax(120px,.7fr) minmax(210px,1fr) 80px;gap:0;background:var(--bmh-blue);color:#fff;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.4px">
       <div style="padding:10px 8px;border-right:1px solid rgba(255,255,255,.14)">#</div>
       <div style="padding:10px 8px;border-right:1px solid rgba(255,255,255,.14)">Medicine</div>
@@ -8003,7 +8052,7 @@ function renderRxDrugs() {
     const eye0 = (d.eye && d.eye[0]) || 'Oral';
     const tap = d.taperRow;
     return `<div class="rx-drug-row" style="border-top:${i ? '1px solid var(--g5)' : 'none'};background:#fff">
-    <div style="display:grid;grid-template-columns:34px minmax(220px,1.4fr) minmax(95px,.7fr) minmax(110px,.7fr) minmax(150px,.9fr) minmax(120px,.7fr) minmax(210px,1fr) 80px;gap:0;align-items:stretch">
+    <div style="display:grid;grid-template-columns:34px minmax(220px,1.4fr) minmax(95px,.7fr) minmax(110px,.7fr) minmax(150px,.9fr) minmax(120px,.7fr) minmax(210px,1fr) 80px;gap:0;align-items:stretch;min-width:1020px">
       <div style="padding:12px 8px;border-right:1px solid var(--g5);font-size:13px;font-weight:900;color:var(--bmh-blue);display:flex;align-items:flex-start;justify-content:center">${i+1}</div>
       <div style="padding:10px 8px;border-right:1px solid var(--g5)">
         <input value="${String(tr).replace(/"/g,'&quot;')}" onchange="RX_DRUGS[${i}].trade=this.value;RX_DRUGS[${i}].brand=this.value" placeholder="Trade name" style="width:100%;font-size:15px;font-weight:900;border:none;background:transparent;padding:0;box-sizing:border-box">
@@ -8023,7 +8072,7 @@ function renderRxDrugs() {
         <button type="button" class="btn btn-xs btn-gray" onclick="removeDrug(${i})" title="Remove">✕</button>
       </div>
     </div>
-    ${tap ? `<div style="display:grid;grid-template-columns:34px minmax(220px,1.4fr) minmax(95px,.7fr) minmax(110px,.7fr) minmax(150px,.9fr) minmax(120px,.7fr) minmax(210px,1fr) 80px;gap:0;align-items:stretch;border-top:1px dashed var(--g4);background:var(--orange-lt)">
+    ${tap ? `<div style="display:grid;grid-template-columns:34px minmax(220px,1.4fr) minmax(95px,.7fr) minmax(110px,.7fr) minmax(150px,.9fr) minmax(120px,.7fr) minmax(210px,1fr) 80px;gap:0;align-items:stretch;border-top:1px dashed var(--g4);background:var(--orange-lt);min-width:1020px">
       <div style="padding:10px 8px;border-right:1px solid var(--g5);font-size:11px;font-weight:900;color:var(--orange);display:flex;align-items:center;justify-content:center">T</div>
       <div style="padding:10px 8px;border-right:1px solid var(--g5);display:flex;flex-direction:column;justify-content:center">
         <div style="font-size:12px;font-weight:900;color:#8a4200">${String(tr || gen).replace(/</g,'&lt;')}</div>
@@ -8543,8 +8592,6 @@ function rxEyePlainEn(eye) {
   return (e || 'as directed').toLowerCase();
 }
 function buildRxPlainInstructionLine(d, lang, fmtIN) {
-  const trade = (typeof rxDrugTradeName === 'function' ? rxDrugTradeName(d) : (d.brand || d.trade || d.name)) || 'Medicine';
-  const generic = (typeof rxDrugGenericName === 'function' ? rxDrugGenericName(d) : (d.name || d.generic || '')) || '';
   const eye = Array.isArray(d.eye) ? d.eye[0] : d.eye;
   const freq = rxFreqPlainEn(d.freq);
   const dur = rxDurationPlainEn(d.dur);
@@ -8552,21 +8599,19 @@ function buildRxPlainInstructionLine(d, lang, fmtIN) {
   const df = fmtIN(d.dateFrom);
   const dt = fmtIN(d.dateTo);
   const form = String(d.drugType || d.type || '').toLowerCase();
-  const genericSafe = generic && generic !== trade ? ' (' + generic + ')' : '';
   let action = 'Take';
   if (/drop|eye/i.test(form)) action = 'Instill one drop';
   else if (/ointment|gel|cream|lotion/i.test(form)) action = 'Apply';
   else if (/spray/i.test(form)) action = 'Use';
   else if (/injection/i.test(form)) action = 'Administer';
   else if (/pessary/i.test(form)) action = 'Insert';
-  const sub = (generic && generic !== trade) ? ' (' + generic + ')' : '';
   let line = '';
   if (lang === 'hi') {
-    line = trade + sub + ' — ' + eyeTxt.replace(/^the /, '') + ' में ' + freq + ', ' + dur + ', ' + df + ' से ' + dt + ' तक।';
+    line = eyeTxt.replace(/^the /, '') + ' में ' + freq + ', ' + dur + ', ' + df + ' से ' + dt + ' तक।';
   } else if (lang === 'pa') {
-    line = trade + sub + ' — ' + eyeTxt + ' ਵਿੱਚ ' + freq + ', ' + dur + ', ' + df + ' ਤੋਂ ' + dt + ' ਤੱਕ।';
+    line = eyeTxt + ' ਵਿੱਚ ' + freq + ', ' + dur + ', ' + df + ' ਤੋਂ ' + dt + ' ਤੱਕ।';
   } else {
-    line = trade + sub + ' — ' + action + ' in ' + eyeTxt + ' ' + freq + ' for ' + dur + ', from ' + df + ' to ' + dt + '.';
+    line = action + ' in ' + eyeTxt + ' ' + freq + ' for ' + dur + ', from ' + df + ' to ' + dt + '.';
   }
   if (d.taperRow && d.taperRow.freq) {
     const tr = d.taperRow;
@@ -8650,7 +8695,8 @@ window.printUnifiedRx = function(deptId) {
     : (document.getElementById(deptId+'-advice')?.value || '')) || '';
 
   // ── Doctor info (logged-in doctor on prescription) ──
-  const doctorName    = typeof getRxDoctorDisplayName === 'function' ? getRxDoctorDisplayName() : (CURRENT_USER?.name || 'Dr. Varun Baweja');
+  const doctorDisplay = typeof getRxDoctorDisplayName === 'function' ? getRxDoctorDisplayName() : (CURRENT_USER?.name || 'Dr. Varun Baweja');
+  const doctorName = String(doctorDisplay).split('·')[0].trim();
   const doctorProfile = (typeof DOCTOR_PROFILES!=='undefined' && DOCTOR_PROFILES[doctorName]) || {};
   const doctorDegrees = doctorProfile.degrees || CURRENT_USER?.degrees || 'MBBS,DO,DNB,Ex Cons Cambridgeshire(UK)';
   const doctorSpec    = {oe:'Ophthalmologist',obg:'Obstetrician & Gynaecologist',psych:'Psychiatrist',skin:'Dermatologist'}[deptId]||'Specialist';
@@ -8707,7 +8753,7 @@ tr:nth-child(even) td{background:#f8f9fc}
 .flag-h{color:#CC0000;font-weight:700}
 .flag-n{color:#1a8c3c;font-weight:600}
 .watermark{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-30deg);font-size:80px;font-weight:900;color:rgba(26,60,110,.04);font-family:'Playfair Display','Georgia',serif;white-space:nowrap;pointer-events:none;z-index:0}
-.diag-banner{margin:0 auto 10px;max-width:92%;padding:8px 16px;border:1.5px solid rgba(26,60,110,.22);border-radius:999px;background:#f0f4ff;text-align:center;font-size:13px;font-weight:800;color:#1A3C6E}
+.diag-banner{margin:0 auto 8px;max-width:92%;padding:5px 12px;border:1px solid rgba(26,60,110,.18);border-radius:999px;background:#f7faff;text-align:center;font-size:10.5px;font-weight:700;color:#1A3C6E}
 </style></head><body>
 
 ${lhImgSrc ? `<img src="${lhImgSrc}" class="lh-img" alt="Baweja Multispeciality Hospital">` : '<div style="height:80px;background:#f2f4f8;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#888;font-size:13px;margin-bottom:10px">Baweja Multispeciality Hospital Letterhead</div>'}
@@ -8765,9 +8811,10 @@ ${drugs.length ? `
       const form = d.drugType || d.type || '—';
       const route = (d.eye && d.eye[0]) || '—';
       const tap = d.taperRow;
+      const plainLine = buildRxPlainInstructionLine(d, rxPlainLang, fmtIN);
       let rows = `<tr>
         <td style="font-weight:700;color:#1A3C6E">${i+1}</td>
-        <td class="left"><div class="rx-name">${trade}</div><div class="rx-gen">${gen}</div></td>
+        <td class="left"><div class="rx-name">${trade}</div><div class="rx-gen">${gen}</div>${plainLine?`<div class="rx-instr" style="margin-top:6px">${escapeHtmlConsent(plainLine)}</div>`:''}</td>
         <td>${form}</td>
         <td>${route}</td>
         <td>${d.freq||'—'}</td>
@@ -8786,10 +8833,6 @@ ${drugs.length ? `
   </tbody>
 </table>` : ''}
 
-${plainInstrBlocks.length ? `
-<div class="sec-title">Patient instructions (plain language)</div>
-${plainInstrBlocks.map(function (p) { return '<div class="rx-instr">' + escapeHtmlConsent(p) + '</div>'; }).join('')}` : ''}
-
 ${advice ? `<div class="lbl-row" style="margin:6px 0"><span class="lbl">Instructions:</span><span class="lbl-val">${advice}</span></div>` : ''}
 
 ${incPrc && procs.length ? `
@@ -8804,7 +8847,7 @@ ${fuFormatted ? `<div style="margin:10px 0"><span class="fu-box">&#128197; Next 
 
 <div class="sig-row">
   <div class="qr-side">
-    <div style="width:70px;height:70px;background:#f2f2f2;border:1px solid #ccc;display:flex;align-items:center;justify-content:center;font-size:9px;color:#888">QR</div>
+    <img src="https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(ptId)}&color=1A3C6E&bgcolor=ffffff&margin=2" alt="Patient QR" style="width:70px;height:70px;border:1px solid #ccc;border-radius:4px;display:block">
     <div class="qr-lbl">BMSH ID: ${ptId}</div>
   </div>
   <div class="dr-side">
@@ -11962,7 +12005,18 @@ function renderOTList() {
   if(dateFilter) cases = cases.filter(c => (c.date||c.scheduledDate||'') === dateFilter);
   if(surgeonFilter && surgeonFilter !== 'All Surgeons') cases = cases.filter(c => c.surgeon === surgeonFilter);
 
-  const buildCard = (c,i) => typeof otCaseCard==='function' ? otCaseCard(c,i+1) : `<div style="border:1.5px solid var(--g4);border-radius:var(--r);padding:12px;margin-bottom:8px"><div style="font-weight:800;font-size:13px">${c.patient}</div><div style="font-size:11px;color:var(--g1)">${c.procedure||'—'} · ${c.scheduledTime||'—'} · ${c.surgeon||'—'}</div><div style="margin-top:6px;display:flex;gap:5px"><select onchange="updateOTStatus('${c.id}',this.value)" style="font-size:11px"><option value="pending" ${c.status==='pending'?'selected':''}>Pending</option><option value="in-progress" ${c.status==='in-progress'?'selected':''}>In Progress</option><option value="completed" ${c.status==='completed'?'selected':''}>Completed</option><option value="postponed" ${c.status==='postponed'?'selected':''}>Postponed</option></select></div></div>`;
+  const buildCard = (c,i) => {
+    try {
+      return typeof otCaseCard==='function' ? otCaseCard(c,i+1) : `<div style="border:1.5px solid var(--g4);border-radius:var(--r);padding:12px;margin-bottom:8px"><div style="font-weight:800;font-size:13px">${c.patient}</div><div style="font-size:11px;color:var(--g1)">${c.procedure||'—'} · ${c.scheduledTime||'—'} · ${c.surgeon||'—'}</div></div>`;
+    } catch (e) {
+      console.warn('OT case fallback render:', c?.id, e);
+      const safe = normalizeOTCaseRecord(c || {});
+      return `<div style="border:1.5px solid var(--orange);border-radius:var(--r);padding:12px;margin-bottom:8px;background:var(--orange-lt)">
+        <div style="font-weight:800;font-size:13px">${safe.patient||'OT Case'}</div>
+        <div style="font-size:11px;color:var(--g1)">${safe.procedure||'—'} · ${safe.scheduledTime||'—'} · ${safe.surgeon||'—'}</div>
+      </div>`;
+    }
+  };
 
   if(hasTabLayout) {
     const noMatch = '<div style="padding:20px;text-align:center;color:var(--g2);font-size:12px">No cases</div>';
