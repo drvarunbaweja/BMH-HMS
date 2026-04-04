@@ -1113,14 +1113,13 @@
             <option value="dry-eye">Dry Eye Protocol</option>
           </select>
           <button class="btn btn-xs btn-outline" onclick="openM('m-order-invest')">🧪 Order Investigations</button>
-          <div class="lang-sel" style="margin-bottom:0"><button class="lang-btn active" onclick="setLang('en',this)">EN</button><button class="lang-btn" onclick="setLang('hi',this)">हिं</button><button class="lang-btn" onclick="setLang('pa',this)">ਪੰ</button></div>
         </div>
         <div style="border-bottom:2px solid var(--bmh-blue);padding-bottom:8px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
           <div style="display:flex;align-items:center;gap:8px">
             <img src="https://bawejahospital.com/img/logo.png" style="height:22px;width:auto;object-fit:contain" alt="BMH" onerror="this.style.display='none'">
-            <div><div style="font-size:13px;font-weight:900;color:var(--bmh-blue)">Baweja Multispeciality Hospital</div><div style="font-size:10px;color:var(--g1)">Dr. Varun Baweja · MS (Ophth)</div></div>
+            <div><div style="font-size:13px;font-weight:900;color:var(--bmh-blue)">Baweja Multispeciality Hospital</div><div style="font-size:10px;color:var(--g1)" id="ophtho-rx-doctor">Dr. Varun Baweja · MS (Ophth)</div></div>
           </div>
-          <div style="text-align:right"><div style="font-family:var(--mono);font-size:11px;color:var(--bmh-teal);font-weight:700">BMSH-000001</div><div style="font-size:11px;color:var(--g1)" id="rx-date"></div></div>
+          <div style="text-align:right"><div style="font-family:var(--mono);font-size:11px;color:var(--bmh-teal);font-weight:700" id="ophtho-rx-ptid">BMSH-000001</div><div style="font-size:11px;color:var(--g1)" id="rx-date"></div></div>
         </div>
         <div style="margin-bottom:8px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:6px">
@@ -1153,12 +1152,14 @@
           </div>
           <div id="rx-quick-dropdown" style="display:none;position:absolute;z-index:200;background:#fff;border:2px solid var(--blue);border-top:none;border-radius:0 0 var(--rsm) var(--rsm);width:100%;max-height:220px;overflow-y:auto;box-shadow:var(--sh-md)"></div>
         </div>
-        <div style="display:grid;grid-template-columns:28px 1fr 80px 110px 90px 60px 60px 36px;gap:5px;padding:5px 8px;background:var(--g6);border-radius:6px;margin-bottom:6px;font-size:9px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px;align-items:center">
-          <span>#</span><span>Drug (Trade → Generic)</span><span>Eye</span><span>Frequency</span><span>Duration</span><span>Taper</span><span>Near</span><span style="cursor:pointer" onclick="openM('m-add-rx-drug')" title="Add drug">➕</span>
-        </div>
         <div id="rx-drugs" style="margin-bottom:4px"></div>
         <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px">
           <button class="btn btn-outline btn-sm" onclick="openM('m-add-rx-drug')">+ Full Drug Form</button>
+          <select style="font-size:11px;padding:6px 8px;border-radius:8px;border:1.5px solid var(--g4)" onchange="setRxLang(this.value)">
+            <option value="en">English</option>
+            <option value="hi">Hindi</option>
+            <option value="pa">Punjabi</option>
+          </select>
           <button class="btn btn-gold btn-sm" onclick="openSaveRxTemplate()">📋 Save as Template</button>
         </div>
         <div style="margin-bottom:10px">
@@ -1257,10 +1258,6 @@
             <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-proc" checked> Procedures Advised</label>
             <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-gl"> Glass Prescription</label>
           </div>
-        </div>
-        <div style="background:linear-gradient(135deg,#0a1628,#1a2d5a);border-radius:var(--r);padding:10px;display:flex;align-items:center;gap:12px;margin-bottom:8px;flex-wrap:wrap">
-          <canvas id="qr-canvas" width="66" height="66" style="border-radius:7px;background:#fff;padding:3px;flex-shrink:0"></canvas>
-          <div style="color:#fff;flex:1"><div style="font-size:11.5px;font-weight:900">BMSH-000001 · Test Patient A</div><div style="font-size:10px;opacity:.6;margin-top:2px">Scan for full record</div></div>
         </div>
         <div style="display:flex;gap:7px;flex-wrap:wrap">
           <button class="btn btn-gold" style="flex:1;justify-content:center" onclick="printRx()">🖨️ Print</button>
@@ -1931,13 +1928,14 @@
           </div>
           <div id="rx-quick-dropdown" style="display:none;position:absolute;z-index:200;background:#fff;border:2px solid var(--blue);border-top:none;border-radius:0 0 var(--rsm) var(--rsm);width:100%;max-height:220px;overflow-y:auto;box-shadow:var(--sh-md)"></div>
         </div>
-        <!-- Drug table -->
-        <div style="display:grid;grid-template-columns:26px 1fr 75px 120px 90px 55px 32px;gap:4px;padding:4px 8px;background:var(--bmh-blue);border-radius:6px 6px 0 0;font-size:9px;font-weight:800;color:#fff;text-transform:uppercase;letter-spacing:.4px;align-items:center">
-          <span style="text-align:center">#</span><span>Drug (Trade Name ↓ Generic)</span><span style="text-align:center">Route</span><span style="text-align:center">Frequency</span><span style="text-align:center">Duration</span><span style="text-align:center">Taper</span><span style="text-align:center;cursor:pointer" onclick="openM('m-add-rx-drug')" title="Full form">➕</span>
-        </div>
         <div id="rx-drugs" style="border:1.5px solid var(--g4);border-top:none;border-radius:0 0 8px 8px;margin-bottom:8px;min-height:44px"></div>
         <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px">
           <button class="btn btn-outline btn-sm" onclick="openM('m-add-rx-drug')">+ Full Drug Form</button>
+          <select style="font-size:11px;padding:6px 8px;border-radius:8px;border:1.5px solid var(--g4)" onchange="setRxLang(this.value)">
+            <option value="en">English</option>
+            <option value="hi">Hindi</option>
+            <option value="pa">Punjabi</option>
+          </select>
           <button class="btn btn-gold btn-sm" onclick="openSaveRxTemplate()">📋 Save as Template</button>
         </div>
         <!-- Investigations -->
@@ -2171,13 +2169,14 @@
           </div>
           <div id="rx-quick-dropdown" style="display:none;position:absolute;z-index:200;background:#fff;border:2px solid var(--blue);border-top:none;border-radius:0 0 var(--rsm) var(--rsm);width:100%;max-height:220px;overflow-y:auto;box-shadow:var(--sh-md)"></div>
         </div>
-        <!-- Drug table -->
-        <div style="display:grid;grid-template-columns:26px 1fr 75px 120px 90px 55px 32px;gap:4px;padding:4px 8px;background:var(--bmh-blue);border-radius:6px 6px 0 0;font-size:9px;font-weight:800;color:#fff;text-transform:uppercase;letter-spacing:.4px;align-items:center">
-          <span style="text-align:center">#</span><span>Drug (Trade Name ↓ Generic)</span><span style="text-align:center">Route</span><span style="text-align:center">Frequency</span><span style="text-align:center">Duration</span><span style="text-align:center">Taper</span><span style="text-align:center;cursor:pointer" onclick="openM('m-add-rx-drug')" title="Full form">➕</span>
-        </div>
         <div id="rx-drugs" style="border:1.5px solid var(--g4);border-top:none;border-radius:0 0 8px 8px;margin-bottom:8px;min-height:44px"></div>
         <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px">
           <button class="btn btn-outline btn-sm" onclick="openM('m-add-rx-drug')">+ Full Drug Form</button>
+          <select style="font-size:11px;padding:6px 8px;border-radius:8px;border:1.5px solid var(--g4)" onchange="setRxLang(this.value)">
+            <option value="en">English</option>
+            <option value="hi">Hindi</option>
+            <option value="pa">Punjabi</option>
+          </select>
           <button class="btn btn-gold btn-sm" onclick="openSaveRxTemplate()">📋 Save as Template</button>
         </div>
         <!-- Investigations -->
@@ -2415,13 +2414,14 @@
           </div>
           <div id="rx-quick-dropdown" style="display:none;position:absolute;z-index:200;background:#fff;border:2px solid var(--blue);border-top:none;border-radius:0 0 var(--rsm) var(--rsm);width:100%;max-height:220px;overflow-y:auto;box-shadow:var(--sh-md)"></div>
         </div>
-        <!-- Drug table -->
-        <div style="display:grid;grid-template-columns:26px 1fr 75px 120px 90px 55px 32px;gap:4px;padding:4px 8px;background:var(--bmh-blue);border-radius:6px 6px 0 0;font-size:9px;font-weight:800;color:#fff;text-transform:uppercase;letter-spacing:.4px;align-items:center">
-          <span style="text-align:center">#</span><span>Drug (Trade Name ↓ Generic)</span><span style="text-align:center">Route</span><span style="text-align:center">Frequency</span><span style="text-align:center">Duration</span><span style="text-align:center">Taper</span><span style="text-align:center;cursor:pointer" onclick="openM('m-add-rx-drug')" title="Full form">➕</span>
-        </div>
         <div id="rx-drugs" style="border:1.5px solid var(--g4);border-top:none;border-radius:0 0 8px 8px;margin-bottom:8px;min-height:44px"></div>
         <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px">
           <button class="btn btn-outline btn-sm" onclick="openM('m-add-rx-drug')">+ Full Drug Form</button>
+          <select style="font-size:11px;padding:6px 8px;border-radius:8px;border:1.5px solid var(--g4)" onchange="setRxLang(this.value)">
+            <option value="en">English</option>
+            <option value="hi">Hindi</option>
+            <option value="pa">Punjabi</option>
+          </select>
           <button class="btn btn-gold btn-sm" onclick="openSaveRxTemplate()">📋 Save as Template</button>
         </div>
         <!-- Investigations -->
