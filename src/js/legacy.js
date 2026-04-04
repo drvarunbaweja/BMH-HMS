@@ -1904,8 +1904,18 @@ function collectDeptDiagnosesForPrint(deptId) {
   return { lines, notes: '' };
 }
 
-function rxDrugTradeName(d) { return (d && (d.trade || d.brand)) ? String(d.trade || d.brand) : ''; }
-function rxDrugGenericName(d) { return (d && (d.generic || d.name)) ? String(d.generic || d.name) : ''; }
+function rxDrugTradeName(d) {
+  if (!d) return '';
+  const s = (d.trade || d.brand || d.name || '').trim();
+  return s ? String(s) : '';
+}
+function rxDrugGenericName(d) {
+  if (!d) return '';
+  const s = (d.generic || d.name || '').trim();
+  const t = (d.trade || d.brand || '').trim();
+  if (s && t && s.toLowerCase() === t.toLowerCase()) return '';
+  return s ? String(s) : '';
+}
 function getRxDoctorDisplayName() {
   const active = document.querySelector('.page.active')?.id || '';
   if (active.includes('obg')) return document.getElementById('obg-rx-doctor')?.textContent?.trim() || window.CURRENT_USER?.name || 'Dr. Geeta Baweja';
@@ -9284,14 +9294,12 @@ function renderRxDrugs() {
     });
   });
 
-  const gGap = '6px';
-  const fieldCols = isOphtho
-    ? 'minmax(96px,0.95fr) minmax(112px,1.05fr) minmax(148px,1.35fr) minmax(96px,0.95fr) minmax(104px,0.82fr) minmax(104px,0.82fr) minmax(44px,0.42fr)'
-    : 'minmax(96px,0.95fr) minmax(112px,1.05fr) minmax(148px,1.35fr) minmax(96px,0.95fr) minmax(104px,0.82fr) minmax(104px,0.82fr) minmax(44px,0.42fr)';
-  const selSt = `font-size:10px;padding:5px 6px;width:100%;max-width:100%;min-width:0;box-sizing:border-box;border-radius:7px`;
-  const dateSt = `font-size:10px;padding:4px 6px;width:100%;max-width:100%;min-width:0;box-sizing:border-box;border-radius:7px`;
+  const gGap = '8px';
+  const fieldCols = 'minmax(0,0.92fr) minmax(0,1.02fr) minmax(0,1.48fr) minmax(0,0.95fr) minmax(0,0.98fr) minmax(0,0.98fr) minmax(48px,0.42fr)';
+  const selSt = `font-size:11px;padding:6px 8px;width:100%;max-width:100%;min-width:0;box-sizing:border-box;border-radius:8px`;
+  const dateSt = `font-size:11px;padding:5px 8px;width:100%;max-width:100%;min-width:0;box-sizing:border-box;border-radius:8px`;
   const gridHead = `
-    <div style="display:grid;grid-template-columns:${fieldCols};gap:${gGap};padding:6px 8px;background:var(--g6);border-radius:8px 8px 0 0;font-size:9px;font-weight:900;color:var(--g1);text-transform:uppercase;letter-spacing:.25px;line-height:1.25;align-items:end">
+    <div style="display:grid;grid-template-columns:${fieldCols};gap:${gGap};padding:7px 10px;background:var(--g6);border-radius:8px 8px 0 0;font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;letter-spacing:.28px;line-height:1.25;align-items:end">
       <div>Type</div>
       <div>${isOphtho ? 'Eye' : 'Route'}</div>
       <div>Frequency</div>
@@ -9315,38 +9323,40 @@ function renderRxDrugs() {
     const title = opts.title || '';
     const bg = opts.bg || '#fff';
     const border = opts.border || 'var(--g5)';
-    const heading = opts.heading || trade;
-    const subheading = opts.subheading || gen;
+    let heading = String(opts.heading || trade || gen || '').trim();
+    if (!heading) heading = '— Medicine name —';
+    let subheading = String(opts.subheading || gen || '').trim();
+    if (subheading && heading !== '— Medicine name —' && subheading.toLowerCase() === heading.toLowerCase()) subheading = '';
     const taperBtn = opts.taperBtn || '';
     const removeBtn = opts.removeBtn || '';
     const instruction = opts.instruction || '';
     const isTaperSeg = !!opts.isTaperSegment;
     const lockDur = opts.parentMainDur != null ? String(opts.parentMainDur) : dur;
-    const badgeEl = opts.showBadge === false ? '' : `<span style="flex-shrink:0;width:26px;height:26px;border-radius:999px;background:${opts.badgeBg || 'var(--bmh-blue)'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:900">${badge}</span>`;
-    const nameStripTaper = `<div style="display:flex;align-items:center;gap:8px;min-height:32px;padding:6px 8px;text-align:left;border-bottom:1px dashed ${border};border-left:3px solid var(--orange);background:linear-gradient(90deg,rgba(255,149,0,.1),transparent)" title="Taper step — same medicine as above"><span style="font-size:18px;line-height:1;color:#a65f00;font-weight:900;padding-left:2px">↳</span><span style="font-size:10px;font-weight:800;color:#8a4200">Taper segment</span></div>`;
+    const badgeEl = opts.showBadge === false ? '' : `<span style="flex-shrink:0;width:30px;height:30px;border-radius:999px;background:${opts.badgeBg || 'var(--bmh-blue)'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:900">${badge}</span>`;
+    const nameInpBase = 'width:100%;box-sizing:border-box;border-radius:8px;border:1px solid var(--g4);background:#fff;color:#1c1c1e;-webkit-text-fill-color:#1c1c1e';
     const nameStripMain = opts.readonlyName
-      ? `<div style="display:flex;align-items:flex-start;gap:8px;padding:6px 8px;text-align:left;border-bottom:1px dashed ${border}">
+      ? `<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 10px;text-align:left;border-bottom:1px solid var(--g5);background:#fafbfd">
           ${badgeEl}
           <div style="flex:1;min-width:0;text-align:left">
-            <div style="width:100%;font-size:13px;font-weight:900;color:${opts.headingColor || 'var(--tx)'};line-height:1.35;word-break:break-word">${String(heading).replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>
-            ${opts.showGeneric !== false ? `<div style="width:100%;font-size:10.5px;color:var(--g1);font-style:italic;line-height:1.35;margin-top:3px;word-break:break-word">${String(subheading).replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>` : ''}
+            <div style="width:100%;font-size:14px;font-weight:900;color:#1c1c1e;line-height:1.4;word-break:break-word">${String(heading).replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>
+            ${opts.showGeneric !== false && subheading ? `<div style="width:100%;font-size:11.5px;color:#3a3a3c;font-style:italic;line-height:1.4;margin-top:4px;word-break:break-word">${String(subheading).replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>` : ''}
           </div>
         </div>`
       : opts.showName !== false
-      ? `<div style="display:flex;align-items:flex-start;gap:8px;padding:6px 8px;text-align:left;border-bottom:1px dashed ${border}">
+      ? `<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 10px;text-align:left;border-bottom:1px solid var(--g5);background:#fafbfd">
           ${badgeEl}
           <div style="flex:1;min-width:0;text-align:left">
-            <input value="${String(heading).replace(/"/g,'&quot;')}" onchange="${prefix}.trade=this.value;${prefix}.brand=this.value" placeholder="Trade name" style="width:100%;font-size:13px;font-weight:900;border:none;background:transparent;padding:0;box-sizing:border-box;color:${opts.headingColor || 'var(--tx)'};line-height:1.35;text-align:left">
-            ${opts.showGeneric !== false ? `<input value="${String(subheading).replace(/"/g,'&quot;')}" onchange="${prefix}.generic=this.value;${prefix}.name=this.value" placeholder="Generic name" style="width:100%;font-size:10.5px;color:var(--g1);font-style:italic;border:none;background:transparent;padding:0;box-sizing:border-box;margin-top:4px;line-height:1.35;text-align:left">` : ''}
+            <input value="${String(heading).replace(/"/g,'&quot;')}" onchange="${prefix}.trade=this.value;${prefix}.brand=this.value" placeholder="Trade / brand name" style="${nameInpBase};padding:8px 10px;font-size:14px;font-weight:800;line-height:1.35;text-align:left">
+            ${opts.showGeneric !== false ? `<input value="${String(subheading).replace(/"/g,'&quot;')}" onchange="${prefix}.generic=this.value;${prefix}.name=this.value" placeholder="Generic name (optional)" style="${nameInpBase};padding:6px 10px;font-size:11.5px;font-style:italic;margin-top:6px;line-height:1.35;text-align:left;color:#3a3a3c;-webkit-text-fill-color:#3a3a3c">` : ''}
           </div>
         </div>`
       : `<div style="min-height:28px;padding:6px 8px;border-bottom:1px dashed ${border}">${opts.emptyNameCell ? '' : `<div style="font-size:10px;font-weight:800;color:${opts.headingColor || '#8a4200'}">${opts.rowLabel || 'Taper'}</div>`}</div>`;
-    const nameStrip = opts.taperIndentOnly ? nameStripTaper : nameStripMain;
-    const fieldGrid = `<div style="display:grid;grid-template-columns:${fieldCols};gap:${gGap};padding:8px;align-items:center">
+    const nameStrip = opts.taperIndentOnly ? '' : nameStripMain;
+    const fieldGrid = `<div style="display:grid;grid-template-columns:${fieldCols};gap:${gGap};padding:10px;align-items:center;width:100%;box-sizing:border-box">
         <div style="min-width:0"><select onchange="${prefix}.drugType=this.value;${prefix}.type=this.value" style="${selSt};border:1px solid ${border};background:#fff">${typeOpts.map(t=>`<option${dt===t?' selected':''}>${t}</option>`).join('')}</select></div>
         <div style="min-width:0"><select onchange="${prefix}.eye=[this.value]" style="${selSt};border:1px solid ${border};background:#fff">${eyeOpts.map(e=>`<option${eye0===e?' selected':''}>${e}</option>`).join('')}</select></div>
         <div style="min-width:0"><select onchange="${prefix}.freq=this.value;window.syncRxDrugDates(${i})" style="${selSt};border:1px solid ${border};background:#fff">${freqOpts.map(f=>`<option${freq===f?' selected':''}>${f}</option>`).join('')}</select></div>
-        <div style="min-width:0">${isTaperSeg ? `<div title="Same duration as main row — dates chain after previous segment" style="font-size:10px;padding:5px 6px;border-radius:7px;border:1px solid ${border};width:100%;box-sizing:border-box;background:#f3f4f6;color:var(--g1);line-height:1.3;word-break:break-word">${String(lockDur).replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>` : `<select onchange="${prefix}.dur=this.value;window.syncRxDrugDates(${i})" style="${selSt};border:1px solid ${border};background:#fff">${durOpts.map(f=>`<option${dur===f?' selected':''}>${f}</option>`).join('')}</select>`}</div>
+        <div style="min-width:0">${isTaperSeg ? `<div title="Same duration as main row — dates chain after previous segment" style="font-size:11px;padding:6px 8px;border-radius:8px;border:1px solid ${border};width:100%;box-sizing:border-box;background:#f3f4f6;color:#3a3a3c;line-height:1.35;word-break:break-word">${String(lockDur).replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>` : `<select onchange="${prefix}.dur=this.value;window.syncRxDrugDates(${i})" style="${selSt};border:1px solid ${border};background:#fff">${durOpts.map(f=>`<option${dur===f?' selected':''}>${f}</option>`).join('')}</select>`}</div>
         <div style="min-width:0"><input type="date" value="${dateFrom||''}" onchange="${prefix}.dateFrom=this.value;window.syncRxDrugDates(${i})" style="${dateSt};border:1px solid ${border};background:#fff"></div>
         <div style="min-width:0"><input type="date" value="${dateTo||''}" onchange="${prefix}.dateTo=this.value" style="${dateSt};border:1px solid ${border};background:#fff"></div>
         <div style="display:flex;flex-direction:column;flex-wrap:nowrap;gap:4px;align-items:center;justify-content:center;min-width:0;padding:2px 0">${taperBtn}${removeBtn}</div>
@@ -9354,7 +9364,7 @@ function renderRxDrugs() {
     return `<div style="padding:0;background:${bg};border-top:${opts.noTopBorder ? 'none' : '1px dashed ' + border}">
       ${nameStrip}
       ${fieldGrid}
-      ${instruction ? `<div style="margin:0 8px 8px;padding:6px 10px;background:${opts.instructionBg || '#f7faff'};border-radius:7px;font-size:10px;line-height:1.45;color:${opts.instructionColor || '#24364f'}">${instruction.replace(/</g,'&lt;')}</div>` : ''}
+      ${instruction ? `<div style="margin:0 10px 10px;padding:7px 11px;background:${opts.instructionBg || '#f7faff'};border-radius:8px;font-size:11px;line-height:1.45;color:${opts.instructionColor || '#24364f'}">${instruction.replace(/</g,'&lt;')}</div>` : ''}
     </div>`;
   };
 
@@ -9365,8 +9375,8 @@ function renderRxDrugs() {
     ${RX_DRUGS.map((d,i)=>{
       const taperRows = ensureRxTaperRows(d);
       const plainLine = d.lang&&d.lang[lang] ? String(d.lang[lang]) : '';
-      return `<div class="rx-drug-row" style="border:1px solid var(--g5);border-radius:10px;background:#fff;max-width:100%;min-width:0;box-sizing:border-box;overflow-x:auto;-webkit-overflow-scrolling:touch">
-        <div style="min-width:0;width:100%;max-width:100%">
+      return `<div class="rx-drug-row" style="border:1px solid var(--g5);border-radius:10px;background:#fff;width:100%;max-width:100%;min-width:0;box-sizing:border-box;overflow-x:auto;-webkit-overflow-scrolling:touch">
+        <div style="min-width:0;width:100%;max-width:100%;box-sizing:border-box">
         ${gridHead}
         ${medicineRow(d, i, {
           prefix:`RX_DRUGS[${i}]`,
@@ -9376,7 +9386,7 @@ function renderRxDrugs() {
           instruction:plainLine,
           noTopBorder:true
         })}
-        ${taperRows.map((tap, tapIdx)=>`<div class="rx-taper-subrow" style="margin-top:0;border-top:2px solid rgba(255,149,0,.45);background:linear-gradient(180deg,rgba(255,149,0,.1),#fff8ef)">${medicineRow(d, i, {
+        ${taperRows.map((tap, tapIdx)=>`<div class="rx-taper-subrow" style="margin-top:0;border-top:1px solid rgba(255,149,0,.4);background:#fffef8">${medicineRow(d, i, {
           prefix:`RX_DRUGS[${i}].taperRows[${tapIdx}]`,
           dt: tap.drugType || tap.type || d.drugType || d.type || 'Tablet',
           eye0: ((tap.eye && tap.eye[0]) || (d.eye && d.eye[0]) || 'Oral'),
