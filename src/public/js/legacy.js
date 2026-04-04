@@ -549,8 +549,11 @@ function buildConsentPatientStripHtml(ptNm, ptId, ptAge, ptSex, ptMob, today, pr
 function collectConsentPrintContext() {
   const ptIds = ['ophtho-pt-uid', 'obg-pt-uid', 'psych-pt-uid', 'skin-pt-uid'];
   const ptNms = ['ophtho-pt-nm', 'obg-pt-nm', 'psych-pt-nm', 'skin-pt-nm'];
-  let ptId = '—'; let ptNm = '_______________';
+  let ptId = window._CONSENT_PRINT_BMH_ID || '—'; let ptNm = '_______________';
+  const forcedOt = window._CONSENT_PRINT_OT_ID ? OT_CASES.find(function (c) { return c.id === window._CONSENT_PRINT_OT_ID; }) : null;
+  if (forcedOt && forcedOt.patient) ptNm = forcedOt.patient;
   for (let i = 0; i < ptIds.length; i++) {
+    if (ptId && ptId !== '—') break;
     const v = document.getElementById(ptIds[i])?.textContent?.trim();
     if (v && v !== '—' && v.startsWith('BMSH-')) { ptId = v; ptNm = document.getElementById(ptNms[i])?.textContent || ptNm; break; }
   }
@@ -559,7 +562,7 @@ function collectConsentPrintContext() {
   const otList = (typeof OT_CASES !== 'undefined' && OT_CASES.length)
     ? OT_CASES.filter(function (c) { return c.bmhId === ptId; }).sort(function (a, b) { return (b.scheduledTime || b.date || '').localeCompare(a.scheduledTime || a.date || ''); })
     : [];
-  const ot = otList[0] || null;
+  const ot = forcedOt || otList[0] || null;
   const procLine = ot ? (String(ot.procedure || 'Procedure') + ' · ' + String(ot.site || 'Eye/ Site') + ' · OT ' + String(ot.scheduledTime || ot.date || '')) : '';
   const doctorName = window.CURRENT_USER?.name || 'Dr. Varun Baweja';
   return {
@@ -5964,9 +5967,10 @@ function createOTCaseFromReceptionPanel(ptId, patientNameTrim) {
     createdBy: CURRENT_USER?.username || 'reception',
     surgeryFee: fee
   };
-  OT_CASES.push(otCase);
-  fbSet('otCases/' + caseId, otCase);
-  return otCase;
+  const normalized = normalizeOTCaseRecord(otCase);
+  OT_CASES.push(normalized);
+  fbSet('otCases/' + caseId, normalized);
+  return normalized;
 }
 
 /** After Register & Token: if surgery panel is open, date is today, and procedure is same-day cataract-type, add to OT list. */
@@ -6214,6 +6218,80 @@ function printSurgeryPackWithKeys(keys, deptLabel) {
     + '@page{size:A4;margin:0}</style></head><body>' + consentPages + footerHtml + '</body></html>';
   safePrint(html);
   showToast('📋 ' + (deptLabel || 'Pack') + ' — ' + keys.length + ' form(s) × 3 variants (EN / EN+PA / EN+HI) ✓', 's');
+}
+function parseIolSummary(iol) {
+  const raw = String(iol || '').trim();
+  if (!raw || raw === 'N/A' || raw === '—') return { display: '—', type: '—', power: '—' };
+  const powerMatch = raw.match(/([+-]?\d+(?:\.\d+)?)\s*D\b/i);
+  const power = powerMatch ? powerMatch[1] + 'D' : '—';
+  let type = raw;
+  if (powerMatch) type = raw.replace(powerMatch[0], '').replace(/[(),]/g, ' ').replace(/\s+/g, ' ').trim();
+  return { display: raw, type: type || raw, power: power };
+}
+function normalizeOTCaseRecord(c) {
+  const src = c || {};
+  const pt = (typeof PATIENTS !== 'undefined' && PATIENTS.find && src.bmhId)
+    ? (PATIENTS.find(function (p) { return p.bmhId === src.bmhId; }) || {})
+    : {};
+  const initials = src.initials || (src.patient || pt.name || '?').split(' ').map(function (n) { return n[0] || ''; }).join('').substring(0, 2).toUpperCase();
+  const site = src.site || src.eye || src.operatingEye || src.opEye || src.surgEye || 'N/A';
+  const iol = src.iol || src.implant || src.iolImplant || 'N/A';
+  const iolSummary = parseIolSummary(iol);
+  let status = src.status || 'pending';
+  if (status === 'scheduled') status = 'pending';
+  return Object.assign({}, src, {
+    patient: src.patient || src.name || pt.name || 'Pending',
+    age: src.age || pt.age || '—',
+    sex: src.sex || pt.sex || '—',
+    dx: src.dx || src.diagnosis || pt.dx || '—',
+    procedure: src.procedure || src.surgery || src.operation || 'Procedure',
+    surgeon: src.surgeon || src.doctor || pt.doctor || CURRENT_USER?.name || '—',
+    anaes: src.anaes || src.anaesthesia || '—',
+    room: src.room || src.otRoom || 'OT-1',
+    scheduledTime: src.scheduledTime || src.time || '—',
+    priority: String(src.priority || 'elective').toLowerCase(),
+    status: status,
+    site: site,
+    eye: site,
+    iol: iol,
+    iolType: src.iolType || iolSummary.type,
+    iolPower: src.iolPower || iolSummary.power,
+    timings: Object.assign({ patientIn:'', anaesStart:'', incision:'', procEnd:'', patientOut:'', rrIn:'' }, src.timings || {}),
+    preop: src.preop == null ? '—' : src.preop,
+    consent: src.consent == null ? '—' : src.consent,
+    fasting: src.fasting == null ? '—' : src.fasting,
+    complications: src.complications || 'None',
+    color: src.color || pt.color || '#1A3C6E',
+    initials: initials,
+    signIn: !!src.signIn,
+    timeOut: !!src.timeOut,
+    signOut: !!src.signOut,
+  });
+}
+function resolveSurgeryPackForCase(otCase) {
+  const c = normalizeOTCaseRecord(otCase);
+  const procedure = String(c.procedure || '').toLowerCase();
+  const packs = getAllSurgeryPacks();
+  const custom = packs.find(function (p) {
+    const label = String(p.label || '').toLowerCase();
+    return String(p.id || '').startsWith('custom-') && label && (procedure.includes(label) || label.includes(procedure));
+  });
+  if (custom) return custom;
+  if (/ivt|intravitreal|anti-vegf/.test(procedure)) return packs.find(function (p) { return p.id === 'ivt'; }) || null;
+  if (/lasik/.test(procedure)) return packs.find(function (p) { return p.id === 'lasik'; }) || null;
+  if (/cataract|phaco|pmics|iol/.test(procedure)) return packs.find(function (p) { return p.id === 'ophtho'; }) || null;
+  if (/lscs|caes|delivery|lapar/.test(procedure)) return packs.find(function (p) { return p.id === 'obg'; }) || null;
+  if (/ect|psy/.test(procedure)) return packs.find(function (p) { return p.id === 'psych'; }) || null;
+  if (/peel|laser|prp|skin/.test(procedure)) return packs.find(function (p) { return p.id === 'skin'; }) || null;
+  return packs.find(function (p) { return String(p.dept || '').toLowerCase().includes('oph') || p.id === 'ophtho'; }) || null;
+}
+function printSurgeryPackForCase(caseId, packId) {
+  const rawCase = OT_CASES.find(function (c) { return c.id === caseId; });
+  if (!rawCase) { showToast('OT case not found', 'w'); return; }
+  const c = normalizeOTCaseRecord(rawCase);
+  window._CONSENT_PRINT_BMH_ID = c.bmhId;
+  window._CONSENT_PRINT_OT_ID = c.id;
+  openSurgeryPackPrintModal(packId || (resolveSurgeryPackForCase(c)?.id || 'ophtho'));
 }
 function openSurgeryPackPrintModal(packOrDept) {
   const fallbackDeptKeys = {
@@ -6486,6 +6564,7 @@ function processBC(mode, code) {
 
 
 function otCaseCard(c, sno) {
+  c = normalizeOTCaseRecord(c);
   const statusStyle = {
     pending:{bg:'var(--g6)',border:'var(--g4)',badge:'bd-gray',label:'⏳ Pending'},
     'in-progress':{bg:'var(--blue-lt)',border:'var(--blue)',badge:'bd-blue',label:'🔄 In Progress'},
@@ -6500,6 +6579,12 @@ function otCaseCard(c, sno) {
   </div>`;
 
   const priorityBadge = c.priority==='emergency'?'<span class="badge bd-red" style="font-size:9px">🚨 Emergency</span>':c.priority==='urgent'?'<span class="badge bd-orange" style="font-size:9px">⚡ Urgent</span>':'';
+  const pack = resolveSurgeryPackForCase(c);
+  const surgeryMeta = [
+    c.site && c.site !== 'N/A' ? '👁️ ' + c.site : '',
+    c.iolType && c.iolType !== '—' && c.iolType !== 'N/A' ? '🔬 ' + c.iolType : '',
+    c.iolPower && c.iolPower !== '—' ? '⚡ ' + c.iolPower : ''
+  ].filter(Boolean).join(' · ');
 
   return `<div style="background:${statusStyle.bg};border-radius:var(--r);padding:11px 13px;margin-bottom:8px;border:1.5px solid ${statusStyle.border};cursor:pointer;transition:all .2s" onclick="openOTCase('${c.id}')" onmouseenter="this.style.transform='translateY(-1px)'" onmouseleave="this.style.transform=''">
     <div style="display:flex;align-items:flex-start;gap:10px">
@@ -6518,7 +6603,7 @@ function otCaseCard(c, sno) {
           <span>👨‍⚕️ ${c.surgeon}</span>
           <span>🕐 ${c.scheduledTime}</span>
           <span>🏥 ${c.room}</span>
-          ${c.iol&&c.iol!=='N/A'?`<span>🔬 ${c.iol}</span>`:''}
+          ${surgeryMeta?`<span>${surgeryMeta}</span>`:''}
         </div>
         ${whoHTML}
         ${c.timings.incision&&c.timings.procEnd?`<div style="font-size:10px;color:${c.status==='completed'?'#1a8c3c':'var(--blue)'};font-weight:700;margin-top:4px">✂️ In: ${c.timings.incision} → Out: ${c.timings.procEnd} · Anaes: ${c.timings.anaesStart||'—'}</div>`:''}
@@ -6531,6 +6616,7 @@ function otCaseCard(c, sno) {
           <option value="completed" ${c.status==='completed'?'selected':''}>Completed</option>
           <option value="postponed" ${c.status==='postponed'?'selected':''}>Postponed</option>
         </select>
+        ${pack ? `<button class="btn btn-xs btn-gold" onclick="event.stopPropagation();printSurgeryPackForCase('${c.id}','${pack.id}')">📋 Pack</button>` : ''}
         <button class="btn btn-xs btn-outline" onclick="event.stopPropagation();printOTCard('${c.id}')">🖨️</button>
       </div>
     </div>
@@ -6539,7 +6625,9 @@ function otCaseCard(c, sno) {
 
 // ─── OPEN OT CASE DETAIL ─────────────
 function openOTCase(id) {
-  const c = OT_CASES.find(x=>x.id===id); if(!c) return;
+  const idx = OT_CASES.findIndex(x=>x.id===id); if(idx<0) return;
+  OT_CASES[idx] = normalizeOTCaseRecord(OT_CASES[idx]);
+  const c = OT_CASES[idx];
   activeOTCase = c;
 
   const timerCase = document.getElementById('ot-timer-case');
@@ -6720,9 +6808,10 @@ function addOTCase() {
     createdAt: new Date().toISOString(),
     createdBy: CURRENT_USER?.name || 'System'
   };
-  OT_CASES.push(newCase);
+  const normalized = normalizeOTCaseRecord(newCase);
+  OT_CASES.push(normalized);
   // Save to Firebase
-  fbSet('otCases/' + newCase.id, newCase).catch(e => console.warn('OT save error:', e));
+  fbSet('otCases/' + normalized.id, normalized).catch(e => console.warn('OT save error:', e));
   renderOTList();
   showToast(`⚕️ ${ptName} added to OT list ✓`,'s');
   closeM('m-ot-add');
@@ -9304,7 +9393,7 @@ function loadOTCasesFromFirebase() {
     if(!data) return;
     const arr = window.OT_CASES || OT_CASES;
     arr.length = 0; // clear first to avoid duplicates on reload
-    Object.values(data).forEach(c => arr.push(c));
+    Object.values(data).forEach(c => arr.push(normalizeOTCaseRecord(c)));
     renderOTListSafe && renderOTListSafe();
   }).catch(e => console.warn('OT load error:', e));
 }
@@ -9769,6 +9858,16 @@ async function _buildBilingualHTML(text, lang) {
   }
   return parts.join('');
 }
+async function buildStructuredConsentFromText(name, text) {
+  const paras = text.split(/\n{2,}/).map(function (p) { return p.trim(); }).filter(Boolean);
+  const out = [];
+  for (const para of paras) {
+    const pa = await _translateText(para, 'pa');
+    const hi = await _translateText(para, 'hi');
+    out.push({ en: para, pa: pa || para, hi: hi || para });
+  }
+  return { title: String(name || 'Consent').toUpperCase(), paras: out };
+}
 
 function openConsentUploadModal() {
   // Always rebuild — ensures latest fields are present every time
@@ -10003,7 +10102,7 @@ ${sigHTML}
 </body></html>`;
 }
 
-function saveConsentFromText() {
+async function saveConsentFromText() {
   const text    = document.getElementById('cup-consent-text')?.value?.trim();
   const name    = document.getElementById('cup-consent-name')?.value?.trim();
   const dept    = document.getElementById('cup-consent-dept')?.value || 'all';
@@ -10011,14 +10110,33 @@ function saveConsentFromText() {
   const lang    = document.getElementById('cup-consent-lang')?.value || 'hi';
   if(!text || !name) { showToast('Please enter both name and text','w'); return; }
   const key = fbKey();
-  fbSet('consentLibrary/' + key, { id:key, name, text, type:'text', dept, docType, lang, createdAt:new Date().toISOString(), createdBy:CURRENT_USER?.name||'Admin' })
-    .then(() => {
-      showToast((docType==='form'?'Form':'Consent') + ' "' + name + '" saved ✓','s');
-      closeM('m-consent-upload');
-      refreshConsentLibrary && refreshConsentLibrary();
-      loadCustomConsentsForSettings && loadCustomConsentsForSettings();
-    })
-    .catch(e => showToast('Save failed: ' + e.message,'w'));
+  const createdAt = new Date().toISOString();
+  try {
+    if (docType === 'consent') {
+      showToast('Translating and saving bilingual consent…', 'i');
+      const structured = await buildStructuredConsentFromText(name, text);
+      const body = structured.paras.map(function (p) { return p.en; }).join('\n\n');
+      const bodyPa = structured.paras.map(function (p) { return p.pa; }).join('\n\n');
+      const bodyHi = structured.paras.map(function (p) { return p.hi; }).join('\n\n');
+      CONSENT_DATA_OVERRIDES[key] = structured;
+      saveConsentDataOverridesToStorage();
+      await fbSet('consentLibrary/' + key, {
+        id:key, name, text, type:'text', dept, docType, lang,
+        body, bodyPa, bodyHi,
+        structuredKey:key,
+        createdAt, createdBy:CURRENT_USER?.name||'Admin'
+      });
+    } else {
+      await fbSet('consentLibrary/' + key, { id:key, name, text, type:'text', dept, docType, lang, createdAt, createdBy:CURRENT_USER?.name||'Admin' });
+    }
+    showToast((docType==='form'?'Form':'Consent') + ' "' + name + '" saved ✓','s');
+    closeM('m-consent-upload');
+    refreshConsentLibrary && refreshConsentLibrary();
+    loadCustomConsentsForSettings && loadCustomConsentsForSettings();
+    renderStructuredConsentList && renderStructuredConsentList();
+  } catch(e) {
+    showToast('Save failed: ' + e.message,'w');
+  }
 }
 
 function saveConsentFromImage() {
@@ -10101,6 +10219,14 @@ function printCustomConsent(id) {
   win.document.write('<html><body style="font-family:Arial,sans-serif;padding:40px;text-align:center;color:#555"><p style="font-size:16px">Loading… ⏳</p></body></html>');
   fbOnce('consentLibrary/' + id, async data => {
     if(!data) { showToast('Consent not found','w'); win.close(); return; }
+    if ((data.body || data.bodyPa || data.bodyHi || data.structuredKey) && data.docType === 'consent') {
+      const cd = data.structuredKey ? resolveConsentDataForPrint(data.structuredKey) : libraryMergedToConsentData(data);
+      if (cd && cd.paras && cd.paras.length) {
+        win.close();
+        printStructuredConsentThreeVariants(cd);
+        return;
+      }
+    }
     const pt = _getConsentPatientHeader();
     let bodyHTML, isImgMode = false;
     if(data.text) {
@@ -11696,7 +11822,9 @@ function renderSetPacksList() {
   el.innerHTML = packs.map(function (p) {
     const keyLines = (p.consentKeys || []).map(function (k) {
       const data = getConsentEntry(k);
-      const title = data && data.title ? data.title : k;
+      const lib = getMergedLibraryItem(k);
+      const tpl = (typeof CONSENT_TEMPLATES !== 'undefined' ? CONSENT_TEMPLATES.find(function (x) { return x.id === k; }) : null);
+      const title = data && data.title ? data.title : (lib && lib.name ? lib.name : (tpl && tpl.name ? tpl.name : k));
       return '<li style="margin:2px 0;font-size:11px">' + title + '</li>';
     }).join('');
     const delBtn = String(p.id).startsWith('custom-')
@@ -11796,6 +11924,7 @@ function renderOTList() {
 
   const dateFilter = document.getElementById('ot-date-inp')?.value || '';
   const surgeonFilter = document.getElementById('ot-surgeon-sel')?.value || '';
+  OT_CASES.forEach(function (c, idx) { OT_CASES[idx] = normalizeOTCaseRecord(c); });
   let cases = OT_CASES.filter(c => centreMatch(c));
   if(dateFilter) cases = cases.filter(c => (c.date||c.scheduledDate||'') === dateFilter);
   if(surgeonFilter && surgeonFilter !== 'All Surgeons') cases = cases.filter(c => c.surgeon === surgeonFilter);
