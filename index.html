@@ -1636,7 +1636,7 @@
           </div>
           <div style="display:flex;gap:7px;margin-top:8px;flex-wrap:wrap">
             <button class="btn btn-orange btn-sm" onclick="scheduleSurgery()">⚕️ Schedule Surgery &amp; Add to OT</button>
-            <button class="btn btn-gray btn-sm" onclick="(function(){const sel=document.getElementById('surg-pack-sel');if(sel&&sel.value)printConsentTemplate(sel.value);else printSurgeryPack(document.getElementById('rc-dept')?.value||'ophtho')})()">📋 Print Consent Pack</button>
+            <button class="btn btn-gray btn-sm" onclick="(function(){const sel=document.getElementById('surg-pack-sel');if(sel&&sel.value)printSurgeryPack(sel.value);else printSurgeryPack(document.getElementById('rc-dept')?.value||'ophtho')})()">📋 Print Consent Pack</button>
           </div>
         </div>
 
@@ -2962,7 +2962,7 @@
     <div class="card"><div class="card-hd"><div class="card-title">Create Template</div></div>
       <div class="fg fg1" style="gap:8px">
         <div class="form-group"><label class="fl">Template Name</label><input type="text" id="rx-tpl-name" placeholder="e.g. Post Phaco Day 1"></div>
-        <div class="form-group"><label class="fl">Department</label><select id="rx-tpl-dept-settings"><option value="Ophthalmology">Ophthalmology</option><option value="OBG">OBG</option><option value="Psychiatry">Psychiatry</option><option value="Skin">Skin</option><option value="All">All</option></select></div>
+        <div class="form-group"><label class="fl">Department</label><select id="rx-tpl-dept-settings"><option value="Ophthalmology">Ophthalmology</option><option value="OBG">OBG</option><option value="Psychiatry">Psychiatry</option><option value="Skin">Skin</option><option value="OT">OT / Operative Notes</option><option value="All">All</option></select></div>
         <div class="form-group full"><label class="fl">Drugs (one per line)</label><textarea id="rx-tpl-drugs" placeholder="Moxifloxacin 0.5% — 4x/day — 7 days&#10;Prednisolone 1% — 4x/day taper — 4 weeks&#10;CMC 0.5% — PRN — 1 month" style="min-height:80px"></textarea></div>
         <button class="btn btn-gold" onclick="saveRxTemplate()">💾 Save Template</button>
       </div>
@@ -3471,6 +3471,10 @@
           </div>
         </div>
         <div class="fg fg1" style="gap:8px">
+          <div class="fg">
+            <div class="form-group"><label class="fl">OT Notes Template</label><select id="ot-notes-template" onchange="applyOTNotesTemplate(this.value)"><option value="">— Select template —</option></select></div>
+            <div class="form-group"><label class="fl">Template hint</label><input type="text" value="Create OT note templates from Settings → Rx Templates using department OT / Operative Notes" readonly style="background:var(--g6);font-size:11px"></div>
+          </div>
           <div class="form-group"><label class="fl">Pre-op Diagnosis</label><input type="text" id="ot-preop-dx" placeholder="e.g. Cataract OS — Partially absorbed lens"></div>
           <div class="form-group"><label class="fl">Post-op Diagnosis</label><input type="text" id="ot-postop-dx" placeholder="Confirmed post-op diagnosis"></div>
           <div class="form-group"><label class="fl">Procedure Performed</label><input type="text" id="ot-procedure" placeholder="e.g. PMICS + IOL Implantation (OS)"></div>
@@ -3479,8 +3483,8 @@
             <div class="form-group"><label class="fl">Assistant Surgeon</label><input type="text" placeholder="Name"></div>
           </div>
           <div class="fg">
-            <div class="form-group"><label class="fl">Scrub Nurse</label><input type="text" placeholder="Name"></div>
-            <div class="form-group"><label class="fl">Circulating Nurse</label><input type="text" placeholder="Name"></div>
+            <div class="form-group"><label class="fl">Scrub Nurse</label><input type="text" id="ot-scrub-nurse" placeholder="Name"></div>
+            <div class="form-group"><label class="fl">Circulating Nurse</label><input type="text" id="ot-circ-nurse" placeholder="Name"></div>
           </div>
           <div class="form-group"><label class="fl">Anaesthesiologist</label><input type="text" placeholder="Name" id="ot-anaes-dr"></div>
           <div class="form-group"><label class="fl">Anaesthesia Type</label><select id="ot-anaes-type"><option>Topical (Eye Drops)</option><option>Peribulbar Block</option><option>Retrobulbar Block</option><option>Sub-Tenon Block</option><option>Spinal Anaesthesia</option><option>Epidural</option><option>General Anaesthesia — LMA</option><option>General Anaesthesia — ETT</option></select></div>
@@ -3502,8 +3506,8 @@
           <div class="form-group"><label class="fl">Subconjunctival Injection</label><input type="text" placeholder="e.g. Gentamicin + Betamethasone"></div>
           <div class="form-group"><label class="fl">Eye Pad / Dressing</label><select><option>Pad and bandage</option><option>Clear shield only</option><option>Double pad</option><option>No pad</option></select></div>
           <div class="form-group full"><label class="fl">Surgeon's Narrative / Additional Notes</label><textarea id="ot-narrative" placeholder="Step-by-step narrative, special circumstances…" style="min-height:80px" placeholder="Step-by-step narrative, special circumstances…"></textarea></div>
-          <div class="form-group"><label class="fl">Post-op Instructions to Recovery</label><textarea placeholder="Recovery room instructions…" style="min-height:50px">Monitor BP and SpO2. Patient to rest supine. Check eye every 15 min. Report IOP spike, pain score >6, or nausea.</textarea></div>
-          <div class="form-group"><label class="fl">Blood Loss (estimated)</label><input type="text" placeholder="e.g. Minimal / 20mL"></div>
+          <div class="form-group"><label class="fl">Post-op Instructions to Recovery</label><textarea id="ot-notes" placeholder="Recovery room instructions…" style="min-height:50px">Monitor BP and SpO2. Patient to rest supine. Check eye every 15 min. Report IOP spike, pain score >6, or nausea.</textarea></div>
+          <div class="form-group"><label class="fl">Blood Loss (estimated)</label><input type="text" id="ot-blood-loss" placeholder="e.g. Minimal / 20mL"></div>
           <div class="form-group"><label class="fl">Fluid Balance</label><input type="text" placeholder="e.g. IV: 500mL RL / Urine output: N/A"></div>
           <div class="form-group"><label class="fl">Specimen Sent</label><select><option>None</option><option>Yes — Histopathology</option><option>Yes — Microbiology C&S</option></select></div>
         </div>
@@ -3603,7 +3607,7 @@
   <div class="form-group"><label class="fl">Display name</label><input type="text" id="edit-rx-tpl-name" style="font-size:13px"></div>
   <div class="form-group"><label class="fl">Department</label>
     <select id="edit-rx-tpl-dept" style="font-size:13px">
-      <option value="ophtho">Ophthalmology</option><option value="obg">OBG</option><option value="psych">Neuropsychiatry</option><option value="skin">Skin</option><option value="all">All</option>
+      <option value="ophtho">Ophthalmology</option><option value="obg">OBG</option><option value="psych">Neuropsychiatry</option><option value="skin">Skin</option><option value="ot">OT / Operative Notes</option><option value="all">All</option>
     </select>
   </div>
   <div class="form-group"><label class="fl">Notes</label><input type="text" id="edit-rx-tpl-notes" placeholder="Optional" style="font-size:13px"></div>
@@ -4042,8 +4046,9 @@
 <!-- OT ADD CASE MODAL -->
 <div class="modal-ov" id="m-ot-add">
 <div class="modal modal-lg">
-<div class="modal-hd"><div class="modal-title">⚕️ Add OT Case</div><button class="modal-close" onclick="closeM('m-ot-add')">✕</button></div>
+<div class="modal-hd"><div class="modal-title" id="ot-add-modal-title">⚕️ Add OT Case</div><button class="modal-close" onclick="closeM('m-ot-add')">✕</button></div>
 <div class="fg" style="gap:10px">
+  <input type="hidden" id="ot-add-case-id">
   <div class="form-group"><label class="fl">Lookup Patient (BMSH ID or Phone)</label><input type="text" id="ot-pt-lookup" placeholder="BMSH-XXXXXX or phone…" oninput="lookupOTPatient(this.value)"></div>
   <div id="ot-pt-lookup-result" style="margin-bottom:8px"></div>
   <div class="form-group"><label class="fl">Patient</label>
@@ -4055,24 +4060,7 @@
   <div class="form-group"><label class="fl">Age / Sex</label><input type="text" id="ot-age-sex" readonly style="background:var(--g6)"></div>
   <div class="form-group"><label class="fl">Pre-op Diagnosis</label><input type="text" id="ot-add-dx" placeholder="Primary diagnosis"></div>
   <div class="form-group"><label class="fl">Procedure</label>
-    <select id="ot-add-proc">
-      <option>PMICS + IOL Implantation (OS)</option>
-      <option>PMICS + IOL Implantation (OD)</option>
-      <option>PMICS (Pinhole Micro Incision Cataract Surgery) + IOL (OU)</option>
-      <option>Trabeculectomy</option>
-      <option>Pterygium Excision + Graft</option>
-      <option>DCR (Dacryocystorhinostomy)</option>
-      <option>Squint Surgery</option>
-      <option>LASIK</option>
-      <option>Eyelid Surgery / Ptosis Repair</option>
-      <option>LSCS (Elective)</option>
-      <option>LSCS (Emergency)</option>
-      <option>Diagnostic Laparoscopy</option>
-      <option>D&amp;C / Hysteroscopy</option>
-      <option>Chemical Peel</option>
-      <option>PRP Treatment</option>
-      <option>Other — specify in notes</option>
-    </select>
+    <select id="ot-add-proc"></select>
   </div>
   <div class="form-group"><label class="fl">Eye / Site</label>
     <select id="ot-add-site"><option>Left Eye (OS)</option><option>Right Eye (OD)</option><option>Both Eyes (OU)</option><option>N/A</option></select>
@@ -4093,7 +4081,11 @@
       <select id="ot-add-priority"><option value="elective">Elective</option><option value="urgent">Urgent</option><option value="emergency">Emergency</option></select>
     </div>
   </div>
-  <div class="form-group"><label class="fl">IOL / Implant</label><input type="text" id="ot-add-iol" placeholder="e.g. AcrySof SN60WF +21.0D OS"></div>
+  <div class="fg">
+    <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">IOL / Implant <button type="button" onclick="openOTAddIolModal()" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></label><select id="ot-add-iol-model"></select></div>
+    <div class="form-group"><label class="fl">IOL Power</label><select id="ot-add-iol-power"></select></div>
+  </div>
+  <div class="form-group"><label class="fl">IOL / Implant Summary</label><input type="text" id="ot-add-iol" placeholder="Selected IOL summary" readonly style="background:var(--g6)"></div>
   <div class="form-group"><label class="fl">Pre-op Workup Done</label>
     <select id="ot-add-preop"><option>Yes — complete</option><option>Partial — see notes</option><option>No — emergency</option></select>
   </div>
@@ -4110,7 +4102,7 @@
     <input type="text" placeholder="CBC ✓  ECG ✓  Biometry ✓  Blood group O+ve"></div>
 </div>
 <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
-  <button class="btn btn-gold" style="flex:1;justify-content:center" onclick="addOTCase()">✅ Add to OT List</button>
+  <button class="btn btn-gold" style="flex:1;justify-content:center" id="ot-add-save-btn" onclick="addOTCase()">✅ Add to OT List</button>
   <button class="btn btn-outline btn-sm" onclick="openM('m-consents')">📋 Generate Consent</button>
   <button class="btn btn-gray" onclick="closeM('m-ot-add')">Cancel</button>
 </div>
@@ -4203,6 +4195,7 @@
       <option value="obg">OBG</option>
       <option value="psych">Neuropsychiatry</option>
       <option value="skin">Skin</option>
+      <option value="ot">OT / Operative Notes</option>
       <option value="all">All Departments</option>
     </select>
   </div>
