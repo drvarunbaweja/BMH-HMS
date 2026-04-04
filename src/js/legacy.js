@@ -9277,19 +9277,22 @@ function renderRxDrugs() {
     });
   });
 
+  const gGap = '4px';
   const gridCols = isOphtho
-    ? 'minmax(210px,1.55fr) minmax(105px,.82fr) minmax(135px,.88fr) minmax(150px,.92fr) minmax(115px,.78fr) minmax(118px,.78fr) minmax(118px,.78fr) 108px'
-    : 'minmax(225px,1.6fr) minmax(108px,.82fr) minmax(138px,.9fr) minmax(150px,.92fr) minmax(118px,.78fr) minmax(118px,.78fr) minmax(118px,.78fr) 108px';
+    ? 'minmax(0,1.2fr) minmax(48px,.34fr) minmax(0,.4fr) minmax(0,.75fr) minmax(48px,.36fr) minmax(72px,.42fr) minmax(72px,.42fr) minmax(56px,.3fr)'
+    : 'minmax(0,1.25fr) minmax(48px,.34fr) minmax(0,.4fr) minmax(0,.75fr) minmax(48px,.36fr) minmax(72px,.42fr) minmax(72px,.42fr) minmax(56px,.3fr)';
+  const selSt = `font-size:9px;padding:3px 2px;width:100%;max-width:100%;min-width:0;box-sizing:border-box;border-radius:6px`;
+  const dateSt = `font-size:9px;padding:2px 3px;width:100%;max-width:100%;min-width:0;box-sizing:border-box;border-radius:6px`;
   const gridHead = `
-    <div style="display:grid;grid-template-columns:${gridCols};gap:8px;padding:6px 8px;background:var(--g6);border-radius:10px 10px 0 0;font-size:9px;font-weight:900;color:var(--g1);text-transform:uppercase;letter-spacing:.45px">
+    <div style="display:grid;grid-template-columns:${gridCols};gap:${gGap};padding:4px 6px;background:var(--g6);border-radius:8px 8px 0 0;font-size:7.5px;font-weight:900;color:var(--g1);text-transform:uppercase;letter-spacing:.2px;line-height:1.2">
       <div>Name</div>
       <div>Type</div>
-      <div>${isOphtho ? 'Eye' : 'Route'}</div>
-      <div>Frequency</div>
-      <div>Duration</div>
-      <div>Start</div>
-      <div>End</div>
-      <div>Action</div>
+      <div>${isOphtho ? 'Eye' : 'Rt'}</div>
+      <div>Freq</div>
+      <div>Dur</div>
+      <div>From</div>
+      <div>To</div>
+      <div>Act</div>
     </div>`;
   const medicineRow = (d, i, options) => {
     const opts = options || {};
@@ -9314,57 +9317,59 @@ function renderRxDrugs() {
     const isTaperSeg = !!opts.isTaperSegment;
     const lockDur = opts.parentMainDur != null ? String(opts.parentMainDur) : dur;
     const nameCell = opts.readonlyName
-      ? `<div style="display:flex;align-items:center;gap:8px">
-          ${opts.showBadge !== false ? `<span style="min-width:24px;height:24px;border-radius:999px;background:${opts.badgeBg || 'var(--bmh-blue)'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:900">${badge}</span>` : ''}
+      ? `<div style="display:flex;align-items:center;gap:4px">
+          ${opts.showBadge !== false ? `<span style="flex-shrink:0;min-width:18px;height:18px;border-radius:999px;background:${opts.badgeBg || 'var(--bmh-blue)'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:8px;font-weight:900">${badge}</span>` : ''}
           <div style="min-width:0;flex:1">
-            <div style="width:100%;font-size:12.5px;font-weight:900;color:${opts.headingColor || 'var(--tx)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${String(heading).replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>
-            ${opts.showGeneric !== false ? `<div style="width:100%;font-size:10px;color:var(--g1);font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px">${String(subheading).replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>` : ''}
+            <div style="width:100%;font-size:10.5px;font-weight:900;color:${opts.headingColor || 'var(--tx)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2">${String(heading).replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>
+            ${opts.showGeneric !== false ? `<div style="width:100%;font-size:8px;color:var(--g1);font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;line-height:1.2">${String(subheading).replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>` : ''}
           </div>
         </div>`
       : opts.showName !== false
-      ? `<div style="display:flex;align-items:center;gap:8px">
-          ${opts.showBadge !== false ? `<span style="min-width:24px;height:24px;border-radius:999px;background:${opts.badgeBg || 'var(--bmh-blue)'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:900">${badge}</span>` : ''}
+      ? `<div style="display:flex;align-items:center;gap:4px">
+          ${opts.showBadge !== false ? `<span style="flex-shrink:0;min-width:18px;height:18px;border-radius:999px;background:${opts.badgeBg || 'var(--bmh-blue)'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:8px;font-weight:900">${badge}</span>` : ''}
           <div style="min-width:0;flex:1">
-            <input value="${String(heading).replace(/"/g,'&quot;')}" onchange="${prefix}.trade=this.value;${prefix}.brand=this.value" placeholder="Trade name" style="width:100%;font-size:12.5px;font-weight:900;border:none;background:transparent;padding:0;box-sizing:border-box;color:${opts.headingColor || 'var(--tx)'}">
-            ${opts.showGeneric !== false ? `<input value="${String(subheading).replace(/"/g,'&quot;')}" onchange="${prefix}.generic=this.value;${prefix}.name=this.value" placeholder="(Generic name)" style="width:100%;font-size:10px;color:var(--g1);font-style:italic;border:none;background:transparent;padding:0;box-sizing:border-box;margin-top:2px">` : ''}
+            <input value="${String(heading).replace(/"/g,'&quot;')}" onchange="${prefix}.trade=this.value;${prefix}.brand=this.value" placeholder="Trade" style="width:100%;font-size:10.5px;font-weight:900;border:none;background:transparent;padding:0;box-sizing:border-box;color:${opts.headingColor || 'var(--tx)'};line-height:1.2">
+            ${opts.showGeneric !== false ? `<input value="${String(subheading).replace(/"/g,'&quot;')}" onchange="${prefix}.generic=this.value;${prefix}.name=this.value" placeholder="Generic" style="width:100%;font-size:8px;color:var(--g1);font-style:italic;border:none;background:transparent;padding:0;box-sizing:border-box;margin-top:1px;line-height:1.2">` : ''}
           </div>
         </div>`
-      : `<div style="min-height:32px;display:flex;align-items:center;${opts.emptyNameCell ? '' : 'gap:8px'}">
-          ${opts.emptyNameCell ? '<div style="width:100%;height:1px"></div>' : `<div style="font-size:11px;font-weight:800;color:${opts.headingColor || '#8a4200'}">${opts.rowLabel || 'Taper'}</div>`}
+      : `<div style="min-height:26px;display:flex;align-items:center;${opts.emptyNameCell ? '' : 'gap:4px'}">
+          ${opts.emptyNameCell ? '<div style="width:100%;height:1px"></div>' : `<div style="font-size:9px;font-weight:800;color:${opts.headingColor || '#8a4200'};line-height:1.2;white-space:nowrap">${opts.rowLabel || 'Taper'}</div>`}
         </div>`;
-    return `<div style="padding:8px;background:${bg};border-top:${opts.noTopBorder ? 'none' : '1px dashed ' + border}">
-      <div style="display:grid;grid-template-columns:${gridCols};gap:8px;align-items:center">
+    return `<div style="padding:5px 6px;background:${bg};border-top:${opts.noTopBorder ? 'none' : '1px dashed ' + border}">
+      <div style="display:grid;grid-template-columns:${gridCols};gap:${gGap};align-items:center">
         <div style="min-width:0">${nameCell}</div>
-        <div><select onchange="${prefix}.drugType=this.value;${prefix}.type=this.value" style="font-size:10.5px;padding:7px;width:100%;border-radius:8px;border:1px solid ${border};background:#fff">${typeOpts.map(t=>`<option${dt===t?' selected':''}>${t}</option>`).join('')}</select></div>
-        <div><select onchange="${prefix}.eye=[this.value]" style="font-size:10.5px;padding:7px;width:100%;border-radius:8px;border:1px solid ${border};background:#fff">${eyeOpts.map(e=>`<option${eye0===e?' selected':''}>${e}</option>`).join('')}</select></div>
-        <div><select onchange="${prefix}.freq=this.value;syncRxDrugDates(${i})" style="font-size:10.5px;padding:7px;width:100%;border-radius:8px;border:1px solid ${border};background:#fff">${freqOpts.map(f=>`<option${freq===f?' selected':''}>${f}</option>`).join('')}</select></div>
-        <div>${isTaperSeg ? `<div title="Same duration as main row" style="font-size:10.5px;padding:7px;border-radius:8px;border:1px solid ${border};width:100%;background:#f3f4f6;color:var(--g1)">${String(lockDur).replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>` : `<select onchange="${prefix}.dur=this.value;syncRxDrugDates(${i})" style="font-size:10.5px;padding:7px;width:100%;border-radius:8px;border:1px solid ${border};background:#fff">${durOpts.map(f=>`<option${dur===f?' selected':''}>${f}</option>`).join('')}</select>`}</div>
-        <div><input type="date" value="${dateFrom||''}" onchange="${prefix}.dateFrom=this.value;syncRxDrugDates(${i})" style="font-size:10.5px;padding:7px;border-radius:8px;border:1px solid ${border};width:100%;background:#fff"></div>
-        <div><input type="date" value="${dateTo||''}" onchange="${prefix}.dateTo=this.value" style="font-size:10.5px;padding:7px;border-radius:8px;border:1px solid ${border};width:100%;background:#fff"></div>
-        <div style="display:flex;flex-direction:column;gap:6px;align-items:stretch;min-width:0">${taperBtn}${removeBtn}</div>
+        <div style="min-width:0"><select onchange="${prefix}.drugType=this.value;${prefix}.type=this.value" style="${selSt};border:1px solid ${border};background:#fff">${typeOpts.map(t=>`<option${dt===t?' selected':''}>${t}</option>`).join('')}</select></div>
+        <div style="min-width:0"><select onchange="${prefix}.eye=[this.value]" style="${selSt};border:1px solid ${border};background:#fff">${eyeOpts.map(e=>`<option${eye0===e?' selected':''}>${e}</option>`).join('')}</select></div>
+        <div style="min-width:0"><select onchange="${prefix}.freq=this.value;syncRxDrugDates(${i})" style="${selSt};border:1px solid ${border};background:#fff">${freqOpts.map(f=>`<option${freq===f?' selected':''}>${f}</option>`).join('')}</select></div>
+        <div style="min-width:0">${isTaperSeg ? `<div title="Same duration as main row — dates chain after previous segment" style="font-size:8.5px;padding:3px 4px;border-radius:6px;border:1px solid ${border};width:100%;max-width:100%;min-width:0;box-sizing:border-box;background:#f3f4f6;color:var(--g1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${String(lockDur).replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>` : `<select onchange="${prefix}.dur=this.value;syncRxDrugDates(${i})" style="${selSt};border:1px solid ${border};background:#fff">${durOpts.map(f=>`<option${dur===f?' selected':''}>${f}</option>`).join('')}</select>`}</div>
+        <div style="min-width:0"><input type="date" value="${dateFrom||''}" onchange="${prefix}.dateFrom=this.value;syncRxDrugDates(${i})" style="${dateSt};border:1px solid ${border};background:#fff"></div>
+        <div style="min-width:0"><input type="date" value="${dateTo||''}" onchange="${prefix}.dateTo=this.value" style="${dateSt};border:1px solid ${border};background:#fff"></div>
+        <div style="display:flex;flex-direction:row;flex-wrap:wrap;gap:3px;align-items:stretch;min-width:0;justify-content:stretch">${taperBtn}${removeBtn}</div>
       </div>
-      ${instruction ? `<div style="margin-top:7px;padding:7px 10px;background:${opts.instructionBg || '#f7faff'};border-radius:8px;font-size:10px;line-height:1.45;color:${opts.instructionColor || '#24364f'}">${instruction.replace(/</g,'&lt;')}</div>` : ''}
+      ${instruction ? `<div style="margin-top:5px;padding:5px 8px;background:${opts.instructionBg || '#f7faff'};border-radius:6px;font-size:9px;line-height:1.4;color:${opts.instructionColor || '#24364f'}">${instruction.replace(/</g,'&lt;')}</div>` : ''}
     </div>`;
   };
 
-  el.innerHTML = `<div style="display:flex;flex-direction:column;gap:10px">
+  el.innerHTML = `<div style="display:flex;flex-direction:column;gap:8px;width:100%;max-width:100%;min-width:0;box-sizing:border-box">
+    <div style="font-size:8.5px;color:var(--g1);line-height:1.35;padding:0 2px 2px"><strong style="color:var(--tx)">Taper:</strong> use <strong>＋Tap</strong> on a row — each step uses the <em>same duration</em> as the main medicine; <em>From/To</em> dates continue the day after the previous step ends.</div>
     ${RX_DRUGS.map((d,i)=>{
       const taperRows = ensureRxTaperRows(d);
       const plainLine = d.lang&&d.lang[lang] ? String(d.lang[lang]) : '';
-      return `<div class="rx-drug-row" style="border:1px solid var(--g5);border-radius:12px;overflow:hidden;background:#fff">
+      const btnTap = 'flex:1;min-width:44px;font-weight:800;font-size:8px;white-space:nowrap;padding:4px 3px;line-height:1.1';
+      const btnX = 'flex:0 0 auto;min-width:26px;font-size:10px;padding:4px 5px;line-height:1';
+      return `<div class="rx-drug-row" style="border:1px solid var(--g5);border-radius:10px;background:#fff;max-width:100%;min-width:0;box-sizing:border-box;overflow-x:auto;-webkit-overflow-scrolling:touch">
+        <div style="min-width:0;width:100%;max-width:100%">
         ${gridHead}
         ${medicineRow(d, i, {
           prefix:`RX_DRUGS[${i}]`,
           badge:`${i+1}`,
-          taperBtn:`<button type="button" class="btn btn-xs btn-outline" style="width:100%;font-weight:800;font-size:10px;white-space:nowrap;padding:6px 8px" onclick="addTaperRow(${i})">Taper</button>`,
-          removeBtn:`<button type="button" class="btn btn-xs btn-gray" onclick="removeDrug(${i})" title="Remove">✕</button>`,
+          taperBtn:`<button type="button" class="btn btn-xs btn-outline" style="${btnTap}" onclick="addTaperRow(${i})" title="Add taper: lower frequency, same days as main, dates chain after this row">＋Tap</button>`,
+          removeBtn:`<button type="button" class="btn btn-xs btn-gray" onclick="removeDrug(${i})" title="Remove medicine" style="${btnX}">✕</button>`,
           instruction:plainLine,
           noTopBorder:true
         })}
-        ${taperRows.map((tap, tapIdx)=>`<div style="margin-top:4px;border-top:1px solid rgba(255,149,0,.28)">${medicineRow(d, i, {
+        ${taperRows.map((tap, tapIdx)=>`<div style="margin-top:2px;border-top:1px solid rgba(255,149,0,.28)">${medicineRow(d, i, {
           prefix:`RX_DRUGS[${i}].taperRows[${tapIdx}]`,
-          heading:rxDrugTradeName(d) || d.name || '',
-          subheading:rxDrugGenericName(d) || '',
           dt: tap.drugType || tap.type || d.drugType || d.type || 'Tablet',
           eye0: ((tap.eye && tap.eye[0]) || (d.eye && d.eye[0]) || 'Oral'),
           freq: tap.freq || '',
@@ -9373,15 +9378,18 @@ function renderRxDrugs() {
           dateTo: tap.dateTo || '',
           isTaperSegment:true,
           parentMainDur:d.dur || '',
-          readonlyName:true,
+          readonlyName:false,
+          showName:false,
+          rowLabel:`↓ Step ${tapIdx + 1}`,
           showBadge:false,
           bg:'#fff7eb',
           border:'var(--orange)',
           headingColor:'#8a4200',
-          taperBtn:`<button type="button" class="btn btn-xs btn-outline" style="width:100%;font-weight:800;font-size:10px;white-space:nowrap;padding:6px 8px" onclick="addTaperRow(${i}, null, ${tapIdx})">Taper</button>`,
-          removeBtn:`<button type="button" class="btn btn-xs btn-gray" onclick="clearTaperRow(${i}, ${tapIdx})">✕</button>`,
+          taperBtn:`<button type="button" class="btn btn-xs btn-outline" style="${btnTap}" onclick="addTaperRow(${i}, null, ${tapIdx})" title="Add another taper after this step">＋Tap</button>`,
+          removeBtn:`<button type="button" class="btn btn-xs btn-gray" onclick="clearTaperRow(${i}, ${tapIdx})" title="Remove this taper step" style="${btnX}">✕</button>`,
           instruction:''
         })}</div>`).join('')}
+        </div>
       </div>`;
     }).join('')}
   </div>`;
