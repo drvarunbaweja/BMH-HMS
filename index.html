@@ -2804,20 +2804,16 @@
 </div>
 <div class="page" id="pg-tpa">
 <div class="sg4">
-  <div class="sc blue"><div class="sc-lbl">Total Claimed MTD</div><div class="sc-val blue">₹12.4L</div></div>
-  <div class="sc green"><div class="sc-lbl">Received</div><div class="sc-val green">₹9.2L</div></div>
-  <div class="sc orange"><div class="sc-lbl">Pending Receipt</div><div class="sc-val orange">₹2.8L</div></div>
-  <div class="sc red"><div class="sc-lbl">Rejected</div><div class="sc-val red">₹0.4L</div></div>
+  <div class="sc blue"><div class="sc-lbl">Total Claimed MTD</div><div class="sc-val blue" id="tpa-total-claimed">₹0</div></div>
+  <div class="sc green"><div class="sc-lbl">Received</div><div class="sc-val green" id="tpa-total-received">₹0</div></div>
+  <div class="sc orange"><div class="sc-lbl">Pending Receipt</div><div class="sc-val orange" id="tpa-total-pending">₹0</div></div>
+  <div class="sc red"><div class="sc-lbl">Rejected</div><div class="sc-val red" id="tpa-total-rejected">₹0</div></div>
 </div>
 <div class="card" style="margin-bottom:14px">
   <div class="card-hd"><div class="card-title">TPA / Cashless Case Tracker</div><button class="btn btn-gold btn-sm" onclick="showToast('New pre-auth form opened ✓','i')">+ New Pre-auth</button></div>
   <div style="overflow-x:auto">
     <table style="min-width:800px"><thead><tr><th>Patient</th><th>Insurer</th><th>Pre-auth No.</th><th>Procedure</th><th>Claimed ₹</th><th>Approved ₹</th><th>Received ₹</th><th>Pending ₹</th><th>Status</th></tr></thead>
-    <tbody>
-      <tr><td><div style="font-weight:800;font-size:12px">Ramesh Patil</div><div style="font-family:var(--mono);font-size:9px;color:var(--bmh-teal)">BMSH-460801</div></td><td><span class="badge bd-green">PMJAY</span></td><td style="font-family:var(--mono);font-size:10px">PA-2025-0442</td><td>PMICS + IOL</td><td><input type="number" value="40000" style="width:80px;font-size:11.5px" oninput="calcPend(this)"></td><td><input type="number" value="38000" style="width:80px;font-size:11.5px" oninput="calcPend(this)"></td><td><input type="number" value="38000" style="width:80px;font-size:11.5px" oninput="calcPend(this)"></td><td class="tpa-p"><span style="font-weight:900;color:var(--green)">₹0</span></td><td><span class="badge bd-green">Settled ✓</span></td></tr>
-      <tr><td><div style="font-weight:800;font-size:12px">Geeta Rao</div></td><td><span class="badge bd-purple">CGHS</span></td><td style="font-family:var(--mono);font-size:10px">PA-2025-0443</td><td>Trabeculectomy</td><td><input type="number" value="55000" style="width:80px;font-size:11.5px" oninput="calcPend(this)"></td><td><input type="number" value="52000" style="width:80px;font-size:11.5px" oninput="calcPend(this)"></td><td><input type="number" value="0" style="width:80px;font-size:11.5px" oninput="calcPend(this)"></td><td class="tpa-p"><span style="font-weight:900;color:var(--orange)">₹52,000</span></td><td><span class="badge bd-orange">Pending</span></td></tr>
-      <tr><td><div style="font-weight:800;font-size:12px">Test Patient B</div><div style="font-family:var(--mono);font-size:9px;color:var(--bmh-teal)">BMSH-000002</div></td><td><span class="badge bd-blue">CGHS</span></td><td style="font-family:var(--mono);font-size:10px">PA-2025-0444</td><td>Glaucoma OPD</td><td><input type="number" value="1200" style="width:80px;font-size:11.5px" oninput="calcPend(this)"></td><td><input type="number" value="1200" style="width:80px;font-size:11.5px" oninput="calcPend(this)"></td><td><input type="number" value="0" style="width:80px;font-size:11.5px" oninput="calcPend(this)"></td><td class="tpa-p"><span style="font-weight:900;color:var(--orange)">₹1,200</span></td><td><span class="badge bd-orange">Pending</span></td></tr>
-    </tbody></table>
+    <tbody id="tpa-case-body"></tbody></table>
   </div>
 </div>
 </div>
