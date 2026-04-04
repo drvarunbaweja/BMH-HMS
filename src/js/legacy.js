@@ -1220,15 +1220,23 @@ function openPatient(bmhId) {
   syncSelectedInvestigationCheckboxes && syncSelectedInvestigationCheckboxes();
   renderOeInvOrderedList && renderOeInvOrderedList();
   renderInvestigationOrders && renderInvestigationOrders();
+  renderCurrentPatientInvestigationUploads && renderCurrentPatientInvestigationUploads();
+  renderOphthoRecap && renderOphthoRecap();
 
   // ── 4. Navigate to dept ────────────────────────────────────────
   const deptPage = { ophtho:'ophtho', obg:'obg', psych:'psych', skin:'skin' }[p.dept] || 'ophtho';
   nav(deptPage, null);
 
+  if(p.dept === 'ophtho' && p.lastVisit && typeof p.lastVisit === 'object') {
+    populateOphthoForm(p.lastVisit);
+  }
+
   // ── 5. Load past visits list + try to reload today's visit ─────
   setTimeout(() => {
     loadPastVisits(p.bmhId, p.dept);
     if(p.dept === 'ophtho') loadTodayVisitIntoForm(p.bmhId);
+    renderCurrentPatientInvestigationUploads && renderCurrentPatientInvestigationUploads();
+    renderOphthoRecap && renderOphthoRecap();
   }, 300);
 }
 
@@ -1398,6 +1406,11 @@ function populateOphthoForm(v) {
     if(typeof RX_DRUGS !== 'undefined') { RX_DRUGS.length = 0; v.rx.forEach(d=>RX_DRUGS.push(d)); }
     typeof renderRxDrugs === 'function' && renderRxDrugs();
   }
+  if(window.CURRENT_PATIENT) {
+    window.CURRENT_PATIENT.lastVisit = JSON.parse(JSON.stringify(v || {}));
+  }
+  renderCurrentPatientInvestigationUploads && renderCurrentPatientInvestigationUploads(Array.isArray(v.investigations) ? v.investigations : []);
+  renderOphthoRecap && renderOphthoRecap();
 
   // Advice text
   setV('rx-advice-text', v.advice || '');
@@ -1856,9 +1869,9 @@ function buildOphthoCaseSheetHtml() {
       <td style="border:1px solid #aaa;padding:2px 3px;font-size:7px;line-height:1.18">${escHtml(rx)}</td>
     </tr>`;
   }).join('');
-  const examHead = (label, bg, fg) => `<th style="border:1px solid #555;padding:4px 3px;font-size:8px;background:${bg};color:${fg};text-transform:uppercase;letter-spacing:.2px">${label}</th>`;
-  const examCell = (v) => `<td style="text-align:center;padding:5px 4px;border:1px solid #777;font-size:8.5px;font-weight:700;line-height:1.2">${escHtml(v)}</td>`;
-  const examBlank = () => `<td style="text-align:center;padding:7px 4px;border:1px solid #777;font-size:8px;font-weight:700;line-height:1.2;color:#666">____________</td>`;
+  const examHead = (label, bg, fg) => `<th style="border:1px solid #555;padding:5px 3px;font-size:8.6px;background:${bg};color:${fg};text-transform:uppercase;letter-spacing:.2px">${label}</th>`;
+  const examCell = (v) => `<td style="text-align:center;padding:6px 4px;border:1px solid #777;font-size:9.3px;font-weight:700;line-height:1.2">${escHtml(v)}</td>`;
+  const examBlank = () => `<td style="text-align:center;padding:8px 4px;border:1px solid #777;font-size:8.8px;font-weight:700;line-height:1.2;color:#666">____________</td>`;
   const examTableHtml = `<table style="width:100%;border-collapse:collapse;table-layout:fixed;margin-top:3px">
 <colgroup>
   <col style="width:6.5%"><col style="width:6.5%"><col style="width:6.5%"><col style="width:6.5%">
@@ -1909,8 +1922,8 @@ function buildOphthoCaseSheetHtml() {
 </tbody>
 </table>
 <div style="font-size:8.2px;margin-top:5px;line-height:1.35"><b>Colour vision:</b> OD ${escHtml(cvOD)} · OS ${escHtml(cvOS)}</div>`;
-  const tdIop = (v) => `<td style="text-align:center;padding:5px 4px;border:1px solid #777;font-size:8.3px;font-weight:700;line-height:1.2">${escHtml(v)}</td>`;
-  const iopTableHtml = `<table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:8.2px;line-height:1.18;margin-top:3px">
+  const tdIop = (v) => `<td style="text-align:center;padding:6px 4px;border:1px solid #777;font-size:9px;font-weight:700;line-height:1.2">${escHtml(v)}</td>`;
+  const iopTableHtml = `<table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:8.8px;line-height:1.18;margin-top:3px">
 <thead><tr style="background:#eef1f6">
   <th style="border:1px solid #777;padding:4px 5px;width:20%">Method</th>
   <th style="border:1px solid #777;padding:4px 5px">OD</th>
@@ -1953,7 +1966,7 @@ function buildOphthoCaseSheetHtml() {
 </tr>
 </tbody>
 </table>`;
-  const ocularField = (label, val) => `<tr><td style="font-size:7.2px;font-weight:700;padding:2px 3px;border:1px solid #bbb;width:23%;vertical-align:top;background:#f2f2f2;line-height:1.18">${escHtml(label)}</td><td style="font-size:7.5px;padding:2px 3px;border:1px solid #bbb;word-break:break-word;line-height:1.22">${escHtml(val) || '—'}</td></tr>`;
+  const ocularField = (label, val) => `<tr><td style="font-size:8px;font-weight:700;padding:3px 4px;border:1px solid #bbb;width:19%;vertical-align:top;background:#f2f2f2;line-height:1.2">${escHtml(label)}</td><td style="font-size:8.6px;padding:3px 4px;border:1px solid #bbb;word-break:break-word;line-height:1.24">${escHtml(val) || '—'}</td></tr>`;
   const fieldLinePrint = (label, val) => ocularField(label, val);
   const slJoin = (struct, eye) => (slData[struct]?.[eye] || []).join(', ');
   const anteriorPrint = (eye) => `<table style="border-collapse:collapse;width:100%">${fieldLinePrint('Lids/Lashes', slJoin('Lids/Lashes', eye))}${fieldLinePrint('Conjunctiva', slJoin('Conjunctiva', eye))}${fieldLinePrint('Cornea', slJoin('Cornea', eye))}${fieldLinePrint('Iris / Pupil', [slJoin('Iris', eye), slJoin('Pupil', eye)].filter(Boolean).join(' · '))}${fieldLinePrint('A/C', slJoin('AC', eye))}${fieldLinePrint('Lens', slJoin('Lens', eye))}</table>`;
@@ -1978,28 +1991,28 @@ function buildOphthoCaseSheetHtml() {
     + '<div style="font-size:6.4px;color:#555;margin-top:2px;line-height:1.1">Ocular health (diagram)</div></div>';
   const ocularBlock = `
 <div style="margin-top:3px;page-break-inside:avoid">
-<h2 style="font-size:9px;margin:2px 0 1px;padding:0">Slit lamp &amp; fundus</h2>
-<div style="display:grid;grid-template-columns:minmax(0,.84fr) 246px minmax(0,.84fr);grid-template-rows:auto auto;gap:3px 4px;align-items:start;width:100%">
+<h2 style="font-size:10.6px;margin:2px 0 1px;padding:0">Slit lamp &amp; fundus</h2>
+<div style="display:grid;grid-template-columns:minmax(0,.74fr) 298px minmax(0,.74fr);grid-template-rows:auto auto;gap:3px 4px;align-items:start;width:100%">
   <div style="grid-column:1;grid-row:1;min-width:0">
-    <div style="font-size:8.4px;font-weight:900;margin:0 0 1px;color:#1a4a8c">${lblEye('od')} — Ant.</div>
+    <div style="font-size:9.4px;font-weight:900;margin:0 0 1px;color:#1a4a8c">${lblEye('od')} — Ant.</div>
     ${anteriorPrint('od')}
   </div>
   <div style="grid-column:3;grid-row:1;min-width:0">
-    <div style="font-size:8.4px;font-weight:900;margin:0 0 1px;color:#1a4a8c">${lblEye('od')} — Post.</div>
+    <div style="font-size:9.4px;font-weight:900;margin:0 0 1px;color:#1a4a8c">${lblEye('od')} — Post.</div>
     ${posteriorPrint('od')}
   </div>
   <div style="grid-column:1;grid-row:2;min-width:0">
-    <div style="font-size:8.4px;font-weight:900;margin:0 0 1px;color:#1a7a4a">${lblEye('os')} — Ant.</div>
+    <div style="font-size:9.4px;font-weight:900;margin:0 0 1px;color:#1a7a4a">${lblEye('os')} — Ant.</div>
     ${anteriorPrint('os')}
   </div>
   <div style="grid-column:3;grid-row:2;min-width:0">
-    <div style="font-size:8.4px;font-weight:900;margin:0 0 1px;color:#1a7a4a">${lblEye('os')} — Post.</div>
+    <div style="font-size:9.4px;font-weight:900;margin:0 0 1px;color:#1a7a4a">${lblEye('os')} — Post.</div>
     ${posteriorPrint('os')}
   </div>
-  <div style="grid-column:2;grid-row:1 / span 2;align-self:center;justify-self:center;padding:4px;border:1px solid #333;border-radius:3px;background:#fff;max-width:252px;width:100%">
-    <div style="font-size:7.8px;font-weight:900;text-align:center;margin-bottom:2px;line-height:1.18">Lids · Cornea · Lens · Fundus</div>
+  <div style="grid-column:2;grid-row:1 / span 2;align-self:center;justify-self:center;padding:4px;border:1px solid #333;border-radius:3px;background:#fff;max-width:304px;width:100%">
+    <div style="font-size:8.8px;font-weight:900;text-align:center;margin-bottom:2px;line-height:1.18">Lids · Cornea · Lens · Fundus</div>
     ${ocularDiagramsHtml}
-    ${slNotes ? `<div style="font-size:7px;color:#222;margin-top:3px;text-align:left;line-height:1.18;white-space:pre-wrap;border-top:1px solid #ddd;padding-top:2px">${escHtml(slNotes)}</div>` : ''}
+    ${slNotes ? `<div style="font-size:7.9px;color:#222;margin-top:3px;text-align:left;line-height:1.2;white-space:pre-wrap;border-top:1px solid #ddd;padding-top:2px">${escHtml(slNotes)}</div>` : ''}
   </div>
 </div>
 </div>`;
@@ -2007,20 +2020,20 @@ function buildOphthoCaseSheetHtml() {
   // ── build HTML ────────────────────────────────────────────────────────
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Case Sheet — ${ptName}</title><style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-body{font-family:Arial,Helvetica,sans-serif;color:#111;padding:1.1mm 1.8mm;font-size:9.8px;line-height:1.22}
+body{font-family:Arial,Helvetica,sans-serif;color:#111;padding:1mm 1.5mm;font-size:10.7px;line-height:1.24}
 @page{size:A4 portrait;margin:1.5mm}
 @media print{body{padding:0}}
-h1{font-size:12.8px;font-weight:900;text-align:center;letter-spacing:.45px;text-transform:uppercase;border-bottom:1.5px solid #111;padding-bottom:2px;margin-bottom:3px}
-h2{font-size:9.6px;font-weight:900;text-transform:uppercase;letter-spacing:.3px;border-bottom:1px solid #111;padding-bottom:1px;margin-bottom:2px;margin-top:4px}
-table{width:100%;border-collapse:collapse;font-size:8.8px}
+h1{font-size:13.6px;font-weight:900;text-align:center;letter-spacing:.45px;text-transform:uppercase;border-bottom:1.5px solid #111;padding-bottom:2px;margin-bottom:3px}
+h2{font-size:10.4px;font-weight:900;text-transform:uppercase;letter-spacing:.3px;border-bottom:1px solid #111;padding-bottom:1px;margin-bottom:2px;margin-top:4px}
+table{width:100%;border-collapse:collapse;font-size:9.4px}
 th,td{border:1px solid #555;padding:2px 3px}
-th{background:#eee;font-weight:900;text-align:center;font-size:8.1px}
+th{background:#eee;font-weight:900;text-align:center;font-size:8.8px}
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:4px}
-.label{font-weight:700;font-size:6px;color:#555;text-transform:uppercase}
-.val{font-size:7px;font-weight:900}
+.label{font-weight:700;font-size:6.9px;color:#555;text-transform:uppercase}
+.val{font-size:8px;font-weight:900}
 .circles{display:flex;flex-wrap:wrap;gap:2px;justify-content:center;margin:2px 0}
-.phx-table td{padding:1px 3px;font-size:6px;border:1px solid #aaa}
-.dx{display:inline-block;border:1px solid #333;border-radius:8px;padding:1px 5px;margin:1px;font-size:6px;font-weight:700}
+.phx-table td{padding:1px 3px;font-size:6.6px;border:1px solid #aaa}
+.dx{display:inline-block;border:1px solid #333;border-radius:8px;padding:1px 5px;margin:1px;font-size:6.8px;font-weight:700}
 .sig-line{border-bottom:1px solid #555;margin-top:8px;width:120px;display:inline-block}
 </style></head><body>
 
@@ -2032,14 +2045,14 @@ th{background:#eee;font-weight:900;text-align:center;font-size:8.1px}
         <img src="${escHtml(smallLogoSrc)}" alt="Baweja Hospital" style="width:40px;height:40px;object-fit:contain" onerror="this.style.display='none'">
       </div>
       <div style="flex:1;min-width:0;text-align:center">
-        <h1 style="font-size:11.6px;font-weight:900;letter-spacing:.45px;text-transform:uppercase;margin:0 0 3px 0;padding:0;border:none">Baweja Multispeciality Hospital — OPD</h1>
-        <div style="font-size:8.6px;line-height:1.42"><b>Today:</b> ${escHtml(today)} · <b>Pt:</b> ${escHtml(ptName)} · <b>Age/Sex:</b> ${escHtml(String(ptAge || '—'))}${ptSex ? '/' + escHtml(ptSex) : ''} · <b>Centre:</b> ${centre === 'CHD' ? 'CHD' : 'RPR'} · <b>Dr:</b> ${escHtml(drName)}</div>
-        <div style="font-size:7.8px;line-height:1.35;margin-top:2px"><b>Ph:</b> ${escHtml(ptMob || '—')} · <b>Addr:</b> ${escHtml(ptAddr || '—')} · <b>Printed:</b> ${escHtml(printDate)}</div>
+        <h1 style="font-size:12.4px;font-weight:900;letter-spacing:.45px;text-transform:uppercase;margin:0 0 3px 0;padding:0;border:none">Baweja Multispeciality Hospital — OPD</h1>
+        <div style="font-size:10px;line-height:1.42"><b>Today:</b> ${escHtml(today)} · <b>Pt:</b> ${escHtml(ptName)} · <b>Age/Sex:</b> ${escHtml(String(ptAge || '—'))}${ptSex ? '/' + escHtml(ptSex) : ''} · <b>Centre:</b> ${centre === 'CHD' ? 'CHD' : 'RPR'} · <b>Dr:</b> ${escHtml(drName)}</div>
+        <div style="font-size:9.2px;line-height:1.35;margin-top:2px"><b>Ph:</b> ${escHtml(ptMob || '—')} · <b>Addr:</b> ${escHtml(ptAddr || '—')} · <b>Printed:</b> ${escHtml(printDate)}</div>
       </div>
     </div>
     <div style="text-align:right;flex-shrink:0;padding:1px 2px 1px 8px;border-left:2px solid #1A3C6E;min-width:92px">
-      <div style="font-size:14px;font-weight:900;font-family:Consolas,ui-monospace,monospace;letter-spacing:.04em;line-height:1">${escHtml(ptId || '—')}</div>
-      <div style="font-size:6.4px;font-weight:800;color:#1A3C6E;text-transform:uppercase;margin-top:2px">BMH ID</div>
+      <div style="font-size:15.8px;font-weight:900;font-family:Consolas,ui-monospace,monospace;letter-spacing:.04em;line-height:1">${escHtml(ptId || '—')}</div>
+      <div style="font-size:7px;font-weight:800;color:#1A3C6E;text-transform:uppercase;margin-top:2px">BMH ID</div>
     </div>
   </div>
 </div>
@@ -2047,18 +2060,18 @@ th{background:#eee;font-weight:900;text-align:center;font-size:8.1px}
 <!-- Personal history | Chief complaints -->
 <div style="display:grid;grid-template-columns:minmax(0,30%) minmax(0,70%);gap:5px;align-items:stretch;margin-bottom:4px">
   <div style="border:1px solid #bbb;border-radius:4px;padding:4px 5px;background:#f8f8f8;display:flex;flex-direction:column">
-    <div style="font-size:8.2px;font-weight:900;text-transform:uppercase;letter-spacing:.2px;border-bottom:1px solid #ccc;margin-bottom:2px;padding-bottom:2px;color:#333">Personal history (systemic)</div>
+    <div style="font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.2px;border-bottom:1px solid #ccc;margin-bottom:2px;padding-bottom:2px;color:#333">Personal history (systemic)</div>
     <table style="width:100%;border-collapse:collapse;line-height:1.1;flex:1">
-      <thead><tr style="background:#eaeaea"><th style="border:1px solid #aaa;padding:2px;text-align:left;font-size:7.1px">C</th><th style="border:1px solid #aaa;padding:2px;font-size:7.1px">?</th><th style="border:1px solid #aaa;padding:2px;text-align:left;font-size:7.1px">Dur</th><th style="border:1px solid #aaa;padding:2px;text-align:left;font-size:7.1px">Rx</th></tr></thead>
+      <thead><tr style="background:#eaeaea"><th style="border:1px solid #aaa;padding:2px;text-align:left;font-size:7.7px">C</th><th style="border:1px solid #aaa;padding:2px;font-size:7.7px">?</th><th style="border:1px solid #aaa;padding:2px;text-align:left;font-size:7.7px">Dur</th><th style="border:1px solid #aaa;padding:2px;text-align:left;font-size:7.7px">Rx</th></tr></thead>
       <tbody>${phxRowsHtml}</tbody>
     </table>
-    <div style="font-size:8.1px;line-height:1.34;margin-top:4px;color:#222">
+    <div style="font-size:8.9px;line-height:1.34;margin-top:4px;color:#222">
       <b>Past ocular</b> OD ${escHtml(pohOD)}${pohOdTxt ? ' — ' + escHtml(pohOdTxt) : ''} · OS ${escHtml(pohOS)}${pohOsTxt ? ' — ' + escHtml(pohOsTxt) : ''}<br/>
       <b>Allergy</b> ${escHtml(drugAl)}${drugAlSpec ? ' (' + escHtml(drugAlSpec) + ')' : ''} · <b>Family</b> ${escHtml(famHx || '—')} · <b>Other</b> ${escHtml(othHx || '—')}
     </div>
   </div>
-  <div style="border:1px solid #b8c8dc;border-radius:4px;padding:8px 10px;background:#f2f6fc;font-size:9.8px;line-height:1.5;display:flex;flex-direction:column;min-height:100%">
-    <div style="font-size:10px;font-weight:900;color:#1A3C6E;text-transform:uppercase;margin-bottom:6px;letter-spacing:.2px;border-bottom:1px solid rgba(26,60,110,.2);padding-bottom:4px">Chief complaints &amp; spectacle history</div>
+  <div style="border:1px solid #b8c8dc;border-radius:4px;padding:8px 10px;background:#f2f6fc;font-size:10.4px;line-height:1.5;display:flex;flex-direction:column;min-height:100%">
+    <div style="font-size:10.7px;font-weight:900;color:#1A3C6E;text-transform:uppercase;margin-bottom:6px;letter-spacing:.2px;border-bottom:1px solid rgba(26,60,110,.2);padding-bottom:4px">Chief complaints &amp; spectacle history</div>
     ${chiefComplaintsEnabled ? `<div style="margin-bottom:6px"><b>CC:</b> ${escHtml(ccStr)}</div>` : ''}
     <div><b>Spectacles:</b> ${escHtml(hxSpec)}</div>
     <div><b>Last spectacle change:</b> ${escHtml(hxLastSpec)}</div>
@@ -2067,17 +2080,17 @@ th{background:#eee;font-weight:900;text-align:center;font-size:8.1px}
 </div>
 
 <div style="margin-top:3px">
-  <h2 style="margin:0 0 2px;font-size:8.8px">VA / refraction</h2>
+  <h2 style="margin:0 0 2px;font-size:10.1px">VA / refraction</h2>
   ${examTableHtml}
 </div>
 
 <div style="margin-top:4px;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);gap:6px;align-items:start">
   <div>
-    <h2 style="margin:0 0 2px;font-size:8.8px">IOP</h2>
+    <h2 style="margin:0 0 2px;font-size:10.1px">IOP</h2>
     ${iopTableHtml}
   </div>
   <div>
-    <h2 style="margin:0 0 2px;font-size:8.8px">Gonioscopy & pachymetry</h2>
+    <h2 style="margin:0 0 2px;font-size:10.1px">Gonioscopy & pachymetry</h2>
     ${gonioPachyHtml}
   </div>
 </div>
@@ -2085,29 +2098,29 @@ th{background:#eee;font-weight:900;text-align:center;font-size:8.1px}
 ${ocularBlock}
 
 <!-- DIAGNOSIS & PLAN -->
-<h2 style="font-size:7.5px;margin-top:3px">Diagnosis</h2>
-${dxLines.length ? `<table style="font-size:6.5px">
-<thead><tr style="background:#eee"><th style="width:22px;text-align:center;border:1px solid #555">#</th><th style="text-align:left;border:1px solid #555">Diagnosis (ICD-10)</th></tr></thead>
-<tbody>${dxLines.map((d,i)=>`<tr><td style="text-align:center;border:1px solid #aaa;font-weight:900;padding:1px">${i+1}</td><td style="border:1px solid #aaa;padding:2px 4px;font-weight:600;line-height:1.2">${escHtml(d)}</td></tr>`).join('')}</tbody>
+<h2 style="font-size:10px;margin-top:3px">Diagnosis</h2>
+${dxLines.length ? `<table style="font-size:8.4px">
+<thead><tr style="background:#eee"><th style="width:24px;text-align:center;border:1px solid #555">#</th><th style="text-align:left;border:1px solid #555">Diagnosis (ICD-10)</th></tr></thead>
+<tbody>${dxLines.map((d,i)=>`<tr><td style="text-align:center;border:1px solid #aaa;font-weight:900;padding:2px">${i+1}</td><td style="border:1px solid #aaa;padding:3px 5px;font-weight:600;line-height:1.22">${escHtml(d)}</td></tr>`).join('')}</tbody>
 </table>` : '<div style="font-size:6.5px;color:#666">—</div>'}
-${dxNotes ? `<div style="margin-top:3px;font-size:6.5px;line-height:1.3;border:1px dashed #aaa;border-radius:4px;padding:4px;background:#fafafa"><span style="font-weight:900;font-size:6px;color:#555">Notes</span><div style="margin-top:2px;white-space:pre-wrap">${escHtml(dxNotes)}</div></div>` : ''}
+${dxNotes ? `<div style="margin-top:3px;font-size:8.1px;line-height:1.3;border:1px dashed #aaa;border-radius:4px;padding:4px;background:#fafafa"><span style="font-weight:900;font-size:7px;color:#555">Notes</span><div style="margin-top:2px;white-space:pre-wrap">${escHtml(dxNotes)}</div></div>` : ''}
 
 ${drugs.length?`
-<h2 style="font-size:7.5px;margin-top:3px">Rx</h2>
-<table style="font-size:6px">
+<h2 style="font-size:10px;margin-top:3px">Rx</h2>
+<table style="font-size:8px">
 <thead><tr style="background:#1A3C6E;color:#fff">
-  <th style="width:14px;text-align:center;border:1px solid #1A3C6E;padding:1px">#</th>
-  <th style="border:1px solid #1A3C6E;padding:1px">Drug</th>
-  <th style="text-align:center;width:52px;border:1px solid #1A3C6E;padding:1px">Eye</th>
-  <th style="text-align:center;width:72px;border:1px solid #1A3C6E;padding:1px">Freq</th>
-  <th style="text-align:center;width:48px;border:1px solid #1A3C6E;padding:1px">Dur</th>
+  <th style="width:16px;text-align:center;border:1px solid #1A3C6E;padding:2px">#</th>
+  <th style="border:1px solid #1A3C6E;padding:2px">Drug</th>
+  <th style="text-align:center;width:58px;border:1px solid #1A3C6E;padding:2px">Eye</th>
+  <th style="text-align:center;width:80px;border:1px solid #1A3C6E;padding:2px">Freq</th>
+  <th style="text-align:center;width:54px;border:1px solid #1A3C6E;padding:2px">Dur</th>
 </tr></thead>
 <tbody>${drugs.map((d,i)=>`<tr style="background:${i%2?'#f9f9f9':'#fff'}">
-  <td style="text-align:center;padding:1px 2px;border:1px solid #e0e0e0">${i+1}</td>
-  <td style="padding:1px 3px;border:1px solid #e0e0e0;line-height:1.15"><b>${d.name||''}</b>${d.brand&&d.brand!==d.name?` (${d.brand})`:''}</td>
-  <td style="text-align:center;padding:1px 2px;border:1px solid #e0e0e0">${(d.eye||[]).join(', ')||'—'}</td>
-  <td style="text-align:center;padding:1px 2px;border:1px solid #e0e0e0">${d.freq||'—'}</td>
-  <td style="text-align:center;padding:1px 2px;border:1px solid #e0e0e0">${d.dur||'—'}</td>
+  <td style="text-align:center;padding:2px 3px;border:1px solid #e0e0e0">${i+1}</td>
+  <td style="padding:2px 4px;border:1px solid #e0e0e0;line-height:1.18"><b>${d.name||''}</b>${d.brand&&d.brand!==d.name?` (${d.brand})`:''}</td>
+  <td style="text-align:center;padding:2px 3px;border:1px solid #e0e0e0">${(d.eye||[]).join(', ')||'—'}</td>
+  <td style="text-align:center;padding:2px 3px;border:1px solid #e0e0e0">${d.freq||'—'}</td>
+  <td style="text-align:center;padding:2px 3px;border:1px solid #e0e0e0">${d.dur||'—'}</td>
 </tr>`).join('')}</tbody>
 </table>`:''}
 
@@ -7911,14 +7924,25 @@ function currentPatientVisitInvestigationBucket() {
   if(!Array.isArray(pt.lastVisit.investigations)) pt.lastVisit.investigations = [];
   return { pt, list: pt.lastVisit.investigations };
 }
+function renderCurrentPatientInvestigationUploads(entries) {
+  const list = document.getElementById('bio-uploads-list');
+  if(!list) return;
+  const bucket = currentPatientVisitInvestigationBucket();
+  const items = Array.isArray(entries) ? entries : (bucket?.list || []);
+  if(!items.length) {
+    list.innerHTML = '<div style="padding:12px;border:1px dashed var(--g4);border-radius:10px;color:var(--g1);font-size:11px;background:#fff">No investigation files saved yet for this patient.</div>';
+    return;
+  }
+  list.innerHTML = '';
+  items.slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))).forEach(entry => addBioUploadCard(entry, list));
+}
 
 function handleInvestigationUpload(input) {
   const files = Array.from(input.files);
   const bmhId = window.CURRENT_PATIENT?.bmhId || document.getElementById('ophtho-pt-uid')?.textContent || 'unknown';
-  const list = document.getElementById('bio-uploads-list');
   const visitBucket = currentPatientVisitInvestigationBucket();
   files.forEach(file => {
-    const isImage = file.type.startsWith('image/');
+    const isImage = file.type.startsWith('image/') || /\.(jpe?g|png|gif|bmp|webp|tiff?)$/i.test(file.name || '');
     if(isImage) {
       // Compress image to max 800px wide, quality 0.7 before storage
       const reader = new FileReader();
@@ -7936,15 +7960,16 @@ function handleInvestigationUpload(input) {
           const key = 'inv_' + Date.now();
           const entry = { key, name: file.name, type: 'image/jpeg', data: compressed, bmhId, date: new Date().toISOString(), sizKB };
           // Save to Firebase
-          if(window.fbSet) fbSet(`investigations/${bmhId}/${key}`, { key, name: file.name, type: 'image/jpeg', bmhId, date: entry.date, sizKB, data: compressed });
+          if(window.fbSet) fbSet(`investigations/${bmhId}/${key}`, { key, name: file.name, type: 'image/jpeg', bmhId, date: entry.date, sizKB, data: compressed }).catch(()=>{});
           if(visitBucket) {
-            visitBucket.list.push({ key, name: file.name, type: 'image/jpeg', date: entry.date, sizKB });
+            visitBucket.list = visitBucket.list || [];
+            visitBucket.list.unshift({ key, name: file.name, type: 'image/jpeg', date: entry.date, sizKB, bmhId });
             fbUpdate && fbUpdate('patients/' + visitBucket.pt.bmhId, { lastVisit: visitBucket.pt.lastVisit }).catch(()=>{});
           }
           // Store compressed data in session for display
           window.INV_UPLOADS = window.INV_UPLOADS || {};
           window.INV_UPLOADS[key] = entry;
-          addBioUploadCard(entry, list);
+          renderCurrentPatientInvestigationUploads && renderCurrentPatientInvestigationUploads();
           showToast(`📎 ${file.name} compressed to ${sizKB} KB ✓`, 's');
         };
         img.src = e.target.result;
@@ -7957,14 +7982,15 @@ function handleInvestigationUpload(input) {
         const key = 'inv_' + Date.now();
         const sizKB = Math.round(file.size / 1024);
         const entry = { key, name: file.name, type: file.type, data: e.target.result, bmhId, date: new Date().toISOString(), sizKB };
-        if(window.fbSet) fbSet(`investigations/${bmhId}/${key}`, { key, name: file.name, type: file.type, bmhId, date: entry.date, sizKB, data: e.target.result });
+        if(window.fbSet) fbSet(`investigations/${bmhId}/${key}`, { key, name: file.name, type: file.type, bmhId, date: entry.date, sizKB, data: e.target.result }).catch(()=>{});
         if(visitBucket) {
-          visitBucket.list.push({ key, name: file.name, type: file.type, date: entry.date, sizKB });
+          visitBucket.list = visitBucket.list || [];
+          visitBucket.list.unshift({ key, name: file.name, type: file.type, date: entry.date, sizKB, bmhId });
           fbUpdate && fbUpdate('patients/' + visitBucket.pt.bmhId, { lastVisit: visitBucket.pt.lastVisit }).catch(()=>{});
         }
         window.INV_UPLOADS = window.INV_UPLOADS || {};
         window.INV_UPLOADS[key] = entry;
-        addBioUploadCard(entry, list);
+        renderCurrentPatientInvestigationUploads && renderCurrentPatientInvestigationUploads();
         showToast(`📎 ${file.name} (${sizKB} KB) saved ✓`, 's');
       };
       reader.readAsDataURL(file);
@@ -7980,7 +8006,7 @@ function addBioUploadCard(entry, list) {
   const icon = entry.type?.startsWith('image') ? '🖼️' : '📄';
   d.innerHTML = `<span style="font-size:20px">${icon}</span>
     <div style="flex:1"><div style="font-size:12px;font-weight:700">${entry.name}</div><div style="font-size:10px;color:var(--g1)">${entry.sizKB} KB · ${new Date(entry.date).toLocaleDateString('en-IN')}</div></div>
-    ${entry.type?.startsWith('image') ? `<button onclick="window.open(window.INV_UPLOADS?.['${entry.key}']?.data,'_blank')" style="background:var(--blue-lt);color:var(--blue);border:1px solid var(--blue);border-radius:5px;padding:3px 8px;font-size:10px;cursor:pointer">👁 View</button>` : ''}`;
+    <button onclick="viewStoredInvestigation('${entry.bmhId || (window.CURRENT_PATIENT?.bmhId || '')}','${entry.key}')" style="background:var(--blue-lt);color:var(--blue);border:1px solid var(--blue);border-radius:5px;padding:3px 8px;font-size:10px;cursor:pointer">👁 View</button>`;
   list.prepend(d);
 }
 function viewStoredInvestigation(bmhId, key) {
@@ -8446,8 +8472,8 @@ function renderRxDrugs() {
   });
 
   const gridCols = isOphtho
-    ? 'minmax(230px,1.6fr) minmax(120px,.9fr) minmax(160px,1fr) minmax(175px,1fr) minmax(140px,.9fr) minmax(135px,.9fr) minmax(135px,.9fr) 84px'
-    : 'minmax(250px,1.7fr) minmax(120px,.9fr) minmax(160px,1fr) minmax(175px,1fr) minmax(140px,.9fr) minmax(135px,.9fr) minmax(135px,.9fr) 84px';
+    ? 'minmax(210px,1.55fr) minmax(105px,.82fr) minmax(135px,.88fr) minmax(150px,.92fr) minmax(115px,.78fr) minmax(118px,.78fr) minmax(118px,.78fr) 108px'
+    : 'minmax(225px,1.6fr) minmax(108px,.82fr) minmax(138px,.9fr) minmax(150px,.92fr) minmax(118px,.78fr) minmax(118px,.78fr) minmax(118px,.78fr) 108px';
   const gridHead = `
     <div style="display:grid;grid-template-columns:${gridCols};gap:8px;padding:6px 8px;background:var(--g6);border-radius:10px 10px 0 0;font-size:9px;font-weight:900;color:var(--g1);text-transform:uppercase;letter-spacing:.45px">
       <div>Name</div>
@@ -8497,7 +8523,7 @@ function renderRxDrugs() {
         <div><select onchange="${prefix}.dur=this.value;syncRxDrugDates(${i})" style="font-size:10.5px;padding:7px;width:100%;border-radius:8px;border:1px solid ${border};background:#fff">${durOpts.map(f=>`<option${dur===f?' selected':''}>${f}</option>`).join('')}</select></div>
         <div><input type="date" value="${dateFrom||''}" onchange="${prefix}.dateFrom=this.value;syncRxDrugDates(${i})" style="font-size:10.5px;padding:7px;border-radius:8px;border:1px solid ${border};width:100%;background:#fff"></div>
         <div><input type="date" value="${dateTo||''}" onchange="${prefix}.dateTo=this.value" style="font-size:10.5px;padding:7px;border-radius:8px;border:1px solid ${border};width:100%;background:#fff"></div>
-        <div style="display:flex;flex-direction:column;gap:6px">${taperBtn}${removeBtn}</div>
+        <div style="display:flex;flex-direction:column;gap:6px;align-items:stretch;min-width:0">${taperBtn}${removeBtn}</div>
       </div>
       ${instruction ? `<div style="margin-top:7px;padding:7px 10px;background:${opts.instructionBg || '#f7faff'};border-radius:8px;font-size:10px;line-height:1.45;color:${opts.instructionColor || '#24364f'}">${instruction.replace(/</g,'&lt;')}</div>` : ''}
     </div>`;
@@ -8512,7 +8538,7 @@ function renderRxDrugs() {
         ${medicineRow(d, i, {
           prefix:`RX_DRUGS[${i}]`,
           badge:`${i+1}`,
-          taperBtn:`<button type="button" class="btn btn-xs btn-outline" style="width:100%;font-weight:800;font-size:10px" onclick="addTaperRow(${i}, RX_DRUGS[${i}].dur || '1 week')">Taper</button>`,
+          taperBtn:`<button type="button" class="btn btn-xs btn-outline" style="width:100%;font-weight:800;font-size:10px;white-space:nowrap;padding:6px 8px" onclick="addTaperRow(${i}, RX_DRUGS[${i}].dur || '1 week')">Taper</button>`,
           removeBtn:`<button type="button" class="btn btn-xs btn-gray" onclick="removeDrug(${i})" title="Remove">✕</button>`,
           instruction:plainLine,
           noTopBorder:true
@@ -8533,7 +8559,7 @@ function renderRxDrugs() {
           showName:false,
           showGeneric:false,
           rowLabel:'Taper',
-          taperBtn:`<button type="button" class="btn btn-xs btn-outline" style="width:100%;font-weight:800;font-size:10px" onclick="addTaperRow(${i}, RX_DRUGS[${i}].taperRows[${tapIdx}].dur || '1 week', ${tapIdx})">Taper</button>`,
+          taperBtn:`<button type="button" class="btn btn-xs btn-outline" style="width:100%;font-weight:800;font-size:10px;white-space:nowrap;padding:6px 8px" onclick="addTaperRow(${i}, RX_DRUGS[${i}].taperRows[${tapIdx}].dur || '1 week', ${tapIdx})">Taper</button>`,
           removeBtn:`<button type="button" class="btn btn-xs btn-gray" onclick="clearTaperRow(${i}, ${tapIdx})">✕</button>`,
           instruction:buildRxPlainInstructionLine({ ...d, freq: tap.freq, dur: tap.dur, dateFrom: tap.dateFrom, dateTo: tap.dateTo, taperRows: [] }, lang, (x)=>x ? new Date(Date.parse(x)).toLocaleDateString('en-IN',{day:'2-digit',month:'2-digit',year:'numeric'}) : '—'),
           instructionBg:'#fffaf0',
@@ -12662,6 +12688,7 @@ function buildQCard(p, sno) {
   const waitStr = waitMin < 60 ? waitMin+'m' : Math.floor(waitMin/60)+'h '+( waitMin%60)+'m';
   // Dilation time
   const dilMin = p.dilated && p.dilatedTime ? Math.floor((now - p.dilatedTime)/60000) : 0;
+  const dilLongWait = p.dilated && dilMin >= 30;
   const dilStr = p.dilated ? `💧${dilMin}m` : '';
   // Visit number (count past visits)
   const visitNo = (p.visitCount||1);
@@ -12703,11 +12730,11 @@ function buildQCard(p, sno) {
         ${p.doctor?`<span style="font-size:10px;color:var(--teal);font-weight:700">🩺${p.doctor.replace('Dr. ','Dr.')}</span>`:''}
         ${p.purpose?`<span style="font-size:10px;color:var(--g1)">${p.purpose}</span>`:''}
         ${!p.preRegistered?`<span style="font-size:10px;color:var(--g2)">⏱${waitStr}</span>`:''}
-        ${dilStr?`<span style="font-size:10px;color:var(--blue)">${dilStr}</span>`:''}
+        ${dilStr?`<span style="font-size:10px;color:var(--blue);${dilLongWait?'animation:pulse 1.35s infinite;font-weight:900;':''}">${dilStr}</span>`:''}
       </div>
     </div>
     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0">
-      ${statusBadge}
+      ${p.dilated && dilLongWait ? statusBadge.replace('">💧Dilated',';animation:pulse 1.35s infinite">💧Dilated') : statusBadge}
       <div style="display:flex;gap:3px" onclick="event.stopPropagation()">
         ${p.preRegistered
           ? `<button title="Check In & Collect Fee" style="background:var(--blue);color:#fff;border:none;border-radius:5px;padding:2px 8px;font-size:9px;font-weight:800;cursor:pointer;line-height:1.6;animation:pulse 2s infinite" onclick="checkInPatient('${p.bmhId}')">✅ Check In</button>`
@@ -12742,7 +12769,7 @@ function dilationCellHtml(p) {
   }
   const now = Date.now();
   const dilMin = Math.floor((now - p.dilatedTime)/60000);
-  return `<span style="font-size:10px;font-weight:800;padding:3px 8px;border-radius:8px;background:var(--purple-lt);color:var(--purple)">${dilMin}m elapsed</span>`;
+  return `<span style="font-size:10px;font-weight:800;padding:3px 8px;border-radius:8px;background:var(--purple-lt);color:var(--purple);${dilMin>=30?'animation:pulse 1.35s infinite;':''}">${dilMin}m elapsed</span>`;
 }
 
 /** Table row for Reception Queue tab and Doctor My Queue (valid <tbody> HTML). */
@@ -12756,6 +12783,7 @@ function buildQTableRow(p, sno, opts) {
   const waitMin = p.checkinAt ? Math.floor((now - p.checkinAt)/60000) : 0;
   const waitStr = waitMin < 60 ? waitMin+'m' : Math.floor(waitMin/60)+'h '+(waitMin%60)+'m';
   const dilMin = p.dilated && p.dilatedTime ? Math.floor((now - p.dilatedTime)/60000) : 0;
+  const dilLongWait = p.dilated && dilMin >= 30;
   const vuln = isPatientVulnerable(p);
   const pendingPRs = PAY_REQUESTS.filter(r=>r.bmhId===p.bmhId&&r.status==='pending');
   const pendingAmt = pendingPRs.reduce((s,r)=>s+r.amount,0);
@@ -12772,7 +12800,7 @@ function buildQTableRow(p, sno, opts) {
   const nmEsc = (p.name||'').replace(/'/g,"\\'");
   const docShort = (p.doctor||'—').replace(/^Dr\.\s*/,'');
   const vulnBadge = vuln ? '<span class="q-vuln-badge" title="Vulnerable — elderly (≥65) or flagged">⚠ VUL</span>' : '';
-  return `<tr class="${vuln ? 'row-vulnerable' : ''}" onclick="${onRow}" style="cursor:pointer">
+  return `<tr class="${vuln ? 'row-vulnerable' : ''}" onclick="${onRow}" style="cursor:pointer;${dilLongWait?'animation:pulse 1.45s infinite;':''}">
     <td style="font-weight:900;color:var(--g2)">${sno}</td>
     <td><div style="display:flex;align-items:center;gap:6px"><span style="width:28px;height:28px;border-radius:50%;background:${p.color||'#1A3C6E'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:900;font-size:10px;flex-shrink:0">${p.initials||p.name[0]||'?'}</span>
       <div><div style="font-weight:800;font-size:12.5px;display:flex;align-items:center;flex-wrap:wrap;gap:4px">${p.name}${vulnBadge}</div>
@@ -12783,7 +12811,7 @@ function buildQTableRow(p, sno, opts) {
     <td style="font-size:10px;color:var(--g1);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.purpose||''}">${p.purpose||'—'}</td>
     <td>${dilationCellHtml(p)}</td>
     <td style="font-size:10px;color:var(--g2)">${p.preRegistered?'—':waitStr}</td>
-    <td><span style="font-size:9px;padding:2px 6px;border-radius:6px;background:${statusBg};font-weight:800">${statusTxt}</span></td>
+    <td><span style="font-size:9px;padding:2px 6px;border-radius:6px;background:${statusBg};font-weight:800;${dilLongWait?'box-shadow:0 0 0 1px rgba(88,86,214,.18);':''}">${statusTxt}</span></td>
     <td class="q-actions" onclick="event.stopPropagation()">
       ${p.preRegistered
         ? `<button type="button" title="Check In" style="background:var(--blue);color:#fff;border:none;border-radius:5px;padding:3px 8px;font-size:9px;font-weight:800;cursor:pointer" onclick="checkInPatient('${p.bmhId}')">Check in</button>`
@@ -12969,8 +12997,8 @@ function renderDocQueue() {
         return deptMatch && drMatch && validStatuses(p) && centreMatch(p);
       });
 
-  // Active (waiting, not dilated, not done); pre-registered shown separately at bottom of active
-  const active  = myPts.filter(p => !p.seen && !p.dilated);
+  // Active list keeps all waiting patients visible; dilated patients also remain in dedicated dilated queue.
+  const active  = myPts.filter(p => !p.seen);
   const dilated = myPts.filter(p => p.dilated && !p.seen);
   const done    = myPts.filter(p => p.seen);
   const xrefs   = (window.XREF_LOG||[]).filter(x => !userDept || x.fromDept===userDept || x.toDept===userDept);
@@ -13152,10 +13180,22 @@ function saveVisit(dept) {
     visit.rx = JSON.parse(JSON.stringify(RX_DRUGS || []));
   }
   if(typeof fbSet !== 'function') { showToast('Save not available (offline)', 'w'); return; }
-  fbSet(`visits/${bmhId}/${visitKey}`, visit)
+  const patientPatch = { lastVisit: visit, lastVisitKey: visitKey, lastVisitDate: visit.date, lastDeptVisit: dept };
+  const localPt = window.CURRENT_PATIENT || PATIENTS.find(p => p.bmhId === bmhId);
+  if(localPt) {
+    localPt.lastVisit = JSON.parse(JSON.stringify(visit));
+    localPt.lastVisitKey = visitKey;
+    localPt.lastVisitDate = visit.date;
+  }
+  Promise.all([
+    fbSet(`visits/${bmhId}/${visitKey}`, visit),
+    typeof fbUpdate === 'function' ? fbUpdate('patients/' + bmhId, patientPatch).catch(()=>{}) : Promise.resolve()
+  ])
     .then(() => {
       showToast(`✅ ${ptName} — visit saved (${visit.dateLabel})`, 's');
       if(typeof loadPastVisits === 'function') loadPastVisits(bmhId, dept);
+      renderCurrentPatientInvestigationUploads && renderCurrentPatientInvestigationUploads(Array.isArray(visit.investigations) ? visit.investigations : []);
+      renderOphthoRecap && renderOphthoRecap();
     })
     .catch(e => showToast('Save failed: ' + e.message, 'w'));
 }
@@ -13190,6 +13230,59 @@ function loadPastVisits(bmhId, dept) {
   } else {
     renderVisits({});
   }
+}
+function renderOphthoRecap() {
+  const el = document.getElementById('ophtho-recap-panel');
+  if(!el) return;
+  const pt = window.CURRENT_PATIENT || PATIENTS.find(p => p.bmhId === (document.getElementById('ophtho-pt-uid')?.textContent || '').trim());
+  if(!pt?.bmhId) {
+    el.innerHTML = '<div style="padding:10px;color:var(--g1);font-size:11px">Open a patient to see quick recap.</div>';
+    return;
+  }
+  const txns = (TRANSACTIONS || []).filter(t => t.bmhId === pt.bmhId).slice().sort((a,b)=>new Date(b.date || 0) - new Date(a.date || 0));
+  const prs = (PAY_REQUESTS || []).filter(r => r.bmhId === pt.bmhId).slice().sort((a,b)=>new Date(b.date || 0) - new Date(a.date || 0));
+  const renderWithVisits = (visitsObj) => {
+    const visits = Object.values(visitsObj || {})
+      .filter(v => v && v.dept === 'ophtho')
+      .sort((a,b)=>String(b.date || '').localeCompare(String(a.date || '')))
+      .slice(0, 5);
+    const visitHtml = visits.length ? visits.map(v => {
+      const dx = Array.isArray(v.diagnoses) && v.diagnoses.length ? v.diagnoses.slice(0,2).join(', ') : (v.diagnosisText || '—');
+      const rx = Array.isArray(v.rx) && v.rx.length ? v.rx.slice(0,2).map(d => rxDrugTradeName(d) || d.trade || d.name || 'Drug').join(', ') : 'No prescription';
+      const spec = [v.hxSpectacles, v.hxLastSpec].filter(Boolean).join(' · ') || 'No glasses note';
+      return `<div style="padding:9px 10px;border:1px solid var(--g5);border-radius:10px;background:#fff;margin-bottom:7px">
+        <div style="display:flex;justify-content:space-between;gap:6px;align-items:flex-start;margin-bottom:4px">
+          <div style="font-size:11px;font-weight:800;color:var(--bmh-blue)">${v.dateLabel || new Date(v.date || Date.now()).toLocaleDateString('en-IN')}</div>
+          <div style="font-size:10px;color:var(--g1)">${v.doctor || ''}</div>
+        </div>
+        <div style="font-size:10.5px;line-height:1.42"><b>Dx:</b> ${dx}</div>
+        <div style="font-size:10.5px;line-height:1.42;margin-top:3px"><b>Rx:</b> ${rx}</div>
+        <div style="font-size:10px;color:var(--g1);line-height:1.36;margin-top:3px"><b>Glasses:</b> ${spec}</div>
+      </div>`;
+    }).join('') : '<div style="padding:10px;border:1px dashed var(--g4);border-radius:10px;background:#fff;color:var(--g1);font-size:11px">No previous ophthalmology visits saved yet.</div>';
+    const paymentHtml = [...txns, ...prs].sort((a,b)=>new Date(b.date || 0) - new Date(a.date || 0)).slice(0, 10).map(item => {
+      const isReq = Object.prototype.hasOwnProperty.call(item, 'status');
+      return `<div style="display:flex;justify-content:space-between;gap:7px;padding:6px 0;border-bottom:1px solid var(--g5);font-size:10.5px">
+        <div style="min-width:0">
+          <div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${isReq ? (item.for || 'Billing request') : (item.service || 'Payment')}</div>
+          <div style="font-size:9.5px;color:var(--g1)">${new Date(item.date || Date.now()).toLocaleDateString('en-IN')} · ${(isReq ? item.status : item.mode) || '—'}</div>
+        </div>
+        <div style="font-weight:800;color:${isReq && item.status==='pending' ? '#8a4200' : 'var(--bmh-blue)'}">₹${(Number(item.amount) || 0).toLocaleString('en-IN')}</div>
+      </div>`;
+    }).join('') || '<div style="font-size:10.5px;color:var(--g1)">No payments recorded yet.</div>';
+    el.innerHTML = `<div style="position:sticky;top:12px;width:100%">
+      <div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;letter-spacing:.45px;margin-bottom:6px">Quick recap</div>
+      <div style="max-height:70vh;overflow:auto;padding-right:4px">
+        ${visitHtml}
+        <details style="margin-top:8px;background:#fff;border:1px solid var(--g5);border-radius:10px;padding:8px 10px">
+          <summary style="cursor:pointer;font-size:11px;font-weight:800;color:var(--bmh-blue)">Payments & billing</summary>
+          <div style="margin-top:8px">${paymentHtml}</div>
+        </details>
+      </div>
+    </div>`;
+  };
+  if(typeof fbOnce === 'function') fbOnce(`visits/${pt.bmhId}`).then(renderWithVisits).catch(()=>renderWithVisits({}));
+  else renderWithVisits({});
 }
 
 window.addEventListener('DOMContentLoaded', function() {
