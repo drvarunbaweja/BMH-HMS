@@ -2583,23 +2583,54 @@
         <div class="ptab" onclick="ptab(this,'inv-ocr')">📷 Photo / OCR</div>
       </div>
       <div class="tab-content active" id="inv-in">
+        <div style="background:var(--blue-lt);border-radius:10px;padding:10px;margin-bottom:12px">
+          <div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Purchase Intake</div>
+          <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:8px;margin-bottom:8px">
+            <div class="form-group" style="margin:0"><label class="fl">Department</label><select id="inv-in-dept"><option value="ophtho">Ophthalmology</option><option value="obg">OBG</option><option value="psych">Psychiatry</option><option value="skin">Skin</option><option value="general">General / Shared</option><option value="ot">OT / Procedure</option><option value="ipd">IPD / Ward</option></select></div>
+            <div class="form-group" style="margin:0"><label class="fl">Vendor</label><input type="text" id="inv-in-vendor" placeholder="Vendor / supplier"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Invoice No.</label><input type="text" id="inv-in-invoice" placeholder="Bill / GRN"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1.4fr 110px 110px 110px 120px;gap:8px">
+            <div class="form-group" style="margin:0"><label class="fl">Item name / barcode</label><input type="text" id="bc-in" placeholder="Enter barcode or item name…"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Qty</label><input type="number" id="inv-in-qty" min="1" value="1"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Cost ₹</label><input type="number" id="inv-in-cost" min="0" value="0"></div>
+            <div class="form-group" style="margin:0"><label class="fl">MRP ₹</label><input type="number" id="inv-in-mrp" min="0" value="0"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Expiry</label><input type="text" id="inv-in-exp" placeholder="MM/YYYY"></div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin-top:8px">
+            <div class="form-group" style="margin:0;min-width:220px;flex:1"><label class="fl">Vendor bill upload</label><input type="file" id="inv-in-bill-file" accept="image/*,.pdf"></div>
+            <button class="btn btn-blue btn-sm" onclick="processBC('in',document.getElementById('bc-in').value)">Add stock →</button>
+          </div>
+        </div>
         <div class="scanner-box" onclick="scanBC('in')" style="margin-bottom:12px">
           <div class="svf">📷<div class="sc-corner sc-tl"></div><div class="sc-corner sc-tr"></div><div class="sc-corner sc-bl"></div><div class="sc-corner sc-br"></div><div class="sc-line"></div></div>
           <div style="font-size:13px;font-weight:800;color:var(--bmh-gold)">Tap to Scan Barcode (Stock In)</div>
           <div style="font-size:11px;color:rgba(255,255,255,.6)">Barcode → translated to item text automatically</div>
         </div>
-        <div style="display:flex;gap:8px"><input type="text" id="bc-in" placeholder="Enter barcode or scan manually…" style="flex:1"><button class="btn btn-blue btn-sm" onclick="processBC('in',document.getElementById('bc-in').value)">Add →</button></div>
         <div id="stock-in-log" style="margin-top:10px"></div>
+        <div class="card" style="margin-top:12px;background:var(--g6)">
+          <div class="card-hd"><div><div class="card-title">Recent Purchases</div><div class="card-sub">Department-wise stock intake, cost, invoice, and uploaded bill tracking</div></div></div>
+          <div id="inv-purchase-log"></div>
+        </div>
       </div>
       <div class="tab-content" id="inv-use">
         <div style="background:var(--orange-lt);border-radius:8px;padding:9px;margin-bottom:10px;font-size:12px;font-weight:700;color:#8a4200">💡 Scan injection/item → stock deducted + auto-billed to patient with MRP &amp; timestamp</div>
-        <div class="form-group" style="margin-bottom:9px"><label class="fl">Patient</label><select id="use-pt"></select></div>
+        <div style="display:grid;grid-template-columns:1.4fr 1fr 120px 120px;gap:8px;margin-bottom:9px">
+          <div class="form-group" style="margin:0"><label class="fl">Patient</label><select id="use-pt"></select></div>
+          <div class="form-group" style="margin:0"><label class="fl">Department</label><select id="inv-use-dept"><option value="ophtho">Ophthalmology</option><option value="obg">OBG</option><option value="psych">Psychiatry</option><option value="skin">Skin</option><option value="general">General / Shared</option><option value="ot">OT / Procedure</option><option value="ipd">IPD / Ward</option></select></div>
+          <div class="form-group" style="margin:0"><label class="fl">Qty</label><input type="number" id="inv-use-qty" min="1" value="1"></div>
+          <div class="form-group" style="margin:0"><label class="fl">Use mode</label><select id="inv-use-mode"><option value="bill">Bill patient</option><option value="consume">Consume only</option><option value="ward">Ward stock use</option></select></div>
+        </div>
         <div class="scanner-box" onclick="scanBC('use')" style="padding:14px;margin-bottom:12px">
           <div class="svf" style="width:80px;height:80px">📷<div class="sc-corner sc-tl"></div><div class="sc-corner sc-tr"></div><div class="sc-corner sc-bl"></div><div class="sc-corner sc-br"></div><div class="sc-line"></div></div>
           <div style="font-size:12.5px;font-weight:800;color:var(--bmh-gold)">Scan Item Given to Patient</div>
         </div>
         <div style="display:flex;gap:8px"><input type="text" id="bc-use" placeholder="Barcode / item name…" style="flex:1"><button class="btn btn-orange btn-sm" onclick="processBC('use',document.getElementById('bc-use').value)">Use →</button></div>
         <div id="use-log" style="margin-top:10px"></div>
+        <div class="card" style="margin-top:12px;background:var(--g6)">
+          <div class="card-hd"><div><div class="card-title">Patient-linked Usage</div><div class="card-sub">Every item used gets linked to a patient, department, stock balance, and billing line</div></div></div>
+          <div id="inv-usage-log"></div>
+        </div>
       </div>
       <div class="tab-content" id="inv-stock"><div id="inv-stock-list"></div></div>
       <div class="tab-content" id="inv-vendor">
@@ -3145,6 +3176,10 @@
   <div class="col" id="ipd-detail-col">
     <div class="card" id="ipd-detail">
       <div style="text-align:center;padding:30px;color:var(--g1)"><div style="font-size:36px;margin-bottom:8px">🛏️</div><div style="font-size:13px;font-weight:700">Select a patient from the list</div></div>
+    </div>
+    <div class="card" style="margin-top:12px">
+      <div class="card-hd"><div><div class="card-title">Ward Alerts</div><div class="card-sub">Missed observations and abnormal parameters appear here for the currently selected patient</div></div></div>
+      <div id="ipd-alerts-panel" style="font-size:12px;color:var(--g1)">Select a patient to load alerts.</div>
     </div>
   </div>
 </div>
@@ -3729,7 +3764,15 @@
     <div class="form-group"><label class="fl">Admitting Doctor</label><select id="ipd-doctor"><option>Dr. Varun Baweja</option><option>Dr. Geeta Baweja</option><option>Dr. Namrata Baweja</option><option>Dr. Tarun Baweja</option><option>Dr. Pooja Baweja</option></select></div>
     <div class="form-group"><label class="fl">Room No.</label><input type="text" id="ipd-room" placeholder="e.g. Room 5"></div>
   </div>
+  <div class="fg">
+    <div class="form-group"><label class="fl">Department</label><select id="ipd-dept"><option value="ophtho">Ophthalmology</option><option value="obg">OBG</option><option value="psych">Psychiatry</option><option value="skin">Skin</option><option value="general">General / Shared</option></select></div>
+    <div class="form-group"><label class="fl">Monitoring Frequency</label><select id="ipd-monitoring"><option value="6h">Every 6 hours</option><option value="4h">Every 4 hours</option><option value="2h">Every 2 hours</option><option value="1h">Hourly</option></select></div>
+  </div>
   <div class="form-group"><label class="fl">Diagnosis at Admission</label><input type="text" id="ipd-dx" placeholder="Primary diagnosis"></div>
+  <div class="fg">
+    <div class="form-group"><label class="fl">Allergies / Alerts</label><input type="text" id="ipd-allergies" placeholder="Drug allergies, fall risk, infection alert"></div>
+    <div class="form-group"><label class="fl">Diet / Fluids</label><input type="text" id="ipd-diet" placeholder="Soft diet, NBM, diabetic diet"></div>
+  </div>
   <div class="form-group"><label class="fl">Special Instructions</label><textarea id="ipd-notes" placeholder="Dietary needs, allergies, nursing instructions…" style="min-height:50px"></textarea></div>
   <div style="display:flex;gap:8px">
     <button class="btn btn-gold" style="flex:1" onclick="confirmIPDAdmit()">✅ Confirm Admission</button>
@@ -3759,6 +3802,16 @@
   <div class="fg">
     <div class="form-group"><label class="fl">Date</label><input type="date" id="pn-date"></div>
     <div class="form-group"><label class="fl">Time</label><input type="time" id="pn-time"></div>
+  </div>
+  <div class="fg">
+    <div class="form-group"><label class="fl">BP</label><input type="text" id="pn-bp" placeholder="120/80"></div>
+    <div class="form-group"><label class="fl">Pulse</label><input type="number" id="pn-pulse" placeholder="72"></div>
+    <div class="form-group"><label class="fl">Temp °C</label><input type="number" step="0.1" id="pn-temp" placeholder="36.8"></div>
+  </div>
+  <div class="fg">
+    <div class="form-group"><label class="fl">SpO2</label><input type="number" id="pn-spo2" placeholder="98"></div>
+    <div class="form-group"><label class="fl">RR</label><input type="number" id="pn-rr" placeholder="18"></div>
+    <div class="form-group"><label class="fl">Pain Score</label><select id="pn-pain"><option value="">—</option><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option></select></div>
   </div>
   <div class="form-group"><label class="fl">Progress Note</label><textarea id="pn-text" placeholder="SOAP note — subjective, objective, assessment, plan…" style="min-height:90px"></textarea></div>
   <div class="form-group"><label class="fl">Staff Nurse</label><input type="text" id="pn-nurse" placeholder="Name of nurse performing examination"></div>
