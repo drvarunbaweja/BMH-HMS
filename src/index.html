@@ -3059,7 +3059,7 @@
 <div class="tab-content" id="set-consents">
   <div class="card">
     <div class="card-hd">
-      <div><div class="card-title">📄 Consent Library</div><div class="card-sub">Click to open and print any consent in English, Hindi or Punjabi</div></div>
+      <div><div class="card-title">📄 Consent Library</div><div class="card-sub">Print a single bilingual consent or form with patient and procedure details</div></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         <button class="btn btn-gold btn-xs" onclick="openConsentUploadModal()">📎 Upload / Create Form</button>
         <button class="btn btn-blue btn-xs" onclick="(function(){const t=Array.from(document.querySelectorAll('#pg-settings .ptab')).find(x=>x.textContent.includes('Surgery Pack'));if(t){ptab(t,'set-surgery-packs');renderSetPacksList&&renderSetPacksList();}})()">📦 Surgery Packs</button>
@@ -3076,14 +3076,14 @@
   </div>
   <div class="card" style="margin-top:12px">
     <div class="card-hd">
-      <div><div class="card-title">Structured consents (bilingual)</div><div class="card-sub">Edit stored English / ਪੰਜਾਬੀ / हिंदी text — prints as three variants (no live translation)</div></div>
+      <div><div class="card-title">Structured consents (bilingual)</div><div class="card-sub">Edit stored English / ਪੰਜਾਬੀ / हिंदी text — prints as one bilingual consent with English followed by the saved translation</div></div>
     </div>
     <div id="set-consent-data-list"></div>
   </div>
   <!-- Surgery Packs inline section -->
   <div class="card" style="margin-top:12px">
     <div class="card-hd">
-      <div><div class="card-title">📦 Surgery Document Packs</div><div class="card-sub">Print a full pack of consents for any procedure</div></div>
+      <div><div class="card-title">📦 Surgery Document Packs</div><div class="card-sub">Print patient-specific consents, forms, and discharge summary for any procedure</div></div>
       <button class="btn btn-gold btn-xs" onclick="openM('m-new-tpl')">+ Custom Pack</button>
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px" id="set-consent-packs-grid">
@@ -3108,7 +3108,7 @@
   </div>
   <div class="card" style="margin-top:12px">
     <div class="card-hd">
-      <div><div class="card-title">Custom consent &amp; form stubs</div><div class="card-sub">Editable short templates for quick printing (bilingual consents remain in the library above)</div></div>
+      <div><div class="card-title">Custom consent &amp; form stubs</div><div class="card-sub">Editable department forms and saved text documents for surgery packs and quick printing</div></div>
       <button class="btn btn-gold btn-xs" onclick="addConsentTemplate()">+ Add</button>
     </div>
     <div style="display:flex;gap:7px;margin-bottom:12px;flex-wrap:wrap">
@@ -3582,7 +3582,7 @@
 <div class="modal">
 <div class="modal-hd"><div class="modal-title">Print surgery pack</div><button class="modal-close" onclick="closeM('m-sp-pack-print')">✕</button></div>
 <div class="fg fg1" style="gap:9px">
-  <div style="font-size:11px;color:var(--g1)">Uncheck any consent you do not want. Each included form prints as three A4 pages (English only · English+ਪੰਜਾਬੀ · English+हिंदी) using saved text.</div>
+  <div style="font-size:11px;color:var(--g1)">Uncheck any document you do not want. Consents print as one bilingual consent, while the discharge summary prints as a separate official hospital document.</div>
   <div id="sp-pack-print-checklist" style="max-height:280px;overflow-y:auto"></div>
   <div style="display:flex;gap:8px;flex-wrap:wrap">
     <button type="button" class="btn btn-gold" onclick="confirmSurgeryPackPrint()">🖨️ Print selected</button>

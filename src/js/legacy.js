@@ -504,6 +504,13 @@ function resolvePrintHeaderSrc() {
   } catch (e) { /* noop */ }
   return 'https://bawejahospital.com/img/logo.png';
 }
+function resolvePrintLogoSrc() {
+  const explicitLogo = document.querySelector('.bmh-logo-img');
+  if (explicitLogo && explicitLogo.src) return explicitLogo.src;
+  const anyLogo = document.querySelector('img[src*="logo.png"], img[src*="logo-white.png"]');
+  if (anyLogo && anyLogo.src) return anyLogo.src;
+  return 'https://bawejahospital.com/img/logo.png';
+}
 function buildConsentParasHtml(cd, variant) {
   const paras = cd.paras || [];
   return paras.map(function (p, i) {
@@ -524,23 +531,56 @@ function buildConsentParasHtml(cd, variant) {
 }
 function consentVariantSubtitle(variant) {
   if (variant === 'en') return '';
-  if (variant === 'en-pa') return '<div style="font-size:10px;font-weight:800;color:#555;text-align:center;margin:-2px 0 10px">Bilingual: English — ਪੰਜਾਬੀ (stored text)</div>';
-  return '<div style="font-size:10px;font-weight:800;color:#555;text-align:center;margin:-2px 0 10px">Bilingual: English — हिंदी (stored text)</div>';
+  if (variant === 'en-pa') return 'English + ਪੰਜਾਬੀ';
+  return 'English + हिंदी';
 }
-function buildConsentPageShell(cd, lhSrc, ptStripHtml, variant) {
-  const title = escapeHtmlConsent(cd.title);
-  const sub = variant === 'en' ? '' : consentVariantSubtitle(variant);
-  return '<div style="page-break-after:always;padding:12mm 14mm;font-family:\'Lato\',Arial,sans-serif">'
-    + (lhSrc ? '<img src="' + escapeHtmlConsent(lhSrc) + '" style="width:100%;height:auto;margin-bottom:10px" alt="">' : '<div style="font-size:16px;font-weight:900;color:#1A3C6E;margin-bottom:8px">Baweja Multispeciality Hospital</div>')
-    + '<div style="font-size:14px;font-weight:900;color:#1A3C6E;text-transform:uppercase;text-align:center;border-bottom:2px solid #D4A017;padding-bottom:8px;margin-bottom:8px">' + title + '</div>'
-    + sub
-    + ptStripHtml
-    + '<div style="font-size:12px;line-height:1.85">' + buildConsentParasHtml(cd, variant) + '</div>'
-    + '<div style="display:flex;justify-content:space-between;margin-top:32px">'
-    + '<div style="text-align:center"><div style="border-bottom:1px solid #333;width:160px;margin-bottom:4px"></div><div style="font-size:10px;color:#666">Patient / Guardian Signature & Date</div></div>'
-    + '<div style="text-align:center"><div style="border-bottom:1px solid #333;width:160px;margin-bottom:4px"></div><div style="font-size:10px;color:#666">Witness Signature & Date</div></div>'
-    + '<div style="text-align:center"><div style="border-bottom:1px solid #333;width:160px;margin-bottom:4px"></div><div style="font-size:10px;color:#666">Doctor\'s Signature & Date</div></div>'
+function getPreferredConsentVariant(cd, preferredLang) {
+  const paras = Array.isArray(cd?.paras) ? cd.paras : [];
+  const hasPa = paras.some(function (p) { return String(p?.pa || '').trim(); });
+  const hasHi = paras.some(function (p) { return String(p?.hi || '').trim(); });
+  const pref = String(preferredLang || '').toLowerCase();
+  if (pref === 'pa' && hasPa) return 'en-pa';
+  if (pref === 'hi' && hasHi) return 'en-hi';
+  const centre = String(window.CURRENT_PATIENT?.centre || CURRENT_USER?.centre || '').toUpperCase();
+  if (centre === 'RPR' && hasPa) return 'en-pa';
+  if (hasHi) return 'en-hi';
+  if (hasPa) return 'en-pa';
+  return 'en';
+}
+function buildCompactDocumentHeader(title, ctx, subtitle) {
+  const esc = escapeHtmlConsent;
+  const logoSrc = resolvePrintLogoSrc();
+  const proc = String(ctx?.procLine || '').trim();
+  return '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;border-bottom:1.5px solid #222;padding-bottom:10px;margin-bottom:12px">'
+    + '<div style="display:flex;align-items:center;gap:10px;min-width:0">'
+    + '<img src="' + esc(logoSrc) + '" style="height:30px;width:auto;object-fit:contain" alt="BMH">'
+    + '<div><div style="font-size:15px;font-weight:900;color:#111;line-height:1.25">' + esc(title) + '</div>'
+    + (subtitle ? '<div style="font-size:10px;font-weight:800;color:#555;margin-top:2px">' + esc(subtitle) + '</div>' : '')
+    + '</div></div>'
+    + '<div style="min-width:245px;max-width:300px;text-align:right;display:grid;gap:4px">'
+    + '<div><span style="display:block;font-size:9.5px;color:#666;text-transform:uppercase;font-weight:800">Patient</span><span style="font-size:12.5px;font-weight:900;color:#111">' + esc(ctx?.ptNm || '—') + '</span></div>'
+    + '<div><span style="display:block;font-size:9.5px;color:#666;text-transform:uppercase;font-weight:800">BMSH ID</span><span style="font-size:12px;font-weight:900;font-family:ui-monospace,monospace;color:#1A3C6E">' + esc(ctx?.ptId || '—') + '</span></div>'
+    + '<div><span style="display:block;font-size:9.5px;color:#666;text-transform:uppercase;font-weight:800">Procedure</span><span style="font-size:11.5px;font-weight:800;color:#111">' + esc(proc || '—') + '</span></div>'
+    + '<div><span style="display:block;font-size:9.5px;color:#666;text-transform:uppercase;font-weight:800">Date</span><span style="font-size:11.5px;font-weight:800;color:#111">' + esc(ctx?.today || '—') + '</span></div>'
     + '</div></div>';
+}
+function buildCompactDocumentShell(title, ctx, bodyHtml, opts) {
+  opts = opts || {};
+  const sigHtml = opts.signatures === false ? '' : '<div style="display:flex;justify-content:space-between;gap:18px;margin-top:28px">'
+    + '<div style="flex:1;text-align:center"><div style="border-bottom:1px solid #333;height:34px"></div><div style="font-size:10px;color:#555;margin-top:4px">Patient / Guardian Signature</div></div>'
+    + '<div style="flex:1;text-align:center"><div style="border-bottom:1px solid #333;height:34px"></div><div style="font-size:10px;color:#555;margin-top:4px">Witness Signature</div></div>'
+    + '<div style="flex:1;text-align:center"><div style="border-bottom:1px solid #333;height:34px"></div><div style="font-size:10px;color:#555;margin-top:4px">Doctor Signature</div></div>'
+    + '</div>';
+  return '<section style="page-break-after:always;padding:12mm 12mm 10mm;font-family:Arial,sans-serif;color:#111">'
+    + buildCompactDocumentHeader(title, ctx, opts.subtitle || '')
+    + '<div style="font-size:12.2px;line-height:1.8">' + bodyHtml + '</div>'
+    + sigHtml
+    + '</section>';
+}
+function buildConsentPageShell(cd, ctx, variant) {
+  return buildCompactDocumentShell(cd.title, ctx, buildConsentParasHtml(cd, variant), {
+    subtitle: variant === 'en' ? '' : consentVariantSubtitle(variant)
+  });
 }
 function buildConsentPatientStripHtml(ptNm, ptId, ptAge, ptSex, ptMob, today, procLine, doctorName) {
   const esc = escapeHtmlConsent;
@@ -582,17 +622,13 @@ function collectConsentPrintContext() {
 }
 function printStructuredConsentThreeVariants(cd) {
   if (!cd || !cd.paras || !cd.paras.length) { showToast('No consent text to print', 'w'); return; }
-  const lhSrc = resolvePrintHeaderSrc();
   const ctx = collectConsentPrintContext();
-  const pages = ['en', 'en-pa', 'en-hi'].map(function (v) { return buildConsentPageShell(cd, lhSrc, ctx.stripHtml, v); }).join('');
-  const footerSrc = window.PRINT_FOOTER_SRC || '';
-  const footerHtml = footerSrc ? '<div style="padding:8mm 14mm;text-align:center;border-top:1px solid #eee"><img src="' + escapeHtmlConsent(footerSrc) + '" style="max-width:100%;height:auto" alt=""></div>' : '';
+  const variant = getPreferredConsentVariant(cd, window._CONSENT_PRINT_LANG || '');
+  const pages = buildConsentPageShell(cd, ctx, variant);
   const html = '<!DOCTYPE html><html><head><meta charset="UTF-8">'
-    + '<style>@import url(\'https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap\');'
-    + '*{margin:0;padding:0;box-sizing:border-box}body{font-family:\'Lato\',Arial,sans-serif;font-size:12px}'
-    + '@page{size:A4;margin:0}</style></head><body>' + pages + footerHtml + '</body></html>';
+    + '<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:12px}@page{size:A4;margin:0}</style></head><body>' + pages + '</body></html>';
   safePrint(html);
-  showToast('Printing 3 variants: English · English+ਪੰਜਾਬੀ · English+हिंदी ✓', 's');
+  showToast('Bilingual consent ready to print ✓', 's');
 }
 
 function renderConsentLibrary(filterDept) {
@@ -634,11 +670,61 @@ function libraryMergedToConsentData(merged) {
   });
   return { title: (merged.name || 'Consent').toUpperCase(), paras: paras };
 }
+function getConsentTemplateItem(id) {
+  return (typeof CONSENT_TEMPLATES !== 'undefined' ? CONSENT_TEMPLATES.find(function (c) { return c.id === id; }) : null) || null;
+}
+function getPackDocumentTitle(key) {
+  if (key === '__discharge__') return 'Discharge Summary & Fitness Certificate';
+  const cd = getConsentEntry(key);
+  if (cd && cd.title) return cd.title;
+  const lib = getMergedLibraryItem(key);
+  if (lib && lib.name) return lib.name;
+  const tpl = getConsentTemplateItem(key);
+  if (tpl && tpl.name) return tpl.name;
+  return key;
+}
+function renderGenericDocumentPage(title, text, ctx, opts) {
+  const body = '<div style="white-space:pre-wrap;font-size:12px;line-height:1.9">' + escapeHtmlConsent(text || '').replace(/\n/g, '<br>') + '</div>';
+  return buildCompactDocumentShell(title, ctx, body, opts);
+}
+function renderImageDocumentPage(title, imgSrc, ctx) {
+  const esc = escapeHtmlConsent;
+  const body = imgSrc
+    ? '<div style="display:flex;align-items:center;justify-content:center;min-height:230mm"><img src="' + esc(imgSrc) + '" style="max-width:100%;max-height:228mm;object-fit:contain;border:1px solid #ddd"></div>'
+    : '<div style="font-size:12px;color:#666;padding:22mm 0;text-align:center">No image saved for this document.</div>';
+  return buildCompactDocumentShell(title, ctx, body, { signatures: false });
+}
+function renderPackDocumentPages(key, ctx) {
+  if (key === '__discharge__') return buildDischargePrintSection();
+  const lib = getMergedLibraryItem(key);
+  const tpl = getConsentTemplateItem(key);
+  const title = getPackDocumentTitle(key);
+  if (lib && lib.docType === 'consent' && (lib.body || lib.bodyPa || lib.bodyHi || lib.structuredKey)) {
+    const cd = lib.structuredKey ? resolveConsentDataForPrint(lib.structuredKey) : libraryMergedToConsentData(lib);
+    if (cd && cd.paras && cd.paras.length) {
+      const variant = getPreferredConsentVariant(cd, lib.lang || window._CONSENT_PRINT_LANG || '');
+      return buildConsentPageShell(cd, ctx, variant);
+    }
+  }
+  const resolved = resolveConsentDataForPrint(key);
+  if (resolved && resolved.paras && resolved.paras.length) {
+    const variant = getPreferredConsentVariant(resolved, lib?.lang || tpl?.lang || window._CONSENT_PRINT_LANG || '');
+    return buildConsentPageShell(resolved, ctx, variant);
+  }
+  if (lib && lib.type === 'image') return renderImageDocumentPage(title, lib.imgSrc, ctx);
+  if (lib && lib.text) return renderGenericDocumentPage(title, lib.text, ctx, { signatures: lib.docType !== 'form' });
+  if (tpl && tpl.content) return renderGenericDocumentPage(title, tpl.content, ctx, { signatures: false });
+  return '';
+}
 function printConsentFromLibrary(id) {
   const merged = getMergedLibraryItem(id);
-  if (!merged || !merged.body) { showToast('Consent not found', 'w'); return; }
-  const cd = libraryMergedToConsentData(merged);
-  printStructuredConsentThreeVariants(cd);
+  if (!merged) { showToast('Consent not found', 'w'); return; }
+  window._CONSENT_PRINT_LANG = merged.lang || '';
+  const ctx = collectConsentPrintContext();
+  const pageHtml = renderPackDocumentPages(id, ctx);
+  if (!pageHtml) { showToast('Nothing to print for this document', 'w'); return; }
+  const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif}@page{size:A4;margin:0}</style></head><body>' + pageHtml + '</body></html>';
+  safePrint(html);
 }
 
 // ═══════════════════════════════════════
@@ -2166,7 +2252,12 @@ function printCaseSheet(opts) {
 function previewCaseSheet() { printCaseSheet({ preview: true }); }
 function printPsychSheet() { if(typeof window.printUnifiedRx === 'function') { window.printUnifiedRx('psych'); } else { showToast('Psychiatry summary printing ✓','s'); setTimeout(()=>window.print(),300); } }
 function printSkinSheet() { if(typeof window.printUnifiedRx === 'function') { window.printUnifiedRx('skin'); } else { showToast('Skin summary printing ✓','s'); setTimeout(()=>window.print(),300); } }
-function printDischarge() { showToast('Discharge card printing ✓','s'); setTimeout(()=>window.print(),300); }
+function printDischarge() {
+  const html = buildDischargePrintHtml();
+  if (!html) { showToast('Select a patient first', 'w'); return; }
+  safePrint(html);
+  showToast('Discharge summary ready to print ✓', 's');
+}
 function printRx() { if (typeof window.printUnifiedRx === 'function') window.printUnifiedRx('oe'); }
 
 function doPrint(type) {
@@ -6493,10 +6584,10 @@ function renderDeptSummary() {
 
 // ── printSurgeryPack — print all relevant consent forms for a dept or custom pack ──────────
 const SURGERY_PACK_DEFAULTS = [
-  { id:'ophtho', dept:'Ophthalmology', icon:'👁️', label:'Ophthalmology surgery pack', desc:'Bilingual consent forms for common eye procedures.', color:'var(--blue)', consentKeys:['cataract','ivt','lasik','pterygium'] },
-  { id:'obg', dept:'Obstetrics & Gynaecology', icon:'🤰', label:'OBG surgical pack', desc:'Delivery, LSCS, laparoscopy and related consents.', color:'#c0004e', consentKeys:['obg-lscs','obg-normal','obg-lap','obg-mtp'] },
-  { id:'psych', dept:'Neuropsychiatry', icon:'🧠', label:'Psychiatry pack', desc:'Evaluation, treatment and ECT-related documentation.', color:'var(--orange)', consentKeys:['psych-gen','psych-ect'] },
-  { id:'skin', dept:'Skin & Cosmetology', icon:'💆', label:'Dermatology / aesthetics pack', desc:'Peel, PRP, laser and injectable procedure consents.', color:'var(--purple)', consentKeys:['skin-peel','skin-laser','skin-prp'] },
+  { id:'ophtho', dept:'Ophthalmology', icon:'👁️', label:'Ophthalmology surgery pack', desc:'Bilingual consent forms, related forms, and discharge summary for eye procedures.', color:'var(--blue)', documentKeys:['cataract','ivt','lasik','pterygium','__discharge__'] },
+  { id:'obg', dept:'Obstetrics & Gynaecology', icon:'🤰', label:'OBG surgical pack', desc:'Delivery, LSCS, laparoscopy and discharge documents.', color:'#c0004e', documentKeys:['obg-lscs','obg-normal','obg-lap','obg-mtp','__discharge__'] },
+  { id:'psych', dept:'Neuropsychiatry', icon:'🧠', label:'Psychiatry pack', desc:'Evaluation, treatment and discharge documents.', color:'var(--orange)', documentKeys:['psych-gen','psych-ect','__discharge__'] },
+  { id:'skin', dept:'Skin & Cosmetology', icon:'💆', label:'Dermatology / aesthetics pack', desc:'Procedure consents, forms, and discharge summary.', color:'var(--purple)', documentKeys:['skin-peel','skin-laser','skin-prp','__discharge__'] },
 ];
 function loadCustomSurgeryPacks() {
   try {
@@ -6509,7 +6600,11 @@ function saveCustomSurgeryPacks(arr) {
   if (window.FBDB) window.FBDB.ref('surgeryPacksCustom').set(arr).catch(function () {});
 }
 function getAllSurgeryPacks() {
-  return SURGERY_PACK_DEFAULTS.concat(loadCustomSurgeryPacks());
+  return SURGERY_PACK_DEFAULTS.concat(loadCustomSurgeryPacks()).map(function (p) {
+    if (!p.documentKeys && p.consentKeys) p.documentKeys = p.consentKeys.slice();
+    if (p.documentKeys && p.documentKeys.indexOf('__discharge__') === -1 && String(p.id || '').startsWith('custom-') === false) p.documentKeys.push('__discharge__');
+    return p;
+  });
 }
 function populateNewPackModal() {
   const host = document.getElementById('new-tpl-docs');
@@ -6533,24 +6628,26 @@ function populateNewPackModal() {
   }).map(function (k) {
     const data = getConsentEntry(k);
     const t = data && data.title ? data.title : k;
-    return '<label style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;font-size:11.5px;cursor:pointer;border-bottom:1px solid var(--g5)"><input type="checkbox" name="new-pack-consent" value="' + k + '"><span>' + t + '</span></label>';
+    return '<label style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;font-size:11.5px;cursor:pointer;border-bottom:1px solid var(--g5)"><input type="checkbox" name="new-pack-doc" value="' + k + '"><span>' + t + '</span></label>';
   }).join('');
   const libRows = (typeof CONSENT_LIBRARY !== 'undefined' ? CONSENT_LIBRARY : []).filter(function (c) {
     return matchesDept(c.dept);
   }).map(function (c) {
     const kind = c.docType === 'form' ? 'form' : 'consent';
-    return '<label style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;font-size:11.5px;cursor:pointer;border-bottom:1px solid var(--g5)"><input type="checkbox" name="new-pack-consent" value="' + String(c.id).replace(/"/g, '&quot;') + '"><span>📚 ' + String(c.name).replace(/</g, '&lt;') + ' <span style="font-size:9px;color:var(--g1)">(' + kind + ' library)</span></span></label>';
+    return '<label style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;font-size:11.5px;cursor:pointer;border-bottom:1px solid var(--g5)"><input type="checkbox" name="new-pack-doc" value="' + String(c.id).replace(/"/g, '&quot;') + '"><span>📚 ' + String(c.name).replace(/</g, '&lt;') + ' <span style="font-size:9px;color:var(--g1)">(' + kind + ' library)</span></span></label>';
   }).join('');
   const tplRows = (typeof CONSENT_TEMPLATES !== 'undefined' ? CONSENT_TEMPLATES : []).filter(function (t) {
     return matchesDept(t.dept);
   }).map(function (t) {
     const kind = t.type === 'template' ? 'form' : 'consent';
-    return '<label style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;font-size:11.5px;cursor:pointer;border-bottom:1px solid var(--g5)"><input type="checkbox" name="new-pack-consent" value="' + String(t.id).replace(/"/g, '&quot;') + '"><span>📎 ' + String(t.name || t.id).replace(/</g, '&lt;') + ' <span style="font-size:9px;color:var(--g1)">(' + kind + ' saved)</span></span></label>';
+    return '<label style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;font-size:11.5px;cursor:pointer;border-bottom:1px solid var(--g5)"><input type="checkbox" name="new-pack-doc" value="' + String(t.id).replace(/"/g, '&quot;') + '"><span>📎 ' + String(t.name || t.id).replace(/</g, '&lt;') + ' <span style="font-size:9px;color:var(--g1)">(' + kind + ' saved)</span></span></label>';
   }).join('');
+  const specialRows = '<label style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;font-size:11.5px;cursor:pointer;border-bottom:1px solid var(--g5)"><input type="checkbox" name="new-pack-doc" value="__discharge__" checked><span>📄 Discharge Summary &amp; Fitness Certificate <span style="font-size:9px;color:var(--g1)">(official document)</span></span></label>';
   host.innerHTML = '<div style="font-size:10px;font-weight:800;color:var(--g1);margin-bottom:6px">Select department-specific consents and forms to include in this pack.</div>'
     + (builtIn ? block('Built-in bilingual consents', builtIn) : '')
     + (libRows ? block('Saved consent / form library', libRows) : '')
     + (tplRows ? block('Saved consent / form templates', tplRows) : '')
+    + block('Discharge document', specialRows)
     + (!builtIn && !libRows && !tplRows ? '<div style="padding:10px;background:var(--g6);border-radius:8px;font-size:11px;color:var(--g1)">No saved items found for this department yet.</div>' : '');
 }
 function saveSurgeryPackFromModal() {
@@ -6558,12 +6655,12 @@ function saveSurgeryPackFromModal() {
   const deptSel = document.getElementById('new-pack-dept');
   const deptLabel = deptSel ? deptSel.options[deptSel.selectedIndex].text : 'General';
   if (!name) { showToast('Enter pack name', 'w'); return; }
-  const boxes = document.querySelectorAll('#new-tpl-docs input[name="new-pack-consent"]:checked');
-  const consentKeys = Array.from(boxes).map(function (b) { return b.value; });
-  if (!consentKeys.length) { showToast('Select at least one consent form', 'w'); return; }
+  const boxes = document.querySelectorAll('#new-tpl-docs input[name="new-pack-doc"]:checked');
+  const documentKeys = Array.from(boxes).map(function (b) { return b.value; });
+  if (!documentKeys.length) { showToast('Select at least one document', 'w'); return; }
   const id = 'custom-' + Date.now();
   const custom = loadCustomSurgeryPacks();
-  custom.push({ id: id, dept: deptLabel, icon: '📦', label: name, desc: 'Custom document pack', color: 'var(--bmh-blue)', consentKeys: consentKeys });
+  custom.push({ id: id, dept: deptLabel, icon: '📦', label: name, desc: 'Custom document pack', color: 'var(--bmh-blue)', documentKeys: documentKeys, consentKeys: documentKeys });
   saveCustomSurgeryPacks(custom);
   closeM('m-new-tpl');
   renderSetPacksList();
@@ -6578,23 +6675,16 @@ function deleteSurgeryPack(id) {
   showToast('Pack deleted ✓', 's');
 }
 function printSurgeryPackWithKeys(keys, deptLabel) {
-  if (!keys || !keys.length) { showToast('No consent forms selected', 'w'); return; }
-  const lhSrc = resolvePrintHeaderSrc();
+  if (!keys || !keys.length) { showToast('No documents selected', 'w'); return; }
   const ctx = collectConsentPrintContext();
   const consentPages = keys.map(function (k) {
-    const cd = resolveConsentDataForPrint(k);
-    if (!cd || !cd.paras || !cd.paras.length) return '';
-    return ['en', 'en-pa', 'en-hi'].map(function (v) { return buildConsentPageShell(cd, lhSrc, ctx.stripHtml, v); }).join('');
+    return renderPackDocumentPages(k, ctx);
   }).join('');
-  if (!consentPages.trim()) { showToast('No consent templates found for ' + (deptLabel || 'pack'), 'w'); return; }
-  const footerSrc = window.PRINT_FOOTER_SRC || '';
-  const footerHtml = footerSrc ? '<div style="padding:8mm 14mm;text-align:center;border-top:1px solid #eee"><img src="' + escapeHtmlConsent(footerSrc) + '" style="max-width:100%;height:auto" alt=""></div>' : '';
+  if (!consentPages.trim()) { showToast('No printable documents found for ' + (deptLabel || 'pack'), 'w'); return; }
   const html = '<!DOCTYPE html><html><head><meta charset="UTF-8">'
-    + '<style>@import url(\'https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap\');'
-    + '*{margin:0;padding:0;box-sizing:border-box}body{font-family:\'Lato\',Arial,sans-serif;font-size:12px}'
-    + '@page{size:A4;margin:0}</style></head><body>' + consentPages + footerHtml + '</body></html>';
+    + '<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:12px}@page{size:A4;margin:0}</style></head><body>' + consentPages + '</body></html>';
   safePrint(html);
-  showToast('📋 ' + (deptLabel || 'Pack') + ' — ' + keys.length + ' form(s) × 3 variants (EN / EN+PA / EN+HI) ✓', 's');
+  showToast('📋 ' + (deptLabel || 'Pack') + ' ready to print ✓', 's');
 }
 function parseIolSummary(iol) {
   const raw = String(iol || '').trim();
@@ -6673,15 +6763,15 @@ function printSurgeryPackForCase(caseId, packId) {
 }
 function openSurgeryPackPrintModal(packOrDept) {
   const fallbackDeptKeys = {
-    ophtho: ['cataract', 'ivt', 'lasik', 'pterygium'],
-    obg: ['obg-lscs', 'obg-normal', 'obg-lap', 'obg-mtp'],
-    psych: ['psych-gen', 'psych-ect'],
-    skin: ['skin-peel', 'skin-laser', 'skin-prp'],
+    ophtho: ['cataract', 'ivt', 'lasik', 'pterygium', '__discharge__'],
+    obg: ['obg-lscs', 'obg-normal', 'obg-lap', 'obg-mtp', '__discharge__'],
+    psych: ['psych-gen', 'psych-ect', '__discharge__'],
+    skin: ['skin-peel', 'skin-laser', 'skin-prp', '__discharge__'],
   };
   const packs = getAllSurgeryPacks();
   const pack = packs.find(function (p) { return p.id === packOrDept; });
-  const keys = pack && pack.consentKeys && pack.consentKeys.length
-    ? pack.consentKeys.slice()
+  const keys = pack && pack.documentKeys && pack.documentKeys.length
+    ? pack.documentKeys.slice()
     : (fallbackDeptKeys[packOrDept] || []);
   const deptLabel = pack
     ? (pack.label || pack.dept)
@@ -6698,7 +6788,7 @@ function openSurgeryPackPrintModal(packOrDept) {
   } else {
     host.innerHTML = keys.map(function (k) {
       const data = merged[k];
-      const title = data && data.title ? data.title : k;
+      const title = getPackDocumentTitle(k);
       return '<label style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;font-size:12px;cursor:pointer;border-bottom:1px solid var(--g5)">'
         + '<input type="checkbox" name="sp-pack-k" value="' + String(k).replace(/"/g, '&quot;') + '" checked>'
         + '<span>' + String(title).replace(/</g, '&lt;') + '</span></label>';
@@ -7581,6 +7671,17 @@ function lookupRxGeneric(idx, tradeName) {
 function normalizePersonNameForMatch(name) {
   return String(name || '').toLowerCase().replace(/\bdr\.?\s*/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
 }
+function normalizeDeptKeyForQueue(dept) {
+  const d = String(dept || '').toLowerCase().trim();
+  if (!d) return '';
+  if (d === 'ophtho' || d.includes('ophthalm')) return 'ophtho';
+  if (d === 'obg' || d.includes('gyn') || d.includes('obst')) return 'obg';
+  if (d === 'psych' || d.includes('psychi')) return 'psych';
+  if (d === 'skin' || d.includes('derma') || d.includes('cosmet')) return 'skin';
+  if (d === 'lab' || d.includes('lab')) return 'lab';
+  if (d === 'reception') return 'reception';
+  return d;
+}
 function doctorMatchesPatientQueue(patientDoctor, currentDoctor) {
   const p = normalizePersonNameForMatch(patientDoctor);
   const c = normalizePersonNameForMatch(currentDoctor);
@@ -7971,17 +8072,22 @@ function handleInvestigationUpload(input) {
           const key = 'inv_' + Date.now();
           const entry = { key, name: file.name, type: 'image/jpeg', data: compressed, bmhId, date: new Date().toISOString(), sizKB };
           // Save to Firebase
-          if(window.fbSet) fbSet(`investigations/${bmhId}/${key}`, { key, name: file.name, type: 'image/jpeg', bmhId, date: entry.date, sizKB, data: compressed }).catch(()=>{});
-          if(visitBucket) {
-            visitBucket.list = visitBucket.list || [];
-            visitBucket.list.unshift({ key, name: file.name, type: 'image/jpeg', date: entry.date, sizKB, bmhId });
-            fbUpdate && fbUpdate('patients/' + visitBucket.pt.bmhId, { lastVisit: visitBucket.pt.lastVisit }).catch(()=>{});
-          }
           // Store compressed data in session for display
           window.INV_UPLOADS = window.INV_UPLOADS || {};
           window.INV_UPLOADS[key] = entry;
-          renderCurrentPatientInvestigationUploads && renderCurrentPatientInvestigationUploads();
-          showToast(`📎 ${file.name} compressed to ${sizKB} KB ✓`, 's');
+          const persist = window.fbSet ? fbSet(`investigations/${bmhId}/${key}`, { key, name: file.name, type: 'image/jpeg', bmhId, date: entry.date, sizKB, data: compressed }) : Promise.resolve();
+          persist.then(() => {
+            if(visitBucket) {
+              visitBucket.list = visitBucket.list || [];
+              visitBucket.list.unshift({ key, name: file.name, type: 'image/jpeg', date: entry.date, sizKB, bmhId });
+              fbUpdate && fbUpdate('patients/' + visitBucket.pt.bmhId, { lastVisit: visitBucket.pt.lastVisit }).catch(()=>{});
+            }
+            renderCurrentPatientInvestigationUploads && renderCurrentPatientInvestigationUploads();
+            showToast(`📎 ${file.name} compressed to ${sizKB} KB ✓`, 's');
+          }).catch(() => {
+            delete window.INV_UPLOADS[key];
+            showToast(`Could not save ${file.name}`, 'w');
+          });
         };
         img.src = e.target.result;
       };
@@ -7993,16 +8099,21 @@ function handleInvestigationUpload(input) {
         const key = 'inv_' + Date.now();
         const sizKB = Math.round(file.size / 1024);
         const entry = { key, name: file.name, type: file.type, data: e.target.result, bmhId, date: new Date().toISOString(), sizKB };
-        if(window.fbSet) fbSet(`investigations/${bmhId}/${key}`, { key, name: file.name, type: file.type, bmhId, date: entry.date, sizKB, data: e.target.result }).catch(()=>{});
-        if(visitBucket) {
-          visitBucket.list = visitBucket.list || [];
-          visitBucket.list.unshift({ key, name: file.name, type: file.type, date: entry.date, sizKB, bmhId });
-          fbUpdate && fbUpdate('patients/' + visitBucket.pt.bmhId, { lastVisit: visitBucket.pt.lastVisit }).catch(()=>{});
-        }
         window.INV_UPLOADS = window.INV_UPLOADS || {};
         window.INV_UPLOADS[key] = entry;
-        renderCurrentPatientInvestigationUploads && renderCurrentPatientInvestigationUploads();
-        showToast(`📎 ${file.name} (${sizKB} KB) saved ✓`, 's');
+        const persist = window.fbSet ? fbSet(`investigations/${bmhId}/${key}`, { key, name: file.name, type: file.type, bmhId, date: entry.date, sizKB, data: e.target.result }) : Promise.resolve();
+        persist.then(() => {
+          if(visitBucket) {
+            visitBucket.list = visitBucket.list || [];
+            visitBucket.list.unshift({ key, name: file.name, type: file.type, date: entry.date, sizKB, bmhId });
+            fbUpdate && fbUpdate('patients/' + visitBucket.pt.bmhId, { lastVisit: visitBucket.pt.lastVisit }).catch(()=>{});
+          }
+          renderCurrentPatientInvestigationUploads && renderCurrentPatientInvestigationUploads();
+          showToast(`📎 ${file.name} (${sizKB} KB) saved ✓`, 's');
+        }).catch(() => {
+          delete window.INV_UPLOADS[key];
+          showToast(`Could not save ${file.name}`, 'w');
+        });
       };
       reader.readAsDataURL(file);
     }
@@ -8496,6 +8607,28 @@ function renderRxDrugs() {
       <div>End</div>
       <div>Action</div>
     </div>`;
+  const taperGrid = (d, i, tap, tapIdx) => {
+    const prefix = `RX_DRUGS[${i}].taperRows[${tapIdx}]`;
+    return `<div style="padding:8px;background:#fff7eb;border-top:1px dashed var(--orange)">
+      <div style="display:grid;grid-template-columns:${gridCols};gap:8px;align-items:center">
+        <div style="display:flex;align-items:center;gap:8px;min-width:0">
+          <span style="min-width:24px;height:24px;border-radius:999px;background:var(--orange);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:900">T</span>
+          <div style="font-size:11px;font-weight:800;color:#8a4200">Taper row</div>
+        </div>
+        <div><select onchange="${prefix}.drugType=this.value;${prefix}.type=this.value" style="font-size:10.5px;padding:7px;width:100%;border-radius:8px;border:1px solid var(--orange);background:#fff">${typeOpts.map(t=>`<option${(d.drugType||d.type||'Tablet')===t?' selected':''}>${t}</option>`).join('')}</select></div>
+        <div><select onchange="${prefix}.eye=[this.value]" style="font-size:10.5px;padding:7px;width:100%;border-radius:8px;border:1px solid var(--orange);background:#fff">${eyeOpts.map(e=>`<option${(((tap.eye && tap.eye[0]) || (d.eye && d.eye[0]) || 'Oral')===e)?' selected':''}>${e}</option>`).join('')}</select></div>
+        <div><select onchange="${prefix}.freq=this.value;syncRxDrugDates(${i})" style="font-size:10.5px;padding:7px;width:100%;border-radius:8px;border:1px solid var(--orange);background:#fff">${freqOpts.map(f=>`<option${(tap.freq||'')===f?' selected':''}>${f}</option>`).join('')}</select></div>
+        <div><select onchange="${prefix}.dur=this.value;syncRxDrugDates(${i})" style="font-size:10.5px;padding:7px;width:100%;border-radius:8px;border:1px solid var(--orange);background:#fff">${durOpts.map(f=>`<option${(tap.dur||'')===f?' selected':''}>${f}</option>`).join('')}</select></div>
+        <div><input type="date" value="${tap.dateFrom||''}" onchange="${prefix}.dateFrom=this.value;syncRxDrugDates(${i})" style="font-size:10.5px;padding:7px;border-radius:8px;border:1px solid var(--orange);width:100%;background:#fff"></div>
+        <div><input type="date" value="${tap.dateTo||''}" onchange="${prefix}.dateTo=this.value" style="font-size:10.5px;padding:7px;border-radius:8px;border:1px solid var(--orange);width:100%;background:#fff"></div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <button type="button" class="btn btn-xs btn-outline" style="width:100%;font-weight:800;font-size:10px;white-space:nowrap;padding:6px 8px" onclick="addTaperRow(${i}, RX_DRUGS[${i}].taperRows[${tapIdx}].dur || '1 week', ${tapIdx})">Taper</button>
+          <button type="button" class="btn btn-xs btn-gray" onclick="clearTaperRow(${i}, ${tapIdx})">✕</button>
+        </div>
+      </div>
+      <div style="margin-top:7px;padding:7px 10px;background:#fffaf0;border-radius:8px;font-size:10px;line-height:1.45;color:#7a4a10">${buildRxPlainInstructionLine({ ...d, ...tap, taperRows: [] }, lang, (x)=>x ? new Date(Date.parse(x)).toLocaleDateString('en-IN',{day:'2-digit',month:'2-digit',year:'numeric'}) : '—').replace(/</g,'&lt;')}</div>
+    </div>`;
+  };
   const medicineRow = (d, i, options) => {
     const opts = options || {};
     const trade = opts.trade || rxDrugTradeName(d) || '';
@@ -8556,29 +8689,7 @@ function renderRxDrugs() {
           instruction:plainLine,
           noTopBorder:true
         })}
-        ${taperRows.map((tap, tapIdx)=>medicineRow({ ...d, ...tap, eye:d.eye, drugType:d.drugType, type:d.type }, i, {
-          prefix:`RX_DRUGS[${i}].taperRows[${tapIdx}]`,
-          dt:d.drugType || d.type || 'Tablet',
-          eye0:(d.eye && d.eye[0]) || 'Oral',
-          freq:tap.freq,
-          dur:tap.dur,
-          dateFrom:tap.dateFrom,
-          dateTo:tap.dateTo,
-          badge:`${i+1}`,
-          badgeBg:'var(--orange)',
-          bg:'var(--orange-lt)',
-          border:'var(--orange)',
-          headingColor:'#8a4200',
-          showName:false,
-          showGeneric:false,
-          rowLabel:'Taper row',
-          taperBtn:`<button type="button" class="btn btn-xs btn-outline" style="width:100%;font-weight:800;font-size:10px;white-space:nowrap;padding:6px 8px" onclick="addTaperRow(${i}, RX_DRUGS[${i}].taperRows[${tapIdx}].dur || '1 week', ${tapIdx})">Taper</button>`,
-          removeBtn:`<button type="button" class="btn btn-xs btn-gray" onclick="clearTaperRow(${i}, ${tapIdx})">✕</button>`,
-          instruction:buildRxPlainInstructionLine({ ...d, freq: tap.freq, dur: tap.dur, dateFrom: tap.dateFrom, dateTo: tap.dateTo, taperRows: [] }, lang, (x)=>x ? new Date(Date.parse(x)).toLocaleDateString('en-IN',{day:'2-digit',month:'2-digit',year:'numeric'}) : '—'),
-          instructionBg:'#fffaf0',
-          instructionColor:'#7a4a10',
-          showBadge:false
-        })).join('')}
+        ${taperRows.map((tap, tapIdx)=>taperGrid(d, i, tap, tapIdx)).join('')}
       </div>`;
     }).join('')}
   </div>`;
@@ -8832,6 +8943,30 @@ function loginUser() {
     
     var profile = USER_DB ? USER_DB[user] : null;
     if (!profile || profile.pw !== pass) {
+      if (window.FBDB) {
+        window.FBDB.ref('userSettings/' + user).once('value').then(function(snap) {
+          const data = snap.val();
+          if(!data) {
+            showLoginErr('Incorrect username or password');
+            var pi = document.getElementById('lg-pass');
+            if (pi) pi.value = '';
+            return;
+          }
+          USER_DB[user] = Object.assign({}, USER_DB[user] || {}, data);
+          if (USER_DB[user].pw !== pass) {
+            showLoginErr('Incorrect username or password');
+            var pi2 = document.getElementById('lg-pass');
+            if (pi2) pi2.value = '';
+            return;
+          }
+          activateUserSession(user, USER_DB[user], { showToastOnSuccess: true, auditLogin: true });
+        }).catch(function() {
+          showLoginErr('Incorrect username or password');
+          var pi3 = document.getElementById('lg-pass');
+          if (pi3) pi3.value = '';
+        });
+        return;
+      }
       showLoginErr('Incorrect username or password');
       var pi = document.getElementById('lg-pass');
       if (pi) pi.value = '';
@@ -8938,6 +9073,17 @@ function activateUserSession(user, profile, opts) {
   }, 250);
 
   if (opts.showToastOnSuccess && typeof showToast === 'function') showToast('Welcome, ' + profile.name + ' ✓', 's');
+}
+function preloadUserSettings() {
+  if(!window.FBDB) return;
+  window.FBDB.ref('userSettings').once('value').then(function(snap) {
+    const settings = snap.val();
+    if(!settings) return;
+    Object.entries(settings).forEach(function([uname, data]) {
+      USER_DB[uname] = Object.assign({}, USER_DB[uname] || {}, data);
+    });
+    if (CURRENT_USER?.isAdmin) renderAdminUsersList && renderAdminUsersList();
+  }).catch(function(e){ console.warn('user preload error:', e); });
 }
 
 function showLoginErr(msg) {
@@ -10324,23 +10470,16 @@ const DISCHARGE_TEMPLATES = {
   },
 };
 
-// Render the discharge page with per-specialty selector + editable medicines
-function renderDischargeBuilder() {
-  const pg = document.getElementById('pg-discharge'); if(!pg) return;
-  // Prefer CURRENT_PATIENT; fallback to reading from active dept page
-  const ptObj = window.CURRENT_PATIENT || PATIENTS.find(p=>{
-    const ids = ['ophtho-pt-uid','obg-pt-uid','psych-pt-uid','skin-pt-uid'];
-    const id = ids.map(i=>document.getElementById(i)?.textContent?.trim()).find(v=>v&&v!=='—');
-    return id && p.bmhId===id;
+function getDischargePrintData(sel) {
+  const specialty = sel || document.getElementById('dc-specialty-sel')?.value || 'ophtho';
+  const ptObj = window.CURRENT_PATIENT || PATIENTS.find(function (p) {
+    const ids = ['ophtho-pt-uid', 'obg-pt-uid', 'psych-pt-uid', 'skin-pt-uid'];
+    const id = ids.map(function (i) { return document.getElementById(i)?.textContent?.trim(); }).find(function (v) { return v && v !== '—'; });
+    return id && p.bmhId === id;
   }) || {};
   const ptId = ptObj.bmhId || '—';
   const ptNm = ptObj.name || document.getElementById('ophtho-pt-nm')?.textContent || document.getElementById('obg-pt-nm')?.textContent || '— Select Patient —';
-
-  const ctrl = document.getElementById('dc-specialty-ctrl');
-  if(!ctrl) return;
-
-  const sel = document.getElementById('dc-specialty-sel')?.value || 'ophtho';
-  const tmpl = DISCHARGE_TEMPLATES[sel] || DISCHARGE_TEMPLATES.ophtho;
+  const tmpl = DISCHARGE_TEMPLATES[specialty] || DISCHARGE_TEMPLATES.ophtho;
   const lastOtCase = OT_CASES.slice().reverse().map(normalizeOTCaseRecord).find(c => c.bmhId === ptObj.bmhId) || null;
   const ipdStay = (window.IPD_PATIENTS || []).slice().reverse().find(x => x.bmhId === ptObj.bmhId) || null;
   const lastRxData = (RX_DRUGS && RX_DRUGS.length)
@@ -10353,6 +10492,97 @@ function renderDischargeBuilder() {
   const diagnosis = ptObj.lastVisit?.dx || ptObj.dx || lastOtCase?.dx || tmpl.procedure || 'the diagnosed condition';
   const procedureName = lastOtCase?.procedure || ptObj.lastVisit?.procedure || tmpl.procedure || 'the planned procedure';
   const joinDate = new Date(new Date(opDate).getTime() + (14 * 24 * 60 * 60 * 1000)).toISOString();
+  return {
+    sel: specialty,
+    tmpl: DISCHARGE_TEMPLATES[specialty] || DISCHARGE_TEMPLATES.ophtho,
+    ptObj: ptObj,
+    ptId: ptId,
+    ptNm: ptNm,
+    lastOtCase: lastOtCase,
+    ipdStay: ipdStay,
+    lastRxData: lastRxData,
+    visitDate: visitDate,
+    opDate: opDate,
+    dischargeDate: dischargeDate,
+    findings: findings,
+    diagnosis: diagnosis,
+    procedureName: procedureName,
+    joinDate: joinDate
+  };
+}
+function dischargeFrequencyToTimes(freq) {
+  const f = String(freq || '').toLowerCase();
+  if (/hourly|every hour/.test(f)) return ['Every hour'];
+  if (/6 times|6x/.test(f)) return ['6am', '10am', '2pm', '6pm', '8pm', '10pm'];
+  if (/4 times|qid/.test(f)) return ['6am', '12pm', '6pm', '10pm'];
+  if (/3 times|tds/.test(f)) return ['8am', '2pm', '8pm'];
+  if (/twice|bd/.test(f)) return ['8am', '8pm'];
+  if (/bedtime|hs/.test(f)) return ['10pm'];
+  return ['8am'];
+}
+function buildDischargePrintSection(sel) {
+  const data = getDischargePrintData(sel);
+  if (!data.ptId || data.ptId === '—') return '';
+  const esc = escapeHtmlConsent;
+  const headerSrc = resolvePrintHeaderSrc();
+  const today = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+  const fmt = function (v) { return v ? new Date(v).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'; };
+  const meds = (data.lastRxData && data.lastRxData.length ? data.lastRxData : []).map(function (d, i) {
+    const trade = rxDrugTradeName(d) || d.name || d.brand || 'Medicine';
+    const generic = rxDrugGenericName(d);
+    const times = dischargeFrequencyToTimes(d.freq).join(' · ');
+    return '<tr>'
+      + '<td style="padding:6px 8px;border:1px solid #cfd5de;font-size:11px">' + (i + 1) + '</td>'
+      + '<td style="padding:6px 8px;border:1px solid #cfd5de;font-size:11px;font-weight:800">' + esc(trade) + (generic && generic !== trade ? '<div style="font-weight:500;color:#555;font-size:10px">' + esc(generic) + '</div>' : '') + '</td>'
+      + '<td style="padding:6px 8px;border:1px solid #cfd5de;font-size:11px">' + esc(d.freq || '—') + '</td>'
+      + '<td style="padding:6px 8px;border:1px solid #cfd5de;font-size:11px">' + esc(d.dur || '—') + '</td>'
+      + '<td style="padding:6px 8px;border:1px solid #cfd5de;font-size:11px">' + esc(times) + '</td>'
+      + '</tr>';
+  }).join('');
+  const summary = 'This is to certify that ' + data.ptNm + ' visited our hospital on ' + fmt(data.visitDate) + '. On examination, it was found that the patient had '
+    + data.findings + ' with diagnosis of ' + data.diagnosis + '. The patient was advised ' + data.procedureName + ', which was subsequently performed on '
+    + fmt(data.opDate) + '. The operative and post-operative periods were uneventful. The patient was admitted to the inpatient ward on '
+    + fmt(data.ipdStay?.admittedAt || data.opDate) + ' and discharged on ' + fmt(data.dischargeDate)
+    + '. The patient is advised to continue the medications and bed rest for 2 weeks. The patient is fit to join duties from ' + fmt(data.joinDate) + '.';
+  return '<section class="page" style="page-break-after:always;padding:10mm 12mm 9mm">'
+    + (headerSrc ? '<img src="' + esc(headerSrc) + '" style="width:100%;height:auto;display:block">' : '<div style="font-size:18px;font-weight:900;color:#1A3C6E">Baweja Multispeciality Hospital</div>')
+    + '<div class="title">DISCHARGE SUMMARY &amp; FITNESS CERTIFICATE</div>'
+    + '<div class="grid">'
+    + '<div class="box"><div class="label">Patient Name</div><div class="val">' + esc(data.ptNm) + '</div></div>'
+    + '<div class="box"><div class="label">BMSH ID</div><div class="val" style="font-family:ui-monospace,monospace">' + esc(data.ptId) + '</div></div>'
+    + '<div class="box"><div class="label">Age / Sex</div><div class="val">' + esc((data.ptObj.age || '—') + ' / ' + (data.ptObj.sex || '—')) + '</div></div>'
+    + '<div class="box"><div class="label">Procedure</div><div class="val">' + esc(data.procedureName) + '</div></div>'
+    + '<div class="box"><div class="label">Eye / Site</div><div class="val">' + esc(data.lastOtCase?.site || data.lastOtCase?.eye || data.ptObj.eye || '—') + '</div></div>'
+    + '<div class="box"><div class="label">Doctor</div><div class="val">' + esc(data.ptObj.doctor || CURRENT_USER?.name || 'Dr. Varun Baweja') + '</div></div>'
+    + '<div class="box"><div class="label">OT Date</div><div class="val">' + esc(fmt(data.opDate)) + '</div></div>'
+    + '<div class="box"><div class="label">Admitted On</div><div class="val">' + esc(fmt(data.ipdStay?.admittedAt || data.opDate)) + '</div></div>'
+    + '<div class="box"><div class="label">Discharged On</div><div class="val">' + esc(fmt(data.dischargeDate)) + '</div></div>'
+    + '</div>'
+    + '<div class="sec"><div class="sec-h">Summary</div><div class="summary">' + esc(summary) + '</div></div>'
+    + '<div class="sec"><div class="sec-h">Medication Schedule</div>'
+    + '<table><thead><tr><th class="th" style="padding:6px 8px;border:1px solid #cfd5de">#</th><th class="th" style="padding:6px 8px;border:1px solid #cfd5de">Medicine</th><th class="th" style="padding:6px 8px;border:1px solid #cfd5de">Frequency</th><th class="th" style="padding:6px 8px;border:1px solid #cfd5de">Duration</th><th class="th" style="padding:6px 8px;border:1px solid #cfd5de">Timings</th></tr></thead><tbody>'
+    + (meds || '<tr><td colspan="5" style="padding:12px;border:1px solid #cfd5de;font-size:11px;color:#666;text-align:center">No prescription found for this patient.</td></tr>')
+    + '</tbody></table></div>'
+    + '<div class="sign"><div><div class="line"></div><div class="small">Patient / Attendant Signature</div></div><div><div class="line"></div><div class="small">Doctor Signature</div></div><div><div class="line"></div><div class="small">Printed on ' + esc(today) + '</div></div></div>'
+    + '</section>';
+}
+function buildDischargePrintHtml(sel) {
+  const section = buildDischargePrintSection(sel);
+  if (!section) return '';
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111}@page{size:A4;margin:0}.page{padding:10mm 12mm 9mm}.title{font-size:15px;font-weight:900;color:#1A3C6E;text-align:center;margin:8px 0 10px}.label{font-size:9px;font-weight:800;color:#555;text-transform:uppercase}.val{font-size:11.5px;font-weight:800;color:#111}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px 14px}.box{border:1px solid #d7dce5;border-radius:8px;padding:8px 10px}.sec{margin-top:10px}.sec-h{font-size:10px;font-weight:900;color:#1A3C6E;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}.summary{font-size:11.2px;line-height:1.75;border:1px solid #d7dce5;border-radius:8px;padding:10px 12px;min-height:124px}table{width:100%;border-collapse:collapse}.th{background:#eef3fb;color:#1A3C6E;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.4px}.sign{display:flex;justify-content:space-between;gap:16px;margin-top:14px}.sign>div{flex:1;text-align:center}.line{border-bottom:1px solid #222;height:32px;margin-bottom:4px}.small{font-size:9.5px;color:#555}</style></head><body>' + section + '</body></html>';
+}
+
+// Render the discharge page with per-specialty selector + editable medicines
+function renderDischargeBuilder() {
+  const pg = document.getElementById('pg-discharge'); if(!pg) return;
+  const ctrl = document.getElementById('dc-specialty-ctrl');
+  if(!ctrl) return;
+  const sel = document.getElementById('dc-specialty-sel')?.value || 'ophtho';
+  const data = getDischargePrintData(sel);
+  const ptObj = data.ptObj;
+  const ptId = data.ptId;
+  const ptNm = data.ptNm;
+  const tmpl = data.tmpl;
 
   document.getElementById('dc-pt-name').textContent = ptNm;
   document.getElementById('dc-pt-id').textContent   = ptId;
@@ -10362,7 +10592,7 @@ function renderDischargeBuilder() {
   document.getElementById('dc-date').textContent    = new Date().toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
   // Set discharge date to today if blank
   const ddEl = document.getElementById('dc-discharge-date');
-  if(ddEl) ddEl.textContent = new Date(dischargeDate).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
+  if(ddEl) ddEl.textContent = new Date(data.dischargeDate).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
   // Doctor from CURRENT_USER
   const surgeonEl = document.getElementById('dc-surgeon');
   if(surgeonEl && (surgeonEl.textContent==='Dr. Varun Baweja'||!surgeonEl.textContent.trim())) {
@@ -10395,8 +10625,8 @@ function renderDischargeBuilder() {
   const medEl = document.getElementById('dc-medicine-list');
   if(medEl) {
     let meds;
-    if(lastRxData && lastRxData.length) {
-      meds = lastRxData.map((d,i)=>renderDcMedRow({
+    if(data.lastRxData && data.lastRxData.length) {
+      meds = data.lastRxData.map((d,i)=>renderDcMedRow({
         name: (rxDrugTradeName(d) || d.name || d.brand || '') + ((rxDrugGenericName(d) && rxDrugGenericName(d)!==rxDrugTradeName(d)) ? ' ('+rxDrugGenericName(d)+')' : ''),
         note: d.freq + ' — ' + d.dur,
         local: (d.lang&&d.lang.pa) ? d.lang.pa : (d.lang&&d.lang.hi ? d.lang.hi : ''),
@@ -10432,26 +10662,26 @@ function renderDischargeBuilder() {
   if (surgeryDetailsEl) {
     const rows = [
       ['Surgery / procedure', procedureName],
-      ['OT date', new Date(opDate).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})],
-      ['Eye / site', lastOtCase?.site || lastOtCase?.eye || ptObj.eye || '—'],
-      ['IOL type / power', [lastOtCase?.iolType, lastOtCase?.iolPower].filter(Boolean).join(' / ') || '—'],
-      ['Admitted on', ipdStay?.admittedAt ? new Date(ipdStay.admittedAt).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}) : '—'],
-      ['Discharged on', new Date(dischargeDate).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})]
+      ['OT date', new Date(data.opDate).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})],
+      ['Eye / site', data.lastOtCase?.site || data.lastOtCase?.eye || ptObj.eye || '—'],
+      ['IOL type / power', [data.lastOtCase?.iolType, data.lastOtCase?.iolPower].filter(Boolean).join(' / ') || '—'],
+      ['Admitted on', data.ipdStay?.admittedAt ? new Date(data.ipdStay.admittedAt).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}) : '—'],
+      ['Discharged on', new Date(data.dischargeDate).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})]
     ];
     surgeryDetailsEl.innerHTML = rows.map(r => `<div style="display:grid;grid-template-columns:145px 1fr;gap:10px;padding:6px 0;border-bottom:1px solid var(--g5)"><div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase">${r[0]}</div><div style="font-size:12px;font-weight:800;color:var(--tx)">${r[1] || '—'}</div></div>`).join('');
   }
 
   const sumEl = document.getElementById('dc-summary-text');
   if (sumEl) {
-    const vDate = new Date(visitDate).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
-    const oDate = new Date(opDate).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
-    const aDate = ipdStay?.admittedAt ? new Date(ipdStay.admittedAt).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}) : oDate;
-    const dDate = new Date(dischargeDate).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
-    const fitDate = new Date(joinDate).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
+    const vDate = new Date(data.visitDate).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
+    const oDate = new Date(data.opDate).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
+    const aDate = data.ipdStay?.admittedAt ? new Date(data.ipdStay.admittedAt).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}) : oDate;
+    const dDate = new Date(data.dischargeDate).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
+    const fitDate = new Date(data.joinDate).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
     sumEl.innerHTML = `
       <div contenteditable="true" spellcheck="false" style="outline:none">
-        This is to certify that <strong>${ptNm}</strong> visited our hospital on <strong>${vDate}</strong>. On examination, it was found that the patient had <strong>${findings}</strong> with diagnosis of <strong>${diagnosis}</strong>.<br><br>
-        The patient was advised <strong>${procedureName}</strong>, which was subsequently performed on <strong>${oDate}</strong>. The operative and post-operative periods were uneventful.<br><br>
+        This is to certify that <strong>${ptNm}</strong> visited our hospital on <strong>${vDate}</strong>. On examination, it was found that the patient had <strong>${data.findings}</strong> with diagnosis of <strong>${data.diagnosis}</strong>.<br><br>
+        The patient was advised <strong>${data.procedureName}</strong>, which was subsequently performed on <strong>${oDate}</strong>. The operative and post-operative periods were uneventful.<br><br>
         The patient was admitted to the inpatient ward on <strong>${aDate}</strong> and discharged on <strong>${dDate}</strong>. The patient is advised to continue the prescribed medications and remain on bed rest for <strong>2 weeks</strong>.<br><br>
         The patient is fit to join his/her duties from <strong>${fitDate}</strong>.
       </div>`;
@@ -10745,21 +10975,16 @@ function printConsentWithHeader() {
 }
 
 function _consentPrintHTML(pt, consentName, bodyHTML, sigBlock, isImageMode) {
-  const lhSrc = window.LH_SRC || '';
-  const logoHtml = lhSrc
-    ? `<img src="${lhSrc}" style="height:20px;width:auto;display:block" alt="BMH">`
-    : `<div style="font-size:12px;font-weight:900;letter-spacing:-.5px;line-height:1.1;color:#000">Baweja<br><span style="font-size:7.5px;font-weight:700;letter-spacing:.8px">MULTISPECIALITY HOSPITAL</span></div>`;
+  const logoSrc = resolvePrintLogoSrc();
+  const logoHtml = `<img src="${logoSrc}" style="height:24px;width:auto;display:block" alt="BMH">`;
 
   // Compact patient detail line — skip '—' fields for surgery/eye to save space
   const ptParts = [
-    `<strong>${pt.name}</strong>`,
-    `${pt.age}/${pt.sex}`,
-    `Mob: ${pt.mob}`,
-    pt.surgery !== '—' ? `Surgery: ${pt.surgery}` : null,
-    pt.eye     !== '—' ? `Eye: ${pt.eye}`         : null,
-    `ID: ${pt.id}`,
-    `Date: ${pt.date}`,
-  ].filter(Boolean).join(' &nbsp;·&nbsp; ');
+    `<div><span class="meta-lbl">Patient</span><div class="meta-val">${pt.name}</div></div>`,
+    `<div><span class="meta-lbl">BMSH ID</span><div class="meta-val mono">${pt.id}</div></div>`,
+    pt.surgery !== '—' ? `<div><span class="meta-lbl">Procedure</span><div class="meta-val">${pt.surgery}${pt.eye !== '—' ? ' · ' + pt.eye : ''}</div></div>` : '',
+    `<div><span class="meta-lbl">Date</span><div class="meta-val">${pt.date}</div></div>`
+  ].filter(Boolean).join('');
 
   const pageStyle = isImageMode
     ? `@page{size:A4 portrait;margin:0}`
@@ -10784,9 +11009,13 @@ function _consentPrintHTML(pt, consentName, bodyHTML, sigBlock, isImageMode) {
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Arial Unicode MS','Noto Sans','Noto Sans Devanagari','Noto Sans Gurmukhi',Arial,sans-serif;color:#000;filter:grayscale(1)}
 ${pageStyle}
-.hdr{display:flex;align-items:center;gap:8px;padding:3mm 5mm 2.5mm;border-bottom:1.5px solid #000;background:#fff}
-.hdr-info{flex:1;font-size:8.5px;line-height:1.5;color:#000}
-.hdr-info .ctitle{font-size:9.5px;font-weight:900;margin-top:1px;border-top:1px solid #ccc;padding-top:1px}
+.hdr{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:4mm 5mm 3mm;border-bottom:1.5px solid #000;background:#fff}
+.hdr-info{display:flex;align-items:center;gap:8px;min-width:0}
+.hdr-title{font-size:13px;font-weight:900;color:#111;line-height:1.25}
+.pt-meta{min-width:240px;max-width:300px;text-align:right;display:grid;gap:4px}
+.meta-lbl{display:block;font-size:8px;font-weight:800;color:#666;text-transform:uppercase}
+.meta-val{font-size:10.5px;font-weight:800;color:#111;line-height:1.3}
+.mono{font-family:ui-monospace,monospace;color:#1A3C6E}
 .sig-row{display:flex;justify-content:space-between;margin-top:22px;padding-top:8px;border-top:1px solid #aaa}
 .sig-box{text-align:center;min-width:140px}
 .sig-line{border-bottom:1px solid #444;height:30px;margin-bottom:3px}
@@ -10795,11 +11024,11 @@ ${imgBodyCSS}
 @media print{button{display:none}}
 </style></head><body>
 <div class="hdr">
-  ${logoHtml}
   <div class="hdr-info">
-    <div>${ptParts}</div>
-    <div class="ctitle">📋 ${consentName}</div>
+    ${logoHtml}
+    <div class="hdr-title">${consentName}</div>
   </div>
+  <div class="pt-meta">${ptParts}</div>
 </div>
 <div class="body-wrap">
   ${bodyHTML}
@@ -10920,35 +11149,12 @@ function refreshConsentLibrary() {
 }
 
 function printCustomConsent(id) {
-  // Open window synchronously before any async work (avoids popup blockers)
-  const win = window.open('','_blank','width=900,height=700');
-  if(!win) { showToast('Allow popups to print','w'); return; }
-  win.document.write('<html><body style="font-family:Arial,sans-serif;padding:40px;text-align:center;color:#555"><p style="font-size:16px">Loading… ⏳</p></body></html>');
   fbOnce('consentLibrary/' + id, async data => {
-    if(!data) { showToast('Consent not found','w'); win.close(); return; }
-    if ((data.body || data.bodyPa || data.bodyHi || data.structuredKey) && data.docType === 'consent') {
-      const cd = data.structuredKey ? resolveConsentDataForPrint(data.structuredKey) : libraryMergedToConsentData(data);
-      if (cd && cd.paras && cd.paras.length) {
-        win.close();
-        printStructuredConsentThreeVariants(cd);
-        return;
-      }
-    }
-    const pt = _getConsentPatientHeader();
-    let bodyHTML, isImgMode = false;
-    if(data.text) {
-      bodyHTML = (data.docType === 'consent' && data.lang)
-        ? await _buildBilingualHTML(data.text, data.lang)
-        : `<pre>${data.text}</pre>`;
-    } else if(data.imgSrc) {
-      bodyHTML = `<img src="${data.imgSrc}" style="width:100%;height:100%;object-fit:contain;display:block">`;
-      isImgMode = true;
-    } else {
-      bodyHTML = '';
-    }
-    win.document.open();
-    win.document.write(_consentPrintHTML(pt, data.name, bodyHTML, null, isImgMode));
-    win.document.close();
+    if(!data) { showToast('Consent not found','w'); return; }
+    const ctx = collectConsentPrintContext();
+    const pageHtml = renderPackDocumentPages(id, ctx);
+    if (!pageHtml) { showToast('Nothing to print for this document', 'w'); return; }
+    safePrint('<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif}@page{size:A4;margin:0}</style></head><body>' + pageHtml + '</body></html>');
   });
 }
 
@@ -11869,38 +12075,10 @@ function editConsentTemplate(id) {
 }
 
 function printConsentTemplate(id) {
-  const cd = getConsentEntry(id);
-  if (cd && cd.paras && cd.paras.length) {
-    printStructuredConsentThreeVariants(cd);
-    return;
-  }
-  const resolved = resolveConsentDataForPrint(id);
-  if (resolved && resolved.paras && resolved.paras.length) {
-    printStructuredConsentThreeVariants(resolved);
-    return;
-  }
-  const lhSrc = resolvePrintHeaderSrc();
-  const today = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
-  const ptIds = ['ophtho-pt-uid', 'obg-pt-uid', 'psych-pt-uid', 'skin-pt-uid'];
-  const ptNms = ['ophtho-pt-nm', 'obg-pt-nm', 'psych-pt-nm', 'skin-pt-nm'];
-  let ptId = '—'; let ptNm = '_______________';
-  for (let i = 0; i < ptIds.length; i++) {
-    const v = document.getElementById(ptIds[i])?.textContent?.trim();
-    if (v && v !== '—' && v.startsWith('BMSH-')) { ptId = v; ptNm = document.getElementById(ptNms[i])?.textContent || ptNm; break; }
-  }
-  const t = CONSENT_TEMPLATES.find(function (c) { return c.id === id; });
-  if (!t) return;
-  const html = '<!DOCTYPE html><html><head><meta charset="UTF-8">'
-    + '<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:12px;padding:15mm}'
-    + '@page{size:A4;margin:0}.title{font-size:16px;font-weight:700;text-align:center;margin:20px 0 10px;text-decoration:underline}'
-    + '.content{line-height:2;margin:16px 0;white-space:pre-wrap}.sig{display:flex;justify-content:space-between;margin-top:40px}'
-    + '.sig-line{border-bottom:1px solid #333;width:180px;text-align:center;padding-top:5px;font-size:10px;color:#666}</style></head><body>'
-    + (lhSrc ? '<img src="' + escapeHtmlConsent(lhSrc) + '" style="width:100%;height:auto;margin-bottom:14px">' : '')
-    + '<div class="title">' + escapeHtmlConsent(t.name.toUpperCase()) + '</div>'
-    + '<div style="margin-bottom:10px"><strong>Patient Name:</strong> ' + escapeHtmlConsent(ptNm) + ' &nbsp;&nbsp; <strong>Date:</strong> ' + escapeHtmlConsent(today) + '</div>'
-    + '<div class="content">' + escapeHtmlConsent(t.content) + '</div>'
-    + '<div class="sig"><div class="sig-line">Patient / Guardian Signature</div><div class="sig-line">Witness Signature</div><div class="sig-line">Doctor Signature</div></div>'
-    + '</body></html>';
+  const ctx = collectConsentPrintContext();
+  const pageHtml = renderPackDocumentPages(id, ctx);
+  if (!pageHtml) { showToast('Template not found', 'w'); return; }
+  const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif}@page{size:A4;margin:0}</style></head><body>' + pageHtml + '</body></html>';
   safePrint(html);
 }
 
@@ -12529,11 +12707,8 @@ function renderSetPacksList() {
   const el = document.getElementById('set-packs-list'); if(!el) return;
   const packs = getAllSurgeryPacks();
   el.innerHTML = packs.map(function (p) {
-    const keyLines = (p.consentKeys || []).map(function (k) {
-      const data = getConsentEntry(k);
-      const lib = getMergedLibraryItem(k);
-      const tpl = (typeof CONSENT_TEMPLATES !== 'undefined' ? CONSENT_TEMPLATES.find(function (x) { return x.id === k; }) : null);
-      const title = data && data.title ? data.title : (lib && lib.name ? lib.name : (tpl && tpl.name ? tpl.name : k));
+    const keyLines = (p.documentKeys || p.consentKeys || []).map(function (k) {
+      const title = getPackDocumentTitle(k);
       return '<li style="margin:2px 0;font-size:11px">' + title + '</li>';
     }).join('');
     const delBtn = String(p.id).startsWith('custom-')
@@ -12549,9 +12724,9 @@ function renderSetPacksList() {
       '</div>' +
       '<div style="font-size:11px;color:var(--g1);margin-top:4px">' + (p.desc || '') + '</div>' +
       '<div style="margin-top:8px;padding:8px 10px;background:#fff;border-radius:8px;border:1px solid var(--g5)">' +
-      '<div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:4px">Consent forms in this pack</div>' +
+      '<div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:4px">Documents in this pack</div>' +
       '<ul style="margin:0;padding-left:18px;color:var(--tx);max-height:140px;overflow-y:auto">' + (keyLines || '<li style="font-size:11px;color:var(--g1)">No keys</li>') + '</ul>' +
-      '<div style="font-size:10px;color:var(--g1);margin-top:6px">Printing uses the active patient and latest OT case when available. Set header/footer under <strong>Hospital</strong> settings.</div>' +
+      '<div style="font-size:10px;color:var(--g1);margin-top:6px">Printing uses the active patient and latest OT case when available. Consents/forms use the compact logo header; discharge summary prints as the official hospital document.</div>' +
       '</div></div>' +
       '<div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">' +
       '<button type="button" class="btn btn-xs" style="background:' + p.color + ';color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:11px;font-weight:800;cursor:pointer;white-space:nowrap" onclick="printSurgeryPack(\'' + p.id + '\')">🖨️ Print pack</button>' +
@@ -13007,7 +13182,7 @@ function renderDocQueue() {
     Psychiatry:'psych', Skin:'skin', Cosmetology:'skin', Dermatology:'skin',
     'Skin & Cosmetology':'skin', Lab:'lab', Reception:'reception'
   };
-  const userDept = deptMap[CURRENT_USER?.dept] || CURRENT_USER?.dept || '';
+  const userDept = normalizeDeptKeyForQueue(deptMap[CURRENT_USER?.dept] || CURRENT_USER?.dept || '');
 
   // Filter: admin/reception sees all; doctor sees own dept (and optionally own name)
   const validStatuses = p => p.status==='waiting'||p.status==='seen'||p.status==='pre-registered'||p.dilated;
@@ -13016,7 +13191,8 @@ function renderDocQueue() {
       return PATIENTS.filter(p => validStatuses(p) && centreMatch(p));
     }
     const deptPts = PATIENTS.filter(p => {
-      const deptMatch = !userDept || p.dept === userDept;
+      const ptDept = normalizeDeptKeyForQueue(p.dept || p.department || '');
+      const deptMatch = !userDept || ptDept === userDept || (!ptDept && userDept === 'ophtho');
       return deptMatch && validStatuses(p) && centreMatch(p);
     });
     const strict = deptPts.filter(p => !CURRENT_USER?.name || !p.doctor || doctorMatchesPatientQueue(p.doctor, CURRENT_USER.name));
@@ -13312,6 +13488,7 @@ function renderOphthoRecap() {
 }
 
 window.addEventListener('DOMContentLoaded', function() {
+  preloadUserSettings && preloadUserSettings();
   // Load saved creds
   try {
     const saved = localStorage.getItem('bmh_creds');
