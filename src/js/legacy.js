@@ -193,6 +193,8 @@ window.BMH_PATIENT_CHARGES = window.BMH_PATIENT_CHARGES || {};
 window.BMH_VENDOR_BILLS = window.BMH_VENDOR_BILLS || [];
 window.BMH_EXPENSES = window.BMH_EXPENSES || [];
 window.BMH_LEDGER = window.BMH_LEDGER || [];
+window.BMH_PURCHASES = window.BMH_PURCHASES || [];
+window.BMH_INVENTORY_USAGE = window.BMH_INVENTORY_USAGE || [];
 window.BMH_BILL_PRINT_SIZE = window.BMH_BILL_PRINT_SIZE || 'A4';
 window._bmhBillDeptFilter = window._bmhBillDeptFilter || 'all';
 window._bmhPO_DRAFT = window._bmhPO_DRAFT || '';
@@ -2723,6 +2725,63 @@ function quickBillItem(name, price) {
 // IPD MODULE
 // ═══════════════════════════════════════
 
+function ipdMonitoringSlots(freqKey, fromIso) {
+  const hours = { '1h':1, '2h':2, '4h':4, '6h':6 }[freqKey] || 6;
+  const start = new Date(fromIso || Date.now());
+  const slots = [];
+  for (let i = 0; i < Math.max(4, Math.floor(24 / hours)); i += 1) {
+    const due = new Date(start.getTime() + (hours * (i + 1) * 60 * 60 * 1000));
+    slots.push({ id:'slot-' + i + '-' + due.getTime(), dueAt: due.toISOString(), recordedAt:'', status:'pending' });
+  }
+  return slots;
+}
+function ipdDeptTemplate(deptKey) {
+  const map = {
+    ophtho:['Vision / pain status','Eye dressing / patch','Eye drops given','IOP / nausea / vomiting','Doctor instructions'],
+    obg:['Bleeding / lochia','Uterine tone','Foetal / baby status','Feeding / lactation','Doctor instructions'],
+    psych:['Mood / behaviour','Sleep','Medication compliance','Risk / supervision','Doctor instructions'],
+    skin:['Rash / lesion change','Itching / pain','Dressing / topical therapy','Drug reaction watch','Doctor instructions'],
+    general:['Pain / comfort','Fluids / diet','Urine / stool','Mobility / fall risk','Doctor instructions']
+  };
+  return (map[deptKey] || map.general).map(label => ({ label, value:'', checked:false }));
+}
+function ipdVitalsStatus(vitals) {
+  const flags = [];
+  const pulse = Number(vitals?.pulse || 0);
+  const temp = Number(vitals?.temp || 0);
+  const spo2 = Number(vitals?.spo2 || 0);
+  const rr = Number(vitals?.rr || 0);
+  if (pulse && (pulse < 50 || pulse > 110)) flags.push({ label:'Pulse out of range', tone:'var(--red)' });
+  if (temp && temp >= 38) flags.push({ label:'Fever', tone:'var(--orange)' });
+  if (spo2 && spo2 < 94) flags.push({ label:'Low SpO2', tone:'var(--red)' });
+  if (rr && (rr < 10 || rr > 24)) flags.push({ label:'Respiratory rate abnormal', tone:'var(--orange)' });
+  return flags;
+}
+function ipdEvaluateAlerts(p) {
+  const alerts = [];
+  const lastVitals = (p.vitalSigns || [])[0];
+  ipdVitalsStatus(lastVitals || {}).forEach(f => alerts.push({ tone:f.tone, text:f.label + (lastVitals?.recordedAt ? ' · ' + new Date(lastVitals.recordedAt).toLocaleString('en-IN') : '') }));
+  (p.monitoringPlan || []).forEach(slot => {
+    if (slot.status !== 'done' && new Date(slot.dueAt).getTime() < Date.now()) alerts.push({ tone:'var(--red)', text:'Observation overdue since ' + new Date(slot.dueAt).toLocaleString('en-IN') });
+  });
+  if (!alerts.length) alerts.push({ tone:'var(--green)', text:'No active IPD alerts right now' });
+  return alerts;
+}
+function renderIPDAlerts(p) {
+  const el = document.getElementById('ipd-alerts-panel');
+  if (!el) return;
+  if (!p) {
+    el.innerHTML = 'Select a patient to load alerts.';
+    return;
+  }
+  const alerts = ipdEvaluateAlerts(p);
+  el.innerHTML = alerts.map(a => `<div style="padding:9px 10px;border-radius:8px;margin-bottom:7px;background:${a.tone === 'var(--green)' ? 'var(--green-lt)' : a.tone === 'var(--orange)' ? 'var(--orange-lt)' : 'var(--red-lt)'};color:${a.tone};font-weight:${a.tone === 'var(--green)' ? '700' : '900'}">${a.text}</div>`).join('');
+}
+function ipdChartSummary(p) {
+  const chart = p.chartRows || [];
+  if (!chart.length) return '<div style="color:var(--g1);font-size:12px">No structured chart items yet.</div>';
+  return chart.map(row => `<div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--g5);font-size:12px"><span>${row.label}</span><strong style="color:${row.checked ? '#1a8c3c' : 'var(--g1)'}">${row.value || (row.checked ? 'Done' : 'Pending')}</strong></div>`).join('');
+}
 
 function openIPDPatient(id) {
   const p = IPD_PATIENTS.find(x=>x.id===id);
@@ -2731,13 +2790,25 @@ function openIPDPatient(id) {
   const el = document.getElementById('ipd-detail');
   if (!el) return;
   const nb = p.isNewborn && p.babyNotes;
+  const lastVitals = (p.vitalSigns || [])[0] || p.vitals || {};
+  const alerts = ipdEvaluateAlerts(p);
   el.innerHTML = `
     <div class="card-hd">
       <div>
         <div class="card-title">${p.name}</div>
-        <div class="card-sub" style="font-family:var(--mono);color:var(--bmh-teal)">${p.id} · ${p.ward}</div>
+        <div class="card-sub" style="font-family:var(--mono);color:var(--bmh-teal)">${p.id} · ${p.ward} · ${bmhDeptLabel(p.dept)}</div>
       </div>
       <span class="badge ${p.status==='critical'?'bd-red':p.isNewborn?'bd-purple':'bd-green'}">${p.status==='critical'?'🔴 Critical':p.isNewborn?'👶 Newborn':'🟢 Stable'}</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px">
+      <div style="background:var(--g6);border-radius:8px;padding:10px"><div style="font-size:9px;color:var(--g1);font-weight:800;text-transform:uppercase">Diagnosis</div><div style="font-size:13px;font-weight:900">${p.dx || '—'}</div></div>
+      <div style="background:var(--g6);border-radius:8px;padding:10px"><div style="font-size:9px;color:var(--g1);font-weight:800;text-transform:uppercase">Doctor</div><div style="font-size:13px;font-weight:900">${p.doctor || '—'}</div></div>
+      <div style="background:var(--g6);border-radius:8px;padding:10px"><div style="font-size:9px;color:var(--g1);font-weight:800;text-transform:uppercase">Monitoring</div><div style="font-size:13px;font-weight:900">${p.monitoringLabel || 'Every 6 hours'}</div></div>
+      <div style="background:var(--g6);border-radius:8px;padding:10px"><div style="font-size:9px;color:var(--g1);font-weight:800;text-transform:uppercase">Allergies / alerts</div><div style="font-size:12px;font-weight:800">${p.allergies || 'None recorded'}</div></div>
+    </div>
+    <div style="background:${alerts.some(a=>a.tone!=='var(--green)') ? 'var(--red-lt)' : 'var(--green-lt)'};border-radius:10px;padding:10px;margin-bottom:12px">
+      <div style="font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.5px;color:${alerts.some(a=>a.tone!=='var(--green)') ? 'var(--red)' : '#1a8c3c'};margin-bottom:6px">Live ward alerts</div>
+      ${alerts.map(a=>`<div style="font-size:12px;color:${a.tone};font-weight:${a.tone==='var(--green)' ? '700' : '900'};margin-bottom:4px">${a.text}</div>`).join('')}
     </div>
     ${nb?`<div style="background:linear-gradient(135deg,#fce4ff,#ede4ff);border-radius:var(--r);padding:13px;border-left:5px solid var(--purple);margin-bottom:12px">
       <div style="font-size:13px;font-weight:900;color:var(--purple);margin-bottom:8px">👶 NEWBORN SPECIAL NOTES</div>
@@ -2752,15 +2823,26 @@ function openIPDPatient(id) {
     </div>`:''}
     <div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Vitals</div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:14px">
-      ${[['BP','bp','mmHg',p.vitals.bp,'ok'],['Pulse','pulse','bpm',p.vitals.pulse,parseInt(p.vitals.pulse)>100?'warn':'ok'],['Temp','temp','°C',p.vitals.temp,parseFloat(p.vitals.temp)>37.5?'warn':'ok'],['SpO2','spo2','%',p.vitals.spo2,parseInt(p.vitals.spo2)<95?'high':'ok'],['RR','rr','brpm',p.vitals.rr,'ok'],['Weight','weight','',p.vitals.weight,'ok']].map(([l,k,u,v,cls])=>`<div style="background:var(--g6);border-radius:8px;padding:9px;text-align:center"><div style="font-size:9px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px">${l}</div><div style="font-size:17px;font-weight:900;margin-top:3px;color:${cls==='warn'?'var(--orange)':cls==='high'?'var(--red)':'#1a8c3c'}">${v}</div><div style="font-size:9px;color:var(--g1)">${u}</div></div>`).join('')}
+      ${[['BP','bp','mmHg',lastVitals.bp,'ok'],['Pulse','pulse','bpm',lastVitals.pulse,parseInt(lastVitals.pulse)>100?'warn':'ok'],['Temp','temp','°C',lastVitals.temp,parseFloat(lastVitals.temp)>37.5?'warn':'ok'],['SpO2','spo2','%',lastVitals.spo2,parseInt(lastVitals.spo2)<95?'high':'ok'],['RR','rr','brpm',lastVitals.rr,'ok'],['Weight','weight','',lastVitals.weight || p.weight || '—','ok']].map(([l,k,u,v,cls])=>`<div style="background:var(--g6);border-radius:8px;padding:9px;text-align:center"><div style="font-size:9px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px">${l}</div><div style="font-size:17px;font-weight:900;margin-top:3px;color:${cls==='warn'?'var(--orange)':cls==='high'?'var(--red)':'#1a8c3c'}">${v||'—'}</div><div style="font-size:9px;color:var(--g1)">${u}</div></div>`).join('')}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+      <div style="background:var(--g6);border-radius:10px;padding:12px">
+        <div style="font-size:10px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Structured chart</div>
+        ${ipdChartSummary(p)}
+      </div>
+      <div style="background:var(--g6);border-radius:10px;padding:12px">
+        <div style="font-size:10px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Monitoring schedule</div>
+        ${(p.monitoringPlan || []).slice(0, 8).map(slot => `<div style="display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--g5);font-size:12px"><span>${new Date(slot.dueAt).toLocaleString('en-IN')}</span><strong style="color:${slot.status==='done' ? '#1a8c3c' : new Date(slot.dueAt).getTime() < Date.now() ? 'var(--red)' : 'var(--orange)'}">${slot.status === 'done' ? 'Recorded' : new Date(slot.dueAt).getTime() < Date.now() ? 'Overdue' : 'Due'}</strong></div>`).join('') || '<div style="color:var(--g1);font-size:12px">No schedule set.</div>'}
+      </div>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
       <div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px">Progress Notes</div>
       <button class="btn btn-gold btn-xs" onclick="openM('m-ipd-note')">+ Add Note</button>
     </div>
     <div id="ipd-notes-list">
-      ${p.notes.map(n=>`<div style="background:var(--g6);border-radius:var(--rsm);padding:12px;margin-bottom:8px;border-left:3px solid var(--blue)">
+      ${(p.notes || []).map(n=>`<div style="background:var(--g6);border-radius:var(--rsm);padding:12px;margin-bottom:8px;border-left:3px solid var(--blue)">
         <div style="font-size:11px;font-weight:900;color:var(--bmh-blue);margin-bottom:4px">${n.date} · ${n.time}</div>
+        ${n.vitals ? `<div style="font-size:10px;color:var(--g1);margin-bottom:6px">BP ${n.vitals.bp||'—'} · Pulse ${n.vitals.pulse||'—'} · Temp ${n.vitals.temp||'—'} · SpO2 ${n.vitals.spo2||'—'} · RR ${n.vitals.rr||'—'} · Pain ${n.vitals.pain||'—'}</div>` : ''}
         <div style="font-size:12px;color:var(--tx3);line-height:1.7">${n.note}</div>
         <div style="font-size:10px;color:var(--g1);margin-top:6px">👩‍⚕️ ${n.nurse} · 👨‍⚕️ ${n.doctor}</div>
       </div>`).join('')}
@@ -2770,6 +2852,7 @@ function openIPDPatient(id) {
       <button class="btn btn-gold btn-sm" onclick="showToast('Discharge card generated ✓','s')">🏠 Discharge</button>
       <button class="btn btn-gray btn-sm" onclick="showToast('Vitals updated ✓','s')">📊 Update Vitals</button>
     </div>`;
+  renderIPDAlerts(p);
 }
 
 function saveProgressNote() {
@@ -2777,8 +2860,27 @@ function saveProgressNote() {
   const note = document.getElementById('pn-text')?.value;
   const nurse = document.getElementById('pn-nurse')?.value||'Staff Nurse';
   const doctor = document.getElementById('pn-doctor')?.value||'Dr. Varun Baweja';
+  const date = document.getElementById('pn-date')?.value || new Date().toISOString().slice(0,10);
+  const time = document.getElementById('pn-time')?.value || new Date().toTimeString().slice(0,5);
+  const vitals = {
+    bp: document.getElementById('pn-bp')?.value || '',
+    pulse: document.getElementById('pn-pulse')?.value || '',
+    temp: document.getElementById('pn-temp')?.value || '',
+    spo2: document.getElementById('pn-spo2')?.value || '',
+    rr: document.getElementById('pn-rr')?.value || '',
+    pain: document.getElementById('pn-pain')?.value || ''
+  };
   if (!note) { showToast('Please enter a note','w'); return; }
-  activeIPDPatient.notes.unshift({date:new Date().toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}),time:new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),note,nurse,doctor});
+  if (!Array.isArray(activeIPDPatient.notes)) activeIPDPatient.notes = [];
+  if (!Array.isArray(activeIPDPatient.vitalSigns)) activeIPDPatient.vitalSigns = [];
+  activeIPDPatient.notes.unshift({date:new Date(date).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}),time,note,nurse,doctor,vitals,recordedAt:new Date(date + 'T' + time).toISOString()});
+  if (Object.values(vitals).some(Boolean)) activeIPDPatient.vitalSigns.unshift(Object.assign({ recordedAt:new Date(date + 'T' + time).toISOString(), by:nurse }, vitals));
+  const nextDue = (activeIPDPatient.monitoringPlan || []).find(slot => slot.status !== 'done');
+  if (nextDue) {
+    nextDue.status = 'done';
+    nextDue.recordedAt = new Date(date + 'T' + time).toISOString();
+  }
+  if (fbUpdate) fbUpdate('ipdPatients/' + activeIPDPatient.id, activeIPDPatient).catch(()=>{});
   showToast('Progress note saved ✓','s');
   closeM('m-ipd-note');
   openIPDPatient(activeIPDPatient.id);
@@ -2796,6 +2898,8 @@ function loadBmhFinancials() {
     const vb = localStorage.getItem('bmh_vendor_bills'); if (vb) { window.BMH_VENDOR_BILLS.length = 0; JSON.parse(vb).forEach(x=>window.BMH_VENDOR_BILLS.push(x)); }
     const ex = localStorage.getItem('bmh_expenses'); if (ex) { window.BMH_EXPENSES.length = 0; JSON.parse(ex).forEach(x=>window.BMH_EXPENSES.push(x)); }
     const lg = localStorage.getItem('bmh_ledger'); if (lg) { window.BMH_LEDGER.length = 0; JSON.parse(lg).forEach(x=>window.BMH_LEDGER.push(x)); }
+    const pu = localStorage.getItem('bmh_purchases'); if (pu) { window.BMH_PURCHASES.length = 0; JSON.parse(pu).forEach(x=>window.BMH_PURCHASES.push(x)); }
+    const iu = localStorage.getItem('bmh_inventory_usage'); if (iu) { window.BMH_INVENTORY_USAGE.length = 0; JSON.parse(iu).forEach(x=>window.BMH_INVENTORY_USAGE.push(x)); }
   } catch (e) { /* noop */ }
 }
 function saveBmhFinancials() {
@@ -2804,6 +2908,8 @@ function saveBmhFinancials() {
     localStorage.setItem('bmh_vendor_bills', JSON.stringify(window.BMH_VENDOR_BILLS));
     localStorage.setItem('bmh_expenses', JSON.stringify(window.BMH_EXPENSES));
     localStorage.setItem('bmh_ledger', JSON.stringify(window.BMH_LEDGER));
+    localStorage.setItem('bmh_purchases', JSON.stringify(window.BMH_PURCHASES));
+    localStorage.setItem('bmh_inventory_usage', JSON.stringify(window.BMH_INVENTORY_USAGE));
   } catch (e) { /* noop */ }
 }
 function loadInventoryStockFromStorage() {
@@ -2812,11 +2918,62 @@ function loadInventoryStockFromStorage() {
     if (!s) return;
     const arr = JSON.parse(s);
     if (!Array.isArray(arr)) return;
-    arr.forEach(row => { const it = INVENTORY.find(x => x.barcode === row.barcode); if (it && typeof row.stock === 'number') it.stock = row.stock; });
+    arr.forEach(row => {
+      const it = INVENTORY.find(x => x.barcode === row.barcode);
+      if (it) Object.assign(it, row);
+    });
   } catch (e) { /* noop */ }
 }
 function saveInventoryStockToStorage() {
-  try { localStorage.setItem('bmh_inventory_stock', JSON.stringify(INVENTORY.map(i => ({ barcode: i.barcode, stock: i.stock })))); } catch (e) { /* noop */ }
+  try { localStorage.setItem('bmh_inventory_stock', JSON.stringify(INVENTORY.map(i => ({ barcode: i.barcode, stock: i.stock, name: i.name, cat: i.cat, mrp: i.mrp, exp: i.exp, dept: i.dept, vendor: i.vendor, cost: i.cost, qr: i.qr })))); } catch (e) { /* noop */ }
+}
+function bmhNowISO() { return new Date().toISOString(); }
+function bmhDeptLabel(k) {
+  const map = { ophtho:'Ophthalmology', obg:'OBG', psych:'Psychiatry', skin:'Skin', general:'General / Shared', ot:'OT / Procedure', ipd:'IPD / Ward' };
+  return map[k] || k || 'General';
+}
+function bmhInventoryDeptValue() { return document.getElementById('inv-in-dept')?.value || 'general'; }
+function bmhInventoryUseDeptValue() { return document.getElementById('inv-use-dept')?.value || 'general'; }
+function bmhCompressFileToData(file, cb) {
+  if (!file) { cb(null); return; }
+  if (/^image\//.test(file.type || '')) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        const max = 1200;
+        const scale = Math.min(1, max / Math.max(img.width || 1, img.height || 1));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round((img.width || 1) * scale);
+        canvas.height = Math.round((img.height || 1) * scale);
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        cb({
+          name: file.name,
+          type: 'image/jpeg',
+          sizeKB: Math.round((canvas.toDataURL('image/jpeg', 0.72).length * 0.75) / 1024),
+          data: canvas.toDataURL('image/jpeg', 0.72)
+        });
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = e => cb({
+    name: file.name,
+    type: file.type || 'application/octet-stream',
+    sizeKB: Math.round((file.size || 0) / 1024),
+    data: e.target.result
+  });
+  reader.readAsDataURL(file);
+}
+function bmhDefaultInventoryDeptForPatient(bmhId) {
+  const pt = PATIENTS.find(x => x.bmhId === bmhId);
+  if (!pt) return 'general';
+  if (pt.status === 'ipd' || pt.ipdAdmitted) return 'ipd';
+  return pt.dept || 'general';
 }
 function inferChargeCategoryFromService(forStr) {
   const s = (forStr || '').toLowerCase();
@@ -3206,12 +3363,12 @@ function bmhRenderVendorTables() {
   const el = document.getElementById('bmh-vendor-table');
   if (el) {
     const rows = window.BMH_VENDOR_BILLS.slice().reverse();
-    el.innerHTML = rows.length ? `<table class="rc-queue-table" style="width:100%"><thead><tr><th>Vendor</th><th>Inv</th><th>₹</th><th>Status</th><th></th></tr></thead><tbody>${rows.map(v => `<tr><td>${v.vendor}</td><td style="font-family:var(--mono);font-size:10px">${v.invoiceNo || '—'}</td><td>₹${v.amount.toLocaleString('en-IN')}</td><td><span class="badge ${v.status === 'paid' ? 'bd-green' : 'bd-orange'}">${v.status}</span></td><td>${v.status === 'pending' ? `<button type="button" class="btn btn-xs btn-gold" onclick="bmhMarkVendorPaid('${v.id}')">Mark paid</button>` : (v.paidRef || '—')}</td></tr>`).join('')}</tbody></table>` : '<div style="color:var(--g1);font-size:12px">No vendor bills.</div>';
+    el.innerHTML = rows.length ? `<table class="rc-queue-table" style="width:100%"><thead><tr><th>Vendor</th><th>Inv</th><th>₹</th><th>Status</th><th>Bill</th><th></th></tr></thead><tbody>${rows.map(v => `<tr><td>${v.vendor}</td><td style="font-family:var(--mono);font-size:10px">${v.invoiceNo || '—'}</td><td>₹${v.amount.toLocaleString('en-IN')}</td><td><span class="badge ${v.status === 'paid' ? 'bd-green' : 'bd-orange'}">${v.status}</span></td><td style="font-size:10px">${v.billFile?.name || v.uploadedName || '—'}</td><td>${v.status === 'pending' ? `<button type="button" class="btn btn-xs btn-gold" onclick="bmhMarkVendorPaid('${v.id}')">Mark paid</button>` : (v.paidRef || '—')}</td></tr>`).join('')}</tbody></table>` : '<div style="color:var(--g1);font-size:12px">No vendor bills.</div>';
   }
   const mini = document.getElementById('inv-vendor-mini');
   if (mini) {
     const pend = window.BMH_VENDOR_BILLS.filter(v => v.status === 'pending');
-    mini.innerHTML = pend.length ? pend.map(v => `<div style="padding:6px;border-bottom:1px solid var(--g5);font-size:12px">${v.vendor} · ₹${v.amount.toLocaleString('en-IN')} <span class="badge bd-orange">due</span></div>`).join('') : '<div style="color:var(--g1);font-size:12px">No pending vendor bills.</div>';
+    mini.innerHTML = pend.length ? pend.map(v => `<div style="padding:6px;border-bottom:1px solid var(--g5);font-size:12px">${v.vendor} · ₹${v.amount.toLocaleString('en-IN')} <span class="badge bd-orange">due</span><div style="font-size:10px;color:var(--g1)">${v.invoiceNo || '—'} · ${v.billFile?.name || v.uploadedName || 'No bill file'}</div></div>`).join('') : '<div style="color:var(--g1);font-size:12px">No pending vendor bills.</div>';
   }
 }
 function bmhAddVendorBill() {
@@ -3392,6 +3549,8 @@ function bmhUseInventoryItemForPatient(bmhId, item, opts) {
   if (!bmhId || !item) return;
   const qty = Math.max(1, Number(opts?.qty) || 1);
   const descSuffix = opts?.descSuffix ? ' ' + opts.descSuffix : '';
+  const usageMode = opts?.mode || 'bill';
+  const patient = PATIENTS.find(x => x.bmhId === bmhId);
   if ((item.stock || 0) >= qty) item.stock -= qty;
   else {
     showToast('Stock is lower than requested quantity — recording bill line anyway', 'w');
@@ -3399,21 +3558,38 @@ function bmhUseInventoryItemForPatient(bmhId, item, opts) {
   }
   const mrp = Number(item.mrp) || 0;
   const cat = /IOL|IVT|Eye|Drop|IV|Injection|Glove|Cannula|Syringe/i.test((item.cat || '') + item.name) ? 'pharmacy' : 'consumable';
-  addBmhPatientCharge(bmhId, {
-    id: 'inv' + Date.now() + Math.random().toString(36).slice(2, 5),
-    cat,
-    desc: item.name + descSuffix,
+  if (usageMode !== 'consume') {
+    addBmhPatientCharge(bmhId, {
+      id: 'inv' + Date.now() + Math.random().toString(36).slice(2, 5),
+      cat,
+      desc: item.name + descSuffix,
+      qty,
+      rate: mrp,
+      amount: mrp * qty,
+      source: 'inventory',
+      ref: item.barcode,
+      ts: new Date().toISOString()
+    });
+    AUTO_BILL.push({ item: item.name, mrp, qty, patient: bmhId, time: new Date().toLocaleTimeString() });
+  }
+  window.BMH_INVENTORY_USAGE.push({
+    id:'IU' + Date.now() + Math.random().toString(36).slice(2, 5),
+    bmhId,
+    patientName: patient?.name || bmhId,
+    dept: opts?.dept || patient?.dept || 'general',
+    itemName: item.name,
+    barcode: item.barcode,
     qty,
-    rate: mrp,
-    amount: mrp * qty,
-    source: 'inventory',
-    ref: item.barcode,
-    ts: new Date().toISOString()
+    mrp,
+    cost: Number(item.cost || 0),
+    mode: usageMode,
+    ts: bmhNowISO()
   });
-  AUTO_BILL.push({ item: item.name, mrp, qty, patient: bmhId, time: new Date().toLocaleTimeString() });
+  saveBmhFinancials();
   saveInventoryStockToStorage();
   renderStockList();
   renderAutoBillLog();
+  renderInventoryUsageLog();
   renderBillingPageIfActive && renderBillingPageIfActive();
 }
 function bmhGeneratePurchaseOrderDraft() {
@@ -3533,15 +3709,70 @@ function initInventory() {
   renderStockList();
   renderAutoBillLog();
   bmhRenderVendorTables();
+  renderInventoryPurchaseLog();
+  renderInventoryUsageLog();
   const s = document.getElementById('use-pt');
-  if (s) s.innerHTML = PATIENTS.map(p => `<option value="${p.bmhId}">${p.name} — ${p.bmhId}</option>`).join('');
+  if (s) {
+    s.innerHTML = PATIENTS.map(p => `<option value="${p.bmhId}">${p.name} — ${p.bmhId}</option>`).join('');
+    if (s.value) {
+      const deptEl = document.getElementById('inv-use-dept');
+      if (deptEl) deptEl.value = bmhDefaultInventoryDeptForPatient(s.value);
+      s.onchange = function () {
+        const deptPick = document.getElementById('inv-use-dept');
+        if (deptPick) deptPick.value = bmhDefaultInventoryDeptForPatient(this.value);
+      };
+    }
+  }
   const ilc = document.getElementById('inv-low-cnt');
   if (ilc) ilc.textContent = INVENTORY.filter(i => i.stock <= i.min).length;
 }
-function renderStockList() { const el=document.getElementById('inv-stock-list');if(!el)return; el.innerHTML=INVENTORY.map(i=>{const pct=Math.min(100,(i.stock/(i.min*3))*100);const cls=i.stock<=2?'critical':i.stock<=i.min?'low':''; return `<div class="inv-row ${cls}"><div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:800">${i.name}</div><div style="font-family:var(--mono);font-size:9px;color:var(--g1)">${i.barcode} · ${i.cat} · Exp:${i.exp}</div><div class="sb-bar"><div class="sb-fill" style="width:${pct}%;background:${i.stock<=2?'var(--red)':i.stock<=i.min?'var(--orange)':'var(--green)'}"></div></div></div><div style="text-align:right;flex-shrink:0"><div style="font-size:17px;font-weight:900;color:${i.stock<=2?'var(--red)':i.stock<=i.min?'var(--orange)':'var(--green)'}">${i.stock}</div><div style="font-size:11px;font-weight:700;color:var(--g1)">MRP ₹${i.mrp.toLocaleString('en-IN')}</div></div></div>`; }).join('');}
+function renderStockList() {
+  const el=document.getElementById('inv-stock-list');if(!el)return;
+  el.innerHTML=INVENTORY.map(i=>{
+    const pct=Math.min(100,(i.stock/(Math.max(1, i.min)*3))*100);
+    const cls=i.stock<=2?'critical':i.stock<=i.min?'low':'';
+    return `<div class="inv-row ${cls}">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;font-weight:800">${i.name}</div>
+        <div style="font-family:var(--mono);font-size:9px;color:var(--g1)">${i.barcode} · ${i.cat} · ${bmhDeptLabel(i.dept || 'general')} · Exp:${i.exp || '—'}</div>
+        <div class="sb-bar"><div class="sb-fill" style="width:${pct}%;background:${i.stock<=2?'var(--red)':i.stock<=i.min?'var(--orange)':'var(--green)'}"></div></div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-size:17px;font-weight:900;color:${i.stock<=2?'var(--red)':i.stock<=i.min?'var(--orange)':'var(--green)'}">${i.stock}</div>
+        <div style="font-size:11px;font-weight:700;color:var(--g1)">MRP ₹${Number(i.mrp||0).toLocaleString('en-IN')}</div>
+        <div style="font-size:10px;color:var(--g1)">Cost ₹${Number(i.cost||0).toLocaleString('en-IN')}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
 function scanBC(mode) { const demo=INVENTORY.filter(i=>i.stock>0)[Math.floor(Math.random()*5)]; const inp=mode==='in'?document.getElementById('bc-in'):document.getElementById('bc-use'); if(inp)inp.value=demo.barcode; showToast('📷 Barcode scanned: '+demo.barcode,'i'); setTimeout(()=>processBC(mode,demo.barcode),400); }
 
 function renderAutoBillLog(){const el=document.getElementById('auto-bill-log');if(!el)return;if(!AUTO_BILL.length){el.innerHTML='<div style="padding:12px;text-align:center;color:var(--g1);font-size:12px">No items billed yet</div>';return;}el.innerHTML=AUTO_BILL.slice().reverse().map(b=>{const pid=String(b.patient||'');return `<div style="display:flex;align-items:center;gap:9px;padding:9px;background:var(--green-lt);border-radius:8px;margin-bottom:6px;font-size:12px;border-left:3px solid var(--green)"><span style="font-size:14px">📦</span><div style="flex:1"><div style="font-weight:800">${b.item}</div><div style="font-family:var(--mono);font-size:9px;color:var(--bmh-teal)">${pid.slice(0,22)}</div></div><div style="text-align:right"><div style="font-weight:900;color:var(--green)">₹${(b.mrp||0).toLocaleString('en-IN')}</div><div style="font-size:9.5px;color:var(--g1)">${b.time||''}</div></div></div>`;}).join('');}
+function renderInventoryPurchaseLog() {
+  const el = document.getElementById('inv-purchase-log');
+  if (!el) return;
+  const rows = (window.BMH_PURCHASES || []).slice().reverse();
+  el.innerHTML = rows.length ? rows.map(r => `<div style="padding:10px 0;border-bottom:1px solid var(--g5);font-size:12px">
+    <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+      <div style="font-weight:900">${r.itemName}</div>
+      <div style="font-weight:900;color:var(--bmh-blue)">+${r.qty} · ₹${Number(r.totalCost||0).toLocaleString('en-IN')}</div>
+    </div>
+    <div style="font-size:10px;color:var(--g1);margin-top:4px">${bmhDeptLabel(r.dept)} · ${r.vendor || 'No vendor'} · Inv ${r.invoiceNo || '—'} · ${new Date(r.ts).toLocaleString('en-IN')}</div>
+    <div style="font-size:10px;color:var(--g1);margin-top:2px">${r.billFile?.name ? 'Bill: ' + r.billFile.name + ' · ' : ''}Barcode ${r.barcode || '—'} · Cost ₹${Number(r.cost || 0).toLocaleString('en-IN')} · MRP ₹${Number(r.mrp || 0).toLocaleString('en-IN')}</div>
+  </div>`).join('') : '<div style="padding:12px;color:var(--g1);font-size:12px">No purchase intake recorded yet.</div>';
+}
+function renderInventoryUsageLog() {
+  const el = document.getElementById('inv-usage-log');
+  if (!el) return;
+  const rows = (window.BMH_INVENTORY_USAGE || []).slice().reverse();
+  el.innerHTML = rows.length ? rows.map(r => `<div style="padding:10px 0;border-bottom:1px solid var(--g5);font-size:12px">
+    <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+      <div><strong>${r.itemName}</strong> <span style="font-family:var(--mono);font-size:10px;color:var(--bmh-teal)">${r.bmhId || ''}</span></div>
+      <div style="font-weight:900;color:${r.mode === 'bill' ? '#1a8c3c' : '#8a4200'}">${r.mode === 'bill' ? 'Billed' : 'Consumed'} · Qty ${r.qty}</div>
+    </div>
+    <div style="font-size:10px;color:var(--g1);margin-top:4px">${bmhDeptLabel(r.dept)} · ${r.patientName || 'Ward stock'} · ${new Date(r.ts).toLocaleString('en-IN')}</div>
+  </div>`).join('') : '<div style="padding:12px;color:var(--g1);font-size:12px">No patient-linked usage recorded yet.</div>';
+}
 
 // ═══════════════════════════════════════
 // TPA
@@ -3927,19 +4158,33 @@ function confirmIPDAdmit() {
   const type   = document.getElementById('ipd-type')?.value || 'Surgical';
   const doctor = document.getElementById('ipd-doctor')?.value || CURRENT_USER?.name || '—';
   const room   = document.getElementById('ipd-room')?.value || '';
+  const dept   = document.getElementById('ipd-dept')?.value || p.dept || 'general';
+  const monitoring = document.getElementById('ipd-monitoring')?.value || '6h';
   const dx     = document.getElementById('ipd-dx')?.value || '';
+  const allergies = document.getElementById('ipd-allergies')?.value || '';
+  const diet = document.getElementById('ipd-diet')?.value || '';
   const notes  = document.getElementById('ipd-notes')?.value || '';
+  const admittedAt = new Date().toISOString();
 
   const ipdEntry = {
     id:'IPD'+Date.now(), bmhId, name:p.name,
-    age:p.age, sex:p.sex, dept:p.dept||'ophtho',
+    age:p.age, sex:p.sex, dept,
     ward, type, doctor, room, dx, notes,
     color:p.color||'#1A3C6E', initials:p.initials||p.name[0]||'?',
     admittedDate: new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}),
-    admittedAt: new Date().toISOString(),
+    admittedAt,
     admittedBy: CURRENT_USER?.name||'System',
     status:'admitted',
-    vitalSigns:[], progressNotes:[]
+    allergies,
+    diet,
+    monitoringKey: monitoring,
+    monitoringLabel: ({'1h':'Hourly','2h':'Every 2 hours','4h':'Every 4 hours','6h':'Every 6 hours'})[monitoring] || 'Every 6 hours',
+    monitoringPlan: ipdMonitoringSlots(monitoring, admittedAt),
+    vitalSigns:[],
+    vitals:{ bp:'', pulse:'', temp:'', spo2:'', rr:'', weight:p.weight || '' },
+    notes:[],
+    chartRows: ipdDeptTemplate(dept),
+    progressNotes:[]
   };
 
   if(!window.IPD_PATIENTS) window.IPD_PATIENTS = [];
@@ -3949,6 +4194,7 @@ function confirmIPDAdmit() {
 
   p.ipdAdmitted = true;
   p.status = 'ipd';
+  p.dept = dept;
 
   // Save to Firebase
   fbSet('ipdPatients/'+ipdEntry.id, ipdEntry).catch(e=>console.warn('IPD save error:',e));
@@ -6643,29 +6889,117 @@ function renameIPDBed(id) {
 function renderInventoryManual() {
   const el = document.getElementById('inv-manual-form'); if(!el) return;
 }
+function bmhFindOrCreateInventoryItem(rawCode, translated) {
+  const lookup = String(rawCode || '').trim();
+  let item = BCMAP[lookup] || BCMAP[lookup.toLowerCase().substring(0, 15)] || INVENTORY.find(x => x.barcode === lookup || x.name.toLowerCase() === lookup.toLowerCase());
+  if (item) return item;
+  item = {
+    name: translated || lookup,
+    barcode: lookup || ('INV-' + Date.now()),
+    qr: lookup || '',
+    cat: 'General',
+    mrp: Number(document.getElementById('inv-in-mrp')?.value || '0') || 0,
+    cost: Number(document.getElementById('inv-in-cost')?.value || '0') || 0,
+    stock: 0,
+    min: 5,
+    exp: document.getElementById('inv-in-exp')?.value || '',
+    dept: bmhInventoryDeptValue(),
+    vendor: document.getElementById('inv-in-vendor')?.value?.trim() || ''
+  };
+  INVENTORY.push(item);
+  BCMAP[item.barcode] = item;
+  return item;
+}
+function bmhRecordInventoryPurchase(item, qty, billFile) {
+  const vendor = document.getElementById('inv-in-vendor')?.value?.trim() || '';
+  const invoiceNo = document.getElementById('inv-in-invoice')?.value?.trim() || '';
+  const dept = bmhInventoryDeptValue();
+  const cost = Number(document.getElementById('inv-in-cost')?.value || item.cost || 0) || 0;
+  const mrp = Number(document.getElementById('inv-in-mrp')?.value || item.mrp || 0) || 0;
+  item.cost = cost;
+  item.mrp = mrp;
+  item.dept = dept;
+  item.vendor = vendor || item.vendor || '';
+  item.exp = document.getElementById('inv-in-exp')?.value || item.exp || '';
+  const totalCost = qty * cost;
+  const purchase = {
+    id:'PO' + Date.now() + Math.random().toString(36).slice(2, 5),
+    itemName:item.name,
+    barcode:item.barcode,
+    dept,
+    vendor,
+    invoiceNo,
+    qty,
+    cost,
+    mrp,
+    totalCost,
+    ts:bmhNowISO(),
+    billFile: billFile || null
+  };
+  window.BMH_PURCHASES.push(purchase);
+  if (vendor && totalCost > 0) {
+    window.BMH_VENDOR_BILLS.push({
+      id: 'VB' + Date.now() + Math.random().toString(36).slice(2, 5),
+      vendor,
+      invoiceNo,
+      amount: totalCost,
+      dueDate: '',
+      status: 'pending',
+      uploadedName: billFile?.name || '',
+      billFile: billFile || null,
+      createdAt: purchase.ts
+    });
+  }
+  saveBmhFinancials();
+  renderInventoryPurchaseLog();
+  bmhRenderVendorTables();
+}
 // Extend processBC — stock in / patient use with inventory deduction + patient charge line
 function processBC(mode, code) {
   if (!code) return;
   const translated = code.replace(/^MFX/, 'Moxifloxacin Eye Drop').replace(/^PDN/, 'Prednisolone Eye Drop').replace(/^IOL/, 'AcrySof IOL').replace(/^BEV/, 'Bevacizumab Injection').replace(/^MAN/, 'Mannitol IV');
-  const item = BCMAP[code] || BCMAP[code.toLowerCase().substring(0, 15)];
+  const item = BCMAP[code] || BCMAP[code.toLowerCase().substring(0, 15)] || INVENTORY.find(x => x.name.toLowerCase() === String(code).toLowerCase());
   if (mode === 'in') {
-    if (item) {
-      item.stock = (item.stock || 0) + 1;
+    const qty = Math.max(1, Number(document.getElementById('inv-in-qty')?.value || '1'));
+    const target = item || bmhFindOrCreateInventoryItem(code, translated);
+    bmhCompressFileToData(document.getElementById('inv-in-bill-file')?.files?.[0], (billFile) => {
+      target.stock = (target.stock || 0) + qty;
+      bmhRecordInventoryPurchase(target, qty, billFile);
       saveInventoryStockToStorage();
       renderStockList();
-      showToast('Stock in: ' + item.name + ' (+' + item.stock + ')', 's');
-    } else showToast('Unknown barcode — add item to master list in Settings if needed', 'w');
+      const log = document.getElementById('stock-in-log');
+      if (log) {
+        const d = document.createElement('div');
+        d.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;background:var(--green-lt);border-radius:8px;margin-bottom:6px;font-size:12px';
+        d.innerHTML = `<span><strong>${target.name}</strong> · ${bmhDeptLabel(target.dept || 'general')}</span><span style="font-weight:900;color:#1a8c3c">+${qty}</span>`;
+        log.prepend(d);
+      }
+      showToast('Stock in: ' + target.name + ' (+' + qty + ')', 's');
+    });
     return;
   }
   if (mode === 'use') {
     const bmhId = document.getElementById('use-pt')?.value || PATIENTS[0]?.bmhId;
+    const qty = Math.max(1, Number(document.getElementById('inv-use-qty')?.value || '1'));
+    const useMode = document.getElementById('inv-use-mode')?.value || 'bill';
+    const dept = bmhInventoryUseDeptValue();
     if (item) {
-      bmhUseInventoryItemForPatient(bmhId, item, { descSuffix: '(inventory use)' });
-      showToast(item.name + ' → patient bill ₹' + (Number(item.mrp) || 0).toLocaleString('en-IN'), 's');
+      bmhUseInventoryItemForPatient(bmhId, item, { descSuffix: '(inventory use)', qty, mode: useMode, dept });
+      const log = document.getElementById('use-log');
+      if (log) {
+        const d = document.createElement('div');
+        d.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;background:var(--orange-lt);border-radius:8px;margin-bottom:6px;font-size:12px';
+        d.innerHTML = `<span><strong>${item.name}</strong> · ${bmhId}</span><span style="font-weight:900;color:#8a4200">${useMode === 'bill' ? 'Billed' : 'Consumed'} × ${qty}</span>`;
+        log.prepend(d);
+      }
+      showToast(item.name + (useMode === 'bill' ? ' → patient bill ₹' + (Number(item.mrp) || 0).toLocaleString('en-IN') : ' consumed from stock') , 's');
     } else {
       showToast('Scanned: "' + translated + '" — not in inventory', 'i');
       AUTO_BILL.push({ item: translated, mrp: 0, patient: bmhId, time: new Date().toLocaleTimeString() });
-      addBmhPatientCharge(bmhId, { id: 'inv' + Date.now(), cat: 'pharmacy', desc: translated + ' (not in stock / OCR)', qty: 1, rate: 0, amount: 0, source: 'inventory', ts: new Date().toISOString() });
+      if (useMode !== 'consume') addBmhPatientCharge(bmhId, { id: 'inv' + Date.now(), cat: 'pharmacy', desc: translated + ' (not in stock / OCR)', qty: qty, rate: 0, amount: 0, source: 'inventory', ts: new Date().toISOString() });
+      window.BMH_INVENTORY_USAGE.push({ id:'IU' + Date.now(), bmhId, patientName:(PATIENTS.find(x=>x.bmhId===bmhId)||{}).name || bmhId, dept, itemName:translated, barcode:code, qty, mrp:0, cost:0, mode:useMode, ts:bmhNowISO() });
+      saveBmhFinancials();
+      renderInventoryUsageLog();
       renderAutoBillLog();
       renderBillingPageIfActive && renderBillingPageIfActive();
     }
@@ -8113,7 +8447,16 @@ function renderRxDrugs() {
     });
   });
 
-  const rowGrid = `display:grid;grid-template-columns:${isOphtho ? 'minmax(220px,1.45fr) minmax(110px,.8fr)' : 'minmax(220px,1.55fr) minmax(110px,.8fr)'} minmax(150px,1fr) minmax(120px,.8fr) minmax(210px,1.1fr) 88px;gap:10px;align-items:end`;
+  const fieldSelect = (label, value, list, onChange, border) => `
+    <div style="display:flex;flex-direction:column;gap:4px">
+      <div style="font-size:9px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px">${label}</div>
+      <select onchange="${onChange}" style="font-size:11px;padding:7px 8px;width:100%;border-radius:8px;border:1px solid ${border};background:#fff">${list.map(v=>`<option${value===v?' selected':''}>${v}</option>`).join('')}</select>
+    </div>`;
+  const fieldInput = (label, value, onChange, border, type, placeholder) => `
+    <div style="display:flex;flex-direction:column;gap:4px">
+      <div style="font-size:9px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px">${label}</div>
+      <input type="${type || 'text'}" value="${String(value || '').replace(/"/g,'&quot;')}" placeholder="${placeholder || ''}" onchange="${onChange}" style="font-size:11px;padding:7px 8px;width:100%;border-radius:8px;border:1px solid ${border};background:#fff">
+    </div>`;
   const medicineRow = (d, i, options) => {
     const opts = options || {};
     const trade = opts.trade || rxDrugTradeName(d) || '';
@@ -8135,30 +8478,30 @@ function renderRxDrugs() {
     const removeBtn = opts.removeBtn || '';
     const instruction = opts.instruction || '';
     const siteLabel = isOphtho ? 'Eye' : 'Route';
-    return `<div style="border-top:1px dashed ${border};padding:10px 12px;background:${bg}">
-      <div style="${rowGrid}">
-        <div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <span style="min-width:24px;height:24px;border-radius:999px;background:${opts.badgeBg || 'var(--bmh-blue)'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:900">${badge}</span>
-            <div style="min-width:0">
-              <input value="${String(heading).replace(/"/g,'&quot;')}" onchange="${prefix}.trade=this.value;${prefix}.brand=this.value" placeholder="Trade name" style="width:100%;font-size:13px;font-weight:900;border:none;background:transparent;padding:0;box-sizing:border-box;color:${opts.headingColor || 'var(--tx)'}">
-              <input value="${String(subheading).replace(/"/g,'&quot;')}" onchange="${prefix}.generic=this.value;${prefix}.name=this.value" placeholder="(Generic name)" style="width:100%;font-size:10.5px;color:var(--g1);font-style:italic;border:none;background:transparent;padding:0;box-sizing:border-box;margin-top:2px">
-              ${title ? `<div style="font-size:9px;color:var(--g1);margin-top:2px">${title}</div>` : ''}
-            </div>
+    return `<div style="padding:10px 12px;background:${bg};border-top:1px dashed ${border};display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap">
+        <div style="display:flex;align-items:flex-start;gap:10px;min-width:0;flex:1">
+          <span style="min-width:28px;height:28px;border-radius:999px;background:${opts.badgeBg || 'var(--bmh-blue)'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:900;margin-top:2px">${badge}</span>
+          <div style="min-width:0;flex:1">
+            <input value="${String(heading).replace(/"/g,'&quot;')}" onchange="${prefix}.trade=this.value;${prefix}.brand=this.value" placeholder="Trade name" style="width:100%;font-size:13px;font-weight:900;border:none;background:transparent;padding:0;box-sizing:border-box;color:${opts.headingColor || 'var(--tx)'}">
+            <input value="${String(subheading).replace(/"/g,'&quot;')}" onchange="${prefix}.generic=this.value;${prefix}.name=this.value" placeholder="(Generic name)" style="width:100%;font-size:10.5px;color:var(--g1);font-style:italic;border:none;background:transparent;padding:0;box-sizing:border-box;margin-top:2px">
+            ${title ? `<div style="font-size:9px;color:var(--g1);margin-top:3px">${title}</div>` : ''}
           </div>
         </div>
-        <div><div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:4px">Type</div><select onchange="${prefix}.drugType=this.value;${prefix}.type=this.value" style="font-size:10px;padding:7px;width:100%;border-radius:8px;border:1px solid ${border}">${typeOpts.map(t=>`<option${dt===t?' selected':''}>${t}</option>`).join('')}</select></div>
-        <div><div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:4px">${siteLabel}</div><select onchange="${prefix}.eye=[this.value]" style="font-size:10px;padding:7px;width:100%;border-radius:8px;border:1px solid ${border}">${eyeOpts.map(e=>`<option${eye0===e?' selected':''}>${e}</option>`).join('')}</select></div>
-        <div><div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:4px">Frequency</div><select onchange="${prefix}.freq=this.value;syncRxDrugDates(${i})" style="font-size:10px;padding:7px;width:100%;border-radius:8px;border:1px solid ${border}">${freqOpts.map(f=>`<option${freq===f?' selected':''}>${f}</option>`).join('')}</select></div>
-        <div>
-          <div style="font-size:9px;font-weight:800;color:var(--g1);margin-bottom:4px">Duration and Dates</div>
-          <div style="display:grid;grid-template-columns:minmax(110px,.9fr) 1fr 1fr;gap:6px">
-            <select onchange="${prefix}.dur=this.value;syncRxDrugDates(${i})" style="font-size:10px;padding:7px;width:100%;border-radius:8px;border:1px solid ${border}">${durOpts.map(f=>`<option${dur===f?' selected':''}>${f}</option>`).join('')}</select>
-            <input type="date" value="${dateFrom||''}" onchange="${prefix}.dateFrom=this.value;syncRxDrugDates(${i})" style="font-size:10px;padding:7px;border-radius:8px;border:1px solid ${border};width:100%">
-            <input type="date" value="${dateTo||''}" onchange="${prefix}.dateTo=this.value" style="font-size:10px;padding:7px;border-radius:8px;border:1px solid ${border};width:100%">
-          </div>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+          ${taperBtn}
+          ${removeBtn}
         </div>
-        <div style="display:flex;flex-direction:column;gap:7px;justify-content:flex-end">${taperBtn}${removeBtn}</div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(${isOphtho ? '170px' : '180px'},1fr));gap:8px">
+        ${fieldSelect('Type', dt, typeOpts, `${prefix}.drugType=this.value;${prefix}.type=this.value`, border)}
+        ${fieldSelect(siteLabel, eye0, eyeOpts, `${prefix}.eye=[this.value]`, border)}
+        ${fieldSelect('Frequency', freq, freqOpts, `${prefix}.freq=this.value;syncRxDrugDates(${i})`, border)}
+        ${fieldSelect('Duration', dur, durOpts, `${prefix}.dur=this.value;syncRxDrugDates(${i})`, border)}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px">
+        ${fieldInput('Start', dateFrom, `${prefix}.dateFrom=this.value;syncRxDrugDates(${i})`, border, 'date')}
+        ${fieldInput('End', dateTo, `${prefix}.dateTo=this.value`, border, 'date')}
       </div>
       ${instruction ? `<div style="margin-top:8px;padding:8px 10px;background:${opts.instructionBg || '#f7faff'};border-radius:8px;font-size:10px;line-height:1.45;color:${opts.instructionColor || '#24364f'}">${instruction.replace(/</g,'&lt;')}</div>` : ''}
     </div>`;
@@ -12187,10 +12530,11 @@ function renderIPD() {
       <div style="width:38px;height:38px;border-radius:50%;background:#1A3C6E;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px;flex-shrink:0">${p.initials||p.name[0]||'?'}</div>
       <div style="flex:1;min-width:0">
         <div style="font-weight:800;font-size:13px">${p.name}</div>
-        <div style="font-size:10.5px;color:var(--g1)">${p.ward||'—'} · ${p.diagnosis||'—'}</div>
+        <div style="font-size:10.5px;color:var(--g1)">${p.ward||'—'} · ${p.dx||p.diagnosis||'—'} · ${bmhDeptLabel(p.dept)}</div>
       </div>
-      <span class="badge ${p.status==='critical'?'bd-red':p.status==='stable'?'bd-green':'bd-gray'}">${p.status||'admitted'}</span>
+      <span class="badge ${ipdEvaluateAlerts(p).some(a=>a.tone==='var(--red)') ? 'bd-red' : p.status==='stable'?'bd-green':'bd-gray'}">${ipdEvaluateAlerts(p).some(a=>a.tone==='var(--red)') ? 'alert' : (p.status||'admitted')}</span>
     </div>`).join('');
+  if (activeIPDPatient && visibleIPD.some(p => p.id === activeIPDPatient.id)) openIPDPatient(activeIPDPatient.id);
 }
 
 // ── renderOTList — renders into ot-all-list + tab sub-lists ──────────────
