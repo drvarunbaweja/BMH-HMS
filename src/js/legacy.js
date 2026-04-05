@@ -962,7 +962,7 @@ function renderImageDocumentPage(title, imgSrc, ctx) {
 }
 function renderPackDocumentPages(key, ctx) {
   if (key === '__discharge__') return buildDischargePrintSection();
-  const lib = getMergedLibraryItem(key);
+  const lib = getMergedLibraryItem(key) || ((window.BMH_UPLOADED_CONSENTS || []).find(function (x) { return x && x.id === key; }) || null);
   const tpl = getConsentTemplateItem(key);
   const title = getPackDocumentTitle(key);
   const mergedEntry = getConsentEntry(key);
@@ -6450,6 +6450,51 @@ function refreshRxTemplateSelects() {
   });
   if (typeof refreshOTNotesTemplateSelect === 'function') refreshOTNotesTemplateSelect();
 }
+function getSurgeryTemplateSuggestions() {
+  return [...new Set((CHARGES_DATA || [])
+    .filter(function (row) {
+      const kind = String(row.kind || '').toLowerCase();
+      return kind === 'surgery' || String(row.cat || '').toLowerCase().includes('eye');
+    })
+    .map(function (row) { return String(row.parent || row.name || '').trim(); })
+    .filter(Boolean))].sort();
+}
+function refreshRxTemplateSurgeryDatalist() {
+  const dl = document.getElementById('rx-tpl-surgery-list');
+  if (!dl) return;
+  dl.innerHTML = getSurgeryTemplateSuggestions().map(function (name) {
+    return '<option value="' + String(name).replace(/"/g, '&quot;') + '"></option>';
+  }).join('');
+}
+function parseTemplateLines(raw, dept) {
+  const lines = String(raw || '').split(/\n/).map(function (l) { return l.trim(); }).filter(Boolean);
+  if (!lines.length) return [];
+  return lines.map(function (line) {
+    const parts = line.split(/[—–-]/).map(function (s) { return s.trim(); });
+    const trade = parts[0] || 'Item';
+    const freq = parts[1] || 'Twice daily (BD)';
+    const dur = parts[2] || '1 Week';
+    if (dept === 'ot') return { trade, generic: '', eye: '', freq, dur };
+    const lib = DRUG_LIBRARY.find(function (x) { return x.trade === trade || x.generic === trade; });
+    const drugType = lib ? lib.type : '';
+    const isEye = /drop|eye|ophth|moxiflox|vigamox|pred|tears/i.test(trade + ' ' + (drugType || ''));
+    return {
+      trade,
+      generic: lib ? lib.generic : trade,
+      eye: isEye ? 'Both Eyes (OU)' : 'Oral',
+      freq,
+      dur
+    };
+  });
+}
+function serializeTemplateRows(rows, dept) {
+  return (rows || []).map(function (row) {
+    const name = dept === 'ot'
+      ? (row.trade || row.name || row.generic || '')
+      : (rxDrugTradeName(row) || row.trade || row.name || row.generic || '');
+    return [name, row.freq || '', row.dur || ''].filter(Boolean).join(' — ');
+  }).join('\n');
+}
 function rxDrugMatchesDept(drug, deptKey, deptLabel) {
   const entry = drug || {};
   const rawDept = String(entry.dept || '').trim();
@@ -6497,6 +6542,7 @@ function renderSetRxTplList() {
       return '<div style="display:flex;align-items:flex-start;gap:10px;padding:10px;background:var(--g6);border-radius:8px;margin-bottom:6px;font-size:12px">' +
         '<div style="flex:1"><div style="font-weight:800">' + n + '</div>' +
         '<div style="font-size:10.5px;color:var(--g1)">' + cnt + ' line(s) with saved frequency / duration' + '</div>' +
+        (meta.surgery ? '<div style="font-size:10px;color:var(--bmh-blue);font-weight:800;margin-top:4px">Surgery: ' + String(meta.surgery).replace(/</g, '&lt;') + '</div>' : '') +
         (preview ? '<div style="font-size:10.5px;color:var(--tx3);margin-top:5px;line-height:1.45">' + preview + '</div>' : '') +
         '</div>' +
         '<button type="button" class="btn btn-xs btn-gold" onclick="openEditRxTemplateModal(' + JSON.stringify(k) + ')">✏️ Edit</button>' +
@@ -6512,13 +6558,16 @@ function openEditRxTemplateModal(key) {
   const kInp = document.getElementById('edit-rx-tpl-key');
   const nInp = document.getElementById('edit-rx-tpl-name');
   const dInp = document.getElementById('edit-rx-tpl-dept');
+  const sInp = document.getElementById('edit-rx-tpl-surgery');
   const notesInp = document.getElementById('edit-rx-tpl-notes');
-  const jInp = document.getElementById('edit-rx-tpl-json');
+  const lInp = document.getElementById('edit-rx-tpl-lines');
   if (kInp) kInp.value = key;
   if (nInp) nInp.value = meta.name || key;
   if (dInp) dInp.value = meta.dept || 'all';
+  if (sInp) sInp.value = meta.surgery || '';
   if (notesInp) notesInp.value = meta.notes || '';
-  if (jInp) jInp.value = JSON.stringify(RX_TEMPLATES_DATA[key], null, 2);
+  if (lInp) lInp.value = serializeTemplateRows(RX_TEMPLATES_DATA[key], meta.dept || 'all');
+  refreshRxTemplateSurgeryDatalist();
   openM('m-edit-rx-tpl');
 }
 function saveRxTemplateFromModal() {
@@ -6526,17 +6575,12 @@ function saveRxTemplateFromModal() {
   if (!key || !RX_TEMPLATES_DATA[key]) { showToast('Invalid template', 'w'); return; }
   const name = document.getElementById('edit-rx-tpl-name')?.value?.trim() || key;
   const dept = document.getElementById('edit-rx-tpl-dept')?.value || 'all';
+  const surgery = document.getElementById('edit-rx-tpl-surgery')?.value?.trim() || '';
   const notes = document.getElementById('edit-rx-tpl-notes')?.value?.trim() || '';
-  let arr;
-  try {
-    arr = JSON.parse(document.getElementById('edit-rx-tpl-json')?.value || '[]');
-  } catch (e) {
-    showToast('Invalid JSON — check drug list', 'w');
-    return;
-  }
-  if (!Array.isArray(arr)) { showToast('Template must be a JSON array', 'w'); return; }
+  const arr = parseTemplateLines(document.getElementById('edit-rx-tpl-lines')?.value || '', dept);
+  if (!arr.length) { showToast('Add at least one template row', 'w'); return; }
   RX_TEMPLATES_DATA[key] = arr;
-  RX_TEMPLATES_META[key] = { dept: dept, name: name, notes: notes };
+  RX_TEMPLATES_META[key] = { dept: dept, name: name, notes: notes, surgery: surgery };
   saveRxTemplatesToStorage();
   refreshRxTemplateSelects();
   renderSetRxTplList();
@@ -8607,28 +8651,13 @@ function saveRxTemplate(mode) {
   const deptSel = document.getElementById('rx-tpl-dept-settings' + suffix);
   const deptMap = { 'Ophthalmology':'ophtho','OBG':'obg','Psychiatry':'psych','Skin':'skin','OT':'ot','All':'all' };
   const dept = deptSel ? (deptMap[deptSel.value] || 'all') : 'all';
+  const surgery = document.getElementById('rx-tpl-surgery' + suffix)?.value?.trim() || '';
   const raw = document.getElementById('rx-tpl-drugs' + suffix)?.value || '';
-  const lines = raw.split(/\n/).map(l=>l.trim()).filter(Boolean);
-  if(!lines.length){showToast('Add one drug per line (e.g. Brand — frequency — duration)','w');return;}
+  const arr = parseTemplateLines(raw, dept);
+  if(!arr.length){showToast('Add one drug per line (e.g. Brand — frequency — duration)','w');return;}
   const key = name.toLowerCase().replace(/\s+/g,'-');
-  RX_TEMPLATES_DATA[key] = lines.map(line => {
-    const parts = line.split(/[—–-]/).map(s=>s.trim());
-    const trade = parts[0] || 'Drug';
-    const freq = parts[1] || 'Twice daily (BD)';
-    const dur = parts[2] || '1 Week';
-    if (dept === 'ot') return { trade, generic: '', eye: '', freq, dur };
-    const lib = DRUG_LIBRARY.find(x => x.trade === trade || x.generic === trade);
-    const drugType = lib ? lib.type : '';
-    const isEye = /drop|eye|ophth|moxiflox|vigamox|pred|tears/i.test(trade + ' ' + (drugType || ''));
-    return {
-      trade,
-      generic: lib ? lib.generic : trade,
-      eye: isEye ? 'Both Eyes (OU)' : 'Oral',
-      freq,
-      dur
-    };
-  });
-  RX_TEMPLATES_META[key] = { dept, name, notes: '' };
+  RX_TEMPLATES_DATA[key] = arr;
+  RX_TEMPLATES_META[key] = { dept, name, notes: '', surgery };
   saveRxTemplatesToStorage();
   refreshRxTemplateSelects();
   renderSetRxTplList && renderSetRxTplList();
@@ -8636,9 +8665,10 @@ function saveRxTemplate(mode) {
   showToast('Template "'+name+'" saved ✓','s');
 }
 function openNewRxTemplateModal() {
-  ['rx-tpl-name-modal','rx-tpl-drugs-modal'].forEach(function (id) { const el = document.getElementById(id); if (el) el.value = ''; });
+  ['rx-tpl-name-modal','rx-tpl-drugs-modal','rx-tpl-surgery-modal'].forEach(function (id) { const el = document.getElementById(id); if (el) el.value = ''; });
   const deptSel = document.getElementById('rx-tpl-dept-settings-modal');
   if (deptSel) deptSel.value = 'Ophthalmology';
+  refreshRxTemplateSurgeryDatalist();
   openM('m-add-rx-tpl');
 }
 
@@ -9296,10 +9326,13 @@ function refreshOTNotesTemplateSelect() {
   const sel = document.getElementById('ot-notes-template');
   if (!sel) return;
   const cur = sel.value;
+  const activeProc = String(activeOTCase?.procedure || '').trim().toLowerCase();
   sel.innerHTML = '<option value="">— Select template —</option>';
   Object.keys(RX_TEMPLATES_DATA || {}).forEach(function (key) {
     const meta = RX_TEMPLATES_META[key] || {};
     if ((meta.dept || '') !== 'ot') return;
+    const templateSurgery = String(meta.surgery || '').trim().toLowerCase();
+    if (templateSurgery && activeProc && !activeProc.includes(templateSurgery) && !templateSurgery.includes(activeProc)) return;
     const opt = document.createElement('option');
     opt.value = key;
     opt.textContent = meta.name || key;
@@ -11661,7 +11694,7 @@ function renderChargesList() {
         const gIdx = CHARGES_DATA.indexOf(c);
         const disabled = editable ? '' : 'disabled';
         return `<div style="display:grid;grid-template-columns:70px 1fr 90px 90px 40px;gap:5px;padding:4px 8px;border-bottom:1px solid var(--g5);align-items:center;font-size:11.5px">
-          <span class="badge bd-gray" style="font-size:9px">${c.cat}</span>
+          <span class="badge bd-gray" style="font-size:9px">${(c.kind || c.cat || '').toString().replace(/</g,'&lt;')}</span>
           <input type="text" value="${c.name}" style="font-size:11.5px;font-weight:600" onchange="CHARGES_DATA[${gIdx}].name=this.value" ${disabled}>
           <input type="number" value="${c.chd}" style="font-size:12px;font-weight:800;color:var(--bmh-blue);text-align:right" onchange="CHARGES_DATA[${gIdx}].chd=parseInt(this.value)" ${disabled}>
           <input type="number" value="${c.rpr}" style="font-size:12px;font-weight:800;color:#8a4200;text-align:right" onchange="CHARGES_DATA[${gIdx}].rpr=parseInt(this.value)" ${disabled}>
@@ -11681,6 +11714,8 @@ function openAddChargeModal() {
   ['add-charge-parent','add-charge-name','add-charge-chd','add-charge-rpr'].forEach(function (id) {
     const el = document.getElementById(id); if (el) el.value = '';
   });
+  const kindEl = document.getElementById('add-charge-kind');
+  if (kindEl) kindEl.value = 'procedure';
   refreshChargeModalSuggestions();
   openM('m-add-proc-charge');
 }
@@ -11689,25 +11724,29 @@ function saveChargeFromModal() {
   if (!canEditChargeCategory(cat)) { showToast('You can edit charges only for your own department', 'w'); return; }
   const parent = document.getElementById('add-charge-parent')?.value?.trim() || '';
   const name = document.getElementById('add-charge-name')?.value?.trim();
+  const kind = document.getElementById('add-charge-kind')?.value || 'procedure';
   const chd = parseInt(document.getElementById('add-charge-chd')?.value || '0', 10) || 0;
   const rpr = parseInt(document.getElementById('add-charge-rpr')?.value || '0', 10) || 0;
-  if (!name) { showToast('Enter charge name', 'w'); return; }
+  if (!name && !parent) { showToast('Enter a main heading or charge name', 'w'); return; }
+  const finalName = name || parent;
+  const finalParent = name ? parent : '';
   const existing = CHARGES_DATA.find(function (row) {
-    return row.cat === cat && String(row.parent || '') === parent && String(row.name || '').toLowerCase() === String(name || '').toLowerCase();
+    return row.cat === cat && String(row.parent || '') === finalParent && String(row.name || '').toLowerCase() === String(finalName || '').toLowerCase();
   });
   if (existing) {
     existing.chd = chd;
     existing.rpr = rpr;
-    existing.parent = parent;
+    existing.parent = finalParent;
+    existing.kind = kind;
   } else {
-    CHARGES_DATA.push({cat, parent, name, chd, rpr});
+    CHARGES_DATA.push({cat, kind, parent: finalParent, name: finalName, chd, rpr});
   }
-  CENTRE_CHARGES.CHD[name] = chd;
-  CENTRE_CHARGES.RPR[name] = rpr;
+  CENTRE_CHARGES.CHD[finalName] = chd;
+  CENTRE_CHARGES.RPR[finalName] = rpr;
   saveChargesToFirebase();
   renderChargesList();
   closeM('m-add-proc-charge');
-  showToast('"' + name + '" saved to fee schedule ✓','s');
+  showToast('"' + finalName + '" saved to fee schedule ✓','s');
 }
 
 function saveCharges() {
@@ -13239,7 +13278,11 @@ function printCustomConsent(id) {
   fbOnce('consentLibrary/' + id, async data => {
     if(!data) { showToast('Consent not found','w'); return; }
     const ctx = collectConsentPrintContext();
-    const pageHtml = renderPackDocumentPages(id, ctx);
+    let pageHtml = renderPackDocumentPages(id, ctx);
+    if (!pageHtml) {
+      if (data.type === 'image') pageHtml = renderImageDocumentPage(data.name || 'Document', data.imgSrc || data.dataUrl || '', ctx);
+      else if (data.text || data.body) pageHtml = renderGenericDocumentPage(data.name || 'Document', data.text || data.body, ctx, { signatures: data.docType !== 'form' });
+    }
     if (!pageHtml) { showToast('Nothing to print for this document', 'w'); return; }
     safePrint('<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif}@page{size:A4;margin:0}</style></head><body>' + pageHtml + '</body></html>');
   });
