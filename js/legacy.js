@@ -237,15 +237,65 @@ function getOtProcedureOptions() {
   return Array.from(new Set(fromCharges.concat(fallbacks).filter(Boolean)));
 }
 function populateOTProcedureOptions(selected) {
-  const sel = document.getElementById('ot-add-proc');
-  if (!sel) return;
+  const input = document.getElementById('ot-add-proc');
+  const list = document.getElementById('ot-proc-list');
+  if (!input || !list) return;
   const options = getOtProcedureOptions();
-  sel.innerHTML = options.map(function (name) {
-    return '<option' + (normalizeOtProcedureName(selected) === normalizeOtProcedureName(name) ? ' selected' : '') + '>' + name.replace(/</g, '&lt;') + '</option>';
+  list.innerHTML = options.map(function (name) {
+    return '<option value="' + String(name).replace(/"/g, '&quot;') + '"></option>';
   }).join('');
-  if (selected && !options.some(function (name) { return normalizeOtProcedureName(name) === normalizeOtProcedureName(selected); })) {
-    sel.innerHTML += '<option selected>' + String(selected).replace(/</g, '&lt;') + '</option>';
+  if (selected) input.value = selected;
+  updateOTIolSummarySuggestions();
+}
+window.OT_DIAGNOSIS_OPTIONS = window.OT_DIAGNOSIS_OPTIONS || [];
+function getOtDiagnosisOptions() {
+  const defaults = [
+    'Cataract',
+    'Cataract Right Eye',
+    'Cataract Left Eye',
+    'Cataract Both Eyes',
+    'Posterior subcapsular cataract',
+    'Nuclear sclerosis cataract',
+    'Primary open-angle glaucoma',
+    'Angle-closure glaucoma',
+    'Pterygium',
+    'Nasolacrimal duct obstruction',
+    'Retinal pathology requiring procedure',
+    'Uterine fibroid',
+    'Ovarian cyst',
+    'Need for LSCS',
+    'Skin lesion for procedure'
+  ];
+  return Array.from(new Set([].concat(window.OT_DIAGNOSIS_OPTIONS || [], defaults).filter(Boolean)));
+}
+function populateOTDiagnosisOptions(selected) {
+  const input = document.getElementById('ot-add-dx');
+  const list = document.getElementById('ot-dx-list');
+  if (!input || !list) return;
+  const options = getOtDiagnosisOptions();
+  list.innerHTML = options.map(function (name) {
+    return '<option value="' + String(name).replace(/"/g, '&quot;') + '"></option>';
+  }).join('');
+  if (selected) input.value = selected;
+}
+function loadOTDiagnosisOptions() {
+  if (!window.fbOnce) return;
+  fbOnce('settings/otDiagnoses').then(function (data) {
+    if (Array.isArray(data) && data.length) {
+      window.OT_DIAGNOSIS_OPTIONS = data.filter(Boolean);
+      populateOTDiagnosisOptions(document.getElementById('ot-add-dx')?.value || '');
+    }
+  }).catch(function () {});
+}
+function addOTDiagnosisOption() {
+  const val = window.prompt('Enter a pre-operative diagnosis to reuse in OT cases:')?.trim();
+  if (!val) return;
+  if (!(window.OT_DIAGNOSIS_OPTIONS || []).includes(val)) {
+    window.OT_DIAGNOSIS_OPTIONS.push(val);
+    fbSet && fbSet('settings/otDiagnoses', window.OT_DIAGNOSIS_OPTIONS);
   }
+  populateOTDiagnosisOptions(val);
+  showToast('OT diagnosis added ✓', 's');
 }
 function getOtIolChoices() {
   const catalog = (IOL_CATALOG || []).map(function (row) {
@@ -285,18 +335,38 @@ function populateOTIolOptions(selectedName, selectedPower) {
     return '<option value="' + value + '"' + ((selectedPower || '') === value ? ' selected' : '') + '>' + power + '</option>';
   }).join('');
   syncOTIolSummary();
+  updateOTIolSummarySuggestions();
 }
 function syncOTIolSummary() {
   const model = document.getElementById('ot-add-iol-model')?.value || '';
   const power = document.getElementById('ot-add-iol-power')?.value || '';
   const input = document.getElementById('ot-add-iol');
   if (!input) return;
+  if (document.activeElement === input && String(input.value || '').trim()) return;
   if (!model) {
     input.value = '';
     return;
   }
   const hasPowerInName = extractIolPower(model);
   input.value = power && !hasPowerInName ? (model + ' ' + power) : model;
+}
+function updateOTIolSummarySuggestions() {
+  const proc = String(document.getElementById('ot-add-proc')?.value || '').toLowerCase();
+  const list = document.getElementById('ot-iol-summary-list');
+  if (!list) return;
+  const names = Array.from(new Set((CHARGES_DATA || []).filter(function (row) {
+    const parent = String(row.parent || '').toLowerCase();
+    const name = String(row.name || '').toLowerCase();
+    if (/pmics|pinhole microincision cataract surgery/.test(proc)) {
+      return /pinhole microincision cataract surgery|pmics/.test(parent);
+    }
+    return /\biol\b|implant/.test(parent) || /\biol\b|implant/.test(name);
+  }).map(function (row) {
+    return row.name;
+  }).filter(Boolean)));
+  list.innerHTML = names.map(function (name) {
+    return '<option value="' + String(name).replace(/"/g, '&quot;') + '"></option>';
+  }).join('');
 }
 function openOTAddIolModal() {
   openM('m-add-iol');
@@ -2654,6 +2724,16 @@ function printDischarge() {
   showToast('Discharge card ready to print ✓', 's');
 }
 function printRx() { if (typeof window.printUnifiedRx === 'function') window.printUnifiedRx('oe'); }
+function getDeptPrintDoctorInfo(type) {
+  const map = { rx: 'oe', ophtho: 'oe', 'obg-anc-card': 'obg', 'psych-summary': 'psych', 'skin-summary': 'skin' };
+  const deptId = map[type] || 'oe';
+  const doctorName = deptId === 'oe'
+    ? (document.getElementById('ophtho-rx-doctor')?.textContent?.trim() || CURRENT_PATIENT?.doctor || CURRENT_USER?.name || 'Dr. Varun Baweja')
+    : (typeof getRxDoctorDisplayName === 'function' ? getRxDoctorDisplayName() : (CURRENT_USER?.name || 'Doctor'));
+  const clean = String(doctorName || '').split('·')[0].trim() || (CURRENT_USER?.name || 'Doctor');
+  const profile = DOCTOR_PROFILES[clean] || {};
+  return { name: clean, degrees: profile.degrees || CURRENT_USER?.degrees || '' };
+}
 
 function doPrint(type) {
   const titles = {'case-sheet':'Ophthalmology Case Sheet','ophtho':'Eye Examination Sheet','rx':'Prescription','obg-anc-card':'ANC Card','psych-summary':'Psychiatry Summary','skin-summary':'Skin & Cosmetology Summary'};
@@ -2663,12 +2743,13 @@ function doPrint(type) {
 
 function generatePrintHTML(type) {
   const today = new Date().toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'});
+  const printDoctor = getDeptPrintDoctorInfo(type);
   const header = `<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding-bottom:12px;border-bottom:2.5px solid #1A3C6E;margin-bottom:15px"><div style="margin-bottom:14px;page-break-inside:avoid"><img src="" class="lh-img-tag" data-lhsrc="1" alt="Baweja Multispeciality Hospital" style="width:100%;max-width:720px;height:auto;display:block"></div><div style="text-align:right;flex-shrink:0"><div style="font-size:9px;color:#444;margin-bottom:6px">&#9993; info&#64;bawejahospital.com</div><div style="font-size:9px;color:#333;margin-top:4px;line-height:2">&#127760; www.bawejahospital.com<br>&#127760; www.bmhchandigarh.com</div></div></div>`;
   const ptBlock = `<div style="background:#f0f4ff;border-radius:8px;padding:10px;margin-bottom:14px;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;font-size:12px">
     <div><div style="font-size:9px;font-weight:800;color:#888;text-transform:uppercase">Patient</div><div style="font-weight:800">Test Patient A</div></div>
     <div><div style="font-size:9px;font-weight:800;color:#888;text-transform:uppercase">BMH ID</div><div style="font-family:monospace;font-weight:800;color:#0B7B8C">BMSH-000001</div></div>
     <div><div style="font-size:9px;font-weight:800;color:#888;text-transform:uppercase">Age / Sex</div><div style="font-weight:800">34Y / Male</div></div>
-    <div><div style="font-size:9px;font-weight:800;color:#888;text-transform:uppercase">Doctor</div><div style="font-weight:800">Dr. Varun Baweja</div></div>
+    <div><div style="font-size:9px;font-weight:800;color:#888;text-transform:uppercase">Doctor</div><div style="font-weight:800">${printDoctor.name}</div></div>
   </div>`;
 
   let body = '';
@@ -2684,7 +2765,7 @@ function generatePrintHTML(type) {
     </div>
     <div style="margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:20px">
       <div><div style="font-size:9px;font-weight:800;color:#888;text-transform:uppercase;margin-bottom:25px">Patient Signature</div><div style="border-bottom:1px solid #333"></div></div>
-      <div style="text-align:right"><div style="font-size:12px;font-weight:800;color:#1A3C6E">Dr. Varun Baweja, MS (Ophth)</div><div style="border-bottom:1px solid #333;margin-top:25px"></div><div style="font-size:9px;color:#888;margin-top:3px">Doctor's Signature & Date</div></div>
+      <div style="text-align:right"><div style="font-size:12px;font-weight:800;color:#1A3C6E">${printDoctor.name}${printDoctor.degrees ? ', ' + printDoctor.degrees : ''}</div><div style="border-bottom:1px solid #333;margin-top:25px"></div><div style="font-size:9px;color:#888;margin-top:3px">Doctor's Signature & Date</div></div>
     </div>`;
   } else if (type === 'ophtho') {
     const vaOd = document.getElementById('va-od-uc')?.value || '6/12';
@@ -2718,7 +2799,7 @@ function generatePrintHTML(type) {
     </div>
     <div style="margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:20px">
       <div><div style="border-bottom:1px solid #333;margin-top:30px"></div><div style="font-size:9px;color:#888;margin-top:3px">Patient Signature</div></div>
-      <div style="text-align:right"><div style="font-size:12px;font-weight:800;color:#1A3C6E">Dr. Varun Baweja, MS (Ophth)</div><div style="border-bottom:1px solid #333;margin-top:20px"></div><div style="font-size:9px;color:#888;margin-top:3px">Signature & Date</div></div>
+      <div style="text-align:right"><div style="font-size:12px;font-weight:800;color:#1A3C6E">${printDoctor.name}${printDoctor.degrees ? ', ' + printDoctor.degrees : ''}</div><div style="border-bottom:1px solid #333;margin-top:20px"></div><div style="font-size:9px;color:#888;margin-top:3px">Signature & Date</div></div>
     </div>`;
   } else if (type === 'obg-anc-card') {
     body = `<div style="font-size:14px;font-weight:900;color:#1A3C6E;border-bottom:2px solid #D4A017;padding-bottom:6px;margin-bottom:12px">🤰 ANC Card — Baweja Multispeciality Hospital</div>
@@ -2726,7 +2807,7 @@ function generatePrintHTML(type) {
       <div><b>Patient:</b> Test Patient E</div><div><b>BMH ID:</b> BMSH-000005</div>
       <div><b>Age:</b> 26 Years</div><div><b>GPAL:</b> G2P1A0L1</div>
       <div><b>LMP:</b> 15 Aug 2024</div><div><b>EDD:</b> 22 May 2025</div>
-      <div><b>Blood Group:</b> O+ve</div><div><b>Doctor:</b> Dr. Geeta Baweja</div>
+      <div><b>Blood Group:</b> O+ve</div><div><b>Doctor:</b> ${printDoctor.name}</div>
     </div>
     <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:14px">
       <thead><tr style="background:#1A3C6E;color:#fff"><th style="padding:6px 8px;text-align:left">Visit</th><th style="padding:6px 8px">Date</th><th style="padding:6px 8px">GA</th><th style="padding:6px 8px">Wt</th><th style="padding:6px 8px">BP</th><th style="padding:6px 8px">FHR</th><th style="padding:6px 8px">FH</th><th style="padding:6px 8px">Presentation</th></tr></thead>
@@ -2737,13 +2818,13 @@ function generatePrintHTML(type) {
     </table>
     <div style="margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:20px">
       <div><div style="border-bottom:1px solid #333;margin-top:30px"></div><div style="font-size:9px;color:#888;margin-top:3px">Patient Signature</div></div>
-      <div style="text-align:right"><div style="font-size:12px;font-weight:800;color:#1A3C6E">Dr. Geeta Baweja, MS (OBG)</div><div style="border-bottom:1px solid #333;margin-top:20px"></div><div style="font-size:9px;color:#888;margin-top:3px">Signature & Date</div></div>
+      <div style="text-align:right"><div style="font-size:12px;font-weight:800;color:#1A3C6E">${printDoctor.name}${printDoctor.degrees ? ', ' + printDoctor.degrees : ''}</div><div style="border-bottom:1px solid #333;margin-top:20px"></div><div style="font-size:9px;color:#888;margin-top:3px">Signature & Date</div></div>
     </div>`;
   } else if (type === 'psych-summary') {
     body = `<div style="font-size:14px;font-weight:900;color:#1A3C6E;border-bottom:2px solid #D4A017;padding-bottom:6px;margin-bottom:12px">🧠 Psychiatry Summary — Test Patient D</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;font-size:12px">
       <div><b>Patient:</b> Test Patient D</div><div><b>BMH ID:</b> BMH-CHD-2025-0901</div>
-      <div><b>Diagnosis:</b> F32.1 — MDE Moderate</div><div><b>Doctor:</b> Dr. Tarun Baweja</div>
+      <div><b>Diagnosis:</b> F32.1 — MDE Moderate</div><div><b>Doctor:</b> ${printDoctor.name}</div>
     </div>
     <div style="background:#f0eeff;border-radius:8px;padding:10px;margin-bottom:10px">
       <div style="font-weight:800;margin-bottom:6px;font-size:12px">Rating Scales</div>
@@ -2759,13 +2840,13 @@ function generatePrintHTML(type) {
     </div>
     <div style="margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:20px">
       <div><div style="border-bottom:1px solid #333;margin-top:30px"></div><div style="font-size:9px;color:#888;margin-top:3px">Patient Signature</div></div>
-      <div style="text-align:right"><div style="font-size:12px;font-weight:800;color:#1A3C6E">Dr. Tarun Baweja, MD (Psychiatry)</div><div style="border-bottom:1px solid #333;margin-top:20px"></div><div style="font-size:9px;color:#888;margin-top:3px">Signature & Date</div></div>
+      <div style="text-align:right"><div style="font-size:12px;font-weight:800;color:#1A3C6E">${printDoctor.name}${printDoctor.degrees ? ', ' + printDoctor.degrees : ''}</div><div style="border-bottom:1px solid #333;margin-top:20px"></div><div style="font-size:9px;color:#888;margin-top:3px">Signature & Date</div></div>
     </div>`;
   } else if (type === 'skin-summary') {
     body = `<div style="font-size:14px;font-weight:900;color:#1A3C6E;border-bottom:2px solid #D4A017;padding-bottom:6px;margin-bottom:12px">💆 Skin & Cosmetology Record — Test Patient F</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;font-size:12px">
       <div><b>Patient:</b> Test Patient F</div><div><b>BMH ID:</b> BMSH-000006</div>
-      <div><b>Diagnosis:</b> Melasma (Epidermal)</div><div><b>Doctor:</b> Dr. Pooja Baweja</div>
+      <div><b>Diagnosis:</b> Melasma (Epidermal)</div><div><b>Doctor:</b> ${printDoctor.name}</div>
       <div><b>Skin Type:</b> Fitzpatrick IV</div><div><b>Treatment:</b> Chemical Peel + Microneedling</div>
     </div>
     <div style="background:#f5f5f7;border-radius:8px;padding:10px;margin-bottom:10px">
@@ -2778,7 +2859,7 @@ function generatePrintHTML(type) {
     </div>
     <div style="margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:20px">
       <div><div style="border-bottom:1px solid #333;margin-top:30px"></div><div style="font-size:9px;color:#888;margin-top:3px">Patient Signature</div></div>
-      <div style="text-align:right"><div style="font-size:12px;font-weight:800;color:#1A3C6E">Dr. Pooja Baweja, MD (Dermatology)</div><div style="border-bottom:1px solid #333;margin-top:20px"></div><div style="font-size:9px;color:#888;margin-top:3px">Signature & Date</div></div>
+      <div style="text-align:right"><div style="font-size:12px;font-weight:800;color:#1A3C6E">${printDoctor.name}${printDoctor.degrees ? ', ' + printDoctor.degrees : ''}</div><div style="border-bottom:1px solid #333;margin-top:20px"></div><div style="font-size:9px;color:#888;margin-top:3px">Signature & Date</div></div>
     </div>`;
   } else {
     body = `<div style="padding:20px;text-align:center;color:#888">Document: ${type}</div>`;
@@ -6046,6 +6127,82 @@ const RX_FREQ_OPTIONS = ['Half-hourly','Hourly','Every 2 hours','Every 3 hours',
 const RX_DURATION_OPTIONS = ['½ day','1 day','2 days','3 days','4 days','5 days','6 days','7 days','13 days','1 week','2 weeks','3 weeks','4 weeks','6 weeks','1 month','2 months','3 months','4 months','5 months','6 months','12 months','Ongoing'];
 const RX_TYPE_OPTIONS = ['Eye Drop','Tablet','Capsule','Ointment','Cream','Gel','Syrup','Injection','Pessary','Lotion','Spray','Other'];
 const RX_SITE_OPTIONS = ['Right Eye (OD)','Left Eye (OS)','Both Eyes (OU)','Oral','Topical','IM / IV','Nasal','Ear','Vaginal'];
+const RX_CUSTOM_OPTION_DEFAULTS = {
+  type: RX_TYPE_OPTIONS.slice(),
+  freq: RX_FREQ_OPTIONS.slice(),
+  dur: RX_DURATION_OPTIONS.slice()
+};
+function getDoctorRxOptionScope() {
+  const dept = normalizeDeptKeyForQueue(rxDeptKeyFromUi ? rxDeptKeyFromUi() : (CURRENT_USER?.dept || 'ophtho')) || 'ophtho';
+  const doctor = String(CURRENT_USER?.name || 'default').trim() || 'default';
+  return { dept: dept, doctor: doctor, key: doctor + '::' + dept };
+}
+function getDoctorCustomRxOptions() {
+  window.DOCTOR_RX_CUSTOM_OPTIONS = window.DOCTOR_RX_CUSTOM_OPTIONS || {};
+  const scope = getDoctorRxOptionScope().key;
+  if (!window.DOCTOR_RX_CUSTOM_OPTIONS[scope]) {
+    window.DOCTOR_RX_CUSTOM_OPTIONS[scope] = { type: [], freq: [], dur: [] };
+  }
+  return window.DOCTOR_RX_CUSTOM_OPTIONS[scope];
+}
+function saveDoctorCustomRxOptions() {
+  try {
+    localStorage.setItem('bmh_doctor_rx_custom_options', JSON.stringify(window.DOCTOR_RX_CUSTOM_OPTIONS || {}));
+  } catch (e) {}
+  if (window.FBDB) {
+    window.FBDB.ref('doctorRxCustomOptions').set(window.DOCTOR_RX_CUSTOM_OPTIONS || {}).catch(function () {});
+  }
+}
+function loadDoctorCustomRxOptions() {
+  window.DOCTOR_RX_CUSTOM_OPTIONS = window.DOCTOR_RX_CUSTOM_OPTIONS || {};
+  try {
+    const raw = localStorage.getItem('bmh_doctor_rx_custom_options');
+    if (raw) Object.assign(window.DOCTOR_RX_CUSTOM_OPTIONS, JSON.parse(raw) || {});
+  } catch (e) {}
+  if (window.FBDB) {
+    window.FBDB.ref('doctorRxCustomOptions').once('value').then(function (snap) {
+      const data = snap.val();
+      if (data && typeof data === 'object') {
+        Object.assign(window.DOCTOR_RX_CUSTOM_OPTIONS, data);
+        refreshCustomRxOptionSelects();
+      }
+    }).catch(function () {});
+  }
+}
+function getMergedRxOptions(kind) {
+  const base = RX_CUSTOM_OPTION_DEFAULTS[kind] || [];
+  const extra = getDoctorCustomRxOptions()[kind] || [];
+  return Array.from(new Set(base.concat(extra).filter(Boolean)));
+}
+function fillSelectWithOptions(id, kind) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const cur = el.value;
+  el.innerHTML = getMergedRxOptions(kind).map(function (opt) {
+    return '<option value="' + String(opt).replace(/"/g, '&quot;') + '">' + String(opt).replace(/</g, '&lt;') + '</option>';
+  }).join('');
+  if ([].slice.call(el.options).some(function (o) { return o.value === cur; })) el.value = cur;
+}
+function refreshCustomRxOptionSelects() {
+  [
+    ['new-drug-type', 'type'], ['new-drug-freq', 'freq'], ['new-drug-dur', 'dur'],
+    ['md-add-type', 'type'], ['md-add-freq', 'freq'], ['md-add-dur', 'dur'],
+    ['md-edit-type', 'type'], ['md-edit-freq', 'freq'], ['md-edit-dur', 'dur']
+  ].forEach(function (pair) {
+    fillSelectWithOptions(pair[0], pair[1]);
+  });
+}
+function addCustomRxOption(kind) {
+  const labels = { type: 'drug type', freq: 'frequency', dur: 'default duration' };
+  const value = window.prompt('Add a new ' + (labels[kind] || kind) + ' for this doctor and department:')?.trim();
+  if (!value) return;
+  const bucket = getDoctorCustomRxOptions();
+  if (!bucket[kind]) bucket[kind] = [];
+  if (!bucket[kind].includes(value)) bucket[kind].push(value);
+  saveDoctorCustomRxOptions();
+  refreshCustomRxOptionSelects();
+  showToast('Saved for ' + (CURRENT_USER?.name || 'doctor') + ' ✓', 's');
+}
 function renderInvestigationChooser() {
   const groups = [
     ['inv-blood-list', INVESTIGATION_LIBRARY.blood],
@@ -8930,9 +9087,10 @@ function fillOTFromPatient(bmhId) {
   }
   // Fill all fields
   const setV=(id,v)=>{const e=document.getElementById(id);if(e)e.value=v;};
+  const dxGuess = p.dx || p.diagnosis || p.lastVisit?.dx || p.purpose || '';
   setV('ot-bmsh-id', p.bmhId);
   setV('ot-age-sex', `${p.age||'?'}Y / ${p.sex||'—'}`);
-  setV('ot-add-dx', p.dx || p.diagnosis || p.purpose || '');
+  populateOTDiagnosisOptions(dxGuess);
   setV('ot-add-site', p.eye || p.opEye || p.surgEye || p.operatingEye || 'N/A');
   if(p.doctor) { const drSel=document.getElementById('ot-add-surgeon'); if(drSel) drSel.value=p.doctor; }
   const guessedProcedure = /surgery|phaco|pmics|cataract|lasik|ivt|trab|pteryg|delivery|lscs|lapar/i.test(String(p.purpose || ''))
@@ -8970,8 +9128,25 @@ function openOTAddModal(opts) {
   const saveBtn = document.getElementById('ot-add-save-btn');
   const editIdEl = document.getElementById('ot-add-case-id');
   if (editIdEl) editIdEl.value = opts.caseId || '';
+  loadOTDiagnosisOptions();
+  populateOTDiagnosisOptions();
   populateOTProcedureOptions();
   populateOTIolOptions();
+  const procEl = document.getElementById('ot-add-proc');
+  if (procEl && !procEl.dataset.boundSuggest) {
+    procEl.addEventListener('input', updateOTIolSummarySuggestions);
+    procEl.dataset.boundSuggest = '1';
+  }
+  const iolModelEl = document.getElementById('ot-add-iol-model');
+  if (iolModelEl && !iolModelEl.dataset.boundSummary) {
+    iolModelEl.addEventListener('change', syncOTIolSummary);
+    iolModelEl.dataset.boundSummary = '1';
+  }
+  const iolPowerEl = document.getElementById('ot-add-iol-power');
+  if (iolPowerEl && !iolPowerEl.dataset.boundSummary) {
+    iolPowerEl.addEventListener('change', syncOTIolSummary);
+    iolPowerEl.dataset.boundSummary = '1';
+  }
   if (titleEl) titleEl.textContent = opts.caseId ? '⚕️ Edit OT Case' : '⚕️ Add OT Case';
   if (saveBtn) saveBtn.textContent = opts.caseId ? '💾 Update OT Case' : '✅ Add to OT List';
   if (opts.caseId) {
@@ -8979,7 +9154,7 @@ function openOTAddModal(opts) {
     const setV=(id,v)=>{const e=document.getElementById(id);if(e)e.value=v||'';};
     setV('ot-bmsh-id', existing.bmhId);
     setV('ot-age-sex', `${existing.age||'?'}Y / ${existing.sex||'—'}`);
-    setV('ot-add-dx', existing.dx);
+    populateOTDiagnosisOptions(existing.dx);
     populateOTProcedureOptions(existing.procedure);
     setV('ot-add-site', existing.site);
     setV('ot-add-surgeon', existing.surgeon);
@@ -10509,6 +10684,40 @@ function renderAISuggestedCharges() {
       onclick="sendQuickCharge('${c.name}','${c.amt}')">${c.label}</button>`
   ).join('');
 }
+function deptChargeCategoryMatches(deptKey, cat) {
+  const c = String(cat || '').toLowerCase();
+  if (deptKey === 'ophtho') return c.includes('eye');
+  if (deptKey === 'obg') return c.includes('obg');
+  if (deptKey === 'psych') return c.includes('psych');
+  if (deptKey === 'skin') return c.includes('skin');
+  return true;
+}
+function renderDeptSendBar(deptKey, hostId, logId) {
+  const host = document.getElementById(hostId);
+  if (!host) return;
+  const centre = getEffectiveCentre ? getEffectiveCentre() : (CURRENT_USER?.centre || 'CHD');
+  const rows = (CHARGES_DATA || []).filter(function (row) {
+    return deptChargeCategoryMatches(deptKey, row.cat);
+  });
+  const options = rows.map(function (row) {
+    const amount = centre === 'RPR' ? Number(row.rpr || 0) : Number(row.chd || 0);
+    return '<option value="' + String(row.name).replace(/"/g, '&quot;') + '|' + amount + '">' + String(row.parent ? row.parent + ' — ' : '') + String(row.name).replace(/</g, '&lt;') + ' — ₹' + amount.toLocaleString('en-IN') + '</option>';
+  }).join('');
+  const quickRows = rows.slice().sort(function (a, b) {
+    return (Number(b.used || b.usageCount || 0)) - (Number(a.used || a.usageCount || 0));
+  }).slice(0, 6);
+  const buttons = quickRows.map(function (row) {
+    const amount = centre === 'RPR' ? Number(row.rpr || 0) : Number(row.chd || 0);
+    const short = String(row.name || '').length > 26 ? String(row.name).slice(0, 24) + '…' : String(row.name || '');
+    return '<button class="btn btn-xs" style="background:#fff;color:#b55a00;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="sendQuickCharge(' + "'" + String(row.name).replace(/'/g, "\\'") + "'" + ',' + amount + ')">' + short.replace(/</g, '&lt;') + ' ₹' + amount.toLocaleString('en-IN') + '</button>';
+  }).join('');
+  host.innerHTML = '<div style="background:linear-gradient(135deg,#fff7e0,#fff3cc);border-radius:10px;padding:8px 11px;margin-bottom:10px;border:1.5px solid rgba(212,160,23,.3)"><div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap"><span style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">📤 Send to Reception:</span><select style="font-size:11px;padding:3px 6px;border-radius:6px;border:1.5px solid rgba(212,160,23,.5);background:#fff;min-width:220px" onchange="sendFromDropdown(this)"><option value="">— All procedures —</option>' + options + '</select><div style="display:flex;gap:4px;flex-wrap:wrap;flex:1">' + buttons + '</div><button class="btn btn-xs btn-gold" onclick="addCustomCharge()" style="white-space:nowrap">+ Custom</button></div><div id="' + logId + '" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px"></div></div>';
+}
+function renderAllDeptSendBars() {
+  renderDeptSendBar('obg', 'obg-top-send-bar', 'sent-charges-log-obg');
+  renderDeptSendBar('psych', 'psych-top-send-bar', 'sent-charges-log-psych');
+  renderDeptSendBar('skin', 'skin-top-send-bar', 'sent-charges-log-skin');
+}
 
 function sendFromDropdown(sel) {
   const val = sel.value; if(!val) return;
@@ -10535,6 +10744,7 @@ function addCustomCharge() {
 setTimeout(() => {
   renderAIProcSuggestions();
   renderAISuggestedCharges();
+  renderAllDeptSendBars();
 }, 200);
 
 // ═══════════════════════════════════════
@@ -11300,28 +11510,55 @@ const CHARGES_DATA = [
   {cat:'Lab',    name:'Renal Function Test',             chd:650,   rpr:550},
   {cat:'Lab',    name:'Vitamin D / B12',                 chd:1200,  rpr:1000},
 ];
+function getChargeMainHeadings() {
+  return Array.from(new Set((CHARGES_DATA || []).map(function (row) {
+    return String(row.parent || '').trim();
+  }).filter(Boolean))).sort();
+}
+function getChargeNamesForCategory(cat) {
+  return Array.from(new Set((CHARGES_DATA || []).filter(function (row) {
+    return !cat || row.cat === cat;
+  }).map(function (row) {
+    return String(row.name || '').trim();
+  }).filter(Boolean))).sort();
+}
+function refreshChargeModalSuggestions() {
+  const parentList = document.getElementById('charge-parent-list');
+  const nameList = document.getElementById('charge-name-list');
+  const cat = document.getElementById('add-charge-cat')?.value || '';
+  if (parentList) {
+    parentList.innerHTML = getChargeMainHeadings().map(function (name) {
+      return '<option value="' + String(name).replace(/"/g, '&quot;') + '"></option>';
+    }).join('');
+  }
+  if (nameList) {
+    nameList.innerHTML = getChargeNamesForCategory(cat).map(function (name) {
+      return '<option value="' + String(name).replace(/"/g, '&quot;') + '"></option>';
+    }).join('');
+  }
+}
+function canEditChargeCategory(cat) {
+  if (CURRENT_USER?.isAdmin) return true;
+  const dept = String(CURRENT_USER?.dept || '').toLowerCase();
+  const c = String(cat || '').toLowerCase();
+  if (dept.includes('oph') && c.includes('eye')) return true;
+  if ((dept.includes('obg') || dept.includes('gyn')) && c.includes('obg')) return true;
+  if (dept.includes('psych') && c.includes('psych')) return true;
+  if ((dept.includes('skin') || dept.includes('derm') || dept.includes('cosmet')) && c.includes('skin')) return true;
+  return false;
+}
 
 function renderChargesList() {
   const el = document.getElementById('set-procs-list') || document.getElementById('charges-list');
   if(!el) return;
   const cats = [...new Set(CHARGES_DATA.map(c=>c.cat))];
-  const canEditDept = function (cat) {
-    if (CURRENT_USER?.isAdmin) return true;
-    const dept = String(CURRENT_USER?.dept || '').toLowerCase();
-    const c = String(cat || '').toLowerCase();
-    if (dept.includes('oph') && c.includes('eye')) return true;
-    if ((dept.includes('obg') || dept.includes('gyn')) && c.includes('obg')) return true;
-    if (dept.includes('psych') && c.includes('psych')) return true;
-    if ((dept.includes('skin') || dept.includes('derm') || dept.includes('cosmet')) && c.includes('skin')) return true;
-    return false;
-  };
   el.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
     <button type="button" class="btn btn-gold btn-sm" onclick="openAddChargeModal()">+ Add Procedure</button>
     <button type="button" class="btn btn-outline btn-sm" onclick="saveCharges()">💾 Save &amp; sync to cloud</button>
     <span style="font-size:11px;color:var(--g1)">Doctors can edit charges for their own departments. Use main heading + subcategory for grouped surgery packages.</span>
   </div>` + cats.map(cat => {
     const rows = CHARGES_DATA.filter(c=>c.cat===cat);
-    const editable = canEditDept(cat);
+    const editable = canEditChargeCategory(cat);
     const groups = {};
     rows.forEach(function (row) {
       const key = row.parent || '__root__';
@@ -11348,6 +11585,8 @@ function renderChargesList() {
       }).join(''); }).join('')}
     </div>`;
   }).join('');
+  refreshChargeModalSuggestions();
+  renderAllDeptSendBars && renderAllDeptSendBars();
 }
 
 function openAddChargeModal() {
@@ -11357,21 +11596,33 @@ function openAddChargeModal() {
   ['add-charge-parent','add-charge-name','add-charge-chd','add-charge-rpr'].forEach(function (id) {
     const el = document.getElementById(id); if (el) el.value = '';
   });
+  refreshChargeModalSuggestions();
   openM('m-add-proc-charge');
 }
 function saveChargeFromModal() {
   const cat = document.getElementById('add-charge-cat')?.value || 'Eye';
+  if (!canEditChargeCategory(cat)) { showToast('You can edit charges only for your own department', 'w'); return; }
   const parent = document.getElementById('add-charge-parent')?.value?.trim() || '';
   const name = document.getElementById('add-charge-name')?.value?.trim();
   const chd = parseInt(document.getElementById('add-charge-chd')?.value || '0', 10) || 0;
   const rpr = parseInt(document.getElementById('add-charge-rpr')?.value || '0', 10) || 0;
   if (!name) { showToast('Enter charge name', 'w'); return; }
-  CHARGES_DATA.push({cat, parent, name, chd, rpr});
+  const existing = CHARGES_DATA.find(function (row) {
+    return row.cat === cat && String(row.parent || '') === parent && String(row.name || '').toLowerCase() === String(name || '').toLowerCase();
+  });
+  if (existing) {
+    existing.chd = chd;
+    existing.rpr = rpr;
+    existing.parent = parent;
+  } else {
+    CHARGES_DATA.push({cat, parent, name, chd, rpr});
+  }
   CENTRE_CHARGES.CHD[name] = chd;
   CENTRE_CHARGES.RPR[name] = rpr;
+  saveChargesToFirebase();
   renderChargesList();
   closeM('m-add-proc-charge');
-  showToast('"' + name + '" added to fee schedule ✓','s');
+  showToast('"' + name + '" saved to fee schedule ✓','s');
 }
 
 function saveCharges() {
@@ -11407,6 +11658,7 @@ function logReferral(type, name, mobile, patient) {
 // Auto-render charges after load (local fee schedule restores without waiting for Firebase)
 setTimeout(() => {
   if (typeof loadChargesFromLocalStorage === 'function') loadChargesFromLocalStorage();
+  if (typeof loadDoctorCustomRxOptions === 'function') loadDoctorCustomRxOptions();
   if(document.getElementById('set-procs-list') || document.getElementById('charges-list')) renderChargesList();
   if(document.getElementById('dr-credentials-list')) renderDrCredentials();
   if (typeof loadDoctorProfilesFromLocalStorage === 'function') loadDoctorProfilesFromLocalStorage();
@@ -11414,6 +11666,8 @@ setTimeout(() => {
   if (typeof loadRxTemplatesFromStorage === 'function') loadRxTemplatesFromStorage();
   if (typeof loadConsentTemplatesFromStorage === 'function') loadConsentTemplatesFromStorage();
   if (typeof loadIolCatalogFromStorage === 'function') loadIolCatalogFromStorage();
+  if (typeof refreshCustomRxOptionSelects === 'function') refreshCustomRxOptionSelects();
+  document.getElementById('add-charge-cat')?.addEventListener('change', refreshChargeModalSuggestions);
 }, 300);
 
 document.addEventListener('bmh:patientsUpdated', () => {
@@ -12300,6 +12554,11 @@ function renderDischargeBuilder() {
   document.getElementById('dc-pt-sex').textContent  = ptObj.sex || '—';
   document.getElementById('dc-pt-mob').textContent  = ptObj.mob || '—';
   document.getElementById('dc-date').textContent    = new Date().toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
+  const procDxEl = document.getElementById('dc-procedure');
+  if (procDxEl) {
+    const procDx = [data.lastOtCase?.dx || data.diagnosis || '', data.lastOtCase?.procedure || data.procedureName || ''].filter(Boolean).join(' · ');
+    procDxEl.textContent = procDx || '—';
+  }
   // Set discharge date to today if blank
   const ddEl = document.getElementById('dc-discharge-date');
   if(ddEl) ddEl.textContent = new Date(data.dischargeDate).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
@@ -15055,6 +15314,7 @@ function saveVisit(dept) {
     const dxRows = getOphthoDiagnosisRows();
     visit.diagnoses = dxRows;
     visit.diagnosisText = document.getElementById('rx-diagnosis-text')?.value?.trim() || '';
+    visit.dx = dxRows.map(formatDxLineForPrint).filter(Boolean).join(' · ') || visit.diagnosisText || '';
     visit.postSurgeryRx = !!document.getElementById('rx-post-surgery')?.checked;
     visit.positiveFindings = buildOphthoPositiveFindingsList().join('; ');
     visit.procedures = [...document.querySelectorAll('#rx-proc-advised [data-proc]')].map(e=>e.dataset.proc).filter(Boolean);
@@ -15151,6 +15411,7 @@ function saveVisit(dept) {
     visit.planManagement = obgGuidance.management;
     visit.planProcedures = obgGuidance.procedures;
     visit.notes = [visit.ancNotes, visit.gynNotes, visit.infertilityNotes].filter(Boolean).join(' | ');
+    visit.dx = Array.isArray(visit.presumptiveDx) ? visit.presumptiveDx.join(' · ') : (visit.clinicalImpression || '');
     visit.rx = JSON.parse(JSON.stringify(RX_DRUGS || []));
   } else if(dept === 'psych') {
     ['psych-chief','psych-duration','psych-onset','psych-trigger','psych-core-syndrome','psych-risk','psych-systemic','psych-sleep','psych-appetite','psych-function','psych-diagnosis','psych-family','psych-personal','psych-pastpsych','psych-medical','psych-substance','psych-suicidality','psych-anxiety','psych-psychosis','psych-polarity','psych-addiction-substance','psych-addiction-pattern','psych-addiction-lastuse','psych-addiction-readiness','psych-stroke-deficit','psych-stroke-timing','psych-stroke-mood','psych-epilepsy-type','psych-epilepsy-last','psych-epilepsy-adherence','psych-epilepsy-trigger','psych-child-concern','psych-child-development','psych-child-school','psych-child-parent','psych-appearance','psych-behaviour','psych-psychomotor','psych-eyecontact','psych-speech-rate','psych-speech-volume','psych-speech-tone','psych-subjective-mood','psych-affect','psych-thought-form','psych-thought-content','psych-hallucinations','psych-orientation','psych-memory','psych-insight','psych-judgement']
@@ -15165,6 +15426,7 @@ function saveVisit(dept) {
     visit.psychPlan = guidance.plan;
     visit.psychInvestigations = guidance.investigations;
     visit.psychTherapy = guidance.therapy;
+    visit.dx = Array.isArray(guidance.tags) ? guidance.tags.join(' · ') : (psychVal('psych-diagnosis') || '');
     visit.rx = JSON.parse(JSON.stringify(RX_DRUGS || []));
   } else if(dept === 'skin') {
     ['skin-chief','skin-duration','skin-site','skin-fit','skin-primary-dx','skin-secondary-dx','skin-routine','skin-medical','skin-hormonal','skin-lesion','skin-secondary-change','skin-distribution','skin-configuration','skin-hair','skin-nail','skin-dermoscopy','skin-cosm-acne-grade','skin-cosm-sensitivity','skin-cosm-pih','skin-cosm-isotret','skin-cosm-tan','skin-cosm-preg']
@@ -15179,18 +15441,22 @@ function saveVisit(dept) {
     visit.skinInvestigations = skinGuidance.investigations;
     visit.skinPlan = skinGuidance.management;
     visit.skinProcedural = skinGuidance.procedures;
+    visit.dx = [document.getElementById('skin-primary-dx')?.value || '', document.getElementById('skin-secondary-dx')?.value || ''].filter(Boolean).join(' · ');
     visit.rx = JSON.parse(JSON.stringify(RX_DRUGS || []));
   }
   if(typeof fbSet !== 'function') { showToast('Save not available (offline)', 'w'); return; }
   const patientPatch = { lastVisit: visit, lastVisitKey: visitKey, lastVisitDate: visit.date, lastDeptVisit: dept };
+  if (visit.dx) patientPatch.dx = visit.dx;
   const localPt = window.CURRENT_PATIENT || PATIENTS.find(p => p.bmhId === bmhId);
   if(localPt) {
     localPt.lastVisit = JSON.parse(JSON.stringify(visit));
     localPt.lastVisitKey = visitKey;
     localPt.lastVisitDate = visit.date;
+    if (visit.dx) localPt.dx = visit.dx;
   }
   Promise.all([
     fbSet(`visits/${bmhId}/${visitKey}`, visit),
+    fbSet(`patients/${bmhId}/lastVisit`, visit),
     typeof fbUpdate === 'function' ? fbUpdate('patients/' + bmhId, patientPatch).catch(()=>{}) : Promise.resolve()
   ])
     .then(() => {

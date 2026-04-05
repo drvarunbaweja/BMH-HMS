@@ -19,6 +19,10 @@
       table { display:block; overflow-x:auto; -webkit-overflow-scrolling:touch; }
       #main-content [style*="grid-template-columns"] { grid-template-columns:1fr !important; }
       #main-content [style*="display:flex"] { max-width:100%; }
+      #obg-layout, #psych-layout, #skin-layout { grid-template-columns:1fr !important; }
+      #ophtho-recap-panel, #skin-summary-rail { float:none !important; width:100% !important; margin:10px 0 0 !important; }
+      #obg-summary-rail, #psych-summary-rail { position:static !important; top:auto !important; }
+      .card-hd[style*="position:sticky"], .ptabs[style*="position:sticky"], div[style*="position:sticky"][style*="Send to Reception"] { position:static !important; top:auto !important; }
     }
   </style>
   <script type="module" crossorigin src="/BMH-HMS/assets/main-CBqiK0PR.js"></script>
@@ -325,7 +329,7 @@
 <div class="page" id="pg-ophtho">
   <div class="content-full">
     <div class="card">
-      <div class="card-hd">
+      <div class="card-hd" style="position:sticky;top:0;z-index:40;background:#fff">
         <div><div class="card-title">👁️ Eye Examination — <span id="ophtho-pt-nm">Test Patient A</span></div><div class="card-sub"><span id="ophtho-pt-uid" style="font-family:var(--mono);color:var(--bmh-teal)">BMSH-000001</span> · Dr. Varun Baweja</div></div>
         <div style="display:flex;gap:5px;flex-wrap:wrap">
           <button class="btn btn-sm btn-gray" onclick="nav('doctor-queue',null)" title="Back to Queue">← Queue</button>
@@ -336,7 +340,7 @@
         </div>
       </div>
       <!-- Smart SEND row — AI-suggested + full dropdown -->
-      <div style="background:linear-gradient(135deg,#fff7e0,#fff3cc);border-radius:10px;padding:9px 12px;margin-bottom:10px;border:1.5px solid rgba(212,160,23,.3)">
+      <div style="position:sticky;top:64px;z-index:39;background:linear-gradient(135deg,#fff7e0,#fff3cc);border-radius:10px;padding:9px 12px;margin-bottom:10px;border:1.5px solid rgba(212,160,23,.3)">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <span style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">📤 Send to Reception:</span>
           <!-- Full dropdown -->
@@ -385,7 +389,7 @@
         <!-- Recently sent indicator -->
         <div id="sent-charges-log" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px"></div>
       </div>
-      <div class="ptabs">
+      <div class="ptabs" style="position:sticky;top:124px;z-index:38;background:#fff">
         <div class="ptab active" onclick="ptab(this,'oe-hx')">History</div>
         <div class="ptab" onclick="ptab(this,'oe-va-iop-ref')">VA / IOP / Refraction</div>
         <div class="ptab" onclick="ptab(this,'oe-slitlamp')">Slit Lamp</div>
@@ -1542,14 +1546,15 @@
   <div class="col">
     <!-- MAIN REGISTER CARD -->
     <div class="card">
-      <div class="card-hd">
+      <div class="card-hd" style="position:sticky;top:0;z-index:40;background:#fff">
         <div class="card-title">🧾 Reception — Register / Check-in</div>
         <div style="display:flex;gap:6px">
           <button class="btn btn-gold btn-xs" onclick="openM('m-rec-bill')">🖨️ Generate Bill</button>
           <button class="btn btn-outline btn-xs" onclick="openM('m-rec-refund')">↩️ Refund</button>
         </div>
       </div>
-      <div class="ptabs">
+      <div id="obg-top-send-bar" style="position:sticky;top:64px;z-index:39;margin-bottom:10px"></div>
+      <div class="ptabs" style="position:sticky;top:64px;z-index:38;background:#fff">
         <div class="ptab active" onclick="ptab(this,'rc-new')">🆕 New Patient</div>
         <div class="ptab" onclick="ptab(this,'rc-exist')">🟢 Queue</div>
         <div class="ptab" onclick="ptab(this,'rc-charges')">💰 Charges</div>
@@ -1805,7 +1810,7 @@
 <div class="page" id="pg-obg">
   <div class="content-full">
     <div class="card">
-      <div class="card-hd">
+      <div class="card-hd" style="position:sticky;top:0;z-index:40;background:#fff">
         <div><div class="card-title">🤰 OBG Clinic — <span id="obg-pt-nm">— Select Patient —</span></div><div class="card-sub" style="font-family:var(--mono);color:var(--bmh-teal)"><span id="obg-pt-uid">—</span> · Dr. Geeta Baweja</div></div>
         <div style="display:flex;gap:5px;flex-wrap:wrap">
           <button class="btn btn-sm btn-gray" onclick="nav('doctor-queue',null)" title="Back to Queue">← Queue</button>
@@ -1814,7 +1819,7 @@
           <button class="btn btn-sm btn-gold" onclick="saveVisit('obg')">💾 Save</button>
         </div>
       </div>
-      <div class="ptabs">
+      <div class="ptabs" style="position:sticky;top:64px;z-index:38;background:#fff">
         <div class="ptab active" onclick="ptab(this,'obg-basic')">Assessment</div>
         <div class="ptab" onclick="ptab(this,'obg-anc')">Visits & Follow-up</div>
         <div class="ptab" onclick="ptab(this,'obg-investigations')">Investigations</div>
@@ -2095,7 +2100,7 @@
       </div>
 
       <!-- OBG RX -->
-      <div class="tab-content" id="obg-rx"><div style="background:linear-gradient(135deg,#fff7e0,#fff3cc);border-radius:10px;padding:8px 11px;margin-bottom:10px;border:1.5px solid rgba(212,160,23,.3)">
+      <div class="tab-content" id="obg-rx"><div id="obg-rx-send-bar" style="display:none;background:linear-gradient(135deg,#fff7e0,#fff3cc);border-radius:10px;padding:8px 11px;margin-bottom:10px;border:1.5px solid rgba(212,160,23,.3)">
         <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
           <span style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">📤 Send to Reception:</span>
           <select style="font-size:11px;padding:3px 6px;border-radius:6px;border:1.5px solid rgba(212,160,23,.5);background:#fff;min-width:160px" onchange="sendFromDropdown(this)">
@@ -2244,7 +2249,7 @@
 <div class="page" id="pg-psych">
   <div class="content-full">
     <div class="card">
-      <div class="card-hd">
+      <div class="card-hd" style="position:sticky;top:0;z-index:40;background:#fff">
         <div><div class="card-title">🧠 Neuropsychiatry — <span id="psych-pt-nm">— Select Patient —</span></div><div class="card-sub" style="font-family:var(--mono);color:var(--bmh-teal)"><span id="psych-pt-uid">—</span> · Dr. Tarun Baweja</div></div>
         <div style="display:flex;gap:5px;flex-wrap:wrap">
           <button class="btn btn-sm btn-gray" onclick="nav('doctor-queue',null)" title="Back to Queue">← Queue</button>
@@ -2252,7 +2257,8 @@
           <button class="btn btn-sm btn-gold" onclick="saveVisit('psych')">💾 Save</button>
         </div>
       </div>
-      <div class="ptabs">
+      <div id="psych-top-send-bar" style="position:sticky;top:64px;z-index:39;margin-bottom:10px"></div>
+      <div class="ptabs" style="position:sticky;top:64px;z-index:38;background:#fff">
         <div class="ptab active" onclick="ptab(this,'psych-hx')">History</div>
         <div class="ptab" onclick="ptab(this,'psych-mse')">MSE</div>
         <div class="ptab" onclick="ptab(this,'psych-past')">Past Visits</div>
@@ -2413,7 +2419,7 @@
       </div>
 
       <!-- PSYCH RX -->
-      <div class="tab-content" id="psych-rx"><div style="background:linear-gradient(135deg,#fff7e0,#fff3cc);border-radius:10px;padding:8px 11px;margin-bottom:10px;border:1.5px solid rgba(212,160,23,.3)">
+      <div class="tab-content" id="psych-rx"><div id="psych-rx-send-bar" style="display:none;background:linear-gradient(135deg,#fff7e0,#fff3cc);border-radius:10px;padding:8px 11px;margin-bottom:10px;border:1.5px solid rgba(212,160,23,.3)">
         <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
           <span style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">📤 Send to Reception:</span>
           <select style="font-size:11px;padding:3px 6px;border-radius:6px;border:1.5px solid rgba(212,160,23,.5);background:#fff;min-width:160px" onchange="sendFromDropdown(this)">
@@ -2562,7 +2568,7 @@
 <div class="page" id="pg-skin">
   <div class="content-full">
     <div class="card">
-      <div class="card-hd">
+      <div class="card-hd" style="position:sticky;top:0;z-index:40;background:#fff">
         <div><div class="card-title">💆 Skin & Cosmetology — <span id="skin-pt-nm">— Select Patient —</span></div><div class="card-sub" style="font-family:var(--mono);color:var(--bmh-teal)"><span id="skin-pt-uid">—</span> · Dr. Pooja Baweja</div></div>
         <div style="display:flex;gap:5px;flex-wrap:wrap">
           <button class="btn btn-sm btn-gray" onclick="nav('doctor-queue',null)" title="Back to Queue">← Queue</button>
@@ -2570,7 +2576,8 @@
           <button class="btn btn-sm btn-gold" onclick="saveVisit('skin')">💾 Save</button>
         </div>
       </div>
-      <div class="ptabs">
+      <div id="skin-top-send-bar" style="position:sticky;top:64px;z-index:39;margin-bottom:10px"></div>
+      <div class="ptabs" style="position:sticky;top:64px;z-index:38;background:#fff">
         <div class="ptab active" onclick="ptab(this,'skin-hx')">History & Diagnosis</div>
         <div class="ptab" onclick="ptab(this,'skin-past')">Past Visits</div>
         <div class="ptab" onclick="ptab(this,'skin-exam')">Skin Examination</div>
@@ -2658,7 +2665,7 @@
       </div>
 
       <!-- SKIN RX -->
-      <div class="tab-content" id="skin-rx"><div style="background:linear-gradient(135deg,#fff7e0,#fff3cc);border-radius:10px;padding:8px 11px;margin-bottom:10px;border:1.5px solid rgba(212,160,23,.3)">
+      <div class="tab-content" id="skin-rx"><div id="skin-rx-send-bar" style="display:none;background:linear-gradient(135deg,#fff7e0,#fff3cc);border-radius:10px;padding:8px 11px;margin-bottom:10px;border:1.5px solid rgba(212,160,23,.3)">
         <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
           <span style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">📤 Send to Reception:</span>
           <select style="font-size:11px;padding:3px 6px;border-radius:6px;border:1.5px solid rgba(212,160,23,.5);background:#fff;min-width:160px" onchange="sendFromDropdown(this)">
@@ -3217,7 +3224,7 @@
 <div class="tab-content" id="set-drugs">
 <div class="g32">
   <div class="card">
-    <div class="card-hd"><div class="card-title">💊 Drug Library</div><button class="btn btn-gold btn-xs" onclick="openM('m-add-drug')">+ Add Drug</button></div>
+    <div class="card-hd"><div class="card-title">💊 Drug Library</div><div style="display:flex;gap:6px;align-items:center"><button class="btn btn-xs btn-outline" onclick="showToast('Doctor-specific Type, Frequency, and Duration defaults can be added with the small + buttons in Quick Add Drug.','i')">?</button><button class="btn btn-gold btn-xs" onclick="openM('m-add-drug')">+ Add Drug</button></div></div>
     <div style="display:flex;gap:8px;margin-bottom:10px">
       <div style="flex:1;display:flex;align-items:center;gap:8px;background:var(--g6);border-radius:8px;padding:7px 12px;border:1.5px solid var(--g4)">
         <span>🔍</span><input type="text" placeholder="Search drugs…" oninput="filterDrugs(this.value)" style="border:none;background:transparent;outline:none;font-size:13px;font-family:var(--font);width:100%;padding:0">
@@ -3230,14 +3237,14 @@
   </div>
   <div class="col">
     <div class="card" style="background:linear-gradient(135deg,var(--blue-lt),#fff);border:2px solid var(--blue)">
-      <div class="card-hd"><div class="card-title" style="color:var(--blue)">Quick Add Drug</div></div>
+      <div class="card-hd"><div class="card-title" style="color:var(--blue)">Quick Add Drug</div><button class="btn btn-xs btn-outline" onclick="showToast('These defaults are saved only for your login in the active department.','i')">?</button></div>
       <div class="fg fg1" style="gap:8px">
-        <div class="form-group"><label class="fl">Type</label><select id="new-drug-type"><option>Eye Drop</option><option>Tablet</option><option>Capsule</option><option>Ointment</option><option>Injection</option><option>Syrup</option><option>Pessary</option><option>Gel</option><option>Cream</option></select></div>
+        <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">Type <button type="button" onclick="addCustomRxOption('type')" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></label><select id="new-drug-type"></select></div>
         <div class="form-group"><label class="fl">Trade Name (Brand)</label><input type="text" id="new-drug-trade" placeholder="e.g. Vigamox"></div>
         <datalist id="drug-generic-datalist"></datalist>
         <div class="form-group"><label class="fl">Generic Name</label><input type="text" id="new-drug-generic" list="drug-generic-datalist" placeholder="e.g. Moxifloxacin 0.5%" autocomplete="off"></div>
-        <div class="form-group"><label class="fl">Default Frequency</label><select id="new-drug-freq"><option>Once daily (OD)</option><option>Twice daily (BD)</option><option>Three times daily (TDS)</option><option>Four times daily (QID)</option><option>Six times daily (6x/day)</option><option>Hourly</option><option>At bedtime (HS)</option><option>As needed (PRN)</option><option>Taper</option></select></div>
-        <div class="form-group"><label class="fl">Default Duration</label><select id="new-drug-dur"><option>½ day</option><option>1 day</option><option>2 days</option><option>3 days</option><option>5 days</option><option>7 days</option><option>14 days</option><option>1 Week</option><option>2 Weeks</option><option>1 Month</option><option>3 Months</option><option>6 Months</option><option>Ongoing</option></select></div>
+        <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">Default Frequency <button type="button" onclick="addCustomRxOption('freq')" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></label><select id="new-drug-freq"></select></div>
+        <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">Default Duration <button type="button" onclick="addCustomRxOption('dur')" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></label><select id="new-drug-dur"></select></div>
         <div class="form-group"><label class="fl">Department</label><select id="new-drug-dept"><option>All</option><option>Ophthalmology</option><option>OBG</option><option>Neuropsychiatry</option><option>Skin</option></select></div>
         <button class="btn btn-blue" onclick="addDrugToLibrary()">+ Add to Library</button>
         <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--g4)">
@@ -3938,8 +3945,8 @@
 <div class="modal-hd"><div class="modal-title">Add charge / procedure</div><button class="modal-close" onclick="closeM('m-add-proc-charge')">✕</button></div>
 <div class="fg fg1" style="gap:9px">
   <div class="form-group"><label class="fl">Department</label><select id="add-charge-cat"><option value="Eye">Eye</option><option value="OBG">OBG</option><option value="Psych">Psych</option><option value="Skin">Skin</option><option value="Lab">Lab</option><option value="Other">Other</option></select></div>
-  <div class="form-group"><label class="fl">Main heading</label><input type="text" id="add-charge-parent" placeholder="e.g. Pinhole Microincision Cataract Surgery + IOL implantation"></div>
-  <div class="form-group"><label class="fl">Charge / subcategory name</label><input type="text" id="add-charge-name" placeholder="e.g. Monofocal IOL"></div>
+  <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">Main heading <button type="button" onclick="showToast('Use a main heading to group related subcharges like PMICS + different IOL options.','i')" style="background:var(--g6);color:var(--blue);border:1px solid var(--g4);border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">?</button></label><input type="text" id="add-charge-parent" list="charge-parent-list" placeholder="e.g. Pinhole Microincision Cataract Surgery + IOL implantation"><datalist id="charge-parent-list"></datalist></div>
+  <div class="form-group"><label class="fl">Charge / subcategory name</label><input type="text" id="add-charge-name" list="charge-name-list" placeholder="e.g. Monofocal IOL"><datalist id="charge-name-list"></datalist></div>
   <div class="form-group"><label class="fl">Chandigarh ₹</label><input type="number" id="add-charge-chd" min="0" step="1"></div>
   <div class="form-group"><label class="fl">Ropar ₹</label><input type="number" id="add-charge-rpr" min="0" step="1"></div>
   <button class="btn btn-gold" onclick="saveChargeFromModal()">💾 Save charge</button>
@@ -4203,11 +4210,11 @@
 <div class="modal-ov" id="m-add-drug">
 <div class="modal"><div class="modal-hd"><div class="modal-title">💊 Add to Drug Library</div><button class="modal-close" onclick="closeM('m-add-drug')">✕</button></div>
 <div class="fg fg1" style="gap:9px">
-  <div class="form-group"><label class="fl">Type / Form</label><select id="md-add-type"><option>Eye Drop</option><option>Tablet</option><option>Capsule</option><option>Ointment</option><option>Injection</option><option>Syrup</option><option>Pessary</option><option>Gel</option><option>Cream</option></select></div>
+  <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">Type / Form <button type="button" onclick="addCustomRxOption('type')" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></label><select id="md-add-type"></select></div>
   <div class="form-group"><label class="fl">Trade Name</label><input type="text" id="md-add-trade" placeholder="e.g. Vigamox"></div>
   <div class="form-group"><label class="fl">Generic Name</label><input type="text" id="md-add-generic" placeholder="e.g. Moxifloxacin 0.5%"></div>
-  <div class="form-group"><label class="fl">Default Frequency</label><select id="md-add-freq"><option>Once daily (OD)</option><option>Twice daily (BD)</option><option>Three times daily (TDS)</option><option>Four times daily (QID)</option><option>Six times (6x/day)</option><option>Hourly</option><option>At bedtime (HS)</option><option>As needed (PRN)</option></select></div>
-  <div class="form-group"><label class="fl">Default Duration</label><select id="md-add-dur"><option>½ day</option><option>1 day</option><option>2 days</option><option>3 days</option><option>5 days</option><option>7 days</option><option>14 days</option><option>1 Week</option><option>2 Weeks</option><option>1 Month</option><option>3 Months</option><option>6 Months</option><option>Ongoing</option></select></div>
+  <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">Default Frequency <button type="button" onclick="addCustomRxOption('freq')" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></label><select id="md-add-freq"></select></div>
+  <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">Default Duration <button type="button" onclick="addCustomRxOption('dur')" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></label><select id="md-add-dur"></select></div>
   <div class="form-group"><label class="fl">Department</label><select id="md-add-dept"><option>All</option><option>Ophthalmology</option><option>OBG</option><option>Neuropsychiatry</option><option>Skin</option></select></div>
   <div style="display:flex;gap:8px"><button class="btn btn-gold" style="flex:1" onclick="addDrugToLibraryFromModal()">+ Save to library</button><button class="btn btn-gray" onclick="closeM('m-add-drug')">Cancel</button></div>
 </div></div></div>
@@ -4216,11 +4223,11 @@
 <div class="modal"><div class="modal-hd"><div class="modal-title">✎ Edit Drug (Library)</div><button class="modal-close" onclick="closeM('m-edit-drug')">✕</button></div>
 <input type="hidden" id="md-edit-idx" value="">
 <div class="fg fg1" style="gap:9px">
-  <div class="form-group"><label class="fl">Type / Form</label><select id="md-edit-type"><option>Eye Drop</option><option>Tablet</option><option>Capsule</option><option>Ointment</option><option>Injection</option><option>Syrup</option><option>Pessary</option><option>Gel</option><option>Cream</option></select></div>
+  <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">Type / Form <button type="button" onclick="addCustomRxOption('type')" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></label><select id="md-edit-type"></select></div>
   <div class="form-group"><label class="fl">Trade Name</label><input type="text" id="md-edit-trade"></div>
   <div class="form-group"><label class="fl">Generic Name</label><input type="text" id="md-edit-generic"></div>
-  <div class="form-group"><label class="fl">Default Frequency</label><select id="md-edit-freq"><option>Once daily (OD)</option><option>Twice daily (BD)</option><option>Three times daily (TDS)</option><option>Four times daily (QID)</option><option>Six times (6x/day)</option><option>Hourly</option><option>At bedtime (HS)</option><option>As needed (PRN)</option></select></div>
-  <div class="form-group"><label class="fl">Default Duration</label><select id="md-edit-dur"><option>½ day</option><option>1 day</option><option>2 days</option><option>3 days</option><option>5 days</option><option>7 days</option><option>14 days</option><option>1 Week</option><option>2 Weeks</option><option>1 Month</option><option>3 Months</option><option>6 Months</option><option>Ongoing</option></select></div>
+  <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">Default Frequency <button type="button" onclick="addCustomRxOption('freq')" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></label><select id="md-edit-freq"></select></div>
+  <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">Default Duration <button type="button" onclick="addCustomRxOption('dur')" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></label><select id="md-edit-dur"></select></div>
   <div class="form-group"><label class="fl">Department</label><select id="md-edit-dept"><option>All</option><option>Ophthalmology</option><option>OBG</option><option>Neuropsychiatry</option><option>Skin</option></select></div>
   <div style="display:flex;gap:8px"><button class="btn btn-gold" style="flex:1" onclick="saveEditDrugLibrary()">💾 Save changes</button><button class="btn btn-gray" onclick="closeM('m-edit-drug')">Cancel</button></div>
 </div></div></div>
@@ -4400,9 +4407,9 @@
   </div>
   <div class="form-group"><label class="fl">BMSH ID</label><input type="text" id="ot-bmsh-id" readonly style="background:var(--green-lt);color:#1a8c3c;font-weight:800;font-family:var(--mono)"></div>
   <div class="form-group"><label class="fl">Age / Sex</label><input type="text" id="ot-age-sex" readonly style="background:var(--g6)"></div>
-  <div class="form-group"><label class="fl">Pre-op Diagnosis</label><input type="text" id="ot-add-dx" placeholder="Primary diagnosis"></div>
+  <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">Pre-op Diagnosis <span style="display:flex;align-items:center;gap:6px"><button type="button" onclick="showToast('Type to search saved OT diagnoses. Use + to add a reusable diagnosis for future cases.','i')" style="background:var(--g6);color:var(--blue);border:1px solid var(--g4);border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">?</button><button type="button" onclick="addOTDiagnosisOption()" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></span></label><input type="text" id="ot-add-dx" list="ot-dx-list" placeholder="Type diagnosis to search or add"><datalist id="ot-dx-list"></datalist></div>
   <div class="form-group"><label class="fl">Procedure</label>
-    <select id="ot-add-proc"></select>
+    <input type="text" id="ot-add-proc" list="ot-proc-list" placeholder="Type procedure to search"><datalist id="ot-proc-list"></datalist>
   </div>
   <div class="form-group"><label class="fl">Eye / Site</label>
     <select id="ot-add-site"><option>Left Eye (OS)</option><option>Right Eye (OD)</option><option>Both Eyes (OU)</option><option>N/A</option></select>
@@ -4427,7 +4434,7 @@
     <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">IOL / Implant <button type="button" onclick="openOTAddIolModal()" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></label><select id="ot-add-iol-model"></select></div>
     <div class="form-group"><label class="fl">IOL Power</label><select id="ot-add-iol-power"></select></div>
   </div>
-  <div class="form-group"><label class="fl">IOL / Implant Summary</label><input type="text" id="ot-add-iol" placeholder="Selected IOL summary" readonly style="background:var(--g6)"></div>
+  <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">IOL / Implant Summary <button type="button" onclick="showToast('For PMICS, type to search saved IOL subcategories under the PMICS main heading.','i')" style="background:var(--g6);color:var(--blue);border:1px solid var(--g4);border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">?</button></label><input type="text" id="ot-add-iol" list="ot-iol-summary-list" placeholder="Selected or typed IOL summary" style="background:#fff"><datalist id="ot-iol-summary-list"></datalist></div>
   <div class="form-group"><label class="fl">Pre-op Workup Done</label>
     <select id="ot-add-preop"><option>Yes — complete</option><option>Partial — see notes</option><option>No — emergency</option></select>
   </div>
