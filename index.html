@@ -13,6 +13,7 @@
       .main { width:100%; min-width:0; }
       .content, .content-full { padding:10px; }
       .card, .modal { max-width:100%; }
+      .modal { width:calc(100vw - 18px) !important; max-height:92vh; overflow:auto; }
       .topbar { gap:8px; flex-wrap:wrap; }
       .topbar .srch { order:3; width:100%; min-width:0; }
       .g32, .g2, .sg4, .fg, .fg1 { grid-template-columns:1fr !important; display:grid !important; }
@@ -22,6 +23,10 @@
       #obg-layout, #psych-layout, #skin-layout { grid-template-columns:1fr !important; }
       #ophtho-recap-panel, #skin-summary-rail { float:none !important; width:100% !important; margin:10px 0 0 !important; }
       #obg-summary-rail, #psych-summary-rail { position:static !important; top:auto !important; }
+      #set-rx-tpl-list > div > div, #admin-users-list > div { flex-wrap:wrap !important; }
+      #set-rx-tpl-list .btn, #admin-users-list .btn, #ot-case-detail .btn, #sp-pack-print-checklist label { width:100%; justify-content:center; }
+      #pg-ot [style*="display:grid;grid-template-columns:1fr 1fr"], #pg-ot .fg { grid-template-columns:1fr !important; }
+      #pg-ot [style*="display:flex;align-items:center;gap:10px"], #pg-ot [style*="display:flex;gap:8px"], #set-rx-templates [style*="display:flex;align-items:flex-start"] { flex-wrap:wrap !important; }
     }
   </style>
   <script type="module" crossorigin src="/BMH-HMS/assets/main-CBqiK0PR.js"></script>
@@ -3805,9 +3810,9 @@
             <div class="form-group"><label class="fl">OT Notes Template</label><select id="ot-notes-template" onchange="applyOTNotesTemplate(this.value)"><option value="">— Select template —</option></select></div>
             <div class="form-group"><label class="fl">Template hint</label><input type="text" value="Create OT note templates from Settings → Rx Templates using department OT / Operative Notes" readonly style="background:var(--g6);font-size:11px"></div>
           </div>
-          <div class="form-group"><label class="fl">Pre-op Diagnosis</label><input type="text" id="ot-preop-dx" placeholder="e.g. Cataract OS — Partially absorbed lens"></div>
-          <div class="form-group"><label class="fl">Post-op Diagnosis</label><input type="text" id="ot-postop-dx" placeholder="Confirmed post-op diagnosis"></div>
-          <div class="form-group"><label class="fl">Procedure Performed</label><input type="text" id="ot-procedure" placeholder="e.g. PMICS + IOL Implantation (OS)"></div>
+          <div class="form-group"><label class="fl">Pre-op Diagnosis</label><input type="text" id="ot-preop-dx" list="ot-dx-list" placeholder="e.g. Cataract OS - Partially absorbed lens"></div>
+          <div class="form-group"><label class="fl">Post-op Diagnosis</label><input type="text" id="ot-postop-dx" list="ot-postop-dx-list" placeholder="Confirmed post-op diagnosis"><datalist id="ot-postop-dx-list"></datalist></div>
+          <div class="form-group"><label class="fl">Procedure Performed</label><input type="text" id="ot-procedure" list="ot-proc-list" placeholder="e.g. PMICS + IOL Implantation (OS)"></div>
           <div class="fg">
             <div class="form-group"><label class="fl">Surgeon</label><select id="ot-notes-surgeon"><option>Dr. Varun Baweja</option><option>Dr. Geeta Baweja</option><option>Dr. Namrata Baweja</option></select></div>
             <div class="form-group"><label class="fl">Assistant Surgeon</label><input type="text" placeholder="Name"></div>
@@ -4418,7 +4423,7 @@
   <div class="form-group"><label class="fl">BMSH ID</label><input type="text" id="ot-bmsh-id" readonly style="background:var(--green-lt);color:#1a8c3c;font-weight:800;font-family:var(--mono)"></div>
   <div class="form-group"><label class="fl">Age / Sex</label><input type="text" id="ot-age-sex" readonly style="background:var(--g6)"></div>
   <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">Pre-op Diagnosis <span style="display:flex;align-items:center;gap:6px"><button type="button" onclick="showToast('Type to search saved OT diagnoses. Use + to add a reusable diagnosis for future cases.','i')" style="background:var(--g6);color:var(--blue);border:1px solid var(--g4);border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">?</button><button type="button" onclick="addOTDiagnosisOption()" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></span></label><input type="text" id="ot-add-dx" list="ot-dx-list" placeholder="Type diagnosis to search or add"><datalist id="ot-dx-list"></datalist></div>
-  <div class="form-group"><label class="fl">Procedure</label>
+  <div class="form-group"><label class="fl">Procedure / Surgery</label>
     <input type="text" id="ot-add-proc" list="ot-proc-list" placeholder="Type procedure to search"><datalist id="ot-proc-list"></datalist>
   </div>
   <div class="form-group"><label class="fl">Eye / Site</label>
