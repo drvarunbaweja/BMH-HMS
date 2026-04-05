@@ -1814,7 +1814,21 @@
   <div class="content-full">
     <div class="card">
       <div class="card-hd" style="position:sticky;top:0;z-index:40;background:#fff">
-        <div><div class="card-title">🤰 OBG Clinic — <span id="obg-pt-nm">— Select Patient —</span></div><div class="card-sub" style="font-family:var(--mono);color:var(--bmh-teal)"><span id="obg-pt-uid">—</span> · Dr. Geeta Baweja</div></div>
+        <div>
+          <div class="card-title">🤰 OBG Clinic — <span id="obg-pt-nm">— Select Patient —</span></div>
+          <div class="card-sub" style="font-family:var(--mono);color:var(--bmh-teal);display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <span id="obg-pt-uid">—</span>
+            <span>·</span>
+            <span id="obg-pt-doc">Dr. Namrata Baweja</span>
+            <label style="display:inline-flex;align-items:center;gap:5px;font-family:var(--font);font-size:11px;color:var(--g1)">
+              <span>Doctor</span>
+              <select id="obg-doc-select" onchange="syncObgDoctorSelector(this.value);populateObgPatientFromCurrent&&populateObgPatientFromCurrent()" style="width:auto;font-size:11px;padding:4px 8px">
+                <option>Dr. Namrata Baweja</option>
+                <option>Dr. Geeta Baweja</option>
+              </select>
+            </label>
+          </div>
+        </div>
         <div style="display:flex;gap:5px;flex-wrap:wrap">
           <button class="btn btn-sm btn-gray" onclick="nav('doctor-queue',null)" title="Back to Queue">← Queue</button>
           <button class="btn btn-sm btn-gray" onclick="openM('m-consents');document.getElementById('mc-type').value='obg-lscs';renderConsentModal()">📋 LSCS Consent</button>
