@@ -10884,6 +10884,7 @@ if (typeof window !== 'undefined') {
 
 // ─── SURGERY / PROCEDURE SAVE + REPORT ─────────────────
 const PROCEDURE_ADVISED_LOG = [];
+window.PROC_COUNSELLOR_LOG = window.PROC_COUNSELLOR_LOG || {};
 function saveProcAdvised() {
   const items = document.querySelectorAll('#rx-proc-advised select');
   items.forEach(sel=>{
@@ -10892,6 +10893,108 @@ function saveProcAdvised() {
       PROCEDURE_ADVISED_LOG.push({proc:val, bmhId:'BMSH-000001', patient:'Test Patient', date:new Date().toLocaleDateString('en-IN'), doctor:document.getElementById('sbnm')?.textContent||'Dr. Varun Baweja'});
     }
   });
+}
+
+function normalizePaymentMode(mode) {
+  const m = String(mode || '').toLowerCase();
+  if (m.includes('cash')) return 'Cash';
+  if (m.includes('upi') || m.includes('gpay') || m.includes('phonepe')) return 'UPI';
+  if (m.includes('card')) return 'Card';
+  if (m.includes('insurance') || m.includes('tpa') || m.includes('cghs') || m.includes('echs') || m.includes('pmjay') || m.includes('ayushman')) return 'Insurance/TPA';
+  if (m.includes('neft') || m.includes('rtgs') || m.includes('bank')) return 'Bank Transfer';
+  if (m.includes('credit') || m.includes('due')) return 'Credit / Due';
+  return mode || 'Other';
+}
+
+function getProcedureReportRows() {
+  const fromVal = document.getElementById('rep-surg-from')?.value || '';
+  const toVal = document.getElementById('rep-surg-to')?.value || '';
+  const proc = (document.getElementById('rep-surg-name')?.value || '').trim().toLowerCase();
+  const statusFilter = document.getElementById('rep-surg-status')?.value || '';
+  const dateOk = function(v) {
+    const d = String(v || '').split('T')[0];
+    if (!d) return true;
+    if (fromVal && d < fromVal) return false;
+    if (toVal && d > toVal) return false;
+    return true;
+  };
+  const advised = PROCEDURE_ADVISED_LOG.map(function (row, idx) {
+    const key = row.id || ('adv-' + idx + '-' + row.bmhId + '-' + row.proc);
+    return {
+      key,
+      patient: row.patient,
+      bmhId: row.bmhId,
+      proc: row.proc,
+      date: row.date || row.createdAt || '',
+      doctor: row.doctor || '',
+      status: 'advised',
+      source: 'advised'
+    };
+  });
+  const otRows = OT_CASES.map(normalizeOTCaseRecord).map(function (c) {
+    let status = 'scheduled';
+    if (c.status === 'completed') status = 'done';
+    else if (c.status === 'pending' || c.status === 'in-progress' || c.status === 'postponed') status = 'scheduled';
+    return {
+      key: c.id,
+      patient: c.patient,
+      bmhId: c.bmhId,
+      proc: c.procedure,
+      date: c.date || c.scheduledDate || '',
+      doctor: c.surgeon || '',
+      status,
+      source: 'ot'
+    };
+  });
+  return advised.concat(otRows).filter(function (row) {
+    if (proc && !String(row.proc || '').toLowerCase().includes(proc)) return false;
+    if (statusFilter && row.status !== statusFilter) return false;
+    if (!dateOk(row.date)) return false;
+    return true;
+  });
+}
+
+function buildProcedureReportHtml(rows, title) {
+  const esc = function(v){ return String(v || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;padding:10mm;color:#111}table{width:100%;border-collapse:collapse}th,td{border:1px solid #d7dce5;padding:6px 7px;font-size:11px;vertical-align:top}th{background:#eef3fb;color:#1A3C6E;font-weight:900} .muted{color:#666;font-size:10px} @page{size:A4 portrait;margin:8mm}</style></head><body>'
+    + '<div style="font-size:18px;font-weight:900;color:#1A3C6E;margin-bottom:10px">' + esc(title) + '</div>'
+    + (rows.length ? '<table><thead><tr><th>#</th><th>Patient</th><th>BMSH ID</th><th>Procedure</th><th>Date</th><th>Doctor</th><th>Status</th><th>Counsellor Follow-up</th></tr></thead><tbody>'
+    + rows.map(function (p, i) {
+        const follow = window.PROC_COUNSELLOR_LOG[p.key] || {};
+        const remark = [follow.status, follow.remark, follow.nextDate].filter(Boolean).join(' · ');
+        return '<tr><td>' + (i + 1) + '</td><td style="font-weight:800">' + esc(p.patient) + '</td><td style="font-family:monospace">' + esc(p.bmhId) + '</td><td>' + esc(p.proc) + '</td><td>' + esc(p.date) + '</td><td>' + esc(p.doctor) + '</td><td>' + esc(p.status) + '</td><td>' + (remark ? esc(remark) : '<span class="muted">No follow-up saved</span>') + '</td></tr>';
+      }).join('')
+    + '</tbody></table>' : '<div style="padding:20px;text-align:center;color:#666">No procedure records found for the current filter.</div>')
+    + '</body></html>';
+}
+
+function openCounsellorFollowup(key) {
+  const row = getProcedureReportRows().find(function (r) { return r.key === key; });
+  if (!row) { showToast('Procedure row not found', 'w'); return; }
+  const saved = window.PROC_COUNSELLOR_LOG[key] || {};
+  const set = function(id, val) { const el = document.getElementById(id); if (el) el.value = val || ''; };
+  set('cf-row-key', key);
+  set('cf-patient-proc', (row.patient || 'Patient') + ' — ' + (row.proc || 'Procedure'));
+  set('cf-counsellor', saved.counsellor || '');
+  set('cf-status', saved.status || 'pending');
+  set('cf-remark', saved.remark || '');
+  set('cf-next-date', saved.nextDate || '');
+  openM('m-counsellor-followup');
+}
+
+function saveCounsellorFollowup() {
+  const key = document.getElementById('cf-row-key')?.value || '';
+  if (!key) { showToast('No procedure selected', 'w'); return; }
+  window.PROC_COUNSELLOR_LOG[key] = {
+    counsellor: document.getElementById('cf-counsellor')?.value || '',
+    status: document.getElementById('cf-status')?.value || 'pending',
+    remark: document.getElementById('cf-remark')?.value || '',
+    nextDate: document.getElementById('cf-next-date')?.value || '',
+    savedAt: new Date().toISOString()
+  };
+  closeM('m-counsellor-followup');
+  generateSurgeryReport();
+  showToast('Counsellor follow-up saved ✓', 's');
 }
 
 // ─── REPORTS ─────────────────
@@ -10984,15 +11087,29 @@ function searchReportPatients(val) {
 function generateSurgeryReport() {
   const proc=document.getElementById('rep-surg-name')?.value||'';
   const el=document.getElementById('rep-surgery-result'); if(!el) return;
-  // Include both OT cases and PROCEDURE_ADVISED_LOG
-  const allAdvised = [...PROCEDURE_ADVISED_LOG, ...OT_CASES.map(c=>({proc:c.procedure,bmhId:c.bmhId,patient:c.patient,date:c.date,doctor:c.surgeon,status:c.status}))];
-  const filtered = proc ? allAdvised.filter(a=>a.proc.toLowerCase().includes(proc.toLowerCase())) : allAdvised;
+  const filtered = getProcedureReportRows();
   el.innerHTML=`<div class="card">
-    <div class="card-hd"><div><div class="card-title">⚕️ ${proc||'All Procedures'} — ${filtered.length} patients</div></div><button class="btn btn-gold btn-xs" onclick="window.print()">🖨️ Print</button></div>
-    ${filtered.length?`<table><thead><tr><th>#</th><th>Patient</th><th>BMSH ID</th><th>Procedure</th><th>Date Advised</th><th>Doctor</th><th>Status</th></tr></thead>
-    <tbody>${filtered.map((p,i)=>`<tr><td>${i+1}</td><td style="font-weight:800">${p.patient}</td><td style="font-family:var(--mono);font-size:10px">${p.bmhId}</td><td>${p.proc}</td><td>${p.date||'—'}</td><td>${p.doctor}</td><td><span class="badge ${p.status==='completed'?'bd-green':p.status==='in-progress'?'bd-blue':'bd-orange'}">${p.status||'Advised'}</span></td></tr>`).join('')}
+    <div class="card-hd"><div><div class="card-title">⚕️ ${proc||'All Procedures'} — ${filtered.length} patients</div></div><button class="btn btn-gold btn-xs" onclick="printSurgeryReportCurrent()">🖨️ Print</button></div>
+    ${filtered.length?`<table><thead><tr><th>#</th><th>Patient</th><th>BMSH ID</th><th>Procedure</th><th>Date Advised</th><th>Doctor</th><th>Status</th><th>Counsellor</th></tr></thead>
+    <tbody>${filtered.map((p,i)=>{ const follow=window.PROC_COUNSELLOR_LOG[p.key]||{}; return `<tr><td>${i+1}</td><td style="font-weight:800">${p.patient}</td><td style="font-family:var(--mono);font-size:10px">${p.bmhId}</td><td>${p.proc}</td><td>${p.date||'—'}</td><td>${p.doctor}</td><td><span class="badge ${p.status==='done'?'bd-green':p.status==='scheduled'?'bd-blue':'bd-orange'}">${p.status||'Advised'}</span></td><td><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="btn btn-xs btn-outline" onclick="openCounsellorFollowup('${p.key}')">📞 Follow-up</button>${follow.status?`<span style="font-size:10px;color:var(--g1)">${follow.status}${follow.nextDate?` · ${follow.nextDate}`:''}</span>`:''}</div></td></tr>`; }).join('')}
     </tbody></table>`:'<div style="padding:20px;text-align:center;color:var(--g1)">No records found</div>'}
   </div>`;
+}
+
+function openSurgeryReportWindow() {
+  const rows = getProcedureReportRows();
+  const proc = document.getElementById('rep-surg-name')?.value || 'Procedure Report';
+  const w = window.open('', '_blank', 'width=1200,height=800');
+  if (!w) { showToast('Popup blocked — allow popups to open report window', 'w'); return; }
+  w.document.write(buildProcedureReportHtml(rows, proc || 'Procedure Report'));
+  w.document.close();
+}
+
+function printSurgeryReportCurrent() {
+  const rows = getProcedureReportRows();
+  const proc = document.getElementById('rep-surg-name')?.value || 'Procedure Report';
+  safePrint(buildProcedureReportHtml(rows, proc || 'Procedure Report'));
+  showToast('Procedure report ready to print ✓', 's');
 }
 
 function generateInvestigationReport() {
@@ -11012,11 +11129,21 @@ function generateFinancialReport() {
   const fromVal = document.getElementById('rep-fin-from')?.value || new Date().toISOString().split('T')[0];
   const toVal   = document.getElementById('rep-fin-to')?.value   || new Date().toISOString().split('T')[0];
   const txAll = TRANSACTIONS.filter(t=>{const d=(t.date||'').split('T')[0]; return d>=fromVal&&d<=toVal;});
-  const cash  = txAll.filter(t=>t.mode==='Cash').reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
-  const upi   = txAll.filter(t=>t.mode==='UPI'||t.mode==='Card').reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
-  const ins   = txAll.filter(t=>t.mode==='Insurance').reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
+  const byMode = {};
+  txAll.forEach(function (t) {
+    const mode = normalizePaymentMode(t.mode);
+    if (!byMode[mode]) byMode[mode] = { count: 0, amount: 0 };
+    byMode[mode].count += 1;
+    byMode[mode].amount += (parseFloat(t.amount) || 0);
+  });
+  const cash  = (byMode['Cash']?.amount) || 0;
+  const upi   = ((byMode['UPI']?.amount) || 0) + ((byMode['Card']?.amount) || 0) + ((byMode['Bank Transfer']?.amount) || 0);
+  const ins   = (byMode['Insurance/TPA']?.amount) || 0;
   const total = cash+upi+ins;
   const pending = PAY_REQUESTS.filter(pr=>!pr.collected).reduce((s,pr)=>s+(parseFloat(pr.amount)||0),0);
+  const modeRows = Object.entries(byMode).sort(function (a, b) { return b[1].amount - a[1].amount; }).map(function (entry) {
+    return `<tr><td style="font-weight:800">${entry[0]}</td><td>${entry[1].count}</td><td style="font-weight:900">₹${entry[1].amount.toLocaleString('en-IN')}</td></tr>`;
+  }).join('');
   el.innerHTML=`<div class="card">
     <div class="card-hd"><div class="card-title">💰 Financial Summary</div><button class="btn btn-gold btn-xs" onclick="window.print()">🖨️</button></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
@@ -11029,8 +11156,20 @@ function generateFinancialReport() {
         ['Refunds','₹0','gray']
       ].map(([l,v,c])=>`<div style="background:var(--${c==='gray'?'g6':`${c}-lt`});border-radius:10px;padding:10px;display:flex;justify-content:space-between;align-items:center"><span style="font-size:12px;font-weight:700;color:var(--g1)">${l}</span><span style="font-size:16px;font-weight:900;color:var(--${c==='gray'?'tx':c})">${v}</span></div>`).join('')}
     </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+      <div style="background:var(--g6);border-radius:10px;padding:12px">
+        <div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Payment mode breakdown</div>
+        ${modeRows ? `<table><thead><tr><th>Mode</th><th>Patients / Txns</th><th>Total ₹</th></tr></thead><tbody>${modeRows}</tbody></table>` : '<div style="font-size:12px;color:var(--g1)">No payment data for this date range.</div>'}
+      </div>
+      <div style="background:var(--g6);border-radius:10px;padding:12px">
+        <div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Quick answers</div>
+        <div style="font-size:12px;line-height:1.8"><strong>Cash patients / txns:</strong> ${(byMode['Cash']?.count) || 0}</div>
+        <div style="font-size:12px;line-height:1.8"><strong>UPI / digital patients / txns:</strong> ${((byMode['UPI']?.count) || 0) + ((byMode['Card']?.count) || 0) + ((byMode['Bank Transfer']?.count) || 0)}</div>
+        <div style="font-size:12px;line-height:1.8"><strong>Insurance / TPA patients / txns:</strong> ${(byMode['Insurance/TPA']?.count) || 0}</div>
+      </div>
+    </div>
     ${txAll.length?`<table><thead><tr><th>Patient</th><th>Mode</th><th>Amount ₹</th><th>Dept</th><th>Date</th></tr></thead>
-    <tbody>${txAll.slice(0,50).map(t=>`<tr><td style="font-weight:700">${t.patient||'—'}</td><td><span class="badge ${t.mode==='Cash'?'bd-blue':t.mode==='Insurance'?'bd-orange':'bd-green'}">${t.mode||'Cash'}</span></td><td style="font-weight:900">₹${parseFloat(t.amount||0).toLocaleString('en-IN')}</td><td>${t.dept||'—'}</td><td>${(t.date||'').split('T')[0]}</td></tr>`).join('')}
+    <tbody>${txAll.slice(0,80).map(t=>{ const mode=normalizePaymentMode(t.mode); return `<tr><td style="font-weight:700">${t.patient||'—'}</td><td><span class="badge ${mode==='Cash'?'bd-blue':mode==='Insurance/TPA'?'bd-orange':'bd-green'}">${mode}</span></td><td style="font-weight:900">₹${parseFloat(t.amount||0).toLocaleString('en-IN')}</td><td>${t.dept||'—'}</td><td>${(t.date||'').split('T')[0]}</td></tr>`; }).join('')}
     </tbody></table>`:'<div style="padding:20px;text-align:center;color:var(--g1);font-size:12.5px">No transactions recorded for this period.<br><span style="font-size:11px">Payments collected at reception will appear here.</span></div>'}
   </div>`;
 }
