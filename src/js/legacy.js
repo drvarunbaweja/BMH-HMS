@@ -1728,6 +1728,9 @@ function populateOphthoForm(v) {
     if(Array.isArray(v.diagnoses) && v.diagnoses.length) v.diagnoses.forEach(dx => addDiagnosisRow(dx));
     else initDiagnosisRowsIfEmpty();
   }
+  const postSurgeryRx = document.getElementById('rx-post-surgery');
+  if (postSurgeryRx) postSurgeryRx.checked = !!v.postSurgeryRx;
+  toggleRxPostSurgeryNote();
   const PHX_IDS = ['phx-allergy','phx-diabetes_mellit','phx-hypertension','phx-heart_disease__','phx-asthma___copd','phx-headache___migr','phx-thyroid_disease','phx-renal_disease','phx-previous_surger','phx-bleeding_disord'];
   if(v.phxExtra && typeof v.phxExtra === 'object') {
     PHX_IDS.forEach(id => {
@@ -2044,6 +2047,30 @@ function initDiagnosisRowsIfEmpty() {
   if(!wrap || wrap.querySelector('.rx-dx-row')) return;
   addDiagnosisRow(); addDiagnosisRow(); addDiagnosisRow();
 }
+function normalizeRxDiagnosisEyeLabel(eye) {
+  const val = String(eye || '').trim().toLowerCase();
+  if (!val) return '';
+  if (/(right|od)/.test(val)) return 'Right Eye';
+  if (/(left|os)/.test(val)) return 'Left Eye';
+  if (/(both|ou|bilateral)/.test(val)) return 'Both Eyes';
+  return String(eye || '').trim();
+}
+function getOphthoDiagnosisRows() {
+  return [...document.querySelectorAll('#rx-diagnosis-rows .rx-dx-row')].map(function (row) {
+    return {
+      eye: normalizeRxDiagnosisEyeLabel(row.querySelector('.rx-dx-eye')?.value || ''),
+      text: (row.querySelector('.rx-dx-line')?.value || '').trim()
+    };
+  }).filter(function (item) { return item.text; });
+}
+function formatDxLineForPrint(item) {
+  if (!item) return '';
+  if (typeof item === 'string') return item.trim();
+  const eye = normalizeRxDiagnosisEyeLabel(item.eye || '');
+  const text = String(item.text || item.label || '').trim();
+  if (!text) return '';
+  return eye ? (eye + ' - ' + text) : text;
+}
 function renumberDiagnosisRows() {
   document.querySelectorAll('#rx-diagnosis-rows .rx-dx-row').forEach((row,i)=>{
     const sp = row.querySelector('span');
@@ -2056,26 +2083,90 @@ function addDiagnosisRow(prefill) {
   const wrap = document.getElementById('rx-diagnosis-rows');
   if(!wrap) return;
   const esc = (s='') => String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  const prefillObj = (prefill && typeof prefill === 'object' && !Array.isArray(prefill))
+    ? prefill
+    : { text: String(prefill || ''), eye: '' };
+  const prefillText = String(prefillObj.text || prefillObj.label || '').trim();
+  const prefillEye = normalizeRxDiagnosisEyeLabel(prefillObj.eye || '');
   const n = wrap.querySelectorAll('.rx-dx-row').length + 1;
   const uid = 'rx-dx-' + Date.now() + '-' + n;
   const d = document.createElement('div');
   d.className = 'rx-dx-row';
-  d.style.cssText = 'display:grid;grid-template-columns:28px 1fr 36px;gap:5px;padding:6px 8px;border-bottom:1px solid var(--g5);align-items:start';
+  d.style.cssText = 'display:grid;grid-template-columns:28px 88px minmax(0,1fr) 36px;gap:5px;padding:6px 8px;border-bottom:1px solid var(--g5);align-items:start';
   d.innerHTML = `<span style="font-weight:900;color:var(--blue);text-align:center;padding-top:6px">${n}</span>
+    <select class="rx-dx-eye" style="font-size:11px;padding:5px 7px;border:1.5px solid var(--g4);border-radius:6px;width:100%;box-sizing:border-box">
+      <option value=""${!prefillEye?' selected':''}>General</option>
+      <option value="Right Eye"${prefillEye==='Right Eye'?' selected':''}>Right</option>
+      <option value="Left Eye"${prefillEye==='Left Eye'?' selected':''}>Left</option>
+      <option value="Both Eyes"${prefillEye==='Both Eyes'?' selected':''}>Both</option>
+    </select>
     <div style="position:relative;min-width:0">
-    <input type="text" class="rx-dx-line" id="${uid}" value="${esc(prefill||'')}" placeholder="ICD-10 / diagnosis — type to search" autocomplete="off" style="font-size:12px;padding:5px 8px;border:1.5px solid var(--g4);border-radius:6px;width:100%;box-sizing:border-box" oninput="rxDxSuggest(this)" onfocus="rxDxSuggest(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();addDiagnosisRow();}">
+    <input type="text" class="rx-dx-line" id="${uid}" value="${esc(prefillText)}" placeholder="ICD-10 / diagnosis — type to search" autocomplete="off" style="font-size:12px;padding:5px 8px;border:1.5px solid var(--g4);border-radius:6px;width:100%;box-sizing:border-box" oninput="rxDxSuggest(this)" onfocus="rxDxSuggest(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();addDiagnosisRow();}">
     <div class="rx-dx-drop" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:500;background:#fff;border:1.5px solid var(--blue);border-top:none;border-radius:0 0 8px 8px;max-height:200px;overflow-y:auto;box-shadow:0 6px 16px rgba(0,0,0,.12)"></div>
     </div>
     <button type="button" class="btn btn-xs btn-gray" onclick="this.closest('.rx-dx-row').remove();renumberDiagnosisRows()" title="Remove" style="margin-top:2px">✕</button>`;
   wrap.appendChild(d);
 }
 function collectOphthoDiagnosesForPrint() {
-  const lines = [...document.querySelectorAll('#rx-diagnosis-rows .rx-dx-line')].map(i=>i.value.trim()).filter(Boolean);
+  const lines = getOphthoDiagnosisRows().map(formatDxLineForPrint).filter(Boolean);
   const notes = (document.getElementById('rx-diagnosis-text')?.value||'').trim();
   const legacyTags = [...document.querySelectorAll('#rx-diagnosis-list .dx-tag')].map(e=>e.textContent.replace(/[×✕]/g,'').trim()).filter(Boolean);
   const merged = [...lines];
   legacyTags.forEach(t => { if(t && !merged.includes(t)) merged.push(t); });
   return { lines: merged, notes };
+}
+function buildOphthoPositiveFindingsList() {
+  const lines = [];
+  const addLine = function (label, value, eye) {
+    const text = String(value || '').trim();
+    if (!text || /^normal$/i.test(text) || /^pink\s*&?\s*healthy$/i.test(text) || /^normal calibre$/i.test(text) || /^clear$/i.test(text)) return;
+    const eyeLabel = normalizeRxDiagnosisEyeLabel(eye);
+    lines.push(eyeLabel ? (label + ' ' + eyeLabel.toLowerCase() + ' - ' + text) : (label + ' - ' + text));
+  };
+  const slRows = (typeof window.collectSlitLampDataForPrint === 'function')
+    ? window.collectSlitLampDataForPrint()
+    : (() => {
+      const data = {};
+      document.querySelectorAll('#oe-slitlamp .sl-sl-row, #oe-slitlamp [style*="grid-template-columns:90px"]').forEach(function (row) {
+        const label = row.querySelector('[style*="9.5px"]')?.textContent?.trim();
+        const cols = row.querySelectorAll('[style*="background:rgba"]');
+        if (!label || cols.length < 2) return;
+        data[label] = {
+          od: [...cols[0].querySelectorAll('.sl-chip.sel')].map(c => c.textContent.trim()).filter(Boolean),
+          os: [...cols[1].querySelectorAll('.sl-chip.sel')].map(c => c.textContent.trim()).filter(Boolean)
+        };
+      });
+      return data;
+    })();
+  Object.entries(slRows || {}).forEach(function ([label, val]) {
+    const odVals = (val?.od || []).filter(v => !/^clear$/i.test(v));
+    const osVals = (val?.os || []).filter(v => !/^clear$/i.test(v));
+    if (odVals.length && osVals.length && odVals.join(', ') === osVals.join(', ')) addLine(label, odVals.join(', '), 'Both Eyes');
+    else {
+      if (odVals.length) addLine(label, odVals.join(', '), 'Right Eye');
+      if (osVals.length) addLine(label, osVals.join(', '), 'Left Eye');
+    }
+  });
+  addLine('Disc', document.getElementById('fund-od-disc')?.value || '', 'Right Eye');
+  addLine('Disc', document.getElementById('fund-os-disc')?.value || '', 'Left Eye');
+  addLine('C/D Ratio', document.getElementById('fund-od-cd')?.value || '', 'Right Eye');
+  addLine('C/D Ratio', document.getElementById('fund-os-cd')?.value || '', 'Left Eye');
+  addLine('Macula', document.getElementById('fund-od-mac')?.value || '', 'Right Eye');
+  addLine('Macula', document.getElementById('fund-os-mac')?.value || '', 'Left Eye');
+  addLine('Vessels', document.getElementById('fund-od-ves')?.value || '', 'Right Eye');
+  addLine('Vessels', document.getElementById('fund-os-ves')?.value || '', 'Left Eye');
+  addLine('Periphery', document.getElementById('fund-od-per')?.value || '', 'Right Eye');
+  addLine('Periphery', document.getElementById('fund-os-per')?.value || '', 'Left Eye');
+  addLine('Fundus', document.getElementById('fundus-od')?.value || '', 'Right Eye');
+  addLine('Fundus', document.getElementById('fundus-os')?.value || '', 'Left Eye');
+  const slNotes = (document.getElementById('sl-notes-text')?.value || '').trim();
+  if (slNotes) lines.push('Slit Lamp Notes - ' + slNotes);
+  return [...new Set(lines.filter(Boolean))];
+}
+function toggleRxPostSurgeryNote() {
+  const note = document.getElementById('rx-post-surgery-note');
+  const checked = !!document.getElementById('rx-post-surgery')?.checked;
+  if (note) note.style.display = checked ? 'block' : 'none';
 }
 
 /** Diagnosis lines for prescription print — Ophthalmology uses numbered rows; other depts use *-dx-list */
@@ -10148,7 +10239,7 @@ function renderRxDrugs() {
     d.dur = normalizeRxDurationLabel(d.dur);
     d.taperRows.forEach(tr => {
       tr.freq = normalizeRxFreqLabel(tr.freq);
-      tr.dur = d.dur;
+      tr.dur = normalizeRxDurationLabel(tr.dur || d.dur);
     });
   });
 
@@ -10897,6 +10988,7 @@ window.printUnifiedRx = function(deptId) {
   // ── Collect drugs ──
   const drugs = typeof RX_DRUGS !== 'undefined' ? RX_DRUGS : [];
   const rxPlainLang = typeof rxLang !== 'undefined' ? rxLang : 'en';
+  const postSurgeryRx = deptId === 'oe' ? !!document.getElementById('rx-post-surgery')?.checked : false;
   const plainInstrBlocks = drugs.length ? drugs.map(function (d) {
     return buildRxPlainInstructionLine(d, rxPlainLang, fmtIN);
   }).filter(Boolean) : [];
@@ -10966,25 +11058,25 @@ window.printUnifiedRx = function(deptId) {
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,300;0,400;0,700;0,900;1,400&family=Playfair+Display:wght@700&display=swap');
 *{margin:0;padding:0;box-sizing:border-box;print-color-adjust:exact;-webkit-print-color-adjust:exact}
-body{font-family:'Lato',Georgia,serif;font-size:11.5px;color:#1a1a1a;background:#fff;padding:8mm 14mm;line-height:1.5}
+body{font-family:'Lato',Georgia,serif;font-size:10.7px;color:#1a1a1a;background:#fff;padding:7mm 12mm;line-height:1.4}
 @page{size:A4 portrait;margin:0}
-.lh-img{width:100%;max-width:100%;height:auto;display:block;margin-bottom:12px}
-.pt-line{display:flex;align-items:baseline;justify-content:space-between;border-bottom:2px solid #1A3C6E;padding-bottom:7px;margin-bottom:8px}
-.pt-name{font-family:'Playfair Display','Georgia',serif;font-size:20px;font-weight:700;color:#1A3C6E;letter-spacing:.3px}
-.pt-meta{font-size:13px;font-weight:300;color:#444;margin-left:12px;font-style:italic}
-.pt-date{font-size:12px;color:#555;font-weight:400}
-.lbl-row{display:flex;gap:0;margin-bottom:6px;align-items:baseline}
-.lbl{font-size:11px;font-weight:700;text-transform:uppercase;min-width:120px;letter-spacing:.8px;color:#1A3C6E}
-.lbl-val{font-size:12px;color:#222}
-.sec-title{font-family:'Playfair Display','Georgia',serif;font-size:13px;font-weight:700;color:#1A3C6E;margin:14px 0 7px;border-bottom:1.5px solid #1A3C6E;padding-bottom:3px;letter-spacing:.3px}
-table{width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:10px}
-th{background:#1A3C6E;color:#fff;border:1px solid #1A3C6E;padding:6px 9px;font-weight:700;text-align:center;font-size:10.5px;letter-spacing:.5px;text-transform:uppercase}
-td{border:1px solid #c8d0dc;padding:6px 9px;text-align:center;vertical-align:top}
+.lh-img{width:100%;max-width:100%;height:auto;display:block;margin-bottom:10px}
+.pt-line{display:flex;align-items:baseline;justify-content:space-between;border-bottom:2px solid #1A3C6E;padding-bottom:6px;margin-bottom:7px}
+.pt-name{font-family:'Playfair Display','Georgia',serif;font-size:18px;font-weight:700;color:#1A3C6E;letter-spacing:.2px}
+.pt-meta{font-size:12px;font-weight:300;color:#444;margin-left:10px;font-style:italic}
+.pt-date{font-size:11px;color:#555;font-weight:400}
+.lbl-row{display:flex;gap:0;margin-bottom:5px;align-items:baseline}
+.lbl{font-size:10px;font-weight:700;text-transform:uppercase;min-width:112px;letter-spacing:.7px;color:#1A3C6E}
+.lbl-val{font-size:11px;color:#222}
+.sec-title{font-family:'Playfair Display','Georgia',serif;font-size:12px;font-weight:700;color:#1A3C6E;margin:11px 0 6px;border-bottom:1.5px solid #1A3C6E;padding-bottom:2px;letter-spacing:.2px}
+table{width:100%;border-collapse:collapse;font-size:10.4px;margin-bottom:8px}
+th{background:#1A3C6E;color:#fff;border:1px solid #1A3C6E;padding:5px 7px;font-weight:700;text-align:center;font-size:9.6px;letter-spacing:.4px;text-transform:uppercase}
+td{border:1px solid #c8d0dc;padding:5px 7px;text-align:center;vertical-align:top}
 td.left{text-align:left}
 tr:nth-child(even) td{background:#f8f9fc}
-.rx-name{font-weight:700;font-size:13px;color:#1A3C6E;letter-spacing:.2px}
-.rx-gen{font-size:10.5px;color:#666;font-style:italic;margin-top:1px}
-.rx-instr{font-size:11px;color:#222;margin-top:6px;padding:6px 10px;background:#f0f4ff;border-left:3px solid #1A3C6E;border-radius:0 4px 4px 0;line-height:1.9}
+.rx-name{font-weight:700;font-size:11.5px;color:#1A3C6E;letter-spacing:.15px}
+.rx-gen{font-size:9.4px;color:#666;font-style:italic;margin-top:1px}
+.rx-instr{font-size:10px;color:#222;margin-top:5px;padding:5px 8px;background:#f0f4ff;border-left:3px solid #1A3C6E;border-radius:0 4px 4px 0;line-height:1.5}
 .proc-item{padding:5px 0;font-size:15px;font-weight:800;border-bottom:1px solid #eee;display:flex;align-items:center;gap:8px}
 .fu-box{background:linear-gradient(135deg,#EBF3FF,#daeeff);border-radius:6px;padding:9px 16px;margin:10px 0;font-size:13px;font-weight:700;color:#1A3C6E;display:inline-block;border:1.5px solid rgba(26,60,110,.2)}
 .sig-row{display:flex;justify-content:space-between;align-items:flex-end;margin-top:28px;padding-top:12px;border-top:1px solid #eee}
@@ -10996,7 +11088,7 @@ tr:nth-child(even) td{background:#f8f9fc}
 .flag-h{color:#CC0000;font-weight:700}
 .flag-n{color:#1a8c3c;font-weight:600}
 .watermark{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-30deg);font-size:80px;font-weight:900;color:rgba(26,60,110,.04);font-family:'Playfair Display','Georgia',serif;white-space:nowrap;pointer-events:none;z-index:0}
-.diag-banner{margin:0 auto 8px;max-width:92%;padding:5px 12px;border:1px solid rgba(26,60,110,.18);border-radius:999px;background:#f7faff;text-align:center;font-size:10.5px;font-weight:700;color:#1A3C6E}
+.diag-banner{margin:0 auto 7px;max-width:96%;padding:4px 10px;border:1px solid rgba(26,60,110,.18);border-radius:999px;background:#f7faff;text-align:center;font-size:9.6px;font-weight:700;color:#1A3C6E}
 </style></head><body>
 
 ${lhImgSrc ? `<img src="${lhImgSrc}" class="lh-img" alt="Baweja Multispeciality Hospital">` : '<div style="height:80px;background:#f2f4f8;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#888;font-size:13px;margin-bottom:10px">Baweja Multispeciality Hospital Letterhead</div>'}
@@ -11012,6 +11104,8 @@ ${lhImgSrc ? `<img src="${lhImgSrc}" class="lh-img" alt="Baweja Multispeciality 
 ${dxList.length ? `<div class="diag-banner">${dxList.join(' · ')}</div>` : ''}
 
 ${ptMob ? `<div class="phone-line">&#9990; ${ptMob} &nbsp;&nbsp;|&nbsp;&nbsp; BMSH ID: ${ptId}</div>` : `<div class="phone-line">BMSH ID: ${ptId}</div>`}
+
+${postSurgeryRx ? `<div class="lbl-row" style="margin:4px 0 7px"><span class="lbl"></span><span class="lbl-val" style="font-weight:800;color:#1A3C6E">The medication schedule after surgery</span></div>` : ''}
 
 ${incCC && cc ? `<div class="lbl-row" style="margin-top:8px"><span class="lbl">Complaints:</span><span class="lbl-val">${cc}${ccDur?' ('+ccDur+')':''}</span></div>` : ''}
 
@@ -11035,13 +11129,7 @@ ${showGL ? `
   </tbody>
 </table>` : ''}
 
-${incPos && deptId==='oe' ? `<div class="lbl-row" style="margin:6px 0"><span class="lbl">Positive Findings:</span><span class="lbl-val">${[
-  document.getElementById('fund-od-disc')?.value,
-  document.getElementById('fund-os-disc')?.value,
-  document.getElementById('fundus-od')?.value,
-  document.getElementById('fundus-os')?.value,
-  document.getElementById('sl-notes-text')?.value
-].filter(v => String(v||'').trim() && String(v).trim() !== 'Normal').map(v => String(v).trim()).join(' ; ') || '—'}</span></div>` : ''}
+${incPos && deptId==='oe' ? `<div class="lbl-row" style="margin:6px 0"><span class="lbl">Positive Findings:</span><span class="lbl-val">${(typeof buildOphthoPositiveFindingsList === 'function' ? buildOphthoPositiveFindingsList() : []).join(' ; ') || '—'}</span></div>` : ''}
 
 ${drugs.length ? `
 <div class="sec-title">Medicine (Rx):</div>
@@ -12042,9 +12130,15 @@ function getDischargePrintData(sel) {
   const tmpl = DISCHARGE_TEMPLATES[specialty] || DISCHARGE_TEMPLATES.ophtho;
   const lastOtCase = OT_CASES.slice().reverse().map(normalizeOTCaseRecord).find(c => c.bmhId === ptObj.bmhId) || null;
   const ipdStay = (window.IPD_PATIENTS || []).slice().reverse().find(x => x.bmhId === ptObj.bmhId) || null;
-  const lastRxData = (RX_DRUGS && RX_DRUGS.length)
+  const livePostSurgeryRx = !!document.getElementById('rx-post-surgery')?.checked;
+  const savedPostSurgeryRx = !!ptObj.lastVisit?.postSurgeryRx;
+  const lastRxData = (livePostSurgeryRx && RX_DRUGS && RX_DRUGS.length)
     ? JSON.parse(JSON.stringify(RX_DRUGS))
-    : (Array.isArray(ptObj.lastVisit?.rx) && ptObj.lastVisit.rx.length ? JSON.parse(JSON.stringify(ptObj.lastVisit.rx)) : []);
+    : (savedPostSurgeryRx && Array.isArray(ptObj.lastVisit?.rx) && ptObj.lastVisit.rx.length)
+      ? JSON.parse(JSON.stringify(ptObj.lastVisit.rx))
+      : (RX_DRUGS && RX_DRUGS.length)
+        ? JSON.parse(JSON.stringify(RX_DRUGS))
+        : (Array.isArray(ptObj.lastVisit?.rx) && ptObj.lastVisit.rx.length ? JSON.parse(JSON.stringify(ptObj.lastVisit.rx)) : []);
   const visitDate = ptObj.lastVisit?.date || ptObj.createdAt || new Date().toISOString();
   const opDate = lastOtCase?.date || lastOtCase?.scheduledDate || ipdStay?.admittedAt || visitDate;
   const dischargeDate = ipdStay?.dischargedAt || new Date().toISOString();
@@ -12069,7 +12163,8 @@ function getDischargePrintData(sel) {
     diagnosis: diagnosis,
     procedureName: procedureName,
     joinDate: joinDate,
-    followups: followups
+    followups: followups,
+    postSurgeryRx: livePostSurgeryRx || savedPostSurgeryRx
   };
 }
 function flattenDischargeRxRows(rows) {
@@ -14957,9 +15052,11 @@ function saveVisit(dept) {
     });
     visit.slChips = slChips;
     visit.slNotes = document.getElementById('sl-notes-text')?.value || '';
-    const dxLines = [...document.querySelectorAll('#rx-diagnosis-rows .rx-dx-line')].map(e=>e.value.trim()).filter(Boolean);
-    visit.diagnoses = dxLines;
+    const dxRows = getOphthoDiagnosisRows();
+    visit.diagnoses = dxRows;
     visit.diagnosisText = document.getElementById('rx-diagnosis-text')?.value?.trim() || '';
+    visit.postSurgeryRx = !!document.getElementById('rx-post-surgery')?.checked;
+    visit.positiveFindings = buildOphthoPositiveFindingsList().join('; ');
     visit.procedures = [...document.querySelectorAll('#rx-proc-advised [data-proc]')].map(e=>e.dataset.proc).filter(Boolean);
     const ccRows = [];
     document.querySelectorAll('.cc-row').forEach(row=>{
@@ -15119,7 +15216,7 @@ function loadPastVisits(bmhId, dept) {
     container.innerHTML = visits.map(v => {
       const invs = Array.isArray(v.investigations) ? v.investigations : [];
       const cc = Array.isArray(v.ccRows) ? v.ccRows.map(r => r.text).filter(Boolean).join(', ') : '';
-      const dx = Array.isArray(v.diagnoses) ? v.diagnoses.join(', ') : (v.diagnosisText || '');
+      const dx = Array.isArray(v.diagnoses) ? v.diagnoses.map(formatDxLineForPrint).filter(Boolean).join(', ') : (v.diagnosisText || '');
       const obgDx = Array.isArray(v.presumptiveDx) ? v.presumptiveDx.join(', ') : '';
       const obgMeta = dept === 'obg'
         ? `<div style="font-size:11px;margin-bottom:5px"><strong>Summary:</strong> ${(v.gravida || '—')} · ${v.ga || 'GA —'} · EDD ${v.edd || '—'}</div>
@@ -15248,7 +15345,7 @@ function renderOphthoRecap() {
       .sort((a,b)=>String(b.date || '').localeCompare(String(a.date || '')))
       .slice(0, 5);
     const visitHtml = visits.length ? visits.map(v => {
-      const dx = Array.isArray(v.diagnoses) && v.diagnoses.length ? v.diagnoses.slice(0,2).join(', ') : (v.diagnosisText || '—');
+      const dx = Array.isArray(v.diagnoses) && v.diagnoses.length ? v.diagnoses.slice(0,2).map(formatDxLineForPrint).filter(Boolean).join(', ') : (v.diagnosisText || '—');
       const rx = Array.isArray(v.rx) && v.rx.length ? v.rx.slice(0,2).map(d => rxDrugTradeName(d) || d.trade || d.name || 'Drug').join(', ') : 'No prescription';
       const spec = [v.hxSpectacles, v.hxLastSpec].filter(Boolean).join(' · ') || 'No glasses note';
       return `<div style="padding:9px 10px;border:1px solid var(--g5);border-radius:10px;background:#fff;margin-bottom:7px">
