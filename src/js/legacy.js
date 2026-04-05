@@ -3310,6 +3310,11 @@ function initObgSelects() {
 function obgChecked(id) {
   return !!document.getElementById(id)?.checked;
 }
+function syncObgAssessmentToHistory() {
+  const srcLmp = document.getElementById('obg-lmp');
+  const dstLmp = document.getElementById('obg-obs-lmp');
+  if(srcLmp && dstLmp && srcLmp.value) dstLmp.value = srcLmp.value;
+}
 const OBG_OBS_FIELD_IDS = [
   'obg-obs-lmp','obg-obs-edd-date','obg-obs-ga-date','obg-obs-edd-usg','obg-obs-ga-usg',
   'obg-obs-menstrual','obg-obs-blood-group','obg-obs-husband-bg','obg-obs-rbs','obg-obs-tsh','obg-obs-gtt',
@@ -3626,6 +3631,7 @@ function renderObgSummaryRail() {
     </details>`;
 }
 function updateObgComputedFields() {
+  syncObgAssessmentToHistory();
   const calc = calcEDD();
   const g = Number(obgVal('obg-g') || 0);
   const p = Number(obgVal('obg-p') || 0);
@@ -6295,84 +6301,210 @@ function printEyeExaminationCaseSheetA4() {
 // ANC CARD PRINT
 function printOBGCard() {
   const pt = window.CURRENT_PATIENT || {};
-  const today=new Date().toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'});
-  // Pull live form values
-  const ptName = pt.name || document.getElementById('obg-pt-nm')?.textContent || '—';
-  const ptId   = pt.bmhId || document.getElementById('obg-pt-uid')?.textContent || '—';
-  const ptAge  = pt.age ? pt.age+' Years' : '—';
-  const ptBloodGrp = document.getElementById('obg-blood-grp')?.value || document.getElementById('obg-blood')?.value || pt.bloodGroup || '—';
-  const lmpVal = document.getElementById('obg-lmp')?.value || '';
-  const lmpFmt = lmpVal ? new Date(lmpVal).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) : '—';
-  const edd    = document.getElementById('obg-edd-inp')?.value || document.getElementById('obg-edd')?.textContent || '—';
-  const gravida= document.getElementById('obg-gpal-chip')?.textContent || '—';
-  const docName= pt.doctor || window.CURRENT_USER?.name || 'Dr. Namrata Baweja';
-  const docSig = docName.includes('Geeta')?'Dr. Geeta Baweja · MS (OBG)':docName.includes('Namrata')?'Dr. Namrata Baweja · MS (OBG)':docName+' · MS (OBG)';
-
-  // Build ANC visit rows from live anc-visit-list DOM items
-  const ancRows = [];
-  document.querySelectorAll('#anc-visit-list .anc-visit-row, #anc-visit-list [data-anc-row]').forEach((row,i)=>{
-    const cells = row.querySelectorAll('input,select,[data-val]');
-    if(cells.length) ancRows.push({
-      num:i+1,
-      date:cells[0]?.value||cells[0]?.textContent||'',
-      ga:cells[1]?.value||cells[1]?.textContent||'',
-      wt:cells[2]?.value||cells[2]?.textContent||'',
-      bp:cells[3]?.value||cells[3]?.textContent||'',
-      fhr:cells[4]?.value||cells[4]?.textContent||'',
-      fh:cells[5]?.value||cells[5]?.textContent||'',
-      pres:cells[6]?.value||cells[6]?.textContent||'',
-      oedema:cells[7]?.value||cells[7]?.textContent||'Nil',
-      urine:cells[8]?.value||cells[8]?.textContent||'Normal',
-      next:cells[9]?.value||cells[9]?.textContent||''
-    });
-  });
-  // Fill empty rows up to 8
-  while(ancRows.length<8) ancRows.push({num:ancRows.length+1,date:'',ga:'',wt:'',bp:'',fhr:'',fh:'',pres:'',oedema:'',urine:'',next:''});
-
-  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+  const today = new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+  const text = function(id, fallback) {
+    const el = document.getElementById(id);
+    if(!el) return fallback || '';
+    if('value' in el) return el.value || fallback || '';
+    return el.textContent || fallback || '';
+  };
+  const fmtDate = function(v) { return v ? obgFmtDate(v, '—') : '—'; };
+  const yesNo = function(v) { return v || '—'; };
+  const complications = [...document.querySelectorAll('.obg-obs-complication:checked')].map(function(x){ return x.value; });
+  const ptName = pt.name || text('obg-pt-nm', '—');
+  const ptId = pt.bmhId || text('obg-pt-uid', '—');
+  const ptAge = pt.age ? `${pt.age} Years` : '—';
+  const gravida = text('obg-gpal-chip', '—');
+  const doctor = getSelectedObgDoctorName ? getSelectedObgDoctorName() : (pt.doctor || CURRENT_USER?.name || 'Dr. Namrata Baweja');
+  const doctorLine = doctor.includes('Geeta') ? 'Dr. Geeta Baweja · MS (OBG)' : doctor.includes('Namrata') ? 'Dr. Namrata Baweja · MS (OBG)' : `${doctor} · MS (OBG)`;
+  const lmp = text('obg-lmp') || text('obg-obs-lmp');
+  const edd = text('obg-edd-inp') || text('obg-edd');
+  const ga = text('obg-ga');
+  const blood = text('obg-blood-grp') || text('obg-obs-blood-group') || pt.bloodGroup || '—';
+  const husbandBg = text('obg-obs-husband-bg', '—');
+  const risk = text('obg-risk', 'Low risk');
+  const complaint = text('obg-main-complaint', 'Routine review');
+  const systemic = text('obg-systemic', 'None declared');
+  const visitDate = fmtDate(text('obg-visit-date'));
+  const nextReview = fmtDate(text('obg-next-review'));
+  const usgDue = fmtDate(text('obg-usg-due') || text('obg-usg-due-inline'));
+  const ttDue = fmtDate(text('obg-tt-due') || text('obg-tt-due-inline'));
+  const ancSummaryRows = [
+    ['Visit type', text('obg-anc-visit', '—')],
+    ['BP', text('obg-bp', '—')],
+    ['Weight', text('obg-weight', '—')],
+    ['FHR', text('obg-fhr', '—')],
+    ['Fundal height', text('obg-fh', '—')],
+    ['Presentation', text('obg-present', '—')],
+    ['Urine protein', text('obg-urine-protein', '—')],
+    ['Urine sugar', text('obg-urine-sugar', '—')],
+    ['Fetal movement', text('obg-fetal-movement', '—')],
+    ['Warning sign', text('obg-warning', '—')]
+  ];
+  const screeningRows = [
+    ['Menstrual history', text('obg-obs-menstrual', '—')],
+    ['RBS', text('obg-obs-rbs', '—')],
+    ['TSH', text('obg-obs-tsh', '—')],
+    ['GTT', text('obg-obs-gtt', '—')],
+    ['HIV', `${text('obg-obs-hiv', '—')} (${fmtDate(text('obg-obs-hiv-date'))})`],
+    ['HBsAg', `${text('obg-obs-hbsag', '—')} (${fmtDate(text('obg-obs-hbsag-date'))})`],
+    ['HCV', `${text('obg-obs-hcv', '—')} (${fmtDate(text('obg-obs-hcv-date'))})`],
+    ['HPLC', `${text('obg-obs-hplc', '—')} (${fmtDate(text('obg-obs-hplc-date'))})`],
+    ['VDRL', `${text('obg-obs-vdrl', '—')} (${fmtDate(text('obg-obs-vdrl-date'))})`],
+    ['Genetic testing', text('obg-obs-genetic', '—')]
+  ];
+  const obstetricRows = [
+    ['Conception', text('obg-obs-conception', '—')],
+    ['Complications', complications.length ? complications.join(', ') : 'None recorded'],
+    ['Pregnancy outcome', text('obg-obs-preg-outcome', '—')],
+    ['Maturity', text('obg-obs-maturity', '—')],
+    ['Gestation age', text('obg-obs-gestation-age', '—')],
+    ['Mode of delivery', text('obg-obs-mode-delivery', '—')],
+    ['Induction', text('obg-obs-induction', '—')],
+    ['Liquor', text('obg-obs-liquor', '—')],
+    ['Cord round neck', text('obg-obs-cord-neck', '—')],
+    ['PPH', text('obg-obs-pph', '—')]
+  ];
+  const babyRows = [
+    ['Gender', text('obg-obs-gender', '—')],
+    ['Birth weight', text('obg-obs-birth-weight', '—')],
+    ['Date of delivery', fmtDate(text('obg-obs-delivery-date'))],
+    ['Time of delivery', text('obg-obs-delivery-time', '—')],
+    ['APGAR', text('obg-obs-apgar', '—')],
+    ['Cry', text('obg-obs-cry', '—')],
+    ['NICU', text('obg-obs-nicu', '—')],
+    ['Phototherapy', text('obg-obs-phototherapy', '—')],
+    ['Breast feed alone', text('obg-obs-breastfeed', '—')],
+    ['Top feed alone', text('obg-obs-topfeed', '—')]
+  ];
+  const vaccineRows = [
+    ['Dose 1', fmtDate(text('obg-vax-1-date')), text('obg-vax-1-status', 'Pending'), text('obg-vax-1-brand', '—'), text('obg-vax-1-batch', '—')],
+    ['Dose 2', fmtDate(text('obg-vax-2-date')), text('obg-vax-2-status', 'Pending'), text('obg-vax-2-brand', '—'), text('obg-vax-2-batch', '—')],
+    ['Booster', fmtDate(text('obg-vax-3-date')), text('obg-vax-3-status', 'Pending'), text('obg-vax-3-brand', '—'), text('obg-vax-3-batch', '—')]
+  ];
+  const ancNotes = [text('obg-anc-notes'), text('obg-obs-complication-note'), text('obg-obs-genetic-note'), text('obg-obs-post-preg-problems')].filter(Boolean).join(' | ') || 'No additional notes recorded.';
+  const rowHtml = function(items) {
+    return items.map(function(item){ return `<div class="mini-row"><div class="mini-lbl">${item[0]}</div><div class="mini-val">${item[1] || '—'}</div></div>`; }).join('');
+  };
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <style>
   *{margin:0;padding:0;box-sizing:border-box;print-color-adjust:exact;-webkit-print-color-adjust:exact}
-  body{font-family:'Nunito',sans-serif;font-size:11px;background:#fff}
   @page{size:A4 portrait;margin:8mm}
-  .hdr{background:linear-gradient(135deg,#6a0091,#AF52DE);padding:12px 18px;color:#fff;border-radius:4px 4px 0 0}
-  table{width:100%;border-collapse:collapse;font-size:10px;margin-top:10px}
-  th{padding:5px 7px;background:#6a0091;color:#fff;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;text-align:center;border:1px solid #ccc}
-  td{padding:4px 7px;border:1px solid #ddd;text-align:center}
-  tr:nth-child(even){background:#fdf4ff}
-  .fl{font-size:9px;color:#666;font-weight:800;text-transform:uppercase;letter-spacing:.4px}
-  .fv{font-size:12px;font-weight:800;color:#1A3C6E;margin-top:2px}
+  body{font-family:'Nunito',sans-serif;background:#fff;color:#17314f}
+  .card{border:1px solid #d7e0ee;border-radius:12px;overflow:hidden}
+  .head{background:linear-gradient(135deg,#1A3C6E,#3d5f92);color:#fff;padding:12px 14px}
+  .head-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+  .title{font-size:20px;font-weight:900;letter-spacing:.2px}
+  .sub{font-size:10px;opacity:.88;margin-top:2px}
+  .tag{background:#fff;color:#1A3C6E;border-radius:999px;padding:3px 10px;font-size:10px;font-weight:900;text-transform:uppercase}
+  .hero-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin-top:10px}
+  .hero-box{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18);border-radius:10px;padding:7px 8px}
+  .hero-lbl{font-size:8px;font-weight:800;text-transform:uppercase;opacity:.82;letter-spacing:.45px}
+  .hero-val{font-size:12px;font-weight:900;margin-top:3px;line-height:1.25}
+  .body{padding:10px}
+  .grid{display:grid;grid-template-columns:1.15fr .95fr;gap:10px}
+  .section{border:1px solid #dde5f0;border-radius:10px;padding:8px 9px;background:#fff}
+  .section.soft{background:#f8fbff}
+  .section.gold{background:#fffaf0}
+  .sec-title{font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.45px;color:#1A3C6E;margin-bottom:6px}
+  .mini-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px 8px}
+  .mini-row{display:grid;grid-template-columns:94px 1fr;gap:6px;align-items:start}
+  .mini-lbl{font-size:8px;font-weight:800;text-transform:uppercase;color:#6b7c92;letter-spacing:.38px}
+  .mini-val{font-size:10px;font-weight:700;line-height:1.3;color:#17314f}
+  .notes{font-size:10px;line-height:1.4;color:#243b57;background:#fbfcfe;border:1px dashed #cfd9e7;border-radius:10px;padding:8px 9px}
+  table{width:100%;border-collapse:collapse}
+  th{font-size:8px;font-weight:900;text-transform:uppercase;letter-spacing:.4px;background:#1A3C6E;color:#fff;padding:5px;border:1px solid #d4dcea}
+  td{font-size:9px;padding:5px;border:1px solid #dfe6f0;text-align:center}
+  .foot{display:flex;justify-content:space-between;align-items:flex-end;margin-top:10px;padding-top:6px;border-top:1px solid #e4e8ef}
+  .sign{width:160px;text-align:center}
+  .line{border-bottom:1px solid #1b1b1b;height:24px}
+  .small{font-size:8px;color:#6c7280;margin-top:3px}
   </style>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
   </head><body>
-  <div class="hdr">
-    <div style="display:flex;justify-content:space-between;align-items:center">
-      <div><div style="font-size:18px;font-weight:900">Baweja Multispeciality Hospital</div><div style="font-size:10px;opacity:.8">Chandigarh & Ropar · +91-81466 22802</div></div>
-      <div style="text-align:right"><div style="font-size:10px;opacity:.7;text-transform:uppercase;letter-spacing:.5px">ANC Card</div><div style="font-size:14px;font-weight:900;color:#D4A017">${ptId}</div></div>
+  <div class="card">
+    <div class="head">
+      <div class="head-top">
+        <div>
+          <div class="title">Baweja Multispeciality Hospital</div>
+          <div class="sub">Personalised ANC Card · Bring this card on every antenatal visit</div>
+        </div>
+        <div class="tag">ANC Card</div>
+      </div>
+      <div class="hero-grid">
+        <div class="hero-box"><div class="hero-lbl">Patient</div><div class="hero-val">${ptName}</div></div>
+        <div class="hero-box"><div class="hero-lbl">BMSH ID</div><div class="hero-val">${ptId}</div></div>
+        <div class="hero-box"><div class="hero-lbl">Age</div><div class="hero-val">${ptAge}</div></div>
+        <div class="hero-box"><div class="hero-lbl">GPAL</div><div class="hero-val">${gravida}</div></div>
+        <div class="hero-box"><div class="hero-lbl">LMP</div><div class="hero-val">${fmtDate(lmp)}</div></div>
+        <div class="hero-box"><div class="hero-lbl">EDD</div><div class="hero-val">${edd || '—'}</div></div>
+      </div>
     </div>
-    <div style="display:flex;gap:20px;margin-top:10px;font-size:11.5px">
-      <div><div style="opacity:.7;font-size:9px;text-transform:uppercase">Patient</div><div style="font-weight:900">${ptName}</div></div>
-      <div><div style="opacity:.7;font-size:9px;text-transform:uppercase">Age</div><div style="font-weight:900">${ptAge}</div></div>
-      <div><div style="opacity:.7;font-size:9px;text-transform:uppercase">LMP</div><div style="font-weight:900">${lmpFmt}</div></div>
-      <div><div style="opacity:.7;font-size:9px;text-transform:uppercase">EDD</div><div style="font-weight:900">${edd}</div></div>
-      <div><div style="opacity:.7;font-size:9px;text-transform:uppercase">GPAL</div><div style="font-weight:900">${gravida}</div></div>
-      <div><div style="opacity:.7;font-size:9px;text-transform:uppercase">Blood Group</div><div style="font-weight:900">${ptBloodGrp}</div></div>
-      <div><div style="opacity:.7;font-size:9px;text-transform:uppercase">Doctor</div><div style="font-weight:900">${docName}</div></div>
-    </div>
-  </div>
-  <div style="padding:10px">
-    <div style="font-size:12px;font-weight:900;color:#6a0091;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">ANC Visit Record</div>
-    <table>
-      <thead><tr><th>Visit</th><th>Date</th><th>GA (Wks)</th><th>Wt (kg)</th><th>BP (mmHg)</th><th>FHR (bpm)</th><th>Fundal Ht</th><th>Presentation</th><th>Oedema</th><th>Urine</th><th>Next Visit</th></tr></thead>
-      <tbody>
-        ${ancRows.map(r=>`<tr><td>${r.num}</td><td>${r.date}</td><td>${r.ga}</td><td>${r.wt}</td><td>${r.bp}</td><td>${r.fhr}</td><td>${r.fh}</td><td>${r.pres}</td><td>${r.oedema}</td><td>${r.urine}</td><td>${r.next}</td></tr>`).join('')}
-      </tbody>
-    </table>
-    <div style="margin-top:14px;display:flex;justify-content:space-between;align-items:flex-end">
-      <div><div style="border-bottom:1px solid #333;width:140px;margin-top:30px"></div><div style="font-size:9px;color:#888;margin-top:3px">Patient Signature</div></div>
-      <div style="text-align:right"><div style="font-size:12px;font-weight:900;color:#1A3C6E">${docSig}</div><div style="font-size:10px;color:#888;margin-top:2px">Baweja Multispeciality Hospital · ${today}</div></div>
+    <div class="body">
+      <div class="grid">
+        <div style="display:grid;gap:10px">
+          <div class="section soft">
+            <div class="sec-title">Current ANC Assessment</div>
+            <div class="mini-grid">${rowHtml(ancSummaryRows)}</div>
+          </div>
+          <div class="section">
+            <div class="sec-title">Pregnancy Profile</div>
+            <div class="mini-grid">${rowHtml([
+              ['Blood group', blood],
+              ['Husband BG', husbandBg],
+              ['GA', ga || '—'],
+              ['High-risk tag', risk],
+              ['Primary complaint', complaint],
+              ['Systemic disease', systemic],
+              ['Visit date', visitDate],
+              ['Next review', nextReview],
+              ['USG due', usgDue],
+              ['TT / Tdap due', ttDue]
+            ])}</div>
+          </div>
+          <div class="section gold">
+            <div class="sec-title">Obstetric History</div>
+            <div class="mini-grid">${rowHtml(obstetricRows)}</div>
+          </div>
+          <div class="section">
+            <div class="sec-title">Important Notes</div>
+            <div class="notes">${ancNotes}</div>
+          </div>
+        </div>
+        <div style="display:grid;gap:10px">
+          <div class="section">
+            <div class="sec-title">Screening & Labs</div>
+            <div class="mini-grid">${rowHtml(screeningRows)}</div>
+          </div>
+          <div class="section soft">
+            <div class="sec-title">Baby / Delivery History</div>
+            <div class="mini-grid">${rowHtml(babyRows)}</div>
+          </div>
+          <div class="section">
+            <div class="sec-title">TT / Td / Tdap Status</div>
+            <table>
+              <thead><tr><th>Dose</th><th>Date</th><th>Status</th><th>Brand</th><th>Batch</th></tr></thead>
+              <tbody>${vaccineRows.map(function(r){ return `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td></tr>`; }).join('')}</tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="foot">
+        <div>
+          <div style="font-size:10px;font-weight:800;color:#1A3C6E">Consultant</div>
+          <div style="font-size:11px;font-weight:900">${doctorLine}</div>
+          <div class="small">Printed on ${today}</div>
+        </div>
+        <div class="sign">
+          <div class="line"></div>
+          <div class="small">Patient Signature</div>
+        </div>
+      </div>
     </div>
   </div>
   </body></html>`;
-  safePrint(html);showToast('ANC Card sent to printer ✓','s');
+  safePrint(html);
+  showToast('ANC Card sent to printer ✓','s');
 }
 
 
