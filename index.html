@@ -1846,7 +1846,7 @@
         <div class="ptab" onclick="ptab(this,'obg-investigations')">Investigations</div>
         <div class="ptab" onclick="ptab(this,'obg-uploads')">Uploads</div>
         <div class="ptab" onclick="ptab(this,'obg-rx')">Prescription</div>
-        <div class="ptab" id="obg-tab-obs-history" onclick="ptab(this,'obg-delivery')" style="display:none">Obstetric History</div>
+        <div class="ptab" id="obg-tab-obs-history" onclick="ptab(this,'obg-delivery')">Obstetric History</div>
       </div>
       </div>
       <div id="obg-layout" style="display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:14px;align-items:start">
@@ -2232,7 +2232,7 @@
       <div class="tab-content" id="obg-delivery">
         <div style="background:var(--orange-lt);border-radius:var(--rsm);padding:12px;margin-bottom:12px;border-left:4px solid var(--orange)">
           <div style="font-size:13px;font-weight:900;color:#8a4200;margin-bottom:6px">🧡 Obstetric History</div>
-          <div style="font-size:12px;color:#8a4200;line-height:1.8">This section opens after ANC is selected and saved. Record antenatal screening, vaccination, prior pregnancy outcomes, labour details, baby details, and postpartum history so the same information returns on future visits.</div>
+          <div style="font-size:12px;color:#8a4200;line-height:1.8">Record antenatal screening, vaccination, prior pregnancy outcomes, labour details, baby details, and postpartum history here. This section stays available on every OBG patient so previous pregnancy details can be reviewed quickly.</div>
         </div>
         <div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:12px">
           <div class="form-group"><label class="fl">LMP</label><input type="date" id="obg-obs-lmp"></div>
@@ -4578,6 +4578,21 @@
   </div>
   <div class="form-group"><label class="fl">Fasting Status</label>
     <select id="ot-add-fasting"><option>Yes — fasted 6+ hrs</option><option>Yes — topical only, no fasting needed</option><option>No — emergency</option></select>
+  </div>
+  <div id="ot-add-obg-block" class="form-group full" style="display:none;background:#fff4f8;border:1px solid rgba(192,0,78,.18);border-radius:12px;padding:12px">
+    <div style="font-size:11px;font-weight:900;color:#c0004e;text-transform:uppercase;letter-spacing:.45px;margin-bottom:8px">OBG / LSCS OT Flow</div>
+    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+      <div class="form-group"><label class="fl">Gestation Age</label><input type="text" id="ot-add-obg-ga" placeholder="e.g. 38+4 weeks"></div>
+      <div class="form-group"><label class="fl">LSCS / Surgery Type</label><select id="ot-add-obg-type"><option value="Elective LSCS">Elective LSCS</option><option value="Emergency LSCS">Emergency LSCS</option><option value="Normal Delivery">Normal Delivery</option><option value="Assisted Delivery">Assisted Delivery</option><option value="Gynae Surgery">Gynae Surgery</option></select></div>
+      <div class="form-group"><label class="fl">Presentation / Baby</label><input type="text" id="ot-add-obg-fetal" placeholder="Cephalic / single live foetus"></div>
+      <div class="form-group"><label class="fl">Indication</label><input type="text" id="ot-add-obg-indication" placeholder="Previous LSCS / fetal distress / CPD"></div>
+      <div class="form-group"><label class="fl">Liquor / Membranes</label><input type="text" id="ot-add-obg-liquor" placeholder="Clear / meconium / ruptured"></div>
+      <div class="form-group"><label class="fl">Blood Arranged</label><input type="text" id="ot-add-obg-blood" placeholder="e.g. 2 units O+ve"></div>
+      <div class="form-group"><label class="fl">Anaesthesia Team Note</label><input type="text" id="ot-add-obg-anaes-note" placeholder="Spinal fit / GA backup"></div>
+      <div class="form-group"><label class="fl">Baby Outcome / NICU</label><input type="text" id="ot-add-obg-baby" placeholder="Live birth / NICU standby"></div>
+      <div class="form-group"><label class="fl">Mother Status</label><input type="text" id="ot-add-obg-mother" placeholder="Stable / high-risk / anaemic"></div>
+      <div class="form-group" style="grid-column:1/-1"><label class="fl">Paperwork / Documents</label><div style="display:flex;gap:10px;flex-wrap:wrap;font-size:11px;padding:6px 0"><label><input type="checkbox" id="ot-add-obg-doc-consent"> LSCS consent</label><label><input type="checkbox" id="ot-add-obg-doc-anaes"> Anaesthesia consent</label><label><input type="checkbox" id="ot-add-obg-doc-blood"> Blood transfusion consent</label><label><input type="checkbox" id="ot-add-obg-doc-newborn"> Neonatal / newborn sheet</label></div></div>
+    </div>
   </div>
   <div class="form-group full" style="background:var(--g6);border:1px solid var(--g4);border-radius:10px;padding:10px">
     <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800;color:var(--bmh-blue);margin-bottom:8px">
