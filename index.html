@@ -3175,7 +3175,8 @@
 </div>
 </div>
 <div class="page" id="pg-settings">
-<div class="ptabs" style="margin-bottom:14px">
+<div style="position:sticky;top:0;z-index:45;background:#fff;padding:0 0 10px">
+<div class="ptabs" style="margin-bottom:0">
   <div class="ptab active" onclick="ptab(this,'set-hospital')">🏥 Hospital</div>
   <div class="ptab" onclick="ptab(this,'set-doctors')">👨‍⚕️ Doctors</div>
   <div class="ptab" onclick="ptab(this,'set-drugs')">💊 Drugs</div>
@@ -3186,6 +3187,7 @@
   <div class="ptab" onclick="ptab(this,'set-import')">📥 Import Patients</div>
   <div class="ptab" onclick="ptab(this,'set-logins');setTimeout(()=>renderAdminUsersList&&renderAdminUsersList(),50)">🔐 Logins</div>
   <div class="ptab" id="set-approvals-tab" onclick="ptab(this,'set-del-approvals');loadDeletionRequests&&loadDeletionRequests();renderDeletionRequests&&renderDeletionRequests()">🗑️ Approvals <span id="del-req-count" style="display:none;background:var(--red);color:#fff;border-radius:50%;width:16px;height:16px;align-items:center;justify-content:center;font-size:9px;font-weight:900;margin-left:3px">0</span></div>
+</div>
 </div>
 
 <!-- HOSPITAL SETTINGS -->

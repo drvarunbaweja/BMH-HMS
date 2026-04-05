@@ -820,6 +820,19 @@ function isAcceptedLoginPassword(user, profile, pass) {
   if (pass === 'ChangeMe@123' && USER_DB[uname]) return true;
   return false;
 }
+function getLoginUserCandidates(rawUser) {
+  const u = String(rawUser || '').trim().toLowerCase();
+  if (!u) return [];
+  const out = [u];
+  if (!u.includes('@')) {
+    out.push(u + '@bawejahospital.com');
+    out.push(u + '.rpr@bawejahospital.com');
+    out.push(u + '.chd@bawejahospital.com');
+  }
+  const uniq = [];
+  out.forEach(function (item) { if (item && uniq.indexOf(item) === -1) uniq.push(item); });
+  return uniq;
+}
 function buildCompactDocumentHeader(title, ctx, subtitle) {
   const esc = escapeHtmlConsent;
   const logoSrc = resolvePrintLogoSrc();
@@ -6516,8 +6529,25 @@ function getSurgeryTemplateSuggestions() {
       const kind = String(row.kind || '').toLowerCase();
       return kind === 'surgery' || String(row.cat || '').toLowerCase().includes('eye');
     })
-    .map(function (row) { return String(row.parent || row.name || '').trim(); })
+    .flatMap(function (row) { return [String(row.parent || '').trim(), String(row.name || '').trim()]; })
     .filter(Boolean))].sort();
+}
+function normalizeOtTemplateKey(text) {
+  return String(text || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+function otTemplateMatchesProcedure(templateSurgery, activeProcedure) {
+  const t = normalizeOtTemplateKey(templateSurgery);
+  const p = normalizeOtTemplateKey(activeProcedure);
+  if (!t) return true;
+  if (!p) return false;
+  if (p.includes(t) || t.includes(p)) return true;
+  return (CHARGES_DATA || []).some(function (row) {
+    const parent = normalizeOtTemplateKey(row.parent || '');
+    const name = normalizeOtTemplateKey(row.name || '');
+    const rowMatchesTemplate = (parent && (parent.includes(t) || t.includes(parent))) || (name && (name.includes(t) || t.includes(name)));
+    const rowMatchesProcedure = (parent && (parent.includes(p) || p.includes(parent))) || (name && (name.includes(p) || p.includes(name)));
+    return rowMatchesTemplate && rowMatchesProcedure;
+  });
 }
 function refreshRxTemplateSurgeryDatalist() {
   const dl = document.getElementById('rx-tpl-surgery-list');
@@ -9395,8 +9425,7 @@ function refreshOTNotesTemplateSelect() {
   Object.keys(RX_TEMPLATES_DATA || {}).forEach(function (key) {
     const meta = RX_TEMPLATES_META[key] || {};
     if ((meta.dept || '') !== 'ot') return;
-    const templateSurgery = String(meta.surgery || '').trim().toLowerCase();
-    if (templateSurgery && activeProc && !activeProc.includes(templateSurgery) && !templateSurgery.includes(activeProc)) return;
+    if (!otTemplateMatchesProcedure(meta.surgery || '', activeProc)) return;
     const opt = document.createElement('option');
     opt.value = key;
     opt.textContent = meta.name || key;
@@ -10937,16 +10966,20 @@ function loginUser() {
   try {
     var user = ((document.getElementById('lg-email') || document.getElementById('lg-user')) ? (document.getElementById('lg-email') || document.getElementById('lg-user')).value : '').trim().toLowerCase();
     var pass = (document.getElementById('lg-pass') ? document.getElementById('lg-pass').value : '');
+    var userCandidates = getLoginUserCandidates(user);
     
     if (!user || !pass) {
       showLoginErr('Please enter username and password');
       return;
     }
     
-    var profile = USER_DB ? USER_DB[user] : null;
-    if (!profile || !isAcceptedLoginPassword(user, profile, pass)) {
+    var matchedUser = userCandidates.find(function (candidate) {
+      return USER_DB && USER_DB[candidate] && isAcceptedLoginPassword(candidate, USER_DB[candidate], pass);
+    }) || user;
+    var profile = USER_DB ? USER_DB[matchedUser] : null;
+    if (!profile || !isAcceptedLoginPassword(matchedUser, profile, pass)) {
       if (window.FBDB) {
-        window.FBDB.ref('userSettings/' + user).once('value').then(function(snap) {
+        window.FBDB.ref('userSettings/' + matchedUser).once('value').then(function(snap) {
           const data = snap.val();
           if(!data) {
             showLoginErr('Incorrect username or password');
@@ -10954,14 +10987,14 @@ function loginUser() {
             if (pi) pi.value = '';
             return;
           }
-          USER_DB[user] = Object.assign({}, USER_DB[user] || {}, data);
-          if (!isAcceptedLoginPassword(user, USER_DB[user], pass)) {
+          USER_DB[matchedUser] = Object.assign({}, USER_DB[matchedUser] || {}, data);
+          if (!isAcceptedLoginPassword(matchedUser, USER_DB[matchedUser], pass)) {
             showLoginErr('Incorrect username or password');
             var pi2 = document.getElementById('lg-pass');
             if (pi2) pi2.value = '';
             return;
           }
-          activateUserSession(user, USER_DB[user], { showToastOnSuccess: true, auditLogin: true });
+          activateUserSession(matchedUser, USER_DB[matchedUser], { showToastOnSuccess: true, auditLogin: true });
         }).catch(function() {
           showLoginErr('Incorrect username or password');
           var pi3 = document.getElementById('lg-pass');
@@ -10985,13 +11018,13 @@ function loginUser() {
     try {
       var rem = document.getElementById('lg-remember');
       if (rem && rem.checked) {
-        localStorage.setItem('bmh_creds', JSON.stringify({u: user, p: pass}));
+        localStorage.setItem('bmh_creds', JSON.stringify({u: matchedUser, p: pass}));
       } else {
         localStorage.removeItem('bmh_creds');
       }
     } catch(storErr) {}
 
-    activateUserSession(user, profile, { showToastOnSuccess: true, auditLogin: true });
+    activateUserSession(matchedUser, profile, { showToastOnSuccess: true, auditLogin: true });
 
 
   } catch(loginErr) {
