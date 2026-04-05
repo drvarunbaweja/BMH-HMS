@@ -542,6 +542,11 @@ const CONSENT_DATA = {
     {en:"I understand risks including incomplete evacuation, infection, haemorrhage, uterine perforation, and failure requiring repeat procedure.", pa:"ਮੈਨੂੰ ਅਧੂਰੇ ਖਾਲੀਕਰਨ, ਇਨਫੈਕਸ਼ਨ, ਖੂਨ ਵਹਿਣਾ, ਅਤੇ ਦੁਬਾਰਾ ਪ੍ਰਕਿਰਿਆ ਦੇ ਜੋਖਮਾਂ ਬਾਰੇ ਦੱਸਿਆ ਗਿਆ ਹੈ।",hi:"अधूरी निकासी, संक्रमण, रक्तस्राव और दोबारा प्रक्रिया के जोखिमों के बारे में जानकारी दी गई है।"},
     {en:"Confidentiality will be maintained as per MTP Act provisions.", pa:"MTP ਐਕਟ ਅਨੁਸਾਰ ਗੁਪਤਤਾ ਰੱਖੀ ਜਾਵੇਗੀ।",hi:"MTP अधिनियम के प्रावधानों के अनुसार गोपनीयता बनाए रखी जाएगी।"},
   ]},
+  'obg-painless': { title:'Consent for Painless Abortion / Suction Evacuation', paras:[
+    {en:"I voluntarily consent to painless abortion / suction evacuation under sedation or anaesthesia as advised by my doctor.", pa:"ਮੈਂ ਡਾਕਟਰ ਦੀ ਸਲਾਹ ਅਨੁਸਾਰ ਬੇਹੋਸ਼ੀ / ਦਰਦ-ਰਹਿਤ ਗਰਭ ਸਮਾਪਤੀ / ਸਕਸ਼ਨ ਇਵੈਕੂਏਸ਼ਨ ਲਈ ਸਹਿਮਤ ਹਾਂ।", hi:"मैं डॉक्टर की सलाह के अनुसार दर्दरहित गर्भसमापन / सक्शन इवैकुएशन के लिए सहमति देता/देती हूँ।"},
+    {en:"I understand the risks include incomplete evacuation, bleeding, infection, uterine perforation, need for repeat procedure, and anaesthesia related risks.", pa:"ਮੈਂ ਸਮਝਦਾ/ਸਮਝਦੀ ਹਾਂ ਕਿ ਅਧੂਰਾ ਖਾਲੀਕਰਨ, ਖੂਨ ਵਹਿਣਾ, ਇਨਫੈਕਸ਼ਨ, ਬੱਚੇਦਾਨੀ ਨੂੰ ਸੱਟ ਅਤੇ ਮੁੜ ਪ੍ਰਕਿਰਿਆ ਦੀ ਲੋੜ ਹੋ ਸਕਦੀ ਹੈ।", hi:"मैं समझता/समझती हूँ कि अधूरी निकासी, रक्तस्राव, संक्रमण, गर्भाशय को चोट और दोबारा प्रक्रिया की आवश्यकता हो सकती है।"},
+    {en:"I understand follow-up is important to confirm complete evacuation and recovery.", pa:"ਮੈਨੂੰ ਸਮਝਾਇਆ ਗਿਆ ਹੈ ਕਿ ਪੂਰੀ ਸਿਹਤਯਾਬੀ ਅਤੇ ਪੂਰਾ ਖਾਲੀਕਰਨ ਯਕੀਨੀ ਕਰਨ ਲਈ ਫਾਲੋ-ਅਪ ਜ਼ਰੂਰੀ ਹੈ।", hi:"मुझे बताया गया है कि पूर्ण स्वास्थ्य लाभ और पूरी निकासी की पुष्टि के लिए फॉलो-अप जरूरी है।"},
+  ]},
   'obg-lap': { title:'Consent for Diagnostic Laparoscopy', paras:[
     {en:"I consent to diagnostic laparoscopy (keyhole surgery) to evaluate my abdominal/pelvic condition as recommended.", pa:"ਮੈਂ ਆਪਣੀ ਪੇਟ/ਪੇਲਵਿਕ ਸਥਿਤੀ ਦੇ ਮੁਲਾਂਕਣ ਲਈ ਲੈਪਰੋਸਕੋਪੀ ਲਈ ਸਹਿਮਤ ਹਾਂ।",hi:"पेट/पेल्विक स्थिति के मूल्यांकन के लिए लेप्रोस्कोपी के लिए सहमत हूँ।"},
     {en:"I understand that if findings necessitate, the procedure may be converted to open laparotomy.", pa:"ਜੇ ਜ਼ਰੂਰੀ ਹੋਵੇ ਤਾਂ ਖੁੱਲ੍ਹੇ ਆਪ੍ਰੇਸ਼ਨ ਵਿੱਚ ਬਦਲਿਆ ਜਾ ਸਕਦਾ ਹੈ, ਮੈਂ ਇਸ ਲਈ ਵੀ ਸਹਿਮਤ ਹਾਂ।",hi:"जरूरत पड़ने पर खुले ऑपरेशन में बदला जा सकता है, मैं उसके लिए भी सहमत हूँ।"},
@@ -635,6 +640,28 @@ const CONSENT_LIBRARY = [
    body:`I consent to receive blood or blood products if deemed medically necessary during my treatment/surgery. I have been informed of the risks: transfusion reactions, fever, allergic reactions, and extremely rare risk of transfusion-transmitted infections (hepatitis B/C, HIV — all blood is screened). I understand refusal may increase risk of anaemia and related complications.`},
   {id:'c-anaes',dept:'obg',name:'Anaesthesia Consent (Spinal / General)',icon:'💉',
    body:`I consent to spinal or general anaesthesia as required for my surgical procedure. I have been assessed by the anaesthetist. Risks of spinal anaesthesia: headache (post-dural puncture), failed block, hypotension, urinary retention. Risks of general anaesthesia: airway difficulties, aspiration, nausea/vomiting, awareness (very rare), drug reactions. Both carry very rare risks of cardiovascular or neurological complications.`},
+  {id:'obg-lscs-preop',dept:'obg',name:'LSCS Pre-operative Checklist',icon:'✅',docType:'form',
+   body:`Patient identity, gestation age, indication for LSCS, and operative consent cross-checked.\n\nBlood group, haemoglobin, and required investigations reviewed.\n\nAnaesthesia review done and fitness documented.\n\nIV line secured, blood arranged if needed, NBM / aspiration prophylaxis recorded.\n\nFetal heart status documented and OT / neonatal team informed.\n\nUrinary catheter, shaving / skin prep, and antibiotic prophylaxis completed as indicated.\n\nRelative counselling and final pre-op sign-off completed.`},
+  {id:'obg-lscs-op',dept:'obg',name:'LSCS Operative Checklist',icon:'📋',docType:'form',
+   body:`WHO sign-in / time-out / sign-out completed.\n\nIndication, gestation age, and baby presentation reconfirmed.\n\nSkin incision, uterine incision, liquor, baby delivery time, cord status, placenta delivery, and uterine closure documented.\n\nEstimated blood loss, intra-operative complications, and additional procedures recorded.\n\nMother condition and baby outcome / NICU need documented before shift out.`},
+  {id:'obg-lscs-postop',dept:'obg',name:'LSCS Post-operative Checklist',icon:'✔️',docType:'form',
+   body:`Vitals, lochia, uterine tone, urine output, pain score, and wound / dressing status checked.\n\nIV fluids, antibiotics, analgesia, and thromboprophylaxis if advised documented.\n\nBreastfeeding support, baby rooming-in / NICU communication, and mobilisation plan reviewed.\n\nDischarge medicines, warning signs, and follow-up advice explained to patient and attendants.`},
+  {id:'obg-labour-admission',dept:'obg',name:'Labour Room Admission Sheet',icon:'📋',docType:'form',
+   body:`Patient identification, parity / obstetric score, labour complaints, membrane status, fetal movements, and referral history documented.\n\nBaseline vitals, fetal heart, cervical findings, and labour plan recorded.\n\nIV access, consent, blood arrangement if needed, and paediatric standby noted.`},
+  {id:'obg-labour-checklist',dept:'obg',name:'Normal Delivery / Labour Checklist',icon:'✅',docType:'form',
+   body:`Maternal vitals, fetal heart, labour progress, pain relief, and vaginal bleeding monitored as per protocol.\n\nPartograph / labour progress, rupture of membranes, liquor, and augmentation if used documented.\n\nPreparation for instrumental delivery / emergency LSCS kept ready when indicated.`},
+  {id:'obg-delivery-record',dept:'obg',name:'Delivery Record & Immediate Postpartum Notes',icon:'📝',docType:'form',
+   body:`Time of delivery, sex, birth weight, APGAR, cry at birth, placenta delivery, perineal trauma / episiotomy, and postpartum bleeding documented.\n\nNewborn care, breastfeeding initiation, and mother condition after delivery recorded.`},
+  {id:'obg-postnatal-checklist',dept:'obg',name:'Postnatal Monitoring Checklist',icon:'✔️',docType:'form',
+   body:`Vitals, lochia, fundal height / uterine tone, urine / bowel function, pain relief, mobilisation, breastfeeding, and baby wellbeing reviewed.\n\nWarning signs explained: fever, heavy bleeding, severe pain, wound issues, poor feeding, or neonatal jaundice.`},
+  {id:'obg-mtp-preop',dept:'obg',name:'MTP / Suction Evacuation Pre-op Checklist',icon:'✅',docType:'form',
+   body:`Identity, gestation / indication, consent, haemoglobin / blood group, ultrasound if applicable, and anaesthesia review documented.\n\nIV access, fasting status, antibiotics / analgesia plan, and Rh status if relevant checked.`},
+  {id:'obg-mtp-op',dept:'obg',name:'MTP / Suction Evacuation Operative Notes Checklist',icon:'📋',docType:'form',
+   body:`Procedure type, cervical preparation, uterine size, suction / evacuation details, completeness of products, blood loss, and complications documented.\n\nSpecimen handling, Rh immunoglobulin indication, and immediate post-procedure condition recorded.`},
+  {id:'obg-mtp-postop',dept:'obg',name:'MTP / Suction Evacuation Post-op Checklist',icon:'✔️',docType:'form',
+   body:`Vitals, bleeding, abdominal pain, urine output, recovery from sedation, antibiotics / analgesia, and discharge counselling reviewed.\n\nContraception counselling, danger signs, and follow-up date provided.`},
+  {id:'obg-newborn-sheet',dept:'obg',name:'Newborn / Vaccination Sheet',icon:'👶',docType:'form',
+   body:`Baby sex, birth weight, APGAR, cry, feeding initiation, vitamin K / vaccines given, NICU need, jaundice watch, and discharge advice documented.\n\nBCG, OPV, Hepatitis B as per birth-dose schedule to be ticked before discharge where applicable.`},
   {id:'c-psych-eval',dept:'psych',name:'Psychiatric Evaluation & Treatment',icon:'🧠',
    body:`I voluntarily consent to psychiatric evaluation, diagnosis, and treatment including medications, psychotherapy, psychological testing, and other investigations recommended by Dr. Tarun Baweja.\n\nConfidentiality: Information disclosed will be kept strictly confidential except where required by law (risk of harm to self or others, court order).\n\nMedications: I have been informed that psychotropic medications may cause side effects and that response to treatment varies. I will report any unexpected effects promptly.`},
   {id:'c-ect',dept:'psych',name:'ECT — Electroconvulsive Therapy',icon:'🧠',
@@ -4408,13 +4435,24 @@ function otCaseNeedsObgFlow(procText, patientId) {
   const pt = patientId ? PATIENTS.find(function (p) { return p.bmhId === patientId; }) : null;
   return /lscs|caes|cesare|delivery|obg|gynae|hyster|lapar/i.test(proc) || normalizeDeptKeyForQueue(pt?.dept || '') === 'obg';
 }
+function getSelectedOTCaseKind() {
+  if(document.getElementById('ot-case-kind-obg')?.checked) return 'obg';
+  if(document.getElementById('ot-case-kind-eye')?.checked) return 'ophtho';
+  return 'ophtho';
+}
 function toggleOTOBGFields() {
   const block = document.getElementById('ot-add-obg-block');
+  const eyeFields = document.getElementById('ot-eye-fields');
+  const eyeSummary = document.getElementById('ot-eye-iol-summary');
+  const siteWrap = document.getElementById('ot-site-wrap');
   if(!block) return;
   const ptId = document.getElementById('ot-bmsh-id')?.value || document.getElementById('ot-pt-sel')?.value || '';
   const proc = document.getElementById('ot-add-proc')?.value || '';
-  const visible = otCaseNeedsObgFlow(proc, ptId);
+  const visible = getSelectedOTCaseKind() === 'obg' || otCaseNeedsObgFlow(proc, ptId);
   block.style.display = visible ? '' : 'none';
+  if (eyeFields) eyeFields.style.display = visible ? 'none' : '';
+  if (eyeSummary) eyeSummary.style.display = visible ? 'none' : '';
+  if (siteWrap) siteWrap.style.display = visible ? 'none' : '';
   if(!visible) return;
   const admitEl = document.getElementById('ot-add-admit');
   const admitBlock = document.getElementById('ot-add-admit-block');
@@ -4423,9 +4461,11 @@ function toggleOTOBGFields() {
   const typeEl = document.getElementById('ot-add-admit-type');
   const wardEl = document.getElementById('ot-add-admit-ward');
   const notesEl = document.getElementById('ot-add-admit-notes');
+  const roomEl = document.getElementById('ot-add-room');
   if(typeEl) typeEl.value = 'Obstetric';
   if(wardEl && !wardEl.value) wardEl.value = 'OBG Ward / Bed';
-  if(notesEl && !notesEl.value) notesEl.value = 'Pre-op vitals, consent, blood arranged, fetal status, catheter if advised, post-op LSCS monitoring.';
+  if(roomEl && (!roomEl.value || /^OT-/.test(roomEl.value))) roomEl.value = 'Labour Room';
+  if(notesEl && !notesEl.value) notesEl.value = 'Pre-op vitals, fetal status, consent checked, labour / OT checklist, medicines and post-op monitoring.';
 }
 function ipdVitalsStatus(vitals) {
   const flags = [];
@@ -4525,6 +4565,8 @@ function openIPDPatient(id) {
       ${(p.notes || []).map(n=>`<div style="background:var(--g6);border-radius:var(--rsm);padding:12px;margin-bottom:8px;border-left:3px solid var(--blue)">
         <div style="font-size:11px;font-weight:900;color:var(--bmh-blue);margin-bottom:4px">${n.date} · ${n.time}</div>
         ${n.vitals ? `<div style="font-size:10px;color:var(--g1);margin-bottom:6px">BP ${n.vitals.bp||'—'} · Pulse ${n.vitals.pulse||'—'} · Temp ${n.vitals.temp||'—'} · SpO2 ${n.vitals.spo2||'—'} · RR ${n.vitals.rr||'—'} · Pain ${n.vitals.pain||'—'}</div>` : ''}
+        ${n.medicine || n.dose ? `<div style="font-size:10px;color:#1a8c3c;margin-bottom:4px"><strong>Medicine / Injection:</strong> ${n.medicine||'—'} ${n.dose?`(${n.dose})`:''}</div>` : ''}
+        ${n.orders ? `<div style="font-size:10px;color:#8a4200;margin-bottom:4px"><strong>Doctor orders:</strong> ${n.orders}</div>` : ''}
         <div style="font-size:12px;color:var(--tx3);line-height:1.7">${n.note}</div>
         <div style="font-size:10px;color:var(--g1);margin-top:6px">👩‍⚕️ ${n.nurse} · 👨‍⚕️ ${n.doctor}</div>
       </div>`).join('')}
@@ -4544,6 +4586,9 @@ function saveProgressNote() {
   const doctor = document.getElementById('pn-doctor')?.value||'Dr. Varun Baweja';
   const date = document.getElementById('pn-date')?.value || new Date().toISOString().slice(0,10);
   const time = document.getElementById('pn-time')?.value || new Date().toTimeString().slice(0,5);
+  const medicine = document.getElementById('pn-med')?.value || '';
+  const dose = document.getElementById('pn-dose')?.value || '';
+  const orders = document.getElementById('pn-orders')?.value || '';
   const vitals = {
     bp: document.getElementById('pn-bp')?.value || '',
     pulse: document.getElementById('pn-pulse')?.value || '',
@@ -4555,7 +4600,7 @@ function saveProgressNote() {
   if (!note) { showToast('Please enter a note','w'); return; }
   if (!Array.isArray(activeIPDPatient.notes)) activeIPDPatient.notes = [];
   if (!Array.isArray(activeIPDPatient.vitalSigns)) activeIPDPatient.vitalSigns = [];
-  activeIPDPatient.notes.unshift({date:new Date(date).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}),time,note,nurse,doctor,vitals,recordedAt:new Date(date + 'T' + time).toISOString()});
+  activeIPDPatient.notes.unshift({date:new Date(date).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}),time,note,nurse,doctor,medicine,dose,orders,vitals,recordedAt:new Date(date + 'T' + time).toISOString()});
   if (Object.values(vitals).some(Boolean)) activeIPDPatient.vitalSigns.unshift(Object.assign({ recordedAt:new Date(date + 'T' + time).toISOString(), by:nurse }, vitals));
   const nextDue = (activeIPDPatient.monitoringPlan || []).find(slot => slot.status !== 'done');
   if (nextDue) {
@@ -6109,6 +6154,7 @@ function confirmIPDAdmit() {
 
   // Save to Firebase
   fbSet('ipdPatients/'+ipdEntry.id, ipdEntry).catch(e=>console.warn('IPD save error:',e));
+  fbUpdate && fbUpdate('patients/'+bmhId,{ ipdAdmitted:true, status:'ipd', dept, doctor }).catch(()=>{});
   fbPush('auditLog',{user:CURRENT_USER?.name,action:'IPD_ADMIT',patient:p.name,bmhId,at:new Date().toISOString()}).catch(()=>{});
 
   closeM('m-ipd-admit');
@@ -8849,7 +8895,11 @@ function renderDeptSummary() {
 // ── printSurgeryPack — print all relevant consent forms for a dept or custom pack ──────────
 const SURGERY_PACK_DEFAULTS = [
   { id:'ophtho', dept:'Ophthalmology', icon:'👁️', label:'Ophthalmology surgery pack', desc:'Bilingual consent forms and related forms for eye procedures.', color:'var(--blue)', documentKeys:['cataract','ivt','lasik','pterygium'] },
-  { id:'obg', dept:'Obstetrics & Gynaecology', icon:'🤰', label:'OBG surgical pack', desc:'Delivery, LSCS, laparoscopy and discharge documents.', color:'#c0004e', documentKeys:['obg-lscs','obg-normal','obg-lap','obg-mtp'] },
+  { id:'obg', dept:'Obstetrics & Gynaecology', icon:'🤰', label:'OBG surgical pack', desc:'Delivery, LSCS, laparoscopy and discharge documents.', color:'#c0004e', documentKeys:['obg-lscs','obg-normal','obg-mtp','obg-lscs-preop','obg-lscs-op','obg-lscs-postop'] },
+  { id:'obg-lscs-pack', dept:'Obstetrics & Gynaecology', icon:'🤰', label:'LSCS pack', desc:'LSCS consent, pre-op, operative, post-op and newborn papers.', color:'#c0004e', documentKeys:['obg-lscs','obg-blood-transfusion','obg-anaes-consent','obg-lscs-preop','obg-lscs-op','obg-lscs-postop','obg-newborn-sheet'] },
+  { id:'obg-normal-pack', dept:'Obstetrics & Gynaecology', icon:'🤰', label:'Normal delivery / labour room pack', desc:'Admission, labour, delivery and postnatal paperwork.', color:'#d9487d', documentKeys:['obg-normal','obg-labour-admission','obg-labour-checklist','obg-delivery-record','obg-postnatal-checklist','obg-newborn-sheet'] },
+  { id:'obg-mtp-pack', dept:'Obstetrics & Gynaecology', icon:'🤰', label:'MTP / suction evacuation pack', desc:'Consent and peri-procedure documentation for MTP / suction evacuation.', color:'#a52a5a', documentKeys:['obg-mtp','obg-mtp-preop','obg-mtp-op','obg-mtp-postop'] },
+  { id:'obg-painless-pack', dept:'Obstetrics & Gynaecology', icon:'🤰', label:'Painless abortion pack', desc:'Sedation, suction evacuation and discharge paperwork.', color:'#7a1f48', documentKeys:['obg-painless','obg-anaes-consent','obg-mtp-preop','obg-mtp-op','obg-mtp-postop'] },
   { id:'psych', dept:'Neuropsychiatry', icon:'🧠', label:'Psychiatry pack', desc:'Evaluation and treatment documents.', color:'var(--orange)', documentKeys:['psych-gen','psych-ect'] },
   { id:'skin', dept:'Skin & Cosmetology', icon:'💆', label:'Dermatology / aesthetics pack', desc:'Procedure consents and forms.', color:'var(--purple)', documentKeys:['skin-peel','skin-laser','skin-prp'] },
 ];
@@ -9115,17 +9165,19 @@ function normalizeOTCaseRecord(c) {
   const site = src.site || src.eye || src.operatingEye || src.opEye || src.surgEye || 'N/A';
   const iol = src.iol || src.implant || src.iolImplant || 'N/A';
   const iolSummary = parseIolSummary(iol);
+  const caseKind = src.caseKind || (otCaseNeedsObgFlow(src.procedure || src.surgery || '', src.bmhId) ? 'obg' : 'ophtho');
   let status = src.status || 'pending';
   if (status === 'scheduled') status = 'pending';
   return Object.assign({}, src, {
     patient: src.patient || src.name || pt.name || 'Pending',
     age: src.age || pt.age || '—',
     sex: src.sex || pt.sex || '—',
+    caseKind,
     dx: src.dx || src.diagnosis || pt.dx || '—',
     procedure: src.procedure || src.surgery || src.operation || 'Procedure',
     surgeon: src.surgeon || src.doctor || pt.doctor || CURRENT_USER?.name || '—',
     anaes: src.anaes || src.anaesthesia || '—',
-    room: src.room || src.otRoom || 'OT-1',
+    room: src.room || src.otRoom || (caseKind === 'obg' ? 'Labour Room' : 'OT-1'),
     centre: src.centre || pt.centre || getEffectiveCentre() || CURRENT_USER?.centre || 'CHD',
     scheduledTime: src.scheduledTime || src.time || '—',
     priority: String(src.priority || 'elective').toLowerCase(),
@@ -9150,16 +9202,21 @@ function normalizeOTCaseRecord(c) {
 function resolveSurgeryPackForCase(otCase) {
   const c = normalizeOTCaseRecord(otCase);
   const procedure = String(c.procedure || '').toLowerCase();
+  const obgType = String(c.obgCaseType || '').toLowerCase();
   const packs = getAllSurgeryPacks();
   const custom = packs.find(function (p) {
     const label = String(p.label || '').toLowerCase();
     return String(p.id || '').startsWith('custom-') && label && (procedure.includes(label) || label.includes(procedure));
   });
   if (custom) return custom;
+  if (/normal delivery|assisted delivery|labour/.test(procedure) || /normal delivery|assisted delivery/.test(obgType)) return packs.find(function (p) { return p.id === 'obg-normal-pack'; }) || null;
+  if (/mtp|suction|evac/.test(procedure) || /mtp|suction/.test(obgType)) return packs.find(function (p) { return p.id === 'obg-mtp-pack'; }) || null;
+  if (/painless abortion/.test(procedure) || /painless abortion/.test(obgType)) return packs.find(function (p) { return p.id === 'obg-painless-pack'; }) || null;
+  if (/lscs|caes|delivery/.test(procedure) || /lscs/.test(obgType)) return packs.find(function (p) { return p.id === 'obg-lscs-pack'; }) || null;
   if (/ivt|intravitreal|anti-vegf/.test(procedure)) return packs.find(function (p) { return p.id === 'ivt'; }) || null;
   if (/lasik/.test(procedure)) return packs.find(function (p) { return p.id === 'lasik'; }) || null;
   if (/cataract|phaco|pmics|iol/.test(procedure)) return packs.find(function (p) { return p.id === 'ophtho'; }) || null;
-  if (/lscs|caes|delivery|lapar/.test(procedure)) return packs.find(function (p) { return p.id === 'obg'; }) || null;
+  if (/lscs|caes|delivery|lapar|gynae|mtp/.test(procedure) || c.caseKind === 'obg') return packs.find(function (p) { return p.id === 'obg'; }) || null;
   if (/ect|psy/.test(procedure)) return packs.find(function (p) { return p.id === 'psych'; }) || null;
   if (/peel|laser|prp|skin/.test(procedure)) return packs.find(function (p) { return p.id === 'skin'; }) || null;
   return packs.find(function (p) { return String(p.dept || '').toLowerCase().includes('oph') || p.id === 'ophtho'; }) || null;
@@ -9175,7 +9232,7 @@ function printSurgeryPackForCase(caseId, packId) {
 function openSurgeryPackPrintModal(packOrDept) {
   const fallbackDeptKeys = {
     ophtho: ['cataract', 'ivt', 'lasik', 'pterygium'],
-    obg: ['obg-lscs', 'obg-normal', 'obg-lap', 'obg-mtp'],
+    obg: ['obg-lscs','obg-normal','obg-mtp','obg-lscs-preop','obg-lscs-op','obg-lscs-postop'],
     psych: ['psych-gen', 'psych-ect'],
     skin: ['skin-peel', 'skin-laser', 'skin-prp'],
   };
@@ -9833,11 +9890,13 @@ function addOTCase() {
   const consent = document.getElementById('ot-add-consent')?.value||'';
   const fasting = document.getElementById('ot-add-fasting')?.value||'';
   const pt = PATIENTS.find(p=>p.bmhId===ptId);
+  const caseKind = getSelectedOTCaseKind();
 
   const existing = editId ? normalizeOTCaseRecord(OT_CASES.find(function (c) { return c.id === editId; }) || {}) : null;
   const newCase = {
     id: editId || ('OT-'+Date.now()), bmhId:ptId, patient:ptName,
     age:pt?.age||'—', sex:pt?.sex||'—',
+    caseKind,
     dx, procedure:proc, site, surgeon, anaes, anaesDoc:'',
     date, scheduledTime:time, room, iol, iolType, iolPower, priority,
     obgCaseType, obgGa, obgIndication, obgFetal, obgLiquor, obgBlood, obgAnaesNote, obgBaby, obgMother, obgDocs,
@@ -9853,6 +9912,14 @@ function addOTCase() {
     createdBy: CURRENT_USER?.name || 'System'
   };
   const normalized = normalizeOTCaseRecord(Object.assign({}, existing || {}, newCase));
+  if (caseKind === 'obg') {
+    normalized.site = 'N/A';
+    normalized.eye = 'N/A';
+    normalized.iol = 'N/A';
+    normalized.iolType = '';
+    normalized.iolPower = '';
+    if (!/labour room/i.test(normalized.room || '')) normalized.room = obgCaseType === 'Normal Delivery' || obgCaseType === 'Assisted Delivery' ? 'Labour Room' : (normalized.room || 'OT-1');
+  }
   if (editId) {
     const idx = OT_CASES.findIndex(function (c) { return c.id === editId; });
     if (idx >= 0) OT_CASES[idx] = normalized;
@@ -9919,6 +9986,11 @@ function fillOTFromPatient(bmhId) {
   // Fill all fields
   const setV=(id,v)=>{const e=document.getElementById(id);if(e)e.value=v;};
   const dxGuess = p.dx || p.diagnosis || p.lastVisit?.dx || p.purpose || '';
+  const isObg = normalizeDeptKeyForQueue(p.dept || '') === 'obg';
+  const eyeRadio = document.getElementById('ot-case-kind-eye');
+  const obgRadio = document.getElementById('ot-case-kind-obg');
+  if (eyeRadio) eyeRadio.checked = !isObg;
+  if (obgRadio) obgRadio.checked = !!isObg;
   setV('ot-bmsh-id', p.bmhId);
   setV('ot-age-sex', `${p.age||'?'}Y / ${p.sex||'—'}`);
   populateOTDiagnosisOptions(dxGuess);
@@ -9926,7 +9998,7 @@ function fillOTFromPatient(bmhId) {
   if(p.doctor) { const drSel=document.getElementById('ot-add-surgeon'); if(drSel) drSel.value=p.doctor; }
   const guessedProcedure = /surgery|phaco|pmics|cataract|lasik|ivt|trab|pteryg|delivery|lscs|lapar/i.test(String(p.purpose || ''))
     ? String(p.purpose).trim()
-    : (p.dept === 'ophtho' ? 'PMICS + IOL Implantation (OS)' : 'Surgery');
+    : (isObg ? 'Elective LSCS' : 'PMICS + IOL Implantation (OS)');
   populateOTProcedureOptions(guessedProcedure);
   populateOTIolOptions(p.iol || p.iolType || '', p.iolPower || extractIolPower(p.iol || p.iolType || ''));
   toggleOTOBGFields();
@@ -9994,6 +10066,10 @@ function openOTAddModal(opts) {
   if (saveBtn) saveBtn.textContent = opts.caseId ? '💾 Update OT Case' : '✅ Add to OT List';
   if (opts.caseId) {
     const existing = normalizeOTCaseRecord(OT_CASES.find(function (c) { return c.id === opts.caseId; }) || {});
+    const eyeRadio = document.getElementById('ot-case-kind-eye');
+    const obgRadio = document.getElementById('ot-case-kind-obg');
+    if (eyeRadio) eyeRadio.checked = existing.caseKind !== 'obg';
+    if (obgRadio) obgRadio.checked = existing.caseKind === 'obg';
     const setV=(id,v)=>{const e=document.getElementById(id);if(e)e.value=v||'';};
     setV('ot-bmsh-id', existing.bmhId);
     setV('ot-age-sex', `${existing.age||'?'}Y / ${existing.sex||'—'}`);
@@ -10058,6 +10134,10 @@ function openOTAddModal(opts) {
     fillOTFromPatient(opts.bmhId);
     toggleOTOBGFields();
   } else {
+    const eyeRadio = document.getElementById('ot-case-kind-eye');
+    const obgRadio = document.getElementById('ot-case-kind-obg');
+    if (eyeRadio) eyeRadio.checked = true;
+    if (obgRadio) obgRadio.checked = false;
     const admitEl = document.getElementById('ot-add-admit');
     const admitBlock = document.getElementById('ot-add-admit-block');
     if (admitEl) admitEl.checked = false;
@@ -13053,6 +13133,7 @@ function loadIPDPatientsFromFirebase() {
       else arr.push(p);
     });
     renderIPD && renderIPD();
+    renderDocQueue && renderDocQueue();
   }).catch(e => console.warn('IPD load error:', e));
 }
 
@@ -15723,13 +15804,18 @@ function renderIPD() {
   if(window.IPD_PATIENTS && window.IPD_PATIENTS !== IPD_PATIENTS) {
     IPD_PATIENTS.length=0; window.IPD_PATIENTS.forEach(p=>IPD_PATIENTS.push(p));
   }
+  const detailEl = document.getElementById('ipd-detail');
   const visibleIPD = IPD_PATIENTS.filter(p => {
     if(!p.centre) p.centre = getEffectiveCentre() || CURRENT_USER?.centre || 'CHD';
     return (p.status || 'admitted') !== 'discharged' && centreMatch(p);
   });
   const el = document.getElementById('ipd-list'); if(!el) return;
   if(!visibleIPD.length) {
+    activeIPDPatient = null;
     el.innerHTML = '<div style="padding:30px;text-align:center;color:var(--g1)"><div style="font-size:36px;margin-bottom:8px">🛏️</div><div style="font-size:13px;font-weight:700">No patients admitted</div><div style="font-size:11px;margin-top:4px">Use the + Admit button to add a patient</div></div>';
+    if (detailEl) {
+      detailEl.innerHTML = '<div style="padding:22px;color:var(--g1);font-size:12px">Select an admitted patient to view monitoring, doctor notes, medicines, and nursing documentation.</div>';
+    }
     return;
   }
   el.innerHTML = visibleIPD.map(p => `
@@ -15743,7 +15829,11 @@ function renderIPD() {
       </div>
       <span class="badge ${ipdEvaluateAlerts(p).some(a=>a.tone==='var(--red)') ? 'bd-red' : p.status==='stable'?'bd-green':'bd-gray'}">${ipdEvaluateAlerts(p).some(a=>a.tone==='var(--red)') ? 'alert' : (p.status||'admitted')}</span>
     </div>`).join('');
-  if (activeIPDPatient && visibleIPD.some(p => p.id === activeIPDPatient.id)) openIPDPatient(activeIPDPatient.id);
+  if (activeIPDPatient && visibleIPD.some(p => p.id === activeIPDPatient.id)) {
+    openIPDPatient(activeIPDPatient.id);
+  } else {
+    openIPDPatient(visibleIPD[0].id);
+  }
 }
 
 // ── renderOTList — renders into ot-all-list + tab sub-lists ──────────────

@@ -4315,6 +4315,11 @@
     <div class="form-group"><label class="fl">Pain Score</label><select id="pn-pain"><option value="">—</option><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option></select></div>
   </div>
   <div class="form-group"><label class="fl">Progress Note</label><textarea id="pn-text" placeholder="SOAP note — subjective, objective, assessment, plan…" style="min-height:90px"></textarea></div>
+  <div class="fg">
+    <div class="form-group"><label class="fl">Medicine / Injection Given</label><input type="text" id="pn-med" placeholder="e.g. Inj Ceftriaxone, Tropicamide drop"></div>
+    <div class="form-group"><label class="fl">Dose / Route</label><input type="text" id="pn-dose" placeholder="e.g. 1 g IV, 1 drop OU"></div>
+  </div>
+  <div class="form-group"><label class="fl">Doctor Orders Followed</label><input type="text" id="pn-orders" placeholder="e.g. Continue hourly vitals, observe bleeding, keep NBM"></div>
   <div class="form-group"><label class="fl">Staff Nurse</label><input type="text" id="pn-nurse" placeholder="Name of nurse performing examination"></div>
   <div class="form-group"><label class="fl">Doctor</label><select id="pn-doctor"><option>Dr. Varun Baweja</option><option>Dr. Geeta Baweja</option><option>Dr. Namrata Baweja</option></select></div>
   <button class="btn btn-gold" onclick="saveProgressNote()">💾 Save Note</button>
@@ -4537,6 +4542,13 @@
 <div class="modal modal-lg">
 <div class="modal-hd"><div class="modal-title" id="ot-add-modal-title">⚕️ Add OT Case</div><button class="modal-close" onclick="closeM('m-ot-add')">✕</button></div>
 <div class="fg" style="gap:10px">
+  <div class="form-group full" style="background:var(--g6);border:1px solid var(--g4);border-radius:10px;padding:10px">
+    <label class="fl">Case Type</label>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;font-weight:700;padding-top:4px">
+      <label><input type="radio" name="ot-case-kind" id="ot-case-kind-eye" value="ophtho" checked onchange="toggleOTOBGFields()"> Eye / Ophthalmology</label>
+      <label><input type="radio" name="ot-case-kind" id="ot-case-kind-obg" value="obg" onchange="toggleOTOBGFields()"> OBG / Labour Room</label>
+    </div>
+  </div>
   <input type="hidden" id="ot-add-case-id">
   <div class="form-group"><label class="fl">Lookup Patient (BMSH ID or Phone)</label><input type="text" id="ot-pt-lookup" placeholder="BMSH-XXXXXX or phone…" oninput="lookupOTPatient(this.value)"></div>
   <div id="ot-pt-lookup-result" style="margin-bottom:8px"></div>
@@ -4551,7 +4563,7 @@
   <div class="form-group"><label class="fl">Procedure / Surgery</label>
     <input type="text" id="ot-add-proc" list="ot-proc-list" placeholder="Type procedure to search"><datalist id="ot-proc-list"></datalist>
   </div>
-  <div class="form-group"><label class="fl">Eye / Site</label>
+  <div class="form-group" id="ot-site-wrap"><label class="fl">Eye / Site</label>
     <select id="ot-add-site"><option>Left Eye (OS)</option><option>Right Eye (OD)</option><option>Both Eyes (OU)</option><option>N/A</option></select>
   </div>
   <div class="form-group"><label class="fl">Surgeon</label>
@@ -4564,17 +4576,17 @@
     <div class="form-group"><label class="fl">Scheduled Date</label><input type="date" id="ot-add-date"></div>
     <div class="form-group"><label class="fl">Scheduled Time</label><input type="time" id="ot-add-time" value="09:00"></div>
     <div class="form-group"><label class="fl">OT Room</label>
-      <select id="ot-add-room"><option>OT-1 (Main)</option><option>OT-2 (Minor)</option><option>OT-3 (Laser)</option></select>
+      <select id="ot-add-room"><option>OT-1 (Main)</option><option>OT-2 (Minor)</option><option>OT-3 (Laser)</option><option>Labour Room</option></select>
     </div>
     <div class="form-group"><label class="fl">Priority</label>
       <select id="ot-add-priority"><option value="elective">Elective</option><option value="urgent">Urgent</option><option value="emergency">Emergency</option></select>
     </div>
   </div>
-  <div class="fg">
+  <div class="fg" id="ot-eye-fields">
     <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">IOL / Implant <button type="button" onclick="openOTAddIolModal()" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></label><select id="ot-add-iol-model"></select></div>
     <div class="form-group"><label class="fl">IOL Power</label><select id="ot-add-iol-power"></select></div>
   </div>
-  <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">IOL / Implant Summary <button type="button" onclick="showToast('For PMICS, type to search saved IOL subcategories under the PMICS main heading.','i')" style="background:var(--g6);color:var(--blue);border:1px solid var(--g4);border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">?</button></label><input type="text" id="ot-add-iol" list="ot-iol-summary-list" placeholder="Selected or typed IOL summary" style="background:#fff"><datalist id="ot-iol-summary-list"></datalist></div>
+  <div class="form-group" id="ot-eye-iol-summary"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">IOL / Implant Summary <button type="button" onclick="showToast('For PMICS, type to search saved IOL subcategories under the PMICS main heading.','i')" style="background:var(--g6);color:var(--blue);border:1px solid var(--g4);border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">?</button></label><input type="text" id="ot-add-iol" list="ot-iol-summary-list" placeholder="Selected or typed IOL summary" style="background:#fff"><datalist id="ot-iol-summary-list"></datalist></div>
   <div class="form-group"><label class="fl">Pre-op Workup Done</label>
     <select id="ot-add-preop"><option>Yes — complete</option><option>Partial — see notes</option><option>No — emergency</option></select>
   </div>
@@ -4588,7 +4600,7 @@
     <div style="font-size:11px;font-weight:900;color:#c0004e;text-transform:uppercase;letter-spacing:.45px;margin-bottom:8px">OBG / LSCS OT Flow</div>
     <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
       <div class="form-group"><label class="fl">Gestation Age</label><input type="text" id="ot-add-obg-ga" placeholder="e.g. 38+4 weeks"></div>
-      <div class="form-group"><label class="fl">LSCS / Surgery Type</label><select id="ot-add-obg-type"><option value="Elective LSCS">Elective LSCS</option><option value="Emergency LSCS">Emergency LSCS</option><option value="Normal Delivery">Normal Delivery</option><option value="Assisted Delivery">Assisted Delivery</option><option value="Gynae Surgery">Gynae Surgery</option></select></div>
+      <div class="form-group"><label class="fl">LSCS / Surgery Type</label><select id="ot-add-obg-type"><option value="Elective LSCS">Elective LSCS</option><option value="Emergency LSCS">Emergency LSCS</option><option value="Normal Delivery">Normal Delivery</option><option value="Assisted Delivery">Assisted Delivery</option><option value="MTP / Suction Evacuation">MTP / Suction Evacuation</option><option value="Painless Abortion">Painless Abortion</option><option value="Gynae Surgery">Gynae Surgery</option></select></div>
       <div class="form-group"><label class="fl">Presentation / Baby</label><input type="text" id="ot-add-obg-fetal" placeholder="Cephalic / single live foetus"></div>
       <div class="form-group"><label class="fl">Indication</label><input type="text" id="ot-add-obg-indication" placeholder="Previous LSCS / fetal distress / CPD"></div>
       <div class="form-group"><label class="fl">Liquor / Membranes</label><input type="text" id="ot-add-obg-liquor" placeholder="Clear / meconium / ruptured"></div>
@@ -4605,7 +4617,7 @@
       Admit patient to IPD / day-care
     </label>
     <div id="ot-add-admit-block" style="display:none;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px">
-      <div class="form-group"><label class="fl">Admission Type</label><select id="ot-add-admit-type"><option value="Day Care">Day Care</option><option value="Post-Op">Post-Operative Monitoring</option><option value="Surgical">Surgical</option><option value="Obstetric">Obstetric</option></select></div>
+      <div class="form-group"><label class="fl">Admission Type</label><select id="ot-add-admit-type"><option value="Day Care">Day Care</option><option value="Post-Op">Post-Operative Monitoring</option><option value="Surgical">Surgical</option><option value="Obstetric">Obstetric</option><option value="Labour Room">Labour Room</option></select></div>
       <div class="form-group"><label class="fl">Ward / Bed</label><input type="text" id="ot-add-admit-ward" placeholder="Eye Ward / Bed 1"></div>
       <div class="form-group"><label class="fl">Room / Bed No.</label><input type="text" id="ot-add-admit-room" placeholder="Room 3 / Bed A"></div>
       <div class="form-group"><label class="fl">Monitoring</label><select id="ot-add-admit-monitoring"><option value="6h">Every 6 hours</option><option value="4h">Every 4 hours</option><option value="2h">Every 2 hours</option><option value="1h">Hourly</option></select></div>
