@@ -157,7 +157,7 @@ function loadIolCatalogFromStorage() {
 function renderIolCatalogList() {
   const el = document.getElementById('set-iol-list');
   if (!el) return;
-  el.innerHTML = '<div style="font-size:11px;color:var(--g1);margin-bottom:8px">IOLs entered here are available in OT scheduling, OT list editing, and surgery planning from reception. Default powers are available from 0.00D to +30.00D.</div>' +
+  el.innerHTML = '<div style="font-size:11px;color:var(--g1);margin-bottom:8px">IOLs entered here are available in OT scheduling, OT list editing, and surgery planning from reception. Default powers are available from +0.00D to +30.00D.</div>' +
     IOL_CATALOG.map(function (row, i) {
       return '<div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--g6);border-radius:8px;margin-bottom:6px;font-size:12px">' +
         '<div style="flex:1"><div style="font-weight:800">' + row.name + '</div>' +
@@ -200,7 +200,10 @@ function addIolFromModal() {
 }
 function extractIolPower(name) {
   const m = String(name || '').match(/([+-]?\d+(?:\.\d+)?)\s*D\b/i);
-  return m ? (m[1] + 'D') : '';
+  if (!m) return '';
+  const raw = String(m[1] || '');
+  const signed = raw.startsWith('+') || raw.startsWith('-') ? raw : ('+' + raw);
+  return signed + 'D';
 }
 function normalizeOtProcedureName(name) {
   return String(name || '').replace(/\s+/g, ' ').trim();
@@ -273,7 +276,7 @@ function populateOTIolOptions(selectedName, selectedPower) {
     return '<option value="' + String(row.name).replace(/"/g, '&quot;') + '"' + (selectedName === row.name ? ' selected' : '') + '>' + String(row.name).replace(/</g, '&lt;') + (meta ? ' — ' + meta.replace(/</g, '&lt;') : '') + '</option>';
   })).join('');
   const defaultPowers = [];
-  for (let i = 0; i <= 300; i += 5) defaultPowers.push((i / 10).toFixed(2) + 'D');
+  for (let i = 0; i <= 300; i += 5) defaultPowers.push('+' + (i / 10).toFixed(2) + 'D');
   const powerOptions = ['— Select power —'].concat(Array.from(new Set(defaultPowers.concat(choices.map(function (row) { return row.power; }).filter(Boolean)))).sort(function (a, b) {
     return parseFloat(a) - parseFloat(b);
   }));
@@ -439,6 +442,10 @@ const CONSENT_DATA = {
 };
 
 const CONSENT_LIBRARY = [
+  {id:'consent-cataract-hi',dept:'ophtho',name:'Cataract Consent — English + Hindi',icon:'📝',lang:'hi',structuredKey:'cataract'},
+  {id:'consent-cataract-pa',dept:'ophtho',name:'Cataract Consent — English + Punjabi',icon:'📝',lang:'pa',structuredKey:'cataract'},
+  {id:'preop-nursing-checklist',dept:'ophtho',name:'Pre-operative Nursing Checklist',icon:'✅',docType:'form',
+   body:`Identity confirmed with BMSH ID, patient name, age, sex, and operative eye/site.\n\nWritten informed consent checked and matching planned procedure verified.\n\nAllergy history, systemic diseases, current medications, blood thinners, diabetes, hypertension, and anaesthesia concerns reviewed.\n\nFasting status, blood sugar if indicated, blood pressure, pulse, temperature, and relevant investigations checked and documented.\n\nOperative eye marked where applicable, jewellery / dentures / contact lenses removed, and patient changed into OT clothing.\n\nBiometry / IOL selection / lens power cross-checked with OT plan and surgeon confirmation.\n\nRequired eye drops / dilatation / antibiotic / anaesthesia preparation completed and documented with time.\n\nEscort counselling completed, valuables handed over, and final nursing sign-off done before shifting to OT.`},
   {id:'c-phaco',dept:'ophtho',name:'Cataract Surgery (PMICS + IOL)',icon:'👁️',
    body:`I, the undersigned, hereby give my voluntary consent for Phacoemulsification (PMICS - Pinhole Micro Incision Cataract Surgery) with intraocular lens (IOL) implantation.\n\nNature of Procedure: The cloudy natural lens (cataract) will be removed through a small incision using ultrasound energy and replaced with an artificial foldable IOL.\n\nRisks Explained: I have been informed of risks including: posterior capsule rupture, dropped nucleus, endophthalmitis (infection), corneal oedema, raised intraocular pressure, cystoid macular oedema, retinal detachment (rare), and the extremely rare risk of loss of vision or the eye. Most complications are treatable.\n\nAlternatives: Spectacles (for mild cataract), observation, or surgery at a later date.\n\nNo Guarantees: I understand that no guarantee of outcome has been made. Vision improvement depends on the health of other eye structures (retina, optic nerve, cornea).\n\nI consent to use of local (topical, peribulbar) or general anaesthesia as deemed necessary by the doctor.\n\nPhotographs/Videos: I consent to intraoperative photographs for medical records/teaching purposes (identifiable information will not be disclosed without consent).`},
   {id:'c-ivt-vegf',dept:'ophtho',name:'IVT Injection — Anti-VEGF (Ranibizumab / Bevacizumab / Aflibercept)',icon:'💉',
@@ -661,17 +668,18 @@ function buildCompactDocumentHeader(title, ctx, subtitle) {
   const esc = escapeHtmlConsent;
   const logoSrc = resolvePrintLogoSrc();
   const proc = String(ctx?.procLine || '').trim();
-  return '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;border-bottom:1.5px solid #222;padding-bottom:10px;margin-bottom:12px">'
-    + '<div style="display:flex;align-items:center;gap:10px;min-width:0">'
+  return '<div style="border:1px solid #222;border-radius:10px;padding:8px 10px;margin-bottom:10px">'
+    + '<div style="display:grid;grid-template-columns:minmax(0,1.2fr) repeat(4,minmax(86px,1fr));gap:8px;align-items:stretch">'
+    + '<div style="display:flex;align-items:center;gap:8px;min-width:0;padding-right:6px;border-right:1px solid #d7dce5">'
     + '<img src="' + esc(logoSrc) + '" style="height:30px;width:auto;object-fit:contain" alt="BMH">'
     + '<div><div style="font-size:15px;font-weight:900;color:#111;line-height:1.25">' + esc(title) + '</div>'
     + (subtitle ? '<div style="font-size:10px;font-weight:800;color:#555;margin-top:2px">' + esc(subtitle) + '</div>' : '')
     + '</div></div>'
-    + '<div style="min-width:245px;max-width:300px;text-align:right;display:grid;gap:4px">'
-    + '<div><span style="display:block;font-size:9.5px;color:#666;text-transform:uppercase;font-weight:800">Patient</span><span style="font-size:12.5px;font-weight:900;color:#111">' + esc(ctx?.ptNm || '—') + '</span></div>'
-    + '<div><span style="display:block;font-size:9.5px;color:#666;text-transform:uppercase;font-weight:800">BMSH ID</span><span style="font-size:12px;font-weight:900;font-family:ui-monospace,monospace;color:#1A3C6E">' + esc(ctx?.ptId || '—') + '</span></div>'
-    + '<div><span style="display:block;font-size:9.5px;color:#666;text-transform:uppercase;font-weight:800">Procedure</span><span style="font-size:11.5px;font-weight:800;color:#111">' + esc(proc || '—') + '</span></div>'
-    + '<div><span style="display:block;font-size:9.5px;color:#666;text-transform:uppercase;font-weight:800">Date</span><span style="font-size:11.5px;font-weight:800;color:#111">' + esc(ctx?.today || '—') + '</span></div>'
+    + '<div style="display:grid;gap:2px"><span style="font-size:8.5px;color:#666;text-transform:uppercase;font-weight:800">Patient</span><span style="font-size:11.5px;font-weight:900;color:#111;line-height:1.3">' + esc(ctx?.ptNm || '—') + '</span></div>'
+    + '<div style="display:grid;gap:2px"><span style="font-size:8.5px;color:#666;text-transform:uppercase;font-weight:800">BMSH ID</span><span style="font-size:11px;font-weight:900;font-family:ui-monospace,monospace;color:#1A3C6E;line-height:1.3">' + esc(ctx?.ptId || '—') + '</span></div>'
+    + '<div style="display:grid;gap:2px"><span style="font-size:8.5px;color:#666;text-transform:uppercase;font-weight:800">Procedure</span><span style="font-size:10.5px;font-weight:800;color:#111;line-height:1.35">' + esc(proc || '—') + '</span></div>'
+    + '<div style="display:grid;gap:2px"><span style="font-size:8.5px;color:#666;text-transform:uppercase;font-weight:800">Doctor</span><span style="font-size:10.5px;font-weight:800;color:#111;line-height:1.35">' + esc(ctx?.doctorName || '—') + '</span></div>'
+    + '<div style="display:grid;gap:2px"><span style="font-size:8.5px;color:#666;text-transform:uppercase;font-weight:800">Date</span><span style="font-size:10.5px;font-weight:800;color:#111;line-height:1.35">' + esc(ctx?.today || '—') + '</span></div>'
     + '</div></div>';
 }
 function buildCompactDocumentShell(title, ctx, bodyHtml, opts) {
@@ -681,9 +689,9 @@ function buildCompactDocumentShell(title, ctx, bodyHtml, opts) {
     + '<div style="flex:1;text-align:center"><div style="border-bottom:1px solid #333;height:34px"></div><div style="font-size:10px;color:#555;margin-top:4px">Witness Signature</div></div>'
     + '<div style="flex:1;text-align:center"><div style="border-bottom:1px solid #333;height:34px"></div><div style="font-size:10px;color:#555;margin-top:4px">Doctor Signature</div></div>'
     + '</div>';
-  return '<section style="page-break-after:always;padding:12mm 12mm 10mm;font-family:Arial,sans-serif;color:#111">'
+  return '<section style="padding:7mm 7mm 6mm;font-family:Arial,sans-serif;color:#111;page-break-inside:avoid;overflow:hidden">'
     + buildCompactDocumentHeader(title, ctx, opts.subtitle || '')
-    + '<div style="font-size:12.2px;line-height:1.8">' + bodyHtml + '</div>'
+    + '<div style="font-size:10.8px;line-height:1.55">' + bodyHtml + '</div>'
     + sigHtml
     + '</section>';
 }
@@ -783,7 +791,7 @@ function openConsentFromLibrary(id) {
 function editConsentLibraryItem(id) {
   const item = getMergedLibraryItem(id);
   if (!item) return;
-  if (item.structuredKey || getMergedConsentData()[id]) {
+  if (item.structuredKey || getMergedConsentData()[id] || item.body || item.bodyPa || item.bodyHi || item.text) {
     openEditConsentDataModal(item.structuredKey || id);
     return;
   }
@@ -859,6 +867,11 @@ function renderPackDocumentPages(key, ctx) {
   const lib = getMergedLibraryItem(key);
   const tpl = getConsentTemplateItem(key);
   const title = getPackDocumentTitle(key);
+  const mergedEntry = getConsentEntry(key);
+  if (mergedEntry && mergedEntry.paras && mergedEntry.paras.length) {
+    const variant = getPreferredConsentVariant(mergedEntry, lib?.lang || tpl?.lang || window._CONSENT_PRINT_LANG || '');
+    return buildConsentPageShell(mergedEntry, ctx, variant);
+  }
   if (lib && lib.docType === 'consent' && (lib.body || lib.bodyPa || lib.bodyHi || lib.structuredKey)) {
     const cd = lib.structuredKey ? resolveConsentDataForPrint(lib.structuredKey) : libraryMergedToConsentData(lib);
     if (cd && cd.paras && cd.paras.length) {
@@ -872,7 +885,7 @@ function renderPackDocumentPages(key, ctx) {
     return buildConsentPageShell(resolved, ctx, variant);
   }
   if (lib && lib.type === 'image') return renderImageDocumentPage(title, lib.imgSrc, ctx);
-  if (lib && lib.text) return renderGenericDocumentPage(title, lib.text, ctx, { signatures: lib.docType !== 'form' });
+  if (lib && (lib.text || lib.body)) return renderGenericDocumentPage(title, lib.text || lib.body, ctx, { signatures: lib.docType !== 'form' });
   if (tpl && tpl.content) return renderGenericDocumentPage(title, tpl.content, ctx, { signatures: false });
   return '';
 }
@@ -4173,6 +4186,19 @@ function bmhGetBillPatientsForView() {
   return pts;
 }
 function bmhSetBillDeptFilter(k) { window._bmhBillDeptFilter = k; renderBillingPage(); }
+window._bmhQuickChargeDept = window._bmhQuickChargeDept || 'all';
+function bmhRefreshQuickChargeDeptButtons() {
+  document.querySelectorAll('[data-bmh-quick-dept]').forEach(function (btn) {
+    const active = btn.getAttribute('data-bmh-quick-dept') === (window._bmhQuickChargeDept || 'all');
+    btn.className = active ? 'btn btn-xs btn-gold' : 'btn btn-xs btn-outline';
+  });
+}
+function bmhSetQuickChargeDeptFilter(k) {
+  window._bmhQuickChargeDept = k || 'all';
+  bmhRefreshQuickChargeDeptButtons();
+  bmhRenderQuickChargePanels();
+}
+window.bmhSetQuickChargeDeptFilter = bmhSetQuickChargeDeptFilter;
 function bmhSelectBillPatient(bmhId) {
   if (!bmhId) return;
   window._bmhSelectedBillPatient = bmhId;
@@ -4338,7 +4364,7 @@ function bmhRenderPatientFinancialSummary() {
 function bmhQuickChargeGroups() {
   const bmhId = document.getElementById('bmh-bill-pt-select')?.value;
   const pt = PATIENTS.find(x => x.bmhId === bmhId) || {};
-  const deptKey = pt.dept || window._bmhBillDeptFilter || 'all';
+  const deptKey = window._bmhQuickChargeDept || pt.dept || 'all';
   const deptCats = {
     ophtho: /^eye/i,
     obg: /^obg/i,
@@ -4399,28 +4425,47 @@ window.bmhQuickAddCharge = bmhQuickAddCharge;
 function bmhRenderQuickChargePanels() {
   const el = document.getElementById('bmh-quick-charge-panels');
   if (!el) return;
+  bmhRefreshQuickChargeDeptButtons();
   const centre = getEffectiveCentre();
   const groups = bmhQuickChargeGroups();
   const rawQ = String(document.getElementById('bmh-charge-search')?.value || '').trim().toLowerCase();
   const q = rawQ.length >= 2 ? rawQ : '';
+  const deptKey = window._bmhQuickChargeDept || 'all';
+  const deptMatcher = {
+    ophtho: /eye|ophth|cataract|phaco|pmics|lasik|trabec|pteryg|retina|glaucoma|optic/i,
+    obg: /obg|gyn|obs|delivery|lscs|preg|uter|ovar|fertility|lapar/i,
+    psych: /psych|mental|depress|anxiety|ect|neuro|brain|seizure|stroke|addiction/i,
+    skin: /skin|derm|cosmet|laser|peel|prp|botox|filler|hair/i
+  };
+  const matchesQuickDept = function (item) {
+    if (deptKey === 'all') return true;
+    const hay = (String(item.name || '') + ' ' + String(item.cat || '')).toLowerCase();
+    return deptMatcher[deptKey] ? deptMatcher[deptKey].test(hay) : true;
+  };
   const searchMatches = q ? (CHARGES_DATA || []).filter(function (item) {
+    if (!matchesQuickDept(item)) return false;
     return String(item.name || '').toLowerCase().includes(q);
   }).slice(0, 24) : [];
+  const cardHtml = function (item, amount, cat, accent) {
+    return `<button type="button" class="btn btn-xs btn-outline" style="display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;min-height:78px;padding:10px;border-radius:10px;text-align:left;background:${accent || '#fff'};border:1px solid var(--g5)" onclick="bmhQuickAddCharge('${String(item.name).replace(/'/g, "\\'")}', ${Number(amount) || 0}, '${cat}')"><span style="font-size:11.5px;font-weight:800;line-height:1.35">${item.name}</span><span style="font-size:9px;color:var(--g1)">${item.cat || cat || 'charge'}</span><span style="font-size:12px;font-weight:900;color:var(--bmh-blue)">₹${(Number(amount) || 0).toLocaleString('en-IN')}</span></button>`;
+  };
   const searchHtml = q ? `<div style="margin-bottom:12px">
       <div style="font-size:10px;font-weight:800;color:var(--bmh-blue);text-transform:uppercase;margin-bottom:6px">Search results</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px">
       ${searchMatches.length ? searchMatches.map(item => {
         const amount = item[centre?.toLowerCase?.()] ?? item[centre] ?? item.chd ?? 0;
-        return `<button type="button" class="btn btn-xs btn-outline" style="justify-content:space-between;width:100%;margin-bottom:6px" onclick="bmhQuickAddCharge('${String(item.name).replace(/'/g, "\\'")}', ${Number(amount) || 0}, '${inferChargeCategoryFromService(item.name)}')"><span style="text-align:left">${item.name}<span style="display:block;font-size:9px;color:var(--g1)">${item.cat || 'charge'}</span></span><span>₹${(Number(amount) || 0).toLocaleString('en-IN')}</span></button>`;
+        return cardHtml(item, amount, inferChargeCategoryFromService(item.name), 'var(--g6)');
       }).join('') : '<div style="font-size:12px;color:var(--g1)">No matching charges</div>'}
+      </div>
     </div>` : '';
   el.innerHTML = searchHtml + groups.map(group => {
     const items = group.items.map(item => {
       const amount = item[centre?.toLowerCase?.()] ?? item[centre] ?? item.chd ?? 0;
-      return `<button type="button" class="btn btn-xs btn-outline" style="justify-content:space-between;width:100%;margin-bottom:6px" onclick="bmhQuickAddCharge('${String(item.name).replace(/'/g, "\\'")}', ${Number(amount) || 0}, '${group.cat}')"><span style="text-align:left">${item.name}</span><span>₹${(Number(amount) || 0).toLocaleString('en-IN')}</span></button>`;
+      return cardHtml(item, amount, group.cat, '#fff');
     }).join('');
     return `<div style="margin-bottom:10px">
       <div style="font-size:10px;font-weight:800;color:var(--bmh-blue);text-transform:uppercase;margin-bottom:6px">${group.label}</div>
-      ${items || '<div style="font-size:12px;color:var(--g1)">No items</div>'}
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px">${items || '<div style="font-size:12px;color:var(--g1)">No items</div>'}</div>
     </div>`;
   }).join('');
 }
@@ -6221,7 +6266,7 @@ function renderStructuredConsentList() {
   }).join('');
 }
 function openEditConsentDataModal(key) {
-  const d = getConsentEntry(key);
+  const d = getConsentEntry(key) || resolveConsentDataForPrint(key);
   if (!d) return;
   const kEl = document.getElementById('edit-cd-key');
   const tEl = document.getElementById('edit-cd-title');
@@ -7451,11 +7496,12 @@ async function registerPatient() {
 
   if(isInsurance) {
     const claimId = 'TPA'+Date.now();
-    const claim = {id:claimId, patient:name, bmhId:uid, for:purpose, amount:fee, status:'pending', mode:payMode, ins:insName||payMode, dept, centre, date:new Date().toISOString(), from:'Reception'};
+    const claim = {id:claimId, patient:name, bmhId:uid, for:purpose, amount:fee, approvedAmount:fee, status:'pending', mode:payMode, ins:insName||payMode, dept, centre, date:new Date().toISOString(), from:'Reception'};
     PAY_REQUESTS.push(claim);
     fbSet&&fbSet('payRequests/'+claimId, claim);
     addBmhPatientCharge(uid, { id: 'chg-' + claimId, cat: inferChargeCategoryFromService(purpose), desc: purpose, qty: 1, rate: fee, amount: fee, source: 'reception', ref: claimId, ts: claim.date });
     patient.ins = insName||payMode;
+    patient.balance = Math.max(Number(patient.balance || 0), Number(fee || 0));
     showToast(`🏦 TPA/Insurance patient — claim pending ₹${fee.toLocaleString('en-IN')}`,'i');
   } else if(isCreditDue) {
     addBmhPatientCharge(uid, { id: 'chg-credit-' + Date.now(), cat: inferChargeCategoryFromService(purpose), desc: purpose, qty: 1, rate: fee, amount: fee, source: 'reception', ts: new Date().toISOString() });
@@ -7522,6 +7568,8 @@ async function registerPatient() {
   renderDocQueue && renderDocQueue();
   renderDashboard && renderDashboard();
   renderReceptionPage && renderReceptionPage();
+  renderInsuranceTab && renderInsuranceTab();
+  renderTpaPage && renderTpaPage();
 }
 window.registerPatient = registerPatient;
 
@@ -12302,8 +12350,6 @@ function openConsentUploadModal() {
     <option value="skin">Skin &amp; Cosmetology</option>
     <option value="all">All Departments</option>`;
   const typeOpts = `<option value="consent">Consent</option><option value="form">Form</option>`;
-  const langOpts = `<option value="hi">English + Hindi (हिंदी)</option><option value="pa">English + Punjabi (ਪੰਜਾਬੀ)</option>`;
-
   const el = document.createElement('div');
   el.className = 'modal-ov'; el.id = 'm-consent-upload';
   el.innerHTML = `
@@ -12329,10 +12375,6 @@ function openConsentUploadModal() {
       <div>${LBL('Name')}
         <input id="cup-consent-name" type="text" placeholder="e.g. Cataract Surgery Consent" style="${SS}">
       </div>
-    </div>
-    <div id="cup-text-lang-row" style="margin-bottom:10px">
-      ${LBL('Translation Language')}
-      <select id="cup-consent-lang" style="width:260px;font-size:13px;padding:8px;border-radius:8px;border:1.5px solid var(--g4)">${langOpts}</select>
     </div>
     ${LBL('Consent / Form Text')}
     <textarea id="cup-consent-text" style="width:100%;min-height:180px;font-size:12px;line-height:1.7"
@@ -12378,9 +12420,6 @@ function openConsentUploadModal() {
 // Show/hide translation language row based on Type selection
 function _cupTypeChange(tab) {
   if(tab !== 'text') return;
-  const typeVal = document.getElementById('cup-consent-type')?.value;
-  const row = document.getElementById('cup-text-lang-row');
-  if(row) row.style.display = typeVal === 'form' ? 'none' : '';
 }
 
 function handleConsentFileUpload(inp) {
@@ -12428,16 +12467,13 @@ async function previewConsentWithHeader() {
   const text    = document.getElementById('cup-consent-text')?.value?.trim();
   const name    = document.getElementById('cup-consent-name')?.value?.trim() || 'Consent';
   const docType = document.getElementById('cup-consent-type')?.value || 'consent';
-  const lang    = document.getElementById('cup-consent-lang')?.value || 'hi';
   if(!text) { showToast('Please enter consent text first','w'); return; }
   const pt  = _getConsentPatientHeaderUpload();
   // Open window synchronously (before any async work) to satisfy popup blockers
   const win = window.open('','_blank','width=900,height=700');
   if(!win) { showToast('Allow popups to preview / print','w'); return; }
   win.document.write('<html><body style="font-family:Arial,sans-serif;padding:40px;text-align:center;color:#555"><p style="font-size:16px">Translating… ⏳ please wait</p></body></html>');
-  const bodyHTML = (docType === 'consent')
-    ? await _buildBilingualHTML(text, lang)
-    : `<pre>${text}</pre>`;
+  const bodyHTML = `<pre>${text}</pre>`;
   win.document.open();
   win.document.write(_consentPrintHTML(pt, name, bodyHTML, null, false));
   win.document.close();
@@ -12470,13 +12506,13 @@ function _consentPrintHTML(pt, consentName, bodyHTML, sigBlock, isImageMode) {
 
   const pageStyle = isImageMode
     ? `@page{size:A4 portrait;margin:0}`
-    : `@page{size:A4 portrait;margin:8mm 12mm 10mm 12mm}`;
+    : `@page{size:A4 portrait;margin:5mm 7mm 6mm 7mm}`;
 
   const imgBodyCSS = isImageMode ? `
     .body-wrap{height:calc(297mm - 24mm);overflow:hidden}
     .body-wrap img{width:100%;height:100%;object-fit:contain;display:block}` : `
-    .body-wrap{padding-top:10px}
-    .body-wrap pre{font-family:Arial,sans-serif;white-space:pre-wrap;font-size:12px;line-height:1.8}`;
+    .body-wrap{padding-top:8px;max-height:248mm;overflow:hidden}
+    .body-wrap pre{font-family:Arial,sans-serif;white-space:pre-wrap;font-size:10.8px;line-height:1.55}`;
 
   const sigHTML = (!isImageMode && !sigBlock) ? `
   <div class="sig-row">
@@ -12491,12 +12527,12 @@ function _consentPrintHTML(pt, consentName, bodyHTML, sigBlock, isImageMode) {
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Arial Unicode MS','Noto Sans','Noto Sans Devanagari','Noto Sans Gurmukhi',Arial,sans-serif;color:#000;filter:grayscale(1)}
 ${pageStyle}
-.hdr{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:4mm 5mm 3mm;border-bottom:1.5px solid #000;background:#fff}
+.hdr{display:flex;justify-content:space-between;align-items:stretch;gap:8px;padding:3mm 4mm;border:1px solid #000;border-radius:10px;background:#fff}
 .hdr-info{display:flex;align-items:center;gap:8px;min-width:0}
-.hdr-title{font-size:13px;font-weight:900;color:#111;line-height:1.25}
-.pt-meta{min-width:240px;max-width:300px;text-align:right;display:grid;gap:4px}
-.meta-lbl{display:block;font-size:8px;font-weight:800;color:#666;text-transform:uppercase}
-.meta-val{font-size:10.5px;font-weight:800;color:#111;line-height:1.3}
+.hdr-title{font-size:12.5px;font-weight:900;color:#111;line-height:1.25}
+.pt-meta{min-width:330px;display:grid;grid-template-columns:repeat(4,minmax(70px,1fr));gap:8px}
+.meta-lbl{display:block;font-size:7.5px;font-weight:800;color:#666;text-transform:uppercase}
+.meta-val{font-size:9.8px;font-weight:800;color:#111;line-height:1.3}
 .mono{font-family:ui-monospace,monospace;color:#1A3C6E}
 .sig-row{display:flex;justify-content:space-between;margin-top:22px;padding-top:8px;border-top:1px solid #aaa}
 .sig-box{text-align:center;min-width:140px}
@@ -12525,28 +12561,11 @@ async function saveConsentFromText() {
   const name    = document.getElementById('cup-consent-name')?.value?.trim();
   const dept    = document.getElementById('cup-consent-dept')?.value || 'all';
   const docType = document.getElementById('cup-consent-type')?.value || 'consent';
-  const lang    = document.getElementById('cup-consent-lang')?.value || 'hi';
   if(!text || !name) { showToast('Please enter both name and text','w'); return; }
   const key = fbKey();
   const createdAt = new Date().toISOString();
   try {
-    if (docType === 'consent') {
-      showToast('Translating and saving bilingual consent…', 'i');
-      const structured = await buildStructuredConsentFromText(name, text);
-      const body = structured.paras.map(function (p) { return p.en; }).join('\n\n');
-      const bodyPa = structured.paras.map(function (p) { return p.pa; }).join('\n\n');
-      const bodyHi = structured.paras.map(function (p) { return p.hi; }).join('\n\n');
-      CONSENT_DATA_OVERRIDES[key] = structured;
-      saveConsentDataOverridesToStorage();
-      await fbSet('consentLibrary/' + key, {
-        id:key, name, text, type:'text', dept, docType, lang,
-        body, bodyPa, bodyHi,
-        structuredKey:key,
-        createdAt, createdBy:CURRENT_USER?.name||'Admin'
-      });
-    } else {
-      await fbSet('consentLibrary/' + key, { id:key, name, text, type:'text', dept, docType, lang, createdAt, createdBy:CURRENT_USER?.name||'Admin' });
-    }
+    await fbSet('consentLibrary/' + key, { id:key, name, text, type:'text', dept, docType, createdAt, createdBy:CURRENT_USER?.name||'Admin' });
     showToast((docType==='form'?'Form':'Consent') + ' "' + name + '" saved ✓','s');
     closeM('m-consent-upload');
     refreshConsentLibrary && refreshConsentLibrary();
@@ -12616,17 +12635,44 @@ function refreshConsentLibrary() {
         const dtBadge = c.docType==='form'
           ? '<span style="font-size:9px;background:#e8e8e8;color:#555;border-radius:4px;padding:1px 5px;font-weight:700">FORM</span>'
           : '<span style="font-size:9px;background:#e8f0ff;color:#1A3C6E;border-radius:4px;padding:1px 5px;font-weight:700">CONSENT</span>';
-        const langBadge = (c.docType==='consent' && c.lang)
-          ? `<span style="font-size:9px;color:#888">${c.lang==='pa'?'EN+PA':'EN+HI'}</span>` : '';
         return `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--g6);border-radius:8px;margin-bottom:5px">
           <span>${icon}</span>
           <span style="flex:1;font-size:12.5px;font-weight:700">${c.name}</span>
-          ${dtBadge} ${langBadge}
+          ${dtBadge}
+          <button class="btn btn-xs btn-gold" onclick="editUploadedConsent('${c.id}')">✏️ Edit</button>
           <button class="btn btn-xs btn-outline" onclick="printCustomConsent('${c.id}')">🖨️ Print</button>
           <button class="btn btn-xs btn-gray" onclick="deleteCustomConsent('${c.id}')">🗑️</button>
         </div>`;
       }).join('');
     if(!existingCustom) list.appendChild(sec);
+  });
+}
+function editUploadedConsent(id) {
+  fbOnce('consentLibrary/' + id, function (data) {
+    if (!data) { showToast('Consent not found', 'w'); return; }
+    const newName = prompt('Edit document name', data.name || '');
+    if (newName === null) return;
+    const newDept = prompt('Department key: ophtho / obg / psych / skin / all', data.dept || 'all');
+    if (newDept === null) return;
+    if (data.type === 'image') {
+      fbUpdate('consentLibrary/' + id, { name: newName.trim() || data.name, dept: normalizeSurgeryPackDeptKey(newDept) || data.dept || 'all' }).then(function () {
+        showToast('Document updated ✓', 's');
+        refreshConsentLibrary();
+        loadCustomConsentsForSettings && loadCustomConsentsForSettings();
+      });
+      return;
+    }
+    const newText = prompt('Edit wording', data.text || data.body || '');
+    if (newText === null) return;
+    fbUpdate('consentLibrary/' + id, {
+      name: newName.trim() || data.name,
+      dept: normalizeSurgeryPackDeptKey(newDept) || data.dept || 'all',
+      text: newText
+    }).then(function () {
+      showToast('Document updated ✓', 's');
+      refreshConsentLibrary();
+      loadCustomConsentsForSettings && loadCustomConsentsForSettings();
+    });
   });
 }
 
@@ -12642,7 +12688,11 @@ function printCustomConsent(id) {
 
 function deleteCustomConsent(id) {
   if(!confirm('Delete this consent from the library?')) return;
-  fbRemove('consentLibrary/' + id).then(()=>{ showToast('Deleted ✓','s'); refreshConsentLibrary(); });
+  fbRemove('consentLibrary/' + id).then(()=>{
+    showToast('Deleted ✓','s');
+    refreshConsentLibrary();
+    loadCustomConsentsForSettings && loadCustomConsentsForSettings();
+  });
 }
 
 
@@ -13446,7 +13496,9 @@ function loadCustomConsentsForSettings() {
         return `<div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--g6);border-radius:8px;margin-bottom:5px;font-size:12px">
           <span>${c.type==='image'?'🖼️':'📝'}</span>
           <div style="flex:1"><strong>${c.name}</strong> <span style="font-size:10px;color:var(--g1);margin-left:6px">${dl}</span></div>
+          <button type="button" class="btn btn-xs btn-gold" onclick="editUploadedConsent('${c.id}')">✏️</button>
           <button type="button" class="btn btn-xs btn-outline" onclick="printCustomConsent('${c.id}')">🖨️</button>
+          <button type="button" class="btn btn-xs btn-gray" onclick="deleteCustomConsent('${c.id}')">🗑️</button>
         </div>`;
       }).join('');
   }).catch(()=>{});

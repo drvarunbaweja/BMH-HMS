@@ -3057,6 +3057,13 @@
   </div>
   <div class="col">
     <div class="card"><div class="card-hd"><div class="card-title">⚡ Quick Add Charges</div><div class="card-sub">Click once to add directly into the selected patient's bill</div></div>
+      <div id="bmh-quick-charge-dept-filter" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+        <button type="button" class="btn btn-xs btn-gold" data-bmh-quick-dept="all" onclick="bmhSetQuickChargeDeptFilter('all')">All</button>
+        <button type="button" class="btn btn-xs btn-outline" data-bmh-quick-dept="ophtho" onclick="bmhSetQuickChargeDeptFilter('ophtho')">Eye</button>
+        <button type="button" class="btn btn-xs btn-outline" data-bmh-quick-dept="obg" onclick="bmhSetQuickChargeDeptFilter('obg')">OBG</button>
+        <button type="button" class="btn btn-xs btn-outline" data-bmh-quick-dept="psych" onclick="bmhSetQuickChargeDeptFilter('psych')">Neuropsychiatry</button>
+        <button type="button" class="btn btn-xs btn-outline" data-bmh-quick-dept="skin" onclick="bmhSetQuickChargeDeptFilter('skin')">Skin / Cosmetology</button>
+      </div>
       <div id="bmh-quick-charge-panels"></div>
     </div>
     <div class="card"><div class="card-hd"><div class="card-title">Pending vendor dues (inventory)</div><div class="card-sub">Link bills under Inventory → Vendors</div></div>
