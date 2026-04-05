@@ -3077,7 +3077,9 @@ function buildSidebarForRole(role, dept, name) {
       <div class="ni" onclick="nav('billing',this)"><div class="ni-ic">💳</div>Billing<span class="nbadge pulse" id="nb-pay"></span></div>
       <div class="ni" onclick="nav('tpa',this)"><div class="ni-ic">🏦</div>TPA / Cashless</div>
       <div class="ngrp">Reports</div>
-      <div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>`;
+      <div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>
+      <div class="ngrp">Settings</div>
+      <div class="ni" onclick="nav('settings',this)"><div class="ni-ic">⚙️</div>Operational Settings</div>`;
   } else if(role==='Lab') {
     nav_el.innerHTML = `
       <div class="ngrp">Lab</div>
@@ -10919,19 +10921,25 @@ function getProcedureReportRows() {
     return true;
   };
   const advised = PROCEDURE_ADVISED_LOG.map(function (row, idx) {
+    const pt = PATIENTS.find(function (p) { return p.bmhId === row.bmhId; }) || {};
     const key = row.id || ('adv-' + idx + '-' + row.bmhId + '-' + row.proc);
     return {
       key,
-      patient: row.patient,
+      patient: row.patient || pt.name || '—',
       bmhId: row.bmhId,
       proc: row.proc,
       date: row.date || row.createdAt || '',
       doctor: row.doctor || '',
       status: 'advised',
-      source: 'advised'
+      source: 'advised',
+      mobile: row.mobile || pt.mob || '',
+      ageSex: row.ageSex || ((pt.age || '—') + '/' + (pt.sex || '—')),
+      centre: row.centre || pt.centre || '',
+      referredBy: row.referredBy || pt.referredBy || ''
     };
   });
   const otRows = OT_CASES.map(normalizeOTCaseRecord).map(function (c) {
+    const pt = PATIENTS.find(function (p) { return p.bmhId === c.bmhId; }) || {};
     let status = 'scheduled';
     if (c.status === 'completed') status = 'done';
     else if (c.status === 'pending' || c.status === 'in-progress' || c.status === 'postponed') status = 'scheduled';
@@ -10943,7 +10951,11 @@ function getProcedureReportRows() {
       date: c.date || c.scheduledDate || '',
       doctor: c.surgeon || '',
       status,
-      source: 'ot'
+      source: 'ot',
+      mobile: pt.mob || '',
+      ageSex: (pt.age || '—') + '/' + (pt.sex || '—'),
+      centre: c.centre || pt.centre || '',
+      referredBy: pt.referredBy || ''
     };
   });
   return advised.concat(otRows).filter(function (row) {
@@ -10958,11 +10970,11 @@ function buildProcedureReportHtml(rows, title) {
   const esc = function(v){ return String(v || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
   return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;padding:10mm;color:#111}table{width:100%;border-collapse:collapse}th,td{border:1px solid #d7dce5;padding:6px 7px;font-size:11px;vertical-align:top}th{background:#eef3fb;color:#1A3C6E;font-weight:900} .muted{color:#666;font-size:10px} @page{size:A4 portrait;margin:8mm}</style></head><body>'
     + '<div style="font-size:18px;font-weight:900;color:#1A3C6E;margin-bottom:10px">' + esc(title) + '</div>'
-    + (rows.length ? '<table><thead><tr><th>#</th><th>Patient</th><th>BMSH ID</th><th>Procedure</th><th>Date</th><th>Doctor</th><th>Status</th><th>Counsellor Follow-up</th></tr></thead><tbody>'
+    + (rows.length ? '<table><thead><tr><th>#</th><th>Patient</th><th>Phone</th><th>Age/Sex</th><th>BMSH ID</th><th>Procedure</th><th>Date</th><th>Doctor</th><th>Centre</th><th>Status</th><th>Counsellor Follow-up</th></tr></thead><tbody>'
     + rows.map(function (p, i) {
         const follow = window.PROC_COUNSELLOR_LOG[p.key] || {};
         const remark = [follow.status, follow.remark, follow.nextDate].filter(Boolean).join(' · ');
-        return '<tr><td>' + (i + 1) + '</td><td style="font-weight:800">' + esc(p.patient) + '</td><td style="font-family:monospace">' + esc(p.bmhId) + '</td><td>' + esc(p.proc) + '</td><td>' + esc(p.date) + '</td><td>' + esc(p.doctor) + '</td><td>' + esc(p.status) + '</td><td>' + (remark ? esc(remark) : '<span class="muted">No follow-up saved</span>') + '</td></tr>';
+        return '<tr><td>' + (i + 1) + '</td><td style="font-weight:800">' + esc(p.patient) + '</td><td>' + esc(p.mobile || '—') + '</td><td>' + esc(p.ageSex || '—') + '</td><td style="font-family:monospace">' + esc(p.bmhId) + '</td><td>' + esc(p.proc) + '</td><td>' + esc(p.date) + '</td><td>' + esc(p.doctor) + '</td><td>' + esc(p.centre || '—') + '</td><td>' + esc(p.status) + '</td><td>' + (remark ? esc(remark) : '<span class="muted">No follow-up saved</span>') + '</td></tr>';
       }).join('')
     + '</tbody></table>' : '<div style="padding:20px;text-align:center;color:#666">No procedure records found for the current filter.</div>')
     + '</body></html>';
@@ -11090,8 +11102,9 @@ function generateSurgeryReport() {
   const filtered = getProcedureReportRows();
   el.innerHTML=`<div class="card">
     <div class="card-hd"><div><div class="card-title">⚕️ ${proc||'All Procedures'} — ${filtered.length} patients</div></div><button class="btn btn-gold btn-xs" onclick="printSurgeryReportCurrent()">🖨️ Print</button></div>
-    ${filtered.length?`<table><thead><tr><th>#</th><th>Patient</th><th>BMSH ID</th><th>Procedure</th><th>Date Advised</th><th>Doctor</th><th>Status</th><th>Counsellor</th></tr></thead>
+    ${filtered.length?`<table><thead><tr><th>#</th><th>Patient</th><th>Phone</th><th>Age/Sex</th><th>BMSH ID</th><th>Procedure</th><th>Date Advised</th><th>Doctor</th><th>Centre</th><th>Status</th><th>Counsellor</th></tr></thead>
     <tbody>${filtered.map((p,i)=>{ const follow=window.PROC_COUNSELLOR_LOG[p.key]||{}; return `<tr><td>${i+1}</td><td style="font-weight:800">${p.patient}</td><td style="font-family:var(--mono);font-size:10px">${p.bmhId}</td><td>${p.proc}</td><td>${p.date||'—'}</td><td>${p.doctor}</td><td><span class="badge ${p.status==='done'?'bd-green':p.status==='scheduled'?'bd-blue':'bd-orange'}">${p.status||'Advised'}</span></td><td><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="btn btn-xs btn-outline" onclick="openCounsellorFollowup('${p.key}')">📞 Follow-up</button>${follow.status?`<span style="font-size:10px;color:var(--g1)">${follow.status}${follow.nextDate?` · ${follow.nextDate}`:''}</span>`:''}</div></td></tr>`; }).join('')}
+    <tbody>${filtered.map((p,i)=>{ const follow=window.PROC_COUNSELLOR_LOG[p.key]||{}; return `<tr><td>${i+1}</td><td style="font-weight:800">${p.patient}${p.referredBy?`<div style="font-size:10px;color:var(--g1);margin-top:2px">Ref: ${p.referredBy}</div>`:''}</td><td>${p.mobile||'—'}</td><td>${p.ageSex||'—'}</td><td style="font-family:var(--mono);font-size:10px">${p.bmhId}</td><td>${p.proc}</td><td>${p.date||'—'}</td><td>${p.doctor}</td><td>${p.centre||'—'}</td><td><span class="badge ${p.status==='done'?'bd-green':p.status==='scheduled'?'bd-blue':'bd-orange'}">${p.status||'Advised'}</span></td><td><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="btn btn-xs btn-outline" onclick="openCounsellorFollowup('${p.key}')">📞 Follow-up</button>${follow.status?`<span style="font-size:10px;color:var(--g1)">${follow.status}${follow.nextDate?` · ${follow.nextDate}`:''}</span>`:''}</div></td></tr>`; }).join('')}
     </tbody></table>`:'<div style="padding:20px;text-align:center;color:var(--g1)">No records found</div>'}
   </div>`;
 }
@@ -15595,6 +15608,39 @@ function renderSettingsPage() {
   loadCustomConsentsForSettings && loadCustomConsentsForSettings();
   const sc = document.getElementById('import-status-count');
   if(sc) sc.textContent = PATIENTS.length.toLocaleString('en-IN') + ' patients in database';
+  const role = String(CURRENT_USER?.role || '');
+  const isReception = role === 'Reception';
+  const settingsPage = document.getElementById('pg-settings');
+  if (settingsPage) {
+    const allowed = isReception
+      ? ['set-doctors', 'set-procedures', 'set-consents', 'set-surgery-packs']
+      : null;
+    Array.from(settingsPage.querySelectorAll('.ptab')).forEach(function (tab) {
+      const onclick = String(tab.getAttribute('onclick') || '');
+      const match = onclick.match(/'([^']+)'/);
+      const tabId = match ? match[1] : '';
+      tab.style.display = (!allowed || allowed.includes(tabId)) ? '' : 'none';
+    });
+    Array.from(settingsPage.querySelectorAll('.tab-content')).forEach(function (panel) {
+      panel.style.display = '';
+      panel.classList.remove('active');
+      if (allowed && !allowed.includes(panel.id)) panel.style.display = 'none';
+    });
+    const firstVisibleTab = Array.from(settingsPage.querySelectorAll('.ptab')).find(function (tab) { return tab.style.display !== 'none'; });
+    const activeVisibleTab = Array.from(settingsPage.querySelectorAll('.ptab.active')).find(function (tab) { return tab.style.display !== 'none'; });
+    settingsPage.querySelectorAll('.ptab').forEach(function (tab) {
+      if (tab.style.display === 'none') tab.classList.remove('active');
+    });
+    const tabToActivate = activeVisibleTab || firstVisibleTab;
+    if (tabToActivate) {
+      const onclick = String(tabToActivate.getAttribute('onclick') || '');
+      const match = onclick.match(/'([^']+)'/);
+      const tabId = match ? match[1] : '';
+      tabToActivate.classList.add('active');
+      const panel = tabId ? document.getElementById(tabId) : null;
+      if (panel && panel.style.display !== 'none') panel.classList.add('active');
+    }
+  }
 }
 
 // ═══════════════════════════════════════════════════
