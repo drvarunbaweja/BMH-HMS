@@ -3326,13 +3326,12 @@ const OBG_OBS_FIELD_IDS = [
   'obg-obs-phototherapy','obg-obs-phototherapy-note','obg-obs-post-preg-problems','obg-obs-breastfeed','obg-obs-topfeed'
 ];
 function shouldShowObgObstetricHistory(savedData) {
-  const tabData = savedData || window.CURRENT_PATIENT?.lastVisit || {};
-  return !!(tabData.obstetricHistoryEnabled || tabData.workflowAnc);
+  return true;
 }
 function updateObgObstetricHistoryTab(forceVisible) {
   const btn = document.getElementById('obg-tab-obs-history');
   if(!btn) return;
-  const visible = typeof forceVisible === 'boolean' ? forceVisible : shouldShowObgObstetricHistory();
+  const visible = true;
   btn.style.display = visible ? '' : 'none';
   if(!visible && document.getElementById('obg-delivery')?.classList.contains('active')) {
     const defaultTab = document.querySelector('#pg-obg .ptab[onclick*="obg-basic"]');
@@ -4137,8 +4136,8 @@ function ipdMonitoringSlots(freqKey, fromIso) {
 }
 function ipdDeptTemplate(deptKey) {
   const map = {
-    ophtho:['Pre-op vitals','Eye marked / consent verified','Eye drops given','Test dose / allergy check','Patch / dressing / pain status','Doctor instructions'],
-    obg:['Bleeding / lochia','Uterine tone','Foetal / baby status','Breastfeeding / lactation','Urine / bowel','Doctor instructions'],
+    ophtho:['Pre-op vitals','Eye marked / consent verified','Dilating / antibiotic drops given','Test dose / allergy check','Patch / dressing / pain status','Discharge medication explained','Doctor instructions'],
+    obg:['BP / pulse / pain score','Bleeding / lochia','Uterine tone / fundal height','Urine output / bowel sounds','Baby status / breastfeeding','IV fluids / antibiotics / analgesia','Doctor notes / orders'],
     psych:['Mood / behaviour','Sleep','Medication compliance','Risk / supervision','Doctor instructions'],
     skin:['Rash / lesion change','Itching / pain','Dressing / topical therapy','Drug reaction watch','Doctor instructions'],
     general:['Pain / comfort','Fluids / diet','Urine / stool','Mobility / fall risk','Doctor instructions']
@@ -4216,6 +4215,30 @@ function autoDischargeCurrentIpdPatientFromSurgery() {
   renderIPD && renderIPD();
   renderDocQueue && renderDocQueue();
   showToast('Patient discharged from IPD ✓', 's');
+}
+function otCaseNeedsObgFlow(procText, patientId) {
+  const proc = String(procText || '').toLowerCase();
+  const pt = patientId ? PATIENTS.find(function (p) { return p.bmhId === patientId; }) : null;
+  return /lscs|caes|cesare|delivery|obg|gynae|hyster|lapar/i.test(proc) || normalizeDeptKeyForQueue(pt?.dept || '') === 'obg';
+}
+function toggleOTOBGFields() {
+  const block = document.getElementById('ot-add-obg-block');
+  if(!block) return;
+  const ptId = document.getElementById('ot-bmsh-id')?.value || document.getElementById('ot-pt-sel')?.value || '';
+  const proc = document.getElementById('ot-add-proc')?.value || '';
+  const visible = otCaseNeedsObgFlow(proc, ptId);
+  block.style.display = visible ? '' : 'none';
+  if(!visible) return;
+  const admitEl = document.getElementById('ot-add-admit');
+  const admitBlock = document.getElementById('ot-add-admit-block');
+  if(admitEl && !admitEl.checked) admitEl.checked = true;
+  if(admitBlock) admitBlock.style.display = 'grid';
+  const typeEl = document.getElementById('ot-add-admit-type');
+  const wardEl = document.getElementById('ot-add-admit-ward');
+  const notesEl = document.getElementById('ot-add-admit-notes');
+  if(typeEl) typeEl.value = 'Obstetric';
+  if(wardEl && !wardEl.value) wardEl.value = 'OBG Ward / Bed';
+  if(notesEl && !notesEl.value) notesEl.value = 'Pre-op vitals, consent, blood arranged, fetal status, catheter if advised, post-op LSCS monitoring.';
 }
 function ipdVitalsStatus(vitals) {
   const flags = [];
@@ -9386,6 +9409,21 @@ function addOTCase() {
   const iol = document.getElementById('ot-add-iol')?.value||'N/A';
   const iolType = document.getElementById('ot-add-iol-model')?.value || '';
   const iolPower = document.getElementById('ot-add-iol-power')?.value || extractIolPower(iol);
+  const obgCaseType = document.getElementById('ot-add-obg-type')?.value || '';
+  const obgGa = document.getElementById('ot-add-obg-ga')?.value || '';
+  const obgIndication = document.getElementById('ot-add-obg-indication')?.value || '';
+  const obgFetal = document.getElementById('ot-add-obg-fetal')?.value || '';
+  const obgLiquor = document.getElementById('ot-add-obg-liquor')?.value || '';
+  const obgBlood = document.getElementById('ot-add-obg-blood')?.value || '';
+  const obgAnaesNote = document.getElementById('ot-add-obg-anaes-note')?.value || '';
+  const obgBaby = document.getElementById('ot-add-obg-baby')?.value || '';
+  const obgMother = document.getElementById('ot-add-obg-mother')?.value || '';
+  const obgDocs = {
+    lscsConsent: !!document.getElementById('ot-add-obg-doc-consent')?.checked,
+    anaesConsent: !!document.getElementById('ot-add-obg-doc-anaes')?.checked,
+    bloodConsent: !!document.getElementById('ot-add-obg-doc-blood')?.checked,
+    newbornSheet: !!document.getElementById('ot-add-obg-doc-newborn')?.checked
+  };
   const admitToIpd = !!document.getElementById('ot-add-admit')?.checked;
   const ipdType = document.getElementById('ot-add-admit-type')?.value || '';
   const ipdWard = document.getElementById('ot-add-admit-ward')?.value || '';
@@ -9405,6 +9443,7 @@ function addOTCase() {
     age:pt?.age||'—', sex:pt?.sex||'—',
     dx, procedure:proc, site, surgeon, anaes, anaesDoc:'',
     date, scheduledTime:time, room, iol, iolType, iolPower, priority,
+    obgCaseType, obgGa, obgIndication, obgFetal, obgLiquor, obgBlood, obgAnaesNote, obgBaby, obgMother, obgDocs,
     centre: pt?.centre || getEffectiveCentre() || CURRENT_USER?.centre || 'CHD',
     preop, consent, fasting, status:'pending',
     admitToIpd, ipdType, ipdWard, ipdRoom, ipdMonitoring, ipdNotes,
@@ -9493,6 +9532,7 @@ function fillOTFromPatient(bmhId) {
     : (p.dept === 'ophtho' ? 'PMICS + IOL Implantation (OS)' : 'Surgery');
   populateOTProcedureOptions(guessedProcedure);
   populateOTIolOptions(p.iol || p.iolType || '', p.iolPower || extractIolPower(p.iol || p.iolType || ''));
+  toggleOTOBGFields();
   // Clear lookup
   const el=document.getElementById('ot-pt-lookup-result'); if(el) el.innerHTML='';
   const lkp=document.getElementById('ot-pt-lookup'); if(lkp) lkp.value='';
@@ -9533,8 +9573,15 @@ function openOTAddModal(opts) {
     procEl.addEventListener('input', function () {
       updateOTIolSummarySuggestions();
       refreshOTNotesTemplateSelect && refreshOTNotesTemplateSelect();
+      toggleOTOBGFields();
     });
     procEl.dataset.boundSuggest = '1';
+  }
+  if (ptSel && !ptSel.dataset.boundObg) {
+    ptSel.addEventListener('change', function () {
+      toggleOTOBGFields();
+    });
+    ptSel.dataset.boundObg = '1';
   }
   const iolModelEl = document.getElementById('ot-add-iol-model');
   if (iolModelEl && !iolModelEl.dataset.boundSummary) {
@@ -9568,6 +9615,21 @@ function openOTAddModal(opts) {
     setV('ot-add-consent', existing.consent);
     setV('ot-add-fasting', existing.fasting);
     setV('ot-add-notes', existing.notes);
+    setV('ot-add-obg-type', existing.obgCaseType);
+    setV('ot-add-obg-ga', existing.obgGa);
+    setV('ot-add-obg-indication', existing.obgIndication);
+    setV('ot-add-obg-fetal', existing.obgFetal);
+    setV('ot-add-obg-liquor', existing.obgLiquor);
+    setV('ot-add-obg-blood', existing.obgBlood);
+    setV('ot-add-obg-anaes-note', existing.obgAnaesNote);
+    setV('ot-add-obg-baby', existing.obgBaby);
+    setV('ot-add-obg-mother', existing.obgMother);
+    const obgDocs = existing.obgDocs || {};
+    const setChecked = function(id, val) { const el = document.getElementById(id); if(el) el.checked = !!val; };
+    setChecked('ot-add-obg-doc-consent', obgDocs.lscsConsent);
+    setChecked('ot-add-obg-doc-anaes', obgDocs.anaesConsent);
+    setChecked('ot-add-obg-doc-blood', obgDocs.bloodConsent);
+    setChecked('ot-add-obg-doc-newborn', obgDocs.newbornSheet);
     const admitEl = document.getElementById('ot-add-admit');
     const admitBlock = document.getElementById('ot-add-admit-block');
     if (admitEl) admitEl.checked = !!existing.admitToIpd;
@@ -9584,6 +9646,7 @@ function openOTAddModal(opts) {
       ptSel.appendChild(opt);
     }
     if (ptSel && existing.bmhId) ptSel.value = existing.bmhId;
+    toggleOTOBGFields();
   } else if (opts.bmhId) {
     const admitEl = document.getElementById('ot-add-admit');
     const admitBlock = document.getElementById('ot-add-admit-block');
@@ -9596,11 +9659,21 @@ function openOTAddModal(opts) {
       else el.value = '';
     });
     fillOTFromPatient(opts.bmhId);
+    toggleOTOBGFields();
   } else {
     const admitEl = document.getElementById('ot-add-admit');
     const admitBlock = document.getElementById('ot-add-admit-block');
     if (admitEl) admitEl.checked = false;
     if (admitBlock) admitBlock.style.display = 'none';
+    ['ot-add-obg-type','ot-add-obg-ga','ot-add-obg-indication','ot-add-obg-fetal','ot-add-obg-liquor','ot-add-obg-blood','ot-add-obg-anaes-note','ot-add-obg-baby','ot-add-obg-mother'].forEach(function (id) {
+      const el = document.getElementById(id);
+      if(el) el.value = '';
+    });
+    ['ot-add-obg-doc-consent','ot-add-obg-doc-anaes','ot-add-obg-doc-blood','ot-add-obg-doc-newborn'].forEach(function (id) {
+      const el = document.getElementById(id);
+      if(el) el.checked = false;
+    });
+    toggleOTOBGFields();
   }
   openM('m-ot-add');
 }
