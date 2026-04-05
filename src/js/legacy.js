@@ -157,13 +157,14 @@ function loadIolCatalogFromStorage() {
 function renderIolCatalogList() {
   const el = document.getElementById('set-iol-list');
   if (!el) return;
-  el.innerHTML = IOL_CATALOG.map(function (row, i) {
-    return '<div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--g6);border-radius:8px;margin-bottom:6px;font-size:12px">' +
-      '<div style="flex:1"><div style="font-weight:800">' + row.name + '</div>' +
-      '<div style="font-size:10.5px;color:var(--g1)">' + (row.type || '—') + ' · ' + (row.mfr || '—') + (row.barcode ? ' · ' + row.barcode : '') + '</div></div>' +
-      '<div style="font-weight:900;color:var(--blue);white-space:nowrap">₹' + Number(row.price || 0).toLocaleString('en-IN') + '</div>' +
-      '<button type="button" class="btn btn-xs btn-gray" onclick="deleteIolCatalogRow(' + i + ')">✕</button></div>';
-  }).join('');
+  el.innerHTML = '<div style="font-size:11px;color:var(--g1);margin-bottom:8px">IOLs entered here are available in OT scheduling, OT list editing, and surgery planning from reception. Default powers are available from 0.00D to +30.00D.</div>' +
+    IOL_CATALOG.map(function (row, i) {
+      return '<div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--g6);border-radius:8px;margin-bottom:6px;font-size:12px">' +
+        '<div style="flex:1"><div style="font-weight:800">' + row.name + '</div>' +
+        '<div style="font-size:10.5px;color:var(--g1)">' + (row.type || '—') + ' · ' + (row.mfr || '—') + (row.barcode ? ' · ' + row.barcode : '') + '</div></div>' +
+        '<div style="text-align:right;white-space:nowrap"><div style="font-weight:900;color:var(--blue)">MRP ₹' + Number(row.price || 0).toLocaleString('en-IN') + '</div></div>' +
+        '<button type="button" class="btn btn-xs btn-gray" onclick="deleteIolCatalogRow(' + i + ')">✕</button></div>';
+    }).join('');
 }
 function deleteIolCatalogRow(i) {
   if (i < 0 || i >= IOL_CATALOG.length) return;
@@ -271,7 +272,9 @@ function populateOTIolOptions(selectedName, selectedPower) {
     const meta = [row.type, row.price ? ('₹' + Number(row.price).toLocaleString('en-IN')) : '', row.barcode].filter(Boolean).join(' · ');
     return '<option value="' + String(row.name).replace(/"/g, '&quot;') + '"' + (selectedName === row.name ? ' selected' : '') + '>' + String(row.name).replace(/</g, '&lt;') + (meta ? ' — ' + meta.replace(/</g, '&lt;') : '') + '</option>';
   })).join('');
-  const powerOptions = ['— Select power —'].concat(Array.from(new Set(choices.map(function (row) { return row.power; }).filter(Boolean))).sort(function (a, b) {
+  const defaultPowers = [];
+  for (let i = 0; i <= 300; i += 5) defaultPowers.push((i / 10).toFixed(2) + 'D');
+  const powerOptions = ['— Select power —'].concat(Array.from(new Set(defaultPowers.concat(choices.map(function (row) { return row.power; }).filter(Boolean)))).sort(function (a, b) {
     return parseFloat(a) - parseFloat(b);
   }));
   powerSel.innerHTML = powerOptions.map(function (power) {
@@ -740,23 +743,33 @@ function printStructuredConsentThreeVariants(cd) {
 
 function renderConsentLibrary(filterDept) {
   const el = document.getElementById('consent-library-list'); if(!el) return;
-  const items = filterDept && filterDept!=='all' ? CONSENT_LIBRARY.filter(c=>c.dept===filterDept) : CONSENT_LIBRARY;
+  const items = (filterDept && filterDept!=='all' ? CONSENT_LIBRARY.filter(c=>c.dept===filterDept) : CONSENT_LIBRARY)
+    .map(function (c) { return getMergedLibraryItem(c.id) || c; })
+    .filter(function (c) { return !c.hidden; });
   const deptColors = {ophtho:'var(--blue)',obg:'#c0004e',psych:'var(--orange)',skin:'#5e00c0'};
   const deptBgs = {ophtho:'var(--blue-lt)',obg:'#ffe5f0',psych:'var(--orange-lt)',skin:'#f0e5ff'};
   const deptLabels = {ophtho:'Ophthalmology',obg:'OBG',psych:'Psychiatry',skin:'Skin'};
-  el.innerHTML = items.map(c=>`
-    <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;border:1px solid var(--g5);margin-bottom:5px;cursor:pointer;background:#fff"
-      onmouseover="this.style.background='var(--g6)'" onmouseout="this.style.background='#fff'"
-      onclick="openConsentFromLibrary('${c.id}')">
-      <div style="font-size:20px;flex-shrink:0">${c.icon}</div>
-      <div style="flex:1">
-        <div style="font-size:12.5px;font-weight:800">${c.name}</div>
-        <span style="font-size:9px;font-weight:800;padding:2px 7px;border-radius:12px;background:${deptBgs[c.dept]||'var(--g6)'};color:${deptColors[c.dept]||'var(--g1)'}">
-          ${deptLabels[c.dept]||c.dept}
-        </span>
-      </div>
-      <button class="btn btn-xs btn-gold" onclick="event.stopPropagation();printConsentFromLibrary('${c.id}')">🖨️ Print</button>
-    </div>`).join('');
+  el.innerHTML = items.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px">${
+    items.map(c=>`
+      <div style="padding:12px;border-radius:10px;border:1px solid var(--g5);background:#fff;display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:flex-start;gap:10px">
+          <div style="font-size:22px;line-height:1;flex-shrink:0">${c.icon||'📄'}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12.5px;font-weight:800;line-height:1.35">${c.name}</div>
+            <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px">
+              <span style="font-size:9px;font-weight:800;padding:2px 7px;border-radius:12px;background:${deptBgs[c.dept]||'var(--g6)'};color:${deptColors[c.dept]||'var(--g1)'}">${deptLabels[c.dept]||c.dept}</span>
+              <span style="font-size:9px;font-weight:800;padding:2px 7px;border-radius:12px;background:var(--g6);color:var(--g1)">${c.docType==='form'?'Form':'Consent'}</span>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn btn-xs btn-blue" onclick="openConsentFromLibrary('${c.id}')">👁️ Open</button>
+          <button class="btn btn-xs btn-gold" onclick="printConsentFromLibrary('${c.id}')">🖨️ Print</button>
+          <button class="btn btn-xs btn-outline" onclick="editConsentLibraryItem('${c.id}')">✏️ Edit</button>
+          <button class="btn btn-xs btn-gray" onclick="deleteConsentLibraryItem('${c.id}')">🗑️ Delete</button>
+        </div>
+      </div>`).join('')
+  }</div>` : '<div style="padding:18px;text-align:center;color:var(--g1);font-size:12px">No consents found for this department.</div>';
 }
 
 function filterConsents(dept) {
@@ -766,6 +779,46 @@ function filterConsents(dept) {
 function openConsentFromLibrary(id) {
   const c = CONSENT_LIBRARY.find(x=>x.id===id); if(!c) return;
   printConsentFromLibrary(id);
+}
+function editConsentLibraryItem(id) {
+  const item = getMergedLibraryItem(id);
+  if (!item) return;
+  if (item.structuredKey || getMergedConsentData()[id]) {
+    openEditConsentDataModal(item.structuredKey || id);
+    return;
+  }
+  const newName = prompt('Edit document name', item.name || '');
+  if (newName === null) return;
+  const newDept = prompt('Department key: ophtho / obg / psych / skin / all', item.dept || 'all');
+  if (newDept === null) return;
+  CONSENT_LIBRARY_OVERRIDES[id] = Object.assign({}, CONSENT_LIBRARY_OVERRIDES[id] || {}, {
+    name: newName.trim() || item.name,
+    dept: normalizeSurgeryPackDeptKey(newDept) || item.dept || 'all',
+    hidden: false
+  });
+  saveConsentLibraryOverridesToStorage();
+  renderConsentLibrary(filterDeptActiveForSettings && filterDeptActiveForSettings() || 'all');
+  showToast('Consent updated ✓', 's');
+}
+function deleteConsentLibraryItem(id) {
+  const item = getMergedLibraryItem(id);
+  if (!item) return;
+  if (!confirm('Hide "' + (item.name || id) + '" from the consent library?')) return;
+  CONSENT_LIBRARY_OVERRIDES[id] = Object.assign({}, CONSENT_LIBRARY_OVERRIDES[id] || {}, { hidden: true });
+  saveConsentLibraryOverridesToStorage();
+  renderConsentLibrary(filterDeptActiveForSettings && filterDeptActiveForSettings() || 'all');
+  showToast('Consent removed from library ✓', 's');
+}
+function filterDeptActiveForSettings() {
+  const btn = Array.from(document.querySelectorAll('#set-consents button')).find(function (b) {
+    return b.className.includes('btn-outline') === false && /All|Ophthalmology|OBG|Psychiatry|Skin/.test(b.textContent || '');
+  });
+  const txt = (btn?.textContent || 'All').toLowerCase();
+  if (txt.includes('oph')) return 'ophtho';
+  if (txt.includes('obg')) return 'obg';
+  if (txt.includes('psych')) return 'psych';
+  if (txt.includes('skin')) return 'skin';
+  return 'all';
 }
 
 function libraryMergedToConsentData(merged) {
@@ -1508,6 +1561,10 @@ function openReceptionPatient(bmhId) {
   const adv = Number(p.advance) || 0;
   const bal = Number(p.balance) || 0;
   const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  const chargeOpts = (CHARGES_DATA || []).slice().sort(function (a, b) { return String(a.name||'').localeCompare(String(b.name||'')); }).map(function (c) {
+    const amt = getChargeForProcedure(c.name, p.centre || CURRENT_USER?.centre || 'CHD');
+    return '<option value="' + esc(c.name) + '|' + String(amt) + '">' + esc(c.name) + ' — ₹' + Number(amt || 0).toLocaleString('en-IN') + '</option>';
+  }).join('');
   m.innerHTML = '<div class="modal" style="max-width:520px;max-height:90vh;overflow:auto">'
     + '<div class="modal-hd"><div class="modal-title">🏥 ' + esc(p.name) + '</div><button type="button" class="modal-close" onclick="closeM(\'m-rc-patient\')">✕</button></div>'
     + '<div style="padding:14px 16px;font-size:12px;line-height:1.5">'
@@ -1526,6 +1583,13 @@ function openReceptionPatient(bmhId) {
         + '<div><div style="font-weight:700">' + esc(t.service || '—') + '</div><div style="font-size:10px;color:var(--g1)">' + esc(t.time || '') + ' · ' + esc(t.mode || '') + '</div></div>'
         + '<div style="text-align:right;font-weight:800">' + tag + ' ₹' + (Number(t.amount) || 0).toLocaleString('en-IN') + '</div></div>';
     }).join('') + '</div>' : '<div style="color:var(--g1);font-size:12px">No transactions recorded.</div>')
+    + '<div style="margin-top:14px;padding:10px;border:1px solid var(--g5);border-radius:8px;background:var(--g6)">'
+    + '<label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800;color:var(--bmh-blue);cursor:pointer"><input type="checkbox" id="rc-more-charge-toggle" onchange="document.getElementById(\'rc-more-charge-wrap\').style.display=this.checked?\'block\':\'none\'"> Add more charges</label>'
+    + '<div id="rc-more-charge-wrap" style="display:none;margin-top:10px">'
+    + '<div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap">'
+    + '<div style="flex:1"><label class="fl">Charge from settings</label><select id="rc-more-charge-select" style="font-size:12px"><option value="">— Select charge —</option>' + chargeOpts + '</select></div>'
+    + '<button type="button" class="btn btn-gold btn-sm" onclick="addReceptionPatientCharge(\'' + String(bmhId).replace(/'/g, "\\'") + '\')">+ Add to final bill</button>'
+    + '</div></div></div>'
     + '<div style="margin-top:14px;display:flex;flex-wrap:wrap;gap:8px">'
     + '<button type="button" class="btn btn-gold btn-sm" onclick="rcOpenBillingFor(\'' + String(bmhId).replace(/'/g, "\\'") + '\')">💳 Billing / charges</button>'
     + '<button type="button" class="btn btn-outline btn-sm" onclick="closeM(\'m-rc-patient\');openPatient(\'' + String(bmhId).replace(/'/g, "\\'") + '\')">👁️ Open doctor record</button>'
@@ -1533,6 +1597,23 @@ function openReceptionPatient(bmhId) {
   openM('m-rc-patient');
 }
 window.openReceptionPatient = openReceptionPatient;
+function addReceptionPatientCharge(bmhId) {
+  const sel = document.getElementById('rc-more-charge-select');
+  if (!sel || !sel.value) { showToast('Select a charge first', 'w'); return; }
+  const parts = sel.value.split('|');
+  const desc = parts[0] || 'Charge';
+  const amt = Number(parts[1] || 0);
+  addBmhPatientCharge(bmhId, { id: 'rcx' + Date.now(), cat: inferChargeCategoryFromService(desc), desc: desc, qty: 1, rate: amt, amount: amt, source: 'reception-extra', ts: new Date().toISOString() });
+  const pt = PATIENTS.find(function (x) { return x.bmhId === bmhId; });
+  if (pt) {
+    pt.balance = Number(pt.balance || 0) + amt;
+    fbUpdate && fbUpdate('patients/' + bmhId, { balance: pt.balance }).catch(function () {});
+  }
+  renderReceptionPage && renderReceptionPage();
+  renderBillingPageIfActive && renderBillingPageIfActive();
+  showToast(desc + ' added to final bill ✓', 's');
+}
+window.addReceptionPatientCharge = addReceptionPatientCharge;
 
 function rcOpenBillingFor(bmhId) {
   closeM('m-rc-patient');
@@ -6058,18 +6139,31 @@ function rxDrugMatchesDept(drug, deptKey, deptLabel) {
 function renderSetRxTplList() {
   const el = document.getElementById('set-rx-tpl-list');
   if (!el) return;
-  const rows = Object.keys(RX_TEMPLATES_DATA).map(function (k) {
-    const meta = RX_TEMPLATES_META[k] || { dept: 'all', name: k, notes: '' };
-    const n = meta.name || k;
-    const deptLab = { ophtho: 'Eye', obg: 'OBG', psych: 'Psych', skin: 'Skin', ot: 'OT', all: 'All' }[meta.dept] || meta.dept || '—';
-    const cnt = (RX_TEMPLATES_DATA[k] || []).length;
-    return '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--g6);border-radius:8px;margin-bottom:6px;font-size:12px">' +
-      '<div style="flex:1"><div style="font-weight:800">' + n + '</div>' +
-      '<div style="font-size:10.5px;color:var(--g1)">' + deptLab + ' · ' + cnt + ' drug(s)</div></div>' +
-      '<button type="button" class="btn btn-xs btn-gold" onclick="openEditRxTemplateModal(' + JSON.stringify(k) + ')">✏️ Edit</button>' +
-      '<button type="button" class="btn btn-xs btn-gray" onclick="deleteRxTemplate(' + JSON.stringify(k) + ')">🗑️</button></div>';
-  });
-  el.innerHTML = rows.length ? rows.join('') : '<div style="padding:16px;color:var(--g1);font-size:12px">No templates yet</div>';
+  const deptOrder = ['ophtho','obg','psych','skin','ot','all'];
+  const deptLabMap = { ophtho: 'Eye', obg: 'OBG', psych: 'Psych', skin: 'Skin', ot: 'OT Notes', all: 'All Departments' };
+  const groups = deptOrder.map(function (deptKey) {
+    const rows = Object.keys(RX_TEMPLATES_DATA).filter(function (k) {
+      return (RX_TEMPLATES_META[k]?.dept || 'all') === deptKey;
+    }).map(function (k) {
+      const meta = RX_TEMPLATES_META[k] || { dept: 'all', name: k, notes: '' };
+      const n = meta.name || k;
+      const arr = RX_TEMPLATES_DATA[k] || [];
+      const preview = arr.slice(0, 2).map(function (row) {
+        const nm = rxDrugTradeName(row) || row.trade || row.name || row.generic || 'Item';
+        return nm + (row.freq ? ' · ' + row.freq : '') + (row.dur ? ' · ' + row.dur : '');
+      }).join('<br>');
+      const cnt = arr.length;
+      return '<div style="display:flex;align-items:flex-start;gap:10px;padding:10px;background:var(--g6);border-radius:8px;margin-bottom:6px;font-size:12px">' +
+        '<div style="flex:1"><div style="font-weight:800">' + n + '</div>' +
+        '<div style="font-size:10.5px;color:var(--g1)">' + cnt + ' line(s) with saved frequency / duration' + '</div>' +
+        (preview ? '<div style="font-size:10.5px;color:var(--tx3);margin-top:5px;line-height:1.45">' + preview + '</div>' : '') +
+        '</div>' +
+        '<button type="button" class="btn btn-xs btn-gold" onclick="openEditRxTemplateModal(' + JSON.stringify(k) + ')">✏️ Edit</button>' +
+        '<button type="button" class="btn btn-xs btn-gray" onclick="deleteRxTemplate(' + JSON.stringify(k) + ')">🗑️</button></div>';
+    }).join('');
+    return rows ? '<div style="margin-bottom:12px"><div style="font-size:10px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;margin-bottom:6px">' + deptLabMap[deptKey] + '</div>' + rows + '</div>' : '';
+  }).join('');
+  el.innerHTML = groups || '<div style="padding:16px;color:var(--g1);font-size:12px">No templates yet</div>';
 }
 function openEditRxTemplateModal(key) {
   if (!key || !RX_TEMPLATES_DATA[key]) return;
@@ -8456,10 +8550,50 @@ function updateOTStatus(id, status) {
   const c = OT_CASES.find(x=>x.id===id); if(!c) return;
   c.status = status;
   c.lastUpdated = new Date().toISOString();
+  if (status === 'completed') {
+    scheduleDefaultSurgeryFollowups(c);
+  }
   fbUpdate('otCases/' + id, { status, lastUpdated: c.lastUpdated }).catch(e => console.warn('OT status save error:', e));
   renderOTList();
   showToast(`${c.patient} — status updated to ${status} ✓`,'s');
   if(activeOTCase?.id===id) openOTCase(id);
+}
+function scheduleDefaultSurgeryFollowups(otCase) {
+  const c = normalizeOTCaseRecord(otCase || {});
+  if (!c.bmhId || !c.date) return;
+  const dayOffsets = [
+    { days: 1, label: 'Post-op Day 1 review', type: 'post-op' },
+    { days: 7, label: 'Post-op 1 week review', type: 'post-op' },
+    { days: 14, label: 'Post-op 2 week review', type: 'post-op' }
+  ];
+  const baseDate = new Date(c.date + 'T09:00:00');
+  const made = [];
+  dayOffsets.forEach(function (cfg) {
+    const dt = new Date(baseDate.getTime() + cfg.days * 24 * 60 * 60 * 1000);
+    const iso = dt.toISOString().split('T')[0];
+    const time = normalizeAptTimeLabel(getNearestAppointmentSlot(iso));
+    const exists = (APPOINTMENTS || []).some(function (a) {
+      return a.bmhId === c.bmhId && a.date === iso && a.type === 'post-op' && /post-op/i.test(String(a.purpose || ''));
+    });
+    if (exists) return;
+    const apt = {
+      id: 'APT' + Date.now() + Math.random().toString(36).slice(2, 5),
+      patient: c.patient,
+      bmhId: c.bmhId,
+      doctor: c.surgeon || CURRENT_USER?.name || '',
+      purpose: cfg.label + ' — ' + (c.procedure || 'Surgery'),
+      date: iso,
+      time: time,
+      type: cfg.type,
+      centre: c.centre || CURRENT_USER?.centre || 'CHD',
+      status: 'booked'
+    };
+    APPOINTMENTS.push(apt);
+    saveAppointmentToFirebase && saveAppointmentToFirebase(apt);
+    made.push(apt);
+  });
+  c.autoFollowups = made.map(function (a) { return { date: a.date, time: a.time, label: a.purpose }; });
+  fbUpdate('otCases/' + c.id, { autoFollowups: c.autoFollowups }).catch(function () {});
 }
 
 function toggleWHO(el) {
@@ -11780,6 +11914,7 @@ function getDischargePrintData(sel) {
   const diagnosis = ptObj.lastVisit?.dx || ptObj.dx || lastOtCase?.dx || tmpl.procedure || 'the diagnosed condition';
   const procedureName = lastOtCase?.procedure || ptObj.lastVisit?.procedure || tmpl.procedure || 'the planned procedure';
   const joinDate = new Date(new Date(opDate).getTime() + (14 * 24 * 60 * 60 * 1000)).toISOString();
+  const followups = Array.isArray(lastOtCase?.autoFollowups) ? lastOtCase.autoFollowups.slice() : [];
   return {
     sel: specialty,
     tmpl: DISCHARGE_TEMPLATES[specialty] || DISCHARGE_TEMPLATES.ophtho,
@@ -11795,8 +11930,32 @@ function getDischargePrintData(sel) {
     findings: findings,
     diagnosis: diagnosis,
     procedureName: procedureName,
-    joinDate: joinDate
+    joinDate: joinDate,
+    followups: followups
   };
+}
+function flattenDischargeRxRows(rows) {
+  return (rows || []).reduce(function (acc, row) {
+    if (!row) return acc;
+    acc.push(Object.assign({}, row, { _taperStep: null }));
+    const tapers = Array.isArray(row.taperRows) ? row.taperRows : (row.taperRow ? [row.taperRow] : []);
+    tapers.forEach(function (tap, idx) {
+      acc.push(Object.assign({}, row, tap || {}, { taperRows: [], _taperStep: idx + 1 }));
+    });
+    return acc;
+  }, []);
+}
+function getDischargeFreqOptionsHtml(selected) {
+  const value = String(selected || '');
+  return RX_FREQ_OPTIONS.map(function (opt) {
+    return '<option value="' + String(opt).replace(/"/g, '&quot;') + '"' + (value === opt ? ' selected' : '') + '>' + opt + '</option>';
+  }).join('');
+}
+function getDischargeDurOptionsHtml(selected) {
+  const value = String(selected || '');
+  return RX_DURATION_OPTIONS.map(function (opt) {
+    return '<option value="' + String(opt).replace(/"/g, '&quot;') + '"' + (value === opt ? ' selected' : '') + '>' + opt + '</option>';
+  }).join('');
 }
 function dischargeFrequencyToTimes(freq) {
   const f = String(freq || '').toLowerCase();
@@ -11815,17 +11974,24 @@ function buildDischargePrintSection(sel) {
   const headerSrc = resolvePrintHeaderSrc();
   const today = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
   const fmt = function (v) { return v ? new Date(v).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'; };
-  const meds = (data.lastRxData && data.lastRxData.length ? data.lastRxData : []).map(function (d, i) {
+  const meds = flattenDischargeRxRows(data.lastRxData && data.lastRxData.length ? data.lastRxData : []).map(function (d, i) {
     const trade = rxDrugTradeName(d) || d.name || d.brand || 'Medicine';
     const generic = rxDrugGenericName(d);
     const times = dischargeFrequencyToTimes(d.freq).join(' · ');
+    const title = d._taperStep ? (trade + ' · Taper step ' + d._taperStep) : trade;
     return '<tr>'
       + '<td style="padding:6px 8px;border:1px solid #cfd5de;font-size:11px">' + (i + 1) + '</td>'
-      + '<td style="padding:6px 8px;border:1px solid #cfd5de;font-size:11px;font-weight:800">' + esc(trade) + (generic && generic !== trade ? '<div style="font-weight:500;color:#555;font-size:10px">' + esc(generic) + '</div>' : '') + '</td>'
+      + '<td style="padding:6px 8px;border:1px solid #cfd5de;font-size:11px;font-weight:800">' + esc(title) + (generic && generic !== trade ? '<div style="font-weight:500;color:#555;font-size:10px">' + esc(generic) + '</div>' : '') + '</td>'
       + '<td style="padding:6px 8px;border:1px solid #cfd5de;font-size:11px">' + esc(d.freq || '—') + '</td>'
       + '<td style="padding:6px 8px;border:1px solid #cfd5de;font-size:11px">' + esc(d.dur || '—') + '</td>'
       + '<td style="padding:6px 8px;border:1px solid #cfd5de;font-size:11px">' + esc(times) + '</td>'
       + '</tr>';
+  }).join('');
+  const followupRows = (data.followups || []).map(function (f, idx) {
+    const dateText = f?.date ? fmt(f.date) : '—';
+    const timeText = f?.time || '';
+    const labelText = f?.label || ('Follow-up ' + (idx + 1));
+    return '<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 10px;border:1px solid #d7dce5;border-radius:8px;margin-top:6px;font-size:11px"><strong>' + esc(labelText) + '</strong><span>' + esc(dateText + (timeText ? ' · ' + timeText : '')) + '</span></div>';
   }).join('');
   const summary = 'This is to certify that ' + data.ptNm + ' visited our hospital on ' + fmt(data.visitDate) + '. On examination, it was found that the patient had '
     + data.findings + ' with diagnosis of ' + data.diagnosis + '. The patient was advised ' + data.procedureName + ', which was subsequently performed on '
@@ -11851,6 +12017,7 @@ function buildDischargePrintSection(sel) {
     + '<table><thead><tr><th class="th" style="padding:6px 8px;border:1px solid #cfd5de">#</th><th class="th" style="padding:6px 8px;border:1px solid #cfd5de">Medicine</th><th class="th" style="padding:6px 8px;border:1px solid #cfd5de">Frequency</th><th class="th" style="padding:6px 8px;border:1px solid #cfd5de">Duration</th><th class="th" style="padding:6px 8px;border:1px solid #cfd5de">Timings</th></tr></thead><tbody>'
     + (meds || '<tr><td colspan="5" style="padding:12px;border:1px solid #cfd5de;font-size:11px;color:#666;text-align:center">No prescription found for this patient.</td></tr>')
     + '</tbody></table></div>'
+    + (followupRows ? '<div class="sec"><div class="sec-h">Default Follow-ups</div>' + followupRows + '</div>' : '')
     + '<div class="sign"><div><div class="line"></div><div class="small">Patient / Attendant Signature</div></div><div><div class="line"></div><div class="small">Doctor Signature</div></div><div><div class="line"></div><div class="small">Printed on ' + esc(today) + '</div></div></div>'
     + '</section>';
 }
@@ -11936,9 +12103,9 @@ function renderDischargeBuilder() {
   if(medEl) {
     let meds;
     if(data.lastRxData && data.lastRxData.length) {
-      meds = data.lastRxData.map((d,i)=>renderDcMedRow({
+      meds = flattenDischargeRxRows(data.lastRxData).map((d,i)=>renderDcMedRow({
         name: (rxDrugTradeName(d) || d.name || d.brand || '') + ((rxDrugGenericName(d) && rxDrugGenericName(d)!==rxDrugTradeName(d)) ? ' ('+rxDrugGenericName(d)+')' : ''),
-        note: d.freq + ' — ' + d.dur,
+        note: d._taperStep ? ('Taper step ' + d._taperStep) : '',
         local: (d.lang&&d.lang.pa) ? d.lang.pa : (d.lang&&d.lang.hi ? d.lang.hi : ''),
         freq: d.freq, duration: d.dur
       }, i, tmpl.color));
@@ -11953,8 +12120,13 @@ function renderDischargeBuilder() {
   const fuEl = document.getElementById('dc-followup-list');
   if(fuEl) {
     const fuDateVal = document.getElementById('rx-fu-date')?.value;
-    let followupList = [...tmpl.followup];
-    if(fuDateVal) {
+    let followupList = (data.followups && data.followups.length)
+      ? data.followups.map(function (f) {
+          const dt = f?.date ? new Date(f.date).toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short',year:'numeric'}) : '';
+          return (f?.label || 'Follow-up') + (dt ? ': ' + dt : '') + (f?.time ? ' · ' + f.time : '');
+        })
+      : [...tmpl.followup];
+    if(fuDateVal && !(data.followups && data.followups.length)) {
       const fuFormatted = new Date(fuDateVal).toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
       followupList = ['Review: ' + fuFormatted, ...followupList.slice(1)];
     }
@@ -11971,7 +12143,7 @@ function renderDischargeBuilder() {
   const surgeryDetailsEl = document.getElementById('dc-surgery-details');
   if (surgeryDetailsEl) {
     const rows = [
-      ['Surgery / procedure', procedureName],
+      ['Surgery / procedure', data.procedureName],
       ['OT date', new Date(data.opDate).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})],
       ['Eye / site', data.lastOtCase?.site || data.lastOtCase?.eye || ptObj.eye || '—'],
       ['IOL type / power', [data.lastOtCase?.iolType, data.lastOtCase?.iolPower].filter(Boolean).join(' / ') || '—'],
@@ -12015,9 +12187,9 @@ function renderDcMedRow(m,i,color) {
     <div contenteditable="true" spellcheck="false" style="font-size:11.5px;color:#555;outline:none;margin-bottom:4px">${m.local}</div>
     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:5px">
       <label style="font-size:10px;font-weight:800;color:var(--g1)">FREQ:</label>
-      <input value="${m.freq}" style="font-size:11px;border:1px solid var(--g4);border-radius:5px;padding:2px 6px;width:140px">
+      <select style="font-size:11px;border:1px solid var(--g4);border-radius:5px;padding:2px 6px;width:170px">${getDischargeFreqOptionsHtml(m.freq)}</select>
       <label style="font-size:10px;font-weight:800;color:var(--g1)">DURATION:</label>
-      <input value="${m.duration}" style="font-size:11px;border:1px solid var(--g4);border-radius:5px;padding:2px 6px;width:110px">
+      <select style="font-size:11px;border:1px solid var(--g4);border-radius:5px;padding:2px 6px;width:130px">${getDischargeDurOptionsHtml(m.duration)}</select>
     </div>
     <div class="drop-freq" style="flex-wrap:wrap;gap:3px">
       ${TIMES.map(t=>`<div class="drop-time ${activeTimes.includes(t)?'active':''}" onclick="this.classList.toggle('active')">${t}</div>`).join('')}
