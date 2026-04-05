@@ -3331,6 +3331,7 @@ function syncObgAssessmentToHistory() {
 }
 const OBG_OBS_FIELD_IDS = [
   'obg-obs-lmp','obg-obs-edd-date','obg-obs-ga-date','obg-obs-edd-usg','obg-obs-ga-usg',
+  'obg-obs-married-duration',
   'obg-obs-menstrual','obg-obs-blood-group','obg-obs-husband-bg','obg-obs-rbs','obg-obs-tsh','obg-obs-gtt',
   'obg-obs-hiv','obg-obs-hiv-date','obg-obs-hbsag','obg-obs-hbsag-date','obg-obs-hcv','obg-obs-hcv-date',
   'obg-obs-hplc','obg-obs-hplc-date','obg-obs-vdrl','obg-obs-vdrl-date','obg-obs-genetic','obg-obs-genetic-date',
@@ -3344,6 +3345,99 @@ const OBG_OBS_FIELD_IDS = [
   'obg-obs-present-age','obg-obs-delivery-location','obg-obs-mark','obg-obs-cry','obg-obs-apgar','obg-obs-nicu','obg-obs-nicu-note',
   'obg-obs-phototherapy','obg-obs-phototherapy-note','obg-obs-post-preg-problems','obg-obs-breastfeed','obg-obs-topfeed'
 ];
+const OBG_PREGNANCY_FIELD_IDS = [
+  'obg-obs-conception','obg-obs-complication-note','obg-obs-preg-outcome','obg-obs-maturity',
+  'obg-obs-gestation-age','obg-obs-mode-delivery','obg-obs-induction','obg-obs-induction-note','obg-obs-liquor','obg-obs-liquor-note',
+  'obg-obs-cord-neck','obg-obs-cord-neck-note','obg-obs-cord-clamp','obg-obs-cord-clamp-note','obg-obs-placenta','obg-obs-placenta-note',
+  'obg-obs-pph','obg-obs-pph-note','obg-obs-postnatal','obg-obs-postnatal-note','obg-obs-menstrual-return','obg-obs-birth-control',
+  'obg-obs-birth-control-note','obg-obs-gender','obg-obs-birth-weight','obg-obs-labour-duration','obg-obs-delivery-date','obg-obs-delivery-time',
+  'obg-obs-present-age','obg-obs-delivery-location','obg-obs-mark','obg-obs-cry','obg-obs-apgar','obg-obs-nicu','obg-obs-nicu-note',
+  'obg-obs-phototherapy','obg-obs-phototherapy-note','obg-obs-post-preg-problems','obg-obs-breastfeed','obg-obs-topfeed'
+];
+function getObgPregnancyOrdinal(n) {
+  if(n === 1) return '1st';
+  if(n === 2) return '2nd';
+  if(n === 3) return '3rd';
+  return `${n}th`;
+}
+function buildObgPregnancyEntryFromCurrentForm() {
+  const entry = {};
+  OBG_PREGNANCY_FIELD_IDS.forEach(id => { entry[id] = obgVal(id); });
+  entry.complications = [...document.querySelectorAll('.obg-obs-complication:checked')].map(x => x.value);
+  return entry;
+}
+function hasObgPregnancyEntryData(entry) {
+  if(!entry || typeof entry !== 'object') return false;
+  return OBG_PREGNANCY_FIELD_IDS.some(id => (entry[id] || '').toString().trim()) || (Array.isArray(entry.complications) && entry.complications.length);
+}
+function clearObgPregnancyEntryForm() {
+  OBG_PREGNANCY_FIELD_IDS.forEach(id => {
+    const el = document.getElementById(id);
+    if(el && 'value' in el) el.value = '';
+  });
+  document.querySelectorAll('.obg-obs-complication').forEach(box => { box.checked = false; });
+}
+function applyObgPregnancyEntryToForm(entry) {
+  clearObgPregnancyEntryForm();
+  const data = entry || {};
+  OBG_PREGNANCY_FIELD_IDS.forEach(id => {
+    const el = document.getElementById(id);
+    if(el && data[id] != null) el.value = data[id];
+  });
+  document.querySelectorAll('.obg-obs-complication').forEach(box => {
+    box.checked = Array.isArray(data.complications) ? data.complications.includes(box.value) : false;
+  });
+}
+function stashCurrentObgPregnancyEntry() {
+  if(!window.OBG_PREGNANCIES) window.OBG_PREGNANCIES = [];
+  const idx = Number(window.OBG_ACTIVE_PREGNANCY_INDEX || 0);
+  while(window.OBG_PREGNANCIES.length <= idx) window.OBG_PREGNANCIES.push({});
+  window.OBG_PREGNANCIES[idx] = buildObgPregnancyEntryFromCurrentForm();
+}
+function renderObgPregnancyTabs() {
+  const host = document.getElementById('obg-pregnancy-tabs');
+  if(!host) return;
+  const list = Array.isArray(window.OBG_PREGNANCIES) && window.OBG_PREGNANCIES.length ? window.OBG_PREGNANCIES : [{}];
+  host.innerHTML = list.map((entry, idx) => {
+    const active = idx === Number(window.OBG_ACTIVE_PREGNANCY_INDEX || 0);
+    const filled = hasObgPregnancyEntryData(entry);
+    return `<button type="button" class="btn btn-sm ${active ? 'btn-blue' : 'btn-gray'}" onclick="setActiveObgPregnancy(${idx})">${getObgPregnancyOrdinal(idx + 1)} Pregnancy${filled ? '' : ''}</button>`;
+  }).join('');
+}
+function setActiveObgPregnancy(index) {
+  if(!window.OBG_PREGNANCIES || !window.OBG_PREGNANCIES.length) window.OBG_PREGNANCIES = [{}];
+  stashCurrentObgPregnancyEntry();
+  window.OBG_ACTIVE_PREGNANCY_INDEX = Math.max(0, Math.min(index, window.OBG_PREGNANCIES.length - 1));
+  applyObgPregnancyEntryToForm(window.OBG_PREGNANCIES[window.OBG_ACTIVE_PREGNANCY_INDEX]);
+  renderObgPregnancyTabs();
+}
+function addObgPregnancyEntry() {
+  if(!window.OBG_PREGNANCIES || !window.OBG_PREGNANCIES.length) window.OBG_PREGNANCIES = [{}];
+  stashCurrentObgPregnancyEntry();
+  window.OBG_PREGNANCIES.push({});
+  window.OBG_ACTIVE_PREGNANCY_INDEX = window.OBG_PREGNANCIES.length - 1;
+  applyObgPregnancyEntryToForm({});
+  renderObgPregnancyTabs();
+  showToast(`Editing ${getObgPregnancyOrdinal(window.OBG_ACTIVE_PREGNANCY_INDEX + 1)} pregnancy details.`, 'i');
+}
+function initObgPregnancyStateFromVisit(data) {
+  const incoming = Array.isArray(data?.obgPregnancies) && data.obgPregnancies.length
+    ? data.obgPregnancies
+    : [Object.fromEntries(OBG_PREGNANCY_FIELD_IDS.map(id => [id, data?.[id] || '']))];
+  window.OBG_PREGNANCIES = incoming.map(entry => ({
+    ...entry,
+    complications: Array.isArray(entry?.complications)
+      ? [...entry.complications]
+      : Array.isArray(data?.obgObsComplications) && incoming.length === 1
+        ? [...data.obgObsComplications]
+        : []
+  }));
+  if(!window.OBG_PREGNANCIES.length) window.OBG_PREGNANCIES = [{}];
+  const preferredIndex = Number.isInteger(data?.activeObgPregnancyIndex) ? data.activeObgPregnancyIndex : 0;
+  window.OBG_ACTIVE_PREGNANCY_INDEX = Math.max(0, Math.min(preferredIndex, window.OBG_PREGNANCIES.length - 1));
+  applyObgPregnancyEntryToForm(window.OBG_PREGNANCIES[window.OBG_ACTIVE_PREGNANCY_INDEX]);
+  renderObgPregnancyTabs();
+}
 function shouldShowObgObstetricHistory(savedData) {
   return true;
 }
@@ -3698,7 +3792,9 @@ function populateObgForm(visit) {
   populateObgPatientFromCurrent();
   const data = visit || window.CURRENT_PATIENT?.lastVisit || {};
   if(!data || typeof data !== 'object') {
+    initObgPregnancyStateFromVisit({});
     toggleObgWorkflow();
+    syncObgAssessmentToHistory();
     updateObgComputedFields();
     return;
   }
@@ -3727,11 +3823,9 @@ function populateObgForm(visit) {
   const infChk = document.getElementById('obg-track-infertility'); if(infChk) infChk.checked = !!data.workflowInfertility;
   ['obg-anc-booking','obg-anc-warning','obg-anc-highrisk','obg-anc-fetal','obg-gyn-aub','obg-gyn-discharge','obg-gyn-pain','obg-gyn-menopause','obg-inf-ovulatory','obg-inf-tubal','obg-inf-endo','obg-inf-male','obg-redflag-bleeding','obg-redflag-leak','obg-redflag-headache','obg-redflag-pain','obg-redflag-fever','obg-redflag-decreasedfm','obg-redflag-swelling','obg-redflag-convulsions','obg-hr-prevlscs','obg-hr-gdm','obg-hr-pih','obg-hr-iugr','obg-hr-multiple','obg-hr-rhneg','obg-hr-placenta','obg-hr-anemia','obg-fetal-growthlag','obg-fetal-malpresentation','obg-fetal-lowliquor','obg-fetal-postdates','obg-aub-clots','obg-aub-intermenstrual','obg-aub-postcoital','obg-aub-anemia','obg-vag-pruritus','obg-vag-foul','obg-vag-dyspareunia','obg-vag-pidrisk','obg-pain-cyclical','obg-pain-severe','obg-pain-bowel','obg-pain-infertility','obg-inf-coital','obg-inf-pastpid','obg-inf-priorsurgery','obg-inf-galactorrhoea','obg-inf-hirsutism','obg-inf-maleabn','obg-inf-lowreserve','obg-inf-rpl']
     .forEach(id => { const el = document.getElementById(id); if(el && data[id] != null) el.checked = !!data[id]; });
-  document.querySelectorAll('.obg-obs-complication').forEach(box => {
-    box.checked = Array.isArray(data.obgObsComplications) ? data.obgObsComplications.includes(box.value) : false;
-  });
   const labs = Array.isArray(data.investigationChecklist) ? data.investigationChecklist : [];
   document.querySelectorAll('.obg-lab').forEach(box => { box.checked = labs.includes(box.value); });
+  initObgPregnancyStateFromVisit(data);
   toggleObgWorkflow();
   updateObgObstetricHistoryTab(!!(data.obstetricHistoryEnabled || data.workflowAnc));
   syncObgAssessmentToHistory();
@@ -6336,6 +6430,7 @@ function printOBGCard() {
   const ga = text('obg-ga');
   const blood = text('obg-blood-grp') || text('obg-obs-blood-group') || pt.bloodGroup || '—';
   const husbandBg = text('obg-obs-husband-bg', '—');
+  const marriedFor = text('obg-obs-married-duration', '—');
   const risk = text('obg-risk', 'Low risk');
   const complaint = text('obg-main-complaint', 'Routine review');
   const systemic = text('obg-systemic', 'None declared');
@@ -6417,9 +6512,75 @@ function printOBGCard() {
     ['Booster', fmtDate(text('obg-vax-3-date')), text('obg-vax-3-status', 'Pending'), text('obg-vax-3-brand', '—'), text('obg-vax-3-batch', '—')]
   ];
   const ancNotes = [text('obg-anc-notes'), text('obg-obs-complication-note'), text('obg-obs-genetic-note'), text('obg-obs-post-preg-problems')].filter(Boolean).join(' | ') || 'No additional notes recorded.';
+  stashCurrentObgPregnancyEntry();
+  const pregnancies = ((window.OBG_PREGNANCIES || []).filter(entry => hasObgPregnancyEntryData(entry)));
   const rowHtml = function(items) {
     return items.map(function(item){ return `<div class="mini-row"><div class="mini-lbl">${item[0]}</div><div class="mini-val">${item[1] || '—'}</div></div>`; }).join('');
   };
+  const pregText = function(entry, id, fallback) { return entry && entry[id] ? entry[id] : (fallback || '—'); };
+  const pregComplications = function(entry) {
+    return Array.isArray(entry?.complications) && entry.complications.length ? entry.complications.join(', ') : 'None recorded';
+  };
+  const pregnancyHtml = pregnancies.map(function(entry, idx) {
+    const title = `${getObgPregnancyOrdinal(idx + 1)} Pregnancy`;
+    return `<div class="preg-card">
+      <div class="preg-title">${title}</div>
+      <div class="preg-grid">
+        <div class="section gold">
+          <div class="sec-title">Conception & Complications</div>
+          <div class="mini-grid">${rowHtml([
+            ['Conception', pregText(entry, 'obg-obs-conception')],
+            ['Complications', pregComplications(entry)],
+            ['Complication note', pregText(entry, 'obg-obs-complication-note')],
+            ['Pregnancy outcome', pregText(entry, 'obg-obs-preg-outcome')],
+            ['Maturity', pregText(entry, 'obg-obs-maturity')],
+            ['Gestation age', pregText(entry, 'obg-obs-gestation-age')]
+          ])}</div>
+        </div>
+        <div class="section pink">
+          <div class="sec-title">Labour Details</div>
+          <div class="mini-grid">${rowHtml([
+            ['Mode of delivery', pregText(entry, 'obg-obs-mode-delivery')],
+            ['Induction', withNote(pregText(entry, 'obg-obs-induction'), pregText(entry, 'obg-obs-induction-note', ''))],
+            ['Liquor', withNote(pregText(entry, 'obg-obs-liquor'), pregText(entry, 'obg-obs-liquor-note', ''))],
+            ['Cord round neck', withNote(pregText(entry, 'obg-obs-cord-neck'), pregText(entry, 'obg-obs-cord-neck-note', ''))],
+            ['Cord clamping', withNote(pregText(entry, 'obg-obs-cord-clamp'), pregText(entry, 'obg-obs-cord-clamp-note', ''))],
+            ['Placenta', withNote(pregText(entry, 'obg-obs-placenta'), pregText(entry, 'obg-obs-placenta-note', ''))],
+            ['PPH', withNote(pregText(entry, 'obg-obs-pph'), pregText(entry, 'obg-obs-pph-note', ''))]
+          ])}</div>
+        </div>
+        <div class="section green">
+          <div class="sec-title">Post Natal Period</div>
+          <div class="mini-grid">${rowHtml([
+            ['Eventful / Uneventful', pregText(entry, 'obg-obs-postnatal')],
+            ['Postnatal note', pregText(entry, 'obg-obs-postnatal-note')],
+            ['Cycle return', pregText(entry, 'obg-obs-menstrual-return')],
+            ['Birth control', withNote(pregText(entry, 'obg-obs-birth-control'), pregText(entry, 'obg-obs-birth-control-note', ''))]
+          ])}</div>
+        </div>
+        <div class="section soft">
+          <div class="sec-title">Baby / Abortion Details</div>
+          <div class="mini-grid">${rowHtml([
+            ['Gender', pregText(entry, 'obg-obs-gender')],
+            ['Birth weight', pregText(entry, 'obg-obs-birth-weight')],
+            ['Duration of labour', pregText(entry, 'obg-obs-labour-duration')],
+            ['Date of delivery', fmtDate(pregText(entry, 'obg-obs-delivery-date', ''))],
+            ['Time of delivery', pregText(entry, 'obg-obs-delivery-time')],
+            ['Present age', pregText(entry, 'obg-obs-present-age')],
+            ['Location of delivery', pregText(entry, 'obg-obs-delivery-location')],
+            ['Mark', pregText(entry, 'obg-obs-mark')],
+            ['Cry', pregText(entry, 'obg-obs-cry')],
+            ['APGAR', pregText(entry, 'obg-obs-apgar')],
+            ['NICU', withNote(pregText(entry, 'obg-obs-nicu'), pregText(entry, 'obg-obs-nicu-note', ''))],
+            ['Phototherapy', withNote(pregText(entry, 'obg-obs-phototherapy'), pregText(entry, 'obg-obs-phototherapy-note', ''))],
+            ['Problems after pregnancy', pregText(entry, 'obg-obs-post-preg-problems')],
+            ['Breast feed alone', pregText(entry, 'obg-obs-breastfeed')],
+            ['Top feed alone', pregText(entry, 'obg-obs-topfeed')]
+          ])}</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
   <style>
   *{margin:0;padding:0;box-sizing:border-box;print-color-adjust:exact;-webkit-print-color-adjust:exact}
@@ -6442,6 +6603,9 @@ function printOBGCard() {
   .section.gold{background:#fffaf0}
   .section.green{background:#f4fff7}
   .section.pink{background:#fff7fb}
+  .preg-card{border:1px solid #dde5f0;border-radius:12px;padding:8px 9px;background:#fff;margin-top:10px}
+  .preg-title{font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.45px;color:#1A3C6E;margin-bottom:7px}
+  .preg-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
   .sec-title{font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.45px;color:#1A3C6E;margin-bottom:6px}
   .mini-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px 8px}
   .mini-row{display:grid;grid-template-columns:94px 1fr;gap:6px;align-items:start}
@@ -6487,6 +6651,7 @@ function printOBGCard() {
             <div class="sec-title">Pregnancy Profile</div>
             <div class="mini-grid">${rowHtml([
               ['GA', ga || '—'],
+              ['Married for', marriedFor],
               ['High-risk tag', risk],
               ['Primary complaint', complaint],
               ['Systemic disease', systemic],
@@ -6495,14 +6660,6 @@ function printOBGCard() {
               ['USG due', usgDue],
               ['TT / Tdap due', ttDue]
             ])}</div>
-          </div>
-          <div class="section gold">
-            <div class="sec-title">Conception & Pregnancy History</div>
-            <div class="mini-grid">${rowHtml(conceptionRows)}</div>
-          </div>
-          <div class="section pink">
-            <div class="sec-title">Labour & Delivery Details</div>
-            <div class="mini-grid">${rowHtml(labourRows)}</div>
           </div>
           <div class="section">
             <div class="sec-title">Important Notes</div>
@@ -6514,14 +6671,6 @@ function printOBGCard() {
             <div class="sec-title">Screening & Labs</div>
             <div class="mini-grid">${rowHtml(screeningRows)}</div>
           </div>
-          <div class="section soft">
-            <div class="sec-title">Baby / Delivery History</div>
-            <div class="mini-grid">${rowHtml(babyRows)}</div>
-          </div>
-          <div class="section green">
-            <div class="sec-title">Postnatal / Follow-up History</div>
-            <div class="mini-grid">${rowHtml(postNatalRows)}</div>
-          </div>
           <div class="section">
             <div class="sec-title">Vaccination History</div>
             <table>
@@ -6531,6 +6680,7 @@ function printOBGCard() {
           </div>
         </div>
       </div>
+      ${pregnancyHtml}
       <div class="foot">
         <div>
           <div style="font-size:10px;font-weight:800;color:#1A3C6E">Consultant</div>
@@ -16133,6 +16283,7 @@ function saveVisit(dept) {
     visit.advice = document.getElementById('rx-advice-text')?.value || '';
   } else if(dept === 'obg') {
     const obgCheckboxIds = ['obg-anc-booking','obg-anc-warning','obg-anc-highrisk','obg-anc-fetal','obg-gyn-aub','obg-gyn-discharge','obg-gyn-pain','obg-gyn-menopause','obg-inf-ovulatory','obg-inf-tubal','obg-inf-endo','obg-inf-male','obg-redflag-bleeding','obg-redflag-leak','obg-redflag-headache','obg-redflag-pain','obg-redflag-fever','obg-redflag-decreasedfm','obg-redflag-swelling','obg-redflag-convulsions','obg-hr-prevlscs','obg-hr-gdm','obg-hr-pih','obg-hr-iugr','obg-hr-multiple','obg-hr-rhneg','obg-hr-placenta','obg-hr-anemia','obg-fetal-growthlag','obg-fetal-malpresentation','obg-fetal-lowliquor','obg-fetal-postdates','obg-aub-clots','obg-aub-intermenstrual','obg-aub-postcoital','obg-aub-anemia','obg-vag-pruritus','obg-vag-foul','obg-vag-dyspareunia','obg-vag-pidrisk','obg-pain-cyclical','obg-pain-severe','obg-pain-bowel','obg-pain-infertility','obg-inf-coital','obg-inf-pastpid','obg-inf-priorsurgery','obg-inf-galactorrhoea','obg-inf-hirsutism','obg-inf-maleabn','obg-inf-lowreserve','obg-inf-rpl'];
+    stashCurrentObgPregnancyEntry();
     visit.lmp = obgVal('obg-lmp');
     visit.edd = document.getElementById('obg-edd')?.textContent || '';
     visit.ga = document.getElementById('obg-ga')?.textContent || '';
@@ -16189,6 +16340,8 @@ function saveVisit(dept) {
     visit.investigationChecklist = [...document.querySelectorAll('.obg-lab:checked')].map(x => x.value);
     OBG_OBS_FIELD_IDS.forEach(id => { visit[id] = obgVal(id); });
     visit.obgObsComplications = [...document.querySelectorAll('.obg-obs-complication:checked')].map(x => x.value);
+    visit.obgPregnancies = JSON.parse(JSON.stringify((window.OBG_PREGNANCIES || []).filter(entry => hasObgPregnancyEntryData(entry))));
+    visit.activeObgPregnancyIndex = Number(window.OBG_ACTIVE_PREGNANCY_INDEX || 0);
     obgCheckboxIds.forEach(id => { visit[id] = obgChecked(id); });
     const obgGuidance = computeObgGuidance();
     visit.presumptiveDx = obgGuidance.diagnoses;
