@@ -2225,25 +2225,127 @@
           <button class="btn btn-gray btn-sm" onclick="showToast('SMS sent ✓','s')">📨</button>
         </div></div>
 
-      <!-- DELIVERY -->
+      <!-- OBSTETRIC HISTORY -->
       <div class="tab-content" id="obg-delivery">
         <div style="background:var(--orange-lt);border-radius:var(--rsm);padding:12px;margin-bottom:12px;border-left:4px solid var(--orange)">
-          <div style="font-size:13px;font-weight:900;color:#8a4200;margin-bottom:6px">⚠️ Previous LSCS — Plan of Delivery</div>
-          <div style="font-size:12px;color:#8a4200;line-height:1.8">Elective LSCS planned at 38–39 weeks. Pre-op workup advised at 37 weeks.<br>Previous scar: Lower uterine segment. Scar tenderness: Nil.</div>
+          <div style="font-size:13px;font-weight:900;color:#8a4200;margin-bottom:6px">🧡 Obstetric History</div>
+          <div style="font-size:12px;color:#8a4200;line-height:1.8">This section opens after ANC is selected and saved. Record antenatal screening, vaccination, prior pregnancy outcomes, labour details, baby details, and postpartum history so the same information returns on future visits.</div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:12px">
+          <div class="form-group"><label class="fl">LMP</label><input type="date" id="obg-obs-lmp"></div>
+          <div class="form-group"><label class="fl">EDD by Date</label><input type="date" id="obg-obs-edd-date"></div>
+          <div class="form-group"><label class="fl">GA by Date</label><input type="text" id="obg-obs-ga-date" placeholder="e.g. 12w 3d"></div>
+          <div class="form-group"><label class="fl">EDD by USG</label><input type="date" id="obg-obs-edd-usg"></div>
+          <div class="form-group"><label class="fl">GA by USG</label><input type="text" id="obg-obs-ga-usg" placeholder="e.g. 12w 1d"></div>
         </div>
         <div class="fg">
-          <div class="form-group"><label class="fl">Mode of Delivery</label><select><option>Elective LSCS</option><option>Emergency LSCS</option><option>Normal Vaginal Delivery</option><option>Instrumental (Forceps)</option><option>Instrumental (Ventouse)</option></select></div>
-          <div class="form-group"><label class="fl">Planned Date</label><input type="date"></div>
-          <div class="form-group"><label class="fl">Anaesthesia</label><select><option>Spinal Anaesthesia</option><option>Epidural</option><option>General Anaesthesia</option></select></div>
-          <div class="form-group"><label class="fl">Blood Arranged</label><select><option>Yes — 2 Units O+ve</option><option>No</option></select></div>
-          <div class="form-group full"><label class="fl">Delivery Notes</label><textarea placeholder="Intra-op findings, complications, baby details…"></textarea></div>
-          <div class="form-group"><label class="fl">Baby Birth Weight</label><input type="text" placeholder="e.g. 2.8 kg"></div>
-          <div class="form-group"><label class="fl">APGAR Score (1/5 min)</label><input type="text" placeholder="e.g. 8/9"></div>
-          <div class="form-group"><label class="fl">Sex of Baby</label><select><option>Male</option><option>Female</option></select></div>
+          <div class="form-group"><label class="fl">Menstrual History</label><select id="obg-obs-menstrual"><option value="">Select</option><option>Regular</option><option>Irregular</option><option>Scanty</option><option>Heavy</option><option>Painful</option><option>Amenorrhoea</option></select></div>
+          <div class="form-group"><label class="fl">Blood Group</label><select id="obg-obs-blood-group"><option value="">Select</option><option>O+ve</option><option>A+ve</option><option>B+ve</option><option>AB+ve</option><option>O-ve</option><option>A-ve</option><option>B-ve</option><option>AB-ve</option></select></div>
+          <div class="form-group"><label class="fl">Husband's BG</label><select id="obg-obs-husband-bg"><option value="">Select</option><option>O+ve</option><option>A+ve</option><option>B+ve</option><option>AB+ve</option><option>O-ve</option><option>A-ve</option><option>B-ve</option><option>AB-ve</option></select></div>
+          <div class="form-group"><label class="fl">RBS (mg/dL)</label><input type="number" id="obg-obs-rbs" placeholder="0"></div>
+          <div class="form-group"><label class="fl">TSH (mIU/L)</label><input type="number" step="0.01" id="obg-obs-tsh" placeholder="0"></div>
+          <div class="form-group"><label class="fl">GTT (mg/dL)</label><input type="number" id="obg-obs-gtt" placeholder="0"></div>
+          <div class="form-group"><label class="fl">HIV</label><select id="obg-obs-hiv"><option value="">Select</option><option>Non-reactive</option><option>Reactive</option><option>Awaited</option><option>Not done</option></select></div>
+          <div class="form-group"><label class="fl">HIV Date</label><input type="date" id="obg-obs-hiv-date"></div>
+          <div class="form-group"><label class="fl">HBsAg</label><select id="obg-obs-hbsag"><option value="">Select</option><option>Negative</option><option>Positive</option><option>Awaited</option><option>Not done</option></select></div>
+          <div class="form-group"><label class="fl">HBsAg Date</label><input type="date" id="obg-obs-hbsag-date"></div>
+          <div class="form-group"><label class="fl">HCV</label><select id="obg-obs-hcv"><option value="">Select</option><option>Negative</option><option>Positive</option><option>Awaited</option><option>Not done</option></select></div>
+          <div class="form-group"><label class="fl">HCV Date</label><input type="date" id="obg-obs-hcv-date"></div>
+          <div class="form-group"><label class="fl">HPLC</label><select id="obg-obs-hplc"><option value="">Select</option><option>Normal</option><option>Abnormal</option><option>Trait detected</option><option>Not done</option></select></div>
+          <div class="form-group"><label class="fl">HPLC Date</label><input type="date" id="obg-obs-hplc-date"></div>
+          <div class="form-group"><label class="fl">VDRL</label><select id="obg-obs-vdrl"><option value="">Select</option><option>Non-reactive</option><option>Reactive</option><option>Awaited</option><option>Not done</option></select></div>
+          <div class="form-group"><label class="fl">VDRL Date</label><input type="date" id="obg-obs-vdrl-date"></div>
+          <div class="form-group"><label class="fl">Genetic Testing</label><select id="obg-obs-genetic"><option value="">Select</option><option>Not advised</option><option>Low risk</option><option>High risk</option><option>Carrier</option><option>Awaited</option></select></div>
+          <div class="form-group"><label class="fl">Test Date</label><input type="date" id="obg-obs-genetic-date"></div>
+          <div class="form-group"><label class="fl">Test Result</label><input type="text" id="obg-obs-genetic-result" placeholder="Enter test result"></div>
+          <div class="form-group full"><label class="fl">Additional Note</label><textarea id="obg-obs-genetic-note" placeholder="Enter additional note"></textarea></div>
         </div>
-        <div style="margin-top:10px;display:flex;gap:8px">
-          <button class="btn btn-gold" onclick="showToast('Delivery record saved ✓','s')">💾 Save Delivery Record</button>
-          <button class="btn btn-outline btn-sm" onclick="openM('m-consents');document.getElementById('mc-type').value='obg-lscs';renderConsentModal()">📋 LSCS Consent</button>
+        <div style="margin:12px 0;background:#eef8ff;border:1px solid rgba(0,122,255,.16);border-radius:12px;padding:12px">
+          <div style="font-size:11px;font-weight:900;color:var(--blue);text-transform:uppercase;letter-spacing:.45px;margin-bottom:8px">TT / Td / Tdap Vaccination</div>
+          <div style="display:grid;grid-template-columns:1.4fr .8fr .8fr .8fr .8fr;gap:8px;align-items:end">
+            <div class="form-group"><label class="fl">Dose 1</label><input type="text" id="obg-vax-1-name" value="Inj TT/Td/Tdap 1st Dose"></div>
+            <div class="form-group"><label class="fl">Date</label><input type="date" id="obg-vax-1-date"></div>
+            <div class="form-group"><label class="fl">Status</label><select id="obg-vax-1-status"><option>Pending</option><option>Given</option><option>Due</option><option>Deferred</option></select></div>
+            <div class="form-group"><label class="fl">Brand</label><input type="text" id="obg-vax-1-brand" placeholder="Brand"></div>
+            <div class="form-group"><label class="fl">Batch</label><input type="text" id="obg-vax-1-batch" placeholder="Batch"></div>
+            <div class="form-group"><label class="fl">Dose 2</label><input type="text" id="obg-vax-2-name" value="Inj TT/Td/Tdap 2nd Dose"></div>
+            <div class="form-group"><label class="fl">Date</label><input type="date" id="obg-vax-2-date"></div>
+            <div class="form-group"><label class="fl">Status</label><select id="obg-vax-2-status"><option>Pending</option><option>Given</option><option>Due</option><option>Deferred</option></select></div>
+            <div class="form-group"><label class="fl">Brand</label><input type="text" id="obg-vax-2-brand" placeholder="Brand"></div>
+            <div class="form-group"><label class="fl">Batch</label><input type="text" id="obg-vax-2-batch" placeholder="Batch"></div>
+            <div class="form-group"><label class="fl">Booster</label><input type="text" id="obg-vax-3-name" value="Inj TT/Td/Tdap Booster Dose"></div>
+            <div class="form-group"><label class="fl">Date</label><input type="date" id="obg-vax-3-date"></div>
+            <div class="form-group"><label class="fl">Status</label><select id="obg-vax-3-status"><option>Pending</option><option>Given</option><option>Due</option><option>Deferred</option></select></div>
+            <div class="form-group"><label class="fl">Brand</label><input type="text" id="obg-vax-3-brand" placeholder="Brand"></div>
+            <div class="form-group"><label class="fl">Batch</label><input type="text" id="obg-vax-3-batch" placeholder="Batch"></div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:12px">
+          <div style="background:#fff;border:1px solid var(--g5);border-radius:12px;padding:12px">
+            <div style="font-size:11px;font-weight:900;color:#6a0091;text-transform:uppercase;letter-spacing:.45px;margin-bottom:8px">Conception & complications</div>
+            <div class="form-group"><label class="fl">Conception</label><select id="obg-obs-conception"><option value="">Select</option><option>Natural</option><option>OI</option><option>IUI</option><option>IVF</option></select></div>
+            <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;font-size:11px;margin:8px 0">
+              <label><input type="checkbox" class="obg-obs-complication" value="Anemia"> Anemia</label>
+              <label><input type="checkbox" class="obg-obs-complication" value="Thyroid"> Thyroid</label>
+              <label><input type="checkbox" class="obg-obs-complication" value="GDM"> GDM</label>
+              <label><input type="checkbox" class="obg-obs-complication" value="Epilepsy"> Epilepsy</label>
+              <label><input type="checkbox" class="obg-obs-complication" value="PIH"> PIH</label>
+              <label><input type="checkbox" class="obg-obs-complication" value="Oligoamnios"> Oligoamnios</label>
+              <label><input type="checkbox" class="obg-obs-complication" value="IUGR (FGR)"> IUGR (FGR)</label>
+            </div>
+            <div class="form-group"><label class="fl">Complication Description</label><textarea id="obg-obs-complication-note" placeholder="Description"></textarea></div>
+            <div class="form-group"><label class="fl">Pregnancy Outcome</label><select id="obg-obs-preg-outcome"><option value="">Select</option><option>Present Pregnancy</option><option>Delivered</option><option>Abortion</option><option>Expired</option></select></div>
+            <div class="form-group"><label class="fl">Maturity</label><select id="obg-obs-maturity"><option value="">Select</option><option>Pre-Term</option><option>Full-Term</option><option>Post-Term</option></select></div>
+            <div class="form-group"><label class="fl">Gestation age</label><input type="text" id="obg-obs-gestation-age" placeholder="e.g. 38 weeks"></div>
+          </div>
+          <div style="background:#fff;border:1px solid var(--g5);border-radius:12px;padding:12px">
+            <div style="font-size:11px;font-weight:900;color:#8a4200;text-transform:uppercase;letter-spacing:.45px;margin-bottom:8px">Labour details</div>
+            <div class="form-group"><label class="fl">Modes of Delivery</label><select id="obg-obs-mode-delivery"><option value="">Select</option><option>Natural</option><option>Normal</option><option>Forceps</option><option>Vaccum</option><option>Caesarean</option></select></div>
+            <div class="form-group"><label class="fl">Induction Done</label><select id="obg-obs-induction"><option value="">Select</option><option>No</option><option>Yes</option><option>Spontaneous labour</option><option>Augmented</option></select></div>
+            <div class="form-group"><label class="fl">Induction Description</label><input type="text" id="obg-obs-induction-note" placeholder="Description"></div>
+            <div class="form-group"><label class="fl">Liquor</label><select id="obg-obs-liquor"><option value="">Select</option><option>Clear</option><option>Thin meconium</option><option>Thick meconium</option><option>Blood stained</option><option>Scanty</option></select></div>
+            <div class="form-group"><label class="fl">Liquor Description</label><input type="text" id="obg-obs-liquor-note" placeholder="Description"></div>
+            <div class="form-group"><label class="fl">Cord Round The Neck</label><select id="obg-obs-cord-neck"><option value="">Select</option><option>No</option><option>Single loop</option><option>Double loop</option><option>Tight loop</option></select></div>
+            <div class="form-group"><label class="fl">Cord Description</label><input type="text" id="obg-obs-cord-neck-note" placeholder="Description"></div>
+            <div class="form-group"><label class="fl">Cord Clamping</label><select id="obg-obs-cord-clamp"><option value="">Select</option><option>Delayed</option><option>Immediate</option><option>Not documented</option></select></div>
+            <div class="form-group"><label class="fl">Cord Clamping Description</label><input type="text" id="obg-obs-cord-clamp-note" placeholder="Description"></div>
+            <div class="form-group"><label class="fl">Expulsion Of Placenta</label><select id="obg-obs-placenta"><option value="">Select</option><option>Spontaneous complete</option><option>Manual removal</option><option>Retained bits</option><option>Not documented</option></select></div>
+            <div class="form-group"><label class="fl">Placenta Description</label><input type="text" id="obg-obs-placenta-note" placeholder="Description"></div>
+            <div class="form-group"><label class="fl">PPH</label><select id="obg-obs-pph"><option value="">Select</option><option>No</option><option>Yes</option><option>Threatened</option></select></div>
+            <div class="form-group"><label class="fl">PPH Description</label><input type="text" id="obg-obs-pph-note" placeholder="Description"></div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">
+          <div style="background:#fff;border:1px solid var(--g5);border-radius:12px;padding:12px">
+            <div style="font-size:11px;font-weight:900;color:#1a8c3c;text-transform:uppercase;letter-spacing:.45px;margin-bottom:8px">Post natal period</div>
+            <div class="form-group"><label class="fl">Eventful / Uneventful</label><select id="obg-obs-postnatal"><option value="">Select</option><option>Uneventful</option><option>Eventful</option></select></div>
+            <div class="form-group"><label class="fl">Postnatal Description</label><input type="text" id="obg-obs-postnatal-note" placeholder="Description"></div>
+            <div class="form-group"><label class="fl">Re-occurrence of menstrual cycle</label><input type="text" id="obg-obs-menstrual-return" placeholder="Description"></div>
+            <div class="form-group"><label class="fl">Birth controlling method</label><select id="obg-obs-birth-control"><option value="">Select</option><option>Barrier</option><option>POP</option><option>COCP</option><option>Copper T</option><option>Interval tubal ligation</option><option>Lactational amenorrhea</option><option>None</option></select></div>
+            <div class="form-group"><label class="fl">Birth control Description</label><input type="text" id="obg-obs-birth-control-note" placeholder="Description"></div>
+          </div>
+          <div style="background:#fff;border:1px solid var(--g5);border-radius:12px;padding:12px">
+            <div style="font-size:11px;font-weight:900;color:var(--blue);text-transform:uppercase;letter-spacing:.45px;margin-bottom:8px">Baby details</div>
+            <div class="fg" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:10px">
+              <div class="form-group"><label class="fl">Gender</label><select id="obg-obs-gender"><option value="">Select</option><option>Male</option><option>Female</option><option>Ambiguous</option></select></div>
+              <div class="form-group"><label class="fl">Birth Weight (Kg)</label><input type="number" step="0.01" id="obg-obs-birth-weight" placeholder="0"></div>
+              <div class="form-group"><label class="fl">Duration of Labour</label><input type="text" id="obg-obs-labour-duration" placeholder="e.g. 8 hours"></div>
+              <div class="form-group"><label class="fl">Date of delivery</label><input type="date" id="obg-obs-delivery-date"></div>
+              <div class="form-group"><label class="fl">Time of delivery</label><input type="time" id="obg-obs-delivery-time"></div>
+              <div class="form-group"><label class="fl">Present Age</label><input type="text" id="obg-obs-present-age" placeholder="Description"></div>
+              <div class="form-group"><label class="fl">Location of delivery</label><input type="text" id="obg-obs-delivery-location" placeholder="Hospital / home"></div>
+              <div class="form-group"><label class="fl">Mark (if any)</label><input type="text" id="obg-obs-mark" placeholder="Description"></div>
+              <div class="form-group"><label class="fl">Cry</label><select id="obg-obs-cry"><option value="">Select</option><option>Immediate</option><option>Delayed</option><option>Absent</option></select></div>
+              <div class="form-group"><label class="fl">APGAR Score</label><input type="text" id="obg-obs-apgar" placeholder="e.g. 8/9"></div>
+              <div class="form-group"><label class="fl">NICU Notes</label><select id="obg-obs-nicu"><option value="">Select</option><option>No NICU stay</option><option>Observation</option><option>Respiratory support</option><option>Sepsis workup</option><option>Phototherapy</option></select></div>
+              <div class="form-group"><label class="fl">NICU Description</label><input type="text" id="obg-obs-nicu-note" placeholder="Description"></div>
+              <div class="form-group"><label class="fl">Phototherapy</label><select id="obg-obs-phototherapy"><option value="">Select</option><option>No</option><option>Yes</option></select></div>
+              <div class="form-group"><label class="fl">Phototherapy Description</label><input type="text" id="obg-obs-phototherapy-note" placeholder="Description"></div>
+              <div class="form-group full"><label class="fl">Problems After Pregnancy</label><textarea id="obg-obs-post-preg-problems" placeholder="Feeding problems | illness | drugs | psychosocial"></textarea></div>
+              <div class="form-group"><label class="fl">Breast feed alone</label><input type="text" id="obg-obs-breastfeed" placeholder="Description"></div>
+              <div class="form-group"><label class="fl">Top feed alone</label><input type="text" id="obg-obs-topfeed" placeholder="Description"></div>
+            </div>
+          </div>
         </div>
       </div>
         </div>
@@ -3570,7 +3672,7 @@
   <!-- PATIENT SEARCH -->
   <div class="tab-content" id="rep-patient">
     <div class="card" style="margin-bottom:14px">
-      <div class="card-hd"><div class="card-title">🔍 Patient Search</div></div>
+      <div class="card-hd"><div class="card-title">🔍 Patient Search</div><button class="btn btn-outline btn-sm" type="button" onclick="exportAllPatientDataCsv()">Export All Patients CSV</button></div>
       <div class="fg">
         <div class="form-group"><label class="fl">Name / BMSH ID / Mobile</label><input type="text" id="rep-pt-search" placeholder="Type to search…" oninput="searchReportPatients(this.value)"></div>
         <div class="form-group"><label class="fl">Date From</label><input type="date" id="rep-pt-from"></div>
