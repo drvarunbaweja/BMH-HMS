@@ -2997,7 +2997,13 @@ function openM(id){
   if(m)m.classList.add('open');
   if(id==='m-print-tpl')loadTplDocs();
   if(id==='m-consents')renderConsentModal();
-  if(id==='m-new-tpl')populateNewPackModal();
+  if(id==='m-new-tpl') {
+    if(!window._editingSurgeryPackId) {
+      resetSurgeryPackModalState && resetSurgeryPackModalState();
+      const nameEl = document.getElementById('new-pack-name'); if(nameEl) nameEl.value = '';
+    }
+    populateNewPackModal();
+  }
   if(id==='m-order-invest') {
     const modal = document.getElementById('m-order-invest');
     modal?.querySelectorAll('.ptabs .ptab').forEach((tab, idx) => tab.classList.toggle('active', idx === 0));
@@ -5211,8 +5217,16 @@ function renderCentresCharges(){
   </div>`;
 }
 function deleteCharge(name){
-  delete CENTRE_CHARGES.CHD[name]; delete CENTRE_CHARGES.RPR[name];
-  saveChargesToFirebase(); renderCentresCharges();
+  const label = 'Charge — ' + name;
+  if (CURRENT_USER?.isAdmin) {
+    delete CENTRE_CHARGES.CHD[name]; delete CENTRE_CHARGES.RPR[name];
+    const idx = CHARGES_DATA.findIndex(function (c) { return c.name === name; });
+    if (idx > -1) CHARGES_DATA.splice(idx, 1);
+    saveChargesToFirebase(); renderCentresCharges(); renderChargesList && renderChargesList();
+    showToast('Charge deleted ✓', 's');
+  } else {
+    requestDeletion('charge', name, label);
+  }
 }
 function addNewCharge(){
   const n=document.getElementById('new-charge-name')?.value?.trim();
@@ -5485,16 +5499,21 @@ function deleteOTCase(id) {
   const idx = OT_CASES.findIndex(function (c) { return c.id === id; });
   if (idx < 0) { showToast('OT case not found', 'w'); return; }
   const c = normalizeOTCaseRecord(OT_CASES[idx]);
-  if (!confirm('Remove ' + (c.patient || 'this patient') + ' from OT list?')) return;
-  OT_CASES.splice(idx, 1);
-  if (activeOTCase && activeOTCase.id === id) activeOTCase = null;
-  fbRemove('otCases/' + id).catch(function (e) { console.warn('OT delete error:', e); });
-  renderOTListSafe && renderOTListSafe();
-  const detail = document.getElementById('ot-case-detail');
-  if (detail) {
-    detail.innerHTML = '<div style="padding:18px;text-align:center;color:var(--g2);font-size:12px">Select an OT case to view details</div>';
+  const label = 'OT case — ' + (c.patient || 'Patient') + ' · ' + (c.procedure || 'Procedure');
+  if (CURRENT_USER?.isAdmin) {
+    if (!confirm('Remove ' + (c.patient || 'this patient') + ' from OT list?')) return;
+    OT_CASES.splice(idx, 1);
+    if (activeOTCase && activeOTCase.id === id) activeOTCase = null;
+    fbRemove('otCases/' + id).catch(function (e) { console.warn('OT delete error:', e); });
+    renderOTListSafe && renderOTListSafe();
+    const detail = document.getElementById('ot-case-detail');
+    if (detail) {
+      detail.innerHTML = '<div style="padding:18px;text-align:center;color:var(--g2);font-size:12px">Select an OT case to view details</div>';
+    }
+    showToast('Removed from OT list ✓', 's');
+  } else {
+    requestDeletion('otCase', id, label);
   }
-  showToast('Removed from OT list ✓', 's');
 }
 function setCurrentPatientByBmhId(bmhId) {
   const p = PATIENTS.find(function (row) { return row.bmhId === bmhId; });
@@ -5547,27 +5566,32 @@ function otActionIconsHtml(caseId) {
 function removePatientFromQueue(bmhId) {
   const p = PATIENTS.find(function (x) { return x.bmhId === bmhId; });
   if (!p) { showToast('Patient not found in queue', 'w'); return; }
-  if (!confirm('Remove ' + (p.name || 'this patient') + ' from today\'s queue?')) return;
-  p.status = 'removed';
-  p.queueRemoved = true;
-  p.queueRemovedAt = Date.now();
-  p.queueRemovedBy = CURRENT_USER?.name || 'System';
-  p.preRegistered = false;
-  p.dilated = false;
-  p.seen = false;
-  fbUpdate && fbUpdate('patients/' + bmhId, {
-    status: 'removed',
-    queueRemoved: true,
-    queueRemovedAt: p.queueRemovedAt,
-    queueRemovedBy: p.queueRemovedBy,
-    preRegistered: false,
-    dilated: false,
-    seen: false
-  }).catch(function (e) { console.warn('Queue remove error:', e); });
-  renderDocQueue && renderDocQueue();
-  renderReceptionPage && renderReceptionPage();
-  renderDashboard && renderDashboard();
-  showToast('Removed from queue ✓', 's');
+  const label = 'Queue patient — ' + (p.name || bmhId) + ' · ' + bmhId;
+  if (CURRENT_USER?.isAdmin) {
+    if (!confirm('Remove ' + (p.name || 'this patient') + ' from today\'s queue?')) return;
+    p.status = 'removed';
+    p.queueRemoved = true;
+    p.queueRemovedAt = Date.now();
+    p.queueRemovedBy = CURRENT_USER?.name || 'System';
+    p.preRegistered = false;
+    p.dilated = false;
+    p.seen = false;
+    fbUpdate && fbUpdate('patients/' + bmhId, {
+      status: 'removed',
+      queueRemoved: true,
+      queueRemovedAt: p.queueRemovedAt,
+      queueRemovedBy: p.queueRemovedBy,
+      preRegistered: false,
+      dilated: false,
+      seen: false
+    }).catch(function (e) { console.warn('Queue remove error:', e); });
+    renderDocQueue && renderDocQueue();
+    renderReceptionPage && renderReceptionPage();
+    renderDashboard && renderDashboard();
+    showToast('Removed from queue ✓', 's');
+  } else {
+    requestDeletion('queuePatient', bmhId, label);
+  }
 }
 
 // ── Confirm IPD Admission ──────────────────────────
@@ -8216,6 +8240,13 @@ function populateNewPackModal() {
     + block('Discharge document', specialRows)
     + (!builtIn && !libRows && !tplRows && !uploadedRows ? '<div style="padding:10px;background:var(--g6);border-radius:8px;font-size:11px;color:var(--g1)">No saved items found for this department yet.</div>' : '');
 }
+function resetSurgeryPackModalState() {
+  window._editingSurgeryPackId = '';
+  const title = document.getElementById('surgery-pack-modal-title');
+  const saveBtn = document.getElementById('surgery-pack-save-btn');
+  if (title) title.textContent = 'Create surgery document pack';
+  if (saveBtn) saveBtn.textContent = '💾 Save pack';
+}
 function saveSurgeryPackFromModal() {
   const name = document.getElementById('new-pack-name')?.value?.trim();
   const deptSel = document.getElementById('new-pack-dept');
@@ -8224,45 +8255,72 @@ function saveSurgeryPackFromModal() {
   const boxes = document.querySelectorAll('#new-tpl-docs input[name="new-pack-doc"]:checked');
   const documentKeys = Array.from(boxes).map(function (b) { return b.value; });
   if (!documentKeys.length) { showToast('Select at least one document', 'w'); return; }
-  const id = 'custom-' + Date.now();
   const custom = loadCustomSurgeryPacks();
-  custom.push({ id: id, dept: deptLabel, icon: '📦', label: name, desc: 'Custom document pack', color: 'var(--bmh-blue)', documentKeys: documentKeys, consentKeys: documentKeys });
+  const editId = window._editingSurgeryPackId || '';
+  if (editId) {
+    const idx = custom.findIndex(function (p) { return p.id === editId; });
+    if (idx >= 0) {
+      custom[idx] = Object.assign({}, custom[idx], { dept: deptLabel, label: name, documentKeys: documentKeys, consentKeys: documentKeys });
+    } else {
+      SURGERY_PACK_OVERRIDES[editId] = Object.assign({}, SURGERY_PACK_OVERRIDES[editId] || {}, { dept: deptLabel, label: name, documentKeys: documentKeys, consentKeys: documentKeys, hidden: false });
+      saveSurgeryPackOverrides();
+    }
+  } else {
+    const id = 'custom-' + Date.now();
+    custom.push({ id: id, dept: deptLabel, icon: '📦', label: name, desc: 'Custom document pack', color: 'var(--bmh-blue)', documentKeys: documentKeys, consentKeys: documentKeys });
+  }
   saveCustomSurgeryPacks(custom);
   closeM('m-new-tpl');
+  resetSurgeryPackModalState();
   renderSetPacksList();
-  populateReceptionSurgeryPackSelect(id);
-  showToast('Pack saved — you can print it from the list ✓', 's');
+  populateReceptionSurgeryPackSelect(editId || '');
+  showToast(editId ? 'Pack updated ✓' : 'Pack saved — you can print it from the list ✓', 's');
 }
 function editSurgeryPack(id) {
   const packs = getAllSurgeryPacks();
   const pack = packs.find(function (p) { return p.id === id; });
   if (!pack) return;
-  const name = prompt('Edit pack name', pack.label || '');
-  if (name === null) return;
-  if (String(pack.id || '').startsWith('custom-')) {
-    const custom = loadCustomSurgeryPacks();
-    const idx = custom.findIndex(function (p) { return p.id === id; });
-    if (idx < 0) return;
-    custom[idx].label = name.trim() || custom[idx].label;
-    saveCustomSurgeryPacks(custom);
-  } else {
-    SURGERY_PACK_OVERRIDES[id] = Object.assign({}, SURGERY_PACK_OVERRIDES[id] || {}, { label: name.trim() || pack.label, hidden: false });
-    saveSurgeryPackOverrides();
+  window._editingSurgeryPackId = id;
+  const title = document.getElementById('surgery-pack-modal-title');
+  const saveBtn = document.getElementById('surgery-pack-save-btn');
+  if (title) title.textContent = 'Edit surgery document pack';
+  if (saveBtn) saveBtn.textContent = '💾 Update pack';
+  const nameEl = document.getElementById('new-pack-name');
+  if (nameEl) nameEl.value = pack.label || '';
+  const deptEl = document.getElementById('new-pack-dept');
+  if (deptEl) {
+    const target = String(pack.dept || 'General');
+    const option = [].slice.call(deptEl.options).find(function (o) {
+      return o.text === target || surgeryPackDeptLabelToKey(o.text) === surgeryPackDeptLabelToKey(target);
+    });
+    if (option) deptEl.value = option.value;
   }
-  renderSetPacksList();
-  showToast('Pack updated ✓', 's');
+  populateNewPackModal();
+  setTimeout(function () {
+    const keys = new Set(pack.documentKeys || pack.consentKeys || []);
+    document.querySelectorAll('#new-tpl-docs input[name="new-pack-doc"]').forEach(function (box) {
+      box.checked = keys.has(box.value);
+    });
+  }, 0);
+  openM('m-new-tpl');
 }
 function deleteSurgeryPack(id) {
-  if (!confirm('Delete / hide this surgery pack?')) return;
-  if (String(id).startsWith('custom-')) {
-    const next = loadCustomSurgeryPacks().filter(function (p) { return p.id !== id; });
-    saveCustomSurgeryPacks(next);
+  const pack = getAllSurgeryPacks().find(function (p) { return p.id === id; });
+  const label = 'Surgery pack — ' + (pack?.label || id);
+  if (CURRENT_USER?.isAdmin) {
+    if (!confirm('Delete / hide this surgery pack?')) return;
+    if (String(id).startsWith('custom-')) {
+      const next = loadCustomSurgeryPacks().filter(function (p) { return p.id !== id; });
+      saveCustomSurgeryPacks(next);
+    } else {
+      SURGERY_PACK_OVERRIDES[id] = Object.assign({}, SURGERY_PACK_OVERRIDES[id] || {}, { hidden: true });
+      saveSurgeryPackOverrides();
+    }
+    renderSetPacksList();
+    showToast('Pack deleted ✓', 's');
   } else {
-    SURGERY_PACK_OVERRIDES[id] = Object.assign({}, SURGERY_PACK_OVERRIDES[id] || {}, { hidden: true });
-    saveSurgeryPackOverrides();
+    requestDeletion('surgeryPack', id, label);
   }
-  renderSetPacksList();
-  showToast('Pack deleted ✓', 's');
 }
 function printSurgeryPackWithKeys(keys, deptLabel) {
   if (!keys || !keys.length) { showToast('No documents selected', 'w'); return; }
@@ -8360,11 +8418,9 @@ function openSurgeryPackPrintModal(packOrDept) {
   };
   const packs = getAllSurgeryPacks();
   const pack = packs.find(function (p) { return p.id === packOrDept; });
-  const baseKeys = pack && pack.documentKeys && pack.documentKeys.length
+  const keys = pack && pack.documentKeys && pack.documentKeys.length
     ? pack.documentKeys.slice()
     : (fallbackDeptKeys[packOrDept] || []);
-  const autoDeptDocs = getAutoPackDepartmentDocuments(pack ? pack.dept : packOrDept);
-  const keys = mergeUniquePackDocumentKeys(baseKeys, autoDeptDocs);
   const deptLabel = pack
     ? (pack.label || pack.dept)
     : ({ ophtho: 'Ophthalmology', obg: 'OBG / Obstetrics', psych: 'Neuropsychiatry', skin: 'Skin & Cosmetology' }[packOrDept] || packOrDept);
@@ -8380,10 +8436,9 @@ function openSurgeryPackPrintModal(packOrDept) {
   } else {
     host.innerHTML = keys.map(function (k) {
       const title = getPackDocumentTitle(k);
-      const isAuto = autoDeptDocs.indexOf(k) !== -1 && baseKeys.indexOf(k) === -1;
       return '<label style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;font-size:12px;cursor:pointer;border-bottom:1px solid var(--g5)">'
         + '<input type="checkbox" name="sp-pack-k" value="' + String(k).replace(/"/g, '&quot;') + '" checked>'
-        + '<span>' + String(title).replace(/</g, '&lt;') + (isAuto ? ' <span style="font-size:9px;color:var(--g1)">(department saved)</span>' : '') + '</span></label>';
+        + '<span>' + String(title).replace(/</g, '&lt;') + '</span></label>';
     }).join('');
   }
   openM('m-sp-pack-print');
@@ -8739,9 +8794,9 @@ function otCaseCard(c, sno) {
   const priorityBadge = c.priority==='emergency'?'<span class="badge bd-red" style="font-size:9px">🚨 Emergency</span>':c.priority==='urgent'?'<span class="badge bd-orange" style="font-size:9px">⚡ Urgent</span>':'';
   const pack = resolveSurgeryPackForCase(c);
   const surgeryMeta = [
-    c.site && c.site !== 'N/A' ? '👁️ ' + c.site : '',
-    c.iolType && c.iolType !== '—' && c.iolType !== 'N/A' ? '🔬 ' + c.iolType : '',
-    c.iolPower && c.iolPower !== '—' ? '⚡ ' + c.iolPower : ''
+    c.site && c.site !== 'N/A' ? '<span style="font-size:12px;font-weight:900;color:#1A3C6E">👁️ ' + c.site + '</span>' : '',
+    c.iolType && c.iolType !== '—' && c.iolType !== 'N/A' ? '<span style="font-size:12px;font-weight:900;color:#8a4200">🔬 ' + c.iolType + '</span>' : '',
+    c.iolPower && c.iolPower !== '—' ? '<span style="font-size:12px;font-weight:900;color:#0B7B8C">⚡ ' + c.iolPower + '</span>' : ''
   ].filter(Boolean).join(' · ');
 
   return `<div style="background:${statusStyle.bg};border-radius:var(--r);padding:11px 13px;margin-bottom:8px;border:1.5px solid ${statusStyle.border};cursor:pointer;transition:all .2s" onclick="openOTCase('${c.id}')" onmouseenter="this.style.transform='translateY(-1px)'" onmouseleave="this.style.transform=''">
@@ -12168,6 +12223,36 @@ function approveDeleteRequest(reqId) {
       const i=PAY_REQUESTS.indexOf(r); if(i>-1) PAY_REQUESTS.splice(i,1);
       try{ if(window.firebase&&firebase.database) firebase.database().ref('payRequests/'+r.id).remove(); }catch(e){}
     });
+  } else if(req.type==='charge') {
+    delete CENTRE_CHARGES.CHD[req.itemId];
+    delete CENTRE_CHARGES.RPR[req.itemId];
+    const idx = CHARGES_DATA.findIndex(c => c.name === req.itemId);
+    if(idx>-1) CHARGES_DATA.splice(idx,1);
+    saveChargesToFirebase && saveChargesToFirebase();
+  } else if(req.type==='otCase') {
+    const idx = OT_CASES.findIndex(c => c.id === req.itemId);
+    if(idx>-1) OT_CASES.splice(idx,1);
+    try{ if(window.firebase&&firebase.database) firebase.database().ref('otCases/'+req.itemId).remove(); }catch(e){}
+  } else if(req.type==='queuePatient') {
+    const p = PATIENTS.find(x => x.bmhId === req.itemId);
+    if (p) {
+      p.status = 'removed';
+      p.queueRemoved = true;
+      p.queueRemovedAt = Date.now();
+      p.queueRemovedBy = CURRENT_USER?.name || 'Admin';
+      p.preRegistered = false;
+      p.dilated = false;
+      p.seen = false;
+    }
+    try{ if(window.firebase&&firebase.database) firebase.database().ref('patients/'+req.itemId).update({status:'removed',queueRemoved:true,queueRemovedAt:Date.now(),queueRemovedBy:CURRENT_USER?.name||'Admin',preRegistered:false,dilated:false,seen:false}); }catch(e){}
+  } else if(req.type==='surgeryPack') {
+    if (String(req.itemId).startsWith('custom-')) {
+      const next = loadCustomSurgeryPacks().filter(function (p) { return p.id !== req.itemId; });
+      saveCustomSurgeryPacks(next);
+    } else {
+      SURGERY_PACK_OVERRIDES[req.itemId] = Object.assign({}, SURGERY_PACK_OVERRIDES[req.itemId] || {}, { hidden: true });
+      saveSurgeryPackOverrides();
+    }
   }
 
   req.status='approved'; req.approvedBy=CURRENT_USER?.name||'Admin'; req.approvedAt=new Date().toISOString();
@@ -12177,7 +12262,7 @@ function approveDeleteRequest(reqId) {
   const pi=PENDING_DELETE_REQUESTS.indexOf(req); if(pi>-1) PENDING_DELETE_REQUESTS.splice(pi,1);
   showToast('✅ Deletion approved — record permanently removed','s');
   renderDeletionRequests(); updateDelReqBadge();
-  renderCollectionDashboard&&renderCollectionDashboard(); renderReceptionPage&&renderReceptionPage();
+  renderCollectionDashboard&&renderCollectionDashboard(); renderReceptionPage&&renderReceptionPage(); renderOTListSafe&&renderOTListSafe(); renderChargesList&&renderChargesList(); renderCentresCharges&&renderCentresCharges(); renderSetPacksList&&renderSetPacksList(); renderDocQueue&&renderDocQueue();
 }
 
 function rejectDeleteRequest(reqId) {
@@ -14784,7 +14869,9 @@ function renderOTList() {
     }).catch(()=>{});
   }
 
-  const dateFilter = document.getElementById('ot-date-inp')?.value || '';
+  const dateInp = document.getElementById('ot-date-inp');
+  if (dateInp && !dateInp.value) dateInp.value = new Date().toISOString().slice(0,10);
+  const dateFilter = dateInp?.value || '';
   const surgeonFilter = document.getElementById('ot-surgeon-sel')?.value || '';
   OT_CASES.forEach(function (c, idx) { OT_CASES[idx] = normalizeOTCaseRecord(c); });
   let cases = OT_CASES.filter(c => centreMatch(c));
@@ -14816,6 +14903,33 @@ function renderOTList() {
     const el = document.getElementById('ot-list'); if(!el) return;
     el.innerHTML = cases.length ? cases.map(buildCard).join('') : emptyHTML;
   }
+}
+function getVisibleOTCases() {
+  const dateInp = document.getElementById('ot-date-inp');
+  const dateFilter = dateInp?.value || new Date().toISOString().slice(0,10);
+  const surgeonFilter = document.getElementById('ot-surgeon-sel')?.value || '';
+  return OT_CASES.map(normalizeOTCaseRecord)
+    .filter(c => centreMatch(c))
+    .filter(c => !dateFilter || (c.date || c.scheduledDate || '') === dateFilter)
+    .filter(c => !surgeonFilter || surgeonFilter === 'All Surgeons' || c.surgeon === surgeonFilter);
+}
+function printOTCompactList() {
+  const cases = getVisibleOTCases();
+  if (!cases.length) { showToast('No OT cases to print', 'w'); return; }
+  const dateText = formatDateIN(document.getElementById('ot-date-inp')?.value || new Date().toISOString().slice(0,10));
+  const rows = cases.map(function (c, i) {
+    return '<tr>'
+      + '<td style="border:1px solid #d7dce5;padding:5px 6px;font-size:10px">' + (i + 1) + '</td>'
+      + '<td style="border:1px solid #d7dce5;padding:5px 6px;font-size:10px;font-weight:700">' + escapeHtmlConsent(c.patient || '—') + '</td>'
+      + '<td style="border:1px solid #d7dce5;padding:5px 6px;font-size:10px">' + escapeHtmlConsent(String(c.age || '—') + ' / ' + String(c.sex || '—')) + '</td>'
+      + '<td style="border:1px solid #d7dce5;padding:5px 6px;font-size:10px;font-weight:900;color:#1A3C6E">' + escapeHtmlConsent(c.site || '—') + '</td>'
+      + '<td style="border:1px solid #d7dce5;padding:5px 6px;font-size:10px;font-weight:900;color:#8a4200">' + escapeHtmlConsent(c.iolType || c.iol || '—') + '</td>'
+      + '<td style="border:1px solid #d7dce5;padding:5px 6px;font-size:10px;font-weight:900;color:#0B7B8C">' + escapeHtmlConsent(c.iolPower || '—') + '</td>'
+      + '</tr>';
+  }).join('');
+  const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;padding:10mm;color:#111}table{width:100%;border-collapse:collapse}th{background:#eef3fb;color:#1A3C6E;font-size:10px;font-weight:900;padding:6px;border:1px solid #d7dce5;text-transform:uppercase}td{vertical-align:top}@page{size:A4 portrait;margin:8mm}</style></head><body><div style="font-size:16px;font-weight:900;color:#1A3C6E;margin-bottom:8px">OT List</div><div style="font-size:11px;margin-bottom:10px">Date: ' + escapeHtmlConsent(dateText) + '</div><table><thead><tr><th>#</th><th>Patient</th><th>Age / Sex</th><th>Eye</th><th>IOL</th><th>Power</th></tr></thead><tbody>' + rows + '</tbody></table></body></html>';
+  safePrint(html);
+  showToast('OT list ready to print ✓', 's');
 }
 
 // ── updIOP — live update right panel ─────────────
@@ -15244,6 +15358,8 @@ function saveVisit(dept) {
   if(!bmhId || bmhId === '—') {
     showToast('No patient selected — open a patient first','w'); return;
   }
+  try {
+  showToast('Saving visit…', 'i');
   const now = new Date();
   const visitKey = 'V' + now.getTime();
   const visit = {
@@ -15465,8 +15581,13 @@ function saveVisit(dept) {
       renderCurrentPatientInvestigationUploads && renderCurrentPatientInvestigationUploads(Array.isArray(visit.investigations) ? visit.investigations : []);
       renderOphthoRecap && renderOphthoRecap();
       renderSkinRail && renderSkinRail();
+      document.dispatchEvent(new CustomEvent('bmh:patientsUpdated'));
     })
     .catch(e => showToast('Save failed: ' + e.message, 'w'));
+  } catch (e) {
+    console.error('saveVisit error', e);
+    showToast('Save failed: ' + e.message, 'w');
+  }
 }
 
 function loadPastVisits(bmhId, dept) {
