@@ -69,6 +69,9 @@ const USER_DB = {
   ['reception.rpr', 'reception.rpr@bawejahospital.com'],
   ['reception.chd', 'reception.chd@bawejahospital.com'],
   ['opto.rpr', 'opto.rpr@bawejahospital.com'],
+  ['opto,rpr', 'opto.rpr@bawejahospital.com'],
+  ['drtarun.rpr', 'drtarun.rpr@bawejahospital.com'],
+  ['drpooja.rpr', 'drpooja.rpr@bawejahospital.com'],
   ['lab.rpr', 'lab.rpr@bawejahospital.com'],
   ['lab.chd', 'lab.chd@bawejahospital.com'],
   ['tpa.rpr', 'tpa.rpr@bawejahospital.com'],
@@ -86,12 +89,12 @@ const USER_DB = {
   'drgeeta','rec_chd','rec_rpr','reception.chd','reception.rpr','lab_chd','lab_rpr','lab.chd','lab.rpr',
   'tpa_chd','tpa_rpr','tpa.chd','tpa.rpr','inv_chd','inv_rpr','inventory.chd','inventory.rpr',
   'optometrist','opto_rpr','opto.rpr','drvarun_chd','drvarun_rpr','drvarun@bawejahospital.com','drbaweja@bawejahospital.com',
-  'drtarun.chd@bawejahospital.com','drtarun.rpr@bawejahospital.com','drtarun@bawejahospital.com',
+  'drtarun.rpr','drtarun.chd@bawejahospital.com','drtarun.rpr@bawejahospital.com','drtarun@bawejahospital.com',
   'drgeeta@bawejahospital.com','drnamrata.chd@bawejahospital.com','drnamrata.rpr@bawejahospital.com','drnamrata@bawejahospital.com',
-  'drpooja.chd@bawejahospital.com','drpooja.rpr@bawejahospital.com','drpooja@bawejahospital.com',
+  'drpooja.rpr','drpooja.chd@bawejahospital.com','drpooja.rpr@bawejahospital.com','drpooja@bawejahospital.com',
   'reception.chd@bawejahospital.com','reception.rpr@bawejahospital.com','lab.chd@bawejahospital.com','lab.rpr@bawejahospital.com',
   'tpa.chd@bawejahospital.com','tpa.rpr@bawejahospital.com','inventory.chd@bawejahospital.com','inventory.rpr@bawejahospital.com',
-  'optometrist@bawejahospital.com','opto.rpr@bawejahospital.com'
+  'optometrist@bawejahospital.com','opto.rpr@bawejahospital.com','opto,rpr'
 ].forEach(function (uname) {
   if (USER_DB[uname]) USER_DB[uname].defaultPw = 'ChangeMe@123';
 });
@@ -12098,7 +12101,9 @@ function activateUserSession(user, profile, opts) {
   const uname = String(user || '').toLowerCase();
   if (uname === 'rec_rpr' || uname === 'reception.rpr' || uname === 'reception.rpr@bawejahospital.com') profile = Object.assign({}, profile, { centre: 'RPR', name: 'Reception Ropar' });
   if (uname === 'rec_chd' || uname === 'reception.chd' || uname === 'reception.chd@bawejahospital.com') profile = Object.assign({}, profile, { centre: 'CHD', name: 'Reception CHD' });
-  if (uname === 'optometrist' || uname === 'opto_rpr' || uname === 'opto.rpr' || uname === 'optometrist@bawejahospital.com' || uname === 'opto.rpr@bawejahospital.com') profile = Object.assign({}, profile, { centre: 'RPR', name: 'Optometrist RPR' });
+  if (uname === 'optometrist' || uname === 'opto_rpr' || uname === 'opto.rpr' || uname === 'opto,rpr' || uname === 'optometrist@bawejahospital.com' || uname === 'opto.rpr@bawejahospital.com') profile = Object.assign({}, profile, { centre: 'RPR', name: 'Optometrist RPR' });
+  if (uname === 'drtarun' || uname === 'drtarun.rpr' || uname === 'drtarun@bawejahospital.com' || uname === 'drtarun.rpr@bawejahospital.com') profile = Object.assign({}, profile, { centre: 'RPR', name: 'Dr. Tarun Baweja', dept: 'Neuropsychiatry' });
+  if (uname === 'drpooja' || uname === 'drpooja.rpr' || uname === 'drpooja@bawejahospital.com' || uname === 'drpooja.rpr@bawejahospital.com') profile = Object.assign({}, profile, { centre: 'RPR', name: 'Dr. Pooja Baweja', dept: 'Skin' });
   if (uname === 'lab.chd@bawejahospital.com') profile = Object.assign({}, profile, { centre: 'CHD', name: 'Lab Tech CHD' });
   if (uname === 'lab.rpr@bawejahospital.com') profile = Object.assign({}, profile, { centre: 'RPR', name: 'Lab Tech Ropar' });
   if (uname === 'tpa.chd@bawejahospital.com') profile = Object.assign({}, profile, { centre: 'CHD', name: 'TPA Executive CHD' });
