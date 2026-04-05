@@ -3310,6 +3310,35 @@ function initObgSelects() {
 function obgChecked(id) {
   return !!document.getElementById(id)?.checked;
 }
+const OBG_OBS_FIELD_IDS = [
+  'obg-obs-lmp','obg-obs-edd-date','obg-obs-ga-date','obg-obs-edd-usg','obg-obs-ga-usg',
+  'obg-obs-menstrual','obg-obs-blood-group','obg-obs-husband-bg','obg-obs-rbs','obg-obs-tsh','obg-obs-gtt',
+  'obg-obs-hiv','obg-obs-hiv-date','obg-obs-hbsag','obg-obs-hbsag-date','obg-obs-hcv','obg-obs-hcv-date',
+  'obg-obs-hplc','obg-obs-hplc-date','obg-obs-vdrl','obg-obs-vdrl-date','obg-obs-genetic','obg-obs-genetic-date',
+  'obg-obs-genetic-result','obg-obs-genetic-note','obg-vax-1-name','obg-vax-1-date','obg-vax-1-status','obg-vax-1-brand','obg-vax-1-batch',
+  'obg-vax-2-name','obg-vax-2-date','obg-vax-2-status','obg-vax-2-brand','obg-vax-2-batch','obg-vax-3-name','obg-vax-3-date','obg-vax-3-status',
+  'obg-vax-3-brand','obg-vax-3-batch','obg-obs-conception','obg-obs-complication-note','obg-obs-preg-outcome','obg-obs-maturity',
+  'obg-obs-gestation-age','obg-obs-mode-delivery','obg-obs-induction','obg-obs-induction-note','obg-obs-liquor','obg-obs-liquor-note',
+  'obg-obs-cord-neck','obg-obs-cord-neck-note','obg-obs-cord-clamp','obg-obs-cord-clamp-note','obg-obs-placenta','obg-obs-placenta-note',
+  'obg-obs-pph','obg-obs-pph-note','obg-obs-postnatal','obg-obs-postnatal-note','obg-obs-menstrual-return','obg-obs-birth-control',
+  'obg-obs-birth-control-note','obg-obs-gender','obg-obs-birth-weight','obg-obs-labour-duration','obg-obs-delivery-date','obg-obs-delivery-time',
+  'obg-obs-present-age','obg-obs-delivery-location','obg-obs-mark','obg-obs-cry','obg-obs-apgar','obg-obs-nicu','obg-obs-nicu-note',
+  'obg-obs-phototherapy','obg-obs-phototherapy-note','obg-obs-post-preg-problems','obg-obs-breastfeed','obg-obs-topfeed'
+];
+function shouldShowObgObstetricHistory(savedData) {
+  const tabData = savedData || window.CURRENT_PATIENT?.lastVisit || {};
+  return !!(tabData.obstetricHistoryEnabled || tabData.workflowAnc);
+}
+function updateObgObstetricHistoryTab(forceVisible) {
+  const btn = document.getElementById('obg-tab-obs-history');
+  if(!btn) return;
+  const visible = typeof forceVisible === 'boolean' ? forceVisible : shouldShowObgObstetricHistory();
+  btn.style.display = visible ? '' : 'none';
+  if(!visible && document.getElementById('obg-delivery')?.classList.contains('active')) {
+    const defaultTab = document.querySelector('#pg-obg .ptab[onclick*="obg-basic"]');
+    if(defaultTab) ptab(defaultTab, 'obg-basic');
+  }
+}
 function toggleObgGuidedSections() {
   const mapping = {
     'obg-anc-warning':'obg-anc-guided-warning',
@@ -3334,6 +3363,7 @@ function toggleObgWorkflow() {
   if(ancPanel) ancPanel.style.display = anc ? '' : 'none';
   if(gynPanel) gynPanel.style.display = gyn ? '' : 'none';
   if(infPanel) infPanel.style.display = inf ? '' : 'none';
+  updateObgObstetricHistoryTab(shouldShowObgObstetricHistory());
   toggleObgGuidedSections();
   updateObgComputedFields();
 }
@@ -3669,14 +3699,22 @@ function populateObgForm(visit) {
     const el = document.getElementById(id);
     if(el && data[key] != null) el.value = data[key];
   });
+  OBG_OBS_FIELD_IDS.forEach(id => {
+    const el = document.getElementById(id);
+    if(el && data[id] != null) el.value = data[id];
+  });
   const ancChk = document.getElementById('obg-track-anc'); if(ancChk) ancChk.checked = data.workflowAnc !== false;
   const gynChk = document.getElementById('obg-track-gynae'); if(gynChk) gynChk.checked = data.workflowGynae !== false;
   const infChk = document.getElementById('obg-track-infertility'); if(infChk) infChk.checked = !!data.workflowInfertility;
   ['obg-anc-booking','obg-anc-warning','obg-anc-highrisk','obg-anc-fetal','obg-gyn-aub','obg-gyn-discharge','obg-gyn-pain','obg-gyn-menopause','obg-inf-ovulatory','obg-inf-tubal','obg-inf-endo','obg-inf-male','obg-redflag-bleeding','obg-redflag-leak','obg-redflag-headache','obg-redflag-pain','obg-redflag-fever','obg-redflag-decreasedfm','obg-redflag-swelling','obg-redflag-convulsions','obg-hr-prevlscs','obg-hr-gdm','obg-hr-pih','obg-hr-iugr','obg-hr-multiple','obg-hr-rhneg','obg-hr-placenta','obg-hr-anemia','obg-fetal-growthlag','obg-fetal-malpresentation','obg-fetal-lowliquor','obg-fetal-postdates','obg-aub-clots','obg-aub-intermenstrual','obg-aub-postcoital','obg-aub-anemia','obg-vag-pruritus','obg-vag-foul','obg-vag-dyspareunia','obg-vag-pidrisk','obg-pain-cyclical','obg-pain-severe','obg-pain-bowel','obg-pain-infertility','obg-inf-coital','obg-inf-pastpid','obg-inf-priorsurgery','obg-inf-galactorrhoea','obg-inf-hirsutism','obg-inf-maleabn','obg-inf-lowreserve','obg-inf-rpl']
     .forEach(id => { const el = document.getElementById(id); if(el && data[id] != null) el.checked = !!data[id]; });
+  document.querySelectorAll('.obg-obs-complication').forEach(box => {
+    box.checked = Array.isArray(data.obgObsComplications) ? data.obgObsComplications.includes(box.value) : false;
+  });
   const labs = Array.isArray(data.investigationChecklist) ? data.investigationChecklist : [];
   document.querySelectorAll('.obg-lab').forEach(box => { box.checked = labs.includes(box.value); });
   toggleObgWorkflow();
+  updateObgObstetricHistoryTab(!!(data.obstetricHistoryEnabled || data.workflowAnc));
   updateObgComputedFields();
 }
 function addANCVisit(){
@@ -4984,6 +5022,48 @@ function bmhExportLedgerCsv() {
   a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
   a.download = 'bmh-daybook.csv';
   a.click();
+}
+function exportAllPatientDataCsv() {
+  const buildAndDownload = (patientMapOrList) => {
+    const source = Array.isArray(patientMapOrList) ? patientMapOrList : Object.values(patientMapOrList || {});
+    const rows = [[
+      'BMSH ID','Name','Age','Sex','Mobile','Department','Doctor','Centre','Status','Registration Date',
+      'Referred By','Referral Mobile','Balance','Last Visit Date','Last Visit Dept','Last Diagnosis','Last Notes'
+    ]];
+    source.slice().sort((a,b) => String(a?.name || '').localeCompare(String(b?.name || ''))).forEach(p => {
+      const lv = p?.lastVisit || {};
+      rows.push([
+        p?.bmhId || '',
+        p?.name || '',
+        p?.age || '',
+        p?.sex || '',
+        p?.mobile || p?.mob || '',
+        p?.dept || p?.department || '',
+        p?.doctor || lv?.doctor || '',
+        p?.centre || '',
+        p?.status || '',
+        p?.date || p?.createdAt || '',
+        p?.referredBy || p?.refName || '',
+        p?.refMobile || '',
+        Number(p?.balance || 0),
+        lv?.date || p?.lastVisitDate || '',
+        p?.lastDeptVisit || lv?.dept || '',
+        p?.dx || lv?.dx || '',
+        lv?.notes || ''
+      ]);
+    });
+    const csv = rows.map(r => r.map(x => '"' + String(x == null ? '' : x).replace(/"/g, '""') + '"').join(',')).join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+    a.download = `bmh-all-patients-${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    showToast(`Exported ${Math.max(0, rows.length - 1)} patients to CSV`, 's');
+  };
+  if(typeof fbOnce === 'function') {
+    fbOnce('patients').then(allPts => buildAndDownload(allPts)).catch(() => buildAndDownload(PATIENTS || []));
+  } else {
+    buildAndDownload(PATIENTS || []);
+  }
 }
 function bmhRenderBillingVendorSummary() {
   const el = document.getElementById('bmh-bill-vendor-summary'); if (!el) return;
@@ -15817,6 +15897,7 @@ function saveVisit(dept) {
     visit.workflowAnc = !!document.getElementById('obg-track-anc')?.checked;
     visit.workflowGynae = !!document.getElementById('obg-track-gynae')?.checked;
     visit.workflowInfertility = !!document.getElementById('obg-track-infertility')?.checked;
+    visit.obstetricHistoryEnabled = !!visit.workflowAnc;
     visit.bloodGroup = obgVal('obg-blood-grp');
     visit.riskTag = obgVal('obg-risk');
     visit.mainComplaint = obgVal('obg-main-complaint');
@@ -15859,6 +15940,8 @@ function saveVisit(dept) {
     visit.nextReview = obgVal('obg-next-review');
     visit.followupPlan = obgVal('obg-followup-plan');
     visit.investigationChecklist = [...document.querySelectorAll('.obg-lab:checked')].map(x => x.value);
+    OBG_OBS_FIELD_IDS.forEach(id => { visit[id] = obgVal(id); });
+    visit.obgObsComplications = [...document.querySelectorAll('.obg-obs-complication:checked')].map(x => x.value);
     obgCheckboxIds.forEach(id => { visit[id] = obgChecked(id); });
     const obgGuidance = computeObgGuidance();
     visit.presumptiveDx = obgGuidance.diagnoses;
@@ -15919,6 +16002,7 @@ function saveVisit(dept) {
   ])
     .then(() => {
       showToast(`✅ ${ptName} — visit saved (${visit.dateLabel})`, 's');
+      if(dept === 'obg') updateObgObstetricHistoryTab(!!visit.obstetricHistoryEnabled);
       if(typeof loadPastVisits === 'function') loadPastVisits(bmhId, dept);
       renderCurrentPatientInvestigationUploads && renderCurrentPatientInvestigationUploads(Array.isArray(visit.investigations) ? visit.investigations : []);
       renderOphthoRecap && renderOphthoRecap();
