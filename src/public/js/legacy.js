@@ -662,6 +662,14 @@ const CONSENT_LIBRARY = [
    body:`Vitals, bleeding, abdominal pain, urine output, recovery from sedation, antibiotics / analgesia, and discharge counselling reviewed.\n\nContraception counselling, danger signs, and follow-up date provided.`},
   {id:'obg-newborn-sheet',dept:'obg',name:'Newborn / Vaccination Sheet',icon:'👶',docType:'form',
    body:`Baby sex, birth weight, APGAR, cry, feeding initiation, vitamin K / vaccines given, NICU need, jaundice watch, and discharge advice documented.\n\nBCG, OPV, Hepatitis B as per birth-dose schedule to be ticked before discharge where applicable.`},
+  {id:'obg-lscs-discharge',dept:'obg',name:'LSCS Discharge Summary & Orders',icon:'🏠',docType:'form',
+   body:`Diagnosis / indication for LSCS:\nProcedure performed:\nMother condition at discharge:\nBaby condition at discharge:\n\nWound care, lochia, breastfeeding, diet, mobilisation, analgesics / antibiotics / supplements, and emergency warning signs explained.\n\nFollow-up: 48 hours, 7 days, 6 weeks or as advised.`},
+  {id:'obg-labour-discharge',dept:'obg',name:'Normal Delivery Discharge Summary',icon:'🏠',docType:'form',
+   body:`Mode of delivery:\nPerineal / postpartum notes:\nMother condition at discharge:\nBaby condition at discharge:\n\nBreastfeeding advice, bleeding warning signs, pain relief, contraception counselling, and follow-up instructions documented.`},
+  {id:'obg-mtp-discharge',dept:'obg',name:'MTP / Suction Evacuation Discharge Sheet',icon:'🏠',docType:'form',
+   body:`Procedure performed:\nCondition at discharge:\nBleeding / pain status:\n\nMedicines, warning signs, contraception advice, and follow-up date provided.`},
+  {id:'obg-birth-vaccination-card',dept:'obg',name:'Birth Dose Vaccination Card',icon:'💉',docType:'form',
+   body:`Baby Name:\nDOB / Time:\nBirth Weight:\nMother Name / BMSH ID:\n\nBirth-dose immunisation checklist:\n1. BCG — date / batch / site\n2. OPV-0 — date / batch\n3. Hepatitis B birth dose — date / batch\n4. Vitamin K — date / batch\n\nNext visit / immunisation advice given to family.`},
   {id:'c-psych-eval',dept:'psych',name:'Psychiatric Evaluation & Treatment',icon:'🧠',
    body:`I voluntarily consent to psychiatric evaluation, diagnosis, and treatment including medications, psychotherapy, psychological testing, and other investigations recommended by Dr. Tarun Baweja.\n\nConfidentiality: Information disclosed will be kept strictly confidential except where required by law (risk of harm to self or others, court order).\n\nMedications: I have been informed that psychotropic medications may cause side effects and that response to treatment varies. I will report any unexpected effects promptly.`},
   {id:'c-ect',dept:'psych',name:'ECT — Electroconvulsive Therapy',icon:'🧠',
@@ -4285,15 +4293,27 @@ function ipdMonitoringSlots(freqKey, fromIso) {
   }
   return slots;
 }
-function ipdDeptTemplate(deptKey) {
+function ipdDeptTemplate(deptKey, context) {
+  const ctx = context || {};
+  const typeText = String(ctx.type || ctx.admissionType || '').toLowerCase();
+  const surgText = String(ctx.surgery || ctx.procedure || '').toLowerCase();
   const map = {
-    ophtho:['Pre-op vitals','Eye marked / consent verified','Dilating / antibiotic drops given','OT checklist / IOL verified','Test dose / allergy check','Patch / dressing / pain status','Post-op drops given','Doctor notes / orders','Discharge medication explained'],
-    obg:['BP / pulse / pain score','Bleeding / lochia','Uterine tone / fundal height','Urine output / bowel sounds','Baby status / breastfeeding','IV fluids / antibiotics / analgesia','LSCS wound / dressing','Doctor notes / orders','Mobilisation / diet advice'],
+    ophtho:['Baseline BP / pulse / sugar reviewed','Investigations / fitness complete','Consent signed / file complete','Eye marked and confirmed','Dilating drops given','Antibiotic / NSAID drops given','IOL / implant verified','Test dose / allergy check if applicable','NBM / escort / OT checklist done','Post-op patch / shield applied','Post-op drops and red flags explained','Discharge timing / review explained'],
     psych:['Mood / behaviour','Sleep','Medication compliance','Risk / supervision','Doctor instructions'],
     skin:['Rash / lesion change','Itching / pain','Dressing / topical therapy','Drug reaction watch','Doctor instructions'],
     general:['Pain / comfort','Fluids / diet','Urine / stool','Mobility / fall risk','Doctor instructions']
   };
-  return (map[deptKey] || map.general).map(label => ({ label, value:'', checked:false }));
+  let labels = map[deptKey] || map.general;
+  if (deptKey === 'obg') {
+    if (/normal delivery|assisted delivery|labour room|maternity/.test(typeText + ' ' + surgText)) {
+      labels = ['Baseline BP / pulse / FHR','Hb / blood group / investigations reviewed','Labour consent / labour room checklist','IV line / hydration / bladder care','Labour progress / contraction charting','Liquor / membranes / bleeding monitored','Delivery details / placenta / PPH watch','Baby status / APGAR / cry / NICU need','Breastfeeding initiation / newborn advice','Postnatal monitoring / danger signs'];
+    } else if (/mtp|suction|evac|painless abortion/.test(typeText + ' ' + surgText)) {
+      labels = ['Vitals / pain score','Consent / Rh status / investigations reviewed','IV line / sedation / anaesthesia clearance','Procedure checklist complete','Bleeding / cramps monitored','Products complete / specimen noted','Antibiotics / analgesia given','Contraception counselling','Warning signs explained','Follow-up date given'];
+    } else {
+      labels = ['BP / pulse / fetal status','Hb / blood group / investigations reviewed','Consent / anaesthesia / blood arranged','Shaving / catheter / NBM complete','OT checklist / prophylaxis complete','Bleeding / lochia monitored','Uterine tone / fundal height','Urine output / bowel sounds','Baby status / breastfeeding','IV fluids / antibiotics / analgesia','LSCS wound / dressing / mobilisation','Doctor notes / discharge advice'];
+    }
+  }
+  return labels.map(label => ({ label, value:'', checked:false }));
 }
 window.PATIENT_VISIT_CACHE = window.PATIENT_VISIT_CACHE || {};
 function cachePatientVisits(bmhId, visitsObj) {
@@ -4390,7 +4410,7 @@ function ensureIpdAdmissionFromOTCase(otCase, patient) {
     monitoringPlan: (base.monitoringPlan && base.monitoringPlan.length) ? base.monitoringPlan : ipdMonitoringSlots(monitoringKey, new Date().toISOString()),
     vitalSigns: Array.isArray(base.vitalSigns) ? base.vitalSigns : [],
     vitals: base.vitals || { bp:'', pulse:'', temp:'', spo2:'', rr:'', weight:pt.weight || '' },
-    chartRows: Array.isArray(base.chartRows) && base.chartRows.length ? base.chartRows : ipdDeptTemplate(dept),
+    chartRows: Array.isArray(base.chartRows) && base.chartRows.length ? base.chartRows : ipdDeptTemplate(dept, { type: otCase.ipdType || otCase.obgCaseType, procedure: otCase.procedure, surgery: otCase.procedure }),
     notes: Array.isArray(base.notes) ? base.notes : [],
     progressNotes: Array.isArray(base.progressNotes) ? base.progressNotes : [],
     otCaseId: otCase.id,
@@ -4502,7 +4522,20 @@ function renderIPDAlerts(p) {
 function ipdChartSummary(p) {
   const chart = p.chartRows || [];
   if (!chart.length) return '<div style="color:var(--g1);font-size:12px">No structured chart items yet.</div>';
-  return chart.map(row => `<div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--g5);font-size:12px"><span>${row.label}</span><strong style="color:${row.checked ? '#1a8c3c' : 'var(--g1)'}">${row.value || (row.checked ? 'Done' : 'Pending')}</strong></div>`).join('');
+  return chart.map(function (row, idx) {
+    return `<div style="display:grid;grid-template-columns:auto 1fr minmax(120px,180px);gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--g5);font-size:12px">
+      <label style="display:flex;align-items:center;justify-content:center"><input type="checkbox" ${row.checked ? 'checked' : ''} onchange="updateIPDChartRow(${idx},'checked',this.checked)"></label>
+      <div style="font-weight:700;color:var(--tx1)">${row.label}</div>
+      <input type="text" value="${escapeHtmlConsent(row.value || '')}" placeholder="${row.checked ? 'Completed / remark' : 'Remark / value'}" oninput="updateIPDChartRow(${idx},'value',this.value)" style="width:100%;border:1px solid var(--g4);border-radius:8px;padding:6px 8px;font-size:11px;background:#fff">
+    </div>`;
+  }).join('');
+}
+
+function updateIPDChartRow(idx, field, value) {
+  if (!activeIPDPatient || !Array.isArray(activeIPDPatient.chartRows) || !activeIPDPatient.chartRows[idx]) return;
+  activeIPDPatient.chartRows[idx][field] = field === 'checked' ? !!value : value;
+  if (field === 'checked' && value && !activeIPDPatient.chartRows[idx].value) activeIPDPatient.chartRows[idx].value = 'Done';
+  if (fbUpdate) fbUpdate('ipdPatients/' + activeIPDPatient.id, { chartRows: activeIPDPatient.chartRows }).catch(()=>{});
 }
 
 function openIPDPatient(id) {
@@ -5983,10 +6016,34 @@ function openIPDFromQueue(bmhId) {
     sel.innerHTML = PATIENTS.map(p=>`<option value="${p.bmhId}" ${p.bmhId===bmhId?'selected':''}>${p.name} · ${p.bmhId}</option>`).join('');
   }
   const deptEl = document.getElementById('ipd-dept');
-  if (deptEl && pt?.dept) deptEl.value = normalizeDeptKeyForQueue(pt.dept) || pt.dept;
+  const deptKey = normalizeDeptKeyForQueue(pt?.dept || '') || pt?.dept || 'general';
+  if (deptEl) deptEl.value = deptKey;
   const docEl = document.getElementById('ipd-doctor');
   if (docEl) docEl.value = pt?.doctor || getEffectiveDoctorNameForDept(pt?.dept) || CURRENT_USER?.name || 'Dr. Namrata Baweja';
+  const typeEl = document.getElementById('ipd-type');
+  const wardEl = document.getElementById('ipd-ward');
+  const roomEl = document.getElementById('ipd-room');
+  const monitoringEl = document.getElementById('ipd-monitoring');
+  const dxEl = document.getElementById('ipd-dx');
+  const notesEl = document.getElementById('ipd-notes');
+  const isEye = deptKey === 'ophtho';
+  const isObg = deptKey === 'obg';
+  if (typeEl) typeEl.value = isEye ? 'Day Care' : (isObg ? 'Obstetric' : 'Surgical');
+  if (wardEl) wardEl.value = isEye ? 'Eye Day Care / Bed 1' : (isObg ? 'OBG Ward / Bed 1' : '');
+  if (roomEl) roomEl.value = isEye ? 'Day Care' : (isObg ? 'Labour Room / Ward' : '');
+  if (monitoringEl) monitoringEl.value = isEye ? '2h' : (isObg ? '1h' : '4h');
+  if (dxEl) dxEl.value = pt?.dx || pt?.purpose || pt?.lastVisit?.dx || '';
+  if (notesEl) notesEl.value = isEye
+    ? 'Check BP / sugar, verify investigations and consent, mark eye, give dilating drops, verify IOL / implant, monitor post-op drops and discharge advice.'
+    : (isObg
+      ? 'Check investigations, shaving / pre-op prep, labour / OT instructions, BP and bleeding watch, baby and breastfeeding monitoring, medicines and doctor orders.'
+      : '');
   openM('m-ipd-admit');
+}
+
+function openIPDChart(id) {
+  nav && nav('ipd', null);
+  setTimeout(function () { openIPDPatient(id); }, 120);
 }
 
 function openOTFromQueue(bmhId) {
@@ -6139,7 +6196,7 @@ function confirmIPDAdmit() {
     vitalSigns:[],
     vitals:{ bp:'', pulse:'', temp:'', spo2:'', rr:'', weight:p.weight || '' },
     notes:[],
-    chartRows: ipdDeptTemplate(dept),
+    chartRows: ipdDeptTemplate(dept, { type, diagnosis: dx, procedure: p.purpose || '' }),
     progressNotes:[]
   };
 
@@ -6161,6 +6218,7 @@ function confirmIPDAdmit() {
   showToast(`🛏️ ${p.name} admitted to IPD — ${ward||type} ✓`,'s');
   renderDocQueue && renderDocQueue();
   renderIPD && renderIPD();
+  openIPDChart(ipdEntry.id);
 }
 
 // ═══════════════════════════════════════
@@ -8895,11 +8953,11 @@ function renderDeptSummary() {
 // ── printSurgeryPack — print all relevant consent forms for a dept or custom pack ──────────
 const SURGERY_PACK_DEFAULTS = [
   { id:'ophtho', dept:'Ophthalmology', icon:'👁️', label:'Ophthalmology surgery pack', desc:'Bilingual consent forms and related forms for eye procedures.', color:'var(--blue)', documentKeys:['cataract','ivt','lasik','pterygium'] },
-  { id:'obg', dept:'Obstetrics & Gynaecology', icon:'🤰', label:'OBG surgical pack', desc:'Delivery, LSCS, laparoscopy and discharge documents.', color:'#c0004e', documentKeys:['obg-lscs','obg-normal','obg-mtp','obg-lscs-preop','obg-lscs-op','obg-lscs-postop'] },
-  { id:'obg-lscs-pack', dept:'Obstetrics & Gynaecology', icon:'🤰', label:'LSCS pack', desc:'LSCS consent, pre-op, operative, post-op and newborn papers.', color:'#c0004e', documentKeys:['obg-lscs','obg-blood-transfusion','obg-anaes-consent','obg-lscs-preop','obg-lscs-op','obg-lscs-postop','obg-newborn-sheet'] },
-  { id:'obg-normal-pack', dept:'Obstetrics & Gynaecology', icon:'🤰', label:'Normal delivery / labour room pack', desc:'Admission, labour, delivery and postnatal paperwork.', color:'#d9487d', documentKeys:['obg-normal','obg-labour-admission','obg-labour-checklist','obg-delivery-record','obg-postnatal-checklist','obg-newborn-sheet'] },
-  { id:'obg-mtp-pack', dept:'Obstetrics & Gynaecology', icon:'🤰', label:'MTP / suction evacuation pack', desc:'Consent and peri-procedure documentation for MTP / suction evacuation.', color:'#a52a5a', documentKeys:['obg-mtp','obg-mtp-preop','obg-mtp-op','obg-mtp-postop'] },
-  { id:'obg-painless-pack', dept:'Obstetrics & Gynaecology', icon:'🤰', label:'Painless abortion pack', desc:'Sedation, suction evacuation and discharge paperwork.', color:'#7a1f48', documentKeys:['obg-painless','obg-anaes-consent','obg-mtp-preop','obg-mtp-op','obg-mtp-postop'] },
+  { id:'obg', dept:'Obstetrics & Gynaecology', icon:'🤰', label:'OBG surgical pack', desc:'Delivery, LSCS, laparoscopy and discharge documents.', color:'#c0004e', documentKeys:['obg-lscs','obg-normal','obg-mtp','obg-lscs-preop','obg-lscs-op','obg-lscs-postop','obg-lscs-discharge','obg-birth-vaccination-card'] },
+  { id:'obg-lscs-pack', dept:'Obstetrics & Gynaecology', icon:'🤰', label:'LSCS pack', desc:'LSCS consent, pre-op, operative, post-op and newborn papers.', color:'#c0004e', documentKeys:['obg-lscs','obg-blood-transfusion','obg-anaes-consent','obg-lscs-preop','obg-lscs-op','obg-lscs-postop','obg-lscs-discharge','obg-newborn-sheet','obg-birth-vaccination-card'] },
+  { id:'obg-normal-pack', dept:'Obstetrics & Gynaecology', icon:'🤰', label:'Normal delivery / labour room pack', desc:'Admission, labour, delivery and postnatal paperwork.', color:'#d9487d', documentKeys:['obg-normal','obg-labour-admission','obg-labour-checklist','obg-delivery-record','obg-postnatal-checklist','obg-labour-discharge','obg-newborn-sheet','obg-birth-vaccination-card'] },
+  { id:'obg-mtp-pack', dept:'Obstetrics & Gynaecology', icon:'🤰', label:'MTP / suction evacuation pack', desc:'Consent and peri-procedure documentation for MTP / suction evacuation.', color:'#a52a5a', documentKeys:['obg-mtp','obg-mtp-preop','obg-mtp-op','obg-mtp-postop','obg-mtp-discharge'] },
+  { id:'obg-painless-pack', dept:'Obstetrics & Gynaecology', icon:'🤰', label:'Painless abortion pack', desc:'Sedation, suction evacuation and discharge paperwork.', color:'#7a1f48', documentKeys:['obg-painless','obg-anaes-consent','obg-mtp-preop','obg-mtp-op','obg-mtp-postop','obg-mtp-discharge'] },
   { id:'psych', dept:'Neuropsychiatry', icon:'🧠', label:'Psychiatry pack', desc:'Evaluation and treatment documents.', color:'var(--orange)', documentKeys:['psych-gen','psych-ect'] },
   { id:'skin', dept:'Skin & Cosmetology', icon:'💆', label:'Dermatology / aesthetics pack', desc:'Procedure consents and forms.', color:'var(--purple)', documentKeys:['skin-peel','skin-laser','skin-prp'] },
 ];
@@ -13128,6 +13186,9 @@ function loadIPDPatientsFromFirebase() {
     const arr = window.IPD_PATIENTS || IPD_PATIENTS;
     Object.values(data).forEach(p => {
       if(!p.centre) p.centre = getEffectiveCentre() || CURRENT_USER?.centre || 'CHD';
+      if(!Array.isArray(p.chartRows) || !p.chartRows.length) {
+        p.chartRows = ipdDeptTemplate(normalizeDeptKeyForQueue(p.dept || p.department || 'general'), { type: p.type, procedure: p.surgery, surgery: p.surgery });
+      }
       const idx = arr.findIndex(x=>x.id===p.id||x.bmhId===p.bmhId);
       if(idx >= 0) arr[idx] = Object.assign({}, arr[idx], p);
       else arr.push(p);
@@ -16326,7 +16387,7 @@ function renderDocQueue() {
         <div style="font-size:10.5px;color:var(--tx3);margin-top:1px">🛏️ ${ip.ward||'—'} · ${ip.type||'—'}</div>
         <div style="font-size:10px;color:var(--g1);margin-top:1px">Dr. ${ip.doctor||'—'} · Admitted ${ip.admittedDate||'—'}</div>
       </div>
-      <button class="btn btn-xs btn-outline" onclick="openIPDPatient('${ip.id}')">View</button>
+      <button class="btn btn-xs btn-outline" onclick="openIPDChart('${ip.id}')">View</button>
     </div>`).join('') : '<div style="padding:20px;text-align:center;color:var(--g2);font-size:12px">No IPD patients</div>';
 }
 
