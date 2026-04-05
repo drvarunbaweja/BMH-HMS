@@ -442,8 +442,8 @@ const CONSENT_DATA = {
 };
 
 const CONSENT_LIBRARY = [
-  {id:'consent-cataract-hi',dept:'ophtho',name:'Cataract Consent — English + Hindi',icon:'📝',lang:'hi',structuredKey:'cataract'},
-  {id:'consent-cataract-pa',dept:'ophtho',name:'Cataract Consent — English + Punjabi',icon:'📝',lang:'pa',structuredKey:'cataract'},
+  {id:'consent-cataract-hi',dept:'ophtho',name:'Cataract Consent — English + Hindi',icon:'📝',docType:'consent',lang:'hi',structuredKey:'cataract'},
+  {id:'consent-cataract-pa',dept:'ophtho',name:'Cataract Consent — English + Punjabi',icon:'📝',docType:'consent',lang:'pa',structuredKey:'cataract'},
   {id:'preop-nursing-checklist',dept:'ophtho',name:'Pre-operative Nursing Checklist',icon:'✅',docType:'form',
    body:`Identity confirmed with BMSH ID, patient name, age, sex, and operative eye/site.\n\nWritten informed consent checked and matching planned procedure verified.\n\nAllergy history, systemic diseases, current medications, blood thinners, diabetes, hypertension, and anaesthesia concerns reviewed.\n\nFasting status, blood sugar if indicated, blood pressure, pulse, temperature, and relevant investigations checked and documented.\n\nOperative eye marked where applicable, jewellery / dentures / contact lenses removed, and patient changed into OT clothing.\n\nBiometry / IOL selection / lens power cross-checked with OT plan and surgeon confirmation.\n\nRequired eye drops / dilatation / antibiotic / anaesthesia preparation completed and documented with time.\n\nEscort counselling completed, valuables handed over, and final nursing sign-off done before shifting to OT.`},
   {id:'c-phaco',dept:'ophtho',name:'Cataract Surgery (PMICS + IOL)',icon:'👁️',
@@ -668,7 +668,7 @@ function buildCompactDocumentHeader(title, ctx, subtitle) {
   const esc = escapeHtmlConsent;
   const logoSrc = resolvePrintLogoSrc();
   const proc = String(ctx?.procLine || '').trim();
-  return '<div style="border:1px solid #222;border-radius:10px;padding:8px 10px;margin-bottom:10px">'
+  return '<div style="border:1px solid #222;border-radius:10px;padding:8px 10px;margin-bottom:8px">'
     + '<div style="display:grid;grid-template-columns:minmax(0,1.2fr) repeat(4,minmax(86px,1fr));gap:8px;align-items:stretch">'
     + '<div style="display:flex;align-items:center;gap:8px;min-width:0;padding-right:6px;border-right:1px solid #d7dce5">'
     + '<img src="' + esc(logoSrc) + '" style="height:30px;width:auto;object-fit:contain" alt="BMH">'
@@ -680,7 +680,9 @@ function buildCompactDocumentHeader(title, ctx, subtitle) {
     + '<div style="display:grid;gap:2px"><span style="font-size:8.5px;color:#666;text-transform:uppercase;font-weight:800">Procedure</span><span style="font-size:10.5px;font-weight:800;color:#111;line-height:1.35">' + esc(proc || '—') + '</span></div>'
     + '<div style="display:grid;gap:2px"><span style="font-size:8.5px;color:#666;text-transform:uppercase;font-weight:800">Doctor</span><span style="font-size:10.5px;font-weight:800;color:#111;line-height:1.35">' + esc(ctx?.doctorName || '—') + '</span></div>'
     + '<div style="display:grid;gap:2px"><span style="font-size:8.5px;color:#666;text-transform:uppercase;font-weight:800">Date</span><span style="font-size:10.5px;font-weight:800;color:#111;line-height:1.35">' + esc(ctx?.today || '—') + '</span></div>'
-    + '</div></div>';
+    + '</div>'
+    + '<div style="padding-top:7px;text-align:center"><div style="font-size:14px;font-weight:900;color:#111;line-height:1.25">' + esc(title) + '</div>' + (subtitle ? '<div style="font-size:10px;font-weight:800;color:#555;margin-top:2px">' + esc(subtitle) + '</div>' : '') + '</div>'
+    + '</div>';
 }
 function buildCompactDocumentShell(title, ctx, bodyHtml, opts) {
   opts = opts || {};
@@ -689,7 +691,7 @@ function buildCompactDocumentShell(title, ctx, bodyHtml, opts) {
     + '<div style="flex:1;text-align:center"><div style="border-bottom:1px solid #333;height:34px"></div><div style="font-size:10px;color:#555;margin-top:4px">Witness Signature</div></div>'
     + '<div style="flex:1;text-align:center"><div style="border-bottom:1px solid #333;height:34px"></div><div style="font-size:10px;color:#555;margin-top:4px">Doctor Signature</div></div>'
     + '</div>';
-  return '<section style="padding:7mm 7mm 6mm;font-family:Arial,sans-serif;color:#111;page-break-inside:avoid;overflow:hidden">'
+  return '<section style="padding:7mm 7mm 6mm;font-family:Arial,sans-serif;color:#111;page-break-after:always;page-break-inside:avoid;overflow:hidden">'
     + buildCompactDocumentHeader(title, ctx, opts.subtitle || '')
     + '<div style="font-size:10.8px;line-height:1.55">' + bodyHtml + '</div>'
     + sigHtml
@@ -7815,16 +7817,28 @@ const SURGERY_PACK_DEFAULTS = [
   { id:'psych', dept:'Neuropsychiatry', icon:'🧠', label:'Psychiatry pack', desc:'Evaluation, treatment and discharge documents.', color:'var(--orange)', documentKeys:['psych-gen','psych-ect','__discharge__'] },
   { id:'skin', dept:'Skin & Cosmetology', icon:'💆', label:'Dermatology / aesthetics pack', desc:'Procedure consents, forms, and discharge summary.', color:'var(--purple)', documentKeys:['skin-peel','skin-laser','skin-prp','__discharge__'] },
 ];
+let SURGERY_PACK_OVERRIDES = {};
 function loadCustomSurgeryPacks() {
   try {
     const ls = localStorage.getItem('bmh_surgery_packs_custom');
     return ls ? JSON.parse(ls) : [];
   } catch (e) { return []; }
 }
+function loadSurgeryPackOverrides() {
+  try {
+    const ls = localStorage.getItem('bmh_surgery_pack_overrides');
+    SURGERY_PACK_OVERRIDES = ls ? JSON.parse(ls) : {};
+  } catch (e) { SURGERY_PACK_OVERRIDES = {}; }
+}
+function saveSurgeryPackOverrides() {
+  try { localStorage.setItem('bmh_surgery_pack_overrides', JSON.stringify(SURGERY_PACK_OVERRIDES)); } catch (e) {}
+}
+loadSurgeryPackOverrides();
 function saveCustomSurgeryPacks(arr) {
   try { localStorage.setItem('bmh_surgery_packs_custom', JSON.stringify(arr)); } catch (e) { /* noop */ }
   if (window.FBDB) window.FBDB.ref('surgeryPacksCustom').set(arr).catch(function () {});
 }
+window.BMH_UPLOADED_CONSENTS = window.BMH_UPLOADED_CONSENTS || [];
 function normalizeSurgeryPackDeptKey(v) {
   const s = String(v || '').toLowerCase().trim();
   if (!s || s === 'all' || s === 'general') return 'all';
@@ -7880,10 +7894,13 @@ function mergeUniquePackDocumentKeys(baseKeys, extraKeys) {
 }
 function getAllSurgeryPacks() {
   return SURGERY_PACK_DEFAULTS.concat(loadCustomSurgeryPacks()).map(function (p) {
+    const merged = Object.assign({}, p, SURGERY_PACK_OVERRIDES[p.id] || {});
+    if (merged.hidden) return null;
+    p = merged;
     if (!p.documentKeys && p.consentKeys) p.documentKeys = p.consentKeys.slice();
     if (p.documentKeys && p.documentKeys.indexOf('__discharge__') === -1 && String(p.id || '').startsWith('custom-') === false) p.documentKeys.push('__discharge__');
     return p;
-  });
+  }).filter(Boolean);
 }
 function populateReceptionSurgeryPackSelect(selected) {
   const sel = document.getElementById('surg-pack-sel');
@@ -7936,13 +7953,20 @@ function populateNewPackModal() {
     const kind = t.type === 'template' ? 'form' : 'consent';
     return '<label style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;font-size:11.5px;cursor:pointer;border-bottom:1px solid var(--g5)"><input type="checkbox" name="new-pack-doc" value="' + String(t.id).replace(/"/g, '&quot;') + '"><span>📎 ' + String(t.name || t.id).replace(/</g, '&lt;') + ' <span style="font-size:9px;color:var(--g1)">(' + kind + ' saved)</span></span></label>';
   }).join('');
+  const uploadedRows = (window.BMH_UPLOADED_CONSENTS || []).filter(function (c) {
+    return matchesDept(c.dept);
+  }).map(function (c) {
+    const kind = c.docType === 'form' ? 'form' : 'consent';
+    return '<label style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;font-size:11.5px;cursor:pointer;border-bottom:1px solid var(--g5)"><input type="checkbox" name="new-pack-doc" value="' + String(c.id).replace(/"/g, '&quot;') + '"><span>📎 ' + String(c.name || c.id).replace(/</g, '&lt;') + ' <span style="font-size:9px;color:var(--g1)">(uploaded ' + kind + ')</span></span></label>';
+  }).join('');
   const specialRows = '<label style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;font-size:11.5px;cursor:pointer;border-bottom:1px solid var(--g5)"><input type="checkbox" name="new-pack-doc" value="__discharge__" checked><span>📄 Discharge Summary &amp; Fitness Certificate <span style="font-size:9px;color:var(--g1)">(official document)</span></span></label>';
   host.innerHTML = '<div style="font-size:10px;font-weight:800;color:var(--g1);margin-bottom:6px">Select department-specific consents and forms to include in this pack.</div>'
     + (builtIn ? block('Built-in bilingual consents', builtIn) : '')
     + (libRows ? block('Saved consent / form library', libRows) : '')
     + (tplRows ? block('Saved consent / form templates', tplRows) : '')
+    + (uploadedRows ? block('Uploaded / custom documents', uploadedRows) : '')
     + block('Discharge document', specialRows)
-    + (!builtIn && !libRows && !tplRows ? '<div style="padding:10px;background:var(--g6);border-radius:8px;font-size:11px;color:var(--g1)">No saved items found for this department yet.</div>' : '');
+    + (!builtIn && !libRows && !tplRows && !uploadedRows ? '<div style="padding:10px;background:var(--g6);border-radius:8px;font-size:11px;color:var(--g1)">No saved items found for this department yet.</div>' : '');
 }
 function saveSurgeryPackFromModal() {
   const name = document.getElementById('new-pack-name')?.value?.trim();
@@ -7961,11 +7985,34 @@ function saveSurgeryPackFromModal() {
   populateReceptionSurgeryPackSelect(id);
   showToast('Pack saved — you can print it from the list ✓', 's');
 }
+function editSurgeryPack(id) {
+  const packs = getAllSurgeryPacks();
+  const pack = packs.find(function (p) { return p.id === id; });
+  if (!pack) return;
+  const name = prompt('Edit pack name', pack.label || '');
+  if (name === null) return;
+  if (String(pack.id || '').startsWith('custom-')) {
+    const custom = loadCustomSurgeryPacks();
+    const idx = custom.findIndex(function (p) { return p.id === id; });
+    if (idx < 0) return;
+    custom[idx].label = name.trim() || custom[idx].label;
+    saveCustomSurgeryPacks(custom);
+  } else {
+    SURGERY_PACK_OVERRIDES[id] = Object.assign({}, SURGERY_PACK_OVERRIDES[id] || {}, { label: name.trim() || pack.label, hidden: false });
+    saveSurgeryPackOverrides();
+  }
+  renderSetPacksList();
+  showToast('Pack updated ✓', 's');
+}
 function deleteSurgeryPack(id) {
-  if (!id || !String(id).startsWith('custom-')) { showToast('Built-in department packs cannot be deleted. Create a custom pack to replace one.', 'w'); return; }
-  if (!confirm('Delete this custom surgery pack?')) return;
-  const next = loadCustomSurgeryPacks().filter(function (p) { return p.id !== id; });
-  saveCustomSurgeryPacks(next);
+  if (!confirm('Delete / hide this surgery pack?')) return;
+  if (String(id).startsWith('custom-')) {
+    const next = loadCustomSurgeryPacks().filter(function (p) { return p.id !== id; });
+    saveCustomSurgeryPacks(next);
+  } else {
+    SURGERY_PACK_OVERRIDES[id] = Object.assign({}, SURGERY_PACK_OVERRIDES[id] || {}, { hidden: true });
+    saveSurgeryPackOverrides();
+  }
   renderSetPacksList();
   showToast('Pack deleted ✓', 's');
 }
@@ -8228,13 +8275,14 @@ function handleFileUpload(inp) {
 }
 
 // SAVE RX TEMPLATE (Settings → Rx Templates → manual lines)
-function saveRxTemplate() {
-  const name = document.getElementById('rx-tpl-name')?.value?.trim();
+function saveRxTemplate(mode) {
+  const suffix = mode === 'modal' ? '-modal' : '';
+  const name = document.getElementById('rx-tpl-name' + suffix)?.value?.trim();
   if(!name){showToast('Enter template name','w');return;}
-  const deptSel = document.getElementById('rx-tpl-dept-settings');
+  const deptSel = document.getElementById('rx-tpl-dept-settings' + suffix);
   const deptMap = { 'Ophthalmology':'ophtho','OBG':'obg','Psychiatry':'psych','Skin':'skin','OT':'ot','All':'all' };
   const dept = deptSel ? (deptMap[deptSel.value] || 'all') : 'all';
-  const raw = document.getElementById('rx-tpl-drugs')?.value || '';
+  const raw = document.getElementById('rx-tpl-drugs' + suffix)?.value || '';
   const lines = raw.split(/\n/).map(l=>l.trim()).filter(Boolean);
   if(!lines.length){showToast('Add one drug per line (e.g. Brand — frequency — duration)','w');return;}
   const key = name.toLowerCase().replace(/\s+/g,'-');
@@ -8243,6 +8291,7 @@ function saveRxTemplate() {
     const trade = parts[0] || 'Drug';
     const freq = parts[1] || 'Twice daily (BD)';
     const dur = parts[2] || '1 Week';
+    if (dept === 'ot') return { trade, generic: '', eye: '', freq, dur };
     const lib = DRUG_LIBRARY.find(x => x.trade === trade || x.generic === trade);
     const drugType = lib ? lib.type : '';
     const isEye = /drop|eye|ophth|moxiflox|vigamox|pred|tears/i.test(trade + ' ' + (drugType || ''));
@@ -8258,7 +8307,14 @@ function saveRxTemplate() {
   saveRxTemplatesToStorage();
   refreshRxTemplateSelects();
   renderSetRxTplList && renderSetRxTplList();
+  if (mode === 'modal') closeM('m-add-rx-tpl');
   showToast('Template "'+name+'" saved ✓','s');
+}
+function openNewRxTemplateModal() {
+  ['rx-tpl-name-modal','rx-tpl-drugs-modal'].forEach(function (id) { const el = document.getElementById(id); if (el) el.value = ''; });
+  const deptSel = document.getElementById('rx-tpl-dept-settings-modal');
+  if (deptSel) deptSel.value = 'Ophthalmology';
+  openM('m-add-rx-tpl');
 }
 
 // IOP PACHYMETRY CORRECTION
@@ -8607,7 +8663,8 @@ function updateOTStatus(id, status) {
   if(activeOTCase?.id===id) openOTCase(id);
 }
 function scheduleDefaultSurgeryFollowups(otCase) {
-  const c = normalizeOTCaseRecord(otCase || {});
+  const source = otCase || {};
+  const c = normalizeOTCaseRecord(source);
   if (!c.bmhId || !c.date) return;
   const dayOffsets = [
     { days: 1, label: 'Post-op Day 1 review', type: 'post-op' },
@@ -8641,6 +8698,7 @@ function scheduleDefaultSurgeryFollowups(otCase) {
     made.push(apt);
   });
   c.autoFollowups = made.map(function (a) { return { date: a.date, time: a.time, label: a.purpose }; });
+  source.autoFollowups = c.autoFollowups.slice();
   fbUpdate('otCases/' + c.id, { autoFollowups: c.autoFollowups }).catch(function () {});
 }
 
@@ -11159,41 +11217,73 @@ function renderChargesList() {
   const el = document.getElementById('set-procs-list') || document.getElementById('charges-list');
   if(!el) return;
   const cats = [...new Set(CHARGES_DATA.map(c=>c.cat))];
+  const canEditDept = function (cat) {
+    if (CURRENT_USER?.isAdmin) return true;
+    const dept = String(CURRENT_USER?.dept || '').toLowerCase();
+    const c = String(cat || '').toLowerCase();
+    if (dept.includes('oph') && c.includes('eye')) return true;
+    if ((dept.includes('obg') || dept.includes('gyn')) && c.includes('obg')) return true;
+    if (dept.includes('psych') && c.includes('psych')) return true;
+    if ((dept.includes('skin') || dept.includes('derm') || dept.includes('cosmet')) && c.includes('skin')) return true;
+    return false;
+  };
   el.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
-    <button type="button" class="btn btn-gold btn-sm" onclick="addChargeRow()">+ Add Procedure</button>
+    <button type="button" class="btn btn-gold btn-sm" onclick="openAddChargeModal()">+ Add Procedure</button>
     <button type="button" class="btn btn-outline btn-sm" onclick="saveCharges()">💾 Save &amp; sync to cloud</button>
-    <span style="font-size:11px;color:var(--g1)">Edit CHD / RPR rates for both centres. Saved data reloads after login.</span>
+    <span style="font-size:11px;color:var(--g1)">Doctors can edit charges for their own departments. Use main heading + subcategory for grouped surgery packages.</span>
   </div>` + cats.map(cat => {
     const rows = CHARGES_DATA.filter(c=>c.cat===cat);
+    const editable = canEditDept(cat);
+    const groups = {};
+    rows.forEach(function (row) {
+      const key = row.parent || '__root__';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(row);
+    });
     return `<div style="margin-bottom:8px">
       <div style="font-size:9.5px;font-weight:800;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;padding:4px 8px;background:var(--g6);border-radius:5px;margin-bottom:4px">${cat}</div>
-      ${rows.map((c,i)=>{
+      ${Object.keys(groups).map(function (parentKey) {
+        const childRows = groups[parentKey];
+        const parentHtml = parentKey !== '__root__'
+          ? `<div style="font-size:10px;font-weight:900;color:var(--tx);padding:6px 8px;background:#fff7e8;border:1px solid rgba(212,160,23,.35);border-radius:7px;margin:6px 0 4px">${parentKey}</div>`
+          : '';
+        return parentHtml + childRows.map((c,i)=>{
         const gIdx = CHARGES_DATA.indexOf(c);
+        const disabled = editable ? '' : 'disabled';
         return `<div style="display:grid;grid-template-columns:70px 1fr 90px 90px 40px;gap:5px;padding:4px 8px;border-bottom:1px solid var(--g5);align-items:center;font-size:11.5px">
           <span class="badge bd-gray" style="font-size:9px">${c.cat}</span>
-          <input type="text" value="${c.name}" style="font-size:11.5px;font-weight:600" onchange="CHARGES_DATA[${gIdx}].name=this.value">
-          <input type="number" value="${c.chd}" style="font-size:12px;font-weight:800;color:var(--bmh-blue);text-align:right" onchange="CHARGES_DATA[${gIdx}].chd=parseInt(this.value)">
-          <input type="number" value="${c.rpr}" style="font-size:12px;font-weight:800;color:#8a4200;text-align:right" onchange="CHARGES_DATA[${gIdx}].rpr=parseInt(this.value)">
-          <button class="btn btn-xs btn-gray" onclick="CHARGES_DATA.splice(${gIdx},1);renderChargesList()">✕</button>
+          <input type="text" value="${c.name}" style="font-size:11.5px;font-weight:600" onchange="CHARGES_DATA[${gIdx}].name=this.value" ${disabled}>
+          <input type="number" value="${c.chd}" style="font-size:12px;font-weight:800;color:var(--bmh-blue);text-align:right" onchange="CHARGES_DATA[${gIdx}].chd=parseInt(this.value)" ${disabled}>
+          <input type="number" value="${c.rpr}" style="font-size:12px;font-weight:800;color:#8a4200;text-align:right" onchange="CHARGES_DATA[${gIdx}].rpr=parseInt(this.value)" ${disabled}>
+          ${editable ? `<button class="btn btn-xs btn-gray" onclick="CHARGES_DATA.splice(${gIdx},1);renderChargesList()">✕</button>` : '<span></span>'}
         </div>`;
-      }).join('')}
+      }).join(''); }).join('')}
     </div>`;
   }).join('');
 }
 
-function addChargeRow() {
-  const cat = prompt('Category (Eye / OBG / Psych / Skin / Lab / Other):','Eye');
-  if(!cat) return;
-  const name = prompt('Procedure / Service Name:');
-  if(!name) return;
-  const chd = parseInt(prompt('Chandigarh Price (₹):','0'))||0;
-  const rpr = parseInt(prompt('Ropar Price (₹):','0'))||0;
-  CHARGES_DATA.push({cat, name, chd, rpr});
-  // Also add to CENTRE_CHARGES
+function openAddChargeModal() {
+  const deptMap = { ophtho:'Eye', obg:'OBG', psych:'Psych', skin:'Skin' };
+  const catEl = document.getElementById('add-charge-cat');
+  if (catEl && !CURRENT_USER?.isAdmin) catEl.value = deptMap[rxDeptKeyFromUi()] || deptMap[normalizeSurgeryPackDeptKey(CURRENT_USER?.dept)] || 'Eye';
+  ['add-charge-parent','add-charge-name','add-charge-chd','add-charge-rpr'].forEach(function (id) {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  openM('m-add-proc-charge');
+}
+function saveChargeFromModal() {
+  const cat = document.getElementById('add-charge-cat')?.value || 'Eye';
+  const parent = document.getElementById('add-charge-parent')?.value?.trim() || '';
+  const name = document.getElementById('add-charge-name')?.value?.trim();
+  const chd = parseInt(document.getElementById('add-charge-chd')?.value || '0', 10) || 0;
+  const rpr = parseInt(document.getElementById('add-charge-rpr')?.value || '0', 10) || 0;
+  if (!name) { showToast('Enter charge name', 'w'); return; }
+  CHARGES_DATA.push({cat, parent, name, chd, rpr});
   CENTRE_CHARGES.CHD[name] = chd;
   CENTRE_CHARGES.RPR[name] = rpr;
   renderChargesList();
-  showToast('"'+name+'" added to fee schedule ✓','s');
+  closeM('m-add-proc-charge');
+  showToast('"' + name + '" added to fee schedule ✓','s');
 }
 
 function saveCharges() {
@@ -11959,8 +12049,8 @@ function getDischargePrintData(sel) {
   const opDate = lastOtCase?.date || lastOtCase?.scheduledDate || ipdStay?.admittedAt || visitDate;
   const dischargeDate = ipdStay?.dischargedAt || new Date().toISOString();
   const findings = [ptObj.lastVisit?.positiveFindings, ptObj.positiveFindings, ptObj.lastVisit?.chiefComplaints].filter(Boolean).join('; ') || 'clinical findings noted in the case sheet';
-  const diagnosis = ptObj.lastVisit?.dx || ptObj.dx || lastOtCase?.dx || tmpl.procedure || 'the diagnosed condition';
-  const procedureName = lastOtCase?.procedure || ptObj.lastVisit?.procedure || tmpl.procedure || 'the planned procedure';
+  const diagnosis = lastOtCase?.dx || ptObj.lastVisit?.dx || ptObj.dx || ptObj.lastVisit?.clinicalImpression || tmpl.procedure || 'the diagnosed condition';
+  const procedureName = lastOtCase?.procedure || ptObj.lastVisit?.procedure || ptObj.surgery || ptObj.surgeryAdvised || tmpl.procedure || 'the planned procedure';
   const joinDate = new Date(new Date(opDate).getTime() + (14 * 24 * 60 * 60 * 1000)).toISOString();
   const followups = Array.isArray(lastOtCase?.autoFollowups) ? lastOtCase.autoFollowups.slice() : [];
   return {
@@ -13480,6 +13570,7 @@ function loadCustomConsentsForSettings() {
   if(!host || !window.FBDB) return;
   window.FBDB.ref('consentLibrary').once('value').then(snap => {
     const data = snap.val();
+    window.BMH_UPLOADED_CONSENTS = data ? Object.values(data) : [];
     let box = document.getElementById('consent-custom-uploaded-list');
     if(!box) {
       box = document.createElement('div');
@@ -14245,9 +14336,7 @@ function renderSetPacksList() {
       const title = getPackDocumentTitle(k);
       return '<li style="margin:2px 0;font-size:11px">' + title + '</li>';
     }).join('');
-    const delBtn = String(p.id).startsWith('custom-')
-      ? '<button type="button" class="btn btn-xs btn-gray" onclick="deleteSurgeryPack(\'' + p.id + '\')">🗑️</button>'
-      : '';
+    const actions = '<button type="button" class="btn btn-xs btn-outline" onclick="editSurgeryPack(\'' + p.id + '\')">✏️</button><button type="button" class="btn btn-xs btn-gray" onclick="deleteSurgeryPack(\'' + p.id + '\')">🗑️</button>';
     return '<div style="padding:12px;border:1.5px solid ' + p.color + '33;border-radius:var(--r);margin-bottom:10px;background:' + p.color + '09">' +
       '<div style="display:flex;align-items:flex-start;gap:12px">' +
       '<span style="font-size:28px;flex-shrink:0">' + p.icon + '</span>' +
@@ -14264,7 +14353,7 @@ function renderSetPacksList() {
       '</div></div>' +
       '<div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">' +
       '<button type="button" class="btn btn-xs" style="background:' + p.color + ';color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:11px;font-weight:800;cursor:pointer;white-space:nowrap" onclick="printSurgeryPack(\'' + p.id + '\')">🖨️ Print pack</button>' +
-      delBtn +
+      actions +
       '</div></div></div>';
   }).join('');
 }
