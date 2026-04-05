@@ -247,6 +247,57 @@ function populateOTProcedureOptions(selected) {
     sel.innerHTML += '<option selected>' + String(selected).replace(/</g, '&lt;') + '</option>';
   }
 }
+window.OT_DIAGNOSIS_OPTIONS = window.OT_DIAGNOSIS_OPTIONS || [];
+function getOtDiagnosisOptions() {
+  const defaults = [
+    'Cataract',
+    'Cataract Right Eye',
+    'Cataract Left Eye',
+    'Cataract Both Eyes',
+    'Posterior subcapsular cataract',
+    'Nuclear sclerosis cataract',
+    'Primary open-angle glaucoma',
+    'Angle-closure glaucoma',
+    'Pterygium',
+    'Nasolacrimal duct obstruction',
+    'Retinal pathology requiring procedure',
+    'Uterine fibroid',
+    'Ovarian cyst',
+    'Need for LSCS',
+    'Skin lesion for procedure'
+  ];
+  return Array.from(new Set([].concat(window.OT_DIAGNOSIS_OPTIONS || [], defaults).filter(Boolean)));
+}
+function populateOTDiagnosisOptions(selected) {
+  const sel = document.getElementById('ot-add-dx');
+  if (!sel) return;
+  const options = getOtDiagnosisOptions();
+  sel.innerHTML = ['<option value="">— Select diagnosis —</option>'].concat(options.map(function (name) {
+    return '<option value="' + String(name).replace(/"/g, '&quot;') + '"' + (String(selected || '').trim() === String(name).trim() ? ' selected' : '') + '>' + String(name).replace(/</g, '&lt;') + '</option>';
+  })).join('');
+  if (selected && !options.some(function (name) { return String(name).trim() === String(selected).trim(); })) {
+    sel.innerHTML += '<option value="' + String(selected).replace(/"/g, '&quot;') + '" selected>' + String(selected).replace(/</g, '&lt;') + '</option>';
+  }
+}
+function loadOTDiagnosisOptions() {
+  if (!window.fbOnce) return;
+  fbOnce('settings/otDiagnoses').then(function (data) {
+    if (Array.isArray(data) && data.length) {
+      window.OT_DIAGNOSIS_OPTIONS = data.filter(Boolean);
+      populateOTDiagnosisOptions(document.getElementById('ot-add-dx')?.value || '');
+    }
+  }).catch(function () {});
+}
+function addOTDiagnosisOption() {
+  const val = window.prompt('Enter a pre-operative diagnosis to reuse in OT cases:')?.trim();
+  if (!val) return;
+  if (!(window.OT_DIAGNOSIS_OPTIONS || []).includes(val)) {
+    window.OT_DIAGNOSIS_OPTIONS.push(val);
+    fbSet && fbSet('settings/otDiagnoses', window.OT_DIAGNOSIS_OPTIONS);
+  }
+  populateOTDiagnosisOptions(val);
+  showToast('OT diagnosis added ✓', 's');
+}
 function getOtIolChoices() {
   const catalog = (IOL_CATALOG || []).map(function (row) {
     return { name: row.name, type: row.type || 'IOL', price: Number(row.price || 0), barcode: row.barcode || '', power: extractIolPower(row.name) };
@@ -8930,9 +8981,10 @@ function fillOTFromPatient(bmhId) {
   }
   // Fill all fields
   const setV=(id,v)=>{const e=document.getElementById(id);if(e)e.value=v;};
+  const dxGuess = p.dx || p.diagnosis || p.lastVisit?.dx || p.purpose || '';
   setV('ot-bmsh-id', p.bmhId);
   setV('ot-age-sex', `${p.age||'?'}Y / ${p.sex||'—'}`);
-  setV('ot-add-dx', p.dx || p.diagnosis || p.purpose || '');
+  populateOTDiagnosisOptions(dxGuess);
   setV('ot-add-site', p.eye || p.opEye || p.surgEye || p.operatingEye || 'N/A');
   if(p.doctor) { const drSel=document.getElementById('ot-add-surgeon'); if(drSel) drSel.value=p.doctor; }
   const guessedProcedure = /surgery|phaco|pmics|cataract|lasik|ivt|trab|pteryg|delivery|lscs|lapar/i.test(String(p.purpose || ''))
@@ -8970,6 +9022,8 @@ function openOTAddModal(opts) {
   const saveBtn = document.getElementById('ot-add-save-btn');
   const editIdEl = document.getElementById('ot-add-case-id');
   if (editIdEl) editIdEl.value = opts.caseId || '';
+  loadOTDiagnosisOptions();
+  populateOTDiagnosisOptions();
   populateOTProcedureOptions();
   populateOTIolOptions();
   if (titleEl) titleEl.textContent = opts.caseId ? '⚕️ Edit OT Case' : '⚕️ Add OT Case';
@@ -8979,7 +9033,7 @@ function openOTAddModal(opts) {
     const setV=(id,v)=>{const e=document.getElementById(id);if(e)e.value=v||'';};
     setV('ot-bmsh-id', existing.bmhId);
     setV('ot-age-sex', `${existing.age||'?'}Y / ${existing.sex||'—'}`);
-    setV('ot-add-dx', existing.dx);
+    populateOTDiagnosisOptions(existing.dx);
     populateOTProcedureOptions(existing.procedure);
     setV('ot-add-site', existing.site);
     setV('ot-add-surgeon', existing.surgeon);
@@ -12300,6 +12354,11 @@ function renderDischargeBuilder() {
   document.getElementById('dc-pt-sex').textContent  = ptObj.sex || '—';
   document.getElementById('dc-pt-mob').textContent  = ptObj.mob || '—';
   document.getElementById('dc-date').textContent    = new Date().toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
+  const procDxEl = document.getElementById('dc-procedure');
+  if (procDxEl) {
+    const procDx = [data.lastOtCase?.dx || data.diagnosis || '', data.lastOtCase?.procedure || data.procedureName || ''].filter(Boolean).join(' · ');
+    procDxEl.textContent = procDx || '—';
+  }
   // Set discharge date to today if blank
   const ddEl = document.getElementById('dc-discharge-date');
   if(ddEl) ddEl.textContent = new Date(data.dischargeDate).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
@@ -15055,6 +15114,7 @@ function saveVisit(dept) {
     const dxRows = getOphthoDiagnosisRows();
     visit.diagnoses = dxRows;
     visit.diagnosisText = document.getElementById('rx-diagnosis-text')?.value?.trim() || '';
+    visit.dx = dxRows.map(formatDxLineForPrint).filter(Boolean).join(' · ') || visit.diagnosisText || '';
     visit.postSurgeryRx = !!document.getElementById('rx-post-surgery')?.checked;
     visit.positiveFindings = buildOphthoPositiveFindingsList().join('; ');
     visit.procedures = [...document.querySelectorAll('#rx-proc-advised [data-proc]')].map(e=>e.dataset.proc).filter(Boolean);
@@ -15151,6 +15211,7 @@ function saveVisit(dept) {
     visit.planManagement = obgGuidance.management;
     visit.planProcedures = obgGuidance.procedures;
     visit.notes = [visit.ancNotes, visit.gynNotes, visit.infertilityNotes].filter(Boolean).join(' | ');
+    visit.dx = Array.isArray(visit.presumptiveDx) ? visit.presumptiveDx.join(' · ') : (visit.clinicalImpression || '');
     visit.rx = JSON.parse(JSON.stringify(RX_DRUGS || []));
   } else if(dept === 'psych') {
     ['psych-chief','psych-duration','psych-onset','psych-trigger','psych-core-syndrome','psych-risk','psych-systemic','psych-sleep','psych-appetite','psych-function','psych-diagnosis','psych-family','psych-personal','psych-pastpsych','psych-medical','psych-substance','psych-suicidality','psych-anxiety','psych-psychosis','psych-polarity','psych-addiction-substance','psych-addiction-pattern','psych-addiction-lastuse','psych-addiction-readiness','psych-stroke-deficit','psych-stroke-timing','psych-stroke-mood','psych-epilepsy-type','psych-epilepsy-last','psych-epilepsy-adherence','psych-epilepsy-trigger','psych-child-concern','psych-child-development','psych-child-school','psych-child-parent','psych-appearance','psych-behaviour','psych-psychomotor','psych-eyecontact','psych-speech-rate','psych-speech-volume','psych-speech-tone','psych-subjective-mood','psych-affect','psych-thought-form','psych-thought-content','psych-hallucinations','psych-orientation','psych-memory','psych-insight','psych-judgement']
@@ -15165,6 +15226,7 @@ function saveVisit(dept) {
     visit.psychPlan = guidance.plan;
     visit.psychInvestigations = guidance.investigations;
     visit.psychTherapy = guidance.therapy;
+    visit.dx = Array.isArray(guidance.tags) ? guidance.tags.join(' · ') : (psychVal('psych-diagnosis') || '');
     visit.rx = JSON.parse(JSON.stringify(RX_DRUGS || []));
   } else if(dept === 'skin') {
     ['skin-chief','skin-duration','skin-site','skin-fit','skin-primary-dx','skin-secondary-dx','skin-routine','skin-medical','skin-hormonal','skin-lesion','skin-secondary-change','skin-distribution','skin-configuration','skin-hair','skin-nail','skin-dermoscopy','skin-cosm-acne-grade','skin-cosm-sensitivity','skin-cosm-pih','skin-cosm-isotret','skin-cosm-tan','skin-cosm-preg']
@@ -15179,18 +15241,22 @@ function saveVisit(dept) {
     visit.skinInvestigations = skinGuidance.investigations;
     visit.skinPlan = skinGuidance.management;
     visit.skinProcedural = skinGuidance.procedures;
+    visit.dx = [document.getElementById('skin-primary-dx')?.value || '', document.getElementById('skin-secondary-dx')?.value || ''].filter(Boolean).join(' · ');
     visit.rx = JSON.parse(JSON.stringify(RX_DRUGS || []));
   }
   if(typeof fbSet !== 'function') { showToast('Save not available (offline)', 'w'); return; }
   const patientPatch = { lastVisit: visit, lastVisitKey: visitKey, lastVisitDate: visit.date, lastDeptVisit: dept };
+  if (visit.dx) patientPatch.dx = visit.dx;
   const localPt = window.CURRENT_PATIENT || PATIENTS.find(p => p.bmhId === bmhId);
   if(localPt) {
     localPt.lastVisit = JSON.parse(JSON.stringify(visit));
     localPt.lastVisitKey = visitKey;
     localPt.lastVisitDate = visit.date;
+    if (visit.dx) localPt.dx = visit.dx;
   }
   Promise.all([
     fbSet(`visits/${bmhId}/${visitKey}`, visit),
+    fbSet(`patients/${bmhId}/lastVisit`, visit),
     typeof fbUpdate === 'function' ? fbUpdate('patients/' + bmhId, patientPatch).catch(()=>{}) : Promise.resolve()
   ])
     .then(() => {

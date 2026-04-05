@@ -322,7 +322,7 @@
 <div class="page" id="pg-ophtho">
   <div class="content-full">
     <div class="card">
-      <div class="card-hd">
+      <div class="card-hd" style="position:sticky;top:0;z-index:40;background:#fff">
         <div><div class="card-title">👁️ Eye Examination — <span id="ophtho-pt-nm">Test Patient A</span></div><div class="card-sub"><span id="ophtho-pt-uid" style="font-family:var(--mono);color:var(--bmh-teal)">BMSH-000001</span> · Dr. Varun Baweja</div></div>
         <div style="display:flex;gap:5px;flex-wrap:wrap">
           <button class="btn btn-sm btn-gray" onclick="nav('doctor-queue',null)" title="Back to Queue">← Queue</button>
@@ -333,7 +333,7 @@
         </div>
       </div>
       <!-- Smart SEND row — AI-suggested + full dropdown -->
-      <div style="background:linear-gradient(135deg,#fff7e0,#fff3cc);border-radius:10px;padding:9px 12px;margin-bottom:10px;border:1.5px solid rgba(212,160,23,.3)">
+      <div style="position:sticky;top:64px;z-index:39;background:linear-gradient(135deg,#fff7e0,#fff3cc);border-radius:10px;padding:9px 12px;margin-bottom:10px;border:1.5px solid rgba(212,160,23,.3)">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <span style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">📤 Send to Reception:</span>
           <!-- Full dropdown -->
@@ -382,7 +382,7 @@
         <!-- Recently sent indicator -->
         <div id="sent-charges-log" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px"></div>
       </div>
-      <div class="ptabs">
+      <div class="ptabs" style="position:sticky;top:124px;z-index:38;background:#fff">
         <div class="ptab active" onclick="ptab(this,'oe-hx')">History</div>
         <div class="ptab" onclick="ptab(this,'oe-va-iop-ref')">VA / IOP / Refraction</div>
         <div class="ptab" onclick="ptab(this,'oe-slitlamp')">Slit Lamp</div>
@@ -1539,14 +1539,14 @@
   <div class="col">
     <!-- MAIN REGISTER CARD -->
     <div class="card">
-      <div class="card-hd">
+      <div class="card-hd" style="position:sticky;top:0;z-index:40;background:#fff">
         <div class="card-title">🧾 Reception — Register / Check-in</div>
         <div style="display:flex;gap:6px">
           <button class="btn btn-gold btn-xs" onclick="openM('m-rec-bill')">🖨️ Generate Bill</button>
           <button class="btn btn-outline btn-xs" onclick="openM('m-rec-refund')">↩️ Refund</button>
         </div>
       </div>
-      <div class="ptabs">
+      <div class="ptabs" style="position:sticky;top:64px;z-index:38;background:#fff">
         <div class="ptab active" onclick="ptab(this,'rc-new')">🆕 New Patient</div>
         <div class="ptab" onclick="ptab(this,'rc-exist')">🟢 Queue</div>
         <div class="ptab" onclick="ptab(this,'rc-charges')">💰 Charges</div>
@@ -1802,7 +1802,7 @@
 <div class="page" id="pg-obg">
   <div class="content-full">
     <div class="card">
-      <div class="card-hd">
+      <div class="card-hd" style="position:sticky;top:0;z-index:40;background:#fff">
         <div><div class="card-title">🤰 OBG Clinic — <span id="obg-pt-nm">— Select Patient —</span></div><div class="card-sub" style="font-family:var(--mono);color:var(--bmh-teal)"><span id="obg-pt-uid">—</span> · Dr. Geeta Baweja</div></div>
         <div style="display:flex;gap:5px;flex-wrap:wrap">
           <button class="btn btn-sm btn-gray" onclick="nav('doctor-queue',null)" title="Back to Queue">← Queue</button>
@@ -1811,7 +1811,7 @@
           <button class="btn btn-sm btn-gold" onclick="saveVisit('obg')">💾 Save</button>
         </div>
       </div>
-      <div class="ptabs">
+      <div class="ptabs" style="position:sticky;top:64px;z-index:38;background:#fff">
         <div class="ptab active" onclick="ptab(this,'obg-basic')">Assessment</div>
         <div class="ptab" onclick="ptab(this,'obg-anc')">Visits & Follow-up</div>
         <div class="ptab" onclick="ptab(this,'obg-investigations')">Investigations</div>
@@ -2241,7 +2241,7 @@
 <div class="page" id="pg-psych">
   <div class="content-full">
     <div class="card">
-      <div class="card-hd">
+      <div class="card-hd" style="position:sticky;top:0;z-index:40;background:#fff">
         <div><div class="card-title">🧠 Neuropsychiatry — <span id="psych-pt-nm">— Select Patient —</span></div><div class="card-sub" style="font-family:var(--mono);color:var(--bmh-teal)"><span id="psych-pt-uid">—</span> · Dr. Tarun Baweja</div></div>
         <div style="display:flex;gap:5px;flex-wrap:wrap">
           <button class="btn btn-sm btn-gray" onclick="nav('doctor-queue',null)" title="Back to Queue">← Queue</button>
@@ -2249,7 +2249,7 @@
           <button class="btn btn-sm btn-gold" onclick="saveVisit('psych')">💾 Save</button>
         </div>
       </div>
-      <div class="ptabs">
+      <div class="ptabs" style="position:sticky;top:64px;z-index:38;background:#fff">
         <div class="ptab active" onclick="ptab(this,'psych-hx')">History</div>
         <div class="ptab" onclick="ptab(this,'psych-mse')">MSE</div>
         <div class="ptab" onclick="ptab(this,'psych-past')">Past Visits</div>
@@ -4397,7 +4397,7 @@
   </div>
   <div class="form-group"><label class="fl">BMSH ID</label><input type="text" id="ot-bmsh-id" readonly style="background:var(--green-lt);color:#1a8c3c;font-weight:800;font-family:var(--mono)"></div>
   <div class="form-group"><label class="fl">Age / Sex</label><input type="text" id="ot-age-sex" readonly style="background:var(--g6)"></div>
-  <div class="form-group"><label class="fl">Pre-op Diagnosis</label><input type="text" id="ot-add-dx" placeholder="Primary diagnosis"></div>
+  <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">Pre-op Diagnosis <button type="button" onclick="addOTDiagnosisOption()" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></label><select id="ot-add-dx"></select></div>
   <div class="form-group"><label class="fl">Procedure</label>
     <select id="ot-add-proc"></select>
   </div>
