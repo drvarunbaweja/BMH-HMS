@@ -859,11 +859,15 @@ function isAcceptedLoginPassword(user, profile, pass) {
 function getLoginUserCandidates(rawUser) {
   const u = String(rawUser || '').trim().toLowerCase();
   if (!u) return [];
-  const out = [u];
-  if (!u.includes('@')) {
-    out.push(u + '@bawejahospital.com');
-    out.push(u + '.rpr@bawejahospital.com');
-    out.push(u + '.chd@bawejahospital.com');
+  const compact = u.replace(/\s+/g, '');
+  const normalized = compact.replace(/[,/\\-]+/g, '.');
+  const underscore = normalized.replace(/\./g, '_');
+  const out = [u, compact, normalized, underscore];
+  if (!normalized.includes('@')) {
+    out.push(normalized + '@bawejahospital.com');
+    out.push(normalized + '.rpr@bawejahospital.com');
+    out.push(normalized + '.chd@bawejahospital.com');
+    out.push(underscore + '@bawejahospital.com');
   }
   const uniq = [];
   out.forEach(function (item) { if (item && uniq.indexOf(item) === -1) uniq.push(item); });
@@ -4598,6 +4602,144 @@ function updateIPDChartRow(idx, field, value) {
   if (fbUpdate) fbUpdate('ipdPatients/' + activeIPDPatient.id, { chartRows: activeIPDPatient.chartRows }).catch(()=>{});
 }
 
+function renderIPDMonitoringSheet(id) {
+  const p = (window.IPD_PATIENTS || IPD_PATIENTS || []).find(function (x) { return x.id === id; });
+  const host = document.getElementById('ipd-monitor-body');
+  if (!p || !host) return;
+  const otCase = p.otCaseId ? normalizeOTCaseRecord(OT_CASES.find(function (x) { return x.id === p.otCaseId; }) || {}) : (OT_CASES.slice().reverse().map(normalizeOTCaseRecord).find(function (x) { return x.bmhId === p.bmhId; }) || {});
+  const lastVitals = (p.vitalSigns || [])[0] || p.vitals || {};
+  const chartHtml = (p.chartRows || []).map(function (row, idx) {
+    const control = Array.isArray(row.options) && row.options.length
+      ? `<select onchange="updateIPDMonitorRow(${idx},this.value)" style="width:100%;border:1px solid var(--g4);border-radius:8px;padding:7px 9px;font-size:12px;background:#fff">
+          <option value="">— Select —</option>
+          ${row.options.map(function (opt) { return '<option value="' + escapeHtmlConsent(opt) + '"' + (String(row.value || '') === String(opt) ? ' selected' : '') + '>' + escapeHtmlConsent(opt) + '</option>'; }).join('')}
+        </select>`
+      : `<input type="text" value="${escapeHtmlConsent(row.value || '')}" placeholder="${escapeHtmlConsent(row.placeholder || 'Remark')}" oninput="updateIPDMonitorRow(${idx},this.value)" style="width:100%;border:1px solid var(--g4);border-radius:8px;padding:7px 9px;font-size:12px;background:#fff">`;
+    return `<div style="display:grid;grid-template-columns:auto minmax(180px,1.1fr) minmax(180px,1fr);gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--g5)">
+      <label style="display:flex;align-items:center;justify-content:center"><input type="checkbox" ${row.checked ? 'checked' : ''} onchange="toggleIPDMonitorCheck(${idx},this.checked)"></label>
+      <div style="font-size:12px;font-weight:800;color:var(--tx1)">${row.label}</div>
+      ${control}
+    </div>`;
+  }).join('');
+  const showLabour = normalizeDeptKeyForQueue(p.dept || '') === 'obg';
+  const labourPanel = showLabour ? `
+    <div style="margin-top:14px;background:#fff4f8;border:1px solid rgba(192,0,78,.18);border-radius:12px;padding:12px">
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:900;color:#c0004e;margin-bottom:10px"><input type="checkbox" id="ipdm-in-labour" ${p.inLabour ? 'checked' : ''} onchange="document.getElementById('ipdm-labour-block').style.display=this.checked?'grid':'none'"> Patient in labour</label>
+      <div id="ipdm-labour-block" style="display:${p.inLabour ? 'grid' : 'none'};grid-template-columns:repeat(3,minmax(0,1fr));gap:10px">
+        <div class="form-group" style="margin:0"><label class="fl">Contractions</label><select id="ipdm-contractions"><option value="">— Select —</option><option ${p.labourContractions==='Regular'?'selected':''}>Regular</option><option ${p.labourContractions==='Irregular'?'selected':''}>Irregular</option><option ${p.labourContractions==='Poor progress'?'selected':''}>Poor progress</option></select></div>
+        <div class="form-group" style="margin:0"><label class="fl">FHR / fetal status</label><select id="ipdm-fhr"><option value="">— Select —</option><option ${p.labourFhr==='Reassuring'?'selected':''}>Reassuring</option><option ${p.labourFhr==='Tachycardia'?'selected':''}>Tachycardia</option><option ${p.labourFhr==='Bradycardia'?'selected':''}>Bradycardia</option><option ${p.labourFhr==='Needs urgent review'?'selected':''}>Needs urgent review</option></select></div>
+        <div class="form-group" style="margin:0"><label class="fl">Liquor / membranes</label><select id="ipdm-liquor"><option value="">— Select —</option><option ${p.labourLiquor==='Clear'?'selected':''}>Clear</option><option ${p.labourLiquor==='Meconium'?'selected':''}>Meconium</option><option ${p.labourLiquor==='Leaking'?'selected':''}>Leaking</option><option ${p.labourLiquor==='Ruptured'?'selected':''}>Ruptured</option></select></div>
+        <div class="form-group" style="margin:0"><label class="fl">Cervix / labour progress</label><input type="text" id="ipdm-cervix" value="${escapeHtmlConsent(p.labourCervix || '')}" placeholder="e.g. 4 cm, 80% effaced"></div>
+        <div class="form-group" style="margin:0"><label class="fl">Bleeding</label><select id="ipdm-bleeding"><option value="">— Select —</option><option ${p.labourBleeding==='Normal'?'selected':''}>Normal</option><option ${p.labourBleeding==='Spotting'?'selected':''}>Spotting</option><option ${p.labourBleeding==='Heavy'?'selected':''}>Heavy</option></select></div>
+        <div class="form-group" style="margin:0"><label class="fl">Medicine / labour advice</label><input type="text" id="ipdm-labour-med" value="${escapeHtmlConsent(p.labourMedicine || '')}" placeholder="Oxytocin / analgesia / advice"></div>
+      </div>
+    </div>` : '';
+  host.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px">
+      <div style="background:#eef3fb;border-radius:10px;padding:10px"><div style="font-size:9px;font-weight:900;color:var(--g1);text-transform:uppercase">Patient</div><div style="font-size:13px;font-weight:900;color:#1A3C6E">${p.name}</div></div>
+      <div style="background:#eefcf6;border-radius:10px;padding:10px"><div style="font-size:9px;font-weight:900;color:var(--g1);text-transform:uppercase">Procedure / surgery</div><div style="font-size:13px;font-weight:900;color:#1a8c3c">${otCase.procedure || p.surgery || p.type || '—'}</div></div>
+      <div style="background:#fff7e8;border-radius:10px;padding:10px"><div style="font-size:9px;font-weight:900;color:var(--g1);text-transform:uppercase">${normalizeDeptKeyForQueue(p.dept || '') === 'ophtho' ? 'Eye / site' : 'Ward / type'}</div><div style="font-size:13px;font-weight:900;color:#8a4200">${normalizeDeptKeyForQueue(p.dept || '') === 'ophtho' ? (otCase.site || p.surgeryEye || '—') : (p.ward || p.type || '—')}</div></div>
+      <div style="background:#fff0f4;border-radius:10px;padding:10px"><div style="font-size:9px;font-weight:900;color:var(--g1);text-transform:uppercase">Doctor</div><div style="font-size:13px;font-weight:900;color:#c0004e">${p.doctor || '—'}</div></div>
+    </div>
+    <div style="background:#fff;border:1px solid var(--g5);border-radius:12px;padding:12px;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Quick vitals entry</div>
+      <div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px">
+        <div class="form-group" style="margin:0"><label class="fl">BP</label><input type="text" id="ipdm-bp" value="${escapeHtmlConsent(lastVitals.bp || '')}" placeholder="120/80"></div>
+        <div class="form-group" style="margin:0"><label class="fl">Pulse</label><input type="number" id="ipdm-pulse" value="${escapeHtmlConsent(lastVitals.pulse || '')}" placeholder="72"></div>
+        <div class="form-group" style="margin:0"><label class="fl">Temp</label><input type="number" step="0.1" id="ipdm-temp" value="${escapeHtmlConsent(lastVitals.temp || '')}" placeholder="36.8"></div>
+        <div class="form-group" style="margin:0"><label class="fl">SpO2</label><input type="number" id="ipdm-spo2" value="${escapeHtmlConsent(lastVitals.spo2 || '')}" placeholder="98"></div>
+        <div class="form-group" style="margin:0"><label class="fl">RR</label><input type="number" id="ipdm-rr" value="${escapeHtmlConsent(lastVitals.rr || '')}" placeholder="18"></div>
+        <div class="form-group" style="margin:0"><label class="fl">Pain</label><select id="ipdm-pain"><option value="">—</option>${[0,1,2,3,4,5,6,7,8,9,10].map(function(n){ return '<option value="' + n + '"' + (String(lastVitals.pain || '') === String(n) ? ' selected' : '') + '>' + n + '</option>'; }).join('')}</select></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+        <button class="btn btn-gold btn-sm" onclick="saveIPDMonitorVitals()">💾 Save Vitals</button>
+        <button class="btn btn-outline btn-sm" onclick="openM('m-ipd-note')">+ Add Vitals / Note</button>
+      </div>
+    </div>
+    <div style="background:#fff;border:1px solid var(--g5);border-radius:12px;padding:12px">
+      <div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Department monitoring checklist</div>
+      ${chartHtml}
+      ${labourPanel}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+        <button class="btn btn-gold btn-sm" onclick="saveIPDMonitoringSheet()">✅ Save Monitoring Sheet</button>
+        <button class="btn btn-gray btn-sm" onclick="closeM('m-ipd-monitor')">Close</button>
+      </div>
+    </div>`;
+}
+
+function updateIPDMonitorRow(idx, value) {
+  if (!activeIPDPatient || !Array.isArray(activeIPDPatient.chartRows) || !activeIPDPatient.chartRows[idx]) return;
+  activeIPDPatient.chartRows[idx].value = value;
+}
+
+function toggleIPDMonitorCheck(idx, checked) {
+  if (!activeIPDPatient || !Array.isArray(activeIPDPatient.chartRows) || !activeIPDPatient.chartRows[idx]) return;
+  activeIPDPatient.chartRows[idx].checked = !!checked;
+  if (checked && !activeIPDPatient.chartRows[idx].value) activeIPDPatient.chartRows[idx].value = 'Done';
+}
+
+function saveIPDMonitorVitals() {
+  if (!activeIPDPatient) return;
+  const vitals = {
+    bp: document.getElementById('ipdm-bp')?.value || '',
+    pulse: document.getElementById('ipdm-pulse')?.value || '',
+    temp: document.getElementById('ipdm-temp')?.value || '',
+    spo2: document.getElementById('ipdm-spo2')?.value || '',
+    rr: document.getElementById('ipdm-rr')?.value || '',
+    pain: document.getElementById('ipdm-pain')?.value || ''
+  };
+  activeIPDPatient.vitals = Object.assign({}, activeIPDPatient.vitals || {}, vitals);
+  if (!Array.isArray(activeIPDPatient.vitalSigns)) activeIPDPatient.vitalSigns = [];
+  activeIPDPatient.vitalSigns.unshift(Object.assign({ recordedAt: new Date().toISOString(), by: CURRENT_USER?.name || 'Staff' }, vitals));
+  const nextDue = (activeIPDPatient.monitoringPlan || []).find(function (slot) { return slot.status !== 'done'; });
+  if (nextDue) {
+    nextDue.status = 'done';
+    nextDue.recordedAt = new Date().toISOString();
+    nextDue.by = CURRENT_USER?.name || 'Staff';
+  }
+  fbUpdate && fbUpdate('ipdPatients/' + activeIPDPatient.id, { vitals: activeIPDPatient.vitals, vitalSigns: activeIPDPatient.vitalSigns, monitoringPlan: activeIPDPatient.monitoringPlan }).catch(()=>{});
+  openIPDPatient(activeIPDPatient.id);
+  renderIPDMonitoringSheet(activeIPDPatient.id);
+  renderIPD && renderIPD();
+  showToast('Vitals saved ✓', 's');
+}
+
+function saveIPDMonitoringSheet() {
+  if (!activeIPDPatient) return;
+  const isObg = normalizeDeptKeyForQueue(activeIPDPatient.dept || '') === 'obg';
+  if (isObg) {
+    activeIPDPatient.inLabour = !!document.getElementById('ipdm-in-labour')?.checked;
+    activeIPDPatient.labourContractions = document.getElementById('ipdm-contractions')?.value || '';
+    activeIPDPatient.labourFhr = document.getElementById('ipdm-fhr')?.value || '';
+    activeIPDPatient.labourLiquor = document.getElementById('ipdm-liquor')?.value || '';
+    activeIPDPatient.labourCervix = document.getElementById('ipdm-cervix')?.value || '';
+    activeIPDPatient.labourBleeding = document.getElementById('ipdm-bleeding')?.value || '';
+    activeIPDPatient.labourMedicine = document.getElementById('ipdm-labour-med')?.value || '';
+  }
+  fbUpdate && fbUpdate('ipdPatients/' + activeIPDPatient.id, {
+    chartRows: activeIPDPatient.chartRows,
+    inLabour: !!activeIPDPatient.inLabour,
+    labourContractions: activeIPDPatient.labourContractions || '',
+    labourFhr: activeIPDPatient.labourFhr || '',
+    labourLiquor: activeIPDPatient.labourLiquor || '',
+    labourCervix: activeIPDPatient.labourCervix || '',
+    labourBleeding: activeIPDPatient.labourBleeding || '',
+    labourMedicine: activeIPDPatient.labourMedicine || ''
+  }).catch(()=>{});
+  openIPDPatient(activeIPDPatient.id);
+  renderIPDMonitoringSheet(activeIPDPatient.id);
+  showToast('Monitoring sheet saved ✓', 's');
+}
+
+function openIPDWorkflow(id) {
+  nav && nav('ipd', null);
+  setTimeout(function () {
+    openIPDPatient(id);
+    renderIPDMonitoringSheet(id);
+    openM('m-ipd-monitor');
+  }, 120);
+}
+
 function openIPDPatient(id) {
   const p = IPD_PATIENTS.find(x=>x.id===id);
   if (!p) return;
@@ -4673,7 +4815,7 @@ function openIPDPatient(id) {
     <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:12px">
       <button class="btn btn-outline btn-sm" onclick="printIPDSummary('${p.id}')">🖨️ Print Summary</button>
       <button class="btn btn-gold btn-sm" onclick="showToast('Discharge card generated ✓','s')">🏠 Discharge</button>
-      <button class="btn btn-gray btn-sm" onclick="showToast('Vitals updated ✓','s')">📊 Update Vitals</button>
+      <button class="btn btn-gray btn-sm" onclick="openIPDWorkflow('${p.id}')">📋 Open Monitoring Sheet</button>
     </div>`;
   renderIPDAlerts(p);
 }
@@ -15946,7 +16088,7 @@ function renderIPD() {
     return;
   }
   el.innerHTML = visibleIPD.map(p => `
-    <div onclick="openIPDPatient('${p.id}')"
+    <div onclick="openIPDWorkflow('${p.id}')"
       style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:var(--r);cursor:pointer;margin-bottom:6px;border:1.5px solid ${p.status==='critical'?'var(--red)':'var(--g4)'};background:${p.status==='critical'?'var(--red-lt)':'#fff'}"
       onmouseover="this.style.background='var(--g6)'" onmouseout="this.style.background='${p.status==='critical'?'var(--red-lt)':'#fff'}'">
       <div style="width:38px;height:38px;border-radius:50%;background:#1A3C6E;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px;flex-shrink:0">${p.initials||p.name[0]||'?'}</div>
@@ -16453,7 +16595,7 @@ function renderDocQueue() {
         <div style="font-size:10.5px;color:var(--tx3);margin-top:1px">🛏️ ${ip.ward||'—'} · ${ip.type||'—'}</div>
         <div style="font-size:10px;color:var(--g1);margin-top:1px">Dr. ${ip.doctor||'—'} · Admitted ${ip.admittedDate||'—'}</div>
       </div>
-      <button class="btn btn-xs btn-outline" onclick="openIPDChart('${ip.id}')">View</button>
+      <button class="btn btn-xs btn-outline" onclick="openIPDWorkflow('${ip.id}')">View</button>
     </div>`).join('') : '<div style="padding:20px;text-align:center;color:var(--g2);font-size:12px">No IPD patients</div>';
 }
 
