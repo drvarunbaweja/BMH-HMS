@@ -2817,6 +2817,7 @@ function printDischarge() {
   const html = buildDischargeCardPrintHtml();
   if (!html) { showToast('Select a patient first', 'w'); return; }
   safePrint(html);
+  autoDischargeCurrentIpdPatientFromSurgery();
   showToast('Discharge card ready to print ✓', 's');
 }
 function printRx() { if (typeof window.printUnifiedRx === 'function') window.printUnifiedRx('oe'); }
@@ -4098,13 +4099,85 @@ function ipdMonitoringSlots(freqKey, fromIso) {
 }
 function ipdDeptTemplate(deptKey) {
   const map = {
-    ophtho:['Vision / pain status','Eye dressing / patch','Eye drops given','IOP / nausea / vomiting','Doctor instructions'],
-    obg:['Bleeding / lochia','Uterine tone','Foetal / baby status','Feeding / lactation','Doctor instructions'],
+    ophtho:['Pre-op vitals','Eye marked / consent verified','Eye drops given','Test dose / allergy check','Patch / dressing / pain status','Doctor instructions'],
+    obg:['Bleeding / lochia','Uterine tone','Foetal / baby status','Breastfeeding / lactation','Urine / bowel','Doctor instructions'],
     psych:['Mood / behaviour','Sleep','Medication compliance','Risk / supervision','Doctor instructions'],
     skin:['Rash / lesion change','Itching / pain','Dressing / topical therapy','Drug reaction watch','Doctor instructions'],
     general:['Pain / comfort','Fluids / diet','Urine / stool','Mobility / fall risk','Doctor instructions']
   };
   return (map[deptKey] || map.general).map(label => ({ label, value:'', checked:false }));
+}
+function ensureIpdAdmissionFromOTCase(otCase, patient) {
+  if (!otCase || !otCase.bmhId || !otCase.admitToIpd) return null;
+  const pt = patient || PATIENTS.find(function (p) { return p.bmhId === otCase.bmhId; }) || {};
+  const dept = normalizeDeptKeyForQueue(otCase.dept || pt.dept || (String(otCase.procedure || '').toLowerCase().includes('lscs') ? 'obg' : 'ophtho'));
+  const monitoringKey = otCase.ipdMonitoring || (dept === 'ophtho' ? '2h' : '6h');
+  const existingIdx = (window.IPD_PATIENTS || []).findIndex(function (x) { return x.bmhId === otCase.bmhId; });
+  const base = existingIdx >= 0 ? (window.IPD_PATIENTS[existingIdx] || {}) : {};
+  const entry = Object.assign({}, base, {
+    id: base.id || ('IPD' + Date.now()),
+    bmhId: otCase.bmhId,
+    name: pt.name || otCase.patient || 'Patient',
+    age: pt.age || otCase.age || '',
+    sex: pt.sex || otCase.sex || '',
+    dept,
+    ward: otCase.ipdWard || base.ward || (dept === 'ophtho' ? 'Eye Day Care' : dept === 'obg' ? 'OBG Ward' : 'Ward'),
+    type: otCase.ipdType || base.type || (dept === 'ophtho' ? 'Day Care' : dept === 'obg' ? 'Obstetric' : 'Surgical'),
+    doctor: otCase.surgeon || pt.doctor || base.doctor || CURRENT_USER?.name || '—',
+    room: otCase.ipdRoom || base.room || '',
+    dx: otCase.dx || pt.dx || base.dx || '',
+    color: pt.color || base.color || '#1A3C6E',
+    initials: pt.initials || base.initials || (String(pt.name || otCase.patient || '?').split(' ').map(function (n) { return n[0] || ''; }).join('').substring(0,2).toUpperCase()),
+    admittedDate: base.admittedDate || new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}),
+    admittedAt: base.admittedAt || new Date().toISOString(),
+    admittedBy: base.admittedBy || CURRENT_USER?.name || 'System',
+    status: 'admitted',
+    allergies: base.allergies || pt.drugAllergy || '',
+    diet: base.diet || '',
+    monitoringKey,
+    monitoringLabel: ({'1h':'Hourly','2h':'Every 2 hours','4h':'Every 4 hours','6h':'Every 6 hours'})[monitoringKey] || 'Every 6 hours',
+    monitoringPlan: (base.monitoringPlan && base.monitoringPlan.length) ? base.monitoringPlan : ipdMonitoringSlots(monitoringKey, new Date().toISOString()),
+    vitalSigns: Array.isArray(base.vitalSigns) ? base.vitalSigns : [],
+    vitals: base.vitals || { bp:'', pulse:'', temp:'', spo2:'', rr:'', weight:pt.weight || '' },
+    chartRows: Array.isArray(base.chartRows) && base.chartRows.length ? base.chartRows : ipdDeptTemplate(dept),
+    notes: Array.isArray(base.notes) ? base.notes : [],
+    progressNotes: Array.isArray(base.progressNotes) ? base.progressNotes : [],
+    otCaseId: otCase.id,
+    surgery: otCase.procedure || '',
+    surgeryEye: otCase.site || '',
+    ipdSource: 'ot',
+    otAdmissionNotes: otCase.ipdNotes || ''
+  });
+  if(!window.IPD_PATIENTS) window.IPD_PATIENTS = [];
+  if (existingIdx >= 0) window.IPD_PATIENTS[existingIdx] = entry;
+  else window.IPD_PATIENTS.push(entry);
+  pt.ipdAdmitted = true;
+  pt.status = 'ipd';
+  pt.dept = dept;
+  fbSet && fbSet('ipdPatients/' + entry.id, entry).catch(function (e) { console.warn('OT→IPD save error:', e); });
+  fbUpdate && fbUpdate('patients/' + otCase.bmhId, { ipdAdmitted:true, status:'ipd', dept }).catch(function () {});
+  return entry;
+}
+function autoDischargeCurrentIpdPatientFromSurgery() {
+  const bmhId = activeOTCase?.bmhId || window.CURRENT_PATIENT?.bmhId;
+  if (!bmhId || !window.IPD_PATIENTS) return;
+  const idx = window.IPD_PATIENTS.findIndex(function (p) { return p.bmhId === bmhId; });
+  if (idx < 0) return;
+  const ipd = window.IPD_PATIENTS[idx];
+  ipd.status = 'discharged';
+  ipd.dischargedAt = new Date().toISOString();
+  ipd.dischargedBy = CURRENT_USER?.name || 'System';
+  fbUpdate && fbUpdate('ipdPatients/' + ipd.id, { status:'discharged', dischargedAt:ipd.dischargedAt, dischargedBy:ipd.dischargedBy }).catch(function(){});
+  window.IPD_PATIENTS.splice(idx, 1);
+  const pt = PATIENTS.find(function (p) { return p.bmhId === bmhId; });
+  if (pt) {
+    pt.ipdAdmitted = false;
+    pt.status = 'seen';
+    fbUpdate && fbUpdate('patients/' + bmhId, { ipdAdmitted:false, status:'seen' }).catch(function(){});
+  }
+  renderIPD && renderIPD();
+  renderDocQueue && renderDocQueue();
+  showToast('Patient discharged from IPD ✓', 's');
 }
 function ipdVitalsStatus(vitals) {
   const flags = [];
@@ -8984,6 +9057,7 @@ function otCaseCard(c, sno) {
           <div style="font-size:13px;font-weight:900">${c.patient}</div>
           <div style="font-family:var(--mono);font-size:9px;color:var(--bmh-teal);font-weight:700">${c.bmhId}</div>
           <span class="badge ${statusStyle.badge}" style="font-size:9.5px">${statusStyle.label}</span>
+          ${c.admitToIpd ? '<span class="badge bd-purple" style="font-size:9px">🛏️ Admitted</span>' : ''}
           ${priorityBadge}
         </div>
         <div style="font-size:11px;color:var(--tx3);margin-top:3px;font-weight:600">${c.procedure}</div>
@@ -9232,6 +9306,12 @@ function addOTCase() {
   const iol = document.getElementById('ot-add-iol')?.value||'N/A';
   const iolType = document.getElementById('ot-add-iol-model')?.value || '';
   const iolPower = document.getElementById('ot-add-iol-power')?.value || extractIolPower(iol);
+  const admitToIpd = !!document.getElementById('ot-add-admit')?.checked;
+  const ipdType = document.getElementById('ot-add-admit-type')?.value || '';
+  const ipdWard = document.getElementById('ot-add-admit-ward')?.value || '';
+  const ipdRoom = document.getElementById('ot-add-admit-room')?.value || '';
+  const ipdMonitoring = document.getElementById('ot-add-admit-monitoring')?.value || '';
+  const ipdNotes = document.getElementById('ot-add-admit-notes')?.value || '';
   const priority = document.getElementById('ot-add-priority')?.value||'elective';
   const notes = document.getElementById('ot-add-notes')?.value||'';
   const preop = document.getElementById('ot-add-preop')?.value||'';
@@ -9247,6 +9327,7 @@ function addOTCase() {
     date, scheduledTime:time, room, iol, iolType, iolPower, priority,
     centre: pt?.centre || getEffectiveCentre() || CURRENT_USER?.centre || 'CHD',
     preop, consent, fasting, status:'pending',
+    admitToIpd, ipdType, ipdWard, ipdRoom, ipdMonitoring, ipdNotes,
     timings:{patientIn:'',anaesStart:'',incision:'',procEnd:'',patientOut:'',rrIn:''},
     complications:'', bloodLoss:'', notes,
     signIn:false, timeOut:false, signOut:false,
@@ -9265,7 +9346,9 @@ function addOTCase() {
   }
   // Save to Firebase
   fbSet('otCases/' + normalized.id, normalized).catch(e => console.warn('OT save error:', e));
+  if (admitToIpd) ensureIpdAdmissionFromOTCase(normalized, pt);
   renderOTList();
+  renderIPD && renderIPD();
   showToast(`⚕️ ${ptName} ${editId ? 'updated in' : 'added to'} OT list ✓`,'s');
   closeM('m-ot-add');
   activeOTCase = normalized;
@@ -9405,6 +9488,15 @@ function openOTAddModal(opts) {
     setV('ot-add-consent', existing.consent);
     setV('ot-add-fasting', existing.fasting);
     setV('ot-add-notes', existing.notes);
+    const admitEl = document.getElementById('ot-add-admit');
+    const admitBlock = document.getElementById('ot-add-admit-block');
+    if (admitEl) admitEl.checked = !!existing.admitToIpd;
+    if (admitBlock) admitBlock.style.display = existing.admitToIpd ? 'grid' : 'none';
+    setV('ot-add-admit-type', existing.ipdType);
+    setV('ot-add-admit-ward', existing.ipdWard);
+    setV('ot-add-admit-room', existing.ipdRoom);
+    setV('ot-add-admit-monitoring', existing.ipdMonitoring);
+    setV('ot-add-admit-notes', existing.ipdNotes);
     if (ptSel && existing.bmhId && ![...ptSel.options].some(function (o) { return o.value === existing.bmhId; })) {
       const opt = document.createElement('option');
       opt.value = existing.bmhId;
@@ -9413,7 +9505,22 @@ function openOTAddModal(opts) {
     }
     if (ptSel && existing.bmhId) ptSel.value = existing.bmhId;
   } else if (opts.bmhId) {
+    const admitEl = document.getElementById('ot-add-admit');
+    const admitBlock = document.getElementById('ot-add-admit-block');
+    if (admitEl) admitEl.checked = false;
+    if (admitBlock) admitBlock.style.display = 'none';
+    ['ot-add-admit-type','ot-add-admit-ward','ot-add-admit-room','ot-add-admit-monitoring','ot-add-admit-notes'].forEach(function (id) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (el.tagName === 'SELECT') el.selectedIndex = 0;
+      else el.value = '';
+    });
     fillOTFromPatient(opts.bmhId);
+  } else {
+    const admitEl = document.getElementById('ot-add-admit');
+    const admitBlock = document.getElementById('ot-add-admit-block');
+    if (admitEl) admitEl.checked = false;
+    if (admitBlock) admitBlock.style.display = 'none';
   }
   openM('m-ot-add');
 }

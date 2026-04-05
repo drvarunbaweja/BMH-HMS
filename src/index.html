@@ -9,6 +9,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./css/main.css">
   <style>
+    #pg-settings > .tab-content { display:none; }
+    #pg-settings > .tab-content.active { display:block; }
     @media (max-width: 768px) {
       .shell { display:block !important; }
       .main { width:100%; min-width:0; }
@@ -3580,8 +3582,8 @@
     <div id="rep-patient-result"></div>
   </div>
 
-  <!-- CSV IMPORT TAB -->
-<div class="tab-content" id="set-import">
+<!-- CSV IMPORT TAB -->
+<div class="tab-content" id="rep-import-legacy">
   <div style="background:var(--blue-lt);border-radius:var(--r);padding:16px;margin-bottom:14px;border:1.5px dashed var(--blue)">
     <div style="font-size:14px;font-weight:900;color:var(--bmh-blue);margin-bottom:6px">📥 Import Patients from CSV</div>
     <div style="font-size:12px;color:var(--g1);margin-bottom:12px">Supports the standard Docterz/BMH CSV format. Duplicate patients (matching mobile or UID) will be skipped.</div>
@@ -4471,6 +4473,19 @@
   </div>
   <div class="form-group"><label class="fl">Fasting Status</label>
     <select id="ot-add-fasting"><option>Yes — fasted 6+ hrs</option><option>Yes — topical only, no fasting needed</option><option>No — emergency</option></select>
+  </div>
+  <div class="form-group full" style="background:var(--g6);border:1px solid var(--g4);border-radius:10px;padding:10px">
+    <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800;color:var(--bmh-blue);margin-bottom:8px">
+      <input type="checkbox" id="ot-add-admit" onchange="document.getElementById('ot-add-admit-block').style.display=this.checked?'grid':'none'">
+      Admit patient to IPD / day-care
+    </label>
+    <div id="ot-add-admit-block" style="display:none;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px">
+      <div class="form-group"><label class="fl">Admission Type</label><select id="ot-add-admit-type"><option value="Day Care">Day Care</option><option value="Post-Op">Post-Operative Monitoring</option><option value="Surgical">Surgical</option><option value="Obstetric">Obstetric</option></select></div>
+      <div class="form-group"><label class="fl">Ward / Bed</label><input type="text" id="ot-add-admit-ward" placeholder="Eye Ward / Bed 1"></div>
+      <div class="form-group"><label class="fl">Room / Bed No.</label><input type="text" id="ot-add-admit-room" placeholder="Room 3 / Bed A"></div>
+      <div class="form-group"><label class="fl">Monitoring</label><select id="ot-add-admit-monitoring"><option value="6h">Every 6 hours</option><option value="4h">Every 4 hours</option><option value="2h">Every 2 hours</option><option value="1h">Hourly</option></select></div>
+      <div class="form-group" style="grid-column:1/-1"><label class="fl">Admission Notes</label><input type="text" id="ot-add-admit-notes" placeholder="Vitals stable, eye marked, drops given, test dose if applicable"></div>
+    </div>
   </div>
   <div class="form-group full"><label class="fl">Additional Notes / Special Instructions</label>
     <textarea id="ot-add-notes" placeholder="Allergies, special equipment needed, implant power, high risk notes…" style="min-height:60px"></textarea>
