@@ -68,6 +68,7 @@ const USER_DB = {
 [
   ['reception.rpr', 'reception.rpr@bawejahospital.com'],
   ['reception.chd', 'reception.chd@bawejahospital.com'],
+  ['opto.rpr', 'opto.rpr@bawejahospital.com'],
   ['lab.rpr', 'lab.rpr@bawejahospital.com'],
   ['lab.chd', 'lab.chd@bawejahospital.com'],
   ['tpa.rpr', 'tpa.rpr@bawejahospital.com'],
@@ -84,7 +85,7 @@ const USER_DB = {
   'drvarun','drbaweja','drtarun','drtarun_chd','drnamrata','drnamrata_chd','drpooja','drpooja_chd',
   'drgeeta','rec_chd','rec_rpr','reception.chd','reception.rpr','lab_chd','lab_rpr','lab.chd','lab.rpr',
   'tpa_chd','tpa_rpr','tpa.chd','tpa.rpr','inv_chd','inv_rpr','inventory.chd','inventory.rpr',
-  'optometrist','opto_rpr','drvarun_chd','drvarun_rpr','drvarun@bawejahospital.com','drbaweja@bawejahospital.com',
+  'optometrist','opto_rpr','opto.rpr','drvarun_chd','drvarun_rpr','drvarun@bawejahospital.com','drbaweja@bawejahospital.com',
   'drtarun.chd@bawejahospital.com','drtarun.rpr@bawejahospital.com','drtarun@bawejahospital.com',
   'drgeeta@bawejahospital.com','drnamrata.chd@bawejahospital.com','drnamrata.rpr@bawejahospital.com','drnamrata@bawejahospital.com',
   'drpooja.chd@bawejahospital.com','drpooja.rpr@bawejahospital.com','drpooja@bawejahospital.com',
@@ -4297,23 +4298,76 @@ function ipdDeptTemplate(deptKey, context) {
   const ctx = context || {};
   const typeText = String(ctx.type || ctx.admissionType || '').toLowerCase();
   const surgText = String(ctx.surgery || ctx.procedure || '').toLowerCase();
+  const row = function(label, options, placeholder) {
+    return { label, value:'', checked:false, options: Array.isArray(options) ? options : null, placeholder: placeholder || '' };
+  };
   const map = {
-    ophtho:['Baseline BP / pulse / sugar reviewed','Investigations / fitness complete','Consent signed / file complete','Eye marked and confirmed','Dilating drops given','Antibiotic / NSAID drops given','IOL / implant verified','Test dose / allergy check if applicable','NBM / escort / OT checklist done','Post-op patch / shield applied','Post-op drops and red flags explained','Discharge timing / review explained'],
-    psych:['Mood / behaviour','Sleep','Medication compliance','Risk / supervision','Doctor instructions'],
-    skin:['Rash / lesion change','Itching / pain','Dressing / topical therapy','Drug reaction watch','Doctor instructions'],
-    general:['Pain / comfort','Fluids / diet','Urine / stool','Mobility / fall risk','Doctor instructions']
+    ophtho:[
+      row('Baseline BP / pulse / sugar reviewed', ['Normal', 'High BP', 'Low sugar', 'Abnormal - review doctor'], 'Observation'),
+      row('Investigations / fitness complete', ['Complete', 'Pending', 'Abnormal - review before OT'], 'Remark'),
+      row('Consent signed / file complete', ['Done', 'Pending', 'Relative counselled'], 'Remark'),
+      row('Eye marked and confirmed', ['Right eye marked', 'Left eye marked', 'Both eyes confirmed', 'Pending'], 'Remark'),
+      row('Dilating drops given', ['Not needed', '1 cycle done', '2 cycles done', '3 cycles done', 'Pending'], 'Drug / timing'),
+      row('Antibiotic / NSAID drops given', ['Given', 'Not yet', 'Not advised'], 'Drug / timing'),
+      row('IOL / implant verified', ['Verified', 'Pending', 'Mismatch - alert doctor'], 'Model / power'),
+      row('Test dose / allergy check', ['Not required', 'Done', 'Reaction noted'], 'Remark'),
+      row('NBM / escort / OT checklist', ['Complete', 'Pending', 'Escort absent'], 'Remark'),
+      row('Post-op patch / shield / pain', ['Comfortable', 'Mild pain', 'Severe pain - review'], 'Patch / pain'),
+      row('Post-op drops and red flags explained', ['Explained', 'Pending'], 'Remark'),
+      row('Discharge timing / review explained', ['Explained', 'Pending'], 'Next review')
+    ],
+    psych:[row('Mood / behaviour', null, 'Observation'),row('Sleep', null, 'Observation'),row('Medication compliance', ['Good', 'Partial', 'Poor'], 'Remark'),row('Risk / supervision', ['Low', 'Moderate', 'High'], 'Remark'),row('Doctor instructions', null, 'Instruction')],
+    skin:[row('Rash / lesion change', null, 'Observation'),row('Itching / pain', ['Better', 'Same', 'Worse'], 'Remark'),row('Dressing / topical therapy', ['Done', 'Pending'], 'Remark'),row('Drug reaction watch', ['No reaction', 'Mild reaction', 'Urgent review'], 'Remark'),row('Doctor instructions', null, 'Instruction')],
+    general:[row('Pain / comfort', ['Comfortable', 'Mild pain', 'Severe pain'], 'Remark'),row('Fluids / diet', ['Taking orally', 'IV fluids', 'NBM'], 'Remark'),row('Urine / stool', ['Normal', 'Reduced', 'Absent', 'Needs review'], 'Remark'),row('Mobility / fall risk', ['Walking', 'Assisted', 'Bed rest'], 'Remark'),row('Doctor instructions', null, 'Instruction')]
   };
   let labels = map[deptKey] || map.general;
   if (deptKey === 'obg') {
     if (/normal delivery|assisted delivery|labour room|maternity/.test(typeText + ' ' + surgText)) {
-      labels = ['Baseline BP / pulse / FHR','Hb / blood group / investigations reviewed','Labour consent / labour room checklist','IV line / hydration / bladder care','Labour progress / contraction charting','Liquor / membranes / bleeding monitored','Delivery details / placenta / PPH watch','Baby status / APGAR / cry / NICU need','Breastfeeding initiation / newborn advice','Postnatal monitoring / danger signs'];
+      labels = [
+        row('Baseline BP / pulse / FHR', ['Stable', 'High BP', 'FHR concern', 'Urgent review'], 'Vitals / FHR'),
+        row('Hb / blood group / investigations reviewed', ['Complete', 'Pending', 'Abnormal - alert doctor'], 'Remark'),
+        row('Labour consent / labour room checklist', ['Done', 'Pending'], 'Remark'),
+        row('IV line / hydration / bladder care', ['Done', 'Ongoing', 'Needs review'], 'Remark'),
+        row('Labour progress / contraction charting', ['Progressing', 'Slow progress', 'Needs doctor review'], 'Remark'),
+        row('Liquor / membranes / bleeding monitored', ['Normal', 'Meconium', 'Heavy bleeding', 'Leakage'], 'Remark'),
+        row('Delivery details / placenta / PPH watch', ['Normal', 'PPH watch', 'PPH suspected', 'Retained placenta concern'], 'Remark'),
+        row('Baby status / APGAR / cry / NICU need', ['Baby well', 'Poor cry', 'NICU review', 'Needs paediatrician'], 'Remark'),
+        row('Breastfeeding initiation / newborn advice', ['Started', 'Counselled', 'Difficulty feeding'], 'Remark'),
+        row('Postnatal monitoring / danger signs', ['Stable', 'Need close watch', 'Urgent review'], 'Remark')
+      ];
     } else if (/mtp|suction|evac|painless abortion/.test(typeText + ' ' + surgText)) {
-      labels = ['Vitals / pain score','Consent / Rh status / investigations reviewed','IV line / sedation / anaesthesia clearance','Procedure checklist complete','Bleeding / cramps monitored','Products complete / specimen noted','Antibiotics / analgesia given','Contraception counselling','Warning signs explained','Follow-up date given'];
+      labels = [
+        row('Vitals / pain score', ['Stable', 'Pain controlled', 'Heavy pain / review'], 'Remark'),
+        row('Consent / Rh status / investigations reviewed', ['Complete', 'Pending', 'Abnormal - review'], 'Remark'),
+        row('IV line / sedation / anaesthesia clearance', ['Done', 'Pending'], 'Remark'),
+        row('Procedure checklist complete', ['Complete', 'Pending'], 'Remark'),
+        row('Bleeding / cramps monitored', ['Mild', 'Moderate', 'Heavy bleeding', 'Urgent review'], 'Remark'),
+        row('Products complete / specimen noted', ['Complete', 'Sent', 'Review needed'], 'Remark'),
+        row('Antibiotics / analgesia given', ['Given', 'Pending'], 'Drugs'),
+        row('Contraception counselling', ['Done', 'Deferred'], 'Plan'),
+        row('Warning signs explained', ['Explained', 'Pending'], 'Remark'),
+        row('Follow-up date given', ['Given', 'Pending'], 'Date / note')
+      ];
     } else {
-      labels = ['BP / pulse / fetal status','Hb / blood group / investigations reviewed','Consent / anaesthesia / blood arranged','Shaving / catheter / NBM complete','OT checklist / prophylaxis complete','Bleeding / lochia monitored','Uterine tone / fundal height','Urine output / bowel sounds','Baby status / breastfeeding','IV fluids / antibiotics / analgesia','LSCS wound / dressing / mobilisation','Doctor notes / discharge advice'];
+      labels = [
+        row('BP / pulse / fetal status', ['Stable', 'High BP', 'Fetal concern', 'Urgent review'], 'Remark'),
+        row('Hb / blood group / investigations reviewed', ['Complete', 'Pending', 'Abnormal - alert doctor'], 'Remark'),
+        row('Consent / anaesthesia / blood arranged', ['Complete', 'Blood pending', 'Anaesthesia review pending'], 'Remark'),
+        row('Shaving / catheter / NBM complete', ['Done', 'Partially done', 'Pending'], 'Remark'),
+        row('OT checklist / prophylaxis complete', ['Complete', 'Pending'], 'Remark'),
+        row('Bleeding / lochia monitored', ['Normal', 'Moderate', 'Heavy bleeding', 'Urgent review'], 'Remark'),
+        row('Uterine tone / fundal height', ['Well contracted', 'Needs monitoring', 'Atony concern'], 'Remark'),
+        row('Urine output / bowel sounds', ['Normal', 'Low output', 'Catheter issue', 'Needs review'], 'Remark'),
+        row('Baby status / breastfeeding', ['Baby well', 'Feeding started', 'NICU review', 'Feeding issue'], 'Remark'),
+        row('IV fluids / antibiotics / analgesia', ['Given as advised', 'Partially given', 'Pending'], 'Drugs / timing'),
+        row('LSCS wound / dressing / mobilisation', ['Clean', 'Oozing', 'Painful', 'Review wound'], 'Remark'),
+        row('Bathing / hygiene / discharge advice', ['Counselled', 'Pending', 'Needs repeat explanation'], 'Remark')
+      ];
     }
   }
-  return labels.map(label => ({ label, value:'', checked:false }));
+  return labels.map(function (item) {
+    return typeof item === 'string' ? row(item, null, 'Remark') : item;
+  });
 }
 window.PATIENT_VISIT_CACHE = window.PATIENT_VISIT_CACHE || {};
 function cachePatientVisits(bmhId, visitsObj) {
@@ -4523,10 +4577,16 @@ function ipdChartSummary(p) {
   const chart = p.chartRows || [];
   if (!chart.length) return '<div style="color:var(--g1);font-size:12px">No structured chart items yet.</div>';
   return chart.map(function (row, idx) {
+    const control = Array.isArray(row.options) && row.options.length
+      ? `<select onchange="updateIPDChartRow(${idx},'value',this.value)" style="width:100%;border:1px solid var(--g4);border-radius:8px;padding:6px 8px;font-size:11px;background:#fff">
+          <option value="">— Select —</option>
+          ${row.options.map(function (opt) { return '<option value="' + escapeHtmlConsent(opt) + '"' + (String(row.value || '') === String(opt) ? ' selected' : '') + '>' + escapeHtmlConsent(opt) + '</option>'; }).join('')}
+        </select>`
+      : `<input type="text" value="${escapeHtmlConsent(row.value || '')}" placeholder="${escapeHtmlConsent(row.placeholder || (row.checked ? 'Completed / remark' : 'Remark / value'))}" oninput="updateIPDChartRow(${idx},'value',this.value)" style="width:100%;border:1px solid var(--g4);border-radius:8px;padding:6px 8px;font-size:11px;background:#fff">`;
     return `<div style="display:grid;grid-template-columns:auto 1fr minmax(120px,180px);gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--g5);font-size:12px">
       <label style="display:flex;align-items:center;justify-content:center"><input type="checkbox" ${row.checked ? 'checked' : ''} onchange="updateIPDChartRow(${idx},'checked',this.checked)"></label>
       <div style="font-weight:700;color:var(--tx1)">${row.label}</div>
-      <input type="text" value="${escapeHtmlConsent(row.value || '')}" placeholder="${row.checked ? 'Completed / remark' : 'Remark / value'}" oninput="updateIPDChartRow(${idx},'value',this.value)" style="width:100%;border:1px solid var(--g4);border-radius:8px;padding:6px 8px;font-size:11px;background:#fff">
+      ${control}
     </div>`;
   }).join('');
 }
@@ -4544,6 +4604,7 @@ function openIPDPatient(id) {
   activeIPDPatient = p;
   const el = document.getElementById('ipd-detail');
   if (!el) return;
+  const otCase = p.otCaseId ? normalizeOTCaseRecord(OT_CASES.find(function (x) { return x.id === p.otCaseId; }) || {}) : (OT_CASES.slice().reverse().map(normalizeOTCaseRecord).find(function (x) { return x.bmhId === p.bmhId; }) || {});
   const nb = p.isNewborn && p.babyNotes;
   const lastVitals = (p.vitalSigns || [])[0] || p.vitals || {};
   const alerts = ipdEvaluateAlerts(p);
@@ -4554,6 +4615,11 @@ function openIPDPatient(id) {
         <div class="card-sub" style="font-family:var(--mono);color:var(--bmh-teal)">${p.id} · ${p.ward} · ${bmhDeptLabel(p.dept)}</div>
       </div>
       <span class="badge ${p.status==='critical'?'bd-red':p.isNewborn?'bd-purple':'bd-green'}">${p.status==='critical'?'🔴 Critical':p.isNewborn?'👶 Newborn':'🟢 Stable'}</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">
+      <div style="background:rgba(26,60,110,.08);border:1px solid rgba(26,60,110,.18);border-radius:10px;padding:10px"><div style="font-size:9px;color:var(--g1);font-weight:800;text-transform:uppercase">Surgery / Procedure</div><div style="font-size:13px;font-weight:900;color:#1A3C6E">${otCase.procedure || p.surgery || p.type || '—'}</div></div>
+      <div style="background:rgba(11,123,140,.08);border:1px solid rgba(11,123,140,.18);border-radius:10px;padding:10px"><div style="font-size:9px;color:var(--g1);font-weight:800;text-transform:uppercase">${p.dept === 'ophtho' ? 'Eye / Site' : 'Ward Type'}</div><div style="font-size:13px;font-weight:900;color:#0B7B8C">${p.dept === 'ophtho' ? (otCase.site || p.surgeryEye || '—') : (p.type || '—')}</div></div>
+      <div style="background:rgba(192,0,78,.07);border:1px solid rgba(192,0,78,.16);border-radius:10px;padding:10px"><div style="font-size:9px;color:var(--g1);font-weight:800;text-transform:uppercase">Due check-up</div><div style="font-size:13px;font-weight:900;color:#c0004e">${((p.monitoringPlan || []).find(function (slot) { return slot.status !== 'done'; })?.dueAt) ? new Date((p.monitoringPlan || []).find(function (slot) { return slot.status !== 'done'; }).dueAt).toLocaleString('en-IN') : 'No pending slot'}</div></div>
     </div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px">
       <div style="background:var(--g6);border-radius:8px;padding:10px"><div style="font-size:9px;color:var(--g1);font-weight:800;text-transform:uppercase">Diagnosis</div><div style="font-size:13px;font-weight:900">${p.dx || '—'}</div></div>
@@ -4592,7 +4658,7 @@ function openIPDPatient(id) {
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
       <div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px">Progress Notes</div>
-      <button class="btn btn-gold btn-xs" onclick="openM('m-ipd-note')">+ Add Note</button>
+      <button class="btn btn-gold btn-xs" onclick="openM('m-ipd-note')">+ Add Vitals / Note</button>
     </div>
     <div id="ipd-notes-list">
       ${(p.notes || []).map(n=>`<div style="background:var(--g6);border-radius:var(--rsm);padding:12px;margin-bottom:8px;border-left:3px solid var(--blue)">
@@ -11890,7 +11956,7 @@ function activateUserSession(user, profile, opts) {
   const uname = String(user || '').toLowerCase();
   if (uname === 'rec_rpr' || uname === 'reception.rpr' || uname === 'reception.rpr@bawejahospital.com') profile = Object.assign({}, profile, { centre: 'RPR', name: 'Reception Ropar' });
   if (uname === 'rec_chd' || uname === 'reception.chd' || uname === 'reception.chd@bawejahospital.com') profile = Object.assign({}, profile, { centre: 'CHD', name: 'Reception CHD' });
-  if (uname === 'optometrist' || uname === 'opto_rpr' || uname === 'optometrist@bawejahospital.com' || uname === 'opto.rpr@bawejahospital.com') profile = Object.assign({}, profile, { centre: 'RPR', name: 'Optometrist RPR' });
+  if (uname === 'optometrist' || uname === 'opto_rpr' || uname === 'opto.rpr' || uname === 'optometrist@bawejahospital.com' || uname === 'opto.rpr@bawejahospital.com') profile = Object.assign({}, profile, { centre: 'RPR', name: 'Optometrist RPR' });
   if (uname === 'lab.chd@bawejahospital.com') profile = Object.assign({}, profile, { centre: 'CHD', name: 'Lab Tech CHD' });
   if (uname === 'lab.rpr@bawejahospital.com') profile = Object.assign({}, profile, { centre: 'RPR', name: 'Lab Tech Ropar' });
   if (uname === 'tpa.chd@bawejahospital.com') profile = Object.assign({}, profile, { centre: 'CHD', name: 'TPA Executive CHD' });
