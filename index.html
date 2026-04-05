@@ -3735,7 +3735,11 @@
         <div class="form-group"><label class="fl">Date Range To</label><input type="date" id="rep-surg-to"></div>
         <div class="form-group"><label class="fl">Status</label><select id="rep-surg-status"><option value="">All</option><option value="advised">Advised — Not Done</option><option value="scheduled">Scheduled</option><option value="done">Completed</option></select></div>
       </div>
-      <button class="btn btn-gold btn-sm" style="margin-top:8px" onclick="generateSurgeryReport()">📋 Generate List</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+        <button class="btn btn-gold btn-sm" onclick="generateSurgeryReport()">📋 Generate List</button>
+        <button class="btn btn-outline btn-sm" type="button" onclick="openSurgeryReportWindow()">🪟 Open Window</button>
+        <button class="btn btn-outline btn-sm" type="button" onclick="printSurgeryReportCurrent()">🖨️ Print</button>
+      </div>
     </div>
     <div id="rep-surgery-result"></div>
   </div>
@@ -3775,6 +3779,24 @@
     <div id="rep-financial-result" style="margin-top:14px"></div>
   </div>
 </div>
+
+<div class="modal-ov" id="m-counsellor-followup">
+<div class="modal"><div class="modal-hd"><div class="modal-title">📞 Counsellor Follow-up</div><button class="modal-close" onclick="closeM('m-counsellor-followup')">✕</button></div>
+<div class="fg fg1" style="gap:9px">
+  <input type="hidden" id="cf-row-key">
+  <div class="form-group"><label class="fl">Patient / Procedure</label><input type="text" id="cf-patient-proc" readonly style="background:var(--g6)"></div>
+  <div class="fg">
+    <div class="form-group"><label class="fl">Counsellor</label><input type="text" id="cf-counsellor" placeholder="Name of counsellor"></div>
+    <div class="form-group"><label class="fl">Call Status</label><select id="cf-status"><option value="pending">Pending</option><option value="called">Called</option><option value="not-reachable">Not reachable</option><option value="declined">Declined procedure</option><option value="postponed">Postponed</option><option value="booked">Booked / going ahead</option></select></div>
+  </div>
+  <div class="form-group"><label class="fl">Reason / Remark</label><textarea id="cf-remark" placeholder="Why patient is not proceeding, financial reasons, wants second opinion, waiting, medically unfit, etc." style="min-height:90px"></textarea></div>
+  <div class="form-group"><label class="fl">Next Follow-up Date</label><input type="date" id="cf-next-date"></div>
+  <div style="display:flex;gap:8px">
+    <button class="btn btn-gold" style="flex:1" onclick="saveCounsellorFollowup()">💾 Save Follow-up</button>
+    <button class="btn btn-gray" onclick="closeM('m-counsellor-followup')">Cancel</button>
+  </div>
+</div>
+</div></div>
 
 <!-- ════════════════════ OT MODULE ════════════════════ -->
 <div class="page" id="pg-ot">
