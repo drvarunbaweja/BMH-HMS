@@ -3700,6 +3700,8 @@ function renderObgSummaryRail() {
   const requests = (PAY_REQUESTS || []).filter(r => r.bmhId === pt.bmhId).slice().sort((a,b)=>new Date(b.date || 0)-new Date(a.date || 0)).slice(0,8);
   const paymentHtml = txns.length ? txns.map(t => `<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--g5)"><div><div style="font-weight:800">${t.service || 'Payment'}</div><div style="font-size:10px;color:var(--g1)">${obgFmtDate(t.date)} · ${t.mode || '—'}</div></div><div style="font-weight:900;color:var(--bmh-blue)">₹${Number(t.amount||0).toLocaleString('en-IN')}</div></div>`).join('') : '<div style="font-size:10.5px;color:var(--g1)">No payments recorded.</div>';
   const reqHtml = requests.length ? requests.map(r => `<div style="padding:7px 0;border-bottom:1px solid var(--g5)"><div style="font-weight:800">${r.for || r.service || 'Request'}</div><div style="display:flex;justify-content:space-between;gap:8px;font-size:10px;color:var(--g1);margin-top:2px"><span>${obgFmtDate(r.date)}</span><span>${r.status || 'pending'}</span></div></div>`).join('') : '<div style="font-size:10.5px;color:var(--g1)">No reception requests sent.</div>';
+  loadPatientVisitsForRail(pt.bmhId, 'obg', function(visits) {
+  const visitHtml = buildVisitSummaryCards(visits, 'obg');
   el.innerHTML = `
     <div style="padding:9px 10px;border-radius:10px;background:var(--purple-lt);margin-bottom:8px">
       <div style="font-size:10px;font-weight:900;color:#6a0091;text-transform:uppercase;margin-bottom:5px">OBS history</div>
@@ -3729,6 +3731,7 @@ function renderObgSummaryRail() {
       <div style="font-size:10px;font-weight:900;color:#1a8c3c;text-transform:uppercase;margin-bottom:5px">Investigations & management</div>
       <div style="font-size:10.7px;line-height:1.45"><b>Investigations:</b><br>${guidance.investigations.length ? guidance.investigations.join('<br>') : 'Guideline-based tests will appear here.'}<br><br><b>Management:</b><br>${guidance.management.length ? guidance.management.join('<br>') : 'Conservative / medical plan will appear here.'}${guidance.procedures.length ? `<br><br><b>Procedures / injections:</b><br>${guidance.procedures.join('<br>')}` : ''}</div>
     </div>
+    ${visitHtml}
     <details open style="margin-bottom:8px;background:#fff;border:1px solid var(--g5);border-radius:10px;padding:8px 10px">
       <summary style="font-size:11px;font-weight:800;color:var(--bmh-blue);cursor:pointer">Payment history</summary>
       <div style="margin-top:8px">${paymentHtml}</div>
@@ -3736,7 +3739,7 @@ function renderObgSummaryRail() {
     <details open style="background:#fff;border:1px solid var(--g5);border-radius:10px;padding:8px 10px">
       <summary style="font-size:11px;font-weight:800;color:var(--bmh-blue);cursor:pointer">Reception requests</summary>
       <div style="margin-top:8px">${reqHtml}</div>
-    </details>`;
+    </details>`; });
 }
 function updateObgComputedFields() {
   syncObgAssessmentToHistory();
@@ -4030,6 +4033,8 @@ function renderPsychRail() {
   const reqs = (PAY_REQUESTS || []).filter(r => r.bmhId === pt.bmhId).slice().sort((a,b)=>new Date(b.date||0)-new Date(a.date||0)).slice(0,8);
   const payHtml = txns.length ? txns.map(t => `<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--g5)"><div><div style="font-weight:800">${t.service || 'Payment'}</div><div style="font-size:10px;color:var(--g1)">${obgFmtDate(t.date)} · ${t.mode || '—'}</div></div><div style="font-weight:900;color:var(--bmh-blue)">₹${Number(t.amount||0).toLocaleString('en-IN')}</div></div>`).join('') : '<div style="font-size:10.5px;color:var(--g1)">No payments recorded.</div>';
   const dueHtml = reqs.length ? reqs.map(r => `<div style="padding:7px 0;border-bottom:1px solid var(--g5)"><div style="font-weight:800">${r.for || 'Request'}</div><div style="display:flex;justify-content:space-between;gap:8px;font-size:10px;color:var(--g1)"><span>${obgFmtDate(r.date)}</span><span>${r.status || 'pending'}</span></div></div>`).join('') : '<div style="font-size:10.5px;color:var(--g1)">No pending reception requests.</div>';
+  loadPatientVisitsForRail(pt.bmhId, 'psych', function(visits) {
+  const visitHtml = buildVisitSummaryCards(visits, 'psych');
   el.innerHTML = `
     <div style="padding:9px 10px;border-radius:10px;background:var(--orange-lt);margin-bottom:8px">
       <div style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;margin-bottom:5px">Presumptive diagnosis</div>
@@ -4051,6 +4056,7 @@ function renderPsychRail() {
       <div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;margin-bottom:5px">Past / systemic</div>
       <div style="font-size:11px;line-height:1.45"><b>Family:</b> ${psychVal('psych-family') || '—'}<br><b>Past psych:</b> ${psychVal('psych-pastpsych') || '—'}<br><b>Medical:</b> ${psychVal('psych-medical') || psychVal('psych-systemic') || '—'}</div>
     </div>
+    ${visitHtml}
     <details open style="margin-bottom:8px;background:#fff;border:1px solid var(--g5);border-radius:10px;padding:8px 10px">
       <summary style="font-size:11px;font-weight:800;color:var(--bmh-blue);cursor:pointer">Payments made</summary>
       <div style="margin-top:8px">${payHtml}</div>
@@ -4058,7 +4064,7 @@ function renderPsychRail() {
     <details open style="background:#fff;border:1px solid var(--g5);border-radius:10px;padding:8px 10px">
       <summary style="font-size:11px;font-weight:800;color:var(--bmh-blue);cursor:pointer">Payments / requests pending</summary>
       <div style="margin-top:8px">${dueHtml}</div>
-    </details>`;
+    </details>`; });
 }
 function populatePsychForm(visit) {
   const data = visit || window.CURRENT_PATIENT?.lastVisit || {};
@@ -4154,6 +4160,8 @@ function renderSkinRail() {
   const reqs = (PAY_REQUESTS || []).filter(r => r.bmhId === pt.bmhId).slice().sort((a,b)=>new Date(b.date||0)-new Date(a.date||0)).slice(0,8);
   const payHtml = txns.length ? txns.map(t => `<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--g5)"><div><div style="font-weight:800">${t.service || 'Payment'}</div><div style="font-size:10px;color:var(--g1)">${obgFmtDate(t.date)} · ${t.mode || '—'}</div></div><div style="font-weight:900;color:var(--bmh-blue)">₹${Number(t.amount||0).toLocaleString('en-IN')}</div></div>`).join('') : '<div style="font-size:10.5px;color:var(--g1)">No payments recorded.</div>';
   const reqHtml = reqs.length ? reqs.map(r => `<div style="padding:7px 0;border-bottom:1px solid var(--g5)"><div style="font-weight:800">${r.for || 'Request'}</div><div style="display:flex;justify-content:space-between;gap:8px;font-size:10px;color:var(--g1)"><span>${obgFmtDate(r.date)}</span><span>${r.status || 'pending'}</span></div></div>`).join('') : '<div style="font-size:10.5px;color:var(--g1)">No pending reception requests.</div>';
+  loadPatientVisitsForRail(pt.bmhId, 'skin', function(visits) {
+  const visitHtml = buildVisitSummaryCards(visits, 'skin');
   el.innerHTML = `<div style="position:sticky;top:12px;width:100%">
     <div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;letter-spacing:.45px;margin-bottom:6px">Cosmetology rail</div>
     <div style="max-height:74vh;overflow:auto;padding-right:4px">
@@ -4173,6 +4181,7 @@ function renderSkinRail() {
         <div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;margin-bottom:5px">Patient factors</div>
         <div style="font-size:11px;line-height:1.45"><b>Fitzpatrick:</b> ${skinVal('skin-fit') || '—'}<br><b>Hormonal:</b> ${skinVal('skin-hormonal') || '—'}<br><b>Medical:</b> ${skinVal('skin-medical') || '—'}</div>
       </div>
+      ${visitHtml}
       <details open style="margin-bottom:8px;background:#fff;border:1px solid var(--g5);border-radius:10px;padding:8px 10px">
         <summary style="font-size:11px;font-weight:800;color:var(--bmh-blue);cursor:pointer">Payments made</summary>
         <div style="margin-top:8px">${payHtml}</div>
@@ -4182,7 +4191,7 @@ function renderSkinRail() {
         <div style="margin-top:8px">${reqHtml}</div>
       </details>
     </div>
-  </div>`;
+  </div>`; });
 }
 function populateSkinForm(visit) {
   const data = visit || window.CURRENT_PATIENT?.lastVisit || {};
@@ -4251,13 +4260,75 @@ function ipdMonitoringSlots(freqKey, fromIso) {
 }
 function ipdDeptTemplate(deptKey) {
   const map = {
-    ophtho:['Pre-op vitals','Eye marked / consent verified','Dilating / antibiotic drops given','Test dose / allergy check','Patch / dressing / pain status','Discharge medication explained','Doctor instructions'],
-    obg:['BP / pulse / pain score','Bleeding / lochia','Uterine tone / fundal height','Urine output / bowel sounds','Baby status / breastfeeding','IV fluids / antibiotics / analgesia','Doctor notes / orders'],
+    ophtho:['Pre-op vitals','Eye marked / consent verified','Dilating / antibiotic drops given','OT checklist / IOL verified','Test dose / allergy check','Patch / dressing / pain status','Post-op drops given','Doctor notes / orders','Discharge medication explained'],
+    obg:['BP / pulse / pain score','Bleeding / lochia','Uterine tone / fundal height','Urine output / bowel sounds','Baby status / breastfeeding','IV fluids / antibiotics / analgesia','LSCS wound / dressing','Doctor notes / orders','Mobilisation / diet advice'],
     psych:['Mood / behaviour','Sleep','Medication compliance','Risk / supervision','Doctor instructions'],
     skin:['Rash / lesion change','Itching / pain','Dressing / topical therapy','Drug reaction watch','Doctor instructions'],
     general:['Pain / comfort','Fluids / diet','Urine / stool','Mobility / fall risk','Doctor instructions']
   };
   return (map[deptKey] || map.general).map(label => ({ label, value:'', checked:false }));
+}
+window.PATIENT_VISIT_CACHE = window.PATIENT_VISIT_CACHE || {};
+function cachePatientVisits(bmhId, visitsObj) {
+  if(!bmhId) return {};
+  const safe = visitsObj && typeof visitsObj === 'object' ? JSON.parse(JSON.stringify(visitsObj)) : {};
+  window.PATIENT_VISIT_CACHE[bmhId] = safe;
+  return safe;
+}
+function getCachedPatientVisits(bmhId) {
+  return (window.PATIENT_VISIT_CACHE && window.PATIENT_VISIT_CACHE[bmhId]) || {};
+}
+function loadPatientVisitsForRail(bmhId, dept, onReady) {
+  const cached = getCachedPatientVisits(bmhId);
+  const hasCached = cached && Object.keys(cached).length;
+  const deliver = function(obj) {
+    const all = cachePatientVisits(bmhId, obj);
+    const visits = Object.values(all || {})
+      .filter(v => v && (!dept || v.dept === dept))
+      .sort((a,b) => String(b.date || '').localeCompare(String(a.date || '')));
+    onReady(visits, all);
+  };
+  if(hasCached) deliver(cached);
+  if(typeof fbOnce === 'function' && bmhId) fbOnce(`visits/${bmhId}`).then(deliver).catch(() => { if(!hasCached) deliver({}); });
+  else if(!hasCached) deliver({});
+}
+function buildVisitSummaryCards(visits, dept) {
+  const labelMap = { ophtho:'ophthalmology', obg:'OBG', psych:'neuropsychiatry', skin:'skin' };
+  if(!visits || !visits.length) {
+    return `<div style="padding:10px;border:1px dashed var(--g4);border-radius:10px;background:#fff;color:var(--g1);font-size:11px">No previous ${labelMap[dept] || 'clinic'} visits saved yet.</div>`;
+  }
+  return visits.slice(0,5).map(v => {
+    const when = v.dateLabel || new Date(v.date || Date.now()).toLocaleDateString('en-IN');
+    let line1 = 'No diagnosis recorded';
+    let line2 = 'No prescription recorded';
+    let line3 = '';
+    if(dept === 'ophtho') {
+      line1 = (Array.isArray(v.diagnoses) && v.diagnoses.length ? v.diagnoses.slice(0,2).map(formatDxLineForPrint).filter(Boolean).join(', ') : (v.diagnosisText || v.dx || 'No diagnosis recorded'));
+      line2 = Array.isArray(v.rx) && v.rx.length ? v.rx.slice(0,2).map(d => rxDrugTradeName(d) || d.trade || d.name || 'Drug').join(', ') : 'No prescription';
+      line3 = [v.hxSpectacles, v.hxLastSpec].filter(Boolean).join(' · ') || '';
+    } else if(dept === 'obg') {
+      line1 = Array.isArray(v.presumptiveDx) && v.presumptiveDx.length ? v.presumptiveDx.join(', ') : (v.dx || v.clinicalImpression || 'No diagnosis recorded');
+      line2 = [v.ancVisitType, v.ga, v.gravida].filter(Boolean).join(' · ') || 'No ANC summary';
+      line3 = [v.nextReview, v.followupPlan].filter(Boolean).join(' · ') || '';
+    } else if(dept === 'psych') {
+      line1 = Array.isArray(v.psychPresumptive) && v.psychPresumptive.length ? v.psychPresumptive.join(', ') : (v.dx || v.chiefComplaint || 'No diagnosis recorded');
+      line2 = Array.isArray(v.rx) && v.rx.length ? v.rx.slice(0,2).map(d => rxDrugTradeName(d) || d.trade || d.name || 'Drug').join(', ') : (v.psychPlan || []).slice(0,2).join(', ') || 'No treatment recorded';
+      line3 = [v.mse, v.psychTherapy && v.psychTherapy[0]].filter(Boolean).join(' · ');
+    } else if(dept === 'skin') {
+      line1 = v['skin-primary-dx'] || v.dx || 'No diagnosis recorded';
+      line2 = Array.isArray(v.rx) && v.rx.length ? v.rx.slice(0,2).map(d => rxDrugTradeName(d) || d.trade || d.name || 'Drug').join(', ') : 'No prescription';
+      line3 = [v['skin-fit'], v['skin-chief']].filter(Boolean).join(' · ');
+    }
+    return `<div style="padding:9px 10px;border:1px solid var(--g5);border-radius:10px;background:#fff;margin-bottom:7px">
+      <div style="display:flex;justify-content:space-between;gap:6px;align-items:flex-start;margin-bottom:4px">
+        <div style="font-size:11px;font-weight:800;color:var(--bmh-blue)">${when}</div>
+        <div style="font-size:10px;color:var(--g1)">${v.doctor || ''}</div>
+      </div>
+      <div style="font-size:10.5px;line-height:1.42"><b>Summary:</b> ${line1}</div>
+      <div style="font-size:10.5px;line-height:1.42;margin-top:3px"><b>Plan / Rx:</b> ${line2}</div>
+      ${line3 ? `<div style="font-size:10px;color:var(--g1);line-height:1.36;margin-top:3px">${line3}</div>` : ''}
+    </div>`;
+  }).join('');
 }
 function ensureIpdAdmissionFromOTCase(otCase, patient) {
   if (!otCase || !otCase.bmhId || !otCase.admitToIpd) return null;
@@ -4276,6 +4347,7 @@ function ensureIpdAdmissionFromOTCase(otCase, patient) {
     ward: otCase.ipdWard || base.ward || (dept === 'ophtho' ? 'Eye Day Care' : dept === 'obg' ? 'OBG Ward' : 'Ward'),
     type: otCase.ipdType || base.type || (dept === 'ophtho' ? 'Day Care' : dept === 'obg' ? 'Obstetric' : 'Surgical'),
     doctor: otCase.surgeon || pt.doctor || base.doctor || CURRENT_USER?.name || '—',
+    centre: otCase.centre || pt.centre || base.centre || getEffectiveCentre() || CURRENT_USER?.centre || 'CHD',
     room: otCase.ipdRoom || base.room || '',
     dx: otCase.dx || pt.dx || base.dx || '',
     color: pt.color || base.color || '#1A3C6E',
@@ -6007,6 +6079,7 @@ function confirmIPDAdmit() {
   const ipdEntry = {
     id:'IPD'+Date.now(), bmhId, name:p.name,
     age:p.age, sex:p.sex, dept,
+    centre: p.centre || getEffectiveCentre() || CURRENT_USER?.centre || 'CHD',
     ward, type, doctor, room, dx, notes,
     color:p.color||'#1A3C6E', initials:p.initials||p.name[0]||'?',
     admittedDate: new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}),
@@ -12973,7 +13046,12 @@ function loadIPDPatientsFromFirebase() {
     const data = snap.val();
     if(!data) return;
     const arr = window.IPD_PATIENTS || IPD_PATIENTS;
-    Object.values(data).forEach(p => { if(!arr.find(x=>x.id===p.id||x.bmhId===p.bmhId)) arr.push(p); });
+    Object.values(data).forEach(p => {
+      if(!p.centre) p.centre = getEffectiveCentre() || CURRENT_USER?.centre || 'CHD';
+      const idx = arr.findIndex(x=>x.id===p.id||x.bmhId===p.bmhId);
+      if(idx >= 0) arr[idx] = Object.assign({}, arr[idx], p);
+      else arr.push(p);
+    });
     renderIPD && renderIPD();
   }).catch(e => console.warn('IPD load error:', e));
 }
@@ -15645,7 +15723,10 @@ function renderIPD() {
   if(window.IPD_PATIENTS && window.IPD_PATIENTS !== IPD_PATIENTS) {
     IPD_PATIENTS.length=0; window.IPD_PATIENTS.forEach(p=>IPD_PATIENTS.push(p));
   }
-  const visibleIPD = IPD_PATIENTS.filter(p => centreMatch(p));
+  const visibleIPD = IPD_PATIENTS.filter(p => {
+    if(!p.centre) p.centre = getEffectiveCentre() || CURRENT_USER?.centre || 'CHD';
+    return (p.status || 'admitted') !== 'discharged' && centreMatch(p);
+  });
   const el = document.getElementById('ipd-list'); if(!el) return;
   if(!visibleIPD.length) {
     el.innerHTML = '<div style="padding:30px;text-align:center;color:var(--g1)"><div style="font-size:36px;margin-bottom:8px">🛏️</div><div style="font-size:13px;font-weight:700">No patients admitted</div><div style="font-size:11px;margin-top:4px">Use the + Admit button to add a patient</div></div>';
@@ -16114,7 +16195,7 @@ function renderDocQueue() {
   const xrefs   = (window.XREF_LOG||[]).filter(x => !userDept || x.fromDept===userDept || x.toDept===userDept);
   const ipdPts  = (window.IPD_PATIENTS||[]).filter(p => {
     const ipdDept = normalizeDeptKeyForQueue(p.dept || p.department || '');
-    return !userDept || ipdDept === userDept || CURRENT_USER?.isAdmin;
+    return (p.status || 'admitted') !== 'discharged' && centreMatch(p) && (!userDept || ipdDept === userDept || CURRENT_USER?.isAdmin);
   });
 
   const emptyRow = label => `<tr><td colspan="10" style="text-align:center;padding:24px;color:var(--g2);font-size:12.5px">No ${label} patients</td></tr>`;
@@ -16394,6 +16475,9 @@ function saveVisit(dept) {
     localPt.lastVisitDate = visit.date;
     localPt.doctor = visit.doctor;
     if (visit.dx) localPt.dx = visit.dx;
+    const cache = getCachedPatientVisits(bmhId);
+    cache[visitKey] = JSON.parse(JSON.stringify(visit));
+    cachePatientVisits(bmhId, cache);
   }
   Promise.all([
     fbSet(`visits/${bmhId}/${visitKey}`, visit),
@@ -16406,6 +16490,8 @@ function saveVisit(dept) {
       if(typeof loadPastVisits === 'function') loadPastVisits(bmhId, dept);
       renderCurrentPatientInvestigationUploads && renderCurrentPatientInvestigationUploads(Array.isArray(visit.investigations) ? visit.investigations : []);
       renderOphthoRecap && renderOphthoRecap();
+      renderObgSummaryRail && renderObgSummaryRail();
+      renderPsychRail && renderPsychRail();
       renderSkinRail && renderSkinRail();
       document.dispatchEvent(new CustomEvent('bmh:patientsUpdated'));
     })
@@ -16552,6 +16638,7 @@ function renderOphthoRecap() {
   const txns = (TRANSACTIONS || []).filter(t => t.bmhId === pt.bmhId).slice().sort((a,b)=>new Date(b.date || 0) - new Date(a.date || 0));
   const prs = (PAY_REQUESTS || []).filter(r => r.bmhId === pt.bmhId).slice().sort((a,b)=>new Date(b.date || 0) - new Date(a.date || 0));
   const renderWithVisits = (visitsObj) => {
+    cachePatientVisits(pt.bmhId, visitsObj || {});
     const g = computeOphthoGuidance();
     const visits = Object.values(visitsObj || {})
       .filter(v => v && v.dept === 'ophtho')
