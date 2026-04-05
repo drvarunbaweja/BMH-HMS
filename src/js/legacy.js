@@ -1614,6 +1614,7 @@ function openPatient(bmhId) {
   ['ophtho-pt-uid','obg-pt-uid','psych-pt-uid','skin-pt-uid'].forEach(id => {
     const e = document.getElementById(id); if(e) e.textContent = p.bmhId;
   });
+  syncObgDoctorSelector(p.dept === 'obg' ? (p.doctor || CURRENT_USER?.name || 'Dr. Namrata Baweja') : '');
   ['obg-rx-ptname','psych-rx-ptname','skin-rx-ptname','oe-rx-ptname'].forEach(id => {
     const e = document.getElementById(id); if(e) e.textContent = p.name;
   });
@@ -2356,10 +2357,10 @@ function rxDrugGenericName(d) {
 }
 function getRxDoctorDisplayName() {
   const active = document.querySelector('.page.active')?.id || '';
-  if (active.includes('obg')) return document.getElementById('obg-rx-doctor')?.textContent?.trim() || window.CURRENT_USER?.name || 'Dr. Geeta Baweja';
-  if (active.includes('psych')) return document.getElementById('psych-rx-doctor')?.textContent?.trim() || window.CURRENT_USER?.name || 'Dr. Tarun Baweja';
-  if (active.includes('skin')) return document.getElementById('skin-rx-doctor')?.textContent?.trim() || window.CURRENT_USER?.name || 'Dr. Pooja Baweja';
-  return document.getElementById('ophtho-rx-doctor')?.textContent?.trim() || window.CURRENT_USER?.name || document.getElementById('sbnm')?.textContent?.trim() || 'Dr. Varun Baweja';
+  if (active.includes('obg')) return document.getElementById('obg-rx-doctor')?.textContent?.trim() || getEffectiveDoctorNameForDept('obg');
+  if (active.includes('psych')) return document.getElementById('psych-rx-doctor')?.textContent?.trim() || getEffectiveDoctorNameForDept('psych');
+  if (active.includes('skin')) return document.getElementById('skin-rx-doctor')?.textContent?.trim() || getEffectiveDoctorNameForDept('skin');
+  return document.getElementById('ophtho-rx-doctor')?.textContent?.trim() || getEffectiveDoctorNameForDept('ophtho') || document.getElementById('sbnm')?.textContent?.trim() || 'Dr. Varun Baweja';
 }
 
 function buildOphthoCaseSheetHtml() {
@@ -3074,12 +3075,10 @@ function editTemplate(id) { showToast('Template editor opened ✓','i'); }
 function ptab(el, cId) {
   if (!el) return;
   const ptabsEl = el.closest('.ptabs');
+  const scope = el.closest('.modal, .modal-ov, .page, .card, body') || document;
   if (ptabsEl) {
     ptabsEl.querySelectorAll('.ptab').forEach(t => t.classList.remove('active'));
-    const container = ptabsEl.parentElement;
-    if (container) {
-      container.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
-    }
+    scope.querySelectorAll('.tab-content.active').forEach(tc => tc.classList.remove('active'));
   }
   el.classList.add('active');
   const tgt = document.getElementById(cId); if (tgt) tgt.classList.add('active');
@@ -3640,7 +3639,9 @@ function populateObgPatientFromCurrent() {
   const blood = document.getElementById('obg-blood-grp');
   if(blood && pt.bloodGroup && !blood.value) blood.value = pt.bloodGroup;
   const rxDoc = document.getElementById('obg-rx-doctor');
-  if(rxDoc) rxDoc.textContent = window.CURRENT_USER?.name || 'Dr. Geeta Baweja';
+  const docName = getSelectedObgDoctorName();
+  if(rxDoc) rxDoc.textContent = docName;
+  syncObgDoctorSelector(docName);
   renderObgSummaryRail();
 }
 function populateObgForm(visit) {
@@ -5568,10 +5569,15 @@ function crossRefer(withFee){ openXRefModal(); if(withFee){const s=document.getE
 
 // ── IPD from queue icon ────────────────────────────
 function openIPDFromQueue(bmhId) {
+  const pt = PATIENTS.find(function (p) { return p.bmhId === bmhId; });
   const sel = document.getElementById('ipd-pt-sel');
   if(sel) {
     sel.innerHTML = PATIENTS.map(p=>`<option value="${p.bmhId}" ${p.bmhId===bmhId?'selected':''}>${p.name} · ${p.bmhId}</option>`).join('');
   }
+  const deptEl = document.getElementById('ipd-dept');
+  if (deptEl && pt?.dept) deptEl.value = normalizeDeptKeyForQueue(pt.dept) || pt.dept;
+  const docEl = document.getElementById('ipd-doctor');
+  if (docEl) docEl.value = pt?.doctor || getEffectiveDoctorNameForDept(pt?.dept) || CURRENT_USER?.name || 'Dr. Namrata Baweja';
   openM('m-ipd-admit');
 }
 
@@ -5699,7 +5705,7 @@ function confirmIPDAdmit() {
   const type   = document.getElementById('ipd-type')?.value || 'Surgical';
   const doctor = document.getElementById('ipd-doctor')?.value || CURRENT_USER?.name || '—';
   const room   = document.getElementById('ipd-room')?.value || '';
-  const dept   = document.getElementById('ipd-dept')?.value || p.dept || 'general';
+  const dept   = normalizeDeptKeyForQueue(document.getElementById('ipd-dept')?.value || p.dept || 'general');
   const monitoring = document.getElementById('ipd-monitoring')?.value || '6h';
   const dx     = document.getElementById('ipd-dx')?.value || '';
   const allergies = document.getElementById('ipd-allergies')?.value || '';
@@ -7915,11 +7921,35 @@ async function registerPatient() {
   if(noFee) fee = 0;
   const payMode = document.getElementById('rc-pay-mode')?.value||'Cash';
   const purpose = document.getElementById('rc-purpose')?.value||'New Consultation';
+  const refType = document.getElementById('rc-ref-type')?.value || '';
+  const refName = document.getElementById('rc-ref-name')?.value?.trim() || '';
+  const refMobile = document.getElementById('rc-ref-mobile')?.value?.trim() || '';
   const insName = document.getElementById('rc-ins-name')?.value||'';
   patient.checkinAt = Date.now();
   patient.purpose = purpose;
+  patient.refType = refType;
+  patient.refName = refName;
+  patient.refMobile = refMobile;
+  patient.referredBy = refName || refType || '';
   const prevVisits = PATIENTS.filter(p=>p.mob===patient.mob&&p.bmhId!==patient.bmhId).length;
   patient.visitCount = prevVisits + 1;
+  if (refType) {
+    const refId = 'REF' + Date.now();
+    logReferral(refType, refName, refMobile, { name, bmhId: uid, dept, purpose, centre });
+    fbSet && fbSet('referrals/' + refId, {
+      id: refId,
+      bmhId: uid,
+      patient: name,
+      dept,
+      centre,
+      refType,
+      refName,
+      refMobile,
+      purpose,
+      createdAt: new Date().toISOString(),
+      createdBy: CURRENT_USER?.name || 'Reception'
+    });
+  }
 
   const isInsurance = payMode.includes('Insurance')||payMode.includes('PMJAY')||payMode.includes('CGHS')||payMode.includes('TPA');
   const isCreditDue = payMode === 'Credit / Due';
@@ -7965,7 +7995,8 @@ async function registerPatient() {
 
   fbUpdate&&fbUpdate('patients/'+uid,{
     checkinAt:patient.checkinAt,purpose,visitCount:patient.visitCount,ins:patient.ins||'',
-    advance:patient.advance, advancePurpose:patient.advancePurpose, consultationNoFee:patient.consultationNoFee
+    advance:patient.advance, advancePurpose:patient.advancePurpose, consultationNoFee:patient.consultationNoFee,
+    refType: patient.refType || '', refName: patient.refName || '', refMobile: patient.refMobile || '', referredBy: patient.referredBy || ''
   });
   if (typeof window.patchPatientFirestore === 'function') {
     window.patchPatientFirestore(uid, {
@@ -7975,7 +8006,11 @@ async function registerPatient() {
       ins: patient.ins || '',
       advance: patient.advance,
       advancePurpose: patient.advancePurpose,
-      consultationNoFee: patient.consultationNoFee
+      consultationNoFee: patient.consultationNoFee,
+      refType: patient.refType || '',
+      refName: patient.refName || '',
+      refMobile: patient.refMobile || '',
+      referredBy: patient.referredBy || ''
     }).catch(() => {});
   }
 
@@ -9665,6 +9700,28 @@ function normalizeDeptKeyForQueue(dept) {
   if (d === 'lab' || d.includes('lab')) return 'lab';
   if (d === 'reception') return 'reception';
   return d;
+}
+function getSelectedObgDoctorName() {
+  const sel = document.getElementById('obg-doc-select');
+  return String(sel?.value || '').trim() || 'Dr. Namrata Baweja';
+}
+function getEffectiveDoctorNameForDept(dept) {
+  const key = normalizeDeptKeyForQueue(dept);
+  if (key === 'obg') return getSelectedObgDoctorName();
+  if (key === 'psych') return 'Dr. Tarun Baweja';
+  if (key === 'skin') return 'Dr. Pooja Baweja';
+  if (key === 'ophtho') return String(CURRENT_USER?.name || document.getElementById('sbnm')?.textContent || 'Dr. Varun Baweja').trim();
+  return String(CURRENT_USER?.name || 'Doctor').trim();
+}
+function syncObgDoctorSelector(forceName) {
+  const sel = document.getElementById('obg-doc-select');
+  const sub = document.getElementById('obg-pt-doc');
+  if (!sel) return;
+  const target = String(forceName || sel.value || CURRENT_PATIENT?.doctor || 'Dr. Namrata Baweja').trim();
+  const hasMatch = Array.from(sel.options || []).some(function (opt) { return String(opt.value) === target; });
+  if (hasMatch) sel.value = target;
+  else if (!sel.value) sel.value = 'Dr. Namrata Baweja';
+  if (sub) sub.textContent = sel.value || 'Dr. Namrata Baweja';
 }
 function doctorMatchesPatientQueue(patientDoctor, currentDoctor) {
   const p = normalizePersonNameForMatch(patientDoctor);
@@ -11819,7 +11876,7 @@ function openAddChargeModal() {
 }
 function saveChargeFromModal() {
   const cat = document.getElementById('add-charge-cat')?.value || 'Eye';
-  if (!canEditChargeCategory(cat)) { showToast('You can edit charges only for your own department', 'w'); return; }
+  if (!isCurrentUserAdmin() && !canEditChargeCategory(cat)) { showToast('You can edit charges only for your own department', 'w'); return; }
   const parent = document.getElementById('add-charge-parent')?.value?.trim() || '';
   const name = document.getElementById('add-charge-name')?.value?.trim();
   const kind = document.getElementById('add-charge-kind')?.value || 'procedure';
@@ -15459,8 +15516,11 @@ function renderDocQueue() {
       const deptMatch = !userDept || ptDept === userDept || (!ptDept && userDept === 'ophtho');
       return deptMatch && validStatuses(p) && centreMatch(p);
     });
-    const strict = deptPts.filter(p => !CURRENT_USER?.name || !p.doctor || doctorMatchesPatientQueue(p.doctor, CURRENT_USER.name));
-    return strict.length ? strict : deptPts;
+    const queueDoctor = getEffectiveDoctorNameForDept(userDept || CURRENT_USER?.dept || '');
+    return deptPts.filter(function (p) {
+      if (!p.doctor) return true;
+      return doctorMatchesPatientQueue(p.doctor, queueDoctor);
+    });
   })();
 
   // Active list keeps all waiting patients visible; dilated patients also remain in dedicated dilated queue.
@@ -15468,7 +15528,10 @@ function renderDocQueue() {
   const dilated = myPts.filter(p => p.dilated && !p.seen);
   const done    = myPts.filter(p => p.seen);
   const xrefs   = (window.XREF_LOG||[]).filter(x => !userDept || x.fromDept===userDept || x.toDept===userDept);
-  const ipdPts  = (window.IPD_PATIENTS||[]).filter(p => !userDept || p.dept===userDept || CURRENT_USER?.isAdmin);
+  const ipdPts  = (window.IPD_PATIENTS||[]).filter(p => {
+    const ipdDept = normalizeDeptKeyForQueue(p.dept || p.department || '');
+    return !userDept || ipdDept === userDept || CURRENT_USER?.isAdmin;
+  });
 
   const emptyRow = label => `<tr><td colspan="10" style="text-align:center;padding:24px;color:var(--g2);font-size:12.5px">No ${label} patients</td></tr>`;
 
@@ -15538,7 +15601,7 @@ function saveVisit(dept) {
     bmhId, ptName, dept,
     date: now.toISOString(),
     dateLabel: now.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}),
-    doctor: CURRENT_USER?.name || '—',
+    doctor: getEffectiveDoctorNameForDept(dept),
     centre: CURRENT_USER?.centre || 'CHD',
     savedBy: CURRENT_USER?.name || 'System',
   };
@@ -15732,13 +15795,14 @@ function saveVisit(dept) {
     visit.rx = JSON.parse(JSON.stringify(RX_DRUGS || []));
   }
   if(typeof fbSet !== 'function') { showToast('Save not available (offline)', 'w'); return; }
-  const patientPatch = { lastVisit: visit, lastVisitKey: visitKey, lastVisitDate: visit.date, lastDeptVisit: dept };
+  const patientPatch = { lastVisit: visit, lastVisitKey: visitKey, lastVisitDate: visit.date, lastDeptVisit: dept, doctor: visit.doctor };
   if (visit.dx) patientPatch.dx = visit.dx;
   const localPt = window.CURRENT_PATIENT || PATIENTS.find(p => p.bmhId === bmhId);
   if(localPt) {
     localPt.lastVisit = JSON.parse(JSON.stringify(visit));
     localPt.lastVisitKey = visitKey;
     localPt.lastVisitDate = visit.date;
+    localPt.doctor = visit.doctor;
     if (visit.dx) localPt.dx = visit.dx;
   }
   Promise.all([
