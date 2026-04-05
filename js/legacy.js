@@ -442,8 +442,8 @@ const CONSENT_DATA = {
 };
 
 const CONSENT_LIBRARY = [
-  {id:'consent-cataract-hi',dept:'ophtho',name:'Cataract Consent — English + Hindi',icon:'📝',lang:'hi',structuredKey:'cataract'},
-  {id:'consent-cataract-pa',dept:'ophtho',name:'Cataract Consent — English + Punjabi',icon:'📝',lang:'pa',structuredKey:'cataract'},
+  {id:'consent-cataract-hi',dept:'ophtho',name:'Cataract Consent — English + Hindi',icon:'📝',docType:'consent',lang:'hi',structuredKey:'cataract'},
+  {id:'consent-cataract-pa',dept:'ophtho',name:'Cataract Consent — English + Punjabi',icon:'📝',docType:'consent',lang:'pa',structuredKey:'cataract'},
   {id:'preop-nursing-checklist',dept:'ophtho',name:'Pre-operative Nursing Checklist',icon:'✅',docType:'form',
    body:`Identity confirmed with BMSH ID, patient name, age, sex, and operative eye/site.\n\nWritten informed consent checked and matching planned procedure verified.\n\nAllergy history, systemic diseases, current medications, blood thinners, diabetes, hypertension, and anaesthesia concerns reviewed.\n\nFasting status, blood sugar if indicated, blood pressure, pulse, temperature, and relevant investigations checked and documented.\n\nOperative eye marked where applicable, jewellery / dentures / contact lenses removed, and patient changed into OT clothing.\n\nBiometry / IOL selection / lens power cross-checked with OT plan and surgeon confirmation.\n\nRequired eye drops / dilatation / antibiotic / anaesthesia preparation completed and documented with time.\n\nEscort counselling completed, valuables handed over, and final nursing sign-off done before shifting to OT.`},
   {id:'c-phaco',dept:'ophtho',name:'Cataract Surgery (PMICS + IOL)',icon:'👁️',
@@ -668,7 +668,7 @@ function buildCompactDocumentHeader(title, ctx, subtitle) {
   const esc = escapeHtmlConsent;
   const logoSrc = resolvePrintLogoSrc();
   const proc = String(ctx?.procLine || '').trim();
-  return '<div style="border:1px solid #222;border-radius:10px;padding:8px 10px;margin-bottom:10px">'
+  return '<div style="border:1px solid #222;border-radius:10px;padding:8px 10px;margin-bottom:8px">'
     + '<div style="display:grid;grid-template-columns:minmax(0,1.2fr) repeat(4,minmax(86px,1fr));gap:8px;align-items:stretch">'
     + '<div style="display:flex;align-items:center;gap:8px;min-width:0;padding-right:6px;border-right:1px solid #d7dce5">'
     + '<img src="' + esc(logoSrc) + '" style="height:30px;width:auto;object-fit:contain" alt="BMH">'
@@ -680,7 +680,9 @@ function buildCompactDocumentHeader(title, ctx, subtitle) {
     + '<div style="display:grid;gap:2px"><span style="font-size:8.5px;color:#666;text-transform:uppercase;font-weight:800">Procedure</span><span style="font-size:10.5px;font-weight:800;color:#111;line-height:1.35">' + esc(proc || '—') + '</span></div>'
     + '<div style="display:grid;gap:2px"><span style="font-size:8.5px;color:#666;text-transform:uppercase;font-weight:800">Doctor</span><span style="font-size:10.5px;font-weight:800;color:#111;line-height:1.35">' + esc(ctx?.doctorName || '—') + '</span></div>'
     + '<div style="display:grid;gap:2px"><span style="font-size:8.5px;color:#666;text-transform:uppercase;font-weight:800">Date</span><span style="font-size:10.5px;font-weight:800;color:#111;line-height:1.35">' + esc(ctx?.today || '—') + '</span></div>'
-    + '</div></div>';
+    + '</div>'
+    + '<div style="padding-top:7px;text-align:center"><div style="font-size:14px;font-weight:900;color:#111;line-height:1.25">' + esc(title) + '</div>' + (subtitle ? '<div style="font-size:10px;font-weight:800;color:#555;margin-top:2px">' + esc(subtitle) + '</div>' : '') + '</div>'
+    + '</div>';
 }
 function buildCompactDocumentShell(title, ctx, bodyHtml, opts) {
   opts = opts || {};
@@ -689,7 +691,7 @@ function buildCompactDocumentShell(title, ctx, bodyHtml, opts) {
     + '<div style="flex:1;text-align:center"><div style="border-bottom:1px solid #333;height:34px"></div><div style="font-size:10px;color:#555;margin-top:4px">Witness Signature</div></div>'
     + '<div style="flex:1;text-align:center"><div style="border-bottom:1px solid #333;height:34px"></div><div style="font-size:10px;color:#555;margin-top:4px">Doctor Signature</div></div>'
     + '</div>';
-  return '<section style="padding:7mm 7mm 6mm;font-family:Arial,sans-serif;color:#111;page-break-inside:avoid;overflow:hidden">'
+  return '<section style="padding:7mm 7mm 6mm;font-family:Arial,sans-serif;color:#111;page-break-after:always;page-break-inside:avoid;overflow:hidden">'
     + buildCompactDocumentHeader(title, ctx, opts.subtitle || '')
     + '<div style="font-size:10.8px;line-height:1.55">' + bodyHtml + '</div>'
     + sigHtml
@@ -1726,6 +1728,9 @@ function populateOphthoForm(v) {
     if(Array.isArray(v.diagnoses) && v.diagnoses.length) v.diagnoses.forEach(dx => addDiagnosisRow(dx));
     else initDiagnosisRowsIfEmpty();
   }
+  const postSurgeryRx = document.getElementById('rx-post-surgery');
+  if (postSurgeryRx) postSurgeryRx.checked = !!v.postSurgeryRx;
+  toggleRxPostSurgeryNote();
   const PHX_IDS = ['phx-allergy','phx-diabetes_mellit','phx-hypertension','phx-heart_disease__','phx-asthma___copd','phx-headache___migr','phx-thyroid_disease','phx-renal_disease','phx-previous_surger','phx-bleeding_disord'];
   if(v.phxExtra && typeof v.phxExtra === 'object') {
     PHX_IDS.forEach(id => {
@@ -2042,6 +2047,30 @@ function initDiagnosisRowsIfEmpty() {
   if(!wrap || wrap.querySelector('.rx-dx-row')) return;
   addDiagnosisRow(); addDiagnosisRow(); addDiagnosisRow();
 }
+function normalizeRxDiagnosisEyeLabel(eye) {
+  const val = String(eye || '').trim().toLowerCase();
+  if (!val) return '';
+  if (/(right|od)/.test(val)) return 'Right Eye';
+  if (/(left|os)/.test(val)) return 'Left Eye';
+  if (/(both|ou|bilateral)/.test(val)) return 'Both Eyes';
+  return String(eye || '').trim();
+}
+function getOphthoDiagnosisRows() {
+  return [...document.querySelectorAll('#rx-diagnosis-rows .rx-dx-row')].map(function (row) {
+    return {
+      eye: normalizeRxDiagnosisEyeLabel(row.querySelector('.rx-dx-eye')?.value || ''),
+      text: (row.querySelector('.rx-dx-line')?.value || '').trim()
+    };
+  }).filter(function (item) { return item.text; });
+}
+function formatDxLineForPrint(item) {
+  if (!item) return '';
+  if (typeof item === 'string') return item.trim();
+  const eye = normalizeRxDiagnosisEyeLabel(item.eye || '');
+  const text = String(item.text || item.label || '').trim();
+  if (!text) return '';
+  return eye ? (eye + ' - ' + text) : text;
+}
 function renumberDiagnosisRows() {
   document.querySelectorAll('#rx-diagnosis-rows .rx-dx-row').forEach((row,i)=>{
     const sp = row.querySelector('span');
@@ -2054,26 +2083,90 @@ function addDiagnosisRow(prefill) {
   const wrap = document.getElementById('rx-diagnosis-rows');
   if(!wrap) return;
   const esc = (s='') => String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  const prefillObj = (prefill && typeof prefill === 'object' && !Array.isArray(prefill))
+    ? prefill
+    : { text: String(prefill || ''), eye: '' };
+  const prefillText = String(prefillObj.text || prefillObj.label || '').trim();
+  const prefillEye = normalizeRxDiagnosisEyeLabel(prefillObj.eye || '');
   const n = wrap.querySelectorAll('.rx-dx-row').length + 1;
   const uid = 'rx-dx-' + Date.now() + '-' + n;
   const d = document.createElement('div');
   d.className = 'rx-dx-row';
-  d.style.cssText = 'display:grid;grid-template-columns:28px 1fr 36px;gap:5px;padding:6px 8px;border-bottom:1px solid var(--g5);align-items:start';
+  d.style.cssText = 'display:grid;grid-template-columns:28px 88px minmax(0,1fr) 36px;gap:5px;padding:6px 8px;border-bottom:1px solid var(--g5);align-items:start';
   d.innerHTML = `<span style="font-weight:900;color:var(--blue);text-align:center;padding-top:6px">${n}</span>
+    <select class="rx-dx-eye" style="font-size:11px;padding:5px 7px;border:1.5px solid var(--g4);border-radius:6px;width:100%;box-sizing:border-box">
+      <option value=""${!prefillEye?' selected':''}>General</option>
+      <option value="Right Eye"${prefillEye==='Right Eye'?' selected':''}>Right</option>
+      <option value="Left Eye"${prefillEye==='Left Eye'?' selected':''}>Left</option>
+      <option value="Both Eyes"${prefillEye==='Both Eyes'?' selected':''}>Both</option>
+    </select>
     <div style="position:relative;min-width:0">
-    <input type="text" class="rx-dx-line" id="${uid}" value="${esc(prefill||'')}" placeholder="ICD-10 / diagnosis — type to search" autocomplete="off" style="font-size:12px;padding:5px 8px;border:1.5px solid var(--g4);border-radius:6px;width:100%;box-sizing:border-box" oninput="rxDxSuggest(this)" onfocus="rxDxSuggest(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();addDiagnosisRow();}">
+    <input type="text" class="rx-dx-line" id="${uid}" value="${esc(prefillText)}" placeholder="ICD-10 / diagnosis — type to search" autocomplete="off" style="font-size:12px;padding:5px 8px;border:1.5px solid var(--g4);border-radius:6px;width:100%;box-sizing:border-box" oninput="rxDxSuggest(this)" onfocus="rxDxSuggest(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();addDiagnosisRow();}">
     <div class="rx-dx-drop" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:500;background:#fff;border:1.5px solid var(--blue);border-top:none;border-radius:0 0 8px 8px;max-height:200px;overflow-y:auto;box-shadow:0 6px 16px rgba(0,0,0,.12)"></div>
     </div>
     <button type="button" class="btn btn-xs btn-gray" onclick="this.closest('.rx-dx-row').remove();renumberDiagnosisRows()" title="Remove" style="margin-top:2px">✕</button>`;
   wrap.appendChild(d);
 }
 function collectOphthoDiagnosesForPrint() {
-  const lines = [...document.querySelectorAll('#rx-diagnosis-rows .rx-dx-line')].map(i=>i.value.trim()).filter(Boolean);
+  const lines = getOphthoDiagnosisRows().map(formatDxLineForPrint).filter(Boolean);
   const notes = (document.getElementById('rx-diagnosis-text')?.value||'').trim();
   const legacyTags = [...document.querySelectorAll('#rx-diagnosis-list .dx-tag')].map(e=>e.textContent.replace(/[×✕]/g,'').trim()).filter(Boolean);
   const merged = [...lines];
   legacyTags.forEach(t => { if(t && !merged.includes(t)) merged.push(t); });
   return { lines: merged, notes };
+}
+function buildOphthoPositiveFindingsList() {
+  const lines = [];
+  const addLine = function (label, value, eye) {
+    const text = String(value || '').trim();
+    if (!text || /^normal$/i.test(text) || /^pink\s*&?\s*healthy$/i.test(text) || /^normal calibre$/i.test(text) || /^clear$/i.test(text)) return;
+    const eyeLabel = normalizeRxDiagnosisEyeLabel(eye);
+    lines.push(eyeLabel ? (label + ' ' + eyeLabel.toLowerCase() + ' - ' + text) : (label + ' - ' + text));
+  };
+  const slRows = (typeof window.collectSlitLampDataForPrint === 'function')
+    ? window.collectSlitLampDataForPrint()
+    : (() => {
+      const data = {};
+      document.querySelectorAll('#oe-slitlamp .sl-sl-row, #oe-slitlamp [style*="grid-template-columns:90px"]').forEach(function (row) {
+        const label = row.querySelector('[style*="9.5px"]')?.textContent?.trim();
+        const cols = row.querySelectorAll('[style*="background:rgba"]');
+        if (!label || cols.length < 2) return;
+        data[label] = {
+          od: [...cols[0].querySelectorAll('.sl-chip.sel')].map(c => c.textContent.trim()).filter(Boolean),
+          os: [...cols[1].querySelectorAll('.sl-chip.sel')].map(c => c.textContent.trim()).filter(Boolean)
+        };
+      });
+      return data;
+    })();
+  Object.entries(slRows || {}).forEach(function ([label, val]) {
+    const odVals = (val?.od || []).filter(v => !/^clear$/i.test(v));
+    const osVals = (val?.os || []).filter(v => !/^clear$/i.test(v));
+    if (odVals.length && osVals.length && odVals.join(', ') === osVals.join(', ')) addLine(label, odVals.join(', '), 'Both Eyes');
+    else {
+      if (odVals.length) addLine(label, odVals.join(', '), 'Right Eye');
+      if (osVals.length) addLine(label, osVals.join(', '), 'Left Eye');
+    }
+  });
+  addLine('Disc', document.getElementById('fund-od-disc')?.value || '', 'Right Eye');
+  addLine('Disc', document.getElementById('fund-os-disc')?.value || '', 'Left Eye');
+  addLine('C/D Ratio', document.getElementById('fund-od-cd')?.value || '', 'Right Eye');
+  addLine('C/D Ratio', document.getElementById('fund-os-cd')?.value || '', 'Left Eye');
+  addLine('Macula', document.getElementById('fund-od-mac')?.value || '', 'Right Eye');
+  addLine('Macula', document.getElementById('fund-os-mac')?.value || '', 'Left Eye');
+  addLine('Vessels', document.getElementById('fund-od-ves')?.value || '', 'Right Eye');
+  addLine('Vessels', document.getElementById('fund-os-ves')?.value || '', 'Left Eye');
+  addLine('Periphery', document.getElementById('fund-od-per')?.value || '', 'Right Eye');
+  addLine('Periphery', document.getElementById('fund-os-per')?.value || '', 'Left Eye');
+  addLine('Fundus', document.getElementById('fundus-od')?.value || '', 'Right Eye');
+  addLine('Fundus', document.getElementById('fundus-os')?.value || '', 'Left Eye');
+  const slNotes = (document.getElementById('sl-notes-text')?.value || '').trim();
+  if (slNotes) lines.push('Slit Lamp Notes - ' + slNotes);
+  return [...new Set(lines.filter(Boolean))];
+}
+function toggleRxPostSurgeryNote() {
+  const note = document.getElementById('rx-post-surgery-note');
+  const checked = !!document.getElementById('rx-post-surgery')?.checked;
+  if (note) note.style.display = checked ? 'block' : 'none';
 }
 
 /** Diagnosis lines for prescription print — Ophthalmology uses numbered rows; other depts use *-dx-list */
@@ -7815,16 +7908,28 @@ const SURGERY_PACK_DEFAULTS = [
   { id:'psych', dept:'Neuropsychiatry', icon:'🧠', label:'Psychiatry pack', desc:'Evaluation, treatment and discharge documents.', color:'var(--orange)', documentKeys:['psych-gen','psych-ect','__discharge__'] },
   { id:'skin', dept:'Skin & Cosmetology', icon:'💆', label:'Dermatology / aesthetics pack', desc:'Procedure consents, forms, and discharge summary.', color:'var(--purple)', documentKeys:['skin-peel','skin-laser','skin-prp','__discharge__'] },
 ];
+let SURGERY_PACK_OVERRIDES = {};
 function loadCustomSurgeryPacks() {
   try {
     const ls = localStorage.getItem('bmh_surgery_packs_custom');
     return ls ? JSON.parse(ls) : [];
   } catch (e) { return []; }
 }
+function loadSurgeryPackOverrides() {
+  try {
+    const ls = localStorage.getItem('bmh_surgery_pack_overrides');
+    SURGERY_PACK_OVERRIDES = ls ? JSON.parse(ls) : {};
+  } catch (e) { SURGERY_PACK_OVERRIDES = {}; }
+}
+function saveSurgeryPackOverrides() {
+  try { localStorage.setItem('bmh_surgery_pack_overrides', JSON.stringify(SURGERY_PACK_OVERRIDES)); } catch (e) {}
+}
+loadSurgeryPackOverrides();
 function saveCustomSurgeryPacks(arr) {
   try { localStorage.setItem('bmh_surgery_packs_custom', JSON.stringify(arr)); } catch (e) { /* noop */ }
   if (window.FBDB) window.FBDB.ref('surgeryPacksCustom').set(arr).catch(function () {});
 }
+window.BMH_UPLOADED_CONSENTS = window.BMH_UPLOADED_CONSENTS || [];
 function normalizeSurgeryPackDeptKey(v) {
   const s = String(v || '').toLowerCase().trim();
   if (!s || s === 'all' || s === 'general') return 'all';
@@ -7880,10 +7985,13 @@ function mergeUniquePackDocumentKeys(baseKeys, extraKeys) {
 }
 function getAllSurgeryPacks() {
   return SURGERY_PACK_DEFAULTS.concat(loadCustomSurgeryPacks()).map(function (p) {
+    const merged = Object.assign({}, p, SURGERY_PACK_OVERRIDES[p.id] || {});
+    if (merged.hidden) return null;
+    p = merged;
     if (!p.documentKeys && p.consentKeys) p.documentKeys = p.consentKeys.slice();
     if (p.documentKeys && p.documentKeys.indexOf('__discharge__') === -1 && String(p.id || '').startsWith('custom-') === false) p.documentKeys.push('__discharge__');
     return p;
-  });
+  }).filter(Boolean);
 }
 function populateReceptionSurgeryPackSelect(selected) {
   const sel = document.getElementById('surg-pack-sel');
@@ -7936,13 +8044,20 @@ function populateNewPackModal() {
     const kind = t.type === 'template' ? 'form' : 'consent';
     return '<label style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;font-size:11.5px;cursor:pointer;border-bottom:1px solid var(--g5)"><input type="checkbox" name="new-pack-doc" value="' + String(t.id).replace(/"/g, '&quot;') + '"><span>📎 ' + String(t.name || t.id).replace(/</g, '&lt;') + ' <span style="font-size:9px;color:var(--g1)">(' + kind + ' saved)</span></span></label>';
   }).join('');
+  const uploadedRows = (window.BMH_UPLOADED_CONSENTS || []).filter(function (c) {
+    return matchesDept(c.dept);
+  }).map(function (c) {
+    const kind = c.docType === 'form' ? 'form' : 'consent';
+    return '<label style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;font-size:11.5px;cursor:pointer;border-bottom:1px solid var(--g5)"><input type="checkbox" name="new-pack-doc" value="' + String(c.id).replace(/"/g, '&quot;') + '"><span>📎 ' + String(c.name || c.id).replace(/</g, '&lt;') + ' <span style="font-size:9px;color:var(--g1)">(uploaded ' + kind + ')</span></span></label>';
+  }).join('');
   const specialRows = '<label style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;font-size:11.5px;cursor:pointer;border-bottom:1px solid var(--g5)"><input type="checkbox" name="new-pack-doc" value="__discharge__" checked><span>📄 Discharge Summary &amp; Fitness Certificate <span style="font-size:9px;color:var(--g1)">(official document)</span></span></label>';
   host.innerHTML = '<div style="font-size:10px;font-weight:800;color:var(--g1);margin-bottom:6px">Select department-specific consents and forms to include in this pack.</div>'
     + (builtIn ? block('Built-in bilingual consents', builtIn) : '')
     + (libRows ? block('Saved consent / form library', libRows) : '')
     + (tplRows ? block('Saved consent / form templates', tplRows) : '')
+    + (uploadedRows ? block('Uploaded / custom documents', uploadedRows) : '')
     + block('Discharge document', specialRows)
-    + (!builtIn && !libRows && !tplRows ? '<div style="padding:10px;background:var(--g6);border-radius:8px;font-size:11px;color:var(--g1)">No saved items found for this department yet.</div>' : '');
+    + (!builtIn && !libRows && !tplRows && !uploadedRows ? '<div style="padding:10px;background:var(--g6);border-radius:8px;font-size:11px;color:var(--g1)">No saved items found for this department yet.</div>' : '');
 }
 function saveSurgeryPackFromModal() {
   const name = document.getElementById('new-pack-name')?.value?.trim();
@@ -7961,11 +8076,34 @@ function saveSurgeryPackFromModal() {
   populateReceptionSurgeryPackSelect(id);
   showToast('Pack saved — you can print it from the list ✓', 's');
 }
+function editSurgeryPack(id) {
+  const packs = getAllSurgeryPacks();
+  const pack = packs.find(function (p) { return p.id === id; });
+  if (!pack) return;
+  const name = prompt('Edit pack name', pack.label || '');
+  if (name === null) return;
+  if (String(pack.id || '').startsWith('custom-')) {
+    const custom = loadCustomSurgeryPacks();
+    const idx = custom.findIndex(function (p) { return p.id === id; });
+    if (idx < 0) return;
+    custom[idx].label = name.trim() || custom[idx].label;
+    saveCustomSurgeryPacks(custom);
+  } else {
+    SURGERY_PACK_OVERRIDES[id] = Object.assign({}, SURGERY_PACK_OVERRIDES[id] || {}, { label: name.trim() || pack.label, hidden: false });
+    saveSurgeryPackOverrides();
+  }
+  renderSetPacksList();
+  showToast('Pack updated ✓', 's');
+}
 function deleteSurgeryPack(id) {
-  if (!id || !String(id).startsWith('custom-')) { showToast('Built-in department packs cannot be deleted. Create a custom pack to replace one.', 'w'); return; }
-  if (!confirm('Delete this custom surgery pack?')) return;
-  const next = loadCustomSurgeryPacks().filter(function (p) { return p.id !== id; });
-  saveCustomSurgeryPacks(next);
+  if (!confirm('Delete / hide this surgery pack?')) return;
+  if (String(id).startsWith('custom-')) {
+    const next = loadCustomSurgeryPacks().filter(function (p) { return p.id !== id; });
+    saveCustomSurgeryPacks(next);
+  } else {
+    SURGERY_PACK_OVERRIDES[id] = Object.assign({}, SURGERY_PACK_OVERRIDES[id] || {}, { hidden: true });
+    saveSurgeryPackOverrides();
+  }
   renderSetPacksList();
   showToast('Pack deleted ✓', 's');
 }
@@ -8228,13 +8366,14 @@ function handleFileUpload(inp) {
 }
 
 // SAVE RX TEMPLATE (Settings → Rx Templates → manual lines)
-function saveRxTemplate() {
-  const name = document.getElementById('rx-tpl-name')?.value?.trim();
+function saveRxTemplate(mode) {
+  const suffix = mode === 'modal' ? '-modal' : '';
+  const name = document.getElementById('rx-tpl-name' + suffix)?.value?.trim();
   if(!name){showToast('Enter template name','w');return;}
-  const deptSel = document.getElementById('rx-tpl-dept-settings');
+  const deptSel = document.getElementById('rx-tpl-dept-settings' + suffix);
   const deptMap = { 'Ophthalmology':'ophtho','OBG':'obg','Psychiatry':'psych','Skin':'skin','OT':'ot','All':'all' };
   const dept = deptSel ? (deptMap[deptSel.value] || 'all') : 'all';
-  const raw = document.getElementById('rx-tpl-drugs')?.value || '';
+  const raw = document.getElementById('rx-tpl-drugs' + suffix)?.value || '';
   const lines = raw.split(/\n/).map(l=>l.trim()).filter(Boolean);
   if(!lines.length){showToast('Add one drug per line (e.g. Brand — frequency — duration)','w');return;}
   const key = name.toLowerCase().replace(/\s+/g,'-');
@@ -8243,6 +8382,7 @@ function saveRxTemplate() {
     const trade = parts[0] || 'Drug';
     const freq = parts[1] || 'Twice daily (BD)';
     const dur = parts[2] || '1 Week';
+    if (dept === 'ot') return { trade, generic: '', eye: '', freq, dur };
     const lib = DRUG_LIBRARY.find(x => x.trade === trade || x.generic === trade);
     const drugType = lib ? lib.type : '';
     const isEye = /drop|eye|ophth|moxiflox|vigamox|pred|tears/i.test(trade + ' ' + (drugType || ''));
@@ -8258,7 +8398,14 @@ function saveRxTemplate() {
   saveRxTemplatesToStorage();
   refreshRxTemplateSelects();
   renderSetRxTplList && renderSetRxTplList();
+  if (mode === 'modal') closeM('m-add-rx-tpl');
   showToast('Template "'+name+'" saved ✓','s');
+}
+function openNewRxTemplateModal() {
+  ['rx-tpl-name-modal','rx-tpl-drugs-modal'].forEach(function (id) { const el = document.getElementById(id); if (el) el.value = ''; });
+  const deptSel = document.getElementById('rx-tpl-dept-settings-modal');
+  if (deptSel) deptSel.value = 'Ophthalmology';
+  openM('m-add-rx-tpl');
 }
 
 // IOP PACHYMETRY CORRECTION
@@ -8607,7 +8754,8 @@ function updateOTStatus(id, status) {
   if(activeOTCase?.id===id) openOTCase(id);
 }
 function scheduleDefaultSurgeryFollowups(otCase) {
-  const c = normalizeOTCaseRecord(otCase || {});
+  const source = otCase || {};
+  const c = normalizeOTCaseRecord(source);
   if (!c.bmhId || !c.date) return;
   const dayOffsets = [
     { days: 1, label: 'Post-op Day 1 review', type: 'post-op' },
@@ -8641,6 +8789,7 @@ function scheduleDefaultSurgeryFollowups(otCase) {
     made.push(apt);
   });
   c.autoFollowups = made.map(function (a) { return { date: a.date, time: a.time, label: a.purpose }; });
+  source.autoFollowups = c.autoFollowups.slice();
   fbUpdate('otCases/' + c.id, { autoFollowups: c.autoFollowups }).catch(function () {});
 }
 
@@ -10090,7 +10239,7 @@ function renderRxDrugs() {
     d.dur = normalizeRxDurationLabel(d.dur);
     d.taperRows.forEach(tr => {
       tr.freq = normalizeRxFreqLabel(tr.freq);
-      tr.dur = d.dur;
+      tr.dur = normalizeRxDurationLabel(tr.dur || d.dur);
     });
   });
 
@@ -10839,6 +10988,7 @@ window.printUnifiedRx = function(deptId) {
   // ── Collect drugs ──
   const drugs = typeof RX_DRUGS !== 'undefined' ? RX_DRUGS : [];
   const rxPlainLang = typeof rxLang !== 'undefined' ? rxLang : 'en';
+  const postSurgeryRx = deptId === 'oe' ? !!document.getElementById('rx-post-surgery')?.checked : false;
   const plainInstrBlocks = drugs.length ? drugs.map(function (d) {
     return buildRxPlainInstructionLine(d, rxPlainLang, fmtIN);
   }).filter(Boolean) : [];
@@ -10908,25 +11058,25 @@ window.printUnifiedRx = function(deptId) {
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,300;0,400;0,700;0,900;1,400&family=Playfair+Display:wght@700&display=swap');
 *{margin:0;padding:0;box-sizing:border-box;print-color-adjust:exact;-webkit-print-color-adjust:exact}
-body{font-family:'Lato',Georgia,serif;font-size:11.5px;color:#1a1a1a;background:#fff;padding:8mm 14mm;line-height:1.5}
+body{font-family:'Lato',Georgia,serif;font-size:10.7px;color:#1a1a1a;background:#fff;padding:7mm 12mm;line-height:1.4}
 @page{size:A4 portrait;margin:0}
-.lh-img{width:100%;max-width:100%;height:auto;display:block;margin-bottom:12px}
-.pt-line{display:flex;align-items:baseline;justify-content:space-between;border-bottom:2px solid #1A3C6E;padding-bottom:7px;margin-bottom:8px}
-.pt-name{font-family:'Playfair Display','Georgia',serif;font-size:20px;font-weight:700;color:#1A3C6E;letter-spacing:.3px}
-.pt-meta{font-size:13px;font-weight:300;color:#444;margin-left:12px;font-style:italic}
-.pt-date{font-size:12px;color:#555;font-weight:400}
-.lbl-row{display:flex;gap:0;margin-bottom:6px;align-items:baseline}
-.lbl{font-size:11px;font-weight:700;text-transform:uppercase;min-width:120px;letter-spacing:.8px;color:#1A3C6E}
-.lbl-val{font-size:12px;color:#222}
-.sec-title{font-family:'Playfair Display','Georgia',serif;font-size:13px;font-weight:700;color:#1A3C6E;margin:14px 0 7px;border-bottom:1.5px solid #1A3C6E;padding-bottom:3px;letter-spacing:.3px}
-table{width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:10px}
-th{background:#1A3C6E;color:#fff;border:1px solid #1A3C6E;padding:6px 9px;font-weight:700;text-align:center;font-size:10.5px;letter-spacing:.5px;text-transform:uppercase}
-td{border:1px solid #c8d0dc;padding:6px 9px;text-align:center;vertical-align:top}
+.lh-img{width:100%;max-width:100%;height:auto;display:block;margin-bottom:10px}
+.pt-line{display:flex;align-items:baseline;justify-content:space-between;border-bottom:2px solid #1A3C6E;padding-bottom:6px;margin-bottom:7px}
+.pt-name{font-family:'Playfair Display','Georgia',serif;font-size:18px;font-weight:700;color:#1A3C6E;letter-spacing:.2px}
+.pt-meta{font-size:12px;font-weight:300;color:#444;margin-left:10px;font-style:italic}
+.pt-date{font-size:11px;color:#555;font-weight:400}
+.lbl-row{display:flex;gap:0;margin-bottom:5px;align-items:baseline}
+.lbl{font-size:10px;font-weight:700;text-transform:uppercase;min-width:112px;letter-spacing:.7px;color:#1A3C6E}
+.lbl-val{font-size:11px;color:#222}
+.sec-title{font-family:'Playfair Display','Georgia',serif;font-size:12px;font-weight:700;color:#1A3C6E;margin:11px 0 6px;border-bottom:1.5px solid #1A3C6E;padding-bottom:2px;letter-spacing:.2px}
+table{width:100%;border-collapse:collapse;font-size:10.4px;margin-bottom:8px}
+th{background:#1A3C6E;color:#fff;border:1px solid #1A3C6E;padding:5px 7px;font-weight:700;text-align:center;font-size:9.6px;letter-spacing:.4px;text-transform:uppercase}
+td{border:1px solid #c8d0dc;padding:5px 7px;text-align:center;vertical-align:top}
 td.left{text-align:left}
 tr:nth-child(even) td{background:#f8f9fc}
-.rx-name{font-weight:700;font-size:13px;color:#1A3C6E;letter-spacing:.2px}
-.rx-gen{font-size:10.5px;color:#666;font-style:italic;margin-top:1px}
-.rx-instr{font-size:11px;color:#222;margin-top:6px;padding:6px 10px;background:#f0f4ff;border-left:3px solid #1A3C6E;border-radius:0 4px 4px 0;line-height:1.9}
+.rx-name{font-weight:700;font-size:11.5px;color:#1A3C6E;letter-spacing:.15px}
+.rx-gen{font-size:9.4px;color:#666;font-style:italic;margin-top:1px}
+.rx-instr{font-size:10px;color:#222;margin-top:5px;padding:5px 8px;background:#f0f4ff;border-left:3px solid #1A3C6E;border-radius:0 4px 4px 0;line-height:1.5}
 .proc-item{padding:5px 0;font-size:15px;font-weight:800;border-bottom:1px solid #eee;display:flex;align-items:center;gap:8px}
 .fu-box{background:linear-gradient(135deg,#EBF3FF,#daeeff);border-radius:6px;padding:9px 16px;margin:10px 0;font-size:13px;font-weight:700;color:#1A3C6E;display:inline-block;border:1.5px solid rgba(26,60,110,.2)}
 .sig-row{display:flex;justify-content:space-between;align-items:flex-end;margin-top:28px;padding-top:12px;border-top:1px solid #eee}
@@ -10938,7 +11088,7 @@ tr:nth-child(even) td{background:#f8f9fc}
 .flag-h{color:#CC0000;font-weight:700}
 .flag-n{color:#1a8c3c;font-weight:600}
 .watermark{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-30deg);font-size:80px;font-weight:900;color:rgba(26,60,110,.04);font-family:'Playfair Display','Georgia',serif;white-space:nowrap;pointer-events:none;z-index:0}
-.diag-banner{margin:0 auto 8px;max-width:92%;padding:5px 12px;border:1px solid rgba(26,60,110,.18);border-radius:999px;background:#f7faff;text-align:center;font-size:10.5px;font-weight:700;color:#1A3C6E}
+.diag-banner{margin:0 auto 7px;max-width:96%;padding:4px 10px;border:1px solid rgba(26,60,110,.18);border-radius:999px;background:#f7faff;text-align:center;font-size:9.6px;font-weight:700;color:#1A3C6E}
 </style></head><body>
 
 ${lhImgSrc ? `<img src="${lhImgSrc}" class="lh-img" alt="Baweja Multispeciality Hospital">` : '<div style="height:80px;background:#f2f4f8;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#888;font-size:13px;margin-bottom:10px">Baweja Multispeciality Hospital Letterhead</div>'}
@@ -10954,6 +11104,8 @@ ${lhImgSrc ? `<img src="${lhImgSrc}" class="lh-img" alt="Baweja Multispeciality 
 ${dxList.length ? `<div class="diag-banner">${dxList.join(' · ')}</div>` : ''}
 
 ${ptMob ? `<div class="phone-line">&#9990; ${ptMob} &nbsp;&nbsp;|&nbsp;&nbsp; BMSH ID: ${ptId}</div>` : `<div class="phone-line">BMSH ID: ${ptId}</div>`}
+
+${postSurgeryRx ? `<div class="lbl-row" style="margin:4px 0 7px"><span class="lbl"></span><span class="lbl-val" style="font-weight:800;color:#1A3C6E">The medication schedule after surgery</span></div>` : ''}
 
 ${incCC && cc ? `<div class="lbl-row" style="margin-top:8px"><span class="lbl">Complaints:</span><span class="lbl-val">${cc}${ccDur?' ('+ccDur+')':''}</span></div>` : ''}
 
@@ -10977,13 +11129,7 @@ ${showGL ? `
   </tbody>
 </table>` : ''}
 
-${incPos && deptId==='oe' ? `<div class="lbl-row" style="margin:6px 0"><span class="lbl">Positive Findings:</span><span class="lbl-val">${[
-  document.getElementById('fund-od-disc')?.value,
-  document.getElementById('fund-os-disc')?.value,
-  document.getElementById('fundus-od')?.value,
-  document.getElementById('fundus-os')?.value,
-  document.getElementById('sl-notes-text')?.value
-].filter(v => String(v||'').trim() && String(v).trim() !== 'Normal').map(v => String(v).trim()).join(' ; ') || '—'}</span></div>` : ''}
+${incPos && deptId==='oe' ? `<div class="lbl-row" style="margin:6px 0"><span class="lbl">Positive Findings:</span><span class="lbl-val">${(typeof buildOphthoPositiveFindingsList === 'function' ? buildOphthoPositiveFindingsList() : []).join(' ; ') || '—'}</span></div>` : ''}
 
 ${drugs.length ? `
 <div class="sec-title">Medicine (Rx):</div>
@@ -11159,41 +11305,73 @@ function renderChargesList() {
   const el = document.getElementById('set-procs-list') || document.getElementById('charges-list');
   if(!el) return;
   const cats = [...new Set(CHARGES_DATA.map(c=>c.cat))];
+  const canEditDept = function (cat) {
+    if (CURRENT_USER?.isAdmin) return true;
+    const dept = String(CURRENT_USER?.dept || '').toLowerCase();
+    const c = String(cat || '').toLowerCase();
+    if (dept.includes('oph') && c.includes('eye')) return true;
+    if ((dept.includes('obg') || dept.includes('gyn')) && c.includes('obg')) return true;
+    if (dept.includes('psych') && c.includes('psych')) return true;
+    if ((dept.includes('skin') || dept.includes('derm') || dept.includes('cosmet')) && c.includes('skin')) return true;
+    return false;
+  };
   el.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
-    <button type="button" class="btn btn-gold btn-sm" onclick="addChargeRow()">+ Add Procedure</button>
+    <button type="button" class="btn btn-gold btn-sm" onclick="openAddChargeModal()">+ Add Procedure</button>
     <button type="button" class="btn btn-outline btn-sm" onclick="saveCharges()">💾 Save &amp; sync to cloud</button>
-    <span style="font-size:11px;color:var(--g1)">Edit CHD / RPR rates for both centres. Saved data reloads after login.</span>
+    <span style="font-size:11px;color:var(--g1)">Doctors can edit charges for their own departments. Use main heading + subcategory for grouped surgery packages.</span>
   </div>` + cats.map(cat => {
     const rows = CHARGES_DATA.filter(c=>c.cat===cat);
+    const editable = canEditDept(cat);
+    const groups = {};
+    rows.forEach(function (row) {
+      const key = row.parent || '__root__';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(row);
+    });
     return `<div style="margin-bottom:8px">
       <div style="font-size:9.5px;font-weight:800;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;padding:4px 8px;background:var(--g6);border-radius:5px;margin-bottom:4px">${cat}</div>
-      ${rows.map((c,i)=>{
+      ${Object.keys(groups).map(function (parentKey) {
+        const childRows = groups[parentKey];
+        const parentHtml = parentKey !== '__root__'
+          ? `<div style="font-size:10px;font-weight:900;color:var(--tx);padding:6px 8px;background:#fff7e8;border:1px solid rgba(212,160,23,.35);border-radius:7px;margin:6px 0 4px">${parentKey}</div>`
+          : '';
+        return parentHtml + childRows.map((c,i)=>{
         const gIdx = CHARGES_DATA.indexOf(c);
+        const disabled = editable ? '' : 'disabled';
         return `<div style="display:grid;grid-template-columns:70px 1fr 90px 90px 40px;gap:5px;padding:4px 8px;border-bottom:1px solid var(--g5);align-items:center;font-size:11.5px">
           <span class="badge bd-gray" style="font-size:9px">${c.cat}</span>
-          <input type="text" value="${c.name}" style="font-size:11.5px;font-weight:600" onchange="CHARGES_DATA[${gIdx}].name=this.value">
-          <input type="number" value="${c.chd}" style="font-size:12px;font-weight:800;color:var(--bmh-blue);text-align:right" onchange="CHARGES_DATA[${gIdx}].chd=parseInt(this.value)">
-          <input type="number" value="${c.rpr}" style="font-size:12px;font-weight:800;color:#8a4200;text-align:right" onchange="CHARGES_DATA[${gIdx}].rpr=parseInt(this.value)">
-          <button class="btn btn-xs btn-gray" onclick="CHARGES_DATA.splice(${gIdx},1);renderChargesList()">✕</button>
+          <input type="text" value="${c.name}" style="font-size:11.5px;font-weight:600" onchange="CHARGES_DATA[${gIdx}].name=this.value" ${disabled}>
+          <input type="number" value="${c.chd}" style="font-size:12px;font-weight:800;color:var(--bmh-blue);text-align:right" onchange="CHARGES_DATA[${gIdx}].chd=parseInt(this.value)" ${disabled}>
+          <input type="number" value="${c.rpr}" style="font-size:12px;font-weight:800;color:#8a4200;text-align:right" onchange="CHARGES_DATA[${gIdx}].rpr=parseInt(this.value)" ${disabled}>
+          ${editable ? `<button class="btn btn-xs btn-gray" onclick="CHARGES_DATA.splice(${gIdx},1);renderChargesList()">✕</button>` : '<span></span>'}
         </div>`;
-      }).join('')}
+      }).join(''); }).join('')}
     </div>`;
   }).join('');
 }
 
-function addChargeRow() {
-  const cat = prompt('Category (Eye / OBG / Psych / Skin / Lab / Other):','Eye');
-  if(!cat) return;
-  const name = prompt('Procedure / Service Name:');
-  if(!name) return;
-  const chd = parseInt(prompt('Chandigarh Price (₹):','0'))||0;
-  const rpr = parseInt(prompt('Ropar Price (₹):','0'))||0;
-  CHARGES_DATA.push({cat, name, chd, rpr});
-  // Also add to CENTRE_CHARGES
+function openAddChargeModal() {
+  const deptMap = { ophtho:'Eye', obg:'OBG', psych:'Psych', skin:'Skin' };
+  const catEl = document.getElementById('add-charge-cat');
+  if (catEl && !CURRENT_USER?.isAdmin) catEl.value = deptMap[rxDeptKeyFromUi()] || deptMap[normalizeSurgeryPackDeptKey(CURRENT_USER?.dept)] || 'Eye';
+  ['add-charge-parent','add-charge-name','add-charge-chd','add-charge-rpr'].forEach(function (id) {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  openM('m-add-proc-charge');
+}
+function saveChargeFromModal() {
+  const cat = document.getElementById('add-charge-cat')?.value || 'Eye';
+  const parent = document.getElementById('add-charge-parent')?.value?.trim() || '';
+  const name = document.getElementById('add-charge-name')?.value?.trim();
+  const chd = parseInt(document.getElementById('add-charge-chd')?.value || '0', 10) || 0;
+  const rpr = parseInt(document.getElementById('add-charge-rpr')?.value || '0', 10) || 0;
+  if (!name) { showToast('Enter charge name', 'w'); return; }
+  CHARGES_DATA.push({cat, parent, name, chd, rpr});
   CENTRE_CHARGES.CHD[name] = chd;
   CENTRE_CHARGES.RPR[name] = rpr;
   renderChargesList();
-  showToast('"'+name+'" added to fee schedule ✓','s');
+  closeM('m-add-proc-charge');
+  showToast('"' + name + '" added to fee schedule ✓','s');
 }
 
 function saveCharges() {
@@ -11952,15 +12130,21 @@ function getDischargePrintData(sel) {
   const tmpl = DISCHARGE_TEMPLATES[specialty] || DISCHARGE_TEMPLATES.ophtho;
   const lastOtCase = OT_CASES.slice().reverse().map(normalizeOTCaseRecord).find(c => c.bmhId === ptObj.bmhId) || null;
   const ipdStay = (window.IPD_PATIENTS || []).slice().reverse().find(x => x.bmhId === ptObj.bmhId) || null;
-  const lastRxData = (RX_DRUGS && RX_DRUGS.length)
+  const livePostSurgeryRx = !!document.getElementById('rx-post-surgery')?.checked;
+  const savedPostSurgeryRx = !!ptObj.lastVisit?.postSurgeryRx;
+  const lastRxData = (livePostSurgeryRx && RX_DRUGS && RX_DRUGS.length)
     ? JSON.parse(JSON.stringify(RX_DRUGS))
-    : (Array.isArray(ptObj.lastVisit?.rx) && ptObj.lastVisit.rx.length ? JSON.parse(JSON.stringify(ptObj.lastVisit.rx)) : []);
+    : (savedPostSurgeryRx && Array.isArray(ptObj.lastVisit?.rx) && ptObj.lastVisit.rx.length)
+      ? JSON.parse(JSON.stringify(ptObj.lastVisit.rx))
+      : (RX_DRUGS && RX_DRUGS.length)
+        ? JSON.parse(JSON.stringify(RX_DRUGS))
+        : (Array.isArray(ptObj.lastVisit?.rx) && ptObj.lastVisit.rx.length ? JSON.parse(JSON.stringify(ptObj.lastVisit.rx)) : []);
   const visitDate = ptObj.lastVisit?.date || ptObj.createdAt || new Date().toISOString();
   const opDate = lastOtCase?.date || lastOtCase?.scheduledDate || ipdStay?.admittedAt || visitDate;
   const dischargeDate = ipdStay?.dischargedAt || new Date().toISOString();
   const findings = [ptObj.lastVisit?.positiveFindings, ptObj.positiveFindings, ptObj.lastVisit?.chiefComplaints].filter(Boolean).join('; ') || 'clinical findings noted in the case sheet';
-  const diagnosis = ptObj.lastVisit?.dx || ptObj.dx || lastOtCase?.dx || tmpl.procedure || 'the diagnosed condition';
-  const procedureName = lastOtCase?.procedure || ptObj.lastVisit?.procedure || tmpl.procedure || 'the planned procedure';
+  const diagnosis = lastOtCase?.dx || ptObj.lastVisit?.dx || ptObj.dx || ptObj.lastVisit?.clinicalImpression || tmpl.procedure || 'the diagnosed condition';
+  const procedureName = lastOtCase?.procedure || ptObj.lastVisit?.procedure || ptObj.surgery || ptObj.surgeryAdvised || tmpl.procedure || 'the planned procedure';
   const joinDate = new Date(new Date(opDate).getTime() + (14 * 24 * 60 * 60 * 1000)).toISOString();
   const followups = Array.isArray(lastOtCase?.autoFollowups) ? lastOtCase.autoFollowups.slice() : [];
   return {
@@ -11979,7 +12163,8 @@ function getDischargePrintData(sel) {
     diagnosis: diagnosis,
     procedureName: procedureName,
     joinDate: joinDate,
-    followups: followups
+    followups: followups,
+    postSurgeryRx: livePostSurgeryRx || savedPostSurgeryRx
   };
 }
 function flattenDischargeRxRows(rows) {
@@ -13480,6 +13665,7 @@ function loadCustomConsentsForSettings() {
   if(!host || !window.FBDB) return;
   window.FBDB.ref('consentLibrary').once('value').then(snap => {
     const data = snap.val();
+    window.BMH_UPLOADED_CONSENTS = data ? Object.values(data) : [];
     let box = document.getElementById('consent-custom-uploaded-list');
     if(!box) {
       box = document.createElement('div');
@@ -14245,9 +14431,7 @@ function renderSetPacksList() {
       const title = getPackDocumentTitle(k);
       return '<li style="margin:2px 0;font-size:11px">' + title + '</li>';
     }).join('');
-    const delBtn = String(p.id).startsWith('custom-')
-      ? '<button type="button" class="btn btn-xs btn-gray" onclick="deleteSurgeryPack(\'' + p.id + '\')">🗑️</button>'
-      : '';
+    const actions = '<button type="button" class="btn btn-xs btn-outline" onclick="editSurgeryPack(\'' + p.id + '\')">✏️</button><button type="button" class="btn btn-xs btn-gray" onclick="deleteSurgeryPack(\'' + p.id + '\')">🗑️</button>';
     return '<div style="padding:12px;border:1.5px solid ' + p.color + '33;border-radius:var(--r);margin-bottom:10px;background:' + p.color + '09">' +
       '<div style="display:flex;align-items:flex-start;gap:12px">' +
       '<span style="font-size:28px;flex-shrink:0">' + p.icon + '</span>' +
@@ -14264,7 +14448,7 @@ function renderSetPacksList() {
       '</div></div>' +
       '<div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">' +
       '<button type="button" class="btn btn-xs" style="background:' + p.color + ';color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:11px;font-weight:800;cursor:pointer;white-space:nowrap" onclick="printSurgeryPack(\'' + p.id + '\')">🖨️ Print pack</button>' +
-      delBtn +
+      actions +
       '</div></div></div>';
   }).join('');
 }
@@ -14868,9 +15052,11 @@ function saveVisit(dept) {
     });
     visit.slChips = slChips;
     visit.slNotes = document.getElementById('sl-notes-text')?.value || '';
-    const dxLines = [...document.querySelectorAll('#rx-diagnosis-rows .rx-dx-line')].map(e=>e.value.trim()).filter(Boolean);
-    visit.diagnoses = dxLines;
+    const dxRows = getOphthoDiagnosisRows();
+    visit.diagnoses = dxRows;
     visit.diagnosisText = document.getElementById('rx-diagnosis-text')?.value?.trim() || '';
+    visit.postSurgeryRx = !!document.getElementById('rx-post-surgery')?.checked;
+    visit.positiveFindings = buildOphthoPositiveFindingsList().join('; ');
     visit.procedures = [...document.querySelectorAll('#rx-proc-advised [data-proc]')].map(e=>e.dataset.proc).filter(Boolean);
     const ccRows = [];
     document.querySelectorAll('.cc-row').forEach(row=>{
@@ -15030,7 +15216,7 @@ function loadPastVisits(bmhId, dept) {
     container.innerHTML = visits.map(v => {
       const invs = Array.isArray(v.investigations) ? v.investigations : [];
       const cc = Array.isArray(v.ccRows) ? v.ccRows.map(r => r.text).filter(Boolean).join(', ') : '';
-      const dx = Array.isArray(v.diagnoses) ? v.diagnoses.join(', ') : (v.diagnosisText || '');
+      const dx = Array.isArray(v.diagnoses) ? v.diagnoses.map(formatDxLineForPrint).filter(Boolean).join(', ') : (v.diagnosisText || '');
       const obgDx = Array.isArray(v.presumptiveDx) ? v.presumptiveDx.join(', ') : '';
       const obgMeta = dept === 'obg'
         ? `<div style="font-size:11px;margin-bottom:5px"><strong>Summary:</strong> ${(v.gravida || '—')} · ${v.ga || 'GA —'} · EDD ${v.edd || '—'}</div>
@@ -15159,7 +15345,7 @@ function renderOphthoRecap() {
       .sort((a,b)=>String(b.date || '').localeCompare(String(a.date || '')))
       .slice(0, 5);
     const visitHtml = visits.length ? visits.map(v => {
-      const dx = Array.isArray(v.diagnoses) && v.diagnoses.length ? v.diagnoses.slice(0,2).join(', ') : (v.diagnosisText || '—');
+      const dx = Array.isArray(v.diagnoses) && v.diagnoses.length ? v.diagnoses.slice(0,2).map(formatDxLineForPrint).filter(Boolean).join(', ') : (v.diagnosisText || '—');
       const rx = Array.isArray(v.rx) && v.rx.length ? v.rx.slice(0,2).map(d => rxDrugTradeName(d) || d.trade || d.name || 'Drug').join(', ') : 'No prescription';
       const spec = [v.hxSpectacles, v.hxLastSpec].filter(Boolean).join(' · ') || 'No glasses note';
       return `<div style="padding:9px 10px;border:1px solid var(--g5);border-radius:10px;background:#fff;margin-bottom:7px">

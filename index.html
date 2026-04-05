@@ -1152,14 +1152,19 @@
             <option value="dry-eye">Dry Eye Protocol</option>
           </select>
           <button class="btn btn-xs btn-outline" onclick="openM('m-order-invest')">🧪 Order Investigations</button>
+          <label style="display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;color:var(--g1);padding:4px 2px;user-select:none;cursor:pointer">
+            <input type="checkbox" id="rx-post-surgery" onchange="toggleRxPostSurgeryNote()">
+            Post Surgery Prescription
+          </label>
         </div>
+        <div id="rx-post-surgery-note" style="display:none;margin:-2px 0 10px;padding:7px 10px;border:1px solid rgba(26,60,110,.18);border-radius:8px;background:#f7faff;font-size:11.5px;font-weight:700;color:var(--blue)">The medication schedule after surgery</div>
         <div style="margin-bottom:8px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:6px">
             <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px">Diagnosis</div>
             <button type="button" class="btn btn-xs btn-blue" onclick="addDiagnosisRow()">+ Add diagnosis line</button>
           </div>
-          <div style="display:grid;grid-template-columns:28px 1fr 36px;gap:5px;padding:5px 8px;background:var(--g6);border-radius:6px;margin-bottom:6px;font-size:9px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px;align-items:center">
-            <span>#</span><span>Diagnosis (type ICD-10 or free text — same as medicines)</span><span></span>
+          <div style="display:grid;grid-template-columns:28px 88px minmax(0,1fr) 36px;gap:5px;padding:5px 8px;background:var(--g6);border-radius:6px;margin-bottom:6px;font-size:9px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px;align-items:center">
+            <span>#</span><span>Eye</span><span>Diagnosis</span><span></span>
           </div>
           <div id="rx-diagnosis-rows" style="margin-bottom:6px"></div>
           <textarea id="rx-diagnosis-text" rows="2" placeholder="Extra diagnosis notes (optional)…" style="width:100%;font-size:12px;border:1.5px solid var(--g4);border-radius:8px;padding:8px 10px;margin-bottom:4px;font-family:var(--font);resize:vertical;min-height:40px;box-sizing:border-box"></textarea>
@@ -3251,7 +3256,7 @@
 <div class="tab-content" id="set-procedures">
 <div class="g32">
   <div class="card">
-    <div class="card-hd"><div class="card-title">⚕️ Procedures &amp; Charges</div><button class="btn btn-gold btn-xs" onclick="openM('m-add-proc-charge')">+ Add Procedure</button></div>
+    <div class="card-hd"><div class="card-title">⚕️ Procedures &amp; Charges</div><button class="btn btn-gold btn-xs" onclick="openAddChargeModal()">+ Add Procedure</button></div>
     <div id="set-procs-list"></div>
   </div>
   <div class="col">
@@ -3266,7 +3271,7 @@
 <div class="tab-content" id="set-rx-templates">
 <div class="g32">
   <div class="card">
-    <div class="card-hd"><div class="card-title">📋 Prescription Templates</div><button class="btn btn-gold btn-xs" onclick="openM('m-add-rx-tpl')">+ New Template</button></div>
+    <div class="card-hd"><div class="card-title">📋 Prescription Templates</div><button class="btn btn-gold btn-xs" onclick="openNewRxTemplateModal()">+ New Template</button></div>
     <div id="set-rx-tpl-list"></div>
   </div>
   <div class="col">
@@ -3924,6 +3929,32 @@
   <div class="form-group"><label class="fl">Notes</label><input type="text" id="edit-rx-tpl-notes" placeholder="Optional" style="font-size:13px"></div>
   <div class="form-group"><label class="fl">Drugs (JSON array)</label><textarea id="edit-rx-tpl-json" rows="14" style="width:100%;font-family:ui-monospace,monospace;font-size:11px;box-sizing:border-box"></textarea></div>
   <button type="button" class="btn btn-gold" onclick="saveRxTemplateFromModal()">💾 Save template</button>
+</div>
+</div>
+</div>
+
+<div class="modal-ov" id="m-add-proc-charge">
+<div class="modal">
+<div class="modal-hd"><div class="modal-title">Add charge / procedure</div><button class="modal-close" onclick="closeM('m-add-proc-charge')">✕</button></div>
+<div class="fg fg1" style="gap:9px">
+  <div class="form-group"><label class="fl">Department</label><select id="add-charge-cat"><option value="Eye">Eye</option><option value="OBG">OBG</option><option value="Psych">Psych</option><option value="Skin">Skin</option><option value="Lab">Lab</option><option value="Other">Other</option></select></div>
+  <div class="form-group"><label class="fl">Main heading</label><input type="text" id="add-charge-parent" placeholder="e.g. Pinhole Microincision Cataract Surgery + IOL implantation"></div>
+  <div class="form-group"><label class="fl">Charge / subcategory name</label><input type="text" id="add-charge-name" placeholder="e.g. Monofocal IOL"></div>
+  <div class="form-group"><label class="fl">Chandigarh ₹</label><input type="number" id="add-charge-chd" min="0" step="1"></div>
+  <div class="form-group"><label class="fl">Ropar ₹</label><input type="number" id="add-charge-rpr" min="0" step="1"></div>
+  <button class="btn btn-gold" onclick="saveChargeFromModal()">💾 Save charge</button>
+</div>
+</div>
+</div>
+
+<div class="modal-ov" id="m-add-rx-tpl">
+<div class="modal modal-lg">
+<div class="modal-hd"><div class="modal-title">Create Rx / OT notes template</div><button class="modal-close" onclick="closeM('m-add-rx-tpl')">✕</button></div>
+<div class="fg fg1" style="gap:9px">
+  <div class="form-group"><label class="fl">Template Name</label><input type="text" id="rx-tpl-name-modal" placeholder="e.g. Post Phaco Day 1"></div>
+  <div class="form-group"><label class="fl">Department</label><select id="rx-tpl-dept-settings-modal"><option value="Ophthalmology">Ophthalmology</option><option value="OBG">OBG</option><option value="Psychiatry">Psychiatry</option><option value="Skin">Skin</option><option value="OT">OT / Operative Notes</option><option value="All">All</option></select></div>
+  <div class="form-group full"><label class="fl">Template rows</label><textarea id="rx-tpl-drugs-modal" placeholder="Moxifloxacin 0.5% — Four times daily (QID) — 7 days&#10;Prednisolone 1% — Four times daily (QID) — 4 weeks&#10;&#10;For OT Notes use one step per line." style="min-height:180px"></textarea></div>
+  <button class="btn btn-gold" onclick="saveRxTemplate('modal')">💾 Save template</button>
 </div>
 </div>
 </div>
