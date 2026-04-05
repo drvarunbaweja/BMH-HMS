@@ -3314,6 +3314,20 @@ function syncObgAssessmentToHistory() {
   const srcLmp = document.getElementById('obg-lmp');
   const dstLmp = document.getElementById('obg-obs-lmp');
   if(srcLmp && dstLmp && srcLmp.value) dstLmp.value = srcLmp.value;
+  const dstEddDate = document.getElementById('obg-obs-edd-date');
+  const dstGaDate = document.getElementById('obg-obs-ga-date');
+  if(srcLmp?.value) {
+    const lmp = new Date(srcLmp.value);
+    if(!Number.isNaN(lmp.getTime())) {
+      const edd = new Date(lmp);
+      edd.setDate(edd.getDate() + 280);
+      if(dstEddDate) dstEddDate.value = edd.toISOString().split('T')[0];
+      const diffDays = Math.max(0, Math.floor((new Date() - lmp)/(1000*60*60*24)));
+      const weeks = Math.floor(diffDays / 7);
+      const days = diffDays % 7;
+      if(dstGaDate) dstGaDate.value = `${weeks}w ${days}d`;
+    }
+  }
 }
 const OBG_OBS_FIELD_IDS = [
   'obg-obs-lmp','obg-obs-edd-date','obg-obs-ga-date','obg-obs-edd-usg','obg-obs-ga-usg',
@@ -3720,6 +3734,7 @@ function populateObgForm(visit) {
   document.querySelectorAll('.obg-lab').forEach(box => { box.checked = labs.includes(box.value); });
   toggleObgWorkflow();
   updateObgObstetricHistoryTab(!!(data.obstetricHistoryEnabled || data.workflowAnc));
+  syncObgAssessmentToHistory();
   updateObgComputedFields();
 }
 function addANCVisit(){
@@ -6309,7 +6324,6 @@ function printOBGCard() {
     return el.textContent || fallback || '';
   };
   const fmtDate = function(v) { return v ? obgFmtDate(v, '—') : '—'; };
-  const yesNo = function(v) { return v || '—'; };
   const complications = [...document.querySelectorAll('.obg-obs-complication:checked')].map(function(x){ return x.value; });
   const ptName = pt.name || text('obg-pt-nm', '—');
   const ptId = pt.bmhId || text('obg-pt-uid', '—');
@@ -6318,7 +6332,7 @@ function printOBGCard() {
   const doctor = getSelectedObgDoctorName ? getSelectedObgDoctorName() : (pt.doctor || CURRENT_USER?.name || 'Dr. Namrata Baweja');
   const doctorLine = doctor.includes('Geeta') ? 'Dr. Geeta Baweja · MS (OBG)' : doctor.includes('Namrata') ? 'Dr. Namrata Baweja · MS (OBG)' : `${doctor} · MS (OBG)`;
   const lmp = text('obg-lmp') || text('obg-obs-lmp');
-  const edd = text('obg-edd-inp') || text('obg-edd');
+  const edd = text('obg-edd-inp') || text('obg-edd') || text('obg-obs-edd-date');
   const ga = text('obg-ga');
   const blood = text('obg-blood-grp') || text('obg-obs-blood-group') || pt.bloodGroup || '—';
   const husbandBg = text('obg-obs-husband-bg', '—');
@@ -6329,6 +6343,11 @@ function printOBGCard() {
   const nextReview = fmtDate(text('obg-next-review'));
   const usgDue = fmtDate(text('obg-usg-due') || text('obg-usg-due-inline'));
   const ttDue = fmtDate(text('obg-tt-due') || text('obg-tt-due-inline'));
+  const withNote = function(main, note) {
+    if(!main && !note) return '—';
+    if(main && note) return `${main} · ${note}`;
+    return main || note || '—';
+  };
   const ancSummaryRows = [
     ['Visit type', text('obg-anc-visit', '—')],
     ['BP', text('obg-bp', '—')],
@@ -6343,6 +6362,8 @@ function printOBGCard() {
   ];
   const screeningRows = [
     ['Menstrual history', text('obg-obs-menstrual', '—')],
+    ['Blood group', blood],
+    ['Husband BG', husbandBg],
     ['RBS', text('obg-obs-rbs', '—')],
     ['TSH', text('obg-obs-tsh', '—')],
     ['GTT', text('obg-obs-gtt', '—')],
@@ -6351,29 +6372,42 @@ function printOBGCard() {
     ['HCV', `${text('obg-obs-hcv', '—')} (${fmtDate(text('obg-obs-hcv-date'))})`],
     ['HPLC', `${text('obg-obs-hplc', '—')} (${fmtDate(text('obg-obs-hplc-date'))})`],
     ['VDRL', `${text('obg-obs-vdrl', '—')} (${fmtDate(text('obg-obs-vdrl-date'))})`],
-    ['Genetic testing', text('obg-obs-genetic', '—')]
+    ['Genetic testing', withNote(text('obg-obs-genetic', '—'), text('obg-obs-genetic-result'))]
   ];
-  const obstetricRows = [
+  const conceptionRows = [
     ['Conception', text('obg-obs-conception', '—')],
     ['Complications', complications.length ? complications.join(', ') : 'None recorded'],
+    ['Complication note', text('obg-obs-complication-note', '—')],
     ['Pregnancy outcome', text('obg-obs-preg-outcome', '—')],
     ['Maturity', text('obg-obs-maturity', '—')],
-    ['Gestation age', text('obg-obs-gestation-age', '—')],
+    ['Gestation age', text('obg-obs-gestation-age', '—')]
+  ];
+  const labourRows = [
     ['Mode of delivery', text('obg-obs-mode-delivery', '—')],
-    ['Induction', text('obg-obs-induction', '—')],
-    ['Liquor', text('obg-obs-liquor', '—')],
-    ['Cord round neck', text('obg-obs-cord-neck', '—')],
-    ['PPH', text('obg-obs-pph', '—')]
+    ['Induction', withNote(text('obg-obs-induction', '—'), text('obg-obs-induction-note'))],
+    ['Liquor', withNote(text('obg-obs-liquor', '—'), text('obg-obs-liquor-note'))],
+    ['Cord round neck', withNote(text('obg-obs-cord-neck', '—'), text('obg-obs-cord-neck-note'))],
+    ['Cord clamping', withNote(text('obg-obs-cord-clamp', '—'), text('obg-obs-cord-clamp-note'))],
+    ['Placenta', withNote(text('obg-obs-placenta', '—'), text('obg-obs-placenta-note'))],
+    ['PPH', withNote(text('obg-obs-pph', '—'), text('obg-obs-pph-note'))]
+  ];
+  const postNatalRows = [
+    ['Eventful / Uneventful', text('obg-obs-eventful', '—')],
+    ['Cycle return', text('obg-obs-cycle-return', '—')],
+    ['Birth control', withNote(text('obg-obs-birth-control', '—'), text('obg-obs-birth-control-note'))],
+    ['Present age', text('obg-obs-present-age', '—')],
+    ['Problems after pregnancy', text('obg-obs-post-preg-problems', '—')]
   ];
   const babyRows = [
     ['Gender', text('obg-obs-gender', '—')],
     ['Birth weight', text('obg-obs-birth-weight', '—')],
     ['Date of delivery', fmtDate(text('obg-obs-delivery-date'))],
     ['Time of delivery', text('obg-obs-delivery-time', '—')],
+    ['Location of delivery', text('obg-obs-location-delivery', '—')],
     ['APGAR', text('obg-obs-apgar', '—')],
     ['Cry', text('obg-obs-cry', '—')],
-    ['NICU', text('obg-obs-nicu', '—')],
-    ['Phototherapy', text('obg-obs-phototherapy', '—')],
+    ['NICU', withNote(text('obg-obs-nicu', '—'), text('obg-obs-nicu-note'))],
+    ['Phototherapy', withNote(text('obg-obs-phototherapy', '—'), text('obg-obs-phototherapy-note'))],
     ['Breast feed alone', text('obg-obs-breastfeed', '—')],
     ['Top feed alone', text('obg-obs-topfeed', '—')]
   ];
@@ -6402,10 +6436,12 @@ function printOBGCard() {
   .hero-lbl{font-size:8px;font-weight:800;text-transform:uppercase;opacity:.82;letter-spacing:.45px}
   .hero-val{font-size:12px;font-weight:900;margin-top:3px;line-height:1.25}
   .body{padding:10px}
-  .grid{display:grid;grid-template-columns:1.15fr .95fr;gap:10px}
+  .grid{display:grid;grid-template-columns:1.08fr .92fr;gap:10px}
   .section{border:1px solid #dde5f0;border-radius:10px;padding:8px 9px;background:#fff}
   .section.soft{background:#f8fbff}
   .section.gold{background:#fffaf0}
+  .section.green{background:#f4fff7}
+  .section.pink{background:#fff7fb}
   .sec-title{font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.45px;color:#1A3C6E;margin-bottom:6px}
   .mini-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px 8px}
   .mini-row{display:grid;grid-template-columns:94px 1fr;gap:6px;align-items:start}
@@ -6450,8 +6486,6 @@ function printOBGCard() {
           <div class="section">
             <div class="sec-title">Pregnancy Profile</div>
             <div class="mini-grid">${rowHtml([
-              ['Blood group', blood],
-              ['Husband BG', husbandBg],
               ['GA', ga || '—'],
               ['High-risk tag', risk],
               ['Primary complaint', complaint],
@@ -6463,8 +6497,12 @@ function printOBGCard() {
             ])}</div>
           </div>
           <div class="section gold">
-            <div class="sec-title">Obstetric History</div>
-            <div class="mini-grid">${rowHtml(obstetricRows)}</div>
+            <div class="sec-title">Conception & Pregnancy History</div>
+            <div class="mini-grid">${rowHtml(conceptionRows)}</div>
+          </div>
+          <div class="section pink">
+            <div class="sec-title">Labour & Delivery Details</div>
+            <div class="mini-grid">${rowHtml(labourRows)}</div>
           </div>
           <div class="section">
             <div class="sec-title">Important Notes</div>
@@ -6480,8 +6518,12 @@ function printOBGCard() {
             <div class="sec-title">Baby / Delivery History</div>
             <div class="mini-grid">${rowHtml(babyRows)}</div>
           </div>
+          <div class="section green">
+            <div class="sec-title">Postnatal / Follow-up History</div>
+            <div class="mini-grid">${rowHtml(postNatalRows)}</div>
+          </div>
           <div class="section">
-            <div class="sec-title">TT / Td / Tdap Status</div>
+            <div class="sec-title">Vaccination History</div>
             <table>
               <thead><tr><th>Dose</th><th>Date</th><th>Status</th><th>Brand</th><th>Batch</th></tr></thead>
               <tbody>${vaccineRows.map(function(r){ return `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td></tr>`; }).join('')}</tbody>
