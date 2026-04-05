@@ -44,6 +44,27 @@ const USER_DB = {
   'drvarun_chd':{ pw:'BMH@VarunCHD25',name:'Dr. Varun Baweja',  role:'Doctor',      dept:'Ophthalmology',    centre:'CHD',  degrees:'MS (Ophthalmology), DNB',                                   canSeeAllCentres:false, isAdmin:false },
   'drvarun_rpr':{ pw:'BMH@VarunRPR25',name:'Dr. Varun Baweja',  role:'Doctor',      dept:'Ophthalmology',    centre:'RPR',  degrees:'MS (Ophthalmology), DNB',                                   canSeeAllCentres:false, isAdmin:false },
 };
+[
+  ['drvarun@bawejahospital.com', { pw:'ChangeMe@123', name:'Dr. Varun Baweja', role:'Admin', dept:'Ophthalmology', centre:'BOTH', degrees:'MS (Ophthalmology), DNB, Ex Cons Cambridgeshire (UK)', canSeeAllCentres:true, isAdmin:true }],
+  ['drbaweja@bawejahospital.com', { pw:'ChangeMe@123', name:'Dr. Baweja', role:'Admin', dept:'Ophthalmology', centre:'BOTH', degrees:'', canSeeAllCentres:true, isAdmin:true }],
+  ['drtarun.chd@bawejahospital.com', { pw:'ChangeMe@123', name:'Dr. Tarun Baweja', role:'Doctor', dept:'Neuropsychiatry', centre:'CHD', degrees:'MD (Psychiatry), DPM', canSeeAllCentres:false, isAdmin:false }],
+  ['drtarun.rpr@bawejahospital.com', { pw:'ChangeMe@123', name:'Dr. Tarun Baweja', role:'Doctor', dept:'Neuropsychiatry', centre:'RPR', degrees:'MD (Psychiatry), DPM', canSeeAllCentres:false, isAdmin:false }],
+  ['drgeeta@bawejahospital.com', { pw:'ChangeMe@123', name:'Dr. Geeta Baweja', role:'Doctor', dept:'OBG', centre:'CHD', degrees:'MS (OBG), FICOG', canSeeAllCentres:false, isAdmin:false }],
+  ['drnamrata.chd@bawejahospital.com', { pw:'ChangeMe@123', name:'Dr. Namrata Baweja', role:'Doctor', dept:'OBG', centre:'CHD', degrees:'MS (OBG), Fellowship Fertility', canSeeAllCentres:false, isAdmin:false }],
+  ['drnamrata.rpr@bawejahospital.com', { pw:'ChangeMe@123', name:'Dr. Namrata Baweja', role:'Doctor', dept:'OBG', centre:'RPR', degrees:'MS (OBG), Fellowship Fertility', canSeeAllCentres:false, isAdmin:false }],
+  ['drpooja.chd@bawejahospital.com', { pw:'ChangeMe@123', name:'Dr. Pooja Baweja', role:'Doctor', dept:'Skin', centre:'CHD', degrees:'MD (Dermatology), FRGUHS', canSeeAllCentres:false, isAdmin:false }],
+  ['drpooja.rpr@bawejahospital.com', { pw:'ChangeMe@123', name:'Dr. Pooja Baweja', role:'Doctor', dept:'Skin', centre:'RPR', degrees:'MD (Dermatology), FRGUHS', canSeeAllCentres:false, isAdmin:false }],
+  ['reception.chd@bawejahospital.com', { pw:'ChangeMe@123', name:'Reception CHD', role:'Reception', dept:'Reception', centre:'CHD', degrees:'', canSeeAllCentres:false, isAdmin:false }],
+  ['reception.rpr@bawejahospital.com', { pw:'ChangeMe@123', name:'Reception Ropar', role:'Reception', dept:'Reception', centre:'RPR', degrees:'', canSeeAllCentres:false, isAdmin:false }],
+  ['lab.chd@bawejahospital.com', { pw:'ChangeMe@123', name:'Lab Tech CHD', role:'Lab', dept:'Lab', centre:'CHD', degrees:'', canSeeAllCentres:false, isAdmin:false }],
+  ['lab.rpr@bawejahospital.com', { pw:'ChangeMe@123', name:'Lab Tech Ropar', role:'Lab', dept:'Lab', centre:'RPR', degrees:'', canSeeAllCentres:false, isAdmin:false }],
+  ['tpa.chd@bawejahospital.com', { pw:'ChangeMe@123', name:'TPA Executive CHD', role:'TPA', dept:'Insurance/TPA', centre:'CHD', degrees:'', canSeeAllCentres:false, isAdmin:false }],
+  ['tpa.rpr@bawejahospital.com', { pw:'ChangeMe@123', name:'TPA Executive RPR', role:'TPA', dept:'Insurance/TPA', centre:'RPR', degrees:'', canSeeAllCentres:false, isAdmin:false }],
+  ['inventory.chd@bawejahospital.com', { pw:'ChangeMe@123', name:'Inventory CHD', role:'Inventory', dept:'Pharmacy / Store', centre:'CHD', degrees:'', canSeeAllCentres:false, isAdmin:false }],
+  ['inventory.rpr@bawejahospital.com', { pw:'ChangeMe@123', name:'Inventory RPR', role:'Inventory', dept:'Pharmacy / Store', centre:'RPR', degrees:'', canSeeAllCentres:false, isAdmin:false }],
+  ['optometrist@bawejahospital.com', { pw:'ChangeMe@123', name:'Optometrist RPR', role:'Optometrist', dept:'Ophthalmology', centre:'RPR', degrees:'B.Optom', canSeeAllCentres:false, isAdmin:false }],
+  ['opto.rpr@bawejahospital.com', { pw:'ChangeMe@123', name:'Optometrist RPR', role:'Optometrist', dept:'Ophthalmology', centre:'RPR', degrees:'B.Optom', canSeeAllCentres:false, isAdmin:false }],
+].forEach(function (entry) { if (!USER_DB[entry[0]]) USER_DB[entry[0]] = entry[1]; });
 let CURRENT_USER = null; // set on login
 
 /** Firebase Auth (app.js) sets window.CURRENT_USER; legacy login sets this var — keep in sync. */
@@ -734,24 +755,27 @@ function getPreferredConsentVariant(cd, preferredLang) {
   if (hasPa) return 'en-pa';
   return 'en';
 }
+function isCurrentUserAdmin() {
+  const role = String(CURRENT_USER?.role || '').toLowerCase();
+  const centre = String(CURRENT_USER?.centre || '').toUpperCase();
+  return !!(CURRENT_USER?.isAdmin || CURRENT_USER?.canSeeAllCentres || role === 'admin' || centre === 'BOTH');
+}
 function buildCompactDocumentHeader(title, ctx, subtitle) {
   const esc = escapeHtmlConsent;
   const logoSrc = resolvePrintLogoSrc();
-  const proc = String(ctx?.procLine || '').trim();
-  return '<div style="border:1px solid #222;border-radius:10px;padding:8px 10px;margin-bottom:8px">'
-    + '<div style="display:grid;grid-template-columns:minmax(0,1.2fr) repeat(4,minmax(86px,1fr));gap:8px;align-items:stretch">'
-    + '<div style="display:flex;align-items:center;gap:8px;min-width:0;padding-right:6px;border-right:1px solid #d7dce5">'
-    + '<img src="' + esc(logoSrc) + '" style="height:30px;width:auto;object-fit:contain" alt="BMH">'
-    + '<div><div style="font-size:15px;font-weight:900;color:#111;line-height:1.25">' + esc(title) + '</div>'
-    + (subtitle ? '<div style="font-size:10px;font-weight:800;color:#555;margin-top:2px">' + esc(subtitle) + '</div>' : '')
+  return '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;border:1px solid #222;border-radius:8px;padding:6px 8px;margin-bottom:6px">'
+    + '<div style="display:flex;align-items:center;gap:7px;min-width:0;flex:1.2">'
+    + '<img src="' + esc(logoSrc) + '" style="height:24px;width:auto;object-fit:contain" alt="BMH">'
+    + '<div style="min-width:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 12px;font-size:9.5px;line-height:1.25">'
+    + '<div><span style="font-weight:800;color:#666;text-transform:uppercase">Patient</span><div style="font-size:10.5px;font-weight:900;color:#111">' + esc(ctx?.ptNm || '—') + '</div></div>'
+    + '<div><span style="font-weight:800;color:#666;text-transform:uppercase">Procedure</span><div style="font-size:10px;font-weight:800;color:#111">' + esc(ctx?.procedure || '—') + '</div></div>'
+    + '<div><span style="font-weight:800;color:#666;text-transform:uppercase">Date</span><div style="font-size:10px;font-weight:800;color:#111">' + esc(ctx?.today || '—') + '</div></div>'
+    + '<div><span style="font-weight:800;color:#666;text-transform:uppercase">Eye</span><div style="font-size:10px;font-weight:800;color:#111">' + esc(ctx?.eye || '—') + '</div></div>'
     + '</div></div>'
-    + '<div style="display:grid;gap:2px"><span style="font-size:8.5px;color:#666;text-transform:uppercase;font-weight:800">Patient</span><span style="font-size:11.5px;font-weight:900;color:#111;line-height:1.3">' + esc(ctx?.ptNm || '—') + '</span></div>'
-    + '<div style="display:grid;gap:2px"><span style="font-size:8.5px;color:#666;text-transform:uppercase;font-weight:800">BMSH ID</span><span style="font-size:11px;font-weight:900;font-family:ui-monospace,monospace;color:#1A3C6E;line-height:1.3">' + esc(ctx?.ptId || '—') + '</span></div>'
-    + '<div style="display:grid;gap:2px"><span style="font-size:8.5px;color:#666;text-transform:uppercase;font-weight:800">Procedure</span><span style="font-size:10.5px;font-weight:800;color:#111;line-height:1.35">' + esc(proc || '—') + '</span></div>'
-    + '<div style="display:grid;gap:2px"><span style="font-size:8.5px;color:#666;text-transform:uppercase;font-weight:800">Doctor</span><span style="font-size:10.5px;font-weight:800;color:#111;line-height:1.35">' + esc(ctx?.doctorName || '—') + '</span></div>'
-    + '<div style="display:grid;gap:2px"><span style="font-size:8.5px;color:#666;text-transform:uppercase;font-weight:800">Date</span><span style="font-size:10.5px;font-weight:800;color:#111;line-height:1.35">' + esc(ctx?.today || '—') + '</span></div>'
-    + '</div>'
-    + '<div style="padding-top:7px;text-align:center"><div style="font-size:14px;font-weight:900;color:#111;line-height:1.25">' + esc(title) + '</div>' + (subtitle ? '<div style="font-size:10px;font-weight:800;color:#555;margin-top:2px">' + esc(subtitle) + '</div>' : '') + '</div>'
+    + '<div style="flex:0 0 108px;border-left:1px solid #d7dce5;padding-left:8px;display:grid;gap:2px;font-size:9.5px;line-height:1.25">'
+    + '<span style="font-weight:800;color:#666;text-transform:uppercase">BMSH ID</span><span style="font-size:10.5px;font-weight:900;font-family:ui-monospace,monospace;color:#1A3C6E">' + esc(ctx?.ptId || '—') + '</span>'
+    + '</div></div>'
+    + '<div style="padding:1px 0 6px;text-align:center"><div style="font-size:13px;font-weight:900;color:#111;line-height:1.15">' + esc(title) + '</div>' + (subtitle ? '<div style="font-size:9px;font-weight:800;color:#555;margin-top:2px">' + esc(subtitle) + '</div>' : '') + '</div>'
     + '</div>';
 }
 function buildCompactDocumentShell(title, ctx, bodyHtml, opts) {
@@ -761,9 +785,9 @@ function buildCompactDocumentShell(title, ctx, bodyHtml, opts) {
     + '<div style="flex:1;text-align:center"><div style="border-bottom:1px solid #333;height:34px"></div><div style="font-size:10px;color:#555;margin-top:4px">Witness Signature</div></div>'
     + '<div style="flex:1;text-align:center"><div style="border-bottom:1px solid #333;height:34px"></div><div style="font-size:10px;color:#555;margin-top:4px">Doctor Signature</div></div>'
     + '</div>';
-  return '<section style="padding:7mm 7mm 6mm;font-family:Arial,sans-serif;color:#111;page-break-after:always;page-break-inside:avoid;overflow:hidden">'
+  return '<section style="padding:5mm 6mm 5mm;font-family:Arial,sans-serif;color:#111;page-break-after:always;page-break-inside:avoid;overflow:hidden">'
     + buildCompactDocumentHeader(title, ctx, opts.subtitle || '')
-    + '<div style="font-size:10.8px;line-height:1.55">' + bodyHtml + '</div>'
+    + '<div style="font-size:10.4px;line-height:1.48">' + bodyHtml + '</div>'
     + sigHtml
     + '</section>';
 }
@@ -802,11 +826,13 @@ function collectConsentPrintContext() {
     ? OT_CASES.filter(function (c) { return c.bmhId === ptId; }).sort(function (a, b) { return (b.scheduledTime || b.date || '').localeCompare(a.scheduledTime || a.date || ''); })
     : [];
   const ot = forcedOt || otList[0] || null;
-  const procLine = ot ? (String(ot.procedure || 'Procedure') + ' · ' + String(ot.site || 'Eye/ Site') + ' · OT ' + String(ot.scheduledTime || ot.date || '')) : '';
+  const procedure = ot ? String(ot.procedure || 'Procedure').trim() : '';
+  const eye = ot ? String(ot.site || ot.eye || 'Eye').trim() : '';
+  const procLine = ot ? [procedure, eye, 'OT ' + String(ot.scheduledTime || ot.date || '')].filter(Boolean).join(' · ') : '';
   const doctorName = window.CURRENT_USER?.name || 'Dr. Varun Baweja';
   return {
     ptId: ptId, ptNm: ptNm, ptAge: pt.age || '', ptSex: pt.sex || '', ptMob: pt.mob || pt.phone || '',
-    today: today, procLine: procLine, doctorName: doctorName,
+    today: today, procLine: procLine, doctorName: doctorName, procedure: procedure, eye: eye,
     stripHtml: buildConsentPatientStripHtml(ptNm, ptId, pt.age || '', pt.sex || '', pt.mob || pt.phone || '', today, procLine, doctorName),
   };
 }
@@ -1314,18 +1340,14 @@ function buildConsentHTML(data, lang, pt) {
   const today = p.date || new Date().toLocaleDateString('en-IN');
   const doc = p.doctor || window.CURRENT_USER?.name || '—';
   const paras = data.paras || [];
-  return '<div style="margin-bottom:14px;padding-bottom:10px;border-bottom:2px solid var(--bmh-gold)">'
-    + '<div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">'
-    + '<img src="https://bawejahospital.com/img/logo.png" style="height:32px;object-fit:contain" alt="BMH" onerror="this.style.display=\'none\'">'
-    + '<div><div style="font-size:15px;font-weight:900;color:var(--bmh-blue)">Baweja Multispeciality Hospital</div>'
-    + '<div style="font-size:11px;color:var(--g1)">Chandigarh & Ropar · +91-81466 22802</div></div></div>'
-    + '<div style="font-size:14px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px">' + String(data.title || '') + '</div>'
-    + '<div style="margin-top:6px;background:linear-gradient(135deg,#1A3C6E,#0B7B8C);border-radius:7px;padding:7px 12px;color:#fff;font-size:11px;display:flex;gap:14px;flex-wrap:wrap;align-items:center">'
-    + '<span style="font-weight:900;font-size:13px;color:#FFD600">' + String(ptName) + '</span>'
-    + '<span>🪪 ' + String(ptId) + '</span>'
-    + (p.age ? '<span>👤 ' + String(p.age) + ' / ' + String(p.sex || '—') + '</span>' : '')
-    + (p.mob ? '<span>📞 ' + String(p.mob) + '</span>' : '')
-    + '<span>📅 ' + String(today) + '</span><span>🩺 ' + String(doc) + '</span></div></div>'
+  const compactCtx = collectConsentPrintContext();
+  compactCtx.ptNm = ptName;
+  compactCtx.ptId = ptId;
+  compactCtx.today = today;
+  compactCtx.doctorName = doc;
+  return '<div style="margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid rgba(26,60,110,.15)">'
+    + buildCompactDocumentHeader(String(data.title || ''), compactCtx, lang === 'en' ? '' : (lang === 'pa' ? 'English + ਪੰਜਾਬੀ' : 'English + हिंदी'))
+    + '</div>'
     + paras.map(function (p0, i) {
       return '<div class="consent-para"><div class="consent-eng" style="font-size:12.5px;line-height:1.7;color:var(--tx)">' + (i + 1) + '. ' + String(p0.en || '') + '</div>'
         + '<div class="consent-local" style="font-size:12px;color:var(--g1);margin-top:2px">' + String(p0[localKey] || '') + '</div></div>';
@@ -10882,8 +10904,16 @@ function loginUser() {
 
 function activateUserSession(user, profile, opts) {
   opts = opts || {};
-  if (String(user || '').toLowerCase() === 'rec_rpr') profile = Object.assign({}, profile, { centre: 'RPR', name: 'Reception Ropar' });
-  if (String(user || '').toLowerCase() === 'optometrist') profile = Object.assign({}, profile, { centre: 'RPR', name: 'Optometrist RPR' });
+  const uname = String(user || '').toLowerCase();
+  if (uname === 'rec_rpr' || uname === 'reception.rpr@bawejahospital.com') profile = Object.assign({}, profile, { centre: 'RPR', name: 'Reception Ropar' });
+  if (uname === 'rec_chd' || uname === 'reception.chd@bawejahospital.com') profile = Object.assign({}, profile, { centre: 'CHD', name: 'Reception CHD' });
+  if (uname === 'optometrist' || uname === 'opto_rpr' || uname === 'optometrist@bawejahospital.com' || uname === 'opto.rpr@bawejahospital.com') profile = Object.assign({}, profile, { centre: 'RPR', name: 'Optometrist RPR' });
+  if (uname === 'lab.chd@bawejahospital.com') profile = Object.assign({}, profile, { centre: 'CHD', name: 'Lab Tech CHD' });
+  if (uname === 'lab.rpr@bawejahospital.com') profile = Object.assign({}, profile, { centre: 'RPR', name: 'Lab Tech Ropar' });
+  if (uname === 'tpa.chd@bawejahospital.com') profile = Object.assign({}, profile, { centre: 'CHD', name: 'TPA Executive CHD' });
+  if (uname === 'tpa.rpr@bawejahospital.com') profile = Object.assign({}, profile, { centre: 'RPR', name: 'TPA Executive RPR' });
+  if (uname === 'inventory.chd@bawejahospital.com') profile = Object.assign({}, profile, { centre: 'CHD', name: 'Inventory CHD' });
+  if (uname === 'inventory.rpr@bawejahospital.com') profile = Object.assign({}, profile, { centre: 'RPR', name: 'Inventory RPR' });
   CURRENT_USER = Object.assign({}, profile, {username: user});
   window.CURRENT_USER = CURRENT_USER;
   try { sessionStorage.setItem('bmh_active_session', JSON.stringify({ u: user })); } catch (e) {}
@@ -11593,7 +11623,7 @@ function refreshChargeModalSuggestions() {
   }
 }
 function canEditChargeCategory(cat) {
-  if (CURRENT_USER?.isAdmin) return true;
+  if (isCurrentUserAdmin()) return true;
   const dept = String(CURRENT_USER?.dept || '').toLowerCase();
   const c = String(cat || '').toLowerCase();
   if (dept.includes('oph') && c.includes('eye')) return true;
@@ -11647,7 +11677,7 @@ function renderChargesList() {
 function openAddChargeModal() {
   const deptMap = { ophtho:'Eye', obg:'OBG', psych:'Psych', skin:'Skin' };
   const catEl = document.getElementById('add-charge-cat');
-  if (catEl && !CURRENT_USER?.isAdmin) catEl.value = deptMap[rxDeptKeyFromUi()] || deptMap[normalizeSurgeryPackDeptKey(CURRENT_USER?.dept)] || 'Eye';
+  if (catEl && !isCurrentUserAdmin()) catEl.value = deptMap[rxDeptKeyFromUi()] || deptMap[normalizeSurgeryPackDeptKey(CURRENT_USER?.dept)] || 'Eye';
   ['add-charge-parent','add-charge-name','add-charge-chd','add-charge-rpr'].forEach(function (id) {
     const el = document.getElementById(id); if (el) el.value = '';
   });
