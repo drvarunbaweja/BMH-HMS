@@ -6323,6 +6323,8 @@ function saveChargesToLocalStorage() {
     localStorage.setItem('bmh_centre_charges', JSON.stringify(CENTRE_CHARGES));
   } catch (e) { /* quota */ }
 }
+window._bmhLastLocalChargesRows = window._bmhLastLocalChargesRows || [];
+window._bmhChargesCloudLoaded = !!window._bmhChargesCloudLoaded;
 function normalizeChargesRows(raw) {
   if (Array.isArray(raw)) return raw.filter(Boolean);
   if (raw && typeof raw === 'object') {
@@ -6333,6 +6335,25 @@ function normalizeChargesRows(raw) {
     }).filter(Boolean);
   }
   return [];
+}
+function scoreChargesRows(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  const parents = new Set();
+  const customKinds = new Set();
+  list.forEach(function (row) {
+    const parent = String(row?.parent || '').trim();
+    if (parent) parents.add(parent);
+    const kind = String(row?.kind || '').trim();
+    if (kind) customKinds.add(kind);
+  });
+  return (list.length * 10) + (parents.size * 20) + (customKinds.size * 5);
+}
+function choosePreferredChargesRows(localRows, remoteRows) {
+  const localList = normalizeChargesRows(localRows);
+  const remoteList = normalizeChargesRows(remoteRows);
+  if (!remoteList.length) return localList;
+  if (!localList.length) return remoteList;
+  return scoreChargesRows(localList) > scoreChargesRows(remoteList) ? localList : remoteList;
 }
 function applyLoadedChargesRows(rows) {
   if (!Array.isArray(rows) || !rows.length) return false;
@@ -6360,6 +6381,7 @@ function loadChargesFromLocalStorage() {
     const sch = localStorage.getItem('bmh_charges_schedule');
     if (sch) {
       const arr = normalizeChargesRows(JSON.parse(sch));
+      window._bmhLastLocalChargesRows = arr.slice();
       applyLoadedChargesRows(arr);
     }
     const cc = localStorage.getItem('bmh_centre_charges');
@@ -6373,6 +6395,10 @@ function loadChargesFromLocalStorage() {
 function saveChargesToFirebase(){
   saveChargesToLocalStorage();
   if(!window.FBDB) return Promise.resolve();
+  if (!window._bmhChargesCloudLoaded) {
+    console.warn('Skipping charge cloud sync until saved charges finish loading');
+    return Promise.resolve();
+  }
   return Promise.all([
     window.FBDB.ref('centreCharges').set(CENTRE_CHARGES),
     window.FBDB.ref('chargesSchedule').set(CHARGES_DATA)
@@ -6396,13 +6422,16 @@ function loadChargesFromFirebase(){
     syncReceptionConsultationFee && syncReceptionConsultationFee();
   }).catch(()=>{});
   window.FBDB.ref('chargesSchedule').once('value').then(snap => {
-    const arr = normalizeChargesRows(snap.val());
+    const arr = choosePreferredChargesRows(window._bmhLastLocalChargesRows, snap.val());
+    window._bmhChargesCloudLoaded = true;
     if (!applyLoadedChargesRows(arr)) return;
     saveChargesToLocalStorage();
     renderChargesList && renderChargesList();
     renderCentresCharges && renderCentresCharges();
     syncReceptionConsultationFee && syncReceptionConsultationFee();
-  }).catch(()=>{});
+  }).catch(()=>{
+    window._bmhChargesCloudLoaded = true;
+  });
 }
 
 // ── Print letterhead / footer (Settings → Hospital) — used on prescription printouts
@@ -11056,14 +11085,25 @@ function refreshOTNotesTemplateSelect() {
   const activeProc = String(document.getElementById('ot-procedure')?.value || activeOTCase?.procedure || activeOTCase?.procedureMain || '').trim().toLowerCase();
   const activeMain = String(activeOTCase?.procedureMain || '').trim().toLowerCase();
   sel.innerHTML = '<option value="">— Select template —</option>';
-  Object.keys(RX_TEMPLATES_DATA || {}).forEach(function (key) {
+  const otKeys = Object.keys(RX_TEMPLATES_DATA || {}).filter(function (key) {
+    return (RX_TEMPLATES_META[key]?.dept || '') === 'ot';
+  }).sort(function (a, b) {
+    const am = RX_TEMPLATES_META[a] || {};
+    const bm = RX_TEMPLATES_META[b] || {};
+    const aTarget = am.surgery || am.name || '';
+    const bTarget = bm.surgery || bm.name || '';
+    const aMatch = (!activeProc && !activeMain) || otTemplateMatchesProcedure(aTarget, activeProc) || otTemplateMatchesProcedure(aTarget, activeMain);
+    const bMatch = (!activeProc && !activeMain) || otTemplateMatchesProcedure(bTarget, activeProc) || otTemplateMatchesProcedure(bTarget, activeMain);
+    if (aMatch !== bMatch) return aMatch ? -1 : 1;
+    return String(am.name || a).localeCompare(String(bm.name || b));
+  });
+  otKeys.forEach(function (key) {
     const meta = RX_TEMPLATES_META[key] || {};
-    if ((meta.dept || '') !== 'ot') return;
-    const target = meta.surgery || meta.name || '';
-    if (!otTemplateMatchesProcedure(target, activeProc) && !otTemplateMatchesProcedure(target, activeMain)) return;
     const opt = document.createElement('option');
     opt.value = key;
-    opt.textContent = meta.name || key;
+    const target = meta.surgery || '';
+    const isMatch = (!activeProc && !activeMain) || otTemplateMatchesProcedure(target, activeProc) || otTemplateMatchesProcedure(target, activeMain);
+    opt.textContent = (meta.name || key) + (target ? (' — ' + target) : '') + (isMatch ? '' : ' (other)');
     sel.appendChild(opt);
   });
   if ([].slice.call(sel.options).some(function (o) { return o.value === cur; })) sel.value = cur;
@@ -11561,9 +11601,16 @@ function getProcedureReportRows() {
     if (toVal && d > toVal) return false;
     return true;
   };
+  const otRows = OT_CASES.map(normalizeOTCaseRecord);
   const advised = PROCEDURE_ADVISED_LOG.map(function (row, idx) {
     const pt = PATIENTS.find(function (p) { return p.bmhId === row.bmhId; }) || {};
     const key = row.id || ('adv-' + idx + '-' + row.bmhId + '-' + row.proc);
+    const otMatch = otRows.find(function (c) {
+      if (!c || c.bmhId !== row.bmhId) return false;
+      return normalizeOtTemplateKey(c.procedure || '').includes(normalizeOtTemplateKey(row.proc || ''))
+        || normalizeOtTemplateKey(row.proc || '').includes(normalizeOtTemplateKey(c.procedure || ''));
+    });
+    const derivedStatus = otMatch ? (otMatch.status === 'completed' ? 'done' : 'scheduled') : 'advised';
     return {
       key,
       patient: row.patient || pt.name || '—',
@@ -11571,7 +11618,7 @@ function getProcedureReportRows() {
       proc: expandProcedureLabelForPrint(row.proc),
       date: row.date || row.createdAt || '',
       doctor: row.doctor || '',
-      status: 'advised',
+      status: derivedStatus,
       source: 'advised',
       mobile: row.mobile || pt.mob || '',
       ageSex: row.ageSex || ((pt.age || '—') + '/' + (pt.sex || '—')),
@@ -11580,27 +11627,7 @@ function getProcedureReportRows() {
       advice: row.advice || pt.lastVisit?.advice || ''
     };
   });
-  const otRows = OT_CASES.map(normalizeOTCaseRecord).map(function (c) {
-    const pt = PATIENTS.find(function (p) { return p.bmhId === c.bmhId; }) || {};
-    let status = 'scheduled';
-    if (c.status === 'completed') status = 'done';
-    else if (c.status === 'pending' || c.status === 'in-progress' || c.status === 'postponed') status = 'scheduled';
-    return {
-      key: c.id,
-      patient: c.patient,
-      bmhId: c.bmhId,
-      proc: c.procedure,
-      date: c.date || c.scheduledDate || '',
-      doctor: c.surgeon || '',
-      status,
-      source: 'ot',
-      mobile: pt.mob || '',
-      ageSex: (pt.age || '—') + '/' + (pt.sex || '—'),
-      centre: c.centre || pt.centre || '',
-      referredBy: pt.referredBy || ''
-    };
-  });
-  return advised.concat(otRows).filter(function (row) {
+  return advised.filter(function (row) {
     if (proc && !String(row.proc || '').toLowerCase().includes(proc)) return false;
     if (statusFilter && row.status !== statusFilter) return false;
     if (!dateOk(row.date)) return false;
@@ -11785,12 +11812,29 @@ function generateFinancialReport() {
   const fromVal = document.getElementById('rep-fin-from')?.value || new Date().toISOString().split('T')[0];
   const toVal   = document.getElementById('rep-fin-to')?.value   || new Date().toISOString().split('T')[0];
   const txAll = TRANSACTIONS.filter(t=>{const d=(t.date||'').split('T')[0]; return d>=fromVal&&d<=toVal;});
+  const deptLabel = function (dept) {
+    const d = String(dept || '').toLowerCase();
+    if (d === 'ophtho') return 'Eye';
+    if (d === 'obg') return 'OBG';
+    if (d === 'psych') return 'Neuropsychiatry';
+    if (d === 'skin') return 'Skin & Cosmetology';
+    return dept || 'General';
+  };
   const byMode = {};
   txAll.forEach(function (t) {
     const mode = normalizePaymentMode(t.mode);
     if (!byMode[mode]) byMode[mode] = { count: 0, amount: 0 };
     byMode[mode].count += 1;
     byMode[mode].amount += getNetTransactionAmount(t);
+  });
+  const byDept = {};
+  txAll.forEach(function (t) {
+    const key = String(t.dept || 'general').toLowerCase();
+    if (!byDept[key]) byDept[key] = { count: 0, amount: 0, modes: {} };
+    const mode = normalizePaymentMode(t.mode);
+    byDept[key].count += 1;
+    byDept[key].amount += getNetTransactionAmount(t);
+    byDept[key].modes[mode] = (byDept[key].modes[mode] || 0) + getNetTransactionAmount(t);
   });
   const cash  = (byMode['Cash']?.amount) || 0;
   const upi   = ((byMode['UPI']?.amount) || 0) + ((byMode['Card']?.amount) || 0) + ((byMode['Bank Transfer']?.amount) || 0);
@@ -11799,6 +11843,12 @@ function generateFinancialReport() {
   const pending = PAY_REQUESTS.filter(pr=>!pr.collected).reduce((s,pr)=>s+(parseFloat(pr.amount)||0),0);
   const modeRows = Object.entries(byMode).sort(function (a, b) { return b[1].amount - a[1].amount; }).map(function (entry) {
     return `<tr><td style="font-weight:800">${entry[0]}</td><td>${entry[1].count}</td><td style="font-weight:900">₹${entry[1].amount.toLocaleString('en-IN')}</td></tr>`;
+  }).join('');
+  const deptRows = Object.entries(byDept).sort(function (a, b) { return b[1].amount - a[1].amount; }).map(function (entry) {
+    const modeText = Object.entries(entry[1].modes).sort(function (x, y) { return y[1] - x[1]; }).map(function (modeEntry) {
+      return modeEntry[0] + ': ₹' + Number(modeEntry[1] || 0).toLocaleString('en-IN');
+    }).join(' · ');
+    return `<tr><td style="font-weight:800">${deptLabel(entry[0])}</td><td>${entry[1].count}</td><td style="font-weight:900">₹${entry[1].amount.toLocaleString('en-IN')}</td><td style="font-size:10px;line-height:1.35">${modeText || '—'}</td></tr>`;
   }).join('');
   el.innerHTML=`<div class="card">
     <div class="card-hd"><div class="card-title">💰 Financial Summary</div><button class="btn btn-gold btn-xs" onclick="window.print()">🖨️</button></div>
@@ -11823,6 +11873,10 @@ function generateFinancialReport() {
         <div style="font-size:12px;line-height:1.8"><strong>UPI / digital patients / txns:</strong> ${((byMode['UPI']?.count) || 0) + ((byMode['Card']?.count) || 0) + ((byMode['Bank Transfer']?.count) || 0)}</div>
         <div style="font-size:12px;line-height:1.8"><strong>Insurance / TPA patients / txns:</strong> ${(byMode['Insurance/TPA']?.count) || 0}</div>
       </div>
+    </div>
+    <div style="background:var(--g6);border-radius:10px;padding:12px;margin-bottom:14px">
+      <div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Department-wise financials</div>
+      ${deptRows ? `<table><thead><tr><th>Department</th><th>Patients / Txns</th><th>Total ₹</th><th>Payment modes</th></tr></thead><tbody>${deptRows}</tbody></table>` : '<div style="font-size:12px;color:var(--g1)">No department-wise financial data for this date range.</div>'}
     </div>
     ${txAll.length?`<table><thead><tr><th>Patient</th><th>Mode</th><th>Amount ₹</th><th>Dept</th><th>Date</th></tr></thead>
     <tbody>${txAll.slice(0,80).map(t=>{ const mode=normalizePaymentMode(t.mode); return `<tr><td style="font-weight:700">${t.patient||'—'}</td><td><span class="badge ${mode==='Cash'?'bd-blue':mode==='Insurance/TPA'?'bd-orange':'bd-green'}">${mode}</span></td><td style="font-weight:900">₹${parseFloat(t.amount||0).toLocaleString('en-IN')}</td><td>${t.dept||'—'}</td><td>${(t.date||'').split('T')[0]}</td></tr>`; }).join('')}
