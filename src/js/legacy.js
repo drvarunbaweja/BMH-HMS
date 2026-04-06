@@ -6323,19 +6323,44 @@ function saveChargesToLocalStorage() {
     localStorage.setItem('bmh_centre_charges', JSON.stringify(CENTRE_CHARGES));
   } catch (e) { /* quota */ }
 }
+function normalizeChargesRows(raw) {
+  if (Array.isArray(raw)) return raw.filter(Boolean);
+  if (raw && typeof raw === 'object') {
+    return Object.keys(raw).sort(function (a, b) {
+      return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
+    }).map(function (key) {
+      return raw[key];
+    }).filter(Boolean);
+  }
+  return [];
+}
+function applyLoadedChargesRows(rows) {
+  if (!Array.isArray(rows) || !rows.length) return false;
+  CHARGES_DATA.length = 0;
+  rows.forEach(function (row) {
+    if (!row || typeof row !== 'object') return;
+    CHARGES_DATA.push({
+      cat: row.cat || '',
+      kind: row.kind || row.cat || 'procedure',
+      parent: row.parent || '',
+      name: row.name || '',
+      chd: Number(row.chd || 0),
+      rpr: Number(row.rpr || 0)
+    });
+  });
+  CHARGES_DATA.forEach(function (c) {
+    if (!c.name) return;
+    CENTRE_CHARGES.CHD[c.name] = c.chd;
+    CENTRE_CHARGES.RPR[c.name] = c.rpr;
+  });
+  return CHARGES_DATA.length > 0;
+}
 function loadChargesFromLocalStorage() {
   try {
     const sch = localStorage.getItem('bmh_charges_schedule');
     if (sch) {
-      const arr = JSON.parse(sch);
-      if (Array.isArray(arr) && arr.length) {
-        CHARGES_DATA.length = 0;
-        arr.forEach(row => CHARGES_DATA.push(row));
-        CHARGES_DATA.forEach(c => {
-          CENTRE_CHARGES.CHD[c.name] = c.chd;
-          CENTRE_CHARGES.RPR[c.name] = c.rpr;
-        });
-      }
+      const arr = normalizeChargesRows(JSON.parse(sch));
+      applyLoadedChargesRows(arr);
     }
     const cc = localStorage.getItem('bmh_centre_charges');
     if (cc) {
@@ -6371,14 +6396,8 @@ function loadChargesFromFirebase(){
     syncReceptionConsultationFee && syncReceptionConsultationFee();
   }).catch(()=>{});
   window.FBDB.ref('chargesSchedule').once('value').then(snap => {
-    const arr = snap.val();
-    if (!Array.isArray(arr) || !arr.length) return;
-    CHARGES_DATA.length = 0;
-    arr.forEach(row => CHARGES_DATA.push(row));
-    CHARGES_DATA.forEach(c => {
-      CENTRE_CHARGES.CHD[c.name] = c.chd;
-      CENTRE_CHARGES.RPR[c.name] = c.rpr;
-    });
+    const arr = normalizeChargesRows(snap.val());
+    if (!applyLoadedChargesRows(arr)) return;
     saveChargesToLocalStorage();
     renderChargesList && renderChargesList();
     renderCentresCharges && renderCentresCharges();
