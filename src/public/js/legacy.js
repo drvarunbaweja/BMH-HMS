@@ -1758,6 +1758,8 @@ function openPatient(bmhId) {
       row.style.display = idx < 3 ? '' : 'none';
     });
   }
+  const ucvaOsDist = document.getElementById('ucva-os-dist'); if (ucvaOsDist) ucvaOsDist.value = '';
+  const ucvaOdDist = document.getElementById('ucva-od-dist'); if (ucvaOdDist) ucvaOdDist.value = '';
   // IOP badges — reset to blank state
   const iopOdVal = document.getElementById('iop-od-val'); if(iopOdVal) iopOdVal.textContent = '—';
   const iopOsVal = document.getElementById('iop-os-val'); if(iopOsVal) iopOsVal.textContent = '—';
@@ -2039,15 +2041,20 @@ function populateOphthoForm(v) {
   setV('rx-advice-text', v.advice || '');
 
   // Chief complaints — restore rows
-  if(Array.isArray(v.ccRows) && v.ccRows.length) {
+  const fallbackCcRows = Array.isArray(v.ccRows) && v.ccRows.length
+    ? v.ccRows
+    : (String(v.chiefComplaints || '').trim()
+        ? String(v.chiefComplaints).split(/\s*;\s*/).filter(Boolean).map(function (text) { return { text:text, dur:'', eye:'' }; })
+        : []);
+  if(fallbackCcRows.length) {
     const ccContainer = document.getElementById('cc-rows');
     if(ccContainer) {
       const rows = Array.from(ccContainer.querySelectorAll('.cc-row'));
       rows.forEach(function (row, idx) {
-        row.style.display = idx < Math.max(v.ccRows.length, 3) ? '' : 'none';
-        const inp = row.querySelector('.cc-inp'); if(inp) inp.value = v.ccRows[idx]?.text || '';
-        const dur = row.querySelector('.cc-dur'); if(dur) dur.value = v.ccRows[idx]?.dur || '';
-        const eye = row.querySelector('.cc-eye'); if(eye) eye.value = v.ccRows[idx]?.eye || '';
+        row.style.display = idx < Math.max(fallbackCcRows.length, 3) ? '' : 'none';
+        const inp = row.querySelector('.cc-inp'); if(inp) inp.value = fallbackCcRows[idx]?.text || '';
+        const dur = row.querySelector('.cc-dur'); if(dur) dur.value = fallbackCcRows[idx]?.dur || '';
+        const eye = row.querySelector('.cc-eye'); if(eye) eye.value = fallbackCcRows[idx]?.eye || '';
       });
     }
   }
@@ -17056,6 +17063,7 @@ function saveVisit(dept) {
       if(txt) ccRows.push({text:txt, dur:row.querySelector('.cc-dur')?.value||'', eye:row.querySelector('.cc-eye')?.value||''});
     });
     visit.ccRows = ccRows;
+    visit.chiefComplaints = ccRows.map(function (c) { return c.text; }).filter(Boolean).join('; ');
     visit.rx = JSON.parse(JSON.stringify(RX_DRUGS || []));
     visit.investigations = JSON.parse(JSON.stringify(window.CURRENT_PATIENT?.lastVisit?.investigations || []));
     visit.hxSpectacles = document.getElementById('hx-spectacles')?.value || '';
