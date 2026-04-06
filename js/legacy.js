@@ -270,13 +270,39 @@ function extractIolPower(name) {
 function normalizeOtProcedureName(name) {
   return String(name || '').replace(/\s+/g, ' ').trim();
 }
+function mapLegacyOTRoomLabel(room) {
+  const val = String(room || '').trim();
+  if (!val) return '';
+  if (/^ot-1/i.test(val) || /main/i.test(val)) return 'Eye OT';
+  if (/^ot-2/i.test(val) || /minor/i.test(val)) return 'Minor OT';
+  if (/^ot-3/i.test(val) || /laser/i.test(val)) return 'Procedure Room';
+  return val;
+}
+function otChargeLooksLikeProcedure(row) {
+  const cat = String(row?.cat || '').toLowerCase();
+  const name = String(row?.name || '').toLowerCase();
+  const parent = String(row?.parent || '').toLowerCase();
+  return /sx|surgery|procedure|laser|delivery|lap|operation/.test(cat)
+    || /trabeculectomy|lasik|pmics|iol|capsulotomy|iridotomy|excision|lscs|delivery|laparoscopy|hysteroscopy|chemical peel|prp|dcr|ptosis|squint|vitrectomy|injection|procedure/.test(name)
+    || /pmics|lscs|delivery|procedure|surgery|laser|iol/.test(parent);
+}
+function getOtProcedureMainHeadings() {
+  return Array.from(new Set((CHARGES_DATA || []).filter(otChargeLooksLikeProcedure).map(function (row) {
+    return normalizeOtProcedureName(row.parent || '');
+  }).filter(Boolean))).sort();
+}
+function getOtProcedureSubheadingOptions(parent) {
+  const target = normalizeOtProcedureName(parent);
+  if (!target) return [];
+  return Array.from(new Set((CHARGES_DATA || []).filter(function (row) {
+    return otChargeLooksLikeProcedure(row) && normalizeOtProcedureName(row.parent || '') === target && normalizeOtProcedureName(row.name || '') !== target;
+  }).map(function (row) {
+    return normalizeOtProcedureName(row.name || '');
+  }).filter(Boolean))).sort();
+}
 function getOtProcedureOptions() {
   const fromCharges = CHARGES_DATA
-    .filter(function (c) {
-      const cat = String(c.cat || '').toLowerCase();
-      const name = String(c.name || '').toLowerCase();
-      return /sx|surgery|procedure|laser|delivery|lap|operation/.test(cat) || /trabeculectomy|lasik|pmics|iol|capsulotomy|iridotomy|excision|lscs|delivery|laparoscopy|hysteroscopy|chemical peel|prp|dcr|ptosis|squint|vitrectomy|injection|procedure/.test(name);
-    })
+    .filter(otChargeLooksLikeProcedure)
     .map(function (c) { return normalizeOtProcedureName(c.name); });
   const fallbacks = [
     'PMICS + IOL Implantation (OS)',
@@ -296,7 +322,59 @@ function getOtProcedureOptions() {
     'PRP Treatment',
     'Other — specify in notes'
   ];
-  return Array.from(new Set(fromCharges.concat(fallbacks).filter(Boolean)));
+  return Array.from(new Set(getOtProcedureMainHeadings().concat(fromCharges, fallbacks).filter(Boolean)));
+}
+function parseOtProcedureSelection(value) {
+  const raw = normalizeOtProcedureName(value);
+  if (!raw) return { main: '', sub: '' };
+  const exactRow = (CHARGES_DATA || []).find(function (row) {
+    return otChargeLooksLikeProcedure(row) && normalizeOtProcedureName(row.name || '') === raw;
+  });
+  if (exactRow && exactRow.parent) return { main: normalizeOtProcedureName(exactRow.parent), sub: normalizeOtProcedureName(exactRow.name) };
+  if (getOtProcedureMainHeadings().includes(raw)) return { main: raw, sub: '' };
+  const parts = raw.split(/\s+[-–—]\s+/);
+  if (parts.length >= 2) {
+    return { main: normalizeOtProcedureName(parts[0]), sub: normalizeOtProcedureName(parts.slice(1).join(' — ')) };
+  }
+  return { main: raw, sub: '' };
+}
+function renderOTProcedureSubheading(mainHeading, selectedSub) {
+  const wrap = document.getElementById('ot-add-proc-sub-wrap');
+  const sel = document.getElementById('ot-add-proc-sub');
+  if (!wrap || !sel) return;
+  const options = getOtProcedureSubheadingOptions(mainHeading);
+  if (!mainHeading || !options.length) {
+    wrap.style.display = 'none';
+    sel.innerHTML = '<option value="">— Select subheading —</option>';
+    return;
+  }
+  sel.innerHTML = '<option value="">— Select subheading —</option>' + options.map(function (name) {
+    return '<option value="' + String(name).replace(/"/g, '&quot;') + '">' + String(name).replace(/</g, '&lt;') + '</option>';
+  }).join('');
+  wrap.style.display = '';
+  if ([].slice.call(sel.options).some(function (o) { return o.value === selectedSub; })) sel.value = selectedSub;
+}
+function composeOtProcedureLabel(mainHeading, subHeading) {
+  const main = normalizeOtProcedureName(mainHeading);
+  const sub = normalizeOtProcedureName(subHeading);
+  if (!main) return sub;
+  if (!sub) return main;
+  return main + ' — ' + sub;
+}
+function onOTProcedureInputChange(value) {
+  const parsed = parseOtProcedureSelection(value);
+  renderOTProcedureSubheading(parsed.main, parsed.sub);
+  updateOTIolSummarySuggestions();
+  refreshOTNotesTemplateSelect && refreshOTNotesTemplateSelect();
+  toggleOTOBGFields();
+}
+function onOTProcedureSubheadingChange(value) {
+  const procEl = document.getElementById('ot-add-proc');
+  if (!procEl) return;
+  const parsed = parseOtProcedureSelection(procEl.value);
+  procEl.value = composeOtProcedureLabel(parsed.main || procEl.value, value);
+  updateOTIolSummarySuggestions();
+  refreshOTNotesTemplateSelect && refreshOTNotesTemplateSelect();
 }
 function populateOTProcedureOptions(selected) {
   const input = document.getElementById('ot-add-proc');
@@ -307,6 +385,8 @@ function populateOTProcedureOptions(selected) {
     return '<option value="' + String(name).replace(/"/g, '&quot;') + '"></option>';
   }).join('');
   if (selected) input.value = selected;
+  const parsed = parseOtProcedureSelection(selected || input.value || '');
+  renderOTProcedureSubheading(parsed.main, parsed.sub);
   updateOTIolSummarySuggestions();
 }
 window.OT_DIAGNOSIS_OPTIONS = window.OT_DIAGNOSIS_OPTIONS || [];
@@ -1168,6 +1248,10 @@ function buildSavedOphthoCaseSheetPageForPatient(bmhId) {
         }).join('')
       + '</tbody></table>'
     : '<div style="font-size:10px;color:#666;margin-top:6px">No medicines saved in the latest eye visit.</div>';
+  let ocularDiagramPrintSrc = 'assets/ocular-health-exam.png';
+  try {
+    ocularDiagramPrintSrc = new URL('assets/ocular-health-exam.png', document.querySelector('base')?.href || window.location.href).href;
+  } catch (e) {}
   const body = ''
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:10.5px;line-height:1.5">'
     + '<div style="border:1px solid #d8deea;border-radius:8px;padding:8px;background:#f8fbff"><div style="font-weight:900;color:#1A3C6E;text-transform:uppercase;font-size:10px;margin-bottom:4px">Patient details</div>'
@@ -1185,10 +1269,12 @@ function buildSavedOphthoCaseSheetPageForPatient(bmhId) {
     + '<div><b>OS:</b> UCVA ' + esc(visit.vaOS || '—') + ' · Subj ' + esc([visit.subjOSsph, visit.subjOScyl, visit.subjOSax].filter(Boolean).join(' / ') || '—') + ' · VA ' + esc(visit.subjOSva || '—') + ' · Add ' + esc(visit.rfOSAdd || '—') + '</div>'
     + '</div></div>'
     + '<div style="margin-top:8px;border:1px solid #d8deea;border-radius:8px;padding:8px;background:#fff"><div style="font-weight:900;color:#1A3C6E;text-transform:uppercase;font-size:10px;margin-bottom:4px">Diagnosis</div><div style="font-size:10.4px;line-height:1.5">' + diagnoses + '</div></div>'
+    + '<div style="margin-top:8px;border:1px solid #d8deea;border-radius:8px;padding:8px;background:#fff"><div style="font-weight:900;color:#1A3C6E;text-transform:uppercase;font-size:10px;margin-bottom:4px">Positive Findings</div><div style="font-size:10.4px;line-height:1.5">' + esc(visit.positiveFindings || '—') + '</div></div>'
     + '<div style="margin-top:8px;border:1px solid #d8deea;border-radius:8px;padding:8px;background:#fff"><div style="font-weight:900;color:#1A3C6E;text-transform:uppercase;font-size:10px;margin-bottom:4px">Slit lamp & Fundus</div>'
     + (slEntries ? '<table style="width:100%;border-collapse:collapse;font-size:10px"><thead><tr style="background:#eef2f9"><th style="border:1px solid #bbb;padding:4px">Finding</th><th style="border:1px solid #bbb;padding:4px">OD</th><th style="border:1px solid #bbb;padding:4px">OS</th></tr></thead><tbody>' + slEntries + '</tbody></table>' : '<div style="font-size:10px;color:#666">No slit lamp findings saved.</div>')
     + ((visit.fundODtext || visit.fundOStext) ? '<div style="margin-top:6px;font-size:10px"><b>Fundus notes:</b> OD ' + esc(visit.fundODtext || '—') + ' · OS ' + esc(visit.fundOStext || '—') + '</div>' : '')
     + '</div>'
+    + '<div style="margin-top:8px;border:1px solid #d8deea;border-radius:8px;padding:8px;background:#fff"><div style="font-weight:900;color:#1A3C6E;text-transform:uppercase;font-size:10px;margin-bottom:4px">Ocular Diagram</div><div style="text-align:center"><img src="' + esc(ocularDiagramPrintSrc) + '" alt="Ocular diagram" style="width:100%;max-width:320px;height:auto;border:1px solid #cfd5de;border-radius:6px;background:#fff"></div></div>'
     + '<div style="margin-top:8px;border:1px solid #d8deea;border-radius:8px;padding:8px;background:#fff"><div style="font-weight:900;color:#1A3C6E;text-transform:uppercase;font-size:10px;margin-bottom:4px">Prescription</div>' + rxHtml + '</div>';
   return buildCompactDocumentShell('Latest Eye Examination Case Sheet', collectConsentPrintContext(), body, { signatures: false });
 }
@@ -4713,7 +4799,7 @@ function toggleOTOBGFields() {
   const roomEl = document.getElementById('ot-add-room');
   if(typeEl) typeEl.value = 'Obstetric';
   if(wardEl && !wardEl.value) wardEl.value = 'OBG Ward / Bed';
-  if(roomEl && (!roomEl.value || /^OT-/.test(roomEl.value))) roomEl.value = 'Labour Room';
+  if(roomEl && (!roomEl.value || /^OT-/.test(roomEl.value) || roomEl.value === 'Eye OT')) roomEl.value = 'Labour Room';
   if(notesEl && !notesEl.value) notesEl.value = 'Pre-op vitals, fetal status, consent checked, labour / OT checklist, medicines and post-op monitoring.';
 }
 function ipdVitalsStatus(vitals) {
@@ -9681,7 +9767,7 @@ function normalizeOTCaseRecord(c) {
     procedure: src.procedure || src.surgery || src.operation || 'Procedure',
     surgeon: src.surgeon || src.doctor || pt.doctor || CURRENT_USER?.name || '—',
     anaes: src.anaes || src.anaesthesia || '—',
-    room: src.room || src.otRoom || (caseKind === 'obg' ? 'Labour Room' : 'OT-1'),
+    room: src.room || src.otRoom || (caseKind === 'obg' ? 'Labour Room' : 'Eye OT'),
     centre: src.centre || pt.centre || getEffectiveCentre() || CURRENT_USER?.centre || 'CHD',
     scheduledTime: src.scheduledTime || src.time || '—',
     priority: String(src.priority || 'elective').toLowerCase(),
@@ -10306,14 +10392,22 @@ function updateOTStatus(id, status) {
   showToast(`${c.patient} — status updated to ${status} ✓`,'s');
   if(activeOTCase?.id===id) openOTCase(id);
 }
+function formatFollowupDisplayDate(dateStr) {
+  if (!dateStr) return '—';
+  try {
+    return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-IN', { day:'2-digit', month:'long', year:'numeric' });
+  } catch (e) {
+    return dateStr;
+  }
+}
 function scheduleDefaultSurgeryFollowups(otCase) {
   const source = otCase || {};
   const c = normalizeOTCaseRecord(source);
   if (!c.bmhId || !c.date) return;
   const dayOffsets = [
-    { days: 1, label: 'Post-op Day 1 review', type: 'post-op' },
-    { days: 7, label: 'Post-op 1 week review', type: 'post-op' },
-    { days: 14, label: 'Post-op 2 week review', type: 'post-op' }
+    { days: 1, label: 'Day 1 review (next morning)', type: 'post-op' },
+    { days: 7, label: '1 week review', type: 'post-op' },
+    { days: 14, label: '2 week review', type: 'post-op' }
   ];
   const baseDate = new Date(c.date + 'T09:00:00');
   const made = [];
@@ -10321,29 +10415,30 @@ function scheduleDefaultSurgeryFollowups(otCase) {
     const dt = new Date(baseDate.getTime() + cfg.days * 24 * 60 * 60 * 1000);
     const iso = dt.toISOString().split('T')[0];
     const time = normalizeAptTimeLabel(getNearestAppointmentSlot(iso));
-    const exists = (APPOINTMENTS || []).some(function (a) {
+    const existing = (APPOINTMENTS || []).find(function (a) {
       return a.bmhId === c.bmhId && a.date === iso && a.type === 'post-op' && /post-op/i.test(String(a.purpose || ''));
     });
-    if (exists) return;
-    const apt = {
+    const apt = existing || {
       id: 'APT' + Date.now() + Math.random().toString(36).slice(2, 5),
       patient: c.patient,
       bmhId: c.bmhId,
       doctor: c.surgeon || CURRENT_USER?.name || '',
-      purpose: cfg.label + ' — ' + (c.procedure || 'Surgery'),
       date: iso,
-      time: time,
       type: cfg.type,
       centre: c.centre || CURRENT_USER?.centre || 'CHD',
       status: 'booked'
     };
-    APPOINTMENTS.push(apt);
+    apt.time = time;
+    apt.purpose = cfg.label + ' — ' + (c.procedure || 'Surgery');
+    apt.dateFormatted = formatFollowupDisplayDate(iso);
+    if (!existing) APPOINTMENTS.push(apt);
     saveAppointmentToFirebase && saveAppointmentToFirebase(apt);
     made.push(apt);
   });
-  c.autoFollowups = made.map(function (a) { return { date: a.date, time: a.time, label: a.purpose }; });
+  c.autoFollowups = made.map(function (a) { return { date: a.date, time: a.time, label: a.purpose, dateLabel: formatFollowupDisplayDate(a.date) }; });
   source.autoFollowups = c.autoFollowups.slice();
   fbUpdate('otCases/' + c.id, { autoFollowups: c.autoFollowups }).catch(function () {});
+  renderAptDay && renderAptDay();
 }
 
 function toggleWHO(el) {
@@ -10391,7 +10486,7 @@ function addOTCase() {
   const anaes = document.getElementById('ot-add-anaes')?.value||'';
   const date = document.getElementById('ot-add-date')?.value||new Date().toISOString().split('T')[0];
   const time = document.getElementById('ot-add-time')?.value||'09:00';
-  const room = document.getElementById('ot-add-room')?.value||'OT-1';
+  const room = document.getElementById('ot-add-room')?.value||'Eye OT';
   const dx = document.getElementById('ot-add-dx')?.value||'';
   const site = document.getElementById('ot-add-site')?.value||'';
   const iol = document.getElementById('ot-add-iol')?.value||'N/A';
@@ -10444,7 +10539,7 @@ function addOTCase() {
     id: editId || ('OT-'+Date.now()), bmhId:ptId, patient:ptName,
     age:pt?.age||'—', sex:pt?.sex||'—',
     caseKind,
-    dx, procedure:proc, site, surgeon, anaes, anaesDoc:'',
+    dx, procedure:proc, procedureMain: parseOtProcedureSelection(proc).main, procedureSub: parseOtProcedureSelection(proc).sub, site, surgeon, anaes, anaesDoc:'',
     date, scheduledTime:time, room, iol, iolType, iolPower, priority,
     obgCaseType, obgGa, obgIndication, obgFetal, obgLiquor, obgBlood, obgAnaesNote, obgBaby, obgMother, obgDocs,
     centre: pt?.centre || getEffectiveCentre() || CURRENT_USER?.centre || 'CHD',
@@ -10465,7 +10560,7 @@ function addOTCase() {
     normalized.iol = 'N/A';
     normalized.iolType = '';
     normalized.iolPower = '';
-    if (!/labour room/i.test(normalized.room || '')) normalized.room = obgCaseType === 'Normal Delivery' || obgCaseType === 'Assisted Delivery' ? 'Labour Room' : (normalized.room || 'OT-1');
+    if (!/labour room/i.test(normalized.room || '')) normalized.room = obgCaseType === 'Normal Delivery' || obgCaseType === 'Assisted Delivery' ? 'Labour Room' : (normalized.room || 'Gynae OT');
   }
   if (editId) {
     const idx = OT_CASES.findIndex(function (c) { return c.id === editId; });
@@ -10628,7 +10723,7 @@ function openOTAddModal(opts) {
     setV('ot-add-anaes', existing.anaes);
     setV('ot-add-date', existing.date);
     setV('ot-add-time', existing.scheduledTime);
-    setV('ot-add-room', existing.room);
+    setV('ot-add-room', mapLegacyOTRoomLabel(existing.room));
     setV('ot-add-priority', existing.priority);
     populateOTIolOptions(existing.iolType || existing.iol || '', existing.iolPower || extractIolPower(existing.iol));
     setV('ot-add-iol', existing.iol || '');
@@ -14228,6 +14323,9 @@ function getDischargePrintData(sel) {
   const diagnosis = lastOtCase?.dx || ptObj.lastVisit?.dx || ptObj.dx || ptObj.lastVisit?.clinicalImpression || tmpl.procedure || 'the diagnosed condition';
   const procedureName = lastOtCase?.procedure || ptObj.lastVisit?.procedure || ptObj.surgery || ptObj.surgeryAdvised || tmpl.procedure || 'the planned procedure';
   const joinDate = new Date(new Date(opDate).getTime() + (14 * 24 * 60 * 60 * 1000)).toISOString();
+  if (lastOtCase && (!Array.isArray(lastOtCase.autoFollowups) || lastOtCase.autoFollowups.length < 3)) {
+    scheduleDefaultSurgeryFollowups(lastOtCase);
+  }
   const followups = Array.isArray(lastOtCase?.autoFollowups) ? lastOtCase.autoFollowups.slice() : [];
   return {
     sel: specialty,
@@ -14272,6 +14370,33 @@ function getDischargeDurOptionsHtml(selected) {
     return '<option value="' + String(opt).replace(/"/g, '&quot;') + '"' + (value === opt ? ' selected' : '') + '>' + opt + '</option>';
   }).join('');
 }
+function getIsoDateOnly(value) {
+  if (!value) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(value))) return String(value);
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toISOString().split('T')[0];
+}
+function formatDischargeDateInput(value) {
+  const iso = getIsoDateOnly(value);
+  return iso || new Date().toISOString().split('T')[0];
+}
+function deriveDischargeToDate(fromDate, durationLabel) {
+  const from = formatDischargeDateInput(fromDate);
+  const days = Math.max(1, durationLabelToDays(durationLabel));
+  return addDaysToIsoDate(from, Math.max(0, days - 1));
+}
+function updateDischargeMedDateRange(el) {
+  const row = el && el.closest ? el.closest('.dc-med-row') : null;
+  if (!row) return;
+  const fromEl = row.querySelector('.dc-med-from');
+  const toEl = row.querySelector('.dc-med-to');
+  const durEl = row.querySelector('.dc-med-duration');
+  if (!fromEl || !toEl || !durEl) return;
+  const fromVal = formatDischargeDateInput(fromEl.value);
+  if (fromEl.value !== fromVal) fromEl.value = fromVal;
+  toEl.value = deriveDischargeToDate(fromVal, durEl.value || '');
+}
 function dischargeFrequencyToTimes(freq) {
   const f = String(freq || '').toLowerCase();
   if (/hourly|every hour/.test(f)) return ['Every hour'];
@@ -14303,7 +14428,7 @@ function buildDischargePrintSection(sel) {
       + '</tr>';
   }).join('');
   const followupRows = (data.followups || []).map(function (f, idx) {
-    const dateText = f?.date ? fmt(f.date) : '—';
+    const dateText = f?.dateLabel || (f?.date ? formatFollowupDisplayDate(f.date) : '—');
     const timeText = f?.time || '';
     const labelText = f?.label || ('Follow-up ' + (idx + 1));
     return '<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 10px;border:1px solid #d7dce5;border-radius:8px;margin-top:6px;font-size:11px"><strong>' + esc(labelText) + '</strong><span>' + esc(dateText + (timeText ? ' · ' + timeText : '')) + '</span></div>';
@@ -14360,8 +14485,8 @@ function buildDischargeCardPrintHtml() {
     el.style.background = el.classList.contains('active') ? '#1A3C6E' : '#fff';
     el.style.color = el.classList.contains('active') ? '#fff' : '#1A3C6E';
   });
-  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;background:#fff;margin:0;padding:0}@page{size:A4;margin:8mm}.discharge-card{border:1px solid #d7dce5;border-radius:12px;overflow:hidden}.dc-header{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;background:#1A3C6E;padding:14px 18px}.dc-field-lbl{font-size:9px;font-weight:800;color:#666;text-transform:uppercase;letter-spacing:.4px}.dc-field-val{font-size:12px;font-weight:800;color:#111}.g2{display:grid;grid-template-columns:1fr 1fr}.drop-item{border-left:4px solid #1A3C6E;padding:8px 10px;border-radius:8px;background:#f7f9ff}.drop-freq{display:flex;gap:4px}.drop-time.active{background:#1A3C6E;color:#fff}.drop-time{display:inline-flex;align-items:center;justify-content:center}</style></head><body>'
-    + clone.outerHTML + '</body></html>';
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;background:#fff;margin:0;padding:0;font-size:11px;line-height:1.22}@page{size:A4;margin:4mm}.print-wrap{transform:scale(.92);transform-origin:top left;width:108.7%}.discharge-card{border:1px solid #d7dce5;border-radius:10px;overflow:hidden}.dc-header{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;background:#1A3C6E;padding:10px 12px}.dc-field-lbl{font-size:8px;font-weight:800;color:#666;text-transform:uppercase;letter-spacing:.35px}.dc-field-val{font-size:10.5px;font-weight:800;color:#111}.g2{display:grid;grid-template-columns:1fr 1fr}.drop-item{border-left:3px solid #1A3C6E;padding:6px 8px;border-radius:7px;background:#f7f9ff;margin-bottom:6px}.drop-freq{display:flex;gap:3px;flex-wrap:wrap}.drop-time.active{background:#1A3C6E;color:#fff}.drop-time{display:inline-flex;align-items:center;justify-content:center;font-size:9px;padding:2px 5px;min-width:30px;border-radius:8px;border:1px solid #d7dce5}.card-title{font-size:13px!important}.card-sub,.muted{font-size:9px!important}</style></head><body><div class="print-wrap">'
+    + clone.outerHTML + '</div></body></html>';
 }
 
 // Render the discharge page with per-specialty selector + editable medicines
@@ -14428,9 +14553,9 @@ function renderDischargeBuilder() {
         note: d._taperStep ? ('Taper step ' + d._taperStep) : '',
         local: (d.lang&&d.lang.pa) ? d.lang.pa : (d.lang&&d.lang.hi ? d.lang.hi : ''),
         freq: d.freq, duration: d.dur
-      }, i, tmpl.color));
+      }, i, tmpl.color, data.dischargeDate));
     } else {
-      meds = tmpl.medicines.map((m,i)=>renderDcMedRow(m,i,tmpl.color));
+      meds = tmpl.medicines.map((m,i)=>renderDcMedRow(m,i,tmpl.color, data.dischargeDate));
     }
     medEl.innerHTML = meds.join('') +
       `<button onclick="addDcMedicine('${sel}')" class="btn btn-xs btn-outline" style="margin-top:6px;width:100%">+ Add Medicine</button>`;
@@ -14442,7 +14567,7 @@ function renderDischargeBuilder() {
     const fuDateVal = document.getElementById('rx-fu-date')?.value;
     let followupList = (data.followups && data.followups.length)
       ? data.followups.map(function (f) {
-          const dt = f?.date ? new Date(f.date).toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short',year:'numeric'}) : '';
+          const dt = f?.dateLabel || (f?.date ? formatFollowupDisplayDate(f.date) : '');
           return (f?.label || 'Follow-up') + (dt ? ': ' + dt : '') + (f?.time ? ' · ' + f.time : '');
         })
       : [...tmpl.followup];
@@ -14490,7 +14615,7 @@ function renderDischargeBuilder() {
   }
 }
 
-function renderDcMedRow(m,i,color) {
+function renderDcMedRow(m,i,color,defaultFromDate) {
   const TIMES = ['12am','6am','8am','10am','12pm','2pm','4pm','6pm','8pm','10pm'];
   const freq = String(m.freq || '').toLowerCase();
   const activeTimes = /every hour|hourly/.test(freq) ? TIMES
@@ -14500,16 +14625,22 @@ function renderDcMedRow(m,i,color) {
     : /twice|bd/.test(freq) ? ['8am','8pm']
     : /bedtime|hs/.test(freq) ? ['10pm']
     : ['8am'];
+  const fromDate = formatDischargeDateInput(m.fromDate || defaultFromDate || new Date());
+  const toDate = formatDischargeDateInput(m.toDate || deriveDischargeToDate(fromDate, m.duration));
   return `<div class="drop-item dc-med-row" style="border-left-color:${color};background:${color}11;margin-bottom:8px;position:relative">
     <button onclick="this.closest('.dc-med-row').remove()" style="position:absolute;top:6px;right:6px;background:none;border:none;cursor:pointer;color:var(--red);font-size:12px">✕</button>
     <div contenteditable="true" spellcheck="false" style="font-weight:900;font-size:13px;outline:none;padding-right:20px">${m.name}</div>
     <div contenteditable="true" spellcheck="false" style="font-size:11px;color:var(--g1);outline:none;margin:3px 0">${m.note}</div>
     <div contenteditable="true" spellcheck="false" style="font-size:11.5px;color:#555;outline:none;margin-bottom:4px">${m.local}</div>
-    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:5px">
+    <div style="display:grid;grid-template-columns:auto minmax(118px,1fr) auto minmax(118px,1fr) auto minmax(120px,1fr) auto minmax(96px,1fr);gap:6px;align-items:center;margin-bottom:5px">
+      <label style="font-size:10px;font-weight:800;color:var(--g1)">FROM:</label>
+      <input type="date" class="dc-med-from" value="${fromDate}" onchange="updateDischargeMedDateRange(this)" style="font-size:10.5px;border:1px solid var(--g4);border-radius:5px;padding:2px 6px;min-width:0;width:100%">
+      <label style="font-size:10px;font-weight:800;color:var(--g1)">TO:</label>
+      <input type="date" class="dc-med-to" value="${toDate}" style="font-size:10.5px;border:1px solid var(--g4);border-radius:5px;padding:2px 6px;min-width:0;width:100%">
       <label style="font-size:10px;font-weight:800;color:var(--g1)">FREQ:</label>
-      <select style="font-size:11px;border:1px solid var(--g4);border-radius:5px;padding:2px 6px;width:170px">${getDischargeFreqOptionsHtml(m.freq)}</select>
+      <select style="font-size:10.5px;border:1px solid var(--g4);border-radius:5px;padding:2px 6px;min-width:0;width:100%">${getDischargeFreqOptionsHtml(m.freq)}</select>
       <label style="font-size:10px;font-weight:800;color:var(--g1)">DURATION:</label>
-      <select style="font-size:11px;border:1px solid var(--g4);border-radius:5px;padding:2px 6px;width:130px">${getDischargeDurOptionsHtml(m.duration)}</select>
+      <select class="dc-med-duration" onchange="updateDischargeMedDateRange(this)" style="font-size:10.5px;border:1px solid var(--g4);border-radius:5px;padding:2px 6px;min-width:0;width:100%">${getDischargeDurOptionsHtml(m.duration)}</select>
     </div>
     <div class="drop-freq" style="flex-wrap:wrap;gap:3px">
       ${TIMES.map(t=>`<div class="drop-time ${activeTimes.includes(t)?'active':''}" onclick="this.classList.toggle('active')">${t}</div>`).join('')}
@@ -14535,7 +14666,7 @@ function addDcMedicine(dept) {
   const addBtn = list.querySelector('button:last-child');
   const color = DISCHARGE_TEMPLATES[dept]?.color || '#1A3C6E';
   const div = document.createElement('div');
-  div.innerHTML = renderDcMedRow({name:'New Medicine', note:'Note', local:'ਸਹੀ ਸਮੇਂ ਤੇ ਲਓ / सही समय पर लें', freq:'3x/day', duration:'5 days'},0,color);
+  div.innerHTML = renderDcMedRow({name:'New Medicine', note:'Note', local:'ਸਹੀ ਸਮੇਂ ਤੇ ਲਓ / सही समय पर लें', freq:'3x/day', duration:'5 days'},0,color,new Date());
   list.insertBefore(div.firstElementChild, addBtn);
 }
 
