@@ -12765,12 +12765,12 @@ window.printUnifiedRx = function(deptId) {
   const vaOS = document.getElementById('ucva-os-dist')?.value || document.getElementById('va-os-uc')?.value||'';
 
   // ── Refraction (glasses) ──
-  const rfODSph = document.getElementById('rf-od-sph2')?.value||'0';
-  const rfODCyl = document.getElementById('rf-od-cyl2')?.value||'0';
-  const rfODAx  = document.getElementById('rf-od-ax2')?.value||'0°';
-  const rfOSSph = document.getElementById('rf-os-sph2')?.value||'0';
-  const rfOSCyl = document.getElementById('rf-os-cyl2')?.value||'0';
-  const rfOSAx  = document.getElementById('rf-os-ax2')?.value||'0°';
+  const rfODSph = document.getElementById('subj-od-sph')?.value || window.CURRENT_PATIENT?.lastVisit?.subjODsph || '0';
+  const rfODCyl = document.getElementById('subj-od-cyl')?.value || window.CURRENT_PATIENT?.lastVisit?.subjODcyl || '0';
+  const rfODAx  = document.getElementById('subj-od-ax')?.value  || window.CURRENT_PATIENT?.lastVisit?.subjODax  || '0°';
+  const rfOSSph = document.getElementById('subj-os-sph')?.value || window.CURRENT_PATIENT?.lastVisit?.subjOSsph || '0';
+  const rfOSCyl = document.getElementById('subj-os-cyl')?.value || window.CURRENT_PATIENT?.lastVisit?.subjOScyl || '0';
+  const rfOSAx  = document.getElementById('subj-os-ax')?.value  || window.CURRENT_PATIENT?.lastVisit?.subjOSax  || '0°';
   const addOD = document.getElementById('rf-od-add')?.value || window.CURRENT_PATIENT?.lastVisit?.rfODAdd || '';
   const addOS = document.getElementById('rf-os-add')?.value || window.CURRENT_PATIENT?.lastVisit?.rfOSAdd || '';
   const subjODva = document.getElementById('subj-od-va')?.value || window.CURRENT_PATIENT?.lastVisit?.subjODva || '';
