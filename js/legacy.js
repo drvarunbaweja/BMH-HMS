@@ -98,6 +98,13 @@ const USER_DB = {
 ].forEach(function (uname) {
   if (USER_DB[uname]) USER_DB[uname].defaultPw = 'ChangeMe@123';
 });
+['opto.rpr@bawejahospital.com','opto.rpr','opto,rpr','opto_rpr','optometrist','optometrist@bawejahospital.com','drvarun_rpr'].forEach(function (uname) {
+  if (USER_DB[uname]) {
+    USER_DB[uname].pw = 'ChangeMe@123';
+    USER_DB[uname].defaultPw = 'ChangeMe@123';
+    USER_DB[uname].disabled = false;
+  }
+});
 let CURRENT_USER = null; // set on login
 
 /** Firebase Auth (app.js) sets window.CURRENT_USER; legacy login sets this var — keep in sync. */
@@ -875,6 +882,18 @@ function getLoginUserCandidates(rawUser) {
   const uniq = [];
   out.forEach(function (item) { if (item && uniq.indexOf(item) === -1) uniq.push(item); });
   return uniq;
+}
+function sanitizeFirebaseKey(key) {
+  return String(key == null ? '' : key).replace(/[.#$\\/[\\]]/g, '_').replace(/\s+/g, ' ').trim() || 'field';
+}
+function sanitizeFirebaseValue(value) {
+  if (Array.isArray(value)) return value.map(sanitizeFirebaseValue);
+  if (!value || typeof value !== 'object') return value;
+  const out = {};
+  Object.keys(value).forEach(function (key) {
+    out[sanitizeFirebaseKey(key)] = sanitizeFirebaseValue(value[key]);
+  });
+  return out;
 }
 function buildCompactDocumentHeader(title, ctx, subtitle) {
   const esc = escapeHtmlConsent;
@@ -1917,10 +1936,11 @@ function populateOphthoForm(v) {
     // Restore saved chip state per structure/eye
     document.querySelectorAll('#oe-slitlamp .sl-sl-row, #oe-slitlamp [style*="grid-template-columns:90px"]').forEach(row => {
       const label = row.querySelector('[style*="9.5px"]')?.textContent?.trim();
-      if(!label || !v.slChips[label]) return;
+      const savedBucket = label ? (v.slChips[label] || v.slChips[sanitizeFirebaseKey(label)]) : null;
+      if(!label || !savedBucket) return;
       const cols = row.querySelectorAll('[style*="background:rgba"]');
       ['od','os'].forEach((eye, i) => {
-        const saved = v.slChips[label][eye] || [];
+        const saved = savedBucket[eye] || [];
         if(!cols[i]) return;
         cols[i].querySelectorAll('.sl-chip').forEach(chip => {
           chip.classList.toggle('sel', saved.includes(chip.textContent.trim()));
@@ -17017,6 +17037,8 @@ function saveVisit(dept) {
   if(typeof fbSet !== 'function') { showToast('Save not available (offline)', 'w'); return; }
   const patientPatch = { lastVisit: visit, lastVisitKey: visitKey, lastVisitDate: visit.date, lastDeptVisit: dept, doctor: visit.doctor };
   if (visit.dx) patientPatch.dx = visit.dx;
+  const visitForCloud = sanitizeFirebaseValue(visit);
+  const patientPatchForCloud = Object.assign({}, patientPatch, { lastVisit: visitForCloud });
   const localPt = window.CURRENT_PATIENT || PATIENTS.find(p => p.bmhId === bmhId);
   if(localPt) {
     localPt.lastVisit = JSON.parse(JSON.stringify(visit));
@@ -17029,9 +17051,9 @@ function saveVisit(dept) {
     cachePatientVisits(bmhId, cache);
   }
   Promise.all([
-    fbSet(`visits/${bmhId}/${visitKey}`, visit),
-    fbSet(`patients/${bmhId}/lastVisit`, visit),
-    typeof fbUpdate === 'function' ? fbUpdate('patients/' + bmhId, patientPatch).catch(()=>{}) : Promise.resolve()
+    fbSet(`visits/${bmhId}/${visitKey}`, visitForCloud),
+    fbSet(`patients/${bmhId}/lastVisit`, visitForCloud),
+    typeof fbUpdate === 'function' ? fbUpdate('patients/' + bmhId, patientPatchForCloud).catch(()=>{}) : Promise.resolve()
   ])
     .then(() => {
       showToast(`✅ ${ptName} — visit saved (${visit.dateLabel})`, 's');
