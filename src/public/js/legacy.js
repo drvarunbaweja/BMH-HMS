@@ -11982,23 +11982,25 @@ function removeInvestFile(id) {
 function viewInvestFile(url, name) {
   window.open(url, '_blank');
 }
-function addInvestigationOrder() {
+function addInvestigationOrder(mode) {
   const pt = window.CURRENT_PATIENT || PATIENTS.find(p => p.bmhId === (document.getElementById('ophtho-pt-uid')?.textContent || '').trim());
   if(!pt) { showToast('Open the patient record first','w'); return; }
   const name = document.getElementById('add-inv-name')?.value?.trim();
   const notes = document.getElementById('add-inv-notes')?.value?.trim();
   if(!name) { showToast('Enter investigation name','w'); return; }
+  const orderMode = mode === 'send' ? 'send' : 'advise';
   const orders = getCurrentPatientInvestigationOrders();
-  orders.push({id:'INV'+Date.now(), name, notes, date: new Date().toLocaleDateString('en-IN'), done: false, patient: pt.name, bmhId: pt.bmhId, dept: pt.dept || 'ophtho', centre: pt.centre || CURRENT_USER?.centre || 'CHD'});
+  orders.push({id:'INV'+Date.now(), name, notes, mode: orderMode, date: new Date().toLocaleDateString('en-IN'), done: false, patient: pt.name, bmhId: pt.bmhId, dept: pt.dept || 'ophtho', centre: pt.centre || CURRENT_USER?.centre || 'CHD'});
   syncCurrentPatientInvestigationOrders();
   persistCurrentPatientInvestigationOrders();
   renderInvestigationOrders();
   document.getElementById('add-inv-name').value = '';
   document.getElementById('add-inv-notes').value = '';
-  // Also add to PAY_REQUESTS so reception can collect
-  const centre = pt.centre || CURRENT_USER?.centre || 'CHD';
-  PAY_REQUESTS.push({id:'PR'+Date.now(), patient:pt.name, bmhId:pt.bmhId, for:name, amount:(CENTRE_CHARGES[centre]?.[name]||0), status:'pending', from:document.getElementById('sbnm')?.textContent||'Doctor', dept:pt.dept||'ophtho', centre});
-  showToast(`🧪 ${name} ordered ✓`, 's');
+  if(orderMode === 'send') {
+    const centre = pt.centre || CURRENT_USER?.centre || 'CHD';
+    PAY_REQUESTS.push({id:'PR'+Date.now(), patient:pt.name, bmhId:pt.bmhId, for:name, amount:(CENTRE_CHARGES[centre]?.[name]||0), status:'pending', from:document.getElementById('sbnm')?.textContent||'Doctor', dept:pt.dept||'ophtho', centre});
+  }
+  showToast(orderMode === 'send' ? `🧪 ${name} advised and sent ✓` : `🧪 ${name} advised ✓`, 's');
   renderOeInvOrderedList && renderOeInvOrderedList();
 }
 function renderOeInvOrderedList() {
@@ -12007,6 +12009,7 @@ function renderOeInvOrderedList() {
   if(!pending.length) { el.innerHTML = '<span style="color:var(--g1);font-style:italic">None ordered</span>'; return; }
   el.innerHTML = pending.map((o,i) => `<div style="display:inline-flex;align-items:center;gap:5px;background:var(--orange-lt);color:#8a4200;border:1px solid rgba(212,160,23,.5);border-radius:20px;padding:2px 10px;font-size:11px;font-weight:700;margin:2px 4px 2px 0">
     🧪 ${o.name}${o.notes?' ('+o.notes+')':''}
+    <span style="font-size:9px;padding:1px 6px;border-radius:10px;background:${o.mode==='send'?'rgba(26,60,110,.12)':'rgba(26,140,60,.12)'};color:${o.mode==='send'?'var(--blue)':'#1a8c3c'}">${o.mode==='send'?'Sent to reception':'Advice only'}</span>
     <span onclick="(function(){const orders=getCurrentPatientInvestigationOrders();const idx=orders.findIndex(x=>x.id===${JSON.stringify(o.id)});if(idx>-1)orders.splice(idx,1);syncCurrentPatientInvestigationOrders();persistCurrentPatientInvestigationOrders();renderOeInvOrderedList();renderInvestigationOrders();})();" style="cursor:pointer;opacity:.6;font-size:12px">&times;</span>
   </div>`).join('');
 }
@@ -12016,7 +12019,7 @@ function renderInvestigationOrders() {
   el.innerHTML = orders.map((o,i) => `<div style="display:flex;align-items:center;gap:7px;padding:6px 8px;background:${o.done?'var(--green-lt)':'var(--orange-lt)'};border-radius:7px;margin-top:5px;font-size:12px">
     <span style="font-size:14px">${o.done?'✅':'🧪'}</span>
     <div style="flex:1"><div style="font-weight:700">${o.name}</div>${o.notes?`<div style="font-size:10.5px;color:var(--g1)">${o.notes}</div>`:''}
-    <div style="font-size:9.5px;color:var(--g1)">${o.date}</div></div>
+    <div style="font-size:9.5px;color:var(--g1)">${o.date} · ${o.mode === 'send' ? 'Sent to reception' : 'Advice only'}</div></div>
     <button class="btn btn-xs ${o.done?'btn-gray':'btn-green'}" onclick="getCurrentPatientInvestigationOrders()[${i}].done=!getCurrentPatientInvestigationOrders()[${i}].done;syncCurrentPatientInvestigationOrders();persistCurrentPatientInvestigationOrders();renderOeInvOrderedList();renderInvestigationOrders()">${o.done?'Undo':'Done ✓'}</button>
     <button class="btn btn-xs btn-gray" onclick="getCurrentPatientInvestigationOrders().splice(${i},1);syncCurrentPatientInvestigationOrders();persistCurrentPatientInvestigationOrders();renderOeInvOrderedList();renderInvestigationOrders()">&#x2715;</button>
   </div>`).join('');
@@ -18008,6 +18011,18 @@ function loadPastVisits(bmhId, dept) {
       return;
     }
     if (dept === 'ophtho') {
+      const chargeLines = ((window.BMH_PATIENT_CHARGES && window.BMH_PATIENT_CHARGES[bmhId]) || []).filter(function (row) {
+        const cat = String(row.cat || '').toLowerCase();
+        const text = [row.desc, row.name, row.service, row.for, row.parent].filter(Boolean).join(' ').toLowerCase();
+        const ref = String(row.ref || row.id || '').toLowerCase();
+        if (ref.startsWith('pr') || ref.startsWith('pr-') || String(row.source || '').toLowerCase() === 'doctor') return false;
+        return cat === 'diagnostic' || cat === 'surgery' || /oct|hvf|fundus|biomet|yag|capsulotomy|laser|topograph|specular|procedure|surgery|ivt|injection|pmics|phaco|trab|iol/.test(text);
+      });
+      const visitDateKey = function (raw) {
+        const t = Date.parse(raw || '');
+        if (!Number.isNaN(t)) return new Date(t).toLocaleDateString('en-IN');
+        return String(raw || '');
+      };
       const surgeries = (OT_CASES || []).map(normalizeOTCaseRecord).filter(function (c) { return c.bmhId === bmhId; }).sort(function (a,b) {
         return String(b.date || '').localeCompare(String(a.date || ''));
       }).slice(0, 10);
@@ -18021,6 +18036,7 @@ function loadPastVisits(bmhId, dept) {
                 <th style="text-align:left;padding:6px;border:1px solid var(--g5)">IOP</th>
                 <th style="text-align:left;padding:6px;border:1px solid var(--g5)">Subjective Refraction</th>
                 <th style="text-align:left;padding:6px;border:1px solid var(--g5)">Diagnosis</th>
+                <th style="text-align:left;padding:6px;border:1px solid var(--g5)">Diagnostics / Procedures</th>
                 <th style="text-align:left;padding:6px;border:1px solid var(--g5)">Rx</th>
               </tr>
             </thead>
@@ -18034,12 +18050,21 @@ function loadPastVisits(bmhId, dept) {
                 ].filter(Boolean).join(' | ') || '—';
                 const dx = Array.isArray(v.diagnoses) ? v.diagnoses.map(formatDxLineForPrint).filter(Boolean).join(', ') : (v.diagnosisText || '—');
                 const rx = Array.isArray(v.rx) && v.rx.length ? v.rx.map(function (d) { return rxDrugTradeName(d) || d.trade || d.name || 'Drug'; }).join(', ') : '—';
+                const vDateKey = visitDateKey(v.date || v.createdAt || v.dateLabel);
+                const doneItems = chargeLines.filter(function (row) {
+                  return visitDateKey(row.ts || row.date) === vDateKey;
+                }).map(function (row) {
+                  return expandProcedureLabelForPrint(row.desc || row.name || row.service || row.for || '—');
+                });
+                const savedProc = Array.isArray(v.procedures) ? v.procedures.map(expandProcedureLabelForPrint).filter(Boolean) : [];
+                const combinedDone = Array.from(new Set(doneItems.concat(savedProc))).filter(Boolean).join(', ') || '—';
                 return `<tr>
                   <td style="padding:6px;border:1px solid var(--g5);vertical-align:top">${v.dateLabel || new Date(v.date || Date.now()).toLocaleDateString('en-IN')}</td>
                   <td style="padding:6px;border:1px solid var(--g5);vertical-align:top">${va}</td>
                   <td style="padding:6px;border:1px solid var(--g5);vertical-align:top">${iop}</td>
                   <td style="padding:6px;border:1px solid var(--g5);vertical-align:top">${refr}</td>
                   <td style="padding:6px;border:1px solid var(--g5);vertical-align:top">${dx}</td>
+                  <td style="padding:6px;border:1px solid var(--g5);vertical-align:top">${combinedDone}</td>
                   <td style="padding:6px;border:1px solid var(--g5);vertical-align:top">${rx}</td>
                 </tr>`;
               }).join('')}

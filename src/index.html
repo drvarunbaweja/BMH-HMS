@@ -288,11 +288,6 @@
         <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">💳 Payment status</div>
         <div id="dq-pay" style="font-size:11px;color:var(--g1);min-height:18px"></div>
       </div>
-      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;flex:2;min-width:260px">
-        <div class="form-group" style="margin:0"><label class="fl">Patient</label><select id="sp-pt" style="font-size:12px"></select></div>
-        <div class="form-group" style="margin:0"><label class="fl">Procedure</label><select id="sp-proc" style="font-size:12px"><option value="1200">Biometry ₹1,200</option><option value="1800">OCT Macula ₹1,800</option><option value="1500">HVF ₹1,500</option><option value="600">Fundus ₹600</option><option value="38000">PMICS Surgery ₹38,000</option></select></div>
-        <button type="button" class="btn btn-orange btn-sm" style="margin-bottom:2px" onclick="sendCharge()">📤 Send to Reception</button>
-      </div>
     </div>
       <div class="ptabs">
         <div class="ptab active" onclick="ptab(this,'dq-active')">Active</div>
@@ -1200,7 +1195,8 @@
               <option>PMICS (Pinhole Micro Incision Cataract Surgery) + IOL</option><option>Trabeculectomy</option><option>IVT Injection</option>
             </datalist>
             <input type="text" id="add-inv-notes" placeholder="Notes (optional)" style="flex:1;min-width:80px">
-            <button class="btn btn-gold btn-sm" onclick="addInvestigationOrder()">+ Add</button>
+            <button class="btn btn-blue btn-sm" onclick="addInvestigationOrder('advise')">Advise</button>
+            <button class="btn btn-gold btn-sm" onclick="addInvestigationOrder('send')">Advise + Send</button>
           </div>
           <div id="inv-order-list" style="margin-top:8px"></div>
         </div>
@@ -1209,24 +1205,8 @@
         <div id="bio-files-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px"></div>
       </div>
 
-      <!-- PRESCRIPTION + QR TAB -->
-      <div class="tab-content" id="oe-rx">
-        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;background:var(--g6);padding:8px 10px;border-radius:var(--rsm)">
-          <button class="btn btn-xs btn-blue" onclick="applyLastRx()">📋 Apply Last Rx</button>
-          <select id="rx-tpl-sel" style="font-size:11px;flex:1" onchange="applyRxTemplate(this.value)">
-            <option value="">— Apply Template —</option>
-            <option value="post-phaco">Post Phaco Day 1</option>
-            <option value="post-ivt">Post IVT</option>
-            <option value="dry-eye">Dry Eye Protocol</option>
-          </select>
-          <button class="btn btn-xs btn-outline" onclick="openM('m-order-invest')">🧪 Order Investigations</button>
-          <label style="display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;color:var(--g1);padding:4px 2px;user-select:none;cursor:pointer">
-            <input type="checkbox" id="rx-post-surgery" onchange="toggleRxPostSurgeryNote()">
-            Post Surgery Prescription
-          </label>
-        </div>
-        <div id="rx-post-surgery-note" style="display:none;margin:-2px 0 10px;padding:7px 10px;border:1px solid rgba(26,60,110,.18);border-radius:8px;background:#f7faff;font-size:11.5px;font-weight:700;color:var(--blue)">The medication schedule after surgery</div>
-        <div style="margin-bottom:8px">
+      <div class="tab-content" id="oe-plan">
+        <div style="margin-bottom:10px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:6px">
             <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px">Diagnosis</div>
             <button type="button" class="btn btn-xs btn-blue" onclick="addDiagnosisRow()">+ Add diagnosis line</button>
@@ -1238,36 +1218,17 @@
           <textarea id="rx-diagnosis-text" rows="2" placeholder="Extra diagnosis notes (optional)…" style="width:100%;font-size:12px;border:1.5px solid var(--g4);border-radius:8px;padding:8px 10px;margin-bottom:4px;font-family:var(--font);resize:vertical;min-height:40px;box-sizing:border-box"></textarea>
           <div id="rx-diagnosis-list" style="display:none" aria-hidden="true"></div>
         </div>
-        <!-- Investigation ordered display -->
         <div style="margin-bottom:10px" id="oe-inv-display-wrap">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;gap:8px;flex-wrap:wrap">
             <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px">🧪 Investigations Ordered</div>
-            <button class="btn btn-xs btn-outline" onclick="openM('m-order-invest')">+ Order More</button>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="btn btn-xs btn-outline" onclick="openM('m-order-invest')">+ Order More</button>
+              <button class="btn btn-xs btn-blue" onclick="addInvestigationOrder('advise')">Advise Only</button>
+              <button class="btn btn-xs btn-orange" onclick="addInvestigationOrder('send')">Advise + Send</button>
+            </div>
           </div>
           <div id="oe-inv-ordered-list" style="min-height:24px;font-size:11.5px;color:var(--g1);font-style:italic">None ordered</div>
         </div>
-        <!-- Drug table header -->
-        <div style="position:relative;margin-bottom:6px">
-          <div style="display:flex;align-items:center;gap:6px;background:var(--blue-lt);border:2px solid var(--blue);border-radius:var(--rsm);padding:7px 10px">
-            <span style="font-size:14px">💊</span>
-            <input type="text" id="rx-quick-search" placeholder="Type drug name to add (e.g. Vigamox, Timolol)…"
-              oninput="rxQuickSearch(this.value)" autocomplete="off"
-              style="flex:1;border:none;background:transparent;outline:none;font-size:13px;font-family:var(--font);font-weight:600">
-            <button class="btn btn-blue btn-xs" onclick="openDrugLibraryAddFromQuick()">+ Add</button>
-          </div>
-          <div id="rx-quick-dropdown" style="display:none;position:absolute;z-index:200;background:#fff;border:2px solid var(--blue);border-top:none;border-radius:0 0 var(--rsm) var(--rsm);width:100%;max-height:220px;overflow-y:auto;box-shadow:var(--sh-md)"></div>
-        </div>
-        <div id="rx-drugs" style="margin-bottom:4px;min-width:0;max-width:100%;box-sizing:border-box"></div>
-        <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px">
-          <button class="btn btn-outline btn-sm" onclick="openM('m-add-rx-drug')">+ Full Drug Form</button>
-          <select style="font-size:11px;padding:6px 8px;border-radius:8px;border:1.5px solid var(--g4)" onchange="setRxLang(this.value)">
-            <option value="en">English</option>
-            <option value="hi">Hindi</option>
-            <option value="pa">Punjabi</option>
-          </select>
-          <button class="btn btn-gold btn-sm" onclick="openSaveRxTemplate()">📋 Save as Template</button>
-        </div>
-      <div class="tab-content" id="oe-plan">
         <div style="margin-bottom:10px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
             <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px">⚕️ Surgery / Procedure Advised</div>
@@ -1341,6 +1302,39 @@
         </div>
       </div>
       <div class="tab-content" id="oe-rx">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;background:var(--g6);padding:8px 10px;border-radius:var(--rsm)">
+          <button class="btn btn-xs btn-blue" onclick="applyLastRx()">📋 Apply Last Rx</button>
+          <select id="rx-tpl-sel" style="font-size:11px;flex:1" onchange="applyRxTemplate(this.value)">
+            <option value="">— Apply Template —</option>
+            <option value="post-phaco">Post Phaco Day 1</option>
+            <option value="post-ivt">Post IVT</option>
+            <option value="dry-eye">Dry Eye Protocol</option>
+          </select>
+          <button class="btn btn-xs btn-outline" onclick="openM('m-order-invest')">🧪 Order Investigations</button>
+          <label style="display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;color:var(--g1);padding:4px 2px;user-select:none;cursor:pointer">
+            <input type="checkbox" id="rx-post-surgery" onchange="toggleRxPostSurgeryNote()">
+            Post Surgery Prescription
+          </label>
+        </div>
+        <div id="rx-post-surgery-note" style="display:none;margin:-2px 0 10px;padding:7px 10px;border:1px solid rgba(26,60,110,.18);border-radius:8px;background:#f7faff;font-size:11.5px;font-weight:700;color:var(--blue)">The medication schedule after surgery</div>
+        <div style="position:relative;margin-bottom:6px">
+          <div style="display:flex;align-items:center;gap:6px;background:var(--blue-lt);border:2px solid var(--blue);border-radius:var(--rsm);padding:7px 10px">
+            <span style="font-size:14px">💊</span>
+            <input type="text" id="rx-quick-search" placeholder="Type drug name to add (e.g. Vigamox, Timolol)…"
+              oninput="rxQuickSearch(this.value)" autocomplete="off"
+              style="flex:1;border:none;background:transparent;outline:none;font-size:13px;font-family:var(--font);font-weight:600">
+            <button class="btn btn-blue btn-xs" onclick="openDrugLibraryAddFromQuick()">+ Add</button>
+          </div>
+          <div id="rx-quick-dropdown" style="display:none;position:absolute;z-index:200;background:#fff;border:2px solid var(--blue);border-top:none;border-radius:0 0 var(--rsm) var(--rsm);width:100%;max-height:220px;overflow-y:auto;box-shadow:var(--sh-md)"></div>
+        </div>
+        <div id="rx-drugs" style="margin-bottom:4px;min-width:0;max-width:100%;box-sizing:border-box"></div>
+        <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+          <button class="btn btn-outline btn-sm" onclick="openM('m-add-rx-drug')">+ Full Drug Form</button>
+          <label style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:var(--g1);cursor:pointer"><input type="radio" name="rx-lang" checked onchange="setRxLang('en')"> EN</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:var(--g1);cursor:pointer"><input type="radio" name="rx-lang" onchange="setRxLang('hi')"> HI</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:var(--g1);cursor:pointer"><input type="radio" name="rx-lang" onchange="setRxLang('pa')"> PA</label>
+          <button class="btn btn-gold btn-sm" onclick="openSaveRxTemplate()">📋 Save as Template</button>
+        </div>
         <div style="background:var(--g6);border-radius:var(--rsm);padding:8px;margin-bottom:8px">
           <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Next Appointment</div>
           <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">
