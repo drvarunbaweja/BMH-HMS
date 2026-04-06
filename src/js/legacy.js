@@ -10276,8 +10276,9 @@ function addOTCase() {
   const editId = document.getElementById('ot-add-case-id')?.value || '';
   const ptSel = document.getElementById('ot-pt-sel');
   const ptOpt = ptSel?.options[ptSel.selectedIndex];
-  const ptName = ptOpt?.text?.split(' — ')[0]||'New Patient';
-  const ptId = document.getElementById('ot-bmsh-id')?.value||'BMSH-'+Math.floor(Math.random()*900000+100000);
+  const rawSelectedName = ptOpt?.text?.split(' — ')[0] || '';
+  const selectedName = /search above|select patient|select\s*—/i.test(rawSelectedName) ? '' : rawSelectedName;
+  const ptId = document.getElementById('ot-bmsh-id')?.value || ptSel?.value || '';
   const proc = document.getElementById('ot-add-proc')?.value||'';
   const surgeon = document.getElementById('ot-add-surgeon')?.value||'';
   const anaes = document.getElementById('ot-add-anaes')?.value||'';
@@ -10315,8 +10316,21 @@ function addOTCase() {
   const preop = document.getElementById('ot-add-preop')?.value||'';
   const consent = document.getElementById('ot-add-consent')?.value||'';
   const fasting = document.getElementById('ot-add-fasting')?.value||'';
-  const pt = PATIENTS.find(p=>p.bmhId===ptId);
+  const pt = PATIENTS.find(p=>p.bmhId===ptId) || (window.CURRENT_PATIENT?.bmhId === ptId ? window.CURRENT_PATIENT : null);
+  const ptName = pt?.name || selectedName || 'New Patient';
   const caseKind = getSelectedOTCaseKind();
+
+  if (!ptId && !editId) {
+    showToast('Select a patient from lookup before adding to OT list', 'w');
+    return;
+  }
+  if (ptSel && pt && ![].slice.call(ptSel.options).some(function (o) { return o.value === pt.bmhId; })) {
+    const opt = document.createElement('option');
+    opt.value = pt.bmhId;
+    opt.textContent = `${pt.name} — ${pt.bmhId} — ${pt.age||'?'}Y/${pt.sex||''}`;
+    ptSel.appendChild(opt);
+    ptSel.value = pt.bmhId;
+  }
 
   const existing = editId ? normalizeOTCaseRecord(OT_CASES.find(function (c) { return c.id === editId; }) || {}) : null;
   const newCase = {
@@ -10409,6 +10423,7 @@ function fillOTFromPatient(bmhId) {
     }
     ptSel.value=bmhId;
   }
+  window.CURRENT_PATIENT = p;
   // Fill all fields
   const setV=(id,v)=>{const e=document.getElementById(id);if(e)e.value=v;};
   const dxGuess = p.dx || p.diagnosis || p.lastVisit?.dx || p.purpose || '';
@@ -10576,6 +10591,18 @@ function openOTAddModal(opts) {
       const el = document.getElementById(id);
       if(el) el.checked = false;
     });
+    const setV=(id,v)=>{const e=document.getElementById(id);if(e)e.value=v||'';};
+    setV('ot-bmsh-id', '');
+    setV('ot-age-sex', '');
+    setV('ot-add-dx', '');
+    setV('ot-add-proc', '');
+    setV('ot-add-site', 'Left Eye (OS)');
+    setV('ot-add-iol', '');
+    const lookupEl = document.getElementById('ot-pt-lookup');
+    if (lookupEl) lookupEl.value = '';
+    const lookupResultEl = document.getElementById('ot-pt-lookup-result');
+    if (lookupResultEl) lookupResultEl.innerHTML = '';
+    if (ptSel) ptSel.value = '';
     toggleOTOBGFields();
   }
   openM('m-ot-add');
