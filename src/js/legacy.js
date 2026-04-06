@@ -10992,13 +10992,54 @@ if (typeof window !== 'undefined') {
 // ─── SURGERY / PROCEDURE SAVE + REPORT ─────────────────
 const PROCEDURE_ADVISED_LOG = [];
 window.PROC_COUNSELLOR_LOG = window.PROC_COUNSELLOR_LOG || {};
+function expandProcedureLabelForPrint(text) {
+  return String(text || '')
+    .replace(/\bPMICS\b(?!\s*\()/gi, 'Pinhole Micro Incision Cataract Surgery (PMICS)')
+    .replace(/PMICS \+ IOL Implantation/gi, 'Pinhole Micro Incision Cataract Surgery (PMICS) + IOL Implantation')
+    .replace(/PMICS \+ IOL/gi, 'Pinhole Micro Incision Cataract Surgery (PMICS) + IOL')
+    .replace(/PMICS \(Pinhole Micro Incision Cataract Surgery\)/gi, 'Pinhole Micro Incision Cataract Surgery (PMICS)');
+}
+function getProcedureAdviceText() {
+  return (document.getElementById('rx-advice-text')?.value || '').trim();
+}
+function getCurrentProcedurePatientMeta() {
+  const pt = window.CURRENT_PATIENT || {};
+  const livePt = PATIENTS.find(function (p) { return p.bmhId === pt.bmhId; }) || {};
+  const merged = Object.assign({}, livePt, pt);
+  return {
+    bmhId: merged.bmhId || 'BMSH-000001',
+    patient: merged.name || 'Test Patient',
+    mobile: merged.mob || '',
+    ageSex: ((merged.age || '—') + '/' + (merged.sex || '—')),
+    centre: merged.centre || CURRENT_USER?.centre || '',
+    referredBy: merged.referredBy || '',
+    doctor: (typeof getRxDoctorDisplayName === 'function' ? getRxDoctorDisplayName() : (CURRENT_USER?.name || document.getElementById('sbnm')?.textContent || 'Dr. Varun Baweja')).split('·')[0].trim(),
+    advice: getProcedureAdviceText()
+  };
+}
+function pushProcedureAdvisedLog(procName, extra) {
+  const proc = expandProcedureLabelForPrint(procName);
+  if (!proc) return;
+  const meta = Object.assign({
+    proc,
+    rawProc: procName || proc,
+    date: new Date().toLocaleDateString('en-IN')
+  }, getCurrentProcedurePatientMeta(), extra || {});
+  const existing = PROCEDURE_ADVISED_LOG.find(function (p) {
+    return p.proc === meta.proc && p.bmhId === meta.bmhId && (p.status || 'advised') === (meta.status || 'advised');
+  });
+  if (existing) {
+    Object.assign(existing, meta);
+    return existing;
+  }
+  PROCEDURE_ADVISED_LOG.push(meta);
+  return meta;
+}
 function saveProcAdvised() {
   const items = document.querySelectorAll('#rx-proc-advised select');
   items.forEach(sel=>{
     const val = sel.value;
-    if(val && !PROCEDURE_ADVISED_LOG.find(p=>p.proc===val&&p.bmhId==='BMSH-000001')) {
-      PROCEDURE_ADVISED_LOG.push({proc:val, bmhId:'BMSH-000001', patient:'Test Patient', date:new Date().toLocaleDateString('en-IN'), doctor:document.getElementById('sbnm')?.textContent||'Dr. Varun Baweja'});
-    }
+    if(val) pushProcedureAdvisedLog(val);
   });
 }
 
@@ -11032,7 +11073,7 @@ function getProcedureReportRows() {
       key,
       patient: row.patient || pt.name || '—',
       bmhId: row.bmhId,
-      proc: row.proc,
+      proc: expandProcedureLabelForPrint(row.proc),
       date: row.date || row.createdAt || '',
       doctor: row.doctor || '',
       status: 'advised',
@@ -11040,7 +11081,8 @@ function getProcedureReportRows() {
       mobile: row.mobile || pt.mob || '',
       ageSex: row.ageSex || ((pt.age || '—') + '/' + (pt.sex || '—')),
       centre: row.centre || pt.centre || '',
-      referredBy: row.referredBy || pt.referredBy || ''
+      referredBy: row.referredBy || pt.referredBy || '',
+      advice: row.advice || pt.lastVisit?.advice || ''
     };
   });
   const otRows = OT_CASES.map(normalizeOTCaseRecord).map(function (c) {
@@ -11079,7 +11121,8 @@ function buildProcedureReportHtml(rows, title) {
     + rows.map(function (p, i) {
         const follow = window.PROC_COUNSELLOR_LOG[p.key] || {};
         const remark = [follow.status, follow.remark, follow.nextDate].filter(Boolean).join(' · ');
-        return '<tr><td>' + (i + 1) + '</td><td style="font-weight:800">' + esc(p.patient) + '</td><td>' + esc(p.mobile || '—') + '</td><td>' + esc(p.ageSex || '—') + '</td><td style="font-family:monospace">' + esc(p.bmhId) + '</td><td>' + esc(p.proc) + '</td><td>' + esc(p.date) + '</td><td>' + esc(p.doctor) + '</td><td>' + esc(p.centre || '—') + '</td><td>' + esc(p.status) + '</td><td>' + (remark ? esc(remark) : '<span class="muted">No follow-up saved</span>') + '</td></tr>';
+        const advice = p.advice ? ('<div class="muted" style="margin-top:4px;line-height:1.35"><b>Advice:</b> ' + esc(p.advice) + '</div>') : '';
+        return '<tr><td>' + (i + 1) + '</td><td style="font-weight:800">' + esc(p.patient) + advice + '</td><td>' + esc(p.mobile || '—') + '</td><td>' + esc(p.ageSex || '—') + '</td><td style="font-family:monospace">' + esc(p.bmhId) + '</td><td>' + esc(p.proc) + '</td><td>' + esc(p.date) + '</td><td>' + esc(p.doctor) + '</td><td>' + esc(p.centre || '—') + '</td><td>' + esc(p.status) + '</td><td>' + (remark ? esc(remark) : '<span class="muted">No follow-up saved</span>') + '</td></tr>';
       }).join('')
     + '</tbody></table>' : '<div style="padding:20px;text-align:center;color:#666">No procedure records found for the current filter.</div>')
     + '</body></html>';
@@ -11205,11 +11248,11 @@ function generateSurgeryReport() {
   const proc=document.getElementById('rep-surg-name')?.value||'';
   const el=document.getElementById('rep-surgery-result'); if(!el) return;
   const filtered = getProcedureReportRows();
+  const esc = function(v){ return String(v || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
   el.innerHTML=`<div class="card">
     <div class="card-hd"><div><div class="card-title">⚕️ ${proc||'All Procedures'} — ${filtered.length} patients</div></div><button class="btn btn-gold btn-xs" onclick="printSurgeryReportCurrent()">🖨️ Print</button></div>
     ${filtered.length?`<table><thead><tr><th>#</th><th>Patient</th><th>Phone</th><th>Age/Sex</th><th>BMSH ID</th><th>Procedure</th><th>Date Advised</th><th>Doctor</th><th>Centre</th><th>Status</th><th>Counsellor</th></tr></thead>
-    <tbody>${filtered.map((p,i)=>{ const follow=window.PROC_COUNSELLOR_LOG[p.key]||{}; return `<tr><td>${i+1}</td><td style="font-weight:800">${p.patient}</td><td style="font-family:var(--mono);font-size:10px">${p.bmhId}</td><td>${p.proc}</td><td>${p.date||'—'}</td><td>${p.doctor}</td><td><span class="badge ${p.status==='done'?'bd-green':p.status==='scheduled'?'bd-blue':'bd-orange'}">${p.status||'Advised'}</span></td><td><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="btn btn-xs btn-outline" onclick="openCounsellorFollowup('${p.key}')">📞 Follow-up</button>${follow.status?`<span style="font-size:10px;color:var(--g1)">${follow.status}${follow.nextDate?` · ${follow.nextDate}`:''}</span>`:''}</div></td></tr>`; }).join('')}
-    <tbody>${filtered.map((p,i)=>{ const follow=window.PROC_COUNSELLOR_LOG[p.key]||{}; return `<tr><td>${i+1}</td><td style="font-weight:800">${p.patient}${p.referredBy?`<div style="font-size:10px;color:var(--g1);margin-top:2px">Ref: ${p.referredBy}</div>`:''}</td><td>${p.mobile||'—'}</td><td>${p.ageSex||'—'}</td><td style="font-family:var(--mono);font-size:10px">${p.bmhId}</td><td>${p.proc}</td><td>${p.date||'—'}</td><td>${p.doctor}</td><td>${p.centre||'—'}</td><td><span class="badge ${p.status==='done'?'bd-green':p.status==='scheduled'?'bd-blue':'bd-orange'}">${p.status||'Advised'}</span></td><td><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="btn btn-xs btn-outline" onclick="openCounsellorFollowup('${p.key}')">📞 Follow-up</button>${follow.status?`<span style="font-size:10px;color:var(--g1)">${follow.status}${follow.nextDate?` · ${follow.nextDate}`:''}</span>`:''}</div></td></tr>`; }).join('')}
+    <tbody>${filtered.map((p,i)=>{ const follow=window.PROC_COUNSELLOR_LOG[p.key]||{}; return `<tr><td>${i+1}</td><td style="font-weight:800">${esc(p.patient)}${p.referredBy?`<div style="font-size:10px;color:var(--g1);margin-top:2px">Ref: ${esc(p.referredBy)}</div>`:''}${p.advice?`<div style="font-size:10px;color:var(--g1);margin-top:4px;line-height:1.35"><b>Advice:</b> ${esc(p.advice)}</div>`:''}</td><td>${esc(p.mobile||'—')}</td><td>${esc(p.ageSex||'—')}</td><td style="font-family:var(--mono);font-size:10px">${esc(p.bmhId)}</td><td>${esc(p.proc)}</td><td>${esc(p.date||'—')}</td><td>${esc(p.doctor)}</td><td>${esc(p.centre||'—')}</td><td><span class="badge ${p.status==='done'?'bd-green':p.status==='scheduled'?'bd-blue':'bd-orange'}">${esc(p.status||'Advised')}</span></td><td><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="btn btn-xs btn-outline" onclick="openCounsellorFollowup('${p.key}')">📞 Follow-up</button>${follow.status?`<span style="font-size:10px;color:var(--g1)">${esc(follow.status)}${follow.nextDate?` · ${esc(follow.nextDate)}`:''}</span>`:''}</div></td></tr>`; }).join('')}
     </tbody></table>`:'<div style="padding:20px;text-align:center;color:var(--g1)">No records found</div>'}
   </div>`;
 }
@@ -11741,9 +11784,7 @@ function renderAptDay() {
 }
 
 function saveProcTyped(val) {
-  if(val && !PROCEDURE_ADVISED_LOG.find(p=>p.proc===val)) {
-    PROCEDURE_ADVISED_LOG.push({proc:val, bmhId:'BMSH-000001', patient:'Test Patient', date:new Date().toLocaleDateString('en-IN'), doctor:document.getElementById('sbnm')?.textContent||'Dr. Varun Baweja'});
-  }
+  if(val) pushProcedureAdvisedLog(val);
 }
 
 // ─── NAV INIT EXTENSION ─────────────────
@@ -12551,7 +12592,7 @@ function addProcItemToContainer(container, procName, price) {
     + '<button class="btn btn-xs btn-gold" onclick="nav(\'brochures\',null)" title="Patient brochure">📄</button>'
     + '<button class="btn btn-xs" style="background:#CC0000;color:#fff;padding:2px 7px" onclick="this.closest(\'[data-proc]\').remove()">✕</button>';
   container.appendChild(d);
-  PROCEDURE_ADVISED_LOG && PROCEDURE_ADVISED_LOG.push({proc:procName, price, date:new Date().toLocaleDateString('en-IN'), patient:'BMSH-000001'});
+  if (PROCEDURE_ADVISED_LOG) pushProcedureAdvisedLog(procName, { price });
   showToast('⚕️ "'+procName+'" added ✓','s');
 }
 
@@ -12784,13 +12825,6 @@ window.printUnifiedRx = function(deptId) {
   const advice  = (deptId === 'oe'
     ? (document.getElementById('rx-advice-text')?.value || '')
     : (document.getElementById(deptId+'-advice')?.value || '')) || '';
-  const expandProcedureLabelForPrint = function (text) {
-    return String(text || '')
-      .replace(/\bPMICS\b(?!\s*\()/gi, 'Pinhole Micro Incision Cataract Surgery (PMICS)')
-      .replace(/PMICS \+ IOL Implantation/gi, 'Pinhole Micro Incision Cataract Surgery (PMICS) + IOL Implantation')
-      .replace(/PMICS \+ IOL/gi, 'Pinhole Micro Incision Cataract Surgery (PMICS) + IOL')
-      .replace(/PMICS \(Pinhole Micro Incision Cataract Surgery\)/gi, 'Pinhole Micro Incision Cataract Surgery (PMICS)');
-  };
   const adviceHtml = String(advice || '').trim()
     ? escapeHtmlConsent(String(advice).trim()).replace(/\n/g, '<br>')
     : '';
