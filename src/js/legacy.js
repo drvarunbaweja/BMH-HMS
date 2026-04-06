@@ -1951,6 +1951,10 @@ function populateOphthoForm(v) {
   // Refraction — Subjective
   setSel('subj-od-sph', v.subjODsph); setSel('subj-od-cyl', v.subjODcyl); setSel('subj-od-ax', v.subjODax);
   setSel('subj-os-sph', v.subjOSsph); setSel('subj-os-cyl', v.subjOScyl); setSel('subj-os-ax', v.subjOSax);
+  setSel('rf-od-add', v.rfODAdd);
+  setSel('rf-os-add', v.rfOSAdd);
+  setSel('nv-od-final', v.nvODFinal);
+  setSel('nv-os-final', v.nvOSFinal);
 
   // Fundus
   setSel('fund-od-disc', v.fundODdisc); setSel('fund-od-cd', v.fundODcd);
@@ -12763,10 +12767,10 @@ window.printUnifiedRx = function(deptId) {
   const rfOSSph = document.getElementById('rf-os-sph2')?.value||'0';
   const rfOSCyl = document.getElementById('rf-os-cyl2')?.value||'0';
   const rfOSAx  = document.getElementById('rf-os-ax2')?.value||'0°';
-  const addOD = document.querySelector('#oe-va-iop-ref select[id*="add"]')?.value || document.querySelectorAll('#oe-va-iop-ref tbody select')[6]?.value||'';
-  const addOS = document.querySelectorAll('#oe-va-iop-ref tbody select')[13]?.value||'';
-  const nvOD  = document.getElementById('ucva-od-near')?.value||'';
-  const nvOS  = document.getElementById('ucva-os-near')?.value||'';
+  const addOD = document.getElementById('rf-od-add')?.value || window.CURRENT_PATIENT?.lastVisit?.rfODAdd || '';
+  const addOS = document.getElementById('rf-os-add')?.value || window.CURRENT_PATIENT?.lastVisit?.rfOSAdd || '';
+  const nvOD  = document.getElementById('nv-od-final')?.value || document.getElementById('ucva-od-near')?.value || window.CURRENT_PATIENT?.lastVisit?.nvODFinal || '';
+  const nvOS  = document.getElementById('nv-os-final')?.value || document.getElementById('ucva-os-near')?.value || window.CURRENT_PATIENT?.lastVisit?.nvOSFinal || '';
 
   // ── Follow-up ──
   const fuDate  = document.getElementById('rx-fu-date')?.value;
@@ -16994,6 +16998,10 @@ function saveVisit(dept) {
     visit.subjOSsph = document.getElementById('subj-os-sph')?.value || '';
     visit.subjOScyl = document.getElementById('subj-os-cyl')?.value || '';
     visit.subjOSax  = document.getElementById('subj-os-ax')?.value  || '';
+    visit.rfODAdd  = document.getElementById('rf-od-add')?.value || '';
+    visit.rfOSAdd  = document.getElementById('rf-os-add')?.value || '';
+    visit.nvODFinal = document.getElementById('nv-od-final')?.value || '';
+    visit.nvOSFinal = document.getElementById('nv-os-final')?.value || '';
     visit.fundODdisc = document.getElementById('fund-od-disc')?.value || '';
     visit.fundODcd   = document.getElementById('fund-od-cd')?.value   || '';
     visit.fundODmac  = document.getElementById('fund-od-mac')?.value  || '';
