@@ -913,6 +913,18 @@ function sanitizeFirebaseValue(value) {
   });
   return out;
 }
+function sanitizeSlChipsMap(map) {
+  const out = {};
+  Object.keys(map || {}).forEach(function (key) {
+    const safeKey = sanitizeFirebaseKey(key);
+    const bucket = map[key] || {};
+    out[safeKey] = {
+      od: Array.isArray(bucket.od) ? bucket.od.slice() : [],
+      os: Array.isArray(bucket.os) ? bucket.os.slice() : []
+    };
+  });
+  return out;
+}
 function buildCompactDocumentHeader(title, ctx, subtitle) {
   const esc = escapeHtmlConsent;
   const logoSrc = resolvePrintLogoSrc();
@@ -16916,7 +16928,7 @@ function saveVisit(dept) {
         os: [...cols[1].querySelectorAll('.sl-chip.sel')].map(c=>c.textContent.trim())
       };
     });
-    visit.slChips = slChips;
+    visit.slChips = sanitizeSlChipsMap(slChips);
     visit.slNotes = document.getElementById('sl-notes-text')?.value || '';
     const dxRows = getOphthoDiagnosisRows();
     visit.diagnoses = dxRows;
@@ -17060,7 +17072,9 @@ function saveVisit(dept) {
   if(typeof fbSet !== 'function') { showToast('Save not available (offline)', 'w'); return; }
   const patientPatch = { lastVisit: visit, lastVisitKey: visitKey, lastVisitDate: visit.date, lastDeptVisit: dept, doctor: visit.doctor };
   if (visit.dx) patientPatch.dx = visit.dx;
+  if (visit.slChips) visit.slChips = sanitizeSlChipsMap(visit.slChips);
   const visitForCloud = sanitizeFirebaseValue(visit);
+  if (visitForCloud.slChips) visitForCloud.slChips = sanitizeSlChipsMap(visitForCloud.slChips);
   const patientPatchForCloud = Object.assign({}, patientPatch, { lastVisit: visitForCloud });
   const localPt = window.CURRENT_PATIENT || PATIENTS.find(p => p.bmhId === bmhId);
   if(localPt) {
