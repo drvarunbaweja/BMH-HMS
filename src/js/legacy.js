@@ -13815,7 +13815,7 @@ function saveChargeFromModal() {
     renderChargesList();
     renderCentresCharges();
     resetChargeModalFields();
-    showToast('"' + finalName + '" saved to database ✓','s');
+    showToast('Saved','s');
   }).catch(function(){
     showToast('Charge save failed. Please retry.', 'e');
   });

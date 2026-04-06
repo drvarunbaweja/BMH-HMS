@@ -1,0 +1,418 @@
+[
+  {
+    "cat": "Eye",
+    "kind": "Eye",
+    "parent": "",
+    "name": "Consultation   Eye",
+    "chd": 800,
+    "rpr": 600
+  },
+  {
+    "cat": "Eye",
+    "kind": "Eye",
+    "parent": "",
+    "name": "Follow-up Consultation",
+    "chd": 500,
+    "rpr": 400
+  },
+  {
+    "cat": "Eye",
+    "kind": "Eye",
+    "parent": "",
+    "name": "Biometry IOL Master",
+    "chd": 1200,
+    "rpr": 1000
+  },
+  {
+    "cat": "Eye",
+    "kind": "Eye",
+    "parent": "",
+    "name": "OCT Macula OU",
+    "chd": 1800,
+    "rpr": 1500
+  },
+  {
+    "cat": "Eye",
+    "kind": "Eye",
+    "parent": "",
+    "name": "HVF Visual Fields",
+    "chd": 1500,
+    "rpr": 1200
+  },
+  {
+    "cat": "Eye",
+    "kind": "Eye",
+    "parent": "",
+    "name": "Fundus Photography",
+    "chd": 600,
+    "rpr": 500
+  },
+  {
+    "cat": "Eye",
+    "kind": "Eye",
+    "parent": "",
+    "name": "Corneal Topography",
+    "chd": 1500,
+    "rpr": 1200
+  },
+  {
+    "cat": "Eye",
+    "kind": "Eye",
+    "parent": "",
+    "name": "Specular Microscopy",
+    "chd": 1200,
+    "rpr": 1000
+  },
+  {
+    "cat": "Eye",
+    "kind": "Eye",
+    "parent": "",
+    "name": "ERG / VEP",
+    "chd": 2500,
+    "rpr": 2000
+  },
+  {
+    "cat": "Eye",
+    "kind": "Eye",
+    "parent": "",
+    "name": "Pre-op Package",
+    "chd": 3500,
+    "rpr": 3000
+  },
+  {
+    "cat": "Eye Sx",
+    "kind": "Eye Sx",
+    "parent": "",
+    "name": "PMICS + IOL Implantation",
+    "chd": 38000,
+    "rpr": 34000
+  },
+  {
+    "cat": "Eye Sx",
+    "kind": "Eye Sx",
+    "parent": "",
+    "name": "Trabeculectomy",
+    "chd": 42000,
+    "rpr": 38000
+  },
+  {
+    "cat": "Eye Sx",
+    "kind": "Eye Sx",
+    "parent": "",
+    "name": "IVT Injection (Anti-VEGF)",
+    "chd": 8000,
+    "rpr": 7000
+  },
+  {
+    "cat": "Eye Sx",
+    "kind": "Eye Sx",
+    "parent": "",
+    "name": "LASIK (per eye)",
+    "chd": 45000,
+    "rpr": 40000
+  },
+  {
+    "cat": "Eye Sx",
+    "kind": "Eye Sx",
+    "parent": "",
+    "name": "Pterygium Excision + Graft",
+    "chd": 8000,
+    "rpr": 7000
+  },
+  {
+    "cat": "Eye Sx",
+    "kind": "Eye Sx",
+    "parent": "",
+    "name": "Nd:YAG Capsulotomy",
+    "chd": 3000,
+    "rpr": 2500
+  },
+  {
+    "cat": "Eye Sx",
+    "kind": "Eye Sx",
+    "parent": "",
+    "name": "Laser Peripheral Iridotomy",
+    "chd": 4000,
+    "rpr": 3500
+  },
+  {
+    "cat": "OBG",
+    "kind": "OBG",
+    "parent": "",
+    "name": "ANC Consultation",
+    "chd": 500,
+    "rpr": 400
+  },
+  {
+    "cat": "OBG",
+    "kind": "OBG",
+    "parent": "",
+    "name": "LSCS (Elective)",
+    "chd": 45000,
+    "rpr": 40000
+  },
+  {
+    "cat": "OBG",
+    "kind": "OBG",
+    "parent": "",
+    "name": "Normal Delivery",
+    "chd": 25000,
+    "rpr": 22000
+  },
+  {
+    "cat": "OBG",
+    "kind": "OBG",
+    "parent": "",
+    "name": "Diagnostic Laparoscopy",
+    "chd": 20000,
+    "rpr": 18000
+  },
+  {
+    "cat": "Psych",
+    "kind": "Psych",
+    "parent": "",
+    "name": "Psychiatry Consultation",
+    "chd": 800,
+    "rpr": 600
+  },
+  {
+    "cat": "Psych",
+    "kind": "Psych",
+    "parent": "",
+    "name": "Psychotherapy Session",
+    "chd": 1200,
+    "rpr": 1000
+  },
+  {
+    "cat": "Psych",
+    "kind": "Psych",
+    "parent": "",
+    "name": "ECT (per session)",
+    "chd": 8000,
+    "rpr": 7000
+  },
+  {
+    "cat": "Skin",
+    "kind": "Skin",
+    "parent": "",
+    "name": "Dermatology Consultation",
+    "chd": 800,
+    "rpr": 600
+  },
+  {
+    "cat": "Skin",
+    "kind": "Skin",
+    "parent": "",
+    "name": "Chemical Peel",
+    "chd": 1500,
+    "rpr": 1200
+  },
+  {
+    "cat": "Skin",
+    "kind": "Skin",
+    "parent": "",
+    "name": "Microneedling",
+    "chd": 2000,
+    "rpr": 1800
+  },
+  {
+    "cat": "Skin",
+    "kind": "Skin",
+    "parent": "",
+    "name": "PRP Treatment",
+    "chd": 3500,
+    "rpr": 3000
+  },
+  {
+    "cat": "Skin",
+    "kind": "Skin",
+    "parent": "",
+    "name": "Botox Injection",
+    "chd": 8000,
+    "rpr": 7000
+  },
+  {
+    "cat": "Skin",
+    "kind": "Skin",
+    "parent": "",
+    "name": "Dermal Filler",
+    "chd": 12000,
+    "rpr": 10000
+  },
+  {
+    "cat": "Skin",
+    "kind": "Skin",
+    "parent": "",
+    "name": "Laser Hair Removal",
+    "chd": 5000,
+    "rpr": 4500
+  },
+  {
+    "cat": "Lab",
+    "kind": "Lab",
+    "parent": "",
+    "name": "CBC / Complete Blood Count",
+    "chd": 400,
+    "rpr": 350
+  },
+  {
+    "cat": "Lab",
+    "kind": "Lab",
+    "parent": "",
+    "name": "HbA1c",
+    "chd": 600,
+    "rpr": 500
+  },
+  {
+    "cat": "Lab",
+    "kind": "Lab",
+    "parent": "",
+    "name": "Lipid Profile",
+    "chd": 700,
+    "rpr": 600
+  },
+  {
+    "cat": "Lab",
+    "kind": "Lab",
+    "parent": "",
+    "name": "Thyroid Profile (T3/T4/TSH)",
+    "chd": 800,
+    "rpr": 700
+  },
+  {
+    "cat": "Lab",
+    "kind": "Lab",
+    "parent": "",
+    "name": "Urine Routine & Microscopy",
+    "chd": 200,
+    "rpr": 180
+  },
+  {
+    "cat": "Eye Sx",
+    "kind": "Eye Sx",
+    "parent": "",
+    "name": "DCR (Lacrimal)",
+    "chd": 52000,
+    "rpr": 45000
+  },
+  {
+    "cat": "Eye Sx",
+    "kind": "Eye Sx",
+    "parent": "",
+    "name": "Squint / Strabismus Surgery",
+    "chd": 35000,
+    "rpr": 30000
+  },
+  {
+    "cat": "Eye Sx",
+    "kind": "Eye Sx",
+    "parent": "",
+    "name": "Ptosis Repair",
+    "chd": 28000,
+    "rpr": 24000
+  },
+  {
+    "cat": "Eye Sx",
+    "kind": "Eye Sx",
+    "parent": "",
+    "name": "Vitrectomy (complex)",
+    "chd": 95000,
+    "rpr": 82000
+  },
+  {
+    "cat": "Eye",
+    "kind": "Eye",
+    "parent": "",
+    "name": "B-Scan Ultrasonography",
+    "chd": 900,
+    "rpr": 750
+  },
+  {
+    "cat": "Eye",
+    "kind": "Eye",
+    "parent": "",
+    "name": "UBM / Anterior Segment OCT",
+    "chd": 1400,
+    "rpr": 1200
+  },
+  {
+    "cat": "OBG",
+    "kind": "OBG",
+    "parent": "",
+    "name": "Hysteroscopy",
+    "chd": 22000,
+    "rpr": 19000
+  },
+  {
+    "cat": "OBG",
+    "kind": "OBG",
+    "parent": "",
+    "name": "IUCD Removal",
+    "chd": 2500,
+    "rpr": 2000
+  },
+  {
+    "cat": "OBG",
+    "kind": "OBG",
+    "parent": "",
+    "name": "Cervical Cerclage",
+    "chd": 18000,
+    "rpr": 15000
+  },
+  {
+    "cat": "Psych",
+    "kind": "Psych",
+    "parent": "",
+    "name": "EEG",
+    "chd": 2500,
+    "rpr": 2000
+  },
+  {
+    "cat": "Psych",
+    "kind": "Psych",
+    "parent": "",
+    "name": "Psychology Testing",
+    "chd": 3500,
+    "rpr": 3000
+  },
+  {
+    "cat": "Skin",
+    "kind": "Skin",
+    "parent": "",
+    "name": "Patch Test (Contact Dermatitis)",
+    "chd": 3500,
+    "rpr": 3000
+  },
+  {
+    "cat": "Skin",
+    "kind": "Skin",
+    "parent": "",
+    "name": "Excision Biopsy (Small)",
+    "chd": 4500,
+    "rpr": 3800
+  },
+  {
+    "cat": "Lab",
+    "kind": "Lab",
+    "parent": "",
+    "name": "LFT / Liver Function",
+    "chd": 900,
+    "rpr": 750
+  },
+  {
+    "cat": "Lab",
+    "kind": "Lab",
+    "parent": "",
+    "name": "Renal Function Test",
+    "chd": 650,
+    "rpr": 550
+  },
+  {
+    "cat": "Lab",
+    "kind": "Lab",
+    "parent": "",
+    "name": "Vitamin D / B12",
+    "chd": 1200,
+    "rpr": 1000
+  }
+]
