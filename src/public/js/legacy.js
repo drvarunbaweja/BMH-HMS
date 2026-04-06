@@ -6374,6 +6374,7 @@ function applyLoadedChargesRows(rows) {
     CENTRE_CHARGES.CHD[c.name] = c.chd;
     CENTRE_CHARGES.RPR[c.name] = c.rpr;
   });
+  ensureCriticalChargesLoaded();
   return CHARGES_DATA.length > 0;
 }
 function loadChargesFromLocalStorage() {
@@ -6390,6 +6391,7 @@ function loadChargesFromLocalStorage() {
       if (d && d.CHD) Object.assign(CENTRE_CHARGES.CHD, d.CHD);
       if (d && d.RPR) Object.assign(CENTRE_CHARGES.RPR, d.RPR);
     }
+    ensureCriticalChargesLoaded();
   } catch (e) { /* noop */ }
 }
 function saveChargesToFirebase(){
@@ -6417,6 +6419,7 @@ function loadChargesFromFirebase(){
     const d=snap.val(); if(!d) return;
     if(d.CHD) Object.assign(CENTRE_CHARGES.CHD, d.CHD);
     if(d.RPR) Object.assign(CENTRE_CHARGES.RPR, d.RPR);
+    ensureCriticalChargesLoaded();
     saveChargesToLocalStorage();
     renderCentresCharges && renderCentresCharges();
     syncReceptionConsultationFee && syncReceptionConsultationFee();
@@ -7983,6 +7986,9 @@ function saveRxTemplateFromModal() {
   closeM('m-edit-rx-tpl');
   showToast((String(dept).indexOf('dc-') === 0 ? 'Discharge card template saved ✓' : 'Rx template saved ✓'), 's');
 }
+window.openEditRxTemplateModal = openEditRxTemplateModal;
+window.saveRxTemplateFromModal = saveRxTemplateFromModal;
+window.deleteRxTemplate = deleteRxTemplate;
 function getDischargeInstructionTemplateRows(specialty) {
   const deptKey = specialty === 'obg' ? 'dc-obg' : 'dc-ophtho';
   const matchKey = Object.keys(RX_TEMPLATES_META || {}).find(function (key) {
@@ -10255,7 +10261,18 @@ function saveRxTemplate(mode) {
   const name = document.getElementById('rx-tpl-name' + suffix)?.value?.trim();
   if(!name){showToast('Enter template name','w');return;}
   const deptSel = document.getElementById('rx-tpl-dept-settings' + suffix);
-  const deptMap = { 'Ophthalmology':'ophtho','OBG':'obg','Psychiatry':'psych','Skin':'skin','OT':'ot','Discharge Card - Eye':'dc-ophtho','Discharge Card - OBG':'dc-obg','All':'all' };
+  const deptMap = {
+    'Ophthalmology':'ophtho',
+    'OBG':'obg',
+    'Psychiatry':'psych',
+    'Skin':'skin',
+    'OT':'ot',
+    'OT - Eye':'ot',
+    'OT - OBG':'ot',
+    'Discharge Card - Eye':'dc-ophtho',
+    'Discharge Card - OBG':'dc-obg',
+    'All':'all'
+  };
   const dept = deptSel ? (deptMap[deptSel.value] || 'all') : 'all';
   const surgery = document.getElementById('rx-tpl-surgery' + suffix)?.value?.trim() || '';
   const raw = document.getElementById('rx-tpl-drugs' + suffix)?.value || '';
@@ -10263,13 +10280,27 @@ function saveRxTemplate(mode) {
   if(!arr.length){showToast('Add one drug per line (e.g. Brand — frequency — duration)','w');return;}
   const key = name.toLowerCase().replace(/\s+/g,'-');
   RX_TEMPLATES_DATA[key] = arr;
-  RX_TEMPLATES_META[key] = { dept, name, notes: '', surgery };
+  RX_TEMPLATES_META[key] = {
+    dept,
+    name,
+    notes: '',
+    surgery,
+    otArea: !suffix && deptSel ? deptSel.value : ''
+  };
   saveRxTemplatesToStorage();
   refreshRxTemplateSelects();
   renderSetRxTplList && renderSetRxTplList();
-  if (mode === 'modal') closeM('m-add-rx-tpl');
-  showToast((String(dept).indexOf('dc-') === 0 ? 'Discharge card template "'+name+'" saved ✓' : 'Template "'+name+'" saved ✓'),'s');
+  refreshOTNotesTemplateSelect && refreshOTNotesTemplateSelect();
+  if (!suffix) {
+    ['rx-tpl-name','rx-tpl-drugs','rx-tpl-surgery'].forEach(function (id) {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    if (deptSel) deptSel.value = 'OT - Eye';
   }
+  if (mode === 'modal') closeM('m-add-rx-tpl');
+  showToast((String(dept).indexOf('dc-') === 0 ? 'Discharge card template "'+name+'" saved ✓' : (dept === 'ot' && !suffix ? 'OT template "'+name+'" saved ✓' : 'Template "'+name+'" saved ✓')),'s');
+}
 function openNewRxTemplateModal() {
   ['rx-tpl-name-modal','rx-tpl-drugs-modal','rx-tpl-surgery-modal'].forEach(function (id) { const el = document.getElementById(id); if (el) el.value = ''; });
   const deptSel = document.getElementById('rx-tpl-dept-settings-modal');
@@ -11084,16 +11115,22 @@ function refreshOTNotesTemplateSelect() {
   const cur = sel.value;
   const activeProc = String(document.getElementById('ot-procedure')?.value || activeOTCase?.procedure || activeOTCase?.procedureMain || '').trim().toLowerCase();
   const activeMain = String(activeOTCase?.procedureMain || '').trim().toLowerCase();
+  const activeDept = String(activeOTCase?.caseType || activeOTCase?.dept || '').toLowerCase();
   sel.innerHTML = '<option value="">— Select template —</option>';
   const otKeys = Object.keys(RX_TEMPLATES_DATA || {}).filter(function (key) {
     return (RX_TEMPLATES_META[key]?.dept || '') === 'ot';
   }).sort(function (a, b) {
     const am = RX_TEMPLATES_META[a] || {};
     const bm = RX_TEMPLATES_META[b] || {};
+    const aArea = String(am.otArea || '').toLowerCase();
+    const bArea = String(bm.otArea || '').toLowerCase();
     const aTarget = am.surgery || am.name || '';
     const bTarget = bm.surgery || bm.name || '';
+    const aAreaMatch = !activeDept || !aArea || aArea.indexOf(activeDept) >= 0;
+    const bAreaMatch = !activeDept || !bArea || bArea.indexOf(activeDept) >= 0;
     const aMatch = (!activeProc && !activeMain) || otTemplateMatchesProcedure(aTarget, activeProc) || otTemplateMatchesProcedure(aTarget, activeMain);
     const bMatch = (!activeProc && !activeMain) || otTemplateMatchesProcedure(bTarget, activeProc) || otTemplateMatchesProcedure(bTarget, activeMain);
+    if (aAreaMatch !== bAreaMatch) return aAreaMatch ? -1 : 1;
     if (aMatch !== bMatch) return aMatch ? -1 : 1;
     return String(am.name || a).localeCompare(String(bm.name || b));
   });
@@ -11102,8 +11139,9 @@ function refreshOTNotesTemplateSelect() {
     const opt = document.createElement('option');
     opt.value = key;
     const target = meta.surgery || '';
+    const area = String(meta.otArea || '').trim();
     const isMatch = (!activeProc && !activeMain) || otTemplateMatchesProcedure(target, activeProc) || otTemplateMatchesProcedure(target, activeMain);
-    opt.textContent = (meta.name || key) + (target ? (' — ' + target) : '') + (isMatch ? '' : ' (other)');
+    opt.textContent = (meta.name || key) + (area ? (' [' + area.replace(/^OT\s*-\s*/i, '') + ']') : '') + (target ? (' — ' + target) : '') + (isMatch ? '' : ' (other)');
     sel.appendChild(opt);
   });
   if ([].slice.call(sel.options).some(function (o) { return o.value === cur; })) sel.value = cur;
@@ -13619,7 +13657,7 @@ function toggleRefDetails2(val) {
 // ─── CHARGES SETTINGS ─────────────────
 // The editable fee schedule (extends CENTRE_CHARGES)
 const CHARGES_DATA = [
-  {cat:'Eye',    name:'Consultation — Eye',             chd:800,  rpr:600},
+  {cat:'Eye',    name:'Consultation — Eye',             chd:500,  rpr:200},
   {cat:'Eye',    name:'Follow-up Consultation',          chd:500,  rpr:400},
   {cat:'Eye',    name:'Biometry IOL Master',             chd:1200, rpr:1000},
   {cat:'Eye',    name:'OCT Macula OU',                   chd:1800, rpr:1500},
@@ -13629,21 +13667,34 @@ const CHARGES_DATA = [
   {cat:'Eye',    name:'Specular Microscopy',             chd:1200, rpr:1000},
   {cat:'Eye',    name:'ERG / VEP',                       chd:2500, rpr:2000},
   {cat:'Eye',    name:'Pre-op Package',                  chd:3500, rpr:3000},
-  {cat:'Eye Sx', name:'PMICS + IOL Implantation',        chd:38000,rpr:34000},
+  {cat:'Eye Sx', kind:'surgery', parent:'', name:'Pinhole Microincision Cataract Surgery + IOL Implantation', chd:0, rpr:0},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Indian Foldable IOL Implantation', chd:10000, rpr:8500},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Indian Foldable Hydrophilic Aspheric IOL Implantation', chd:13000, rpr:11500},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Indian Foldable Hydrophobic Aspheric IOL Implantation', chd:18000, rpr:14500},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Premium Preloaded 3 Piece Hydrophobic Aspheric IOL Implantation', chd:20000, rpr:18500},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Premium 1 Piece Hydrophobic IOL Implantation', chd:20000, rpr:18500},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Premium 1 Piece Hydrophobic Aspheric IOL Implantation', chd:25000, rpr:23500},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Foldable Advanced Monofocal IOL Implantation', chd:25000, rpr:23500},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Premium Preloaded 1 Piece Hydrophobic Aspheric IOL Implantation', chd:30000, rpr:28500},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Indian Multifocal IOL Implantation', chd:45000, rpr:35000},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Premium 1 Piece Preloaded Advanced Monofocal IOL Implantation', chd:50000, rpr:45000},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Premium Multifocal IOL Implantation', chd:70000, rpr:65000},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Premium 1 Piece Preloaded Trifocal IOL Implantation', chd:95000, rpr:85000},
+  {cat:'Eye Sx', name:'PMICS + IOL Implantation',        chd:10000,rpr:8500},
   {cat:'Eye Sx', name:'Trabeculectomy',                  chd:42000,rpr:38000},
   {cat:'Eye Sx', name:'IVT Injection (Anti-VEGF)',       chd:8000, rpr:7000},
   {cat:'Eye Sx', name:'LASIK (per eye)',                 chd:45000,rpr:40000},
   {cat:'Eye Sx', name:'Pterygium Excision + Graft',      chd:8000, rpr:7000},
   {cat:'Eye Sx', name:'Nd:YAG Capsulotomy',              chd:3000, rpr:2500},
   {cat:'Eye Sx', name:'Laser Peripheral Iridotomy',      chd:4000, rpr:3500},
-  {cat:'OBG',    name:'ANC Consultation',                chd:500,  rpr:400},
+  {cat:'OBG',    name:'ANC Consultation',                chd:500,  rpr:200},
   {cat:'OBG',    name:'LSCS (Elective)',                 chd:45000,rpr:40000},
   {cat:'OBG',    name:'Normal Delivery',                 chd:25000,rpr:22000},
   {cat:'OBG',    name:'Diagnostic Laparoscopy',          chd:20000,rpr:18000},
-  {cat:'Psych',  name:'Psychiatry Consultation',         chd:800,  rpr:600},
+  {cat:'Psych',  name:'Psychiatry Consultation',         chd:500,  rpr:200},
   {cat:'Psych',  name:'Psychotherapy Session',           chd:1200, rpr:1000},
   {cat:'Psych',  name:'ECT (per session)',               chd:8000, rpr:7000},
-  {cat:'Skin',   name:'Dermatology Consultation',        chd:800,  rpr:600},
+  {cat:'Skin',   name:'Dermatology Consultation',        chd:500,  rpr:200},
   {cat:'Skin',   name:'Chemical Peel',                   chd:1500, rpr:1200},
   {cat:'Skin',   name:'Microneedling',                   chd:2000, rpr:1800},
   {cat:'Skin',   name:'PRP Treatment',                   chd:3500, rpr:3000},
@@ -13672,6 +13723,52 @@ const CHARGES_DATA = [
   {cat:'Lab',    name:'Renal Function Test',             chd:650,   rpr:550},
   {cat:'Lab',    name:'Vitamin D / B12',                 chd:1200,  rpr:1000},
 ];
+const CRITICAL_CHARGE_ROWS = [
+  {cat:'Eye', kind:'Eye', parent:'', name:'Consultation — Eye', chd:500, rpr:200},
+  {cat:'OBG', kind:'OBG', parent:'', name:'ANC Consultation', chd:500, rpr:200},
+  {cat:'Psych', kind:'Psych', parent:'', name:'Psychiatry Consultation', chd:500, rpr:200},
+  {cat:'Skin', kind:'Skin', parent:'', name:'Dermatology Consultation', chd:500, rpr:200},
+  {cat:'Eye Sx', kind:'surgery', parent:'', name:'Pinhole Microincision Cataract Surgery + IOL Implantation', chd:0, rpr:0},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Indian Foldable IOL Implantation', chd:10000, rpr:8500},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Indian Foldable Hydrophilic Aspheric IOL Implantation', chd:13000, rpr:11500},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Indian Foldable Hydrophobic Aspheric IOL Implantation', chd:18000, rpr:14500},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Premium Preloaded 3 Piece Hydrophobic Aspheric IOL Implantation', chd:20000, rpr:18500},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Premium 1 Piece Hydrophobic IOL Implantation', chd:20000, rpr:18500},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Premium 1 Piece Hydrophobic Aspheric IOL Implantation', chd:25000, rpr:23500},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Foldable Advanced Monofocal IOL Implantation', chd:25000, rpr:23500},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Premium Preloaded 1 Piece Hydrophobic Aspheric IOL Implantation', chd:30000, rpr:28500},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Indian Multifocal IOL Implantation', chd:45000, rpr:35000},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Premium 1 Piece Preloaded Advanced Monofocal IOL Implantation', chd:50000, rpr:45000},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Premium Multifocal IOL Implantation', chd:70000, rpr:65000},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Premium 1 Piece Preloaded Trifocal IOL Implantation', chd:95000, rpr:85000}
+];
+function upsertCriticalChargeRow(row) {
+  const idx = CHARGES_DATA.findIndex(function (existing) {
+    return String(existing.cat || '') === String(row.cat || '')
+      && String(existing.parent || '') === String(row.parent || '')
+      && String(existing.name || '').toLowerCase() === String(row.name || '').toLowerCase();
+  });
+  const next = {
+    cat: row.cat || '',
+    kind: row.kind || row.cat || 'procedure',
+    parent: row.parent || '',
+    name: row.name || '',
+    chd: Number(row.chd || 0),
+    rpr: Number(row.rpr || 0)
+  };
+  if (idx >= 0) CHARGES_DATA[idx] = Object.assign({}, CHARGES_DATA[idx], next);
+  else CHARGES_DATA.push(next);
+  if (next.name) {
+    CENTRE_CHARGES.CHD[next.name] = next.chd;
+    CENTRE_CHARGES.RPR[next.name] = next.rpr;
+  }
+}
+function ensureCriticalChargesLoaded() {
+  CENTRE_CHARGES.CHD['Consultation'] = 500;
+  CENTRE_CHARGES.RPR['Consultation'] = 200;
+  CRITICAL_CHARGE_ROWS.forEach(upsertCriticalChargeRow);
+}
+ensureCriticalChargesLoaded();
 function getChargeMainHeadings() {
   return Array.from(new Set((CHARGES_DATA || []).map(function (row) {
     return String(row.parent || '').trim();
