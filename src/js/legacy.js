@@ -5127,6 +5127,11 @@ function loadBmhFinancials() {
     const pu = localStorage.getItem('bmh_purchases'); if (pu) { window.BMH_PURCHASES.length = 0; JSON.parse(pu).forEach(x=>window.BMH_PURCHASES.push(x)); }
     const iu = localStorage.getItem('bmh_inventory_usage'); if (iu) { window.BMH_INVENTORY_USAGE.length = 0; JSON.parse(iu).forEach(x=>window.BMH_INVENTORY_USAGE.push(x)); }
   } catch (e) { /* noop */ }
+  Object.keys(window.BMH_PATIENT_CHARGES || {}).forEach(function (bmhId) {
+    (window.BMH_PATIENT_CHARGES[bmhId] || []).slice().forEach(function (row) {
+      if (!row?.isConcession) bmhEnsureEEGConcessionLine(bmhId, row);
+    });
+  });
 }
 function saveBmhFinancials() {
   try {
@@ -5208,11 +5213,42 @@ function inferChargeCategoryFromService(forStr) {
   if (/consult|follow/.test(s)) return 'consultation';
   return 'other';
 }
+function bmhIsEEGCharge(row) {
+  const hay = [row?.desc, row?.name, row?.service, row?.for].filter(Boolean).join(' ').toLowerCase();
+  return /\beeg\b/.test(hay);
+}
+function bmhEnsureEEGConcessionLine(bmhId, baseRow) {
+  if (!bmhId || !baseRow || baseRow.isConcession || !bmhIsEEGCharge(baseRow)) return;
+  const arr = window.BMH_PATIENT_CHARGES[bmhId] || [];
+  const concessionId = 'concession-' + baseRow.id;
+  const concessionAmount = -Math.abs((Number(baseRow.amount) || ((Number(baseRow.qty) || 1) * (Number(baseRow.rate) || 0))) * 0.5);
+  const concessionLine = {
+    id: concessionId,
+    cat: 'concession',
+    desc: 'EEG concession (50%)',
+    qty: 1,
+    rate: concessionAmount,
+    amount: concessionAmount,
+    source: 'concession',
+    ref: baseRow.id,
+    ts: baseRow.ts || new Date().toISOString(),
+    isConcession: true
+  };
+  const idx = arr.findIndex(function (x) { return x.id === concessionId; });
+  if (idx > -1) arr[idx] = Object.assign({}, arr[idx], concessionLine);
+  else arr.push(concessionLine);
+}
+function getNetTransactionAmount(txn) {
+  const amt = Number(txn?.amount) || 0;
+  if (amt <= 0) return 0;
+  return isEEGTransaction(txn) ? amt * 0.5 : amt;
+}
 function addBmhPatientCharge(bmhId, row) {
   if (!bmhId) return;
   if (!window.BMH_PATIENT_CHARGES[bmhId]) window.BMH_PATIENT_CHARGES[bmhId] = [];
   if (!row.amount && row.rate != null) row.amount = (Number(row.qty) || 1) * (Number(row.rate) || 0);
   window.BMH_PATIENT_CHARGES[bmhId].push(row);
+  bmhEnsureEEGConcessionLine(bmhId, row);
   saveBmhFinancials();
   bmhSyncPatientRunningBalance(bmhId);
 }
@@ -5275,7 +5311,7 @@ function bmhTotalsForPatient(bmhId) {
   return { sub, gst, total, discount: disc, advanceApplied, taxable };
 }
 function bmhCatLabel(cat) {
-  const m = { investigation: 'Investigation', diagnostic: 'Diagnostic', surgery: 'Surgery / procedure', consumable: 'Consumable', pharmacy: 'Pharmacy / injection', ot: 'OT', reception: 'Reception', consultation: 'Consultation', billing: 'Billing', inventory: 'Inventory', doctor: 'Doctor', other: 'Other' };
+  const m = { investigation: 'Investigation', diagnostic: 'Diagnostic', surgery: 'Surgery / procedure', consumable: 'Consumable', pharmacy: 'Pharmacy / injection', ot: 'OT', reception: 'Reception', consultation: 'Consultation', billing: 'Billing', inventory: 'Inventory', doctor: 'Doctor', concession: 'Concession', other: 'Other' };
   return m[cat] || cat || 'Other';
 }
 function bmhGetTodayBillPatients() {
@@ -5410,6 +5446,7 @@ function bmhUpdateChargeLine(bmhId, lineId, field, value) {
   if (field === 'qty') row.qty = Math.max(1, Number(value) || 1);
   if (field === 'rate') row.rate = Math.max(0, Number(value) || 0);
   row.amount = (Number(row.qty) || 1) * (Number(row.rate) || 0);
+  bmhEnsureEEGConcessionLine(bmhId, row);
   saveBmhFinancials();
   bmhSyncPatientRunningBalance(bmhId);
   bmhRenderBillLines();
@@ -5656,6 +5693,8 @@ function renderTpaPage() {
 function bmhRemoveChargeLine(bmhId, lineId) {
   const arr = window.BMH_PATIENT_CHARGES[bmhId]; if (!arr) return;
   const i = arr.findIndex(x => x.id === lineId); if (i > -1) arr.splice(i, 1);
+  const ci = arr.findIndex(x => x.id === ('concession-' + lineId) || x.ref === lineId);
+  if (ci > -1) arr.splice(ci, 1);
   saveBmhFinancials();
   bmhSyncPatientRunningBalance(bmhId);
   bmhRenderBillLines();
@@ -11472,7 +11511,7 @@ function generateDailyReport() {
     const d=(tx.date||'').split('T')[0]||today;
     return d>=rangeFrom&&d<=rangeTo;
   });
-  const totalCollection = txInRange.reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
+  const totalCollection = txInRange.reduce((s,t)=>s+getNetTransactionAmount(t),0);
   const pendingPay = PAY_REQUESTS.filter(pr=>!pr.collected).reduce((s,pr)=>s+(parseFloat(pr.amount)||0),0);
   const surgeriesDone = OT_CASES.filter(c=>c.status==='completed'||(c.date>=rangeFrom&&c.date<=rangeTo)).length;
 
@@ -11481,8 +11520,8 @@ function generateDailyReport() {
   const deptRows = depts.map(([key,name,icon])=>{
     const pts = dateFilteredPts.filter(p=>p.dept===key);
     const deptTx = txInRange.filter(t=>t.dept===key);
-    const consult = deptTx.filter(t=>!(t.mode==='Insurance')).reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
-    const ins = deptTx.filter(t=>t.mode==='Insurance').reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
+    const consult = deptTx.filter(t=>!(t.mode==='Insurance')).reduce((s,t)=>s+getNetTransactionAmount(t),0);
+    const ins = deptTx.filter(t=>t.mode==='Insurance').reduce((s,t)=>s+getNetTransactionAmount(t),0);
     const surgs = OT_CASES.filter(c=>(c.date>=rangeFrom&&c.date<=rangeTo)).length;
     return `<tr><td>${icon} ${name}</td><td>${pts.length}</td><td>₹${consult.toLocaleString('en-IN')}</td><td>₹0</td><td>₹${ins.toLocaleString('en-IN')}</td><td style="font-weight:900">₹${(consult+ins).toLocaleString('en-IN')}</td></tr>`;
   }).join('');
@@ -11583,7 +11622,7 @@ function generateFinancialReport() {
     const mode = normalizePaymentMode(t.mode);
     if (!byMode[mode]) byMode[mode] = { count: 0, amount: 0 };
     byMode[mode].count += 1;
-    byMode[mode].amount += (parseFloat(t.amount) || 0);
+    byMode[mode].amount += getNetTransactionAmount(t);
   });
   const cash  = (byMode['Cash']?.amount) || 0;
   const upi   = ((byMode['UPI']?.amount) || 0) + ((byMode['Card']?.amount) || 0) + ((byMode['Bank Transfer']?.amount) || 0);
@@ -13614,15 +13653,38 @@ const DEPT_COLORS = {
   psych:{label:'🧠 Neuropsychiatry',bg:'var(--orange-lt)',border:'var(--orange)',text:'var(--orange)'},
   skin:{label:'💆 Skin',bg:'var(--green-lt)',border:'var(--green)',text:'var(--green)'},
 };
+function txnIsoDate(txn) {
+  const d = String(txn?.date || txn?.createdAt || '');
+  return d.includes('T') ? d.split('T')[0] : d.slice(0, 10);
+}
+function isCollectedTxn(txn) {
+  if (!txn || txn.isRefund === true || txn.collected === false) return false;
+  return (Number(txn.amount) || 0) > 0;
+}
+function isEEGTransaction(txn) {
+  const hay = [
+    txn?.service,
+    txn?.name,
+    txn?.narration,
+    txn?.purpose,
+    txn?.type
+  ].filter(Boolean).join(' ').toLowerCase();
+  return /\beeg\b/.test(hay);
+}
+function getConcessionAdjustedCollectionTotal(transactions) {
+  return (transactions || []).filter(isCollectedTxn).reduce(function (s, t) {
+    return s + getNetTransactionAmount(t);
+  }, 0);
+}
 
 function renderCollectionDashboard() {
   const allTxn = TRANSACTIONS.filter(t => (t.centre || 'CHD') === getEffectiveCentre());
   const collected = allTxn.filter(t=>t.collected);
 
   // Update summary cards
-  const total = collected.reduce((s,t)=>s+t.amount,0);
-  const cash  = collected.filter(t=>t.mode==='Cash').reduce((s,t)=>s+t.amount,0);
-  const upi   = collected.filter(t=>t.mode!=='Cash').reduce((s,t)=>s+t.amount,0);
+  const total = getConcessionAdjustedCollectionTotal(collected);
+  const cash  = collected.filter(t=>t.mode==='Cash').reduce((s,t)=>s+getNetTransactionAmount(t),0);
+  const upi   = collected.filter(t=>t.mode!=='Cash').reduce((s,t)=>s+getNetTransactionAmount(t),0);
   const pending = allTxn.filter(t=>!t.collected).reduce((s,t)=>s+t.amount,0);
 
   const fmt = n => '₹'+n.toLocaleString('en-IN');
@@ -13643,7 +13705,7 @@ function renderCollectionDashboard() {
     deptEl.innerHTML = depts.map(dept => {
       const dTxn = collected.filter(t=>t.dept===dept);
       const dPending = allTxn.filter(t=>!t.collected&&t.dept===dept);
-      const dTotal = dTxn.reduce((s,t)=>s+t.amount,0);
+      const dTotal = dTxn.reduce((s,t)=>s+getNetTransactionAmount(t),0);
       const dPendAmt = dPending.reduce((s,t)=>s+t.amount,0);
       const dc = DEPT_COLORS[dept];
       const did = 'dept-txn-'+dept;
@@ -13711,7 +13773,7 @@ function toggleDeptDetail(id) {
 function printDayCollection() {
   const today = new Date().toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'});
   const collected = TRANSACTIONS.filter(t=>t.collected);
-  const total = collected.reduce((s,t)=>s+t.amount,0);
+  const total = collected.reduce((s,t)=>s+getNetTransactionAmount(t),0);
   const fmt = n=>'₹'+n.toLocaleString('en-IN');
   const lhSrc = window.LH_SRC||'';
 
@@ -13731,14 +13793,14 @@ ${lhSrc?`<img src="${lhSrc}" style="width:100%;height:auto;margin-bottom:12px">`
 </div>
 <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">
   <div style="background:#EBF3FF;border-radius:6px;padding:10px;text-align:center"><div style="font-size:8.5px;font-weight:700;color:#666;text-transform:uppercase;margin-bottom:4px">Total</div><div style="font-size:20px;font-weight:900;color:#1A3C6E">${fmt(total)}</div></div>
-  <div style="background:#EBF3FF;border-radius:6px;padding:10px;text-align:center"><div style="font-size:8.5px;font-weight:700;color:#666;text-transform:uppercase;margin-bottom:4px">Cash</div><div style="font-size:20px;font-weight:900;color:#1a8c3c">${fmt(collected.filter(t=>t.mode==='Cash').reduce((s,t)=>s+t.amount,0))}</div></div>
-  <div style="background:#EBF3FF;border-radius:6px;padding:10px;text-align:center"><div style="font-size:8.5px;font-weight:700;color:#666;text-transform:uppercase;margin-bottom:4px">UPI/Card</div><div style="font-size:20px;font-weight:900;color:#1A3C6E">${fmt(collected.filter(t=>t.mode!=='Cash').reduce((s,t)=>s+t.amount,0))}</div></div>
+  <div style="background:#EBF3FF;border-radius:6px;padding:10px;text-align:center"><div style="font-size:8.5px;font-weight:700;color:#666;text-transform:uppercase;margin-bottom:4px">Cash</div><div style="font-size:20px;font-weight:900;color:#1a8c3c">${fmt(collected.filter(t=>t.mode==='Cash').reduce((s,t)=>s+getNetTransactionAmount(t),0))}</div></div>
+  <div style="background:#EBF3FF;border-radius:6px;padding:10px;text-align:center"><div style="font-size:8.5px;font-weight:700;color:#666;text-transform:uppercase;margin-bottom:4px">UPI/Card</div><div style="font-size:20px;font-weight:900;color:#1A3C6E">${fmt(collected.filter(t=>t.mode!=='Cash').reduce((s,t)=>s+getNetTransactionAmount(t),0))}</div></div>
   <div style="background:#EBF3FF;border-radius:6px;padding:10px;text-align:center"><div style="font-size:8.5px;font-weight:700;color:#666;text-transform:uppercase;margin-bottom:4px">Transactions</div><div style="font-size:20px;font-weight:900;color:#1A3C6E">${collected.length}</div></div>
 </div>
 <table>
   <thead><tr><th>#</th><th>Time</th><th>Patient</th><th>BMSH ID</th><th>Department</th><th>Service</th><th>Mode</th><th>Amount</th></tr></thead>
   <tbody>
-    ${collected.map((t,i)=>`<tr><td>${i+1}</td><td>${t.time}</td><td style="font-weight:700">${t.patient}</td><td style="font-family:monospace;font-size:10px">${t.bmhId}</td><td>${{ophtho:'Ophthalmology',obg:'OBG',psych:'Psychiatry',skin:'Skin'}[t.dept]||t.dept}</td><td>${t.service}</td><td>${t.mode}</td><td style="font-weight:700;text-align:right">${fmt(t.amount)}</td></tr>`).join('')}
+    ${collected.map((t,i)=>`<tr><td>${i+1}</td><td>${t.time}</td><td style="font-weight:700">${t.patient}</td><td style="font-family:monospace;font-size:10px">${t.bmhId}</td><td>${{ophtho:'Ophthalmology',obg:'OBG',psych:'Psychiatry',skin:'Skin'}[t.dept]||t.dept}</td><td>${t.service}${isEEGTransaction(t)?' <span style="font-size:10px;color:#8a4200">(50% concession applied)</span>':''}</td><td>${t.mode}</td><td style="font-weight:700;text-align:right">${fmt(getNetTransactionAmount(t))}</td></tr>`).join('')}
     <tr class="total-row"><td colspan="7" style="text-align:right;border:1px solid #1A3C6E">TOTAL COLLECTED</td><td style="text-align:right;border:1px solid #1A3C6E">${fmt(total)}</td></tr>
   </tbody>
 </table>
@@ -14477,6 +14539,16 @@ function buildDischargeCardPrintHtml() {
   const card = document.getElementById('discharge-card');
   if (!card) return '';
   const clone = card.cloneNode(true);
+  const summaryText = clone.querySelector('#dc-summary-text');
+  if (summaryText) {
+    const summaryHeading = summaryText.previousElementSibling;
+    if (summaryHeading) summaryHeading.remove();
+    summaryText.remove();
+  }
+  const headerTag = Array.from(clone.querySelectorAll('.dc-header div')).find(function (el) {
+    return /discharge summary/i.test(String(el.textContent || '').trim());
+  });
+  if (headerTag) headerTag.textContent = 'Discharge Card';
   clone.querySelectorAll('[contenteditable]').forEach(function (node) {
     node.removeAttribute('contenteditable');
     node.style.borderBottom = 'none';
@@ -14491,7 +14563,7 @@ function buildDischargeCardPrintHtml() {
     el.style.background = el.classList.contains('active') ? '#1A3C6E' : '#fff';
     el.style.color = el.classList.contains('active') ? '#fff' : '#1A3C6E';
   });
-  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;background:#fff;margin:0;padding:0;font-size:11px;line-height:1.22}@page{size:A4;margin:4mm}.print-wrap{transform:scale(.92);transform-origin:top left;width:108.7%}.discharge-card{border:1px solid #d7dce5;border-radius:10px;overflow:hidden}.dc-header{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;background:#1A3C6E;padding:10px 12px}.dc-field-lbl{font-size:8px;font-weight:800;color:#666;text-transform:uppercase;letter-spacing:.35px}.dc-field-val{font-size:10.5px;font-weight:800;color:#111}.g2{display:grid;grid-template-columns:1fr 1fr}.drop-item{border-left:3px solid #1A3C6E;padding:6px 8px;border-radius:7px;background:#f7f9ff;margin-bottom:6px}.drop-freq{display:flex;gap:3px;flex-wrap:wrap}.drop-time.active{background:#1A3C6E;color:#fff}.drop-time{display:inline-flex;align-items:center;justify-content:center;font-size:9px;padding:2px 5px;min-width:30px;border-radius:8px;border:1px solid #d7dce5}.card-title{font-size:13px!important}.card-sub,.muted{font-size:9px!important}</style></head><body><div class="print-wrap">'
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{font-family:Arial,sans-serif;color:#111;background:#fff;margin:0;padding:0;font-size:10.4px;line-height:1.14}@page{size:A4 landscape;margin:4mm}.print-wrap{transform:scale(.86);transform-origin:top left;width:116.5%;filter:grayscale(100%) contrast(1.05)}.discharge-card{border:1px solid #9a9a9a;border-radius:8px;overflow:hidden}.dc-header{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;background:#666 !important;padding:8px 10px}.dc-field-lbl{font-size:7.5px;font-weight:800;color:#555;text-transform:uppercase;letter-spacing:.35px}.dc-field-val{font-size:10px;font-weight:800;color:#111}.g2{display:grid;grid-template-columns:1fr 1fr}.drop-item{border-left:3px solid #666;padding:5px 7px;border-radius:6px;background:#efefef !important;margin-bottom:5px}.drop-freq{display:flex;gap:3px;flex-wrap:wrap}.drop-time.active{background:#666 !important;color:#fff}.drop-time{display:inline-flex;align-items:center;justify-content:center;font-size:8.5px;padding:2px 5px;min-width:28px;border-radius:8px;border:1px solid #bdbdbd}.card-title{font-size:12px!important}.card-sub,.muted{font-size:8.5px!important}</style></head><body><div class="print-wrap">'
     + clone.outerHTML + '</div></body></html>';
 }
 
@@ -16524,18 +16596,9 @@ function renderDashboard() {
   const checkedIn = PATIENTS.filter(p => p.status === 'waiting' || p.seen || p.dilated).length;
 
   const todayApts = APPOINTMENTS.filter(a => a.date === today);
-  const txnDay = (t) => {
-    const d = (t.date || t.createdAt || '').toString();
-    return d.includes('T') ? d.split('T')[0] : d.slice(0, 10);
-  };
-  const txnOk = (t) => {
-    if (t.isRefund === true) return false;
-    const amt = Number(t.amount) || 0;
-    if (amt <= 0) return false;
-    if (t.collected === false) return false;
-    return true;
-  };
-  const todayCollection = TRANSACTIONS.filter(t => txnDay(t) === today && txnOk(t)).reduce((s, t) => s + (Number(t.amount) || 0), 0);
+  const txnDay = txnIsoDate;
+  const txnOk = isCollectedTxn;
+  const todayCollection = TRANSACTIONS.filter(t => txnDay(t) === today && txnOk(t)).reduce((s, t) => s + getNetTransactionAmount(t), 0);
   const pendingAmt = PAY_REQUESTS.filter(r => r.status === 'pending').reduce((s, r) => s + (r.amount || 0), 0);
 
   const setEl = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
@@ -16589,7 +16652,7 @@ function renderDashboard() {
     const modes = {};
     TRANSACTIONS.filter(t => txnDay(t) === today && txnOk(t)).forEach(t => {
       const m = t.mode || 'Cash';
-      modes[m] = (modes[m] || 0) + (Number(t.amount) || 0);
+      modes[m] = (modes[m] || 0) + getNetTransactionAmount(t);
     });
     const modeEl = document.getElementById('dash-cl-modes');
     if (modeEl) {
@@ -16602,7 +16665,7 @@ function renderDashboard() {
         const d = new Date();
         d.setDate(d.getDate() - daysAgo);
         const ds = d.toISOString().slice(0, 10);
-        return TRANSACTIONS.filter(t => txnDay(t) === ds && txnOk(t)).reduce((s, t) => s + (Number(t.amount) || 0), 0);
+        return TRANSACTIONS.filter(t => txnDay(t) === ds && txnOk(t)).reduce((s, t) => s + getNetTransactionAmount(t), 0);
       };
       let mx = 1;
       for (let i = 0; i < 14; i++) mx = Math.max(mx, dayTotal(i));
