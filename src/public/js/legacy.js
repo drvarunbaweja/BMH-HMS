@@ -14044,15 +14044,37 @@ function savePatientToFirebase(patient) {
 
 let _fbPatientsLoaded = false;
 let _renderDashTimer = null;
+function getActivePageId() {
+  return document.querySelector('.page.active')?.id || '';
+}
+function renderActivePageAfterRealtimeUpdate() {
+  const activeId = getActivePageId();
+  if (activeId === 'pg-dashboard') {
+    renderDashboard && renderDashboard();
+    return;
+  }
+  if (activeId === 'pg-reception') {
+    renderReceptionPage && renderReceptionPage();
+    renderCollectionDashboard && renderCollectionDashboard();
+    return;
+  }
+  if (activeId === 'pg-doctor-queue') {
+    renderDocQueue && renderDocQueue();
+    return;
+  }
+  if (activeId === 'pg-ipd') {
+    renderIPD && renderIPD();
+    return;
+  }
+  if (activeId === 'pg-ot') {
+    renderOTListSafe && renderOTListSafe();
+    return;
+  }
+}
 function _debouncedRenderDash() {
   if(_renderDashTimer) clearTimeout(_renderDashTimer);
   _renderDashTimer = setTimeout(() => {
-    const active = document.querySelector('.page.active');
-    if(active && (active.id==='pg-dashboard' || active.id==='pg-reception' || active.id==='pg-doctor-queue')) {
-      renderDashboard && renderDashboard();
-      renderReceptionPage && renderReceptionPage();
-      renderDocQueue && renderDocQueue();
-    }
+    renderActivePageAfterRealtimeUpdate();
   }, 300);
 }
 
@@ -14095,15 +14117,16 @@ function savePayRequestToFirebase(pr) {
 function listenPayRequests() {
   const centre = CURRENT_USER?.isAdmin ? null : (CURRENT_USER?.centre || 'CHD');
   fbOn('payRequests', data => {
-    if(!data) return;
     PAY_REQUESTS.length = 0;
-    Object.values(data).forEach(r => {
+    Object.values(data || {}).forEach(r => {
       if(!centre || r.centre === centre || CURRENT_USER?.isAdmin) PAY_REQUESTS.push(r);
     });
-    renderReceptionPage && renderReceptionPage();
     // Update badge
     const nb = document.getElementById('nb-pay');
     if(nb) nb.textContent = PAY_REQUESTS.filter(r=>r.status==='pending').length;
+    const activeId = getActivePageId();
+    if (activeId === 'pg-reception') renderReceptionPage && renderReceptionPage();
+    else if (activeId === 'pg-dashboard') renderDashboard && renderDashboard();
   });
 }
 
@@ -14115,10 +14138,11 @@ function saveAppointmentToFirebase(apt) {
 
 function listenAppointments() {
   fbOn('appointments', data => {
-    if(!data) return;
     APPOINTMENTS.length = 0;
-    Object.values(data).forEach(a => APPOINTMENTS.push(a));
-    renderAptDay && renderAptDay();
+    Object.values(data || {}).forEach(a => APPOINTMENTS.push(a));
+    const activeId = getActivePageId();
+    if (activeId === 'pg-appointments') renderAptDay && renderAptDay();
+    else if (activeId === 'pg-dashboard') renderDashboard && renderDashboard();
   });
 }
 
