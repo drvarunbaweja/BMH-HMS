@@ -16832,22 +16832,16 @@ function selectExistingPatient(bmhId) {
 
 // ── renderDashboard — admin (finance/stock) vs clinical (doctors) ────
 function renderDashboard() {
-  loadBmhFinancials();
   const today = new Date().toISOString().split('T')[0];
   const adminDateEl = document.getElementById('db-admin-date');
   if (adminDateEl && !adminDateEl.value) adminDateEl.value = today;
   const selectedDate = adminDateEl?.value || today;
   const todaySeen = PATIENTS.filter(p => p.seen).length;
   const waiting = PATIENTS.filter(p => p.status === 'waiting' && !p.seen).length;
-  const checkedIn = PATIENTS.filter(p => p.status === 'waiting' || p.seen || p.dilated).length;
-
-  const todayApts = APPOINTMENTS.filter(a => a.date === today);
   const txnDay = txnIsoDate;
   const txnOk = isCollectedTxn;
   const todayCollection = TRANSACTIONS.filter(t => txnDay(t) === today && txnOk(t)).reduce((s, t) => s + getNetTransactionAmount(t), 0);
   const selectedTxn = TRANSACTIONS.filter(t => txnDay(t) === selectedDate && txnOk(t));
-  const selectedCollection = selectedTxn.reduce((s, t) => s + getNetTransactionAmount(t), 0);
-  const pendingAmt = PAY_REQUESTS.filter(r => r.status === 'pending').reduce((s, r) => s + (r.amount || 0), 0);
 
   const setEl = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
   const u = window.CURRENT_USER || CURRENT_USER;
@@ -16861,19 +16855,11 @@ function renderDashboard() {
   const subEl = document.getElementById('dash-subtitle');
   if (subEl) subEl.textContent = (isAdminDash ? 'Admin · overdue & stock · ' : 'Clinical · ') + (document.getElementById('tb-cp')?.textContent || '') + ' · ' + new Date().toLocaleDateString('en-IN');
 
-  let diagToday = 0;
-  try {
-    Object.keys(window.BMH_PATIENT_CHARGES || {}).forEach(bid => {
-      (window.BMH_PATIENT_CHARGES[bid] || []).forEach(l => {
-        if ((l.cat === 'diagnostic' || l.cat === 'investigation') && (l.ts || '').startsWith(today)) diagToday++;
-      });
-    });
-  } catch (e) { /* noop */ }
-
   setEl('db-opd', String(todaySeen + waiting));
   setEl('db-collection', '₹' + todayCollection.toLocaleString('en-IN'));
 
   if (isAdminDash) {
+    const selectedCollection = selectedTxn.reduce((s, t) => s + getNetTransactionAmount(t), 0);
     const dateMatch = function (iso) {
       if (!iso) return false;
       const raw = String(iso);
@@ -16902,28 +16888,10 @@ function renderDashboard() {
       const active = (p.status || 'admitted') !== 'discharged';
       return centreMatch(p) && (selectedDate === today ? active : (dateMatch(p.admittedAt) || dateMatch(p.date) || dateMatch(p.createdAt)));
     });
-    const overduePts = PATIENTS.filter(function (p) {
-      if (!centreMatch(p)) return false;
-      const summary = bmhGetPatientFinancialSummary ? bmhGetPatientFinancialSummary(p.bmhId) : null;
-      const due = Math.max(Number(p.balance) || 0, Number(summary?.balance || 0), Number(summary?.pendingTotal || 0));
-      return due > 0;
-    });
-    const overdueAmt = overduePts.reduce(function (s, p) {
-      const summary = bmhGetPatientFinancialSummary ? bmhGetPatientFinancialSummary(p.bmhId) : null;
-      const due = Math.max(Number(p.balance) || 0, Number(summary?.balance || 0), Number(summary?.pendingTotal || 0));
-      return s + due;
-    }, 0);
     setEl('db-admin-opd', String(opdCount));
     setEl('db-admin-surgeries', String(surgeryCases.length));
     setEl('db-admin-ipd', String(ipdCases.length));
     setEl('db-admin-total-collection', '₹' + selectedCollection.toLocaleString('en-IN'));
-    setEl('db-admin-overdue-amt', '₹' + overdueAmt.toLocaleString('en-IN'));
-    setEl('db-admin-overdue-ct', String(overduePts.length));
-    const low = INVENTORY ? INVENTORY.filter(i => i.stock <= i.min).length : 0;
-    setEl('db-stock', String(low));
-    const vendPend = (window.BMH_VENDOR_BILLS || []).filter(v => v.status === 'pending');
-    const vendSum = vendPend.reduce((s, v) => s + v.amount, 0);
-    setEl('db-admin-vendor-pend', '₹' + vendSum.toLocaleString('en-IN'));
     const summaryEl = document.getElementById('dash-admin-summary-blocks');
     if (summaryEl) {
       const deptMeta = [
@@ -17007,6 +16975,17 @@ function renderDashboard() {
       summaryEl.innerHTML = cards.join('') + totalCard;
     }
   } else {
+    const checkedIn = PATIENTS.filter(p => p.status === 'waiting' || p.seen || p.dilated).length;
+    const pendingAmt = PAY_REQUESTS.filter(r => r.status === 'pending').reduce((s, r) => s + (r.amount || 0), 0);
+    let diagToday = 0;
+    try {
+      Object.keys(window.BMH_PATIENT_CHARGES || {}).forEach(bid => {
+        (window.BMH_PATIENT_CHARGES[bid] || []).forEach(l => {
+          if ((l.cat === 'diagnostic' || l.cat === 'investigation') && (l.ts || '').startsWith(today)) diagToday++;
+        });
+      });
+    } catch (e) { /* noop */ }
+
     setEl('db-cl-opd', String(todaySeen + waiting));
     setEl('db-cl-ipd', String(typeof IPD_PATIENTS !== 'undefined' ? IPD_PATIENTS.length : 0));
     setEl('db-cl-diag', String(diagToday));
@@ -17046,16 +17025,16 @@ function renderDashboard() {
       html += '</div>';
       chart.innerHTML = html;
     }
-  }
+    const payHtml = PAY_REQUESTS.filter(r => r.status === 'pending').slice(0, 8).map(pr => `<div style="font-size:12px;padding:7px;border-bottom:1px solid var(--g5)"><strong>${pr.patient}</strong> · ₹${(pr.amount || 0).toLocaleString('en-IN')}<div style="font-size:10px;color:var(--g1)">${pr.for || ''}</div></div>`).join('') || '<div style="color:var(--g1);font-size:12px;padding:8px">No pending payment requests</div>';
+    const dp = document.getElementById('dash-pay'); if (dp) dp.innerHTML = payHtml;
+    const dpc = document.getElementById('dash-pay-clinical'); if (dpc) dpc.innerHTML = payHtml;
 
-  const payHtml = PAY_REQUESTS.filter(r => r.status === 'pending').slice(0, 8).map(pr => `<div style="font-size:12px;padding:7px;border-bottom:1px solid var(--g5)"><strong>${pr.patient}</strong> · ₹${(pr.amount || 0).toLocaleString('en-IN')}<div style="font-size:10px;color:var(--g1)">${pr.for || ''}</div></div>`).join('') || '<div style="color:var(--g1);font-size:12px;padding:8px">No pending payment requests</div>';
-  const dp = document.getElementById('dash-pay'); if (dp) dp.innerHTML = payHtml;
-  const dpc = document.getElementById('dash-pay-clinical'); if (dpc) dpc.innerHTML = payHtml;
-
-  setEl('db-apts', String(todayApts.length));
-  const aptList = document.getElementById('dash-apts');
-  if (aptList) {
-    aptList.innerHTML = todayApts.slice(0, 8).map(a => `<div style="font-size:12px;padding:5px 0;border-bottom:1px solid var(--g5)"><span style="font-weight:700">${a.patient || ''}</span> · ${a.time || ''} · ${a.doctor || ''}</div>`).join('') || '<div style="color:var(--g1);font-size:12px">No appointments today</div>';
+    const todayApts = APPOINTMENTS.filter(a => a.date === today);
+    setEl('db-apts', String(todayApts.length));
+    const aptList = document.getElementById('dash-apts');
+    if (aptList) {
+      aptList.innerHTML = todayApts.slice(0, 8).map(a => `<div style="font-size:12px;padding:5px 0;border-bottom:1px solid var(--g5)"><span style="font-weight:700">${a.patient || ''}</span> · ${a.time || ''} · ${a.doctor || ''}</div>`).join('') || '<div style="color:var(--g1);font-size:12px">No appointments today</div>';
+    }
   }
 }
 function normalizeDashboardPaymentMode(mode) {
