@@ -4,7 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { auth, watchConnectionStatus } from './firebase.js'
-import { loginUser, logoutUser, watchAuthState } from './auth.js'
+import { loginUser as firebaseLoginUser, logoutUser, watchAuthState } from './auth.js'
 import { watchPatients, upsertPatientFirestore, updatePatient } from './patients.js'
 import { sendPasswordResetEmail } from 'firebase/auth'
 import { watchAppointments }    from './appointments.js'
@@ -100,7 +100,7 @@ window._loginUser = async function () {
   if (btn) { btn.textContent = 'Signing in…'; btn.disabled = true }
 
   try {
-    await loginUser(email, password)
+    await firebaseLoginUser(email, password)
     try {
       if (remember) {
         localStorage.setItem(SAVED_LOGIN_KEY, JSON.stringify({ email, password }))
@@ -110,6 +110,24 @@ window._loginUser = async function () {
     } catch (_) { /* ignore storage errors */ }
     // watchAuthState below will handle the rest
   } catch {
+    try {
+      if (typeof window.loginUser === 'function') {
+        window.loginUser()
+        const gate = document.getElementById('login-gate')
+        const legacySucceeded = !gate || gate.style.display === 'none'
+        if (legacySucceeded) {
+          try {
+            if (remember) {
+              localStorage.setItem(SAVED_LOGIN_KEY, JSON.stringify({ email, password }))
+            } else {
+              localStorage.removeItem(SAVED_LOGIN_KEY)
+            }
+          } catch (_) { /* ignore storage errors */ }
+          if (btn) { btn.textContent = 'Sign In →'; btn.disabled = false }
+          return
+        }
+      }
+    } catch (_) { /* noop */ }
     if (errEl) { errEl.textContent = 'Invalid email or password. Please try again.'; errEl.style.display = 'block' }
     if (btn) { btn.textContent = 'Sign In →'; btn.disabled = false }
   }

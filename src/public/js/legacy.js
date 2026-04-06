@@ -119,6 +119,7 @@ window.syncLegacyCurrentUserFromFirebase = function () {
     centre: u.centre || 'CHD',
     isAdmin: !!u.isAdmin,
     canSeeAllCentres: !!u.isAdmin || u.centre === 'BOTH',
+    access: u.access || {},
   };
 };
 
@@ -3086,6 +3087,10 @@ function doLogin(name, dept, role, centre) {
 
 function buildSidebarForRole(role, dept, name) {
   const nav_el = document.getElementById('sbnav'); if(!nav_el) return;
+  const accessModules = Array.isArray(CURRENT_USER?.access?.modules) ? CURRENT_USER.access.modules : null;
+  const allowNav = function(key, html) {
+    return (!accessModules || !accessModules.length || accessModules.includes(key)) ? html : '';
+  };
   if(role==='Doctor') {
     const deptNav = {
       'Ophthalmology': '<div class="ni" onclick="nav(\'ophtho\',this)"><div class="ni-ic">👁️</div>Eye Examination</div>',
@@ -3097,39 +3102,39 @@ function buildSidebarForRole(role, dept, name) {
       <div class="ngrp">My Patients</div>
       <div class="ni active" onclick="nav('doctor-queue',this)"><div class="ni-ic">🩺</div>My Queue<span class="nbadge pulse" id="nb-dq">0</span></div>
       ${deptNav[dept]||''}
-      <div class="ni" onclick="nav('appointments',this)"><div class="ni-ic">📅</div>Appointments</div>
+      ${allowNav('appointments', `<div class="ni" onclick="nav('appointments',this)"><div class="ni-ic">📅</div>Appointments</div>`)}
       <div class="ngrp">IPD / OT</div>
-      <div class="ni" onclick="nav('ipd',this)"><div class="ni-ic">🛏️</div>IPD Patients<span class="nbadge" id="nb-ipd"></span></div>
-      <div class="ni" onclick="nav('ot',this)"><div class="ni-ic">🔬</div>OT Module</div>
+      ${allowNav('ipd', `<div class="ni" onclick="nav('ipd',this)"><div class="ni-ic">🛏️</div>IPD Patients<span class="nbadge" id="nb-ipd"></span></div>`)}
+      ${allowNav('ot', `<div class="ni" onclick="nav('ot',this)"><div class="ni-ic">🔬</div>OT Module</div>`)}
       <div class="ngrp">Finance</div>
-      <div class="ni" onclick="nav('billing',this)"><div class="ni-ic">💳</div>My Payments<span class="nbadge pulse" id="nb-pay"></span></div>
+      ${allowNav('billing', `<div class="ni" onclick="nav('billing',this)"><div class="ni-ic">💳</div>My Payments<span class="nbadge pulse" id="nb-pay"></span></div>`)}
       <div class="ngrp">Other</div>
-      <div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>
-      <div class="ni" onclick="nav('settings',this)"><div class="ni-ic">⚙️</div>Settings</div>`;
+      ${allowNav('reports', `<div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>`)}
+      ${allowNav('settings', `<div class="ni" onclick="nav('settings',this)"><div class="ni-ic">⚙️</div>Settings</div>`)}`;
   } else if(role==='Optometrist') {
     nav_el.innerHTML = `
       <div class="ngrp">My Queue</div>
       <div class="ni active" onclick="nav('doctor-queue',this)"><div class="ni-ic">🩺</div>Patient Queue<span class="nbadge pulse" id="nb-dq">0</span></div>
       <div class="ni" onclick="nav('ophtho',this)"><div class="ni-ic">👁️</div>Eye Examination</div>
-      <div class="ni" onclick="nav('appointments',this)"><div class="ni-ic">📅</div>Appointments</div>
+      ${allowNav('appointments', `<div class="ni" onclick="nav('appointments',this)"><div class="ni-ic">📅</div>Appointments</div>`)}
       <div class="ngrp">Other</div>
-      <div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>
-      <div class="ni" onclick="nav('settings',this)"><div class="ni-ic">⚙️</div>Settings</div>`;
+      ${allowNav('reports', `<div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>`)}
+      ${allowNav('settings', `<div class="ni" onclick="nav('settings',this)"><div class="ni-ic">⚙️</div>Settings</div>`)}`;
   } else if(role==='Reception') {
     nav_el.innerHTML = `
       <div class="ngrp">Reception</div>
-      <div class="ni active" onclick="nav('reception',this)"><div class="ni-ic">🧾</div>Reception<span class="nbadge pulse" id="nb-rec">0</span></div>
-      <div class="ni" onclick="nav('appointments',this)"><div class="ni-ic">📅</div>Appointments</div>
+      ${allowNav('reception', `<div class="ni active" onclick="nav('reception',this)"><div class="ni-ic">🧾</div>Reception<span class="nbadge pulse" id="nb-rec">0</span></div>`)}
+      ${allowNav('appointments', `<div class="ni" onclick="nav('appointments',this)"><div class="ni-ic">📅</div>Appointments</div>`)}
       <div class="ngrp">IPD / OT</div>
-      <div class="ni" onclick="nav('ipd',this)"><div class="ni-ic">🛏️</div>IPD Patients<span class="nbadge" id="nb-ipd"></span></div>
-      <div class="ni" onclick="nav('ot',this)"><div class="ni-ic">🔬</div>OT Module</div>
+      ${allowNav('ipd', `<div class="ni" onclick="nav('ipd',this)"><div class="ni-ic">🛏️</div>IPD Patients<span class="nbadge" id="nb-ipd"></span></div>`)}
+      ${allowNav('ot', `<div class="ni" onclick="nav('ot',this)"><div class="ni-ic">🔬</div>OT Module</div>`)}
       <div class="ngrp">Finance</div>
-      <div class="ni" onclick="nav('billing',this)"><div class="ni-ic">💳</div>Billing<span class="nbadge pulse" id="nb-pay"></span></div>
-      <div class="ni" onclick="nav('tpa',this)"><div class="ni-ic">🏦</div>TPA / Cashless</div>
+      ${allowNav('billing', `<div class="ni" onclick="nav('billing',this)"><div class="ni-ic">💳</div>Billing<span class="nbadge pulse" id="nb-pay"></span></div>`)}
+      ${allowNav('tpa', `<div class="ni" onclick="nav('tpa',this)"><div class="ni-ic">🏦</div>TPA / Cashless</div>`)}
       <div class="ngrp">Reports</div>
-      <div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>
+      ${allowNav('reports', `<div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>`)}
       <div class="ngrp">Settings</div>
-      <div class="ni" onclick="nav('settings',this)"><div class="ni-ic">⚙️</div>Operational Settings</div>`;
+      ${allowNav('settings', `<div class="ni" onclick="nav('settings',this)"><div class="ni-ic">⚙️</div>Operational Settings</div>`)}`;
   } else if(role==='Lab') {
     nav_el.innerHTML = `
       <div class="ngrp">Lab</div>
@@ -7827,9 +7832,44 @@ function addDrugToLibraryFromModal() {
   DRUG_LIBRARY.push({ type, trade, generic, freq, dur, dept });
   saveDrugLibraryToStorage();
   renderSettingsDrugs();
+  rebuildDrugGenericDatalist();
+  if (window.RX_QUICK_ADD_TO_PRESCRIPTION) {
+    const today = new Date().toISOString().split('T')[0];
+    RX_DRUGS.push({
+      trade, brand: trade, generic, name: generic,
+      drugType: type || 'Tablet',
+      eye: [(type === 'Eye Drop' ? 'Both Eyes (OU)' : 'Oral')],
+      freq: normalizeRxFreqLabel(freq || 'Twice daily (BD)'),
+      dur: normalizeRxDurationLabel(dur || '1 week'),
+      dateFrom: today,
+      dateTo: '',
+      taperRows: [],
+      lang: { en: '', hi: '', pa: '' }
+    });
+    computeRxEndAndTaperDates(RX_DRUGS[RX_DRUGS.length - 1]);
+    renderRxDrugs && renderRxDrugs();
+    window.RX_QUICK_ADD_TO_PRESCRIPTION = false;
+  }
   showToast('💊 ' + trade + ' added to library ✓', 's');
   closeM('m-add-drug');
   ['md-add-trade','md-add-generic'].forEach(id => { const x = document.getElementById(id); if (x) x.value = ''; });
+}
+function openDrugLibraryAddFromQuick() {
+  const inp = document.getElementById('rx-quick-search');
+  const val = inp?.value?.trim() || '';
+  const seed = rxQuickSelectedDrug || (val ? ((typeof DRUG_LIBRARY !== 'undefined' ? DRUG_LIBRARY : []).find(d =>
+    String(d.trade).toLowerCase().includes(val.toLowerCase()) || String(d.generic).toLowerCase().includes(val.toLowerCase())
+  ) || null) : null);
+  refreshCustomRxOptionSelects && refreshCustomRxOptionSelects();
+  document.getElementById('md-add-trade').value = seed?.trade || seed?.brand || val || '';
+  document.getElementById('md-add-generic').value = seed?.generic || seed?.name || '';
+  document.getElementById('md-add-type').value = seed?.type || 'Tablet';
+  document.getElementById('md-add-freq').value = normalizeRxFreqLabel(seed?.freq || 'Twice daily (BD)');
+  document.getElementById('md-add-dur').value = normalizeRxDurationLabel(seed?.dur || '1 week');
+  const deptMap = { ophtho:'Ophthalmology', obg:'OBG', psych:'Neuropsychiatry', skin:'Skin' };
+  document.getElementById('md-add-dept').value = seed?.dept || (deptMap[rxDeptKeyFromUi()] || 'All');
+  window.RX_QUICK_ADD_TO_PRESCRIPTION = true;
+  openM('m-add-drug');
 }
 function openEditDrugLibrary(i) {
   const d = DRUG_LIBRARY[i];
@@ -10765,11 +10805,19 @@ function getSelectedObgDoctorName() {
 }
 function getEffectiveDoctorNameForDept(dept) {
   const key = normalizeDeptKeyForQueue(dept);
+  const currentName = String(CURRENT_USER?.name || document.getElementById('sbnm')?.textContent || '').trim();
+  const currentNormalized = normalizePersonNameForMatch(currentName);
   if (key === 'obg') return getSelectedObgDoctorName();
-  if (key === 'psych') return 'Dr. Tarun Baweja';
-  if (key === 'skin') return 'Dr. Pooja Baweja';
-  if (key === 'ophtho') return String(CURRENT_USER?.name || document.getElementById('sbnm')?.textContent || 'Dr. Varun Baweja').trim();
-  return String(CURRENT_USER?.name || 'Doctor').trim();
+  if (key === 'psych') {
+    if (currentNormalized.includes('tarun')) return currentName || 'Dr. Tarun Baweja';
+    return 'Dr. Tarun Baweja';
+  }
+  if (key === 'skin') {
+    if (currentNormalized.includes('pooja')) return currentName || 'Dr. Pooja Baweja';
+    return 'Dr. Pooja Baweja';
+  }
+  if (key === 'ophtho') return currentName || 'Dr. Varun Baweja';
+  return currentName || 'Doctor';
 }
 function syncObgDoctorSelector(forceName) {
   const sel = document.getElementById('obg-doc-select');
@@ -15667,9 +15715,10 @@ function renderSettingsPage() {
   const isReception = role === 'Reception';
   const settingsPage = document.getElementById('pg-settings');
   if (settingsPage) {
-    const allowed = isReception
+    const explicitAllowed = Array.isArray(CURRENT_USER?.access?.settings) && CURRENT_USER.access.settings.length ? CURRENT_USER.access.settings : null;
+    const allowed = explicitAllowed || (isReception
       ? ['set-doctors', 'set-procedures', 'set-consents', 'set-surgery-packs']
-      : null;
+      : null);
     Array.from(settingsPage.querySelectorAll('.ptab')).forEach(function (tab) {
       const onclick = String(tab.getAttribute('onclick') || '');
       const match = onclick.match(/'([^']+)'/);
@@ -15839,7 +15888,25 @@ function setUserDisabled(uname, disabled) {
 function openAddUserModal() {
   if(!CURRENT_USER?.isAdmin) { showToast('Admin access required','w'); return; }
   ['nu-username','nu-name','nu-pw','nu-pw2','nu-dept'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  ['nu-access-modules','nu-access-settings'].forEach(function(id){
+    document.querySelectorAll('#'+id+' input[type=checkbox]').forEach(function(cb){ cb.checked = false; });
+  });
   openM('m-add-user');
+}
+function collectAccessSelections(prefix) {
+  return {
+    modules: Array.from(document.querySelectorAll('#' + prefix + '-access-modules input[type=checkbox]:checked')).map(function (cb) { return cb.value; }),
+    settings: Array.from(document.querySelectorAll('#' + prefix + '-access-settings input[type=checkbox]:checked')).map(function (cb) { return cb.value; })
+  };
+}
+function applyAccessSelections(prefix, access) {
+  const acc = access || {};
+  ['modules','settings'].forEach(function(kind) {
+    const values = Array.isArray(acc[kind]) ? acc[kind] : [];
+    document.querySelectorAll('#' + prefix + '-access-' + kind + ' input[type=checkbox]').forEach(function (cb) {
+      cb.checked = values.includes(cb.value);
+    });
+  });
 }
 
 // ── Save New User ──────────────────────────────────────────────
@@ -15852,6 +15919,7 @@ function saveNewUser() {
   const role   = document.getElementById('nu-role')?.value||'Reception';
   const centre = document.getElementById('nu-centre')?.value||'CHD';
   const dept   = (document.getElementById('nu-dept')?.value||'').trim();
+  const access = collectAccessSelections('nu');
 
   if(!uname) { showToast('Username is required','w'); return; }
   if(USER_DB[uname]) { showToast(`Username "@${uname}" already exists — choose another`,'w'); return; }
@@ -15864,6 +15932,7 @@ function saveNewUser() {
     degrees: '',
     canSeeAllCentres: (centre==='BOTH' || role==='Admin'),
     isAdmin: (role==='Admin'),
+    access,
     disabled: false,
     createdAt: new Date().toISOString(),
     createdBy: CURRENT_USER.name
@@ -15888,6 +15957,7 @@ function openEditUser(uname) {
   document.getElementById('eu-centre').value= u.centre || 'CHD';
   document.getElementById('eu-dept').value  = u.dept || '';
   document.getElementById('eu-newpw').value = '';
+  applyAccessSelections('eu', u.access || {});
   openM('m-edit-user');
 }
 
@@ -15900,6 +15970,7 @@ function saveEditUser() {
   const centre = document.getElementById('eu-centre')?.value||'CHD';
   const dept   = (document.getElementById('eu-dept')?.value||'').trim();
   const newpw  = document.getElementById('eu-newpw')?.value||'';
+  const access = collectAccessSelections('eu');
 
   if(!USER_DB[uname]) { showToast('User not found','w'); return; }
   if(!name) { showToast('Full name is required','w'); return; }
@@ -15909,17 +15980,19 @@ function saveEditUser() {
   USER_DB[uname].role   = role;
   USER_DB[uname].centre = centre;
   USER_DB[uname].dept   = dept;
+  USER_DB[uname].access = access;
   USER_DB[uname].canSeeAllCentres = (centre==='BOTH'||role==='Admin');
   USER_DB[uname].isAdmin = (role==='Admin');
   if(newpw) USER_DB[uname].pw = newpw;
 
-  const updateData = { name, role, centre, dept, canSeeAllCentres: USER_DB[uname].canSeeAllCentres, isAdmin: USER_DB[uname].isAdmin, updatedBy: CURRENT_USER.name, updatedAt: new Date().toISOString() };
+  const updateData = { name, role, centre, dept, access, canSeeAllCentres: USER_DB[uname].canSeeAllCentres, isAdmin: USER_DB[uname].isAdmin, updatedBy: CURRENT_USER.name, updatedAt: new Date().toISOString() };
   if(newpw) updateData.pw = newpw;
   fbUpdate('userSettings/' + uname, updateData).catch(e => console.warn('Edit user error:', e));
 
   // If editing own account, update CURRENT_USER too
   if(uname === CURRENT_USER?.username) {
     CURRENT_USER.name = name; CURRENT_USER.role = role; CURRENT_USER.centre = centre;
+    CURRENT_USER.access = access;
     if(newpw) CURRENT_USER.pw = newpw;
     const sbnm = document.getElementById('sbnm'); if(sbnm) sbnm.textContent = name;
     const sbrl = document.getElementById('sbrl'); if(sbrl) sbrl.textContent = role+' · '+centre;
@@ -16773,6 +16846,10 @@ function renderDocQueue() {
     'Skin & Cosmetology':'skin', Lab:'lab', Reception:'reception'
   };
   const userDept = normalizeDeptKeyForQueue(deptMap[CURRENT_USER?.dept] || CURRENT_USER?.dept || '');
+  const queueDoctor = getEffectiveDoctorNameForDept(userDept || CURRENT_USER?.dept || '');
+  const titleEl = document.getElementById('dq-title');
+  if (titleEl) titleEl.textContent = `${queueDoctor} — My Patients`;
+  const searchQ = String(document.getElementById('dq-search')?.value || '').trim().toLowerCase();
 
   // Filter: admin/reception sees all; doctor sees own dept (and optionally own name)
   const validStatuses = p => p.status==='waiting'||p.status==='seen'||p.status==='pre-registered'||p.dilated;
@@ -16785,17 +16862,29 @@ function renderDocQueue() {
       const deptMatch = !userDept || ptDept === userDept || (!ptDept && userDept === 'ophtho');
       return deptMatch && validStatuses(p) && centreMatch(p);
     });
-    const queueDoctor = getEffectiveDoctorNameForDept(userDept || CURRENT_USER?.dept || '');
     return deptPts.filter(function (p) {
       if (!p.doctor) return true;
       return doctorMatchesPatientQueue(p.doctor, queueDoctor);
     });
   })();
+  const filteredPts = searchQ ? myPts.filter(function (p) {
+    const hay = [
+      p.name,
+      p.bmhId,
+      p.mob,
+      p.mobile,
+      p.doctor,
+      p.purpose,
+      p.dept,
+      p.department
+    ].map(function (v) { return String(v || '').toLowerCase(); }).join(' ');
+    return hay.includes(searchQ);
+  }) : myPts;
 
   // Active list keeps all waiting patients visible; dilated patients also remain in dedicated dilated queue.
-  const active  = myPts.filter(p => !p.seen);
-  const dilated = myPts.filter(p => p.dilated && !p.seen);
-  const done    = myPts.filter(p => p.seen);
+  const active  = filteredPts.filter(p => !p.seen);
+  const dilated = filteredPts.filter(p => p.dilated && !p.seen);
+  const done    = filteredPts.filter(p => p.seen);
   const xrefs   = (window.XREF_LOG||[]).filter(x => !userDept || x.fromDept===userDept || x.toDept===userDept);
   const ipdPts  = (window.IPD_PATIENTS||[]).filter(p => {
     const ipdDept = normalizeDeptKeyForQueue(p.dept || p.department || '');
@@ -17093,6 +17182,7 @@ function saveVisit(dept) {
     typeof fbUpdate === 'function' ? fbUpdate('patients/' + bmhId, patientPatchForCloud).catch(()=>{}) : Promise.resolve()
   ])
     .then(() => {
+      if (dept === 'ophtho') populateOphthoForm(visit);
       showToast(`✅ ${ptName} — visit saved (${visit.dateLabel})`, 's');
       if(dept === 'obg') updateObgObstetricHistoryTab(!!visit.obstetricHistoryEnabled);
       if(typeof loadPastVisits === 'function') loadPastVisits(bmhId, dept);

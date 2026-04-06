@@ -226,6 +226,13 @@
         <button type="button" class="btn btn-outline btn-xs" onclick="nav('discharge',null)">🏠 Discharge</button>
       </div>
     </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:240px;background:#fff;border:1.5px solid var(--g4);border-radius:10px;padding:7px 10px">
+        <span style="font-size:13px;color:var(--g1)">🔍</span>
+        <input type="text" id="dq-search" placeholder="Search patient, BMSH ID, mobile, purpose or doctor…" oninput="renderDocQueue()" style="border:none;outline:none;background:transparent;width:100%;font-size:12px;font-family:var(--font)">
+      </div>
+      <button type="button" class="btn btn-outline btn-xs" onclick="const q=document.getElementById('dq-search'); if(q){q.value='';} renderDocQueue();">Clear Search</button>
+    </div>
     <div class="dq-toolbar" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;padding:10px 12px;background:var(--g6);border-radius:var(--rsm);margin-bottom:12px;border:1px solid var(--g5)">
       <div style="flex:1;min-width:160px">
         <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">💳 Payment status</div>
@@ -1192,7 +1199,7 @@
             <input type="text" id="rx-quick-search" placeholder="Type drug name to add (e.g. Vigamox, Timolol)…"
               oninput="rxQuickSearch(this.value)" autocomplete="off"
               style="flex:1;border:none;background:transparent;outline:none;font-size:13px;font-family:var(--font);font-weight:600">
-            <button class="btn btn-blue btn-xs" onclick="addRxFromQuick()">+ Add</button>
+            <button class="btn btn-blue btn-xs" onclick="openDrugLibraryAddFromQuick()">+ Add</button>
           </div>
           <div id="rx-quick-dropdown" style="display:none;position:absolute;z-index:200;background:#fff;border:2px solid var(--blue);border-top:none;border-radius:0 0 var(--rsm) var(--rsm);width:100%;max-height:220px;overflow-y:auto;box-shadow:var(--sh-md)"></div>
         </div>
@@ -2165,7 +2172,7 @@
             <input type="text" id="rx-quick-search" placeholder="Type drug name to add (e.g. Dydrogesterone, Metformin, Labetalol)…"
               oninput="rxQuickSearch(this.value)" autocomplete="off"
               style="flex:1;border:none;background:transparent;outline:none;font-size:13px;font-family:var(--font);font-weight:600">
-            <button class="btn btn-blue btn-xs" onclick="addRxFromQuick()">+ Add</button>
+            <button class="btn btn-blue btn-xs" onclick="openDrugLibraryAddFromQuick()">+ Add</button>
           </div>
           <div id="rx-quick-dropdown" style="display:none;position:absolute;z-index:200;background:#fff;border:2px solid var(--blue);border-top:none;border-radius:0 0 var(--rsm) var(--rsm);width:100%;max-height:220px;overflow-y:auto;box-shadow:var(--sh-md)"></div>
         </div>
@@ -2596,7 +2603,7 @@
             <input type="text" id="rx-quick-search" placeholder="Type drug name to add (e.g. Sertraline, Clonazepam, Sodium Valproate)…"
               oninput="rxQuickSearch(this.value)" autocomplete="off"
               style="flex:1;border:none;background:transparent;outline:none;font-size:13px;font-family:var(--font);font-weight:600">
-            <button class="btn btn-blue btn-xs" onclick="addRxFromQuick()">+ Add</button>
+            <button class="btn btn-blue btn-xs" onclick="openDrugLibraryAddFromQuick()">+ Add</button>
           </div>
           <div id="rx-quick-dropdown" style="display:none;position:absolute;z-index:200;background:#fff;border:2px solid var(--blue);border-top:none;border-radius:0 0 var(--rsm) var(--rsm);width:100%;max-height:220px;overflow-y:auto;box-shadow:var(--sh-md)"></div>
         </div>
@@ -2844,7 +2851,7 @@
             <input type="text" id="rx-quick-search" placeholder="Type drug name to add (e.g. Tretinoin, Doxycycline, Hydroquinone)…"
               oninput="rxQuickSearch(this.value)" autocomplete="off"
               style="flex:1;border:none;background:transparent;outline:none;font-size:13px;font-family:var(--font);font-weight:600">
-            <button class="btn btn-blue btn-xs" onclick="addRxFromQuick()">+ Add</button>
+            <button class="btn btn-blue btn-xs" onclick="openDrugLibraryAddFromQuick()">+ Add</button>
           </div>
           <div id="rx-quick-dropdown" style="display:none;position:absolute;z-index:200;background:#fff;border:2px solid var(--blue);border-top:none;border-radius:0 0 var(--rsm) var(--rsm);width:100%;max-height:220px;overflow-y:auto;box-shadow:var(--sh-md)"></div>
         </div>
@@ -4693,6 +4700,34 @@
     </select>
   </div>
   <div class="form-group"><label class="fl">Department</label><input type="text" id="nu-dept" placeholder="e.g. Reception, OBG, Lab"></div>
+  <div class="form-group full"><label class="fl">Module Access</label>
+    <div id="nu-access-modules" style="display:flex;gap:8px;flex-wrap:wrap;font-size:11px">
+      <label><input type="checkbox" value="reception"> Reception</label>
+      <label><input type="checkbox" value="appointments"> Appointments</label>
+      <label><input type="checkbox" value="ipd"> IPD</label>
+      <label><input type="checkbox" value="ot"> OT</label>
+      <label><input type="checkbox" value="billing"> Billing</label>
+      <label><input type="checkbox" value="tpa"> TPA</label>
+      <label><input type="checkbox" value="reports"> Reports</label>
+      <label><input type="checkbox" value="settings"> Settings</label>
+      <label><input type="checkbox" value="inventory"> Inventory</label>
+      <label><input type="checkbox" value="lab"> Lab</label>
+    </div>
+  </div>
+  <div class="form-group full"><label class="fl">Settings Access</label>
+    <div id="nu-access-settings" style="display:flex;gap:8px;flex-wrap:wrap;font-size:11px">
+      <label><input type="checkbox" value="set-hospital"> Hospital</label>
+      <label><input type="checkbox" value="set-doctors"> Doctors</label>
+      <label><input type="checkbox" value="set-drugs"> Drugs</label>
+      <label><input type="checkbox" value="set-procedures"> Charges</label>
+      <label><input type="checkbox" value="set-rx-templates"> Rx Templates</label>
+      <label><input type="checkbox" value="set-consents"> Consents</label>
+      <label><input type="checkbox" value="set-surgery-packs"> Surgery Packs</label>
+      <label><input type="checkbox" value="set-import"> Import</label>
+      <label><input type="checkbox" value="set-logins"> Logins</label>
+      <label><input type="checkbox" value="set-del-approvals"> Approvals</label>
+    </div>
+  </div>
 </div>
 <div style="display:flex;gap:8px;margin-top:14px">
   <button class="btn btn-gold" style="flex:1" onclick="saveNewUser()">✅ Create User</button>
@@ -4726,6 +4761,34 @@
     </select>
   </div>
   <div class="form-group"><label class="fl">Department</label><input type="text" id="eu-dept" placeholder="Department"></div>
+  <div class="form-group full"><label class="fl">Module Access</label>
+    <div id="eu-access-modules" style="display:flex;gap:8px;flex-wrap:wrap;font-size:11px">
+      <label><input type="checkbox" value="reception"> Reception</label>
+      <label><input type="checkbox" value="appointments"> Appointments</label>
+      <label><input type="checkbox" value="ipd"> IPD</label>
+      <label><input type="checkbox" value="ot"> OT</label>
+      <label><input type="checkbox" value="billing"> Billing</label>
+      <label><input type="checkbox" value="tpa"> TPA</label>
+      <label><input type="checkbox" value="reports"> Reports</label>
+      <label><input type="checkbox" value="settings"> Settings</label>
+      <label><input type="checkbox" value="inventory"> Inventory</label>
+      <label><input type="checkbox" value="lab"> Lab</label>
+    </div>
+  </div>
+  <div class="form-group full"><label class="fl">Settings Access</label>
+    <div id="eu-access-settings" style="display:flex;gap:8px;flex-wrap:wrap;font-size:11px">
+      <label><input type="checkbox" value="set-hospital"> Hospital</label>
+      <label><input type="checkbox" value="set-doctors"> Doctors</label>
+      <label><input type="checkbox" value="set-drugs"> Drugs</label>
+      <label><input type="checkbox" value="set-procedures"> Charges</label>
+      <label><input type="checkbox" value="set-rx-templates"> Rx Templates</label>
+      <label><input type="checkbox" value="set-consents"> Consents</label>
+      <label><input type="checkbox" value="set-surgery-packs"> Surgery Packs</label>
+      <label><input type="checkbox" value="set-import"> Import</label>
+      <label><input type="checkbox" value="set-logins"> Logins</label>
+      <label><input type="checkbox" value="set-del-approvals"> Approvals</label>
+    </div>
+  </div>
   <div class="form-group full"><label class="fl">Reset Password (leave blank to keep current)</label><input type="password" id="eu-newpw" placeholder="New password…" autocomplete="new-password"></div>
 </div>
 <div style="display:flex;gap:8px;margin-top:14px">
