@@ -899,7 +899,10 @@ function getForcedUrgentLoginProfile(rawUser, pass) {
   return { username: canonical, profile: Object.assign({}, USER_DB[canonical], { disabled: false }) };
 }
 function sanitizeFirebaseKey(key) {
-  return String(key == null ? '' : key).replace(/[.#$\\/[\\]]/g, '_').replace(/\s+/g, ' ').trim() || 'field';
+  return String(key == null ? '' : key)
+    .replace(/[.#$\[\]/]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim() || 'field';
 }
 function sanitizeFirebaseValue(value) {
   if (Array.isArray(value)) return value.map(sanitizeFirebaseValue);
