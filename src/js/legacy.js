@@ -1914,6 +1914,7 @@ function loadTodayVisitIntoForm(bmhId) {
   if(!bmhId || bmhId==='—') return;
   const todayStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
   fbOnce('visits/' + bmhId, data => {
+    if ((window.CURRENT_PATIENT?.bmhId || '') !== bmhId) return;
     if(!data) return;
     // Find the most recent visit saved TODAY for ophtho
     const todayVisits = Object.values(data)
@@ -1986,6 +1987,14 @@ function populateOphthoForm(v) {
         });
       });
     });
+  } else {
+    document.querySelectorAll('.sl-chip').forEach(c => {
+      c.classList.remove('sel');
+      if(c.textContent.trim() === 'Normal' || c.textContent.trim() === 'Clear' ||
+         c.textContent.trim() === 'Deep & Clear' || c.textContent.trim() === 'Round & Reacting') {
+        c.classList.add('sel');
+      }
+    });
   }
   setV('sl-notes-text', v.slNotes);
 
@@ -2030,6 +2039,18 @@ function populateOphthoForm(v) {
   if(Array.isArray(v.rx) && v.rx.length) {
     if(typeof RX_DRUGS !== 'undefined') { RX_DRUGS.length = 0; v.rx.forEach(d=>RX_DRUGS.push(d)); }
     typeof renderRxDrugs === 'function' && renderRxDrugs();
+  } else if(typeof RX_DRUGS !== 'undefined') {
+    RX_DRUGS.length = 0;
+    typeof renderRxDrugs === 'function' && renderRxDrugs();
+  }
+  const procContainer = document.getElementById('rx-proc-advised');
+  if (procContainer) {
+    procContainer.innerHTML = '';
+    if (Array.isArray(v.procedures) && v.procedures.length) {
+      v.procedures.forEach(function (procName) {
+        addProcItemToContainer(procContainer, procName, 0, { silentLog: true, quiet: true });
+      });
+    }
   }
   if(window.CURRENT_PATIENT) {
     window.CURRENT_PATIENT.lastVisit = JSON.parse(JSON.stringify(v || {}));
@@ -12577,12 +12598,13 @@ function addProcFromDropdownDept(sel) {
   sel.value = '';
 }
 
-function addProcItemToContainer(container, procName, price) {
+function addProcItemToContainer(container, procName, price, opts) {
+  opts = opts || {};
   if(!container || !procName) return;
   const placeholder = container.querySelector('.proc-placeholder');
   if(placeholder) placeholder.remove();
   const existing = Array.from(container.querySelectorAll('[data-proc]')).map(e=>e.dataset.proc);
-  if(existing.includes(procName)) { showToast('"'+procName+'" already added','i'); return; }
+  if(existing.includes(procName)) { if (!opts.quiet) showToast('"'+procName+'" already added','i'); return; }
   const d = document.createElement('div');
   d.dataset.proc = procName;
   d.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 11px;background:var(--orange-lt);border-radius:8px;border-left:3px solid var(--orange);margin-bottom:5px';
@@ -12592,8 +12614,8 @@ function addProcItemToContainer(container, procName, price) {
     + '<button class="btn btn-xs btn-gold" onclick="nav(\'brochures\',null)" title="Patient brochure">📄</button>'
     + '<button class="btn btn-xs" style="background:#CC0000;color:#fff;padding:2px 7px" onclick="this.closest(\'[data-proc]\').remove()">✕</button>';
   container.appendChild(d);
-  if (PROCEDURE_ADVISED_LOG) pushProcedureAdvisedLog(procName, { price });
-  showToast('⚕️ "'+procName+'" added ✓','s');
+  if (!opts.silentLog && PROCEDURE_ADVISED_LOG) pushProcedureAdvisedLog(procName, { price });
+  if (!opts.quiet) showToast('⚕️ "'+procName+'" added ✓','s');
 }
 
 // Override addProcItem to use container-based approach
@@ -17012,7 +17034,15 @@ function saveVisit(dept) {
   try {
   showToast('Saving visit…', 'i');
   const now = new Date();
-  const visitKey = 'V' + now.getTime();
+  const localPt = window.CURRENT_PATIENT || PATIENTS.find(p => p.bmhId === bmhId);
+  const todayKey = now.toISOString().split('T')[0];
+  const cachedVisits = getCachedPatientVisits(bmhId);
+  const todaysExistingKey = (localPt?.lastVisitKey && String(localPt?.lastVisitDate || '').startsWith(todayKey) && localPt?.lastDeptVisit === dept)
+    ? localPt.lastVisitKey
+    : (Object.entries(cachedVisits).find(function ([key, val]) {
+        return val && val.dept === dept && String(val.date || '').startsWith(todayKey);
+      }) || [null])[0];
+  const visitKey = todaysExistingKey || ('V' + now.getTime());
   const visit = {
     id: visitKey,
     bmhId, ptName, dept,
@@ -17231,16 +17261,15 @@ function saveVisit(dept) {
   const visitForCloud = sanitizeFirebaseValue(visit);
   if (visitForCloud.slChips) visitForCloud.slChips = sanitizeSlChipsMap(visitForCloud.slChips);
   const patientPatchForCloud = Object.assign({}, patientPatch, { lastVisit: visitForCloud });
-  const localPt = window.CURRENT_PATIENT || PATIENTS.find(p => p.bmhId === bmhId);
   if(localPt) {
     localPt.lastVisit = JSON.parse(JSON.stringify(visit));
     localPt.lastVisitKey = visitKey;
     localPt.lastVisitDate = visit.date;
+    localPt.lastDeptVisit = dept;
     localPt.doctor = visit.doctor;
     if (visit.dx) localPt.dx = visit.dx;
-    const cache = getCachedPatientVisits(bmhId);
-    cache[visitKey] = JSON.parse(JSON.stringify(visit));
-    cachePatientVisits(bmhId, cache);
+    cachedVisits[visitKey] = JSON.parse(JSON.stringify(visit));
+    cachePatientVisits(bmhId, cachedVisits);
   }
   Promise.all([
     fbSet(`visits/${bmhId}/${visitKey}`, visitForCloud),
