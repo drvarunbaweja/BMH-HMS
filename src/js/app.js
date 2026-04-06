@@ -100,7 +100,13 @@ window._loginUser = async function () {
   if (btn) { btn.textContent = 'Signing in…'; btn.disabled = true }
 
   const looksLikeEmail = /@/.test(email)
-  const shouldUseLegacyFirst = !looksLikeEmail || /^[a-z0-9._,-]+$/i.test(email)
+  const isHospitalManagedEmail = /@bawejahospital\.com$/i.test(email)
+  const isDefaultManagedPassword = password === 'ChangeMe@123'
+  const shouldUseLegacyFirst =
+    !looksLikeEmail ||
+    /^[a-z0-9._,-]+$/i.test(email) ||
+    isHospitalManagedEmail ||
+    isDefaultManagedPassword
 
   if (shouldUseLegacyFirst && typeof window.loginUser === 'function') {
     try {
