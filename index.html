@@ -4088,6 +4088,11 @@
 <div class="modal-hd"><div class="modal-title">Print surgery pack</div><button class="modal-close" onclick="closeM('m-sp-pack-print')">✕</button></div>
 <div class="fg fg1" style="gap:9px">
   <div style="font-size:11px;color:var(--g1)">Uncheck any document you do not want. Consents print as one bilingual consent, while the discharge summary prints as a separate official hospital document.</div>
+  <div class="form-group">
+    <label class="fl">Surgery pack</label>
+    <select id="sp-pack-select" onchange="changeSurgeryPackSelection(this.value)"></select>
+  </div>
+  <div id="sp-pack-extra-options" style="display:none;background:var(--g6);border:1px solid var(--g4);border-radius:10px;padding:10px"></div>
   <div id="sp-pack-print-checklist" style="max-height:280px;overflow-y:auto"></div>
   <div style="display:flex;gap:8px;flex-wrap:wrap">
     <button type="button" class="btn btn-gold" onclick="confirmSurgeryPackPrint()">🖨️ Print selected</button>

@@ -1107,6 +1107,7 @@ function getConsentTemplateItem(id) {
 }
 function getPackDocumentTitle(key) {
   if (key === '__discharge__') return 'Discharge Summary & Fitness Certificate';
+  if (key === '__ophtho_case_sheet__') return 'Latest Eye Examination Case Sheet';
   const cd = getConsentEntry(key);
   if (cd && cd.title) return cd.title;
   const lib = getMergedLibraryItem(key) || ((window.BMH_UPLOADED_CONSENTS || []).find(function (x) { return x && x.id === key; }) || null);
@@ -1114,6 +1115,82 @@ function getPackDocumentTitle(key) {
   const tpl = getConsentTemplateItem(key);
   if (tpl && tpl.name) return tpl.name;
   return key;
+}
+function getLatestSavedVisitForDept(bmhId, dept) {
+  if (!bmhId) return null;
+  const localPt = (typeof PATIENTS !== 'undefined' ? PATIENTS.find(function (p) { return p.bmhId === bmhId; }) : null) || null;
+  const cachedVisits = getCachedPatientVisits(bmhId);
+  const visits = Object.values(cachedVisits || {}).filter(function (v) {
+    return v && v.dept === dept;
+  }).sort(function (a, b) {
+    return String(b.date || b.createdAt || '').localeCompare(String(a.date || a.createdAt || ''));
+  });
+  if (localPt?.lastVisit && localPt.lastDeptVisit === dept) {
+    const lv = localPt.lastVisit;
+    if (!visits.length || String(lv.date || '').localeCompare(String(visits[0]?.date || '')) >= 0) return lv;
+  }
+  return visits[0] || null;
+}
+function buildSavedOphthoCaseSheetPageForPatient(bmhId) {
+  const pt = (typeof PATIENTS !== 'undefined' ? PATIENTS.find(function (p) { return p.bmhId === bmhId; }) : null) || {};
+  const visit = getLatestSavedVisitForDept(bmhId, 'ophtho');
+  if (!visit) return '';
+  const esc = escapeHtmlConsent;
+  const dateLabel = formatDateIN(visit.date || visit.createdAt || new Date().toISOString());
+  const cc = Array.isArray(visit.ccRows)
+    ? visit.ccRows.map(function (row) {
+        return [row.text, row.dur ? '(' + row.dur + ')' : '', row.eye || ''].filter(Boolean).join(' ');
+      }).filter(Boolean).join('; ')
+    : (visit.chiefComplaints || '—');
+  const diagnoses = Array.isArray(visit.diagnoses) && visit.diagnoses.length
+    ? visit.diagnoses.map(function (d) { return esc(formatDxLineForPrint(d)); }).join('<br>')
+    : esc(visit.dx || visit.diagnosisText || '—');
+  const slEntries = Object.entries(visit.slChips || {}).map(function (entry) {
+    const label = entry[0];
+    const bucket = entry[1] || {};
+    const od = (bucket.od || []).join(', ');
+    const os = (bucket.os || []).join(', ');
+    if (!od && !os) return '';
+    return '<tr><td style="border:1px solid #bbb;padding:4px 5px;font-weight:700;background:#f6f7fb;width:24%">' + esc(label.replace(/_/g, '/')) + '</td>'
+      + '<td style="border:1px solid #bbb;padding:4px 5px">' + esc(od || '—') + '</td>'
+      + '<td style="border:1px solid #bbb;padding:4px 5px">' + esc(os || '—') + '</td></tr>';
+  }).filter(Boolean).join('');
+  const rxRows = Array.isArray(visit.rx) ? visit.rx : [];
+  const rxHtml = rxRows.length
+    ? '<table style="width:100%;border-collapse:collapse;font-size:10px;margin-top:6px"><thead><tr style="background:#1A3C6E;color:#fff"><th style="border:1px solid #1A3C6E;padding:4px;width:28px">#</th><th style="border:1px solid #1A3C6E;padding:4px;text-align:left">Medicine</th><th style="border:1px solid #1A3C6E;padding:4px;width:80px">Eye</th><th style="border:1px solid #1A3C6E;padding:4px;width:110px">Frequency</th><th style="border:1px solid #1A3C6E;padding:4px;width:90px">Duration</th></tr></thead><tbody>'
+      + rxRows.map(function (d, i) {
+          return '<tr><td style="border:1px solid #ccc;padding:4px;text-align:center">' + (i + 1) + '</td>'
+            + '<td style="border:1px solid #ccc;padding:4px"><b>' + esc(rxDrugTradeName(d) || d.trade || d.name || d.generic || 'Medicine') + '</b>'
+            + ((d.generic && d.generic !== d.trade && d.generic !== d.name) ? ' <span style="color:#666">(' + esc(d.generic) + ')</span>' : '') + '</td>'
+            + '<td style="border:1px solid #ccc;padding:4px;text-align:center">' + esc(d.eye || d.site || '—') + '</td>'
+            + '<td style="border:1px solid #ccc;padding:4px;text-align:center">' + esc(d.freq || '—') + '</td>'
+            + '<td style="border:1px solid #ccc;padding:4px;text-align:center">' + esc(d.dur || '—') + '</td></tr>';
+        }).join('')
+      + '</tbody></table>'
+    : '<div style="font-size:10px;color:#666;margin-top:6px">No medicines saved in the latest eye visit.</div>';
+  const body = ''
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:10.5px;line-height:1.5">'
+    + '<div style="border:1px solid #d8deea;border-radius:8px;padding:8px;background:#f8fbff"><div style="font-weight:900;color:#1A3C6E;text-transform:uppercase;font-size:10px;margin-bottom:4px">Patient details</div>'
+    + '<div><b>Name:</b> ' + esc(pt.name || visit.ptName || '—') + '</div>'
+    + '<div><b>BMH ID:</b> ' + esc(bmhId || '—') + '</div>'
+    + '<div><b>Age/Sex:</b> ' + esc((pt.age || '—') + (pt.sex ? ' / ' + pt.sex : '')) + '</div>'
+    + '<div><b>Visit date:</b> ' + esc(dateLabel) + '</div></div>'
+    + '<div style="border:1px solid #d8deea;border-radius:8px;padding:8px;background:#fffdf8"><div style="font-weight:900;color:#8a4200;text-transform:uppercase;font-size:10px;margin-bottom:4px">Summary</div>'
+    + '<div><b>Chief complaints:</b> ' + esc(cc || '—') + '</div>'
+    + '<div><b>Positive findings:</b> ' + esc(visit.positiveFindings || '—') + '</div>'
+    + '<div><b>Advice:</b> ' + esc(visit.advice || '—') + '</div></div></div>'
+    + '<div style="margin-top:8px;border:1px solid #d8deea;border-radius:8px;padding:8px;background:#fff"><div style="font-weight:900;color:#1A3C6E;text-transform:uppercase;font-size:10px;margin-bottom:4px">Refraction & Vision</div>'
+    + '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;font-size:10px">'
+    + '<div><b>OD:</b> UCVA ' + esc(visit.vaOD || '—') + ' · Subj ' + esc([visit.subjODsph, visit.subjODcyl, visit.subjODax].filter(Boolean).join(' / ') || '—') + ' · VA ' + esc(visit.subjODva || '—') + ' · Add ' + esc(visit.rfODAdd || '—') + '</div>'
+    + '<div><b>OS:</b> UCVA ' + esc(visit.vaOS || '—') + ' · Subj ' + esc([visit.subjOSsph, visit.subjOScyl, visit.subjOSax].filter(Boolean).join(' / ') || '—') + ' · VA ' + esc(visit.subjOSva || '—') + ' · Add ' + esc(visit.rfOSAdd || '—') + '</div>'
+    + '</div></div>'
+    + '<div style="margin-top:8px;border:1px solid #d8deea;border-radius:8px;padding:8px;background:#fff"><div style="font-weight:900;color:#1A3C6E;text-transform:uppercase;font-size:10px;margin-bottom:4px">Diagnosis</div><div style="font-size:10.4px;line-height:1.5">' + diagnoses + '</div></div>'
+    + '<div style="margin-top:8px;border:1px solid #d8deea;border-radius:8px;padding:8px;background:#fff"><div style="font-weight:900;color:#1A3C6E;text-transform:uppercase;font-size:10px;margin-bottom:4px">Slit lamp & Fundus</div>'
+    + (slEntries ? '<table style="width:100%;border-collapse:collapse;font-size:10px"><thead><tr style="background:#eef2f9"><th style="border:1px solid #bbb;padding:4px">Finding</th><th style="border:1px solid #bbb;padding:4px">OD</th><th style="border:1px solid #bbb;padding:4px">OS</th></tr></thead><tbody>' + slEntries + '</tbody></table>' : '<div style="font-size:10px;color:#666">No slit lamp findings saved.</div>')
+    + ((visit.fundODtext || visit.fundOStext) ? '<div style="margin-top:6px;font-size:10px"><b>Fundus notes:</b> OD ' + esc(visit.fundODtext || '—') + ' · OS ' + esc(visit.fundOStext || '—') + '</div>' : '')
+    + '</div>'
+    + '<div style="margin-top:8px;border:1px solid #d8deea;border-radius:8px;padding:8px;background:#fff"><div style="font-weight:900;color:#1A3C6E;text-transform:uppercase;font-size:10px;margin-bottom:4px">Prescription</div>' + rxHtml + '</div>';
+  return buildCompactDocumentShell('Latest Eye Examination Case Sheet', collectConsentPrintContext(), body, { signatures: false });
 }
 function renderGenericDocumentPage(title, text, ctx, opts) {
   const body = '<div style="white-space:pre-wrap;font-size:12px;line-height:1.9">' + escapeHtmlConsent(text || '').replace(/\n/g, '<br>') + '</div>';
@@ -1128,6 +1205,7 @@ function renderImageDocumentPage(title, imgSrc, ctx) {
 }
 function renderPackDocumentPages(key, ctx) {
   if (key === '__discharge__') return buildDischargePrintSection();
+  if (key === '__ophtho_case_sheet__') return buildSavedOphthoCaseSheetPageForPatient(ctx?.ptId || window._CONSENT_PRINT_BMH_ID || '');
   const lib = getMergedLibraryItem(key) || ((window.BMH_UPLOADED_CONSENTS || []).find(function (x) { return x && x.id === key; }) || null);
   const tpl = getConsentTemplateItem(key);
   const title = getPackDocumentTitle(key);
@@ -9655,7 +9733,18 @@ function printSurgeryPackForCase(caseId, packId) {
   window._CONSENT_PRINT_OT_ID = c.id;
   openSurgeryPackPrintModal(packId || (resolveSurgeryPackForCase(c)?.id || 'ophtho'));
 }
-function openSurgeryPackPrintModal(packOrDept) {
+function populateSurgeryPackPrintSelect(selectedPackId) {
+  const sel = document.getElementById('sp-pack-select');
+  if (!sel) return;
+  const packs = getAllSurgeryPacks();
+  sel.innerHTML = packs.map(function (p) {
+    const label = (p.icon || '📋') + ' ' + (p.label || p.dept || p.id);
+    return '<option value="' + String(p.id).replace(/"/g, '&quot;') + '">' + String(label).replace(/</g, '&lt;') + '</option>';
+  }).join('');
+  const target = selectedPackId || sel.value || '';
+  if ([].slice.call(sel.options).some(function (o) { return o.value === target; })) sel.value = target;
+}
+function renderSurgeryPackPrintModal(packOrDept) {
   const fallbackDeptKeys = {
     ophtho: ['cataract', 'ivt', 'lasik', 'pterygium'],
     obg: ['obg-lscs','obg-normal','obg-mtp','obg-lscs-preop','obg-lscs-op','obg-lscs-postop'],
@@ -9663,7 +9752,8 @@ function openSurgeryPackPrintModal(packOrDept) {
     skin: ['skin-peel', 'skin-laser', 'skin-prp'],
   };
   const packs = getAllSurgeryPacks();
-  const pack = packs.find(function (p) { return p.id === packOrDept; });
+  const pack = packs.find(function (p) { return p.id === packOrDept; }) || packs[0] || null;
+  const packId = pack?.id || packOrDept;
   const keys = pack && pack.documentKeys && pack.documentKeys.length
     ? pack.documentKeys.slice()
     : (fallbackDeptKeys[packOrDept] || []);
@@ -9671,12 +9761,22 @@ function openSurgeryPackPrintModal(packOrDept) {
     ? (pack.label || pack.dept)
     : ({ ophtho: 'Ophthalmology', obg: 'OBG / Obstetrics', psych: 'Neuropsychiatry', skin: 'Skin & Cosmetology' }[packOrDept] || packOrDept);
   window._SP_PACK_LABEL = deptLabel;
+  window._SP_PACK_ID = packId;
+  populateSurgeryPackPrintSelect(packId);
+  const extraHost = document.getElementById('sp-pack-extra-options');
+  const deptKey = surgeryPackDeptLabelToKey(pack?.dept || packId);
+  const canPrintCaseSheet = deptKey === 'ophtho' && !!(window._CONSENT_PRINT_BMH_ID || '');
+  if (extraHost) {
+    extraHost.style.display = canPrintCaseSheet ? '' : 'none';
+    extraHost.innerHTML = canPrintCaseSheet
+      ? '<label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;cursor:pointer"><input type="checkbox" id="sp-pack-include-case-sheet" value="1"><span>Include the latest saved eye examination case sheet for this patient</span></label>'
+      : '';
+  }
   const host = document.getElementById('sp-pack-print-checklist');
   if (!host) {
     printSurgeryPackWithKeys(keys, deptLabel);
     return;
   }
-  const merged = getMergedConsentData();
   if (!keys.length) {
     host.innerHTML = '<div style="padding:12px;color:var(--g1);font-size:12px">No documents in this pack yet.</div>';
   } else {
@@ -9687,11 +9787,18 @@ function openSurgeryPackPrintModal(packOrDept) {
         + '<span>' + String(title).replace(/</g, '&lt;') + '</span></label>';
     }).join('');
   }
+}
+function openSurgeryPackPrintModal(packOrDept) {
+  renderSurgeryPackPrintModal(packOrDept);
   openM('m-sp-pack-print');
+}
+function changeSurgeryPackSelection(packId) {
+  renderSurgeryPackPrintModal(packId);
 }
 function confirmSurgeryPackPrint() {
   const boxes = document.querySelectorAll('#sp-pack-print-checklist input[name="sp-pack-k"]:checked');
   const keys = Array.from(boxes).map(function (b) { return b.value; });
+  if (document.getElementById('sp-pack-include-case-sheet')?.checked) keys.push('__ophtho_case_sheet__');
   closeM('m-sp-pack-print');
   printSurgeryPackWithKeys(keys, window._SP_PACK_LABEL || 'Pack');
 }
