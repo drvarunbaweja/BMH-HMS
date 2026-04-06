@@ -31,7 +31,7 @@
       #pg-ot [style*="display:flex;align-items:center;gap:10px"], #pg-ot [style*="display:flex;gap:8px"], #set-rx-templates [style*="display:flex;align-items:flex-start"] { flex-wrap:wrap !important; }
     }
   </style>
-  <script type="module" crossorigin src="/BMH-HMS/assets/main-CBqiK0PR.js"></script>
+  <script type="module" crossorigin src="/BMH-HMS/assets/main-CRCOUTdu.js"></script>
   <link rel="modulepreload" crossorigin href="/BMH-HMS/assets/firebase-core-CsWAQJdo.js">
   <link rel="modulepreload" crossorigin href="/BMH-HMS/assets/firebase-db-DJhyJ2pn.js">
   <link rel="stylesheet" crossorigin href="/BMH-HMS/assets/main-Dha0tA3N.css">
@@ -228,6 +228,13 @@
         <button type="button" class="btn btn-outline btn-xs" onclick="openM('m-print-tpl')">🖨️ Print Template</button>
         <button type="button" class="btn btn-outline btn-xs" onclick="nav('discharge',null)">🏠 Discharge</button>
       </div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:240px;background:#fff;border:1.5px solid var(--g4);border-radius:10px;padding:7px 10px">
+        <span style="font-size:13px;color:var(--g1)">🔍</span>
+        <input type="text" id="dq-search" placeholder="Search patient, BMSH ID, mobile, purpose or doctor…" oninput="renderDocQueue()" style="border:none;outline:none;background:transparent;width:100%;font-size:12px;font-family:var(--font)">
+      </div>
+      <button type="button" class="btn btn-outline btn-xs" onclick="const q=document.getElementById('dq-search'); if(q){q.value='';} renderDocQueue();">Clear Search</button>
     </div>
     <div class="dq-toolbar" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;padding:10px 12px;background:var(--g6);border-radius:var(--rsm);margin-bottom:12px;border:1px solid var(--g5)">
       <div style="flex:1;min-width:160px">
@@ -876,8 +883,8 @@
                 <td style="border:1px solid var(--g4)"><select id="subj-od-sph" style="width:65px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-sph-sel"></select></td>
                 <td style="border:1px solid var(--g4)"><select id="subj-od-cyl" style="width:65px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-cyl-sel"></select></td>
                 <td style="border:1px solid var(--g4)"><select id="subj-od-ax" style="width:58px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-ax-sel"></select></td>
-                <td style="border:1px solid var(--g4)"><select style="width:55px;font-size:10px;padding:2px 2px;border:none;background:transparent"><option>—</option><option>+1.00</option><option>+1.25</option><option>+1.50</option><option>+1.75</option><option>+2.00</option><option>+2.25</option><option>+2.50</option><option>+2.75</option><option>+3.00</option></select></td>
-                <td style="border:1px solid var(--g4)"><select style="width:50px;font-size:10px;padding:2px 2px;border:none;background:transparent"><option>—</option><option>N5</option><option>N6</option><option>N8</option><option>N10</option><option>N12</option><option>N18</option><option>N24</option><option>N36</option></select></td>
+                <td style="border:1px solid var(--g4)"><select id="rf-od-add" style="width:55px;font-size:10px;padding:2px 2px;border:none;background:transparent"><option>—</option><option>+1.00</option><option>+1.25</option><option>+1.50</option><option>+1.75</option><option>+2.00</option><option>+2.25</option><option>+2.50</option><option>+2.75</option><option>+3.00</option></select></td>
+                <td style="border:1px solid var(--g4)"><select id="nv-od-final" style="width:50px;font-size:10px;padding:2px 2px;border:none;background:transparent"><option>—</option><option>N5</option><option>N6</option><option>N8</option><option>N10</option><option>N12</option><option>N18</option><option>N24</option><option>N36</option></select></td>
               </tr>
               <tr>
                 <td style="font-weight:900;background:#e8f5e9;border:1px solid var(--g4);padding:4px 7px">OS</td>
@@ -892,8 +899,8 @@
                 <td style="border:1px solid var(--g4)"><select id="subj-os-sph" style="width:65px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-sph-sel"></select></td>
                 <td style="border:1px solid var(--g4)"><select id="subj-os-cyl" style="width:65px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-cyl-sel"></select></td>
                 <td style="border:1px solid var(--g4)"><select id="subj-os-ax" style="width:58px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-ax-sel"></select></td>
-                <td style="border:1px solid var(--g4)"><select style="width:55px;font-size:10px;padding:2px 2px;border:none;background:transparent"><option>—</option><option>+1.00</option><option>+1.25</option><option>+1.50</option><option>+1.75</option><option>+2.00</option><option>+2.25</option><option>+2.50</option><option>+2.75</option><option>+3.00</option></select></td>
-                <td style="border:1px solid var(--g4)"><select style="width:50px;font-size:10px;padding:2px 2px;border:none;background:transparent"><option>—</option><option>N5</option><option>N6</option><option>N8</option><option>N10</option><option>N12</option><option>N18</option><option>N24</option><option>N36</option></select></td>
+                <td style="border:1px solid var(--g4)"><select id="rf-os-add" style="width:55px;font-size:10px;padding:2px 2px;border:none;background:transparent"><option>—</option><option>+1.00</option><option>+1.25</option><option>+1.50</option><option>+1.75</option><option>+2.00</option><option>+2.25</option><option>+2.50</option><option>+2.75</option><option>+3.00</option></select></td>
+                <td style="border:1px solid var(--g4)"><select id="nv-os-final" style="width:50px;font-size:10px;padding:2px 2px;border:none;background:transparent"><option>—</option><option>N5</option><option>N6</option><option>N8</option><option>N10</option><option>N12</option><option>N18</option><option>N24</option><option>N36</option></select></td>
               </tr>
             </tbody>
           </table>
@@ -1195,7 +1202,7 @@
             <input type="text" id="rx-quick-search" placeholder="Type drug name to add (e.g. Vigamox, Timolol)…"
               oninput="rxQuickSearch(this.value)" autocomplete="off"
               style="flex:1;border:none;background:transparent;outline:none;font-size:13px;font-family:var(--font);font-weight:600">
-            <button class="btn btn-blue btn-xs" onclick="addRxFromQuick()">+ Add</button>
+            <button class="btn btn-blue btn-xs" onclick="openDrugLibraryAddFromQuick()">+ Add</button>
           </div>
           <div id="rx-quick-dropdown" style="display:none;position:absolute;z-index:200;background:#fff;border:2px solid var(--blue);border-top:none;border-radius:0 0 var(--rsm) var(--rsm);width:100%;max-height:220px;overflow-y:auto;box-shadow:var(--sh-md)"></div>
         </div>
@@ -2168,7 +2175,7 @@
             <input type="text" id="rx-quick-search" placeholder="Type drug name to add (e.g. Dydrogesterone, Metformin, Labetalol)…"
               oninput="rxQuickSearch(this.value)" autocomplete="off"
               style="flex:1;border:none;background:transparent;outline:none;font-size:13px;font-family:var(--font);font-weight:600">
-            <button class="btn btn-blue btn-xs" onclick="addRxFromQuick()">+ Add</button>
+            <button class="btn btn-blue btn-xs" onclick="openDrugLibraryAddFromQuick()">+ Add</button>
           </div>
           <div id="rx-quick-dropdown" style="display:none;position:absolute;z-index:200;background:#fff;border:2px solid var(--blue);border-top:none;border-radius:0 0 var(--rsm) var(--rsm);width:100%;max-height:220px;overflow-y:auto;box-shadow:var(--sh-md)"></div>
         </div>
@@ -2599,7 +2606,7 @@
             <input type="text" id="rx-quick-search" placeholder="Type drug name to add (e.g. Sertraline, Clonazepam, Sodium Valproate)…"
               oninput="rxQuickSearch(this.value)" autocomplete="off"
               style="flex:1;border:none;background:transparent;outline:none;font-size:13px;font-family:var(--font);font-weight:600">
-            <button class="btn btn-blue btn-xs" onclick="addRxFromQuick()">+ Add</button>
+            <button class="btn btn-blue btn-xs" onclick="openDrugLibraryAddFromQuick()">+ Add</button>
           </div>
           <div id="rx-quick-dropdown" style="display:none;position:absolute;z-index:200;background:#fff;border:2px solid var(--blue);border-top:none;border-radius:0 0 var(--rsm) var(--rsm);width:100%;max-height:220px;overflow-y:auto;box-shadow:var(--sh-md)"></div>
         </div>
@@ -2847,7 +2854,7 @@
             <input type="text" id="rx-quick-search" placeholder="Type drug name to add (e.g. Tretinoin, Doxycycline, Hydroquinone)…"
               oninput="rxQuickSearch(this.value)" autocomplete="off"
               style="flex:1;border:none;background:transparent;outline:none;font-size:13px;font-family:var(--font);font-weight:600">
-            <button class="btn btn-blue btn-xs" onclick="addRxFromQuick()">+ Add</button>
+            <button class="btn btn-blue btn-xs" onclick="openDrugLibraryAddFromQuick()">+ Add</button>
           </div>
           <div id="rx-quick-dropdown" style="display:none;position:absolute;z-index:200;background:#fff;border:2px solid var(--blue);border-top:none;border-radius:0 0 var(--rsm) var(--rsm);width:100%;max-height:220px;overflow-y:auto;box-shadow:var(--sh-md)"></div>
         </div>
@@ -4696,6 +4703,34 @@
     </select>
   </div>
   <div class="form-group"><label class="fl">Department</label><input type="text" id="nu-dept" placeholder="e.g. Reception, OBG, Lab"></div>
+  <div class="form-group full"><label class="fl">Module Access</label>
+    <div id="nu-access-modules" style="display:flex;gap:8px;flex-wrap:wrap;font-size:11px">
+      <label><input type="checkbox" value="reception"> Reception</label>
+      <label><input type="checkbox" value="appointments"> Appointments</label>
+      <label><input type="checkbox" value="ipd"> IPD</label>
+      <label><input type="checkbox" value="ot"> OT</label>
+      <label><input type="checkbox" value="billing"> Billing</label>
+      <label><input type="checkbox" value="tpa"> TPA</label>
+      <label><input type="checkbox" value="reports"> Reports</label>
+      <label><input type="checkbox" value="settings"> Settings</label>
+      <label><input type="checkbox" value="inventory"> Inventory</label>
+      <label><input type="checkbox" value="lab"> Lab</label>
+    </div>
+  </div>
+  <div class="form-group full"><label class="fl">Settings Access</label>
+    <div id="nu-access-settings" style="display:flex;gap:8px;flex-wrap:wrap;font-size:11px">
+      <label><input type="checkbox" value="set-hospital"> Hospital</label>
+      <label><input type="checkbox" value="set-doctors"> Doctors</label>
+      <label><input type="checkbox" value="set-drugs"> Drugs</label>
+      <label><input type="checkbox" value="set-procedures"> Charges</label>
+      <label><input type="checkbox" value="set-rx-templates"> Rx Templates</label>
+      <label><input type="checkbox" value="set-consents"> Consents</label>
+      <label><input type="checkbox" value="set-surgery-packs"> Surgery Packs</label>
+      <label><input type="checkbox" value="set-import"> Import</label>
+      <label><input type="checkbox" value="set-logins"> Logins</label>
+      <label><input type="checkbox" value="set-del-approvals"> Approvals</label>
+    </div>
+  </div>
 </div>
 <div style="display:flex;gap:8px;margin-top:14px">
   <button class="btn btn-gold" style="flex:1" onclick="saveNewUser()">✅ Create User</button>
@@ -4729,6 +4764,34 @@
     </select>
   </div>
   <div class="form-group"><label class="fl">Department</label><input type="text" id="eu-dept" placeholder="Department"></div>
+  <div class="form-group full"><label class="fl">Module Access</label>
+    <div id="eu-access-modules" style="display:flex;gap:8px;flex-wrap:wrap;font-size:11px">
+      <label><input type="checkbox" value="reception"> Reception</label>
+      <label><input type="checkbox" value="appointments"> Appointments</label>
+      <label><input type="checkbox" value="ipd"> IPD</label>
+      <label><input type="checkbox" value="ot"> OT</label>
+      <label><input type="checkbox" value="billing"> Billing</label>
+      <label><input type="checkbox" value="tpa"> TPA</label>
+      <label><input type="checkbox" value="reports"> Reports</label>
+      <label><input type="checkbox" value="settings"> Settings</label>
+      <label><input type="checkbox" value="inventory"> Inventory</label>
+      <label><input type="checkbox" value="lab"> Lab</label>
+    </div>
+  </div>
+  <div class="form-group full"><label class="fl">Settings Access</label>
+    <div id="eu-access-settings" style="display:flex;gap:8px;flex-wrap:wrap;font-size:11px">
+      <label><input type="checkbox" value="set-hospital"> Hospital</label>
+      <label><input type="checkbox" value="set-doctors"> Doctors</label>
+      <label><input type="checkbox" value="set-drugs"> Drugs</label>
+      <label><input type="checkbox" value="set-procedures"> Charges</label>
+      <label><input type="checkbox" value="set-rx-templates"> Rx Templates</label>
+      <label><input type="checkbox" value="set-consents"> Consents</label>
+      <label><input type="checkbox" value="set-surgery-packs"> Surgery Packs</label>
+      <label><input type="checkbox" value="set-import"> Import</label>
+      <label><input type="checkbox" value="set-logins"> Logins</label>
+      <label><input type="checkbox" value="set-del-approvals"> Approvals</label>
+    </div>
+  </div>
   <div class="form-group full"><label class="fl">Reset Password (leave blank to keep current)</label><input type="password" id="eu-newpw" placeholder="New password…" autocomplete="new-password"></div>
 </div>
 <div style="display:flex;gap:8px;margin-top:14px">
