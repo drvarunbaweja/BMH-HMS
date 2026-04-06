@@ -16862,6 +16862,18 @@ function renderDashboard() {
     const surgeryCases = (window.OT_CASES || OT_CASES || []).filter(function (c) {
       return centreMatch(c) && (dateMatch(c.date) || dateMatch(c.otDate) || dateMatch(c.createdAt) || dateMatch(c.surgeryDate));
     });
+    const chargeByDept = {};
+    Object.keys(window.BMH_PATIENT_CHARGES || {}).forEach(function (bid) {
+      const patient = PATIENTS.find(function (p) { return p.bmhId === bid; });
+      if (patient && !centreMatch(patient)) return;
+      (window.BMH_PATIENT_CHARGES[bid] || []).forEach(function (line) {
+        const ts = String(line.ts || line.date || '');
+        if (!dateMatch(ts)) return;
+        const deptKey = String(line.dept || patient?.dept || 'ophtho').toLowerCase();
+        if (!chargeByDept[deptKey]) chargeByDept[deptKey] = [];
+        chargeByDept[deptKey].push(line);
+      });
+    });
     const ipdCases = (window.IPD_PATIENTS || IPD_PATIENTS || []).filter(function (p) {
       const active = (p.status || 'admitted') !== 'discharged';
       return centreMatch(p) && (selectedDate === today ? active : (dateMatch(p.admittedAt) || dateMatch(p.date) || dateMatch(p.createdAt)));
@@ -16888,34 +16900,88 @@ function renderDashboard() {
     const vendPend = (window.BMH_VENDOR_BILLS || []).filter(v => v.status === 'pending');
     const vendSum = vendPend.reduce((s, v) => s + v.amount, 0);
     setEl('db-admin-vendor-pend', '₹' + vendSum.toLocaleString('en-IN'));
-    const listEl = document.getElementById('dash-admin-overdue-list');
-    if (listEl) {
-      listEl.innerHTML = overduePts.length ? overduePts.slice().sort(function (a, b) {
-        const sa = bmhGetPatientFinancialSummary ? bmhGetPatientFinancialSummary(a.bmhId) : null;
-        const sb = bmhGetPatientFinancialSummary ? bmhGetPatientFinancialSummary(b.bmhId) : null;
-        const da = Math.max(Number(a.balance) || 0, Number(sa?.balance || 0), Number(sa?.pendingTotal || 0));
-        const db = Math.max(Number(b.balance) || 0, Number(sb?.balance || 0), Number(sb?.pendingTotal || 0));
-        return db - da;
-      }).slice(0, 24).map(function (p) {
-        const summary = bmhGetPatientFinancialSummary ? bmhGetPatientFinancialSummary(p.bmhId) : null;
-        const due = Math.max(Number(p.balance) || 0, Number(summary?.balance || 0), Number(summary?.pendingTotal || 0));
-        const pendingLines = (PAY_REQUESTS || []).filter(function (r) { return r.bmhId === p.bmhId && r.status === 'pending'; }).length;
-        return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 8px;border-bottom:1px solid var(--g5);font-size:12px">
-          <div style="flex:1;min-width:0">
-            <div style="font-weight:800">${p.name} <span style="font-family:var(--mono);font-size:10px;color:var(--bmh-teal)">${p.bmhId}</span></div>
-            <div style="font-size:10px;color:var(--g1)">${p.dept || '—'} · ${p.mob || p.mobile || '—'}${pendingLines ? ' · ' + pendingLines + ' pending request(s)' : ''}</div>
+    const summaryEl = document.getElementById('dash-admin-summary-blocks');
+    if (summaryEl) {
+      const deptMeta = [
+        { key: 'ophtho', label: 'Eye', cls: 'blue', icon: '👁️' },
+        { key: 'obg', label: 'OBG', cls: 'red', icon: '🤰' },
+        { key: 'psych', label: 'Neuropsychiatry', cls: 'orange', icon: '🧠' },
+        { key: 'skin', label: 'Skin & Cosmetology', cls: 'gold', icon: '💆' }
+      ];
+      const deptOpdCount = function (key) {
+        return displayPts.filter(function (p) {
+          return String(p.dept || '').toLowerCase() === key && (dateMatch(p.checkinAt) || dateMatch(p.createdAt) || dateMatch(p.seenAt));
+        }).length;
+      };
+      const deptSurgeryCount = function (key) {
+        return surgeryCases.filter(function (c) { return String(c.dept || '').toLowerCase() === key; }).length;
+      };
+      const deptProcedureCount = function (key) {
+        const lines = chargeByDept[key] || [];
+        return lines.filter(function (line) {
+          const cat = String(line.cat || '').toLowerCase();
+          const text = [line.desc, line.name, line.kind, line.parent].join(' ').toLowerCase();
+          if (cat === 'diagnostic' || cat === 'investigation') return false;
+          if (cat === 'surgery' || /surgery|lscs|pmics|phaco|delivery|labour room|mtp/i.test(text)) return false;
+          return true;
+        }).length;
+      };
+      const deptCollection = function (key) {
+        return selectedTxn.filter(function (t) { return String(t.dept || '').toLowerCase() === key; }).reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
+      };
+      const deptModeText = function (key) {
+        const grouped = {};
+        selectedTxn.filter(function (t) { return String(t.dept || '').toLowerCase() === key; }).forEach(function (t) {
+          const mode = normalizeDashboardPaymentMode(t.mode);
+          grouped[mode] = (grouped[mode] || 0) + getNetTransactionAmount(t);
+        });
+        return Object.entries(grouped).map(function (entry) {
+          return entry[0] + ': ₹' + Number(entry[1] || 0).toLocaleString('en-IN');
+        }).join(' · ') || 'No collections';
+      };
+      const cards = deptMeta.map(function (meta) {
+        return `<div class="card" style="padding:14px;min-height:180px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <div style="font-size:13px;font-weight:900;color:var(--bmh-blue)">${meta.icon} ${meta.label}</div>
           </div>
-          <div style="text-align:right">
-            <div style="color:var(--orange);font-weight:900">Due ₹${due.toLocaleString('en-IN')}</div>
-            <button class="btn btn-red btn-xs" onclick="clearAdminPatientDue('${p.bmhId}')">Clear Due</button>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div class="sc ${meta.cls}" style="min-height:76px"><div class="sc-lbl">OPD patients</div><div class="sc-val ${meta.cls}">${deptOpdCount(meta.key)}</div></div>
+            <div class="sc ${meta.cls}" style="min-height:76px"><div class="sc-lbl">Surgeries</div><div class="sc-val ${meta.cls}">${deptSurgeryCount(meta.key)}</div></div>
+            <div class="sc ${meta.cls}" style="min-height:76px"><div class="sc-lbl">Procedures</div><div class="sc-val ${meta.cls}">${deptProcedureCount(meta.key)}</div></div>
+            <div class="sc ${meta.cls}" style="min-height:76px"><div class="sc-lbl">Collection</div><div class="sc-val ${meta.cls}">₹${deptCollection(meta.key).toLocaleString('en-IN')}</div></div>
           </div>
+          <div style="margin-top:10px;font-size:10px;font-weight:700;color:var(--g1);line-height:1.5">${deptModeText(meta.key)}</div>
         </div>`;
-      }).join('') : '<div style="padding:16px;color:var(--g1);font-size:13px">No patient balances due — great.</div>';
+      });
+      const totalModes = {};
+      selectedTxn.forEach(function (t) {
+        const mode = normalizeDashboardPaymentMode(t.mode);
+        totalModes[mode] = (totalModes[mode] || 0) + getNetTransactionAmount(t);
+      });
+      const totalProcedures = Object.keys(chargeByDept).reduce(function (sum, key) {
+        return sum + (chargeByDept[key] || []).filter(function (line) {
+          const cat = String(line.cat || '').toLowerCase();
+          const text = [line.desc, line.name, line.kind, line.parent].join(' ').toLowerCase();
+          if (cat === 'diagnostic' || cat === 'investigation') return false;
+          if (cat === 'surgery' || /surgery|lscs|pmics|phaco|delivery|labour room|mtp/i.test(text)) return false;
+          return true;
+        }).length;
+      }, 0);
+      const totalModeText = Object.entries(totalModes).map(function (entry) {
+        return entry[0] + ': ₹' + Number(entry[1] || 0).toLocaleString('en-IN');
+      }).join(' · ') || 'No collections';
+      const totalCard = `<div class="card" style="padding:14px;min-height:180px;border:2px solid var(--bmh-gold)">
+        <div style="font-size:13px;font-weight:900;color:var(--bmh-blue);margin-bottom:10px">🏥 Hospital Total</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div class="sc green" style="min-height:76px"><div class="sc-lbl">OPD patients</div><div class="sc-val green">${opdCount}</div></div>
+          <div class="sc green" style="min-height:76px"><div class="sc-lbl">Surgeries</div><div class="sc-val green">${surgeryCases.length}</div></div>
+          <div class="sc green" style="min-height:76px"><div class="sc-lbl">Procedures</div><div class="sc-val green">${totalProcedures}</div></div>
+          <div class="sc green" style="min-height:76px"><div class="sc-lbl">Collection</div><div class="sc-val green">₹${selectedCollection.toLocaleString('en-IN')}</div></div>
+        </div>
+        <div style="margin-top:10px;font-size:10px;font-weight:700;color:var(--g1);line-height:1.5">${totalModeText}</div>
+      </div>`;
+      summaryEl.innerHTML = cards.join('') + totalCard;
     }
-    renderAdminDashboardBreakdowns(selectedDate, selectedTxn, overduePts, surgeryCases, ipdCases, displayPts);
-    bmhGeneratePurchaseOrderDraft();
-    if (!window._adminDashDetail || !window._adminDashDetail.type) window._adminDashDetail = { type: 'dues' };
-    renderAdminDashboardDetail(selectedDate, selectedTxn, overduePts, surgeryCases, ipdCases, displayPts);
   } else {
     setEl('db-cl-opd', String(todaySeen + waiting));
     setEl('db-cl-ipd', String(typeof IPD_PATIENTS !== 'undefined' ? IPD_PATIENTS.length : 0));
