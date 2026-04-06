@@ -3428,13 +3428,14 @@
     <div id="set-rx-tpl-list"></div>
   </div>
   <div class="col">
-    <div class="card"><div class="card-hd"><div class="card-title">Create Template</div></div>
+    <div class="card"><div class="card-hd"><div class="card-title">OT Notes Templates</div></div>
       <div class="fg fg1" style="gap:8px">
-        <div class="form-group"><label class="fl">Template Name</label><input type="text" id="rx-tpl-name" placeholder="e.g. Post Phaco Day 1"></div>
-        <div class="form-group"><label class="fl">Department</label><select id="rx-tpl-dept-settings"><option value="Ophthalmology">Ophthalmology</option><option value="OBG">OBG</option><option value="Psychiatry">Psychiatry</option><option value="Skin">Skin</option><option value="OT">OT / Operative Notes</option><option value="All">All</option></select></div>
-        <div class="form-group"><label class="fl">Surgery link for OT Notes</label><input type="text" id="rx-tpl-surgery" list="rx-tpl-surgery-list" placeholder="e.g. PMICS + IOL Implantation"><datalist id="rx-tpl-surgery-list"></datalist></div>
-        <div class="form-group full"><label class="fl">Drugs (one per line)</label><textarea id="rx-tpl-drugs" placeholder="Moxifloxacin 0.5% — 4x/day — 7 days&#10;Prednisolone 1% — 4x/day taper — 4 weeks&#10;CMC 0.5% — PRN — 1 month" style="min-height:80px"></textarea></div>
-        <button class="btn btn-gold" onclick="saveRxTemplate()">💾 Save Template</button>
+        <div style="font-size:12px;color:var(--g1);line-height:1.5">Save OT note templates here for Eye and OBG. These templates will appear inside OT Operative Notes and autosuggest by linked surgery.</div>
+        <div class="form-group"><label class="fl">Template Name</label><input type="text" id="rx-tpl-name" placeholder="e.g. PMICS Routine Note"></div>
+        <div class="form-group"><label class="fl">OT Branch</label><select id="rx-tpl-dept-settings"><option value="OT - Eye">OT - Eye</option><option value="OT - OBG">OT - OBG</option></select></div>
+        <div class="form-group"><label class="fl">Linked Surgery / Procedure</label><input type="text" id="rx-tpl-surgery" list="rx-tpl-surgery-list" placeholder="e.g. Pinhole Microincision Cataract Surgery + IOL Implantation"><datalist id="rx-tpl-surgery-list"></datalist></div>
+        <div class="form-group full"><label class="fl">OT Notes Template (one line per step)</label><textarea id="rx-tpl-drugs" placeholder="Peribulbar anaesthesia given&#10;Clear corneal entry made&#10;Nucleus delivered and IOL implanted&#10;Wound checked secure" style="min-height:120px"></textarea></div>
+        <button class="btn btn-gold" onclick="saveRxTemplate()">💾 Save OT Template</button>
       </div>
     </div>
   </div>
