@@ -222,17 +222,25 @@ watchAuthState(
     // With Firebase Auth we must call them explicitly after the user is known.
     setTimeout(() => {
       const safe = fn => { try { if (typeof window[fn] === 'function') window[fn]() } catch (_) {} }
+      const defer = (fn, delay = 0) => {
+        const runner = () => safe(fn)
+        if (typeof window.requestIdleCallback === 'function') {
+          window.requestIdleCallback(runner, { timeout: Math.max(300, delay || 800) })
+          return
+        }
+        setTimeout(runner, delay)
+      }
       safe('loadPatientsFromFirebase')
-      safe('listenPayRequests')
-      safe('listenAppointments')
-      safe('loadTodayTransactions')
-      safe('loadCustomPurposes')
-      safe('loadAdviceTemplates')
-      safe('loadDeletionRequests')
-      safe('loadOTCasesFromFirebase')
-      safe('loadIPDPatientsFromFirebase')
-      safe('loadChargesFromFirebase')
-      if (user.role === 'lab') safe('listenLabOrders')
+      defer('listenPayRequests', 120)
+      defer('listenAppointments', 120)
+      defer('loadTodayTransactions', 120)
+      defer('loadCustomPurposes', 600)
+      defer('loadAdviceTemplates', 600)
+      defer('loadChargesFromFirebase', 600)
+      defer('loadDeletionRequests', 1100)
+      defer('loadOTCasesFromFirebase', 1100)
+      defer('loadIPDPatientsFromFirebase', 1100)
+      if (user.role === 'lab') defer('listenLabOrders', 1100)
     }, 300)
 
     // Navigate to role's home page

@@ -1518,6 +1518,10 @@
     </select>
     <div id="dc-specialty-ctrl" style="display:none"></div><!-- trigger hook -->
     <button class="btn btn-gold" onclick="printDischarge()">🖨️ Print Discharge Card</button>
+    <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:var(--tx);padding:6px 10px;border:1px solid var(--g4);border-radius:8px;background:#fff">
+      <input type="checkbox" id="dc-color-print">
+      Colour print
+    </label>
     <button class="wa-btn" onclick="showToast('Discharge card sent via WhatsApp ✓','s')">📱 WhatsApp</button>
     <button class="btn btn-outline btn-sm" onclick="showToast('Auto-booking follow-up appointment ✓','s')">📅 Auto-Book Follow-up</button>
     <button class="btn btn-outline btn-sm" onclick="loadDischargeFromLastVisit()">📂 Load from Last Visit</button>
@@ -4149,12 +4153,12 @@
   <div class="form-group"><label class="fl">Display name</label><input type="text" id="edit-rx-tpl-name" style="font-size:13px"></div>
   <div class="form-group"><label class="fl">Department</label>
     <select id="edit-rx-tpl-dept" style="font-size:13px">
-      <option value="ophtho">Ophthalmology</option><option value="obg">OBG</option><option value="psych">Neuropsychiatry</option><option value="skin">Skin</option><option value="ot">OT / Operative Notes</option><option value="all">All</option>
+      <option value="ophtho">Ophthalmology</option><option value="obg">OBG</option><option value="psych">Neuropsychiatry</option><option value="skin">Skin</option><option value="ot">OT / Operative Notes</option><option value="dc-ophtho">Discharge Card — Eye</option><option value="dc-obg">Discharge Card — OBG</option><option value="all">All</option>
     </select>
   </div>
   <div class="form-group"><label class="fl">Surgery link for OT Notes</label><input type="text" id="edit-rx-tpl-surgery" list="rx-tpl-surgery-list" placeholder="Optional"></div>
   <div class="form-group"><label class="fl">Notes</label><input type="text" id="edit-rx-tpl-notes" placeholder="Optional" style="font-size:13px"></div>
-  <div class="form-group full"><label class="fl">Template rows</label><textarea id="edit-rx-tpl-lines" rows="14" style="width:100%;font-size:12px;box-sizing:border-box" placeholder="One line per medicine or OT note step"></textarea></div>
+  <div class="form-group full"><label class="fl">Template rows</label><textarea id="edit-rx-tpl-lines" rows="14" style="width:100%;font-size:12px;box-sizing:border-box" placeholder="One line per medicine, OT note step, or discharge instruction"></textarea></div>
   <button type="button" class="btn btn-gold" onclick="saveRxTemplateFromModal()">💾 Save template</button>
 </div>
 </div>
@@ -4180,9 +4184,9 @@
 <div class="modal-hd"><div class="modal-title">Create Rx / OT notes template</div><button class="modal-close" onclick="closeM('m-add-rx-tpl')">✕</button></div>
 <div class="fg fg1" style="gap:9px">
   <div class="form-group"><label class="fl">Template Name</label><input type="text" id="rx-tpl-name-modal" placeholder="e.g. Post Phaco Day 1"></div>
-  <div class="form-group"><label class="fl">Department</label><select id="rx-tpl-dept-settings-modal"><option value="Ophthalmology">Ophthalmology</option><option value="OBG">OBG</option><option value="Psychiatry">Psychiatry</option><option value="Skin">Skin</option><option value="OT">OT / Operative Notes</option><option value="All">All</option></select></div>
+  <div class="form-group"><label class="fl">Department</label><select id="rx-tpl-dept-settings-modal"><option value="Ophthalmology">Ophthalmology</option><option value="OBG">OBG</option><option value="Psychiatry">Psychiatry</option><option value="Skin">Skin</option><option value="OT">OT / Operative Notes</option><option value="Discharge Card - Eye">Discharge Card - Eye</option><option value="Discharge Card - OBG">Discharge Card - OBG</option><option value="All">All</option></select></div>
   <div class="form-group"><label class="fl">Surgery link for OT Notes</label><input type="text" id="rx-tpl-surgery-modal" list="rx-tpl-surgery-list" placeholder="e.g. PMICS + IOL Implantation"></div>
-  <div class="form-group full"><label class="fl">Template rows</label><textarea id="rx-tpl-drugs-modal" placeholder="Moxifloxacin 0.5% — Four times daily (QID) — 7 days&#10;Prednisolone 1% — Four times daily (QID) — 4 weeks&#10;&#10;For OT Notes use one step per line." style="min-height:180px"></textarea></div>
+  <div class="form-group full"><label class="fl">Template rows</label><textarea id="rx-tpl-drugs-modal" placeholder="Moxifloxacin 0.5% — Four times daily (QID) — 7 days&#10;Prednisolone 1% — Four times daily (QID) — 4 weeks&#10;&#10;For OT Notes or Discharge Card templates, use one instruction per line." style="min-height:180px"></textarea></div>
   <button class="btn btn-gold" onclick="saveRxTemplate('modal')">💾 Save template</button>
 </div>
 </div>

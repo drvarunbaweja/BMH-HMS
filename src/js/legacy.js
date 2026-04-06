@@ -6347,9 +6347,14 @@ function loadChargesFromLocalStorage() {
 }
 function saveChargesToFirebase(){
   saveChargesToLocalStorage();
-  if(!window.FBDB) return;
-  window.FBDB.ref('centreCharges').set(CENTRE_CHARGES).catch(()=>{});
-  window.FBDB.ref('chargesSchedule').set(CHARGES_DATA).catch(()=>{});
+  if(!window.FBDB) return Promise.resolve();
+  return Promise.all([
+    window.FBDB.ref('centreCharges').set(CENTRE_CHARGES),
+    window.FBDB.ref('chargesSchedule').set(CHARGES_DATA)
+  ]).catch(function(err){
+    console.warn('saveChargesToFirebase error:', err);
+    throw err;
+  });
 }
 function loadChargesFromFirebase(){
   loadChargesFromLocalStorage();
@@ -7677,12 +7682,26 @@ let RX_TEMPLATES_DATA = {
   'post-phaco': [{trade:'Vigamox',generic:'Moxifloxacin 0.5%',type:'Eye Drop',eye:'OS',freq:'QID',dur:'1 Week'},{trade:'Pred Forte',generic:'Prednisolone 1%',type:'Eye Drop',eye:'OS',freq:'QID→Taper',dur:'4 Weeks'},{trade:'Refresh Tears',generic:'CMC 0.5%',type:'Eye Drop',eye:'OU',freq:'PRN',dur:'1 Month'}],
   'post-ivt': [{trade:'Vigamox',generic:'Moxifloxacin 0.5%',type:'Eye Drop',eye:'OS',freq:'QID',dur:'3 Days'},{trade:'Refresh Tears',generic:'CMC 0.5%',type:'Eye Drop',eye:'OU',freq:'PRN',dur:'1 Month'}],
   'dry-eye': [{trade:'Refresh Tears',generic:'CMC 0.5%',type:'Eye Drop',eye:'OU',freq:'QID',dur:'1 Month'},{trade:'Restasis',generic:'Cyclosporine 0.05%',type:'Eye Drop',eye:'OU',freq:'BD',dur:'3 Months'}],
+  'discharge-eye-default': [
+    {trade:'Do NOT rub the operated eye under any circumstances'},
+    {trade:'Wear dark glasses outdoors and protect the eye from dust and water'},
+    {trade:'If there is severe pain, redness, watering, or sudden drop in vision, report immediately'},
+    {trade:'Attend all scheduled follow-ups even if recovery feels comfortable'}
+  ],
+  'discharge-obg-default': [
+    {trade:'Keep the wound clean and dry and take medicines exactly as prescribed'},
+    {trade:'Watch for fever, foul-smelling discharge, heavy bleeding, breast pain, or wound redness'},
+    {trade:'Continue iron, calcium, fluids, and adequate nutrition during recovery'},
+    {trade:'Come for all postnatal and stitch review follow-ups on the scheduled dates'}
+  ],
 };
 /** Per-template metadata: dept key ophtho|obg|psych|skin|all, display name, notes */
 const RX_TEMPLATES_META = {
   'post-phaco': { dept: 'ophtho', name: 'Post Phaco (default)', notes: '' },
   'post-ivt': { dept: 'ophtho', name: 'Post IVT (default)', notes: '' },
   'dry-eye': { dept: 'ophtho', name: 'Dry eye (default)', notes: '' },
+  'discharge-eye-default': { dept: 'dc-ophtho', name: 'Discharge Card — Eye (default)', notes: '' },
+  'discharge-obg-default': { dept: 'dc-obg', name: 'Discharge Card — OBG (default)', notes: '' },
 };
 function saveRxTemplatesToStorage() {
   try { localStorage.setItem('bmh_rx_templates', JSON.stringify({ data: RX_TEMPLATES_DATA, meta: RX_TEMPLATES_META })); } catch (e) { /* quota */ }
@@ -7794,6 +7813,7 @@ function parseTemplateLines(raw, dept) {
   const lines = String(raw || '').split(/\n/).map(function (l) { return l.trim(); }).filter(Boolean);
   if (!lines.length) return [];
   return lines.map(function (line) {
+    if (String(dept || '').indexOf('dc-') === 0) return { trade: line, generic: '', eye: '', freq: '', dur: '' };
     const parts = line.split(/[—–-]/).map(function (s) { return s.trim(); });
     const trade = parts[0] || 'Item';
     const freq = parts[1] || 'Twice daily (BD)';
@@ -7813,6 +7833,7 @@ function parseTemplateLines(raw, dept) {
 }
 function serializeTemplateRows(rows, dept) {
   return (rows || []).map(function (row) {
+    if (String(dept || '').indexOf('dc-') === 0) return row.trade || row.name || row.generic || '';
     const name = dept === 'ot'
       ? (row.trade || row.name || row.generic || '')
       : (rxDrugTradeName(row) || row.trade || row.name || row.generic || '');
@@ -7849,8 +7870,8 @@ function rxDrugMatchesDept(drug, deptKey, deptLabel) {
 function renderSetRxTplList() {
   const el = document.getElementById('set-rx-tpl-list');
   if (!el) return;
-  const deptOrder = ['ophtho','obg','psych','skin','ot','all'];
-  const deptLabMap = { ophtho: 'Eye', obg: 'OBG', psych: 'Psych', skin: 'Skin', ot: 'OT Notes', all: 'All Departments' };
+  const deptOrder = ['ophtho','obg','psych','skin','ot','dc-ophtho','dc-obg','all'];
+  const deptLabMap = { ophtho: 'Eye', obg: 'OBG', psych: 'Psych', skin: 'Skin', ot: 'OT Notes', 'dc-ophtho': 'Discharge Card — Eye', 'dc-obg': 'Discharge Card — OBG', all: 'All Departments' };
   const groups = deptOrder.map(function (deptKey) {
     const rows = Object.keys(RX_TEMPLATES_DATA).filter(function (k) {
       return (RX_TEMPLATES_META[k]?.dept || 'all') === deptKey;
@@ -7859,6 +7880,9 @@ function renderSetRxTplList() {
       const n = meta.name || k;
       const arr = RX_TEMPLATES_DATA[k] || [];
       const preview = arr.slice(0, 2).map(function (row) {
+        if (String(meta.dept || '').indexOf('dc-') === 0) {
+          return row.trade || row.name || row.generic || 'Instruction';
+        }
         const nm = rxDrugTradeName(row) || row.trade || row.name || row.generic || 'Item';
         return nm + (row.freq ? ' · ' + row.freq : '') + (row.dur ? ' · ' + row.dur : '');
       }).join('<br>');
@@ -7909,7 +7933,17 @@ function saveRxTemplateFromModal() {
   refreshRxTemplateSelects();
   renderSetRxTplList();
   closeM('m-edit-rx-tpl');
-  showToast('Rx template saved ✓', 's');
+  showToast((String(dept).indexOf('dc-') === 0 ? 'Discharge card template saved ✓' : 'Rx template saved ✓'), 's');
+}
+function getDischargeInstructionTemplateRows(specialty) {
+  const deptKey = specialty === 'obg' ? 'dc-obg' : 'dc-ophtho';
+  const matchKey = Object.keys(RX_TEMPLATES_META || {}).find(function (key) {
+    return (RX_TEMPLATES_META[key]?.dept || '') === deptKey;
+  });
+  if (!matchKey || !RX_TEMPLATES_DATA[matchKey]) return [];
+  return (RX_TEMPLATES_DATA[matchKey] || []).map(function (row) {
+    return String(row.trade || row.name || row.generic || '').trim();
+  }).filter(Boolean);
 }
 function renderStructuredConsentList() {
   const el = document.getElementById('set-consent-data-list');
@@ -10173,7 +10207,7 @@ function saveRxTemplate(mode) {
   const name = document.getElementById('rx-tpl-name' + suffix)?.value?.trim();
   if(!name){showToast('Enter template name','w');return;}
   const deptSel = document.getElementById('rx-tpl-dept-settings' + suffix);
-  const deptMap = { 'Ophthalmology':'ophtho','OBG':'obg','Psychiatry':'psych','Skin':'skin','OT':'ot','All':'all' };
+  const deptMap = { 'Ophthalmology':'ophtho','OBG':'obg','Psychiatry':'psych','Skin':'skin','OT':'ot','Discharge Card - Eye':'dc-ophtho','Discharge Card - OBG':'dc-obg','All':'all' };
   const dept = deptSel ? (deptMap[deptSel.value] || 'all') : 'all';
   const surgery = document.getElementById('rx-tpl-surgery' + suffix)?.value?.trim() || '';
   const raw = document.getElementById('rx-tpl-drugs' + suffix)?.value || '';
@@ -10186,8 +10220,8 @@ function saveRxTemplate(mode) {
   refreshRxTemplateSelects();
   renderSetRxTplList && renderSetRxTplList();
   if (mode === 'modal') closeM('m-add-rx-tpl');
-  showToast('Template "'+name+'" saved ✓','s');
-}
+  showToast((String(dept).indexOf('dc-') === 0 ? 'Discharge card template "'+name+'" saved ✓' : 'Template "'+name+'" saved ✓'),'s');
+  }
 function openNewRxTemplateModal() {
   ['rx-tpl-name-modal','rx-tpl-drugs-modal','rx-tpl-surgery-modal'].forEach(function (id) { const el = document.getElementById(id); if (el) el.value = ''; });
   const deptSel = document.getElementById('rx-tpl-dept-settings-modal');
@@ -12848,6 +12882,14 @@ function loginUser() {
 
 function activateUserSession(user, profile, opts) {
   opts = opts || {};
+  function deferBootstrap(fn, delay) {
+    const runner = function(){ try { fn(); } catch (e) { console.warn('Deferred bootstrap error:', e); } };
+    if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+      window.requestIdleCallback(runner, { timeout: Math.max(300, delay || 800) });
+      return;
+    }
+    setTimeout(runner, delay || 0);
+  }
   const uname = String(user || '').toLowerCase();
   if (uname === 'rec_rpr' || uname === 'reception.rpr' || uname === 'reception.rpr@bawejahospital.com') profile = Object.assign({}, profile, { centre: 'RPR', name: 'Reception Ropar' });
   if (uname === 'rec_chd' || uname === 'reception.chd' || uname === 'reception.chd@bawejahospital.com') profile = Object.assign({}, profile, { centre: 'CHD', name: 'Reception CHD' });
@@ -12899,21 +12941,25 @@ function activateUserSession(user, profile, opts) {
   setTimeout(function() {
     try {
       if (typeof loadPatientsFromFirebase === 'function')  loadPatientsFromFirebase();
-      if (typeof listenPayRequests === 'function')         listenPayRequests();
-      if (typeof listenAppointments === 'function')        listenAppointments();
-      if (typeof loadTodayTransactions === 'function')     loadTodayTransactions();
-      if (typeof loadCustomPurposes === 'function')        loadCustomPurposes();
-      if (typeof loadAdviceTemplates === 'function')       loadAdviceTemplates();
-      if (typeof loadDeletionRequests === 'function')      loadDeletionRequests();
-      if (typeof loadOTCasesFromFirebase === 'function')   loadOTCasesFromFirebase();
-      if (typeof loadIPDPatientsFromFirebase === 'function') loadIPDPatientsFromFirebase();
-      if (typeof loadDoctorProfilesFromFirebase === 'function') loadDoctorProfilesFromFirebase();
-      if (typeof loadChargesFromFirebase === 'function') loadChargesFromFirebase();
-      if (typeof renderDocQueue === 'function') renderDocQueue();
-      if (typeof renderReceptionPage === 'function') renderReceptionPage();
-      if (typeof renderDashboard === 'function') renderDashboard();
-      if (profile.role === 'Lab' && typeof listenLabOrders === 'function') listenLabOrders();
-      if (window.FBDB) {
+      deferBootstrap(function() {
+        if (typeof listenPayRequests === 'function') listenPayRequests();
+        if (typeof listenAppointments === 'function') listenAppointments();
+        if (typeof loadTodayTransactions === 'function') loadTodayTransactions();
+      }, 120);
+      deferBootstrap(function() {
+        if (typeof loadCustomPurposes === 'function') loadCustomPurposes();
+        if (typeof loadAdviceTemplates === 'function') loadAdviceTemplates();
+        if (typeof loadChargesFromFirebase === 'function') loadChargesFromFirebase();
+        if (typeof loadDoctorProfilesFromFirebase === 'function') loadDoctorProfilesFromFirebase();
+      }, 600);
+      deferBootstrap(function() {
+        if (typeof loadDeletionRequests === 'function') loadDeletionRequests();
+        if (typeof loadOTCasesFromFirebase === 'function') loadOTCasesFromFirebase();
+        if (typeof loadIPDPatientsFromFirebase === 'function') loadIPDPatientsFromFirebase();
+        if (profile.role === 'Lab' && typeof listenLabOrders === 'function') listenLabOrders();
+      }, 1100);
+      deferBootstrap(function() {
+        if (!window.FBDB) return;
         window.FBDB.ref('userSettings').once('value').then(function(snap) {
           const settings = snap.val();
           if(!settings) return;
@@ -12926,7 +12972,7 @@ function activateUserSession(user, profile, opts) {
             }
           });
         }).catch(function(e){ console.warn('userSettings load error:', e); });
-      }
+      }, 1600);
       if (opts.auditLogin && typeof fbPush === 'function') {
         fbPush('auditLog', { user: profile.name, role: profile.role, centre: profile.centre, action: 'LOGIN', timestamp: new Date().toISOString() });
       }
@@ -13623,7 +13669,7 @@ function renderChargesList() {
           <input type="text" value="${c.name}" style="font-size:11.5px;font-weight:600" onchange="CHARGES_DATA[${gIdx}].name=this.value" ${disabled}>
           <input type="number" value="${c.chd}" style="font-size:12px;font-weight:800;color:var(--bmh-blue);text-align:right" onchange="CHARGES_DATA[${gIdx}].chd=parseInt(this.value)" ${disabled}>
           <input type="number" value="${c.rpr}" style="font-size:12px;font-weight:800;color:#8a4200;text-align:right" onchange="CHARGES_DATA[${gIdx}].rpr=parseInt(this.value)" ${disabled}>
-          ${editable ? `<button class="btn btn-xs btn-gray" onclick="CHARGES_DATA.splice(${gIdx},1);renderChargesList()">✕</button>` : '<span></span>'}
+          ${editable ? `<button class="btn btn-xs btn-gray" title="Delete charge" onclick="deleteChargeAt(${gIdx})">✕</button>` : '<span></span>'}
         </div>`;
       }).join(''); }).join('')}
     </div>`;
@@ -13643,6 +13689,30 @@ function openAddChargeModal() {
   if (kindEl) kindEl.value = 'procedure';
   refreshChargeModalSuggestions();
   openM('m-add-proc-charge');
+}
+function resetChargeModalFields() {
+  ['add-charge-parent','add-charge-name','add-charge-chd','add-charge-rpr'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  const kindEl = document.getElementById('add-charge-kind');
+  if (kindEl) kindEl.value = 'procedure';
+  refreshChargeModalSuggestions();
+  const focusEl = document.getElementById('add-charge-parent') || document.getElementById('add-charge-name');
+  if (focusEl) focusEl.focus();
+}
+function deleteChargeAt(idx) {
+  const row = CHARGES_DATA[idx];
+  if (!row) return;
+  if (!isCurrentUserAdmin() && !canEditChargeCategory(row.cat)) { showToast('You can edit charges only for your own department', 'w'); return; }
+  CHARGES_DATA.splice(idx, 1);
+  saveChargesToFirebase().then(function(){
+    renderChargesList();
+    renderCentresCharges();
+    showToast('"' + (row.name || 'Charge') + '" deleted from database ✓', 's');
+  }).catch(function(){
+    showToast('Delete failed. Please retry.', 'e');
+  });
 }
 function saveChargeFromModal() {
   const cat = document.getElementById('add-charge-cat')?.value || 'Eye';
@@ -13668,10 +13738,14 @@ function saveChargeFromModal() {
   }
   CENTRE_CHARGES.CHD[finalName] = chd;
   CENTRE_CHARGES.RPR[finalName] = rpr;
-  saveChargesToFirebase();
-  renderChargesList();
-  closeM('m-add-proc-charge');
-  showToast('"' + finalName + '" saved to fee schedule ✓','s');
+  saveChargesToFirebase().then(function(){
+    renderChargesList();
+    renderCentresCharges();
+    resetChargeModalFields();
+    showToast('"' + finalName + '" saved to database ✓','s');
+  }).catch(function(){
+    showToast('Charge save failed. Please retry.', 'e');
+  });
 }
 
 function saveCharges() {
@@ -14658,6 +14732,7 @@ function buildDischargeCardPrintHtml() {
   renderDischargeBuilder();
   const card = document.getElementById('discharge-card');
   if (!card) return '';
+  const colorPrint = !!document.getElementById('dc-color-print')?.checked;
   const clone = card.cloneNode(true);
   const summaryText = clone.querySelector('#dc-summary-text');
   if (summaryText) {
@@ -14692,10 +14767,10 @@ function buildDischargeCardPrintHtml() {
     el.style.borderRadius = '10px';
     el.style.padding = '2px 7px';
     el.style.fontSize = '10px';
-    el.style.background = el.classList.contains('active') ? '#1A3C6E' : '#fff';
+    el.style.background = el.classList.contains('active') ? (colorPrint ? '#1A3C6E' : '#666') : '#fff';
     el.style.color = el.classList.contains('active') ? '#fff' : '#1A3C6E';
   });
-  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{font-family:Arial,sans-serif;color:#111;background:#fff;margin:0;padding:0;font-size:10px;line-height:1.08}@page{size:A4 landscape;margin:3mm}.print-wrap{transform:scale(.82);transform-origin:top left;width:120.5%;filter:grayscale(100%) contrast(1.08)}.discharge-card{border:1px solid #9a9a9a;border-radius:8px;overflow:hidden}.dc-header{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;background:#666 !important;padding:7px 9px}.dc-field-lbl{font-size:7px;font-weight:800;color:#555;text-transform:uppercase;letter-spacing:.35px}.dc-field-val{font-size:9.5px;font-weight:800;color:#111}.g2{display:grid;grid-template-columns:1fr 1fr}.drop-item{border-left:3px solid #666;padding:4px 6px;border-radius:6px;background:#efefef !important;margin-bottom:4px}.drop-freq{display:flex;gap:2px;flex-wrap:wrap}.drop-time.active{background:#666 !important;color:#fff}.drop-time{display:inline-flex;align-items:center;justify-content:center;font-size:8px;padding:1px 4px;min-width:24px;border-radius:8px;border:1px solid #bdbdbd}.card-title{font-size:11px!important}.card-sub,.muted{font-size:8px!important}.dc-instr-row{padding:3px 0 !important}.dc-instr-row div{font-size:9.4px !important;line-height:1.25 !important}</style></head><body><div class="print-wrap">'
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{font-family:Arial,sans-serif;color:#111;background:#fff;margin:0;padding:0;font-size:10px;line-height:1.08}@page{size:A4 landscape;margin:3mm}.print-wrap{transform:scale(.82);transform-origin:top left;width:120.5%;' + (colorPrint ? '' : 'filter:grayscale(100%) contrast(1.08)') + '}.discharge-card{border:1px solid #9a9a9a;border-radius:8px;overflow:hidden}.dc-header{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;background:' + (colorPrint ? '#1A3C6E' : '#666') + ' !important;padding:7px 9px}.dc-field-lbl{font-size:7px;font-weight:800;color:#555;text-transform:uppercase;letter-spacing:.35px}.dc-field-val{font-size:9.5px;font-weight:800;color:#111}.g2{display:grid;grid-template-columns:1fr 1fr}.drop-item{border-left:3px solid ' + (colorPrint ? '#1A3C6E' : '#666') + ';padding:4px 6px;border-radius:6px;background:' + (colorPrint ? '#eef3fb' : '#efefef') + ' !important;margin-bottom:4px}.drop-freq{display:flex;gap:2px;flex-wrap:wrap}.drop-time.active{background:' + (colorPrint ? '#1A3C6E' : '#666') + ' !important;color:#fff}.drop-time{display:inline-flex;align-items:center;justify-content:center;font-size:8px;padding:1px 4px;min-width:24px;border-radius:8px;border:1px solid #bdbdbd}.card-title{font-size:11px!important}.card-sub,.muted{font-size:8px!important}.dc-instr-row{padding:3px 0 !important}.dc-instr-row div{font-size:9.4px !important;line-height:1.25 !important}</style></head><body><div class="print-wrap">'
     + clone.outerHTML + '</div></body></html>';
 }
 
@@ -14710,6 +14785,8 @@ function renderDischargeBuilder() {
   const ptId = data.ptId;
   const ptNm = data.ptNm;
   const tmpl = data.tmpl;
+  const dischargeTemplateInstructions = getDischargeInstructionTemplateRows(sel);
+  const activeInstructions = dischargeTemplateInstructions.length ? dischargeTemplateInstructions : tmpl.instructions;
 
   document.getElementById('dc-pt-name').textContent = ptNm;
   document.getElementById('dc-pt-id').textContent   = ptId;
@@ -14749,7 +14826,7 @@ function renderDischargeBuilder() {
   // Instructions
   const instrEl = document.getElementById('dc-instructions-list');
   if(instrEl) {
-    instrEl.innerHTML = tmpl.instructions.map((ins,i)=>
+    instrEl.innerHTML = activeInstructions.map((ins,i)=>
       `<div class="dc-instr-row" style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;border-bottom:1px solid var(--g5)">
         <span style="font-size:13px;margin-top:1px">⚠️</span>
         <div contenteditable="true" spellcheck="false"
