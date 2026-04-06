@@ -456,7 +456,8 @@
         <div class="ptab" onclick="ptab(this,'oe-slitlamp')">Slit Lamp</div>
         <div class="ptab" onclick="ptab(this,'oe-fundus')">Fundus</div>
         <div class="ptab" onclick="ptab(this,'oe-biometry')">Biometry</div>
-        <div class="ptab" onclick="ptab(this,'oe-rx')">Prescription + QR</div>
+        <div class="ptab" onclick="ptab(this,'oe-plan')">Plan / Instructions</div>
+        <div class="ptab" onclick="ptab(this,'oe-rx')">Prescription</div>
         <div class="ptab" onclick="ptab(this,'oe-past')">Past Visits</div>
       </div>
       <div id="ophtho-recap-panel" style="float:right;width:300px;margin:8px 0 12px 12px"></div>
@@ -1266,6 +1267,7 @@
           </select>
           <button class="btn btn-gold btn-sm" onclick="openSaveRxTemplate()">📋 Save as Template</button>
         </div>
+      <div class="tab-content" id="oe-plan">
         <div style="margin-bottom:10px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
             <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px">⚕️ Surgery / Procedure Advised</div>
@@ -1315,7 +1317,7 @@
         <!-- Advice section with common options and save template -->
         <div style="background:#fffbeb;border-radius:var(--rsm);padding:10px 12px;margin-bottom:8px;border:1.5px solid rgba(212,160,23,.4)">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px">
-            <div style="font-size:10px;font-weight:800;color:#8a4200;text-transform:uppercase;letter-spacing:.5px">📋 Advice to Patient</div>
+            <div style="font-size:10px;font-weight:800;color:#8a4200;text-transform:uppercase;letter-spacing:.5px">📋 Instructions</div>
             <div style="display:flex;gap:5px">
               <button class="btn btn-xs btn-outline" onclick="openSaveAdviceTemplate()">💾 Save as Template</button>
               <button class="btn btn-xs" style="background:var(--orange-lt);color:#8a4200;border:1px solid rgba(212,160,23,.5)" onclick="openLoadAdviceTemplate()">📂 Load Template</button>
@@ -1334,9 +1336,11 @@
             <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:3px 8px;border-radius:10px;background:var(--g5);border:1px solid var(--g4);cursor:pointer;user-select:none">Head elevated post-op</span>
             <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:3px 8px;border-radius:10px;background:var(--g5);border:1px solid var(--g4);cursor:pointer;user-select:none">Protective shield at night</span>
           </div>
-          <textarea id="rx-advice-text" placeholder="Type advice to patient or load from template…" style="width:100%;min-height:52px;font-size:12px;border:1.5px solid rgba(212,160,23,.4);border-radius:6px;padding:7px 9px;background:#fff;font-family:var(--font);resize:vertical"></textarea>
-          <textarea id="rx-extra-advice-text" placeholder="Additional advice to patient…" style="width:100%;min-height:42px;font-size:12px;border:1.5px solid rgba(212,160,23,.28);border-radius:6px;padding:7px 9px;background:#fff;font-family:var(--font);resize:vertical;margin-top:6px"></textarea>
+          <textarea id="rx-advice-text" placeholder="Type instructions to patient or load from template…" style="width:100%;min-height:52px;font-size:12px;border:1.5px solid rgba(212,160,23,.4);border-radius:6px;padding:7px 9px;background:#fff;font-family:var(--font);resize:vertical"></textarea>
+          <textarea id="rx-extra-advice-text" placeholder="Additional instructions…" style="width:100%;min-height:42px;font-size:12px;border:1.5px solid rgba(212,160,23,.28);border-radius:6px;padding:7px 9px;background:#fff;font-family:var(--font);resize:vertical;margin-top:6px"></textarea>
         </div>
+      </div>
+      <div class="tab-content" id="oe-rx">
         <div style="background:var(--g6);border-radius:var(--rsm);padding:8px;margin-bottom:8px">
           <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Next Appointment</div>
           <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">
@@ -1361,12 +1365,12 @@
             <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-diag" checked> Diagrams</label>
             <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-rx" checked> Medications</label>
             <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-proc" checked> Procedures Advised</label>
-            <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-adv" checked> Advice to Patient</label>
+            <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-adv" checked> Instructions</label>
             <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-gl"> Glass Prescription</label>
           </div>
         </div>
         <div style="display:flex;gap:7px;flex-wrap:wrap">
-          <button class="btn btn-gold" style="flex:1;justify-content:center" onclick="printRx()">🖨️ Print</button>
+          <button class="btn btn-gold" style="flex:1;justify-content:center" onclick="saveAndPrintRx('ophtho')">💾🖨️ Save &amp; Print</button>
           <button class="wa-btn" onclick="showToast('Sent via WhatsApp ✓','s')">📱</button>
           <button class="btn btn-gray btn-sm" onclick="showToast('SMS sent ✓','s')">📨</button>
         </div>
@@ -1556,9 +1560,9 @@
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
-      <!-- LEFT: Patient details + Instructions + Follow-up -->
+      <!-- LEFT: Patient + surgery details + Instructions + Follow-up -->
       <div style="padding:16px 18px;border-right:1px solid var(--g5)">
-        <div style="font-size:11px;font-weight:800;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;border-bottom:2px solid var(--bmh-gold);padding-bottom:5px">Patient Details</div>
+        <div style="font-size:11px;font-weight:800;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;border-bottom:2px solid var(--bmh-gold);padding-bottom:5px">Patient &amp; Surgery Details</div>
         <div class="g2" style="gap:7px 14px;margin-bottom:12px">
           <div><div class="dc-field-lbl">Patient Name</div><div class="dc-field-val" id="dc-pt-name">— Select Patient —</div></div>
           <div><div class="dc-field-lbl">Age / Sex</div><div class="dc-field-val"><span id="dc-pt-age">—</span> / <span id="dc-pt-sex">—</span></div></div>
@@ -1567,6 +1571,8 @@
             <div contenteditable="true" spellcheck="false" class="dc-field-val" id="dc-surgeon" style="outline:none;border-bottom:1px dashed var(--g4)">Dr. Varun Baweja</div></div>
           <div><div class="dc-field-lbl">Procedure / Diagnosis</div>
             <div contenteditable="true" spellcheck="false" class="dc-field-val" id="dc-procedure" style="outline:none;border-bottom:1px dashed var(--g4);color:var(--bmh-blue)">Click to enter</div></div>
+          <div><div class="dc-field-lbl">OT Date / Eye</div><div class="dc-field-val" id="dc-ot-eye">—</div></div>
+          <div><div class="dc-field-lbl">IOL / Power</div><div class="dc-field-val" id="dc-iol-summary">—</div></div>
           <div><div class="dc-field-lbl">Discharge Date</div>
             <div contenteditable="true" spellcheck="false" class="dc-field-val" id="dc-discharge-date" style="outline:none;border-bottom:1px dashed var(--g4)"></div></div>
         </div>
@@ -1579,8 +1585,7 @@
         <div style="font-size:11px;font-weight:800;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 7px;border-bottom:2px solid var(--bmh-gold);padding-bottom:4px">📅 Follow-up Schedule</div>
         <div id="dc-followup-list"></div>
 
-        <div style="font-size:11px;font-weight:800;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 7px;border-bottom:2px solid var(--bmh-gold);padding-bottom:4px">🧾 Surgery Details</div>
-        <div id="dc-surgery-details" style="font-size:12px"></div>
+        <div id="dc-surgery-details" style="display:none;font-size:12px"></div>
 
         <div style="font-size:11px;font-weight:800;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 7px;border-bottom:2px solid var(--bmh-gold);padding-bottom:4px">📄 Discharge Summary &amp; Fitness Certificate</div>
         <div id="dc-summary-text" style="background:var(--g6);border-radius:8px;padding:10px 12px;font-size:11.5px;line-height:1.7;color:var(--tx)"></div>
@@ -4636,6 +4641,12 @@
   <div class="form-group"><label class="fl">Amount Received ₹</label><input type="number" value="0"></div>
   <button class="btn btn-gold" onclick="showToast('Insurance entry added ✓','s');closeM('m-add-ins')">+ Add Entry</button>
 </div></div></div>
+
+<div class="modal-ov" id="m-tpa-case">
+<div class="modal" style="max-width:760px">
+<div class="modal-hd"><div class="modal-title">🏦 TPA / Cashless Case Detail</div><button class="modal-close" onclick="closeTPACaseDetail()">✕</button></div>
+<div id="tpa-case-detail"></div>
+</div></div>
 
 <!-- OT ADD CASE MODAL -->
 <div class="modal-ov" id="m-ot-add">

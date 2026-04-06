@@ -99,6 +99,25 @@ window._loginUser = async function () {
   const btn = document.querySelector('#login-gate button[onclick]')
   if (btn) { btn.textContent = 'Signing in…'; btn.disabled = true }
 
+  const looksLikeEmail = /@/.test(email)
+  const shouldUseLegacyFirst = !looksLikeEmail || /^[a-z0-9._,-]+$/i.test(email)
+
+  if (shouldUseLegacyFirst && typeof window.loginUser === 'function') {
+    try {
+      window.loginUser()
+      const gate = document.getElementById('login-gate')
+      const legacySucceeded = !gate || gate.style.display === 'none'
+      if (legacySucceeded) {
+        try {
+          if (remember) localStorage.setItem(SAVED_LOGIN_KEY, JSON.stringify({ email, password }))
+          else localStorage.removeItem(SAVED_LOGIN_KEY)
+        } catch (_) { /* ignore */ }
+        if (btn) { btn.textContent = 'Sign In →'; btn.disabled = false }
+        return
+      }
+    } catch (_) { /* noop */ }
+  }
+
   try {
     await firebaseLoginUser(email, password)
     try {
