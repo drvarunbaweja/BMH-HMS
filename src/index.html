@@ -390,62 +390,49 @@
           <button class="btn btn-sm btn-gray" onclick="nav('doctor-queue',null)" title="Back to Queue">← Queue</button>
           <button class="btn btn-sm btn-green" onclick="markCurrentPatientSeen()">✓ Seen</button>
           <button class="btn btn-sm btn-gray" onclick="openM('m-consents')">📋 Consents</button>
-          <button class="btn btn-sm btn-outline" onclick="previewCaseSheet()">👁 Preview</button>
+          <button class="btn btn-sm btn-outline" onclick="saveAndPrintRx('ophtho')">💾🖨️ Save &amp; Print</button>
           <button class="btn btn-sm btn-outline" onclick="printCaseSheet()">🖨️ Print Case Sheet</button>
           <button class="btn btn-sm btn-gold" onclick="saveVisit('ophtho')">💾 Save</button>
         </div>
       </div>
-      <!-- Smart SEND row — AI-suggested + full dropdown -->
-      <div style="position:sticky;top:64px;z-index:39;background:linear-gradient(135deg,#fff7e0,#fff3cc);border-radius:10px;padding:9px 12px;margin-bottom:10px;border:1.5px solid rgba(212,160,23,.3)">
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <span style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">📤 Send to Reception:</span>
-          <!-- Full dropdown -->
-          <div style="position:relative;flex-shrink:0">
-            <select id="send-charge-sel" style="font-size:11.5px;padding:4px 28px 4px 8px;border-radius:7px;border:1.5px solid rgba(212,160,23,.5);background:#fff;cursor:pointer;min-width:180px" onchange="sendFromDropdown(this)">
-              <option value="">— All Procedures —</option>
-              <optgroup label="Eye Investigations">
-                <option value="Biometry IOL Master|1200">Biometry IOL Master — ₹1,200</option>
-                <option value="OCT Macula OU|1800">OCT Macula OU — ₹1,800</option>
-                <option value="HVF Visual Fields|1500">HVF Visual Fields — ₹1,500</option>
-                <option value="Fundus Photography|600">Fundus Photography — ₹600</option>
-                <option value="Corneal Topography|1500">Corneal Topography — ₹1,500</option>
-                <option value="Specular Microscopy|1200">Specular Microscopy — ₹1,200</option>
-                <option value="Fluorescein Angiography|4000">Fluorescein Angiography — ₹4,000</option>
-                <option value="ERG / VEP|2500">ERG / VEP — ₹2,500</option>
-              </optgroup>
-              <optgroup label="Eye Surgeries">
-                <option value="Pre-op Package|3500">Pre-op Package — ₹3,500</option>
-                <option value="PMICS (Pinhole Micro Incision Cataract Surgery) + IOL|38000">PMICS + IOL — ₹38,000</option>
-                <option value="Trabeculectomy|42000">Trabeculectomy — ₹42,000</option>
-                <option value="IVT Injection|8000">IVT Injection — ₹8,000</option>
-                <option value="LASIK (per eye)|45000">LASIK (per eye) — ₹45,000</option>
-                <option value="Pterygium Excision|8000">Pterygium Excision — ₹8,000</option>
-              </optgroup>
-              <optgroup label="OBG">
-                <option value="ANC Visit|500">ANC Visit — ₹500</option>
-                <option value="LSCS (Elective)|45000">LSCS (Elective) — ₹45,000</option>
-                <option value="Normal Delivery|25000">Normal Delivery — ₹25,000</option>
-              </optgroup>
-              <optgroup label="Skin">
-                <option value="Chemical Peel|1500">Chemical Peel — ₹1,500</option>
-                <option value="Microneedling|2000">Microneedling — ₹2,000</option>
-                <option value="Botox (per area)|8000">Botox — ₹8,000</option>
-                <option value="PRP Treatment|3500">PRP Treatment — ₹3,500</option>
-              </optgroup>
-              <optgroup label="Consultation">
-                <option value="Consultation|800">Consultation — ₹800</option>
-                <option value="Follow-up Consultation|500">Follow-up — ₹500</option>
-              </optgroup>
-            </select>
+      <div id="ophtho-top-sticky" style="position:sticky;top:64px;z-index:39;background:#fff;padding-bottom:8px;margin-bottom:10px">
+        <!-- Smart SEND row — AI-suggested + full dropdown -->
+        <div id="ophtho-send-bar" style="background:linear-gradient(135deg,#fff7e0,#fff3cc);border-radius:10px;padding:9px 12px;margin-bottom:8px;border:1.5px solid rgba(212,160,23,.3)">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">📤 Send to Reception:</span>
+            <div style="position:relative;flex-shrink:0">
+              <select id="send-charge-sel" style="font-size:11.5px;padding:4px 28px 4px 8px;border-radius:7px;border:1.5px solid rgba(212,160,23,.5);background:#fff;cursor:pointer;min-width:180px" onchange="sendFromDropdown(this)">
+                <option value="">— All Procedures —</option>
+                <optgroup label="Eye Investigations">
+                  <option value="Biometry IOL Master|1200">Biometry IOL Master — ₹1,200</option>
+                  <option value="OCT Macula OU|1800">OCT Macula OU — ₹1,800</option>
+                  <option value="HVF Visual Fields|1500">HVF Visual Fields — ₹1,500</option>
+                  <option value="Fundus Photography|600">Fundus Photography — ₹600</option>
+                  <option value="Corneal Topography|1500">Corneal Topography — ₹1,500</option>
+                  <option value="Specular Microscopy|1200">Specular Microscopy — ₹1,200</option>
+                  <option value="Fluorescein Angiography|4000">Fluorescein Angiography — ₹4,000</option>
+                  <option value="ERG / VEP|2500">ERG / VEP — ₹2,500</option>
+                </optgroup>
+                <optgroup label="Eye Surgeries">
+                  <option value="Pre-op Package|3500">Pre-op Package — ₹3,500</option>
+                  <option value="PMICS (Pinhole Micro Incision Cataract Surgery) + IOL|38000">PMICS + IOL — ₹38,000</option>
+                  <option value="Trabeculectomy|42000">Trabeculectomy — ₹42,000</option>
+                  <option value="IVT Injection|8000">IVT Injection — ₹8,000</option>
+                  <option value="LASIK (per eye)|45000">LASIK (per eye) — ₹45,000</option>
+                  <option value="Pterygium Excision|8000">Pterygium Excision — ₹8,000</option>
+                </optgroup>
+                <optgroup label="Consultation">
+                  <option value="Consultation|800">Consultation — ₹800</option>
+                  <option value="Follow-up Consultation|500">Follow-up — ₹500</option>
+                </optgroup>
+              </select>
+            </div>
+            <div id="ai-suggested-charges" style="display:flex;gap:5px;flex-wrap:wrap"></div>
+            <button class="btn btn-xs btn-gold" onclick="addCustomCharge()" style="white-space:nowrap">+ Custom</button>
           </div>
-          <!-- AI-suggested quick buttons (context-aware) -->
-          <div id="ai-suggested-charges" style="display:flex;gap:5px;flex-wrap:wrap"></div>
-          <button class="btn btn-xs btn-gold" onclick="addCustomCharge()" style="white-space:nowrap">+ Custom</button>
+          <div id="sent-charges-log" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px"></div>
         </div>
-        <!-- Recently sent indicator -->
-        <div id="sent-charges-log" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px"></div>
-      </div>
-      <div class="ptabs" style="position:sticky;top:124px;z-index:38;background:#fff">
+        <div class="ptabs" style="background:#fff;border-bottom:1px solid var(--g5);padding-bottom:2px">
         <div class="ptab active" onclick="ptab(this,'oe-hx')">History</div>
         <div class="ptab" onclick="ptab(this,'oe-va-iop-ref')">VA / IOP / Refraction</div>
         <div class="ptab" onclick="ptab(this,'oe-slitlamp')">Slit Lamp</div>
@@ -454,6 +441,7 @@
         <div class="ptab" onclick="ptab(this,'oe-plan')">Plan / Instructions</div>
         <div class="ptab" onclick="ptab(this,'oe-rx')">Prescription</div>
         <div class="ptab" onclick="ptab(this,'oe-past')">Past Visits</div>
+        </div>
       </div>
       <div id="ophtho-recap-panel" style="float:right;width:300px;margin:8px 0 12px 12px"></div>
 
@@ -1364,7 +1352,7 @@
           </div>
         </div>
         <div style="display:flex;gap:7px;flex-wrap:wrap">
-          <button class="btn btn-gold" style="flex:1;justify-content:center" onclick="saveAndPrintRx('ophtho')">💾🖨️ Save &amp; Print</button>
+          <button class="btn btn-gold" style="flex:1;justify-content:center" onclick="printRx()">🖨️ Print Prescription</button>
           <button class="wa-btn" onclick="showToast('Sent via WhatsApp ✓','s')">📱</button>
           <button class="btn btn-gray btn-sm" onclick="showToast('SMS sent ✓','s')">📨</button>
         </div>
