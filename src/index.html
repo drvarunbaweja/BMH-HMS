@@ -4606,7 +4606,10 @@
   <div class="form-group"><label class="fl">Age / Sex</label><input type="text" id="ot-age-sex" readonly style="background:var(--g6)"></div>
   <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">Pre-op Diagnosis <span style="display:flex;align-items:center;gap:6px"><button type="button" onclick="showToast('Type to search saved OT diagnoses. Use + to add a reusable diagnosis for future cases.','i')" style="background:var(--g6);color:var(--blue);border:1px solid var(--g4);border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">?</button><button type="button" onclick="addOTDiagnosisOption()" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></span></label><input type="text" id="ot-add-dx" list="ot-dx-list" placeholder="Type diagnosis to search or add"><datalist id="ot-dx-list"></datalist></div>
   <div class="form-group"><label class="fl">Procedure / Surgery</label>
-    <input type="text" id="ot-add-proc" list="ot-proc-list" placeholder="Type procedure to search"><datalist id="ot-proc-list"></datalist>
+    <input type="text" id="ot-add-proc" list="ot-proc-list" placeholder="Type procedure to search" onfocus="populateOTProcedureOptions('');this.select();" oninput="onOTProcedureInputChange(this.value)" onchange="onOTProcedureInputChange(this.value)"><datalist id="ot-proc-list"></datalist>
+  </div>
+  <div class="form-group" id="ot-add-proc-sub-wrap" style="display:none"><label class="fl">Procedure subheading / package</label>
+    <select id="ot-add-proc-sub" onchange="onOTProcedureSubheadingChange(this.value)"><option value="">— Select subheading —</option></select>
   </div>
   <div class="form-group" id="ot-site-wrap"><label class="fl">Eye / Site</label>
     <select id="ot-add-site"><option>Left Eye (OS)</option><option>Right Eye (OD)</option><option>Both Eyes (OU)</option><option>N/A</option></select>
@@ -4621,7 +4624,7 @@
     <div class="form-group"><label class="fl">Scheduled Date</label><input type="date" id="ot-add-date"></div>
     <div class="form-group"><label class="fl">Scheduled Time</label><input type="time" id="ot-add-time" value="09:00"></div>
     <div class="form-group"><label class="fl">OT Room</label>
-      <select id="ot-add-room"><option>OT-1 (Main)</option><option>OT-2 (Minor)</option><option>OT-3 (Laser)</option><option>Labour Room</option></select>
+      <select id="ot-add-room"><option>Eye OT</option><option>Gynae OT</option><option>Minor OT</option><option>Labour Room</option><option>Procedure Room</option></select>
     </div>
     <div class="form-group"><label class="fl">Priority</label>
       <select id="ot-add-priority"><option value="elective">Elective</option><option value="urgent">Urgent</option><option value="emergency">Emergency</option></select>
