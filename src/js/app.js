@@ -14,6 +14,7 @@ import { watchLeads }           from './leads.js'
 import { todayKey }             from './utils.js'
 
 const SAVED_LOGIN_KEY = 'bmh_saved_login_v1'
+const USE_FIRESTORE_REALTIME_AFTER_LOGIN = false
 
 function loadSavedLogin() {
   try {
@@ -205,14 +206,18 @@ watchAuthState(
     const centre = user.centre || 'CHD'
     const today  = todayKey()
 
-    // Start real-time Firestore listeners
-    listeners.push(watchPatients(centre))
-    listeners.push(watchAppointments(centre, today))
-    listeners.push(watchTransactions(centre, today))
-    listeners.push(watchPayRequests(centre))
+    // The live HMS pages are still driven by legacy.js + RTDB.
+    // Running Firestore realtime listeners in parallel here causes the same
+    // patient/billing data to load twice and can freeze the UI after login.
+    if (USE_FIRESTORE_REALTIME_AFTER_LOGIN) {
+      listeners.push(watchPatients(centre))
+      listeners.push(watchAppointments(centre, today))
+      listeners.push(watchTransactions(centre, today))
+      listeners.push(watchPayRequests(centre))
 
-    if (['admin', 'reception'].includes(user.role)) {
-      listeners.push(watchLeads(centre))
+      if (['admin', 'reception'].includes(user.role)) {
+        listeners.push(watchLeads(centre))
+      }
     }
 
     watchConnectionStatus('fb-status')
