@@ -167,7 +167,7 @@
       <div class="card-hd" style="align-items:flex-end;gap:10px;flex-wrap:wrap">
         <div>
           <div class="card-title">Admin Overview</div>
-          <div class="card-sub">Date-filtered collections, dues, surgeries, IPD census, and payment-mode drilldown</div>
+          <div class="card-sub">Lightweight date-filtered summary by department</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:flex-end">
           <div class="form-group" style="margin:0">
@@ -175,60 +175,9 @@
             <input type="date" id="db-admin-date" onchange="renderDashboard()" />
           </div>
           <button type="button" class="btn btn-outline btn-sm" onclick="const d=document.getElementById('db-admin-date'); if(d){ d.value=''; } renderDashboard();">Today</button>
-          <button type="button" class="btn btn-outline btn-sm" onclick="nav('billing',null)">Open Billing</button>
         </div>
       </div>
-      <div class="sg4">
-        <div class="sc blue" style="cursor:pointer" onclick="showAdminDashboardDetail('opd')"><div class="sc-lbl">OPD patients</div><div class="sc-val blue" id="db-admin-opd">0</div><div class="sc-icon">🩺</div></div>
-        <div class="sc orange" style="cursor:pointer" onclick="showAdminDashboardDetail('surgeries')"><div class="sc-lbl">Surgeries</div><div class="sc-val orange" id="db-admin-surgeries">0</div><div class="sc-icon">🔬</div></div>
-        <div class="sc gold" style="cursor:pointer" onclick="showAdminDashboardDetail('ipd')"><div class="sc-lbl">IPD patients</div><div class="sc-val gold" id="db-admin-ipd">0</div><div class="sc-icon">🛏️</div></div>
-        <div class="sc green" style="cursor:pointer" onclick="showAdminDashboardDetail('transactions')"><div class="sc-lbl">Total collection</div><div class="sc-val green" id="db-admin-total-collection">₹0</div><div class="sc-icon">💰</div></div>
-      </div>
-      <div class="sg4" style="margin-top:10px">
-        <div class="sc orange" style="cursor:pointer" onclick="showAdminDashboardDetail('dues')"><div class="sc-lbl">Dues / overdue</div><div class="sc-val orange" id="db-admin-overdue-amt">₹0</div><div class="sc-icon">📑</div></div>
-        <div class="sc red" style="cursor:pointer" onclick="showAdminDashboardDetail('dues')"><div class="sc-lbl">Patients with balance</div><div class="sc-val red" id="db-admin-overdue-ct">0</div><div class="sc-icon">⚠️</div></div>
-        <div class="sc gold"><div class="sc-lbl">Low stock SKUs</div><div class="sc-val gold" id="db-stock">0</div><div class="sc-icon">📦</div></div>
-        <div class="sc green"><div class="sc-lbl">Vendor bills pending</div><div class="sc-val green" id="db-admin-vendor-pend">₹0</div><div class="sc-icon">🏪</div></div>
-      </div>
-    </div>
-    <div class="g32">
-      <div class="card">
-        <div class="card-hd">
-          <div>
-            <div class="card-title">Payment Modes</div>
-            <div class="card-sub">Click a payment mode to see all matching payments for the chosen date</div>
-          </div>
-        </div>
-        <div id="dash-admin-mode-blocks" class="sg4"></div>
-      </div>
-      <div class="card">
-        <div class="card-hd">
-          <div>
-            <div class="card-title">Department Collections</div>
-            <div class="card-sub">Clickable department blocks with totals and mode split</div>
-          </div>
-        </div>
-        <div id="dash-admin-dept-blocks" class="sg4"></div>
-      </div>
-    </div>
-    <div class="g32">
-      <div class="card"><div class="card-hd"><div><div class="card-title">Overdue &amp; pending balances</div><div class="card-sub">Click the due cards above to focus here. Admin can clear incorrect dues.</div></div><button class="btn btn-gold btn-sm" onclick="showAdminDashboardDetail('dues')">Refresh dues</button></div>
-        <div id="dash-admin-overdue-list"></div>
-      </div>
-      <div class="col">
-        <div class="card"><div class="card-hd"><div><div class="card-title">Transaction Details</div><div class="card-sub">Changes with the block you click above</div></div></div>
-          <div id="dash-admin-detail-title" style="font-size:11px;font-weight:800;color:var(--g1);margin-bottom:6px">Select a block above</div>
-          <div id="dash-admin-detail-list" style="max-height:340px;overflow:auto"></div>
-        </div>
-        <div class="card"><div class="card-hd"><div><div class="card-title">Low stock — suggested PO</div><div class="card-sub">Review and print purchase order</div></div></div>
-          <div id="dash-admin-po-preview" style="font-size:12px;color:var(--tx3);max-height:220px;overflow:auto"></div>
-          <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-            <button type="button" class="btn btn-gold btn-sm" onclick="bmhGeneratePurchaseOrderDraft()">Regenerate draft</button>
-            <button type="button" class="btn btn-outline btn-sm" onclick="bmhPrintPurchaseOrder()">Print PO (after confirm)</button>
-          </div>
-        </div>
-        <div class="card"><div class="card-hd"><div class="card-title">💳 Pending payment requests</div></div><div id="dash-pay"></div></div>
-      </div>
+      <div id="dash-admin-summary-blocks" class="sg4"></div>
     </div>
   </div>
 
