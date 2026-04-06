@@ -3122,6 +3122,15 @@ function printDischarge() {
   showToast('Discharge card ready to print ✓', 's');
 }
 function printRx() { if (typeof window.printUnifiedRx === 'function') window.printUnifiedRx('oe'); }
+function saveAndPrintRx(dept) {
+  const map = { ophtho: 'ophtho', oe: 'ophtho', obg: 'obg', psych: 'psych', skin: 'skin' };
+  const key = map[dept] || dept || 'ophtho';
+  saveVisit(key);
+  setTimeout(function () {
+    if (key === 'ophtho' || key === 'oe') printRx();
+    else if (typeof window.printUnifiedRx === 'function') window.printUnifiedRx(key);
+  }, 450);
+}
 function getDeptPrintDoctorInfo(type) {
   const map = { rx: 'oe', ophtho: 'oe', 'obg-anc-card': 'obg', 'psych-summary': 'psych', 'skin-summary': 'skin' };
   const deptId = map[type] || 'oe';
@@ -3392,6 +3401,10 @@ function ptab(el, cId) {
   const tgt = document.getElementById(cId); if (tgt) tgt.classList.add('active');
   const page = el.closest('.page');
   const pageKey = page?.id?.replace(/^pg-/, '') || '';
+  if (pageKey === 'ophtho') {
+    const sendBar = document.getElementById('send-charge-sel')?.closest('div[style*="position:sticky"]');
+    if (sendBar) sendBar.style.display = cId === 'oe-rx' ? 'none' : '';
+  }
   updateDepartmentRailVisibility(pageKey, cId);
 }
 function openM(id){
@@ -7746,6 +7759,17 @@ function otTemplateMatchesProcedure(templateSurgery, activeProcedure) {
     return rowMatchesTemplate && rowMatchesProcedure;
   });
 }
+function getPreferredOtDiagnosis(procedureText) {
+  const proc = String(procedureText || '').toLowerCase();
+  if (/pmics|phaco|cataract/.test(proc)) return 'Cataract';
+  if (/lscs|caesarean/.test(proc)) return 'Pregnancy';
+  return '';
+}
+function getPreferredOtPostDiagnosis(procedureText) {
+  const proc = String(procedureText || '').toLowerCase();
+  if (/pmics|phaco|cataract/.test(proc)) return 'Pseudophakia';
+  return '';
+}
 function refreshRxTemplateSurgeryDatalist() {
   const dl = document.getElementById('rx-tpl-surgery-list');
   if (!dl) return;
@@ -9968,7 +9992,7 @@ function renderInsuranceTab() {
     </div>
     ${ins.map(r => {
       const isp = r.status==='pending';
-      return `<div style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:var(--r);border:1.5px solid ${isp?'rgba(255,149,0,.35)':'var(--g4)'};background:${isp?'var(--orange-lt)':'#fff'};margin-bottom:6px">
+      return `<div style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:var(--r);border:1.5px solid ${isp?'rgba(255,149,0,.35)':'var(--g4)'};background:${isp?'var(--orange-lt)':'#fff'};margin-bottom:6px;cursor:pointer" onclick="openTPACaseDetail('${r.id}')">
         <div style="flex:1">
           <div style="font-weight:800;font-size:13px">${r.patient}</div>
           <div style="font-size:10.5px;color:var(--g1)">${r.for||'—'} · <span style="color:var(--blue);font-weight:700">${r.ins||r.mode||'TPA'}</span></div>
@@ -9977,11 +10001,76 @@ function renderInsuranceTab() {
         <div style="text-align:right">
           <div style="font-size:15px;font-weight:900;color:${isp?'var(--orange)':'#1a8c3c'}">₹${r.amount.toLocaleString('en-IN')}</div>
           ${isp
-            ? `<button class="btn btn-xs btn-green" style="margin-top:4px" onclick="markPaid('${r.id}')">✅ Mark Received</button>`
+            ? `<button class="btn btn-xs btn-green" style="margin-top:4px" onclick="event.stopPropagation();openTPACaseDetail('${r.id}')">✅ Open</button>`
             : `<span style="font-size:10px;background:var(--green-lt);color:#1a8c3c;padding:2px 8px;border-radius:10px;font-weight:700">✓ Cleared</span>`}
         </div>
       </div>`;
     }).join('')}`;
+}
+function openTPACaseDetail(prId) {
+  const pr = (PAY_REQUESTS || []).find(function (r) { return r.id === prId; });
+  if (!pr) { showToast('TPA case not found', 'w'); return; }
+  const pt = PATIENTS.find(function (p) { return p.bmhId === pr.bmhId; }) || {};
+  const wrap = document.getElementById('tpa-case-detail');
+  if (!wrap) return;
+  wrap.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+      <div><div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase">Patient</div><div style="font-size:13px;font-weight:900">${pr.patient || pt.name || '—'}</div><div style="font-size:10px;color:var(--g1)">${pr.bmhId || '—'} · ${pt.mob || pt.mobile || '—'}</div></div>
+      <div><div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase">TPA / Policy</div><div style="font-size:13px;font-weight:900">${pr.ins || pr.mode || 'TPA'}</div><div style="font-size:10px;color:var(--g1)">${pr.policy || 'No policy entered'}</div></div>
+    </div>
+    <div style="font-size:11px;color:var(--tx3);margin-bottom:8px">${pr.for || 'Insurance / cashless case'}</div>
+    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:10px">
+      <div class="form-group" style="margin:0"><label class="fl">Amount Received ₹</label><input type="number" id="tpa-received-amt" value="${Number(pr.receivedAmount || 0) || ''}" placeholder="0"></div>
+      <div class="form-group" style="margin:0"><label class="fl">Received Date</label><input type="date" id="tpa-received-date" value="${String(pr.receivedDate || '').slice(0,10)}"></div>
+      <div class="form-group" style="margin:0"><label class="fl">UTR / Txn No.</label><input type="text" id="tpa-received-utr" value="${pr.utr || pr.paymentRef || ''}" placeholder="UTR / transaction"></div>
+    </div>
+    <div class="form-group" style="margin:0 0 10px 0"><label class="fl">Notes</label><textarea id="tpa-received-note" placeholder="Pre-auth, deficiency, coordinator note..." style="min-height:56px">${pr.notes || ''}</textarea></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-outline btn-sm" onclick="closeTPACaseDetail()">Close</button>
+      <button class="btn btn-gold btn-sm" onclick="saveTPAReceipt('${pr.id}')">💾 Save TPA Receipt</button>
+    </div>`;
+  openM('m-tpa-case');
+}
+function closeTPACaseDetail() {
+  closeM('m-tpa-case');
+}
+function saveTPAReceipt(prId) {
+  const pr = (PAY_REQUESTS || []).find(function (r) { return r.id === prId; });
+  if (!pr) return;
+  const amt = Number(document.getElementById('tpa-received-amt')?.value || 0);
+  const date = document.getElementById('tpa-received-date')?.value || new Date().toISOString().slice(0, 10);
+  const utr = document.getElementById('tpa-received-utr')?.value || '';
+  const notes = document.getElementById('tpa-received-note')?.value || '';
+  pr.receivedAmount = amt;
+  pr.receivedDate = date;
+  pr.utr = utr;
+  pr.notes = notes;
+  if (amt > 0) pr.status = 'paid';
+  try { if (window.firebase && firebase.database) firebase.database().ref('payRequests/' + pr.id).update({ receivedAmount: amt, receivedDate: date, utr: utr, notes: notes, status: pr.status, updatedAt: new Date().toISOString() }); } catch (e) {}
+  if (amt > 0) {
+    const txn = {
+      id: 'TPAR' + Date.now(),
+      patient: pr.patient,
+      bmhId: pr.bmhId,
+      service: pr.for || 'Insurance receipt',
+      amount: amt,
+      mode: 'Insurance/TPA',
+      collected: true,
+      paymentRef: utr,
+      ins: pr.ins || pr.mode || 'TPA',
+      dept: pr.dept || (PATIENTS.find(function (p) { return p.bmhId === pr.bmhId; }) || {}).dept || 'ophtho',
+      time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+      date: new Date(date + 'T09:00:00').toISOString(),
+      centre: pr.centre || CURRENT_USER?.centre || 'CHD',
+      createdBy: CURRENT_USER?.name || 'TPA'
+    };
+    TRANSACTIONS.push(txn);
+    try { if (window.firebase && firebase.database) firebase.database().ref('transactions/' + todayKey() + '/' + txn.id).set(txn); } catch (e) {}
+  }
+  showToast('TPA receipt saved ✓', 's');
+  closeTPACaseDetail();
+  renderInsuranceTab && renderInsuranceTab();
+  renderDashboard && renderDashboard();
 }
 
 // RECEIPT FROM RECEPTION
@@ -10333,8 +10422,8 @@ function openOTCase(id) {
 
   // Prefill notes
   const setVal = (id,val)=>{ const el=document.getElementById(id); if(el) el.value=val; };
-  setVal('ot-preop-dx', c.dx);
-  setVal('ot-postop-dx', c.postopDx || c.dx);
+  setVal('ot-preop-dx', c.dx || getPreferredOtDiagnosis(c.procedure));
+  setVal('ot-postop-dx', c.postopDx || getPreferredOtPostDiagnosis(c.procedure) || c.dx);
   setVal('ot-procedure', c.procedure);
   setVal('ot-implant', c.iol);
   setVal('ot-anaes-dr', c.anaesDoc);
@@ -10603,6 +10692,8 @@ function addOTCase() {
     createdBy: CURRENT_USER?.name || 'System'
   };
   const normalized = normalizeOTCaseRecord(Object.assign({}, existing || {}, newCase));
+  if (!normalized.dx) normalized.dx = getPreferredOtDiagnosis(normalized.procedure || proc) || normalized.dx;
+  if (!normalized.postopDx) normalized.postopDx = getPreferredOtPostDiagnosis(normalized.procedure || proc) || normalized.postopDx;
   if (caseKind === 'obg') {
     normalized.site = 'N/A';
     normalized.eye = 'N/A';
@@ -10896,12 +10987,14 @@ function refreshOTNotesTemplateSelect() {
   const sel = document.getElementById('ot-notes-template');
   if (!sel) return;
   const cur = sel.value;
-  const activeProc = String(activeOTCase?.procedure || '').trim().toLowerCase();
+  const activeProc = String(document.getElementById('ot-procedure')?.value || activeOTCase?.procedure || activeOTCase?.procedureMain || '').trim().toLowerCase();
+  const activeMain = String(activeOTCase?.procedureMain || '').trim().toLowerCase();
   sel.innerHTML = '<option value="">— Select template —</option>';
   Object.keys(RX_TEMPLATES_DATA || {}).forEach(function (key) {
     const meta = RX_TEMPLATES_META[key] || {};
     if ((meta.dept || '') !== 'ot') return;
-    if (!otTemplateMatchesProcedure(meta.surgery || '', activeProc)) return;
+    const target = meta.surgery || meta.name || '';
+    if (!otTemplateMatchesProcedure(target, activeProc) && !otTemplateMatchesProcedure(target, activeMain)) return;
     const opt = document.createElement('option');
     opt.value = key;
     opt.textContent = meta.name || key;
@@ -14604,16 +14697,25 @@ function renderDischargeBuilder() {
   // Set discharge date to today if blank
   const ddEl = document.getElementById('dc-discharge-date');
   if(ddEl) ddEl.textContent = formatDateIN(data.dischargeDate);
-  // Doctor from CURRENT_USER
+  const otDoctor = data.lastOtCase?.surgeon || data.lastOtCase?.doctor || '';
   const surgeonEl = document.getElementById('dc-surgeon');
-  if(surgeonEl && (surgeonEl.textContent==='Dr. Varun Baweja'||!surgeonEl.textContent.trim())) {
-    surgeonEl.textContent = ptObj.doctor || window.CURRENT_USER?.name || 'Dr. Varun Baweja';
+  if(surgeonEl) {
+    surgeonEl.textContent = otDoctor || ptObj.doctor || window.CURRENT_USER?.name || 'Dr. Varun Baweja';
   }
   const docSigEl = document.getElementById('dc-doc-sig');
   if(docSigEl) {
-    const dName = ptObj.doctor || window.CURRENT_USER?.name || 'Dr. Varun Baweja';
+    const dName = otDoctor || ptObj.doctor || window.CURRENT_USER?.name || 'Dr. Varun Baweja';
     const deptSig = {ophtho:'MS (Ophth)', obg:'MS (OBG)', psych:'MD (Psychiatry)', skin:'MD (Dermatology)'}[sel] || 'MS';
     docSigEl.textContent = dName + ' · ' + deptSig;
+  }
+  const otEyeEl = document.getElementById('dc-ot-eye');
+  if (otEyeEl) {
+    const bits = [data.lastOtCase?.date ? formatDateIN(data.lastOtCase.date) : '', data.lastOtCase?.site || data.lastOtCase?.eye || ptObj.eye || ''].filter(Boolean);
+    otEyeEl.textContent = bits.join(' · ') || '—';
+  }
+  const iolEl = document.getElementById('dc-iol-summary');
+  if (iolEl) {
+    iolEl.textContent = [data.lastOtCase?.iolType, data.lastOtCase?.iolPower].filter(Boolean).join(' / ') || '—';
   }
 
   // Instructions
@@ -17903,6 +18005,58 @@ function loadPastVisits(bmhId, dept) {
       .sort((a,b) => String(b.date || b.createdAt || '').localeCompare(String(a.date || a.createdAt || '')));
     if(!visits.length) {
       container.innerHTML = `<div style="text-align:center;padding:30px;color:var(--g2);font-size:12px"><div style="font-size:28px;margin-bottom:8px">📋</div>No past visits saved yet</div>`;
+      return;
+    }
+    if (dept === 'ophtho') {
+      const surgeries = (OT_CASES || []).map(normalizeOTCaseRecord).filter(function (c) { return c.bmhId === bmhId; }).sort(function (a,b) {
+        return String(b.date || '').localeCompare(String(a.date || ''));
+      }).slice(0, 10);
+      container.innerHTML = `<div style="display:grid;grid-template-columns:1.35fr .85fr;gap:10px">
+        <div style="overflow:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:10.5px">
+            <thead>
+              <tr>
+                <th style="text-align:left;padding:6px;border:1px solid var(--g5)">Date</th>
+                <th style="text-align:left;padding:6px;border:1px solid var(--g5)">VA</th>
+                <th style="text-align:left;padding:6px;border:1px solid var(--g5)">IOP</th>
+                <th style="text-align:left;padding:6px;border:1px solid var(--g5)">Subjective Refraction</th>
+                <th style="text-align:left;padding:6px;border:1px solid var(--g5)">Diagnosis</th>
+                <th style="text-align:left;padding:6px;border:1px solid var(--g5)">Rx</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${visits.map(function (v) {
+                const va = [(v.ucvaOD || v.vaOD || ''), (v.ucvaOS || v.vaOS || '')].filter(Boolean).join(' / ') || '—';
+                const iop = [(v.iopGatOD || ''), (v.iopGatOS || '')].filter(Boolean).map(function (x) { return x + ' mmHg'; }).join(' / ') || '—';
+                const refr = [
+                  [v.subjODsph, v.subjODcyl, v.subjODax, v.subjODva].filter(Boolean).join(' '),
+                  [v.subjOSsph, v.subjOScyl, v.subjOSax, v.subjOSva].filter(Boolean).join(' ')
+                ].filter(Boolean).join(' | ') || '—';
+                const dx = Array.isArray(v.diagnoses) ? v.diagnoses.map(formatDxLineForPrint).filter(Boolean).join(', ') : (v.diagnosisText || '—');
+                const rx = Array.isArray(v.rx) && v.rx.length ? v.rx.map(function (d) { return rxDrugTradeName(d) || d.trade || d.name || 'Drug'; }).join(', ') : '—';
+                return `<tr>
+                  <td style="padding:6px;border:1px solid var(--g5);vertical-align:top">${v.dateLabel || new Date(v.date || Date.now()).toLocaleDateString('en-IN')}</td>
+                  <td style="padding:6px;border:1px solid var(--g5);vertical-align:top">${va}</td>
+                  <td style="padding:6px;border:1px solid var(--g5);vertical-align:top">${iop}</td>
+                  <td style="padding:6px;border:1px solid var(--g5);vertical-align:top">${refr}</td>
+                  <td style="padding:6px;border:1px solid var(--g5);vertical-align:top">${dx}</td>
+                  <td style="padding:6px;border:1px solid var(--g5);vertical-align:top">${rx}</td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+        <div style="border:1px solid var(--g5);border-radius:10px;background:#fff;padding:10px;align-self:start">
+          <div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;letter-spacing:.45px;margin-bottom:8px">Surgery History</div>
+          ${surgeries.length ? surgeries.map(function (c) {
+            return `<div style="padding:7px 0;border-bottom:1px solid var(--g5);font-size:10.5px;line-height:1.45">
+              <div style="font-weight:800;color:var(--bmh-blue)">${formatDateIN(c.date)}</div>
+              <div>${expandProcedureLabelForPrint(c.procedure || c.procedureMain || '—')}</div>
+              <div style="color:var(--g1)">${[c.site || c.eye || '—', c.iolType || '', c.iolPower || ''].filter(Boolean).join(' · ')}</div>
+            </div>`;
+          }).join('') : '<div style="font-size:11px;color:var(--g1)">No surgery history saved yet.</div>'}
+        </div>
+      </div>`;
       return;
     }
     container.innerHTML = visits.map(v => {
