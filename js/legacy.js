@@ -964,6 +964,15 @@ function getLoginUserCandidates(rawUser) {
   out.forEach(function (item) { if (item && uniq.indexOf(item) === -1) uniq.push(item); });
   return uniq;
 }
+function findUserSettingsCandidate(userCandidates, settings) {
+  const all = settings || {};
+  const candidates = Array.isArray(userCandidates) ? userCandidates : [];
+  for (let i = 0; i < candidates.length; i++) {
+    const candidate = String(candidates[i] || '').toLowerCase();
+    if (candidate && all[candidate]) return { username: candidate, profile: all[candidate] };
+  }
+  return null;
+}
 function getForcedUrgentLoginProfile(rawUser, pass) {
   const u = String(rawUser || '').trim().toLowerCase();
   if (pass !== 'ChangeMe@123') return null;
@@ -12672,15 +12681,17 @@ function loginUser() {
     var profile = USER_DB ? USER_DB[matchedUser] : null;
     if (!profile || !isAcceptedLoginPassword(matchedUser, profile, pass)) {
       if (window.FBDB) {
-        window.FBDB.ref('userSettings/' + matchedUser).once('value').then(function(snap) {
-          const data = snap.val();
-          if(!data) {
+        window.FBDB.ref('userSettings').once('value').then(function(snap) {
+          const settings = snap.val() || {};
+          const found = findUserSettingsCandidate(userCandidates, settings);
+          if(!found || !found.profile) {
             showLoginErr('Incorrect username or password');
             var pi = document.getElementById('lg-pass');
             if (pi) pi.value = '';
             return;
           }
-          USER_DB[matchedUser] = Object.assign({}, USER_DB[matchedUser] || {}, data);
+          matchedUser = found.username;
+          USER_DB[matchedUser] = Object.assign({}, USER_DB[matchedUser] || {}, found.profile);
           if (!isAcceptedLoginPassword(matchedUser, USER_DB[matchedUser], pass)) {
             showLoginErr('Incorrect username or password');
             var pi2 = document.getElementById('lg-pass');
@@ -16591,6 +16602,9 @@ function selectExistingPatient(bmhId) {
 function renderDashboard() {
   loadBmhFinancials();
   const today = new Date().toISOString().split('T')[0];
+  const adminDateEl = document.getElementById('db-admin-date');
+  if (adminDateEl && !adminDateEl.value) adminDateEl.value = today;
+  const selectedDate = adminDateEl?.value || today;
   const todaySeen = PATIENTS.filter(p => p.seen).length;
   const waiting = PATIENTS.filter(p => p.status === 'waiting' && !p.seen).length;
   const checkedIn = PATIENTS.filter(p => p.status === 'waiting' || p.seen || p.dilated).length;
@@ -16599,6 +16613,8 @@ function renderDashboard() {
   const txnDay = txnIsoDate;
   const txnOk = isCollectedTxn;
   const todayCollection = TRANSACTIONS.filter(t => txnDay(t) === today && txnOk(t)).reduce((s, t) => s + getNetTransactionAmount(t), 0);
+  const selectedTxn = TRANSACTIONS.filter(t => txnDay(t) === selectedDate && txnOk(t));
+  const selectedCollection = selectedTxn.reduce((s, t) => s + getNetTransactionAmount(t), 0);
   const pendingAmt = PAY_REQUESTS.filter(r => r.status === 'pending').reduce((s, r) => s + (r.amount || 0), 0);
 
   const setEl = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
@@ -16626,8 +16642,37 @@ function renderDashboard() {
   setEl('db-collection', '₹' + todayCollection.toLocaleString('en-IN'));
 
   if (isAdminDash) {
-    const overduePts = PATIENTS.filter(p => (p.balance || 0) > 0);
-    const overdueAmt = overduePts.reduce((s, p) => s + (p.balance || 0), 0);
+    const dateMatch = function (iso) {
+      if (!iso) return false;
+      const raw = String(iso);
+      return raw.slice(0, 10) === selectedDate;
+    };
+    const displayPts = PATIENTS.filter(function (p) { return centreMatch(p); });
+    const opdCount = displayPts.filter(function (p) {
+      return dateMatch(p.checkinAt) || dateMatch(p.createdAt) || dateMatch(p.seenAt);
+    }).length;
+    const surgeryCases = (window.OT_CASES || OT_CASES || []).filter(function (c) {
+      return centreMatch(c) && (dateMatch(c.date) || dateMatch(c.otDate) || dateMatch(c.createdAt) || dateMatch(c.surgeryDate));
+    });
+    const ipdCases = (window.IPD_PATIENTS || IPD_PATIENTS || []).filter(function (p) {
+      const active = (p.status || 'admitted') !== 'discharged';
+      return centreMatch(p) && (selectedDate === today ? active : (dateMatch(p.admittedAt) || dateMatch(p.date) || dateMatch(p.createdAt)));
+    });
+    const overduePts = PATIENTS.filter(function (p) {
+      if (!centreMatch(p)) return false;
+      const summary = bmhGetPatientFinancialSummary ? bmhGetPatientFinancialSummary(p.bmhId) : null;
+      const due = Math.max(Number(p.balance) || 0, Number(summary?.balance || 0), Number(summary?.pendingTotal || 0));
+      return due > 0;
+    });
+    const overdueAmt = overduePts.reduce(function (s, p) {
+      const summary = bmhGetPatientFinancialSummary ? bmhGetPatientFinancialSummary(p.bmhId) : null;
+      const due = Math.max(Number(p.balance) || 0, Number(summary?.balance || 0), Number(summary?.pendingTotal || 0));
+      return s + due;
+    }, 0);
+    setEl('db-admin-opd', String(opdCount));
+    setEl('db-admin-surgeries', String(surgeryCases.length));
+    setEl('db-admin-ipd', String(ipdCases.length));
+    setEl('db-admin-total-collection', '₹' + selectedCollection.toLocaleString('en-IN'));
     setEl('db-admin-overdue-amt', '₹' + overdueAmt.toLocaleString('en-IN'));
     setEl('db-admin-overdue-ct', String(overduePts.length));
     const low = INVENTORY ? INVENTORY.filter(i => i.stock <= i.min).length : 0;
@@ -16637,9 +16682,32 @@ function renderDashboard() {
     setEl('db-admin-vendor-pend', '₹' + vendSum.toLocaleString('en-IN'));
     const listEl = document.getElementById('dash-admin-overdue-list');
     if (listEl) {
-      listEl.innerHTML = overduePts.length ? overduePts.slice(0, 14).map(p => `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;border-bottom:1px solid var(--g5);font-size:12px"><span><strong>${p.name}</strong> <span style="font-family:var(--mono);font-size:10px;color:var(--bmh-teal)">${p.bmhId}</span></span><span style="color:var(--orange);font-weight:800">Due ₹${(p.balance || 0).toLocaleString('en-IN')}</span></div>`).join('') : '<div style="padding:16px;color:var(--g1);font-size:13px">No patient balances due — great.</div>';
+      listEl.innerHTML = overduePts.length ? overduePts.slice().sort(function (a, b) {
+        const sa = bmhGetPatientFinancialSummary ? bmhGetPatientFinancialSummary(a.bmhId) : null;
+        const sb = bmhGetPatientFinancialSummary ? bmhGetPatientFinancialSummary(b.bmhId) : null;
+        const da = Math.max(Number(a.balance) || 0, Number(sa?.balance || 0), Number(sa?.pendingTotal || 0));
+        const db = Math.max(Number(b.balance) || 0, Number(sb?.balance || 0), Number(sb?.pendingTotal || 0));
+        return db - da;
+      }).slice(0, 24).map(function (p) {
+        const summary = bmhGetPatientFinancialSummary ? bmhGetPatientFinancialSummary(p.bmhId) : null;
+        const due = Math.max(Number(p.balance) || 0, Number(summary?.balance || 0), Number(summary?.pendingTotal || 0));
+        const pendingLines = (PAY_REQUESTS || []).filter(function (r) { return r.bmhId === p.bmhId && r.status === 'pending'; }).length;
+        return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 8px;border-bottom:1px solid var(--g5);font-size:12px">
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:800">${p.name} <span style="font-family:var(--mono);font-size:10px;color:var(--bmh-teal)">${p.bmhId}</span></div>
+            <div style="font-size:10px;color:var(--g1)">${p.dept || '—'} · ${p.mob || p.mobile || '—'}${pendingLines ? ' · ' + pendingLines + ' pending request(s)' : ''}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="color:var(--orange);font-weight:900">Due ₹${due.toLocaleString('en-IN')}</div>
+            <button class="btn btn-red btn-xs" onclick="clearAdminPatientDue('${p.bmhId}')">Clear Due</button>
+          </div>
+        </div>`;
+      }).join('') : '<div style="padding:16px;color:var(--g1);font-size:13px">No patient balances due — great.</div>';
     }
+    renderAdminDashboardBreakdowns(selectedDate, selectedTxn, overduePts, surgeryCases, ipdCases, displayPts);
     bmhGeneratePurchaseOrderDraft();
+    if (!window._adminDashDetail || !window._adminDashDetail.type) window._adminDashDetail = { type: 'dues' };
+    renderAdminDashboardDetail(selectedDate, selectedTxn, overduePts, surgeryCases, ipdCases, displayPts);
   } else {
     setEl('db-cl-opd', String(todaySeen + waiting));
     setEl('db-cl-ipd', String(typeof IPD_PATIENTS !== 'undefined' ? IPD_PATIENTS.length : 0));
@@ -16691,6 +16759,157 @@ function renderDashboard() {
   if (aptList) {
     aptList.innerHTML = todayApts.slice(0, 8).map(a => `<div style="font-size:12px;padding:5px 0;border-bottom:1px solid var(--g5)"><span style="font-weight:700">${a.patient || ''}</span> · ${a.time || ''} · ${a.doctor || ''}</div>`).join('') || '<div style="color:var(--g1);font-size:12px">No appointments today</div>';
   }
+}
+function normalizeDashboardPaymentMode(mode) {
+  const raw = String(mode || '').trim();
+  const low = raw.toLowerCase();
+  if (!raw) return 'Cash';
+  if (/(insurance|tpa|cashless|pmjay|ayushman|cghs|echs)/i.test(low)) return 'Insurance / TPA';
+  if (/upi/i.test(low)) return 'UPI';
+  if (/credit/i.test(low)) return 'Credit Card';
+  if (/debit/i.test(low)) return 'Debit Card';
+  if (/cash/i.test(low)) return 'Cash';
+  if (/card/i.test(low)) return 'Card';
+  return raw;
+}
+function patientHasSurgeryDue(bmhId) {
+  const lines = (window.BMH_PATIENT_CHARGES && window.BMH_PATIENT_CHARGES[bmhId]) || [];
+  const pendingPRs = (PAY_REQUESTS || []).filter(function (r) { return r.bmhId === bmhId && r.status === 'pending'; });
+  return lines.some(function (l) {
+    const text = [l.cat, l.kind, l.parent, l.name, l.desc].join(' ').toLowerCase();
+    return /surgery|procedure|lscs|pmics|phaco|delivery|labour room|mtp|laser|iol/.test(text);
+  }) || pendingPRs.some(function (r) {
+    const text = [r.for, r.service, r.mode, r.desc].join(' ').toLowerCase();
+    return /surgery|procedure|lscs|pmics|phaco|delivery|labour room|mtp|laser|iol/.test(text);
+  });
+}
+function clearAdminPatientDue(bmhId) {
+  if (!CURRENT_USER?.isAdmin) { showToast('Admin access required', 'w'); return; }
+  const patient = PATIENTS.find(function (p) { return p.bmhId === bmhId; });
+  if (!patient) { showToast('Patient not found', 'w'); return; }
+  const summary = bmhGetPatientFinancialSummary ? bmhGetPatientFinancialSummary(bmhId) : null;
+  const due = Math.max(Number(patient.balance) || 0, Number(summary?.balance || 0), Number(summary?.pendingTotal || 0));
+  if (due <= 0) { showToast('No due found for this patient', 'i'); return; }
+  if (!confirm('Clear the due for ' + (patient.name || bmhId) + '?\n₹' + due.toLocaleString('en-IN') + '\nThis is an admin correction action.')) return;
+  patient.balance = 0;
+  try { if (window.firebase && firebase.database) firebase.database().ref('patients/' + bmhId + '/balance').set(0); } catch (e) {}
+  (PAY_REQUESTS || []).filter(function (r) { return r.bmhId === bmhId && r.status === 'pending'; }).forEach(function (pr) {
+    pr.status = 'cancelled';
+    try { if (window.firebase && firebase.database) firebase.database().ref('payRequests/' + pr.id).update({ status: 'cancelled', clearedBy: CURRENT_USER?.name || 'Admin', clearedAt: new Date().toISOString() }); } catch (e) {}
+  });
+  fbPush && fbPush('auditLog', { user: CURRENT_USER?.name || 'Admin', role: 'Admin', action: 'CLEAR_DUE', item: (patient.name || bmhId) + ' ' + bmhId + ' ₹' + due, timestamp: new Date().toISOString() });
+  showToast('Due cleared for ' + (patient.name || bmhId), 's');
+  renderDashboard && renderDashboard();
+  renderReceptionPage && renderReceptionPage();
+}
+function showAdminDashboardDetail(type, value) {
+  window._adminDashDetail = { type: type, value: value || '' };
+  renderDashboard && renderDashboard();
+}
+function renderAdminDashboardBreakdowns(selectedDate, selectedTxn, overduePts, surgeryCases, ipdCases, displayPts) {
+  const fmt = function (n) { return '₹' + Number(n || 0).toLocaleString('en-IN'); };
+  const modeEl = document.getElementById('dash-admin-mode-blocks');
+  const deptEl = document.getElementById('dash-admin-dept-blocks');
+  const groupedModes = {};
+  selectedTxn.forEach(function (t) {
+    const mode = normalizeDashboardPaymentMode(t.mode);
+    if (!groupedModes[mode]) groupedModes[mode] = { total: 0, count: 0 };
+    groupedModes[mode].total += getNetTransactionAmount(t);
+    groupedModes[mode].count += 1;
+  });
+  if (modeEl) {
+    const entries = Object.entries(groupedModes);
+    modeEl.innerHTML = entries.length ? entries.map(function (entry) {
+      const mode = entry[0], data = entry[1];
+      return `<div class="sc blue" style="cursor:pointer" onclick="showAdminDashboardDetail('mode','${String(mode).replace(/'/g, "\\'")}')"><div class="sc-lbl">${mode}</div><div class="sc-val blue">${fmt(data.total)}</div><div class="sc-icon">${data.count}</div></div>`;
+    }).join('') : '<div style="padding:12px;color:var(--g1);font-size:12px">No payments found for this date.</div>';
+  }
+  if (deptEl) {
+    const deptMeta = [
+      { key: 'ophtho', label: 'Eye', cls: 'blue' },
+      { key: 'obg', label: 'OBG', cls: 'red' },
+      { key: 'psych', label: 'Neuropsychiatry', cls: 'orange' },
+      { key: 'skin', label: 'Skin & Cosmetology', cls: 'gold' }
+    ];
+    deptEl.innerHTML = deptMeta.map(function (meta) {
+      const txns = selectedTxn.filter(function (t) { return String(t.dept || '').toLowerCase() === meta.key; });
+      const total = txns.reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
+      const modes = {};
+      txns.forEach(function (t) {
+        const m = normalizeDashboardPaymentMode(t.mode);
+        modes[m] = (modes[m] || 0) + getNetTransactionAmount(t);
+      });
+      const modeText = Object.entries(modes).slice(0, 3).map(function (entry) {
+        return entry[0] + ' ' + fmt(entry[1]);
+      }).join(' · ') || 'No payments';
+      return `<div class="sc ${meta.cls}" style="cursor:pointer;min-height:124px" onclick="showAdminDashboardDetail('dept','${meta.key}')"><div class="sc-lbl">${meta.label}</div><div class="sc-val ${meta.cls}">${fmt(total)}</div><div style="font-size:10px;color:var(--g1);font-weight:700;line-height:1.45">${modeText}</div></div>`;
+    }).join('');
+  }
+}
+function renderAdminDashboardDetail(selectedDate, selectedTxn, overduePts, surgeryCases, ipdCases, displayPts) {
+  const titleEl = document.getElementById('dash-admin-detail-title');
+  const listEl = document.getElementById('dash-admin-detail-list');
+  if (!titleEl || !listEl) return;
+  const detail = window._adminDashDetail || { type: 'dues' };
+  const fmt = function (n) { return '₹' + Number(n || 0).toLocaleString('en-IN'); };
+  const rowHtml = function (label, meta, amount, extra) {
+    return `<div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--g5)"><div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:800">${label}</div><div style="font-size:10.5px;color:var(--g1)">${meta || ''}</div>${extra || ''}</div>${amount ? `<div style="font-size:12px;font-weight:900;color:var(--bmh-blue)">${amount}</div>` : ''}</div>`;
+  };
+  if (detail.type === 'dues') {
+    titleEl.textContent = 'Outstanding dues';
+    listEl.innerHTML = overduePts.length ? overduePts.map(function (p) {
+      const summary = bmhGetPatientFinancialSummary ? bmhGetPatientFinancialSummary(p.bmhId) : null;
+      const due = Math.max(Number(p.balance) || 0, Number(summary?.balance || 0), Number(summary?.pendingTotal || 0));
+      return rowHtml(p.name + ' · ' + p.bmhId, [p.dept || '—', p.mob || p.mobile || '—'].join(' · '), fmt(due), `<div style="margin-top:6px"><button class="btn btn-red btn-xs" onclick="clearAdminPatientDue('${p.bmhId}')">Clear Due</button></div>`);
+    }).join('') : '<div style="padding:14px;color:var(--g1);font-size:12px">No dues for this selection.</div>';
+    return;
+  }
+  if (detail.type === 'mode') {
+    const mode = detail.value || '';
+    titleEl.textContent = mode + ' payments on ' + formatDateIN(selectedDate);
+    const rows = selectedTxn.filter(function (t) { return normalizeDashboardPaymentMode(t.mode) === mode; });
+    listEl.innerHTML = rows.length ? rows.map(function (t) {
+      return rowHtml((t.patient || 'Patient') + ' · ' + (t.bmhId || '—'), [t.service || '—', t.dept || '—', t.time || '—'].join(' · '), fmt(getNetTransactionAmount(t)));
+    }).join('') : '<div style="padding:14px;color:var(--g1);font-size:12px">No transactions for this mode.</div>';
+    return;
+  }
+  if (detail.type === 'dept') {
+    const dept = detail.value || '';
+    titleEl.textContent = dept.toUpperCase() + ' collections on ' + formatDateIN(selectedDate);
+    const rows = selectedTxn.filter(function (t) { return String(t.dept || '').toLowerCase() === dept; });
+    listEl.innerHTML = rows.length ? rows.map(function (t) {
+      return rowHtml((t.patient || 'Patient') + ' · ' + (t.bmhId || '—'), [normalizeDashboardPaymentMode(t.mode), t.service || '—', t.time || '—'].join(' · '), fmt(getNetTransactionAmount(t)));
+    }).join('') : '<div style="padding:14px;color:var(--g1);font-size:12px">No transactions for this department.</div>';
+    return;
+  }
+  if (detail.type === 'opd') {
+    titleEl.textContent = 'OPD patients on ' + formatDateIN(selectedDate);
+    const rows = displayPts.filter(function (p) {
+      return [p.checkinAt, p.createdAt, p.seenAt].some(function (iso) { return String(iso || '').slice(0, 10) === selectedDate; });
+    });
+    listEl.innerHTML = rows.length ? rows.map(function (p) {
+      return rowHtml(p.name + ' · ' + p.bmhId, [p.doctor || '—', p.dept || '—', p.mob || p.mobile || '—'].join(' · '), '');
+    }).join('') : '<div style="padding:14px;color:var(--g1);font-size:12px">No OPD patients for this date.</div>';
+    return;
+  }
+  if (detail.type === 'surgeries') {
+    titleEl.textContent = 'Surgeries on ' + formatDateIN(selectedDate);
+    listEl.innerHTML = surgeryCases.length ? surgeryCases.map(function (c) {
+      return rowHtml((c.patient || c.name || 'Patient') + ' · ' + (c.bmhId || '—'), [c.procedure || c.procedureMain || '—', c.site || c.eye || '—', c.otRoom || c.room || '—'].join(' · '), '');
+    }).join('') : '<div style="padding:14px;color:var(--g1);font-size:12px">No surgeries for this date.</div>';
+    return;
+  }
+  if (detail.type === 'ipd') {
+    titleEl.textContent = 'IPD patients';
+    listEl.innerHTML = ipdCases.length ? ipdCases.map(function (p) {
+      return rowHtml((p.name || 'Patient') + ' · ' + (p.bmhId || '—'), [p.dept || '—', p.ward || p.room || p.bed || '—', p.procedure || p.surgery || '—'].join(' · '), '');
+    }).join('') : '<div style="padding:14px;color:var(--g1);font-size:12px">No IPD patients in this view.</div>';
+    return;
+  }
+  titleEl.textContent = 'Transactions on ' + formatDateIN(selectedDate);
+  listEl.innerHTML = selectedTxn.length ? selectedTxn.map(function (t) {
+    return rowHtml((t.patient || 'Patient') + ' · ' + (t.bmhId || '—'), [normalizeDashboardPaymentMode(t.mode), t.service || '—', t.dept || '—'].join(' · '), fmt(getNetTransactionAmount(t)));
+  }).join('') : '<div style="padding:14px;color:var(--g1);font-size:12px">No transactions for this date.</div>';
 }
 
 // ── Today’s reception queue (dept filter, no sub-tab) ─────────
@@ -17001,8 +17220,9 @@ function buildQCard(p, sno) {
   const runningDue = Math.max(Number(p.balance) || 0, pendingAmt);
   const paidPRs = PAY_REQUESTS.filter(r=>r.bmhId===p.bmhId&&r.status==='paid');
   const pendingPRIds = pendingPRs.map(r=>r.id);
+  const surgeryDue = runningDue > 0 && patientHasSurgeryDue(p.bmhId);
   const chargeHtml = runningDue>0
-    ? `<span onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;gap:3px;background:rgba(255,149,0,.15);color:#8a4200;border:1px solid rgba(255,149,0,.4);border-radius:10px;padding:1px 6px;font-size:9px;font-weight:800;animation:pulse 2s infinite">⚠️ Surgery due ₹${runningDue.toLocaleString('en-IN')}${pendingAmt>0?`<button title="Delete all pending charges for this patient" onclick="event.stopPropagation();deletePatientPendingCharges('${p.bmhId}')" style="background:none;border:none;cursor:pointer;padding:0 0 0 2px;font-size:10px;color:#c0392b;line-height:1">🗑</button>`:''}</span>`
+    ? `<span onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;gap:3px;background:rgba(255,149,0,.15);color:#8a4200;border:1px solid rgba(255,149,0,.4);border-radius:10px;padding:1px 6px;font-size:9px;font-weight:800;animation:pulse 2s infinite">⚠️ ${surgeryDue ? 'Surgery due' : 'Due'} ₹${runningDue.toLocaleString('en-IN')}${pendingAmt>0?`<button title="Delete all pending charges for this patient" onclick="event.stopPropagation();deletePatientPendingCharges('${p.bmhId}')" style="background:none;border:none;cursor:pointer;padding:0 0 0 2px;font-size:10px;color:#c0392b;line-height:1">🗑</button>`:''}</span>`
     : paidPRs.length
     ? `<span style="background:var(--green-lt);color:#1a8c3c;border:1px solid var(--green);border-radius:10px;padding:1px 6px;font-size:9px;font-weight:800">✓ Paid</span>`
     : p.advance>0 ? `<span style="background:var(--blue-lt);color:var(--blue);border:1px solid rgba(0,122,255,.3);border-radius:10px;padding:1px 6px;font-size:9px;font-weight:800">💙 Adv ₹${p.advance.toLocaleString('en-IN')}</span>` : '';
@@ -17093,8 +17313,9 @@ function buildQTableRow(p, sno, opts) {
   const runningDue = Math.max(Number(p.balance) || 0, pendingAmt);
   const paidPRs = PAY_REQUESTS.filter(r=>r.bmhId===p.bmhId&&r.status==='paid');
   const advLbl = (p.advance > 0) ? `<span style="font-size:9px;color:var(--blue);font-weight:800">Adv ₹${(p.advance||0).toLocaleString('en-IN')}</span>` : '';
+  const surgeryDue = runningDue > 0 && patientHasSurgeryDue(p.bmhId);
   const chargeHint = runningDue>0
-    ? `<span style="font-size:9px;color:#8a4200;font-weight:800">Surgery due ₹${runningDue.toLocaleString('en-IN')}</span>${advLbl ? ' · ' + advLbl : ''}`
+    ? `<span style="font-size:9px;color:#8a4200;font-weight:800">${surgeryDue ? 'Surgery due' : 'Due'} ₹${runningDue.toLocaleString('en-IN')}</span>${advLbl ? ' · ' + advLbl : ''}`
     : paidPRs.length
     ? `<span style="font-size:9px;color:#1a8c3c">Paid</span>${advLbl ? ' · ' + advLbl : ''}`
     : (advLbl || '');
