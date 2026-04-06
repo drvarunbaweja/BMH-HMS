@@ -2229,6 +2229,7 @@ function populateOphthoForm(v) {
 
   // Advice text
   setV('rx-advice-text', v.advice || '');
+  setV('rx-extra-advice-text', v.extraAdvice || '');
 
   // Chief complaints — restore rows
   const fallbackCcRows = Array.isArray(v.ccRows) && v.ccRows.length
@@ -10395,7 +10396,7 @@ function updateOTStatus(id, status) {
 function formatFollowupDisplayDate(dateStr) {
   if (!dateStr) return '—';
   try {
-    return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-IN', { day:'2-digit', month:'long', year:'numeric' });
+    return formatDateIN(dateStr);
   } catch (e) {
     return dateStr;
   }
@@ -12818,11 +12819,17 @@ function centreMatch(item) {
   if(!uc) return true; // admin/BOTH — see everything
   return (item.centre || 'CHD') === uc;
 }
-function formatDateIN(value) {
-  if(!value) return '—';
+function formatDateDDMMYYYY(value) {
+  if (!value) return '—';
   const d = String(value).includes('T') ? new Date(value) : new Date(String(value) + 'T12:00:00');
-  if(Number.isNaN(d.getTime())) return String(value);
-  return d.toLocaleDateString('en-IN',{day:'2-digit',month:'2-digit',year:'numeric'});
+  if (Number.isNaN(d.getTime())) return String(value);
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  return dd + '/' + mm + '/' + yyyy;
+}
+function formatDateIN(value) {
+  return formatDateDDMMYYYY(value);
 }
 
 function filterPatientsForUser() {
@@ -13039,15 +13046,13 @@ function buildRxPlainInstructionLine(d, lang, fmtIN) {
 
 // ─── UPDATED printUnifiedRx with doctor degrees + safePrint ─────────────
 window.printUnifiedRx = function(deptId) {
-  const today = new Date().toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'});
+  const today = formatDateIN(new Date());
   const rxDateOe = document.getElementById('rx-date');
   if (rxDateOe) rxDateOe.textContent = today;
   ['obg','psych','skin'].forEach(d=>{const e=document.getElementById(d+'-rx-date');if(e)e.textContent=today;});
 
   const fmtIN = (iso) => {
-    if (!iso) return '—';
-    const t = Date.parse(iso);
-    return Number.isNaN(t) ? String(iso) : new Date(t).toLocaleDateString('en-IN',{day:'2-digit',month:'2-digit',year:'numeric'});
+    return formatDateIN(iso);
   };
 
   // ── Collect checkboxes ──
@@ -13058,6 +13063,7 @@ window.printUnifiedRx = function(deptId) {
   const incPrc  = document.getElementById(deptId+'-inc-proc')?.checked ?? true;
   const incCC   = document.getElementById('oe-inc-cc')?.checked ?? true;
   const incPos  = document.getElementById('oe-inc-posfind')?.checked ?? true;
+  const incAdv  = document.getElementById('oe-inc-adv')?.checked ?? true;
 
   // ── Collect diagnoses — Ophthalmology: numbered rows; other depts: *-dx-list ──
   const dxPack = typeof collectDeptDiagnosesForPrint === 'function' ? collectDeptDiagnosesForPrint(deptId) : { lines: [], notes: '' };
@@ -13109,10 +13115,10 @@ window.printUnifiedRx = function(deptId) {
 
   // ── Follow-up ──
   const fuDate  = document.getElementById('rx-fu-date')?.value;
-  const fuFormatted = fuDate ? new Date(fuDate).toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'}) : '';
+  const fuFormatted = fuDate ? formatDateIN(fuDate) : '';
   const advice  = (deptId === 'oe'
-    ? (document.getElementById('rx-advice-text')?.value || '')
-    : (document.getElementById(deptId+'-advice')?.value || '')) || '';
+    ? [document.getElementById('rx-advice-text')?.value || '', document.getElementById('rx-extra-advice-text')?.value || ''].filter(Boolean).join('\n')
+    : [document.getElementById(deptId+'-advice')?.value || '', document.getElementById(deptId+'-extra-advice')?.value || ''].filter(Boolean).join('\n')) || '';
   const adviceHtml = String(advice || '').trim()
     ? escapeHtmlConsent(String(advice).trim()).replace(/\n/g, '<br>')
     : '';
@@ -13219,7 +13225,7 @@ ${showGL ? `
 
 ${incPos && deptId==='oe' ? `<div class="lbl-row" style="margin:6px 0"><span class="lbl">Positive Findings:</span><span class="lbl-val">${(typeof buildOphthoPositiveFindingsList === 'function' ? buildOphthoPositiveFindingsList() : []).join(' ; ') || '—'}</span></div>` : ''}
 
-${drugs.length ? `
+${incRx && drugs.length ? `
 <div class="sec-title">Medicine (Rx):</div>
 <table>
   <thead><tr><th>#</th><th class="left">Name</th><th>Form</th><th>Route / Eye</th><th>Frequency</th><th>Duration</th><th>From</th><th>To</th></tr></thead>
@@ -13265,7 +13271,7 @@ ${drugs.length ? `
   </tbody>
 </table>` : ''}
 
-${adviceHtml ? `<div style="margin:8px 0"><div class="lbl" style="margin-bottom:4px">Instructions</div><div class="lbl-val" style="display:block;line-height:1.6;padding:6px 8px;background:#f7faff;border-left:3px solid #1A3C6E;border-radius:0 6px 6px 0">${adviceHtml}</div></div>` : ''}
+${incAdv && adviceHtml ? `<div style="margin:8px 0"><div class="lbl" style="margin-bottom:4px">Instructions</div><div class="lbl-val" style="display:block;line-height:1.6;padding:6px 8px;background:#f7faff;border-left:3px solid #1A3C6E;border-radius:0 6px 6px 0">${adviceHtml}</div></div>` : ''}
 
 ${incPrc && procs.length ? `
 <div class="sec-title">Procedure / Surgery Advised:</div>
@@ -14412,8 +14418,8 @@ function buildDischargePrintSection(sel) {
   if (!data.ptId || data.ptId === '—') return '';
   const esc = escapeHtmlConsent;
   const headerSrc = resolvePrintHeaderSrc();
-  const today = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
-  const fmt = function (v) { return v ? new Date(v).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'; };
+  const today = formatDateIN(new Date());
+  const fmt = function (v) { return formatDateIN(v); };
   const meds = flattenDischargeRxRows(data.lastRxData && data.lastRxData.length ? data.lastRxData : []).map(function (d, i) {
     const trade = rxDrugTradeName(d) || d.name || d.brand || 'Medicine';
     const generic = rxDrugGenericName(d);
@@ -14428,7 +14434,7 @@ function buildDischargePrintSection(sel) {
       + '</tr>';
   }).join('');
   const followupRows = (data.followups || []).map(function (f, idx) {
-    const dateText = f?.dateLabel || (f?.date ? formatFollowupDisplayDate(f.date) : '—');
+    const dateText = f?.date ? formatDateIN(f.date) : (f?.dateLabel || '—');
     const timeText = f?.time || '';
     const labelText = f?.label || ('Follow-up ' + (idx + 1));
     return '<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 10px;border:1px solid #d7dce5;border-radius:8px;margin-top:6px;font-size:11px"><strong>' + esc(labelText) + '</strong><span>' + esc(dateText + (timeText ? ' · ' + timeText : '')) + '</span></div>';
@@ -14506,7 +14512,7 @@ function renderDischargeBuilder() {
   document.getElementById('dc-pt-age').textContent  = ptObj.age || '—';
   document.getElementById('dc-pt-sex').textContent  = ptObj.sex || '—';
   document.getElementById('dc-pt-mob').textContent  = ptObj.mob || '—';
-  document.getElementById('dc-date').textContent    = new Date().toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
+  document.getElementById('dc-date').textContent    = formatDateIN(new Date());
   const procDxEl = document.getElementById('dc-procedure');
   if (procDxEl) {
     const procDx = [data.lastOtCase?.dx || data.diagnosis || '', data.lastOtCase?.procedure || data.procedureName || ''].filter(Boolean).join(' · ');
@@ -14514,7 +14520,7 @@ function renderDischargeBuilder() {
   }
   // Set discharge date to today if blank
   const ddEl = document.getElementById('dc-discharge-date');
-  if(ddEl) ddEl.textContent = new Date(data.dischargeDate).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
+  if(ddEl) ddEl.textContent = formatDateIN(data.dischargeDate);
   // Doctor from CURRENT_USER
   const surgeonEl = document.getElementById('dc-surgeon');
   if(surgeonEl && (surgeonEl.textContent==='Dr. Varun Baweja'||!surgeonEl.textContent.trim())) {
@@ -14567,12 +14573,12 @@ function renderDischargeBuilder() {
     const fuDateVal = document.getElementById('rx-fu-date')?.value;
     let followupList = (data.followups && data.followups.length)
       ? data.followups.map(function (f) {
-          const dt = f?.dateLabel || (f?.date ? formatFollowupDisplayDate(f.date) : '');
+          const dt = f?.date ? formatDateIN(f.date) : (f?.dateLabel || '');
           return (f?.label || 'Follow-up') + (dt ? ': ' + dt : '') + (f?.time ? ' · ' + f.time : '');
         })
       : [...tmpl.followup];
     if(fuDateVal && !(data.followups && data.followups.length)) {
-      const fuFormatted = new Date(fuDateVal).toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
+      const fuFormatted = formatDateIN(fuDateVal);
       followupList = ['Review: ' + fuFormatted, ...followupList.slice(1)];
     }
     fuEl.innerHTML = followupList.map((f,i)=>
@@ -14589,22 +14595,22 @@ function renderDischargeBuilder() {
   if (surgeryDetailsEl) {
     const rows = [
       ['Surgery / procedure', data.procedureName],
-      ['OT date', new Date(data.opDate).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})],
+      ['OT date', formatDateIN(data.opDate)],
       ['Eye / site', data.lastOtCase?.site || data.lastOtCase?.eye || ptObj.eye || '—'],
       ['IOL type / power', [data.lastOtCase?.iolType, data.lastOtCase?.iolPower].filter(Boolean).join(' / ') || '—'],
-      ['Admitted on', data.ipdStay?.admittedAt ? new Date(data.ipdStay.admittedAt).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}) : '—'],
-      ['Discharged on', new Date(data.dischargeDate).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})]
+      ['Admitted on', data.ipdStay?.admittedAt ? formatDateIN(data.ipdStay.admittedAt) : '—'],
+      ['Discharged on', formatDateIN(data.dischargeDate)]
     ];
     surgeryDetailsEl.innerHTML = rows.map(r => `<div style="display:grid;grid-template-columns:145px 1fr;gap:10px;padding:6px 0;border-bottom:1px solid var(--g5)"><div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase">${r[0]}</div><div style="font-size:12px;font-weight:800;color:var(--tx)">${r[1] || '—'}</div></div>`).join('');
   }
 
   const sumEl = document.getElementById('dc-summary-text');
   if (sumEl) {
-    const vDate = new Date(data.visitDate).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
-    const oDate = new Date(data.opDate).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
-    const aDate = data.ipdStay?.admittedAt ? new Date(data.ipdStay.admittedAt).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}) : oDate;
-    const dDate = new Date(data.dischargeDate).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
-    const fitDate = new Date(data.joinDate).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
+    const vDate = formatDateIN(data.visitDate);
+    const oDate = formatDateIN(data.opDate);
+    const aDate = data.ipdStay?.admittedAt ? formatDateIN(data.ipdStay.admittedAt) : oDate;
+    const dDate = formatDateIN(data.dischargeDate);
+    const fitDate = formatDateIN(data.joinDate);
     sumEl.innerHTML = `
       <div contenteditable="true" spellcheck="false" style="outline:none">
         This is to certify that <strong>${ptNm}</strong> visited our hospital on <strong>${vDate}</strong>. On examination, it was found that the patient had <strong>${data.findings}</strong> with diagnosis of <strong>${data.diagnosis}</strong>.<br><br>
@@ -17460,6 +17466,7 @@ function saveVisit(dept) {
       };
     });
     visit.advice = document.getElementById('rx-advice-text')?.value || '';
+    visit.extraAdvice = document.getElementById('rx-extra-advice-text')?.value || '';
   } else if(dept === 'obg') {
     const obgCheckboxIds = ['obg-anc-booking','obg-anc-warning','obg-anc-highrisk','obg-anc-fetal','obg-gyn-aub','obg-gyn-discharge','obg-gyn-pain','obg-gyn-menopause','obg-inf-ovulatory','obg-inf-tubal','obg-inf-endo','obg-inf-male','obg-redflag-bleeding','obg-redflag-leak','obg-redflag-headache','obg-redflag-pain','obg-redflag-fever','obg-redflag-decreasedfm','obg-redflag-swelling','obg-redflag-convulsions','obg-hr-prevlscs','obg-hr-gdm','obg-hr-pih','obg-hr-iugr','obg-hr-multiple','obg-hr-rhneg','obg-hr-placenta','obg-hr-anemia','obg-fetal-growthlag','obg-fetal-malpresentation','obg-fetal-lowliquor','obg-fetal-postdates','obg-aub-clots','obg-aub-intermenstrual','obg-aub-postcoital','obg-aub-anemia','obg-vag-pruritus','obg-vag-foul','obg-vag-dyspareunia','obg-vag-pidrisk','obg-pain-cyclical','obg-pain-severe','obg-pain-bowel','obg-pain-infertility','obg-inf-coital','obg-inf-pastpid','obg-inf-priorsurgery','obg-inf-galactorrhoea','obg-inf-hirsutism','obg-inf-maleabn','obg-inf-lowreserve','obg-inf-rpl'];
     stashCurrentObgPregnancyEntry();
