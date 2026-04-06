@@ -1951,6 +1951,8 @@ function populateOphthoForm(v) {
   // Refraction — Subjective
   setSel('subj-od-sph', v.subjODsph); setSel('subj-od-cyl', v.subjODcyl); setSel('subj-od-ax', v.subjODax);
   setSel('subj-os-sph', v.subjOSsph); setSel('subj-os-cyl', v.subjOScyl); setSel('subj-os-ax', v.subjOSax);
+  setSel('subj-od-va', v.subjODva);
+  setSel('subj-os-va', v.subjOSva);
   setSel('rf-od-add', v.rfODAdd);
   setSel('rf-os-add', v.rfOSAdd);
   setSel('nv-od-final', v.nvODFinal);
@@ -2040,18 +2042,12 @@ function populateOphthoForm(v) {
   if(Array.isArray(v.ccRows) && v.ccRows.length) {
     const ccContainer = document.getElementById('cc-rows');
     if(ccContainer) {
-      ccContainer.innerHTML = '';
-      v.ccRows.forEach(cc => {
-        if(typeof addCC === 'function') {
-          addCC();
-          const rows = ccContainer.querySelectorAll('.cc-row');
-          const last = rows[rows.length-1];
-          if(last) {
-            const inp = last.querySelector('.cc-inp'); if(inp) inp.value = cc.text||'';
-            const dur = last.querySelector('.cc-dur'); if(dur) dur.value = cc.dur||'';
-            const eye = last.querySelector('.cc-eye'); if(eye) eye.value = cc.eye||'';
-          }
-        }
+      const rows = Array.from(ccContainer.querySelectorAll('.cc-row'));
+      rows.forEach(function (row, idx) {
+        row.style.display = idx < Math.max(v.ccRows.length, 3) ? '' : 'none';
+        const inp = row.querySelector('.cc-inp'); if(inp) inp.value = v.ccRows[idx]?.text || '';
+        const dur = row.querySelector('.cc-dur'); if(dur) dur.value = v.ccRows[idx]?.dur || '';
+        const eye = row.querySelector('.cc-eye'); if(eye) eye.value = v.ccRows[idx]?.eye || '';
       });
     }
   }
@@ -12362,6 +12358,7 @@ function activateUserSession(user, profile, opts) {
   if (uname === 'rec_chd' || uname === 'reception.chd' || uname === 'reception.chd@bawejahospital.com') profile = Object.assign({}, profile, { centre: 'CHD', name: 'Reception CHD' });
   if (uname === 'optometrist' || uname === 'opto_rpr' || uname === 'opto.rpr' || uname === 'opto,rpr' || uname === 'optometrist@bawejahospital.com' || uname === 'opto.rpr@bawejahospital.com') profile = Object.assign({}, profile, { centre: 'RPR', name: 'Optometrist RPR' });
   if (uname === 'drtarun' || uname === 'drtarun.rpr' || uname === 'drtarun@bawejahospital.com' || uname === 'drtarun.rpr@bawejahospital.com') profile = Object.assign({}, profile, { centre: 'RPR', name: 'Dr. Tarun Baweja', dept: 'Neuropsychiatry' });
+  if (uname === 'drnamrata' || uname === 'drnamrata.rpr' || uname === 'drnamrata@bawejahospital.com' || uname === 'drnamrata.rpr@bawejahospital.com') profile = Object.assign({}, profile, { centre: 'RPR', name: 'Dr. Namrata Baweja', dept: 'OBG' });
   if (uname === 'drpooja' || uname === 'drpooja.rpr' || uname === 'drpooja@bawejahospital.com' || uname === 'drpooja.rpr@bawejahospital.com') profile = Object.assign({}, profile, { centre: 'RPR', name: 'Dr. Pooja Baweja', dept: 'Skin' });
   if (uname === 'lab.chd@bawejahospital.com') profile = Object.assign({}, profile, { centre: 'CHD', name: 'Lab Tech CHD' });
   if (uname === 'lab.rpr@bawejahospital.com') profile = Object.assign({}, profile, { centre: 'RPR', name: 'Lab Tech Ropar' });
@@ -12769,6 +12766,8 @@ window.printUnifiedRx = function(deptId) {
   const rfOSAx  = document.getElementById('rf-os-ax2')?.value||'0°';
   const addOD = document.getElementById('rf-od-add')?.value || window.CURRENT_PATIENT?.lastVisit?.rfODAdd || '';
   const addOS = document.getElementById('rf-os-add')?.value || window.CURRENT_PATIENT?.lastVisit?.rfOSAdd || '';
+  const subjODva = document.getElementById('subj-od-va')?.value || window.CURRENT_PATIENT?.lastVisit?.subjODva || '';
+  const subjOSva = document.getElementById('subj-os-va')?.value || window.CURRENT_PATIENT?.lastVisit?.subjOSva || '';
   const nvOD  = document.getElementById('nv-od-final')?.value || document.getElementById('ucva-od-near')?.value || window.CURRENT_PATIENT?.lastVisit?.nvODFinal || '';
   const nvOS  = document.getElementById('nv-os-final')?.value || document.getElementById('ucva-os-near')?.value || window.CURRENT_PATIENT?.lastVisit?.nvOSFinal || '';
 
@@ -12778,6 +12777,16 @@ window.printUnifiedRx = function(deptId) {
   const advice  = (deptId === 'oe'
     ? (document.getElementById('rx-advice-text')?.value || '')
     : (document.getElementById(deptId+'-advice')?.value || '')) || '';
+  const expandProcedureLabelForPrint = function (text) {
+    return String(text || '')
+      .replace(/\bPMICS\b(?!\s*\()/gi, 'Pinhole Micro Incision Cataract Surgery (PMICS)')
+      .replace(/PMICS \+ IOL Implantation/gi, 'Pinhole Micro Incision Cataract Surgery (PMICS) + IOL Implantation')
+      .replace(/PMICS \+ IOL/gi, 'Pinhole Micro Incision Cataract Surgery (PMICS) + IOL')
+      .replace(/PMICS \(Pinhole Micro Incision Cataract Surgery\)/gi, 'Pinhole Micro Incision Cataract Surgery (PMICS)');
+  };
+  const adviceHtml = String(advice || '').trim()
+    ? escapeHtmlConsent(String(advice).trim()).replace(/\n/g, '<br>')
+    : '';
 
   // ── Doctor info (logged-in doctor on prescription) ──
   const doctorDisplay = typeof getRxDoctorDisplayName === 'function' ? getRxDoctorDisplayName() : (CURRENT_USER?.name || 'Dr. Varun Baweja');
@@ -12874,8 +12883,8 @@ ${showGL ? `
 <table>
   <thead><tr><th>Eye</th><th>SPH</th><th>CYL</th><th>AXIS</th><th>ADD</th><th>DVA</th><th>NVA</th></tr></thead>
   <tbody>
-    <tr><td><b>Right Eye</b></td><td>${rfODSph||'0'}</td><td>${rfODCyl||'0'}</td><td>${rfODAx||'0°'}</td><td>${addOD||'—'}</td><td>${vaOD||'—'}</td><td>${nvOD||'—'}</td></tr>
-    <tr><td><b>Left Eye</b></td><td>${rfOSSph||'0'}</td><td>${rfOSCyl||'0'}</td><td>${rfOSAx||'0°'}</td><td>${addOS||'—'}</td><td>${vaOS||'—'}</td><td>${nvOS||'—'}</td></tr>
+    <tr><td><b>Right Eye</b></td><td>${rfODSph||'0'}</td><td>${rfODCyl||'0'}</td><td>${rfODAx||'0°'}</td><td>${addOD||'—'}</td><td>${subjODva||vaOD||'—'}</td><td>${nvOD||'—'}</td></tr>
+    <tr><td><b>Left Eye</b></td><td>${rfOSSph||'0'}</td><td>${rfOSCyl||'0'}</td><td>${rfOSAx||'0°'}</td><td>${addOS||'—'}</td><td>${subjOSva||vaOS||'—'}</td><td>${nvOS||'—'}</td></tr>
   </tbody>
 </table>` : ''}
 
@@ -12927,11 +12936,11 @@ ${drugs.length ? `
   </tbody>
 </table>` : ''}
 
-${advice ? `<div class="lbl-row" style="margin:6px 0"><span class="lbl">Instructions:</span><span class="lbl-val">${advice}</span></div>` : ''}
+${adviceHtml ? `<div style="margin:8px 0"><div class="lbl" style="margin-bottom:4px">Instructions</div><div class="lbl-val" style="display:block;line-height:1.6;padding:6px 8px;background:#f7faff;border-left:3px solid #1A3C6E;border-radius:0 6px 6px 0">${adviceHtml}</div></div>` : ''}
 
 ${incPrc && procs.length ? `
 <div class="sec-title">Procedure / Surgery Advised:</div>
-${procs.map(p=>`<div class="proc-item">&#9890; ${p}</div>`).join('')}` : ''}
+${procs.map(p=>`<div class="proc-item">&#9890; ${expandProcedureLabelForPrint(p)}</div>`).join('')}` : ''}
 
 ${incInv && patientInvestigationOrders.length ? `
 <div class="sec-title">Investigations Ordered:</div>
@@ -16689,8 +16698,9 @@ function buildQTableRow(p, sno, opts) {
 
 function markSeen(bmhId) {
   const p = PATIENTS.find(x=>x.bmhId===bmhId);
-  if(p) { p.seen=true; p.status='seen'; p.dilated=false; }
-  fbUpdate && fbUpdate('patients/'+bmhId,{seen:true,status:'seen'}).catch(()=>{});
+  const nowIso = new Date().toISOString();
+  if(p) { p.seen=true; p.status='seen'; p.dilated=false; p.seenAt = nowIso; }
+  fbUpdate && fbUpdate('patients/'+bmhId,{seen:true,status:'seen',seenAt:nowIso}).catch(()=>{});
   renderDocQueue && renderDocQueue();
   renderReceptionPage && renderReceptionPage();
   renderDashboard && renderDashboard();
@@ -16886,9 +16896,13 @@ function renderDocQueue() {
   }) : myPts;
 
   // Active list keeps all waiting patients visible; dilated patients also remain in dedicated dilated queue.
+  const todayKeyLocal = new Date().toISOString().split('T')[0];
+  const serialMap = new Map(filteredPts.map(function (p, idx) { return [p.bmhId, idx + 1]; }));
   const active  = filteredPts.filter(p => !p.seen);
   const dilated = filteredPts.filter(p => p.dilated && !p.seen);
-  const done    = filteredPts.filter(p => p.seen);
+  const done    = filteredPts.filter(function (p) {
+    return p.seen && String(p.seenAt || '').startsWith(todayKeyLocal);
+  });
   const xrefs   = (window.XREF_LOG||[]).filter(x => !userDept || x.fromDept===userDept || x.toDept===userDept);
   const ipdPts  = (window.IPD_PATIENTS||[]).filter(p => {
     const ipdDept = normalizeDeptKeyForQueue(p.dept || p.department || '');
@@ -16898,13 +16912,13 @@ function renderDocQueue() {
   const emptyRow = label => `<tr><td colspan="10" style="text-align:center;padding:24px;color:var(--g2);font-size:12.5px">No ${label} patients</td></tr>`;
 
   const ae = document.getElementById('dq-active-list');
-  if(ae) ae.innerHTML = active.length ? active.map((p,i)=>buildQTableRow(p,i+1)).join('') : emptyRow('active');
+  if(ae) ae.innerHTML = active.length ? active.map((p)=>buildQTableRow(p, serialMap.get(p.bmhId) || '')).join('') : emptyRow('active');
 
   const de = document.getElementById('dq-dil-list');
-  if(de) de.innerHTML = dilated.length ? dilated.map((p,i)=>buildQTableRow(p,i+1)).join('') : emptyRow('dilated');
+  if(de) de.innerHTML = dilated.length ? dilated.map((p)=>buildQTableRow(p, serialMap.get(p.bmhId) || '')).join('') : emptyRow('dilated');
 
   const dne = document.getElementById('dq-done-list');
-  if(dne) dne.innerHTML = done.length ? done.map((p,i)=>buildQTableRow(p,i+1)).join('') : emptyRow('done');
+  if(dne) dne.innerHTML = done.length ? done.map((p)=>buildQTableRow(p, serialMap.get(p.bmhId) || '')).join('') : emptyRow('done');
 
   // Dilated tab visibility — only show for ophtho
   const dilTab = document.getElementById('dq-tab-dil');
@@ -16995,9 +17009,11 @@ function saveVisit(dept) {
     visit.subjODsph = document.getElementById('subj-od-sph')?.value || '';
     visit.subjODcyl = document.getElementById('subj-od-cyl')?.value || '';
     visit.subjODax  = document.getElementById('subj-od-ax')?.value  || '';
+    visit.subjODva  = document.getElementById('subj-od-va')?.value  || '';
     visit.subjOSsph = document.getElementById('subj-os-sph')?.value || '';
     visit.subjOScyl = document.getElementById('subj-os-cyl')?.value || '';
     visit.subjOSax  = document.getElementById('subj-os-ax')?.value  || '';
+    visit.subjOSva  = document.getElementById('subj-os-va')?.value  || '';
     visit.rfODAdd  = document.getElementById('rf-od-add')?.value || '';
     visit.rfOSAdd  = document.getElementById('rf-os-add')?.value || '';
     visit.nvODFinal = document.getElementById('nv-od-final')?.value || '';
