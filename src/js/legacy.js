@@ -1795,6 +1795,11 @@ function openPatient(bmhId) {
   // ── 4. Navigate to dept ────────────────────────────────────────
   const deptPage = { ophtho:'ophtho', obg:'obg', psych:'psych', skin:'skin' }[p.dept] || 'ophtho';
   nav(deptPage, null);
+  if (p.dept === 'ophtho') {
+    const historyTab = Array.from(document.querySelectorAll('#pg-ophtho .ptab')).find(function (el) { return el.textContent.includes('History'); });
+    if (historyTab) ptab(historyTab, 'oe-hx');
+    window.scrollTo(0, 0);
+  }
 
   if(p.dept === 'ophtho' && p.lastVisit && typeof p.lastVisit === 'object') {
     populateOphthoForm(p.lastVisit);
@@ -7743,6 +7748,31 @@ function saveDrugLibraryToStorage() {
   if (window.FBDB) window.FBDB.ref('drugLibrary').set(DRUG_LIBRARY).catch(() => {});
 }
 
+function getCurrentDrugDeptLabel() {
+  const deptMap = {
+    ophtho: 'Ophthalmology',
+    ophthalmology: 'Ophthalmology',
+    obg: 'OBG',
+    psych: 'Neuropsychiatry',
+    psychiatry: 'Neuropsychiatry',
+    neuropsychiatry: 'Neuropsychiatry',
+    skin: 'Skin',
+    dermatology: 'Skin',
+    'skin & cosmetology': 'Skin'
+  };
+  const key = normalizeDeptKeyForQueue(CURRENT_USER?.dept || window.CURRENT_PATIENT?.dept || '');
+  return deptMap[key] || deptMap[String(CURRENT_USER?.dept || '').toLowerCase()] || 'All';
+}
+
+function syncDrugDeptDefaults() {
+  const dept = getCurrentDrugDeptLabel();
+  ['new-drug-dept','md-add-dept'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (!el || CURRENT_USER?.isAdmin) return;
+    if ([...el.options].some(function (o) { return o.value === dept; })) el.value = dept;
+  });
+}
+
 function loadDrugLibraryFromStorage() {
   try {
     const ls = localStorage.getItem('bmh_drug_library');
@@ -7757,6 +7787,7 @@ function loadDrugLibraryFromStorage() {
   if (!window.FBDB) {
     renderSettingsDrugs && renderSettingsDrugs();
     rebuildDrugGenericDatalist();
+    syncDrugDeptDefaults();
     return;
   }
   window.FBDB.ref('drugLibrary').once('value').then(snap => {
@@ -7764,15 +7795,18 @@ function loadDrugLibraryFromStorage() {
     if (!Array.isArray(arr) || !arr.length) {
       renderSettingsDrugs && renderSettingsDrugs();
       rebuildDrugGenericDatalist();
+      syncDrugDeptDefaults();
       return;
     }
     DRUG_LIBRARY.length = 0;
     arr.forEach(x => DRUG_LIBRARY.push(x));
     renderSettingsDrugs && renderSettingsDrugs();
     rebuildDrugGenericDatalist();
+    syncDrugDeptDefaults();
   }).catch(() => {
     renderSettingsDrugs && renderSettingsDrugs();
     rebuildDrugGenericDatalist();
+    syncDrugDeptDefaults();
   });
 }
 window.loadDrugLibraryFromStorage = loadDrugLibraryFromStorage;
@@ -7809,6 +7843,7 @@ function handleDrugImportCsv(inp) {
     const tCol = ti >= 0 ? ti : 0;
     const gCol = gi >= 0 ? gi : 1;
     const typeCol = tyi >= 0 ? tyi : (header.length > 2 ? 2 : -1);
+    const deptDefault = document.getElementById('new-drug-dept')?.value || getCurrentDrugDeptLabel();
     let added = 0;
     for (let i = 1; i < lines.length; i++) {
       const cols = lines[i].split(',').map(x => x.trim().replace(/^"|"$/g, ''));
@@ -7824,7 +7859,7 @@ function handleDrugImportCsv(inp) {
         generic: generic || trade,
         freq: 'BD',
         dur: '1 Week',
-        dept: 'All',
+        dept: deptDefault,
         company: company || ''
       });
       added++;
@@ -7848,6 +7883,7 @@ function renderSettingsDrugs() {
     <button class="btn btn-xs btn-gray" onclick="removeDrugLib(${i})">✕</button>
   </div>`).join('');
   rebuildDrugGenericDatalist();
+  syncDrugDeptDefaults();
 }
 function addDrugToLibraryFromModal() {
   const type = document.getElementById('md-add-type')?.value;
@@ -7895,7 +7931,7 @@ function openDrugLibraryAddFromQuick() {
   document.getElementById('md-add-freq').value = normalizeRxFreqLabel(seed?.freq || 'Twice daily (BD)');
   document.getElementById('md-add-dur').value = normalizeRxDurationLabel(seed?.dur || '1 week');
   const deptMap = { ophtho:'Ophthalmology', obg:'OBG', psych:'Neuropsychiatry', skin:'Skin' };
-  document.getElementById('md-add-dept').value = seed?.dept || (deptMap[rxDeptKeyFromUi()] || 'All');
+  document.getElementById('md-add-dept').value = seed?.dept || (deptMap[rxDeptKeyFromUi()] || getCurrentDrugDeptLabel());
   window.RX_QUICK_ADD_TO_PRESCRIPTION = true;
   openM('m-add-drug');
 }
@@ -7940,6 +7976,7 @@ function addDrugToLibrary() {
   renderSettingsDrugs();
   showToast(`💊 ${trade} added to library ✓`,'s');
   closeM('m-add-drug');
+  syncDrugDeptDefaults();
 }
 function removeDrugLib(i){DRUG_LIBRARY.splice(i,1);saveDrugLibraryToStorage();renderSettingsDrugs();}
 function filterDrugs(v) {
@@ -16767,6 +16804,13 @@ function markSeen(bmhId) {
   renderDocQueue && renderDocQueue();
   renderReceptionPage && renderReceptionPage();
   renderDashboard && renderDashboard();
+}
+function markCurrentPatientSeen() {
+  const ids = ['ophtho-pt-uid','obg-pt-uid','psych-pt-uid','skin-pt-uid'];
+  const bmhId = (window.CURRENT_PATIENT?.bmhId || ids.map(function (id) { return document.getElementById(id)?.textContent?.trim(); }).find(Boolean) || '').trim();
+  if(!bmhId || bmhId === '—') { showToast('Open a patient first', 'w'); return; }
+  markSeen(bmhId);
+  showToast('Patient marked seen ✓', 's');
 }
 
 function checkInPatient(bmhId) {

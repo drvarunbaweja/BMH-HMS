@@ -343,6 +343,7 @@
         <div><div class="card-title">👁️ Eye Examination — <span id="ophtho-pt-nm">Test Patient A</span></div><div class="card-sub"><span id="ophtho-pt-uid" style="font-family:var(--mono);color:var(--bmh-teal)">BMSH-000001</span> · Dr. Varun Baweja</div></div>
         <div style="display:flex;gap:5px;flex-wrap:wrap">
           <button class="btn btn-sm btn-gray" onclick="nav('doctor-queue',null)" title="Back to Queue">← Queue</button>
+          <button class="btn btn-sm btn-green" onclick="markCurrentPatientSeen()">✓ Seen</button>
           <button class="btn btn-sm btn-gray" onclick="openM('m-consents')">📋 Consents</button>
           <button class="btn btn-sm btn-outline" onclick="previewCaseSheet()">👁 Preview</button>
           <button class="btn btn-sm btn-outline" onclick="printCaseSheet()">🖨️ Print Case Sheet</button>
@@ -1839,6 +1840,7 @@
         </div>
         <div style="display:flex;gap:5px;flex-wrap:wrap">
           <button class="btn btn-sm btn-gray" onclick="nav('doctor-queue',null)" title="Back to Queue">← Queue</button>
+          <button class="btn btn-sm btn-green" onclick="markCurrentPatientSeen()">✓ Seen</button>
           <button class="btn btn-sm btn-gray" onclick="openM('m-consents');document.getElementById('mc-type').value='obg-lscs';renderConsentModal()">📋 LSCS Consent</button>
           <button class="btn btn-sm btn-outline" onclick="printOBGCard()">🖨️ Print ANC Card</button>
           <button class="btn btn-sm btn-gold" onclick="saveVisit('obg')">💾 Save</button>
@@ -2391,6 +2393,7 @@
         <div><div class="card-title">🧠 Neuropsychiatry — <span id="psych-pt-nm">— Select Patient —</span></div><div class="card-sub" style="font-family:var(--mono);color:var(--bmh-teal)"><span id="psych-pt-uid">—</span> · Dr. Tarun Baweja</div></div>
         <div style="display:flex;gap:5px;flex-wrap:wrap">
           <button class="btn btn-sm btn-gray" onclick="nav('doctor-queue',null)" title="Back to Queue">← Queue</button>
+          <button class="btn btn-sm btn-green" onclick="markCurrentPatientSeen()">✓ Seen</button>
           <button class="btn btn-sm btn-outline" onclick="printPsychSheet()">🖨️ Print</button>
           <button class="btn btn-sm btn-gold" onclick="saveVisit('psych')">💾 Save</button>
         </div>
@@ -2712,6 +2715,7 @@
         <div><div class="card-title">💆 Skin & Cosmetology — <span id="skin-pt-nm">— Select Patient —</span></div><div class="card-sub" style="font-family:var(--mono);color:var(--bmh-teal)"><span id="skin-pt-uid">—</span> · Dr. Pooja Baweja</div></div>
         <div style="display:flex;gap:5px;flex-wrap:wrap">
           <button class="btn btn-sm btn-gray" onclick="nav('doctor-queue',null)" title="Back to Queue">← Queue</button>
+          <button class="btn btn-sm btn-green" onclick="markCurrentPatientSeen()">✓ Seen</button>
           <button class="btn btn-sm btn-outline" onclick="printSkinSheet()">🖨️ Print</button>
           <button class="btn btn-sm btn-gold" onclick="saveVisit('skin')">💾 Save</button>
         </div>
