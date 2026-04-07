@@ -13147,6 +13147,14 @@ function formatDateDDMMYYYY(value) {
 function formatDateIN(value) {
   return formatDateDDMMYYYY(value);
 }
+function localDateKey(value) {
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  return yyyy + '-' + mm + '-' + dd;
+}
 
 function filterPatientsForUser() {
   if(!CURRENT_USER) return;
@@ -17973,7 +17981,7 @@ function renderDocQueue() {
   const titleEl = document.getElementById('dq-title');
   if (titleEl) titleEl.textContent = `${queueDoctor} — My Patients`;
   const searchQ = String(document.getElementById('dq-search')?.value || '').trim().toLowerCase();
-  const todayKeyLocal = new Date().toISOString().split('T')[0];
+  const todayKeyLocal = localDateKey(new Date());
   const isTodayQueuePatient = function (p) {
     if (!p) return false;
     if (p.queueRemoved) return false;
@@ -17983,9 +17991,9 @@ function renderDocQueue() {
       const s = String(raw || '');
       if (!s) return false;
       if (/^\d+$/.test(s)) {
-        try { return new Date(Number(s)).toISOString().slice(0, 10) === todayKeyLocal; } catch (e) { return false; }
+        try { return localDateKey(new Date(Number(s))) === todayKeyLocal; } catch (e) { return false; }
       }
-      return s.slice(0, 10) === todayKeyLocal;
+      return localDateKey(s) === todayKeyLocal || s.slice(0, 10) === todayKeyLocal;
     });
   };
 
@@ -18024,7 +18032,7 @@ function renderDocQueue() {
   const active  = filteredPts.filter(p => !p.seen);
   const dilated = filteredPts.filter(p => p.dilated && !p.seen);
   const done    = filteredPts.filter(function (p) {
-    return p.seen && String(p.seenAt || '').startsWith(todayKeyLocal);
+    return p.seen && localDateKey(p.seenAt || p.checkinAt || p.createdAt) === todayKeyLocal;
   });
   const xrefs   = (window.XREF_LOG||[]).filter(x => !userDept || x.fromDept===userDept || x.toDept===userDept);
   const ipdPts  = (window.IPD_PATIENTS||[]).filter(p => {
