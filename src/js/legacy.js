@@ -18008,10 +18008,11 @@ function renderDocQueue() {
       const deptMatch = !userDept || ptDept === userDept || (!ptDept && userDept === 'ophtho');
       return deptMatch && validStatuses(p) && centreMatch(p) && isTodayQueuePatient(p);
     });
-    return deptPts.filter(function (p) {
+    const matchedPts = deptPts.filter(function (p) {
       if (!p.doctor) return true;
       return doctorMatchesPatientQueue(p.doctor, queueDoctor);
     });
+    return matchedPts.length ? matchedPts : deptPts;
   })();
   const filteredPts = searchQ ? myPts.filter(function (p) {
     const hay = [
