@@ -14779,6 +14779,15 @@ function deleteTransaction(txnId) {
 // DELETION APPROVAL SYSTEM — non-admins request, admins approve
 // ══════════════════════════════════════════════════════════════
 window.PENDING_DELETE_REQUESTS = window.PENDING_DELETE_REQUESTS || [];
+window.ALL_DELETE_REQUESTS = window.ALL_DELETE_REQUESTS || [];
+
+function isConsultationChargeEntry(pr) {
+  const txt = String(pr?.for || pr?.service || pr?.desc || '').toLowerCase();
+  return /\bconsultation\b|\bconsult\b/.test(txt);
+}
+function showDeleteApprovalRequiredPopup() {
+  alert('This deletion requires admin approval.\n\nPlease request approval. Admin can review it in Settings > Approvals and approve to delete.');
+}
 
 function requestDeletion(type, itemId, label) {
   window._delReqType  = type;
@@ -14903,8 +14912,8 @@ function loadIPDPatientsFromFirebase() {
 function loadDeletionRequests() {
   if(!window.fbOnce || !CURRENT_USER?.isAdmin) return;
   fbOnce('deletionRequests').then(data=>{
-    if(!data) { updateDelReqBadge(); return; }
-    window.PENDING_DELETE_REQUESTS = Object.values(data).filter(r=>r.status==='pending');
+    window.ALL_DELETE_REQUESTS = data ? Object.values(data) : [];
+    window.PENDING_DELETE_REQUESTS = (window.ALL_DELETE_REQUESTS || []).filter(r=>r.status==='pending');
     updateDelReqBadge();
     renderDeletionRequests();
   }).catch(()=>{});
@@ -14917,9 +14926,10 @@ function updateDelReqBadge() {
 
 function renderDeletionRequests() {
   const el = document.getElementById('set-del-req-list'); if(!el) return;
-  const pending = (window.PENDING_DELETE_REQUESTS||[]).filter(r=>r.status==='pending');
-  if(!pending.length) { el.innerHTML='<div style="padding:24px;text-align:center;color:var(--g1);font-size:13px">✅ No pending deletion requests</div>'; return; }
-  el.innerHTML = pending.map(r=>`
+  const all = (window.ALL_DELETE_REQUESTS && window.ALL_DELETE_REQUESTS.length ? window.ALL_DELETE_REQUESTS : window.PENDING_DELETE_REQUESTS || []).slice()
+    .sort((a,b)=>new Date(b.requestedAt||0)-new Date(a.requestedAt||0));
+  if(!all.length) { el.innerHTML='<div style="padding:24px;text-align:center;color:var(--g1);font-size:13px">✅ No deletion requests yet</div>'; return; }
+  el.innerHTML = all.map(r=>`
     <div style="border:1.5px solid rgba(255,59,48,.3);border-radius:var(--r);overflow:hidden;margin-bottom:10px;background:#fff">
       <div style="background:rgba(255,59,48,.06);padding:10px 14px;border-bottom:1px solid rgba(255,59,48,.15)">
         <div style="font-size:12px;font-weight:900;color:var(--red)">${r.type==='transaction'?'💳 Transaction':'⚠️ Charge'} Deletion Request</div>
@@ -14929,10 +14939,15 @@ function renderDeletionRequests() {
         <div style="font-size:12.5px;font-weight:800;margin-bottom:4px">${r.label||r.itemId}</div>
         <div style="font-size:11.5px;color:var(--g1);margin-bottom:8px">Requested by: <strong>${r.requestedBy}</strong> · ${r.requestedByRole} · ${r.centre}</div>
         <div style="background:var(--orange-lt);border-left:3px solid var(--orange);border-radius:0 6px 6px 0;padding:7px 10px;font-size:12px;margin-bottom:10px"><span style="font-weight:800;color:#8a4200">Reason:</span> ${r.reason}</div>
-        <div style="display:flex;gap:8px">
-          <button onclick="approveDeleteRequest('${r.id}')" style="flex:1;background:var(--green);color:#fff;border:none;border-radius:6px;padding:8px 12px;font-size:12px;font-weight:800;cursor:pointer">✅ Approve &amp; Delete</button>
-          <button onclick="rejectDeleteRequest('${r.id}')" style="flex:1;background:var(--g4);color:var(--tx1);border:none;border-radius:6px;padding:8px 12px;font-size:12px;font-weight:800;cursor:pointer">❌ Reject</button>
-        </div>
+        ${r.status==='pending'
+          ? `<div style="display:flex;gap:8px">
+              <button onclick="approveDeleteRequest('${r.id}')" style="flex:1;background:var(--green);color:#fff;border:none;border-radius:6px;padding:8px 12px;font-size:12px;font-weight:800;cursor:pointer">✅ Approve &amp; Delete</button>
+              <button onclick="rejectDeleteRequest('${r.id}')" style="flex:1;background:var(--g4);color:var(--tx1);border:none;border-radius:6px;padding:8px 12px;font-size:12px;font-weight:800;cursor:pointer">❌ Reject</button>
+            </div>`
+          : `<div style="font-size:11.5px;padding:7px 10px;border-radius:7px;background:${r.status==='approved'?'var(--green-lt)':'var(--g6)'};color:${r.status==='approved'?'#1a8c3c':'var(--tx1)'};font-weight:800">
+              Status: ${(r.status||'pending').toUpperCase()}${r.status==='approved'&&r.approvedBy?` · By ${r.approvedBy}`:''}${r.status==='rejected'&&r.rejectedBy?` · By ${r.rejectedBy}`:''}
+            </div>`
+        }
       </div>
     </div>`).join('');
 }
@@ -14990,6 +15005,10 @@ function approveDeleteRequest(reqId) {
   fbPush&&fbPush('auditLog',{user:CURRENT_USER?.name,role:'Admin',action:'DELETE_APPROVED',item:req.label,reason:req.reason,requestedBy:req.requestedBy,timestamp:req.approvedAt});
 
   const pi=PENDING_DELETE_REQUESTS.indexOf(req); if(pi>-1) PENDING_DELETE_REQUESTS.splice(pi,1);
+  if (Array.isArray(window.ALL_DELETE_REQUESTS)) {
+    const ai = window.ALL_DELETE_REQUESTS.findIndex(function (x) { return x.id === req.id; });
+    if (ai > -1) window.ALL_DELETE_REQUESTS[ai] = Object.assign({}, window.ALL_DELETE_REQUESTS[ai], req);
+  }
   showToast('✅ Deletion approved — record permanently removed','s');
   renderDeletionRequests(); updateDelReqBadge();
   renderCollectionDashboard&&renderCollectionDashboard(); renderReceptionPage&&renderReceptionPage(); renderOTListSafe&&renderOTListSafe(); renderChargesList&&renderChargesList(); renderCentresCharges&&renderCentresCharges(); renderSetPacksList&&renderSetPacksList(); renderDocQueue&&renderDocQueue();
@@ -15003,6 +15022,10 @@ function rejectDeleteRequest(reqId) {
   fbUpdate&&fbUpdate('deletionRequests/'+reqId,{status:'rejected',rejectedBy:req.rejectedBy,rejectedAt:req.rejectedAt,rejectionNote:note});
   fbPush&&fbPush('auditLog',{user:CURRENT_USER?.name,role:'Admin',action:'DELETE_REJECTED',item:req.label,reason:req.reason,requestedBy:req.requestedBy,rejectionNote:note,timestamp:req.rejectedAt});
   const pi=PENDING_DELETE_REQUESTS.indexOf(req); if(pi>-1) PENDING_DELETE_REQUESTS.splice(pi,1);
+  if (Array.isArray(window.ALL_DELETE_REQUESTS)) {
+    const ai = window.ALL_DELETE_REQUESTS.findIndex(function (x) { return x.id === req.id; });
+    if (ai > -1) window.ALL_DELETE_REQUESTS[ai] = Object.assign({}, window.ALL_DELETE_REQUESTS[ai], req);
+  }
   showToast('❌ Deletion request rejected','i');
   renderDeletionRequests(); updateDelReqBadge();
 }
@@ -18314,15 +18337,15 @@ function deletePayRequest(prId) {
     showToast(`🗑️ Charge deleted: ${label}`,'i');
     renderReceptionPage&&renderReceptionPage(); renderDeptSummary&&renderDeptSummary();
   } else {
-    const amt = Number(pr.amount) || 0;
-    if (amt > 1000) {
-      requestDeletion('payRequest', prId, label);
-    } else {
-      if(!confirm(`Delete this charge request?\n${label}\n\nAmount is ≤ ₹1000, so reception can delete directly.`)) return;
+    if (isConsultationChargeEntry(pr)) {
+      if(!confirm(`Delete this consultation charge request?\n${label}\n\nOnly consultation entries can be deleted directly by reception.`)) return;
       const idx = PAY_REQUESTS.findIndex(r=>r.id===prId);
       if(idx>-1) { PAY_REQUESTS.splice(idx,1); try { if(window.firebase&&firebase.database) firebase.database().ref('payRequests/'+prId).remove(); } catch(e){} }
       showToast(`🗑️ Charge deleted: ${label}`,'i');
       renderReceptionPage&&renderReceptionPage(); renderDeptSummary&&renderDeptSummary();
+    } else {
+      showDeleteApprovalRequiredPopup();
+      requestDeletion('payRequest', prId, label);
     }
   }
 }
@@ -18340,14 +18363,15 @@ function deletePatientPendingCharges(bmhId) {
     showToast(`🗑️ Deleted ${pending.length} charge(s)`,'i');
     renderReceptionPage&&renderReceptionPage(); renderDeptSummary&&renderDeptSummary();
   } else {
-    const total = pending.reduce((s,r)=>s+(Number(r.amount)||0),0);
-    if (total > 1000) {
-      requestDeletion('patientCharges', bmhId, label);
-    } else {
-      if(!confirm(`Delete ${pending.length} pending charge(s) for this patient?\n${label}\n\nTotal is ≤ ₹1000, so reception can delete directly.`)) return;
+    const onlyConsultations = pending.every(function (r) { return isConsultationChargeEntry(r); });
+    if (onlyConsultations) {
+      if(!confirm(`Delete ${pending.length} consultation charge(s) for this patient?\n${label}\n\nOnly consultation entries can be deleted directly by reception.`)) return;
       pending.forEach(pr=>{ const idx=PAY_REQUESTS.indexOf(pr); if(idx>-1) PAY_REQUESTS.splice(idx,1); try { if(window.firebase&&firebase.database) firebase.database().ref('payRequests/'+pr.id).remove(); } catch(e){} });
       showToast(`🗑️ Deleted ${pending.length} charge(s)`,'i');
       renderReceptionPage&&renderReceptionPage(); renderDeptSummary&&renderDeptSummary();
+    } else {
+      showDeleteApprovalRequiredPopup();
+      requestDeletion('patientCharges', bmhId, label);
     }
   }
 }
