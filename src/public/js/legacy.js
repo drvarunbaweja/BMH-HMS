@@ -1386,6 +1386,7 @@ function nav(id, el) {
   document.querySelectorAll('.ni').forEach(n => n.classList.remove('active'));
   const pg = document.getElementById('pg-' + pageKey);
   if(pg) pg.classList.add('active');
+  document.body.classList.toggle('queue-sidebar-collapsed', pageKey === 'doctor-queue');
   // Update title
   const titles = {dashboard:'Dashboard','doctor-queue':'My Patient Queue',ophtho:'Eye Examination',
     appointments:'Appointment Book','print-templates':'Print Templates',consents:'Consent Forms',
@@ -9264,8 +9265,8 @@ async function registerPatient() {
   const uid = await reserveNextBmhId();
   if(!/^BMSH-\d{6,9}$/.test(uid)) { showToast('Could not generate a valid BMSH ID','e'); return; }
 
-  const name = (fn + ' ' + ln).trim();
-  const initials = name.split(' ').map(w=>w[0]||'').join('').toUpperCase().substring(0,2);
+  const name = toTitleCaseName((fn + ' ' + ln).trim());
+  const initials = computePatientInitials(name);
   const colors = ['#1A3C6E','#0B7B8C','#FF2D55','#AF52DE','#34C759','#FF9500','#5856D6','#FF3B30'];
   const color = colors[Math.floor(Math.random()*colors.length)];
 
@@ -9288,6 +9289,7 @@ async function registerPatient() {
     createdAt: new Date().toISOString(),
     createdBy: CURRENT_USER?.name || 'Reception'
   };
+  normalizePatientRecord(patient);
 
   const exists = PATIENTS.findIndex(p=>p.bmhId===uid);
   if(exists >= 0) PATIENTS[exists] = patient; else PATIENTS.push(patient);
@@ -9362,6 +9364,8 @@ async function registerPatient() {
     };
     TRANSACTIONS.push(txn);
     saveTransactionToFirebase&&saveTransactionToFirebase(txn);
+    patient.balance = bmhSyncPatientRunningBalance(uid);
+    fbUpdate&&fbUpdate('patients/'+uid,{balance:patient.balance});
   }
 
   if(advAmt > 0) {
@@ -13147,6 +13151,36 @@ function formatDateDDMMYYYY(value) {
 function formatDateIN(value) {
   return formatDateDDMMYYYY(value);
 }
+function toTitleCaseName(value) {
+  return String(value || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .split(' ')
+    .map(function (part) {
+      return part.split(/([-'])/).map(function (seg) {
+        if (seg === '-' || seg === "'") return seg;
+        const s = String(seg || '').trim();
+        return s ? (s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()) : '';
+      }).join('');
+    })
+    .join(' ');
+}
+function computePatientInitials(name) {
+  return String(name || '')
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(function (w) { return (w[0] || '').toUpperCase(); })
+    .join('');
+}
+function normalizePatientRecord(p) {
+  if (!p || typeof p !== 'object') return p;
+  if (p.name) p.name = toTitleCaseName(p.name);
+  if (p.patient) p.patient = toTitleCaseName(p.patient);
+  const base = p.name || p.patient || '';
+  if (base) p.initials = computePatientInitials(base);
+  return p;
+}
 function localDateKey(value) {
   const d = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(d.getTime())) return '';
@@ -14205,6 +14239,7 @@ setTimeout(renderCollectionDashboard, 500);
 // ── PATIENTS ─────────────────────────────────────────────────
 function savePatientToFirebase(patient) {
   if(!patient || !patient.bmhId) return;
+  normalizePatientRecord(patient);
   const centre = (CURRENT_USER?.centre==='RPR' || patient.centre==='RPR') ? 'RPR' : 'CHD';
   const payload = {
     ...patient,
@@ -14266,12 +14301,12 @@ function loadPatientsFromFirebase() {
     const all = data ? Object.values(data) : [];
     if(isAdmin || cu?.canSeeAllCentres) {
       PATIENTS.length = 0;
-      all.forEach(p => PATIENTS.push(p));
+      all.forEach(p => PATIENTS.push(normalizePatientRecord(p)));
     } else {
       PATIENTS.length = 0;
       all.forEach(p => {
         const pc = p.centre || 'CHD';
-        if(!centre || pc === centre) PATIENTS.push(p);
+        if(!centre || pc === centre) PATIENTS.push(normalizePatientRecord(p));
       });
     }
     if(!_fbPatientsLoaded) {
@@ -16081,8 +16116,8 @@ function importPatientsCSV(file) {
       
       const ageMatch = (row['Age']||'').match(/(\d+)/);
       const pt = {
-        bmhId, name,
-        initials: name.split(' ').slice(0,2).map(w=>w[0]?.toUpperCase()||'').join(''),
+        bmhId, name: toTitleCaseName(name),
+        initials: computePatientInitials(name),
         color: colors[imported%6],
         age: ageMatch?ageMatch[1]:'—',
         sex: (row['Sex']||'').charAt(0).toUpperCase()+(row['Sex']||'').slice(1),
@@ -16099,6 +16134,7 @@ function importPatientsCSV(file) {
         pastHx: row['Past History']||'',
         allergy: row['Allergy History']||''
       };
+      normalizePatientRecord(pt);
       
       PATIENTS.push(pt);
       if(window.FBDB) savePatientToFirebase(pt);
@@ -17672,7 +17708,7 @@ function buildQCard(p, sno) {
   // Charge status
   const pendingPRs = PAY_REQUESTS.filter(r=>r.bmhId===p.bmhId&&r.status==='pending');
   const pendingAmt = pendingPRs.reduce((s,r)=>s+r.amount,0);
-  const runningDue = Math.max(Number(p.balance) || 0, pendingAmt);
+  const runningDue = Math.max(typeof bmhComputeBalanceDue === 'function' ? bmhComputeBalanceDue(p.bmhId) : (Number(p.balance) || 0), pendingAmt);
   const paidPRs = PAY_REQUESTS.filter(r=>r.bmhId===p.bmhId&&r.status==='paid');
   const pendingPRIds = pendingPRs.map(r=>r.id);
   const surgeryDue = runningDue > 0 && patientHasSurgeryDue(p.bmhId);
@@ -17693,22 +17729,22 @@ function buildQCard(p, sno) {
   const cardBorder = p.preRegistered ? '1px dashed #ccc' : '1px solid var(--g5)';
   return `<div class="q-card compact ${p.status}" onclick="${p.preRegistered?`checkInPatient('${p.bmhId}')`:`openPatient('${p.bmhId}')`}" style="cursor:pointer;padding:6px 9px;margin-bottom:4px;border-radius:8px;border:${cardBorder};background:${cardBg};display:flex;align-items:center;gap:7px;opacity:${p.preRegistered?'.75':'1'}"
     onmouseover="this.style.background='var(--g6)'" onmouseout="this.style.background='${cardBg}'">
-    ${sno!==undefined?`<div style="font-size:10px;font-weight:900;color:var(--g2);width:16px;text-align:center;flex-shrink:0">${sno}</div>`:''}
+    ${sno!==undefined?`<div style="font-size:12px;font-weight:900;color:var(--g2);width:20px;text-align:center;flex-shrink:0">${sno}</div>`:''}
     <div style="width:30px;height:30px;border-radius:50%;background:${p.color||'#1A3C6E'};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:11px;flex-shrink:0">${p.initials||p.name[0]||'?'}</div>
     <div style="flex:1;min-width:0">
       <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
-        <span style="font-weight:800;font-size:12.5px;white-space:nowrap">${p.name}</span>
+        <span style="font-weight:800;font-size:14px;white-space:nowrap">${p.name}</span>
         <span style="font-size:9px;padding:1px 5px;border-radius:8px;background:${deptColor}22;color:${deptColor};font-weight:800;border:1px solid ${deptColor}44">${deptLabel}</span>
         ${isNew?'<span style="font-size:9px;padding:1px 5px;border-radius:8px;background:#e8f5e9;color:#1a8c3c;font-weight:800;border:1px solid #a5d6a7">NEW</span>':'<span style="font-size:9px;padding:1px 5px;border-radius:8px;background:#e3f2fd;color:var(--blue);font-weight:800;border:1px solid #bbdefb">V'+visitNo+'</span>'}
         ${chargeHtml}
       </div>
       <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:2px">
-        <span style="font-size:10px;color:var(--g1);font-family:var(--mono)">${p.bmhId}</span>
-        <span style="font-size:10px;color:var(--g1)">${p.age||'?'}Y/${(p.sex||'?')[0]}</span>
-        ${p.doctor?`<span style="font-size:10px;color:var(--teal);font-weight:700">🩺${p.doctor.replace('Dr. ','Dr.')}</span>`:''}
-        ${p.purpose?`<span style="font-size:10px;color:var(--g1)">${p.purpose}</span>`:''}
-        ${!p.preRegistered?`<span style="font-size:10px;color:var(--g2)">⏱${waitStr}</span>`:''}
-        ${dilStr?`<span style="font-size:10px;color:var(--blue);${dilLongWait?'animation:pulse 1.35s infinite;font-weight:900;':''}">${dilStr}</span>`:''}
+        <span style="font-size:11px;color:var(--g1);font-family:var(--mono)">${p.bmhId}</span>
+        <span style="font-size:11px;color:var(--g1)">${p.age||'?'}Y/${(p.sex||'?')[0]}</span>
+        ${p.doctor?`<span style="font-size:11px;color:var(--teal);font-weight:700">🩺${p.doctor.replace('Dr. ','Dr.')}</span>`:''}
+        ${p.purpose?`<span style="font-size:11px;color:var(--g1)">${p.purpose}</span>`:''}
+        ${!p.preRegistered?`<span style="font-size:11px;color:var(--g2)">⏱${waitStr}</span>`:''}
+        ${dilStr?`<span style="font-size:11px;color:var(--blue);${dilLongWait?'animation:pulse 1.35s infinite;font-weight:900;':''}">${dilStr}</span>`:''}
       </div>
     </div>
     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0">
@@ -17765,14 +17801,14 @@ function buildQTableRow(p, sno, opts) {
   const vuln = isPatientVulnerable(p);
   const pendingPRs = PAY_REQUESTS.filter(r=>r.bmhId===p.bmhId&&r.status==='pending');
   const pendingAmt = pendingPRs.reduce((s,r)=>s+r.amount,0);
-  const runningDue = Math.max(Number(p.balance) || 0, pendingAmt);
+  const runningDue = Math.max(typeof bmhComputeBalanceDue === 'function' ? bmhComputeBalanceDue(p.bmhId) : (Number(p.balance) || 0), pendingAmt);
   const paidPRs = PAY_REQUESTS.filter(r=>r.bmhId===p.bmhId&&r.status==='paid');
   const advLbl = (p.advance > 0) ? `<span style="font-size:9px;color:var(--blue);font-weight:800">Adv ₹${(p.advance||0).toLocaleString('en-IN')}</span>` : '';
   const surgeryDue = runningDue > 0 && patientHasSurgeryDue(p.bmhId);
   const chargeHint = runningDue>0
-    ? `<span style="font-size:9px;color:#8a4200;font-weight:800">${surgeryDue ? 'Surgery due' : 'Due'} ₹${runningDue.toLocaleString('en-IN')}</span>${advLbl ? ' · ' + advLbl : ''}`
-    : paidPRs.length
-    ? `<span style="font-size:9px;color:#1a8c3c">Paid</span>${advLbl ? ' · ' + advLbl : ''}`
+    ? `<span style="font-size:10px;color:#8a4200;font-weight:800">${surgeryDue ? 'Surgery due' : 'Due'} ₹${runningDue.toLocaleString('en-IN')}</span>${advLbl ? ' · ' + advLbl : ''}`
+    : paidPRs.length || runningDue === 0
+    ? `<span style="font-size:10px;color:#1a8c3c">Paid</span>${advLbl ? ' · ' + advLbl : ''}`
     : (advLbl || '');
   const statusTxt = p.preRegistered ? 'Pre-reg' : p.seen ? 'Seen' : p.dilated ? 'Dilated' : 'Waiting';
   const statusBg = p.preRegistered ? '#f0f0f0' : p.seen ? 'var(--green-lt)' : p.dilated ? 'var(--blue-lt)' : 'var(--orange-lt)';
@@ -17781,17 +17817,17 @@ function buildQTableRow(p, sno, opts) {
   const docShort = (p.doctor||'—').replace(/^Dr\.\s*/,'');
   const vulnBadge = vuln ? '<span class="q-vuln-badge" title="Vulnerable — elderly (≥65) or flagged">⚠ VUL</span>' : '';
   return `<tr class="${vuln ? 'row-vulnerable' : ''}" onclick="${onRow}" style="cursor:pointer;${dilLongWait?'animation:pulse 1.45s infinite;':''}">
-    <td style="font-weight:900;color:var(--g2)">${sno}</td>
+    <td style="font-weight:900;color:var(--g2);font-size:12px">${sno}</td>
     <td><div style="display:flex;align-items:center;gap:6px"><span style="width:28px;height:28px;border-radius:50%;background:${p.color||'#1A3C6E'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:900;font-size:10px;flex-shrink:0">${p.initials||p.name[0]||'?'}</span>
-      <div><div style="font-weight:800;font-size:12.5px;display:flex;align-items:center;flex-wrap:wrap;gap:4px">${p.name}${vulnBadge}</div>
-      <div style="font-size:10px;color:var(--g1)">${p.age||'?'}Y · ${(p.sex||'?')[0]} · ${p.mob||'—'}</div>${chargeHint?`<div style="margin-top:2px">${chargeHint}</div>`:''}</div></div></td>
-    <td style="font-family:var(--mono);font-size:10px;color:var(--bmh-teal);font-weight:700">${p.bmhId}</td>
-    <td><span style="font-size:9px;padding:2px 6px;border-radius:6px;background:${deptColor}22;color:${deptColor};font-weight:800">${deptLabel}</span></td>
-    <td style="font-size:10px;max-width:88px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.doctor||''}">${docShort}</td>
-    <td style="font-size:10px;color:var(--g1);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.purpose||''}">${p.purpose||'—'}</td>
-    <td>${dilationCellHtml(p)}</td>
-    <td style="font-size:10px;color:var(--g2)">${p.preRegistered?'—':waitStr}</td>
-    <td><span style="font-size:9px;padding:2px 6px;border-radius:6px;background:${statusBg};font-weight:800;${dilLongWait?'box-shadow:0 0 0 1px rgba(88,86,214,.18);':''}">${statusTxt}</span></td>
+      <div><div style="font-weight:800;font-size:14px;display:flex;align-items:center;flex-wrap:wrap;gap:4px">${p.name}${vulnBadge}</div>
+      <div style="font-size:11px;color:var(--g1)">${p.age||'?'}Y · ${(p.sex||'?')[0]} · ${p.mob||'—'}</div>${chargeHint?`<div style="margin-top:2px">${chargeHint}</div>`:''}</div></div></td>
+    <td style="font-family:var(--mono);font-size:11px;color:var(--bmh-teal);font-weight:700">${p.bmhId}</td>
+    <td><span style="font-size:10px;padding:2px 6px;border-radius:6px;background:${deptColor}22;color:${deptColor};font-weight:800">${deptLabel}</span></td>
+    <td style="font-size:11px;max-width:108px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.doctor||''}">${docShort}</td>
+    <td style="font-size:11px;color:var(--g1);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.purpose||''}">${p.purpose||'—'}</td>
+    <td style="font-size:11px">${dilationCellHtml(p)}</td>
+    <td style="font-size:11px;color:var(--g2)">${p.preRegistered?'—':waitStr}</td>
+    <td><span style="font-size:10px;padding:2px 6px;border-radius:6px;background:${statusBg};font-weight:800;${dilLongWait?'box-shadow:0 0 0 1px rgba(88,86,214,.18);':''}">${statusTxt}</span></td>
     <td class="q-actions" onclick="event.stopPropagation()">
       ${p.preRegistered
         ? `<button type="button" title="Check In" style="background:var(--blue);color:#fff;border:none;border-radius:5px;padding:3px 8px;font-size:9px;font-weight:800;cursor:pointer" onclick="checkInPatient('${p.bmhId}')">Check in</button>`
@@ -17804,6 +17840,10 @@ function buildQTableRow(p, sno, opts) {
       }
     </td>
   </tr>`;
+}
+function toggleQueueSidebarCollapse(forceExpand) {
+  const shouldCollapse = forceExpand === true ? false : !document.body.classList.contains('queue-sidebar-collapsed');
+  document.body.classList.toggle('queue-sidebar-collapsed', shouldCollapse);
 }
 
 function markSeen(bmhId) {
@@ -17914,7 +17954,7 @@ function saveUpdatedPatientDetails() {
   const ln = document.getElementById('upd-ln')?.value?.trim()||'';
   if(!fn) { showToast('First name is required','w'); return; }
   const updates = {
-    name: (fn+' '+ln).trim(),
+    name: toTitleCaseName((fn+' '+ln).trim()),
     age: document.getElementById('upd-age')?.value?.trim()||p.age||'',
     sex: document.getElementById('upd-sex')?.value||p.sex||'Male',
     dob: document.getElementById('upd-dob')?.value||p.dob||'',
@@ -17929,8 +17969,9 @@ function saveUpdatedPatientDetails() {
     refName: document.getElementById('upd-ref-name')?.value?.trim()||''
   };
   // Update initials too
-  updates.initials = (fn[0]||(ln[0]||'')).toUpperCase();
+  updates.initials = computePatientInitials(updates.name);
   Object.assign(p, updates);
+  normalizePatientRecord(p);
   fbUpdate && fbUpdate('patients/'+bid, updates).catch(()=>{});
   showToast(`✅ ${updates.name} — details updated`,'s');
   closeM('m-update-details');
