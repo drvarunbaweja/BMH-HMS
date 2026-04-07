@@ -15001,9 +15001,33 @@ function requestDeletion(type, itemId, label) {
   window._delReqId    = itemId;
   window._delReqLabel = label;
   const lbl = document.getElementById('del-req-item-label');
-  if(lbl) lbl.textContent = label;
-  const inp = document.getElementById('del-req-reason'); if(inp) inp.value='';
-  openM('m-delete-req');
+  if (lbl) lbl.textContent = label;
+  const inp = document.getElementById('del-req-reason');
+  if (inp) inp.value = '';
+  const modal = document.getElementById('m-delete-req');
+  if (modal) {
+    openM('m-delete-req');
+    return;
+  }
+  const reason = window.prompt('This deletion requires admin approval.\n\nEnter reason for:\n' + String(label || ''));
+  if (!reason || !String(reason).trim()) return;
+  const reqId = 'DELREQ' + Date.now();
+  const req = {
+    id: reqId,
+    type: window._delReqType,
+    itemId: window._delReqId,
+    label: window._delReqLabel,
+    reason: String(reason).trim(),
+    requestedBy: CURRENT_USER?.name || 'Staff',
+    requestedByRole: CURRENT_USER?.role || '',
+    centre: CURRENT_USER?.centre || 'CHD',
+    requestedAt: new Date().toISOString(),
+    status: 'pending'
+  };
+  PENDING_DELETE_REQUESTS.push(req);
+  fbSet && fbSet('deletionRequests/' + reqId, req);
+  fbPush && fbPush('auditLog', { user: req.requestedBy, role: req.requestedByRole, action: 'DELETE_REQUESTED', item: req.label, reason: req.reason, timestamp: req.requestedAt });
+  showToast('🔔 Deletion request sent to admin for approval', 'i');
 }
 
 function submitDeleteRequest() {
@@ -15713,6 +15737,41 @@ function followupLineToDateOnly(line) {
   if (parts.length > 1) return parts.slice(1).join(':').trim() || s;
   return s;
 }
+/** Vertical follow-up block for print: fixed labels (1 day / 1 week / 2 weeks) + dates only (no procedure text). */
+function buildOphFollowupVerticalPrintHtml(fus) {
+  const esc = escapeHtmlConsent;
+  const labels = ['1 day', '1 week', '2 weeks / final follow-up'];
+  const arr = Array.isArray(fus) ? fus : [];
+  let html = '';
+  labels.forEach(function (lbl, i) {
+    const dateText = arr[i] ? followupLineToDateOnly(arr[i]) : '—';
+    html += '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:6px 10px;border-bottom:1px solid #e2e6ed;font-size:12px;line-height:1.35">'
+      + '<span style="font-weight:900;color:#1A3C6E;min-width:0">' + esc(lbl) + '</span>'
+      + '<span style="font-weight:800;font-family:ui-monospace,monospace;font-size:12.5px;text-align:right;white-space:nowrap">' + esc(dateText) + '</span>'
+      + '</div>';
+  });
+  for (let j = labels.length; j < arr.length; j++) {
+    html += '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:6px 10px;border-bottom:1px solid #e2e6ed;font-size:11px">'
+      + '<span style="font-weight:800;color:#555">Follow-up ' + (j + 1) + '</span>'
+      + '<span style="font-weight:800;font-family:ui-monospace,monospace;font-size:12px;text-align:right">' + esc(followupLineToDateOnly(arr[j])) + '</span>'
+      + '</div>';
+  }
+  return '<div style="border:1px solid #cfd5de;border-radius:8px;overflow:hidden;background:#fafbfc">'
+    + '<div style="font-size:9px;font-weight:900;color:#1A3C6E;text-transform:uppercase;letter-spacing:.4px;padding:7px 10px;background:#eef3fb;border-bottom:1px solid #cfd5de">Follow-up</div>'
+    + html + '</div>';
+}
+function timeSlotMatchesActive(row, t) {
+  const want = String(t).toLowerCase().replace(/\s+/g, '');
+  return (row.activeTimes || []).some(function (a) {
+    return String(a || '').toLowerCase().replace(/\s+/g, '') === want;
+  });
+}
+function medTimeSlotIcon(row, t) {
+  if (!timeSlotMatchesActive(row, t)) return '';
+  const n = String(row.name || '').toLowerCase();
+  const isTab = (/tablet|tablet\.|capsule|cap\.|syrup|suspension|oral|\.syp|syp\.|mouth|mg tab|mcg tab/.test(n) || /\btab\b/.test(n)) && !/drop|eye drop|eyedrop|tears|lubricant|latanoprost|timolol|brimo|moxiflox|moxi|pred|prednisolone drop|ns drop/.test(n);
+  return isTab ? '💊' : '💧';
+}
 function buildOphthoDischargeA4LayoutPrintHtml(snap, data, colorPrint) {
   const esc = escapeHtmlConsent;
   const blue = colorPrint ? '#1A3C6E' : '#333';
@@ -15725,39 +15784,39 @@ function buildOphthoDischargeA4LayoutPrintHtml(snap, data, colorPrint) {
   const fus = (snap && snap.followups && snap.followups.length) ? snap.followups : [];
   const meds = (snap && snap.medicines && snap.medicines.length) ? snap.medicines : [];
   const TIMES = ['12am','6am','8am','10am','12pm','2pm','4pm','6pm','8pm','10pm'];
-  const medRows = meds.filter(function (m) { return !m.isTaper; }).slice(0, 4);
-  const taperRows = meds.filter(function (m) { return m.isTaper; }).slice(0, 4);
+  const medRows = meds.filter(function (m) { return !m.isTaper; });
+  const taperRows = meds.filter(function (m) { return m.isTaper; });
+  const totalRows = medRows.length + taperRows.length;
+  const hdrFs = totalRows > 10 ? '6px' : totalRows > 7 ? '6.5px' : '7px';
+  const cellPad = totalRows > 10 ? '1px 1px' : '2px 2px';
+  const nameFs = totalRows > 10 ? '7px' : totalRows > 7 ? '7.5px' : '8.5px';
   const gridHtml = function (rows, title) {
     if (!rows.length) return '';
     const head = TIMES.map(function (t) {
-      return '<th style="border:1px solid #bbb;padding:3px 2px;font-size:7px;font-weight:800;background:#eef3fb">' + esc(t) + '</th>';
+      return '<th style="border:1px solid #bbb;padding:' + cellPad + ';font-size:' + hdrFs + ';font-weight:800;background:#eef3fb;line-height:1.1">' + esc(t) + '</th>';
     }).join('');
-    const body = rows.map(function (row, ri) {
-      const name = esc(String(row.name || 'Medicine').slice(0, 42));
+    const body = rows.map(function (row) {
+      const name = esc(String(row.name || 'Medicine').slice(0, 56));
       const cells = TIMES.map(function (t) {
-        const on = (row.activeTimes || []).indexOf(t) >= 0;
-        return '<td style="border:1px solid #ccc;text-align:center;font-size:11px;font-weight:900;padding:4px 2px;background:' + (on ? blue : '#fff') + ';color:' + (on ? '#fff' : '#333') + '">' + (on ? '●' : '') + '</td>';
+        const icon = medTimeSlotIcon(row, t);
+        return '<td style="border:1px solid #ccc;text-align:center;padding:' + cellPad + ';vertical-align:middle;background:#fff;height:14px;line-height:1"><span style="font-size:11px">' + icon + '</span></td>';
       }).join('');
       const dr = (row.fromDate && row.toDate) ? (esc(row.fromDate) + ' → ' + esc(row.toDate)) : '—';
-      return '<tr><td style="border:1px solid #bbb;padding:4px;font-size:8.5px;font-weight:800;max-width:120px">' + name + '</td>' + cells + '<td style="border:1px solid #bbb;padding:4px;font-size:7px;white-space:nowrap">' + dr + '</td></tr>';
+      return '<tr><td style="border:1px solid #bbb;padding:3px 4px;font-size:' + nameFs + ';font-weight:800;line-height:1.2;word-break:break-word">' + name + '</td>' + cells + '<td style="border:1px solid #bbb;padding:3px 4px;font-size:6.5px;white-space:nowrap;line-height:1.15">' + dr + '</td></tr>';
     }).join('');
-    return '<div style="margin-top:6px"><div style="font-size:9px;font-weight:900;color:' + blue + ';margin-bottom:4px">' + esc(title) + '</div>'
-      + '<table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:8px"><thead><tr><th style="border:1px solid #bbb;padding:3px;font-size:7px;background:#f5f5f5">Medicine</th>' + head + '<th style="border:1px solid #bbb;padding:3px;font-size:7px;background:#f5f5f5;width:78px">Dates</th></tr></thead><tbody>' + body + '</tbody></table></div>';
+    return '<div style="margin-top:4px"><div style="font-size:8.5px;font-weight:900;color:' + blue + ';margin-bottom:3px">' + esc(title) + '</div>'
+      + '<table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:7px"><thead><tr><th style="border:1px solid #bbb;padding:3px 4px;font-size:' + hdrFs + ';background:#f5f5f5;width:20%">Medicine</th>' + head + '<th style="border:1px solid #bbb;padding:3px;font-size:' + hdrFs + ';background:#f5f5f5;width:11%">Dates</th></tr></thead><tbody>' + body + '</tbody></table></div>';
   };
-  const fuHtml = fus.length
-    ? '<div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;padding:6px 8px;border:1px dashed ' + gold + ';border-radius:6px;font-size:10px;font-weight:800;color:' + blue + '">'
-    + fus.map(function (f) { return '<span>' + esc(followupLineToDateOnly(f)) + '</span>'; }).join('<span style="color:#bbb">·</span>')
-    + '</div>'
-    : '';
-  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>@page{size:A4 portrait;margin:6mm}body{font-family:Arial,sans-serif;color:#111;margin:0;padding:0;font-size:10px}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>'
-    + '<div style="border:1px solid #aaa;border-radius:8px;overflow:hidden">'
-    + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;background:' + blue + ';color:#fff;padding:8px 10px">'
-    + '<div><div style="font-size:10px;opacity:.85">Discharge Card</div><div style="font-size:9px;opacity:.75">Baweja Multispeciality Hospital</div></div>'
+  const fuCenter = buildOphFollowupVerticalPrintHtml(fus);
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>@page{size:A4 landscape;margin:5mm}body{font-family:Arial,sans-serif;color:#111;margin:0;padding:0;font-size:10px}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>'
+    + '<div style="border:1px solid #aaa;border-radius:8px;overflow:hidden;max-height:200mm">'
+    + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;background:' + blue + ';color:#fff;padding:7px 10px">'
+    + '<div><div style="font-size:10px;opacity:.88">Discharge Card</div><div style="font-size:9px;opacity:.75">Baweja Multispeciality Hospital</div></div>'
     + '<div style="text-align:right"><div style="font-size:12px;font-weight:900;color:' + gold + '">' + esc(ptId) + '</div><div style="font-size:9px;opacity:.85">Date: ' + esc(formatDateIN(new Date())) + '</div></div></div>'
-    + '<div style="display:grid;grid-template-columns:1.1fr 0.65fr;gap:0;min-height:118mm">'
-    + '<div style="border-right:1px solid #ddd;padding:10px 12px;font-size:11px">'
-    + '<div style="font-size:10px;font-weight:900;color:' + blue + ';border-bottom:2px solid ' + gold + ';margin-bottom:8px;padding-bottom:4px">Patient &amp; surgery</div>'
-    + '<div style="font-size:14px;font-weight:900;margin-bottom:6px">' + esc(ptNm) + '</div>'
+    + '<div style="display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,0.42fr) minmax(0,1fr);gap:10px;align-items:stretch;padding:8px 10px;border-bottom:1px solid #ddd;min-height:0;max-height:92mm">'
+    + '<div style="border:1px solid #e0e0e0;border-radius:8px;padding:10px 12px;font-size:11px;background:#fff">'
+    + '<div style="font-size:9px;font-weight:900;color:' + blue + ';border-bottom:2px solid ' + gold + ';margin-bottom:8px;padding-bottom:4px;text-transform:uppercase;letter-spacing:.35px">Patient &amp; surgery</div>'
+    + '<div style="font-size:15px;font-weight:900;margin-bottom:8px;line-height:1.2">' + esc(ptNm) + '</div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;font-size:11px;line-height:1.35">'
     + '<div><span style="font-size:8px;color:#666;text-transform:uppercase">Age / Sex</span><br>' + esc((ptObj.age || '—') + ' / ' + (ptObj.sex || '—')) + '</div>'
     + '<div><span style="font-size:8px;color:#666;text-transform:uppercase">Mobile</span><br>' + esc(ptObj.mob || '—') + '</div>'
@@ -15766,16 +15825,16 @@ function buildOphthoDischargeA4LayoutPrintHtml(snap, data, colorPrint) {
     + '<div><span style="font-size:8px;color:#666;text-transform:uppercase">IOL</span><br>' + esc([ot.iolType, ot.iolPower].filter(Boolean).join(' / ') || '—') + '</div>'
     + '<div style="grid-column:1/-1"><span style="font-size:8px;color:#666;text-transform:uppercase">Surgeon</span><br>' + esc(ot.surgeon || ptObj.doctor || CURRENT_USER?.name || '—') + '</div>'
     + '</div></div>'
-    + '<div style="padding:8px 10px;font-size:9px;background:#fffaf0">'
-    + '<div style="font-size:9px;font-weight:900;color:' + blue + ';margin-bottom:6px">Instructions</div>'
-    + '<div style="line-height:1.35;color:#5a3000">' + (instr.length ? instr.map(function (x) { return '<div style="margin-bottom:4px">• ' + esc(x) + '</div>'; }).join('') : '<div style="color:#888">—</div>') + '</div>'
+    + '<div style="min-width:0;display:flex;flex-direction:column;justify-content:flex-start">' + fuCenter + '</div>'
+    + '<div style="border:1px solid #f0e6d2;border-radius:8px;padding:8px 10px;font-size:10px;background:#fffaf0;min-width:0">'
+    + '<div style="font-size:9px;font-weight:900;color:' + blue + ';margin-bottom:6px;text-transform:uppercase;letter-spacing:.35px">Instructions</div>'
+    + '<div style="line-height:1.4;color:#5a3000;font-size:10.5px">' + (instr.length ? instr.map(function (x) { return '<div style="margin-bottom:4px">• ' + esc(x) + '</div>'; }).join('') : '<div style="color:#888">—</div>') + '</div>'
     + '</div></div>'
-    + '<div style="padding:4px 10px 8px">' + fuHtml + '</div>'
-    + '<div style="padding:8px 10px 8px;border-top:1px solid #eee">'
-    + gridHtml(medRows, 'Medication schedule (mark drops/tablet in time slot)')
+    + '<div style="padding:6px 10px 8px;border-top:1px solid #eee">'
+    + gridHtml(medRows, 'Medication schedule (💧 drop · 💊 tablet in time slot)')
     + (taperRows.length ? gridHtml(taperRows, 'Taper steps') : '')
     + '</div>'
-    + '<div style="display:flex;justify-content:space-between;padding:8px 12px;border-top:1px solid #ddd;font-size:8px;color:#555"><div>Patient signature</div><div>' + esc(CURRENT_USER?.name || 'Doctor') + '</div></div>'
+    + '<div style="display:flex;justify-content:space-between;padding:6px 12px;border-top:1px solid #ddd;font-size:8px;color:#555"><div>Patient / attendant signature</div><div>' + esc(CURRENT_USER?.name || 'Doctor') + '</div></div>'
     + '</div></body></html>';
 }
 function buildDischargeCardPrintHtml() {

@@ -4632,6 +4632,23 @@
 </div>
 </div></div>
 
+<!-- DELETE APPROVAL REQUEST (non-admin: queue, OT, etc.) -->
+<div class="modal-ov" id="m-delete-req">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-hd"><div class="modal-title">🗑️ Request deletion approval</div><button type="button" class="modal-close" onclick="closeM('m-delete-req')">✕</button></div>
+    <div style="padding:14px 16px;font-size:12px;line-height:1.5">
+      <p style="margin-bottom:10px;color:var(--tx3)">Admins can delete directly. For other staff, an admin will review this request under <strong>Settings → Approvals</strong>.</p>
+      <div style="font-size:11px;margin-bottom:10px;padding:8px 10px;background:var(--g6);border-radius:8px;border:1px solid var(--g5)"><strong>Item:</strong> <span id="del-req-item-label" style="word-break:break-word">—</span></div>
+      <label class="fl">Reason for deletion</label>
+      <textarea id="del-req-reason" placeholder="Brief reason (required)…" style="width:100%;min-height:76px;font-size:12px;border:1.5px solid var(--g4);border-radius:8px;padding:8px;margin-top:4px;font-family:var(--font)"></textarea>
+      <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+        <button type="button" class="btn btn-gray btn-sm" onclick="closeM('m-delete-req')">Cancel</button>
+        <button type="button" class="btn btn-gold btn-sm" onclick="submitDeleteRequest()">Submit request</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ADD PURPOSE MODAL -->
 <div class="modal-ov" id="m-add-purpose">
 <div class="modal"><div class="modal-hd"><div class="modal-title">+ Add Purpose of Visit</div><button class="modal-close" onclick="closeM('m-add-purpose')">✕</button></div>
