@@ -361,12 +361,67 @@ function composeOtProcedureLabel(mainHeading, subHeading) {
   if (!sub) return main;
   return main + ' — ' + sub;
 }
+function isStaarIclProcedure(procText) {
+  const txt = String(procText || '').toLowerCase();
+  return /staar|staar icl|\bicl\b|implantable collamer lens|collamer lens/.test(txt);
+}
+function buildOtIclSummary(cfg) {
+  const c = cfg || {};
+  if (!c.enabled) return '';
+  if (c.eyes === 'both') {
+    const first = [c.firstType || 'Regular', c.firstPower || ''].filter(Boolean).join(' ');
+    const second = [c.secondType || 'Regular', c.secondPower || ''].filter(Boolean).join(' ');
+    return ['STARR ICL', 'Both Eyes', '1st: ' + first, '2nd: ' + second].join(' · ');
+  }
+  const one = [c.oneType || 'Regular', c.onePower || ''].filter(Boolean).join(' ');
+  return ['STARR ICL', 'One Eye', one].filter(Boolean).join(' · ');
+}
+function getOtIclConfigFromForm() {
+  const enabled = isStaarIclProcedure(document.getElementById('ot-add-proc')?.value || '');
+  const eyes = document.getElementById('ot-icl-eyes')?.value || 'one';
+  return {
+    enabled: !!enabled,
+    eyes: eyes === 'both' ? 'both' : 'one',
+    oneType: document.getElementById('ot-icl-one-type')?.value || 'Regular',
+    onePower: (document.getElementById('ot-icl-one-power')?.value || '').trim(),
+    firstType: document.getElementById('ot-icl-first-type')?.value || 'Regular',
+    secondType: document.getElementById('ot-icl-second-type')?.value || 'Regular',
+    firstPower: (document.getElementById('ot-icl-first-power')?.value || '').trim(),
+    secondPower: (document.getElementById('ot-icl-second-power')?.value || '').trim()
+  };
+}
+function applyOtIclConfigToForm(cfg) {
+  const c = cfg || {};
+  const setV = function (id, val) { const el = document.getElementById(id); if (el) el.value = val || ''; };
+  setV('ot-icl-eyes', c.eyes || 'one');
+  setV('ot-icl-one-type', c.oneType || 'Regular');
+  setV('ot-icl-one-power', c.onePower || '');
+  setV('ot-icl-first-type', c.firstType || 'Regular');
+  setV('ot-icl-second-type', c.secondType || 'Regular');
+  setV('ot-icl-first-power', c.firstPower || '');
+  setV('ot-icl-second-power', c.secondPower || '');
+}
+function toggleOtIclFields() {
+  const wrap = document.getElementById('ot-icl-config-wrap');
+  const bothWrap = document.getElementById('ot-icl-both-wrap');
+  const oneWrap = document.getElementById('ot-icl-one-wrap');
+  if (!wrap) return;
+  const enabled = isStaarIclProcedure(document.getElementById('ot-add-proc')?.value || '');
+  wrap.style.display = enabled ? '' : 'none';
+  if (!enabled) return;
+  const eyes = document.getElementById('ot-icl-eyes')?.value || 'one';
+  const isBoth = eyes === 'both';
+  if (bothWrap) bothWrap.style.display = isBoth ? '' : 'none';
+  if (oneWrap) oneWrap.style.display = isBoth ? 'none' : '';
+}
 function onOTProcedureInputChange(value) {
+  populateOTProcedureOptions(document.getElementById('ot-add-proc')?.value || '', value || '');
   const parsed = parseOtProcedureSelection(value);
   renderOTProcedureSubheading(parsed.main, parsed.sub);
   updateOTIolSummarySuggestions();
   refreshOTNotesTemplateSelect && refreshOTNotesTemplateSelect();
   toggleOTOBGFields();
+  toggleOtIclFields();
 }
 function onOTProcedureSubheadingChange(value) {
   const procEl = document.getElementById('ot-add-proc');
@@ -380,7 +435,11 @@ function populateOTProcedureOptions(selected) {
   const input = document.getElementById('ot-add-proc');
   const list = document.getElementById('ot-proc-list');
   if (!input || !list) return;
-  const options = getOtProcedureOptions();
+  const query = normalizeOtProcedureName(arguments[1] || '').toLowerCase();
+  const allOptions = getOtProcedureOptions();
+  const options = !query ? allOptions : allOptions.filter(function (name) {
+    return String(name || '').toLowerCase().includes(query);
+  });
   list.innerHTML = options.map(function (name) {
     return '<option value="' + String(name).replace(/"/g, '&quot;') + '"></option>';
   }).join('');
@@ -5052,6 +5111,7 @@ function toggleOTOBGFields() {
   if(wardEl && !wardEl.value) wardEl.value = 'OBG Ward / Bed';
   if(roomEl && (!roomEl.value || /^OT-/.test(roomEl.value) || roomEl.value === 'Eye OT')) roomEl.value = 'Labour Room';
   if(notesEl && !notesEl.value) notesEl.value = 'Pre-op vitals, fetal status, consent checked, labour / OT checklist, medicines and post-op monitoring.';
+  toggleOtIclFields();
 }
 function ipdVitalsStatus(vitals) {
   const flags = [];
@@ -11033,6 +11093,8 @@ function addOTCase() {
   const iol = document.getElementById('ot-add-iol')?.value||'N/A';
   const iolType = document.getElementById('ot-add-iol-model')?.value || '';
   const iolPower = document.getElementById('ot-add-iol-power')?.value || extractIolPower(iol);
+  const iclConfig = getOtIclConfigFromForm();
+  const iclSummary = buildOtIclSummary(iclConfig);
   const obgCaseType = document.getElementById('ot-add-obg-type')?.value || '';
   const obgGa = document.getElementById('ot-add-obg-ga')?.value || '';
   const obgIndication = document.getElementById('ot-add-obg-indication')?.value || '';
@@ -11081,7 +11143,7 @@ function addOTCase() {
     age:pt?.age||'—', sex:pt?.sex||'—',
     caseKind,
     dx, procedure:proc, procedureMain: parseOtProcedureSelection(proc).main, procedureSub: parseOtProcedureSelection(proc).sub, site, surgeon, anaes, anaesDoc:'',
-    date, scheduledTime:time, room, iol, iolType, iolPower, priority,
+    date, scheduledTime:time, room, iol: iclSummary || iol, iolType: iclSummary ? (iclConfig.eyes === 'both' ? 'STARR ICL (Both Eyes)' : 'STARR ICL (One Eye)') : iolType, iolPower: iclSummary ? ((iclConfig.eyes === 'both' ? [(iclConfig.firstPower || '—'), (iclConfig.secondPower || '—')].join(' / ') : (iclConfig.onePower || '—')) : iolPower), iclConfig, priority,
     obgCaseType, obgGa, obgIndication, obgFetal, obgLiquor, obgBlood, obgAnaesNote, obgBaby, obgMother, obgDocs,
     centre: pt?.centre || getEffectiveCentre() || CURRENT_USER?.centre || 'CHD',
     preop, consent, fasting, status:'pending',
@@ -11270,6 +11332,7 @@ function openOTAddModal(opts) {
     setV('ot-add-priority', existing.priority);
     populateOTIolOptions(existing.iolType || existing.iol || '', existing.iolPower || extractIolPower(existing.iol));
     setV('ot-add-iol', existing.iol || '');
+    applyOtIclConfigToForm(existing.iclConfig || {});
     setV('ot-add-preop', existing.preop);
     setV('ot-add-consent', existing.consent);
     setV('ot-add-fasting', existing.fasting);
@@ -11306,6 +11369,7 @@ function openOTAddModal(opts) {
     }
     if (ptSel && existing.bmhId) ptSel.value = existing.bmhId;
     toggleOTOBGFields();
+    toggleOtIclFields();
   } else if (opts.bmhId) {
     const admitEl = document.getElementById('ot-add-admit');
     const admitBlock = document.getElementById('ot-add-admit-block');
@@ -11319,6 +11383,7 @@ function openOTAddModal(opts) {
     });
     fillOTFromPatient(opts.bmhId);
     toggleOTOBGFields();
+    toggleOtIclFields();
   } else {
     const eyeRadio = document.getElementById('ot-case-kind-eye');
     const obgRadio = document.getElementById('ot-case-kind-obg');
@@ -11343,12 +11408,14 @@ function openOTAddModal(opts) {
     setV('ot-add-proc', '');
     setV('ot-add-site', 'Left Eye (OS)');
     setV('ot-add-iol', '');
+    applyOtIclConfigToForm({ eyes:'one', oneType:'Regular', firstType:'Regular', secondType:'Regular' });
     const lookupEl = document.getElementById('ot-pt-lookup');
     if (lookupEl) lookupEl.value = '';
     const lookupResultEl = document.getElementById('ot-pt-lookup-result');
     if (lookupResultEl) lookupResultEl.innerHTML = '';
     if (ptSel) ptSel.value = '';
     toggleOTOBGFields();
+    toggleOtIclFields();
   }
   openM('m-ot-add');
 }
@@ -15383,7 +15450,8 @@ function renderDischargeBuilder() {
   }
   const iolEl = document.getElementById('dc-iol-summary');
   if (iolEl) {
-    iolEl.textContent = [data.lastOtCase?.iolType, data.lastOtCase?.iolPower].filter(Boolean).join(' / ') || '—';
+    const iclSummary = buildOtIclSummary(data.lastOtCase?.iclConfig || {});
+    iolEl.textContent = iclSummary || [data.lastOtCase?.iolType, data.lastOtCase?.iolPower].filter(Boolean).join(' / ') || '—';
   }
 
   // Instructions
@@ -15450,7 +15518,7 @@ function renderDischargeBuilder() {
       ['Surgery / procedure', data.procedureName],
       ['OT date', formatDateIN(data.opDate)],
       ['Eye / site', data.lastOtCase?.site || data.lastOtCase?.eye || ptObj.eye || '—'],
-      ['IOL type / power', [data.lastOtCase?.iolType, data.lastOtCase?.iolPower].filter(Boolean).join(' / ') || '—'],
+      ['IOL type / power', buildOtIclSummary(data.lastOtCase?.iclConfig || {}) || [data.lastOtCase?.iolType, data.lastOtCase?.iolPower].filter(Boolean).join(' / ') || '—'],
       ['Admitted on', data.ipdStay?.admittedAt ? formatDateIN(data.ipdStay.admittedAt) : '—'],
       ['Discharged on', formatDateIN(data.dischargeDate)]
     ];

@@ -1864,6 +1864,7 @@
       <div style="position:sticky;top:64px;z-index:39;background:#fff;padding-bottom:8px">
       <div id="obg-top-send-bar" style="margin-bottom:8px"></div>
       <div class="ptabs" style="position:static;background:#fff;margin-bottom:0">
+        <div class="ptab" onclick="ptab(this,'obg-vitals')">Vitals</div>
         <div class="ptab active" onclick="ptab(this,'obg-basic')">Assessment</div>
         <div class="ptab" onclick="ptab(this,'obg-anc')">Visits & Follow-up</div>
         <div class="ptab" onclick="ptab(this,'obg-investigations')">Investigations</div>
@@ -1874,6 +1875,40 @@
       </div>
       <div id="obg-layout" style="display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:14px;align-items:start">
         <div>
+          <!-- VITALS -->
+          <div class="tab-content" id="obg-vitals">
+            <div style="background:var(--g6);border-radius:12px;padding:14px;border:1px solid var(--g5)">
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+                <div style="padding-right:12px;border-right:1px solid var(--g4)">
+                  <div style="font-size:12px;font-weight:900;color:var(--g1);margin-bottom:10px">Anthropometry</div>
+                  <div class="fg" style="grid-template-columns:1fr">
+                    <div class="form-group"><label class="fl">Weight</label><input type="number" id="obg-vitals-weight" placeholder="kg"></div>
+                    <div class="form-group"><label class="fl">Height</label><input type="number" id="obg-vitals-height" placeholder="cm"></div>
+                    <div class="form-group"><label class="fl">RBS</label><input type="number" id="obg-vitals-rbs" placeholder="mg/dL"></div>
+                  </div>
+                </div>
+                <div style="padding-right:12px;border-right:1px solid var(--g4)">
+                  <div style="font-size:12px;font-weight:900;color:var(--g1);margin-bottom:10px">Vitals</div>
+                  <div class="fg" style="grid-template-columns:1fr 1fr">
+                    <div class="form-group"><label class="fl">Temperature</label><input type="number" id="obg-vitals-temp" placeholder="°F"></div>
+                    <div class="form-group"><label class="fl">Pulse</label><input type="number" id="obg-vitals-pulse" placeholder="/min"></div>
+                    <div class="form-group"><label class="fl">Respiratory Rate</label><input type="number" id="obg-vitals-rr" placeholder="/min"></div>
+                    <div class="form-group"><label class="fl">Oxygen Saturation</label><input type="number" id="obg-vitals-spo2" placeholder="%"></div>
+                    <div class="form-group"><label class="fl">Blood Pressure (Systolic)</label><input type="number" id="obg-vitals-bp-sys" placeholder="mmHg"></div>
+                    <div class="form-group"><label class="fl">Blood Pressure (Diastolic)</label><input type="number" id="obg-vitals-bp-dia" placeholder="mmHg"></div>
+                  </div>
+                </div>
+                <div>
+                  <div style="font-size:12px;font-weight:900;color:var(--g1);margin-bottom:10px">Specialized Parameters</div>
+                  <div class="fg" style="grid-template-columns:1fr">
+                    <div class="form-group"><label class="fl">LMP</label><input type="date" id="obg-vitals-lmp" onchange="document.getElementById('obg-lmp').value=this.value;calcEDD();updateObgComputedFields()"></div>
+                    <div class="form-group"><label class="fl">Fetal Presentation</label><select id="obg-vitals-fetal-presentation"><option value="">Select</option><option>Cephalic</option><option>Breech</option><option>Transverse</option><option>Unstable lie</option></select></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- BASIC INFO -->
           <div class="tab-content active" id="obg-basic">
             <div style="background:linear-gradient(135deg,var(--purple-lt),#fce4ff);border-radius:var(--rsm);padding:12px;margin-bottom:12px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;font-size:12px">
@@ -1896,7 +1931,7 @@
               <div class="form-group"><label class="fl">EDD</label><input type="text" id="obg-edd-inp" readonly style="background:var(--green-lt);color:#1a8c3c;font-weight:800"></div>
               <div class="form-group"><label class="fl">Blood Group</label><select id="obg-blood-grp"><option value="">— Select —</option><option>O+ve</option><option>A+ve</option><option>B+ve</option><option>AB+ve</option><option>O-ve</option><option>A-ve</option><option>B-ve</option><option>AB-ve</option></select></div>
               <div class="form-group"><label class="fl">High-Risk Tag</label><select id="obg-risk"><option value="">Low risk</option><option>GDM</option><option>Hypertensive disorder</option><option>FGR / SGA</option><option>Previous LSCS</option><option>Multiple pregnancy</option><option>Rh negative</option><option>Placenta previa</option><option>Preterm risk</option></select></div>
-              <div class="form-group"><label class="fl">Primary Complaint</label><select id="obg-main-complaint" onchange="updateObgComputedFields()"><option value="">Routine review</option><option>Amenorrhoea / positive UPT</option><option>ANC routine review</option><option>Bleeding PV</option><option>Abdominal pain</option><option>Decreased fetal movements</option><option>Infertility evaluation</option><option>Irregular cycles</option><option>White discharge</option><option>Pelvic pain</option></select></div>
+              <div class="form-group"><label class="fl">Primary Complaint</label><input type="text" id="obg-main-complaint" list="obg-main-complaint-list" placeholder="Type or select complaint" onchange="updateObgComputedFields()"><datalist id="obg-main-complaint-list"><option value="Routine review"></option><option value="Amenorrhoea / positive UPT"></option><option value="ANC routine review"></option><option value="Bleeding PV"></option><option value="Abdominal pain"></option><option value="Decreased fetal movements"></option><option value="Infertility evaluation"></option><option value="Irregular cycles"></option><option value="White discharge"></option><option value="Pelvic pain"></option></datalist></div>
               <div class="form-group"><label class="fl">Systemic Disease</label><select id="obg-systemic"><option value="">None declared</option><option>Diabetes mellitus</option><option>Hypertension</option><option>Thyroid disorder</option><option>Epilepsy</option><option>Cardiac disease</option><option>Asthma</option><option>Anaemia</option><option>TB / chronic infection</option><option>Autoimmune disorder</option></select></div>
             </div>
 
@@ -1982,6 +2017,52 @@
                 <div class="form-group"><label class="fl">USG Due</label><input type="date" id="obg-usg-due" onchange="updateObgComputedFields()"></div>
                 <div class="form-group"><label class="fl">TT / Tdap Due</label><input type="date" id="obg-tt-due" onchange="updateObgComputedFields()"></div>
                 <div class="form-group full"><label class="fl">Important ANC Notes</label><textarea id="obg-anc-notes" placeholder="Placenta, scar status, oedema, counselling, fetal surveillance plan…"></textarea></div>
+              </div>
+            </div>
+
+            <div style="margin-top:12px;background:#eef8ff;border:1px solid rgba(0,122,255,.16);border-radius:12px;padding:12px">
+              <div style="font-size:11px;font-weight:900;color:var(--blue);text-transform:uppercase;letter-spacing:.45px;margin-bottom:8px">Menstrual history / baseline labs / TT-Tdap</div>
+              <div class="fg">
+                <div class="form-group"><label class="fl">Menstrual History</label><select id="obg-obs-menstrual"><option value="">Select</option><option>Regular</option><option>Irregular</option><option>Scanty</option><option>Heavy</option><option>Painful</option><option>Amenorrhoea</option></select></div>
+                <div class="form-group"><label class="fl">Blood Group</label><select id="obg-obs-blood-group"><option value="">Select</option><option>O+ve</option><option>A+ve</option><option>B+ve</option><option>AB+ve</option><option>O-ve</option><option>A-ve</option><option>B-ve</option><option>AB-ve</option></select></div>
+                <div class="form-group"><label class="fl">Husband's BG</label><select id="obg-obs-husband-bg"><option value="">Select</option><option>O+ve</option><option>A+ve</option><option>B+ve</option><option>AB+ve</option><option>O-ve</option><option>A-ve</option><option>B-ve</option><option>AB-ve</option></select></div>
+                <div class="form-group"><label class="fl">RBS (mg/dL)</label><input type="number" id="obg-obs-rbs" placeholder="0"></div>
+                <div class="form-group"><label class="fl">TSH (mIU/L)</label><input type="number" step="0.01" id="obg-obs-tsh" placeholder="0"></div>
+                <div class="form-group"><label class="fl">GTT (mg/dL)</label><input type="number" id="obg-obs-gtt" placeholder="0"></div>
+                <div class="form-group"><label class="fl">HIV</label><select id="obg-obs-hiv"><option value="">Select</option><option>Non-reactive</option><option>Reactive</option><option>Awaited</option><option>Not done</option></select></div>
+                <div class="form-group"><label class="fl">HIV Date</label><input type="date" id="obg-obs-hiv-date"></div>
+                <div class="form-group"><label class="fl">HBsAg</label><select id="obg-obs-hbsag"><option value="">Select</option><option>Negative</option><option>Positive</option><option>Awaited</option><option>Not done</option></select></div>
+                <div class="form-group"><label class="fl">HBsAg Date</label><input type="date" id="obg-obs-hbsag-date"></div>
+                <div class="form-group"><label class="fl">HCV</label><select id="obg-obs-hcv"><option value="">Select</option><option>Negative</option><option>Positive</option><option>Awaited</option><option>Not done</option></select></div>
+                <div class="form-group"><label class="fl">HCV Date</label><input type="date" id="obg-obs-hcv-date"></div>
+                <div class="form-group"><label class="fl">HPLC</label><select id="obg-obs-hplc"><option value="">Select</option><option>Normal</option><option>Abnormal</option><option>Trait detected</option><option>Not done</option></select></div>
+                <div class="form-group"><label class="fl">HPLC Date</label><input type="date" id="obg-obs-hplc-date"></div>
+                <div class="form-group"><label class="fl">VDRL</label><select id="obg-obs-vdrl"><option value="">Select</option><option>Non-reactive</option><option>Reactive</option><option>Awaited</option><option>Not done</option></select></div>
+                <div class="form-group"><label class="fl">VDRL Date</label><input type="date" id="obg-obs-vdrl-date"></div>
+                <div class="form-group"><label class="fl">Genetic Testing</label><select id="obg-obs-genetic"><option value="">Select</option><option>Not advised</option><option>Low risk</option><option>High risk</option><option>Carrier</option><option>Awaited</option></select></div>
+                <div class="form-group"><label class="fl">Test Date</label><input type="date" id="obg-obs-genetic-date"></div>
+                <div class="form-group"><label class="fl">Test Result</label><input type="text" id="obg-obs-genetic-result" placeholder="Enter test result"></div>
+                <div class="form-group full"><label class="fl">Additional Note</label><textarea id="obg-obs-genetic-note" placeholder="Enter additional note"></textarea></div>
+              </div>
+              <div style="margin-top:12px;background:#fff;border:1px solid rgba(0,122,255,.12);border-radius:10px;padding:10px">
+                <div style="font-size:10px;font-weight:900;color:var(--blue);text-transform:uppercase;letter-spacing:.45px;margin-bottom:8px">TT / Td / Tdap Vaccination</div>
+                <div style="display:grid;grid-template-columns:1.4fr .8fr .8fr .8fr .8fr;gap:8px;align-items:end">
+                  <div class="form-group"><label class="fl">Dose 1</label><input type="text" id="obg-vax-1-name" value="Inj TT/Td/Tdap 1st Dose"></div>
+                  <div class="form-group"><label class="fl">Date</label><input type="date" id="obg-vax-1-date"></div>
+                  <div class="form-group"><label class="fl">Status</label><select id="obg-vax-1-status"><option>Pending</option><option>Given</option><option>Due</option><option>Deferred</option></select></div>
+                  <div class="form-group"><label class="fl">Brand</label><input type="text" id="obg-vax-1-brand" placeholder="Brand"></div>
+                  <div class="form-group"><label class="fl">Batch</label><input type="text" id="obg-vax-1-batch" placeholder="Batch"></div>
+                  <div class="form-group"><label class="fl">Dose 2</label><input type="text" id="obg-vax-2-name" value="Inj TT/Td/Tdap 2nd Dose"></div>
+                  <div class="form-group"><label class="fl">Date</label><input type="date" id="obg-vax-2-date"></div>
+                  <div class="form-group"><label class="fl">Status</label><select id="obg-vax-2-status"><option>Pending</option><option>Given</option><option>Due</option><option>Deferred</option></select></div>
+                  <div class="form-group"><label class="fl">Brand</label><input type="text" id="obg-vax-2-brand" placeholder="Brand"></div>
+                  <div class="form-group"><label class="fl">Batch</label><input type="text" id="obg-vax-2-batch" placeholder="Batch"></div>
+                  <div class="form-group"><label class="fl">Booster</label><input type="text" id="obg-vax-3-name" value="Inj TT/Td/Tdap Booster Dose"></div>
+                  <div class="form-group"><label class="fl">Date</label><input type="date" id="obg-vax-3-date"></div>
+                  <div class="form-group"><label class="fl">Status</label><select id="obg-vax-3-status"><option>Pending</option><option>Given</option><option>Due</option><option>Deferred</option></select></div>
+                  <div class="form-group"><label class="fl">Brand</label><input type="text" id="obg-vax-3-brand" placeholder="Brand"></div>
+                  <div class="form-group"><label class="fl">Batch</label><input type="text" id="obg-vax-3-batch" placeholder="Batch"></div>
+                </div>
               </div>
             </div>
 
@@ -2179,9 +2260,17 @@
           </div>
           <div id="obg-dx-list">
             <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">
-              <input type="text" class="dx-inp" placeholder="Type diagnosis to search (ICD-10)…" oninput="filterDx(this)" onfocus="showDxDropdown(this)" style="flex:1;font-size:12px" autocomplete="off">
+              <input type="text" class="dx-inp" placeholder="Type diagnosis…" style="flex:1;font-size:12px" autocomplete="off">
               <button class="btn btn-xs btn-gray" onclick="this.closest('div').remove()">✕</button>
             </div>
+          </div>
+        </div>
+        <div style="background:var(--g6);border-radius:var(--rsm);padding:8px 11px;margin-bottom:10px;border:1.5px solid var(--g4)">
+          <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px">🖨️ Include in Printout (OBG)</div>
+          <div style="display:flex;gap:14px;flex-wrap:wrap">
+            <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="obg-inc-vitals" checked> Vitals & LMP</label>
+            <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="obg-inc-anc" checked> ANC details (if ANC checked)</label>
+            <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="obg-inc-complaint" checked> Primary complaint</label>
           </div>
         </div>
         <!-- Drug quick search -->
@@ -2273,48 +2362,6 @@
           </div>
           <button class="btn btn-blue btn-sm" type="button" onclick="addObgPregnancyEntry()">+ Pregnancy</button>
         </div>
-        <div class="fg">
-          <div class="form-group"><label class="fl">Menstrual History</label><select id="obg-obs-menstrual"><option value="">Select</option><option>Regular</option><option>Irregular</option><option>Scanty</option><option>Heavy</option><option>Painful</option><option>Amenorrhoea</option></select></div>
-          <div class="form-group"><label class="fl">Blood Group</label><select id="obg-obs-blood-group"><option value="">Select</option><option>O+ve</option><option>A+ve</option><option>B+ve</option><option>AB+ve</option><option>O-ve</option><option>A-ve</option><option>B-ve</option><option>AB-ve</option></select></div>
-          <div class="form-group"><label class="fl">Husband's BG</label><select id="obg-obs-husband-bg"><option value="">Select</option><option>O+ve</option><option>A+ve</option><option>B+ve</option><option>AB+ve</option><option>O-ve</option><option>A-ve</option><option>B-ve</option><option>AB-ve</option></select></div>
-          <div class="form-group"><label class="fl">RBS (mg/dL)</label><input type="number" id="obg-obs-rbs" placeholder="0"></div>
-          <div class="form-group"><label class="fl">TSH (mIU/L)</label><input type="number" step="0.01" id="obg-obs-tsh" placeholder="0"></div>
-          <div class="form-group"><label class="fl">GTT (mg/dL)</label><input type="number" id="obg-obs-gtt" placeholder="0"></div>
-          <div class="form-group"><label class="fl">HIV</label><select id="obg-obs-hiv"><option value="">Select</option><option>Non-reactive</option><option>Reactive</option><option>Awaited</option><option>Not done</option></select></div>
-          <div class="form-group"><label class="fl">HIV Date</label><input type="date" id="obg-obs-hiv-date"></div>
-          <div class="form-group"><label class="fl">HBsAg</label><select id="obg-obs-hbsag"><option value="">Select</option><option>Negative</option><option>Positive</option><option>Awaited</option><option>Not done</option></select></div>
-          <div class="form-group"><label class="fl">HBsAg Date</label><input type="date" id="obg-obs-hbsag-date"></div>
-          <div class="form-group"><label class="fl">HCV</label><select id="obg-obs-hcv"><option value="">Select</option><option>Negative</option><option>Positive</option><option>Awaited</option><option>Not done</option></select></div>
-          <div class="form-group"><label class="fl">HCV Date</label><input type="date" id="obg-obs-hcv-date"></div>
-          <div class="form-group"><label class="fl">HPLC</label><select id="obg-obs-hplc"><option value="">Select</option><option>Normal</option><option>Abnormal</option><option>Trait detected</option><option>Not done</option></select></div>
-          <div class="form-group"><label class="fl">HPLC Date</label><input type="date" id="obg-obs-hplc-date"></div>
-          <div class="form-group"><label class="fl">VDRL</label><select id="obg-obs-vdrl"><option value="">Select</option><option>Non-reactive</option><option>Reactive</option><option>Awaited</option><option>Not done</option></select></div>
-          <div class="form-group"><label class="fl">VDRL Date</label><input type="date" id="obg-obs-vdrl-date"></div>
-          <div class="form-group"><label class="fl">Genetic Testing</label><select id="obg-obs-genetic"><option value="">Select</option><option>Not advised</option><option>Low risk</option><option>High risk</option><option>Carrier</option><option>Awaited</option></select></div>
-          <div class="form-group"><label class="fl">Test Date</label><input type="date" id="obg-obs-genetic-date"></div>
-          <div class="form-group"><label class="fl">Test Result</label><input type="text" id="obg-obs-genetic-result" placeholder="Enter test result"></div>
-          <div class="form-group full"><label class="fl">Additional Note</label><textarea id="obg-obs-genetic-note" placeholder="Enter additional note"></textarea></div>
-        </div>
-        <div style="margin:12px 0;background:#eef8ff;border:1px solid rgba(0,122,255,.16);border-radius:12px;padding:12px">
-          <div style="font-size:11px;font-weight:900;color:var(--blue);text-transform:uppercase;letter-spacing:.45px;margin-bottom:8px">TT / Td / Tdap Vaccination</div>
-          <div style="display:grid;grid-template-columns:1.4fr .8fr .8fr .8fr .8fr;gap:8px;align-items:end">
-            <div class="form-group"><label class="fl">Dose 1</label><input type="text" id="obg-vax-1-name" value="Inj TT/Td/Tdap 1st Dose"></div>
-            <div class="form-group"><label class="fl">Date</label><input type="date" id="obg-vax-1-date"></div>
-            <div class="form-group"><label class="fl">Status</label><select id="obg-vax-1-status"><option>Pending</option><option>Given</option><option>Due</option><option>Deferred</option></select></div>
-            <div class="form-group"><label class="fl">Brand</label><input type="text" id="obg-vax-1-brand" placeholder="Brand"></div>
-            <div class="form-group"><label class="fl">Batch</label><input type="text" id="obg-vax-1-batch" placeholder="Batch"></div>
-            <div class="form-group"><label class="fl">Dose 2</label><input type="text" id="obg-vax-2-name" value="Inj TT/Td/Tdap 2nd Dose"></div>
-            <div class="form-group"><label class="fl">Date</label><input type="date" id="obg-vax-2-date"></div>
-            <div class="form-group"><label class="fl">Status</label><select id="obg-vax-2-status"><option>Pending</option><option>Given</option><option>Due</option><option>Deferred</option></select></div>
-            <div class="form-group"><label class="fl">Brand</label><input type="text" id="obg-vax-2-brand" placeholder="Brand"></div>
-            <div class="form-group"><label class="fl">Batch</label><input type="text" id="obg-vax-2-batch" placeholder="Batch"></div>
-            <div class="form-group"><label class="fl">Booster</label><input type="text" id="obg-vax-3-name" value="Inj TT/Td/Tdap Booster Dose"></div>
-            <div class="form-group"><label class="fl">Date</label><input type="date" id="obg-vax-3-date"></div>
-            <div class="form-group"><label class="fl">Status</label><select id="obg-vax-3-status"><option>Pending</option><option>Given</option><option>Due</option><option>Deferred</option></select></div>
-            <div class="form-group"><label class="fl">Brand</label><input type="text" id="obg-vax-3-brand" placeholder="Brand"></div>
-            <div class="form-group"><label class="fl">Batch</label><input type="text" id="obg-vax-3-batch" placeholder="Batch"></div>
-          </div>
-        </div>
         <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:12px">
           <div style="background:#fff;border:1px solid var(--g5);border-radius:12px;padding:12px">
             <div style="font-size:11px;font-weight:900;color:#6a0091;text-transform:uppercase;letter-spacing:.45px;margin-bottom:8px">Conception & complications</div>
@@ -2335,7 +2382,8 @@
           </div>
           <div style="background:#fff;border:1px solid var(--g5);border-radius:12px;padding:12px">
             <div style="font-size:11px;font-weight:900;color:#8a4200;text-transform:uppercase;letter-spacing:.45px;margin-bottom:8px">Labour details</div>
-            <div class="form-group"><label class="fl">Modes of Delivery</label><select id="obg-obs-mode-delivery"><option value="">Select</option><option>Natural</option><option>Normal</option><option>Forceps</option><option>Vaccum</option><option>Caesarean</option></select></div>
+            <div class="form-group"><label class="fl">Modes of Delivery</label><select id="obg-obs-mode-delivery" onchange="toggleObgCSectionIndication()"><option value="">Select</option><option>Natural</option><option>Normal</option><option>Forceps</option><option>Vaccum</option><option>Caesarean</option></select></div>
+            <div class="form-group" id="obg-obs-csection-indication-wrap" style="display:none"><label class="fl">Caesarean Indication</label><input type="text" id="obg-obs-csection-indication" list="obg-csection-indication-list" placeholder="Type or select indication"><datalist id="obg-csection-indication-list"><option value="Previous LSCS"></option><option value="Fetal distress"></option><option value="Non progress of labour"></option><option value="CPD"></option><option value="Breech / malpresentation"></option><option value="Placenta previa"></option><option value="Severe preeclampsia / eclampsia"></option><option value="PROM with failed induction"></option><option value="Oligohydramnios"></option><option value="IUGR with distress"></option></datalist></div>
             <div class="form-group"><label class="fl">Induction Done</label><select id="obg-obs-induction"><option value="">Select</option><option>No</option><option>Yes</option><option>Spontaneous labour</option><option>Augmented</option></select></div>
             <div class="form-group"><label class="fl">Induction Description</label><input type="text" id="obg-obs-induction-note" placeholder="Description"></div>
             <div class="form-group"><label class="fl">Liquor</label><select id="obg-obs-liquor"><option value="">Select</option><option>Clear</option><option>Thin meconium</option><option>Thick meconium</option><option>Blood stained</option><option>Scanty</option></select></div>
@@ -4631,7 +4679,7 @@
   <div class="form-group"><label class="fl">Age / Sex</label><input type="text" id="ot-age-sex" readonly style="background:var(--g6)"></div>
   <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">Pre-op Diagnosis <span style="display:flex;align-items:center;gap:6px"><button type="button" onclick="showToast('Type to search saved OT diagnoses. Use + to add a reusable diagnosis for future cases.','i')" style="background:var(--g6);color:var(--blue);border:1px solid var(--g4);border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">?</button><button type="button" onclick="addOTDiagnosisOption()" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></span></label><input type="text" id="ot-add-dx" list="ot-dx-list" placeholder="Type diagnosis to search or add"><datalist id="ot-dx-list"></datalist></div>
   <div class="form-group"><label class="fl">Procedure / Surgery</label>
-    <input type="text" id="ot-add-proc" list="ot-proc-list" placeholder="Type procedure to search" onfocus="populateOTProcedureOptions('');this.select();" oninput="onOTProcedureInputChange(this.value)" onchange="onOTProcedureInputChange(this.value)"><datalist id="ot-proc-list"></datalist>
+    <input type="text" id="ot-add-proc" list="ot-proc-list" placeholder="Type procedure to search" onfocus="populateOTProcedureOptions(this.value||'');if(typeof this.showPicker==='function'){try{this.showPicker();}catch(e){}};" oninput="onOTProcedureInputChange(this.value)" onchange="onOTProcedureInputChange(this.value)"><datalist id="ot-proc-list"></datalist>
   </div>
   <div class="form-group" id="ot-add-proc-sub-wrap" style="display:none"><label class="fl">Procedure subheading / package</label>
     <select id="ot-add-proc-sub" onchange="onOTProcedureSubheadingChange(this.value)"><option value="">— Select subheading —</option></select>
@@ -4658,6 +4706,21 @@
   <div class="fg" id="ot-eye-fields">
     <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">IOL / Implant <button type="button" onclick="openOTAddIolModal()" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></label><select id="ot-add-iol-model"></select></div>
     <div class="form-group"><label class="fl">IOL Power</label><select id="ot-add-iol-power"></select></div>
+  </div>
+  <div id="ot-icl-config-wrap" class="form-group full" style="display:none;background:#eef8ff;border:1px solid rgba(0,122,255,.2);border-radius:10px;padding:10px">
+    <div style="font-size:11px;font-weight:900;color:var(--blue);text-transform:uppercase;margin-bottom:8px">STARR ICL details</div>
+    <div class="fg" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
+      <div class="form-group"><label class="fl">Eyes</label><select id="ot-icl-eyes" onchange="toggleOtIclFields()"><option value="one">One Eye</option><option value="both">Both Eyes</option></select></div>
+      <div class="form-group" id="ot-icl-one-wrap"><label class="fl">Type / ICL power (one eye)</label><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><select id="ot-icl-one-type"><option value="Regular">Regular</option><option value="Toric">Toric</option></select><input type="text" id="ot-icl-one-power" placeholder="e.g. +10.50D"></div></div>
+    </div>
+    <div id="ot-icl-both-wrap" style="display:none">
+      <div class="fg" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
+        <div class="form-group"><label class="fl">First eye type</label><select id="ot-icl-first-type"><option value="Regular">Regular</option><option value="Toric">Toric</option></select></div>
+        <div class="form-group"><label class="fl">Second eye type</label><select id="ot-icl-second-type"><option value="Regular">Regular</option><option value="Toric">Toric</option></select></div>
+        <div class="form-group"><label class="fl">First eye ICL power</label><input type="text" id="ot-icl-first-power" placeholder="e.g. +10.00D"></div>
+        <div class="form-group"><label class="fl">Second eye ICL power</label><input type="text" id="ot-icl-second-power" placeholder="e.g. +10.50D"></div>
+      </div>
+    </div>
   </div>
   <div class="form-group" id="ot-eye-iol-summary"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">IOL / Implant Summary <button type="button" onclick="showToast('For PMICS, type to search saved IOL subcategories under the PMICS main heading.','i')" style="background:var(--g6);color:var(--blue);border:1px solid var(--g4);border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">?</button></label><input type="text" id="ot-add-iol" list="ot-iol-summary-list" placeholder="Selected or typed IOL summary" style="background:#fff"><datalist id="ot-iol-summary-list"></datalist></div>
   <div class="form-group"><label class="fl">Pre-op Workup Done</label>
