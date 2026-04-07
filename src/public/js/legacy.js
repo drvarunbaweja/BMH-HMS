@@ -1452,9 +1452,12 @@ function rebuildDxListFromValues(listId, values) {
     const inp = document.createElement('input');
     inp.type = 'text';
     inp.className = 'dx-inp';
-    inp.placeholder = 'ICD-10 search or type free-text diagnosis…';
-    inp.setAttribute('oninput', 'filterDx(this)');
-    inp.setAttribute('onfocus', 'showDxDropdown(this)');
+    const isObgList = listId === 'obg-dx-list';
+    inp.placeholder = isObgList ? 'Type diagnosis…' : 'ICD-10 search or type free-text diagnosis…';
+    if (!isObgList) {
+      inp.setAttribute('oninput', 'filterDx(this)');
+      inp.setAttribute('onfocus', 'showDxDropdown(this)');
+    }
     inp.style.cssText = 'flex:1;font-size:12px';
     inp.autocomplete = 'off';
     inp.value = text || '';
@@ -1536,7 +1539,7 @@ function nav(id, el) {
   else if(pageKey==='appointments')    { const d=document.getElementById('apt-date-inp'); if(d)d.value=new Date().toISOString().split('T')[0]; renderAptDay && renderAptDay(); }
   else if(pageKey==='print-templates') renderPrintTemplates && renderPrintTemplates();
   else if(pageKey==='consents')        { renderConsent && renderConsent(); updateConsentPatientHeader(); refreshConsentLibrary && refreshConsentLibrary(); }
-  else if(pageKey==='ophtho')          { initQR && initQR(); renderRxDrugs && renderRxDrugs(); buildRefractionDropdowns && buildRefractionDropdowns(); renderOphthoPayList && renderOphthoPayList(); typeof initDiagnosisRowsIfEmpty==='function'&&initDiagnosisRowsIfEmpty(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); }
+  else if(pageKey==='ophtho')          { initQR && initQR(); renderRxDrugs && renderRxDrugs(); buildRefractionDropdowns && buildRefractionDropdowns(); renderOphthoPayList && renderOphthoPayList(); typeof initDiagnosisRowsIfEmpty==='function'&&initDiagnosisRowsIfEmpty(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); typeof wrapOphAdviceChipsWithDelete==='function'&&wrapOphAdviceChipsWithDelete(); }
   else if(pageKey==='obg')             { renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); initObgSelects && initObgSelects(); toggleObgWorkflow && toggleObgWorkflow(); populateObgPatientFromCurrent && populateObgPatientFromCurrent(); updateObgComputedFields && updateObgComputedFields(); }
   else if(pageKey==='psych')           { renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); togglePsychTracks && togglePsychTracks(); renderPsychRail && renderPsychRail(); }
   else if(pageKey==='skin')            { renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); renderSkinRail && renderSkinRail(); }
@@ -2326,6 +2329,13 @@ function loadTodayDeptVisitIntoForm(bmhId, dept) {
 function populateOphthoForm(v) {
   function setV(id, val) { const el=document.getElementById(id); if(el&&val!==undefined&&val!==null) el.value=val; }
   function setSel(id, val) { const el=document.getElementById(id); if(el&&val){ for(let i=0;i<el.options.length;i++){if(el.options[i].value===val||el.options[i].text===val){el.selectedIndex=i;break;}} } }
+  function setRfField(id, val) {
+    if (val === undefined || val === null || val === '') return;
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (el.tagName === 'INPUT') { el.value = val; return; }
+    setSel(id, val);
+  }
 
   // Visual Acuity
   setSel('va-od-uc', v.ucvaOD || v.vaOD);
@@ -2352,14 +2362,16 @@ function populateOphthoForm(v) {
   if(v.pachyOD || v.pachyOS) { typeof updIOPWithPachy==='function' && updIOPWithPachy(); }
 
   // Refraction — Current Spectacles
-  setSel('rf-od-sph2', v.rfODsph); setSel('rf-od-cyl2', v.rfODcyl); setSel('rf-od-ax2', v.rfODax);
-  setSel('rf-os-sph2', v.rfOSsph); setSel('rf-os-cyl2', v.rfOScyl); setSel('rf-os-ax2', v.rfOSax);
+  setRfField('rf-od-sph2', v.rfODsph); setRfField('rf-od-cyl2', v.rfODcyl); setRfField('rf-od-ax2', v.rfODax);
+  setRfField('rf-os-sph2', v.rfOSsph); setRfField('rf-os-cyl2', v.rfOScyl); setRfField('rf-os-ax2', v.rfOSax);
+  setRfField('rf-od-add-spec', v.rfODaddSpec);
+  setRfField('rf-os-add-spec', v.rfOSaddSpec);
   // Refraction — Cycloplegic
-  setSel('cyc-od-sph', v.cycODsph); setSel('cyc-od-cyl', v.cycODcyl); setSel('cyc-od-ax', v.cycODax);
-  setSel('cyc-os-sph', v.cycOSsph); setSel('cyc-os-cyl', v.cycOScyl); setSel('cyc-os-ax', v.cycOSax);
+  setRfField('cyc-od-sph', v.cycODsph); setRfField('cyc-od-cyl', v.cycODcyl); setRfField('cyc-od-ax', v.cycODax);
+  setRfField('cyc-os-sph', v.cycOSsph); setRfField('cyc-os-cyl', v.cycOScyl); setRfField('cyc-os-ax', v.cycOSax);
   // Refraction — Subjective
-  setSel('subj-od-sph', v.subjODsph); setSel('subj-od-cyl', v.subjODcyl); setSel('subj-od-ax', v.subjODax);
-  setSel('subj-os-sph', v.subjOSsph); setSel('subj-os-cyl', v.subjOScyl); setSel('subj-os-ax', v.subjOSax);
+  setRfField('subj-od-sph', v.subjODsph); setRfField('subj-od-cyl', v.subjODcyl); setRfField('subj-od-ax', v.subjODax);
+  setRfField('subj-os-sph', v.subjOSsph); setRfField('subj-os-cyl', v.subjOScyl); setRfField('subj-os-ax', v.subjOSax);
   setSel('subj-od-va', v.subjODva);
   setSel('subj-os-va', v.subjOSva);
   setSel('rf-od-add', v.rfODAdd);
@@ -2927,12 +2939,21 @@ function buildOphthoCaseSheetHtml() {
   const ptMob  = pt.mob  || pt.phone  || '';
   const ptAddr = (pt.address || pt.addr || pt.addressLine || '').trim();
 
-  // ── chief complaints ──────────────────────────────────────────────────
+  // ── chief complaints (scope to ophtho page — avoid picking up rows elsewhere) ──
   const ccRows = [];
-  document.querySelectorAll('.cc-row').forEach(row=>{
+  document.querySelectorAll('#pg-ophtho #cc-rows .cc-row').forEach(row=>{
     const txt = row.querySelector('.cc-inp')?.value?.trim();
     if(txt) ccRows.push({text:txt, dur:row.querySelector('.cc-dur')?.value||'', eye:row.querySelector('.cc-eye')?.value||''});
   });
+  if (!ccRows.length) {
+    const lv = currentPt.lastVisit || {};
+    const raw = String(lv.chiefComplaints || lv.cc || '').trim();
+    if (raw) {
+      raw.split(/\s*;\s*/).filter(Boolean).forEach(function (text) {
+        ccRows.push({ text: text, dur: '', eye: '' });
+      });
+    }
+  }
 
   // ── visual acuity (merged VA tab + prescription tab) ───────────────────
   const ucvaOD = document.getElementById('va-od-uc')?.value || document.getElementById('ucva-od-dist')?.value || '—';
@@ -2948,9 +2969,11 @@ function buildOphthoCaseSheetHtml() {
     odSph2: document.getElementById('rf-od-sph2')?.value || '—',
     odCyl2: document.getElementById('rf-od-cyl2')?.value || '—',
     odAx2:  document.getElementById('rf-od-ax2')?.value  || '—',
+    odAddSpec: document.getElementById('rf-od-add-spec')?.value || '—',
     osSph2: document.getElementById('rf-os-sph2')?.value || '—',
     osCyl2: document.getElementById('rf-os-cyl2')?.value || '—',
     osAx2:  document.getElementById('rf-os-ax2')?.value  || '—',
+    osAddSpec: document.getElementById('rf-os-add-spec')?.value || '—',
     // Cycloplegic / AR
     cycODsph: document.getElementById('cyc-od-sph')?.value || '—',
     cycODcyl: document.getElementById('cyc-od-cyl')?.value || '—',
@@ -3068,16 +3091,16 @@ function buildOphthoCaseSheetHtml() {
   const examBlank = () => `<td style="text-align:center;padding:8px 4px;border:1px solid #777;font-size:8.8px;font-weight:700;line-height:1.2;color:#666">____________</td>`;
   const examTableHtml = `<table style="width:100%;border-collapse:collapse;table-layout:fixed;margin-top:3px">
 <colgroup>
-  <col style="width:6.5%"><col style="width:6.5%"><col style="width:6.5%"><col style="width:6.5%">
-  <col style="width:7.5%"><col style="width:7.5%"><col style="width:6.5%">
-  <col style="width:7.5%"><col style="width:7.5%"><col style="width:6.5%">
-  <col style="width:7.5%"><col style="width:7.5%"><col style="width:6.5%"><col style="width:8%">
+  <col style="width:6%"><col style="width:6%"><col style="width:6%"><col style="width:6%">
+  <col style="width:6.5%"><col style="width:6.5%"><col style="width:6.5%"><col style="width:6%">
+  <col style="width:6.5%"><col style="width:6.5%"><col style="width:6.5%">
+  <col style="width:6.5%"><col style="width:6.5%"><col style="width:6.5%"><col style="width:6.5%"><col style="width:7%">
 </colgroup>
 <thead>
 <tr>
   <th rowspan="2" style="border:1px solid #555;padding:5px 3px;font-size:8px;background:#e9edf3">Eye</th>
   <th colspan="4" style="border:1px solid #555;padding:5px 3px;font-size:8.5px;background:#dfeeff;color:#0f4c81">VA</th>
-  <th colspan="3" style="border:1px solid #555;padding:5px 3px;font-size:8.5px;background:#e8f5e9;color:#165b2f">Current Glasses</th>
+  <th colspan="4" style="border:1px solid #555;padding:5px 3px;font-size:8.5px;background:#e8f5e9;color:#165b2f">Current Glasses</th>
   <th colspan="3" style="border:1px solid #555;padding:5px 3px;font-size:8.5px;background:#efe6ff;color:#5c2a9d">AR / Cycloplegic</th>
   <th colspan="4" style="border:1px solid #555;padding:5px 3px;font-size:8.5px;background:#fff1df;color:#8a4200">Subjective Refraction</th>
 </tr>
@@ -3089,6 +3112,7 @@ function buildOphthoCaseSheetHtml() {
   ${examHead('Sph','#e8f5e9','#165b2f')}
   ${examHead('Cyl','#e8f5e9','#165b2f')}
   ${examHead('Axis','#e8f5e9','#165b2f')}
+  ${examHead('Near add','#e8f5e9','#165b2f')}
   ${examHead('Sph','#efe6ff','#5c2a9d')}
   ${examHead('Cyl','#efe6ff','#5c2a9d')}
   ${examHead('Axis','#efe6ff','#5c2a9d')}
@@ -3102,16 +3126,16 @@ function buildOphthoCaseSheetHtml() {
 <tr>
   <td style="font-weight:900;text-align:center;border:1px solid #555;padding:6px 3px;font-size:9px;background:#eef5ff;color:#0f4c81">OD</td>
   ${examCell(ucvaOD)}${examCell(bcvaOD)}${examCell(phOD)}${examCell(document.getElementById('ucva-od-near')?.value || '—')}
-  ${examCell(rf.odSph2)}${examCell(rf.odCyl2)}${examCell(rf.odAx2)}
+  ${examCell(rf.odSph2)}${examCell(rf.odCyl2)}${examCell(rf.odAx2)}${examCell(rf.odAddSpec)}
   ${examCell(rf.cycODsph)}${examCell(rf.cycODcyl)}${examCell(rf.cycODax)}
-  ${examCell(rf.subjODsph)}${examCell(rf.subjODcyl)}${examCell(rf.subjODax)}${examBlank()}
+  ${examCell(rf.subjODsph)}${examCell(rf.subjODcyl)}${examCell(rf.subjODax)}${examCell(document.getElementById('subj-od-va')?.value || '—')}
 </tr>
 <tr>
   <td style="font-weight:900;text-align:center;border:1px solid #555;padding:6px 3px;font-size:9px;background:#edf9f0;color:#165b2f">OS</td>
   ${examCell(ucvaOS)}${examCell(bcvaOS)}${examCell(phOS)}${examCell(document.getElementById('ucva-os-near')?.value || '—')}
-  ${examCell(rf.osSph2)}${examCell(rf.osCyl2)}${examCell(rf.osAx2)}
+  ${examCell(rf.osSph2)}${examCell(rf.osCyl2)}${examCell(rf.osAx2)}${examCell(rf.osAddSpec)}
   ${examCell(rf.cycOSsph)}${examCell(rf.cycOScyl)}${examCell(rf.cycOSax)}
-  ${examCell(rf.subjOSsph)}${examCell(rf.subjOScyl)}${examCell(rf.subjOSax)}${examBlank()}
+  ${examCell(rf.subjOSsph)}${examCell(rf.subjOScyl)}${examCell(rf.subjOSax)}${examCell(document.getElementById('subj-os-va')?.value || '—')}
 </tr>
 </tbody>
 </table>
@@ -3361,6 +3385,8 @@ function previewCaseSheet() { printCaseSheet({ preview: true }); }
 function printPsychSheet() { if(typeof window.printUnifiedRx === 'function') { window.printUnifiedRx('psych'); } else { showToast('Psychiatry summary printing ✓','s'); setTimeout(()=>window.print(),300); } }
 function printSkinSheet() { if(typeof window.printUnifiedRx === 'function') { window.printUnifiedRx('skin'); } else { showToast('Skin summary printing ✓','s'); setTimeout(()=>window.print(),300); } }
 function printDischarge() {
+  renderDischargeBuilder();
+  persistOphDischargeSnapshotToOtCase();
   const html = buildDischargeCardPrintHtml();
   if (!html) { showToast('Select a patient first', 'w'); return; }
   safePrint(html);
@@ -3644,7 +3670,19 @@ function ptab(el, cId) {
     scope.querySelectorAll('.tab-content.active').forEach(tc => tc.classList.remove('active'));
   }
   el.classList.add('active');
-  const tgt = document.getElementById(cId); if (tgt) tgt.classList.add('active');
+  const tgt = document.getElementById(cId);
+  if (tgt) {
+    tgt.classList.add('active');
+    tgt.scrollTop = 0;
+    const card = tgt.closest('.card');
+    if (card) card.scrollTop = 0;
+    const page = el.closest('.page');
+    if (page) {
+      page.scrollTop = 0;
+      const cf = page.querySelector('.content-full');
+      if (cf) cf.scrollTop = 0;
+    }
+  }
   const page = el.closest('.page');
   const pageKey = page?.id?.replace(/^pg-/, '') || '';
   if (pageKey === 'ophtho') {
@@ -3784,25 +3822,30 @@ function updIOPWithPachy() {
   }
 }
 
-// Refraction dropdown builder
+// Refraction — datalists + typed inputs (autosuggest); legacy .rf-*-sel selects still supported
+function fillRefractionDatalist(id, values) {
+  const dl = document.getElementById(id);
+  if (!dl) return;
+  dl.innerHTML = values.map(function (v) { return '<option value="' + String(v || '').replace(/"/g, '&quot;') + '">'; }).join('');
+}
 function buildRefractionDropdowns() {
   const sphs = ['','Plano','Err','+0.25','+0.50','+0.75','+1.00','+1.25','+1.50','+1.75','+2.00','+2.25','+2.50','+3.00','+3.50','+4.00','+4.50','+5.00','+5.50','+6.00','+7.00','+8.00','+9.00','+10.00','-0.25','-0.50','-0.75','-1.00','-1.25','-1.50','-1.75','-2.00','-2.25','-2.50','-3.00','-3.50','-4.00','-4.50','-5.00','-5.50','-6.00','-7.00','-8.00','-9.00','-10.00'];
   const cyls = ['','Plano','-0.25','-0.50','-0.75','-1.00','-1.25','-1.50','-1.75','-2.00','-2.25','-2.50','-3.00','-3.50','-4.00','+0.25','+0.50','+0.75','+1.00','+1.25','+1.50','+2.00','+2.50','+3.00'];
   const axes = [''].concat(Array.from({length:180},(_,i)=>(i+1)+'°'));
-  // All rf- selects (old dropdowns + new spectacle ones)
-  ['rf-od-sph','rf-os-sph','rf-od-sph2','rf-os-sph2','cyc-od-sph','cyc-os-sph','subj-od-sph','subj-os-sph'].forEach(id=>{
-    const s=document.getElementById(id); if(s) s.innerHTML=sphs.map(v=>`<option>${v||'—'}</option>`).join('');
+  const adds = ['','+0.50','+0.75','+1.00','+1.25','+1.50','+1.75','+2.00','+2.25','+2.50','+2.75','+3.00','+3.50'];
+  fillRefractionDatalist('dl-rf-sph', sphs);
+  fillRefractionDatalist('dl-rf-cyl', cyls);
+  fillRefractionDatalist('dl-rf-ax', axes);
+  fillRefractionDatalist('dl-rf-addspec', adds);
+  document.querySelectorAll('.rf-sph-sel').forEach(function (s) {
+    if (!s.options.length) s.innerHTML = sphs.map(function (v) { return '<option>' + (v || '—') + '</option>'; }).join('');
   });
-  ['rf-od-cyl','rf-os-cyl','rf-od-cyl2','rf-os-cyl2','cyc-od-cyl','cyc-os-cyl','subj-od-cyl','subj-os-cyl'].forEach(id=>{
-    const s=document.getElementById(id); if(s) s.innerHTML=cyls.map(v=>`<option>${v||'—'}</option>`).join('');
+  document.querySelectorAll('.rf-cyl-sel').forEach(function (s) {
+    if (!s.options.length) s.innerHTML = cyls.map(function (v) { return '<option>' + (v || '—') + '</option>'; }).join('');
   });
-  ['rf-od-ax','rf-os-ax','rf-od-ax2','rf-os-ax2','cyc-od-ax','cyc-os-ax','subj-od-ax','subj-os-ax'].forEach(id=>{
-    const s=document.getElementById(id); if(s) s.innerHTML=axes.map(v=>`<option>${v||'—'}</option>`).join('');
+  document.querySelectorAll('.rf-ax-sel').forEach(function (s) {
+    if (!s.options.length) s.innerHTML = axes.map(function (v) { return '<option>' + (v || '—') + '</option>'; }).join('');
   });
-  // Also populate any .rf-sph-sel/.rf-cyl-sel/.rf-ax-sel dynamically added
-  document.querySelectorAll('.rf-sph-sel').forEach(s=>{ if(!s.options.length) s.innerHTML=sphs.map(v=>`<option>${v||'—'}</option>`).join(''); });
-  document.querySelectorAll('.rf-cyl-sel').forEach(s=>{ if(!s.options.length) s.innerHTML=cyls.map(v=>`<option>${v||'—'}</option>`).join(''); });
-  document.querySelectorAll('.rf-ax-sel').forEach(s=>{  if(!s.options.length) s.innerHTML=axes.map(v=>`<option>${v||'—'}</option>`).join(''); });
 }
 
 // PHQ-9 / GAD-7 rating scale builder
@@ -3904,16 +3947,20 @@ const OBG_OBS_FIELD_IDS = [
   'obg-obs-genetic-result','obg-obs-genetic-note','obg-vax-1-name','obg-vax-1-date','obg-vax-1-status','obg-vax-1-brand','obg-vax-1-batch',
   'obg-vax-2-name','obg-vax-2-date','obg-vax-2-status','obg-vax-2-brand','obg-vax-2-batch','obg-vax-3-name','obg-vax-3-date','obg-vax-3-status',
   'obg-vax-3-brand','obg-vax-3-batch','obg-obs-conception','obg-obs-complication-note','obg-obs-preg-outcome','obg-obs-maturity',
-  'obg-obs-gestation-age','obg-obs-mode-delivery','obg-obs-induction','obg-obs-induction-note','obg-obs-liquor','obg-obs-liquor-note',
+  'obg-obs-gestation-age','obg-obs-mode-delivery','obg-obs-csection-indication','obg-obs-induction','obg-obs-induction-note','obg-obs-liquor','obg-obs-liquor-note',
   'obg-obs-cord-neck','obg-obs-cord-neck-note','obg-obs-cord-clamp','obg-obs-cord-clamp-note','obg-obs-placenta','obg-obs-placenta-note',
   'obg-obs-pph','obg-obs-pph-note','obg-obs-postnatal','obg-obs-postnatal-note','obg-obs-menstrual-return','obg-obs-birth-control',
   'obg-obs-birth-control-note','obg-obs-gender','obg-obs-birth-weight','obg-obs-labour-duration','obg-obs-delivery-date','obg-obs-delivery-time',
   'obg-obs-present-age','obg-obs-delivery-location','obg-obs-mark','obg-obs-cry','obg-obs-apgar','obg-obs-nicu','obg-obs-nicu-note',
   'obg-obs-phototherapy','obg-obs-phototherapy-note','obg-obs-post-preg-problems','obg-obs-breastfeed','obg-obs-topfeed'
 ];
+const OBG_VITAL_FIELD_IDS = [
+  'obg-vitals-weight','obg-vitals-height','obg-vitals-rbs','obg-vitals-temp','obg-vitals-pulse',
+  'obg-vitals-rr','obg-vitals-bp-sys','obg-vitals-bp-dia','obg-vitals-lmp','obg-vitals-fetal-presentation'
+];
 const OBG_PREGNANCY_FIELD_IDS = [
   'obg-obs-conception','obg-obs-complication-note','obg-obs-preg-outcome','obg-obs-maturity',
-  'obg-obs-gestation-age','obg-obs-mode-delivery','obg-obs-induction','obg-obs-induction-note','obg-obs-liquor','obg-obs-liquor-note',
+  'obg-obs-gestation-age','obg-obs-mode-delivery','obg-obs-csection-indication','obg-obs-induction','obg-obs-induction-note','obg-obs-liquor','obg-obs-liquor-note',
   'obg-obs-cord-neck','obg-obs-cord-neck-note','obg-obs-cord-clamp','obg-obs-cord-clamp-note','obg-obs-placenta','obg-obs-placenta-note',
   'obg-obs-pph','obg-obs-pph-note','obg-obs-postnatal','obg-obs-postnatal-note','obg-obs-menstrual-return','obg-obs-birth-control',
   'obg-obs-birth-control-note','obg-obs-gender','obg-obs-birth-weight','obg-obs-labour-duration','obg-obs-delivery-date','obg-obs-delivery-time',
@@ -4043,15 +4090,25 @@ function toggleObgWorkflow() {
   if(infPanel) infPanel.style.display = inf ? '' : 'none';
   updateObgObstetricHistoryTab(shouldShowObgObstetricHistory());
   toggleObgGuidedSections();
+  toggleObgCSectionIndication();
   updateObgComputedFields();
+}
+function toggleObgCSectionIndication() {
+  const mode = String(document.getElementById('obg-obs-mode-delivery')?.value || '').toLowerCase();
+  const wrap = document.getElementById('obg-obs-csection-indication-wrap');
+  const inp = document.getElementById('obg-obs-csection-indication');
+  const show = mode.includes('caesarean') || mode.includes('cesarean') || mode.includes('lscs') || mode.includes('c-section');
+  if (wrap) wrap.style.display = show ? '' : 'none';
+  if (!show && inp) inp.value = '';
 }
 function calcEDD(){
   const lmpVal = document.getElementById('obg-lmp')?.value;
+  const ancEnabled = !!document.getElementById('obg-track-anc')?.checked;
   const eddDisp = document.getElementById('obg-edd');
   const eddInp = document.getElementById('obg-edd-inp');
   const gaDisp = document.getElementById('obg-ga');
   const triEl = document.getElementById('obg-tri');
-  if(!lmpVal){
+  if(!lmpVal || !ancEnabled){
     if(eddDisp) eddDisp.textContent = '—';
     if(eddInp) eddInp.value = '';
     if(gaDisp) gaDisp.textContent = '—';
@@ -4309,6 +4366,12 @@ function renderObgSummaryRail() {
 }
 function updateObgComputedFields() {
   syncObgAssessmentToHistory();
+  const vitalsLmp = document.getElementById('obg-vitals-lmp');
+  const assessLmp = document.getElementById('obg-lmp');
+  if (vitalsLmp && assessLmp && vitalsLmp.value && vitalsLmp.value !== assessLmp.value) assessLmp.value = vitalsLmp.value;
+  const vitalsPresentation = document.getElementById('obg-vitals-fetal-presentation')?.value || '';
+  const assessPresentation = document.getElementById('obg-present');
+  if (assessPresentation && vitalsPresentation && !assessPresentation.value) assessPresentation.value = vitalsPresentation;
   const calc = calcEDD();
   const g = Number(obgVal('obg-g') || 0);
   const p = Number(obgVal('obg-p') || 0);
@@ -4357,12 +4420,53 @@ function populateObgPatientFromCurrent() {
   syncObgDoctorSelector(docName);
   renderObgSummaryRail();
 }
+function obgAdviceDraftKey() {
+  const bmhId = (window.CURRENT_PATIENT?.bmhId || document.getElementById('obg-pt-uid')?.textContent || '').trim();
+  const day = new Date().toISOString().slice(0, 10);
+  return bmhId ? ('bmh_obg_advice_draft_' + bmhId + '_' + day) : '';
+}
+function saveObgAdviceDraft() {
+  try {
+    const key = obgAdviceDraftKey();
+    if (!key) return;
+    const payload = {
+      advice: document.getElementById('obg-advice')?.value || '',
+      extra: document.getElementById('obg-extra-advice')?.value || ''
+    };
+    localStorage.setItem(key, JSON.stringify(payload));
+  } catch (e) { /* noop */ }
+}
+function loadObgAdviceDraft() {
+  try {
+    const key = obgAdviceDraftKey();
+    if (!key) return;
+    const raw = localStorage.getItem(key);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    const a = document.getElementById('obg-advice');
+    const e = document.getElementById('obg-extra-advice');
+    if (a && data && data.advice != null && !a.value) a.value = data.advice;
+    if (e && data && data.extra != null && !e.value) e.value = data.extra;
+  } catch (err) { /* noop */ }
+}
+function ensureObgAdviceAutosave() {
+  ['obg-advice', 'obg-extra-advice'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (!el || el._obgAdviceBound) return;
+    el._obgAdviceBound = true;
+    el.addEventListener('input', saveObgAdviceDraft);
+    el.addEventListener('change', saveObgAdviceDraft);
+  });
+}
 function populateObgForm(visit) {
   populateObgPatientFromCurrent();
   const data = visit || window.CURRENT_PATIENT?.lastVisit || {};
   if(!data || typeof data !== 'object') {
     initObgPregnancyStateFromVisit({});
     toggleObgWorkflow();
+    toggleObgCSectionIndication();
+    ensureObgAdviceAutosave();
+    loadObgAdviceDraft();
     syncObgAssessmentToHistory();
     updateObgComputedFields();
     return;
@@ -4387,6 +4491,10 @@ function populateObgForm(visit) {
     const el = document.getElementById(id);
     if(el && data[id] != null) el.value = data[id];
   });
+  OBG_VITAL_FIELD_IDS.forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el && data[id] != null) el.value = data[id];
+  });
   const ancChk = document.getElementById('obg-track-anc'); if(ancChk) ancChk.checked = data.workflowAnc !== false;
   const gynChk = document.getElementById('obg-track-gynae'); if(gynChk) gynChk.checked = data.workflowGynae !== false;
   const infChk = document.getElementById('obg-track-infertility'); if(infChk) infChk.checked = !!data.workflowInfertility;
@@ -4396,6 +4504,7 @@ function populateObgForm(visit) {
   document.querySelectorAll('.obg-lab').forEach(box => { box.checked = labs.includes(box.value); });
   initObgPregnancyStateFromVisit(data);
   toggleObgWorkflow();
+  toggleObgCSectionIndication();
   updateObgObstetricHistoryTab(!!(data.obstetricHistoryEnabled || data.workflowAnc));
   syncObgAssessmentToHistory();
   updateObgComputedFields();
@@ -4405,6 +4514,9 @@ function populateObgForm(visit) {
   if (oa && data.obgAdvice != null) oa.value = data.obgAdvice;
   const oea = document.getElementById('obg-extra-advice');
   if (oea && data.obgExtraAdvice != null) oea.value = data.obgExtraAdvice;
+  ensureObgAdviceAutosave();
+  if (oa && !oa.value) loadObgAdviceDraft();
+  saveObgAdviceDraft();
   const fu = data.rxFuDate || data.followupDate;
   if (fu) {
     const obgFu = document.querySelector('#pg-obg #obg-rx input[type="date"]');
@@ -9575,8 +9687,60 @@ function ensureDailyReceptionReset() {
   } catch(e) { /* private mode */ }
 }
 
+/** Update demographics for an existing patient (same BMSH ID shown in form) — no new token / fee. */
+function updateExistingPatientFromReceptionForm(bmhId) {
+  const uid = String(bmhId || '').trim();
+  if (!uid || !/^BMSH-/.test(uid)) { showToast('Load a patient first (prefill or search)', 'w'); return; }
+  const p = PATIENTS.find(function (x) { return x.bmhId === uid; });
+  if (!p) { showToast('Patient not found', 'w'); return; }
+  const fn = (document.getElementById('rc-fn')?.value || '').trim();
+  const ln = (document.getElementById('rc-ln')?.value || '').trim();
+  const mob = (document.getElementById('rc-mob-inp')?.value || document.getElementById('rc-mob')?.value || '').trim();
+  const dob = document.getElementById('rc-dob')?.value || '';
+  const age = document.getElementById('rc-age')?.value || '';
+  const sex = document.getElementById('rc-sex')?.value || 'Male';
+  const dept = document.getElementById('rc-dept')?.value || 'ophtho';
+  const dr = document.getElementById('rc-dr')?.value || '';
+  const centre = document.getElementById('rc-centre')?.value || CURRENT_USER?.centre || 'CHD';
+  const addr = document.getElementById('rc-addr')?.value || '';
+  const mob2 = document.getElementById('rc-mob2')?.value?.trim() || '';
+  const email = document.getElementById('rc-email')?.value?.trim() || '';
+  const rel = document.getElementById('rc-rel')?.value || '';
+  if (!fn) { showToast('Please enter patient first name', 'w'); return; }
+  const name = toTitleCaseName((fn + ' ' + ln).trim());
+  p.name = name;
+  p.initials = computePatientInitials(name);
+  p.age = age;
+  p.sex = sex;
+  p.mob = mob;
+  p.mob2 = mob2;
+  p.email = email;
+  p.dob = dob;
+  p.addr = addr;
+  p.rel = rel;
+  p.dept = dept;
+  p.doctor = dr;
+  p.centre = centre;
+  normalizePatientRecord(p);
+  savePatientToFirebase(p);
+  fbUpdate && fbUpdate('patients/' + uid, {
+    name: p.name, age: p.age, sex: p.sex, mob: p.mob, mob2: p.mob2, email: p.email, dob: p.dob, addr: p.addr, rel: p.rel, dept: p.dept, doctor: p.doctor, centre: p.centre, initials: p.initials
+  }).catch(function () {});
+  showToast('Patient details updated ✓', 's');
+  renderDocQueue && renderDocQueue();
+  renderReceptionPage && renderReceptionPage();
+}
+window.updateExistingPatientFromReceptionForm = updateExistingPatientFromReceptionForm;
+
 /** Reception — Register & Generate Token (full-width form) */
 async function registerPatient() {
+  const uidDisplayed = (document.getElementById('rc-uid')?.textContent || '').trim();
+  const existingPt = uidDisplayed && PATIENTS.find(function (p) { return p.bmhId === uidDisplayed; });
+  if (existingPt) {
+    updateExistingPatientFromReceptionForm(uidDisplayed);
+    return;
+  }
+  /* existingPt is false — continue with new registration using reserved ID */
   const fn  = (document.getElementById('rc-fn')?.value  || '').trim();
   const ln  = (document.getElementById('rc-ln')?.value  || '').trim();
   const mob = (document.getElementById('rc-mob-inp')?.value || document.getElementById('rc-mob')?.value || '').trim();
@@ -10298,6 +10462,7 @@ function normalizeOTCaseRecord(c) {
     signIn: !!src.signIn,
     timeOut: !!src.timeOut,
     signOut: !!src.signOut,
+    ophDischargeSnapshot: src.ophDischargeSnapshot || null,
   });
 }
 function resolveSurgeryPackForCase(otCase) {
@@ -11706,9 +11871,10 @@ function addDxRow() {
   const ap = document.querySelector('.page.active');
   const list = ap ? ap.querySelector('[id$="-dx-list"]') : null;
   if(!list) return;
+  const isObg = list.id === 'obg-dx-list';
   const d = document.createElement('div');
   d.style.cssText='display:flex;gap:6px;align-items:center;margin-top:5px';
-  d.innerHTML=`<input type="text" class="dx-inp" placeholder="ICD-10 search or type free-text diagnosis…" oninput="filterDx(this)" onfocus="showDxDropdown(this);wireDxInputFocus(this)" style="flex:1" autocomplete="off">
+  d.innerHTML=`<input type="text" class="dx-inp" placeholder="${isObg ? 'Type diagnosis…' : 'ICD-10 search or type free-text diagnosis…'}" ${isObg ? '' : 'oninput="filterDx(this)" onfocus="showDxDropdown(this);wireDxInputFocus(this)"'} style="flex:1" autocomplete="off">
     <button type="button" class="btn btn-xs btn-gray" onclick="this.closest('div').remove()">✕</button>`;
   list.appendChild(d);
   const inp = d.querySelector('.dx-inp');
@@ -13559,6 +13725,21 @@ function localDateKey(value) {
   const yyyy = d.getFullYear();
   return yyyy + '-' + mm + '-' + dd;
 }
+/** Shared filter: patient appears in today's doctor queue and reception queue (same date logic). */
+function patientQueueDateMatchesToday(p) {
+  if (!p || p.queueRemoved) return false;
+  const todayKeyLocal = localDateKey(new Date());
+  const stamps = [p.checkinAt, p.createdAt, p.seenAt].filter(Boolean);
+  if (!stamps.length) return false;
+  return stamps.some(function (raw) {
+    const s = String(raw || '');
+    if (!s) return false;
+    if (/^\d+$/.test(s)) {
+      try { return localDateKey(new Date(Number(s))) === todayKeyLocal; } catch (e) { return false; }
+    }
+    return localDateKey(s) === todayKeyLocal || s.slice(0, 10) === todayKeyLocal;
+  });
+}
 
 function filterPatientsForUser() {
   if(!CURRENT_USER) return;
@@ -13796,6 +13977,9 @@ window.printUnifiedRx = function(deptId) {
   const incPos  = isOe ? (document.getElementById('oe-inc-posfind')?.checked ?? true) : false;
   const incAdv  = isOe ? (document.getElementById('oe-inc-adv')?.checked ?? true) : (document.getElementById(deptId + '-inc-adv')?.checked ?? true);
   const incRx   = isOe ? (document.getElementById('oe-inc-rx')?.checked ?? true) : (document.getElementById(deptId + '-inc-rx')?.checked ?? true);
+  const obgIncVitals = deptId === 'obg' ? (document.getElementById('obg-inc-vitals')?.checked ?? true) : false;
+  const obgIncAnc = deptId === 'obg' ? (document.getElementById('obg-inc-anc')?.checked ?? true) : false;
+  const obgIncComplaint = deptId === 'obg' ? (document.getElementById('obg-inc-complaint')?.checked ?? true) : false;
 
   // OBG / psych / skin: always print medicines, advice, investigations & procedures (no print checkboxes in UI)
   const forceFullDeptRx = deptId === 'obg' || deptId === 'psych' || deptId === 'skin';
@@ -13812,6 +13996,7 @@ window.printUnifiedRx = function(deptId) {
   // ── Collect complaints ──
   const cc   = document.getElementById('cc-text')?.value || '';
   const ccDur = document.getElementById('dur-text')?.value || '';
+  const obgComplaint = document.getElementById('obg-main-complaint')?.value || window.CURRENT_PATIENT?.lastVisit?.mainComplaint || '';
 
   // ── Collect drugs (fallback to saved visit when UI state not restored, e.g. after reopening same day) ──
   let drugs = typeof RX_DRUGS !== 'undefined' && Array.isArray(RX_DRUGS) ? RX_DRUGS : [];
@@ -13855,6 +14040,25 @@ window.printUnifiedRx = function(deptId) {
   const subjOSva = document.getElementById('subj-os-va')?.value || window.CURRENT_PATIENT?.lastVisit?.subjOSva || '';
   const nvOD  = document.getElementById('nv-od-final')?.value || document.getElementById('ucva-od-near')?.value || window.CURRENT_PATIENT?.lastVisit?.nvODFinal || '';
   const nvOS  = document.getElementById('nv-os-final')?.value || document.getElementById('ucva-os-near')?.value || window.CURRENT_PATIENT?.lastVisit?.nvOSFinal || '';
+  const obgAncOn = deptId === 'obg' ? !!document.getElementById('obg-track-anc')?.checked : false;
+  const obgVitalsSummary = deptId === 'obg' ? [
+    ['Wt', document.getElementById('obg-vitals-weight')?.value || window.CURRENT_PATIENT?.lastVisit?.['obg-vitals-weight'] || '—'],
+    ['Ht', document.getElementById('obg-vitals-height')?.value || window.CURRENT_PATIENT?.lastVisit?.['obg-vitals-height'] || '—'],
+    ['Temp', document.getElementById('obg-vitals-temp')?.value || window.CURRENT_PATIENT?.lastVisit?.['obg-vitals-temp'] || '—'],
+    ['Pulse', document.getElementById('obg-vitals-pulse')?.value || window.CURRENT_PATIENT?.lastVisit?.['obg-vitals-pulse'] || '—'],
+    ['RR', document.getElementById('obg-vitals-rr')?.value || window.CURRENT_PATIENT?.lastVisit?.['obg-vitals-rr'] || '—'],
+    ['BP', ((document.getElementById('obg-vitals-bp-sys')?.value || window.CURRENT_PATIENT?.lastVisit?.['obg-vitals-bp-sys'] || '') + '/' + (document.getElementById('obg-vitals-bp-dia')?.value || window.CURRENT_PATIENT?.lastVisit?.['obg-vitals-bp-dia'] || '')).replace(/^\/$/, '—')],
+    ['SpO₂', document.getElementById('obg-vitals-spo2')?.value || window.CURRENT_PATIENT?.lastVisit?.['obg-vitals-spo2'] || '—'],
+    ['RBS', document.getElementById('obg-vitals-rbs')?.value || window.CURRENT_PATIENT?.lastVisit?.['obg-vitals-rbs'] || '—'],
+    ['LMP', document.getElementById('obg-lmp')?.value || window.CURRENT_PATIENT?.lastVisit?.lmp || '—']
+  ] : [];
+  const obgAncSummary = deptId === 'obg' ? {
+    gpal: document.getElementById('obg-gpal-chip')?.textContent || window.CURRENT_PATIENT?.lastVisit?.gravida || '—',
+    ga: document.getElementById('obg-ga')?.textContent || window.CURRENT_PATIENT?.lastVisit?.ga || '—',
+    edd: document.getElementById('obg-edd')?.textContent || window.CURRENT_PATIENT?.lastVisit?.edd || '—',
+    hb: document.getElementById('obg-obs-hb')?.value || '—',
+    bloodGroup: document.getElementById('obg-blood-grp')?.value || window.CURRENT_PATIENT?.lastVisit?.bloodGroup || document.getElementById('obg-obs-blood-group')?.value || '—'
+  } : null;
 
   // ── Follow-up (per-dept date field; duplicate id=rx-fu-date would otherwise read Ophtho only) ──
   let fuDate = getDeptFollowUpDateInput(deptId)?.value || '';
@@ -13953,6 +14157,9 @@ ${ptMob ? `<div class="phone-line">&#9990; ${ptMob} &nbsp;&nbsp;|&nbsp;&nbsp; BM
 ${postSurgeryRx ? `<div class="lbl-row" style="margin:4px 0 7px"><span class="lbl"></span><span class="lbl-val" style="font-weight:800;color:#1A3C6E">The medication schedule after surgery</span></div>` : ''}
 
 ${incCC && cc ? `<div class="lbl-row" style="margin-top:8px"><span class="lbl">Complaints:</span><span class="lbl-val">${cc}${ccDur?' ('+ccDur+')':''}</span></div>` : ''}
+${deptId==='obg' && obgIncComplaint && obgComplaint ? `<div class="lbl-row" style="margin-top:8px"><span class="lbl">Primary Complaint:</span><span class="lbl-val">${escapeHtmlConsent(obgComplaint)}</span></div>` : ''}
+${deptId==='obg' && obgIncVitals ? `<div class="lbl-row" style="margin-top:8px"><span class="lbl">Vitals & LMP:</span><span class="lbl-val">${obgVitalsSummary.map(function (x) { return x[0] + ' ' + x[1]; }).join(' · ')}</span></div>` : ''}
+${deptId==='obg' && obgIncAnc && obgAncOn ? `<div class="lbl-row" style="margin-top:8px"><span class="lbl">ANC:</span><span class="lbl-val">GPAL ${escapeHtmlConsent(obgAncSummary.gpal)} · GA ${escapeHtmlConsent(obgAncSummary.ga)} · EDD ${escapeHtmlConsent(obgAncSummary.edd)} · Hb ${escapeHtmlConsent(obgAncSummary.hb)} · Blood group ${escapeHtmlConsent(obgAncSummary.bloodGroup)}</span></div>` : ''}
 
 ${showVA ? `
 <div class="sec-title">Visual Acuity Test:</div>
@@ -14824,20 +15031,77 @@ function submitDeleteRequest() {
 
 // ── Advice Templates ──────────────────────────────────────────────────────────
 window.ADVICE_TEMPLATES = window.ADVICE_TEMPLATES || [];
+function refreshRxAdviceFromChips() {
+  const chips = [...document.querySelectorAll('#adv-chips .adv-chip.active')].map(function (c) { return c.textContent.trim(); });
+  const ta = document.getElementById('rx-advice-text');
+  if (!ta) return;
+  const manualText = ta.value.replace(/^• .+$/gm, '').trim();
+  ta.value = chips.map(function (c) { return '• ' + c; }).join('\n') + (manualText ? '\n' + manualText : '');
+}
 function toggleAdvChip(el) {
   const active = el.classList.toggle('active');
   if(active) { el.style.background='var(--orange)'; el.style.color='#fff'; el.style.borderColor='var(--orange)'; }
   else { el.style.background='var(--g5)'; el.style.color=''; el.style.borderColor='var(--g4)'; }
-  // Update advice textarea with all active chips
-  const chips = [...document.querySelectorAll('#adv-chips .adv-chip.active')].map(c=>c.textContent.trim());
-  const ta = document.getElementById('rx-advice-text');
-  if(ta) {
-    const existing = ta.value.split('\n').filter(l=>!document.querySelectorAll('#adv-chips .adv-chip').length||true);
-    // Only prepend chip lines
-    const manualText = ta.value.replace(/^• .+(\n|$)/gm,'').trim();
-    ta.value = chips.map(c=>'• '+c).join('\n') + (manualText ? '\n'+manualText : '');
-  }
+  refreshRxAdviceFromChips();
 }
+function removeOphAdvChipRow(btn) {
+  const row = btn.closest('.adv-chip-row');
+  if (row) row.remove();
+  refreshRxAdviceFromChips();
+}
+window.removeOphAdvChipRow = removeOphAdvChipRow;
+function wrapOphAdviceChipsWithDelete() {
+  const wrap = document.getElementById('adv-chips');
+  if (!wrap) return;
+  wrap.querySelectorAll(':scope > .adv-chip').forEach(function (chip) {
+    if (chip.closest('.adv-chip-row')) return;
+    const row = document.createElement('span');
+    row.className = 'adv-chip-row';
+    row.style.cssText = 'display:inline-flex;align-items:center;gap:2px;margin:2px';
+    chip.parentNode.insertBefore(row, chip);
+    row.appendChild(chip);
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.setAttribute('aria-label', 'Remove');
+    del.textContent = '×';
+    del.className = 'btn btn-xs btn-gray';
+    del.style.cssText = 'padding:0 4px;font-size:10px;line-height:1.1;min-width:20px';
+    del.onclick = function (e) { e.stopPropagation(); removeOphAdvChipRow(del); };
+    row.appendChild(del);
+  });
+}
+window.wrapOphAdviceChipsWithDelete = wrapOphAdviceChipsWithDelete;
+function ingestCustomAdviceLinesFromTextarea(ta) {
+  if (!ta) return;
+  const wrap = document.getElementById('adv-chips');
+  if (!wrap) return;
+  const existing = new Set([...wrap.querySelectorAll('.adv-chip')].map(function (c) { return c.textContent.trim().toLowerCase(); }));
+  (ta.value || '').split('\n').forEach(function (line) {
+    if (!/^\s*•\s*\S/.test(line)) return;
+    const t = line.replace(/^\s*•\s*/, '').trim();
+    if (t.length < 3 || existing.has(t.toLowerCase())) return;
+    const chip = document.createElement('span');
+    chip.className = 'adv-chip active';
+    chip.onclick = function () { toggleAdvChip(chip); };
+    chip.style.cssText = 'font-size:10px;padding:3px 8px;border-radius:10px;background:var(--orange);color:#fff;border:1px solid var(--orange);cursor:pointer;user-select:none';
+    chip.textContent = t;
+    const row = document.createElement('span');
+    row.className = 'adv-chip-row';
+    row.style.cssText = 'display:inline-flex;align-items:center;gap:2px;margin:2px';
+    row.appendChild(chip);
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.textContent = '×';
+    del.className = 'btn btn-xs btn-gray';
+    del.style.cssText = 'padding:0 4px;font-size:10px;line-height:1.1';
+    del.onclick = function (e) { e.stopPropagation(); removeOphAdvChipRow(del); };
+    row.appendChild(del);
+    wrap.appendChild(row);
+    existing.add(t.toLowerCase());
+  });
+  refreshRxAdviceFromChips();
+}
+window.ingestCustomAdviceLinesFromTextarea = ingestCustomAdviceLinesFromTextarea;
 function openSaveAdviceTemplate() {
   const ta = document.getElementById('rx-advice-text');
   const text = ta?.value?.trim(); if(!text) { showToast('Nothing to save — type advice first','w'); return; }
@@ -15381,11 +15645,150 @@ function buildDischargePrintHtml(sel) {
   if (!section) return '';
   return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111}@page{size:A4;margin:0}.page{padding:10mm 12mm 9mm}.title{font-size:15px;font-weight:900;color:#1A3C6E;text-align:center;margin:8px 0 10px}.label{font-size:9px;font-weight:800;color:#555;text-transform:uppercase}.val{font-size:11.5px;font-weight:800;color:#111}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px 14px}.box{border:1px solid #d7dce5;border-radius:8px;padding:8px 10px}.sec{margin-top:10px}.sec-h{font-size:10px;font-weight:900;color:#1A3C6E;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}.summary{font-size:11.2px;line-height:1.75;border:1px solid #d7dce5;border-radius:8px;padding:10px 12px;min-height:124px}table{width:100%;border-collapse:collapse}.th{background:#eef3fb;color:#1A3C6E;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.4px}.sign{display:flex;justify-content:space-between;gap:16px;margin-top:14px}.sign>div{flex:1;text-align:center}.line{border-bottom:1px solid #222;height:32px;margin-bottom:4px}.small{font-size:9.5px;color:#555}</style></head><body>' + section + '</body></html>';
 }
+function collectDischargeCardSnapshotFromDom() {
+  const instr = [];
+  document.querySelectorAll('#dc-instructions-list .dc-instr-row [contenteditable]').forEach(function (el) {
+    const t = String(el.textContent || '').trim();
+    if (t) instr.push(t);
+  });
+  const fus = [];
+  document.querySelectorAll('#dc-followup-list [contenteditable]').forEach(function (el) {
+    const t = String(el.textContent || '').trim();
+    if (t) fus.push(t);
+  });
+  const medicines = [];
+  document.querySelectorAll('#dc-medicine-list .dc-med-row').forEach(function (row) {
+    const nameEl = row.querySelector('div[contenteditable]');
+    const noteEls = row.querySelectorAll('div[contenteditable]');
+    const medName = nameEl ? String(nameEl.textContent || '').trim() : '';
+    const noteText = noteEls[1] ? String(noteEls[1].textContent || '').trim() : '';
+    const local = noteEls[2] ? String(noteEls[2].textContent || '').trim() : '';
+    const fromEl = row.querySelector('.dc-med-from');
+    const toEl = row.querySelector('.dc-med-to');
+    const selFreq = row.querySelector('select');
+    const durSel = row.querySelector('.dc-med-duration');
+    const freq = selFreq ? selFreq.value : '';
+    const duration = durSel ? durSel.value : '';
+    const activeTimes = Array.from(row.querySelectorAll('.drop-time.active')).map(function (t) { return String(t.textContent || '').trim(); });
+    medicines.push({
+      name: medName,
+      note: noteText,
+      local: local,
+      freq: freq,
+      duration: duration,
+      fromDate: fromEl ? fromEl.value : '',
+      toDate: toEl ? toEl.value : '',
+      activeTimes: activeTimes,
+      isTaper: /taper/i.test(noteText)
+    });
+  });
+  return { capturedAt: new Date().toISOString(), instructions: instr, followups: fus, medicines: medicines };
+}
+function persistOphDischargeSnapshotToOtCase() {
+  const snap = collectDischargeCardSnapshotFromDom();
+  const ptId = document.getElementById('dc-pt-id')?.textContent?.trim();
+  if (!ptId || ptId === '—') return;
+  const today = new Date().toISOString().split('T')[0];
+  let rawCase = OT_CASES.find(function (c) {
+    const oc = normalizeOTCaseRecord(c);
+    return oc.bmhId === ptId && String(oc.date || '').slice(0, 10) === today && (oc.status === 'pending' || oc.status === 'in-progress');
+  });
+  if (!rawCase) {
+    rawCase = OT_CASES.slice().reverse().map(normalizeOTCaseRecord).find(function (c) {
+      return c.bmhId === ptId && (c.caseKind === 'ophtho' || !c.caseKind || c.caseKind !== 'obg');
+    });
+  }
+  if (!rawCase || !rawCase.id) return;
+  const idx = OT_CASES.findIndex(function (c) { return c.id === rawCase.id; });
+  if (idx < 0) return;
+  OT_CASES[idx].ophDischargeSnapshot = snap;
+  fbUpdate && fbUpdate('otCases/' + rawCase.id, { ophDischargeSnapshot: snap }).catch(function () {});
+}
+function followupLineToDateOnly(line) {
+  const s = String(line || '').trim();
+  if (!s) return '—';
+  const m = s.match(/(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{4}-\d{2}-\d{2})/);
+  if (m) return m[1];
+  const parts = s.split(':');
+  if (parts.length > 1) return parts.slice(1).join(':').trim() || s;
+  return s;
+}
+function buildOphthoDischargeA4LayoutPrintHtml(snap, data, colorPrint) {
+  const esc = escapeHtmlConsent;
+  const blue = colorPrint ? '#1A3C6E' : '#333';
+  const gold = colorPrint ? '#D4A017' : '#666';
+  const ptNm = data.ptNm || '—';
+  const ptId = data.ptId || '—';
+  const ptObj = data.ptObj || {};
+  const ot = data.lastOtCase || {};
+  const instr = (snap && snap.instructions && snap.instructions.length) ? snap.instructions : [];
+  const fus = (snap && snap.followups && snap.followups.length) ? snap.followups : [];
+  const meds = (snap && snap.medicines && snap.medicines.length) ? snap.medicines : [];
+  const TIMES = ['12am','6am','8am','10am','12pm','2pm','4pm','6pm','8pm','10pm'];
+  const medRows = meds.filter(function (m) { return !m.isTaper; }).slice(0, 4);
+  const taperRows = meds.filter(function (m) { return m.isTaper; }).slice(0, 4);
+  const gridHtml = function (rows, title) {
+    if (!rows.length) return '';
+    const head = TIMES.map(function (t) {
+      return '<th style="border:1px solid #bbb;padding:3px 2px;font-size:7px;font-weight:800;background:#eef3fb">' + esc(t) + '</th>';
+    }).join('');
+    const body = rows.map(function (row, ri) {
+      const name = esc(String(row.name || 'Medicine').slice(0, 42));
+      const cells = TIMES.map(function (t) {
+        const on = (row.activeTimes || []).indexOf(t) >= 0;
+        return '<td style="border:1px solid #ccc;text-align:center;font-size:11px;font-weight:900;padding:4px 2px;background:' + (on ? blue : '#fff') + ';color:' + (on ? '#fff' : '#333') + '">' + (on ? '●' : '') + '</td>';
+      }).join('');
+      const dr = (row.fromDate && row.toDate) ? (esc(row.fromDate) + ' → ' + esc(row.toDate)) : '—';
+      return '<tr><td style="border:1px solid #bbb;padding:4px;font-size:8.5px;font-weight:800;max-width:120px">' + name + '</td>' + cells + '<td style="border:1px solid #bbb;padding:4px;font-size:7px;white-space:nowrap">' + dr + '</td></tr>';
+    }).join('');
+    return '<div style="margin-top:6px"><div style="font-size:9px;font-weight:900;color:' + blue + ';margin-bottom:4px">' + esc(title) + '</div>'
+      + '<table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:8px"><thead><tr><th style="border:1px solid #bbb;padding:3px;font-size:7px;background:#f5f5f5">Medicine</th>' + head + '<th style="border:1px solid #bbb;padding:3px;font-size:7px;background:#f5f5f5;width:78px">Dates</th></tr></thead><tbody>' + body + '</tbody></table></div>';
+  };
+  const fuHtml = fus.length
+    ? '<div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;padding:6px 8px;border:1px dashed ' + gold + ';border-radius:6px;font-size:10px;font-weight:800;color:' + blue + '">'
+    + fus.map(function (f) { return '<span>' + esc(followupLineToDateOnly(f)) + '</span>'; }).join('<span style="color:#bbb">·</span>')
+    + '</div>'
+    : '';
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>@page{size:A4 portrait;margin:6mm}body{font-family:Arial,sans-serif;color:#111;margin:0;padding:0;font-size:10px}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>'
+    + '<div style="border:1px solid #aaa;border-radius:8px;overflow:hidden">'
+    + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;background:' + blue + ';color:#fff;padding:8px 10px">'
+    + '<div><div style="font-size:10px;opacity:.85">Discharge Card</div><div style="font-size:9px;opacity:.75">Baweja Multispeciality Hospital</div></div>'
+    + '<div style="text-align:right"><div style="font-size:12px;font-weight:900;color:' + gold + '">' + esc(ptId) + '</div><div style="font-size:9px;opacity:.85">Date: ' + esc(formatDateIN(new Date())) + '</div></div></div>'
+    + '<div style="display:grid;grid-template-columns:1.1fr 0.65fr;gap:0;min-height:118mm">'
+    + '<div style="border-right:1px solid #ddd;padding:10px 12px;font-size:11px">'
+    + '<div style="font-size:10px;font-weight:900;color:' + blue + ';border-bottom:2px solid ' + gold + ';margin-bottom:8px;padding-bottom:4px">Patient &amp; surgery</div>'
+    + '<div style="font-size:14px;font-weight:900;margin-bottom:6px">' + esc(ptNm) + '</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;font-size:11px;line-height:1.35">'
+    + '<div><span style="font-size:8px;color:#666;text-transform:uppercase">Age / Sex</span><br>' + esc((ptObj.age || '—') + ' / ' + (ptObj.sex || '—')) + '</div>'
+    + '<div><span style="font-size:8px;color:#666;text-transform:uppercase">Mobile</span><br>' + esc(ptObj.mob || '—') + '</div>'
+    + '<div style="grid-column:1/-1"><span style="font-size:8px;color:#666;text-transform:uppercase">Procedure / Dx</span><br>' + esc([ot.dx || data.diagnosis || '', ot.procedure || data.procedureName || ''].filter(Boolean).join(' · ') || '—') + '</div>'
+    + '<div><span style="font-size:8px;color:#666;text-transform:uppercase">OT / Eye</span><br>' + esc([ot.date ? formatDateIN(ot.date) : '', ot.site || ot.eye || ''].filter(Boolean).join(' · ') || '—') + '</div>'
+    + '<div><span style="font-size:8px;color:#666;text-transform:uppercase">IOL</span><br>' + esc([ot.iolType, ot.iolPower].filter(Boolean).join(' / ') || '—') + '</div>'
+    + '<div style="grid-column:1/-1"><span style="font-size:8px;color:#666;text-transform:uppercase">Surgeon</span><br>' + esc(ot.surgeon || ptObj.doctor || CURRENT_USER?.name || '—') + '</div>'
+    + '</div></div>'
+    + '<div style="padding:8px 10px;font-size:9px;background:#fffaf0">'
+    + '<div style="font-size:9px;font-weight:900;color:' + blue + ';margin-bottom:6px">Instructions</div>'
+    + '<div style="line-height:1.35;color:#5a3000">' + (instr.length ? instr.map(function (x) { return '<div style="margin-bottom:4px">• ' + esc(x) + '</div>'; }).join('') : '<div style="color:#888">—</div>') + '</div>'
+    + '</div></div>'
+    + '<div style="padding:4px 10px 8px">' + fuHtml + '</div>'
+    + '<div style="padding:8px 10px 8px;border-top:1px solid #eee">'
+    + gridHtml(medRows, 'Medication schedule (mark drops/tablet in time slot)')
+    + (taperRows.length ? gridHtml(taperRows, 'Taper steps') : '')
+    + '</div>'
+    + '<div style="display:flex;justify-content:space-between;padding:8px 12px;border-top:1px solid #ddd;font-size:8px;color:#555"><div>Patient signature</div><div>' + esc(CURRENT_USER?.name || 'Doctor') + '</div></div>'
+    + '</div></body></html>';
+}
 function buildDischargeCardPrintHtml() {
-  renderDischargeBuilder();
+  const sel = document.getElementById('dc-specialty-sel')?.value || 'ophtho';
+  const colorPrint = !!document.getElementById('dc-color-print')?.checked;
+  if (sel === 'ophtho') {
+    const snap = collectDischargeCardSnapshotFromDom();
+    const data = getDischargePrintData('ophtho');
+    const custom = buildOphthoDischargeA4LayoutPrintHtml(snap, data, colorPrint);
+    if (custom) return custom;
+  }
   const card = document.getElementById('discharge-card');
   if (!card) return '';
-  const colorPrint = !!document.getElementById('dc-color-print')?.checked;
   const clone = card.cloneNode(true);
   const summaryText = clone.querySelector('#dc-summary-text');
   if (summaryText) {
@@ -15439,7 +15842,11 @@ function renderDischargeBuilder() {
   const ptNm = data.ptNm;
   const tmpl = data.tmpl;
   const dischargeTemplateInstructions = getDischargeInstructionTemplateRows(sel);
-  const activeInstructions = dischargeTemplateInstructions.length ? dischargeTemplateInstructions : tmpl.instructions;
+  let activeInstructions = dischargeTemplateInstructions.length ? dischargeTemplateInstructions : tmpl.instructions;
+  const ophSnap = (sel === 'ophtho' && data.lastOtCase && data.lastOtCase.ophDischargeSnapshot) ? data.lastOtCase.ophDischargeSnapshot : null;
+  if (ophSnap && Array.isArray(ophSnap.instructions) && ophSnap.instructions.length) {
+    activeInstructions = ophSnap.instructions;
+  }
 
   document.getElementById('dc-pt-name').textContent = ptNm;
   document.getElementById('dc-pt-id').textContent   = ptId;
@@ -15493,11 +15900,13 @@ function renderDischargeBuilder() {
       class="btn btn-xs btn-outline">+ Add Instruction</button>`;
   }
 
-  // Medicines — prefer live RX_DRUGS, fallback to template
+  // Medicines — prefer live RX_DRUGS, fallback to template; ophtho OT snapshot overrides
   const medEl = document.getElementById('dc-medicine-list');
   if(medEl) {
     let meds;
-    if(data.lastRxData && data.lastRxData.length) {
+    if (sel === 'ophtho' && ophSnap && Array.isArray(ophSnap.medicines) && ophSnap.medicines.length) {
+      meds = ophSnap.medicines.map(function (m, i) { return renderDcMedRow(m, i, tmpl.color, data.dischargeDate); });
+    } else if(data.lastRxData && data.lastRxData.length) {
       meds = flattenDischargeRxRows(data.lastRxData).map((d,i)=>renderDcMedRow({
         name: (rxDrugTradeName(d) || d.name || d.brand || '') + ((rxDrugGenericName(d) && rxDrugGenericName(d)!==rxDrugTradeName(d)) ? ' ('+rxDrugGenericName(d)+')' : ''),
         note: d._taperStep ? ('Taper step ' + d._taperStep) : '',
@@ -15515,13 +15924,15 @@ function renderDischargeBuilder() {
   const fuEl = document.getElementById('dc-followup-list');
   if(fuEl) {
     const fuDateVal = document.getElementById('rx-fu-date')?.value;
-    let followupList = (data.followups && data.followups.length)
+    let followupList = (ophSnap && Array.isArray(ophSnap.followups) && ophSnap.followups.length)
+      ? ophSnap.followups.slice()
+      : (data.followups && data.followups.length)
       ? data.followups.map(function (f) {
           const dt = f?.date ? formatDateIN(f.date) : (f?.dateLabel || '');
           return (f?.label || 'Follow-up') + (dt ? ': ' + dt : '') + (f?.time ? ' · ' + f.time : '');
         })
       : [...tmpl.followup];
-    if(fuDateVal && !(data.followups && data.followups.length)) {
+    if(fuDateVal && !(data.followups && data.followups.length) && !(ophSnap && ophSnap.followups && ophSnap.followups.length)) {
       const fuFormatted = formatDateIN(fuDateVal);
       followupList = ['Review: ' + fuFormatted, ...followupList.slice(1)];
     }
@@ -15568,13 +15979,14 @@ function renderDischargeBuilder() {
 function renderDcMedRow(m,i,color,defaultFromDate) {
   const TIMES = ['12am','6am','8am','10am','12pm','2pm','4pm','6pm','8pm','10pm'];
   const freq = String(m.freq || '').toLowerCase();
-  const activeTimes = /every hour|hourly/.test(freq) ? TIMES
+  const fromSnap = Array.isArray(m.activeTimes) && m.activeTimes.length ? m.activeTimes : null;
+  const activeTimes = fromSnap || (/every hour|hourly/.test(freq) ? TIMES
     : /6 times|6x/.test(freq) ? ['6am','10am','2pm','6pm','8pm','10pm']
     : /4 times|qid/.test(freq) ? ['6am','12pm','6pm','10pm']
     : /3 times|tds/.test(freq) ? ['8am','2pm','8pm']
     : /twice|bd/.test(freq) ? ['8am','8pm']
     : /bedtime|hs/.test(freq) ? ['10pm']
-    : ['8am'];
+    : ['8am']);
   const fromDate = formatDischargeDateInput(m.fromDate || defaultFromDate || new Date());
   const toDate = formatDischargeDateInput(m.toDate || deriveDischargeToDate(fromDate, m.duration));
   const taperOnly = !!m.isTaper;
@@ -17822,15 +18234,9 @@ function renderAdminDashboardDetail(selectedDate, selectedTxn, overduePts, surge
 
 // ── Today’s reception queue (dept filter, no sub-tab) ─────────
 function getReceptionBasePts() {
-  const today = new Date().toISOString().slice(0,10);
-  const isToday0 = (p) => {
-    if(!p.createdAt && !p.checkinAt) return true;
-    if(p.createdAt?.startsWith(today)) return true;
-    if(p.checkinAt && new Date(p.checkinAt).toISOString().startsWith(today)) return true;
-    if(p.preRegistered) return true;
-    return false;
-  };
-  let pts = PATIENTS.filter(p => (p.status==='waiting'||p.status==='pre-registered'||p.seen||p.dilated) && isToday0(p) && centreMatch(p));
+  let pts = PATIENTS.filter(function (p) {
+    return (p.status === 'waiting' || p.status === 'pre-registered' || p.seen || p.dilated) && patientQueueDateMatchesToday(p) && centreMatch(p);
+  });
   const df = window._rcDeptFilter || 'all';
   if(df !== 'all') pts = pts.filter(p=>p.dept===df);
   return pts;
@@ -18267,6 +18673,7 @@ function buildQTableRow(p, sno, opts) {
         ? `<button type="button" title="Check In" style="background:var(--blue);color:#fff;border:none;border-radius:5px;padding:3px 8px;font-size:9px;font-weight:800;cursor:pointer" onclick="checkInPatient('${p.bmhId}')">Check in</button>`
         : `${!p.seen?`<button type="button" title="Seen" style="background:var(--green);color:#fff;border:none;border-radius:5px;padding:3px 6px;font-size:9px;font-weight:800;cursor:pointer" onclick="markSeen('${p.bmhId}')">✓</button>`:''}
       ${isOphtho&&!p.dilated&&!p.seen?`<button type="button" title="Dilate" style="background:var(--blue-lt);color:var(--blue);border:1.5px solid var(--blue);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="markDilated('${p.bmhId}','${nmEsc}')">💧</button>`:''}
+      ${receptionQueue ? `<button type="button" title="Restore to doctor queue" style="background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1.5px solid var(--bmh-blue);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="event.stopPropagation();restorePatientToDoctorQueue('${p.bmhId}')">↩</button>` : ''}
       <button type="button" title="Cross-ref" style="background:rgba(11,123,140,.1);color:var(--teal);border:1.5px solid var(--teal);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="openXRefModal('${p.bmhId}')">↔️</button>
       <button type="button" title="IPD" style="background:rgba(175,82,222,.1);color:var(--purple);border:1.5px solid var(--purple);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="openIPDFromQueue('${p.bmhId}')">🛏️</button>
       <button type="button" title="OT" style="background:rgba(255,149,0,.1);color:var(--orange);border:1.5px solid var(--orange);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="openOTFromQueue('${p.bmhId}')">🔬</button>
@@ -18289,6 +18696,23 @@ function markSeen(bmhId) {
   renderReceptionPage && renderReceptionPage();
   renderDashboard && renderDashboard();
 }
+/** Reception: restore a patient to the doctor queue if they were missing (re-check-in, clear removal flag). */
+function restorePatientToDoctorQueue(bmhId) {
+  const p = PATIENTS.find(function (x) { return x.bmhId === bmhId; });
+  if (!p) { showToast('Patient not found', 'w'); return; }
+  p.queueRemoved = false;
+  p.status = (p.status === 'removed' || !p.status) ? 'waiting' : p.status;
+  if (p.status === 'seen') p.status = 'waiting';
+  p.seen = false;
+  p.checkinAt = Date.now();
+  const patch = { queueRemoved: false, status: p.status, seen: false, checkinAt: p.checkinAt };
+  fbUpdate && fbUpdate('patients/' + bmhId, patch).catch(function () {});
+  showToast('Patient sent back to doctor queue ✓', 's');
+  renderDocQueue && renderDocQueue();
+  renderReceptionPage && renderReceptionPage();
+  renderDashboard && renderDashboard();
+}
+window.restorePatientToDoctorQueue = restorePatientToDoctorQueue;
 function markCurrentPatientSeen() {
   const ids = ['ophtho-pt-uid','obg-pt-uid','psych-pt-uid','skin-pt-uid'];
   const bmhId = (window.CURRENT_PATIENT?.bmhId || ids.map(function (id) { return document.getElementById(id)?.textContent?.trim(); }).find(Boolean) || '').trim();
@@ -18477,32 +18901,16 @@ function renderDocQueue() {
   const titleEl = document.getElementById('dq-title');
   if (titleEl) titleEl.textContent = `${queueDoctor} — My Patients`;
   const searchQ = String(document.getElementById('dq-search')?.value || '').trim().toLowerCase();
-  const todayKeyLocal = localDateKey(new Date());
-  const isTodayQueuePatient = function (p) {
-    if (!p) return false;
-    if (p.queueRemoved) return false;
-    const stamps = [p.checkinAt, p.createdAt, p.seenAt].filter(Boolean);
-    if (!stamps.length) return false;
-    return stamps.some(function (raw) {
-      const s = String(raw || '');
-      if (!s) return false;
-      if (/^\d+$/.test(s)) {
-        try { return localDateKey(new Date(Number(s))) === todayKeyLocal; } catch (e) { return false; }
-      }
-      return localDateKey(s) === todayKeyLocal || s.slice(0, 10) === todayKeyLocal;
-    });
-  };
-
   // Filter: admin/reception sees all; doctor sees own dept (and optionally own name)
   const validStatuses = p => p.status==='waiting'||p.status==='seen'||p.status==='pre-registered'||p.dilated;
   const myPts = (() => {
     if (CURRENT_USER?.isAdmin || CURRENT_USER?.role === 'Reception') {
-      return PATIENTS.filter(p => validStatuses(p) && centreMatch(p) && isTodayQueuePatient(p));
+      return PATIENTS.filter(p => validStatuses(p) && centreMatch(p) && patientQueueDateMatchesToday(p));
     }
     const deptPts = PATIENTS.filter(p => {
       const ptDept = normalizeDeptKeyForQueue(p.dept || p.department || '');
       const deptMatch = !userDept || ptDept === userDept || (!ptDept && userDept === 'ophtho');
-      return deptMatch && validStatuses(p) && centreMatch(p) && isTodayQueuePatient(p);
+      return deptMatch && validStatuses(p) && centreMatch(p) && patientQueueDateMatchesToday(p);
     });
     const matchedPts = deptPts.filter(function (p) {
       if (!p.doctor) return true;
@@ -18639,9 +19047,11 @@ function saveVisit(dept) {
     visit.rfODsph  = document.getElementById('rf-od-sph2')?.value || '';
     visit.rfODcyl  = document.getElementById('rf-od-cyl2')?.value || '';
     visit.rfODax   = document.getElementById('rf-od-ax2')?.value  || '';
+    visit.rfODaddSpec = document.getElementById('rf-od-add-spec')?.value || '';
     visit.rfOSsph  = document.getElementById('rf-os-sph2')?.value || '';
     visit.rfOScyl  = document.getElementById('rf-os-cyl2')?.value || '';
     visit.rfOSax   = document.getElementById('rf-os-ax2')?.value  || '';
+    visit.rfOSaddSpec = document.getElementById('rf-os-add-spec')?.value || '';
     visit.cycODsph = document.getElementById('cyc-od-sph')?.value || '';
     visit.cycODcyl = document.getElementById('cyc-od-cyl')?.value || '';
     visit.cycODax  = document.getElementById('cyc-od-ax')?.value  || '';
@@ -18693,7 +19103,7 @@ function saveVisit(dept) {
     visit.positiveFindings = buildOphthoPositiveFindingsList().join('; ');
     visit.procedures = [...document.querySelectorAll('#rx-proc-advised [data-proc]')].map(e=>e.dataset.proc).filter(Boolean);
     const ccRows = [];
-    document.querySelectorAll('.cc-row').forEach(row=>{
+    document.querySelectorAll('#pg-ophtho #cc-rows .cc-row').forEach(row=>{
       const txt = row.querySelector('.cc-inp')?.value?.trim();
       if(txt) ccRows.push({text:txt, dur:row.querySelector('.cc-dur')?.value||'', eye:row.querySelector('.cc-eye')?.value||''});
     });
@@ -18780,6 +19190,7 @@ function saveVisit(dept) {
     visit.nextReview = obgVal('obg-next-review');
     visit.followupPlan = obgVal('obg-followup-plan');
     visit.investigationChecklist = [...document.querySelectorAll('.obg-lab:checked')].map(x => x.value);
+    OBG_VITAL_FIELD_IDS.forEach(function (id) { visit[id] = obgVal(id); });
     OBG_OBS_FIELD_IDS.forEach(id => { visit[id] = obgVal(id); });
     visit.obgObsComplications = [...document.querySelectorAll('.obg-obs-complication:checked')].map(x => x.value);
     visit.obgPregnancies = JSON.parse(JSON.stringify((window.OBG_PREGNANCIES || []).filter(entry => hasObgPregnancyEntryData(entry))));
