@@ -858,7 +858,7 @@
               <tr>
                 <th rowspan="2" style="padding:5px 7px;border:1px solid var(--g4)">Eye</th>
                 <th colspan="2" style="padding:5px 7px;border:1px solid var(--g4);background:#dceeff;color:var(--blue)">UCVA</th>
-                <th colspan="3" style="padding:5px 7px;border:1px solid var(--g4);background:#e8f5e9;color:#1a7a4a">Current Spectacles</th>
+                <th colspan="4" style="padding:5px 7px;border:1px solid var(--g4);background:#e8f5e9;color:#1a7a4a">Current Spectacles</th>
                 <th colspan="3" style="padding:5px 7px;border:1px solid var(--g4);background:var(--purple-lt);color:var(--purple)">Cycloplegic / AR</th>
                 <th colspan="4" style="padding:5px 7px;border:1px solid var(--g4);background:var(--orange-lt);color:#8a4200">Subjective</th>
                 <th style="padding:5px 7px;border:1px solid var(--g4)">Add</th>
@@ -866,7 +866,7 @@
               </tr>
               <tr>
                 <th style="border:1px solid var(--g4);padding:3px 5px;background:#dceeff">Dist</th><th style="border:1px solid var(--g4);padding:3px 5px;background:#dceeff;font-size:8px">Near</th>
-                <th style="border:1px solid var(--g4);padding:3px 5px;background:#e8f5e9">Sph</th><th style="border:1px solid var(--g4);padding:3px 5px;background:#e8f5e9">Cyl</th><th style="border:1px solid var(--g4);padding:3px 5px;background:#e8f5e9">Axis</th>
+                <th style="border:1px solid var(--g4);padding:3px 5px;background:#e8f5e9">Sph</th><th style="border:1px solid var(--g4);padding:3px 5px;background:#e8f5e9">Cyl</th><th style="border:1px solid var(--g4);padding:3px 5px;background:#e8f5e9">Axis</th><th style="border:1px solid var(--g4);padding:3px 5px;background:#e8f5e9;font-size:8px">Add</th>
                 <th style="border:1px solid var(--g4);padding:3px 5px">Sph</th><th style="border:1px solid var(--g4);padding:3px 5px">Cyl</th><th style="border:1px solid var(--g4);padding:3px 5px">Axis</th>
                 <th style="border:1px solid var(--g4);padding:3px 5px">Sph</th><th style="border:1px solid var(--g4);padding:3px 5px">Cyl</th><th style="border:1px solid var(--g4);padding:3px 5px">Axis</th><th style="border:1px solid var(--g4);padding:3px 5px">VA</th>
                 <th style="border:1px solid var(--g4);padding:3px 5px"></th>
@@ -878,15 +878,16 @@
                 <td style="font-weight:900;background:#e8f0fe;border:1px solid var(--g4);padding:4px 7px">OD</td>
                 <td style="border:1px solid var(--g4)"><select id="ucva-od-dist" style="width:58px;font-size:10px;padding:2px 2px;border:none;background:transparent"><option value="">—</option><option>6/6</option><option>6/6p</option><option>6/9</option><option>6/9p</option><option>6/12</option><option>6/12p</option><option>6/18</option><option>6/18p</option><option>6/24</option><option>6/24p</option><option>6/36</option><option>6/36p</option><option>6/60</option><option>6/60p</option><option>5/60</option><option>4/60</option><option>3/60</option><option>2/60</option><option>1/60</option><option>CF</option><option>HM</option><option>PL</option><option>NPL</option></select></td>
                 <td style="border:1px solid var(--g4)"><select id="ucva-od-near" style="width:50px;font-size:10px;padding:2px 2px;border:none;background:transparent"><option>—</option><option>N5</option><option>N6</option><option>N8</option><option>N10</option><option>N12</option><option>N18</option><option>N24</option><option>N36</option></select></td>
-                <td style="border:1px solid var(--g4)"><select id="rf-od-sph2" style="width:65px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-sph-sel"></select></td>
-                <td style="border:1px solid var(--g4)"><select id="rf-od-cyl2" style="width:65px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-cyl-sel"></select></td>
-                <td style="border:1px solid var(--g4)"><select id="rf-od-ax2" style="width:58px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-ax-sel"></select></td>
-                <td style="border:1px solid var(--g4)"><select id="cyc-od-sph" style="width:65px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-sph-sel"></select></td>
-                <td style="border:1px solid var(--g4)"><select id="cyc-od-cyl" style="width:65px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-cyl-sel"></select></td>
-                <td style="border:1px solid var(--g4)"><select id="cyc-od-ax" style="width:58px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-ax-sel"></select></td>
-                <td style="border:1px solid var(--g4)"><select id="subj-od-sph" style="width:65px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-sph-sel"></select></td>
-                <td style="border:1px solid var(--g4)"><select id="subj-od-cyl" style="width:65px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-cyl-sel"></select></td>
-                <td style="border:1px solid var(--g4)"><select id="subj-od-ax" style="width:58px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-ax-sel"></select></td>
+                <td style="border:1px solid var(--g4)"><input list="dl-rf-sph" id="rf-od-sph2" style="width:62px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-sph-inp" autocomplete="off"></td>
+                <td style="border:1px solid var(--g4)"><input list="dl-rf-cyl" id="rf-od-cyl2" style="width:62px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-cyl-inp" autocomplete="off"></td>
+                <td style="border:1px solid var(--g4)"><input list="dl-rf-ax" id="rf-od-ax2" style="width:54px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-ax-inp" autocomplete="off"></td>
+                <td style="border:1px solid var(--g4)"><input list="dl-rf-addspec" id="rf-od-add-spec" style="width:48px;font-size:10px;padding:2px 2px;border:none;background:transparent" placeholder="Add" autocomplete="off"></td>
+                <td style="border:1px solid var(--g4)"><input list="dl-rf-sph" id="cyc-od-sph" style="width:62px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-sph-inp" autocomplete="off"></td>
+                <td style="border:1px solid var(--g4)"><input list="dl-rf-cyl" id="cyc-od-cyl" style="width:62px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-cyl-inp" autocomplete="off"></td>
+                <td style="border:1px solid var(--g4)"><input list="dl-rf-ax" id="cyc-od-ax" style="width:54px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-ax-inp" autocomplete="off"></td>
+                <td style="border:1px solid var(--g4)"><input list="dl-rf-sph" id="subj-od-sph" style="width:62px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-sph-inp" autocomplete="off"></td>
+                <td style="border:1px solid var(--g4)"><input list="dl-rf-cyl" id="subj-od-cyl" style="width:62px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-cyl-inp" autocomplete="off"></td>
+                <td style="border:1px solid var(--g4)"><input list="dl-rf-ax" id="subj-od-ax" style="width:54px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-ax-inp" autocomplete="off"></td>
                 <td style="border:1px solid var(--g4)"><select id="subj-od-va" style="width:58px;font-size:10px;padding:2px 2px;border:none;background:transparent"><option value="">—</option><option>6/6</option><option>6/6p</option><option>6/9</option><option>6/9p</option><option>6/12</option><option>6/12p</option><option>6/18</option><option>6/18p</option><option>6/24</option><option>6/24p</option><option>6/36</option><option>6/36p</option><option>6/60</option><option>6/60p</option><option>5/60</option><option>4/60</option><option>3/60</option><option>2/60</option><option>1/60</option><option>CF</option><option>HM</option><option>PL</option><option>NPL</option><option>NI</option></select></td>
                 <td style="border:1px solid var(--g4)"><select id="rf-od-add" style="width:55px;font-size:10px;padding:2px 2px;border:none;background:transparent"><option>—</option><option>+1.00</option><option>+1.25</option><option>+1.50</option><option>+1.75</option><option>+2.00</option><option>+2.25</option><option>+2.50</option><option>+2.75</option><option>+3.00</option></select></td>
                 <td style="border:1px solid var(--g4)"><select id="nv-od-final" style="width:50px;font-size:10px;padding:2px 2px;border:none;background:transparent"><option>—</option><option>N5</option><option>N6</option><option>N8</option><option>N10</option><option>N12</option><option>N18</option><option>N24</option><option>N36</option></select></td>
@@ -895,21 +896,26 @@
                 <td style="font-weight:900;background:#e8f5e9;border:1px solid var(--g4);padding:4px 7px">OS</td>
                 <td style="border:1px solid var(--g4)"><select id="ucva-os-dist" style="width:58px;font-size:10px;padding:2px 2px;border:none;background:transparent"><option value="">—</option><option>6/6</option><option>6/6p</option><option>6/9</option><option>6/9p</option><option>6/12</option><option>6/12p</option><option>6/18</option><option>6/18p</option><option>6/24</option><option>6/24p</option><option>6/36</option><option>6/36p</option><option>6/60</option><option>6/60p</option><option>5/60</option><option>4/60</option><option>3/60</option><option>2/60</option><option>1/60</option><option>CF</option><option>HM</option><option>PL</option><option>NPL</option></select></td>
                 <td style="border:1px solid var(--g4)"><select id="ucva-os-near" style="width:50px;font-size:10px;padding:2px 2px;border:none;background:transparent"><option>—</option><option>N5</option><option>N6</option><option>N8</option><option>N10</option><option>N12</option><option>N18</option><option>N24</option><option>N36</option></select></td>
-                <td style="border:1px solid var(--g4)"><select id="rf-os-sph2" style="width:65px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-sph-sel"></select></td>
-                <td style="border:1px solid var(--g4)"><select id="rf-os-cyl2" style="width:65px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-cyl-sel"></select></td>
-                <td style="border:1px solid var(--g4)"><select id="rf-os-ax2" style="width:58px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-ax-sel"></select></td>
-                <td style="border:1px solid var(--g4)"><select id="cyc-os-sph" style="width:65px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-sph-sel"></select></td>
-                <td style="border:1px solid var(--g4)"><select id="cyc-os-cyl" style="width:65px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-cyl-sel"></select></td>
-                <td style="border:1px solid var(--g4)"><select id="cyc-os-ax" style="width:58px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-ax-sel"></select></td>
-                <td style="border:1px solid var(--g4)"><select id="subj-os-sph" style="width:65px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-sph-sel"></select></td>
-                <td style="border:1px solid var(--g4)"><select id="subj-os-cyl" style="width:65px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-cyl-sel"></select></td>
-                <td style="border:1px solid var(--g4)"><select id="subj-os-ax" style="width:58px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-ax-sel"></select></td>
+                <td style="border:1px solid var(--g4)"><input list="dl-rf-sph" id="rf-os-sph2" style="width:62px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-sph-inp" autocomplete="off"></td>
+                <td style="border:1px solid var(--g4)"><input list="dl-rf-cyl" id="rf-os-cyl2" style="width:62px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-cyl-inp" autocomplete="off"></td>
+                <td style="border:1px solid var(--g4)"><input list="dl-rf-ax" id="rf-os-ax2" style="width:54px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-ax-inp" autocomplete="off"></td>
+                <td style="border:1px solid var(--g4)"><input list="dl-rf-addspec" id="rf-os-add-spec" style="width:48px;font-size:10px;padding:2px 2px;border:none;background:transparent" placeholder="Add" autocomplete="off"></td>
+                <td style="border:1px solid var(--g4)"><input list="dl-rf-sph" id="cyc-os-sph" style="width:62px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-sph-inp" autocomplete="off"></td>
+                <td style="border:1px solid var(--g4)"><input list="dl-rf-cyl" id="cyc-os-cyl" style="width:62px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-cyl-inp" autocomplete="off"></td>
+                <td style="border:1px solid var(--g4)"><input list="dl-rf-ax" id="cyc-os-ax" style="width:54px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-ax-inp" autocomplete="off"></td>
+                <td style="border:1px solid var(--g4)"><input list="dl-rf-sph" id="subj-os-sph" style="width:62px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-sph-inp" autocomplete="off"></td>
+                <td style="border:1px solid var(--g4)"><input list="dl-rf-cyl" id="subj-os-cyl" style="width:62px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-cyl-inp" autocomplete="off"></td>
+                <td style="border:1px solid var(--g4)"><input list="dl-rf-ax" id="subj-os-ax" style="width:54px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-ax-inp" autocomplete="off"></td>
                 <td style="border:1px solid var(--g4)"><select id="subj-os-va" style="width:58px;font-size:10px;padding:2px 2px;border:none;background:transparent"><option value="">—</option><option>6/6</option><option>6/6p</option><option>6/9</option><option>6/9p</option><option>6/12</option><option>6/12p</option><option>6/18</option><option>6/18p</option><option>6/24</option><option>6/24p</option><option>6/36</option><option>6/36p</option><option>6/60</option><option>6/60p</option><option>5/60</option><option>4/60</option><option>3/60</option><option>2/60</option><option>1/60</option><option>CF</option><option>HM</option><option>PL</option><option>NPL</option><option>NI</option></select></td>
                 <td style="border:1px solid var(--g4)"><select id="rf-os-add" style="width:55px;font-size:10px;padding:2px 2px;border:none;background:transparent"><option>—</option><option>+1.00</option><option>+1.25</option><option>+1.50</option><option>+1.75</option><option>+2.00</option><option>+2.25</option><option>+2.50</option><option>+2.75</option><option>+3.00</option></select></td>
                 <td style="border:1px solid var(--g4)"><select id="nv-os-final" style="width:50px;font-size:10px;padding:2px 2px;border:none;background:transparent"><option>—</option><option>N5</option><option>N6</option><option>N8</option><option>N10</option><option>N12</option><option>N18</option><option>N24</option><option>N36</option></select></td>
               </tr>
             </tbody>
           </table>
+          <datalist id="dl-rf-sph"></datalist>
+          <datalist id="dl-rf-cyl"></datalist>
+          <datalist id="dl-rf-ax"></datalist>
+          <datalist id="dl-rf-addspec"></datalist>
         </div>
         <div class="fg3">
           <div class="form-group"><label class="fl">IPD (mm)</label><input type="text" id="ipd-val" placeholder="62"></div>
@@ -1174,11 +1180,11 @@
           <div style="display:grid;grid-template-columns:28px 88px minmax(0,1fr) 36px;gap:5px;padding:5px 8px;background:var(--g6);border-radius:6px;margin-bottom:6px;font-size:9px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px;align-items:center">
             <span>#</span><span>Eye</span><span>Diagnosis</span><span></span>
           </div>
-          <div id="rx-diagnosis-rows" style="margin-bottom:6px"></div>
-          <textarea id="rx-diagnosis-text" rows="2" placeholder="Extra diagnosis notes (optional)…" style="width:100%;font-size:12px;border:1.5px solid var(--g4);border-radius:8px;padding:8px 10px;margin-bottom:4px;font-family:var(--font);resize:vertical;min-height:40px;box-sizing:border-box"></textarea>
+          <div id="rx-diagnosis-rows" style="margin-bottom:2px"></div>
+          <textarea id="rx-diagnosis-text" rows="2" placeholder="Extra diagnosis notes (optional)…" style="width:100%;font-size:12px;border:1.5px solid var(--g4);border-radius:8px;padding:6px 8px;margin-bottom:0;font-family:var(--font);resize:vertical;min-height:36px;box-sizing:border-box"></textarea>
           <div id="rx-diagnosis-list" style="display:none" aria-hidden="true"></div>
         </div>
-        <div style="margin-bottom:10px" id="oe-inv-display-wrap">
+        <div style="margin-bottom:6px" id="oe-inv-display-wrap">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;gap:8px;flex-wrap:wrap">
             <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px">🧪 Investigations Ordered</div>
             <div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -1236,7 +1242,7 @@
           </div>
         </div>
         <!-- Advice section with common options and save template -->
-        <div style="background:#fffbeb;border-radius:var(--rsm);padding:10px 12px;margin-bottom:8px;border:1.5px solid rgba(212,160,23,.4)">
+        <div style="background:#fffbeb;border-radius:var(--rsm);padding:8px 10px;margin-bottom:4px;border:1.5px solid rgba(212,160,23,.4)">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px">
             <div style="font-size:10px;font-weight:800;color:#8a4200;text-transform:uppercase;letter-spacing:.5px">📋 Instructions</div>
             <div style="display:flex;gap:5px">
@@ -1257,8 +1263,8 @@
             <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:3px 8px;border-radius:10px;background:var(--g5);border:1px solid var(--g4);cursor:pointer;user-select:none">Head elevated post-op</span>
             <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:3px 8px;border-radius:10px;background:var(--g5);border:1px solid var(--g4);cursor:pointer;user-select:none">Protective shield at night</span>
           </div>
-          <textarea id="rx-advice-text" placeholder="Type instructions to patient or load from template…" style="width:100%;min-height:52px;font-size:12px;border:1.5px solid rgba(212,160,23,.4);border-radius:6px;padding:7px 9px;background:#fff;font-family:var(--font);resize:vertical"></textarea>
-          <textarea id="rx-extra-advice-text" placeholder="Additional instructions…" style="width:100%;min-height:42px;font-size:12px;border:1.5px solid rgba(212,160,23,.28);border-radius:6px;padding:7px 9px;background:#fff;font-family:var(--font);resize:vertical;margin-top:6px"></textarea>
+          <textarea id="rx-advice-text" placeholder="Type instructions to patient or load from template…" onblur="ingestCustomAdviceLinesFromTextarea(this)" style="width:100%;min-height:48px;font-size:12px;border:1.5px solid rgba(212,160,23,.4);border-radius:6px;padding:6px 8px;background:#fff;font-family:var(--font);resize:vertical"></textarea>
+          <textarea id="rx-extra-advice-text" placeholder="Additional instructions…" style="width:100%;min-height:38px;font-size:12px;border:1.5px solid rgba(212,160,23,.28);border-radius:6px;padding:6px 8px;background:#fff;font-family:var(--font);resize:vertical;margin-top:4px"></textarea>
         </div>
       </div>
       <div class="tab-content" id="oe-rx">
@@ -1726,6 +1732,7 @@
 
         <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
           <button class="btn btn-gold" style="flex:1;justify-content:center" onclick="registerPatient()">✅ Register &amp; Generate Token</button>
+          <button type="button" class="btn btn-blue btn-sm" style="justify-content:center" onclick="updateExistingPatientFromReceptionForm((document.getElementById('rc-uid')||{}).textContent||'')">💾 Update patient</button>
           <button class="btn btn-gray btn-sm" onclick="showToast('Token printed ✓','s')">🖨️ Token</button>
           <button class="btn btn-outline btn-sm" onclick="openM('m-rec-bill')">🧾 Bill</button>
           <button class="btn btn-blue btn-sm" onclick="openEditPatientModal()">✏️ Edit Patient</button>
@@ -2383,7 +2390,7 @@
           <div style="background:#fff;border:1px solid var(--g5);border-radius:12px;padding:12px">
             <div style="font-size:11px;font-weight:900;color:#8a4200;text-transform:uppercase;letter-spacing:.45px;margin-bottom:8px">Labour details</div>
             <div class="form-group"><label class="fl">Modes of Delivery</label><select id="obg-obs-mode-delivery" onchange="toggleObgCSectionIndication()"><option value="">Select</option><option>Natural</option><option>Normal</option><option>Forceps</option><option>Vaccum</option><option>Caesarean</option></select></div>
-            <div class="form-group" id="obg-obs-csection-indication-wrap" style="display:none"><label class="fl">Caesarean Indication</label><input type="text" id="obg-obs-csection-indication" list="obg-csection-indication-list" placeholder="Type or select indication"><datalist id="obg-csection-indication-list"><option value="Previous LSCS"></option><option value="Fetal distress"></option><option value="Non progress of labour"></option><option value="CPD"></option><option value="Breech / malpresentation"></option><option value="Placenta previa"></option><option value="Severe preeclampsia / eclampsia"></option><option value="PROM with failed induction"></option><option value="Oligohydramnios"></option><option value="IUGR with distress"></option></datalist></div>
+            <div class="form-group" id="obg-obs-csection-indication-wrap" style="display:none"><label class="fl">Caesarean Indication</label><input type="text" id="obg-obs-csection-indication" list="obg-csection-indication-list" placeholder="Type or select indication"><datalist id="obg-csection-indication-list"><option value="Previous LSCS"></option><option value="Repeat elective LSCS"></option><option value="Fetal distress"></option><option value="Non-progress of labour / failed induction"></option><option value="CPD / obstructed labour"></option><option value="Breech / malpresentation"></option><option value="Placenta previa / low-lying placenta"></option><option value="Abruptio placentae"></option><option value="APH (antepartum haemorrhage)"></option><option value="Cord prolapse"></option><option value="Severe preeclampsia / eclampsia"></option><option value="PROM with failed induction"></option><option value="Oligohydramnios"></option><option value="IUGR with distress"></option><option value="Multiple pregnancy"></option><option value="Maternal request (elective)"></option><option value="HIV / Hepatitis B (elective)"></option></datalist></div>
             <div class="form-group"><label class="fl">Induction Done</label><select id="obg-obs-induction"><option value="">Select</option><option>No</option><option>Yes</option><option>Spontaneous labour</option><option>Augmented</option></select></div>
             <div class="form-group"><label class="fl">Induction Description</label><input type="text" id="obg-obs-induction-note" placeholder="Description"></div>
             <div class="form-group"><label class="fl">Liquor</label><select id="obg-obs-liquor"><option value="">Select</option><option>Clear</option><option>Thin meconium</option><option>Thick meconium</option><option>Blood stained</option><option>Scanty</option></select></div>
