@@ -10,6 +10,22 @@
   <style>
     #pg-settings > .tab-content { display:none; }
     #pg-settings > .tab-content.active { display:block; }
+    body.queue-sidebar-collapsed .sidebar { width:64px !important; min-width:64px !important; }
+    body.queue-sidebar-collapsed .sidebar .bmh-nm,
+    body.queue-sidebar-collapsed .sidebar .bmh-sub2,
+    body.queue-sidebar-collapsed .sidebar .ngrp,
+    body.queue-sidebar-collapsed .sidebar .ni:not(.queue-expand-link),
+    body.queue-sidebar-collapsed .sidebar .c-sel,
+    body.queue-sidebar-collapsed .sidebar .u-meta { display:none !important; }
+    body.queue-sidebar-collapsed .sidebar .sb-hd { padding-bottom:8px; }
+    body.queue-sidebar-collapsed .sidebar .bmh-logo-row { justify-content:center; }
+    body.queue-sidebar-collapsed .sidebar .sb-nav { padding-top:6px; }
+    body.queue-sidebar-collapsed .sidebar .queue-expand-link { display:flex !important; }
+    .queue-expand-link { display:none; width:100%; justify-content:center; }
+    .queue-expand-link .ni-ic { margin-right:0 !important; }
+    .dq-queue-main .rc-queue-table th,
+    .dq-queue-main .rc-queue-table td { font-size:11px; }
+    .dq-queue-main .ptab { font-size:13px; }
     @media (max-width: 768px) {
       html, body { width:100%; max-width:100%; overflow-x:hidden; }
       .shell { display:block !important; }
@@ -221,6 +237,7 @@
     <div class="card-hd" style="flex-wrap:wrap;gap:10px;align-items:flex-start">
       <div><div class="card-title" id="dq-title">Dr. Varun Baweja — My Patients</div><div class="card-sub"><span class="live-dot"></span>Click any patient to open case sheet instantly</div></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto">
+        <button type="button" class="btn btn-outline btn-xs" onclick="toggleQueueSidebarCollapse(true)">☰ Expand Menu</button>
         <button type="button" class="btn btn-gold btn-xs" onclick="openM('m-np')">+ Add Patient</button>
         <button type="button" class="btn btn-outline btn-xs" onclick="nav('ophtho',null)">👁️ Eye Exam</button>
         <button type="button" class="btn btn-outline btn-xs" onclick="nav('appointments',null)">📅 Appointments</button>
