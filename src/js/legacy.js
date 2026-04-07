@@ -17973,17 +17973,32 @@ function renderDocQueue() {
   const titleEl = document.getElementById('dq-title');
   if (titleEl) titleEl.textContent = `${queueDoctor} — My Patients`;
   const searchQ = String(document.getElementById('dq-search')?.value || '').trim().toLowerCase();
+  const todayKeyLocal = new Date().toISOString().split('T')[0];
+  const isTodayQueuePatient = function (p) {
+    if (!p) return false;
+    if (p.queueRemoved) return false;
+    const stamps = [p.checkinAt, p.createdAt, p.seenAt].filter(Boolean);
+    if (!stamps.length) return false;
+    return stamps.some(function (raw) {
+      const s = String(raw || '');
+      if (!s) return false;
+      if (/^\d+$/.test(s)) {
+        try { return new Date(Number(s)).toISOString().slice(0, 10) === todayKeyLocal; } catch (e) { return false; }
+      }
+      return s.slice(0, 10) === todayKeyLocal;
+    });
+  };
 
   // Filter: admin/reception sees all; doctor sees own dept (and optionally own name)
   const validStatuses = p => p.status==='waiting'||p.status==='seen'||p.status==='pre-registered'||p.dilated;
   const myPts = (() => {
     if (CURRENT_USER?.isAdmin || CURRENT_USER?.role === 'Reception') {
-      return PATIENTS.filter(p => validStatuses(p) && centreMatch(p));
+      return PATIENTS.filter(p => validStatuses(p) && centreMatch(p) && isTodayQueuePatient(p));
     }
     const deptPts = PATIENTS.filter(p => {
       const ptDept = normalizeDeptKeyForQueue(p.dept || p.department || '');
       const deptMatch = !userDept || ptDept === userDept || (!ptDept && userDept === 'ophtho');
-      return deptMatch && validStatuses(p) && centreMatch(p);
+      return deptMatch && validStatuses(p) && centreMatch(p) && isTodayQueuePatient(p);
     });
     return deptPts.filter(function (p) {
       if (!p.doctor) return true;
@@ -18005,7 +18020,6 @@ function renderDocQueue() {
   }) : myPts;
 
   // Active list keeps all waiting patients visible; dilated patients also remain in dedicated dilated queue.
-  const todayKeyLocal = new Date().toISOString().split('T')[0];
   const serialMap = new Map(filteredPts.map(function (p, idx) { return [p.bmhId, idx + 1]; }));
   const active  = filteredPts.filter(p => !p.seen);
   const dilated = filteredPts.filter(p => p.dilated && !p.seen);
