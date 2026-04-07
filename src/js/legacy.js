@@ -2149,6 +2149,10 @@ function populateOphthoForm(v) {
   // Trigger IOP badge update
   if(v.iopGatOD) { typeof updIOP==='function' && updIOP('od', v.iopGatOD); }
   if(v.iopGatOS) { typeof updIOP==='function' && updIOP('os', v.iopGatOS); }
+  if(typeof updateNCTHighlight === 'function') {
+    updateNCTHighlight('od', v.iopNctOD);
+    updateNCTHighlight('os', v.iopNctOS);
+  }
   if(v.pachyOD || v.pachyOS) { typeof updIOPWithPachy==='function' && updIOPWithPachy(); }
 
   // Refraction — Current Spectacles
@@ -13438,6 +13442,7 @@ window.printUnifiedRx = function(deptId) {
   const incCC   = document.getElementById('oe-inc-cc')?.checked ?? true;
   const incPos  = document.getElementById('oe-inc-posfind')?.checked ?? true;
   const incAdv  = document.getElementById('oe-inc-adv')?.checked ?? true;
+  const incRx   = document.getElementById(deptId+'-inc-rx')?.checked ?? (document.getElementById('oe-inc-rx')?.checked ?? true);
 
   // ── Collect diagnoses — Ophthalmology: numbered rows; other depts: *-dx-list ──
   const dxPack = typeof collectDeptDiagnosesForPrint === 'function' ? collectDeptDiagnosesForPrint(deptId) : { lines: [], notes: '' };
@@ -13582,8 +13587,8 @@ ${showVA ? `
 <table>
   <thead><tr><th>Eye</th><th>UCDVA</th>${showIOP?'<th>IOP (GAT)</th>':''}${showIOP&&(iopNctOD||iopNctOS)?'<th>IOP (NCT)</th>':''}<th>DVA</th><th>NVA</th></tr></thead>
   <tbody>
-    <tr><td><b>Right Eye</b></td><td>${vaOD||'—'}</td>${showIOP?`<td class="${parseFloat(iopGatOD)>21?'flag-h':'flag-n'}">${iopGatOD?iopGatOD+' mmHg':'—'}</td>`:''}${showIOP&&(iopNctOD||iopNctOS)?`<td>${iopNctOD?iopNctOD+' mmHg':'—'}</td>`:''}<td>${rfODSph!=='0'||(rfODCyl!=='0')?'6/6':'—'}</td><td>${nvOD||'—'}</td></tr>
-    <tr><td><b>Left Eye</b></td><td>${vaOS||'—'}</td>${showIOP?`<td class="${parseFloat(iopGatOS)>21?'flag-h':'flag-n'}">${iopGatOS?iopGatOS+' mmHg':'—'}</td>`:''}${showIOP&&(iopNctOD||iopNctOS)?`<td>${iopNctOS?iopNctOS+' mmHg':'—'}</td>`:''}<td>${rfOSSph!=='0'||(rfOSCyl!=='0')?'6/6':'—'}</td><td>${nvOS||'—'}</td></tr>
+    <tr><td><b>Right Eye</b></td><td>${vaOD||'—'}</td>${showIOP?`<td class="${parseFloat(iopGatOD)>21?'flag-h':'flag-n'}">${iopGatOD?iopGatOD+' mmHg':'—'}</td>`:''}${showIOP&&(iopNctOD||iopNctOS)?`<td class="${parseFloat(iopNctOD)>21?'flag-h':'flag-n'}">${iopNctOD?iopNctOD+' mmHg':'—'}</td>`:''}<td>${rfODSph!=='0'||(rfODCyl!=='0')?'6/6':'—'}</td><td>${nvOD||'—'}</td></tr>
+    <tr><td><b>Left Eye</b></td><td>${vaOS||'—'}</td>${showIOP?`<td class="${parseFloat(iopGatOS)>21?'flag-h':'flag-n'}">${iopGatOS?iopGatOS+' mmHg':'—'}</td>`:''}${showIOP&&(iopNctOD||iopNctOS)?`<td class="${parseFloat(iopNctOS)>21?'flag-h':'flag-n'}">${iopNctOS?iopNctOS+' mmHg':'—'}</td>`:''}<td>${rfOSSph!=='0'||(rfOSCyl!=='0')?'6/6':'—'}</td><td>${nvOS||'—'}</td></tr>
   </tbody>
 </table>` : ''}
 
@@ -17705,6 +17710,23 @@ function updIOP(eye, val) {
   }
 }
 
+function updateNCTHighlight(eye, val) {
+  const n = parseFloat(val);
+  const input = document.getElementById('iop-nct-' + eye);
+  if (!input) return;
+  if (!isNaN(n) && n > 21) {
+    input.style.background = 'var(--red-lt)';
+    input.style.borderColor = 'var(--red)';
+    input.style.color = 'var(--red)';
+    input.style.fontWeight = '900';
+  } else {
+    input.style.background = '#fff';
+    input.style.borderColor = 'var(--g4)';
+    input.style.color = '';
+    input.style.fontWeight = '';
+  }
+}
+
 // ── buildQCard — patient queue card ─────────────
 function buildQCard(p, sno) {
   const deptLabel = {ophtho:'Eye',obg:'OBG',psych:'Psych',skin:'Skin',lab:'Lab'}[p.dept]||p.dept||'—';
@@ -17877,6 +17899,9 @@ function markCurrentPatientSeen() {
   if(!bmhId || bmhId === '—') { showToast('Open a patient first', 'w'); return; }
   markSeen(bmhId);
   showToast('Patient marked seen ✓', 's');
+  if (typeof nav === 'function') {
+    setTimeout(function () { nav('doctor-queue', null); }, 80);
+  }
 }
 
 function checkInPatient(bmhId) {
