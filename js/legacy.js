@@ -1339,11 +1339,76 @@ function printConsentFromLibrary(id) {
 
 function clearSharedPrescriptionEditor() {
   if (typeof RX_DRUGS !== 'undefined') RX_DRUGS.length = 0;
-  const quick = document.querySelector('.tab-content.active [id="rx-quick-search"]') || document.getElementById('rx-quick-search');
+  const quick = getActiveRxQuickSearchInput();
   if (quick) quick.value = '';
-  const dd = document.querySelector('.tab-content.active [id="rx-quick-dropdown"]') || document.getElementById('rx-quick-dropdown');
+  const dd = document.querySelector('.page.active [id="rx-quick-dropdown"]') || document.getElementById('rx-quick-dropdown');
   if (dd) dd.style.display = 'none';
   renderRxDrugs && renderRxDrugs();
+}
+
+/** First #rx-quick-search on the active clinic page (avoids duplicate id picking Ophtho when on OBG). */
+function getActiveRxQuickSearchInput() {
+  const ap = document.querySelector('.page.active');
+  if (ap) {
+    const el = ap.querySelector('#rx-quick-search');
+    if (el) return el;
+  }
+  return document.getElementById('rx-quick-search');
+}
+
+/** Follow-up date input for the prescription being printed (duplicate id="rx-fu-date" exists per dept). */
+function getDeptFollowUpDateInput(deptId) {
+  const wrapSel = { oe: '#pg-ophtho #oe-rx', obg: '#pg-obg #obg-rx', psych: '#pg-psych #psych-rx', skin: '#pg-skin #skin-rx' }[deptId];
+  if (wrapSel) {
+    const wrap = document.querySelector(wrapSel);
+    const inp = wrap && wrap.querySelector('input[type="date"]');
+    if (inp) return inp;
+  }
+  return document.getElementById('rx-fu-date');
+}
+
+function wireDxInputFocus(inp) {
+  if (!inp || inp._dxWired) return;
+  inp._dxWired = true;
+  inp.addEventListener('focus', function () { window._dxActiveInput = this; });
+}
+
+function restoreRxFromVisitData(data) {
+  if (typeof RX_DRUGS === 'undefined') return;
+  RX_DRUGS.length = 0;
+  if (data && Array.isArray(data.rx) && data.rx.length) {
+    data.rx.forEach(function (d) { RX_DRUGS.push(JSON.parse(JSON.stringify(d))); });
+  }
+  renderRxDrugs && renderRxDrugs();
+}
+
+function rebuildDxListFromValues(listId, values) {
+  const list = document.getElementById(listId);
+  if (!list) return;
+  const rows = (Array.isArray(values) && values.length) ? values : [''];
+  list.innerHTML = '';
+  rows.forEach(function (text) {
+    const d = document.createElement('div');
+    d.style.cssText = 'display:flex;align-items:center;gap:7px;margin-bottom:5px';
+    const inp = document.createElement('input');
+    inp.type = 'text';
+    inp.className = 'dx-inp';
+    inp.placeholder = 'ICD-10 search or type free-text diagnosis…';
+    inp.setAttribute('oninput', 'filterDx(this)');
+    inp.setAttribute('onfocus', 'showDxDropdown(this)');
+    inp.style.cssText = 'flex:1;font-size:12px';
+    inp.autocomplete = 'off';
+    inp.value = text || '';
+    wireDxInputFocus(inp);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-xs btn-gray';
+    btn.textContent = '✕';
+    btn.onclick = function () { d.remove(); };
+    d.appendChild(inp);
+    d.appendChild(btn);
+    list.appendChild(d);
+  });
 }
 
 function updateDepartmentRailVisibility(pageKey, activeTabId) {
@@ -1997,6 +2062,9 @@ function openPatient(bmhId) {
   setTimeout(() => {
     loadPastVisits(p.bmhId, p.dept);
     if(p.dept === 'ophtho') loadTodayVisitIntoForm(p.bmhId);
+    else if(p.dept === 'obg') loadTodayDeptVisitIntoForm(p.bmhId, 'obg');
+    else if(p.dept === 'psych') loadTodayDeptVisitIntoForm(p.bmhId, 'psych');
+    else if(p.dept === 'skin') loadTodayDeptVisitIntoForm(p.bmhId, 'skin');
     renderCurrentPatientInvestigationUploads && renderCurrentPatientInvestigationUploads();
     renderOphthoRecap && renderOphthoRecap();
     if(p.dept === 'psych') renderPsychRail && renderPsychRail();
@@ -2080,11 +2148,6 @@ function addReceptionPatientCharge(bmhId) {
   const desc = parts[0] || 'Charge';
   const amt = Number(parts[1] || 0);
   addBmhPatientCharge(bmhId, { id: 'rcx' + Date.now(), cat: inferChargeCategoryFromService(desc), desc: desc, qty: 1, rate: amt, amount: amt, source: 'reception-extra', ts: new Date().toISOString() });
-  const pt = PATIENTS.find(function (x) { return x.bmhId === bmhId; });
-  if (pt) {
-    pt.balance = Number(pt.balance || 0) + amt;
-    fbUpdate && fbUpdate('patients/' + bmhId, { balance: pt.balance }).catch(function () {});
-  }
   renderReceptionPage && renderReceptionPage();
   renderBillingPageIfActive && renderBillingPageIfActive();
   showToast(desc + ' added to final bill ✓', 's');
@@ -2104,7 +2167,14 @@ function rcOpenBillingFor(bmhId) {
   window._bmhSelectedBillPatient = bmhId;
   if(typeof bmhSelectBillPatient === 'function') bmhSelectBillPatient(bmhId);
 }
+/** Open billing for patient and show print-ready receipt (half A4 / A5). */
+function rcOpenBillingForAndPrint(bmhId) {
+  if (!bmhId) return;
+  rcOpenBillingFor(bmhId);
+  setTimeout(function () { printBmhPatientBill(bmhId); }, 350);
+}
 window.rcOpenBillingFor = rcOpenBillingFor;
+window.rcOpenBillingForAndPrint = rcOpenBillingForAndPrint;
 
 // ═══════════════════════════════════════════════════════════════════
 // loadTodayVisitIntoForm — if a visit was saved TODAY for this patient,
@@ -2124,6 +2194,25 @@ function loadTodayVisitIntoForm(bmhId) {
     const v = todayVisits[0];
     populateOphthoForm(v);
     showToast("Today's visit data restored ✓", 'i');
+  });
+}
+
+/** Reload today's saved visit for OBG / psych / skin from Firebase (prescription + advice persist same day). */
+function loadTodayDeptVisitIntoForm(bmhId, dept) {
+  if (!bmhId || bmhId === '—' || !dept) return;
+  const todayStr = new Date().toISOString().split('T')[0];
+  if (typeof fbOnce !== 'function') return;
+  fbOnce('visits/' + bmhId, function (data) {
+    if ((window.CURRENT_PATIENT?.bmhId || '') !== bmhId) return;
+    if (!data) return;
+    const todayVisits = Object.values(data)
+      .filter(function (v) { return v && v.dept === dept && v.date && String(v.date).startsWith(todayStr); })
+      .sort(function (a, b) { return String(b.date || '').localeCompare(String(a.date || '')); });
+    if (!todayVisits.length) return;
+    const v = todayVisits[0];
+    if (dept === 'obg') { populateObgForm(v); showToast("Today's OBG visit restored ✓", 'i'); }
+    else if (dept === 'psych') { populatePsychForm(v); showToast("Today's psychiatry visit restored ✓", 'i'); }
+    else if (dept === 'skin') { populateSkinForm(v); showToast("Today's skin visit restored ✓", 'i'); }
   });
 }
 
@@ -2342,7 +2431,6 @@ function markPaid(id) {
   }
   const p = PATIENTS.find(x=>x.bmhId===pr.bmhId);
   if(p) {
-    p.balance=0;
     // If this was a cross-refer payment — now route patient to target dept
     if(pr.xref && pr.xrefDept) {
       p.dept = pr.xrefDept;
@@ -2359,10 +2447,12 @@ function markPaid(id) {
       showToast('💳 ₹'+pr.amount.toLocaleString('en-IN')+' received from '+pr.patient+' ✓','s');
     }
   }
+  bmhSyncPatientRunningBalance(pr.bmhId);
   fbUpdate && fbUpdate('payRequests/'+id,{status:'paid'}).catch(()=>{});
   renderDocQueue && renderDocQueue();
   renderDashboard && renderDashboard();
   renderReceptionPage && renderReceptionPage();
+  renderBillingPageIfActive && renderBillingPageIfActive();
 }
 function sendCharge() {
   const pt = document.getElementById('sp-pt')?.value; const fr = document.getElementById('sp-proc')?.value || '';
@@ -2374,7 +2464,7 @@ function sendCharge() {
   PAY_REQUESTS.push(_pr2);
   syncPayRequestToPatientCharges(_pr2);
   fbSet&&fbSet('payRequests/'+_prId2,_pr2);
-  if(_pt2){_pt2.balance=(_pt2.balance||0)+amt;fbUpdate&&fbUpdate('patients/'+pt,{balance:_pt2.balance});}
+  if (_pt2) bmhSyncPatientRunningBalance(pt);
   renderReceptionPage&&renderReceptionPage();
   renderBillingPageIfActive && renderBillingPageIfActive();
   showToast('📤 Charge sent to Reception — pulsing now ✓','s');
@@ -2390,8 +2480,7 @@ function sendQuickCharge(name, amount, bmhIdOverride) {
   PAY_REQUESTS.push(pr);
   syncPayRequestToPatientCharges(pr);
   fbSet&&fbSet('payRequests/'+prId, pr);
-  // Update patient balance
-  if(pt) { pt.balance=(pt.balance||0)+parseInt(amount); fbUpdate&&fbUpdate('patients/'+ptId,{balance:pt.balance}); }
+  if (pt) bmhSyncPatientRunningBalance(ptId);
   renderReceptionPage&&renderReceptionPage();
   renderDashboard&&renderDashboard();
   renderBillingPageIfActive && renderBillingPageIfActive();
@@ -4187,6 +4276,27 @@ function populateObgForm(visit) {
   updateObgObstetricHistoryTab(!!(data.obstetricHistoryEnabled || data.workflowAnc));
   syncObgAssessmentToHistory();
   updateObgComputedFields();
+
+  restoreRxFromVisitData(data);
+  const oa = document.getElementById('obg-advice');
+  if (oa && data.obgAdvice != null) oa.value = data.obgAdvice;
+  const oea = document.getElementById('obg-extra-advice');
+  if (oea && data.obgExtraAdvice != null) oea.value = data.obgExtraAdvice;
+  const fu = data.rxFuDate || data.followupDate;
+  if (fu) {
+    const obgFu = document.querySelector('#pg-obg #obg-rx input[type="date"]');
+    if (obgFu) obgFu.value = fu;
+  }
+  if (Array.isArray(data.obgDiagnoses)) {
+    rebuildDxListFromValues('obg-dx-list', data.obgDiagnoses);
+  }
+  if (Array.isArray(data.obgProcAdvised) && data.obgProcAdvised.length) {
+    const procEl = document.getElementById('rx-proc-advised-obg');
+    if (procEl) {
+      procEl.innerHTML = '';
+      data.obgProcAdvised.forEach(function (p) { addProcItemToContainer(procEl, p, 0, { silentLog: true, quiet: true }); });
+    }
+  }
 }
 function addANCVisit(){
   const today = new Date().toISOString().split('T')[0];
@@ -4430,6 +4540,16 @@ function populatePsychForm(visit) {
   });
   togglePsychTracks();
   renderPsychRail();
+  restoreRxFromVisitData(data);
+  const pa = document.getElementById('psych-advice');
+  if (pa && data.psychAdvice != null) pa.value = data.psychAdvice;
+  const pea = document.getElementById('psych-extra-advice');
+  if (pea && data.psychExtraAdvice != null) pea.value = data.psychExtraAdvice;
+  if (data.rxFuDate) {
+    const el = document.querySelector('#pg-psych #psych-rx input[type="date"]');
+    if (el) el.value = data.rxFuDate;
+  }
+  if (Array.isArray(data.psychDxList)) rebuildDxListFromValues('psych-dx-list', data.psychDxList);
 }
 function printPsychRx(){printPsychSheet();}
 
@@ -4567,6 +4687,16 @@ function populateSkinForm(visit) {
       if(el && data[id] != null) el.checked = !!data[id];
     });
   renderSkinRail();
+  restoreRxFromVisitData(data);
+  const sa = document.getElementById('skin-advice');
+  if (sa && data.skinAdvice != null) sa.value = data.skinAdvice;
+  const sea = document.getElementById('skin-extra-advice');
+  if (sea && data.skinExtraAdvice != null) sea.value = data.skinExtraAdvice;
+  if (data.rxFuDate) {
+    const el = document.querySelector('#pg-skin #skin-rx input[type="date"]');
+    if (el) el.value = data.rxFuDate;
+  }
+  if (Array.isArray(data.skinDxList)) rebuildDxListFromValues('skin-dx-list', data.skinDxList);
 }
 function selectProc(el,name){
   document.querySelectorAll('.procedure-card').forEach(c=>c.classList.remove('selected'));
@@ -5927,58 +6057,81 @@ function printBmhPatientBill(bmhIdOpt) {
   const p = info.patient || {};
   const lines = window.BMH_PATIENT_CHARGES[bmhId] || [];
   const { sub, total, discount, advanceApplied, taxable } = bmhTotalsForPatient(bmhId);
-  const invNo = 'INV-' + String(Date.now()).slice(-8);
-  const today = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
-  const sz = document.getElementById('bmh-print-size')?.value || window.BMH_BILL_PRINT_SIZE || 'A4';
-  const pageCss = sz === 'A5' ? 'size: 148mm 210mm' : 'size: A4 portrait';
+  const invNo = 'RCP-' + String(Date.now()).slice(-10);
+  const today = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  const timeStr = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+  const lhSrc = typeof resolvePrintHeaderSrc === 'function' ? resolvePrintHeaderSrc() : '';
   const byCat = {};
   lines.forEach(l => { const c = l.cat || 'other'; if (!byCat[c]) byCat[c] = []; byCat[c].push(l); });
+  const esc = (s) => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
   const bodyRows = Object.keys(byCat).map(cat => {
-    const hdr = `<tr><td colspan="5" style="background:#eef2f8;font-weight:800;padding:6px">${bmhCatLabel(cat)}</td></tr>`;
-    const rs = byCat[cat].map((l, i) => `<tr><td>${i + 1}</td><td>${l.desc || ''}</td><td style="text-align:center">${l.qty || 1}</td><td style="text-align:right">₹${(Number(l.rate) || 0).toLocaleString('en-IN')}</td><td style="text-align:right;font-weight:700">₹${(Number(l.amount) || 0).toLocaleString('en-IN')}</td></tr>`).join('');
+    const hdr = `<tr><td colspan="4" style="background:#e8eef8;font-weight:800;font-size:9px;text-transform:uppercase;letter-spacing:.4px;padding:5px 8px;color:#1A3C6E">${esc(bmhCatLabel(cat))}</td></tr>`;
+    const rs = byCat[cat].map((l) => `<tr>
+      <td style="padding:6px 8px;font-size:10.5px;vertical-align:top" colspan="2">${esc(l.desc || '—')}</td>
+      <td style="padding:6px 8px;text-align:center;font-size:10px">${l.qty || 1}</td>
+      <td style="padding:6px 8px;text-align:right;font-weight:700;font-size:10.5px">₹${(Number(l.amount) || 0).toLocaleString('en-IN')}</td>
+    </tr>`).join('');
     return hdr + rs;
   }).join('');
-  const timelineRows = info.timeline.map((item, idx) => `<tr>
-    <td>${idx + 1}</td>
-    <td>${new Date(item.ts).toLocaleDateString('en-IN')}</td>
-    <td>${item.kind === 'charge' ? 'Charge' : item.kind === 'pending' ? 'Pending' : 'Payment'}</td>
-    <td>${item.label}</td>
-    <td>${item.meta || '—'}</td>
-    <td style="text-align:right;font-weight:700">₹${(Number(item.amount) || 0).toLocaleString('en-IN')}</td>
-  </tr>`).join('');
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Bill</title><style>
-*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',system-ui,sans-serif;padding:0 8mm;font-size:12px;width:100%;max-width:100%}
-@page{${pageCss};margin:8mm}
-.hdr{display:flex;justify-content:space-between;border-bottom:3px solid #1A3C6E;padding-bottom:10px;margin-bottom:12px}
-table{width:100%;border-collapse:collapse;margin-bottom:12px} th,td{padding:8px;border-bottom:1px solid #eee;font-size:11.5px}
-th{background:#1A3C6E;color:#fff;font-size:10px;text-transform:uppercase}
-.tot{display:flex;justify-content:flex-end;gap:16px;margin-top:8px;font-weight:800}
+  const dueAmt = Math.max(0, bmhComputeBalanceDue(bmhId));
+  const payLines = (TRANSACTIONS || []).filter(t => t.bmhId === bmhId && t.collected !== false).slice(-6).map(t => `<div style="display:flex;justify-content:space-between;font-size:9.5px;padding:3px 0;border-bottom:1px dashed #e0e4ec"><span>${esc(t.service || 'Payment')} · ${esc(t.mode || '')}</span><span style="font-weight:800;color:#1a8c3c">₹${(Number(t.amount)||0).toLocaleString('en-IN')}</span></div>`).join('');
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Receipt — ${esc(p.name || '')}</title><style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,system-ui,sans-serif;font-size:11px;color:#1a1a1a;background:#fff;padding:7mm 9mm;width:100%;max-width:100%}
+@page{size:148mm 210mm;margin:0}
+.lh{width:100%;max-height:52px;object-fit:contain;display:block;margin:0 auto 8px}
+.brand{border-bottom:2px solid #1A3C6E;padding-bottom:8px;margin-bottom:10px}
+.brand h1{font-size:14px;font-weight:800;color:#1A3C6E;letter-spacing:.2px;text-align:center}
+.brand-meta{text-align:center;font-size:8.5px;color:#555;line-height:1.45;margin-top:4px}
+.rcp{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;font-size:9px}
+.rcp strong{font-size:11px;color:#1A3C6E}
+.ptbox{background:linear-gradient(135deg,#f6f8fc,#eef2f9);border:1px solid #d7dce8;border-radius:8px;padding:8px 10px;margin-bottom:10px}
+.ptbox .nm{font-weight:800;font-size:12px;color:#111}
+.ptbox .id{font-family:ui-monospace,monospace;font-size:9.5px;color:#0B7B8C;margin-top:2px}
+.sum{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
+.sum .cell{background:#fafbfe;border:1px solid #e6eaf2;border-radius:6px;padding:6px 8px}
+.sum .lbl{font-size:8px;font-weight:800;text-transform:uppercase;color:#6b7280;letter-spacing:.3px}
+.sum .val{font-size:13px;font-weight:800;margin-top:2px}
+.sum .due .val{color:#b45309}
+.sum .got .val{color:#15803d}
+table{width:100%;border-collapse:collapse;margin-bottom:8px}
+th{background:#1A3C6E;color:#fff;font-size:8px;text-transform:uppercase;letter-spacing:.4px;padding:5px 8px;text-align:left}
+th:last-child{text-align:right}
+.totbar{margin-top:12px;padding:10px 12px;background:linear-gradient(135deg,#1A3C6E,#0f2749);border-radius:8px;color:#fff;text-align:right}
+.totbar .big{font-size:18px;font-weight:800}
+.totbar .sub{font-size:9px;opacity:.9;margin-top:4px}
+.payh{font-size:9px;font-weight:800;color:#1A3C6E;text-transform:uppercase;margin:10px 0 4px;letter-spacing:.4px}
+.foot{margin-top:14px;padding-top:8px;border-top:1px solid #e5e7eb;font-size:8px;color:#6b7280;text-align:center;line-height:1.5}
 </style></head><body>
-<div class="hdr"><div><div style="font-size:18px;font-weight:900;color:#1A3C6E">Baweja Multispeciality Hospital</div><div style="font-size:10px;color:#666">Chandigarh · Ropar · +91-81466 22802</div></div>
-<div style="text-align:right"><div style="font-weight:900;color:#1A3C6E">${invNo}</div><div style="font-size:11px;color:#666">${today}</div></div></div>
-<div style="background:#f5f5f7;border-radius:8px;padding:10px 14px;margin-bottom:12px;display:flex;justify-content:space-between">
-  <div><strong>${p.name || 'Patient'}</strong><div style="font-size:10px;font-family:monospace;color:#0B7B8C">${bmhId}</div><div style="font-size:10px">${p.age ? p.age + 'Y' : ''} ${p.sex || ''} · ${p.doctor || ''}</div></div>
-  <div style="text-align:right;font-size:11px">${p.dept || ''}</div>
+${lhSrc ? `<img src="${lhSrc}" class="lh" alt="">` : ''}
+<div class="brand">
+  <h1>Baweja Multispeciality Hospital</h1>
+  <div class="brand-meta">SCO 138–139, Sector 33C, Chandigarh · 168 &amp; 169, Urban Estate Phase II, Ropar<br>Phone: +91-81466 22802 · E-mail: info@bawejahospital.com</div>
 </div>
-<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px">
-  <div style="background:#f5f5f7;padding:8px;border-radius:8px"><div style="font-size:9px;color:#666;text-transform:uppercase;font-weight:800">Charges</div><div style="font-size:16px;font-weight:900;color:#1A3C6E">₹${info.chargeTotal.toLocaleString('en-IN')}</div></div>
-  <div style="background:#eef9f0;padding:8px;border-radius:8px"><div style="font-size:9px;color:#1a8c3c;text-transform:uppercase;font-weight:800">Received</div><div style="font-size:16px;font-weight:900;color:#1a8c3c">₹${info.paidTotal.toLocaleString('en-IN')}</div></div>
-  <div style="background:#eef4ff;padding:8px;border-radius:8px"><div style="font-size:9px;color:#0B7B8C;text-transform:uppercase;font-weight:800">Advance</div><div style="font-size:16px;font-weight:900;color:#0B7B8C">₹${info.advanceTotal.toLocaleString('en-IN')}</div></div>
-  <div style="background:#fff4e8;padding:8px;border-radius:8px"><div style="font-size:9px;color:#b55a00;text-transform:uppercase;font-weight:800">Balance / due</div><div style="font-size:16px;font-weight:900;color:#b55a00">₹${Math.max(info.pendingTotal, info.balance).toLocaleString('en-IN')}</div></div>
+<div class="rcp">
+  <div><strong>${invNo}</strong><div style="margin-top:2px">Patient bill / receipt</div></div>
+  <div style="text-align:right">${today}<br>${timeStr}</div>
 </div>
-<table><thead><tr><th>#</th><th>Description</th><th>Qty</th><th>Rate ₹</th><th>Amount ₹</th></tr></thead><tbody>${bodyRows || '<tr><td colspan="5">No lines</td></tr>'}</tbody></table>
-<div class="tot" style="flex-direction:column;align-items:flex-end;gap:4px">
-${discount > 0 ? '<span>Discount ₹' + discount.toLocaleString('en-IN') + '</span>' : ''}
-${advanceApplied > 0 ? '<span>Advance adjusted ₹' + advanceApplied.toLocaleString('en-IN') + '</span>' : ''}
-<span>Chargeable total ₹${(taxable != null ? taxable : sub - discount - advanceApplied).toLocaleString('en-IN')}</span>
-<span style="color:#1A3C6E">Net ₹${total.toLocaleString('en-IN')}</span>
+<div class="ptbox">
+  <div class="nm">${esc(p.name || 'Patient')}</div>
+  <div class="id">${esc(bmhId)}</div>
+  <div style="font-size:9.5px;color:#555;margin-top:4px">${p.age ? esc(String(p.age)) + 'Y' : ''} ${esc(p.sex || '')} · ${esc(p.dept || '')} · ${esc(p.doctor || '')}</div>
 </div>
-<div style="margin:16px 0 8px;font-size:11px;font-weight:900;color:#1A3C6E;text-transform:uppercase">Financial transaction history</div>
-<table><thead><tr><th>#</th><th>Date</th><th>Type</th><th>Description</th><th>Details</th><th>Amount ₹</th></tr></thead><tbody>${timelineRows || '<tr><td colspan="6">No financial history</td></tr>'}</tbody></table>
-<div style="margin-top:24px;font-size:10px;color:#777;text-align:center">Computer-generated bill · BMH</div>
+<div class="sum">
+  <div class="cell"><div class="lbl">Total charges</div><div class="val" style="color:#1A3C6E">₹${info.chargeTotal.toLocaleString('en-IN')}</div></div>
+  <div class="cell"><div class="lbl">Amount received</div><div class="val" style="color:#15803d">₹${info.paidTotal.toLocaleString('en-IN')}</div></div>
+  <div class="cell due"><div class="lbl">Amount due</div><div class="val">₹${dueAmt.toLocaleString('en-IN')}</div></div>
+  <div class="cell got"><div class="lbl">After discount / adv.</div><div class="val">₹${(Number(total) || 0).toLocaleString('en-IN')}</div></div>
+</div>
+<table><thead><tr><th colspan="2">Description</th><th>Qty</th><th style="text-align:right">Amount</th></tr></thead><tbody>${bodyRows || '<tr><td colspan="4" style="padding:9px;text-align:center;color:#888">No charge lines</td></tr>'}</tbody></table>
+${discount > 0 || advanceApplied > 0 ? `<div style="font-size:9.5px;text-align:right;margin-bottom:6px;color:#444">${discount > 0 ? 'Discount ₹' + discount.toLocaleString('en-IN') + ' · ' : ''}${advanceApplied > 0 ? 'Advance adjusted ₹' + advanceApplied.toLocaleString('en-IN') : ''}</div>` : ''}
+<div class="totbar"><div class="big">Net payable: ₹${(Number(taxable != null ? taxable : sub - discount - advanceApplied) || 0).toLocaleString('en-IN')}</div><div class="sub">Outstanding balance ₹${dueAmt.toLocaleString('en-IN')} · Consultation &amp; investigations are billed separately</div></div>
+${payLines ? `<div class="payh">Recent payments</div><div>${payLines}</div>` : ''}
+<div class="foot">This is a computer-generated receipt. Subject to hospital policies. GST as applicable.<br>Please retain this receipt for your records.</div>
 </body></html>`;
   safePrint(html);
-  showToast('Print dialog opened ✓', 's');
+  showToast('Print preview opened ✓', 's');
 }
 function printBmhPaymentAck(txn) {
   const sz = document.getElementById('bmh-print-size')?.value || window.BMH_BILL_PRINT_SIZE || 'A4';
@@ -8278,7 +8431,7 @@ function addDrugToLibraryFromModal() {
   ['md-add-trade','md-add-generic'].forEach(id => { const x = document.getElementById(id); if (x) x.value = ''; });
 }
 function openDrugLibraryAddFromQuick() {
-  const inp = document.getElementById('rx-quick-search');
+  const inp = getActiveRxQuickSearchInput();
   const val = inp?.value?.trim() || '';
   const seed = rxQuickSelectedDrug || (val ? ((typeof DRUG_LIBRARY !== 'undefined' ? DRUG_LIBRARY : []).find(d =>
     String(d.trade).toLowerCase().includes(val.toLowerCase()) || String(d.generic).toLowerCase().includes(val.toLowerCase())
@@ -8746,7 +8899,18 @@ function rxDxSuggest(inp) {
     const code = entry && entry.code ? String(entry.code).toLowerCase() : '';
     if (hay.includes(val) || code.includes(val)) matches.push(label);
   });
-  if (!matches.length) { drop.style.display = 'none'; drop.innerHTML = ''; return; }
+  if (!matches.length) {
+    const typed = (inp.value || '').trim();
+    if (typed.length >= 2) {
+      window._rxDxFreeTarget = inp;
+      const esc = function (s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); };
+      drop.innerHTML = '<div style="padding:6px 8px;cursor:pointer;font-size:11px;line-height:1.4;background:var(--green-lt);border-top:1px solid var(--g5)" onmousedown="event.preventDefault();rxDxApplyFreeText()"><strong>Not in database — use as diagnosis</strong><br><span style="color:var(--g1)">' + esc(typed) + '</span></div>';
+      drop.style.display = 'block';
+    } else {
+      drop.style.display = 'none'; drop.innerHTML = '';
+    }
+    return;
+  }
   const esc = function (s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); };
   drop.innerHTML = matches.slice(0, 14).map(function (label) {
     const enc = encodeURIComponent(label);
@@ -8763,6 +8927,18 @@ function rxDxApplyChoice(el) {
   if (inp) inp.value = label;
   if (drop) { drop.style.display = 'none'; drop.innerHTML = ''; }
   if (inp) inp.focus();
+}
+function rxDxApplyFreeText() {
+  const inp = window._rxDxFreeTarget || document.querySelector('.rx-dx-line:focus');
+  if (!inp) return;
+  const drop = inp.nextElementSibling;
+  const v = inp.value.trim();
+  if (!v) return;
+  inp.value = v;
+  inp.style.background = 'var(--green-lt)';
+  inp.style.borderColor = 'var(--green)';
+  if (drop && drop.classList && drop.classList.contains('rx-dx-drop')) { drop.style.display = 'none'; drop.innerHTML = ''; }
+  inp.focus();
 }
 document.addEventListener('click', function (e) {
   if (e.target.closest && (e.target.closest('.rx-dx-drop') || e.target.closest('.rx-dx-line'))) return;
@@ -9662,7 +9838,9 @@ function renderDeptSummary() {
       <div style="padding:8px 12px">
         ${dPRs.map(r=>{
           const pt = PATIENTS.find(p=>p.bmhId===r.bmhId)||{};
+          const bid = String(r.bmhId||'').replace(/'/g, "\\'");
           return `<div style="display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid var(--g5)">
+            <button type="button" class="btn btn-xs btn-outline" style="flex-shrink:0;padding:4px 7px;min-width:36px" title="Open bill & print receipt" onclick="rcOpenBillingForAndPrint('${bid}')">🧾</button>
             <div style="width:30px;height:30px;border-radius:50%;background:${pt.color||d.color};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:11px;flex-shrink:0">${pt.initials||r.patient[0]||'?'}</div>
             <div style="flex:1">
               <div style="font-weight:800;font-size:12.5px">${r.patient}</div>
@@ -11340,21 +11518,30 @@ function showDxDropdown(inp) { if(inp.value.length>=2) filterDx(inp); }
 function hideDxDropdown() { const d=document.getElementById('dx-dropdown'); if(d) d.style.display='none'; }
 function showDxDropdownList(inp, matches) {
   const d = document.getElementById('dx-dropdown'); if(!d) return;
-  if(!matches.length){d.style.display='none';return;}
+  const typed = (inp && inp.value) ? inp.value.trim() : '';
+  const showFree = typed.length >= 2 && !matches.length;
+  if(!matches.length && !showFree){d.style.display='none';return;}
   d.style.display='block';
   const rect = inp.getBoundingClientRect();
   d.style.position='fixed';
   d.style.top=(rect.bottom+window.scrollY)+'px';
   d.style.left=rect.left+'px';
   d.style.width=Math.max(320,rect.width)+'px';
-  d.innerHTML = matches.map(m=>`<div class="dx-dropdown-item" onclick="selectDx('${m.full.replace(/'/g,"\\'")}',event)">
+  let html = matches.map(m=>`<div class="dx-dropdown-item" onclick="selectDx('${m.full.replace(/'/g,"\\'")}',event)">
     <span style="font-family:var(--mono);font-size:10px;color:var(--blue);font-weight:700">${m.code}</span>
     <span style="font-size:12px;font-weight:600;margin-left:8px">${m.desc}</span>
   </div>`).join('');
+  if (showFree) {
+    const safe = escapeHtmlConsent(typed);
+    html += `<div class="dx-dropdown-item" onmousedown="event.preventDefault();selectDxFreeText()" style="cursor:pointer;border-top:1px solid var(--g5);padding-top:8px;margin-top:4px;background:var(--green-lt)">
+    <span style="font-size:12px;font-weight:800;color:var(--tx)">Not in database — use as diagnosis</span>
+    <span style="font-size:11px;color:var(--g1);display:block;margin-top:3px;line-height:1.35">${safe}</span>
+  </div>`;
+  }
+  d.innerHTML = html;
 }
 function selectDx(fullText, event) {
-  // Find the focused input and set its value
-  const activeInput = document.querySelector('.dx-inp:focus') || document.querySelector('.dx-inp');
+  const activeInput = window._dxActiveInput || document.querySelector('.dx-inp:focus') || document.querySelector('.dx-inp');
   if(activeInput) {
     activeInput.value = fullText;
     activeInput.style.background='var(--green-lt)';
@@ -11363,14 +11550,34 @@ function selectDx(fullText, event) {
   hideDxDropdown();
   if(event) event.stopPropagation();
 }
-function addDxRow() {
-  const list = document.getElementById('dx-list'); if(!list) return;
-  const d = document.createElement('div');
-  d.style='display:flex;gap:6px;align-items:center;margin-top:5px';
-  d.innerHTML=`<input type="text" class="dx-inp" placeholder="Type diagnosis to search…" oninput="filterDx(this)" onfocus="showDxDropdown(this)" style="flex:1" autocomplete="off">
-    <button class="btn btn-xs btn-gray" onclick="this.closest('div').remove()">✕</button>`;
-  list.appendChild(d);
+function selectDxFreeText() {
+  const activeInput = window._dxActiveInput || document.querySelector('.dx-inp:focus') || document.querySelector('.dx-inp');
+  if (!activeInput) { hideDxDropdown(); return; }
+  const v = activeInput.value.trim();
+  if (!v) { hideDxDropdown(); return; }
+  activeInput.value = v;
+  activeInput.style.background='var(--green-lt)';
+  activeInput.style.borderColor='var(--green)';
+  hideDxDropdown();
 }
+function addDxRow() {
+  const ap = document.querySelector('.page.active');
+  const list = ap ? ap.querySelector('[id$="-dx-list"]') : null;
+  if(!list) return;
+  const d = document.createElement('div');
+  d.style.cssText='display:flex;gap:6px;align-items:center;margin-top:5px';
+  d.innerHTML=`<input type="text" class="dx-inp" placeholder="ICD-10 search or type free-text diagnosis…" oninput="filterDx(this)" onfocus="showDxDropdown(this);wireDxInputFocus(this)" style="flex:1" autocomplete="off">
+    <button type="button" class="btn btn-xs btn-gray" onclick="this.closest('div').remove()">✕</button>`;
+  list.appendChild(d);
+  const inp = d.querySelector('.dx-inp');
+  if (inp) { wireDxInputFocus(inp); inp.focus(); }
+}
+document.addEventListener('focusin', function (e) {
+  const t = e.target;
+  if (!t || !t.classList) return;
+  if (t.classList.contains('dx-inp')) window._dxActiveInput = t;
+  if (t.classList.contains('rx-dx-line')) window._rxDxFreeTarget = t;
+});
 document.addEventListener('click', function(e) { if(!e.target.classList.contains('dx-inp')) hideDxDropdown(); });
 
 // ─── PRESCRIPTION — NEW DRUG ROW RENDERER ─────────────────
@@ -12484,7 +12691,7 @@ const RX_COMMON_EXTRA = [
 function addRxFromQuick() {
   let drug = rxQuickSelectedDrug;
   if (!drug) {
-    const inp = document.getElementById('rx-quick-search');
+    const inp = getActiveRxQuickSearchInput();
     const val = inp?.value?.trim();
     if (!val) { showToast('Type a drug name first', 'w'); return; }
     const v = val.toLowerCase();
@@ -12553,10 +12760,11 @@ function addRxFromQuick() {
   computeRxEndAndTaperDates(RX_DRUGS[RX_DRUGS.length - 1]);
 
   renderRxDrugs();
-  const inp2 = document.getElementById('rx-quick-search');
-  if (inp2) inp2.value = '';
+  const inp2 = getActiveRxQuickSearchInput();
+  if (inp2) { inp2.value = ''; try { inp2.focus(); } catch (e) { /* noop */ } }
   rxQuickSelectedDrug = null;
-  const dd = document.getElementById('rx-quick-dropdown'); if (dd) dd.style.display = 'none';
+  const dd = document.querySelector('.page.active [id="rx-quick-dropdown"]') || document.getElementById('rx-quick-dropdown');
+  if (dd) dd.style.display = 'none';
   showToast('💊 ' + (trade || generic) + ' added ✓', 's');
 }
 document.addEventListener('click',e=>{if(!e.target.closest('#rx-quick-search')&&!e.target.closest('#rx-quick-dropdown')){document.querySelectorAll('#rx-quick-dropdown').forEach(dd=>{dd.style.display='none';});}});
@@ -13434,15 +13642,25 @@ window.printUnifiedRx = function(deptId) {
   };
 
   // ── Collect checkboxes ──
+  // OBG / psych / skin have no *-inc-* toggles in markup; never fall back to oe-inc-* or Eye Rx
+  // would inherit unchecked state and drop medicines / advice from the printout.
+  const isOe = deptId === 'oe';
   const incIOP  = document.getElementById(deptId+'-inc-iop')?.checked ?? true;
   const incVA   = document.getElementById(deptId+'-inc-va')?.checked  ?? true;
   const incGL   = document.getElementById(deptId+'-inc-gl')?.checked  ?? false;
   const incInv  = document.getElementById(deptId+'-inc-inv')?.checked ?? true;
   const incPrc  = document.getElementById(deptId+'-inc-proc')?.checked ?? true;
-  const incCC   = document.getElementById('oe-inc-cc')?.checked ?? true;
-  const incPos  = document.getElementById('oe-inc-posfind')?.checked ?? true;
-  const incAdv  = document.getElementById('oe-inc-adv')?.checked ?? true;
-  const incRx   = document.getElementById(deptId+'-inc-rx')?.checked ?? (document.getElementById('oe-inc-rx')?.checked ?? true);
+  const incCC   = isOe ? (document.getElementById('oe-inc-cc')?.checked ?? true) : true;
+  const incPos  = isOe ? (document.getElementById('oe-inc-posfind')?.checked ?? true) : false;
+  const incAdv  = isOe ? (document.getElementById('oe-inc-adv')?.checked ?? true) : (document.getElementById(deptId + '-inc-adv')?.checked ?? true);
+  const incRx   = isOe ? (document.getElementById('oe-inc-rx')?.checked ?? true) : (document.getElementById(deptId + '-inc-rx')?.checked ?? true);
+
+  // OBG / psych / skin: always print medicines, advice, investigations & procedures (no print checkboxes in UI)
+  const forceFullDeptRx = deptId === 'obg' || deptId === 'psych' || deptId === 'skin';
+  const incRxFinal = forceFullDeptRx ? true : incRx;
+  const incAdvFinal = forceFullDeptRx ? true : incAdv;
+  const incInvFinal = forceFullDeptRx ? true : incInv;
+  const incPrcFinal = forceFullDeptRx ? true : incPrc;
 
   // ── Collect diagnoses — Ophthalmology: numbered rows; other depts: *-dx-list ──
   const dxPack = typeof collectDeptDiagnosesForPrint === 'function' ? collectDeptDiagnosesForPrint(deptId) : { lines: [], notes: '' };
@@ -13453,8 +13671,12 @@ window.printUnifiedRx = function(deptId) {
   const cc   = document.getElementById('cc-text')?.value || '';
   const ccDur = document.getElementById('dur-text')?.value || '';
 
-  // ── Collect drugs ──
-  const drugs = typeof RX_DRUGS !== 'undefined' ? RX_DRUGS : [];
+  // ── Collect drugs (fallback to saved visit when UI state not restored, e.g. after reopening same day) ──
+  let drugs = typeof RX_DRUGS !== 'undefined' && Array.isArray(RX_DRUGS) ? RX_DRUGS : [];
+  if (forceFullDeptRx && (!drugs || !drugs.length)) {
+    const savedRx = window.CURRENT_PATIENT?.lastVisit?.rx;
+    if (Array.isArray(savedRx) && savedRx.length) drugs = JSON.parse(JSON.stringify(savedRx));
+  }
   const rxPlainLang = typeof rxLang !== 'undefined' ? rxLang : 'en';
   const postSurgeryRx = deptId === 'oe' ? !!document.getElementById('rx-post-surgery')?.checked : false;
   const plainInstrBlocks = drugs.length ? drugs.map(function (d) {
@@ -13492,8 +13714,12 @@ window.printUnifiedRx = function(deptId) {
   const nvOD  = document.getElementById('nv-od-final')?.value || document.getElementById('ucva-od-near')?.value || window.CURRENT_PATIENT?.lastVisit?.nvODFinal || '';
   const nvOS  = document.getElementById('nv-os-final')?.value || document.getElementById('ucva-os-near')?.value || window.CURRENT_PATIENT?.lastVisit?.nvOSFinal || '';
 
-  // ── Follow-up ──
-  const fuDate  = document.getElementById('rx-fu-date')?.value;
+  // ── Follow-up (per-dept date field; duplicate id=rx-fu-date would otherwise read Ophtho only) ──
+  let fuDate = getDeptFollowUpDateInput(deptId)?.value || '';
+  if (!fuDate && forceFullDeptRx) {
+    const lv = window.CURRENT_PATIENT?.lastVisit;
+    fuDate = lv?.rxFuDate || lv?.followupDate || '';
+  }
   const fuFormatted = fuDate ? formatDateIN(fuDate) : '';
   const advice  = (deptId === 'oe'
     ? [document.getElementById('rx-advice-text')?.value || '', document.getElementById('rx-extra-advice-text')?.value || ''].filter(Boolean).join('\n')
@@ -13526,6 +13752,10 @@ window.printUnifiedRx = function(deptId) {
   const showVA = incVA && deptId==='oe' && (vaOD||vaOS);
   const showGL = incGL && deptId==='oe' && (rfODSph||rfOSSph||rfODCyl||rfOSCyl);
   const showIOP = incIOP && deptId==='oe' && (iopGatOD||iopGatOS||iopNctOD||iopNctOS);
+
+  const rxEmptyNote = forceFullDeptRx && (!drugs || !drugs.length)
+    ? `<div style="margin:8px 0;font-size:11px;color:#555;border:1px dashed #c8d0dc;padding:10px;border-radius:8px;background:#fafbfc">No medications on this prescription. Add drugs using the search above, then print again.</div>`
+    : '';
 
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>
@@ -13604,7 +13834,7 @@ ${showGL ? `
 
 ${incPos && deptId==='oe' ? `<div class="lbl-row" style="margin:6px 0"><span class="lbl">Positive Findings:</span><span class="lbl-val">${(typeof buildOphthoPositiveFindingsList === 'function' ? buildOphthoPositiveFindingsList() : []).join(' ; ') || '—'}</span></div>` : ''}
 
-${incRx && drugs.length ? `
+${incRxFinal && drugs.length ? `
 <div class="sec-title">Medicine (Rx):</div>
 <table>
   <thead><tr><th>#</th><th class="left">Name</th><th>Form</th><th>Route / Eye</th><th>Frequency</th><th>Duration</th><th>From</th><th>To</th></tr></thead>
@@ -13648,15 +13878,15 @@ ${incRx && drugs.length ? `
       return rows;
     }).join('')}
   </tbody>
-</table>` : ''}
+</table>` : rxEmptyNote}
 
-${incAdv && adviceHtml ? `<div style="margin:8px 0"><div class="lbl" style="margin-bottom:4px">Instructions</div><div class="lbl-val" style="display:block;line-height:1.6;padding:6px 8px;background:#f7faff;border-left:3px solid #1A3C6E;border-radius:0 6px 6px 0">${adviceHtml}</div></div>` : ''}
+${incAdvFinal && adviceHtml ? `<div style="margin:8px 0"><div class="lbl" style="margin-bottom:4px">Instructions</div><div class="lbl-val" style="display:block;line-height:1.6;padding:6px 8px;background:#f7faff;border-left:3px solid #1A3C6E;border-radius:0 6px 6px 0">${adviceHtml}</div></div>` : ''}
 
-${incPrc && procs.length ? `
+${incPrcFinal && procs.length ? `
 <div class="sec-title">Procedure / Surgery Advised:</div>
 ${procs.map(p=>`<div class="proc-item">&#9890; ${expandProcedureLabelForPrint(p)}</div>`).join('')}` : ''}
 
-${incInv && patientInvestigationOrders.length ? `
+${incInvFinal && patientInvestigationOrders.length ? `
 <div class="sec-title">Investigations Ordered:</div>
 ${patientInvestigationOrders.map(o=>`<div class="proc-item">&#9514; ${o.name}${o.notes?' — '+o.notes:''}</div>`).join('')}` : ''}
 
@@ -15911,11 +16141,11 @@ function selectRxQuickPick(i) {
   if (item.kind === 'settings') {
     const d = item.d;
     rxQuickSelectedDrug = { _from: 'settings', trade: d.trade, generic: d.generic, type: d.type, freq: d.freq, dur: d.dur, dept: d.dept };
-    const inp = document.getElementById('rx-quick-search');
+    const inp = getActiveRxQuickSearchInput();
     if (inp) inp.value = d.trade;
   } else {
     rxQuickSelectedDrug = Object.assign({ _from: 'full' }, item.d);
-    const inp = document.getElementById('rx-quick-search');
+    const inp = getActiveRxQuickSearchInput();
     if (inp) inp.value = item.d.brand || item.d.name;
   }
   const activeRxTab = document.querySelector('.tab-content.active[id$="-rx"], .tab-content.active[id="oe-rx"]');
@@ -15929,7 +16159,7 @@ function selectRxQuickDrug(idx) {
   const d = lib[idx];
   if (!d) return;
   rxQuickSelectedDrug = Object.assign({ _from: 'full' }, d);
-  const inp = document.getElementById('rx-quick-search');
+  const inp = getActiveRxQuickSearchInput();
   if (inp) inp.value = d.brand || d.name;
   const activeRxTab = document.querySelector('.tab-content.active[id$="-rx"], .tab-content.active[id="oe-rx"]');
   const dd = activeRxTab ? activeRxTab.querySelector('[id="rx-quick-dropdown"]') : document.getElementById('rx-quick-dropdown');
@@ -18380,6 +18610,15 @@ function saveVisit(dept) {
     visit.planProcedures = obgGuidance.procedures;
     visit.notes = [visit.ancNotes, visit.gynNotes, visit.infertilityNotes].filter(Boolean).join(' | ');
     visit.dx = Array.isArray(visit.presumptiveDx) ? visit.presumptiveDx.join(' · ') : (visit.clinicalImpression || '');
+    visit.obgAdvice = document.getElementById('obg-advice')?.value || '';
+    visit.obgExtraAdvice = document.getElementById('obg-extra-advice')?.value || '';
+    visit.rxFuDate = document.querySelector('#pg-obg #obg-rx input[type="date"]')?.value || '';
+    visit.followupDate = visit.rxFuDate || '';
+    visit.obgDiagnoses = [...document.querySelectorAll('#obg-dx-list .dx-inp')].map(function (e) { return e.value.trim(); }).filter(Boolean);
+    visit.obgProcAdvised = [...document.querySelectorAll('#rx-proc-advised-obg [data-proc]')].map(function (e) { return e.dataset.proc; }).filter(Boolean);
+    if (visit.obgDiagnoses.length) {
+      visit.dx = [visit.obgDiagnoses.join(' · '), visit.dx].filter(Boolean).join(' · ');
+    }
     visit.rx = JSON.parse(JSON.stringify(RX_DRUGS || []));
   } else if(dept === 'psych') {
     ['psych-chief','psych-duration','psych-onset','psych-trigger','psych-core-syndrome','psych-risk','psych-systemic','psych-sleep','psych-appetite','psych-function','psych-diagnosis','psych-family','psych-personal','psych-pastpsych','psych-medical','psych-substance','psych-suicidality','psych-anxiety','psych-psychosis','psych-polarity','psych-addiction-substance','psych-addiction-pattern','psych-addiction-lastuse','psych-addiction-readiness','psych-stroke-deficit','psych-stroke-timing','psych-stroke-mood','psych-epilepsy-type','psych-epilepsy-last','psych-epilepsy-adherence','psych-epilepsy-trigger','psych-child-concern','psych-child-development','psych-child-school','psych-child-parent','psych-appearance','psych-behaviour','psych-psychomotor','psych-eyecontact','psych-speech-rate','psych-speech-volume','psych-speech-tone','psych-subjective-mood','psych-affect','psych-thought-form','psych-thought-content','psych-hallucinations','psych-orientation','psych-memory','psych-insight','psych-judgement']
@@ -18394,7 +18633,14 @@ function saveVisit(dept) {
     visit.psychPlan = guidance.plan;
     visit.psychInvestigations = guidance.investigations;
     visit.psychTherapy = guidance.therapy;
-    visit.dx = Array.isArray(guidance.tags) ? guidance.tags.join(' · ') : (psychVal('psych-diagnosis') || '');
+    visit.psychDxList = [...document.querySelectorAll('#psych-dx-list .dx-inp')].map(function (e) { return e.value.trim(); }).filter(Boolean);
+    const psychDxLine = visit.psychDxList.length ? visit.psychDxList.join(' · ') : '';
+    const tagLine = Array.isArray(guidance.tags) ? guidance.tags.join(' · ') : '';
+    visit.dx = [psychDxLine, tagLine, psychVal('psych-diagnosis')].filter(Boolean).join(' · ') || '';
+    visit.psychAdvice = document.getElementById('psych-advice')?.value || '';
+    visit.psychExtraAdvice = document.getElementById('psych-extra-advice')?.value || '';
+    visit.rxFuDate = document.querySelector('#pg-psych #psych-rx input[type="date"]')?.value || '';
+    visit.followupDate = visit.rxFuDate || '';
     visit.rx = JSON.parse(JSON.stringify(RX_DRUGS || []));
   } else if(dept === 'skin') {
     ['skin-chief','skin-duration','skin-site','skin-fit','skin-primary-dx','skin-secondary-dx','skin-routine','skin-medical','skin-hormonal','skin-lesion','skin-secondary-change','skin-distribution','skin-configuration','skin-hair','skin-nail','skin-dermoscopy','skin-cosm-acne-grade','skin-cosm-sensitivity','skin-cosm-pih','skin-cosm-isotret','skin-cosm-tan','skin-cosm-preg']
@@ -18409,7 +18655,14 @@ function saveVisit(dept) {
     visit.skinInvestigations = skinGuidance.investigations;
     visit.skinPlan = skinGuidance.management;
     visit.skinProcedural = skinGuidance.procedures;
-    visit.dx = [document.getElementById('skin-primary-dx')?.value || '', document.getElementById('skin-secondary-dx')?.value || ''].filter(Boolean).join(' · ');
+    visit.skinDxList = [...document.querySelectorAll('#skin-dx-list .dx-inp')].map(function (e) { return e.value.trim(); }).filter(Boolean);
+    const skinSelDx = [document.getElementById('skin-primary-dx')?.value || '', document.getElementById('skin-secondary-dx')?.value || ''].filter(function (x) { return x && x !== 'None'; });
+    const skinDxLine = visit.skinDxList.length ? visit.skinDxList.join(' · ') : '';
+    visit.dx = [skinDxLine, skinSelDx.join(' · ')].filter(Boolean).join(' · ');
+    visit.skinAdvice = document.getElementById('skin-advice')?.value || '';
+    visit.skinExtraAdvice = document.getElementById('skin-extra-advice')?.value || '';
+    visit.rxFuDate = document.querySelector('#pg-skin #skin-rx input[type="date"]')?.value || '';
+    visit.followupDate = visit.rxFuDate || '';
     visit.rx = JSON.parse(JSON.stringify(RX_DRUGS || []));
   }
   if(typeof fbSet !== 'function') { showToast('Save not available (offline)', 'w'); return; }
