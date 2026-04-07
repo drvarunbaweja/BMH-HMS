@@ -770,8 +770,8 @@
               </tr>
               <tr>
                 <td style="padding:4px 9px;border:1px solid var(--g4);font-weight:900;background:#e8f0fe;color:var(--blue)">NCT</td>
-                <td style="border:1px solid var(--g4)"><input type="number" id="iop-nct-od" placeholder="mmHg" oninput="autoStampTime('iop-nct-od-t')" style="width:60px;font-size:12px;padding:3px 5px;text-align:center"></td>
-                <td style="border:1px solid var(--g4)"><input type="number" id="iop-nct-os" placeholder="mmHg" oninput="autoStampTime('iop-nct-os-t')" style="width:60px;font-size:12px;padding:3px 5px;text-align:center"></td>
+                <td style="border:1px solid var(--g4)"><input type="number" id="iop-nct-od" placeholder="mmHg" oninput="autoStampTime('iop-nct-od-t');updateNCTHighlight('od',this.value)" style="width:60px;font-size:12px;padding:3px 5px;text-align:center"></td>
+                <td style="border:1px solid var(--g4)"><input type="number" id="iop-nct-os" placeholder="mmHg" oninput="autoStampTime('iop-nct-os-t');updateNCTHighlight('os',this.value)" style="width:60px;font-size:12px;padding:3px 5px;text-align:center"></td>
                 <td style="border:1px solid var(--g4)"><input type="time" id="iop-nct-od-t" style="width:70px;font-size:10px;padding:2px 4px;background:var(--g6)" readonly></td>
                 <td style="border:1px solid var(--g4)"><input type="time" id="iop-nct-os-t" style="width:70px;font-size:10px;padding:2px 4px;background:var(--g6)" readonly></td>
                 <td style="border:1px solid var(--g4);color:var(--g1);text-align:center;font-size:11px" colspan="2">— pachy entered above —</td>
