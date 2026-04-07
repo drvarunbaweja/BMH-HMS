@@ -1980,6 +1980,11 @@ function openPatient(bmhId) {
   // All checkboxes unchecked
   document.querySelectorAll('#pg-ophtho input[type=checkbox], #pg-obg input[type=checkbox], #pg-psych input[type=checkbox], #pg-skin input[type=checkbox]')
     .forEach(el => { el.checked = false; });
+  // Prescription print defaults (Eye) — keep these enabled by default on each patient open.
+  ['oe-inc-va', 'oe-inc-rx', 'oe-inc-proc', 'oe-inc-adv', 'oe-inc-gl'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) el.checked = true;
+  });
   // Slit lamp chips — deselect all, then re-select defaults (Normal chips)
   document.querySelectorAll('.sl-chip').forEach(c => {
     c.classList.remove('sel');
@@ -2096,6 +2101,7 @@ function openReceptionPatient(bmhId) {
     const amt = getChargeForProcedure(c.name, p.centre || CURRENT_USER?.centre || 'CHD');
     return '<option value="' + esc(c.name) + '|' + String(amt) + '">' + esc(c.name) + ' — ₹' + Number(amt || 0).toLocaleString('en-IN') + '</option>';
   }).join('');
+  window._rcChargeOptionsHtml = chargeOpts;
   m.innerHTML = '<div class="modal" style="max-width:520px;max-height:90vh;overflow:auto">'
     + '<div class="modal-hd"><div class="modal-title">🏥 ' + esc(p.name) + '</div><button type="button" class="modal-close" onclick="closeM(\'m-rc-patient\')">✕</button></div>'
     + '<div style="padding:14px 16px;font-size:12px;line-height:1.5">'
@@ -2117,9 +2123,11 @@ function openReceptionPatient(bmhId) {
     + '<div style="margin-top:14px;padding:10px;border:1px solid var(--g5);border-radius:8px;background:var(--g6)">'
     + '<label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800;color:var(--bmh-blue);cursor:pointer"><input type="checkbox" id="rc-more-charge-toggle" onchange="document.getElementById(\'rc-more-charge-wrap\').style.display=this.checked?\'block\':\'none\'"> Add more charges</label>'
     + '<div id="rc-more-charge-wrap" style="display:none;margin-top:10px">'
-    + '<div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap">'
-    + '<div style="flex:1"><label class="fl">Charge from settings</label><select id="rc-more-charge-select" style="font-size:12px"><option value="">— Select charge —</option>' + chargeOpts + '</select></div>'
-    + '<button type="button" class="btn btn-gold btn-sm" onclick="addReceptionPatientCharge(\'' + String(bmhId).replace(/'/g, "\\'") + '\')">+ Add to final bill</button>'
+    + '<div id="rc-more-charge-rows"></div>'
+    + '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">'
+    + '<button type="button" class="btn btn-xs btn-outline" onclick="rcAddMoreChargeRow()">＋ Add another charge</button>'
+    + '<button type="button" class="btn btn-gold btn-sm" onclick="addReceptionPatientCharges(\'' + String(bmhId).replace(/'/g, "\\'") + '\', false)">Add selected to final bill</button>'
+    + '<button type="button" class="btn btn-outline btn-sm" onclick="addReceptionPatientCharges(\'' + String(bmhId).replace(/'/g, "\\'") + '\', true)">🖨️ Add + Print bill</button>'
     + '</div></div></div>'
     + '<div style="margin-top:14px;display:flex;flex-wrap:wrap;gap:8px">'
     + '<button type="button" class="btn btn-gold btn-sm" onclick="rcOpenBillingFor(\'' + String(bmhId).replace(/'/g, "\\'") + '\')">💳 Billing / charges</button>'
@@ -2127,6 +2135,7 @@ function openReceptionPatient(bmhId) {
     + '<button type="button" class="btn btn-outline btn-sm" onclick="closeM(\'m-rc-patient\');openPatient(\'' + String(bmhId).replace(/'/g, "\\'") + '\')">👁️ Open doctor record</button>'
     + '</div></div></div>';
   openM('m-rc-patient');
+  setTimeout(function () { rcResetMoreChargeRows(); }, 20);
 }
 window.openReceptionPatient = openReceptionPatient;
 function openReceptionPatientEdit(bmhId) {
@@ -2141,18 +2150,57 @@ function openReceptionPatientEdit(bmhId) {
   }, 120);
 }
 window.openReceptionPatientEdit = openReceptionPatientEdit;
-function addReceptionPatientCharge(bmhId) {
-  const sel = document.getElementById('rc-more-charge-select');
-  if (!sel || !sel.value) { showToast('Select a charge first', 'w'); return; }
-  const parts = sel.value.split('|');
-  const desc = parts[0] || 'Charge';
-  const amt = Number(parts[1] || 0);
-  addBmhPatientCharge(bmhId, { id: 'rcx' + Date.now(), cat: inferChargeCategoryFromService(desc), desc: desc, qty: 1, rate: amt, amount: amt, source: 'reception-extra', ts: new Date().toISOString() });
+function rcAddMoreChargeRow(prefillValue) {
+  const rows = document.getElementById('rc-more-charge-rows');
+  if (!rows) return;
+  const row = document.createElement('div');
+  row.style.cssText = 'display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end;margin-bottom:7px';
+  row.innerHTML =
+    '<div><label class="fl">Charge from settings</label><select class="rc-more-charge-select-row" style="font-size:12px"><option value="">— Select charge —</option>' + (window._rcChargeOptionsHtml || '') + '</select></div>' +
+    '<button type="button" class="btn btn-xs btn-gray" onclick="this.closest(\'div\').remove()">✕</button>';
+  rows.appendChild(row);
+  const sel = row.querySelector('.rc-more-charge-select-row');
+  if (sel && prefillValue) sel.value = prefillValue;
+}
+function rcResetMoreChargeRows() {
+  const rows = document.getElementById('rc-more-charge-rows');
+  if (!rows) return;
+  rows.innerHTML = '';
+  rcAddMoreChargeRow();
+}
+function addReceptionPatientCharges(bmhId, printAfter) {
+  const sels = Array.from(document.querySelectorAll('#rc-more-charge-rows .rc-more-charge-select-row'));
+  if (!sels.length) { showToast('No charge rows added', 'w'); return; }
+  let added = 0;
+  let skipped = 0;
+  sels.forEach(function (sel) {
+    if (!sel || !sel.value) return;
+    const parts = sel.value.split('|');
+    const desc = String(parts[0] || 'Charge').trim();
+    const amt = Number(parts[1] || 0);
+    if (!(amt > 0) || !desc) return;
+    const existing = (window.BMH_PATIENT_CHARGES[bmhId] || []).some(function (x) {
+      return String(x.desc || '').trim().toLowerCase() === desc.toLowerCase()
+        && Math.abs((Number(x.amount) || 0) - amt) < 0.001
+        && String(x.source || '').toLowerCase().includes('reception');
+    });
+    if (existing) { skipped += 1; return; }
+    addBmhPatientCharge(bmhId, { id: 'rcx' + Date.now() + Math.random().toString(36).slice(2, 5), cat: inferChargeCategoryFromService(desc), desc: desc, qty: 1, rate: amt, amount: amt, source: 'reception-extra', ts: new Date().toISOString() });
+    added += 1;
+  });
   renderReceptionPage && renderReceptionPage();
   renderBillingPageIfActive && renderBillingPageIfActive();
-  showToast(desc + ' added to final bill ✓', 's');
+  if (!added) {
+    showToast(skipped ? 'Selected charges already exist in bill' : 'Select at least one charge', 'i');
+    return;
+  }
+  showToast((added + ' charge(s) added to final bill' + (skipped ? ' · ' + skipped + ' skipped (duplicate)' : '')) + ' ✓', 's');
+  if (printAfter) rcOpenBillingForAndPrint(bmhId);
 }
-window.addReceptionPatientCharge = addReceptionPatientCharge;
+window.rcAddMoreChargeRow = rcAddMoreChargeRow;
+window.rcResetMoreChargeRows = rcResetMoreChargeRows;
+window.addReceptionPatientCharges = addReceptionPatientCharges;
+window.addReceptionPatientCharge = function (bmhId) { addReceptionPatientCharges(bmhId, false); };
 
 function rcOpenBillingFor(bmhId) {
   closeM('m-rc-patient');
@@ -2458,9 +2506,17 @@ function sendCharge() {
   const pt = document.getElementById('sp-pt')?.value; const fr = document.getElementById('sp-proc')?.value || '';
   const amt = parseInt(fr.match(/\d+/)?.[0]||0);
   if (!pt) return;
+  const serviceName = fr.split(' ₹')[0];
+  const dup = (PAY_REQUESTS || []).find(function (r) {
+    return r.bmhId === pt
+      && String(r.for || '').trim().toLowerCase() === String(serviceName || '').trim().toLowerCase()
+      && Number(r.amount || 0) === Number(amt || 0)
+      && (r.status === 'pending' || r.status === 'paid');
+  });
+  if (dup) { showToast('Same charge already sent/collected for this patient', 'i'); return; }
   const _pt2 = PATIENTS.find(x=>x.bmhId===pt);
   const _prId2 = 'PR'+Date.now();
-  const _pr2 = {id:_prId2,patient:_pt2?.name||pt,bmhId:pt,for:fr.split(' ₹')[0],amount:amt,status:'pending',from:document.getElementById('sbnm').textContent,dept:_pt2?.dept||'ophtho',centre:_pt2?.centre||CURRENT_USER?.centre||'CHD',date:new Date().toISOString()};
+  const _pr2 = {id:_prId2,patient:_pt2?.name||pt,bmhId:pt,for:serviceName,amount:amt,status:'pending',from:document.getElementById('sbnm').textContent,dept:_pt2?.dept||'ophtho',centre:_pt2?.centre||CURRENT_USER?.centre||'CHD',date:new Date().toISOString()};
   PAY_REQUESTS.push(_pr2);
   syncPayRequestToPatientCharges(_pr2);
   fbSet&&fbSet('payRequests/'+_prId2,_pr2);
@@ -2475,8 +2531,16 @@ function sendQuickCharge(name, amount, bmhIdOverride) {
   const ptId = pt?.bmhId || bmhIdOverride || 'BMSH-000000';
   const dept = pt?.dept || CURRENT_USER?.dept || 'ophtho';
   const centre = pt?.centre || CURRENT_USER?.centre || 'CHD';
+  const amtNum = parseInt(amount) || 0;
+  const dup = (PAY_REQUESTS || []).find(function (r) {
+    return r.bmhId === ptId
+      && String(r.for || '').trim().toLowerCase() === String(name || '').trim().toLowerCase()
+      && Number(r.amount || 0) === Number(amtNum)
+      && (r.status === 'pending' || r.status === 'paid');
+  });
+  if (dup) { showToast('Same charge already sent/collected for this patient', 'i'); return; }
   const prId = 'PR'+Date.now()+Math.floor(Math.random()*1000);
-  const pr = {id:prId, patient:ptName, bmhId:ptId, for:name, amount:parseInt(amount)||0, status:'pending', from:CURRENT_USER?.name||'Doctor', dept, centre, date:new Date().toISOString()};
+  const pr = {id:prId, patient:ptName, bmhId:ptId, for:name, amount:amtNum, status:'pending', from:CURRENT_USER?.name||'Doctor', dept, centre, date:new Date().toISOString()};
   PAY_REQUESTS.push(pr);
   syncPayRequestToPatientCharges(pr);
   fbSet&&fbSet('payRequests/'+prId, pr);
@@ -5482,13 +5546,17 @@ function bmhSyncPatientRunningBalance(bmhId) {
   return due;
 }
 
+function bmhGetAdvanceAvailableForPatient(bmhId) {
+  const p = PATIENTS.find(x => x.bmhId === bmhId);
+  return Math.max(0, Number(p?.advance) || 0);
+}
+
 function bmhTotalsForPatient(bmhId) {
   const lines = window.BMH_PATIENT_CHARGES[bmhId] || [];
   const sub = lines.reduce((s, x) => s + (Number(x.amount) || 0), 0);
   const disc = Math.max(0, parseFloat(document.getElementById('bmh-bill-discount')?.value) || 0);
   const afterDisc = Math.max(0, sub - disc);
-  const p = PATIENTS.find(x => x.bmhId === bmhId);
-  const advAvail = Math.max(0, Number(p?.advance) || 0);
+  const advAvail = Math.max(0, Number(bmhGetAdvanceAvailableForPatient(bmhId)) || 0);
   const applyAdv = document.getElementById('bmh-apply-advance')?.checked;
   const advanceApplied = applyAdv ? Math.min(advAvail, afterDisc) : 0;
   const taxable = Math.max(0, afterDisc - advanceApplied);
@@ -5569,12 +5637,13 @@ function bmhSelectBillPatient(bmhId) {
   const t = document.getElementById('bmh-bill-card-title');
   const s = document.getElementById('bmh-bill-card-sub');
   if (t) t.textContent = p ? '💳 ' + p.name : '💳 Billing';
-  const advHint = p && (p.advance > 0) ? ' · Adv ₹' + (Number(p.advance) || 0).toLocaleString('en-IN') + ' (tick below to deduct)' : '';
+  const advAvail = bmhGetAdvanceAvailableForPatient(bmhId);
+  const advHint = p && (advAvail > 0) ? ' · Adv ₹' + (Number(advAvail) || 0).toLocaleString('en-IN') + ' (tick below to deduct)' : '';
   if (s) s.textContent = p ? p.bmhId + ' · ' + (p.dept || '') + ' · ' + (p.doctor || '') + advHint : '';
   const aa = document.getElementById('bmh-apply-advance');
   const al = document.getElementById('bmh-advance-available');
-  if (p && al) al.textContent = '₹' + (Number(p.advance) || 0).toLocaleString('en-IN') + ' available';
-  if (aa && p) { aa.checked = (p.advance > 0); aa.disabled = !(p.advance > 0); }
+  if (p && al) al.textContent = '₹' + (Number(advAvail) || 0).toLocaleString('en-IN') + ' available';
+  if (aa && p) { aa.checked = (advAvail > 0); aa.disabled = !(advAvail > 0); }
   const tog = document.getElementById('bmh-pay-received-toggle');
   if (tog && tog.checked) bmhTogglePaymentForm(true);
   bmhRenderQuickChargePanels();
@@ -5595,7 +5664,8 @@ function bmhRenderBillPatientList() {
   el.innerHTML = pts.map(p => {
     const tot = bmhBillPreviewTotal(p.bmhId);
     const bal = p.balance > 0 ? ' · Due ₹' + p.balance.toLocaleString('en-IN') : '';
-    const adv = (p.advance > 0) ? ' · Adv ₹' + (Number(p.advance) || 0).toLocaleString('en-IN') : '';
+    const advAvail = bmhGetAdvanceAvailableForPatient(p.bmhId);
+    const adv = (advAvail > 0) ? ' · Adv ₹' + (Number(advAvail) || 0).toLocaleString('en-IN') : '';
     return `<button type="button" class="btn btn-outline btn-sm" style="width:100%;justify-content:space-between;margin-bottom:4px;text-align:left" onclick="document.getElementById('bmh-bill-pt-select').value='${p.bmhId}';bmhSelectBillPatient('${p.bmhId}')">
       <span><strong>${p.name}</strong> <span style="font-family:var(--mono);font-size:10px;color:var(--bmh-teal)">${p.bmhId}</span>${adv ? '<span style="font-size:10px;color:var(--blue);font-weight:800">' + adv + '</span>' : ''}</span>
       <span style="font-size:11px;color:var(--g1)">Bill ₹${tot.toLocaleString('en-IN')}${bal}</span>
@@ -6188,6 +6258,11 @@ function bmhRecordPatientPayment() {
       PAY_REQUESTS.push(prIns);
       fbSet && fbSet('payRequests/' + prIns.id, prIns);
     }
+  }
+  const advAdj = Number(bmhTotalsForPatient(bmhId).advanceApplied || 0);
+  if (pt && advAdj > 0) {
+    pt.advance = Math.max(0, (Number(pt.advance) || 0) - advAdj);
+    fbUpdate && fbUpdate('patients/' + bmhId, { advance: pt.advance });
   }
   const updatedDue = bmhSyncPatientRunningBalance(bmhId);
   if (pt) pt.balance = updatedDue;
@@ -18171,7 +18246,16 @@ function deletePayRequest(prId) {
     showToast(`🗑️ Charge deleted: ${label}`,'i');
     renderReceptionPage&&renderReceptionPage(); renderDeptSummary&&renderDeptSummary();
   } else {
-    requestDeletion('payRequest', prId, label);
+    const amt = Number(pr.amount) || 0;
+    if (amt > 1000) {
+      requestDeletion('payRequest', prId, label);
+    } else {
+      if(!confirm(`Delete this charge request?\n${label}\n\nAmount is ≤ ₹1000, so reception can delete directly.`)) return;
+      const idx = PAY_REQUESTS.findIndex(r=>r.id===prId);
+      if(idx>-1) { PAY_REQUESTS.splice(idx,1); try { if(window.firebase&&firebase.database) firebase.database().ref('payRequests/'+prId).remove(); } catch(e){} }
+      showToast(`🗑️ Charge deleted: ${label}`,'i');
+      renderReceptionPage&&renderReceptionPage(); renderDeptSummary&&renderDeptSummary();
+    }
   }
 }
 
@@ -18188,7 +18272,15 @@ function deletePatientPendingCharges(bmhId) {
     showToast(`🗑️ Deleted ${pending.length} charge(s)`,'i');
     renderReceptionPage&&renderReceptionPage(); renderDeptSummary&&renderDeptSummary();
   } else {
-    requestDeletion('patientCharges', bmhId, label);
+    const total = pending.reduce((s,r)=>s+(Number(r.amount)||0),0);
+    if (total > 1000) {
+      requestDeletion('patientCharges', bmhId, label);
+    } else {
+      if(!confirm(`Delete ${pending.length} pending charge(s) for this patient?\n${label}\n\nTotal is ≤ ₹1000, so reception can delete directly.`)) return;
+      pending.forEach(pr=>{ const idx=PAY_REQUESTS.indexOf(pr); if(idx>-1) PAY_REQUESTS.splice(idx,1); try { if(window.firebase&&firebase.database) firebase.database().ref('payRequests/'+pr.id).remove(); } catch(e){} });
+      showToast(`🗑️ Deleted ${pending.length} charge(s)`,'i');
+      renderReceptionPage&&renderReceptionPage(); renderDeptSummary&&renderDeptSummary();
+    }
   }
 }
 
