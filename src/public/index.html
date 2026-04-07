@@ -4183,14 +4183,21 @@
     window.BMH_FB_READY = true;
     // Connection dot wired by app.js via modular SDK
   } catch(e) {
-    window.BMH_FB_READY = false;
-    console.warn('Legacy Firebase bridge init skipped:', e.message);
+    try {
+      var existingApp = (firebase.apps && firebase.apps.length) ? firebase.apps[0] : firebase.app();
+      window.FBDB = existingApp.database();
+      window.BMH_FB_READY = true;
+      console.warn('Legacy Firebase bridge reused existing app:', e.message);
+    } catch (reuseErr) {
+      window.BMH_FB_READY = false;
+      console.warn('Legacy Firebase bridge init failed:', reuseErr.message || e.message);
+    }
   }
 })();
 </script>
 
 <!-- ═══ MAIN APP SCRIPT (legacy — being migrated to modules) ═══ -->
-<script defer src="%BASE_URL%js/legacy.js"></script>
+<script defer src="%BASE_URL%js/legacy.js?v=20260407-hotfix2"></script>
 
 <!-- ═══ VITE MODULE ENTRY ═══ -->
 <script type="module" src="./js/app.js"></script>
