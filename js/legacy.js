@@ -1863,6 +1863,14 @@ function initQR() {
   img.alt = bmhId;
   canvas.parentNode.replaceChild(img, canvas);
 }
+function syncUcvaToRefraction(eye) {
+  const srcId = eye === 'os' ? 'va-os-uc' : 'va-od-uc';
+  const dstId = eye === 'os' ? 'ucva-os-dist' : 'ucva-od-dist';
+  const src = document.getElementById(srcId);
+  const dst = document.getElementById(dstId);
+  if (!src || !dst) return;
+  dst.value = src.value || '';
+}
 
 // ═══════════════════════════════════════
 // INTERACTIONS
@@ -2124,6 +2132,12 @@ function populateOphthoForm(v) {
   function setSel(id, val) { const el=document.getElementById(id); if(el&&val){ for(let i=0;i<el.options.length;i++){if(el.options[i].value===val||el.options[i].text===val){el.selectedIndex=i;break;}} } }
 
   // Visual Acuity
+  setSel('va-od-uc', v.ucvaOD || v.vaOD);
+  setSel('va-os-uc', v.ucvaOS || v.vaOS);
+  setSel('va-od-bc', v.bcvaOD);
+  setSel('va-os-bc', v.bcvaOS);
+  setSel('va-od-ph', v.phOD);
+  setSel('va-os-ph', v.phOS);
   setSel('ucva-od-dist', v.vaOD);    setSel('ucva-os-dist', v.vaOS);
   setSel('ucva-od-near', v.vaODNear); setSel('ucva-os-near', v.vaOSNear);
 
@@ -2152,6 +2166,8 @@ function populateOphthoForm(v) {
   setSel('rf-os-add', v.rfOSAdd);
   setSel('nv-od-final', v.nvODFinal);
   setSel('nv-os-final', v.nvOSFinal);
+  syncUcvaToRefraction('od');
+  syncUcvaToRefraction('os');
 
   // Fundus
   setSel('fund-od-disc', v.fundODdisc); setSel('fund-od-cd', v.fundODcd);
@@ -18163,6 +18179,12 @@ function saveVisit(dept) {
     savedBy: CURRENT_USER?.name || 'System',
   };
   if(dept === 'ophtho') {
+    visit.ucvaOD = document.getElementById('va-od-uc')?.value || document.getElementById('ucva-od-dist')?.value || '';
+    visit.ucvaOS = document.getElementById('va-os-uc')?.value || document.getElementById('ucva-os-dist')?.value || '';
+    visit.bcvaOD = document.getElementById('va-od-bc')?.value || '';
+    visit.bcvaOS = document.getElementById('va-os-bc')?.value || '';
+    visit.phOD   = document.getElementById('va-od-ph')?.value || '';
+    visit.phOS   = document.getElementById('va-os-ph')?.value || '';
     visit.vaOD   = document.getElementById('ucva-od-dist')?.value || '';
     visit.vaOS   = document.getElementById('ucva-os-dist')?.value || '';
     visit.vaODNear = document.getElementById('ucva-od-near')?.value || '';
