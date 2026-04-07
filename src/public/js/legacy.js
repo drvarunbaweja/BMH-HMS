@@ -11143,7 +11143,7 @@ function addOTCase() {
     age:pt?.age||'—', sex:pt?.sex||'—',
     caseKind,
     dx, procedure:proc, procedureMain: parseOtProcedureSelection(proc).main, procedureSub: parseOtProcedureSelection(proc).sub, site, surgeon, anaes, anaesDoc:'',
-    date, scheduledTime:time, room, iol: iclSummary || iol, iolType: iclSummary ? (iclConfig.eyes === 'both' ? 'STARR ICL (Both Eyes)' : 'STARR ICL (One Eye)') : iolType, iolPower: iclSummary ? ((iclConfig.eyes === 'both' ? [(iclConfig.firstPower || '—'), (iclConfig.secondPower || '—')].join(' / ') : (iclConfig.onePower || '—')) : iolPower), iclConfig, priority,
+    date, scheduledTime:time, room, iol: iclSummary || iol, iolType: iclSummary ? (iclConfig.eyes === 'both' ? 'STARR ICL (Both Eyes)' : 'STARR ICL (One Eye)') : iolType, iolPower: (iclSummary ? (iclConfig.eyes === 'both' ? [(iclConfig.firstPower || '—'), (iclConfig.secondPower || '—')].join(' / ') : (iclConfig.onePower || '—')) : iolPower), iclConfig, priority,
     obgCaseType, obgGa, obgIndication, obgFetal, obgLiquor, obgBlood, obgAnaesNote, obgBaby, obgMother, obgDocs,
     centre: pt?.centre || getEffectiveCentre() || CURRENT_USER?.centre || 'CHD',
     preop, consent, fasting, status:'pending',
