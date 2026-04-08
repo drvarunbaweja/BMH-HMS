@@ -375,32 +375,14 @@
             <div style="position:relative;flex-shrink:0">
               <select id="send-charge-sel" style="font-size:11.5px;padding:4px 28px 4px 8px;border-radius:7px;border:1.5px solid rgba(212,160,23,.5);background:#fff;cursor:pointer;min-width:180px" onchange="sendFromDropdown(this)">
                 <option value="">— All Procedures —</option>
-                <optgroup label="Eye Investigations">
-                  <option value="Biometry IOL Master|1200">Biometry IOL Master — ₹1,200</option>
-                  <option value="OCT Macula OU|1800">OCT Macula OU — ₹1,800</option>
-                  <option value="HVF Visual Fields|1500">HVF Visual Fields — ₹1,500</option>
-                  <option value="Fundus Photography|600">Fundus Photography — ₹600</option>
-                  <option value="Corneal Topography|1500">Corneal Topography — ₹1,500</option>
-                  <option value="Specular Microscopy|1200">Specular Microscopy — ₹1,200</option>
-                  <option value="Fluorescein Angiography|4000">Fluorescein Angiography — ₹4,000</option>
-                  <option value="ERG / VEP|2500">ERG / VEP — ₹2,500</option>
-                </optgroup>
-                <optgroup label="Eye Surgeries">
-                  <option value="Pre-op Package|3500">Pre-op Package — ₹3,500</option>
-                  <option value="PMICS (Pinhole Micro Incision Cataract Surgery) + IOL|38000">PMICS + IOL — ₹38,000</option>
-                  <option value="Trabeculectomy|42000">Trabeculectomy — ₹42,000</option>
-                  <option value="IVT Injection|8000">IVT Injection — ₹8,000</option>
-                  <option value="LASIK (per eye)|45000">LASIK (per eye) — ₹45,000</option>
-                  <option value="Pterygium Excision|8000">Pterygium Excision — ₹8,000</option>
-                </optgroup>
-                <optgroup label="Consultation">
-                  <option value="Consultation|800">Consultation — ₹800</option>
-                  <option value="Follow-up Consultation|500">Follow-up — ₹500</option>
-                </optgroup>
               </select>
             </div>
+            <input type="text" id="send-charge-custom-name" list="send-charge-datalist" placeholder="Type or pick charge…" autocomplete="off" style="font-size:11.5px;padding:4px 8px;border-radius:7px;border:1.5px solid rgba(212,160,23,.5);min-width:160px;max-width:280px;flex:1">
+            <input type="number" id="send-charge-custom-amt" placeholder="₹" min="0" style="font-size:11.5px;padding:4px 8px;width:80px;border-radius:7px;border:1.5px solid rgba(212,160,23,.5)">
+            <button type="button" class="btn btn-xs btn-gold" onclick="sendOphthoTypedCharge()">Send</button>
+            <datalist id="send-charge-datalist"></datalist>
             <div id="ai-suggested-charges" style="display:flex;gap:5px;flex-wrap:wrap"></div>
-            <button class="btn btn-xs btn-gold" onclick="addCustomCharge()" style="white-space:nowrap">+ Custom</button>
+            <button type="button" class="btn btn-xs btn-outline" onclick="addCustomCharge()" style="white-space:nowrap">Custom (prompt)</button>
           </div>
           <div id="sent-charges-log" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px"></div>
         </div>
@@ -2509,7 +2491,7 @@
           <div class="form-group"><label class="fl">Sleep</label><select id="psych-sleep"><option value="">— Select —</option><option>Normal</option><option>Initial insomnia</option><option>Middle insomnia</option><option>Terminal insomnia</option><option>Hypersomnia</option><option>Reduced need for sleep</option></select></div>
           <div class="form-group"><label class="fl">Appetite</label><select id="psych-appetite"><option value="">— Select —</option><option>Normal</option><option>Reduced</option><option>Increased</option><option>Weight loss</option><option>Weight gain</option></select></div>
           <div class="form-group"><label class="fl">Functioning</label><select id="psych-function"><option value="">— Select —</option><option>Mildly impaired</option><option>Moderately impaired</option><option>Severely impaired</option><option>Bed-bound / dependent</option><option>School decline</option></select></div>
-          <div class="form-group"><label class="fl">Diagnosis (ICD-10)</label><select id="psych-diagnosis"><option value="">— Select —</option><option>F32.1 — Major Depressive Episode, Moderate</option><option>F32.2 — Major Depressive Episode, Severe</option><option>F41.1 — GAD</option><option>F20 — Schizophrenia</option><option>F31 — Bipolar Affective Disorder</option><option>F43.1 — PTSD</option><option>G40 — Epilepsy</option><option>I69 — Stroke sequelae</option><option>F10.2 — Alcohol dependence</option><option>F90 — ADHD</option></select></div>
+            <div class="form-group"><label class="fl">Diagnosis (ICD-10)</label><input type="text" id="psych-diagnosis" class="dx-inp" placeholder="Type a few letters to search ICD-10…" autocomplete="off" style="width:100%;font-size:12px;padding:5px 8px;border:1.5px solid var(--g4);border-radius:6px;box-sizing:border-box" oninput="filterDx(this)" onfocus="showDxDropdown(this);wireDxInputFocus(this)"></div>
           <div class="form-group"><label class="fl">Family History</label><input id="psych-family" list="psych-family-list" placeholder="Depression / bipolar / epilepsy"></div>
           <div class="form-group full"><label class="fl">Personal History</label><textarea id="psych-personal" placeholder="Education, occupation, family setup, premorbid personality, psychosocial supports"></textarea></div>
           <div class="form-group full"><label class="fl">Past Psychiatric History</label><textarea id="psych-pastpsych" placeholder="Previous episodes, admissions, medicines, therapy response"></textarea></div>
@@ -3508,7 +3490,7 @@
         <div style="font-size:12px;color:var(--g1);line-height:1.5">Save OT note templates here for Eye and OBG. These templates will appear inside OT Operative Notes and autosuggest by linked surgery.</div>
         <div class="form-group"><label class="fl">Template Name</label><input type="text" id="rx-tpl-name" placeholder="e.g. PMICS Routine Note"></div>
         <div class="form-group"><label class="fl">OT Branch</label><select id="rx-tpl-dept-settings"><option value="OT - Eye">OT - Eye</option><option value="OT - OBG">OT - OBG</option></select></div>
-        <div class="form-group"><label class="fl">Linked Surgery / Procedure</label><input type="text" id="rx-tpl-surgery" list="rx-tpl-surgery-list" placeholder="e.g. Pinhole Microincision Cataract Surgery + IOL Implantation"><datalist id="rx-tpl-surgery-list"></datalist></div>
+        <div class="form-group"><label class="fl">Linked Surgery / Procedure</label><input type="text" id="rx-tpl-surgery" list="rx-tpl-surgery-list" placeholder="e.g. Pinhole Microincision Cataract Surgery"><datalist id="rx-tpl-surgery-list"></datalist></div>
         <div class="form-group full"><label class="fl">OT Notes Template (one line per step)</label><textarea id="rx-tpl-drugs" placeholder="Peribulbar anaesthesia given&#10;Clear corneal entry made&#10;Nucleus delivered and IOL implanted&#10;Wound checked secure" style="min-height:120px"></textarea></div>
         <button class="btn btn-gold" onclick="saveRxTemplate()">💾 Save OT Template</button>
       </div>
@@ -4198,7 +4180,7 @@
 <div class="fg fg1" style="gap:9px">
   <div class="form-group"><label class="fl">Department</label><select id="add-charge-cat"><option value="Eye">Eye</option><option value="OBG">OBG</option><option value="Psych">Psych</option><option value="Skin">Skin</option><option value="Lab">Lab</option><option value="Other">Other</option></select></div>
   <div class="form-group"><label class="fl">Category</label><select id="add-charge-kind"><option value="procedure">Procedure</option><option value="surgery">Surgery</option><option value="laser">Laser</option><option value="diagnostic">Diagnostic</option><option value="lab">Lab Investigation</option><option value="medicine">Medicine / Consumable</option><option value="room">Room / Stay</option><option value="other">Other</option></select></div>
-  <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">Main heading <button type="button" onclick="showToast('Use a main heading to group related subcharges like PMICS + different IOL options.','i')" style="background:var(--g6);color:var(--blue);border:1px solid var(--g4);border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">?</button></label><input type="text" id="add-charge-parent" list="charge-parent-list" placeholder="e.g. Pinhole Microincision Cataract Surgery + IOL implantation"><datalist id="charge-parent-list"></datalist></div>
+  <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">Main heading <button type="button" onclick="showToast('Use a main heading to group related subcharges like PMICS + different IOL options.','i')" style="background:var(--g6);color:var(--blue);border:1px solid var(--g4);border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">?</button></label><input type="text" id="add-charge-parent" list="charge-parent-list" placeholder="e.g. Pinhole Microincision Cataract Surgery"><datalist id="charge-parent-list"></datalist></div>
   <div class="form-group"><label class="fl">Charge / subcategory name</label><input type="text" id="add-charge-name" list="charge-name-list" placeholder="Optional if main heading itself is the charge"><datalist id="charge-name-list"></datalist></div>
   <div class="form-group"><label class="fl">Chandigarh ₹</label><input type="number" id="add-charge-chd" min="0" step="1"></div>
   <div class="form-group"><label class="fl">Ropar ₹</label><input type="number" id="add-charge-rpr" min="0" step="1"></div>
@@ -4221,16 +4203,54 @@
 </div>
 
 <div class="modal-ov" id="m-edit-consent-data">
-<div class="modal modal-lg">
+<div class="modal modal-lg" style="max-width:min(96vw,1100px);width:100%;max-height:92vh">
 <div class="modal-hd"><div class="modal-title">Edit bilingual consent</div><button class="modal-close" onclick="closeM('m-edit-consent-data')">✕</button></div>
 <div class="fg fg1" style="gap:9px">
   <input type="hidden" id="edit-cd-key">
   <div class="form-group"><label class="fl">Title</label><input type="text" id="edit-cd-title" style="font-size:13px"></div>
   <div style="font-size:10.5px;color:var(--g1)">Separate <strong>paragraphs</strong> with a <strong>blank line</strong>. Align English, Punjabi and Hindi blocks by paragraph order.</div>
-  <div class="form-group"><label class="fl">English</label><textarea id="edit-cd-en" rows="8" style="width:100%;font-size:12px;box-sizing:border-box"></textarea></div>
-  <div class="form-group"><label class="fl">ਪੰਜਾਬੀ</label><textarea id="edit-cd-pa" rows="8" style="width:100%;font-size:12px;box-sizing:border-box"></textarea></div>
-  <div class="form-group"><label class="fl">हिंदी</label><textarea id="edit-cd-hi" rows="8" style="width:100%;font-size:12px;box-sizing:border-box"></textarea></div>
+  <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:8px;background:var(--g6);border-radius:8px;border:1px solid var(--g4);margin-bottom:4px">
+    <span style="font-size:9px;font-weight:800;color:var(--g1);text-transform:uppercase">Format</span>
+    <select onchange="applyConsentToolbarToFocused('fontSize', this.value);this.value=''" style="font-size:11px;padding:3px 6px;border-radius:6px;border:1.5px solid var(--g4)"><option value="">Size</option><option value="10px">10</option><option value="11px">11</option><option value="12px">12</option><option value="13px">13</option><option value="14px">14</option><option value="15px">15</option></select>
+    <select onchange="applyConsentToolbarToFocused('fontFamily', this.value);this.value=''" style="font-size:11px;padding:3px 6px;border-radius:6px;border:1.5px solid var(--g4)"><option value="">Font</option><option value="Arial,sans-serif">Arial</option><option value="Georgia,serif">Georgia</option><option value="'Times New Roman',Times,serif">Times</option><option value="system-ui,sans-serif">System</option></select>
+    <button type="button" class="btn btn-xs btn-outline" onclick="applyConsentToolbarToFocused('textAlign','left')" title="Align left">⬅</button>
+    <button type="button" class="btn btn-xs btn-outline" onclick="applyConsentToolbarToFocused('textAlign','center')" title="Center">↔</button>
+    <button type="button" class="btn btn-xs btn-outline" onclick="applyConsentToolbarToFocused('textAlign','right')" title="Align right">➡</button>
+    <button type="button" class="btn btn-xs btn-outline" onclick="applyConsentToolbarToFocused('textAlign','justify')" title="Justify">⬌</button>
+  </div>
+  <div class="form-group"><label class="fl">English</label><textarea id="edit-cd-en" rows="12" style="width:100%;min-height:180px;font-size:12px;box-sizing:border-box"></textarea></div>
+  <div class="form-group"><label class="fl">ਪੰਜਾਬੀ</label><textarea id="edit-cd-pa" rows="12" style="width:100%;min-height:180px;font-size:12px;box-sizing:border-box"></textarea></div>
+  <div class="form-group"><label class="fl">हिंदी</label><textarea id="edit-cd-hi" rows="12" style="width:100%;min-height:180px;font-size:12px;box-sizing:border-box"></textarea></div>
   <button type="button" class="btn btn-gold" onclick="saveStructuredConsentFromModal()">💾 Save to database</button>
+</div>
+</div>
+</div>
+
+<div class="modal-ov" id="m-edit-uploaded-consent">
+<div class="modal modal-lg" style="max-width:min(96vw,1100px);width:100%;max-height:92vh">
+<div class="modal-hd"><div class="modal-title">Edit uploaded consent / form</div><button class="modal-close" onclick="closeM('m-edit-uploaded-consent')">✕</button></div>
+<div class="fg fg1" style="gap:9px">
+  <input type="hidden" id="edit-upl-consent-id">
+  <div class="form-group"><label class="fl">Title</label><input type="text" id="edit-upl-consent-name" style="width:100%;font-size:13px;box-sizing:border-box"></div>
+  <div class="form-group"><label class="fl">Department</label><select id="edit-upl-consent-dept" style="font-size:12px;padding:5px 8px;border-radius:6px;border:1.5px solid var(--g4);width:100%;box-sizing:border-box">
+    <option value="ophtho">Ophthalmology</option>
+    <option value="obg">OBG</option>
+    <option value="psych">Psychiatry / Neurology</option>
+    <option value="skin">Skin &amp; Cosmetology</option>
+    <option value="all">All Departments</option>
+  </select></div>
+  <div id="edit-upl-consent-toolbar" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:8px;background:var(--g6);border-radius:8px;border:1px solid var(--g4);margin-bottom:4px">
+    <span style="font-size:9px;font-weight:800;color:var(--g1);text-transform:uppercase">Format</span>
+    <select onchange="applyConsentToolbarToFocused('fontSize', this.value);this.value=''" style="font-size:11px;padding:3px 6px;border-radius:6px;border:1.5px solid var(--g4)"><option value="">Size</option><option value="10px">10</option><option value="11px">11</option><option value="12px">12</option><option value="13px">13</option><option value="14px">14</option><option value="15px">15</option></select>
+    <select onchange="applyConsentToolbarToFocused('fontFamily', this.value);this.value=''" style="font-size:11px;padding:3px 6px;border-radius:6px;border:1.5px solid var(--g4)"><option value="">Font</option><option value="Arial,sans-serif">Arial</option><option value="Georgia,serif">Georgia</option><option value="'Times New Roman',Times,serif">Times</option><option value="system-ui,sans-serif">System</option></select>
+    <button type="button" class="btn btn-xs btn-outline" onclick="applyConsentToolbarToFocused('textAlign','left')" title="Align left">⬅</button>
+    <button type="button" class="btn btn-xs btn-outline" onclick="applyConsentToolbarToFocused('textAlign','center')" title="Center">↔</button>
+    <button type="button" class="btn btn-xs btn-outline" onclick="applyConsentToolbarToFocused('textAlign','right')" title="Align right">➡</button>
+    <button type="button" class="btn btn-xs btn-outline" onclick="applyConsentToolbarToFocused('textAlign','justify')" title="Justify">⬌</button>
+  </div>
+  <div id="edit-upl-consent-image-wrap" style="display:none;text-align:center;margin-bottom:10px;max-height:min(78vh,900px);overflow:auto;border:1px solid var(--g4);border-radius:8px;padding:10px;background:var(--g6)"></div>
+  <textarea id="edit-upl-consent-text" style="display:none;width:100%;min-height:min(55vh,520px);font-size:12px;line-height:1.6;box-sizing:border-box;padding:10px;border-radius:8px;border:1.5px solid var(--g4)" onfocus="window._consentToolbarTarget=this"></textarea>
+  <button type="button" class="btn btn-gold" onclick="saveUploadedConsentFromModal()">💾 Save</button>
 </div>
 </div>
 </div>
@@ -4703,7 +4723,7 @@
   <div class="form-group"><label class="fl">Age / Sex</label><input type="text" id="ot-age-sex" readonly style="background:var(--g6)"></div>
   <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">Pre-op Diagnosis <span style="display:flex;align-items:center;gap:6px"><button type="button" onclick="showToast('Type to search saved OT diagnoses. Use + to add a reusable diagnosis for future cases.','i')" style="background:var(--g6);color:var(--blue);border:1px solid var(--g4);border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">?</button><button type="button" onclick="addOTDiagnosisOption()" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></span></label><input type="text" id="ot-add-dx" list="ot-dx-list" placeholder="Type diagnosis to search or add"><datalist id="ot-dx-list"></datalist></div>
   <div class="form-group"><label class="fl">Procedure / Surgery</label>
-    <input type="text" id="ot-add-proc" list="ot-proc-list" placeholder="Type procedure to search" onfocus="populateOTProcedureOptions(this.value||'');if(typeof this.showPicker==='function'){try{this.showPicker();}catch(e){}};" oninput="onOTProcedureInputChange(this.value)" onchange="onOTProcedureInputChange(this.value)"><datalist id="ot-proc-list"></datalist>
+    <input type="text" id="ot-add-proc" list="ot-proc-list" placeholder="Type procedure to search" readonly onfocus="this.removeAttribute('readonly');populateOTProcedureOptions(this.value||'');" oninput="onOTProcedureInputChange(this.value)" onchange="onOTProcedureInputChange(this.value)"><datalist id="ot-proc-list"></datalist>
   </div>
   <div class="form-group" id="ot-add-proc-sub-wrap" style="display:none"><label class="fl">Procedure subheading / package</label>
     <select id="ot-add-proc-sub" onchange="onOTProcedureSubheadingChange(this.value)"><option value="">— Select subheading —</option></select>
