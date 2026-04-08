@@ -283,13 +283,18 @@ function otChargeLooksLikeProcedure(row) {
   const name = String(row?.name || '').toLowerCase();
   const parent = String(row?.parent || '').toLowerCase();
   return /sx|surgery|procedure|laser|delivery|lap|operation/.test(cat)
-    || /trabeculectomy|lasik|pmics|iol|capsulotomy|iridotomy|excision|lscs|delivery|laparoscopy|hysteroscopy|chemical peel|prp|dcr|ptosis|squint|vitrectomy|injection|procedure/.test(name)
-    || /pmics|lscs|delivery|procedure|surgery|laser|iol/.test(parent);
+    || /trabeculectomy|lasik|pmics|iol|icl|staar|collamer|implantable|capsulotomy|iridotomy|excision|lscs|delivery|laparoscopy|hysteroscopy|chemical peel|prp|dcr|ptosis|squint|vitrectomy|injection|procedure/.test(name)
+    || /pmics|lscs|delivery|procedure|surgery|laser|iol|icl|collamer/.test(parent);
 }
 function getOtProcedureMainHeadings() {
-  return Array.from(new Set((CHARGES_DATA || []).filter(otChargeLooksLikeProcedure).map(function (row) {
-    return normalizeOtProcedureName(row.parent || '');
-  }).filter(Boolean))).sort();
+  const out = new Set();
+  (CHARGES_DATA || []).filter(otChargeLooksLikeProcedure).forEach(function (row) {
+    const p = normalizeOtProcedureName(row.parent || '');
+    const n = normalizeOtProcedureName(row.name || '');
+    if (p) out.add(p);
+    else if (n) out.add(n);
+  });
+  return Array.from(out).filter(Boolean).sort();
 }
 function getOtProcedureSubheadingOptions(parent) {
   const target = normalizeOtProcedureName(parent);
@@ -327,6 +332,9 @@ function getOtProcedureOptions() {
 function parseOtProcedureSelection(value) {
   const raw = normalizeOtProcedureName(value);
   if (!raw) return { main: '', sub: '' };
+  if (raw === 'Pinhole Microincision Cataract Surgery + IOL Implantation') {
+    return { main: 'Pinhole Microincision Cataract Surgery', sub: '' };
+  }
   const exactRow = (CHARGES_DATA || []).find(function (row) {
     return otChargeLooksLikeProcedure(row) && normalizeOtProcedureName(row.name || '') === raw;
   });
@@ -1135,6 +1143,7 @@ function collectConsentPrintContext() {
     if (v && v !== '—' && v.startsWith('BMSH-')) { ptId = v; ptNm = document.getElementById(ptNms[i])?.textContent || ptNm; break; }
   }
   const pt = (typeof PATIENTS !== 'undefined' && PATIENTS.find) ? PATIENTS.find(function (p) { return p.bmhId === ptId; }) || {} : {};
+  if (pt.name) ptNm = pt.name;
   const today = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
   const otList = (typeof OT_CASES !== 'undefined' && OT_CASES.length)
     ? OT_CASES.filter(function (c) { return c.bmhId === ptId; }).sort(function (a, b) { return (b.scheduledTime || b.date || '').localeCompare(a.scheduledTime || a.date || ''); })
@@ -1454,10 +1463,8 @@ function rebuildDxListFromValues(listId, values) {
     inp.className = 'dx-inp';
     const isObgList = listId === 'obg-dx-list';
     inp.placeholder = isObgList ? 'Type diagnosis…' : 'ICD-10 search or type free-text diagnosis…';
-    if (!isObgList) {
-      inp.setAttribute('oninput', 'filterDx(this)');
-      inp.setAttribute('onfocus', 'showDxDropdown(this)');
-    }
+    inp.setAttribute('oninput', 'filterDx(this)');
+    inp.setAttribute('onfocus', 'showDxDropdown(this)');
     inp.style.cssText = 'flex:1;font-size:12px';
     inp.autocomplete = 'off';
     inp.value = text || '';
@@ -1561,6 +1568,10 @@ function nav(id, el) {
   if(pageKey==='obg') renderObgSummaryRail && renderObgSummaryRail();
   if(pageKey==='psych') renderPsychRail && renderPsychRail();
   if(pageKey==='skin') renderSkinRail && renderSkinRail();
+  if (pageKey === 'ophtho' || pageKey === 'obg' || pageKey === 'psych' || pageKey === 'skin') {
+    renderAllDeptSendBars && renderAllDeptSendBars();
+    renderAISuggestedCharges && renderAISuggestedCharges();
+  }
   updateDepartmentRailVisibility(pageKey);
 }
 
@@ -2195,10 +2206,76 @@ function openReceptionPatient(bmhId) {
     + '<button type="button" class="btn btn-gold btn-sm" onclick="rcOpenBillingFor(\'' + String(bmhId).replace(/'/g, "\\'") + '\')">💳 Billing / charges</button>'
     + '<button type="button" class="btn btn-outline btn-sm" onclick="closeM(\'m-rc-patient\');openReceptionPatientEdit(\'' + String(bmhId).replace(/'/g, "\\'") + '\')">✏️ Edit / change details</button>'
     + '<button type="button" class="btn btn-outline btn-sm" onclick="closeM(\'m-rc-patient\');openPatient(\'' + String(bmhId).replace(/'/g, "\\'") + '\')">👁️ Open doctor record</button>'
+    + '<button type="button" class="btn btn-outline btn-sm" onclick="rcToggleConsentSection(\'' + String(bmhId).replace(/'/g, "\\'") + '\')">📋 Add consent</button>'
+    + '</div>'
+    + '<div id="rc-consent-panel" style="display:none;margin-top:12px;padding:12px;border:1px solid var(--g5);border-radius:8px;background:#fff">'
+    + '<div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:6px">Print consent</div>'
+    + '<input type="text" id="rc-consent-search" list="rc-consent-dl" placeholder="Type to search consents for this department…" autocomplete="off" style="width:100%;font-size:12px;padding:8px;margin-bottom:8px;box-sizing:border-box" onfocus="populateRcConsentDatalist(\'' + String(bmhId).replace(/'/g, "\\'") + '\')">'
+    + '<datalist id="rc-consent-dl"></datalist>'
+    + '<button type="button" class="btn btn-gold btn-sm" onclick="rcPrintReceptionConsentFromPopup(\'' + String(bmhId).replace(/'/g, "\\'") + '\')">🖨️ Print selected consent</button>'
     + '</div></div></div>';
   openM('m-rc-patient');
   setTimeout(function () { rcResetMoreChargeRows(); }, 20);
 }
+function populateRcConsentDatalist(bmhId) {
+  const p = PATIENTS.find(function (x) { return x.bmhId === bmhId; });
+  const dl = document.getElementById('rc-consent-dl');
+  if (!dl || !p) return;
+  const dk = normalizeDeptKeyForQueue(p.dept || '');
+  const items = CONSENT_LIBRARY.map(function (c) { return getMergedLibraryItem(c.id) || c; })
+    .filter(function (c) { return !c.hidden; })
+    .filter(function (c) {
+      const cd = String(c.dept || 'all');
+      if (cd === 'all') return true;
+      if (!dk) return true;
+      return cd === dk;
+    });
+  const map = {};
+  dl.innerHTML = items.map(function (c) {
+    const nm = String(c.name || c.id || '').trim();
+    if (nm) map[nm] = c.id;
+    return '<option value="' + String(nm).replace(/"/g, '&quot;') + '"></option>';
+  }).join('');
+  window._rcConsentNameToId = map;
+}
+function rcToggleConsentSection(bmhId) {
+  const panel = document.getElementById('rc-consent-panel');
+  if (!panel) return;
+  const hidden = panel.style.display === 'none' || !panel.style.display;
+  panel.style.display = hidden ? 'block' : 'none';
+  if (hidden) {
+    populateRcConsentDatalist(bmhId);
+    setTimeout(function () {
+      const inp = document.getElementById('rc-consent-search');
+      if (inp) inp.focus();
+    }, 50);
+  }
+}
+function rcPrintReceptionConsentFromPopup(bmhId) {
+  const inp = document.getElementById('rc-consent-search');
+  const raw = String(inp?.value || '').trim();
+  if (!raw) { showToast('Search or pick a consent first', 'w'); return; }
+  const map = window._rcConsentNameToId || {};
+  let id = map[raw];
+  if (!id) {
+    const lib = CONSENT_LIBRARY.map(function (c) { return getMergedLibraryItem(c.id) || c; })
+      .find(function (c) {
+        return !c.hidden && String(c.name || '').toLowerCase() === raw.toLowerCase();
+      });
+    id = lib && lib.id;
+  }
+  if (!id) { showToast('No matching consent — pick from the list', 'w'); return; }
+  const prev = window._CONSENT_PRINT_BMH_ID;
+  window._CONSENT_PRINT_BMH_ID = bmhId;
+  try {
+    printConsentFromLibrary(id);
+  } finally {
+    window._CONSENT_PRINT_BMH_ID = prev;
+  }
+}
+window.populateRcConsentDatalist = populateRcConsentDatalist;
+window.rcToggleConsentSection = rcToggleConsentSection;
+window.rcPrintReceptionConsentFromPopup = rcPrintReceptionConsentFromPopup;
 window.openReceptionPatient = openReceptionPatient;
 function openReceptionPatientEdit(bmhId) {
   nav('reception', null);
@@ -3403,6 +3480,23 @@ function saveAndPrintRx(dept) {
     else if (typeof window.printUnifiedRx === 'function') window.printUnifiedRx(key);
   }, 450);
 }
+function findDoctorProfileByRxName(doctorName) {
+  const n = String(doctorName || '').split('·')[0].trim();
+  if (!n || typeof DOCTOR_PROFILES === 'undefined') return {};
+  if (DOCTOR_PROFILES[n]) return DOCTOR_PROFILES[n];
+  const fold = function (s) { return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim(); };
+  const fn = fold(n);
+  const keys = Object.keys(DOCTOR_PROFILES || {});
+  for (let i = 0; i < keys.length; i++) {
+    if (fold(keys[i]) === fn) return DOCTOR_PROFILES[keys[i]];
+  }
+  return {};
+}
+function doctorNameMatchesCurrentUser(doctorName) {
+  const dn = String(doctorName || '').split('·')[0].trim().toLowerCase();
+  const cu = String(CURRENT_USER?.name || '').split('·')[0].trim().toLowerCase();
+  return !!(dn && cu && dn === cu);
+}
 function getDeptPrintDoctorInfo(type) {
   const map = { rx: 'oe', ophtho: 'oe', 'obg-anc-card': 'obg', 'psych-summary': 'psych', 'skin-summary': 'skin' };
   const deptId = map[type] || 'oe';
@@ -3410,8 +3504,10 @@ function getDeptPrintDoctorInfo(type) {
     ? (document.getElementById('ophtho-rx-doctor')?.textContent?.trim() || CURRENT_PATIENT?.doctor || CURRENT_USER?.name || 'Dr. Varun Baweja')
     : (typeof getRxDoctorDisplayName === 'function' ? getRxDoctorDisplayName() : (CURRENT_USER?.name || 'Doctor'));
   const clean = String(doctorName || '').split('·')[0].trim() || (CURRENT_USER?.name || 'Doctor');
-  const profile = DOCTOR_PROFILES[clean] || {};
-  return { name: clean, degrees: profile.degrees || CURRENT_USER?.degrees || '' };
+  const profile = findDoctorProfileByRxName(clean);
+  let degrees = String(profile.degrees || '').trim();
+  if (!degrees && doctorNameMatchesCurrentUser(clean)) degrees = String(CURRENT_USER?.degrees || '').trim();
+  return { name: clean, degrees: degrees };
 }
 
 function doPrint(type) {
@@ -6776,6 +6872,16 @@ function choosePreferredChargesRows(localRows, remoteRows) {
   if (!localList.length) return remoteList;
   return scoreChargesRows(localList) > scoreChargesRows(remoteList) ? localList : remoteList;
 }
+const LEGACY_PMICS_CHARGE_HEADING = 'Pinhole Microincision Cataract Surgery + IOL Implantation';
+const PMICS_MAIN_CHARGE_HEADING = 'Pinhole Microincision Cataract Surgery';
+function migrateLegacyPmicsChargeParents() {
+  if (!Array.isArray(CHARGES_DATA)) return;
+  CHARGES_DATA.forEach(function (row) {
+    if (!row) return;
+    if (String(row.parent || '') === LEGACY_PMICS_CHARGE_HEADING) row.parent = PMICS_MAIN_CHARGE_HEADING;
+    if (String(row.name || '') === LEGACY_PMICS_CHARGE_HEADING) row.name = PMICS_MAIN_CHARGE_HEADING;
+  });
+}
 function applyLoadedChargesRows(rows) {
   if (!Array.isArray(rows) || !rows.length) return false;
   CHARGES_DATA.length = 0;
@@ -6790,6 +6896,7 @@ function applyLoadedChargesRows(rows) {
       rpr: Number(row.rpr || 0)
     });
   });
+  migrateLegacyPmicsChargeParents();
   CHARGES_DATA.forEach(function (c) {
     if (!c.name) return;
     CENTRE_CHARGES.CHD[c.name] = c.chd;
@@ -8365,12 +8472,22 @@ function renderSetRxTplList() {
         (meta.surgery ? '<div style="font-size:10px;color:var(--bmh-blue);font-weight:800;margin-top:4px">Surgery: ' + String(meta.surgery).replace(/</g, '&lt;') + '</div>' : '') +
         (preview ? '<div style="font-size:10.5px;color:var(--tx3);margin-top:5px;line-height:1.45">' + preview + '</div>' : '') +
         '</div>' +
-        '<button type="button" class="btn btn-xs btn-gold" onclick="openEditRxTemplateModal(' + JSON.stringify(k) + ')">✏️ Open / Edit</button>' +
-        '<button type="button" class="btn btn-xs btn-gray" onclick="deleteRxTemplate(' + JSON.stringify(k) + ')">🗑️ Delete</button></div>';
+        '<button type="button" class="btn btn-xs btn-gold" data-rx-tpl-edit="' + encodeURIComponent(k) + '">✏️ Open / Edit</button>' +
+        '<button type="button" class="btn btn-xs btn-gray" data-rx-tpl-del="' + encodeURIComponent(k) + '">🗑️ Delete</button></div>';
     }).join('');
     return rows ? '<div style="margin-bottom:12px"><div style="font-size:10px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;margin-bottom:6px">' + deptLabMap[deptKey] + '</div>' + rows + '</div>' : '';
   }).join('');
   el.innerHTML = groups || '<div style="padding:16px;color:var(--g1);font-size:12px">No templates yet</div>';
+  el.querySelectorAll('[data-rx-tpl-edit]').forEach(function (btn) {
+    btn.onclick = function () {
+      openEditRxTemplateModal(decodeURIComponent(btn.getAttribute('data-rx-tpl-edit') || ''));
+    };
+  });
+  el.querySelectorAll('[data-rx-tpl-del]').forEach(function (btn) {
+    btn.onclick = function () {
+      deleteRxTemplate(decodeURIComponent(btn.getAttribute('data-rx-tpl-del') || ''));
+    };
+  });
 }
 function openEditRxTemplateModal(key) {
   if (!key || !RX_TEMPLATES_DATA[key]) return;
@@ -8438,6 +8555,16 @@ function renderStructuredConsentList() {
       + '</div>';
   }).join('');
 }
+function applyConsentToolbarToFocused(prop, val) {
+  if (!val) return;
+  const el = window._consentToolbarTarget || document.querySelector('#m-edit-consent-data textarea:focus, #m-edit-uploaded-consent textarea:focus, #edit-upl-consent-text:focus') || document.getElementById('edit-cd-en') || document.getElementById('edit-upl-consent-text');
+  if (!el) return;
+  if (prop === 'fontSize') el.style.fontSize = val;
+  else if (prop === 'fontFamily') el.style.fontFamily = val;
+  else if (prop === 'textAlign') el.style.textAlign = val;
+}
+window.applyConsentToolbarToFocused = applyConsentToolbarToFocused;
+
 function openEditConsentDataModal(key) {
   const d = getConsentEntry(key) || resolveConsentDataForPrint(key);
   if (!d) return;
@@ -8452,6 +8579,11 @@ function openEditConsentDataModal(key) {
   if (enEl) enEl.value = paras.map(function (p) { return p.en || ''; }).join('\n\n');
   if (paEl) paEl.value = paras.map(function (p) { return p.pa || ''; }).join('\n\n');
   if (hiEl) hiEl.value = paras.map(function (p) { return p.hi || ''; }).join('\n\n');
+  [enEl, paEl, hiEl].forEach(function (ta) {
+    if (!ta) return;
+    ta.onfocus = function () { window._consentToolbarTarget = this; };
+  });
+  if (enEl) window._consentToolbarTarget = enEl;
   openM('m-edit-consent-data');
 }
 function saveStructuredConsentFromModal() {
@@ -11166,6 +11298,30 @@ function formatFollowupDisplayDate(dateStr) {
     return dateStr;
   }
 }
+/** Post-op follow-up slot: 11:30 base, +10 min per additional OT case same day for this patient. */
+function computePostOpFollowupBaseTimeMinutes(otCase) {
+  const c = normalizeOTCaseRecord(otCase || {});
+  const surgeryDate = String(c.date || '').slice(0, 10);
+  if (!c.bmhId || !surgeryDate) return 11 * 60 + 30;
+  const sameDay = (OT_CASES || []).filter(function (row) {
+    const oc = normalizeOTCaseRecord(row);
+    return oc.bmhId === c.bmhId && String(oc.date || '').slice(0, 10) === surgeryDate;
+  });
+  sameDay.sort(function (a, b) {
+    return String(a.id || '').localeCompare(String(b.id || ''));
+  });
+  const idx = sameDay.findIndex(function (row) {
+    return normalizeOTCaseRecord(row).id === c.id;
+  });
+  const ord = idx < 0 ? 0 : idx;
+  return 11 * 60 + 30 + ord * 10;
+}
+function minutesToTime24(totalMins) {
+  const m = ((totalMins % (24 * 60)) + 24 * 60) % (24 * 60);
+  const h = Math.floor(m / 60);
+  const mm = m % 60;
+  return String(h).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
+}
 function scheduleDefaultSurgeryFollowups(otCase) {
   const source = otCase || {};
   const c = normalizeOTCaseRecord(source);
@@ -11176,11 +11332,12 @@ function scheduleDefaultSurgeryFollowups(otCase) {
     { days: 14, label: '2 week review', type: 'post-op' }
   ];
   const baseDate = new Date(c.date + 'T09:00:00');
+  const baseMins = computePostOpFollowupBaseTimeMinutes(c);
+  const time = normalizeAptTimeLabel(minutesToTime24(baseMins));
   const made = [];
   dayOffsets.forEach(function (cfg) {
     const dt = new Date(baseDate.getTime() + cfg.days * 24 * 60 * 60 * 1000);
     const iso = dt.toISOString().split('T')[0];
-    const time = normalizeAptTimeLabel(getNearestAppointmentSlot(iso));
     const existing = (APPOINTMENTS || []).find(function (a) {
       return a.bmhId === c.bmhId && a.date === iso && a.type === 'post-op' && /post-op/i.test(String(a.purpose || ''));
     });
@@ -11582,6 +11739,11 @@ function openOTAddModal(opts) {
     toggleOTOBGFields();
     toggleOtIclFields();
   }
+  const procInpFinal = document.getElementById('ot-add-proc');
+  if (procInpFinal) {
+    procInpFinal.setAttribute('readonly', 'readonly');
+    populateOTProcedureOptions(procInpFinal.value || '');
+  }
   openM('m-ot-add');
 }
 
@@ -11815,10 +11977,28 @@ function printOTCard(id) {
 
 // ─── ICD-10 DATABASE ─────────────────
 
+function getAllDxEntriesForFilter() {
+  const out = [];
+  (typeof ICD10_DB !== 'undefined' ? ICD10_DB : []).forEach(function (d) { out.push(d); });
+  (typeof ICD10_EYE !== 'undefined' ? ICD10_EYE : []).forEach(function (entry) {
+    if (typeof entry === 'string') {
+      const m = entry.match(/^([A-Z]\d{2}(?:\.\d+)?)\s*[—–-]\s*(.+)$/i);
+      if (m) out.push({ code: m[1], desc: m[2].trim(), full: entry });
+      else out.push({ code: '', desc: entry, full: entry });
+    } else if (entry && entry.code) out.push(entry);
+  });
+  return out;
+}
+
 function filterDx(inp) {
   const val = inp.value.toLowerCase();
   if(val.length < 2) { hideDxDropdown(); return; }
-  const matches = ICD10_DB.filter(d=>d.desc.toLowerCase().includes(val)||d.code.toLowerCase().includes(val)).slice(0,10);
+  const pool = getAllDxEntriesForFilter();
+  const matches = pool.filter(function (d) {
+    const desc = (d.desc || '').toLowerCase();
+    const code = (d.code || '').toLowerCase();
+    return desc.includes(val) || code.includes(val);
+  }).slice(0, 12);
   showDxDropdownList(inp, matches);
 }
 function showDxDropdown(inp) { if(inp.value.length>=2) filterDx(inp); }
@@ -11834,10 +12014,13 @@ function showDxDropdownList(inp, matches) {
   d.style.top=(rect.bottom+window.scrollY)+'px';
   d.style.left=rect.left+'px';
   d.style.width=Math.max(320,rect.width)+'px';
-  let html = matches.map(m=>`<div class="dx-dropdown-item" onclick="selectDx('${m.full.replace(/'/g,"\\'")}',event)">
-    <span style="font-family:var(--mono);font-size:10px;color:var(--blue);font-weight:700">${m.code}</span>
+  let html = matches.map(function (m) {
+    const full = m.full || (m.code ? m.code + ' — ' + m.desc : m.desc);
+    return `<div class="dx-dropdown-item" onclick="selectDx('${String(full).replace(/'/g,"\\'")}',event)">
+    <span style="font-family:var(--mono);font-size:10px;color:var(--blue);font-weight:700">${m.code || '—'}</span>
     <span style="font-size:12px;font-weight:600;margin-left:8px">${m.desc}</span>
-  </div>`).join('');
+  </div>`;
+  }).join('');
   if (showFree) {
     const safe = escapeHtmlConsent(typed);
     html += `<div class="dx-dropdown-item" onmousedown="event.preventDefault();selectDxFreeText()" style="cursor:pointer;border-top:1px solid var(--g5);padding-top:8px;margin-top:4px;background:var(--green-lt)">
@@ -11874,7 +12057,7 @@ function addDxRow() {
   const isObg = list.id === 'obg-dx-list';
   const d = document.createElement('div');
   d.style.cssText='display:flex;gap:6px;align-items:center;margin-top:5px';
-  d.innerHTML=`<input type="text" class="dx-inp" placeholder="${isObg ? 'Type diagnosis…' : 'ICD-10 search or type free-text diagnosis…'}" ${isObg ? '' : 'oninput="filterDx(this)" onfocus="showDxDropdown(this);wireDxInputFocus(this)"'} style="flex:1" autocomplete="off">
+  d.innerHTML=`<input type="text" class="dx-inp" placeholder="${isObg ? 'Type diagnosis…' : 'ICD-10 search or type free-text diagnosis…'}" oninput="filterDx(this)" onfocus="showDxDropdown(this);wireDxInputFocus(this)" style="flex:1" autocomplete="off">
     <button type="button" class="btn btn-xs btn-gray" onclick="this.closest('div').remove()">✕</button>`;
   list.appendChild(d);
   const inp = d.querySelector('.dx-inp');
@@ -11937,6 +12120,14 @@ function getEffectiveDoctorNameForDept(dept) {
   }
   if (key === 'ophtho') return currentName || 'Dr. Varun Baweja';
   return currentName || 'Doctor';
+}
+
+function normalizeQueueDeptForUser(dept) {
+  const d = String(dept || '').toLowerCase().trim();
+  if (!d) return '';
+  if (d.includes('opto')) return 'ophtho';
+  if (d.includes('optomet')) return 'ophtho';
+  return dept;
 }
 function syncObgDoctorSelector(forceName) {
   const sel = document.getElementById('obg-doc-select');
@@ -13345,39 +13536,46 @@ function addProcAdvised() {
 }
 
 // ─── SMART SEND ROW ─────────────────
+function getDeptKeyForSendCharge() {
+  const page = document.querySelector('.page.active')?.id || '';
+  if (page === 'pg-ophtho') return 'ophtho';
+  if (page === 'pg-obg') return 'obg';
+  if (page === 'pg-psych') return 'psych';
+  if (page === 'pg-skin') return 'skin';
+  return normalizeDeptKeyForQueue(window.CURRENT_PATIENT?.dept) || 'ophtho';
+}
+function lookupChargeAmountFromSettings(deptKey, name) {
+  const centre = typeof getEffectiveCentre === 'function' ? getEffectiveCentre() : (CURRENT_USER?.centre === 'RPR' ? 'RPR' : 'CHD');
+  const n = String(name || '').trim().toLowerCase();
+  if (!n) return 0;
+  const rows = (CHARGES_DATA || []).filter(function (row) {
+    return deptChargeCategoryMatches(deptKey, row.cat);
+  });
+  const row = rows.find(function (r) {
+    return String(r.name || '').trim().toLowerCase() === n;
+  });
+  if (!row) return 0;
+  return centre === 'RPR' ? Number(row.rpr || 0) : Number(row.chd || 0);
+}
 function renderAISuggestedCharges() {
   const el = document.getElementById('ai-suggested-charges'); if(!el) return;
-  // Get current patient diagnosis context to suggest relevant charges
-  const pt = PATIENTS[0];
-  const dept = pt?.dept || 'ophtho';
-  const suggestions = {
-    ophtho: [
-      {label:'Biometry ₹1,200', name:'Biometry IOL Master', amt:1200},
-      {label:'OCT ₹1,800', name:'OCT Macula OU', amt:1800},
-      {label:'HVF ₹1,500', name:'HVF Visual Fields', amt:1500},
-      {label:'Fundus ₹600', name:'Fundus Photography', amt:600},
-      {label:'PMICS ₹38K', name:'PMICS (Pinhole Micro Incision Cataract Surgery) + IOL', amt:38000},
-    ],
-    obg: [
-      {label:'ANC ₹500', name:'ANC Visit', amt:500},
-      {label:'LSCS ₹45K', name:'LSCS (Elective)', amt:45000},
-    ],
-    psych: [
-      {label:'Consult ₹800', name:'Consultation', amt:800},
-    ],
-    skin: [
-      {label:'Peel ₹1,500', name:'Chemical Peel', amt:1500},
-      {label:'PRP ₹3,500', name:'PRP Treatment', amt:3500},
-      {label:'Botox ₹8K', name:'Botox Injection', amt:8000},
-    ],
-  };
-  const s = suggestions[dept] || suggestions.ophtho;
-  el.innerHTML = s.map(c =>
-    `<button class="btn btn-xs" style="background:#fff;color:#b55a00;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700;transition:all .15s"
-      onmouseenter="this.style.background='#b55a00';this.style.color='#fff'"
-      onmouseleave="this.style.background='#fff';this.style.color='#b55a00'"
-      onclick="sendQuickCharge('${c.name}','${c.amt}')">${c.label}</button>`
-  ).join('');
+  const dept = getDeptKeyForSendCharge();
+  const centre = typeof getEffectiveCentre === 'function' ? getEffectiveCentre() : (CURRENT_USER?.centre === 'RPR' ? 'RPR' : 'CHD');
+  const rows = (CHARGES_DATA || []).filter(function (row) {
+    return deptChargeCategoryMatches(dept, row.cat);
+  }).slice().sort(function (a, b) {
+    return (Number(b.used || b.usageCount || 0)) - (Number(a.used || a.usageCount || 0));
+  }).slice(0, 10);
+  if (!rows.length) {
+    el.innerHTML = '<span style="font-size:10px;color:var(--g1)">Add items under Settings → Charges for this department.</span>';
+    return;
+  }
+  el.innerHTML = rows.map(function (row) {
+    const amount = centre === 'RPR' ? Number(row.rpr || 0) : Number(row.chd || 0);
+    const nm = String(row.name || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    const label = String(row.name || '').length > 24 ? String(row.name).slice(0, 22) + '…' : String(row.name || '');
+    return '<button type="button" class="btn btn-xs" style="background:#fff;color:#b55a00;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700;transition:all .15s" onmouseenter="this.style.background=\'#b55a00\';this.style.color=\'#fff\'" onmouseleave="this.style.background=\'#fff\';this.style.color=\'#b55a00\'" onclick="sendQuickCharge(\'' + nm + '\',' + amount + ')">' + label.replace(/</g, '&lt;') + ' ₹' + amount.toLocaleString('en-IN') + '</button>';
+  }).join('');
 }
 function deptChargeCategoryMatches(deptKey, cat) {
   const c = String(cat || '').toLowerCase();
@@ -13387,6 +13585,65 @@ function deptChargeCategoryMatches(deptKey, cat) {
   if (deptKey === 'skin') return c.includes('skin');
   return true;
 }
+/** Ophtho toolbar: rebuild #send-charge-sel from Settings → Charges (Eye / Eye Sx). */
+function renderOphthoSendChargeSelect() {
+  const sel = document.getElementById('send-charge-sel');
+  if (!sel) return;
+  const centre = typeof getEffectiveCentre === 'function' ? getEffectiveCentre() : (CURRENT_USER?.centre === 'RPR' ? 'RPR' : 'CHD');
+  const rows = (CHARGES_DATA || []).filter(function (row) {
+    return deptChargeCategoryMatches('ophtho', row.cat);
+  });
+  const byCat = {};
+  rows.forEach(function (row) {
+    const c = row.cat || 'Charges';
+    if (!byCat[c]) byCat[c] = [];
+    byCat[c].push(row);
+  });
+  const esc = function (s) {
+    return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  };
+  let html = '<option value="">— All Procedures —</option>';
+  Object.keys(byCat).sort().forEach(function (cat) {
+    html += '<optgroup label="' + esc(cat) + '">';
+    byCat[cat].forEach(function (row) {
+      const amount = centre === 'RPR' ? Number(row.rpr || 0) : Number(row.chd || 0);
+      const label = (row.parent ? String(row.parent) + ' — ' : '') + String(row.name);
+      html += '<option value="' + esc(row.name) + '|' + amount + '">' + esc(label) + ' — ₹' + amount.toLocaleString('en-IN') + '</option>';
+    });
+    html += '</optgroup>';
+  });
+  sel.innerHTML = html;
+  const dl = document.getElementById('send-charge-datalist');
+  if (dl) {
+    dl.innerHTML = rows.map(function (row) {
+      return '<option value="' + esc(row.name) + '">';
+    }).join('');
+  }
+}
+function sendOphthoTypedCharge() {
+  const nameEl = document.getElementById('send-charge-custom-name');
+  const amtEl = document.getElementById('send-charge-custom-amt');
+  const name = (nameEl && nameEl.value || '').trim();
+  if (!name) { showToast('Type or pick a charge name', 'w'); return; }
+  let amt = parseInt(amtEl && amtEl.value, 10);
+  if (!amt || isNaN(amt)) amt = lookupChargeAmountFromSettings('ophtho', name);
+  sendQuickCharge(name, amt);
+  if (nameEl) nameEl.value = '';
+  if (amtEl) amtEl.value = '';
+}
+window.sendOphthoTypedCharge = sendOphthoTypedCharge;
+function sendQuickChargeFromDeptInputs(deptKey) {
+  const nameEl = document.getElementById('send-charge-name-' + deptKey);
+  const amtEl = document.getElementById('send-charge-amt-' + deptKey);
+  const name = (nameEl && nameEl.value || '').trim();
+  if (!name) { showToast('Type or pick a charge name', 'w'); return; }
+  let amt = parseInt(amtEl && amtEl.value, 10);
+  if (!amt || isNaN(amt)) amt = lookupChargeAmountFromSettings(deptKey, name);
+  sendQuickCharge(name, amt);
+  if (nameEl) nameEl.value = '';
+  if (amtEl) amtEl.value = '';
+}
+window.sendQuickChargeFromDeptInputs = sendQuickChargeFromDeptInputs;
 function renderDeptSendBar(deptKey, hostId, logId) {
   const host = document.getElementById(hostId);
   if (!host) return;
@@ -13404,11 +13661,15 @@ function renderDeptSendBar(deptKey, hostId, logId) {
   const buttons = quickRows.map(function (row) {
     const amount = centre === 'RPR' ? Number(row.rpr || 0) : Number(row.chd || 0);
     const short = String(row.name || '').length > 26 ? String(row.name).slice(0, 24) + '…' : String(row.name || '');
-    return '<button class="btn btn-xs" style="background:#fff;color:#b55a00;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="sendQuickCharge(' + "'" + String(row.name).replace(/'/g, "\\'") + "'" + ',' + amount + ')">' + short.replace(/</g, '&lt;') + ' ₹' + amount.toLocaleString('en-IN') + '</button>';
+    return '<button type="button" class="btn btn-xs" style="background:#fff;color:#b55a00;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="sendQuickCharge(' + "'" + String(row.name).replace(/'/g, "\\'") + "'" + ',' + amount + ')">' + short.replace(/</g, '&lt;') + ' ₹' + amount.toLocaleString('en-IN') + '</button>';
   }).join('');
-  host.innerHTML = '<div style="background:linear-gradient(135deg,#fff7e0,#fff3cc);border-radius:10px;padding:8px 11px;margin-bottom:10px;border:1.5px solid rgba(212,160,23,.3)"><div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap"><span style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">📤 Send to Reception:</span><select style="font-size:11px;padding:3px 6px;border-radius:6px;border:1.5px solid rgba(212,160,23,.5);background:#fff;min-width:220px" onchange="sendFromDropdown(this)"><option value="">— All procedures —</option>' + options + '</select><div style="display:flex;gap:4px;flex-wrap:wrap;flex:1">' + buttons + '</div><button class="btn btn-xs btn-gold" onclick="addCustomCharge()" style="white-space:nowrap">+ Custom</button></div><div id="' + logId + '" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px"></div></div>';
+  const dlOpts = rows.map(function (row) {
+    return '<option value="' + String(row.name).replace(/"/g, '&quot;') + '">';
+  }).join('');
+  host.innerHTML = '<div style="background:linear-gradient(135deg,#fff7e0,#fff3cc);border-radius:10px;padding:8px 11px;margin-bottom:10px;border:1.5px solid rgba(212,160,23,.3)"><div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap"><span style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">📤 Send to Reception:</span><select style="font-size:11px;padding:3px 6px;border-radius:6px;border:1.5px solid rgba(212,160,23,.5);background:#fff;min-width:200px" onchange="sendFromDropdown(this)"><option value="">— Pick from Settings → Charges —</option>' + options + '</select><input type="text" id="send-charge-name-' + deptKey + '" list="send-charge-dl-' + deptKey + '" placeholder="Type charge name…" autocomplete="off" style="font-size:11px;padding:4px 8px;border-radius:6px;border:1.5px solid rgba(212,160,23,.5);min-width:160px;max-width:240px;flex:1"><input type="number" id="send-charge-amt-' + deptKey + '" placeholder="₹" min="0" style="font-size:11px;padding:4px 8px;width:76px;border-radius:6px;border:1.5px solid rgba(212,160,23,.5)"><button type="button" class="btn btn-xs btn-gold" onclick="sendQuickChargeFromDeptInputs(\'' + deptKey + '\')">Send</button><div style="display:flex;gap:4px;flex-wrap:wrap;flex:1">' + buttons + '</div><button type="button" class="btn btn-xs btn-outline" onclick="addCustomCharge()" style="white-space:nowrap">Custom (prompt)</button></div><datalist id="send-charge-dl-' + deptKey + '">' + dlOpts + '</datalist><div id="' + logId + '" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px"></div></div>';
 }
 function renderAllDeptSendBars() {
+  renderOphthoSendChargeSelect();
   renderDeptSendBar('obg', 'obg-top-send-bar', 'sent-charges-log-obg');
   renderDeptSendBar('psych', 'psych-top-send-bar', 'sent-charges-log-psych');
   renderDeptSendBar('skin', 'skin-top-send-bar', 'sent-charges-log-skin');
@@ -13729,8 +13990,12 @@ function localDateKey(value) {
 function patientQueueDateMatchesToday(p) {
   if (!p || p.queueRemoved) return false;
   const todayKeyLocal = localDateKey(new Date());
-  const stamps = [p.checkinAt, p.createdAt, p.seenAt].filter(Boolean);
-  if (!stamps.length) return false;
+  const stamps = [p.checkinAt, p.createdAt, p.seenAt, p.updatedAt, p.registeredAt, p.visitDate, p.queueDate, p.appointmentDate].filter(Boolean);
+  if (!stamps.length) {
+    // No date fields at all — show if clearly still in today’s active queue (matches reception behaviour)
+    if ((p.status === 'waiting' || p.status === 'pre-registered' || p.dilated) && !p.seen) return true;
+    return false;
+  }
   return stamps.some(function (raw) {
     const s = String(raw || '');
     if (!s) return false;
@@ -13892,8 +14157,8 @@ function rxEyePlainEn(eye) {
   if (/Right Eye|\(OD\)/i.test(e)) return 'the right eye';
   if (/Left Eye|\(OS\)/i.test(e)) return 'the left eye';
   if (/Both Eyes|\(OU\)/i.test(e)) return 'both eyes';
-  if (/Oral/i.test(e)) return 'by mouth';
-  if (/Topical/i.test(e)) return 'topically';
+  if (/Oral/i.test(e)) return '';
+  if (/Topical/i.test(e)) return 'the affected area';
   return (e || 'as directed').toLowerCase();
 }
 function rxEyePlain(eye, lang) {
@@ -13903,7 +14168,7 @@ function rxEyePlain(eye, lang) {
       'the right eye':'दाहिनी आंख',
       'the left eye':'बाईं आंख',
       'both eyes':'दोनों आंखें',
-      'by mouth':'मुंह से',
+      'the affected area':'प्रभावित जगह',
       'topically':'बाहरी रूप से',
       'as directed':'जैसा बताया गया है'
     };
@@ -13914,13 +14179,35 @@ function rxEyePlain(eye, lang) {
       'the right eye':'ਸੱਜੀ ਅੱਖ',
       'the left eye':'ਖੱਬੀ ਅੱਖ',
       'both eyes':'ਦੋਵਾਂ ਅੱਖਾਂ',
-      'by mouth':'ਮੂੰਹ ਰਾਹੀਂ',
+      'the affected area':'ਪ੍ਰਭਾਵਿਤ ਥਾਂ',
       'topically':'ਬਾਹਰੋਂ',
       'as directed':'ਜਿਵੇਂ ਦੱਸਿਆ ਗਿਆ ਹੈ'
     };
     return map[en] || en;
   }
   return en;
+}
+function rxOralDosePhraseEn(d) {
+  const t = String(d.drugType || d.type || '').toLowerCase();
+  if (/capsule|cap\b/.test(t)) return 'one capsule';
+  if (/syrup|suspension|elixir/.test(t)) return 'the measured dose';
+  if (/powder|sachet/.test(t)) return 'one sachet';
+  if (/tablet|tab\b/.test(t)) return 'one tablet';
+  return 'one tablet';
+}
+function rxPlainIsEyeDrop(d) {
+  const form = String(d.drugType || d.type || '').toLowerCase();
+  return /drop|eyedrop|eye drop/.test(form) || (/eye/i.test(form) && /drop/i.test(String(d.name || '')));
+}
+function rxPlainIsTopicalCream(d) {
+  const form = String(d.drugType || d.type || '').toLowerCase();
+  return /ointment|gel|cream|lotion/i.test(form);
+}
+function isRxPlainOral(d) {
+  if (rxPlainIsEyeDrop(d) || rxPlainIsTopicalCream(d)) return false;
+  const form = String(d.drugType || d.type || '').toLowerCase();
+  if (/injection|inj\b|spray|pessary|nasal|inhal/i.test(form)) return false;
+  return /tablet|capsule|oral|syrup|tab|suspension|powder|sachet|mouth|mg tab|mcg tab/.test(form) || (!/drop|ointment|gel|cream|lotion|eye\b/.test(form));
 }
 function buildRxPlainInstructionLine(d, lang, fmtIN) {
   const eye = Array.isArray(d.eye) ? d.eye[0] : d.eye;
@@ -13930,25 +14217,49 @@ function buildRxPlainInstructionLine(d, lang, fmtIN) {
   const df = fmtIN(d.dateFrom);
   const dt = fmtIN(d.dateTo);
   const form = String(d.drugType || d.type || '').toLowerCase();
-  let action = 'Take';
-  if (/drop|eye/i.test(form)) action = 'Instill one drop';
-  else if (/ointment|gel|cream|lotion/i.test(form)) action = 'Apply';
-  else if (/spray/i.test(form)) action = 'Use';
-  else if (/injection/i.test(form)) action = 'Administer';
-  else if (/pessary/i.test(form)) action = 'Insert';
+  const oralEn = isRxPlainOral(d);
+  const dropEn = rxPlainIsEyeDrop(d);
+  const topicalEn = rxPlainIsTopicalCream(d);
   let line = '';
   if (lang === 'hi') {
-    if (/drop|eye/i.test(form)) line = eyeTxt + ' में 1 बूंद ' + freq + ', ' + dur + ', ' + df + ' से ' + dt + ' तक।';
-    else if (/ointment|gel|cream|lotion/i.test(form)) line = eyeTxt + ' पर लगाएं, ' + freq + ', ' + dur + ', ' + df + ' से ' + dt + ' तक।';
-    else if (/injection/i.test(form)) line = 'निर्देशानुसार दें, ' + freq + ', ' + dur + ', ' + df + ' से ' + dt + ' तक।';
-    else line = eyeTxt + ' के लिए ' + freq + ', ' + dur + ', ' + df + ' से ' + dt + ' तक।';
+    if (dropEn) {
+      line = eyeTxt + ' में 1 बूंद डालें, ' + freq + ', ' + dur + ', ' + df + ' से ' + dt + ' तक।';
+    } else if (topicalEn) {
+      line = eyeTxt + ' पर लगाएं, ' + freq + ', ' + dur + ', ' + df + ' से ' + dt + ' तक।';
+    } else if (/injection/i.test(form)) {
+      line = 'निर्देशानुसार दें, ' + freq + ', ' + dur + ', ' + df + ' से ' + dt + ' तक।';
+    } else if (oralEn) {
+      line = 'निर्देशानुसार दिन में दवा लें (' + freq + '), ' + dur + ', ' + df + ' से ' + dt + ' तक।';
+    } else {
+      line = (eyeTxt ? eyeTxt + ' — ' : '') + freq + ', ' + dur + ', ' + df + ' से ' + dt + ' तक।';
+    }
   } else if (lang === 'pa') {
-    if (/drop|eye/i.test(form)) line = eyeTxt + ' ਵਿੱਚ 1 ਬੂੰਦ ' + freq + ', ' + dur + ', ' + df + ' ਤੋਂ ' + dt + ' ਤੱਕ।';
-    else if (/ointment|gel|cream|lotion/i.test(form)) line = eyeTxt + ' ਤੇ ਲਗਾਓ, ' + freq + ', ' + dur + ', ' + df + ' ਤੋਂ ' + dt + ' ਤੱਕ।';
-    else if (/injection/i.test(form)) line = 'ਨਿਰਦੇਸ਼ ਅਨੁਸਾਰ ਦਿਓ, ' + freq + ', ' + dur + ', ' + df + ' ਤੋਂ ' + dt + ' ਤੱਕ।';
-    else line = eyeTxt + ' ਲਈ ' + freq + ', ' + dur + ', ' + df + ' ਤੋਂ ' + dt + ' ਤੱਕ।';
+    if (dropEn) {
+      line = eyeTxt + ' ਵਿੱਚ 1 ਬੂੰਦ ਪਾਓ, ' + freq + ', ' + dur + ', ' + df + ' ਤੋਂ ' + dt + ' ਤੱਕ।';
+    } else if (topicalEn) {
+      line = eyeTxt + ' ਤੇ ਲਗਾਓ, ' + freq + ', ' + dur + ', ' + df + ' ਤੋਂ ' + dt + ' ਤੱਕ।';
+    } else if (/injection/i.test(form)) {
+      line = 'ਨਿਰਦੇਸ਼ ਅਨੁਸਾਰ ਦਿਓ, ' + freq + ', ' + dur + ', ' + df + ' ਤੋਂ ' + dt + ' ਤੱਕ।';
+    } else if (oralEn) {
+      line = 'ਨਿਰਦੇਸ਼ ਅਨੁਸਾਰ ਦਵਾਈ ਲਓ (' + freq + '), ' + dur + ', ' + df + ' ਤੋਂ ' + dt + ' ਤੱਕ।';
+    } else {
+      line = (eyeTxt ? eyeTxt + ' — ' : '') + freq + ', ' + dur + ', ' + df + ' ਤੋਂ ' + dt + ' ਤੱਕ।';
+    }
   } else {
-    line = action + ' in ' + eyeTxt + ' ' + freq + ' for ' + dur + ', from ' + df + ' to ' + dt + '.';
+    const eyeEn = rxEyePlainEn(eye);
+    if (dropEn) {
+      line = 'Instill one drop in ' + (eyeEn || 'the affected eye') + ', ' + freq + ', for ' + dur + ', from ' + df + ' to ' + dt + '.';
+    } else if (topicalEn) {
+      line = 'Apply to ' + (eyeEn || 'the affected area') + ', ' + freq + ', for ' + dur + ', from ' + df + ' to ' + dt + '.';
+    } else if (/injection/i.test(form)) {
+      line = 'Use as directed ' + freq + ' for ' + dur + ', from ' + df + ' to ' + dt + '.';
+    } else if (/spray/i.test(form)) {
+      line = 'Use as directed ' + freq + ' for ' + dur + ', from ' + df + ' to ' + dt + '.';
+    } else if (/pessary/i.test(form)) {
+      line = 'Insert as directed ' + freq + ' for ' + dur + ', from ' + df + ' to ' + dt + '.';
+    } else {
+      line = 'Take ' + rxOralDosePhraseEn(d) + ' ' + freq + ' for ' + dur + ', from ' + df + ' to ' + dt + '.';
+    }
   }
   return line;
 }
@@ -14074,13 +14385,16 @@ window.printUnifiedRx = function(deptId) {
     ? escapeHtmlConsent(String(advice).trim()).replace(/\n/g, '<br>')
     : '';
 
-  // ── Doctor info (logged-in doctor on prescription) ──
+  // ── Doctor info (logged-in doctor on prescription) — prefer saved Settings → Doctors credentials ──
   const doctorDisplay = typeof getRxDoctorDisplayName === 'function' ? getRxDoctorDisplayName() : (CURRENT_USER?.name || 'Dr. Varun Baweja');
   const doctorName = String(doctorDisplay).split('·')[0].trim();
-  const doctorProfile = (typeof DOCTOR_PROFILES!=='undefined' && DOCTOR_PROFILES[doctorName]) || {};
-  const doctorDegrees = doctorProfile.degrees || CURRENT_USER?.degrees || 'MBBS,DO,DNB,Ex Cons Cambridgeshire(UK)';
-  const doctorSpec    = {oe:'Ophthalmologist',obg:'Obstetrician & Gynaecologist',psych:'Psychiatrist',skin:'Dermatologist'}[deptId]||'Specialist';
-  const doctorReg     = doctorProfile.reg || '';
+  const doctorProfile = findDoctorProfileByRxName(doctorName);
+  let doctorDegrees = String(doctorProfile.degrees || '').trim();
+  if (!doctorDegrees && doctorNameMatchesCurrentUser(doctorName)) {
+    doctorDegrees = String(CURRENT_USER?.degrees || '').trim();
+  }
+  const doctorSpec    = {oe:'Ophthalmologist',obg:'Obstetrician & Gynaecologist',psych:'Neuropsychiatrist',skin:'Dermatologist'}[deptId]||'Specialist';
+  const doctorReg     = String(doctorProfile.reg || '').trim();
   const doctorPhone   = '6280048805';
 
   // ── Patient info ──
@@ -14309,19 +14623,19 @@ const CHARGES_DATA = [
   {cat:'Eye',    name:'Specular Microscopy',             chd:1200, rpr:1000},
   {cat:'Eye',    name:'ERG / VEP',                       chd:2500, rpr:2000},
   {cat:'Eye',    name:'Pre-op Package',                  chd:3500, rpr:3000},
-  {cat:'Eye Sx', kind:'surgery', parent:'', name:'Pinhole Microincision Cataract Surgery + IOL Implantation', chd:0, rpr:0},
-  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Indian Foldable IOL Implantation', chd:10000, rpr:8500},
-  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Indian Foldable Hydrophilic Aspheric IOL Implantation', chd:13000, rpr:11500},
-  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Indian Foldable Hydrophobic Aspheric IOL Implantation', chd:18000, rpr:14500},
-  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Premium Preloaded 3 Piece Hydrophobic Aspheric IOL Implantation', chd:20000, rpr:18500},
-  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Premium 1 Piece Hydrophobic IOL Implantation', chd:20000, rpr:18500},
-  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Premium 1 Piece Hydrophobic Aspheric IOL Implantation', chd:25000, rpr:23500},
-  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Foldable Advanced Monofocal IOL Implantation', chd:25000, rpr:23500},
-  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Premium Preloaded 1 Piece Hydrophobic Aspheric IOL Implantation', chd:30000, rpr:28500},
-  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Indian Multifocal IOL Implantation', chd:45000, rpr:35000},
-  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Premium 1 Piece Preloaded Advanced Monofocal IOL Implantation', chd:50000, rpr:45000},
-  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Premium Multifocal IOL Implantation', chd:70000, rpr:65000},
-  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Premium 1 Piece Preloaded Trifocal IOL Implantation', chd:95000, rpr:85000},
+  {cat:'Eye Sx', kind:'surgery', parent:'', name:'Pinhole Microincision Cataract Surgery', chd:0, rpr:0},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery', name:'Indian Foldable IOL Implantation', chd:10000, rpr:8500},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery', name:'Indian Foldable Hydrophilic Aspheric IOL Implantation', chd:13000, rpr:11500},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery', name:'Indian Foldable Hydrophobic Aspheric IOL Implantation', chd:18000, rpr:14500},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery', name:'Premium Preloaded 3 Piece Hydrophobic Aspheric IOL Implantation', chd:20000, rpr:18500},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery', name:'Premium 1 Piece Hydrophobic IOL Implantation', chd:20000, rpr:18500},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery', name:'Premium 1 Piece Hydrophobic Aspheric IOL Implantation', chd:25000, rpr:23500},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery', name:'Foldable Advanced Monofocal IOL Implantation', chd:25000, rpr:23500},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery', name:'Premium Preloaded 1 Piece Hydrophobic Aspheric IOL Implantation', chd:30000, rpr:28500},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery', name:'Indian Multifocal IOL Implantation', chd:45000, rpr:35000},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery', name:'Premium 1 Piece Preloaded Advanced Monofocal IOL Implantation', chd:50000, rpr:45000},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery', name:'Premium Multifocal IOL Implantation', chd:70000, rpr:65000},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery', name:'Premium 1 Piece Preloaded Trifocal IOL Implantation', chd:95000, rpr:85000},
   {cat:'Eye Sx', name:'PMICS + IOL Implantation',        chd:10000,rpr:8500},
   {cat:'Eye Sx', name:'Trabeculectomy',                  chd:42000,rpr:38000},
   {cat:'Eye Sx', name:'IVT Injection (Anti-VEGF)',       chd:8000, rpr:7000},
@@ -14370,19 +14684,19 @@ const CRITICAL_CHARGE_ROWS = [
   {cat:'OBG', kind:'OBG', parent:'', name:'ANC Consultation', chd:500, rpr:200},
   {cat:'Psych', kind:'Psych', parent:'', name:'Psychiatry Consultation', chd:500, rpr:200},
   {cat:'Skin', kind:'Skin', parent:'', name:'Dermatology Consultation', chd:500, rpr:200},
-  {cat:'Eye Sx', kind:'surgery', parent:'', name:'Pinhole Microincision Cataract Surgery + IOL Implantation', chd:0, rpr:0},
-  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Indian Foldable IOL Implantation', chd:10000, rpr:8500},
-  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Indian Foldable Hydrophilic Aspheric IOL Implantation', chd:13000, rpr:11500},
-  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Indian Foldable Hydrophobic Aspheric IOL Implantation', chd:18000, rpr:14500},
-  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Premium Preloaded 3 Piece Hydrophobic Aspheric IOL Implantation', chd:20000, rpr:18500},
-  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Premium 1 Piece Hydrophobic IOL Implantation', chd:20000, rpr:18500},
-  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Premium 1 Piece Hydrophobic Aspheric IOL Implantation', chd:25000, rpr:23500},
-  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Foldable Advanced Monofocal IOL Implantation', chd:25000, rpr:23500},
-  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Premium Preloaded 1 Piece Hydrophobic Aspheric IOL Implantation', chd:30000, rpr:28500},
-  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Indian Multifocal IOL Implantation', chd:45000, rpr:35000},
-  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Premium 1 Piece Preloaded Advanced Monofocal IOL Implantation', chd:50000, rpr:45000},
-  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Premium Multifocal IOL Implantation', chd:70000, rpr:65000},
-  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery + IOL Implantation', name:'Premium 1 Piece Preloaded Trifocal IOL Implantation', chd:95000, rpr:85000}
+  {cat:'Eye Sx', kind:'surgery', parent:'', name:'Pinhole Microincision Cataract Surgery', chd:0, rpr:0},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery', name:'Indian Foldable IOL Implantation', chd:10000, rpr:8500},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery', name:'Indian Foldable Hydrophilic Aspheric IOL Implantation', chd:13000, rpr:11500},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery', name:'Indian Foldable Hydrophobic Aspheric IOL Implantation', chd:18000, rpr:14500},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery', name:'Premium Preloaded 3 Piece Hydrophobic Aspheric IOL Implantation', chd:20000, rpr:18500},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery', name:'Premium 1 Piece Hydrophobic IOL Implantation', chd:20000, rpr:18500},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery', name:'Premium 1 Piece Hydrophobic Aspheric IOL Implantation', chd:25000, rpr:23500},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery', name:'Foldable Advanced Monofocal IOL Implantation', chd:25000, rpr:23500},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery', name:'Premium Preloaded 1 Piece Hydrophobic Aspheric IOL Implantation', chd:30000, rpr:28500},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery', name:'Indian Multifocal IOL Implantation', chd:45000, rpr:35000},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery', name:'Premium 1 Piece Preloaded Advanced Monofocal IOL Implantation', chd:50000, rpr:45000},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery', name:'Premium Multifocal IOL Implantation', chd:70000, rpr:65000},
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery', name:'Premium 1 Piece Preloaded Trifocal IOL Implantation', chd:95000, rpr:85000}
 ];
 function upsertCriticalChargeRow(row) {
   const idx = CHARGES_DATA.findIndex(function (existing) {
@@ -14409,6 +14723,7 @@ function ensureCriticalChargesLoaded() {
   CENTRE_CHARGES.CHD['Consultation'] = 500;
   CENTRE_CHARGES.RPR['Consultation'] = 200;
   CRITICAL_CHARGE_ROWS.forEach(upsertCriticalChargeRow);
+  migrateLegacyPmicsChargeParents();
 }
 ensureCriticalChargesLoaded();
 function getChargeMainHeadings() {
@@ -14567,6 +14882,7 @@ function saveCharges() {
     CENTRE_CHARGES.RPR[c.name] = c.rpr;
   });
   saveChargesToFirebase();
+  renderAllDeptSendBars && renderAllDeptSendBars();
   showToast('Charges saved & synced ✓','s');
 }
 
@@ -15737,20 +16053,25 @@ function followupLineToDateOnly(line) {
   if (parts.length > 1) return parts.slice(1).join(':').trim() || s;
   return s;
 }
-/** Vertical follow-up block for print: fixed labels (1 day / 1 week / 2 weeks) + dates only (no procedure text). */
+/** Vertical follow-up block for print: final follow-up label + date on separate rows first; then 1 day / 1 week. */
 function buildOphFollowupVerticalPrintHtml(fus) {
   const esc = escapeHtmlConsent;
-  const labels = ['1 day', '1 week', '2 weeks / final follow-up'];
   const arr = Array.isArray(fus) ? fus : [];
-  let html = '';
-  labels.forEach(function (lbl, i) {
-    const dateText = arr[i] ? followupLineToDateOnly(arr[i]) : '—';
-    html += '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:6px 10px;border-bottom:1px solid #e2e6ed;font-size:12px;line-height:1.35">'
+  const oneDay = arr[0] ? followupLineToDateOnly(arr[0]) : '—';
+  const oneWeek = arr[1] ? followupLineToDateOnly(arr[1]) : '—';
+  const finalDate = arr[2] ? followupLineToDateOnly(arr[2]) : '—';
+  const finalBlock = '<div style="padding:8px 10px;border-bottom:1px solid #e2e6ed">'
+    + '<div style="font-size:12px;font-weight:900;color:#1A3C6E;text-align:center;line-height:1.3">' + esc('2 weeks / final follow-up') + '</div>'
+    + '<div style="font-size:12.5px;font-weight:800;font-family:ui-monospace,monospace;text-align:center;margin-top:4px">' + esc(finalDate) + '</div>'
+    + '</div>';
+  const row = function (lbl, dt) {
+    return '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:6px 10px;border-bottom:1px solid #e2e6ed;font-size:12px;line-height:1.35">'
       + '<span style="font-weight:900;color:#1A3C6E;min-width:0">' + esc(lbl) + '</span>'
-      + '<span style="font-weight:800;font-family:ui-monospace,monospace;font-size:12.5px;text-align:right;white-space:nowrap">' + esc(dateText) + '</span>'
+      + '<span style="font-weight:800;font-family:ui-monospace,monospace;font-size:12.5px;text-align:right;white-space:nowrap">' + esc(dt) + '</span>'
       + '</div>';
-  });
-  for (let j = labels.length; j < arr.length; j++) {
+  };
+  let html = finalBlock + row('1 day', oneDay) + row('1 week', oneWeek);
+  for (let j = 3; j < arr.length; j++) {
     html += '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:6px 10px;border-bottom:1px solid #e2e6ed;font-size:11px">'
       + '<span style="font-weight:800;color:#555">Follow-up ' + (j + 1) + '</span>'
       + '<span style="font-weight:800;font-family:ui-monospace,monospace;font-size:12px;text-align:right">' + esc(followupLineToDateOnly(arr[j])) + '</span>'
@@ -15784,9 +16105,7 @@ function buildOphthoDischargeA4LayoutPrintHtml(snap, data, colorPrint) {
   const fus = (snap && snap.followups && snap.followups.length) ? snap.followups : [];
   const meds = (snap && snap.medicines && snap.medicines.length) ? snap.medicines : [];
   const TIMES = ['12am','6am','8am','10am','12pm','2pm','4pm','6pm','8pm','10pm'];
-  const medRows = meds.filter(function (m) { return !m.isTaper; });
-  const taperRows = meds.filter(function (m) { return m.isTaper; });
-  const totalRows = medRows.length + taperRows.length;
+  const totalRows = meds.length;
   const hdrFs = totalRows > 10 ? '6px' : totalRows > 7 ? '6.5px' : '7px';
   const cellPad = totalRows > 10 ? '1px 1px' : '2px 2px';
   const nameFs = totalRows > 10 ? '7px' : totalRows > 7 ? '7.5px' : '8.5px';
@@ -15796,13 +16115,16 @@ function buildOphthoDischargeA4LayoutPrintHtml(snap, data, colorPrint) {
       return '<th style="border:1px solid #bbb;padding:' + cellPad + ';font-size:' + hdrFs + ';font-weight:800;background:#eef3fb;line-height:1.1">' + esc(t) + '</th>';
     }).join('');
     const body = rows.map(function (row) {
-      const name = esc(String(row.name || 'Medicine').slice(0, 56));
+      const isTap = !!row.isTaper;
+      const name = isTap
+        ? '<span style="display:block;border-left:3px solid #D4A017;padding-left:6px">&nbsp;</span>'
+        : esc(String(row.name || 'Medicine').slice(0, 56));
       const cells = TIMES.map(function (t) {
         const icon = medTimeSlotIcon(row, t);
         return '<td style="border:1px solid #ccc;text-align:center;padding:' + cellPad + ';vertical-align:middle;background:#fff;height:14px;line-height:1"><span style="font-size:11px">' + icon + '</span></td>';
       }).join('');
       const dr = (row.fromDate && row.toDate) ? (esc(row.fromDate) + ' → ' + esc(row.toDate)) : '—';
-      return '<tr><td style="border:1px solid #bbb;padding:3px 4px;font-size:' + nameFs + ';font-weight:800;line-height:1.2;word-break:break-word">' + name + '</td>' + cells + '<td style="border:1px solid #bbb;padding:3px 4px;font-size:6.5px;white-space:nowrap;line-height:1.15">' + dr + '</td></tr>';
+      return '<tr><td style="border:1px solid #bbb;padding:3px 4px;font-size:' + nameFs + ';line-height:1.2;word-break:break-word;vertical-align:middle;background:' + (isTap ? '#fffaf5' : '#fff') + '">' + name + '</td>' + cells + '<td style="border:1px solid #bbb;padding:3px 4px;font-size:6.5px;white-space:nowrap;line-height:1.15;background:' + (isTap ? '#fffaf5' : '#fff') + '">' + dr + '</td></tr>';
     }).join('');
     return '<div style="margin-top:4px"><div style="font-size:8.5px;font-weight:900;color:' + blue + ';margin-bottom:3px">' + esc(title) + '</div>'
       + '<table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:7px"><thead><tr><th style="border:1px solid #bbb;padding:3px 4px;font-size:' + hdrFs + ';background:#f5f5f5;width:20%">Medicine</th>' + head + '<th style="border:1px solid #bbb;padding:3px;font-size:' + hdrFs + ';background:#f5f5f5;width:11%">Dates</th></tr></thead><tbody>' + body + '</tbody></table></div>';
@@ -15831,8 +16153,7 @@ function buildOphthoDischargeA4LayoutPrintHtml(snap, data, colorPrint) {
     + '<div style="line-height:1.4;color:#5a3000;font-size:10.5px">' + (instr.length ? instr.map(function (x) { return '<div style="margin-bottom:4px">• ' + esc(x) + '</div>'; }).join('') : '<div style="color:#888">—</div>') + '</div>'
     + '</div></div>'
     + '<div style="padding:6px 10px 8px;border-top:1px solid #eee">'
-    + gridHtml(medRows, 'Medication schedule (💧 drop · 💊 tablet in time slot)')
-    + (taperRows.length ? gridHtml(taperRows, 'Taper steps') : '')
+    + gridHtml(meds, 'Medicines and timings (💧 drop · 💊 tablet in time slot)')
     + '</div>'
     + '<div style="display:flex;justify-content:space-between;padding:6px 12px;border-top:1px solid #ddd;font-size:8px;color:#555"><div>Patient / attendant signature</div><div>' + esc(CURRENT_USER?.name || 'Doctor') + '</div></div>'
     + '</div></body></html>';
@@ -15929,7 +16250,7 @@ function renderDischargeBuilder() {
   const docSigEl = document.getElementById('dc-doc-sig');
   if(docSigEl) {
     const dName = otDoctor || ptObj.doctor || window.CURRENT_USER?.name || 'Dr. Varun Baweja';
-    const deptSig = {ophtho:'MS (Ophth)', obg:'MS (OBG)', psych:'MD (Psychiatry)', skin:'MD (Dermatology)'}[sel] || 'MS';
+    const deptSig = {ophtho:'MS (Ophth)', obg:'MS (OBG)', psych:'MD (Neuropsychiatry)', skin:'MD (Dermatology)'}[sel] || 'MS';
     docSigEl.textContent = dName + ' · ' + deptSig;
   }
   const otEyeEl = document.getElementById('dc-ot-eye');
@@ -16472,32 +16793,64 @@ function refreshConsentLibrary() {
     if(!existingCustom) list.appendChild(sec);
   });
 }
+function openEditUploadedConsentModal(id, data) {
+  const hid = document.getElementById('edit-upl-consent-id');
+  const nameInp = document.getElementById('edit-upl-consent-name');
+  const deptSel = document.getElementById('edit-upl-consent-dept');
+  const ta = document.getElementById('edit-upl-consent-text');
+  const imgWrap = document.getElementById('edit-upl-consent-image-wrap');
+  const tb = document.getElementById('edit-upl-consent-toolbar');
+  if (hid) hid.value = id;
+  if (nameInp) nameInp.value = data.name || '';
+  if (deptSel) deptSel.value = normalizeSurgeryPackDeptKey(data.dept) || data.dept || 'all';
+  if (data.type === 'image') {
+    if (ta) { ta.style.display = 'none'; ta.value = ''; }
+    if (tb) tb.style.display = 'none';
+    if (imgWrap) {
+      imgWrap.style.display = 'block';
+      const src = data.imgSrc || data.dataUrl || '';
+      imgWrap.innerHTML = src
+        ? '<img src="' + String(src).replace(/"/g, '&quot;') + '" alt="" style="max-width:100%;max-height:min(78vh,900px);object-fit:contain;border-radius:8px;border:1px solid var(--g4);background:#fff">'
+        : '<p style="padding:20px;color:var(--g1)">No image data (PDF-only uploads: edit name/dept only).</p>';
+    }
+  } else {
+    if (imgWrap) { imgWrap.style.display = 'none'; imgWrap.innerHTML = ''; }
+    if (tb) tb.style.display = 'flex';
+    if (ta) {
+      ta.style.display = 'block';
+      ta.value = data.text || data.body || '';
+      ta.style.minHeight = 'min(55vh,520px)';
+      ta.onfocus = function () { window._consentToolbarTarget = this; };
+      window._consentToolbarTarget = ta;
+    }
+  }
+  openM('m-edit-uploaded-consent');
+}
+function saveUploadedConsentFromModal() {
+  const id = document.getElementById('edit-upl-consent-id')?.value;
+  if (!id) return;
+  const name = document.getElementById('edit-upl-consent-name')?.value?.trim();
+  const dept = document.getElementById('edit-upl-consent-dept')?.value;
+  const ta = document.getElementById('edit-upl-consent-text');
+  const isImage = ta && ta.style.display === 'none';
+  const payload = {
+    name: name || 'Document',
+    dept: normalizeSurgeryPackDeptKey(dept) || 'all'
+  };
+  if (!isImage && ta) payload.text = ta.value;
+  fbUpdate('consentLibrary/' + id, payload).then(function () {
+    showToast('Document updated ✓', 's');
+    closeM('m-edit-uploaded-consent');
+    refreshConsentLibrary && refreshConsentLibrary();
+    loadCustomConsentsForSettings && loadCustomConsentsForSettings();
+  }).catch(function () { showToast('Could not save', 'w'); });
+}
+window.saveUploadedConsentFromModal = saveUploadedConsentFromModal;
+
 function editUploadedConsent(id) {
   fbOnce('consentLibrary/' + id, function (data) {
     if (!data) { showToast('Consent not found', 'w'); return; }
-    const newName = prompt('Edit document name', data.name || '');
-    if (newName === null) return;
-    const newDept = prompt('Department key: ophtho / obg / psych / skin / all', data.dept || 'all');
-    if (newDept === null) return;
-    if (data.type === 'image') {
-      fbUpdate('consentLibrary/' + id, { name: newName.trim() || data.name, dept: normalizeSurgeryPackDeptKey(newDept) || data.dept || 'all' }).then(function () {
-        showToast('Document updated ✓', 's');
-        refreshConsentLibrary();
-        loadCustomConsentsForSettings && loadCustomConsentsForSettings();
-      });
-      return;
-    }
-    const newText = prompt('Edit wording', data.text || data.body || '');
-    if (newText === null) return;
-    fbUpdate('consentLibrary/' + id, {
-      name: newName.trim() || data.name,
-      dept: normalizeSurgeryPackDeptKey(newDept) || data.dept || 'all',
-      text: newText
-    }).then(function () {
-      showToast('Document updated ✓', 's');
-      refreshConsentLibrary();
-      loadCustomConsentsForSettings && loadCustomConsentsForSettings();
-    });
+    openEditUploadedConsentModal(id, data);
   });
 }
 
@@ -18949,13 +19302,14 @@ function issueRefundAtReception() {
 
 // ── renderDocQueue — dept-filtered + sub-lists ───
 function renderDocQueue() {
+  const todayKeyLocal = localDateKey(new Date());
   // Map doctor dept name to patient dept key
   const deptMap = {
     Ophthalmology:'ophtho', OBG:'obg', Neuropsychiatry:'psych',
     Psychiatry:'psych', Skin:'skin', Cosmetology:'skin', Dermatology:'skin',
     'Skin & Cosmetology':'skin', Lab:'lab', Reception:'reception'
   };
-  const userDept = normalizeDeptKeyForQueue(deptMap[CURRENT_USER?.dept] || CURRENT_USER?.dept || '');
+  const userDept = normalizeDeptKeyForQueue(deptMap[normalizeQueueDeptForUser(CURRENT_USER?.dept)] || normalizeQueueDeptForUser(CURRENT_USER?.dept) || '');
   const queueDoctor = getEffectiveDoctorNameForDept(userDept || CURRENT_USER?.dept || '');
   const titleEl = document.getElementById('dq-title');
   if (titleEl) titleEl.textContent = `${queueDoctor} — My Patients`;
@@ -18964,18 +19318,16 @@ function renderDocQueue() {
   const validStatuses = p => p.status==='waiting'||p.status==='seen'||p.status==='pre-registered'||p.dilated;
   const myPts = (() => {
     if (CURRENT_USER?.isAdmin || CURRENT_USER?.role === 'Reception') {
-      return PATIENTS.filter(p => validStatuses(p) && centreMatch(p) && patientQueueDateMatchesToday(p));
+      // Doctor Queue should be visible across centres for all logins (reception already has centre controls).
+      return PATIENTS.filter(p => validStatuses(p) && patientQueueDateMatchesToday(p));
     }
     const deptPts = PATIENTS.filter(p => {
       const ptDept = normalizeDeptKeyForQueue(p.dept || p.department || '');
       const deptMatch = !userDept || ptDept === userDept || (!ptDept && userDept === 'ophtho');
-      return deptMatch && validStatuses(p) && centreMatch(p) && patientQueueDateMatchesToday(p);
+      return deptMatch && validStatuses(p) && patientQueueDateMatchesToday(p);
     });
-    const matchedPts = deptPts.filter(function (p) {
-      if (!p.doctor) return true;
-      return doctorMatchesPatientQueue(p.doctor, queueDoctor);
-    });
-    return matchedPts.length ? matchedPts : deptPts;
+    // Show full dept queue (same as reception’s dept slice); do not hide patients when another row matches doctor name.
+    return deptPts;
   })();
   const filteredPts = searchQ ? myPts.filter(function (p) {
     const hay = [
