@@ -21,10 +21,11 @@
     body.queue-sidebar-collapsed .sidebar .bmh-logo-row { justify-content:center; }
     body.queue-sidebar-collapsed .sidebar .sb-nav { padding-top:6px; }
     body.queue-sidebar-collapsed .sidebar .queue-expand-link { display:flex !important; }
-    .queue-expand-link { display:none; width:100%; justify-content:center; }
-    .queue-expand-link .ni-ic { margin-right:0 !important; }
+    .queue-expand-link { display:none; width:100%; justify-content:center; background:transparent !important; color:var(--bmh-blue) !important; border:none !important; box-shadow:none !important; }
+    .queue-expand-link .ni-ic { margin-right:0 !important; color:var(--bmh-blue) !important; background:transparent !important; }
     .dq-queue-main .rc-queue-table th,
-    .dq-queue-main .rc-queue-table td { font-size:11px; }
+    .dq-queue-main .rc-queue-table td { font-size:11.5px; }
+    .dq-queue-main .rc-queue-table th { font-size:11px; }
     .dq-queue-main .ptab { font-size:13px; }
     @media (max-width: 768px) {
       html, body { width:100%; max-width:100%; overflow-x:hidden; }
@@ -1252,12 +1253,13 @@
       <div class="tab-content" id="oe-rx">
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;background:var(--g6);padding:8px 10px;border-radius:var(--rsm)">
           <button class="btn btn-xs btn-blue" onclick="applyLastRx()">📋 Apply Last Rx</button>
-          <select id="rx-tpl-sel" style="font-size:11px;flex:1" onchange="applyRxTemplate(this.value)">
+          <select id="rx-tpl-sel" style="display:none" onchange="applyRxTemplate(this.value)">
             <option value="">— Apply Template —</option>
             <option value="post-phaco">Post Phaco Day 1</option>
             <option value="post-ivt">Post IVT</option>
             <option value="dry-eye">Dry Eye Protocol</option>
           </select>
+          <button class="btn btn-xs btn-outline" type="button" onclick="openRxTemplatePicker('ophtho')" style="flex:1;justify-content:flex-start">📋 Templates</button>
           <button class="btn btn-xs btn-outline" onclick="openM('m-order-invest')">🧪 Order Investigations</button>
           <label style="display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;color:var(--g1);padding:4px 2px;user-select:none;cursor:pointer">
             <input type="checkbox" id="rx-post-surgery" onchange="toggleRxPostSurgeryNote()">
@@ -1632,7 +1634,7 @@
           </div>
 <div class="form-group"><label class="fl">Doctor</label><select id="rc-dr"></select></div>
           <div class="form-group">
-            <label class="fl" style="display:flex;align-items:center;justify-content:space-between">Purpose <button onclick="openM('m-add-purpose')" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></label>
+            <label class="fl" style="display:flex;align-items:center;justify-content:space-between">Purpose <button onclick="renderCustomPurposeList();openM('m-add-purpose')" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></label>
             <select id="rc-purpose" onchange="checkSurgeryPurpose();syncReceptionConsultationFee&&syncReceptionConsultationFee()">
               <option>New Consultation</option><option>Follow-up</option><option>Post-op (Day 1)</option><option>Post-op (1 Week)</option><option>Post-op (1 Month)</option><option>Post-op (3 Months)</option><option>Emergency</option><option>ANC Visit</option><option>Surgery</option><option>Procedure / Injection</option><option>Investigation Only</option>
             </select>
@@ -2231,9 +2233,10 @@
       </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;background:var(--g6);padding:7px;border-radius:var(--rsm)">
           <button class="btn btn-xs btn-blue" onclick="applyLastRx()">📋 Last Rx</button>
-          <select style="font-size:11px;flex:1" onchange="applyRxTemplate(this.value)">
+          <select style="display:none" onchange="applyRxTemplate(this.value)">
             <option value="">— Template —</option>
           </select>
+          <button class="btn btn-xs btn-outline" type="button" onclick="openRxTemplatePicker('obg')" style="flex:1;justify-content:flex-start">📋 Templates</button>
           <button class="btn btn-xs btn-outline" onclick="openM('m-order-invest')">🧪 Investigations</button>
           <button class="btn btn-xs btn-gold" onclick="openSaveRxTemplate()">📋 Save Template</button>
           <div class="lang-sel" style="margin:0">
@@ -2631,9 +2634,10 @@
       </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;background:var(--g6);padding:7px;border-radius:var(--rsm)">
           <button class="btn btn-xs btn-blue" onclick="applyLastRx()">📋 Last Rx</button>
-          <select style="font-size:11px;flex:1" onchange="applyRxTemplate(this.value)">
+          <select style="display:none" onchange="applyRxTemplate(this.value)">
             <option value="">— Template —</option>
           </select>
+          <button class="btn btn-xs btn-outline" type="button" onclick="openRxTemplatePicker('psych')" style="flex:1;justify-content:flex-start">📋 Templates</button>
           <button class="btn btn-xs btn-outline" onclick="openM('m-order-invest')">🧪 Investigations</button>
           <button class="btn btn-xs btn-gold" onclick="openSaveRxTemplate()">📋 Save Template</button>
           <div class="lang-sel" style="margin:0">
@@ -2881,9 +2885,10 @@
       </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;background:var(--g6);padding:7px;border-radius:var(--rsm)">
           <button class="btn btn-xs btn-blue" onclick="applyLastRx()">📋 Last Rx</button>
-          <select style="font-size:11px;flex:1" onchange="applyRxTemplate(this.value)">
+          <select style="display:none" onchange="applyRxTemplate(this.value)">
             <option value="">— Template —</option>
           </select>
+          <button class="btn btn-xs btn-outline" type="button" onclick="openRxTemplatePicker('skin')" style="flex:1;justify-content:flex-start">📋 Templates</button>
           <button class="btn btn-xs btn-outline" onclick="openM('m-order-invest')">🧪 Investigations</button>
           <button class="btn btn-xs btn-gold" onclick="openSaveRxTemplate()">📋 Save Template</button>
           <div class="lang-sel" style="margin:0">
@@ -4675,7 +4680,18 @@
 <div class="fg fg1" style="gap:9px">
   <div class="form-group"><label class="fl">New Purpose</label><input type="text" id="new-purpose-inp" placeholder="e.g. Retinal Screening"></div>
   <button class="btn btn-gold" onclick="addPurposeOption()">+ Add to List</button>
+  <div class="form-group full"><label class="fl">Saved Custom Purposes</label><div id="custom-purpose-list"></div></div>
 </div></div></div>
+
+<div class="modal-ov" id="m-rx-template-picker">
+<div class="modal modal-lg">
+<div class="modal-hd"><div class="modal-title" id="rx-template-picker-title">Prescription Templates</div><button class="modal-close" onclick="closeM('m-rx-template-picker')">✕</button></div>
+<div class="fg fg1" style="gap:10px">
+  <div style="font-size:11px;color:var(--g1)">Select a template to fill the prescription immediately.</div>
+  <div id="rx-template-picker-list"></div>
+</div>
+</div>
+</div>
 
 <!-- ADD INSURANCE ENTRY MODAL -->
 <div class="modal-ov" id="m-add-ins">

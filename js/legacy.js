@@ -286,30 +286,48 @@ function otChargeLooksLikeProcedure(row) {
     || /trabeculectomy|lasik|pmics|iol|icl|staar|collamer|implantable|capsulotomy|iridotomy|excision|lscs|delivery|laparoscopy|hysteroscopy|chemical peel|prp|dcr|ptosis|squint|vitrectomy|injection|procedure/.test(name)
     || /pmics|lscs|delivery|procedure|surgery|laser|iol|icl|collamer/.test(parent);
 }
+function otProcedureBelongsToCaseKind(text, kind) {
+  const val = String(text || '').toLowerCase();
+  if (!val) return kind !== 'obg';
+  const looksObg = /lscs|caes|cesare|delivery|labour|mtp|suction|evacuat|abortion|obg|gynae|hyster|lapar|ovarian|fibroid|cyst/.test(val);
+  if (kind === 'obg') return looksObg;
+  return !looksObg;
+}
 function getOtProcedureMainHeadings() {
+  const caseKind = getSelectedOTCaseKind && getSelectedOTCaseKind();
   const out = new Set();
   (CHARGES_DATA || []).filter(otChargeLooksLikeProcedure).forEach(function (row) {
     const p = normalizeOtProcedureName(row.parent || '');
     const n = normalizeOtProcedureName(row.name || '');
+    const target = p || n;
+    if (!otProcedureBelongsToCaseKind(target, caseKind)) return;
     if (p) out.add(p);
     else if (n) out.add(n);
   });
   return Array.from(out).filter(Boolean).sort();
 }
 function getOtProcedureSubheadingOptions(parent) {
+  const caseKind = getSelectedOTCaseKind && getSelectedOTCaseKind();
   const target = normalizeOtProcedureName(parent);
   if (!target) return [];
   return Array.from(new Set((CHARGES_DATA || []).filter(function (row) {
-    return otChargeLooksLikeProcedure(row) && normalizeOtProcedureName(row.parent || '') === target && normalizeOtProcedureName(row.name || '') !== target;
+    const name = normalizeOtProcedureName(row.name || '');
+    return otChargeLooksLikeProcedure(row)
+      && normalizeOtProcedureName(row.parent || '') === target
+      && name !== target
+      && otProcedureBelongsToCaseKind(target || name, caseKind);
   }).map(function (row) {
     return normalizeOtProcedureName(row.name || '');
   }).filter(Boolean))).sort();
 }
 function getOtProcedureOptions() {
+  const caseKind = getSelectedOTCaseKind && getSelectedOTCaseKind();
   const fromCharges = CHARGES_DATA
-    .filter(otChargeLooksLikeProcedure)
+    .filter(function (row) {
+      return otChargeLooksLikeProcedure(row) && otProcedureBelongsToCaseKind((row.parent || row.name || ''), caseKind);
+    })
     .map(function (c) { return normalizeOtProcedureName(c.name); });
-  const fallbacks = [
+  const eyeFallbacks = [
     'PMICS + IOL Implantation (OS)',
     'PMICS + IOL Implantation (OD)',
     'PMICS (Pinhole Micro Incision Cataract Surgery) + IOL (OU)',
@@ -319,14 +337,21 @@ function getOtProcedureOptions() {
     'Squint Surgery',
     'LASIK',
     'Eyelid Surgery / Ptosis Repair',
-    'LSCS (Elective)',
-    'LSCS (Emergency)',
-    'Diagnostic Laparoscopy',
-    'D&C / Hysteroscopy',
-    'Chemical Peel',
+    'Implantable Collamer Lens (Staar)',
     'PRP Treatment',
     'Other — specify in notes'
   ];
+  const obgFallbacks = [
+    'LSCS (Elective)',
+    'LSCS (Emergency)',
+    'Normal Delivery',
+    'MTP / Suction Evacuation',
+    'Painless Abortion',
+    'Diagnostic Laparoscopy',
+    'D&C / Hysteroscopy',
+    'Other — specify in notes'
+  ];
+  const fallbacks = caseKind === 'obg' ? obgFallbacks : eyeFallbacks;
   return Array.from(new Set(getOtProcedureMainHeadings().concat(fromCharges, fallbacks).filter(Boolean)));
 }
 function parseOtProcedureSelection(value) {
@@ -914,7 +939,18 @@ function getMergedConsentData() {
   return out;
 }
 function getConsentEntry(key) {
-  return getMergedConsentData()[key] || CONSENT_DATA[key];
+  const merged = getMergedConsentData();
+  if (merged[key] || CONSENT_DATA[key]) return merged[key] || CONSENT_DATA[key];
+  const lib = getMergedLibraryItem(key) || ((window.BMH_UPLOADED_CONSENTS || []).find(function (x) { return x && x.id === key; }) || null);
+  if (lib && (lib.body || lib.text)) {
+    return libraryMergedToConsentData({
+      name: lib.name,
+      body: lib.body || lib.text || '',
+      bodyPa: lib.bodyPa || '',
+      bodyHi: lib.bodyHi || ''
+    });
+  }
+  return null;
 }
 /** Resolve consent key for printing: built-in data, uploaded template id, or library item id. */
 function resolveConsentDataForPrint(key) {
@@ -938,7 +974,7 @@ function resolveConsentDataForPrint(key) {
   return null;
 }
 function getMergedLibraryItem(id) {
-  const base = CONSENT_LIBRARY.find(function (x) { return x.id === id; });
+  const base = CONSENT_LIBRARY.find(function (x) { return x.id === id; }) || ((window.BMH_UPLOADED_CONSENTS || []).find(function (x) { return x && x.id === id; }) || null);
   if (!base) return null;
   const ov = CONSENT_LIBRARY_OVERRIDES[id] || {};
   return Object.assign({}, base, ov);
@@ -1791,6 +1827,7 @@ function printSelectedDocs() {
 }
 
 function renderConsent() {
+  populateConsentTypeSelectors();
   const type = document.getElementById('consent-type-sel')?.value || 'cataract';
   const lang = document.getElementById('consent-lang-sel')?.value || 'pa';
   const data = getConsentEntry(type) || getConsentEntry('cataract');
@@ -1811,6 +1848,7 @@ function _getConsentPatientHeaderUpload() {
   return { name: ptNm, id: ptId, age: pt.age || '—', sex: pt.sex || '—', mob: pt.mob || '', date: today, doctor: window.CURRENT_USER?.name || '—' };
 }
 function buildConsentHTML(data, lang, pt) {
+  if (!data) return '<div style="padding:16px;color:var(--g1);font-size:12px">No consent content found for this document.</div>';
   const localKey = lang === 'pa' ? 'pa' : 'hi';
   const p = pt || _getConsentPatientHeader();
   const ptName = p.name || document.getElementById('ophtho-pt-nm')?.textContent || '—';
@@ -1835,6 +1873,53 @@ function buildConsentHTML(data, lang, pt) {
     + '<div><div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:24px">Witness Signature</div><div style="border-bottom:1px solid var(--tx);margin-bottom:4px"></div><div style="font-size:10px;color:var(--g1)">Name & Date</div></div>'
     + '<div><div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:24px">Doctor\'s Signature</div><div style="border-bottom:1px solid var(--tx);margin-bottom:4px"></div><div style="font-size:10px;color:var(--g1)">' + String(doc) + ' · ' + String(today) + '</div></div></div>';
 }
+function loadUploadedConsentsCache(cb) {
+  if (!window.FBDB) {
+    if (typeof cb === 'function') cb(window.BMH_UPLOADED_CONSENTS || []);
+    return;
+  }
+  window.FBDB.ref('consentLibrary').once('value').then(function (snap) {
+    const data = snap.val();
+    window.BMH_UPLOADED_CONSENTS = data ? Object.values(data) : [];
+    if (typeof cb === 'function') cb(window.BMH_UPLOADED_CONSENTS);
+  }).catch(function () {
+    if (typeof cb === 'function') cb(window.BMH_UPLOADED_CONSENTS || []);
+  });
+}
+function populateConsentTypeSelectors() {
+  const deptKey = rxDeptKeyFromUi ? rxDeptKeyFromUi() : normalizeDeptKeyForQueue(CURRENT_USER?.dept || '');
+  const uploaded = (window.BMH_UPLOADED_CONSENTS || []).filter(function (c) {
+    const cd = normalizeSurgeryPackDeptKey(c.dept || 'all');
+    return !c.hidden && (cd === 'all' || !deptKey || cd === deptKey);
+  });
+  [
+    { id: 'mc-type', builtins: true },
+    { id: 'consent-type-sel', builtins: false }
+  ].forEach(function (cfg) {
+    const sel = document.getElementById(cfg.id);
+    if (!sel) return;
+    const current = sel.value || '';
+    Array.from(sel.querySelectorAll('option[data-uploaded-consent="1"]')).forEach(function (opt) { opt.remove(); });
+    if (!uploaded.length) return;
+    const frag = document.createDocumentFragment();
+    if (cfg.builtins) {
+      const sep = document.createElement('option');
+      sep.disabled = true;
+      sep.textContent = '──────── Uploaded / Custom ────────';
+      sep.setAttribute('data-uploaded-consent', '1');
+      frag.appendChild(sep);
+    }
+    uploaded.forEach(function (c) {
+      const opt = document.createElement('option');
+      opt.value = c.id;
+      opt.textContent = (c.type === 'image' ? '🖼️ ' : '📎 ') + (c.name || c.id);
+      opt.setAttribute('data-uploaded-consent', '1');
+      frag.appendChild(opt);
+    });
+    sel.appendChild(frag);
+    if (current && Array.from(sel.options).some(function (o) { return o.value === current; })) sel.value = current;
+  });
+}
 function renderConsentModal() {
   const ptIds = ['ophtho-pt-uid', 'obg-pt-uid', 'psych-pt-uid', 'skin-pt-uid'];
   const ptNms = ['ophtho-pt-nm', 'obg-pt-nm', 'psych-pt-nm', 'skin-pt-nm'];
@@ -1852,6 +1937,7 @@ function renderConsentModal() {
   const mb = document.getElementById('cmb-mob'); if (mb) mb.textContent = pt.mob || '—';
   const db = document.getElementById('cmb-date'); if (db) db.textContent = today;
   const xb = document.getElementById('cmb-doc'); if (xb) xb.textContent = window.CURRENT_USER?.name || '—';
+  populateConsentTypeSelectors();
   const type = document.getElementById('mc-type')?.value || 'cataract';
   const lang = document.getElementById('mc-lang')?.value || 'pa';
   const data = getConsentEntry(type) || getConsentEntry('cataract');
@@ -3023,9 +3109,21 @@ function buildOphthoCaseSheetHtml() {
     if(txt) ccRows.push({text:txt, dur:row.querySelector('.cc-dur')?.value||'', eye:row.querySelector('.cc-eye')?.value||''});
   });
   if (!ccRows.length) {
+    ['cc1','cc2','cc3','cc4'].forEach(function (id) {
+      const el = document.getElementById(id);
+      const txt = String(el?.value || '').trim();
+      if (txt) ccRows.push({ text: txt, dur: '', eye: '' });
+    });
+  }
+  if (!ccRows.length) {
     const lv = currentPt.lastVisit || {};
+    if (Array.isArray(lv.ccRows) && lv.ccRows.length) {
+      lv.ccRows.forEach(function (row) {
+        if (row && row.text) ccRows.push({ text: row.text, dur: row.dur || '', eye: row.eye || '' });
+      });
+    }
     const raw = String(lv.chiefComplaints || lv.cc || '').trim();
-    if (raw) {
+    if (!ccRows.length && raw) {
       raw.split(/\s*;\s*/).filter(Boolean).forEach(function (text) {
         ccRows.push({ text: text, dur: '', eye: '' });
       });
@@ -3151,6 +3249,14 @@ function buildOphthoCaseSheetHtml() {
   const escHtml = (s) => (s == null ? '' : String(s)).replace(/</g, '&lt;');
   const PHX_SHORT = ['Allerg','DM','HTN','IHD','Asthma','Migr','Thyroid','Renal','Surg','Bleed'];
   const ccStr = ccRows.map(c => c.text + (c.dur ? ' (' + c.dur + ')' : '') + (c.eye ? ' ' + c.eye : '')).join('; ') || '—';
+  const ccPrintHtml = ccRows.length
+    ? '<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:6px">'
+      + ccRows.map(function (c, idx) {
+          const parts = [String(c.text || '').trim(), String(c.dur || '').trim(), String(c.eye || '').trim()].filter(Boolean);
+          return '<div style="display:flex;gap:6px;align-items:flex-start"><span style="font-weight:900;min-width:16px;color:#1A3C6E">' + (idx + 1) + '.</span><span>' + escHtml(parts.join(' · ')) + '</span></div>';
+        }).join('')
+      + '</div>'
+    : '<div style="margin-bottom:6px"><b>CC:</b> ' + escHtml(ccStr) + '</div>';
   const phxRowsHtml = PHX_MAP.map(([id], i) => {
     const yn = document.getElementById(id)?.value || '—';
     const dur = (document.getElementById(id + '-dur')?.value || '').trim() || '—';
@@ -3367,7 +3473,7 @@ th{background:#eee;font-weight:900;text-align:center;font-size:8.8px}
   </div>
   <div style="border:1px solid #b8c8dc;border-radius:4px;padding:8px 10px;background:#f2f6fc;font-size:10.4px;line-height:1.5;display:flex;flex-direction:column;min-height:100%">
     <div style="font-size:10.7px;font-weight:900;color:#1A3C6E;text-transform:uppercase;margin-bottom:6px;letter-spacing:.2px;border-bottom:1px solid rgba(26,60,110,.2);padding-bottom:4px">Chief complaints &amp; spectacle history</div>
-    ${chiefComplaintsEnabled ? `<div style="margin-bottom:6px"><b>CC:</b> ${escHtml(ccStr)}</div>` : ''}
+    ${chiefComplaintsEnabled ? ccPrintHtml : ''}
     <div><b>Spectacles:</b> ${escHtml(hxSpec)}</div>
     <div><b>Last spectacle change:</b> ${escHtml(hxLastSpec)}</div>
     <div><b>Ocular meds (history):</b> ${escHtml(hxOcularMeds)}</div>
@@ -8326,15 +8432,21 @@ function rxDeptKeyFromUi() {
   return 'ophtho';
 }
 function refreshRxTemplateSelects() {
-  const dk = rxDeptKeyFromUi();
   const selList = document.querySelectorAll('#rx-tpl-sel, select[onchange*="applyRxTemplate"]');
   selList.forEach(function (sel) {
+    const page = sel.closest('.page');
+    const pageId = page?.id || '';
+    const dk = pageId.includes('obg') ? 'obg'
+      : pageId.includes('psych') ? 'psych'
+      : pageId.includes('skin') ? 'skin'
+      : pageId.includes('ophtho') ? 'ophtho'
+      : rxDeptKeyFromUi();
     const cur = sel.value;
     sel.innerHTML = '<option value="">— Template —</option>';
     Object.keys(RX_TEMPLATES_DATA).forEach(function (k) {
       const meta = RX_TEMPLATES_META[k] || { dept: 'all', name: k };
       const d = meta.dept || 'all';
-      if (d !== 'all' && d !== dk) return;
+      if (d !== dk) return;
       const opt = document.createElement('option');
       opt.value = k;
       opt.textContent = meta.name || k;
@@ -8343,6 +8455,48 @@ function refreshRxTemplateSelects() {
     if ([...sel.options].some(function (o) { return o.value === cur; })) sel.value = cur;
   });
   if (typeof refreshOTNotesTemplateSelect === 'function') refreshOTNotesTemplateSelect();
+}
+function getRxTemplateEntriesForDept(deptKey) {
+  return Object.keys(RX_TEMPLATES_DATA).filter(function (k) {
+    const meta = RX_TEMPLATES_META[k] || { dept: 'all', name: k };
+    const d = meta.dept || 'all';
+    return d === deptKey;
+  }).map(function (k) {
+    return { key: k, meta: RX_TEMPLATES_META[k] || { dept: 'all', name: k }, rows: RX_TEMPLATES_DATA[k] || [] };
+  });
+}
+function openRxTemplatePicker(deptKey) {
+  const dk = deptKey || rxDeptKeyFromUi();
+  const host = document.getElementById('rx-template-picker-list');
+  const title = document.getElementById('rx-template-picker-title');
+  if (!host) return;
+  if (title) {
+    const map = { ophtho:'Eye Templates', obg:'OBG Templates', psych:'Neuropsychiatry Templates', skin:'Skin Templates' };
+    title.textContent = map[dk] || 'Prescription Templates';
+  }
+  const items = getRxTemplateEntriesForDept(dk).filter(function (entry) {
+    return (entry.meta.dept || 'all') !== 'ot' && String(entry.meta.dept || '').indexOf('dc-') !== 0;
+  });
+  host.innerHTML = items.length
+    ? '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">'
+      + items.map(function (entry) {
+          const preview = entry.rows.slice(0, 3).map(function (row) {
+            const nm = rxDrugTradeName(row) || row.trade || row.name || row.generic || 'Item';
+            return nm + (row.freq ? ' · ' + row.freq : '');
+          }).join('<br>');
+          return '<button type="button" class="btn btn-outline" style="display:block;text-align:left;padding:10px 12px;border-radius:10px;min-height:110px;background:#fff" onclick="applyRxTemplateFromPicker(\'' + String(entry.key).replace(/'/g, "\\'") + '\')">'
+            + '<div style="font-size:12.5px;font-weight:900;color:var(--bmh-blue);margin-bottom:5px">' + String(entry.meta.name || entry.key).replace(/</g, '&lt;') + '</div>'
+            + '<div style="font-size:10.5px;color:var(--g1);margin-bottom:6px">' + entry.rows.length + ' line(s)</div>'
+            + '<div style="font-size:10.5px;line-height:1.4;color:var(--tx3)">' + preview + '</div>'
+            + '</button>';
+        }).join('')
+      + '</div>'
+    : '<div style="font-size:12px;color:var(--g1)">No templates saved for this department yet.</div>';
+  openM('m-rx-template-picker');
+}
+function applyRxTemplateFromPicker(tplId) {
+  applyRxTemplate(tplId);
+  closeM('m-rx-template-picker');
 }
 function getSurgeryTemplateSuggestions() {
   return [...new Set((CHARGES_DATA || [])
@@ -8499,7 +8653,7 @@ function openEditRxTemplateModal(key) {
   const notesInp = document.getElementById('edit-rx-tpl-notes');
   const lInp = document.getElementById('edit-rx-tpl-lines');
   if (kInp) kInp.value = key;
-  if (nInp) nInp.value = meta.name || key;
+  if (nInp) nInp.value = toDisplayTitleCase(meta.name || key);
   if (dInp) dInp.value = meta.dept || 'all';
   if (sInp) sInp.value = meta.surgery || '';
   if (notesInp) notesInp.value = meta.notes || '';
@@ -8510,7 +8664,7 @@ function openEditRxTemplateModal(key) {
 function saveRxTemplateFromModal() {
   const key = document.getElementById('edit-rx-tpl-key')?.value;
   if (!key || !RX_TEMPLATES_DATA[key]) { showToast('Invalid template', 'w'); return; }
-  const name = document.getElementById('edit-rx-tpl-name')?.value?.trim() || key;
+  const name = toDisplayTitleCase(document.getElementById('edit-rx-tpl-name')?.value?.trim() || key);
   const dept = document.getElementById('edit-rx-tpl-dept')?.value || 'all';
   const surgery = document.getElementById('edit-rx-tpl-surgery')?.value?.trim() || '';
   const notes = document.getElementById('edit-rx-tpl-notes')?.value?.trim() || '';
@@ -9070,6 +9224,20 @@ window.addEventListener('DOMContentLoaded', function() {
   try { toggleRefractivePanel && toggleRefractivePanel(); } catch(e) {}
   try { renderSkinRail && renderSkinRail(); } catch(e) {}
   try { renderOphthoRecap && renderOphthoRecap(); } catch(e) {}
+  try { loadUploadedConsentsCache && loadUploadedConsentsCache(function(){ populateConsentTypeSelectors && populateConsentTypeSelectors(); populateReceptionSurgeryPackSelect && populateReceptionSurgeryPackSelect(); }); } catch(e) {}
+  try {
+    if (window.FBDB) {
+      window.FBDB.ref('surgeryPacksCustom').once('value').then(function (snap) {
+        const v = snap.val();
+        if (Array.isArray(v)) {
+          window.BMH_CUSTOM_SURGERY_PACKS = v.slice();
+          try { localStorage.setItem('bmh_surgery_packs_custom', JSON.stringify(v)); } catch (_) {}
+          populateReceptionSurgeryPackSelect && populateReceptionSurgeryPackSelect();
+          renderSetPacksList && renderSetPacksList();
+        }
+      }).catch(function () {});
+    }
+  } catch (e) {}
   try { populateSelectors && populateSelectors(); } catch(e) {}
   const aptInp = document.getElementById('apt-date-inp');
   if(aptInp) aptInp.value = new Date().toISOString().split('T')[0];
@@ -10191,7 +10359,8 @@ function scheduleSurgery() {
 window.CUSTOM_PURPOSES = window.CUSTOM_PURPOSES || [];
 
 function addPurposeOption() {
-  const val = document.getElementById('new-purpose-inp')?.value?.trim(); if(!val) return;
+  const raw = document.getElementById('new-purpose-inp')?.value?.trim(); if(!raw) return;
+  const val = toDisplayTitleCase(raw);
   // Add to all rc-purpose selects
   document.querySelectorAll('#rc-purpose').forEach(sel=>{
     if(![...sel.options].some(o=>o.textContent===val)) {
@@ -10208,12 +10377,41 @@ function addPurposeOption() {
   const inp=document.getElementById('new-purpose-inp'); if(inp) inp.value='';
   closeM('m-add-purpose');
 }
+function renderCustomPurposeList() {
+  const host = document.getElementById('custom-purpose-list');
+  if (!host) return;
+  const items = (window.CUSTOM_PURPOSES || []).slice().sort();
+  host.innerHTML = items.length
+    ? items.map(function (val) {
+        const safe = String(val).replace(/'/g, "\\'");
+        return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 9px;background:var(--g6);border-radius:8px;margin-top:6px;font-size:12px">'
+          + '<div style="font-weight:700;flex:1;min-width:0">' + String(val).replace(/</g, '&lt;') + '</div>'
+          + '<button type="button" class="btn btn-xs btn-gray" onclick="deletePurposeOption(\'' + safe + '\')">🗑️ Delete</button>'
+          + '</div>';
+      }).join('')
+    : '<div style="font-size:11px;color:var(--g1);padding:6px 0">No custom purposes added yet.</div>';
+}
+function deletePurposeOption(val) {
+  const target = String(val || '').trim();
+  if (!target) return;
+  if (!confirm('Delete purpose "' + target + '"?')) return;
+  window.CUSTOM_PURPOSES = (window.CUSTOM_PURPOSES || []).filter(function (x) { return String(x || '').trim() !== target; });
+  document.querySelectorAll('#rc-purpose').forEach(function (sel) {
+    Array.from(sel.options).forEach(function (opt) {
+      if (String(opt.textContent || '').trim() === target) opt.remove();
+    });
+  });
+  fbSet && fbSet('settings/customPurposes', window.CUSTOM_PURPOSES);
+  updatePurposeOptions && updatePurposeOptions();
+  renderCustomPurposeList();
+  showToast('Purpose deleted ✓', 's');
+}
 
 function loadCustomPurposes() {
   if(!window.fbOnce) return;
   fbOnce('settings/customPurposes').then(data=>{
     if(!data || !Array.isArray(data) || !data.length) return;
-    window.CUSTOM_PURPOSES = data;
+    window.CUSTOM_PURPOSES = data.map(toDisplayTitleCase);
     // Append to every #rc-purpose dropdown currently in the DOM
     data.forEach(val=>{
       document.querySelectorAll('#rc-purpose').forEach(sel=>{
@@ -10224,6 +10422,7 @@ function loadCustomPurposes() {
     });
     // Also re-run updatePurposeOptions so the active dropdown gets them appended cleanly
     updatePurposeOptions && updatePurposeOptions();
+    renderCustomPurposeList();
   }).catch(()=>{});
 }
 function filterRcByDept(dept) {
@@ -10302,9 +10501,12 @@ const SURGERY_PACK_DEFAULTS = [
 ];
 let SURGERY_PACK_OVERRIDES = {};
 function loadCustomSurgeryPacks() {
+  if (Array.isArray(window.BMH_CUSTOM_SURGERY_PACKS)) return window.BMH_CUSTOM_SURGERY_PACKS.slice();
   try {
     const ls = localStorage.getItem('bmh_surgery_packs_custom');
-    return ls ? JSON.parse(ls) : [];
+    const parsed = ls ? JSON.parse(ls) : [];
+    window.BMH_CUSTOM_SURGERY_PACKS = Array.isArray(parsed) ? parsed.slice() : [];
+    return window.BMH_CUSTOM_SURGERY_PACKS.slice();
   } catch (e) { return []; }
 }
 function loadSurgeryPackOverrides() {
@@ -10318,6 +10520,7 @@ function saveSurgeryPackOverrides() {
 }
 loadSurgeryPackOverrides();
 function saveCustomSurgeryPacks(arr) {
+  window.BMH_CUSTOM_SURGERY_PACKS = Array.isArray(arr) ? arr.slice() : [];
   try { localStorage.setItem('bmh_surgery_packs_custom', JSON.stringify(arr)); } catch (e) { /* noop */ }
   if (window.FBDB) window.FBDB.ref('surgeryPacksCustom').set(arr).catch(function () {});
 }
@@ -10892,7 +11095,7 @@ function handleFileUpload(inp) {
 // SAVE RX TEMPLATE (Settings → Rx Templates → manual lines)
 function saveRxTemplate(mode) {
   const suffix = mode === 'modal' ? '-modal' : '';
-  const name = document.getElementById('rx-tpl-name' + suffix)?.value?.trim();
+  const name = toDisplayTitleCase(document.getElementById('rx-tpl-name' + suffix)?.value?.trim());
   if(!name){showToast('Enter template name','w');return;}
   const deptSel = document.getElementById('rx-tpl-dept-settings' + suffix);
   const deptMap = {
@@ -11555,7 +11758,6 @@ function fillOTFromPatient(bmhId) {
   window.CURRENT_PATIENT = p;
   // Fill all fields
   const setV=(id,v)=>{const e=document.getElementById(id);if(e)e.value=v;};
-  const dxGuess = p.dx || p.diagnosis || p.lastVisit?.dx || p.purpose || '';
   const isObg = normalizeDeptKeyForQueue(p.dept || '') === 'obg';
   const eyeRadio = document.getElementById('ot-case-kind-eye');
   const obgRadio = document.getElementById('ot-case-kind-obg');
@@ -11563,13 +11765,14 @@ function fillOTFromPatient(bmhId) {
   if (obgRadio) obgRadio.checked = !!isObg;
   setV('ot-bmsh-id', p.bmhId);
   setV('ot-age-sex', `${p.age||'?'}Y / ${p.sex||'—'}`);
-  populateOTDiagnosisOptions(dxGuess);
+  populateOTDiagnosisOptions('');
+  setV('ot-add-dx', '');
   setV('ot-add-site', p.eye || p.opEye || p.surgEye || p.operatingEye || 'N/A');
   if(p.doctor) { const drSel=document.getElementById('ot-add-surgeon'); if(drSel) drSel.value=p.doctor; }
-  const guessedProcedure = /surgery|phaco|pmics|cataract|lasik|ivt|trab|pteryg|delivery|lscs|lapar/i.test(String(p.purpose || ''))
-    ? String(p.purpose).trim()
-    : (isObg ? 'Elective LSCS' : 'PMICS + IOL Implantation (OS)');
-  populateOTProcedureOptions(guessedProcedure);
+  setV('ot-add-proc', '');
+  const subSel = document.getElementById('ot-add-proc-sub');
+  if (subSel) subSel.value = '';
+  populateOTProcedureOptions('');
   populateOTIolOptions(p.iol || p.iolType || '', p.iolPower || extractIolPower(p.iol || p.iolType || ''));
   toggleOTOBGFields();
   // Clear lookup
@@ -12886,7 +13089,8 @@ function addInvestigationOrder(mode) {
   document.getElementById('add-inv-notes').value = '';
   if(orderMode === 'send') {
     const centre = pt.centre || CURRENT_USER?.centre || 'CHD';
-    PAY_REQUESTS.push({id:'PR'+Date.now(), patient:pt.name, bmhId:pt.bmhId, for:name, amount:(CENTRE_CHARGES[centre]?.[name]||0), status:'pending', from:document.getElementById('sbnm')?.textContent||'Doctor', dept:pt.dept||'ophtho', centre});
+    const deptKey = normalizeDeptKeyForQueue(pt.dept || 'ophtho') || 'ophtho';
+    PAY_REQUESTS.push({id:'PR'+Date.now(), patient:pt.name, bmhId:pt.bmhId, for:name, amount:lookupChargeAmountFromSettings(deptKey, name), status:'pending', from:document.getElementById('sbnm')?.textContent||'Doctor', dept:pt.dept||'ophtho', centre});
   }
   showToast(orderMode === 'send' ? `🧪 ${name} advised and sent ✓` : `🧪 ${name} advised ✓`, 's');
   renderOeInvOrderedList && renderOeInvOrderedList();
@@ -13385,7 +13589,7 @@ function openSaveRxTemplate() {
   openM('m-save-rx-tpl');
 }
 function saveRxAsTemplate() {
-  const name = document.getElementById('tpl-name-inp')?.value?.trim(); if(!name){showToast('Enter template name','w');return;}
+  const name = toDisplayTitleCase(document.getElementById('tpl-name-inp')?.value?.trim()); if(!name){showToast('Enter template name','w');return;}
   if(!RX_DRUGS.length){showToast('No drugs to save','w');return;}
   const dept = document.getElementById('tpl-dept-inp')?.value || 'all';
   const notes = document.getElementById('tpl-notes-inp')?.value?.trim() || '';
@@ -13954,6 +14158,22 @@ function toTitleCaseName(value) {
     .replace(/\s+/g, ' ')
     .split(' ')
     .map(function (part) {
+      return part.split(/([-'])/).map(function (seg) {
+        if (seg === '-' || seg === "'") return seg;
+        const s = String(seg || '').trim();
+        return s ? (s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()) : '';
+      }).join('');
+    })
+    .join(' ');
+}
+function toDisplayTitleCase(value) {
+  return String(value || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .split(' ')
+    .map(function (part) {
+      const upper = String(part || '').toUpperCase();
+      if (upper === 'ANC') return 'ANC';
       return part.split(/([-'])/).map(function (seg) {
         if (seg === '-' || seg === "'") return seg;
         const s = String(seg || '').trim();
@@ -14785,8 +15005,15 @@ function renderChargesList() {
       <div style="font-size:9.5px;font-weight:800;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;padding:4px 8px;background:var(--g6);border-radius:5px;margin-bottom:4px">${cat}</div>
       ${Object.keys(groups).map(function (parentKey) {
         const childRows = groups[parentKey];
+        const parentRow = parentKey !== '__root__'
+          ? rows.find(function (r) { return !r.parent && String(r.name || '') === String(parentKey); })
+          : null;
+        const parentIdx = parentRow ? CHARGES_DATA.indexOf(parentRow) : -1;
         const parentHtml = parentKey !== '__root__'
-          ? `<div style="font-size:10px;font-weight:900;color:var(--tx);padding:6px 8px;background:#fff7e8;border:1px solid rgba(212,160,23,.35);border-radius:7px;margin:6px 0 4px">${parentKey}</div>`
+          ? `<div style="display:flex;align-items:center;gap:8px;justify-content:space-between;font-size:10px;font-weight:900;color:var(--tx);padding:6px 8px;background:#fff7e8;border:1px solid rgba(212,160,23,.35);border-radius:7px;margin:6px 0 4px">
+              <div style="flex:1;min-width:0">${parentKey}</div>
+              ${editable && parentIdx > -1 ? `<div style="display:flex;gap:5px;flex-shrink:0"><button class="btn btn-xs btn-outline" onclick="editChargeHeading(${parentIdx})">✏️</button><button class="btn btn-xs btn-gray" onclick="deleteChargeHeading(${parentIdx})">✕</button></div>` : ''}
+            </div>`
           : '';
         return parentHtml + childRows.map((c,i)=>{
         const gIdx = CHARGES_DATA.indexOf(c);
@@ -14803,6 +15030,42 @@ function renderChargesList() {
   }).join('');
   refreshChargeModalSuggestions();
   renderAllDeptSendBars && renderAllDeptSendBars();
+}
+function editChargeHeading(idx) {
+  const row = CHARGES_DATA[idx];
+  if (!row) return;
+  if (!isCurrentUserAdmin() && !canEditChargeCategory(row.cat)) { showToast('You can edit charges only for your own department', 'w'); return; }
+  const oldName = String(row.name || '').trim();
+  const next = prompt('Edit main heading', oldName);
+  if (next === null) return;
+  const newName = String(next || '').trim();
+  if (!newName || newName === oldName) return;
+  row.name = newName;
+  CHARGES_DATA.forEach(function (r) {
+    if (String(r.parent || '').trim() === oldName) r.parent = newName;
+  });
+  saveChargesToFirebase().then(function () {
+    renderChargesList();
+    renderCentresCharges();
+    showToast('Main heading saved to database ✓', 's');
+  }).catch(function () { showToast('Save failed. Please retry.', 'e'); });
+}
+function deleteChargeHeading(idx) {
+  const row = CHARGES_DATA[idx];
+  if (!row) return;
+  if (!isCurrentUserAdmin() && !canEditChargeCategory(row.cat)) { showToast('You can edit charges only for your own department', 'w'); return; }
+  const heading = String(row.name || '').trim();
+  if (!heading) return;
+  if (!confirm('Delete main heading "' + heading + '" and all its subheadings?')) return;
+  for (let i = CHARGES_DATA.length - 1; i >= 0; i -= 1) {
+    const r = CHARGES_DATA[i];
+    if (String(r.name || '').trim() === heading || String(r.parent || '').trim() === heading) CHARGES_DATA.splice(i, 1);
+  }
+  saveChargesToFirebase().then(function () {
+    renderChargesList();
+    renderCentresCharges();
+    showToast('Main heading deleted from database ✓', 's');
+  }).catch(function () { showToast('Delete failed. Please retry.', 'e'); });
 }
 
 function openAddChargeModal() {
@@ -14869,7 +15132,7 @@ function saveChargeFromModal() {
     renderChargesList();
     renderCentresCharges();
     resetChargeModalFields();
-    showToast('Saved','s');
+    showToast('Saved to database ✓','s');
   }).catch(function(){
     showToast('Charge save failed. Please retry.', 'e');
   });
@@ -14881,9 +15144,13 @@ function saveCharges() {
     CENTRE_CHARGES.CHD[c.name] = c.chd;
     CENTRE_CHARGES.RPR[c.name] = c.rpr;
   });
-  saveChargesToFirebase();
-  renderAllDeptSendBars && renderAllDeptSendBars();
-  showToast('Charges saved & synced ✓','s');
+  saveChargesToFirebase().then(function () {
+    renderAllDeptSendBars && renderAllDeptSendBars();
+    renderChargesList && renderChargesList();
+    showToast('Saved to database ✓','s');
+  }).catch(function () {
+    showToast('Charge save failed. Please retry.', 'e');
+  });
 }
 
 function getChargeForProcedure(name, centre) {
@@ -14961,6 +15228,7 @@ function updatePurposeOptions() {
     }
   });
   checkSurgeryPurpose && checkSurgeryPurpose();
+  renderCustomPurposeList && renderCustomPurposeList();
 }
 
 // ═══════════════════════════════════════
@@ -16060,17 +16328,13 @@ function buildOphFollowupVerticalPrintHtml(fus) {
   const oneDay = arr[0] ? followupLineToDateOnly(arr[0]) : '—';
   const oneWeek = arr[1] ? followupLineToDateOnly(arr[1]) : '—';
   const finalDate = arr[2] ? followupLineToDateOnly(arr[2]) : '—';
-  const finalBlock = '<div style="padding:8px 10px;border-bottom:1px solid #e2e6ed">'
-    + '<div style="font-size:12px;font-weight:900;color:#1A3C6E;text-align:center;line-height:1.3">' + esc('2 weeks / final follow-up') + '</div>'
-    + '<div style="font-size:12.5px;font-weight:800;font-family:ui-monospace,monospace;text-align:center;margin-top:4px">' + esc(finalDate) + '</div>'
-    + '</div>';
   const row = function (lbl, dt) {
     return '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:6px 10px;border-bottom:1px solid #e2e6ed;font-size:12px;line-height:1.35">'
       + '<span style="font-weight:900;color:#1A3C6E;min-width:0">' + esc(lbl) + '</span>'
       + '<span style="font-weight:800;font-family:ui-monospace,monospace;font-size:12.5px;text-align:right;white-space:nowrap">' + esc(dt) + '</span>'
       + '</div>';
   };
-  let html = finalBlock + row('1 day', oneDay) + row('1 week', oneWeek);
+  let html = row('1 day', oneDay) + row('1 week', oneWeek) + row('2 weeks / final follow-up', finalDate);
   for (let j = 3; j < arr.length; j++) {
     html += '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:6px 10px;border-bottom:1px solid #e2e6ed;font-size:11px">'
       + '<span style="font-weight:800;color:#555">Follow-up ' + (j + 1) + '</span>'
@@ -16106,9 +16370,9 @@ function buildOphthoDischargeA4LayoutPrintHtml(snap, data, colorPrint) {
   const meds = (snap && snap.medicines && snap.medicines.length) ? snap.medicines : [];
   const TIMES = ['12am','6am','8am','10am','12pm','2pm','4pm','6pm','8pm','10pm'];
   const totalRows = meds.length;
-  const hdrFs = totalRows > 10 ? '6px' : totalRows > 7 ? '6.5px' : '7px';
-  const cellPad = totalRows > 10 ? '1px 1px' : '2px 2px';
-  const nameFs = totalRows > 10 ? '7px' : totalRows > 7 ? '7.5px' : '8.5px';
+  const hdrFs = totalRows > 10 ? '6.2px' : totalRows > 7 ? '6.8px' : '7.4px';
+  const cellPad = totalRows > 10 ? '1px 2px' : '2px 3px';
+  const nameFs = totalRows > 10 ? '7.3px' : totalRows > 7 ? '8px' : '9px';
   const gridHtml = function (rows, title) {
     if (!rows.length) return '';
     const head = TIMES.map(function (t) {
@@ -16130,16 +16394,16 @@ function buildOphthoDischargeA4LayoutPrintHtml(snap, data, colorPrint) {
       + '<table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:7px"><thead><tr><th style="border:1px solid #bbb;padding:3px 4px;font-size:' + hdrFs + ';background:#f5f5f5;width:20%">Medicine</th>' + head + '<th style="border:1px solid #bbb;padding:3px;font-size:' + hdrFs + ';background:#f5f5f5;width:11%">Dates</th></tr></thead><tbody>' + body + '</tbody></table></div>';
   };
   const fuCenter = buildOphFollowupVerticalPrintHtml(fus);
-  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>@page{size:A4 landscape;margin:5mm}body{font-family:Arial,sans-serif;color:#111;margin:0;padding:0;font-size:10px}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>'
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>@page{size:A4 landscape;margin:4mm}body{font-family:Arial,sans-serif;color:#111;margin:0;padding:0;font-size:10.5px}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>'
     + '<div style="border:1px solid #aaa;border-radius:8px;overflow:hidden;max-height:200mm">'
-    + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;background:' + blue + ';color:#fff;padding:7px 10px">'
+    + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;background:' + blue + ';color:#fff;padding:8px 11px">'
     + '<div><div style="font-size:10px;opacity:.88">Discharge Card</div><div style="font-size:9px;opacity:.75">Baweja Multispeciality Hospital</div></div>'
     + '<div style="text-align:right"><div style="font-size:12px;font-weight:900;color:' + gold + '">' + esc(ptId) + '</div><div style="font-size:9px;opacity:.85">Date: ' + esc(formatDateIN(new Date())) + '</div></div></div>'
-    + '<div style="display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,0.42fr) minmax(0,1fr);gap:10px;align-items:stretch;padding:8px 10px;border-bottom:1px solid #ddd;min-height:0;max-height:92mm">'
-    + '<div style="border:1px solid #e0e0e0;border-radius:8px;padding:10px 12px;font-size:11px;background:#fff">'
+    + '<div style="display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,0.42fr) minmax(0,1fr);gap:10px;align-items:stretch;padding:9px 11px;border-bottom:1px solid #ddd;min-height:0;max-height:92mm">'
+    + '<div style="border:1px solid #e0e0e0;border-radius:8px;padding:10px 12px;font-size:11.4px;background:#fff">'
     + '<div style="font-size:9px;font-weight:900;color:' + blue + ';border-bottom:2px solid ' + gold + ';margin-bottom:8px;padding-bottom:4px;text-transform:uppercase;letter-spacing:.35px">Patient &amp; surgery</div>'
-    + '<div style="font-size:15px;font-weight:900;margin-bottom:8px;line-height:1.2">' + esc(ptNm) + '</div>'
-    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;font-size:11px;line-height:1.35">'
+    + '<div style="font-size:16px;font-weight:900;margin-bottom:8px;line-height:1.2">' + esc(ptNm) + '</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;font-size:11.3px;line-height:1.35">'
     + '<div><span style="font-size:8px;color:#666;text-transform:uppercase">Age / Sex</span><br>' + esc((ptObj.age || '—') + ' / ' + (ptObj.sex || '—')) + '</div>'
     + '<div><span style="font-size:8px;color:#666;text-transform:uppercase">Mobile</span><br>' + esc(ptObj.mob || '—') + '</div>'
     + '<div style="grid-column:1/-1"><span style="font-size:8px;color:#666;text-transform:uppercase">Procedure / Dx</span><br>' + esc([ot.dx || data.diagnosis || '', ot.procedure || data.procedureName || ''].filter(Boolean).join(' · ') || '—') + '</div>'
@@ -16148,7 +16412,7 @@ function buildOphthoDischargeA4LayoutPrintHtml(snap, data, colorPrint) {
     + '<div style="grid-column:1/-1"><span style="font-size:8px;color:#666;text-transform:uppercase">Surgeon</span><br>' + esc(ot.surgeon || ptObj.doctor || CURRENT_USER?.name || '—') + '</div>'
     + '</div></div>'
     + '<div style="min-width:0;display:flex;flex-direction:column;justify-content:flex-start">' + fuCenter + '</div>'
-    + '<div style="border:1px solid #f0e6d2;border-radius:8px;padding:8px 10px;font-size:10px;background:#fffaf0;min-width:0">'
+    + '<div style="border:1px solid #f0e6d2;border-radius:8px;padding:8px 10px;font-size:10.3px;background:#fffaf0;min-width:0">'
     + '<div style="font-size:9px;font-weight:900;color:' + blue + ';margin-bottom:6px;text-transform:uppercase;letter-spacing:.35px">Instructions</div>'
     + '<div style="line-height:1.4;color:#5a3000;font-size:10.5px">' + (instr.length ? instr.map(function (x) { return '<div style="margin-bottom:4px">• ' + esc(x) + '</div>'; }).join('') : '<div style="color:#888">—</div>') + '</div>'
     + '</div></div>'
@@ -16206,7 +16470,7 @@ function buildDischargeCardPrintHtml() {
     el.style.background = el.classList.contains('active') ? (colorPrint ? '#1A3C6E' : '#666') : '#fff';
     el.style.color = el.classList.contains('active') ? '#fff' : '#1A3C6E';
   });
-  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{font-family:Arial,sans-serif;color:#111;background:#fff;margin:0;padding:0;font-size:10px;line-height:1.08}@page{size:A4 landscape;margin:3mm}.print-wrap{transform:scale(.82);transform-origin:top left;width:120.5%;' + (colorPrint ? '' : 'filter:grayscale(100%) contrast(1.08)') + '}.discharge-card{border:1px solid #9a9a9a;border-radius:8px;overflow:hidden}.dc-header{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;background:' + (colorPrint ? '#1A3C6E' : '#666') + ' !important;padding:7px 9px}.dc-field-lbl{font-size:7px;font-weight:800;color:#555;text-transform:uppercase;letter-spacing:.35px}.dc-field-val{font-size:9.5px;font-weight:800;color:#111}.g2{display:grid;grid-template-columns:1fr 1fr}.drop-item{border-left:3px solid ' + (colorPrint ? '#1A3C6E' : '#666') + ';padding:4px 6px;border-radius:6px;background:' + (colorPrint ? '#eef3fb' : '#efefef') + ' !important;margin-bottom:4px}.drop-freq{display:flex;gap:2px;flex-wrap:wrap}.drop-time.active{background:' + (colorPrint ? '#1A3C6E' : '#666') + ' !important;color:#fff}.drop-time{display:inline-flex;align-items:center;justify-content:center;font-size:8px;padding:1px 4px;min-width:24px;border-radius:8px;border:1px solid #bdbdbd}.card-title{font-size:11px!important}.card-sub,.muted{font-size:8px!important}.dc-instr-row{padding:3px 0 !important}.dc-instr-row div{font-size:9.4px !important;line-height:1.25 !important}</style></head><body><div class="print-wrap">'
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{font-family:Arial,sans-serif;color:#111;background:#fff;margin:0;padding:0;font-size:10.6px;line-height:1.12}@page{size:A4 landscape;margin:3mm}.print-wrap{transform:scale(.80);transform-origin:top left;width:124%;' + (colorPrint ? '' : 'filter:grayscale(100%) contrast(1.08)') + '}.discharge-card{border:1px solid #9a9a9a;border-radius:8px;overflow:hidden}.dc-header{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;background:' + (colorPrint ? '#1A3C6E' : '#666') + ' !important;padding:7px 9px}.dc-field-lbl{font-size:7.5px;font-weight:800;color:#555;text-transform:uppercase;letter-spacing:.35px}.dc-field-val{font-size:10.2px;font-weight:800;color:#111}.g2{display:grid;grid-template-columns:1fr 1fr}.drop-item{border-left:3px solid ' + (colorPrint ? '#1A3C6E' : '#666') + ';padding:4px 6px;border-radius:6px;background:' + (colorPrint ? '#eef3fb' : '#efefef') + ' !important;margin-bottom:4px}.drop-freq{display:flex;gap:2px;flex-wrap:wrap}.drop-time.active{background:' + (colorPrint ? '#1A3C6E' : '#666') + ' !important;color:#fff}.drop-time{display:inline-flex;align-items:center;justify-content:center;font-size:8.6px;padding:1px 4px;min-width:24px;border-radius:8px;border:1px solid #bdbdbd}.card-title{font-size:11.8px!important}.card-sub,.muted{font-size:8.4px!important}.dc-instr-row{padding:2px 0 !important}.dc-instr-row div{font-size:9.6px !important;line-height:1.2 !important}</style></head><body><div class="print-wrap">'
     + clone.outerHTML + '</div></body></html>';
 }
 
@@ -16303,11 +16567,22 @@ function renderDischargeBuilder() {
   // Follow-up — try to read from rx-fu-date first
   const fuEl = document.getElementById('dc-followup-list');
   if(fuEl) {
+    const sortFollowupStrings = function (rows) {
+      return rows.slice().sort(function (a, b) {
+        const getDate = function (txt) {
+          const m = String(txt || '').match(/(\d{2})\/(\d{2})\/(\d{4})/);
+          return m ? new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1])).getTime() : Number.MAX_SAFE_INTEGER;
+        };
+        return getDate(a) - getDate(b);
+      });
+    };
     const fuDateVal = document.getElementById('rx-fu-date')?.value;
     let followupList = (ophSnap && Array.isArray(ophSnap.followups) && ophSnap.followups.length)
       ? ophSnap.followups.slice()
       : (data.followups && data.followups.length)
-      ? data.followups.map(function (f) {
+      ? data.followups.slice().sort(function (a, b) {
+          return new Date(a?.date || 0).getTime() - new Date(b?.date || 0).getTime();
+        }).map(function (f) {
           const dt = f?.date ? formatDateIN(f.date) : (f?.dateLabel || '');
           return (f?.label || 'Follow-up') + (dt ? ': ' + dt : '') + (f?.time ? ' · ' + f.time : '');
         })
@@ -16316,6 +16591,7 @@ function renderDischargeBuilder() {
       const fuFormatted = formatDateIN(fuDateVal);
       followupList = ['Review: ' + fuFormatted, ...followupList.slice(1)];
     }
+    followupList = sortFollowupStrings(followupList);
     fuEl.innerHTML = followupList.map((f,i)=>
       `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--g6);border-radius:8px;margin-bottom:5px">
         <span>📅</span>
@@ -16829,7 +17105,7 @@ function openEditUploadedConsentModal(id, data) {
 function saveUploadedConsentFromModal() {
   const id = document.getElementById('edit-upl-consent-id')?.value;
   if (!id) return;
-  const name = document.getElementById('edit-upl-consent-name')?.value?.trim();
+  const name = toDisplayTitleCase(document.getElementById('edit-upl-consent-name')?.value?.trim());
   const dept = document.getElementById('edit-upl-consent-dept')?.value;
   const ta = document.getElementById('edit-upl-consent-text');
   const isImage = ta && ta.style.display === 'none';
@@ -17746,6 +18022,12 @@ function loadConsentTemplatesFromStorage() {
 function renderConsentForms(filter='all') {
   const el=document.getElementById('set-consent-stub-list'); if(!el) return;
   const items = CONSENT_TEMPLATES.filter(c=>filter==='all'||c.type===filter);
+  const uploaded = (window.BMH_UPLOADED_CONSENTS || []).filter(function (c) {
+    if (!c || c.hidden) return false;
+    if (filter === 'consent') return (c.docType || 'consent') === 'consent';
+    if (filter === 'template') return (c.docType || '') === 'form';
+    return true;
+  });
   el.innerHTML = items.map(c=>`
     <div style="border:1.5px solid var(--g4);border-radius:var(--r);padding:11px;margin-bottom:7px;display:flex;align-items:center;gap:10px">
       <div style="font-size:20px">${c.type==='consent'?'📄':'📋'}</div>
@@ -17754,7 +18036,17 @@ function renderConsentForms(filter='all') {
       <button class="btn btn-xs btn-outline" onclick="editConsentTemplate('${c.id}')">✏️ Edit</button>
       <button class="btn btn-xs btn-outline" onclick="printConsentTemplate('${c.id}')">🖨️ Print</button>
       <button class="btn btn-xs btn-gray" onclick="deleteConsentTemplate('${c.id}')">🗑️</button>
-    </div>`).join('')
+    </div>`).join('') +
+  uploaded.map(function (c) {
+    return `<div style="border:1.5px solid var(--g4);border-radius:var(--r);padding:11px;margin-bottom:7px;display:flex;align-items:center;gap:10px;background:var(--g6)">
+      <div style="font-size:20px">${c.type==='image'?'🖼️':'📎'}</div>
+      <div style="flex:1"><div style="font-weight:700;font-size:12.5px">${c.name || c.id}</div>
+        <div style="font-size:10.5px;color:var(--g1)">${(c.docType || 'consent') === 'form' ? 'Uploaded Form' : 'Uploaded Consent'} · ${c.dept || 'all'}</div></div>
+      <button class="btn btn-xs btn-outline" onclick="editUploadedConsent('${c.id}')">✏️ Edit</button>
+      <button class="btn btn-xs btn-outline" onclick="printCustomConsent('${c.id}')">🖨️ Print</button>
+      <button class="btn btn-xs btn-gray" onclick="deleteCustomConsent('${c.id}')">🗑️</button>
+    </div>`;
+  }).join('')
   || '<div style="padding:20px;text-align:center;color:var(--g1)">No forms found</div>';
 }
 
@@ -17767,7 +18059,8 @@ function filterConsentType(type) {
 }
 
 function addConsentTemplate() {
-  const name = prompt('Template name:'); if(!name) return;
+  const rawName = prompt('Template name:'); if(!rawName) return;
+  const name = toDisplayTitleCase(rawName);
   const type = confirm('Is this a Consent form? (Cancel = Surgery Template)') ? 'consent' : 'template';
   CONSENT_TEMPLATES.push({id:'CT'+Date.now(),type,name,dept:'all',content:''});
   saveConsentTemplatesToStorage();
@@ -17847,6 +18140,7 @@ function renderSettingsPage() {
     window.FBDB.ref('surgeryPacksCustom').once('value').then(function (snap) {
       const v = snap.val();
       if (Array.isArray(v) && v.length) {
+        window.BMH_CUSTOM_SURGERY_PACKS = v.slice();
         try { localStorage.setItem('bmh_surgery_packs_custom', JSON.stringify(v)); } catch (e) { /* noop */ }
       }
       renderSetPacksList && renderSetPacksList();
@@ -19069,11 +19363,11 @@ function buildQTableRow(p, sno, opts) {
   const docShort = (p.doctor||'—').replace(/^Dr\.\s*/,'');
   const vulnBadge = vuln ? '<span class="q-vuln-badge" title="Vulnerable — elderly (≥65) or flagged">⚠ VUL</span>' : '';
   return `<tr class="${vuln ? 'row-vulnerable' : ''}" onclick="${onRow}" style="cursor:pointer;${dilLongWait?'animation:pulse 1.45s infinite;':''}">
-    <td style="font-weight:900;color:var(--g2);font-size:12px">${sno}</td>
+    <td style="font-weight:900;color:var(--g2);font-size:12.5px">${sno}</td>
     <td><div style="display:flex;align-items:center;gap:6px"><span style="width:28px;height:28px;border-radius:50%;background:${p.color||'#1A3C6E'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:900;font-size:10px;flex-shrink:0">${p.initials||p.name[0]||'?'}</span>
-      <div><div style="font-weight:800;font-size:14px;display:flex;align-items:center;flex-wrap:wrap;gap:4px">${p.name}${vulnBadge}</div>
+      <div><div style="font-weight:800;font-size:15px;line-height:1.05;display:flex;align-items:center;flex-wrap:nowrap;gap:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}${vulnBadge}</div>
       <div style="font-size:11px;color:var(--g1)">${p.age||'?'}Y · ${(p.sex||'?')[0]} · ${p.mob||'—'}</div>${chargeHint?`<div style="margin-top:2px">${chargeHint}</div>`:''}</div></div></td>
-    <td style="font-family:var(--mono);font-size:11px;color:var(--bmh-teal);font-weight:700">${p.bmhId}</td>
+    <td style="font-family:var(--mono);font-size:12px;color:var(--bmh-teal);font-weight:800;white-space:nowrap">${p.bmhId}</td>
     <td><span style="font-size:10px;padding:2px 6px;border-radius:6px;background:${deptColor}22;color:${deptColor};font-weight:800">${deptLabel}</span></td>
     <td style="font-size:11px;max-width:108px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.doctor||''}">${docShort}</td>
     <td style="font-size:11px;color:var(--g1);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.purpose||''}">${p.purpose||'—'}</td>
@@ -19320,7 +19614,6 @@ function renderDocQueue() {
     const visibleStatus = p.status === 'waiting' || p.status === 'pre-registered' || p.seen || p.dilated;
     if (!visibleStatus) return false;
     if (!patientQueueDateMatchesToday(p) && !(p.checkinAt && localDateKey(p.checkinAt) === todayKeyLocal)) return false;
-    if (CURRENT_USER?.isAdmin || CURRENT_USER?.canSeeAllCentres) return true;
     return centreMatch(p);
   });
   const myPts = (() => {
