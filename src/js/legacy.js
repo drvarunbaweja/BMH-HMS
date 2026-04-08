@@ -19314,17 +19314,22 @@ function renderDocQueue() {
   const titleEl = document.getElementById('dq-title');
   if (titleEl) titleEl.textContent = `${queueDoctor} — My Patients`;
   const searchQ = String(document.getElementById('dq-search')?.value || '').trim().toLowerCase();
-  // Filter: admin/reception sees all; doctor sees own dept (and optionally own name)
-  const validStatuses = p => p.status==='waiting'||p.status==='seen'||p.status==='pre-registered'||p.dilated;
+  // Filter: admin/reception sees all; doctor sees own dept.
+  // Keep this intentionally broad so today's registered patients do not disappear
+  // just because a legacy flow saved a different queue status label.
+  const inTodayQueue = function (p) {
+    if (!p || p.queueRemoved || p.status === 'removed') return false;
+    return patientQueueDateMatchesToday(p) || (!!p.checkinAt && localDateKey(p.checkinAt) === todayKeyLocal);
+  };
   const myPts = (() => {
     if (CURRENT_USER?.isAdmin || CURRENT_USER?.role === 'Reception') {
       // Doctor Queue should be visible across centres for all logins (reception already has centre controls).
-      return PATIENTS.filter(p => validStatuses(p) && patientQueueDateMatchesToday(p));
+      return PATIENTS.filter(function (p) { return inTodayQueue(p); });
     }
     const deptPts = PATIENTS.filter(p => {
       const ptDept = normalizeDeptKeyForQueue(p.dept || p.department || '');
       const deptMatch = !userDept || ptDept === userDept || (!ptDept && userDept === 'ophtho');
-      return deptMatch && validStatuses(p) && patientQueueDateMatchesToday(p);
+      return deptMatch && inTodayQueue(p);
     });
     // Show full dept queue (same as reception’s dept slice); do not hide patients when another row matches doctor name.
     return deptPts;
