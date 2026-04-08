@@ -19314,22 +19314,23 @@ function renderDocQueue() {
   const titleEl = document.getElementById('dq-title');
   if (titleEl) titleEl.textContent = `${queueDoctor} — My Patients`;
   const searchQ = String(document.getElementById('dq-search')?.value || '').trim().toLowerCase();
-  // Filter: admin/reception sees all; doctor sees own dept.
-  // Keep this intentionally broad so today's registered patients do not disappear
-  // just because a legacy flow saved a different queue status label.
-  const inTodayQueue = function (p) {
+  // Use the same "today's visible queue" basis as Reception, then narrow by department for doctors.
+  const queueBasePts = PATIENTS.filter(function (p) {
     if (!p || p.queueRemoved || p.status === 'removed') return false;
-    return patientQueueDateMatchesToday(p) || (!!p.checkinAt && localDateKey(p.checkinAt) === todayKeyLocal);
-  };
+    const visibleStatus = p.status === 'waiting' || p.status === 'pre-registered' || p.seen || p.dilated;
+    if (!visibleStatus) return false;
+    if (!patientQueueDateMatchesToday(p) && !(p.checkinAt && localDateKey(p.checkinAt) === todayKeyLocal)) return false;
+    if (CURRENT_USER?.isAdmin || CURRENT_USER?.canSeeAllCentres) return true;
+    return centreMatch(p);
+  });
   const myPts = (() => {
-    if (CURRENT_USER?.isAdmin || CURRENT_USER?.role === 'Reception') {
-      // Doctor Queue should be visible across centres for all logins (reception already has centre controls).
-      return PATIENTS.filter(function (p) { return inTodayQueue(p); });
+    if (CURRENT_USER?.isAdmin || CURRENT_USER?.role === 'Reception' || CURRENT_USER?.canSeeAllCentres) {
+      return queueBasePts;
     }
-    const deptPts = PATIENTS.filter(p => {
+    const deptPts = queueBasePts.filter(p => {
       const ptDept = normalizeDeptKeyForQueue(p.dept || p.department || '');
       const deptMatch = !userDept || ptDept === userDept || (!ptDept && userDept === 'ophtho');
-      return deptMatch && inTodayQueue(p);
+      return deptMatch;
     });
     // Show full dept queue (same as reception’s dept slice); do not hide patients when another row matches doctor name.
     return deptPts;
