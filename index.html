@@ -428,6 +428,7 @@
         <div style="display:flex;gap:5px;flex-wrap:wrap">
           <button class="btn btn-sm btn-gray" onclick="nav('doctor-queue',null)" title="Back to Queue">← Queue</button>
           <button class="btn btn-sm btn-green" onclick="markCurrentPatientSeen()">✓ Seen</button>
+          <label style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--g4);border-radius:999px;background:var(--g6);font-size:11px;font-weight:800;color:var(--g1);cursor:pointer"><input type="checkbox" id="proc-done-toggle-ophtho" onchange="handleProcedureDoneToggle('ophtho',this.checked)"> Procedure done</label>
           <button class="btn btn-sm btn-gray" onclick="openM('m-consents')">📋 Consents</button>
           <button class="btn btn-sm btn-outline" onclick="saveAndPrintRx('ophtho')">💾🖨️ Save &amp; Print</button>
           <button class="btn btn-sm btn-outline" onclick="printCaseSheet()">🖨️ Print Case Sheet</button>
@@ -1918,6 +1919,7 @@
         <div style="display:flex;gap:5px;flex-wrap:wrap">
           <button class="btn btn-sm btn-gray" onclick="nav('doctor-queue',null)" title="Back to Queue">← Queue</button>
           <button class="btn btn-sm btn-green" onclick="markCurrentPatientSeen()">✓ Seen</button>
+          <label style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--g4);border-radius:999px;background:var(--g6);font-size:11px;font-weight:800;color:var(--g1);cursor:pointer"><input type="checkbox" id="proc-done-toggle-obg" onchange="handleProcedureDoneToggle('obg',this.checked)"> Procedure done</label>
           <button class="btn btn-sm btn-gray" onclick="openM('m-consents');document.getElementById('mc-type').value='obg-lscs';renderConsentModal()">📋 LSCS Consent</button>
           <button class="btn btn-sm btn-outline" onclick="printOBGCard()">🖨️ Print ANC Card</button>
           <button class="btn btn-sm btn-gold" onclick="saveVisit('obg')">💾 Save</button>
@@ -2521,6 +2523,7 @@
         <div style="display:flex;gap:5px;flex-wrap:wrap">
           <button class="btn btn-sm btn-gray" onclick="nav('doctor-queue',null)" title="Back to Queue">← Queue</button>
           <button class="btn btn-sm btn-green" onclick="markCurrentPatientSeen()">✓ Seen</button>
+          <label style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--g4);border-radius:999px;background:var(--g6);font-size:11px;font-weight:800;color:var(--g1);cursor:pointer"><input type="checkbox" id="proc-done-toggle-psych" onchange="handleProcedureDoneToggle('psych',this.checked)"> Procedure done</label>
           <button class="btn btn-sm btn-outline" onclick="printPsychSheet()">🖨️ Print</button>
           <button class="btn btn-sm btn-gold" onclick="saveVisit('psych')">💾 Save</button>
         </div>
@@ -2845,6 +2848,7 @@
         <div style="display:flex;gap:5px;flex-wrap:wrap">
           <button class="btn btn-sm btn-gray" onclick="nav('doctor-queue',null)" title="Back to Queue">← Queue</button>
           <button class="btn btn-sm btn-green" onclick="markCurrentPatientSeen()">✓ Seen</button>
+          <label style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--g4);border-radius:999px;background:var(--g6);font-size:11px;font-weight:800;color:var(--g1);cursor:pointer"><input type="checkbox" id="proc-done-toggle-skin" onchange="handleProcedureDoneToggle('skin',this.checked)"> Procedure done</label>
           <button class="btn btn-sm btn-outline" onclick="printSkinSheet()">🖨️ Print</button>
           <button class="btn btn-sm btn-gold" onclick="saveVisit('skin')">💾 Save</button>
         </div>
@@ -4513,6 +4517,43 @@
   <div class="form-group"><label class="fl">Batch No. (optional)</label><input type="text" id="iol-add-batch" placeholder="Batch / lot"></div>
   <div class="form-group"><label class="fl">Serial No. (optional)</label><input type="text" id="iol-add-serial" placeholder="Unique serial"></div>
   <button class="btn btn-gold" onclick="addIolFromModal()">💾 Add to catalogue</button>
+</div>
+</div>
+</div>
+
+<div class="modal-ov" id="m-procedure-done">
+<div class="modal modal-lg">
+<div class="modal-hd">
+  <div class="modal-title">Procedure Done</div>
+  <button class="modal-close" onclick="closeM('m-procedure-done')">✕</button>
+</div>
+<div class="fg fg1" style="gap:10px">
+  <input type="hidden" id="proc-done-dept">
+  <div style="display:grid;grid-template-columns:1.4fr 120px 1fr;gap:8px;align-items:end">
+    <div class="form-group" style="margin:0">
+      <label class="fl">Procedure performed</label>
+      <input type="text" id="proc-done-name" list="proc-done-charge-list" placeholder="Type procedure from charges list">
+      <datalist id="proc-done-charge-list"></datalist>
+    </div>
+    <div class="form-group" style="margin:0">
+      <label class="fl">Amount ₹</label>
+      <input type="number" id="proc-done-amount" min="0" placeholder="Auto">
+    </div>
+    <div class="form-group" style="margin:0">
+      <label class="fl">Notes</label>
+      <input type="text" id="proc-done-notes" placeholder="Procedure note / side / details">
+    </div>
+  </div>
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+    <div style="font-size:11px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px">Consumables / stock used</div>
+    <button class="btn btn-xs btn-outline" type="button" onclick="addProcedureUsageRow()">+ Add stock used</button>
+  </div>
+  <datalist id="proc-done-stock-list"></datalist>
+  <div id="proc-done-usage-list"></div>
+  <div style="display:flex;justify-content:flex-end;gap:8px">
+    <button class="btn btn-outline" type="button" onclick="closeM('m-procedure-done')">Close</button>
+    <button class="btn btn-gold" type="button" onclick="saveProcedureDoneModal()">Save Procedure</button>
+  </div>
 </div>
 </div>
 </div>
