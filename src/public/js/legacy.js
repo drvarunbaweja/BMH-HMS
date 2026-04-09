@@ -13595,7 +13595,7 @@ function getReferralReportRows() {
     if (deptFilter && String(p?.dept || '') !== deptFilter) return false;
     if (doctorFilter && referredBy !== doctorFilter) return false;
     if (centreFilter && normalizeAppointmentCentreValue(p?.centre || centreFilter) !== centreFilter) return false;
-    return inRange(p?.createdAt || p?.registeredAt || p?.checkinAt || p?.queueDate || p?.date);
+    return inRange(p?.updatedAt || p?.createdAt || p?.registeredAt || p?.checkinAt || p?.queueDate || p?.date);
   }).map(function (p) {
     const bmhId = p.bmhId;
     const txns = (TRANSACTIONS || []).filter(function (t) {
@@ -13618,7 +13618,7 @@ function getReferralReportRows() {
       deptLabel: ({ ophtho:'Ophthalmology', obg:'OBG', psych:'Neuropsychiatry', skin:'Skin' })[p.dept] || p.dept || 'General',
       doctor: p.assignedDoctor || p.doctor || '—',
       referredBy: toDisplayTitleCase(p.referredBy || p.refName || ''),
-      date: formatDateDDMMYYYY(p.createdAt || p.registeredAt || p.checkinAt || p.queueDate || p.date || ''),
+      date: formatDateDDMMYYYY(p.updatedAt || p.createdAt || p.registeredAt || p.checkinAt || p.queueDate || p.date || ''),
       surgeryCharges: surgeryCharges,
       totalCharges: totalCharges,
       centre: normalizeAppointmentCentreValue(p.centre || centreFilter || 'CHD')
@@ -15310,13 +15310,17 @@ function localDateKey(value) {
 function patientQueueDateMatchesToday(p) {
   if (!p || p.queueRemoved) return false;
   const todayKeyLocal = localDateKey(new Date());
-  const stamps = [p.checkinAt, p.createdAt, p.seenAt, p.updatedAt, p.registeredAt, p.visitDate, p.queueDate, p.appointmentDate].filter(Boolean);
+  const otDoneToday = (window.OT_CASES || OT_CASES || []).some(function (c) {
+    return c && c.bmhId === p.bmhId && String(c.status || '').toLowerCase() === 'completed'
+      && localDateKey(c.date || c.surgeryDate || c.otDate || c.updatedAt || c.createdAt) === todayKeyLocal;
+  });
+  const stamps = [p.checkinAt, p.createdAt, p.seenAt, p.updatedAt, p.registeredAt, p.visitDate, p.queueDate, p.appointmentDate, p.dischargedAt].filter(Boolean);
   if (!stamps.length) {
     // No date fields at all — show if clearly still in today’s active queue (matches reception behaviour)
-    if ((p.status === 'waiting' || p.status === 'pre-registered' || p.dilated) && !p.seen) return true;
+    if ((p.status === 'waiting' || p.status === 'pre-registered' || p.dilated || otDoneToday) && !p.seen) return true;
     return false;
   }
-  return stamps.some(function (raw) {
+  return otDoneToday || stamps.some(function (raw) {
     const s = String(raw || '');
     if (!s) return false;
     if (/^\d+$/.test(s)) {
@@ -15715,10 +15719,6 @@ window.printUnifiedRx = function(deptId) {
 
   // ── Follow-up (per-dept date field; duplicate id=rx-fu-date would otherwise read Ophtho only) ──
   let fuDate = getDeptFollowUpDateInput(deptId)?.value || '';
-  if (!fuDate && forceFullDeptRx) {
-    const lv = window.CURRENT_PATIENT?.lastVisit;
-    fuDate = lv?.rxFuDate || lv?.followupDate || '';
-  }
   const fuFormatted = fuDate ? formatDateIN(fuDate) : '';
   const advice  = (deptId === 'oe'
     ? [document.getElementById('rx-advice-text')?.value || '', document.getElementById('rx-extra-advice-text')?.value || ''].filter(Boolean).join('\n')
@@ -19764,8 +19764,11 @@ function renderDashboard() {
   const adminDateEl = document.getElementById('db-admin-date');
   if (adminDateEl && !adminDateEl.value) adminDateEl.value = today;
   const selectedDate = adminDateEl?.value || today;
-  const todaySeen = PATIENTS.filter(p => p.seen).length;
-  const waiting = PATIENTS.filter(p => p.status === 'waiting' && !p.seen).length;
+  const todaysVisiblePatients = PATIENTS.filter(function (p) {
+    return centreMatch(p) && patientQueueDateMatchesToday(p);
+  });
+  const todaySeen = todaysVisiblePatients.filter(function (p) { return !!p.seen; }).length;
+  const waiting = todaysVisiblePatients.filter(function (p) { return !p.seen && !p.queueRemoved; }).length;
   const txnDay = txnIsoDate;
   const txnOk = isCollectedTxn;
   const todayCollection = TRANSACTIONS.filter(t => txnDay(t) === today && txnOk(t)).reduce((s, t) => s + getNetTransactionAmount(t), 0);
@@ -19797,7 +19800,7 @@ function renderDashboard() {
     };
     const displayPts = PATIENTS.filter(function (p) { return centreMatch(p); });
     const opdCount = displayPts.filter(function (p) {
-      return dateMatch(p.checkinAt) || dateMatch(p.createdAt) || dateMatch(p.seenAt);
+      return patientQueueDateMatchesToday(p) && (!selectedDate || localDateKey(p.seenAt || p.checkinAt || p.createdAt || p.updatedAt) === selectedDate);
     }).length;
     const surgeryCases = (window.OT_CASES || OT_CASES || []).filter(function (c) {
       return centreMatch(c) && (dateMatch(c.date) || dateMatch(c.otDate) || dateMatch(c.createdAt) || dateMatch(c.surgeryDate));
@@ -19832,7 +19835,9 @@ function renderDashboard() {
       ];
       const deptOpdCount = function (key) {
         return displayPts.filter(function (p) {
-          return String(p.dept || '').toLowerCase() === key && (dateMatch(p.checkinAt) || dateMatch(p.createdAt) || dateMatch(p.seenAt));
+          return String(p.dept || '').toLowerCase() === key
+            && patientQueueDateMatchesToday(p)
+            && (!selectedDate || localDateKey(p.seenAt || p.checkinAt || p.createdAt || p.updatedAt) === selectedDate);
         }).length;
       };
       const deptSurgeryCount = function (key) {
@@ -20824,6 +20829,7 @@ function saveUpdatedPatientDetails() {
   const ln = document.getElementById('upd-ln')?.value?.trim()||'';
   if(!fn) { showToast('First name is required','w'); return; }
   const refName = document.getElementById('upd-ref-name')?.value?.trim()||'';
+  const nowIso = new Date().toISOString();
   const updates = {
     name: toTitleCaseName((fn+' '+ln).trim()),
     age: document.getElementById('upd-age')?.value?.trim()||p.age||'',
@@ -20838,7 +20844,8 @@ function saveUpdatedPatientDetails() {
     relation: document.getElementById('upd-rel')?.value?.trim()||'',
     rel: document.getElementById('upd-rel')?.value?.trim()||'',
     refName: refName,
-    referredBy: refName || p.referredBy || ''
+    referredBy: refName || p.referredBy || '',
+    updatedAt: nowIso
   };
   // Update initials too
   updates.initials = computePatientInitials(updates.name);
@@ -20931,6 +20938,10 @@ function renderDocQueue() {
   // Use the same "today's visible queue" basis as Reception, then narrow by department for doctors.
   const queueBasePts = PATIENTS.filter(function (p) {
     if (!p || p.queueRemoved || p.status === 'removed') return false;
+    const otCompletedToday = (window.OT_CASES || OT_CASES || []).some(function (c) {
+      return c && c.bmhId === p.bmhId && String(c.status || '').toLowerCase() === 'completed'
+        && localDateKey(c.date || c.surgeryDate || c.otDate || c.updatedAt || c.createdAt) === todayKeyLocal;
+    });
     const visibleStatus =
       p.status === 'waiting' ||
       p.status === 'pre-registered' ||
@@ -20938,10 +20949,13 @@ function renderDocQueue() {
       p.status === 'ot' ||
       p.status === 'ot-listed' ||
       p.status === 'scheduled' ||
+      p.status === 'completed' ||
+      p.status === 'discharged' ||
       p.seen ||
       p.dilated ||
       !!p.otCaseId ||
-      !!p.ipdAdmitted;
+      !!p.ipdAdmitted ||
+      otCompletedToday;
     if (!visibleStatus) return false;
     if (!patientQueueDateMatchesToday(p) && !(p.checkinAt && localDateKey(p.checkinAt) === todayKeyLocal)) return false;
     return centreMatch(p);
