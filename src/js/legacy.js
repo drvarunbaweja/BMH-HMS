@@ -10500,12 +10500,20 @@ function completeQrLookup(rawId) {
 }
 
 async function decodeQrFromCanvas(canvas) {
-  if (!canvas || typeof BarcodeDetector === 'undefined') return '';
+  if (!canvas) return '';
   try {
-    const detector = new BarcodeDetector({ formats: ['qr_code'] });
-    const codes = await detector.detect(canvas);
-    const raw = codes && codes[0] && (codes[0].rawValue || codes[0].rawData || '');
-    return String(raw || '').trim();
+    if (typeof BarcodeDetector !== 'undefined') {
+      const detector = new BarcodeDetector({ formats: ['qr_code'] });
+      const codes = await detector.detect(canvas);
+      const raw = codes && codes[0] && (codes[0].rawValue || codes[0].rawData || '');
+      if (String(raw || '').trim()) return String(raw || '').trim();
+    }
+  } catch (e) {}
+  try {
+    const ctx = canvas.getContext('2d', { willReadFrequently: true }) || canvas.getContext('2d');
+    const imageData = ctx?.getImageData(0, 0, canvas.width, canvas.height);
+    const fallbackRaw = window.BMH_QR_DECODE ? window.BMH_QR_DECODE(imageData) : '';
+    return String(fallbackRaw || '').trim();
   } catch (e) {
     return '';
   }
@@ -10522,9 +10530,7 @@ function startQRCamera() {
   const video = document.getElementById('qr-video');
   if(!video) return;
   const resultEl = document.getElementById('qr-scan-result');
-  if (resultEl) resultEl.textContent = (typeof BarcodeDetector === 'undefined')
-    ? 'Live QR decode not supported here — use Upload Image or enter BMSH ID manually.'
-    : 'Opening camera…';
+  if (resultEl) resultEl.textContent = 'Opening camera…';
   window._bmhQrScanActive = true;
   navigator.mediaDevices?.getUserMedia({video:{facingMode:'environment'}}).then(stream=>{
     video._stream = stream;
