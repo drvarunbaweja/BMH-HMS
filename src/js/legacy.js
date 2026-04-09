@@ -635,9 +635,20 @@ window.BMH_EXPENSES = window.BMH_EXPENSES || [];
 window.BMH_LEDGER = window.BMH_LEDGER || [];
 window.BMH_PURCHASES = window.BMH_PURCHASES || [];
 window.BMH_INVENTORY_USAGE = window.BMH_INVENTORY_USAGE || [];
+window.BMH_INVENTORY_INDENTS = window.BMH_INVENTORY_INDENTS || [];
+window.BMH_INVENTORY_TRANSFERS = window.BMH_INVENTORY_TRANSFERS || [];
 window.BMH_BILL_PRINT_SIZE = window.BMH_BILL_PRINT_SIZE || 'A4';
 window._bmhBillDeptFilter = window._bmhBillDeptFilter || 'all';
 window._bmhPO_DRAFT = window._bmhPO_DRAFT || '';
+window.BMH_INVENTORY_CATEGORIES = window.BMH_INVENTORY_CATEGORIES || [
+  'Injections','Vaccines','Syringes','IV Cannulas','IV Fluids','Antibiotics','Gloves','Sutures','Kits','Serums','Creams','Miscellaneous','IOL'
+];
+window.BMH_STORE_LOCATIONS = window.BMH_STORE_LOCATIONS || [
+  'Eye Central Store CHD','Eye Central Store RPR',
+  'OBG Central Store CHD','OBG Central Store RPR',
+  'Labour Room','OBG OT','Eye OT','Minor OT','Procedure Room',
+  'Eye CHD','Eye RPR','OBG CHD','OBG RPR','Skin CHD','Skin RPR','PSY CHD','PSY RPR'
+];
 
 const LAB_PANELS = {
   haem:[{n:'Haemoglobin',u:'g/dL',lo:11.5,hi:17.5,v:'',id:'hb'},{n:'WBC Count',u:'×10³/μL',lo:4.5,hi:11,v:'',id:'wbc'},{n:'Platelets',u:'×10³/μL',lo:150,hi:400,v:'',id:'plt'},{n:'PCV',u:'%',lo:36,hi:52,v:'',id:'pcv'}],
@@ -6178,6 +6189,8 @@ function loadBmhFinancials() {
     const lg = localStorage.getItem('bmh_ledger'); if (lg) { window.BMH_LEDGER.length = 0; JSON.parse(lg).forEach(x=>window.BMH_LEDGER.push(x)); }
     const pu = localStorage.getItem('bmh_purchases'); if (pu) { window.BMH_PURCHASES.length = 0; JSON.parse(pu).forEach(x=>window.BMH_PURCHASES.push(x)); }
     const iu = localStorage.getItem('bmh_inventory_usage'); if (iu) { window.BMH_INVENTORY_USAGE.length = 0; JSON.parse(iu).forEach(x=>window.BMH_INVENTORY_USAGE.push(x)); }
+    const ii = localStorage.getItem('bmh_inventory_indents'); if (ii) { window.BMH_INVENTORY_INDENTS.length = 0; JSON.parse(ii).forEach(x=>window.BMH_INVENTORY_INDENTS.push(x)); }
+    const it = localStorage.getItem('bmh_inventory_transfers'); if (it) { window.BMH_INVENTORY_TRANSFERS.length = 0; JSON.parse(it).forEach(x=>window.BMH_INVENTORY_TRANSFERS.push(x)); }
   } catch (e) { /* noop */ }
   Object.keys(window.BMH_PATIENT_CHARGES || {}).forEach(function (bmhId) {
     (window.BMH_PATIENT_CHARGES[bmhId] || []).slice().forEach(function (row) {
@@ -6193,6 +6206,8 @@ function saveBmhFinancials() {
     localStorage.setItem('bmh_ledger', JSON.stringify(window.BMH_LEDGER));
     localStorage.setItem('bmh_purchases', JSON.stringify(window.BMH_PURCHASES));
     localStorage.setItem('bmh_inventory_usage', JSON.stringify(window.BMH_INVENTORY_USAGE));
+    localStorage.setItem('bmh_inventory_indents', JSON.stringify(window.BMH_INVENTORY_INDENTS));
+    localStorage.setItem('bmh_inventory_transfers', JSON.stringify(window.BMH_INVENTORY_TRANSFERS));
   } catch (e) { /* noop */ }
 }
 function loadInventoryStockFromStorage() {
@@ -6208,7 +6223,7 @@ function loadInventoryStockFromStorage() {
   } catch (e) { /* noop */ }
 }
 function saveInventoryStockToStorage() {
-  try { localStorage.setItem('bmh_inventory_stock', JSON.stringify(INVENTORY.map(i => ({ barcode: i.barcode, stock: i.stock, name: i.name, cat: i.cat, mrp: i.mrp, exp: i.exp, dept: i.dept, vendor: i.vendor, cost: i.cost, qr: i.qr })))); } catch (e) { /* noop */ }
+  try { localStorage.setItem('bmh_inventory_stock', JSON.stringify(INVENTORY.map(i => ({ barcode: i.barcode, stock: i.stock, name: i.name, cat: i.cat, mrp: i.mrp, exp: i.exp, dept: i.dept, vendor: i.vendor, cost: i.cost, qr: i.qr, store: i.store, min: i.min, billMode: i.billMode, vendorBillingMode: i.vendorBillingMode } )))); } catch (e) { /* noop */ }
 }
 function bmhNowISO() { return new Date().toISOString(); }
 function bmhDeptLabel(k) {
@@ -6217,6 +6232,63 @@ function bmhDeptLabel(k) {
 }
 function bmhInventoryDeptValue() { return document.getElementById('inv-in-dept')?.value || 'general'; }
 function bmhInventoryUseDeptValue() { return document.getElementById('inv-use-dept')?.value || 'general'; }
+function bmhInventoryCategoryValue() { return document.getElementById('inv-in-cat')?.value || 'Miscellaneous'; }
+function bmhInventoryStoreValue() { return document.getElementById('inv-in-store')?.value || ''; }
+function bmhInventoryBillModeValue() { return document.getElementById('inv-in-bill-mode')?.value || 'monthly'; }
+function bmhInventoryStoreOptions() { return (window.BMH_STORE_LOCATIONS || []).slice(); }
+function bmhInventoryCategoryOptions() {
+  const existing = Array.from(new Set((INVENTORY || []).map(function (i) { return String(i.cat || '').trim(); }).filter(Boolean)));
+  return Array.from(new Set((window.BMH_INVENTORY_CATEGORIES || []).concat(existing))).filter(Boolean);
+}
+function bmhInventoryLowItems() {
+  return (INVENTORY || []).filter(function (i) { return Number(i.stock || 0) <= Number(i.min || 0); });
+}
+function bmhInventoryFilterValue(id) {
+  return String(document.getElementById(id)?.value || 'all').trim();
+}
+function bmhDefaultStoreForDept(dept) {
+  const map = {
+    ophtho: CURRENT_USER?.centre === 'RPR' ? 'Eye RPR' : 'Eye CHD',
+    obg: CURRENT_USER?.centre === 'RPR' ? 'OBG RPR' : 'OBG CHD',
+    psych: CURRENT_USER?.centre === 'RPR' ? 'PSY RPR' : 'PSY CHD',
+    skin: CURRENT_USER?.centre === 'RPR' ? 'Skin RPR' : 'Skin CHD',
+    ot: /obg/i.test(CURRENT_USER?.dept || '') ? 'OBG OT' : 'Eye OT',
+    ipd: /obg/i.test(CURRENT_USER?.dept || '') ? 'Labour Room' : 'Eye OT'
+  };
+  return map[dept] || '';
+}
+function bmhFormatStoreLabel(store) {
+  return store || 'Unassigned store';
+}
+function parseInventoryExpiryDate(exp) {
+  const raw = String(exp || '').trim();
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return new Date(raw + 'T00:00:00');
+  const m = raw.match(/^(\d{1,2})[\/\-](\d{2,4})$/);
+  if (m) {
+    const month = Math.max(1, Math.min(12, Number(m[1] || 1))) - 1;
+    const year = Number(m[2].length === 2 ? ('20' + m[2]) : m[2]);
+    return new Date(year, month + 1, 0);
+  }
+  const d = new Date(raw);
+  return isNaN(d.getTime()) ? null : d;
+}
+function monthsUntilExpiry(exp) {
+  const dt = parseInventoryExpiryDate(exp);
+  if (!dt) return null;
+  const now = new Date();
+  const months = (dt.getFullYear() - now.getFullYear()) * 12 + (dt.getMonth() - now.getMonth());
+  return months + (dt.getDate() >= now.getDate() ? 0 : -1);
+}
+function bmhVendorBillOutstanding(v) {
+  return Math.max(0, (Number(v?.amount) || 0) - (Number(v?.paidAmount) || 0));
+}
+function bmhVendorStatusLabel(v) {
+  const out = bmhVendorBillOutstanding(v);
+  if (out <= 0) return 'paid';
+  if ((Number(v?.paidAmount) || 0) > 0) return 'partial';
+  return v?.status || 'pending';
+}
 function bmhCompressFileToData(file, cb) {
   if (!file) { cb(null); return; }
   if (/^image\//.test(file.type || '')) {
@@ -6860,63 +6932,130 @@ function bmhAppendLedger(row) {
   saveBmhFinancials();
 }
 function bmhRenderVendorTables() {
-  const el = document.getElementById('bmh-vendor-table');
-  if (el) {
+  [document.getElementById('bmh-vendor-table'), document.getElementById('inv-vendor-table')].filter(Boolean).forEach(function (el) {
     const rows = window.BMH_VENDOR_BILLS.slice().reverse();
-    el.innerHTML = rows.length ? `<table class="rc-queue-table" style="width:100%"><thead><tr><th>Vendor</th><th>Inv</th><th>₹</th><th>Status</th><th>Bill</th><th></th></tr></thead><tbody>${rows.map(v => `<tr><td>${v.vendor}</td><td style="font-family:var(--mono);font-size:10px">${v.invoiceNo || '—'}</td><td>₹${v.amount.toLocaleString('en-IN')}</td><td><span class="badge ${v.status === 'paid' ? 'bd-green' : 'bd-orange'}">${v.status}</span></td><td style="font-size:10px">${v.billFile?.name || v.uploadedName || '—'}</td><td>${v.status === 'pending' ? `<button type="button" class="btn btn-xs btn-gold" onclick="bmhMarkVendorPaid('${v.id}')">Mark paid</button>` : (v.paidRef || '—')}</td></tr>`).join('')}</tbody></table>` : '<div style="color:var(--g1);font-size:12px">No vendor bills.</div>';
-  }
+    el.innerHTML = rows.length ? `<table class="rc-queue-table" style="width:100%"><thead><tr><th>Vendor</th><th>Inv</th><th>₹</th><th>Status</th><th>Bill</th><th></th></tr></thead><tbody>${rows.map(v => {
+      const out = bmhVendorBillOutstanding(v);
+      const status = bmhVendorStatusLabel(v);
+      const badge = status === 'paid' ? 'bd-green' : status === 'partial' ? 'bd-orange' : 'bd-orange';
+      return `<tr><td>${v.vendor}<div style="font-size:10px;color:var(--g1)">${escapeHtmlConsent(v.store || '')}${v.billMode === 'on-use' ? ' · on use' : ''}</div></td><td style="font-family:var(--mono);font-size:10px">${v.invoiceNo || '—'}</td><td>₹${v.amount.toLocaleString('en-IN')}<div style="font-size:10px;color:var(--g1)">Outstanding ₹${out.toLocaleString('en-IN')}</div></td><td><span class="badge ${badge}">${status}</span><div style="font-size:10px;color:var(--g1)">${v.dueDate || 'Due on use'}</div></td><td style="font-size:10px">${v.billFile?.name || v.uploadedName ? `<a href="#" onclick="event.preventDefault();openInventoryBill('${v.id}')">${escapeHtmlConsent(v.billFile?.name || v.uploadedName)}</a>` : '—'}</td><td>${out > 0 ? `<button type="button" class="btn btn-xs btn-gold" onclick="bmhMarkVendorPaid('${v.id}')">Mark paid</button>` : (v.paidRef || '—')}</td></tr>`;
+    }).join('')}</tbody></table>` : '<div style="color:var(--g1);font-size:12px">No vendor bills.</div>';
+  });
   const mini = document.getElementById('inv-vendor-mini');
   if (mini) {
-    const pend = window.BMH_VENDOR_BILLS.filter(v => v.status === 'pending');
-    mini.innerHTML = pend.length ? pend.map(v => `<div style="padding:6px;border-bottom:1px solid var(--g5);font-size:12px">${v.vendor} · ₹${v.amount.toLocaleString('en-IN')} <span class="badge bd-orange">due</span><div style="font-size:10px;color:var(--g1)">${v.invoiceNo || '—'} · ${v.billFile?.name || v.uploadedName || 'No bill file'}</div></div>`).join('') : '<div style="color:var(--g1);font-size:12px">No pending vendor bills.</div>';
+    const pend = window.BMH_VENDOR_BILLS.filter(v => bmhVendorBillOutstanding(v) > 0);
+    mini.innerHTML = pend.length ? pend.map(v => `<div style="padding:6px;border-bottom:1px solid var(--g5);font-size:12px">${v.vendor} · ₹${bmhVendorBillOutstanding(v).toLocaleString('en-IN')} <span class="badge bd-orange">due</span><div style="font-size:10px;color:var(--g1)">${v.invoiceNo || '—'} · ${v.billFile?.name || v.uploadedName ? `<a href="#" onclick="event.preventDefault();openInventoryBill('${v.id}')">${escapeHtmlConsent(v.billFile?.name || v.uploadedName)}</a>` : 'No bill file'}</div></div>`).join('') : '<div style="color:var(--g1);font-size:12px">No pending vendor bills.</div>';
+  }
+  const summaryEl = document.getElementById('inv-vendor-summary');
+  if (summaryEl) {
+    const grouped = {};
+    (window.BMH_VENDOR_BILLS || []).forEach(function (v) {
+      const key = String(v.vendor || 'Unknown Vendor');
+      grouped[key] = grouped[key] || { vendor:key, total:0, outstanding:0, count:0 };
+      grouped[key].total += Number(v.amount || 0);
+      grouped[key].outstanding += bmhVendorBillOutstanding(v);
+      grouped[key].count += 1;
+    });
+    const rows = Object.values(grouped).sort(function (a,b) { return b.outstanding - a.outstanding; });
+    summaryEl.innerHTML = rows.length ? rows.map(function (r) {
+      return `<div style="padding:10px 0;border-bottom:1px solid var(--g5);font-size:12px;display:flex;justify-content:space-between;gap:10px;align-items:center">
+        <div><strong>${escapeHtmlConsent(r.vendor)}</strong><div style="font-size:10px;color:var(--g1)">Bills ${r.count} · Total ₹${r.total.toLocaleString('en-IN')}</div></div>
+        <div style="display:flex;gap:8px;align-items:center"><span style="font-weight:900;color:${r.outstanding > 0 ? '#b55a00' : '#1a8c3c'}">Outstanding ₹${r.outstanding.toLocaleString('en-IN')}</span>${r.outstanding > 0 ? `<button type="button" class="btn btn-xs btn-gold" onclick="bmhPayVendorOutstanding('${String(r.vendor).replace(/'/g, "\\'")}')">Clear by bank / cheque</button>` : ''}</div>
+      </div>`;
+    }).join('') : '<div style="padding:12px;color:var(--g1);font-size:12px">No vendor accounts yet.</div>';
   }
 }
 function bmhAddVendorBill() {
-  const vendor = document.getElementById('bmh-vend-name')?.value?.trim();
-  const inv = document.getElementById('bmh-vend-inv')?.value?.trim();
-  const amt = parseFloat(document.getElementById('bmh-vend-amt')?.value || '0');
-  const due = document.getElementById('bmh-vend-due')?.value || '';
-  const f = document.getElementById('bmh-vend-file')?.files?.[0];
+  const vendor = document.getElementById('inv-vend-name')?.value?.trim() || document.getElementById('bmh-vend-name')?.value?.trim();
+  const inv = document.getElementById('inv-vend-inv')?.value?.trim() || document.getElementById('bmh-vend-inv')?.value?.trim();
+  const amt = parseFloat(document.getElementById('inv-vend-amt')?.value || document.getElementById('bmh-vend-amt')?.value || '0');
+  const due = document.getElementById('inv-vend-due')?.value || document.getElementById('bmh-vend-due')?.value || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const f = document.getElementById('inv-vend-file')?.files?.[0] || document.getElementById('bmh-vend-file')?.files?.[0];
   if (!vendor || !(amt > 0)) { showToast('Vendor and amount required', 'w'); return; }
-  window.BMH_VENDOR_BILLS.push({ id: 'VB' + Date.now(), vendor, invoiceNo: inv, amount: amt, dueDate: due, status: 'pending', uploadedName: f ? f.name : '', createdAt: new Date().toISOString() });
-  saveBmhFinancials();
-  bmhRenderVendorTables();
-  showToast('Vendor bill recorded ✓', 's');
+  bmhCompressFileToData(f, function (billFile) {
+    window.BMH_VENDOR_BILLS.push({ id: 'VB' + Date.now(), vendor, invoiceNo: inv, amount: amt, dueDate: due, status: 'pending', uploadedName: f ? f.name : '', billFile: billFile || null, createdAt: new Date().toISOString() });
+    saveBmhFinancials();
+    bmhRenderVendorTables();
+    showToast('Vendor bill recorded ✓', 's');
+    ['inv-vend-name','inv-vend-inv','inv-vend-amt','inv-vend-due','bmh-vend-name','bmh-vend-inv','bmh-vend-amt','bmh-vend-due'].forEach(function (id) { const el = document.getElementById(id); if (el) el.value = ''; });
+    ['inv-vend-file','bmh-vend-file'].forEach(function (id) { const el = document.getElementById(id); if (el) el.value = ''; });
+  });
 }
 function bmhMarkVendorPaid(id) {
   const ref = prompt('Cheque no. / UTR / reference:');
   if (ref === null) return;
   const v = window.BMH_VENDOR_BILLS.find(x => x.id === id); if (!v) return;
-  v.status = 'paid';
+  const mode = prompt('Payment mode (Cheque / Bank Transfer / NEFT):', 'Bank Transfer') || 'Bank Transfer';
+  const amountStr = prompt('Amount received against this bill', String(bmhVendorBillOutstanding(v)));
+  if (amountStr === null) return;
+  const amt = Math.max(0, Number(amountStr || 0));
+  if (!(amt > 0)) { showToast('Enter payment amount', 'w'); return; }
+  v.paidAmount = (Number(v.paidAmount) || 0) + amt;
+  v.status = bmhVendorBillOutstanding(v) <= 0 ? 'paid' : 'partial';
   v.paidRef = ref || '';
   v.paidAt = new Date().toISOString();
-  bmhAppendLedger({ date: new Date().toISOString(), type: 'Payment', narration: 'Vendor ' + v.vendor + ' — Inv ' + (v.invoiceNo || ''), dr: v.amount, cr: 0, party: v.vendor, ref: v.paidRef });
+  v.paymentMode = mode;
+  bmhAppendLedger({ date: new Date().toISOString(), type: 'Payment', narration: 'Vendor ' + v.vendor + ' — Inv ' + (v.invoiceNo || ''), dr: amt, cr: 0, party: v.vendor, ref: (mode ? mode + ' · ' : '') + (v.paidRef || '') });
   saveBmhFinancials();
   bmhRenderVendorTables();
   renderBillingPage();
   showToast('Payment recorded ✓', 's');
 }
+function bmhPayVendorOutstanding(vendorName) {
+  const vendor = String(vendorName || '').trim();
+  if (!vendor) return;
+  const rows = (window.BMH_VENDOR_BILLS || []).filter(function (v) {
+    return String(v.vendor || '').trim() === vendor && bmhVendorBillOutstanding(v) > 0;
+  }).sort(function (a, b) { return String(a.createdAt || a.dueDate || '').localeCompare(String(b.createdAt || b.dueDate || '')); });
+  if (!rows.length) { showToast('No pending bills for this vendor', 'i'); return; }
+  const total = rows.reduce(function (s, r) { return s + bmhVendorBillOutstanding(r); }, 0);
+  const amountStr = prompt('Amount being cleared against total vendor account', String(total));
+  if (amountStr === null) return;
+  let remaining = Math.max(0, Number(amountStr || 0));
+  if (!(remaining > 0)) { showToast('Enter payment amount', 'w'); return; }
+  const mode = prompt('Payment mode (Cheque / Bank Transfer / NEFT):', 'Bank Transfer') || 'Bank Transfer';
+  const ref = prompt('Cheque no. / UTR / reference:') || '';
+  rows.forEach(function (v) {
+    if (remaining <= 0) return;
+    const out = bmhVendorBillOutstanding(v);
+    const applied = Math.min(out, remaining);
+    v.paidAmount = (Number(v.paidAmount) || 0) + applied;
+    v.status = bmhVendorBillOutstanding(v) <= 0 ? 'paid' : 'partial';
+    v.paidRef = ref || v.paidRef || '';
+    v.paidAt = new Date().toISOString();
+    v.paymentMode = mode;
+    remaining -= applied;
+  });
+  const paid = Math.max(0, Number(amountStr || 0)) - remaining;
+  bmhAppendLedger({ date: new Date().toISOString(), type: 'Payment', narration: 'Vendor account clearance — ' + vendor, dr: paid, cr: 0, party: vendor, ref: (mode ? mode + ' · ' : '') + (ref || '') });
+  saveBmhFinancials();
+  bmhRenderVendorTables();
+  renderBillingPage();
+  showToast('Vendor account updated ✓', 's');
+}
+window.bmhPayVendorOutstanding = bmhPayVendorOutstanding;
 function bmhAddExpense() {
-  const desc = document.getElementById('bmh-exp-desc')?.value?.trim();
-  const amt = parseFloat(document.getElementById('bmh-exp-amt')?.value || '0');
-  const cat = document.getElementById('bmh-exp-cat')?.value?.trim() || 'General';
+  const desc = document.getElementById('inv-exp-desc')?.value?.trim() || document.getElementById('bmh-exp-desc')?.value?.trim();
+  const amt = parseFloat(document.getElementById('inv-exp-amt')?.value || document.getElementById('bmh-exp-amt')?.value || '0');
+  const cat = document.getElementById('inv-exp-cat')?.value?.trim() || document.getElementById('bmh-exp-cat')?.value?.trim() || 'General';
   if (!desc || !(amt > 0)) { showToast('Description and amount required', 'w'); return; }
   window.BMH_EXPENSES.push({ id: 'EX' + Date.now(), date: new Date().toISOString(), desc, amount: amt, cat });
   bmhAppendLedger({ date: new Date().toISOString(), type: 'Expense', narration: desc + ' (' + cat + ')', dr: amt, cr: 0, party: '—', ref: '' });
   saveBmhFinancials();
-  document.getElementById('bmh-exp-desc').value = '';
-  document.getElementById('bmh-exp-amt').value = '';
+  ['inv-exp-desc','inv-exp-amt','inv-exp-cat','bmh-exp-desc','bmh-exp-amt','bmh-exp-cat'].forEach(function (id) { const el = document.getElementById(id); if (el) el.value = ''; });
   bmhRenderExpenseList();
   showToast('Expense posted ✓', 's');
 }
 function bmhRenderExpenseList() {
-  const el = document.getElementById('bmh-exp-list'); if (!el) return;
-  el.innerHTML = window.BMH_EXPENSES.slice().reverse().map(e => `<div style="padding:6px;border-bottom:1px solid var(--g5);font-size:12px;display:flex;justify-content:space-between"><span>${e.desc}</span><strong>₹${e.amount.toLocaleString('en-IN')}</strong></div>`).join('') || '<div style="color:var(--g1)">No expenses.</div>';
+  [document.getElementById('bmh-exp-list'), document.getElementById('inv-exp-list')].filter(Boolean).forEach(function (el) {
+    el.innerHTML = window.BMH_EXPENSES.slice().reverse().map(e => `<div style="padding:6px;border-bottom:1px solid var(--g5);font-size:12px;display:flex;justify-content:space-between"><span>${e.desc}</span><strong>₹${e.amount.toLocaleString('en-IN')}</strong></div>`).join('') || '<div style="color:var(--g1)">No expenses.</div>';
+  });
 }
 function bmhRenderLedgerBody() {
-  const el = document.getElementById('bmh-ledger-body'); if (!el) return;
   const rows = window.BMH_LEDGER.slice().sort((a, b) => new Date(a.date) - new Date(b.date));
-  el.innerHTML = rows.map(l => `<tr><td style="white-space:nowrap;font-size:11px">${(l.date || '').slice(0, 10)}</td><td>${l.type || ''}</td><td>${l.narration || ''}</td><td>${l.party || ''}</td><td style="text-align:right">${l.dr ? '₹' + l.dr.toLocaleString('en-IN') : '—'}</td><td style="text-align:right">${l.cr ? '₹' + l.cr.toLocaleString('en-IN') : '—'}</td><td style="font-size:10px">${l.ref || ''}</td></tr>`).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--g1)">No entries yet.</td></tr>';
+  [document.getElementById('bmh-ledger-body'), document.getElementById('inv-ledger-body')].filter(Boolean).forEach(function (el) {
+    el.innerHTML = rows.map(l => `<tr><td style="white-space:nowrap;font-size:11px">${(l.date || '').slice(0, 10)}</td><td>${l.type || ''}</td><td>${l.narration || ''}</td><td>${l.party || ''}</td><td style="text-align:right">${l.dr ? '₹' + l.dr.toLocaleString('en-IN') : '—'}</td><td style="text-align:right">${l.cr ? '₹' + l.cr.toLocaleString('en-IN') : '—'}</td><td style="font-size:10px">${l.ref || ''}</td></tr>`).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--g1)">No entries yet.</td></tr>';
+  });
 }
 function bmhExportLedgerCsv() {
   const rows = [['Date', 'Type', 'Narration', 'Party', 'Debit', 'Credit', 'Ref']];
@@ -7184,28 +7323,170 @@ function bmhUseInventoryItemForPatient(bmhId, item, opts) {
     bmhId,
     patientName: patient?.name || bmhId,
     dept: opts?.dept || patient?.dept || 'general',
+    store: item.store || '',
     itemName: item.name,
     barcode: item.barcode,
     qty,
     mrp,
     cost: Number(item.cost || 0),
     mode: usageMode,
+    vendorBillingMode: item.vendorBillingMode || 'monthly',
     ts: bmhNowISO()
   });
+  if (/iol/i.test(String(item.cat || '') + ' ' + String(item.name || '')) && patient) {
+    const usageRef = {
+      itemName: item.name,
+      barcode: item.barcode,
+      power: String(item.name || '').match(/[+-]?\d+(\.\d+)?D/i)?.[0] || '',
+      usedAt: bmhNowISO(),
+      vendor: item.vendor || ''
+    };
+    patient.lastIolUsage = usageRef;
+    fbUpdate && fbUpdate('patients/' + bmhId, { lastIolUsage: usageRef }).catch(function(){});
+  }
   saveBmhFinancials();
   saveInventoryStockToStorage();
   renderStockList();
   renderAutoBillLog();
   renderInventoryUsageLog();
+  renderInventoryPoAlerts();
+  renderInventoryStoreStock();
   renderBillingPageIfActive && renderBillingPageIfActive();
 }
-function bmhGeneratePurchaseOrderDraft() {
-  const low = INVENTORY.filter(i => i.stock <= i.min);
-  window._bmhPO_DRAFT = 'PURCHASE ORDER — Baweja Multispeciality Hospital\nDate: ' + new Date().toLocaleString('en-IN') + '\n\nPlease supply:\n\n' + low.map((i, n) => `${n + 1}. ${i.name} — barcode ${i.barcode} — order qty suggestion: ${Math.max(i.min * 2 - i.stock, i.min)} (current ${i.stock}, min ${i.min})`).join('\n') + '\n\nAuthorised by: _______________\n';
+function bmhGeneratePurchaseOrderDraft(silent) {
+  const low = bmhInventoryLowItems();
+  window._bmhPO_DRAFT = 'PURCHASE ORDER — Baweja Multispeciality Hospital\nDate: ' + new Date().toLocaleString('en-IN') + '\n\nPlease supply:\n\n' + low.map((i, n) => `${n + 1}. ${i.name} — ${bmhFormatStoreLabel(i.store)} — vendor ${i.vendor || 'TBD'} — barcode ${i.barcode} — order qty suggestion: ${Math.max((Number(i.min) || 1) * 2 - (Number(i.stock) || 0), Number(i.min) || 1)} (current ${i.stock}, min ${i.min})`).join('\n') + '\n\nAuthorised by: _______________\n';
   const el = document.getElementById('dash-admin-po-preview');
   if (el) el.innerHTML = '<pre style="white-space:pre-wrap;font-size:11px;margin:0">' + window._bmhPO_DRAFT.replace(/</g, '&lt;') + '</pre>';
-  if (!low.length) showToast('No low-stock items — PO is empty', 'i');
+  if (!low.length && !silent) showToast('No low-stock items — PO is empty', 'i');
 }
+function openInventoryBill(id) {
+  const purchase = (window.BMH_PURCHASES || []).find(function (r) { return r.id === id; });
+  const vendorBill = (window.BMH_VENDOR_BILLS || []).find(function (r) { return r.id === id; });
+  const file = purchase?.billFile || vendorBill?.billFile || null;
+  if (!file?.data) { showToast('Bill scan not available', 'w'); return; }
+  const w = window.open('', '_blank');
+  if (!w) { showToast('Allow popups to open bill scan', 'w'); return; }
+  if (/pdf/i.test(file.type || '')) w.location.href = file.data;
+  else {
+    w.document.write(`<!DOCTYPE html><html><body style="margin:0;background:#111;display:flex;align-items:center;justify-content:center"><img src="${file.data}" alt="${escapeHtmlConsent(file.name || 'Bill')}" style="max-width:100vw;max-height:100vh"></body></html>`);
+    w.document.close();
+  }
+}
+window.openInventoryBill = openInventoryBill;
+function saveInventoryIndent() {
+  const requestStore = document.getElementById('inv-indent-store')?.value || '';
+  const sourceStore = document.getElementById('inv-indent-source')?.value || '';
+  const item = document.getElementById('inv-indent-item')?.value?.trim() || '';
+  const qty = Math.max(1, Number(document.getElementById('inv-indent-qty')?.value || '1'));
+  const urgency = document.getElementById('inv-indent-urgency')?.value || 'routine';
+  const notes = document.getElementById('inv-indent-notes')?.value?.trim() || '';
+  if (!requestStore || !sourceStore || !item) { showToast('Fill store, source, and item', 'w'); return; }
+  window.BMH_INVENTORY_INDENTS.push({ id: 'IND' + Date.now(), requestStore, sourceStore, item, qty, urgency, notes, status: 'open', requestedBy: CURRENT_USER?.name || 'Staff', createdAt: bmhNowISO() });
+  saveBmhFinancials();
+  renderInventoryIndents();
+  showToast('Indent submitted ✓', 's');
+  ['inv-indent-item','inv-indent-notes'].forEach(function (id) { const el = document.getElementById(id); if (el) el.value = ''; });
+  const qtyEl = document.getElementById('inv-indent-qty'); if (qtyEl) qtyEl.value = '1';
+}
+window.saveInventoryIndent = saveInventoryIndent;
+function saveInventoryTransfer() {
+  const fromStore = document.getElementById('inv-tr-from')?.value || '';
+  const toStore = document.getElementById('inv-tr-to')?.value || '';
+  const raw = document.getElementById('inv-tr-item')?.value?.trim() || '';
+  const qty = Math.max(1, Number(document.getElementById('inv-tr-qty')?.value || '1'));
+  if (!fromStore || !toStore || !raw) { showToast('Fill from, to and item', 'w'); return; }
+  if (fromStore === toStore) { showToast('Choose different stores', 'w'); return; }
+  const item = INVENTORY.find(function (x) { return (String(x.barcode || '').toLowerCase() === raw.toLowerCase() || String(x.name || '').toLowerCase() === raw.toLowerCase()) && String(x.store || '') === fromStore; });
+  if (!item) { showToast('Inventory item not found in selected store', 'w'); return; }
+  if ((Number(item.stock) || 0) < qty) { showToast('Not enough stock to transfer', 'w'); return; }
+  item.stock = Math.max(0, (Number(item.stock) || 0) - qty);
+  let target = INVENTORY.find(function (x) { return x.barcode === item.barcode && String(x.store || '') === toStore; });
+  if (!target) { target = Object.assign({}, item, { stock: 0, store: toStore }); INVENTORY.push(target); }
+  target.stock = (Number(target.stock) || 0) + qty;
+  window.BMH_INVENTORY_TRANSFERS.push({ id: 'TR' + Date.now(), itemName: item.name, barcode: item.barcode, fromStore, toStore, qty, ts: bmhNowISO(), user: CURRENT_USER?.name || 'Inventory' });
+  saveInventoryStockToStorage();
+  saveBmhFinancials();
+  renderStockList();
+  renderInventoryTransfers();
+  renderInventoryStoreStock();
+  renderInventoryPoAlerts();
+  showToast('Stock transferred ✓', 's');
+}
+window.saveInventoryTransfer = saveInventoryTransfer;
+function bmhApplyVendorReturn(item, qty, vendorOverride) {
+  const vendor = String(vendorOverride || item.vendor || '').trim();
+  const reduction = Math.max(0, (Number(item.cost) || 0) * Math.max(1, Number(qty) || 1));
+  if (!vendor || !(reduction > 0)) return { vendor, reduced: 0 };
+  let remaining = reduction;
+  const candidates = (window.BMH_VENDOR_BILLS || []).filter(function (v) {
+    return String(v.vendor || '').trim() === vendor;
+  }).sort(function (a, b) {
+    return String(a.createdAt || a.dueDate || '').localeCompare(String(b.createdAt || b.dueDate || ''));
+  });
+  candidates.forEach(function (bill) {
+    if (remaining <= 0) return;
+    const targetMatch = String(bill.itemName || '').trim().toLowerCase() === String(item.name || '').trim().toLowerCase();
+    if (!targetMatch && candidates.some(function (v) { return String(v.itemName || '').trim().toLowerCase() === String(item.name || '').trim().toLowerCase(); })) return;
+    const currentAmount = Math.max(0, Number(bill.amount) || 0);
+    if (!(currentAmount > 0)) return;
+    const applied = Math.min(currentAmount, remaining);
+    bill.amount = Math.max(0, currentAmount - applied);
+    if ((Number(bill.paidAmount) || 0) > bill.amount) bill.paidAmount = bill.amount;
+    bill.status = bmhVendorBillOutstanding(bill) <= 0 ? 'paid' : ((Number(bill.paidAmount) || 0) > 0 ? 'partial' : 'pending');
+    bill.returnAdjusted = (Number(bill.returnAdjusted) || 0) + applied;
+    remaining -= applied;
+  });
+  return { vendor, reduced: reduction - remaining };
+}
+function saveInventoryReturn() {
+  const store = document.getElementById('inv-ret-store')?.value || '';
+  const raw = document.getElementById('inv-ret-item')?.value?.trim() || '';
+  const qty = Math.max(1, Number(document.getElementById('inv-ret-qty')?.value || '1'));
+  const vendorOverride = document.getElementById('inv-ret-vendor')?.value?.trim() || '';
+  const reason = document.getElementById('inv-ret-reason')?.value?.trim() || '';
+  if (!store || !raw) { showToast('Select store and item', 'w'); return; }
+  const item = INVENTORY.find(function (x) {
+    return (String(x.barcode || '').toLowerCase() === raw.toLowerCase() || String(x.name || '').toLowerCase() === raw.toLowerCase()) && String(x.store || '') === store;
+  });
+  if (!item) { showToast('Item not found in selected store', 'w'); return; }
+  if ((Number(item.stock) || 0) < qty) { showToast('Not enough stock to return', 'w'); return; }
+  item.stock = Math.max(0, (Number(item.stock) || 0) - qty);
+  const ts = bmhNowISO();
+  const returnValue = (Number(item.cost) || 0) * qty;
+  const reduced = bmhApplyVendorReturn(item, qty, vendorOverride);
+  window.BMH_PURCHASES.push({
+    id: 'RET' + Date.now(),
+    itemName: item.name,
+    barcode: item.barcode,
+    dept: item.dept || 'general',
+    store: store,
+    category: item.cat || '',
+    vendor: reduced.vendor || item.vendor || '',
+    invoiceNo: 'RETURN',
+    qty: -qty,
+    cost: Number(item.cost) || 0,
+    mrp: Number(item.mrp) || 0,
+    totalCost: -returnValue,
+    billMode: item.vendorBillingMode || 'monthly',
+    dueDate: '',
+    reason: reason,
+    ts: ts,
+    isReturn: true
+  });
+  bmhAppendLedger({ date: ts, type: 'Vendor return', narration: item.name + (reason ? ' — ' + reason : ''), dr: 0, cr: returnValue, party: reduced.vendor || item.vendor || 'Vendor', ref: item.barcode || '' });
+  saveInventoryStockToStorage();
+  saveBmhFinancials();
+  renderStockList();
+  renderInventoryPurchaseLog();
+  renderInventoryPoAlerts();
+  renderInventoryStoreStock();
+  bmhRenderVendorTables();
+  showToast('Stock returned to vendor ✓', 's');
+  ['inv-ret-item','inv-ret-vendor','inv-ret-reason'].forEach(function (id) { const el = document.getElementById(id); if (el) el.value = ''; });
+  const qtyEl = document.getElementById('inv-ret-qty'); if (qtyEl) qtyEl.value = '1';
+}
+window.saveInventoryReturn = saveInventoryReturn;
 function bmhPrintPurchaseOrder() {
   if (!window._bmhPO_DRAFT) bmhGeneratePurchaseOrderDraft();
   if (!confirm('Print suggested purchase order now?')) return;
@@ -7313,11 +7594,26 @@ function checkLabVal(inp,lo,hi){const v=parseFloat(inp.value)||0;inp.className='
 function initInventory() {
   loadInventoryStockFromStorage();
   loadBmhFinancials();
+  bmhPopulateInventorySelectors();
+  const deptPick = document.getElementById('inv-in-dept');
+  if (deptPick) {
+    deptPick.onchange = function () {
+      const storeEl = document.getElementById('inv-in-store');
+      if (storeEl && !storeEl.value) storeEl.value = bmhDefaultStoreForDept(this.value);
+    };
+  }
   renderStockList();
   renderAutoBillLog();
   bmhRenderVendorTables();
   renderInventoryPurchaseLog();
   renderInventoryUsageLog();
+  renderInventoryExpiryCheck(1);
+  renderInventoryIndents();
+  renderInventoryTransfers();
+  renderInventoryPoAlerts();
+  renderInventoryStoreStock();
+  renderInventoryExpensePanel();
+  renderInventoryLedgerPanel();
   const s = document.getElementById('use-pt');
   if (s) {
     s.innerHTML = PATIENTS.map(p => `<option value="${p.bmhId}">${p.name} — ${p.bmhId}</option>`).join('');
@@ -7332,25 +7628,93 @@ function initInventory() {
   }
   const ilc = document.getElementById('inv-low-cnt');
   if (ilc) ilc.textContent = INVENTORY.filter(i => i.stock <= i.min).length;
+  const totalEl = document.getElementById('inv-total-items');
+  if (totalEl) totalEl.textContent = String(INVENTORY.reduce(function (s, i) { return s + Math.max(0, Number(i.stock) || 0); }, 0));
+}
+function renderInventoryExpiryCheck(withinMonths) {
+  const listEl = document.getElementById('inv-expiry-list');
+  if (!listEl) return;
+  [1,2,3,6].forEach(function (m) {
+    const el = document.getElementById('inv-expiry-' + m + 'm');
+    if (el) {
+      el.textContent = String((INVENTORY || []).filter(function (i) {
+        const mo = monthsUntilExpiry(i.exp);
+        return mo != null && mo >= 0 && mo < m;
+      }).length);
+    }
+  });
+  const rows = (INVENTORY || []).filter(function (i) {
+    const mo = monthsUntilExpiry(i.exp);
+    return mo != null && mo >= 0 && mo < (withinMonths || 1);
+  }).sort(function (a, b) {
+    return (parseInventoryExpiryDate(a.exp)?.getTime() || 0) - (parseInventoryExpiryDate(b.exp)?.getTime() || 0);
+  });
+  listEl.innerHTML = rows.length ? rows.map(function (i) {
+    const mo = monthsUntilExpiry(i.exp);
+    const expLabel = parseInventoryExpiryDate(i.exp)?.toLocaleDateString('en-GB', { day:'2-digit', month:'2-digit', year:'2-digit' }) || i.exp || '—';
+    const tone = mo < 1 ? 'var(--red)' : mo < 2 ? 'var(--orange)' : mo < 3 ? '#8a6d00' : 'var(--bmh-blue)';
+    return `<div style="padding:10px 0;border-bottom:1px solid var(--g5);font-size:12px">
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><strong>${escapeHtmlConsent(i.name)}</strong><span style="font-weight:900;color:${tone}">${expLabel}</span></div>
+      <div style="font-size:10px;color:var(--g1);margin-top:4px">${escapeHtmlConsent(i.cat || '')} · ${bmhFormatStoreLabel(i.store)} · Stock ${Number(i.stock || 0)} · Vendor ${escapeHtmlConsent(i.vendor || '—')}</div>
+    </div>`;
+  }).join('') : `<div style="padding:12px;color:var(--g1);font-size:12px">No items expiring within ${withinMonths || 1} month${(withinMonths || 1) === 1 ? '' : 's'}.</div>`;
+}
+window.renderInventoryExpiryCheck = renderInventoryExpiryCheck;
+function bmhPopulateInventorySelectors() {
+  const catOpts = ['<option value="all">All categories</option>'].concat(bmhInventoryCategoryOptions().map(function (c) {
+    return '<option value="' + escapeHtmlConsent(c) + '">' + escapeHtmlConsent(c) + '</option>';
+  })).join('');
+  const catEditOpts = bmhInventoryCategoryOptions().map(function (c) {
+    return '<option value="' + escapeHtmlConsent(c) + '">' + escapeHtmlConsent(c) + '</option>';
+  }).join('');
+  const storeOpts = ['<option value="all">All stores</option>'].concat(bmhInventoryStoreOptions().map(function (s) {
+    return '<option value="' + escapeHtmlConsent(s) + '">' + escapeHtmlConsent(s) + '</option>';
+  })).join('');
+  const storeEditOpts = bmhInventoryStoreOptions().map(function (s) {
+    return '<option value="' + escapeHtmlConsent(s) + '">' + escapeHtmlConsent(s) + '</option>';
+  }).join('');
+  [['inv-stock-cat-filter', catOpts], ['inv-in-cat', catEditOpts]].forEach(function (pair) {
+    const el = document.getElementById(pair[0]); if (el) el.innerHTML = pair[1];
+  });
+  ['inv-stock-store-filter','inv-in-store','inv-tr-from','inv-tr-to','inv-indent-store','inv-indent-source'].forEach(function (id) {
+    const el = document.getElementById(id); if (el) el.innerHTML = /filter/.test(id) ? storeOpts : storeEditOpts;
+  });
+  ['inv-ret-store'].forEach(function (id) {
+    const el = document.getElementById(id); if (el) el.innerHTML = storeEditOpts;
+  });
+  const dept = bmhInventoryDeptValue();
+  const storeEl = document.getElementById('inv-in-store');
+  if (storeEl && !storeEl.value) storeEl.value = bmhDefaultStoreForDept(dept);
 }
 function renderStockList() {
   const el=document.getElementById('inv-stock-list');if(!el)return;
-  el.innerHTML=INVENTORY.map(i=>{
+  const catFilter = bmhInventoryFilterValue('inv-stock-cat-filter');
+  const storeFilter = bmhInventoryFilterValue('inv-stock-store-filter');
+  const rows = INVENTORY.filter(function (i) {
+    return (catFilter === 'all' || String(i.cat || '') === catFilter)
+      && (storeFilter === 'all' || String(i.store || '') === storeFilter);
+  });
+  el.innerHTML=rows.map(i=>{
     const pct=Math.min(100,(i.stock/(Math.max(1, i.min)*3))*100);
     const cls=i.stock<=2?'critical':i.stock<=i.min?'low':'';
     return `<div class="inv-row ${cls}">
       <div style="flex:1;min-width:0">
         <div style="font-size:12px;font-weight:800">${i.name}</div>
-        <div style="font-family:var(--mono);font-size:9px;color:var(--g1)">${i.barcode} · ${i.cat} · ${bmhDeptLabel(i.dept || 'general')} · Exp:${i.exp || '—'}</div>
+        <div style="font-family:var(--mono);font-size:9px;color:var(--g1)">${i.barcode} · ${i.cat} · ${bmhDeptLabel(i.dept || 'general')} · ${bmhFormatStoreLabel(i.store)} · Exp:${i.exp || '—'}</div>
+        <div style="font-size:10px;color:var(--g1);margin-top:2px">${i.vendor ? 'Vendor: ' + i.vendor + ' · ' : ''}${i.vendorBillingMode === 'on-use' ? 'Bill only when used' : 'Monthly vendor bill'}</div>
         <div class="sb-bar"><div class="sb-fill" style="width:${pct}%;background:${i.stock<=2?'var(--red)':i.stock<=i.min?'var(--orange)':'var(--green)'}"></div></div>
       </div>
       <div style="text-align:right;flex-shrink:0">
         <div style="font-size:17px;font-weight:900;color:${i.stock<=2?'var(--red)':i.stock<=i.min?'var(--orange)':'var(--green)'}">${i.stock}</div>
         <div style="font-size:11px;font-weight:700;color:var(--g1)">MRP ₹${Number(i.mrp||0).toLocaleString('en-IN')}</div>
-        <div style="font-size:10px;color:var(--g1)">Cost ₹${Number(i.cost||0).toLocaleString('en-IN')}</div>
+        <div style="font-size:10px;color:var(--g1)">Cost ₹${Number(i.cost||0).toLocaleString('en-IN')} · Min ${Number(i.min||0)}</div>
       </div>
     </div>`;
-  }).join('');
+  }).join('') || '<div style="padding:12px;color:var(--g1);font-size:12px">No stock items for this filter.</div>';
+  const ilc = document.getElementById('inv-low-cnt');
+  if (ilc) ilc.textContent = String(bmhInventoryLowItems().length);
+  const totalEl = document.getElementById('inv-total-items');
+  if (totalEl) totalEl.textContent = String(INVENTORY.reduce(function (s, i) { return s + Math.max(0, Number(i.stock) || 0); }, 0));
 }
 function scanBC(mode) { const demo=INVENTORY.filter(i=>i.stock>0)[Math.floor(Math.random()*5)]; const inp=mode==='in'?document.getElementById('bc-in'):document.getElementById('bc-use'); if(inp)inp.value=demo.barcode; showToast('📷 Barcode scanned: '+demo.barcode,'i'); setTimeout(()=>processBC(mode,demo.barcode),400); }
 
@@ -7364,8 +7728,8 @@ function renderInventoryPurchaseLog() {
       <div style="font-weight:900">${r.itemName}</div>
       <div style="font-weight:900;color:var(--bmh-blue)">+${r.qty} · ₹${Number(r.totalCost||0).toLocaleString('en-IN')}</div>
     </div>
-    <div style="font-size:10px;color:var(--g1);margin-top:4px">${bmhDeptLabel(r.dept)} · ${r.vendor || 'No vendor'} · Inv ${r.invoiceNo || '—'} · ${new Date(r.ts).toLocaleString('en-IN')}</div>
-    <div style="font-size:10px;color:var(--g1);margin-top:2px">${r.billFile?.name ? 'Bill: ' + r.billFile.name + ' · ' : ''}Barcode ${r.barcode || '—'} · Cost ₹${Number(r.cost || 0).toLocaleString('en-IN')} · MRP ₹${Number(r.mrp || 0).toLocaleString('en-IN')}</div>
+    <div style="font-size:10px;color:var(--g1);margin-top:4px">${bmhDeptLabel(r.dept)} · ${bmhFormatStoreLabel(r.store)} · ${r.vendor || 'No vendor'} · Inv ${r.invoiceNo || '—'} · ${new Date(r.ts).toLocaleString('en-IN')}</div>
+    <div style="font-size:10px;color:var(--g1);margin-top:2px">${r.billFile?.name ? 'Bill: <a href="#" onclick="event.preventDefault();openInventoryBill(\'' + r.id + '\')">' + escapeHtmlConsent(r.billFile.name) + '</a> · ' : ''}Barcode ${r.barcode || '—'} · Cost ₹${Number(r.cost || 0).toLocaleString('en-IN')} · MRP ₹${Number(r.mrp || 0).toLocaleString('en-IN')}</div>
   </div>`).join('') : '<div style="padding:12px;color:var(--g1);font-size:12px">No purchase intake recorded yet.</div>';
 }
 function renderInventoryUsageLog() {
@@ -7377,8 +7741,80 @@ function renderInventoryUsageLog() {
       <div><strong>${r.itemName}</strong> <span style="font-family:var(--mono);font-size:10px;color:var(--bmh-teal)">${r.bmhId || ''}</span></div>
       <div style="font-weight:900;color:${r.mode === 'bill' ? '#1a8c3c' : '#8a4200'}">${r.mode === 'bill' ? 'Billed' : 'Consumed'} · Qty ${r.qty}</div>
     </div>
-    <div style="font-size:10px;color:var(--g1);margin-top:4px">${bmhDeptLabel(r.dept)} · ${r.patientName || 'Ward stock'} · ${new Date(r.ts).toLocaleString('en-IN')}</div>
+    <div style="font-size:10px;color:var(--g1);margin-top:4px">${bmhDeptLabel(r.dept)} · ${bmhFormatStoreLabel(r.store)} · ${r.patientName || 'Ward stock'} · ${new Date(r.ts).toLocaleString('en-IN')}</div>
   </div>`).join('') : '<div style="padding:12px;color:var(--g1);font-size:12px">No patient-linked usage recorded yet.</div>';
+}
+function renderInventoryIndents() {
+  const el = document.getElementById('inv-indent-list'); if (!el) return;
+  const rows = (window.BMH_INVENTORY_INDENTS || []).slice().reverse();
+  el.innerHTML = rows.length ? rows.map(function (r) {
+    return `<div style="padding:10px 0;border-bottom:1px solid var(--g5);font-size:12px">
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+        <div><strong>${escapeHtmlConsent(r.item || 'Item')}</strong> · Qty ${Number(r.qty || 0)}</div>
+        <span class="badge ${r.status === 'issued' ? 'bd-green' : r.urgency === 'urgent' ? 'bd-red' : 'bd-orange'}">${escapeHtmlConsent(r.status || 'open')}</span>
+      </div>
+      <div style="font-size:10px;color:var(--g1);margin-top:4px">${escapeHtmlConsent(r.requestStore || '')} ← ${escapeHtmlConsent(r.sourceStore || '')} · ${escapeHtmlConsent(r.requestedBy || '')} · ${formatDateIN(r.createdAt || '')}</div>
+      <div style="font-size:10px;color:var(--g1);margin-top:2px">${escapeHtmlConsent(r.notes || '')}</div>
+    </div>`;
+  }).join('') : '<div style="padding:12px;color:var(--g1);font-size:12px">No indents yet.</div>';
+}
+function renderInventoryTransfers() {
+  const el = document.getElementById('inv-transfer-log'); if (!el) return;
+  const rows = (window.BMH_INVENTORY_TRANSFERS || []).slice().reverse().slice(0, 12);
+  el.innerHTML = rows.length ? rows.map(function (r) {
+    return `<div style="padding:10px 0;border-bottom:1px solid var(--g5);font-size:12px">
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><strong>${escapeHtmlConsent(r.itemName || '')}</strong><span style="font-weight:900;color:var(--bmh-blue)">Qty ${Number(r.qty || 0)}</span></div>
+      <div style="font-size:10px;color:var(--g1);margin-top:4px">${escapeHtmlConsent(r.fromStore || '')} → ${escapeHtmlConsent(r.toStore || '')} · ${formatDateIN(r.ts || '')}</div>
+    </div>`;
+  }).join('') : '<div style="padding:12px;color:var(--g1);font-size:12px">No transfers yet.</div>';
+}
+function renderInventoryStoreStock() {
+  const el = document.getElementById('inv-store-stock'); if (!el) return;
+  const grouped = {};
+  INVENTORY.forEach(function (item) {
+    const key = item.store || 'Unassigned store';
+    grouped[key] = grouped[key] || [];
+    grouped[key].push(item);
+  });
+  const keys = Object.keys(grouped).sort();
+  el.innerHTML = keys.length ? keys.map(function (store) {
+    const rows = grouped[store];
+    const total = rows.reduce(function (s, r) { return s + (Number(r.stock) || 0); }, 0);
+    return `<div style="padding:10px 0;border-bottom:1px solid var(--g5)">
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:6px"><strong>${escapeHtmlConsent(store)}</strong><span style="font-size:11px;color:var(--bmh-blue);font-weight:900">${total} units</span></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">${rows.slice(0,8).map(function (r) { return `<span class="badge ${Number(r.stock||0) <= Number(r.min||0) ? 'bd-orange' : 'bd-green'}">${escapeHtmlConsent(r.name)} · ${Number(r.stock||0)}</span>`; }).join('')}${rows.length > 8 ? `<span class="badge bd-blue">+${rows.length - 8} more</span>` : ''}</div>
+    </div>`;
+  }).join('') : '<div style="padding:12px;color:var(--g1);font-size:12px">No stock assigned to stores yet.</div>';
+}
+function renderInventoryPoAlerts() {
+  const el = document.getElementById('inv-po-alerts'); if (!el) return;
+  const low = bmhInventoryLowItems();
+  if (!low.length) {
+    el.innerHTML = '<div style="padding:12px;color:var(--g1);font-size:12px">All items are above minimum stock.</div>';
+  } else {
+    el.innerHTML = low.map(function (i) {
+      const suggested = Math.max((Number(i.min) || 1) * 2 - (Number(i.stock) || 0), Number(i.min) || 1);
+      return `<div style="padding:10px 0;border-bottom:1px solid var(--g5);font-size:12px;animation:pulse 1.8s infinite">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><strong>${escapeHtmlConsent(i.name)}</strong><span style="color:#b55a00;font-weight:900">${Number(i.stock||0)} / min ${Number(i.min||0)}</span></div>
+        <div style="font-size:10px;color:var(--g1);margin-top:4px">${escapeHtmlConsent(i.vendor || 'No vendor')} · ${bmhFormatStoreLabel(i.store)} · Suggested PO qty ${suggested}</div>
+      </div>`;
+    }).join('');
+  }
+  const badge = document.getElementById('nb-inv');
+  if (badge) {
+    badge.textContent = String(low.length || '');
+    badge.style.display = low.length ? 'inline-flex' : 'none';
+    badge.style.animation = low.length ? 'pulse 1.4s infinite' : '';
+  }
+  const ilc = document.getElementById('inv-low-cnt');
+  if (ilc) ilc.textContent = String(low.length);
+  bmhGeneratePurchaseOrderDraft(true);
+}
+function renderInventoryExpensePanel() {
+  bmhRenderExpenseList();
+}
+function renderInventoryLedgerPanel() {
+  bmhRenderLedgerBody();
 }
 
 // ═══════════════════════════════════════
@@ -12068,14 +12504,16 @@ function bmhFindOrCreateInventoryItem(rawCode, translated) {
     name: translated || lookup,
     barcode: lookup || ('INV-' + Date.now()),
     qr: lookup || '',
-    cat: 'General',
+    cat: bmhInventoryCategoryValue(),
     mrp: Number(document.getElementById('inv-in-mrp')?.value || '0') || 0,
     cost: Number(document.getElementById('inv-in-cost')?.value || '0') || 0,
     stock: 0,
-    min: 5,
+    min: Number(document.getElementById('inv-in-min')?.value || '5') || 5,
     exp: document.getElementById('inv-in-exp')?.value || '',
     dept: bmhInventoryDeptValue(),
-    vendor: document.getElementById('inv-in-vendor')?.value?.trim() || ''
+    vendor: document.getElementById('inv-in-vendor')?.value?.trim() || '',
+    store: bmhInventoryStoreValue() || bmhDefaultStoreForDept(bmhInventoryDeptValue()),
+    vendorBillingMode: bmhInventoryBillModeValue()
   };
   INVENTORY.push(item);
   BCMAP[item.barcode] = item;
@@ -12085,26 +12523,40 @@ function bmhRecordInventoryPurchase(item, qty, billFile) {
   const vendor = document.getElementById('inv-in-vendor')?.value?.trim() || '';
   const invoiceNo = document.getElementById('inv-in-invoice')?.value?.trim() || '';
   const dept = bmhInventoryDeptValue();
+  const store = bmhInventoryStoreValue() || bmhDefaultStoreForDept(dept);
+  const category = bmhInventoryCategoryValue();
   const cost = Number(document.getElementById('inv-in-cost')?.value || item.cost || 0) || 0;
   const mrp = Number(document.getElementById('inv-in-mrp')?.value || item.mrp || 0) || 0;
+  const minQty = Number(document.getElementById('inv-in-min')?.value || item.min || 0) || 0;
+  const billMode = bmhInventoryBillModeValue();
   item.cost = cost;
   item.mrp = mrp;
   item.dept = dept;
+  item.cat = category || item.cat || 'Miscellaneous';
+  item.min = minQty;
+  item.store = store;
   item.vendor = vendor || item.vendor || '';
+  item.vendorBillingMode = billMode;
   item.exp = document.getElementById('inv-in-exp')?.value || item.exp || '';
   const totalCost = qty * cost;
+  const purchaseTs = bmhNowISO();
+  const dueDate = billMode === 'on-use' ? '' : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const purchase = {
     id:'PO' + Date.now() + Math.random().toString(36).slice(2, 5),
     itemName:item.name,
     barcode:item.barcode,
     dept,
+    store,
+    category,
     vendor,
     invoiceNo,
     qty,
     cost,
     mrp,
     totalCost,
-    ts:bmhNowISO(),
+    billMode,
+    dueDate,
+    ts:purchaseTs,
     billFile: billFile || null
   };
   window.BMH_PURCHASES.push(purchase);
@@ -12114,16 +12566,22 @@ function bmhRecordInventoryPurchase(item, qty, billFile) {
       vendor,
       invoiceNo,
       amount: totalCost,
-      dueDate: '',
+      dueDate: dueDate,
       status: 'pending',
       uploadedName: billFile?.name || '',
       billFile: billFile || null,
-      createdAt: purchase.ts
+      createdAt: purchase.ts,
+      itemName: item.name,
+      billMode: billMode,
+      store: store,
+      category: category,
+      usageLinked: billMode === 'on-use'
     });
   }
   saveBmhFinancials();
   renderInventoryPurchaseLog();
   bmhRenderVendorTables();
+  renderInventoryPoAlerts();
 }
 // Extend processBC — stock in / patient use with inventory deduction + patient charge line
 function processBC(mode, code) {
@@ -14259,6 +14717,20 @@ function patientHasUnreadLabResults(pt) {
   return orders.some(function (o) {
     return o && o.mode === 'send' && o.done && o.labReady && !o.doctorSeen;
   });
+}
+function getUnreadLabResultsTitle(pt) {
+  const orders = (Array.isArray(pt?.investigationOrders) ? pt.investigationOrders : []).filter(function (o) {
+    return o && o.mode === 'send' && o.done && o.labReady && !o.doctorSeen;
+  });
+  if (!orders.length) return '';
+  const lines = orders.map(function (o) {
+    const nm = normalizeLabTestName(o.name || 'Test');
+    const val = String(o?.result?.val || '').trim();
+    const unit = String(o?.result?.unit || '').trim();
+    const flag = String(o?.result?.flag || o?.flag || '').trim();
+    return [nm + ':', val, unit, flag && flag !== 'Normal' && flag !== '—' ? '(' + flag + ')' : ''].filter(Boolean).join(' ');
+  });
+  return lines.join('\n');
 }
 function getPatientLabQueueEntries() {
   const out = [];
@@ -17271,6 +17743,12 @@ function updateDelReqBadge() {
   if (tab) {
     tab.style.animation = cnt > 0 ? 'pulse 1.4s infinite' : '';
     tab.style.boxShadow = cnt > 0 ? '0 0 0 2px rgba(255,59,48,.15) inset' : '';
+  }
+  const dqPill = document.getElementById('dq-approvals-pill');
+  if (dqPill) {
+    const canSee = canCurrentUserApproveDeletionRequests();
+    dqPill.style.display = (canSee && cnt > 0) ? 'inline-flex' : 'none';
+    dqPill.textContent = `🗑 ${cnt} approval${cnt === 1 ? '' : 's'}`;
   }
 }
 
@@ -20955,7 +21433,8 @@ function buildQTableRow(p, sno, opts) {
   const nmEsc = (p.name||'').replace(/'/g,"\\'");
   const docShort = (p.assignedDoctor || p.doctor || '—').replace(/^Dr\.\s*/,'');
   const vulnBadge = vuln ? '<span class="q-vuln-badge" title="Vulnerable — elderly (≥65) or flagged">⚠ VUL</span>' : '';
-  const labReadyBadge = patientHasUnreadLabResults(p) ? '<span style="display:inline-flex;align-items:center;gap:4px;padding:1px 6px;border-radius:999px;background:#eafaf1;color:#166534;border:1px solid rgba(22,101,52,.25);font-size:9px;font-weight:900;animation:pulse 1.2s infinite">🧪 Results Ready</span>' : '';
+  const labHover = getUnreadLabResultsTitle(p);
+  const labReadyBadge = patientHasUnreadLabResults(p) ? `<span title="${escapeHtmlConsent(labHover || 'Results ready')}" style="display:inline-flex;align-items:center;gap:4px;padding:1px 6px;border-radius:999px;background:#eafaf1;color:#166534;border:1px solid rgba(22,101,52,.25);font-size:9px;font-weight:900;animation:pulse 1.2s infinite">🧪 Results Ready</span>` : '';
   return `<tr class="${vuln ? 'row-vulnerable' : ''}" onclick="${onRow}" style="cursor:pointer;${dilLongWait?'animation:pulse 1.45s infinite;':''}">
     <td style="font-weight:900;color:var(--g2);font-size:12.5px">${sno}</td>
     <td><div style="display:flex;align-items:center;gap:6px"><span style="width:28px;height:28px;border-radius:50%;background:${p.color||'#1A3C6E'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:900;font-size:10px;flex-shrink:0">${p.initials||p.name[0]||'?'}</span>
