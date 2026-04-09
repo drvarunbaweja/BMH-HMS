@@ -1198,7 +1198,8 @@ function collectConsentPrintContext() {
 function buildAdmissionSlipPage(ctx) {
   const esc = escapeHtmlConsent;
   const ot = window._CONSENT_PRINT_OT_ID ? OT_CASES.find(function (c) { return c.id === window._CONSENT_PRINT_OT_ID; }) : null;
-  const pt = PATIENTS.find(function (p) { return p.bmhId === (ctx?.ptId || ''); }) || {};
+  const ptList = Array.isArray(window.PATIENTS) ? window.PATIENTS : [];
+  const pt = ptList.find(function (p) { return p.bmhId === (ctx?.ptId || ''); }) || {};
   const diagnosis = String((ot && (ot.dx || ot.diagnosis || ot.preopDiagnosis)) || pt.dx || pt.diagnosis || pt.lastDiagnosis || '________________').trim();
   const procedure = String((ot && (ot.procedure || ot.surgery)) || ctx?.procedure || '________________').trim();
   const relation = pt.relativeName || pt.guardianName || pt.guardian || pt.fatherName || pt.husbandName || pt.spouseName || '________________';
@@ -1770,11 +1771,14 @@ function printPaymentReceipt(pr) {
   const service = pr.for || pr.service || 'Consultation';
   const patName = pr.patient || pt.name || '—';
   const bmhId   = pr.bmhId || '—';
+  const logoSrc = resolvePrintLogoSrc();
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Receipt</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:Arial,sans-serif;font-size:12px;color:#111;background:#fff;width:280px;margin:0 auto;padding:8px}
-    .hdr{text-align:center;border-bottom:2px solid #1A3C6E;padding-bottom:8px;margin-bottom:10px}
+    .hdr{display:flex;align-items:center;gap:10px;border-bottom:2px solid #1A3C6E;padding-bottom:8px;margin-bottom:10px}
+    .hdr-logo{height:34px;width:auto;object-fit:contain;flex-shrink:0}
+    .hdr-copy{flex:1;text-align:left}
     .hdr h1{font-size:15px;color:#1A3C6E;font-weight:900}
     .hdr p{font-size:10px;color:#666;margin-top:2px}
     .badge{display:inline-block;background:#D4A017;color:#1A3C6E;font-weight:900;padding:2px 10px;border-radius:20px;font-size:11px;margin:6px 0}
@@ -1785,8 +1789,11 @@ function printPaymentReceipt(pr) {
     @media print{button{display:none!important}}
   </style></head><body>
   <div class="hdr">
-    <h1>Baweja Multispeciality Hospital</h1>
-    <p>Chandigarh · Ropar · +91-81466 22802</p>
+    ${logoSrc ? `<img src="${logoSrc}" class="hdr-logo" alt="BMH">` : ''}
+    <div class="hdr-copy">
+      <h1>Baweja Multispeciality Hospital</h1>
+      <p>Chandigarh · Ropar · +91-81466 22802</p>
+    </div>
   </div>
   <div style="text-align:center"><div class="badge">RECEIPT</div></div>
   <div class="row"><span style="color:#888">Receipt No.</span><span style="font-family:monospace;font-weight:700">${receiptNo}</span></div>
@@ -1830,7 +1837,7 @@ function aptCard(a) {
 function renderAppointments() {
   document.getElementById('apt-date-inp').value = new Date().toISOString().split('T')[0];
   renderAptDay();
-  const tl = document.getElementById('apt-today-list'); if (tl) tl.innerHTML = APPOINTMENTS.filter(a=>a.date===new Date().toISOString().split('T')[0]).map(aptCard).join('') || '<div style="padding:12px;text-align:center;color:var(--g1);font-size:12px">No appointments today</div>';
+  const tl = document.getElementById('apt-today-list'); if (tl) tl.innerHTML = APPOINTMENTS.filter(a=>a.date===new Date().toISOString().split('T')[0] && normalizeAppointmentCentreValue(a.centre || 'CHD') === normalizeAppointmentCentreValue(window.CURRENT_USER?.centre || getEffectiveCentre() || 'CHD')).map(aptCard).join('') || '<div style="padding:12px;text-align:center;color:var(--g1);font-size:12px">No appointments today</div>';
   const ul = document.getElementById('apt-upcoming'); if (ul) ul.innerHTML = APPOINTMENTS.slice(0,4).map(a=>`<div style="display:flex;align-items:center;gap:9px;padding:8px;border-bottom:1px solid var(--g5);font-size:12px;cursor:pointer"><span style="font-size:14px">📅</span><div style="flex:1"><div style="font-weight:800">${a.patient}</div><div style="font-size:10.5px;color:var(--g1)">${a.purpose} · ${a.date}</div></div><span class="badge bd-blue">${a.time}</span></div>`).join('');
 }
 
@@ -2834,7 +2841,7 @@ function bookFollowup() {
   const ptMob  = PATIENTS.find(p=>p.bmhId===ptId)?.mob || '';
   const doc    = CURRENT_USER?.name || 'Doctor';
   const dept   = CURRENT_USER?.dept || 'Ophthalmology';
-  const nearestSlot = getNearestAppointmentSlot(d);
+  const nearestSlot = getNearestAppointmentSlot(d, new Date());
 
   // Add to APPOINTMENTS array
   // Double-booking check
@@ -2854,7 +2861,11 @@ function bookFollowup() {
     dept: dept,
     purpose: 'Follow-up',
     status: 'booked',
-    centre: CURRENT_USER?.centre || 'CHD'
+    centre: normalizeAppointmentCentreValue(window.CURRENT_PATIENT?.centre || CURRENT_USER?.centre || 'CHD'),
+    leadId: window.CURRENT_LEAD?.id || '',
+    leadName: window.CURRENT_LEAD?.name || '',
+    leadPhone: window.CURRENT_LEAD?.phone || window.CURRENT_LEAD?.mobile || '',
+    leadSource: window.CURRENT_LEAD?.source || ''
   };
   APPOINTMENTS.push(apt);
   // Save to Firebase
@@ -2901,18 +2912,30 @@ function normalizeAptTimeLabel(slot) {
   const hr12 = ((hh + 11) % 12) + 1;
   return `${hr12}:${String(mm).padStart(2,'0')} ${suffix}`;
 }
-function getNearestAppointmentSlot(dateStr) {
-  const TIMES = ['08:30','09:00','09:30','10:00','10:30','11:00','11:30','12:00','14:00','14:30','15:00','15:30','16:00','16:30','17:00'];
+function normalizeAppointmentCentreValue(value) {
+  const v = String(value || '').trim().toLowerCase();
+  if (!v) return 'CHD';
+  if (v === 'rpr' || v.includes('ropar') || v.includes('rupnagar')) return 'RPR';
+  if (v === 'chd' || v.includes('chandigarh')) return 'CHD';
+  return String(value || '').toUpperCase();
+}
+function roundToNearestTenMinuteSlot(baseDate) {
+  const d = new Date(baseDate || Date.now());
+  if (!Number.isFinite(d.getTime())) return { hh: 9, mm: 0 };
+  let hh = d.getHours();
+  let mm = d.getMinutes();
+  mm = Math.floor(mm / 10) * 10;
+  if (mm >= 60) { hh += 1; mm = 0; }
+  return { hh: hh, mm: mm };
+}
+function getNearestAppointmentSlot(dateStr, baseDate) {
   if (!dateStr) return '9:00 AM';
   const todayStr = new Date().toISOString().split('T')[0];
-  if (dateStr !== todayStr) return '9:00 AM';
-  const now = new Date();
-  const mins = now.getHours() * 60 + now.getMinutes();
-  const next = TIMES.find(t => {
-    const [h,m] = t.split(':').map(Number);
-    return (h * 60 + m) >= mins;
-  });
-  return normalizeAptTimeLabel(next || TIMES[TIMES.length - 1]);
+  const rounded = roundToNearestTenMinuteSlot(baseDate || new Date());
+  if (dateStr !== todayStr) {
+    return normalizeAptTimeLabel(String(rounded.hh).padStart(2, '0') + ':' + String(rounded.mm).padStart(2, '0'));
+  }
+  return normalizeAptTimeLabel(String(rounded.hh).padStart(2, '0') + ':' + String(rounded.mm).padStart(2, '0'));
 }
 function bookApt() {
   const dateEl   = document.getElementById('book-date');
@@ -2942,7 +2965,7 @@ function bookApt() {
       'Dr. Tarun Baweja':'psych','Dr. Pooja Baweja':'skin'
     })[doctor] || 'ophtho',
     purpose: purposeEl?.value || 'Consultation',
-    centre: centreEl?.value || window.CURRENT_USER?.centre || 'CHD',
+    centre: normalizeAppointmentCentreValue(centreEl?.value || window.CURRENT_USER?.centre || 'CHD'),
     notes: notesEl?.value || '',
     status: 'booked',
     createdBy: window.CURRENT_USER?.username || 'reception'
@@ -6541,7 +6564,7 @@ function printBmhPatientBill(bmhIdOpt) {
   const invNo = 'RCP-' + String(Date.now()).slice(-10);
   const today = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
   const timeStr = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-  const lhSrc = typeof resolvePrintHeaderSrc === 'function' ? resolvePrintHeaderSrc() : '';
+  const logoSrc = typeof resolvePrintLogoSrc === 'function' ? resolvePrintLogoSrc() : '';
   const byCat = {};
   lines.forEach(l => { const c = l.cat || 'other'; if (!byCat[c]) byCat[c] = []; byCat[c].push(l); });
   const esc = (s) => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
@@ -6561,10 +6584,11 @@ function printBmhPatientBill(bmhIdOpt) {
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Inter,system-ui,sans-serif;font-size:11px;color:#1a1a1a;background:#fff;padding:7mm 9mm;width:100%;max-width:100%}
 @page{size:148mm 210mm;margin:0}
-.lh{width:100%;max-height:52px;object-fit:contain;display:block;margin:0 auto 8px}
-.brand{border-bottom:2px solid #1A3C6E;padding-bottom:8px;margin-bottom:10px}
-.brand h1{font-size:14px;font-weight:800;color:#1A3C6E;letter-spacing:.2px;text-align:center}
-.brand-meta{text-align:center;font-size:8.5px;color:#555;line-height:1.45;margin-top:4px}
+.brand{display:flex;align-items:center;gap:10px;border-bottom:2px solid #1A3C6E;padding-bottom:8px;margin-bottom:10px}
+.brand-logo{height:42px;width:auto;object-fit:contain;flex-shrink:0}
+.brand-copy{flex:1}
+.brand h1{font-size:14px;font-weight:800;color:#1A3C6E;letter-spacing:.2px;text-align:left}
+.brand-meta{text-align:left;font-size:8.5px;color:#555;line-height:1.45;margin-top:4px}
 .rcp{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;font-size:9px}
 .rcp strong{font-size:11px;color:#1A3C6E}
 .ptbox{background:linear-gradient(135deg,#f6f8fc,#eef2f9);border:1px solid #d7dce8;border-radius:8px;padding:8px 10px;margin-bottom:10px}
@@ -6585,10 +6609,12 @@ th:last-child{text-align:right}
 .payh{font-size:9px;font-weight:800;color:#1A3C6E;text-transform:uppercase;margin:10px 0 4px;letter-spacing:.4px}
 .foot{margin-top:14px;padding-top:8px;border-top:1px solid #e5e7eb;font-size:8px;color:#6b7280;text-align:center;line-height:1.5}
 </style></head><body>
-${lhSrc ? `<img src="${lhSrc}" class="lh" alt="">` : ''}
 <div class="brand">
-  <h1>Baweja Multispeciality Hospital</h1>
-  <div class="brand-meta">SCO 138–139, Sector 33C, Chandigarh · 168 &amp; 169, Urban Estate Phase II, Ropar<br>Phone: +91-81466 22802 · E-mail: info@bawejahospital.com</div>
+  ${logoSrc ? `<img src="${logoSrc}" class="brand-logo" alt="BMH">` : ''}
+  <div class="brand-copy">
+    <h1>Baweja Multispeciality Hospital</h1>
+    <div class="brand-meta">SCO 138–139, Sector 33C, Chandigarh · 168 &amp; 169, Urban Estate Phase II, Ropar<br>Phone: +91-81466 22802 · E-mail: info@bawejahospital.com</div>
+  </div>
 </div>
 <div class="rcp">
   <div><strong>${invNo}</strong><div style="margin-top:2px">Patient bill / receipt</div></div>
@@ -7075,7 +7101,10 @@ function saveChargesToFirebase(){
   return Promise.all([
     window.FBDB.ref('centreCharges').set(CENTRE_CHARGES),
     window.FBDB.ref('chargesSchedule').set(CHARGES_DATA)
-  ]).catch(function(err){
+  ]).then(function(res){
+    showToast('Saved to database ✓', 's');
+    return res;
+  }).catch(function(err){
     console.warn('saveChargesToFirebase error:', err);
     throw err;
   });
@@ -8537,16 +8566,16 @@ function openRxTemplatePicker(deptKey) {
     return (entry.meta.dept || 'all') !== 'ot' && String(entry.meta.dept || '').indexOf('dc-') !== 0;
   });
   host.innerHTML = items.length
-    ? '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">'
+    ? '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px">'
       + items.map(function (entry) {
           const preview = entry.rows.slice(0, 3).map(function (row) {
             const nm = rxDrugTradeName(row) || row.trade || row.name || row.generic || 'Item';
             return nm + (row.freq ? ' · ' + row.freq : '');
           }).join('<br>');
-          return '<button type="button" class="btn btn-outline" style="display:block;text-align:left;padding:10px 12px;border-radius:10px;min-height:110px;background:#fff" onclick="applyRxTemplateFromPicker(\'' + String(entry.key).replace(/'/g, "\\'") + '\')">'
-            + '<div style="font-size:12.5px;font-weight:900;color:var(--bmh-blue);margin-bottom:5px">' + String(entry.meta.name || entry.key).replace(/</g, '&lt;') + '</div>'
-            + '<div style="font-size:10.5px;color:var(--g1);margin-bottom:6px">' + entry.rows.length + ' line(s)</div>'
-            + '<div style="font-size:10.5px;line-height:1.4;color:var(--tx3)">' + preview + '</div>'
+          return '<button type="button" class="btn btn-outline" style="display:block;text-align:left;padding:8px 10px;border-radius:9px;min-height:86px;background:#fff" onclick="applyRxTemplateFromPicker(\'' + String(entry.key).replace(/'/g, "\\'") + '\')">'
+            + '<div style="font-size:11.5px;font-weight:900;color:var(--bmh-blue);margin-bottom:4px;line-height:1.25">' + String(entry.meta.name || entry.key).replace(/</g, '&lt;') + '</div>'
+            + '<div style="font-size:9.5px;color:var(--g1);margin-bottom:5px">' + entry.rows.length + ' line(s)</div>'
+            + '<div style="font-size:9.5px;line-height:1.35;color:var(--tx3)">' + preview + '</div>'
             + '</button>';
         }).join('')
       + '</div>'
@@ -10941,8 +10970,8 @@ function renderSurgeryPackPrintModal(packOrDept) {
       const title = getPackDocumentTitle(k);
       const locked = k === '__admission_slip__';
       return '<label style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;font-size:12px;cursor:pointer;border-bottom:1px solid var(--g5)">'
-        + '<input type="checkbox" name="sp-pack-k" value="' + String(k).replace(/"/g, '&quot;') + '" checked ' + (locked ? 'disabled' : '') + '>'
-        + '<span>' + String(title).replace(/</g, '&lt;') + '</span></label>';
+        + '<input type="checkbox" name="sp-pack-k" value="' + String(k).replace(/"/g, '&quot;') + '" checked>'
+        + '<span>' + String(title).replace(/</g, '&lt;') + (locked ? ' <span style="font-size:10px;color:var(--g1)">(included by default)</span>' : '') + '</span></label>';
     }).join('');
   }
 }
@@ -13317,6 +13346,7 @@ function addCustomLabTest() {
 function renderAptDay() {
   const date = document.getElementById('apt-date-inp')?.value || new Date().toISOString().split('T')[0];
   const drFilter = document.getElementById('apt-dr-filter')?.value || '';
+  const centreFilter = normalizeAppointmentCentreValue(window.CURRENT_USER?.centre || getEffectiveCentre() || 'CHD');
   const timeSortVal = (slot) => {
     const s = normalizeAptTimeLabel(slot);
     const m = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
@@ -13325,13 +13355,19 @@ function renderAptDay() {
     if(String(m[3]).toUpperCase() === 'PM') h += 12;
     return h * 60 + Number(m[2]);
   };
-  const dayApts = APPOINTMENTS.filter(a => a.date === date && (!drFilter || a.doctor === drFilter))
+  const dayApts = APPOINTMENTS.filter(a => a.date === date && (!drFilter || a.doctor === drFilter) && normalizeAppointmentCentreValue(a.centre || 'CHD') === centreFilter)
     .slice()
     .sort((a,b) => timeSortVal(a.time || a.scheduledTime) - timeSortVal(b.time || b.scheduledTime));
   const slotsEl = document.getElementById('apt-day-slots');
   if(!slotsEl) return;
 
-  const TIMES = ['08:30','09:00','09:30','10:00','10:30','11:00','11:30','12:00','14:00','14:30','15:00','15:30','16:00','16:30','17:00'];
+  const TIMES = [];
+  for (let mins = 8 * 60 + 30; mins <= 17 * 60; mins += 10) {
+    if (mins > 12 * 60 && mins < 14 * 60) continue;
+    const hh = Math.floor(mins / 60);
+    const mm = mins % 60;
+    TIMES.push(String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0'));
+  }
   slotsEl.innerHTML = TIMES.map(t => {
     const booked = dayApts.find(a => normalizeAptTimeLabel(a.time || a.scheduledTime) === normalizeAptTimeLabel(t));
     if(booked) return `<div class="apt-slot booked" onclick="showToast('${booked.patient} — ${booked.purpose}','i')">
@@ -13357,7 +13393,7 @@ function renderAptDay() {
   </div>`).join('') : '<div style="padding:14px;text-align:center;color:var(--g1);font-size:12px">No appointments on this date</div>';
 
   const upcomingEl = document.getElementById('apt-upcoming-list');
-  if(upcomingEl) upcomingEl.innerHTML = APPOINTMENTS.slice().sort((a,b)=>{
+  if(upcomingEl) upcomingEl.innerHTML = APPOINTMENTS.filter(a => normalizeAppointmentCentreValue(a.centre || 'CHD') === centreFilter).slice().sort((a,b)=>{
     const ad = new Date(`${a.date || '1970-01-01'}T00:00:00`).getTime() + (timeSortVal(a.time || a.scheduledTime) * 60000);
     const bd = new Date(`${b.date || '1970-01-01'}T00:00:00`).getTime() + (timeSortVal(b.time || b.scheduledTime) * 60000);
     return ad - bd;
@@ -13366,7 +13402,7 @@ function renderAptDay() {
     <div style="flex:1"><div style="font-weight:800">${a.patient}</div><div style="font-size:10.5px;color:var(--g1)">${a.purpose||a.type} · ${a.date}</div></div>
     <span class="badge bd-blue">${normalizeAptTimeLabel(a.time)}</span>
   </div>`).join('');
-  const ct = document.getElementById('apt-upcoming-ct'); if(ct) ct.textContent = APPOINTMENTS.length;
+  const ct = document.getElementById('apt-upcoming-ct'); if(ct) ct.textContent = APPOINTMENTS.filter(a => normalizeAppointmentCentreValue(a.centre || 'CHD') === centreFilter).length;
 }
 
 function saveProcTyped(val) {
@@ -15194,7 +15230,6 @@ function saveChargeFromModal() {
     renderChargesList();
     renderCentresCharges();
     resetChargeModalFields();
-    showToast('Saved to database ✓','s');
   }).catch(function(){
     showToast('Charge save failed. Please retry.', 'e');
   });
@@ -15209,7 +15244,6 @@ function saveCharges() {
   saveChargesToFirebase().then(function () {
     renderAllDeptSendBars && renderAllDeptSendBars();
     renderChargesList && renderChargesList();
-    showToast('Saved to database ✓','s');
   }).catch(function () {
     showToast('Charge save failed. Please retry.', 'e');
   });
@@ -15330,14 +15364,21 @@ function getConcessionAdjustedCollectionTotal(transactions) {
 }
 
 function renderCollectionDashboard() {
-  const allTxn = TRANSACTIONS.filter(t => (t.centre || 'CHD') === getEffectiveCentre());
+  const today = new Date();
+  const todayKeyLocal = [
+    today.getFullYear(),
+    String(today.getMonth() + 1).padStart(2, '0'),
+    String(today.getDate()).padStart(2, '0')
+  ].join('-');
+  const allTxn = TRANSACTIONS.filter(function (t) {
+    return (t.centre || 'CHD') === getEffectiveCentre() && txnIsoDate(t) === todayKeyLocal;
+  });
   const collected = allTxn.filter(t=>t.collected);
 
   // Update summary cards
   const total = getConcessionAdjustedCollectionTotal(collected);
   const cash  = collected.filter(t=>t.mode==='Cash').reduce((s,t)=>s+getNetTransactionAmount(t),0);
   const upi   = collected.filter(t=>t.mode!=='Cash').reduce((s,t)=>s+getNetTransactionAmount(t),0);
-  const pending = allTxn.filter(t=>!t.collected).reduce((s,t)=>s+t.amount,0);
 
   const fmt = n => '₹'+n.toLocaleString('en-IN');
   const setEl = (id,v) => { const e=document.getElementById(id); if(e) e.textContent=v; };
@@ -15346,8 +15387,8 @@ function renderCollectionDashboard() {
   setEl('rc-cash-total', fmt(cash));
   setEl('rc-upi-total', fmt(upi));
   setEl('rc-upi-total2', fmt(upi));
-  setEl('rc-pending-total', fmt(pending));
-  setEl('rc-pending-total2', fmt(pending));
+  setEl('rc-pending-total', fmt(0));
+  setEl('rc-pending-total2', fmt(0));
   setEl('rc-ins-total', fmt(collected.filter(t=>t.mode==='Insurance').reduce((s,t)=>s+t.amount,0)));
 
   // Dept breakdown
@@ -15356,21 +15397,18 @@ function renderCollectionDashboard() {
     const depts = ['ophtho','obg','psych','skin'];
     deptEl.innerHTML = depts.map(dept => {
       const dTxn = collected.filter(t=>t.dept===dept);
-      const dPending = allTxn.filter(t=>!t.collected&&t.dept===dept);
       const dTotal = dTxn.reduce((s,t)=>s+getNetTransactionAmount(t),0);
-      const dPendAmt = dPending.reduce((s,t)=>s+t.amount,0);
       const dc = DEPT_COLORS[dept];
       const did = 'dept-txn-'+dept;
-      if(!dTxn.length && !dPending.length) return '';
+      if(!dTxn.length) return '';
       return `<div style="border:1.5px solid ${dc.border};border-radius:var(--r);overflow:hidden;background:#fff">
         <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:${dc.bg};cursor:pointer" onclick="toggleDeptDetail('${did}')">
           <div style="flex:1">
             <div style="font-size:13px;font-weight:800;color:${dc.text}">${dc.label}</div>
-            <div style="font-size:10.5px;color:var(--g1);margin-top:2px">${dTxn.length} collected · ${dPending.length} pending</div>
+            <div style="font-size:10.5px;color:var(--g1);margin-top:2px">${dTxn.length} transaction${dTxn.length>1?'s':''} today</div>
           </div>
           <div style="text-align:right">
             <div style="font-size:18px;font-weight:900;color:${dc.text}">${fmt(dTotal)}</div>
-            ${dPendAmt>0?`<div style="font-size:10.5px;color:var(--orange);font-weight:700">+ ${fmt(dPendAmt)} pending</div>`:''}
           </div>
           <div id="chev-${did}" style="font-size:16px;color:${dc.text}">⌄</div>
         </div>
@@ -15382,13 +15420,6 @@ function renderCollectionDashboard() {
               <div style="font-weight:800;color:#1a8c3c">${fmt(t.amount)}</div>
               <button title="Delete" onclick="deleteTransaction('${t.id}')" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--red);padding:0 2px">🗑️</button>
             </div>`).join('') : '<div style="padding:8px;color:var(--g1);font-size:11.5px">No collected payments yet</div>'}
-          ${dPending.length ? `<div style="margin-top:6px;font-size:10px;font-weight:800;color:var(--orange);text-transform:uppercase">Pending (${dPending.length}):</div>`+dPending.map(t=>`
-            <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--g5);font-size:12px;opacity:.75">
-              <div style="flex:1"><div style="font-weight:700">${t.patient}</div><div style="font-size:10.5px;color:var(--g1)">${t.service||'—'}</div></div>
-              <span class="badge bd-orange" style="font-size:9.5px">Pending</span>
-              <div style="font-weight:800;color:var(--orange)">${fmt(t.amount)}</div>
-              <button title="Delete" onclick="deleteTransaction('${t.id}')" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--red);padding:0 2px">🗑️</button>
-            </div>`).join('') : ''}
         </div>
       </div>`;
     }).join('');
@@ -15596,9 +15627,12 @@ function saveAppointmentToFirebase(apt) {
 }
 
 function listenAppointments() {
+  const centre = CURRENT_USER?.isAdmin ? null : normalizeAppointmentCentreValue(CURRENT_USER?.centre || 'CHD');
   fbOn('appointments', data => {
     APPOINTMENTS.length = 0;
-    Object.values(data || {}).forEach(a => APPOINTMENTS.push(a));
+    Object.values(data || {}).forEach(function (a) {
+      if (!centre || normalizeAppointmentCentreValue(a.centre || 'CHD') === centre) APPOINTMENTS.push(a);
+    });
     const activeId = getActivePageId();
     if (activeId === 'pg-appointments') renderAptDay && renderAptDay();
     else if (activeId === 'pg-dashboard') renderDashboard && renderDashboard();
