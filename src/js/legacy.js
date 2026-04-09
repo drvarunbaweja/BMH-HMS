@@ -10424,7 +10424,7 @@ function lookupByBMHID(val) {
 
 function openQRScanner() {
   const modal = document.getElementById('m-qr-scanner');
-  if(modal) { openM('m-qr-scanner'); return; }
+  if(modal) { openM('m-qr-scanner'); startQRCamera(); return; }
   const div = document.createElement('div');
   div.id = 'm-qr-scanner';
   div.className = 'modal-ov';
@@ -10435,7 +10435,12 @@ function openQRScanner() {
         Point camera at the QR code on the patient's prescription. The BMSH ID will be extracted automatically.
       </div>
       <video id="qr-video" style="width:100%;border-radius:8px;background:#000;max-height:280px" autoplay playsinline></video>
+      <canvas id="qr-canvas-scan" style="display:none"></canvas>
       <div id="qr-scan-result" style="margin-top:10px;font-size:13px;font-weight:700;text-align:center;min-height:24px"></div>
+      <div style="margin-top:10px;display:flex;gap:8px">
+        <input type="text" id="qr-manual-id" placeholder="Enter BMSH ID manually if needed" style="flex:1">
+        <button class="btn btn-gold btn-sm" onclick="submitManualQrId()">Use ID</button>
+      </div>
       <div style="margin-top:10px;display:flex;gap:8px">
         <label class="btn btn-outline btn-sm" style="flex:1;justify-content:center;cursor:pointer">
           📁 Upload Image <input type="file" accept="image/*" style="display:none" onchange="readQRFromFile(this)">
@@ -10449,16 +10454,108 @@ function openQRScanner() {
   startQRCamera();
 }
 
+function extractBmhIdFromQr(raw) {
+  const text = String(raw || '').trim();
+  if (!text) return '';
+  const upper = text.toUpperCase();
+  const direct = upper.match(/BMSH[-\s]*\d+/i);
+  if (direct && direct[0]) return direct[0].replace(/\s+/g, '').replace(/BMSH[-\s]*/i, 'BMSH-');
+  try {
+    const url = new URL(text);
+    const candidates = [
+      url.searchParams.get('bmhId'),
+      url.searchParams.get('bmshId'),
+      url.searchParams.get('id'),
+      url.pathname.split('/').filter(Boolean).pop()
+    ].filter(Boolean);
+    for (const c of candidates) {
+      const hit = String(c).toUpperCase().match(/BMSH[-\s]*\d+/i);
+      if (hit && hit[0]) return hit[0].replace(/\s+/g, '').replace(/BMSH[-\s]*/i, 'BMSH-');
+      if (/^\d{4,}$/.test(String(c).trim())) return 'BMSH-' + String(c).trim();
+    }
+  } catch (e) {}
+  const digits = upper.match(/\b\d{4,}\b/);
+  if (digits && digits[0]) return 'BMSH-' + digits[0];
+  return upper;
+}
+
+function completeQrLookup(rawId) {
+  const id = extractBmhIdFromQr(rawId);
+  if (!id) return;
+  const clean = id.startsWith('BMSH-') ? id : ('BMSH-' + id.replace(/^BMSH[-\s]*/i, ''));
+  const search = document.getElementById('rc-bmhid-search');
+  if (search) search.value = clean;
+  lookupByBMHID(clean);
+  const patient = (PATIENTS || []).find(function (p) {
+    const pid = String(p?.bmhId || '').toUpperCase();
+    return pid === clean || pid === id || pid.includes(clean.replace('BMSH-', ''));
+  });
+  closeQRScanner();
+  if (patient && patient.bmhId) {
+    prefillExistingPatient(patient.bmhId);
+    showToast('QR scanned and patient loaded ✓', 's');
+  } else {
+    showToast('QR scanned — review search result below', 's');
+  }
+}
+
+async function decodeQrFromCanvas(canvas) {
+  if (!canvas || typeof BarcodeDetector === 'undefined') return '';
+  try {
+    const detector = new BarcodeDetector({ formats: ['qr_code'] });
+    const codes = await detector.detect(canvas);
+    const raw = codes && codes[0] && (codes[0].rawValue || codes[0].rawData || '');
+    return String(raw || '').trim();
+  } catch (e) {
+    return '';
+  }
+}
+
+function submitManualQrId() {
+  const inp = document.getElementById('qr-manual-id');
+  const id = inp?.value?.trim();
+  if (!id) { showToast('Enter a BMSH ID', 'w'); return; }
+  completeQrLookup(id);
+}
+
 function startQRCamera() {
   const video = document.getElementById('qr-video');
   if(!video) return;
+  const resultEl = document.getElementById('qr-scan-result');
+  if (resultEl) resultEl.textContent = (typeof BarcodeDetector === 'undefined')
+    ? 'Live QR decode not supported here — use Upload Image or enter BMSH ID manually.'
+    : 'Opening camera…';
+  window._bmhQrScanActive = true;
   navigator.mediaDevices?.getUserMedia({video:{facingMode:'environment'}}).then(stream=>{
     video._stream = stream;
     video.srcObject = stream;
-  }).catch(()=>{ document.getElementById('qr-scan-result').textContent = 'Camera not available — use file upload instead'; });
+    const loop = async function () {
+      if (!window._bmhQrScanActive) return;
+      try {
+        if (video.readyState >= 2 && typeof BarcodeDetector !== 'undefined') {
+          const canvas = document.getElementById('qr-canvas-scan');
+          if (canvas) {
+            canvas.width = video.videoWidth || 640;
+            canvas.height = video.videoHeight || 480;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const raw = await decodeQrFromCanvas(canvas);
+            if (raw) {
+              if (resultEl) resultEl.textContent = 'QR detected: ' + raw;
+              completeQrLookup(raw);
+              return;
+            }
+          }
+        }
+      } catch (e) {}
+      requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(loop);
+  }).catch(()=>{ if(resultEl) resultEl.textContent = 'Camera not available — use Upload Image or enter BMSH ID manually.'; });
 }
 
 function closeQRScanner() {
+  window._bmhQrScanActive = false;
   const video = document.getElementById('qr-video');
   if(video?._stream) video._stream.getTracks().forEach(t=>t.stop());
   closeM('m-qr-scanner');
@@ -10467,17 +10564,22 @@ function closeQRScanner() {
 function readQRFromFile(input) {
   const file = input.files[0]; if(!file) return;
   const reader = new FileReader();
-  reader.onload = e => {
+  reader.onload = async e => {
     const img = new Image();
-    img.onload = () => {
+    img.onload = async () => {
       const canvas = document.createElement('canvas');
       canvas.width=img.width; canvas.height=img.height;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img,0,0);
       const el = document.getElementById('qr-scan-result');
-      if(el) el.textContent = 'Processing image — if BMSH ID not detected, type it manually in the search field above.';
-      const id = prompt('QR scan: Enter BMSH ID from the prescription if camera decode failed:','BMSH-');
-      if(id) { closeQRScanner(); lookupByBMHID(id); const s=document.getElementById('rc-bmhid-search'); if(s) s.value=id; }
+      if(el) el.textContent = 'Processing image…';
+      const decoded = await decodeQrFromCanvas(canvas);
+      if (decoded) {
+        if (el) el.textContent = 'QR detected: ' + decoded;
+        completeQrLookup(decoded);
+        return;
+      }
+      if(el) el.textContent = 'QR not detected — enter the BMSH ID manually below.';
     };
     img.src = e.target.result;
   };
@@ -14114,26 +14216,34 @@ function getLabTestMeta(name) {
   const n = normalizeLabTestName(name);
   const low = n.toLowerCase();
   const defs = [
-    { re:/\bhb\b|haemoglobin/, group:'haem', unit:'g/dL', range:'12-16' },
-    { re:/\btlc\b|total leucocyte|wbc/, group:'haem', unit:'/cumm', range:'4000-11000' },
-    { re:/\bdlc\b/, group:'haem', unit:'%', range:'40-75' },
-    { re:/\bplatelet/, group:'haem', unit:'lakh/cumm', range:'1.5-4.5' },
-    { re:/\bcbc\b|complete blood count/, group:'haem', unit:'', range:'' },
-    { re:/\brbs\b|blood sugar|glucose/, group:'diab', unit:'mg/dL', range:'70-140' },
-    { re:/\bhba1c\b/, group:'diab', unit:'%', range:'4-5.6' },
-    { re:/\burea\b/, group:'bio', unit:'mg/dL', range:'15-40' },
-    { re:/\bcreatinine\b/, group:'bio', unit:'mg/dL', range:'0.6-1.2' },
-    { re:/\bsodium\b/, group:'bio', unit:'mEq/L', range:'135-145' },
-    { re:/\bpotassium\b/, group:'bio', unit:'mEq/L', range:'3.5-5.0' },
-    { re:/\bbilirubin\b/, group:'bio', unit:'mg/dL', range:'0.2-1.2' },
-    { re:/\bsgot\b|\bast\b/, group:'bio', unit:'U/L', range:'0-40' },
-    { re:/\bsgpt\b|\balt\b/, group:'bio', unit:'U/L', range:'0-40' },
-    { re:/\btsh\b/, group:'thyroid', unit:'mIU/L', range:'0.4-4.5' },
-    { re:/\bt3\b/, group:'thyroid', unit:'ng/mL', range:'0.8-2.0' },
-    { re:/\bt4\b/, group:'thyroid', unit:'µg/dL', range:'5-12' }
+    { re:/\bhb\b|haemoglobin/, group:'haem', unit:'g/dL', range:'12-16', purpose:'Haemoglobin helps assess anaemia status and oxygen-carrying capacity of blood.', normalNote:'Values in the reference range usually suggest adequate haemoglobin for age and sex, though symptoms and clinical context matter.', abnormalNote:'Low values may suggest anaemia or blood loss, while higher values can be seen with dehydration or other causes and need clinical correlation.' },
+    { re:/\btlc\b|total leucocyte|wbc/, group:'haem', unit:'/cumm', range:'4000-11000', purpose:'Total white blood cell count is used as a broad marker of immune and inflammatory activity.', normalNote:'A normal count does not rule out disease, but it is generally reassuring when interpreted with symptoms and examination.', abnormalNote:'High or low counts can occur with infection, inflammation, medicines, marrow disorders, or stress and must be interpreted clinically.' },
+    { re:/\bdlc\b/, group:'haem', unit:'%', range:'40-75', purpose:'Differential leucocyte count describes the distribution of white blood cell types.', normalNote:'Balanced differential counts usually support a stable immune profile.', abnormalNote:'Shifts in neutrophils, lymphocytes, eosinophils, or other subsets can point toward infection, allergy, stress, or hematologic disease.' },
+    { re:/\bplatelet/, group:'haem', unit:'lakh/cumm', range:'1.5-4.5', purpose:'Platelet count helps assess clotting support and bleeding risk.', normalNote:'Counts in the reference range are generally adequate for routine haemostasis.', abnormalNote:'Low platelet counts may increase bleeding risk, while high counts can be reactive or primary and should be interpreted with the overall blood picture.' },
+    { re:/\bcbc\b|complete blood count/, group:'haem', unit:'', range:'', purpose:'Complete blood count gives an overview of red cells, white cells, and platelets.', normalNote:'When all CBC components are within range, it supports a broadly stable blood profile.', abnormalNote:'A CBC is a screening panel; any abnormal component should be interpreted together with symptoms, examination, and sometimes repeat testing.' },
+    { re:/\brbs\b|blood sugar|glucose/, group:'diab', unit:'mg/dL', range:'70-140', purpose:'Glucose testing is used to screen for and monitor diabetes and glucose regulation.', normalNote:'Values within the stated range are generally acceptable depending on fasting or random testing conditions.', abnormalNote:'Single abnormal glucose readings do not always confirm diabetes and may require confirmation with repeat testing or HbA1c in the right clinical setting.' },
+    { re:/\bhba1c\b/, group:'diab', unit:'%', range:'4-5.6', purpose:'HbA1c reflects average blood glucose exposure over roughly the previous 2 to 3 months.', normalNote:'Lower values within the expected range are generally consistent with good long-term glycaemic control.', abnormalNote:'Higher values suggest poorer glucose control over time, but interpretation should consider anaemia, haemoglobin variants, and the clinical picture.' },
+    { re:/\burea\b/, group:'bio', unit:'mg/dL', range:'15-40', purpose:'Blood urea is a biochemical marker often used with creatinine to assess hydration and kidney-related metabolism.', normalNote:'Values in range are usually compatible with stable protein metabolism and renal handling.', abnormalNote:'High or low values can reflect dehydration, diet, catabolism, liver issues, or kidney-related causes and should be interpreted with creatinine and symptoms.' },
+    { re:/\bcreatinine\b/, group:'bio', unit:'mg/dL', range:'0.6-1.2', purpose:'Creatinine is used as a practical marker of kidney filtration function.', normalNote:'Values within range are usually reassuring, though kidney assessment is best interpreted with age, muscle mass, urine findings, and clinical context.', abnormalNote:'Abnormal creatinine does not automatically mean severe kidney disease; hydration, muscle mass, medicines, and acute illness can all influence the result.' },
+    { re:/\bsodium\b/, group:'bio', unit:'mEq/L', range:'135-145', purpose:'Sodium helps assess fluid balance and overall electrolyte status.', normalNote:'Normal sodium usually supports stable fluid and electrolyte regulation.', abnormalNote:'Abnormal sodium can occur in dehydration, fluid overload, endocrine conditions, medicines, and acute illness and should be assessed clinically.' },
+    { re:/\bpotassium\b/, group:'bio', unit:'mEq/L', range:'3.5-5.0', purpose:'Potassium is important for neuromuscular and cardiac function.', normalNote:'Values within range are generally consistent with stable potassium balance.', abnormalNote:'Low or high potassium may need prompt clinical attention in the right setting, especially when symptoms, kidney issues, or ECG changes are present.' },
+    { re:/\bbilirubin\b/, group:'bio', unit:'mg/dL', range:'0.2-1.2', purpose:'Bilirubin helps assess jaundice and liver-bile metabolism.', normalNote:'Normal bilirubin levels usually argue against significant jaundice at the time of testing.', abnormalNote:'Raised bilirubin can come from liver, bile duct, or red-cell causes and is interpreted best with liver enzymes and symptoms.' },
+    { re:/\bsgot\b|\bast\b/, group:'bio', unit:'U/L', range:'0-40', purpose:'AST is a liver-associated enzyme that can also rise from muscle-related causes.', normalNote:'Normal AST is generally reassuring when interpreted with ALT and bilirubin.', abnormalNote:'A raised AST does not always mean primary liver disease; muscle injury, medicines, alcohol, and systemic illness can contribute.' },
+    { re:/\bsgpt\b|\balt\b/, group:'bio', unit:'U/L', range:'0-40', purpose:'ALT is commonly used as a marker of liver cell injury.', normalNote:'Values within range are generally consistent with a stable liver enzyme pattern.', abnormalNote:'Raised ALT may reflect fatty liver, viral hepatitis, medicines, alcohol, or other causes and needs interpretation with history and other tests.' },
+    { re:/\btsh\b/, group:'thyroid', unit:'mIU/L', range:'0.4-4.5', purpose:'TSH is the main screening test for thyroid regulation.', normalNote:'A TSH within the reference interval often suggests euthyroid status, though free thyroid hormones may still be needed in some situations.', abnormalNote:'TSH abnormalities should be correlated with T3/T4, symptoms, pregnancy status, and ongoing thyroid treatment.' },
+    { re:/\bt3\b/, group:'thyroid', unit:'ng/mL', range:'0.8-2.0', purpose:'T3 helps assess the active thyroid hormone status in selected thyroid evaluations.', normalNote:'A value in range supports balanced thyroid hormone availability when interpreted with TSH and T4.', abnormalNote:'T3 changes alone should not be over-interpreted and usually need correlation with TSH, T4, and symptoms.' },
+    { re:/\bt4\b/, group:'thyroid', unit:'µg/dL', range:'5-12', purpose:'T4 reflects thyroid hormone availability and supports thyroid function assessment.', normalNote:'Values in range are generally consistent with stable thyroid hormone levels.', abnormalNote:'Abnormal values can occur in thyroid disease and also in binding-protein changes, pregnancy, or medication effects.' }
   ];
   const hit = defs.find(function (d) { return d.re.test(low); });
-  return Object.assign({ name: n, group:'custom', unit:'', range:'' }, hit || {});
+  return Object.assign({
+    name: n,
+    group:'custom',
+    unit:'',
+    range:'',
+    purpose:'This investigation should be interpreted in the clinical context of the patient.',
+    normalNote:'Values within the printed reference interval are generally reassuring, but must be interpreted with symptoms and examination findings.',
+    abnormalNote:'Abnormal results do not automatically indicate a serious problem and may need clinical correlation, repeat testing, or trend comparison.'
+  }, hit || {});
 }
 function formatLabAgeSex(pt) {
   return [pt?.age ? String(pt.age) + 'Y' : '', pt?.sex || ''].filter(Boolean).join(' / ') || '—';
@@ -14188,19 +14298,35 @@ function getPatientLabQueueEntries() {
 function buildLabInsights(order) {
   if (!order || !order.results) return [];
   const alerts = [];
+  const general = [];
   Object.keys(order.results).forEach(function (name) {
     const r = order.results[name] || {};
+    const meta = Object.assign({}, getLabTestMeta(name), r);
     const flag = String(r.flag || '').toUpperCase();
+    if (meta.purpose) general.push(meta.purpose);
     if (flag === 'HIGH' || flag === 'LOW') {
-      alerts.push(name + ' is ' + flag.toLowerCase());
+      alerts.push(name + ' is ' + flag.toLowerCase() + '. ' + (meta.abnormalNote || 'This should be interpreted clinically and may need correlation with symptoms and repeat trends.'));
+    } else if (String(r.val || '').trim()) {
+      alerts.push(name + ': ' + (meta.normalNote || 'This result appears within the expected range and is best interpreted in overall clinical context.'));
     }
   });
-  return alerts;
+  const out = [];
+  const seen = new Set();
+  general.concat(alerts).forEach(function (line) {
+    const clean = String(line || '').trim();
+    if (!clean || seen.has(clean)) return;
+    seen.add(clean);
+    out.push(clean);
+  });
+  out.push('Reference ranges can vary by age, sex, laboratory method, and clinical setting.');
+  out.push('Isolated abnormal values do not necessarily indicate serious disease and should be correlated with the treating clinician.');
+  return out.slice(0, 8);
 }
 function renderLabReportPreview(order) {
   if (!order) return;
   const pt = PATIENTS.find(function (x) { return x.bmhId === order.bmhId; }) || {};
   const setTxt = function (id, val) { const el = document.getElementById(id); if (el) el.textContent = val || '—'; };
+  const setHtml = function (id, html) { const el = document.getElementById(id); if (el) el.innerHTML = html || ''; };
   setTxt('lab-rpt-name', order.patient || pt.name || '—');
   setTxt('lab-rpt-id', order.bmhId || pt.bmhId || '—');
   setTxt('lab-rpt-age', formatLabAgeSex(pt));
@@ -14247,6 +14373,9 @@ function renderLabReportPreview(order) {
     const insights = buildLabInsights(order);
     abn.textContent = insights.length ? 'Abnormal: ' + insights.length : '';
   }
+  setHtml('lab-rpt-insights', buildLabInsights(order).map(function (x) {
+    return '<div style="margin-bottom:5px">• ' + escapeHtmlConsent(x) + '</div>';
+  }).join(''));
 }
 
 function renderLabOrders() {
@@ -14867,8 +14996,6 @@ function printLabReport() {
   const order = (sel && sel.value ? LAB_ORDERS.find(function (o) { return o.id === sel.value; }) : null) || activeLabOrder || LAB_ORDERS[0];
   if (!order) { showToast('No lab report selected', 'w'); return; }
   const pt = PATIENTS.find(function (x) { return x.bmhId === order.bmhId; }) || {};
-  const headerSrc = resolvePrintHeaderSrc();
-  const footerSrc = window.PRINT_FOOTER_SRC || '';
   const groups = { haem:'Haematology', bio:'Biochemistry', diab:'Diabetes', thyroid:'Thyroid', custom:'Additional Tests' };
   const grouped = { haem:[], bio:[], diab:[], thyroid:[], custom:[] };
   order.tests.forEach(function (name) {
@@ -14876,8 +15003,8 @@ function printLabReport() {
     grouped[row.group || 'custom'].push(row);
   });
   const insights = buildLabInsights(order);
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{margin:0;padding:0;box-sizing:border-box;print-color-adjust:exact;-webkit-print-color-adjust:exact}body{font-family:Arial,sans-serif;font-size:10.8px;color:#111;padding:18mm 10mm 16mm}@page{size:A4 portrait;margin:0}.header{margin-bottom:10mm}.header img,.footer img{width:100%;height:auto;display:block}.pt-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;background:#f3f4f6;border:1px solid #d8dde6;border-radius:8px;padding:8px 10px;margin-bottom:10px}.pt-lbl{font-size:8.5px;color:#666;font-weight:700;text-transform:uppercase}.section-hd{font-size:11px;font-weight:900;color:#222;text-transform:uppercase;letter-spacing:.5px;margin:12px 0 0;padding:6px 8px;background:#efefef;border-left:4px solid #555}.insights{margin:10px 0;padding:8px 10px;border:1px solid #d8dde6;border-radius:8px;background:#fafafa;font-size:10.5px;line-height:1.55}table{width:100%;border-collapse:collapse;margin-top:8px}thead th{background:#555;color:#fff;padding:6px 8px;text-align:left;font-size:9px;font-weight:800;text-transform:uppercase}td{padding:6px 8px;border:1px solid #e3e3e3;font-size:10.2px}tr:nth-child(even){background:#fbfbfb}.flag-h{color:#b42318;font-weight:900}.flag-l{color:#c26d00;font-weight:900}.flag-n{color:#166534;font-weight:800}.footer{position:fixed;left:0;right:0;bottom:0;padding:0 10mm 6mm}.signs{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:18px}.signline{border-bottom:1px solid #333;height:28px;margin-bottom:4px}.small{font-size:9px;color:#666}</style></head><body>
-${headerSrc ? `<div class="header"><img src="${headerSrc}" alt="Header"></div>` : `<div class="header" style="font-size:18px;font-weight:900;color:#222;margin-bottom:10mm">Baweja Multispeciality Hospital</div>`}
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{margin:0;padding:0;box-sizing:border-box;print-color-adjust:exact;-webkit-print-color-adjust:exact}body{font-family:Arial,sans-serif;font-size:10.8px;color:#111;padding:14mm 12mm 12mm}@page{size:A4 portrait;margin:0}.header{margin-bottom:8mm;padding:10px 12px;border:1.5px solid #cfd5df;border-radius:10px;background:#f9fafb}.header-title{font-size:22px;font-weight:900;letter-spacing:.4px;color:#1f2937}.header-sub{font-size:11px;color:#4b5563;margin-top:3px}.pt-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;background:#f3f4f6;border:1px solid #d8dde6;border-radius:8px;padding:8px 10px;margin-bottom:10px}.pt-lbl{font-size:8.5px;color:#666;font-weight:700;text-transform:uppercase}.section-hd{font-size:11px;font-weight:900;color:#222;text-transform:uppercase;letter-spacing:.5px;margin:12px 0 0;padding:6px 8px;background:#efefef;border-left:4px solid #555}.insights{margin:10px 0;padding:8px 10px;border:1px solid #d8dde6;border-radius:8px;background:#fafafa;font-size:10.5px;line-height:1.55}table{width:100%;border-collapse:collapse;margin-top:8px}thead th{background:#555;color:#fff;padding:6px 8px;text-align:left;font-size:9px;font-weight:800;text-transform:uppercase}td{padding:6px 8px;border:1px solid #e3e3e3;font-size:10.2px;vertical-align:top}tr:nth-child(even){background:#fbfbfb}.flag-h{color:#b42318;font-weight:900}.flag-l{color:#c26d00;font-weight:900}.flag-n{color:#166534;font-weight:800}.footer{margin-top:14px;padding-top:8px;border-top:1px solid #d1d5db}.signs{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:18px}.signline{border-bottom:1px solid #333;height:28px;margin-bottom:4px}.small{font-size:9px;color:#666}</style></head><body>
+<div class="header"><div class="header-title">Laboratory Report</div><div class="header-sub">Processed by outsourced laboratory partner. Result interpretation should always be correlated clinically by the treating doctor.</div></div>
 <div class="pt-bar">
   <div><div class="pt-lbl">Patient</div><div style="font-weight:900">${escapeHtmlConsent(order.patient || pt.name || '—')}</div></div>
   <div><div class="pt-lbl">BMSH ID</div><div style="font-family:monospace;color:#222;font-weight:700">${escapeHtmlConsent(order.bmhId || pt.bmhId || '—')}</div></div>
@@ -14886,21 +15013,24 @@ ${headerSrc ? `<div class="header"><img src="${headerSrc}" alt="Header"></div>` 
   <div><div class="pt-lbl">Report Date</div><div style="font-weight:700">${escapeHtmlConsent(formatDateIN(order.completedAt || order.date || new Date()))}</div></div>
   <div><div class="pt-lbl">Lab Technician</div><div style="font-weight:700">${escapeHtmlConsent(order.tech || '—')}</div></div>
 </div>
-${insights.length ? `<div class="insights"><div style="font-weight:900;margin-bottom:4px;color:#333">Laboratory insights</div>${insights.map(function (x) { return '<div>• ' + escapeHtmlConsent(x) + '</div>'; }).join('')}${order.comments ? '<div style="margin-top:6px"><b>Comment:</b> ' + escapeHtmlConsent(order.comments) + '</div>' : ''}</div>` : (order.comments ? `<div class="insights"><div style="font-weight:900;margin-bottom:4px;color:#333">Laboratory note</div>${escapeHtmlConsent(order.comments)}</div>` : '')}
+${insights.length ? `<div class="insights"><div style="font-weight:900;margin-bottom:4px;color:#333">Interpretive notes</div>${insights.map(function (x) { return '<div>• ' + escapeHtmlConsent(x) + '</div>'; }).join('')}${order.comments ? '<div style="margin-top:6px"><b>Lab comment:</b> ' + escapeHtmlConsent(order.comments) + '</div>' : ''}</div>` : (order.comments ? `<div class="insights"><div style="font-weight:900;margin-bottom:4px;color:#333">Lab comment</div>${escapeHtmlConsent(order.comments)}</div>` : '')}
 ${Object.keys(groups).map(function (key) {
   const rows = grouped[key] || [];
   if (!rows.length) return '';
   return '<div class="section-hd">' + groups[key] + '</div><table><thead><tr><th>Test</th><th>Value</th><th>Unit</th><th>Normal Range</th><th>Flag</th></tr></thead><tbody>' + rows.map(function (row) {
     const flag = String(row.flag || '—');
     const cls = flag === 'HIGH' ? 'flag-h' : flag === 'LOW' ? 'flag-l' : 'flag-n';
-    return '<tr><td style="font-weight:700">' + escapeHtmlConsent(row.name || '') + '</td><td class="' + cls + '">' + escapeHtmlConsent(row.val || '—') + '</td><td>' + escapeHtmlConsent(row.unit || '') + '</td><td>' + escapeHtmlConsent(row.range || '') + '</td><td class="' + cls + '">' + escapeHtmlConsent(flag || '—') + '</td></tr>';
+    const note = flag === 'HIGH' || flag === 'LOW'
+      ? (row.abnormalNote || '')
+      : (row.purpose || '');
+    return '<tr><td style="font-weight:700">' + escapeHtmlConsent(row.name || '') + (note ? '<div style="margin-top:3px;font-size:9px;color:#6b7280;line-height:1.35">' + escapeHtmlConsent(note) + '</div>' : '') + '</td><td class="' + cls + '">' + escapeHtmlConsent(row.val || '—') + '</td><td>' + escapeHtmlConsent(row.unit || '') + '</td><td>' + escapeHtmlConsent(row.range || '') + '</td><td class="' + cls + '">' + escapeHtmlConsent(flag || '—') + '</td></tr>';
   }).join('') + '</tbody></table>';
 }).join('')}
 <div class="signs">
   <div><div class="signline"></div><div class="small">Lab Technician Signature</div></div>
   <div><div class="signline"></div><div class="small">Authorised Signatory</div></div>
 </div>
-<div class="footer">${footerSrc ? `<img src="${footerSrc}" alt="Footer">` : `<div class="small" style="text-align:center">Baweja Multispeciality Hospital · This report is computer generated.</div>`}</div>
+<div class="footer"><div class="small" style="text-align:center">This outsourced laboratory report is computer generated. Reference intervals and interpretation may vary by method, age, sex, and clinical context.</div></div>
 </body></html>`;
   safePrint(html);
   showToast('Lab report sent to printer ✓','s');
