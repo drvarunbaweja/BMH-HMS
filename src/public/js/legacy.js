@@ -1531,6 +1531,12 @@ function buildSavedOphthoCaseSheetPageForPatient(bmhId) {
       + '<td style="border:1px solid #bbb;padding:4px 5px">' + esc(od || '—') + '</td>'
       + '<td style="border:1px solid #bbb;padding:4px 5px">' + esc(os || '—') + '</td></tr>';
   }).filter(Boolean).join('');
+  const pachyOD = visit.pachyOD || '—';
+  const pachyOS = visit.pachyOS || '—';
+  const corrOD = visit.iopCorrOD || '—';
+  const corrOS = visit.iopCorrOS || '—';
+  const iopOD = visit.iopGatOD || visit.iopNctOD || '—';
+  const iopOS = visit.iopGatOS || visit.iopNctOS || '—';
   const rxRows = Array.isArray(visit.rx) ? visit.rx : [];
   const rxHtml = rxRows.length
     ? '<table style="width:100%;border-collapse:collapse;font-size:10px;margin-top:6px"><thead><tr style="background:#1A3C6E;color:#fff"><th style="border:1px solid #1A3C6E;padding:4px;width:28px">#</th><th style="border:1px solid #1A3C6E;padding:4px;text-align:left">Medicine</th><th style="border:1px solid #1A3C6E;padding:4px;width:80px">Eye</th><th style="border:1px solid #1A3C6E;padding:4px;width:110px">Frequency</th><th style="border:1px solid #1A3C6E;padding:4px;width:90px">Duration</th></tr></thead><tbody>'
@@ -1563,6 +1569,11 @@ function buildSavedOphthoCaseSheetPageForPatient(bmhId) {
     + '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;font-size:10px">'
     + '<div><b>OD:</b> UCVA ' + esc(visit.vaOD || '—') + ' · Subj ' + esc([visit.subjODsph, visit.subjODcyl, visit.subjODax].filter(Boolean).join(' / ') || '—') + ' · VA ' + esc(visit.subjODva || '—') + ' · Add ' + esc(visit.rfODAdd || '—') + '</div>'
     + '<div><b>OS:</b> UCVA ' + esc(visit.vaOS || '—') + ' · Subj ' + esc([visit.subjOSsph, visit.subjOScyl, visit.subjOSax].filter(Boolean).join(' / ') || '—') + ' · VA ' + esc(visit.subjOSva || '—') + ' · Add ' + esc(visit.rfOSAdd || '—') + '</div>'
+    + '</div></div>'
+    + '<div style="margin-top:8px;border:1px solid #d8deea;border-radius:8px;padding:8px;background:#fff"><div style="font-weight:900;color:#1A3C6E;text-transform:uppercase;font-size:10px;margin-bottom:4px">IOP / Pachymetry</div>'
+    + '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;font-size:10px;line-height:1.45">'
+    + '<div><b>OD:</b> IOP ' + esc(iopOD) + ' · Pachy ' + esc(pachyOD) + ' · Corrected IOP ' + esc(corrOD) + '</div>'
+    + '<div><b>OS:</b> IOP ' + esc(iopOS) + ' · Pachy ' + esc(pachyOS) + ' · Corrected IOP ' + esc(corrOS) + '</div>'
     + '</div></div>'
     + '<div style="margin-top:8px;border:1px solid #d8deea;border-radius:8px;padding:8px;background:#fff"><div style="font-weight:900;color:#1A3C6E;text-transform:uppercase;font-size:10px;margin-bottom:4px">Diagnosis</div><div style="font-size:10.4px;line-height:1.5">' + diagnoses + '</div></div>'
     + '<div style="margin-top:8px;border:1px solid #d8deea;border-radius:8px;padding:8px;background:#fff"><div style="font-weight:900;color:#1A3C6E;text-transform:uppercase;font-size:10px;margin-bottom:4px">Positive Findings</div><div style="font-size:10.4px;line-height:1.5">' + esc(visit.positiveFindings || '—') + '</div></div>'
@@ -1858,7 +1869,7 @@ function qCard(p, sno) {
     <div style="flex:1;min-width:0">
       <div class="q-name">${p.name}</div>
       <div class="q-uid">${p.bmhId}</div>
-      <div class="q-sub">${deptLabel} · ${p.doctor}</div>
+      <div class="q-sub">${deptLabel} · ${(p.assignedDoctor || p.doctor || '—')}</div>
       <div style="font-size:10px;color:var(--g1)">${p.purpose}${p.ins?' · '+p.ins:''}</div>
       ${dilHtml}
       ${payHtml ? `<div style="margin-top:3px">${payHtml}</div>` : ''}
@@ -10475,11 +10486,12 @@ function updateExistingPatientFromReceptionForm(bmhId) {
   p.rel = rel;
   p.dept = dept;
   p.doctor = dr;
+  p.assignedDoctor = dr;
   p.centre = centre;
   normalizePatientRecord(p);
   savePatientToFirebase(p);
   fbUpdate && fbUpdate('patients/' + uid, {
-    name: p.name, age: p.age, sex: p.sex, mob: p.mob, mob2: p.mob2, email: p.email, dob: p.dob, addr: p.addr, rel: p.rel, dept: p.dept, doctor: p.doctor, centre: p.centre, initials: p.initials
+    name: p.name, age: p.age, sex: p.sex, mob: p.mob, mob2: p.mob2, email: p.email, dob: p.dob, addr: p.addr, rel: p.rel, dept: p.dept, doctor: p.doctor, assignedDoctor: p.assignedDoctor, centre: p.centre, initials: p.initials
   }).catch(function () {});
   showToast('Patient details updated ✓', 's');
   renderDocQueue && renderDocQueue();
@@ -10528,7 +10540,7 @@ async function registerPatient() {
   const patient = {
     bmhId: uid, name, initials, color,
     age, sex, mob, mob2, email, dob, addr,
-    dept, doctor: dr,
+    dept, doctor: dr, assignedDoctor: dr,
     centre, status: isPreReg ? 'pre-registered' : 'waiting',
     balance:0,
     advance: advAmt > 0 ? advAmt : 0,
@@ -11200,23 +11212,36 @@ function deleteSurgeryPack(id) {
   }
 }
 function printSurgeryPackWithKeys(keys, deptLabel) {
-  if (!keys || !keys.length) { showToast('No documents selected', 'w'); return; }
-  const ctx = collectConsentPrintContext();
-  const consentPages = keys.map(function (k) {
+  try {
+    if (!keys || !keys.length) { showToast('No documents selected', 'w'); return; }
+    const ctx = collectConsentPrintContext();
+    const consentPages = keys.map(function (k) {
+      try {
+        return renderPackDocumentPages(k, ctx);
+      } catch (e) {
+        console.error('surgery pack doc print failed', k, e);
+        return '';
+      }
+    }).join('');
+    const fallbackPages = buildAdmissionSlipPage(ctx || collectConsentPrintContext());
+    const finalPages = String(consentPages || '').trim() ? consentPages : fallbackPages;
+    if (!String(finalPages || '').trim()) { showToast('No printable documents found for ' + (deptLabel || 'pack'), 'w'); return; }
+    const html = '<!DOCTYPE html><html><head><meta charset="UTF-8">'
+      + '<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:12px}@page{size:A4;margin:0}</style></head><body>' + finalPages + '</body></html>';
+    showToast('Opening surgery pack print preview…', 'i');
+    safePrint(html);
+    showToast('📋 ' + (deptLabel || 'Pack') + ' ready to print ✓', 's');
+  } catch (e) {
+    console.error('printSurgeryPackWithKeys failed', e);
     try {
-      return renderPackDocumentPages(k, ctx);
-    } catch (e) {
-      console.error('surgery pack doc print failed', k, e);
-      return '';
+      const ctx = collectConsentPrintContext();
+      safePrint('<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:12px}@page{size:A4;margin:0}</style></head><body>' + buildAdmissionSlipPage(ctx) + '</body></html>');
+      showToast('Pack preview opened with admission slip fallback ✓', 's');
+    } catch (fallbackErr) {
+      console.error('surgery pack fallback admission slip failed', fallbackErr);
+      showToast('Surgery pack print failed', 'e');
     }
-  }).join('');
-  const fallbackPages = buildAdmissionSlipPage(ctx || collectConsentPrintContext());
-  const finalPages = consentPages.trim() ? consentPages : fallbackPages;
-  if (!finalPages.trim()) { showToast('No printable documents found for ' + (deptLabel || 'pack'), 'w'); return; }
-  const html = '<!DOCTYPE html><html><head><meta charset="UTF-8">'
-    + '<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:12px}@page{size:A4;margin:0}</style></head><body>' + finalPages + '</body></html>';
-  safePrint(html);
-  showToast('📋 ' + (deptLabel || 'Pack') + ' ready to print ✓', 's');
+  }
 }
 function parseIolSummary(iol) {
   const raw = String(iol || '').trim();
@@ -11294,19 +11319,24 @@ function resolveSurgeryPackForCase(otCase) {
   return packs.find(function (p) { return String(p.dept || '').toLowerCase().includes('oph') || p.id === 'ophtho'; }) || null;
 }
 function printSurgeryPackForCase(caseId, packId) {
-  const rawCase = OT_CASES.find(function (c) { return c.id === caseId; });
-  if (!rawCase) { showToast('OT case not found', 'w'); return; }
-  const c = normalizeOTCaseRecord(rawCase);
-  window._CONSENT_PRINT_BMH_ID = c.bmhId;
-  window._CONSENT_PRINT_OT_ID = c.id;
-  const pack = getAllSurgeryPacks().find(function (p) { return p.id === (packId || (resolveSurgeryPackForCase(c)?.id || 'ophtho')); }) || resolveSurgeryPackForCase(c);
-  const keys = (pack && Array.isArray(pack.documentKeys) ? pack.documentKeys.slice() : []);
-  if (keys.indexOf('__admission_slip__') === -1) keys.unshift('__admission_slip__');
-  if (!keys.length) {
-    openSurgeryPackPrintModal(packId || (resolveSurgeryPackForCase(c)?.id || 'ophtho'));
-    return;
+  try {
+    const rawCase = OT_CASES.find(function (c) { return c.id === caseId; });
+    if (!rawCase) { showToast('OT case not found', 'w'); return; }
+    const c = normalizeOTCaseRecord(rawCase);
+    window._CONSENT_PRINT_BMH_ID = c.bmhId;
+    window._CONSENT_PRINT_OT_ID = c.id;
+    const pack = getAllSurgeryPacks().find(function (p) { return p.id === (packId || (resolveSurgeryPackForCase(c)?.id || 'ophtho')); }) || resolveSurgeryPackForCase(c);
+    const keys = (pack && Array.isArray(pack.documentKeys) ? pack.documentKeys.slice() : []);
+    if (keys.indexOf('__admission_slip__') === -1) keys.unshift('__admission_slip__');
+    if (!keys.length) {
+      openSurgeryPackPrintModal(packId || (resolveSurgeryPackForCase(c)?.id || 'ophtho'));
+      return;
+    }
+    printSurgeryPackWithKeys(keys, pack?.label || pack?.dept || 'Pack');
+  } catch (e) {
+    console.error('printSurgeryPackForCase failed', e);
+    showToast('Could not prepare surgery pack', 'e');
   }
-  printSurgeryPackWithKeys(keys, pack?.label || pack?.dept || 'Pack');
 }
 function populateSurgeryPackPrintSelect(selectedPackId) {
   const sel = document.getElementById('sp-pack-select');
@@ -13604,7 +13634,8 @@ function addInvestigationOrder(mode) {
   if(!name) { showToast('Enter investigation name','w'); return; }
   const orderMode = mode === 'send' ? 'send' : 'advise';
   const orders = getCurrentPatientInvestigationOrders();
-  orders.push({id:'INV'+Date.now(), name, notes, mode: orderMode, date: new Date().toLocaleDateString('en-IN'), done: false, patient: pt.name, bmhId: pt.bmhId, dept: pt.dept || 'ophtho', centre: pt.centre || CURRENT_USER?.centre || 'CHD'});
+  const orderId = 'INV' + Date.now();
+  orders.push({id:orderId, name, notes, mode: orderMode, date: new Date().toLocaleDateString('en-IN'), done: false, patient: pt.name, bmhId: pt.bmhId, dept: pt.dept || 'ophtho', centre: pt.centre || CURRENT_USER?.centre || 'CHD'});
   syncCurrentPatientInvestigationOrders();
   persistCurrentPatientInvestigationOrders();
   renderInvestigationOrders();
@@ -13613,10 +13644,34 @@ function addInvestigationOrder(mode) {
   if(orderMode === 'send') {
     const centre = pt.centre || CURRENT_USER?.centre || 'CHD';
     const deptKey = normalizeDeptKeyForQueue(pt.dept || 'ophtho') || 'ophtho';
-    PAY_REQUESTS.push({id:'PR'+Date.now(), patient:pt.name, bmhId:pt.bmhId, for:name, amount:lookupChargeAmountFromSettings(deptKey, name), status:'pending', from:document.getElementById('sbnm')?.textContent||'Doctor', dept:pt.dept||'ophtho', centre});
+    const pr = {id:'PR'+Date.now(), patient:pt.name, bmhId:pt.bmhId, for:name, amount:lookupChargeAmountFromSettings(deptKey, name), status:'pending', from:document.getElementById('sbnm')?.textContent||'Doctor', dept:pt.dept||'ophtho', centre, linkedInvestigationOrderId: orderId};
+    PAY_REQUESTS.push(pr);
+    try { fbSet && fbSet('payRequests/' + pr.id, pr); } catch (e) {}
   }
   showToast(orderMode === 'send' ? `🧪 ${name} advised and sent ✓` : `🧪 ${name} advised ✓`, 's');
   renderOeInvOrderedList && renderOeInvOrderedList();
+}
+function cancelInvestigationReceptionRequest(orderId) {
+  if (!orderId) return;
+  const orders = getCurrentPatientInvestigationOrders();
+  const idx = orders.findIndex(function (x) { return x && x.id === orderId; });
+  const order = idx > -1 ? orders[idx] : null;
+  if (idx > -1) orders.splice(idx, 1);
+  syncCurrentPatientInvestigationOrders();
+  persistCurrentPatientInvestigationOrders();
+  (PAY_REQUESTS || []).slice().forEach(function (pr) {
+    const sameOrder = pr.linkedInvestigationOrderId && pr.linkedInvestigationOrderId === orderId;
+    const sameLegacyShape = !pr.linkedInvestigationOrderId && order && pr.status === 'pending'
+      && pr.bmhId === order.bmhId && String(pr.for || '').trim() === String(order.name || '').trim();
+    if (!sameOrder && !sameLegacyShape) return;
+    const i = PAY_REQUESTS.indexOf(pr);
+    if (i > -1) PAY_REQUESTS.splice(i, 1);
+    try { if (window.firebase && firebase.database) firebase.database().ref('payRequests/' + pr.id).remove(); } catch (e) {}
+  });
+  renderOeInvOrderedList && renderOeInvOrderedList();
+  renderInvestigationOrders && renderInvestigationOrders();
+  renderReceptionPage && renderReceptionPage();
+  showToast('Investigation request removed ✓', 's');
 }
 function renderOeInvOrderedList() {
   const el = document.getElementById('oe-inv-ordered-list'); if(!el) return;
@@ -13625,7 +13680,7 @@ function renderOeInvOrderedList() {
   el.innerHTML = pending.map((o,i) => `<div style="display:inline-flex;align-items:center;gap:5px;background:var(--orange-lt);color:#8a4200;border:1px solid rgba(212,160,23,.5);border-radius:20px;padding:2px 10px;font-size:11px;font-weight:700;margin:2px 4px 2px 0">
     🧪 ${o.name}${o.notes?' ('+o.notes+')':''}
     <span style="font-size:9px;padding:1px 6px;border-radius:10px;background:${o.mode==='send'?'rgba(26,60,110,.12)':'rgba(26,140,60,.12)'};color:${o.mode==='send'?'var(--blue)':'#1a8c3c'}">${o.mode==='send'?'Sent to reception':'Advice only'}</span>
-    <span onclick="(function(){const orders=getCurrentPatientInvestigationOrders();const idx=orders.findIndex(x=>x.id===${JSON.stringify(o.id)});if(idx>-1)orders.splice(idx,1);syncCurrentPatientInvestigationOrders();persistCurrentPatientInvestigationOrders();renderOeInvOrderedList();renderInvestigationOrders();})();" style="cursor:pointer;opacity:.6;font-size:12px">&times;</span>
+    <span onclick="cancelInvestigationReceptionRequest(${JSON.stringify(o.id)})" style="cursor:pointer;opacity:.6;font-size:12px">&times;</span>
   </div>`).join('');
 }
 function renderInvestigationOrders() {
@@ -13636,7 +13691,7 @@ function renderInvestigationOrders() {
     <div style="flex:1"><div style="font-weight:700">${o.name}</div>${o.notes?`<div style="font-size:10.5px;color:var(--g1)">${o.notes}</div>`:''}
     <div style="font-size:9.5px;color:var(--g1)">${o.date} · ${o.mode === 'send' ? 'Sent to reception' : 'Advice only'}</div></div>
     <button class="btn btn-xs ${o.done?'btn-gray':'btn-green'}" onclick="getCurrentPatientInvestigationOrders()[${i}].done=!getCurrentPatientInvestigationOrders()[${i}].done;syncCurrentPatientInvestigationOrders();persistCurrentPatientInvestigationOrders();renderOeInvOrderedList();renderInvestigationOrders()">${o.done?'Undo':'Done ✓'}</button>
-    <button class="btn btn-xs btn-gray" onclick="getCurrentPatientInvestigationOrders().splice(${i},1);syncCurrentPatientInvestigationOrders();persistCurrentPatientInvestigationOrders();renderOeInvOrderedList();renderInvestigationOrders()">&#x2715;</button>
+    <button class="btn btn-xs btn-gray" onclick="cancelInvestigationReceptionRequest(${JSON.stringify(o.id)})">&#x2715;</button>
   </div>`).join('');
 }
 
@@ -14786,6 +14841,8 @@ function normalizePatientRecord(p) {
   if (!p || typeof p !== 'object') return p;
   if (p.name) p.name = toTitleCaseName(p.name);
   if (p.patient) p.patient = toTitleCaseName(p.patient);
+  if (p.assignedDoctor) p.assignedDoctor = toDisplayTitleCase(p.assignedDoctor);
+  if (!p.assignedDoctor && p.doctor) p.assignedDoctor = p.doctor;
   const base = p.name || p.patient || '';
   if (base) p.initials = computePatientInitials(base);
   return p;
@@ -20043,7 +20100,7 @@ function buildQCard(p, sno) {
       <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:2px">
         <span style="font-size:11px;color:var(--g1);font-family:var(--mono)">${p.bmhId}</span>
         <span style="font-size:11px;color:var(--g1)">${p.age||'?'}Y/${(p.sex||'?')[0]}</span>
-        ${p.doctor?`<span style="font-size:11px;color:var(--teal);font-weight:700">🩺${p.doctor.replace('Dr. ','Dr.')}</span>`:''}
+        ${(p.assignedDoctor || p.doctor)?`<span style="font-size:11px;color:var(--teal);font-weight:700">🩺${(p.assignedDoctor || p.doctor).replace('Dr. ','Dr.')}</span>`:''}
         ${p.purpose?`<span style="font-size:11px;color:var(--g1)">${p.purpose}</span>`:''}
         ${!p.preRegistered?`<span style="font-size:11px;color:var(--g2)">⏱${waitStr}</span>`:''}
         ${dilStr?`<span style="font-size:11px;color:var(--blue);${dilLongWait?'animation:pulse 1.35s infinite;font-weight:900;':''}">${dilStr}</span>`:''}
@@ -20116,7 +20173,7 @@ function buildQTableRow(p, sno, opts) {
   const statusBg = p.preRegistered ? '#f0f0f0' : p.seen ? 'var(--green-lt)' : p.dilated ? 'var(--blue-lt)' : 'var(--orange-lt)';
   const onRow = p.preRegistered ? `checkInPatient('${p.bmhId}')` : (receptionQueue ? `openReceptionPatient('${p.bmhId}')` : (p._xrefEntry ? `openPatientForDept('${p.bmhId}','${p.dept}')` : `openPatient('${p.bmhId}')`));
   const nmEsc = (p.name||'').replace(/'/g,"\\'");
-  const docShort = (p.doctor||'—').replace(/^Dr\.\s*/,'');
+  const docShort = (p.assignedDoctor || p.doctor || '—').replace(/^Dr\.\s*/,'');
   const vulnBadge = vuln ? '<span class="q-vuln-badge" title="Vulnerable — elderly (≥65) or flagged">⚠ VUL</span>' : '';
   return `<tr class="${vuln ? 'row-vulnerable' : ''}" onclick="${onRow}" style="cursor:pointer;${dilLongWait?'animation:pulse 1.45s infinite;':''}">
     <td style="font-weight:900;color:var(--g2);font-size:12.5px">${sno}</td>
@@ -20215,6 +20272,7 @@ function deletePayRequest(prId) {
   const pr = PAY_REQUESTS.find(r=>r.id===prId);
   if(!pr) { showToast('Charge not found','w'); return; }
   const label = `₹${pr.amount?.toLocaleString('en-IN')||'?'} charge — ${pr.patient||'?'} (${pr.for||'—'})`;
+  const isInvestigationRequest = !!pr.linkedInvestigationOrderId || /oct|hvf|biometry|fundus|topography|specular|scan|cbc|blood|test|profile|urine|ecg|investigation/i.test(String(pr.for || pr.service || pr.desc || ''));
   if(CURRENT_USER?.isAdmin) {
     if(!confirm(`Delete this charge request?\n${label}\nThis cannot be undone.`)) return;
     const idx = PAY_REQUESTS.findIndex(r=>r.id===prId);
@@ -20223,10 +20281,13 @@ function deletePayRequest(prId) {
     showToast(`🗑️ Charge deleted: ${label}`,'i');
     renderReceptionPage&&renderReceptionPage(); renderDeptSummary&&renderDeptSummary();
   } else {
-    if (isConsultationChargeEntry(pr)) {
-      if(!confirm(`Delete this consultation charge request?\n${label}\n\nOnly consultation entries can be deleted directly by reception.`)) return;
+    if (isConsultationChargeEntry(pr) || isInvestigationRequest) {
+      if(!confirm(`Delete this ${isInvestigationRequest ? 'investigation' : 'consultation'} charge request?\n${label}\n\nThis pending request will be removed immediately.`)) return;
       const idx = PAY_REQUESTS.findIndex(r=>r.id===prId);
       if(idx>-1) { PAY_REQUESTS.splice(idx,1); try { if(window.firebase&&firebase.database) firebase.database().ref('payRequests/'+prId).remove(); } catch(e){} }
+      if (pr.linkedInvestigationOrderId) {
+        try { cancelInvestigationReceptionRequest(pr.linkedInvestigationOrderId); } catch (e) {}
+      }
       showToast(`🗑️ Charge deleted: ${label}`,'i');
       renderReceptionPage&&renderReceptionPage(); renderDeptSummary&&renderDeptSummary();
     } else {
@@ -20357,6 +20418,10 @@ function getActiveCrossRefsForPatient(p) {
   else if (p?.xrefTo) refs.push({ id: 'legacy-xref', toDept: p.xrefTo, toDoctor: p.xrefDoctor, paid: !!p.xrefPaid, active: true });
   return refs.filter(function (r) { return r && r.toDept && r.active !== false; });
 }
+function getSelectedQueueDeptForAdmin() {
+  const sel = document.getElementById('dq-admin-dept-filter');
+  return String(sel?.value || 'all').trim().toLowerCase() || 'all';
+}
 function renderDocQueue() {
   const todayKeyLocal = localDateKey(new Date());
   // Map doctor dept name to patient dept key
@@ -20366,9 +20431,18 @@ function renderDocQueue() {
     'Skin & Cosmetology':'skin', Lab:'lab', Reception:'reception'
   };
   const userDept = normalizeDeptKeyForQueue(deptMap[normalizeQueueDeptForUser(CURRENT_USER?.dept)] || normalizeQueueDeptForUser(CURRENT_USER?.dept) || '');
-  const queueDoctor = getEffectiveDoctorNameForDept(userDept || CURRENT_USER?.dept || '');
+  const adminDeptFilter = (CURRENT_USER?.isAdmin || CURRENT_USER?.role === 'Reception') ? getSelectedQueueDeptForAdmin() : 'all';
+  const effectiveQueueDept = adminDeptFilter !== 'all' ? adminDeptFilter : userDept;
+  const queueDoctor = (CURRENT_USER?.isAdmin && adminDeptFilter === 'all')
+    ? 'Hospital'
+    : getEffectiveDoctorNameForDept(effectiveQueueDept || CURRENT_USER?.dept || '');
   const titleEl = document.getElementById('dq-title');
   if (titleEl) titleEl.textContent = `${queueDoctor} — My Patients`;
+  const adminDeptSel = document.getElementById('dq-admin-dept-filter');
+  if (adminDeptSel) {
+    adminDeptSel.style.display = (CURRENT_USER?.isAdmin || CURRENT_USER?.role === 'Reception') ? '' : 'none';
+    if (adminDeptSel.value !== adminDeptFilter) adminDeptSel.value = adminDeptFilter;
+  }
   const searchQ = String(document.getElementById('dq-search')?.value || '').trim().toLowerCase();
   // Use the same "today's visible queue" basis as Reception, then narrow by department for doctors.
   const queueBasePts = PATIENTS.filter(function (p) {
@@ -20380,7 +20454,11 @@ function renderDocQueue() {
   });
   const myPts = (() => {
     if (CURRENT_USER?.isAdmin || CURRENT_USER?.role === 'Reception') {
-      return queueBasePts;
+      return adminDeptFilter === 'all'
+        ? queueBasePts
+        : queueBasePts.filter(function (p) {
+            return normalizeDeptKeyForQueue(p.dept || p.department || '') === adminDeptFilter;
+          });
     }
     const deptPts = [];
     queueBasePts.forEach(function (p) {
@@ -20422,10 +20500,10 @@ function renderDocQueue() {
   const done    = filteredPts.filter(function (p) {
     return p.seen && localDateKey(p.seenAt || p.checkinAt || p.createdAt) === todayKeyLocal;
   });
-  const xrefs   = (window.XREF_LOG||[]).filter(x => !userDept || x.fromDept===userDept || x.toDept===userDept);
+  const xrefs   = (window.XREF_LOG||[]).filter(x => !effectiveQueueDept || x.fromDept===effectiveQueueDept || x.toDept===effectiveQueueDept);
   const ipdPts  = (window.IPD_PATIENTS||[]).filter(p => {
     const ipdDept = normalizeDeptKeyForQueue(p.dept || p.department || '');
-    return (p.status || 'admitted') !== 'discharged' && centreMatch(p) && (!userDept || ipdDept === userDept || CURRENT_USER?.isAdmin);
+    return (p.status || 'admitted') !== 'discharged' && centreMatch(p) && (!effectiveQueueDept || ipdDept === effectiveQueueDept || CURRENT_USER?.isAdmin);
   });
 
   const emptyRow = label => `<tr><td colspan="10" style="text-align:center;padding:24px;color:var(--g2);font-size:12.5px">No ${label} patients</td></tr>`;
@@ -20441,7 +20519,7 @@ function renderDocQueue() {
 
   // Dilated tab visibility — only show for ophtho
   const dilTab = document.getElementById('dq-tab-dil');
-  if(dilTab) dilTab.style.display = (userDept==='ophtho'||CURRENT_USER?.isAdmin) ? '' : 'none';
+  if(dilTab) dilTab.style.display = (effectiveQueueDept==='ophtho'||adminDeptFilter==='all'||CURRENT_USER?.isAdmin) ? '' : 'none';
 
   // Cross-refer log
   const xe = document.getElementById('dq-xref-log');
@@ -20509,6 +20587,18 @@ function saveVisit(dept, opts) {
     centre: CURRENT_USER?.centre || 'CHD',
     savedBy: CURRENT_USER?.name || 'System',
   };
+  const latestSameDeptVisit = (function () {
+    const candidates = Object.values(cachedVisits || {}).filter(function (entry) {
+      return entry && entry.dept === dept;
+    }).sort(function (a, b) {
+      return String(b.date || b.createdAt || '').localeCompare(String(a.date || a.createdAt || ''));
+    });
+    if (localPt?.lastVisit && localPt?.lastDeptVisit === dept) {
+      const lv = localPt.lastVisit;
+      if (!candidates.length || String(lv.date || '').localeCompare(String(candidates[0]?.date || '')) >= 0) return lv;
+    }
+    return candidates[0] || null;
+  })();
   if(dept === 'ophtho') {
     visit.ucvaOD = document.getElementById('va-od-uc')?.value || document.getElementById('ucva-od-dist')?.value || '';
     visit.ucvaOS = document.getElementById('va-os-uc')?.value || document.getElementById('ucva-os-dist')?.value || '';
@@ -20526,8 +20616,12 @@ function saveVisit(dept, opts) {
     visit.iopNctOS = document.getElementById('iop-nct-os')?.value || '';
     visit.pachyOD  = document.getElementById('pachy-od')?.value   || '';
     visit.pachyOS  = document.getElementById('pachy-os')?.value   || '';
+    if (!visit.pachyOD && latestSameDeptVisit?.pachyOD) visit.pachyOD = latestSameDeptVisit.pachyOD;
+    if (!visit.pachyOS && latestSameDeptVisit?.pachyOS) visit.pachyOS = latestSameDeptVisit.pachyOS;
     visit.gonioOD  = document.getElementById('gonio-od')?.value   || '';
     visit.gonioOS  = document.getElementById('gonio-os')?.value   || '';
+    visit.iopCorrOD = document.getElementById('iop-corr-od')?.textContent?.trim() || latestSameDeptVisit?.iopCorrOD || '';
+    visit.iopCorrOS = document.getElementById('iop-corr-os')?.textContent?.trim() || latestSameDeptVisit?.iopCorrOS || '';
     visit.rfODsph  = document.getElementById('rf-od-sph2')?.value || '';
     visit.rfODcyl  = document.getElementById('rf-od-cyl2')?.value || '';
     visit.rfODax   = document.getElementById('rf-od-ax2')?.value  || '';
@@ -20759,7 +20853,7 @@ function saveVisit(dept, opts) {
     visit.rx = JSON.parse(JSON.stringify(RX_DRUGS || []));
   }
   if(typeof fbSet !== 'function') { showToast('Save not available (offline)', 'w'); return; }
-  const patientPatch = { lastVisit: visit, lastVisitKey: visitKey, lastVisitDate: visit.date, lastDeptVisit: dept, doctor: visit.doctor };
+  const patientPatch = { lastVisit: visit, lastVisitKey: visitKey, lastVisitDate: visit.date, lastDeptVisit: dept };
   if (visit.dx) patientPatch.dx = visit.dx;
   if (visit.slChips) visit.slChips = sanitizeSlChipsMap(visit.slChips);
   const visitForCloud = sanitizeFirebaseValue(visit);
@@ -20770,7 +20864,6 @@ function saveVisit(dept, opts) {
     localPt.lastVisitKey = visitKey;
     localPt.lastVisitDate = visit.date;
     localPt.lastDeptVisit = dept;
-    localPt.doctor = visit.doctor;
     if (visit.dx) localPt.dx = visit.dx;
     cachedVisits[visitKey] = JSON.parse(JSON.stringify(visit));
     cachePatientVisits(bmhId, cachedVisits);
