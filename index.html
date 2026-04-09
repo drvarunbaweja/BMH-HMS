@@ -299,6 +299,7 @@
     <div class="card-hd" style="flex-wrap:wrap;gap:10px;align-items:flex-start">
       <div><div class="card-title" id="dq-title">Dr. Varun Baweja — My Patients</div><div class="card-sub"><span class="live-dot"></span>Click any patient to open case sheet instantly</div></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto">
+        <button type="button" id="dq-approvals-pill" class="btn btn-outline btn-xs" style="display:none;animation:pulse 1.4s infinite;border-color:rgba(255,59,48,.5);color:#c0392b;font-weight:900" onclick="nav('settings',null);setTimeout(function(){var t=document.getElementById('set-approvals-tab'); if(t) t.click();},180)">🗑 0 approvals</button>
         <button type="button" class="btn btn-outline btn-xs" onclick="toggleQueueSidebarCollapse(true)">☰ Expand Menu</button>
         <button type="button" class="btn btn-gold btn-xs" onclick="openM('m-np')">+ Add Patient</button>
         <button type="button" class="btn btn-outline btn-xs" onclick="nav('ophtho',null)">👁️ Eye Exam</button>
@@ -3179,26 +3180,33 @@
         <div class="ptab active" onclick="ptab(this,'inv-in')">📥 Stock In</div>
         <div class="ptab" onclick="ptab(this,'inv-use')">💊 Patient Usage</div>
         <div class="ptab" onclick="ptab(this,'inv-stock')">📋 Current Stock</div>
+        <div class="ptab" onclick="ptab(this,'inv-expiry')">⏳ Expiry Check</div>
+        <div class="ptab" onclick="ptab(this,'inv-stores')">🏬 Stores & Transfers</div>
+        <div class="ptab" onclick="ptab(this,'inv-indent')">📝 Indents</div>
         <div class="ptab" onclick="ptab(this,'inv-vendor')">🏪 Vendors</div>
         <div class="ptab" onclick="ptab(this,'inv-ocr')">📷 Photo / OCR</div>
       </div>
       <div class="tab-content active" id="inv-in">
         <div style="background:var(--blue-lt);border-radius:10px;padding:10px;margin-bottom:12px">
           <div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Purchase Intake</div>
-          <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:8px;margin-bottom:8px">
+          <div style="display:grid;grid-template-columns:1.1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px">
             <div class="form-group" style="margin:0"><label class="fl">Department</label><select id="inv-in-dept"><option value="ophtho">Ophthalmology</option><option value="obg">OBG</option><option value="psych">Psychiatry</option><option value="skin">Skin</option><option value="general">General / Shared</option><option value="ot">OT / Procedure</option><option value="ipd">IPD / Ward</option></select></div>
+            <div class="form-group" style="margin:0"><label class="fl">Category</label><select id="inv-in-cat"></select></div>
             <div class="form-group" style="margin:0"><label class="fl">Vendor</label><input type="text" id="inv-in-vendor" placeholder="Vendor / supplier"></div>
             <div class="form-group" style="margin:0"><label class="fl">Invoice No.</label><input type="text" id="inv-in-invoice" placeholder="Bill / GRN"></div>
           </div>
-          <div style="display:grid;grid-template-columns:1.4fr 110px 110px 110px 120px;gap:8px">
+          <div style="display:grid;grid-template-columns:1.5fr 1fr 100px 100px 100px 115px 115px;gap:8px">
             <div class="form-group" style="margin:0"><label class="fl">Item name / barcode</label><input type="text" id="bc-in" placeholder="Enter barcode or item name…"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Store / location</label><select id="inv-in-store"></select></div>
             <div class="form-group" style="margin:0"><label class="fl">Qty</label><input type="number" id="inv-in-qty" min="1" value="1"></div>
             <div class="form-group" style="margin:0"><label class="fl">Cost ₹</label><input type="number" id="inv-in-cost" min="0" value="0"></div>
             <div class="form-group" style="margin:0"><label class="fl">MRP ₹</label><input type="number" id="inv-in-mrp" min="0" value="0"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Min Qty</label><input type="number" id="inv-in-min" min="0" value="5"></div>
             <div class="form-group" style="margin:0"><label class="fl">Expiry</label><input type="text" id="inv-in-exp" placeholder="MM/YYYY"></div>
           </div>
           <div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin-top:8px">
             <div class="form-group" style="margin:0;min-width:220px;flex:1"><label class="fl">Vendor bill upload</label><input type="file" id="inv-in-bill-file" accept="image/*,.pdf"></div>
+            <div class="form-group" style="margin:0;min-width:220px"><label class="fl">Vendor billing</label><select id="inv-in-bill-mode"><option value="monthly">Monthly bill (clear in 1 month)</option><option value="on-use">Bill only when used (IOL / consignment)</option></select></div>
             <button class="btn btn-blue btn-sm" onclick="processBC('in',document.getElementById('bc-in').value)">Add stock →</button>
           </div>
         </div>
@@ -3232,11 +3240,106 @@
           <div id="inv-usage-log"></div>
         </div>
       </div>
-      <div class="tab-content" id="inv-stock"><div id="inv-stock-list"></div></div>
+      <div class="tab-content" id="inv-stock">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+          <div class="form-group" style="margin:0"><label class="fl">Filter by category</label><select id="inv-stock-cat-filter" onchange="renderStockList()"></select></div>
+          <div class="form-group" style="margin:0"><label class="fl">Filter by store</label><select id="inv-stock-store-filter" onchange="renderStockList()"></select></div>
+        </div>
+        <div id="inv-stock-list"></div>
+      </div>
+      <div class="tab-content" id="inv-expiry">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px">
+          <button type="button" class="btn btn-outline btn-sm" onclick="renderInventoryExpiryCheck(1)">Within 1 month</button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="renderInventoryExpiryCheck(2)">Within 2 months</button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="renderInventoryExpiryCheck(3)">Within 3 months</button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="renderInventoryExpiryCheck(6)">Within 6 months</button>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px">
+          <div style="background:var(--red-lt);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:#a52a2a;font-weight:800">1 Month</div><div style="font-size:18px;font-weight:900;color:#a52a2a" id="inv-expiry-1m">0</div></div>
+          <div style="background:var(--orange-lt);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:#b55a00;font-weight:800">2 Months</div><div style="font-size:18px;font-weight:900;color:#b55a00" id="inv-expiry-2m">0</div></div>
+          <div style="background:#fff3d8;border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:#8a6d00;font-weight:800">3 Months</div><div style="font-size:18px;font-weight:900;color:#8a6d00" id="inv-expiry-3m">0</div></div>
+          <div style="background:var(--blue-lt);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:var(--bmh-blue);font-weight:800">6 Months</div><div style="font-size:18px;font-weight:900;color:var(--bmh-blue)" id="inv-expiry-6m">0</div></div>
+        </div>
+        <div id="inv-expiry-list"></div>
+      </div>
+      <div class="tab-content" id="inv-stores">
+        <div style="background:var(--g6);border-radius:10px;padding:12px;margin-bottom:12px">
+          <div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Transfer stock between stores</div>
+          <div style="display:grid;grid-template-columns:1.2fr 1.2fr 1.5fr 100px 1fr;gap:8px;align-items:end">
+            <div class="form-group" style="margin:0"><label class="fl">From store</label><select id="inv-tr-from"></select></div>
+            <div class="form-group" style="margin:0"><label class="fl">To store</label><select id="inv-tr-to"></select></div>
+            <div class="form-group" style="margin:0"><label class="fl">Item / barcode</label><input type="text" id="inv-tr-item" placeholder="Type item name or barcode"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Qty</label><input type="number" id="inv-tr-qty" min="1" value="1"></div>
+            <button class="btn btn-blue btn-sm" onclick="saveInventoryTransfer()">Transfer</button>
+          </div>
+        </div>
+        <div style="background:#fff7ec;border-radius:10px;padding:12px;margin-bottom:12px;border:1px solid rgba(255,149,0,.18)">
+          <div style="font-size:11px;font-weight:900;color:#b55a00;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Return stock to vendor</div>
+          <div style="display:grid;grid-template-columns:1.2fr 1.5fr 100px 1fr 1fr;gap:8px;align-items:end">
+            <div class="form-group" style="margin:0"><label class="fl">From store</label><select id="inv-ret-store"></select></div>
+            <div class="form-group" style="margin:0"><label class="fl">Item / barcode</label><input type="text" id="inv-ret-item" placeholder="Type item name or barcode"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Qty</label><input type="number" id="inv-ret-qty" min="1" value="1"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Vendor</label><input type="text" id="inv-ret-vendor" placeholder="Optional override"></div>
+            <button class="btn btn-orange btn-sm" onclick="saveInventoryReturn()">Return to vendor</button>
+          </div>
+          <div class="form-group" style="margin:8px 0 0"><label class="fl">Reason</label><input type="text" id="inv-ret-reason" placeholder="Damaged / expired / wrong supply / excess stock"></div>
+        </div>
+        <div class="card" style="margin-bottom:12px">
+          <div class="card-hd"><div><div class="card-title">Low-stock purchase orders</div><div class="card-sub">Items at or below minimum quantity pulse here for printing</div></div><button type="button" class="btn btn-outline btn-sm" onclick="bmhPrintPurchaseOrder()">🖨️ Print PO</button></div>
+          <div id="inv-po-alerts"></div>
+        </div>
+        <div class="card"><div class="card-hd"><div class="card-title">Store stock snapshot</div></div><div id="inv-store-stock"></div></div>
+      </div>
+      <div class="tab-content" id="inv-indent">
+        <div style="background:var(--g6);border-radius:10px;padding:12px;margin-bottom:12px">
+          <div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Raise indent</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1.3fr 90px 1fr 1fr;gap:8px;align-items:end">
+            <div class="form-group" style="margin:0"><label class="fl">Requesting store</label><select id="inv-indent-store"></select></div>
+            <div class="form-group" style="margin:0"><label class="fl">Required from</label><select id="inv-indent-source"></select></div>
+            <div class="form-group" style="margin:0"><label class="fl">Item needed</label><input type="text" id="inv-indent-item" placeholder="Item name / barcode"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Qty</label><input type="number" id="inv-indent-qty" min="1" value="1"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Urgency</label><select id="inv-indent-urgency"><option value="routine">Routine</option><option value="priority">Priority</option><option value="urgent">Urgent</option></select></div>
+            <button class="btn btn-orange btn-sm" onclick="saveInventoryIndent()">Submit indent</button>
+          </div>
+          <div class="form-group" style="margin-top:8px"><label class="fl">Notes</label><input type="text" id="inv-indent-notes" placeholder="Reason / case details / staff note"></div>
+        </div>
+        <div class="card"><div class="card-hd"><div class="card-title">Open indents</div></div><div id="inv-indent-list"></div></div>
+      </div>
       <div class="tab-content" id="inv-vendor">
-        <div style="font-size:12px;color:var(--g1);margin-bottom:10px">Vendor invoices added here also appear under <strong>Billing → Vendors &amp; expenses</strong> with pending dues.</div>
-        <div id="inv-vendor-mini" style="font-size:12px"></div>
-        <button type="button" class="btn btn-outline btn-sm" style="margin-top:10px" onclick="nav('billing',null);setTimeout(function(){var t=document.querySelector('#pg-billing .ptab:nth-child(2)');if(t)t.click();},200)">Open full vendor screen →</button>
+        <div class="card" style="margin-bottom:12px">
+          <div class="card-hd"><div><div class="card-title">Vendor outstanding summary</div><div class="card-sub">Cheque / bank-transfer clearances reduce the oldest outstanding bills first</div></div></div>
+          <div id="inv-vendor-summary"></div>
+        </div>
+        <div class="g32" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="card">
+            <div class="card-hd"><div class="card-title">Vendor bills</div></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+                <div class="form-group"><label class="fl">Vendor</label><input type="text" id="inv-vend-name" placeholder="Supplier name"></div>
+                <div class="form-group"><label class="fl">Invoice no.</label><input type="text" id="inv-vend-inv" placeholder="Invoice #"></div>
+                <div class="form-group"><label class="fl">Amount ₹</label><input type="number" id="inv-vend-amt" placeholder="0"></div>
+                <div class="form-group"><label class="fl">Due date</label><input type="date" id="inv-vend-due"></div>
+              </div>
+            <div class="form-group"><label class="fl">Upload scan / PDF</label><input type="file" id="inv-vend-file" accept="image/*,.pdf"></div>
+            <button type="button" class="btn btn-blue btn-sm" onclick="bmhAddVendorBill()">+ Add vendor bill</button>
+            <div id="inv-vendor-table" style="margin-top:12px;font-size:12px"></div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div class="card">
+              <div class="card-hd"><div class="card-title">Expenses</div></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                <div class="form-group"><label class="fl">Description</label><input type="text" id="inv-exp-desc" placeholder="e.g. Stationery"></div>
+                <div class="form-group"><label class="fl">Amount ₹</label><input type="number" id="inv-exp-amt"></div>
+                <div class="form-group" style="grid-column:1/-1"><label class="fl">Category</label><input type="text" id="inv-exp-cat" placeholder="Admin / OT / Marketing"></div>
+              </div>
+              <button type="button" class="btn btn-orange btn-sm" onclick="bmhAddExpense()">+ Post expense</button>
+              <div id="inv-exp-list" style="margin-top:12px;font-size:12px"></div>
+            </div>
+            <div class="card">
+              <div class="card-hd"><div class="card-title">Day book / ledger</div><button type="button" class="btn btn-outline btn-sm" onclick="bmhExportLedgerCsv()">Export CSV</button></div>
+              <div style="overflow-x:auto"><table class="rc-queue-table" style="min-width:720px"><thead><tr><th>Date</th><th>Type</th><th>Narration</th><th>Party</th><th style="text-align:right">Debit ₹</th><th style="text-align:right">Credit ₹</th><th>Ref</th></tr></thead><tbody id="inv-ledger-body"></tbody></table></div>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="tab-content" id="inv-ocr">
         <div style="background:var(--g6);border-radius:8px;padding:10px;margin-bottom:10px;font-size:12px;color:var(--tx3)">Take a photo of a label or invoice. Paste extracted text below (use your phone OCR or Google Lens), then split into lines to add stock or patient items.</div>
@@ -3252,10 +3355,11 @@
     <div class="card"><div class="card-hd"><div><div class="card-title">Auto-Billing Log</div><div class="card-sub">Items billed with MRP + time → patient bill + inventory deduction</div></div></div><div id="auto-bill-log"><div style="padding:14px;text-align:center;color:var(--g1);font-size:12px">No items billed yet</div></div></div>
     <div class="card"><div class="card-hd"><div class="card-title">Inventory Stats</div></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
-        <div style="background:var(--green-lt);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:#1a8c3c;font-weight:800">Total Items</div><div style="font-size:18px;font-weight:900;color:#1a8c3c">284</div></div>
+        <div style="background:var(--green-lt);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:#1a8c3c;font-weight:800">Total Items</div><div style="font-size:18px;font-weight:900;color:#1a8c3c" id="inv-total-items">0</div></div>
         <div style="background:var(--orange-lt);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:#b55a00;font-weight:800">Low Stock</div><div style="font-size:18px;font-weight:900;color:#b55a00" id="inv-low-cnt">4</div></div>
       </div>
     </div>
+    <div class="card"><div class="card-hd"><div class="card-title">Recent transfers</div></div><div id="inv-transfer-log"><div style="padding:12px;color:var(--g1);font-size:12px">No transfers yet.</div></div></div>
   </div>
 </div>
 </div>
