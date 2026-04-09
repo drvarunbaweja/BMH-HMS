@@ -10204,6 +10204,19 @@ function toggleInvestigation(el, name, price) {
   else if(!cb.checked && idx>-1) SELECTED_INVESTIGATIONS.splice(idx,1);
   syncSelectedInvestigationCheckboxes();
 }
+function removePendingInvestigationPayRequestsForPatient(bmhId, orderNames) {
+  const names = new Set((orderNames || []).map(function (x) { return String(x || '').trim(); }).filter(Boolean));
+  (PAY_REQUESTS || []).slice().forEach(function (pr) {
+    if (!pr || pr.status !== 'pending') return;
+    if (pr.bmhId !== bmhId) return;
+    const isInvestigationRequest = !!pr.linkedInvestigationOrderId || /oct|hvf|biometry|fundus|topography|specular|scan|cbc|blood|test|profile|urine|ecg|investigation|thyroid|hba1c|rbs/i.test(String(pr.for || pr.service || pr.desc || ''));
+    if (!isInvestigationRequest) return;
+    if (names.size && !names.has(String(pr.for || '').trim())) return;
+    const idx = PAY_REQUESTS.indexOf(pr);
+    if (idx > -1) PAY_REQUESTS.splice(idx, 1);
+    try { if (window.firebase && firebase.database) firebase.database().ref('payRequests/' + pr.id).remove(); } catch (e) {}
+  });
+}
 function confirmInvestigations() {
   if(!SELECTED_INVESTIGATIONS.length){showToast('No investigations selected','w');return;}
   const pt = window.CURRENT_PATIENT || PATIENTS.find(p => p.bmhId === (document.getElementById('ophtho-pt-uid')?.textContent || '').trim());
@@ -10230,22 +10243,11 @@ function confirmInvestigations() {
       orderedBy: doctor
     };
     orders.push(order);
-    PAY_REQUESTS.push({
-      id:'PR'+Date.now()+Math.random(),
-      patient:pt.name,
-      bmhId:pt.bmhId,
-      for:inv.name,
-      amount:Number(inv.price)||0,
-      status:'pending',
-      from:doctor,
-      dept:order.dept,
-      centre,
-      date:new Date().toISOString()
-    });
   });
+  removePendingInvestigationPayRequestsForPatient(pt.bmhId, SELECTED_INVESTIGATIONS.map(function (x) { return x.name; }));
   syncCurrentPatientInvestigationOrders();
   persistCurrentPatientInvestigationOrders();
-  showToast(`🧪 ${SELECTED_INVESTIGATIONS.length} investigation(s) ordered & sent to reception ✓`,'s');
+  showToast(`🧪 ${SELECTED_INVESTIGATIONS.length} investigation(s) sent to lab ✓`,'s');
   closeM('m-order-invest');
   clearSelectedInvestigations();
   renderOeInvOrderedList && renderOeInvOrderedList();
@@ -13930,14 +13932,8 @@ function addInvestigationOrder(mode) {
   renderInvestigationOrders();
   document.getElementById('add-inv-name').value = '';
   document.getElementById('add-inv-notes').value = '';
-  if(orderMode === 'send') {
-    const centre = pt.centre || CURRENT_USER?.centre || 'CHD';
-    const deptKey = normalizeDeptKeyForQueue(pt.dept || 'ophtho') || 'ophtho';
-    const pr = {id:'PR'+Date.now(), patient:pt.name, bmhId:pt.bmhId, for:name, amount:lookupChargeAmountFromSettings(deptKey, name), status:'pending', from:document.getElementById('sbnm')?.textContent||'Doctor', dept:pt.dept||'ophtho', centre, linkedInvestigationOrderId: orderId};
-    PAY_REQUESTS.push(pr);
-    try { fbSet && fbSet('payRequests/' + pr.id, pr); } catch (e) {}
-  }
-  showToast(orderMode === 'send' ? `🧪 ${name} advised and sent ✓` : `🧪 ${name} advised ✓`, 's');
+  if(orderMode === 'send') removePendingInvestigationPayRequestsForPatient(pt.bmhId, [name]);
+  showToast(orderMode === 'send' ? `🧪 ${name} sent to lab ✓` : `🧪 ${name} advised ✓`, 's');
   renderOeInvOrderedList && renderOeInvOrderedList();
 }
 function cancelInvestigationReceptionRequest(orderId) {
@@ -13968,7 +13964,7 @@ function renderOeInvOrderedList() {
   if(!pending.length) { el.innerHTML = '<span style="color:var(--g1);font-style:italic">None ordered</span>'; return; }
   el.innerHTML = pending.map((o,i) => `<div style="display:inline-flex;align-items:center;gap:5px;background:var(--orange-lt);color:#8a4200;border:1px solid rgba(212,160,23,.5);border-radius:20px;padding:2px 10px;font-size:11px;font-weight:700;margin:2px 4px 2px 0">
     🧪 ${o.name}${o.notes?' ('+o.notes+')':''}
-    <span style="font-size:9px;padding:1px 6px;border-radius:10px;background:${o.mode==='send'?'rgba(26,60,110,.12)':'rgba(26,140,60,.12)'};color:${o.mode==='send'?'var(--blue)':'#1a8c3c'}">${o.mode==='send'?'Sent to reception':'Advice only'}</span>
+    <span style="font-size:9px;padding:1px 6px;border-radius:10px;background:${o.mode==='send'?'rgba(11,123,140,.12)':'rgba(26,140,60,.12)'};color:${o.mode==='send'?'var(--teal)':'#1a8c3c'}">${o.mode==='send'?'Sent to lab':'Advice only'}</span>
     <span onclick="cancelInvestigationReceptionRequest(${JSON.stringify(o.id)})" style="cursor:pointer;opacity:.6;font-size:12px">&times;</span>
   </div>`).join('');
 }
@@ -13978,7 +13974,7 @@ function renderInvestigationOrders() {
   el.innerHTML = orders.map((o,i) => `<div style="display:flex;align-items:center;gap:7px;padding:6px 8px;background:${o.done?'var(--green-lt)':'var(--orange-lt)'};border-radius:7px;margin-top:5px;font-size:12px">
     <span style="font-size:14px">${o.done?'✅':'🧪'}</span>
     <div style="flex:1"><div style="font-weight:700">${o.name}</div>${o.notes?`<div style="font-size:10.5px;color:var(--g1)">${o.notes}</div>`:''}
-    <div style="font-size:9.5px;color:var(--g1)">${o.date} · ${o.mode === 'send' ? 'Sent to reception' : 'Advice only'}</div></div>
+    <div style="font-size:9.5px;color:var(--g1)">${o.date} · ${o.mode === 'send' ? 'Sent to lab' : 'Advice only'}</div></div>
     <button class="btn btn-xs ${o.done?'btn-gray':'btn-green'}" onclick="getCurrentPatientInvestigationOrders()[${i}].done=!getCurrentPatientInvestigationOrders()[${i}].done;syncCurrentPatientInvestigationOrders();persistCurrentPatientInvestigationOrders();renderOeInvOrderedList();renderInvestigationOrders()">${o.done?'Undo':'Done ✓'}</button>
     <button class="btn btn-xs btn-gray" onclick="cancelInvestigationReceptionRequest(${JSON.stringify(o.id)})">&#x2715;</button>
   </div>`).join('');
