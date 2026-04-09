@@ -241,10 +241,35 @@ function addIolFromModal() {
   const mfr = document.getElementById('iol-add-mfr')?.value?.trim() || '';
   const price = parseInt(document.getElementById('iol-add-price')?.value || '0', 10) || 0;
   const bc = document.getElementById('iol-add-barcode')?.value?.trim() || '';
+  const batch = document.getElementById('iol-add-batch')?.value?.trim() || '';
+  const serial = document.getElementById('iol-add-serial')?.value?.trim() || '';
   if (!name) { showToast('Enter lens name / power', 'w'); return; }
-  IOL_CATALOG.push({ name, type, mfr, price, barcode: bc });
-  if (!INVENTORY.find(function (item) { return String(item.name || '').toLowerCase() === String(name).toLowerCase(); })) {
-    const invRow = { name, barcode: bc || ('IOL-' + Date.now()), cat: 'IOL', mrp: price || 0, cost: price || 0, stock: 0, min: 1, exp: '', dept: 'ophtho', vendor: mfr || '' };
+  const power = extractIolPower(name);
+  IOL_CATALOG.push({ name, type, mfr, price, barcode: bc, batchNo: batch, serialNo: serial, power: power || '' });
+  const canCreateUniqueInventoryRow = serial || batch || bc || power;
+  const hasSameInventoryRow = INVENTORY.find(function (item) {
+    if (serial && String(item.serialNo || '').trim() && String(item.serialNo || '').trim().toLowerCase() === serial.toLowerCase()) return true;
+    if (bc && String(item.barcode || '').trim() && String(item.barcode || '').trim().toLowerCase() === bc.toLowerCase()) return true;
+    return !canCreateUniqueInventoryRow && String(item.name || '').toLowerCase() === String(name).toLowerCase();
+  });
+  if (!hasSameInventoryRow) {
+    const invRow = {
+      name,
+      barcode: bc || serial || ('IOL-' + Date.now()),
+      cat: 'IOL',
+      mrp: price || 0,
+      cost: price || 0,
+      stock: (serial || batch || bc || power) ? 1 : 0,
+      min: 1,
+      exp: '',
+      dept: 'ophtho',
+      vendor: mfr || '',
+      vendorBillingMode: 'on-use',
+      store: 'Eye OT',
+      batchNo: batch,
+      serialNo: serial,
+      power: power || ''
+    };
     INVENTORY.push(invRow);
     BCMAP[invRow.barcode] = invRow;
     BCMAP[String(invRow.name).toLowerCase().substring(0, 15)] = invRow;
@@ -255,7 +280,7 @@ function addIolFromModal() {
   renderIolCatalogList();
   populateOTIolOptions && populateOTIolOptions();
   closeM('m-add-iol');
-  ['iol-add-name','iol-add-type','iol-add-mfr','iol-add-price','iol-add-barcode'].forEach(function (id) {
+  ['iol-add-name','iol-add-type','iol-add-mfr','iol-add-price','iol-add-barcode','iol-add-batch','iol-add-serial'].forEach(function (id) {
     const n = document.getElementById(id); if (n) n.value = '';
   });
   showToast('IOL added to catalogue ✓', 's');
@@ -583,7 +608,7 @@ function populateOTIolOptions(selectedName, selectedPower) {
     return '<option value="' + String(row.name).replace(/"/g, '&quot;') + '"' + (selectedName === row.name ? ' selected' : '') + '>' + String(row.name).replace(/</g, '&lt;') + (meta ? ' — ' + meta.replace(/</g, '&lt;') : '') + '</option>';
   })).join('');
   const defaultPowers = [];
-  for (let i = 0; i <= 300; i += 5) defaultPowers.push('+' + (i / 10).toFixed(2) + 'D');
+  for (let i = 30; i <= 300; i += 5) defaultPowers.push('+' + (i / 10).toFixed(2) + 'D');
   const powerOptions = ['— Select power —'].concat(Array.from(new Set(defaultPowers.concat(choices.map(function (row) { return row.power; }).filter(Boolean)))).sort(function (a, b) {
     return parseFloat(a) - parseFloat(b);
   }));
@@ -6223,7 +6248,122 @@ function loadInventoryStockFromStorage() {
   } catch (e) { /* noop */ }
 }
 function saveInventoryStockToStorage() {
-  try { localStorage.setItem('bmh_inventory_stock', JSON.stringify(INVENTORY.map(i => ({ barcode: i.barcode, stock: i.stock, name: i.name, cat: i.cat, mrp: i.mrp, exp: i.exp, dept: i.dept, vendor: i.vendor, cost: i.cost, qr: i.qr, store: i.store, min: i.min, billMode: i.billMode, vendorBillingMode: i.vendorBillingMode } )))); } catch (e) { /* noop */ }
+  try { localStorage.setItem('bmh_inventory_stock', JSON.stringify(INVENTORY.map(i => ({ barcode: i.barcode, stock: i.stock, name: i.name, cat: i.cat, mrp: i.mrp, exp: i.exp, dept: i.dept, vendor: i.vendor, cost: i.cost, qr: i.qr, store: i.store, min: i.min, billMode: i.billMode, vendorBillingMode: i.vendorBillingMode, serialNo: i.serialNo, batchNo: i.batchNo, power: i.power } )))); } catch (e) { /* noop */ }
+}
+function normalizeIolPowerValue(power) {
+  const raw = String(power || '').trim();
+  if (!raw) return '';
+  const m = raw.match(/([+-]?\d+(?:\.\d+)?)/);
+  if (!m) return raw;
+  const num = Number(m[1]);
+  if (!isFinite(num)) return raw;
+  return (num >= 0 ? '+' : '') + num.toFixed(2) + 'D';
+}
+function normalizeIolModelStem(text) {
+  return String(text || '')
+    .replace(/[+-]?\d+(?:\.\d+)?\s*D\b/ig, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+function describeIolInventoryItem(item) {
+  const bits = [
+    item.serialNo ? ('Serial ' + item.serialNo) : '',
+    item.batchNo ? ('Batch ' + item.batchNo) : '',
+    item.barcode ? ('Code ' + item.barcode) : ''
+  ].filter(Boolean);
+  return [item.name, bits.join(' · ')].filter(Boolean).join(' — ');
+}
+function chooseIolInventoryItem(matches, desiredPower) {
+  if (!matches.length) return null;
+  if (matches.length === 1) return matches[0];
+  const lines = matches.slice(0, 9).map(function (item, idx) {
+    return (idx + 1) + '. ' + describeIolInventoryItem(item);
+  });
+  const choice = window.prompt('More than one IOL is in stock for power ' + (desiredPower || 'selected power') + '. Enter the serial option number used:\n\n' + lines.join('\n'), '1');
+  if (choice == null) return false;
+  const idx = Math.max(1, parseInt(choice, 10) || 0) - 1;
+  return matches[idx] || null;
+}
+function consumeIolForOtCase(otCase) {
+  const c = otCase || {};
+  if (!c || c.iolInventoryConsumed || c.status !== 'completed') return { changed: false };
+  const chosenPower = normalizeIolPowerValue(c.iolPower || extractIolPower(c.iol || c.iolType || ''));
+  const rawPower = String(c.iolPower || '').trim();
+  if (rawPower.includes('/') || rawPower.includes(',')) return { changed: false };
+  const modelStem = normalizeIolModelStem(c.iolType || c.iol || '');
+  let matches = (INVENTORY || []).filter(function (item) {
+    if ((Number(item.stock) || 0) <= 0) return false;
+    if (!/iol/i.test(String(item.cat || '') + ' ' + String(item.name || ''))) return false;
+    const itemPower = normalizeIolPowerValue(item.power || extractIolPower(item.name || ''));
+    if (chosenPower && itemPower && itemPower !== chosenPower) return false;
+    if (modelStem) {
+      const itemStem = normalizeIolModelStem(item.name || '');
+      return !itemStem || itemStem.includes(modelStem) || modelStem.includes(itemStem);
+    }
+    return true;
+  });
+  if (!matches.length && chosenPower) {
+    matches = (INVENTORY || []).filter(function (item) {
+      return (Number(item.stock) || 0) > 0
+        && /iol/i.test(String(item.cat || '') + ' ' + String(item.name || ''))
+        && normalizeIolPowerValue(item.power || extractIolPower(item.name || '')) === chosenPower;
+    });
+  }
+  if (!matches.length) {
+    return {
+      changed: false,
+      pending: true,
+      reason: 'No matching IOL stock found for ' + (chosenPower || 'selected lens')
+    };
+  }
+  const chosen = chooseIolInventoryItem(matches, chosenPower);
+  if (chosen === false) {
+    return {
+      changed: false,
+      pending: true,
+      cancelled: true,
+      reason: 'IOL stock selection skipped for now'
+    };
+  }
+  if (!chosen) {
+    return {
+      changed: false,
+      pending: true,
+      cancelled: true,
+      reason: 'Valid IOL serial not selected'
+    };
+  }
+  bmhUseInventoryItemForPatient(c.bmhId, chosen, { qty: 1, mode: 'consume', dept: 'ophtho' });
+  c.iolInventoryConsumed = true;
+  c.iolInventoryPending = false;
+  c.iolInventoryBarcode = chosen.barcode || '';
+  c.iolSerial = chosen.serialNo || '';
+  c.iolBatch = chosen.batchNo || '';
+  c.iolPower = c.iolPower || chosen.power || extractIolPower(chosen.name || '');
+  const patient = PATIENTS.find(function (p) { return p.bmhId === c.bmhId; });
+  const usageRef = {
+    itemName: chosen.name,
+    barcode: chosen.barcode || '',
+    serialNo: chosen.serialNo || '',
+    batchNo: chosen.batchNo || '',
+    power: c.iolPower || '',
+    usedAt: bmhNowISO(),
+    vendor: chosen.vendor || ''
+  };
+  if (patient) patient.lastIolUsage = usageRef;
+  fbUpdate && fbUpdate('patients/' + c.bmhId, { lastIolUsage: usageRef }).catch(function(){});
+  return {
+    changed: true,
+    updates: {
+      iolInventoryConsumed: true,
+      iolInventoryPending: false,
+      iolInventoryBarcode: c.iolInventoryBarcode,
+      iolSerial: c.iolSerial,
+      iolBatch: c.iolBatch,
+      iolPower: c.iolPower
+    }
+  };
 }
 function bmhNowISO() { return new Date().toISOString(); }
 function bmhDeptLabel(k) {
@@ -7338,6 +7478,8 @@ function bmhUseInventoryItemForPatient(bmhId, item, opts) {
       itemName: item.name,
       barcode: item.barcode,
       power: String(item.name || '').match(/[+-]?\d+(\.\d+)?D/i)?.[0] || '',
+      serialNo: item.serialNo || '',
+      batchNo: item.batchNo || '',
       usedAt: bmhNowISO(),
       vendor: item.vendor || ''
     };
@@ -7701,7 +7843,7 @@ function renderStockList() {
       <div style="flex:1;min-width:0">
         <div style="font-size:12px;font-weight:800">${i.name}</div>
         <div style="font-family:var(--mono);font-size:9px;color:var(--g1)">${i.barcode} · ${i.cat} · ${bmhDeptLabel(i.dept || 'general')} · ${bmhFormatStoreLabel(i.store)} · Exp:${i.exp || '—'}</div>
-        <div style="font-size:10px;color:var(--g1);margin-top:2px">${i.vendor ? 'Vendor: ' + i.vendor + ' · ' : ''}${i.vendorBillingMode === 'on-use' ? 'Bill only when used' : 'Monthly vendor bill'}</div>
+        <div style="font-size:10px;color:var(--g1);margin-top:2px">${i.vendor ? 'Vendor: ' + i.vendor + ' · ' : ''}${i.serialNo ? 'Serial: ' + i.serialNo + ' · ' : ''}${i.batchNo ? 'Batch: ' + i.batchNo + ' · ' : ''}${(i.power || extractIolPower(i.name || '')) ? 'Power: ' + (i.power || extractIolPower(i.name || '')) + ' · ' : ''}${i.vendorBillingMode === 'on-use' ? 'Bill only when used' : 'Monthly vendor bill'}</div>
         <div class="sb-bar"><div class="sb-fill" style="width:${pct}%;background:${i.stock<=2?'var(--red)':i.stock<=i.min?'var(--orange)':'var(--green)'}"></div></div>
       </div>
       <div style="text-align:right;flex-shrink:0">
@@ -12831,12 +12973,20 @@ function updateOTStatus(id, status) {
   const c = OT_CASES.find(x=>x.id===id); if(!c) return;
   c.status = status;
   c.lastUpdated = new Date().toISOString();
+  let extraUpdates = {};
   if (status === 'completed') {
+    const consumeResult = consumeIolForOtCase(c);
+    if (consumeResult?.pending) {
+      c.iolInventoryPending = true;
+      extraUpdates.iolInventoryPending = true;
+      if (consumeResult.reason) showToast(consumeResult.reason, 'i');
+    }
+    if (consumeResult?.updates) extraUpdates = Object.assign(extraUpdates, consumeResult.updates);
     scheduleDefaultSurgeryFollowups(c);
   }
-  fbUpdate('otCases/' + id, { status, lastUpdated: c.lastUpdated }).catch(e => console.warn('OT status save error:', e));
+  fbUpdate('otCases/' + id, Object.assign({ status: c.status, lastUpdated: c.lastUpdated }, extraUpdates)).catch(e => console.warn('OT status save error:', e));
   renderOTList();
-  showToast(`${c.patient} — status updated to ${status} ✓`,'s');
+  showToast(`${c.patient} — status updated to ${c.status} ✓`,'s');
   if(activeOTCase?.id===id) openOTCase(id);
 }
 function formatFollowupDisplayDate(dateStr) {
