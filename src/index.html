@@ -22,8 +22,8 @@
     body.queue-sidebar-collapsed .sidebar .bmh-logo-row { justify-content:center; }
     body.queue-sidebar-collapsed .sidebar .sb-nav { padding-top:6px; }
     body.queue-sidebar-collapsed .sidebar .queue-expand-link { display:flex !important; }
-    .queue-expand-link { display:none; width:100%; justify-content:center; background:transparent !important; color:var(--bmh-blue) !important; border:none !important; box-shadow:none !important; }
-    .queue-expand-link .ni-ic { margin-right:0 !important; color:var(--bmh-blue) !important; background:transparent !important; }
+    .queue-expand-link { display:none; width:100%; justify-content:center; background:transparent !important; color:#fff !important; border:none !important; box-shadow:none !important; }
+    .queue-expand-link .ni-ic { margin-right:0 !important; color:#fff !important; background:transparent !important; }
     .dq-queue-main .rc-queue-table th,
     .dq-queue-main .rc-queue-table td { font-size:11.5px; }
     .dq-queue-main .rc-queue-table th { font-size:11px; }
@@ -195,22 +195,32 @@
         </div>
       </div>
       <div id="dash-admin-summary-blocks" class="sg4"></div>
+      <div class="g32" style="margin-top:14px">
+        <div class="card">
+          <div class="card-hd"><div><div class="card-title">Collection Analytics</div><div class="card-sub">Daily, weekly and monthly collections</div></div></div>
+          <div id="dash-admin-chart-collection" style="min-height:170px;padding:8px 4px"></div>
+        </div>
+        <div class="card">
+          <div class="card-hd"><div><div class="card-title">Surgery Analytics</div><div class="card-sub">Recent surgical volume by time period</div></div></div>
+          <div id="dash-admin-chart-surgery" style="min-height:170px;padding:8px 4px"></div>
+        </div>
+      </div>
     </div>
   </div>
 
   <!-- Clinical dashboard (doctors & similar roles) -->
   <div id="dash-view-clinical">
     <div class="sg4">
-      <div class="sc blue"><div class="sc-lbl">OPD today</div><div class="sc-val blue" id="db-cl-opd">0</div><div class="sc-icon">🩺</div></div>
-      <div class="sc gold"><div class="sc-lbl">IPD</div><div class="sc-val gold" id="db-cl-ipd">0</div><div class="sc-icon">🛏️</div></div>
-      <div class="sc blue"><div class="sc-lbl">Diagnostics (lines)</div><div class="sc-val blue" id="db-cl-diag">0</div><div class="sc-icon">🔬</div></div>
-      <div class="sc green"><div class="sc-lbl">Appointments</div><div class="sc-val green" id="db-apts">0</div><div class="sc-icon">📅</div></div>
+      <div class="sc blue"><div class="sc-lbl" id="db-cl-opd-lbl">OPD today</div><div class="sc-val blue" id="db-cl-opd">0</div><div class="sc-icon">🩺</div></div>
+      <div class="sc gold"><div class="sc-lbl" id="db-cl-ipd-lbl">New patients</div><div class="sc-val gold" id="db-cl-ipd">0</div><div class="sc-icon">🆕</div></div>
+      <div class="sc blue"><div class="sc-lbl" id="db-cl-diag-lbl">Old patients</div><div class="sc-val blue" id="db-cl-diag">0</div><div class="sc-icon">👥</div></div>
+      <div class="sc green"><div class="sc-lbl" id="db-apts-lbl">Diagnostics</div><div class="sc-val green" id="db-apts">0</div><div class="sc-icon">🔬</div></div>
     </div>
     <div class="sg4" style="margin-top:10px">
-      <div class="sc orange"><div class="sc-lbl">Checked in / active</div><div class="sc-val orange" id="db-cl-checked">0</div><div class="sc-icon">✅</div></div>
-      <div class="sc gold"><div class="sc-lbl">Collection today</div><div class="sc-val gold" id="db-cl-collection">₹0</div><div class="sc-icon">💰</div></div>
-      <div class="sc blue"><div class="sc-lbl">Pay pending</div><div class="sc-val blue" id="db-pending">₹0</div><div class="sc-icon">⏳</div></div>
-      <div class="sc gold"><div class="sc-lbl">Low stock</div><div class="sc-val gold" id="db-stock-dup">0</div><div class="sc-icon">📦</div></div>
+      <div class="sc orange"><div class="sc-lbl" id="db-cl-checked-lbl">Surgeries</div><div class="sc-val orange" id="db-cl-checked">0</div><div class="sc-icon">🏥</div></div>
+      <div class="sc gold"><div class="sc-lbl" id="db-cl-collection-lbl">Collection today</div><div class="sc-val gold" id="db-cl-collection">₹0</div><div class="sc-icon">💰</div></div>
+      <div class="sc blue"><div class="sc-lbl" id="db-pending-lbl">Surgery collection</div><div class="sc-val blue" id="db-pending">₹0</div><div class="sc-icon">🧾</div></div>
+      <div class="sc gold"><div class="sc-lbl" id="db-stock-dup-lbl">IPD</div><div class="sc-val gold" id="db-stock-dup">0</div><div class="sc-icon">🛏️</div></div>
     </div>
     <div class="g32" style="margin-top:14px">
       <div class="card"><div class="card-hd"><div><div class="card-title">Collection by payment mode (today)</div><div class="card-sub">Cash, UPI, card, etc.</div></div></div><div id="dash-cl-modes"></div></div>

@@ -1585,7 +1585,42 @@ function updateDepartmentRailVisibility(pageKey, activeTabId) {
 // ═══════════════════════════════════════
 // NAV
 // ═══════════════════════════════════════
-function nav(id, el) {
+function getCurrentAppNavState() {
+  const activePage = document.querySelector('.page.active')?.id?.replace(/^pg-/, '') || 'dashboard';
+  const activeTabOnclick = document.querySelector('#pg-' + activePage + ' .ptabs .ptab.active')?.getAttribute('onclick') || '';
+  const tabTokens = activeTabOnclick.match(/'([^']+)'/g);
+  const activeTab = tabTokens && tabTokens.length ? String(tabTokens[tabTokens.length - 1]).replace(/'/g, '') : '';
+  return { page: activePage, tab: activeTab || '', patientId: window.CURRENT_PATIENT?.bmhId || '' };
+}
+function pushAppNavState(replace) {
+  try {
+    const state = getCurrentAppNavState();
+    const hash = '#/' + state.page + (state.tab ? ('/' + state.tab) : '') + (state.patientId ? ('/' + state.patientId) : '');
+    (replace ? history.replaceState : history.pushState).call(history, state, '', hash);
+  } catch (e) {}
+}
+function restoreAppNavState(state) {
+  if (!state || window._appHistoryRestoring) return;
+  window._appHistoryRestoring = true;
+  try {
+    if (state.patientId && Array.isArray(window.PATIENTS) && window.PATIENTS.find(function (p) { return p.bmhId === state.patientId; })) {
+      openPatient(state.patientId, { silentHistory: true });
+    } else if (state.page) {
+      nav(state.page, null, { silentHistory: true });
+    }
+    if (state.tab) {
+      const pageRoot = document.getElementById('pg-' + (state.page || getCurrentAppNavState().page));
+      const tabEl = pageRoot ? Array.from(pageRoot.querySelectorAll('.ptabs .ptab')).find(function (tab) {
+        return String(tab.getAttribute('onclick') || '').includes("'" + state.tab + "'");
+      }) : null;
+      if (tabEl) ptab(tabEl, state.tab, { silentHistory: true });
+    }
+  } finally {
+    window._appHistoryRestoring = false;
+  }
+}
+function nav(id, el, opts) {
+  opts = opts || {};
   // Sidebar passes short ids ('reception'); app.js may pass full ids ('pg-reception').
   const pageKey = (typeof id === 'string' && id.startsWith('pg-')) ? id.slice(3) : id;
   // Show the correct page
@@ -1646,6 +1681,7 @@ function nav(id, el) {
     renderAISuggestedCharges && renderAISuggestedCharges();
   }
   updateDepartmentRailVisibility(pageKey);
+  if (!opts.silentHistory && !window._appHistoryRestoring) pushAppNavState(false);
 }
 
 // ═══════════════════════════════════════
@@ -2142,9 +2178,11 @@ function syncUcvaToRefraction(eye) {
 // ═══════════════════════════════════════
 // INTERACTIONS
 // ═══════════════════════════════════════
-function openPatient(bmhId) {
+function openPatient(bmhId, opts) {
+  opts = opts || {};
   const p = PATIENTS.find(x => x.bmhId === bmhId);
   if(!p) return;
+  window._suspendVisitAutosave = true;
 
   // ── Set global current patient for printOphthoSheet etc. ───────
   window.CURRENT_PATIENT = p;
@@ -2247,21 +2285,22 @@ function openPatient(bmhId) {
   populateObgPatientFromCurrent && populateObgPatientFromCurrent();
 
   // ── 4. Navigate to dept ────────────────────────────────────────
-  const deptPage = { ophtho:'ophtho', obg:'obg', psych:'psych', skin:'skin' }[p.dept] || 'ophtho';
-  nav(deptPage, null);
-  if (p.dept === 'ophtho') {
+  const targetDept = normalizeDeptKeyForQueue(opts.deptOverride || p.dept || '') || p.dept;
+  const deptPage = { ophtho:'ophtho', obg:'obg', psych:'psych', skin:'skin' }[targetDept] || 'ophtho';
+  nav(deptPage, null, { silentHistory: true });
+  if (deptPage === 'ophtho') {
     const historyTab = Array.from(document.querySelectorAll('#pg-ophtho .ptab')).find(function (el) { return el.textContent.includes('History'); });
-    if (historyTab) ptab(historyTab, 'oe-hx');
+    if (historyTab) ptab(historyTab, 'oe-hx', { silentHistory: true });
     window.scrollTo(0, 0);
   }
 
-  if(p.dept === 'ophtho' && p.lastVisit && typeof p.lastVisit === 'object') {
+  if(deptPage === 'ophtho' && p.lastVisit && typeof p.lastVisit === 'object') {
     populateOphthoForm(p.lastVisit);
-  } else if(p.dept === 'obg') {
+  } else if(deptPage === 'obg') {
     populateObgForm && populateObgForm(p.lastVisit || {});
-  } else if(p.dept === 'psych') {
+  } else if(deptPage === 'psych') {
     populatePsychForm && populatePsychForm(p.lastVisit || {});
-  } else if(p.dept === 'skin') {
+  } else if(deptPage === 'skin') {
     populateSkinForm && populateSkinForm(p.lastVisit || {});
   }
 
@@ -2379,6 +2418,11 @@ function rcToggleConsentSection(bmhId) {
       if (inp) inp.focus();
     }, 50);
   }
+  setTimeout(function () { window._suspendVisitAutosave = false; }, 900);
+  if (!opts.silentHistory && !window._appHistoryRestoring) pushAppNavState(false);
+}
+function openPatientForDept(bmhId, dept) {
+  openPatient(bmhId, { deptOverride: dept });
 }
 function rcPrintReceptionConsentFromPopup(bmhId) {
   const inp = document.getElementById('rc-consent-search');
@@ -2758,16 +2802,24 @@ function markPaid(id) {
   if(p) {
     // If this was a cross-refer payment — now route patient to target dept
     if(pr.xref && pr.xrefDept) {
-      p.dept = pr.xrefDept;
-      p.doctor = pr.xrefDoctor || p.doctor;
       p.status = 'waiting';
       p.xrefPaid = true;
+      const refs = Array.isArray(p.crossRefs) ? p.crossRefs.slice() : [];
+      refs.forEach(function (r) {
+        if (!r) return;
+        if (r.toDept === pr.xrefDept && (!pr.xrefDoctor || r.toDoctor === pr.xrefDoctor)) {
+          r.paid = true;
+          r.active = true;
+        }
+      });
+      p.crossRefs = refs;
+      fbUpdate && fbUpdate('patients/' + pr.bmhId, { crossRefs: sanitizeFirebaseValue(refs), status: 'waiting', xrefPaid: true }).catch(()=>{});
       // Mark xref as paid in log
       if(window.XREF_LOG) {
         const xr = window.XREF_LOG.find(x=>x.bmhId===pr.bmhId&&x.toDept===pr.xrefDept);
         if(xr) xr.paid=true;
       }
-      showToast('💳 Payment cleared — '+p.name+' sent to '+pr.xrefDoctor+"'s queue ✓",'s');
+      showToast('💳 Payment cleared — '+p.name+' added to '+pr.xrefDoctor+"'s queue ✓",'s');
     } else {
       showToast('💳 ₹'+pr.amount.toLocaleString('en-IN')+' received from '+pr.patient+' ✓','s');
     }
@@ -3911,7 +3963,8 @@ function renderPaymentsPage() { const el=document.getElementById('pg-pay-content
 function editTemplate(id) { showToast('Template editor opened ✓','i'); }
 
 // TABS / MODAL / TOAST / MOB
-function ptab(el, cId) {
+function ptab(el, cId, opts) {
+  opts = opts || {};
   if (!el) return;
   const ptabsEl = el.closest('.ptabs');
   const scope = el.closest('.modal, .modal-ov, .page, .card, body') || document;
@@ -3952,6 +4005,7 @@ function ptab(el, cId) {
     if (legacyBar) legacyBar.style.display = 'none';
   });
   updateDepartmentRailVisibility(pageKey, cId);
+  if (!opts.silentHistory && !window._appHistoryRestoring) pushAppNavState(false);
 }
 function openM(id){
   const m=document.getElementById(id);
@@ -7268,14 +7322,25 @@ function doXRef(){
 
   // Route patient to referred dept queue
   if(p) {
+    const refs = Array.isArray(p.crossRefs) ? p.crossRefs.slice() : [];
+    refs.push({
+      id: xref.id,
+      toDept: toDept,
+      toDoctor: toDoctor,
+      fromDept: p?.dept || CURRENT_USER?.dept || '',
+      fee: !!fee,
+      paid: !fee,
+      active: true,
+      reason: reason,
+      createdAt: xref.createdAt
+    });
+    p.crossRefs = refs;
     p.xrefTo = toDept;
     p.xrefDoctor = toDoctor;
-    // If free → immediately put in referred dept queue
+    p.status = 'waiting';
     if(!fee) {
-      p.dept = toDept;
-      p.doctor = toDoctor;
-      p.status = 'waiting';
-      showToast(`↔️ ${ptName} sent directly to ${toDoctor}'s queue ✓`,'s');
+      fbUpdate && fbUpdate('patients/' + bmhId, { crossRefs: sanitizeFirebaseValue(refs), xrefTo: toDept, xrefDoctor: toDoctor, status: 'waiting' }).catch(()=>{});
+      showToast(`↔️ ${ptName} added to ${toDoctor}'s queue ✓`,'s');
     } else {
       // Paid → send to reception as pulsating payment request
       const xrFee = parseInt(document.getElementById('xref-fee-amt')?.value||'800')||800;
@@ -7289,6 +7354,7 @@ function doXRef(){
       };
       PAY_REQUESTS.push(xrPR);
       fbSet&&fbSet('payRequests/'+xrPR.id, xrPR);
+      fbUpdate && fbUpdate('patients/' + bmhId, { crossRefs: sanitizeFirebaseValue(refs), xrefTo: toDept, xrefDoctor: toDoctor }).catch(()=>{});
       showToast(`↔️ ${ptName} → ${toDoctor} — Payment request sent to Reception 💳`,'s');
     }
   }
@@ -9369,6 +9435,12 @@ window.addEventListener('DOMContentLoaded', function() {
       document.getElementById(id)?.addEventListener('input', renderOphthoRecap);
     });
   document.querySelectorAll('.cc-inp').forEach(el => el.addEventListener('input', renderOphthoRecap));
+  document.addEventListener('input', function (e) { scheduleVisitAutosaveFromElement(e.target); }, true);
+  document.addEventListener('change', function (e) { scheduleVisitAutosaveFromElement(e.target); }, true);
+  window.addEventListener('popstate', function (e) {
+    if (e.state && (e.state.page || e.state.patientId || e.state.tab)) restoreAppNavState(e.state);
+  });
+  pushAppNavState(true);
   // Set today's date on all date fields
   try { updateRcDr && updateRcDr(); } catch(e) {}
 });
@@ -10827,7 +10899,12 @@ function printSurgeryPackWithKeys(keys, deptLabel) {
   if (!keys || !keys.length) { showToast('No documents selected', 'w'); return; }
   const ctx = collectConsentPrintContext();
   const consentPages = keys.map(function (k) {
-    return renderPackDocumentPages(k, ctx);
+    try {
+      return renderPackDocumentPages(k, ctx);
+    } catch (e) {
+      console.error('surgery pack doc print failed', k, e);
+      return '';
+    }
   }).join('');
   if (!consentPages.trim()) { showToast('No printable documents found for ' + (deptLabel || 'pack'), 'w'); return; }
   const html = '<!DOCTYPE html><html><head><meta charset="UTF-8">'
@@ -13465,6 +13542,31 @@ function safePrint(html) {
   // Write content
   const doc = iframe.contentDocument || iframe.contentWindow.document;
   doc.open(); doc.write(html); doc.close();
+}
+
+const _visitAutosaveTimers = {};
+function getDeptKeyFromAutosaveElement(el) {
+  const page = el?.closest?.('.page');
+  const pageId = page?.id || '';
+  if (pageId === 'pg-ophtho') return 'ophtho';
+  if (pageId === 'pg-obg') return 'obg';
+  if (pageId === 'pg-psych') return 'psych';
+  if (pageId === 'pg-skin') return 'skin';
+  return '';
+}
+function scheduleVisitAutosaveFromElement(el) {
+  if (!el || window._suspendVisitAutosave) return;
+  if (el.closest('.modal, .modal-ov')) return;
+  if (el.type === 'button' || el.type === 'submit' || el.type === 'file') return;
+  const dept = getDeptKeyFromAutosaveElement(el);
+  if (!dept) return;
+  const uidMap = { ophtho:'ophtho-pt-uid', obg:'obg-pt-uid', psych:'psych-pt-uid', skin:'skin-pt-uid' };
+  const bmhId = document.getElementById(uidMap[dept])?.textContent?.trim();
+  if (!bmhId || bmhId === '—') return;
+  clearTimeout(_visitAutosaveTimers[dept]);
+  _visitAutosaveTimers[dept] = setTimeout(function () {
+    saveVisit(dept, { silent: true, autosave: true });
+  }, 1200);
 }
 
 // ─── RX QUICK SEARCH ─────────────
@@ -18710,7 +18812,9 @@ function renderDashboard() {
   const selectedTxn = TRANSACTIONS.filter(t => txnDay(t) === selectedDate && txnOk(t));
 
   const setEl = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+  const setHtml = (id, v) => { const e = document.getElementById(id); if (e) e.innerHTML = v; };
   const u = window.CURRENT_USER || CURRENT_USER;
+  const currentDeptKey = normalizeDeptKeyForQueue(normalizeQueueDeptForUser(u?.dept || ''));
   const isAdminDash = !!(u && (u.isAdmin || String(u.role || '').toLowerCase() === 'admin'));
   const adm = document.getElementById('dash-view-admin');
   const cln = document.getElementById('dash-view-clinical');
@@ -18840,28 +18944,110 @@ function renderDashboard() {
       </div>`;
       summaryEl.innerHTML = cards.join('') + totalCard;
     }
+    const renderBarSet = function (values, labels, colors) {
+      const max = Math.max(1, ...values);
+      return '<div style="display:flex;align-items:flex-end;gap:8px;height:135px;padding:4px 2px 0">'
+        + values.map(function (v, idx) {
+          const h = Math.max(8, Math.round((v / max) * 100));
+          return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px">'
+            + '<div title="' + labels[idx] + ': ' + v + '" style="width:100%;max-width:56px;height:' + h + '%;min-height:' + (v ? 10 : 3) + 'px;background:' + (colors[idx] || 'var(--bmh-blue)') + ';border-radius:8px 8px 0 0"></div>'
+            + '<div style="font-size:9px;font-weight:800;color:var(--g1);text-align:center;line-height:1.25">' + labels[idx] + '</div>'
+            + '<div style="font-size:10px;font-weight:900;color:var(--tx)">' + Number(v || 0).toLocaleString('en-IN') + '</div>'
+            + '</div>';
+        }).join('')
+        + '</div>';
+    };
+    const collChartEl = document.getElementById('dash-admin-chart-collection');
+    if (collChartEl) {
+      const days = Array.from({ length: 7 }).map(function (_, idx) {
+        const d = new Date();
+        d.setDate(d.getDate() - (6 - idx));
+        const ds = d.toISOString().slice(0, 10);
+        const total = TRANSACTIONS.filter(function (t) { return txnDay(t) === ds && txnOk(t) && centreMatch(t); }).reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
+        return { label: d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }), value: total };
+      });
+      const weeks = Array.from({ length: 6 }).map(function (_, idx) {
+        const end = new Date();
+        end.setDate(end.getDate() - ((5 - idx) * 7));
+        const weekDates = Array.from({ length: 7 }).map(function (__unused, wd) {
+          const d = new Date(end);
+          d.setDate(end.getDate() - wd);
+          return d.toISOString().slice(0, 10);
+        });
+        const total = TRANSACTIONS.filter(function (t) { return weekDates.includes(txnDay(t)) && txnOk(t) && centreMatch(t); }).reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
+        return { label: 'W' + (idx + 1), value: total };
+      });
+      const months = Array.from({ length: 4 }).map(function (_, idx) {
+        const d = new Date();
+        d.setMonth(d.getMonth() - (3 - idx), 1);
+        const ym = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+        const total = TRANSACTIONS.filter(function (t) { return String(txnDay(t) || '').startsWith(ym) && txnOk(t) && centreMatch(t); }).reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
+        return { label: d.toLocaleDateString('en-IN', { month: 'short' }), value: total };
+      });
+      collChartEl.innerHTML = '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px">'
+        + '<div><div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;margin-bottom:6px">Daily</div>' + renderBarSet(days.map(function (x) { return x.value; }), days.map(function (x) { return x.label; }), days.map(function () { return 'var(--bmh-blue)'; })) + '</div>'
+        + '<div><div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;margin-bottom:6px">Weekly</div>' + renderBarSet(weeks.map(function (x) { return x.value; }), weeks.map(function (x) { return x.label; }), weeks.map(function () { return 'var(--bmh-gold)'; })) + '</div>'
+        + '<div><div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;margin-bottom:6px">Monthly</div>' + renderBarSet(months.map(function (x) { return x.value; }), months.map(function (x) { return x.label; }), months.map(function () { return 'var(--bmh-teal)'; })) + '</div>'
+        + '</div>';
+    }
+    const surgChartEl = document.getElementById('dash-admin-chart-surgery');
+    if (surgChartEl) {
+      const days = Array.from({ length: 7 }).map(function (_, idx) {
+        const d = new Date();
+        d.setDate(d.getDate() - (6 - idx));
+        const ds = d.toISOString().slice(0, 10);
+        const total = (window.OT_CASES || OT_CASES || []).filter(function (c) {
+          return centreMatch(c) && [c.date, c.otDate, c.createdAt, c.surgeryDate].some(function (v) { return String(v || '').slice(0, 10) === ds; });
+        }).length;
+        return { label: d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }), value: total };
+      });
+      surgChartEl.innerHTML = renderBarSet(days.map(function (x) { return x.value; }), days.map(function (x) { return x.label; }), days.map(function () { return 'var(--orange)'; }));
+    }
   } else {
-    const checkedIn = PATIENTS.filter(p => p.status === 'waiting' || p.seen || p.dilated).length;
-    const pendingAmt = PAY_REQUESTS.filter(r => r.status === 'pending').reduce((s, r) => s + (r.amount || 0), 0);
+    const todayPts = PATIENTS.filter(function (p) {
+      return centreMatch(p) && normalizeDeptKeyForQueue(p.dept || '') === currentDeptKey && patientQueueDateMatchesToday(p);
+    });
+    const checkedIn = todayPts.filter(function (p) { return !p.seen; }).length;
+    const newPts = todayPts.filter(function (p) { return localDateKey(p.createdAt || p.registeredAt || p.checkinAt) === today; }).length;
+    const oldPts = Math.max(0, todayPts.length - newPts);
     let diagToday = 0;
+    let surgeryCollection = 0;
     try {
       Object.keys(window.BMH_PATIENT_CHARGES || {}).forEach(bid => {
-        (window.BMH_PATIENT_CHARGES[bid] || []).forEach(l => {
-          if ((l.cat === 'diagnostic' || l.cat === 'investigation') && (l.ts || '').startsWith(today)) diagToday++;
+        const pt = PATIENTS.find(function (p) { return p.bmhId === bid; });
+        if (!pt || !centreMatch(pt) || normalizeDeptKeyForQueue(pt.dept || '') !== currentDeptKey) return;
+        (window.BMH_PATIENT_CHARGES[bid] || []).forEach(function (l) {
+          const cat = String(l.cat || '').toLowerCase();
+          const txt = [l.desc, l.name, l.kind, l.parent].join(' ').toLowerCase();
+          if ((cat === 'diagnostic' || cat === 'investigation') && String(l.ts || '').startsWith(today)) diagToday++;
+          if ((cat === 'surgery' || /surgery|pmics|phaco|delivery|lscs|labour room|mtp|iol/.test(txt)) && String(l.ts || '').startsWith(today)) {
+            surgeryCollection += Number(l.amount || l.rate || 0);
+          }
         });
       });
     } catch (e) { /* noop */ }
+    const todaySurgeries = (window.OT_CASES || OT_CASES || []).filter(function (c) {
+      return centreMatch(c) && normalizeDeptKeyForQueue(c.dept || '') === currentDeptKey && [c.date, c.otDate, c.createdAt, c.surgeryDate].some(function (v) {
+        return String(v || '').slice(0, 10) === today;
+      });
+    }).length;
+    const deptTxnsToday = TRANSACTIONS.filter(function (t) {
+      return txnDay(t) === today && txnOk(t) && centreMatch(t) && normalizeDeptKeyForQueue(t.dept || '') === currentDeptKey;
+    });
 
-    setEl('db-cl-opd', String(todaySeen + waiting));
-    setEl('db-cl-ipd', String(typeof IPD_PATIENTS !== 'undefined' ? IPD_PATIENTS.length : 0));
-    setEl('db-cl-diag', String(diagToday));
-    setEl('db-cl-checked', String(checkedIn));
-    setEl('db-cl-collection', '₹' + todayCollection.toLocaleString('en-IN'));
-    setEl('db-pending', '₹' + pendingAmt.toLocaleString('en-IN'));
-    setEl('db-stock-dup', String(INVENTORY ? INVENTORY.filter(i => i.stock <= i.min).length : 0));
+    setEl('db-cl-opd', String(todayPts.length));
+    setEl('db-cl-ipd', String(newPts));
+    setEl('db-cl-diag', String(oldPts));
+    setEl('db-apts', String(diagToday));
+    setEl('db-cl-checked', String(todaySurgeries));
+    setEl('db-cl-collection', '₹' + deptTxnsToday.reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0).toLocaleString('en-IN'));
+    setEl('db-pending', '₹' + surgeryCollection.toLocaleString('en-IN'));
+    setEl('db-stock-dup', String((window.IPD_PATIENTS || IPD_PATIENTS || []).filter(function (p) {
+      return centreMatch(p) && normalizeDeptKeyForQueue(p.dept || '') === currentDeptKey && (p.status || 'admitted') !== 'discharged';
+    }).length));
 
     const modes = {};
-    TRANSACTIONS.filter(t => txnDay(t) === today && txnOk(t)).forEach(t => {
+    deptTxnsToday.forEach(function (t) {
       const m = t.mode || 'Cash';
       modes[m] = (modes[m] || 0) + getNetTransactionAmount(t);
     });
@@ -18895,8 +19081,17 @@ function renderDashboard() {
     const dp = document.getElementById('dash-pay'); if (dp) dp.innerHTML = payHtml;
     const dpc = document.getElementById('dash-pay-clinical'); if (dpc) dpc.innerHTML = payHtml;
 
-    const todayApts = APPOINTMENTS.filter(a => a.date === today);
-    setEl('db-apts', String(todayApts.length));
+    const todayApts = APPOINTMENTS.filter(function (a) {
+      return a.date === today && centreMatch(a) && (!currentDeptKey || normalizeDeptKeyForQueue(a.dept || '') === currentDeptKey);
+    });
+    setEl('db-apts-lbl', 'Diagnostics');
+    setEl('db-cl-opd-lbl', 'OPD today');
+    setEl('db-cl-ipd-lbl', 'New patients');
+    setEl('db-cl-diag-lbl', 'Old patients');
+    setEl('db-cl-checked-lbl', 'Surgeries');
+    setEl('db-cl-collection-lbl', 'Collection today');
+    setEl('db-pending-lbl', 'Surgery collection');
+    setEl('db-stock-dup-lbl', 'IPD');
     const aptList = document.getElementById('dash-apts');
     if (aptList) {
       aptList.innerHTML = todayApts.slice(0, 8).map(a => `<div style="font-size:12px;padding:5px 0;border-bottom:1px solid var(--g5)"><span style="font-weight:700">${a.patient || ''}</span> · ${a.time || ''} · ${a.doctor || ''}</div>`).join('') || '<div style="color:var(--g1);font-size:12px">No appointments today</div>';
@@ -19475,7 +19670,7 @@ function buildQTableRow(p, sno, opts) {
     : (advLbl || '');
   const statusTxt = p.preRegistered ? 'Pre-reg' : p.seen ? 'Seen' : p.dilated ? 'Dilated' : 'Waiting';
   const statusBg = p.preRegistered ? '#f0f0f0' : p.seen ? 'var(--green-lt)' : p.dilated ? 'var(--blue-lt)' : 'var(--orange-lt)';
-  const onRow = p.preRegistered ? `checkInPatient('${p.bmhId}')` : (receptionQueue ? `openReceptionPatient('${p.bmhId}')` : `openPatient('${p.bmhId}')`);
+  const onRow = p.preRegistered ? `checkInPatient('${p.bmhId}')` : (receptionQueue ? `openReceptionPatient('${p.bmhId}')` : (p._xrefEntry ? `openPatientForDept('${p.bmhId}','${p.dept}')` : `openPatient('${p.bmhId}')`));
   const nmEsc = (p.name||'').replace(/'/g,"\\'");
   const docShort = (p.doctor||'—').replace(/^Dr\.\s*/,'');
   const vulnBadge = vuln ? '<span class="q-vuln-badge" title="Vulnerable — elderly (≥65) or flagged">⚠ VUL</span>' : '';
@@ -19712,6 +19907,12 @@ function issueRefundAtReception() {
 }
 
 // ── renderDocQueue — dept-filtered + sub-lists ───
+function getActiveCrossRefsForPatient(p) {
+  const refs = [];
+  if (Array.isArray(p?.crossRefs)) refs.push.apply(refs, p.crossRefs.filter(Boolean));
+  else if (p?.xrefTo) refs.push({ id: 'legacy-xref', toDept: p.xrefTo, toDoctor: p.xrefDoctor, paid: !!p.xrefPaid, active: true });
+  return refs.filter(function (r) { return r && r.toDept && r.active !== false; });
+}
 function renderDocQueue() {
   const todayKeyLocal = localDateKey(new Date());
   // Map doctor dept name to patient dept key
@@ -19734,15 +19935,26 @@ function renderDocQueue() {
     return centreMatch(p);
   });
   const myPts = (() => {
-    if (CURRENT_USER?.isAdmin || CURRENT_USER?.role === 'Reception' || CURRENT_USER?.canSeeAllCentres) {
+    if (CURRENT_USER?.isAdmin || CURRENT_USER?.role === 'Reception') {
       return queueBasePts;
     }
-    const deptPts = queueBasePts.filter(p => {
+    const deptPts = [];
+    queueBasePts.forEach(function (p) {
       const ptDept = normalizeDeptKeyForQueue(p.dept || p.department || '');
-      const deptMatch = !userDept || ptDept === userDept || (!ptDept && userDept === 'ophtho');
-      return deptMatch;
+      if (!userDept || ptDept === userDept || (!ptDept && userDept === 'ophtho')) {
+        deptPts.push(Object.assign({}, p, { _queueKey: p.bmhId }));
+      }
+      getActiveCrossRefsForPatient(p).forEach(function (xref) {
+        if (!xref.paid || xref.toDept !== userDept) return;
+        deptPts.push(Object.assign({}, p, {
+          dept: xref.toDept,
+          doctor: xref.toDoctor || p.doctor,
+          status: p.seen ? 'seen' : 'waiting',
+          _xrefEntry: true,
+          _queueKey: p.bmhId + '::' + (xref.id || (xref.toDept + '::' + (xref.toDoctor || '')))
+        }));
+      });
     });
-    // Show full dept queue (same as reception’s dept slice); do not hide patients when another row matches doctor name.
     return deptPts;
   })();
   const filteredPts = searchQ ? myPts.filter(function (p) {
@@ -19760,7 +19972,7 @@ function renderDocQueue() {
   }) : myPts;
 
   // Active list keeps all waiting patients visible; dilated patients also remain in dedicated dilated queue.
-  const serialMap = new Map(filteredPts.map(function (p, idx) { return [p.bmhId, idx + 1]; }));
+  const serialMap = new Map(filteredPts.map(function (p, idx) { return [p._queueKey || p.bmhId, idx + 1]; }));
   const active  = filteredPts.filter(p => !p.seen);
   const dilated = filteredPts.filter(p => p.dilated && !p.seen);
   const done    = filteredPts.filter(function (p) {
@@ -19775,13 +19987,13 @@ function renderDocQueue() {
   const emptyRow = label => `<tr><td colspan="10" style="text-align:center;padding:24px;color:var(--g2);font-size:12.5px">No ${label} patients</td></tr>`;
 
   const ae = document.getElementById('dq-active-list');
-  if(ae) ae.innerHTML = active.length ? active.map((p)=>buildQTableRow(p, serialMap.get(p.bmhId) || '')).join('') : emptyRow('active');
+  if(ae) ae.innerHTML = active.length ? active.map((p)=>buildQTableRow(p, serialMap.get(p._queueKey || p.bmhId) || '')).join('') : emptyRow('active');
 
   const de = document.getElementById('dq-dil-list');
-  if(de) de.innerHTML = dilated.length ? dilated.map((p)=>buildQTableRow(p, serialMap.get(p.bmhId) || '')).join('') : emptyRow('dilated');
+  if(de) de.innerHTML = dilated.length ? dilated.map((p)=>buildQTableRow(p, serialMap.get(p._queueKey || p.bmhId) || '')).join('') : emptyRow('dilated');
 
   const dne = document.getElementById('dq-done-list');
-  if(dne) dne.innerHTML = done.length ? done.map((p)=>buildQTableRow(p, serialMap.get(p.bmhId) || '')).join('') : emptyRow('done');
+  if(dne) dne.innerHTML = done.length ? done.map((p)=>buildQTableRow(p, serialMap.get(p._queueKey || p.bmhId) || '')).join('') : emptyRow('done');
 
   // Dilated tab visibility — only show for ophtho
   const dilTab = document.getElementById('dq-tab-dil');
@@ -19823,16 +20035,17 @@ function renderDrSettings() {
 // ════════════════════════════════════════════════════════════════════════════
 // saveVisit — persists dept visit to Firebase (visits/{bmhId}/{visitKey})
 // ════════════════════════════════════════════════════════════════════════════
-function saveVisit(dept) {
+function saveVisit(dept, opts) {
+  opts = opts || {};
   const uidMap = { ophtho:'ophtho-pt-uid', obg:'obg-pt-uid', psych:'psych-pt-uid', skin:'skin-pt-uid' };
   const nmMap  = { ophtho:'ophtho-pt-nm',  obg:'obg-pt-nm',  psych:'psych-pt-nm',  skin:'skin-pt-nm'  };
   const bmhId  = document.getElementById(uidMap[dept])?.textContent?.trim();
   const ptName = document.getElementById(nmMap[dept])?.textContent?.trim();
   if(!bmhId || bmhId === '—') {
-    showToast('No patient selected — open a patient first','w'); return;
+    if (!opts.silent) showToast('No patient selected — open a patient first','w'); return;
   }
   try {
-  showToast('Saving visit…', 'i');
+  if (!opts.silent) showToast('Saving visit…', 'i');
   const now = new Date();
   const localPt = window.CURRENT_PATIENT || PATIENTS.find(p => p.bmhId === bmhId);
   const todayKey = now.toISOString().split('T')[0];
@@ -20110,8 +20323,8 @@ function saveVisit(dept) {
     typeof fbUpdate === 'function' ? fbUpdate('patients/' + bmhId, patientPatchForCloud).catch(()=>{}) : Promise.resolve()
   ])
     .then(() => {
-      if (dept === 'ophtho') populateOphthoForm(visit);
-      showToast(`✅ ${ptName} — visit saved (${visit.dateLabel})`, 's');
+      if (dept === 'ophtho' && !opts.autosave) populateOphthoForm(visit);
+      if (!opts.silent) showToast(`✅ ${ptName} — visit saved (${visit.dateLabel})`, 's');
       if(dept === 'obg') updateObgObstetricHistoryTab(!!visit.obstetricHistoryEnabled);
       if(typeof loadPastVisits === 'function') loadPastVisits(bmhId, dept);
       renderCurrentPatientInvestigationUploads && renderCurrentPatientInvestigationUploads(Array.isArray(visit.investigations) ? visit.investigations : []);
@@ -20121,10 +20334,13 @@ function saveVisit(dept) {
       renderSkinRail && renderSkinRail();
       document.dispatchEvent(new CustomEvent('bmh:patientsUpdated'));
     })
-    .catch(e => showToast('Save failed: ' + e.message, 'w'));
+    .catch(e => {
+      if (!opts.silent) showToast('Save failed: ' + e.message, 'w');
+      else console.warn('autosave failed', e);
+    });
   } catch (e) {
     console.error('saveVisit error', e);
-    showToast('Save failed: ' + e.message, 'w');
+    if (!opts.silent) showToast('Save failed: ' + e.message, 'w');
   }
 }
 
