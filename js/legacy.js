@@ -1670,6 +1670,17 @@ function restoreRxFromVisitData(data) {
   renderRxDrugs && renderRxDrugs();
 }
 
+function restoreCurrentPatientRxForDeptIfEmpty(dept) {
+  if (typeof RX_DRUGS === 'undefined' || !Array.isArray(RX_DRUGS)) return;
+  if (RX_DRUGS.length) return;
+  const bmhId = window.CURRENT_PATIENT?.bmhId;
+  if (!bmhId) return;
+  const visit = getLatestSavedVisitForDept(bmhId, dept);
+  if (visit && Array.isArray(visit.rx) && visit.rx.length) {
+    restoreRxFromVisitData(visit);
+  }
+}
+
 function rebuildDxListFromValues(listId, values) {
   const list = document.getElementById(listId);
   if (!list) return;
@@ -4195,6 +4206,10 @@ function ptab(el, cId, opts) {
     sendBar.style.display = (pageKey === deptKey && cId === cfg.rxTab) ? 'none' : '';
   });
   updateOphthoSendBarVisibility(pageKey, cId);
+  if (cId === 'oe-rx') restoreCurrentPatientRxForDeptIfEmpty('ophtho');
+  else if (cId === 'obg-rx') restoreCurrentPatientRxForDeptIfEmpty('obg');
+  else if (cId === 'psych-rx') restoreCurrentPatientRxForDeptIfEmpty('psych');
+  else if (cId === 'skin-rx') restoreCurrentPatientRxForDeptIfEmpty('skin');
   ['obg-rx-send-bar', 'psych-rx-send-bar', 'skin-rx-send-bar'].forEach(function (id) {
     const legacyBar = document.getElementById(id);
     if (legacyBar) legacyBar.style.display = 'none';
@@ -9805,7 +9820,46 @@ function applyRxTemplate(tplId) {
   renderRxDrugs();
   showToast('Template applied ✓','s');
 }
-function applyLastRx() { showToast('Last visit prescription applied ✓','s'); }
+function applyLastRx() {
+  const dept = activeClinicDeptKey();
+  const bmhId = window.CURRENT_PATIENT?.bmhId;
+  if (!bmhId) { showToast('Open a patient first', 'w'); return; }
+  const visit = getLatestSavedVisitForDept(bmhId, dept);
+  if (!visit || !Array.isArray(visit.rx) || !visit.rx.length) {
+    showToast('No saved prescription found for this department', 'i');
+    return;
+  }
+  restoreRxFromVisitData(visit);
+  if (dept === 'ophtho') {
+    const procContainer = document.getElementById('rx-proc-advised');
+    if (procContainer && Array.isArray(visit.procedures)) {
+      procContainer.innerHTML = '';
+      visit.procedures.forEach(function (procName) {
+        addProcItemToContainer(procContainer, procName, 0, { silentLog: true, quiet: true });
+      });
+    }
+    const adviceEl = document.getElementById('rx-advice-text');
+    if (adviceEl) adviceEl.value = visit.advice || '';
+    const extraAdviceEl = document.getElementById('rx-extra-advice-text');
+    if (extraAdviceEl) extraAdviceEl.value = visit.extraAdvice || '';
+  } else if (dept === 'obg') {
+    const adviceEl = document.getElementById('obg-advice');
+    if (adviceEl) adviceEl.value = visit.obgAdvice || '';
+    const extraAdviceEl = document.getElementById('obg-extra-advice');
+    if (extraAdviceEl) extraAdviceEl.value = visit.obgExtraAdvice || '';
+  } else if (dept === 'psych') {
+    const adviceEl = document.getElementById('psych-advice');
+    if (adviceEl) adviceEl.value = visit.psychAdvice || '';
+    const extraAdviceEl = document.getElementById('psych-extra-advice');
+    if (extraAdviceEl) extraAdviceEl.value = visit.psychExtraAdvice || '';
+  } else if (dept === 'skin') {
+    const adviceEl = document.getElementById('skin-advice');
+    if (adviceEl) adviceEl.value = visit.skinAdvice || '';
+    const extraAdviceEl = document.getElementById('skin-extra-advice');
+    if (extraAdviceEl) extraAdviceEl.value = visit.skinExtraAdvice || '';
+  }
+  showToast('Last saved prescription applied ✓','s');
+}
 const ICD10_EYE = [
   'H26.9 — Cataract, unspecified','H26.0 — Infantile/Juvenile cataract','H26.1 — Traumatic cataract',
   'H25.1 — Nuclear cataract','H25.0 — Cortical cataract','H25.2 — Posterior subcapsular cataract',
@@ -11245,7 +11299,14 @@ function printSurgeryPackForCase(caseId, packId) {
   const c = normalizeOTCaseRecord(rawCase);
   window._CONSENT_PRINT_BMH_ID = c.bmhId;
   window._CONSENT_PRINT_OT_ID = c.id;
-  openSurgeryPackPrintModal(packId || (resolveSurgeryPackForCase(c)?.id || 'ophtho'));
+  const pack = getAllSurgeryPacks().find(function (p) { return p.id === (packId || (resolveSurgeryPackForCase(c)?.id || 'ophtho')); }) || resolveSurgeryPackForCase(c);
+  const keys = (pack && Array.isArray(pack.documentKeys) ? pack.documentKeys.slice() : []);
+  if (keys.indexOf('__admission_slip__') === -1) keys.unshift('__admission_slip__');
+  if (!keys.length) {
+    openSurgeryPackPrintModal(packId || (resolveSurgeryPackForCase(c)?.id || 'ophtho'));
+    return;
+  }
+  printSurgeryPackWithKeys(keys, pack?.label || pack?.dept || 'Pack');
 }
 function populateSurgeryPackPrintSelect(selectedPackId) {
   const sel = document.getElementById('sp-pack-select');
@@ -18914,6 +18975,9 @@ function setUserDisabled(uname, disabled) {
 function openAddUserModal() {
   if(!CURRENT_USER?.isAdmin) { showToast('Admin access required','w'); return; }
   ['nu-username','nu-name','nu-pw','nu-pw2','nu-dept'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  const nuRole = document.getElementById('nu-role'); if (nuRole) nuRole.value = 'Reception';
+  const nuCentre = document.getElementById('nu-centre'); if (nuCentre) nuCentre.value = 'CHD';
+  const nuAdmin = document.getElementById('nu-is-admin'); if (nuAdmin) nuAdmin.checked = false;
   ['nu-access-modules','nu-access-settings'].forEach(function(id){
     document.querySelectorAll('#'+id+' input[type=checkbox]').forEach(function(cb){ cb.checked = false; });
   });
@@ -18934,6 +18998,17 @@ function applyAccessSelections(prefix, access) {
     });
   });
 }
+function syncAdminGrantToggle(prefix) {
+  const roleEl = document.getElementById(prefix + '-role');
+  const adminEl = document.getElementById(prefix + '-is-admin');
+  const centreEl = document.getElementById(prefix + '-centre');
+  if (!roleEl || !adminEl) return;
+  if (roleEl.value === 'Admin' && !adminEl.checked) adminEl.checked = true;
+  if (adminEl.checked) {
+    roleEl.value = 'Admin';
+    if (centreEl) centreEl.value = 'BOTH';
+  }
+}
 
 // ── Save New User ──────────────────────────────────────────────
 function saveNewUser() {
@@ -18942,8 +19017,11 @@ function saveNewUser() {
   const name   = (document.getElementById('nu-name')?.value||'').trim();
   const pw     = document.getElementById('nu-pw')?.value||'';
   const pw2    = document.getElementById('nu-pw2')?.value||'';
-  const role   = document.getElementById('nu-role')?.value||'Reception';
-  const centre = document.getElementById('nu-centre')?.value||'CHD';
+  const roleInput = document.getElementById('nu-role')?.value||'Reception';
+  const grantAdmin = !!document.getElementById('nu-is-admin')?.checked || roleInput === 'Admin';
+  const role   = grantAdmin ? 'Admin' : roleInput;
+  const centreInput = document.getElementById('nu-centre')?.value||'CHD';
+  const centre = grantAdmin ? 'BOTH' : centreInput;
   const dept   = (document.getElementById('nu-dept')?.value||'').trim();
   const access = collectAccessSelections('nu');
 
@@ -18956,8 +19034,8 @@ function saveNewUser() {
   const newUser = {
     pw, name, role, dept, centre,
     degrees: '',
-    canSeeAllCentres: (centre==='BOTH' || role==='Admin'),
-    isAdmin: (role==='Admin'),
+    canSeeAllCentres: (centre==='BOTH' || grantAdmin),
+    isAdmin: grantAdmin,
     access,
     disabled: false,
     createdAt: new Date().toISOString(),
@@ -18981,9 +19059,11 @@ function openEditUser(uname) {
   document.getElementById('eu-name').value  = u.name || '';
   document.getElementById('eu-role').value  = u.role || 'Reception';
   document.getElementById('eu-centre').value= u.centre || 'CHD';
+  const euAdmin = document.getElementById('eu-is-admin'); if (euAdmin) euAdmin.checked = !!u.isAdmin || String(u.role || '') === 'Admin';
   document.getElementById('eu-dept').value  = u.dept || '';
   document.getElementById('eu-newpw').value = '';
   applyAccessSelections('eu', u.access || {});
+  syncAdminGrantToggle('eu');
   openM('m-edit-user');
 }
 
@@ -18992,8 +19072,11 @@ function saveEditUser() {
   if(!CURRENT_USER?.isAdmin) { showToast('Admin access required','w'); return; }
   const uname  = document.getElementById('eu-username')?.value||'';
   const name   = (document.getElementById('eu-name')?.value||'').trim();
-  const role   = document.getElementById('eu-role')?.value||'Reception';
-  const centre = document.getElementById('eu-centre')?.value||'CHD';
+  const roleInput = document.getElementById('eu-role')?.value||'Reception';
+  const grantAdmin = !!document.getElementById('eu-is-admin')?.checked || roleInput === 'Admin';
+  const role   = grantAdmin ? 'Admin' : roleInput;
+  const centreInput = document.getElementById('eu-centre')?.value||'CHD';
+  const centre = grantAdmin ? 'BOTH' : centreInput;
   const dept   = (document.getElementById('eu-dept')?.value||'').trim();
   const newpw  = document.getElementById('eu-newpw')?.value||'';
   const access = collectAccessSelections('eu');
@@ -19007,8 +19090,8 @@ function saveEditUser() {
   USER_DB[uname].centre = centre;
   USER_DB[uname].dept   = dept;
   USER_DB[uname].access = access;
-  USER_DB[uname].canSeeAllCentres = (centre==='BOTH'||role==='Admin');
-  USER_DB[uname].isAdmin = (role==='Admin');
+  USER_DB[uname].canSeeAllCentres = (centre==='BOTH'||grantAdmin);
+  USER_DB[uname].isAdmin = grantAdmin;
   if(newpw) USER_DB[uname].pw = newpw;
 
   const updateData = { name, role, centre, dept, access, canSeeAllCentres: USER_DB[uname].canSeeAllCentres, isAdmin: USER_DB[uname].isAdmin, updatedBy: CURRENT_USER.name, updatedAt: new Date().toISOString() };
@@ -19019,6 +19102,8 @@ function saveEditUser() {
   if(uname === CURRENT_USER?.username) {
     CURRENT_USER.name = name; CURRENT_USER.role = role; CURRENT_USER.centre = centre;
     CURRENT_USER.access = access;
+    CURRENT_USER.isAdmin = grantAdmin;
+    CURRENT_USER.canSeeAllCentres = (centre === 'BOTH' || grantAdmin);
     if(newpw) CURRENT_USER.pw = newpw;
     const sbnm = document.getElementById('sbnm'); if(sbnm) sbnm.textContent = name;
     const sbrl = document.getElementById('sbrl'); if(sbrl) sbrl.textContent = role+' · '+centre;

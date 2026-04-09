@@ -4879,7 +4879,7 @@
   <div class="form-group"><label class="fl">Password</label><input type="password" id="nu-pw" placeholder="Min 6 characters" autocomplete="new-password"></div>
   <div class="form-group"><label class="fl">Confirm Password</label><input type="password" id="nu-pw2" placeholder="Repeat password" autocomplete="new-password"></div>
   <div class="form-group"><label class="fl">Role</label>
-    <select id="nu-role">
+    <select id="nu-role" onchange="syncAdminGrantToggle('nu')">
       <option value="Reception">Reception</option>
       <option value="Doctor">Doctor</option>
       <option value="Lab">Lab</option>
@@ -4888,6 +4888,12 @@
       <option value="TPA">TPA</option>
       <option value="Admin">Admin</option>
     </select>
+  </div>
+  <div class="form-group"><label class="fl">Admin Access</label>
+    <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;padding:10px 12px;border:1.5px solid var(--g4);border-radius:8px;background:var(--g6);cursor:pointer">
+      <input type="checkbox" id="nu-is-admin" onchange="syncAdminGrantToggle('nu')">
+      Grant full admin login access
+    </label>
   </div>
   <div class="form-group"><label class="fl">Centre</label>
     <select id="nu-centre">
@@ -4940,7 +4946,7 @@
 <div class="fg" style="gap:10px">
   <div class="form-group"><label class="fl">Full Name</label><input type="text" id="eu-name" placeholder="Full name"></div>
   <div class="form-group"><label class="fl">Role</label>
-    <select id="eu-role">
+    <select id="eu-role" onchange="syncAdminGrantToggle('eu')">
       <option value="Reception">Reception</option>
       <option value="Doctor">Doctor</option>
       <option value="Lab">Lab</option>
@@ -4949,6 +4955,12 @@
       <option value="TPA">TPA</option>
       <option value="Admin">Admin</option>
     </select>
+  </div>
+  <div class="form-group"><label class="fl">Admin Access</label>
+    <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;padding:10px 12px;border:1.5px solid var(--g4);border-radius:8px;background:var(--g6);cursor:pointer">
+      <input type="checkbox" id="eu-is-admin" onchange="syncAdminGrantToggle('eu')">
+      Grant full admin login access
+    </label>
   </div>
   <div class="form-group"><label class="fl">Centre</label>
     <select id="eu-centre">
