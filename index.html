@@ -3140,7 +3140,10 @@
           <button class="btn btn-gold btn-sm" onclick="printLabReport()">&#128424; Print</button>
         </div>
       </div>
-      <div style="margin-bottom:10px"><img src="" class="lh-img-tag" data-lhsrc="1" alt="Baweja Multispeciality Hospital" style="width:100%;max-width:680px;height:auto;display:block"></div>
+      <div style="margin-bottom:10px;padding:12px 14px;border:1.5px solid #d8dde6;border-radius:10px;background:#fafafa">
+        <div style="font-size:20px;font-weight:900;color:#1f2937;letter-spacing:.3px">Laboratory Report</div>
+        <div style="font-size:11px;color:#4b5563;margin-top:4px">Processed by outsourced laboratory partner. Please interpret results in clinical context.</div>
+      </div>
       <div style="background:#f2f4f8;border-radius:6px;padding:7px 10px;margin-bottom:10px;display:grid;grid-template-columns:repeat(3,1fr);gap:5px;font-size:11px">
         <div><div style="font-size:8.5px;color:#666;font-weight:700;text-transform:uppercase">Patient</div><div style="font-weight:900" id="lab-rpt-name">Test Patient A</div></div>
         <div><div style="font-size:8.5px;color:#666;font-weight:700;text-transform:uppercase">BMSH ID</div><div style="font-family:monospace;font-size:10px;font-weight:700;color:#1A3C6E" id="lab-rpt-id">BMSH-000001</div></div>
@@ -3161,6 +3164,7 @@
       <div class="tab-content" id="lab-p-diab"><div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 65px;gap:5px;padding:4px 8px 5px;font-size:9.5px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px"><span>Test</span><span>Value</span><span>Unit</span><span>Normal Range</span><span>Flag</span></div><div id="lab-diab"></div></div>
       <div class="tab-content" id="lab-p-thyroid"><div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 65px;gap:5px;padding:4px 8px 5px;font-size:9.5px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px"><span>Test</span><span>Value</span><span>Unit</span><span>Normal Range</span><span>Flag</span></div><div id="lab-thyroid"></div></div>
       <div class="tab-content" id="lab-p-custom"><div style="padding:10px;background:var(--g6);border-radius:8px;border:2px dashed var(--g4);margin-bottom:8px"><div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:7px">Add Custom Test</div><div style="display:flex;gap:7px;flex-wrap:wrap"><input type="text" id="custom-test-name" placeholder="Test name" style="flex:2"><input type="text" id="custom-test-val" placeholder="Value" style="flex:1;min-width:60px"><input type="text" id="custom-test-unit" placeholder="Unit" style="flex:1;min-width:50px"><input type="text" id="custom-test-range" placeholder="Range" style="flex:1;min-width:80px"><button class="btn btn-blue btn-sm" onclick="addCustomLabTest()">+ Add</button></div></div><div id="custom-tests-list"></div></div>
+      <div id="lab-rpt-insights" style="margin-top:10px;padding:10px 12px;border:1px solid #d8dde6;border-radius:8px;background:#fafafa;font-size:10.5px;line-height:1.55;color:#374151"></div>
     </div>
   </div>
 </div>
