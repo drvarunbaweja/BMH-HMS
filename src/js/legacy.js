@@ -4099,7 +4099,45 @@ function setCentre(c, btn) {
   renderDocQueue && renderDocQueue();
   renderIPD && renderIPD();
 }
-function renderPaymentsPage() { const el=document.getElementById('pg-pay-content'); if(el) el.innerHTML='<div style="display:flex;flex-direction:column;gap:8px">'+PAY_REQUESTS.map(payCardHtml).join('')+'</div>'; }
+function renderPaymentsPage() {
+  const el = document.getElementById('pg-pay-content');
+  if (!el) return;
+  const centre = getEffectiveCentre();
+  const todayKey = localDateKey(new Date());
+  const reqs = (PAY_REQUESTS || []).filter(function (r) {
+    return (r.centre || 'CHD') === centre;
+  });
+  const todayReqs = reqs.filter(function (r) {
+    const stamp = r.date || r.createdAt || r.updatedAt || '';
+    return !stamp || localDateKey(stamp) === todayKey || String(stamp).slice(0, 10) === todayKey;
+  });
+  const pending = todayReqs.filter(function (r) { return r.status === 'pending'; });
+  const collected = todayReqs.filter(function (r) { return r.status === 'paid'; });
+  const txns = (TRANSACTIONS || []).filter(function (t) {
+    return (t.centre || 'CHD') === centre && txnIsoDate(t) === todayKey;
+  });
+  const modeTotals = {};
+  txns.forEach(function (t) {
+    const mode = normalizePaymentModeLabel ? normalizePaymentModeLabel(t.mode || 'Other') : String(t.mode || 'Other');
+    modeTotals[mode] = (modeTotals[mode] || 0) + getNetTransactionAmount(t);
+  });
+  const modeHtml = Object.keys(modeTotals).length
+    ? Object.keys(modeTotals).sort().map(function (mode) {
+        return '<span class="badge bd-gray" style="font-size:10px">' + mode + ' ₹' + modeTotals[mode].toLocaleString('en-IN') + '</span>';
+      }).join(' ')
+    : '<span style="font-size:11px;color:var(--g1)">No collections recorded today</span>';
+  const listHtml = todayReqs.length
+    ? todayReqs.map(payCardHtml).join('')
+    : '<div style="padding:20px;text-align:center;color:var(--g1);font-size:12px">No payment requests for this centre today</div>';
+  el.innerHTML =
+    '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:12px">'
+      + '<div style="background:var(--orange-lt);border:1px solid rgba(255,149,0,.35);border-radius:10px;padding:12px"><div style="font-size:10px;font-weight:800;color:#8a4200;text-transform:uppercase">Pending dues</div><div style="font-size:20px;font-weight:900;color:#8a4200;margin-top:3px">' + pending.length + '</div><div style="font-size:11px;color:#8a4200">₹' + pending.reduce(function (s, r) { return s + (Number(r.amount) || 0); }, 0).toLocaleString('en-IN') + '</div></div>'
+      + '<div style="background:var(--green-lt);border:1px solid rgba(26,140,60,.28);border-radius:10px;padding:12px"><div style="font-size:10px;font-weight:800;color:#1a8c3c;text-transform:uppercase">Collected requests</div><div style="font-size:20px;font-weight:900;color:#1a8c3c;margin-top:3px">' + collected.length + '</div><div style="font-size:11px;color:#1a8c3c">₹' + collected.reduce(function (s, r) { return s + (Number(r.amount) || 0); }, 0).toLocaleString('en-IN') + '</div></div>'
+      + '<div style="background:var(--blue-lt);border:1px solid rgba(26,60,110,.2);border-radius:10px;padding:12px"><div style="font-size:10px;font-weight:800;color:var(--bmh-blue);text-transform:uppercase">Transactions today</div><div style="font-size:20px;font-weight:900;color:var(--bmh-blue);margin-top:3px">' + txns.length + '</div><div style="font-size:11px;color:var(--bmh-blue)">₹' + getConcessionAdjustedCollectionTotal(txns).toLocaleString('en-IN') + '</div></div>'
+    + '</div>'
+    + '<div style="background:#fff;border:1px solid var(--g5);border-radius:10px;padding:10px 12px;margin-bottom:12px"><div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:6px">Mode-wise collection today</div><div style="display:flex;gap:6px;flex-wrap:wrap">' + modeHtml + '</div></div>'
+    + '<div style="display:flex;flex-direction:column;gap:8px">' + listHtml + '</div>';
+}
 function editTemplate(id) { showToast('Template editor opened ✓','i'); }
 
 // TABS / MODAL / TOAST / MOB
@@ -10746,9 +10784,16 @@ function filterRcByDept(dept) {
 }
 function renderDeptSummary() {
   const el = document.getElementById('rc-dept-summary-list'); if(!el) return;
-  const today = new Date().toISOString().slice(0,10);
-  // All pending/paid pay requests for today
-  const todayPRs = PAY_REQUESTS.filter(r => (r.date||'').startsWith(today) || !r.date);
+  const today = localDateKey(new Date());
+  const centre = getEffectiveCentre();
+  const selectedDept = window._rcDeptSummaryFilterDept || '';
+  const onlyPending = !!window._rcDeptSummaryPendingOnly;
+  const todayPRs = PAY_REQUESTS.filter(function (r) {
+    if ((r.centre || 'CHD') !== centre) return false;
+    const stamp = r.date || r.createdAt || r.updatedAt || '';
+    if (!stamp) return true;
+    return localDateKey(stamp) === today || String(stamp).slice(0, 10) === today;
+  });
   const depts = [
     {k:'ophtho',l:'Ophthalmology',icon:'👁️',color:'var(--blue)'},
     {k:'obg',l:'OBG',icon:'🤰',color:'#c0004e'},
@@ -10759,8 +10804,10 @@ function renderDeptSummary() {
     el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--g1);font-size:12px">No charge requests from doctors today</div>';
     return;
   }
-  el.innerHTML = depts.map(d=>{
-    const dPRs = todayPRs.filter(r=>r.dept===d.k);
+  el.innerHTML = (selectedDept ? '<div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button type="button" class="btn btn-xs btn-outline" onclick="window._rcDeptSummaryFilterDept=\\\'\\\';window._rcDeptSummaryPendingOnly=false;renderDeptSummary()">Show all departments</button></div>' : '') + depts.map(d=>{
+    if (selectedDept && d.k !== selectedDept) return '';
+    let dPRs = todayPRs.filter(r=>r.dept===d.k);
+    if (onlyPending) dPRs = dPRs.filter(function (r) { return r.status === 'pending'; });
     if(!dPRs.length) return '';
     const pending = dPRs.filter(r=>r.status==='pending');
     const paid = dPRs.filter(r=>r.status==='paid');
@@ -11210,8 +11257,25 @@ function renderSurgeryPackPrintModal(packOrDept) {
   }
 }
 function openSurgeryPackPrintModal(packOrDept) {
-  renderSurgeryPackPrintModal(packOrDept);
-  openM('m-sp-pack-print');
+  try {
+    renderSurgeryPackPrintModal(packOrDept);
+    if (document.getElementById('m-sp-pack-print')) {
+      openM('m-sp-pack-print');
+      return;
+    }
+  } catch (e) {
+    console.error('openSurgeryPackPrintModal failed', e);
+  }
+  try {
+    const packs = getAllSurgeryPacks();
+    const pack = packs.find(function (p) { return p.id === packOrDept; }) || packs[0] || null;
+    const keys = pack && pack.documentKeys && pack.documentKeys.length ? pack.documentKeys.slice() : [];
+    if (keys.indexOf('__admission_slip__') === -1) keys.unshift('__admission_slip__');
+    printSurgeryPackWithKeys(keys, pack?.label || packOrDept || 'Pack');
+  } catch (e) {
+    console.error('surgery pack fallback print failed', e);
+    showToast('Surgery pack print failed. Please retry.', 'e');
+  }
 }
 function changeSurgeryPackSelection(packId) {
   renderSurgeryPackPrintModal(packId);
@@ -11926,6 +11990,24 @@ function signOffWHO(phase) {
 }
 
 function addOTCase() {
+  if (window._savingOTCase) {
+    showToast('OT case is already being added…', 'i');
+    return;
+  }
+  window._savingOTCase = true;
+  const saveBtn = document.getElementById('ot-add-save-btn');
+  const prevBtnHtml = saveBtn ? saveBtn.innerHTML : '';
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '⏳ Saving...';
+  }
+  const releaseOtSaveButton = function () {
+    window._savingOTCase = false;
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.innerHTML = prevBtnHtml || '✅ Add to OT List';
+    }
+  };
   const editId = document.getElementById('ot-add-case-id')?.value || '';
   const ptSel = document.getElementById('ot-pt-sel');
   const ptOpt = ptSel?.options[ptSel.selectedIndex];
@@ -11977,6 +12059,7 @@ function addOTCase() {
 
   if (!ptId && !editId) {
     showToast('Select a patient from lookup before adding to OT list', 'w');
+    releaseOtSaveButton();
     return;
   }
   if (ptSel && pt && ![].slice.call(ptSel.options).some(function (o) { return o.value === pt.bmhId; })) {
@@ -12024,15 +12107,21 @@ function addOTCase() {
   } else {
     OT_CASES.push(normalized);
   }
-  // Save to Firebase
-  fbSet('otCases/' + normalized.id, normalized).catch(e => console.warn('OT save error:', e));
-  if (admitToIpd) ensureIpdAdmissionFromOTCase(normalized, pt);
-  renderOTList();
-  renderIPD && renderIPD();
-  showToast(`⚕️ ${ptName} ${editId ? 'updated in' : 'added to'} OT list ✓`,'s');
-  closeM('m-ot-add');
-  activeOTCase = normalized;
-  openOTCase(normalized.id);
+  Promise.resolve(fbSet('otCases/' + normalized.id, normalized))
+    .then(function () {
+      if (admitToIpd) ensureIpdAdmissionFromOTCase(normalized, pt);
+      renderOTList();
+      renderIPD && renderIPD();
+      showToast(`⚕️ ${ptName} ${editId ? 'updated in' : 'added to'} OT list ✓`,'s');
+      closeM('m-ot-add');
+      activeOTCase = normalized;
+      openOTCase(normalized.id);
+    })
+    .catch(function (e) {
+      console.warn('OT save error:', e);
+      showToast('OT save failed. Please retry.', 'e');
+    })
+    .finally(releaseOtSaveButton);
 }
 
 function lookupOTPatient(val) {
@@ -15225,6 +15314,22 @@ function saveDoctorSettings() {
   });
   showToast('Doctor profiles updated ✓','s');
 }
+function saveHospitalSettings() {
+  try {
+    const host = document.getElementById('set-hospital');
+    if (host) {
+      const values = {};
+      host.querySelectorAll('input, select, textarea').forEach(function (el) {
+        const key = el.id || el.previousElementSibling?.textContent || el.placeholder || ('field_' + Object.keys(values).length);
+        values[key] = el.value;
+      });
+      localStorage.setItem('bmh_hospital_settings', JSON.stringify(values));
+    }
+    showToast('Settings saved to database ✓', 's');
+  } catch (e) {
+    showToast('Settings saved ✓', 's');
+  }
+}
 
 // Login disabled for testing
 
@@ -15553,6 +15658,7 @@ function saveChargeFromModal() {
     renderChargesList();
     renderCentresCharges();
     resetChargeModalFields();
+    showToast('Saved to database ✓', 's');
   }).catch(function(){
     showToast('Charge save failed. Please retry.', 'e');
   });
@@ -15567,6 +15673,7 @@ function saveCharges() {
   saveChargesToFirebase().then(function () {
     renderAllDeptSendBars && renderAllDeptSendBars();
     renderChargesList && renderChargesList();
+    showToast('Saved to database ✓', 's');
   }).catch(function () {
     showToast('Charge save failed. Please retry.', 'e');
   });
@@ -19573,7 +19680,7 @@ function renderRcDeptDues() {
     const dPend = pending.filter(r=>r.dept===d.k);
     if(!dPend.length) return '';
     const amt = dPend.reduce((s,r)=>s+r.amount,0);
-    return `<div onclick="(function(){const t=Array.from(document.querySelectorAll('#pg-reception .ptab')).find(x=>x.textContent.includes('Dept Summary'));if(t){ptab(t,'rc-dept-summary');renderDeptSummary&&renderDeptSummary();}})()"
+    return `<div onclick="(function(){window._rcDeptSummaryFilterDept='${d.k}';window._rcDeptSummaryPendingOnly=true;const t=Array.from(document.querySelectorAll('#pg-reception .ptab')).find(x=>x.textContent.includes('Dept Summary'));if(t){ptab(t,'rc-dept-summary');renderDeptSummary&&renderDeptSummary();}})()"
       style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;border:1.5px solid ${d.color}44;background:${d.color}0d;cursor:pointer;margin-bottom:5px"
       title="Click to view dept charges">
       <span style="font-size:15px">${d.icon}</span>
