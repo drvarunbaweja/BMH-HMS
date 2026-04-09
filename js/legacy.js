@@ -1200,6 +1200,14 @@ function certificateDeptKeyFromUi() {
   if (active === 'pg-skin') return 'skin';
   return normalizeDeptKeyForQueue(window.CURRENT_PATIENT?.dept || CURRENT_USER?.dept || '') || 'ophtho';
 }
+function activeClinicDeptKey() {
+  const active = document.querySelector('.page.active')?.id || '';
+  if (active === 'pg-ophtho') return 'ophtho';
+  if (active === 'pg-obg') return 'obg';
+  if (active === 'pg-psych') return 'psych';
+  if (active === 'pg-skin') return 'skin';
+  return normalizeDeptKeyForQueue(window.CURRENT_PATIENT?.dept || CURRENT_USER?.dept || '') || 'ophtho';
+}
 function getCertificateTemplatesForDept(dept) {
   const custom = Object.values(CERTIFICATE_TEMPLATES || {}).filter(function (tpl) { return tpl && tpl.dept === dept; });
   return (CERTIFICATE_LIBRARY_DEFAULTS[dept] || []).concat(custom);
@@ -1767,7 +1775,7 @@ function nav(id, el, opts) {
   document.querySelectorAll('.ni').forEach(n => n.classList.remove('active'));
   const pg = document.getElementById('pg-' + pageKey);
   if(pg) pg.classList.add('active');
-  document.body.classList.toggle('queue-sidebar-collapsed', pageKey === 'doctor-queue');
+  document.body.classList.toggle('queue-sidebar-collapsed', ['doctor-queue','ophtho','obg','psych','skin'].includes(pageKey));
   // Update title
   const titles = {dashboard:'Dashboard','doctor-queue':'My Patient Queue',ophtho:'Eye Examination',
     appointments:'Appointment Book','print-templates':'Print Templates',consents:'Consent Forms',
@@ -3023,18 +3031,19 @@ function sendQuickCharge(name, amount, bmhIdOverride) {
   showToast('📤 '+name+' ₹'+parseInt(amount).toLocaleString('en-IN')+' → Reception pulsing ✓','s');
 }
 function bookFollowup() {
-  const d = document.getElementById('rx-fu-date')?.value;
+  const dept = activeClinicDeptKey();
+  const fuInput = getDeptFollowUpDateInput(dept === 'ophtho' ? 'oe' : dept);
+  const d = fuInput?.value;
   if(!d) { showToast('Please select a follow-up date first','w'); return; }
   const fuDate = new Date(d);
   const formatted = fuDate.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
-  const ptName = document.getElementById('ophtho-pt-nm')?.textContent ||
-                 document.getElementById('obg-pt-nm')?.textContent ||
-                 document.getElementById('psych-pt-nm')?.textContent ||
-                 document.getElementById('skin-pt-nm')?.textContent || 'Patient';
-  const ptId   = document.getElementById('ophtho-pt-uid')?.textContent || '—';
+  const ptNameMap = { ophtho:'ophtho-pt-nm', obg:'obg-pt-nm', psych:'psych-pt-nm', skin:'skin-pt-nm' };
+  const ptIdMap = { ophtho:'ophtho-pt-uid', obg:'obg-pt-uid', psych:'psych-pt-uid', skin:'skin-pt-uid' };
+  const ptName = document.getElementById(ptNameMap[dept])?.textContent?.trim() || window.CURRENT_PATIENT?.name || 'Patient';
+  const ptId   = document.getElementById(ptIdMap[dept])?.textContent?.trim() || window.CURRENT_PATIENT?.bmhId || '—';
   const ptMob  = PATIENTS.find(p=>p.bmhId===ptId)?.mob || '';
   const doc    = CURRENT_USER?.name || 'Doctor';
-  const dept   = CURRENT_USER?.dept || 'Ophthalmology';
+  const deptLabel = CURRENT_USER?.dept || dept || 'Ophthalmology';
   const nearestSlot = getNearestAppointmentSlot(d, new Date());
 
   // Add to APPOINTMENTS array
@@ -3052,7 +3061,7 @@ function bookFollowup() {
     dateFormatted: formatted,
     time: nearestSlot,
     doctor: doc,
-    dept: dept,
+    dept: deptLabel,
     purpose: 'Follow-up',
     status: 'booked',
     centre: normalizeAppointmentCentreValue(window.CURRENT_PATIENT?.centre || CURRENT_USER?.centre || 'CHD'),
@@ -3064,6 +3073,11 @@ function bookFollowup() {
   APPOINTMENTS.push(apt);
   // Save to Firebase
   if(typeof saveAppointmentToFirebase==='function') saveAppointmentToFirebase(apt);
+  if (window.CURRENT_PATIENT) {
+    window.CURRENT_PATIENT.lastVisit = window.CURRENT_PATIENT.lastVisit || {};
+    window.CURRENT_PATIENT.lastVisit.rxFuDate = d;
+    window.CURRENT_PATIENT.lastVisit.followupDate = d;
+  }
 
   // Update UI
   const fuDisplay = document.getElementById('rx-fu-display');
@@ -9942,20 +9956,25 @@ function setFollowupDays(n, unit) {
   else if(u==='w'||u==='week') d.setDate(d.getDate()+n*7);
   else if(u==='m'||u==='month') d.setMonth(d.getMonth()+n);
   const v = d.toISOString().split('T')[0];
-  document.querySelectorAll('#rx-fu-date').forEach(e=>e.value=v);
-  bookFollowupApt(d, n, unit);
+  const dept = activeClinicDeptKey();
+  const fuInput = getDeptFollowUpDateInput(dept === 'ophtho' ? 'oe' : dept);
+  if (fuInput) fuInput.value = v;
+  bookFollowupApt(d, n, unit, dept);
 }
 
-function bookFollowupApt(date, n, unit) {
-  const ptId   = document.querySelector('[id$="-rx-ptid"]')?.textContent||document.getElementById('ophtho-pt-uid')?.textContent||'';
-  const ptName = document.querySelector('[id$="-rx-ptname"]')?.textContent||document.getElementById('ophtho-pt-nm')?.textContent||'Patient';
+function bookFollowupApt(date, n, unit, deptKey) {
+  const dept = deptKey || activeClinicDeptKey();
+  const ptIdMap = { ophtho:'ophtho-pt-uid', obg:'obg-pt-uid', psych:'psych-pt-uid', skin:'skin-pt-uid' };
+  const ptNameMap = { ophtho:'ophtho-pt-nm', obg:'obg-pt-nm', psych:'psych-pt-nm', skin:'skin-pt-nm' };
+  const ptId   = document.getElementById(ptIdMap[dept])?.textContent?.trim() || window.CURRENT_PATIENT?.bmhId || '';
+  const ptName = document.getElementById(ptNameMap[dept])?.textContent?.trim() || window.CURRENT_PATIENT?.name || 'Patient';
   const unitLabel = unit==='D'?'day':unit==='W'?'week':'month';
   const apt = {
     id:'APT-'+Date.now(), patient:ptName, bmhId:ptId,
     mob:PATIENTS.find(p=>p.bmhId===ptId)?.mob||'',
     date:date.toISOString().split('T')[0], time:normalizeAptTimeLabel(getNearestAppointmentSlot(date.toISOString().split('T')[0])),
     doctor:CURRENT_USER?.name||'Dr. Varun Baweja',
-    dept:CURRENT_USER?.dept||'Ophthalmology', centre:CURRENT_USER?.centre||'CHD',
+    dept:CURRENT_USER?.dept||dept||'Ophthalmology', centre:CURRENT_USER?.centre||'CHD',
     purpose:'Follow-up ('+n+' '+unitLabel+(n>1?'s':'')+' review)',
     status:'booked', bookedAt:new Date().toISOString()
   };
