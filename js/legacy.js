@@ -1344,6 +1344,15 @@ function collectConsentPrintContext() {
 }
 function buildAdmissionSlipPage(ctx) {
   const esc = escapeHtmlConsent;
+  const fmtSlipDate = function (value) {
+    if (!value) return '';
+    try { return formatDateDDMMYYYY(value); } catch (e) {}
+    try {
+      const d = new Date(value);
+      if (!isNaN(d.getTime())) return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
+    } catch (e) {}
+    return String(value || '');
+  };
   const ot = window._CONSENT_PRINT_OT_ID ? OT_CASES.find(function (c) { return c.id === window._CONSENT_PRINT_OT_ID; }) : null;
   const ptList = Array.isArray(window.PATIENTS) ? window.PATIENTS : [];
   const pt = ptList.find(function (p) { return p.bmhId === (ctx?.ptId || ''); }) || {};
@@ -1351,7 +1360,7 @@ function buildAdmissionSlipPage(ctx) {
   const procedure = String((ot && (ot.procedure || ot.surgery)) || ctx?.procedure || '________________').trim();
   const relation = pt.relativeName || pt.guardianName || pt.guardian || pt.fatherName || pt.husbandName || pt.spouseName || '________________';
   const admitArea = (ot && (ot.room || ot.admitArea)) || 'Ward / Private Room / Labour Room';
-  const admissionDate = ot && ot.date ? formatDateDMY(ot.date) : formatDateDMY(new Date());
+  const admissionDate = ot && ot.date ? fmtSlipDate(ot.date) : fmtSlipDate(new Date());
   const admissionTime = ot && ot.scheduledTime ? String(ot.scheduledTime) : '________________';
   const reason = [diagnosis, procedure].filter(function (x) { return x && x !== '________________'; }).join(' · ') || '________________';
   const logo = resolvePrintLogoSrc();
@@ -1616,15 +1625,15 @@ function renderPackDocumentPages(key, ctx) {
         return buildConsentPageShell(cd, ctx, variant);
       }
     }
-    const resolved = resolveConsentDataForPrint(key);
-    if (resolved && resolved.paras && resolved.paras.length) {
-      const variant = getPreferredConsentVariant(resolved, lib?.lang || tpl?.lang || window._CONSENT_PRINT_LANG || '');
-      return buildConsentPageShell(resolved, ctx, variant);
-    }
-    if (lib && lib.type === 'image') return renderImageDocumentPage(title, lib.imgSrc, ctx);
-    if (lib && (lib.text || lib.body)) return renderGenericDocumentPage(title, lib.text || lib.body, ctx, { signatures: lib.docType !== 'form' });
-    if (tpl && tpl.content) return renderGenericDocumentPage(title, tpl.content, ctx, { signatures: false });
-    return '';
+  const resolved = resolveConsentDataForPrint(key);
+  if (resolved && resolved.paras && resolved.paras.length) {
+    const variant = getPreferredConsentVariant(resolved, lib?.lang || tpl?.lang || window._CONSENT_PRINT_LANG || '');
+    return buildConsentPageShell(resolved, ctx, variant);
+  }
+  if (lib && lib.type === 'image') return renderImageDocumentPage(title, lib.imgSrc, ctx);
+  if (lib && (lib.text || lib.body)) return renderGenericDocumentPage(title, lib.text || lib.body, ctx, { signatures: lib.docType !== 'form' });
+  if (tpl && tpl.content) return renderGenericDocumentPage(title, tpl.content, ctx, { signatures: false });
+  return renderGenericDocumentPage(title, 'This saved pack item is linked, but no printable content could be resolved. Please review this template/document in Settings.', ctx || collectConsentPrintContext(), { signatures: false });
   } catch (e) {
     console.error('renderPackDocumentPages failed', key, e);
     try {
@@ -8604,7 +8613,7 @@ const INVESTIGATION_LIBRARY = {
   ]
 };
 const RX_FREQ_OPTIONS = ['Half-hourly','Hourly','Every 2 hours','Every 3 hours','Every 4 hours','Six times daily (6x/day)','Four times daily (QID)','Three times daily (TDS)','Twice daily (BD)','Once daily (OD)','At bedtime (HS)','Once weekly','As needed (PRN)'];
-const RX_DURATION_OPTIONS = ['½ day','1 day','2 days','3 days','4 days','5 days','6 days','7 days','13 days','1 week','2 weeks','3 weeks','4 weeks','6 weeks','1 month','2 months','3 months','4 months','5 months','6 months','12 months','Ongoing'];
+const RX_DURATION_OPTIONS = ['½ day','1 day','2 days','3 days','4 days','5 days','6 days','7 days','10 days','13 days','1 week','2 weeks','3 weeks','4 weeks','6 weeks','1 month','2 months','3 months','4 months','5 months','6 months','12 months','Ongoing'];
 const RX_TYPE_OPTIONS = ['Eye Drop','Tablet','Capsule','Ointment','Cream','Gel','Syrup','Injection','Pessary','Lotion','Spray','Other'];
 const RX_SITE_OPTIONS = ['Right Eye (OD)','Left Eye (OS)','Both Eyes (OU)','Oral','Topical','IM / IV','Nasal','Ear','Vaginal'];
 const RX_CUSTOM_OPTION_DEFAULTS = {
@@ -8674,13 +8683,21 @@ function refreshCustomRxOptionSelects() {
 }
 function addCustomRxOption(kind) {
   const labels = { type: 'drug type', freq: 'frequency', dur: 'default duration' };
-  const value = window.prompt('Add a new ' + (labels[kind] || kind) + ' for this doctor and department:')?.trim();
-  if (!value) return;
+  const raw = window.prompt('Add a new ' + (labels[kind] || kind) + ' for this doctor and department:')?.trim();
+  if (!raw) return;
+  const value = kind === 'dur' ? raw : toDisplayTitleCase(raw);
   const bucket = getDoctorCustomRxOptions();
   if (!bucket[kind]) bucket[kind] = [];
   if (!bucket[kind].includes(value)) bucket[kind].push(value);
   saveDoctorCustomRxOptions();
   refreshCustomRxOptionSelects();
+  if (kind === 'type') {
+    ['new-drug-type','md-add-type','md-edit-type'].forEach(function (id) { const el = document.getElementById(id); if (el) el.value = value; });
+  } else if (kind === 'freq') {
+    ['new-drug-freq','md-add-freq','md-edit-freq'].forEach(function (id) { const el = document.getElementById(id); if (el) el.value = value; });
+  } else if (kind === 'dur') {
+    ['new-drug-dur','md-add-dur','md-edit-dur'].forEach(function (id) { const el = document.getElementById(id); if (el) el.value = value; });
+  }
   showToast('Saved for ' + (CURRENT_USER?.name || 'doctor') + ' ✓', 's');
 }
 function renderInvestigationChooser() {
@@ -20971,7 +20988,8 @@ function saveVisit(dept, opts) {
       .forEach(id => { visit[id] = document.getElementById(id)?.value || ''; });
     ['skin-cosm-melasma','skin-cosm-acne','skin-cosm-scar','skin-cosm-ageing','skin-cosm-sensitive','skin-cosm-hair']
       .forEach(id => { visit[id] = !!document.getElementById(id)?.checked; });
-    const skinGuidance = computeSkinGuidance();
+    let skinGuidance = { diagnoses: [], investigations: [], management: [], procedures: [] };
+    try { skinGuidance = computeSkinGuidance() || skinGuidance; } catch (skinErr) { console.warn('computeSkinGuidance failed during save', skinErr); }
     visit.chiefComplaint = document.getElementById('skin-chief')?.value || '';
     visit.exam = document.getElementById('skin-dermoscopy')?.value || '';
     visit.procedures = document.querySelector('#skin-procedures textarea')?.value || '';
