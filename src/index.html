@@ -51,6 +51,13 @@
       .ptabs { overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; white-space:nowrap; }
       .ptabs::-webkit-scrollbar { display:none; }
       .ptab { flex:0 0 auto; }
+      #m-ipd-monitor .modal { width:calc(100vw - 10px) !important; max-width:none !important; margin:0 auto; }
+      #ipd-monitor-body { padding-right:0 !important; }
+      #ipd-monitor-body [data-ipdm-head],
+      #ipd-monitor-body [data-ipdm-vitals],
+      #ipd-monitor-body [data-ipdm-labour] { grid-template-columns:1fr !important; }
+      #ipd-monitor-body [data-ipdm-row] { grid-template-columns:34px 1fr !important; }
+      #ipd-monitor-body [data-ipdm-row] > :last-child { grid-column:1 / -1; }
       #set-rx-tpl-list > div > div, #admin-users-list > div { flex-wrap:wrap !important; }
       #set-rx-tpl-list .btn, #admin-users-list .btn, #ot-case-detail .btn, #sp-pack-print-checklist label { width:100%; justify-content:center; }
       #pg-ot [style*="display:grid;grid-template-columns:1fr 1fr"], #pg-ot .fg { grid-template-columns:1fr !important; }

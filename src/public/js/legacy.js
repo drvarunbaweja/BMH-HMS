@@ -5773,15 +5773,26 @@ function ensureIpdAdmissionFromOTCase(otCase, patient) {
 }
 function autoDischargeCurrentIpdPatientFromSurgery() {
   const bmhId = document.getElementById('dc-pt-id')?.textContent?.trim() || activeOTCase?.bmhId || window.CURRENT_PATIENT?.bmhId;
-  if (!bmhId || !window.IPD_PATIENTS) return;
-  const idx = window.IPD_PATIENTS.findIndex(function (p) { return p.bmhId === bmhId; });
-  if (idx < 0) return;
-  const ipd = window.IPD_PATIENTS[idx];
+  const list = window.IPD_PATIENTS || IPD_PATIENTS || [];
+  if (!bmhId || !list.length) return;
+  const match = list.find(function (p) {
+    return p.bmhId === bmhId || (activeOTCase?.id && p.otCaseId === activeOTCase.id);
+  });
+  if (!match) return;
+  dischargeIPDPatientById(match.id);
+}
+function dischargeIPDPatientById(id, opts) {
+  opts = opts || {};
+  const list = window.IPD_PATIENTS || IPD_PATIENTS || [];
+  const idx = list.findIndex(function (p) { return p.id === id; });
+  if (idx < 0) return false;
+  const ipd = list[idx];
+  const bmhId = ipd.bmhId;
   ipd.status = 'discharged';
   ipd.dischargedAt = new Date().toISOString();
   ipd.dischargedBy = CURRENT_USER?.name || 'System';
   fbUpdate && fbUpdate('ipdPatients/' + ipd.id, { status:'discharged', dischargedAt:ipd.dischargedAt, dischargedBy:ipd.dischargedBy }).catch(function(){});
-  window.IPD_PATIENTS.splice(idx, 1);
+  list.splice(idx, 1);
   const pt = PATIENTS.find(function (p) { return p.bmhId === bmhId; });
   if (pt) {
     pt.ipdAdmitted = false;
@@ -5790,7 +5801,12 @@ function autoDischargeCurrentIpdPatientFromSurgery() {
   }
   renderIPD && renderIPD();
   renderDocQueue && renderDocQueue();
-  showToast('Patient discharged from IPD ✓', 's');
+  if (!opts.silentToast) showToast('Patient discharged from IPD ✓', 's');
+  return true;
+}
+function dischargeActiveIPDPatient() {
+  if (!activeIPDPatient?.id) return;
+  dischargeIPDPatientById(activeIPDPatient.id);
 }
 function otCaseNeedsObgFlow(procText, patientId) {
   const proc = String(procText || '').toLowerCase();
@@ -5900,7 +5916,7 @@ function renderIPDMonitoringSheet(id) {
           ${row.options.map(function (opt) { return '<option value="' + escapeHtmlConsent(opt) + '"' + (String(row.value || '') === String(opt) ? ' selected' : '') + '>' + escapeHtmlConsent(opt) + '</option>'; }).join('')}
         </select>`
       : `<input type="text" value="${escapeHtmlConsent(row.value || '')}" placeholder="${escapeHtmlConsent(row.placeholder || 'Remark')}" oninput="updateIPDMonitorRow(${idx},this.value)" style="width:100%;border:1px solid var(--g4);border-radius:8px;padding:7px 9px;font-size:12px;background:#fff">`;
-    return `<div style="display:grid;grid-template-columns:auto minmax(180px,1.1fr) minmax(180px,1fr);gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--g5)">
+    return `<div data-ipdm-row="1" style="display:grid;grid-template-columns:auto minmax(180px,1.1fr) minmax(180px,1fr);gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--g5)">
       <label style="display:flex;align-items:center;justify-content:center"><input type="checkbox" ${row.checked ? 'checked' : ''} onchange="toggleIPDMonitorCheck(${idx},this.checked)"></label>
       <div style="font-size:12px;font-weight:800;color:var(--tx1)">${row.label}</div>
       ${control}
@@ -5910,7 +5926,7 @@ function renderIPDMonitoringSheet(id) {
   const labourPanel = showLabour ? `
     <div style="margin-top:14px;background:#fff4f8;border:1px solid rgba(192,0,78,.18);border-radius:12px;padding:12px">
       <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:900;color:#c0004e;margin-bottom:10px"><input type="checkbox" id="ipdm-in-labour" ${p.inLabour ? 'checked' : ''} onchange="document.getElementById('ipdm-labour-block').style.display=this.checked?'grid':'none'"> Patient in labour</label>
-      <div id="ipdm-labour-block" style="display:${p.inLabour ? 'grid' : 'none'};grid-template-columns:repeat(3,minmax(0,1fr));gap:10px">
+      <div id="ipdm-labour-block" data-ipdm-labour="1" style="display:${p.inLabour ? 'grid' : 'none'};grid-template-columns:repeat(3,minmax(0,1fr));gap:10px">
         <div class="form-group" style="margin:0"><label class="fl">Contractions</label><select id="ipdm-contractions"><option value="">— Select —</option><option ${p.labourContractions==='Regular'?'selected':''}>Regular</option><option ${p.labourContractions==='Irregular'?'selected':''}>Irregular</option><option ${p.labourContractions==='Poor progress'?'selected':''}>Poor progress</option></select></div>
         <div class="form-group" style="margin:0"><label class="fl">FHR / fetal status</label><select id="ipdm-fhr"><option value="">— Select —</option><option ${p.labourFhr==='Reassuring'?'selected':''}>Reassuring</option><option ${p.labourFhr==='Tachycardia'?'selected':''}>Tachycardia</option><option ${p.labourFhr==='Bradycardia'?'selected':''}>Bradycardia</option><option ${p.labourFhr==='Needs urgent review'?'selected':''}>Needs urgent review</option></select></div>
         <div class="form-group" style="margin:0"><label class="fl">Liquor / membranes</label><select id="ipdm-liquor"><option value="">— Select —</option><option ${p.labourLiquor==='Clear'?'selected':''}>Clear</option><option ${p.labourLiquor==='Meconium'?'selected':''}>Meconium</option><option ${p.labourLiquor==='Leaking'?'selected':''}>Leaking</option><option ${p.labourLiquor==='Ruptured'?'selected':''}>Ruptured</option></select></div>
@@ -5920,7 +5936,7 @@ function renderIPDMonitoringSheet(id) {
       </div>
     </div>` : '';
   host.innerHTML = `
-    <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px">
+    <div data-ipdm-head="1" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px">
       <div style="background:#eef3fb;border-radius:10px;padding:10px"><div style="font-size:9px;font-weight:900;color:var(--g1);text-transform:uppercase">Patient</div><div style="font-size:13px;font-weight:900;color:#1A3C6E">${p.name}</div></div>
       <div style="background:#eefcf6;border-radius:10px;padding:10px"><div style="font-size:9px;font-weight:900;color:var(--g1);text-transform:uppercase">Procedure / surgery</div><div style="font-size:13px;font-weight:900;color:#1a8c3c">${otCase.procedure || p.surgery || p.type || '—'}</div></div>
       <div style="background:#fff7e8;border-radius:10px;padding:10px"><div style="font-size:9px;font-weight:900;color:var(--g1);text-transform:uppercase">${normalizeDeptKeyForQueue(p.dept || '') === 'ophtho' ? 'Eye / site' : 'Ward / type'}</div><div style="font-size:13px;font-weight:900;color:#8a4200">${normalizeDeptKeyForQueue(p.dept || '') === 'ophtho' ? (otCase.site || p.surgeryEye || '—') : (p.ward || p.type || '—')}</div></div>
@@ -5928,7 +5944,7 @@ function renderIPDMonitoringSheet(id) {
     </div>
     <div style="background:#fff;border:1px solid var(--g5);border-radius:12px;padding:12px;margin-bottom:12px">
       <div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Quick vitals entry</div>
-      <div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px">
+      <div data-ipdm-vitals="1" style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px">
         <div class="form-group" style="margin:0"><label class="fl">BP</label><input type="text" id="ipdm-bp" value="${escapeHtmlConsent(lastVitals.bp || '')}" placeholder="120/80"></div>
         <div class="form-group" style="margin:0"><label class="fl">Pulse</label><input type="number" id="ipdm-pulse" value="${escapeHtmlConsent(lastVitals.pulse || '')}" placeholder="72"></div>
         <div class="form-group" style="margin:0"><label class="fl">Temp</label><input type="number" step="0.1" id="ipdm-temp" value="${escapeHtmlConsent(lastVitals.temp || '')}" placeholder="36.8"></div>
@@ -6099,7 +6115,7 @@ function openIPDPatient(id) {
     </div>
     <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:12px">
       <button class="btn btn-outline btn-sm" onclick="printIPDSummary('${p.id}')">🖨️ Print Summary</button>
-      <button class="btn btn-gold btn-sm" onclick="showToast('Discharge card generated ✓','s')">🏠 Discharge</button>
+        <button class="btn btn-gold btn-sm" onclick="dischargeActiveIPDPatient()">🏠 Discharge</button>
       <button class="btn btn-gray btn-sm" onclick="openIPDWorkflow('${p.id}')">📋 Open Monitoring Sheet</button>
     </div>`;
   renderIPDAlerts(p);
@@ -6306,6 +6322,22 @@ function bmhTotalReceivedForPatient(bmhId) {
   return (TRANSACTIONS || [])
     .filter(t => t.bmhId === bmhId && t.collected !== false)
     .reduce((s, t) => s + Math.max(0, Number(t.amount) || 0), 0);
+}
+function bmhGetChargeCategoriesForPatient(bmhId) {
+  return Array.from(new Set((window.BMH_PATIENT_CHARGES[bmhId] || []).map(function (line) {
+    return String(line.cat || inferChargeCategoryFromService(line.desc || line.name || '') || 'other').toLowerCase();
+  }).filter(Boolean)));
+}
+function bmhTotalReceivedForCategories(bmhId, categories) {
+  const cats = Array.isArray(categories) ? categories.map(function (c) { return String(c || '').toLowerCase(); }).filter(Boolean) : [];
+  if (!cats.length) return bmhTotalReceivedForPatient(bmhId);
+  return (TRANSACTIONS || [])
+    .filter(function (t) {
+      if (t.bmhId !== bmhId || t.collected === false) return false;
+      const inferred = String(inferChargeCategoryFromService(t.service || t.for || t.desc || '') || 'other').toLowerCase();
+      return cats.includes(inferred);
+    })
+    .reduce(function (s, t) { return s + Math.max(0, Number(t.amount) || 0); }, 0);
 }
 
 function bmhComputeBalanceDue(bmhId, totalOverride) {
@@ -6786,7 +6818,8 @@ function bmhUpdateBillTotals() {
   const bmhId = document.getElementById('bmh-bill-pt-select')?.value;
   const z = bmhId ? bmhTotalsForPatient(bmhId) : { sub: 0, gst: 0, total: 0, discount: 0, advanceApplied: 0, taxable: 0 };
   const { sub, gst, total, discount, advanceApplied, taxable } = z;
-  const received = bmhId ? bmhTotalReceivedForPatient(bmhId) : 0;
+  const activeCats = bmhId ? bmhGetChargeCategoriesForPatient(bmhId) : [];
+  const received = bmhId ? bmhTotalReceivedForCategories(bmhId, activeCats) : 0;
   const due = Math.max(0, total - received);
   const a = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = '₹' + v.toLocaleString('en-IN'); };
   a('bill-sub', sub);
@@ -6939,6 +6972,9 @@ function printBmhPatientBill(bmhIdOpt) {
   const info = bmhGetPatientFinancialSummary(bmhId);
   const p = info.patient || {};
   const lines = window.BMH_PATIENT_CHARGES[bmhId] || [];
+  const activeCats = Array.from(new Set(lines.map(function (l) {
+    return String(l.cat || inferChargeCategoryFromService(l.desc || l.name || '') || 'other').toLowerCase();
+  }).filter(Boolean)));
   const { sub, total, discount, advanceApplied, taxable } = bmhTotalsForPatient(bmhId);
   const invNo = 'RCP-' + String(Date.now()).slice(-10);
   const today = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -6956,8 +6992,13 @@ function printBmhPatientBill(bmhIdOpt) {
     </tr>`).join('');
     return hdr + rs;
   }).join('');
-  const dueAmt = Math.max(0, bmhComputeBalanceDue(bmhId));
-  const payLines = (TRANSACTIONS || []).filter(t => t.bmhId === bmhId && t.collected !== false).slice(-6).map(t => `<div style="display:flex;justify-content:space-between;font-size:9.5px;padding:3px 0;border-bottom:1px dashed #e0e4ec"><span>${esc(t.service || 'Payment')} · ${esc(t.mode || '')}</span><span style="font-weight:800;color:#1a8c3c">₹${(Number(t.amount)||0).toLocaleString('en-IN')}</span></div>`).join('');
+  const relevantReceived = bmhTotalReceivedForCategories(bmhId, activeCats);
+  const dueAmt = Math.max(0, Math.max(0, Number(taxable != null ? taxable : total) || 0) - relevantReceived);
+  const payLines = (TRANSACTIONS || []).filter(function (t) {
+    if (t.bmhId !== bmhId || t.collected === false) return false;
+    const inferred = String(inferChargeCategoryFromService(t.service || t.for || t.desc || '') || 'other').toLowerCase();
+    return !activeCats.length || activeCats.includes(inferred);
+  }).slice(-6).map(t => `<div style="display:flex;justify-content:space-between;font-size:9.5px;padding:3px 0;border-bottom:1px dashed #e0e4ec"><span>${esc(t.service || 'Payment')} · ${esc(t.mode || '')}</span><span style="font-weight:800;color:#1a8c3c">₹${(Number(t.amount)||0).toLocaleString('en-IN')}</span></div>`).join('');
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Receipt — ${esc(p.name || '')}</title><style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
@@ -7006,7 +7047,7 @@ th:last-child{text-align:right}
 </div>
 <div class="sum">
   <div class="cell"><div class="lbl">Total charges</div><div class="val" style="color:#1A3C6E">₹${info.chargeTotal.toLocaleString('en-IN')}</div></div>
-  <div class="cell"><div class="lbl">Amount received</div><div class="val" style="color:#15803d">₹${info.paidTotal.toLocaleString('en-IN')}</div></div>
+  <div class="cell"><div class="lbl">Amount received</div><div class="val" style="color:#15803d">₹${relevantReceived.toLocaleString('en-IN')}</div></div>
   <div class="cell due"><div class="lbl">Amount due</div><div class="val">₹${dueAmt.toLocaleString('en-IN')}</div></div>
   <div class="cell got"><div class="lbl">After discount / adv.</div><div class="val">₹${(Number(total) || 0).toLocaleString('en-IN')}</div></div>
 </div>
@@ -16021,6 +16062,7 @@ function deleteChargeAt(idx) {
   const row = CHARGES_DATA[idx];
   if (!row) return;
   if (!isCurrentUserAdmin() && !canEditChargeCategory(row.cat)) { showToast('You can edit charges only for your own department', 'w'); return; }
+  if (!confirm('Delete charge "' + (row.name || 'Charge') + '"?')) return;
   CHARGES_DATA.splice(idx, 1);
   saveChargesToFirebase().then(function(){
     renderChargesList();
@@ -16075,6 +16117,7 @@ function saveCharges() {
     CENTRE_CHARGES.CHD[c.name] = c.chd;
     CENTRE_CHARGES.RPR[c.name] = c.rpr;
   });
+  showToast('Saving charges to database…', 'i');
   saveChargesToFirebase().then(function () {
     renderAllDeptSendBars && renderAllDeptSendBars();
     renderChargesList && renderChargesList();
