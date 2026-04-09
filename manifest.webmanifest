@@ -1,0 +1,19 @@
+{
+  "name": "BMH HMS Internal",
+  "short_name": "BMH HMS",
+  "description": "Baweja Multispeciality Hospital internal staff app",
+  "start_url": "/BMH-HMS/",
+  "scope": "/BMH-HMS/",
+  "display": "standalone",
+  "background_color": "#f5f7fb",
+  "theme_color": "#1a3c6e",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/BMH-HMS/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

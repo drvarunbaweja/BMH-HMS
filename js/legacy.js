@@ -16725,6 +16725,7 @@ function listenPayRequests() {
     Object.values(data || {}).forEach(r => {
       if(!centre || r.centre === centre || CURRENT_USER?.isAdmin) PAY_REQUESTS.push(r);
     });
+    runOneTimePendingDuesCleanup && runOneTimePendingDuesCleanup();
     // Update badge
     const nb = document.getElementById('nb-pay');
     if(nb) nb.textContent = PAY_REQUESTS.filter(r=>r.status==='pending').length;
@@ -16732,6 +16733,25 @@ function listenPayRequests() {
     if (activeId === 'pg-reception') renderReceptionPage && renderReceptionPage();
     else if (activeId === 'pg-dashboard') renderDashboard && renderDashboard();
   });
+}
+function runOneTimePendingDuesCleanup() {
+  const cleanupKey = 'bmh_pending_dues_cleanup_20260409';
+  try {
+    if (localStorage.getItem(cleanupKey) === 'done') return;
+  } catch (e) {}
+  const pending = (PAY_REQUESTS || []).filter(function (r) { return r && r.status === 'pending'; });
+  if (!pending.length) {
+    try { localStorage.setItem(cleanupKey, 'done'); } catch (e) {}
+    return;
+  }
+  pending.forEach(function (pr) {
+    pr.status = 'cancelled';
+    pr.cancelledAt = new Date().toISOString();
+    pr.cancelledBy = CURRENT_USER?.name || 'System cleanup';
+    try { if (window.firebase && firebase.database) firebase.database().ref('payRequests/' + pr.id).update({ status:'cancelled', cancelledAt: pr.cancelledAt, cancelledBy: pr.cancelledBy }); } catch (e) {}
+  });
+  try { localStorage.setItem(cleanupKey, 'done'); } catch (e) {}
+  showToast('Pending dues cleaned up ✓', 's');
 }
 
 // ── APPOINTMENTS ─────────────────────────────────────────────
@@ -19891,10 +19911,6 @@ function renderDashboard() {
       const active = (p.status || 'admitted') !== 'discharged';
       return centreMatch(p) && (selectedDate === today ? active : (dateMatch(p.admittedAt) || dateMatch(p.date) || dateMatch(p.createdAt)));
     });
-    const overduePts = displayPts.filter(function (p) {
-      const summary = bmhGetPatientFinancialSummary ? bmhGetPatientFinancialSummary(p.bmhId) : null;
-      return Math.max(Number(p.balance) || 0, Number(summary?.balance || 0), Number(summary?.pendingTotal || 0)) > 0;
-    });
     setEl('db-admin-opd', String(opdCount));
     setEl('db-admin-surgeries', String(surgeryCases.length));
     setEl('db-admin-ipd', String(ipdCases.length));
@@ -19940,10 +19956,6 @@ function renderDashboard() {
           return entry[0] + ': ₹' + Number(entry[1] || 0).toLocaleString('en-IN');
         }).join(' · ') || 'No collections';
       };
-      const dueTotal = overduePts.reduce(function (sum, p) {
-        const summary = bmhGetPatientFinancialSummary ? bmhGetPatientFinancialSummary(p.bmhId) : null;
-        return sum + Math.max(Number(p.balance) || 0, Number(summary?.balance || 0), Number(summary?.pendingTotal || 0));
-      }, 0);
       const cards = deptMeta.map(function (meta) {
         return `<div class="card" style="padding:14px;min-height:180px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
@@ -19985,13 +19997,7 @@ function renderDashboard() {
         </div>
         <div style="margin-top:10px;font-size:10px;font-weight:700;color:var(--g1);line-height:1.5">${totalModeText}</div>
       </div>`;
-      const dueCard = `<div class="card" style="padding:14px;min-height:180px;border:2px solid rgba(255,149,0,.35);cursor:pointer" onclick="showAdminDashboardDetail('dues');renderDashboard()">
-        <div style="font-size:13px;font-weight:900;color:#8a4200;margin-bottom:10px">⚠️ Pending Dues</div>
-        <div class="sc orange" style="min-height:92px"><div class="sc-lbl">Patients with dues</div><div class="sc-val orange">${overduePts.length}</div></div>
-        <div style="margin-top:10px;font-size:12px;font-weight:900;color:#8a4200">₹${dueTotal.toLocaleString('en-IN')}</div>
-        <div style="margin-top:6px;font-size:10px;color:var(--g1);font-weight:700">Click to open and delete dues</div>
-      </div>`;
-      summaryEl.innerHTML = cards.join('') + totalCard + dueCard;
+      summaryEl.innerHTML = cards.join('') + totalCard;
     }
     const renderBarSet = function (values, labels, colors) {
       const max = Math.max(1, ...values);
@@ -20052,7 +20058,6 @@ function renderDashboard() {
       });
       surgChartEl.innerHTML = renderBarSet(days.map(function (x) { return x.value; }), days.map(function (x) { return x.label; }), days.map(function () { return 'var(--orange)'; }));
     }
-    renderAdminDashboardDetail(selectedDate, selectedTxn, overduePts, surgeryCases, ipdCases, displayPts);
   } else {
     const todayPts = PATIENTS.filter(function (p) {
       return centreMatch(p) && normalizeDeptKeyForQueue(p.dept || '') === currentDeptKey && patientQueueDateMatchesToday(p);
