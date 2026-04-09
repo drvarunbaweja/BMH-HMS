@@ -1665,6 +1665,15 @@ function getDeptFollowUpDateInput(deptId) {
   }
   return document.getElementById('rx-fu-date');
 }
+function getDeptFollowUpDisplayEl(deptId) {
+  const wrapSel = { oe: '#pg-ophtho #oe-rx', obg: '#pg-obg #obg-rx', psych: '#pg-psych #psych-rx', skin: '#pg-skin #skin-rx' }[deptId];
+  if (wrapSel) {
+    const wrap = document.querySelector(wrapSel);
+    const el = wrap && wrap.querySelector('#rx-fu-display');
+    if (el) return el;
+  }
+  return document.getElementById('rx-fu-display');
+}
 
 function wireDxInputFocus(inp) {
   if (!inp || inp._dxWired) return;
@@ -3102,7 +3111,7 @@ function bookFollowup() {
   }
 
   // Update UI
-  const fuDisplay = document.getElementById('rx-fu-display');
+  const fuDisplay = getDeptFollowUpDisplayEl(dept === 'ophtho' ? 'oe' : dept);
   if(fuDisplay) {
     fuDisplay.textContent = '📅 ' + formatted;
     fuDisplay.style.color = 'var(--green)';
@@ -3382,28 +3391,37 @@ function buildOphthoCaseSheetHtml() {
 
   // ── chief complaints (scope to ophtho page — avoid picking up rows elsewhere) ──
   const ccRows = [];
-  document.querySelectorAll('#pg-ophtho #cc-rows .cc-row').forEach(row=>{
-    const txt = row.querySelector('.cc-inp')?.value?.trim();
-    if(txt) ccRows.push({text:txt, dur:row.querySelector('.cc-dur')?.value||'', eye:row.querySelector('.cc-eye')?.value||''});
+  const pushCcRow = function (text, dur, eye) {
+    const txt = String(text || '').trim();
+    if (!txt) return;
+    ccRows.push({ text: txt, dur: String(dur || '').trim(), eye: String(eye || '').trim() });
+  };
+  document.querySelectorAll('#pg-ophtho #cc-rows .cc-row').forEach(function (row) {
+    pushCcRow(row.querySelector('.cc-inp')?.value, row.querySelector('.cc-dur')?.value, row.querySelector('.cc-eye')?.value);
   });
   if (!ccRows.length) {
-    ['cc1','cc2','cc3','cc4'].forEach(function (id) {
+    ['cc1','cc2','cc3','cc4'].forEach(function (id, idx) {
       const el = document.getElementById(id);
-      const txt = String(el?.value || '').trim();
-      if (txt) ccRows.push({ text: txt, dur: '', eye: '' });
+      const row = el?.closest('.cc-row');
+      pushCcRow(el?.value, row?.querySelector('.cc-dur')?.value, row?.querySelector('.cc-eye')?.value);
+      if (!row) {
+        const allRows = document.querySelectorAll('#pg-ophtho #cc-rows .cc-row');
+        const fallbackRow = allRows[idx];
+        pushCcRow(el?.value, fallbackRow?.querySelector('.cc-dur')?.value, fallbackRow?.querySelector('.cc-eye')?.value);
+      }
     });
   }
   if (!ccRows.length) {
     const lv = currentPt.lastVisit || {};
     if (Array.isArray(lv.ccRows) && lv.ccRows.length) {
       lv.ccRows.forEach(function (row) {
-        if (row && row.text) ccRows.push({ text: row.text, dur: row.dur || '', eye: row.eye || '' });
+        pushCcRow(row && row.text, row && row.dur, row && row.eye);
       });
     }
     const raw = String(lv.chiefComplaints || lv.cc || '').trim();
     if (!ccRows.length && raw) {
       raw.split(/\s*;\s*/).filter(Boolean).forEach(function (text) {
-        ccRows.push({ text: text, dur: '', eye: '' });
+        pushCcRow(text, '', '');
       });
     }
   }
@@ -10020,11 +10038,21 @@ function setFollowupDays(n, unit) {
   if(u==='d'||u==='day') d.setDate(d.getDate()+n);
   else if(u==='w'||u==='week') d.setDate(d.getDate()+n*7);
   else if(u==='m'||u==='month') d.setMonth(d.getMonth()+n);
-  const v = d.toISOString().split('T')[0];
+  const v = localDateKey(d);
   const dept = activeClinicDeptKey();
   const fuInput = getDeptFollowUpDateInput(dept === 'ophtho' ? 'oe' : dept);
-  if (fuInput) fuInput.value = v;
-  bookFollowupApt(d, n, unit, dept);
+  if (fuInput) {
+    fuInput.value = v;
+    fuInput.dispatchEvent(new Event('input', { bubbles: true }));
+    fuInput.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  const fuDisplay = getDeptFollowUpDisplayEl(dept === 'ophtho' ? 'oe' : dept);
+  if (fuDisplay) {
+    const formatted = d.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
+    fuDisplay.textContent = '📅 ' + formatted;
+    fuDisplay.style.color = 'var(--green)';
+    fuDisplay.style.fontWeight = '800';
+  }
 }
 
 function bookFollowupApt(date, n, unit, deptKey) {
