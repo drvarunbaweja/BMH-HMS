@@ -8784,8 +8784,9 @@ function renderInvestigationChooser() {
   groups.forEach(([id, items]) => {
     const el = document.getElementById(id);
     if(!el) return;
-    el.innerHTML = items.map(([name, price]) => `<div class="invest-option" data-investigation-name="${String(name).replace(/"/g,'&quot;')}" data-price="${price}" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--g6);border-radius:8px;cursor:pointer" onclick="toggleInvestigation(this,${JSON.stringify(name)},${price})"><input type="checkbox" style="width:16px;height:16px;flex-shrink:0"><div style="flex:1"><div style="font-size:12px;font-weight:700">${name}</div><div style="font-size:10px;color:var(--g1)">Outsourced lab / no charge</div></div></div>`).join('');
+    el.innerHTML = items.map(([name, price]) => `<div class="invest-option" data-investigation-name="${String(name).replace(/"/g,'&quot;')}" data-price="${price}" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--g6);border-radius:8px;cursor:pointer;user-select:none;-webkit-user-select:none" onclick="toggleInvestigation(this,${JSON.stringify(name)},${price})"><input type="checkbox" tabindex="-1" aria-hidden="true" style="width:16px;height:16px;flex-shrink:0;pointer-events:none"><div style="flex:1"><div style="font-size:12px;font-weight:700">${name}</div><div style="font-size:10px;color:var(--g1)">Outsourced lab / no charge</div></div></div>`).join('');
   });
+  syncSelectedInvestigationCheckboxes();
 }
 let INVESTIGATION_TEMPLATES_DATA = {
   'baseline-lab': ['CBC (Complete Blood Count)', 'Fasting Blood Sugar', 'HbA1c', 'Serum Creatinine'],
@@ -10224,6 +10225,7 @@ function filterPastVisits(type) { showToast(`Showing ${type==='all'?'all visits'
 // INVESTIGATIONS
 function toggleInvestigation(el, name, price) {
   const cb = el.querySelector('input[type=checkbox]');
+  if(!cb) return;
   cb.checked = !cb.checked;
   el.style.background = cb.checked ? 'var(--blue-lt)' : 'var(--g6)';
   const idx = SELECTED_INVESTIGATIONS.findIndex(i=>i.name===name);
@@ -10231,6 +10233,56 @@ function toggleInvestigation(el, name, price) {
   else if(!cb.checked && idx>-1) SELECTED_INVESTIGATIONS.splice(idx,1);
   syncSelectedInvestigationCheckboxes();
 }
+
+window._bmhDeferredInstallPrompt = null;
+window._bmhInstallPromptReady = false;
+
+function updateInstallAppUi() {
+  const btn = document.getElementById('dash-install-app-btn');
+  const note = document.getElementById('dash-install-app-note');
+  const iosHint = /iphone|ipad|ipod/i.test(navigator.userAgent || '');
+  if (btn) {
+    btn.style.display = (window._bmhInstallPromptReady || iosHint) ? 'inline-flex' : 'none';
+  }
+  if (note) {
+    note.textContent = iosHint
+      ? 'On iPhone/iPad, open in Safari and use Share → Add to Home Screen.'
+      : (window._bmhInstallPromptReady ? 'Install the internal app for faster phone access.' : 'If install does not appear, refresh once and reopen the dashboard.');
+  }
+}
+
+window.promptInstallApp = async function promptInstallApp() {
+  const iosHint = /iphone|ipad|ipod/i.test(navigator.userAgent || '');
+  if (window._bmhDeferredInstallPrompt) {
+    try {
+      window._bmhDeferredInstallPrompt.prompt();
+      await window._bmhDeferredInstallPrompt.userChoice;
+    } catch (e) {}
+    window._bmhDeferredInstallPrompt = null;
+    window._bmhInstallPromptReady = false;
+    updateInstallAppUi();
+    return;
+  }
+  if (iosHint) {
+    showToast('Use Safari → Share → Add to Home Screen', 'i');
+    return;
+  }
+  showToast('Install option will appear when the browser is ready.', 'i');
+};
+
+window.addEventListener('beforeinstallprompt', function (e) {
+  try { e.preventDefault(); } catch (err) {}
+  window._bmhDeferredInstallPrompt = e;
+  window._bmhInstallPromptReady = true;
+  updateInstallAppUi();
+});
+
+window.addEventListener('appinstalled', function () {
+  window._bmhDeferredInstallPrompt = null;
+  window._bmhInstallPromptReady = false;
+  showToast('BMH HMS installed ✓', 's');
+  updateInstallAppUi();
+});
 function removePendingInvestigationPayRequestsForPatient(bmhId, orderNames) {
   const names = new Set((orderNames || []).map(function (x) { return String(x || '').trim(); }).filter(Boolean));
   (PAY_REQUESTS || []).slice().forEach(function (pr) {
@@ -19850,6 +19902,7 @@ function selectExistingPatient(bmhId) {
 
 // ── renderDashboard — admin (finance/stock) vs clinical (doctors) ────
 function renderDashboard() {
+  try { updateInstallAppUi && updateInstallAppUi(); } catch (e) {}
   const today = new Date().toISOString().split('T')[0];
   const adminDateEl = document.getElementById('db-admin-date');
   if (adminDateEl && !adminDateEl.value) adminDateEl.value = today;

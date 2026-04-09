@@ -208,6 +208,22 @@
       <div style="text-align:center;background:rgba(212,160,23,.2);border-radius:8px;padding:7px 12px"><div style="font-size:20px;font-weight:900" id="db-collection">₹0</div><div style="font-size:9px;opacity:.7;font-weight:700">COLLECTED</div></div>
     </div>
   </div>
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-hd" style="gap:10px;flex-wrap:wrap">
+      <div>
+        <div class="card-title">Internal App</div>
+        <div class="card-sub" id="dash-install-app-note">Install the internal app for faster phone access.</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-left:auto">
+        <button class="btn btn-gold btn-sm" type="button" id="dash-install-app-btn" onclick="promptInstallApp()" style="display:none">Install App</button>
+        <button class="btn btn-outline btn-sm" type="button" onclick="nav('doctor-queue',null)">Queue</button>
+        <button class="btn btn-outline btn-sm" type="button" onclick="nav('reception',null)">Reception</button>
+        <button class="btn btn-outline btn-sm" type="button" onclick="nav('ot',null)">OT</button>
+        <button class="btn btn-outline btn-sm" type="button" onclick="nav('ipd',null)">IPD</button>
+        <button class="btn btn-outline btn-sm" type="button" onclick="nav('lab',null)">Lab</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Admin / finance dashboard (no live queue) -->
   <div id="dash-view-admin" style="display:none">
