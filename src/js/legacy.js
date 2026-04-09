@@ -20476,9 +20476,10 @@ function saveVisit(dept, opts) {
     visit.pohOsText = document.getElementById('poh-os-text')?.value || '';
     const PHX_IDS = ['phx-allergy','phx-diabetes_mellit','phx-hypertension','phx-heart_disease__','phx-asthma___copd','phx-headache___migr','phx-thyroid_disease','phx-renal_disease','phx-previous_surger','phx-bleeding_disord'];
     visit.phxExtra = {};
+    const prevPhxExtra = localPt?.lastVisit?.phxExtra || cachedVisits[todaysExistingKey || '']?.phxExtra || {};
     PHX_IDS.forEach(id => {
       const durRaw = document.getElementById(id+'-dur')?.value || '';
-      let baseDate = v.phxExtra && v.phxExtra[id] ? v.phxExtra[id].baseDate : '';
+      let baseDate = prevPhxExtra && prevPhxExtra[id] ? prevPhxExtra[id].baseDate : '';
       if (!baseDate && ((document.getElementById(id)?.value || '') === 'Y')) {
         const m = String(durRaw).match(/(\d+)\s*(year|years|yr|yrs|month|months|mo|mos)/i);
         const now = new Date();
