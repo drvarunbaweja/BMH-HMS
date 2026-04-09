@@ -2431,6 +2431,8 @@ function openPatient(bmhId, opts) {
   }
   const ucvaOsDist = document.getElementById('ucva-os-dist'); if (ucvaOsDist) ucvaOsDist.value = '';
   const ucvaOdDist = document.getElementById('ucva-od-dist'); if (ucvaOdDist) ucvaOdDist.value = '';
+  const fundCdOd = document.getElementById('fund-od-cd'); if (fundCdOd) fundCdOd.value = '0.3';
+  const fundCdOs = document.getElementById('fund-os-cd'); if (fundCdOs) fundCdOs.value = '0.3';
   // IOP badges — reset to blank state
   const iopOdVal = document.getElementById('iop-od-val'); if(iopOdVal) iopOdVal.textContent = '—';
   const iopOsVal = document.getElementById('iop-os-val'); if(iopOsVal) iopOsVal.textContent = '—';
@@ -6597,6 +6599,31 @@ function bmhQuickChargeGroups() {
   if (showStay) groups.push({ label: 'Stay / Inpatient', items: stay, cat: 'stay' });
   return groups.filter(group => group.items && group.items.length);
 }
+function bmhQuickChargeGroupedItems() {
+  const bmhId = document.getElementById('bmh-bill-pt-select')?.value;
+  const pt = PATIENTS.find(function (x) { return x.bmhId === bmhId; }) || {};
+  const deptKey = window._bmhQuickChargeDept || pt.dept || 'all';
+  const deptCats = {
+    ophtho: /^eye/i,
+    obg: /^obg/i,
+    psych: /^psych/i,
+    skin: /^skin/i
+  };
+  const deptRows = deptCats[deptKey]
+    ? CHARGES_DATA.filter(function (c) { return deptCats[deptKey].test(String(c.cat || '')); })
+    : CHARGES_DATA.slice();
+  const groups = {};
+  deptRows.forEach(function (row) {
+    const heading = String(row.parent || row.name || '').trim();
+    if (!heading) return;
+    if (!groups[heading]) groups[heading] = { heading: heading, parentRow: null, children: [] };
+    if (!row.parent) groups[heading].parentRow = row;
+    else groups[heading].children.push(row);
+  });
+  return Object.values(groups).filter(function (g) { return g.children.length; }).sort(function (a, b) {
+    return a.heading.localeCompare(b.heading);
+  });
+}
 function bmhQuickAddCharge(name, amount, cat) {
   const bmhId = document.getElementById('bmh-bill-pt-select')?.value;
   if (!bmhId) { showToast('Select a patient first', 'w'); return; }
@@ -6645,7 +6672,18 @@ function bmhRenderQuickChargePanels() {
       }).join('') : '<div style="font-size:12px;color:var(--g1)">No matching charges</div>'}
       </div>
     </div>` : '';
-  el.innerHTML = searchHtml + groups.map(group => {
+  const groupedHtml = bmhQuickChargeGroupedItems().map(function (group) {
+    const rows = group.children.map(function (item) {
+      const amount = item[centre?.toLowerCase?.()] ?? item[centre] ?? item.chd ?? 0;
+      const title = String(item.name || '');
+      return `<button type="button" class="btn btn-xs btn-outline" style="display:flex;justify-content:space-between;gap:8px;width:100%;margin-bottom:6px;padding:8px 10px;border-radius:8px;text-align:left;background:#fff" onclick="bmhQuickAddCharge('${String(title).replace(/'/g, "\\'")}', ${Number(amount) || 0}, '${item.kind || 'procedure'}')"><span style="font-size:11.5px;font-weight:800;line-height:1.3">${title}</span><span style="font-size:11.5px;font-weight:900;color:var(--bmh-blue);white-space:nowrap">₹${(Number(amount) || 0).toLocaleString('en-IN')}</span></button>`;
+    }).join('');
+    return `<details style="margin-bottom:10px;background:#fff;border:1px solid var(--g5);border-radius:10px;padding:0 10px 8px">
+      <summary style="cursor:pointer;list-style:none;padding:10px 0;font-size:12px;font-weight:900;color:var(--bmh-blue)">${group.heading}</summary>
+      <div style="padding-top:2px">${rows}</div>
+    </details>`;
+  }).join('');
+  el.innerHTML = searchHtml + groupedHtml + groups.map(group => {
     const items = group.items.map(item => {
       const amount = item[centre?.toLowerCase?.()] ?? item[centre] ?? item.chd ?? 0;
       return cardHtml(item, amount, group.cat, '#fff');
@@ -10973,6 +11011,7 @@ function renderDeptSummary() {
         ${dPRs.map(r=>{
           const pt = PATIENTS.find(p=>p.bmhId===r.bmhId)||{};
           const bid = String(r.bmhId||'').replace(/'/g, "\\'");
+          const canDeleteDue = r.status === 'pending';
           return `<div style="display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid var(--g5)">
             <button type="button" class="btn btn-xs btn-outline" style="flex-shrink:0;padding:4px 7px;min-width:36px" title="Open bill & print receipt" onclick="rcOpenBillingForAndPrint('${bid}')">🧾</button>
             <div style="width:30px;height:30px;border-radius:50%;background:${pt.color||d.color};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:11px;flex-shrink:0">${pt.initials||r.patient[0]||'?'}</div>
@@ -10982,6 +11021,7 @@ function renderDeptSummary() {
             </div>
             <div style="font-weight:900;font-size:13px;color:${r.status==='paid'?'#1a8c3c':'var(--orange)'}">₹${r.amount.toLocaleString('en-IN')}</div>
             ${r.status==='pending'?`<button class="btn btn-xs" style="background:var(--green);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:10.5px;font-weight:800;cursor:pointer" onclick="markPaid('${r.id}')">Collect</button>`:`<span style="font-size:10px;background:var(--green-lt);color:#1a8c3c;padding:2px 8px;border-radius:10px;font-weight:700">✓ Paid</span>`}
+            ${canDeleteDue ? `<button class="btn btn-xs btn-gray" onclick="deletePayRequest('${r.id}')" title="Delete due">✕</button>` : ''}
             <button class="btn btn-xs btn-outline" onclick="openXRefModal('${r.bmhId}')" title="Cross-refer">↔️</button>
             <button class="btn btn-xs" style="background:rgba(175,82,222,.1);color:var(--purple);border:1.5px solid var(--purple);border-radius:6px;padding:3px 6px;font-size:10px;cursor:pointer" onclick="openIPDFromQueue('${r.bmhId}')" title="IPD">🛏️</button>
             <button class="btn btn-xs" style="background:rgba(255,149,0,.1);color:var(--orange);border:1.5px solid var(--orange);border-radius:6px;padding:3px 6px;font-size:10px;cursor:pointer" onclick="openOTFromQueue('${r.bmhId}')" title="OT">🔬</button>
@@ -11257,13 +11297,32 @@ function printSurgeryPackWithKeys(keys, deptLabel) {
     const html = '<!DOCTYPE html><html><head><meta charset="UTF-8">'
       + '<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:12px}@page{size:A4;margin:0}</style></head><body>' + finalPages + '</body></html>';
     showToast('Opening surgery pack print preview…', 'i');
-    safePrint(html);
+    const w = window.open('', '_blank', 'width=1100,height=900');
+    if (w) {
+      w.document.open();
+      w.document.write(html);
+      w.document.close();
+      try { w.focus(); } catch (e) {}
+      setTimeout(function () { try { w.print(); } catch (e) {} }, 250);
+    } else {
+      safePrint(html);
+    }
     showToast('📋 ' + (deptLabel || 'Pack') + ' ready to print ✓', 's');
   } catch (e) {
     console.error('printSurgeryPackWithKeys failed', e);
     try {
       const ctx = collectConsentPrintContext();
-      safePrint('<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:12px}@page{size:A4;margin:0}</style></head><body>' + buildAdmissionSlipPage(ctx) + '</body></html>');
+      const fallbackHtml = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:12px}@page{size:A4;margin:0}</style></head><body>' + buildAdmissionSlipPage(ctx) + '</body></html>';
+      const wf = window.open('', '_blank', 'width=900,height=800');
+      if (wf) {
+        wf.document.open();
+        wf.document.write(fallbackHtml);
+        wf.document.close();
+        try { wf.focus(); } catch (e) {}
+        setTimeout(function () { try { wf.print(); } catch (e) {} }, 250);
+      } else {
+        safePrint(fallbackHtml);
+      }
       showToast('Pack preview opened with admission slip fallback ✓', 's');
     } catch (fallbackErr) {
       console.error('surgery pack fallback admission slip failed', fallbackErr);
@@ -13100,6 +13159,7 @@ function getCurrentProcedurePatientMeta() {
     ageSex: ((merged.age || '—') + '/' + (merged.sex || '—')),
     centre: merged.centre || CURRENT_USER?.centre || '',
     referredBy: merged.referredBy || '',
+    dept: normalizeDeptKeyForQueue(merged.dept || CURRENT_USER?.dept || ''),
     doctor: (typeof getRxDoctorDisplayName === 'function' ? getRxDoctorDisplayName() : (CURRENT_USER?.name || document.getElementById('sbnm')?.textContent || 'Dr. Varun Baweja')).split('·')[0].trim(),
     advice: getProcedureAdviceText()
   };
@@ -13603,17 +13663,39 @@ function addBioUploadCard(entry, list) {
   list.prepend(d);
 }
 function viewStoredInvestigation(bmhId, key) {
+  const openInvestigationData = function (payload) {
+    if (!payload?.data) { showToast('File data not found','w'); return; }
+    const type = String(payload.type || '').toLowerCase();
+    if (type.startsWith('image/')) {
+      const w = window.open('', '_blank', 'width=1100,height=850');
+      if (!w) { window.open(payload.data, '_blank'); return; }
+      w.document.open();
+      w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>' + escapeHtmlConsent(payload.name || 'Image') + '</title><style>body{margin:0;background:#111;display:flex;align-items:center;justify-content:center;min-height:100vh}img{max-width:100vw;max-height:100vh;object-fit:contain}</style></head><body><img src="' + payload.data + '" alt=""></body></html>');
+      w.document.close();
+      return;
+    }
+    if (type === 'application/pdf') {
+      const w = window.open('', '_blank', 'width=1100,height=850');
+      if (!w) { window.open(payload.data, '_blank'); return; }
+      w.document.open();
+      w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>' + escapeHtmlConsent(payload.name || 'PDF') + '</title><style>html,body{height:100%;margin:0}iframe{width:100%;height:100%;border:none}</style></head><body><iframe src="' + payload.data + '"></iframe></body></html>');
+      w.document.close();
+      return;
+    }
+    window.open(payload.data, '_blank');
+  };
   const cached = window.INV_UPLOADS?.[key];
   if(cached?.data) {
-    window.open(cached.data, '_blank');
+    openInvestigationData(cached);
     return;
   }
+  const resolvedBmhId = bmhId || window.CURRENT_PATIENT?.bmhId || '';
   if(window.fbOnce) {
-    fbOnce(`investigations/${bmhId}/${key}`).then(data => {
+    fbOnce(`investigations/${resolvedBmhId}/${key}`).then(data => {
       if(!data?.data) { showToast('File data not found','w'); return; }
       window.INV_UPLOADS = window.INV_UPLOADS || {};
       window.INV_UPLOADS[key] = data;
-      window.open(data.data, '_blank');
+      openInvestigationData(data);
     }).catch(() => showToast('Could not open investigation','w'));
   }
 }
@@ -16434,7 +16516,7 @@ function openSaveAdviceTemplate() {
   const ta = document.getElementById('rx-advice-text');
   const text = ta?.value?.trim(); if(!text) { showToast('Nothing to save — type advice first','w'); return; }
   const name = prompt('Template name (e.g. "Post-cataract advice"):'); if(!name) return;
-  const tpl = {id:'adv_'+Date.now(), name, text};
+  const tpl = {id:'adv_'+Date.now(), name, text, dept: normalizeRxTemplateDeptKey(rxDeptKeyFromUi())};
   window.ADVICE_TEMPLATES.push(tpl);
   fbSet && fbSet('adviceTemplates/'+tpl.id, tpl);
   showToast(`✅ Template "${name}" saved`,'s');
@@ -16450,7 +16532,11 @@ function openLoadAdviceTemplate() {
   } else { _showAdviceTemplatePicker(); }
 }
 function _showAdviceTemplatePicker() {
-  const tpls = window.ADVICE_TEMPLATES;
+  const dept = normalizeRxTemplateDeptKey(rxDeptKeyFromUi());
+  const tpls = (window.ADVICE_TEMPLATES || []).filter(function (t) {
+    const td = normalizeRxTemplateDeptKey(t?.dept || 'all');
+    return td === 'all' || td === dept;
+  });
   if(!tpls.length) { showToast('No saved templates','i'); return; }
   const names = tpls.map((t,i)=>`${i+1}. ${t.name}`).join('\n');
   const choice = prompt(`Select template number:\n${names}`);
@@ -20469,6 +20555,16 @@ function renderDocQueue() {
   const adminDeptSel = document.getElementById('dq-admin-dept-filter');
   if (adminDeptSel) {
     adminDeptSel.style.display = (CURRENT_USER?.isAdmin || CURRENT_USER?.role === 'Reception') ? '' : 'none';
+    if (!adminDeptSel.dataset.filled) {
+      adminDeptSel.innerHTML = [
+        '<option value="all">All Departments</option>',
+        '<option value="ophtho">Ophthalmology</option>',
+        '<option value="obg">OBG</option>',
+        '<option value="psych">Neuropsychiatry</option>',
+        '<option value="skin">Skin & Cosmetology</option>'
+      ].join('');
+      adminDeptSel.dataset.filled = '1';
+    }
     if (adminDeptSel.value !== adminDeptFilter) adminDeptSel.value = adminDeptFilter;
   }
   const searchQ = String(document.getElementById('dq-search')?.value || '').trim().toLowerCase();

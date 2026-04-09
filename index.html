@@ -22,7 +22,8 @@
     body.queue-sidebar-collapsed .sidebar .sb-nav { padding-top:6px; }
     body.queue-sidebar-collapsed .sidebar .queue-expand-link { display:flex !important; }
     .queue-expand-link { display:none; width:100%; justify-content:center; background:transparent !important; color:#fff !important; border:none !important; box-shadow:none !important; }
-    .queue-expand-link .ni-ic { margin-right:0 !important; color:#fff !important; background:transparent !important; }
+    .queue-expand-link .ni-ic,
+    .queue-expand-link span { margin-right:0 !important; color:#fff !important; fill:#fff !important; background:transparent !important; }
     .dq-queue-main .rc-queue-table th,
     .dq-queue-main .rc-queue-table td { font-size:11.5px; }
     .dq-queue-main .rc-queue-table th { font-size:11px; }
@@ -1051,11 +1052,12 @@
             </div>
             <div class="fg" style="gap:7px;margin-bottom:8px">
               <div class="form-group"><label class="fl">Disc</label><select id="fund-od-disc"><option>Pink & Healthy</option><option>Pale</option><option>Hyperaemic</option><option>Swollen</option><option>Cupped</option><option>Tilted</option><option>Drusen</option></select></div>
-              <div class="form-group"><label class="fl">C/D Ratio OD</label><select id="fund-od-cd" style="font-size:13px;font-weight:900;color:var(--blue);border:1.5px solid var(--blue);border-radius:7px"><option>0.1</option><option>0.2</option><option>0.3</option><optionselected>0.4</option><option>0.5</option><option>0.6</option><option>0.7</option><option>0.8</option><option>0.9</option><option>1.0</option><option>Excavated</option><option>Tilted</option><option>NVD</option></select></div>
+              <div class="form-group"><label class="fl">C/D Ratio OD</label><select id="fund-od-cd" style="font-size:13px;font-weight:900;color:var(--blue);border:1.5px solid var(--blue);border-radius:7px"><option>0.1</option><option>0.2</option><option selected>0.3</option><option>0.4</option><option>0.5</option><option>0.6</option><option>0.7</option><option>0.8</option><option>0.9</option><option>1.0</option><option>Excavated</option><option>Tilted</option><option>NVD</option></select></div>
               <div class="form-group"><label class="fl">Macula OD</label><select id="fund-od-mac"><option>Normal</option><option>ARMD Dry</option><option>ARMD Wet</option><option>ERM</option><option>CMO</option><option>MH</option><option>Scar</option></select></div>
               <div class="form-group"><label class="fl">Vessels OD</label><select id="fund-od-ves"><option>Normal calibre</option><option>AV nipping</option><option>Silver wiring</option><option>NVD</option><option>NVE</option><option>Ghost vessels</option></select></div>
               <div class="form-group"><label class="fl">Periphery OD</label><select id="fund-od-per"><option>Normal</option><option>Lattice degeneration</option><option>Breaks</option><option>Detachment</option><option>Laser scars</option></select></div>
             </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px"><button type="button" class="btn btn-xs btn-outline" onclick="document.getElementById('fundus-od').value='Fundus hazy';">Fundus hazy</button><button type="button" class="btn btn-xs btn-outline" onclick="document.getElementById('fundus-od').value='Fundus not visible';">Fundus not visible</button></div>
             <textarea id="fundus-od" style="width:100%;font-size:11.5px;min-height:50px;border:1px solid var(--g4);background:#fff;border-radius:6px;resize:none;font-family:var(--font);padding:6px 8px" placeholder="Fundus findings OD…"></textarea>
           </div>
           <div style="background:var(--g6);border-radius:var(--rsm);padding:11px">
@@ -1064,11 +1066,12 @@
             </div>
             <div class="fg" style="gap:7px;margin-bottom:8px">
               <div class="form-group"><label class="fl">Disc</label><select id="fund-os-disc"><option>Pink & Healthy</option><option>Pale</option><option>Hyperaemic</option><option>Swollen</option><option>Cupped</option><option>Tilted</option></select></div>
-              <div class="form-group"><label class="fl">C/D Ratio OS</label><select id="fund-os-cd" style="font-size:13px;font-weight:900;color:#1a8c3c;border:1.5px solid var(--green);border-radius:7px"><option>0.1</option><option>0.2</option><option>0.3</option><optionselected>0.4</option><option>0.5</option><option>0.6</option><option>0.7</option><option>0.8</option><option>0.9</option><option>1.0</option><option>Excavated</option><option>Tilted</option><option>NVD</option></select></div>
+              <div class="form-group"><label class="fl">C/D Ratio OS</label><select id="fund-os-cd" style="font-size:13px;font-weight:900;color:#1a8c3c;border:1.5px solid var(--green);border-radius:7px"><option>0.1</option><option>0.2</option><option selected>0.3</option><option>0.4</option><option>0.5</option><option>0.6</option><option>0.7</option><option>0.8</option><option>0.9</option><option>1.0</option><option>Excavated</option><option>Tilted</option><option>NVD</option></select></div>
               <div class="form-group"><label class="fl">Macula OS</label><select id="fund-os-mac"><option>Normal</option><option>ARMD Dry</option><option>ARMD Wet</option><option>ERM</option><option>CMO</option><option>MH</option><option>Scar</option></select></div>
               <div class="form-group"><label class="fl">Vessels OS</label><select id="fund-os-ves"><option>Normal calibre</option><option>AV nipping</option><option>Silver wiring</option><option>NVD</option><option>NVE</option><option>Ghost vessels</option></select></div>
               <div class="form-group"><label class="fl">Periphery OS</label><select id="fund-os-per"><option>Normal</option><option>Lattice degeneration</option><option>Breaks</option><option>Detachment</option><option>Laser scars</option></select></div>
             </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px"><button type="button" class="btn btn-xs btn-outline" onclick="document.getElementById('fundus-os').value='Fundus hazy';">Fundus hazy</button><button type="button" class="btn btn-xs btn-outline" onclick="document.getElementById('fundus-os').value='Fundus not visible';">Fundus not visible</button></div>
             <textarea id="fundus-os" style="width:100%;font-size:11.5px;min-height:50px;border:1px solid var(--g4);background:#fff;border-radius:6px;resize:none;font-family:var(--font);padding:6px 8px" placeholder="Fundus findings OS…"></textarea>
           </div>
         </div>
