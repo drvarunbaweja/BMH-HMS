@@ -264,6 +264,13 @@
         <span style="font-size:13px;color:var(--g1)">🔍</span>
         <input type="text" id="dq-search" placeholder="Search patient, BMSH ID, mobile, purpose or doctor…" oninput="renderDocQueue()" style="border:none;outline:none;background:transparent;width:100%;font-size:12px;font-family:var(--font)">
       </div>
+      <select id="dq-admin-dept-filter" onchange="renderDocQueue()" style="display:none;min-width:170px;border:1.5px solid var(--g4);border-radius:10px;padding:7px 10px;background:#fff;font-size:12px;font-family:var(--font)">
+        <option value="all">All departments</option>
+        <option value="ophtho">Eye</option>
+        <option value="obg">OBG</option>
+        <option value="psych">Neuropsychiatry</option>
+        <option value="skin">Skin & Cosmetology</option>
+      </select>
       <button type="button" class="btn btn-outline btn-xs" onclick="const q=document.getElementById('dq-search'); if(q){q.value='';} renderDocQueue();">Clear Search</button>
     </div>
     <div class="dq-toolbar" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;padding:10px 12px;background:var(--g6);border-radius:var(--rsm);margin-bottom:12px;border:1px solid var(--g5)">
