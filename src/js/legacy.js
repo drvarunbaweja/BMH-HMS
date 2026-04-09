@@ -10311,9 +10311,14 @@ function lookupByBMHID(val) {
   if(!val || val.length < 3) { el.innerHTML=''; return; }
   const v = val.trim().toUpperCase();
   const vLow = val.trim().toLowerCase();
+  const digits = String(val || '').replace(/\D/g, '');
+  const byPhoneMatch = function (p) {
+    const nums = [p?.mob, p?.mobile, p?.mob2, p?.altMobile].map(function (x) { return String(x || '').replace(/\D/g, ''); }).filter(Boolean);
+    return digits.length >= 6 && nums.some(function (n) { return n.includes(digits); });
+  };
   // Search by BMSH ID, phone, or name
-  const byId = PATIENTS.find(p => p.bmhId === v || p.bmhId.includes(v.replace('BMSH-','')));
-  const byPhone = val.replace(/\s/g,'').length >= 6 ? PATIENTS.find(p => p.mob?.replace(/\s/g,'').includes(val.replace(/\s/g,''))) : null;
+  const byId = PATIENTS.find(p => String(p.bmhId || '').toUpperCase() === v || String(p.bmhId || '').toUpperCase().includes(v.replace('BMSH-','')));
+  const byPhone = PATIENTS.find(byPhoneMatch) || null;
   const byName = val.length >= 3 ? PATIENTS.filter(p => p.name?.toLowerCase().includes(vLow)) : [];
   const single = byId || byPhone;
   if(single) {
@@ -15293,6 +15298,15 @@ function formatDateDDMMYYYY(value) {
   const yyyy = d.getFullYear();
   return dd + '/' + mm + '/' + yyyy;
 }
+function formatDateDDMMYY(value) {
+  if (!value) return '—';
+  const d = String(value).includes('T') ? new Date(value) : new Date(String(value) + 'T12:00:00');
+  if (Number.isNaN(d.getTime())) return String(value);
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yy = String(d.getFullYear()).slice(-2);
+  return dd + '/' + mm + '/' + yy;
+}
 function formatDateIN(value) {
   return formatDateDDMMYYYY(value);
 }
@@ -16018,7 +16032,7 @@ function toggleRefDetails2(val) {
 // The editable fee schedule (extends CENTRE_CHARGES)
 const CHARGES_DATA = [
   {cat:'Eye',    name:'Consultation — Eye',             chd:500,  rpr:200},
-  {cat:'Eye',    name:'Follow-up Consultation',          chd:500,  rpr:400},
+  {cat:'Eye',    name:'Follow-up Consultation',          chd:500,  rpr:200},
   {cat:'Eye',    name:'Biometry IOL Master',             chd:1200, rpr:1000},
   {cat:'Eye',    name:'OCT Macula OU',                   chd:1800, rpr:1500},
   {cat:'Eye',    name:'HVF Visual Fields',               chd:1500, rpr:1200},
@@ -16126,6 +16140,10 @@ function upsertCriticalChargeRow(row) {
 function ensureCriticalChargesLoaded() {
   CENTRE_CHARGES.CHD['Consultation'] = 500;
   CENTRE_CHARGES.RPR['Consultation'] = 200;
+  CENTRE_CHARGES.CHD['Follow-up Consultation'] = 500;
+  CENTRE_CHARGES.RPR['Follow-up Consultation'] = 200;
+  CENTRE_CHARGES.CHD['Follow-up'] = 500;
+  CENTRE_CHARGES.RPR['Follow-up'] = 200;
   CRITICAL_CHARGE_ROWS.forEach(upsertCriticalChargeRow);
   migrateLegacyPmicsChargeParents();
 }
@@ -17682,11 +17700,17 @@ function buildDischargeCardPrintHtml() {
     el.style.border = '1px solid #d7dce5';
     el.style.borderRadius = '10px';
     el.style.padding = '2px 7px';
-    el.style.fontSize = '10px';
+    el.style.fontSize = '11.5px';
     el.style.background = el.classList.contains('active') ? (colorPrint ? '#1A3C6E' : '#666') : '#fff';
     el.style.color = el.classList.contains('active') ? '#fff' : '#1A3C6E';
   });
-  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{font-family:Arial,sans-serif;color:#111;background:#fff;margin:0;padding:0;font-size:10.6px;line-height:1.12}@page{size:A4 landscape;margin:3mm}.print-wrap{transform:scale(.80);transform-origin:top left;width:124%;' + (colorPrint ? '' : 'filter:grayscale(100%) contrast(1.08)') + '}.discharge-card{border:1px solid #9a9a9a;border-radius:8px;overflow:hidden}.dc-header{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;background:' + (colorPrint ? '#1A3C6E' : '#666') + ' !important;padding:7px 9px}.dc-field-lbl{font-size:7.5px;font-weight:800;color:#555;text-transform:uppercase;letter-spacing:.35px}.dc-field-val{font-size:10.2px;font-weight:800;color:#111}.g2{display:grid;grid-template-columns:1fr 1fr}.drop-item{border-left:3px solid ' + (colorPrint ? '#1A3C6E' : '#666') + ';padding:4px 6px;border-radius:6px;background:' + (colorPrint ? '#eef3fb' : '#efefef') + ' !important;margin-bottom:4px}.drop-freq{display:flex;gap:2px;flex-wrap:wrap}.drop-time.active{background:' + (colorPrint ? '#1A3C6E' : '#666') + ' !important;color:#fff}.drop-time{display:inline-flex;align-items:center;justify-content:center;font-size:8.6px;padding:1px 4px;min-width:24px;border-radius:8px;border:1px solid #bdbdbd}.card-title{font-size:11.8px!important}.card-sub,.muted{font-size:8.4px!important}.dc-instr-row{padding:2px 0 !important}.dc-instr-row div{font-size:9.6px !important;line-height:1.2 !important}</style></head><body><div class="print-wrap">'
+  clone.querySelectorAll('input[type="date"]').forEach(function (inp) {
+    inp.type = 'text';
+    inp.value = formatDateDDMMYY(inp.value);
+    inp.style.fontSize = '12px';
+    inp.style.fontWeight = '800';
+  });
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{font-family:Arial,sans-serif;color:#111;background:#fff;margin:0;padding:0;font-size:10.6px;line-height:1.12}@page{size:A4 landscape;margin:3mm}.print-wrap{transform:scale(.80);transform-origin:top left;width:124%;' + (colorPrint ? '' : 'filter:grayscale(100%) contrast(1.08)') + '}.discharge-card{border:1px solid #9a9a9a;border-radius:8px;overflow:hidden}.dc-header{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;background:' + (colorPrint ? '#1A3C6E' : '#666') + ' !important;padding:7px 9px}.dc-field-lbl{font-size:7.5px;font-weight:800;color:#555;text-transform:uppercase;letter-spacing:.35px}.dc-field-val{font-size:10.8px;font-weight:800;color:#111}.g2{display:grid;grid-template-columns:1fr 1fr}.drop-item{border-left:3px solid ' + (colorPrint ? '#1A3C6E' : '#666') + ';padding:4px 6px;border-radius:6px;background:' + (colorPrint ? '#eef3fb' : '#efefef') + ' !important;margin-bottom:4px}.drop-freq{display:flex;gap:2px;flex-wrap:wrap}.drop-time.active{background:' + (colorPrint ? '#1A3C6E' : '#666') + ' !important;color:#fff}.drop-time{display:inline-flex;align-items:center;justify-content:center;font-size:11.5px;padding:1px 4px;min-width:24px;border-radius:8px;border:1px solid #bdbdbd}.dc-med-row input,.dc-med-row select{font-size:12px !important;font-weight:800 !important}.card-title{font-size:11.8px!important}.card-sub,.muted{font-size:8.4px!important}.dc-instr-row{padding:2px 0 !important}.dc-instr-row div{font-size:9.6px !important;line-height:1.2 !important}</style></head><body><div class="print-wrap">'
     + clone.outerHTML + '</div></body></html>';
 }
 
@@ -17713,7 +17737,7 @@ function renderDischargeBuilder() {
   document.getElementById('dc-pt-age').textContent  = ptObj.age || '—';
   document.getElementById('dc-pt-sex').textContent  = ptObj.sex || '—';
   document.getElementById('dc-pt-mob').textContent  = ptObj.mob || '—';
-  document.getElementById('dc-date').textContent    = formatDateIN(new Date());
+  document.getElementById('dc-date').textContent    = formatDateDDMMYY(new Date());
   const procDxEl = document.getElementById('dc-procedure');
   if (procDxEl) {
     const procDx = [data.lastOtCase?.dx || data.diagnosis || '', data.lastOtCase?.procedure || data.procedureName || ''].filter(Boolean).join(' · ');
@@ -17721,7 +17745,7 @@ function renderDischargeBuilder() {
   }
   // Set discharge date to today if blank
   const ddEl = document.getElementById('dc-discharge-date');
-  if(ddEl) ddEl.textContent = formatDateIN(data.dischargeDate);
+  if(ddEl) ddEl.textContent = formatDateDDMMYY(data.dischargeDate);
   const otDoctor = data.lastOtCase?.surgeon || data.lastOtCase?.doctor || '';
   const surgeonEl = document.getElementById('dc-surgeon');
   if(surgeonEl) {
@@ -17735,7 +17759,7 @@ function renderDischargeBuilder() {
   }
   const otEyeEl = document.getElementById('dc-ot-eye');
   if (otEyeEl) {
-    const bits = [data.lastOtCase?.date ? formatDateIN(data.lastOtCase.date) : '', data.lastOtCase?.site || data.lastOtCase?.eye || ptObj.eye || ''].filter(Boolean);
+    const bits = [data.lastOtCase?.date ? formatDateDDMMYY(data.lastOtCase.date) : '', data.lastOtCase?.site || data.lastOtCase?.eye || ptObj.eye || ''].filter(Boolean);
     otEyeEl.textContent = bits.join(' · ') || '—';
   }
   const iolEl = document.getElementById('dc-iol-summary');
