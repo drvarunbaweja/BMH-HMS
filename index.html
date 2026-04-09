@@ -29,7 +29,8 @@
     .dq-queue-main .rc-queue-table th { font-size:11px; }
     .dq-queue-main .ptab { font-size:13px; }
     @media (max-width: 768px) {
-      html, body { width:100%; max-width:100%; overflow-x:hidden; overscroll-behavior-x:none; touch-action:pan-y pinch-zoom; }
+      html, body { width:100%; max-width:100%; overflow-x:hidden; overflow-y:auto !important; overscroll-behavior-x:none; touch-action:pan-y pinch-zoom; height:auto !important; }
+      .shell, .main, #main-content, .content, .content-full { height:auto !important; min-height:100vh; overflow-y:visible !important; }
       .shell { display:block !important; }
       .main, #main-content { width:100%; min-width:0; max-width:100%; overflow-x:hidden; }
       .content, .content-full { padding:10px; }
