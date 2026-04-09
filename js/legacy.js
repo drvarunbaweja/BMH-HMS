@@ -3386,6 +3386,7 @@ function buildOphthoCaseSheetHtml() {
 
   // ── Age/Sex/Address from patient record ──────────────────────────────
   const pt = currentPt.bmhId ? currentPt : ((window.PATIENTS||[]).find(p=>p.bmhId===ptId)||{});
+  const latestSavedVisit = getLatestSavedVisitForDept(ptId || currentPt.bmhId || '', 'ophtho') || currentPt.lastVisit || {};
   const ptAge  = pt.age  || '';
   const ptSex  = pt.sex  || pt.gender || '';
   const ptMob  = pt.mob  || pt.phone  || '';
@@ -3414,7 +3415,7 @@ function buildOphthoCaseSheetHtml() {
     });
   }
   if (!ccRows.length) {
-    const lv = currentPt.lastVisit || {};
+    const lv = latestSavedVisit || {};
     if (Array.isArray(lv.ccRows) && lv.ccRows.length) {
       lv.ccRows.forEach(function (row) {
         pushCcRow(row && row.text, row && row.dur, row && row.eye);
@@ -3547,6 +3548,7 @@ function buildOphthoCaseSheetHtml() {
   const escHtml = (s) => (s == null ? '' : String(s)).replace(/</g, '&lt;');
   const PHX_SHORT = ['Allerg','DM','HTN','IHD','Asthma','Migr','Thyroid','Renal','Surg','Bleed'];
   const ccStr = ccRows.map(c => c.text + (c.dur ? ' (' + c.dur + ')' : '') + (c.eye ? ' ' + c.eye : '')).join('; ') || '—';
+  const shouldPrintChiefComplaints = ccRows.length || ccStr !== '—' || chiefComplaintsEnabled;
   const ccPrintHtml = ccRows.length
     ? '<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:6px">'
       + ccRows.map(function (c, idx) {
@@ -3771,7 +3773,7 @@ th{background:#eee;font-weight:900;text-align:center;font-size:8.8px}
   </div>
   <div style="border:1px solid #b8c8dc;border-radius:4px;padding:8px 10px;background:#f2f6fc;font-size:10.4px;line-height:1.5;display:flex;flex-direction:column;min-height:100%">
     <div style="font-size:10.7px;font-weight:900;color:#1A3C6E;text-transform:uppercase;margin-bottom:6px;letter-spacing:.2px;border-bottom:1px solid rgba(26,60,110,.2);padding-bottom:4px">Chief complaints &amp; spectacle history</div>
-    ${chiefComplaintsEnabled ? ccPrintHtml : ''}
+    ${shouldPrintChiefComplaints ? ccPrintHtml : ''}
     <div><b>Spectacles:</b> ${escHtml(hxSpec)}</div>
     <div><b>Last spectacle change:</b> ${escHtml(hxLastSpec)}</div>
     <div><b>Ocular meds (history):</b> ${escHtml(hxOcularMeds)}</div>
@@ -3824,7 +3826,7 @@ ${drugs.length?`
 </table>`:''}
 
 ${(()=>{
-  const fuDate = document.getElementById('rx-fu-date')?.value;
+  const fuDate = getDeptFollowUpDateInput('oe')?.value || '';
   const fuFmt = fuDate ? new Date(fuDate).toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'long',year:'numeric'}) : '';
   return fuFmt ? `<div style="background:#EBF3FF;border-radius:4px;padding:3px 8px;display:inline-block;font-size:6.5px;font-weight:800;color:#1A3C6E;border:1px solid rgba(26,60,110,.25);margin:2px 0 4px">Next: ${fuFmt}</div>` : '';
 })()}
@@ -11297,32 +11299,14 @@ function printSurgeryPackWithKeys(keys, deptLabel) {
     const html = '<!DOCTYPE html><html><head><meta charset="UTF-8">'
       + '<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:12px}@page{size:A4;margin:0}</style></head><body>' + finalPages + '</body></html>';
     showToast('Opening surgery pack print preview…', 'i');
-    const w = window.open('', '_blank', 'width=1100,height=900');
-    if (w) {
-      w.document.open();
-      w.document.write(html);
-      w.document.close();
-      try { w.focus(); } catch (e) {}
-      setTimeout(function () { try { w.print(); } catch (e) {} }, 250);
-    } else {
-      safePrint(html);
-    }
+    safePrint(html);
     showToast('📋 ' + (deptLabel || 'Pack') + ' ready to print ✓', 's');
   } catch (e) {
     console.error('printSurgeryPackWithKeys failed', e);
     try {
       const ctx = collectConsentPrintContext();
       const fallbackHtml = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:12px}@page{size:A4;margin:0}</style></head><body>' + buildAdmissionSlipPage(ctx) + '</body></html>';
-      const wf = window.open('', '_blank', 'width=900,height=800');
-      if (wf) {
-        wf.document.open();
-        wf.document.write(fallbackHtml);
-        wf.document.close();
-        try { wf.focus(); } catch (e) {}
-        setTimeout(function () { try { wf.print(); } catch (e) {} }, 250);
-      } else {
-        safePrint(fallbackHtml);
-      }
+      safePrint(fallbackHtml);
       showToast('Pack preview opened with admission slip fallback ✓', 's');
     } catch (fallbackErr) {
       console.error('surgery pack fallback admission slip failed', fallbackErr);
@@ -11413,12 +11397,12 @@ function printSurgeryPackForCase(caseId, packId) {
     window._CONSENT_PRINT_BMH_ID = c.bmhId;
     window._CONSENT_PRINT_OT_ID = c.id;
     const pack = getAllSurgeryPacks().find(function (p) { return p.id === (packId || (resolveSurgeryPackForCase(c)?.id || 'ophtho')); }) || resolveSurgeryPackForCase(c);
-    const keys = (pack && Array.isArray(pack.documentKeys) ? pack.documentKeys.slice() : []);
-    if (keys.indexOf('__admission_slip__') === -1) keys.unshift('__admission_slip__');
-    if (!keys.length) {
-      openSurgeryPackPrintModal(packId || (resolveSurgeryPackForCase(c)?.id || 'ophtho'));
+    if (document.getElementById('m-sp-pack-print')) {
+      openSurgeryPackPrintModal(pack?.id || packId || (resolveSurgeryPackForCase(c)?.id || 'ophtho'));
       return;
     }
+    const keys = (pack && Array.isArray(pack.documentKeys) ? pack.documentKeys.slice() : []);
+    if (keys.indexOf('__admission_slip__') === -1) keys.unshift('__admission_slip__');
     printSurgeryPackWithKeys(keys, pack?.label || pack?.dept || 'Pack');
   } catch (e) {
     console.error('printSurgeryPackForCase failed', e);
@@ -15422,33 +15406,33 @@ window.printUnifiedRx = function(deptId) {
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,300;0,400;0,700;0,900;1,400&family=Playfair+Display:wght@700&display=swap');
 *{margin:0;padding:0;box-sizing:border-box;print-color-adjust:exact;-webkit-print-color-adjust:exact}
-body{font-family:'Lato',Georgia,serif;font-size:10.7px;color:#1a1a1a;background:#fff;padding:7mm 12mm;line-height:1.4}
+body{font-family:'Lato',Georgia,serif;font-size:9.9px;color:#1a1a1a;background:#fff;padding:5.5mm 9mm;line-height:1.32}
 @page{size:A4 portrait;margin:0}
 .lh-img{width:100%;max-width:100%;height:auto;display:block;margin-bottom:10px}
-.pt-line{display:flex;align-items:baseline;justify-content:space-between;border-bottom:2px solid #1A3C6E;padding-bottom:6px;margin-bottom:7px}
-.pt-name{font-family:'Playfair Display','Georgia',serif;font-size:18px;font-weight:700;color:#1A3C6E;letter-spacing:.2px}
-.pt-meta{font-size:12px;font-weight:300;color:#444;margin-left:10px;font-style:italic}
-.pt-date{font-size:11px;color:#555;font-weight:400}
-.lbl-row{display:flex;gap:0;margin-bottom:5px;align-items:baseline}
-.lbl{font-size:10px;font-weight:700;text-transform:uppercase;min-width:112px;letter-spacing:.7px;color:#1A3C6E}
-.lbl-val{font-size:11px;color:#222}
-.sec-title{font-family:'Playfair Display','Georgia',serif;font-size:12px;font-weight:700;color:#1A3C6E;margin:11px 0 6px;border-bottom:1.5px solid #1A3C6E;padding-bottom:2px;letter-spacing:.2px}
-table{width:100%;border-collapse:collapse;font-size:10.4px;margin-bottom:8px}
-th{background:#1A3C6E;color:#fff;border:1px solid #1A3C6E;padding:5px 7px;font-weight:700;text-align:center;font-size:9.6px;letter-spacing:.4px;text-transform:uppercase}
-td{border:1px solid #c8d0dc;padding:5px 7px;text-align:center;vertical-align:top}
+.pt-line{display:flex;align-items:baseline;justify-content:space-between;border-bottom:2px solid #1A3C6E;padding-bottom:5px;margin-bottom:6px}
+.pt-name{font-family:'Playfair Display','Georgia',serif;font-size:16px;font-weight:700;color:#1A3C6E;letter-spacing:.2px}
+.pt-meta{font-size:11px;font-weight:300;color:#444;margin-left:8px;font-style:italic}
+.pt-date{font-size:10px;color:#555;font-weight:400}
+.lbl-row{display:flex;gap:0;margin-bottom:4px;align-items:baseline}
+.lbl{font-size:9.2px;font-weight:700;text-transform:uppercase;min-width:104px;letter-spacing:.6px;color:#1A3C6E}
+.lbl-val{font-size:10.3px;color:#222}
+.sec-title{font-family:'Playfair Display','Georgia',serif;font-size:11px;font-weight:700;color:#1A3C6E;margin:9px 0 5px;border-bottom:1.5px solid #1A3C6E;padding-bottom:2px;letter-spacing:.2px}
+table{width:100%;border-collapse:collapse;font-size:9.8px;margin-bottom:7px}
+th{background:#1A3C6E;color:#fff;border:1px solid #1A3C6E;padding:4px 6px;font-weight:700;text-align:center;font-size:8.9px;letter-spacing:.35px;text-transform:uppercase}
+td{border:1px solid #c8d0dc;padding:4px 6px;text-align:center;vertical-align:top}
 td.left{text-align:left}
 tr:nth-child(even) td{background:#f8f9fc}
-.rx-name{font-weight:700;font-size:11.5px;color:#1A3C6E;letter-spacing:.15px}
-.rx-gen{font-size:9.4px;color:#666;font-style:italic;margin-top:1px}
-.rx-instr{font-size:10px;color:#222;margin-top:5px;padding:5px 8px;background:#f0f4ff;border-left:3px solid #1A3C6E;border-radius:0 4px 4px 0;line-height:1.5}
-.proc-item{padding:5px 0;font-size:15px;font-weight:800;border-bottom:1px solid #eee;display:flex;align-items:center;gap:8px}
-.fu-box{background:linear-gradient(135deg,#EBF3FF,#daeeff);border-radius:6px;padding:9px 16px;margin:10px 0;font-size:13px;font-weight:700;color:#1A3C6E;display:inline-block;border:1.5px solid rgba(26,60,110,.2)}
-.sig-row{display:flex;justify-content:space-between;align-items:flex-end;margin-top:28px;padding-top:12px;border-top:1px solid #eee}
-.dr-name{font-family:'Playfair Display','Georgia',serif;font-size:15px;font-weight:700;color:#1A3C6E}
-.dr-deg{font-size:11px;color:#444;margin-top:2px;font-style:italic}
-.dr-spec{font-size:12px;font-weight:700;color:#333;margin-top:2px}
-.dr-reg{font-size:10px;color:#888;margin-top:2px}
-.phone-line{font-size:11.5px;color:#444;margin-bottom:8px}
+.rx-name{font-weight:700;font-size:10.8px;color:#1A3C6E;letter-spacing:.1px}
+.rx-gen{font-size:8.8px;color:#666;font-style:italic;margin-top:1px}
+.rx-instr{font-size:9.4px;color:#222;margin-top:4px;padding:4px 7px;background:#f0f4ff;border-left:3px solid #1A3C6E;border-radius:0 4px 4px 0;line-height:1.4}
+.proc-item{padding:4px 0;font-size:12.5px;font-weight:800;border-bottom:1px solid #eee;display:flex;align-items:center;gap:8px}
+.fu-box{background:linear-gradient(135deg,#EBF3FF,#daeeff);border-radius:6px;padding:7px 14px;margin:8px 0;font-size:11.5px;font-weight:700;color:#1A3C6E;display:inline-block;border:1.5px solid rgba(26,60,110,.2)}
+.sig-row{display:flex;justify-content:space-between;align-items:flex-end;margin-top:18px;padding-top:10px;border-top:1px solid #eee}
+.dr-name{font-family:'Playfair Display','Georgia',serif;font-size:14px;font-weight:700;color:#1A3C6E}
+.dr-deg{font-size:10px;color:#444;margin-top:2px;font-style:italic}
+.dr-spec{font-size:11px;font-weight:700;color:#333;margin-top:2px}
+.dr-reg{font-size:9px;color:#888;margin-top:2px}
+.phone-line{font-size:10.5px;color:#444;margin-bottom:6px}
 .flag-h{color:#CC0000;font-weight:700}
 .flag-n{color:#1a8c3c;font-weight:600}
 .watermark{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-30deg);font-size:80px;font-weight:900;color:rgba(26,60,110,.04);font-family:'Playfair Display','Georgia',serif;white-space:nowrap;pointer-events:none;z-index:0}
@@ -19174,10 +19158,12 @@ function syncAdminGrantToggle(prefix) {
   const adminEl = document.getElementById(prefix + '-is-admin');
   const centreEl = document.getElementById(prefix + '-centre');
   if (!roleEl || !adminEl) return;
-  if (roleEl.value === 'Admin' && !adminEl.checked) adminEl.checked = true;
   if (adminEl.checked) {
     roleEl.value = 'Admin';
     if (centreEl) centreEl.value = 'BOTH';
+  } else if (roleEl.value === 'Admin') {
+    roleEl.value = 'Reception';
+    if (centreEl && centreEl.value === 'BOTH') centreEl.value = 'CHD';
   }
 }
 
@@ -19189,8 +19175,8 @@ function saveNewUser() {
   const pw     = document.getElementById('nu-pw')?.value||'';
   const pw2    = document.getElementById('nu-pw2')?.value||'';
   const roleInput = document.getElementById('nu-role')?.value||'Reception';
-  const grantAdmin = !!document.getElementById('nu-is-admin')?.checked || roleInput === 'Admin';
-  const role   = grantAdmin ? 'Admin' : roleInput;
+  const grantAdmin = !!document.getElementById('nu-is-admin')?.checked;
+  const role   = grantAdmin ? 'Admin' : (roleInput === 'Admin' ? 'Reception' : roleInput);
   const centreInput = document.getElementById('nu-centre')?.value||'CHD';
   const centre = grantAdmin ? 'BOTH' : centreInput;
   const dept   = (document.getElementById('nu-dept')?.value||'').trim();
@@ -19244,8 +19230,8 @@ function saveEditUser() {
   const uname  = document.getElementById('eu-username')?.value||'';
   const name   = (document.getElementById('eu-name')?.value||'').trim();
   const roleInput = document.getElementById('eu-role')?.value||'Reception';
-  const grantAdmin = !!document.getElementById('eu-is-admin')?.checked || roleInput === 'Admin';
-  const role   = grantAdmin ? 'Admin' : roleInput;
+  const grantAdmin = !!document.getElementById('eu-is-admin')?.checked;
+  const role   = grantAdmin ? 'Admin' : (roleInput === 'Admin' ? 'Reception' : roleInput);
   const centreInput = document.getElementById('eu-centre')?.value||'CHD';
   const centre = grantAdmin ? 'BOTH' : centreInput;
   const dept   = (document.getElementById('eu-dept')?.value||'').trim();
@@ -20441,8 +20427,17 @@ function deletePatientPendingCharges(bmhId) {
 function openEditPatientModal(bmhId) {
   const bid = bmhId || document.getElementById('rc-uid')?.textContent?.trim();
   if(!bid) { showToast('No patient selected','w'); return; }
-  const p = PATIENTS.find(x=>x.bmhId===bid);
-  if(!p) { showToast('Patient not found','w'); return; }
+  const p = PATIENTS.find(x=>x.bmhId===bid)
+    || (window.CURRENT_PATIENT && window.CURRENT_PATIENT.bmhId === bid ? window.CURRENT_PATIENT : null)
+    || {
+      bmhId: bid,
+      name: document.getElementById('rc-fn')?.value || '',
+      age: document.getElementById('rc-age')?.value || '',
+      sex: document.getElementById('rc-sex')?.value || 'Male',
+      mobile: document.getElementById('rc-mob')?.value || '',
+      address: document.getElementById('rc-addr')?.value || '',
+      refName: document.getElementById('rc-ref-name')?.value || ''
+    };
   window._editingBmhId = bid;
   const nameParts = (p.name||'').trim().split(' ');
   const setVal = (id,v) => { const e=document.getElementById(id); if(e) e.value=v||''; };
@@ -20464,11 +20459,11 @@ function openEditPatientModal(bmhId) {
 function saveUpdatedPatientDetails() {
   const bid = window._editingBmhId;
   if(!bid) { showToast('No patient selected','w'); return; }
-  const p = PATIENTS.find(x=>x.bmhId===bid);
-  if(!p) { showToast('Patient not found','w'); return; }
+  const p = PATIENTS.find(x=>x.bmhId===bid) || (window.CURRENT_PATIENT && window.CURRENT_PATIENT.bmhId === bid ? window.CURRENT_PATIENT : null) || { bmhId: bid };
   const fn = document.getElementById('upd-fn')?.value?.trim()||'';
   const ln = document.getElementById('upd-ln')?.value?.trim()||'';
   if(!fn) { showToast('First name is required','w'); return; }
+  const refName = document.getElementById('upd-ref-name')?.value?.trim()||'';
   const updates = {
     name: toTitleCaseName((fn+' '+ln).trim()),
     age: document.getElementById('upd-age')?.value?.trim()||p.age||'',
@@ -20482,13 +20477,18 @@ function saveUpdatedPatientDetails() {
     addr: document.getElementById('upd-addr')?.value?.trim()||'',
     relation: document.getElementById('upd-rel')?.value?.trim()||'',
     rel: document.getElementById('upd-rel')?.value?.trim()||'',
-    refName: document.getElementById('upd-ref-name')?.value?.trim()||''
+    refName: refName,
+    referredBy: refName || p.referredBy || ''
   };
   // Update initials too
   updates.initials = computePatientInitials(updates.name);
   Object.assign(p, updates);
   normalizePatientRecord(p);
-  fbUpdate && fbUpdate('patients/'+bid, updates).catch(()=>{});
+  if (!PATIENTS.find(x=>x.bmhId===bid)) PATIENTS.push(p);
+  fbUpdate && fbUpdate('patients/'+bid, updates).catch(function (e) {
+    console.warn('patient update error', e);
+    showToast('Save failed while updating patient details', 'e');
+  });
   showToast(`✅ ${updates.name} — details updated`,'s');
   closeM('m-update-details');
   renderReceptionPage && renderReceptionPage();
