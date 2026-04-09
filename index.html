@@ -391,6 +391,7 @@
             <input type="text" id="send-charge-custom-name" list="send-charge-datalist" placeholder="Type or pick charge…" autocomplete="off" style="font-size:11.5px;padding:4px 8px;border-radius:7px;border:1.5px solid rgba(212,160,23,.5);min-width:160px;max-width:280px;flex:1">
             <input type="number" id="send-charge-custom-amt" placeholder="₹" min="0" style="font-size:11.5px;padding:4px 8px;width:80px;border-radius:7px;border:1.5px solid rgba(212,160,23,.5)">
             <button type="button" class="btn btn-xs btn-gold" onclick="sendOphthoTypedCharge()">Send</button>
+            <button type="button" class="btn btn-xs btn-outline" onclick="openCertificateModal('ophtho')">📄 Certificates</button>
             <datalist id="send-charge-datalist"></datalist>
             <div id="ai-suggested-charges" style="display:flex;gap:5px;flex-wrap:wrap"></div>
             <button type="button" class="btn btn-xs btn-outline" onclick="addCustomCharge()" style="white-space:nowrap">Custom (prompt)</button>
@@ -4477,6 +4478,30 @@
 <div class="modal-ov" id="m-ipd-monitor">
 <div class="modal modal-lg"><div class="modal-hd"><div class="modal-title">🛏️ IPD Monitoring Sheet</div><button class="modal-close" onclick="closeM('m-ipd-monitor')">✕</button></div>
 <div id="ipd-monitor-body" style="max-height:72vh;overflow:auto;padding-right:4px"></div>
+</div></div>
+
+<div class="modal-ov" id="m-certificates">
+<div class="modal" style="max-width:980px">
+<div class="modal-hd"><div class="modal-title">Department Certificates</div><button class="modal-close" onclick="closeM('m-certificates')">✕</button></div>
+<div class="fg" style="grid-template-columns:260px 1fr;gap:12px">
+  <div class="card" style="padding:12px">
+    <div class="form-group"><label class="fl">Certificate</label><select id="cert-template-sel" onchange="applyCertificateTemplate(this.value)"><option value="">— Select certificate —</option></select></div>
+    <div class="form-group"><label class="fl">Template name</label><input type="text" id="cert-template-name" placeholder="Certificate template name"></div>
+    <div id="cert-template-list" style="display:flex;flex-direction:column;gap:6px;max-height:360px;overflow:auto"></div>
+  </div>
+  <div class="card" style="padding:12px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+      <div class="form-group"><label class="fl">Patient</label><input type="text" id="cert-pt-display" readonly></div>
+      <div class="form-group"><label class="fl">Doctor</label><input type="text" id="cert-doctor-display" readonly></div>
+    </div>
+    <div class="form-group"><label class="fl">Certificate heading</label><input type="text" id="cert-title"></div>
+    <div class="form-group"><label class="fl">Certificate text</label><textarea id="cert-body" style="min-height:360px"></textarea></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+      <button type="button" class="btn btn-outline" onclick="saveCurrentCertificateTemplate()">➕ Add To Templates</button>
+      <button type="button" class="btn btn-gold" onclick="printCurrentCertificate()">🖨️ Print</button>
+    </div>
+  </div>
+</div>
 </div></div>
 
 <!-- ADD RX DRUG MODAL -->

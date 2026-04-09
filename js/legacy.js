@@ -1167,6 +1167,145 @@ function buildConsentPatientStripHtml(ptNm, ptId, ptAge, ptSex, ptMob, today, pr
     + (procLine ? '<span style="flex-basis:100%;font-size:11px;opacity:.95;border-top:1px solid rgba(255,255,255,.25);padding-top:6px;margin-top:2px">🔬 ' + esc(procLine) + '</span>' : '')
     + '</div>';
 }
+const CERTIFICATE_LIBRARY_DEFAULTS = {
+  ophtho: [
+    { id: 'ophtho-fitness', name: 'Fitness Certificate', title: 'Fitness Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, has been examined at Baweja Multispeciality Hospital.\n\nClinical diagnosis: {{diagnosis}}\nPlanned / completed procedure: {{procedure}}\n\nThe patient is presently fit for the advised ophthalmic treatment / procedure and for related routine activities as advised.\n\nAdditional remarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' },
+    { id: 'ophtho-leave', name: 'Leave Certificate', title: 'Leave Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, is under treatment at Baweja Multispeciality Hospital for {{diagnosis}}.\n\nThe patient is advised rest / medical leave from {{today}} for {{leave_days}} days.\n\nProcedure / treatment: {{procedure}}\nRemarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' }
+  ],
+  obg: [
+    { id: 'obg-fitness', name: 'Fitness Certificate', title: 'Fitness Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, has been evaluated in the Obstetrics & Gynaecology department.\n\nDiagnosis: {{diagnosis}}\nPlanned / completed procedure: {{procedure}}\n\nThe patient is fit / under appropriate care as per current clinical status.\n\nRemarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' },
+    { id: 'obg-leave', name: 'Leave Certificate', title: 'Leave Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, is under OBG care at Baweja Multispeciality Hospital.\n\nDiagnosis: {{diagnosis}}\nThe patient is advised rest / medical leave from {{today}} for {{leave_days}} days.\n\nRemarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' }
+  ],
+  psych: [
+    { id: 'psych-fitness', name: 'Fitness Certificate', title: 'Fitness Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, has been examined in Neuropsychiatry.\n\nDiagnosis: {{diagnosis}}\nCurrent treatment / plan: {{procedure}}\n\nThe patient is presently fit / under treatment as per the present clinical assessment.\n\nRemarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' },
+    { id: 'psych-leave', name: 'Leave Certificate', title: 'Leave Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, is undergoing treatment in Neuropsychiatry.\n\nDiagnosis: {{diagnosis}}\nThe patient is advised leave / rest from {{today}} for {{leave_days}} days.\n\nRemarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' }
+  ],
+  skin: [
+    { id: 'skin-fitness', name: 'Fitness Certificate', title: 'Fitness Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, has been examined in Skin & Cosmetology.\n\nDiagnosis: {{diagnosis}}\nCurrent treatment / procedure: {{procedure}}\n\nThe patient is fit / under treatment as per present assessment.\n\nRemarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' },
+    { id: 'skin-leave', name: 'Leave Certificate', title: 'Leave Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, is under treatment in Skin & Cosmetology.\n\nDiagnosis: {{diagnosis}}\nThe patient is advised leave / recovery time from {{today}} for {{leave_days}} days.\n\nRemarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' }
+  ]
+};
+let CERTIFICATE_TEMPLATES = {};
+function loadCertificateTemplatesFromStorage() {
+  try { CERTIFICATE_TEMPLATES = JSON.parse(localStorage.getItem('bmh_certificate_templates') || '{}') || {}; } catch (e) { CERTIFICATE_TEMPLATES = {}; }
+}
+function saveCertificateTemplatesToStorage() {
+  try { localStorage.setItem('bmh_certificate_templates', JSON.stringify(CERTIFICATE_TEMPLATES || {})); } catch (e) {}
+}
+function certificateDeptKeyFromUi() {
+  const active = document.querySelector('.page.active')?.id || '';
+  if (active === 'pg-ophtho') return 'ophtho';
+  if (active === 'pg-obg') return 'obg';
+  if (active === 'pg-psych') return 'psych';
+  if (active === 'pg-skin') return 'skin';
+  return normalizeDeptKeyForQueue(window.CURRENT_PATIENT?.dept || CURRENT_USER?.dept || '') || 'ophtho';
+}
+function getCertificateTemplatesForDept(dept) {
+  const custom = Object.values(CERTIFICATE_TEMPLATES || {}).filter(function (tpl) { return tpl && tpl.dept === dept; });
+  return (CERTIFICATE_LIBRARY_DEFAULTS[dept] || []).concat(custom);
+}
+function buildCertificateContext(dept) {
+  const pt = window.CURRENT_PATIENT || {};
+  const ageSex = [pt.age ? (pt.age + 'Y') : '', pt.sex || ''].filter(Boolean).join(' / ') || '—';
+  const diagnosis = dept === 'ophtho'
+    ? ([...document.querySelectorAll('#rx-diagnosis-rows .dx-inp')].map(function (e) { return e.value.trim(); }).filter(Boolean).join(' · ') || pt.lastVisit?.dx || '')
+    : dept === 'obg'
+    ? ([...document.querySelectorAll('#obg-dx-list .dx-inp')].map(function (e) { return e.value.trim(); }).filter(Boolean).join(' · ') || pt.lastVisit?.dx || '')
+    : dept === 'psych'
+    ? ([...document.querySelectorAll('#psych-dx-list .dx-inp')].map(function (e) { return e.value.trim(); }).filter(Boolean).join(' · ') || pt.lastVisit?.dx || '')
+    : ([...document.querySelectorAll('#skin-dx-list .dx-inp')].map(function (e) { return e.value.trim(); }).filter(Boolean).join(' · ') || pt.lastVisit?.dx || '');
+  const procedure = expandProcedureLabelForPrint((Array.isArray(pt.lastVisit?.procedures) ? pt.lastVisit.procedures[0] : '') || pt.lastVisit?.procedure || pt.lastVisit?.procedures || '');
+  return {
+    patient_name: pt.name || '',
+    patient_id: pt.bmhId || '',
+    age_sex: ageSex,
+    diagnosis: diagnosis || '________________',
+    procedure: procedure || '________________',
+    today: formatDateDDMMYYYY(new Date()),
+    doctor: getEffectiveDoctorNameForDept(dept),
+    leave_days: '3',
+    remarks: '________________'
+  };
+}
+function renderCertificateTemplateText(text, ctx) {
+  return String(text || '').replace(/\{\{([^}]+)\}\}/g, function (_, key) {
+    return ctx[String(key || '').trim()] != null ? String(ctx[String(key || '').trim()]) : '';
+  });
+}
+function refreshCertificateTemplateList(dept) {
+  const host = document.getElementById('cert-template-list');
+  const sel = document.getElementById('cert-template-sel');
+  if (!host || !sel) return;
+  const items = getCertificateTemplatesForDept(dept);
+  sel.innerHTML = '<option value="">— Select certificate —</option>' + items.map(function (tpl) {
+    return '<option value="' + String(tpl.id).replace(/"/g, '&quot;') + '">' + String(tpl.name || tpl.title).replace(/</g, '&lt;') + '</option>';
+  }).join('');
+  host.innerHTML = items.map(function (tpl) {
+    return '<button type="button" class="btn btn-outline btn-sm" style="justify-content:flex-start" onclick="applyCertificateTemplate(\'' + String(tpl.id).replace(/'/g, "\\'") + '\')">' + String(tpl.name || tpl.title).replace(/</g, '&lt;') + '</button>';
+  }).join('');
+}
+function openCertificateModal(dept) {
+  const dk = normalizeDeptKeyForQueue(dept || certificateDeptKeyFromUi()) || 'ophtho';
+  window._currentCertificateDept = dk;
+  const pt = window.CURRENT_PATIENT || {};
+  const doctor = getEffectiveDoctorNameForDept(dk);
+  const ptDisplay = document.getElementById('cert-pt-display');
+  const docDisplay = document.getElementById('cert-doctor-display');
+  if (ptDisplay) ptDisplay.value = [pt.name || '—', pt.bmhId || '—'].join(' · ');
+  if (docDisplay) docDisplay.value = doctor;
+  refreshCertificateTemplateList(dk);
+  const first = getCertificateTemplatesForDept(dk)[0];
+  if (first) applyCertificateTemplate(first.id);
+  openM('m-certificates');
+}
+function applyCertificateTemplate(id) {
+  const dept = window._currentCertificateDept || certificateDeptKeyFromUi();
+  const items = getCertificateTemplatesForDept(dept);
+  const tpl = items.find(function (t) { return t.id === id; }) || items[0];
+  if (!tpl) return;
+  const ctx = buildCertificateContext(dept);
+  const titleEl = document.getElementById('cert-title');
+  const bodyEl = document.getElementById('cert-body');
+  const nameEl = document.getElementById('cert-template-name');
+  const sel = document.getElementById('cert-template-sel');
+  if (sel) sel.value = tpl.id;
+  if (titleEl) titleEl.value = tpl.title || tpl.name || 'Certificate';
+  if (bodyEl) bodyEl.value = renderCertificateTemplateText(tpl.body || '', ctx);
+  if (nameEl) nameEl.value = tpl.name || tpl.title || 'Certificate';
+}
+function buildCertificatePrintHtml() {
+  const dept = window._currentCertificateDept || certificateDeptKeyFromUi();
+  const ctxData = buildCertificateContext(dept);
+  const ctx = collectConsentPrintContext();
+  ctx.ptNm = ctxData.patient_name || ctx.ptNm;
+  ctx.ptId = ctxData.patient_id || ctx.ptId;
+  ctx.today = ctxData.today || ctx.today;
+  ctx.doctorName = ctxData.doctor || ctx.doctorName;
+  const title = document.getElementById('cert-title')?.value?.trim() || 'Certificate';
+  const body = String(document.getElementById('cert-body')?.value || '').trim().replace(/\n/g, '<br>');
+  const fullBody = '<div style="min-height:170mm;font-size:12px;line-height:1.8">' + body + '</div>'
+    + '<div style="display:flex;justify-content:flex-end;margin-top:24px"><div style="text-align:center;min-width:220px"><div style="border-bottom:1px solid #222;height:40px"></div><div style="font-size:11px;margin-top:6px;font-weight:800">' + escapeHtmlConsent(ctx.doctorName || '') + '</div><div style="font-size:10px;color:#555">Consultant</div></div></div>';
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif}@page{size:A4 portrait;margin:8mm}</style></head><body>'
+    + buildCompactDocumentShell(title, ctx, fullBody, { signatures: false })
+    + '</body></html>';
+}
+function printCurrentCertificate() {
+  safePrint(buildCertificatePrintHtml());
+}
+function saveCurrentCertificateTemplate() {
+  const dept = window._currentCertificateDept || certificateDeptKeyFromUi();
+  const title = toDisplayTitleCase(document.getElementById('cert-title')?.value?.trim() || '');
+  const body = document.getElementById('cert-body')?.value?.trim() || '';
+  const name = toDisplayTitleCase(document.getElementById('cert-template-name')?.value?.trim() || title || 'Certificate');
+  if (!title || !body) { showToast('Enter certificate heading and body', 'w'); return; }
+  const key = 'cert-' + dept + '-' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  CERTIFICATE_TEMPLATES[key] = { id: key, dept: dept, name: name, title: title, body: body };
+  saveCertificateTemplatesToStorage();
+  refreshCertificateTemplateList(dept);
+  const sel = document.getElementById('cert-template-sel');
+  if (sel) sel.value = key;
+  showToast('Certificate template saved ✓', 's');
+}
 function collectConsentPrintContext() {
   const ptIds = ['ophtho-pt-uid', 'obg-pt-uid', 'psych-pt-uid', 'skin-pt-uid'];
   const ptNms = ['ophtho-pt-nm', 'obg-pt-nm', 'psych-pt-nm', 'skin-pt-nm'];
@@ -2681,7 +2820,8 @@ function populateOphthoForm(v) {
   const PHX_IDS = ['phx-allergy','phx-diabetes_mellit','phx-hypertension','phx-heart_disease__','phx-asthma___copd','phx-headache___migr','phx-thyroid_disease','phx-renal_disease','phx-previous_surger','phx-bleeding_disord'];
   if(v.phxExtra && typeof v.phxExtra === 'object') {
     PHX_IDS.forEach(id => {
-      setV(id+'-dur', v.phxExtra[id]?.dur || '');
+      const durVal = buildPersistentHistoryDuration(v.phxExtra[id]?.dur || '', v.phxExtra[id]?.baseDate || '', new Date());
+      setV(id+'-dur', durVal || '');
       setV(id+'-rx', v.phxExtra[id]?.rx || '');
     });
   }
@@ -9438,9 +9578,24 @@ window.addEventListener('DOMContentLoaded', function() {
   document.addEventListener('input', function (e) { scheduleVisitAutosaveFromElement(e.target); }, true);
   document.addEventListener('change', function (e) { scheduleVisitAutosaveFromElement(e.target); }, true);
   window.addEventListener('popstate', function (e) {
-    if (e.state && (e.state.page || e.state.patientId || e.state.tab)) restoreAppNavState(e.state);
+    if (e.state && (e.state.page || e.state.patientId || e.state.tab)) {
+      restoreAppNavState(e.state);
+      return;
+    }
+    const current = getCurrentAppNavState();
+    if (!current.page || current.page === 'dashboard') {
+      history.pushState(current, '', '#/' + current.page);
+      restoreAppNavState(current);
+    }
+  });
+  document.body.addEventListener('click', function (e) {
+    const a = e.target.closest('a[href="#"], a[href=""], a[href="/"]');
+    if (a) e.preventDefault();
   });
   pushAppNavState(true);
+  history.pushState(getCurrentAppNavState(), '', '#/' + getCurrentAppNavState().page);
+  const aiFab = document.getElementById('ai-fab'); if (aiFab) aiFab.remove();
+  const aiPanel = document.getElementById('ai-panel'); if (aiPanel) aiPanel.remove();
   // Set today's date on all date fields
   try { updateRcDr && updateRcDr(); } catch(e) {}
 });
@@ -10906,9 +11061,11 @@ function printSurgeryPackWithKeys(keys, deptLabel) {
       return '';
     }
   }).join('');
-  if (!consentPages.trim()) { showToast('No printable documents found for ' + (deptLabel || 'pack'), 'w'); return; }
+  const fallbackPages = buildAdmissionSlipPage(ctx || collectConsentPrintContext());
+  const finalPages = consentPages.trim() ? consentPages : fallbackPages;
+  if (!finalPages.trim()) { showToast('No printable documents found for ' + (deptLabel || 'pack'), 'w'); return; }
   const html = '<!DOCTYPE html><html><head><meta charset="UTF-8">'
-    + '<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:12px}@page{size:A4;margin:0}</style></head><body>' + consentPages + '</body></html>';
+    + '<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:12px}@page{size:A4;margin:0}</style></head><body>' + finalPages + '</body></html>';
   safePrint(html);
   showToast('📋 ' + (deptLabel || 'Pack') + ' ready to print ✓', 's');
 }
@@ -13688,6 +13845,7 @@ function renderRxDrugs() {
   const typeOpts=RX_TYPE_OPTIONS;
   const eyeOpts=RX_SITE_OPTIONS;
   const lang = typeof rxLang!=='undefined'?rxLang:'en';
+  const rxAlerts = computeRxInteractionAlerts();
 
   RX_DRUGS.forEach((d,i)=>{
     if (!d.dateFrom) d.dateFrom = new Date().toISOString().split('T')[0];
@@ -13758,6 +13916,7 @@ function renderRxDrugs() {
     </div>`;
   };
   el.innerHTML = `<div class="rx-drugs-root" style="display:flex;flex-direction:column;gap:12px;width:100%;max-width:100%;min-width:0;box-sizing:border-box">
+    ${rxAlerts.length ? `<div style="border:1.5px solid rgba(204,0,0,.25);background:#fff4f4;border-radius:10px;padding:10px 12px"><div style="font-size:11px;font-weight:900;color:#b42318;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Drug interaction / history alerts</div>${rxAlerts.map(function (a) { return `<div style="font-size:11.5px;line-height:1.5;color:#7a1f1f;margin-bottom:4px">• ${esc(a)}</div>`; }).join('')}</div>` : ''}
     ${RX_DRUGS.map((d,i)=>{
       const taperRows = ensureRxTaperRows(d);
       const mainPrefix = `RX_DRUGS[${i}]`;
@@ -13775,6 +13934,45 @@ function renderRxDrugs() {
       </div>`;
     }).join('')}
   </div>`;
+}
+function computeRxInteractionAlerts() {
+  const alerts = [];
+  const text = RX_DRUGS.map(function (d) {
+    return [d.trade, d.brand, d.generic, d.name].join(' ').toLowerCase();
+  }).join(' || ');
+  const has = function (re) { return re.test(text); };
+  const phxVal = function (id) { return document.getElementById(id)?.value || window.CURRENT_PATIENT?.lastVisit?.[id] || 'N'; };
+  const extraHx = String(document.getElementById('hx-other-systemic')?.value || window.CURRENT_PATIENT?.lastVisit?.otherSystemic || '').toLowerCase();
+  const allergySpec = String(document.getElementById('drug-allergy-spec')?.value || window.CURRENT_PATIENT?.lastVisit?.drugAllergySpec || '').toLowerCase();
+  if (has(/\btimolol\b|\bcosopt\b/) && (phxVal('phx-asthma___copd') === 'Y' || /asthma|copd|bronch/.test(extraHx))) {
+    alerts.push('Timolol / Cosopt may worsen asthma or COPD.');
+  }
+  if (has(/\btimolol\b|\bcosopt\b/) && (phxVal('phx-heart_disease__') === 'Y' || /heart|block|brady/.test(extraHx))) {
+    alerts.push('Timolol-containing drops may aggravate bradycardia or heart disease.');
+  }
+  if (has(/\bdiamox\b|\bacetazolamide\b/) && (phxVal('phx-renal_disease') === 'Y' || /renal|kidney/.test(extraHx))) {
+    alerts.push('Acetazolamide / Diamox needs caution in renal disease.');
+  }
+  if (has(/\bdiamox\b|\bacetazolamide\b/) && /sulfa|sulfonamide/.test(allergySpec)) {
+    alerts.push('Acetazolamide / Diamox may cross-react with sulfonamide allergy.');
+  }
+  if (has(/\bpred\b|\bpred forte\b|\bdexameth|\blotepred|\bsteroid/) && phxVal('phx-diabetes_mellit') === 'Y') {
+    alerts.push('Steroid therapy may raise sugars; monitor diabetes control.');
+  }
+  if (has(/\bketorolac\b|\bbromfenac\b|\bnepafenac\b|\bacular\b|\byellox\b/) && (/nsaid|aspirin/.test(allergySpec) || String(document.getElementById('drug-allergy')?.value || '').toLowerCase().includes('nsaid'))) {
+    alerts.push('Topical NSAID use needs caution with NSAID / aspirin allergy history.');
+  }
+  if (has(/\bbrimonidine\b|\balphagan\b/) && /clonidine/.test(extraHx)) {
+    alerts.push('Brimonidine with clonidine-like therapy may increase systemic side effects.');
+  }
+  const seen = new Set();
+  RX_DRUGS.forEach(function (d) {
+    const key = String(rxDrugTradeName(d) || d.trade || d.name || d.generic || '').trim().toLowerCase();
+    if (!key) return;
+    if (seen.has(key)) alerts.push((d.trade || d.name || d.generic || 'Drug') + ' appears more than once in the prescription.');
+    seen.add(key);
+  });
+  return Array.from(new Set(alerts));
 }
 
 // ─── TEMPLATE SAVE ─────────────
@@ -14072,7 +14270,7 @@ function renderDeptSendBar(deptKey, hostId, logId) {
   const dlOpts = rows.map(function (row) {
     return '<option value="' + String(row.name).replace(/"/g, '&quot;') + '">';
   }).join('');
-  host.innerHTML = '<div style="background:linear-gradient(135deg,#fff7e0,#fff3cc);border-radius:10px;padding:8px 11px;margin-bottom:10px;border:1.5px solid rgba(212,160,23,.3)"><div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap"><span style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">📤 Send to Reception:</span><div style="display:flex;gap:4px;flex-wrap:wrap;flex:1;min-width:220px">' + buttons + '</div><select style="font-size:11px;padding:3px 6px;border-radius:6px;border:1.5px solid rgba(212,160,23,.5);background:#fff;min-width:200px" onchange="sendFromDropdown(this)"><option value="">— Pick from Settings → Charges —</option>' + options + '</select><input type="text" id="send-charge-name-' + deptKey + '" list="send-charge-dl-' + deptKey + '" placeholder="Type charge name…" autocomplete="off" style="font-size:11px;padding:4px 8px;border-radius:6px;border:1.5px solid rgba(212,160,23,.5);min-width:150px;max-width:220px;flex:1"><input type="number" id="send-charge-amt-' + deptKey + '" placeholder="₹" min="0" style="font-size:11px;padding:4px 8px;width:72px;border-radius:6px;border:1.5px solid rgba(212,160,23,.5)"><button type="button" class="btn btn-xs btn-gold" onclick="sendQuickChargeFromDeptInputs(\'' + deptKey + '\')">Send</button><button type="button" class="btn btn-xs btn-outline" onclick="addCustomCharge()" style="white-space:nowrap">Custom</button></div><datalist id="send-charge-dl-' + deptKey + '">' + dlOpts + '</datalist></div>';
+  host.innerHTML = '<div style="background:linear-gradient(135deg,#fff7e0,#fff3cc);border-radius:10px;padding:8px 11px;margin-bottom:10px;border:1.5px solid rgba(212,160,23,.3)"><div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap"><span style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">📤 Send to Reception:</span><div style="display:flex;gap:4px;flex-wrap:wrap;flex:1;min-width:220px">' + buttons + '</div><select style="font-size:11px;padding:3px 6px;border-radius:6px;border:1.5px solid rgba(212,160,23,.5);background:#fff;min-width:200px" onchange="sendFromDropdown(this)"><option value="">— Pick from Settings → Charges —</option>' + options + '</select><input type="text" id="send-charge-name-' + deptKey + '" list="send-charge-dl-' + deptKey + '" placeholder="Type charge name…" autocomplete="off" style="font-size:11px;padding:4px 8px;border-radius:6px;border:1.5px solid rgba(212,160,23,.5);min-width:150px;max-width:220px;flex:1"><input type="number" id="send-charge-amt-' + deptKey + '" placeholder="₹" min="0" style="font-size:11px;padding:4px 8px;width:72px;border-radius:6px;border:1.5px solid rgba(212,160,23,.5)"><button type="button" class="btn btn-xs btn-gold" onclick="sendQuickChargeFromDeptInputs(\'' + deptKey + '\')">Send</button><button type="button" class="btn btn-xs btn-outline" onclick="openCertificateModal(\'' + deptKey + '\')" style="white-space:nowrap">📄 Certificates</button><button type="button" class="btn btn-xs btn-outline" onclick="addCustomCharge()" style="white-space:nowrap">Custom</button></div><datalist id="send-charge-dl-' + deptKey + '">' + dlOpts + '</datalist></div>';
 }
 function renderAllDeptSendBars() {
   renderOphthoSendChargeSelect();
@@ -14099,6 +14297,7 @@ setTimeout(() => {
   renderAIProcSuggestions();
   renderAISuggestedCharges();
   renderAllDeptSendBars();
+  loadCertificateTemplatesFromStorage && loadCertificateTemplatesFromStorage();
 }, 200);
 
 // ═══════════════════════════════════════
@@ -14419,6 +14618,28 @@ function patientQueueDateMatchesToday(p) {
     }
     return localDateKey(s) === todayKeyLocal || s.slice(0, 10) === todayKeyLocal;
   });
+}
+function buildPersistentHistoryDuration(rawDur, baseDate, referenceDate) {
+  const durText = String(rawDur || '').trim();
+  const ref = referenceDate ? new Date(referenceDate) : new Date();
+  const base = baseDate ? new Date(baseDate) : null;
+  if (base && !Number.isNaN(base.getTime())) {
+    const months = Math.max(0, Math.round((ref.getTime() - base.getTime()) / (1000 * 60 * 60 * 24 * 30.4375)));
+    if (months >= 24) {
+      const yrs = Math.floor(months / 12);
+      const rem = months % 12;
+      return rem ? (yrs + ' years ' + rem + ' months') : (yrs + ' years');
+    }
+    if (months > 0) return months + ' months';
+  }
+  const m = durText.match(/(\d+)\s*(year|years|yr|yrs|month|months|mo|mos)/i);
+  if (!m) return durText;
+  const n = Number(m[1] || 0);
+  const unit = String(m[2] || '').toLowerCase();
+  const inferredBase = new Date(ref);
+  if (unit.startsWith('y')) inferredBase.setFullYear(inferredBase.getFullYear() - n);
+  else inferredBase.setMonth(inferredBase.getMonth() - n);
+  return buildPersistentHistoryDuration('', inferredBase.toISOString(), ref);
 }
 
 function filterPatientsForUser() {
@@ -17771,20 +17992,7 @@ Respond concisely in bullet points. Always recommend consulting the doctor for c
   renderAIChat();
 }
 
-// Inject AI floating button on load
-setTimeout(() => {
-  if(!document.getElementById('ai-fab')) {
-    const fab = document.createElement('button');
-    fab.id = 'ai-fab';
-    fab.onclick = toggleAI;
-    fab.title = 'BMH AI Assistant';
-    fab.style.cssText = 'position:fixed;bottom:16px;right:16px;width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--bmh-blue),var(--bmh-teal));color:#fff;border:none;font-size:22px;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:8999;display:flex;align-items:center;justify-content:center;transition:transform .2s';
-    fab.innerHTML = '🤖';
-    fab.onmouseover = ()=>fab.style.transform='scale(1.1)';
-    fab.onmouseout  = ()=>fab.style.transform='scale(1)';
-    document.body.appendChild(fab);
-  }
-}, 800);
+// AI assistant removed
 
 // ── POINT 10: Print Appointments by date with phone numbers ──
 
@@ -17902,11 +18110,7 @@ function setPrintPatient(bmhId) {
 // ── AI ASSISTANT ──────────────────────────────────
 let aiPanelOpen = false;
 function toggleAI() {
-  const p = document.getElementById('ai-panel');
-  if(!p) return;
-  const isOpen = p.style.display === 'flex';
-  p.style.display = isOpen ? 'none' : 'flex';
-  if(!isOpen) { const inp=document.getElementById('ai-inp'); if(inp) inp.focus(); }
+  return;
 }
 
 async function sendAIMessage() {
@@ -20166,9 +20370,22 @@ function saveVisit(dept, opts) {
     const PHX_IDS = ['phx-allergy','phx-diabetes_mellit','phx-hypertension','phx-heart_disease__','phx-asthma___copd','phx-headache___migr','phx-thyroid_disease','phx-renal_disease','phx-previous_surger','phx-bleeding_disord'];
     visit.phxExtra = {};
     PHX_IDS.forEach(id => {
+      const durRaw = document.getElementById(id+'-dur')?.value || '';
+      let baseDate = v.phxExtra && v.phxExtra[id] ? v.phxExtra[id].baseDate : '';
+      if (!baseDate && ((document.getElementById(id)?.value || '') === 'Y')) {
+        const m = String(durRaw).match(/(\d+)\s*(year|years|yr|yrs|month|months|mo|mos)/i);
+        const now = new Date();
+        if (m) {
+          baseDate = new Date(now);
+          if (String(m[2]).toLowerCase().startsWith('y')) baseDate.setFullYear(baseDate.getFullYear() - Number(m[1] || 0));
+          else baseDate.setMonth(baseDate.getMonth() - Number(m[1] || 0));
+          baseDate = baseDate.toISOString();
+        }
+      }
       visit.phxExtra[id] = {
-        dur: document.getElementById(id+'-dur')?.value || '',
-        rx: document.getElementById(id+'-rx')?.value || ''
+        dur: durRaw,
+        rx: document.getElementById(id+'-rx')?.value || '',
+        baseDate: baseDate || ''
       };
     });
     visit.advice = document.getElementById('rx-advice-text')?.value || '';
