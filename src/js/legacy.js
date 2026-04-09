@@ -8749,15 +8749,42 @@ function addCustomRxOption(kind) {
   showToast('Saved for ' + (CURRENT_USER?.name || 'doctor') + ' ✓', 's');
 }
 function renderInvestigationChooser() {
+  const seen = new Set();
+  const dedupe = function (rows) {
+    return rows.filter(function (row) {
+      const name = String(row && row[0] || '').trim();
+      if (!name) return false;
+      const key = name.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+  const labRows = dedupe((CHARGES_DATA || []).filter(function (row) {
+    return String(row?.cat || '').toLowerCase() === 'lab';
+  }).map(function (row) { return [row.name, 0]; }));
+  const diagRows = dedupe((CHARGES_DATA || []).filter(function (row) {
+    const cat = String(row?.cat || '').toLowerCase();
+    const name = String(row?.name || '');
+    if (cat === 'lab') return false;
+    return /x-?ray|ecg|echo|usg|ultrasound|mri|ct scan|doppler/i.test(name);
+  }).map(function (row) { return [row.name, 0]; }));
+  const eyeRows = dedupe((CHARGES_DATA || []).filter(function (row) {
+    const cat = String(row?.cat || '').toLowerCase();
+    const name = String(row?.name || '');
+    if (cat !== 'eye') return false;
+    if (/consultation|follow-up|pre-op package/i.test(name)) return false;
+    return /biometry|oct|hvf|fundus|topography|specular|erg|vep|fluorescein|ubm|b-?scan/i.test(name);
+  }).map(function (row) { return [row.name, 0]; }));
   const groups = [
-    ['inv-blood-list', INVESTIGATION_LIBRARY.blood],
-    ['inv-diag-list', INVESTIGATION_LIBRARY.diag],
-    ['inv-eye-list', INVESTIGATION_LIBRARY.eye]
+    ['inv-blood-list', labRows.length ? labRows : INVESTIGATION_LIBRARY.blood.map(function (x) { return [x[0], 0]; })],
+    ['inv-diag-list', diagRows.length ? diagRows : INVESTIGATION_LIBRARY.diag.map(function (x) { return [x[0], 0]; })],
+    ['inv-eye-list', eyeRows.length ? eyeRows : INVESTIGATION_LIBRARY.eye.map(function (x) { return [x[0], 0]; })]
   ];
   groups.forEach(([id, items]) => {
     const el = document.getElementById(id);
     if(!el) return;
-    el.innerHTML = items.map(([name, price]) => `<div class="invest-option" data-investigation-name="${String(name).replace(/"/g,'&quot;')}" data-price="${price}" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--g6);border-radius:8px;cursor:pointer" onclick="toggleInvestigation(this,${JSON.stringify(name)},${price})"><input type="checkbox" style="width:16px;height:16px;flex-shrink:0"><div style="flex:1"><div style="font-size:12px;font-weight:700">${name}</div><div style="font-size:10px;color:var(--g1)">₹${Number(price).toLocaleString('en-IN')}</div></div></div>`).join('');
+    el.innerHTML = items.map(([name, price]) => `<div class="invest-option" data-investigation-name="${String(name).replace(/"/g,'&quot;')}" data-price="${price}" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--g6);border-radius:8px;cursor:pointer" onclick="toggleInvestigation(this,${JSON.stringify(name)},${price})"><input type="checkbox" style="width:16px;height:16px;flex-shrink:0"><div style="flex:1"><div style="font-size:12px;font-weight:700">${name}</div><div style="font-size:10px;color:var(--g1)">Outsourced lab / no charge</div></div></div>`).join('');
   });
 }
 let INVESTIGATION_TEMPLATES_DATA = {
@@ -8824,7 +8851,7 @@ function syncSelectedInvestigationCheckboxes() {
   const sl = document.getElementById('selected-invest-list');
   if(sl) {
     sl.innerHTML = SELECTED_INVESTIGATIONS.length
-      ? SELECTED_INVESTIGATIONS.map(i=>`<span style="display:inline-block;margin:2px 4px 2px 0;background:var(--blue-lt);color:var(--blue);padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">${i.name} ₹${i.price.toLocaleString('en-IN')}</span>`).join('')
+      ? SELECTED_INVESTIGATIONS.map(i=>`<span style="display:inline-block;margin:2px 4px 2px 0;background:var(--blue-lt);color:var(--blue);padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">${i.name}</span>`).join('')
       : 'None selected';
   }
 }
@@ -13368,34 +13395,51 @@ function generateDailyReport() {
   const rangeTo   = toVal   || today;
   const todayLabel = new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
 
-  // Filter patients for the date range (use createdAt date)
-  const inRange = p => {
-    const d = (p.createdAt||'').split('T')[0] || today;
+  const selectedCentre = normalizeAppointmentCentreValue((typeof getEffectiveCentre === 'function' ? getEffectiveCentre() : (CURRENT_USER?.centre || 'CHD')) || 'CHD');
+  const allowAllCentres = !!(CURRENT_USER?.isAdmin || CURRENT_USER?.canSeeAllCentres);
+  const inRange = function (p) {
+    const d = localDateKey(p.checkinAt || p.createdAt || p.registeredAt || p.updatedAt || p.queueDate || p.date);
+    if (!d) return false;
     return d >= rangeFrom && d <= rangeTo;
   };
   const deptMap = {ophtho:'Ophthalmology',obg:'OBG',psych:'Neuropsychiatry',skin:'Skin'};
-  const allPts = PATIENTS.filter(p=>(!deptFilter||p.dept===deptFilter));
-  // For date range — use today's queue if no filter set (patients in current session)
-  const todayPts = allPts.filter(p=>inRange(p)||true); // show all loaded; filter by date if available
-  const dateFilteredPts = (fromVal||toVal) ? allPts.filter(inRange) : allPts;
+  const allPts = PATIENTS.filter(function (p) {
+    if (deptFilter && p.dept !== deptFilter) return false;
+    if (!allowAllCentres && normalizeAppointmentCentreValue(p.centre || selectedCentre) !== selectedCentre) return false;
+    return true;
+  });
+  const dateFilteredPts = allPts.filter(inRange);
 
   // Compute totals from TRANSACTIONS array
   const txInRange = TRANSACTIONS.filter(tx=>{
     const d=(tx.date||'').split('T')[0]||today;
-    return d>=rangeFrom&&d<=rangeTo;
+    if (d < rangeFrom || d > rangeTo) return false;
+    if (!allowAllCentres && normalizeAppointmentCentreValue(tx.centre || selectedCentre) !== selectedCentre) return false;
+    if (deptFilter && String(tx.dept || '') !== deptFilter) return false;
+    return true;
   });
   const totalCollection = txInRange.reduce((s,t)=>s+getNetTransactionAmount(t),0);
-  const pendingPay = PAY_REQUESTS.filter(pr=>!pr.collected).reduce((s,pr)=>s+(parseFloat(pr.amount)||0),0);
-  const surgeriesDone = OT_CASES.filter(c=>c.status==='completed'||(c.date>=rangeFrom&&c.date<=rangeTo)).length;
+  const pendingPay = PAY_REQUESTS.filter(function (pr) {
+    if (pr.collected) return false;
+    if (!allowAllCentres && normalizeAppointmentCentreValue(pr.centre || selectedCentre) !== selectedCentre) return false;
+    if (deptFilter && String(pr.dept || '') !== deptFilter) return false;
+    return true;
+  }).reduce((s,pr)=>s+(parseFloat(pr.amount)||0),0);
+  const surgeriesDone = OT_CASES.filter(function (c) {
+    const d = localDateKey(c.date || c.otDate || c.surgeryDate || c.createdAt || c.updatedAt);
+    if (!d || d < rangeFrom || d > rangeTo) return false;
+    if (!allowAllCentres && normalizeAppointmentCentreValue(c.centre || selectedCentre) !== selectedCentre) return false;
+    if (deptFilter && String(c.dept || '') !== deptFilter) return false;
+    return String(c.status || '').toLowerCase() === 'completed';
+  }).length;
 
   // Per-dept breakdown
   const depts = [['ophtho','Ophthalmology','👁️'],['obg','OBG','🤰'],['psych','Neuropsychiatry','🧠'],['skin','Skin','💆']];
   const deptRows = depts.map(([key,name,icon])=>{
     const pts = dateFilteredPts.filter(p=>p.dept===key);
     const deptTx = txInRange.filter(t=>t.dept===key);
-    const consult = deptTx.filter(t=>!(t.mode==='Insurance')).reduce((s,t)=>s+getNetTransactionAmount(t),0);
-    const ins = deptTx.filter(t=>t.mode==='Insurance').reduce((s,t)=>s+getNetTransactionAmount(t),0);
-    const surgs = OT_CASES.filter(c=>(c.date>=rangeFrom&&c.date<=rangeTo)).length;
+    const consult = deptTx.filter(t=>normalizePaymentMode(t.mode)!=='Insurance/TPA').reduce((s,t)=>s+getNetTransactionAmount(t),0);
+    const ins = deptTx.filter(t=>normalizePaymentMode(t.mode)==='Insurance/TPA').reduce((s,t)=>s+getNetTransactionAmount(t),0);
     return `<tr><td>${icon} ${name}</td><td>${pts.length}</td><td>₹${consult.toLocaleString('en-IN')}</td><td>₹0</td><td>₹${ins.toLocaleString('en-IN')}</td><td style="font-weight:900">₹${(consult+ins).toLocaleString('en-IN')}</td></tr>`;
   }).join('');
   const totalPts = depts.reduce((s,[k])=>s+dateFilteredPts.filter(p=>p.dept===k).length,0);
@@ -13403,7 +13447,7 @@ function generateDailyReport() {
   const rangeLabel = fromVal||toVal ? `${new Date(rangeFrom).toLocaleDateString('en-IN',{day:'numeric',month:'short'})} – ${new Date(rangeTo).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}` : todayLabel;
 
   el.innerHTML=`<div class="card">
-    <div class="card-hd"><div><div class="card-title">📅 Daily Summary — ${rangeLabel}</div><div class="card-sub">All departments · ${window.CURRENT_USER?.centre==='RPR'?'Ropar':'Chandigarh'} Centre</div></div>
+    <div class="card-hd"><div><div class="card-title">📅 Daily Summary — ${rangeLabel}</div><div class="card-sub">${deptFilter ? (deptMap[deptFilter] || deptFilter) : 'All departments'} · ${allowAllCentres ? 'All visible centres' : (selectedCentre==='RPR'?'Ropar':'Chandigarh')} Centre</div></div>
     <button class="btn btn-gold btn-xs" onclick="window.print()">🖨️ Print</button></div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">
       ${[
@@ -13581,7 +13625,9 @@ function getReferralReportRows() {
   const toVal = document.getElementById('rep-ref-to')?.value || '';
   const deptFilter = document.getElementById('rep-ref-dept')?.value || '';
   const doctorFilter = toDisplayTitleCase(document.getElementById('rep-ref-doctor')?.value || '').trim();
-  const centreFilter = normalizeAppointmentCentreValue((typeof getEffectiveCentre === 'function' ? getEffectiveCentre() : (CURRENT_USER?.centre || 'CHD')) || 'CHD');
+  const centreFilter = (CURRENT_USER?.isAdmin || CURRENT_USER?.canSeeAllCentres)
+    ? ''
+    : normalizeAppointmentCentreValue((typeof getEffectiveCentre === 'function' ? getEffectiveCentre() : (CURRENT_USER?.centre || 'CHD')) || 'CHD');
   const inRange = function (value) {
     const key = localDateKey(value);
     if (!key) return !fromVal && !toVal;
@@ -19821,6 +19867,10 @@ function renderDashboard() {
       const active = (p.status || 'admitted') !== 'discharged';
       return centreMatch(p) && (selectedDate === today ? active : (dateMatch(p.admittedAt) || dateMatch(p.date) || dateMatch(p.createdAt)));
     });
+    const overduePts = displayPts.filter(function (p) {
+      const summary = bmhGetPatientFinancialSummary ? bmhGetPatientFinancialSummary(p.bmhId) : null;
+      return Math.max(Number(p.balance) || 0, Number(summary?.balance || 0), Number(summary?.pendingTotal || 0)) > 0;
+    });
     setEl('db-admin-opd', String(opdCount));
     setEl('db-admin-surgeries', String(surgeryCases.length));
     setEl('db-admin-ipd', String(ipdCases.length));
@@ -19866,6 +19916,10 @@ function renderDashboard() {
           return entry[0] + ': ₹' + Number(entry[1] || 0).toLocaleString('en-IN');
         }).join(' · ') || 'No collections';
       };
+      const dueTotal = overduePts.reduce(function (sum, p) {
+        const summary = bmhGetPatientFinancialSummary ? bmhGetPatientFinancialSummary(p.bmhId) : null;
+        return sum + Math.max(Number(p.balance) || 0, Number(summary?.balance || 0), Number(summary?.pendingTotal || 0));
+      }, 0);
       const cards = deptMeta.map(function (meta) {
         return `<div class="card" style="padding:14px;min-height:180px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
@@ -19907,7 +19961,13 @@ function renderDashboard() {
         </div>
         <div style="margin-top:10px;font-size:10px;font-weight:700;color:var(--g1);line-height:1.5">${totalModeText}</div>
       </div>`;
-      summaryEl.innerHTML = cards.join('') + totalCard;
+      const dueCard = `<div class="card" style="padding:14px;min-height:180px;border:2px solid rgba(255,149,0,.35);cursor:pointer" onclick="showAdminDashboardDetail('dues');renderDashboard()">
+        <div style="font-size:13px;font-weight:900;color:#8a4200;margin-bottom:10px">⚠️ Pending Dues</div>
+        <div class="sc orange" style="min-height:92px"><div class="sc-lbl">Patients with dues</div><div class="sc-val orange">${overduePts.length}</div></div>
+        <div style="margin-top:10px;font-size:12px;font-weight:900;color:#8a4200">₹${dueTotal.toLocaleString('en-IN')}</div>
+        <div style="margin-top:6px;font-size:10px;color:var(--g1);font-weight:700">Click to open and delete dues</div>
+      </div>`;
+      summaryEl.innerHTML = cards.join('') + totalCard + dueCard;
     }
     const renderBarSet = function (values, labels, colors) {
       const max = Math.max(1, ...values);
@@ -19968,6 +20028,7 @@ function renderDashboard() {
       });
       surgChartEl.innerHTML = renderBarSet(days.map(function (x) { return x.value; }), days.map(function (x) { return x.label; }), days.map(function () { return 'var(--orange)'; }));
     }
+    renderAdminDashboardDetail(selectedDate, selectedTxn, overduePts, surgeryCases, ipdCases, displayPts);
   } else {
     const todayPts = PATIENTS.filter(function (p) {
       return centreMatch(p) && normalizeDeptKeyForQueue(p.dept || '') === currentDeptKey && patientQueueDateMatchesToday(p);
@@ -20856,6 +20917,24 @@ function saveUpdatedPatientDetails() {
     console.warn('patient update error', e);
     showToast('Save failed while updating patient details', 'e');
   });
+  if (refName) {
+    try { logReferral('Doctor', refName, '', { name: updates.name, bmhId: bid, dept: p.dept || '', purpose: p.purpose || '', centre: p.centre || CURRENT_USER?.centre || '' }); } catch (e) {}
+    const refId = 'REF' + Date.now();
+    fbSet && fbSet('referrals/' + refId, {
+      id: refId,
+      bmhId: bid,
+      patient: updates.name,
+      dept: p.dept || '',
+      centre: p.centre || CURRENT_USER?.centre || '',
+      refType: 'Doctor',
+      refName: refName,
+      refMobile: p.refMobile || '',
+      purpose: p.purpose || '',
+      createdAt: nowIso,
+      createdBy: CURRENT_USER?.name || 'Reception',
+      editedReferral: true
+    });
+  }
   showToast(`✅ ${updates.name} — details updated`,'s');
   closeM('m-update-details');
   renderReceptionPage && renderReceptionPage();
