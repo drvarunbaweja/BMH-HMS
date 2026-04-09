@@ -20717,7 +20717,17 @@ function renderDocQueue() {
   // Use the same "today's visible queue" basis as Reception, then narrow by department for doctors.
   const queueBasePts = PATIENTS.filter(function (p) {
     if (!p || p.queueRemoved || p.status === 'removed') return false;
-    const visibleStatus = p.status === 'waiting' || p.status === 'pre-registered' || p.seen || p.dilated;
+    const visibleStatus =
+      p.status === 'waiting' ||
+      p.status === 'pre-registered' ||
+      p.status === 'ipd' ||
+      p.status === 'ot' ||
+      p.status === 'ot-listed' ||
+      p.status === 'scheduled' ||
+      p.seen ||
+      p.dilated ||
+      !!p.otCaseId ||
+      !!p.ipdAdmitted;
     if (!visibleStatus) return false;
     if (!patientQueueDateMatchesToday(p) && !(p.checkinAt && localDateKey(p.checkinAt) === todayKeyLocal)) return false;
     return centreMatch(p);
