@@ -1183,7 +1183,7 @@
             </datalist>
             <input type="text" id="add-inv-notes" placeholder="Notes (optional)" style="flex:1;min-width:80px">
             <button class="btn btn-blue btn-sm" onclick="addInvestigationOrder('advise')">Advise</button>
-            <button class="btn btn-gold btn-sm" onclick="addInvestigationOrder('send')">Advise + Send</button>
+            <button class="btn btn-gold btn-sm" onclick="addInvestigationOrder('send')">Advise + Send to Lab</button>
           </div>
           <div id="inv-order-list" style="margin-top:8px"></div>
         </div>
@@ -1211,7 +1211,7 @@
             <div style="display:flex;gap:6px;flex-wrap:wrap">
               <button class="btn btn-xs btn-outline" onclick="openM('m-order-invest')">+ Order More</button>
               <button class="btn btn-xs btn-blue" onclick="addInvestigationOrder('advise')">Advise Only</button>
-              <button class="btn btn-xs btn-orange" onclick="addInvestigationOrder('send')">Advise + Send</button>
+              <button class="btn btn-xs btn-orange" onclick="addInvestigationOrder('send')">Advise + Send to Lab</button>
             </div>
           </div>
           <div id="oe-inv-ordered-list" style="min-height:24px;font-size:11.5px;color:var(--g1);font-style:italic">None ordered</div>
@@ -4636,7 +4636,7 @@
   <div id="selected-invest-list" style="font-size:12px;color:var(--tx3);min-height:24px">None selected</div>
 </div>
 <div style="display:flex;gap:8px;margin-top:12px">
-  <button class="btn btn-gold" style="flex:1" onclick="confirmInvestigations()">✅ Order &amp; Send to Reception</button>
+  <button class="btn btn-gold" style="flex:1" onclick="confirmInvestigations()">✅ Order &amp; Send to Lab</button>
   <button class="btn btn-gray" onclick="closeM('m-order-invest')">Cancel</button>
 </div>
 </div></div>
