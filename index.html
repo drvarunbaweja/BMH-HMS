@@ -3210,6 +3210,31 @@
             <button class="btn btn-blue btn-sm" onclick="processBC('in',document.getElementById('bc-in').value)">Add stock →</button>
           </div>
         </div>
+        <div id="inv-iol-stock-box" style="display:none;background:linear-gradient(135deg,#fff7db,#fff);border:1px solid #ead8a4;border-radius:10px;padding:12px;margin-bottom:12px">
+          <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+            <div>
+              <div style="font-size:11px;font-weight:900;color:#8a4200;text-transform:uppercase;letter-spacing:.5px">IOL Power Stock Entry</div>
+              <div style="font-size:11px;color:#7a5f22">Select vendor, brand, model, then set quantity ticker against each power from +3.00D to +30.00D.</div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-xs btn-outline" onclick="prepareIolInventoryFromBill()">📷 Prepare from bill / OCR</button>
+              <button class="btn btn-xs btn-gold" onclick="saveIolInventoryGrid()">💾 Add selected IOL powers to stock</button>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:10px">
+            <div class="form-group" style="margin:0"><label class="fl">Vendor Name</label><input type="text" id="inv-iol-vendor" placeholder="Vendor / supplier"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Brand</label><input type="text" id="inv-iol-brand" placeholder="AcrySof / Tecnis / Appasamy"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Company</label><input type="text" id="inv-iol-company" placeholder="Alcon / J&J / Zeiss"></div>
+            <div class="form-group" style="margin:0"><label class="fl">IOL Name / Model</label><input type="text" id="inv-iol-model" placeholder="Hydrophobic Aspheric / Multifocal / Toric"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:140px 140px 1fr;gap:8px;align-items:end;margin-bottom:10px">
+            <div class="form-group" style="margin:0"><label class="fl">Default Expiry</label><input type="text" id="inv-iol-expiry" placeholder="MM/YYYY"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Default Cost ₹</label><input type="number" id="inv-iol-cost" min="0" value="0"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Serial / batch map (optional)</label><textarea id="inv-iol-serial-map" rows="2" style="width:100%;font-family:var(--mono);font-size:11px" placeholder="+21.00D: SER123,BATCH-A | +21.50D: SER124,BATCH-A"></textarea></div>
+          </div>
+          <div id="inv-iol-bill-review" style="display:none;background:#fff;border:1px dashed #d2bb79;border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:11px;color:#7a5f22"></div>
+          <div id="inv-iol-power-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px"></div>
+        </div>
         <div class="scanner-box" onclick="scanBC('in')" style="margin-bottom:12px">
           <div class="svf">📷<div class="sc-corner sc-tl"></div><div class="sc-corner sc-tr"></div><div class="sc-corner sc-bl"></div><div class="sc-corner sc-br"></div><div class="sc-line"></div></div>
           <div style="font-size:13px;font-weight:800;color:var(--bmh-gold)">Tap to Scan Barcode (Stock In)</div>
@@ -3224,7 +3249,12 @@
       <div class="tab-content" id="inv-use">
         <div style="background:var(--orange-lt);border-radius:8px;padding:9px;margin-bottom:10px;font-size:12px;font-weight:700;color:#8a4200">💡 Scan injection/item → stock deducted + auto-billed to patient with MRP &amp; timestamp</div>
         <div style="display:grid;grid-template-columns:1.4fr 1fr 120px 120px;gap:8px;margin-bottom:9px">
-          <div class="form-group" style="margin:0"><label class="fl">Patient</label><select id="use-pt"></select></div>
+          <div class="form-group" style="margin:0;position:relative">
+            <label class="fl">Patient search</label>
+            <input type="text" id="inv-use-pt-search" placeholder="Search by BMSH ID / phone number">
+            <input type="hidden" id="use-pt">
+            <div id="inv-use-pt-results" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:25;background:#fff;border:1px solid var(--g4);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.12);max-height:220px;overflow-y:auto;margin-top:4px"></div>
+          </div>
           <div class="form-group" style="margin:0"><label class="fl">Department</label><select id="inv-use-dept"><option value="ophtho">Ophthalmology</option><option value="obg">OBG</option><option value="psych">Psychiatry</option><option value="skin">Skin</option><option value="general">General / Shared</option><option value="ot">OT / Procedure</option><option value="ipd">IPD / Ward</option></select></div>
           <div class="form-group" style="margin:0"><label class="fl">Qty</label><input type="number" id="inv-use-qty" min="1" value="1"></div>
           <div class="form-group" style="margin:0"><label class="fl">Use mode</label><select id="inv-use-mode"><option value="bill">Bill patient</option><option value="consume">Consume only</option><option value="ward">Ward stock use</option></select></div>

@@ -6386,6 +6386,181 @@ function bmhInventoryLowItems() {
 function bmhInventoryFilterValue(id) {
   return String(document.getElementById(id)?.value || 'all').trim();
 }
+function bmhIolPowerSeries() {
+  const out = [];
+  for (let i = 30; i <= 300; i += 5) out.push('+' + (i / 10).toFixed(2) + 'D');
+  return out;
+}
+function toggleInventoryIolBox() {
+  const box = document.getElementById('inv-iol-stock-box');
+  if (!box) return;
+  const isIol = /iol/i.test(bmhInventoryCategoryValue());
+  box.style.display = isIol ? 'block' : 'none';
+  if (isIol) renderIolInventoryPowerGrid();
+}
+function readIolGridSerialMap() {
+  const raw = String(document.getElementById('inv-iol-serial-map')?.value || '').trim();
+  const map = {};
+  if (!raw) return map;
+  raw.split(/\n|\|/).map(function (line) { return line.trim(); }).filter(Boolean).forEach(function (line) {
+    const parts = line.split(':');
+    if (parts.length < 2) return;
+    const power = normalizeIolPowerValue(parts.shift());
+    const values = parts.join(':').split(';').map(function (chunk) {
+      const bits = chunk.split(',').map(function (x) { return String(x || '').trim(); });
+      return { serialNo: bits[0] || '', batchNo: bits[1] || '' };
+    }).filter(function (row) { return row.serialNo || row.batchNo; });
+    if (power && values.length) map[power] = values;
+  });
+  return map;
+}
+function renderIolInventoryPowerGrid(prefill) {
+  const el = document.getElementById('inv-iol-power-grid');
+  if (!el) return;
+  const seed = prefill || {};
+  el.innerHTML = bmhIolPowerSeries().map(function (power) {
+    const qty = Math.max(0, Number(seed[power]?.qty || 0));
+    return `<div style="border:1px solid #ead8a4;border-radius:9px;background:#fff;padding:8px">
+      <div style="font-size:12px;font-weight:900;color:#8a4200">${power}</div>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:6px">
+        <button class="btn btn-xs btn-outline" type="button" onclick="adjustIolPowerQty('${power}',-1)">−</button>
+        <input type="number" min="0" max="9" value="${qty}" data-power="${power}" class="inv-iol-qty" style="width:54px;text-align:center;font-weight:900">
+        <button class="btn btn-xs btn-outline" type="button" onclick="adjustIolPowerQty('${power}',1)">+</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+window.renderIolInventoryPowerGrid = renderIolInventoryPowerGrid;
+function adjustIolPowerQty(power, delta) {
+  const input = document.querySelector('.inv-iol-qty[data-power="' + power.replace(/"/g, '&quot;') + '"]');
+  if (!input) return;
+  const next = Math.max(0, Math.min(9, (parseInt(input.value, 10) || 0) + delta));
+  input.value = String(next);
+}
+window.adjustIolPowerQty = adjustIolPowerQty;
+function buildIolInventoryRow(base, power, rowIndex, serialHint) {
+  const brand = String(base.brand || '').trim();
+  const company = String(base.company || '').trim();
+  const model = String(base.model || '').trim();
+  const name = [brand, model, power].filter(Boolean).join(' ');
+  const serialNo = String(serialHint?.serialNo || '').trim();
+  const batchNo = String(serialHint?.batchNo || '').trim();
+  const barcode = serialNo || batchNo || ('IOL-' + power.replace(/[+.]/g, '') + '-' + Date.now() + '-' + rowIndex);
+  return {
+    name,
+    barcode,
+    qr: barcode,
+    cat: 'IOL',
+    mrp: Number(base.mrp || 0) || 0,
+    cost: Number(base.cost || 0) || 0,
+    stock: 1,
+    min: Number(base.min || 1) || 1,
+    exp: base.exp || '',
+    dept: 'ophtho',
+    vendor: String(base.vendor || '').trim() || company,
+    store: base.store || 'Eye OT',
+    vendorBillingMode: base.billMode || 'on-use',
+    serialNo: serialNo,
+    batchNo: batchNo,
+    power: power,
+    iolBrand: brand,
+    iolCompany: company,
+    iolModel: model
+  };
+}
+function saveIolInventoryGrid() {
+  const vendor = document.getElementById('inv-iol-vendor')?.value?.trim() || document.getElementById('inv-in-vendor')?.value?.trim() || '';
+  const brand = document.getElementById('inv-iol-brand')?.value?.trim() || '';
+  const company = document.getElementById('inv-iol-company')?.value?.trim() || '';
+  const model = document.getElementById('inv-iol-model')?.value?.trim() || '';
+  const exp = document.getElementById('inv-iol-expiry')?.value?.trim() || document.getElementById('inv-in-exp')?.value?.trim() || '';
+  const cost = Number(document.getElementById('inv-iol-cost')?.value || document.getElementById('inv-in-cost')?.value || '0') || 0;
+  const mrp = Number(document.getElementById('inv-in-mrp')?.value || cost || '0') || 0;
+  const picked = Array.from(document.querySelectorAll('.inv-iol-qty')).map(function (input) {
+    return { power: String(input.dataset.power || ''), qty: Math.max(0, parseInt(input.value, 10) || 0) };
+  }).filter(function (row) { return row.qty > 0; });
+  if (!brand && !company && !model) { showToast('Enter brand/company/model for IOL stock', 'w'); return; }
+  if (!picked.length) { showToast('Select at least one IOL power quantity', 'w'); return; }
+  const serialMap = readIolGridSerialMap();
+  const base = {
+    vendor: vendor,
+    brand: brand,
+    company: company,
+    model: model,
+    exp: exp,
+    cost: cost,
+    mrp: mrp,
+    min: 1,
+    store: bmhInventoryStoreValue() || 'Eye OT',
+    billMode: 'on-use'
+  };
+  let added = 0;
+  picked.forEach(function (row) {
+    const hints = serialMap[row.power] || [];
+    for (let idx = 0; idx < row.qty; idx += 1) {
+      const invRow = buildIolInventoryRow(base, row.power, idx + 1, hints[idx] || null);
+      INVENTORY.push(invRow);
+      BCMAP[invRow.barcode] = invRow;
+      BCMAP[String(invRow.name).toLowerCase().substring(0, 15)] = invRow;
+      bmhRecordInventoryPurchase(invRow, 1, null);
+      added += 1;
+    }
+  });
+  saveInventoryStockToStorage();
+  renderStockList();
+  renderInventoryPurchaseLog();
+  renderInventoryStoreStock();
+  renderInventoryPoAlerts();
+  showToast('IOL stock added: ' + added + ' lens entries', 's');
+}
+window.saveIolInventoryGrid = saveIolInventoryGrid;
+function parseIolBillOcrText(text) {
+  const raw = String(text || '').trim();
+  if (!raw) return null;
+  const lines = raw.split(/\n+/).map(function (line) { return line.trim(); }).filter(Boolean);
+  const flat = lines.join(' ');
+  const companyGuess = lines.find(function (line) { return /alcon|johnson|zeiss|appasamy|aurolab|rayner|hoya/i.test(line); }) || '';
+  const expiryGuess = flat.match(/\b(0[1-9]|1[0-2])\s*[\/-]\s*(20\d{2}|\d{2})\b/);
+  const rows = {};
+  lines.forEach(function (line) {
+    const powerMatch = line.match(/([+-]?\d+(?:\.\d+)?)\s*D\b/i);
+    if (!powerMatch) return;
+    const power = normalizeIolPowerValue(powerMatch[1]);
+    const serialMatch = line.match(/\b(?:SN|SERIAL|S\/N)[:\s-]*([A-Z0-9-]+)\b/i);
+    const batchMatch = line.match(/\b(?:BATCH|LOT)[:\s-]*([A-Z0-9-]+)\b/i);
+    rows[power] = rows[power] || { qty: 0, serials: [] };
+    rows[power].qty += 1;
+    rows[power].serials.push({ serialNo: serialMatch ? serialMatch[1] : '', batchNo: batchMatch ? batchMatch[1] : '' });
+  });
+  return { company: companyGuess, expiry: expiryGuess ? (expiryGuess[1] + '/' + expiryGuess[2]) : '', rows: rows };
+}
+function prepareIolInventoryFromBill() {
+  const parsed = parseIolBillOcrText(document.getElementById('inv-ocr-text')?.value || '');
+  if (!parsed || !Object.keys(parsed.rows || {}).length) {
+    showToast('Paste IOL bill OCR text first for review', 'w');
+    return;
+  }
+  if (parsed.company && !document.getElementById('inv-iol-company')?.value) document.getElementById('inv-iol-company').value = parsed.company;
+  if (parsed.expiry && !document.getElementById('inv-iol-expiry')?.value) document.getElementById('inv-iol-expiry').value = parsed.expiry;
+  const review = document.getElementById('inv-iol-bill-review');
+  if (review) {
+    review.style.display = 'block';
+    review.innerHTML = '<strong>Bill review prepared.</strong> Please confirm powers, serial numbers, expiry, and model details before adding to stock.';
+  }
+  const serialMapText = Object.keys(parsed.rows).sort(function (a, b) { return parseFloat(a) - parseFloat(b); }).map(function (power) {
+    return power + ': ' + parsed.rows[power].serials.map(function (row) {
+      return [row.serialNo || '', row.batchNo || ''].filter(Boolean).join(',');
+    }).filter(Boolean).join('; ');
+  }).filter(Boolean).join(' | ');
+  const serialMapEl = document.getElementById('inv-iol-serial-map');
+  if (serialMapEl && serialMapText) serialMapEl.value = serialMapText;
+  renderIolInventoryPowerGrid(Object.keys(parsed.rows).reduce(function (acc, power) {
+    acc[power] = { qty: parsed.rows[power].qty };
+    return acc;
+  }, {}));
+  showToast('IOL bill details prepared for manual review ✓', 's');
+}
+window.prepareIolInventoryFromBill = prepareIolInventoryFromBill;
 function bmhDefaultStoreForDept(dept) {
   const map = {
     ophtho: CURRENT_USER?.centre === 'RPR' ? 'Eye RPR' : 'Eye CHD',
@@ -6469,6 +6644,65 @@ function bmhDefaultInventoryDeptForPatient(bmhId) {
   if (!pt) return 'general';
   if (pt.status === 'ipd' || pt.ipdAdmitted) return 'ipd';
   return pt.dept || 'general';
+}
+function bmhFindInventoryUsePatients(query) {
+  const q = String(query || '').trim().toLowerCase();
+  if (!q) return [];
+  return (PATIENTS || []).filter(function (p) {
+    return String(p.bmhId || '').toLowerCase().includes(q)
+      || String(p.mob || p.mobile || p.phone || '').replace(/\D/g, '').includes(q.replace(/\D/g, ''))
+      || String(p.mob2 || '').replace(/\D/g, '').includes(q.replace(/\D/g, ''));
+  }).slice(0, 12);
+}
+function selectInventoryUsePatient(bmhId) {
+  const pt = (PATIENTS || []).find(function (p) { return p.bmhId === bmhId; });
+  const hidden = document.getElementById('use-pt');
+  const input = document.getElementById('inv-use-pt-search');
+  const results = document.getElementById('inv-use-pt-results');
+  if (!pt || !hidden || !input) return;
+  hidden.value = pt.bmhId;
+  input.value = [pt.name, pt.bmhId, pt.mob || pt.mobile || pt.phone || ''].filter(Boolean).join(' · ');
+  if (results) results.style.display = 'none';
+  const deptPick = document.getElementById('inv-use-dept');
+  if (deptPick) deptPick.value = bmhDefaultInventoryDeptForPatient(pt.bmhId);
+}
+window.selectInventoryUsePatient = selectInventoryUsePatient;
+function renderInventoryUsePatientResults(query) {
+  const box = document.getElementById('inv-use-pt-results');
+  if (!box) return;
+  const rows = bmhFindInventoryUsePatients(query);
+  if (!rows.length) {
+    box.innerHTML = '<div style="padding:10px 12px;font-size:12px;color:var(--g1)">No patient found by BMSH ID / phone</div>';
+    box.style.display = query ? 'block' : 'none';
+    return;
+  }
+  box.innerHTML = rows.map(function (p) {
+    const phone = p.mob || p.mobile || p.phone || '—';
+    return `<button type="button" style="display:block;width:100%;text-align:left;padding:10px 12px;background:#fff;border:0;border-bottom:1px solid var(--g5);cursor:pointer" onclick="selectInventoryUsePatient('${String(p.bmhId || '').replace(/'/g, '\\&#39;')}')">
+      <div style="font-weight:800;font-size:12px">${escapeHtmlConsent(p.name || 'Patient')}</div>
+      <div style="font-size:10px;color:var(--g1)">${escapeHtmlConsent(p.bmhId || '')} · ${escapeHtmlConsent(phone)}</div>
+    </button>`;
+  }).join('');
+  box.style.display = 'block';
+}
+function bindInventoryUsePatientSearch() {
+  const input = document.getElementById('inv-use-pt-search');
+  const hidden = document.getElementById('use-pt');
+  const results = document.getElementById('inv-use-pt-results');
+  if (!input || input.dataset.boundInventorySearch) return;
+  input.addEventListener('input', function () {
+    if (hidden) hidden.value = '';
+    renderInventoryUsePatientResults(this.value);
+  });
+  input.addEventListener('focus', function () {
+    if (this.value && !hidden?.value) renderInventoryUsePatientResults(this.value);
+  });
+  document.addEventListener('click', function (e) {
+    if (!results || !input) return;
+    if (e.target === input || results.contains(e.target)) return;
+    results.style.display = 'none';
+  });
+  input.dataset.boundInventorySearch = '1';
 }
 function inferChargeCategoryFromService(forStr) {
   const s = (forStr || '').toLowerCase();
@@ -7744,6 +7978,17 @@ function initInventory() {
       if (storeEl && !storeEl.value) storeEl.value = bmhDefaultStoreForDept(this.value);
     };
   }
+  const catPick = document.getElementById('inv-in-cat');
+  if (catPick) catPick.onchange = toggleInventoryIolBox;
+  const vendorSync = document.getElementById('inv-in-vendor');
+  if (vendorSync && !vendorSync.dataset.iolSyncBound) {
+    vendorSync.addEventListener('input', function () {
+      const iolVendor = document.getElementById('inv-iol-vendor');
+      if (iolVendor && !iolVendor.value) iolVendor.value = this.value;
+    });
+    vendorSync.dataset.iolSyncBound = '1';
+  }
+  toggleInventoryIolBox();
   renderStockList();
   renderAutoBillLog();
   bmhRenderVendorTables();
@@ -7756,18 +8001,7 @@ function initInventory() {
   renderInventoryStoreStock();
   renderInventoryExpensePanel();
   renderInventoryLedgerPanel();
-  const s = document.getElementById('use-pt');
-  if (s) {
-    s.innerHTML = PATIENTS.map(p => `<option value="${p.bmhId}">${p.name} — ${p.bmhId}</option>`).join('');
-    if (s.value) {
-      const deptEl = document.getElementById('inv-use-dept');
-      if (deptEl) deptEl.value = bmhDefaultInventoryDeptForPatient(s.value);
-      s.onchange = function () {
-        const deptPick = document.getElementById('inv-use-dept');
-        if (deptPick) deptPick.value = bmhDefaultInventoryDeptForPatient(this.value);
-      };
-    }
-  }
+  bindInventoryUsePatientSearch();
   const ilc = document.getElementById('inv-low-cnt');
   if (ilc) ilc.textContent = INVENTORY.filter(i => i.stock <= i.min).length;
   const totalEl = document.getElementById('inv-total-items');
@@ -7827,6 +8061,7 @@ function bmhPopulateInventorySelectors() {
   const dept = bmhInventoryDeptValue();
   const storeEl = document.getElementById('inv-in-store');
   if (storeEl && !storeEl.value) storeEl.value = bmhDefaultStoreForDept(dept);
+  toggleInventoryIolBox();
 }
 function renderStockList() {
   const el=document.getElementById('inv-stock-list');if(!el)return;
@@ -10349,9 +10584,6 @@ function populateSelectors() {
   ['sp-pt','apt-pt-sel','ipd-pt-sel','xref-pt-sel'].forEach(id=>{
     const s=document.getElementById(id); if(s) s.innerHTML=PATIENTS.map(p=>`<option value="${p.bmhId}">${p.name} — ${p.bmhId}</option>`).join('');
   });
-  ['use-pt'].forEach(id=>{
-    const s=document.getElementById(id); if(s) s.innerHTML=PATIENTS.map(p=>`<option value="${p.bmhId}">${p.name} — ${p.bmhId}</option>`).join('');
-  });
   updateNPDr();
 }
 // Deferred init — runs after ALL declarations are parsed
@@ -12750,10 +12982,11 @@ function processBC(mode, code) {
     return;
   }
   if (mode === 'use') {
-    const bmhId = document.getElementById('use-pt')?.value || PATIENTS[0]?.bmhId;
+    const bmhId = document.getElementById('use-pt')?.value || '';
     const qty = Math.max(1, Number(document.getElementById('inv-use-qty')?.value || '1'));
     const useMode = document.getElementById('inv-use-mode')?.value || 'bill';
     const dept = bmhInventoryUseDeptValue();
+    if (!bmhId) { showToast('Search and select a patient by BMSH ID / phone first', 'w'); return; }
     if (item) {
       bmhUseInventoryItemForPatient(bmhId, item, { descSuffix: '(inventory use)', qty, mode: useMode, dept });
       const log = document.getElementById('use-log');
