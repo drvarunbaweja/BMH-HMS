@@ -79,6 +79,10 @@
       #pg-lab #lab-pt-sel { width:100%; }
       #rx-drugs, .rx-drugs-root { overflow-x:hidden !important; }
       .rc-queue-table-wrap, table { -webkit-overflow-scrolling:touch; }
+      #rc-search-row { flex-wrap:wrap !important; }
+      #rc-search-row > div:first-child { min-width:0; width:100%; }
+      #rc-qr-inline-btn { display:none !important; }
+      #rc-qr-mobile-btn { display:flex !important; width:100%; justify-content:center; }
     }
   </style>
 </head>
@@ -1649,13 +1653,14 @@
           </div>
           <button class="btn btn-xs" style="background:rgba(255,255,255,.2);color:#fff" onclick="genRcUID()">🔄 New ID</button>
         </div>
-        <div style="display:flex;gap:7px;margin-bottom:10px;align-items:center">
+        <div id="rc-search-row" style="display:flex;gap:7px;margin-bottom:10px;align-items:center">
           <div style="flex:1;display:flex;align-items:center;gap:7px;background:#fff;border:1.5px solid var(--g4);border-radius:8px;padding:6px 10px">
             <span style="font-size:14px">🔍</span>
             <input type="text" id="rc-bmhid-search" placeholder="Search by BMSH ID (e.g. BMSH-056000) or phone…" style="border:none;outline:none;font-size:12px;font-family:var(--font);width:100%" oninput="lookupByBMHID(this.value)">
           </div>
-          <button class="btn btn-xs btn-outline" onclick="openQRScanner()" title="Scan QR from prescription">📷 QR</button>
+          <button class="btn btn-xs btn-outline" id="rc-qr-inline-btn" onclick="openQRScanner()" title="Scan QR from prescription">📷 QR</button>
         </div>
+        <button class="btn btn-outline" id="rc-qr-mobile-btn" onclick="openQRScanner()" title="Scan QR from prescription" style="display:none;width:100%;justify-content:center;margin:-2px 0 10px 0">📷 Scan Patient QR</button>
         <div id="rc-bmhid-result" style="margin-bottom:8px"></div>
         <div class="fg">
           <div class="form-group"><label class="fl">First Name</label><input type="text" id="rc-fn" placeholder="First name"></div>
