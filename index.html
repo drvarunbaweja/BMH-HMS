@@ -2252,7 +2252,7 @@
           </div>
           <div id="obg-dx-list">
             <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">
-              <input type="text" class="dx-inp" placeholder="Type diagnosis…" style="flex:1;font-size:12px" autocomplete="off">
+              <input type="text" class="dx-inp" placeholder="Type diagnosis…" style="flex:1;font-size:12px" autocomplete="off" oninput="filterDx(this)" onfocus="showDxDropdown(this);wireDxInputFocus(this)">
               <button class="btn btn-xs btn-gray" onclick="this.closest('div').remove()">✕</button>
             </div>
           </div>
@@ -3874,9 +3874,9 @@
 
   <!-- OT STATS ROW -->
   <div class="sg4" style="margin-bottom:14px">
-    <div class="sc blue"><div class="sc-lbl">Scheduled Today</div><div class="sc-val blue" id="ot-sched-cnt">3</div><div class="sc-icon">📋</div></div>
-    <div class="sc green"><div class="sc-lbl">Completed</div><div class="sc-val green" id="ot-done-cnt">1</div><div class="sc-icon">✅</div></div>
-    <div class="sc orange"><div class="sc-lbl">In Progress</div><div class="sc-val orange" id="ot-inprog-cnt">1</div><div class="sc-icon">⚕️</div></div>
+    <div class="sc blue"><div class="sc-lbl">Scheduled Today</div><div class="sc-val blue" id="ot-sched-cnt">0</div><div class="sc-icon">📋</div></div>
+    <div class="sc green"><div class="sc-lbl">Completed</div><div class="sc-val green" id="ot-done-cnt">0</div><div class="sc-icon">✅</div></div>
+    <div class="sc orange"><div class="sc-lbl">In Progress</div><div class="sc-val orange" id="ot-inprog-cnt">0</div><div class="sc-icon">⚕️</div></div>
     <div class="sc red"><div class="sc-lbl">Postponed</div><div class="sc-val red" id="ot-post-cnt">0</div><div class="sc-icon">⏸️</div></div>
   </div>
 
