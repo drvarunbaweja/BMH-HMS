@@ -1819,6 +1819,7 @@ function nav(id, el, opts) {
     renderAllDeptSendBars && renderAllDeptSendBars();
     renderAISuggestedCharges && renderAISuggestedCharges();
   }
+  updateOphthoSendBarVisibility(pageKey);
   updateDepartmentRailVisibility(pageKey);
   if (!opts.silentHistory && !window._appHistoryRestoring) pushAppNavState(false);
 }
@@ -2413,6 +2414,7 @@ function openPatient(bmhId, opts) {
   if(typeof RX_DRUGS !== 'undefined') RX_DRUGS.length = 0;
   if(typeof SELECTED_INVESTIGATIONS !== 'undefined') SELECTED_INVESTIGATIONS.length = 0;
   typeof renderRxDrugs === 'function' && renderRxDrugs();
+  updateOphthoSendBarVisibility('ophtho');
   const rxAdvice = document.getElementById('rx-advice-text'); if(rxAdvice) rxAdvice.value='';
   syncCurrentPatientInvestigationOrders();
   syncSelectedInvestigationCheckboxes && syncSelectedInvestigationCheckboxes();
@@ -4178,6 +4180,7 @@ function ptab(el, cId, opts) {
     if (!sendBar) return;
     sendBar.style.display = (pageKey === deptKey && cId === cfg.rxTab) ? 'none' : '';
   });
+  updateOphthoSendBarVisibility(pageKey, cId);
   ['obg-rx-send-bar', 'psych-rx-send-bar', 'skin-rx-send-bar'].forEach(function (id) {
     const legacyBar = document.getElementById(id);
     if (legacyBar) legacyBar.style.display = 'none';
@@ -4204,6 +4207,32 @@ function openM(id){
     refreshInvestigationTemplateSelect && refreshInvestigationTemplateSelect();
     syncSelectedInvestigationCheckboxes && syncSelectedInvestigationCheckboxes();
   }
+}
+
+function isCurrentUserRprOptometrist() {
+  const uname = String(CURRENT_USER?.username || window.CURRENT_USER?.username || '').trim().toLowerCase();
+  const role = String(CURRENT_USER?.role || window.CURRENT_USER?.role || '').trim().toLowerCase();
+  const centre = String(CURRENT_USER?.centre || window.CURRENT_USER?.centre || '').trim().toUpperCase();
+  return centre === 'RPR' && (
+    role === 'optometrist' ||
+    ['opto.rpr', 'opto,rpr', 'opto_rpr', 'opto.rpr@bawejahospital.com', 'optometrist', 'optometrist@bawejahospital.com'].includes(uname)
+  );
+}
+
+function updateOphthoSendBarVisibility(pageKey, activeTabId) {
+  const sendBar = document.getElementById('ophtho-send-bar');
+  if (!sendBar) return;
+  const isOphthoPage = pageKey === 'ophtho' || document.getElementById('pg-ophtho')?.classList.contains('active');
+  if (!isOphthoPage) {
+    sendBar.style.display = '';
+    return;
+  }
+  const activeRx = activeTabId === 'oe-rx' || !!document.getElementById('oe-rx')?.classList.contains('active');
+  if (isCurrentUserRprOptometrist() || activeRx) {
+    sendBar.style.display = 'none';
+    return;
+  }
+  sendBar.style.display = '';
 }
 function closeM(id){const m=document.getElementById(id);if(m)m.classList.remove('open')}
 document.addEventListener('click',e=>{document.querySelectorAll('.modal-ov').forEach(m=>{if(e.target===m)m.classList.remove('open')})});
@@ -20648,15 +20677,15 @@ function saveVisit(dept, opts) {
     typeof fbUpdate === 'function' ? fbUpdate('patients/' + bmhId, patientPatchForCloud).catch(()=>{}) : Promise.resolve()
   ])
     .then(() => {
-      if (dept === 'ophtho' && !opts.autosave) populateOphthoForm(visit);
+      try { if (dept === 'ophtho' && !opts.autosave) populateOphthoForm(visit); } catch (e) { console.warn('post-save populateOphthoForm failed', e); }
       if (!opts.silent) showToast(`✅ ${ptName} — visit saved (${visit.dateLabel})`, 's');
-      if(dept === 'obg') updateObgObstetricHistoryTab(!!visit.obstetricHistoryEnabled);
-      if(typeof loadPastVisits === 'function') loadPastVisits(bmhId, dept);
-      renderCurrentPatientInvestigationUploads && renderCurrentPatientInvestigationUploads(Array.isArray(visit.investigations) ? visit.investigations : []);
-      renderOphthoRecap && renderOphthoRecap();
-      renderObgSummaryRail && renderObgSummaryRail();
-      renderPsychRail && renderPsychRail();
-      renderSkinRail && renderSkinRail();
+      try { if(dept === 'obg') updateObgObstetricHistoryTab(!!visit.obstetricHistoryEnabled); } catch (e) { console.warn('post-save updateObgObstetricHistoryTab failed', e); }
+      try { if(typeof loadPastVisits === 'function') loadPastVisits(bmhId, dept); } catch (e) { console.warn('post-save loadPastVisits failed', e); }
+      try { renderCurrentPatientInvestigationUploads && renderCurrentPatientInvestigationUploads(Array.isArray(visit.investigations) ? visit.investigations : []); } catch (e) { console.warn('post-save renderCurrentPatientInvestigationUploads failed', e); }
+      try { renderOphthoRecap && renderOphthoRecap(); } catch (e) { console.warn('post-save renderOphthoRecap failed', e); }
+      try { renderObgSummaryRail && renderObgSummaryRail(); } catch (e) { console.warn('post-save renderObgSummaryRail failed', e); }
+      try { renderPsychRail && renderPsychRail(); } catch (e) { console.warn('post-save renderPsychRail failed', e); }
+      try { renderSkinRail && renderSkinRail(); } catch (e) { console.warn('post-save renderSkinRail failed', e); }
       document.dispatchEvent(new CustomEvent('bmh:patientsUpdated'));
     })
     .catch(e => {
