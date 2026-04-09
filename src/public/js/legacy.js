@@ -8784,9 +8784,21 @@ function renderInvestigationChooser() {
   groups.forEach(([id, items]) => {
     const el = document.getElementById(id);
     if(!el) return;
-    el.innerHTML = items.map(([name, price]) => `<div class="invest-option" data-investigation-name="${String(name).replace(/"/g,'&quot;')}" data-price="${price}" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--g6);border-radius:8px;cursor:pointer;user-select:none;-webkit-user-select:none" onclick="toggleInvestigation(this,${JSON.stringify(name)},${price})"><input type="checkbox" tabindex="-1" aria-hidden="true" style="width:16px;height:16px;flex-shrink:0;pointer-events:none"><div style="flex:1"><div style="font-size:12px;font-weight:700">${name}</div><div style="font-size:10px;color:var(--g1)">Outsourced lab / no charge</div></div></div>`).join('');
+    el.innerHTML = items.map(([name, price]) => `<div class="invest-option" data-investigation-name="${String(name).replace(/"/g,'&quot;')}" data-price="${price}" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--g6);border-radius:8px;cursor:pointer;user-select:none;-webkit-user-select:none"><input type="checkbox" tabindex="-1" aria-hidden="true" style="width:16px;height:16px;flex-shrink:0;pointer-events:none"><div style="flex:1"><div style="font-size:12px;font-weight:700">${name}</div><div style="font-size:10px;color:var(--g1)">Outsourced lab / no charge</div></div></div>`).join('');
   });
   syncSelectedInvestigationCheckboxes();
+}
+function bindInvestigationChooserClicks() {
+  if (window._bmhInvestigationChooserBound) return;
+  window._bmhInvestigationChooserBound = true;
+  document.addEventListener('click', function (e) {
+    const card = e.target && e.target.closest ? e.target.closest('#m-order-invest .invest-option') : null;
+    if (!card) return;
+    const name = String(card.getAttribute('data-investigation-name') || '').trim();
+    const price = Number(card.getAttribute('data-price') || 0);
+    if (!name) return;
+    toggleInvestigation(card, name, price);
+  });
 }
 let INVESTIGATION_TEMPLATES_DATA = {
   'baseline-lab': ['CBC (Complete Blood Count)', 'Fasting Blood Sugar', 'HbA1c', 'Serum Creatinine'],
@@ -10283,6 +10295,7 @@ window.addEventListener('appinstalled', function () {
   showToast('BMH HMS installed ✓', 's');
   updateInstallAppUi();
 });
+bindInvestigationChooserClicks();
 function removePendingInvestigationPayRequestsForPatient(bmhId, orderNames) {
   const names = new Set((orderNames || []).map(function (x) { return String(x || '').trim(); }).filter(Boolean));
   (PAY_REQUESTS || []).slice().forEach(function (pr) {
