@@ -13510,6 +13510,121 @@ function generateFinancialReport() {
   </div>`;
 }
 
+function populateReferralDoctorDatalist() {
+  const dl = document.getElementById('rep-ref-doctor-list');
+  if (!dl) return;
+  const names = Array.from(new Set((PATIENTS || []).map(function (p) {
+    return toDisplayTitleCase(p?.referredBy || p?.refName || '');
+  }).filter(Boolean))).sort();
+  dl.innerHTML = names.map(function (name) {
+    return '<option value="' + String(name).replace(/"/g, '&quot;') + '">';
+  }).join('');
+}
+function isLikelySurgeryChargeLabel(value) {
+  const hay = String(value || '').toLowerCase();
+  return /(surgery|procedure|pmics|pinhole micro incision cataract surgery|phaco|cataract|iol|implantation|ivt|injec|yag|trab|pterygium|lscs|delivery|mtp|evacuation|laser|icl|implantable collamer lens|vitrectomy)/i.test(hay);
+}
+function getReferralReportRows() {
+  const fromVal = document.getElementById('rep-ref-from')?.value || '';
+  const toVal = document.getElementById('rep-ref-to')?.value || '';
+  const deptFilter = document.getElementById('rep-ref-dept')?.value || '';
+  const doctorFilter = toDisplayTitleCase(document.getElementById('rep-ref-doctor')?.value || '').trim();
+  const centreFilter = normalizeAppointmentCentreValue((typeof getEffectiveCentre === 'function' ? getEffectiveCentre() : (CURRENT_USER?.centre || 'CHD')) || 'CHD');
+  const inRange = function (value) {
+    const key = localDateKey(value);
+    if (!key) return !fromVal && !toVal;
+    if (fromVal && key < fromVal) return false;
+    if (toVal && key > toVal) return false;
+    return true;
+  };
+  const rows = (PATIENTS || []).filter(function (p) {
+    const referredBy = toDisplayTitleCase(p?.referredBy || p?.refName || '').trim();
+    if (!referredBy) return false;
+    if (deptFilter && String(p?.dept || '') !== deptFilter) return false;
+    if (doctorFilter && referredBy !== doctorFilter) return false;
+    if (centreFilter && normalizeAppointmentCentreValue(p?.centre || centreFilter) !== centreFilter) return false;
+    return inRange(p?.createdAt || p?.registeredAt || p?.checkinAt || p?.queueDate || p?.date);
+  }).map(function (p) {
+    const bmhId = p.bmhId;
+    const txns = (TRANSACTIONS || []).filter(function (t) {
+      return t.bmhId === bmhId && (!centreFilter || normalizeAppointmentCentreValue(t.centre || p.centre || centreFilter) === centreFilter);
+    });
+    const surgeryTxns = txns.filter(function (t) {
+      return isLikelySurgeryChargeLabel(t.service || t.for || t.desc || '');
+    });
+    const surgeryCharges = surgeryTxns.reduce(function (sum, t) {
+      return sum + getNetTransactionAmount(t);
+    }, 0);
+    const totalCharges = txns.reduce(function (sum, t) {
+      return sum + getNetTransactionAmount(t);
+    }, 0);
+    return {
+      patient: p.name || p.patient || 'Unknown',
+      bmhId: bmhId,
+      mobile: p.mob || p.mobile || p.phone || '',
+      dept: p.dept || '',
+      deptLabel: ({ ophtho:'Ophthalmology', obg:'OBG', psych:'Neuropsychiatry', skin:'Skin' })[p.dept] || p.dept || 'General',
+      doctor: p.assignedDoctor || p.doctor || '—',
+      referredBy: toDisplayTitleCase(p.referredBy || p.refName || ''),
+      date: formatDateDDMMYYYY(p.createdAt || p.registeredAt || p.checkinAt || p.queueDate || p.date || ''),
+      surgeryCharges: surgeryCharges,
+      totalCharges: totalCharges,
+      centre: normalizeAppointmentCentreValue(p.centre || centreFilter || 'CHD')
+    };
+  }).sort(function (a, b) {
+    if (a.referredBy !== b.referredBy) return a.referredBy.localeCompare(b.referredBy);
+    return a.patient.localeCompare(b.patient);
+  });
+  return rows;
+}
+function buildReferralReportHtml(rows) {
+  const doctorFilter = toDisplayTitleCase(document.getElementById('rep-ref-doctor')?.value || '').trim();
+  const fromVal = document.getElementById('rep-ref-from')?.value || '';
+  const toVal = document.getElementById('rep-ref-to')?.value || '';
+  const deptFilter = document.getElementById('rep-ref-dept')?.value || '';
+  const title = doctorFilter ? ('Referral Report — ' + doctorFilter) : 'Referral Report';
+  const totalSurgery = rows.reduce(function (sum, row) { return sum + (Number(row.surgeryCharges) || 0); }, 0);
+  const totalOverall = rows.reduce(function (sum, row) { return sum + (Number(row.totalCharges) || 0); }, 0);
+  const esc = function (v) {
+    return String(v || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  };
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>' + esc(title) + '</title>'
+    + '<style>body{font-family:Arial,sans-serif;margin:18px;color:#111} h1{font-size:18px;margin:0 0 6px} .sub{font-size:11px;color:#555;margin-bottom:12px} .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px} .card{border:1px solid #ddd;border-radius:10px;padding:10px;background:#fafafa} .label{font-size:10px;font-weight:700;text-transform:uppercase;color:#666} .val{font-size:18px;font-weight:900;margin-top:2px} table{width:100%;border-collapse:collapse;font-size:11px} th,td{border:1px solid #ddd;padding:6px;vertical-align:top;text-align:left} th{background:#f3f4f7} @page{size:A4 landscape;margin:10mm}</style></head><body>'
+    + '<h1>' + esc(title) + '</h1>'
+    + '<div class="sub">Date range: ' + esc((fromVal ? formatDateDDMMYYYY(fromVal) : 'Beginning') + ' to ' + (toVal ? formatDateDDMMYYYY(toVal) : 'Today')) + ' · Department: ' + esc(deptFilter || 'All') + '</div>'
+    + '<div class="cards"><div class="card"><div class="label">Referred Patients</div><div class="val">' + rows.length + '</div></div><div class="card"><div class="label">Surgery Charges</div><div class="val">₹' + totalSurgery.toLocaleString('en-IN') + '</div></div><div class="card"><div class="label">Total Charges</div><div class="val">₹' + totalOverall.toLocaleString('en-IN') + '</div></div></div>'
+    + (rows.length ? '<table><thead><tr><th>#</th><th>Referred By</th><th>Patient</th><th>Phone</th><th>BMSH ID</th><th>Dept</th><th>Doctor</th><th>Date</th><th>Surgery Charges ₹</th><th>Total Charges ₹</th></tr></thead><tbody>'
+      + rows.map(function (row, idx) {
+        return '<tr><td>' + (idx + 1) + '</td><td>' + esc(row.referredBy) + '</td><td>' + esc(row.patient) + '</td><td>' + esc(row.mobile || '—') + '</td><td>' + esc(row.bmhId) + '</td><td>' + esc(row.deptLabel) + '</td><td>' + esc(row.doctor) + '</td><td>' + esc(row.date || '—') + '</td><td>₹' + (Number(row.surgeryCharges) || 0).toLocaleString('en-IN') + '</td><td>₹' + (Number(row.totalCharges) || 0).toLocaleString('en-IN') + '</td></tr>';
+      }).join('') + '</tbody></table>' : '<div style="padding:18px;border:1px dashed #ccc;border-radius:10px;color:#666">No referrals found for the selected filters.</div>')
+    + '</body></html>';
+}
+function generateReferralReport() {
+  populateReferralDoctorDatalist();
+  const el = document.getElementById('rep-referral-result');
+  if (!el) return;
+  const rows = getReferralReportRows();
+  const totalSurgery = rows.reduce(function (sum, row) { return sum + (Number(row.surgeryCharges) || 0); }, 0);
+  const totalOverall = rows.reduce(function (sum, row) { return sum + (Number(row.totalCharges) || 0); }, 0);
+  el.innerHTML = '<div class="card">'
+    + '<div class="card-hd"><div><div class="card-title">👨‍⚕️ Referral Report</div><div class="card-sub">' + rows.length + ' patients matched your filters</div></div><button class="btn btn-gold btn-xs" type="button" onclick="printReferralReportCurrent()">🖨️ Print</button></div>'
+    + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px">'
+    + '<div style="background:var(--blue-lt);border-radius:10px;padding:12px;text-align:center"><div style="font-size:10px;font-weight:800;text-transform:uppercase;color:var(--blue)">Referred Patients</div><div style="font-size:22px;font-weight:900;color:var(--blue)">' + rows.length + '</div></div>'
+    + '<div style="background:var(--green-lt);border-radius:10px;padding:12px;text-align:center"><div style="font-size:10px;font-weight:800;text-transform:uppercase;color:var(--green)">Surgery Charges</div><div style="font-size:22px;font-weight:900;color:var(--green)">₹' + totalSurgery.toLocaleString('en-IN') + '</div></div>'
+    + '<div style="background:var(--gold-lt,var(--orange-lt));border-radius:10px;padding:12px;text-align:center"><div style="font-size:10px;font-weight:800;text-transform:uppercase;color:var(--orange)">Total Charges</div><div style="font-size:22px;font-weight:900;color:var(--orange)">₹' + totalOverall.toLocaleString('en-IN') + '</div></div>'
+    + '</div>'
+    + (rows.length ? '<table><thead><tr><th>#</th><th>Referred By</th><th>Patient</th><th>Phone</th><th>BMSH ID</th><th>Department</th><th>Doctor</th><th>Date</th><th>Surgery Charges ₹</th><th>Total Charges ₹</th></tr></thead><tbody>'
+      + rows.map(function (row, idx) {
+        return '<tr><td>' + (idx + 1) + '</td><td style="font-weight:800">' + row.referredBy + '</td><td style="font-weight:800">' + row.patient + '</td><td>' + (row.mobile || '—') + '</td><td style="font-family:var(--mono);font-size:10px">' + row.bmhId + '</td><td>' + row.deptLabel + '</td><td>' + row.doctor + '</td><td>' + (row.date || '—') + '</td><td style="font-weight:900">₹' + (Number(row.surgeryCharges) || 0).toLocaleString('en-IN') + '</td><td style="font-weight:900">₹' + (Number(row.totalCharges) || 0).toLocaleString('en-IN') + '</td></tr>';
+      }).join('') + '</tbody></table>' : '<div style="padding:20px;text-align:center;color:var(--g1)">No referral records found for the selected filters.</div>')
+    + '</div>';
+}
+function printReferralReportCurrent() {
+  populateReferralDoctorDatalist();
+  safePrint(buildReferralReportHtml(getReferralReportRows()));
+  showToast('Referral report ready to print ✓', 's');
+}
+
 // ─── REFUND SEARCH ─────────────────
 const MOCK_INVOICES = [
   {id:'INV-2025-460847-001',patient:'Test Patient',bmhId:'BMSH-000001',date:'07 Aug 2025',amount:42000,desc:'PMICS + IOL OS + Biometry',status:'paid'},
@@ -16001,6 +16116,7 @@ setTimeout(() => {
   if (typeof loadConsentTemplatesFromStorage === 'function') loadConsentTemplatesFromStorage();
   if (typeof loadIolCatalogFromStorage === 'function') loadIolCatalogFromStorage();
   if (typeof refreshCustomRxOptionSelects === 'function') refreshCustomRxOptionSelects();
+  if (typeof populateReferralDoctorDatalist === 'function') populateReferralDoctorDatalist();
   document.getElementById('add-charge-cat')?.addEventListener('change', refreshChargeModalSuggestions);
 }, 300);
 

@@ -29,7 +29,7 @@
     .dq-queue-main .rc-queue-table th { font-size:11px; }
     .dq-queue-main .ptab { font-size:13px; }
     @media (max-width: 768px) {
-      html, body { width:100%; max-width:100%; overflow-x:hidden; }
+      html, body { width:100%; max-width:100%; overflow-x:hidden; overscroll-behavior-x:none; touch-action:pan-y pinch-zoom; }
       .shell { display:block !important; }
       .main, #main-content { width:100%; min-width:0; max-width:100%; overflow-x:hidden; }
       .content, .content-full { padding:10px; }
@@ -43,14 +43,19 @@
       #main-content [style*="display:flex"] { max-width:100%; min-width:0; }
       #main-content [style*="min-width:"] { min-width:0 !important; }
       #main-content input, #main-content select, #main-content textarea, #main-content button { max-width:100%; }
+      #main-content .page, #main-content .tab-content, #main-content .card, #main-content .g2, #main-content .g32, #main-content .sg4, #main-content .fg, #main-content .fg1 { min-width:0; max-width:100%; overflow-x:hidden; }
       #obg-layout, #psych-layout, #skin-layout { grid-template-columns:1fr !important; }
       #ophtho-recap-panel, #skin-summary-rail { float:none !important; width:100% !important; margin:10px 0 0 !important; }
       #obg-summary-rail, #psych-summary-rail { position:static !important; top:auto !important; }
+      .ptabs { overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; white-space:nowrap; }
+      .ptabs::-webkit-scrollbar { display:none; }
+      .ptab { flex:0 0 auto; }
       #set-rx-tpl-list > div > div, #admin-users-list > div { flex-wrap:wrap !important; }
       #set-rx-tpl-list .btn, #admin-users-list .btn, #ot-case-detail .btn, #sp-pack-print-checklist label { width:100%; justify-content:center; }
       #pg-ot [style*="display:grid;grid-template-columns:1fr 1fr"], #pg-ot .fg { grid-template-columns:1fr !important; }
       #pg-ot [style*="display:flex;align-items:center;gap:10px"], #pg-ot [style*="display:flex;gap:8px"], #set-rx-templates [style*="display:flex;align-items:flex-start"] { flex-wrap:wrap !important; }
       #rx-drugs, .rx-drugs-root { overflow-x:hidden !important; }
+      .rc-queue-table-wrap, table { -webkit-overflow-scrolling:touch; }
     }
   </style>
   <script type="module" crossorigin src="/BMH-HMS/assets/main-DkBDuLby.js"></script>
@@ -3756,6 +3761,7 @@
     <div class="ptab" onclick="ptab(this,'rep-surgery')">⚕️ Surgery / Procedure</div>
     <div class="ptab" onclick="ptab(this,'rep-investigation')">🧪 Investigations Advised</div>
     <div class="ptab" onclick="ptab(this,'rep-financial')">💰 Financial</div>
+    <div class="ptab" onclick="ptab(this,'rep-referrals')">👨‍⚕️ Referrals</div>
   </div>
 
   <!-- DAILY SUMMARY -->
@@ -3869,6 +3875,24 @@
     </div>
     <button class="btn btn-gold" onclick="generateFinancialReport()">💰 Generate Report</button>
     <div id="rep-financial-result" style="margin-top:14px"></div>
+  </div>
+
+  <div class="tab-content" id="rep-referrals">
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-hd"><div><div class="card-title">👨‍⚕️ Referral Report</div><div class="card-sub">Track who referred the patient and the surgery value generated from those referrals</div></div></div>
+      <div class="fg">
+        <div class="form-group"><label class="fl">Date From</label><input type="date" id="rep-ref-from"></div>
+        <div class="form-group"><label class="fl">Date To</label><input type="date" id="rep-ref-to"></div>
+        <div class="form-group"><label class="fl">Department</label><select id="rep-ref-dept"><option value="">All Departments</option><option value="ophtho">Ophthalmology</option><option value="obg">OBG</option><option value="psych">Neuropsychiatry</option><option value="skin">Skin</option></select></div>
+        <div class="form-group"><label class="fl">Referred By</label><input type="text" id="rep-ref-doctor" list="rep-ref-doctor-list" placeholder="Start typing doctor / referrer name"></div>
+        <datalist id="rep-ref-doctor-list"></datalist>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+        <button class="btn btn-gold btn-sm" type="button" onclick="generateReferralReport()">📋 Generate Report</button>
+        <button class="btn btn-outline btn-sm" type="button" onclick="printReferralReportCurrent()">🖨️ Print</button>
+      </div>
+    </div>
+    <div id="rep-referral-result"></div>
   </div>
 </div>
 
