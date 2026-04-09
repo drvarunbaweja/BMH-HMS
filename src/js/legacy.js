@@ -2530,6 +2530,7 @@ function openPatient(bmhId, opts) {
   renderOphthoRecap && renderOphthoRecap();
   initObgSelects && initObgSelects();
   populateObgPatientFromCurrent && populateObgPatientFromCurrent();
+  ['ophtho','obg','psych','skin'].forEach(function (deptKey) { restoreProcedureDoneState(deptKey, null); });
 
   // ── 4. Navigate to dept ────────────────────────────────────────
   const targetDept = normalizeDeptKeyForQueue(opts.deptOverride || p.dept || '') || p.dept;
@@ -2979,6 +2980,7 @@ function populateOphthoForm(v) {
   // Advice text
   setV('rx-advice-text', v.advice || '');
   setV('rx-extra-advice-text', v.extraAdvice || '');
+  restoreProcedureDoneState('ophtho', v.procDone || null);
 
   // Chief complaints — restore rows
   const fallbackCcRows = Array.isArray(v.ccRows) && v.ccRows.length
@@ -5112,6 +5114,7 @@ function populateObgForm(visit) {
   populateObgPatientFromCurrent();
   const data = visit || window.CURRENT_PATIENT?.lastVisit || {};
   if(!data || typeof data !== 'object') {
+    restoreProcedureDoneState('obg', null);
     initObgPregnancyStateFromVisit({});
     toggleObgWorkflow();
     toggleObgCSectionIndication();
@@ -5182,6 +5185,7 @@ function populateObgForm(visit) {
       data.obgProcAdvised.forEach(function (p) { addProcItemToContainer(procEl, p, 0, { silentLog: true, quiet: true }); });
     }
   }
+  restoreProcedureDoneState('obg', data.procDone || null);
 }
 function addANCVisit(){
   const today = new Date().toISOString().split('T')[0];
@@ -5435,6 +5439,7 @@ function populatePsychForm(visit) {
     if (el) el.value = data.rxFuDate;
   }
   if (Array.isArray(data.psychDxList)) rebuildDxListFromValues('psych-dx-list', data.psychDxList);
+  restoreProcedureDoneState('psych', data.procDone || null);
 }
 function printPsychRx(){printPsychSheet();}
 
@@ -5582,6 +5587,7 @@ function populateSkinForm(visit) {
     if (el) el.value = data.rxFuDate;
   }
   if (Array.isArray(data.skinDxList)) rebuildDxListFromValues('skin-dx-list', data.skinDxList);
+  restoreProcedureDoneState('skin', data.procDone || null);
 }
 function selectProc(el,name){
   document.querySelectorAll('.procedure-card').forEach(c=>c.classList.remove('selected'));
@@ -16019,6 +16025,186 @@ function deptChargeCategoryMatches(deptKey, cat) {
   if (deptKey === 'skin') return c.includes('skin');
   return true;
 }
+window.BMH_PROC_DONE_STATE = window.BMH_PROC_DONE_STATE || { ophtho:null, obg:null, psych:null, skin:null };
+function getProcedureDoneStateForDept(dept) {
+  return JSON.parse(JSON.stringify((window.BMH_PROC_DONE_STATE && window.BMH_PROC_DONE_STATE[dept]) || null));
+}
+function setProcedureDoneStateForDept(dept, state) {
+  window.BMH_PROC_DONE_STATE = window.BMH_PROC_DONE_STATE || {};
+  window.BMH_PROC_DONE_STATE[dept] = state ? JSON.parse(JSON.stringify(state)) : null;
+  const toggle = document.getElementById('proc-done-toggle-' + dept);
+  if (toggle) toggle.checked = !!(state && state.enabled);
+}
+function chargeLooksLikePerformedProcedure(row, deptKey) {
+  if (!row || !deptChargeCategoryMatches(deptKey, row.cat)) return false;
+  const kind = String(row.kind || '').toLowerCase();
+  const name = String(row.name || '').toLowerCase();
+  const parent = String(row.parent || '').toLowerCase();
+  if (/consult|follow|invest|diag|lab|drug|pharmacy|vaccine/.test(kind + ' ' + name)) return false;
+  return !!(parent || /procedure|surgery|laser|peel|prp|botox|filler|ivt|capsulotomy|delivery|lscs|mtp|d&c|hysteroscopy|injection|chemical peel|microneedling|mesotherapy|cryotherapy/.test(kind + ' ' + name + ' ' + parent));
+}
+function getProcedureDoneChargeRows(deptKey) {
+  return (CHARGES_DATA || []).filter(function (row) {
+    return chargeLooksLikePerformedProcedure(row, deptKey);
+  }).slice().sort(function (a, b) {
+    return String(a.parent || a.name || '').localeCompare(String(b.parent || b.name || '')) || String(a.name || '').localeCompare(String(b.name || ''));
+  });
+}
+function getChargeAmountForRow(row) {
+  const centre = typeof getEffectiveCentre === 'function' ? getEffectiveCentre() : (CURRENT_USER?.centre || 'CHD');
+  return centre === 'RPR' ? Number(row?.rpr || 0) : Number(row?.chd || 0);
+}
+function fillProcedureDoneDatalists(dept) {
+  const chargeList = document.getElementById('proc-done-charge-list');
+  const stockList = document.getElementById('proc-done-stock-list');
+  if (chargeList) {
+    chargeList.innerHTML = getProcedureDoneChargeRows(dept).map(function (row) {
+      const label = (row.parent ? row.parent + ' — ' : '') + row.name;
+      return '<option value="' + String(label).replace(/"/g, '&quot;') + '"></option>';
+    }).join('');
+  }
+  if (stockList) {
+    stockList.innerHTML = (INVENTORY || []).filter(function (item) {
+      return Number(item.stock || 0) > 0;
+    }).slice().sort(function (a, b) {
+      return String(a.name || '').localeCompare(String(b.name || ''));
+    }).map(function (item) {
+      const label = [item.name, item.barcode, item.store].filter(Boolean).join(' · ');
+      return '<option value="' + String(label).replace(/"/g, '&quot;') + '"></option>';
+    }).join('');
+  }
+}
+function renderProcedureUsageRows(items) {
+  const host = document.getElementById('proc-done-usage-list');
+  if (!host) return;
+  const rows = Array.isArray(items) ? items : [];
+  host.innerHTML = rows.length ? rows.map(function (row, idx) {
+    return `<div style="display:grid;grid-template-columns:minmax(0,1.7fr) 90px 120px 95px 28px;gap:8px;align-items:end;padding:8px;border:1px solid var(--g5);border-radius:8px;background:#fff;margin-bottom:7px">
+      <div class="form-group" style="margin:0"><label class="fl">Stock item</label><input type="text" class="proc-stock-name" list="proc-done-stock-list" value="${escapeHtmlConsent(row.name || '')}" placeholder="Type stock item / barcode"></div>
+      <div class="form-group" style="margin:0"><label class="fl">Qty</label><input type="number" class="proc-stock-qty" min="1" value="${Math.max(1, Number(row.qty || 1))}"></div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:var(--g1);padding-bottom:8px"><input type="checkbox" class="proc-stock-bill"${row.billPatient ? ' checked' : ''}> Bill patient</label>
+      <div style="font-size:10px;color:var(--g1);padding-bottom:8px">Applied: ${Number(row.appliedQty || 0)}</div>
+      <button class="btn btn-xs btn-gray" type="button" onclick="removeProcedureUsageRow(${idx})">✕</button>
+    </div>`;
+  }).join('') : '<div style="padding:10px;border:1px dashed var(--g4);border-radius:8px;color:var(--g1);font-size:11px;background:var(--g6)">No consumables added yet.</div>';
+}
+function getProcedureDraftFromModal() {
+  const dept = document.getElementById('proc-done-dept')?.value || '';
+  const items = Array.from(document.querySelectorAll('#proc-done-usage-list > div')).map(function (row, idx) {
+    const prev = (window.BMH_PROC_DONE_STATE && window.BMH_PROC_DONE_STATE[dept] && window.BMH_PROC_DONE_STATE[dept].items && window.BMH_PROC_DONE_STATE[dept].items[idx]) || {};
+    return {
+      name: row.querySelector('.proc-stock-name')?.value?.trim() || '',
+      qty: Math.max(1, Number(row.querySelector('.proc-stock-qty')?.value || '1')),
+      billPatient: !!row.querySelector('.proc-stock-bill')?.checked,
+      appliedQty: Number(prev.appliedQty || 0)
+    };
+  }).filter(function (row) { return row.name; });
+  return {
+    enabled: true,
+    procedure: document.getElementById('proc-done-name')?.value?.trim() || '',
+    amount: Number(document.getElementById('proc-done-amount')?.value || 0) || 0,
+    notes: document.getElementById('proc-done-notes')?.value?.trim() || '',
+    items: items
+  };
+}
+function addProcedureUsageRow(seed) {
+  const dept = document.getElementById('proc-done-dept')?.value || activeClinicDeptKey();
+  const current = getProcedureDraftFromModal();
+  const next = current.items || [];
+  next.push(Object.assign({ name:'', qty:1, billPatient:false, appliedQty:0 }, seed || {}));
+  setProcedureDoneStateForDept(dept, Object.assign(current, { items: next }));
+  renderProcedureUsageRows(next);
+}
+window.addProcedureUsageRow = addProcedureUsageRow;
+function removeProcedureUsageRow(idx) {
+  const dept = document.getElementById('proc-done-dept')?.value || activeClinicDeptKey();
+  const current = getProcedureDraftFromModal();
+  current.items.splice(idx, 1);
+  setProcedureDoneStateForDept(dept, current);
+  renderProcedureUsageRows(current.items);
+}
+window.removeProcedureUsageRow = removeProcedureUsageRow;
+function findInventoryItemForProcedureUse(raw) {
+  const q = String(raw || '').trim().toLowerCase();
+  if (!q) return null;
+  return (INVENTORY || []).find(function (item) {
+    const label = [item.name, item.barcode, item.store].filter(Boolean).join(' · ').toLowerCase();
+    return label === q || String(item.barcode || '').toLowerCase() === q || String(item.name || '').toLowerCase() === q;
+  }) || (INVENTORY || []).find(function (item) {
+    const label = [item.name, item.barcode, item.store].filter(Boolean).join(' · ').toLowerCase();
+    return label.includes(q) || String(item.name || '').toLowerCase().includes(q) || String(item.barcode || '').toLowerCase().includes(q);
+  }) || null;
+}
+function openProcedureDoneModalForDept(dept) {
+  if (!window.CURRENT_PATIENT?.bmhId) { showToast('Open a patient first', 'w'); return; }
+  fillProcedureDoneDatalists(dept);
+  const state = getProcedureDoneStateForDept(dept) || { enabled:true, procedure:'', amount:0, notes:'', items:[] };
+  const hidden = document.getElementById('proc-done-dept'); if (hidden) hidden.value = dept;
+  const nameEl = document.getElementById('proc-done-name'); if (nameEl) nameEl.value = state.procedure || '';
+  const amtEl = document.getElementById('proc-done-amount'); if (amtEl) amtEl.value = state.amount || '';
+  const notesEl = document.getElementById('proc-done-notes'); if (notesEl) notesEl.value = state.notes || '';
+  renderProcedureUsageRows(state.items || []);
+  openM('m-procedure-done');
+}
+function handleProcedureDoneToggle(dept, checked) {
+  if (checked) {
+    openProcedureDoneModalForDept(dept);
+    return;
+  }
+  setProcedureDoneStateForDept(dept, null);
+  if (window.CURRENT_PATIENT?.bmhId) saveVisit(dept, { silent: true });
+}
+window.handleProcedureDoneToggle = handleProcedureDoneToggle;
+function saveProcedureDoneModal() {
+  const dept = document.getElementById('proc-done-dept')?.value || activeClinicDeptKey();
+  const bmhId = window.CURRENT_PATIENT?.bmhId || '';
+  if (!dept || !bmhId) { showToast('Open a patient first', 'w'); return; }
+  const state = getProcedureDraftFromModal();
+  if (!state.procedure) { showToast('Select the performed procedure first', 'w'); return; }
+  const chargeRows = getProcedureDoneChargeRows(dept);
+  const matchedRow = chargeRows.find(function (row) {
+    const label = (row.parent ? row.parent + ' — ' : '') + row.name;
+    return String(label).trim().toLowerCase() === String(state.procedure).trim().toLowerCase()
+      || String(row.name || '').trim().toLowerCase() === String(state.procedure).trim().toLowerCase();
+  });
+  if (matchedRow && !state.amount) state.amount = getChargeAmountForRow(matchedRow);
+  const procRef = 'procdone-' + dept + '-' + String(state.procedure).trim().toLowerCase();
+  const existingCharge = ((window.BMH_PATIENT_CHARGES && window.BMH_PATIENT_CHARGES[bmhId]) || []).find(function (row) {
+    return String(row.ref || '').toLowerCase() === procRef;
+  });
+  if (!existingCharge && state.amount > 0) {
+    addBmhPatientCharge(bmhId, {
+      id: 'pcd-' + Date.now(),
+      cat: inferChargeCategoryFromService(state.procedure),
+      desc: state.procedure,
+      qty: 1,
+      rate: state.amount,
+      amount: state.amount,
+      source: 'procedure-done',
+      ref: procRef,
+      ts: new Date().toISOString()
+    });
+  }
+  state.items = (state.items || []).map(function (row) {
+    const invItem = findInventoryItemForProcedureUse(row.name);
+    const prevApplied = Number(row.appliedQty || 0);
+    const delta = Math.max(0, Number(row.qty || 0) - prevApplied);
+    if (invItem && delta > 0) {
+      bmhUseInventoryItemForPatient(bmhId, invItem, { qty: delta, mode: row.billPatient ? 'bill' : 'consume', dept: dept });
+      row.appliedQty = prevApplied + delta;
+      row.barcode = invItem.barcode || '';
+    }
+    return row;
+  });
+  setProcedureDoneStateForDept(dept, state);
+  closeM('m-procedure-done');
+  saveVisit(dept, { silent: true });
+  showToast('Procedure done details saved ✓', 's');
+}
+window.saveProcedureDoneModal = saveProcedureDoneModal;
+function restoreProcedureDoneState(dept, data) {
+  setProcedureDoneStateForDept(dept, data && data.enabled ? data : null);
+}
 /** Ophtho toolbar: rebuild #send-charge-sel from Settings → Charges (Eye / Eye Sx). */
 function renderOphthoSendChargeSelect() {
   const sel = document.getElementById('send-charge-sel');
@@ -22429,6 +22615,7 @@ function saveVisit(dept, opts) {
     });
     visit.advice = document.getElementById('rx-advice-text')?.value || '';
     visit.extraAdvice = document.getElementById('rx-extra-advice-text')?.value || '';
+    visit.procDone = getProcedureDoneStateForDept('ophtho');
   } else if(dept === 'obg') {
     const obgCheckboxIds = ['obg-anc-booking','obg-anc-warning','obg-anc-highrisk','obg-anc-fetal','obg-gyn-aub','obg-gyn-discharge','obg-gyn-pain','obg-gyn-menopause','obg-inf-ovulatory','obg-inf-tubal','obg-inf-endo','obg-inf-male','obg-redflag-bleeding','obg-redflag-leak','obg-redflag-headache','obg-redflag-pain','obg-redflag-fever','obg-redflag-decreasedfm','obg-redflag-swelling','obg-redflag-convulsions','obg-hr-prevlscs','obg-hr-gdm','obg-hr-pih','obg-hr-iugr','obg-hr-multiple','obg-hr-rhneg','obg-hr-placenta','obg-hr-anemia','obg-fetal-growthlag','obg-fetal-malpresentation','obg-fetal-lowliquor','obg-fetal-postdates','obg-aub-clots','obg-aub-intermenstrual','obg-aub-postcoital','obg-aub-anemia','obg-vag-pruritus','obg-vag-foul','obg-vag-dyspareunia','obg-vag-pidrisk','obg-pain-cyclical','obg-pain-severe','obg-pain-bowel','obg-pain-infertility','obg-inf-coital','obg-inf-pastpid','obg-inf-priorsurgery','obg-inf-galactorrhoea','obg-inf-hirsutism','obg-inf-maleabn','obg-inf-lowreserve','obg-inf-rpl'];
     stashCurrentObgPregnancyEntry();
@@ -22511,6 +22698,7 @@ function saveVisit(dept, opts) {
       visit.dx = [visit.obgDiagnoses.join(' · '), visit.dx].filter(Boolean).join(' · ');
     }
     visit.rx = JSON.parse(JSON.stringify(RX_DRUGS || []));
+    visit.procDone = getProcedureDoneStateForDept('obg');
   } else if(dept === 'psych') {
     ['psych-chief','psych-duration','psych-onset','psych-trigger','psych-core-syndrome','psych-risk','psych-systemic','psych-sleep','psych-appetite','psych-function','psych-diagnosis','psych-family','psych-personal','psych-pastpsych','psych-medical','psych-substance','psych-suicidality','psych-anxiety','psych-psychosis','psych-polarity','psych-addiction-substance','psych-addiction-pattern','psych-addiction-lastuse','psych-addiction-readiness','psych-stroke-deficit','psych-stroke-timing','psych-stroke-mood','psych-epilepsy-type','psych-epilepsy-last','psych-epilepsy-adherence','psych-epilepsy-trigger','psych-child-concern','psych-child-development','psych-child-school','psych-child-parent','psych-appearance','psych-behaviour','psych-psychomotor','psych-eyecontact','psych-speech-rate','psych-speech-volume','psych-speech-tone','psych-subjective-mood','psych-affect','psych-thought-form','psych-thought-content','psych-hallucinations','psych-orientation','psych-memory','psych-insight','psych-judgement']
       .forEach(id => { visit[id] = psychVal(id); });
@@ -22533,6 +22721,7 @@ function saveVisit(dept, opts) {
     visit.rxFuDate = document.querySelector('#pg-psych #psych-rx input[type="date"]')?.value || '';
     visit.followupDate = visit.rxFuDate || '';
     visit.rx = JSON.parse(JSON.stringify(RX_DRUGS || []));
+    visit.procDone = getProcedureDoneStateForDept('psych');
   } else if(dept === 'skin') {
     ['skin-chief','skin-duration','skin-site','skin-fit','skin-primary-dx','skin-secondary-dx','skin-routine','skin-medical','skin-hormonal','skin-lesion','skin-secondary-change','skin-distribution','skin-configuration','skin-hair','skin-nail','skin-dermoscopy','skin-cosm-acne-grade','skin-cosm-sensitivity','skin-cosm-pih','skin-cosm-isotret','skin-cosm-tan','skin-cosm-preg']
       .forEach(id => { visit[id] = document.getElementById(id)?.value || ''; });
@@ -22556,6 +22745,7 @@ function saveVisit(dept, opts) {
     visit.rxFuDate = document.querySelector('#pg-skin #skin-rx input[type="date"]')?.value || '';
     visit.followupDate = visit.rxFuDate || '';
     visit.rx = JSON.parse(JSON.stringify(RX_DRUGS || []));
+    visit.procDone = getProcedureDoneStateForDept('skin');
   }
   if(typeof fbSet !== 'function') { showToast('Save not available (offline)', 'w'); return; }
   const patientPatch = { lastVisit: visit, lastVisitKey: visitKey, lastVisitDate: visit.date, lastDeptVisit: dept };
