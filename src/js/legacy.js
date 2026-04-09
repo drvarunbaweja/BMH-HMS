@@ -1597,33 +1597,44 @@ function renderImageDocumentPage(title, imgSrc, ctx) {
   return buildCompactDocumentShell(title, ctx, body, { signatures: false });
 }
 function renderPackDocumentPages(key, ctx) {
-  if (key === '__discharge__') return buildDischargePrintSection();
-  if (key === '__ophtho_case_sheet__') return buildSavedOphthoCaseSheetPageForPatient(ctx?.ptId || window._CONSENT_PRINT_BMH_ID || '');
-  if (key === '__admission_slip__') return buildAdmissionSlipPage(ctx || collectConsentPrintContext());
-  const lib = getMergedLibraryItem(key) || ((window.BMH_UPLOADED_CONSENTS || []).find(function (x) { return x && x.id === key; }) || null);
-  const tpl = getConsentTemplateItem(key);
-  const title = getPackDocumentTitle(key);
-  const mergedEntry = getConsentEntry(key);
-  if (mergedEntry && mergedEntry.paras && mergedEntry.paras.length) {
-    const variant = getPreferredConsentVariant(mergedEntry, lib?.lang || tpl?.lang || window._CONSENT_PRINT_LANG || '');
-    return buildConsentPageShell(mergedEntry, ctx, variant);
-  }
-  if (lib && lib.docType === 'consent' && (lib.body || lib.bodyPa || lib.bodyHi || lib.structuredKey)) {
-    const cd = lib.structuredKey ? resolveConsentDataForPrint(lib.structuredKey) : libraryMergedToConsentData(lib);
-    if (cd && cd.paras && cd.paras.length) {
-      const variant = getPreferredConsentVariant(cd, lib.lang || window._CONSENT_PRINT_LANG || '');
-      return buildConsentPageShell(cd, ctx, variant);
+  try {
+    if (key === '__discharge__') return buildDischargePrintSection();
+    if (key === '__ophtho_case_sheet__') return buildSavedOphthoCaseSheetPageForPatient(ctx?.ptId || window._CONSENT_PRINT_BMH_ID || '');
+    if (key === '__admission_slip__') return buildAdmissionSlipPage(ctx || collectConsentPrintContext());
+    const lib = getMergedLibraryItem(key) || ((window.BMH_UPLOADED_CONSENTS || []).find(function (x) { return x && x.id === key; }) || null);
+    const tpl = getConsentTemplateItem(key);
+    const title = getPackDocumentTitle(key);
+    const mergedEntry = getConsentEntry(key);
+    if (mergedEntry && mergedEntry.paras && mergedEntry.paras.length) {
+      const variant = getPreferredConsentVariant(mergedEntry, lib?.lang || tpl?.lang || window._CONSENT_PRINT_LANG || '');
+      return buildConsentPageShell(mergedEntry, ctx, variant);
+    }
+    if (lib && lib.docType === 'consent' && (lib.body || lib.bodyPa || lib.bodyHi || lib.structuredKey)) {
+      const cd = lib.structuredKey ? resolveConsentDataForPrint(lib.structuredKey) : libraryMergedToConsentData(lib);
+      if (cd && cd.paras && cd.paras.length) {
+        const variant = getPreferredConsentVariant(cd, lib.lang || window._CONSENT_PRINT_LANG || '');
+        return buildConsentPageShell(cd, ctx, variant);
+      }
+    }
+    const resolved = resolveConsentDataForPrint(key);
+    if (resolved && resolved.paras && resolved.paras.length) {
+      const variant = getPreferredConsentVariant(resolved, lib?.lang || tpl?.lang || window._CONSENT_PRINT_LANG || '');
+      return buildConsentPageShell(resolved, ctx, variant);
+    }
+    if (lib && lib.type === 'image') return renderImageDocumentPage(title, lib.imgSrc, ctx);
+    if (lib && (lib.text || lib.body)) return renderGenericDocumentPage(title, lib.text || lib.body, ctx, { signatures: lib.docType !== 'form' });
+    if (tpl && tpl.content) return renderGenericDocumentPage(title, tpl.content, ctx, { signatures: false });
+    return '';
+  } catch (e) {
+    console.error('renderPackDocumentPages failed', key, e);
+    try {
+      const title = getPackDocumentTitle(key);
+      return renderGenericDocumentPage(title, 'This document could not be rendered automatically. Please review the saved template or upload source.', ctx || collectConsentPrintContext(), { signatures: false });
+    } catch (fallbackErr) {
+      console.error('renderPackDocumentPages fallback failed', key, fallbackErr);
+      return '';
     }
   }
-  const resolved = resolveConsentDataForPrint(key);
-  if (resolved && resolved.paras && resolved.paras.length) {
-    const variant = getPreferredConsentVariant(resolved, lib?.lang || tpl?.lang || window._CONSENT_PRINT_LANG || '');
-    return buildConsentPageShell(resolved, ctx, variant);
-  }
-  if (lib && lib.type === 'image') return renderImageDocumentPage(title, lib.imgSrc, ctx);
-  if (lib && (lib.text || lib.body)) return renderGenericDocumentPage(title, lib.text || lib.body, ctx, { signatures: lib.docType !== 'form' });
-  if (tpl && tpl.content) return renderGenericDocumentPage(title, tpl.content, ctx, { signatures: false });
-  return '';
 }
 function printConsentFromLibrary(id) {
   const merged = getMergedLibraryItem(id);
@@ -11285,14 +11296,16 @@ function printSurgeryPackWithKeys(keys, deptLabel) {
   try {
     if (!keys || !keys.length) { showToast('No documents selected', 'w'); return; }
     const ctx = collectConsentPrintContext();
-    const consentPages = keys.map(function (k) {
+    const renderedPages = [];
+    keys.forEach(function (k) {
       try {
-        return renderPackDocumentPages(k, ctx);
+        const pageHtml = renderPackDocumentPages(k, ctx);
+        if (String(pageHtml || '').trim()) renderedPages.push(pageHtml);
       } catch (e) {
         console.error('surgery pack doc print failed', k, e);
-        return '';
       }
-    }).join('');
+    });
+    const consentPages = renderedPages.join('');
     const fallbackPages = buildAdmissionSlipPage(ctx || collectConsentPrintContext());
     const finalPages = String(consentPages || '').trim() ? consentPages : fallbackPages;
     if (!String(finalPages || '').trim()) { showToast('No printable documents found for ' + (deptLabel || 'pack'), 'w'); return; }
