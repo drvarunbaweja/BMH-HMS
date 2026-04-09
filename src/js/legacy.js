@@ -2382,6 +2382,13 @@ function openPatient(bmhId, opts) {
   const p = PATIENTS.find(x => x.bmhId === bmhId);
   if(!p) return;
   window._suspendVisitAutosave = true;
+  const unreadLabOrders = Array.isArray(p.investigationOrders) ? p.investigationOrders.filter(function (o) {
+    return o && o.mode === 'send' && o.done && o.labReady && !o.doctorSeen;
+  }) : [];
+  if (unreadLabOrders.length) {
+    unreadLabOrders.forEach(function (o) { o.doctorSeen = true; });
+    fbUpdate && fbUpdate('patients/' + p.bmhId, { investigationOrders: p.investigationOrders }).catch(function(){});
+  }
 
   // ── Set global current patient for printOphthoSheet etc. ───────
   window.CURRENT_PATIENT = p;
@@ -7291,9 +7298,9 @@ function printReceipt() { printBmhPatientBill(); }
 // LAB INIT (from v9)
 // ═══════════════════════════════════════
 function initLab() {
-  const today = new Date().toLocaleDateString('en-IN'); const el=document.getElementById('lab-date'); if(el)el.textContent=today;
-  const sel=document.getElementById('lab-pt-sel'); if(sel)sel.innerHTML=PATIENTS.map(p=>`<option>${p.name} — ${p.bmhId}</option>`).join('');
-  ['haem','bio','diab','thyroid'].forEach(panel=>{ const el2=document.getElementById('lab-'+panel); if(!el2)return; el2.innerHTML=LAB_PANELS[panel].map(t=>{const hasVal=t.v!==''; const v=parseFloat(t.v); const flag=hasVal?(v<t.lo?'LOW':v>t.hi?'HIGH':'Normal'):'—'; const cls=flag==='HIGH'?'val-high':flag==='LOW'?'val-low':flag==='Normal'?'val-ok':''; return `<div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 70px;gap:6px;padding:8px 10px;background:${flag==='HIGH'||flag==='LOW'?'var(--red-lt)':flag==='Normal'?'var(--green-lt)':'var(--g6)'};border-radius:8px;margin-bottom:5px;align-items:center"><span style="font-size:12px;font-weight:700">${t.n}</span><input type="number" value="${t.v}" class="lab-val-inp ${hasVal?cls:''}" placeholder="—" oninput="checkLabVal(this,${t.lo},${t.hi})"><span style="font-size:11px;color:var(--g1)">${t.u}</span><span style="font-size:11px;color:var(--g1)">${t.lo}–${t.hi}</span><span class="badge ${flag==='HIGH'||flag==='LOW'?'bd-red':flag==='Normal'?'bd-green':'bd-gray'}">${flag}</span></div>`;}).join(''); });
+  const dateEl = document.getElementById('lab-rpt-date');
+  if (dateEl && !String(dateEl.textContent || '').trim()) dateEl.textContent = formatDateIN(new Date());
+  renderLabOrders && renderLabOrders();
 }
 function checkLabVal(inp,lo,hi){const v=parseFloat(inp.value)||0;inp.className='lab-val-inp '+(v<lo?'val-low':v>hi?'val-high':'val-ok');}
 
@@ -10213,6 +10220,8 @@ function confirmInvestigations() {
       notes: '',
       price: Number(inv.price) || 0,
       date: new Date().toLocaleDateString('en-IN'),
+      orderedAt: new Date().toISOString(),
+      mode: 'send',
       done: false,
       patient: pt.name,
       bmhId: pt.bmhId,
@@ -13981,33 +13990,184 @@ function renderInvestigationOrders() {
 const LAB_ORDERS = [];
 let activeLabOrder = null;
 
+function normalizeLabTestName(name) {
+  return String(name || '').trim();
+}
+function labTestKey(name) {
+  return normalizeLabTestName(name).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+function getLabTestMeta(name) {
+  const n = normalizeLabTestName(name);
+  const low = n.toLowerCase();
+  const defs = [
+    { re:/\bhb\b|haemoglobin/, group:'haem', unit:'g/dL', range:'12-16' },
+    { re:/\btlc\b|total leucocyte|wbc/, group:'haem', unit:'/cumm', range:'4000-11000' },
+    { re:/\bdlc\b/, group:'haem', unit:'%', range:'40-75' },
+    { re:/\bplatelet/, group:'haem', unit:'lakh/cumm', range:'1.5-4.5' },
+    { re:/\bcbc\b|complete blood count/, group:'haem', unit:'', range:'' },
+    { re:/\brbs\b|blood sugar|glucose/, group:'diab', unit:'mg/dL', range:'70-140' },
+    { re:/\bhba1c\b/, group:'diab', unit:'%', range:'4-5.6' },
+    { re:/\burea\b/, group:'bio', unit:'mg/dL', range:'15-40' },
+    { re:/\bcreatinine\b/, group:'bio', unit:'mg/dL', range:'0.6-1.2' },
+    { re:/\bsodium\b/, group:'bio', unit:'mEq/L', range:'135-145' },
+    { re:/\bpotassium\b/, group:'bio', unit:'mEq/L', range:'3.5-5.0' },
+    { re:/\bbilirubin\b/, group:'bio', unit:'mg/dL', range:'0.2-1.2' },
+    { re:/\bsgot\b|\bast\b/, group:'bio', unit:'U/L', range:'0-40' },
+    { re:/\bsgpt\b|\balt\b/, group:'bio', unit:'U/L', range:'0-40' },
+    { re:/\btsh\b/, group:'thyroid', unit:'mIU/L', range:'0.4-4.5' },
+    { re:/\bt3\b/, group:'thyroid', unit:'ng/mL', range:'0.8-2.0' },
+    { re:/\bt4\b/, group:'thyroid', unit:'µg/dL', range:'5-12' }
+  ];
+  const hit = defs.find(function (d) { return d.re.test(low); });
+  return Object.assign({ name: n, group:'custom', unit:'', range:'' }, hit || {});
+}
+function formatLabAgeSex(pt) {
+  return [pt?.age ? String(pt.age) + 'Y' : '', pt?.sex || ''].filter(Boolean).join(' / ') || '—';
+}
+function patientHasUnreadLabResults(pt) {
+  const orders = Array.isArray(pt?.investigationOrders) ? pt.investigationOrders : [];
+  return orders.some(function (o) {
+    return o && o.mode === 'send' && o.done && o.labReady && !o.doctorSeen;
+  });
+}
+function getPatientLabQueueEntries() {
+  const out = [];
+  PATIENTS.forEach(function (pt) {
+    if (!pt || !centreMatch(pt)) return;
+    const orders = Array.isArray(pt.investigationOrders) ? pt.investigationOrders.slice() : [];
+    const relevant = orders.filter(function (o) {
+      if (!o || o.mode !== 'send') return false;
+      return !o.done || (o.labReady && !o.doctorSeen);
+    });
+    if (!relevant.length) return;
+    const latest = relevant.slice().sort(function (a, b) {
+      return String(b.completedAt || b.date || '').localeCompare(String(a.completedAt || a.date || ''));
+    })[0] || {};
+    out.push({
+      id: 'LAB-' + pt.bmhId,
+      bmhId: pt.bmhId,
+      patient: pt.name,
+      age: pt.age || '',
+      sex: pt.sex || '',
+      dr: latest.orderedBy || pt.assignedDoctor || pt.doctor || 'Doctor',
+      dept: pt.dept || 'ophtho',
+      centre: pt.centre || CURRENT_USER?.centre || 'CHD',
+      date: latest.date || formatDateIN(new Date()),
+      tests: relevant.map(function (o) { return normalizeLabTestName(o.name); }),
+      orders: relevant.map(function (o) { return Object.assign({}, o); }),
+      results: relevant.reduce(function (acc, o) {
+        acc[normalizeLabTestName(o.name)] = Object.assign({}, getLabTestMeta(o.name), o.result || {}, { flag: (o.result && o.result.flag) || o.flag || '—' });
+        return acc;
+      }, {}),
+      comments: latest.labComments || '',
+      tech: latest.labTech || '',
+      status: relevant.every(function (o) { return o.done; }) ? 'completed' : 'pending',
+      unread: relevant.some(function (o) { return o.done && o.labReady && !o.doctorSeen; })
+    });
+  });
+  out.sort(function (a, b) {
+    if (a.status !== b.status) return a.status === 'pending' ? -1 : 1;
+    return String(b.date || '').localeCompare(String(a.date || ''));
+  });
+  return out;
+}
+function buildLabInsights(order) {
+  if (!order || !order.results) return [];
+  const alerts = [];
+  Object.keys(order.results).forEach(function (name) {
+    const r = order.results[name] || {};
+    const flag = String(r.flag || '').toUpperCase();
+    if (flag === 'HIGH' || flag === 'LOW') {
+      alerts.push(name + ' is ' + flag.toLowerCase());
+    }
+  });
+  return alerts;
+}
+function renderLabReportPreview(order) {
+  if (!order) return;
+  const pt = PATIENTS.find(function (x) { return x.bmhId === order.bmhId; }) || {};
+  const setTxt = function (id, val) { const el = document.getElementById(id); if (el) el.textContent = val || '—'; };
+  setTxt('lab-rpt-name', order.patient || pt.name || '—');
+  setTxt('lab-rpt-id', order.bmhId || pt.bmhId || '—');
+  setTxt('lab-rpt-age', formatLabAgeSex(pt));
+  setTxt('lab-rpt-dr', order.dr || pt.assignedDoctor || pt.doctor || '—');
+  setTxt('lab-rpt-date', formatDateIN(order.completedAt || order.date || new Date()));
+  setTxt('lab-rpt-tech', order.tech || document.getElementById('lab-incharge')?.value || '—');
+  const byGroup = { haem:[], bio:[], diab:[], thyroid:[], custom:[] };
+  order.tests.forEach(function (name) {
+    const saved = order.results[normalizeLabTestName(name)] || {};
+    const meta = Object.assign({}, getLabTestMeta(name), saved);
+    byGroup[meta.group || 'custom'].push(meta);
+  });
+  ['haem','bio','diab','thyroid'].forEach(function (group) {
+    const host = document.getElementById('lab-' + group);
+    if (!host) return;
+    host.innerHTML = (byGroup[group] || []).map(function (row) {
+      const f = String(row.flag || '—');
+      const fColor = f === 'HIGH' ? 'var(--red)' : f === 'LOW' ? 'var(--orange)' : '#1a8c3c';
+      return '<div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 65px;gap:5px;align-items:center;padding:6px 8px;border-bottom:1px solid var(--g5);font-size:11px">'
+        + '<span style="font-weight:800">' + escapeHtmlConsent(row.name || '') + '</span>'
+        + '<span style="font-weight:800;color:' + fColor + '">' + escapeHtmlConsent(row.val || '—') + '</span>'
+        + '<span>' + escapeHtmlConsent(row.unit || '') + '</span>'
+        + '<span>' + escapeHtmlConsent(row.range || '') + '</span>'
+        + '<span style="font-weight:900;color:' + fColor + '">' + escapeHtmlConsent(f || '—') + '</span>'
+        + '</div>';
+    }).join('');
+  });
+  const customHost = document.getElementById('custom-tests-list');
+  if (customHost) {
+    customHost.innerHTML = (byGroup.custom || []).map(function (row) {
+      const f = String(row.flag || '—');
+      const fColor = f === 'HIGH' ? 'var(--red)' : f === 'LOW' ? 'var(--orange)' : '#1a8c3c';
+      return '<div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 65px;gap:5px;align-items:center;padding:6px 8px;border-bottom:1px solid var(--g5);font-size:11px;background:#fff;border-radius:7px;margin-bottom:5px">'
+        + '<span style="font-weight:800">' + escapeHtmlConsent(row.name || '') + '</span>'
+        + '<span style="font-weight:800;color:' + fColor + '">' + escapeHtmlConsent(row.val || '—') + '</span>'
+        + '<span>' + escapeHtmlConsent(row.unit || '') + '</span>'
+        + '<span>' + escapeHtmlConsent(row.range || '') + '</span>'
+        + '<span style="font-weight:900;color:' + fColor + '">' + escapeHtmlConsent(f || '—') + '</span>'
+        + '</div>';
+    }).join('');
+  }
+  const abn = document.getElementById('abn-cnt');
+  if (abn) {
+    const insights = buildLabInsights(order);
+    abn.textContent = insights.length ? 'Abnormal: ' + insights.length : '';
+  }
+}
+
 function renderLabOrders() {
   const el = document.getElementById('lab-ordered-list'); if(!el) return;
+  const merged = getPatientLabQueueEntries();
+  LAB_ORDERS.length = 0;
+  merged.forEach(function (o) { LAB_ORDERS.push(o); });
   const pending = LAB_ORDERS.filter(o=>o.status==='pending');
   const done = LAB_ORDERS.filter(o=>o.status==='completed');
   const ct = document.getElementById('lab-pending-ct'); if(ct) ct.textContent = pending.length+' pending';
+  const nb = document.getElementById('nb-lab'); if (nb) nb.textContent = String(pending.length);
 
   el.innerHTML = LAB_ORDERS.map(o => `<div style="padding:10px 12px;background:${o.status==='completed'?'var(--green-lt)':'var(--orange-lt)'};border-radius:var(--rsm);margin-bottom:7px;cursor:pointer;border-left:4px solid ${o.status==='completed'?'var(--green)':'var(--orange)'}" onclick="openLabOrder('${o.id}')">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
       <div style="font-size:13px;font-weight:900">${o.patient}</div>
-      <span class="badge ${o.status==='completed'?'bd-green':'bd-orange'}" style="font-size:9.5px">${o.status==='completed'?'✅ Done':'⏳ Pending'}</span>
+      <span class="badge ${o.status==='completed'?'bd-green':'bd-orange'}" style="font-size:9.5px">${o.status==='completed'?(o.unread?'🔔 Ready':'✅ Done'):'⏳ Pending'}</span>
     </div>
-    <div style="font-family:var(--mono);font-size:9.5px;color:var(--bmh-teal);margin-bottom:4px">${o.bmhId} · ${o.age}</div>
+    <div style="font-family:var(--mono);font-size:9.5px;color:var(--bmh-teal);margin-bottom:4px">${o.bmhId} · ${o.age ? o.age+'Y' : '—'}${o.sex ? ' / '+o.sex : ''}</div>
     <div style="font-size:11px;color:var(--tx3)">Ref: ${o.dr} · ${o.date}</div>
     <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px">
       ${o.tests.map(t=>`<span class="badge ${o.status==='completed'?'bd-green':'bd-orange'}" style="font-size:9.5px">${t}</span>`).join('')}
     </div>
   </div>`).join('');
-
-  // Update lab report header
-  const p = PATIENTS.find(pt => LAB_ORDERS[0] && pt.bmhId === LAB_ORDERS[0].bmhId);
-  if(p) {
-    ['lab-rpt-name','lab-rpt-id','lab-rpt-age','lab-rpt-dr'].forEach((id,i) => {
-      const el2 = document.getElementById(id);
-      if(el2) el2.textContent = [p.name, p.bmhId, p.age+'Y/'+p.sex[0], p.doctor][i];
-    });
+  const sel = document.getElementById('lab-pt-sel');
+  if (sel) {
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">Select patient report</option>' + LAB_ORDERS.map(function (o) {
+      return '<option value="' + escapeHtmlConsent(o.id) + '">' + escapeHtmlConsent(o.patient) + ' · ' + escapeHtmlConsent(o.bmhId) + '</option>';
+    }).join('');
+    if ([...sel.options].some(function (opt) { return opt.value === cur; })) sel.value = cur;
+    else if (!activeLabOrder && LAB_ORDERS[0]) sel.value = LAB_ORDERS[0].id;
+    sel.onchange = function () { openLabOrder(this.value); };
   }
-  const rptDate = document.getElementById('lab-rpt-date'); if(rptDate) rptDate.textContent = new Date().toLocaleDateString('en-IN');
+  const first = activeLabOrder || LAB_ORDERS[0];
+  if (first) renderLabReportPreview(first);
 }
 
 function openLabOrder(id) {
@@ -14017,23 +14177,29 @@ function openLabOrder(id) {
   panel.style.display = 'block';
   document.getElementById('lab-entry-pt-name').textContent = order.patient + ' · ' + order.bmhId;
   document.getElementById('lab-entry-inv-name').textContent = order.tests.join(' · ');
+  const comm = document.getElementById('lab-comments'); if (comm) comm.value = order.comments || '';
+  const techInp = document.getElementById('lab-incharge'); if (techInp && !techInp.value) techInp.value = order.tech || '';
+  const sel = document.getElementById('lab-pt-sel'); if (sel) sel.value = order.id;
 
   // Build result entry fields for each test
   const fieldsEl = document.getElementById('lab-entry-fields'); if(!fieldsEl) return;
   fieldsEl.innerHTML = order.tests.map(t => {
-    const saved = order.results[t] || {};
+    const saved = order.results[normalizeLabTestName(t)] || {};
+    const meta = Object.assign({}, getLabTestMeta(t), saved);
+    const key = labTestKey(t);
     return `<div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 60px;gap:5px;align-items:center;padding:6px 8px;background:var(--g6);border-radius:7px;margin-bottom:5px">
       <span style="font-size:12px;font-weight:800">${t}</span>
-      <input type="text" placeholder="Value" value="${saved.val||''}" id="lr-val-${t.replace(/\s+/g,'_')}" style="font-size:12px;font-weight:800;text-align:center" onchange="flagLabVal(this,'${t}')">
-      <input type="text" placeholder="Unit" value="${saved.unit||''}" id="lr-unit-${t.replace(/\s+/g,'_')}" style="font-size:11px;text-align:center">
-      <input type="text" placeholder="Range" value="${saved.range||''}" id="lr-range-${t.replace(/\s+/g,'_')}" style="font-size:11px;text-align:center">
-      <span id="lr-flag-${t.replace(/\s+/g,'_')}" style="font-size:10px;font-weight:800;text-align:center;color:${saved.flag==='HIGH'?'var(--red)':saved.flag==='LOW'?'var(--orange)':'#1a8c3c'}">${saved.flag||'—'}</span>
+      <input type="text" placeholder="Value" value="${meta.val||''}" id="lr-val-${key}" style="font-size:12px;font-weight:800;text-align:center" onchange="flagLabVal(this,${JSON.stringify(t)})">
+      <input type="text" placeholder="Unit" value="${meta.unit||''}" id="lr-unit-${key}" style="font-size:11px;text-align:center">
+      <input type="text" placeholder="Range" value="${meta.range||''}" id="lr-range-${key}" style="font-size:11px;text-align:center">
+      <span id="lr-flag-${key}" style="font-size:10px;font-weight:800;text-align:center;color:${meta.flag==='HIGH'?'var(--red)':meta.flag==='LOW'?'var(--orange)':'#1a8c3c'}">${meta.flag||'—'}</span>
     </div>`;
   }).join('');
+  renderLabReportPreview(order);
 }
 
 function flagLabVal(inp, testName) {
-  const key = testName.replace(/\s+/g,'_');
+  const key = labTestKey(testName);
   const rangeEl = document.getElementById('lr-range-'+key);
   const flagEl = document.getElementById('lr-flag-'+key);
   if(!rangeEl || !flagEl) return;
@@ -14054,37 +14220,46 @@ function flagLabVal(inp, testName) {
 function saveLabResults() {
   if(!activeLabOrder) return;
   const tech = document.getElementById('lab-incharge')?.value || 'Lab Technician';
+  const comments = document.getElementById('lab-comments')?.value?.trim() || '';
+  const pt = PATIENTS.find(function (x) { return x.bmhId === activeLabOrder.bmhId; });
+  const orders = Array.isArray(pt?.investigationOrders) ? pt.investigationOrders : [];
   activeLabOrder.tests.forEach(t => {
-    const key = t.replace(/\s+/g,'_');
-    activeLabOrder.results[t] = {
+    const key = labTestKey(t);
+    const normalized = normalizeLabTestName(t);
+    const res = {
       val: document.getElementById('lr-val-'+key)?.value || '',
       unit: document.getElementById('lr-unit-'+key)?.value || '',
       range: document.getElementById('lr-range-'+key)?.value || '',
       flag: document.getElementById('lr-flag-'+key)?.textContent || '—',
     };
+    activeLabOrder.results[normalized] = Object.assign({}, getLabTestMeta(t), res);
+    const target = orders.find(function (o) {
+      return o && o.mode === 'send' && normalizeLabTestName(o.name) === normalized && (!o.done || !o.doctorSeen);
+    });
+    if (target) {
+      target.done = true;
+      target.labReady = true;
+      target.doctorSeen = false;
+      target.result = Object.assign({}, getLabTestMeta(t), res);
+      target.flag = res.flag;
+      target.completedAt = new Date().toISOString();
+      target.labTech = tech;
+      target.labComments = comments;
+    }
   });
   activeLabOrder.status = 'completed';
   activeLabOrder.tech = tech;
+  activeLabOrder.comments = comments;
+  activeLabOrder.completedAt = new Date().toISOString();
+  if (pt?.bmhId) {
+    fbUpdate && fbUpdate('patients/' + pt.bmhId, { investigationOrders: orders }).catch(function(){});
+  }
+  try { saveLabOrderToFirebase(activeLabOrder); } catch (e) {}
   document.getElementById('lab-rpt-tech').textContent = tech;
-
-  // Notify doctor — add a notification badge to doctor queue
-  const nb = document.getElementById('nb-dq');
-  if(nb) { nb.textContent = parseInt(nb.textContent||0)+1; nb.style.background='var(--green)'; }
+  renderLabReportPreview(activeLabOrder);
+  renderDocQueue && renderDocQueue();
+  renderDashboard && renderDashboard();
   showToast(`✅ Lab results saved for ${activeLabOrder.patient} — Doctor notified ✓`, 's');
-
-  // Flash notification in doctor queue
-  setTimeout(() => {
-    const notifArea = document.getElementById('dq-active-list');
-    if(notifArea) {
-      const notif = document.createElement('div');
-      notif.style.cssText='background:var(--green-lt);border:2px solid var(--green);border-radius:var(--rsm);padding:10px 12px;margin-bottom:8px;animation:fadeUp .3s ease';
-      notif.innerHTML = `<div style="font-size:12px;font-weight:900;color:#1a8c3c">✅ Lab Results Ready</div>
-        <div style="font-size:11.5px;color:var(--tx3);margin-top:3px">${activeLabOrder.patient} — ${activeLabOrder.tests.join(', ')}</div>
-        <div style="font-size:10.5px;color:#1a8c3c;margin-top:4px">Results entered by ${tech}</div>`;
-      notifArea.insertBefore(notif, notifArea.firstChild);
-    }
-  }, 200);
-
   renderLabOrders();
   document.getElementById('lab-entry-panel').style.display = 'none';
   initLab();
@@ -14557,44 +14732,44 @@ function saveRxAsTemplate() {
 
 // ─── PROFESSIONAL LAB REPORT PRINT ─────────────
 function printLabReport() {
-  const today = new Date().toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'});
-  const g = id => document.getElementById(id)?.textContent||'—';
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{margin:0;padding:0;box-sizing:border-box;print-color-adjust:exact}body{font-family:Arial,sans-serif;font-size:11px;padding:12mm}@page{size:A4 portrait;margin:8mm}.hdr{display:flex;justify-content:space-between;padding-bottom:10px;border-bottom:2.5px solid #1A3C6E;margin-bottom:12px}.baweja{font-size:18px;font-weight:900;color:#1A3C6E;letter-spacing:2px;border-bottom:2px solid #CC0000;display:block;margin-bottom:2px}table{width:100%;border-collapse:collapse;margin-top:8px}thead th{background:#1A3C6E;color:#fff;padding:5px 8px;text-align:left;font-size:9.5px;font-weight:800;text-transform:uppercase}td{padding:5px 8px;border-bottom:1px solid #eee}tr:nth-child(even){background:#f9f9f9}.flag-h{color:#CC0000;font-weight:900}.flag-l{color:#FF9500;font-weight:900}.section-hd{font-size:11px;font-weight:900;color:#1A3C6E;text-transform:uppercase;letter-spacing:.5px;margin:12px 0 0;padding:4px 8px;background:#f2f4f8;border-left:4px solid #1A3C6E}.pt-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;background:#f2f4f8;border-radius:6px;padding:8px 12px;font-size:11px;margin-bottom:12px}.pt-lbl{font-size:8.5px;color:#666;font-weight:700;text-transform:uppercase}</style></head><body>
-<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding-bottom:12px;border-bottom:2.5px solid #1A3C6E;margin-bottom:15px">
-  <div style="margin-bottom:14px;page-break-inside:avoid"><img src="" class="lh-img-tag" data-lhsrc="1" alt="Baweja Multispeciality Hospital" style="width:100%;max-width:720px;height:auto;display:block"></div>
-  <div style="text-align:right;flex-shrink:0">
-    <div style="font-size:9px;color:#444;margin-bottom:6px;font-family:Arial,sans-serif">&#9993; info&#64;bawejahospital.com</div>
-    
-    <div style="font-size:9px;color:#333;margin-top:4px;line-height:2;font-family:Arial,sans-serif">&#127760; : www.bawejahospital.com<br>&#127760; : www.bmhchandigarh.com</div>
-  </div>
-</div>
+  const sel = document.getElementById('lab-pt-sel');
+  const order = (sel && sel.value ? LAB_ORDERS.find(function (o) { return o.id === sel.value; }) : null) || activeLabOrder || LAB_ORDERS[0];
+  if (!order) { showToast('No lab report selected', 'w'); return; }
+  const pt = PATIENTS.find(function (x) { return x.bmhId === order.bmhId; }) || {};
+  const headerSrc = resolvePrintHeaderSrc();
+  const footerSrc = window.PRINT_FOOTER_SRC || '';
+  const groups = { haem:'Haematology', bio:'Biochemistry', diab:'Diabetes', thyroid:'Thyroid', custom:'Additional Tests' };
+  const grouped = { haem:[], bio:[], diab:[], thyroid:[], custom:[] };
+  order.tests.forEach(function (name) {
+    const row = Object.assign({}, getLabTestMeta(name), order.results[normalizeLabTestName(name)] || {});
+    grouped[row.group || 'custom'].push(row);
+  });
+  const insights = buildLabInsights(order);
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{margin:0;padding:0;box-sizing:border-box;print-color-adjust:exact;-webkit-print-color-adjust:exact}body{font-family:Arial,sans-serif;font-size:10.8px;color:#111;padding:18mm 10mm 16mm}@page{size:A4 portrait;margin:0}.header{margin-bottom:10mm}.header img,.footer img{width:100%;height:auto;display:block}.pt-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;background:#f3f4f6;border:1px solid #d8dde6;border-radius:8px;padding:8px 10px;margin-bottom:10px}.pt-lbl{font-size:8.5px;color:#666;font-weight:700;text-transform:uppercase}.section-hd{font-size:11px;font-weight:900;color:#222;text-transform:uppercase;letter-spacing:.5px;margin:12px 0 0;padding:6px 8px;background:#efefef;border-left:4px solid #555}.insights{margin:10px 0;padding:8px 10px;border:1px solid #d8dde6;border-radius:8px;background:#fafafa;font-size:10.5px;line-height:1.55}table{width:100%;border-collapse:collapse;margin-top:8px}thead th{background:#555;color:#fff;padding:6px 8px;text-align:left;font-size:9px;font-weight:800;text-transform:uppercase}td{padding:6px 8px;border:1px solid #e3e3e3;font-size:10.2px}tr:nth-child(even){background:#fbfbfb}.flag-h{color:#b42318;font-weight:900}.flag-l{color:#c26d00;font-weight:900}.flag-n{color:#166534;font-weight:800}.footer{position:fixed;left:0;right:0;bottom:0;padding:0 10mm 6mm}.signs{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:18px}.signline{border-bottom:1px solid #333;height:28px;margin-bottom:4px}.small{font-size:9px;color:#666}</style></head><body>
+${headerSrc ? `<div class="header"><img src="${headerSrc}" alt="Header"></div>` : `<div class="header" style="font-size:18px;font-weight:900;color:#222;margin-bottom:10mm">Baweja Multispeciality Hospital</div>`}
 <div class="pt-bar">
-  <div><div class="pt-lbl">Patient</div><div style="font-weight:900">${g('lab-rpt-name')}</div></div>
-  <div><div class="pt-lbl">BMSH ID</div><div style="font-family:monospace;color:#1A3C6E;font-weight:700">${g('lab-rpt-id')}</div></div>
-  <div><div class="pt-lbl">Age/Sex</div><div style="font-weight:700">${g('lab-rpt-age')}</div></div>
-  <div><div class="pt-lbl">Ref. Doctor</div><div style="font-weight:700">${g('lab-rpt-dr')}</div></div>
-  <div><div class="pt-lbl">Date</div><div style="font-weight:700">${today}</div></div>
-  <div><div class="pt-lbl">Lab Technician</div><div style="font-weight:700">${g('lab-rpt-tech')}</div></div>
+  <div><div class="pt-lbl">Patient</div><div style="font-weight:900">${escapeHtmlConsent(order.patient || pt.name || '—')}</div></div>
+  <div><div class="pt-lbl">BMSH ID</div><div style="font-family:monospace;color:#222;font-weight:700">${escapeHtmlConsent(order.bmhId || pt.bmhId || '—')}</div></div>
+  <div><div class="pt-lbl">Age/Sex</div><div style="font-weight:700">${escapeHtmlConsent(formatLabAgeSex(pt))}</div></div>
+  <div><div class="pt-lbl">Ref. Doctor</div><div style="font-weight:700">${escapeHtmlConsent(order.dr || pt.assignedDoctor || pt.doctor || '—')}</div></div>
+  <div><div class="pt-lbl">Report Date</div><div style="font-weight:700">${escapeHtmlConsent(formatDateIN(order.completedAt || order.date || new Date()))}</div></div>
+  <div><div class="pt-lbl">Lab Technician</div><div style="font-weight:700">${escapeHtmlConsent(order.tech || '—')}</div></div>
 </div>
-${['haem','bio','diab','thyroid'].map(p=>{
-  const rows=document.querySelectorAll('#lab-'+p+' > div');
-  if(!rows.length)return'';
-  const pName={'haem':'Haematology','bio':'Biochemistry','diab':'Diabetes','thyroid':'Thyroid'}[p];
-  return '<div class="section-hd">'+pName+'</div><table><thead><tr><th>Test</th><th>Value</th><th>Unit</th><th>Normal Range</th><th>Flag</th></tr></thead><tbody>'+
-    Array.from(rows).map(r=>{
-      const inps=r.querySelectorAll('input');
-      const spns=r.querySelectorAll('span.badge');
-      const name=r.querySelector('span')?.textContent||'';
-      const val=inps[0]?.value||'—';
-      const flag=spns[spns.length-1]?.textContent||'—';
-      return '<tr><td style="font-weight:700">'+name+'</td><td style="font-weight:800;color:'+(flag==='HIGH'?'#CC0000':flag==='LOW'?'#FF9500':'#1a8c3c')+'">'+val+'</td><td></td><td></td><td class="'+(flag==='HIGH'?'flag-h':flag==='LOW'?'flag-l':'')+'">'+flag+'</td></tr>';
-    }).join('')+'</tbody></table>';
+${insights.length ? `<div class="insights"><div style="font-weight:900;margin-bottom:4px;color:#333">Laboratory insights</div>${insights.map(function (x) { return '<div>• ' + escapeHtmlConsent(x) + '</div>'; }).join('')}${order.comments ? '<div style="margin-top:6px"><b>Comment:</b> ' + escapeHtmlConsent(order.comments) + '</div>' : ''}</div>` : (order.comments ? `<div class="insights"><div style="font-weight:900;margin-bottom:4px;color:#333">Laboratory note</div>${escapeHtmlConsent(order.comments)}</div>` : '')}
+${Object.keys(groups).map(function (key) {
+  const rows = grouped[key] || [];
+  if (!rows.length) return '';
+  return '<div class="section-hd">' + groups[key] + '</div><table><thead><tr><th>Test</th><th>Value</th><th>Unit</th><th>Normal Range</th><th>Flag</th></tr></thead><tbody>' + rows.map(function (row) {
+    const flag = String(row.flag || '—');
+    const cls = flag === 'HIGH' ? 'flag-h' : flag === 'LOW' ? 'flag-l' : 'flag-n';
+    return '<tr><td style="font-weight:700">' + escapeHtmlConsent(row.name || '') + '</td><td class="' + cls + '">' + escapeHtmlConsent(row.val || '—') + '</td><td>' + escapeHtmlConsent(row.unit || '') + '</td><td>' + escapeHtmlConsent(row.range || '') + '</td><td class="' + cls + '">' + escapeHtmlConsent(flag || '—') + '</td></tr>';
+  }).join('') + '</tbody></table>';
 }).join('')}
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:20px">
-  <div><div style="border-bottom:1px solid #333;margin-top:28px"></div><div style="font-size:9px;color:#888;margin-top:3px">Lab Technician Signature</div></div>
-  <div style="text-align:right"><div style="font-size:11px;font-weight:900;color:#1A3C6E">Baweja Multispeciality Hospital</div><div style="border-bottom:1px solid #333;margin-top:28px"></div><div style="font-size:9px;color:#888;margin-top:3px">Authorised Signatory</div></div>
+<div class="signs">
+  <div><div class="signline"></div><div class="small">Lab Technician Signature</div></div>
+  <div><div class="signline"></div><div class="small">Authorised Signatory</div></div>
 </div>
-<div style="margin-top:12px;padding:7px;background:#f2f4f8;border-radius:6px;font-size:9px;color:#888;text-align:center">This report is generated electronically · Queries: 8146622802 / 6280048805</div>
+<div class="footer">${footerSrc ? `<img src="${footerSrc}" alt="Footer">` : `<div class="small" style="text-align:center">Baweja Multispeciality Hospital · This report is computer generated.</div>`}</div>
 </body></html>`;
   safePrint(html);
   showToast('Lab report sent to printer ✓','s');
@@ -15595,26 +15770,26 @@ window.printUnifiedRx = function(deptId) {
 body{font-family:'Lato',Georgia,serif;font-size:9.9px;color:#1a1a1a;background:#fff;padding:5.5mm 9mm;line-height:1.32}
 @page{size:A4 portrait;margin:0}
 .lh-img{width:100%;max-width:100%;height:auto;display:block;margin-bottom:10px}
-.pt-line{display:flex;align-items:baseline;justify-content:space-between;border-bottom:2px solid #1A3C6E;padding-bottom:5px;margin-bottom:6px}
-.pt-name{font-family:'Playfair Display','Georgia',serif;font-size:16px;font-weight:700;color:#1A3C6E;letter-spacing:.2px}
+.pt-line{display:flex;align-items:baseline;justify-content:space-between;border-bottom:2px solid #444;padding-bottom:5px;margin-bottom:6px}
+.pt-name{font-family:'Playfair Display','Georgia',serif;font-size:16px;font-weight:700;color:#222;letter-spacing:.2px}
 .pt-meta{font-size:11px;font-weight:300;color:#444;margin-left:8px;font-style:italic}
 .pt-date{font-size:10px;color:#555;font-weight:400}
 .lbl-row{display:flex;gap:0;margin-bottom:4px;align-items:baseline}
-.lbl{font-size:9.2px;font-weight:700;text-transform:uppercase;min-width:104px;letter-spacing:.6px;color:#1A3C6E}
+.lbl{font-size:9.2px;font-weight:700;text-transform:uppercase;min-width:104px;letter-spacing:.6px;color:#333}
 .lbl-val{font-size:10.3px;color:#222}
-.sec-title{font-family:'Playfair Display','Georgia',serif;font-size:11px;font-weight:700;color:#1A3C6E;margin:9px 0 5px;border-bottom:1.5px solid #1A3C6E;padding-bottom:2px;letter-spacing:.2px}
+.sec-title{font-family:'Playfair Display','Georgia',serif;font-size:11px;font-weight:700;color:#222;margin:9px 0 5px;border-bottom:1.5px solid #555;padding-bottom:2px;letter-spacing:.2px}
 table{width:100%;border-collapse:collapse;font-size:9.8px;margin-bottom:7px}
-th{background:#1A3C6E;color:#fff;border:1px solid #1A3C6E;padding:4px 6px;font-weight:700;text-align:center;font-size:8.9px;letter-spacing:.35px;text-transform:uppercase}
+th{background:#5a5a5a;color:#fff;border:1px solid #5a5a5a;padding:4px 6px;font-weight:700;text-align:center;font-size:8.9px;letter-spacing:.35px;text-transform:uppercase}
 td{border:1px solid #c8d0dc;padding:4px 6px;text-align:center;vertical-align:top}
 td.left{text-align:left}
 tr:nth-child(even) td{background:#f8f9fc}
-.rx-name{font-weight:700;font-size:10.8px;color:#1A3C6E;letter-spacing:.1px}
+.rx-name{font-weight:700;font-size:10.8px;color:#222;letter-spacing:.1px}
 .rx-gen{font-size:8.8px;color:#666;font-style:italic;margin-top:1px}
-.rx-instr{font-size:9.4px;color:#222;margin-top:4px;padding:4px 7px;background:#f0f4ff;border-left:3px solid #1A3C6E;border-radius:0 4px 4px 0;line-height:1.4}
+.rx-instr{font-size:9.4px;color:#222;margin-top:4px;padding:4px 7px;background:#f2f2f2;border-left:3px solid #666;border-radius:0 4px 4px 0;line-height:1.4}
 .proc-item{padding:4px 0;font-size:12.5px;font-weight:800;border-bottom:1px solid #eee;display:flex;align-items:center;gap:8px}
-.fu-box{background:linear-gradient(135deg,#EBF3FF,#daeeff);border-radius:6px;padding:7px 14px;margin:8px 0;font-size:11.5px;font-weight:700;color:#1A3C6E;display:inline-block;border:1.5px solid rgba(26,60,110,.2)}
+.fu-box{background:#f2f2f2;border-radius:6px;padding:7px 14px;margin:8px 0;font-size:11.5px;font-weight:700;color:#222;display:inline-block;border:1.5px solid #c7c7c7}
 .sig-row{display:flex;justify-content:space-between;align-items:flex-end;margin-top:18px;padding-top:10px;border-top:1px solid #eee}
-.dr-name{font-family:'Playfair Display','Georgia',serif;font-size:14px;font-weight:700;color:#1A3C6E}
+.dr-name{font-family:'Playfair Display','Georgia',serif;font-size:14px;font-weight:700;color:#222}
 .dr-deg{font-size:10px;color:#444;margin-top:2px;font-style:italic}
 .dr-spec{font-size:11px;font-weight:700;color:#333;margin-top:2px}
 .dr-reg{font-size:9px;color:#888;margin-top:2px}
@@ -15622,7 +15797,7 @@ tr:nth-child(even) td{background:#f8f9fc}
 .flag-h{color:#CC0000;font-weight:700}
 .flag-n{color:#1a8c3c;font-weight:600}
 .watermark{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-30deg);font-size:80px;font-weight:900;color:rgba(26,60,110,.04);font-family:'Playfair Display','Georgia',serif;white-space:nowrap;pointer-events:none;z-index:0}
-.diag-banner{margin:0 auto 7px;max-width:96%;padding:4px 10px;border:1px solid rgba(26,60,110,.18);border-radius:999px;background:#f7faff;text-align:center;font-size:9.6px;font-weight:700;color:#1A3C6E}
+.diag-banner{margin:0 auto 7px;max-width:96%;padding:4px 10px;border:1px solid #d0d0d0;border-radius:999px;background:#f5f5f5;text-align:center;font-size:9.6px;font-weight:700;color:#222}
 </style></head><body>
 
 ${lhImgSrc ? `<img src="${lhImgSrc}" class="lh-img" alt="Baweja Multispeciality Hospital">` : '<div style="height:80px;background:#f2f4f8;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#888;font-size:13px;margin-bottom:10px">Baweja Multispeciality Hospital Letterhead</div>'}
@@ -15639,7 +15814,7 @@ ${dxList.length ? `<div class="diag-banner">${dxList.join(' · ')}</div>` : ''}
 
 ${ptMob ? `<div class="phone-line">&#9990; ${ptMob} &nbsp;&nbsp;|&nbsp;&nbsp; BMSH ID: ${ptId}</div>` : `<div class="phone-line">BMSH ID: ${ptId}</div>`}
 
-${postSurgeryRx ? `<div class="lbl-row" style="margin:4px 0 7px"><span class="lbl"></span><span class="lbl-val" style="font-weight:800;color:#1A3C6E">The medication schedule after surgery</span></div>` : ''}
+${postSurgeryRx ? `<div class="lbl-row" style="margin:4px 0 7px"><span class="lbl"></span><span class="lbl-val" style="font-weight:800;color:#222">The medication schedule after surgery</span></div>` : ''}
 
 ${incCC && cc ? `<div class="lbl-row" style="margin-top:8px"><span class="lbl">Complaints:</span><span class="lbl-val">${cc}${ccDur?' ('+ccDur+')':''}</span></div>` : ''}
 ${deptId==='obg' && obgIncComplaint && obgComplaint ? `<div class="lbl-row" style="margin-top:8px"><span class="lbl">Primary Complaint:</span><span class="lbl-val">${escapeHtmlConsent(obgComplaint)}</span></div>` : ''}
@@ -15714,7 +15889,7 @@ ${incRxFinal && drugs.length ? `
   </tbody>
 </table>` : rxEmptyNote}
 
-${incAdvFinal && adviceHtml ? `<div style="margin:8px 0"><div class="lbl" style="margin-bottom:4px">Instructions</div><div class="lbl-val" style="display:block;line-height:1.6;padding:6px 8px;background:#f7faff;border-left:3px solid #1A3C6E;border-radius:0 6px 6px 0">${adviceHtml}</div></div>` : ''}
+${incAdvFinal && adviceHtml ? `<div style="margin:8px 0"><div class="lbl" style="margin-bottom:4px">Instructions</div><div class="lbl-val" style="display:block;line-height:1.6;padding:6px 8px;background:#f2f2f2;border-left:3px solid #666;border-radius:0 6px 6px 0">${adviceHtml}</div></div>` : ''}
 
 ${incPrcFinal && procs.length ? `
 <div class="sec-title">Procedure / Surgery Advised:</div>
@@ -16918,9 +17093,8 @@ function saveLabOrderToFirebase(order) {
 
 function listenLabOrders() {
   fbOn('labOrders', data => {
-    if(!data) return;
     LAB_ORDERS.length = 0;
-    Object.values(data).forEach(o => LAB_ORDERS.push(o));
+    if(data) Object.values(data).forEach(o => LAB_ORDERS.push(o));
     renderLabOrders && renderLabOrders();
   });
 }
@@ -20464,10 +20638,11 @@ function buildQTableRow(p, sno, opts) {
   const nmEsc = (p.name||'').replace(/'/g,"\\'");
   const docShort = (p.assignedDoctor || p.doctor || '—').replace(/^Dr\.\s*/,'');
   const vulnBadge = vuln ? '<span class="q-vuln-badge" title="Vulnerable — elderly (≥65) or flagged">⚠ VUL</span>' : '';
+  const labReadyBadge = patientHasUnreadLabResults(p) ? '<span style="display:inline-flex;align-items:center;gap:4px;padding:1px 6px;border-radius:999px;background:#eafaf1;color:#166534;border:1px solid rgba(22,101,52,.25);font-size:9px;font-weight:900;animation:pulse 1.2s infinite">🧪 Results Ready</span>' : '';
   return `<tr class="${vuln ? 'row-vulnerable' : ''}" onclick="${onRow}" style="cursor:pointer;${dilLongWait?'animation:pulse 1.45s infinite;':''}">
     <td style="font-weight:900;color:var(--g2);font-size:12.5px">${sno}</td>
     <td><div style="display:flex;align-items:center;gap:6px"><span style="width:28px;height:28px;border-radius:50%;background:${p.color||'#1A3C6E'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:900;font-size:10px;flex-shrink:0">${p.initials||p.name[0]||'?'}</span>
-      <div><div style="font-weight:800;font-size:15px;line-height:1.05;display:flex;align-items:center;flex-wrap:nowrap;gap:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}${vulnBadge}</div>
+      <div><div style="font-weight:800;font-size:15px;line-height:1.05;display:flex;align-items:center;flex-wrap:nowrap;gap:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}${vulnBadge}${labReadyBadge}</div>
       <div style="font-size:11px;color:var(--g1)">${p.age||'?'}Y · ${(p.sex||'?')[0]} · ${p.mob||'—'}</div>${chargeHint?`<div style="margin-top:2px">${chargeHint}</div>`:''}</div></div></td>
     <td style="font-family:var(--mono);font-size:12px;color:var(--bmh-teal);font-weight:800;white-space:nowrap">${p.bmhId}</td>
     <td><span style="font-size:10px;padding:2px 6px;border-radius:6px;background:${deptColor}22;color:${deptColor};font-weight:800">${deptLabel}</span></td>
