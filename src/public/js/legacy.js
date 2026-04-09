@@ -2250,14 +2250,16 @@ function setLang(lang, btn) {
 function addRxDrug() {
   RX_DRUGS.push({name:'New Drop / Drug',brand:'',eye:['OU'],freq:'',dur:'',lang:{en:'Enter instructions…',hi:'',pa:''}});
   renderRxDrugs();
+  scheduleActiveClinicRxAutosave();
   showToast('Drug added — edit name and instructions ✓','s');
 }
-function removeDrug(i) { RX_DRUGS.splice(i,1); renderRxDrugs(); }
+function removeDrug(i) { RX_DRUGS.splice(i,1); renderRxDrugs(); scheduleActiveClinicRxAutosave(); }
 function toggleEye(drugIdx, eye, el) {
   const d = RX_DRUGS[drugIdx]; if (!d) return;
   if (d.eye.includes(eye)) d.eye = d.eye.filter(e=>e!==eye);
   else d.eye.push(eye);
   renderRxDrugs();
+  scheduleActiveClinicRxAutosave();
 }
 
 // ═══════════════════════════════════════
@@ -14522,6 +14524,7 @@ function safePrint(html) {
 }
 
 const _visitAutosaveTimers = {};
+const _rxAutosaveTimers = {};
 function getDeptKeyFromAutosaveElement(el) {
   const page = el?.closest?.('.page');
   const pageId = page?.id || '';
@@ -14544,6 +14547,20 @@ function scheduleVisitAutosaveFromElement(el) {
   _visitAutosaveTimers[dept] = setTimeout(function () {
     saveVisit(dept, { silent: true, autosave: true });
   }, 1200);
+}
+function scheduleActiveClinicRxAutosave() {
+  if (window._suspendVisitAutosave) return;
+  const pageId = document.querySelector('.page.active')?.id || '';
+  const deptMap = { 'pg-ophtho':'ophtho', 'pg-obg':'obg', 'pg-psych':'psych', 'pg-skin':'skin' };
+  const dept = deptMap[pageId] || '';
+  if (!dept) return;
+  const uidMap = { ophtho:'ophtho-pt-uid', obg:'obg-pt-uid', psych:'psych-pt-uid', skin:'skin-pt-uid' };
+  const bmhId = document.getElementById(uidMap[dept])?.textContent?.trim();
+  if (!bmhId || bmhId === '—') return;
+  clearTimeout(_rxAutosaveTimers[dept]);
+  _rxAutosaveTimers[dept] = setTimeout(function () {
+    saveVisit(dept, { silent: true, autosave: true });
+  }, 900);
 }
 
 // ─── RX QUICK SEARCH ─────────────
@@ -14640,6 +14657,7 @@ function addRxFromQuick() {
   computeRxEndAndTaperDates(RX_DRUGS[RX_DRUGS.length - 1]);
 
   renderRxDrugs();
+  scheduleActiveClinicRxAutosave();
   const inp2 = getActiveRxQuickSearchInput();
   if (inp2) { inp2.value = ''; try { inp2.focus(); } catch (e) { /* noop */ } }
   rxQuickSelectedDrug = null;
@@ -14754,6 +14772,7 @@ function renderRxDrugs() {
       </div>`;
     }).join('')}
   </div>`;
+  scheduleActiveClinicRxAutosave();
 }
 function computeRxInteractionAlerts() {
   const alerts = [];
@@ -15737,6 +15756,11 @@ function buildRxPlainInstructionLine(d, lang, fmtIN) {
 
 // ─── UPDATED printUnifiedRx with doctor degrees + safePrint ─────────────
 window.printUnifiedRx = function(deptId) {
+  const saveDeptMap = { oe:'ophtho', ophtho:'ophtho', obg:'obg', psych:'psych', skin:'skin' };
+  const saveDept = saveDeptMap[deptId] || '';
+  if (saveDept) {
+    try { saveVisit(saveDept, { silent: true, autosave: true }); } catch (e) { console.warn('rx pre-print save failed', e); }
+  }
   const today = formatDateIN(new Date());
   const rxDateOe = document.getElementById('rx-date');
   if (rxDateOe) rxDateOe.textContent = today;
