@@ -9581,9 +9581,12 @@ function renderInvestigationChooser() {
       return true;
     });
   };
+  const labDefaults = DEFAULT_ZERO_CHARGE_LAB_ROWS.map(function (row) { return [row.name, 0]; });
   const labRows = dedupe((CHARGES_DATA || []).filter(function (row) {
-    return String(row?.cat || '').toLowerCase() === 'lab';
-  }).map(function (row) { return [row.name, 0]; }));
+    return String(row?.cat || '').toLowerCase() === 'lab' || String(row?.kind || '').toLowerCase() === 'lab';
+  }).map(function (row) { return [normalizeInvestigationLabel(row.name), 0]; }).concat(labDefaults)).sort(function (a, b) {
+    return String(a[0] || '').localeCompare(String(b[0] || ''));
+  });
   const diagRows = dedupe((CHARGES_DATA || []).filter(function (row) {
     const cat = String(row?.cat || '').toLowerCase();
     const name = String(row?.name || '');
@@ -11630,8 +11633,8 @@ function updateExistingPatientFromReceptionForm(bmhId) {
   if (!uid || !/^BMSH-/.test(uid)) { showToast('Load a patient first (prefill or search)', 'w'); return; }
   const p = PATIENTS.find(function (x) { return x.bmhId === uid; });
   if (!p) { showToast('Patient not found', 'w'); return; }
-  const fn = (document.getElementById('rc-fn')?.value || '').trim();
-  const ln = (document.getElementById('rc-ln')?.value || '').trim();
+  const fn = normalizeReceptionFieldValue('rc-fn', document.getElementById('rc-fn')?.value || '');
+  const ln = normalizeReceptionFieldValue('rc-ln', document.getElementById('rc-ln')?.value || '');
   const mob = (document.getElementById('rc-mob-inp')?.value || document.getElementById('rc-mob')?.value || '').trim();
   const dob = document.getElementById('rc-dob')?.value || '';
   const age = document.getElementById('rc-age')?.value || '';
@@ -11639,10 +11642,10 @@ function updateExistingPatientFromReceptionForm(bmhId) {
   const dept = document.getElementById('rc-dept')?.value || 'ophtho';
   const dr = document.getElementById('rc-dr')?.value || '';
   const centre = document.getElementById('rc-centre')?.value || CURRENT_USER?.centre || 'CHD';
-  const addr = document.getElementById('rc-addr')?.value || '';
+  const addr = normalizeReceptionFieldValue('rc-addr', document.getElementById('rc-addr')?.value || '');
   const mob2 = document.getElementById('rc-mob2')?.value?.trim() || '';
   const email = document.getElementById('rc-email')?.value?.trim() || '';
-  const rel = document.getElementById('rc-rel')?.value || '';
+  const rel = normalizeReceptionFieldValue('rc-rel', document.getElementById('rc-rel')?.value || '');
   if (!fn) { showToast('Please enter patient first name', 'w'); return; }
   const name = toTitleCaseName((fn + ' ' + ln).trim());
   p.name = name;
@@ -11679,8 +11682,8 @@ async function registerPatient() {
     return;
   }
   /* existingPt is false — continue with new registration using reserved ID */
-  const fn  = (document.getElementById('rc-fn')?.value  || '').trim();
-  const ln  = (document.getElementById('rc-ln')?.value  || '').trim();
+  const fn  = normalizeReceptionFieldValue('rc-fn', document.getElementById('rc-fn')?.value  || '');
+  const ln  = normalizeReceptionFieldValue('rc-ln', document.getElementById('rc-ln')?.value  || '');
   const mob = (document.getElementById('rc-mob-inp')?.value || document.getElementById('rc-mob')?.value || '').trim();
   const dob = document.getElementById('rc-dob')?.value || '';
   const age = document.getElementById('rc-age')?.value || '';
@@ -11688,10 +11691,10 @@ async function registerPatient() {
   const dept= document.getElementById('rc-dept')?.value || 'ophtho';
   const dr  = document.getElementById('rc-dr')?.value   || '';
   const centre = document.getElementById('rc-centre')?.value || CURRENT_USER?.centre || 'CHD';
-  const addr= document.getElementById('rc-addr')?.value || '';
+  const addr= normalizeReceptionFieldValue('rc-addr', document.getElementById('rc-addr')?.value || '');
   const noFee = document.getElementById('rc-no-fee')?.checked;
   const advAmt = parseFloat(document.getElementById('rc-advance-amt')?.value)||0;
-  const advPurpose = (document.getElementById('rc-advance-purpose')?.value||'').trim();
+  const advPurpose = normalizeReceptionFieldValue('rc-advance-purpose', document.getElementById('rc-advance-purpose')?.value||'');
 
   if(!fn) { showToast('Please enter patient first name','w'); return; }
 
@@ -11703,7 +11706,7 @@ async function registerPatient() {
   const colors = ['#1A3C6E','#0B7B8C','#FF2D55','#AF52DE','#34C759','#FF9500','#5856D6','#FF3B30'];
   const color = colors[Math.floor(Math.random()*colors.length)];
 
-  const purposeVal = document.getElementById('rc-purpose')?.value||'New Consultation';
+  const purposeVal = normalizeReceptionFieldValue('rc-purpose', document.getElementById('rc-purpose')?.value||'New Consultation');
   const isPreReg = purposeVal==='Need to Check In' || purposeVal==='Not Checked In';
   const mob2  = document.getElementById('rc-mob2')?.value?.trim() || '';
   const email = document.getElementById('rc-email')?.value?.trim() || '';
@@ -11738,9 +11741,9 @@ async function registerPatient() {
   let fee = parseFloat(document.getElementById('rc-fee')?.value || getReceptionConsultationRate(centre) || 0) || 0;
   if(noFee) fee = 0;
   const payMode = document.getElementById('rc-pay-mode')?.value||'Cash';
-  const purpose = document.getElementById('rc-purpose')?.value||'New Consultation';
+  const purpose = normalizeReceptionFieldValue('rc-purpose', document.getElementById('rc-purpose')?.value||'New Consultation');
   const refType = document.getElementById('rc-ref-type')?.value || '';
-  const refName = document.getElementById('rc-ref-name')?.value?.trim() || '';
+  const refName = normalizeReceptionFieldValue('rc-ref-name', document.getElementById('rc-ref-name')?.value?.trim() || '');
   const refMobile = document.getElementById('rc-ref-mobile')?.value?.trim() || '';
   const insName = document.getElementById('rc-ins-name')?.value||'';
   patient.checkinAt = Date.now();
@@ -12024,10 +12027,32 @@ function renderCustomPurposeList() {
         const safe = String(val).replace(/'/g, "\\'");
         return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 9px;background:var(--g6);border-radius:8px;margin-top:6px;font-size:12px">'
           + '<div style="font-weight:700;flex:1;min-width:0">' + String(val).replace(/</g, '&lt;') + '</div>'
+          + '<button type="button" class="btn btn-xs btn-outline" onclick="editPurposeOption(\'' + safe + '\')">✏️ Edit</button>'
           + '<button type="button" class="btn btn-xs btn-gray" onclick="deletePurposeOption(\'' + safe + '\')">🗑️ Delete</button>'
           + '</div>';
       }).join('')
     : '<div style="font-size:11px;color:var(--g1);padding:6px 0">No custom purposes added yet.</div>';
+}
+function editPurposeOption(val) {
+  const current = String(val || '').trim();
+  if (!current) return;
+  const raw = window.prompt('Edit purpose', current);
+  if (raw === null) return;
+  const next = toDisplayTitleCase(raw);
+  if (!next) return;
+  if (next === current) return;
+  window.CUSTOM_PURPOSES = (window.CUSTOM_PURPOSES || []).map(function (x) {
+    return String(x || '').trim() === current ? next : x;
+  });
+  document.querySelectorAll('#rc-purpose').forEach(function (sel) {
+    Array.from(sel.options).forEach(function (opt) {
+      if (String(opt.textContent || '').trim() === current) opt.textContent = next;
+    });
+  });
+  fbSet && fbSet('settings/customPurposes', window.CUSTOM_PURPOSES);
+  updatePurposeOptions && updatePurposeOptions();
+  renderCustomPurposeList();
+  showToast('Purpose updated ✓', 's');
 }
 function deletePurposeOption(val) {
   const target = String(val || '').trim();
@@ -12049,9 +12074,10 @@ function loadCustomPurposes() {
   if(!window.fbOnce) return;
   fbOnce('settings/customPurposes').then(data=>{
     if(!data || !Array.isArray(data) || !data.length) return;
-    window.CUSTOM_PURPOSES = data.map(toDisplayTitleCase);
+    const normalized = data.map(toDisplayTitleCase);
+    window.CUSTOM_PURPOSES = normalized;
     // Append to every #rc-purpose dropdown currently in the DOM
-    data.forEach(val=>{
+    normalized.forEach(val=>{
       document.querySelectorAll('#rc-purpose').forEach(sel=>{
         if(![...sel.options].some(o=>o.textContent===val)){
           const opt=document.createElement('option'); opt.textContent=val; sel.appendChild(opt);
@@ -12063,6 +12089,8 @@ function loadCustomPurposes() {
     renderCustomPurposeList();
   }).catch(()=>{});
 }
+window.editPurposeOption = editPurposeOption;
+window.deletePurposeOption = deletePurposeOption;
 function filterRcByDept(dept) {
   window._rcDeptFilter = dept;
   renderReceptionPage && renderReceptionPage();
@@ -15870,8 +15898,7 @@ function printLabReport() {
     grouped[row.group || 'custom'].push(row);
   });
   const insights = buildLabInsights(order);
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{margin:0;padding:0;box-sizing:border-box;print-color-adjust:exact;-webkit-print-color-adjust:exact}body{font-family:Arial,sans-serif;font-size:10.8px;color:#111;padding:14mm 12mm 12mm}@page{size:A4 portrait;margin:0}.header{margin-bottom:8mm;padding:10px 12px;border:1.5px solid #cfd5df;border-radius:10px;background:#f9fafb}.header-title{font-size:22px;font-weight:900;letter-spacing:.4px;color:#1f2937}.header-sub{font-size:11px;color:#4b5563;margin-top:3px}.pt-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;background:#f3f4f6;border:1px solid #d8dde6;border-radius:8px;padding:8px 10px;margin-bottom:10px}.pt-lbl{font-size:8.5px;color:#666;font-weight:700;text-transform:uppercase}.section-hd{font-size:11px;font-weight:900;color:#222;text-transform:uppercase;letter-spacing:.5px;margin:12px 0 0;padding:6px 8px;background:#efefef;border-left:4px solid #555}.insights{margin:10px 0;padding:8px 10px;border:1px solid #d8dde6;border-radius:8px;background:#fafafa;font-size:10.5px;line-height:1.55}table{width:100%;border-collapse:collapse;margin-top:8px}thead th{background:#555;color:#fff;padding:6px 8px;text-align:left;font-size:9px;font-weight:800;text-transform:uppercase}td{padding:6px 8px;border:1px solid #e3e3e3;font-size:10.2px;vertical-align:top}tr:nth-child(even){background:#fbfbfb}.flag-h{color:#b42318;font-weight:900}.flag-l{color:#c26d00;font-weight:900}.flag-n{color:#166534;font-weight:800}.footer{margin-top:14px;padding-top:8px;border-top:1px solid #d1d5db}.signs{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:18px}.signline{border-bottom:1px solid #333;height:28px;margin-bottom:4px}.small{font-size:9px;color:#666}</style></head><body>
-<div class="header"><div class="header-title">Laboratory Report</div><div class="header-sub">Processed by outsourced laboratory partner. Result interpretation should always be correlated clinically by the treating doctor.</div></div>
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{margin:0;padding:0;box-sizing:border-box;print-color-adjust:economy;-webkit-print-color-adjust:economy}body{font-family:Arial,sans-serif;font-size:10.8px;color:#111;padding:0 12mm 12mm;background:#fff}@page{size:A4 portrait;margin:40mm 12mm 12mm}.pt-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;border:1px solid #9ca3af;border-radius:8px;padding:8px 10px;margin-bottom:10px;background:#fff}.pt-lbl{font-size:8.5px;color:#555;font-weight:700;text-transform:uppercase;letter-spacing:.3px}.section-hd{font-size:10.8px;font-weight:900;color:#111;text-transform:uppercase;letter-spacing:.5px;margin:11px 0 0;padding:6px 8px;background:#ececec;border-left:4px solid #666}.insights{margin:10px 0;padding:8px 10px;border:1px solid #bdbdbd;border-radius:8px;background:#f7f7f7;font-size:10.3px;line-height:1.52}table{width:100%;border-collapse:collapse;margin-top:8px}thead th{background:#666;color:#fff;padding:6px 8px;text-align:left;font-size:9px;font-weight:800;text-transform:uppercase}td{padding:6px 8px;border:1px solid #d7d7d7;font-size:10.1px;vertical-align:top}tr:nth-child(even){background:#fafafa}.flag-h{color:#111;font-weight:900;background:#e7e7e7}.flag-l{color:#111;font-weight:900;background:#f1f1f1}.flag-n{color:#111;font-weight:800}.footer{margin-top:14px;padding-top:8px;border-top:1px solid #c7c7c7}.signs{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:18px}.signline{border-bottom:1px solid #333;height:28px;margin-bottom:4px}.small{font-size:9px;color:#555}</style></head><body>
 <div class="pt-bar">
   <div><div class="pt-lbl">Patient</div><div style="font-weight:900">${escapeHtmlConsent(order.patient || pt.name || '—')}</div></div>
   <div><div class="pt-lbl">BMSH ID</div><div style="font-family:monospace;color:#222;font-weight:700">${escapeHtmlConsent(order.bmhId || pt.bmhId || '—')}</div></div>
@@ -16585,6 +16612,12 @@ function toTitleCaseName(value) {
     })
     .join(' ');
 }
+function normalizeInvestigationLabel(value) {
+  const raw = String(value || '').trim().replace(/\s+/g, ' ');
+  if (!raw) return '';
+  if (!/[a-z]/.test(raw) && /[A-Z]/.test(raw)) return raw;
+  return toDisplayTitleCase(raw);
+}
 function toDisplayTitleCase(value) {
   return String(value || '')
     .trim()
@@ -16600,6 +16633,30 @@ function toDisplayTitleCase(value) {
       }).join('');
     })
     .join(' ');
+}
+function normalizeReceptionFieldValue(id, value) {
+  const raw = String(value || '').trim().replace(/\s+/g, ' ');
+  if (!raw) return '';
+  const fieldId = String(id || '');
+  if (fieldId === 'rc-fn' || fieldId === 'rc-ln' || fieldId === 'upd-fn' || fieldId === 'upd-ln') return toTitleCaseName(raw);
+  if (/purpose|addr|rel|ref-name|advance-purpose/i.test(fieldId)) return toDisplayTitleCase(raw);
+  return raw;
+}
+function bindReceptionTitleCaseFields() {
+  if (window._bmhReceptionTitleCaseBound) return;
+  window._bmhReceptionTitleCaseBound = true;
+  const ids = [
+    'rc-fn','rc-ln','rc-addr','rc-rel','rc-ref-name','rc-advance-purpose','new-purpose-inp',
+    'upd-fn','upd-ln','upd-addr','upd-rel','upd-ref-name'
+  ];
+  const apply = function (e) {
+    const el = e && e.target;
+    if (!el || !ids.includes(el.id)) return;
+    const next = normalizeReceptionFieldValue(el.id, el.value);
+    if (next !== el.value) el.value = next;
+  };
+  document.addEventListener('change', apply, true);
+  document.addEventListener('blur', apply, true);
 }
 function computePatientInitials(name) {
   return String(name || '')
@@ -17341,11 +17398,11 @@ const CHARGES_DATA = [
   {cat:'Skin',   name:'Botox Injection',                 chd:8000, rpr:7000},
   {cat:'Skin',   name:'Dermal Filler',                   chd:12000,rpr:10000},
   {cat:'Skin',   name:'Laser Hair Removal',              chd:5000, rpr:4500},
-  {cat:'Lab',    name:'CBC / Complete Blood Count',      chd:400,  rpr:350},
-  {cat:'Lab',    name:'HbA1c',                           chd:600,  rpr:500},
-  {cat:'Lab',    name:'Lipid Profile',                   chd:700,  rpr:600},
-  {cat:'Lab',    name:'Thyroid Profile (T3/T4/TSH)',     chd:800,  rpr:700},
-  {cat:'Lab',    name:'Urine Routine & Microscopy',      chd:200,  rpr:180},
+  {cat:'Lab',    name:'CBC / Complete Blood Count',      chd:0,  rpr:0},
+  {cat:'Lab',    name:'HbA1c',                           chd:0,  rpr:0},
+  {cat:'Lab',    name:'Lipid Profile',                   chd:0,  rpr:0},
+  {cat:'Lab',    name:'Thyroid Profile (T3/T4/TSH)',     chd:0,  rpr:0},
+  {cat:'Lab',    name:'Urine Routine & Microscopy',      chd:0,  rpr:0},
   {cat:'Eye Sx', name:'DCR (Lacrimal)',                  chd:52000, rpr:45000},
   {cat:'Eye Sx', name:'Squint / Strabismus Surgery',     chd:35000, rpr:30000},
   {cat:'Eye Sx', name:'Ptosis Repair',                   chd:28000, rpr:24000},
@@ -17359,9 +17416,42 @@ const CHARGES_DATA = [
   {cat:'Psych',  name:'Psychology Testing',              chd:3500,  rpr:3000},
   {cat:'Skin',   name:'Patch Test (Contact Dermatitis)', chd:3500,  rpr:3000},
   {cat:'Skin',   name:'Excision Biopsy (Small)',         chd:4500,  rpr:3800},
-  {cat:'Lab',    name:'LFT / Liver Function',            chd:900,   rpr:750},
-  {cat:'Lab',    name:'Renal Function Test',             chd:650,   rpr:550},
-  {cat:'Lab',    name:'Vitamin D / B12',                 chd:1200,  rpr:1000},
+  {cat:'Lab',    name:'LFT / Liver Function',            chd:0,   rpr:0},
+  {cat:'Lab',    name:'Renal Function Test',             chd:0,   rpr:0},
+  {cat:'Lab',    name:'Vitamin D / B12',                 chd:0,  rpr:0},
+];
+const DEFAULT_ZERO_CHARGE_LAB_ROWS = [
+  {cat:'Lab', kind:'lab', parent:'', name:'CBC / Complete Blood Count', chd:0, rpr:0},
+  {cat:'Lab', kind:'lab', parent:'', name:'HbA1c', chd:0, rpr:0},
+  {cat:'Lab', kind:'lab', parent:'', name:'Lipid Profile', chd:0, rpr:0},
+  {cat:'Lab', kind:'lab', parent:'', name:'Thyroid Profile (T3/T4/TSH)', chd:0, rpr:0},
+  {cat:'Lab', kind:'lab', parent:'', name:'Urine Routine & Microscopy', chd:0, rpr:0},
+  {cat:'Lab', kind:'lab', parent:'', name:'LFT / Liver Function', chd:0, rpr:0},
+  {cat:'Lab', kind:'lab', parent:'', name:'Renal Function Test', chd:0, rpr:0},
+  {cat:'Lab', kind:'lab', parent:'', name:'Vitamin D / B12', chd:0, rpr:0},
+  {cat:'Lab', kind:'lab', parent:'', name:'HIV', chd:0, rpr:0},
+  {cat:'Lab', kind:'lab', parent:'', name:'HBsAg', chd:0, rpr:0},
+  {cat:'Lab', kind:'lab', parent:'', name:'HCV', chd:0, rpr:0},
+  {cat:'Lab', kind:'lab', parent:'', name:'Thyroid Function Test (TFT)', chd:0, rpr:0},
+  {cat:'Lab', kind:'lab', parent:'', name:'Thyroid Stimulating Hormone (TSH)', chd:0, rpr:0},
+  {cat:'Lab', kind:'lab', parent:'', name:'Hemoglobin (Hb)', chd:0, rpr:0},
+  {cat:'Lab', kind:'lab', parent:'', name:'Hemogram (HMG)', chd:0, rpr:0},
+  {cat:'Lab', kind:'lab', parent:'', name:'DOPE Test', chd:0, rpr:0},
+  {cat:'Lab', kind:'lab', parent:'', name:'Follicle Stimulating Hormone (FSH)', chd:0, rpr:0},
+  {cat:'Lab', kind:'lab', parent:'', name:'Prolactin', chd:0, rpr:0},
+  {cat:'Lab', kind:'lab', parent:'', name:'Random Blood Sugar (RBS)', chd:0, rpr:0},
+  {cat:'Lab', kind:'lab', parent:'', name:'Electrolytes', chd:0, rpr:0},
+  {cat:'Lab', kind:'lab', parent:'', name:'Uric Acid', chd:0, rpr:0},
+  {cat:'Lab', kind:'lab', parent:'', name:'Bilirubin', chd:0, rpr:0},
+  {cat:'Lab', kind:'lab', parent:'', name:'VDRL', chd:0, rpr:0},
+  {cat:'Lab', kind:'lab', parent:'', name:'Urine Pregnancy Test (UPT)', chd:0, rpr:0},
+  {cat:'Lab', kind:'lab', parent:'', name:'Coagulogram', chd:0, rpr:0},
+  {cat:'Lab', kind:'lab', parent:'', name:'Widal', chd:0, rpr:0},
+  {cat:'Lab', kind:'lab', parent:'', name:'Malarial Parasite (MP)', chd:0, rpr:0},
+  {cat:'Lab', kind:'lab', parent:'', name:'RA Factor', chd:0, rpr:0},
+  {cat:'Lab', kind:'lab', parent:'', name:'Blood Group', chd:0, rpr:0},
+  {cat:'Lab', kind:'lab', parent:'', name:'Dual Test', chd:0, rpr:0},
+  {cat:'Lab', kind:'lab', parent:'', name:'Pap Smear', chd:0, rpr:0}
 ];
 const CRITICAL_CHARGE_ROWS = [
   {cat:'Eye', kind:'Eye', parent:'', name:'Consultation — Eye', chd:500, rpr:200},
@@ -17382,6 +17472,7 @@ const CRITICAL_CHARGE_ROWS = [
   {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery', name:'Premium Multifocal IOL Implantation', chd:70000, rpr:65000},
   {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery', name:'Premium 1 Piece Preloaded Trifocal IOL Implantation', chd:95000, rpr:85000}
 ];
+CRITICAL_CHARGE_ROWS.push.apply(CRITICAL_CHARGE_ROWS, DEFAULT_ZERO_CHARGE_LAB_ROWS);
 function upsertCriticalChargeRow(row) {
   const idx = CHARGES_DATA.findIndex(function (existing) {
     return String(existing.cat || '') === String(row.cat || '')
@@ -17581,11 +17672,14 @@ window.saveCharges = saveCharges;
 function saveChargeFromModal() {
   const cat = document.getElementById('add-charge-cat')?.value || 'Eye';
   if (!isCurrentUserAdmin() && !canEditChargeCategory(cat)) { showToast('You can edit charges only for your own department', 'w'); return; }
-  const parent = document.getElementById('add-charge-parent')?.value?.trim() || '';
-  const name = document.getElementById('add-charge-name')?.value?.trim();
+  const rawParent = document.getElementById('add-charge-parent')?.value?.trim() || '';
+  const rawName = document.getElementById('add-charge-name')?.value?.trim();
   const kind = document.getElementById('add-charge-kind')?.value || 'procedure';
   const chd = parseInt(document.getElementById('add-charge-chd')?.value || '0', 10) || 0;
   const rpr = parseInt(document.getElementById('add-charge-rpr')?.value || '0', 10) || 0;
+  const isLabCharge = String(cat).toLowerCase() === 'lab' || String(kind).toLowerCase() === 'lab';
+  const parent = isLabCharge ? normalizeInvestigationLabel(rawParent) : rawParent;
+  const name = isLabCharge ? normalizeInvestigationLabel(rawName) : rawName;
   if (!name && !parent) { showToast('Enter a main heading or charge name', 'w'); return; }
   const finalName = name || parent;
   const finalParent = name ? parent : '';
@@ -17661,6 +17755,7 @@ setTimeout(() => {
   if (typeof loadIolCatalogFromStorage === 'function') loadIolCatalogFromStorage();
   if (typeof refreshCustomRxOptionSelects === 'function') refreshCustomRxOptionSelects();
   if (typeof populateReferralDoctorDatalist === 'function') populateReferralDoctorDatalist();
+  if (typeof bindReceptionTitleCaseFields === 'function') bindReceptionTitleCaseFields();
   document.getElementById('add-charge-cat')?.addEventListener('change', refreshChargeModalSuggestions);
 }, 300);
 
@@ -22189,10 +22284,10 @@ function saveUpdatedPatientDetails() {
   const bid = window._editingBmhId;
   if(!bid) { showToast('No patient selected','w'); return; }
   const p = PATIENTS.find(x=>x.bmhId===bid) || (window.CURRENT_PATIENT && window.CURRENT_PATIENT.bmhId === bid ? window.CURRENT_PATIENT : null) || { bmhId: bid };
-  const fn = document.getElementById('upd-fn')?.value?.trim()||'';
-  const ln = document.getElementById('upd-ln')?.value?.trim()||'';
+  const fn = normalizeReceptionFieldValue('upd-fn', document.getElementById('upd-fn')?.value?.trim()||'');
+  const ln = normalizeReceptionFieldValue('upd-ln', document.getElementById('upd-ln')?.value?.trim()||'');
   if(!fn) { showToast('First name is required','w'); return; }
-  const refName = document.getElementById('upd-ref-name')?.value?.trim()||'';
+  const refName = normalizeReceptionFieldValue('upd-ref-name', document.getElementById('upd-ref-name')?.value?.trim()||'');
   const nowIso = new Date().toISOString();
   const updates = {
     name: toTitleCaseName((fn+' '+ln).trim()),
@@ -22203,10 +22298,10 @@ function saveUpdatedPatientDetails() {
     mob: document.getElementById('upd-mob')?.value?.trim()||p.mob||p.mobile||'',
     mob2: document.getElementById('upd-mob2')?.value?.trim()||'',
     email: document.getElementById('upd-email')?.value?.trim()||'',
-    address: document.getElementById('upd-addr')?.value?.trim()||'',
-    addr: document.getElementById('upd-addr')?.value?.trim()||'',
-    relation: document.getElementById('upd-rel')?.value?.trim()||'',
-    rel: document.getElementById('upd-rel')?.value?.trim()||'',
+    address: normalizeReceptionFieldValue('upd-addr', document.getElementById('upd-addr')?.value?.trim()||''),
+    addr: normalizeReceptionFieldValue('upd-addr', document.getElementById('upd-addr')?.value?.trim()||''),
+    relation: normalizeReceptionFieldValue('upd-rel', document.getElementById('upd-rel')?.value?.trim()||''),
+    rel: normalizeReceptionFieldValue('upd-rel', document.getElementById('upd-rel')?.value?.trim()||''),
     refName: refName,
     referredBy: refName || p.referredBy || '',
     updatedAt: nowIso
