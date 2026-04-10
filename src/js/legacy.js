@@ -10610,14 +10610,29 @@ function buildDrugLibrarySeedRows() {
   return seeded;
 }
 
+function stripLeadingDrugQueryPrefix(s) {
+  return String(s || '').replace(/^\?+\s*/, '').trim();
+}
+function normalizeDrugLibrarySnapshot(val) {
+  if (val == null) return [];
+  if (Array.isArray(val)) return val.filter(Boolean);
+  if (typeof val === 'object') {
+    return Object.keys(val).sort().map(function (k) { return val[k]; }).filter(function (row) {
+      return row && typeof row === 'object';
+    });
+  }
+  return [];
+}
 function mergeDrugLibraryRows(primaryRows) {
   const merged = [];
   const pushUnique = function (row) {
     if (!row) return;
-    const trade = String(row.trade || row.brand || row.name || '').trim();
-    const generic = String(row.generic || row.name || row.trade || '').trim();
+    let trade = stripLeadingDrugQueryPrefix(row.trade || row.brand || row.name || '');
+    let generic = stripLeadingDrugQueryPrefix(row.generic || row.name || row.trade || row.brand || '');
     const dept = String(row.dept || 'All').trim();
-    if (!trade || !generic) return;
+    if (!trade && !generic) return;
+    if (!trade) trade = generic;
+    if (!generic) generic = trade;
     const key = [trade.toLowerCase(), generic.toLowerCase(), dept.toLowerCase()].join('|');
     if (merged.some(function (x) {
       return [String(x.trade || '').trim().toLowerCase(), String(x.generic || '').trim().toLowerCase(), String(x.dept || 'All').trim().toLowerCase()].join('|') === key;
@@ -10668,42 +10683,42 @@ function syncDrugDeptDefaults() {
 }
 
 function loadDrugLibraryFromStorage() {
+  let localArr = [];
   try {
     const ls = localStorage.getItem('bmh_drug_library');
     if (ls) {
       const arr = JSON.parse(ls);
-      if (Array.isArray(arr) && arr.length) {
-        DRUG_LIBRARY.length = 0;
-        mergeDrugLibraryRows(arr).forEach(x => DRUG_LIBRARY.push(x));
-      }
+      if (Array.isArray(arr)) localArr = arr.filter(Boolean);
     }
   } catch (e) { /* noop */ }
-  if (!window.FBDB) {
-    if (!DRUG_LIBRARY.length) mergeDrugLibraryRows([]).forEach(x => DRUG_LIBRARY.push(x));
+
+  const applyMergedRows = function (remoteArr, opts) {
+    opts = opts || {};
+    const remote = Array.isArray(remoteArr) ? remoteArr.filter(Boolean) : [];
+    // Clear before merge so buildDrugLibrarySeedRows() does not duplicate the in-memory library
+    DRUG_LIBRARY.length = 0;
+    // Prefer local rows first so a good browser copy wins duplicate-key ties
+    const merged = mergeDrugLibraryRows(localArr.concat(remote));
+    merged.forEach(function (x) { DRUG_LIBRARY.push(x); });
+    try { localStorage.setItem('bmh_drug_library', JSON.stringify(DRUG_LIBRARY)); } catch (e) { /* noop */ }
     renderSettingsDrugs && renderSettingsDrugs();
     rebuildDrugGenericDatalist();
     syncDrugDeptDefaults();
+    if (opts.repairCloud && window.FBDB && DRUG_LIBRARY.length) {
+      window.FBDB.ref('drugLibrary').set(DRUG_LIBRARY).catch(function () {});
+    }
+  };
+
+  if (!window.FBDB) {
+    applyMergedRows([], { repairCloud: false });
     return;
   }
-  window.FBDB.ref('drugLibrary').once('value').then(snap => {
-    const arr = snap.val();
-    if (!Array.isArray(arr) || !arr.length) {
-      if (!DRUG_LIBRARY.length) mergeDrugLibraryRows([]).forEach(x => DRUG_LIBRARY.push(x));
-      renderSettingsDrugs && renderSettingsDrugs();
-      rebuildDrugGenericDatalist();
-      syncDrugDeptDefaults();
-      return;
-    }
-    DRUG_LIBRARY.length = 0;
-    mergeDrugLibraryRows(arr).forEach(x => DRUG_LIBRARY.push(x));
-    renderSettingsDrugs && renderSettingsDrugs();
-    rebuildDrugGenericDatalist();
-    syncDrugDeptDefaults();
-  }).catch(() => {
-    if (!DRUG_LIBRARY.length) mergeDrugLibraryRows([]).forEach(x => DRUG_LIBRARY.push(x));
-    renderSettingsDrugs && renderSettingsDrugs();
-    rebuildDrugGenericDatalist();
-    syncDrugDeptDefaults();
+  window.FBDB.ref('drugLibrary').once('value').then(function (snap) {
+    const remoteArr = normalizeDrugLibrarySnapshot(snap.val());
+    const repairCloud = !remoteArr.length && localArr.length > 0;
+    applyMergedRows(remoteArr, { repairCloud: repairCloud });
+  }).catch(function () {
+    applyMergedRows([], { repairCloud: false });
   });
 }
 window.loadDrugLibraryFromStorage = loadDrugLibraryFromStorage;
@@ -16196,7 +16211,7 @@ function addRxFromQuick() {
   rxQuickSelectedDrug = null;
   const dd = document.querySelector('.page.active [id="rx-quick-dropdown"]') || document.getElementById('rx-quick-dropdown');
   if (dd) dd.style.display = 'none';
-  showToast('💊 ' + (trade || generic) + ' added ✓', 's');
+  showToast('💊 ' + stripLeadingDrugQueryPrefix(trade || generic || '') + ' added ✓', 's');
 }
 document.addEventListener('click',e=>{if(!e.target.closest('#rx-quick-search')&&!e.target.closest('#rx-quick-dropdown')){document.querySelectorAll('#rx-quick-dropdown').forEach(dd=>{dd.style.display='none';});}});
 
@@ -17195,7 +17210,7 @@ function patientQueueDateMatchesToday(p) {
     if ((p.status === 'waiting' || p.status === 'pre-registered' || p.dilated || otDoneToday) && !p.seen) return true;
     return false;
   }
-  return otDoneToday || stamps.some(function (raw) {
+  const stampHit = stamps.some(function (raw) {
     const s = String(raw || '');
     if (!s) return false;
     if (/^\d+$/.test(s)) {
@@ -17203,6 +17218,10 @@ function patientQueueDateMatchesToday(p) {
     }
     return localDateKey(s) === todayKeyLocal || s.slice(0, 10) === todayKeyLocal;
   });
+  if (stampHit || otDoneToday) return true;
+  // Timestamps exist but none are “today” (sync lag / wrong field) — still show active queue patients
+  if (!p.seen && (p.status === 'waiting' || p.status === 'pre-registered' || p.dilated)) return true;
+  return false;
 }
 function buildPersistentHistoryDuration(rawDur, baseDate, referenceDate) {
   const durText = String(rawDur || '').trim();
@@ -22995,7 +23014,8 @@ function renderDocQueue() {
       otCompletedToday;
     if (!visibleStatus) return false;
     if (!patientQueueDateMatchesToday(p) && !(p.checkinAt && localDateKey(p.checkinAt) === todayKeyLocal)) return false;
-    return centreMatch(p);
+    // Doctor queue: show today’s patients from all centres (centre toggle only affects billing/reception tools).
+    return true;
   });
   const myPts = (() => {
     if (CURRENT_USER?.isAdmin || CURRENT_USER?.role === 'Reception') {
