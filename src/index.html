@@ -39,19 +39,19 @@
     #pg-obg .ptabs,
     #pg-psych .ptabs,
     #pg-skin .ptabs {
-      background:linear-gradient(180deg,#f7fbff 0%, #ebf3ff 100%) !important;
-      border:1px solid rgba(26,60,110,.16);
-      border-bottom:1px solid rgba(26,60,110,.22);
+      background:linear-gradient(180deg,#d9e8fb 0%, #c8def8 100%) !important;
+      border:1px solid rgba(26,60,110,.28);
+      border-bottom:2px solid rgba(26,60,110,.36);
       border-radius:14px;
       padding:5px;
-      box-shadow:0 8px 20px rgba(20,52,102,.08), inset 0 1px 0 rgba(255,255,255,.9);
+      box-shadow:0 10px 24px rgba(20,52,102,.14), inset 0 1px 0 rgba(255,255,255,.92);
       margin-bottom:8px !important;
     }
     #pg-ophtho .ptab,
     #pg-obg .ptab,
     #pg-psych .ptab,
     #pg-skin .ptab {
-      color:#35506f;
+      color:#284768;
       font-size:12px;
       font-weight:900;
       letter-spacing:.01em;
@@ -62,18 +62,72 @@
     #pg-obg .ptab:hover,
     #pg-psych .ptab:hover,
     #pg-skin .ptab:hover {
-      background:rgba(255,255,255,.72);
-      color:#17365f;
-      border-color:rgba(26,60,110,.12);
+      background:rgba(255,255,255,.84);
+      color:#12335d;
+      border-color:rgba(26,60,110,.22);
     }
     #pg-ophtho .ptab.active,
     #pg-obg .ptab.active,
     #pg-psych .ptab.active,
     #pg-skin .ptab.active {
-      background:linear-gradient(180deg,#ffffff 0%, #f6f9ff 100%);
-      color:#14325e;
-      border-color:rgba(26,60,110,.18);
-      box-shadow:0 6px 14px rgba(19,50,94,.12);
+      background:linear-gradient(180deg,#ffffff 0%, #f4f8ff 100%);
+      color:#0d2a50;
+      border-color:rgba(26,60,110,.26);
+      box-shadow:0 8px 18px rgba(19,50,94,.18);
+    }
+    .dept-diag-grid {
+      display:grid;
+      grid-template-columns:minmax(0,1fr) 240px;
+      gap:12px;
+      align-items:start;
+    }
+    .prev-dx-box {
+      background:linear-gradient(180deg,#f8fbff 0%, #edf5ff 100%);
+      border:1px solid rgba(26,60,110,.18);
+      border-radius:10px;
+      padding:10px;
+      min-height:92px;
+      box-shadow:0 4px 10px rgba(20,52,102,.06);
+    }
+    .prev-dx-box .prev-dx-title {
+      font-size:9.5px;
+      font-weight:900;
+      color:var(--bmh-blue);
+      text-transform:uppercase;
+      letter-spacing:.5px;
+      margin-bottom:6px;
+    }
+    .prev-dx-box .prev-dx-text {
+      font-size:11px;
+      line-height:1.45;
+      color:var(--tx);
+      min-height:40px;
+    }
+    .oe-plan-grid {
+      display:grid;
+      grid-template-columns:minmax(0,1.05fr) 330px;
+      gap:12px;
+      align-items:start;
+    }
+    .oe-plan-side > div {
+      margin-bottom:10px;
+    }
+    .admin-billing-chip {
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:6px 10px;
+      border-radius:999px;
+      border:1px solid rgba(26,60,110,.14);
+      background:var(--g6);
+      cursor:pointer;
+      font-size:11px;
+      font-weight:800;
+    }
+    .admin-billing-chip.active {
+      background:var(--blue-lt);
+      color:var(--bmh-blue);
+      border-color:rgba(26,60,110,.28);
     }
     @media (max-width: 768px) {
       html, body { width:100%; max-width:100%; overflow-x:hidden; overflow-y:auto !important; overscroll-behavior-x:none; touch-action:pan-y pinch-zoom; height:auto !important; }
@@ -106,6 +160,9 @@
       #pg-obg .ptab,
       #pg-psych .ptab,
       #pg-skin .ptab { min-height:32px; font-size:11.5px; }
+      .dept-diag-grid,
+      .oe-plan-grid { grid-template-columns:1fr; }
+      .prev-dx-box { min-height:0; }
       #m-ipd-monitor .modal { width:calc(100vw - 10px) !important; max-width:none !important; margin:0 auto; }
       #ipd-monitor-body { padding-right:0 !important; }
       #ipd-monitor-body [data-ipdm-head],
@@ -490,15 +547,13 @@
                 <option value="">— All Procedures —</option>
               </select>
             </div>
-            <input type="text" id="send-charge-custom-name" list="send-charge-datalist" placeholder="Type or pick charge…" autocomplete="off" style="font-size:11.5px;padding:4px 8px;border-radius:7px;border:1.5px solid rgba(212,160,23,.5);min-width:160px;max-width:280px;flex:1">
+            <input type="text" id="send-charge-custom-name" list="send-charge-datalist" placeholder="Type or pick charge…" autocomplete="off" style="font-size:11.5px;padding:4px 8px;border-radius:7px;border:1.5px solid rgba(212,160,23,.5);min-width:140px;max-width:220px;flex:1">
             <input type="number" id="send-charge-custom-amt" placeholder="₹" min="0" style="font-size:11.5px;padding:4px 8px;width:80px;border-radius:7px;border:1.5px solid rgba(212,160,23,.5)">
             <button type="button" class="btn btn-xs btn-gold" onclick="sendOphthoTypedCharge()">Send</button>
             <button type="button" class="btn btn-xs btn-outline" onclick="openCertificateModal('ophtho')">📄 Certificates</button>
             <datalist id="send-charge-datalist"></datalist>
-            <div id="ai-suggested-charges" style="display:flex;gap:5px;flex-wrap:wrap"></div>
-            <button type="button" class="btn btn-xs btn-outline" onclick="addCustomCharge()" style="white-space:nowrap">Custom (prompt)</button>
+            <button type="button" class="btn btn-xs btn-outline" onclick="addCustomCharge()" style="white-space:nowrap">Custom</button>
           </div>
-          <div id="sent-charges-log" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px"></div>
         </div>
         <div class="ptabs" style="background:#fff;border-bottom:1px solid var(--g5);padding-bottom:2px">
         <div class="ptab active" onclick="ptab(this,'oe-hx')">History</div>
@@ -1270,17 +1325,31 @@
       </div>
 
       <div class="tab-content" id="oe-plan">
+        <div class="oe-plan-grid">
+        <div>
         <div style="margin-bottom:10px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:6px">
-            <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px">Diagnosis</div>
-            <button type="button" class="btn btn-xs btn-blue" onclick="addDiagnosisRow()">+ Add diagnosis line</button>
+          <div class="dept-diag-grid">
+            <div>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:6px">
+                <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px">Diagnosis</div>
+                <button type="button" class="btn btn-xs btn-blue" onclick="addDiagnosisRow()">+ Add diagnosis line</button>
+              </div>
+              <div style="display:grid;grid-template-columns:28px 78px minmax(0,1fr) 36px;gap:5px;padding:5px 8px;background:var(--g6);border-radius:6px;margin-bottom:6px;font-size:9px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px;align-items:center">
+                <span>#</span><span>Eye</span><span>Diagnosis</span><span></span>
+              </div>
+              <div id="rx-diagnosis-rows" style="margin-bottom:2px"></div>
+              <textarea id="rx-diagnosis-text" rows="2" placeholder="Extra diagnosis notes (optional)…" style="width:100%;font-size:12px;border:1.5px solid var(--g4);border-radius:8px;padding:6px 8px;margin-bottom:0;font-family:var(--font);resize:vertical;min-height:36px;box-sizing:border-box"></textarea>
+              <div id="rx-diagnosis-list" style="display:none" aria-hidden="true"></div>
+            </div>
+            <div class="prev-dx-box">
+              <div class="prev-dx-title">Previous Diagnosis</div>
+              <div id="oe-prev-dx-text" class="prev-dx-text">No previous active diagnosis</div>
+              <select id="oe-prev-dx-status" style="margin-top:8px;font-size:11px;padding:5px 7px;border-radius:7px;border:1.5px solid var(--g4);width:100%" onchange="handlePreviousDiagnosisStatusChange('ophtho', this.value)">
+                <option value="carry">Carry forward</option>
+                <option value="resolved">Resolved</option>
+              </select>
+            </div>
           </div>
-          <div style="display:grid;grid-template-columns:28px 88px minmax(0,1fr) 36px;gap:5px;padding:5px 8px;background:var(--g6);border-radius:6px;margin-bottom:6px;font-size:9px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px;align-items:center">
-            <span>#</span><span>Eye</span><span>Diagnosis</span><span></span>
-          </div>
-          <div id="rx-diagnosis-rows" style="margin-bottom:2px"></div>
-          <textarea id="rx-diagnosis-text" rows="2" placeholder="Extra diagnosis notes (optional)…" style="width:100%;font-size:12px;border:1.5px solid var(--g4);border-radius:8px;padding:6px 8px;margin-bottom:0;font-family:var(--font);resize:vertical;min-height:36px;box-sizing:border-box"></textarea>
-          <div id="rx-diagnosis-list" style="display:none" aria-hidden="true"></div>
         </div>
         <div style="margin-bottom:6px" id="oe-inv-display-wrap">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;gap:8px;flex-wrap:wrap">
@@ -1293,47 +1362,20 @@
           </div>
           <div id="oe-inv-ordered-list" style="min-height:24px;font-size:11.5px;color:var(--g1);font-style:italic">None ordered</div>
         </div>
-        <div style="margin-bottom:10px">
+        </div>
+        <div class="oe-plan-side">
+        <div>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
             <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px">⚕️ Surgery / Procedure Advised</div>
             <div style="display:flex;gap:5px">
               <select id="proc-add-dropdown" style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:180px" onchange="addProcFromDropdown(this)">
                 <option value="">— Select from list —</option>
-                <optgroup label="Eye Procedures">
-                  <option value="PMICS + IOL Implantation (Left Eye)">PMICS + IOL (Left Eye)</option>
-                  <option value="PMICS + IOL Implantation (Right Eye)">PMICS + IOL (Right Eye)</option>
-                  <option value="PMICS + IOL Implantation (Both Eyes)">PMICS + IOL (Both Eyes)</option>
-                  <option value="Trabeculectomy OD">Trabeculectomy OD</option>
-                  <option value="Trabeculectomy OS">Trabeculectomy OS</option>
-                  <option value="IVT Injection (Anti-VEGF)">IVT Injection (Anti-VEGF)</option>
-                  <option value="IVT Injection (Steroid)">IVT Injection (Steroid)</option>
-                  <option value="LASIK OU">LASIK OU</option>
-                  <option value="Pterygium Excision + Graft">Pterygium Excision + Graft</option>
-                  <option value="Squint Surgery">Squint Surgery</option>
-                  <option value="DCR Surgery">DCR Surgery</option>
-                  <option value="Ptosis Repair">Ptosis Repair</option>
-                  <option value="Laser Peripheral Iridotomy">Laser Peripheral Iridotomy</option>
-                  <option value="Nd:YAG Capsulotomy">Nd:YAG Capsulotomy</option>
-                  <option value="Argon Laser Trabeculoplasty">Argon Laser Trabeculoplasty</option>
-                </optgroup>
-                <optgroup label="OBG">
-                  <option value="LSCS (Elective)">LSCS (Elective)</option>
-                  <option value="Diagnostic Laparoscopy">Diagnostic Laparoscopy</option>
-                  <option value="D&C / Hysteroscopy">D&amp;C / Hysteroscopy</option>
-                </optgroup>
-                <optgroup label="Skin">
-                  <option value="Chemical Peel">Chemical Peel</option>
-                  <option value="PRP Treatment">PRP Treatment</option>
-                  <option value="Microneedling">Microneedling</option>
-                  <option value="Botox Injection">Botox Injection</option>
-                </optgroup>
                 <option value="__custom__">+ Add New Procedure…</option>
               </select>
               <button class="btn btn-xs btn-orange" onclick="addProcAdvised()">+ Custom</button>
             </div>
           </div>
-          <!-- AI suggested quick-add chips -->
-          <div id="ai-proc-suggestions" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px"></div>
+          <div id="oe-proc-library" style="display:grid;gap:5px;margin-bottom:6px"></div>
           <!-- Added procedures list — bold, no charges -->
           <div id="rx-proc-advised" style="min-height:32px">
             <div style="font-size:11px;color:var(--g1);padding:5px 8px;font-style:italic;background:var(--g6);border-radius:6px">No procedure advised yet</div>
@@ -1348,21 +1390,11 @@
               <button class="btn btn-xs" style="background:var(--orange-lt);color:#8a4200;border:1px solid rgba(212,160,23,.5)" onclick="openLoadAdviceTemplate()">📂 Load Template</button>
             </div>
           </div>
-          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:7px" id="adv-chips">
-            <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:3px 8px;border-radius:10px;background:var(--g5);border:1px solid var(--g4);cursor:pointer;user-select:none">Avoid rubbing eyes</span>
-            <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:3px 8px;border-radius:10px;background:var(--g5);border:1px solid var(--g4);cursor:pointer;user-select:none">Use dark glasses outdoors</span>
-            <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:3px 8px;border-radius:10px;background:var(--g5);border:1px solid var(--g4);cursor:pointer;user-select:none">Complete eye drops course</span>
-            <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:3px 8px;border-radius:10px;background:var(--g5);border:1px solid var(--g4);cursor:pointer;user-select:none">Avoid swimming</span>
-            <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:3px 8px;border-radius:10px;background:var(--g5);border:1px solid var(--g4);cursor:pointer;user-select:none">Rest eyes — limit screen time</span>
-            <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:3px 8px;border-radius:10px;background:var(--g5);border:1px solid var(--g4);cursor:pointer;user-select:none">No driving after dilation</span>
-            <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:3px 8px;border-radius:10px;background:var(--g5);border:1px solid var(--g4);cursor:pointer;user-select:none">Control blood sugar</span>
-            <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:3px 8px;border-radius:10px;background:var(--g5);border:1px solid var(--g4);cursor:pointer;user-select:none">Control blood pressure</span>
-            <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:3px 8px;border-radius:10px;background:var(--g5);border:1px solid var(--g4);cursor:pointer;user-select:none">Pre-op fasting (after midnight)</span>
-            <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:3px 8px;border-radius:10px;background:var(--g5);border:1px solid var(--g4);cursor:pointer;user-select:none">Head elevated post-op</span>
-            <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:3px 8px;border-radius:10px;background:var(--g5);border:1px solid var(--g4);cursor:pointer;user-select:none">Protective shield at night</span>
-          </div>
+          <div id="oe-advice-library" style="display:grid;gap:5px;margin-bottom:7px"></div>
           <textarea id="rx-advice-text" placeholder="Type instructions to patient or load from template…" onblur="ingestCustomAdviceLinesFromTextarea(this)" style="width:100%;min-height:48px;font-size:12px;border:1.5px solid rgba(212,160,23,.4);border-radius:6px;padding:6px 8px;background:#fff;font-family:var(--font);resize:vertical"></textarea>
           <textarea id="rx-extra-advice-text" placeholder="Additional instructions…" style="width:100%;min-height:38px;font-size:12px;border:1.5px solid rgba(212,160,23,.28);border-radius:6px;padding:6px 8px;background:#fff;font-family:var(--font);resize:vertical;margin-top:4px"></textarea>
+        </div>
+        </div>
         </div>
       </div>
       <div class="tab-content" id="oe-rx">
@@ -2335,20 +2367,7 @@
       </div>
 
       <!-- OBG RX -->
-      <div class="tab-content" id="obg-rx"><div id="obg-rx-send-bar" style="display:none;background:linear-gradient(135deg,#fff7e0,#fff3cc);border-radius:10px;padding:8px 11px;margin-bottom:10px;border:1.5px solid rgba(212,160,23,.3)">
-        <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
-          <span style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">📤 Send to Reception:</span>
-          <select style="font-size:11px;padding:3px 6px;border-radius:6px;border:1.5px solid rgba(212,160,23,.5);background:#fff;min-width:160px" onchange="sendFromDropdown(this)">
-            <option value="">— All procedures —</option>
-            <option value="Consultation|800">Consultation ₹800</option>
-            <option value="Follow-up|500">Follow-up ₹500</option>
-            <option value="ANC Visit|500">ANC</option><option value="Ultrasound Abdomen|800">USG</option><option value="LSCS (Elective)|45000">LSCS</option><option value="Normal Delivery|25000">Delivery</option><option value="Diagnostic Laparoscopy|20000">Laparoscopy</option>
-          </select>
-          <div style="display:flex;gap:4px;flex-wrap:wrap;flex:1"><button class="btn btn-xs" style="background:#fff;color:#b55a00;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="sendQuickCharge('ANC Visit','500')">ANC ₹500</button><button class="btn btn-xs" style="background:#fff;color:#b55a00;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="sendQuickCharge('Ultrasound Abdomen','800')">USG ₹800</button><button class="btn btn-xs" style="background:#fff;color:#b55a00;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="sendQuickCharge('LSCS (Elective)','45000')">LSCS ₹45K</button><button class="btn btn-xs" style="background:#fff;color:#b55a00;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="sendQuickCharge('Normal Delivery','25000')">Delivery ₹25K</button><button class="btn btn-xs" style="background:#fff;color:#b55a00;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="sendQuickCharge('Diagnostic Laparoscopy','20000')">Laparoscopy ₹20K</button></div>
-          <button class="btn btn-xs btn-gold" onclick="addCustomCharge()" style="white-space:nowrap">+ Custom</button>
-        </div>
-        <div id="sent-charges-log-obg" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px"></div>
-      </div>
+      <div class="tab-content" id="obg-rx"><div id="obg-rx-send-bar"></div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;background:var(--g6);padding:7px;border-radius:var(--rsm)">
           <button class="btn btn-xs btn-blue" onclick="applyLastRx()">📋 Last Rx</button>
           <select style="display:none" onchange="applyRxTemplate(this.value)">
@@ -2365,13 +2384,25 @@
         </div>
         <!-- Diagnosis -->
         <div style="margin-bottom:10px">
-          <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;display:flex;justify-content:space-between">
-            <span>Diagnosis</span><button class="btn btn-xs btn-outline" onclick="addDxRow()">+ Add</button>
-          </div>
-          <div id="obg-dx-list">
-            <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">
-              <input type="text" class="dx-inp" placeholder="Type diagnosis…" style="flex:1;font-size:12px" autocomplete="off" oninput="filterDx(this)" onfocus="showDxDropdown(this);wireDxInputFocus(this)">
-              <button class="btn btn-xs btn-gray" onclick="this.closest('div').remove()">✕</button>
+          <div class="dept-diag-grid">
+            <div>
+              <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;display:flex;justify-content:space-between">
+                <span>Diagnosis</span><button class="btn btn-xs btn-outline" onclick="addDxRow()">+ Add</button>
+              </div>
+              <div id="obg-dx-list">
+                <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">
+                  <input type="text" class="dx-inp" placeholder="Type diagnosis…" style="flex:1;font-size:12px" autocomplete="off" oninput="filterDx(this)" onfocus="showDxDropdown(this);wireDxInputFocus(this)">
+                  <button class="btn btn-xs btn-gray" onclick="this.closest('div').remove()">✕</button>
+                </div>
+              </div>
+            </div>
+            <div class="prev-dx-box">
+              <div class="prev-dx-title">Previous Diagnosis</div>
+              <div id="obg-prev-dx-text" class="prev-dx-text">No previous active diagnosis</div>
+              <select id="obg-prev-dx-status" style="margin-top:8px;font-size:11px;padding:5px 7px;border-radius:7px;border:1.5px solid var(--g4);width:100%" onchange="handlePreviousDiagnosisStatusChange('obg', this.value)">
+                <option value="carry">Carry forward</option>
+                <option value="resolved">Resolved</option>
+              </select>
             </div>
           </div>
         </div>
@@ -2417,15 +2448,13 @@
           <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:5px;margin-bottom:6px">
             <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px">⚕️ Surgery / Procedure Advised</div>
             <div style="display:flex;gap:5px;flex-wrap:wrap">
-              <select style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:190px;border:1.5px solid var(--orange)" onchange="addProcFromDropdownDept(this)">
+              <select id="obg-proc-add-dropdown" style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:190px;border:1.5px solid var(--orange)" onchange="addProcFromDropdownDept(this)">
                 <option value="">— Select procedure —</option>
-                <option value="LSCS (Elective)|45000">LSCS (Elective)</option><option value="Normal Delivery|25000">Normal Delivery</option><option value="Diagnostic Laparoscopy|20000">Diagnostic Laparoscopy</option><option value="Hysteroscopy|15000">Hysteroscopy</option><option value="D&C|8000">D&C</option><option value="Tubectomy|10000">Tubectomy</option><option value="IUCD Insertion|2000">IUCD Insertion</option>
                 <option value="__custom__|0">+ Add new procedure…</option>
               </select>
             </div>
           </div>
-          <div style="font-size:9.5px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">AI Quick-Add:</div>
-          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:7px"><button class="btn btn-xs" style="background:var(--orange-lt);color:#8a4200;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="addProcItem('LSCS (Elective)',45000)">LSCS</button><button class="btn btn-xs" style="background:var(--orange-lt);color:#8a4200;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="addProcItem('Normal Delivery',25000)">Normal Delivery</button><button class="btn btn-xs" style="background:var(--orange-lt);color:#8a4200;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="addProcItem('Diagnostic Laparoscopy',20000)">Diagnostic Laparosco</button><button class="btn btn-xs" style="background:var(--orange-lt);color:#8a4200;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="addProcItem('Hysteroscopy',15000)">Hysteroscopy</button><button class="btn btn-xs" style="background:var(--orange-lt);color:#8a4200;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="addProcItem('D&C',8000)">D&C</button></div>
+          <div id="obg-proc-library" style="display:grid;gap:5px;margin-bottom:7px"></div>
           <div id="rx-proc-advised-obg" style="min-height:28px">
             <div class="proc-placeholder" style="font-size:11px;color:var(--g1);padding:5px 8px;font-style:italic;background:var(--g6);border-radius:6px">No procedure advised yet</div>
           </div>
@@ -2443,6 +2472,7 @@
             <button class="btn btn-blue btn-sm" onclick="bookFollowup()">📅 Book</button>
           </div>
         </div>
+        <div id="obg-advice-library" style="display:grid;gap:5px;margin-bottom:7px"></div>
         <textarea placeholder="Advice to patient…" style="width:100%;min-height:40px;margin-bottom:8px;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px" id="obg-advice"></textarea>
         <textarea placeholder="Additional advice to patient…" style="width:100%;min-height:38px;margin-bottom:8px;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px" id="obg-extra-advice"></textarea>
         <div style="display:flex;gap:7px;flex-wrap:wrap">
@@ -2737,20 +2767,7 @@
       </div>
 
       <!-- PSYCH RX -->
-      <div class="tab-content" id="psych-rx"><div id="psych-rx-send-bar" style="display:none;background:linear-gradient(135deg,#fff7e0,#fff3cc);border-radius:10px;padding:8px 11px;margin-bottom:10px;border:1.5px solid rgba(212,160,23,.3)">
-        <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
-          <span style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">📤 Send to Reception:</span>
-          <select style="font-size:11px;padding:3px 6px;border-radius:6px;border:1.5px solid rgba(212,160,23,.5);background:#fff;min-width:160px" onchange="sendFromDropdown(this)">
-            <option value="">— All procedures —</option>
-            <option value="Consultation|800">Consultation ₹800</option>
-            <option value="Follow-up|500">Follow-up ₹500</option>
-            <option value="Psychiatry Consultation|800">Consult</option><option value="Psychiatry Follow-up|500">Follow-up</option><option value="Psychotherapy Session|1200">Psychotherapy</option><option value="Electroconvulsive Therapy|8000">ECT</option>
-          </select>
-          <div style="display:flex;gap:4px;flex-wrap:wrap;flex:1"><button class="btn btn-xs" style="background:#fff;color:#b55a00;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="sendQuickCharge('Psychiatry Consultation','800')">Consult ₹800</button><button class="btn btn-xs" style="background:#fff;color:#b55a00;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="sendQuickCharge('Psychiatry Follow-up','500')">Follow-up ₹500</button><button class="btn btn-xs" style="background:#fff;color:#b55a00;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="sendQuickCharge('Psychotherapy Session','1200')">Psychotherapy ₹1,200</button><button class="btn btn-xs" style="background:#fff;color:#b55a00;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="sendQuickCharge('Electroconvulsive Therapy','8000')">ECT ₹8K</button></div>
-          <button class="btn btn-xs btn-gold" onclick="addCustomCharge()" style="white-space:nowrap">+ Custom</button>
-        </div>
-        <div id="sent-charges-log-psych" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px"></div>
-      </div>
+      <div class="tab-content" id="psych-rx"><div id="psych-rx-send-bar"></div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;background:var(--g6);padding:7px;border-radius:var(--rsm)">
           <button class="btn btn-xs btn-blue" onclick="applyLastRx()">📋 Last Rx</button>
           <select style="display:none" onchange="applyRxTemplate(this.value)">
@@ -2767,13 +2784,25 @@
         </div>
         <!-- Diagnosis -->
         <div style="margin-bottom:10px">
-          <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;display:flex;justify-content:space-between">
-            <span>Diagnosis</span><button class="btn btn-xs btn-outline" onclick="addDxRow()">+ Add</button>
-          </div>
-          <div id="psych-dx-list">
-            <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">
-              <input type="text" class="dx-inp" placeholder="Type diagnosis to search (ICD-10)…" oninput="filterDx(this)" onfocus="showDxDropdown(this)" style="flex:1;font-size:12px" autocomplete="off">
-              <button class="btn btn-xs btn-gray" onclick="this.closest('div').remove()">✕</button>
+          <div class="dept-diag-grid">
+            <div>
+              <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;display:flex;justify-content:space-between">
+                <span>Diagnosis</span><button class="btn btn-xs btn-outline" onclick="addDxRow()">+ Add</button>
+              </div>
+              <div id="psych-dx-list">
+                <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">
+                  <input type="text" class="dx-inp" placeholder="Type diagnosis to search (ICD-10)…" oninput="filterDx(this)" onfocus="showDxDropdown(this)" style="flex:1;font-size:12px" autocomplete="off">
+                  <button class="btn btn-xs btn-gray" onclick="this.closest('div').remove()">✕</button>
+                </div>
+              </div>
+            </div>
+            <div class="prev-dx-box">
+              <div class="prev-dx-title">Previous Diagnosis</div>
+              <div id="psych-prev-dx-text" class="prev-dx-text">No previous active diagnosis</div>
+              <select id="psych-prev-dx-status" style="margin-top:8px;font-size:11px;padding:5px 7px;border-radius:7px;border:1.5px solid var(--g4);width:100%" onchange="handlePreviousDiagnosisStatusChange('psych', this.value)">
+                <option value="carry">Carry forward</option>
+                <option value="resolved">Resolved</option>
+              </select>
             </div>
           </div>
         </div>
@@ -2811,15 +2840,13 @@
           <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:5px;margin-bottom:6px">
             <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px">⚕️ Surgery / Procedure Advised</div>
             <div style="display:flex;gap:5px;flex-wrap:wrap">
-              <select style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:190px;border:1.5px solid var(--orange)" onchange="addProcFromDropdownDept(this)">
+              <select id="psych-proc-add-dropdown" style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:190px;border:1.5px solid var(--orange)" onchange="addProcFromDropdownDept(this)">
                 <option value="">— Select procedure —</option>
-                <option value="Electroconvulsive Therapy (ECT)|8000">Electroconvulsive Therapy (ECT)</option><option value="Psychotherapy Session|1200">Psychotherapy Session</option><option value="Cognitive Behavioural Therapy|1500">Cognitive Behavioural Therapy</option>
                 <option value="__custom__|0">+ Add new procedure…</option>
               </select>
             </div>
           </div>
-          <div style="font-size:9.5px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">AI Quick-Add:</div>
-          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:7px"><button class="btn btn-xs" style="background:var(--orange-lt);color:#8a4200;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="addProcItem('Electroconvulsive Therapy (ECT)',8000)">Electroconvulsive Th</button><button class="btn btn-xs" style="background:var(--orange-lt);color:#8a4200;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="addProcItem('Psychotherapy Session',1200)">Psychotherapy Sessio</button><button class="btn btn-xs" style="background:var(--orange-lt);color:#8a4200;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="addProcItem('Cognitive Behavioural Therapy',1500)">Cognitive Behavioura</button></div>
+          <div id="psych-proc-library" style="display:grid;gap:5px;margin-bottom:7px"></div>
           <div id="rx-proc-advised-psych" style="min-height:28px">
             <div class="proc-placeholder" style="font-size:11px;color:var(--g1);padding:5px 8px;font-style:italic;background:var(--g6);border-radius:6px">No procedure advised yet</div>
           </div>
@@ -2837,6 +2864,7 @@
             <button class="btn btn-blue btn-sm" onclick="bookFollowup()">📅 Book</button>
           </div>
         </div>
+        <div id="psych-advice-library" style="display:grid;gap:5px;margin-bottom:7px"></div>
         <textarea placeholder="Advice to patient…" style="width:100%;min-height:40px;margin-bottom:8px;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px" id="psych-advice"></textarea>
         <textarea placeholder="Additional advice to patient…" style="width:100%;min-height:38px;margin-bottom:8px;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px" id="psych-extra-advice"></textarea>
         <div style="display:flex;gap:7px;flex-wrap:wrap">
@@ -2989,20 +3017,7 @@
       </div>
 
       <!-- SKIN RX -->
-      <div class="tab-content" id="skin-rx"><div id="skin-rx-send-bar" style="display:none;background:linear-gradient(135deg,#fff7e0,#fff3cc);border-radius:10px;padding:8px 11px;margin-bottom:10px;border:1.5px solid rgba(212,160,23,.3)">
-        <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
-          <span style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">📤 Send to Reception:</span>
-          <select style="font-size:11px;padding:3px 6px;border-radius:6px;border:1.5px solid rgba(212,160,23,.5);background:#fff;min-width:160px" onchange="sendFromDropdown(this)">
-            <option value="">— All procedures —</option>
-            <option value="Consultation|800">Consultation ₹800</option>
-            <option value="Follow-up|500">Follow-up ₹500</option>
-            <option value="Dermatology Consultation|800">Consult</option><option value="Chemical Peel|1500">Peel</option><option value="PRP Treatment|3500">PRP</option><option value="Microneedling|2000">Microneedling</option><option value="Botox Injection|8000">Botox</option><option value="Laser Treatment|5000">Laser</option>
-          </select>
-          <div style="display:flex;gap:4px;flex-wrap:wrap;flex:1"><button class="btn btn-xs" style="background:#fff;color:#b55a00;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="sendQuickCharge('Dermatology Consultation','800')">Consult ₹800</button><button class="btn btn-xs" style="background:#fff;color:#b55a00;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="sendQuickCharge('Chemical Peel','1500')">Peel ₹1,500</button><button class="btn btn-xs" style="background:#fff;color:#b55a00;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="sendQuickCharge('PRP Treatment','3500')">PRP ₹3,500</button><button class="btn btn-xs" style="background:#fff;color:#b55a00;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="sendQuickCharge('Microneedling','2000')">Microneedling ₹2K</button><button class="btn btn-xs" style="background:#fff;color:#b55a00;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="sendQuickCharge('Botox Injection','8000')">Botox ₹8K</button><button class="btn btn-xs" style="background:#fff;color:#b55a00;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="sendQuickCharge('Laser Treatment','5000')">Laser ₹5K</button></div>
-          <button class="btn btn-xs btn-gold" onclick="addCustomCharge()" style="white-space:nowrap">+ Custom</button>
-        </div>
-        <div id="sent-charges-log-skin" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px"></div>
-      </div>
+      <div class="tab-content" id="skin-rx"><div id="skin-rx-send-bar"></div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;background:var(--g6);padding:7px;border-radius:var(--rsm)">
           <button class="btn btn-xs btn-blue" onclick="applyLastRx()">📋 Last Rx</button>
           <select style="display:none" onchange="applyRxTemplate(this.value)">
@@ -3019,13 +3034,25 @@
         </div>
         <!-- Diagnosis -->
         <div style="margin-bottom:10px">
-          <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;display:flex;justify-content:space-between">
-            <span>Diagnosis</span><button class="btn btn-xs btn-outline" onclick="addDxRow()">+ Add</button>
-          </div>
-          <div id="skin-dx-list">
-            <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">
-              <input type="text" class="dx-inp" placeholder="Type diagnosis to search (ICD-10)…" oninput="filterDx(this)" onfocus="showDxDropdown(this)" style="flex:1;font-size:12px" autocomplete="off">
-              <button class="btn btn-xs btn-gray" onclick="this.closest('div').remove()">✕</button>
+          <div class="dept-diag-grid">
+            <div>
+              <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;display:flex;justify-content:space-between">
+                <span>Diagnosis</span><button class="btn btn-xs btn-outline" onclick="addDxRow()">+ Add</button>
+              </div>
+              <div id="skin-dx-list">
+                <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">
+                  <input type="text" class="dx-inp" placeholder="Type diagnosis to search (ICD-10)…" oninput="filterDx(this)" onfocus="showDxDropdown(this)" style="flex:1;font-size:12px" autocomplete="off">
+                  <button class="btn btn-xs btn-gray" onclick="this.closest('div').remove()">✕</button>
+                </div>
+              </div>
+            </div>
+            <div class="prev-dx-box">
+              <div class="prev-dx-title">Previous Diagnosis</div>
+              <div id="skin-prev-dx-text" class="prev-dx-text">No previous active diagnosis</div>
+              <select id="skin-prev-dx-status" style="margin-top:8px;font-size:11px;padding:5px 7px;border-radius:7px;border:1.5px solid var(--g4);width:100%" onchange="handlePreviousDiagnosisStatusChange('skin', this.value)">
+                <option value="carry">Carry forward</option>
+                <option value="resolved">Resolved</option>
+              </select>
             </div>
           </div>
         </div>
@@ -3063,15 +3090,13 @@
           <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:5px;margin-bottom:6px">
             <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px">⚕️ Surgery / Procedure Advised</div>
             <div style="display:flex;gap:5px;flex-wrap:wrap">
-              <select style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:190px;border:1.5px solid var(--orange)" onchange="addProcFromDropdownDept(this)">
+              <select id="skin-proc-add-dropdown" style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:190px;border:1.5px solid var(--orange)" onchange="addProcFromDropdownDept(this)">
                 <option value="">— Select procedure —</option>
-                <option value="Chemical Peel|1500">Chemical Peel</option><option value="Microneedling|2000">Microneedling</option><option value="PRP Treatment|3500">PRP Treatment</option><option value="Botox Injection|8000">Botox Injection</option><option value="Dermal Filler|12000">Dermal Filler</option><option value="Laser Hair Removal|5000">Laser Hair Removal</option><option value="CO2 Laser Treatment|8000">CO2 Laser Treatment</option><option value="Cryotherapy|1500">Cryotherapy</option>
                 <option value="__custom__|0">+ Add new procedure…</option>
               </select>
             </div>
           </div>
-          <div style="font-size:9.5px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">AI Quick-Add:</div>
-          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:7px"><button class="btn btn-xs" style="background:var(--orange-lt);color:#8a4200;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="addProcItem('Chemical Peel',1500)">Chemical Peel</button><button class="btn btn-xs" style="background:var(--orange-lt);color:#8a4200;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="addProcItem('Microneedling',2000)">Microneedling</button><button class="btn btn-xs" style="background:var(--orange-lt);color:#8a4200;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="addProcItem('PRP Treatment',3500)">PRP Treatment</button><button class="btn btn-xs" style="background:var(--orange-lt);color:#8a4200;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="addProcItem('Botox Injection',8000)">Botox Injection</button><button class="btn btn-xs" style="background:var(--orange-lt);color:#8a4200;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="addProcItem('Dermal Filler',12000)">Dermal Filler</button></div>
+          <div id="skin-proc-library" style="display:grid;gap:5px;margin-bottom:7px"></div>
           <div id="rx-proc-advised-skin" style="min-height:28px">
             <div class="proc-placeholder" style="font-size:11px;color:var(--g1);padding:5px 8px;font-style:italic;background:var(--g6);border-radius:6px">No procedure advised yet</div>
           </div>
@@ -3089,6 +3114,7 @@
             <button class="btn btn-blue btn-sm" onclick="bookFollowup()">📅 Book</button>
           </div>
         </div>
+        <div id="skin-advice-library" style="display:grid;gap:5px;margin-bottom:7px"></div>
         <textarea placeholder="Advice to patient…" style="width:100%;min-height:40px;margin-bottom:8px;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px" id="skin-advice"></textarea>
         <textarea placeholder="Additional advice to patient…" style="width:100%;min-height:38px;margin-bottom:8px;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px" id="skin-extra-advice"></textarea>
         <div style="display:flex;gap:7px;flex-wrap:wrap">
@@ -3473,6 +3499,7 @@
       <div class="form-group" style="margin:0"><label class="fl">Patient scope</label><select id="bmh-bill-patient-scope" onchange="bmhRenderBillPatientList()"><option value="focus">Selected patient only</option><option value="today">Today's patients</option><option value="date">Selected date</option><option value="admitted">Currently admitted</option><option value="all">All visible patients</option></select></div>
       <div class="form-group" style="margin:0"><label class="fl">Date</label><input type="date" id="bmh-bill-date-filter" onchange="bmhRenderBillPatientList()"></div>
     </div>
+    <div id="bmh-admin-daily-billing-panel" style="display:none;margin-bottom:12px"></div>
     <div id="bmh-bill-pt-list" style="max-height:200px;overflow:auto;border:1px solid var(--g5);border-radius:8px;margin-bottom:12px"></div>
     <div class="form-group" style="margin-bottom:10px"><label class="fl">Selected patient</label><select id="bmh-bill-pt-select" onchange="bmhSelectBillPatient(this.value)"></select></div>
     <div id="bmh-bill-summary" style="margin-bottom:12px"></div>
@@ -4975,7 +5002,7 @@
 
 <!-- UPDATE DETAILS MODAL -->
 <div class="modal-ov" id="m-update-details">
-<div class="modal" style="max-width:440px"><div class="modal-hd"><div class="modal-title">✏️ Edit Patient Details</div><button class="modal-close" onclick="closeM('m-update-details')">✕</button></div>
+<div class="modal" style="max-width:520px"><div class="modal-hd"><div class="modal-title">✏️ Edit Patient Details</div><button class="modal-close" onclick="closeM('m-update-details')">✕</button></div>
 <div class="fg" style="gap:9px;padding-bottom:4px">
   <div class="form-group"><label class="fl">First Name</label><input type="text" id="upd-fn" placeholder="First name"></div>
   <div class="form-group"><label class="fl">Last Name</label><input type="text" id="upd-ln" placeholder="Last name"></div>
@@ -4989,6 +5016,15 @@
   <div class="form-group full"><label class="fl">Address</label><input type="text" id="upd-addr" placeholder="Full address"></div>
   <div class="form-group"><label class="fl">Relation</label><input type="text" id="upd-rel" placeholder="Self / Father's name…"></div>
   <div class="form-group"><label class="fl">Referred By</label><input type="text" id="upd-ref-name" placeholder="Doctor or person name"></div>
+  <div class="form-group"><label class="fl">Consultation Fee ₹</label><input type="number" id="upd-fee" min="0" step="1" placeholder="0"></div>
+  <div class="form-group" style="display:flex;align-items:flex-end">
+    <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;padding:10px 0">
+      <input type="checkbox" id="upd-no-fee" style="width:auto" onchange="var f=document.getElementById('upd-fee'); if(f){ f.disabled=this.checked; if(this.checked) f.value='0'; }">
+      Waive consultation fee
+    </label>
+  </div>
+  <div class="form-group"><label class="fl">Advance ₹</label><input type="number" id="upd-advance-amt" min="0" step="1" placeholder="0"></div>
+  <div class="form-group"><label class="fl">Advance Purpose</label><input type="text" id="upd-advance-purpose" placeholder="Advance on account"></div>
 </div>
 <div style="padding:6px 0 2px">
   <div id="upd-bmhid-display" style="font-size:11px;color:var(--g2);padding:2px 0 6px">BMSH ID: —</div>
