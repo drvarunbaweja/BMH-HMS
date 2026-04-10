@@ -2638,14 +2638,23 @@ function populateRcConsentDatalist(bmhId) {
   const dl = document.getElementById('rc-consent-dl');
   if (!dl || !p) return;
   const dk = normalizeDeptKeyForQueue(p.dept || '');
-  const items = CONSENT_LIBRARY.map(function (c) { return getMergedLibraryItem(c.id) || c; })
+  const builtins = CONSENT_LIBRARY.map(function (c) { return getMergedLibraryItem(c.id) || c; })
     .filter(function (c) { return !c.hidden; })
     .filter(function (c) {
-      const cd = String(c.dept || 'all');
+      const cd = normalizeSurgeryPackDeptKey(c.dept || 'all');
       if (cd === 'all') return true;
       if (!dk) return true;
       return cd === dk;
     });
+  const uploaded = (window.BMH_UPLOADED_CONSENTS || [])
+    .filter(function (c) { return c && !c.hidden; })
+    .filter(function (c) {
+      const cd = normalizeSurgeryPackDeptKey(c.dept || 'all');
+      if (cd === 'all') return true;
+      if (!dk) return true;
+      return cd === dk;
+    });
+  const items = builtins.concat(uploaded);
   const map = {};
   dl.innerHTML = items.map(function (c) {
     const nm = String(c.name || c.id || '').trim();
@@ -13300,6 +13309,7 @@ function bmhFindOrCreateInventoryItem(rawCode, translated) {
     store: bmhInventoryStoreValue() || bmhDefaultStoreForDept(bmhInventoryDeptValue()),
     vendorBillingMode: bmhInventoryBillModeValue()
   };
+  normalizeInventoryRecord(item);
   INVENTORY.push(item);
   BCMAP[item.barcode] = item;
   return item;
@@ -13323,6 +13333,7 @@ function bmhRecordInventoryPurchase(item, qty, billFile) {
   item.vendor = vendor || item.vendor || '';
   item.vendorBillingMode = billMode;
   item.exp = document.getElementById('inv-in-exp')?.value || item.exp || '';
+  normalizeInventoryRecord(item);
   const totalCost = qty * cost;
   const purchaseTs = bmhNowISO();
   const dueDate = billMode === 'on-use' ? '' : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -13344,9 +13355,10 @@ function bmhRecordInventoryPurchase(item, qty, billFile) {
     ts:purchaseTs,
     billFile: billFile || null
   };
+  normalizeInventoryRecord(purchase);
   window.BMH_PURCHASES.push(purchase);
   if (vendor && totalCost > 0) {
-    window.BMH_VENDOR_BILLS.push({
+    const vendorBill = {
       id: 'VB' + Date.now() + Math.random().toString(36).slice(2, 5),
       vendor,
       invoiceNo,
@@ -13361,7 +13373,9 @@ function bmhRecordInventoryPurchase(item, qty, billFile) {
       store: store,
       category: category,
       usageLinked: billMode === 'on-use'
-    });
+    };
+    normalizeInventoryRecord(vendorBill);
+    window.BMH_VENDOR_BILLS.push(vendorBill);
   }
   saveBmhFinancials();
   renderInventoryPurchaseLog();
@@ -14739,30 +14753,76 @@ function getProcedureReportRows() {
     return true;
   };
   const otRows = OT_CASES.map(normalizeOTCaseRecord);
-  const advised = PROCEDURE_ADVISED_LOG.map(function (row, idx) {
-    const pt = PATIENTS.find(function (p) { return p.bmhId === row.bmhId; }) || {};
+  const advised = [];
+  const seen = new Set();
+  const pushRow = function (row, idx, pt, deptKey, visitDate) {
     const key = row.id || ('adv-' + idx + '-' + row.bmhId + '-' + row.proc);
+    const normalizedProc = expandProcedureLabelForPrint(row.proc);
+    if (!normalizedProc) return;
+    const dedupe = [row.bmhId, String(normalizedProc).toLowerCase(), String(visitDate || row.date || row.createdAt || '').slice(0, 10)].join('|');
+    if (seen.has(dedupe)) return;
+    seen.add(dedupe);
     const otMatch = otRows.find(function (c) {
       if (!c || c.bmhId !== row.bmhId) return false;
-      return normalizeOtTemplateKey(c.procedure || '').includes(normalizeOtTemplateKey(row.proc || ''))
-        || normalizeOtTemplateKey(row.proc || '').includes(normalizeOtTemplateKey(c.procedure || ''));
+      return normalizeOtTemplateKey(c.procedure || '').includes(normalizeOtTemplateKey(normalizedProc || ''))
+        || normalizeOtTemplateKey(normalizedProc || '').includes(normalizeOtTemplateKey(c.procedure || ''));
     });
     const derivedStatus = otMatch ? (otMatch.status === 'completed' ? 'done' : 'scheduled') : 'advised';
-    return {
+    advised.push({
       key,
       patient: row.patient || pt.name || '—',
       bmhId: row.bmhId,
-      proc: expandProcedureLabelForPrint(row.proc),
-      date: row.date || row.createdAt || '',
-      doctor: row.doctor || '',
+      proc: normalizedProc,
+      date: row.date || visitDate || row.createdAt || '',
+      doctor: row.doctor || pt.assignedDoctor || pt.doctor || '',
       status: derivedStatus,
-      source: 'advised',
+      source: row.source || 'saved',
       mobile: row.mobile || pt.mob || '',
       ageSex: row.ageSex || ((pt.age || '—') + '/' + (pt.sex || '—')),
       centre: row.centre || pt.centre || '',
       referredBy: row.referredBy || pt.referredBy || '',
-      advice: row.advice || pt.lastVisit?.advice || ''
-    };
+      advice: row.advice || pt.lastVisit?.advice || '',
+      dept: row.dept || deptKey || normalizeDeptKeyForQueue(pt.dept || '')
+    });
+  };
+  PROCEDURE_ADVISED_LOG.forEach(function (row, idx) {
+    const pt = PATIENTS.find(function (p) { return p.bmhId === row.bmhId; }) || {};
+    pushRow(row, idx, pt, row.dept || normalizeDeptKeyForQueue(pt.dept || ''), row.date || row.createdAt || '');
+  });
+  PATIENTS.forEach(function (pt) {
+    if (!pt || !pt.bmhId) return;
+    const visitMap = Object.assign({}, getCachedPatientVisits(pt.bmhId) || {});
+    if (pt.lastVisitKey && pt.lastVisit) visitMap[pt.lastVisitKey] = pt.lastVisit;
+    else if (pt.lastVisit && !Object.keys(visitMap).length) visitMap.last = pt.lastVisit;
+    Object.entries(visitMap).forEach(function (entry) {
+      const visit = entry[1] || {};
+      const visitDate = visit.date || visit.createdAt || pt.lastVisitDate || '';
+      const visitDept = normalizeDeptKeyForQueue(visit.dept || pt.lastDeptVisit || pt.dept || '');
+      [
+        { list: Array.isArray(visit.procedures) ? visit.procedures : [], dept: visitDept || 'ophtho' },
+        { list: Array.isArray(visit.obgProcAdvised) ? visit.obgProcAdvised : [], dept: 'obg' },
+        { list: Array.isArray(visit.psychProcAdvised) ? visit.psychProcAdvised : [], dept: 'psych' },
+        { list: Array.isArray(visit.skinProcAdvised) ? visit.skinProcAdvised : [], dept: 'skin' }
+      ].forEach(function (grp) {
+        grp.list.forEach(function (procName, idx) {
+          pushRow({
+            id: 'saved-' + pt.bmhId + '-' + entry[0] + '-' + idx,
+            bmhId: pt.bmhId,
+            patient: pt.name,
+            proc: procName,
+            date: visitDate,
+            doctor: visit.doctor || pt.assignedDoctor || pt.doctor || '',
+            mobile: pt.mob || '',
+            ageSex: ((pt.age || '—') + '/' + (pt.sex || '—')),
+            centre: visit.centre || pt.centre || '',
+            referredBy: pt.referredBy || '',
+            advice: visit.advice || visit.obgAdvice || visit.psychAdvice || visit.skinAdvice || '',
+            dept: grp.dept,
+            source: 'saved'
+          }, idx, pt, grp.dept, visitDate);
+        });
+      });
+    });
   });
   return advised.filter(function (row) {
     if (proc && !String(row.proc || '').toLowerCase().includes(proc)) return false;
@@ -16986,6 +17046,19 @@ function toDisplayTitleCase(value) {
     })
     .join(' ');
 }
+function normalizeInventoryTextValue(value) {
+  const raw = String(value || '').trim().replace(/\s+/g, ' ');
+  if (!raw) return '';
+  if (!/[a-z]/.test(raw) && /[A-Z]/.test(raw)) return raw;
+  return toDisplayTitleCase(raw);
+}
+function normalizeInventoryRecord(item) {
+  if (!item || typeof item !== 'object') return item;
+  ['name','cat','dept','vendor','store','iolBrand','iolCompany','iolModel','brand','company','model','itemName','category'].forEach(function (key) {
+    if (item[key]) item[key] = normalizeInventoryTextValue(item[key]);
+  });
+  return item;
+}
 function normalizeReceptionFieldValue(id, value) {
   const raw = String(value || '').trim().replace(/\s+/g, ' ');
   if (!raw) return '';
@@ -18936,6 +19009,7 @@ function savePrescriptionToFirebase(bmhId, rxData) {
 
 // ── INVENTORY ─────────────────────────────────────────────────
 function saveInventoryItemToFirebase(item) {
+  normalizeInventoryRecord(item);
   fbSet(`inventory/${item.barcode}`, item);
 }
 
@@ -23229,6 +23303,7 @@ function saveVisit(dept, opts) {
     visit.psychExtraAdvice = document.getElementById('psych-extra-advice')?.value || '';
     visit.rxFuDate = document.querySelector('#pg-psych #psych-rx #rx-fu-date')?.value || '';
     visit.followupDate = visit.rxFuDate || '';
+    visit.psychProcAdvised = [...document.querySelectorAll('#rx-proc-advised-psych [data-proc]')].map(function (e) { return e.dataset.proc; }).filter(Boolean);
     visit.rx = JSON.parse(JSON.stringify(RX_DRUGS || []));
     visit.procDone = getProcedureDoneStateForDept('psych');
   } else if(dept === 'skin') {
@@ -23253,6 +23328,7 @@ function saveVisit(dept, opts) {
     visit.skinExtraAdvice = document.getElementById('skin-extra-advice')?.value || '';
     visit.rxFuDate = document.querySelector('#pg-skin #skin-rx #rx-fu-date')?.value || '';
     visit.followupDate = visit.rxFuDate || '';
+    visit.skinProcAdvised = [...document.querySelectorAll('#rx-proc-advised-skin [data-proc]')].map(function (e) { return e.dataset.proc; }).filter(Boolean);
     visit.rx = JSON.parse(JSON.stringify(RX_DRUGS || []));
     visit.procDone = getProcedureDoneStateForDept('skin');
   }
