@@ -10568,6 +10568,75 @@ function rebuildDrugGenericDatalist() {
   dl.innerHTML = gens.map(g => `<option value="${String(g).replace(/&/g,'&amp;').replace(/"/g,'&quot;')}">`).join('');
 }
 
+function buildDrugLibrarySeedRows() {
+  const seeded = [];
+  const pushUnique = function (row) {
+    const trade = String(row.trade || '').trim();
+    const generic = String(row.generic || '').trim();
+    const dept = String(row.dept || 'All').trim();
+    if (!trade || !generic) return;
+    const exists = seeded.some(function (x) {
+      return String(x.trade || '').trim().toLowerCase() === trade.toLowerCase()
+        && String(x.generic || '').trim().toLowerCase() === generic.toLowerCase()
+        && String(x.dept || 'All').trim().toLowerCase() === dept.toLowerCase();
+    });
+    if (!exists) seeded.push(row);
+  };
+  (DRUG_LIBRARY_FULL || []).forEach(function (d) {
+    const trade = String(d.brand || d.trade || d.name || '').trim();
+    const generic = String(d.name || d.generic || d.brand || '').trim();
+    if (!trade || !generic) return;
+    pushUnique({
+      type: d.type || 'Tablet',
+      trade: trade,
+      generic: generic,
+      freq: d.freq || 'BD',
+      dur: d.dur || '1 Week',
+      dept: d.dept || 'All',
+      company: d.company || ''
+    });
+  });
+  DRUG_LIBRARY.forEach(function (d) {
+    pushUnique({
+      type: d.type || 'Tablet',
+      trade: d.trade || d.brand || d.name || '',
+      generic: d.generic || d.name || d.trade || '',
+      freq: d.freq || 'BD',
+      dur: d.dur || '1 Week',
+      dept: d.dept || 'All',
+      company: d.company || ''
+    });
+  });
+  return seeded;
+}
+
+function mergeDrugLibraryRows(primaryRows) {
+  const merged = [];
+  const pushUnique = function (row) {
+    if (!row) return;
+    const trade = String(row.trade || row.brand || row.name || '').trim();
+    const generic = String(row.generic || row.name || row.trade || '').trim();
+    const dept = String(row.dept || 'All').trim();
+    if (!trade || !generic) return;
+    const key = [trade.toLowerCase(), generic.toLowerCase(), dept.toLowerCase()].join('|');
+    if (merged.some(function (x) {
+      return [String(x.trade || '').trim().toLowerCase(), String(x.generic || '').trim().toLowerCase(), String(x.dept || 'All').trim().toLowerCase()].join('|') === key;
+    })) return;
+    merged.push({
+      type: row.type || 'Tablet',
+      trade: trade,
+      generic: generic,
+      freq: row.freq || 'BD',
+      dur: row.dur || '1 Week',
+      dept: dept,
+      company: row.company || ''
+    });
+  };
+  (Array.isArray(primaryRows) ? primaryRows : []).forEach(pushUnique);
+  buildDrugLibrarySeedRows().forEach(pushUnique);
+  return merged;
+}
+
 function saveDrugLibraryToStorage() {
   try { localStorage.setItem('bmh_drug_library', JSON.stringify(DRUG_LIBRARY)); } catch (e) { /* noop */ }
   if (window.FBDB) window.FBDB.ref('drugLibrary').set(DRUG_LIBRARY).catch(() => {});
@@ -10605,11 +10674,12 @@ function loadDrugLibraryFromStorage() {
       const arr = JSON.parse(ls);
       if (Array.isArray(arr) && arr.length) {
         DRUG_LIBRARY.length = 0;
-        arr.forEach(x => DRUG_LIBRARY.push(x));
+        mergeDrugLibraryRows(arr).forEach(x => DRUG_LIBRARY.push(x));
       }
     }
   } catch (e) { /* noop */ }
   if (!window.FBDB) {
+    if (!DRUG_LIBRARY.length) mergeDrugLibraryRows([]).forEach(x => DRUG_LIBRARY.push(x));
     renderSettingsDrugs && renderSettingsDrugs();
     rebuildDrugGenericDatalist();
     syncDrugDeptDefaults();
@@ -10618,17 +10688,19 @@ function loadDrugLibraryFromStorage() {
   window.FBDB.ref('drugLibrary').once('value').then(snap => {
     const arr = snap.val();
     if (!Array.isArray(arr) || !arr.length) {
+      if (!DRUG_LIBRARY.length) mergeDrugLibraryRows([]).forEach(x => DRUG_LIBRARY.push(x));
       renderSettingsDrugs && renderSettingsDrugs();
       rebuildDrugGenericDatalist();
       syncDrugDeptDefaults();
       return;
     }
     DRUG_LIBRARY.length = 0;
-    arr.forEach(x => DRUG_LIBRARY.push(x));
+    mergeDrugLibraryRows(arr).forEach(x => DRUG_LIBRARY.push(x));
     renderSettingsDrugs && renderSettingsDrugs();
     rebuildDrugGenericDatalist();
     syncDrugDeptDefaults();
   }).catch(() => {
+    if (!DRUG_LIBRARY.length) mergeDrugLibraryRows([]).forEach(x => DRUG_LIBRARY.push(x));
     renderSettingsDrugs && renderSettingsDrugs();
     rebuildDrugGenericDatalist();
     syncDrugDeptDefaults();
