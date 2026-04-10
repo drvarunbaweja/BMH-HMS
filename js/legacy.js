@@ -2981,6 +2981,7 @@ function populateOphthoForm(v) {
   setV('rx-advice-text', v.advice || '');
   setV('rx-extra-advice-text', v.extraAdvice || '');
   restoreProcedureDoneState('ophtho', v.procDone || null);
+  refreshPreviousDiagnosisPanel('ophtho', v);
 
   // Chief complaints — restore rows
   const fallbackCcRows = Array.isArray(v.ccRows) && v.ccRows.length
@@ -3108,7 +3109,7 @@ function sendQuickCharge(name, amount, bmhIdOverride) {
   const pt = window.CURRENT_PATIENT || PATIENTS.find(p=>p.bmhId===bmhIdOverride);
   const ptName = pt?.name || 'Unknown Patient';
   const ptId = pt?.bmhId || bmhIdOverride || 'BMSH-000000';
-  const dept = pt?.dept || CURRENT_USER?.dept || 'ophtho';
+  const dept = normalizeDeptKeyForQueue(pt?.dept || CURRENT_USER?.dept || getDeptKeyForSendCharge() || 'ophtho') || 'ophtho';
   const centre = pt?.centre || CURRENT_USER?.centre || 'CHD';
   const amtNum = parseInt(amount) || 0;
   const dup = (PAY_REQUESTS || []).find(function (r) {
@@ -3128,6 +3129,14 @@ function sendQuickCharge(name, amount, bmhIdOverride) {
   renderDashboard&&renderDashboard();
   renderBillingPageIfActive && renderBillingPageIfActive();
   const nb = document.getElementById('nb-pay'); if(nb) nb.textContent = PAY_REQUESTS.filter(r=>r.status==='pending').length;
+  const bucket = getDoctorCustomRxOptionsForDept(dept);
+  bucket.sendRecent = bucket.sendRecent || {};
+  const key = String(name || '').trim().toLowerCase();
+  if (key) {
+    bucket.sendRecent[key] = Number(bucket.sendRecent[key] || 0) + 1;
+    saveDoctorCustomRxOptions();
+    renderAllDeptSendBars();
+  }
   showToast('📤 '+name+' ₹'+parseInt(amount).toLocaleString('en-IN')+' → Reception pulsing ✓','s');
 }
 function bookFollowup() {
@@ -3415,11 +3424,105 @@ function toggleRxPostSurgeryNote() {
 
 /** Diagnosis lines for prescription print — Ophthalmology uses numbered rows; other depts use *-dx-list */
 function collectDeptDiagnosesForPrint(deptId) {
-  if (deptId === 'oe') return collectOphthoDiagnosesForPrint();
+  if (deptId === 'oe') {
+    const pack = collectOphthoDiagnosesForPrint();
+    if (!(pack.lines || []).length) {
+      const prev = getPreviousDiagnosisEntryForDept(window.CURRENT_PATIENT || {}, 'ophtho');
+      if (prev?.status !== 'resolved' && prev?.text) pack.lines = [prev.text];
+    }
+    return pack;
+  }
   const listEl = document.getElementById(deptId + '-dx-list');
   const lines = listEl ? [...listEl.querySelectorAll('.dx-inp')].map(e => e.value.trim()).filter(Boolean) : [];
-  return { lines, notes: '' };
+  if (lines.length) return { lines, notes: '' };
+  const deptMap = { obg: 'obg', psych: 'psych', skin: 'skin' };
+  const prev = getPreviousDiagnosisEntryForDept(window.CURRENT_PATIENT || {}, deptMap[deptId] || deptId);
+  return { lines: prev?.status !== 'resolved' && prev?.text ? [prev.text] : [], notes: '' };
 }
+
+function getVisitDiagnosisTextForDept(visit, dept) {
+  const v = visit || {};
+  if (dept === 'ophtho') {
+    const rows = Array.isArray(v.diagnoses) ? v.diagnoses.map(formatDxLineForPrint).filter(Boolean) : [];
+    return rows.join(' · ') || String(v.diagnosisText || v.dx || '').trim();
+  }
+  if (dept === 'obg') {
+    return (Array.isArray(v.obgDiagnoses) ? v.obgDiagnoses.filter(Boolean).join(' · ') : '') || String(v.dx || '').trim();
+  }
+  if (dept === 'psych') {
+    return (Array.isArray(v.psychDxList) ? v.psychDxList.filter(Boolean).join(' · ') : '') || String(v.dx || '').trim();
+  }
+  if (dept === 'skin') {
+    return (Array.isArray(v.skinDxList) ? v.skinDxList.filter(Boolean).join(' · ') : '') || String(v.dx || '').trim();
+  }
+  return String(v.dx || v.diagnosisText || '').trim();
+}
+function getPreviousDiagnosisEntryForDept(pt, dept) {
+  const key = normalizeQueueDeptForUser(dept || '');
+  const patient = pt || window.CURRENT_PATIENT || {};
+  const map = patient.prevDxByDept || {};
+  const direct = map[key];
+  if (direct && String(direct.text || '').trim()) return direct;
+  const bid = patient.bmhId || '';
+  const visits = Object.values(getCachedPatientVisits(bid) || {}).filter(function (entry) {
+    return entry && normalizeQueueDeptForUser(entry.dept || '') === key;
+  }).sort(function (a, b) {
+    return String(b.date || b.createdAt || '').localeCompare(String(a.date || a.createdAt || ''));
+  });
+  const latest = visits.find(function (entry) { return String(getVisitDiagnosisTextForDept(entry, key) || '').trim(); });
+  if (!latest) return { text: '', status: 'active' };
+  return {
+    text: getVisitDiagnosisTextForDept(latest, key),
+    status: 'active',
+    fromDate: latest.date || latest.createdAt || '',
+    updatedAt: latest.date || latest.createdAt || ''
+  };
+}
+function previousDiagnosisUiIdsForDept(dept) {
+  const map = {
+    ophtho: { text: 'oe-prev-dx-text', status: 'oe-prev-dx-status' },
+    obg: { text: 'obg-prev-dx-text', status: 'obg-prev-dx-status' },
+    psych: { text: 'psych-prev-dx-text', status: 'psych-prev-dx-status' },
+    skin: { text: 'skin-prev-dx-text', status: 'skin-prev-dx-status' }
+  };
+  return map[normalizeQueueDeptForUser(dept || '')] || {};
+}
+function refreshPreviousDiagnosisPanel(dept, visit) {
+  const ids = previousDiagnosisUiIdsForDept(dept);
+  const textEl = document.getElementById(ids.text);
+  const statusEl = document.getElementById(ids.status);
+  if (!textEl || !statusEl) return;
+  const pt = window.CURRENT_PATIENT || {};
+  const entry = getPreviousDiagnosisEntryForDept(pt, dept);
+  const currentText = String(getVisitDiagnosisTextForDept(visit || pt.lastVisit || {}, dept) || '').trim();
+  const prevText = String(entry?.text || '').trim();
+  if (!prevText || entry?.status === 'resolved' || (currentText && currentText === prevText)) {
+    textEl.textContent = 'No previous active diagnosis';
+    statusEl.value = 'active';
+    statusEl.disabled = true;
+    return;
+  }
+  textEl.textContent = prevText;
+  statusEl.disabled = false;
+  statusEl.value = entry?.status === 'resolved' ? 'resolved' : 'active';
+}
+window.handlePreviousDiagnosisStatusChange = function (dept, value) {
+  const key = normalizeQueueDeptForUser(dept || '');
+  const pt = window.CURRENT_PATIENT || {};
+  if (!pt || !pt.bmhId) return;
+  const existing = getPreviousDiagnosisEntryForDept(pt, key);
+  if (!existing?.text) return;
+  pt.prevDxByDept = Object.assign({}, pt.prevDxByDept || {}, {
+    [key]: Object.assign({}, existing, { status: value === 'resolved' ? 'resolved' : 'active', updatedAt: new Date().toISOString() })
+  });
+  const patch = { prevDxByDept: pt.prevDxByDept };
+  fbUpdate && fbUpdate('patients/' + pt.bmhId, patch).catch(function (e) {
+    console.warn('previous diagnosis status update failed', e);
+  });
+  if (typeof window.patchPatientFirestore === 'function') window.patchPatientFirestore(pt.bmhId, patch).catch(function () {});
+  refreshPreviousDiagnosisPanel(key, pt.lastVisit || null);
+  showToast(value === 'resolved' ? 'Previous diagnosis marked resolved ✓' : 'Previous diagnosis kept active ✓', 's');
+};
 
 function rxDrugTradeName(d) {
   if (!d) return '';
@@ -5122,6 +5225,7 @@ function populateObgForm(visit) {
     loadObgAdviceDraft();
     syncObgAssessmentToHistory();
     updateObgComputedFields();
+    refreshPreviousDiagnosisPanel('obg', {});
     return;
   }
   const mappings = {
@@ -5186,6 +5290,7 @@ function populateObgForm(visit) {
     }
   }
   restoreProcedureDoneState('obg', data.procDone || null);
+  refreshPreviousDiagnosisPanel('obg', data);
 }
 function addANCVisit(){
   const today = new Date().toISOString().split('T')[0];
@@ -5440,6 +5545,7 @@ function populatePsychForm(visit) {
   }
   if (Array.isArray(data.psychDxList)) rebuildDxListFromValues('psych-dx-list', data.psychDxList);
   restoreProcedureDoneState('psych', data.procDone || null);
+  refreshPreviousDiagnosisPanel('psych', data);
 }
 function printPsychRx(){printPsychSheet();}
 
@@ -5588,6 +5694,7 @@ function populateSkinForm(visit) {
   }
   if (Array.isArray(data.skinDxList)) rebuildDxListFromValues('skin-dx-list', data.skinDxList);
   restoreProcedureDoneState('skin', data.procDone || null);
+  refreshPreviousDiagnosisPanel('skin', data);
 }
 function selectProc(el,name){
   document.querySelectorAll('.procedure-card').forEach(c=>c.classList.remove('selected'));
@@ -7260,6 +7367,7 @@ function bmhRemoveChargeLine(bmhId, lineId) {
   bmhRenderBillLines();
   bmhUpdateBillTotals();
   bmhRenderBillPatientList();
+  renderAdminDailyBillingPanel();
 }
 function bmhAddManualBillLine() {
   const bmhId = document.getElementById('bmh-bill-pt-select')?.value;
@@ -7914,11 +8022,104 @@ function renderBillingPage() {
   if (labSel) labSel.innerHTML = PATIENTS.map(p => `<option value="${p.bmhId}">${p.name} — ${p.bmhId}</option>`).join('');
   const usel = document.getElementById('use-pt');
   if (usel) usel.innerHTML = PATIENTS.map(p => `<option value="${p.bmhId}">${p.name} — ${p.bmhId}</option>`).join('');
+  renderAdminDailyBillingPanel();
 }
 function renderBillingPageIfActive() {
   const pg = document.getElementById('pg-billing');
   if (pg && pg.classList.contains('active')) renderBillingPage();
 }
+window._bmhAdminBillingDept = window._bmhAdminBillingDept || 'all';
+window._bmhAdminBillingCat = window._bmhAdminBillingCat || 'all';
+function renderAdminDailyBillingPanel() {
+  const wrap = document.getElementById('bmh-admin-daily-billing-panel');
+  if (!wrap) return;
+  if (!CURRENT_USER?.isAdmin) {
+    wrap.style.display = 'none';
+    wrap.innerHTML = '';
+    return;
+  }
+  const safe = function (v) { return escapeHtmlConsent(String(v || '')); };
+  wrap.style.display = '';
+  const selectedDate = document.getElementById('bmh-bill-date-filter')?.value || localDateKey(new Date());
+  const rows = [];
+  Object.keys(window.BMH_PATIENT_CHARGES || {}).forEach(function (bmhId) {
+    const pt = PATIENTS.find(function (p) { return p.bmhId === bmhId; }) || {};
+    (window.BMH_PATIENT_CHARGES[bmhId] || []).forEach(function (row) {
+      if (localDateKey(row.ts || row.date) !== selectedDate) return;
+      if (!centreMatch(pt) && !centreMatch(row)) return;
+      rows.push({
+        bmhId: bmhId,
+        patient: pt.name || row.patient || 'Patient',
+        dept: normalizeQueueDeptForUser(pt.dept || row.dept || 'other') || 'other',
+        cat: String(row.cat || inferChargeCategoryFromService(row.desc || row.name || '') || 'other').toLowerCase(),
+        desc: row.desc || row.name || row.service || 'Charge',
+        amount: Number(row.amount || 0),
+        rowId: row.id,
+        ts: row.ts || row.date || ''
+      });
+    });
+  });
+  const deptLabels = { all: 'All Departments', ophtho: 'Ophthalmology', obg: 'OBG', psych: 'Neuropsychiatry', skin: 'Skin', other: 'Other' };
+  const deptTotals = {};
+  const catTotals = {};
+  rows.forEach(function (row) {
+    deptTotals[row.dept] = (deptTotals[row.dept] || 0) + row.amount;
+    catTotals[row.cat] = (catTotals[row.cat] || 0) + row.amount;
+  });
+  let filtered = rows.slice();
+  if (window._bmhAdminBillingDept !== 'all') filtered = filtered.filter(function (row) { return row.dept === window._bmhAdminBillingDept; });
+  if (window._bmhAdminBillingCat !== 'all') filtered = filtered.filter(function (row) { return row.cat === window._bmhAdminBillingCat; });
+  filtered.sort(function (a, b) { return String(b.ts || '').localeCompare(String(a.ts || '')); });
+  const deptChips = ['all'].concat(Object.keys(deptTotals).sort()).map(function (dept) {
+    const active = dept === window._bmhAdminBillingDept;
+    const total = dept === 'all' ? rows.reduce(function (s, row) { return s + row.amount; }, 0) : (deptTotals[dept] || 0);
+    return `<button type="button" class="admin-billing-chip${active ? ' active' : ''}" onclick="setAdminBillingDeptFilter('${dept}')">${deptLabels[dept] || dept} · ₹${Number(total || 0).toLocaleString('en-IN')}</button>`;
+  }).join('');
+  const catChips = ['all'].concat(Object.keys(catTotals).sort()).map(function (cat) {
+    const active = cat === window._bmhAdminBillingCat;
+    const total = cat === 'all' ? rows.reduce(function (s, row) { return s + row.amount; }, 0) : (catTotals[cat] || 0);
+    return `<button type="button" class="admin-billing-chip${active ? ' active' : ''}" onclick="setAdminBillingCategoryFilter('${cat}')">${bmhCatLabel(cat)} · ₹${Number(total || 0).toLocaleString('en-IN')}</button>`;
+  }).join('');
+  wrap.innerHTML = `<div style="background:var(--g6);border:1px solid var(--g5);border-radius:12px;padding:12px">
+    <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+      <div>
+        <div style="font-size:10px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.45px">Admin Daily Billing</div>
+        <div style="font-size:12px;color:var(--g1)">Delete wrong entries made on ${formatDateIN(selectedDate)}</div>
+      </div>
+      <div style="font-size:13px;font-weight:900;color:var(--bmh-blue)">₹${filtered.reduce(function (s, row) { return s + row.amount; }, 0).toLocaleString('en-IN')}</div>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">${deptChips}</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">${catChips}</div>
+    <div style="max-height:260px;overflow:auto;background:#fff;border:1px solid var(--g5);border-radius:10px">
+      ${filtered.length ? filtered.map(function (row) {
+        return `<div style="display:grid;grid-template-columns:minmax(0,1.2fr) 120px 110px 46px;gap:8px;align-items:center;padding:9px 10px;border-bottom:1px solid var(--g5);font-size:11.5px">
+          <div style="min-width:0">
+            <div style="font-weight:800">${safe(row.patient)} <span style="font-family:var(--mono);font-size:10px;color:var(--bmh-teal)">${safe(row.bmhId)}</span></div>
+            <div style="color:var(--g1);line-height:1.35">${safe(row.desc)}</div>
+          </div>
+          <div style="font-size:10px;color:var(--g1)">${deptLabels[row.dept] || row.dept}<br>${bmhCatLabel(row.cat)}</div>
+          <div style="font-weight:900;color:var(--bmh-blue)">₹${Number(row.amount || 0).toLocaleString('en-IN')}</div>
+          <button type="button" class="btn btn-xs btn-gray" onclick="deleteAdminBillingLine('${row.bmhId}','${row.rowId}')">✕</button>
+        </div>`;
+      }).join('') : '<div style="padding:16px;text-align:center;color:var(--g1);font-size:12px">No billing entries for this filter.</div>'}
+    </div>
+  </div>`;
+}
+window.setAdminBillingDeptFilter = function (dept) {
+  window._bmhAdminBillingDept = dept || 'all';
+  renderAdminDailyBillingPanel();
+};
+window.setAdminBillingCategoryFilter = function (cat) {
+  window._bmhAdminBillingCat = cat || 'all';
+  renderAdminDailyBillingPanel();
+};
+window.deleteAdminBillingLine = function (bmhId, rowId) {
+  if (!CURRENT_USER?.isAdmin) return;
+  if (!confirm('Delete this billing entry?')) return;
+  bmhRemoveChargeLine(bmhId, rowId);
+  renderAdminDailyBillingPanel();
+  showToast('Billing entry deleted ✓', 's');
+};
 
 function renderBillItems() {
   const el = document.getElementById('bill-items-list');
@@ -9488,18 +9689,28 @@ const RX_CUSTOM_OPTION_DEFAULTS = {
   freq: RX_FREQ_OPTIONS.slice(),
   dur: RX_DURATION_OPTIONS.slice()
 };
-function getDoctorRxOptionScope() {
-  const dept = normalizeDeptKeyForQueue(rxDeptKeyFromUi ? rxDeptKeyFromUi() : (CURRENT_USER?.dept || 'ophtho')) || 'ophtho';
+function getDoctorRxOptionScope(deptOverride) {
+  const dept = normalizeDeptKeyForQueue(deptOverride || (rxDeptKeyFromUi ? rxDeptKeyFromUi() : (CURRENT_USER?.dept || 'ophtho'))) || 'ophtho';
   const doctor = String(CURRENT_USER?.name || 'default').trim() || 'default';
   return { dept: dept, doctor: doctor, key: doctor + '::' + dept };
 }
-function getDoctorCustomRxOptions() {
+function getDoctorCustomRxOptionsForDept(deptOverride) {
   window.DOCTOR_RX_CUSTOM_OPTIONS = window.DOCTOR_RX_CUSTOM_OPTIONS || {};
-  const scope = getDoctorRxOptionScope().key;
+  const scope = getDoctorRxOptionScope(deptOverride).key;
   if (!window.DOCTOR_RX_CUSTOM_OPTIONS[scope]) {
-    window.DOCTOR_RX_CUSTOM_OPTIONS[scope] = { type: [], freq: [], dur: [] };
+    window.DOCTOR_RX_CUSTOM_OPTIONS[scope] = { type: [], freq: [], dur: [], advice: [], procedure: [], sendRecent: {} };
   }
+  const bucket = window.DOCTOR_RX_CUSTOM_OPTIONS[scope];
+  if (!Array.isArray(bucket.type)) bucket.type = [];
+  if (!Array.isArray(bucket.freq)) bucket.freq = [];
+  if (!Array.isArray(bucket.dur)) bucket.dur = [];
+  if (!Array.isArray(bucket.advice)) bucket.advice = [];
+  if (!Array.isArray(bucket.procedure)) bucket.procedure = [];
+  if (!bucket.sendRecent || typeof bucket.sendRecent !== 'object') bucket.sendRecent = {};
   return window.DOCTOR_RX_CUSTOM_OPTIONS[scope];
+}
+function getDoctorCustomRxOptions() {
+  return getDoctorCustomRxOptionsForDept();
 }
 function saveDoctorCustomRxOptions() {
   try {
@@ -9521,6 +9732,8 @@ function loadDoctorCustomRxOptions() {
       if (data && typeof data === 'object') {
         Object.assign(window.DOCTOR_RX_CUSTOM_OPTIONS, data);
         refreshCustomRxOptionSelects();
+        refreshDeptAdviceAndProcedureUi();
+        renderAllDeptSendBars();
       }
     }).catch(function () {});
   }
@@ -9546,6 +9759,167 @@ function refreshCustomRxOptionSelects() {
     ['md-edit-type', 'type'], ['md-edit-freq', 'freq'], ['md-edit-dur', 'dur']
   ].forEach(function (pair) {
     fillSelectWithOptions(pair[0], pair[1]);
+  });
+}
+function normalizeDeptTemplateLabel(value) {
+  const raw = String(value || '').trim().replace(/\s+/g, ' ');
+  if (!raw) return '';
+  if (!/[a-z]/.test(raw) && /[A-Z]/.test(raw)) return raw;
+  return toDisplayTitleCase(raw);
+}
+function saveDeptTemplateOption(kind, dept, rawValue) {
+  const value = normalizeDeptTemplateLabel(rawValue);
+  if (!value) return '';
+  const bucket = getDoctorCustomRxOptionsForDept(dept);
+  if (!Array.isArray(bucket[kind])) bucket[kind] = [];
+  if (!bucket[kind].some(function (x) { return String(x).trim().toLowerCase() === value.toLowerCase(); })) {
+    bucket[kind].push(value);
+    bucket[kind].sort(function (a, b) { return String(a).localeCompare(String(b)); });
+    saveDoctorCustomRxOptions();
+  }
+  return value;
+}
+function deleteDeptTemplateOption(kind, dept, rawValue) {
+  const value = String(rawValue || '').trim().toLowerCase();
+  if (!value) return;
+  const bucket = getDoctorCustomRxOptionsForDept(dept);
+  if (!Array.isArray(bucket[kind])) return;
+  bucket[kind] = bucket[kind].filter(function (x) { return String(x || '').trim().toLowerCase() !== value; });
+  saveDoctorCustomRxOptions();
+}
+function getDeptAdviceTextareaId(dept) {
+  return { ophtho: 'rx-advice-text', obg: 'obg-advice', psych: 'psych-advice', skin: 'skin-advice' }[dept] || 'rx-advice-text';
+}
+function getDeptAdviceLibraryHostId(dept) {
+  return { ophtho: 'oe-advice-library', obg: 'obg-advice-library', psych: 'psych-advice-library', skin: 'skin-advice-library' }[dept] || 'oe-advice-library';
+}
+function getDeptProcedureLibraryHostId(dept) {
+  return { ophtho: 'oe-proc-library', obg: 'obg-proc-library', psych: 'psych-proc-library', skin: 'skin-proc-library' }[dept] || 'oe-proc-library';
+}
+function getDeptProcedureSelectId(dept) {
+  return { ophtho: 'proc-add-dropdown', obg: 'obg-proc-add-dropdown', psych: 'psych-proc-add-dropdown', skin: 'skin-proc-add-dropdown' }[dept] || 'proc-add-dropdown';
+}
+function getDeptProcedureContainerId(dept) {
+  return { ophtho: 'rx-proc-advised', obg: 'rx-proc-advised-obg', psych: 'rx-proc-advised-psych', skin: 'rx-proc-advised-skin' }[dept] || 'rx-proc-advised';
+}
+function appendAdviceTemplateToTextarea(dept, text) {
+  const ta = document.getElementById(getDeptAdviceTextareaId(dept));
+  if (!ta) return;
+  const value = normalizeDeptTemplateLabel(text);
+  if (!value) return;
+  const lines = String(ta.value || '').split('\n').map(function (line) { return String(line || '').trim(); }).filter(Boolean);
+  if (!lines.some(function (line) { return line.toLowerCase() === value.toLowerCase(); })) lines.push(value);
+  ta.value = lines.join('\n');
+  ta.dispatchEvent(new Event('change', { bubbles: true }));
+}
+function renderDeptAdviceLibrary(dept) {
+  const host = document.getElementById(getDeptAdviceLibraryHostId(dept));
+  if (!host) return;
+  const bucket = getDoctorCustomRxOptionsForDept(dept);
+  const items = (bucket.advice || []).slice().sort(function (a, b) { return String(a).localeCompare(String(b)); });
+  if (!items.length) {
+    host.innerHTML = '<div style="font-size:10.5px;color:var(--g1);padding:6px 8px;border:1px dashed var(--g4);border-radius:8px;background:var(--g6)">Saved instructions will appear here like templates.</div>';
+    return;
+  }
+  host.innerHTML = items.map(function (item) {
+    const safeItem = String(item).replace(/"/g, '&quot;');
+    const jsItem = String(item).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    return '<div style="display:grid;grid-template-columns:minmax(0,1fr) 26px;gap:6px;align-items:start;background:#fff;border:1px solid var(--g5);border-radius:8px;padding:7px 8px">'
+      + '<button type="button" class="btn btn-xs btn-outline" style="justify-content:flex-start;text-align:left;white-space:normal;line-height:1.35;padding:6px 8px" title="' + safeItem + '" onclick="appendAdviceTemplateToTextarea(\'' + dept + '\',\'' + jsItem + '\')">📋 ' + escapeHtmlConsent(item) + '</button>'
+      + '<button type="button" class="btn btn-xs btn-gray" title="Delete" onclick="removeDeptAdviceTemplate(\'' + dept + '\',\'' + jsItem + '\')">✕</button>'
+      + '</div>';
+  }).join('');
+}
+window.appendAdviceTemplateToTextarea = appendAdviceTemplateToTextarea;
+window.removeDeptAdviceTemplate = function removeDeptAdviceTemplate(dept, item) {
+  deleteDeptTemplateOption('advice', dept, item);
+  renderDeptAdviceLibrary(dept);
+};
+function syncDeptAdviceLibraryFromTextarea(dept) {
+  const ta = document.getElementById(getDeptAdviceTextareaId(dept));
+  if (!ta) return;
+  const normalizedLines = String(ta.value || '').split('\n').map(function (line) { return normalizeDeptTemplateLabel(line); }).filter(Boolean);
+  if (normalizedLines.length) ta.value = normalizedLines.join('\n');
+  normalizedLines.forEach(function (line) {
+    saveDeptTemplateOption('advice', dept, line);
+  });
+  renderDeptAdviceLibrary(dept);
+}
+function renderDeptProcedureLibrary(dept) {
+  const host = document.getElementById(getDeptProcedureLibraryHostId(dept));
+  if (!host) return;
+  const bucket = getDoctorCustomRxOptionsForDept(dept);
+  const items = (bucket.procedure || []).slice().sort(function (a, b) { return String(a).localeCompare(String(b)); });
+  if (!items.length) {
+    host.innerHTML = '<div style="font-size:10.5px;color:var(--g1);padding:6px 8px;border:1px dashed var(--g4);border-radius:8px;background:var(--g6)">Saved procedures for this department will appear here.</div>';
+    return;
+  }
+  host.innerHTML = items.map(function (item) {
+    const jsItem = String(item).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    return '<div style="display:grid;grid-template-columns:minmax(0,1fr) 26px;gap:6px;align-items:start;background:#fff;border:1px solid var(--g5);border-radius:8px;padding:7px 8px">'
+      + '<button type="button" class="btn btn-xs btn-outline" style="justify-content:flex-start;text-align:left;white-space:normal;line-height:1.35;padding:6px 8px" onclick="addDeptSavedProcedure(\'' + dept + '\',\'' + jsItem + '\')">⚕️ ' + escapeHtmlConsent(item) + '</button>'
+      + '<button type="button" class="btn btn-xs btn-gray" title="Delete" onclick="removeDeptProcedureTemplate(\'' + dept + '\',\'' + jsItem + '\')">✕</button>'
+      + '</div>';
+  }).join('');
+}
+window.addDeptSavedProcedure = function addDeptSavedProcedure(dept, item) {
+  const container = document.getElementById(getDeptProcedureContainerId(dept));
+  addProcItemToContainer(container, item, 0, { quiet: true });
+};
+window.removeDeptProcedureTemplate = function removeDeptProcedureTemplate(dept, item) {
+  deleteDeptTemplateOption('procedure', dept, item);
+  renderDeptProcedureLibrary(dept);
+  renderDeptProcedureSelect(dept);
+};
+function getDeptProcedureRowsForPicker(dept) {
+  const rows = getProcedureDoneChargeRows(dept);
+  const seen = new Set();
+  return rows.filter(function (row) {
+    const label = (row.parent ? row.parent + ' — ' : '') + row.name;
+    const key = String(label || '').trim().toLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+function renderDeptProcedureSelect(dept) {
+  const sel = document.getElementById(getDeptProcedureSelectId(dept));
+  if (!sel) return;
+  const rows = getDeptProcedureRowsForPicker(dept);
+  const centre = getEffectiveCentre ? getEffectiveCentre() : (CURRENT_USER?.centre || 'CHD');
+  const bucket = getDoctorCustomRxOptionsForDept(dept);
+  const custom = (bucket.procedure || []).slice().sort(function (a, b) { return String(a).localeCompare(String(b)); });
+  let html = '<option value="">— Select procedure —</option>';
+  if (custom.length) {
+    html += '<optgroup label="Saved Procedures">';
+    custom.forEach(function (name) {
+      html += '<option value="' + String(name).replace(/"/g, '&quot;') + '|0">' + escapeHtmlConsent(name) + '</option>';
+    });
+    html += '</optgroup>';
+  }
+  const grouped = {};
+  rows.forEach(function (row) {
+    const grp = String(row.parent || row.cat || 'Procedures');
+    if (!grouped[grp]) grouped[grp] = [];
+    grouped[grp].push(row);
+  });
+  Object.keys(grouped).sort().forEach(function (grp) {
+    html += '<optgroup label="' + escapeHtmlConsent(grp) + '">';
+    grouped[grp].forEach(function (row) {
+      const amount = centre === 'RPR' ? Number(row.rpr || 0) : Number(row.chd || 0);
+      const label = (row.parent ? row.parent + ' — ' : '') + row.name;
+      html += '<option value="' + String(label).replace(/"/g, '&quot;') + '|' + amount + '">' + escapeHtmlConsent(label) + '</option>';
+    });
+    html += '</optgroup>';
+  });
+  html += '<option value="__custom__|0">+ Add new procedure…</option>';
+  sel.innerHTML = html;
+}
+function refreshDeptAdviceAndProcedureUi() {
+  ['ophtho', 'obg', 'psych', 'skin'].forEach(function (dept) {
+    renderDeptAdviceLibrary(dept);
+    renderDeptProcedureLibrary(dept);
+    renderDeptProcedureSelect(dept);
   });
 }
 function addCustomRxOption(kind) {
@@ -15940,69 +16314,34 @@ ${Object.keys(groups).map(function (key) {
 // ─── PROCEDURE / SURGERY ADVISED ─────────────
 const PROC_LOG = [];  // persistent across session
 
-// AI-suggest procedures based on current diagnosis + department
 function renderAIProcSuggestions() {
-  const deptMap = {ophtho:'ophtho', obg:'obg', psych:'psych', skin:'skin'};
-  // Determine current dept from active patient
-  const pt = PATIENTS[0]; // default to first patient for demo
-  const dept = pt?.dept || 'ophtho';
-
-  const suggestions = {
-    ophtho:[
-      {label:'PMICS + IOL OS', full:'PMICS + IOL Implantation (Left Eye)', price:38000},
-      {label:'PMICS + IOL OD', full:'PMICS + IOL Implantation (Right Eye)', price:38000},
-      {label:'IVT Injection', full:'IVT Injection (Anti-VEGF)', price:8000},
-      {label:'YAG Caps', full:'Nd:YAG Capsulotomy', price:3000},
-      {label:'Laser PI', full:'Laser Peripheral Iridotomy', price:4000},
-      {label:'Trab OD', full:'Trabeculectomy OD', price:42000},
-    ],
-    obg:[
-      {label:'LSCS', full:'LSCS (Elective)', price:45000},
-      {label:'Laparoscopy', full:'Diagnostic Laparoscopy', price:20000},
-      {label:'D&C', full:'D&C / Hysteroscopy', price:12000},
-    ],
-    psych:[
-      {label:'ECT', full:'Electroconvulsive Therapy', price:8000},
-    ],
-    skin:[
-      {label:'Chemical Peel', full:'Chemical Peel', price:1500},
-      {label:'PRP', full:'PRP Treatment', price:3500},
-      {label:'Microneedling', full:'Microneedling', price:2000},
-      {label:'Botox', full:'Botox Injection', price:8000},
-    ],
-  };
-
-  const s = suggestions[dept] || suggestions.ophtho;
-  document.querySelectorAll('#ai-proc-suggestions').forEach(el => {
-    el.innerHTML = s.map(p =>
-      `<button class="btn btn-xs" style="background:var(--orange-lt);color:#8a4200;border:1.5px solid rgba(255,149,0,.4);padding:4px 10px;font-size:10.5px;font-weight:700;transition:all .15s"
-        onmouseenter="this.style.background='var(--orange)';this.style.color='#fff'"
-        onmouseleave="this.style.background='var(--orange-lt)';this.style.color='#8a4200'"
-        onclick="addProcItem('${p.full}',${p.price})">${p.label}</button>`
-    ).join('');
-  });
+  refreshDeptAdviceAndProcedureUi();
 }
-
-
-
 function addProcFromDropdown(sel) {
   const val = sel.value;
   if(!val) return;
-  if(val === '__custom__') {
+  if(val.indexOf('__custom__') === 0) {
     sel.value = '';
     addProcAdvised();
     return;
   }
-  // Get price from CENTRE_CHARGES
-  const price = Object.entries(CENTRE_CHARGES.CHD).find(([k])=>k.toLowerCase().includes(val.toLowerCase().split(' ')[0]))?.[1] || 0;
-  addProcItem(val, price);
+  const parts = val.split('|');
+  const procName = normalizeDeptTemplateLabel(parts[0] || '');
+  const price = Number(parts[1] || 0) || 0;
+  const dept = 'ophtho';
+  const container = document.getElementById(getDeptProcedureContainerId(dept));
+  if (procName) addProcItemToContainer(container, procName, price);
   sel.value = '';
 }
 
 function addProcAdvised() {
+  const dept = activeClinicDeptKey();
   const val = prompt('Enter procedure / surgery name:');
   if(!val) return;
-  addProcItem(val, 0);
+  const next = saveDeptTemplateOption('procedure', dept, val);
+  addProcItemToContainer(document.getElementById(getDeptProcedureContainerId(dept)), next || val, 0);
+  renderDeptProcedureLibrary(dept);
+  renderDeptProcedureSelect(dept);
 }
 
 // ─── SMART SEND ROW ─────────────────
@@ -16028,24 +16367,7 @@ function lookupChargeAmountFromSettings(deptKey, name) {
   return centre === 'RPR' ? Number(row.rpr || 0) : Number(row.chd || 0);
 }
 function renderAISuggestedCharges() {
-  const el = document.getElementById('ai-suggested-charges'); if(!el) return;
-  const dept = getDeptKeyForSendCharge();
-  const centre = typeof getEffectiveCentre === 'function' ? getEffectiveCentre() : (CURRENT_USER?.centre === 'RPR' ? 'RPR' : 'CHD');
-  const rows = (CHARGES_DATA || []).filter(function (row) {
-    return deptChargeCategoryMatches(dept, row.cat);
-  }).slice().sort(function (a, b) {
-    return (Number(b.used || b.usageCount || 0)) - (Number(a.used || a.usageCount || 0));
-  }).slice(0, 10);
-  if (!rows.length) {
-    el.innerHTML = '<span style="font-size:10px;color:var(--g1)">Add items under Settings → Charges for this department.</span>';
-    return;
-  }
-  el.innerHTML = rows.map(function (row) {
-    const amount = centre === 'RPR' ? Number(row.rpr || 0) : Number(row.chd || 0);
-    const nm = String(row.name || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-    const label = String(row.name || '').length > 24 ? String(row.name).slice(0, 22) + '…' : String(row.name || '');
-    return '<button type="button" class="btn btn-xs" style="background:#fff;color:#b55a00;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700;transition:all .15s" onmouseenter="this.style.background=\'#b55a00\';this.style.color=\'#fff\'" onmouseleave="this.style.background=\'#fff\';this.style.color=\'#b55a00\'" onclick="sendQuickCharge(\'' + nm + '\',' + amount + ')">' + label.replace(/</g, '&lt;') + ' ₹' + amount.toLocaleString('en-IN') + '</button>';
-  }).join('');
+  renderAllDeptSendBars();
 }
 function deptChargeCategoryMatches(deptKey, cat) {
   const c = String(cat || '').toLowerCase();
@@ -16243,6 +16565,7 @@ function renderOphthoSendChargeSelect() {
   const rows = (CHARGES_DATA || []).filter(function (row) {
     return deptChargeCategoryMatches('ophtho', row.cat);
   });
+  const recentMap = getDoctorCustomRxOptionsForDept('ophtho').sendRecent || {};
   const byCat = {};
   rows.forEach(function (row) {
     const c = row.cat || 'Charges';
@@ -16252,7 +16575,21 @@ function renderOphthoSendChargeSelect() {
   const esc = function (s) {
     return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
   };
-  let html = '<option value="">— All Procedures —</option>';
+  let html = '<option value="">— Select charge —</option>';
+  const recentRows = rows.slice().filter(function (row) {
+    return Number(recentMap[String(row.name || '').toLowerCase()] || 0) > 0;
+  }).sort(function (a, b) {
+    return Number(recentMap[String(b.name || '').toLowerCase()] || 0) - Number(recentMap[String(a.name || '').toLowerCase()] || 0);
+  }).slice(0, 6);
+  if (recentRows.length) {
+    html += '<optgroup label="Recent">';
+    recentRows.forEach(function (row) {
+      const amount = centre === 'RPR' ? Number(row.rpr || 0) : Number(row.chd || 0);
+      const label = (row.parent ? String(row.parent) + ' — ' : '') + String(row.name);
+      html += '<option value="' + esc(row.name) + '|' + amount + '">' + esc(label) + ' — ₹' + amount.toLocaleString('en-IN') + '</option>';
+    });
+    html += '</optgroup>';
+  }
   Object.keys(byCat).sort().forEach(function (cat) {
     html += '<optgroup label="' + esc(cat) + '">';
     byCat[cat].forEach(function (row) {
@@ -16301,28 +16638,38 @@ function renderDeptSendBar(deptKey, hostId, logId) {
   const rows = (CHARGES_DATA || []).filter(function (row) {
     return deptChargeCategoryMatches(deptKey, row.cat);
   });
-  const options = rows.map(function (row) {
+  const recentMap = getDoctorCustomRxOptionsForDept(deptKey).sendRecent || {};
+  const topRecent = rows.slice().filter(function (row) {
+    return Number(recentMap[String(row.name || '').toLowerCase()] || 0) > 0;
+  }).sort(function (a, b) {
+    return Number(recentMap[String(b.name || '').toLowerCase()] || 0) - Number(recentMap[String(a.name || '').toLowerCase()] || 0);
+  }).slice(0, 6);
+  let options = '';
+  if (topRecent.length) {
+    options += '<optgroup label="Recent">';
+    options += topRecent.map(function (row) {
+      const amount = centre === 'RPR' ? Number(row.rpr || 0) : Number(row.chd || 0);
+      return '<option value="' + String(row.name).replace(/"/g, '&quot;') + '|' + amount + '">' + String(row.parent ? row.parent + ' — ' : '') + String(row.name).replace(/</g, '&lt;') + ' — ₹' + amount.toLocaleString('en-IN') + '</option>';
+    }).join('');
+    options += '</optgroup>';
+  }
+  options += rows.map(function (row) {
     const amount = centre === 'RPR' ? Number(row.rpr || 0) : Number(row.chd || 0);
     return '<option value="' + String(row.name).replace(/"/g, '&quot;') + '|' + amount + '">' + String(row.parent ? row.parent + ' — ' : '') + String(row.name).replace(/</g, '&lt;') + ' — ₹' + amount.toLocaleString('en-IN') + '</option>';
-  }).join('');
-  const quickRows = rows.slice().sort(function (a, b) {
-    return (Number(b.used || b.usageCount || 0)) - (Number(a.used || a.usageCount || 0));
-  }).slice(0, 6);
-  const buttons = quickRows.map(function (row) {
-    const amount = centre === 'RPR' ? Number(row.rpr || 0) : Number(row.chd || 0);
-    const short = String(row.name || '').length > 26 ? String(row.name).slice(0, 24) + '…' : String(row.name || '');
-    return '<button type="button" class="btn btn-xs" style="background:#fff;color:#b55a00;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="sendQuickCharge(' + "'" + String(row.name).replace(/'/g, "\\'") + "'" + ',' + amount + ')">' + short.replace(/</g, '&lt;') + ' ₹' + amount.toLocaleString('en-IN') + '</button>';
   }).join('');
   const dlOpts = rows.map(function (row) {
     return '<option value="' + String(row.name).replace(/"/g, '&quot;') + '">';
   }).join('');
-  host.innerHTML = '<div style="background:linear-gradient(135deg,#fff7e0,#fff3cc);border-radius:10px;padding:8px 11px;margin-bottom:10px;border:1.5px solid rgba(212,160,23,.3)"><div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap"><span style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">📤 Send to Reception:</span><div style="display:flex;gap:4px;flex-wrap:wrap;flex:1;min-width:220px">' + buttons + '</div><select style="font-size:11px;padding:3px 6px;border-radius:6px;border:1.5px solid rgba(212,160,23,.5);background:#fff;min-width:200px" onchange="sendFromDropdown(this)"><option value="">— Pick from Settings → Charges —</option>' + options + '</select><input type="text" id="send-charge-name-' + deptKey + '" list="send-charge-dl-' + deptKey + '" placeholder="Type charge name…" autocomplete="off" style="font-size:11px;padding:4px 8px;border-radius:6px;border:1.5px solid rgba(212,160,23,.5);min-width:150px;max-width:220px;flex:1"><input type="number" id="send-charge-amt-' + deptKey + '" placeholder="₹" min="0" style="font-size:11px;padding:4px 8px;width:72px;border-radius:6px;border:1.5px solid rgba(212,160,23,.5)"><button type="button" class="btn btn-xs btn-gold" onclick="sendQuickChargeFromDeptInputs(\'' + deptKey + '\')">Send</button><button type="button" class="btn btn-xs btn-outline" onclick="openCertificateModal(\'' + deptKey + '\')" style="white-space:nowrap">📄 Certificates</button><button type="button" class="btn btn-xs btn-outline" onclick="addCustomCharge()" style="white-space:nowrap">Custom</button></div><datalist id="send-charge-dl-' + deptKey + '">' + dlOpts + '</datalist></div>';
+  host.innerHTML = '<div style="background:linear-gradient(135deg,#fff7e0,#fff3cc);border-radius:10px;padding:8px 11px;margin-bottom:10px;border:1.5px solid rgba(212,160,23,.3)"><div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap"><span style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">📤 Send to Reception:</span><select style="font-size:11px;padding:3px 6px;border-radius:6px;border:1.5px solid rgba(212,160,23,.5);background:#fff;min-width:220px;flex:1" onchange="sendFromDropdown(this)"><option value="">— Pick from Settings → Charges —</option>' + options + '</select><input type="text" id="send-charge-name-' + deptKey + '" list="send-charge-dl-' + deptKey + '" placeholder="Type charge name…" autocomplete="off" style="font-size:11px;padding:4px 8px;border-radius:6px;border:1.5px solid rgba(212,160,23,.5);min-width:150px;max-width:220px;flex:1"><input type="number" id="send-charge-amt-' + deptKey + '" placeholder="₹" min="0" style="font-size:11px;padding:4px 8px;width:72px;border-radius:6px;border:1.5px solid rgba(212,160,23,.5)"><button type="button" class="btn btn-xs btn-gold" onclick="sendQuickChargeFromDeptInputs(\'' + deptKey + '\')">Send</button><button type="button" class="btn btn-xs btn-outline" onclick="openCertificateModal(\'' + deptKey + '\')" style="white-space:nowrap">📄 Certificates</button><button type="button" class="btn btn-xs btn-outline" onclick="addCustomCharge()" style="white-space:nowrap">Custom</button></div><datalist id="send-charge-dl-' + deptKey + '">' + dlOpts + '</datalist></div>';
 }
 function renderAllDeptSendBars() {
   renderOphthoSendChargeSelect();
-  renderDeptSendBar('obg', 'obg-top-send-bar', 'sent-charges-log-obg');
-  renderDeptSendBar('psych', 'psych-top-send-bar', 'sent-charges-log-psych');
-  renderDeptSendBar('skin', 'skin-top-send-bar', 'sent-charges-log-skin');
+  renderDeptSendBar('obg', 'obg-top-send-bar');
+  renderDeptSendBar('psych', 'psych-top-send-bar');
+  renderDeptSendBar('skin', 'skin-top-send-bar');
+  renderDeptSendBar('obg', 'obg-rx-send-bar');
+  renderDeptSendBar('psych', 'psych-rx-send-bar');
+  renderDeptSendBar('skin', 'skin-rx-send-bar');
 }
 
 function sendFromDropdown(sel) {
@@ -16343,6 +16690,8 @@ setTimeout(() => {
   renderAIProcSuggestions();
   renderAISuggestedCharges();
   renderAllDeptSendBars();
+  refreshDeptAdviceAndProcedureUi();
+  bindDeptAdviceLibraryAutosave();
   loadCertificateTemplatesFromStorage && loadCertificateTemplatesFromStorage();
 }, 200);
 
@@ -16764,9 +17113,13 @@ function addProcFromDropdownDept(sel) {
   const val = sel.value; if(!val) return;
   if(val.startsWith('__custom__')) { sel.value=''; addProcAdvised(); return; }
   const parts = val.split('|');
-  const name = parts[0], price = parseInt(parts[1])||0;
-  // Find the right container - look for nearest rx-proc-advised
-  const container = sel.closest('[class*="tab-content"]')?.querySelector('[id^="rx-proc-advised"]')
+  const name = normalizeDeptTemplateLabel(parts[0]), price = parseInt(parts[1])||0;
+  const dept = sel.id === 'obg-proc-add-dropdown' ? 'obg'
+    : sel.id === 'psych-proc-add-dropdown' ? 'psych'
+    : sel.id === 'skin-proc-add-dropdown' ? 'skin'
+    : 'ophtho';
+  const container = document.getElementById(getDeptProcedureContainerId(dept))
+    || sel.closest('[class*="tab-content"]')?.querySelector('[id^="rx-proc-advised"]')
     || document.getElementById('rx-proc-advised');
   addProcItemToContainer(container, name, price);
   sel.value = '';
@@ -16788,13 +17141,21 @@ function addProcItemToContainer(container, procName, price, opts) {
     + '<button class="btn btn-xs btn-gold" onclick="nav(\'brochures\',null)" title="Patient brochure">📄</button>'
     + '<button class="btn btn-xs" style="background:#CC0000;color:#fff;padding:2px 7px" onclick="this.closest(\'[data-proc]\').remove()">✕</button>';
   container.appendChild(d);
+  const dept = container.id === 'rx-proc-advised-obg' ? 'obg'
+    : container.id === 'rx-proc-advised-psych' ? 'psych'
+    : container.id === 'rx-proc-advised-skin' ? 'skin'
+    : 'ophtho';
+  saveDeptTemplateOption('procedure', dept, procName);
+  renderDeptProcedureLibrary(dept);
+  renderDeptProcedureSelect(dept);
   if (!opts.silentLog && PROCEDURE_ADVISED_LOG) pushProcedureAdvisedLog(procName, { price });
   if (!opts.quiet) showToast('⚕️ "'+procName+'" added ✓','s');
 }
 
 // Override addProcItem to use container-based approach
 function addProcItem(procName, price) {
-  const c = document.getElementById('rx-proc-advised')
+  const dept = activeClinicDeptKey();
+  const c = document.getElementById(getDeptProcedureContainerId(dept))
     || document.querySelector('[id^="rx-proc-advised"]');
   addProcItemToContainer(c, procName, price);
 }
@@ -18279,16 +18640,11 @@ function submitDeleteRequest() {
 // ── Advice Templates ──────────────────────────────────────────────────────────
 window.ADVICE_TEMPLATES = window.ADVICE_TEMPLATES || [];
 function refreshRxAdviceFromChips() {
-  const chips = [...document.querySelectorAll('#adv-chips .adv-chip.active')].map(function (c) { return c.textContent.trim(); });
-  const ta = document.getElementById('rx-advice-text');
+  const ta = document.getElementById(getDeptAdviceTextareaId(activeClinicDeptKey()));
   if (!ta) return;
-  const manualText = ta.value.replace(/^• .+$/gm, '').trim();
-  ta.value = chips.map(function (c) { return '• ' + c; }).join('\n') + (manualText ? '\n' + manualText : '');
+  syncDeptAdviceLibraryFromTextarea(activeClinicDeptKey());
 }
 function toggleAdvChip(el) {
-  const active = el.classList.toggle('active');
-  if(active) { el.style.background='var(--orange)'; el.style.color='#fff'; el.style.borderColor='var(--orange)'; }
-  else { el.style.background='var(--g5)'; el.style.color=''; el.style.borderColor='var(--g4)'; }
   refreshRxAdviceFromChips();
 }
 function removeOphAdvChipRow(btn) {
@@ -18298,55 +18654,16 @@ function removeOphAdvChipRow(btn) {
 }
 window.removeOphAdvChipRow = removeOphAdvChipRow;
 function wrapOphAdviceChipsWithDelete() {
-  const wrap = document.getElementById('adv-chips');
-  if (!wrap) return;
-  wrap.querySelectorAll(':scope > .adv-chip').forEach(function (chip) {
-    if (chip.closest('.adv-chip-row')) return;
-    const row = document.createElement('span');
-    row.className = 'adv-chip-row';
-    row.style.cssText = 'display:inline-flex;align-items:center;gap:2px;margin:2px';
-    chip.parentNode.insertBefore(row, chip);
-    row.appendChild(chip);
-    const del = document.createElement('button');
-    del.type = 'button';
-    del.setAttribute('aria-label', 'Remove');
-    del.textContent = '×';
-    del.className = 'btn btn-xs btn-gray';
-    del.style.cssText = 'padding:0 4px;font-size:10px;line-height:1.1;min-width:20px';
-    del.onclick = function (e) { e.stopPropagation(); removeOphAdvChipRow(del); };
-    row.appendChild(del);
-  });
+  renderDeptAdviceLibrary('ophtho');
 }
 window.wrapOphAdviceChipsWithDelete = wrapOphAdviceChipsWithDelete;
 function ingestCustomAdviceLinesFromTextarea(ta) {
   if (!ta) return;
-  const wrap = document.getElementById('adv-chips');
-  if (!wrap) return;
-  const existing = new Set([...wrap.querySelectorAll('.adv-chip')].map(function (c) { return c.textContent.trim().toLowerCase(); }));
-  (ta.value || '').split('\n').forEach(function (line) {
-    if (!/^\s*•\s*\S/.test(line)) return;
-    const t = line.replace(/^\s*•\s*/, '').trim();
-    if (t.length < 3 || existing.has(t.toLowerCase())) return;
-    const chip = document.createElement('span');
-    chip.className = 'adv-chip active';
-    chip.onclick = function () { toggleAdvChip(chip); };
-    chip.style.cssText = 'font-size:10px;padding:3px 8px;border-radius:10px;background:var(--orange);color:#fff;border:1px solid var(--orange);cursor:pointer;user-select:none';
-    chip.textContent = t;
-    const row = document.createElement('span');
-    row.className = 'adv-chip-row';
-    row.style.cssText = 'display:inline-flex;align-items:center;gap:2px;margin:2px';
-    row.appendChild(chip);
-    const del = document.createElement('button');
-    del.type = 'button';
-    del.textContent = '×';
-    del.className = 'btn btn-xs btn-gray';
-    del.style.cssText = 'padding:0 4px;font-size:10px;line-height:1.1';
-    del.onclick = function (e) { e.stopPropagation(); removeOphAdvChipRow(del); };
-    row.appendChild(del);
-    wrap.appendChild(row);
-    existing.add(t.toLowerCase());
-  });
-  refreshRxAdviceFromChips();
+  const dept = ta.id === 'obg-advice' ? 'obg'
+    : ta.id === 'psych-advice' ? 'psych'
+    : ta.id === 'skin-advice' ? 'skin'
+    : 'ophtho';
+  syncDeptAdviceLibraryFromTextarea(dept);
 }
 window.ingestCustomAdviceLinesFromTextarea = ingestCustomAdviceLinesFromTextarea;
 function openSaveAdviceTemplate() {
@@ -18389,6 +18706,18 @@ function loadAdviceTemplates() {
   fbOnce('adviceTemplates').then(data=>{
     if(data) window.ADVICE_TEMPLATES = Object.values(data);
   }).catch(()=>{});
+}
+function bindDeptAdviceLibraryAutosave() {
+  if (window._bmhDeptAdviceAutosaveBound) return;
+  window._bmhDeptAdviceAutosaveBound = true;
+  const ids = ['rx-advice-text', 'obg-advice', 'psych-advice', 'skin-advice'];
+  const handler = function (e) {
+    const el = e && e.target;
+    if (!el || !ids.includes(el.id)) return;
+    ingestCustomAdviceLinesFromTextarea(el);
+  };
+  document.addEventListener('change', handler, true);
+  document.addEventListener('blur', handler, true);
 }
 
 // ── Load OT Cases from Firebase on login ─────────────────────────────────────
@@ -22324,6 +22653,11 @@ function openEditPatientModal(bmhId) {
   setVal('upd-addr', p.address||p.addr||'');
   setVal('upd-rel', p.relation||p.rel||'');
   setVal('upd-ref-name', p.refName||p.referredBy||'');
+  setVal('upd-fee', p.consultationFee != null ? p.consultationFee : (getReceptionConsultationRate(p.centre || CURRENT_USER?.centre || 'CHD') || 0));
+  setVal('upd-advance-amt', p.advance != null ? p.advance : '');
+  setVal('upd-advance-purpose', p.advancePurpose || '');
+  const noFeeEl = document.getElementById('upd-no-fee'); if (noFeeEl) noFeeEl.checked = !!p.consultationNoFee;
+  const feeEl = document.getElementById('upd-fee'); if (feeEl) feeEl.disabled = !!p.consultationNoFee;
   const disp=document.getElementById('upd-bmhid-display'); if(disp) disp.textContent='BMSH ID: '+bid;
   openM('m-update-details');
 }
@@ -22336,6 +22670,10 @@ function saveUpdatedPatientDetails() {
   const ln = normalizeReceptionFieldValue('upd-ln', document.getElementById('upd-ln')?.value?.trim()||'');
   if(!fn) { showToast('First name is required','w'); return; }
   const refName = normalizeReceptionFieldValue('upd-ref-name', document.getElementById('upd-ref-name')?.value?.trim()||'');
+  const noFee = !!document.getElementById('upd-no-fee')?.checked;
+  const consultationFee = Math.max(0, parseFloat(document.getElementById('upd-fee')?.value || p.consultationFee || 0) || 0);
+  const advanceAmt = Math.max(0, parseFloat(document.getElementById('upd-advance-amt')?.value || p.advance || 0) || 0);
+  const advancePurpose = normalizeReceptionFieldValue('upd-advance-purpose', document.getElementById('upd-advance-purpose')?.value?.trim()||'');
   const nowIso = new Date().toISOString();
   const updates = {
     name: toTitleCaseName((fn+' '+ln).trim()),
@@ -22352,6 +22690,10 @@ function saveUpdatedPatientDetails() {
     rel: normalizeReceptionFieldValue('upd-rel', document.getElementById('upd-rel')?.value?.trim()||''),
     refName: refName,
     referredBy: refName || p.referredBy || '',
+    consultationFee: noFee ? 0 : consultationFee,
+    consultationNoFee: noFee,
+    advance: advanceAmt,
+    advancePurpose: advancePurpose || (advanceAmt > 0 ? 'Advance on account' : ''),
     updatedAt: nowIso
   };
   // Update initials too
@@ -22359,6 +22701,30 @@ function saveUpdatedPatientDetails() {
   Object.assign(p, updates);
   normalizePatientRecord(p);
   if (!PATIENTS.find(x=>x.bmhId===bid)) PATIENTS.push(p);
+  try {
+    const today = localDateKey(new Date());
+    const chargeRows = window.BMH_PATIENT_CHARGES[bid] || [];
+    chargeRows.forEach(function (row) {
+      if (String(row.source || '').toLowerCase() !== 'reception') return;
+      if (localDateKey(row.ts || row.date) !== today) return;
+      const isConsult = /consult|follow-up/i.test(String(row.desc || row.name || ''));
+      if (!isConsult) return;
+      row.rate = noFee ? 0 : consultationFee;
+      row.amount = (Number(row.qty) || 1) * (Number(row.rate) || 0);
+      row.desc = String(row.desc || row.name || '').replace(/\s*\(no fee\)\s*/ig, '').trim() + (noFee ? ' (no fee)' : '');
+    });
+    (TRANSACTIONS || []).forEach(function (txn) {
+      if (txn.bmhId !== bid || txn.collected === false) return;
+      if (localDateKey(txn.date) !== today) return;
+      if (!/consult|follow-up/i.test(String(txn.service || txn.for || ''))) return;
+      txn.amount = noFee ? 0 : consultationFee;
+      txn.noFee = noFee;
+      txn.service = String(txn.service || txn.for || '').replace(/\s*\(no fee\)\s*/ig, '').trim() + (noFee ? ' (no fee)' : '');
+      saveTransactionToFirebase && saveTransactionToFirebase(txn);
+    });
+    saveBmhFinancials && saveBmhFinancials();
+    bmhSyncPatientRunningBalance && bmhSyncPatientRunningBalance(bid);
+  } catch (e) { console.warn('reception detail financial sync failed', e); }
   fbUpdate && fbUpdate('patients/'+bid, updates).catch(function (e) {
     console.warn('patient update error', e);
     showToast('Save failed while updating patient details', 'e');
@@ -22893,6 +23259,19 @@ function saveVisit(dept, opts) {
   if(typeof fbSet !== 'function') { showToast('Save not available (offline)', 'w'); return; }
   const patientPatch = { lastVisit: visit, lastVisitKey: visitKey, lastVisitDate: visit.date, lastDeptVisit: dept };
   if (visit.dx) patientPatch.dx = visit.dx;
+  const prevDxMap = Object.assign({}, localPt?.prevDxByDept || {});
+  const existingPrev = prevDxMap[dept] || {};
+  if (String(visit.dx || '').trim()) {
+    prevDxMap[dept] = {
+      text: String(visit.dx || '').trim(),
+      status: 'active',
+      fromDate: existingPrev.fromDate || visit.date,
+      updatedAt: visit.date
+    };
+  } else if (existingPrev && existingPrev.text) {
+    prevDxMap[dept] = Object.assign({}, existingPrev, { updatedAt: visit.date });
+  }
+  patientPatch.prevDxByDept = prevDxMap;
   if (visit.slChips) visit.slChips = sanitizeSlChipsMap(visit.slChips);
   const visitForCloud = sanitizeFirebaseValue(visit);
   if (visitForCloud.slChips) visitForCloud.slChips = sanitizeSlChipsMap(visitForCloud.slChips);
@@ -22903,6 +23282,7 @@ function saveVisit(dept, opts) {
     localPt.lastVisitDate = visit.date;
     localPt.lastDeptVisit = dept;
     if (visit.dx) localPt.dx = visit.dx;
+    localPt.prevDxByDept = prevDxMap;
     cachedVisits[visitKey] = JSON.parse(JSON.stringify(visit));
     cachePatientVisits(bmhId, cachedVisits);
   }
@@ -22921,6 +23301,7 @@ function saveVisit(dept, opts) {
       try { renderObgSummaryRail && renderObgSummaryRail(); } catch (e) { console.warn('post-save renderObgSummaryRail failed', e); }
       try { renderPsychRail && renderPsychRail(); } catch (e) { console.warn('post-save renderPsychRail failed', e); }
       try { renderSkinRail && renderSkinRail(); } catch (e) { console.warn('post-save renderSkinRail failed', e); }
+      try { refreshPreviousDiagnosisPanel(dept, visit); } catch (e) { console.warn('post-save refreshPreviousDiagnosisPanel failed', e); }
       document.dispatchEvent(new CustomEvent('bmh:patientsUpdated'));
     })
     .catch(e => {
