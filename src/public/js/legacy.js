@@ -1716,7 +1716,7 @@ function getDeptFollowUpDateInput(deptId) {
   const wrapSel = { oe: '#pg-ophtho #oe-rx', obg: '#pg-obg #obg-rx', psych: '#pg-psych #psych-rx', skin: '#pg-skin #skin-rx' }[deptId];
   if (wrapSel) {
     const wrap = document.querySelector(wrapSel);
-    const inp = wrap && wrap.querySelector('input[type="date"]');
+    const inp = wrap && wrap.querySelector('#rx-fu-date');
     if (inp) return inp;
   }
   return document.getElementById('rx-fu-date');
@@ -5172,7 +5172,7 @@ function populateObgForm(visit) {
   saveObgAdviceDraft();
   const fu = data.rxFuDate || data.followupDate;
   if (fu) {
-    const obgFu = document.querySelector('#pg-obg #obg-rx input[type="date"]');
+    const obgFu = document.querySelector('#pg-obg #obg-rx #rx-fu-date');
     if (obgFu) obgFu.value = fu;
   }
   if (Array.isArray(data.obgDiagnoses)) {
@@ -5435,7 +5435,7 @@ function populatePsychForm(visit) {
   const pea = document.getElementById('psych-extra-advice');
   if (pea && data.psychExtraAdvice != null) pea.value = data.psychExtraAdvice;
   if (data.rxFuDate) {
-    const el = document.querySelector('#pg-psych #psych-rx input[type="date"]');
+    const el = document.querySelector('#pg-psych #psych-rx #rx-fu-date');
     if (el) el.value = data.rxFuDate;
   }
   if (Array.isArray(data.psychDxList)) rebuildDxListFromValues('psych-dx-list', data.psychDxList);
@@ -5583,7 +5583,7 @@ function populateSkinForm(visit) {
   const sea = document.getElementById('skin-extra-advice');
   if (sea && data.skinExtraAdvice != null) sea.value = data.skinExtraAdvice;
   if (data.rxFuDate) {
-    const el = document.querySelector('#pg-skin #skin-rx input[type="date"]');
+    const el = document.querySelector('#pg-skin #skin-rx #rx-fu-date');
     if (el) el.value = data.rxFuDate;
   }
   if (Array.isArray(data.skinDxList)) rebuildDxListFromValues('skin-dx-list', data.skinDxList);
@@ -7221,12 +7221,10 @@ function bmhFindChargeAndAdd() {
 function renderTpaPage() {
   const body = document.getElementById('tpa-case-body');
   if (!body) return;
-  const claims = (PAY_REQUESTS || []).filter(function (r) {
-    return /Insurance|TPA|PMJAY|CGHS|ECHS/i.test(String(r.mode || r.ins || ''));
-  }).sort(function (a, b) { return new Date(b.date || 0) - new Date(a.date || 0); });
+  const claims = getDisplayTpaClaims();
   const totalClaimed = claims.reduce(function (s, r) { return s + (Number(r.amount) || 0); }, 0);
   const received = (TRANSACTIONS || []).filter(function (t) {
-    return /Insurance|TPA|PMJAY|CGHS|ECHS/i.test(String(t.mode || t.ins || ''));
+    return isInsuranceLikeMode(t.mode || t.ins || '');
   }).reduce(function (s, t) { return s + (Number(t.amount) || 0); }, 0);
   const pending = claims.filter(function (r) { return r.status === 'pending'; }).reduce(function (s, r) { return s + (Number(r.amount) || 0); }, 0);
   const rejected = claims.filter(function (r) { return r.status === 'rejected'; }).reduce(function (s, r) { return s + (Number(r.amount) || 0); }, 0);
@@ -7236,7 +7234,7 @@ function renderTpaPage() {
   set('tpa-total-pending', pending);
   set('tpa-total-rejected', rejected);
   body.innerHTML = claims.length ? claims.map(function (r) {
-    const receivedAmt = (TRANSACTIONS || []).filter(function (t) { return t.bmhId === r.bmhId && /Insurance|TPA|PMJAY|CGHS|ECHS/i.test(String(t.mode || t.ins || '')); }).reduce(function (s, t) { return s + (Number(t.amount) || 0); }, 0);
+    const receivedAmt = (TRANSACTIONS || []).filter(function (t) { return t.bmhId === r.bmhId && isInsuranceLikeMode(t.mode || t.ins || ''); }).reduce(function (s, t) { return s + (Number(t.amount) || 0); }, 0);
     const approvedAmt = Math.max(Number(r.approvedAmount) || 0, Number(r.amount) || 0);
     const pendingAmt = Math.max(0, approvedAmt - receivedAmt);
     return `<tr>
@@ -7248,7 +7246,7 @@ function renderTpaPage() {
       <td>₹${approvedAmt.toLocaleString('en-IN')}</td>
       <td>₹${receivedAmt.toLocaleString('en-IN')}</td>
       <td style="font-weight:900;color:${pendingAmt > 0 ? 'var(--orange)' : 'var(--green)'}">₹${pendingAmt.toLocaleString('en-IN')}</td>
-      <td><span class="badge ${r.status === 'pending' ? 'bd-orange' : r.status === 'rejected' ? 'bd-red' : 'bd-green'}">${r.status || 'pending'}</span></td>
+      <td><span class="badge ${r.status === 'pending' ? 'bd-orange' : r.status === 'rejected' ? 'bd-red' : 'bd-green'}">${r._synthetic ? 'pending' : (r.status || 'pending')}</span></td>
     </tr>`;
   }).join('') : '<tr><td colspan="9" style="text-align:center;color:var(--g1);padding:20px">No TPA / cashless cases yet</td></tr>';
 }
@@ -12638,10 +12636,7 @@ function printSurgeryPack(packOrDept) {
 // ── renderInsuranceTab — TPA/cashless pending claims ──────────
 function renderInsuranceTab() {
   const el = document.getElementById('rc-insurance-list'); if(!el) return;
-  const ins = PAY_REQUESTS.filter(r => {
-    const m = (r.mode||r.ins||'').toLowerCase();
-    return m.includes('insurance')||m.includes('tpa')||m.includes('cghs')||m.includes('echs')||m.includes('pmjay')||m.includes('ayushman');
-  });
+  const ins = getDisplayTpaClaims();
   if(!ins.length) {
     el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--g1);font-size:13px">No insurance/TPA patients today</div>'; return;
   }
@@ -12678,7 +12673,7 @@ function renderInsuranceTab() {
     }).join('')}`;
 }
 function openTPACaseDetail(prId) {
-  const pr = (PAY_REQUESTS || []).find(function (r) { return r.id === prId; });
+  const pr = getDisplayTpaClaims().find(function (r) { return r.id === prId; });
   if (!pr) { showToast('TPA case not found', 'w'); return; }
   const pt = PATIENTS.find(function (p) { return p.bmhId === pr.bmhId; }) || {};
   const wrap = document.getElementById('tpa-case-detail');
@@ -12705,7 +12700,15 @@ function closeTPACaseDetail() {
   closeM('m-tpa-case');
 }
 function saveTPAReceipt(prId) {
-  const pr = (PAY_REQUESTS || []).find(function (r) { return r.id === prId; });
+  let pr = (PAY_REQUESTS || []).find(function (r) { return r.id === prId; });
+  if (!pr) {
+    const fallback = getDisplayTpaClaims().find(function (r) { return r.id === prId; });
+    if (fallback) {
+      pr = Object.assign({}, fallback, { id: 'TPA' + Date.now(), _synthetic: false });
+      PAY_REQUESTS.push(pr);
+      try { fbSet && fbSet('payRequests/' + pr.id, pr); } catch (e) {}
+    }
+  }
   if (!pr) return;
   const amt = Number(document.getElementById('tpa-received-amt')?.value || 0);
   const date = document.getElementById('tpa-received-date')?.value || new Date().toISOString().slice(0, 10);
@@ -18078,6 +18081,49 @@ function savePayRequestToFirebase(pr) {
     centre: CURRENT_USER?.centre || 'CHD'
   });
 }
+function isInsuranceLikeMode(value) {
+  return /Insurance|TPA|PMJAY|CGHS|ECHS|Ayushman|Cashless/i.test(String(value || ''));
+}
+function getDisplayTpaClaims() {
+  const centre = CURRENT_USER?.isAdmin ? null : (CURRENT_USER?.centre || 'CHD');
+  const liveClaims = (PAY_REQUESTS || []).filter(function (r) {
+    if (!isInsuranceLikeMode(r.mode || r.ins || '')) return false;
+    if (centre && String(r.centre || 'CHD') !== String(centre)) return false;
+    return true;
+  }).map(function (r) {
+    return Object.assign({ _synthetic: false }, r);
+  });
+  const byBmhId = new Set(liveClaims.map(function (r) { return String(r.bmhId || '').trim(); }).filter(Boolean));
+  const synthetic = (PATIENTS || []).filter(function (p) {
+    if (!p || !p.bmhId) return false;
+    if (byBmhId.has(String(p.bmhId))) return false;
+    if (centre && String(p.centre || 'CHD') !== String(centre)) return false;
+    const ins = String(p.ins || p.refType || '').trim();
+    if (!isInsuranceLikeMode(ins)) return false;
+    return true;
+  }).map(function (p) {
+    const summary = typeof bmhGetPatientFinancialSummary === 'function' ? bmhGetPatientFinancialSummary(p.bmhId) : null;
+    const amount = Math.max(Number(summary?.balance || 0), Number(summary?.chargeTotal || 0), Number(p.balance || 0), 0);
+    return {
+      id: 'SYNTPA-' + p.bmhId,
+      bmhId: p.bmhId,
+      patient: p.name || '—',
+      for: p.purpose || 'Cashless / TPA Case',
+      amount: amount,
+      approvedAmount: amount,
+      status: 'pending',
+      mode: 'Insurance/TPA',
+      ins: p.ins || 'Insurance/TPA',
+      policy: p.policy || '',
+      dept: p.dept || 'ophtho',
+      centre: p.centre || centre || 'CHD',
+      date: p.updatedAt || p.checkinAt || p.createdAt || new Date().toISOString(),
+      from: 'Reception',
+      _synthetic: true
+    };
+  });
+  return liveClaims.concat(synthetic).sort(function (a, b) { return new Date(b.date || 0) - new Date(a.date || 0); });
+}
 
 function listenPayRequests() {
   const centre = CURRENT_USER?.isAdmin ? null : (CURRENT_USER?.centre || 'CHD');
@@ -18100,7 +18146,9 @@ function runOneTimePendingDuesCleanup() {
   try {
     if (localStorage.getItem(cleanupKey) === 'done') return;
   } catch (e) {}
-  const pending = (PAY_REQUESTS || []).filter(function (r) { return r && r.status === 'pending'; });
+  const pending = (PAY_REQUESTS || []).filter(function (r) {
+    return r && r.status === 'pending' && !isInsuranceLikeMode(r.mode || r.ins || '');
+  });
   if (!pending.length) {
     try { localStorage.setItem(cleanupKey, 'done'); } catch (e) {}
     return;
@@ -22785,7 +22833,7 @@ function saveVisit(dept, opts) {
     visit.dx = Array.isArray(visit.presumptiveDx) ? visit.presumptiveDx.join(' · ') : (visit.clinicalImpression || '');
     visit.obgAdvice = document.getElementById('obg-advice')?.value || '';
     visit.obgExtraAdvice = document.getElementById('obg-extra-advice')?.value || '';
-    visit.rxFuDate = document.querySelector('#pg-obg #obg-rx input[type="date"]')?.value || '';
+    visit.rxFuDate = document.querySelector('#pg-obg #obg-rx #rx-fu-date')?.value || '';
     visit.followupDate = visit.rxFuDate || '';
     visit.obgDiagnoses = [...document.querySelectorAll('#obg-dx-list .dx-inp')].map(function (e) { return e.value.trim(); }).filter(Boolean);
     visit.obgProcAdvised = [...document.querySelectorAll('#rx-proc-advised-obg [data-proc]')].map(function (e) { return e.dataset.proc; }).filter(Boolean);
@@ -22813,7 +22861,7 @@ function saveVisit(dept, opts) {
     visit.dx = [psychDxLine, tagLine, psychVal('psych-diagnosis')].filter(Boolean).join(' · ') || '';
     visit.psychAdvice = document.getElementById('psych-advice')?.value || '';
     visit.psychExtraAdvice = document.getElementById('psych-extra-advice')?.value || '';
-    visit.rxFuDate = document.querySelector('#pg-psych #psych-rx input[type="date"]')?.value || '';
+    visit.rxFuDate = document.querySelector('#pg-psych #psych-rx #rx-fu-date')?.value || '';
     visit.followupDate = visit.rxFuDate || '';
     visit.rx = JSON.parse(JSON.stringify(RX_DRUGS || []));
     visit.procDone = getProcedureDoneStateForDept('psych');
@@ -22837,7 +22885,7 @@ function saveVisit(dept, opts) {
     visit.dx = [skinDxLine, skinSelDx.join(' · ')].filter(Boolean).join(' · ');
     visit.skinAdvice = document.getElementById('skin-advice')?.value || '';
     visit.skinExtraAdvice = document.getElementById('skin-extra-advice')?.value || '';
-    visit.rxFuDate = document.querySelector('#pg-skin #skin-rx input[type="date"]')?.value || '';
+    visit.rxFuDate = document.querySelector('#pg-skin #skin-rx #rx-fu-date')?.value || '';
     visit.followupDate = visit.rxFuDate || '';
     visit.rx = JSON.parse(JSON.stringify(RX_DRUGS || []));
     visit.procDone = getProcedureDoneStateForDept('skin');
