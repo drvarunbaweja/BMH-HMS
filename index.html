@@ -34,6 +34,46 @@
     .dq-queue-main .rc-queue-table td { font-size:11.5px; }
     .dq-queue-main .rc-queue-table th { font-size:11px; }
     .dq-queue-main .ptab { font-size:13px; }
+    #pg-ophtho .ptabs,
+    #pg-obg .ptabs,
+    #pg-psych .ptabs,
+    #pg-skin .ptabs {
+      background:linear-gradient(180deg,#f7fbff 0%, #ebf3ff 100%) !important;
+      border:1px solid rgba(26,60,110,.16);
+      border-bottom:1px solid rgba(26,60,110,.22);
+      border-radius:14px;
+      padding:5px;
+      box-shadow:0 8px 20px rgba(20,52,102,.08), inset 0 1px 0 rgba(255,255,255,.9);
+      margin-bottom:8px !important;
+    }
+    #pg-ophtho .ptab,
+    #pg-obg .ptab,
+    #pg-psych .ptab,
+    #pg-skin .ptab {
+      color:#35506f;
+      font-size:12px;
+      font-weight:900;
+      letter-spacing:.01em;
+      border:1px solid transparent;
+      min-height:34px;
+    }
+    #pg-ophtho .ptab:hover,
+    #pg-obg .ptab:hover,
+    #pg-psych .ptab:hover,
+    #pg-skin .ptab:hover {
+      background:rgba(255,255,255,.72);
+      color:#17365f;
+      border-color:rgba(26,60,110,.12);
+    }
+    #pg-ophtho .ptab.active,
+    #pg-obg .ptab.active,
+    #pg-psych .ptab.active,
+    #pg-skin .ptab.active {
+      background:linear-gradient(180deg,#ffffff 0%, #f6f9ff 100%);
+      color:#14325e;
+      border-color:rgba(26,60,110,.18);
+      box-shadow:0 6px 14px rgba(19,50,94,.12);
+    }
     @media (max-width: 768px) {
       html, body { width:100%; max-width:100%; overflow-x:hidden; overflow-y:auto !important; overscroll-behavior-x:none; touch-action:pan-y pinch-zoom; height:auto !important; }
       .shell, .main, #main-content, .content, .content-full { height:auto !important; min-height:100vh; overflow-y:visible !important; }
@@ -57,6 +97,14 @@
       .ptabs { overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; white-space:nowrap; }
       .ptabs::-webkit-scrollbar { display:none; }
       .ptab { flex:0 0 auto; }
+      #pg-ophtho .ptabs,
+      #pg-obg .ptabs,
+      #pg-psych .ptabs,
+      #pg-skin .ptabs { border-radius:12px; padding:4px; }
+      #pg-ophtho .ptab,
+      #pg-obg .ptab,
+      #pg-psych .ptab,
+      #pg-skin .ptab { min-height:32px; font-size:11.5px; }
       #m-ipd-monitor .modal { width:calc(100vw - 10px) !important; max-width:none !important; margin:0 auto; }
       #ipd-monitor-body { padding-right:0 !important; }
       #ipd-monitor-body [data-ipdm-head],
