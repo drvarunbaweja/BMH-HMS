@@ -239,13 +239,8 @@ watchAuthState(
       defer('listenPayRequests', 120)
       defer('listenAppointments', 120)
       defer('loadTodayTransactions', 120)
-      defer('loadCustomPurposes', 600)
-      defer('loadAdviceTemplates', 600)
-      defer('loadChargesFromFirebase', 600)
-      defer('loadDeletionRequests', 1100)
-      defer('loadOTCasesFromFirebase', 1100)
-      defer('loadIPDPatientsFromFirebase', 1100)
-      if (user.role === 'lab') defer('listenLabOrders', 1100)
+      // Non-critical modules are loaded lazily when the user opens those pages.
+      if (user.role === 'lab') defer('listenLabOrders', 900)
     }, 300)
 
     // Navigate to role's home page
