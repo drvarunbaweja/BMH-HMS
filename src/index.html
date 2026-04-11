@@ -3594,6 +3594,31 @@
       </label>
       <div id="bill-discount-line" style="display:none;justify-content:space-between;margin-bottom:5px;font-size:12.5px;color:var(--orange)"><span>Discount</span><span style="font-weight:800" id="bill-discount-amt">₹0</span></div>
       <div id="bill-advance-line" style="display:none;justify-content:space-between;margin-bottom:5px;font-size:12.5px;color:var(--blue)"><span>Advance adjusted</span><span style="font-weight:800" id="bill-advance-amt">₹0</span></div>
+      <div style="margin:10px 0 12px;padding:10px;border:1px solid var(--g5);border-radius:10px;background:#fff">
+        <div style="font-size:11px;font-weight:800;color:var(--g1);margin-bottom:8px">Payment received</div>
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:12px;cursor:pointer">
+          <input type="checkbox" id="bmh-pay-received-toggle" onchange="bmhTogglePaymentForm(this.checked)">
+          Mark payment received now
+        </label>
+        <div id="bmh-pay-form" style="display:none">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+            <div class="form-group" style="margin:0"><label class="fl">Amount received ₹</label><input type="number" id="bmh-pay-amt" placeholder="Amount" oninput="bmhUpdateBillTotals()"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Mode of payment</label>
+              <select id="bmh-pay-mode" onchange="bmhToggleBillingInsuranceFields()"><option value="Cash">Cash</option><option value="UPI">UPI</option><option value="Card">Card</option><option value="NEFT">NEFT</option><option value="Cheque">Cheque</option><option value="Insurance/TPA">Insurance/TPA</option><option value="PMJAY / Ayushman">PMJAY / Ayushman</option><option value="CGHS/ECHS">CGHS/ECHS</option></select>
+            </div>
+            <div class="form-group" style="margin:0;grid-column:1/-1"><label class="fl">Cheque no. / UTR / ref no.</label><input type="text" id="bmh-pay-ref" placeholder="Required for bank / UPI reconciliation"></div>
+          </div>
+          <div id="bmh-pay-insurance-fields" style="display:none;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+            <div class="form-group" style="margin:0"><label class="fl">Insurance / TPA</label><input type="text" id="bmh-pay-insurer" placeholder="Insurer / TPA name"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Policy / pre-auth no.</label><input type="text" id="bmh-pay-policy" placeholder="Policy or pre-auth"></div>
+            <div class="form-group" style="margin:0;grid-column:1/-1"><label class="fl">Amount still due to hospital ₹</label><input type="number" id="bmh-pay-insurer-due" placeholder="Pending from insurer / TPA"></div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button type="button" class="btn btn-gold" onclick="bmhRecordPatientPayment()">✓ Record payment &amp; print receipt</button>
+            <button type="button" class="btn btn-outline btn-sm" onclick="bmhClearPaymentDraft()">Clear draft</button>
+          </div>
+        </div>
+      </div>
       <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:12.5px"><span>Chargeable total (after disc. / adv.)</span><span style="font-weight:700" id="bill-taxable">₹0</span></div>
       <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:12.5px;color:#1a8c3c"><span>Received so far</span><span style="font-weight:800" id="bill-received">₹0</span></div>
       <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:12.5px;color:#8a4200"><span>Balance due</span><span style="font-weight:800" id="bill-balance-due">₹0</span></div>
@@ -3602,28 +3627,6 @@
     <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
       <button type="button" class="btn btn-blue" onclick="printBmhPatientBill()">🖨️ Print full bill</button>
       <button type="button" class="btn btn-outline btn-sm" onclick="showToast('Share via WhatsApp from print preview','i')">📱</button>
-    </div>
-    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--g5)">
-      <div style="font-size:11px;font-weight:800;color:var(--g1);margin-bottom:8px">Payment received</div>
-      <label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:12px;cursor:pointer">
-        <input type="checkbox" id="bmh-pay-received-toggle" onchange="bmhTogglePaymentForm(this.checked)">
-        Mark payment received now
-      </label>
-      <div id="bmh-pay-form" style="display:none">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-          <div class="form-group" style="margin:0"><label class="fl">Amount received ₹</label><input type="number" id="bmh-pay-amt" placeholder="Amount"></div>
-          <div class="form-group" style="margin:0"><label class="fl">Mode of payment</label>
-            <select id="bmh-pay-mode" onchange="bmhToggleBillingInsuranceFields()"><option value="Cash">Cash</option><option value="UPI">UPI</option><option value="Card">Card</option><option value="NEFT">NEFT</option><option value="Cheque">Cheque</option><option value="Insurance/TPA">Insurance/TPA</option><option value="PMJAY / Ayushman">PMJAY / Ayushman</option><option value="CGHS/ECHS">CGHS/ECHS</option></select>
-          </div>
-          <div class="form-group" style="margin:0;grid-column:1/-1"><label class="fl">Cheque no. / UTR / ref no.</label><input type="text" id="bmh-pay-ref" placeholder="Required for bank / UPI reconciliation"></div>
-        </div>
-        <div id="bmh-pay-insurance-fields" style="display:none;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-          <div class="form-group" style="margin:0"><label class="fl">Insurance / TPA</label><input type="text" id="bmh-pay-insurer" placeholder="Insurer / TPA name"></div>
-          <div class="form-group" style="margin:0"><label class="fl">Policy / pre-auth no.</label><input type="text" id="bmh-pay-policy" placeholder="Policy or pre-auth"></div>
-          <div class="form-group" style="margin:0;grid-column:1/-1"><label class="fl">Amount still due to hospital ₹</label><input type="number" id="bmh-pay-insurer-due" placeholder="Pending from insurer / TPA"></div>
-        </div>
-        <button type="button" class="btn btn-gold" onclick="bmhRecordPatientPayment()">✓ Record payment &amp; print receipt</button>
-      </div>
     </div>
   </div>
   <div class="col">

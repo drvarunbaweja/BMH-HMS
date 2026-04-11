@@ -4,6 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>BMH HMS v51</title>
+  <meta name="theme-color" content="#1a3c6e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="BMH HMS">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" href="https://bawejahospital.com/img/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
@@ -22,13 +28,148 @@
     body.queue-sidebar-collapsed .sidebar .bmh-logo-row { justify-content:center; }
     body.queue-sidebar-collapsed .sidebar .sb-nav { padding-top:6px; }
     body.queue-sidebar-collapsed .sidebar .queue-expand-link { display:flex !important; }
-    .queue-expand-link { display:none; width:100%; justify-content:center; }
-    .queue-expand-link .ni-ic { margin-right:0 !important; }
+    .queue-expand-link { display:none; width:100%; justify-content:center; background:transparent !important; color:#fff !important; border:none !important; box-shadow:none !important; }
+    .queue-expand-link .ni-ic,
+    .queue-expand-link span { margin-right:0 !important; color:#fff !important; fill:#fff !important; background:transparent !important; }
     .dq-queue-main .rc-queue-table th,
-    .dq-queue-main .rc-queue-table td { font-size:11px; }
+    .dq-queue-main .rc-queue-table td { font-size:11.5px; }
+    .dq-queue-main .rc-queue-table th { font-size:11px; }
     .dq-queue-main .ptab { font-size:13px; }
+    #pg-ophtho .ptabs,
+    #pg-obg .ptabs,
+    #pg-psych .ptabs,
+    #pg-skin .ptabs {
+      background:linear-gradient(180deg,#d9e8fb 0%, #c8def8 100%) !important;
+      border:1px solid rgba(26,60,110,.28);
+      border-bottom:2px solid rgba(26,60,110,.36);
+      border-radius:14px;
+      padding:5px;
+      box-shadow:0 10px 24px rgba(20,52,102,.14), inset 0 1px 0 rgba(255,255,255,.92);
+      margin-bottom:8px !important;
+    }
+    #pg-ophtho .ptab,
+    #pg-obg .ptab,
+    #pg-psych .ptab,
+    #pg-skin .ptab {
+      color:#284768;
+      font-size:12px;
+      font-weight:900;
+      letter-spacing:.01em;
+      border:1px solid transparent;
+      min-height:34px;
+    }
+    #pg-ophtho .ptab:hover,
+    #pg-obg .ptab:hover,
+    #pg-psych .ptab:hover,
+    #pg-skin .ptab:hover {
+      background:rgba(255,255,255,.84);
+      color:#12335d;
+      border-color:rgba(26,60,110,.22);
+    }
+    #pg-ophtho .ptab.active,
+    #pg-obg .ptab.active,
+    #pg-psych .ptab.active,
+    #pg-skin .ptab.active {
+      background:linear-gradient(180deg,#ffffff 0%, #f4f8ff 100%);
+      color:#0d2a50;
+      border-color:rgba(26,60,110,.26);
+      box-shadow:0 8px 18px rgba(19,50,94,.18);
+    }
+    .dept-diag-grid {
+      display:grid;
+      grid-template-columns:minmax(0,1fr) 240px;
+      gap:12px;
+      align-items:start;
+    }
+    .plan-stack {
+      display:grid;
+      gap:10px;
+    }
+    .plan-panel {
+      background:linear-gradient(180deg,#ffffff 0%, #f8fbff 100%);
+      border:1.5px solid rgba(26,60,110,.16);
+      border-radius:12px;
+      padding:10px 12px;
+      box-shadow:0 6px 18px rgba(20,52,102,.06);
+    }
+    .plan-panel-head {
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:8px;
+      flex-wrap:wrap;
+      margin-bottom:7px;
+    }
+    .plan-panel-title {
+      font-size:10px;
+      font-weight:900;
+      color:var(--g1);
+      text-transform:uppercase;
+      letter-spacing:.5px;
+    }
+    .diag-prev-wrap {
+      display:grid;
+      grid-template-columns:minmax(0,1fr) 225px;
+      gap:12px;
+      align-items:start;
+    }
+    .prev-dx-box {
+      background:linear-gradient(180deg,#f8fbff 0%, #edf5ff 100%);
+      border:1px solid rgba(26,60,110,.18);
+      border-radius:10px;
+      padding:10px;
+      min-height:92px;
+      box-shadow:0 4px 10px rgba(20,52,102,.06);
+    }
+    .prev-dx-box .prev-dx-title {
+      font-size:9.5px;
+      font-weight:900;
+      color:var(--bmh-blue);
+      text-transform:uppercase;
+      letter-spacing:.5px;
+      margin-bottom:6px;
+    }
+    .prev-dx-box .prev-dx-text {
+      font-size:11px;
+      line-height:1.45;
+      color:var(--tx);
+      min-height:40px;
+    }
+    .oe-plan-grid {
+      display:grid;
+      grid-template-columns:minmax(0,1.05fr) 330px;
+      gap:12px;
+      align-items:start;
+    }
+    .quick-library-grid {
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+      gap:6px;
+      margin-bottom:7px;
+    }
+    .oe-plan-side > div {
+      margin-bottom:10px;
+    }
+    .admin-billing-chip {
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:6px 10px;
+      border-radius:999px;
+      border:1px solid rgba(26,60,110,.14);
+      background:var(--g6);
+      cursor:pointer;
+      font-size:11px;
+      font-weight:800;
+    }
+    .admin-billing-chip.active {
+      background:var(--blue-lt);
+      color:var(--bmh-blue);
+      border-color:rgba(26,60,110,.28);
+    }
     @media (max-width: 768px) {
-      html, body { width:100%; max-width:100%; overflow-x:hidden; }
+      html, body { width:100%; max-width:100%; overflow-x:hidden; overflow-y:auto !important; overscroll-behavior-x:none; touch-action:pan-y pinch-zoom; height:auto !important; }
+      .shell, .main, #main-content, .content, .content-full { height:auto !important; min-height:100vh; overflow-y:visible !important; }
       .shell { display:block !important; }
       .main, #main-content { width:100%; min-width:0; max-width:100%; overflow-x:hidden; }
       .content, .content-full { padding:10px; }
@@ -42,6 +183,7 @@
       #main-content [style*="display:flex"] { max-width:100%; min-width:0; }
       #main-content [style*="min-width:"] { min-width:0 !important; }
       #main-content input, #main-content select, #main-content textarea, #main-content button { max-width:100%; }
+      #main-content .page, #main-content .tab-content, #main-content .card, #main-content .g2, #main-content .g32, #main-content .sg4, #main-content .fg, #main-content .fg1 { min-width:0; max-width:100%; overflow-x:hidden; }
       #pg-inventory, #pg-inventory .card, #pg-inventory .tab-content, #pg-inventory .g32 { overflow-x:visible !important; }
       #pg-inventory .inventory-scroll-x { overflow-x:auto !important; -webkit-overflow-scrolling:touch; }
       #pg-inventory .inventory-wide-grid { min-width:780px; }
@@ -49,11 +191,46 @@
       #obg-layout, #psych-layout, #skin-layout { grid-template-columns:1fr !important; }
       #ophtho-recap-panel, #skin-summary-rail { float:none !important; width:100% !important; margin:10px 0 0 !important; }
       #obg-summary-rail, #psych-summary-rail { position:static !important; top:auto !important; }
+      .ptabs { overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; white-space:nowrap; }
+      .ptabs::-webkit-scrollbar { display:none; }
+      .ptab { flex:0 0 auto; }
+      #pg-ophtho .ptabs,
+      #pg-obg .ptabs,
+      #pg-psych .ptabs,
+      #pg-skin .ptabs { border-radius:12px; padding:4px; }
+      #pg-ophtho .ptab,
+      #pg-obg .ptab,
+      #pg-psych .ptab,
+      #pg-skin .ptab { min-height:32px; font-size:11.5px; }
+      .dept-diag-grid,
+      .diag-prev-wrap,
+      .oe-plan-grid { grid-template-columns:1fr; }
+      .prev-dx-box { min-height:0; }
+      #m-ipd-monitor .modal { width:calc(100vw - 10px) !important; max-width:none !important; margin:0 auto; }
+      #ipd-monitor-body { padding-right:0 !important; }
+      #ipd-monitor-body [data-ipdm-head],
+      #ipd-monitor-body [data-ipdm-vitals],
+      #ipd-monitor-body [data-ipdm-labour] { grid-template-columns:1fr !important; }
+      #ipd-monitor-body [data-ipdm-row] { grid-template-columns:34px 1fr !important; }
+      #ipd-monitor-body [data-ipdm-row] > :last-child { grid-column:1 / -1; }
       #set-rx-tpl-list > div > div, #admin-users-list > div { flex-wrap:wrap !important; }
       #set-rx-tpl-list .btn, #admin-users-list .btn, #ot-case-detail .btn, #sp-pack-print-checklist label { width:100%; justify-content:center; }
       #pg-ot [style*="display:grid;grid-template-columns:1fr 1fr"], #pg-ot .fg { grid-template-columns:1fr !important; }
       #pg-ot [style*="display:flex;align-items:center;gap:10px"], #pg-ot [style*="display:flex;gap:8px"], #set-rx-templates [style*="display:flex;align-items:flex-start"] { flex-wrap:wrap !important; }
+      #pg-lab .g32 { grid-template-columns:1fr !important; }
+      #pg-lab #lab-entry-fields > div,
+      #pg-lab [id^="lab-p-"] > div:first-child { grid-template-columns:1.3fr 1fr 1fr 1fr 58px !important; }
+      #pg-lab .card-hd { flex-wrap:wrap; gap:8px; }
+      #pg-lab #lab-entry-panel .card-hd > div:last-child,
+      #pg-lab #lab-entry-panel .card-hd input,
+      #pg-lab #lab-entry-panel .card-hd button,
+      #pg-lab #lab-pt-sel { width:100%; }
       #rx-drugs, .rx-drugs-root { overflow-x:hidden !important; }
+      .rc-queue-table-wrap, table { -webkit-overflow-scrolling:touch; }
+      #rc-search-row { flex-wrap:wrap !important; }
+      #rc-search-row > div:first-child { min-width:0; width:100%; }
+      #rc-qr-inline-btn { display:none !important; }
+      #rc-qr-mobile-btn { display:flex !important; width:100%; justify-content:center; }
     }
   </style>
 </head>
@@ -180,6 +357,22 @@
       <div style="text-align:center;background:rgba(212,160,23,.2);border-radius:8px;padding:7px 12px"><div style="font-size:20px;font-weight:900" id="db-collection">₹0</div><div style="font-size:9px;opacity:.7;font-weight:700">COLLECTED</div></div>
     </div>
   </div>
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-hd" style="gap:10px;flex-wrap:wrap">
+      <div>
+        <div class="card-title">Internal App</div>
+        <div class="card-sub" id="dash-install-app-note">Install the internal app for faster phone access.</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-left:auto">
+        <button class="btn btn-gold btn-sm" type="button" id="dash-install-app-btn" onclick="promptInstallApp()" style="display:none">Install App</button>
+        <button class="btn btn-outline btn-sm" type="button" onclick="nav('doctor-queue',null)">Queue</button>
+        <button class="btn btn-outline btn-sm" type="button" onclick="nav('reception',null)">Reception</button>
+        <button class="btn btn-outline btn-sm" type="button" onclick="nav('ot',null)">OT</button>
+        <button class="btn btn-outline btn-sm" type="button" onclick="nav('ipd',null)">IPD</button>
+        <button class="btn btn-outline btn-sm" type="button" onclick="nav('lab',null)">Lab</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Admin / finance dashboard (no live queue) -->
   <div id="dash-view-admin" style="display:none">
@@ -198,22 +391,32 @@
         </div>
       </div>
       <div id="dash-admin-summary-blocks" class="sg4"></div>
+      <div class="g32" style="margin-top:14px">
+        <div class="card">
+          <div class="card-hd"><div><div class="card-title">Collection Analytics</div><div class="card-sub">Daily, weekly and monthly collections</div></div></div>
+          <div id="dash-admin-chart-collection" style="min-height:170px;padding:8px 4px"></div>
+        </div>
+        <div class="card">
+          <div class="card-hd"><div><div class="card-title">Surgery Analytics</div><div class="card-sub">Recent surgical volume by time period</div></div></div>
+          <div id="dash-admin-chart-surgery" style="min-height:170px;padding:8px 4px"></div>
+        </div>
+      </div>
     </div>
   </div>
 
   <!-- Clinical dashboard (doctors & similar roles) -->
   <div id="dash-view-clinical">
     <div class="sg4">
-      <div class="sc blue"><div class="sc-lbl">OPD today</div><div class="sc-val blue" id="db-cl-opd">0</div><div class="sc-icon">🩺</div></div>
-      <div class="sc gold"><div class="sc-lbl">IPD</div><div class="sc-val gold" id="db-cl-ipd">0</div><div class="sc-icon">🛏️</div></div>
-      <div class="sc blue"><div class="sc-lbl">Diagnostics (lines)</div><div class="sc-val blue" id="db-cl-diag">0</div><div class="sc-icon">🔬</div></div>
-      <div class="sc green"><div class="sc-lbl">Appointments</div><div class="sc-val green" id="db-apts">0</div><div class="sc-icon">📅</div></div>
+      <div class="sc blue"><div class="sc-lbl" id="db-cl-opd-lbl">OPD today</div><div class="sc-val blue" id="db-cl-opd">0</div><div class="sc-icon">🩺</div></div>
+      <div class="sc gold"><div class="sc-lbl" id="db-cl-ipd-lbl">New patients</div><div class="sc-val gold" id="db-cl-ipd">0</div><div class="sc-icon">🆕</div></div>
+      <div class="sc blue"><div class="sc-lbl" id="db-cl-diag-lbl">Old patients</div><div class="sc-val blue" id="db-cl-diag">0</div><div class="sc-icon">👥</div></div>
+      <div class="sc green"><div class="sc-lbl" id="db-apts-lbl">Diagnostics</div><div class="sc-val green" id="db-apts">0</div><div class="sc-icon">🔬</div></div>
     </div>
     <div class="sg4" style="margin-top:10px">
-      <div class="sc orange"><div class="sc-lbl">Checked in / active</div><div class="sc-val orange" id="db-cl-checked">0</div><div class="sc-icon">✅</div></div>
-      <div class="sc gold"><div class="sc-lbl">Collection today</div><div class="sc-val gold" id="db-cl-collection">₹0</div><div class="sc-icon">💰</div></div>
-      <div class="sc blue"><div class="sc-lbl">Pay pending</div><div class="sc-val blue" id="db-pending">₹0</div><div class="sc-icon">⏳</div></div>
-      <div class="sc gold"><div class="sc-lbl">Low stock</div><div class="sc-val gold" id="db-stock-dup">0</div><div class="sc-icon">📦</div></div>
+      <div class="sc orange"><div class="sc-lbl" id="db-cl-checked-lbl">Surgeries</div><div class="sc-val orange" id="db-cl-checked">0</div><div class="sc-icon">🏥</div></div>
+      <div class="sc gold"><div class="sc-lbl" id="db-cl-collection-lbl">Collection today</div><div class="sc-val gold" id="db-cl-collection">₹0</div><div class="sc-icon">💰</div></div>
+      <div class="sc blue"><div class="sc-lbl" id="db-pending-lbl">Surgery collection</div><div class="sc-val blue" id="db-pending">₹0</div><div class="sc-icon">🧾</div></div>
+      <div class="sc gold"><div class="sc-lbl" id="db-stock-dup-lbl">IPD</div><div class="sc-val gold" id="db-stock-dup">0</div><div class="sc-icon">🛏️</div></div>
     </div>
     <div class="g32" style="margin-top:14px">
       <div class="card"><div class="card-hd"><div><div class="card-title">Collection by payment mode (today)</div><div class="card-sub">Cash, UPI, card, etc.</div></div></div><div id="dash-cl-modes"></div></div>
@@ -241,6 +444,7 @@
     <div class="card-hd" style="flex-wrap:wrap;gap:10px;align-items:flex-start">
       <div><div class="card-title" id="dq-title">Dr. Varun Baweja — My Patients</div><div class="card-sub"><span class="live-dot"></span>Click any patient to open case sheet instantly</div></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto">
+        <button type="button" id="dq-approvals-pill" class="btn btn-outline btn-xs" style="display:none;animation:pulse 1.4s infinite;border-color:rgba(255,59,48,.5);color:#c0392b;font-weight:900" onclick="nav('settings',null);setTimeout(function(){var t=document.getElementById('set-approvals-tab'); if(t) t.click();},180)">🗑 0 approvals</button>
         <button type="button" class="btn btn-outline btn-xs" onclick="toggleQueueSidebarCollapse(true)">☰ Expand Menu</button>
         <button type="button" class="btn btn-gold btn-xs" onclick="openM('m-np')">+ Add Patient</button>
         <button type="button" class="btn btn-outline btn-xs" onclick="nav('ophtho',null)">👁️ Eye Exam</button>
@@ -254,6 +458,13 @@
         <span style="font-size:13px;color:var(--g1)">🔍</span>
         <input type="text" id="dq-search" placeholder="Search patient, BMSH ID, mobile, purpose or doctor…" oninput="renderDocQueue()" style="border:none;outline:none;background:transparent;width:100%;font-size:12px;font-family:var(--font)">
       </div>
+      <select id="dq-admin-dept-filter" onchange="renderDocQueue()" style="display:none;min-width:170px;border:1.5px solid var(--g4);border-radius:10px;padding:7px 10px;background:#fff;font-size:12px;font-family:var(--font)">
+        <option value="all">All departments</option>
+        <option value="ophtho">Eye</option>
+        <option value="obg">OBG</option>
+        <option value="psych">Neuropsychiatry</option>
+        <option value="skin">Skin & Cosmetology</option>
+      </select>
       <button type="button" class="btn btn-outline btn-xs" onclick="const q=document.getElementById('dq-search'); if(q){q.value='';} renderDocQueue();">Clear Search</button>
     </div>
     <div class="dq-toolbar" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;padding:10px 12px;background:var(--g6);border-radius:var(--rsm);margin-bottom:12px;border:1px solid var(--g5)">
@@ -362,6 +573,7 @@
         <div style="display:flex;gap:5px;flex-wrap:wrap">
           <button class="btn btn-sm btn-gray" onclick="nav('doctor-queue',null)" title="Back to Queue">← Queue</button>
           <button class="btn btn-sm btn-green" onclick="markCurrentPatientSeen()">✓ Seen</button>
+          <label style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--g4);border-radius:999px;background:var(--g6);font-size:11px;font-weight:800;color:var(--g1);cursor:pointer"><input type="checkbox" id="proc-done-toggle-ophtho" onchange="handleProcedureDoneToggle('ophtho',this.checked)"> Procedure done</label>
           <button class="btn btn-sm btn-gray" onclick="openM('m-consents')">📋 Consents</button>
           <button class="btn btn-sm btn-outline" onclick="saveAndPrintRx('ophtho')">💾🖨️ Save &amp; Print</button>
           <button class="btn btn-sm btn-outline" onclick="printCaseSheet()">🖨️ Print Case Sheet</button>
@@ -378,14 +590,13 @@
                 <option value="">— All Procedures —</option>
               </select>
             </div>
-            <input type="text" id="send-charge-custom-name" list="send-charge-datalist" placeholder="Type or pick charge…" autocomplete="off" style="font-size:11.5px;padding:4px 8px;border-radius:7px;border:1.5px solid rgba(212,160,23,.5);min-width:160px;max-width:280px;flex:1">
+            <input type="text" id="send-charge-custom-name" list="send-charge-datalist" placeholder="Type or pick charge…" autocomplete="off" style="font-size:11.5px;padding:4px 8px;border-radius:7px;border:1.5px solid rgba(212,160,23,.5);min-width:140px;max-width:220px;flex:1">
             <input type="number" id="send-charge-custom-amt" placeholder="₹" min="0" style="font-size:11.5px;padding:4px 8px;width:80px;border-radius:7px;border:1.5px solid rgba(212,160,23,.5)">
             <button type="button" class="btn btn-xs btn-gold" onclick="sendOphthoTypedCharge()">Send</button>
+            <button type="button" class="btn btn-xs btn-outline" onclick="openCertificateModal('ophtho')">📄 Certificates</button>
             <datalist id="send-charge-datalist"></datalist>
-            <div id="ai-suggested-charges" style="display:flex;gap:5px;flex-wrap:wrap"></div>
-            <button type="button" class="btn btn-xs btn-outline" onclick="addCustomCharge()" style="white-space:nowrap">Custom (prompt)</button>
+            <button type="button" class="btn btn-xs btn-outline" onclick="addCustomCharge()" style="white-space:nowrap">Custom</button>
           </div>
-          <div id="sent-charges-log" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px"></div>
         </div>
         <div class="ptabs" style="background:#fff;border-bottom:1px solid var(--g5);padding-bottom:2px">
         <div class="ptab active" onclick="ptab(this,'oe-hx')">History</div>
@@ -1033,11 +1244,12 @@
             </div>
             <div class="fg" style="gap:7px;margin-bottom:8px">
               <div class="form-group"><label class="fl">Disc</label><select id="fund-od-disc"><option>Pink & Healthy</option><option>Pale</option><option>Hyperaemic</option><option>Swollen</option><option>Cupped</option><option>Tilted</option><option>Drusen</option></select></div>
-              <div class="form-group"><label class="fl">C/D Ratio OD</label><select id="fund-od-cd" style="font-size:13px;font-weight:900;color:var(--blue);border:1.5px solid var(--blue);border-radius:7px"><option>0.1</option><option>0.2</option><option>0.3</option><optionselected>0.4</option><option>0.5</option><option>0.6</option><option>0.7</option><option>0.8</option><option>0.9</option><option>1.0</option><option>Excavated</option><option>Tilted</option><option>NVD</option></select></div>
+              <div class="form-group"><label class="fl">C/D Ratio OD</label><select id="fund-od-cd" style="font-size:13px;font-weight:900;color:var(--blue);border:1.5px solid var(--blue);border-radius:7px"><option>0.1</option><option>0.2</option><option selected>0.3</option><option>0.4</option><option>0.5</option><option>0.6</option><option>0.7</option><option>0.8</option><option>0.9</option><option>1.0</option><option>Excavated</option><option>Tilted</option><option>NVD</option></select></div>
               <div class="form-group"><label class="fl">Macula OD</label><select id="fund-od-mac"><option>Normal</option><option>ARMD Dry</option><option>ARMD Wet</option><option>ERM</option><option>CMO</option><option>MH</option><option>Scar</option></select></div>
               <div class="form-group"><label class="fl">Vessels OD</label><select id="fund-od-ves"><option>Normal calibre</option><option>AV nipping</option><option>Silver wiring</option><option>NVD</option><option>NVE</option><option>Ghost vessels</option></select></div>
               <div class="form-group"><label class="fl">Periphery OD</label><select id="fund-od-per"><option>Normal</option><option>Lattice degeneration</option><option>Breaks</option><option>Detachment</option><option>Laser scars</option></select></div>
             </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px"><button type="button" class="btn btn-xs btn-outline" onclick="document.getElementById('fundus-od').value='Fundus hazy';">Fundus hazy</button><button type="button" class="btn btn-xs btn-outline" onclick="document.getElementById('fundus-od').value='Fundus not visible';">Fundus not visible</button></div>
             <textarea id="fundus-od" style="width:100%;font-size:11.5px;min-height:50px;border:1px solid var(--g4);background:#fff;border-radius:6px;resize:none;font-family:var(--font);padding:6px 8px" placeholder="Fundus findings OD…"></textarea>
           </div>
           <div style="background:var(--g6);border-radius:var(--rsm);padding:11px">
@@ -1046,11 +1258,12 @@
             </div>
             <div class="fg" style="gap:7px;margin-bottom:8px">
               <div class="form-group"><label class="fl">Disc</label><select id="fund-os-disc"><option>Pink & Healthy</option><option>Pale</option><option>Hyperaemic</option><option>Swollen</option><option>Cupped</option><option>Tilted</option></select></div>
-              <div class="form-group"><label class="fl">C/D Ratio OS</label><select id="fund-os-cd" style="font-size:13px;font-weight:900;color:#1a8c3c;border:1.5px solid var(--green);border-radius:7px"><option>0.1</option><option>0.2</option><option>0.3</option><optionselected>0.4</option><option>0.5</option><option>0.6</option><option>0.7</option><option>0.8</option><option>0.9</option><option>1.0</option><option>Excavated</option><option>Tilted</option><option>NVD</option></select></div>
+              <div class="form-group"><label class="fl">C/D Ratio OS</label><select id="fund-os-cd" style="font-size:13px;font-weight:900;color:#1a8c3c;border:1.5px solid var(--green);border-radius:7px"><option>0.1</option><option>0.2</option><option selected>0.3</option><option>0.4</option><option>0.5</option><option>0.6</option><option>0.7</option><option>0.8</option><option>0.9</option><option>1.0</option><option>Excavated</option><option>Tilted</option><option>NVD</option></select></div>
               <div class="form-group"><label class="fl">Macula OS</label><select id="fund-os-mac"><option>Normal</option><option>ARMD Dry</option><option>ARMD Wet</option><option>ERM</option><option>CMO</option><option>MH</option><option>Scar</option></select></div>
               <div class="form-group"><label class="fl">Vessels OS</label><select id="fund-os-ves"><option>Normal calibre</option><option>AV nipping</option><option>Silver wiring</option><option>NVD</option><option>NVE</option><option>Ghost vessels</option></select></div>
               <div class="form-group"><label class="fl">Periphery OS</label><select id="fund-os-per"><option>Normal</option><option>Lattice degeneration</option><option>Breaks</option><option>Detachment</option><option>Laser scars</option></select></div>
             </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px"><button type="button" class="btn btn-xs btn-outline" onclick="document.getElementById('fundus-os').value='Fundus hazy';">Fundus hazy</button><button type="button" class="btn btn-xs btn-outline" onclick="document.getElementById('fundus-os').value='Fundus not visible';">Fundus not visible</button></div>
             <textarea id="fundus-os" style="width:100%;font-size:11.5px;min-height:50px;border:1px solid var(--g4);background:#fff;border-radius:6px;resize:none;font-family:var(--font);padding:6px 8px" placeholder="Fundus findings OS…"></textarea>
           </div>
         </div>
@@ -1145,7 +1358,7 @@
             </datalist>
             <input type="text" id="add-inv-notes" placeholder="Notes (optional)" style="flex:1;min-width:80px">
             <button class="btn btn-blue btn-sm" onclick="addInvestigationOrder('advise')">Advise</button>
-            <button class="btn btn-gold btn-sm" onclick="addInvestigationOrder('send')">Advise + Send</button>
+            <button class="btn btn-gold btn-sm" onclick="addInvestigationOrder('send')">Advise + Send to Lab</button>
           </div>
           <div id="inv-order-list" style="margin-top:8px"></div>
         </div>
@@ -1155,110 +1368,86 @@
       </div>
 
       <div class="tab-content" id="oe-plan">
-        <div style="margin-bottom:10px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:6px">
-            <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px">Diagnosis</div>
-            <button type="button" class="btn btn-xs btn-blue" onclick="addDiagnosisRow()">+ Add diagnosis line</button>
-          </div>
-          <div style="display:grid;grid-template-columns:28px 88px minmax(0,1fr) 36px;gap:5px;padding:5px 8px;background:var(--g6);border-radius:6px;margin-bottom:6px;font-size:9px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px;align-items:center">
-            <span>#</span><span>Eye</span><span>Diagnosis</span><span></span>
-          </div>
-          <div id="rx-diagnosis-rows" style="margin-bottom:2px"></div>
-          <textarea id="rx-diagnosis-text" rows="2" placeholder="Extra diagnosis notes (optional)…" style="width:100%;font-size:12px;border:1.5px solid var(--g4);border-radius:8px;padding:6px 8px;margin-bottom:0;font-family:var(--font);resize:vertical;min-height:36px;box-sizing:border-box"></textarea>
-          <div id="rx-diagnosis-list" style="display:none" aria-hidden="true"></div>
-        </div>
-        <div style="margin-bottom:6px" id="oe-inv-display-wrap">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;gap:8px;flex-wrap:wrap">
-            <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px">🧪 Investigations Ordered</div>
-            <div style="display:flex;gap:6px;flex-wrap:wrap">
-              <button class="btn btn-xs btn-outline" onclick="openM('m-order-invest')">+ Order More</button>
-              <button class="btn btn-xs btn-blue" onclick="addInvestigationOrder('advise')">Advise Only</button>
-              <button class="btn btn-xs btn-orange" onclick="addInvestigationOrder('send')">Advise + Send</button>
+        <div class="oe-plan-grid">
+        <div class="plan-stack">
+        <div class="plan-panel">
+          <div class="diag-prev-wrap">
+            <div>
+              <div class="plan-panel-head">
+                <div class="plan-panel-title">Diagnosis</div>
+                <button type="button" class="btn btn-xs btn-blue" onclick="addDiagnosisRow()">+ Add diagnosis line</button>
+              </div>
+              <div style="display:grid;grid-template-columns:28px 78px minmax(0,1fr) 36px;gap:5px;padding:5px 8px;background:var(--g6);border-radius:6px;margin-bottom:6px;font-size:9px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px;align-items:center">
+                <span>#</span><span>Eye</span><span>Diagnosis</span><span></span>
+              </div>
+              <div id="rx-diagnosis-rows" style="margin-bottom:2px"></div>
+              <textarea id="rx-diagnosis-text" rows="2" placeholder="Extra diagnosis notes (optional)…" style="width:100%;font-size:12px;border:1.5px solid var(--g4);border-radius:8px;padding:6px 8px;margin-bottom:0;font-family:var(--font);resize:vertical;min-height:36px;box-sizing:border-box"></textarea>
+              <div id="rx-diagnosis-list" style="display:none" aria-hidden="true"></div>
             </div>
-          </div>
-          <div id="oe-inv-ordered-list" style="min-height:24px;font-size:11.5px;color:var(--g1);font-style:italic">None ordered</div>
-        </div>
-        <div style="margin-bottom:10px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
-            <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px">⚕️ Surgery / Procedure Advised</div>
-            <div style="display:flex;gap:5px">
-              <select id="proc-add-dropdown" style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:180px" onchange="addProcFromDropdown(this)">
-                <option value="">— Select from list —</option>
-                <optgroup label="Eye Procedures">
-                  <option value="PMICS + IOL Implantation (Left Eye)">PMICS + IOL (Left Eye)</option>
-                  <option value="PMICS + IOL Implantation (Right Eye)">PMICS + IOL (Right Eye)</option>
-                  <option value="PMICS + IOL Implantation (Both Eyes)">PMICS + IOL (Both Eyes)</option>
-                  <option value="Trabeculectomy OD">Trabeculectomy OD</option>
-                  <option value="Trabeculectomy OS">Trabeculectomy OS</option>
-                  <option value="IVT Injection (Anti-VEGF)">IVT Injection (Anti-VEGF)</option>
-                  <option value="IVT Injection (Steroid)">IVT Injection (Steroid)</option>
-                  <option value="LASIK OU">LASIK OU</option>
-                  <option value="Pterygium Excision + Graft">Pterygium Excision + Graft</option>
-                  <option value="Squint Surgery">Squint Surgery</option>
-                  <option value="DCR Surgery">DCR Surgery</option>
-                  <option value="Ptosis Repair">Ptosis Repair</option>
-                  <option value="Laser Peripheral Iridotomy">Laser Peripheral Iridotomy</option>
-                  <option value="Nd:YAG Capsulotomy">Nd:YAG Capsulotomy</option>
-                  <option value="Argon Laser Trabeculoplasty">Argon Laser Trabeculoplasty</option>
-                </optgroup>
-                <optgroup label="OBG">
-                  <option value="LSCS (Elective)">LSCS (Elective)</option>
-                  <option value="Diagnostic Laparoscopy">Diagnostic Laparoscopy</option>
-                  <option value="D&C / Hysteroscopy">D&amp;C / Hysteroscopy</option>
-                </optgroup>
-                <optgroup label="Skin">
-                  <option value="Chemical Peel">Chemical Peel</option>
-                  <option value="PRP Treatment">PRP Treatment</option>
-                  <option value="Microneedling">Microneedling</option>
-                  <option value="Botox Injection">Botox Injection</option>
-                </optgroup>
-                <option value="__custom__">+ Add New Procedure…</option>
+            <div class="prev-dx-box">
+              <div class="prev-dx-title">Previous Diagnosis</div>
+              <div id="oe-prev-dx-text" class="prev-dx-text">No previous active diagnosis</div>
+              <select id="oe-prev-dx-status" style="margin-top:8px;font-size:11px;padding:5px 7px;border-radius:7px;border:1.5px solid var(--g4);width:100%" onchange="handlePreviousDiagnosisStatusChange('ophtho', this.value)">
+                <option value="carry">Carry forward</option>
+                <option value="resolved">Resolved</option>
               </select>
-              <button class="btn btn-xs btn-orange" onclick="addProcAdvised()">+ Custom</button>
             </div>
           </div>
-          <!-- AI suggested quick-add chips -->
-          <div id="ai-proc-suggestions" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px"></div>
-          <!-- Added procedures list — bold, no charges -->
-          <div id="rx-proc-advised" style="min-height:32px">
-            <div style="font-size:11px;color:var(--g1);padding:5px 8px;font-style:italic;background:var(--g6);border-radius:6px">No procedure advised yet</div>
-          </div>
         </div>
-        <!-- Advice section with common options and save template -->
-        <div style="background:#fffbeb;border-radius:var(--rsm);padding:8px 10px;margin-bottom:4px;border:1.5px solid rgba(212,160,23,.4)">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px">
-            <div style="font-size:10px;font-weight:800;color:#8a4200;text-transform:uppercase;letter-spacing:.5px">📋 Instructions</div>
+        <div class="plan-panel" style="background:#fffbeb;border-color:rgba(212,160,23,.4)">
+          <div class="plan-panel-head">
+            <div class="plan-panel-title" style="color:#8a4200">Instructions</div>
             <div style="display:flex;gap:5px">
               <button class="btn btn-xs btn-outline" onclick="openSaveAdviceTemplate()">💾 Save as Template</button>
               <button class="btn btn-xs" style="background:var(--orange-lt);color:#8a4200;border:1px solid rgba(212,160,23,.5)" onclick="openLoadAdviceTemplate()">📂 Load Template</button>
             </div>
           </div>
-          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:7px" id="adv-chips">
-            <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:3px 8px;border-radius:10px;background:var(--g5);border:1px solid var(--g4);cursor:pointer;user-select:none">Avoid rubbing eyes</span>
-            <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:3px 8px;border-radius:10px;background:var(--g5);border:1px solid var(--g4);cursor:pointer;user-select:none">Use dark glasses outdoors</span>
-            <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:3px 8px;border-radius:10px;background:var(--g5);border:1px solid var(--g4);cursor:pointer;user-select:none">Complete eye drops course</span>
-            <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:3px 8px;border-radius:10px;background:var(--g5);border:1px solid var(--g4);cursor:pointer;user-select:none">Avoid swimming</span>
-            <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:3px 8px;border-radius:10px;background:var(--g5);border:1px solid var(--g4);cursor:pointer;user-select:none">Rest eyes — limit screen time</span>
-            <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:3px 8px;border-radius:10px;background:var(--g5);border:1px solid var(--g4);cursor:pointer;user-select:none">No driving after dilation</span>
-            <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:3px 8px;border-radius:10px;background:var(--g5);border:1px solid var(--g4);cursor:pointer;user-select:none">Control blood sugar</span>
-            <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:3px 8px;border-radius:10px;background:var(--g5);border:1px solid var(--g4);cursor:pointer;user-select:none">Control blood pressure</span>
-            <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:3px 8px;border-radius:10px;background:var(--g5);border:1px solid var(--g4);cursor:pointer;user-select:none">Pre-op fasting (after midnight)</span>
-            <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:3px 8px;border-radius:10px;background:var(--g5);border:1px solid var(--g4);cursor:pointer;user-select:none">Head elevated post-op</span>
-            <span class="adv-chip" onclick="toggleAdvChip(this)" style="font-size:10px;padding:3px 8px;border-radius:10px;background:var(--g5);border:1px solid var(--g4);cursor:pointer;user-select:none">Protective shield at night</span>
-          </div>
+          <div id="oe-advice-library" class="quick-library-grid"></div>
           <textarea id="rx-advice-text" placeholder="Type instructions to patient or load from template…" onblur="ingestCustomAdviceLinesFromTextarea(this)" style="width:100%;min-height:48px;font-size:12px;border:1.5px solid rgba(212,160,23,.4);border-radius:6px;padding:6px 8px;background:#fff;font-family:var(--font);resize:vertical"></textarea>
           <textarea id="rx-extra-advice-text" placeholder="Additional instructions…" style="width:100%;min-height:38px;font-size:12px;border:1.5px solid rgba(212,160,23,.28);border-radius:6px;padding:6px 8px;background:#fff;font-family:var(--font);resize:vertical;margin-top:4px"></textarea>
+        </div>
+        <div class="plan-panel">
+          <div class="plan-panel-head">
+            <div class="plan-panel-title">Surgery / Procedure Advised</div>
+            <div style="display:flex;gap:5px">
+              <select id="proc-add-dropdown" style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:180px" onchange="addProcFromDropdown(this)">
+                <option value="">— Select from list —</option>
+                <option value="__custom__">+ Add New Procedure…</option>
+              </select>
+              <button class="btn btn-xs btn-orange" onclick="addProcAdvised()">+ Custom</button>
+            </div>
+          </div>
+          <div id="oe-proc-library" class="quick-library-grid"></div>
+          <div id="rx-proc-advised" style="min-height:32px">
+            <div style="font-size:11px;color:var(--g1);padding:5px 8px;font-style:italic;background:var(--g6);border-radius:6px">No procedure advised yet</div>
+          </div>
+        </div>
+        </div>
+        <div class="oe-plan-side">
+        <div class="plan-panel" id="oe-inv-display-wrap">
+          <div class="plan-panel-head">
+            <div class="plan-panel-title">🧪 Investigations Ordered</div>
+            <div style="display:flex;gap:5px">
+              <button class="btn btn-xs btn-outline" onclick="openM('m-order-invest')">+ Order More</button>
+              <button class="btn btn-xs btn-blue" onclick="addInvestigationOrder('advise')">Advise Only</button>
+              <button class="btn btn-xs btn-orange" onclick="addInvestigationOrder('send')">Advise + Send to Lab</button>
+            </div>
+          </div>
+          <div id="oe-inv-ordered-list" style="min-height:24px;font-size:11.5px;color:var(--g1);font-style:italic">None ordered</div>
+        </div>
+        </div>
         </div>
       </div>
       <div class="tab-content" id="oe-rx">
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;background:var(--g6);padding:8px 10px;border-radius:var(--rsm)">
           <button class="btn btn-xs btn-blue" onclick="applyLastRx()">📋 Apply Last Rx</button>
-          <select id="rx-tpl-sel" style="font-size:11px;flex:1" onchange="applyRxTemplate(this.value)">
+          <select id="rx-tpl-sel" style="display:none" onchange="applyRxTemplate(this.value)">
             <option value="">— Apply Template —</option>
             <option value="post-phaco">Post Phaco Day 1</option>
             <option value="post-ivt">Post IVT</option>
             <option value="dry-eye">Dry Eye Protocol</option>
           </select>
+          <button class="btn btn-xs btn-outline" type="button" onclick="openRxTemplatePicker('ophtho')" style="flex:1;justify-content:flex-start">📋 Templates</button>
           <button class="btn btn-xs btn-outline" onclick="openM('m-order-invest')">🧪 Order Investigations</button>
           <label style="display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;color:var(--g1);padding:4px 2px;user-select:none;cursor:pointer">
             <input type="checkbox" id="rx-post-surgery" onchange="toggleRxPostSurgeryNote()">
@@ -1566,6 +1755,7 @@
       <div class="card-hd" style="position:sticky;top:0;z-index:40;background:#fff">
         <div class="card-title">🧾 Reception — Register / Check-in</div>
         <div style="display:flex;gap:6px">
+          <button class="btn btn-outline btn-xs" onclick="openQRScanner()" title="Scan QR from prescription">📷 Scan QR</button>
           <button class="btn btn-gold btn-xs" onclick="openM('m-rec-bill')">🖨️ Generate Bill</button>
           <button class="btn btn-outline btn-xs" onclick="openM('m-rec-refund')">↩️ Refund</button>
         </div>
@@ -1587,13 +1777,14 @@
           </div>
           <button class="btn btn-xs" style="background:rgba(255,255,255,.2);color:#fff" onclick="genRcUID()">🔄 New ID</button>
         </div>
-        <div style="display:flex;gap:7px;margin-bottom:10px;align-items:center">
+        <div id="rc-search-row" style="display:flex;gap:7px;margin-bottom:10px;align-items:center">
           <div style="flex:1;display:flex;align-items:center;gap:7px;background:#fff;border:1.5px solid var(--g4);border-radius:8px;padding:6px 10px">
             <span style="font-size:14px">🔍</span>
             <input type="text" id="rc-bmhid-search" placeholder="Search by BMSH ID (e.g. BMSH-056000) or phone…" style="border:none;outline:none;font-size:12px;font-family:var(--font);width:100%" oninput="lookupByBMHID(this.value)">
           </div>
-          <button class="btn btn-xs btn-outline" onclick="openQRScanner()" title="Scan QR from prescription">📷 QR</button>
+          <button class="btn btn-xs btn-outline" id="rc-qr-inline-btn" onclick="openQRScanner()" title="Scan QR from prescription">📷 QR</button>
         </div>
+        <button class="btn btn-outline" id="rc-qr-mobile-btn" onclick="openQRScanner()" title="Scan QR from prescription" style="display:none;width:100%;justify-content:center;margin:-2px 0 10px 0">📷 Scan Patient QR</button>
         <div id="rc-bmhid-result" style="margin-bottom:8px"></div>
         <div class="fg">
           <div class="form-group"><label class="fl">First Name</label><input type="text" id="rc-fn" placeholder="First name"></div>
@@ -1633,7 +1824,7 @@
           </div>
 <div class="form-group"><label class="fl">Doctor</label><select id="rc-dr"></select></div>
           <div class="form-group">
-            <label class="fl" style="display:flex;align-items:center;justify-content:space-between">Purpose <button onclick="openM('m-add-purpose')" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></label>
+            <label class="fl" style="display:flex;align-items:center;justify-content:space-between">Purpose <button onclick="renderCustomPurposeList();openM('m-add-purpose')" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></label>
             <select id="rc-purpose" onchange="checkSurgeryPurpose();syncReceptionConsultationFee&&syncReceptionConsultationFee()">
               <option>New Consultation</option><option>Follow-up</option><option>Post-op (Day 1)</option><option>Post-op (1 Week)</option><option>Post-op (1 Month)</option><option>Post-op (3 Months)</option><option>Emergency</option><option>ANC Visit</option><option>Surgery</option><option>Procedure / Injection</option><option>Investigation Only</option>
             </select>
@@ -1846,6 +2037,7 @@
         <div style="display:flex;gap:5px;flex-wrap:wrap">
           <button class="btn btn-sm btn-gray" onclick="nav('doctor-queue',null)" title="Back to Queue">← Queue</button>
           <button class="btn btn-sm btn-green" onclick="markCurrentPatientSeen()">✓ Seen</button>
+          <label style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--g4);border-radius:999px;background:var(--g6);font-size:11px;font-weight:800;color:var(--g1);cursor:pointer"><input type="checkbox" id="proc-done-toggle-obg" onchange="handleProcedureDoneToggle('obg',this.checked)"> Procedure done</label>
           <button class="btn btn-sm btn-gray" onclick="openM('m-consents');document.getElementById('mc-type').value='obg-lscs';renderConsentModal()">📋 LSCS Consent</button>
           <button class="btn btn-sm btn-outline" onclick="printOBGCard()">🖨️ Print ANC Card</button>
           <button class="btn btn-sm btn-gold" onclick="saveVisit('obg')">💾 Save</button>
@@ -2216,25 +2408,13 @@
       </div>
 
       <!-- OBG RX -->
-      <div class="tab-content" id="obg-rx"><div id="obg-rx-send-bar" style="display:none;background:linear-gradient(135deg,#fff7e0,#fff3cc);border-radius:10px;padding:8px 11px;margin-bottom:10px;border:1.5px solid rgba(212,160,23,.3)">
-        <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
-          <span style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">📤 Send to Reception:</span>
-          <select style="font-size:11px;padding:3px 6px;border-radius:6px;border:1.5px solid rgba(212,160,23,.5);background:#fff;min-width:160px" onchange="sendFromDropdown(this)">
-            <option value="">— All procedures —</option>
-            <option value="Consultation|800">Consultation ₹800</option>
-            <option value="Follow-up|500">Follow-up ₹500</option>
-            <option value="ANC Visit|500">ANC</option><option value="Ultrasound Abdomen|800">USG</option><option value="LSCS (Elective)|45000">LSCS</option><option value="Normal Delivery|25000">Delivery</option><option value="Diagnostic Laparoscopy|20000">Laparoscopy</option>
-          </select>
-          <div style="display:flex;gap:4px;flex-wrap:wrap;flex:1"><button class="btn btn-xs" style="background:#fff;color:#b55a00;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="sendQuickCharge('ANC Visit','500')">ANC ₹500</button><button class="btn btn-xs" style="background:#fff;color:#b55a00;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="sendQuickCharge('Ultrasound Abdomen','800')">USG ₹800</button><button class="btn btn-xs" style="background:#fff;color:#b55a00;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="sendQuickCharge('LSCS (Elective)','45000')">LSCS ₹45K</button><button class="btn btn-xs" style="background:#fff;color:#b55a00;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="sendQuickCharge('Normal Delivery','25000')">Delivery ₹25K</button><button class="btn btn-xs" style="background:#fff;color:#b55a00;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="sendQuickCharge('Diagnostic Laparoscopy','20000')">Laparoscopy ₹20K</button></div>
-          <button class="btn btn-xs btn-gold" onclick="addCustomCharge()" style="white-space:nowrap">+ Custom</button>
-        </div>
-        <div id="sent-charges-log-obg" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px"></div>
-      </div>
+      <div class="tab-content" id="obg-rx"><div id="obg-rx-send-bar"></div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;background:var(--g6);padding:7px;border-radius:var(--rsm)">
           <button class="btn btn-xs btn-blue" onclick="applyLastRx()">📋 Last Rx</button>
-          <select style="font-size:11px;flex:1" onchange="applyRxTemplate(this.value)">
+          <select style="display:none" onchange="applyRxTemplate(this.value)">
             <option value="">— Template —</option>
           </select>
+          <button class="btn btn-xs btn-outline" type="button" onclick="openRxTemplatePicker('obg')" style="flex:1;justify-content:flex-start">📋 Templates</button>
           <button class="btn btn-xs btn-outline" onclick="openM('m-order-invest')">🧪 Investigations</button>
           <button class="btn btn-xs btn-gold" onclick="openSaveRxTemplate()">📋 Save Template</button>
           <div class="lang-sel" style="margin:0">
@@ -2244,16 +2424,32 @@
           </div>
         </div>
         <!-- Diagnosis -->
-        <div style="margin-bottom:10px">
-          <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;display:flex;justify-content:space-between">
-            <span>Diagnosis</span><button class="btn btn-xs btn-outline" onclick="addDxRow()">+ Add</button>
-          </div>
-          <div id="obg-dx-list">
-            <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">
-              <input type="text" class="dx-inp" placeholder="Type diagnosis…" style="flex:1;font-size:12px" autocomplete="off">
-              <button class="btn btn-xs btn-gray" onclick="this.closest('div').remove()">✕</button>
+        <div class="plan-panel" style="margin-bottom:10px">
+          <div class="diag-prev-wrap">
+            <div>
+              <div class="plan-panel-head"><div class="plan-panel-title">Diagnosis</div><button class="btn btn-xs btn-outline" onclick="addDxRow()">+ Add</button></div>
+              <div id="obg-dx-list">
+                <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">
+                  <input type="text" class="dx-inp" placeholder="Type diagnosis…" style="flex:1;font-size:12px" autocomplete="off" oninput="filterDx(this)" onfocus="showDxDropdown(this);wireDxInputFocus(this)">
+                  <button class="btn btn-xs btn-gray" onclick="this.closest('div').remove()">✕</button>
+                </div>
+              </div>
+            </div>
+            <div class="prev-dx-box">
+              <div class="prev-dx-title">Previous Diagnosis</div>
+              <div id="obg-prev-dx-text" class="prev-dx-text">No previous active diagnosis</div>
+              <select id="obg-prev-dx-status" style="margin-top:8px;font-size:11px;padding:5px 7px;border-radius:7px;border:1.5px solid var(--g4);width:100%" onchange="handlePreviousDiagnosisStatusChange('obg', this.value)">
+                <option value="carry">Carry forward</option>
+                <option value="resolved">Resolved</option>
+              </select>
             </div>
           </div>
+        </div>
+        <div class="plan-panel" style="background:#fffbeb;border-color:rgba(212,160,23,.4);margin-bottom:10px">
+          <div class="plan-panel-head"><div class="plan-panel-title" style="color:#8a4200">Instructions</div></div>
+          <div id="obg-advice-library" class="quick-library-grid"></div>
+          <textarea placeholder="Advice to patient…" style="width:100%;min-height:40px;margin-bottom:8px;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px" id="obg-advice"></textarea>
+          <textarea placeholder="Additional advice to patient…" style="width:100%;min-height:38px;margin-bottom:0;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px" id="obg-extra-advice"></textarea>
         </div>
         <div style="background:var(--g6);border-radius:var(--rsm);padding:8px 11px;margin-bottom:10px;border:1.5px solid var(--g4)">
           <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px">🖨️ Include in Printout (OBG)</div>
@@ -2293,19 +2489,17 @@
           <div id="obg-inv-list"><div style="font-size:11.5px;color:var(--g1);padding:5px 8px">None ordered</div></div>
         </div>
         <!-- Procedures -->
-        <div style="margin-bottom:10px">
-          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:5px;margin-bottom:6px">
-            <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px">⚕️ Surgery / Procedure Advised</div>
+        <div class="plan-panel" style="margin-bottom:10px">
+          <div class="plan-panel-head">
+            <div class="plan-panel-title">Surgery / Procedure Advised</div>
             <div style="display:flex;gap:5px;flex-wrap:wrap">
-              <select style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:190px;border:1.5px solid var(--orange)" onchange="addProcFromDropdownDept(this)">
+              <select id="obg-proc-add-dropdown" style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:190px;border:1.5px solid var(--orange)" onchange="addProcFromDropdownDept(this)">
                 <option value="">— Select procedure —</option>
-                <option value="LSCS (Elective)|45000">LSCS (Elective)</option><option value="Normal Delivery|25000">Normal Delivery</option><option value="Diagnostic Laparoscopy|20000">Diagnostic Laparoscopy</option><option value="Hysteroscopy|15000">Hysteroscopy</option><option value="D&C|8000">D&C</option><option value="Tubectomy|10000">Tubectomy</option><option value="IUCD Insertion|2000">IUCD Insertion</option>
                 <option value="__custom__|0">+ Add new procedure…</option>
               </select>
             </div>
           </div>
-          <div style="font-size:9.5px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">AI Quick-Add:</div>
-          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:7px"><button class="btn btn-xs" style="background:var(--orange-lt);color:#8a4200;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="addProcItem('LSCS (Elective)',45000)">LSCS</button><button class="btn btn-xs" style="background:var(--orange-lt);color:#8a4200;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="addProcItem('Normal Delivery',25000)">Normal Delivery</button><button class="btn btn-xs" style="background:var(--orange-lt);color:#8a4200;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="addProcItem('Diagnostic Laparoscopy',20000)">Diagnostic Laparosco</button><button class="btn btn-xs" style="background:var(--orange-lt);color:#8a4200;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="addProcItem('Hysteroscopy',15000)">Hysteroscopy</button><button class="btn btn-xs" style="background:var(--orange-lt);color:#8a4200;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="addProcItem('D&C',8000)">D&C</button></div>
+          <div id="obg-proc-library" class="quick-library-grid"></div>
           <div id="rx-proc-advised-obg" style="min-height:28px">
             <div class="proc-placeholder" style="font-size:11px;color:var(--g1);padding:5px 8px;font-style:italic;background:var(--g6);border-radius:6px">No procedure advised yet</div>
           </div>
@@ -2323,8 +2517,6 @@
             <button class="btn btn-blue btn-sm" onclick="bookFollowup()">📅 Book</button>
           </div>
         </div>
-        <textarea placeholder="Advice to patient…" style="width:100%;min-height:40px;margin-bottom:8px;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px" id="obg-advice"></textarea>
-        <textarea placeholder="Additional advice to patient…" style="width:100%;min-height:38px;margin-bottom:8px;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px" id="obg-extra-advice"></textarea>
         <div style="display:flex;gap:7px;flex-wrap:wrap">
           <button class="btn btn-gold" style="flex:1;justify-content:center" onclick="printUnifiedRx('obg')">🖨️ Print Prescription</button>
           <button class="wa-btn" onclick="showToast('Sent via WhatsApp ✓','s')">📱</button>
@@ -2448,6 +2640,7 @@
         <div style="display:flex;gap:5px;flex-wrap:wrap">
           <button class="btn btn-sm btn-gray" onclick="nav('doctor-queue',null)" title="Back to Queue">← Queue</button>
           <button class="btn btn-sm btn-green" onclick="markCurrentPatientSeen()">✓ Seen</button>
+          <label style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--g4);border-radius:999px;background:var(--g6);font-size:11px;font-weight:800;color:var(--g1);cursor:pointer"><input type="checkbox" id="proc-done-toggle-psych" onchange="handleProcedureDoneToggle('psych',this.checked)"> Procedure done</label>
           <button class="btn btn-sm btn-outline" onclick="printPsychSheet()">🖨️ Print</button>
           <button class="btn btn-sm btn-gold" onclick="saveVisit('psych')">💾 Save</button>
         </div>
@@ -2616,25 +2809,13 @@
       </div>
 
       <!-- PSYCH RX -->
-      <div class="tab-content" id="psych-rx"><div id="psych-rx-send-bar" style="display:none;background:linear-gradient(135deg,#fff7e0,#fff3cc);border-radius:10px;padding:8px 11px;margin-bottom:10px;border:1.5px solid rgba(212,160,23,.3)">
-        <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
-          <span style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">📤 Send to Reception:</span>
-          <select style="font-size:11px;padding:3px 6px;border-radius:6px;border:1.5px solid rgba(212,160,23,.5);background:#fff;min-width:160px" onchange="sendFromDropdown(this)">
-            <option value="">— All procedures —</option>
-            <option value="Consultation|800">Consultation ₹800</option>
-            <option value="Follow-up|500">Follow-up ₹500</option>
-            <option value="Psychiatry Consultation|800">Consult</option><option value="Psychiatry Follow-up|500">Follow-up</option><option value="Psychotherapy Session|1200">Psychotherapy</option><option value="Electroconvulsive Therapy|8000">ECT</option>
-          </select>
-          <div style="display:flex;gap:4px;flex-wrap:wrap;flex:1"><button class="btn btn-xs" style="background:#fff;color:#b55a00;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="sendQuickCharge('Psychiatry Consultation','800')">Consult ₹800</button><button class="btn btn-xs" style="background:#fff;color:#b55a00;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="sendQuickCharge('Psychiatry Follow-up','500')">Follow-up ₹500</button><button class="btn btn-xs" style="background:#fff;color:#b55a00;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="sendQuickCharge('Psychotherapy Session','1200')">Psychotherapy ₹1,200</button><button class="btn btn-xs" style="background:#fff;color:#b55a00;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="sendQuickCharge('Electroconvulsive Therapy','8000')">ECT ₹8K</button></div>
-          <button class="btn btn-xs btn-gold" onclick="addCustomCharge()" style="white-space:nowrap">+ Custom</button>
-        </div>
-        <div id="sent-charges-log-psych" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px"></div>
-      </div>
+      <div class="tab-content" id="psych-rx"><div id="psych-rx-send-bar"></div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;background:var(--g6);padding:7px;border-radius:var(--rsm)">
           <button class="btn btn-xs btn-blue" onclick="applyLastRx()">📋 Last Rx</button>
-          <select style="font-size:11px;flex:1" onchange="applyRxTemplate(this.value)">
+          <select style="display:none" onchange="applyRxTemplate(this.value)">
             <option value="">— Template —</option>
           </select>
+          <button class="btn btn-xs btn-outline" type="button" onclick="openRxTemplatePicker('psych')" style="flex:1;justify-content:flex-start">📋 Templates</button>
           <button class="btn btn-xs btn-outline" onclick="openM('m-order-invest')">🧪 Investigations</button>
           <button class="btn btn-xs btn-gold" onclick="openSaveRxTemplate()">📋 Save Template</button>
           <div class="lang-sel" style="margin:0">
@@ -2644,16 +2825,32 @@
           </div>
         </div>
         <!-- Diagnosis -->
-        <div style="margin-bottom:10px">
-          <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;display:flex;justify-content:space-between">
-            <span>Diagnosis</span><button class="btn btn-xs btn-outline" onclick="addDxRow()">+ Add</button>
-          </div>
-          <div id="psych-dx-list">
-            <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">
-              <input type="text" class="dx-inp" placeholder="Type diagnosis to search (ICD-10)…" oninput="filterDx(this)" onfocus="showDxDropdown(this)" style="flex:1;font-size:12px" autocomplete="off">
-              <button class="btn btn-xs btn-gray" onclick="this.closest('div').remove()">✕</button>
+        <div class="plan-panel" style="margin-bottom:10px">
+          <div class="diag-prev-wrap">
+            <div>
+              <div class="plan-panel-head"><div class="plan-panel-title">Diagnosis</div><button class="btn btn-xs btn-outline" onclick="addDxRow()">+ Add</button></div>
+              <div id="psych-dx-list">
+                <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">
+                  <input type="text" class="dx-inp" placeholder="Type diagnosis to search (ICD-10)…" oninput="filterDx(this)" onfocus="showDxDropdown(this)" style="flex:1;font-size:12px" autocomplete="off">
+                  <button class="btn btn-xs btn-gray" onclick="this.closest('div').remove()">✕</button>
+                </div>
+              </div>
+            </div>
+            <div class="prev-dx-box">
+              <div class="prev-dx-title">Previous Diagnosis</div>
+              <div id="psych-prev-dx-text" class="prev-dx-text">No previous active diagnosis</div>
+              <select id="psych-prev-dx-status" style="margin-top:8px;font-size:11px;padding:5px 7px;border-radius:7px;border:1.5px solid var(--g4);width:100%" onchange="handlePreviousDiagnosisStatusChange('psych', this.value)">
+                <option value="carry">Carry forward</option>
+                <option value="resolved">Resolved</option>
+              </select>
             </div>
           </div>
+        </div>
+        <div class="plan-panel" style="background:#fffbeb;border-color:rgba(212,160,23,.4);margin-bottom:10px">
+          <div class="plan-panel-head"><div class="plan-panel-title" style="color:#8a4200">Instructions</div></div>
+          <div id="psych-advice-library" class="quick-library-grid"></div>
+          <textarea placeholder="Advice to patient…" style="width:100%;min-height:40px;margin-bottom:8px;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px" id="psych-advice"></textarea>
+          <textarea placeholder="Additional advice to patient…" style="width:100%;min-height:38px;margin-bottom:0;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px" id="psych-extra-advice"></textarea>
         </div>
         <!-- Drug quick search -->
         <div style="position:relative;margin-bottom:6px">
@@ -2685,19 +2882,17 @@
           <div id="psych-inv-list"><div style="font-size:11.5px;color:var(--g1);padding:5px 8px">None ordered</div></div>
         </div>
         <!-- Procedures -->
-        <div style="margin-bottom:10px">
-          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:5px;margin-bottom:6px">
-            <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px">⚕️ Surgery / Procedure Advised</div>
+        <div class="plan-panel" style="margin-bottom:10px">
+          <div class="plan-panel-head">
+            <div class="plan-panel-title">Surgery / Procedure Advised</div>
             <div style="display:flex;gap:5px;flex-wrap:wrap">
-              <select style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:190px;border:1.5px solid var(--orange)" onchange="addProcFromDropdownDept(this)">
+              <select id="psych-proc-add-dropdown" style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:190px;border:1.5px solid var(--orange)" onchange="addProcFromDropdownDept(this)">
                 <option value="">— Select procedure —</option>
-                <option value="Electroconvulsive Therapy (ECT)|8000">Electroconvulsive Therapy (ECT)</option><option value="Psychotherapy Session|1200">Psychotherapy Session</option><option value="Cognitive Behavioural Therapy|1500">Cognitive Behavioural Therapy</option>
                 <option value="__custom__|0">+ Add new procedure…</option>
               </select>
             </div>
           </div>
-          <div style="font-size:9.5px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">AI Quick-Add:</div>
-          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:7px"><button class="btn btn-xs" style="background:var(--orange-lt);color:#8a4200;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="addProcItem('Electroconvulsive Therapy (ECT)',8000)">Electroconvulsive Th</button><button class="btn btn-xs" style="background:var(--orange-lt);color:#8a4200;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="addProcItem('Psychotherapy Session',1200)">Psychotherapy Sessio</button><button class="btn btn-xs" style="background:var(--orange-lt);color:#8a4200;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="addProcItem('Cognitive Behavioural Therapy',1500)">Cognitive Behavioura</button></div>
+          <div id="psych-proc-library" class="quick-library-grid"></div>
           <div id="rx-proc-advised-psych" style="min-height:28px">
             <div class="proc-placeholder" style="font-size:11px;color:var(--g1);padding:5px 8px;font-style:italic;background:var(--g6);border-radius:6px">No procedure advised yet</div>
           </div>
@@ -2715,8 +2910,6 @@
             <button class="btn btn-blue btn-sm" onclick="bookFollowup()">📅 Book</button>
           </div>
         </div>
-        <textarea placeholder="Advice to patient…" style="width:100%;min-height:40px;margin-bottom:8px;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px" id="psych-advice"></textarea>
-        <textarea placeholder="Additional advice to patient…" style="width:100%;min-height:38px;margin-bottom:8px;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px" id="psych-extra-advice"></textarea>
         <div style="display:flex;gap:7px;flex-wrap:wrap">
           <button class="btn btn-gold" style="flex:1;justify-content:center" onclick="printUnifiedRx('psych')">🖨️ Print Prescription</button>
           <button class="wa-btn" onclick="showToast('Sent via WhatsApp ✓','s')">📱</button>
@@ -2771,6 +2964,7 @@
         <div style="display:flex;gap:5px;flex-wrap:wrap">
           <button class="btn btn-sm btn-gray" onclick="nav('doctor-queue',null)" title="Back to Queue">← Queue</button>
           <button class="btn btn-sm btn-green" onclick="markCurrentPatientSeen()">✓ Seen</button>
+          <label style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--g4);border-radius:999px;background:var(--g6);font-size:11px;font-weight:800;color:var(--g1);cursor:pointer"><input type="checkbox" id="proc-done-toggle-skin" onchange="handleProcedureDoneToggle('skin',this.checked)"> Procedure done</label>
           <button class="btn btn-sm btn-outline" onclick="printSkinSheet()">🖨️ Print</button>
           <button class="btn btn-sm btn-gold" onclick="saveVisit('skin')">💾 Save</button>
         </div>
@@ -2866,25 +3060,13 @@
       </div>
 
       <!-- SKIN RX -->
-      <div class="tab-content" id="skin-rx"><div id="skin-rx-send-bar" style="display:none;background:linear-gradient(135deg,#fff7e0,#fff3cc);border-radius:10px;padding:8px 11px;margin-bottom:10px;border:1.5px solid rgba(212,160,23,.3)">
-        <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
-          <span style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">📤 Send to Reception:</span>
-          <select style="font-size:11px;padding:3px 6px;border-radius:6px;border:1.5px solid rgba(212,160,23,.5);background:#fff;min-width:160px" onchange="sendFromDropdown(this)">
-            <option value="">— All procedures —</option>
-            <option value="Consultation|800">Consultation ₹800</option>
-            <option value="Follow-up|500">Follow-up ₹500</option>
-            <option value="Dermatology Consultation|800">Consult</option><option value="Chemical Peel|1500">Peel</option><option value="PRP Treatment|3500">PRP</option><option value="Microneedling|2000">Microneedling</option><option value="Botox Injection|8000">Botox</option><option value="Laser Treatment|5000">Laser</option>
-          </select>
-          <div style="display:flex;gap:4px;flex-wrap:wrap;flex:1"><button class="btn btn-xs" style="background:#fff;color:#b55a00;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="sendQuickCharge('Dermatology Consultation','800')">Consult ₹800</button><button class="btn btn-xs" style="background:#fff;color:#b55a00;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="sendQuickCharge('Chemical Peel','1500')">Peel ₹1,500</button><button class="btn btn-xs" style="background:#fff;color:#b55a00;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="sendQuickCharge('PRP Treatment','3500')">PRP ₹3,500</button><button class="btn btn-xs" style="background:#fff;color:#b55a00;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="sendQuickCharge('Microneedling','2000')">Microneedling ₹2K</button><button class="btn btn-xs" style="background:#fff;color:#b55a00;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="sendQuickCharge('Botox Injection','8000')">Botox ₹8K</button><button class="btn btn-xs" style="background:#fff;color:#b55a00;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="sendQuickCharge('Laser Treatment','5000')">Laser ₹5K</button></div>
-          <button class="btn btn-xs btn-gold" onclick="addCustomCharge()" style="white-space:nowrap">+ Custom</button>
-        </div>
-        <div id="sent-charges-log-skin" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px"></div>
-      </div>
+      <div class="tab-content" id="skin-rx"><div id="skin-rx-send-bar"></div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;background:var(--g6);padding:7px;border-radius:var(--rsm)">
           <button class="btn btn-xs btn-blue" onclick="applyLastRx()">📋 Last Rx</button>
-          <select style="font-size:11px;flex:1" onchange="applyRxTemplate(this.value)">
+          <select style="display:none" onchange="applyRxTemplate(this.value)">
             <option value="">— Template —</option>
           </select>
+          <button class="btn btn-xs btn-outline" type="button" onclick="openRxTemplatePicker('skin')" style="flex:1;justify-content:flex-start">📋 Templates</button>
           <button class="btn btn-xs btn-outline" onclick="openM('m-order-invest')">🧪 Investigations</button>
           <button class="btn btn-xs btn-gold" onclick="openSaveRxTemplate()">📋 Save Template</button>
           <div class="lang-sel" style="margin:0">
@@ -2894,16 +3076,32 @@
           </div>
         </div>
         <!-- Diagnosis -->
-        <div style="margin-bottom:10px">
-          <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;display:flex;justify-content:space-between">
-            <span>Diagnosis</span><button class="btn btn-xs btn-outline" onclick="addDxRow()">+ Add</button>
-          </div>
-          <div id="skin-dx-list">
-            <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">
-              <input type="text" class="dx-inp" placeholder="Type diagnosis to search (ICD-10)…" oninput="filterDx(this)" onfocus="showDxDropdown(this)" style="flex:1;font-size:12px" autocomplete="off">
-              <button class="btn btn-xs btn-gray" onclick="this.closest('div').remove()">✕</button>
+        <div class="plan-panel" style="margin-bottom:10px">
+          <div class="diag-prev-wrap">
+            <div>
+              <div class="plan-panel-head"><div class="plan-panel-title">Diagnosis</div><button class="btn btn-xs btn-outline" onclick="addDxRow()">+ Add</button></div>
+              <div id="skin-dx-list">
+                <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">
+                  <input type="text" class="dx-inp" placeholder="Type diagnosis to search (ICD-10)…" oninput="filterDx(this)" onfocus="showDxDropdown(this)" style="flex:1;font-size:12px" autocomplete="off">
+                  <button class="btn btn-xs btn-gray" onclick="this.closest('div').remove()">✕</button>
+                </div>
+              </div>
+            </div>
+            <div class="prev-dx-box">
+              <div class="prev-dx-title">Previous Diagnosis</div>
+              <div id="skin-prev-dx-text" class="prev-dx-text">No previous active diagnosis</div>
+              <select id="skin-prev-dx-status" style="margin-top:8px;font-size:11px;padding:5px 7px;border-radius:7px;border:1.5px solid var(--g4);width:100%" onchange="handlePreviousDiagnosisStatusChange('skin', this.value)">
+                <option value="carry">Carry forward</option>
+                <option value="resolved">Resolved</option>
+              </select>
             </div>
           </div>
+        </div>
+        <div class="plan-panel" style="background:#fffbeb;border-color:rgba(212,160,23,.4);margin-bottom:10px">
+          <div class="plan-panel-head"><div class="plan-panel-title" style="color:#8a4200">Instructions</div></div>
+          <div id="skin-advice-library" class="quick-library-grid"></div>
+          <textarea placeholder="Advice to patient…" style="width:100%;min-height:40px;margin-bottom:8px;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px" id="skin-advice"></textarea>
+          <textarea placeholder="Additional advice to patient…" style="width:100%;min-height:38px;margin-bottom:0;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px" id="skin-extra-advice"></textarea>
         </div>
         <!-- Drug quick search -->
         <div style="position:relative;margin-bottom:6px">
@@ -2935,19 +3133,17 @@
           <div id="skin-inv-list"><div style="font-size:11.5px;color:var(--g1);padding:5px 8px">None ordered</div></div>
         </div>
         <!-- Procedures -->
-        <div style="margin-bottom:10px">
-          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:5px;margin-bottom:6px">
-            <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px">⚕️ Surgery / Procedure Advised</div>
+        <div class="plan-panel" style="margin-bottom:10px">
+          <div class="plan-panel-head">
+            <div class="plan-panel-title">Surgery / Procedure Advised</div>
             <div style="display:flex;gap:5px;flex-wrap:wrap">
-              <select style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:190px;border:1.5px solid var(--orange)" onchange="addProcFromDropdownDept(this)">
+              <select id="skin-proc-add-dropdown" style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:190px;border:1.5px solid var(--orange)" onchange="addProcFromDropdownDept(this)">
                 <option value="">— Select procedure —</option>
-                <option value="Chemical Peel|1500">Chemical Peel</option><option value="Microneedling|2000">Microneedling</option><option value="PRP Treatment|3500">PRP Treatment</option><option value="Botox Injection|8000">Botox Injection</option><option value="Dermal Filler|12000">Dermal Filler</option><option value="Laser Hair Removal|5000">Laser Hair Removal</option><option value="CO2 Laser Treatment|8000">CO2 Laser Treatment</option><option value="Cryotherapy|1500">Cryotherapy</option>
                 <option value="__custom__|0">+ Add new procedure…</option>
               </select>
             </div>
           </div>
-          <div style="font-size:9.5px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">AI Quick-Add:</div>
-          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:7px"><button class="btn btn-xs" style="background:var(--orange-lt);color:#8a4200;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="addProcItem('Chemical Peel',1500)">Chemical Peel</button><button class="btn btn-xs" style="background:var(--orange-lt);color:#8a4200;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="addProcItem('Microneedling',2000)">Microneedling</button><button class="btn btn-xs" style="background:var(--orange-lt);color:#8a4200;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="addProcItem('PRP Treatment',3500)">PRP Treatment</button><button class="btn btn-xs" style="background:var(--orange-lt);color:#8a4200;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="addProcItem('Botox Injection',8000)">Botox Injection</button><button class="btn btn-xs" style="background:var(--orange-lt);color:#8a4200;border:1.5px solid rgba(255,149,0,.4);padding:3px 9px;font-size:10.5px;font-weight:700" onclick="addProcItem('Dermal Filler',12000)">Dermal Filler</button></div>
+          <div id="skin-proc-library" class="quick-library-grid"></div>
           <div id="rx-proc-advised-skin" style="min-height:28px">
             <div class="proc-placeholder" style="font-size:11px;color:var(--g1);padding:5px 8px;font-style:italic;background:var(--g6);border-radius:6px">No procedure advised yet</div>
           </div>
@@ -2965,8 +3161,6 @@
             <button class="btn btn-blue btn-sm" onclick="bookFollowup()">📅 Book</button>
           </div>
         </div>
-        <textarea placeholder="Advice to patient…" style="width:100%;min-height:40px;margin-bottom:8px;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px" id="skin-advice"></textarea>
-        <textarea placeholder="Additional advice to patient…" style="width:100%;min-height:38px;margin-bottom:8px;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px" id="skin-extra-advice"></textarea>
         <div style="display:flex;gap:7px;flex-wrap:wrap">
           <button class="btn btn-gold" style="flex:1;justify-content:center" onclick="printUnifiedRx('skin')">🖨️ Print Prescription</button>
           <button class="wa-btn" onclick="showToast('Sent via WhatsApp ✓','s')">📱</button>
@@ -3040,7 +3234,7 @@
 <div class="g32">
   <div class="col">
     <div class="card">
-      <div class="card-hd"><div><div class="card-title">&#129514; Tests Ordered</div><div class="card-sub"><span class="live-dot"></span>Click patient to enter results</div></div><span class="badge bd-orange" id="lab-pending-ct">2 pending</span></div>
+      <div class="card-hd"><div><div class="card-title">&#129514; Lab Patient Queue</div><div class="card-sub"><span class="live-dot"></span>Only patient, advised tests, and referring doctor are shown here</div></div><span class="badge bd-orange" id="lab-pending-ct">0 pending</span></div>
       <div id="lab-ordered-list"></div>
     </div>
     <div class="card" id="lab-entry-panel" style="display:none">
@@ -3048,7 +3242,7 @@
         <div><div class="card-title" id="lab-entry-pt-name">Patient</div><div class="card-sub" id="lab-entry-inv-name">Investigation</div></div>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
           <input type="text" id="lab-incharge" placeholder="Lab technician name" style="font-size:11.5px;flex:1;min-width:120px">
-          <button class="btn btn-gold btn-sm" onclick="saveLabResults()">&#128190; Save &amp; Notify</button>
+          <button class="btn btn-gold btn-sm" onclick="saveLabResults()">✅ Done &amp; Notify</button>
         </div>
       </div>
       <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 60px;gap:5px;padding:4px 8px 5px;font-size:9.5px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px"><span>Test</span><span>Value</span><span>Unit</span><span>Range</span><span>Flag</span></div>
@@ -3066,7 +3260,10 @@
           <button class="btn btn-gold btn-sm" onclick="printLabReport()">&#128424; Print</button>
         </div>
       </div>
-      <div style="margin-bottom:10px"><img src="" class="lh-img-tag" data-lhsrc="1" alt="Baweja Multispeciality Hospital" style="width:100%;max-width:680px;height:auto;display:block"></div>
+      <div style="margin-bottom:10px;padding:12px 14px;border:1.5px solid #d8dde6;border-radius:10px;background:#fafafa">
+        <div style="font-size:20px;font-weight:900;color:#1f2937;letter-spacing:.3px">Laboratory Report</div>
+        <div style="font-size:11px;color:#4b5563;margin-top:4px">Processed by outsourced laboratory partner. Please interpret results in clinical context.</div>
+      </div>
       <div style="background:#f2f4f8;border-radius:6px;padding:7px 10px;margin-bottom:10px;display:grid;grid-template-columns:repeat(3,1fr);gap:5px;font-size:11px">
         <div><div style="font-size:8.5px;color:#666;font-weight:700;text-transform:uppercase">Patient</div><div style="font-weight:900" id="lab-rpt-name">Test Patient A</div></div>
         <div><div style="font-size:8.5px;color:#666;font-weight:700;text-transform:uppercase">BMSH ID</div><div style="font-family:monospace;font-size:10px;font-weight:700;color:#1A3C6E" id="lab-rpt-id">BMSH-000001</div></div>
@@ -3087,6 +3284,7 @@
       <div class="tab-content" id="lab-p-diab"><div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 65px;gap:5px;padding:4px 8px 5px;font-size:9.5px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px"><span>Test</span><span>Value</span><span>Unit</span><span>Normal Range</span><span>Flag</span></div><div id="lab-diab"></div></div>
       <div class="tab-content" id="lab-p-thyroid"><div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 65px;gap:5px;padding:4px 8px 5px;font-size:9.5px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px"><span>Test</span><span>Value</span><span>Unit</span><span>Normal Range</span><span>Flag</span></div><div id="lab-thyroid"></div></div>
       <div class="tab-content" id="lab-p-custom"><div style="padding:10px;background:var(--g6);border-radius:8px;border:2px dashed var(--g4);margin-bottom:8px"><div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:7px">Add Custom Test</div><div style="display:flex;gap:7px;flex-wrap:wrap"><input type="text" id="custom-test-name" placeholder="Test name" style="flex:2"><input type="text" id="custom-test-val" placeholder="Value" style="flex:1;min-width:60px"><input type="text" id="custom-test-unit" placeholder="Unit" style="flex:1;min-width:50px"><input type="text" id="custom-test-range" placeholder="Range" style="flex:1;min-width:80px"><button class="btn btn-blue btn-sm" onclick="addCustomLabTest()">+ Add</button></div></div><div id="custom-tests-list"></div></div>
+      <div id="lab-rpt-insights" style="margin-top:10px;padding:10px 12px;border:1px solid #d8dde6;border-radius:8px;background:#fafafa;font-size:10.5px;line-height:1.55;color:#374151"></div>
     </div>
   </div>
 </div>
@@ -3101,26 +3299,33 @@
         <div class="ptab active" onclick="ptab(this,'inv-in')">📥 Stock In</div>
         <div class="ptab" onclick="ptab(this,'inv-use')">💊 Patient Usage</div>
         <div class="ptab" onclick="ptab(this,'inv-stock')">📋 Current Stock</div>
+        <div class="ptab" onclick="ptab(this,'inv-expiry')">⏳ Expiry Check</div>
+        <div class="ptab" onclick="ptab(this,'inv-stores')">🏬 Stores & Transfers</div>
+        <div class="ptab" onclick="ptab(this,'inv-indent')">📝 Indents</div>
         <div class="ptab" onclick="ptab(this,'inv-vendor')">🏪 Vendors</div>
         <div class="ptab" onclick="ptab(this,'inv-ocr')">📷 Photo / OCR</div>
       </div>
       <div class="tab-content active" id="inv-in">
         <div style="background:var(--blue-lt);border-radius:10px;padding:10px;margin-bottom:12px">
           <div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Purchase Intake</div>
-          <div class="inventory-scroll-x"><div class="inventory-wide-grid" style="display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:8px;margin-bottom:8px">
+          <div class="inventory-scroll-x"><div class="inventory-wide-grid" style="display:grid;grid-template-columns:1.1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px">
             <div class="form-group" style="margin:0"><label class="fl">Department</label><select id="inv-in-dept"><option value="ophtho">Ophthalmology</option><option value="obg">OBG</option><option value="psych">Psychiatry</option><option value="skin">Skin</option><option value="general">General / Shared</option><option value="ot">OT / Procedure</option><option value="ipd">IPD / Ward</option></select></div>
+            <div class="form-group" style="margin:0"><label class="fl">Category</label><select id="inv-in-cat"></select></div>
             <div class="form-group" style="margin:0"><label class="fl">Vendor</label><input type="text" id="inv-in-vendor" placeholder="Vendor / supplier"></div>
             <div class="form-group" style="margin:0"><label class="fl">Invoice No.</label><input type="text" id="inv-in-invoice" placeholder="Bill / GRN"></div>
           </div></div>
-          <div class="inventory-scroll-x"><div class="inventory-wide-grid" style="display:grid;grid-template-columns:1.4fr 110px 110px 110px 120px;gap:8px">
+          <div class="inventory-scroll-x"><div class="inventory-wide-grid" style="display:grid;grid-template-columns:1.5fr 1fr 100px 100px 100px 115px 115px;gap:8px">
             <div class="form-group" style="margin:0"><label class="fl">Item name / barcode</label><input type="text" id="bc-in" placeholder="Enter barcode or item name…"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Store / location</label><select id="inv-in-store"></select></div>
             <div class="form-group" style="margin:0"><label class="fl">Qty</label><input type="number" id="inv-in-qty" min="1" value="1"></div>
             <div class="form-group" style="margin:0"><label class="fl">Cost ₹</label><input type="number" id="inv-in-cost" min="0" value="0"></div>
             <div class="form-group" style="margin:0"><label class="fl">MRP ₹</label><input type="number" id="inv-in-mrp" min="0" value="0"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Min Qty</label><input type="number" id="inv-in-min" min="0" value="5"></div>
             <div class="form-group" style="margin:0"><label class="fl">Expiry</label><input type="text" id="inv-in-exp" placeholder="MM/YYYY"></div>
           </div></div>
           <div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin-top:8px">
             <div class="form-group" style="margin:0;min-width:220px;flex:1"><label class="fl">Vendor bill upload</label><input type="file" id="inv-in-bill-file" accept="image/*,.pdf"></div>
+            <div class="form-group" style="margin:0;min-width:220px"><label class="fl">Vendor billing</label><select id="inv-in-bill-mode"><option value="monthly">Monthly bill (clear in 1 month)</option><option value="on-use">Bill only when used (IOL / consignment)</option></select></div>
             <button class="btn btn-blue btn-sm" onclick="processBC('in',document.getElementById('bc-in').value)">Add stock →</button>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
@@ -3137,6 +3342,31 @@
             <div id="inv-import-preview-in" style="margin-top:8px;font-size:11px;color:var(--tx3)"></div>
           </div>
         </div>
+        <div id="inv-iol-stock-box" style="display:none;background:linear-gradient(135deg,#fff7db,#fff);border:1px solid #ead8a4;border-radius:10px;padding:12px;margin-bottom:12px">
+          <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+            <div>
+              <div style="font-size:11px;font-weight:900;color:#8a4200;text-transform:uppercase;letter-spacing:.5px">IOL Power Stock Entry</div>
+              <div style="font-size:11px;color:#7a5f22">Select vendor, brand, model, then set quantity ticker against each power from +3.00D to +30.00D.</div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-xs btn-outline" onclick="prepareIolInventoryFromBill()">📷 Prepare from bill / OCR</button>
+              <button class="btn btn-xs btn-gold" onclick="saveIolInventoryGrid()">💾 Add selected IOL powers to stock</button>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:10px">
+            <div class="form-group" style="margin:0"><label class="fl">Vendor Name</label><input type="text" id="inv-iol-vendor" placeholder="Vendor / supplier"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Brand</label><input type="text" id="inv-iol-brand" placeholder="AcrySof / Tecnis / Appasamy"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Company</label><input type="text" id="inv-iol-company" placeholder="Alcon / J&J / Zeiss"></div>
+            <div class="form-group" style="margin:0"><label class="fl">IOL Name / Model</label><input type="text" id="inv-iol-model" placeholder="Hydrophobic Aspheric / Multifocal / Toric"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:140px 140px 1fr;gap:8px;align-items:end;margin-bottom:10px">
+            <div class="form-group" style="margin:0"><label class="fl">Default Expiry</label><input type="text" id="inv-iol-expiry" placeholder="MM/YYYY"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Default Cost ₹</label><input type="number" id="inv-iol-cost" min="0" value="0"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Serial / batch map (optional)</label><textarea id="inv-iol-serial-map" rows="2" style="width:100%;font-family:var(--mono);font-size:11px" placeholder="+21.00D: SER123,BATCH-A | +21.50D: SER124,BATCH-A"></textarea></div>
+          </div>
+          <div id="inv-iol-bill-review" style="display:none;background:#fff;border:1px dashed #d2bb79;border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:11px;color:#7a5f22"></div>
+          <div id="inv-iol-power-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px"></div>
+        </div>
         <div id="stock-in-log" style="margin-top:10px"></div>
         <div class="card" style="margin-top:12px;background:var(--g6)">
           <div class="card-hd"><div><div class="card-title">Recent Purchases</div><div class="card-sub">Department-wise stock intake, cost, invoice, and uploaded bill tracking</div></div></div>
@@ -3146,7 +3376,12 @@
       <div class="tab-content" id="inv-use">
         <div style="background:var(--orange-lt);border-radius:8px;padding:9px;margin-bottom:10px;font-size:12px;font-weight:700;color:#8a4200">💡 Scan injection/item → stock deducted + auto-billed to patient with MRP &amp; timestamp</div>
         <div class="inventory-scroll-x"><div class="inventory-wide-grid" style="display:grid;grid-template-columns:1.4fr 1fr 120px 120px;gap:8px;margin-bottom:9px">
-          <div class="form-group" style="margin:0"><label class="fl">Patient</label><select id="use-pt"></select></div>
+          <div class="form-group" style="margin:0;position:relative">
+            <label class="fl">Patient search</label>
+            <input type="text" id="inv-use-pt-search" placeholder="Search by BMSH ID / phone number">
+            <input type="hidden" id="use-pt">
+            <div id="inv-use-pt-results" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:25;background:#fff;border:1px solid var(--g4);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.12);max-height:220px;overflow-y:auto;margin-top:4px"></div>
+          </div>
           <div class="form-group" style="margin:0"><label class="fl">Department</label><select id="inv-use-dept"><option value="ophtho">Ophthalmology</option><option value="obg">OBG</option><option value="psych">Psychiatry</option><option value="skin">Skin</option><option value="general">General / Shared</option><option value="ot">OT / Procedure</option><option value="ipd">IPD / Ward</option></select></div>
           <div class="form-group" style="margin:0"><label class="fl">Qty</label><input type="number" id="inv-use-qty" min="1" value="1"></div>
           <div class="form-group" style="margin:0"><label class="fl">Use mode</label><select id="inv-use-mode"><option value="bill">Bill patient</option><option value="consume">Consume only</option><option value="ward">Ward stock use</option></select></div>
@@ -3170,11 +3405,106 @@
           <div id="inv-usage-log"></div>
         </div>
       </div>
-      <div class="tab-content" id="inv-stock"><div id="inv-stock-list"></div></div>
+      <div class="tab-content" id="inv-stock">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+          <div class="form-group" style="margin:0"><label class="fl">Filter by category</label><select id="inv-stock-cat-filter" onchange="renderStockList()"></select></div>
+          <div class="form-group" style="margin:0"><label class="fl">Filter by store</label><select id="inv-stock-store-filter" onchange="renderStockList()"></select></div>
+        </div>
+        <div id="inv-stock-list"></div>
+      </div>
+      <div class="tab-content" id="inv-expiry">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px">
+          <button type="button" class="btn btn-outline btn-sm" onclick="renderInventoryExpiryCheck(1)">Within 1 month</button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="renderInventoryExpiryCheck(2)">Within 2 months</button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="renderInventoryExpiryCheck(3)">Within 3 months</button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="renderInventoryExpiryCheck(6)">Within 6 months</button>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px">
+          <div style="background:var(--red-lt);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:#a52a2a;font-weight:800">1 Month</div><div style="font-size:18px;font-weight:900;color:#a52a2a" id="inv-expiry-1m">0</div></div>
+          <div style="background:var(--orange-lt);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:#b55a00;font-weight:800">2 Months</div><div style="font-size:18px;font-weight:900;color:#b55a00" id="inv-expiry-2m">0</div></div>
+          <div style="background:#fff3d8;border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:#8a6d00;font-weight:800">3 Months</div><div style="font-size:18px;font-weight:900;color:#8a6d00" id="inv-expiry-3m">0</div></div>
+          <div style="background:var(--blue-lt);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:var(--bmh-blue);font-weight:800">6 Months</div><div style="font-size:18px;font-weight:900;color:var(--bmh-blue)" id="inv-expiry-6m">0</div></div>
+        </div>
+        <div id="inv-expiry-list"></div>
+      </div>
+      <div class="tab-content" id="inv-stores">
+        <div style="background:var(--g6);border-radius:10px;padding:12px;margin-bottom:12px">
+          <div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Transfer stock between stores</div>
+          <div style="display:grid;grid-template-columns:1.2fr 1.2fr 1.5fr 100px 1fr;gap:8px;align-items:end">
+            <div class="form-group" style="margin:0"><label class="fl">From store</label><select id="inv-tr-from"></select></div>
+            <div class="form-group" style="margin:0"><label class="fl">To store</label><select id="inv-tr-to"></select></div>
+            <div class="form-group" style="margin:0"><label class="fl">Item / barcode</label><input type="text" id="inv-tr-item" placeholder="Type item name or barcode"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Qty</label><input type="number" id="inv-tr-qty" min="1" value="1"></div>
+            <button class="btn btn-blue btn-sm" onclick="saveInventoryTransfer()">Transfer</button>
+          </div>
+        </div>
+        <div style="background:#fff7ec;border-radius:10px;padding:12px;margin-bottom:12px;border:1px solid rgba(255,149,0,.18)">
+          <div style="font-size:11px;font-weight:900;color:#b55a00;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Return stock to vendor</div>
+          <div style="display:grid;grid-template-columns:1.2fr 1.5fr 100px 1fr 1fr;gap:8px;align-items:end">
+            <div class="form-group" style="margin:0"><label class="fl">From store</label><select id="inv-ret-store"></select></div>
+            <div class="form-group" style="margin:0"><label class="fl">Item / barcode</label><input type="text" id="inv-ret-item" placeholder="Type item name or barcode"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Qty</label><input type="number" id="inv-ret-qty" min="1" value="1"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Vendor</label><input type="text" id="inv-ret-vendor" placeholder="Optional override"></div>
+            <button class="btn btn-orange btn-sm" onclick="saveInventoryReturn()">Return to vendor</button>
+          </div>
+          <div class="form-group" style="margin:8px 0 0"><label class="fl">Reason</label><input type="text" id="inv-ret-reason" placeholder="Damaged / expired / wrong supply / excess stock"></div>
+        </div>
+        <div class="card" style="margin-bottom:12px">
+          <div class="card-hd"><div><div class="card-title">Low-stock purchase orders</div><div class="card-sub">Items at or below minimum quantity pulse here for printing</div></div><button type="button" class="btn btn-outline btn-sm" onclick="bmhPrintPurchaseOrder()">🖨️ Print PO</button></div>
+          <div id="inv-po-alerts"></div>
+        </div>
+        <div class="card"><div class="card-hd"><div class="card-title">Store stock snapshot</div></div><div id="inv-store-stock"></div></div>
+      </div>
+      <div class="tab-content" id="inv-indent">
+        <div style="background:var(--g6);border-radius:10px;padding:12px;margin-bottom:12px">
+          <div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Raise indent</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1.3fr 90px 1fr 1fr;gap:8px;align-items:end">
+            <div class="form-group" style="margin:0"><label class="fl">Requesting store</label><select id="inv-indent-store"></select></div>
+            <div class="form-group" style="margin:0"><label class="fl">Required from</label><select id="inv-indent-source"></select></div>
+            <div class="form-group" style="margin:0"><label class="fl">Item needed</label><input type="text" id="inv-indent-item" placeholder="Item name / barcode"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Qty</label><input type="number" id="inv-indent-qty" min="1" value="1"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Urgency</label><select id="inv-indent-urgency"><option value="routine">Routine</option><option value="priority">Priority</option><option value="urgent">Urgent</option></select></div>
+            <button class="btn btn-orange btn-sm" onclick="saveInventoryIndent()">Submit indent</button>
+          </div>
+          <div class="form-group" style="margin-top:8px"><label class="fl">Notes</label><input type="text" id="inv-indent-notes" placeholder="Reason / case details / staff note"></div>
+        </div>
+        <div class="card"><div class="card-hd"><div class="card-title">Open indents</div></div><div id="inv-indent-list"></div></div>
+      </div>
       <div class="tab-content" id="inv-vendor">
-        <div style="font-size:12px;color:var(--g1);margin-bottom:10px">Vendor invoices added here also appear under <strong>Billing → Vendors &amp; expenses</strong> with pending dues.</div>
-        <div id="inv-vendor-mini" style="font-size:12px"></div>
-        <button type="button" class="btn btn-outline btn-sm" style="margin-top:10px" onclick="nav('billing',null);setTimeout(function(){var t=document.querySelector('#pg-billing .ptab:nth-child(2)');if(t)t.click();},200)">Open full vendor screen →</button>
+        <div class="card" style="margin-bottom:12px">
+          <div class="card-hd"><div><div class="card-title">Vendor outstanding summary</div><div class="card-sub">Cheque / bank-transfer clearances reduce the oldest outstanding bills first</div></div></div>
+          <div id="inv-vendor-summary"></div>
+        </div>
+        <div class="g32" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="card">
+            <div class="card-hd"><div class="card-title">Vendor bills</div></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+                <div class="form-group"><label class="fl">Vendor</label><input type="text" id="inv-vend-name" placeholder="Supplier name"></div>
+                <div class="form-group"><label class="fl">Invoice no.</label><input type="text" id="inv-vend-inv" placeholder="Invoice #"></div>
+                <div class="form-group"><label class="fl">Amount ₹</label><input type="number" id="inv-vend-amt" placeholder="0"></div>
+                <div class="form-group"><label class="fl">Due date</label><input type="date" id="inv-vend-due"></div>
+              </div>
+            <div class="form-group"><label class="fl">Upload scan / PDF</label><input type="file" id="inv-vend-file" accept="image/*,.pdf"></div>
+            <button type="button" class="btn btn-blue btn-sm" onclick="bmhAddVendorBill()">+ Add vendor bill</button>
+            <div id="inv-vendor-table" style="margin-top:12px;font-size:12px"></div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div class="card">
+              <div class="card-hd"><div class="card-title">Expenses</div></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                <div class="form-group"><label class="fl">Description</label><input type="text" id="inv-exp-desc" placeholder="e.g. Stationery"></div>
+                <div class="form-group"><label class="fl">Amount ₹</label><input type="number" id="inv-exp-amt"></div>
+                <div class="form-group" style="grid-column:1/-1"><label class="fl">Category</label><input type="text" id="inv-exp-cat" placeholder="Admin / OT / Marketing"></div>
+              </div>
+              <button type="button" class="btn btn-orange btn-sm" onclick="bmhAddExpense()">+ Post expense</button>
+              <div id="inv-exp-list" style="margin-top:12px;font-size:12px"></div>
+            </div>
+            <div class="card">
+              <div class="card-hd"><div class="card-title">Day book / ledger</div><button type="button" class="btn btn-outline btn-sm" onclick="bmhExportLedgerCsv()">Export CSV</button></div>
+              <div style="overflow-x:auto"><table class="rc-queue-table" style="min-width:720px"><thead><tr><th>Date</th><th>Type</th><th>Narration</th><th>Party</th><th style="text-align:right">Debit ₹</th><th style="text-align:right">Credit ₹</th><th>Ref</th></tr></thead><tbody id="inv-ledger-body"></tbody></table></div>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="tab-content" id="inv-ocr">
         <div style="background:var(--g6);border-radius:8px;padding:10px;margin-bottom:10px;font-size:12px;color:var(--tx3)">Upload a bill, PDF, or live photo from the phone. The app will extract text, prefill the stock form, and leave everything ready for manual review before saving.</div>
@@ -3196,10 +3526,11 @@
     <div class="card"><div class="card-hd"><div><div class="card-title">Auto-Billing Log</div><div class="card-sub">Items billed with MRP + time → patient bill + inventory deduction</div></div></div><div id="auto-bill-log"><div style="padding:14px;text-align:center;color:var(--g1);font-size:12px">No items billed yet</div></div></div>
     <div class="card"><div class="card-hd"><div class="card-title">Inventory Stats</div></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
-        <div style="background:var(--green-lt);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:#1a8c3c;font-weight:800">Total Items</div><div style="font-size:18px;font-weight:900;color:#1a8c3c">284</div></div>
+        <div style="background:var(--green-lt);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:#1a8c3c;font-weight:800">Total Items</div><div style="font-size:18px;font-weight:900;color:#1a8c3c" id="inv-total-items">0</div></div>
         <div style="background:var(--orange-lt);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:#b55a00;font-weight:800">Low Stock</div><div style="font-size:18px;font-weight:900;color:#b55a00" id="inv-low-cnt">0</div></div>
       </div>
     </div>
+    <div class="card"><div class="card-hd"><div class="card-title">Recent transfers</div></div><div id="inv-transfer-log"><div style="padding:12px;color:var(--g1);font-size:12px">No transfers yet.</div></div></div>
   </div>
 </div>
 </div>
@@ -3234,6 +3565,7 @@
       <div class="form-group" style="margin:0"><label class="fl">Patient scope</label><select id="bmh-bill-patient-scope" onchange="bmhRenderBillPatientList()"><option value="focus">Selected patient only</option><option value="today">Today's patients</option><option value="date">Selected date</option><option value="admitted">Currently admitted</option><option value="all">All visible patients</option></select></div>
       <div class="form-group" style="margin:0"><label class="fl">Date</label><input type="date" id="bmh-bill-date-filter" onchange="bmhRenderBillPatientList()"></div>
     </div>
+    <div id="bmh-admin-daily-billing-panel" style="display:none;margin-bottom:12px"></div>
     <div id="bmh-bill-pt-list" style="max-height:200px;overflow:auto;border:1px solid var(--g5);border-radius:8px;margin-bottom:12px"></div>
     <div class="form-group" style="margin-bottom:10px"><label class="fl">Selected patient</label><select id="bmh-bill-pt-select" onchange="bmhSelectBillPatient(this.value)"></select></div>
     <div id="bmh-bill-summary" style="margin-bottom:12px"></div>
@@ -3262,6 +3594,31 @@
       </label>
       <div id="bill-discount-line" style="display:none;justify-content:space-between;margin-bottom:5px;font-size:12.5px;color:var(--orange)"><span>Discount</span><span style="font-weight:800" id="bill-discount-amt">₹0</span></div>
       <div id="bill-advance-line" style="display:none;justify-content:space-between;margin-bottom:5px;font-size:12.5px;color:var(--blue)"><span>Advance adjusted</span><span style="font-weight:800" id="bill-advance-amt">₹0</span></div>
+      <div style="margin:10px 0 12px;padding:10px;border:1px solid var(--g5);border-radius:10px;background:#fff">
+        <div style="font-size:11px;font-weight:800;color:var(--g1);margin-bottom:8px">Payment received</div>
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:12px;cursor:pointer">
+          <input type="checkbox" id="bmh-pay-received-toggle" onchange="bmhTogglePaymentForm(this.checked)">
+          Mark payment received now
+        </label>
+        <div id="bmh-pay-form" style="display:none">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+            <div class="form-group" style="margin:0"><label class="fl">Amount received ₹</label><input type="number" id="bmh-pay-amt" placeholder="Amount" oninput="bmhUpdateBillTotals()"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Mode of payment</label>
+              <select id="bmh-pay-mode" onchange="bmhToggleBillingInsuranceFields()"><option value="Cash">Cash</option><option value="UPI">UPI</option><option value="Card">Card</option><option value="NEFT">NEFT</option><option value="Cheque">Cheque</option><option value="Insurance/TPA">Insurance/TPA</option><option value="PMJAY / Ayushman">PMJAY / Ayushman</option><option value="CGHS/ECHS">CGHS/ECHS</option></select>
+            </div>
+            <div class="form-group" style="margin:0;grid-column:1/-1"><label class="fl">Cheque no. / UTR / ref no.</label><input type="text" id="bmh-pay-ref" placeholder="Required for bank / UPI reconciliation"></div>
+          </div>
+          <div id="bmh-pay-insurance-fields" style="display:none;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+            <div class="form-group" style="margin:0"><label class="fl">Insurance / TPA</label><input type="text" id="bmh-pay-insurer" placeholder="Insurer / TPA name"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Policy / pre-auth no.</label><input type="text" id="bmh-pay-policy" placeholder="Policy or pre-auth"></div>
+            <div class="form-group" style="margin:0;grid-column:1/-1"><label class="fl">Amount still due to hospital ₹</label><input type="number" id="bmh-pay-insurer-due" placeholder="Pending from insurer / TPA"></div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button type="button" class="btn btn-gold" onclick="bmhRecordPatientPayment()">✓ Record payment &amp; print receipt</button>
+            <button type="button" class="btn btn-outline btn-sm" onclick="bmhClearPaymentDraft()">Clear draft</button>
+          </div>
+        </div>
+      </div>
       <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:12.5px"><span>Chargeable total (after disc. / adv.)</span><span style="font-weight:700" id="bill-taxable">₹0</span></div>
       <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:12.5px;color:#1a8c3c"><span>Received so far</span><span style="font-weight:800" id="bill-received">₹0</span></div>
       <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:12.5px;color:#8a4200"><span>Balance due</span><span style="font-weight:800" id="bill-balance-due">₹0</span></div>
@@ -3270,28 +3627,6 @@
     <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
       <button type="button" class="btn btn-blue" onclick="printBmhPatientBill()">🖨️ Print full bill</button>
       <button type="button" class="btn btn-outline btn-sm" onclick="showToast('Share via WhatsApp from print preview','i')">📱</button>
-    </div>
-    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--g5)">
-      <div style="font-size:11px;font-weight:800;color:var(--g1);margin-bottom:8px">Payment received</div>
-      <label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:12px;cursor:pointer">
-        <input type="checkbox" id="bmh-pay-received-toggle" onchange="bmhTogglePaymentForm(this.checked)">
-        Mark payment received now
-      </label>
-      <div id="bmh-pay-form" style="display:none">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-          <div class="form-group" style="margin:0"><label class="fl">Amount received ₹</label><input type="number" id="bmh-pay-amt" placeholder="Amount"></div>
-          <div class="form-group" style="margin:0"><label class="fl">Mode of payment</label>
-            <select id="bmh-pay-mode" onchange="bmhToggleBillingInsuranceFields()"><option value="Cash">Cash</option><option value="UPI">UPI</option><option value="Card">Card</option><option value="NEFT">NEFT</option><option value="Cheque">Cheque</option><option value="Insurance/TPA">Insurance/TPA</option><option value="PMJAY / Ayushman">PMJAY / Ayushman</option><option value="CGHS/ECHS">CGHS/ECHS</option></select>
-          </div>
-          <div class="form-group" style="margin:0;grid-column:1/-1"><label class="fl">Cheque no. / UTR / ref no.</label><input type="text" id="bmh-pay-ref" placeholder="Required for bank / UPI reconciliation"></div>
-        </div>
-        <div id="bmh-pay-insurance-fields" style="display:none;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-          <div class="form-group" style="margin:0"><label class="fl">Insurance / TPA</label><input type="text" id="bmh-pay-insurer" placeholder="Insurer / TPA name"></div>
-          <div class="form-group" style="margin:0"><label class="fl">Policy / pre-auth no.</label><input type="text" id="bmh-pay-policy" placeholder="Policy or pre-auth"></div>
-          <div class="form-group" style="margin:0;grid-column:1/-1"><label class="fl">Amount still due to hospital ₹</label><input type="number" id="bmh-pay-insurer-due" placeholder="Pending from insurer / TPA"></div>
-        </div>
-        <button type="button" class="btn btn-gold" onclick="bmhRecordPatientPayment()">✓ Record payment &amp; print receipt</button>
-      </div>
     </div>
   </div>
   <div class="col">
@@ -3418,7 +3753,7 @@
       <div class="form-group"><label class="fl">GST Number</label><input type="text" value="03AABCB1234Z1Z5"></div>
       <div class="form-group"><label class="fl">ECHS/CGHS Empanelled</label><select><option>Yes</option><option>No</option></select></div>
       <div class="form-group"><label class="fl">PMJAY Empanelled</label><select><option>Yes</option><option>No</option></select></div>
-      <button class="btn btn-gold" onclick="showToast('Settings saved ✓','s')">💾 Save Settings</button>
+      <button class="btn btn-gold" onclick="saveHospitalSettings()">💾 Save Settings</button>
     </div>
   </div>
   <div class="col">
@@ -3755,6 +4090,7 @@
     <div class="ptab" onclick="ptab(this,'rep-surgery')">⚕️ Surgery / Procedure</div>
     <div class="ptab" onclick="ptab(this,'rep-investigation')">🧪 Investigations Advised</div>
     <div class="ptab" onclick="ptab(this,'rep-financial')">💰 Financial</div>
+    <div class="ptab" onclick="ptab(this,'rep-referrals')">👨‍⚕️ Referrals</div>
   </div>
 
   <!-- DAILY SUMMARY -->
@@ -3869,6 +4205,24 @@
     <button class="btn btn-gold" onclick="generateFinancialReport()">💰 Generate Report</button>
     <div id="rep-financial-result" style="margin-top:14px"></div>
   </div>
+
+  <div class="tab-content" id="rep-referrals">
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-hd"><div><div class="card-title">👨‍⚕️ Referral Report</div><div class="card-sub">Track who referred the patient and the surgery value generated from those referrals</div></div></div>
+      <div class="fg">
+        <div class="form-group"><label class="fl">Date From</label><input type="date" id="rep-ref-from"></div>
+        <div class="form-group"><label class="fl">Date To</label><input type="date" id="rep-ref-to"></div>
+        <div class="form-group"><label class="fl">Department</label><select id="rep-ref-dept"><option value="">All Departments</option><option value="ophtho">Ophthalmology</option><option value="obg">OBG</option><option value="psych">Neuropsychiatry</option><option value="skin">Skin</option></select></div>
+        <div class="form-group"><label class="fl">Referred By</label><input type="text" id="rep-ref-doctor" list="rep-ref-doctor-list" placeholder="Start typing doctor / referrer name"></div>
+        <datalist id="rep-ref-doctor-list"></datalist>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+        <button class="btn btn-gold btn-sm" type="button" onclick="generateReferralReport()">📋 Generate Report</button>
+        <button class="btn btn-outline btn-sm" type="button" onclick="printReferralReportCurrent()">🖨️ Print</button>
+      </div>
+    </div>
+    <div id="rep-referral-result"></div>
+  </div>
 </div>
 
 <div class="modal-ov" id="m-counsellor-followup">
@@ -3894,9 +4248,9 @@
 
   <!-- OT STATS ROW -->
   <div class="sg4" style="margin-bottom:14px">
-    <div class="sc blue"><div class="sc-lbl">Scheduled Today</div><div class="sc-val blue" id="ot-sched-cnt">3</div><div class="sc-icon">📋</div></div>
-    <div class="sc green"><div class="sc-lbl">Completed</div><div class="sc-val green" id="ot-done-cnt">1</div><div class="sc-icon">✅</div></div>
-    <div class="sc orange"><div class="sc-lbl">In Progress</div><div class="sc-val orange" id="ot-inprog-cnt">1</div><div class="sc-icon">⚕️</div></div>
+    <div class="sc blue"><div class="sc-lbl">Scheduled Today</div><div class="sc-val blue" id="ot-sched-cnt">0</div><div class="sc-icon">📋</div></div>
+    <div class="sc green"><div class="sc-lbl">Completed</div><div class="sc-val green" id="ot-done-cnt">0</div><div class="sc-icon">✅</div></div>
+    <div class="sc orange"><div class="sc-lbl">In Progress</div><div class="sc-val orange" id="ot-inprog-cnt">0</div><div class="sc-icon">⚕️</div></div>
     <div class="sc red"><div class="sc-lbl">Postponed</div><div class="sc-val red" id="ot-post-cnt">0</div><div class="sc-icon">⏸️</div></div>
   </div>
 
@@ -4303,7 +4657,46 @@
   <div class="form-group"><label class="fl">Manufacturer</label><input type="text" id="iol-add-mfr" placeholder="Alcon / J&amp;J / Zeiss"></div>
   <div class="form-group"><label class="fl">Indicative price (₹)</label><input type="number" id="iol-add-price" placeholder="0" min="0"></div>
   <div class="form-group"><label class="fl">Barcode / SKU (optional)</label><input type="text" id="iol-add-barcode" placeholder="IOL-…"></div>
+  <div class="form-group"><label class="fl">Batch No. (optional)</label><input type="text" id="iol-add-batch" placeholder="Batch / lot"></div>
+  <div class="form-group"><label class="fl">Serial No. (optional)</label><input type="text" id="iol-add-serial" placeholder="Unique serial"></div>
   <button class="btn btn-gold" onclick="addIolFromModal()">💾 Add to catalogue</button>
+</div>
+</div>
+</div>
+
+<div class="modal-ov" id="m-procedure-done">
+<div class="modal modal-lg">
+<div class="modal-hd">
+  <div class="modal-title">Procedure Done</div>
+  <button class="modal-close" onclick="closeM('m-procedure-done')">✕</button>
+</div>
+<div class="fg fg1" style="gap:10px">
+  <input type="hidden" id="proc-done-dept">
+  <div style="display:grid;grid-template-columns:1.4fr 120px 1fr;gap:8px;align-items:end">
+    <div class="form-group" style="margin:0">
+      <label class="fl">Procedure performed</label>
+      <input type="text" id="proc-done-name" list="proc-done-charge-list" placeholder="Type procedure from charges list">
+      <datalist id="proc-done-charge-list"></datalist>
+    </div>
+    <div class="form-group" style="margin:0">
+      <label class="fl">Amount ₹</label>
+      <input type="number" id="proc-done-amount" min="0" placeholder="Auto">
+    </div>
+    <div class="form-group" style="margin:0">
+      <label class="fl">Notes</label>
+      <input type="text" id="proc-done-notes" placeholder="Procedure note / side / details">
+    </div>
+  </div>
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+    <div style="font-size:11px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px">Consumables / stock used</div>
+    <button class="btn btn-xs btn-outline" type="button" onclick="addProcedureUsageRow()">+ Add stock used</button>
+  </div>
+  <datalist id="proc-done-stock-list"></datalist>
+  <div id="proc-done-usage-list"></div>
+  <div style="display:flex;justify-content:flex-end;gap:8px">
+    <button class="btn btn-outline" type="button" onclick="closeM('m-procedure-done')">Close</button>
+    <button class="btn btn-gold" type="button" onclick="saveProcedureDoneModal()">Save Procedure</button>
+  </div>
 </div>
 </div>
 </div>
@@ -4489,6 +4882,30 @@
 <div id="ipd-monitor-body" style="max-height:72vh;overflow:auto;padding-right:4px"></div>
 </div></div>
 
+<div class="modal-ov" id="m-certificates">
+<div class="modal" style="max-width:980px">
+<div class="modal-hd"><div class="modal-title">Department Certificates</div><button class="modal-close" onclick="closeM('m-certificates')">✕</button></div>
+<div class="fg" style="grid-template-columns:260px 1fr;gap:12px">
+  <div class="card" style="padding:12px">
+    <div class="form-group"><label class="fl">Certificate</label><select id="cert-template-sel" onchange="applyCertificateTemplate(this.value)"><option value="">— Select certificate —</option></select></div>
+    <div class="form-group"><label class="fl">Template name</label><input type="text" id="cert-template-name" placeholder="Certificate template name"></div>
+    <div id="cert-template-list" style="display:flex;flex-direction:column;gap:6px;max-height:360px;overflow:auto"></div>
+  </div>
+  <div class="card" style="padding:12px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+      <div class="form-group"><label class="fl">Patient</label><input type="text" id="cert-pt-display" readonly></div>
+      <div class="form-group"><label class="fl">Doctor</label><input type="text" id="cert-doctor-display" readonly></div>
+    </div>
+    <div class="form-group"><label class="fl">Certificate heading</label><input type="text" id="cert-title"></div>
+    <div class="form-group"><label class="fl">Certificate text</label><textarea id="cert-body" style="min-height:360px"></textarea></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+      <button type="button" class="btn btn-outline" onclick="saveCurrentCertificateTemplate()">➕ Add To Templates</button>
+      <button type="button" class="btn btn-gold" onclick="printCurrentCertificate()">🖨️ Print</button>
+    </div>
+  </div>
+</div>
+</div></div>
+
 <!-- ADD RX DRUG MODAL -->
 <div class="modal-ov" id="m-add-rx-drug">
 <div class="modal"><div class="modal-hd"><div class="modal-title">💊 Add Drug / Drop</div><button class="modal-close" onclick="closeM('m-add-rx-drug')">✕</button></div>
@@ -4575,7 +4992,7 @@
   <div id="selected-invest-list" style="font-size:12px;color:var(--tx3);min-height:24px">None selected</div>
 </div>
 <div style="display:flex;gap:8px;margin-top:12px">
-  <button class="btn btn-gold" style="flex:1" onclick="confirmInvestigations()">✅ Order &amp; Send to Reception</button>
+  <button class="btn btn-gold" style="flex:1" onclick="confirmInvestigations()">✅ Order &amp; Send to Lab</button>
   <button class="btn btn-gray" onclick="closeM('m-order-invest')">Cancel</button>
 </div>
 </div></div>
@@ -4656,7 +5073,7 @@
 
 <!-- UPDATE DETAILS MODAL -->
 <div class="modal-ov" id="m-update-details">
-<div class="modal" style="max-width:440px"><div class="modal-hd"><div class="modal-title">✏️ Edit Patient Details</div><button class="modal-close" onclick="closeM('m-update-details')">✕</button></div>
+<div class="modal" style="max-width:520px"><div class="modal-hd"><div class="modal-title">✏️ Edit Patient Details</div><button class="modal-close" onclick="closeM('m-update-details')">✕</button></div>
 <div class="fg" style="gap:9px;padding-bottom:4px">
   <div class="form-group"><label class="fl">First Name</label><input type="text" id="upd-fn" placeholder="First name"></div>
   <div class="form-group"><label class="fl">Last Name</label><input type="text" id="upd-ln" placeholder="Last name"></div>
@@ -4670,6 +5087,15 @@
   <div class="form-group full"><label class="fl">Address</label><input type="text" id="upd-addr" placeholder="Full address"></div>
   <div class="form-group"><label class="fl">Relation</label><input type="text" id="upd-rel" placeholder="Self / Father's name…"></div>
   <div class="form-group"><label class="fl">Referred By</label><input type="text" id="upd-ref-name" placeholder="Doctor or person name"></div>
+  <div class="form-group"><label class="fl">Consultation Fee ₹</label><input type="number" id="upd-fee" min="0" step="1" placeholder="0"></div>
+  <div class="form-group" style="display:flex;align-items:flex-end">
+    <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;padding:10px 0">
+      <input type="checkbox" id="upd-no-fee" style="width:auto" onchange="var f=document.getElementById('upd-fee'); if(f){ f.disabled=this.checked; if(this.checked) f.value='0'; }">
+      Waive consultation fee
+    </label>
+  </div>
+  <div class="form-group"><label class="fl">Advance ₹</label><input type="number" id="upd-advance-amt" min="0" step="1" placeholder="0"></div>
+  <div class="form-group"><label class="fl">Advance Purpose</label><input type="text" id="upd-advance-purpose" placeholder="Advance on account"></div>
 </div>
 <div style="padding:6px 0 2px">
   <div id="upd-bmhid-display" style="font-size:11px;color:var(--g2);padding:2px 0 6px">BMSH ID: —</div>
@@ -4700,7 +5126,18 @@
 <div class="fg fg1" style="gap:9px">
   <div class="form-group"><label class="fl">New Purpose</label><input type="text" id="new-purpose-inp" placeholder="e.g. Retinal Screening"></div>
   <button class="btn btn-gold" onclick="addPurposeOption()">+ Add to List</button>
+  <div class="form-group full"><label class="fl">Saved Custom Purposes</label><div id="custom-purpose-list"></div></div>
 </div></div></div>
+
+<div class="modal-ov" id="m-rx-template-picker">
+<div class="modal modal-lg">
+<div class="modal-hd"><div class="modal-title" id="rx-template-picker-title">Prescription Templates</div><button class="modal-close" onclick="closeM('m-rx-template-picker')">✕</button></div>
+<div class="fg fg1" style="gap:10px">
+  <div style="font-size:11px;color:var(--g1)">Select a template to fill the prescription immediately.</div>
+  <div id="rx-template-picker-list"></div>
+</div>
+</div>
+</div>
 
 <!-- ADD INSURANCE ENTRY MODAL -->
 <div class="modal-ov" id="m-add-ins">
@@ -4853,7 +5290,7 @@
   <div class="form-group"><label class="fl">Password</label><input type="password" id="nu-pw" placeholder="Min 6 characters" autocomplete="new-password"></div>
   <div class="form-group"><label class="fl">Confirm Password</label><input type="password" id="nu-pw2" placeholder="Repeat password" autocomplete="new-password"></div>
   <div class="form-group"><label class="fl">Role</label>
-    <select id="nu-role">
+    <select id="nu-role" onchange="syncAdminGrantToggle('nu')">
       <option value="Reception">Reception</option>
       <option value="Doctor">Doctor</option>
       <option value="Lab">Lab</option>
@@ -4862,6 +5299,12 @@
       <option value="TPA">TPA</option>
       <option value="Admin">Admin</option>
     </select>
+  </div>
+  <div class="form-group"><label class="fl">Admin Access</label>
+    <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;padding:10px 12px;border:1.5px solid var(--g4);border-radius:8px;background:var(--g6);cursor:pointer">
+      <input type="checkbox" id="nu-is-admin" onchange="syncAdminGrantToggle('nu')">
+      Grant full admin login access
+    </label>
   </div>
   <div class="form-group"><label class="fl">Centre</label>
     <select id="nu-centre">
@@ -4914,7 +5357,7 @@
 <div class="fg" style="gap:10px">
   <div class="form-group"><label class="fl">Full Name</label><input type="text" id="eu-name" placeholder="Full name"></div>
   <div class="form-group"><label class="fl">Role</label>
-    <select id="eu-role">
+    <select id="eu-role" onchange="syncAdminGrantToggle('eu')">
       <option value="Reception">Reception</option>
       <option value="Doctor">Doctor</option>
       <option value="Lab">Lab</option>
@@ -4923,6 +5366,12 @@
       <option value="TPA">TPA</option>
       <option value="Admin">Admin</option>
     </select>
+  </div>
+  <div class="form-group"><label class="fl">Admin Access</label>
+    <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;padding:10px 12px;border:1.5px solid var(--g4);border-radius:8px;background:var(--g6);cursor:pointer">
+      <input type="checkbox" id="eu-is-admin" onchange="syncAdminGrantToggle('eu')">
+      Grant full admin login access
+    </label>
   </div>
   <div class="form-group"><label class="fl">Centre</label>
     <select id="eu-centre">
@@ -5043,6 +5492,9 @@
 
 <!-- ═══ MAIN APP SCRIPT (legacy — being migrated to modules) ═══ -->
 <script defer src="%BASE_URL%js/legacy.js?v=20260411-queue-drugs"></script>
+
+<!-- ═══ QR DECODER BRIDGE ═══ -->
+<script type="module" src="./js/qr-decoder.js"></script>
 
 <!-- ═══ VITE MODULE ENTRY ═══ -->
 <script type="module" src="./js/app.js"></script>
