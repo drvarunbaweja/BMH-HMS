@@ -1936,8 +1936,7 @@ function nav(id, el, opts) {
   if(pageKey==='psych') renderPsychRail && renderPsychRail();
   if(pageKey==='skin') renderSkinRail && renderSkinRail();
   if (pageKey === 'ophtho' || pageKey === 'obg' || pageKey === 'psych' || pageKey === 'skin') {
-    renderAllDeptSendBars && renderAllDeptSendBars();
-    renderAISuggestedCharges && renderAISuggestedCharges();
+    deferPageWork(function () { renderSendBarsForActiveDept(pageKey); });
   }
   updateOphthoSendBarVisibility(pageKey);
   updateDepartmentRailVisibility(pageKey);
@@ -11025,6 +11024,8 @@ function repairDrugLibraryFromAllSources() {
 window.repairDrugLibraryFromAllSources = repairDrugLibraryFromAllSources;
 
 function loadDrugLibraryFromStorage() {
+  if (window._bmhDrugLibraryLoadedOnce) return;
+  window._bmhDrugLibraryLoadedOnce = true;
   const applyMergedRows = function (remoteVal, opts) {
     opts = opts || {};
     const remoteArr = normalizeDrugLibrarySnapshot(remoteVal);
@@ -11046,13 +11047,13 @@ function loadDrugLibraryFromStorage() {
     applyMergedRows(null, { repairCloud: false });
     return;
   }
-  if (window._bmhDrugLibListenerAttached) return;
-  window._bmhDrugLibListenerAttached = true;
-  window.FBDB.ref('drugLibrary').on('value', function (snap) {
+  window.FBDB.ref('drugLibrary').once('value').then(function (snap) {
     const remoteArr = normalizeDrugLibrarySnapshot(snap.val());
     const localArr = readDrugLibraryRowsFromAllLocalSources();
     const repairCloud = (!!localArr.length && localArr.length > remoteArr.length) || (!remoteArr.length && localArr.length > 0);
     applyMergedRows(snap.val(), { repairCloud: repairCloud });
+  }).catch(function () {
+    applyMergedRows(null, { repairCloud: false });
   });
 }
 window.loadDrugLibraryFromStorage = loadDrugLibraryFromStorage;
@@ -17193,6 +17194,26 @@ function sendFromDropdown(sel) {
   sendQuickCharge(name, amt);
   sel.value = '';
 }
+function renderSendBarsForActiveDept(pageKey) {
+  if (pageKey === 'ophtho') {
+    renderOphthoSendChargeSelect && renderOphthoSendChargeSelect();
+    return;
+  }
+  if (pageKey === 'obg') {
+    renderDeptSendBar && renderDeptSendBar('obg', 'obg-top-send-bar');
+    renderDeptSendBar && renderDeptSendBar('obg', 'obg-rx-send-bar');
+    return;
+  }
+  if (pageKey === 'psych') {
+    renderDeptSendBar && renderDeptSendBar('psych', 'psych-top-send-bar');
+    renderDeptSendBar && renderDeptSendBar('psych', 'psych-rx-send-bar');
+    return;
+  }
+  if (pageKey === 'skin') {
+    renderDeptSendBar && renderDeptSendBar('skin', 'skin-top-send-bar');
+    renderDeptSendBar && renderDeptSendBar('skin', 'skin-rx-send-bar');
+  }
+}
 
 function addCustomCharge() {
   const name = prompt('Procedure / investigation name:'); if(!name) return;
@@ -17202,9 +17223,6 @@ function addCustomCharge() {
 
 // ─── INIT CALLS ─────────────────
 setTimeout(() => {
-  renderAIProcSuggestions();
-  renderAISuggestedCharges();
-  renderAllDeptSendBars();
   refreshDeptAdviceAndProcedureUi();
   bindDeptAdviceLibraryAutosave();
   loadCertificateTemplatesFromStorage && loadCertificateTemplatesFromStorage();
@@ -19195,20 +19213,47 @@ function _debouncedRenderDash() {
   }, 300);
 }
 
+function applyPatientsPayload(data) {
+  const all = data ? Object.values(data) : [];
+  window._BMH_ALL_PATIENTS_CACHE = all.map(function (p) { return normalizePatientRecord(p); });
+  rebuildPatientsArrayFromGlobalCache();
+  if(!_fbPatientsLoaded) {
+    _fbPatientsLoaded = true;
+    showToast('Connected to database ✓','s');
+  }
+  genRcUID && genRcUID();
+  _debouncedRenderDash();
+}
+function refreshPatientsFromFirebase() {
+  if (window._bmhPatientsRefreshInFlight || !window.FBDB) return Promise.resolve();
+  window._bmhPatientsRefreshInFlight = true;
+  return fbOnce('patients').then(function (data) {
+    applyPatientsPayload(data);
+  }).catch(function (e) {
+    console.warn('patients refresh failed', e);
+  }).finally(function () {
+    window._bmhPatientsRefreshInFlight = false;
+  });
+}
+function schedulePatientsRefreshLoop() {
+  if (window._bmhPatientsRefreshLoopStarted) return;
+  window._bmhPatientsRefreshLoopStarted = true;
+  window._bmhPatientsRefreshTimer = setInterval(function () {
+    if (document.visibilityState === 'hidden') return;
+    refreshPatientsFromFirebase();
+  }, 45000);
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') refreshPatientsFromFirebase();
+  });
+  window.addEventListener('focus', function () { refreshPatientsFromFirebase(); });
+}
+window.refreshPatientsFromFirebase = refreshPatientsFromFirebase;
+
 function loadPatientsFromFirebase() {
   if(window._bmhRtdbPatientsListening) return;
   window._bmhRtdbPatientsListening = true;
-  fbOn('patients', data => {
-    const all = data ? Object.values(data) : [];
-    window._BMH_ALL_PATIENTS_CACHE = all.map(function (p) { return normalizePatientRecord(p); });
-    rebuildPatientsArrayFromGlobalCache();
-    if(!_fbPatientsLoaded) {
-      _fbPatientsLoaded = true;
-      showToast('Connected to database ✓','s');
-    }
-    genRcUID && genRcUID();
-    _debouncedRenderDash();
-  });
+  refreshPatientsFromFirebase();
+  schedulePatientsRefreshLoop();
 }
 
 // ── PAY REQUESTS (real-time sync) ────────────────────────────
@@ -22014,6 +22059,13 @@ function logoutUser() {
   window._bmhAppointmentsListening = false;
   window._bmhLabOrdersListening = false;
   window._bmhTodayTransactionsLoadedKey = '';
+  window._bmhDrugLibraryLoadedOnce = false;
+  window._bmhPatientsRefreshInFlight = false;
+  if (window._bmhPatientsRefreshTimer) {
+    clearInterval(window._bmhPatientsRefreshTimer);
+    window._bmhPatientsRefreshTimer = null;
+  }
+  window._bmhPatientsRefreshLoopStarted = false;
   CURRENT_USER = null;
   window.CURRENT_USER = null;
   try { sessionStorage.removeItem('bmh_active_session'); } catch (e) {}
