@@ -1890,6 +1890,23 @@ function nav(id, el, opts) {
   ['oe','obg','psych','skin'].forEach(d => {
     const e2 = document.getElementById(d+'-rx-date'); if(e2) e2.textContent = today;
   });
+  const ensureRealtimeDataForPage = function () {
+    try {
+      if (pageKey === 'appointments' || pageKey === 'dashboard') {
+        listenAppointments && listenAppointments();
+      }
+      if (['reception','billing','payments','tpa','dashboard'].includes(pageKey)) {
+        listenPayRequests && listenPayRequests();
+        loadTodayTransactions && loadTodayTransactions();
+      }
+      if (pageKey === 'lab') {
+        listenLabOrders && listenLabOrders();
+      }
+    } catch (e) {
+      console.warn('Deferred realtime bootstrap error:', e);
+    }
+  };
+  deferPageWork(ensureRealtimeDataForPage);
   // Page-specific init
   if(pageKey==='dashboard')            deferPageWork(function(){ renderDashboard && renderDashboard(); });
   else if(pageKey==='doctor-queue')    deferPageWork(function(){ renderDocQueue && renderDocQueue(); });
@@ -17344,9 +17361,12 @@ function activateUserSession(user, profile, opts) {
     try {
       if (typeof loadPatientsFromFirebase === 'function')  loadPatientsFromFirebase();
       deferBootstrap(function() {
-        if (typeof listenPayRequests === 'function') listenPayRequests();
-        if (typeof listenAppointments === 'function') listenAppointments();
-        if (typeof loadTodayTransactions === 'function') loadTodayTransactions();
+        var hotRoles = ['Admin', 'Reception', 'TPA'];
+        if (hotRoles.indexOf(String(profile.role || '')) !== -1) {
+          if (typeof listenPayRequests === 'function') listenPayRequests();
+          if (typeof listenAppointments === 'function') listenAppointments();
+          if (typeof loadTodayTransactions === 'function') loadTodayTransactions();
+        }
       }, 120);
       deferBootstrap(function() {
         if (typeof listenDeletionRequestsForApprover === 'function') listenDeletionRequestsForApprover();
@@ -19187,7 +19207,6 @@ function loadPatientsFromFirebase() {
       showToast('Connected to database ✓','s');
     }
     genRcUID && genRcUID();
-    scheduleDuplicatePatientRepair && scheduleDuplicatePatientRepair();
     _debouncedRenderDash();
   });
 }
@@ -19245,6 +19264,8 @@ function getDisplayTpaClaims() {
 }
 
 function listenPayRequests() {
+  if (window._bmhPayRequestsListening) return;
+  window._bmhPayRequestsListening = true;
   const centre = CURRENT_USER?.isAdmin ? null : (CURRENT_USER?.centre || 'CHD');
   fbOn('payRequests', data => {
     PAY_REQUESTS.length = 0;
@@ -19289,6 +19310,8 @@ function saveAppointmentToFirebase(apt) {
 }
 
 function listenAppointments() {
+  if (window._bmhAppointmentsListening) return;
+  window._bmhAppointmentsListening = true;
   const centre = CURRENT_USER?.isAdmin ? null : normalizeAppointmentCentreValue(CURRENT_USER?.centre || 'CHD');
   fbOn('appointments', data => {
     APPOINTMENTS.length = 0;
@@ -19660,10 +19683,17 @@ function rejectDeleteRequest(reqId) {
 }
 
 function loadTodayTransactions() {
+  const today = todayKey();
+  const centre = normalizeAppointmentCentreValue((CURRENT_USER?.centre || 'CHD'));
+  const cacheKey = today + '|' + (CURRENT_USER?.isAdmin ? 'ALL' : centre);
+  if (window._bmhTodayTransactionsLoadedKey === cacheKey) return;
+  window._bmhTodayTransactionsLoadedKey = cacheKey;
   fbOnce(`transactions/${todayKey()}`, data => {
     if(!data) return;
     TRANSACTIONS.length = 0;
-    Object.values(data).forEach(t => TRANSACTIONS.push(t));
+    Object.values(data).forEach(function (t) {
+      if (CURRENT_USER?.isAdmin || normalizeAppointmentCentreValue(t.centre || 'CHD') === centre) TRANSACTIONS.push(t);
+    });
     renderCollectionDashboard && renderCollectionDashboard();
   });
 }
@@ -19674,6 +19704,8 @@ function saveLabOrderToFirebase(order) {
 }
 
 function listenLabOrders() {
+  if (window._bmhLabOrdersListening) return;
+  window._bmhLabOrdersListening = true;
   fbOn('labOrders', data => {
     LAB_ORDERS.length = 0;
     if(data) Object.values(data).forEach(o => LAB_ORDERS.push(o));
@@ -21978,6 +22010,10 @@ function logoutUser() {
   if(window.FBDB) window.FBDB.ref().off();
   _fbPatientsLoaded = false;
   window._bmhRtdbPatientsListening = false; // allow listener to re-attach on next login
+  window._bmhPayRequestsListening = false;
+  window._bmhAppointmentsListening = false;
+  window._bmhLabOrdersListening = false;
+  window._bmhTodayTransactionsLoadedKey = '';
   CURRENT_USER = null;
   window.CURRENT_USER = null;
   try { sessionStorage.removeItem('bmh_active_session'); } catch (e) {}

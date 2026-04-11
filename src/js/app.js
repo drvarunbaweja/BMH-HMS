@@ -236,9 +236,12 @@ watchAuthState(
         setTimeout(runner, delay)
       }
       safe('loadPatientsFromFirebase')
-      defer('listenPayRequests', 120)
-      defer('listenAppointments', 120)
-      defer('loadTodayTransactions', 120)
+      const eagerRoles = ['admin', 'reception', 'tpa']
+      if (eagerRoles.includes(String(user.role || '').toLowerCase())) {
+        defer('listenPayRequests', 120)
+        defer('listenAppointments', 120)
+        defer('loadTodayTransactions', 120)
+      }
       // Non-critical modules are loaded lazily when the user opens those pages.
       if (user.role === 'lab') defer('listenLabOrders', 900)
     }, 300)
