@@ -3698,32 +3698,19 @@
 </div>
 </div>
 <div class="page" id="pg-centres">
-<div class="g2" style="margin-bottom:12px">
-  <div style="background:linear-gradient(135deg,var(--bmh-blue),#1a5280);border-radius:var(--r);padding:16px;color:#fff">
-    <div style="font-size:16px;font-weight:900;margin-bottom:4px">📍 Chandigarh Centre</div>
-    <div style="font-size:11px;opacity:.7;line-height:1.6">SCO #100, Near Delhi Public School<br>Sector 40C, Chandigarh · 160036<br>+91-81466 22802</div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px">
-      <div style="text-align:center;background:rgba(255,255,255,.1);border-radius:8px;padding:8px"><div style="font-size:20px;font-weight:900">0</div><div style="font-size:9px;opacity:.7;font-weight:700">OPD TODAY</div></div>
-      <div style="text-align:center;background:rgba(255,255,255,.1);border-radius:8px;padding:8px"><div style="font-size:20px;font-weight:900" id="db-collection">₹0</div><div style="font-size:9px;opacity:.7;font-weight:700">COLLECTED</div></div>
-      <div style="text-align:center;background:rgba(255,255,255,.1);border-radius:8px;padding:8px"><div style="font-size:20px;font-weight:900">6</div><div style="font-size:9px;opacity:.7;font-weight:700">SURGERIES</div></div>
+<div class="card" style="margin-bottom:12px">
+  <div class="card-hd">
+    <div>
+      <div class="card-title">🏥 Two-Centre Daily Collection Statement</div>
+      <div class="card-sub">Live department-wise daily tally for Chandigarh and Ropar</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap">
+      <div class="form-group" style="margin:0;min-width:170px"><label class="fl">Date</label><input type="date" id="centres-date" onchange="renderCentresView()"></div>
+      <button class="btn btn-outline btn-sm" onclick="window.print()">🖨️ Print</button>
     </div>
   </div>
-  <div style="background:linear-gradient(135deg,#6a3000,#b35a00);border-radius:var(--r);padding:16px;color:#fff">
-    <div style="font-size:16px;font-weight:900;margin-bottom:4px">📍 Ropar Centre</div>
-    <div style="font-size:11px;opacity:.7;line-height:1.6">1571/39, Opposite Civil Hospital<br>Preet Colony, Rupnagar, Punjab 140001<br>+91-81466 22802</div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px">
-      <div style="text-align:center;background:rgba(255,255,255,.1);border-radius:8px;padding:8px"><div style="font-size:20px;font-weight:900">31</div><div style="font-size:9px;opacity:.7;font-weight:700">OPD TODAY</div></div>
-      <div style="text-align:center;background:rgba(255,255,255,.1);border-radius:8px;padding:8px"><div style="font-size:20px;font-weight:900">₹0.8L</div><div style="font-size:9px;opacity:.7;font-weight:700">COLLECTED</div></div>
-      <div style="text-align:center;background:rgba(255,255,255,.1);border-radius:8px;padding:8px"><div style="font-size:20px;font-weight:900">3</div><div style="font-size:9px;opacity:.7;font-weight:700">SURGERIES</div></div>
-    </div>
-  </div>
-</div>
-<div class="card">
-  <div class="card-hd"><div class="card-title">Charge Schedule — Chandigarh vs Ropar</div></div>
-  <div style="display:grid;grid-template-columns:1fr 80px 80px;gap:5px;padding:4px 11px 7px;font-size:9px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px;border-bottom:1.5px solid var(--g5)">
-    <span>Service</span><span style="text-align:right;color:var(--bmh-blue)">CHD ₹</span><span style="text-align:right;color:#8a4200">Ropar ₹</span>
-  </div>
-  <div id="centres-charge-list"></div>
+  <div id="centres-summary-blocks" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-bottom:12px"></div>
+  <div id="centres-daily-sheet"></div>
 </div>
 </div>
 <div class="page" id="pg-settings">

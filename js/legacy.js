@@ -8889,6 +8889,166 @@ function calcPend(inp){const row=inp.closest('tr');if(!row)return;const inputs=r
 // ═══════════════════════════════════════
 // CENTRES CHARGES
 // ═══════════════════════════════════════
+function renderCentresView() {
+  const dateEl = document.getElementById('centres-date');
+  const today = localDateKey(new Date());
+  if (dateEl && !dateEl.value) dateEl.value = today;
+  const selectedDate = dateEl?.value || today;
+  const centreCodes = (CURRENT_USER?.isAdmin || CURRENT_USER?.canSeeAllCentres) ? ['CHD', 'RPR'] : [normalizeAppointmentCentreValue(CURRENT_USER?.centre || 'CHD')];
+  const centreMeta = {
+    CHD: { label: 'Chandigarh Centre', tone: 'var(--bmh-blue)' },
+    RPR: { label: 'Ropar Centre', tone: '#8a4200' }
+  };
+  const deptMeta = [
+    { key: 'ophtho', label: 'Eye' },
+    { key: 'obg', label: 'OBG' },
+    { key: 'psych', label: 'Neuropsychiatry' },
+    { key: 'skin', label: 'Skin' }
+  ];
+  const isSameDay = function (value) { return localDateKey(value) === selectedDate; };
+  const esc = function (v) { return escapeHtmlConsent(String(v || '')); };
+  const fmt = function (n) { return '₹' + Number(n || 0).toLocaleString('en-IN'); };
+  const visiblePatients = (PATIENTS || []).filter(function (p) {
+    return centreCodes.includes(normalizeAppointmentCentreValue(p.centre || 'CHD')) && isSameDay(p.checkinAt || p.createdAt || p.updatedAt || p.date || p.registeredAt);
+  });
+  const selectedTxn = (TRANSACTIONS || []).filter(function (t) {
+    return centreCodes.includes(normalizeAppointmentCentreValue(t.centre || 'CHD')) && isSameDay(t.date) && isCollectedTxn(t);
+  });
+  const selectedClaims = getDisplayTpaClaims().filter(function (r) {
+    return centreCodes.includes(normalizeAppointmentCentreValue(r.centre || 'CHD')) && String(r.status || '').toLowerCase() !== 'paid';
+  });
+  const surgeriesOnDate = (OT_CASES || []).filter(function (c) {
+    return centreCodes.includes(normalizeAppointmentCentreValue(c.centre || 'CHD')) && isSameDay(c.date || c.otDate || c.surgeryDate || c.createdAt);
+  });
+
+  const classifyVisitKind = function (patient) {
+    const purpose = String(patient.purpose || '').toLowerCase();
+    if (/follow/.test(purpose)) return 'followup';
+    if ((Number(patient.visitCount || 1) || 1) > 1) return 'followup';
+    return 'new';
+  };
+  const summarizeServiceGroup = function (rows) {
+    const grouped = {};
+    rows.forEach(function (row) {
+      const key = String(row.service || row.for || row.desc || 'Miscellaneous').trim() || 'Miscellaneous';
+      if (!grouped[key]) grouped[key] = { label: key, count: 0, amount: 0 };
+      grouped[key].count += 1;
+      grouped[key].amount += getNetTransactionAmount(row);
+    });
+    return Object.values(grouped).sort(function (a, b) { return b.amount - a.amount || a.label.localeCompare(b.label); });
+  };
+  const centreSheets = centreCodes.map(function (centreCode) {
+    const patients = visiblePatients.filter(function (p) { return normalizeAppointmentCentreValue(p.centre || 'CHD') === centreCode; });
+    const txns = selectedTxn.filter(function (t) { return normalizeAppointmentCentreValue(t.centre || 'CHD') === centreCode; });
+    const claims = selectedClaims.filter(function (r) { return normalizeAppointmentCentreValue(r.centre || 'CHD') === centreCode; });
+    const otCases = surgeriesOnDate.filter(function (c) { return normalizeAppointmentCentreValue(c.centre || 'CHD') === centreCode; });
+    const centreTotal = txns.reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
+    const centreTpaDue = claims.reduce(function (s, r) {
+      const claimed = Number(r.claimedAmount || r.amount || 0);
+      const received = Number(r.receivedAmount || 0);
+      const patientDue = Number(r.patientDue || 0);
+      return s + Math.max(0, claimed - received) + patientDue;
+    }, 0);
+    const deptBlocks = deptMeta.map(function (dept) {
+      const deptPatients = patients.filter(function (p) { return normalizeDeptKeyForQueue(p.dept || '') === dept.key; });
+      const deptTxns = txns.filter(function (t) { return normalizeDeptKeyForQueue(t.dept || '') === dept.key; });
+      const deptClaims = claims.filter(function (r) { return normalizeDeptKeyForQueue(r.dept || '') === dept.key; });
+      const deptOt = otCases.filter(function (c) { return normalizeDeptKeyForQueue(c.dept || '') === dept.key; });
+      const consultPatients = deptPatients.filter(function (p) {
+        return !/diagnostic|investigation|procedure only|lab/i.test(String(p.purpose || ''));
+      });
+      const newCount = consultPatients.filter(function (p) { return classifyVisitKind(p) === 'new'; }).length;
+      const followCount = consultPatients.filter(function (p) { return classifyVisitKind(p) === 'followup'; }).length;
+      const noFeeCount = consultPatients.filter(function (p) { return !!p.consultationNoFee; }).length;
+      const paidCount = Math.max(0, consultPatients.length - noFeeCount);
+      const deptConsultTxns = deptTxns.filter(function (t) {
+        return inferChargeCategoryFromService(t.service || t.for || t.desc || '') === 'consultation';
+      });
+      const diagnosticTxns = deptTxns.filter(function (t) {
+        const cat = inferChargeCategoryFromService(t.service || t.for || t.desc || '');
+        return cat === 'diagnostic' || cat === 'investigation' || /oct|hvf|fundus|biometry|topography|specular|cbc|test|scan|profile|blood|urine|ecg/i.test(String(t.service || ''));
+      });
+      const surgeryTxns = deptTxns.filter(function (t) {
+        const cat = inferChargeCategoryFromService(t.service || t.for || t.desc || '');
+        return cat === 'surgery' || /surgery|procedure|pmics|phaco|iol|delivery|lscs|laser|capsulotomy|ivt|injection|mtp|laparoscopy/i.test(String(t.service || ''));
+      });
+      const cashTxns = deptTxns.filter(function (t) { return normalizePaymentMode(t.mode) === 'Cash'; });
+      const onlineTxns = deptTxns.filter(function (t) {
+        const mode = normalizePaymentMode(t.mode);
+        return mode !== 'Cash' && mode !== 'Insurance/TPA' && mode !== 'Credit / Due';
+      });
+      const cashGroups = summarizeServiceGroup(cashTxns);
+      const onlineGroups = summarizeServiceGroup(onlineTxns);
+      const claimDue = deptClaims.reduce(function (s, r) {
+        const claimed = Number(r.claimedAmount || r.amount || 0);
+        const received = Number(r.receivedAmount || 0);
+        return s + Math.max(0, claimed - received);
+      }, 0);
+      return `<div style="border:1px solid var(--g5);border-radius:12px;padding:12px;background:#fff;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:8px">
+          <div style="font-size:14px;font-weight:900;color:${centreMeta[centreCode].tone}">${dept.label}</div>
+          <div style="font-size:13px;font-weight:900;color:${centreMeta[centreCode].tone}">${fmt(deptTxns.reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0))}</div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px">
+          <div style="background:var(--g6);border-radius:8px;padding:8px"><div style="font-size:10px;color:var(--g1);font-weight:800">Total OPD</div><div style="font-size:16px;font-weight:900">${consultPatients.length}</div><div style="font-size:10px;color:var(--g1)">New ${newCount} · Follow-up ${followCount}</div></div>
+          <div style="background:var(--g6);border-radius:8px;padding:8px"><div style="font-size:10px;color:var(--g1);font-weight:800">Consultation</div><div style="font-size:16px;font-weight:900">${fmt(deptConsultTxns.reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0))}</div><div style="font-size:10px;color:var(--g1)">Paid ${paidCount} · No fee ${noFeeCount}</div></div>
+          <div style="background:var(--g6);border-radius:8px;padding:8px"><div style="font-size:10px;color:var(--g1);font-weight:800">Investigations / Minor</div><div style="font-size:16px;font-weight:900">${fmt(diagnosticTxns.reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0))}</div><div style="font-size:10px;color:var(--g1)">Entries ${diagnosticTxns.length}</div></div>
+          <div style="background:var(--g6);border-radius:8px;padding:8px"><div style="font-size:10px;color:var(--g1);font-weight:800">Surgery Collection</div><div style="font-size:16px;font-weight:900">${fmt(surgeryTxns.reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0))}</div><div style="font-size:10px;color:var(--g1)">Cases ${deptOt.length}</div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+          <div style="border:1px solid var(--g5);border-radius:8px;padding:8px">
+            <div style="font-size:10px;font-weight:900;color:#1a8c3c;text-transform:uppercase;margin-bottom:6px">Cash Payments</div>
+            ${cashGroups.length ? cashGroups.map(function (row) { return `<div style="display:flex;justify-content:space-between;gap:8px;font-size:11px;padding:4px 0;border-bottom:1px solid var(--g5)"><span>${esc(row.label)} <span style="color:var(--g1)">(${row.count})</span></span><strong>${fmt(row.amount)}</strong></div>`; }).join('') : '<div style="font-size:11px;color:var(--g1)">No cash collection</div>'}
+          </div>
+          <div style="border:1px solid var(--g5);border-radius:8px;padding:8px">
+            <div style="font-size:10px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;margin-bottom:6px">Online Payments</div>
+            ${onlineGroups.length ? onlineGroups.map(function (row) { return `<div style="display:flex;justify-content:space-between;gap:8px;font-size:11px;padding:4px 0;border-bottom:1px solid var(--g5)"><span>${esc(row.label)} <span style="color:var(--g1)">(${row.count})</span></span><strong>${fmt(row.amount)}</strong></div>`; }).join('') : '<div style="font-size:11px;color:var(--g1)">No online collection</div>'}
+          </div>
+          <div style="border:1px solid var(--g5);border-radius:8px;padding:8px">
+            <div style="font-size:10px;font-weight:900;color:#b55a00;text-transform:uppercase;margin-bottom:6px">TPA / Cashless Due</div>
+            <div style="font-size:18px;font-weight:900;color:#b55a00;margin-bottom:6px">${fmt(claimDue)}</div>
+            ${deptClaims.length ? deptClaims.map(function (r) { return `<div style="font-size:11px;padding:4px 0;border-bottom:1px solid var(--g5)"><strong>${esc(r.patient || 'Patient')}</strong><div style="color:var(--g1)">${esc(r.procedure || r.for || 'Claim')} · ${fmt(Math.max(0, Number(r.claimedAmount || r.amount || 0) - Number(r.receivedAmount || 0)))}</div></div>`; }).join('') : '<div style="font-size:11px;color:var(--g1)">No cashless due</div>'}
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+    return {
+      code: centreCode,
+      total: centreTotal,
+      tpaDue: centreTpaDue,
+      opd: patients.length,
+      surgeries: otCases.length,
+      html: `<div class="card" style="padding:14px;margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;margin-bottom:10px">
+          <div>
+            <div style="font-size:16px;font-weight:900;color:${centreMeta[centreCode].tone}">${centreMeta[centreCode].label}</div>
+            <div style="font-size:11px;color:var(--g1)">Daily statement for ${formatDateIN(selectedDate)}</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <div style="background:var(--g6);border-radius:10px;padding:8px 10px;text-align:center;min-width:110px"><div style="font-size:10px;color:var(--g1);font-weight:800">OPD Entries</div><div style="font-size:18px;font-weight:900">${patients.length}</div></div>
+            <div style="background:var(--g6);border-radius:10px;padding:8px 10px;text-align:center;min-width:110px"><div style="font-size:10px;color:var(--g1);font-weight:800">Collected</div><div style="font-size:18px;font-weight:900;color:${centreMeta[centreCode].tone}">${fmt(centreTotal)}</div></div>
+            <div style="background:var(--g6);border-radius:10px;padding:8px 10px;text-align:center;min-width:110px"><div style="font-size:10px;color:var(--g1);font-weight:800">TPA Due</div><div style="font-size:18px;font-weight:900;color:#b55a00">${fmt(centreTpaDue)}</div></div>
+          </div>
+        </div>
+        ${deptBlocks}
+      </div>`
+    };
+  });
+  const summaryEl = document.getElementById('centres-summary-blocks');
+  if (summaryEl) {
+    const allTotal = centreSheets.reduce(function (s, c) { return s + c.total; }, 0);
+    const allTpa = centreSheets.reduce(function (s, c) { return s + c.tpaDue; }, 0);
+    const allOpd = centreSheets.reduce(function (s, c) { return s + c.opd; }, 0);
+    summaryEl.innerHTML = `
+      <div class="sc green"><div class="sc-lbl">Total Collection</div><div class="sc-val green">${fmt(allTotal)}</div></div>
+      <div class="sc blue"><div class="sc-lbl">Total OPD Entries</div><div class="sc-val blue">${allOpd}</div></div>
+      <div class="sc orange"><div class="sc-lbl">TPA / Cashless Due</div><div class="sc-val orange">${fmt(allTpa)}</div></div>
+      <div class="sc red"><div class="sc-lbl">Centres Covered</div><div class="sc-val red">${centreSheets.length}</div></div>
+    `;
+  }
+  const sheetEl = document.getElementById('centres-daily-sheet');
+  if (sheetEl) sheetEl.innerHTML = centreSheets.map(function (c) { return c.html; }).join('') || '<div class="card" style="padding:16px;color:var(--g1)">No daily data found for this date.</div>';
+}
 function renderCentresCharges(){
   const el=document.getElementById('centres-charge-list');if(!el)return;
   el.innerHTML=`<div style="display:grid;grid-template-columns:1fr 100px 100px 50px;gap:4px;padding:5px 11px;background:var(--g6);font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;border-radius:6px 6px 0 0">
