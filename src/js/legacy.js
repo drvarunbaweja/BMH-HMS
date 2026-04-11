@@ -4331,6 +4331,8 @@ function setCentre(c, btn) {
   document.querySelectorAll('.c-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   document.getElementById('tb-cp').textContent='📍 '+(c==='CHD'?'Chandigarh':'Ropar');
+  const rcCentre = document.getElementById('rc-centre');
+  if (rcCentre) rcCentre.value = c;
   showToast('Switched to '+(c==='CHD'?'Chandigarh':'Ropar')+' Centre','i');
   syncReceptionConsultationFee && syncReceptionConsultationFee();
   rebuildPatientsArrayFromGlobalCache && rebuildPatientsArrayFromGlobalCache();
@@ -12109,7 +12111,7 @@ function syncReceptionCentreAndFee() {
 
   const lockedCentre = getUserCentre();
   const centre = getReceptionSelectedCentre();
-  if(lockedCentre) centreEl.value = centre;
+  centreEl.value = centre;
   centreEl.disabled = !!lockedCentre;
   centreEl.style.opacity = lockedCentre ? '0.7' : '1';
 
@@ -17054,6 +17056,7 @@ function activateUserSession(user, profile, opts) {
         if (typeof loadTodayTransactions === 'function') loadTodayTransactions();
       }, 120);
       deferBootstrap(function() {
+        if (typeof loadDrugLibraryFromStorage === 'function') loadDrugLibraryFromStorage();
         if (typeof loadCustomPurposes === 'function') loadCustomPurposes();
         if (typeof loadAdviceTemplates === 'function') loadAdviceTemplates();
         if (typeof loadChargesFromFirebase === 'function') loadChargesFromFirebase();
