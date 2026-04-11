@@ -6943,10 +6943,50 @@ function bmhTotalReceivedForCategories(bmhId, categories) {
     })
     .reduce(function (s, t) { return s + Math.max(0, Number(t.amount) || 0); }, 0);
 }
+function bmhGetEffectiveBillContext(bmhId) {
+  const lines = (window.BMH_PATIENT_CHARGES[bmhId] || []).slice();
+  const categories = function (rows) {
+    return Array.from(new Set((rows || []).map(function (line) {
+      return String(line.cat || inferChargeCategoryFromService(line.desc || line.name || '') || 'other').toLowerCase();
+    }).filter(Boolean)));
+  };
+  const consultationLines = lines.filter(function (line) {
+    return String(line.cat || '').toLowerCase() === 'consultation'
+      || inferChargeCategoryFromService(line.desc || line.name || '') === 'consultation';
+  });
+  const nonConsultationLines = lines.filter(function (line) { return !consultationLines.includes(line); });
+  const consultationChargeTotal = consultationLines.reduce(function (s, line) { return s + (Number(line.amount) || 0); }, 0);
+  const consultationReceived = bmhTotalReceivedForCategories(bmhId, ['consultation']);
+  const excludeSettledConsultation = nonConsultationLines.length > 0 && consultationChargeTotal > 0 && consultationReceived >= consultationChargeTotal;
+  const effectiveLines = excludeSettledConsultation ? nonConsultationLines : lines;
+  const activeCats = categories(effectiveLines);
+  const effectiveReceived = excludeSettledConsultation
+    ? (TRANSACTIONS || []).filter(function (t) {
+        if (t.bmhId !== bmhId || t.collected === false) return false;
+        const inferred = String(inferChargeCategoryFromService(t.service || t.for || t.desc || '') || 'other').toLowerCase();
+        return inferred !== 'consultation';
+      }).reduce(function (s, t) { return s + Math.max(0, Number(t.amount) || 0); }, 0)
+    : bmhTotalReceivedForCategories(bmhId, activeCats);
+  const chargeTotal = effectiveLines.reduce(function (s, line) { return s + (Number(line.amount) || 0); }, 0);
+  return {
+    allLines: lines,
+    lines: effectiveLines,
+    activeCats: activeCats,
+    chargeTotal: chargeTotal,
+    received: effectiveReceived,
+    excludedSettledConsultation: excludeSettledConsultation,
+    excludedConsultationChargeTotal: excludeSettledConsultation ? consultationChargeTotal : 0
+  };
+}
+function bmhGetPendingRecordedPaymentAmount() {
+  const toggle = document.getElementById('bmh-pay-received-toggle');
+  if (!toggle || !toggle.checked) return 0;
+  return Math.max(0, Number(document.getElementById('bmh-pay-amt')?.value || 0));
+}
 
 function bmhComputeBalanceDue(bmhId, totalOverride) {
   const targetTotal = totalOverride != null ? Number(totalOverride) || 0 : bmhTotalsForPatient(bmhId).total;
-  const received = bmhTotalReceivedForPatient(bmhId);
+  const received = Number(bmhGetEffectiveBillContext(bmhId).received || 0);
   return Math.max(0, targetTotal - received);
 }
 
@@ -6959,13 +6999,49 @@ function bmhSyncPatientRunningBalance(bmhId) {
   return due;
 }
 
+function bmhDeleteTransactionEntry(txnId) {
+  if (!CURRENT_USER?.isAdmin) { showToast('Only admin can delete saved payments', 'w'); return; }
+  const txn = (TRANSACTIONS || []).find(function (t) { return t.id === txnId; });
+  if (!txn) { showToast('Payment not found', 'w'); return; }
+  if (!confirm(`Delete saved payment of ₹${Number(txn.amount || 0).toLocaleString('en-IN')} for ${txn.patient || txn.bmhId || 'patient'}?`)) return;
+  const idx = TRANSACTIONS.findIndex(function (t) { return t.id === txnId; });
+  if (idx > -1) TRANSACTIONS.splice(idx, 1);
+  const txnDateKey = localDateKey(txn.date || txn.createdAt || txn.ts || new Date().toISOString());
+  try { if (window.firebase && firebase.database) firebase.database().ref(`transactions/${txnDateKey}/${txnId}`).remove(); } catch (e) {}
+  saveBmhFinancials();
+  if (txn.bmhId) bmhSyncPatientRunningBalance(txn.bmhId);
+  renderBillingPageIfActive();
+  renderAdminDailyBillingPanel();
+  renderDashboard && renderDashboard();
+  showToast('Saved payment deleted ✓', 's');
+}
+window.bmhDeleteTransactionEntry = bmhDeleteTransactionEntry;
+
+function bmhDeletePendingDueEntry(prId) {
+  if (!CURRENT_USER?.isAdmin) { showToast('Only admin can delete saved dues', 'w'); return; }
+  const pr = (PAY_REQUESTS || []).find(function (r) { return r.id === prId; });
+  if (!pr) { showToast('Due entry not found', 'w'); return; }
+  if (!confirm(`Delete saved due entry of ₹${Number(pr.amount || 0).toLocaleString('en-IN')} for ${pr.patient || pr.bmhId || 'patient'}?`)) return;
+  const idx = PAY_REQUESTS.findIndex(function (r) { return r.id === prId; });
+  if (idx > -1) PAY_REQUESTS.splice(idx, 1);
+  try { if (window.firebase && firebase.database) firebase.database().ref('payRequests/' + prId).remove(); } catch (e) {}
+  saveBmhFinancials();
+  if (pr.bmhId) bmhSyncPatientRunningBalance(pr.bmhId);
+  renderBillingPageIfActive();
+  renderAdminDailyBillingPanel();
+  renderDashboard && renderDashboard();
+  showToast('Saved due deleted ✓', 's');
+}
+window.bmhDeletePendingDueEntry = bmhDeletePendingDueEntry;
+
 function bmhGetAdvanceAvailableForPatient(bmhId) {
   const p = PATIENTS.find(x => x.bmhId === bmhId);
   return Math.max(0, Number(p?.advance) || 0);
 }
 
 function bmhTotalsForPatient(bmhId) {
-  const lines = window.BMH_PATIENT_CHARGES[bmhId] || [];
+  const ctx = bmhGetEffectiveBillContext(bmhId);
+  const lines = ctx.lines;
   const sub = lines.reduce((s, x) => s + (Number(x.amount) || 0), 0);
   const disc = Math.max(0, parseFloat(document.getElementById('bmh-bill-discount')?.value) || 0);
   const afterDisc = Math.max(0, sub - disc);
@@ -7089,8 +7165,10 @@ function bmhRenderBillLines() {
   const el = document.getElementById('bmh-bill-lines'); if (!el) return;
   const bmhId = document.getElementById('bmh-bill-pt-select')?.value;
   if (!bmhId) { el.innerHTML = '<div style="color:var(--g1);font-size:12px">Select a patient.</div>'; return; }
-  const lines = window.BMH_PATIENT_CHARGES[bmhId] || [];
+  const ctx = bmhGetEffectiveBillContext(bmhId);
+  const lines = ctx.lines;
   if (!lines.length) { el.innerHTML = '<div style="color:var(--g1);font-size:12px">No charge lines yet — add from doctor, reception, OT, inventory, or manual.</div>'; return; }
+  const canDeleteSavedLines = !!CURRENT_USER?.isAdmin;
   const byCat = {};
   lines.forEach(l => { const c = l.cat || 'other'; if (!byCat[c]) byCat[c] = []; byCat[c].push(l); });
   el.innerHTML = Object.keys(byCat).map(cat => `<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:800;color:var(--bmh-teal);text-transform:uppercase;margin-bottom:4px">${bmhCatLabel(cat)}</div>${byCat[cat].map(l => {
@@ -7103,9 +7181,9 @@ function bmhRenderBillLines() {
       <input type="number" min="1" step="1" value="${Number(l.qty)||1}" onchange="bmhUpdateChargeLine('${bmhId}','${l.id}','qty',this.value)" style="font-size:11px;padding:6px;border-radius:6px;border:1px solid var(--g4);width:100%">
       <input type="number" min="0" step="1" value="${Number(l.rate)||amt}" onchange="bmhUpdateChargeLine('${bmhId}','${l.id}','rate',this.value)" style="font-size:11px;padding:6px;border-radius:6px;border:1px solid var(--g4);width:100%">
       <span style="font-weight:800;text-align:right">₹${amt.toLocaleString('en-IN')}</span>
-      <button type="button" class="btn btn-xs btn-gray" onclick="bmhRemoveChargeLine('${bmhId}','${l.id}')">✕</button>
+      ${canDeleteSavedLines ? `<button type="button" class="btn btn-xs btn-gray" onclick="bmhRemoveChargeLine('${bmhId}','${l.id}')">✕</button>` : '<span></span>'}
     </div>`;
-  }).join('')}</div>`).join('');
+  }).join('')}</div>`).join('') + (ctx.excludedSettledConsultation ? `<div style="margin-top:8px;font-size:11px;color:var(--g1);background:var(--g6);border-radius:8px;padding:8px 10px">Consultation already settled separately: ₹${ctx.excludedConsultationChargeTotal.toLocaleString('en-IN')}</div>` : '');
 }
 function bmhUpdateChargeLine(bmhId, lineId, field, value) {
   const arr = window.BMH_PATIENT_CHARGES[bmhId] || [];
@@ -7126,20 +7204,22 @@ function bmhUpdateChargeLine(bmhId, lineId, field, value) {
 
 function bmhGetPatientFinancialSummary(bmhId) {
   const patient = PATIENTS.find(x => x.bmhId === bmhId) || {};
-  const lines = window.BMH_PATIENT_CHARGES[bmhId] || [];
+  const billContext = bmhGetEffectiveBillContext(bmhId);
+  const lines = billContext.lines;
   const txns = (TRANSACTIONS || []).filter(t => t.bmhId === bmhId).slice().sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
   const payRequests = (PAY_REQUESTS || []).filter(r => r.bmhId === bmhId).slice().sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
-  const chargeTotal = lines.reduce((s, x) => s + (Number(x.amount) || 0), 0);
-  const paidTotal = txns.filter(t => t.collected !== false).reduce((s, t) => s + Math.max(0, Number(t.amount) || 0), 0);
+  const chargeTotal = billContext.chargeTotal;
+  const paidTotal = billContext.received;
   const advanceTotal = txns.filter(t => t.type === 'advance' || /advance/i.test(t.service || '')).reduce((s, t) => s + Math.max(0, Number(t.amount) || 0), 0);
   const pendingTotal = payRequests.filter(r => r.status === 'pending').reduce((s, r) => s + Math.max(0, Number(r.amount) || 0), 0);
   const balance = Math.max(Math.max(0, Number(patient.balance) || 0), Math.max(0, chargeTotal - paidTotal));
   const timeline = [];
 
-  lines.forEach(l => {
+  (billContext.allLines || []).forEach(l => {
     timeline.push({
       ts: l.ts || l.date || new Date().toISOString(),
       kind: 'charge',
+      rowId: l.id,
       label: l.desc || 'Charge',
       meta: [bmhCatLabel(l.cat), l.source].filter(Boolean).join(' · '),
       amount: Number(l.amount) || 0
@@ -7149,6 +7229,7 @@ function bmhGetPatientFinancialSummary(bmhId) {
     timeline.push({
       ts: t.date || new Date().toISOString(),
       kind: 'payment',
+      rowId: t.id,
       label: t.service || 'Payment',
       meta: [t.mode, t.paymentRef].filter(Boolean).join(' · '),
       amount: Number(t.amount) || 0
@@ -7158,6 +7239,7 @@ function bmhGetPatientFinancialSummary(bmhId) {
     timeline.push({
       ts: r.date || new Date().toISOString(),
       kind: r.status === 'pending' ? 'pending' : 'payment',
+      rowId: r.id,
       label: r.for || 'Billing request',
       meta: [r.mode || r.status, r.ins].filter(Boolean).join(' · '),
       amount: Number(r.amount) || 0
@@ -7165,7 +7247,7 @@ function bmhGetPatientFinancialSummary(bmhId) {
   });
   timeline.sort((a, b) => new Date(b.ts || 0) - new Date(a.ts || 0));
 
-  return { patient, lines, txns, payRequests, chargeTotal, paidTotal, advanceTotal, pendingTotal, balance, timeline };
+  return { patient, lines, txns, payRequests, chargeTotal, paidTotal, advanceTotal, pendingTotal, balance, timeline, billContext };
 }
 
 function bmhRenderPatientFinancialSummary() {
@@ -7181,6 +7263,13 @@ function bmhRenderPatientFinancialSummary() {
   const timelineHtml = info.timeline.length ? info.timeline.slice(0, 14).map(item => {
     const tone = item.kind === 'charge' ? 'var(--bmh-blue)' : item.kind === 'pending' ? 'var(--orange)' : 'var(--green)';
     const badge = item.kind === 'charge' ? 'Charge' : item.kind === 'pending' ? 'Pending' : 'Payment';
+    const adminDelete = CURRENT_USER?.isAdmin
+      ? (item.kind === 'charge'
+          ? `<button type="button" class="btn btn-xs btn-gray" onclick="bmhRemoveChargeLine('${bmhId}','${item.rowId}')">✕</button>`
+          : item.kind === 'pending'
+            ? `<button type="button" class="btn btn-xs btn-gray" onclick="bmhDeletePendingDueEntry('${item.rowId}')">✕</button>`
+            : `<button type="button" class="btn btn-xs btn-gray" onclick="bmhDeleteTransactionEntry('${item.rowId}')">✕</button>`)
+      : '';
     return `<div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--g5);font-size:12px">
       <div style="flex:1">
         <div style="font-weight:800">${item.label}</div>
@@ -7190,6 +7279,7 @@ function bmhRenderPatientFinancialSummary() {
         <div style="font-size:10px;font-weight:800;color:${tone};text-transform:uppercase">${badge}</div>
         <div style="font-weight:900;color:${tone}">${fmt(item.amount)}</div>
       </div>
+      ${adminDelete}
     </div>`;
   }).join('') : '<div style="color:var(--g1);font-size:12px">No financial activity recorded yet.</div>';
 
@@ -7380,12 +7470,12 @@ function renderTpaPage() {
     const receivedAmt = (TRANSACTIONS || []).filter(function (t) { return t.bmhId === r.bmhId && isInsuranceLikeMode(t.mode || t.ins || ''); }).reduce(function (s, t) { return s + (Number(t.amount) || 0); }, 0);
     const approvedAmt = Math.max(Number(r.approvedAmount) || 0, Number(r.amount) || 0);
     const pendingAmt = Math.max(0, approvedAmt - receivedAmt);
-    return `<tr>
+    return `<tr style="cursor:pointer" onclick="openTPACaseDetail('${r.id}')">
       <td><div style="font-weight:800;font-size:12px">${r.patient || '—'}</div><div style="font-family:var(--mono);font-size:9px;color:var(--bmh-teal)">${r.bmhId || '—'}</div></td>
       <td><span class="badge bd-blue">${r.ins || r.mode || 'Insurance'}</span></td>
       <td style="font-family:var(--mono);font-size:10px">${r.policy || '—'}</td>
-      <td>${r.for || 'Hospital bill'}</td>
-      <td>₹${(Number(r.amount) || 0).toLocaleString('en-IN')}</td>
+      <td>${r.procedure || r.for || 'Hospital bill'}${r.diagnosis ? `<div style="font-size:10px;color:var(--g1)">${r.diagnosis}</div>` : ''}</td>
+      <td>₹${(Number(r.claimedAmount || r.amount) || 0).toLocaleString('en-IN')}</td>
       <td>₹${approvedAmt.toLocaleString('en-IN')}</td>
       <td>₹${receivedAmt.toLocaleString('en-IN')}</td>
       <td style="font-weight:900;color:${pendingAmt > 0 ? 'var(--orange)' : 'var(--green)'}">₹${pendingAmt.toLocaleString('en-IN')}</td>
@@ -7421,9 +7511,10 @@ function bmhUpdateBillTotals() {
   const bmhId = document.getElementById('bmh-bill-pt-select')?.value;
   const z = bmhId ? bmhTotalsForPatient(bmhId) : { sub: 0, gst: 0, total: 0, discount: 0, advanceApplied: 0, taxable: 0 };
   const { sub, gst, total, discount, advanceApplied, taxable } = z;
-  const activeCats = bmhId ? bmhGetChargeCategoriesForPatient(bmhId) : [];
-  const received = bmhId ? bmhTotalReceivedForCategories(bmhId, activeCats) : 0;
-  const due = Math.max(0, total - received);
+  const effectiveCtx = bmhId ? bmhGetEffectiveBillContext(bmhId) : { received: 0 };
+  const received = Number(effectiveCtx.received || 0);
+  const pendingNow = bmhGetPendingRecordedPaymentAmount();
+  const due = Math.max(0, total - received - pendingNow);
   const a = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = '₹' + v.toLocaleString('en-IN'); };
   a('bill-sub', sub);
   const bd = document.getElementById('bill-discount-line');
@@ -7434,7 +7525,7 @@ function bmhUpdateBillTotals() {
   a('bill-advance-amt', advanceApplied);
   const tx = document.getElementById('bill-taxable');
   if (tx) tx.textContent = '₹' + (taxable || 0).toLocaleString('en-IN');
-  a('bill-received', received);
+  a('bill-received', received + pendingNow);
   a('bill-balance-due', due);
   a('bill-total', total);
   if (bmhId) bmhSyncPatientRunningBalance(bmhId);
@@ -7443,12 +7534,26 @@ function bmhUpdateBillTotals() {
 function bmhTogglePaymentForm(on) {
   const wrap = document.getElementById('bmh-pay-form');
   if (wrap) wrap.style.display = on ? 'block' : 'none';
-  if (!on) return;
+  if (!on) { bmhUpdateBillTotals(); return; }
   const bmhId = document.getElementById('bmh-bill-pt-select')?.value;
   const amtEl = document.getElementById('bmh-pay-amt');
   if (bmhId && amtEl && !amtEl.value) amtEl.value = String(bmhComputeBalanceDue(bmhId));
+  bmhUpdateBillTotals();
 }
 window.bmhTogglePaymentForm = bmhTogglePaymentForm;
+function bmhClearPaymentDraft() {
+  ['bmh-pay-amt','bmh-pay-ref','bmh-pay-insurer','bmh-pay-policy','bmh-pay-insurer-due'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  const mode = document.getElementById('bmh-pay-mode');
+  if (mode) mode.value = 'Cash';
+  const toggle = document.getElementById('bmh-pay-received-toggle');
+  if (toggle) toggle.checked = false;
+  bmhToggleBillingInsuranceFields();
+  bmhTogglePaymentForm(false);
+}
+window.bmhClearPaymentDraft = bmhClearPaymentDraft;
 function bmhAppendLedger(row) {
   window.BMH_LEDGER.push(Object.assign({ id: 'L' + Date.now() + Math.random().toString(36).slice(2, 6) }, row));
   saveBmhFinancials();
@@ -7641,10 +7746,8 @@ function printBmhPatientBill(bmhIdOpt) {
   if (!bmhId) { showToast('Select a patient', 'w'); return; }
   const info = bmhGetPatientFinancialSummary(bmhId);
   const p = info.patient || {};
-  const lines = window.BMH_PATIENT_CHARGES[bmhId] || [];
-  const activeCats = Array.from(new Set(lines.map(function (l) {
-    return String(l.cat || inferChargeCategoryFromService(l.desc || l.name || '') || 'other').toLowerCase();
-  }).filter(Boolean)));
+  const billContext = bmhGetEffectiveBillContext(bmhId);
+  const lines = billContext.lines;
   const { sub, total, discount, advanceApplied, taxable } = bmhTotalsForPatient(bmhId);
   const invNo = 'RCP-' + String(Date.now()).slice(-10);
   const today = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -7662,12 +7765,16 @@ function printBmhPatientBill(bmhIdOpt) {
     </tr>`).join('');
     return hdr + rs;
   }).join('');
-  const relevantReceived = bmhTotalReceivedForCategories(bmhId, activeCats);
+  const relevantReceived = Number(billContext.received || 0);
   const dueAmt = Math.max(0, Math.max(0, Number(taxable != null ? taxable : total) || 0) - relevantReceived);
   const payLines = (TRANSACTIONS || []).filter(function (t) {
     if (t.bmhId !== bmhId || t.collected === false) return false;
+    if (billContext.excludedSettledConsultation) {
+      const inferred = String(inferChargeCategoryFromService(t.service || t.for || t.desc || '') || 'other').toLowerCase();
+      return inferred !== 'consultation';
+    }
     const inferred = String(inferChargeCategoryFromService(t.service || t.for || t.desc || '') || 'other').toLowerCase();
-    return !activeCats.length || activeCats.includes(inferred);
+    return !billContext.activeCats.length || billContext.activeCats.includes(inferred);
   }).slice(-6).map(t => `<div style="display:flex;justify-content:space-between;font-size:9.5px;padding:3px 0;border-bottom:1px dashed #e0e4ec"><span>${esc(t.service || 'Payment')} · ${esc(t.mode || '')}</span><span style="font-weight:800;color:#1a8c3c">₹${(Number(t.amount)||0).toLocaleString('en-IN')}</span></div>`).join('');
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Receipt — ${esc(p.name || '')}</title><style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
@@ -7723,7 +7830,7 @@ th:last-child{text-align:right}
 </div>
 <table><thead><tr><th colspan="2">Description</th><th>Qty</th><th style="text-align:right">Amount</th></tr></thead><tbody>${bodyRows || '<tr><td colspan="4" style="padding:9px;text-align:center;color:#888">No charge lines</td></tr>'}</tbody></table>
 ${discount > 0 || advanceApplied > 0 ? `<div style="font-size:9.5px;text-align:right;margin-bottom:6px;color:#444">${discount > 0 ? 'Discount ₹' + discount.toLocaleString('en-IN') + ' · ' : ''}${advanceApplied > 0 ? 'Advance adjusted ₹' + advanceApplied.toLocaleString('en-IN') : ''}</div>` : ''}
-<div class="totbar"><div class="big">Net payable: ₹${(Number(taxable != null ? taxable : sub - discount - advanceApplied) || 0).toLocaleString('en-IN')}</div><div class="sub">Outstanding balance ₹${dueAmt.toLocaleString('en-IN')} · Consultation &amp; investigations are billed separately</div></div>
+<div class="totbar"><div class="big">Net payable: ₹${(Number(taxable != null ? taxable : sub - discount - advanceApplied) || 0).toLocaleString('en-IN')}</div><div class="sub">Outstanding balance ₹${dueAmt.toLocaleString('en-IN')} · Consultation and surgery are billed separately where already settled</div></div>
 ${payLines ? `<div class="payh">Recent payments</div><div>${payLines}</div>` : ''}
 <div class="foot">This is a computer-generated receipt. Subject to hospital policies. GST as applicable.<br>Please retain this receipt for your records.</div>
 </body></html>`;
@@ -8373,7 +8480,7 @@ function renderAdminDailyBillingPanel() {
       ${filtered.length ? filtered.map(function (row) {
         return `<div style="display:grid;grid-template-columns:minmax(0,1.2fr) 120px 110px 46px;gap:8px;align-items:center;padding:9px 10px;border-bottom:1px solid var(--g5);font-size:11.5px">
           <div style="min-width:0">
-            <div style="font-weight:800">${safe(row.patient)} <span style="font-family:var(--mono);font-size:10px;color:var(--bmh-teal)">${safe(row.bmhId)}</span></div>
+            <button type="button" class="btn btn-link" style="padding:0;border:none;background:none;color:inherit;font:inherit;text-align:left" onclick="focusAdminBillingPatient('${row.bmhId}')"><span style="font-weight:800">${safe(row.patient)}</span> <span style="font-family:var(--mono);font-size:10px;color:var(--bmh-teal)">${safe(row.bmhId)}</span></button>
             <div style="color:var(--g1);line-height:1.35">${safe(row.desc)}</div>
           </div>
           <div style="font-size:10px;color:var(--g1)">${deptLabels[row.dept] || row.dept}<br>${bmhCatLabel(row.cat)}</div>
@@ -8384,6 +8491,19 @@ function renderAdminDailyBillingPanel() {
     </div>
   </div>`;
 }
+function focusAdminBillingPatient(bmhId) {
+  if (!bmhId) return;
+  window._bmhBillFocusPatient = bmhId;
+  const scopeEl = document.getElementById('bmh-bill-patient-scope');
+  if (scopeEl) scopeEl.value = 'focus';
+  renderBillingPage();
+  const sel = document.getElementById('bmh-bill-pt-select');
+  if (sel) sel.value = bmhId;
+  bmhSelectBillPatient(bmhId);
+  const summary = document.getElementById('bmh-bill-summary');
+  if (summary && typeof summary.scrollIntoView === 'function') summary.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+window.focusAdminBillingPatient = focusAdminBillingPatient;
 window.setAdminBillingDeptFilter = function (dept) {
   window._bmhAdminBillingDept = dept || 'all';
   renderAdminDailyBillingPanel();
@@ -12570,7 +12690,8 @@ async function registerPatient() {
   const refType = document.getElementById('rc-ref-type')?.value || '';
   const refName = normalizeReceptionFieldValue('rc-ref-name', document.getElementById('rc-ref-name')?.value?.trim() || '');
   const refMobile = document.getElementById('rc-ref-mobile')?.value?.trim() || '';
-  const insName = document.getElementById('rc-ins-name')?.value||'';
+  const insName = normalizeReceptionFieldValue('rc-ins-name', document.getElementById('rc-ins-name')?.value||'');
+  const policyNo = (document.getElementById('rc-policy')?.value || '').trim();
   patient.checkinAt = Date.now();
   patient.purpose = purpose;
   patient.refType = refType;
@@ -12609,11 +12730,12 @@ async function registerPatient() {
 
   if(isInsurance) {
     const claimId = 'TPA'+Date.now();
-    const claim = {id:claimId, patient:name, bmhId:uid, for:purpose, amount:fee, approvedAmount:fee, status:'pending', mode:payMode, ins:insName||payMode, dept, centre, date:new Date().toISOString(), from:'Reception'};
+    const claim = {id:claimId, patient:name, bmhId:uid, for:purpose, amount:fee, approvedAmount:fee, claimedAmount:fee, status:'pending', mode:payMode, ins:insName||payMode, policy:policyNo, dept, centre, date:new Date().toISOString(), from:'Reception'};
     PAY_REQUESTS.push(claim);
     fbSet&&fbSet('payRequests/'+claimId, claim);
     addBmhPatientCharge(uid, { id: 'chg-' + claimId, cat: inferChargeCategoryFromService(purpose), desc: purpose, qty: 1, rate: fee, amount: fee, source: 'reception', ref: claimId, ts: claim.date });
     patient.ins = insName||payMode;
+    patient.policy = policyNo || patient.policy || '';
     patient.balance = Math.max(Number(patient.balance || 0), Number(fee || 0));
     showToast(`🏦 TPA/Insurance patient — claim pending ₹${fee.toLocaleString('en-IN')}`,'i');
   } else if(isCreditDue) {
@@ -12649,7 +12771,7 @@ async function registerPatient() {
   }
 
   fbUpdate&&fbUpdate('patients/'+uid,{
-    checkinAt:patient.checkinAt,purpose,visitCount:patient.visitCount,ins:patient.ins||'',
+    checkinAt:patient.checkinAt,purpose,visitCount:patient.visitCount,ins:patient.ins||'', policy: patient.policy || '',
     advance:patient.advance, advancePurpose:patient.advancePurpose, consultationNoFee:patient.consultationNoFee,
     refType: patient.refType || '', refName: patient.refName || '', refMobile: patient.refMobile || '', referredBy: patient.referredBy || ''
   });
@@ -12659,6 +12781,7 @@ async function registerPatient() {
       purpose,
       visitCount: patient.visitCount,
       ins: patient.ins || '',
+      policy: patient.policy || '',
       advance: patient.advance,
       advancePurpose: patient.advancePurpose,
       consultationNoFee: patient.consultationNoFee,
@@ -13517,16 +13640,37 @@ function openTPACaseDetail(prId) {
   const pt = PATIENTS.find(function (p) { return p.bmhId === pr.bmhId; }) || {};
   const wrap = document.getElementById('tpa-case-detail');
   if (!wrap) return;
+  const deptKey = normalizeQueueDeptForUser(pr.dept || pt.dept || 'ophtho') || 'ophtho';
+  const deptMatcher = {
+    ophtho: /^eye/i,
+    obg: /^obg/i,
+    psych: /^psych/i,
+    skin: /^skin/i
+  };
+  const procedureOptions = (CHARGES_DATA || []).filter(function (c) {
+    if (!deptMatcher[deptKey] || !deptMatcher[deptKey].test(String(c.cat || ''))) return false;
+    return /surgery|procedure|implant|capsulotomy|pmics|phaco|oct|delivery|lscs|laser|excision|biopsy|laparoscopy|ivf|trabeculectomy|yag|iridotomy/i.test(String(c.name || ''));
+  }).map(function (c) { return String(c.name || '').trim(); }).filter(Boolean).sort();
+  const claimedAmount = Number(pr.claimedAmount || pr.approvedAmount || pr.amount || 0) || '';
+  const receivedAmount = Number(pr.receivedAmount || 0) || '';
+  const patientDue = Number(pr.patientDue != null ? pr.patientDue : Math.max(0, claimedAmount - receivedAmount)) || '';
   wrap.innerHTML = `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
       <div><div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase">Patient</div><div style="font-size:13px;font-weight:900">${pr.patient || pt.name || '—'}</div><div style="font-size:10px;color:var(--g1)">${pr.bmhId || '—'} · ${pt.mob || pt.mobile || '—'}</div></div>
       <div><div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase">TPA / Policy</div><div style="font-size:13px;font-weight:900">${pr.ins || pr.mode || 'TPA'}</div><div style="font-size:10px;color:var(--g1)">${pr.policy || 'No policy entered'}</div></div>
     </div>
-    <div style="font-size:11px;color:var(--tx3);margin-bottom:8px">${pr.for || 'Insurance / cashless case'}</div>
-    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:10px">
-      <div class="form-group" style="margin:0"><label class="fl">Amount Received ₹</label><input type="number" id="tpa-received-amt" value="${Number(pr.receivedAmount || 0) || ''}" placeholder="0"></div>
-      <div class="form-group" style="margin:0"><label class="fl">Received Date</label><input type="date" id="tpa-received-date" value="${String(pr.receivedDate || '').slice(0,10)}"></div>
-      <div class="form-group" style="margin:0"><label class="fl">UTR / Txn No.</label><input type="text" id="tpa-received-utr" value="${pr.utr || pr.paymentRef || ''}" placeholder="UTR / transaction"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+      <div class="form-group" style="margin:0"><label class="fl">Diagnosis</label><input type="text" id="tpa-diagnosis" value="${escapeHtmlConsent(pr.diagnosis || pt.dx || pt.lastVisit?.dx || '')}" placeholder="Diagnosis"></div>
+      <div class="form-group" style="margin:0"><label class="fl">Surgery / Procedure</label><input list="tpa-procedure-list" type="text" id="tpa-procedure-name" value="${escapeHtmlConsent(pr.procedure || pr.for || '')}" placeholder="Procedure / surgery"></div>
+      <div class="form-group" style="margin:0"><label class="fl">Policy / Pre-auth No.</label><input type="text" id="tpa-policy-no" value="${escapeHtmlConsent(pr.policy || pt.policy || '')}" placeholder="Policy / pre-auth"></div>
+      <div class="form-group" style="margin:0"><label class="fl">Claimed Amount ₹</label><input type="number" id="tpa-claimed-amt" value="${claimedAmount}" placeholder="0"></div>
+    </div>
+    <datalist id="tpa-procedure-list">${procedureOptions.map(function (name) { return `<option value="${escapeHtmlConsent(name)}"></option>`; }).join('')}</datalist>
+    <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:10px">
+      <div class="form-group" style="margin:0"><label class="fl">Amount Credited ₹</label><input type="number" id="tpa-received-amt" value="${receivedAmount}" placeholder="0"></div>
+      <div class="form-group" style="margin:0"><label class="fl">Credited Date</label><input type="date" id="tpa-received-date" value="${String(pr.receivedDate || '').slice(0,10)}"></div>
+      <div class="form-group" style="margin:0"><label class="fl">UTR / Txn No.</label><input type="text" id="tpa-received-utr" value="${escapeHtmlConsent(pr.utr || pr.paymentRef || '')}" placeholder="UTR / transaction"></div>
+      <div class="form-group" style="margin:0"><label class="fl">Due From Patient ₹</label><input type="number" id="tpa-patient-due" value="${patientDue}" placeholder="0"></div>
     </div>
     <div class="form-group" style="margin:0 0 10px 0"><label class="fl">Notes</label><textarea id="tpa-received-note" placeholder="Pre-auth, deficiency, coordinator note..." style="min-height:56px">${pr.notes || ''}</textarea></div>
     <div style="display:flex;gap:8px;justify-content:flex-end">
@@ -13549,16 +13693,53 @@ function saveTPAReceipt(prId) {
     }
   }
   if (!pr) return;
+  const diagnosis = toTitleCaseName(document.getElementById('tpa-diagnosis')?.value || '');
+  const procedure = toTitleCaseName(document.getElementById('tpa-procedure-name')?.value || '');
+  const policyNo = (document.getElementById('tpa-policy-no')?.value || '').trim();
+  const claimedAmount = Math.max(0, Number(document.getElementById('tpa-claimed-amt')?.value || pr.claimedAmount || pr.amount || 0));
   const amt = Number(document.getElementById('tpa-received-amt')?.value || 0);
   const date = document.getElementById('tpa-received-date')?.value || new Date().toISOString().slice(0, 10);
   const utr = document.getElementById('tpa-received-utr')?.value || '';
+  const patientDue = Math.max(0, Number(document.getElementById('tpa-patient-due')?.value || 0));
   const notes = document.getElementById('tpa-received-note')?.value || '';
+  pr.diagnosis = diagnosis;
+  pr.procedure = procedure;
+  pr.policy = policyNo;
+  pr.claimedAmount = claimedAmount;
+  pr.amount = claimedAmount || pr.amount || 0;
+  pr.approvedAmount = Math.max(Number(pr.approvedAmount || 0), claimedAmount || 0);
   pr.receivedAmount = amt;
   pr.receivedDate = date;
   pr.utr = utr;
   pr.notes = notes;
+  pr.patientDue = patientDue;
   if (amt > 0) pr.status = 'paid';
-  try { if (window.firebase && firebase.database) firebase.database().ref('payRequests/' + pr.id).update({ receivedAmount: amt, receivedDate: date, utr: utr, notes: notes, status: pr.status, updatedAt: new Date().toISOString() }); } catch (e) {}
+  const pt = PATIENTS.find(function (p) { return p.bmhId === pr.bmhId; });
+  if (pt) {
+    pt.ins = pr.ins || pr.mode || pt.ins || '';
+    pt.policy = policyNo || pt.policy || '';
+    if (diagnosis) pt.dx = diagnosis;
+  }
+  try {
+    if (window.firebase && firebase.database) firebase.database().ref('payRequests/' + pr.id).update({
+      diagnosis: diagnosis,
+      procedure: procedure,
+      policy: policyNo,
+      claimedAmount: claimedAmount,
+      amount: pr.amount,
+      approvedAmount: pr.approvedAmount,
+      receivedAmount: amt,
+      receivedDate: date,
+      utr: utr,
+      notes: notes,
+      patientDue: patientDue,
+      status: pr.status,
+      updatedAt: new Date().toISOString()
+    });
+  } catch (e) {}
+  if (pt) {
+    fbUpdate && fbUpdate('patients/' + pr.bmhId, { ins: pt.ins || '', policy: pt.policy || '', dx: diagnosis || pt.dx || '', balance: Math.max(0, patientDue || pt.balance || 0) });
+  }
   if (amt > 0) {
     const txn = {
       id: 'TPAR' + Date.now(),
@@ -13577,11 +13758,13 @@ function saveTPAReceipt(prId) {
       createdBy: CURRENT_USER?.name || 'TPA'
     };
     TRANSACTIONS.push(txn);
-    try { if (window.firebase && firebase.database) firebase.database().ref('transactions/' + todayKey() + '/' + txn.id).set(txn); } catch (e) {}
+    saveTransactionToFirebase && saveTransactionToFirebase(txn);
   }
+  if (pr.bmhId) bmhSyncPatientRunningBalance(pr.bmhId);
   showToast('TPA receipt saved ✓', 's');
   closeTPACaseDetail();
-  renderInsuranceTab && renderInsuranceTab();
+  renderTpaPage && renderTpaPage();
+  renderBillingPageIfActive();
   renderDashboard && renderDashboard();
 }
 
