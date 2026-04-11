@@ -320,7 +320,7 @@
     <div class="ngrp">Finance</div>
     <div class="ni" onclick="nav('billing',this)"><div class="ni-ic">💰</div>Billing</div>
     <div class="ni" onclick="nav('tpa',this)"><div class="ni-ic">🏦</div>TPA / Cashless</div>
-    <div class="ni" onclick="nav('inventory',this)"><div class="ni-ic">📦</div>Inventory<span class="nbadge" id="nb-inv">4</span></div>
+    <div class="ni" onclick="nav('inventory',this)"><div class="ni-ic">📦</div>Inventory<span class="nbadge" id="nb-inv">0</span></div>
     <div class="ngrp">Management</div>
     <div class="ni" onclick="nav('centres',this)"><div class="ni-ic">🏥</div>Two-Centre View</div>
     <div class="ni" onclick="nav('settings',this)"><div class="ni-ic">⚙️</div>Settings</div>
@@ -3504,7 +3504,7 @@
     <div class="card"><div class="card-hd"><div class="card-title">Inventory Stats</div></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
         <div style="background:var(--green-lt);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:#1a8c3c;font-weight:800">Total Items</div><div style="font-size:18px;font-weight:900;color:#1a8c3c" id="inv-total-items">0</div></div>
-        <div style="background:var(--orange-lt);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:#b55a00;font-weight:800">Low Stock</div><div style="font-size:18px;font-weight:900;color:#b55a00" id="inv-low-cnt">4</div></div>
+        <div style="background:var(--orange-lt);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:#b55a00;font-weight:800">Low Stock</div><div style="font-size:18px;font-weight:900;color:#b55a00" id="inv-low-cnt">0</div></div>
       </div>
     </div>
     <div class="card"><div class="card-hd"><div class="card-title">Recent transfers</div></div><div id="inv-transfer-log"><div style="padding:12px;color:var(--g1);font-size:12px">No transfers yet.</div></div></div>
@@ -3787,6 +3787,8 @@
             <input type="file" id="drug-import-file" accept=".csv,.txt,text/csv" style="font-size:11px" onchange="handleDrugImportCsv(this)">
           </div>
           <div style="font-size:10px;color:var(--g1)">Save Excel as <strong>CSV</strong> with columns: Trade / Brand, Generic, <strong>Type / form</strong> (e.g. eye drops, tablet, ointment), Company (optional). First row = headers.</div>
+          <button type="button" class="btn btn-outline btn-sm" style="margin-top:8px" onclick="repairDrugLibraryFromAllSources && repairDrugLibraryFromAllSources()">↻ Restore drugs from backups + cloud</button>
+          <div style="font-size:9px;color:var(--g1);margin-top:4px">Merges this browser’s saved lists and Firebase. Use on each PC if the library shrank after sync.</div>
         </div>
       </div>
     </div>
@@ -5463,7 +5465,7 @@
 </script>
 
 <!-- ═══ MAIN APP SCRIPT (legacy — being migrated to modules) ═══ -->
-<script defer src="/BMH-HMS/js/legacy.js?v=20260407-hotfix2"></script>
+<script defer src="/BMH-HMS/js/legacy.js?v=20260411-queue-drugs"></script>
 
 <!-- ═══ QR DECODER BRIDGE ═══ -->
 

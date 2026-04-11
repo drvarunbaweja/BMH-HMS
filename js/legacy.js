@@ -4333,6 +4333,7 @@ function setCentre(c, btn) {
   document.getElementById('tb-cp').textContent='📍 '+(c==='CHD'?'Chandigarh':'Ropar');
   showToast('Switched to '+(c==='CHD'?'Chandigarh':'Ropar')+' Centre','i');
   syncReceptionConsultationFee && syncReceptionConsultationFee();
+  rebuildPatientsArrayFromGlobalCache && rebuildPatientsArrayFromGlobalCache();
   // Refresh all views after centre switch
   renderReceptionPage && renderReceptionPage();
   renderDocQueue && renderDocQueue();
@@ -10368,8 +10369,10 @@ function rxDrugMatchesDept(drug, deptKey, deptLabel) {
     /\b(pred forte|vigamox|refresh tears|timoptol|cosopt|restasis)\b/.test(hay);
 
   if (deptKey === 'ophtho') {
-    if (!rawDept) return looksEyeSpecific;
-    return normalizedDept === 'ophtho' || normalizedDept === 'ophthalmology' || normalizedDept === 'all';
+    if (!rawDept) return true;
+    if (normalizedDept === 'ophtho' || normalizedDept === 'ophthalmology' || normalizedDept === 'all') return true;
+    if (/oph|eye|ocular|optom/i.test(rawDept)) return true;
+    return false;
   }
 
   if (looksEyeSpecific) return false;
@@ -10653,7 +10656,7 @@ function mergeDrugLibraryRows(primaryRows) {
 }
 
 function saveDrugLibraryToStorage() {
-  try { localStorage.setItem('bmh_drug_library', JSON.stringify(DRUG_LIBRARY)); } catch (e) { /* noop */ }
+  persistDrugLibraryLocalSnapshots(DRUG_LIBRARY);
   if (window.FBDB) window.FBDB.ref('drugLibrary').set(DRUG_LIBRARY).catch(() => {});
 }
 
@@ -10682,25 +10685,77 @@ function syncDrugDeptDefaults() {
   });
 }
 
-function loadDrugLibraryFromStorage() {
-  let localArr = [];
+function readDrugLibraryFromLocalStorage() {
   try {
     const ls = localStorage.getItem('bmh_drug_library');
-    if (ls) {
-      const arr = JSON.parse(ls);
-      if (Array.isArray(arr)) localArr = arr.filter(Boolean);
-    }
+    if (!ls) return [];
+    const arr = JSON.parse(ls);
+    return Array.isArray(arr) ? arr.filter(Boolean) : [];
+  } catch (e) {
+    return [];
+  }
+}
+/** Merge every local snapshot (main + automatic backup + optional archive) so uploads survive a bad cloud write. */
+function readDrugLibraryRowsFromAllLocalSources() {
+  const keys = ['bmh_drug_library', 'bmh_drug_library_backup', 'bmh_drug_library_archive'];
+  const out = [];
+  keys.forEach(function (key) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return;
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) arr.filter(Boolean).forEach(function (r) { out.push(r); });
+    } catch (e) { /* noop */ }
+  });
+  return out;
+}
+function persistDrugLibraryLocalSnapshots(rows) {
+  try {
+    const next = JSON.stringify(Array.isArray(rows) ? rows : []);
+    const prev = localStorage.getItem('bmh_drug_library');
+    if (prev && prev !== next) localStorage.setItem('bmh_drug_library_archive', prev);
+    localStorage.setItem('bmh_drug_library', next);
+    localStorage.setItem('bmh_drug_library_backup', next);
   } catch (e) { /* noop */ }
-
-  const applyMergedRows = function (remoteArr, opts) {
-    opts = opts || {};
-    const remote = Array.isArray(remoteArr) ? remoteArr.filter(Boolean) : [];
-    // Clear before merge so buildDrugLibrarySeedRows() does not duplicate the in-memory library
+}
+/**
+ * One-click recovery: union Firebase + all localStorage drug snapshots + current memory, then save local + cloud.
+ * Run from Settings after a sync incident; have each workstation click once if their browser still has an older copy.
+ */
+function repairDrugLibraryFromAllSources() {
+  const rescue = readDrugLibraryRowsFromAllLocalSources();
+  const mem = (typeof DRUG_LIBRARY !== 'undefined' && DRUG_LIBRARY.length) ? DRUG_LIBRARY.slice() : [];
+  const runMerge = function (remoteVal) {
+    const remoteArr = normalizeDrugLibrarySnapshot(remoteVal);
     DRUG_LIBRARY.length = 0;
-    // Prefer local rows first so a good browser copy wins duplicate-key ties
-    const merged = mergeDrugLibraryRows(localArr.concat(remote));
+    mergeDrugLibraryRows(rescue.concat(remoteArr).concat(mem)).forEach(function (x) { DRUG_LIBRARY.push(x); });
+    persistDrugLibraryLocalSnapshots(DRUG_LIBRARY);
+    renderSettingsDrugs && renderSettingsDrugs();
+    rebuildDrugGenericDatalist();
+    syncDrugDeptDefaults();
+    if (window.FBDB && DRUG_LIBRARY.length) {
+      window.FBDB.ref('drugLibrary').set(DRUG_LIBRARY).catch(function () {});
+    }
+    showToast('Drug library restored: ' + DRUG_LIBRARY.length + ' rows (local backups + cloud) ✓', 's');
+  };
+  if (!window.FBDB) {
+    runMerge(null);
+    return;
+  }
+  window.FBDB.ref('drugLibrary').once('value').then(function (snap) { runMerge(snap.val()); }).catch(function () { runMerge(null); });
+}
+window.repairDrugLibraryFromAllSources = repairDrugLibraryFromAllSources;
+
+function loadDrugLibraryFromStorage() {
+  const applyMergedRows = function (remoteVal, opts) {
+    opts = opts || {};
+    const remoteArr = normalizeDrugLibrarySnapshot(remoteVal);
+    const localArr = readDrugLibraryRowsFromAllLocalSources();
+    const currentArr = Array.isArray(DRUG_LIBRARY) ? DRUG_LIBRARY.slice() : [];
+    DRUG_LIBRARY.length = 0;
+    const merged = mergeDrugLibraryRows(localArr.concat(remoteArr).concat(currentArr));
     merged.forEach(function (x) { DRUG_LIBRARY.push(x); });
-    try { localStorage.setItem('bmh_drug_library', JSON.stringify(DRUG_LIBRARY)); } catch (e) { /* noop */ }
+    persistDrugLibraryLocalSnapshots(DRUG_LIBRARY);
     renderSettingsDrugs && renderSettingsDrugs();
     rebuildDrugGenericDatalist();
     syncDrugDeptDefaults();
@@ -10710,15 +10765,16 @@ function loadDrugLibraryFromStorage() {
   };
 
   if (!window.FBDB) {
-    applyMergedRows([], { repairCloud: false });
+    applyMergedRows(null, { repairCloud: false });
     return;
   }
-  window.FBDB.ref('drugLibrary').once('value').then(function (snap) {
+  if (window._bmhDrugLibListenerAttached) return;
+  window._bmhDrugLibListenerAttached = true;
+  window.FBDB.ref('drugLibrary').on('value', function (snap) {
     const remoteArr = normalizeDrugLibrarySnapshot(snap.val());
-    const repairCloud = !remoteArr.length && localArr.length > 0;
-    applyMergedRows(remoteArr, { repairCloud: repairCloud });
-  }).catch(function () {
-    applyMergedRows([], { repairCloud: false });
+    const localArr = readDrugLibraryRowsFromAllLocalSources();
+    const repairCloud = (!!localArr.length && localArr.length > remoteArr.length) || (!remoteArr.length && localArr.length > 0);
+    applyMergedRows(snap.val(), { repairCloud: repairCloud });
   });
 }
 window.loadDrugLibraryFromStorage = loadDrugLibraryFromStorage;
@@ -17074,8 +17130,38 @@ function getReceptionSelectedCentre() {
 function centreMatch(item) {
   const uc = getEffectiveCentre();
   if(!uc) return true; // admin/BOTH — see everything
-  return (item.centre || 'CHD') === uc;
+  return patientCentreKey(item.centre) === patientCentreKey(uc);
 }
+/** Normalise patient / UI centre to CHD or RPR (handles Ropar, typos). */
+function patientCentreKey(value) {
+  return normalizeAppointmentCentreValue(value) === 'RPR' ? 'RPR' : 'CHD';
+}
+/**
+ * Which centre’s rows should live in PATIENTS[] for centre-locked users.
+ * Returns null for admin / BOTH / canSeeAll — keep full Firebase mirror (doctor queue is all-centre; billing uses centreMatch).
+ */
+function effectivePatientListCentreScope() {
+  const cu = typeof CURRENT_USER !== 'undefined' ? CURRENT_USER : window.CURRENT_USER;
+  if (!cu) return null;
+  if (cu.canSeeAllCentres || cu.isAdmin || /^admin$/i.test(String(cu.role || '')) || cu.centre === 'BOTH') return null;
+  const locked = typeof getUserCentre === 'function' ? getUserCentre() : null;
+  if (locked) return patientCentreKey(locked);
+  return patientCentreKey(cu.centre || (typeof getEffectiveCentre === 'function' ? getEffectiveCentre() : 'CHD'));
+}
+function rebuildPatientsArrayFromGlobalCache() {
+  const cache = window._BMH_ALL_PATIENTS_CACHE;
+  if (!Array.isArray(cache)) return;
+  const want = effectivePatientListCentreScope();
+  PATIENTS.length = 0;
+  if (want == null) {
+    cache.forEach(function (p) { PATIENTS.push(p); });
+  } else {
+    cache.forEach(function (p) {
+      if (patientCentreKey(p.centre) === want) PATIENTS.push(p);
+    });
+  }
+}
+window.rebuildPatientsArrayFromGlobalCache = rebuildPatientsArrayFromGlobalCache;
 function formatDateDDMMYYYY(value) {
   if (!value) return '—';
   const d = String(value).includes('T') ? new Date(value) : new Date(String(value) + 'T12:00:00');
@@ -17188,6 +17274,13 @@ function normalizePatientRecord(p) {
   if (base) p.initials = computePatientInitials(base);
   return p;
 }
+/** True if patient is off the active queue (boolean seen, or status from Firebase). */
+function isPatientMarkedSeen(p) {
+  if (!p) return false;
+  if (p.seen === true || p.seen === 1) return true;
+  const st = String(p.status || '').toLowerCase();
+  return st === 'seen' || st === 'done';
+}
 function localDateKey(value) {
   const d = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(d.getTime())) return '';
@@ -17206,9 +17299,7 @@ function patientQueueDateMatchesToday(p) {
   });
   const stamps = [p.checkinAt, p.createdAt, p.seenAt, p.updatedAt, p.registeredAt, p.visitDate, p.queueDate, p.appointmentDate, p.dischargedAt].filter(Boolean);
   if (!stamps.length) {
-    // No date fields at all — show if clearly still in today’s active queue (matches reception behaviour)
-    if ((p.status === 'waiting' || p.status === 'pre-registered' || p.dilated || otDoneToday) && !p.seen) return true;
-    return false;
+    return !!otDoneToday;
   }
   const stampHit = stamps.some(function (raw) {
     const s = String(raw || '');
@@ -17218,10 +17309,23 @@ function patientQueueDateMatchesToday(p) {
     }
     return localDateKey(s) === todayKeyLocal || s.slice(0, 10) === todayKeyLocal;
   });
-  if (stampHit || otDoneToday) return true;
-  // Timestamps exist but none are “today” (sync lag / wrong field) — still show active queue patients
-  if (!p.seen && (p.status === 'waiting' || p.status === 'pre-registered' || p.dilated)) return true;
-  return false;
+  return !!(stampHit || otDoneToday);
+}
+function getTodayQueueBasePatients() {
+  const todayKeyLocal = localDateKey(new Date());
+  return PATIENTS.filter(function (p) {
+    if (!p || p.queueRemoved || String(p.status || '').toLowerCase() === 'removed') return false;
+    if (!centreMatch(p)) return false;
+    if (!patientQueueDateMatchesToday(p) && !(p.checkinAt && localDateKey(p.checkinAt) === todayKeyLocal)) return false;
+    return true;
+  });
+}
+/** Seen / done row belongs in “Done today” (same serial as active list). */
+function patientDoneQueueMatchesToday(p, todayKeyLocal) {
+  if (!isPatientMarkedSeen(p)) return false;
+  if (p.seenAt && localDateKey(p.seenAt) === todayKeyLocal) return true;
+  if (p.checkinAt && localDateKey(p.checkinAt) === todayKeyLocal) return true;
+  return patientQueueDateMatchesToday(p);
 }
 function buildPersistentHistoryDuration(rawDur, baseDate, referenceDate) {
   const durText = String(rawDur || '').trim();
@@ -17259,14 +17363,14 @@ function filterPatientsForUser() {
   // Update queue badge counts for centre
   const localPts = PATIENTS.filter(p => (p.centre||'CHD') === myCentre);
   const nb = document.getElementById('nb-dq');
-  if(nb) nb.textContent = localPts.filter(p=>!p.seen).length;
+  if(nb) nb.textContent = localPts.filter(p=>!isPatientMarkedSeen(p)).length;
   // For doctor: filter to own dept too
   if(CURRENT_USER.role === 'Doctor') {
     const deptMap = {Ophthalmology:'ophtho',OBG:'obg',Neuropsychiatry:'psych','Skin':'skin','Skin & Cosmetology':'skin'};
     const myDept = deptMap[CURRENT_USER.dept] || 'ophtho';
     const myPts = PATIENTS.filter(p => (p.centre||'CHD')===myCentre && p.dept===myDept);
     const nb2 = document.getElementById('nb-dq');
-    if(nb2) nb2.textContent = myPts.filter(p=>!p.seen).length;
+    if(nb2) nb2.textContent = myPts.filter(p=>!isPatientMarkedSeen(p)).length;
   }
 }
 
@@ -18520,7 +18624,11 @@ setTimeout(renderCollectionDashboard, 500);
 function savePatientToFirebase(patient) {
   if(!patient || !patient.bmhId) return;
   normalizePatientRecord(patient);
-  const centre = (CURRENT_USER?.centre==='RPR' || patient.centre==='RPR') ? 'RPR' : 'CHD';
+  const centreRaw = patient.centre
+    || (typeof getEffectiveCentre === 'function' ? getEffectiveCentre() : '')
+    || CURRENT_USER?.centre
+    || 'CHD';
+  const centre = patientCentreKey(centreRaw);
   const payload = {
     ...patient,
     centre,
@@ -18574,21 +18682,10 @@ function _debouncedRenderDash() {
 function loadPatientsFromFirebase() {
   if(window._bmhRtdbPatientsListening) return;
   window._bmhRtdbPatientsListening = true;
-  const cu = (typeof CURRENT_USER !== 'undefined' && CURRENT_USER) || window.CURRENT_USER;
-  const centre = cu?.centre;
-  const isAdmin = cu?.isAdmin || cu?.canSeeAllCentres || cu?.role === 'admin';
   fbOn('patients', data => {
     const all = data ? Object.values(data) : [];
-    if(isAdmin || cu?.canSeeAllCentres) {
-      PATIENTS.length = 0;
-      all.forEach(p => PATIENTS.push(normalizePatientRecord(p)));
-    } else {
-      PATIENTS.length = 0;
-      all.forEach(p => {
-        const pc = p.centre || 'CHD';
-        if(!centre || pc === centre) PATIENTS.push(normalizePatientRecord(p));
-      });
-    }
+    window._BMH_ALL_PATIENTS_CACHE = all.map(function (p) { return normalizePatientRecord(p); });
+    rebuildPatientsArrayFromGlobalCache();
     if(!_fbPatientsLoaded) {
       _fbPatientsLoaded = true;
       showToast('Connected to database ✓','s');
@@ -21767,8 +21864,8 @@ function renderDashboard() {
   const todaysVisiblePatients = PATIENTS.filter(function (p) {
     return centreMatch(p) && patientQueueDateMatchesToday(p);
   });
-  const todaySeen = todaysVisiblePatients.filter(function (p) { return !!p.seen; }).length;
-  const waiting = todaysVisiblePatients.filter(function (p) { return !p.seen && !p.queueRemoved; }).length;
+  const todaySeen = todaysVisiblePatients.filter(function (p) { return isPatientMarkedSeen(p); }).length;
+  const waiting = todaysVisiblePatients.filter(function (p) { return !isPatientMarkedSeen(p) && !p.queueRemoved; }).length;
   const txnDay = txnIsoDate;
   const txnOk = isCollectedTxn;
   const todayCollection = TRANSACTIONS.filter(t => txnDay(t) === today && txnOk(t)).reduce((s, t) => s + getNetTransactionAmount(t), 0);
@@ -21972,7 +22069,7 @@ function renderDashboard() {
     const todayPts = PATIENTS.filter(function (p) {
       return centreMatch(p) && normalizeDeptKeyForQueue(p.dept || '') === currentDeptKey && patientQueueDateMatchesToday(p);
     });
-    const checkedIn = todayPts.filter(function (p) { return !p.seen; }).length;
+    const checkedIn = todayPts.filter(function (p) { return !isPatientMarkedSeen(p); }).length;
     const newPts = todayPts.filter(function (p) { return localDateKey(p.createdAt || p.registeredAt || p.checkinAt) === today; }).length;
     const oldPts = Math.max(0, todayPts.length - newPts);
     let diagToday = 0;
@@ -22217,9 +22314,7 @@ function renderAdminDashboardDetail(selectedDate, selectedTxn, overduePts, surge
 
 // ── Today’s reception queue (dept filter, no sub-tab) ─────────
 function getReceptionBasePts() {
-  let pts = PATIENTS.filter(function (p) {
-    return (p.status === 'waiting' || p.status === 'pre-registered' || p.seen || p.dilated) && patientQueueDateMatchesToday(p) && centreMatch(p);
-  });
+  let pts = getTodayQueueBasePatients();
   const df = window._rcDeptFilter || 'all';
   if(df !== 'all') pts = pts.filter(p=>p.dept===df);
   return pts;
@@ -22228,8 +22323,8 @@ function getReceptionBasePts() {
 function computeReceptionQueuePts() {
   let pts = getReceptionBasePts();
   const sub = window._rcQueueSubtab || 'waiting';
-  if(sub === 'seen') pts = pts.filter(p=>p.seen);
-  else if(sub === 'waiting') pts = pts.filter(p=>!p.seen);
+  if(sub === 'seen') pts = pts.filter(p=>isPatientMarkedSeen(p));
+  else if(sub === 'waiting') pts = pts.filter(p=>!isPatientMarkedSeen(p));
   return pts;
 }
 
@@ -22246,7 +22341,7 @@ function renderReceptionPage() {
       const depts = [{k:'all',l:'All',icon:'🏥'},{k:'ophtho',l:'Eye',icon:'👁️'},{k:'obg',l:'OBG',icon:'🤰'},{k:'psych',l:'Psych',icon:'🧠'},{k:'skin',l:'Skin',icon:'💆'}];
       summaryEl.innerHTML = depts.map(d=>{
         const cnt = d.k==='all' ? basePts.length : basePts.filter(p=>p.dept===d.k).length;
-        const waiting = d.k==='all' ? basePts.filter(p=>!p.seen).length : basePts.filter(p=>p.dept===d.k&&!p.seen).length;
+        const waiting = d.k==='all' ? basePts.filter(p=>!isPatientMarkedSeen(p)).length : basePts.filter(p=>p.dept===d.k&&!isPatientMarkedSeen(p)).length;
         return `<button onclick="filterRcByDept('${d.k}')" style="flex:1;min-width:60px;background:#fff;border:1.5px solid var(--g4);border-radius:8px;padding:6px 8px;cursor:pointer;text-align:center">
           <div style="font-size:13px">${d.icon}</div>
           <div style="font-size:11px;font-weight:800">${cnt}</div>
@@ -22575,8 +22670,8 @@ function buildQCard(p, sno) {
       <div style="display:flex;gap:3px" onclick="event.stopPropagation()">
         ${p.preRegistered
           ? `<button title="Check In & Collect Fee" style="background:var(--blue);color:#fff;border:none;border-radius:5px;padding:2px 8px;font-size:9px;font-weight:800;cursor:pointer;line-height:1.6;animation:pulse 2s infinite" onclick="checkInPatient('${p.bmhId}')">✅ Check In</button>`
-          : `${!p.seen?`<button title="Mark Seen" style="background:var(--green);color:#fff;border:none;border-radius:5px;padding:2px 6px;font-size:9px;font-weight:800;cursor:pointer;line-height:1.4" onclick="markSeen('${p.bmhId}')">✓</button>`:''}
-        ${isOphtho&&!p.dilated?`<button title="Dilate" style="background:var(--blue-lt);color:var(--blue);border:1.5px solid var(--blue);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="markDilated('${p.bmhId}','${p.name.replace(/'/g,"\\'")}')">💧</button>`:''}
+          : `${!isPatientMarkedSeen(p)?`<button title="Mark Seen" style="background:var(--green);color:#fff;border:none;border-radius:5px;padding:2px 6px;font-size:9px;font-weight:800;cursor:pointer;line-height:1.4" onclick="markSeen('${p.bmhId}')">✓</button>`:''}
+        ${isOphtho&&!p.dilated&&!isPatientMarkedSeen(p)?`<button title="Dilate" style="background:var(--blue-lt);color:var(--blue);border:1.5px solid var(--blue);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="markDilated('${p.bmhId}','${p.name.replace(/'/g,"\\'")}')">💧</button>`:''}
         <button title="Cross-Refer" style="background:rgba(11,123,140,.1);color:var(--teal);border:1.5px solid var(--teal);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="openXRefModal('${p.bmhId}')">↔️</button>
         <button title="IPD" style="background:rgba(175,82,222,.1);color:var(--purple);border:1.5px solid var(--purple);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="openIPDFromQueue('${p.bmhId}')">🛏️</button>
         <button title="Add to OT" style="background:rgba(255,149,0,.1);color:var(--orange);border:1.5px solid var(--orange);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="openOTFromQueue('${p.bmhId}')">🔬</button>
@@ -22633,8 +22728,9 @@ function buildQTableRow(p, sno, opts) {
     : paidPRs.length || runningDue === 0
     ? `<span style="font-size:10px;color:#1a8c3c">Paid</span>${advLbl ? ' · ' + advLbl : ''}`
     : (advLbl || '');
-  const statusTxt = p.preRegistered ? 'Pre-reg' : p.seen ? 'Seen' : p.dilated ? 'Dilated' : 'Waiting';
-  const statusBg = p.preRegistered ? '#f0f0f0' : p.seen ? 'var(--green-lt)' : p.dilated ? 'var(--blue-lt)' : 'var(--orange-lt)';
+  const seenRow = isPatientMarkedSeen(p);
+  const statusTxt = p.preRegistered ? 'Pre-reg' : seenRow ? 'Seen' : p.dilated ? 'Dilated' : 'Waiting';
+  const statusBg = p.preRegistered ? '#f0f0f0' : seenRow ? 'var(--green-lt)' : p.dilated ? 'var(--blue-lt)' : 'var(--orange-lt)';
   const onRow = p.preRegistered ? `checkInPatient('${p.bmhId}')` : (receptionQueue ? `openReceptionPatient('${p.bmhId}')` : (p._xrefEntry ? `openPatientForDept('${p.bmhId}','${p.dept}')` : `openPatient('${p.bmhId}')`));
   const nmEsc = (p.name||'').replace(/'/g,"\\'");
   const docShort = (p.assignedDoctor || p.doctor || '—').replace(/^Dr\.\s*/,'');
@@ -22656,8 +22752,8 @@ function buildQTableRow(p, sno, opts) {
     <td class="q-actions" onclick="event.stopPropagation()">
       ${p.preRegistered
         ? `<button type="button" title="Check In" style="background:var(--blue);color:#fff;border:none;border-radius:5px;padding:3px 8px;font-size:9px;font-weight:800;cursor:pointer" onclick="checkInPatient('${p.bmhId}')">Check in</button>`
-        : `${!p.seen?`<button type="button" title="Seen" style="background:var(--green);color:#fff;border:none;border-radius:5px;padding:3px 6px;font-size:9px;font-weight:800;cursor:pointer" onclick="markSeen('${p.bmhId}')">✓</button>`:''}
-      ${isOphtho&&!p.dilated&&!p.seen?`<button type="button" title="Dilate" style="background:var(--blue-lt);color:var(--blue);border:1.5px solid var(--blue);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="markDilated('${p.bmhId}','${nmEsc}')">💧</button>`:''}
+        : `${!seenRow?`<button type="button" title="Seen" style="background:var(--green);color:#fff;border:none;border-radius:5px;padding:3px 6px;font-size:9px;font-weight:800;cursor:pointer" onclick="markSeen('${p.bmhId}')">✓</button>`:''}
+      ${isOphtho&&!p.dilated&&!seenRow?`<button type="button" title="Dilate" style="background:var(--blue-lt);color:var(--blue);border:1.5px solid var(--blue);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="markDilated('${p.bmhId}','${nmEsc}')">💧</button>`:''}
       ${receptionQueue ? `<button type="button" title="Restore to doctor queue" style="background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1.5px solid var(--bmh-blue);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="event.stopPropagation();restorePatientToDoctorQueue('${p.bmhId}')">↩</button>` : ''}
       <button type="button" title="Cross-ref" style="background:rgba(11,123,140,.1);color:var(--teal);border:1.5px solid var(--teal);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="openXRefModal('${p.bmhId}')">↔️</button>
       <button type="button" title="IPD" style="background:rgba(175,82,222,.1);color:var(--purple);border:1.5px solid var(--purple);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="openIPDFromQueue('${p.bmhId}')">🛏️</button>
@@ -22992,31 +23088,7 @@ function renderDocQueue() {
   }
   const searchQ = String(document.getElementById('dq-search')?.value || '').trim().toLowerCase();
   // Use the same "today's visible queue" basis as Reception, then narrow by department for doctors.
-  const queueBasePts = PATIENTS.filter(function (p) {
-    if (!p || p.queueRemoved || p.status === 'removed') return false;
-    const otCompletedToday = (window.OT_CASES || OT_CASES || []).some(function (c) {
-      return c && c.bmhId === p.bmhId && String(c.status || '').toLowerCase() === 'completed'
-        && localDateKey(c.date || c.surgeryDate || c.otDate || c.updatedAt || c.createdAt) === todayKeyLocal;
-    });
-    const visibleStatus =
-      p.status === 'waiting' ||
-      p.status === 'pre-registered' ||
-      p.status === 'ipd' ||
-      p.status === 'ot' ||
-      p.status === 'ot-listed' ||
-      p.status === 'scheduled' ||
-      p.status === 'completed' ||
-      p.status === 'discharged' ||
-      p.seen ||
-      p.dilated ||
-      !!p.otCaseId ||
-      !!p.ipdAdmitted ||
-      otCompletedToday;
-    if (!visibleStatus) return false;
-    if (!patientQueueDateMatchesToday(p) && !(p.checkinAt && localDateKey(p.checkinAt) === todayKeyLocal)) return false;
-    // Doctor queue: show today’s patients from all centres (centre toggle only affects billing/reception tools).
-    return true;
-  });
+  const queueBasePts = getTodayQueueBasePatients();
   const myPts = (() => {
     if (CURRENT_USER?.isAdmin || CURRENT_USER?.role === 'Reception') {
       return adminDeptFilter === 'all'
@@ -23036,13 +23108,17 @@ function renderDocQueue() {
         deptPts.push(Object.assign({}, p, {
           dept: xref.toDept,
           doctor: xref.toDoctor || p.doctor,
-          status: p.seen ? 'seen' : 'waiting',
+          status: isPatientMarkedSeen(p) ? 'seen' : 'waiting',
           _xrefEntry: true,
           _queueKey: p.bmhId + '::' + (xref.id || (xref.toDept + '::' + (xref.toDoctor || '')))
         }));
       });
     });
-    return deptPts;
+    if (deptPts.length) return deptPts;
+    return queueBasePts.filter(function (p) {
+      const ptDept = normalizeDeptKeyForQueue(p.dept || p.department || '');
+      return !userDept || ptDept === userDept || (!ptDept && userDept === 'ophtho');
+    });
   })();
   const filteredPts = searchQ ? myPts.filter(function (p) {
     const hay = [
@@ -23060,10 +23136,10 @@ function renderDocQueue() {
 
   // Active list keeps all waiting patients visible; dilated patients also remain in dedicated dilated queue.
   const serialMap = new Map(filteredPts.map(function (p, idx) { return [p._queueKey || p.bmhId, idx + 1]; }));
-  const active  = filteredPts.filter(p => !p.seen);
-  const dilated = filteredPts.filter(p => p.dilated && !p.seen);
+  const active  = filteredPts.filter(function (p) { return !isPatientMarkedSeen(p); });
+  const dilated = filteredPts.filter(function (p) { return p.dilated && !isPatientMarkedSeen(p); });
   const done    = filteredPts.filter(function (p) {
-    return p.seen && localDateKey(p.seenAt || p.checkinAt || p.createdAt) === todayKeyLocal;
+    return patientDoneQueueMatchesToday(p, todayKeyLocal);
   });
   const xrefs   = (window.XREF_LOG||[]).filter(x => !effectiveQueueDept || x.fromDept===effectiveQueueDept || x.toDept===effectiveQueueDept);
   const ipdPts  = (window.IPD_PATIENTS||[]).filter(p => {
