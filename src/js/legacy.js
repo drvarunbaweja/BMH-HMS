@@ -12429,9 +12429,11 @@ function toggleInsField() {
   const mode = document.getElementById('rc-pay-mode')?.value;
   const f1 = document.getElementById('rc-ins-field');
   const f2 = document.getElementById('rc-ins-policy');
+  const f3 = document.getElementById('rc-ins-claimed');
   const show = mode==='Insurance/TPA'||mode==='PMJAY / Ayushman'||mode==='CGHS/ECHS';
   if(f1) f1.style.display = show?'flex':'none';
   if(f2) f2.style.display = show?'flex':'none';
+  if(f3) f3.style.display = show?'flex':'none';
 }
 function toggleRecInsField() {
   const mode = document.getElementById('rec-pay-mode-final')?.value;
@@ -13016,6 +13018,7 @@ async function registerPatient() {
   const refMobile = document.getElementById('rc-ref-mobile')?.value?.trim() || '';
   const insName = normalizeReceptionFieldValue('rc-ins-name', document.getElementById('rc-ins-name')?.value||'');
   const policyNo = (document.getElementById('rc-policy')?.value || '').trim();
+  const claimAmountInput = Math.max(0, Number(document.getElementById('rc-claim-amt')?.value || 0));
   patient.checkinAt = Date.now();
   patient.purpose = purpose;
   patient.refType = refType;
@@ -13065,12 +13068,14 @@ async function registerPatient() {
 
   if(isInsurance) {
     const claimId = 'TPA'+Date.now();
-    const claim = {id:claimId, patient:name, bmhId:uid, for:purpose, amount:fee, approvedAmount:fee, claimedAmount:fee, status:'pending', mode:payMode, ins:insName||payMode, policy:policyNo, dept, centre, date:new Date().toISOString(), from:'Reception'};
+    const claimAmount = Math.max(claimAmountInput, Number(fee || 0));
+    const claim = {id:claimId, patient:name, bmhId:uid, for:purpose, amount:claimAmount, approvedAmount:claimAmount, claimedAmount:claimAmount, status:'pending', mode:payMode, ins:insName||payMode, policy:policyNo, dept, centre, date:new Date().toISOString(), from:'Reception'};
     PAY_REQUESTS.push(claim);
     fbSet&&fbSet('payRequests/'+claimId, claim);
     addBmhPatientCharge(uid, { id: 'chg-' + claimId, cat: inferChargeCategoryFromService(purpose), desc: purpose, qty: 1, rate: fee, amount: fee, source: 'reception', ref: claimId, ts: claim.date });
     patient.ins = insName||payMode;
     patient.policy = policyNo || patient.policy || '';
+    patient.claimedAmount = claimAmount;
     patient.balance = Math.max(Number(patient.balance || 0), Number(fee || 0));
     showToast(`🏦 TPA/Insurance patient — claim pending ₹${fee.toLocaleString('en-IN')}`,'i');
   } else if(isCreditDue) {
@@ -13183,7 +13188,7 @@ window.addEventListener('bmh:patientsUpdated', () => {
 });
 
 function resetRegistrationForm() {
-  ['rc-fn','rc-ln','rc-rel','rc-age','rc-addr','rc-dob','rc-mob-inp','rc-mob2','rc-email','rc-bmhid-search','rc-ref-name','rc-ref-mobile','rc-ins-name','rc-policy','rc-advance-amt','rc-advance-purpose'].forEach(id=>{
+  ['rc-fn','rc-ln','rc-rel','rc-age','rc-addr','rc-dob','rc-mob-inp','rc-mob2','rc-email','rc-bmhid-search','rc-ref-name','rc-ref-mobile','rc-ins-name','rc-policy','rc-claim-amt','rc-advance-amt','rc-advance-purpose'].forEach(id=>{
     const e=document.getElementById(id);
     if(e){ e.value = ''; }
   });
@@ -13198,6 +13203,7 @@ function resetRegistrationForm() {
   const refDetail=document.getElementById('rc-ref-detail'); if(refDetail) refDetail.style.display='none';
   const insField=document.getElementById('rc-ins-field'); if(insField) insField.style.display='none';
   const insPolicy=document.getElementById('rc-ins-policy'); if(insPolicy) insPolicy.style.display='none';
+  const insClaim=document.getElementById('rc-ins-claimed'); if(insClaim) insClaim.style.display='none';
   const surgPanel=document.getElementById('rc-surgery-panel'); if(surgPanel) surgPanel.style.display='none';
   updateRcDr && updateRcDr();
   updatePurposeOptions && updatePurposeOptions();
@@ -24188,6 +24194,10 @@ function openEditPatientModal(bmhId) {
   setVal('upd-advance-purpose', p.advancePurpose || '');
   setVal('upd-ins-name', p.ins || '');
   setVal('upd-policy', p.policy || '');
+  const existingClaim = (PAY_REQUESTS || []).find(function (r) {
+    return r.bmhId === bid && isInsuranceLikeMode(r.mode || r.ins || '');
+  });
+  setVal('upd-claim-amt', existingClaim?.claimedAmount != null ? existingClaim.claimedAmount : (p.claimedAmount || ''));
   const updPayMode = document.getElementById('upd-pay-mode');
   if (updPayMode) updPayMode.value = isInsuranceLikeMode(p.ins || p.policy || '') ? (p.ins || 'Insurance/TPA') : 'Cash';
   const noFeeEl = document.getElementById('upd-no-fee'); if (noFeeEl) noFeeEl.checked = !!p.consultationNoFee;
@@ -24216,6 +24226,7 @@ function saveUpdatedPatientDetails() {
   const payMode = document.getElementById('upd-pay-mode')?.value || 'Cash';
   const insName = normalizeReceptionFieldValue('upd-ins-name', document.getElementById('upd-ins-name')?.value?.trim() || '');
   const policyNo = (document.getElementById('upd-policy')?.value || '').trim();
+  const claimedAmountInput = Math.max(0, Number(document.getElementById('upd-claim-amt')?.value || 0));
   const consultationFee = Math.max(0, parseFloat(document.getElementById('upd-fee')?.value || p.consultationFee || 0) || 0);
   const advanceAmt = Math.max(0, parseFloat(document.getElementById('upd-advance-amt')?.value || p.advance || 0) || 0);
   const advancePurpose = normalizeReceptionFieldValue('upd-advance-purpose', document.getElementById('upd-advance-purpose')?.value?.trim()||'');
@@ -24239,6 +24250,7 @@ function saveUpdatedPatientDetails() {
     consultationNoFee: noFee,
     ins: isInsuranceLikeMode(payMode || insName) ? (insName || payMode) : '',
     policy: policyNo,
+    claimedAmount: isInsuranceLikeMode(payMode || insName) ? claimedAmountInput : 0,
     advance: advanceAmt,
     advancePurpose: advancePurpose || (advanceAmt > 0 ? 'Advance on account' : ''),
     updatedAt: nowIso
@@ -24280,6 +24292,7 @@ function saveUpdatedPatientDetails() {
     const currentSummary = typeof bmhGetPatientFinancialSummary === 'function' ? bmhGetPatientFinancialSummary(bid) : null;
     const claimAmount = Math.max(
       0,
+      claimedAmountInput,
       Number(existingClaim?.claimedAmount || 0),
       Number(existingClaim?.amount || 0),
       Number(currentSummary?.balance || 0),
