@@ -7009,10 +7009,26 @@ function bmhTotalReceivedForCategories(bmhId, categories) {
   return (TRANSACTIONS || [])
     .filter(function (t) {
       if (t.bmhId !== bmhId || t.collected === false) return false;
+      if (Array.isArray(t.billCats) && t.billCats.length) {
+        return t.billCats.map(function (c) { return String(c || '').toLowerCase(); }).some(function (c) { return cats.includes(c); });
+      }
+      if (String(t.type || '').toLowerCase() === 'billing-payment' || String(t.source || '').toLowerCase() === 'billing') return true;
       const inferred = String(inferChargeCategoryFromService(t.service || t.for || t.desc || '') || 'other').toLowerCase();
       return cats.includes(inferred);
     })
     .reduce(function (s, t) { return s + Math.max(0, Number(t.amount) || 0); }, 0);
+}
+function bmhTransactionMatchesBillContext(t, ctx) {
+  if (!t || t.collected === false) return false;
+  const activeCats = Array.isArray(ctx?.activeCats) ? ctx.activeCats.map(function (c) { return String(c || '').toLowerCase(); }) : [];
+  if (Array.isArray(t.billCats) && t.billCats.length) {
+    const txnCats = t.billCats.map(function (c) { return String(c || '').toLowerCase(); });
+    return !activeCats.length || txnCats.some(function (c) { return activeCats.includes(c); });
+  }
+  if (String(t.type || '').toLowerCase() === 'billing-payment' || String(t.source || '').toLowerCase() === 'billing') return true;
+  const inferred = String(inferChargeCategoryFromService(t.service || t.for || t.desc || '') || 'other').toLowerCase();
+  if (ctx?.excludedSettledConsultation) return inferred !== 'consultation';
+  return !activeCats.length || activeCats.includes(inferred);
 }
 function bmhGetEffectiveBillContext(bmhId) {
   const lines = (window.BMH_PATIENT_CHARGES[bmhId] || []).slice();
@@ -7031,13 +7047,10 @@ function bmhGetEffectiveBillContext(bmhId) {
   const excludeSettledConsultation = nonConsultationLines.length > 0 && consultationChargeTotal > 0 && consultationReceived >= consultationChargeTotal;
   const effectiveLines = excludeSettledConsultation ? nonConsultationLines : lines;
   const activeCats = categories(effectiveLines);
-  const effectiveReceived = excludeSettledConsultation
-    ? (TRANSACTIONS || []).filter(function (t) {
-        if (t.bmhId !== bmhId || t.collected === false) return false;
-        const inferred = String(inferChargeCategoryFromService(t.service || t.for || t.desc || '') || 'other').toLowerCase();
-        return inferred !== 'consultation';
-      }).reduce(function (s, t) { return s + Math.max(0, Number(t.amount) || 0); }, 0)
-    : bmhTotalReceivedForCategories(bmhId, activeCats);
+  const effectiveCtx = { activeCats: activeCats, excludedSettledConsultation: excludeSettledConsultation };
+  const effectiveReceived = (TRANSACTIONS || []).filter(function (t) {
+    return t.bmhId === bmhId && bmhTransactionMatchesBillContext(t, effectiveCtx);
+  }).reduce(function (s, t) { return s + Math.max(0, Number(t.amount) || 0); }, 0);
   const chargeTotal = effectiveLines.reduce(function (s, line) { return s + (Number(line.amount) || 0); }, 0);
   return {
     allLines: lines,
@@ -7819,6 +7832,7 @@ function printBmhPatientBill(bmhIdOpt) {
   if (!bmhId) { showToast('Select a patient', 'w'); return; }
   const info = bmhGetPatientFinancialSummary(bmhId);
   const p = info.patient || {};
+  const centre = String(p.centre || CURRENT_USER?.centre || 'CHD').toUpperCase();
   const billContext = bmhGetEffectiveBillContext(bmhId);
   const lines = billContext.lines;
   const { sub, total, discount, advanceApplied, taxable } = bmhTotalsForPatient(bmhId);
@@ -7826,6 +7840,12 @@ function printBmhPatientBill(bmhIdOpt) {
   const today = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
   const timeStr = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
   const logoSrc = typeof resolvePrintLogoSrc === 'function' ? resolvePrintLogoSrc() : '';
+  const hospitalName = getHospitalDetailValue('Hospital Name', 'Baweja Multispeciality Hospital');
+  const hospitalAddress = centre === 'RPR'
+    ? getHospitalDetailValue('Ropar Address', '1571/39, Opp. Civil Hospital, Preet Colony, Rupnagar, Punjab 140001')
+    : getHospitalDetailValue('Chandigarh Address', 'SCO #100, Near Delhi Public School, Sector 40C, Chandigarh 160036');
+  const hospitalPhone = getHospitalDetailValue('Phone', '+91-81466 22802');
+  const hospitalEmail = getHospitalDetailValue('Email', 'info@bawejahospital.com');
   const byCat = {};
   lines.forEach(l => { const c = l.cat || 'other'; if (!byCat[c]) byCat[c] = []; byCat[c].push(l); });
   const esc = (s) => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
@@ -7841,13 +7861,7 @@ function printBmhPatientBill(bmhIdOpt) {
   const relevantReceived = Number(billContext.received || 0);
   const dueAmt = Math.max(0, Math.max(0, Number(taxable != null ? taxable : total) || 0) - relevantReceived);
   const payLines = (TRANSACTIONS || []).filter(function (t) {
-    if (t.bmhId !== bmhId || t.collected === false) return false;
-    if (billContext.excludedSettledConsultation) {
-      const inferred = String(inferChargeCategoryFromService(t.service || t.for || t.desc || '') || 'other').toLowerCase();
-      return inferred !== 'consultation';
-    }
-    const inferred = String(inferChargeCategoryFromService(t.service || t.for || t.desc || '') || 'other').toLowerCase();
-    return !billContext.activeCats.length || billContext.activeCats.includes(inferred);
+    return t.bmhId === bmhId && bmhTransactionMatchesBillContext(t, billContext);
   }).slice(-6).map(t => `<div style="display:flex;justify-content:space-between;font-size:9.5px;padding:3px 0;border-bottom:1px dashed #e0e4ec"><span>${esc(t.service || 'Payment')} · ${esc(t.mode || '')}</span><span style="font-weight:800;color:#1a8c3c">₹${(Number(t.amount)||0).toLocaleString('en-IN')}</span></div>`).join('');
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Receipt — ${esc(p.name || '')}</title><style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
@@ -7882,8 +7896,8 @@ th:last-child{text-align:right}
 <div class="brand">
   ${logoSrc ? `<img src="${logoSrc}" class="brand-logo" alt="BMH">` : ''}
   <div class="brand-copy">
-    <h1>Baweja Multispeciality Hospital</h1>
-    <div class="brand-meta">SCO 138–139, Sector 33C, Chandigarh · 168 &amp; 169, Urban Estate Phase II, Ropar<br>Phone: +91-81466 22802 · E-mail: info@bawejahospital.com</div>
+    <h1>${esc(hospitalName)}</h1>
+    <div class="brand-meta">${esc(hospitalAddress)}<br>Phone: ${esc(hospitalPhone)}${hospitalEmail ? ' · E-mail: ' + esc(hospitalEmail) : ''}</div>
   </div>
 </div>
 <div class="rcp">
@@ -7924,8 +7938,28 @@ function bmhRecordPatientPayment() {
   const policy = document.getElementById('bmh-pay-policy')?.value?.trim() || '';
   const insurerDue = Math.max(0, Number(document.getElementById('bmh-pay-insurer-due')?.value || 0));
   const pt = PATIENTS.find(p => p.bmhId === bmhId);
+  const billCtx = bmhGetEffectiveBillContext(bmhId);
   const txnId = 'TXN' + Date.now();
-  const txn = { id: txnId, patient: pt?.name || bmhId, bmhId, service: 'Billing payment', amount: amt, mode, collected: true, paymentRef: ref, ins: insName, policy, dept: pt?.dept || 'ophtho', time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }), date: new Date().toISOString(), centre: pt?.centre || CURRENT_USER?.centre || 'CHD', createdBy: CURRENT_USER?.name || 'Billing' };
+  const txn = {
+    id: txnId,
+    patient: pt?.name || bmhId,
+    bmhId,
+    service: 'Billing payment',
+    amount: amt,
+    mode,
+    collected: true,
+    paymentRef: ref,
+    ins: insName,
+    policy,
+    dept: pt?.dept || 'ophtho',
+    time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+    date: new Date().toISOString(),
+    centre: pt?.centre || CURRENT_USER?.centre || 'CHD',
+    createdBy: CURRENT_USER?.name || 'Billing',
+    source: 'billing',
+    type: 'billing-payment',
+    billCats: (billCtx.activeCats || []).slice()
+  };
   TRANSACTIONS.push(txn);
   saveTransactionToFirebase && saveTransactionToFirebase(txn);
   if (insurerDue > 0) {
