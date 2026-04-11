@@ -18686,10 +18686,7 @@ function buildRxPlainInstructionLine(d, lang, fmtIN) {
       line = 'Take ' + rxOralDosePhraseEn(d) + ' ' + freq + ' for ' + dur + ', from ' + df + ' to ' + dt + '.';
     }
   }
-  const timingSource = Array.isArray(d.activeTimes) && d.activeTimes.length
-    ? d.activeTimes
-    : (Array.isArray(d.times) && d.times.length ? d.times : []);
-  const timings = timingSource.filter(Boolean).join(' · ');
+  const timings = getRxTimingsText(d);
   if (timings) {
     if (lang === 'hi') line += ' समय: ' + timings + '।';
     else if (lang === 'pa') line += ' ਸਮਾਂ: ' + timings + '।';
@@ -18710,15 +18707,16 @@ function getRxTimingsText(d) {
     : (Array.isArray(d.times) && d.times.length ? d.times : []);
   if (explicit.length) return explicit.join(' · ');
   const freq = String(d.freq || '').toLowerCase();
-  if (/hourly/.test(freq)) return 'Hourly';
-  if (/every 2 hours/.test(freq)) return '6am · 8am · 10am · 12pm · 2pm · 4pm · 6pm · 8pm';
-  if (/every 3 hours/.test(freq)) return '6am · 9am · 12pm · 3pm · 6pm · 9pm';
-  if (/every 4 hours/.test(freq)) return '6am · 10am · 2pm · 6pm · 10pm';
-  if (/6 times|6x/.test(freq)) return '6am · 10am · 2pm · 6pm · 8pm · 10pm';
-  if (/4 times|qid/.test(freq)) return '6am · 12pm · 6pm · 10pm';
+  if (/half-hourly/.test(freq)) return '8am onward every 30 min';
+  if (/hourly/.test(freq)) return '8am onward hourly';
+  if (/every 2 hours/.test(freq)) return '8am · 10am · 12pm · 2pm · 4pm · 6pm · 8pm · 10pm';
+  if (/every 3 hours/.test(freq)) return '8am · 11am · 2pm · 5pm · 8pm';
+  if (/every 4 hours/.test(freq)) return '8am · 12pm · 4pm · 8pm';
+  if (/6 times|6x/.test(freq)) return '8am · 10am · 12pm · 2pm · 6pm · 10pm';
+  if (/4 times|qid/.test(freq)) return '8am · 12pm · 4pm · 8pm';
   if (/3 times|tds/.test(freq)) return '8am · 2pm · 8pm';
   if (/twice|bd/.test(freq)) return '8am · 8pm';
-  if (/once daily|od/.test(freq)) return '9am';
+  if (/once daily|od/.test(freq)) return '8am';
   if (/bedtime|hs/.test(freq)) return '10pm';
   if (/once weekly/.test(freq)) return 'Once Weekly';
   if (/prn|as needed/.test(freq)) return 'As Needed';
