@@ -7211,7 +7211,9 @@ function bmhGetPatientFinancialSummary(bmhId) {
   const chargeTotal = billContext.chargeTotal;
   const paidTotal = billContext.received;
   const advanceTotal = txns.filter(t => t.type === 'advance' || /advance/i.test(t.service || '')).reduce((s, t) => s + Math.max(0, Number(t.amount) || 0), 0);
-  const pendingTotal = payRequests.filter(r => r.status === 'pending').reduce((s, r) => s + Math.max(0, Number(r.amount) || 0), 0);
+  const pendingTotal = payRequests.filter(function (r) {
+    return r.status === 'pending' && !isInsuranceLikeMode(r.mode || r.ins || '');
+  }).reduce((s, r) => s + Math.max(0, Number(r.amount) || 0), 0);
   const balance = Math.max(Math.max(0, Number(patient.balance) || 0), Math.max(0, chargeTotal - paidTotal));
   const timeline = [];
 
@@ -7288,7 +7290,7 @@ function bmhRenderPatientFinancialSummary() {
       <div style="background:var(--g6);border-radius:8px;padding:10px"><div style="font-size:10px;color:var(--g1);font-weight:800;text-transform:uppercase">Charge total</div><div style="font-size:18px;font-weight:900;color:var(--bmh-blue)">${fmt(info.chargeTotal)}</div></div>
       <div style="background:var(--green-lt);border-radius:8px;padding:10px"><div style="font-size:10px;color:#1a8c3c;font-weight:800;text-transform:uppercase">Received</div><div style="font-size:18px;font-weight:900;color:#1a8c3c">${fmt(info.paidTotal)}</div></div>
       <div style="background:var(--blue-lt);border-radius:8px;padding:10px"><div style="font-size:10px;color:var(--blue);font-weight:800;text-transform:uppercase">Advance</div><div style="font-size:18px;font-weight:900;color:var(--blue)">${fmt(info.advanceTotal)}</div></div>
-      <div style="background:var(--orange-lt);border-radius:8px;padding:10px"><div style="font-size:10px;color:#8a4200;font-weight:800;text-transform:uppercase">Outstanding</div><div style="font-size:18px;font-weight:900;color:#8a4200">${fmt(Math.max(info.pendingTotal, info.balance))}</div></div>
+      <div style="background:var(--orange-lt);border-radius:8px;padding:10px"><div style="font-size:10px;color:#8a4200;font-weight:800;text-transform:uppercase">Outstanding</div><div style="font-size:18px;font-weight:900;color:#8a4200">${fmt(info.balance)}</div></div>
     </div>
     <div style="background:var(--g6);border-radius:8px;padding:12px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
@@ -7900,6 +7902,33 @@ function bmhRecordPatientPayment() {
   }
   const updatedDue = bmhSyncPatientRunningBalance(bmhId);
   if (pt) pt.balance = updatedDue;
+  const pendingNonInsurance = (PAY_REQUESTS || []).filter(function (r) {
+    return r.bmhId === bmhId && r.status === 'pending' && !isInsuranceLikeMode(r.mode || r.ins || '');
+  }).sort(function (a, b) { return new Date(a.date || 0) - new Date(b.date || 0); });
+  if (pendingNonInsurance.length) {
+    let remaining = Math.max(0, updatedDue);
+    pendingNonInsurance.forEach(function (pr) {
+      if (remaining <= 0) {
+        pr.status = 'paid';
+        pr.amount = 0;
+      } else {
+        const amtDue = Math.max(0, Number(pr.amount || 0));
+        const nextAmt = Math.min(amtDue, remaining);
+        pr.amount = nextAmt;
+        pr.status = nextAmt > 0 ? 'pending' : 'paid';
+        remaining = Math.max(0, remaining - nextAmt);
+      }
+      try {
+        if (window.firebase && firebase.database) {
+          firebase.database().ref('payRequests/' + pr.id).update({
+            amount: Number(pr.amount || 0),
+            status: pr.status,
+            updatedAt: new Date().toISOString()
+          });
+        }
+      } catch (e) {}
+    });
+  }
   bmhAppendLedger({ date: new Date().toISOString(), type: 'Receipt', narration: 'Patient payment (' + mode + ')', dr: 0, cr: amt, party: pt?.name || bmhId, ref: ref || mode });
   saveBmhFinancials();
   const pi = document.getElementById('bmh-pay-amt'); if (pi) pi.value = '';
@@ -8233,12 +8262,54 @@ function findInventoryNameInText(text) {
     .sort(function (a, b) { return b.length - a.length; });
   const hit = allNames.find(function (name) { return raw.includes(name.toLowerCase()); });
   if (hit) return hit;
+  const iolCatalogHit = (IOL_CATALOG || []).map(function (row) { return String(row.name || '').trim(); }).filter(Boolean)
+    .sort(function (a, b) { return b.length - a.length; })
+    .find(function (name) { return raw.includes(name.toLowerCase()); });
+  if (iolCatalogHit) return iolCatalogHit;
   const lines = String(text || '').split(/\n+/).map(function (line) { return line.trim(); }).filter(Boolean);
   return lines.find(function (line) {
     return /drop|inj|injection|tab|capsule|cream|gel|iol|lactate|dns|glove|syringe|cannula|suture|kit|serum|vaccine/i.test(line)
       && !/invoice|bill|gst|phone|mob|amount|total|qty|quantity|vendor/i.test(line);
   }) || '';
 }
+function findInventoryCandidatesFromText(text, limit) {
+  const raw = String(text || '').toLowerCase().replace(/[^a-z0-9.+\s-]/g, ' ');
+  const terms = Array.from(new Set(raw.split(/\s+/).map(function (t) { return t.trim(); }).filter(function (t) { return t.length >= 3; })));
+  if (!terms.length) return [];
+  const pool = []
+    .concat((INVENTORY || []).map(function (item) { return { name: String(item.name || '').trim(), source: 'inventory' }; }))
+    .concat((IOL_CATALOG || []).map(function (row) { return { name: String(row.name || '').trim(), source: 'iol' }; }));
+  const seen = new Set();
+  return pool.map(function (entry) {
+      const name = String(entry.name || '').trim();
+      const low = name.toLowerCase();
+      if (!name || seen.has(low)) return null;
+      seen.add(low);
+      let score = 0;
+      terms.forEach(function (term) {
+        if (low.includes(term)) score += term.length >= 5 ? 4 : 2;
+        if (low.startsWith(term)) score += 2;
+      });
+      if (/\+\d+(\.\d+)?d/i.test(raw) && /\+\d+(\.\d+)?d/i.test(low)) {
+        const wantedPower = (raw.match(/\+\d+(\.\d+)?d/i) || [''])[0];
+        if (wantedPower && low.includes(wantedPower)) score += 6;
+      }
+      return score > 0 ? { name: name, score: score, source: entry.source } : null;
+    })
+    .filter(Boolean)
+    .sort(function (a, b) { return b.score - a.score || a.name.localeCompare(b.name); })
+    .slice(0, Math.max(1, Number(limit || 5)));
+}
+function applyInventorySuggestedCandidate(mode, name) {
+  const fieldId = mode === 'use' ? 'bc-use' : 'bc-in';
+  const el = document.getElementById(fieldId);
+  if (el) el.value = name || '';
+  if (mode === 'use') {
+    const preview = document.getElementById('inv-import-preview-use');
+    if (preview) preview.innerHTML += `<div style="margin-top:8px;color:#1a8c3c;font-weight:700">Selected: ${escapeHtmlConsent(name || '')}</div>`;
+  }
+}
+window.applyInventorySuggestedCandidate = applyInventorySuggestedCandidate;
 function parseInventoryImportText(text) {
   const flat = String(text || '').replace(/\s+/g, ' ').trim();
   const lines = String(text || '').split(/\n+/).map(function (line) { return line.trim(); }).filter(Boolean);
@@ -8276,7 +8347,13 @@ function renderInventoryImportReview(parsed, mode, text) {
   if (parsed.amount) bits.push('Amount: <strong>₹' + Number(parsed.amount).toLocaleString('en-IN') + '</strong>');
   if (parsed.batchNo) bits.push('Batch: <strong>' + escapeHtmlConsent(parsed.batchNo) + '</strong>');
   if (parsed.serialNo) bits.push('Serial: <strong>' + escapeHtmlConsent(parsed.serialNo) + '</strong>');
-  setInventoryImportPreview(mode, bits.length ? bits.join(' · ') : 'No clear fields detected automatically. Please review manually.');
+  const candidates = findInventoryCandidatesFromText(text || parsed.itemName || '', 5);
+  const candidateHtml = candidates.length
+    ? `<div style="margin-top:8px"><div style="font-size:10px;font-weight:800;color:var(--bmh-blue);text-transform:uppercase;margin-bottom:6px">Suggested stock match</div><div style="display:flex;gap:6px;flex-wrap:wrap">${candidates.map(function (entry) {
+        return `<button type="button" class="btn btn-xs btn-outline" onclick="applyInventorySuggestedCandidate('${mode}','${String(entry.name).replace(/'/g, "\\'")}')">${escapeHtmlConsent(entry.name)}</button>`;
+      }).join('')}</div></div>`
+    : '';
+  setInventoryImportPreview(mode, (bits.length ? bits.join(' · ') : 'No clear fields detected automatically. Please review manually.') + candidateHtml);
   const ta = document.getElementById('inv-ocr-text');
   if (ta && text) ta.value = text;
 }
@@ -8340,6 +8417,7 @@ async function handleInventoryImportFile(mode, inp) {
   setInventoryImportPreview(mode, '');
   try {
     let text = '';
+    const fileNameHint = String(file.name || '').replace(/\.[a-z0-9]+$/i, '').replace(/[_-]+/g, ' ');
     if (/pdf/i.test(file.type || '') || /\.pdf$/i.test(file.name || '')) {
       text = await extractInventoryTextFromPdfFile(file);
     } else {
@@ -8351,9 +8429,14 @@ async function handleInventoryImportFile(mode, inp) {
       });
       text = await extractInventoryTextFromImageDataUrl(dataUrl);
     }
-    const parsed = parseInventoryImportText(text);
+    const combinedText = (text + '\n' + fileNameHint).trim();
+    const parsed = parseInventoryImportText(combinedText);
+    if (!parsed.itemName) {
+      const topMatch = findInventoryCandidatesFromText(combinedText, 1)[0];
+      if (topMatch) parsed.itemName = topMatch.name;
+    }
     applyInventoryParsedData(parsed, mode);
-    renderInventoryImportReview(parsed, mode, text);
+    renderInventoryImportReview(parsed, mode, combinedText);
     setInventoryImportStatus(mode, 'OCR complete. Please review the populated fields before saving.', '#1a8c3c');
     if (mode === 'ocr') {
       const tabBtn = Array.from(document.querySelectorAll('#pg-inventory .ptab')).find(function (el) { return String(el.textContent || '').includes('Photo / OCR'); });
@@ -13713,7 +13796,7 @@ function saveTPAReceipt(prId) {
   pr.utr = utr;
   pr.notes = notes;
   pr.patientDue = patientDue;
-  if (amt > 0) pr.status = 'paid';
+  if (amt > 0) pr.status = amt >= Math.max(0, claimedAmount || pr.amount || 0) ? 'paid' : 'partial';
   const pt = PATIENTS.find(function (p) { return p.bmhId === pr.bmhId; });
   if (pt) {
     pt.ins = pr.ins || pr.mode || pt.ins || '';
@@ -23693,6 +23776,10 @@ function openEditPatientModal(bmhId) {
   setVal('upd-fee', p.consultationFee != null ? p.consultationFee : (getReceptionConsultationRate(p.centre || CURRENT_USER?.centre || 'CHD') || 0));
   setVal('upd-advance-amt', p.advance != null ? p.advance : '');
   setVal('upd-advance-purpose', p.advancePurpose || '');
+  setVal('upd-ins-name', p.ins || '');
+  setVal('upd-policy', p.policy || '');
+  const updPayMode = document.getElementById('upd-pay-mode');
+  if (updPayMode) updPayMode.value = isInsuranceLikeMode(p.ins || p.policy || '') ? (p.ins || 'Insurance/TPA') : 'Cash';
   const noFeeEl = document.getElementById('upd-no-fee'); if (noFeeEl) noFeeEl.checked = !!p.consultationNoFee;
   const feeEl = document.getElementById('upd-fee'); if (feeEl) feeEl.disabled = !!p.consultationNoFee;
   const disp=document.getElementById('upd-bmhid-display'); if(disp) disp.textContent='BMSH ID: '+bid;
@@ -23702,12 +23789,23 @@ function openEditPatientModal(bmhId) {
 function saveUpdatedPatientDetails() {
   const bid = window._editingBmhId;
   if(!bid) { showToast('No patient selected','w'); return; }
-  const p = PATIENTS.find(x=>x.bmhId===bid) || (window.CURRENT_PATIENT && window.CURRENT_PATIENT.bmhId === bid ? window.CURRENT_PATIENT : null) || { bmhId: bid };
+  let p = PATIENTS.find(x=>x.bmhId===bid) || (window.CURRENT_PATIENT && window.CURRENT_PATIENT.bmhId === bid ? window.CURRENT_PATIENT : null) || null;
+  if (!p) {
+    p = {
+      bmhId: bid,
+      name: document.getElementById('upd-fn')?.value?.trim() || '',
+      dept: document.getElementById('rc-dept')?.value || window.CURRENT_PATIENT?.dept || 'ophtho',
+      centre: getEffectiveCentre ? getEffectiveCentre() : (CURRENT_USER?.centre || 'CHD')
+    };
+  }
   const fn = normalizeReceptionFieldValue('upd-fn', document.getElementById('upd-fn')?.value?.trim()||'');
   const ln = normalizeReceptionFieldValue('upd-ln', document.getElementById('upd-ln')?.value?.trim()||'');
   if(!fn) { showToast('First name is required','w'); return; }
   const refName = normalizeReceptionFieldValue('upd-ref-name', document.getElementById('upd-ref-name')?.value?.trim()||'');
   const noFee = !!document.getElementById('upd-no-fee')?.checked;
+  const payMode = document.getElementById('upd-pay-mode')?.value || 'Cash';
+  const insName = normalizeReceptionFieldValue('upd-ins-name', document.getElementById('upd-ins-name')?.value?.trim() || '');
+  const policyNo = (document.getElementById('upd-policy')?.value || '').trim();
   const consultationFee = Math.max(0, parseFloat(document.getElementById('upd-fee')?.value || p.consultationFee || 0) || 0);
   const advanceAmt = Math.max(0, parseFloat(document.getElementById('upd-advance-amt')?.value || p.advance || 0) || 0);
   const advancePurpose = normalizeReceptionFieldValue('upd-advance-purpose', document.getElementById('upd-advance-purpose')?.value?.trim()||'');
@@ -23729,6 +23827,8 @@ function saveUpdatedPatientDetails() {
     referredBy: refName || p.referredBy || '',
     consultationFee: noFee ? 0 : consultationFee,
     consultationNoFee: noFee,
+    ins: isInsuranceLikeMode(payMode || insName) ? (insName || payMode) : '',
+    policy: policyNo,
     advance: advanceAmt,
     advancePurpose: advancePurpose || (advanceAmt > 0 ? 'Advance on account' : ''),
     updatedAt: nowIso
@@ -23762,6 +23862,42 @@ function saveUpdatedPatientDetails() {
     saveBmhFinancials && saveBmhFinancials();
     bmhSyncPatientRunningBalance && bmhSyncPatientRunningBalance(bid);
   } catch (e) { console.warn('reception detail financial sync failed', e); }
+  if (isInsuranceLikeMode(payMode || insName)) {
+    const existingClaim = (PAY_REQUESTS || []).find(function (r) {
+      return r.bmhId === bid && isInsuranceLikeMode(r.mode || r.ins || '');
+    });
+    if (existingClaim) {
+      existingClaim.mode = payMode;
+      existingClaim.ins = insName || payMode;
+      existingClaim.policy = policyNo;
+      existingClaim.patient = updates.name;
+      existingClaim.centre = p.centre || existingClaim.centre || CURRENT_USER?.centre || 'CHD';
+      existingClaim.dept = p.dept || existingClaim.dept || 'ophtho';
+      existingClaim.updatedAt = nowIso;
+      try { if (window.firebase && firebase.database) firebase.database().ref('payRequests/' + existingClaim.id).update({ mode: existingClaim.mode, ins: existingClaim.ins, policy: existingClaim.policy, patient: existingClaim.patient, centre: existingClaim.centre, dept: existingClaim.dept, updatedAt: nowIso }); } catch (e) {}
+    } else if (consultationFee > 0 && !noFee) {
+      const claimId = 'TPA' + Date.now();
+      const claim = {
+        id: claimId,
+        patient: updates.name,
+        bmhId: bid,
+        for: p.purpose || 'Consultation',
+        amount: consultationFee,
+        claimedAmount: consultationFee,
+        approvedAmount: consultationFee,
+        status: 'pending',
+        mode: payMode,
+        ins: insName || payMode,
+        policy: policyNo,
+        dept: p.dept || 'ophtho',
+        centre: p.centre || CURRENT_USER?.centre || 'CHD',
+        date: nowIso,
+        from: 'Reception edit'
+      };
+      PAY_REQUESTS.push(claim);
+      fbSet && fbSet('payRequests/' + claimId, claim);
+    }
+  }
   fbUpdate && fbUpdate('patients/'+bid, updates).catch(function (e) {
     console.warn('patient update error', e);
     showToast('Save failed while updating patient details', 'e');
