@@ -2055,58 +2055,129 @@ function cancelPayReq(reqId) {
   renderReceptionPage();
 }
 
-function printPaymentReceipt(pr) {
-  // pr can be a PAY_REQUEST or a TRANSACTION object
-  const pt = PATIENTS.find(p=>p.bmhId===pr.bmhId)||{};
-  const today = new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
-  const time  = new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
-  const receiptNo = 'RCP-'+(pr.id||'').slice(-6).toUpperCase()||('RCP-'+Math.floor(Math.random()*999999));
-  const amount = pr.amount || 0;
-  const mode   = pr.mode || 'Cash';
-  const service = pr.for || pr.service || 'Consultation';
-  const patName = pr.patient || pt.name || '—';
-  const bmhId   = pr.bmhId || '—';
+function getSavedHospitalSettings() {
+  try {
+    return JSON.parse(localStorage.getItem('bmh_hospital_settings') || '{}') || {};
+  } catch (e) {
+    return {};
+  }
+}
+function getHospitalDetailValue(label, fallback) {
+  const settings = getSavedHospitalSettings();
+  return String(settings[label] || fallback || '').trim();
+}
+function bmhAmountToWords(num) {
+  const n = Math.round(Math.max(0, Number(num) || 0));
+  if (!n) return 'Zero Rupees Only';
+  const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+  const twoDigits = function (x) {
+    x = Number(x) || 0;
+    if (x < 20) return ones[x];
+    return (tens[Math.floor(x / 10)] + (x % 10 ? ' ' + ones[x % 10] : '')).trim();
+  };
+  const threeDigits = function (x) {
+    x = Number(x) || 0;
+    const hundred = Math.floor(x / 100);
+    const rem = x % 100;
+    return [hundred ? ones[hundred] + ' Hundred' : '', rem ? twoDigits(rem) : ''].filter(Boolean).join(' ').trim();
+  };
+  let value = n;
+  const crore = Math.floor(value / 10000000); value %= 10000000;
+  const lakh = Math.floor(value / 100000); value %= 100000;
+  const thousand = Math.floor(value / 1000); value %= 1000;
+  const hundred = value;
+  const parts = [];
+  if (crore) parts.push(twoDigits(crore) + ' Crore');
+  if (lakh) parts.push(twoDigits(lakh) + ' Lakh');
+  if (thousand) parts.push(twoDigits(thousand) + ' Thousand');
+  if (hundred) parts.push(threeDigits(hundred));
+  return parts.join(' ').replace(/\s+/g, ' ').trim() + ' Rupees Only';
+}
+function buildRelationPrintText(pt) {
+  return String(pt?.relation || pt?.rel || '').trim();
+}
+function buildProfessionalReceiptHtml(pr) {
+  const pt = PATIENTS.find(function (p) { return p.bmhId === pr.bmhId; }) || {};
+  const centre = String(pr.centre || pt.centre || CURRENT_USER?.centre || 'CHD').toUpperCase();
+  const hospitalName = getHospitalDetailValue('Hospital Name', 'Baweja Multispeciality Hospital');
+  const address = centre === 'RPR'
+    ? getHospitalDetailValue('Ropar Address', '1571/39, Opp. Civil Hospital, Preet Colony, Rupnagar, Punjab 140001')
+    : getHospitalDetailValue('Chandigarh Address', 'SCO #100, Near Delhi Public School, Sector 40C, Chandigarh 160036');
+  const phone = getHospitalDetailValue('Phone', '+91-81466 22802');
+  const email = getHospitalDetailValue('Email', 'info@bawejahospital.com');
   const logoSrc = resolvePrintLogoSrc();
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Receipt</title>
-  <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:Arial,sans-serif;font-size:12px;color:#111;background:#fff;width:280px;margin:0 auto;padding:8px}
-    .hdr{display:flex;align-items:center;gap:10px;border-bottom:2px solid #1A3C6E;padding-bottom:8px;margin-bottom:10px}
-    .hdr-logo{height:34px;width:auto;object-fit:contain;flex-shrink:0}
-    .hdr-copy{flex:1;text-align:left}
-    .hdr h1{font-size:15px;color:#1A3C6E;font-weight:900}
-    .hdr p{font-size:10px;color:#666;margin-top:2px}
-    .badge{display:inline-block;background:#D4A017;color:#1A3C6E;font-weight:900;padding:2px 10px;border-radius:20px;font-size:11px;margin:6px 0}
-    .row{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed #eee;font-size:11.5px}
-    .row.total{font-size:14px;font-weight:900;border-bottom:2px solid #1A3C6E;border-top:2px solid #1A3C6E;padding:6px 0;margin-top:4px}
-    .row.total span:last-child{color:#1A3C6E}
-    .footer{text-align:center;font-size:9.5px;color:#888;margin-top:12px;line-height:1.6}
-    @media print{button{display:none!important}}
+  const amount = Math.max(0, Number(pr.amount || 0));
+  const receiptNo = 'RCP-' + String(pr.id || ('X' + Date.now())).slice(-6).toUpperCase();
+  const when = pr.date ? new Date(pr.date) : new Date();
+  const relationText = buildRelationPrintText(pt);
+  const addressText = String(pt.address || pt.addr || '').trim();
+  const service = escapeHtmlConsent(pr.for || pr.service || 'Consultation');
+  const patientParts = [
+    '<strong>' + escapeHtmlConsent(pr.patient || pt.name || '—') + '</strong>',
+    relationText ? escapeHtmlConsent(relationText) : '',
+    addressText ? ('resident of ' + escapeHtmlConsent(addressText)) : ''
+  ].filter(Boolean);
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Receipt</title><style>
+    *{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;margin:0;padding:10mm;background:#fff;font-size:12.5px;line-height:1.55}
+    @page{size:A4 portrait;margin:10mm}
+    .sheet{border:1px solid #cfd5de;border-radius:10px;padding:12mm 12mm 10mm}
+    .hdr{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;border-bottom:2px solid #1A3C6E;padding-bottom:10px;margin-bottom:14px}
+    .logo-wrap{display:flex;align-items:flex-start;gap:10px}
+    .logo{height:46px;width:auto;object-fit:contain}
+    .hname{font-size:21px;font-weight:900;color:#1A3C6E;line-height:1.1}
+    .hmeta{font-size:11px;color:#444;line-height:1.45;margin-top:4px;max-width:430px}
+    .badge{display:inline-block;padding:4px 12px;border-radius:999px;background:#eef3fb;color:#1A3C6E;font-size:11px;font-weight:900;letter-spacing:.5px}
+    .meta-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:10px 0 14px}
+    .meta-box{border:1px solid #d7dce5;border-radius:8px;padding:8px 10px}
+    .lbl{font-size:9px;font-weight:800;color:#666;text-transform:uppercase;letter-spacing:.5px}
+    .val{font-size:12px;font-weight:800;color:#111;margin-top:3px}
+    .para{font-size:13px;line-height:1.8;margin:12px 0}
+    .amt-box{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;border:1px solid #d7dce5;border-radius:10px;padding:12px;background:#fbfcfe;margin:14px 0}
+    .amt{font-size:24px;font-weight:900;color:#1A3C6E}
+    .foot{display:flex;justify-content:space-between;gap:20px;margin-top:26px}
+    .sign{flex:1;text-align:center}
+    .line{height:34px;border-bottom:1px solid #222;margin-bottom:6px}
+    .small{font-size:10px;color:#666}
   </style></head><body>
-  <div class="hdr">
-    ${logoSrc ? `<img src="${logoSrc}" class="hdr-logo" alt="BMH">` : ''}
-    <div class="hdr-copy">
-      <h1>Baweja Multispeciality Hospital</h1>
-      <p>Chandigarh · Ropar · +91-81466 22802</p>
+  <div class="sheet">
+    <div class="hdr">
+      <div class="logo-wrap">
+        ${logoSrc ? `<img src="${logoSrc}" class="logo" alt="BMH">` : ''}
+        <div>
+          <div class="hname">${escapeHtmlConsent(hospitalName)}</div>
+          <div class="hmeta">${escapeHtmlConsent(address)}<br>Phone: ${escapeHtmlConsent(phone)}${email ? ' · Email: ' + escapeHtmlConsent(email) : ''}</div>
+        </div>
+      </div>
+      <div style="text-align:right"><div class="badge">RECEIPT</div></div>
     </div>
-  </div>
-  <div style="text-align:center"><div class="badge">RECEIPT</div></div>
-  <div class="row"><span style="color:#888">Receipt No.</span><span style="font-family:monospace;font-weight:700">${receiptNo}</span></div>
-  <div class="row"><span style="color:#888">Date &amp; Time</span><span>${today} ${time}</span></div>
-  <div class="row"><span style="color:#888">Patient</span><span style="font-weight:800">${patName}</span></div>
-  <div class="row"><span style="color:#888">BMSH ID</span><span style="font-family:monospace;color:#0B7B8C">${bmhId}</span></div>
-  ${pt.age?`<div class="row"><span style="color:#888">Age / Sex</span><span>${pt.age}Y / ${pt.sex||'—'}</span></div>`:''}
-  <div class="row"><span style="color:#888">Service</span><span>${service}</span></div>
-  <div class="row"><span style="color:#888">Payment Mode</span><span>${mode}</span></div>
-  <div class="row total"><span>Total Amount</span><span>₹${Math.abs(amount).toLocaleString('en-IN')}</span></div>
-  <div class="footer">
-    Thank you for choosing Baweja Multispeciality Hospital<br>
-    This is a computer-generated receipt · No GST applicable<br>
-    <button onclick="window.print()" style="margin-top:8px;padding:4px 14px;background:#1A3C6E;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px">🖨️ Print</button>
+    <div class="meta-grid">
+      <div class="meta-box"><div class="lbl">Receipt No.</div><div class="val" style="font-family:ui-monospace,monospace">${receiptNo}</div></div>
+      <div class="meta-box"><div class="lbl">Date</div><div class="val">${escapeHtmlConsent(formatDateIN(when))}</div></div>
+      <div class="meta-box"><div class="lbl">Time</div><div class="val">${escapeHtmlConsent(when.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}))}</div></div>
+      <div class="meta-box"><div class="lbl">BMSH ID</div><div class="val" style="font-family:ui-monospace,monospace">${escapeHtmlConsent(pr.bmhId || pt.bmhId || '—')}</div></div>
+    </div>
+    <div class="para">Received a sum of <strong>Rs. ${escapeHtmlConsent(bmhAmountToWords(amount))}</strong> (<strong>₹${amount.toLocaleString('en-IN')}</strong>) from ${patientParts.join(', ') || '<strong>the patient</strong>'} as charges for <strong>${service}</strong>.</div>
+    <div class="amt-box">
+      <div>
+        <div class="lbl">Payment Mode</div>
+        <div class="val">${escapeHtmlConsent(pr.mode || 'Cash')}</div>
+        <div class="small" style="margin-top:6px">Ref / UTR / Cheque: ${escapeHtmlConsent(pr.paymentRef || pr.ref || pr.utr || '—')}</div>
+      </div>
+      <div class="amt">₹${amount.toLocaleString('en-IN')}</div>
+    </div>
+    <div class="foot">
+      <div class="sign"><div class="line"></div><div class="small">Received From</div></div>
+      <div class="sign"><div class="line"></div><div class="small">Authorised Signatory</div></div>
+    </div>
   </div>
   <script>window.onload=()=>window.print()<\/script>
   </body></html>`;
-  const w = window.open('','_blank','width=340,height=500');
+}
+
+function printPaymentReceipt(pr) {
+  const html = buildProfessionalReceiptHtml(pr || {});
+  const w = window.open('','_blank','width=900,height=760');
   if(w) { w.document.write(html); w.document.close(); }
 }
 
@@ -7840,30 +7911,7 @@ ${payLines ? `<div class="payh">Recent payments</div><div>${payLines}</div>` : '
   showToast('Print preview opened ✓', 's');
 }
 function printBmhPaymentAck(txn) {
-  const sz = document.getElementById('bmh-print-size')?.value || window.BMH_BILL_PRINT_SIZE || 'A4';
-  const pageCss = sz === 'A5' ? 'size: 148mm 210mm' : 'size: A4 portrait';
-  const today = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
-  const time = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-  const amt = Number(txn.amount) || 0;
-  const ref = txn.paymentRef || txn.ref || '';
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
-*{box-sizing:border-box}body{font-family:system-ui,sans-serif;padding:10mm;font-size:13px;width:100%} @page{${pageCss};margin:8mm}
-.hdr{text-align:center;border-bottom:3px solid #1A3C6E;padding-bottom:10px;margin-bottom:14px}
-.badge{display:inline-block;background:#D4A017;color:#1A3C6E;font-weight:900;padding:4px 14px;border-radius:20px;margin-bottom:8px}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0;font-size:12px}
-.total{font-size:22px;font-weight:900;color:#1A3C6E;text-align:center;margin:18px 0}
-</style></head><body>
-<div class="hdr"><div style="font-size:17px;font-weight:900;color:#1A3C6E">Baweja Multispeciality Hospital</div><div style="font-size:11px;color:#666">Payment acknowledgement</div>
-<div class="badge">RECEIVED</div></div>
-<div class="grid"><div><strong>Patient</strong><br>${txn.patient || ''}</div><div><strong>BMSH ID</strong><br><span style="font-family:monospace">${txn.bmhId || ''}</span></div>
-<div><strong>Mode</strong><br>${txn.mode || 'Cash'}</div><div><strong>Date / time</strong><br>${today} ${time}</div>
-<div style="grid-column:1/-1"><strong>Ref / UTR / Cheque</strong><br>${ref || '—'}</div></div>
-<div class="total">₹${amt.toLocaleString('en-IN')}</div>
-<div style="text-align:center;font-size:10.5px;color:#888">This is a system-generated acknowledgement of payment.</div>
-<script>window.onload=function(){window.print()}<\/script>
-</body></html>`;
-  const w = window.open('', '_blank');
-  if (w) { w.document.write(html); w.document.close(); }
+  printPaymentReceipt(txn);
 }
 function bmhRecordPatientPayment() {
   const bmhId = document.getElementById('bmh-bill-pt-select')?.value;
@@ -7941,7 +7989,6 @@ function bmhRecordPatientPayment() {
   showToast('Payment saved ✓', 's');
   renderBillingPage();
   renderDashboard && renderDashboard();
-  printBmhPaymentAck(Object.assign({}, txn, { ref }));
 }
 function bmhToggleBillingInsuranceFields() {
   const mode = document.getElementById('bmh-pay-mode')?.value || 'Cash';
@@ -12970,6 +13017,17 @@ async function registerPatient() {
 
   const isInsurance = payMode.includes('Insurance')||payMode.includes('PMJAY')||payMode.includes('CGHS')||payMode.includes('TPA');
   const isCreditDue = payMode === 'Credit / Due';
+  const previousDue = isExistingRegistration
+    ? Math.max(
+        0,
+        Number(existingPt?.balance || 0),
+        Number((typeof bmhGetPatientFinancialSummary === 'function' ? bmhGetPatientFinancialSummary(uid)?.balance : 0) || 0)
+      )
+    : 0;
+  let dueReceivedNow = false;
+  if (isExistingRegistration && previousDue > 0) {
+    dueReceivedNow = confirm(`${name} has a pending due of ₹${previousDue.toLocaleString('en-IN')}.\n\nDue received now?`);
+  }
 
   if(isInsurance) {
     const claimId = 'TPA'+Date.now();
@@ -13053,6 +13111,18 @@ async function registerPatient() {
         printPaymentReceipt({id:'TXN'+Date.now(),patient:name,bmhId:uid,for:purpose,service:purpose,amount:fee,mode:payMode,bmhId:uid});
       }
     },200);
+  }
+  if (dueReceivedNow && previousDue > 0) {
+    setTimeout(function () {
+      rcOpenBillingFor(uid);
+      const toggle = document.getElementById('bmh-pay-received-toggle');
+      if (toggle) toggle.checked = true;
+      bmhTogglePaymentForm(true);
+      const amtEl = document.getElementById('bmh-pay-amt');
+      if (amtEl) amtEl.value = String(previousDue);
+      bmhUpdateBillTotals && bmhUpdateBillTotals();
+      showToast('Billing opened with the pending due ready to record', 'i');
+    }, 260);
   }
 
   resetRegistrationForm();
@@ -13897,6 +13967,7 @@ function openTPACaseDetail(prId) {
   const claimedAmount = Number(pr.claimedAmount || pr.approvedAmount || pr.amount || 0) || '';
   const receivedAmount = Number(pr.receivedAmount || 0) || '';
   const patientDue = Number(pr.patientDue != null ? pr.patientDue : Math.max(0, claimedAmount - receivedAmount)) || '';
+  const eyeValue = deptKey === 'ophtho' ? (pr.eye || pt.eye || pt.lastVisit?.eye || '') : 'N/A';
   wrap.innerHTML = `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
       <div><div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase">Patient</div><div style="font-size:13px;font-weight:900">${pr.patient || pt.name || '—'}</div><div style="font-size:10px;color:var(--g1)">${pr.bmhId || '—'} · ${pt.mob || pt.mobile || '—'}</div></div>
@@ -13905,6 +13976,7 @@ function openTPACaseDetail(prId) {
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
       <div class="form-group" style="margin:0"><label class="fl">Diagnosis</label><input type="text" id="tpa-diagnosis" value="${escapeHtmlConsent(pr.diagnosis || pt.dx || pt.lastVisit?.dx || '')}" placeholder="Diagnosis"></div>
       <div class="form-group" style="margin:0"><label class="fl">Surgery / Procedure</label><input list="tpa-procedure-list" type="text" id="tpa-procedure-name" value="${escapeHtmlConsent(pr.procedure || pr.for || '')}" placeholder="Procedure / surgery"></div>
+      <div class="form-group" style="margin:0"><label class="fl">Eye If Applicable</label><input type="text" id="tpa-eye" value="${escapeHtmlConsent(eyeValue)}" ${deptKey === 'ophtho' ? 'placeholder="Right / Left / Both"' : 'readonly'}></div>
       <div class="form-group" style="margin:0"><label class="fl">Policy / Pre-auth No.</label><input type="text" id="tpa-policy-no" value="${escapeHtmlConsent(pr.policy || pt.policy || '')}" placeholder="Policy / pre-auth"></div>
       <div class="form-group" style="margin:0"><label class="fl">Claimed Amount ₹</label><input type="number" id="tpa-claimed-amt" value="${claimedAmount}" placeholder="0"></div>
     </div>
@@ -13938,6 +14010,7 @@ function saveTPAReceipt(prId) {
   if (!pr) return;
   const diagnosis = toTitleCaseName(document.getElementById('tpa-diagnosis')?.value || '');
   const procedure = toTitleCaseName(document.getElementById('tpa-procedure-name')?.value || '');
+  const eye = toTitleCaseName(document.getElementById('tpa-eye')?.value || '');
   const policyNo = (document.getElementById('tpa-policy-no')?.value || '').trim();
   const claimedAmount = Math.max(0, Number(document.getElementById('tpa-claimed-amt')?.value || pr.claimedAmount || pr.amount || 0));
   const amt = Number(document.getElementById('tpa-received-amt')?.value || 0);
@@ -13947,6 +14020,7 @@ function saveTPAReceipt(prId) {
   const notes = document.getElementById('tpa-received-note')?.value || '';
   pr.diagnosis = diagnosis;
   pr.procedure = procedure;
+  pr.eye = eye || (normalizeQueueDeptForUser(pr.dept || '') === 'ophtho' ? '' : 'N/A');
   pr.policy = policyNo;
   pr.claimedAmount = claimedAmount;
   pr.amount = claimedAmount || pr.amount || 0;
@@ -13967,6 +14041,7 @@ function saveTPAReceipt(prId) {
     if (window.firebase && firebase.database) firebase.database().ref('payRequests/' + pr.id).update({
       diagnosis: diagnosis,
       procedure: procedure,
+      eye: pr.eye,
       policy: policyNo,
       claimedAmount: claimedAmount,
       amount: pr.amount,
@@ -13982,6 +14057,40 @@ function saveTPAReceipt(prId) {
   } catch (e) {}
   if (pt) {
     fbUpdate && fbUpdate('patients/' + pr.bmhId, { ins: pt.ins || '', policy: pt.policy || '', dx: diagnosis || pt.dx || '', balance: Math.max(0, patientDue || pt.balance || 0) });
+  }
+  const patientShare = (PAY_REQUESTS || []).find(function (r) {
+    return r.bmhId === pr.bmhId && String(r.from || '').toLowerCase() === 'tpa patient share';
+  });
+  if (patientDue > 0) {
+    if (patientShare) {
+      patientShare.amount = patientDue;
+      patientShare.status = 'pending';
+      patientShare.mode = 'Credit / Due';
+      patientShare.for = 'Patient share after TPA / Cashless';
+      patientShare.updatedAt = new Date().toISOString();
+      try { fbUpdate && fbUpdate('payRequests/' + patientShare.id, { amount: patientDue, status: 'pending', mode: 'Credit / Due', for: patientShare.for, updatedAt: patientShare.updatedAt }); } catch (e) {}
+    } else {
+      const patientShareReq = {
+        id: 'PRPS' + Date.now(),
+        patient: pr.patient,
+        bmhId: pr.bmhId,
+        for: 'Patient share after TPA / Cashless',
+        amount: patientDue,
+        status: 'pending',
+        from: 'TPA patient share',
+        dept: pr.dept || pt?.dept || 'ophtho',
+        centre: pr.centre || pt?.centre || CURRENT_USER?.centre || 'CHD',
+        mode: 'Credit / Due',
+        date: new Date().toISOString()
+      };
+      PAY_REQUESTS.push(patientShareReq);
+      try { fbSet && fbSet('payRequests/' + patientShareReq.id, patientShareReq); } catch (e) {}
+    }
+  } else if (patientShare) {
+    patientShare.amount = 0;
+    patientShare.status = 'paid';
+    patientShare.updatedAt = new Date().toISOString();
+    try { fbUpdate && fbUpdate('payRequests/' + patientShare.id, { amount: 0, status: 'paid', updatedAt: patientShare.updatedAt }); } catch (e) {}
   }
   if (amt > 0) {
     const txn = {
@@ -20485,6 +20594,11 @@ function buildDischargePrintSection(sel) {
     + fmt(data.opDate) + '. The operative and post-operative periods were uneventful. The patient was admitted to the inpatient ward on '
     + fmt(data.ipdStay?.admittedAt || data.opDate) + ' and discharged on ' + fmt(data.dischargeDate)
     + '. The patient is advised to continue the medications and bed rest for 2 weeks. The patient is fit to join duties from ' + fmt(data.joinDate) + '.';
+  const relationText = buildRelationPrintText(data.ptObj);
+  const addrText = data.ptObj.address || data.ptObj.addr || '—';
+  const surgeonName = data.lastOtCase?.surgeon || data.lastOtCase?.doctor || data.ptObj.doctor || CURRENT_USER?.name || 'Dr. Varun Baweja';
+  const surgeonProfile = typeof findDoctorProfileByRxName === 'function' ? findDoctorProfileByRxName(String(surgeonName).split('·')[0].trim()) : null;
+  const surgeonDegrees = surgeonProfile?.degrees || CURRENT_USER?.degrees || '';
   return '<section class="page" style="page-break-after:always;padding:10mm 12mm 9mm">'
     + (headerSrc ? '<img src="' + esc(headerSrc) + '" style="width:100%;height:auto;display:block">' : '<div style="font-size:18px;font-weight:900;color:#1A3C6E">Baweja Multispeciality Hospital</div>')
     + '<div class="title">DISCHARGE SUMMARY &amp; FITNESS CERTIFICATE</div>'
@@ -20492,20 +20606,18 @@ function buildDischargePrintSection(sel) {
     + '<div class="box"><div class="label">Patient Name</div><div class="val">' + esc(data.ptNm) + '</div></div>'
     + '<div class="box"><div class="label">BMSH ID</div><div class="val" style="font-family:ui-monospace,monospace">' + esc(data.ptId) + '</div></div>'
     + '<div class="box"><div class="label">Age / Sex</div><div class="val">' + esc((data.ptObj.age || '—') + ' / ' + (data.ptObj.sex || '—')) + '</div></div>'
+    + '<div class="box"><div class="label">Relation</div><div class="val">' + esc(relationText || '—') + '</div></div>'
+    + '<div class="box" style="grid-column:span 2"><div class="label">Address</div><div class="val" style="font-size:10.8px;line-height:1.55">' + esc(addrText) + '</div></div>'
     + '<div class="box"><div class="label">Procedure</div><div class="val">' + esc(data.procedureName) + '</div></div>'
     + '<div class="box"><div class="label">Eye / Site</div><div class="val">' + esc(data.lastOtCase?.site || data.lastOtCase?.eye || data.ptObj.eye || '—') + '</div></div>'
-    + '<div class="box"><div class="label">Doctor</div><div class="val">' + esc(data.ptObj.doctor || CURRENT_USER?.name || 'Dr. Varun Baweja') + '</div></div>'
+    + '<div class="box"><div class="label">Surgeon</div><div class="val">' + esc(surgeonName) + '</div></div>'
     + '<div class="box"><div class="label">OT Date</div><div class="val">' + esc(fmt(data.opDate)) + '</div></div>'
     + '<div class="box"><div class="label">Admitted On</div><div class="val">' + esc(fmt(data.ipdStay?.admittedAt || data.opDate)) + '</div></div>'
     + '<div class="box"><div class="label">Discharged On</div><div class="val">' + esc(fmt(data.dischargeDate)) + '</div></div>'
     + '</div>'
     + '<div class="sec"><div class="sec-h">Summary</div><div class="summary">' + esc(summary) + '</div></div>'
-    + '<div class="sec"><div class="sec-h">Medication Schedule</div>'
-    + '<table><thead><tr><th class="th" style="padding:6px 8px;border:1px solid #cfd5de">#</th><th class="th" style="padding:6px 8px;border:1px solid #cfd5de">Medicine</th><th class="th" style="padding:6px 8px;border:1px solid #cfd5de">Frequency</th><th class="th" style="padding:6px 8px;border:1px solid #cfd5de">Duration</th><th class="th" style="padding:6px 8px;border:1px solid #cfd5de">Timings</th></tr></thead><tbody>'
-    + (meds || '<tr><td colspan="5" style="padding:12px;border:1px solid #cfd5de;font-size:11px;color:#666;text-align:center">No prescription found for this patient.</td></tr>')
-    + '</tbody></table></div>'
     + (followupRows ? '<div class="sec"><div class="sec-h">Default Follow-ups</div>' + followupRows + '</div>' : '')
-    + '<div class="sign"><div><div class="line"></div><div class="small">Patient / Attendant Signature</div></div><div><div class="line"></div><div class="small">Doctor Signature</div></div><div><div class="line"></div><div class="small">Printed on ' + esc(today) + '</div></div></div>'
+    + '<div class="sign"><div><div class="line"></div><div class="small">Patient / Attendant Signature</div></div><div><div class="line"></div><div class="small">' + esc(surgeonName + (surgeonDegrees ? ' · ' + surgeonDegrees : '')) + '</div></div><div><div class="line"></div><div class="small">Printed on ' + esc(today) + '</div></div></div>'
     + '</section>';
 }
 function buildDischargePrintHtml(sel) {
@@ -20888,12 +21000,18 @@ function renderDischargeBuilder() {
     const aDate = data.ipdStay?.admittedAt ? formatDateIN(data.ipdStay.admittedAt) : oDate;
     const dDate = formatDateIN(data.dischargeDate);
     const fitDate = formatDateIN(data.joinDate);
+    const relationText = buildRelationPrintText(ptObj);
+    const addrText = ptObj.address || ptObj.addr || '';
+    const surgeonName = otDoctor || ptObj.doctor || window.CURRENT_USER?.name || 'Dr. Varun Baweja';
+    const surgeonProfile = typeof findDoctorProfileByRxName === 'function' ? findDoctorProfileByRxName(String(surgeonName).split('·')[0].trim()) : null;
+    const surgeonDegrees = surgeonProfile?.degrees || CURRENT_USER?.degrees || '';
     sumEl.innerHTML = `
       <div contenteditable="true" spellcheck="false" style="outline:none">
-        This is to certify that <strong>${ptNm}</strong> visited our hospital on <strong>${vDate}</strong>. On examination, it was found that the patient had <strong>${data.findings}</strong> with diagnosis of <strong>${data.diagnosis}</strong>.<br><br>
+        This is to certify that <strong>${ptNm}</strong>${relationText ? ', ' + relationText : ''}${addrText ? ', resident of <strong>' + addrText + '</strong>' : ''}, visited our hospital on <strong>${vDate}</strong>. On examination, it was found that the patient had <strong>${data.findings}</strong> with diagnosis of <strong>${data.diagnosis}</strong>.<br><br>
         The patient was advised <strong>${data.procedureName}</strong>, which was subsequently performed on <strong>${oDate}</strong>. The operative and post-operative periods were uneventful.<br><br>
         The patient was admitted to the inpatient ward on <strong>${aDate}</strong> and discharged on <strong>${dDate}</strong>. The patient is advised to continue the prescribed medications and remain on bed rest for <strong>2 weeks</strong>.<br><br>
-        The patient is fit to join his/her duties from <strong>${fitDate}</strong>.
+        The patient is fit to join his/her duties from <strong>${fitDate}</strong>.<br><br>
+        <strong>${surgeonName}${surgeonDegrees ? ' · ' + surgeonDegrees : ''}</strong>
       </div>`;
   }
 }
@@ -23998,6 +24116,7 @@ function saveUpdatedPatientDetails() {
   Object.assign(p, updates);
   normalizePatientRecord(p);
   if (!PATIENTS.find(x=>x.bmhId===bid)) PATIENTS.push(p);
+  savePatientToFirebase && savePatientToFirebase(p);
   try {
     const today = localDateKey(new Date());
     const chargeRows = window.BMH_PATIENT_CHARGES[bid] || [];
@@ -24026,6 +24145,16 @@ function saveUpdatedPatientDetails() {
     const existingClaim = (PAY_REQUESTS || []).find(function (r) {
       return r.bmhId === bid && isInsuranceLikeMode(r.mode || r.ins || '');
     });
+    const currentSummary = typeof bmhGetPatientFinancialSummary === 'function' ? bmhGetPatientFinancialSummary(bid) : null;
+    const claimAmount = Math.max(
+      0,
+      Number(existingClaim?.claimedAmount || 0),
+      Number(existingClaim?.amount || 0),
+      Number(currentSummary?.balance || 0),
+      Number(currentSummary?.chargeTotal || 0),
+      Number(p.balance || 0),
+      Number(consultationFee || 0)
+    );
     if (existingClaim) {
       existingClaim.mode = payMode;
       existingClaim.ins = insName || payMode;
@@ -24033,18 +24162,22 @@ function saveUpdatedPatientDetails() {
       existingClaim.patient = updates.name;
       existingClaim.centre = p.centre || existingClaim.centre || CURRENT_USER?.centre || 'CHD';
       existingClaim.dept = p.dept || existingClaim.dept || 'ophtho';
+      existingClaim.amount = claimAmount || existingClaim.amount || 0;
+      existingClaim.claimedAmount = claimAmount || existingClaim.claimedAmount || existingClaim.amount || 0;
+      existingClaim.approvedAmount = Math.max(Number(existingClaim.approvedAmount || 0), claimAmount || 0);
+      existingClaim.status = existingClaim.receivedAmount > 0 ? existingClaim.status : 'pending';
       existingClaim.updatedAt = nowIso;
-      try { if (window.firebase && firebase.database) firebase.database().ref('payRequests/' + existingClaim.id).update({ mode: existingClaim.mode, ins: existingClaim.ins, policy: existingClaim.policy, patient: existingClaim.patient, centre: existingClaim.centre, dept: existingClaim.dept, updatedAt: nowIso }); } catch (e) {}
-    } else if (consultationFee > 0 && !noFee) {
+      try { if (window.firebase && firebase.database) firebase.database().ref('payRequests/' + existingClaim.id).update({ mode: existingClaim.mode, ins: existingClaim.ins, policy: existingClaim.policy, patient: existingClaim.patient, centre: existingClaim.centre, dept: existingClaim.dept, amount: existingClaim.amount, claimedAmount: existingClaim.claimedAmount, approvedAmount: existingClaim.approvedAmount, status: existingClaim.status, updatedAt: nowIso }); } catch (e) {}
+    } else {
       const claimId = 'TPA' + Date.now();
       const claim = {
         id: claimId,
         patient: updates.name,
         bmhId: bid,
-        for: p.purpose || 'Consultation',
-        amount: consultationFee,
-        claimedAmount: consultationFee,
-        approvedAmount: consultationFee,
+        for: p.purpose || 'Cashless / TPA Case',
+        amount: claimAmount,
+        claimedAmount: claimAmount,
+        approvedAmount: claimAmount,
         status: 'pending',
         mode: payMode,
         ins: insName || payMode,
@@ -24058,10 +24191,12 @@ function saveUpdatedPatientDetails() {
       fbSet && fbSet('payRequests/' + claimId, claim);
     }
   }
-  fbUpdate && fbUpdate('patients/'+bid, updates).catch(function (e) {
+  try {
+    if (fbUpdate) fbUpdate('patients/' + bid, updates);
+  } catch (e) {
     console.warn('patient update error', e);
     showToast('Save failed while updating patient details', 'e');
-  });
+  }
   if (refName) {
     try { logReferral('Doctor', refName, '', { name: updates.name, bmhId: bid, dept: p.dept || '', purpose: p.purpose || '', centre: p.centre || CURRENT_USER?.centre || '' }); } catch (e) {}
     const refId = 'REF' + Date.now();
@@ -24083,6 +24218,7 @@ function saveUpdatedPatientDetails() {
   showToast(`✅ ${updates.name} — details updated`,'s');
   closeM('m-update-details');
   renderReceptionPage && renderReceptionPage();
+  renderTpaPage && renderTpaPage();
   // Refresh open patient card if visible
   if(typeof renderPatientCard==='function') renderPatientCard(bid);
 }
