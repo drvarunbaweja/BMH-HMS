@@ -13988,7 +13988,8 @@ function openTPACaseDetail(prId) {
       <div class="form-group" style="margin:0"><label class="fl">Due From Patient ₹</label><input type="number" id="tpa-patient-due" value="${patientDue}" placeholder="0"></div>
     </div>
     <div class="form-group" style="margin:0 0 10px 0"><label class="fl">Notes</label><textarea id="tpa-received-note" placeholder="Pre-auth, deficiency, coordinator note..." style="min-height:56px">${pr.notes || ''}</textarea></div>
-    <div style="display:flex;gap:8px;justify-content:flex-end">
+    <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+      ${CURRENT_USER?.isAdmin ? `<button class="btn btn-red btn-sm" onclick="deleteTPACase('${pr.id}')">🗑 Delete Case</button>` : ''}
       <button class="btn btn-outline btn-sm" onclick="closeTPACaseDetail()">Close</button>
       <button class="btn btn-gold btn-sm" onclick="saveTPAReceipt('${pr.id}')">💾 Save TPA Receipt</button>
     </div>`;
@@ -13996,6 +13997,44 @@ function openTPACaseDetail(prId) {
 }
 function closeTPACaseDetail() {
   closeM('m-tpa-case');
+}
+function deleteTPACase(prId) {
+  if (!CURRENT_USER?.isAdmin) { showToast('Only admin can delete TPA / cashless entries', 'w'); return; }
+  const pr = getDisplayTpaClaims().find(function (r) { return r.id === prId; });
+  if (!pr) { showToast('TPA case not found', 'w'); return; }
+  const label = (pr.patient || pr.bmhId || 'this case') + (pr.ins ? ' · ' + pr.ins : '');
+  if (!confirm(`Delete TPA / cashless entry for ${label}?\n\nThis will remove the case from the tracker.`)) return;
+  const liveClaim = (PAY_REQUESTS || []).find(function (r) { return r.id === prId; });
+  if (liveClaim) {
+    const idx = PAY_REQUESTS.indexOf(liveClaim);
+    if (idx > -1) PAY_REQUESTS.splice(idx, 1);
+    try { if (window.firebase && firebase.database) firebase.database().ref('payRequests/' + prId).remove(); } catch (e) {}
+  }
+  const linkedShare = (PAY_REQUESTS || []).filter(function (r) {
+    return r && r.bmhId === pr.bmhId && String(r.from || '').toLowerCase() === 'tpa patient share';
+  });
+  linkedShare.forEach(function (r) {
+    const idx = PAY_REQUESTS.indexOf(r);
+    if (idx > -1) PAY_REQUESTS.splice(idx, 1);
+    try { if (window.firebase && firebase.database) firebase.database().ref('payRequests/' + r.id).remove(); } catch (e) {}
+  });
+  const pt = (PATIENTS || []).find(function (p) { return p && p.bmhId === pr.bmhId; });
+  if (pt) {
+    pt.ins = '';
+    pt.policy = '';
+    try {
+      fbUpdate && fbUpdate('patients/' + pr.bmhId, {
+        ins: '',
+        policy: '',
+        updatedAt: new Date().toISOString()
+      });
+    } catch (e) {}
+  }
+  closeTPACaseDetail();
+  showToast('TPA / cashless entry deleted ✓', 's');
+  renderTpaPage && renderTpaPage();
+  renderBillingPageIfActive();
+  renderDashboard && renderDashboard();
 }
 function saveTPAReceipt(prId) {
   let pr = (PAY_REQUESTS || []).find(function (r) { return r.id === prId; });
