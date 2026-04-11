@@ -1888,14 +1888,14 @@ function nav(id, el, opts) {
   else if(pageKey==='appointments')    { const d=document.getElementById('apt-date-inp'); if(d)d.value=new Date().toISOString().split('T')[0]; renderAptDay && renderAptDay(); }
   else if(pageKey==='print-templates') renderPrintTemplates && renderPrintTemplates();
   else if(pageKey==='consents')        { renderConsent && renderConsent(); updateConsentPatientHeader(); refreshConsentLibrary && refreshConsentLibrary(); }
-  else if(pageKey==='ophtho')          { initQR && initQR(); renderRxDrugs && renderRxDrugs(); buildRefractionDropdowns && buildRefractionDropdowns(); renderOphthoPayList && renderOphthoPayList(); typeof initDiagnosisRowsIfEmpty==='function'&&initDiagnosisRowsIfEmpty(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); typeof wrapOphAdviceChipsWithDelete==='function'&&wrapOphAdviceChipsWithDelete(); }
-  else if(pageKey==='obg')             { renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); initObgSelects && initObgSelects(); toggleObgWorkflow && toggleObgWorkflow(); populateObgPatientFromCurrent && populateObgPatientFromCurrent(); updateObgComputedFields && updateObgComputedFields(); }
-  else if(pageKey==='psych')           { renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); togglePsychTracks && togglePsychTracks(); renderPsychRail && renderPsychRail(); }
-  else if(pageKey==='skin')            { renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); renderSkinRail && renderSkinRail(); }
+  else if(pageKey==='ophtho')          { initQR && initQR(); renderRxDrugs && renderRxDrugs(); buildRefractionDropdowns && buildRefractionDropdowns(); renderOphthoPayList && renderOphthoPayList(); typeof initDiagnosisRowsIfEmpty==='function'&&initDiagnosisRowsIfEmpty(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); typeof wrapOphAdviceChipsWithDelete==='function'&&wrapOphAdviceChipsWithDelete(); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); }, 120); }
+  else if(pageKey==='obg')             { renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); initObgSelects && initObgSelects(); toggleObgWorkflow && toggleObgWorkflow(); populateObgPatientFromCurrent && populateObgPatientFromCurrent(); updateObgComputedFields && updateObgComputedFields(); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); }, 120); }
+  else if(pageKey==='psych')           { renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); togglePsychTracks && togglePsychTracks(); renderPsychRail && renderPsychRail(); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); }, 120); }
+  else if(pageKey==='skin')            { renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); renderSkinRail && renderSkinRail(); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); }, 120); }
   else if(pageKey==='reception')       { renderReceptionPage && renderReceptionPage(); setTimeout(()=>{renderCollectionDashboard&&renderCollectionDashboard();loadCustomPurposes&&loadCustomPurposes();},100); }
   else if(pageKey==='lab')             { initLab && initLab(); renderLabOrders && renderLabOrders(); }
-  else if(pageKey==='ipd')             renderIPD && renderIPD();
-  else if(pageKey==='ot')              { renderOTList && renderOTList(); setTimeout(()=>{ const w=document.getElementById('who-signin-list'); const t=document.getElementById('ot-t-in'); if(w) w.style.display=''; if(t&&t.closest('.card')) t.closest('.card').style.display=''; },100); }
+  else if(pageKey==='ipd')             { loadIPDPatientsFromFirebase && loadIPDPatientsFromFirebase(); renderIPD && renderIPD(); }
+  else if(pageKey==='ot')              { loadOTCasesFromFirebase && loadOTCasesFromFirebase(); renderOTList && renderOTList(); setTimeout(()=>{ const w=document.getElementById('who-signin-list'); const t=document.getElementById('ot-t-in'); if(w) w.style.display=''; if(t&&t.closest('.card')) t.closest('.card').style.display=''; },100); }
   else if(pageKey==='inventory')       initInventory && initInventory();
   else if(pageKey==='billing')         renderBillingPage && renderBillingPage();
   else if(pageKey==='tpa')             renderTpaPage && renderTpaPage();
@@ -1903,7 +1903,7 @@ function nav(id, el, opts) {
   else if(pageKey==='reports')         renderReports && renderReports();
   else if(pageKey==='brochures')       renderBrochures && renderBrochures();
   else if(pageKey==='centres')         renderCentresView && renderCentresView();
-  else if(pageKey==='settings')        { renderSettingsPage && renderSettingsPage(); setTimeout(()=>renderConsentLibrary&&renderConsentLibrary('all'),100); }
+  else if(pageKey==='settings')        { renderSettingsPage && renderSettingsPage(); setTimeout(()=>{ renderConsentLibrary&&renderConsentLibrary('all'); loadChargesFromFirebase&&loadChargesFromFirebase(); loadDoctorProfilesFromFirebase&&loadDoctorProfilesFromFirebase(); loadDeletionRequests&&loadDeletionRequests(); },100); }
   else if(pageKey==='discharge')       { renderDischargeBuilder && renderDischargeBuilder(); }
   if(['obg','psych','skin'].includes(pageKey)) clearSharedPrescriptionEditor();
   if(pageKey==='ophtho') renderOphthoRecap && renderOphthoRecap();
@@ -8022,6 +8022,56 @@ function setInventoryImportPreview(mode, html) {
   if (!el) return;
   el.innerHTML = html || '';
 }
+let _inventoryTesseractPromise = null;
+let _inventoryPdfJsPromise = null;
+function loadInventoryExternalScript(src) {
+  return new Promise(function (resolve, reject) {
+    const existing = Array.from(document.scripts || []).find(function (s) { return s.src === src; });
+    if (existing) {
+      if (existing.dataset.loaded === '1') { resolve(true); return; }
+      existing.addEventListener('load', function () { existing.dataset.loaded = '1'; resolve(true); }, { once: true });
+      existing.addEventListener('error', reject, { once: true });
+      return;
+    }
+    const s = document.createElement('script');
+    s.src = src;
+    s.async = true;
+    s.onload = function () { s.dataset.loaded = '1'; resolve(true); };
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+function ensureInventoryTesseract() {
+  if (window.Tesseract) return Promise.resolve(window.Tesseract);
+  if (_inventoryTesseractPromise) return _inventoryTesseractPromise;
+  _inventoryTesseractPromise = loadInventoryExternalScript('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js')
+    .then(function () {
+      if (!window.Tesseract) throw new Error('OCR engine not available');
+      return window.Tesseract;
+    })
+    .catch(function (err) {
+      _inventoryTesseractPromise = null;
+      throw err;
+    });
+  return _inventoryTesseractPromise;
+}
+function ensureInventoryPdfJs() {
+  if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  if (_inventoryPdfJsPromise) return _inventoryPdfJsPromise;
+  _inventoryPdfJsPromise = import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs')
+    .then(function (pdfjsLib) {
+      window.pdfjsLib = pdfjsLib;
+      if (pdfjsLib?.GlobalWorkerOptions) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs';
+      }
+      return pdfjsLib;
+    })
+    .catch(function (err) {
+      _inventoryPdfJsPromise = null;
+      throw err;
+    });
+  return _inventoryPdfJsPromise;
+}
 function inventoryKnownVendorNames() {
   const names = [];
   (window.BMH_VENDOR_BILLS || []).forEach(function (v) { if (v?.vendor) names.push(String(v.vendor)); });
@@ -8127,6 +8177,7 @@ function applyInventoryParsedData(parsed, mode) {
   if (catEl && parsed.category && Array.from(catEl.options).some(function (o) { return o.value === parsed.category; })) catEl.value = parsed.category;
 }
 async function extractInventoryTextFromImageDataUrl(dataUrl) {
+  await ensureInventoryTesseract();
   if (!window.Tesseract) throw new Error('OCR engine not loaded');
   const result = await window.Tesseract.recognize(dataUrl, 'eng', {
     logger: function (m) {
@@ -8137,6 +8188,8 @@ async function extractInventoryTextFromImageDataUrl(dataUrl) {
   return String(result?.data?.text || '').trim();
 }
 async function extractInventoryTextFromPdfFile(file) {
+  await ensureInventoryPdfJs();
+  await ensureInventoryTesseract();
   if (!window.pdfjsLib) throw new Error('PDF reader not loaded');
   const arr = await file.arrayBuffer();
   const pdf = await window.pdfjsLib.getDocument({ data: arr }).promise;
@@ -17263,19 +17316,9 @@ function activateUserSession(user, profile, opts) {
         if (typeof loadTodayTransactions === 'function') loadTodayTransactions();
       }, 120);
       deferBootstrap(function() {
-        if (typeof loadDrugLibraryFromStorage === 'function') loadDrugLibraryFromStorage();
-        if (typeof loadCustomPurposes === 'function') loadCustomPurposes();
-        if (typeof loadAdviceTemplates === 'function') loadAdviceTemplates();
-        if (typeof loadChargesFromFirebase === 'function') loadChargesFromFirebase();
-        if (typeof loadDoctorProfilesFromFirebase === 'function') loadDoctorProfilesFromFirebase();
-      }, 600);
-      deferBootstrap(function() {
-        if (typeof loadDeletionRequests === 'function') loadDeletionRequests();
         if (typeof listenDeletionRequestsForApprover === 'function') listenDeletionRequestsForApprover();
-        if (typeof loadOTCasesFromFirebase === 'function') loadOTCasesFromFirebase();
-        if (typeof loadIPDPatientsFromFirebase === 'function') loadIPDPatientsFromFirebase();
         if (profile.role === 'Lab' && typeof listenLabOrders === 'function') listenLabOrders();
-      }, 1100);
+      }, 900);
       deferBootstrap(function() {
         if (!window.FBDB) return;
         window.FBDB.ref('userSettings').once('value').then(function(snap) {
