@@ -11997,9 +11997,14 @@ function lookupByBMHID(val) {
     return digits.length >= 6 && nums.some(function (n) { return n.includes(digits); });
   };
   // Search by BMSH ID, phone, or name
-  const byId = PATIENTS.find(p => String(p.bmhId || '').toUpperCase() === v || String(p.bmhId || '').toUpperCase().includes(v.replace('BMSH-','')));
-  const byPhone = PATIENTS.find(byPhoneMatch) || null;
-  const byName = val.length >= 3 ? PATIENTS.filter(p => p.name?.toLowerCase().includes(vLow)) : [];
+  const activePatients = (PATIENTS || []).filter(function (p) { return !isMergedPatientRecord(p); });
+  const mergedById = (PATIENTS || []).find(function (p) {
+    return String(p?.bmhId || '').toUpperCase() === v && p?.mergedInto;
+  });
+  const byId = (mergedById && activePatients.find(function (p) { return String(p?.bmhId || '') === String(mergedById.mergedInto || ''); }))
+    || activePatients.find(p => String(p.bmhId || '').toUpperCase() === v || String(p.bmhId || '').toUpperCase().includes(v.replace('BMSH-','')));
+  const byPhone = activePatients.find(byPhoneMatch) || null;
+  const byName = val.length >= 3 ? activePatients.filter(p => p.name?.toLowerCase().includes(vLow)) : [];
   const single = byId || byPhone;
   if(single) {
     el.innerHTML = `<div style="background:var(--green-lt);border-radius:8px;padding:10px;border-left:3px solid var(--green)">
@@ -12102,10 +12107,13 @@ function completeQrLookup(rawId) {
   const patient = (PATIENTS || []).find(function (p) {
     const pid = String(p?.bmhId || '').toUpperCase();
     return pid === clean || pid === id || pid.includes(clean.replace('BMSH-', ''));
-  });
+  }) || null;
+  const resolvedPatient = patient?.mergedInto
+    ? (PATIENTS || []).find(function (p) { return String(p?.bmhId || '') === String(patient.mergedInto || ''); }) || patient
+    : patient;
   closeQRScanner();
-  if (patient && patient.bmhId) {
-    prefillExistingPatient(patient.bmhId);
+  if (resolvedPatient && resolvedPatient.bmhId) {
+    prefillExistingPatient(resolvedPatient.bmhId);
     showToast('QR scanned and patient loaded ✓', 's');
   } else {
     showToast('QR scanned — review search result below', 's');
@@ -12209,7 +12217,7 @@ function lookupByPhone(val) {
   const matchEl = document.getElementById('rc-phone-match'); if(!matchEl) return;
   if(val.length < 7) { matchEl.innerHTML=''; return; }
   // Find all matches (multiple patients with similar phone)
-  const matches = PATIENTS.filter(p=>p.mob&&p.mob.replace(/\s/g,'').includes(val.replace(/\s/g,'').slice(-7)));
+  const matches = PATIENTS.filter(p=>!isMergedPatientRecord(p) && p.mob&&p.mob.replace(/\s/g,'').includes(val.replace(/\s/g,'').slice(-7)));
   if(matches.length) {
     matchEl.innerHTML = matches.map(match=>`
       <div style="background:var(--green-lt);border-radius:8px;padding:10px;margin-bottom:6px;border-left:3px solid var(--green)">
@@ -12229,6 +12237,10 @@ function lookupByPhone(val) {
 }
 function prefillExistingPatient(bmhId) {
   const p = PATIENTS.find(x=>x.bmhId===bmhId); if(!p) return;
+  if (p.mergedInto) {
+    prefillExistingPatient(p.mergedInto);
+    return;
+  }
   const fn = document.getElementById('rc-fn'); if(fn) fn.value = p.name.split(' ')[0]||'';
   const ln = document.getElementById('rc-ln'); if(ln) ln.value = p.name.split(' ').slice(1).join(' ')||'';
   const rel = document.getElementById('rc-rel'); if(rel) rel.value = p.rel||'';
@@ -12470,15 +12482,10 @@ window.updateExistingPatientFromReceptionForm = updateExistingPatientFromRecepti
 /** Reception — Register & Generate Token (full-width form) */
 async function registerPatient() {
   const uidDisplayed = (document.getElementById('rc-uid')?.textContent || '').trim();
-  const existingPt = uidDisplayed && PATIENTS.find(function (p) { return p.bmhId === uidDisplayed; });
-  if (existingPt) {
-    updateExistingPatientFromReceptionForm(uidDisplayed);
-    return;
-  }
-  /* existingPt is false — continue with new registration using reserved ID */
   const fn  = normalizeReceptionFieldValue('rc-fn', document.getElementById('rc-fn')?.value  || '');
   const ln  = normalizeReceptionFieldValue('rc-ln', document.getElementById('rc-ln')?.value  || '');
   const mob = (document.getElementById('rc-mob-inp')?.value || document.getElementById('rc-mob')?.value || '').trim();
+  const mob2  = document.getElementById('rc-mob2')?.value?.trim() || '';
   const dob = document.getElementById('rc-dob')?.value || '';
   const age = document.getElementById('rc-age')?.value || '';
   const sex = document.getElementById('rc-sex')?.value || 'Male';
@@ -12492,33 +12499,39 @@ async function registerPatient() {
 
   if(!fn) { showToast('Please enter patient first name','w'); return; }
 
-  const uid = await reserveNextBmhId();
-  if(!/^BMSH-\d{6,9}$/.test(uid)) { showToast('Could not generate a valid BMSH ID','e'); return; }
-
   const name = toTitleCaseName((fn + ' ' + ln).trim());
+  const existingPt = (uidDisplayed && PATIENTS.find(function (p) { return p.bmhId === uidDisplayed && !isMergedPatientRecord(p); }))
+    || findCanonicalExistingPatientByIdentity({ name, mob, mob2 });
+  const isExistingRegistration = !!existingPt;
+  const uid = isExistingRegistration ? existingPt.bmhId : await reserveNextBmhId();
+  if(!/^BMSH-\d{6,9}$/.test(uid)) { showToast('Could not generate a valid BMSH ID','e'); return; }
+  const uidEl = document.getElementById('rc-uid');
+  if (uidEl) uidEl.textContent = uid;
+
   const initials = computePatientInitials(name);
   const colors = ['#1A3C6E','#0B7B8C','#FF2D55','#AF52DE','#34C759','#FF9500','#5856D6','#FF3B30'];
-  const color = colors[Math.floor(Math.random()*colors.length)];
+  const color = existingPt?.color || colors[Math.floor(Math.random()*colors.length)];
 
   const purposeVal = normalizeReceptionFieldValue('rc-purpose', document.getElementById('rc-purpose')?.value||'New Consultation');
   const isPreReg = purposeVal==='Need to Check In' || purposeVal==='Not Checked In';
-  const mob2  = document.getElementById('rc-mob2')?.value?.trim() || '';
   const email = document.getElementById('rc-email')?.value?.trim() || '';
+  const currentIso = new Date().toISOString();
 
-  const patient = {
+  const patient = Object.assign({}, existingPt || {}, {
     bmhId: uid, name, initials, color,
     age, sex, mob, mob2, email, dob, addr,
     dept, doctor: dr, assignedDoctor: dr,
     centre, status: isPreReg ? 'pre-registered' : 'waiting',
-    balance:0,
-    advance: advAmt > 0 ? advAmt : 0,
-    advancePurpose: advPurpose || (advAmt > 0 ? 'Advance on account' : ''),
+    balance: Number(existingPt?.balance || 0),
+    advance: advAmt > 0 ? advAmt : Number(existingPt?.advance || 0),
+    advancePurpose: advPurpose || existingPt?.advancePurpose || (advAmt > 0 ? 'Advance on account' : ''),
     consultationNoFee: !!noFee,
     seen:false, dilated:false,
     preRegistered: isPreReg,
-    createdAt: new Date().toISOString(),
-    createdBy: CURRENT_USER?.name || 'Reception'
-  };
+    createdAt: existingPt?.createdAt || currentIso,
+    updatedAt: currentIso,
+    createdBy: existingPt?.createdBy || CURRENT_USER?.name || 'Reception'
+  });
   normalizePatientRecord(patient);
 
   const exists = PATIENTS.findIndex(p=>p.bmhId===uid);
@@ -12546,8 +12559,15 @@ async function registerPatient() {
   patient.refName = refName;
   patient.refMobile = refMobile;
   patient.referredBy = refName || refType || '';
-  const prevVisits = PATIENTS.filter(p=>p.mob===patient.mob&&p.bmhId!==patient.bmhId).length;
-  patient.visitCount = prevVisits + 1;
+  const prevVisits = PATIENTS.filter(function (p) {
+    if (!p || isMergedPatientRecord(p)) return false;
+    return String(p?.bmhId || '') !== String(patient.bmhId || '')
+      && patientNameIdentityKey(p?.name || p?.patient) === patientNameIdentityKey(patient.name)
+      && getPatientPhoneKeys(p).some(function (phoneKey) { return getPatientPhoneKeys(patient).includes(phoneKey); });
+  }).length;
+  patient.visitCount = isExistingRegistration
+    ? Math.max(Number(existingPt?.visitCount || 0), 1) + 1
+    : prevVisits + 1;
   if (refType) {
     const refId = 'REF' + Date.now();
     logReferral(refType, refName, refMobile, { name, bmhId: uid, dept, purpose, centre });
@@ -12635,6 +12655,11 @@ async function registerPatient() {
   const token = todayPts.length;
 
   showToast(`✅ ${name} registered — Token #${token}`, 's');
+  if (isExistingRegistration || prevVisits > 0) {
+    repairDuplicatePatientsForIdentity({ name, mob, mob2 }).catch(function (e) {
+      console.warn('duplicate patient merge after registration failed', e);
+    });
+  }
 
   maybeScheduleSameDaySurgeryOTFromRegistration(patient);
 
@@ -17537,6 +17562,214 @@ function normalizePatientRecord(p) {
   if (st === 'seen' || st === 'done') p.seen = true;
   return p;
 }
+function normalizePatientPhoneKey(value) {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (digits.length < 7) return '';
+  return digits.slice(-10);
+}
+function patientNameIdentityKey(value) {
+  return toTitleCaseName(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+function isMergedPatientRecord(p) {
+  if (!p || typeof p !== 'object') return false;
+  if (p.mergedInto || p.inactive || p.queueRemoved) return true;
+  return String(p.status || '').toLowerCase() === 'merged';
+}
+function getPatientPhoneKeys(record) {
+  return Array.from(new Set(
+    [record?.mob, record?.mobile, record?.mob2, record?.altMobile]
+      .map(normalizePatientPhoneKey)
+      .filter(Boolean)
+  ));
+}
+function getPatientIdentityMatches(input, opts) {
+  const options = opts || {};
+  const exclude = String(options.excludeBmhId || '').trim();
+  const nameKey = patientNameIdentityKey(input?.name || input?.patient || (((input?.fn || '') + ' ' + (input?.ln || '')).trim()));
+  const phoneKeys = Array.from(new Set(
+    [input?.mob, input?.mobile, input?.mob2, input?.altMobile]
+      .map(normalizePatientPhoneKey)
+      .filter(Boolean)
+  ));
+  if (!nameKey || !phoneKeys.length) return [];
+  return (PATIENTS || []).filter(function (p) {
+    if (!p || isMergedPatientRecord(p)) return false;
+    if (exclude && String(p.bmhId || '').trim() === exclude) return false;
+    if (patientNameIdentityKey(p.name || p.patient) !== nameKey) return false;
+    return getPatientPhoneKeys(p).some(function (phoneKey) { return phoneKeys.includes(phoneKey); });
+  });
+}
+function extractBmhNumericId(value) {
+  const match = String(value || '').trim().match(/^BMSH-(\d{1,9})$/i);
+  return match ? parseInt(match[1], 10) : Number.MAX_SAFE_INTEGER;
+}
+function sortPatientsByCanonicalIdentity(list) {
+  return (list || []).slice().sort(function (a, b) {
+    const idDiff = extractBmhNumericId(a?.bmhId) - extractBmhNumericId(b?.bmhId);
+    if (idDiff !== 0) return idDiff;
+    const aTime = Date.parse(a?.createdAt || a?.updatedAt || '') || 0;
+    const bTime = Date.parse(b?.createdAt || b?.updatedAt || '') || 0;
+    return aTime - bTime;
+  });
+}
+function findCanonicalExistingPatientByIdentity(input, opts) {
+  const matches = getPatientIdentityMatches(input, opts);
+  if (!matches.length) return null;
+  return sortPatientsByCanonicalIdentity(matches)[0] || null;
+}
+function pickNewerRecordByDate(a, b) {
+  const aTime = Date.parse(a?.date || a?.createdAt || a?.updatedAt || '') || 0;
+  const bTime = Date.parse(b?.date || b?.createdAt || b?.updatedAt || '') || 0;
+  return bTime > aTime ? b : a;
+}
+async function mergeDuplicatePatientRecord(canonicalId, duplicateId) {
+  const targetId = String(canonicalId || '').trim();
+  const dupId = String(duplicateId || '').trim();
+  if (!targetId || !dupId || targetId === dupId) return null;
+  const canonical = PATIENTS.find(function (p) { return String(p?.bmhId || '') === targetId; });
+  const duplicate = PATIENTS.find(function (p) { return String(p?.bmhId || '') === dupId; });
+  if (!canonical || !duplicate) return null;
+  if (duplicate.mergedInto === targetId) return canonical;
+
+  const nowIso = new Date().toISOString();
+  const merged = Object.assign({}, canonical);
+  ['mob','mob2','email','dob','addr','rel','dept','doctor','assignedDoctor','centre','color','purpose','refType','refName','refMobile','referredBy'].forEach(function (key) {
+    if ((!merged[key] || merged[key] === '—') && duplicate[key]) merged[key] = duplicate[key];
+  });
+  merged.balance = Math.max(Number(merged.balance || 0), Number(duplicate.balance || 0), 0);
+  merged.advance = Math.max(Number(merged.advance || 0), Number(duplicate.advance || 0), 0);
+  if (!merged.advancePurpose && duplicate.advancePurpose) merged.advancePurpose = duplicate.advancePurpose;
+  merged.visitCount = Math.max(Number(merged.visitCount || 0), Number(duplicate.visitCount || 0), 1);
+  merged.prevDxByDept = Object.assign({}, duplicate.prevDxByDept || {}, merged.prevDxByDept || {});
+  if (duplicate.lastVisit) merged.lastVisit = pickNewerRecordByDate(merged.lastVisit || {}, duplicate.lastVisit || {});
+  if (patientQueueDateMatchesToday(duplicate) && !patientQueueDateMatchesToday(merged)) {
+    ['checkinAt','status','seen','seenAt','updatedAt','purpose','doctor','assignedDoctor','dept','centre','queueDate'].forEach(function (key) {
+      if (duplicate[key] != null) merged[key] = duplicate[key];
+    });
+    merged.queueRemoved = false;
+  }
+  normalizePatientRecord(merged);
+  merged.lastUpdated = nowIso;
+  merged.updatedBy = CURRENT_USER?.name || 'System';
+
+  const duplicatePatch = {
+    mergedInto: targetId,
+    inactive: true,
+    queueRemoved: true,
+    status: 'merged',
+    seen: true,
+    lastUpdated: nowIso,
+    updatedBy: CURRENT_USER?.name || 'System'
+  };
+
+  const applyLocalMerge = function () {
+    const apply = function (list) {
+      if (!Array.isArray(list)) return;
+      const canIndex = list.findIndex(function (p) { return String(p?.bmhId || '') === targetId; });
+      if (canIndex >= 0) list[canIndex] = Object.assign({}, merged);
+      const dupIndex = list.findIndex(function (p) { return String(p?.bmhId || '') === dupId; });
+      if (dupIndex >= 0) list[dupIndex] = Object.assign({}, list[dupIndex], duplicatePatch);
+    };
+    apply(PATIENTS);
+    apply(window._BMH_ALL_PATIENTS_CACHE);
+  };
+
+  const copyBucket = async function (bucketName) {
+    if (typeof fbOnce !== 'function' || typeof fbSet !== 'function') return;
+    const [existingTarget, sourceItems] = await Promise.all([
+      fbOnce(bucketName + '/' + targetId).catch(function () { return {}; }),
+      fbOnce(bucketName + '/' + dupId).catch(function () { return {}; })
+    ]);
+    const sourceEntries = Object.entries(sourceItems || {});
+    if (!sourceEntries.length) return;
+    const existing = Object.assign({}, existingTarget || {});
+    for (const [rawKey, rawValue] of sourceEntries) {
+      let nextKey = rawKey;
+      while (Object.prototype.hasOwnProperty.call(existing, nextKey)) {
+        nextKey = rawKey + '-merged-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+      }
+      existing[nextKey] = rawValue;
+      await fbSet(bucketName + '/' + targetId + '/' + nextKey, sanitizeFirebaseValue(rawValue));
+    }
+    await fbRemove(bucketName + '/' + dupId).catch(function () {});
+  };
+
+  applyLocalMerge();
+  const writes = [
+    fbSet('patients/' + targetId, sanitizeFirebaseValue(merged)),
+    fbUpdate('patients/' + dupId, duplicatePatch).catch(function () {})
+  ];
+  if (typeof window.upsertPatientFirestore === 'function') {
+    writes.push(window.upsertPatientFirestore(merged).catch(function () {}));
+  }
+  if (typeof window.patchPatientFirestore === 'function') {
+    writes.push(window.patchPatientFirestore(dupId, duplicatePatch).catch(function () {}));
+  }
+  await Promise.all(writes);
+  await copyBucket('visits');
+  await copyBucket('prescriptions');
+  rebuildPatientsArrayFromGlobalCache && rebuildPatientsArrayFromGlobalCache();
+  return merged;
+}
+async function repairDuplicatePatientsForIdentity(input) {
+  const matches = sortPatientsByCanonicalIdentity(getPatientIdentityMatches(input));
+  if (matches.length < 2) return matches[0] || null;
+  const canonical = matches[0];
+  for (let i = 1; i < matches.length; i += 1) {
+    await mergeDuplicatePatientRecord(canonical.bmhId, matches[i].bmhId);
+  }
+  return canonical;
+}
+async function repairDuplicatePatientsByIdentity() {
+  if (window._bmhDuplicateRepairRunning) return;
+  window._bmhDuplicateRepairRunning = true;
+  try {
+    const source = Array.isArray(window._BMH_ALL_PATIENTS_CACHE) && window._BMH_ALL_PATIENTS_CACHE.length
+      ? window._BMH_ALL_PATIENTS_CACHE
+      : PATIENTS;
+    const groups = new Map();
+    (source || []).forEach(function (p) {
+      if (!p || isMergedPatientRecord(p)) return;
+      const nameKey = patientNameIdentityKey(p.name || p.patient);
+      if (!nameKey) return;
+      getPatientPhoneKeys(p).forEach(function (phoneKey) {
+        const groupKey = nameKey + '|' + phoneKey;
+        if (!groups.has(groupKey)) groups.set(groupKey, []);
+        groups.get(groupKey).push(p);
+      });
+    });
+    let repairs = 0;
+    for (const patients of groups.values()) {
+      const unique = Array.from(new Map((patients || []).map(function (p) {
+        return [String(p?.bmhId || ''), p];
+      })).values());
+      if (unique.length < 2) continue;
+      const sorted = sortPatientsByCanonicalIdentity(unique);
+      const canonical = sorted[0];
+      for (let i = 1; i < sorted.length; i += 1) {
+        await mergeDuplicatePatientRecord(canonical.bmhId, sorted[i].bmhId);
+        repairs += 1;
+      }
+    }
+    if (repairs) showToast('Patient IDs repaired and visit history merged ✓', 's');
+  } catch (e) {
+    console.warn('duplicate patient repair failed', e);
+  } finally {
+    window._bmhDuplicateRepairRunning = false;
+    window._bmhDuplicateRepairDone = true;
+  }
+}
+function scheduleDuplicatePatientRepair() {
+  if (window._bmhDuplicateRepairDone || window._bmhDuplicateRepairQueued) return;
+  window._bmhDuplicateRepairQueued = true;
+  setTimeout(function () {
+    window._bmhDuplicateRepairQueued = false;
+    repairDuplicatePatientsByIdentity();
+  }, 1800);
+}
 /** True if patient is off the active queue (boolean seen, or status from Firebase). */
 function isPatientMarkedSeen(p) {
   if (!p) return false;
@@ -18954,6 +19187,7 @@ function loadPatientsFromFirebase() {
       showToast('Connected to database ✓','s');
     }
     genRcUID && genRcUID();
+    scheduleDuplicatePatientRepair && scheduleDuplicatePatientRepair();
     _debouncedRenderDash();
   });
 }
