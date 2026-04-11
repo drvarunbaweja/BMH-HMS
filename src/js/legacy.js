@@ -10618,6 +10618,14 @@ function buildDrugLibrarySeedRows() {
 function stripLeadingDrugQueryPrefix(s) {
   return String(s || '').replace(/^\?+\s*/, '').trim();
 }
+function normalizeDrugLibraryRow(row) {
+  if (!row || typeof row !== 'object') return row;
+  row.trade = stripLeadingDrugQueryPrefix(row.trade || row.brand || row.name || '');
+  row.generic = stripLeadingDrugQueryPrefix(row.generic || row.name || row.trade || row.brand || '');
+  if (!row.trade) row.trade = row.generic;
+  if (!row.generic) row.generic = row.trade;
+  return row;
+}
 function normalizeDrugLibrarySnapshot(val) {
   if (val == null) return [];
   if (Array.isArray(val)) return val.filter(Boolean);
@@ -10823,7 +10831,7 @@ function handleDrugImportCsv(inp) {
       const rawType = typeCol >= 0 ? (cols[typeCol] || '') : '';
       if (!trade && !generic) continue;
       const drugType = normalizeDrugTypeFromCsv(rawType);
-      DRUG_LIBRARY.push({
+      DRUG_LIBRARY.push(normalizeDrugLibraryRow({
         type: drugType,
         trade: trade || generic,
         generic: generic || trade,
@@ -10831,7 +10839,7 @@ function handleDrugImportCsv(inp) {
         dur: '1 Week',
         dept: deptDefault,
         company: company || ''
-      });
+      }));
       added++;
     }
     saveDrugLibraryToStorage();
@@ -10845,6 +10853,14 @@ function handleDrugImportCsv(inp) {
 
 function renderSettingsDrugs() {
   const el = document.getElementById('set-drugs-list'); if(!el) return;
+  let changed = false;
+  DRUG_LIBRARY.forEach(function (d) {
+    const beforeTrade = String(d?.trade || '');
+    const beforeGeneric = String(d?.generic || '');
+    normalizeDrugLibraryRow(d);
+    if (beforeTrade !== String(d?.trade || '') || beforeGeneric !== String(d?.generic || '')) changed = true;
+  });
+  if (changed) saveDrugLibraryToStorage();
   el.innerHTML = DRUG_LIBRARY.map((d,i) => `<div style="display:flex;align-items:center;gap:9px;padding:9px;background:var(--g6);border-radius:8px;margin-bottom:6px">
     <div style="width:28px;height:28px;border-radius:6px;background:${d.type==='Eye Drop'?'var(--blue-lt)':d.type==='Tablet'?'var(--green-lt)':'var(--purple-lt)'};display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0">${d.type==='Eye Drop'?'💧':d.type==='Tablet'?'💊':'🧴'}</div>
     <div style="flex:1"><div style="font-size:12.5px;font-weight:800">${d.trade} <span style="font-size:10.5px;color:var(--g1);font-weight:500">(${d.generic})</span>${d.company ? ` <span style="font-size:10px;color:var(--bmh-teal)">${d.company}</span>` : ''}</div>
@@ -10863,7 +10879,7 @@ function addDrugToLibraryFromModal() {
   const dur = document.getElementById('md-add-dur')?.value;
   const dept = document.getElementById('md-add-dept')?.value;
   if (!trade || !generic) { showToast('Enter trade and generic name', 'w'); return; }
-  DRUG_LIBRARY.push({ type, trade, generic, freq, dur, dept });
+  DRUG_LIBRARY.push(normalizeDrugLibraryRow({ type, trade, generic, freq, dur, dept }));
   saveDrugLibraryToStorage();
   renderSettingsDrugs();
   rebuildDrugGenericDatalist();
@@ -10926,6 +10942,7 @@ function saveEditDrugLibrary() {
   DRUG_LIBRARY[i].freq = document.getElementById('md-edit-freq')?.value;
   DRUG_LIBRARY[i].dur = document.getElementById('md-edit-dur')?.value;
   DRUG_LIBRARY[i].dept = document.getElementById('md-edit-dept')?.value;
+  normalizeDrugLibraryRow(DRUG_LIBRARY[i]);
   saveDrugLibraryToStorage();
   renderSettingsDrugs();
   rebuildDrugGenericDatalist();
@@ -10941,7 +10958,7 @@ function addDrugToLibrary() {
   const dur = document.getElementById('new-drug-dur')?.value;
   const dept = document.getElementById('new-drug-dept')?.value;
   if(!trade||!generic){showToast('Please enter trade and generic name','w');return;}
-  DRUG_LIBRARY.push({type,trade,generic,freq,dur,dept});
+  DRUG_LIBRARY.push(normalizeDrugLibraryRow({type,trade,generic,freq,dur,dept}));
   saveDrugLibraryToStorage();
   renderSettingsDrugs();
   showToast(`💊 ${trade} added to library ✓`,'s');
