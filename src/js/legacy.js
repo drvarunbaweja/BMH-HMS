@@ -7994,6 +7994,196 @@ function bmhPrintPurchaseOrder() {
   const w = window.open('', '_blank');
   if (w) { w.document.write(html); w.document.close(); }
 }
+function toggleInventoryImportPane(mode) {
+  const pane = document.getElementById('inv-import-pane-' + mode);
+  if (!pane) {
+    if (mode === 'ocr') {
+      const tabBtn = Array.from(document.querySelectorAll('#pg-inventory .ptab')).find(function (el) { return String(el.textContent || '').includes('Photo / OCR'); });
+      if (tabBtn) ptab(tabBtn, 'inv-ocr');
+    }
+    return;
+  }
+  pane.style.display = pane.style.display === 'none' || !pane.style.display ? 'block' : 'none';
+}
+window.toggleInventoryImportPane = toggleInventoryImportPane;
+function triggerInventoryImportCamera(mode) {
+  const inp = document.getElementById('inv-import-file-' + mode);
+  if (inp) inp.click();
+}
+window.triggerInventoryImportCamera = triggerInventoryImportCamera;
+function setInventoryImportStatus(mode, text, tone) {
+  const el = document.getElementById('inv-import-status-' + mode);
+  if (!el) return;
+  el.textContent = text || '';
+  el.style.color = tone || 'var(--g1)';
+}
+function setInventoryImportPreview(mode, html) {
+  const el = document.getElementById('inv-import-preview-' + mode);
+  if (!el) return;
+  el.innerHTML = html || '';
+}
+function inventoryKnownVendorNames() {
+  const names = [];
+  (window.BMH_VENDOR_BILLS || []).forEach(function (v) { if (v?.vendor) names.push(String(v.vendor)); });
+  (INVENTORY || []).forEach(function (i) { if (i?.vendor) names.push(String(i.vendor)); });
+  return Array.from(new Set(names.map(function (v) { return normalizeInventoryTextValue(v); }).filter(Boolean)));
+}
+function inferInventoryCategoryFromText(text) {
+  const raw = String(text || '').toLowerCase();
+  if (!raw) return '';
+  if (/iol|intraocular lens|staar|collamer|hydrophobic|hydrophilic|multifocal|toric/.test(raw)) return 'IOL';
+  if (/eye drop|drops|ophthalmic/.test(raw)) return 'Eye Drops';
+  if (/glove/.test(raw)) return 'Gloves';
+  if (/syringe/.test(raw)) return 'Syringes';
+  if (/cannula|iv cannula/.test(raw)) return 'IV Cannulas';
+  if (/ringer lactate|dns|mannitol|fluid|iv/.test(raw)) return 'IV Fluids';
+  if (/vaccine/.test(raw)) return 'Vaccines';
+  if (/suture/.test(raw)) return 'Sutures';
+  if (/kit/.test(raw)) return 'Kits';
+  if (/serum/.test(raw)) return 'Serums';
+  if (/cream|ointment|gel/.test(raw)) return 'Creams';
+  if (/inj|injection|vial|ampoule|ampule/.test(raw)) return 'Injections';
+  if (/antibiotic|moxifloxacin|cef|azithro|amox|cipro/.test(raw)) return 'Antibiotics';
+  return '';
+}
+function findInventoryNameInText(text) {
+  const raw = String(text || '').toLowerCase();
+  const allNames = (INVENTORY || []).map(function (i) { return String(i.name || '').trim(); }).filter(Boolean)
+    .sort(function (a, b) { return b.length - a.length; });
+  const hit = allNames.find(function (name) { return raw.includes(name.toLowerCase()); });
+  if (hit) return hit;
+  const lines = String(text || '').split(/\n+/).map(function (line) { return line.trim(); }).filter(Boolean);
+  return lines.find(function (line) {
+    return /drop|inj|injection|tab|capsule|cream|gel|iol|lactate|dns|glove|syringe|cannula|suture|kit|serum|vaccine/i.test(line)
+      && !/invoice|bill|gst|phone|mob|amount|total|qty|quantity|vendor/i.test(line);
+  }) || '';
+}
+function parseInventoryImportText(text) {
+  const flat = String(text || '').replace(/\s+/g, ' ').trim();
+  const lines = String(text || '').split(/\n+/).map(function (line) { return line.trim(); }).filter(Boolean);
+  const vendorNames = inventoryKnownVendorNames();
+  const vendor = vendorNames.find(function (name) { return flat.toLowerCase().includes(String(name).toLowerCase()); })
+    || lines.find(function (line) { return /medical|pharma|surgicals|healthcare|opticals|traders|distributors|labs|diagnostics/i.test(line); })
+    || '';
+  const invoiceMatch = flat.match(/\b(?:invoice|inv|bill)\s*(?:no|number|#)?\s*[:\-]?\s*([A-Z0-9\/-]{3,})/i);
+  const qtyMatch = flat.match(/\b(?:qty|quantity|pcs|pieces|units?)\s*[:x-]?\s*(\d{1,4})\b/i);
+  const expMatch = flat.match(/\b(0[1-9]|1[0-2])\s*[\/-]\s*(20\d{2}|\d{2})\b/);
+  const batchMatch = flat.match(/\b(?:batch|lot)\s*(?:no|number|#)?\s*[:\-]?\s*([A-Z0-9-]{3,})/i);
+  const serialMatch = flat.match(/\b(?:serial|s\/n|sn)\s*(?:no|number|#)?\s*[:\-]?\s*([A-Z0-9-]{3,})/i);
+  const amountMatches = Array.from(flat.matchAll(/(?:rs\.?|inr|₹)\s*([0-9]+(?:\.[0-9]{1,2})?)/gi)).map(function (m) { return Number(m[1] || 0); }).filter(Boolean);
+  const itemName = findInventoryNameInText(text);
+  const category = inferInventoryCategoryFromText(itemName || flat);
+  return {
+    vendor: normalizeInventoryTextValue(vendor),
+    invoiceNo: invoiceMatch ? invoiceMatch[1] : '',
+    qty: qtyMatch ? Math.max(1, Number(qtyMatch[1] || 1)) : 1,
+    exp: expMatch ? (expMatch[1] + '/' + expMatch[2]) : '',
+    batchNo: batchMatch ? batchMatch[1] : '',
+    serialNo: serialMatch ? serialMatch[1] : '',
+    amount: amountMatches.length ? amountMatches[amountMatches.length - 1] : 0,
+    itemName: normalizeInventoryTextValue(itemName),
+    category: category
+  };
+}
+function renderInventoryImportReview(parsed, mode, text) {
+  const bits = [];
+  if (parsed.itemName) bits.push('Item: <strong>' + escapeHtmlConsent(parsed.itemName) + '</strong>');
+  if (parsed.vendor) bits.push('Vendor: <strong>' + escapeHtmlConsent(parsed.vendor) + '</strong>');
+  if (parsed.invoiceNo) bits.push('Invoice: <strong>' + escapeHtmlConsent(parsed.invoiceNo) + '</strong>');
+  if (parsed.qty) bits.push('Qty: <strong>' + parsed.qty + '</strong>');
+  if (parsed.exp) bits.push('Expiry: <strong>' + escapeHtmlConsent(parsed.exp) + '</strong>');
+  if (parsed.amount) bits.push('Amount: <strong>₹' + Number(parsed.amount).toLocaleString('en-IN') + '</strong>');
+  if (parsed.batchNo) bits.push('Batch: <strong>' + escapeHtmlConsent(parsed.batchNo) + '</strong>');
+  if (parsed.serialNo) bits.push('Serial: <strong>' + escapeHtmlConsent(parsed.serialNo) + '</strong>');
+  setInventoryImportPreview(mode, bits.length ? bits.join(' · ') : 'No clear fields detected automatically. Please review manually.');
+  const ta = document.getElementById('inv-ocr-text');
+  if (ta && text) ta.value = text;
+}
+function applyInventoryParsedData(parsed, mode) {
+  if (mode === 'use') {
+    const useInput = document.getElementById('bc-use');
+    if (useInput && parsed.itemName) useInput.value = parsed.itemName;
+    const qtyInput = document.getElementById('inv-use-qty');
+    if (qtyInput && parsed.qty) qtyInput.value = String(parsed.qty);
+    return;
+  }
+  const fieldMap = {
+    vendor: 'inv-in-vendor',
+    invoiceNo: 'inv-in-invoice',
+    itemName: 'bc-in',
+    exp: 'inv-in-exp'
+  };
+  Object.keys(fieldMap).forEach(function (key) {
+    const el = document.getElementById(fieldMap[key]);
+    if (el && parsed[key]) el.value = parsed[key];
+  });
+  const qtyEl = document.getElementById('inv-in-qty');
+  if (qtyEl && parsed.qty) qtyEl.value = String(parsed.qty);
+  const costEl = document.getElementById('inv-in-cost');
+  if (costEl && parsed.amount) costEl.value = String(parsed.amount);
+  const mrpEl = document.getElementById('inv-in-mrp');
+  if (mrpEl && parsed.amount && !Number(mrpEl.value || 0)) mrpEl.value = String(parsed.amount);
+  const catEl = document.getElementById('inv-in-cat');
+  if (catEl && parsed.category && Array.from(catEl.options).some(function (o) { return o.value === parsed.category; })) catEl.value = parsed.category;
+}
+async function extractInventoryTextFromImageDataUrl(dataUrl) {
+  if (!window.Tesseract) throw new Error('OCR engine not loaded');
+  const result = await window.Tesseract.recognize(dataUrl, 'eng', {
+    logger: function (m) {
+      const prog = Math.round((Number(m.progress || 0) || 0) * 100);
+      if (m.status) setInventoryImportStatus(window._inventoryImportMode || 'ocr', m.status + (prog ? ' ' + prog + '%' : ''), 'var(--bmh-blue)');
+    }
+  });
+  return String(result?.data?.text || '').trim();
+}
+async function extractInventoryTextFromPdfFile(file) {
+  if (!window.pdfjsLib) throw new Error('PDF reader not loaded');
+  const arr = await file.arrayBuffer();
+  const pdf = await window.pdfjsLib.getDocument({ data: arr }).promise;
+  const page = await pdf.getPage(1);
+  const viewport = page.getViewport({ scale: 2 });
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  await page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport }).promise;
+  return extractInventoryTextFromImageDataUrl(canvas.toDataURL('image/jpeg', 0.92));
+}
+async function handleInventoryImportFile(mode, inp) {
+  const file = inp?.files?.[0];
+  if (!file) return;
+  window._inventoryImportMode = mode;
+  setInventoryImportStatus(mode, 'Preparing file…', 'var(--bmh-blue)');
+  setInventoryImportPreview(mode, '');
+  try {
+    let text = '';
+    if (/pdf/i.test(file.type || '') || /\.pdf$/i.test(file.name || '')) {
+      text = await extractInventoryTextFromPdfFile(file);
+    } else {
+      const dataUrl = await new Promise(function (resolve, reject) {
+        const fr = new FileReader();
+        fr.onload = function (e) { resolve(String(e.target?.result || '')); };
+        fr.onerror = reject;
+        fr.readAsDataURL(file);
+      });
+      text = await extractInventoryTextFromImageDataUrl(dataUrl);
+    }
+    const parsed = parseInventoryImportText(text);
+    applyInventoryParsedData(parsed, mode);
+    renderInventoryImportReview(parsed, mode, text);
+    setInventoryImportStatus(mode, 'OCR complete. Please review the populated fields before saving.', '#1a8c3c');
+    if (mode === 'ocr') {
+      const tabBtn = Array.from(document.querySelectorAll('#pg-inventory .ptab')).find(function (el) { return String(el.textContent || '').includes('Photo / OCR'); });
+      if (tabBtn) ptab(tabBtn, 'inv-ocr');
+    }
+  } catch (err) {
+    console.warn('Inventory OCR failed:', err);
+    setInventoryImportStatus(mode, 'Could not auto-read this file. You can still review the upload and fill the fields manually.', 'var(--orange)');
+    setInventoryImportPreview(mode, 'Automatic extraction failed for this file.');
+  } finally {
+    if (inp) inp.value = '';
+  }
+}
+window.handleInventoryImportFile = handleInventoryImportFile;
 function bmhOcrApplyToStockIn() {
   const ta = document.getElementById('inv-ocr-text')?.value?.trim().split('\n')[0]?.trim();
   if (!ta) { showToast('Paste OCR text first', 'w'); return; }

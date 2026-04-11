@@ -13,7 +13,9 @@
   "dependencies": {
     "firebase": "^11.0.0",
     "firebase-admin": "^13.7.0",
-    "jsqr": "^1.4.0"
+    "jsqr": "^1.4.0",
+    "pdfjs-dist": "^5.6.205",
+    "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
     "vite": "^5.4.0"

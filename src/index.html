@@ -14,6 +14,14 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./css/main.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script type="module">
+    import * as pdfjsLib from 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs';
+    window.pdfjsLib = pdfjsLib;
+    if (pdfjsLib?.GlobalWorkerOptions) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs';
+    }
+  </script>
   <style>
     #pg-settings > .tab-content { display:none; }
     #pg-settings > .tab-content.active { display:block; }
@@ -184,6 +192,10 @@
       #main-content [style*="min-width:"] { min-width:0 !important; }
       #main-content input, #main-content select, #main-content textarea, #main-content button { max-width:100%; }
       #main-content .page, #main-content .tab-content, #main-content .card, #main-content .g2, #main-content .g32, #main-content .sg4, #main-content .fg, #main-content .fg1 { min-width:0; max-width:100%; overflow-x:hidden; }
+      #pg-inventory, #pg-inventory .card, #pg-inventory .tab-content, #pg-inventory .g32 { overflow-x:visible !important; }
+      #pg-inventory .inventory-scroll-x { overflow-x:auto !important; -webkit-overflow-scrolling:touch; }
+      #pg-inventory .inventory-wide-grid { min-width:780px; }
+      #pg-inventory .inventory-import-pane { width:100%; }
       #obg-layout, #psych-layout, #skin-layout { grid-template-columns:1fr !important; }
       #ophtho-recap-panel, #skin-summary-rail { float:none !important; width:100% !important; margin:10px 0 0 !important; }
       #obg-summary-rail, #psych-summary-rail { position:static !important; top:auto !important; }
@@ -3304,13 +3316,13 @@
       <div class="tab-content active" id="inv-in">
         <div style="background:var(--blue-lt);border-radius:10px;padding:10px;margin-bottom:12px">
           <div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Purchase Intake</div>
-          <div style="display:grid;grid-template-columns:1.1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px">
+          <div class="inventory-scroll-x"><div class="inventory-wide-grid" style="display:grid;grid-template-columns:1.1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px">
             <div class="form-group" style="margin:0"><label class="fl">Department</label><select id="inv-in-dept"><option value="ophtho">Ophthalmology</option><option value="obg">OBG</option><option value="psych">Psychiatry</option><option value="skin">Skin</option><option value="general">General / Shared</option><option value="ot">OT / Procedure</option><option value="ipd">IPD / Ward</option></select></div>
             <div class="form-group" style="margin:0"><label class="fl">Category</label><select id="inv-in-cat"></select></div>
             <div class="form-group" style="margin:0"><label class="fl">Vendor</label><input type="text" id="inv-in-vendor" placeholder="Vendor / supplier"></div>
             <div class="form-group" style="margin:0"><label class="fl">Invoice No.</label><input type="text" id="inv-in-invoice" placeholder="Bill / GRN"></div>
-          </div>
-          <div style="display:grid;grid-template-columns:1.5fr 1fr 100px 100px 100px 115px 115px;gap:8px">
+          </div></div>
+          <div class="inventory-scroll-x"><div class="inventory-wide-grid" style="display:grid;grid-template-columns:1.5fr 1fr 100px 100px 100px 115px 115px;gap:8px">
             <div class="form-group" style="margin:0"><label class="fl">Item name / barcode</label><input type="text" id="bc-in" placeholder="Enter barcode or item name…"></div>
             <div class="form-group" style="margin:0"><label class="fl">Store / location</label><select id="inv-in-store"></select></div>
             <div class="form-group" style="margin:0"><label class="fl">Qty</label><input type="number" id="inv-in-qty" min="1" value="1"></div>
@@ -3318,11 +3330,24 @@
             <div class="form-group" style="margin:0"><label class="fl">MRP ₹</label><input type="number" id="inv-in-mrp" min="0" value="0"></div>
             <div class="form-group" style="margin:0"><label class="fl">Min Qty</label><input type="number" id="inv-in-min" min="0" value="5"></div>
             <div class="form-group" style="margin:0"><label class="fl">Expiry</label><input type="text" id="inv-in-exp" placeholder="MM/YYYY"></div>
-          </div>
+          </div></div>
           <div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin-top:8px">
             <div class="form-group" style="margin:0;min-width:220px;flex:1"><label class="fl">Vendor bill upload</label><input type="file" id="inv-in-bill-file" accept="image/*,.pdf"></div>
             <div class="form-group" style="margin:0;min-width:220px"><label class="fl">Vendor billing</label><select id="inv-in-bill-mode"><option value="monthly">Monthly bill (clear in 1 month)</option><option value="on-use">Bill only when used (IOL / consignment)</option></select></div>
             <button class="btn btn-blue btn-sm" onclick="processBC('in',document.getElementById('bc-in').value)">Add stock →</button>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+            <button type="button" class="btn btn-outline btn-sm" onclick="toggleInventoryImportPane('in')">📷 Capture / Upload Bill</button>
+            <button type="button" class="btn btn-outline btn-sm" onclick="toggleInventoryImportPane('ocr')">🧾 OCR Review</button>
+          </div>
+          <div id="inv-import-pane-in" class="inventory-import-pane" style="display:none;background:#fff;border:1px dashed var(--g4);border-radius:10px;padding:10px;margin-top:10px">
+            <div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Import From Bill / Live Photo</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end">
+              <div class="form-group" style="margin:0;min-width:220px;flex:1"><label class="fl">Choose image / PDF</label><input type="file" id="inv-import-file-in" accept="image/*,.pdf" capture="environment" onchange="handleInventoryImportFile('in', this)"></div>
+              <button type="button" class="btn btn-blue btn-sm" onclick="triggerInventoryImportCamera('in')">📷 Take Photo</button>
+            </div>
+            <div id="inv-import-status-in" style="font-size:11px;color:var(--g1);margin-top:8px"></div>
+            <div id="inv-import-preview-in" style="margin-top:8px;font-size:11px;color:var(--tx3)"></div>
           </div>
         </div>
         <div id="inv-iol-stock-box" style="display:none;background:linear-gradient(135deg,#fff7db,#fff);border:1px solid #ead8a4;border-radius:10px;padding:12px;margin-bottom:12px">
@@ -3350,11 +3375,6 @@
           <div id="inv-iol-bill-review" style="display:none;background:#fff;border:1px dashed #d2bb79;border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:11px;color:#7a5f22"></div>
           <div id="inv-iol-power-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px"></div>
         </div>
-        <div class="scanner-box" onclick="scanBC('in')" style="margin-bottom:12px">
-          <div class="svf">📷<div class="sc-corner sc-tl"></div><div class="sc-corner sc-tr"></div><div class="sc-corner sc-bl"></div><div class="sc-corner sc-br"></div><div class="sc-line"></div></div>
-          <div style="font-size:13px;font-weight:800;color:var(--bmh-gold)">Tap to Scan Barcode (Stock In)</div>
-          <div style="font-size:11px;color:rgba(255,255,255,.6)">Barcode → translated to item text automatically</div>
-        </div>
         <div id="stock-in-log" style="margin-top:10px"></div>
         <div class="card" style="margin-top:12px;background:var(--g6)">
           <div class="card-hd"><div><div class="card-title">Recent Purchases</div><div class="card-sub">Department-wise stock intake, cost, invoice, and uploaded bill tracking</div></div></div>
@@ -3363,7 +3383,7 @@
       </div>
       <div class="tab-content" id="inv-use">
         <div style="background:var(--orange-lt);border-radius:8px;padding:9px;margin-bottom:10px;font-size:12px;font-weight:700;color:#8a4200">💡 Scan injection/item → stock deducted + auto-billed to patient with MRP &amp; timestamp</div>
-        <div style="display:grid;grid-template-columns:1.4fr 1fr 120px 120px;gap:8px;margin-bottom:9px">
+        <div class="inventory-scroll-x"><div class="inventory-wide-grid" style="display:grid;grid-template-columns:1.4fr 1fr 120px 120px;gap:8px;margin-bottom:9px">
           <div class="form-group" style="margin:0;position:relative">
             <label class="fl">Patient search</label>
             <input type="text" id="inv-use-pt-search" placeholder="Search by BMSH ID / phone number">
@@ -3373,10 +3393,18 @@
           <div class="form-group" style="margin:0"><label class="fl">Department</label><select id="inv-use-dept"><option value="ophtho">Ophthalmology</option><option value="obg">OBG</option><option value="psych">Psychiatry</option><option value="skin">Skin</option><option value="general">General / Shared</option><option value="ot">OT / Procedure</option><option value="ipd">IPD / Ward</option></select></div>
           <div class="form-group" style="margin:0"><label class="fl">Qty</label><input type="number" id="inv-use-qty" min="1" value="1"></div>
           <div class="form-group" style="margin:0"><label class="fl">Use mode</label><select id="inv-use-mode"><option value="bill">Bill patient</option><option value="consume">Consume only</option><option value="ward">Ward stock use</option></select></div>
+        </div></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+          <button type="button" class="btn btn-outline btn-sm" onclick="toggleInventoryImportPane('use')">📷 Capture / Upload Medicine Photo</button>
         </div>
-        <div class="scanner-box" onclick="scanBC('use')" style="padding:14px;margin-bottom:12px">
-          <div class="svf" style="width:80px;height:80px">📷<div class="sc-corner sc-tl"></div><div class="sc-corner sc-tr"></div><div class="sc-corner sc-bl"></div><div class="sc-corner sc-br"></div><div class="sc-line"></div></div>
-          <div style="font-size:12.5px;font-weight:800;color:var(--bmh-gold)">Scan Item Given to Patient</div>
+        <div id="inv-import-pane-use" class="inventory-import-pane" style="display:none;background:#fff;border:1px dashed var(--g4);border-radius:10px;padding:10px;margin-bottom:10px">
+          <div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Import Medicine For Patient Usage</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end">
+            <div class="form-group" style="margin:0;min-width:220px;flex:1"><label class="fl">Choose image / PDF</label><input type="file" id="inv-import-file-use" accept="image/*,.pdf" capture="environment" onchange="handleInventoryImportFile('use', this)"></div>
+            <button type="button" class="btn btn-blue btn-sm" onclick="triggerInventoryImportCamera('use')">📷 Take Photo</button>
+          </div>
+          <div id="inv-import-status-use" style="font-size:11px;color:var(--g1);margin-top:8px"></div>
+          <div id="inv-import-preview-use" style="margin-top:8px;font-size:11px;color:var(--tx3)"></div>
         </div>
         <div style="display:flex;gap:8px"><input type="text" id="bc-use" placeholder="Barcode / item name…" style="flex:1"><button class="btn btn-orange btn-sm" onclick="processBC('use',document.getElementById('bc-use').value)">Use →</button></div>
         <div id="use-log" style="margin-top:10px"></div>
@@ -3487,8 +3515,14 @@
         </div>
       </div>
       <div class="tab-content" id="inv-ocr">
-        <div style="background:var(--g6);border-radius:8px;padding:10px;margin-bottom:10px;font-size:12px;color:var(--tx3)">Take a photo of a label or invoice. Paste extracted text below (use your phone OCR or Google Lens), then split into lines to add stock or patient items.</div>
-        <div class="form-group"><label class="fl">Paste OCR / barcode text</label><textarea id="inv-ocr-text" rows="4" style="width:100%;font-family:var(--mono);font-size:11px" placeholder="e.g. MFX-001 Vigamox batch…"></textarea></div>
+        <div style="background:var(--g6);border-radius:8px;padding:10px;margin-bottom:10px;font-size:12px;color:var(--tx3)">Upload a bill, PDF, or live photo from the phone. The app will extract text, prefill the stock form, and leave everything ready for manual review before saving.</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:10px">
+          <div class="form-group" style="margin:0;min-width:220px;flex:1"><label class="fl">Upload bill / PDF / photo</label><input type="file" id="inv-import-file-ocr" accept="image/*,.pdf" capture="environment" onchange="handleInventoryImportFile('ocr', this)"></div>
+          <button type="button" class="btn btn-blue btn-sm" onclick="triggerInventoryImportCamera('ocr')">📷 Take Photo</button>
+        </div>
+        <div id="inv-import-status-ocr" style="font-size:11px;color:var(--g1);margin-bottom:8px"></div>
+        <div id="inv-import-preview-ocr" style="margin-bottom:8px;font-size:11px;color:var(--tx3)"></div>
+        <div class="form-group"><label class="fl">Extracted OCR / barcode text</label><textarea id="inv-ocr-text" rows="6" style="width:100%;font-family:var(--mono);font-size:11px" placeholder="OCR output will appear here automatically after upload"></textarea></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button type="button" class="btn btn-blue btn-sm" onclick="bmhOcrApplyToStockIn()">Use first line as stock-in barcode</button>
           <button type="button" class="btn btn-orange btn-sm" onclick="bmhOcrApplyToPatientUse()">Use first line for selected patient (usage)</button>
