@@ -18686,7 +18686,43 @@ function buildRxPlainInstructionLine(d, lang, fmtIN) {
       line = 'Take ' + rxOralDosePhraseEn(d) + ' ' + freq + ' for ' + dur + ', from ' + df + ' to ' + dt + '.';
     }
   }
+  const timingSource = Array.isArray(d.activeTimes) && d.activeTimes.length
+    ? d.activeTimes
+    : (Array.isArray(d.times) && d.times.length ? d.times : []);
+  const timings = timingSource.filter(Boolean).join(' · ');
+  if (timings) {
+    if (lang === 'hi') line += ' समय: ' + timings + '।';
+    else if (lang === 'pa') line += ' ਸਮਾਂ: ' + timings + '।';
+    else line += ' Timings: ' + timings + '.';
+  }
   return line;
+}
+
+function getDoctorPrescriptionPrintMode(profile) {
+  const mode = String(profile?.rxPrintMode || '').trim().toLowerCase();
+  if (['table', 'plain', 'both', 'plain_only'].includes(mode)) return mode;
+  return 'both';
+}
+
+function getRxTimingsText(d) {
+  const explicit = Array.isArray(d.activeTimes) && d.activeTimes.length
+    ? d.activeTimes
+    : (Array.isArray(d.times) && d.times.length ? d.times : []);
+  if (explicit.length) return explicit.join(' · ');
+  const freq = String(d.freq || '').toLowerCase();
+  if (/hourly/.test(freq)) return 'Hourly';
+  if (/every 2 hours/.test(freq)) return '6am · 8am · 10am · 12pm · 2pm · 4pm · 6pm · 8pm';
+  if (/every 3 hours/.test(freq)) return '6am · 9am · 12pm · 3pm · 6pm · 9pm';
+  if (/every 4 hours/.test(freq)) return '6am · 10am · 2pm · 6pm · 10pm';
+  if (/6 times|6x/.test(freq)) return '6am · 10am · 2pm · 6pm · 8pm · 10pm';
+  if (/4 times|qid/.test(freq)) return '6am · 12pm · 6pm · 10pm';
+  if (/3 times|tds/.test(freq)) return '8am · 2pm · 8pm';
+  if (/twice|bd/.test(freq)) return '8am · 8pm';
+  if (/once daily|od/.test(freq)) return '9am';
+  if (/bedtime|hs/.test(freq)) return '10pm';
+  if (/once weekly/.test(freq)) return 'Once Weekly';
+  if (/prn|as needed/.test(freq)) return 'As Needed';
+  return '—';
 }
 
 // ─── UPDATED printUnifiedRx with doctor degrees + safePrint ─────────────
@@ -18819,6 +18855,7 @@ window.printUnifiedRx = function(deptId) {
   if (!doctorDegrees && doctorNameMatchesCurrentUser(doctorName)) {
     doctorDegrees = String(CURRENT_USER?.degrees || '').trim();
   }
+  const rxPrintMode = getDoctorPrescriptionPrintMode(doctorProfile);
   const doctorSpec    = {oe:'Ophthalmologist',obg:'Obstetrician & Gynaecologist',psych:'Neuropsychiatrist',skin:'Dermatologist'}[deptId]||'Specialist';
   const doctorReg     = String(doctorProfile.reg || '').trim();
   const doctorPhone   = '6280048805';
@@ -18923,16 +18960,17 @@ ${showGL ? `
 
 ${incPos && deptId==='oe' ? `<div class="lbl-row" style="margin:6px 0"><span class="lbl">Positive Findings:</span><span class="lbl-val">${(typeof buildOphthoPositiveFindingsList === 'function' ? buildOphthoPositiveFindingsList() : []).join(' ; ') || '—'}</span></div>` : ''}
 
-${incRxFinal && drugs.length ? `
+${incRxFinal && drugs.length && rxPrintMode !== 'plain_only' ? `
 <div class="sec-title">Medicine (Rx):</div>
 <table>
-  <thead><tr><th>#</th><th class="left">Name</th><th>Form</th><th>Route / Eye</th><th>Frequency</th><th>Duration</th><th>From</th><th>To</th></tr></thead>
+  <thead><tr><th>#</th><th class="left">Name</th><th>Form</th><th>Route / Eye</th><th>Frequency</th><th>Timings</th><th>Duration</th><th>From</th><th>To</th></tr></thead>
   <tbody>
     ${drugs.map((d,i)=>{
       const trade = (typeof rxDrugTradeName === 'function' ? rxDrugTradeName(d) : (d.brand||d.trade||'')) || '—';
       const gen = (typeof rxDrugGenericName === 'function' ? rxDrugGenericName(d) : (d.name||d.generic||'')) || '—';
       const form = d.drugType || d.type || '—';
       const route = (d.eye && d.eye[0]) || '—';
+      const timings = getRxTimingsText(d);
       const plainLine = buildRxPlainInstructionLine(d, rxPlainLang, fmtIN);
       const taperRows = Array.isArray(d.taperRows) ? d.taperRows : (d.taperRow ? [d.taperRow] : []);
       let rows = `<tr>
@@ -18941,33 +18979,46 @@ ${incRxFinal && drugs.length ? `
         <td>${form}</td>
         <td>${route}</td>
         <td>${d.freq||'—'}</td>
+        <td>${timings}</td>
         <td>${d.dur||'—'}</td>
         <td>${fmtIN(d.dateFrom)}</td>
         <td>${fmtIN(d.dateTo)}</td>
       </tr>`;
-      if (plainLine) {
-        rows += `<tr style="background:#f7faff"><td class="left" colspan="8" style="padding-top:7px;padding-bottom:7px;font-size:11px;line-height:1.5"><div style="padding-left:8px">${escapeHtmlConsent(plainLine)}</div></td></tr>`;
+      if (plainLine && rxPrintMode === 'both') {
+        rows += `<tr style="background:#f7faff"><td class="left" colspan="9" style="padding-top:7px;padding-bottom:7px;font-size:11px;line-height:1.5"><div style="padding-left:8px">${escapeHtmlConsent(plainLine)}</div></td></tr>`;
       }
       taperRows.forEach((tap, tapIdx) => {
         const taperLine = buildRxPlainInstructionLine({ ...d, freq: tap.freq, dur: tap.dur, dateFrom: tap.dateFrom, dateTo: tap.dateTo, taperRows: [] }, rxPlainLang, fmtIN);
+        const taperTimings = getRxTimingsText(tap);
         rows += `<tr style="background:#fff8e6">
           <td style="font-weight:700;color:#8a4200">↳</td>
           <td class="left"><div class="rx-name">${trade}</div><div class="rx-gen">${rxPlainLang === 'hi' ? `धीरे कम करें ${tapIdx + 1}` : rxPlainLang === 'pa' ? `ਹੌਲੀ ਘਟਾਓ ${tapIdx + 1}` : `Taper ${tapIdx + 1}`}</div></td>
           <td>${form}</td>
           <td>${route}</td>
           <td>${rxFreqPlain(tap.freq, rxPlainLang)||'—'}</td>
+          <td>${taperTimings}</td>
           <td>${rxDurationPlain(tap.dur, rxPlainLang)||'—'}</td>
           <td>${fmtIN(tap.dateFrom)}</td>
           <td>${fmtIN(tap.dateTo)}</td>
         </tr>`;
-        if (taperLine) {
-          rows += `<tr style="background:#fffaf0"><td class="left" colspan="8" style="padding-top:7px;padding-bottom:7px;font-size:11px;line-height:1.5"><div style="padding-left:8px">${escapeHtmlConsent(taperLine)}</div></td></tr>`;
+        if (taperLine && rxPrintMode === 'both') {
+          rows += `<tr style="background:#fffaf0"><td class="left" colspan="9" style="padding-top:7px;padding-bottom:7px;font-size:11px;line-height:1.5"><div style="padding-left:8px">${escapeHtmlConsent(taperLine)}</div></td></tr>`;
         }
       });
       return rows;
     }).join('')}
   </tbody>
 </table>` : rxEmptyNote}
+
+${incRxFinal && drugs.length && (rxPrintMode === 'plain' || rxPrintMode === 'plain_only') ? `
+<div class="sec-title">Medicine Instructions:</div>
+<div style="display:flex;flex-direction:column;gap:7px">
+  ${drugs.map((d,i)=>{
+    const plainLine = buildRxPlainInstructionLine(d, rxPlainLang, fmtIN);
+    const taperRows = Array.isArray(d.taperRows) ? d.taperRows : (d.taperRow ? [d.taperRow] : []);
+    return `<div style="padding:7px 9px;border:1px solid #c8d0dc;border-radius:8px;background:#fafbfc;font-size:11px;line-height:1.6"><strong>${i+1}. ${escapeHtmlConsent((typeof rxDrugTradeName === 'function' ? rxDrugTradeName(d) : (d.brand||d.trade||d.name||'')) || 'Medicine')}</strong><div style="margin-top:4px">${escapeHtmlConsent(plainLine || '')}</div>${taperRows.map((tap, idx)=>`<div style="margin-top:4px;padding-left:10px;color:#8a4200">↳ ${escapeHtmlConsent(buildRxPlainInstructionLine({ ...d, freq: tap.freq, dur: tap.dur, dateFrom: tap.dateFrom, dateTo: tap.dateTo, activeTimes: tap.activeTimes || tap.times || [] }, rxPlainLang, fmtIN) || ('Taper ' + (idx+1)))}</div>`).join('')}</div>`;
+  }).join('')}
+</div>` : ''}
 
 ${incAdvFinal && adviceHtml ? `<div style="margin:8px 0"><div class="lbl" style="margin-bottom:4px">Instructions</div><div class="lbl-val" style="display:block;line-height:1.6;padding:6px 8px;background:#f2f2f2;border-left:3px solid #666;border-radius:0 6px 6px 0">${adviceHtml}</div></div>` : ''}
 
@@ -22224,7 +22275,7 @@ function renderDrCredentials() {
         <div class="form-group" style="margin:0"><label class="fl">Reg No.</label><input type="text" id="dr-reg-${name.replace(/\s/g,'_')}" value="${dr.reg||''}" placeholder="PMC-XXXXX" style="font-size:12px"></div>
         <div class="form-group" style="margin:0"><label class="fl">Specialty</label><input type="text" id="dr-spec-${name.replace(/\s/g,'_')}" value="${dr.dept||''}" placeholder="Ophthalmology…" style="font-size:12px"></div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px">
         <div class="form-group" style="margin:0"><label class="fl">Signature (upload)</label>
           <input type="file" accept="image/*" onchange="uploadDrSignature('${name}',this)" style="font-size:11px">
         </div>
@@ -22233,6 +22284,14 @@ function renderDrCredentials() {
             <option ${dr.centre==='CHD'?'selected':''}>CHD</option>
             <option ${dr.centre==='RPR'?'selected':''}>RPR</option>
             <option ${dr.centre==='CHD & RPR'?'selected':''}>CHD & RPR</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0"><label class="fl">Prescription Print</label>
+          <select id="dr-rx-print-${name.replace(/\s/g,'_')}" style="font-size:12px">
+            <option value="table" ${getDoctorPrescriptionPrintMode(dr)==='table'?'selected':''}>Table Only</option>
+            <option value="plain" ${getDoctorPrescriptionPrintMode(dr)==='plain'?'selected':''}>Plain Instructions With Timings</option>
+            <option value="both" ${getDoctorPrescriptionPrintMode(dr)==='both'?'selected':''}>Table + Instructions</option>
+            <option value="plain_only" ${getDoctorPrescriptionPrintMode(dr)==='plain_only'?'selected':''}>Plain Instructions Only</option>
           </select>
         </div>
       </div>
@@ -22265,11 +22324,13 @@ function saveDoctorCredentials() {
     const reg  = document.getElementById('dr-reg-'+key)?.value;
     const spec = document.getElementById('dr-spec-'+key)?.value;
     const ctr  = document.getElementById('dr-centre-'+key)?.value;
+    const rxp  = document.getElementById('dr-rx-print-'+key)?.value;
     if(DOCTOR_PROFILES[name]) {
       if(deg !== undefined)  DOCTOR_PROFILES[name].degrees = deg;
       if(reg !== undefined)  DOCTOR_PROFILES[name].reg     = reg;
       if(spec !== undefined) DOCTOR_PROFILES[name].dept    = spec;
       if(ctr !== undefined)  DOCTOR_PROFILES[name].centre  = ctr;
+      if(rxp !== undefined)  DOCTOR_PROFILES[name].rxPrintMode = rxp;
     }
   });
   saveDoctorProfilesToLocalStorage();
