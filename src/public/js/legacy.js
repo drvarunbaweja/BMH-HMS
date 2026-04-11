@@ -1855,6 +1855,14 @@ function restoreAppNavState(state) {
 }
 function nav(id, el, opts) {
   opts = opts || {};
+  const deferPageWork = function (fn) {
+    const runner = function () { try { fn && fn(); } catch (e) { console.warn('Deferred page init error:', e); } };
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(function () { setTimeout(runner, 0); });
+      return;
+    }
+    setTimeout(runner, 0);
+  };
   // Sidebar passes short ids ('reception'); app.js may pass full ids ('pg-reception').
   const pageKey = (typeof id === 'string' && id.startsWith('pg-')) ? id.slice(3) : id;
   // Show the correct page
@@ -1883,28 +1891,28 @@ function nav(id, el, opts) {
     const e2 = document.getElementById(d+'-rx-date'); if(e2) e2.textContent = today;
   });
   // Page-specific init
-  if(pageKey==='dashboard')            renderDashboard && renderDashboard();
-  else if(pageKey==='doctor-queue')    renderDocQueue && renderDocQueue();
-  else if(pageKey==='appointments')    { const d=document.getElementById('apt-date-inp'); if(d)d.value=new Date().toISOString().split('T')[0]; renderAptDay && renderAptDay(); }
-  else if(pageKey==='print-templates') renderPrintTemplates && renderPrintTemplates();
-  else if(pageKey==='consents')        { renderConsent && renderConsent(); updateConsentPatientHeader(); refreshConsentLibrary && refreshConsentLibrary(); }
-  else if(pageKey==='ophtho')          { initQR && initQR(); renderRxDrugs && renderRxDrugs(); buildRefractionDropdowns && buildRefractionDropdowns(); renderOphthoPayList && renderOphthoPayList(); typeof initDiagnosisRowsIfEmpty==='function'&&initDiagnosisRowsIfEmpty(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); typeof wrapOphAdviceChipsWithDelete==='function'&&wrapOphAdviceChipsWithDelete(); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); }, 120); }
-  else if(pageKey==='obg')             { renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); initObgSelects && initObgSelects(); toggleObgWorkflow && toggleObgWorkflow(); populateObgPatientFromCurrent && populateObgPatientFromCurrent(); updateObgComputedFields && updateObgComputedFields(); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); }, 120); }
-  else if(pageKey==='psych')           { renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); togglePsychTracks && togglePsychTracks(); renderPsychRail && renderPsychRail(); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); }, 120); }
-  else if(pageKey==='skin')            { renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); renderSkinRail && renderSkinRail(); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); }, 120); }
-  else if(pageKey==='reception')       { renderReceptionPage && renderReceptionPage(); setTimeout(()=>{renderCollectionDashboard&&renderCollectionDashboard();loadCustomPurposes&&loadCustomPurposes();},100); }
-  else if(pageKey==='lab')             { initLab && initLab(); renderLabOrders && renderLabOrders(); }
-  else if(pageKey==='ipd')             { loadIPDPatientsFromFirebase && loadIPDPatientsFromFirebase(); renderIPD && renderIPD(); }
-  else if(pageKey==='ot')              { loadOTCasesFromFirebase && loadOTCasesFromFirebase(); renderOTList && renderOTList(); setTimeout(()=>{ const w=document.getElementById('who-signin-list'); const t=document.getElementById('ot-t-in'); if(w) w.style.display=''; if(t&&t.closest('.card')) t.closest('.card').style.display=''; },100); }
-  else if(pageKey==='inventory')       initInventory && initInventory();
-  else if(pageKey==='billing')         renderBillingPage && renderBillingPage();
-  else if(pageKey==='tpa')             renderTpaPage && renderTpaPage();
-  else if(pageKey==='payments')        renderPaymentsPage && renderPaymentsPage();
-  else if(pageKey==='reports')         renderReports && renderReports();
-  else if(pageKey==='brochures')       renderBrochures && renderBrochures();
-  else if(pageKey==='centres')         renderCentresView && renderCentresView();
-  else if(pageKey==='settings')        { renderSettingsPage && renderSettingsPage(); setTimeout(()=>{ renderConsentLibrary&&renderConsentLibrary('all'); loadChargesFromFirebase&&loadChargesFromFirebase(); loadDoctorProfilesFromFirebase&&loadDoctorProfilesFromFirebase(); loadDeletionRequests&&loadDeletionRequests(); },100); }
-  else if(pageKey==='discharge')       { renderDischargeBuilder && renderDischargeBuilder(); }
+  if(pageKey==='dashboard')            deferPageWork(function(){ renderDashboard && renderDashboard(); });
+  else if(pageKey==='doctor-queue')    deferPageWork(function(){ renderDocQueue && renderDocQueue(); });
+  else if(pageKey==='appointments')    deferPageWork(function(){ const d=document.getElementById('apt-date-inp'); if(d)d.value=new Date().toISOString().split('T')[0]; renderAptDay && renderAptDay(); });
+  else if(pageKey==='print-templates') deferPageWork(function(){ renderPrintTemplates && renderPrintTemplates(); });
+  else if(pageKey==='consents')        deferPageWork(function(){ renderConsent && renderConsent(); updateConsentPatientHeader(); refreshConsentLibrary && refreshConsentLibrary(); });
+  else if(pageKey==='ophtho')          deferPageWork(function(){ initQR && initQR(); renderRxDrugs && renderRxDrugs(); buildRefractionDropdowns && buildRefractionDropdowns(); renderOphthoPayList && renderOphthoPayList(); typeof initDiagnosisRowsIfEmpty==='function'&&initDiagnosisRowsIfEmpty(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); typeof wrapOphAdviceChipsWithDelete==='function'&&wrapOphAdviceChipsWithDelete(); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); }, 120); });
+  else if(pageKey==='obg')             deferPageWork(function(){ renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); initObgSelects && initObgSelects(); toggleObgWorkflow && toggleObgWorkflow(); populateObgPatientFromCurrent && populateObgPatientFromCurrent(); updateObgComputedFields && updateObgComputedFields(); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); }, 120); });
+  else if(pageKey==='psych')           deferPageWork(function(){ renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); togglePsychTracks && togglePsychTracks(); renderPsychRail && renderPsychRail(); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); }, 120); });
+  else if(pageKey==='skin')            deferPageWork(function(){ renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); renderSkinRail && renderSkinRail(); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); }, 120); });
+  else if(pageKey==='reception')       deferPageWork(function(){ renderReceptionPage && renderReceptionPage(); setTimeout(()=>{renderCollectionDashboard&&renderCollectionDashboard();loadCustomPurposes&&loadCustomPurposes();},100); });
+  else if(pageKey==='lab')             deferPageWork(function(){ initLab && initLab(); renderLabOrders && renderLabOrders(); });
+  else if(pageKey==='ipd')             deferPageWork(function(){ loadIPDPatientsFromFirebase && loadIPDPatientsFromFirebase(); renderIPD && renderIPD(); });
+  else if(pageKey==='ot')              deferPageWork(function(){ loadOTCasesFromFirebase && loadOTCasesFromFirebase(); renderOTList && renderOTList(); setTimeout(()=>{ const w=document.getElementById('who-signin-list'); const t=document.getElementById('ot-t-in'); if(w) w.style.display=''; if(t&&t.closest('.card')) t.closest('.card').style.display=''; },100); });
+  else if(pageKey==='inventory')       deferPageWork(function(){ initInventory && initInventory(); });
+  else if(pageKey==='billing')         deferPageWork(function(){ renderBillingPage && renderBillingPage(); });
+  else if(pageKey==='tpa')             deferPageWork(function(){ renderTpaPage && renderTpaPage(); });
+  else if(pageKey==='payments')        deferPageWork(function(){ renderPaymentsPage && renderPaymentsPage(); });
+  else if(pageKey==='reports')         deferPageWork(function(){ renderReports && renderReports(); });
+  else if(pageKey==='brochures')       deferPageWork(function(){ renderBrochures && renderBrochures(); });
+  else if(pageKey==='centres')         deferPageWork(function(){ renderCentresView && renderCentresView(); });
+  else if(pageKey==='settings')        deferPageWork(function(){ renderSettingsPage && renderSettingsPage(); setTimeout(()=>{ renderConsentLibrary&&renderConsentLibrary('all'); loadChargesFromFirebase&&loadChargesFromFirebase(); loadDoctorProfilesFromFirebase&&loadDoctorProfilesFromFirebase(); loadDeletionRequests&&loadDeletionRequests(); },100); });
+  else if(pageKey==='discharge')       deferPageWork(function(){ renderDischargeBuilder && renderDischargeBuilder(); });
   if(['obg','psych','skin'].includes(pageKey)) clearSharedPrescriptionEditor();
   if(pageKey==='ophtho') renderOphthoRecap && renderOphthoRecap();
   if(pageKey==='obg') renderObgSummaryRail && renderObgSummaryRail();
@@ -22273,51 +22281,59 @@ function renderDashboard() {
         + '</div>';
     };
     const collChartEl = document.getElementById('dash-admin-chart-collection');
-    if (collChartEl) {
-      const days = Array.from({ length: 7 }).map(function (_, idx) {
-        const d = new Date();
-        d.setDate(d.getDate() - (6 - idx));
-        const ds = d.toISOString().slice(0, 10);
-        const total = TRANSACTIONS.filter(function (t) { return txnDay(t) === ds && txnOk(t) && centreMatch(t); }).reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
-        return { label: d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }), value: total };
-      });
-      const weeks = Array.from({ length: 6 }).map(function (_, idx) {
-        const end = new Date();
-        end.setDate(end.getDate() - ((5 - idx) * 7));
-        const weekDates = Array.from({ length: 7 }).map(function (__unused, wd) {
-          const d = new Date(end);
-          d.setDate(end.getDate() - wd);
-          return d.toISOString().slice(0, 10);
-        });
-        const total = TRANSACTIONS.filter(function (t) { return weekDates.includes(txnDay(t)) && txnOk(t) && centreMatch(t); }).reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
-        return { label: 'W' + (idx + 1), value: total };
-      });
-      const months = Array.from({ length: 4 }).map(function (_, idx) {
-        const d = new Date();
-        d.setMonth(d.getMonth() - (3 - idx), 1);
-        const ym = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
-        const total = TRANSACTIONS.filter(function (t) { return String(txnDay(t) || '').startsWith(ym) && txnOk(t) && centreMatch(t); }).reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
-        return { label: d.toLocaleDateString('en-IN', { month: 'short' }), value: total };
-      });
-      collChartEl.innerHTML = '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px">'
-        + '<div><div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;margin-bottom:6px">Daily</div>' + renderBarSet(days.map(function (x) { return x.value; }), days.map(function (x) { return x.label; }), days.map(function () { return 'var(--bmh-blue)'; })) + '</div>'
-        + '<div><div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;margin-bottom:6px">Weekly</div>' + renderBarSet(weeks.map(function (x) { return x.value; }), weeks.map(function (x) { return x.label; }), weeks.map(function () { return 'var(--bmh-gold)'; })) + '</div>'
-        + '<div><div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;margin-bottom:6px">Monthly</div>' + renderBarSet(months.map(function (x) { return x.value; }), months.map(function (x) { return x.label; }), months.map(function () { return 'var(--bmh-teal)'; })) + '</div>'
-        + '</div>';
-    }
     const surgChartEl = document.getElementById('dash-admin-chart-surgery');
-    if (surgChartEl) {
-      const days = Array.from({ length: 7 }).map(function (_, idx) {
-        const d = new Date();
-        d.setDate(d.getDate() - (6 - idx));
-        const ds = d.toISOString().slice(0, 10);
-        const total = (window.OT_CASES || OT_CASES || []).filter(function (c) {
-          return centreMatch(c) && [c.date, c.otDate, c.createdAt, c.surgeryDate].some(function (v) { return String(v || '').slice(0, 10) === ds; });
-        }).length;
-        return { label: d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }), value: total };
-      });
-      surgChartEl.innerHTML = renderBarSet(days.map(function (x) { return x.value; }), days.map(function (x) { return x.label; }), days.map(function () { return 'var(--orange)'; }));
-    }
+    if (collChartEl) collChartEl.innerHTML = '<div style="padding:24px 12px;color:var(--g1);font-size:12px;text-align:center">Loading collection trends…</div>';
+    if (surgChartEl) surgChartEl.innerHTML = '<div style="padding:24px 12px;color:var(--g1);font-size:12px;text-align:center">Loading surgery trends…</div>';
+    if (window._dashAdminChartsTimer) clearTimeout(window._dashAdminChartsTimer);
+    window._dashAdminChartsTimer = setTimeout(function () {
+      if (getActivePageId() !== 'pg-dashboard') return;
+      const collTarget = document.getElementById('dash-admin-chart-collection');
+      if (collTarget) {
+        const days = Array.from({ length: 7 }).map(function (_, idx) {
+          const d = new Date();
+          d.setDate(d.getDate() - (6 - idx));
+          const ds = d.toISOString().slice(0, 10);
+          const total = TRANSACTIONS.filter(function (t) { return txnDay(t) === ds && txnOk(t) && centreMatch(t); }).reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
+          return { label: d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }), value: total };
+        });
+        const weeks = Array.from({ length: 6 }).map(function (_, idx) {
+          const end = new Date();
+          end.setDate(end.getDate() - ((5 - idx) * 7));
+          const weekDates = Array.from({ length: 7 }).map(function (__unused, wd) {
+            const d = new Date(end);
+            d.setDate(end.getDate() - wd);
+            return d.toISOString().slice(0, 10);
+          });
+          const total = TRANSACTIONS.filter(function (t) { return weekDates.includes(txnDay(t)) && txnOk(t) && centreMatch(t); }).reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
+          return { label: 'W' + (idx + 1), value: total };
+        });
+        const months = Array.from({ length: 4 }).map(function (_, idx) {
+          const d = new Date();
+          d.setMonth(d.getMonth() - (3 - idx), 1);
+          const ym = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+          const total = TRANSACTIONS.filter(function (t) { return String(txnDay(t) || '').startsWith(ym) && txnOk(t) && centreMatch(t); }).reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
+          return { label: d.toLocaleDateString('en-IN', { month: 'short' }), value: total };
+        });
+        collTarget.innerHTML = '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px">'
+          + '<div><div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;margin-bottom:6px">Daily</div>' + renderBarSet(days.map(function (x) { return x.value; }), days.map(function (x) { return x.label; }), days.map(function () { return 'var(--bmh-blue)'; })) + '</div>'
+          + '<div><div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;margin-bottom:6px">Weekly</div>' + renderBarSet(weeks.map(function (x) { return x.value; }), weeks.map(function (x) { return x.label; }), weeks.map(function () { return 'var(--bmh-gold)'; })) + '</div>'
+          + '<div><div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;margin-bottom:6px">Monthly</div>' + renderBarSet(months.map(function (x) { return x.value; }), months.map(function (x) { return x.label; }), months.map(function () { return 'var(--bmh-teal)'; })) + '</div>'
+          + '</div>';
+      }
+      const surgTarget = document.getElementById('dash-admin-chart-surgery');
+      if (surgTarget) {
+        const days = Array.from({ length: 7 }).map(function (_, idx) {
+          const d = new Date();
+          d.setDate(d.getDate() - (6 - idx));
+          const ds = d.toISOString().slice(0, 10);
+          const total = (window.OT_CASES || OT_CASES || []).filter(function (c) {
+            return centreMatch(c) && [c.date, c.otDate, c.createdAt, c.surgeryDate].some(function (v) { return String(v || '').slice(0, 10) === ds; });
+          }).length;
+          return { label: d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }), value: total };
+        });
+        surgTarget.innerHTML = renderBarSet(days.map(function (x) { return x.value; }), days.map(function (x) { return x.label; }), days.map(function () { return 'var(--orange)'; }));
+      }
+    }, 180);
   } else {
     const todayPts = PATIENTS.filter(function (p) {
       return centreMatch(p) && normalizeDeptKeyForQueue(p.dept || '') === currentDeptKey && patientQueueDateMatchesToday(p);
