@@ -8319,6 +8319,32 @@ function inventoryKnownVendorNames() {
   (INVENTORY || []).forEach(function (i) { if (i?.vendor) names.push(String(i.vendor)); });
   return Array.from(new Set(names.map(function (v) { return normalizeInventoryTextValue(v); }).filter(Boolean)));
 }
+function inventoryKnownProductNames() {
+  const names = [];
+  (INVENTORY || []).forEach(function (i) { if (i?.name) names.push(String(i.name)); });
+  (IOL_CATALOG || []).forEach(function (row) { if (row?.name) names.push(String(row.name)); });
+  (window.BMH_PURCHASES || []).forEach(function (row) { if (row?.itemName) names.push(String(row.itemName)); });
+  return Array.from(new Set(names.map(function (v) { return normalizeInventoryTextValue(v); }).filter(Boolean)));
+}
+function renderInventoryImportDatalists() {
+  const vendorList = document.getElementById('inv-vendor-datalist');
+  if (vendorList) vendorList.innerHTML = inventoryKnownVendorNames().map(function (name) {
+    return '<option value="' + escapeHtmlConsent(name) + '"></option>';
+  }).join('');
+  const itemList = document.getElementById('inv-item-datalist');
+  if (itemList) itemList.innerHTML = inventoryKnownProductNames().map(function (name) {
+    return '<option value="' + escapeHtmlConsent(name) + '"></option>';
+  }).join('');
+}
+function normalizeInventoryCompareText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9+.\s-]/g, ' ')
+    .replace(/\bpower\b/g, ' ')
+    .replace(/\biol\b/g, ' iol ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 function inferInventoryCategoryFromText(text) {
   const raw = String(text || '').toLowerCase();
   if (!raw) return '';
@@ -8338,20 +8364,61 @@ function inferInventoryCategoryFromText(text) {
   return '';
 }
 function findInventoryNameInText(text) {
-  const raw = String(text || '').toLowerCase();
-  const allNames = (INVENTORY || []).map(function (i) { return String(i.name || '').trim(); }).filter(Boolean)
-    .sort(function (a, b) { return b.length - a.length; });
-  const hit = allNames.find(function (name) { return raw.includes(name.toLowerCase()); });
+  const raw = normalizeInventoryCompareText(text);
+  const allNames = inventoryKnownProductNames().sort(function (a, b) { return b.length - a.length; });
+  const hit = allNames.find(function (name) {
+    const low = normalizeInventoryCompareText(name);
+    if (!low) return false;
+    if (raw.includes(low)) return true;
+    const tokens = low.split(/\s+/).filter(function (t) { return t.length >= 3; });
+    return tokens.length >= 2 && tokens.every(function (token) { return raw.includes(token); });
+  });
   if (hit) return hit;
-  const iolCatalogHit = (IOL_CATALOG || []).map(function (row) { return String(row.name || '').trim(); }).filter(Boolean)
-    .sort(function (a, b) { return b.length - a.length; })
-    .find(function (name) { return raw.includes(name.toLowerCase()); });
-  if (iolCatalogHit) return iolCatalogHit;
   const lines = String(text || '').split(/\n+/).map(function (line) { return line.trim(); }).filter(Boolean);
   return lines.find(function (line) {
     return /drop|inj|injection|tab|capsule|cream|gel|iol|lactate|dns|glove|syringe|cannula|suture|kit|serum|vaccine/i.test(line)
       && !/invoice|bill|gst|phone|mob|amount|total|qty|quantity|vendor/i.test(line);
   }) || '';
+}
+function extractInventoryLineItems(text) {
+  const rows = [];
+  const seen = new Set();
+  const lines = String(text || '').split(/\n+/).map(function (line) { return line.trim().replace(/\s+/g, ' '); }).filter(Boolean);
+  lines.forEach(function (line) {
+    const lower = line.toLowerCase();
+    const isRelevant = /iol|intraocular lens|vivinex|hoya|xy1|inj|injection|tab|caps|capsule|drop|vial|ampoule|cream|gel|glove|syringe|cannula|suture|kit|serum|vaccine/i.test(line)
+      || !!findInventoryCandidatesFromText(line, 1).length;
+    if (!isRelevant || /invoice|bill|amount|grand total|sub total|cgst|sgst|igst|taxable/i.test(lower)) return;
+    const itemName = normalizeInventoryTextValue(findInventoryNameInText(line) || line.replace(/\bhsn\b.*$/i, '').trim());
+    const hsnMatch = line.match(/\b(?:hsn|sac)\s*[:\-]?\s*([0-9]{4,8})\b/i) || line.match(/\b([0-9]{6,8})\b/);
+    const qtyMatch = line.match(/\b(?:qty|quantity)\s*[:x-]?\s*(\d{1,4})\b/i) || line.match(/\b(\d{1,3})\s*(?:pcs|piece|pieces|unit|units|nos?)\b/i);
+    const expMatch = line.match(/\b(0[1-9]|1[0-2])\s*[\/-]\s*(20\d{2}|\d{2})\b/);
+    const batchMatch = line.match(/\b(?:batch|lot)\s*(?:no|number|#)?\s*[:\-]?\s*([A-Z0-9-]{3,})\b/i);
+    const serialMatch = line.match(/\b(?:serial|s\/n|sn)\s*(?:no|number|#)?\s*[:\-]?\s*([A-Z0-9-]{3,})\b/i);
+    const powerMatch = line.match(/([+-]?\d+(?:\.\d+)?)\s*(?:d|diopter)\b/i) || line.match(/([+-]\d+(?:\.\d+)?)\b/);
+    const numbers = Array.from(line.matchAll(/(?:₹|rs\.?|inr)?\s*([0-9]+(?:\.[0-9]{1,2})?)/gi)).map(function (m) { return Number(m[1] || 0); }).filter(Boolean);
+    const total = numbers.length ? numbers[numbers.length - 1] : 0;
+    const rate = numbers.length > 1 ? numbers[numbers.length - 2] : total;
+    const qty = Math.max(1, Number(qtyMatch?.[1] || 1));
+    const item = {
+      rawLine: line,
+      itemName: itemName,
+      hsn: hsnMatch ? String(hsnMatch[1] || '') : '',
+      qty: qty,
+      exp: expMatch ? (expMatch[1] + '/' + expMatch[2]) : '',
+      batchNo: batchMatch ? batchMatch[1] : '',
+      serialNo: serialMatch ? serialMatch[1] : '',
+      power: powerMatch ? normalizeIolPowerValue(powerMatch[1]) : '',
+      rate: rate,
+      total: total,
+      category: inferInventoryCategoryFromText(itemName || line)
+    };
+    const key = normalizeInventoryCompareText([item.itemName, item.batchNo, item.serialNo, item.power].join(' '));
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    rows.push(item);
+  });
+  return rows;
 }
 function findInventoryCandidatesFromText(text, limit) {
   const raw = String(text || '').toLowerCase().replace(/[^a-z0-9.+\s-]/g, ' ');
@@ -8399,23 +8466,34 @@ function parseInventoryImportText(text) {
     || lines.find(function (line) { return /medical|pharma|surgicals|healthcare|opticals|traders|distributors|labs|diagnostics/i.test(line); })
     || '';
   const invoiceMatch = flat.match(/\b(?:invoice|inv|bill)\s*(?:no|number|#)?\s*[:\-]?\s*([A-Z0-9\/-]{3,})/i);
+  const dateMatch = flat.match(/\b([0-3]?\d[\/.-][01]?\d[\/.-](?:20)?\d{2})\b/);
   const qtyMatch = flat.match(/\b(?:qty|quantity|pcs|pieces|units?)\s*[:x-]?\s*(\d{1,4})\b/i);
   const expMatch = flat.match(/\b(0[1-9]|1[0-2])\s*[\/-]\s*(20\d{2}|\d{2})\b/);
   const batchMatch = flat.match(/\b(?:batch|lot)\s*(?:no|number|#)?\s*[:\-]?\s*([A-Z0-9-]{3,})/i);
   const serialMatch = flat.match(/\b(?:serial|s\/n|sn)\s*(?:no|number|#)?\s*[:\-]?\s*([A-Z0-9-]{3,})/i);
+  const hsnMatch = flat.match(/\b(?:hsn|sac)\s*[:\-]?\s*([0-9]{4,8})\b/i);
+  const gstMatches = Array.from(flat.matchAll(/\b(?:cgst|sgst|igst|gst)\b[^0-9]{0,12}([0-9]+(?:\.[0-9]{1,2})?)/gi)).map(function (m) { return Number(m[1] || 0); }).filter(Boolean);
   const amountMatches = Array.from(flat.matchAll(/(?:rs\.?|inr|₹)\s*([0-9]+(?:\.[0-9]{1,2})?)/gi)).map(function (m) { return Number(m[1] || 0); }).filter(Boolean);
-  const itemName = findInventoryNameInText(text);
-  const category = inferInventoryCategoryFromText(itemName || flat);
+  const lineItems = extractInventoryLineItems(text);
+  const primaryItem = lineItems[0] || null;
+  const itemName = primaryItem?.itemName || findInventoryNameInText(text);
+  const category = primaryItem?.category || inferInventoryCategoryFromText(itemName || flat);
   return {
     vendor: normalizeInventoryTextValue(vendor),
     invoiceNo: invoiceMatch ? invoiceMatch[1] : '',
-    qty: qtyMatch ? Math.max(1, Number(qtyMatch[1] || 1)) : 1,
-    exp: expMatch ? (expMatch[1] + '/' + expMatch[2]) : '',
-    batchNo: batchMatch ? batchMatch[1] : '',
-    serialNo: serialMatch ? serialMatch[1] : '',
+    invoiceDate: dateMatch ? dateMatch[1] : '',
+    qty: primaryItem?.qty || (qtyMatch ? Math.max(1, Number(qtyMatch[1] || 1)) : 1),
+    exp: primaryItem?.exp || (expMatch ? (expMatch[1] + '/' + expMatch[2]) : ''),
+    batchNo: primaryItem?.batchNo || (batchMatch ? batchMatch[1] : ''),
+    serialNo: primaryItem?.serialNo || (serialMatch ? serialMatch[1] : ''),
+    hsn: primaryItem?.hsn || (hsnMatch ? hsnMatch[1] : ''),
+    power: primaryItem?.power || '',
+    rate: primaryItem?.rate || 0,
+    gstAmount: gstMatches.reduce(function (s, n) { return s + n; }, 0),
     amount: amountMatches.length ? amountMatches[amountMatches.length - 1] : 0,
     itemName: normalizeInventoryTextValue(itemName),
-    category: category
+    category: category,
+    lineItems: lineItems
   };
 }
 function renderInventoryImportReview(parsed, mode, text) {
@@ -8423,21 +8501,52 @@ function renderInventoryImportReview(parsed, mode, text) {
   if (parsed.itemName) bits.push('Item: <strong>' + escapeHtmlConsent(parsed.itemName) + '</strong>');
   if (parsed.vendor) bits.push('Vendor: <strong>' + escapeHtmlConsent(parsed.vendor) + '</strong>');
   if (parsed.invoiceNo) bits.push('Invoice: <strong>' + escapeHtmlConsent(parsed.invoiceNo) + '</strong>');
+  if (parsed.invoiceDate) bits.push('Date: <strong>' + escapeHtmlConsent(parsed.invoiceDate) + '</strong>');
   if (parsed.qty) bits.push('Qty: <strong>' + parsed.qty + '</strong>');
+  if (parsed.hsn) bits.push('HSN: <strong>' + escapeHtmlConsent(parsed.hsn) + '</strong>');
   if (parsed.exp) bits.push('Expiry: <strong>' + escapeHtmlConsent(parsed.exp) + '</strong>');
+  if (parsed.rate) bits.push('Rate: <strong>₹' + Number(parsed.rate).toLocaleString('en-IN') + '</strong>');
   if (parsed.amount) bits.push('Amount: <strong>₹' + Number(parsed.amount).toLocaleString('en-IN') + '</strong>');
+  if (parsed.gstAmount) bits.push('GST: <strong>₹' + Number(parsed.gstAmount).toLocaleString('en-IN') + '</strong>');
   if (parsed.batchNo) bits.push('Batch: <strong>' + escapeHtmlConsent(parsed.batchNo) + '</strong>');
   if (parsed.serialNo) bits.push('Serial: <strong>' + escapeHtmlConsent(parsed.serialNo) + '</strong>');
+  if (parsed.power) bits.push('Power: <strong>' + escapeHtmlConsent(parsed.power) + '</strong>');
   const candidates = findInventoryCandidatesFromText(text || parsed.itemName || '', 5);
+  const lineItemHtml = Array.isArray(parsed.lineItems) && parsed.lineItems.length
+    ? `<div style="margin-top:8px"><div style="font-size:10px;font-weight:800;color:#8a4200;text-transform:uppercase;margin-bottom:6px">Extracted bill items</div><div style="display:flex;gap:6px;flex-wrap:wrap">${parsed.lineItems.slice(0, 8).map(function (item, idx) {
+        const label = [item.itemName || 'Item', item.power || '', item.batchNo ? ('Batch ' + item.batchNo) : '', item.qty ? ('Qty ' + item.qty) : ''].filter(Boolean).join(' · ');
+        return `<button type="button" class="btn btn-xs btn-gold" onclick="applyInventoryParsedLineItem('${mode}',${idx})">${escapeHtmlConsent(label)}</button>`;
+      }).join('')}</div></div>`
+    : '';
   const candidateHtml = candidates.length
     ? `<div style="margin-top:8px"><div style="font-size:10px;font-weight:800;color:var(--bmh-blue);text-transform:uppercase;margin-bottom:6px">Suggested stock match</div><div style="display:flex;gap:6px;flex-wrap:wrap">${candidates.map(function (entry) {
         return `<button type="button" class="btn btn-xs btn-outline" onclick="applyInventorySuggestedCandidate('${mode}','${String(entry.name).replace(/'/g, "\\'")}')">${escapeHtmlConsent(entry.name)}</button>`;
       }).join('')}</div></div>`
     : '';
-  setInventoryImportPreview(mode, (bits.length ? bits.join(' · ') : 'No clear fields detected automatically. Please review manually.') + candidateHtml);
+  setInventoryImportPreview(mode, (bits.length ? bits.join(' · ') : 'No clear fields detected automatically. Please review manually.') + lineItemHtml + candidateHtml);
   const ta = document.getElementById('inv-ocr-text');
   if (ta && text) ta.value = text;
 }
+function applyInventoryParsedLineItem(mode, idx) {
+  const parsed = window._inventoryParsedImports && window._inventoryParsedImports[mode];
+  const item = parsed && Array.isArray(parsed.lineItems) ? parsed.lineItems[idx] : null;
+  if (!item) return;
+  const merged = Object.assign({}, parsed, {
+    itemName: item.itemName || parsed.itemName || '',
+    qty: item.qty || parsed.qty || 1,
+    exp: item.exp || parsed.exp || '',
+    batchNo: item.batchNo || parsed.batchNo || '',
+    serialNo: item.serialNo || parsed.serialNo || '',
+    hsn: item.hsn || parsed.hsn || '',
+    power: item.power || parsed.power || '',
+    rate: item.rate || parsed.rate || 0,
+    amount: item.total || parsed.amount || 0,
+    category: item.category || parsed.category || ''
+  });
+  applyInventoryParsedData(merged, mode);
+  setInventoryImportStatus(mode, 'Selected extracted item for review.', '#1a8c3c');
+}
+window.applyInventoryParsedLineItem = applyInventoryParsedLineItem;
 function applyInventoryParsedData(parsed, mode) {
   if (mode === 'use') {
     const useInput = document.getElementById('bc-use');
@@ -8459,7 +8568,7 @@ function applyInventoryParsedData(parsed, mode) {
   const qtyEl = document.getElementById('inv-in-qty');
   if (qtyEl && parsed.qty) qtyEl.value = String(parsed.qty);
   const costEl = document.getElementById('inv-in-cost');
-  if (costEl && parsed.amount) costEl.value = String(parsed.amount);
+  if (costEl && (parsed.rate || parsed.amount)) costEl.value = String(parsed.rate || parsed.amount);
   const mrpEl = document.getElementById('inv-in-mrp');
   if (mrpEl && parsed.amount && !Number(mrpEl.value || 0)) mrpEl.value = String(parsed.amount);
   const catEl = document.getElementById('inv-in-cat');
@@ -8512,6 +8621,8 @@ async function handleInventoryImportFile(mode, inp) {
     }
     const combinedText = (text + '\n' + fileNameHint).trim();
     const parsed = parseInventoryImportText(combinedText);
+    window._inventoryParsedImports = window._inventoryParsedImports || {};
+    window._inventoryParsedImports[mode] = parsed;
     if (!parsed.itemName) {
       const topMatch = findInventoryCandidatesFromText(combinedText, 1)[0];
       if (topMatch) parsed.itemName = topMatch.name;
@@ -8833,6 +8944,7 @@ function bmhPopulateInventorySelectors() {
 }
 function renderStockList() {
   const el=document.getElementById('inv-stock-list');if(!el)return;
+  renderInventoryImportDatalists();
   const catFilter = bmhInventoryFilterValue('inv-stock-cat-filter');
   const storeFilter = bmhInventoryFilterValue('inv-stock-store-filter');
   const rows = INVENTORY.filter(function (i) {

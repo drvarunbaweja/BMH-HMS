@@ -197,8 +197,16 @@
         touch-action:pan-x pan-y pinch-zoom;
         overscroll-behavior-x:contain;
         width:100%;
+        max-width:100vw;
+        display:block !important;
       }
-      #pg-inventory .inventory-wide-grid { min-width:780px; width:max-content; }
+      #pg-inventory .inventory-scroll-x > .inventory-wide-grid {
+        min-width:780px;
+        width:max-content;
+        max-width:none !important;
+        flex:none !important;
+      }
+      #pg-inventory input, #pg-inventory select, #pg-inventory textarea { touch-action:manipulation; }
       #pg-inventory .inventory-import-pane { width:100%; }
       #obg-layout, #psych-layout, #skin-layout { grid-template-columns:1fr !important; }
       #ophtho-recap-panel, #skin-summary-rail { float:none !important; width:100% !important; margin:10px 0 0 !important; }
@@ -3324,11 +3332,11 @@
           <div class="inventory-scroll-x"><div class="inventory-wide-grid" style="display:grid;grid-template-columns:1.1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px">
             <div class="form-group" style="margin:0"><label class="fl">Department</label><select id="inv-in-dept"><option value="ophtho">Ophthalmology</option><option value="obg">OBG</option><option value="psych">Psychiatry</option><option value="skin">Skin</option><option value="general">General / Shared</option><option value="ot">OT / Procedure</option><option value="ipd">IPD / Ward</option></select></div>
             <div class="form-group" style="margin:0"><label class="fl">Category</label><select id="inv-in-cat"></select></div>
-            <div class="form-group" style="margin:0"><label class="fl">Vendor</label><input type="text" id="inv-in-vendor" placeholder="Vendor / supplier"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Vendor</label><input type="text" id="inv-in-vendor" list="inv-vendor-datalist" placeholder="Vendor / supplier"></div>
             <div class="form-group" style="margin:0"><label class="fl">Invoice No.</label><input type="text" id="inv-in-invoice" placeholder="Bill / GRN"></div>
           </div></div>
           <div class="inventory-scroll-x"><div class="inventory-wide-grid" style="display:grid;grid-template-columns:1.5fr 1fr 100px 100px 100px 115px 115px;gap:8px">
-            <div class="form-group" style="margin:0"><label class="fl">Item name / barcode</label><input type="text" id="bc-in" placeholder="Enter barcode or item name…"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Item name / barcode</label><input type="text" id="bc-in" list="inv-item-datalist" placeholder="Enter barcode or item name…"></div>
             <div class="form-group" style="margin:0"><label class="fl">Store / location</label><select id="inv-in-store"></select></div>
             <div class="form-group" style="margin:0"><label class="fl">Qty</label><input type="number" id="inv-in-qty" min="1" value="1"></div>
             <div class="form-group" style="margin:0"><label class="fl">Cost ₹</label><input type="number" id="inv-in-cost" min="0" value="0"></div>
@@ -3336,6 +3344,8 @@
             <div class="form-group" style="margin:0"><label class="fl">Min Qty</label><input type="number" id="inv-in-min" min="0" value="5"></div>
             <div class="form-group" style="margin:0"><label class="fl">Expiry</label><input type="text" id="inv-in-exp" placeholder="MM/YYYY"></div>
           </div></div>
+          <datalist id="inv-vendor-datalist"></datalist>
+          <datalist id="inv-item-datalist"></datalist>
           <div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin-top:8px">
             <div class="form-group" style="margin:0;min-width:220px;flex:1"><label class="fl">Vendor bill upload</label><input type="file" id="inv-in-bill-file" accept="image/*,.pdf"></div>
             <div class="form-group" style="margin:0;min-width:220px"><label class="fl">Vendor billing</label><select id="inv-in-bill-mode"><option value="monthly">Monthly bill (clear in 1 month)</option><option value="on-use">Bill only when used (IOL / consignment)</option></select></div>
