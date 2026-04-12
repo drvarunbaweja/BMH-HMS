@@ -9089,6 +9089,7 @@ function applyInventoryFieldFromChip(target, value, mode) {
       break;
   }
 }
+window.applyInventoryFieldFromChip = applyInventoryFieldFromChip;
 function applyInventoryManualChip(mode, idx) {
   const parsed = window._inventoryParsedImports && window._inventoryParsedImports[mode];
   const chip = parsed && Array.isArray(parsed.manualChips) ? parsed.manualChips[idx] : null;
