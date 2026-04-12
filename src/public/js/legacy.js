@@ -7738,7 +7738,7 @@ function bmhRenderVendorTables() {
       const out = bmhVendorBillOutstanding(v);
       const status = bmhVendorStatusLabel(v);
       const badge = status === 'paid' ? 'bd-green' : status === 'partial' ? 'bd-orange' : 'bd-orange';
-      return `<tr><td>${v.vendor}<div style="font-size:10px;color:var(--g1)">${escapeHtmlConsent(v.store || '')}${v.billMode === 'on-use' ? ' · on use' : ''}</div></td><td style="font-family:var(--mono);font-size:10px">${v.invoiceNo || '—'}</td><td>₹${v.amount.toLocaleString('en-IN')}<div style="font-size:10px;color:var(--g1)">Outstanding ₹${out.toLocaleString('en-IN')}</div></td><td><span class="badge ${badge}">${status}</span><div style="font-size:10px;color:var(--g1)">${v.dueDate || 'Due on use'}</div></td><td style="font-size:10px">${v.billFile?.name || v.uploadedName ? `<a href="#" onclick="event.preventDefault();openInventoryBill('${v.id}')">${escapeHtmlConsent(v.billFile?.name || v.uploadedName)}</a>` : '—'}</td><td>${out > 0 ? `<button type="button" class="btn btn-xs btn-gold" onclick="bmhMarkVendorPaid('${v.id}')">Mark paid</button>` : (v.paidRef || '—')}${isAdminUser() ? ` <button type="button" class="btn btn-xs btn-gray" onclick="bmhDeleteVendorBill('${v.id}')">Delete</button>` : ''}</td></tr>`;
+      return `<tr><td>${v.vendor}<div style="font-size:10px;color:var(--g1)">${escapeHtmlConsent(v.store || '')}${v.billMode === 'on-use' ? ' · on use' : ''}</div></td><td style="font-family:var(--mono);font-size:10px">${v.invoiceNo || '—'}</td><td>₹${v.amount.toLocaleString('en-IN')}<div style="font-size:10px;color:var(--g1)">Outstanding ₹${out.toLocaleString('en-IN')}</div></td><td><span class="badge ${badge}">${status}</span><div style="font-size:10px;color:var(--g1)">${v.dueDate || 'Due on use'}</div></td><td style="font-size:10px">${v.billFile?.name || v.uploadedName ? `<a href="#" onclick="event.preventDefault();openInventoryBill('${v.id}')">${escapeHtmlConsent(v.billFile?.name || v.uploadedName)}</a>` : '—'}</td><td>${out > 0 ? `<button type="button" class="btn btn-xs btn-gold" onclick="bmhMarkVendorPaid('${v.id}')">Pay bill</button>` : (v.paidRef || '—')}${isAdminUser() ? ` <button type="button" class="btn btn-xs btn-gray" onclick="bmhDeleteVendorBill('${v.id}')">Delete</button>` : ''}</td></tr>`;
     }).join('')}</tbody></table>` : '<div style="color:var(--g1);font-size:12px">No vendor bills.</div>';
   });
   const mini = document.getElementById('inv-vendor-mini');
@@ -7781,12 +7781,13 @@ function bmhRenderVendorTables() {
           <div style="min-width:0">
             <a href="#" onclick="event.preventDefault();openInventoryBill('${v.id}')" style="font-weight:800;color:var(--bmh-blue);text-decoration:none">${escapeHtmlConsent(v.invoiceNo || 'No Invoice')}</a>
             <div style="font-size:10px;color:var(--g1);margin-top:4px">${escapeHtmlConsent(v.vendor || '')} · Bill date ${escapeHtmlConsent(String(v.billDateKey || v.createdAt || '').slice(0,10)).replace(/-/g,'/')} · ${escapeHtmlConsent(v.dept || '')}</div>
-            <div style="font-size:10px;color:var(--g1);margin-top:2px">Amount ₹${Number(v.amount || 0).toLocaleString('en-IN')} · Paid ₹${paid.toLocaleString('en-IN')} · ${escapeHtmlConsent(v.paymentMode || 'Pending')}${v.paidRef ? ' · ' + escapeHtmlConsent(v.paidRef) : ''}</div>
+            <div style="font-size:10px;color:var(--g1);margin-top:2px">Amount ₹${Number(v.amount || 0).toLocaleString('en-IN')} · Paid ₹${paid.toLocaleString('en-IN')} · Pending ₹${out.toLocaleString('en-IN')} · ${escapeHtmlConsent(v.paymentMode || 'Pending')}${v.paidRef ? ' · ' + escapeHtmlConsent(v.paidRef) : ''}</div>
           </div>
           <div style="text-align:right">
             <div style="font-weight:900;color:${out>0?'#b55a00':'#1a8c3c'}">₹${Number(v.amount || 0).toLocaleString('en-IN')}</div>
             <div style="margin-top:4px"><span class="badge ${status === 'paid' ? 'bd-green' : 'bd-orange'}">${status}</span></div>
             <div style="font-size:10px;color:${out>0?'#b55a00':'#1a8c3c'};margin-top:4px">Due ₹${out.toLocaleString('en-IN')}</div>
+            ${out > 0 ? `<div style="margin-top:6px;display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap"><button type="button" class="btn btn-xs btn-gold" onclick="bmhMarkVendorPaid('${v.id}')">Pay bill</button><button type="button" class="btn btn-xs btn-outline" onclick="bmhPayVendorOutstanding('${String(v.vendor || '').replace(/'/g, "\\'")}')">Part pay</button></div>` : ''}
           </div>
         </div>
       </div>`;
@@ -7911,17 +7912,49 @@ function bmhAddExpense() {
   const desc = document.getElementById('inv-exp-desc')?.value?.trim() || document.getElementById('bmh-exp-desc')?.value?.trim();
   const amt = parseFloat(document.getElementById('inv-exp-amt')?.value || document.getElementById('bmh-exp-amt')?.value || '0');
   const cat = document.getElementById('inv-exp-cat')?.value?.trim() || document.getElementById('bmh-exp-cat')?.value?.trim() || 'General';
+  const vendor = document.getElementById('inv-exp-vendor')?.value?.trim() || '';
+  const mode = document.getElementById('inv-exp-mode')?.value || 'Cash';
+  const ref = document.getElementById('inv-exp-ref')?.value?.trim() || '';
+  const billDate = document.getElementById('inv-exp-date')?.value || new Date().toISOString().slice(0, 10);
+  const f = document.getElementById('inv-exp-file')?.files?.[0] || null;
   if (!desc || !(amt > 0)) { showToast('Description and amount required', 'w'); return; }
-  window.BMH_EXPENSES.push({ id: 'EX' + Date.now(), date: new Date().toISOString(), desc, amount: amt, cat });
-  bmhAppendLedger({ date: new Date().toISOString(), type: 'Expense', narration: desc + ' (' + cat + ')', dr: amt, cr: 0, party: '—', ref: '' });
-  saveBmhFinancials();
-  ['inv-exp-desc','inv-exp-amt','inv-exp-cat','bmh-exp-desc','bmh-exp-amt','bmh-exp-cat'].forEach(function (id) { const el = document.getElementById(id); if (el) el.value = ''; });
-  bmhRenderExpenseList();
-  showToast('Expense posted ✓', 's');
+  bmhCompressFileToData(f, function (billFile) {
+    window.BMH_EXPENSES.push({
+      id: 'EX' + Date.now(),
+      date: billDate,
+      desc,
+      amount: amt,
+      cat,
+      vendor,
+      paymentMode: mode,
+      paymentRef: ref,
+      uploadedName: f ? f.name : '',
+      billFile: billFile || null
+    });
+    if (vendor && billFile) inventoryRememberBillMeta(vendor, cat, billFile);
+    bmhAppendLedger({ date: billDate, type: 'Expense', narration: desc + ' (' + cat + ')', dr: amt, cr: 0, party: vendor || '—', ref: (mode ? mode + ' · ' : '') + ref });
+    saveBmhFinancials();
+    ['inv-exp-desc','inv-exp-amt','inv-exp-cat','inv-exp-vendor','inv-exp-ref','bmh-exp-desc','bmh-exp-amt','bmh-exp-cat'].forEach(function (id) { const el = document.getElementById(id); if (el) el.value = ''; });
+    const modeEl = document.getElementById('inv-exp-mode'); if (modeEl) modeEl.value = 'Cash';
+    const dateEl = document.getElementById('inv-exp-date'); if (dateEl) dateEl.value = '';
+    const fileEl = document.getElementById('inv-exp-file'); if (fileEl) fileEl.value = '';
+    bmhRenderExpenseList();
+    bmhRenderVendorTables();
+    showToast('Expense posted ✓', 's');
+  });
 }
 function bmhRenderExpenseList() {
   [document.getElementById('bmh-exp-list'), document.getElementById('inv-exp-list')].filter(Boolean).forEach(function (el) {
-    el.innerHTML = window.BMH_EXPENSES.slice().reverse().map(e => `<div style="padding:6px;border-bottom:1px solid var(--g5);font-size:12px;display:flex;justify-content:space-between"><span>${e.desc}</span><strong>₹${e.amount.toLocaleString('en-IN')}</strong></div>`).join('') || '<div style="color:var(--g1)">No expenses.</div>';
+    el.innerHTML = window.BMH_EXPENSES.slice().reverse().map(function (e) {
+      return `<div style="padding:8px 0;border-bottom:1px solid var(--g5);font-size:12px;display:flex;justify-content:space-between;gap:10px">
+        <div style="min-width:0">
+          <div style="font-weight:800">${escapeHtmlConsent(e.desc || '')}</div>
+          <div style="font-size:10px;color:var(--g1);margin-top:2px">${escapeHtmlConsent(e.cat || '')}${e.vendor ? ' · ' + escapeHtmlConsent(e.vendor) : ''} · ${escapeHtmlConsent(String(e.date || '').slice(0,10)).replace(/-/g,'/')} · ${escapeHtmlConsent(e.paymentMode || 'Cash')}${e.paymentRef ? ' · ' + escapeHtmlConsent(e.paymentRef) : ''}</div>
+          <div style="font-size:10px;color:var(--g1);margin-top:2px">${e.billFile?.name || e.uploadedName ? `<a href="#" onclick="event.preventDefault();openInventoryBill('${e.id}')">${escapeHtmlConsent(e.billFile?.name || e.uploadedName)}</a>` : 'No bill uploaded'}</div>
+        </div>
+        <strong>₹${Number(e.amount || 0).toLocaleString('en-IN')}</strong>
+      </div>`;
+    }).join('') || '<div style="color:var(--g1)">No expenses.</div>';
   });
 }
 function bmhRenderLedgerBody() {
@@ -15360,8 +15393,13 @@ function bmhFindOrCreateInventoryItem(rawCode, translated) {
   return item;
 }
 function bmhRecordInventoryPurchase(item, qty, billFile) {
-  const vendor = document.getElementById('inv-in-vendor')?.value?.trim() || '';
-  const invoiceNo = document.getElementById('inv-in-invoice')?.value?.trim() || '';
+  const vendor = document.getElementById('inv-in-vendor')?.value?.trim()
+    || document.getElementById('inv-iol-vendor')?.value?.trim()
+    || String(item.vendor || '').trim()
+    || '';
+  const invoiceNo = document.getElementById('inv-in-invoice')?.value?.trim()
+    || String(item.invoiceNo || '').trim()
+    || '';
   const dept = bmhInventoryDeptValue();
   const store = bmhInventoryStoreValue() || bmhDefaultStoreForDept(dept);
   const category = bmhInventoryCategoryValue();
@@ -15410,28 +15448,47 @@ function bmhRecordInventoryPurchase(item, qty, billFile) {
   };
   normalizeInventoryRecord(purchase);
   window.BMH_PURCHASES.push(purchase);
+  if (billFile && vendor) inventoryRememberBillMeta(vendor, dept, billFile);
   if (vendor && totalCost > 0) {
-    const vendorBill = {
-      id: 'VB' + Date.now() + Math.random().toString(36).slice(2, 5),
-      vendor,
-      invoiceNo,
-      amount: totalCost,
-      dueDate: dueDate,
-      status: 'pending',
-      uploadedName: billFile?.name || '',
-      billFile: billFile || null,
-      createdAt: purchase.ts,
-      dept: dept,
-      billDateKey: purchase.billDateKey,
-      billGroup: purchase.billGroup,
-      itemName: item.name,
-      billMode: billMode,
-      store: store,
-      category: category,
-      usageLinked: billMode === 'on-use'
-    };
-    normalizeInventoryRecord(vendorBill);
-    window.BMH_VENDOR_BILLS.push(vendorBill);
+    const existingVendorBill = (window.BMH_VENDOR_BILLS || []).find(function (v) {
+      return String(v.billGroup || '') === String(purchase.billGroup || '')
+        && String(v.vendor || '').trim() === vendor
+        && String(v.invoiceNo || '') === invoiceNo;
+    });
+    if (existingVendorBill) {
+      existingVendorBill.amount = Number(existingVendorBill.amount || 0) + totalCost;
+      existingVendorBill.uploadedName = existingVendorBill.uploadedName || billFile?.name || '';
+      existingVendorBill.billFile = existingVendorBill.billFile || billFile || null;
+      existingVendorBill.itemName = existingVendorBill.itemName || item.name;
+      existingVendorBill.store = existingVendorBill.store || store;
+      existingVendorBill.category = existingVendorBill.category || category;
+      existingVendorBill.dept = existingVendorBill.dept || dept;
+      existingVendorBill.billDateKey = existingVendorBill.billDateKey || purchase.billDateKey;
+      existingVendorBill.billMode = existingVendorBill.billMode || billMode;
+      normalizeInventoryRecord(existingVendorBill);
+    } else {
+      const vendorBill = {
+        id: 'VB' + Date.now() + Math.random().toString(36).slice(2, 5),
+        vendor,
+        invoiceNo,
+        amount: totalCost,
+        dueDate: dueDate,
+        status: 'pending',
+        uploadedName: billFile?.name || '',
+        billFile: billFile || null,
+        createdAt: purchase.ts,
+        dept: dept,
+        billDateKey: purchase.billDateKey,
+        billGroup: purchase.billGroup,
+        itemName: item.name,
+        billMode: billMode,
+        store: store,
+        category: category,
+        usageLinked: billMode === 'on-use'
+      };
+      normalizeInventoryRecord(vendorBill);
+      window.BMH_VENDOR_BILLS.push(vendorBill);
+    }
   }
   saveBmhFinancials();
   renderInventoryPurchaseLog();

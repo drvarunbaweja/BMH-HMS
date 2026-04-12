@@ -3528,7 +3528,7 @@
           <div class="card">
             <div class="card-hd"><div class="card-title">Vendor bills</div></div>
             <div class="form-group" style="margin-bottom:10px"><label class="fl">Select vendor</label><select id="inv-vendor-filter" onchange="bmhRenderVendorTables()"></select></div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
                 <div class="form-group"><label class="fl">Vendor</label><input type="text" id="inv-vend-name" placeholder="Supplier name"></div>
                 <div class="form-group"><label class="fl">Invoice no.</label><input type="text" id="inv-vend-inv" placeholder="Invoice #"></div>
                 <div class="form-group"><label class="fl">Amount ₹</label><input type="number" id="inv-vend-amt" placeholder="0"></div>
@@ -3540,7 +3540,7 @@
           </div>
           <div style="display:flex;flex-direction:column;gap:12px">
             <div class="card">
-              <div class="card-hd"><div class="card-title">Vendor Bill Detail</div><button type="button" class="btn btn-gold btn-sm" onclick="bmhPayVendorOutstanding(document.getElementById('inv-vendor-filter')?.value || '')">Bulk Payment</button></div>
+              <div class="card-hd"><div class="card-title">Vendor Bill Detail</div><button type="button" class="btn btn-gold btn-sm" onclick="bmhPayVendorOutstanding(document.getElementById('inv-vendor-filter')?.value || '')">Pay vendor total / part payment</button></div>
               <div id="inv-vendor-detail"></div>
             </div>
           </div>
@@ -3550,9 +3550,14 @@
         <div class="card" style="margin-bottom:12px">
           <div class="card-hd"><div class="card-title">Expenses</div><button type="button" class="btn btn-outline btn-sm" onclick="bmhPrintInventorySection('Inventory Expenses And Ledger', '#inv-ocr')">🖨️ Print</button></div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-            <div class="form-group"><label class="fl">Description</label><input type="text" id="inv-exp-desc" placeholder="e.g. Stationery"></div>
+            <div class="form-group"><label class="fl">Description</label><input type="text" id="inv-exp-desc" placeholder="e.g. Electricity bill"></div>
             <div class="form-group"><label class="fl">Amount ₹</label><input type="number" id="inv-exp-amt"></div>
-            <div class="form-group" style="grid-column:1/-1"><label class="fl">Category</label><input type="text" id="inv-exp-cat" placeholder="Admin / OT / Marketing"></div>
+            <div class="form-group"><label class="fl">Category</label><input type="text" id="inv-exp-cat" placeholder="Electricity / Rent / Maintenance / Printing"></div>
+            <div class="form-group"><label class="fl">Vendor / Service Provider</label><input type="text" id="inv-exp-vendor" list="inv-vendor-datalist" placeholder="Vendor / provider"></div>
+            <div class="form-group"><label class="fl">Payment mode</label><select id="inv-exp-mode"><option value="Cash">Cash</option><option value="Online">Online</option><option value="Cheque">Cheque</option><option value="Bank Transfer">Bank Transfer</option><option value="Credit">Credit / Pending</option></select></div>
+            <div class="form-group"><label class="fl">Cheque / UTR / Ref</label><input type="text" id="inv-exp-ref" placeholder="Transaction reference"></div>
+            <div class="form-group"><label class="fl">Bill date</label><input type="date" id="inv-exp-date"></div>
+            <div class="form-group"><label class="fl">Upload scan / PDF</label><input type="file" id="inv-exp-file" accept="image/*,.pdf"></div>
           </div>
           <button type="button" class="btn btn-orange btn-sm" onclick="bmhAddExpense()">+ Post expense</button>
           <div id="inv-exp-list" style="margin-top:12px;font-size:12px"></div>
