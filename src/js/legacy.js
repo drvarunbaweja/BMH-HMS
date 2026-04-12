@@ -7697,17 +7697,76 @@ function bmhRenderVendorTables() {
     const rows = window.BMH_VENDOR_BILLS.slice().reverse().filter(function (v) {
       return !filterVendor || String(v.vendor || '').trim() === filterVendor;
     });
+    const totalDue = rows.reduce(function (s, v) { return s + bmhVendorBillOutstanding(v); }, 0);
     detailEl.innerHTML = rows.length ? rows.map(function (v) {
       const paid = Number(v.paidAmount || 0);
       const out = bmhVendorBillOutstanding(v);
+      const status = out <= 0 ? 'paid' : (paid > 0 ? 'part paid' : 'due');
       return `<div style="padding:10px 0;border-bottom:1px solid var(--g5);font-size:12px">
-        <div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><strong>${escapeHtmlConsent(v.invoiceNo || 'No Invoice')}</strong><span style="font-weight:900;color:${out>0?'#b55a00':'#1a8c3c'}">Outstanding ₹${out.toLocaleString('en-IN')}</span></div>
-        <div style="font-size:10px;color:var(--g1);margin-top:4px">${escapeHtmlConsent(v.vendor || '')} · Bill date ${escapeHtmlConsent(String(v.billDateKey || v.createdAt || '').slice(0,10)).replace(/-/g,'/')} · ${escapeHtmlConsent(v.dept || '')}</div>
-        <div style="font-size:10px;color:var(--g1);margin-top:2px">Amount ₹${Number(v.amount || 0).toLocaleString('en-IN')} · Paid ₹${paid.toLocaleString('en-IN')} · ${escapeHtmlConsent(v.paymentMode || 'Pending')}${v.paidRef ? ' · ' + escapeHtmlConsent(v.paidRef) : ''}</div>
+        <div style="display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:10px;align-items:start">
+          <div style="padding-top:2px">${out > 0 ? `<input type="checkbox" class="inv-vendor-bill-check" value="${escapeHtmlConsent(v.id)}">` : ''}</div>
+          <div style="min-width:0">
+            <a href="#" onclick="event.preventDefault();openInventoryBill('${v.id}')" style="font-weight:800;color:var(--bmh-blue);text-decoration:none">${escapeHtmlConsent(v.invoiceNo || 'No Invoice')}</a>
+            <div style="font-size:10px;color:var(--g1);margin-top:4px">${escapeHtmlConsent(v.vendor || '')} · Bill date ${escapeHtmlConsent(String(v.billDateKey || v.createdAt || '').slice(0,10)).replace(/-/g,'/')} · ${escapeHtmlConsent(v.dept || '')}</div>
+            <div style="font-size:10px;color:var(--g1);margin-top:2px">Amount ₹${Number(v.amount || 0).toLocaleString('en-IN')} · Paid ₹${paid.toLocaleString('en-IN')} · ${escapeHtmlConsent(v.paymentMode || 'Pending')}${v.paidRef ? ' · ' + escapeHtmlConsent(v.paidRef) : ''}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-weight:900;color:${out>0?'#b55a00':'#1a8c3c'}">₹${Number(v.amount || 0).toLocaleString('en-IN')}</div>
+            <div style="margin-top:4px"><span class="badge ${status === 'paid' ? 'bd-green' : 'bd-orange'}">${status}</span></div>
+            <div style="font-size:10px;color:${out>0?'#b55a00':'#1a8c3c'};margin-top:4px">Due ₹${out.toLocaleString('en-IN')}</div>
+          </div>
+        </div>
       </div>`;
-    }).join('') : '<div style="padding:12px;color:var(--g1);font-size:12px">No bills for this vendor.</div>';
+    }).join('') + `<div style="padding-top:12px;display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap">
+      <div style="font-size:13px;font-weight:900;color:var(--bmh-blue)">Total due ₹${totalDue.toLocaleString('en-IN')}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button type="button" class="btn btn-outline btn-sm" onclick="bmhPaySelectedVendorBills()">Pay selected bills</button>
+        <button type="button" class="btn btn-gold btn-sm" onclick="bmhPayVendorOutstanding(document.getElementById('inv-vendor-filter')?.value || '')">Part payment / vendor total</button>
+      </div>
+    </div>` : '<div style="padding:12px;color:var(--g1);font-size:12px">No bills for this vendor.</div>';
   }
 }
+function bmhSelectedVendorBillIds() {
+  return Array.from(document.querySelectorAll('#inv-vendor-detail .inv-vendor-bill-check:checked')).map(function (el) {
+    return String(el.value || '').trim();
+  }).filter(Boolean);
+}
+function bmhApplyVendorPaymentToBills(rows, amount, mode, ref) {
+  let remaining = Math.max(0, Number(amount || 0));
+  rows.forEach(function (v) {
+    if (remaining <= 0) return;
+    const out = bmhVendorBillOutstanding(v);
+    if (!(out > 0)) return;
+    const applied = Math.min(out, remaining);
+    v.paidAmount = (Number(v.paidAmount) || 0) + applied;
+    v.status = bmhVendorBillOutstanding(v) <= 0 ? 'paid' : 'partial';
+    v.paidRef = ref || v.paidRef || '';
+    v.paidAt = new Date().toISOString();
+    v.paymentMode = mode || v.paymentMode || 'Bank Transfer';
+    remaining -= applied;
+  });
+  return remaining;
+}
+function bmhPaySelectedVendorBills() {
+  const ids = bmhSelectedVendorBillIds();
+  if (!ids.length) { showToast('Select bills first', 'w'); return; }
+  const rows = (window.BMH_VENDOR_BILLS || []).filter(function (v) { return ids.includes(String(v.id || '')); });
+  const total = rows.reduce(function (s, v) { return s + bmhVendorBillOutstanding(v); }, 0);
+  const amountStr = prompt('Amount to apply against selected bills', String(total));
+  if (amountStr === null) return;
+  const amount = Math.max(0, Number(amountStr || 0));
+  if (!(amount > 0)) { showToast('Enter payment amount', 'w'); return; }
+  const mode = prompt('Payment mode (Cheque / Bank Transfer / NEFT):', 'Bank Transfer') || 'Bank Transfer';
+  const ref = prompt('Cheque no. / UTR / reference:') || '';
+  const remaining = bmhApplyVendorPaymentToBills(rows, amount, mode, ref);
+  const paid = amount - remaining;
+  bmhAppendLedger({ date: new Date().toISOString(), type: 'Payment', narration: 'Vendor bills — ' + rows.map(function (r) { return r.invoiceNo || r.vendor || 'Bill'; }).join(', '), dr: paid, cr: 0, party: rows[0]?.vendor || 'Vendor', ref: (mode ? mode + ' · ' : '') + ref });
+  saveBmhFinancials();
+  bmhRenderVendorTables();
+  renderBillingPage();
+  showToast('Vendor payment recorded ✓', 's');
+}
+window.bmhPaySelectedVendorBills = bmhPaySelectedVendorBills;
 function bmhDeleteVendorBill(id) {
   if (!isAdminUser()) { showToast('Only admin can delete bills', 'w'); return; }
   const idx = (window.BMH_VENDOR_BILLS || []).findIndex(function (v) { return v.id === id; });
@@ -7745,11 +7804,7 @@ function bmhMarkVendorPaid(id) {
   if (amountStr === null) return;
   const amt = Math.max(0, Number(amountStr || 0));
   if (!(amt > 0)) { showToast('Enter payment amount', 'w'); return; }
-  v.paidAmount = (Number(v.paidAmount) || 0) + amt;
-  v.status = bmhVendorBillOutstanding(v) <= 0 ? 'paid' : 'partial';
-  v.paidRef = ref || '';
-  v.paidAt = new Date().toISOString();
-  v.paymentMode = mode;
+  bmhApplyVendorPaymentToBills([v], amt, mode, ref);
   bmhAppendLedger({ date: new Date().toISOString(), type: 'Payment', narration: 'Vendor ' + v.vendor + ' — Inv ' + (v.invoiceNo || ''), dr: amt, cr: 0, party: v.vendor, ref: (mode ? mode + ' · ' : '') + (v.paidRef || '') });
   saveBmhFinancials();
   bmhRenderVendorTables();
@@ -7770,17 +7825,7 @@ function bmhPayVendorOutstanding(vendorName) {
   if (!(remaining > 0)) { showToast('Enter payment amount', 'w'); return; }
   const mode = prompt('Payment mode (Cheque / Bank Transfer / NEFT):', 'Bank Transfer') || 'Bank Transfer';
   const ref = prompt('Cheque no. / UTR / reference:') || '';
-  rows.forEach(function (v) {
-    if (remaining <= 0) return;
-    const out = bmhVendorBillOutstanding(v);
-    const applied = Math.min(out, remaining);
-    v.paidAmount = (Number(v.paidAmount) || 0) + applied;
-    v.status = bmhVendorBillOutstanding(v) <= 0 ? 'paid' : 'partial';
-    v.paidRef = ref || v.paidRef || '';
-    v.paidAt = new Date().toISOString();
-    v.paymentMode = mode;
-    remaining -= applied;
-  });
+  remaining = bmhApplyVendorPaymentToBills(rows, remaining, mode, ref);
   const paid = Math.max(0, Number(amountStr || 0)) - remaining;
   bmhAppendLedger({ date: new Date().toISOString(), type: 'Payment', narration: 'Vendor account clearance — ' + vendor, dr: paid, cr: 0, party: vendor, ref: (mode ? mode + ' · ' : '') + (ref || '') });
   saveBmhFinancials();
@@ -8448,7 +8493,7 @@ function addInventoryCategoryPrompt() {
   if (!Array.isArray(window.BMH_INVENTORY_CATEGORIES)) window.BMH_INVENTORY_CATEGORIES = [];
   if (!window.BMH_INVENTORY_CATEGORIES.includes(name)) window.BMH_INVENTORY_CATEGORIES.push(name);
   try { localStorage.setItem('bmh_inventory_categories', JSON.stringify(window.BMH_INVENTORY_CATEGORIES)); } catch (e) {}
-  fillInventoryCategoryOptions && fillInventoryCategoryOptions();
+  if (typeof bmhPopulateInventorySelectors === 'function') bmhPopulateInventorySelectors();
   const sel = document.getElementById('inv-in-cat');
   if (sel) sel.value = name;
   showToast('Category added ✓', 's');
@@ -8516,6 +8561,17 @@ function findInventoryNameInText(text) {
     return /drop|inj|injection|tab|capsule|cream|gel|iol|lactate|dns|glove|syringe|cannula|suture|kit|serum|vaccine/i.test(line)
       && !/invoice|bill|gst|phone|mob|amount|total|qty|quantity|vendor/i.test(line);
   }) || '';
+}
+function cleanInventoryImportText(text) {
+  return String(text || '')
+    .split(/\n+/)
+    .map(function (line) { return line.trim().replace(/\s+/g, ' '); })
+    .filter(Boolean)
+    .filter(function (line) {
+      return !/goods once sold|taken back|receiver|authorized signatory|authorised signatory|all disputes|subject to|jurisdiction|bank details|terms and conditions|thank you|for optivision|dis amt|cgst|sgst|igst|taxable amt|grand total|sub total/i.test(line);
+    })
+    .join('\n')
+    .trim();
 }
 function extractInventoryLineItems(text) {
   const rows = [];
@@ -8952,7 +9008,7 @@ function ensureInventoryBillReviewModal() {
         <div style="display:grid;grid-template-columns:1fr 170px 150px auto;gap:8px;align-items:end;margin-bottom:8px">
           <div class="form-group" style="margin:0;grid-column:1 / -1">
             <label class="fl">OCR text review</label>
-            <textarea id="inv-bill-review-ocr-text" rows="22" style="width:100%;font-family:var(--mono);font-size:11px;min-height:520px"></textarea>
+            <textarea id="inv-bill-review-ocr-text" rows="12" style="width:100%;font-family:var(--mono);font-size:11px;min-height:225px;max-height:260px"></textarea>
           </div>
           <div class="form-group" style="margin:0">
             <label class="fl">Extract as</label>
@@ -9016,7 +9072,7 @@ function openInventoryBillReviewModal(mode) {
     return `<button type="button" class="btn btn-xs ${String(item.category || '').toLowerCase()==='iol' ? 'btn-gold' : 'btn-outline'}" onclick="applyInventoryBillReviewItem('${mode}',${idx})">${escapeHtmlConsent(label)}</button>`;
   }).join('') : '<div style="color:var(--g1)">No extracted line items.</div>';
   const ocrTextEl = document.getElementById('inv-bill-review-ocr-text');
-  if (ocrTextEl) ocrTextEl.value = String(document.getElementById('inv-ocr-text')?.value || '');
+  if (ocrTextEl) ocrTextEl.value = String(parsed.reviewText || document.getElementById('inv-ocr-text')?.value || '');
   const powerTargetEl = document.getElementById('inv-bill-review-power-target');
   if (powerTargetEl) powerTargetEl.value = parsed.power || '';
   renderInventoryReviewManualChips(mode);
@@ -9067,10 +9123,10 @@ async function extractInventoryTextFromCanvasRegions(canvas) {
   const w = canvas.width || 1;
   const h = canvas.height || 1;
   const regions = [
-    cropToDataUrl(0, 0, w, h * 0.22),
-    cropToDataUrl(w * 0.02, h * 0.16, w * 0.96, h * 0.28),
-    cropToDataUrl(w * 0.02, h * 0.24, w * 0.96, h * 0.20),
-    cropToDataUrl(w * 0.02, h * 0.12, w * 0.96, h * 0.50)
+    cropToDataUrl(0, 0, w, h * 0.18),
+    cropToDataUrl(w * 0.02, h * 0.14, w * 0.96, h * 0.24),
+    cropToDataUrl(w * 0.02, h * 0.18, w * 0.96, h * 0.32),
+    cropToDataUrl(w * 0.02, h * 0.10, w * 0.96, h * 0.62)
   ];
   const texts = [];
   for (let i = 0; i < regions.length; i += 1) {
@@ -9138,7 +9194,12 @@ async function extractInventoryTextFromPdfFile(file) {
   canvas.height = viewport.height;
   await page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport }).promise;
   const ocrText = await extractInventoryTextFromCanvasRegions(canvas);
-  return [directText, ocrText].filter(Boolean).join('\n');
+  const cleanedDirect = cleanInventoryImportText(directText);
+  const cleanedOcr = cleanInventoryImportText(ocrText);
+  if (cleanedDirect && cleanedDirect.split('\n').length >= 3) {
+    return [cleanedDirect, cleanedOcr].filter(Boolean).join('\n');
+  }
+  return cleanedOcr || cleanedDirect || '';
 }
 async function handleInventoryImportFile(mode, inp) {
   const file = inp?.files?.[0];
@@ -9162,8 +9223,9 @@ async function handleInventoryImportFile(mode, inp) {
     } else {
       text = await extractInventoryTextFromImageFile(file);
     }
-    const combinedText = (text + '\n' + fileNameHint).trim();
+    const combinedText = cleanInventoryImportText((text + '\n' + fileNameHint).trim());
     const parsed = parseInventoryImportText(combinedText);
+    parsed.reviewText = combinedText;
     window._inventoryParsedImports = window._inventoryParsedImports || {};
     window._inventoryParsedImports[mode] = parsed;
     if (!parsed.itemName) {
