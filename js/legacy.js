@@ -8856,17 +8856,17 @@ function ensureInventoryBillReviewModal() {
   modal = document.createElement('div');
   modal.className = 'modal-ov';
   modal.id = 'm-inv-bill-review';
-  modal.innerHTML = `<div class="modal modal-lg" style="max-width:min(96vw,1180px);width:100%;max-height:92vh">
+  modal.innerHTML = `<div class="modal modal-lg" style="max-width:min(98vw,1320px);width:100%;max-height:94vh">
     <div class="modal-hd"><div class="modal-title">Inventory Bill Review</div><button class="modal-close" onclick="closeM('m-inv-bill-review')">✕</button></div>
-    <div style="display:grid;grid-template-columns:1.15fr .95fr;gap:12px">
-      <div id="inv-bill-review-left" style="min-height:420px;border:1px solid var(--g4);border-radius:10px;background:#fff;overflow:auto"></div>
+    <div style="display:grid;grid-template-columns:minmax(340px,.85fr) minmax(560px,1.15fr);gap:12px">
+      <div id="inv-bill-review-left" style="min-height:520px;border:1px solid var(--g4);border-radius:10px;background:#fff;overflow:auto"></div>
       <div style="min-width:0">
         <div id="inv-bill-review-summary" style="font-size:12px;color:var(--tx3);margin-bottom:10px"></div>
         <div id="inv-bill-review-items" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"></div>
-        <div style="display:grid;grid-template-columns:1fr 150px 150px auto;gap:8px;align-items:end;margin-bottom:8px">
-          <div class="form-group" style="margin:0">
+        <div style="display:grid;grid-template-columns:1fr 170px 150px auto;gap:8px;align-items:end;margin-bottom:8px">
+          <div class="form-group" style="margin:0;grid-column:1 / -1">
             <label class="fl">OCR text review</label>
-            <textarea id="inv-bill-review-ocr-text" rows="8" style="width:100%;font-family:var(--mono);font-size:11px"></textarea>
+            <textarea id="inv-bill-review-ocr-text" rows="18" style="width:100%;font-family:var(--mono);font-size:11px;min-height:380px"></textarea>
           </div>
           <div class="form-group" style="margin:0">
             <label class="fl">Extract as</label>
@@ -8980,10 +8980,10 @@ async function extractInventoryTextFromCanvasRegions(canvas) {
   const w = canvas.width || 1;
   const h = canvas.height || 1;
   const regions = [
-    cropToDataUrl(0, 0, w, h * 0.32),
-    cropToDataUrl(w * 0.02, h * 0.20, w * 0.96, h * 0.30),
-    cropToDataUrl(w * 0.62, h * 0.74, w * 0.35, h * 0.16),
-    canvas.toDataURL('image/jpeg', 0.92)
+    cropToDataUrl(0, 0, w, h * 0.22),
+    cropToDataUrl(w * 0.02, h * 0.16, w * 0.96, h * 0.28),
+    cropToDataUrl(w * 0.02, h * 0.24, w * 0.96, h * 0.20),
+    cropToDataUrl(w * 0.02, h * 0.12, w * 0.96, h * 0.50)
   ];
   const texts = [];
   for (let i = 0; i < regions.length; i += 1) {
@@ -8991,6 +8991,29 @@ async function extractInventoryTextFromCanvasRegions(canvas) {
     if (txt) texts.push(txt);
   }
   return texts.join('\n');
+}
+async function extractStructuredTextFromPdfPage(page) {
+  const content = await page.getTextContent();
+  const items = Array.isArray(content?.items) ? content.items : [];
+  const lines = [];
+  items.forEach(function (item) {
+    const str = String(item?.str || '').trim();
+    if (!str) return;
+    const y = Math.round(Number(item?.transform?.[5] || 0));
+    let row = lines.find(function (line) { return Math.abs(line.y - y) <= 3; });
+    if (!row) {
+      row = { y: y, parts: [] };
+      lines.push(row);
+    }
+    row.parts.push({ x: Number(item?.transform?.[4] || 0), str: str });
+  });
+  return lines
+    .sort(function (a, b) { return b.y - a.y; })
+    .map(function (line) {
+      return line.parts.sort(function (a, b) { return a.x - b.x; }).map(function (part) { return part.str; }).join(' ').replace(/\s+/g, ' ').trim();
+    })
+    .filter(Boolean)
+    .join('\n');
 }
 async function extractInventoryTextFromImageFile(file) {
   const dataUrl = await new Promise(function (resolve, reject) {
@@ -9018,12 +9041,17 @@ async function extractInventoryTextFromPdfFile(file) {
   const arr = await file.arrayBuffer();
   const pdf = await window.pdfjsLib.getDocument({ data: arr }).promise;
   const page = await pdf.getPage(1);
+  let directText = '';
+  try {
+    directText = await extractStructuredTextFromPdfPage(page);
+  } catch (_) { /* fallback to OCR below */ }
   const viewport = page.getViewport({ scale: 2 });
   const canvas = document.createElement('canvas');
   canvas.width = viewport.width;
   canvas.height = viewport.height;
   await page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport }).promise;
-  return extractInventoryTextFromCanvasRegions(canvas);
+  const ocrText = await extractInventoryTextFromCanvasRegions(canvas);
+  return [directText, ocrText].filter(Boolean).join('\n');
 }
 async function handleInventoryImportFile(mode, inp) {
   const file = inp?.files?.[0];
