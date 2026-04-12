@@ -8573,6 +8573,36 @@ function applyInventoryParsedData(parsed, mode) {
   if (mrpEl && parsed.amount && !Number(mrpEl.value || 0)) mrpEl.value = String(parsed.amount);
   const catEl = document.getElementById('inv-in-cat');
   if (catEl && parsed.category && Array.from(catEl.options).some(function (o) { return o.value === parsed.category; })) catEl.value = parsed.category;
+  if (parsed.category === 'IOL') {
+    if (catEl) catEl.value = 'IOL';
+    toggleInventoryIolBox();
+    const itemText = String(parsed.itemName || '').trim();
+    const companyMatch = itemText.match(/\b(HOYA|ALCON|ZEISS|JOHNSON|APPASAMY|AUROLAB|RAYNER|STAAR)\b/i);
+    const company = companyMatch ? companyMatch[1].toUpperCase() : '';
+    const model = itemText
+      .replace(/\b(HOYA|ALCON|ZEISS|JOHNSON|APPASAMY|AUROLAB|RAYNER|STAAR)\b/i, '')
+      .replace(/[+-]?\d+(?:\.\d+)?\s*D?\b/ig, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const setVal = function (id, value) {
+      const el = document.getElementById(id);
+      if (el && value && !String(el.value || '').trim()) el.value = value;
+    };
+    setVal('inv-iol-vendor', parsed.vendor || '');
+    setVal('inv-iol-company', company || parsed.vendor || '');
+    setVal('inv-iol-brand', company || '');
+    setVal('inv-iol-model', model || itemText);
+    setVal('inv-iol-expiry', parsed.exp || '');
+    const iolCost = document.getElementById('inv-iol-cost');
+    if (iolCost && (parsed.rate || parsed.amount) && !Number(iolCost.value || 0)) iolCost.value = String(parsed.rate || parsed.amount);
+    if (parsed.power) {
+      renderIolInventoryPowerGrid({ [parsed.power]: { qty: Math.max(1, Number(parsed.qty || 1)) } });
+      const serialMapEl = document.getElementById('inv-iol-serial-map');
+      if (serialMapEl && (parsed.serialNo || parsed.batchNo)) {
+        serialMapEl.value = parsed.power + ': ' + [parsed.serialNo || '', parsed.batchNo || ''].filter(Boolean).join(',');
+      }
+    }
+  }
 }
 async function extractInventoryTextFromImageDataUrl(dataUrl) {
   await ensureInventoryTesseract();
@@ -8584,6 +8614,49 @@ async function extractInventoryTextFromImageDataUrl(dataUrl) {
     }
   });
   return String(result?.data?.text || '').trim();
+}
+async function extractInventoryTextFromCanvasRegions(canvas) {
+  const cropToDataUrl = function (sx, sy, sw, sh) {
+    const out = document.createElement('canvas');
+    out.width = Math.max(1, Math.round(sw));
+    out.height = Math.max(1, Math.round(sh));
+    const ctx = out.getContext('2d');
+    ctx.drawImage(canvas, sx, sy, sw, sh, 0, 0, out.width, out.height);
+    return out.toDataURL('image/jpeg', 0.96);
+  };
+  const w = canvas.width || 1;
+  const h = canvas.height || 1;
+  const regions = [
+    cropToDataUrl(0, 0, w, h * 0.32),
+    cropToDataUrl(w * 0.02, h * 0.20, w * 0.96, h * 0.30),
+    cropToDataUrl(w * 0.62, h * 0.74, w * 0.35, h * 0.16),
+    canvas.toDataURL('image/jpeg', 0.92)
+  ];
+  const texts = [];
+  for (let i = 0; i < regions.length; i += 1) {
+    const txt = await extractInventoryTextFromImageDataUrl(regions[i]);
+    if (txt) texts.push(txt);
+  }
+  return texts.join('\n');
+}
+async function extractInventoryTextFromImageFile(file) {
+  const dataUrl = await new Promise(function (resolve, reject) {
+    const fr = new FileReader();
+    fr.onload = function (e) { resolve(String(e.target?.result || '')); };
+    fr.onerror = reject;
+    fr.readAsDataURL(file);
+  });
+  const img = await new Promise(function (resolve, reject) {
+    const image = new Image();
+    image.onload = function () { resolve(image); };
+    image.onerror = reject;
+    image.src = dataUrl;
+  });
+  const canvas = document.createElement('canvas');
+  canvas.width = img.width;
+  canvas.height = img.height;
+  canvas.getContext('2d').drawImage(img, 0, 0);
+  return extractInventoryTextFromCanvasRegions(canvas);
 }
 async function extractInventoryTextFromPdfFile(file) {
   await ensureInventoryPdfJs();
@@ -8597,7 +8670,7 @@ async function extractInventoryTextFromPdfFile(file) {
   canvas.width = viewport.width;
   canvas.height = viewport.height;
   await page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport }).promise;
-  return extractInventoryTextFromImageDataUrl(canvas.toDataURL('image/jpeg', 0.92));
+  return extractInventoryTextFromCanvasRegions(canvas);
 }
 async function handleInventoryImportFile(mode, inp) {
   const file = inp?.files?.[0];
@@ -8611,13 +8684,7 @@ async function handleInventoryImportFile(mode, inp) {
     if (/pdf/i.test(file.type || '') || /\.pdf$/i.test(file.name || '')) {
       text = await extractInventoryTextFromPdfFile(file);
     } else {
-      const dataUrl = await new Promise(function (resolve, reject) {
-        const fr = new FileReader();
-        fr.onload = function (e) { resolve(String(e.target?.result || '')); };
-        fr.onerror = reject;
-        fr.readAsDataURL(file);
-      });
-      text = await extractInventoryTextFromImageDataUrl(dataUrl);
+      text = await extractInventoryTextFromImageFile(file);
     }
     const combinedText = (text + '\n' + fileNameHint).trim();
     const parsed = parseInventoryImportText(combinedText);
