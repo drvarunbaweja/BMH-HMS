@@ -8562,7 +8562,9 @@ function parseInventoryImportText(text) {
   const lineItems = extractInventoryLineItems(text);
   const primaryItem = lineItems[0] || null;
   const itemName = primaryItem?.itemName || findInventoryNameInText(text);
-  const category = primaryItem?.category || inferInventoryCategoryFromText(itemName || flat);
+  const category = lineItems.some(function (item) { return String(item.category || '').toLowerCase() === 'iol'; })
+    ? 'IOL'
+    : (primaryItem?.category || inferInventoryCategoryFromText(itemName || flat));
   const iolIdentity = parseIolIdentityFromItemName(primaryItem?.itemName || itemName || '');
   return {
     vendor: normalizeInventoryTextValue(vendor),
@@ -8585,6 +8587,42 @@ function parseInventoryImportText(text) {
     model: iolIdentity.model || '',
     lineItems: lineItems
   };
+}
+function getCurrentIolGridState() {
+  const state = {};
+  Array.from(document.querySelectorAll('.inv-iol-qty')).forEach(function (input) {
+    const power = String(input.dataset.power || '');
+    if (!power) return;
+    state[power] = { qty: Math.max(0, parseInt(input.value, 10) || 0) };
+  });
+  return state;
+}
+function appendIolSerialMap(power, serialNo, batchNo) {
+  const powerKey = normalizeIolPowerValue(power);
+  if (!powerKey) return;
+  const serialMapEl = document.getElementById('inv-iol-serial-map');
+  if (!serialMapEl) return;
+  const current = readIolGridSerialMap();
+  current[powerKey] = current[powerKey] || [];
+  if (serialNo || batchNo) {
+    const exists = current[powerKey].some(function (row) {
+      return String(row.serialNo || '') === String(serialNo || '') && String(row.batchNo || '') === String(batchNo || '');
+    });
+    if (!exists) current[powerKey].push({ serialNo: serialNo || '', batchNo: batchNo || '' });
+  }
+  serialMapEl.value = Object.keys(current).sort(function (a, b) { return parseFloat(a) - parseFloat(b); }).map(function (p) {
+    return p + ': ' + (current[p] || []).map(function (row) {
+      return [row.serialNo || '', row.batchNo || ''].filter(Boolean).join(',');
+    }).filter(Boolean).join('; ');
+  }).filter(Boolean).join(' | ');
+}
+function mergeIolParsedSelection(parsed) {
+  if (!parsed?.power) return;
+  const next = getCurrentIolGridState();
+  next[parsed.power] = next[parsed.power] || { qty: 0 };
+  next[parsed.power].qty = Math.max(1, Number(next[parsed.power].qty || 0) + Math.max(1, Number(parsed.qty || 1)));
+  renderIolInventoryPowerGrid(next);
+  appendIolSerialMap(parsed.power, parsed.serialNo || '', parsed.batchNo || '');
 }
 function renderInventoryImportReview(parsed, mode, text) {
   const bits = [];
@@ -8613,7 +8651,8 @@ function renderInventoryImportReview(parsed, mode, text) {
         return `<button type="button" class="btn btn-xs btn-outline" onclick="applyInventorySuggestedCandidate('${mode}','${String(entry.name).replace(/'/g, "\\'")}')">${escapeHtmlConsent(entry.name)}</button>`;
       }).join('')}</div></div>`
     : '';
-  setInventoryImportPreview(mode, (bits.length ? bits.join(' · ') : 'No clear fields detected automatically. Please review manually.') + lineItemHtml + candidateHtml);
+  const popupHtml = `<div style="margin-top:8px"><button type="button" class="btn btn-xs btn-blue" onclick="openInventoryBillReviewModal('${mode}')">Open bill review popup</button></div>`;
+  setInventoryImportPreview(mode, (bits.length ? bits.join(' · ') : 'No clear fields detected automatically. Please review manually.') + lineItemHtml + candidateHtml + popupHtml);
   const ta = document.getElementById('inv-ocr-text');
   if (ta && text) ta.value = text;
 }
@@ -8666,7 +8705,9 @@ function applyInventoryParsedData(parsed, mode) {
     if (priorMrp > 0) mrpEl.value = String(priorMrp);
   }
   const catEl = document.getElementById('inv-in-cat');
-  if (catEl && parsed.category && Array.from(catEl.options).some(function (o) { return o.value === parsed.category; })) catEl.value = parsed.category;
+  if (catEl && parsed.category && Array.from(catEl.options).some(function (o) { return o.value === parsed.category; })) {
+    catEl.value = parsed.category;
+  }
   if (parsed.category === 'IOL') {
     if (catEl) catEl.value = 'IOL';
     toggleInventoryIolBox();
@@ -8679,20 +8720,86 @@ function applyInventoryParsedData(parsed, mode) {
     setVal('inv-iol-vendor', parsed.vendor || '');
     setVal('inv-iol-company', parsed.company || iolIdentity.company || '');
     setVal('inv-iol-brand', parsed.brand || iolIdentity.brand || '');
-    setVal('inv-iol-model', parsed.batchNo || '');
+    if (parsed.batchNo) setVal('inv-iol-model', parsed.batchNo || '');
     setVal('inv-iol-expiry', parsed.exp || '');
     const iolCost = document.getElementById('inv-iol-cost');
     if (iolCost && (parsed.cost || parsed.rate || parsed.amount)) iolCost.value = String(parsed.cost || parsed.rate || parsed.amount);
     if (parsed.power) {
-      renderIolInventoryPowerGrid({ [parsed.power]: { qty: Math.max(1, Number(parsed.qty || 1)) } });
-      const serialMapEl = document.getElementById('inv-iol-serial-map');
-      if (serialMapEl) {
-        const serialLine = parsed.power + ': ' + [parsed.serialNo || '', parsed.batchNo || ''].filter(Boolean).join(',');
-        serialMapEl.value = serialLine.replace(/: $/, ': ');
-      }
+      mergeIolParsedSelection(parsed);
     }
   }
 }
+function ensureInventoryBillReviewModal() {
+  let modal = document.getElementById('m-inv-bill-review');
+  if (modal) return modal;
+  modal = document.createElement('div');
+  modal.className = 'modal-ov';
+  modal.id = 'm-inv-bill-review';
+  modal.innerHTML = `<div class="modal modal-lg" style="max-width:min(96vw,1180px);width:100%;max-height:92vh">
+    <div class="modal-hd"><div class="modal-title">Inventory Bill Review</div><button class="modal-close" onclick="closeM('m-inv-bill-review')">✕</button></div>
+    <div style="display:grid;grid-template-columns:1.15fr .95fr;gap:12px">
+      <div id="inv-bill-review-left" style="min-height:420px;border:1px solid var(--g4);border-radius:10px;background:#fff;overflow:auto"></div>
+      <div style="min-width:0">
+        <div id="inv-bill-review-summary" style="font-size:12px;color:var(--tx3);margin-bottom:10px"></div>
+        <div id="inv-bill-review-items" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"></div>
+        <div id="inv-bill-review-detail" style="border:1px solid var(--g4);border-radius:10px;background:#fafbff;padding:10px;font-size:11px;color:var(--tx3)"></div>
+      </div>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+  return modal;
+}
+function openInventoryBillReviewModal(mode) {
+  const modal = ensureInventoryBillReviewModal();
+  const parsed = window._inventoryParsedImports && window._inventoryParsedImports[mode];
+  const asset = window._inventoryImportAssets && window._inventoryImportAssets[mode];
+  const left = document.getElementById('inv-bill-review-left');
+  const summary = document.getElementById('inv-bill-review-summary');
+  const items = document.getElementById('inv-bill-review-items');
+  const detail = document.getElementById('inv-bill-review-detail');
+  if (!parsed || !left || !summary || !items || !detail) return;
+  if (asset?.data) {
+    if (/pdf/i.test(asset.type || '')) {
+      left.innerHTML = `<iframe src="${asset.data}" style="width:100%;height:70vh;border:0"></iframe>`;
+    } else {
+      left.innerHTML = `<img src="${asset.data}" alt="${escapeHtmlConsent(asset.name || 'Bill')}" style="max-width:100%;display:block">`;
+    }
+  } else {
+    left.innerHTML = '<div style="padding:18px;color:var(--g1)">Bill preview not available.</div>';
+  }
+  summary.innerHTML = [
+    parsed.vendor ? ('Vendor: <strong>' + escapeHtmlConsent(parsed.vendor) + '</strong>') : '',
+    parsed.invoiceNo ? ('Invoice: <strong>' + escapeHtmlConsent(parsed.invoiceNo) + '</strong>') : '',
+    parsed.invoiceDate ? ('Date: <strong>' + escapeHtmlConsent(parsed.invoiceDate) + '</strong>') : ''
+  ].filter(Boolean).join(' · ');
+  const rows = Array.isArray(parsed.lineItems) ? parsed.lineItems : [];
+  items.innerHTML = rows.length ? rows.map(function (item, idx) {
+    const label = [item.itemName || 'Item', item.power || '', item.batchNo ? ('Batch ' + item.batchNo) : '', item.serialNo ? ('Serial ' + item.serialNo) : '', item.qty ? ('Qty ' + item.qty) : ''].filter(Boolean).join(' · ');
+    return `<button type="button" class="btn btn-xs ${String(item.category || '').toLowerCase()==='iol' ? 'btn-gold' : 'btn-outline'}" onclick="applyInventoryBillReviewItem('${mode}',${idx})">${escapeHtmlConsent(label)}</button>`;
+  }).join('') : '<div style="color:var(--g1)">No extracted line items.</div>';
+  detail.innerHTML = 'Tap a product line to populate the stock-in fields. If it is an IOL, the category will switch to IOL and the power grid/serial map will update.';
+  openM('m-inv-bill-review');
+}
+window.openInventoryBillReviewModal = openInventoryBillReviewModal;
+function applyInventoryBillReviewItem(mode, idx) {
+  applyInventoryParsedLineItem(mode, idx);
+  const parsed = window._inventoryParsedImports && window._inventoryParsedImports[mode];
+  const item = parsed && Array.isArray(parsed.lineItems) ? parsed.lineItems[idx] : null;
+  const detail = document.getElementById('inv-bill-review-detail');
+  if (item && detail) {
+    detail.innerHTML = [
+      item.itemName ? ('Item: <strong>' + escapeHtmlConsent(item.itemName) + '</strong>') : '',
+      item.hsn ? ('HSN: <strong>' + escapeHtmlConsent(item.hsn) + '</strong>') : '',
+      item.batchNo ? ('Batch: <strong>' + escapeHtmlConsent(item.batchNo) + '</strong>') : '',
+      item.serialNo ? ('Serial: <strong>' + escapeHtmlConsent(item.serialNo) + '</strong>') : '',
+      item.exp ? ('Expiry: <strong>' + escapeHtmlConsent(item.exp) + '</strong>') : '',
+      item.power ? ('Power: <strong>' + escapeHtmlConsent(item.power) + '</strong>') : '',
+      item.cost ? ('Cost: <strong>₹' + Number(item.cost).toLocaleString('en-IN') + '</strong>') : ''
+    ].filter(Boolean).join(' · ') || 'Selected item applied.';
+  }
+  showToast('Bill item applied ✓', 's');
+}
+window.applyInventoryBillReviewItem = applyInventoryBillReviewItem;
 async function extractInventoryTextFromImageDataUrl(dataUrl) {
   await ensureInventoryTesseract();
   if (!window.Tesseract) throw new Error('OCR engine not loaded');
@@ -8765,11 +8872,19 @@ async function handleInventoryImportFile(mode, inp) {
   const file = inp?.files?.[0];
   if (!file) return;
   window._inventoryImportMode = mode;
+  window._inventoryImportAssets = window._inventoryImportAssets || {};
   setInventoryImportStatus(mode, 'Preparing file…', 'var(--bmh-blue)');
   setInventoryImportPreview(mode, '');
   try {
     let text = '';
     const fileNameHint = String(file.name || '').replace(/\.[a-z0-9]+$/i, '').replace(/[_-]+/g, ' ');
+    const fileData = await new Promise(function (resolve, reject) {
+      const fr = new FileReader();
+      fr.onload = function (e) { resolve(String(e.target?.result || '')); };
+      fr.onerror = reject;
+      fr.readAsDataURL(file);
+    });
+    window._inventoryImportAssets[mode] = { name: file.name || '', type: file.type || '', data: fileData };
     if (/pdf/i.test(file.type || '') || /\.pdf$/i.test(file.name || '')) {
       text = await extractInventoryTextFromPdfFile(file);
     } else {
@@ -8786,6 +8901,7 @@ async function handleInventoryImportFile(mode, inp) {
     applyInventoryParsedData(parsed, mode);
     renderInventoryImportReview(parsed, mode, combinedText);
     setInventoryImportStatus(mode, 'OCR complete. Please review the populated fields before saving.', '#1a8c3c');
+    if (mode === 'in' || mode === 'ocr') openInventoryBillReviewModal(mode);
     if (mode === 'ocr') {
       const tabBtn = Array.from(document.querySelectorAll('#pg-inventory .ptab')).find(function (el) { return String(el.textContent || '').includes('Photo / OCR'); });
       if (tabBtn) ptab(tabBtn, 'inv-ocr');
