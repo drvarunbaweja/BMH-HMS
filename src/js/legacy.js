@@ -7647,8 +7647,20 @@ function bmhAppendLedger(row) {
   saveBmhFinancials();
 }
 function bmhRenderVendorTables() {
+  const vendorFilterEl = document.getElementById('inv-vendor-filter');
+  if (vendorFilterEl) {
+    const vendors = Array.from(new Set((window.BMH_VENDOR_BILLS || []).map(function (v) { return String(v.vendor || '').trim(); }).filter(Boolean))).sort();
+    const current = vendorFilterEl.value || '';
+    vendorFilterEl.innerHTML = ['<option value="">All vendors</option>'].concat(vendors.map(function (v) {
+      return '<option value="' + escapeHtmlConsent(v) + '"' + (current === v ? ' selected' : '') + '>' + escapeHtmlConsent(v) + '</option>';
+    })).join('');
+    if (current) vendorFilterEl.value = current;
+  }
   [document.getElementById('bmh-vendor-table'), document.getElementById('inv-vendor-table')].filter(Boolean).forEach(function (el) {
-    const rows = window.BMH_VENDOR_BILLS.slice().reverse();
+    const filterVendor = String(document.getElementById('inv-vendor-filter')?.value || '').trim();
+    const rows = window.BMH_VENDOR_BILLS.slice().reverse().filter(function (v) {
+      return !filterVendor || String(v.vendor || '').trim() === filterVendor;
+    });
     el.innerHTML = rows.length ? `<table class="rc-queue-table" style="width:100%"><thead><tr><th>Vendor</th><th>Inv</th><th>₹</th><th>Status</th><th>Bill</th><th></th></tr></thead><tbody>${rows.map(v => {
       const out = bmhVendorBillOutstanding(v);
       const status = bmhVendorStatusLabel(v);
@@ -7678,6 +7690,22 @@ function bmhRenderVendorTables() {
         <div style="display:flex;gap:8px;align-items:center"><span style="font-weight:900;color:${r.outstanding > 0 ? '#b55a00' : '#1a8c3c'}">Outstanding ₹${r.outstanding.toLocaleString('en-IN')}</span>${r.outstanding > 0 ? `<button type="button" class="btn btn-xs btn-gold" onclick="bmhPayVendorOutstanding('${String(r.vendor).replace(/'/g, "\\'")}')">Clear by bank / cheque</button>` : ''}</div>
       </div>`;
     }).join('') : '<div style="padding:12px;color:var(--g1);font-size:12px">No vendor accounts yet.</div>';
+  }
+  const detailEl = document.getElementById('inv-vendor-detail');
+  if (detailEl) {
+    const filterVendor = String(document.getElementById('inv-vendor-filter')?.value || '').trim();
+    const rows = window.BMH_VENDOR_BILLS.slice().reverse().filter(function (v) {
+      return !filterVendor || String(v.vendor || '').trim() === filterVendor;
+    });
+    detailEl.innerHTML = rows.length ? rows.map(function (v) {
+      const paid = Number(v.paidAmount || 0);
+      const out = bmhVendorBillOutstanding(v);
+      return `<div style="padding:10px 0;border-bottom:1px solid var(--g5);font-size:12px">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><strong>${escapeHtmlConsent(v.invoiceNo || 'No Invoice')}</strong><span style="font-weight:900;color:${out>0?'#b55a00':'#1a8c3c'}">Outstanding ₹${out.toLocaleString('en-IN')}</span></div>
+        <div style="font-size:10px;color:var(--g1);margin-top:4px">${escapeHtmlConsent(v.vendor || '')} · Bill date ${escapeHtmlConsent(String(v.billDateKey || v.createdAt || '').slice(0,10)).replace(/-/g,'/')} · ${escapeHtmlConsent(v.dept || '')}</div>
+        <div style="font-size:10px;color:var(--g1);margin-top:2px">Amount ₹${Number(v.amount || 0).toLocaleString('en-IN')} · Paid ₹${paid.toLocaleString('en-IN')} · ${escapeHtmlConsent(v.paymentMode || 'Pending')}${v.paidRef ? ' · ' + escapeHtmlConsent(v.paidRef) : ''}</div>
+      </div>`;
+    }).join('') : '<div style="padding:12px;color:var(--g1);font-size:12px">No bills for this vendor.</div>';
   }
 }
 function bmhDeleteVendorBill(id) {
@@ -9473,15 +9501,53 @@ function renderStockList() {
   const rows = INVENTORY.filter(function (i) {
     return (catFilter === 'all' || String(i.cat || '') === catFilter)
       && (storeFilter === 'all' || String(i.store || '') === storeFilter);
+  }).filter(function (i) {
+    return !/^(MFX-001|PDN-002|CMC-003|TIM-004|IOL-021|IOL-023|OTP-001|BEV-001|MAN-001|RL-001)$/.test(String(i.barcode || ''));
   });
-  el.innerHTML=rows.map(i=>{
+  const iolGroups = {};
+  const normalRows = [];
+  rows.forEach(function (i) {
+    if (String(i.cat || '').toLowerCase() === 'iol') {
+      const key = [i.iolCompany || i.vendor || '', i.iolBrand || '', i.power || extractIolPower(i.name || ''), i.store || ''].join('||');
+      iolGroups[key] = iolGroups[key] || { sample: i, stock: 0, serials: [] };
+      iolGroups[key].stock += Number(i.stock || 0);
+      if (i.serialNo || i.batchNo) iolGroups[key].serials.push([i.serialNo || '', i.batchNo || ''].filter(Boolean).join(' / '));
+    } else {
+      normalRows.push(i);
+    }
+  });
+  const blocks = [];
+  normalRows.forEach(function (i) { blocks.push({ type: 'normal', item: i }); });
+  Object.keys(iolGroups).sort().forEach(function (key) { blocks.push({ type: 'iol', group: iolGroups[key] }); });
+  el.innerHTML=blocks.map(function(entry){
+    if (entry.type === 'iol') {
+      const i = entry.group.sample;
+      const stock = Number(entry.group.stock || 0);
+      const min = Number(i.min || 0);
+      const pct = Math.min(100,(stock/(Math.max(1, min)*3))*100);
+      const critical = stock<=2, low = stock<=min;
+      return `<div class="inv-row ${critical?'critical':low?'low':''}">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:800">${escapeHtmlConsent(i.iolCompany || i.vendor || '')} ${escapeHtmlConsent(i.iolBrand || '')} ${escapeHtmlConsent(i.power || extractIolPower(i.name || ''))}</div>
+          <div style="font-family:var(--mono);font-size:9px;color:var(--g1)">IOL · ${bmhFormatStoreLabel(i.store)} · Exp:${escapeHtmlConsent(i.exp || '—')}</div>
+          <div style="font-size:10px;color:var(--g1);margin-top:2px">${i.vendor ? 'Vendor: ' + escapeHtmlConsent(i.vendor) + ' · ' : ''}${i.batchNo ? 'Batch: ' + escapeHtmlConsent(i.batchNo) + ' · ' : ''}${entry.group.serials.length ? 'Serials: ' + escapeHtmlConsent(entry.group.serials.slice(0,4).join(', ')) + ' · ' : ''}${i.vendorBillingMode === 'on-use' ? 'Bill only when used' : 'Monthly vendor bill'}</div>
+          <div class="sb-bar"><div class="sb-fill" style="width:${pct}%;background:${critical?'var(--red)':low?'var(--orange)':'var(--green)'}"></div></div>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-size:17px;font-weight:900;color:${critical?'var(--red)':low?'var(--orange)':'var(--green)'}">${stock}</div>
+          <div style="font-size:11px;font-weight:700;color:var(--g1)">MRP ₹${Number(i.mrp||0).toLocaleString('en-IN')}</div>
+          <div style="font-size:10px;color:var(--g1)">Cost ₹${Number(i.cost||0).toLocaleString('en-IN')} · Min ${min}</div>
+        </div>
+      </div>`;
+    }
+    const i = entry.item;
     const pct=Math.min(100,(i.stock/(Math.max(1, i.min)*3))*100);
     const cls=i.stock<=2?'critical':i.stock<=i.min?'low':'';
     return `<div class="inv-row ${cls}">
       <div style="flex:1;min-width:0">
-        <div style="font-size:12px;font-weight:800">${i.name}</div>
-        <div style="font-family:var(--mono);font-size:9px;color:var(--g1)">${i.barcode} · ${i.cat} · ${bmhDeptLabel(i.dept || 'general')} · ${bmhFormatStoreLabel(i.store)} · Exp:${i.exp || '—'}</div>
-        <div style="font-size:10px;color:var(--g1);margin-top:2px">${i.vendor ? 'Vendor: ' + i.vendor + ' · ' : ''}${i.serialNo ? 'Serial: ' + i.serialNo + ' · ' : ''}${i.batchNo ? 'Batch: ' + i.batchNo + ' · ' : ''}${(i.power || extractIolPower(i.name || '')) ? 'Power: ' + (i.power || extractIolPower(i.name || '')) + ' · ' : ''}${i.vendorBillingMode === 'on-use' ? 'Bill only when used' : 'Monthly vendor bill'}</div>
+        <div style="font-size:12px;font-weight:800">${escapeHtmlConsent(i.name)}</div>
+        <div style="font-family:var(--mono);font-size:9px;color:var(--g1)">${escapeHtmlConsent(i.barcode)} · ${escapeHtmlConsent(i.cat)} · ${bmhDeptLabel(i.dept || 'general')} · ${bmhFormatStoreLabel(i.store)} · Exp:${escapeHtmlConsent(i.exp || '—')}</div>
+        <div style="font-size:10px;color:var(--g1);margin-top:2px">${i.vendor ? 'Vendor: ' + escapeHtmlConsent(i.vendor) + ' · ' : ''}${i.serialNo ? 'Serial: ' + escapeHtmlConsent(i.serialNo) + ' · ' : ''}${i.batchNo ? 'Batch: ' + escapeHtmlConsent(i.batchNo) + ' · ' : ''}${(i.power || extractIolPower(i.name || '')) ? 'Power: ' + escapeHtmlConsent(i.power || extractIolPower(i.name || '')) + ' · ' : ''}${i.vendorBillingMode === 'on-use' ? 'Bill only when used' : 'Monthly vendor bill'}</div>
         <div class="sb-bar"><div class="sb-fill" style="width:${pct}%;background:${i.stock<=2?'var(--red)':i.stock<=i.min?'var(--orange)':'var(--green)'}"></div></div>
       </div>
       <div style="text-align:right;flex-shrink:0">
@@ -9494,7 +9560,7 @@ function renderStockList() {
   const ilc = document.getElementById('inv-low-cnt');
   if (ilc) ilc.textContent = String(bmhInventoryLowItems().length);
   const totalEl = document.getElementById('inv-total-items');
-  if (totalEl) totalEl.textContent = String(INVENTORY.reduce(function (s, i) { return s + Math.max(0, Number(i.stock) || 0); }, 0));
+  if (totalEl) totalEl.textContent = String(rows.reduce(function (s, i) { return s + Math.max(0, Number(i.stock) || 0); }, 0));
 }
 function scanBC(mode) { const demo=INVENTORY.filter(i=>i.stock>0)[Math.floor(Math.random()*5)]; const inp=mode==='in'?document.getElementById('bc-in'):document.getElementById('bc-use'); if(inp)inp.value=demo.barcode; showToast('📷 Barcode scanned: '+demo.barcode,'i'); setTimeout(()=>processBC(mode,demo.barcode),400); }
 

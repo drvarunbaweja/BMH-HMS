@@ -3327,7 +3327,7 @@
         <div class="ptab" onclick="ptab(this,'inv-stores')">🏬 Stores & Transfers</div>
         <div class="ptab" onclick="ptab(this,'inv-indent')">📝 Indents</div>
         <div class="ptab" onclick="ptab(this,'inv-vendor')">🏪 Vendors</div>
-        <div class="ptab" onclick="ptab(this,'inv-ocr')">📷 Photo / OCR</div>
+        <div class="ptab" onclick="ptab(this,'inv-ocr')">📒 Expenses &amp; Ledger</div>
       </div>
       <div class="tab-content active" id="inv-in">
         <div style="background:var(--blue-lt);border-radius:10px;padding:10px;margin-bottom:12px">
@@ -3504,6 +3504,7 @@
         <div class="g32" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
           <div class="card">
             <div class="card-hd"><div class="card-title">Vendor bills</div></div>
+            <div class="form-group" style="margin-bottom:10px"><label class="fl">Select vendor</label><select id="inv-vendor-filter" onchange="bmhRenderVendorTables()"></select></div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
                 <div class="form-group"><label class="fl">Vendor</label><input type="text" id="inv-vend-name" placeholder="Supplier name"></div>
                 <div class="form-group"><label class="fl">Invoice no.</label><input type="text" id="inv-vend-inv" placeholder="Invoice #"></div>
@@ -3516,34 +3517,26 @@
           </div>
           <div style="display:flex;flex-direction:column;gap:12px">
             <div class="card">
-              <div class="card-hd"><div class="card-title">Expenses</div></div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-                <div class="form-group"><label class="fl">Description</label><input type="text" id="inv-exp-desc" placeholder="e.g. Stationery"></div>
-                <div class="form-group"><label class="fl">Amount ₹</label><input type="number" id="inv-exp-amt"></div>
-                <div class="form-group" style="grid-column:1/-1"><label class="fl">Category</label><input type="text" id="inv-exp-cat" placeholder="Admin / OT / Marketing"></div>
-              </div>
-              <button type="button" class="btn btn-orange btn-sm" onclick="bmhAddExpense()">+ Post expense</button>
-              <div id="inv-exp-list" style="margin-top:12px;font-size:12px"></div>
-            </div>
-            <div class="card">
-              <div class="card-hd"><div class="card-title">Day book / ledger</div><button type="button" class="btn btn-outline btn-sm" onclick="bmhExportLedgerCsv()">Export CSV</button></div>
-              <div style="overflow-x:auto"><table class="rc-queue-table" style="min-width:720px"><thead><tr><th>Date</th><th>Type</th><th>Narration</th><th>Party</th><th style="text-align:right">Debit ₹</th><th style="text-align:right">Credit ₹</th><th>Ref</th></tr></thead><tbody id="inv-ledger-body"></tbody></table></div>
+              <div class="card-hd"><div class="card-title">Vendor Bill Detail</div><button type="button" class="btn btn-gold btn-sm" onclick="bmhPayVendorOutstanding(document.getElementById('inv-vendor-filter')?.value || '')">Bulk Payment</button></div>
+              <div id="inv-vendor-detail"></div>
             </div>
           </div>
         </div>
       </div>
       <div class="tab-content" id="inv-ocr">
-        <div style="background:var(--g6);border-radius:8px;padding:10px;margin-bottom:10px;font-size:12px;color:var(--tx3)">Upload a bill, PDF, or live photo from the phone. The app will extract text, prefill the stock form, and leave everything ready for manual review before saving.</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:10px">
-          <div class="form-group" style="margin:0;min-width:220px;flex:1"><label class="fl">Upload bill / PDF / photo</label><input type="file" id="inv-import-file-ocr" accept="image/*,.pdf" capture="environment" onchange="handleInventoryImportFile('ocr', this)"></div>
-          <button type="button" class="btn btn-blue btn-sm" onclick="triggerInventoryImportCamera('ocr')">📷 Take Photo</button>
+        <div class="card" style="margin-bottom:12px">
+          <div class="card-hd"><div class="card-title">Expenses</div></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div class="form-group"><label class="fl">Description</label><input type="text" id="inv-exp-desc" placeholder="e.g. Stationery"></div>
+            <div class="form-group"><label class="fl">Amount ₹</label><input type="number" id="inv-exp-amt"></div>
+            <div class="form-group" style="grid-column:1/-1"><label class="fl">Category</label><input type="text" id="inv-exp-cat" placeholder="Admin / OT / Marketing"></div>
+          </div>
+          <button type="button" class="btn btn-orange btn-sm" onclick="bmhAddExpense()">+ Post expense</button>
+          <div id="inv-exp-list" style="margin-top:12px;font-size:12px"></div>
         </div>
-        <div id="inv-import-status-ocr" style="font-size:11px;color:var(--g1);margin-bottom:8px"></div>
-        <div id="inv-import-preview-ocr" style="margin-bottom:8px;font-size:11px;color:var(--tx3)"></div>
-        <div class="form-group"><label class="fl">Extracted OCR / barcode text</label><textarea id="inv-ocr-text" rows="6" style="width:100%;font-family:var(--mono);font-size:11px" placeholder="OCR output will appear here automatically after upload"></textarea></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button type="button" class="btn btn-blue btn-sm" onclick="bmhOcrApplyToStockIn()">Use first line as stock-in barcode</button>
-          <button type="button" class="btn btn-orange btn-sm" onclick="bmhOcrApplyToPatientUse()">Use first line for selected patient (usage)</button>
+        <div class="card">
+          <div class="card-hd"><div class="card-title">Day book / ledger</div><button type="button" class="btn btn-outline btn-sm" onclick="bmhExportLedgerCsv()">Export CSV</button></div>
+          <div style="overflow-x:auto"><table class="rc-queue-table" style="min-width:720px"><thead><tr><th>Date</th><th>Type</th><th>Narration</th><th>Party</th><th style="text-align:right">Debit ₹</th><th style="text-align:right">Credit ₹</th><th>Ref</th></tr></thead><tbody id="inv-ledger-body"></tbody></table></div>
         </div>
       </div>
     </div>
