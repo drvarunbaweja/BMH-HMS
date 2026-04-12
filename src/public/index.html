@@ -153,6 +153,7 @@
       justify-content:flex-end;
       padding:8px;
       background:transparent !important;
+      backdrop-filter:none !important;
     }
     #m-inv-bill-review.inventory-review-docked > .modal {
       pointer-events:auto;
@@ -3527,7 +3528,11 @@
         <div class="g32" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
           <div class="card">
             <div class="card-hd"><div class="card-title">Vendor bills</div></div>
-            <div class="form-group" style="margin-bottom:10px"><label class="fl">Select vendor</label><select id="inv-vendor-filter" onchange="bmhRenderVendorTables()"></select></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+              <div class="form-group" style="margin:0"><label class="fl">Search / select vendor</label><input type="text" id="inv-vendor-search" list="inv-vendor-datalist" placeholder="Type vendor name" oninput="bmhRenderVendorTables()"></div>
+              <div class="form-group" style="margin:0"><label class="fl">Bill date</label><input type="date" id="inv-vendor-date" onchange="bmhRenderVendorTables()"></div>
+            </div>
+            <div class="form-group" style="margin-bottom:10px"><label class="fl">Select vendor</label><select id="inv-vendor-filter" onchange="bmhSyncVendorSearchFromSelect();bmhRenderVendorTables()"></select></div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
                 <div class="form-group"><label class="fl">Vendor</label><input type="text" id="inv-vend-name" placeholder="Supplier name"></div>
                 <div class="form-group"><label class="fl">Invoice no.</label><input type="text" id="inv-vend-inv" placeholder="Invoice #"></div>

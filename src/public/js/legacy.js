@@ -6727,6 +6727,7 @@ function saveIolInventoryGrid() {
   let added = 0;
   try {
     bmhCompressFileToData(document.getElementById('inv-in-bill-file')?.files?.[0], function (billFile) {
+      try {
       picked.forEach(function (row) {
         const hints = serialMap[row.power] || [];
         for (let idx = 0; idx < row.qty; idx += 1) {
@@ -6761,6 +6762,10 @@ function saveIolInventoryGrid() {
       } catch (e) { console.warn('IOL stock post-save UI refresh failed', e); }
       showToast('Saved ✓', 's');
       resetInventoryStockInForm(true);
+      } catch (e) {
+        console.error('saveIolInventoryGrid callback failed', e);
+        showToast('IOL stock save failed. ' + String(e?.message || 'Please retry.'), 'e');
+      }
     });
   } catch (e) {
     console.error('saveIolInventoryGrid failed', e);
@@ -7721,18 +7726,26 @@ function bmhAppendLedger(row) {
 }
 function bmhRenderVendorTables() {
   const vendorFilterEl = document.getElementById('inv-vendor-filter');
+  const vendorSearchEl = document.getElementById('inv-vendor-search');
   if (vendorFilterEl) {
     const vendors = Array.from(new Set((window.BMH_VENDOR_BILLS || []).map(function (v) { return String(v.vendor || '').trim(); }).filter(Boolean))).sort();
     const current = vendorFilterEl.value || '';
     vendorFilterEl.innerHTML = ['<option value="">All vendors</option>'].concat(vendors.map(function (v) {
       return '<option value="' + escapeHtmlConsent(v) + '"' + (current === v ? ' selected' : '') + '>' + escapeHtmlConsent(v) + '</option>';
     })).join('');
-    if (current) vendorFilterEl.value = current;
+    const typed = String(vendorSearchEl?.value || '').trim();
+    const resolved = typed && vendors.find(function (v) { return normalizeInventoryCompareText(v) === normalizeInventoryCompareText(typed); });
+    if (resolved) vendorFilterEl.value = resolved;
+    else if (current) vendorFilterEl.value = current;
   }
   [document.getElementById('bmh-vendor-table'), document.getElementById('inv-vendor-table')].filter(Boolean).forEach(function (el) {
-    const filterVendor = String(document.getElementById('inv-vendor-filter')?.value || '').trim();
+    const filterVendor = String(document.getElementById('inv-vendor-filter')?.value || document.getElementById('inv-vendor-search')?.value || '').trim();
+    const filterDate = String(document.getElementById('inv-vendor-date')?.value || '').trim();
     const rows = window.BMH_VENDOR_BILLS.slice().reverse().filter(function (v) {
-      return !filterVendor || String(v.vendor || '').trim() === filterVendor;
+      const vendorOk = !filterVendor || normalizeInventoryCompareText(String(v.vendor || '')) === normalizeInventoryCompareText(filterVendor);
+      const dateKey = String(v.billDateKey || v.createdAt || '').slice(0, 10);
+      const dateOk = !filterDate || dateKey === filterDate;
+      return vendorOk && dateOk;
     });
     el.innerHTML = rows.length ? `<table class="rc-queue-table" style="width:100%"><thead><tr><th>Vendor</th><th>Inv</th><th>₹</th><th>Status</th><th>Bill</th><th></th></tr></thead><tbody>${rows.map(v => {
       const out = bmhVendorBillOutstanding(v);
@@ -7766,9 +7779,13 @@ function bmhRenderVendorTables() {
   }
   const detailEl = document.getElementById('inv-vendor-detail');
   if (detailEl) {
-    const filterVendor = String(document.getElementById('inv-vendor-filter')?.value || '').trim();
+    const filterVendor = String(document.getElementById('inv-vendor-filter')?.value || document.getElementById('inv-vendor-search')?.value || '').trim();
+    const filterDate = String(document.getElementById('inv-vendor-date')?.value || '').trim();
     const rows = window.BMH_VENDOR_BILLS.slice().reverse().filter(function (v) {
-      return !filterVendor || String(v.vendor || '').trim() === filterVendor;
+      const vendorOk = !filterVendor || normalizeInventoryCompareText(String(v.vendor || '')) === normalizeInventoryCompareText(filterVendor);
+      const dateKey = String(v.billDateKey || v.createdAt || '').slice(0, 10);
+      const dateOk = !filterDate || dateKey === filterDate;
+      return vendorOk && dateOk;
     });
     const totalDue = rows.reduce(function (s, v) { return s + bmhVendorBillOutstanding(v); }, 0);
     detailEl.innerHTML = rows.length ? rows.map(function (v) {
@@ -7800,6 +7817,12 @@ function bmhRenderVendorTables() {
     </div>` : '<div style="padding:12px;color:var(--g1);font-size:12px">No bills for this vendor.</div>';
   }
 }
+function bmhSyncVendorSearchFromSelect() {
+  const sel = document.getElementById('inv-vendor-filter');
+  const inp = document.getElementById('inv-vendor-search');
+  if (sel && inp) inp.value = sel.value || '';
+}
+window.bmhSyncVendorSearchFromSelect = bmhSyncVendorSearchFromSelect;
 function bmhSelectedVendorBillIds() {
   return Array.from(document.querySelectorAll('#inv-vendor-detail .inv-vendor-bill-check:checked')).map(function (el) {
     return String(el.value || '').trim();
