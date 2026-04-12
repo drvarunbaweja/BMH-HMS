@@ -1078,6 +1078,9 @@ function isCurrentUserAdmin() {
   const centre = String(CURRENT_USER?.centre || '').toUpperCase();
   return !!(CURRENT_USER?.isAdmin || CURRENT_USER?.canSeeAllCentres || role === 'admin' || centre === 'BOTH');
 }
+function isAdminUser() {
+  return isCurrentUserAdmin();
+}
 function isAcceptedLoginPassword(user, profile, pass) {
   if (!profile) return false;
   if (profile.pw === pass) return true;
@@ -7740,11 +7743,12 @@ function bmhRenderVendorTables() {
   }
   [document.getElementById('bmh-vendor-table'), document.getElementById('inv-vendor-table')].filter(Boolean).forEach(function (el) {
     const filterVendor = String(document.getElementById('inv-vendor-filter')?.value || document.getElementById('inv-vendor-search')?.value || '').trim();
-    const filterDate = String(document.getElementById('inv-vendor-date')?.value || '').trim();
+    const filterDateFrom = String(document.getElementById('inv-vendor-date-from')?.value || '').trim();
+    const filterDateTo = String(document.getElementById('inv-vendor-date-to')?.value || '').trim();
     const rows = window.BMH_VENDOR_BILLS.slice().reverse().filter(function (v) {
       const vendorOk = !filterVendor || normalizeInventoryCompareText(String(v.vendor || '')) === normalizeInventoryCompareText(filterVendor);
       const dateKey = String(v.billDateKey || v.createdAt || '').slice(0, 10);
-      const dateOk = !filterDate || dateKey === filterDate;
+      const dateOk = (!filterDateFrom || dateKey >= filterDateFrom) && (!filterDateTo || dateKey <= filterDateTo);
       return vendorOk && dateOk;
     });
     el.innerHTML = rows.length ? `<table class="rc-queue-table" style="width:100%"><thead><tr><th>Vendor</th><th>Inv</th><th>₹</th><th>Status</th><th>Bill</th><th></th></tr></thead><tbody>${rows.map(v => {
@@ -7780,11 +7784,12 @@ function bmhRenderVendorTables() {
   const detailEl = document.getElementById('inv-vendor-detail');
   if (detailEl) {
     const filterVendor = String(document.getElementById('inv-vendor-filter')?.value || document.getElementById('inv-vendor-search')?.value || '').trim();
-    const filterDate = String(document.getElementById('inv-vendor-date')?.value || '').trim();
+    const filterDateFrom = String(document.getElementById('inv-vendor-date-from')?.value || '').trim();
+    const filterDateTo = String(document.getElementById('inv-vendor-date-to')?.value || '').trim();
     const rows = window.BMH_VENDOR_BILLS.slice().reverse().filter(function (v) {
       const vendorOk = !filterVendor || normalizeInventoryCompareText(String(v.vendor || '')) === normalizeInventoryCompareText(filterVendor);
       const dateKey = String(v.billDateKey || v.createdAt || '').slice(0, 10);
-      const dateOk = !filterDate || dateKey === filterDate;
+      const dateOk = (!filterDateFrom || dateKey >= filterDateFrom) && (!filterDateTo || dateKey <= filterDateTo);
       return vendorOk && dateOk;
     });
     const totalDue = rows.reduce(function (s, v) { return s + bmhVendorBillOutstanding(v); }, 0);
@@ -7939,6 +7944,7 @@ function bmhAddExpense() {
   const mode = document.getElementById('inv-exp-mode')?.value || 'Cash';
   const ref = document.getElementById('inv-exp-ref')?.value?.trim() || '';
   const billDate = document.getElementById('inv-exp-date')?.value || new Date().toISOString().slice(0, 10);
+  const dueDate = document.getElementById('inv-exp-due-date')?.value || '';
   const f = document.getElementById('inv-exp-file')?.files?.[0] || null;
   if (!desc || !(amt > 0)) { showToast('Description and amount required', 'w'); return; }
   bmhCompressFileToData(f, function (billFile) {
@@ -7951,13 +7957,14 @@ function bmhAddExpense() {
       vendor,
       paymentMode: mode,
       paymentRef: ref,
+      dueDate: dueDate,
       uploadedName: f ? f.name : '',
       billFile: billFile || null
     });
     if (vendor && billFile) inventoryRememberBillMeta(vendor, cat, billFile);
     bmhAppendLedger({ date: billDate, type: 'Expense', narration: desc + ' (' + cat + ')', dr: amt, cr: 0, party: vendor || '—', ref: (mode ? mode + ' · ' : '') + ref });
     saveBmhFinancials();
-    ['inv-exp-desc','inv-exp-amt','inv-exp-cat','inv-exp-vendor','inv-exp-ref','bmh-exp-desc','bmh-exp-amt','bmh-exp-cat'].forEach(function (id) { const el = document.getElementById(id); if (el) el.value = ''; });
+    ['inv-exp-desc','inv-exp-amt','inv-exp-cat','inv-exp-vendor','inv-exp-ref','inv-exp-due-date','bmh-exp-desc','bmh-exp-amt','bmh-exp-cat'].forEach(function (id) { const el = document.getElementById(id); if (el) el.value = ''; });
     const modeEl = document.getElementById('inv-exp-mode'); if (modeEl) modeEl.value = 'Cash';
     const dateEl = document.getElementById('inv-exp-date'); if (dateEl) dateEl.value = '';
     const fileEl = document.getElementById('inv-exp-file'); if (fileEl) fileEl.value = '';
@@ -7972,7 +7979,7 @@ function bmhRenderExpenseList() {
       return `<div style="padding:8px 0;border-bottom:1px solid var(--g5);font-size:12px;display:flex;justify-content:space-between;gap:10px">
         <div style="min-width:0">
           <div style="font-weight:800">${escapeHtmlConsent(e.desc || '')}</div>
-          <div style="font-size:10px;color:var(--g1);margin-top:2px">${escapeHtmlConsent(e.cat || '')}${e.vendor ? ' · ' + escapeHtmlConsent(e.vendor) : ''} · ${escapeHtmlConsent(String(e.date || '').slice(0,10)).replace(/-/g,'/')} · ${escapeHtmlConsent(e.paymentMode || 'Cash')}${e.paymentRef ? ' · ' + escapeHtmlConsent(e.paymentRef) : ''}</div>
+          <div style="font-size:10px;color:var(--g1);margin-top:2px">${escapeHtmlConsent(e.cat || '')}${e.vendor ? ' · ' + escapeHtmlConsent(e.vendor) : ''} · ${escapeHtmlConsent(String(e.date || '').slice(0,10)).replace(/-/g,'/')} · ${escapeHtmlConsent(e.paymentMode || 'Cash')}${e.paymentRef ? ' · ' + escapeHtmlConsent(e.paymentRef) : ''}${e.dueDate ? ' · Due ' + escapeHtmlConsent(String(e.dueDate).replace(/-/g,'/')) : ''}</div>
           <div style="font-size:10px;color:var(--g1);margin-top:2px">${e.billFile?.name || e.uploadedName ? `<a href="#" onclick="event.preventDefault();openInventoryBill('${e.id}')">${escapeHtmlConsent(e.billFile?.name || e.uploadedName)}</a>` : 'No bill uploaded'}</div>
         </div>
         <strong>₹${Number(e.amount || 0).toLocaleString('en-IN')}</strong>
@@ -8984,9 +8991,35 @@ function renderInventoryReviewManualChips(mode) {
   const host = document.getElementById('inv-bill-review-manual-chips');
   if (!host) return;
   const chips = Array.isArray(parsed?.manualChips) ? parsed.manualChips : [];
-  host.innerHTML = chips.length ? chips.map(function (chip, idx) {
+  const reviewText = normalizeInventoryCompareText(parsed?.reviewText || '');
+  const memory = loadInventoryOcrMemory();
+  const suggestions = [];
+  inventoryKnownVendorNames().forEach(function (v) {
+    const norm = normalizeInventoryCompareText(v);
+    if (reviewText && norm && reviewText.includes(norm)) suggestions.push({ target: 'vendor', value: v });
+  });
+  inventoryKnownProductNames().forEach(function (v) {
+    const norm = normalizeInventoryCompareText(v);
+    if (reviewText && norm && reviewText.includes(norm)) suggestions.push({ target: 'itemName', value: v });
+  });
+  (memory.companies || []).forEach(function (v) {
+    const norm = normalizeInventoryCompareText(v);
+    if (reviewText && norm && reviewText.includes(norm)) suggestions.push({ target: 'company', value: v });
+  });
+  (memory.brands || []).forEach(function (v) {
+    const norm = normalizeInventoryCompareText(v);
+    if (reviewText && norm && reviewText.includes(norm)) suggestions.push({ target: 'brand', value: v });
+  });
+  const uniqueSuggestions = suggestions.filter(function (chip, idx, arr) {
+    return arr.findIndex(function (x) { return x.target === chip.target && normalizeInventoryCompareText(x.value) === normalizeInventoryCompareText(chip.value); }) === idx;
+  }).slice(0, 10);
+  const learnedHtml = uniqueSuggestions.length ? `<div style="margin-bottom:6px;font-size:10px;color:#1a8c3c;font-weight:800;text-transform:uppercase">Learned matches</div>` + uniqueSuggestions.map(function (chip) {
+    return `<button type="button" class="btn btn-xs btn-gold" onclick="applyInventoryFieldFromChip('${chip.target}','${String(chip.value).replace(/'/g, "\\'")}','${mode}')">${escapeHtmlConsent(chip.target)}: ${escapeHtmlConsent(chip.value)}</button>`;
+  }).join(' ') : '';
+  const manualHtml = chips.length ? chips.map(function (chip, idx) {
     return `<button type="button" class="btn btn-xs btn-outline" onclick="applyInventoryManualChip('${mode}',${idx})">${escapeHtmlConsent(chip.target)}: ${escapeHtmlConsent(chip.value)}</button>`;
-  }).join(' ') : '<div style="color:var(--g1)">No extracted chips yet.</div>';
+  }).join(' ') : '';
+  host.innerHTML = (learnedHtml || manualHtml) ? (learnedHtml + (manualHtml ? `<div style="margin-top:6px">${manualHtml}</div>` : '')) : '<div style="color:var(--g1)">No extracted chips yet.</div>';
 }
 function applyInventoryParsedLineItem(mode, idx) {
   const parsed = window._inventoryParsedImports && window._inventoryParsedImports[mode];
@@ -24268,6 +24301,7 @@ function renderDashboard() {
     setEl('db-admin-ipd', String(ipdCases.length));
     setEl('db-admin-total-collection', '₹' + selectedCollection.toLocaleString('en-IN'));
     const summaryEl = document.getElementById('dash-admin-summary-blocks');
+    const dueAlertEl = document.getElementById('dash-admin-due-alerts');
     if (summaryEl) {
       const deptMeta = [
         { key: 'ophtho', label: 'Eye', cls: 'blue', icon: '👁️' },
@@ -24350,6 +24384,27 @@ function renderDashboard() {
         <div style="margin-top:10px;font-size:10px;font-weight:700;color:var(--g1);line-height:1.5">${totalModeText}</div>
       </div>`;
       summaryEl.innerHTML = cards.join('') + totalCard;
+    }
+    if (dueAlertEl) {
+      const end = new Date(selectedDate + 'T00:00:00');
+      end.setDate(end.getDate() + 7);
+      const endKey = end.toISOString().slice(0, 10);
+      const dueItems = [];
+      (window.BMH_VENDOR_BILLS || []).forEach(function (v) {
+        const due = String(v.dueDate || '').slice(0, 10);
+        if (due && due >= selectedDate && due <= endKey && bmhVendorBillOutstanding(v) > 0) {
+          dueItems.push({ kind: 'Vendor Bill', name: v.vendor || 'Vendor', ref: v.invoiceNo || 'No Invoice', due: due, amount: bmhVendorBillOutstanding(v) });
+        }
+      });
+      (window.BMH_EXPENSES || []).forEach(function (e) {
+        const due = String(e.dueDate || '').slice(0, 10);
+        if (due && due >= selectedDate && due <= endKey) {
+          dueItems.push({ kind: 'Expense', name: e.vendor || e.desc || 'Expense', ref: e.cat || '', due: due, amount: Number(e.amount || 0) });
+        }
+      });
+      dueAlertEl.innerHTML = dueItems.length ? `<div class="card" style="margin-top:12px"><div class="card-hd"><div><div class="card-title">Upcoming Due Alerts</div><div class="card-sub">Bills and expenses due within 7 days</div></div></div>${dueItems.map(function (d) {
+        return `<div style="padding:10px 0;border-bottom:1px solid var(--g5);display:flex;justify-content:space-between;gap:10px;align-items:center;font-size:12px"><div><strong>${escapeHtmlConsent(d.name)}</strong><div style="font-size:10px;color:var(--g1)">${escapeHtmlConsent(d.kind)} · ${escapeHtmlConsent(d.ref || '')} · Due ${escapeHtmlConsent(String(d.due).replace(/-/g,'/'))}</div></div><div style="font-weight:900;color:#b55a00">₹${Number(d.amount || 0).toLocaleString('en-IN')}</div></div>`;
+      }).join('')}</div>` : '';
     }
     const renderBarSet = function (values, labels, colors) {
       const max = Math.max(1, ...values);

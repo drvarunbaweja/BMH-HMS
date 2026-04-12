@@ -435,6 +435,7 @@
         </div>
       </div>
       <div id="dash-admin-summary-blocks" class="sg4"></div>
+      <div id="dash-admin-due-alerts" style="margin-top:12px"></div>
       <div class="g32" style="margin-top:14px">
         <div class="card">
           <div class="card-hd"><div><div class="card-title">Collection Analytics</div><div class="card-sub">Daily, weekly and monthly collections</div></div></div>
@@ -3528,9 +3529,10 @@
         <div class="g32" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
           <div class="card">
             <div class="card-hd"><div class="card-title">Vendor bills</div></div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
               <div class="form-group" style="margin:0"><label class="fl">Search / select vendor</label><input type="text" id="inv-vendor-search" list="inv-vendor-datalist" placeholder="Type vendor name" oninput="bmhRenderVendorTables()"></div>
-              <div class="form-group" style="margin:0"><label class="fl">Bill date</label><input type="date" id="inv-vendor-date" onchange="bmhRenderVendorTables()"></div>
+              <div class="form-group" style="margin:0"><label class="fl">Bill date from</label><input type="date" id="inv-vendor-date-from" onchange="bmhRenderVendorTables()"></div>
+              <div class="form-group" style="margin:0"><label class="fl">Bill date to</label><input type="date" id="inv-vendor-date-to" onchange="bmhRenderVendorTables()"></div>
             </div>
             <div class="form-group" style="margin-bottom:10px"><label class="fl">Select vendor</label><select id="inv-vendor-filter" onchange="bmhSyncVendorSearchFromSelect();bmhRenderVendorTables()"></select></div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
@@ -3562,6 +3564,7 @@
             <div class="form-group"><label class="fl">Payment mode</label><select id="inv-exp-mode"><option value="Cash">Cash</option><option value="Online">Online</option><option value="Cheque">Cheque</option><option value="Bank Transfer">Bank Transfer</option><option value="Credit">Credit / Pending</option></select></div>
             <div class="form-group"><label class="fl">Cheque / UTR / Ref</label><input type="text" id="inv-exp-ref" placeholder="Transaction reference"></div>
             <div class="form-group"><label class="fl">Bill date</label><input type="date" id="inv-exp-date"></div>
+            <div class="form-group"><label class="fl">Due / last date</label><input type="date" id="inv-exp-due-date"></div>
             <div class="form-group"><label class="fl">Upload scan / PDF</label><input type="file" id="inv-exp-file" accept="image/*,.pdf"></div>
           </div>
           <button type="button" class="btn btn-orange btn-sm" onclick="bmhAddExpense()">+ Post expense</button>
