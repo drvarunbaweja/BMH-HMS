@@ -3436,6 +3436,7 @@
           <div class="form-group" style="margin:0"><label class="fl">Filter by category</label><select id="inv-stock-cat-filter" onchange="renderStockList()"></select></div>
           <div class="form-group" style="margin:0"><label class="fl">Filter by store</label><select id="inv-stock-store-filter" onchange="renderStockList()"></select></div>
         </div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:10px"><button type="button" class="btn btn-outline btn-sm" onclick="bmhPrintInventorySection('Current Stock', '#inv-stock-list')">🖨️ Print current stock</button></div>
         <div id="inv-stock-list"></div>
       </div>
       <div class="tab-content" id="inv-expiry">
@@ -3498,7 +3499,7 @@
       </div>
       <div class="tab-content" id="inv-vendor">
         <div class="card" style="margin-bottom:12px">
-          <div class="card-hd"><div><div class="card-title">Vendor outstanding summary</div><div class="card-sub">Cheque / bank-transfer clearances reduce the oldest outstanding bills first</div></div></div>
+          <div class="card-hd"><div><div class="card-title">Vendor outstanding summary</div><div class="card-sub">Cheque / bank-transfer clearances reduce the oldest outstanding bills first</div></div><button type="button" class="btn btn-outline btn-sm" onclick="bmhPrintInventorySection('Vendor Dues And Payments', '#inv-vendor')">🖨️ Print vendors</button></div>
           <div id="inv-vendor-summary"></div>
         </div>
         <div class="g32" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
@@ -3525,7 +3526,7 @@
       </div>
       <div class="tab-content" id="inv-ocr">
         <div class="card" style="margin-bottom:12px">
-          <div class="card-hd"><div class="card-title">Expenses</div></div>
+          <div class="card-hd"><div class="card-title">Expenses</div><button type="button" class="btn btn-outline btn-sm" onclick="bmhPrintInventorySection('Inventory Expenses And Ledger', '#inv-ocr')">🖨️ Print</button></div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
             <div class="form-group"><label class="fl">Description</label><input type="text" id="inv-exp-desc" placeholder="e.g. Stationery"></div>
             <div class="form-group"><label class="fl">Amount ₹</label><input type="number" id="inv-exp-amt"></div>

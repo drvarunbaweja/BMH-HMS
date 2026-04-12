@@ -6463,12 +6463,20 @@ function loadInventoryStockFromStorage() {
     if (!Array.isArray(arr)) return;
     arr.forEach(row => {
       const it = INVENTORY.find(x => x.barcode === row.barcode);
-      if (it) Object.assign(it, row);
+      if (it) {
+        Object.assign(it, row);
+      } else if (row && row.barcode) {
+        const copy = Object.assign({}, row);
+        normalizeInventoryRecord(copy);
+        INVENTORY.push(copy);
+        BCMAP[copy.barcode] = copy;
+        if (copy.name) BCMAP[String(copy.name).toLowerCase().substring(0, 15)] = copy;
+      }
     });
   } catch (e) { /* noop */ }
 }
 function saveInventoryStockToStorage() {
-  try { localStorage.setItem('bmh_inventory_stock', JSON.stringify(INVENTORY.map(i => ({ barcode: i.barcode, stock: i.stock, name: i.name, cat: i.cat, mrp: i.mrp, exp: i.exp, dept: i.dept, vendor: i.vendor, cost: i.cost, qr: i.qr, store: i.store, min: i.min, billMode: i.billMode, vendorBillingMode: i.vendorBillingMode, serialNo: i.serialNo, batchNo: i.batchNo, power: i.power } )))); } catch (e) { /* noop */ }
+  try { localStorage.setItem('bmh_inventory_stock', JSON.stringify(INVENTORY.map(i => ({ barcode: i.barcode, stock: i.stock, name: i.name, cat: i.cat, mrp: i.mrp, exp: i.exp, dept: i.dept, vendor: i.vendor, cost: i.cost, qr: i.qr, store: i.store, min: i.min, billMode: i.billMode, vendorBillingMode: i.vendorBillingMode, serialNo: i.serialNo, batchNo: i.batchNo, power: i.power, iolCompany: i.iolCompany, iolBrand: i.iolBrand, iolModel: i.iolModel } )))); } catch (e) { /* noop */ }
 }
 function normalizeIolPowerValue(power) {
   const raw = String(power || '').trim();
@@ -6716,26 +6724,56 @@ function saveIolInventoryGrid() {
     store: bmhInventoryStoreValue() || 'Eye OT',
     billMode: 'on-use'
   };
-  let added = 0;
-  picked.forEach(function (row) {
-    const hints = serialMap[row.power] || [];
-    for (let idx = 0; idx < row.qty; idx += 1) {
-      const invRow = buildIolInventoryRow(base, row.power, idx + 1, hints[idx] || null);
-      INVENTORY.push(invRow);
-      BCMAP[invRow.barcode] = invRow;
-      BCMAP[String(invRow.name).toLowerCase().substring(0, 15)] = invRow;
-      bmhRecordInventoryPurchase(invRow, 1, null);
-      added += 1;
-    }
+  bmhCompressFileToData(document.getElementById('inv-in-bill-file')?.files?.[0], function (billFile) {
+    let added = 0;
+    picked.forEach(function (row) {
+      const hints = serialMap[row.power] || [];
+      for (let idx = 0; idx < row.qty; idx += 1) {
+        const invRow = buildIolInventoryRow(base, row.power, idx + 1, hints[idx] || null);
+        INVENTORY.push(invRow);
+        BCMAP[invRow.barcode] = invRow;
+        BCMAP[String(invRow.name).toLowerCase().substring(0, 15)] = invRow;
+        bmhRecordInventoryPurchase(invRow, 1, billFile || null);
+        added += 1;
+      }
+    });
+    saveInventoryStockToStorage();
+    renderStockList();
+    renderInventoryPurchaseLog();
+    renderInventoryStoreStock();
+    renderInventoryPoAlerts();
+    bmhRenderVendorTables();
+    resetInventoryStockInForm(true);
+    showToast('Saved', 's');
   });
-  saveInventoryStockToStorage();
-  renderStockList();
-  renderInventoryPurchaseLog();
-  renderInventoryStoreStock();
-  renderInventoryPoAlerts();
-  showToast('IOL stock added: ' + added + ' lens entries', 's');
 }
 window.saveIolInventoryGrid = saveIolInventoryGrid;
+function resetInventoryStockInForm(includeIol) {
+  ['inv-in-vendor','inv-in-invoice','bc-in','inv-in-qty','inv-in-cost','inv-in-mrp','inv-in-min','inv-in-exp'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (id === 'inv-in-qty') el.value = '1';
+    else if (id === 'inv-in-cost' || id === 'inv-in-mrp') el.value = '0';
+    else if (id === 'inv-in-min') el.value = '5';
+    else el.value = '';
+  });
+  const billFile = document.getElementById('inv-in-bill-file');
+  if (billFile) billFile.value = '';
+  const reviewText = document.getElementById('inv-ocr-text');
+  if (reviewText) reviewText.value = '';
+  setInventoryImportPreview && setInventoryImportPreview('in', '');
+  setInventoryImportStatus && setInventoryImportStatus('in', '', 'var(--g1)');
+  if (includeIol) {
+    ['inv-iol-vendor','inv-iol-brand','inv-iol-company','inv-iol-model','inv-iol-expiry','inv-iol-cost','inv-iol-serial-map'].forEach(function (id) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (id === 'inv-iol-cost') el.value = '0';
+      else el.value = '';
+    });
+    renderIolInventoryPowerGrid({});
+  }
+}
+window.resetInventoryStockInForm = resetInventoryStockInForm;
 function parseIolBillOcrText(text) {
   const raw = String(text || '').trim();
   if (!raw) return null;
@@ -8322,6 +8360,26 @@ function bmhPrintPurchaseOrder() {
   const w = window.open('', '_blank');
   if (w) { w.document.write(html); w.document.close(); }
 }
+function bmhPrintInventorySection(title, selector) {
+  const node = document.querySelector(selector);
+  if (!node) { showToast('Nothing to print here', 'w'); return; }
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${String(title || 'Inventory Print').replace(/</g,'&lt;')}</title><style>
+    body{font-family:system-ui,-apple-system,sans-serif;padding:10mm;font-size:12px;color:#111}
+    h1{font-size:18px;margin:0 0 10px}
+    table{width:100%;border-collapse:collapse}
+    th,td{border:1px solid #ccc;padding:6px 8px;font-size:11px;vertical-align:top}
+    .badge{display:inline-block;padding:2px 8px;border-radius:10px;border:1px solid #bbb;font-size:10px}
+    a{color:#111;text-decoration:none}
+    button{display:none!important}
+    input{display:none!important}
+    @page{margin:10mm}
+  </style></head><body><h1>${String(title || 'Inventory Print').replace(/</g,'&lt;')}</h1>${node.innerHTML}<script>window.onload=function(){window.print()}<\/script></body></html>`;
+  const w = window.open('', '_blank');
+  if (!w) { showToast('Allow popups to print', 'w'); return; }
+  w.document.write(html);
+  w.document.close();
+}
+window.bmhPrintInventorySection = bmhPrintInventorySection;
 function toggleInventoryImportPane(mode) {
   const pane = document.getElementById('inv-import-pane-' + mode);
   if (!pane) {
@@ -8449,22 +8507,39 @@ function inventoryKnownProductNames() {
   (loadInventoryOcrMemory().products || []).forEach(function (v) { names.push(String(v)); });
   return Array.from(new Set(names.map(function (v) { return normalizeInventoryTextValue(v); }).filter(Boolean)));
 }
+function inventoryKnownMrpMap() {
+  const map = {};
+  []
+    .concat(INVENTORY || [])
+    .concat(window.BMH_PURCHASES || [])
+    .forEach(function (row) {
+      const key = normalizeInventoryCompareText(row?.name || row?.itemName || '');
+      const mrp = Number(row?.mrp || 0) || 0;
+      if (key && mrp > 0) map[key] = mrp;
+    });
+  const mem = loadInventoryOcrMemory();
+  Object.keys(mem.mrps || {}).forEach(function (key) {
+    const mrp = Number(mem.mrps[key] || 0) || 0;
+    if (key && mrp > 0) map[key] = mrp;
+  });
+  return map;
+}
 function inventoryFindKnownMrp(itemName) {
   const wanted = normalizeInventoryCompareText(itemName);
   if (!wanted) return 0;
-  const pools = []
-    .concat(INVENTORY || [])
-    .concat(window.BMH_PURCHASES || []);
-  for (let i = pools.length - 1; i >= 0; i -= 1) {
-    const row = pools[i] || {};
-    const rowName = normalizeInventoryCompareText(row.name || row.itemName || '');
-    if (!rowName) continue;
-    if (rowName === wanted || rowName.includes(wanted) || wanted.includes(rowName)) {
-      const mrp = Number(row.mrp || 0) || 0;
-      if (mrp > 0) return mrp;
-    }
-  }
-  return 0;
+  const map = inventoryKnownMrpMap();
+  if (map[wanted]) return map[wanted];
+  const hit = Object.keys(map).find(function (key) { return key === wanted || key.includes(wanted) || wanted.includes(key); });
+  return Number(hit ? map[hit] : 0) || 0;
+}
+function rememberInventoryMrp(itemName, mrp) {
+  const key = normalizeInventoryCompareText(itemName);
+  const value = Number(mrp || 0) || 0;
+  if (!key || !(value > 0)) return;
+  const memory = loadInventoryOcrMemory();
+  memory.mrps = memory.mrps || {};
+  memory.mrps[key] = value;
+  saveInventoryOcrMemory();
 }
 function renderInventoryImportDatalists() {
   const vendorList = document.getElementById('inv-vendor-datalist');
@@ -8787,6 +8862,15 @@ function renderInventoryImportReview(parsed, mode, text) {
   if (parsed.serialNo) bits.push('Serial: <strong>' + escapeHtmlConsent(parsed.serialNo) + '</strong>');
   if (parsed.power) bits.push('Power: <strong>' + escapeHtmlConsent(parsed.power) + '</strong>');
   const candidates = findInventoryCandidatesFromText(text || parsed.itemName || '', 5);
+  const knownMrp = inventoryFindKnownMrp(parsed.itemName || '');
+  const learnedBits = [];
+  if (parsed.vendor && inventoryKnownVendorNames().some(function (v) { return normalizeInventoryCompareText(v) === normalizeInventoryCompareText(parsed.vendor); })) {
+    learnedBits.push('Known vendor: <strong>' + escapeHtmlConsent(parsed.vendor) + '</strong>');
+  }
+  if (parsed.itemName && inventoryKnownProductNames().some(function (v) { return normalizeInventoryCompareText(v) === normalizeInventoryCompareText(parsed.itemName); })) {
+    learnedBits.push('Known product: <strong>' + escapeHtmlConsent(parsed.itemName) + '</strong>');
+  }
+  if (knownMrp > 0) learnedBits.push('Known MRP: <strong>₹' + knownMrp.toLocaleString('en-IN') + '</strong>');
   const lineItemHtml = Array.isArray(parsed.lineItems) && parsed.lineItems.length
     ? `<div style="margin-top:8px"><div style="font-size:10px;font-weight:800;color:#8a4200;text-transform:uppercase;margin-bottom:6px">Extracted bill items</div><div style="display:flex;gap:6px;flex-wrap:wrap">${parsed.lineItems.slice(0, 8).map(function (item, idx) {
         const label = [item.itemName || 'Item', item.power || '', item.batchNo ? ('Batch ' + item.batchNo) : '', item.qty ? ('Qty ' + item.qty) : ''].filter(Boolean).join(' · ');
@@ -8799,7 +8883,7 @@ function renderInventoryImportReview(parsed, mode, text) {
       }).join('')}</div></div>`
     : '';
   const popupHtml = `<div style="margin-top:8px"><button type="button" class="btn btn-xs btn-blue" onclick="openInventoryBillReviewModal('${mode}')">Open bill review popup</button></div>`;
-  setInventoryImportPreview(mode, (bits.length ? bits.join(' · ') : 'No clear fields detected automatically. Please review manually.') + lineItemHtml + candidateHtml + popupHtml);
+  setInventoryImportPreview(mode, (bits.length ? bits.join(' · ') : 'No clear fields detected automatically. Please review manually.') + (learnedBits.length ? `<div style="margin-top:8px;font-size:11px;color:#1a8c3c">${learnedBits.join(' · ')}</div>` : '') + lineItemHtml + candidateHtml + popupHtml);
   const ta = document.getElementById('inv-ocr-text');
   if (ta && text) ta.value = text;
 }
@@ -9599,6 +9683,7 @@ function renderStockList() {
           <div style="font-size:17px;font-weight:900;color:${critical?'var(--red)':low?'var(--orange)':'var(--green)'}">${stock}</div>
           <div style="font-size:11px;font-weight:700;color:var(--g1)">MRP ₹${Number(i.mrp||0).toLocaleString('en-IN')}</div>
           <div style="font-size:10px;color:var(--g1)">Cost ₹${Number(i.cost||0).toLocaleString('en-IN')} · Min ${min}</div>
+          ${CURRENT_USER?.isAdmin ? `<button type="button" class="btn btn-xs btn-gray" style="margin-top:6px" onclick="deleteInventoryIolGroup('${String(i.iolCompany || i.vendor || '').replace(/'/g, "\\'")}','${String(i.iolBrand || '').replace(/'/g, "\\'")}','${String(i.power || extractIolPower(i.name || '')).replace(/'/g, "\\'")}','${String(i.store || '').replace(/'/g, "\\'")}')">Delete</button>` : ''}
         </div>
       </div>`;
     }
@@ -9616,6 +9701,7 @@ function renderStockList() {
         <div style="font-size:17px;font-weight:900;color:${i.stock<=2?'var(--red)':i.stock<=i.min?'var(--orange)':'var(--green)'}">${i.stock}</div>
         <div style="font-size:11px;font-weight:700;color:var(--g1)">MRP ₹${Number(i.mrp||0).toLocaleString('en-IN')}</div>
         <div style="font-size:10px;color:var(--g1)">Cost ₹${Number(i.cost||0).toLocaleString('en-IN')} · Min ${Number(i.min||0)}</div>
+        ${CURRENT_USER?.isAdmin ? `<button type="button" class="btn btn-xs btn-gray" style="margin-top:6px" onclick="deleteInventoryStockRow('${String(i.barcode || '').replace(/'/g, "\\'")}')">Delete</button>` : ''}
       </div>
     </div>`;
   }).join('') || '<div style="padding:12px;color:var(--g1);font-size:12px">No stock items for this filter.</div>';
@@ -9624,6 +9710,41 @@ function renderStockList() {
   const totalEl = document.getElementById('inv-total-items');
   if (totalEl) totalEl.textContent = String(rows.reduce(function (s, i) { return s + Math.max(0, Number(i.stock) || 0); }, 0));
 }
+function deleteInventoryStockRow(barcode) {
+  if (!CURRENT_USER?.isAdmin) { showToast('Only admin can delete stock', 'w'); return; }
+  const idx = INVENTORY.findIndex(function (i) { return String(i.barcode || '') === String(barcode || ''); });
+  if (idx < 0) return;
+  const item = INVENTORY[idx];
+  if (!confirm('Delete stock row for ' + (item.name || item.barcode || 'item') + '?')) return;
+  INVENTORY.splice(idx, 1);
+  delete BCMAP[barcode];
+  saveInventoryStockToStorage();
+  renderStockList();
+  renderInventoryStoreStock();
+  renderInventoryPoAlerts();
+  showToast('Stock row deleted', 's');
+}
+window.deleteInventoryStockRow = deleteInventoryStockRow;
+function deleteInventoryIolGroup(company, brand, power, store) {
+  if (!CURRENT_USER?.isAdmin) { showToast('Only admin can delete stock', 'w'); return; }
+  const matches = INVENTORY.filter(function (i) {
+    return String(i.cat || '').toLowerCase() === 'iol'
+      && String(i.iolCompany || i.vendor || '') === String(company || '')
+      && String(i.iolBrand || '') === String(brand || '')
+      && String(i.power || extractIolPower(i.name || '')) === String(power || '')
+      && String(i.store || '') === String(store || '');
+  });
+  if (!matches.length) return;
+  if (!confirm('Delete ' + matches.length + ' IOL stock entr' + (matches.length === 1 ? 'y' : 'ies') + ' for ' + [company, brand, power].filter(Boolean).join(' ') + '?')) return;
+  window.INVENTORY = INVENTORY.filter(function (i) { return !matches.includes(i); });
+  matches.forEach(function (i) { if (i.barcode) delete BCMAP[i.barcode]; });
+  saveInventoryStockToStorage();
+  renderStockList();
+  renderInventoryStoreStock();
+  renderInventoryPoAlerts();
+  showToast('IOL stock deleted', 's');
+}
+window.deleteInventoryIolGroup = deleteInventoryIolGroup;
 function scanBC(mode) { const demo=INVENTORY.filter(i=>i.stock>0)[Math.floor(Math.random()*5)]; const inp=mode==='in'?document.getElementById('bc-in'):document.getElementById('bc-use'); if(inp)inp.value=demo.barcode; showToast('📷 Barcode scanned: '+demo.barcode,'i'); setTimeout(()=>processBC(mode,demo.barcode),400); }
 
 function renderAutoBillLog(){const el=document.getElementById('auto-bill-log');if(!el)return;if(!AUTO_BILL.length){el.innerHTML='<div style="padding:12px;text-align:center;color:var(--g1);font-size:12px">No items billed yet</div>';return;}el.innerHTML=AUTO_BILL.slice().reverse().map(b=>{const pid=String(b.patient||'');return `<div style="display:flex;align-items:center;gap:9px;padding:9px;background:var(--green-lt);border-radius:8px;margin-bottom:6px;font-size:12px;border-left:3px solid var(--green)"><span style="font-size:14px">📦</span><div style="flex:1"><div style="font-weight:800">${b.item}</div><div style="font-family:var(--mono);font-size:9px;color:var(--bmh-teal)">${pid.slice(0,22)}</div></div><div style="text-align:right"><div style="font-weight:900;color:var(--green)">₹${(b.mrp||0).toLocaleString('en-IN')}</div><div style="font-size:9.5px;color:var(--g1)">${b.time||''}</div></div></div>`;}).join('');}
@@ -15167,6 +15288,12 @@ function bmhRecordInventoryPurchase(item, qty, billFile) {
   item.vendorBillingMode = billMode;
   item.exp = document.getElementById('inv-in-exp')?.value || item.exp || '';
   normalizeInventoryRecord(item);
+  if (item.vendor) learnInventoryOcrValue('vendor', item.vendor);
+  if (item.name) learnInventoryOcrValue('itemName', item.name);
+  if (item.iolCompany) learnInventoryOcrValue('company', item.iolCompany);
+  if (item.iolBrand) learnInventoryOcrValue('brand', item.iolBrand);
+  if (item.batchNo) learnInventoryOcrValue('batchNo', item.batchNo);
+  if (Number(item.mrp || 0) > 0) rememberInventoryMrp(item.name, item.mrp);
   const totalCost = qty * cost;
   const purchaseTs = bmhNowISO();
   const dueDate = billMode === 'on-use' ? '' : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -15240,7 +15367,8 @@ function processBC(mode, code) {
         d.innerHTML = `<span><strong>${target.name}</strong> · ${bmhDeptLabel(target.dept || 'general')}</span><span style="font-weight:900;color:#1a8c3c">+${qty}</span>`;
         log.prepend(d);
       }
-      showToast('Stock in: ' + target.name + ' (+' + qty + ')', 's');
+      resetInventoryStockInForm(false);
+      showToast('Saved', 's');
     });
     return;
   }
