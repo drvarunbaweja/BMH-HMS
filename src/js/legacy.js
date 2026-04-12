@@ -8383,34 +8383,51 @@ function findInventoryNameInText(text) {
 function extractInventoryLineItems(text) {
   const rows = [];
   const seen = new Set();
-  const lines = String(text || '').split(/\n+/).map(function (line) { return line.trim().replace(/\s+/g, ' '); }).filter(Boolean);
+  const baseLines = String(text || '').split(/\n+/).map(function (line) { return line.trim().replace(/\s+/g, ' '); }).filter(Boolean);
+  const lines = [];
+  for (let i = 0; i < baseLines.length; i += 1) {
+    const line = baseLines[i];
+    const next = baseLines[i + 1] || '';
+    const isProductLead = /iol|intraocular lens|vivinex|hoya|xy1|inj|injection|tab|caps|capsule|drop|vial|ampoule|cream|gel|glove|syringe|cannula|suture|kit|serum|vaccine/i.test(line);
+    const isNumericDetail = /\b\d{6,8}\b/.test(next) && /\b\d{2}[\/-]\d{2}[\/-]\d{2,4}\b/.test(next) && /\d+\.\d{2}/.test(next);
+    if (isProductLead && isNumericDetail) {
+      lines.push(line + ' ' + next);
+      i += 1;
+      continue;
+    }
+    lines.push(line);
+  }
   lines.forEach(function (line) {
     const lower = line.toLowerCase();
+    if (/ludhiana|billed to|preet colony|opp\.? civil hospital|goods once sold|receiver|authorised signatory|grand total|sub total|terms|conditions|bank details|phone|mail|gstin/i.test(lower)) return;
     const isRelevant = /iol|intraocular lens|vivinex|hoya|xy1|inj|injection|tab|caps|capsule|drop|vial|ampoule|cream|gel|glove|syringe|cannula|suture|kit|serum|vaccine/i.test(line)
       || !!findInventoryCandidatesFromText(line, 1).length;
     if (!isRelevant || /invoice|bill|amount|grand total|sub total|cgst|sgst|igst|taxable/i.test(lower)) return;
     const itemName = normalizeInventoryTextValue(findInventoryNameInText(line) || line.replace(/\bhsn\b.*$/i, '').trim());
     const hsnMatch = line.match(/\b(?:hsn|sac)\s*[:\-]?\s*([0-9]{4,8})\b/i) || line.match(/\b([0-9]{6,8})\b/);
-    const qtyMatch = line.match(/\b(?:qty|quantity)\s*[:x-]?\s*(\d{1,4})\b/i) || line.match(/\b(\d{1,3})\s*(?:pcs|piece|pieces|unit|units|nos?)\b/i);
+    const qtyMatch = line.match(/\b(?:qty|quantity)\s*[:x-]?\s*(\d{1,4})\b/i) || line.match(/\b(\d{1,3})\s*(?:pcs|piece|pieces|unit|units|nos?)\b/i) || line.match(/\b([0-9]{6,8})\s+(\d{1,3})\s+[A-Z0-9-]{3,}\s+\d{2}[\/-]\d{2}[\/-]\d{2,4}\b/i);
     const expMatch = line.match(/\b(0[1-9]|1[0-2])\s*[\/-]\s*(20\d{2}|\d{2})\b/);
     const batchMatch = line.match(/\b(?:batch|lot)\s*(?:no|number|#)?\s*[:\-]?\s*([A-Z0-9-]{3,})\b/i);
     const serialMatch = line.match(/\b(?:serial|s\/n|sn)\s*(?:no|number|#)?\s*[:\-]?\s*([A-Z0-9-]{3,})\b/i);
     const powerMatch = line.match(/([+-]?\d+(?:\.\d+)?)\s*(?:d|diopter)\b/i) || line.match(/([+-]\d+(?:\.\d+)?)\b/);
+    const tableRowMatch = line.match(/\b([0-9]{6,8})\s+(\d{1,3})\s+([A-Z0-9-]{3,})\s+([0-3]?\d[\/-][01]?\d[\/-]\d{2,4})\s+([0-9]+(?:\.[0-9]{1,2})?)\s+([0-9]+(?:\.[0-9]{1,2})?)\s+([0-9]+(?:\.[0-9]{1,2})?)\s+([0-9]+(?:\.[0-9]{1,2})?)/i);
     const numbers = Array.from(line.matchAll(/(?:₹|rs\.?|inr)?\s*([0-9]+(?:\.[0-9]{1,2})?)/gi)).map(function (m) { return Number(m[1] || 0); }).filter(Boolean);
-    const total = numbers.length ? numbers[numbers.length - 1] : 0;
-    const rate = numbers.length > 1 ? numbers[numbers.length - 2] : total;
-    const qty = Math.max(1, Number(qtyMatch?.[1] || 1));
+    const qty = Math.max(1, Number((tableRowMatch && tableRowMatch[2]) || qtyMatch?.[2] || qtyMatch?.[1] || 1));
+    const rate = tableRowMatch ? Number(tableRowMatch[5] || 0) : (numbers.length > 1 ? numbers[numbers.length - 2] : (numbers[0] || 0));
+    const gstAmount = tableRowMatch ? Number(tableRowMatch[7] || 0) : 0;
+    const total = tableRowMatch ? Number(tableRowMatch[8] || 0) : (numbers.length ? numbers[numbers.length - 1] : 0);
     const item = {
       rawLine: line,
       itemName: itemName,
-      hsn: hsnMatch ? String(hsnMatch[1] || '') : '',
+      hsn: tableRowMatch ? String(tableRowMatch[1] || '') : (hsnMatch ? String(hsnMatch[1] || '') : ''),
       qty: qty,
-      exp: expMatch ? (expMatch[1] + '/' + expMatch[2]) : '',
-      batchNo: batchMatch ? batchMatch[1] : '',
+      exp: tableRowMatch ? String(tableRowMatch[4] || '') : (expMatch ? (expMatch[1] + '/' + expMatch[2]) : ''),
+      batchNo: tableRowMatch ? String(tableRowMatch[3] || '') : (batchMatch ? batchMatch[1] : ''),
       serialNo: serialMatch ? serialMatch[1] : '',
       power: powerMatch ? normalizeIolPowerValue(powerMatch[1]) : '',
       rate: rate,
       total: total,
+      gstAmount: gstAmount,
       category: inferInventoryCategoryFromText(itemName || line)
     };
     const key = normalizeInventoryCompareText([item.itemName, item.batchNo, item.serialNo, item.power].join(' '));
@@ -8452,10 +8469,18 @@ function applyInventorySuggestedCandidate(mode, name) {
   const fieldId = mode === 'use' ? 'bc-use' : 'bc-in';
   const el = document.getElementById(fieldId);
   if (el) el.value = name || '';
+  if (mode !== 'use') {
+    applyInventoryParsedData({
+      itemName: name || '',
+      category: inferInventoryCategoryFromText(name || ''),
+      power: /\+\d+(?:\.\d+)?/i.test(String(name || '')) ? normalizeIolPowerValue((String(name || '').match(/([+-]?\d+(?:\.\d+)?)/) || [,''])[1]) : ''
+    }, mode);
+  }
   if (mode === 'use') {
     const preview = document.getElementById('inv-import-preview-use');
     if (preview) preview.innerHTML += `<div style="margin-top:8px;color:#1a8c3c;font-weight:700">Selected: ${escapeHtmlConsent(name || '')}</div>`;
   }
+  showToast('Item selected for review ✓', 's');
 }
 window.applyInventorySuggestedCandidate = applyInventorySuggestedCandidate;
 function parseInventoryImportText(text) {
@@ -8489,8 +8514,8 @@ function parseInventoryImportText(text) {
     hsn: primaryItem?.hsn || (hsnMatch ? hsnMatch[1] : ''),
     power: primaryItem?.power || '',
     rate: primaryItem?.rate || 0,
-    gstAmount: gstMatches.reduce(function (s, n) { return s + n; }, 0),
-    amount: amountMatches.length ? amountMatches[amountMatches.length - 1] : 0,
+    gstAmount: primaryItem?.gstAmount || gstMatches.reduce(function (s, n) { return s + n; }, 0),
+    amount: primaryItem?.total || (amountMatches.length ? amountMatches[amountMatches.length - 1] : 0),
     itemName: normalizeInventoryTextValue(itemName),
     category: category,
     lineItems: lineItems
