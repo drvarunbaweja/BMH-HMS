@@ -6725,26 +6725,44 @@ function saveIolInventoryGrid() {
     billMode: 'on-use'
   };
   bmhCompressFileToData(document.getElementById('inv-in-bill-file')?.files?.[0], function (billFile) {
-    let added = 0;
-    picked.forEach(function (row) {
-      const hints = serialMap[row.power] || [];
-      for (let idx = 0; idx < row.qty; idx += 1) {
-        const invRow = buildIolInventoryRow(base, row.power, idx + 1, hints[idx] || null);
-        INVENTORY.push(invRow);
-        BCMAP[invRow.barcode] = invRow;
-        BCMAP[String(invRow.name).toLowerCase().substring(0, 15)] = invRow;
-        bmhRecordInventoryPurchase(invRow, 1, billFile || null);
-        added += 1;
+    try {
+      let added = 0;
+      picked.forEach(function (row) {
+        const hints = serialMap[row.power] || [];
+        for (let idx = 0; idx < row.qty; idx += 1) {
+          const invRow = buildIolInventoryRow(base, row.power, idx + 1, hints[idx] || null);
+          INVENTORY.push(invRow);
+          BCMAP[invRow.barcode] = invRow;
+          BCMAP[String(invRow.name).toLowerCase().substring(0, 15)] = invRow;
+          bmhRecordInventoryPurchase(invRow, 1, billFile || null);
+          added += 1;
+        }
+      });
+      saveInventoryStockToStorage();
+      const catFilter = document.getElementById('inv-stock-cat-filter');
+      const storeFilter = document.getElementById('inv-stock-store-filter');
+      if (catFilter) catFilter.value = 'all';
+      if (storeFilter) storeFilter.value = 'all';
+      renderStockList();
+      renderInventoryPurchaseLog();
+      renderInventoryStoreStock();
+      renderInventoryPoAlerts();
+      bmhRenderVendorTables();
+      resetInventoryStockInForm(true);
+      const tabBtn = Array.from(document.querySelectorAll('#pg-inventory .ptab')).find(function (el) { return String(el.textContent || '').includes('Current Stock'); });
+      if (tabBtn) ptab(tabBtn, 'inv-stock');
+      showToast('Saved ✓', 's');
+      const log = document.getElementById('stock-in-log');
+      if (log) {
+        const d = document.createElement('div');
+        d.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;background:var(--green-lt);border-radius:8px;margin-bottom:6px;font-size:12px';
+        d.innerHTML = `<span><strong>IOL stock saved</strong> · ${escapeHtmlConsent([company, brand].filter(Boolean).join(' ') || vendor || 'IOL')}</span><span style="font-weight:900;color:#1a8c3c">+${added}</span>`;
+        log.prepend(d);
       }
-    });
-    saveInventoryStockToStorage();
-    renderStockList();
-    renderInventoryPurchaseLog();
-    renderInventoryStoreStock();
-    renderInventoryPoAlerts();
-    bmhRenderVendorTables();
-    resetInventoryStockInForm(true);
-    showToast('Saved', 's');
+    } catch (e) {
+      console.error('saveIolInventoryGrid failed', e);
+      showToast('IOL stock save failed. Please retry.', 'e');
+    }
   });
 }
 window.saveIolInventoryGrid = saveIolInventoryGrid;
@@ -20037,7 +20055,7 @@ function saveDoctorSettings() {
     if(deg) DOCTOR_PROFILES[name].degrees = deg;
     if(reg)  DOCTOR_PROFILES[name].reg = reg;
   });
-  showToast('Doctor profiles updated ✓','s');
+  showToast('Saved ✓','s');
 }
 function saveHospitalSettings() {
   try {
@@ -20050,7 +20068,7 @@ function saveHospitalSettings() {
       });
       localStorage.setItem('bmh_hospital_settings', JSON.stringify(values));
     }
-    showToast('Settings saved to database ✓', 's');
+    showToast('Saved ✓', 's');
   } catch (e) {
     showToast('Settings saved ✓', 's');
   }
