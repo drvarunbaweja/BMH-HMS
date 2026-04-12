@@ -147,6 +147,22 @@
       gap:6px;
       margin-bottom:7px;
     }
+    #m-inv-bill-review.inventory-review-docked {
+      pointer-events:none;
+      align-items:flex-start;
+      justify-content:flex-end;
+      padding:8px;
+      background:transparent !important;
+    }
+    #m-inv-bill-review.inventory-review-docked > .modal {
+      pointer-events:auto;
+      width:min(46vw,640px) !important;
+      max-width:min(46vw,640px) !important;
+      max-height:92vh !important;
+      margin:0 0 0 auto;
+      box-shadow:0 22px 50px rgba(0,0,0,.24);
+      border:1px solid rgba(26,60,110,.18);
+    }
     .oe-plan-side > div {
       margin-bottom:10px;
     }
@@ -211,6 +227,10 @@
       }
       #pg-inventory input, #pg-inventory select, #pg-inventory textarea { touch-action:manipulation; }
       #pg-inventory .inventory-import-pane { width:100%; }
+      #m-inv-bill-review.inventory-review-docked > .modal {
+        width:min(94vw,560px) !important;
+        max-width:min(94vw,560px) !important;
+      }
       #obg-layout, #psych-layout, #skin-layout { grid-template-columns:1fr !important; }
       #ophtho-recap-panel, #skin-summary-rail { float:none !important; width:100% !important; margin:10px 0 0 !important; }
       #obg-summary-rail, #psych-summary-rail { position:static !important; top:auto !important; }
@@ -3376,6 +3396,8 @@
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
               <button class="btn btn-xs btn-outline" onclick="prepareIolInventoryFromBill()">📷 Prepare from bill / OCR</button>
+              <button class="btn btn-xs btn-outline" onclick="reopenInventoryBillForMoreIols()">＋ Add More IOLs</button>
+              <button class="btn btn-xs btn-outline" onclick="reopenInventoryBillForMoreItems()">＋ More Items</button>
               <button class="btn btn-xs btn-gold" onclick="saveIolInventoryGrid()">💾 Add selected IOL powers to stock</button>
             </div>
           </div>
