@@ -6743,11 +6743,11 @@ function saveIolInventoryGrid() {
       const storeFilter = document.getElementById('inv-stock-store-filter');
       if (catFilter) catFilter.value = 'all';
       if (storeFilter) storeFilter.value = 'all';
-      renderStockList();
-      renderInventoryPurchaseLog();
-      renderInventoryStoreStock();
-      renderInventoryPoAlerts();
-      bmhRenderVendorTables();
+      try { renderStockList(); } catch (e) { console.warn('renderStockList failed', e); }
+      try { renderInventoryPurchaseLog(); } catch (e) { console.warn('renderInventoryPurchaseLog failed', e); }
+      try { renderInventoryStoreStock(); } catch (e) { console.warn('renderInventoryStoreStock failed', e); }
+      try { renderInventoryPoAlerts(); } catch (e) { console.warn('renderInventoryPoAlerts failed', e); }
+      try { bmhRenderVendorTables(); } catch (e) { console.warn('bmhRenderVendorTables failed', e); }
       resetInventoryStockInForm(true);
       const tabBtn = Array.from(document.querySelectorAll('#pg-inventory .ptab')).find(function (el) { return String(el.textContent || '').includes('Current Stock'); });
       if (tabBtn) ptab(tabBtn, 'inv-stock');
@@ -9035,11 +9035,17 @@ function applyInventoryParsedData(parsed, mode) {
     const priorMrp = inventoryFindKnownMrp(parsed.itemName || '');
     if (priorMrp > 0) mrpEl.value = String(priorMrp);
   }
+  const shouldTreatAsIol = String(parsed.category || '').toLowerCase() === 'iol'
+    || !!normalizeIolPowerValue(parsed.power || '')
+    || /iol|intraocular lens|hoya|vivinex|impress|xy1|hydrophobic|hydrophilic|multifocal|toric|staar/i.test(String(parsed.itemName || ''));
   const catEl = document.getElementById('inv-in-cat');
-  if (catEl && parsed.category && Array.from(catEl.options).some(function (o) { return o.value === parsed.category; })) {
-    catEl.value = parsed.category;
+  if (catEl) {
+    const nextCat = shouldTreatAsIol ? 'IOL' : String(parsed.category || '');
+    if (nextCat && Array.from(catEl.options).some(function (o) { return o.value === nextCat; })) {
+      catEl.value = nextCat;
+    }
   }
-  if (parsed.category === 'IOL') {
+  if (shouldTreatAsIol) {
     if (catEl) catEl.value = 'IOL';
     toggleInventoryIolBox();
     const itemText = String(parsed.itemName || '').trim();
@@ -9055,9 +9061,7 @@ function applyInventoryParsedData(parsed, mode) {
     setVal('inv-iol-expiry', parsed.exp || '');
     const iolCost = document.getElementById('inv-iol-cost');
     if (iolCost && (parsed.cost || parsed.rate || parsed.amount)) iolCost.value = String(parsed.cost || parsed.rate || parsed.amount);
-    if (parsed.power) {
-      mergeIolParsedSelection(parsed);
-    }
+    mergeIolParsedSelection(Object.assign({}, parsed, { category: 'IOL', power: normalizeIolPowerValue(parsed.power || '') || parsed.power || '' }));
   }
 }
 function duplicateInventoryBillReviewItem(mode) {
@@ -15374,19 +15378,30 @@ function processBC(mode, code) {
     const qty = Math.max(1, Number(document.getElementById('inv-in-qty')?.value || '1'));
     const target = item || bmhFindOrCreateInventoryItem(code, translated);
     bmhCompressFileToData(document.getElementById('inv-in-bill-file')?.files?.[0], (billFile) => {
-      target.stock = (target.stock || 0) + qty;
-      bmhRecordInventoryPurchase(target, qty, billFile);
-      saveInventoryStockToStorage();
-      renderStockList();
-      const log = document.getElementById('stock-in-log');
-      if (log) {
-        const d = document.createElement('div');
-        d.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;background:var(--green-lt);border-radius:8px;margin-bottom:6px;font-size:12px';
-        d.innerHTML = `<span><strong>${target.name}</strong> · ${bmhDeptLabel(target.dept || 'general')}</span><span style="font-weight:900;color:#1a8c3c">+${qty}</span>`;
-        log.prepend(d);
+      try {
+        target.stock = (target.stock || 0) + qty;
+        bmhRecordInventoryPurchase(target, qty, billFile);
+        saveInventoryStockToStorage();
+        const catFilter = document.getElementById('inv-stock-cat-filter');
+        const storeFilter = document.getElementById('inv-stock-store-filter');
+        if (catFilter) catFilter.value = 'all';
+        if (storeFilter) storeFilter.value = 'all';
+        try { renderStockList(); } catch (e) { console.warn('renderStockList failed', e); }
+        const log = document.getElementById('stock-in-log');
+        if (log) {
+          const d = document.createElement('div');
+          d.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;background:var(--green-lt);border-radius:8px;margin-bottom:6px;font-size:12px';
+          d.innerHTML = `<span><strong>${target.name}</strong> · ${bmhDeptLabel(target.dept || 'general')}</span><span style="font-weight:900;color:#1a8c3c">+${qty}</span>`;
+          log.prepend(d);
+        }
+        resetInventoryStockInForm(false);
+        const tabBtn = Array.from(document.querySelectorAll('#pg-inventory .ptab')).find(function (el) { return String(el.textContent || '').includes('Current Stock'); });
+        if (tabBtn) ptab(tabBtn, 'inv-stock');
+        showToast('Saved ✓', 's');
+      } catch (e) {
+        console.error('processBC stock-in failed', e);
+        showToast('Stock save failed. Please retry.', 'e');
       }
-      resetInventoryStockInForm(false);
-      showToast('Saved', 's');
     });
     return;
   }
