@@ -6662,10 +6662,11 @@ function buildIolInventoryRow(base, power, rowIndex, serialHint) {
   const brand = String(base.brand || '').trim();
   const company = String(base.company || '').trim();
   const model = String(base.model || '').trim();
-  const name = [brand, model, power].filter(Boolean).join(' ');
+  const name = [company, brand, power].filter(Boolean).join(' ');
   const serialNo = String(serialHint?.serialNo || '').trim();
-  const batchNo = String(serialHint?.batchNo || '').trim();
-  const barcode = serialNo || batchNo || ('IOL-' + power.replace(/[+.]/g, '') + '-' + Date.now() + '-' + rowIndex);
+  const batchNo = String(serialHint?.batchNo || base.batchNo || '').trim();
+  const barcodeBase = serialNo || batchNo || ('IOL-' + power.replace(/[+.]/g, '') + '-' + Date.now());
+  const barcode = barcodeBase + '-' + rowIndex;
   return {
     name,
     barcode,
@@ -6692,21 +6693,22 @@ function saveIolInventoryGrid() {
   const vendor = document.getElementById('inv-iol-vendor')?.value?.trim() || document.getElementById('inv-in-vendor')?.value?.trim() || '';
   const brand = document.getElementById('inv-iol-brand')?.value?.trim() || '';
   const company = document.getElementById('inv-iol-company')?.value?.trim() || '';
-  const model = document.getElementById('inv-iol-model')?.value?.trim() || '';
+  const batchNo = document.getElementById('inv-iol-model')?.value?.trim() || '';
   const exp = document.getElementById('inv-iol-expiry')?.value?.trim() || document.getElementById('inv-in-exp')?.value?.trim() || '';
   const cost = Number(document.getElementById('inv-iol-cost')?.value || document.getElementById('inv-in-cost')?.value || '0') || 0;
-  const mrp = Number(document.getElementById('inv-in-mrp')?.value || cost || '0') || 0;
+  const mrp = Number(document.getElementById('inv-in-mrp')?.value || '0') || 0;
   const picked = Array.from(document.querySelectorAll('.inv-iol-qty')).map(function (input) {
     return { power: String(input.dataset.power || ''), qty: Math.max(0, parseInt(input.value, 10) || 0) };
   }).filter(function (row) { return row.qty > 0; });
-  if (!brand && !company && !model) { showToast('Enter brand/company/model for IOL stock', 'w'); return; }
+  if (!brand && !company && !batchNo) { showToast('Enter company / brand / batch for IOL stock', 'w'); return; }
   if (!picked.length) { showToast('Select at least one IOL power quantity', 'w'); return; }
   const serialMap = readIolGridSerialMap();
   const base = {
     vendor: vendor,
     brand: brand,
     company: company,
-    model: model,
+    model: '',
+    batchNo: batchNo,
     exp: exp,
     cost: cost,
     mrp: mrp,
@@ -7651,7 +7653,7 @@ function bmhRenderVendorTables() {
       const out = bmhVendorBillOutstanding(v);
       const status = bmhVendorStatusLabel(v);
       const badge = status === 'paid' ? 'bd-green' : status === 'partial' ? 'bd-orange' : 'bd-orange';
-      return `<tr><td>${v.vendor}<div style="font-size:10px;color:var(--g1)">${escapeHtmlConsent(v.store || '')}${v.billMode === 'on-use' ? ' · on use' : ''}</div></td><td style="font-family:var(--mono);font-size:10px">${v.invoiceNo || '—'}</td><td>₹${v.amount.toLocaleString('en-IN')}<div style="font-size:10px;color:var(--g1)">Outstanding ₹${out.toLocaleString('en-IN')}</div></td><td><span class="badge ${badge}">${status}</span><div style="font-size:10px;color:var(--g1)">${v.dueDate || 'Due on use'}</div></td><td style="font-size:10px">${v.billFile?.name || v.uploadedName ? `<a href="#" onclick="event.preventDefault();openInventoryBill('${v.id}')">${escapeHtmlConsent(v.billFile?.name || v.uploadedName)}</a>` : '—'}</td><td>${out > 0 ? `<button type="button" class="btn btn-xs btn-gold" onclick="bmhMarkVendorPaid('${v.id}')">Mark paid</button>` : (v.paidRef || '—')}</td></tr>`;
+      return `<tr><td>${v.vendor}<div style="font-size:10px;color:var(--g1)">${escapeHtmlConsent(v.store || '')}${v.billMode === 'on-use' ? ' · on use' : ''}</div></td><td style="font-family:var(--mono);font-size:10px">${v.invoiceNo || '—'}</td><td>₹${v.amount.toLocaleString('en-IN')}<div style="font-size:10px;color:var(--g1)">Outstanding ₹${out.toLocaleString('en-IN')}</div></td><td><span class="badge ${badge}">${status}</span><div style="font-size:10px;color:var(--g1)">${v.dueDate || 'Due on use'}</div></td><td style="font-size:10px">${v.billFile?.name || v.uploadedName ? `<a href="#" onclick="event.preventDefault();openInventoryBill('${v.id}')">${escapeHtmlConsent(v.billFile?.name || v.uploadedName)}</a>` : '—'}</td><td>${out > 0 ? `<button type="button" class="btn btn-xs btn-gold" onclick="bmhMarkVendorPaid('${v.id}')">Mark paid</button>` : (v.paidRef || '—')}${isAdminUser() ? ` <button type="button" class="btn btn-xs btn-gray" onclick="bmhDeleteVendorBill('${v.id}')">Delete</button>` : ''}</td></tr>`;
     }).join('')}</tbody></table>` : '<div style="color:var(--g1);font-size:12px">No vendor bills.</div>';
   });
   const mini = document.getElementById('inv-vendor-mini');
@@ -7678,6 +7680,18 @@ function bmhRenderVendorTables() {
     }).join('') : '<div style="padding:12px;color:var(--g1);font-size:12px">No vendor accounts yet.</div>';
   }
 }
+function bmhDeleteVendorBill(id) {
+  if (!isAdminUser()) { showToast('Only admin can delete bills', 'w'); return; }
+  const idx = (window.BMH_VENDOR_BILLS || []).findIndex(function (v) { return v.id === id; });
+  if (idx < 0) return;
+  const bill = window.BMH_VENDOR_BILLS[idx];
+  if (!confirm('Delete vendor bill ' + (bill.invoiceNo || bill.uploadedName || bill.vendor || '') + '?')) return;
+  window.BMH_VENDOR_BILLS.splice(idx, 1);
+  saveBmhFinancials();
+  bmhRenderVendorTables();
+  showToast('Vendor bill deleted', 's');
+}
+window.bmhDeleteVendorBill = bmhDeleteVendorBill;
 function bmhAddVendorBill() {
   const vendor = document.getElementById('inv-vend-name')?.value?.trim() || document.getElementById('bmh-vend-name')?.value?.trim();
   const inv = document.getElementById('inv-vend-inv')?.value?.trim() || document.getElementById('bmh-vend-inv')?.value?.trim();
@@ -8326,6 +8340,23 @@ function inventoryKnownProductNames() {
   (window.BMH_PURCHASES || []).forEach(function (row) { if (row?.itemName) names.push(String(row.itemName)); });
   return Array.from(new Set(names.map(function (v) { return normalizeInventoryTextValue(v); }).filter(Boolean)));
 }
+function inventoryFindKnownMrp(itemName) {
+  const wanted = normalizeInventoryCompareText(itemName);
+  if (!wanted) return 0;
+  const pools = []
+    .concat(INVENTORY || [])
+    .concat(window.BMH_PURCHASES || []);
+  for (let i = pools.length - 1; i >= 0; i -= 1) {
+    const row = pools[i] || {};
+    const rowName = normalizeInventoryCompareText(row.name || row.itemName || '');
+    if (!rowName) continue;
+    if (rowName === wanted || rowName.includes(wanted) || wanted.includes(rowName)) {
+      const mrp = Number(row.mrp || 0) || 0;
+      if (mrp > 0) return mrp;
+    }
+  }
+  return 0;
+}
 function renderInventoryImportDatalists() {
   const vendorList = document.getElementById('inv-vendor-datalist');
   if (vendorList) vendorList.innerHTML = inventoryKnownVendorNames().map(function (name) {
@@ -8344,6 +8375,21 @@ function normalizeInventoryCompareText(value) {
     .replace(/\biol\b/g, ' iol ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+function parseIolIdentityFromItemName(name) {
+  const raw = String(name || '').trim().replace(/\s+/g, ' ');
+  const upper = raw.toUpperCase();
+  const companyMatch = upper.match(/\b(HOYA|ALCON|ZEISS|JOHNSON|J&J|APPASAMY|AUROLAB|RAYNER|STAAR)\b/);
+  const company = companyMatch ? normalizeInventoryTextValue(companyMatch[1] === 'J&J' ? 'Johnson' : companyMatch[1]) : '';
+  let brand = '';
+  if (/\bIMPRESS\b/i.test(raw)) brand = 'Impress';
+  else if (/\bVIVINEX\b/i.test(raw)) brand = 'Vivinex';
+  else if (/\bACRYSOF\b/i.test(raw)) brand = 'AcrySof';
+  else if (/\bTECNIS\b/i.test(raw)) brand = 'Tecnis';
+  else if (/\bSTAAR\b/i.test(raw)) brand = 'Staar';
+  const familyMatch = raw.match(/\b([A-Z0-9-]{3,}(?:\s+[A-Z0-9-]{2,})?)\b(?:\s*[+-]\d+(?:\.\d+)?)?$/i);
+  const model = familyMatch ? normalizeInventoryTextValue(familyMatch[1]) : '';
+  return { company, brand, model };
 }
 function inferInventoryCategoryFromText(text) {
   const raw = String(text || '').toLowerCase();
@@ -8397,16 +8443,29 @@ function extractInventoryLineItems(text) {
     }
     lines.push(line);
   }
+  for (let i = 0; i < baseLines.length; i += 1) {
+    const lead = baseLines[i] || '';
+    const detail = baseLines[i + 1] || '';
+    if (!/hoya|vivinex|impress|xy1|iol/i.test(lead)) continue;
+    if (!/\b\d{6,8}\b/.test(detail) || !/[A-Z0-9-]{5,}/.test(detail) || !/\d+\.\d{2}/.test(detail)) continue;
+    lines.push((lead + ' ' + detail).trim());
+    i += 1;
+  }
   lines.forEach(function (line) {
     const lower = line.toLowerCase();
     if (/ludhiana|billed to|preet colony|opp\.? civil hospital|goods once sold|receiver|authorised signatory|grand total|sub total|terms|conditions|bank details|phone|mail|gstin/i.test(lower)) return;
     const isRelevant = /iol|intraocular lens|vivinex|hoya|xy1|inj|injection|tab|caps|capsule|drop|vial|ampoule|cream|gel|glove|syringe|cannula|suture|kit|serum|vaccine/i.test(line)
       || !!findInventoryCandidatesFromText(line, 1).length;
-    if (!isRelevant || /invoice|bill|amount|grand total|sub total|cgst|sgst|igst|taxable/i.test(lower)) return;
-    const itemName = normalizeInventoryTextValue(findInventoryNameInText(line) || line.replace(/\bhsn\b.*$/i, '').trim());
+    if (!isRelevant || /invoice|bill|grand total|sub total|cgst|sgst|igst|taxable/i.test(lower)) return;
+    const productLead = line.match(/((?:hoya\s+)?(?:vivinex\s+)?(?:impress\s+)?[a-z0-9-]+(?:\s+[a-z0-9+-]+){0,6})/i);
+    const itemName = normalizeInventoryTextValue(
+      (/hoya|vivinex|impress|xy1|iol/i.test(line) && productLead ? productLead[1] : '') ||
+      findInventoryNameInText(line) ||
+      line.replace(/\bhsn\b.*$/i, '').trim()
+    );
     const hsnMatch = line.match(/\b(?:hsn|sac)\s*[:\-]?\s*([0-9]{4,8})\b/i) || line.match(/\b([0-9]{6,8})\b/);
     const qtyMatch = line.match(/\b(?:qty|quantity)\s*[:x-]?\s*(\d{1,4})\b/i) || line.match(/\b(\d{1,3})\s*(?:pcs|piece|pieces|unit|units|nos?)\b/i) || line.match(/\b([0-9]{6,8})\s+(\d{1,3})\s+[A-Z0-9-]{3,}\s+\d{2}[\/-]\d{2}[\/-]\d{2,4}\b/i);
-    const expMatch = line.match(/\b(0[1-9]|1[0-2])\s*[\/-]\s*(20\d{2}|\d{2})\b/);
+    const expMatch = line.match(/\b([0-3]?\d[\/-][01]?\d[\/-](?:20)?\d{2})\b/);
     const batchMatch = line.match(/\b(?:batch|lot)\s*(?:no|number|#)?\s*[:\-]?\s*([A-Z0-9-]{3,})\b/i);
     const serialMatch = line.match(/\b(?:serial|s\/n|sn)\s*(?:no|number|#)?\s*[:\-]?\s*([A-Z0-9-]{3,})\b/i);
     const powerMatch = line.match(/([+-]?\d+(?:\.\d+)?)\s*(?:d|diopter)\b/i) || line.match(/([+-]\d+(?:\.\d+)?)\b/);
@@ -8421,13 +8480,14 @@ function extractInventoryLineItems(text) {
       itemName: itemName,
       hsn: tableRowMatch ? String(tableRowMatch[1] || '') : (hsnMatch ? String(hsnMatch[1] || '') : ''),
       qty: qty,
-      exp: tableRowMatch ? String(tableRowMatch[4] || '') : (expMatch ? (expMatch[1] + '/' + expMatch[2]) : ''),
+      exp: tableRowMatch ? String(tableRowMatch[4] || '') : (expMatch ? expMatch[1] : ''),
       batchNo: tableRowMatch ? String(tableRowMatch[3] || '') : (batchMatch ? batchMatch[1] : ''),
       serialNo: serialMatch ? serialMatch[1] : '',
       power: powerMatch ? normalizeIolPowerValue(powerMatch[1]) : '',
       rate: rate,
       total: total,
       gstAmount: gstAmount,
+      cost: Number((rate || 0) + (gstAmount || 0)).toFixed ? Number(((rate || 0) + (gstAmount || 0)).toFixed(2)) : ((rate || 0) + (gstAmount || 0)),
       category: inferInventoryCategoryFromText(itemName || line)
     };
     const key = normalizeInventoryCompareText([item.itemName, item.batchNo, item.serialNo, item.power].join(' '));
@@ -8488,9 +8548,9 @@ function parseInventoryImportText(text) {
   const lines = String(text || '').split(/\n+/).map(function (line) { return line.trim(); }).filter(Boolean);
   const vendorNames = inventoryKnownVendorNames();
   const vendor = vendorNames.find(function (name) { return flat.toLowerCase().includes(String(name).toLowerCase()); })
-    || lines.find(function (line) { return /medical|pharma|surgicals|healthcare|opticals|traders|distributors|labs|diagnostics/i.test(line); })
+    || lines.slice(0, 8).find(function (line) { return /medical|pharma|surgicals|healthcare|opticals|traders|distributors|labs|diagnostics/i.test(line); })
     || '';
-  const invoiceMatch = flat.match(/\b(?:invoice|inv|bill)\s*(?:no|number|#)?\s*[:\-]?\s*([A-Z0-9\/-]{3,})/i);
+  const invoiceMatch = flat.match(/\b(?:invoice|inv|bill)\s*(?:no|number|#|no\.)?\s*[:\-]?\s*([A-Z]?[0-9]{3,}[A-Z0-9\/-]*)/i);
   const dateMatch = flat.match(/\b([0-3]?\d[\/.-][01]?\d[\/.-](?:20)?\d{2})\b/);
   const qtyMatch = flat.match(/\b(?:qty|quantity|pcs|pieces|units?)\s*[:x-]?\s*(\d{1,4})\b/i);
   const expMatch = flat.match(/\b(0[1-9]|1[0-2])\s*[\/-]\s*(20\d{2}|\d{2})\b/);
@@ -8503,6 +8563,7 @@ function parseInventoryImportText(text) {
   const primaryItem = lineItems[0] || null;
   const itemName = primaryItem?.itemName || findInventoryNameInText(text);
   const category = primaryItem?.category || inferInventoryCategoryFromText(itemName || flat);
+  const iolIdentity = parseIolIdentityFromItemName(primaryItem?.itemName || itemName || '');
   return {
     vendor: normalizeInventoryTextValue(vendor),
     invoiceNo: invoiceMatch ? invoiceMatch[1] : '',
@@ -8516,8 +8577,12 @@ function parseInventoryImportText(text) {
     rate: primaryItem?.rate || 0,
     gstAmount: primaryItem?.gstAmount || gstMatches.reduce(function (s, n) { return s + n; }, 0),
     amount: primaryItem?.total || (amountMatches.length ? amountMatches[amountMatches.length - 1] : 0),
+    cost: primaryItem?.cost || Number(((primaryItem?.rate || 0) + (primaryItem?.gstAmount || 0)).toFixed(2)) || 0,
     itemName: normalizeInventoryTextValue(itemName),
     category: category,
+    company: iolIdentity.company || '',
+    brand: iolIdentity.brand || '',
+    model: iolIdentity.model || '',
     lineItems: lineItems
   };
 }
@@ -8566,6 +8631,7 @@ function applyInventoryParsedLineItem(mode, idx) {
     power: item.power || parsed.power || '',
     rate: item.rate || parsed.rate || 0,
     amount: item.total || parsed.amount || 0,
+    cost: item.cost || parsed.cost || 0,
     category: item.category || parsed.category || ''
   });
   applyInventoryParsedData(merged, mode);
@@ -8593,38 +8659,36 @@ function applyInventoryParsedData(parsed, mode) {
   const qtyEl = document.getElementById('inv-in-qty');
   if (qtyEl && parsed.qty) qtyEl.value = String(parsed.qty);
   const costEl = document.getElementById('inv-in-cost');
-  if (costEl && (parsed.rate || parsed.amount)) costEl.value = String(parsed.rate || parsed.amount);
+  if (costEl && (parsed.cost || parsed.rate || parsed.amount)) costEl.value = String(parsed.cost || parsed.rate || parsed.amount);
   const mrpEl = document.getElementById('inv-in-mrp');
-  if (mrpEl && parsed.amount && !Number(mrpEl.value || 0)) mrpEl.value = String(parsed.amount);
+  if (mrpEl && !Number(mrpEl.value || 0)) {
+    const priorMrp = inventoryFindKnownMrp(parsed.itemName || '');
+    if (priorMrp > 0) mrpEl.value = String(priorMrp);
+  }
   const catEl = document.getElementById('inv-in-cat');
   if (catEl && parsed.category && Array.from(catEl.options).some(function (o) { return o.value === parsed.category; })) catEl.value = parsed.category;
   if (parsed.category === 'IOL') {
     if (catEl) catEl.value = 'IOL';
     toggleInventoryIolBox();
     const itemText = String(parsed.itemName || '').trim();
-    const companyMatch = itemText.match(/\b(HOYA|ALCON|ZEISS|JOHNSON|APPASAMY|AUROLAB|RAYNER|STAAR)\b/i);
-    const company = companyMatch ? companyMatch[1].toUpperCase() : '';
-    const model = itemText
-      .replace(/\b(HOYA|ALCON|ZEISS|JOHNSON|APPASAMY|AUROLAB|RAYNER|STAAR)\b/i, '')
-      .replace(/[+-]?\d+(?:\.\d+)?\s*D?\b/ig, '')
-      .replace(/\s+/g, ' ')
-      .trim();
+    const iolIdentity = parseIolIdentityFromItemName(itemText);
     const setVal = function (id, value) {
       const el = document.getElementById(id);
-      if (el && value && !String(el.value || '').trim()) el.value = value;
+      if (el && value) el.value = value;
     };
     setVal('inv-iol-vendor', parsed.vendor || '');
-    setVal('inv-iol-company', company || parsed.vendor || '');
-    setVal('inv-iol-brand', company || '');
-    setVal('inv-iol-model', model || itemText);
+    setVal('inv-iol-company', parsed.company || iolIdentity.company || '');
+    setVal('inv-iol-brand', parsed.brand || iolIdentity.brand || '');
+    setVal('inv-iol-model', parsed.batchNo || '');
     setVal('inv-iol-expiry', parsed.exp || '');
     const iolCost = document.getElementById('inv-iol-cost');
-    if (iolCost && (parsed.rate || parsed.amount) && !Number(iolCost.value || 0)) iolCost.value = String(parsed.rate || parsed.amount);
+    if (iolCost && (parsed.cost || parsed.rate || parsed.amount)) iolCost.value = String(parsed.cost || parsed.rate || parsed.amount);
     if (parsed.power) {
       renderIolInventoryPowerGrid({ [parsed.power]: { qty: Math.max(1, Number(parsed.qty || 1)) } });
       const serialMapEl = document.getElementById('inv-iol-serial-map');
-      if (serialMapEl && (parsed.serialNo || parsed.batchNo)) {
-        serialMapEl.value = parsed.power + ': ' + [parsed.serialNo || '', parsed.batchNo || ''].filter(Boolean).join(',');
+      if (serialMapEl) {
+        const serialLine = parsed.power + ': ' + [parsed.serialNo || '', parsed.batchNo || ''].filter(Boolean).join(',');
+        serialMapEl.value = serialLine.replace(/: $/, ': ');
       }
     }
   }
