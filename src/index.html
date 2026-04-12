@@ -191,10 +191,10 @@
       #pg-inventory .tab-content,
       #pg-inventory .g32 { overflow-x:visible !important; }
       #pg-inventory .inventory-scroll-x {
-        overflow-x:auto !important;
+        overflow-x:scroll !important;
         overflow-y:visible !important;
         -webkit-overflow-scrolling:touch;
-        touch-action:pan-x pan-y pinch-zoom;
+        touch-action:auto;
         overscroll-behavior-x:contain;
         width:100%;
         max-width:100vw;
@@ -3377,10 +3377,10 @@
             </div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:10px">
-            <div class="form-group" style="margin:0"><label class="fl">Vendor Name</label><input type="text" id="inv-iol-vendor" placeholder="Vendor / supplier"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Vendor Name</label><input type="text" id="inv-iol-vendor" list="inv-vendor-datalist" placeholder="Vendor / supplier"></div>
             <div class="form-group" style="margin:0"><label class="fl">Brand</label><input type="text" id="inv-iol-brand" placeholder="AcrySof / Tecnis / Appasamy"></div>
             <div class="form-group" style="margin:0"><label class="fl">Company</label><input type="text" id="inv-iol-company" placeholder="Alcon / J&J / Zeiss"></div>
-            <div class="form-group" style="margin:0"><label class="fl">IOL Name / Model</label><input type="text" id="inv-iol-model" placeholder="Hydrophobic Aspheric / Multifocal / Toric"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Batch Number</label><input type="text" id="inv-iol-model" placeholder="Batch from product line"></div>
           </div>
           <div style="display:grid;grid-template-columns:140px 140px 1fr;gap:8px;align-items:end;margin-bottom:10px">
             <div class="form-group" style="margin:0"><label class="fl">Default Expiry</label><input type="text" id="inv-iol-expiry" placeholder="MM/YYYY"></div>
