@@ -9089,6 +9089,7 @@ function applyInventoryFieldFromChip(target, value, mode) {
       break;
   }
 }
+window.applyInventoryFieldFromChip = applyInventoryFieldFromChip;
 function applyInventoryManualChip(mode, idx) {
   const parsed = window._inventoryParsedImports && window._inventoryParsedImports[mode];
   const chip = parsed && Array.isArray(parsed.manualChips) ? parsed.manualChips[idx] : null;
@@ -9819,6 +9820,75 @@ function bmhPopulateInventorySelectors() {
   if (storeEl && !storeEl.value) storeEl.value = bmhDefaultStoreForDept(dept);
   toggleInventoryIolBox();
 }
+function ensureInventoryStockDetailModal() {
+  let modal = document.getElementById('m-inv-stock-detail');
+  if (modal) return modal;
+  modal = document.createElement('div');
+  modal.className = 'modal-ov';
+  modal.id = 'm-inv-stock-detail';
+  modal.innerHTML = `<div class="modal modal-lg" style="max-width:min(92vw,980px);width:100%">
+    <div class="modal-hd"><div class="modal-title" id="inv-stock-detail-title">Stock Details</div><button class="modal-close" onclick="closeM('m-inv-stock-detail')">✕</button></div>
+    <div id="inv-stock-detail-body" style="max-height:78vh;overflow:auto"></div>
+  </div>`;
+  document.body.appendChild(modal);
+  return modal;
+}
+function openInventoryStockGroup(groupId) {
+  const groups = window._inventoryStockGroups || {};
+  const group = groups[groupId];
+  if (!group) return;
+  ensureInventoryStockDetailModal();
+  const titleEl = document.getElementById('inv-stock-detail-title');
+  const bodyEl = document.getElementById('inv-stock-detail-body');
+  if (titleEl) titleEl.textContent = group.title || 'Stock Details';
+  if (!bodyEl) return;
+  if (group.kind === 'iol') {
+    const byPower = {};
+    (group.rows || []).forEach(function (row) {
+      const power = String(row.power || extractIolPower(row.name || '') || 'No power');
+      const key = [power, row.store || ''].join('||');
+      byPower[key] = byPower[key] || { power: power, store: row.store || '', sample: row, stock: 0, serials: [] };
+      byPower[key].stock += Number(row.stock || 0);
+      if (row.serialNo || row.batchNo) byPower[key].serials.push([row.serialNo || '', row.batchNo || ''].filter(Boolean).join(' / '));
+    });
+    bodyEl.innerHTML = Object.values(byPower).sort(function (a, b) { return String(a.power).localeCompare(String(b.power), undefined, { numeric: true }); }).map(function (row) {
+      const sample = row.sample || {};
+      return `<div style="padding:10px 0;border-bottom:1px solid var(--g5)">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
+          <div>
+            <div style="font-weight:900;font-size:13px;color:var(--bmh-blue)">${escapeHtmlConsent(row.power)}</div>
+            <div style="font-size:11px;color:var(--g1);margin-top:3px">${bmhFormatStoreLabel(row.store)} · Stock ${Number(row.stock || 0)} · Exp ${escapeHtmlConsent(sample.exp || '—')}</div>
+            <div style="font-size:10px;color:var(--g1);margin-top:3px">${sample.vendor ? 'Vendor: ' + escapeHtmlConsent(sample.vendor) + ' · ' : ''}${sample.batchNo ? 'Batch: ' + escapeHtmlConsent(sample.batchNo) + ' · ' : ''}${row.serials.length ? 'Serials: ' + escapeHtmlConsent(row.serials.slice(0,8).join(', ')) : ''}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:16px;font-weight:900;color:var(--green)">₹${Number(sample.mrp || 0).toLocaleString('en-IN')}</div>
+            <div style="font-size:10px;color:var(--g1)">Cost ₹${Number(sample.cost || 0).toLocaleString('en-IN')}</div>
+            ${CURRENT_USER?.isAdmin ? `<button type="button" class="btn btn-xs btn-gray" style="margin-top:6px" onclick="deleteInventoryIolGroup('${String(sample.iolCompany || sample.vendor || '').replace(/'/g, "\\'")}','${String(sample.iolBrand || '').replace(/'/g, "\\'")}','${String(row.power || '').replace(/'/g, "\\'")}','${String(row.store || '').replace(/'/g, "\\'")}')">Delete</button>` : ''}
+          </div>
+        </div>
+      </div>`;
+    }).join('') || '<div style="padding:12px;color:var(--g1)">No stock for this IOL.</div>';
+  } else {
+    bodyEl.innerHTML = (group.rows || []).map(function (row) {
+      return `<div style="padding:10px 0;border-bottom:1px solid var(--g5)">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
+          <div>
+            <div style="font-weight:900;font-size:13px;color:var(--bmh-blue)">${escapeHtmlConsent(row.name || '')}</div>
+            <div style="font-size:11px;color:var(--g1);margin-top:3px">${escapeHtmlConsent(row.cat || '')} · ${bmhDeptLabel(row.dept || 'general')} · ${bmhFormatStoreLabel(row.store)} · Stock ${Number(row.stock || 0)}</div>
+            <div style="font-size:10px;color:var(--g1);margin-top:3px">${row.vendor ? 'Vendor: ' + escapeHtmlConsent(row.vendor) + ' · ' : ''}${row.batchNo ? 'Batch: ' + escapeHtmlConsent(row.batchNo) + ' · ' : ''}${row.serialNo ? 'Serial: ' + escapeHtmlConsent(row.serialNo) + ' · ' : ''}${row.exp ? 'Exp: ' + escapeHtmlConsent(row.exp) : ''}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:16px;font-weight:900;color:var(--green)">${Number(row.stock || 0)}</div>
+            <div style="font-size:10px;color:var(--g1)">MRP ₹${Number(row.mrp || 0).toLocaleString('en-IN')} · Cost ₹${Number(row.cost || 0).toLocaleString('en-IN')}</div>
+            ${CURRENT_USER?.isAdmin ? `<button type="button" class="btn btn-xs btn-gray" style="margin-top:6px" onclick="deleteInventoryStockRow('${String(row.barcode || '').replace(/'/g, "\\'")}')">Delete</button>` : ''}
+          </div>
+        </div>
+      </div>`;
+    }).join('') || '<div style="padding:12px;color:var(--g1)">No stock rows in this group.</div>';
+  }
+  openM('m-inv-stock-detail');
+}
+window.openInventoryStockGroup = openInventoryStockGroup;
 function renderStockList() {
   const el=document.getElementById('inv-stock-list');if(!el)return;
   renderInventoryImportDatalists();
@@ -9830,66 +9900,109 @@ function renderStockList() {
   }).filter(function (i) {
     return !/^(MFX-001|PDN-002|CMC-003|TIM-004|IOL-021|IOL-023|OTP-001|BEV-001|MAN-001|RL-001)$/.test(String(i.barcode || ''));
   });
-  const iolGroups = {};
-  const normalRows = [];
+  const sectionMap = {};
+  const stockGroups = {};
   rows.forEach(function (i) {
-    if (String(i.cat || '').toLowerCase() === 'iol') {
-      const key = [i.iolCompany || i.vendor || '', i.iolBrand || '', i.power || extractIolPower(i.name || ''), i.store || ''].join('||');
-      iolGroups[key] = iolGroups[key] || { sample: i, stock: 0, serials: [] };
-      iolGroups[key].stock += Number(i.stock || 0);
-      if (i.serialNo || i.batchNo) iolGroups[key].serials.push([i.serialNo || '', i.batchNo || ''].filter(Boolean).join(' / '));
-    } else {
-      normalRows.push(i);
+    const deptKey = String(i.dept || 'general');
+    sectionMap[deptKey] = sectionMap[deptKey] || [];
+    const isIol = String(i.cat || '').toLowerCase() === 'iol';
+    const title = isIol
+      ? [i.iolCompany || i.vendor || '', i.iolBrand || ''].filter(Boolean).join(' ').trim() || String(i.name || 'IOL')
+      : String(i.name || 'Unnamed Item');
+    const groupKey = isIol
+      ? ['iol', deptKey, normalizeInventoryCompareText(i.iolCompany || i.vendor || ''), normalizeInventoryCompareText(i.iolBrand || '')].join('::')
+      : ['normal', deptKey, normalizeInventoryCompareText(i.name || ''), normalizeInventoryCompareText(i.cat || '')].join('::');
+    if (!stockGroups[groupKey]) {
+      stockGroups[groupKey] = {
+        id: groupKey,
+        kind: isIol ? 'iol' : 'normal',
+        dept: deptKey,
+        title: title + ' — ' + bmhDeptLabel(deptKey),
+        label: title,
+        rows: [],
+        totalStock: 0,
+        categories: new Set(),
+        stores: new Set(),
+        powers: new Set()
+      };
+      sectionMap[deptKey].push(stockGroups[groupKey]);
     }
+    const g = stockGroups[groupKey];
+    g.rows.push(i);
+    g.totalStock += Number(i.stock || 0);
+    g.categories.add(String(i.cat || ''));
+    g.stores.add(String(i.store || ''));
+    if (isIol) g.powers.add(String(i.power || extractIolPower(i.name || '') || ''));
   });
-  const blocks = [];
-  normalRows.forEach(function (i) { blocks.push({ type: 'normal', item: i }); });
-  Object.keys(iolGroups).sort().forEach(function (key) { blocks.push({ type: 'iol', group: iolGroups[key] }); });
-  el.innerHTML=blocks.map(function(entry){
-    if (entry.type === 'iol') {
-      const i = entry.group.sample;
-      const stock = Number(entry.group.stock || 0);
-      const min = Number(i.min || 0);
-      const pct = Math.min(100,(stock/(Math.max(1, min)*3))*100);
-      const critical = stock<=2, low = stock<=min;
-      return `<div class="inv-row ${critical?'critical':low?'low':''}">
+  window._inventoryStockGroups = stockGroups;
+  const sectionKeys = Object.keys(sectionMap).sort(function (a, b) { return bmhDeptLabel(a).localeCompare(bmhDeptLabel(b)); });
+  el.innerHTML = sectionKeys.map(function (deptKey) {
+    const cards = sectionMap[deptKey].sort(function (a, b) { return String(a.label || '').localeCompare(String(b.label || '')); }).map(function (g) {
+      const min = Math.max(1, ...g.rows.map(function (r) { return Number(r.min || 0) || 0; }), 1);
+      const pct = Math.min(100, (g.totalStock / (min * 3)) * 100);
+      const critical = g.totalStock <= 2;
+      const low = g.totalStock <= min;
+      const tone = critical ? 'var(--red)' : low ? 'var(--orange)' : 'var(--green)';
+      const sub = g.kind === 'iol'
+        ? `${g.powers.size} power${g.powers.size === 1 ? '' : 's'} · ${g.stores.size} store${g.stores.size === 1 ? '' : 's'}`
+        : `${Array.from(g.categories).filter(Boolean).join(', ') || 'Stock item'} · ${g.stores.size} store${g.stores.size === 1 ? '' : 's'}`;
+      return `<button type="button" class="inv-row ${critical?'critical':low?'low':''}" style="width:100%;text-align:left;border:none;cursor:pointer" onclick="openInventoryStockGroup('${g.id.replace(/'/g, "\\'")}')">
         <div style="flex:1;min-width:0">
-          <div style="font-size:12px;font-weight:800">${escapeHtmlConsent(i.iolCompany || i.vendor || '')} ${escapeHtmlConsent(i.iolBrand || '')} ${escapeHtmlConsent(i.power || extractIolPower(i.name || ''))}</div>
-          <div style="font-family:var(--mono);font-size:9px;color:var(--g1)">IOL · ${bmhFormatStoreLabel(i.store)} · Exp:${escapeHtmlConsent(i.exp || '—')}</div>
-          <div style="font-size:10px;color:var(--g1);margin-top:2px">${i.vendor ? 'Vendor: ' + escapeHtmlConsent(i.vendor) + ' · ' : ''}${i.batchNo ? 'Batch: ' + escapeHtmlConsent(i.batchNo) + ' · ' : ''}${entry.group.serials.length ? 'Serials: ' + escapeHtmlConsent(entry.group.serials.slice(0,4).join(', ')) + ' · ' : ''}${i.vendorBillingMode === 'on-use' ? 'Bill only when used' : 'Monthly vendor bill'}</div>
-          <div class="sb-bar"><div class="sb-fill" style="width:${pct}%;background:${critical?'var(--red)':low?'var(--orange)':'var(--green)'}"></div></div>
+          <div style="font-size:12px;font-weight:800">${escapeHtmlConsent(g.label)}</div>
+          <div style="font-size:10px;color:var(--g1);margin-top:2px">${escapeHtmlConsent(sub)}</div>
+          <div class="sb-bar"><div class="sb-fill" style="width:${pct}%;background:${tone}"></div></div>
         </div>
         <div style="text-align:right;flex-shrink:0">
-          <div style="font-size:17px;font-weight:900;color:${critical?'var(--red)':low?'var(--orange)':'var(--green)'}">${stock}</div>
-          <div style="font-size:11px;font-weight:700;color:var(--g1)">MRP ₹${Number(i.mrp||0).toLocaleString('en-IN')}</div>
-          <div style="font-size:10px;color:var(--g1)">Cost ₹${Number(i.cost||0).toLocaleString('en-IN')} · Min ${min}</div>
-          ${CURRENT_USER?.isAdmin ? `<button type="button" class="btn btn-xs btn-gray" style="margin-top:6px" onclick="deleteInventoryIolGroup('${String(i.iolCompany || i.vendor || '').replace(/'/g, "\\'")}','${String(i.iolBrand || '').replace(/'/g, "\\'")}','${String(i.power || extractIolPower(i.name || '')).replace(/'/g, "\\'")}','${String(i.store || '').replace(/'/g, "\\'")}')">Delete</button>` : ''}
+          <div style="font-size:17px;font-weight:900;color:${tone}">${Number(g.totalStock || 0)}</div>
+          <div style="font-size:10px;color:var(--g1)">${g.kind === 'iol' ? 'Open powers' : 'Open stock rows'}</div>
         </div>
-      </div>`;
-    }
-    const i = entry.item;
-    const pct=Math.min(100,(i.stock/(Math.max(1, i.min)*3))*100);
-    const cls=i.stock<=2?'critical':i.stock<=i.min?'low':'';
-    return `<div class="inv-row ${cls}">
-      <div style="flex:1;min-width:0">
-        <div style="font-size:12px;font-weight:800">${escapeHtmlConsent(i.name)}</div>
-        <div style="font-family:var(--mono);font-size:9px;color:var(--g1)">${escapeHtmlConsent(i.barcode)} · ${escapeHtmlConsent(i.cat)} · ${bmhDeptLabel(i.dept || 'general')} · ${bmhFormatStoreLabel(i.store)} · Exp:${escapeHtmlConsent(i.exp || '—')}</div>
-        <div style="font-size:10px;color:var(--g1);margin-top:2px">${i.vendor ? 'Vendor: ' + escapeHtmlConsent(i.vendor) + ' · ' : ''}${i.serialNo ? 'Serial: ' + escapeHtmlConsent(i.serialNo) + ' · ' : ''}${i.batchNo ? 'Batch: ' + escapeHtmlConsent(i.batchNo) + ' · ' : ''}${(i.power || extractIolPower(i.name || '')) ? 'Power: ' + escapeHtmlConsent(i.power || extractIolPower(i.name || '')) + ' · ' : ''}${i.vendorBillingMode === 'on-use' ? 'Bill only when used' : 'Monthly vendor bill'}</div>
-        <div class="sb-bar"><div class="sb-fill" style="width:${pct}%;background:${i.stock<=2?'var(--red)':i.stock<=i.min?'var(--orange)':'var(--green)'}"></div></div>
-      </div>
-      <div style="text-align:right;flex-shrink:0">
-        <div style="font-size:17px;font-weight:900;color:${i.stock<=2?'var(--red)':i.stock<=i.min?'var(--orange)':'var(--green)'}">${i.stock}</div>
-        <div style="font-size:11px;font-weight:700;color:var(--g1)">MRP ₹${Number(i.mrp||0).toLocaleString('en-IN')}</div>
-        <div style="font-size:10px;color:var(--g1)">Cost ₹${Number(i.cost||0).toLocaleString('en-IN')} · Min ${Number(i.min||0)}</div>
-        ${CURRENT_USER?.isAdmin ? `<button type="button" class="btn btn-xs btn-gray" style="margin-top:6px" onclick="deleteInventoryStockRow('${String(i.barcode || '').replace(/'/g, "\\'")}')">Delete</button>` : ''}
-      </div>
-    </div>`;
+      </button>`;
+    }).join('');
+    return `<div style="margin-bottom:14px"><div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">${bmhDeptLabel(deptKey)}</div>${cards}</div>`;
   }).join('') || '<div style="padding:12px;color:var(--g1);font-size:12px">No stock items for this filter.</div>';
   const ilc = document.getElementById('inv-low-cnt');
   if (ilc) ilc.textContent = String(bmhInventoryLowItems().length);
   const totalEl = document.getElementById('inv-total-items');
   if (totalEl) totalEl.textContent = String(rows.reduce(function (s, i) { return s + Math.max(0, Number(i.stock) || 0); }, 0));
 }
+function addInventoryVendorPrompt() {
+  const name = normalizeInventoryTextValue(prompt('Vendor name') || '');
+  if (!name) return;
+  learnInventoryOcrValue('vendor', name);
+  renderInventoryImportDatalists();
+  const search = document.getElementById('inv-vendor-search');
+  const filter = document.getElementById('inv-vendor-filter');
+  if (search) search.value = name;
+  if (filter) filter.value = name;
+  bmhRenderVendorTables();
+  showToast('Vendor added ✓', 's');
+}
+window.addInventoryVendorPrompt = addInventoryVendorPrompt;
+function deleteInventoryVendorPrompt() {
+  if (!CURRENT_USER?.isAdmin) { showToast('Only admin can delete vendors', 'w'); return; }
+  const vendor = String(document.getElementById('inv-vendor-filter')?.value || document.getElementById('inv-vendor-search')?.value || '').trim();
+  if (!vendor) { showToast('Select a vendor first', 'w'); return; }
+  const billCount = (window.BMH_VENDOR_BILLS || []).filter(function (v) { return normalizeInventoryCompareText(v.vendor || '') === normalizeInventoryCompareText(vendor); }).length;
+  const msg = billCount
+    ? 'This will remove the vendor from saved suggestions and delete ' + billCount + ' vendor bill entr' + (billCount === 1 ? 'y' : 'ies') + '. Continue?'
+    : 'Delete this vendor from saved suggestions?';
+  if (!confirm(msg)) return;
+  if (billCount) {
+    window.BMH_VENDOR_BILLS = (window.BMH_VENDOR_BILLS || []).filter(function (v) { return normalizeInventoryCompareText(v.vendor || '') !== normalizeInventoryCompareText(vendor); });
+  }
+  const memory = loadInventoryOcrMemory();
+  memory.vendors = (memory.vendors || []).filter(function (v) { return normalizeInventoryCompareText(v) !== normalizeInventoryCompareText(vendor); });
+  saveInventoryOcrMemory();
+  saveBmhFinancials();
+  const search = document.getElementById('inv-vendor-search');
+  const filter = document.getElementById('inv-vendor-filter');
+  if (search) search.value = '';
+  if (filter) filter.value = '';
+  renderInventoryImportDatalists();
+  bmhRenderVendorTables();
+  showToast('Vendor deleted', 's');
+}
+window.deleteInventoryVendorPrompt = deleteInventoryVendorPrompt;
 function deleteInventoryStockRow(barcode) {
   if (!CURRENT_USER?.isAdmin) { showToast('Only admin can delete stock', 'w'); return; }
   const idx = INVENTORY.findIndex(function (i) { return String(i.barcode || '') === String(barcode || ''); });

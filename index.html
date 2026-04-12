@@ -3531,7 +3531,7 @@
         </div>
         <div class="g32" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
           <div class="card">
-            <div class="card-hd"><div class="card-title">Vendor bills</div></div>
+            <div class="card-hd"><div class="card-title">Vendor bills</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn btn-outline btn-xs" onclick="addInventoryVendorPrompt()">+ Add vendor</button><button type="button" class="btn btn-gray btn-xs" onclick="deleteInventoryVendorPrompt()">Delete vendor</button></div></div>
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
               <div class="form-group" style="margin:0"><label class="fl">Search / select vendor</label><input type="text" id="inv-vendor-search" list="inv-vendor-datalist" placeholder="Type vendor name" oninput="bmhRenderVendorTables()"></div>
               <div class="form-group" style="margin:0"><label class="fl">Bill date from</label><input type="date" id="inv-vendor-date-from" onchange="bmhRenderVendorTables()"></div>
