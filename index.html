@@ -188,19 +188,22 @@
       #pg-inventory .content-full,
       #pg-inventory .card,
       #pg-inventory .tab-content,
-      #pg-inventory .g32 { overflow-x:visible !important; }
+      #pg-inventory .g32,
+      #pg-inventory .col { overflow-x:auto !important; }
+      #pg-inventory { overflow-x:auto !important; -webkit-overflow-scrolling:touch; }
       #pg-inventory .inventory-scroll-x {
         overflow-x:scroll !important;
         overflow-y:visible !important;
         -webkit-overflow-scrolling:touch;
         touch-action:auto;
         overscroll-behavior-x:contain;
-        width:100%;
-        max-width:100vw;
+        width:max-content;
+        min-width:100%;
+        max-width:none;
         display:block !important;
       }
       #pg-inventory .inventory-scroll-x > .inventory-wide-grid {
-        min-width:780px;
+        min-width:980px;
         width:max-content;
         max-width:none !important;
         flex:none !important;
@@ -3334,7 +3337,7 @@
           <div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Purchase Intake</div>
           <div class="inventory-scroll-x"><div class="inventory-wide-grid" style="display:grid;grid-template-columns:1.1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px">
             <div class="form-group" style="margin:0"><label class="fl">Department</label><select id="inv-in-dept"><option value="ophtho">Ophthalmology</option><option value="obg">OBG</option><option value="psych">Psychiatry</option><option value="skin">Skin</option><option value="general">General / Shared</option><option value="ot">OT / Procedure</option><option value="ipd">IPD / Ward</option></select></div>
-            <div class="form-group" style="margin:0"><label class="fl">Category</label><select id="inv-in-cat"></select></div>
+            <div class="form-group" style="margin:0"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">Category <button type="button" onclick="addInventoryCategoryPrompt()" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></label><select id="inv-in-cat"></select></div>
             <div class="form-group" style="margin:0"><label class="fl">Vendor</label><input type="text" id="inv-in-vendor" list="inv-vendor-datalist" placeholder="Vendor / supplier"></div>
             <div class="form-group" style="margin:0"><label class="fl">Invoice No.</label><input type="text" id="inv-in-invoice" placeholder="Bill / GRN"></div>
           </div></div>
