@@ -8403,6 +8403,29 @@ function renderInventoryImportDatalists() {
     return '<option value="' + escapeHtmlConsent(name) + '"></option>';
   }).join('');
 }
+function inventoryRememberBillMeta(vendor, dept, billFile) {
+  const meta = {
+    vendor: normalizeInventoryTextValue(vendor || ''),
+    dept: String(dept || ''),
+    billFile: billFile || null,
+    billDate: bmhNowISO(),
+    dateKey: new Date().toISOString().slice(0, 10)
+  };
+  window._inventoryCurrentBillMeta = meta;
+  return meta;
+}
+function addInventoryCategoryPrompt() {
+  const name = normalizeInventoryTextValue(prompt('New inventory category name') || '');
+  if (!name) return;
+  if (!Array.isArray(window.BMH_INVENTORY_CATEGORIES)) window.BMH_INVENTORY_CATEGORIES = [];
+  if (!window.BMH_INVENTORY_CATEGORIES.includes(name)) window.BMH_INVENTORY_CATEGORIES.push(name);
+  try { localStorage.setItem('bmh_inventory_categories', JSON.stringify(window.BMH_INVENTORY_CATEGORIES)); } catch (e) {}
+  fillInventoryCategoryOptions && fillInventoryCategoryOptions();
+  const sel = document.getElementById('inv-in-cat');
+  if (sel) sel.value = name;
+  showToast('Category added ✓', 's');
+}
+window.addInventoryCategoryPrompt = addInventoryCategoryPrompt;
 function normalizeInventoryCompareText(value) {
   return String(value || '')
     .toLowerCase()
@@ -8724,6 +8747,7 @@ function applyInventoryParsedLineItem(mode, idx) {
   });
   applyInventoryParsedData(merged, mode);
   setInventoryImportStatus(mode, 'Selected extracted item for review.', '#1a8c3c');
+  if (mode === 'in') window._inventoryBillReviewSelectedIndex = idx;
 }
 window.applyInventoryParsedLineItem = applyInventoryParsedLineItem;
 function applyInventoryFieldFromChip(target, value, mode) {
@@ -8850,6 +8874,36 @@ function applyInventoryParsedData(parsed, mode) {
     }
   }
 }
+function duplicateInventoryBillReviewItem(mode) {
+  const parsed = window._inventoryParsedImports && window._inventoryParsedImports[mode];
+  const idx = Number(window._inventoryBillReviewSelectedIndex);
+  const item = parsed && Array.isArray(parsed.lineItems) ? parsed.lineItems[idx] : null;
+  if (!item) { showToast('Select a bill item first', 'w'); return; }
+  const clone = Object.assign({}, item, { qty: 1 });
+  if (String(clone.category || '').toLowerCase() === 'iol') {
+    const serialNo = String(prompt('Serial number for the additional same IOL', '') || '').trim();
+    const batchNo = String(prompt('Batch number for the additional same IOL', clone.batchNo || '') || '').trim();
+    clone.serialNo = serialNo;
+    clone.batchNo = batchNo;
+  }
+  parsed.lineItems.push(clone);
+  openInventoryBillReviewModal(mode);
+  showToast('Added one more same item row ✓', 's');
+}
+window.duplicateInventoryBillReviewItem = duplicateInventoryBillReviewItem;
+function useInventoryBillItemForPatient(mode) {
+  const parsed = window._inventoryParsedImports && window._inventoryParsedImports[mode];
+  const idx = Number(window._inventoryBillReviewSelectedIndex);
+  const item = parsed && Array.isArray(parsed.lineItems) ? parsed.lineItems[idx] : null;
+  if (!item) { showToast('Select a bill item first', 'w'); return; }
+  const useInput = document.getElementById('bc-use');
+  const qtyInput = document.getElementById('inv-use-qty');
+  if (useInput) useInput.value = item.itemName || '';
+  if (qtyInput) qtyInput.value = String(Math.max(1, Number(item.qty || 1)));
+  ptab(document.querySelector('#pg-inventory .ptab[onclick*=\"inv-use\"]'), 'inv-use');
+  showToast('Item sent to patient usage', 's');
+}
+window.useInventoryBillItemForPatient = useInventoryBillItemForPatient;
 function ensureInventoryBillReviewModal() {
   let modal = document.getElementById('m-inv-bill-review');
   if (modal) return modal;
@@ -8863,10 +8917,14 @@ function ensureInventoryBillReviewModal() {
       <div style="min-width:0">
         <div id="inv-bill-review-summary" style="font-size:12px;color:var(--tx3);margin-bottom:10px"></div>
         <div id="inv-bill-review-items" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+          <button type="button" class="btn btn-outline btn-sm" onclick="duplicateInventoryBillReviewItem(window._inventoryBillReviewMode || 'in')">＋ Add One More Same Item</button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="useInventoryBillItemForPatient(window._inventoryBillReviewMode || 'in')">Tie Selected Product To Patient Usage</button>
+        </div>
         <div style="display:grid;grid-template-columns:1fr 170px 150px auto;gap:8px;align-items:end;margin-bottom:8px">
           <div class="form-group" style="margin:0;grid-column:1 / -1">
             <label class="fl">OCR text review</label>
-            <textarea id="inv-bill-review-ocr-text" rows="18" style="width:100%;font-family:var(--mono);font-size:11px;min-height:380px"></textarea>
+            <textarea id="inv-bill-review-ocr-text" rows="22" style="width:100%;font-family:var(--mono);font-size:11px;min-height:520px"></textarea>
           </div>
           <div class="form-group" style="margin:0">
             <label class="fl">Extract as</label>
@@ -8954,6 +9012,7 @@ function applyInventoryBillReviewItem(mode, idx) {
       item.cost ? ('Cost: <strong>₹' + Number(item.cost).toLocaleString('en-IN') + '</strong>') : ''
     ].filter(Boolean).join(' · ') || 'Selected item applied.';
   }
+  window._inventoryBillReviewSelectedIndex = idx;
   showToast('Bill item applied ✓', 's');
 }
 window.applyInventoryBillReviewItem = applyInventoryBillReviewItem;
@@ -9083,10 +9142,11 @@ async function handleInventoryImportFile(mode, inp) {
       const topMatch = findInventoryCandidatesFromText(combinedText, 1)[0];
       if (topMatch) parsed.itemName = topMatch.name;
     }
+    if (mode === 'in') inventoryRememberBillMeta(parsed.vendor || '', document.getElementById('inv-in-dept')?.value || '', window._inventoryImportAssets[mode] || null);
     applyInventoryParsedData(parsed, mode);
     renderInventoryImportReview(parsed, mode, combinedText);
     setInventoryImportStatus(mode, 'OCR complete. Please review the populated fields before saving.', '#1a8c3c');
-    if (mode === 'in' || mode === 'ocr') openInventoryBillReviewModal(mode);
+    openInventoryBillReviewModal(mode);
     if (mode === 'ocr') {
       const tabBtn = Array.from(document.querySelectorAll('#pg-inventory .ptab')).find(function (el) { return String(el.textContent || '').includes('Photo / OCR'); });
       if (tabBtn) ptab(tabBtn, 'inv-ocr');
@@ -9373,6 +9433,12 @@ function renderInventoryExpiryCheck(withinMonths) {
 }
 window.renderInventoryExpiryCheck = renderInventoryExpiryCheck;
 function bmhPopulateInventorySelectors() {
+  try {
+    const savedInvCats = JSON.parse(localStorage.getItem('bmh_inventory_categories') || 'null');
+    if (Array.isArray(savedInvCats) && savedInvCats.length) {
+      window.BMH_INVENTORY_CATEGORIES = Array.from(new Set((window.BMH_INVENTORY_CATEGORIES || []).concat(savedInvCats.map(normalizeInventoryTextValue).filter(Boolean))));
+    }
+  } catch (e) { /* noop */ }
   const catOpts = ['<option value="all">All categories</option>'].concat(bmhInventoryCategoryOptions().map(function (c) {
     return '<option value="' + escapeHtmlConsent(c) + '">' + escapeHtmlConsent(c) + '</option>';
   })).join('');
@@ -9443,7 +9509,7 @@ function renderInventoryPurchaseLog() {
       <div style="font-weight:900;color:var(--bmh-blue)">+${r.qty} · ₹${Number(r.totalCost||0).toLocaleString('en-IN')}</div>
     </div>
     <div style="font-size:10px;color:var(--g1);margin-top:4px">${bmhDeptLabel(r.dept)} · ${bmhFormatStoreLabel(r.store)} · ${r.vendor || 'No vendor'} · Inv ${r.invoiceNo || '—'} · ${new Date(r.ts).toLocaleString('en-IN')}</div>
-    <div style="font-size:10px;color:var(--g1);margin-top:2px">${r.billFile?.name ? 'Bill: <a href="#" onclick="event.preventDefault();openInventoryBill(\'' + r.id + '\')">' + escapeHtmlConsent(r.billFile.name) + '</a> · ' : ''}Barcode ${r.barcode || '—'} · Cost ₹${Number(r.cost || 0).toLocaleString('en-IN')} · MRP ₹${Number(r.mrp || 0).toLocaleString('en-IN')}</div>
+    <div style="font-size:10px;color:var(--g1);margin-top:2px">${r.billFile?.name ? 'Bill: <a href="#" onclick="event.preventDefault();openInventoryBill(\'' + r.id + '\')">' + escapeHtmlConsent(r.billFile.name) + '</a> · ' : ''}Bill date ${escapeHtmlConsent(r.billDateKey || '').replace(/-/g,'/')} · Barcode ${r.barcode || '—'} · Cost ₹${Number(r.cost || 0).toLocaleString('en-IN')} · MRP ₹${Number(r.mrp || 0).toLocaleString('en-IN')}</div>
   </div>`).join('') : '<div style="padding:12px;color:var(--g1);font-size:12px">No purchase intake recorded yet.</div>';
 }
 function renderInventoryUsageLog() {
@@ -14992,7 +15058,9 @@ function bmhRecordInventoryPurchase(item, qty, billFile) {
     billMode,
     dueDate,
     ts:purchaseTs,
-    billFile: billFile || null
+    billFile: billFile || null,
+    billDateKey: new Date().toISOString().slice(0, 10),
+    billGroup: [normalizeInventoryTextValue(vendor), invoiceNo || 'NOINV', dept || 'general', new Date().toISOString().slice(0, 10)].join('::')
   };
   normalizeInventoryRecord(purchase);
   window.BMH_PURCHASES.push(purchase);
@@ -15007,6 +15075,9 @@ function bmhRecordInventoryPurchase(item, qty, billFile) {
       uploadedName: billFile?.name || '',
       billFile: billFile || null,
       createdAt: purchase.ts,
+      dept: dept,
+      billDateKey: purchase.billDateKey,
+      billGroup: purchase.billGroup,
       itemName: item.name,
       billMode: billMode,
       store: store,
