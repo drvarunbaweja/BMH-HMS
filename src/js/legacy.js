@@ -8327,10 +8327,45 @@ function ensureInventoryPdfJs() {
     });
   return _inventoryPdfJsPromise;
 }
+function loadInventoryOcrMemory() {
+  if (window.BMH_INVENTORY_OCR_MEMORY) return window.BMH_INVENTORY_OCR_MEMORY;
+  try {
+    window.BMH_INVENTORY_OCR_MEMORY = JSON.parse(localStorage.getItem('bmh_inventory_ocr_memory') || '{}') || {};
+  } catch (e) {
+    window.BMH_INVENTORY_OCR_MEMORY = {};
+  }
+  return window.BMH_INVENTORY_OCR_MEMORY;
+}
+function saveInventoryOcrMemory() {
+  try {
+    localStorage.setItem('bmh_inventory_ocr_memory', JSON.stringify(loadInventoryOcrMemory()));
+  } catch (e) { /* noop */ }
+}
+function learnInventoryOcrValue(target, value) {
+  const raw = normalizeInventoryTextValue(value);
+  if (!raw) return;
+  const memory = loadInventoryOcrMemory();
+  const bucketMap = {
+    vendor: 'vendors',
+    itemName: 'products',
+    product: 'products',
+    company: 'companies',
+    brand: 'brands',
+    batchNo: 'batches'
+  };
+  const bucket = bucketMap[String(target || '')];
+  if (!bucket) return;
+  memory[bucket] = Array.isArray(memory[bucket]) ? memory[bucket] : [];
+  if (!memory[bucket].some(function (v) { return normalizeInventoryCompareText(v) === normalizeInventoryCompareText(raw); })) {
+    memory[bucket].push(raw);
+    saveInventoryOcrMemory();
+  }
+}
 function inventoryKnownVendorNames() {
   const names = [];
   (window.BMH_VENDOR_BILLS || []).forEach(function (v) { if (v?.vendor) names.push(String(v.vendor)); });
   (INVENTORY || []).forEach(function (i) { if (i?.vendor) names.push(String(i.vendor)); });
+  (loadInventoryOcrMemory().vendors || []).forEach(function (v) { names.push(String(v)); });
   return Array.from(new Set(names.map(function (v) { return normalizeInventoryTextValue(v); }).filter(Boolean)));
 }
 function inventoryKnownProductNames() {
@@ -8338,6 +8373,7 @@ function inventoryKnownProductNames() {
   (INVENTORY || []).forEach(function (i) { if (i?.name) names.push(String(i.name)); });
   (IOL_CATALOG || []).forEach(function (row) { if (row?.name) names.push(String(row.name)); });
   (window.BMH_PURCHASES || []).forEach(function (row) { if (row?.itemName) names.push(String(row.itemName)); });
+  (loadInventoryOcrMemory().products || []).forEach(function (v) { names.push(String(v)); });
   return Array.from(new Set(names.map(function (v) { return normalizeInventoryTextValue(v); }).filter(Boolean)));
 }
 function inventoryFindKnownMrp(itemName) {
@@ -8379,10 +8415,14 @@ function normalizeInventoryCompareText(value) {
 function parseIolIdentityFromItemName(name) {
   const raw = String(name || '').trim().replace(/\s+/g, ' ');
   const upper = raw.toUpperCase();
+  const knownCompanies = (loadInventoryOcrMemory().companies || []).concat(['Hoya','Alcon','Zeiss','Johnson','Appasamy','Aurolab','Rayner','Staar']);
+  const learnedCompany = knownCompanies.find(function (c) { return c && upper.includes(String(c).toUpperCase()); }) || '';
   const companyMatch = upper.match(/\b(HOYA|ALCON|ZEISS|JOHNSON|J&J|APPASAMY|AUROLAB|RAYNER|STAAR)\b/);
-  const company = companyMatch ? normalizeInventoryTextValue(companyMatch[1] === 'J&J' ? 'Johnson' : companyMatch[1]) : '';
+  const company = learnedCompany || (companyMatch ? normalizeInventoryTextValue(companyMatch[1] === 'J&J' ? 'Johnson' : companyMatch[1]) : '');
   let brand = '';
-  if (/\bIMPRESS\b/i.test(raw)) brand = 'Impress';
+  const knownBrands = (loadInventoryOcrMemory().brands || []);
+  brand = knownBrands.find(function (b) { return b && upper.includes(String(b).toUpperCase()); }) || '';
+  if (!brand && /\bIMPRESS\b/i.test(raw)) brand = 'Impress';
   else if (/\bVIVINEX\b/i.test(raw)) brand = 'Vivinex';
   else if (/\bACRYSOF\b/i.test(raw)) brand = 'AcrySof';
   else if (/\bTECNIS\b/i.test(raw)) brand = 'Tecnis';
@@ -8656,6 +8696,15 @@ function renderInventoryImportReview(parsed, mode, text) {
   const ta = document.getElementById('inv-ocr-text');
   if (ta && text) ta.value = text;
 }
+function renderInventoryReviewManualChips(mode) {
+  const parsed = window._inventoryParsedImports && window._inventoryParsedImports[mode];
+  const host = document.getElementById('inv-bill-review-manual-chips');
+  if (!host) return;
+  const chips = Array.isArray(parsed?.manualChips) ? parsed.manualChips : [];
+  host.innerHTML = chips.length ? chips.map(function (chip, idx) {
+    return `<button type="button" class="btn btn-xs btn-outline" onclick="applyInventoryManualChip('${mode}',${idx})">${escapeHtmlConsent(chip.target)}: ${escapeHtmlConsent(chip.value)}</button>`;
+  }).join(' ') : '<div style="color:var(--g1)">No extracted chips yet.</div>';
+}
 function applyInventoryParsedLineItem(mode, idx) {
   const parsed = window._inventoryParsedImports && window._inventoryParsedImports[mode];
   const item = parsed && Array.isArray(parsed.lineItems) ? parsed.lineItems[idx] : null;
@@ -8677,6 +8726,78 @@ function applyInventoryParsedLineItem(mode, idx) {
   setInventoryImportStatus(mode, 'Selected extracted item for review.', '#1a8c3c');
 }
 window.applyInventoryParsedLineItem = applyInventoryParsedLineItem;
+function applyInventoryFieldFromChip(target, value, mode) {
+  const parsed = window._inventoryParsedImports && window._inventoryParsedImports[mode];
+  const safe = String(value || '').trim();
+  if (!safe) return;
+  const set = function (id, val) { const el = document.getElementById(id); if (el) el.value = val; };
+  switch (target) {
+    case 'vendor':
+      set('inv-in-vendor', safe); set('inv-iol-vendor', safe); learnInventoryOcrValue('vendor', safe); break;
+    case 'invoiceNo':
+      set('inv-in-invoice', safe); break;
+    case 'invoiceDate':
+      set('inv-in-exp', safe); break;
+    case 'itemName':
+      set('bc-in', safe); learnInventoryOcrValue('itemName', safe);
+      applyInventoryParsedData({
+        itemName: safe,
+        category: inferInventoryCategoryFromText(safe),
+        company: parsed?.company || '',
+        brand: parsed?.brand || ''
+      }, mode);
+      break;
+    case 'company':
+      set('inv-iol-company', safe); learnInventoryOcrValue('company', safe); break;
+    case 'brand':
+      set('inv-iol-brand', safe); learnInventoryOcrValue('brand', safe); break;
+    case 'batchNo':
+      set('inv-iol-model', safe); learnInventoryOcrValue('batchNo', safe); break;
+    case 'serialNo': {
+      const power = normalizeIolPowerValue(document.getElementById('inv-bill-review-power-target')?.value || parsed?.power || '');
+      if (power) appendIolSerialMap(power, safe, '');
+      break;
+    }
+    case 'power':
+      applyInventoryParsedData({ category: 'IOL', power: safe, qty: 1 }, mode);
+      break;
+    case 'exp':
+      set('inv-in-exp', safe); set('inv-iol-expiry', safe); break;
+    case 'rate':
+    case 'gstAmount':
+    case 'cost':
+      if (target === 'cost') { set('inv-in-cost', safe); set('inv-iol-cost', safe); }
+      break;
+    case 'hsn':
+      break;
+  }
+}
+function applyInventoryManualChip(mode, idx) {
+  const parsed = window._inventoryParsedImports && window._inventoryParsedImports[mode];
+  const chip = parsed && Array.isArray(parsed.manualChips) ? parsed.manualChips[idx] : null;
+  if (!chip) return;
+  applyInventoryFieldFromChip(chip.target, chip.value, mode);
+  showToast('Chip applied ✓', 's');
+}
+window.applyInventoryManualChip = applyInventoryManualChip;
+function extractInventoryReviewSelection(mode) {
+  const ta = document.getElementById('inv-bill-review-ocr-text');
+  const targetEl = document.getElementById('inv-bill-review-target');
+  if (!ta || !targetEl) return;
+  const text = String(ta.value || '');
+  const start = Math.max(0, Number(ta.selectionStart || 0));
+  const end = Math.max(start, Number(ta.selectionEnd || 0));
+  const picked = text.slice(start, end).trim();
+  if (!picked) { showToast('Highlight some OCR text first', 'w'); return; }
+  const parsed = window._inventoryParsedImports && window._inventoryParsedImports[mode];
+  if (!parsed) return;
+  parsed.manualChips = Array.isArray(parsed.manualChips) ? parsed.manualChips : [];
+  const target = String(targetEl.value || 'itemName');
+  parsed.manualChips.push({ target: target, value: picked });
+  renderInventoryReviewManualChips(mode);
+  showToast('Selection extracted as chip ✓', 's');
+}
+window.extractInventoryReviewSelection = extractInventoryReviewSelection;
 function applyInventoryParsedData(parsed, mode) {
   if (mode === 'use') {
     const useInput = document.getElementById('bc-use');
@@ -8742,6 +8863,36 @@ function ensureInventoryBillReviewModal() {
       <div style="min-width:0">
         <div id="inv-bill-review-summary" style="font-size:12px;color:var(--tx3);margin-bottom:10px"></div>
         <div id="inv-bill-review-items" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"></div>
+        <div style="display:grid;grid-template-columns:1fr 150px 150px auto;gap:8px;align-items:end;margin-bottom:8px">
+          <div class="form-group" style="margin:0">
+            <label class="fl">OCR text review</label>
+            <textarea id="inv-bill-review-ocr-text" rows="8" style="width:100%;font-family:var(--mono);font-size:11px"></textarea>
+          </div>
+          <div class="form-group" style="margin:0">
+            <label class="fl">Extract as</label>
+            <select id="inv-bill-review-target">
+              <option value="vendor">Vendor</option>
+              <option value="invoiceNo">Invoice No</option>
+              <option value="itemName">Product</option>
+              <option value="company">Company</option>
+              <option value="brand">Brand</option>
+              <option value="batchNo">Batch</option>
+              <option value="serialNo">Serial</option>
+              <option value="power">Power</option>
+              <option value="exp">Expiry</option>
+              <option value="rate">Rate</option>
+              <option value="gstAmount">GST</option>
+              <option value="cost">Cost</option>
+              <option value="hsn">HSN</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin:0">
+            <label class="fl">Power target</label>
+            <input type="text" id="inv-bill-review-power-target" placeholder="+21.00D">
+          </div>
+          <button type="button" class="btn btn-blue btn-sm" onclick="extractInventoryReviewSelection(window._inventoryBillReviewMode || 'in')">Extract highlighted text</button>
+        </div>
+        <div id="inv-bill-review-manual-chips" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"></div>
         <div id="inv-bill-review-detail" style="border:1px solid var(--g4);border-radius:10px;background:#fafbff;padding:10px;font-size:11px;color:var(--tx3)"></div>
       </div>
     </div>
@@ -8757,6 +8908,7 @@ function openInventoryBillReviewModal(mode) {
   const summary = document.getElementById('inv-bill-review-summary');
   const items = document.getElementById('inv-bill-review-items');
   const detail = document.getElementById('inv-bill-review-detail');
+  window._inventoryBillReviewMode = mode;
   if (!parsed || !left || !summary || !items || !detail) return;
   if (asset?.data) {
     if (/pdf/i.test(asset.type || '')) {
@@ -8777,6 +8929,11 @@ function openInventoryBillReviewModal(mode) {
     const label = [item.itemName || 'Item', item.power || '', item.batchNo ? ('Batch ' + item.batchNo) : '', item.serialNo ? ('Serial ' + item.serialNo) : '', item.qty ? ('Qty ' + item.qty) : ''].filter(Boolean).join(' · ');
     return `<button type="button" class="btn btn-xs ${String(item.category || '').toLowerCase()==='iol' ? 'btn-gold' : 'btn-outline'}" onclick="applyInventoryBillReviewItem('${mode}',${idx})">${escapeHtmlConsent(label)}</button>`;
   }).join('') : '<div style="color:var(--g1)">No extracted line items.</div>';
+  const ocrTextEl = document.getElementById('inv-bill-review-ocr-text');
+  if (ocrTextEl) ocrTextEl.value = String(document.getElementById('inv-ocr-text')?.value || '');
+  const powerTargetEl = document.getElementById('inv-bill-review-power-target');
+  if (powerTargetEl) powerTargetEl.value = parsed.power || '';
+  renderInventoryReviewManualChips(mode);
   detail.innerHTML = 'Tap a product line to populate the stock-in fields. If it is an IOL, the category will switch to IOL and the power grid/serial map will update.';
   openM('m-inv-bill-review');
 }
