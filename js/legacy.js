@@ -6724,9 +6724,9 @@ function saveIolInventoryGrid() {
     store: bmhInventoryStoreValue() || 'Eye OT',
     billMode: 'on-use'
   };
-  bmhCompressFileToData(document.getElementById('inv-in-bill-file')?.files?.[0], function (billFile) {
-    try {
-      let added = 0;
+  let added = 0;
+  try {
+    bmhCompressFileToData(document.getElementById('inv-in-bill-file')?.files?.[0], function (billFile) {
       picked.forEach(function (row) {
         const hints = serialMap[row.power] || [];
         for (let idx = 0; idx < row.qty; idx += 1) {
@@ -6739,33 +6739,50 @@ function saveIolInventoryGrid() {
         }
       });
       saveInventoryStockToStorage();
-      const catFilter = document.getElementById('inv-stock-cat-filter');
-      const storeFilter = document.getElementById('inv-stock-store-filter');
-      if (catFilter) catFilter.value = 'all';
-      if (storeFilter) storeFilter.value = 'all';
-      try { renderStockList(); } catch (e) { console.warn('renderStockList failed', e); }
-      try { renderInventoryPurchaseLog(); } catch (e) { console.warn('renderInventoryPurchaseLog failed', e); }
-      try { renderInventoryStoreStock(); } catch (e) { console.warn('renderInventoryStoreStock failed', e); }
-      try { renderInventoryPoAlerts(); } catch (e) { console.warn('renderInventoryPoAlerts failed', e); }
-      try { bmhRenderVendorTables(); } catch (e) { console.warn('bmhRenderVendorTables failed', e); }
-      resetInventoryStockInForm(true);
-      const tabBtn = Array.from(document.querySelectorAll('#pg-inventory .ptab')).find(function (el) { return String(el.textContent || '').includes('Current Stock'); });
-      if (tabBtn) ptab(tabBtn, 'inv-stock');
+      try {
+        const catFilter = document.getElementById('inv-stock-cat-filter');
+        const storeFilter = document.getElementById('inv-stock-store-filter');
+        if (catFilter) catFilter.value = 'all';
+        if (storeFilter) storeFilter.value = 'all';
+        renderStockList();
+        renderInventoryPurchaseLog();
+        renderInventoryStoreStock();
+        renderInventoryPoAlerts();
+        bmhRenderVendorTables();
+        const log = document.getElementById('stock-in-log');
+        if (log) {
+          const d = document.createElement('div');
+          d.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;background:var(--green-lt);border-radius:8px;margin-bottom:6px;font-size:12px';
+          d.innerHTML = `<span><strong>IOL stock saved</strong> · ${escapeHtmlConsent([company, brand].filter(Boolean).join(' ') || vendor || 'IOL')}</span><span style="font-weight:900;color:#1a8c3c">+${added}</span>`;
+          log.prepend(d);
+        }
+        const tabBtn = Array.from(document.querySelectorAll('#pg-inventory .ptab')).find(function (el) { return String(el.textContent || '').includes('Current Stock'); });
+        if (tabBtn) ptab(tabBtn, 'inv-stock');
+      } catch (e) { console.warn('IOL stock post-save UI refresh failed', e); }
       showToast('Saved ✓', 's');
-      const log = document.getElementById('stock-in-log');
-      if (log) {
-        const d = document.createElement('div');
-        d.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;background:var(--green-lt);border-radius:8px;margin-bottom:6px;font-size:12px';
-        d.innerHTML = `<span><strong>IOL stock saved</strong> · ${escapeHtmlConsent([company, brand].filter(Boolean).join(' ') || vendor || 'IOL')}</span><span style="font-weight:900;color:#1a8c3c">+${added}</span>`;
-        log.prepend(d);
-      }
-    } catch (e) {
-      console.error('saveIolInventoryGrid failed', e);
-      showToast('IOL stock save failed. Please retry.', 'e');
-    }
-  });
+      resetInventoryStockInForm(true);
+    });
+  } catch (e) {
+    console.error('saveIolInventoryGrid failed', e);
+    if (added > 0) showToast('Saved ✓', 's');
+    else showToast('IOL stock save failed. Please retry.', 'e');
+  }
 }
 window.saveIolInventoryGrid = saveIolInventoryGrid;
+function reopenInventoryBillForMoreIols() {
+  const parsed = window._inventoryParsedImports && window._inventoryParsedImports.in;
+  if (!parsed) { showToast('No extracted bill is loaded yet', 'w'); return; }
+  openInventoryBillReviewModal('in');
+  toggleInventoryBillReviewDock(true);
+}
+window.reopenInventoryBillForMoreIols = reopenInventoryBillForMoreIols;
+function reopenInventoryBillForMoreItems() {
+  const parsed = window._inventoryParsedImports && window._inventoryParsedImports.in;
+  if (!parsed) { showToast('No extracted bill is loaded yet', 'w'); return; }
+  openInventoryBillReviewModal('in');
+  toggleInventoryBillReviewDock(true);
+}
+window.reopenInventoryBillForMoreItems = reopenInventoryBillForMoreItems;
 function resetInventoryStockInForm(includeIol) {
   ['inv-in-vendor','inv-in-invoice','bc-in','inv-in-qty','inv-in-cost','inv-in-mrp','inv-in-min','inv-in-exp'].forEach(function (id) {
     const el = document.getElementById(id);
@@ -8862,6 +8879,7 @@ function mergeIolParsedSelection(parsed) {
   next[parsed.power] = next[parsed.power] || { qty: 0 };
   next[parsed.power].qty = Math.max(1, Number(next[parsed.power].qty || 0) + Math.max(1, Number(parsed.qty || 1)));
   renderIolInventoryPowerGrid(next);
+  window._inventoryLastIolPower = parsed.power;
   appendIolSerialMap(parsed.power, parsed.serialNo || '', parsed.batchNo || '');
 }
 function renderInventoryImportReview(parsed, mode, text) {
@@ -8964,7 +8982,7 @@ function applyInventoryFieldFromChip(target, value, mode) {
     case 'batchNo':
       set('inv-iol-model', safe); learnInventoryOcrValue('batchNo', safe); break;
     case 'serialNo': {
-      const power = normalizeIolPowerValue(document.getElementById('inv-bill-review-power-target')?.value || parsed?.power || '');
+      const power = normalizeIolPowerValue(window._inventoryLastIolPower || parsed?.power || '');
       if (power) appendIolSerialMap(power, safe, '');
       break;
     }
@@ -9101,7 +9119,7 @@ function ensureInventoryBillReviewModal() {
   modal.className = 'modal-ov';
   modal.id = 'm-inv-bill-review';
   modal.innerHTML = `<div class="modal modal-lg" style="max-width:min(98vw,1320px);width:100%;max-height:94vh">
-    <div class="modal-hd"><div class="modal-title">Inventory Bill Review</div><button class="modal-close" onclick="closeM('m-inv-bill-review')">✕</button></div>
+    <div class="modal-hd" style="cursor:move"><div class="modal-title">Inventory Bill Review</div><div style="display:flex;gap:6px;align-items:center"><button type="button" class="btn btn-xs btn-outline" onclick="toggleInventoryBillReviewDock()">⇄ Dock</button><button class="modal-close" onclick="closeM('m-inv-bill-review')">✕</button></div></div>
     <div style="display:grid;grid-template-columns:minmax(340px,.85fr) minmax(560px,1.15fr);gap:12px">
       <div id="inv-bill-review-left" style="min-height:520px;border:1px solid var(--g4);border-radius:10px;background:#fff;overflow:auto"></div>
       <div style="min-width:0">
@@ -9109,9 +9127,11 @@ function ensureInventoryBillReviewModal() {
         <div id="inv-bill-review-items" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
           <button type="button" class="btn btn-outline btn-sm" onclick="duplicateInventoryBillReviewItem(window._inventoryBillReviewMode || 'in')">＋ Add One More Same Item</button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="reopenInventoryBillForMoreItems()">＋ More Items</button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="jumpToInventoryStockIn()">Use In Stock In</button>
           <button type="button" class="btn btn-outline btn-sm" onclick="useInventoryBillItemForPatient(window._inventoryBillReviewMode || 'in')">Tie Selected Product To Patient Usage</button>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 170px 150px auto;gap:8px;align-items:end;margin-bottom:8px">
+        <div style="display:grid;grid-template-columns:1fr 190px auto;gap:8px;align-items:end;margin-bottom:8px">
           <div class="form-group" style="margin:0;grid-column:1 / -1">
             <label class="fl">OCR text review</label>
             <textarea id="inv-bill-review-ocr-text" rows="12" style="width:100%;font-family:var(--mono);font-size:11px;min-height:225px;max-height:260px"></textarea>
@@ -9134,10 +9154,6 @@ function ensureInventoryBillReviewModal() {
               <option value="hsn">HSN</option>
             </select>
           </div>
-          <div class="form-group" style="margin:0">
-            <label class="fl">Power target</label>
-            <input type="text" id="inv-bill-review-power-target" placeholder="+21.00D">
-          </div>
           <button type="button" class="btn btn-blue btn-sm" onclick="extractInventoryReviewSelection(window._inventoryBillReviewMode || 'in')">Extract highlighted text</button>
         </div>
         <div id="inv-bill-review-manual-chips" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"></div>
@@ -9146,8 +9162,62 @@ function ensureInventoryBillReviewModal() {
     </div>
   </div>`;
   document.body.appendChild(modal);
+  const hd = modal.querySelector('.modal-hd');
+  const box = modal.querySelector('.modal');
+  if (hd && box && !hd.dataset.dragBound) {
+    hd.dataset.dragBound = '1';
+    let active = false; let startX = 0; let startY = 0; let startL = 0; let startT = 0;
+    hd.addEventListener('mousedown', function (e) {
+      if (!modal.classList.contains('inventory-review-docked')) return;
+      if (String(e.target?.tagName || '').toLowerCase() === 'button') return;
+      active = true;
+      startX = e.clientX; startY = e.clientY;
+      const rect = box.getBoundingClientRect();
+      startL = rect.left; startT = rect.top;
+      e.preventDefault();
+    });
+    document.addEventListener('mousemove', function (e) {
+      if (!active) return;
+      box.style.margin = '0';
+      box.style.position = 'fixed';
+      box.style.left = Math.max(8, startL + (e.clientX - startX)) + 'px';
+      box.style.top = Math.max(8, startT + (e.clientY - startY)) + 'px';
+      box.style.right = 'auto';
+    });
+    document.addEventListener('mouseup', function () { active = false; });
+  }
   return modal;
 }
+function toggleInventoryBillReviewDock(force) {
+  const modal = document.getElementById('m-inv-bill-review');
+  if (!modal) return;
+  const box = modal.querySelector('.modal');
+  const shouldDock = typeof force === 'boolean' ? force : !modal.classList.contains('inventory-review-docked');
+  modal.classList.toggle('inventory-review-docked', shouldDock);
+  window._inventoryBillReviewDocked = shouldDock;
+  if (box) {
+    if (shouldDock) {
+      box.style.position = 'fixed';
+      box.style.top = '8px';
+      box.style.right = '8px';
+      box.style.left = 'auto';
+      box.style.margin = '0';
+    } else {
+      box.style.position = '';
+      box.style.top = '';
+      box.style.right = '';
+      box.style.left = '';
+      box.style.margin = '';
+    }
+  }
+}
+window.toggleInventoryBillReviewDock = toggleInventoryBillReviewDock;
+function jumpToInventoryStockIn() {
+  const tabBtn = Array.from(document.querySelectorAll('#pg-inventory .ptab')).find(function (el) { return String(el.textContent || '').includes('Stock In'); });
+  if (tabBtn) ptab(tabBtn, 'inv-in');
+  toggleInventoryBillReviewDock(true);
+}
+window.jumpToInventoryStockIn = jumpToInventoryStockIn;
 function openInventoryBillReviewModal(mode) {
   const modal = ensureInventoryBillReviewModal();
   const parsed = window._inventoryParsedImports && window._inventoryParsedImports[mode];
@@ -9179,11 +9249,10 @@ function openInventoryBillReviewModal(mode) {
   }).join('') : '<div style="color:var(--g1)">No extracted line items.</div>';
   const ocrTextEl = document.getElementById('inv-bill-review-ocr-text');
   if (ocrTextEl) ocrTextEl.value = String(parsed.reviewText || document.getElementById('inv-ocr-text')?.value || '');
-  const powerTargetEl = document.getElementById('inv-bill-review-power-target');
-  if (powerTargetEl) powerTargetEl.value = parsed.power || '';
   renderInventoryReviewManualChips(mode);
   detail.innerHTML = 'Tap a product line to populate the stock-in fields. If it is an IOL, the category will switch to IOL and the power grid/serial map will update.';
   openM('m-inv-bill-review');
+  if (window._inventoryBillReviewDocked) toggleInventoryBillReviewDock(true);
 }
 window.openInventoryBillReviewModal = openInventoryBillReviewModal;
 function applyInventoryBillReviewItem(mode, idx) {
