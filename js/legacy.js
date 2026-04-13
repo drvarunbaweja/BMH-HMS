@@ -4656,7 +4656,8 @@ function openM(id){
   if(id==='m-order-invest') {
     const modal = document.getElementById('m-order-invest');
     modal?.querySelectorAll('.ptabs .ptab').forEach((tab, idx) => tab.classList.toggle('active', idx === 0));
-    modal?.querySelectorAll('.tab-content').forEach((tab, idx) => tab.classList.toggle('active', tab.id === 'inv-blood'));
+    const firstPaneId = modal?.querySelector('.ptabs .ptab.active')?.getAttribute('onclick')?.match(/'([^']+)'/)?.[1] || 'inv-haem';
+    modal?.querySelectorAll('.tab-content').forEach(function (tab) { tab.classList.toggle('active', tab.id === firstPaneId); });
     refreshInvestigationTemplateSelect && refreshInvestigationTemplateSelect();
     syncSelectedInvestigationCheckboxes && syncSelectedInvestigationCheckboxes();
   }
@@ -6745,7 +6746,11 @@ function toggleInventoryIolBox() {
   if (!box) return;
   const isIol = /iol/i.test(bmhInventoryCategoryValue());
   box.style.display = isIol ? 'block' : 'none';
-  if (isIol) renderIolInventoryPowerGrid();
+  if (isIol) {
+    renderIolInventoryPowerGrid();
+    const cont = document.getElementById('inv-iol-brands-container');
+    if (cont && cont.children.length === 0) addIolBrandEntry();
+  }
 }
 function readIolGridSerialMap() {
   const raw = String(document.getElementById('inv-iol-serial-map')?.value || '').trim();
@@ -6773,11 +6778,12 @@ function renderIolInventoryPowerGrid(prefill) {
       <div style="font-size:12px;font-weight:900;color:#8a4200">${power}</div>
       <div style="display:flex;align-items:center;gap:6px;margin-top:6px">
         <button class="btn btn-xs btn-outline" type="button" onclick="adjustIolPowerQty('${power}',-1)">−</button>
-        <input type="number" min="0" max="9" value="${qty}" data-power="${power}" class="inv-iol-qty" style="width:54px;text-align:center;font-weight:900">
+        <input type="number" min="0" max="9" value="${qty}" data-power="${power}" class="inv-iol-qty" style="width:54px;text-align:center;font-weight:900" oninput="updateIolPowerCounter()">
         <button class="btn btn-xs btn-outline" type="button" onclick="adjustIolPowerQty('${power}',1)">+</button>
       </div>
     </div>`;
   }).join('');
+  updateIolPowerCounter();
 }
 window.renderIolInventoryPowerGrid = renderIolInventoryPowerGrid;
 function adjustIolPowerQty(power, delta) {
@@ -6785,8 +6791,24 @@ function adjustIolPowerQty(power, delta) {
   if (!input) return;
   const next = Math.max(0, Math.min(9, (parseInt(input.value, 10) || 0) + delta));
   input.value = String(next);
+  updateIolPowerCounter();
 }
 window.adjustIolPowerQty = adjustIolPowerQty;
+function updateIolPowerCounter() {
+  const box = document.getElementById('inv-iol-stock-box');
+  if (!box) return;
+  let counter = document.getElementById('inv-iol-power-counter');
+  if (!counter) {
+    counter = document.createElement('div');
+    counter.id = 'inv-iol-power-counter';
+    counter.style.cssText = 'margin:8px 0 10px;font-size:11px;font-weight:900;color:#8a4200;background:#fff3d8;border:1px solid #ead8a4;border-radius:8px;padding:6px 10px;display:inline-flex;gap:10px;align-items:center';
+    const target = box.querySelector('#inv-iol-brands-container') || box.firstElementChild;
+    box.insertBefore(counter, target);
+  }
+  const total = Array.from(box.querySelectorAll('.inv-iol-qty')).reduce(function (sum, el) { return sum + Math.max(0, Number(el.value) || 0); }, 0);
+  counter.textContent = 'IOL power counter: ' + total + ' unit' + (total === 1 ? '' : 's');
+}
+window.updateIolPowerCounter = updateIolPowerCounter;
 function buildIolInventoryRow(base, power, rowIndex, serialHint) {
   const brand = String(base.brand || '').trim();
   const company = String(base.company || '').trim();
@@ -6818,71 +6840,111 @@ function buildIolInventoryRow(base, power, rowIndex, serialHint) {
     iolModel: model
   };
 }
+function addIolBrandEntry(prefill) {
+  const container = document.getElementById('inv-iol-brands-container');
+  if (!container) return;
+  const idx = container.children.length;
+  const p = prefill || {};
+  const div = document.createElement('div');
+  div.className = 'inv-iol-brand-entry';
+  div.dataset.idx = idx;
+  div.style.cssText = 'background:#fffbec;border:1px solid #ead8a4;border-radius:8px;padding:10px;margin-bottom:10px;position:relative';
+  div.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase">Brand Entry ${idx + 1}</div>
+      ${idx > 0 ? `<button class="btn btn-xs btn-gray" onclick="removeIolBrandEntry(this)">✕ Remove</button>` : ''}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
+      <div class="form-group" style="margin:0"><label class="fl">Brand</label><input type="text" class="iol-brand-field" placeholder="AcrySof / Tecnis / Appasamy" value="${escapeHtmlConsent(p.brand||'')}"></div>
+      <div class="form-group" style="margin:0"><label class="fl">Company</label><input type="text" class="iol-company-field" placeholder="Alcon / J&amp;J / Zeiss" value="${escapeHtmlConsent(p.company||'')}"></div>
+      <div class="form-group" style="margin:0"><label class="fl">Batch Number</label><input type="text" class="iol-model-field" placeholder="Batch from product line" value="${escapeHtmlConsent(p.batch||'')}"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:140px 140px 1fr;gap:8px;align-items:end;margin-bottom:8px">
+      <div class="form-group" style="margin:0"><label class="fl">Expiry</label><input type="text" class="iol-expiry-field" placeholder="MM/YYYY" value="${escapeHtmlConsent(p.exp||'')}"></div>
+      <div class="form-group" style="margin:0"><label class="fl">Cost ₹</label><input type="number" class="iol-cost-field" min="0" value="${p.cost||0}"></div>
+      <div class="form-group" style="margin:0"><label class="fl">Serial / batch map (optional)</label><textarea class="iol-serial-map-field" rows="2" style="width:100%;font-family:var(--mono);font-size:11px" placeholder="+21.00D: SER123,BATCH-A"></textarea></div>
+    </div>
+    <div class="iol-power-grid-container" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px"></div>
+  `;
+  container.appendChild(div);
+  renderIolBrandPowerGrid(div);
+}
+function removeIolBrandEntry(btn) {
+  const entry = btn.closest('.inv-iol-brand-entry');
+  if (entry) entry.remove();
+  updateIolPowerCounter();
+}
+function renderIolBrandPowerGrid(entryDiv) {
+  const gridEl = entryDiv.querySelector('.iol-power-grid-container');
+  if (!gridEl) return;
+  const powers = [];
+  for (let p = 3.0; p <= 30.0; p += 0.5) powers.push('+' + p.toFixed(2) + 'D');
+  gridEl.innerHTML = powers.map(function (pw) {
+    return `<div style="background:#fff;border:1px solid #d2bb79;border-radius:7px;padding:6px 8px;text-align:center"><div style="font-size:11px;font-weight:700;margin-bottom:5px">${pw}</div><input type="number" class="inv-iol-qty" data-power="${pw}" min="0" value="0" style="width:100%;text-align:center;font-weight:800;font-size:13px" oninput="updateIolPowerCounter()"></div>`;
+  }).join('');
+  updateIolPowerCounter();
+}
+function readIolBrandEntrySerialMap(entryDiv) {
+  const raw = String(entryDiv.querySelector('.iol-serial-map-field')?.value || '');
+  const out = {};
+  raw.split('|').forEach(function (seg) {
+    const parts = seg.split(':');
+    if (parts.length >= 2) {
+      const power = parts[0].trim();
+      out[power] = parts[1].split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+    }
+  });
+  return out;
+}
+window.addIolBrandEntry = addIolBrandEntry;
+window.removeIolBrandEntry = removeIolBrandEntry;
 function saveIolInventoryGrid() {
   const vendor = document.getElementById('inv-iol-vendor')?.value?.trim() || document.getElementById('inv-in-vendor')?.value?.trim() || '';
-  const brand = document.getElementById('inv-iol-brand')?.value?.trim() || '';
-  const company = document.getElementById('inv-iol-company')?.value?.trim() || '';
-  const batchNo = document.getElementById('inv-iol-model')?.value?.trim() || '';
-  const exp = document.getElementById('inv-iol-expiry')?.value?.trim() || document.getElementById('inv-in-exp')?.value?.trim() || '';
-  const cost = Number(document.getElementById('inv-iol-cost')?.value || document.getElementById('inv-in-cost')?.value || '0') || 0;
   const mrp = Number(document.getElementById('inv-in-mrp')?.value || '0') || 0;
-  const picked = Array.from(document.querySelectorAll('.inv-iol-qty')).map(function (input) {
-    return { power: String(input.dataset.power || ''), qty: Math.max(0, parseInt(input.value, 10) || 0) };
-  }).filter(function (row) { return row.qty > 0; });
-  if (!brand && !company && !batchNo) { showToast('Enter company / brand / batch for IOL stock', 'w'); return; }
-  if (!picked.length) { showToast('Select at least one IOL power quantity', 'w'); return; }
-  const serialMap = readIolGridSerialMap();
-  const base = {
-    vendor: vendor,
-    brand: brand,
-    company: company,
-    model: '',
-    batchNo: batchNo,
-    exp: exp,
-    cost: cost,
-    mrp: mrp,
-    min: 1,
-    store: bmhInventoryStoreValue() || 'Eye OT',
-    billMode: 'on-use'
-  };
+  const brandEntries = document.querySelectorAll('#inv-iol-brands-container .inv-iol-brand-entry');
+  let allBrandData = [];
+  if (brandEntries.length > 0) {
+    brandEntries.forEach(function (entryDiv) {
+      const brand = entryDiv.querySelector('.iol-brand-field')?.value?.trim() || '';
+      const company = entryDiv.querySelector('.iol-company-field')?.value?.trim() || '';
+      const batchNo = entryDiv.querySelector('.iol-model-field')?.value?.trim() || '';
+      const exp = entryDiv.querySelector('.iol-expiry-field')?.value?.trim() || '';
+      const cost = Number(entryDiv.querySelector('.iol-cost-field')?.value || '0') || 0;
+      const picked = Array.from(entryDiv.querySelectorAll('.inv-iol-qty')).map(function (input) {
+        return { power: String(input.dataset.power || ''), qty: Math.max(0, parseInt(input.value, 10) || 0) };
+      }).filter(function (row) { return row.qty > 0; });
+      const serialMap = readIolBrandEntrySerialMap(entryDiv);
+      if (picked.length > 0) allBrandData.push({ brand, company, batchNo, exp, cost, picked, serialMap });
+    });
+  }
+  if (!allBrandData.length) { showToast('Enter at least one IOL power quantity', 'w'); return; }
+  if (!allBrandData.some(function (b) { return b.brand || b.company || b.batchNo; })) { showToast('Enter company / brand / batch for IOL stock', 'w'); return; }
   let added = 0;
   try {
     bmhCompressFileToData(document.getElementById('inv-in-bill-file')?.files?.[0], function (billFile) {
       try {
-      picked.forEach(function (row) {
-        const hints = serialMap[row.power] || [];
-        for (let idx = 0; idx < row.qty; idx += 1) {
-          const invRow = buildIolInventoryRow(base, row.power, idx + 1, hints[idx] || null);
-          INVENTORY.push(invRow);
-          BCMAP[invRow.barcode] = invRow;
-          BCMAP[String(invRow.name).toLowerCase().substring(0, 15)] = invRow;
-          bmhRecordInventoryPurchase(invRow, 1, billFile || null);
-          added += 1;
-        }
-      });
-      saveInventoryStockToStorage();
-      try {
-        const catFilter = document.getElementById('inv-stock-cat-filter');
-        const storeFilter = document.getElementById('inv-stock-store-filter');
-        if (catFilter) catFilter.value = 'all';
-        if (storeFilter) storeFilter.value = 'all';
+        allBrandData.forEach(function (bd) {
+          const base = { vendor: vendor, brand: bd.brand, company: bd.company, model: '', batchNo: bd.batchNo, exp: bd.exp, cost: bd.cost, mrp: mrp, min: 1, store: bmhInventoryStoreValue() || 'Eye OT', billMode: 'on-use' };
+          bd.picked.forEach(function (row) {
+            const hints = bd.serialMap[row.power] || [];
+            for (let idx = 0; idx < row.qty; idx += 1) {
+              const invRow = buildIolInventoryRow(base, row.power, idx + 1, hints[idx] || null);
+              INVENTORY.push(invRow);
+              BCMAP[invRow.barcode] = invRow;
+              BCMAP[String(invRow.name).toLowerCase().substring(0, 15)] = invRow;
+              bmhRecordInventoryPurchase(invRow, 1, billFile || null);
+              added += 1;
+            }
+          });
+        });
+        saveInventoryStockToStorage();
         renderStockList();
         renderInventoryPurchaseLog();
         renderInventoryStoreStock();
         renderInventoryPoAlerts();
         bmhRenderVendorTables();
-        const log = document.getElementById('stock-in-log');
-        if (log) {
-          const d = document.createElement('div');
-          d.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;background:var(--green-lt);border-radius:8px;margin-bottom:6px;font-size:12px';
-          d.innerHTML = `<span><strong>IOL stock saved</strong> · ${escapeHtmlConsent([company, brand].filter(Boolean).join(' ') || vendor || 'IOL')}</span><span style="font-weight:900;color:#1a8c3c">+${added}</span>`;
-          log.prepend(d);
-        }
-        const tabBtn = Array.from(document.querySelectorAll('#pg-inventory .ptab')).find(function (el) { return String(el.textContent || '').includes('Current Stock'); });
-        if (tabBtn) ptab(tabBtn, 'inv-stock');
-      } catch (e) { console.warn('IOL stock post-save UI refresh failed', e); }
-      showToast('Saved ✓', 's');
-      resetInventoryStockInForm(true);
+        showToast('Saved ✓ — ' + added + ' IOL units added', 's');
+        resetInventoryStockInForm(true);
       } catch (e) {
         console.error('saveIolInventoryGrid callback failed', e);
         showToast('IOL stock save failed. ' + String(e?.message || 'Please retry.'), 'e');
@@ -7893,7 +7955,7 @@ function bmhRenderVendorTables() {
     });
     const rows = Object.values(grouped).sort(function (a,b) { return b.outstanding - a.outstanding; });
     summaryEl.innerHTML = rows.length ? rows.map(function (r) {
-      return `<div style="padding:10px 0;border-bottom:1px solid var(--g5);font-size:12px;display:flex;justify-content:space-between;gap:10px;align-items:center">
+      return `<div style="padding:10px 0;border-bottom:1px solid var(--g5);font-size:12px;display:flex;justify-content:space-between;gap:10px;align-items:center;cursor:pointer" onclick="bmhFilterVendorFromSummary('${String(r.vendor).replace(/'/g, "\\'")}')">
         <div><strong>${escapeHtmlConsent(r.vendor)}</strong><div style="font-size:10px;color:var(--g1)">Bills ${r.count} · Total ₹${r.total.toLocaleString('en-IN')}</div></div>
         <div style="display:flex;gap:8px;align-items:center"><span style="font-weight:900;color:${r.outstanding > 0 ? '#b55a00' : '#1a8c3c'}">Outstanding ₹${r.outstanding.toLocaleString('en-IN')}</span>${r.outstanding > 0 ? `<button type="button" class="btn btn-xs btn-gold" onclick="bmhPayVendorOutstanding('${String(r.vendor).replace(/'/g, "\\'")}')">Clear by bank / cheque</button>` : ''}</div>
       </div>`;
@@ -7945,7 +8007,15 @@ function bmhSyncVendorSearchFromSelect() {
   const inp = document.getElementById('inv-vendor-search');
   if (sel && inp) inp.value = sel.value || '';
 }
+function bmhFilterVendorFromSummary(vendor) {
+  const sel = document.getElementById('inv-vendor-filter');
+  const inp = document.getElementById('inv-vendor-search');
+  if (sel) sel.value = vendor || '';
+  if (inp) inp.value = vendor || '';
+  bmhRenderVendorTables();
+}
 window.bmhSyncVendorSearchFromSelect = bmhSyncVendorSearchFromSelect;
+window.bmhFilterVendorFromSummary = bmhFilterVendorFromSummary;
 function bmhSelectedVendorBillIds() {
   return Array.from(document.querySelectorAll('#inv-vendor-detail .inv-vendor-bill-check:checked')).map(function (el) {
     return String(el.value || '').trim();
@@ -11698,6 +11768,23 @@ const INVESTIGATION_LIBRARY = {
     ['Fluorescein Angiography', 4000]
   ]
 };
+// Investigation categories from lab sheet (used by order-investigation tabs)
+const INVESTIGATION_CATEGORIES = [
+  { id:'haem', label:'🩸 Haematology', tests:['Hb (Haemoglobin)','T.L.C. (Total Leukocytes Count)','D.L.C. (Differential Leukocytes Count)','Neutrophils','Lymphocytes','Monocytes','Eosinophils','Basophils','Platelets Count','R.B.C. (Red Blood Cells)','P.C.V. (Packed Cell Volume)','M.C.V. (Mean Cell Volume)','M.C.H. (Mean Cell Haemoglobin)','M.C.H.C. (Mean Cell Haemoglobin Conc.)','E.S.R. (Erythrocytes Sedimentation Rate)','Malarial Parasite']},
+  { id:'coag', label:'🔬 Coagulogram', tests:['B.T. (Bleeding Time)','C.T. (Clotting Time)','P.T. (Prothrombin Time)','P.T.I. (Prothrombin Time Index)','I.N.R. (International Normalised Ratio)','A.P.T.T (Activated Partial Thrombin Time)']},
+  { id:'chem', label:'🧪 Chemistry', tests:['Fasting Glucose','Post Prandial Glucose','Post Lunch Glucose','Post Dinner Glucose','Random Glucose','CPK-MB','CPK-NAC','Amylase','S. Lipase','GAMA G.T.','LDH','TROP-T','Glycosylated Haemoglobin (HbA1c)','ABG (Average Blood Glucose)']},
+  { id:'rft', label:'💉 RFT', tests:['B. Urea','S. Creatinine','S. Uric Acid','Spot Microalbuminuria','24 hrs. Microalbuminuria','Spot Urine Creatinine','24 hrs. Urine Creatinine','Urine Albumin-Creatinine Ratio','24 hrs. Urine Proteins','Total Volume (24hr)']},
+  { id:'lft', label:'🫀 LFT', tests:['Total Bilirubin','Direct Bilirubin','Indirect Bilirubin','Total Proteins','Albumin','Globulin','A/G Ratio','S.G.O.T. (AST)','S.G.P.T. (ALT)','Alkaline Phosphatase']},
+  { id:'lipid', label:'🫀 Lipid Profile', tests:['Total Cholesterol','Triglycerides','HDL Cholesterol','LDL','VLDL','Cholesterol/HDL Ratio','LDL/HDL Ratio','Non-HDL Cholesterol','Total Lipids']},
+  { id:'electro', label:'⚡ Electrolytes', tests:['Sodium (Na+)','Potassium (K+)','Chloride (Cl-)','Calcium (Ca++)','Phosphorous','Magnesium (Mg)','Lithium (Li)']},
+  { id:'sero', label:'🔬 Serology', tests:['Blood Group (ABO)','Rh. Anti-D','H.I.V. I & II','HBsAg','H.C.V. (Tridot)','V.D.R.L.','R.A. Factor','A.S.O.','C. Reactive Proteins',"Direct Coombs Test","Indirect Coombs Test",'Malarial Antigens - P. Falciparum','Malarial Antigens - P. Vivax','Typhi Dot IgG','Typhi Dot IgM','Widal']},
+  { id:'urine', label:'💧 Urine', tests:['Urine Colour','Urine Appearance','Urine Proteins','Urine Sugar','Urine pH','Specific Gravity','Acetone/Ketones','Bile Salt','Bile Pigment',"Urine Pus Cells","Urine RBC's",'Epithelial Cells','Calcium Oxalate Crystals','Triple Phosphate Crystals','Uric Acid Crystals','Amorphous Deposits','Budding Yeast','Fungal Hyphae','Mucus Fibers','Urine Bacteria']},
+  { id:'stool', label:'🔬 Stool', tests:['Stool Colour','Stool Consistency','Stool Blood','Stool Mucous','Stool Parasite','Stool pH','Occult Blood','Veg. Form of Protozoa','Cyst of Protozoa','Ova/Eggs of Helminths','Stool Pus Cells','Stool Mucus Fibers','Fat Cells','Hanging Drop (Vibrio)']},
+  { id:'hcg', label:'🤰 HCG', tests:['Human Chorionic Gonadotropin (HCG)']},
+  { id:'semen', label:'🔬 Semen', tests:['Semen Volume','Semen Colour','Semen Reaction','Semen Viscosity','Liquefaction Time','Semen Pus Cells',"Semen RBC's",'Spermatogonia','Total Sperm Count','Normal Morphology','Active Motile (1st Hr)','Active Motile (2nd Hr)','Active Motile (3rd Hr)','Active Motile (4th Hr)','Sluggish Motility (1st Hr)','Non-Motile (1st Hr)']},
+  { id:'rafq', label:'🦴 RA Factor', tests:['R.A. Factor (Quantitative)']},
+  { id:'thyroid', label:'🦋 Thyroid', tests:['TSH','T3 (Triiodothyronine)','T4 (Thyroxine)','Free T3','Free T4','Anti-TPO Antibodies']}
+];
 const RX_FREQ_OPTIONS = ['Half-hourly','Hourly','Every 2 hours','Every 3 hours','Every 4 hours','Six times daily (6x/day)','Four times daily (QID)','Three times daily (TDS)','Twice daily (BD)','Once daily (OD)','At bedtime (HS)','Once weekly','As needed (PRN)'];
 const RX_DURATION_OPTIONS = ['½ day','1 day','2 days','3 days','4 days','5 days','6 days','7 days','10 days','13 days','1 week','2 weeks','3 weeks','4 weeks','6 weeks','1 month','2 months','3 months','4 months','5 months','6 months','12 months','Ongoing'];
 const RX_TYPE_OPTIONS = ['Eye Drop','Tablet','Capsule','Ointment','Cream','Gel','Syrup','Injection','Pessary','Lotion','Spray','Other'];
@@ -11960,45 +12047,34 @@ function addCustomRxOption(kind) {
   showToast('Saved for ' + (CURRENT_USER?.name || 'doctor') + ' ✓', 's');
 }
 function renderInvestigationChooser() {
-  const seen = new Set();
-  const dedupe = function (rows) {
-    return rows.filter(function (row) {
-      const name = String(row && row[0] || '').trim();
-      if (!name) return false;
-      const key = name.toLowerCase();
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-  };
-  const labDefaults = DEFAULT_ZERO_CHARGE_LAB_ROWS.map(function (row) { return [row.name, 0]; });
-  const labRows = dedupe((CHARGES_DATA || []).filter(function (row) {
-    return String(row?.cat || '').toLowerCase() === 'lab' || String(row?.kind || '').toLowerCase() === 'lab';
-  }).map(function (row) { return [normalizeInvestigationLabel(row.name), 0]; }).concat(labDefaults)).sort(function (a, b) {
-    return String(a[0] || '').localeCompare(String(b[0] || ''));
+  INVESTIGATION_CATEGORIES.forEach(function (cat) {
+    const el = document.getElementById('inv-' + cat.id + '-list');
+    if (!el) return;
+    el.innerHTML = cat.tests.map(function (name) {
+      return `<div class="invest-option" data-investigation-name="${String(name).replace(/"/g,'&quot;')}" data-price="0" data-inv-cat="${cat.id}" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--g6);border-radius:8px;cursor:pointer;user-select:none;-webkit-user-select:none"><input type="checkbox" tabindex="-1" aria-hidden="true" style="width:16px;height:16px;flex-shrink:0;pointer-events:none"><div style="flex:1"><div style="font-size:12px;font-weight:700">${name}</div><div style="font-size:10px;color:var(--g1)">${getInvestigationCategoryLabel(cat.id)}</div></div></div>`;
+    }).join('');
   });
-  const diagRows = dedupe((CHARGES_DATA || []).filter(function (row) {
-    const cat = String(row?.cat || '').toLowerCase();
-    const name = String(row?.name || '');
-    if (cat === 'lab') return false;
-    return /x-?ray|ecg|echo|usg|ultrasound|mri|ct scan|doppler/i.test(name);
-  }).map(function (row) { return [row.name, 0]; }));
-  const eyeRows = dedupe((CHARGES_DATA || []).filter(function (row) {
-    const cat = String(row?.cat || '').toLowerCase();
-    const name = String(row?.name || '');
-    if (cat !== 'eye') return false;
-    if (/consultation|follow-up|pre-op package/i.test(name)) return false;
-    return /biometry|oct|hvf|fundus|topography|specular|erg|vep|fluorescein|ubm|b-?scan/i.test(name);
-  }).map(function (row) { return [row.name, 0]; }));
-  const groups = [
-    ['inv-blood-list', labRows.length ? labRows : INVESTIGATION_LIBRARY.blood.map(function (x) { return [x[0], 0]; })],
-    ['inv-diag-list', diagRows.length ? diagRows : INVESTIGATION_LIBRARY.diag.map(function (x) { return [x[0], 0]; })],
-    ['inv-eye-list', eyeRows.length ? eyeRows : INVESTIGATION_LIBRARY.eye.map(function (x) { return [x[0], 0]; })]
-  ];
-  groups.forEach(([id, items]) => {
-    const el = document.getElementById(id);
-    if(!el) return;
-    el.innerHTML = items.map(([name, price]) => `<div class="invest-option" data-investigation-name="${String(name).replace(/"/g,'&quot;')}" data-price="${price}" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--g6);border-radius:8px;cursor:pointer;user-select:none;-webkit-user-select:none"><input type="checkbox" tabindex="-1" aria-hidden="true" style="width:16px;height:16px;flex-shrink:0;pointer-events:none"><div style="flex:1"><div style="font-size:12px;font-weight:700">${name}</div><div style="font-size:10px;color:var(--g1)">Outsourced lab / no charge</div></div></div>`).join('');
+  syncSelectedInvestigationCheckboxes();
+}
+function getInvestigationCategoryLabel(catId) {
+  const labels = { haem:'Haematology', coag:'Coagulogram', chem:'Chemistry', rft:'Renal Function', lft:'Liver Function', lipid:'Lipid Profile', electro:'Electrolytes', sero:'Serology', urine:'Urine Exam', stool:'Stool Exam', hcg:'Pregnancy Test', semen:'Semen Analysis', rafq:'RA Factor', thyroid:'Thyroid' };
+  return labels[catId] || catId;
+}
+function selectAllInvCat(catId) {
+  const cat = INVESTIGATION_CATEGORIES.find(function (c) { return c.id === catId; });
+  if (!cat) return;
+  const listEl = document.getElementById('inv-' + catId + '-list');
+  if (!listEl) return;
+  cat.tests.forEach(function (name) {
+    const card = listEl.querySelector('[data-investigation-name="' + String(name).replace(/"/g, '&quot;') + '"]');
+    if (!card) return;
+    const cb = card.querySelector('input[type=checkbox]');
+    if (cb && !cb.checked) {
+      const idx = SELECTED_INVESTIGATIONS.findIndex(function (i) { return i.name === name; });
+      if (idx === -1) SELECTED_INVESTIGATIONS.push({ name: name, price: 0 });
+      cb.checked = true;
+      card.style.background = 'var(--blue-lt)';
+    }
   });
   syncSelectedInvestigationCheckboxes();
 }
@@ -18272,7 +18348,7 @@ function openLabOrder(id) {
     const key = labTestKey(t);
     return `<div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 60px;gap:5px;align-items:center;padding:6px 8px;background:var(--g6);border-radius:7px;margin-bottom:5px">
       <span style="font-size:12px;font-weight:800">${t}</span>
-      <input type="text" placeholder="Value" value="${meta.val||''}" id="lr-val-${key}" style="font-size:12px;font-weight:800;text-align:center" onchange="flagLabVal(this,${JSON.stringify(t)})">
+      <input type="text" placeholder="Value" value="${meta.val||''}" id="lr-val-${key}" style="font-size:12px;font-weight:800;text-align:center" oninput="flagLabVal(this,${JSON.stringify(t)})" onchange="flagLabVal(this,${JSON.stringify(t)})">
       <input type="text" placeholder="Unit" value="${meta.unit||''}" id="lr-unit-${key}" style="font-size:11px;text-align:center">
       <input type="text" placeholder="Range" value="${meta.range||''}" id="lr-range-${key}" style="font-size:11px;text-align:center">
       <span id="lr-flag-${key}" style="font-size:10px;font-weight:800;text-align:center;color:${meta.flag==='HIGH'?'var(--red)':meta.flag==='LOW'?'var(--orange)':'#1a8c3c'}">${meta.flag||'—'}</span>
@@ -18281,11 +18357,12 @@ function openLabOrder(id) {
   renderLabReportPreview(order);
 }
 
-function flagLabVal(inp, testName) {
+function setLabFlagForTest(testName) {
   const key = labTestKey(testName);
+  const inp = document.getElementById('lr-val-' + key);
   const rangeEl = document.getElementById('lr-range-'+key);
   const flagEl = document.getElementById('lr-flag-'+key);
-  if(!rangeEl || !flagEl) return;
+  if(!inp || !rangeEl || !flagEl) return;
   const range = rangeEl.value;
   const val = parseFloat(inp.value);
   if(range && !isNaN(val)) {
@@ -18297,6 +18374,70 @@ function flagLabVal(inp, testName) {
       flagEl.style.color = flag==='HIGH'?'var(--red)':flag==='LOW'?'var(--orange)':'#1a8c3c';
       inp.style.background = flag==='HIGH'?'var(--red-lt)':flag==='LOW'?'var(--orange-lt)':'var(--green-lt)';
     }
+  }
+}
+function flagLabVal(inp, testName) {
+  setLabFlagForTest(testName);
+  calculateLabFormulas(testName);
+}
+function calculateLabFormulas(changedTestName) {
+  const getVal = function (testKey) {
+    const el = document.getElementById('lr-val-' + labTestKey(testKey));
+    return el ? parseFloat(el.value) : NaN;
+  };
+  const setVal = function (testKey, val) {
+    const el = document.getElementById('lr-val-' + labTestKey(testKey));
+    if (el && !isNaN(val)) {
+      el.value = val.toFixed(2);
+      el.style.background = 'var(--blue-lt)';
+      setLabFlagForTest(testKey);
+    }
+  };
+  const low = (changedTestName || '').toLowerCase();
+  if (/prothrombin time(?! index)|\bpt\b/.test(low)) {
+    const pt = getVal('P.T. (Prothrombin Time)');
+    const control = 14;
+    if (!isNaN(pt)) {
+      setVal('P.T.I. (Prothrombin Time Index)', (control / pt) * 100);
+      setVal('I.N.R. (International Normalised Ratio)', parseFloat((pt / control).toFixed(2)));
+    }
+  }
+  if (/hba1c|glycosylated haemoglobin/.test(low)) {
+    const hba1c = getVal('Glycosylated Haemoglobin (HbA1c)');
+    if (!isNaN(hba1c)) setVal('ABG (Average Blood Glucose)', (hba1c * 28.7) - 46.7);
+  }
+  if (/total cholesterol|triglyceride|hdl/.test(low)) {
+    const chol = getVal('Total Cholesterol');
+    const tg = getVal('Triglycerides');
+    const hdl = getVal('HDL Cholesterol');
+    if (!isNaN(chol) && !isNaN(tg) && !isNaN(hdl)) {
+      const vldl = tg / 5;
+      const ldl = chol - hdl - vldl;
+      setVal('VLDL', vldl);
+      setVal('LDL', ldl);
+      setVal('Cholesterol/HDL Ratio', hdl > 0 ? chol / hdl : NaN);
+      setVal('LDL/HDL Ratio', hdl > 0 ? ldl / hdl : NaN);
+      setVal('Non-HDL Cholesterol', chol - hdl);
+    }
+  }
+  if (/total bilirubin|direct bilirubin/.test(low)) {
+    const total = getVal('Total Bilirubin');
+    const direct = getVal('Direct Bilirubin');
+    if (!isNaN(total) && !isNaN(direct)) setVal('Indirect Bilirubin', total - direct);
+  }
+  if (/total protein|albumin/.test(low)) {
+    const tp = getVal('Total Proteins');
+    const alb = getVal('Albumin');
+    if (!isNaN(tp) && !isNaN(alb)) {
+      const glob = tp - alb;
+      setVal('Globulin', glob);
+      if (glob > 0) setVal('A/G Ratio', alb / glob);
+    }
+  }
+  if (/spot microalbumin|spot urine creatinine/.test(low)) {
+    const alb = getVal('Spot Microalbuminuria');
+    const cr = getVal('Spot Urine Creatinine');
+    if (!isNaN(alb) && !isNaN(cr) && cr > 0) setVal('Urine Albumin-Creatinine Ratio', alb / cr);
   }
 }
 
@@ -20869,7 +21010,22 @@ const CHARGES_DATA = [
   {cat:'Lab',    name:'Renal Function Test',             chd:0,   rpr:0},
   {cat:'Lab',    name:'Vitamin D / B12',                 chd:0,  rpr:0},
 ];
-const DEFAULT_ZERO_CHARGE_LAB_ROWS = [
+function getLabHeadingPlainLabel(label) {
+  return String(label || '').replace(/^[^\w(]+/u, '').trim();
+}
+function getLabChargeRowsFromInvestigationCategories() {
+  if (!Array.isArray(INVESTIGATION_CATEGORIES)) return [];
+  const rows = [];
+  INVESTIGATION_CATEGORIES.forEach(function (cat) {
+    const heading = getLabHeadingPlainLabel(cat.label || cat.id || 'Lab');
+    rows.push({ cat:'Lab', kind:'lab', parent:'', name: heading, chd:0, rpr:0 });
+    (cat.tests || []).forEach(function (test) {
+      rows.push({ cat:'Lab', kind:'lab', parent: heading, name: String(test || '').trim(), chd:0, rpr:0 });
+    });
+  });
+  return rows;
+}
+const DEFAULT_ZERO_CHARGE_LAB_ROWS = getLabChargeRowsFromInvestigationCategories().concat([
   {cat:'Lab', kind:'lab', parent:'', name:'CBC / Complete Blood Count', chd:0, rpr:0},
   {cat:'Lab', kind:'lab', parent:'', name:'HbA1c', chd:0, rpr:0},
   {cat:'Lab', kind:'lab', parent:'', name:'Lipid Profile', chd:0, rpr:0},
@@ -20901,7 +21057,13 @@ const DEFAULT_ZERO_CHARGE_LAB_ROWS = [
   {cat:'Lab', kind:'lab', parent:'', name:'Blood Group', chd:0, rpr:0},
   {cat:'Lab', kind:'lab', parent:'', name:'Dual Test', chd:0, rpr:0},
   {cat:'Lab', kind:'lab', parent:'', name:'Pap Smear', chd:0, rpr:0}
-];
+]).filter(function (row, idx, arr) {
+  const key = [String(row.parent || '').trim().toLowerCase(), String(row.name || '').trim().toLowerCase()].join('|');
+  return arr.findIndex(function (x) {
+    const k = [String(x.parent || '').trim().toLowerCase(), String(x.name || '').trim().toLowerCase()].join('|');
+    return k === key;
+  }) === idx;
+});
 const CRITICAL_CHARGE_ROWS = [
   {cat:'Eye', kind:'Eye', parent:'', name:'Consultation — Eye', chd:500, rpr:200},
   {cat:'Eye', kind:'Eye', parent:'', name:'Follow-up Consultation', chd:500, rpr:200},
