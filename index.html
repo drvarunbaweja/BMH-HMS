@@ -3383,14 +3383,14 @@
         <div style="background:var(--blue-lt);border-radius:10px;padding:10px;margin-bottom:12px">
           <div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Purchase Intake</div>
           <div class="inventory-scroll-x"><div class="inventory-wide-grid" style="display:grid;grid-template-columns:1.1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px">
-            <div class="form-group" style="margin:0"><label class="fl">Department</label><select id="inv-in-dept"><option value="ophtho">Ophthalmology</option><option value="obg">OBG</option><option value="psych">Psychiatry</option><option value="skin">Skin</option><option value="general">General / Shared</option><option value="ot">OT / Procedure</option><option value="ipd">IPD / Ward</option></select></div>
-            <div class="form-group" style="margin:0"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">Category <button type="button" onclick="addInventoryCategoryPrompt()" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></label><select id="inv-in-cat"></select></div>
+            <div class="form-group" style="margin:0"><label class="fl" style="display:flex;align-items:center;justify-content:space-between;gap:6px">Department <span style="display:flex;gap:4px"><button type="button" onclick="addInventoryDeptPrompt()" title="Add department" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;font-weight:900">+</button><button type="button" onclick="deleteInventoryDeptPrompt()" title="Remove department" style="background:var(--g3);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;font-weight:900">−</button></span></label><select id="inv-in-dept"></select></div>
+            <div class="form-group" style="margin:0"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">Category <span style="display:flex;gap:4px"><button type="button" onclick="addInventoryCategoryPrompt()" title="Add category" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button><button type="button" onclick="deleteInventoryCategoryPrompt()" title="Delete category from list" style="background:var(--g3);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;font-weight:900">−</button></span></label><select id="inv-in-cat"></select></div>
             <div class="form-group" style="margin:0"><label class="fl">Vendor</label><input type="text" id="inv-in-vendor" list="inv-vendor-datalist" placeholder="Vendor / supplier"></div>
             <div class="form-group" style="margin:0"><label class="fl">Invoice No.</label><input type="text" id="inv-in-invoice" placeholder="Bill / GRN"></div>
           </div></div>
           <div class="inventory-scroll-x"><div class="inventory-wide-grid" style="display:grid;grid-template-columns:1.5fr 1fr 100px 100px 100px 115px 115px;gap:8px">
-            <div class="form-group" style="margin:0"><label class="fl">Item name / barcode</label><input type="text" id="bc-in" list="inv-item-datalist" placeholder="Enter barcode or item name…"></div>
-            <div class="form-group" style="margin:0"><label class="fl">Store / location</label><select id="inv-in-store"></select></div>
+            <div class="form-group" style="margin:0"><label class="fl" style="display:flex;align-items:center;justify-content:space-between;gap:6px">Item / barcode <button type="button" class="btn btn-xs btn-gray" onclick="removeInventoryLearnedProductPrompt()" title="Remove a saved name from suggestions">✕ Suggest</button></label><input type="text" id="bc-in" list="inv-item-datalist" placeholder="Enter barcode or item name…"></div>
+            <div class="form-group" style="margin:0"><label class="fl" style="display:flex;align-items:center;justify-content:space-between;gap:6px">Store / location <span style="display:flex;gap:4px"><button type="button" onclick="addInventoryStorePrompt()" title="Add store" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;font-weight:900">+</button><button type="button" onclick="deleteInventoryStorePrompt()" title="Remove store from list" style="background:var(--g3);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;font-weight:900">−</button></span></label><select id="inv-in-store"></select></div>
             <div class="form-group" style="margin:0"><label class="fl">Qty</label><input type="number" id="inv-in-qty" min="1" value="1"></div>
             <div class="form-group" style="margin:0"><label class="fl">Cost ₹</label><input type="number" id="inv-in-cost" min="0" value="0"></div>
             <div class="form-group" style="margin:0"><label class="fl">MRP ₹</label><input type="number" id="inv-in-mrp" min="0" value="0"></div>
@@ -3456,7 +3456,7 @@
             <input type="hidden" id="use-pt">
             <div id="inv-use-pt-results" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:25;background:#fff;border:1px solid var(--g4);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.12);max-height:220px;overflow-y:auto;margin-top:4px"></div>
           </div>
-          <div class="form-group" style="margin:0"><label class="fl">Department</label><select id="inv-use-dept"><option value="ophtho">Ophthalmology</option><option value="obg">OBG</option><option value="psych">Psychiatry</option><option value="skin">Skin</option><option value="general">General / Shared</option><option value="ot">OT / Procedure</option><option value="ipd">IPD / Ward</option></select></div>
+          <div class="form-group" style="margin:0"><label class="fl">Department</label><select id="inv-use-dept"></select></div>
           <div class="form-group" style="margin:0"><label class="fl">Qty</label><input type="number" id="inv-use-qty" min="1" value="1"></div>
           <div class="form-group" style="margin:0"><label class="fl">Use mode</label><select id="inv-use-mode"><option value="bill">Bill patient</option><option value="consume">Consume only</option><option value="ward">Ward stock use</option></select></div>
         </div></div>
@@ -3549,6 +3549,7 @@
         <div class="card"><div class="card-hd"><div class="card-title">Open indents</div></div><div id="inv-indent-list"></div></div>
       </div>
       <div class="tab-content" id="inv-vendor">
+        <div id="inv-vendor-home-strip" style="margin-bottom:10px;padding:10px 12px;background:var(--g6);border:1px solid var(--g5);border-radius:10px"></div>
         <div id="inv-bill-due-banner" style="margin-bottom:10px"></div>
         <div style="margin-bottom:12px;display:flex;flex-wrap:wrap;gap:16px;align-items:center">
           <span style="font-size:11px;font-weight:800;color:var(--g1);text-transform:uppercase">View</span>
@@ -3560,9 +3561,10 @@
           <div class="card-hd"><div><div class="card-title">Vendor outstanding summary</div><div class="card-sub">Cheque / bank-transfer clearances reduce the oldest outstanding bills first</div></div><button type="button" class="btn btn-outline btn-sm" onclick="bmhPrintInventorySection('Vendor Dues And Payments', '#inv-vendor')">🖨️ Print vendors</button></div>
           <div id="inv-vendor-summary"></div>
         </div>
-        <div class="g32" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-          <div class="card">
-            <div class="card-hd"><div class="card-title">Vendor bills</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn btn-outline btn-xs" onclick="addInventoryVendorPrompt()">+ Add vendor</button><button type="button" class="btn btn-gray btn-xs" onclick="deleteInventoryVendorPrompt()">Delete vendor</button></div></div>
+        <div class="g32" style="display:grid;grid-template-columns:minmax(280px,1fr) minmax(300px,1.12fr);gap:12px;align-items:start">
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div class="card">
+            <div class="card-hd"><div class="card-title">Vendor bill entry</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn btn-outline btn-xs" onclick="addInventoryVendorPrompt()">+ Add vendor</button><button type="button" class="btn btn-gray btn-xs" onclick="deleteInventoryVendorPrompt()">Delete vendor</button></div></div>
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
               <div class="form-group" style="margin:0"><label class="fl">Search / select vendor</label><input type="text" id="inv-vendor-search" list="inv-vendor-datalist" placeholder="Type vendor name" oninput="bmhRenderVendorTables()"></div>
               <div class="form-group" style="margin:0"><label class="fl">Bill date from</label><input type="date" id="inv-vendor-date-from" onchange="bmhRenderVendorTables()"></div>
@@ -3577,19 +3579,23 @@
               </div>
             <div class="form-group"><label class="fl">Upload scan / PDF</label><input type="file" id="inv-vend-file" accept="image/*,.pdf"></div>
             <button type="button" class="btn btn-blue btn-sm" onclick="bmhAddVendorBill()">+ Add vendor bill</button>
-            <div id="inv-vendor-table" style="margin-top:12px;font-size:12px"></div>
           </div>
-          <div style="display:flex;flex-direction:column;gap:12px">
             <div class="card">
-              <div class="card-hd"><div class="card-title">Vendor Bill Detail</div><button type="button" class="btn btn-gold btn-sm" onclick="bmhPayVendorOutstanding(document.getElementById('inv-vendor-filter')?.value || '')">Pay vendor total / part payment</button></div>
+              <div class="card-hd"><div class="card-title">Bill detail</div><button type="button" class="btn btn-gold btn-sm" onclick="bmhPayVendorOutstanding(document.getElementById('inv-vendor-filter')?.value || '')">Pay vendor total / part</button></div>
               <div id="inv-vendor-detail"></div>
             </div>
+          </div>
+          <div class="card">
+            <div class="card-hd"><div><div class="card-title">All bills</div><div class="card-sub">Click a row for details on the left</div></div><button type="button" class="btn btn-outline btn-sm" onclick="bmhPrintFilteredVendorBills()">🖨️ Print list</button></div>
+            <div id="inv-vendor-table" style="margin-top:4px;font-size:12px"></div>
           </div>
         </div>
         </div>
         <div id="inv-panel-office" style="display:none">
-          <div class="card" style="margin-bottom:12px">
-            <div class="card-hd"><div><div class="card-title">Utility &amp; office bills</div><div class="card-sub">Electricity, water, rent, biomedical waste, etc. — payment details, due dates, compressed scans</div></div></div>
+          <div class="g32" style="display:grid;grid-template-columns:minmax(280px,1fr) minmax(300px,1.12fr);gap:12px;align-items:start">
+            <div style="display:flex;flex-direction:column;gap:12px">
+              <div class="card">
+            <div class="card-hd"><div><div class="card-title">Utility &amp; office bills</div><div class="card-sub">Electricity, water, rent, biomedical waste, etc.</div></div></div>
             <div class="g32" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
               <div class="form-group" style="margin:0"><label class="fl">Category</label><input type="text" id="inv-office-cat" list="inv-office-cat-datalist" placeholder="Select or type"></div>
               <div class="form-group" style="margin:0"><label class="fl">Label / account</label><input type="text" id="inv-office-label" placeholder="e.g. CHD wing meter"></div>
@@ -3607,15 +3613,15 @@
             </div>
             <datalist id="inv-office-cat-datalist"></datalist>
           </div>
-          <div class="g32" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-            <div class="card">
-              <div class="card-hd"><div><div class="card-title">Bills</div><div class="card-sub">Non-vendor categories</div></div></div>
-              <div class="form-group" style="margin-bottom:10px"><label class="fl">Filter</label><select id="inv-office-filter" onchange="bmhRenderOfficeBillsPanel()"><option value="">All categories</option></select></div>
-              <div id="inv-office-bills-list" style="font-size:12px"></div>
-            </div>
             <div class="card">
               <div class="card-hd"><div class="card-title">Bill detail</div></div>
               <div id="inv-office-detail"></div>
+            </div>
+            </div>
+            <div class="card">
+              <div class="card-hd"><div><div class="card-title">All bills</div><div class="card-sub">Click a row for details on the left</div></div><button type="button" class="btn btn-outline btn-sm" onclick="bmhPrintFilteredOfficeBills()">🖨️ Print list</button></div>
+              <div class="form-group" style="margin-bottom:10px"><label class="fl">Filter</label><select id="inv-office-filter" onchange="bmhRenderOfficeBillsPanel()"><option value="">All categories</option></select></div>
+              <div id="inv-office-bills-list" style="font-size:12px"></div>
             </div>
           </div>
         </div>
@@ -3696,6 +3702,19 @@
     <div id="bmh-bill-pt-list" style="max-height:200px;overflow:auto;border:1px solid var(--g5);border-radius:8px;margin-bottom:12px"></div>
     <div class="form-group" style="margin-bottom:10px"><label class="fl">Selected patient</label><select id="bmh-bill-pt-select" onchange="bmhSelectBillPatient(this.value)"></select></div>
     <div id="bmh-bill-summary" style="margin-bottom:12px"></div>
+    <div id="bmh-billing-advance-panel" style="display:none;margin-bottom:12px;padding:12px 14px;background:var(--blue-lt);border:1px solid var(--g4);border-radius:10px">
+      <div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Add advance (on account)</div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin-bottom:10px">
+        <div class="form-group" style="margin:0"><label class="fl">Mode</label><select id="bmh-billing-advance-mode"><option value="Cash">Cash</option><option value="UPI">UPI</option><option value="Card">Card</option><option value="NEFT">NEFT</option><option value="Cheque">Cheque</option></select></div>
+      </div>
+      <div id="bmh-billing-advance-rows"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;align-items:center">
+        <button type="button" class="btn btn-outline btn-xs" onclick="bmhAddBillingAdvanceRow()">+ Another line</button>
+        <button type="button" class="btn btn-blue btn-sm" onclick="bmhPostPatientAdvanceFromBilling()">Post advance to patient</button>
+        <button type="button" class="btn btn-xs btn-gray" onclick="bmhPromptAddAdvanceReasonOption()">+ Add reason option</button>
+      </div>
+      <div style="font-size:10px;color:var(--g1);margin-top:8px">Increases the patient’s advance balance (same as reception advance). Use multiple lines for split purposes.</div>
+    </div>
     <div id="bmh-bill-items-wrap">
       <div style="font-size:10px;font-weight:800;color:var(--bmh-blue);text-transform:uppercase;margin-bottom:6px">Charge lines (investigations, diagnostics, surgery, consumables, pharmacy, OT, reception…)</div>
       <div id="bmh-bill-lines"></div>
