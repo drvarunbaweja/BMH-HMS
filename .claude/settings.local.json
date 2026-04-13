@@ -11,7 +11,10 @@
       "Bash(npm install:*)",
       "Bash(npm run:*)",
       "Bash(__NEW_LINE_21d00d5675639cb7__ sed:*)",
-      "Bash(/Users/varunbaweja/Downloads/BMH-HMS/src/index.html:*)"
+      "Bash(/Users/varunbaweja/Downloads/BMH-HMS/src/index.html:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)",
+      "Bash(git push:*)"
     ]
   }
 }
