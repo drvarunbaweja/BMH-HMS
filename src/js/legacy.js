@@ -4656,7 +4656,8 @@ function openM(id){
   if(id==='m-order-invest') {
     const modal = document.getElementById('m-order-invest');
     modal?.querySelectorAll('.ptabs .ptab').forEach((tab, idx) => tab.classList.toggle('active', idx === 0));
-    modal?.querySelectorAll('.tab-content').forEach((tab, idx) => tab.classList.toggle('active', tab.id === 'inv-blood'));
+    const firstPaneId = modal?.querySelector('.ptabs .ptab.active')?.getAttribute('onclick')?.match(/'([^']+)'/)?.[1] || 'inv-haem';
+    modal?.querySelectorAll('.tab-content').forEach(function (tab) { tab.classList.toggle('active', tab.id === firstPaneId); });
     refreshInvestigationTemplateSelect && refreshInvestigationTemplateSelect();
     syncSelectedInvestigationCheckboxes && syncSelectedInvestigationCheckboxes();
   }
@@ -8000,7 +8001,7 @@ function bmhRenderVendorTables() {
     });
     const rows = Object.values(grouped).sort(function (a,b) { return b.outstanding - a.outstanding; });
     summaryEl.innerHTML = rows.length ? rows.map(function (r) {
-      return `<div style="padding:10px 0;border-bottom:1px solid var(--g5);font-size:12px;display:flex;justify-content:space-between;gap:10px;align-items:center">
+      return `<div style="padding:10px 0;border-bottom:1px solid var(--g5);font-size:12px;display:flex;justify-content:space-between;gap:10px;align-items:center;cursor:pointer" onclick="bmhFilterVendorFromSummary('${String(r.vendor).replace(/'/g, "\\'")}')">
         <div><strong>${escapeHtmlConsent(r.vendor)}</strong><div style="font-size:10px;color:var(--g1)">Bills ${r.count} · Total ₹${r.total.toLocaleString('en-IN')}</div></div>
         <div style="display:flex;gap:8px;align-items:center"><span style="font-weight:900;color:${r.outstanding > 0 ? '#b55a00' : '#1a8c3c'}">Outstanding ₹${r.outstanding.toLocaleString('en-IN')}</span>${r.outstanding > 0 ? `<button type="button" class="btn btn-xs btn-gold" onclick="bmhPayVendorOutstanding('${String(r.vendor).replace(/'/g, "\\'")}')">Clear by bank / cheque</button>` : ''}</div>
       </div>`;
@@ -8052,7 +8053,15 @@ function bmhSyncVendorSearchFromSelect() {
   const inp = document.getElementById('inv-vendor-search');
   if (sel && inp) inp.value = sel.value || '';
 }
+function bmhFilterVendorFromSummary(vendor) {
+  const sel = document.getElementById('inv-vendor-filter');
+  const inp = document.getElementById('inv-vendor-search');
+  if (sel) sel.value = vendor || '';
+  if (inp) inp.value = vendor || '';
+  bmhRenderVendorTables();
+}
 window.bmhSyncVendorSearchFromSelect = bmhSyncVendorSearchFromSelect;
+window.bmhFilterVendorFromSummary = bmhFilterVendorFromSummary;
 function bmhSelectedVendorBillIds() {
   return Array.from(document.querySelectorAll('#inv-vendor-detail .inv-vendor-bill-check:checked')).map(function (el) {
     return String(el.value || '').trim();
@@ -10317,6 +10326,10 @@ function renderInventoryTransfers() {
 }
 function renderInventoryStoreStock() {
   const el = document.getElementById('inv-store-stock'); if (!el) return;
+  const iolTotal = (INVENTORY || []).reduce(function (sum, item) {
+    const text = (String(item.name || '') + ' ' + String(item.cat || '')).toLowerCase();
+    return /\biol\b|intraocular lens|acrysof|tecnis|panoptix|toric|trifocal/.test(text) ? sum + (Number(item.stock) || 0) : sum;
+  }, 0);
   const grouped = {};
   INVENTORY.forEach(function (item) {
     const key = item.store || 'Unassigned store';
@@ -10324,7 +10337,7 @@ function renderInventoryStoreStock() {
     grouped[key].push(item);
   });
   const keys = Object.keys(grouped).sort();
-  el.innerHTML = keys.length ? keys.map(function (store) {
+  const storesHtml = keys.length ? keys.map(function (store) {
     const rows = grouped[store];
     const total = rows.reduce(function (s, r) { return s + (Number(r.stock) || 0); }, 0);
     return `<div style="padding:10px 0;border-bottom:1px solid var(--g5)">
@@ -10332,6 +10345,7 @@ function renderInventoryStoreStock() {
       <div style="display:flex;gap:6px;flex-wrap:wrap">${rows.slice(0,8).map(function (r) { return `<span class="badge ${Number(r.stock||0) <= Number(r.min||0) ? 'bd-orange' : 'bd-green'}">${escapeHtmlConsent(r.name)} · ${Number(r.stock||0)}</span>`; }).join('')}${rows.length > 8 ? `<span class="badge bd-blue">+${rows.length - 8} more</span>` : ''}</div>
     </div>`;
   }).join('') : '<div style="padding:12px;color:var(--g1);font-size:12px">No stock assigned to stores yet.</div>';
+  el.innerHTML = `<div style="padding:8px 0 10px;border-bottom:1px solid var(--g5);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center"><strong>Total IOL stock</strong><span class="badge bd-blue" style="font-size:11px">${iolTotal} units</span></div>` + storesHtml;
 }
 function renderInventoryPoAlerts() {
   const el = document.getElementById('inv-po-alerts'); if (!el) return;
@@ -18548,7 +18562,7 @@ function openLabOrder(id) {
     const key = labTestKey(t);
     return `<div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 60px;gap:5px;align-items:center;padding:6px 8px;background:var(--g6);border-radius:7px;margin-bottom:5px">
       <span style="font-size:12px;font-weight:800">${t}</span>
-      <input type="text" placeholder="Value" value="${meta.val||''}" id="lr-val-${key}" style="font-size:12px;font-weight:800;text-align:center" onchange="flagLabVal(this,${JSON.stringify(t)})">
+      <input type="text" placeholder="Value" value="${meta.val||''}" id="lr-val-${key}" style="font-size:12px;font-weight:800;text-align:center" oninput="flagLabVal(this,${JSON.stringify(t)})" onchange="flagLabVal(this,${JSON.stringify(t)})">
       <input type="text" placeholder="Unit" value="${meta.unit||''}" id="lr-unit-${key}" style="font-size:11px;text-align:center">
       <input type="text" placeholder="Range" value="${meta.range||''}" id="lr-range-${key}" style="font-size:11px;text-align:center">
       <span id="lr-flag-${key}" style="font-size:10px;font-weight:800;text-align:center;color:${meta.flag==='HIGH'?'var(--red)':meta.flag==='LOW'?'var(--orange)':'#1a8c3c'}">${meta.flag||'—'}</span>
@@ -18557,11 +18571,12 @@ function openLabOrder(id) {
   renderLabReportPreview(order);
 }
 
-function flagLabVal(inp, testName) {
+function setLabFlagForTest(testName) {
   const key = labTestKey(testName);
+  const inp = document.getElementById('lr-val-' + key);
   const rangeEl = document.getElementById('lr-range-'+key);
   const flagEl = document.getElementById('lr-flag-'+key);
-  if(!rangeEl || !flagEl) return;
+  if(!inp || !rangeEl || !flagEl) return;
   const range = rangeEl.value;
   const val = parseFloat(inp.value);
   if(range && !isNaN(val)) {
@@ -18574,6 +18589,9 @@ function flagLabVal(inp, testName) {
       inp.style.background = flag==='HIGH'?'var(--red-lt)':flag==='LOW'?'var(--orange-lt)':'var(--green-lt)';
     }
   }
+}
+function flagLabVal(inp, testName) {
+  setLabFlagForTest(testName);
   calculateLabFormulas(testName);
 }
 // Auto-calculate derived fields when input values change
@@ -18587,6 +18605,7 @@ function calculateLabFormulas(changedTestName) {
     if (el && !isNaN(val)) {
       el.value = val.toFixed(2);
       el.style.background = 'var(--blue-lt)';
+      setLabFlagForTest(testKey);
     }
   };
   const low = (changedTestName || '').toLowerCase();
@@ -18700,10 +18719,12 @@ function searchLabAddPatient(query) {
   const today = new Date().toISOString().split('T')[0];
   const matches = (window.PATIENTS || []).filter(function (p) {
     if (!centreMatch(p)) return false;
+    const visitDate = String(p.visitDate || p.regDate || p.date || p.createdAt || p.registeredAt || '').slice(0, 10);
+    if (visitDate !== today) return false;
     const phone = String(p.mob || p.phone || '').replace(/\D/g, '');
     const bmhId = String(p.bmhId || '').toLowerCase();
-    const name = String(p.name || '').toLowerCase();
-    return bmhId.includes(q) || phone.includes(q.replace(/\D/g,'')) || name.includes(q);
+    const qDigits = q.replace(/\D/g,'');
+    return bmhId.includes(q) || (qDigits.length >= 3 && phone.includes(qDigits));
   }).slice(0, 8);
   if (!matches.length) {
     resultsEl.style.display = 'block';
