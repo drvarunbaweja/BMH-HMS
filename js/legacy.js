@@ -3716,13 +3716,13 @@ function refreshPreviousDiagnosisPanel(dept, visit) {
   const prevText = String(entry?.text || '').trim();
   if (!prevText || entry?.status === 'resolved' || (currentText && currentText === prevText)) {
     textEl.textContent = 'No previous active diagnosis';
-    statusEl.value = 'active';
+    statusEl.value = Array.from(statusEl.options || []).some(function (opt) { return opt.value === 'active'; }) ? 'active' : 'carry';
     statusEl.disabled = true;
     return;
   }
   textEl.textContent = prevText;
   statusEl.disabled = false;
-  statusEl.value = entry?.status === 'resolved' ? 'resolved' : 'active';
+  statusEl.value = entry?.status === 'resolved' ? 'resolved' : (Array.from(statusEl.options || []).some(function (opt) { return opt.value === 'active'; }) ? 'active' : 'carry');
 }
 window.handlePreviousDiagnosisStatusChange = function (dept, value) {
   const key = normalizeQueueDeptForUser(dept || '');
@@ -5119,6 +5119,7 @@ function computeObgLivingIssueAge() {
 }
 function computeObgPresumptiveDx() {
   const guidance = computeObgGuidance();
+  const questionTopics = Object.keys(window.OBG_RECAP_QUESTION_MAP || {});
   return guidance.diagnoses;
 }
 function computeObgGuidance() {
@@ -5274,10 +5275,7 @@ function computeObgGuidance() {
   };
 }
 function renderObgInvestigationSummary() {
-  const el = document.getElementById('obg-investigation-summary');
-  if(!el) return;
-  const items = [...document.querySelectorAll('.obg-lab:checked')].map(x => x.value);
-  el.textContent = items.length ? items.join(' • ') : 'No investigations selected yet.';
+  renderDeptInvestigationPanels();
 }
 function renderObgSummaryRail() {
   const el = document.getElementById('obg-summary-content');
@@ -5320,6 +5318,14 @@ function renderObgSummaryRail() {
     </div>
     <div style="padding:9px 10px;border-radius:10px;background:#fff8e6;margin-bottom:8px;border:1px solid rgba(255,149,0,.18)">
       <div style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;margin-bottom:5px">What to ask</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+        ${questionTopics.map(function (topic) {
+          const safe = String(topic).replace(/'/g, "\\'");
+          return `<button type="button" class="btn btn-xs btn-outline" style="background:#fff;border-color:rgba(212,160,23,.3);color:#8a4200" onclick="renderObgRecapQuestionOptions('${safe}')">${escapeHtmlConsent(topic)}</button>`;
+        }).join('')}
+        <button type="button" class="btn btn-xs btn-gold" onclick="addObgPrimaryComplaintOption()">+ Add More</button>
+      </div>
+      <div id="obg-recap-question-options" style="margin-bottom:8px"></div>
       <div style="font-size:10.7px;line-height:1.45">${guidance.ask.length ? guidance.ask.join('<br>') : 'Use ANC / Gynae / Infertility checkboxes to open the relevant proforma.'}</div>
     </div>
     <div style="padding:9px 10px;border-radius:10px;background:#eef8ff;margin-bottom:8px;border:1px solid rgba(0,122,255,.14)">
@@ -5436,6 +5442,7 @@ function ensureObgAdviceAutosave() {
 }
 function populateObgForm(visit) {
   populateObgPatientFromCurrent();
+  renderObgPrimaryComplaintOptions();
   const data = visit || window.CURRENT_PATIENT?.lastVisit || {};
   if(!data || typeof data !== 'object') {
     restoreProcedureDoneState('obg', null);
@@ -12024,6 +12031,40 @@ function getCurrentInvestigationDeptKey() {
   if(dept.includes('skin')) return 'skin';
   return 'ophtho';
 }
+window.CURRENT_INVESTIGATION_ORDER_MODE = window.CURRENT_INVESTIGATION_ORDER_MODE || 'send';
+function normalizeInvestigationDeptForUi(dept) {
+  const key = String(dept || getCurrentInvestigationDeptKey() || '').toLowerCase();
+  if (key === 'oe' || key.includes('oph')) return 'oe';
+  if (key.includes('obg')) return 'obg';
+  if (key.includes('psych')) return 'psych';
+  if (key.includes('skin')) return 'skin';
+  return 'oe';
+}
+function openInvestigationOrderModal(mode) {
+  window.CURRENT_INVESTIGATION_ORDER_MODE = mode === 'advise' ? 'advise' : 'send';
+  openM('m-order-invest');
+}
+function switchInvestigationModeTab(dept, mode, btn) {
+  const key = normalizeInvestigationDeptForUi(dept);
+  document.querySelectorAll('.inv-mode-tab[data-dept="' + key + '"]').forEach(function (el) {
+    el.classList.toggle('active', el === btn);
+    if (!el.classList.contains('active')) {
+      el.classList.remove('btn-blue');
+      if (!el.classList.contains('btn-outline')) el.classList.add('btn-outline');
+    } else {
+      el.classList.add('btn-blue');
+      el.classList.remove('btn-outline');
+    }
+  });
+  document.querySelectorAll('.inv-mode-pane[data-dept="' + key + '"]').forEach(function (pane) {
+    pane.style.display = pane.getAttribute('data-mode') === mode ? '' : 'none';
+  });
+}
+function printCurrentInvestigations(dept) {
+  if (!window.CURRENT_PATIENT?.bmhId) { showToast('Open the patient record first','w'); return; }
+  const key = normalizeInvestigationDeptForUi(dept);
+  window.printUnifiedRx && window.printUnifiedRx(key === 'oe' ? 'oe' : key);
+}
 function saveInvestigationTemplatesToStorage() {
   try {
     localStorage.setItem('bmh_investigation_templates', JSON.stringify({
@@ -13695,13 +13736,14 @@ function removePendingInvestigationPayRequestsForPatient(bmhId, orderNames) {
     try { if (window.firebase && firebase.database) firebase.database().ref('payRequests/' + pr.id).remove(); } catch (e) {}
   });
 }
-function confirmInvestigations() {
+function confirmInvestigations(modeArg) {
   if(!SELECTED_INVESTIGATIONS.length){showToast('No investigations selected','w');return;}
   const pt = window.CURRENT_PATIENT || PATIENTS.find(p => p.bmhId === (document.getElementById('ophtho-pt-uid')?.textContent || '').trim());
   if(!pt) { showToast('Open the patient record first','w'); return; }
   const orders = getCurrentPatientInvestigationOrders();
   const centre = pt.centre || CURRENT_USER?.centre || 'CHD';
   const doctor = document.getElementById('sbnm')?.textContent || CURRENT_USER?.name || 'Doctor';
+  const orderMode = modeArg === 'advise' ? 'advise' : (modeArg === 'send' ? 'send' : (window.CURRENT_INVESTIGATION_ORDER_MODE === 'advise' ? 'advise' : 'send'));
   SELECTED_INVESTIGATIONS.forEach((inv, idx) => {
     const existing = orders.find(o => !o.done && o.name === inv.name);
     if(existing) return;
@@ -13712,7 +13754,7 @@ function confirmInvestigations() {
       price: Number(inv.price) || 0,
       date: new Date().toLocaleDateString('en-IN'),
       orderedAt: new Date().toISOString(),
-      mode: 'send',
+      mode: orderMode,
       done: false,
       patient: pt.name,
       bmhId: pt.bmhId,
@@ -13722,10 +13764,14 @@ function confirmInvestigations() {
     };
     orders.push(order);
   });
-  removePendingInvestigationPayRequestsForPatient(pt.bmhId, SELECTED_INVESTIGATIONS.map(function (x) { return x.name; }));
+  if (orderMode === 'send') {
+    removePendingInvestigationPayRequestsForPatient(pt.bmhId, SELECTED_INVESTIGATIONS.map(function (x) { return x.name; }));
+  }
   syncCurrentPatientInvestigationOrders();
   persistCurrentPatientInvestigationOrders();
-  showToast(`🧪 ${SELECTED_INVESTIGATIONS.length} investigation(s) sent to lab ✓`,'s');
+  showToast(orderMode === 'send'
+    ? `🧪 ${SELECTED_INVESTIGATIONS.length} investigation(s) sent to lab ✓`
+    : `🧪 ${SELECTED_INVESTIGATIONS.length} investigation(s) advised ✓`,'s');
   closeM('m-order-invest');
   clearSelectedInvestigations();
   renderOeInvOrderedList && renderOeInvOrderedList();
@@ -16800,16 +16846,21 @@ function getAllDxEntriesForFilter() {
 
 function filterDx(inp) {
   const val = inp.value.toLowerCase();
-  if(val.length < 2) { hideDxDropdown(); return; }
+  const isObg = String(inp?.dataset?.dxDept || '').toLowerCase() === 'obg' || inp?.closest?.('#obg-dx-list');
+  if(val.length < 2 && !isObg) { hideDxDropdown(); return; }
   const pool = getAllDxEntriesForFilter();
   const matches = pool.filter(function (d) {
     const desc = (d.desc || '').toLowerCase();
     const code = (d.code || '').toLowerCase();
-    return desc.includes(val) || code.includes(val);
+    return !val || desc.includes(val) || code.includes(val);
   }).slice(0, 12);
   showDxDropdownList(inp, matches);
 }
-function showDxDropdown(inp) { if(inp.value.length>=2) filterDx(inp); }
+function showDxDropdown(inp) {
+  const isObg = String(inp?.dataset?.dxDept || '').toLowerCase() === 'obg' || inp?.closest?.('#obg-dx-list');
+  if (isObg) { filterDx(inp); return; }
+  if(inp.value.length>=2) filterDx(inp);
+}
 function hideDxDropdown() { const d=document.getElementById('dx-dropdown'); if(d) d.style.display='none'; }
 function showDxDropdownList(inp, matches) {
   const d = document.getElementById('dx-dropdown'); if(!d) return;
@@ -16865,7 +16916,7 @@ function addDxRow() {
   const isObg = list.id === 'obg-dx-list';
   const d = document.createElement('div');
   d.style.cssText='display:flex;gap:6px;align-items:center;margin-top:5px';
-  d.innerHTML=`<input type="text" class="dx-inp" placeholder="${isObg ? 'Type diagnosis…' : 'ICD-10 search or type free-text diagnosis…'}" oninput="filterDx(this)" onfocus="showDxDropdown(this);wireDxInputFocus(this)" style="flex:1" autocomplete="off">
+  d.innerHTML=`<input type="text" class="dx-inp" ${isObg ? 'data-dx-dept="obg"' : ''} placeholder="${isObg ? 'Type diagnosis…' : 'ICD-10 search or type free-text diagnosis…'}" oninput="filterDx(this)" onfocus="showDxDropdown(this);wireDxInputFocus(this)" style="flex:1" autocomplete="off">
     <button type="button" class="btn btn-xs btn-gray" onclick="this.closest('div').remove()">✕</button>`;
   list.appendChild(d);
   const inp = d.querySelector('.dx-inp');
@@ -17922,15 +17973,37 @@ function cancelInvestigationReceptionRequest(orderId) {
   renderReceptionPage && renderReceptionPage();
   showToast('Investigation request removed ✓', 's');
 }
+function buildInvestigationOrderCards(mode, emptyMessage) {
+  const pending = syncCurrentPatientInvestigationOrders().filter(function (o) {
+    return !o.done && String(o.mode || 'send') === mode;
+  });
+  if (!pending.length) return '<span style="color:var(--g1);font-style:italic">' + (emptyMessage || 'None ordered') + '</span>';
+  return pending.map(function (o) {
+    return `<div style="display:inline-flex;align-items:center;gap:5px;background:${mode==='send'?'var(--orange-lt)':'#eef7ff'};color:${mode==='send'?'#8a4200':'var(--blue)'};border:1px solid ${mode==='send'?'rgba(212,160,23,.5)':'rgba(26,60,110,.2)'};border-radius:20px;padding:2px 10px;font-size:11px;font-weight:700;margin:2px 4px 2px 0">
+      🧪 ${o.name}${o.notes?' ('+o.notes+')':''}
+      <span style="font-size:9px;padding:1px 6px;border-radius:10px;background:${mode==='send'?'rgba(11,123,140,.12)':'rgba(26,140,60,.12)'};color:${mode==='send'?'var(--teal)':'#1a8c3c'}">${mode==='send'?'Sent to lab':'Advised'}</span>
+      <span onclick="cancelInvestigationReceptionRequest(${JSON.stringify(o.id)})" style="cursor:pointer;opacity:.6;font-size:12px">&times;</span>
+    </div>`;
+  }).join('');
+}
+function renderDeptInvestigationPanels() {
+  const map = [
+    ['oe-inv-ordered-list-send', 'send', 'None ordered'],
+    ['oe-inv-ordered-list-advise', 'advise', 'None advised'],
+    ['obg-investigation-summary-send', 'send', 'No investigations selected yet.'],
+    ['obg-investigation-summary-advise', 'advise', 'No investigations advised yet.'],
+    ['psych-inv-list-send', 'send', 'None ordered'],
+    ['psych-inv-list-advise', 'advise', 'None advised'],
+    ['skin-inv-list-send', 'send', 'None ordered'],
+    ['skin-inv-list-advise', 'advise', 'None advised']
+  ];
+  map.forEach(function (row) {
+    const el = document.getElementById(row[0]);
+    if (el) el.innerHTML = buildInvestigationOrderCards(row[1], row[2]);
+  });
+}
 function renderOeInvOrderedList() {
-  const el = document.getElementById('oe-inv-ordered-list'); if(!el) return;
-  const pending = syncCurrentPatientInvestigationOrders().filter(o=>!o.done);
-  if(!pending.length) { el.innerHTML = '<span style="color:var(--g1);font-style:italic">None ordered</span>'; return; }
-  el.innerHTML = pending.map((o,i) => `<div style="display:inline-flex;align-items:center;gap:5px;background:var(--orange-lt);color:#8a4200;border:1px solid rgba(212,160,23,.5);border-radius:20px;padding:2px 10px;font-size:11px;font-weight:700;margin:2px 4px 2px 0">
-    🧪 ${o.name}${o.notes?' ('+o.notes+')':''}
-    <span style="font-size:9px;padding:1px 6px;border-radius:10px;background:${o.mode==='send'?'rgba(11,123,140,.12)':'rgba(26,140,60,.12)'};color:${o.mode==='send'?'var(--teal)':'#1a8c3c'}">${o.mode==='send'?'Sent to lab':'Advice only'}</span>
-    <span onclick="cancelInvestigationReceptionRequest(${JSON.stringify(o.id)})" style="cursor:pointer;opacity:.6;font-size:12px">&times;</span>
-  </div>`).join('');
+  renderDeptInvestigationPanels();
 }
 function renderInvestigationOrders() {
   const el = document.getElementById('inv-order-list'); if(!el) return;
@@ -17942,6 +18015,7 @@ function renderInvestigationOrders() {
     <button class="btn btn-xs ${o.done?'btn-gray':'btn-green'}" onclick="getCurrentPatientInvestigationOrders()[${i}].done=!getCurrentPatientInvestigationOrders()[${i}].done;syncCurrentPatientInvestigationOrders();persistCurrentPatientInvestigationOrders();renderOeInvOrderedList();renderInvestigationOrders()">${o.done?'Undo':'Done ✓'}</button>
     <button class="btn btn-xs btn-gray" onclick="cancelInvestigationReceptionRequest(${JSON.stringify(o.id)})">&#x2715;</button>
   </div>`).join('');
+  renderDeptInvestigationPanels();
 }
 
 // (Legacy duplicate printUnifiedRx removed — use window.printUnifiedRx below.)
@@ -19513,6 +19587,43 @@ function toDisplayTitleCase(value) {
     })
     .join(' ');
 }
+window.OBG_PRIMARY_COMPLAINT_OPTIONS = window.OBG_PRIMARY_COMPLAINT_OPTIONS || [
+  'Routine Review',
+  'Amenorrhoea / Positive UPT',
+  'ANC Routine Review',
+  'Bleeding PV',
+  'Abdominal Pain',
+  'Decreased Fetal Movements',
+  'Infertility Evaluation',
+  'Irregular Cycles',
+  'White Discharge',
+  'Pelvic Pain'
+];
+window.OBG_RECAP_QUESTION_MAP = window.OBG_RECAP_QUESTION_MAP || {
+  'Cycle Pattern': ['Regular Cycles', 'Irregular Cycles', 'Oligomenorrhoea', 'Menorrhagia', 'Intermenstrual Bleeding', 'Postcoital Bleeding'],
+  'Bleeding': ['Bleeding PV', 'Heavy Menstrual Bleeding', 'Spotting', 'Clots', 'Postmenopausal Bleeding'],
+  'Discharge': ['White Discharge', 'Foul-Smelling Discharge', 'Pruritus', 'Dyspareunia'],
+  'Pain': ['Abdominal Pain', 'Pelvic Pain', 'Dysmenorrhoea', 'Pain During Intercourse'],
+  'ANC Red Flags': ['Decreased Fetal Movements', 'Leaking PV', 'Headache / Blurring of Vision', 'Swelling', 'Fever'],
+  'Fertility': ['Infertility Evaluation', 'Subfertility', 'PCOS Features', 'Male Factor Evaluation']
+};
+function saveObgRecapQuestionMap() {
+  try { localStorage.setItem('bmh_obg_recap_question_map', JSON.stringify(window.OBG_RECAP_QUESTION_MAP || {})); } catch (e) {}
+}
+function loadObgRecapQuestionMap() {
+  try {
+    const raw = localStorage.getItem('bmh_obg_recap_question_map');
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') {
+      Object.keys(parsed).forEach(function (key) {
+        const vals = Array.isArray(parsed[key]) ? parsed[key].map(toDisplayTitleCase).filter(Boolean) : [];
+        if (!window.OBG_RECAP_QUESTION_MAP[key]) window.OBG_RECAP_QUESTION_MAP[key] = [];
+        window.OBG_RECAP_QUESTION_MAP[key] = Array.from(new Set(window.OBG_RECAP_QUESTION_MAP[key].concat(vals)));
+      });
+    }
+  } catch (e) {}
+}
 function normalizeInventoryTextValue(value) {
   const raw = String(value || '').trim().replace(/\s+/g, ' ');
   if (!raw) return '';
@@ -19549,6 +19660,104 @@ function bindReceptionTitleCaseFields() {
   };
   document.addEventListener('change', apply, true);
   document.addEventListener('blur', apply, true);
+}
+function saveObgPrimaryComplaintOptions() {
+  try { localStorage.setItem('bmh_obg_primary_complaints', JSON.stringify(window.OBG_PRIMARY_COMPLAINT_OPTIONS || [])); } catch (e) {}
+  fbSet && fbSet('settings/obgPrimaryComplaints', window.OBG_PRIMARY_COMPLAINT_OPTIONS || []).catch(function(){});
+}
+function loadObgPrimaryComplaintOptions() {
+  try {
+    const raw = localStorage.getItem('bmh_obg_primary_complaints');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length) {
+        window.OBG_PRIMARY_COMPLAINT_OPTIONS = Array.from(new Set(parsed.concat(window.OBG_PRIMARY_COMPLAINT_OPTIONS || []).filter(Boolean)));
+      }
+    }
+  } catch (e) {}
+  if (window.fbOnce) {
+    fbOnce('settings/obgPrimaryComplaints').then(function (data) {
+      if (Array.isArray(data) && data.length) {
+        window.OBG_PRIMARY_COMPLAINT_OPTIONS = Array.from(new Set(data.concat(window.OBG_PRIMARY_COMPLAINT_OPTIONS || []).filter(Boolean)));
+        renderObgPrimaryComplaintOptions();
+      }
+    }).catch(function(){});
+  }
+}
+function renderObgPrimaryComplaintOptions() {
+  const list = document.getElementById('obg-main-complaint-list');
+  if (!list) return;
+  const options = Array.from(new Set((window.OBG_PRIMARY_COMPLAINT_OPTIONS || []).map(function (x) { return toDisplayTitleCase(x); }).filter(Boolean))).sort();
+  window.OBG_PRIMARY_COMPLAINT_OPTIONS = options;
+  list.innerHTML = options.map(function (name) {
+    return '<option value="' + String(name).replace(/"/g, '&quot;') + '"></option>';
+  }).join('');
+}
+function saveObgPrimaryComplaintFromField() {
+  const input = document.getElementById('obg-main-complaint');
+  if (!input) return;
+  const val = toDisplayTitleCase(input.value || '');
+  if (!val) return;
+  input.value = val;
+  if (!(window.OBG_PRIMARY_COMPLAINT_OPTIONS || []).includes(val)) {
+    window.OBG_PRIMARY_COMPLAINT_OPTIONS.push(val);
+    saveObgPrimaryComplaintOptions();
+    renderObgPrimaryComplaintOptions();
+  }
+}
+function addObgPrimaryComplaintOption() {
+  const raw = window.prompt('Add primary complaint');
+  if (raw === null) return;
+  const val = toDisplayTitleCase(raw);
+  if (!val) return;
+  if (!(window.OBG_PRIMARY_COMPLAINT_OPTIONS || []).includes(val)) {
+    window.OBG_PRIMARY_COMPLAINT_OPTIONS.push(val);
+    saveObgPrimaryComplaintOptions();
+    renderObgPrimaryComplaintOptions();
+  }
+  const input = document.getElementById('obg-main-complaint');
+  if (input) input.value = val;
+  updateObgComputedFields && updateObgComputedFields();
+  showToast('Primary complaint saved ✓', 's');
+}
+function applyObgPrimaryComplaintText(text) {
+  const input = document.getElementById('obg-main-complaint');
+  if (!input) return;
+  const current = String(input.value || '').trim();
+  const next = toDisplayTitleCase(text || '');
+  if (!next) return;
+  const parts = current ? current.split(/\s*;\s*/).filter(Boolean) : [];
+  if (!parts.includes(next)) parts.push(next);
+  input.value = parts.join('; ');
+  saveObgPrimaryComplaintFromField();
+  updateObgComputedFields && updateObgComputedFields();
+}
+function renderObgRecapQuestionOptions(topic) {
+  const host = document.getElementById('obg-recap-question-options');
+  if (!host) return;
+  const options = (window.OBG_RECAP_QUESTION_MAP && window.OBG_RECAP_QUESTION_MAP[topic]) || [];
+  if (!options.length) {
+    host.innerHTML = '';
+    return;
+  }
+  host.innerHTML = '<div style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;margin-bottom:6px">' + escapeHtmlConsent(topic) + '</div>'
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap">'
+    + options.map(function (item) {
+      const safe = String(item).replace(/'/g, "\\'");
+      return '<button type="button" class="btn btn-xs btn-outline" style="background:#fff;border-color:rgba(212,160,23,.35);color:#8a4200" onclick="applyObgPrimaryComplaintText(\'' + safe + '\')">' + escapeHtmlConsent(item) + '</button>';
+    }).join('')
+    + '<button type="button" class="btn btn-xs btn-gold" onclick="addObgRecapQuestionOption(\'' + String(topic).replace(/'/g, "\\'") + '\')">+ Add More</button></div>';
+}
+function addObgRecapQuestionOption(topic) {
+  const raw = window.prompt('Add question / complaint option for ' + topic);
+  if (raw === null) return;
+  const val = toDisplayTitleCase(raw);
+  if (!val) return;
+  if (!window.OBG_RECAP_QUESTION_MAP[topic]) window.OBG_RECAP_QUESTION_MAP[topic] = [];
+  if (!window.OBG_RECAP_QUESTION_MAP[topic].includes(val)) window.OBG_RECAP_QUESTION_MAP[topic].push(val);
+  saveObgRecapQuestionMap();
+  applyObgPrimaryComplaintText(val);
+  renderObgRecapQuestionOptions(topic);
 }
 function computePatientInitials(name) {
   return String(name || '')
@@ -20305,8 +20514,21 @@ window.printUnifiedRx = function(deptId) {
   const lhImgSrc = resolvePrintHeaderSrc();
   const footerSrc = window.PRINT_FOOTER_SRC || '';
 
-  const showVA = incVA && deptId==='oe' && (vaOD||vaOS);
-  const showGL = incGL && deptId==='oe' && (rfODSph||rfOSSph||rfODCyl||rfOSCyl);
+  const hasMeaningfulText = function (v) {
+    const s = String(v == null ? '' : v).trim();
+    if (!s || s === '—') return false;
+    return true;
+  };
+  const hasMeaningfulRefraction = function () {
+    const vals = [rfODSph, rfODCyl, rfOSSph, rfOSCyl, addOD, addOS, rfODAx, rfOSAx, subjODva, subjOSva, nvOD, nvOS];
+    return vals.some(function (v) {
+      const s = String(v == null ? '' : v).trim().toLowerCase();
+      if (!s || s === '—' || s === '0' || s === '0.00' || s === '0°' || s === 'pl' || s === 'plano') return false;
+      return true;
+    });
+  };
+  const showVA = incVA && deptId==='oe' && [vaOD, vaOS, subjODva, subjOSva, nvOD, nvOS].some(hasMeaningfulText);
+  const showGL = incGL && deptId==='oe' && hasMeaningfulRefraction();
   const showIOP = incIOP && deptId==='oe' && (iopGatOD||iopGatOS||iopNctOD||iopNctOS);
 
   const rxEmptyNote = forceFullDeptRx && (!drugs || !drugs.length)
@@ -20376,8 +20598,8 @@ ${showVA ? `
 <table>
   <thead><tr><th>Eye</th><th>UCDVA</th>${showIOP?'<th>IOP (GAT)</th>':''}${showIOP&&(iopNctOD||iopNctOS)?'<th>IOP (NCT)</th>':''}<th>DVA</th><th>NVA</th></tr></thead>
   <tbody>
-    <tr><td><b>Right Eye</b></td><td>${vaOD||'—'}</td>${showIOP?`<td class="${parseFloat(iopGatOD)>21?'flag-h':'flag-n'}">${iopGatOD?iopGatOD+' mmHg':'—'}</td>`:''}${showIOP&&(iopNctOD||iopNctOS)?`<td class="${parseFloat(iopNctOD)>21?'flag-h':'flag-n'}">${iopNctOD?iopNctOD+' mmHg':'—'}</td>`:''}<td>${rfODSph!=='0'||(rfODCyl!=='0')?'6/6':'—'}</td><td>${nvOD||'—'}</td></tr>
-    <tr><td><b>Left Eye</b></td><td>${vaOS||'—'}</td>${showIOP?`<td class="${parseFloat(iopGatOS)>21?'flag-h':'flag-n'}">${iopGatOS?iopGatOS+' mmHg':'—'}</td>`:''}${showIOP&&(iopNctOD||iopNctOS)?`<td class="${parseFloat(iopNctOS)>21?'flag-h':'flag-n'}">${iopNctOS?iopNctOS+' mmHg':'—'}</td>`:''}<td>${rfOSSph!=='0'||(rfOSCyl!=='0')?'6/6':'—'}</td><td>${nvOS||'—'}</td></tr>
+    <tr><td><b>Right Eye</b></td><td>${vaOD||'—'}</td>${showIOP?`<td class="${parseFloat(iopGatOD)>21?'flag-h':'flag-n'}">${iopGatOD?iopGatOD+' mmHg':'—'}</td>`:''}${showIOP&&(iopNctOD||iopNctOS)?`<td class="${parseFloat(iopNctOD)>21?'flag-h':'flag-n'}">${iopNctOD?iopNctOD+' mmHg':'—'}</td>`:''}<td>${subjODva||'—'}</td><td>${nvOD||'—'}</td></tr>
+    <tr><td><b>Left Eye</b></td><td>${vaOS||'—'}</td>${showIOP?`<td class="${parseFloat(iopGatOS)>21?'flag-h':'flag-n'}">${iopGatOS?iopGatOS+' mmHg':'—'}</td>`:''}${showIOP&&(iopNctOD||iopNctOS)?`<td class="${parseFloat(iopNctOS)>21?'flag-h':'flag-n'}">${iopNctOS?iopNctOS+' mmHg':'—'}</td>`:''}<td>${subjOSva||'—'}</td><td>${nvOS||'—'}</td></tr>
   </tbody>
 </table>` : ''}
 
@@ -20945,6 +21167,9 @@ setTimeout(() => {
   if (typeof loadRxTemplatesFromStorage === 'function') loadRxTemplatesFromStorage();
   if (typeof loadConsentTemplatesFromStorage === 'function') loadConsentTemplatesFromStorage();
   if (typeof loadIolCatalogFromStorage === 'function') loadIolCatalogFromStorage();
+  if (typeof loadObgPrimaryComplaintOptions === 'function') loadObgPrimaryComplaintOptions();
+  if (typeof loadObgRecapQuestionMap === 'function') loadObgRecapQuestionMap();
+  if (typeof renderObgPrimaryComplaintOptions === 'function') renderObgPrimaryComplaintOptions();
   if (typeof refreshCustomRxOptionSelects === 'function') refreshCustomRxOptionSelects();
   if (typeof populateReferralDoctorDatalist === 'function') populateReferralDoctorDatalist();
   if (typeof bindReceptionTitleCaseFields === 'function') bindReceptionTitleCaseFields();
@@ -25394,16 +25619,13 @@ function buildQTableRow(p, sno, opts) {
   const onRow = p.preRegistered ? `checkInPatient('${p.bmhId}')` : (receptionQueue ? `openReceptionPatient('${p.bmhId}')` : (p._xrefEntry ? `openPatientForDept('${p.bmhId}','${p.dept}')` : `openPatient('${p.bmhId}')`));
   const nmEsc = (p.name||'').replace(/'/g,"\\'");
   const docShort = (p.assignedDoctor || p.doctor || '—').replace(/^Dr\.\s*/,'');
-  const nameLine = p.dept === 'obg'
-    ? ((p.age || '?') + 'Y · ' + (p.name || ''))
-    : (p.name || '');
   const vulnBadge = vuln ? '<span class="q-vuln-badge" title="Vulnerable — elderly (≥65) or flagged">⚠ VUL</span>' : '';
   const labHover = getUnreadLabResultsTitle(p);
   const labReadyBadge = patientHasUnreadLabResults(p) ? `<span title="${escapeHtmlConsent(labHover || 'Results ready')}" style="display:inline-flex;align-items:center;gap:4px;padding:1px 6px;border-radius:999px;background:#eafaf1;color:#166534;border:1px solid rgba(22,101,52,.25);font-size:9px;font-weight:900;animation:pulse 1.2s infinite">🧪 Results Ready</span>` : '';
   return `<tr class="${vuln ? 'row-vulnerable' : ''}" onclick="${onRow}" style="cursor:pointer;${dilLongWait?'animation:pulse 1.45s infinite;':''}">
     <td style="font-weight:900;color:var(--g2);font-size:12.5px">${sno}</td>
     <td><div style="display:flex;align-items:center;gap:6px"><span style="width:28px;height:28px;border-radius:50%;background:${p.color||'#1A3C6E'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:900;font-size:10px;flex-shrink:0">${p.initials||p.name[0]||'?'}</span>
-      <div><div style="font-weight:800;font-size:15px;line-height:1.05;display:flex;align-items:center;flex-wrap:nowrap;gap:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${nameLine}${vulnBadge}${labReadyBadge}</div>
+      <div><div style="font-weight:800;font-size:15px;line-height:1.05;display:flex;align-items:center;flex-wrap:nowrap;gap:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name || ''}${vulnBadge}${labReadyBadge}</div>
       <div style="font-size:11px;color:var(--g1)">${p.age||'?'}Y · ${(p.sex||'?')[0]} · ${p.mob||'—'}</div>${chargeHint?`<div style="margin-top:2px">${chargeHint}</div>`:''}</div></div></td>
     <td style="font-family:var(--mono);font-size:12px;color:var(--bmh-teal);font-weight:800;white-space:nowrap">${p.bmhId}</td>
     <td><span style="font-size:10px;padding:2px 6px;border-radius:6px;background:${deptColor}22;color:${deptColor};font-weight:800">${deptLabel}</span></td>
