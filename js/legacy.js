@@ -1208,20 +1208,23 @@ function buildConsentPatientStripHtml(ptNm, ptId, ptAge, ptSex, ptMob, today, pr
 }
 const CERTIFICATE_LIBRARY_DEFAULTS = {
   ophtho: [
-    { id: 'ophtho-fitness', name: 'Fitness Certificate', title: 'Fitness Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, has been examined at Baweja Multispeciality Hospital.\n\nClinical diagnosis: {{diagnosis}}\nPlanned / completed procedure: {{procedure}}\n\nThe patient is presently fit for the advised ophthalmic treatment / procedure and for related routine activities as advised.\n\nAdditional remarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' },
-    { id: 'ophtho-leave', name: 'Leave Certificate', title: 'Leave Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, is under treatment at Baweja Multispeciality Hospital for {{diagnosis}}.\n\nThe patient is advised rest / medical leave from {{today}} for {{leave_days}} days.\n\nProcedure / treatment: {{procedure}}\nRemarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' }
+    { id: 'ophtho-fitness', category: 'OPD', name: 'Fitness Certificate', title: 'Fitness Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, has been examined at Baweja Multispeciality Hospital.\n\nClinical diagnosis: {{diagnosis}}\nPlanned / completed procedure: {{procedure}}\n\nThe patient is presently fit for the advised ophthalmic treatment / procedure and for related routine activities as advised.\n\nAdditional remarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' },
+    { id: 'ophtho-leave', category: 'OPD', name: 'Leave Certificate', title: 'Leave Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, is under treatment at Baweja Multispeciality Hospital for {{diagnosis}}.\n\nThe patient is advised rest / medical leave from {{today}} for {{leave_days}} days.\n\nProcedure / treatment: {{procedure}}\nRemarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' }
   ],
   obg: [
-    { id: 'obg-fitness', name: 'Fitness Certificate', title: 'Fitness Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, has been evaluated in the Obstetrics & Gynaecology department.\n\nDiagnosis: {{diagnosis}}\nPlanned / completed procedure: {{procedure}}\n\nThe patient is fit / under appropriate care as per current clinical status.\n\nRemarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' },
-    { id: 'obg-leave', name: 'Leave Certificate', title: 'Leave Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, is under OBG care at Baweja Multispeciality Hospital.\n\nDiagnosis: {{diagnosis}}\nThe patient is advised rest / medical leave from {{today}} for {{leave_days}} days.\n\nRemarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' }
+    { id: 'obg-fitness', category: 'OPD', name: 'Fitness Certificate', title: 'Fitness Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, has been evaluated in the Obstetrics & Gynaecology department.\n\nDiagnosis: {{diagnosis}}\nPlanned / completed procedure: {{procedure}}\n\nThe patient is fit / under appropriate care as per current clinical status.\n\nRemarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' },
+    { id: 'obg-leave', category: 'OPD', name: 'Leave Certificate', title: 'Leave Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, is under OBG care at Baweja Multispeciality Hospital.\n\nDiagnosis: {{diagnosis}}\nThe patient is advised rest / medical leave from {{today}} for {{leave_days}} days.\n\nRemarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' },
+    { id: 'obg-discharge-lscs', category: 'Discharge', name: 'LSCS Discharge Summary', title: 'Discharge Summary', body: 'Diagnosis / indication for LSCS:\n{{diagnosis}}\nProcedure performed:\n{{procedure}}\n\nMother condition at discharge:\nBaby condition at discharge:\n\nWound care, lochia, breastfeeding, diet, mobilisation, analgesics / antibiotics / supplements, and emergency warning signs explained.\n\nFollow-up: 48 hours, 7 days, 6 weeks or as advised.\n\nDate: {{today}}\nDoctor: {{doctor}}' },
+    { id: 'obg-discharge-nd', category: 'Discharge', name: 'Normal Delivery Discharge', title: 'Discharge Summary', body: 'Mode of delivery:\n{{procedure}}\n\nMother condition at discharge:\nBaby condition at discharge:\n\nBreastfeeding advice, bleeding warning signs, pain relief, contraception counselling, and follow-up instructions documented.\n\nDate: {{today}}\nDoctor: {{doctor}}' },
+    { id: 'obg-ot-notes', category: 'OT Notes', name: 'OT Procedure Note (template)', title: 'OT Notes', body: 'Procedure: {{procedure}}\nDiagnosis: {{diagnosis}}\n\nFindings:\n\nSpecimen:\n\nBlood loss:\n\nPost-op plan:\n\nDate: {{today}}\nDoctor: {{doctor}}' }
   ],
   psych: [
-    { id: 'psych-fitness', name: 'Fitness Certificate', title: 'Fitness Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, has been examined in Neuropsychiatry.\n\nDiagnosis: {{diagnosis}}\nCurrent treatment / plan: {{procedure}}\n\nThe patient is presently fit / under treatment as per the present clinical assessment.\n\nRemarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' },
-    { id: 'psych-leave', name: 'Leave Certificate', title: 'Leave Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, is undergoing treatment in Neuropsychiatry.\n\nDiagnosis: {{diagnosis}}\nThe patient is advised leave / rest from {{today}} for {{leave_days}} days.\n\nRemarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' }
+    { id: 'psych-fitness', category: 'OPD', name: 'Fitness Certificate', title: 'Fitness Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, has been examined in Neuropsychiatry.\n\nDiagnosis: {{diagnosis}}\nCurrent treatment / plan: {{procedure}}\n\nThe patient is presently fit / under treatment as per the present clinical assessment.\n\nRemarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' },
+    { id: 'psych-leave', category: 'OPD', name: 'Leave Certificate', title: 'Leave Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, is undergoing treatment in Neuropsychiatry.\n\nDiagnosis: {{diagnosis}}\nThe patient is advised leave / rest from {{today}} for {{leave_days}} days.\n\nRemarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' }
   ],
   skin: [
-    { id: 'skin-fitness', name: 'Fitness Certificate', title: 'Fitness Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, has been examined in Skin & Cosmetology.\n\nDiagnosis: {{diagnosis}}\nCurrent treatment / procedure: {{procedure}}\n\nThe patient is fit / under treatment as per present assessment.\n\nRemarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' },
-    { id: 'skin-leave', name: 'Leave Certificate', title: 'Leave Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, is under treatment in Skin & Cosmetology.\n\nDiagnosis: {{diagnosis}}\nThe patient is advised leave / recovery time from {{today}} for {{leave_days}} days.\n\nRemarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' }
+    { id: 'skin-fitness', category: 'OPD', name: 'Fitness Certificate', title: 'Fitness Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, has been examined in Skin & Cosmetology.\n\nDiagnosis: {{diagnosis}}\nCurrent treatment / procedure: {{procedure}}\n\nThe patient is fit / under treatment as per present assessment.\n\nRemarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' },
+    { id: 'skin-leave', category: 'OPD', name: 'Leave Certificate', title: 'Leave Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, is under treatment in Skin & Cosmetology.\n\nDiagnosis: {{diagnosis}}\nThe patient is advised leave / recovery time from {{today}} for {{leave_days}} days.\n\nRemarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' }
   ]
 };
 let CERTIFICATE_TEMPLATES = {};
@@ -1247,9 +1250,65 @@ function activeClinicDeptKey() {
   if (active === 'pg-skin') return 'skin';
   return normalizeDeptKeyForQueue(window.CURRENT_PATIENT?.dept || CURRENT_USER?.dept || '') || 'ophtho';
 }
+function getCertificateTemplateCategoryList() {
+  const base = ['OPD', 'OT Notes', 'Discharge', 'General'];
+  try {
+    const extra = JSON.parse(localStorage.getItem('bmh_cert_extra_categories') || '[]');
+    if (Array.isArray(extra)) {
+      extra.forEach(function (x) {
+        const n = normalizeDeptTemplateLabel(String(x || ''));
+        if (n && !base.includes(n)) base.push(n);
+      });
+    }
+  } catch (e) {}
+  return base;
+}
+function ensureCertificateCategorySelects() {
+  const opts = getCertificateTemplateCategoryList();
+  const html = '<option value="all">All categories</option>' + opts.map(function (c) {
+    return '<option value="' + String(c).replace(/"/g, '&quot;') + '">' + String(c).replace(/</g, '&lt;') + '</option>';
+  }).join('');
+  const fil = document.getElementById('cert-template-category-filter');
+  const curF = fil ? fil.value : 'all';
+  if (fil) fil.innerHTML = html;
+  if (fil && [...fil.options].some(function (o) { return o.value === curF; })) fil.value = curF;
+  const cat = document.getElementById('cert-template-cat');
+  const curC = cat ? cat.value : '';
+  if (cat) {
+    cat.innerHTML = opts.map(function (c) {
+      return '<option value="' + String(c).replace(/"/g, '&quot;') + '">' + String(c).replace(/</g, '&lt;') + '</option>';
+    }).join('');
+    if ([...cat.options].some(function (o) { return o.value === curC; })) cat.value = curC;
+  }
+}
+function promptAddCertificateCategory() {
+  const raw = window.prompt('New template category name (e.g. Antenatal, Postnatal):');
+  if (!raw) return;
+  const name = normalizeDeptTemplateLabel(raw);
+  if (!name) return;
+  const list = getCertificateTemplateCategoryList();
+  if (!list.includes(name)) {
+    try {
+      const extra = JSON.parse(localStorage.getItem('bmh_cert_extra_categories') || '[]');
+      extra.push(name);
+      localStorage.setItem('bmh_cert_extra_categories', JSON.stringify(extra));
+    } catch (e) {}
+  }
+  ensureCertificateCategorySelects();
+  const cat = document.getElementById('cert-template-cat');
+  if (cat) cat.value = name;
+  showToast('Category added — pick it when saving a template', 's');
+}
+window.promptAddCertificateCategory = promptAddCertificateCategory;
 function getCertificateTemplatesForDept(dept) {
   const custom = Object.values(CERTIFICATE_TEMPLATES || {}).filter(function (tpl) { return tpl && tpl.dept === dept; });
-  return (CERTIFICATE_LIBRARY_DEFAULTS[dept] || []).concat(custom);
+  const filterEl = document.getElementById('cert-template-category-filter');
+  const filter = filterEl && filterEl.value ? filterEl.value : 'all';
+  const merge = (CERTIFICATE_LIBRARY_DEFAULTS[dept] || []).concat(custom);
+  if (filter === 'all') return merge;
+  return merge.filter(function (tpl) {
+    return String(tpl.category || 'General') === filter;
+  });
 }
 function buildCertificateContext(dept) {
   const pt = window.CURRENT_PATIENT || {};
@@ -1283,12 +1342,15 @@ function refreshCertificateTemplateList(dept) {
   const host = document.getElementById('cert-template-list');
   const sel = document.getElementById('cert-template-sel');
   if (!host || !sel) return;
+  ensureCertificateCategorySelects();
   const items = getCertificateTemplatesForDept(dept);
   sel.innerHTML = '<option value="">— Select certificate —</option>' + items.map(function (tpl) {
-    return '<option value="' + String(tpl.id).replace(/"/g, '&quot;') + '">' + String(tpl.name || tpl.title).replace(/</g, '&lt;') + '</option>';
+    const c = String(tpl.category || 'General');
+    return '<option value="' + String(tpl.id).replace(/"/g, '&quot;') + '">' + String(tpl.name || tpl.title).replace(/</g, '&lt;') + ' · ' + c + '</option>';
   }).join('');
   host.innerHTML = items.map(function (tpl) {
-    return '<button type="button" class="btn btn-outline btn-sm" style="justify-content:flex-start" onclick="applyCertificateTemplate(\'' + String(tpl.id).replace(/'/g, "\\'") + '\')">' + String(tpl.name || tpl.title).replace(/</g, '&lt;') + '</button>';
+    const c = String(tpl.category || 'General');
+    return '<button type="button" class="btn btn-outline btn-sm" style="justify-content:flex-start" onclick="applyCertificateTemplate(\'' + String(tpl.id).replace(/'/g, "\\'") + '\')">' + String(tpl.name || tpl.title).replace(/</g, '&lt;') + ' · ' + c + '</button>';
   }).join('');
 }
 function openCertificateModal(dept) {
@@ -1300,6 +1362,7 @@ function openCertificateModal(dept) {
   const docDisplay = document.getElementById('cert-doctor-display');
   if (ptDisplay) ptDisplay.value = [pt.name || '—', pt.bmhId || '—'].join(' · ');
   if (docDisplay) docDisplay.value = doctor;
+  ensureCertificateCategorySelects();
   refreshCertificateTemplateList(dk);
   const first = getCertificateTemplatesForDept(dk)[0];
   if (first) applyCertificateTemplate(first.id);
@@ -1307,18 +1370,21 @@ function openCertificateModal(dept) {
 }
 function applyCertificateTemplate(id) {
   const dept = window._currentCertificateDept || certificateDeptKeyFromUi();
-  const items = getCertificateTemplatesForDept(dept);
-  const tpl = items.find(function (t) { return t.id === id; }) || items[0];
+  const custom = Object.values(CERTIFICATE_TEMPLATES || {}).filter(function (tpl) { return tpl && tpl.dept === dept; });
+  const all = (CERTIFICATE_LIBRARY_DEFAULTS[dept] || []).concat(custom);
+  const tpl = all.find(function (t) { return t.id === id; }) || getCertificateTemplatesForDept(dept)[0];
   if (!tpl) return;
   const ctx = buildCertificateContext(dept);
   const titleEl = document.getElementById('cert-title');
   const bodyEl = document.getElementById('cert-body');
   const nameEl = document.getElementById('cert-template-name');
   const sel = document.getElementById('cert-template-sel');
+  const catEl = document.getElementById('cert-template-cat');
   if (sel) sel.value = tpl.id;
   if (titleEl) titleEl.value = tpl.title || tpl.name || 'Certificate';
   if (bodyEl) bodyEl.value = renderCertificateTemplateText(tpl.body || '', ctx);
   if (nameEl) nameEl.value = tpl.name || tpl.title || 'Certificate';
+  if (catEl) catEl.value = tpl.category || 'General';
 }
 function buildCertificatePrintHtml() {
   const dept = window._currentCertificateDept || certificateDeptKeyFromUi();
@@ -1346,7 +1412,8 @@ function saveCurrentCertificateTemplate() {
   const name = toDisplayTitleCase(document.getElementById('cert-template-name')?.value?.trim() || title || 'Certificate');
   if (!title || !body) { showToast('Enter certificate heading and body', 'w'); return; }
   const key = 'cert-' + dept + '-' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-  CERTIFICATE_TEMPLATES[key] = { id: key, dept: dept, name: name, title: title, body: body };
+  const cat = document.getElementById('cert-template-cat')?.value?.trim() || 'General';
+  CERTIFICATE_TEMPLATES[key] = { id: key, dept: dept, category: cat, name: name, title: title, body: body };
   saveCertificateTemplatesToStorage();
   refreshCertificateTemplateList(dept);
   const sel = document.getElementById('cert-template-sel');
@@ -6748,6 +6815,7 @@ function toggleInventoryIolBox() {
   box.style.display = isIol ? 'block' : 'none';
   if (isIol) {
     renderIolInventoryPowerGrid();
+    // Initialize multi-brand container with first entry if empty
     const cont = document.getElementById('inv-iol-brands-container');
     if (cont && cont.children.length === 0) addIolBrandEntry();
   }
@@ -6840,6 +6908,7 @@ function buildIolInventoryRow(base, power, rowIndex, serialHint) {
     iolModel: model
   };
 }
+// IOL Multi-brand support — render brand entry UI
 function addIolBrandEntry(prefill) {
   const container = document.getElementById('inv-iol-brands-container');
   if (!container) return;
@@ -6851,7 +6920,10 @@ function addIolBrandEntry(prefill) {
   div.style.cssText = 'background:#fffbec;border:1px solid #ead8a4;border-radius:8px;padding:10px;margin-bottom:10px;position:relative';
   div.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <div style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase">Brand Entry ${idx + 1}</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <div style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase">Brand Entry ${idx + 1}</div>
+        <button type="button" class="btn btn-xs btn-outline" title="Add another IOL brand" onclick="addIolBrandEntry()">＋</button>
+      </div>
       ${idx > 0 ? `<button class="btn btn-xs btn-gray" onclick="removeIolBrandEntry(this)">✕ Remove</button>` : ''}
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
@@ -6867,12 +6939,15 @@ function addIolBrandEntry(prefill) {
     <div class="iol-power-grid-container" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px"></div>
   `;
   container.appendChild(div);
+  // Render power grid for this entry
   renderIolBrandPowerGrid(div);
 }
 function removeIolBrandEntry(btn) {
   const entry = btn.closest('.inv-iol-brand-entry');
   if (entry) entry.remove();
-  updateIolPowerCounter();
+}
+function syncIolVendorToAll(val) {
+  // Keep vendor field in sync (it's shared at top level)
 }
 function renderIolBrandPowerGrid(entryDiv) {
   const gridEl = entryDiv.querySelector('.iol-power-grid-container');
@@ -6880,9 +6955,79 @@ function renderIolBrandPowerGrid(entryDiv) {
   const powers = [];
   for (let p = 3.0; p <= 30.0; p += 0.5) powers.push('+' + p.toFixed(2) + 'D');
   gridEl.innerHTML = powers.map(function (pw) {
-    return `<div style="background:#fff;border:1px solid #d2bb79;border-radius:7px;padding:6px 8px;text-align:center"><div style="font-size:11px;font-weight:700;margin-bottom:5px">${pw}</div><input type="number" class="inv-iol-qty" data-power="${pw}" min="0" value="0" style="width:100%;text-align:center;font-weight:800;font-size:13px" oninput="updateIolPowerCounter()"></div>`;
+    const esc = pw.replace(/"/g, '&quot;');
+    return `<div class="iol-power-cell" data-power="${esc}" style="background:#fff;border:1px solid #d2bb79;border-radius:7px;padding:6px 6px 8px;text-align:center">
+      <div style="font-size:11px;font-weight:700;margin-bottom:5px">${pw}</div>
+      <div style="display:flex;align-items:center;gap:4px;justify-content:center;margin-bottom:4px">
+        <button type="button" class="btn btn-xs btn-gray" onclick="iolBrandPowerQtyDelta(this,-1)">−</button>
+        <input type="number" class="inv-iol-qty" data-power="${esc}" min="0" max="99" value="0" style="width:40px;text-align:center;font-weight:800;font-size:13px" oninput="iolBrandQtyInput(this)">
+        <button type="button" class="btn btn-xs btn-gray" onclick="iolBrandPowerQtyDelta(this,1)">+</button>
+      </div>
+      <button type="button" class="btn btn-xs btn-outline" style="font-size:10px;padding:2px 6px" onclick="iolToggleSnPanel(this)">S/n</button>
+      <div class="iol-sn-slots" style="display:none;margin-top:6px;text-align:left"></div>
+    </div>`;
   }).join('');
   updateIolPowerCounter();
+}
+function iolBrandPowerQtyDelta(btn, delta) {
+  const cell = btn.closest('.iol-power-cell');
+  const inp = cell && cell.querySelector('.inv-iol-qty');
+  if (!inp) return;
+  let v = (parseInt(inp.value, 10) || 0) + delta;
+  v = Math.max(0, Math.min(99, v));
+  inp.value = String(v);
+  iolSyncSnSlots(cell);
+  updateIolPowerCounter();
+}
+function iolBrandQtyInput(inp) {
+  const cell = inp.closest('.iol-power-cell');
+  iolSyncSnSlots(cell);
+  updateIolPowerCounter();
+}
+function iolToggleSnPanel(btn) {
+  const cell = btn.closest('.iol-power-cell');
+  const wrap = cell && cell.querySelector('.iol-sn-slots');
+  if (!wrap) return;
+  const open = wrap.style.display !== 'block';
+  wrap.style.display = open ? 'block' : 'none';
+  wrap.dataset.open = open ? '1' : '0';
+  iolSyncSnSlots(cell);
+}
+function iolSyncSnSlots(cell) {
+  if (!cell) return;
+  const wrap = cell.querySelector('.iol-sn-slots');
+  const inp = cell.querySelector('.inv-iol-qty');
+  if (!wrap || !inp) return;
+  const n = Math.max(0, parseInt(inp.value, 10) || 0);
+  const open = wrap.dataset.open === '1';
+  if (!open) { wrap.innerHTML = ''; return; }
+  if (n === 0) {
+    wrap.innerHTML = '<div style="font-size:9px;color:var(--g1)">Set quantity first</div>';
+    return;
+  }
+  const keep = Array.from(wrap.querySelectorAll('.iol-sn-input')).map(function (el) { return el.value; });
+  wrap.innerHTML = '';
+  for (let i = 0; i < n; i += 1) {
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'iol-sn-input';
+    input.placeholder = 'S/N ' + (i + 1);
+    input.style.cssText = 'width:100%;font-size:10px;padding:3px 5px;border:1px solid var(--g4);border-radius:4px;box-sizing:border-box;margin-bottom:4px';
+    input.value = keep[i] || '';
+    wrap.appendChild(input);
+  }
+}
+window.iolBrandPowerQtyDelta = iolBrandPowerQtyDelta;
+window.iolBrandQtyInput = iolBrandQtyInput;
+window.iolToggleSnPanel = iolToggleSnPanel;
+function readIolBrandSerialMapFromGrid(entryDiv) {
+  const out = {};
+  entryDiv.querySelectorAll('.iol-power-cell').forEach(function (cell) {
+    const power = cell.dataset.power;
+    const sns = Array.from(cell.querySelectorAll('.iol-sn-input')).map(function (el) { return el.value.trim(); }).filter(Boolean);
+    if (sns.length) out[power] = sns;
+  });
+  return out;
 }
 function readIolBrandEntrySerialMap(entryDiv) {
   const raw = String(entryDiv.querySelector('.iol-serial-map-field')?.value || '');
@@ -6898,10 +7043,14 @@ function readIolBrandEntrySerialMap(entryDiv) {
 }
 window.addIolBrandEntry = addIolBrandEntry;
 window.removeIolBrandEntry = removeIolBrandEntry;
+window.syncIolVendorToAll = syncIolVendorToAll;
+
 function saveIolInventoryGrid() {
   const vendor = document.getElementById('inv-iol-vendor')?.value?.trim() || document.getElementById('inv-in-vendor')?.value?.trim() || '';
   const mrp = Number(document.getElementById('inv-in-mrp')?.value || '0') || 0;
   const brandEntries = document.querySelectorAll('#inv-iol-brands-container .inv-iol-brand-entry');
+
+  // Support new multi-brand form AND legacy single-brand form
   let allBrandData = [];
   if (brandEntries.length > 0) {
     brandEntries.forEach(function (entryDiv) {
@@ -6913,38 +7062,93 @@ function saveIolInventoryGrid() {
       const picked = Array.from(entryDiv.querySelectorAll('.inv-iol-qty')).map(function (input) {
         return { power: String(input.dataset.power || ''), qty: Math.max(0, parseInt(input.value, 10) || 0) };
       }).filter(function (row) { return row.qty > 0; });
-      const serialMap = readIolBrandEntrySerialMap(entryDiv);
+      const serialMap = Object.assign({}, readIolBrandEntrySerialMap(entryDiv), readIolBrandSerialMapFromGrid(entryDiv));
       if (picked.length > 0) allBrandData.push({ brand, company, batchNo, exp, cost, picked, serialMap });
     });
+  } else {
+    // Legacy single-brand fallback
+    const brand = document.getElementById('inv-iol-brand')?.value?.trim() || '';
+    const company = document.getElementById('inv-iol-company')?.value?.trim() || '';
+    const batchNo = document.getElementById('inv-iol-model')?.value?.trim() || '';
+    const exp = document.getElementById('inv-iol-expiry')?.value?.trim() || document.getElementById('inv-in-exp')?.value?.trim() || '';
+    const cost = Number(document.getElementById('inv-iol-cost')?.value || document.getElementById('inv-in-cost')?.value || '0') || 0;
+    const picked = Array.from(document.querySelectorAll('.inv-iol-qty')).map(function (input) {
+      return { power: String(input.dataset.power || ''), qty: Math.max(0, parseInt(input.value, 10) || 0) };
+    }).filter(function (row) { return row.qty > 0; });
+    const serialMap = readIolGridSerialMap();
+    if (picked.length > 0) allBrandData.push({ brand, company, batchNo, exp, cost, picked, serialMap });
   }
+
   if (!allBrandData.length) { showToast('Enter at least one IOL power quantity', 'w'); return; }
-  if (!allBrandData.some(function (b) { return b.brand || b.company || b.batchNo; })) { showToast('Enter company / brand / batch for IOL stock', 'w'); return; }
+  if (!allBrandData.some(function (b) { return b.brand || b.company || b.batchNo; })) {
+    showToast('Enter company / brand / batch for IOL stock', 'w'); return;
+  }
+  // Legacy single-brand kept for backward compat — fall through to new code
+  const brand = allBrandData[0].brand;
+  const company = allBrandData[0].company;
+  const batchNo = allBrandData[0].batchNo;
+  const exp = allBrandData[0].exp;
+  const cost = allBrandData[0].cost;
+  const picked = allBrandData[0].picked;
+  const serialMap = allBrandData[0].serialMap;
   let added = 0;
   try {
     bmhCompressFileToData(document.getElementById('inv-in-bill-file')?.files?.[0], function (billFile) {
       try {
-        allBrandData.forEach(function (bd) {
-          const base = { vendor: vendor, brand: bd.brand, company: bd.company, model: '', batchNo: bd.batchNo, exp: bd.exp, cost: bd.cost, mrp: mrp, min: 1, store: bmhInventoryStoreValue() || 'Eye OT', billMode: 'on-use' };
-          bd.picked.forEach(function (row) {
-            const hints = bd.serialMap[row.power] || [];
-            for (let idx = 0; idx < row.qty; idx += 1) {
-              const invRow = buildIolInventoryRow(base, row.power, idx + 1, hints[idx] || null);
-              INVENTORY.push(invRow);
-              BCMAP[invRow.barcode] = invRow;
-              BCMAP[String(invRow.name).toLowerCase().substring(0, 15)] = invRow;
-              bmhRecordInventoryPurchase(invRow, 1, billFile || null);
-              added += 1;
-            }
-          });
+      // Process all brand entries
+      allBrandData.forEach(function (bd) {
+        const base = {
+          vendor: vendor,
+          brand: bd.brand,
+          company: bd.company,
+          model: '',
+          batchNo: bd.batchNo,
+          exp: bd.exp,
+          cost: bd.cost,
+          mrp: mrp,
+          min: 1,
+          store: bmhInventoryStoreValue() || 'Eye OT',
+          billMode: 'on-use'
+        };
+        bd.picked.forEach(function (row) {
+          const hints = bd.serialMap[row.power] || [];
+          for (let idx = 0; idx < row.qty; idx += 1) {
+            const invRow = buildIolInventoryRow(base, row.power, idx + 1, hints[idx] || null);
+            INVENTORY.push(invRow);
+            BCMAP[invRow.barcode] = invRow;
+            BCMAP[String(invRow.name).toLowerCase().substring(0, 15)] = invRow;
+            bmhRecordInventoryPurchase(invRow, 1, billFile || null);
+            added += 1;
+          }
         });
-        saveInventoryStockToStorage();
+      });
+      saveInventoryStockToStorage();
+      try {
+        const catFilter = document.getElementById('inv-stock-cat-filter');
+        const storeFilter = document.getElementById('inv-stock-store-filter');
+        if (catFilter) catFilter.value = 'all';
+        if (storeFilter) storeFilter.value = 'all';
         renderStockList();
         renderInventoryPurchaseLog();
         renderInventoryStoreStock();
         renderInventoryPoAlerts();
         bmhRenderVendorTables();
-        showToast('Saved ✓ — ' + added + ' IOL units added', 's');
-        resetInventoryStockInForm(true);
+        const brandNames = allBrandData.map(function (b) { return [b.company, b.brand].filter(Boolean).join(' '); }).filter(Boolean).join(' + ');
+        const log = document.getElementById('stock-in-log');
+        if (log) {
+          const d = document.createElement('div');
+          d.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;background:var(--green-lt);border-radius:8px;margin-bottom:6px;font-size:12px';
+          d.innerHTML = `<span><strong>IOL stock saved</strong> · ${escapeHtmlConsent(brandNames || vendor || 'IOL')} (${allBrandData.length} brand${allBrandData.length>1?'s':''})</span><span style="font-weight:900;color:#1a8c3c">+${added}</span>`;
+          log.prepend(d);
+        }
+        const tabBtn = Array.from(document.querySelectorAll('#pg-inventory .ptab')).find(function (el) { return String(el.textContent || '').includes('Current Stock'); });
+        if (tabBtn) ptab(tabBtn, 'inv-stock');
+      } catch (e) { console.warn('IOL stock post-save UI refresh failed', e); }
+      showToast('Saved ✓ — ' + added + ' IOL units added', 's');
+      resetInventoryStockInForm(true);
+      // Clear brand entries and add fresh one
+      const cont = document.getElementById('inv-iol-brands-container');
+      if (cont) { cont.innerHTML = ''; addIolBrandEntry(); }
       } catch (e) {
         console.error('saveIolInventoryGrid callback failed', e);
         showToast('IOL stock save failed. ' + String(e?.message || 'Please retry.'), 'e');
@@ -9074,6 +9278,16 @@ function parseInventoryImportText(text) {
     ? 'IOL'
     : (primaryItem?.category || inferInventoryCategoryFromText(itemName || flat));
   const iolIdentity = parseIolIdentityFromItemName(primaryItem?.itemName || itemName || '');
+  let billTotal = 0;
+  const gtLine = lines.find(function (ln) { return /grand\s*total|net\s*payable|amount\s*payable|total\s*amount/i.test(String(ln || '')); });
+  if (gtLine) {
+    const nums = Array.from(String(gtLine).matchAll(/([0-9]+(?:\.[0-9]{1,2})?)/g)).map(function (m) { return Number(m[1]); }).filter(function (n) { return n > 0; });
+    if (nums.length) billTotal = nums[nums.length - 1];
+  }
+  if (!(billTotal > 0)) {
+    const gm = flat.match(/\b(?:grand\s*total|net\s*amount|amount\s*payable)\s*[:\-]?\s*(?:₹|rs\.?|inr)?\s*([0-9]+(?:\.[0-9]{1,2})?)/i);
+    if (gm) billTotal = Number(gm[1]) || 0;
+  }
   return {
     vendor: normalizeInventoryTextValue(vendor),
     invoiceNo: invoiceMatch ? invoiceMatch[1] : '',
@@ -9093,9 +9307,46 @@ function parseInventoryImportText(text) {
     company: iolIdentity.company || '',
     brand: iolIdentity.brand || '',
     model: iolIdentity.model || '',
-    lineItems: lineItems
+    lineItems: lineItems,
+    billTotal: billTotal
   };
 }
+function bmhMaybeRegisterVendorBillFromParsedImport(parsed, asset, mode) {
+  if (!parsed) return;
+  const vendor = String(parsed.vendor || '').trim();
+  let amt = Number(parsed.billTotal || 0) || Number(parsed.amount || 0) || 0;
+  if (!(amt > 0) && Array.isArray(parsed.lineItems)) {
+    amt = parsed.lineItems.reduce(function (s, x) { return s + (Number(x.total) || 0); }, 0);
+  }
+  if (!vendor || !(amt > 0)) return;
+  const inv = String(parsed.invoiceNo || '').trim();
+  const dayKey = new Date().toISOString().slice(0, 10);
+  const fileName = String(asset?.name || '');
+  const dup = (window.BMH_VENDOR_BILLS || []).some(function (v) {
+    if (String(v.vendor || '').trim() !== vendor || Math.abs(Number(v.amount) - amt) >= 0.5) return false;
+    if (inv && String(v.invoiceNo || '') === inv) return true;
+    return !!v.ocrSource && String(v.uploadedName || '') === fileName && String(v.createdAt || '').slice(0, 10) === dayKey;
+  });
+  if (dup) return;
+  const id = 'VB-OCR-' + Date.now();
+  const billFile = asset && asset.data ? { name: asset.name || '', data: asset.data } : null;
+  window.BMH_VENDOR_BILLS.push({
+    id: id,
+    vendor: vendor,
+    invoiceNo: inv || ('OCR ' + id.slice(-6)),
+    amount: amt,
+    dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+    status: 'pending',
+    uploadedName: fileName,
+    billFile: billFile,
+    createdAt: new Date().toISOString(),
+    ocrSource: true,
+    ocrMode: String(mode || '')
+  });
+  try { saveBmhFinancials(); } catch (e) {}
+  try { bmhRenderVendorTables(); } catch (e) {}
+}
+window.bmhMaybeRegisterVendorBillFromParsedImport = bmhMaybeRegisterVendorBillFromParsedImport;
 function getCurrentIolGridState() {
   const state = {};
   Array.from(document.querySelectorAll('.inv-iol-qty')).forEach(function (input) {
@@ -9687,6 +9938,7 @@ async function handleInventoryImportFile(mode, inp) {
     }
     if (mode === 'in') inventoryRememberBillMeta(parsed.vendor || '', document.getElementById('inv-in-dept')?.value || '', window._inventoryImportAssets[mode] || null);
     applyInventoryParsedData(parsed, mode);
+    bmhMaybeRegisterVendorBillFromParsedImport(parsed, window._inventoryImportAssets[mode], mode);
     renderInventoryImportReview(parsed, mode, combinedText);
     setInventoryImportStatus(mode, 'OCR complete. Please review the populated fields before saving.', '#1a8c3c');
     openInventoryBillReviewModal(mode);
@@ -10079,6 +10331,8 @@ function openInventoryStockGroup(groupId) {
 window.openInventoryStockGroup = openInventoryStockGroup;
 function renderStockList() {
   const el=document.getElementById('inv-stock-list');if(!el)return;
+  const admBtn = document.getElementById('btn-inv-clear-all');
+  if (admBtn) admBtn.style.display = (typeof isAdminUser === 'function' && isAdminUser()) ? 'inline-flex' : 'none';
   renderInventoryImportDatalists();
   const catFilter = bmhInventoryFilterValue('inv-stock-cat-filter');
   const storeFilter = bmhInventoryFilterValue('inv-stock-store-filter');
@@ -10153,6 +10407,20 @@ function renderStockList() {
   const totalEl = document.getElementById('inv-total-items');
   if (totalEl) totalEl.textContent = String(rows.reduce(function (s, i) { return s + Math.max(0, Number(i.stock) || 0); }, 0));
 }
+function adminClearAllInventoryStock() {
+  if (typeof isAdminUser !== 'function' || !isAdminUser()) { showToast('Only admin can clear inventory', 'w'); return; }
+  if (!confirm('Delete ALL current inventory rows? Barcode map will reset. This cannot be undone.')) return;
+  INVENTORY.length = 0;
+  if (typeof BCMAP === 'object' && BCMAP) { Object.keys(BCMAP).forEach(function (k) { delete BCMAP[k]; }); }
+  saveInventoryStockToStorage();
+  renderStockList();
+  renderInventoryPurchaseLog();
+  renderInventoryStoreStock();
+  renderInventoryPoAlerts();
+  try { bmhRenderVendorTables(); } catch (e) {}
+  showToast('Inventory cleared', 's');
+}
+window.adminClearAllInventoryStock = adminClearAllInventoryStock;
 function addInventoryVendorPrompt() {
   const name = normalizeInventoryTextValue(prompt('Vendor name') || '');
   if (!name) return;
@@ -10280,6 +10548,10 @@ function renderInventoryTransfers() {
 }
 function renderInventoryStoreStock() {
   const el = document.getElementById('inv-store-stock'); if (!el) return;
+  const iolTotal = (INVENTORY || []).reduce(function (sum, item) {
+    const text = (String(item.name || '') + ' ' + String(item.cat || '')).toLowerCase();
+    return /\biol\b|intraocular lens|acrysof|tecnis|panoptix|toric|trifocal/.test(text) ? sum + (Number(item.stock) || 0) : sum;
+  }, 0);
   const grouped = {};
   INVENTORY.forEach(function (item) {
     const key = item.store || 'Unassigned store';
@@ -10287,7 +10559,7 @@ function renderInventoryStoreStock() {
     grouped[key].push(item);
   });
   const keys = Object.keys(grouped).sort();
-  el.innerHTML = keys.length ? keys.map(function (store) {
+  const storesHtml = keys.length ? keys.map(function (store) {
     const rows = grouped[store];
     const total = rows.reduce(function (s, r) { return s + (Number(r.stock) || 0); }, 0);
     return `<div style="padding:10px 0;border-bottom:1px solid var(--g5)">
@@ -10295,6 +10567,7 @@ function renderInventoryStoreStock() {
       <div style="display:flex;gap:6px;flex-wrap:wrap">${rows.slice(0,8).map(function (r) { return `<span class="badge ${Number(r.stock||0) <= Number(r.min||0) ? 'bd-orange' : 'bd-green'}">${escapeHtmlConsent(r.name)} · ${Number(r.stock||0)}</span>`; }).join('')}${rows.length > 8 ? `<span class="badge bd-blue">+${rows.length - 8} more</span>` : ''}</div>
     </div>`;
   }).join('') : '<div style="padding:12px;color:var(--g1);font-size:12px">No stock assigned to stores yet.</div>';
+  el.innerHTML = `<div style="padding:8px 0 10px;border-bottom:1px solid var(--g5);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center"><strong>Total IOL stock</strong><span class="badge bd-blue" style="font-size:11px">${iolTotal} units</span></div>` + storesHtml;
 }
 function renderInventoryPoAlerts() {
   const el = document.getElementById('inv-po-alerts'); if (!el) return;
@@ -11735,56 +12008,223 @@ const DRUG_LIBRARY = [
 ];
 
 const SELECTED_INVESTIGATIONS = [];
+// Legacy library kept for backward compatibility
 const INVESTIGATION_LIBRARY = {
-  blood: [
-    ['CBC (Complete Blood Count)', 850],
-    ['Fasting Blood Sugar', 250],
-    ['HbA1c', 600],
-    ['Serum Creatinine', 350],
-    ['Urea & Electrolytes', 700],
-    ['Liver Function Tests', 900],
-    ['Coagulation Profile', 1200],
-    ['HIV', 400],
-    ['HbsAg', 300],
-    ['VDRL', 300]
-  ],
-  diag: [
-    ['Chest X-Ray', 600],
-    ['ECG', 350],
-    ['Echocardiography', 2500],
-    ['USG Abdomen', 1200],
-    ['MRI Brain', 8000],
-    ['CT Scan Head', 5000]
-  ],
-  eye: [
-    ['Biometry (IOL Master)', 1200],
-    ['OCT Macula OU', 1800],
-    ['OCT Optic Disc OU', 1800],
-    ['HVF Visual Fields', 1500],
-    ['Fundus Photography', 600],
-    ['Corneal Topography', 1500],
-    ['Specular Microscopy', 1200],
-    ['ERG / VEP', 2500],
-    ['Fluorescein Angiography', 4000]
-  ]
+  blood: [['CBC (Complete Blood Count)', 850],['Fasting Blood Sugar', 250],['HbA1c', 600],['Serum Creatinine', 350],['Urea & Electrolytes', 700],['Liver Function Tests', 900],['Coagulation Profile', 1200],['HIV', 400],['HbsAg', 300],['VDRL', 300]],
+  diag: [['Chest X-Ray', 600],['ECG', 350],['Echocardiography', 2500],['USG Abdomen', 1200],['MRI Brain', 8000],['CT Scan Head', 5000]],
+  eye: [['Biometry (IOL Master)', 1200],['OCT Macula OU', 1800],['OCT Optic Disc OU', 1800],['HVF Visual Fields', 1500],['Fundus Photography', 600],['Corneal Topography', 1500],['Specular Microscopy', 1200],['ERG / VEP', 2500],['Fluorescein Angiography', 4000]]
 };
-// Investigation categories from lab sheet (used by order-investigation tabs)
+// Investigation categories from lab Excel file
 const INVESTIGATION_CATEGORIES = [
-  { id:'haem', label:'🩸 Haematology', tests:['Hb (Haemoglobin)','T.L.C. (Total Leukocytes Count)','D.L.C. (Differential Leukocytes Count)','Neutrophils','Lymphocytes','Monocytes','Eosinophils','Basophils','Platelets Count','R.B.C. (Red Blood Cells)','P.C.V. (Packed Cell Volume)','M.C.V. (Mean Cell Volume)','M.C.H. (Mean Cell Haemoglobin)','M.C.H.C. (Mean Cell Haemoglobin Conc.)','E.S.R. (Erythrocytes Sedimentation Rate)','Malarial Parasite']},
-  { id:'coag', label:'🔬 Coagulogram', tests:['B.T. (Bleeding Time)','C.T. (Clotting Time)','P.T. (Prothrombin Time)','P.T.I. (Prothrombin Time Index)','I.N.R. (International Normalised Ratio)','A.P.T.T (Activated Partial Thrombin Time)']},
-  { id:'chem', label:'🧪 Chemistry', tests:['Fasting Glucose','Post Prandial Glucose','Post Lunch Glucose','Post Dinner Glucose','Random Glucose','CPK-MB','CPK-NAC','Amylase','S. Lipase','GAMA G.T.','LDH','TROP-T','Glycosylated Haemoglobin (HbA1c)','ABG (Average Blood Glucose)']},
-  { id:'rft', label:'💉 RFT', tests:['B. Urea','S. Creatinine','S. Uric Acid','Spot Microalbuminuria','24 hrs. Microalbuminuria','Spot Urine Creatinine','24 hrs. Urine Creatinine','Urine Albumin-Creatinine Ratio','24 hrs. Urine Proteins','Total Volume (24hr)']},
-  { id:'lft', label:'🫀 LFT', tests:['Total Bilirubin','Direct Bilirubin','Indirect Bilirubin','Total Proteins','Albumin','Globulin','A/G Ratio','S.G.O.T. (AST)','S.G.P.T. (ALT)','Alkaline Phosphatase']},
-  { id:'lipid', label:'🫀 Lipid Profile', tests:['Total Cholesterol','Triglycerides','HDL Cholesterol','LDL','VLDL','Cholesterol/HDL Ratio','LDL/HDL Ratio','Non-HDL Cholesterol','Total Lipids']},
-  { id:'electro', label:'⚡ Electrolytes', tests:['Sodium (Na+)','Potassium (K+)','Chloride (Cl-)','Calcium (Ca++)','Phosphorous','Magnesium (Mg)','Lithium (Li)']},
-  { id:'sero', label:'🔬 Serology', tests:['Blood Group (ABO)','Rh. Anti-D','H.I.V. I & II','HBsAg','H.C.V. (Tridot)','V.D.R.L.','R.A. Factor','A.S.O.','C. Reactive Proteins',"Direct Coombs Test","Indirect Coombs Test",'Malarial Antigens - P. Falciparum','Malarial Antigens - P. Vivax','Typhi Dot IgG','Typhi Dot IgM','Widal']},
-  { id:'urine', label:'💧 Urine', tests:['Urine Colour','Urine Appearance','Urine Proteins','Urine Sugar','Urine pH','Specific Gravity','Acetone/Ketones','Bile Salt','Bile Pigment',"Urine Pus Cells","Urine RBC's",'Epithelial Cells','Calcium Oxalate Crystals','Triple Phosphate Crystals','Uric Acid Crystals','Amorphous Deposits','Budding Yeast','Fungal Hyphae','Mucus Fibers','Urine Bacteria']},
-  { id:'stool', label:'🔬 Stool', tests:['Stool Colour','Stool Consistency','Stool Blood','Stool Mucous','Stool Parasite','Stool pH','Occult Blood','Veg. Form of Protozoa','Cyst of Protozoa','Ova/Eggs of Helminths','Stool Pus Cells','Stool Mucus Fibers','Fat Cells','Hanging Drop (Vibrio)']},
+  { id:'haem', label:'🩸 Haematology', tests:[
+    'Hb (Haemoglobin)','T.L.C. (Total Leukocytes Count)','Neutrophils','Lymphocytes','Monocytes','Eosinophils','Basophils',
+    'Platelets Count','R.B.C. (Red Blood Cells)','P.C.V. (Packed Cell Volume)','M.C.V. (Mean Cell Volume)',
+    'M.C.H. (Mean Cell Haemoglobin)','M.C.H.C. (Mean Cell Haemoglobin Conc.)','E.S.R. (Erythrocytes Sedimentation Rate)','Malarial Parasite'
+  ]},
+  { id:'coag', label:'🔬 Coagulogram', tests:[
+    'B.T. (Bleeding Time)','C.T. (Clotting Time)','P.T. (Prothrombin Time)','P.T.I. (Prothrombin Time Index)',
+    'I.N.R. (International Normalised Ratio)','A.P.T.T (Activated Partial Thrombin Time)'
+  ]},
+  { id:'chem', label:'🧪 Chemistry', tests:[
+    'Fasting Glucose','Post Prandial Glucose','Post Lunch Glucose','Post Dinner Glucose','Random Glucose',
+    'CPK-MB','CPK-NAC','Amylase','S. Lipase','GAMA G.T.','LDH','TROP-T',
+    'Glycosylated Haemoglobin (HbA1c)','ABG (Average Blood Glucose)'
+  ]},
+  { id:'rft', label:'💉 RFT', tests:[
+    'B. Urea','S. Creatinine','S. Uric Acid','Spot Microalbuminuria','24 hrs. Microalbuminuria',
+    'Spot Urine Creatinine','24 hrs. Urine Creatinine','Urine Albumin-Creatinine Ratio',
+    '24 hrs. Urine Proteins','Total Volume (24hr)'
+  ]},
+  { id:'lft', label:'🫀 LFT', tests:[
+    'Total Bilirubin','Direct Bilirubin','Indirect Bilirubin','Total Proteins','Albumin','Globulin','A/G Ratio',
+    'S.G.O.T. (AST)','S.G.P.T. (ALT)','Alkaline Phosphatase'
+  ]},
+  { id:'lipid', label:'🫀 Lipid Profile', tests:[
+    'Total Cholesterol','Triglycerides','HDL Cholesterol','LDL','VLDL',
+    'Cholesterol/HDL Ratio','LDL/HDL Ratio','Non-HDL Cholesterol','Total Lipids'
+  ]},
+  { id:'electro', label:'⚡ Electrolytes', tests:[
+    'Sodium (Na+)','Potassium (K+)','Chloride (Cl-)','Calcium (Ca++)','Phosphorous','Magnesium (Mg)','Lithium (Li)'
+  ]},
+  { id:'sero', label:'🔬 Serology', tests:[
+    'Blood Group (ABO)','Rh. Anti-D','H.I.V. I & II','HBsAg','H.C.V. (Tridot)','V.D.R.L.',
+    'R.A. Factor','A.S.O.','C. Reactive Proteins',"Direct Coombs Test","Indirect Coombs Test",
+    'Malarial Antigens - P. Falciparum','Malarial Antigens - P. Vivax',
+    'Typhi Dot IgG','Typhi Dot IgM','Widal'
+  ]},
+  { id:'urine', label:'💧 Urine', tests:[
+    'Urine Colour','Urine Appearance','Urine Proteins','Urine Sugar','Urine pH','Specific Gravity',
+    'Acetone/Ketones','Bile Salt','Bile Pigment',"Urine Pus Cells","Urine RBC's",'Epithelial Cells',
+    'Calcium Oxalate Crystals','Triple Phosphate Crystals','Uric Acid Crystals','Amorphous Deposits',
+    'Budding Yeast','Fungal Hyphae','Mucus Fibers','Urine Bacteria'
+  ]},
+  { id:'stool', label:'🔬 Stool', tests:[
+    'Stool Colour','Stool Consistency','Stool Blood','Stool Mucous','Stool Parasite',
+    'Stool pH','Occult Blood','Veg. Form of Protozoa','Cyst of Protozoa','Ova/Eggs of Helminths',
+    'Stool Pus Cells','Stool Mucus Fibers','Fat Cells','Hanging Drop (Vibrio)'
+  ]},
   { id:'hcg', label:'🤰 HCG', tests:['Human Chorionic Gonadotropin (HCG)']},
-  { id:'semen', label:'🔬 Semen', tests:['Semen Volume','Semen Colour','Semen Reaction','Semen Viscosity','Liquefaction Time','Semen Pus Cells',"Semen RBC's",'Spermatogonia','Total Sperm Count','Normal Morphology','Active Motile (1st Hr)','Active Motile (2nd Hr)','Active Motile (3rd Hr)','Active Motile (4th Hr)','Sluggish Motility (1st Hr)','Non-Motile (1st Hr)']},
+  { id:'semen', label:'🔬 Semen', tests:[
+    'Semen Volume','Semen Colour','Semen Reaction','Semen Viscosity','Liquefaction Time',
+    'Semen Pus Cells',"Semen RBC's",'Spermatogonia','Total Sperm Count','Normal Morphology',
+    'Active Motile (1st Hr)','Active Motile (2nd Hr)','Active Motile (3rd Hr)','Active Motile (4th Hr)',
+    'Sluggish Motility (1st Hr)','Non-Motile (1st Hr)'
+  ]},
   { id:'rafq', label:'🦴 RA Factor', tests:['R.A. Factor (Quantitative)']},
   { id:'thyroid', label:'🦋 Thyroid', tests:['TSH','T3 (Triiodothyronine)','T4 (Thyroxine)','Free T3','Free T4','Anti-TPO Antibodies']}
 ];
+/** Exact unit + reference interval per investigation label (matches INVESTIGATION_CATEGORIES) — overrides regex in getLabTestMeta */
+const LAB_RANGE_BY_EXACT_NAME = {};
+(function initLabRangeExactNames() {
+  const ROWS = [
+    ['Hb (Haemoglobin)', 'gm/dl', '11-16'],
+    ['T.L.C. (Total Leukocytes Count)', '/cmm', '4000-11000'],
+    ['Neutrophils', '%', '40-70'],
+    ['Lymphocytes', '%', '30-45'],
+    ['Monocytes', '%', '2-5'],
+    ['Eosinophils', '%', '1-6'],
+    ['Basophils', '%', '0-1'],
+    ['Platelets Count', 'Lacs', '1.5-4.5'],
+    ['R.B.C. (Red Blood Cells)', 'Million/cmm', '3.5-5.5'],
+    ['P.C.V. (Packed Cell Volume)', '%', '33-48'],
+    ['M.C.V. (Mean Cell Volume)', 'fl', '80-95'],
+    ['M.C.H. (Mean Cell Haemoglobin)', 'pg', '27-32'],
+    ['M.C.H.C. (Mean Cell Haemoglobin Conc.)', 'gm/dl', '32-36'],
+    ['E.S.R. (Erythrocytes Sedimentation Rate)', 'mm/hr', '0-20'],
+    ['Malarial Parasite', '', ''],
+    ['B.T. (Bleeding Time)', 'min', '1-6'],
+    ['C.T. (Clotting Time)', 'min', '1-10'],
+    ['P.T. (Prothrombin Time)', 'sec', '11-16'],
+    ['P.T.I. (Prothrombin Time Index)', '%', '70-130'],
+    ['I.N.R. (International Normalised Ratio)', '', '0.8-1.2'],
+    ['A.P.T.T (Activated Partial Thrombin Time)', 'sec', '25-40'],
+    ['Fasting Glucose', 'mg/dl', '70-110'],
+    ['Post Prandial Glucose', 'mg/dl', '70-140'],
+    ['Post Lunch Glucose', 'mg/dl', '70-140'],
+    ['Post Dinner Glucose', 'mg/dl', '70-140'],
+    ['Random Glucose', 'mg/dl', '70-160'],
+    ['CPK-MB', 'IU/L', '0-25'],
+    ['CPK-NAC', 'IU/L', '25-200'],
+    ['Amylase', 'IU/L', '25-110'],
+    ['S. Lipase', 'IU/L', '20-300'],
+    ['GAMA G.T.', 'IU/L', '0-35'],
+    ['LDH', 'IU/L', '114-240'],
+    ['TROP-T', '', ''],
+    ['Glycosylated Haemoglobin (HbA1c)', '%', '4.7-6.0'],
+    ['ABG (Average Blood Glucose)', 'mg/dl', '90-150'],
+    ['B. Urea', 'mg/dl', '10-40'],
+    ['S. Creatinine', 'mg/dl', '0.5-1.5'],
+    ['S. Uric Acid', 'mg/dl', '2-7'],
+    ['Spot Microalbuminuria', 'mg/g Creatinine', '0-30'],
+    ['24 hrs. Microalbuminuria', 'mg/24hr', '30-300'],
+    ['Spot Urine Creatinine', 'mg/dl', '25-400'],
+    ['24 hrs. Urine Creatinine', 'mg/24hr', '500-2000'],
+    ['Urine Albumin-Creatinine Ratio', 'mg/mmol', '3-30'],
+    ['24 hrs. Urine Proteins', 'mg/24hr', '0-150'],
+    ['Total Volume (24hr)', 'ml/24hr', ''],
+    ['Total Bilirubin', 'mg/dl', '0.2-1.2'],
+    ['Direct Bilirubin', 'mg/dl', '0.2-1.0'],
+    ['Indirect Bilirubin', 'mg/dl', '0-0.2'],
+    ['Total Proteins', 'gm/dl', '6-8'],
+    ['Albumin', 'gm/dl', '3.8-5.0'],
+    ['Globulin', 'gm/dl', '2.3-3.5'],
+    ['A/G Ratio', '', '0.9-2.0'],
+    ['S.G.O.T. (AST)', 'IU/L', '6-40'],
+    ['S.G.P.T. (ALT)', 'IU/L', '3-35'],
+    ['Alkaline Phosphatase', 'U/L', '39-118'],
+    ['Total Cholesterol', 'mg/dl', '125-200'],
+    ['Triglycerides', 'mg/dl', '60-165'],
+    ['HDL Cholesterol', 'mg/dl', '30-70'],
+    ['LDL', 'mg/dl', '74-130'],
+    ['VLDL', 'mg/dl', '10-32'],
+    ['Cholesterol/HDL Ratio', '', '3-5'],
+    ['LDL/HDL Ratio', '', '1.5-3.5'],
+    ['Non-HDL Cholesterol', 'mg/dl', '0-160'],
+    ['Total Lipids', 'mg/dl', '400-700'],
+    ['Sodium (Na+)', 'mmol/L', '135-155'],
+    ['Potassium (K+)', 'mmol/L', '3.5-5.5'],
+    ['Chloride (Cl-)', 'mmol/L', '98-107'],
+    ['Calcium (Ca++)', 'mg%', '8.4-11.5'],
+    ['Phosphorous', 'mg%', '2.5-4.8'],
+    ['Magnesium (Mg)', 'mmol/L', '1.7-2.2'],
+    ['Lithium (Li)', 'mEq/L', '0.5-1.0'],
+    ['Blood Group (ABO)', '', ''],
+    ['Rh. Anti-D', '', ''],
+    ['H.I.V. I & II', '', 'Non-Reactive'],
+    ['HBsAg', '', 'Non-Reactive'],
+    ['H.C.V. (Tridot)', '', 'Non-Reactive'],
+    ['V.D.R.L.', '', 'Non-Reactive'],
+    ['R.A. Factor', '', 'Negative'],
+    ['A.S.O.', '', 'Negative'],
+    ['C. Reactive Proteins', '', 'Negative'],
+    ['Direct Coombs Test', '', 'Negative'],
+    ['Indirect Coombs Test', '', 'Negative'],
+    ['Malarial Antigens - P. Falciparum', '', 'Negative'],
+    ['Malarial Antigens - P. Vivax', '', 'Negative'],
+    ['Typhi Dot IgG', '', 'Negative'],
+    ['Typhi Dot IgM', '', 'Negative'],
+    ['Widal', '', 'Negative'],
+    ['Urine Colour', '', 'Light Yellow'],
+    ['Urine Appearance', '', 'Clear'],
+    ['Urine Proteins', '', 'Nil'],
+    ['Urine Sugar', '', 'Nil'],
+    ['Urine pH', '', '6.5'],
+    ['Specific Gravity', '', '1.005-1.030'],
+    ['Acetone/Ketones', '', 'Negative'],
+    ['Bile Salt', '', 'Negative'],
+    ['Bile Pigment', '', 'Negative'],
+    ['Urine Pus Cells', '', 'Nil'],
+    ['Urine RBC\'s', '', 'Nil'],
+    ['Epithelial Cells', '', 'Nil'],
+    ['Calcium Oxalate Crystals', '', 'Nil'],
+    ['Triple Phosphate Crystals', '', 'Nil'],
+    ['Uric Acid Crystals', '', 'Nil'],
+    ['Amorphous Deposits', '', 'Nil'],
+    ['Budding Yeast', '', 'Nil'],
+    ['Fungal Hyphae', '', 'Nil'],
+    ['Mucus Fibers', '', 'Nil'],
+    ['Urine Bacteria', '', 'Nil'],
+    ['Stool Colour', '', 'Brownish'],
+    ['Stool Consistency', '', ''],
+    ['Stool Blood', '', 'Nil'],
+    ['Stool Mucous', '', 'Nil'],
+    ['Stool Parasite', '', 'Nil'],
+    ['Stool pH', '', '6.5'],
+    ['Occult Blood', '', 'Negative'],
+    ['Veg. Form of Protozoa', '', 'Nil'],
+    ['Cyst of Protozoa', '', 'Nil'],
+    ['Ova/Eggs of Helminths', '', 'Nil'],
+    ['Stool Pus Cells', '', 'Nil'],
+    ['Stool Mucus Fibers', '', 'Nil'],
+    ['Fat Cells', '', 'Nil'],
+    ['Hanging Drop (Vibrio)', '', 'Negative'],
+    ['Human Chorionic Gonadotropin (HCG)', '', ''],
+    ['Semen Volume', 'ml', '>=2.5'],
+    ['Semen Colour', '', 'Creamy White'],
+    ['Semen Reaction', '', 'Alkaline'],
+    ['Semen Viscosity', '', ''],
+    ['Liquefaction Time', 'min', '0-30'],
+    ['Semen Pus Cells', '', 'Nil'],
+    ['Semen RBC\'s', '', 'Nil'],
+    ['Spermatogonia', '', 'Nil'],
+    ['Total Sperm Count', 'Million/ml', '20-200'],
+    ['Normal Morphology', '%', '>30'],
+    ['Active Motile (1st Hr)', '%', '>50'],
+    ['Active Motile (2nd Hr)', '%', '>50'],
+    ['Active Motile (3rd Hr)', '%', '>50'],
+    ['Active Motile (4th Hr)', '%', '>50'],
+    ['Sluggish Motility (1st Hr)', '%', ''],
+    ['Non-Motile (1st Hr)', '%', ''],
+    ['R.A. Factor (Quantitative)', 'IU/ml', '0-20'],
+    ['TSH', 'mIU/L', '0.4-4.5'],
+    ['T3 (Triiodothyronine)', 'ng/ml', '0.8-2.0'],
+    ['T4 (Thyroxine)', 'µg/dl', '5-12'],
+    ['Free T3', 'pg/ml', '2.3-4.2'],
+    ['Free T4', 'ng/dl', '0.89-1.76'],
+    ['Anti-TPO Antibodies', 'IU/ml', '0-35']
+  ];
+  ROWS.forEach(function (r) { LAB_RANGE_BY_EXACT_NAME[r[0]] = { unit: r[1], range: r[2] }; });
+})();
 const RX_FREQ_OPTIONS = ['Half-hourly','Hourly','Every 2 hours','Every 3 hours','Every 4 hours','Six times daily (6x/day)','Four times daily (QID)','Three times daily (TDS)','Twice daily (BD)','Once daily (OD)','At bedtime (HS)','Once weekly','As needed (PRN)'];
 const RX_DURATION_OPTIONS = ['½ day','1 day','2 days','3 days','4 days','5 days','6 days','7 days','10 days','13 days','1 week','2 weeks','3 weeks','4 weeks','6 weeks','1 month','2 months','3 months','4 months','5 months','6 months','12 months','Ongoing'];
 const RX_TYPE_OPTIONS = ['Eye Drop','Tablet','Capsule','Ointment','Cream','Gel','Syrup','Injection','Pessary','Lotion','Spray','Other'];
@@ -16931,6 +17371,7 @@ function getAllDxEntriesForFilter() {
 function filterDx(inp) {
   const val = inp.value.toLowerCase();
   const isObg = String(inp?.dataset?.dxDept || '').toLowerCase() === 'obg' || inp?.closest?.('#obg-dx-list');
+  if (!val || val.length < 1) { hideDxDropdown(); return; }
   if(val.length < 2 && !isObg) { hideDxDropdown(); return; }
   const pool = getAllDxEntriesForFilter();
   const matches = pool.filter(function (d) {
@@ -17000,7 +17441,7 @@ function addDxRow() {
   const isObg = list.id === 'obg-dx-list';
   const d = document.createElement('div');
   d.style.cssText='display:flex;gap:6px;align-items:center;margin-top:5px';
-  d.innerHTML=`<input type="text" class="dx-inp" ${isObg ? 'data-dx-dept="obg"' : ''} placeholder="${isObg ? 'Type diagnosis…' : 'ICD-10 search or type free-text diagnosis…'}" oninput="filterDx(this)" onfocus="showDxDropdown(this);wireDxInputFocus(this)" style="flex:1" autocomplete="off">
+  d.innerHTML=`<input type="text" class="dx-inp" ${isObg ? 'data-dx-dept="obg"' : ''} placeholder="${isObg ? 'ICD-10 code or diagnosis — type to search' : 'ICD-10 search or type free-text diagnosis…'}" oninput="filterDx(this)" onfocus="showDxDropdown(this);wireDxInputFocus(this)" style="flex:1" autocomplete="off">
     <button type="button" class="btn btn-xs btn-gray" onclick="this.closest('div').remove()">✕</button>`;
   list.appendChild(d);
   const inp = d.querySelector('.dx-inp');
@@ -18118,34 +18559,176 @@ function getLabTestMeta(name) {
   const n = normalizeLabTestName(name);
   const low = n.toLowerCase();
   const defs = [
-    { re:/\bhb\b|haemoglobin/, group:'haem', unit:'g/dL', range:'12-16', purpose:'Haemoglobin helps assess anaemia status and oxygen-carrying capacity of blood.', normalNote:'Values in the reference range usually suggest adequate haemoglobin for age and sex, though symptoms and clinical context matter.', abnormalNote:'Low values may suggest anaemia or blood loss, while higher values can be seen with dehydration or other causes and need clinical correlation.' },
-    { re:/\btlc\b|total leucocyte|wbc/, group:'haem', unit:'/cumm', range:'4000-11000', purpose:'Total white blood cell count is used as a broad marker of immune and inflammatory activity.', normalNote:'A normal count does not rule out disease, but it is generally reassuring when interpreted with symptoms and examination.', abnormalNote:'High or low counts can occur with infection, inflammation, medicines, marrow disorders, or stress and must be interpreted clinically.' },
-    { re:/\bdlc\b/, group:'haem', unit:'%', range:'40-75', purpose:'Differential leucocyte count describes the distribution of white blood cell types.', normalNote:'Balanced differential counts usually support a stable immune profile.', abnormalNote:'Shifts in neutrophils, lymphocytes, eosinophils, or other subsets can point toward infection, allergy, stress, or hematologic disease.' },
-    { re:/\bplatelet/, group:'haem', unit:'lakh/cumm', range:'1.5-4.5', purpose:'Platelet count helps assess clotting support and bleeding risk.', normalNote:'Counts in the reference range are generally adequate for routine haemostasis.', abnormalNote:'Low platelet counts may increase bleeding risk, while high counts can be reactive or primary and should be interpreted with the overall blood picture.' },
-    { re:/\bcbc\b|complete blood count/, group:'haem', unit:'', range:'', purpose:'Complete blood count gives an overview of red cells, white cells, and platelets.', normalNote:'When all CBC components are within range, it supports a broadly stable blood profile.', abnormalNote:'A CBC is a screening panel; any abnormal component should be interpreted together with symptoms, examination, and sometimes repeat testing.' },
-    { re:/\brbs\b|blood sugar|glucose/, group:'diab', unit:'mg/dL', range:'70-140', purpose:'Glucose testing is used to screen for and monitor diabetes and glucose regulation.', normalNote:'Values within the stated range are generally acceptable depending on fasting or random testing conditions.', abnormalNote:'Single abnormal glucose readings do not always confirm diabetes and may require confirmation with repeat testing or HbA1c in the right clinical setting.' },
-    { re:/\bhba1c\b/, group:'diab', unit:'%', range:'4-5.6', purpose:'HbA1c reflects average blood glucose exposure over roughly the previous 2 to 3 months.', normalNote:'Lower values within the expected range are generally consistent with good long-term glycaemic control.', abnormalNote:'Higher values suggest poorer glucose control over time, but interpretation should consider anaemia, haemoglobin variants, and the clinical picture.' },
-    { re:/\burea\b/, group:'bio', unit:'mg/dL', range:'15-40', purpose:'Blood urea is a biochemical marker often used with creatinine to assess hydration and kidney-related metabolism.', normalNote:'Values in range are usually compatible with stable protein metabolism and renal handling.', abnormalNote:'High or low values can reflect dehydration, diet, catabolism, liver issues, or kidney-related causes and should be interpreted with creatinine and symptoms.' },
-    { re:/\bcreatinine\b/, group:'bio', unit:'mg/dL', range:'0.6-1.2', purpose:'Creatinine is used as a practical marker of kidney filtration function.', normalNote:'Values within range are usually reassuring, though kidney assessment is best interpreted with age, muscle mass, urine findings, and clinical context.', abnormalNote:'Abnormal creatinine does not automatically mean severe kidney disease; hydration, muscle mass, medicines, and acute illness can all influence the result.' },
-    { re:/\bsodium\b/, group:'bio', unit:'mEq/L', range:'135-145', purpose:'Sodium helps assess fluid balance and overall electrolyte status.', normalNote:'Normal sodium usually supports stable fluid and electrolyte regulation.', abnormalNote:'Abnormal sodium can occur in dehydration, fluid overload, endocrine conditions, medicines, and acute illness and should be assessed clinically.' },
-    { re:/\bpotassium\b/, group:'bio', unit:'mEq/L', range:'3.5-5.0', purpose:'Potassium is important for neuromuscular and cardiac function.', normalNote:'Values within range are generally consistent with stable potassium balance.', abnormalNote:'Low or high potassium may need prompt clinical attention in the right setting, especially when symptoms, kidney issues, or ECG changes are present.' },
-    { re:/\bbilirubin\b/, group:'bio', unit:'mg/dL', range:'0.2-1.2', purpose:'Bilirubin helps assess jaundice and liver-bile metabolism.', normalNote:'Normal bilirubin levels usually argue against significant jaundice at the time of testing.', abnormalNote:'Raised bilirubin can come from liver, bile duct, or red-cell causes and is interpreted best with liver enzymes and symptoms.' },
-    { re:/\bsgot\b|\bast\b/, group:'bio', unit:'U/L', range:'0-40', purpose:'AST is a liver-associated enzyme that can also rise from muscle-related causes.', normalNote:'Normal AST is generally reassuring when interpreted with ALT and bilirubin.', abnormalNote:'A raised AST does not always mean primary liver disease; muscle injury, medicines, alcohol, and systemic illness can contribute.' },
-    { re:/\bsgpt\b|\balt\b/, group:'bio', unit:'U/L', range:'0-40', purpose:'ALT is commonly used as a marker of liver cell injury.', normalNote:'Values within range are generally consistent with a stable liver enzyme pattern.', abnormalNote:'Raised ALT may reflect fatty liver, viral hepatitis, medicines, alcohol, or other causes and needs interpretation with history and other tests.' },
-    { re:/\btsh\b/, group:'thyroid', unit:'mIU/L', range:'0.4-4.5', purpose:'TSH is the main screening test for thyroid regulation.', normalNote:'A TSH within the reference interval often suggests euthyroid status, though free thyroid hormones may still be needed in some situations.', abnormalNote:'TSH abnormalities should be correlated with T3/T4, symptoms, pregnancy status, and ongoing thyroid treatment.' },
-    { re:/\bt3\b/, group:'thyroid', unit:'ng/mL', range:'0.8-2.0', purpose:'T3 helps assess the active thyroid hormone status in selected thyroid evaluations.', normalNote:'A value in range supports balanced thyroid hormone availability when interpreted with TSH and T4.', abnormalNote:'T3 changes alone should not be over-interpreted and usually need correlation with TSH, T4, and symptoms.' },
-    { re:/\bt4\b/, group:'thyroid', unit:'µg/dL', range:'5-12', purpose:'T4 reflects thyroid hormone availability and supports thyroid function assessment.', normalNote:'Values in range are generally consistent with stable thyroid hormone levels.', abnormalNote:'Abnormal values can occur in thyroid disease and also in binding-protein changes, pregnancy, or medication effects.' }
+    // ── HAEMATOLOGY ──────────────────────────────────────────────────
+    { re:/\bhb\b|haemoglobin/, group:'haem', unit:'gm/dl', range:'11-16' },
+    { re:/\btlc\b|total leuko|total leucocyte|wbc/, group:'haem', unit:'/cmm', range:'4000-11000' },
+    { re:/neutrophil/, group:'haem', unit:'%', range:'40-70' },
+    { re:/lymphocyte/, group:'haem', unit:'%', range:'30-45' },
+    { re:/monocyte/, group:'haem', unit:'%', range:'2-5' },
+    { re:/eosinophil/, group:'haem', unit:'%', range:'1-6' },
+    { re:/basophil/, group:'haem', unit:'%', range:'0-1' },
+    { re:/\bplatelet/, group:'haem', unit:'Lacs', range:'1.5-4.5' },
+    { re:/\bdlc\b|differential leuko/, group:'haem', unit:'%', range:'40-75' },
+    { re:/\brbc\b|red blood cell/, group:'haem', unit:'Million/cmm', range:'3.5-5.5' },
+    { re:/\bpcv\b|packed cell/, group:'haem', unit:'%', range:'33-48' },
+    { re:/\bmcv\b|mean cell vol/, group:'haem', unit:'fl', range:'80-95' },
+    { re:/\bmch\b(?!c)|mean cell haemoglobin(?! conc)/, group:'haem', unit:'pg', range:'27-32' },
+    { re:/\bmchc\b|mean cell haemoglobin conc/, group:'haem', unit:'gm/dl', range:'32-36' },
+    { re:/\besr\b|erythrocyte sedimentation/, group:'haem', unit:'mm/hr', range:'0-20' },
+    { re:/malarial parasite/, group:'haem', unit:'', range:'' },
+    { re:/\bcbc\b|complete blood count/, group:'haem', unit:'', range:'' },
+    // ── COAGULOGRAM ──────────────────────────────────────────────────
+    { re:/\bbt\b|bleeding time/, group:'coag', unit:'min', range:'1-6' },
+    { re:/\bct\b|clotting time/, group:'coag', unit:'min', range:'1-10' },
+    { re:/prothrombin time(?! index)|\bpt\b(?! index)/, group:'coag', unit:'sec', range:'11-16' },
+    { re:/prothrombin time index|\bpti\b/, group:'coag', unit:'%', range:'70-130', formula:'pti' },
+    { re:/\binr\b|international normalised/, group:'coag', unit:'', range:'0.8-1.2', formula:'inr' },
+    { re:/aptt|activated partial thrombin/, group:'coag', unit:'sec', range:'25-40' },
+    // ── CHEMISTRY ─────────────────────────────────────────────────────
+    { re:/fasting glucose|fasting blood sugar|\bfbs\b/, group:'chem', unit:'mg/dl', range:'70-110' },
+    { re:/post prandial|post-prandial|\bppbs\b|\bpp glucose/, group:'chem', unit:'mg/dl', range:'70-140' },
+    { re:/post lunch/, group:'chem', unit:'mg/dl', range:'70-140' },
+    { re:/post dinner/, group:'chem', unit:'mg/dl', range:'70-140' },
+    { re:/random glucose|random blood sugar|\brbs\b/, group:'chem', unit:'mg/dl', range:'70-160' },
+    { re:/\bhba1c\b|glycosylated haemoglobin/, group:'chem', unit:'%', range:'4.7-6.0', formula:'hba1c_interp' },
+    { re:/average blood glucose|\babg\b/, group:'chem', unit:'mg/dl', range:'90-150', formula:'abg' },
+    { re:/\bcpk-mb\b/, group:'chem', unit:'IU/L', range:'0-25' },
+    { re:/\bcpk-nac\b|\bcpk\b(?!-mb)/, group:'chem', unit:'IU/L', range:'25-200' },
+    { re:/\bamylase\b/, group:'chem', unit:'IU/L', range:'25-110' },
+    { re:/\blipase\b|s\. lipase/, group:'chem', unit:'IU/L', range:'20-300' },
+    { re:/gama g\.t\.|gamma gt|\bggt\b/, group:'chem', unit:'IU/L', range:'0-35' },
+    { re:/\bldh\b/, group:'chem', unit:'IU/L', range:'114-240' },
+    { re:/\btrop-t\b|troponin/, group:'chem', unit:'', range:'' },
+    // ── RFT ───────────────────────────────────────────────────────────
+    { re:/\burea\b|blood urea|\bbun\b/, group:'rft', unit:'mg/dl', range:'10-40' },
+    { re:/\bcreatinine\b/, group:'rft', unit:'mg/dl', range:'0.5-1.5' },
+    { re:/\buric acid\b/, group:'rft', unit:'mg/dl', range:'2-7' },
+    { re:/spot microalbumin/, group:'rft', unit:'mg/g Creatinine', range:'0-30' },
+    { re:/24.*microalbumin/, group:'rft', unit:'mg/24hr', range:'30-300' },
+    { re:/spot urine creatinine/, group:'rft', unit:'mg/dl', range:'25-400' },
+    { re:/24.*urine creatinine/, group:'rft', unit:'mg/24hr', range:'500-2000' },
+    { re:/albumin.*creatinine ratio|uacr/, group:'rft', unit:'mg/mmol', range:'3-30', formula:'uacr' },
+    { re:/24.*urine protein/, group:'rft', unit:'mg/24hr', range:'0-150' },
+    { re:/total volume.*24|24.*total volume/, group:'rft', unit:'ml/24hr', range:'' },
+    // ── LFT ───────────────────────────────────────────────────────────
+    { re:/total bilirubin/, group:'lft', unit:'mg/dl', range:'0.2-1.2' },
+    { re:/direct bilirubin/, group:'lft', unit:'mg/dl', range:'0.2-1.0' },
+    { re:/indirect bilirubin/, group:'lft', unit:'mg/dl', range:'0-0.2', formula:'ibili' },
+    { re:/total protein/, group:'lft', unit:'gm/dl', range:'6-8' },
+    { re:/\balbumin\b/, group:'lft', unit:'gm/dl', range:'3.8-5.0' },
+    { re:/\bglobulin\b/, group:'lft', unit:'gm/dl', range:'2.3-3.5', formula:'globulin' },
+    { re:/a\/g ratio|albumin.*globulin ratio/, group:'lft', unit:'', range:'0.9-2.0', formula:'agratio' },
+    { re:/\bsgot\b|\bast\b/, group:'lft', unit:'IU/L', range:'6-40' },
+    { re:/\bsgpt\b|\balt\b/, group:'lft', unit:'IU/L', range:'3-35' },
+    { re:/alkaline phosphatase|\balp\b/, group:'lft', unit:'U/L', range:'39-118' },
+    // ── LIPID ─────────────────────────────────────────────────────────
+    { re:/total cholesterol/, group:'lipid', unit:'mg/dl', range:'125-200' },
+    { re:/triglyceride/, group:'lipid', unit:'mg/dl', range:'60-165' },
+    { re:/hdl cholesterol|\bhdl\b/, group:'lipid', unit:'mg/dl', range:'30-70' },
+    { re:/\bldl\b(?! hdl)/, group:'lipid', unit:'mg/dl', range:'74-130', formula:'ldl' },
+    { re:/\bvldl\b/, group:'lipid', unit:'mg/dl', range:'10-32', formula:'vldl' },
+    { re:/cholesterol.*hdl.*ratio|chol.*hdl/, group:'lipid', unit:'', range:'3-5', formula:'cholhdl' },
+    { re:/ldl.*hdl.*ratio/, group:'lipid', unit:'', range:'1.5-3.5', formula:'ldhldl' },
+    { re:/non-hdl cholesterol/, group:'lipid', unit:'mg/dl', range:'0-160', formula:'nonhdl' },
+    { re:/total lipid/, group:'lipid', unit:'mg/dl', range:'400-700' },
+    // ── ELECTROLYTES ──────────────────────────────────────────────────
+    { re:/sodium|na\+/, group:'electro', unit:'mmol/L', range:'135-155' },
+    { re:/potassium|k\+/, group:'electro', unit:'mmol/L', range:'3.5-5.5' },
+    { re:/chloride|cl[-]/, group:'electro', unit:'mmol/L', range:'98-107' },
+    { re:/calcium|ca\+\+/, group:'electro', unit:'mg%', range:'8.4-11.5' },
+    { re:/phosphorous|phosphate|po4/, group:'electro', unit:'mg%', range:'2.5-4.8' },
+    { re:/magnesium|\bmg\b/, group:'electro', unit:'mmol/L', range:'1.7-2.2' },
+    { re:/lithium|\bli\b/, group:'electro', unit:'mEq/L', range:'0.5-1.0' },
+    // ── SEROLOGY ──────────────────────────────────────────────────────
+    { re:/blood group/, group:'sero', unit:'', range:'' },
+    { re:/rh.*anti|anti-d/, group:'sero', unit:'', range:'' },
+    { re:/hiv|h\.i\.v/, group:'sero', unit:'', range:'Non-Reactive' },
+    { re:/hbsag/, group:'sero', unit:'', range:'Non-Reactive' },
+    { re:/hcv|h\.c\.v/, group:'sero', unit:'', range:'Non-Reactive' },
+    { re:/\bvdrl\b/, group:'sero', unit:'', range:'Non-Reactive' },
+    { re:/r\.a\.factor|ra factor(?! quantit)/, group:'sero', unit:'', range:'Negative' },
+    { re:/\baso\b|anti.*streptol/, group:'sero', unit:'', range:'Negative' },
+    { re:/c\. reactive|c-reactive|\bcrp\b/, group:'sero', unit:'', range:'Negative' },
+    { re:/direct coombs/, group:'sero', unit:'', range:'Negative' },
+    { re:/indirect coombs/, group:'sero', unit:'', range:'Negative' },
+    { re:/malarial antigen/, group:'sero', unit:'', range:'Negative' },
+    { re:/typhi dot.*igg/, group:'sero', unit:'', range:'Negative' },
+    { re:/typhi dot.*igm/, group:'sero', unit:'', range:'Negative' },
+    { re:/\bwidal\b/, group:'sero', unit:'', range:'Negative' },
+    // ── URINE ─────────────────────────────────────────────────────────
+    { re:/urine colou?r/, group:'urine', unit:'', range:'Light Yellow' },
+    { re:/urine appearance/, group:'urine', unit:'', range:'Clear' },
+    { re:/urine protein/, group:'urine', unit:'', range:'Nil' },
+    { re:/urine sugar/, group:'urine', unit:'', range:'Nil' },
+    { re:/urine ph/, group:'urine', unit:'', range:'6.5' },
+    { re:/specific gravity/, group:'urine', unit:'', range:'1.005-1.030' },
+    { re:/acetone|ketone/, group:'urine', unit:'', range:'Negative' },
+    { re:/bile salt/, group:'urine', unit:'', range:'Negative' },
+    { re:/bile pigment/, group:'urine', unit:'', range:'Negative' },
+    { re:/urine pus cell/, group:'urine', unit:'', range:'Nil' },
+    { re:/urine rbc/, group:'urine', unit:'', range:'Nil' },
+    { re:/epithelial cell/, group:'urine', unit:'', range:'Nil' },
+    { re:/calcium oxalate/, group:'urine', unit:'', range:'Nil' },
+    { re:/triple phosphate/, group:'urine', unit:'', range:'Nil' },
+    { re:/uric acid crystal/, group:'urine', unit:'', range:'Nil' },
+    { re:/amorphous/, group:'urine', unit:'', range:'Nil' },
+    { re:/budding yeast/, group:'urine', unit:'', range:'Nil' },
+    { re:/fungal hyphae/, group:'urine', unit:'', range:'Nil' },
+    { re:/mucus fiber/, group:'urine', unit:'', range:'Nil' },
+    { re:/urine bacteria/, group:'urine', unit:'', range:'Nil' },
+    // ── STOOL ─────────────────────────────────────────────────────────
+    { re:/stool colou?r/, group:'stool', unit:'', range:'Brownish' },
+    { re:/stool consistency/, group:'stool', unit:'', range:'' },
+    { re:/stool blood/, group:'stool', unit:'', range:'Nil' },
+    { re:/stool mucou?s/, group:'stool', unit:'', range:'Nil' },
+    { re:/stool parasite/, group:'stool', unit:'', range:'Nil' },
+    { re:/stool ph/, group:'stool', unit:'', range:'6.5' },
+    { re:/occult blood/, group:'stool', unit:'', range:'Negative' },
+    { re:/veg.*protozoa|protozoa.*veg/, group:'stool', unit:'', range:'Nil' },
+    { re:/cyst.*protozoa/, group:'stool', unit:'', range:'Nil' },
+    { re:/ova|eggs.*helminth/, group:'stool', unit:'', range:'Nil' },
+    { re:/stool pus cell/, group:'stool', unit:'', range:'Nil' },
+    { re:/stool mucus fiber/, group:'stool', unit:'', range:'Nil' },
+    { re:/fat cell/, group:'stool', unit:'', range:'Nil' },
+    { re:/hanging drop|vibrio/, group:'stool', unit:'', range:'Negative' },
+    // ── HCG ───────────────────────────────────────────────────────────
+    { re:/chorionic gonadotropin|hcg/, group:'hcg', unit:'', range:'' },
+    // ── SEMEN ─────────────────────────────────────────────────────────
+    { re:/semen volume/, group:'semen', unit:'ml', range:'>=2.5' },
+    { re:/semen colou?r/, group:'semen', unit:'', range:'Creamy White' },
+    { re:/semen reaction/, group:'semen', unit:'', range:'Alkaline' },
+    { re:/semen viscosity/, group:'semen', unit:'', range:'' },
+    { re:/liquefaction time/, group:'semen', unit:'min', range:'0-30' },
+    { re:/semen pus cell/, group:'semen', unit:'', range:'Nil' },
+    { re:/semen rbc/, group:'semen', unit:'', range:'Nil' },
+    { re:/spermatogonia/, group:'semen', unit:'', range:'Nil' },
+    { re:/total sperm count/, group:'semen', unit:'Million/ml', range:'20-200' },
+    { re:/normal morphology/, group:'semen', unit:'%', range:'>30' },
+    { re:/active motile/, group:'semen', unit:'%', range:'>50' },
+    { re:/sluggish motility/, group:'semen', unit:'%', range:'' },
+    { re:/non-motile/, group:'semen', unit:'%', range:'' },
+    // ── RA FACTOR QUANTITATIVE ────────────────────────────────────────
+    { re:/ra factor.*quantit|quantit.*ra factor/, group:'rafq', unit:'IU/ml', range:'0-20' },
+    // ── THYROID ───────────────────────────────────────────────────────
+    { re:/\btsh\b/, group:'thyroid', unit:'mIU/L', range:'0.4-4.5' },
+    { re:/\bt3\b(?! all)/, group:'thyroid', unit:'ng/ml', range:'0.8-2.0' },
+    { re:/\bt4\b(?! all)/, group:'thyroid', unit:'µg/dl', range:'5-12' },
+    { re:/free t3/, group:'thyroid', unit:'pg/ml', range:'2.3-4.2' },
+    { re:/free t4/, group:'thyroid', unit:'ng/dl', range:'0.89-1.76' },
+    { re:/anti.*tpo|tpo antibod/, group:'thyroid', unit:'IU/ml', range:'0-35' }
   ];
   const hit = defs.find(function (d) { return d.re.test(low); });
+  const exact = LAB_RANGE_BY_EXACT_NAME[n];
   return Object.assign({
     name: n,
     group:'custom',
     unit:'',
     range:'',
+    formula: null,
     purpose:'This investigation should be interpreted in the clinical context of the patient.',
     normalNote:'Values within the printed reference interval are generally reassuring, but must be interpreted with symptoms and examination findings.',
     abnormalNote:'Abnormal results do not automatically indicate a serious problem and may need clinical correlation, repeat testing, or trend comparison.'
-  }, hit || {});
+  }, hit || {}, exact || {});
 }
 function formatLabAgeSex(pt) {
   return [pt?.age ? String(pt.age) + 'Y' : '', pt?.sex || ''].filter(Boolean).join(' / ') || '—';
@@ -18249,13 +18832,20 @@ function renderLabReportPreview(order) {
   setTxt('lab-rpt-dr', order.dr || pt.assignedDoctor || pt.doctor || '—');
   setTxt('lab-rpt-date', formatDateIN(order.completedAt || order.date || new Date()));
   setTxt('lab-rpt-tech', order.tech || document.getElementById('lab-incharge')?.value || '—');
-  const byGroup = { haem:[], bio:[], diab:[], thyroid:[], custom:[] };
+  const ALL_LAB_GROUPS = ['haem','coag','chem','rft','lft','lipid','electro','sero','urine','stool','hcg','semen','rafq','thyroid','bio','diab','custom'];
+  const byGroup = {};
+  ALL_LAB_GROUPS.forEach(function (g) { byGroup[g] = []; });
   order.tests.forEach(function (name) {
     const saved = order.results[normalizeLabTestName(name)] || {};
     const meta = Object.assign({}, getLabTestMeta(name), saved);
-    byGroup[meta.group || 'custom'].push(meta);
+    const g = meta.group || 'custom';
+    if (!byGroup[g]) byGroup[g] = [];
+    byGroup[g].push(meta);
   });
-  ['haem','bio','diab','thyroid'].forEach(function (group) {
+  // 'bio' and 'diab' legacy groups fall back to 'chem' display
+  if (byGroup.bio && byGroup.bio.length) byGroup.chem = (byGroup.chem || []).concat(byGroup.bio);
+  if (byGroup.diab && byGroup.diag && byGroup.diab.length) byGroup.chem = (byGroup.chem || []).concat(byGroup.diab);
+  ['haem','coag','chem','rft','lft','lipid','electro','sero','urine','stool','hcg','semen','rafq','thyroid'].forEach(function (group) {
     const host = document.getElementById('lab-' + group);
     if (!host) return;
     host.innerHTML = (byGroup[group] || []).map(function (row) {
@@ -18380,6 +18970,7 @@ function flagLabVal(inp, testName) {
   setLabFlagForTest(testName);
   calculateLabFormulas(testName);
 }
+// Auto-calculate derived fields when input values change
 function calculateLabFormulas(changedTestName) {
   const getVal = function (testKey) {
     const el = document.getElementById('lr-val-' + labTestKey(testKey));
@@ -18394,6 +18985,7 @@ function calculateLabFormulas(changedTestName) {
     }
   };
   const low = (changedTestName || '').toLowerCase();
+  // PTI: (PT patient / PT control) × 100  — assume control = 14s
   if (/prothrombin time(?! index)|\bpt\b/.test(low)) {
     const pt = getVal('P.T. (Prothrombin Time)');
     const control = 14;
@@ -18402,10 +18994,12 @@ function calculateLabFormulas(changedTestName) {
       setVal('I.N.R. (International Normalised Ratio)', parseFloat((pt / control).toFixed(2)));
     }
   }
+  // ABG from HbA1c: ABG = (HbA1c × 28.7) - 46.7
   if (/hba1c|glycosylated haemoglobin/.test(low)) {
     const hba1c = getVal('Glycosylated Haemoglobin (HbA1c)');
     if (!isNaN(hba1c)) setVal('ABG (Average Blood Glucose)', (hba1c * 28.7) - 46.7);
   }
+  // Lipid formulas
   if (/total cholesterol|triglyceride|hdl/.test(low)) {
     const chol = getVal('Total Cholesterol');
     const tg = getVal('Triglycerides');
@@ -18420,11 +19014,13 @@ function calculateLabFormulas(changedTestName) {
       setVal('Non-HDL Cholesterol', chol - hdl);
     }
   }
+  // LFT indirect bilirubin = Total - Direct
   if (/total bilirubin|direct bilirubin/.test(low)) {
     const total = getVal('Total Bilirubin');
     const direct = getVal('Direct Bilirubin');
     if (!isNaN(total) && !isNaN(direct)) setVal('Indirect Bilirubin', total - direct);
   }
+  // LFT Globulin = Total Proteins - Albumin, A/G ratio = Albumin / Globulin
   if (/total protein|albumin/.test(low)) {
     const tp = getVal('Total Proteins');
     const alb = getVal('Albumin');
@@ -18434,6 +19030,7 @@ function calculateLabFormulas(changedTestName) {
       if (glob > 0) setVal('A/G Ratio', alb / glob);
     }
   }
+  // RFT Urine Albumin-Creatinine Ratio
   if (/spot microalbumin|spot urine creatinine/.test(low)) {
     const alb = getVal('Spot Microalbuminuria');
     const cr = getVal('Spot Urine Creatinine');
@@ -18487,6 +19084,79 @@ function saveLabResults() {
   renderLabOrders();
   document.getElementById('lab-entry-panel').style.display = 'none';
   initLab();
+}
+
+// ── ADD PATIENT TO LAB MANUALLY ──────────────────────────────────────
+function searchLabAddPatient(query) {
+  const q = String(query || '').trim().toLowerCase();
+  const resultsEl = document.getElementById('lab-add-pt-results');
+  if (!resultsEl) return;
+  if (!q || q.length < 2) { resultsEl.style.display = 'none'; return; }
+  const today = new Date().toISOString().split('T')[0];
+  const matches = (window.PATIENTS || []).filter(function (p) {
+    if (!centreMatch(p)) return false;
+    const visitDate = String(p.visitDate || p.regDate || p.date || p.createdAt || p.registeredAt || '').slice(0, 10);
+    if (visitDate !== today) return false;
+    const phone = String(p.mob || p.phone || '').replace(/\D/g, '');
+    const bmhId = String(p.bmhId || '').toLowerCase();
+    const qDigits = q.replace(/\D/g,'');
+    return bmhId.includes(q) || (qDigits.length >= 3 && phone.includes(qDigits));
+  }).slice(0, 8);
+  if (!matches.length) {
+    resultsEl.style.display = 'block';
+    resultsEl.innerHTML = '<div style="padding:10px;font-size:11.5px;color:var(--g1)">No patients found for today</div>';
+    return;
+  }
+  resultsEl.style.display = 'block';
+  resultsEl.innerHTML = matches.map(function (p) {
+    return '<div onclick="selectLabAddPatient(\'' + p.bmhId + '\',\'' + String(p.name || '').replace(/'/g, '') + '\')" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--g5);display:flex;align-items:center;gap:8px" onmouseenter="this.style.background=\'var(--g6)\'" onmouseleave="this.style.background=\'\'"><div style="flex:1"><div style="font-size:12.5px;font-weight:800">' + escapeHtmlConsent(p.name || '') + '</div><div style="font-size:10.5px;color:var(--g1)">' + (p.bmhId || '') + ' · ' + (p.mob || '') + '</div></div></div>';
+  }).join('');
+}
+function selectLabAddPatient(bmhId, name) {
+  const inp = document.getElementById('lab-add-pt-bmhid');
+  const nameEl = document.getElementById('lab-add-pt-name');
+  const searchEl = document.getElementById('lab-add-pt-search');
+  const resultsEl = document.getElementById('lab-add-pt-results');
+  if (inp) inp.value = bmhId;
+  if (nameEl) nameEl.textContent = name + ' (' + bmhId + ')';
+  if (searchEl) searchEl.value = name;
+  if (resultsEl) resultsEl.style.display = 'none';
+}
+function addPatientToLab() {
+  const bmhId = document.getElementById('lab-add-pt-bmhid')?.value?.trim();
+  if (!bmhId) { showToast('Search and select a patient first', 'w'); return; }
+  const pt = (window.PATIENTS || []).find(function (p) { return p.bmhId === bmhId; });
+  if (!pt) { showToast('Patient not found', 'w'); return; }
+  // Check if already in queue
+  const existing = LAB_ORDERS.find(function (o) { return o.bmhId === bmhId; });
+  if (existing) {
+    openLabOrder(existing.id);
+    showToast(pt.name + ' is already in the lab queue', 'i');
+    return;
+  }
+  // Create a manual lab entry (walk-in) for this patient
+  const orders = Array.isArray(pt.investigationOrders) ? pt.investigationOrders : [];
+  const manualOrder = {
+    name: 'Manual Lab Entry',
+    mode: 'send',
+    date: new Date().toISOString().split('T')[0],
+    orderedBy: CURRENT_USER?.name || 'Lab',
+    done: false,
+    labReady: false,
+    doctorSeen: false,
+    isManualLabEntry: true
+  };
+  orders.push(manualOrder);
+  pt.investigationOrders = orders;
+  if (pt.bmhId) {
+    fbUpdate && fbUpdate('patients/' + pt.bmhId, { investigationOrders: orders }).catch(function(){});
+  }
+  // Clear search UI
+  const inp = document.getElementById('lab-add-pt-bmhid'); if (inp) inp.value = '';
+  const nameEl = document.getElementById('lab-add-pt-name'); if (nameEl) nameEl.textContent = '';
+  const searchEl = document.getElementById('lab-add-pt-search'); if (searchEl) searchEl.value = '';
+  renderLabOrders();
+  showToast(pt.name + ' added to lab queue ✓', 's');
 }
 
 function addCustomLabTest() {
@@ -18977,12 +19647,18 @@ function printLabReport() {
   const order = (sel && sel.value ? LAB_ORDERS.find(function (o) { return o.id === sel.value; }) : null) || activeLabOrder || LAB_ORDERS[0];
   if (!order) { showToast('No lab report selected', 'w'); return; }
   const pt = PATIENTS.find(function (x) { return x.bmhId === order.bmhId; }) || {};
-  const groups = { haem:'Haematology', bio:'Biochemistry', diab:'Diabetes', thyroid:'Thyroid', custom:'Additional Tests' };
-  const grouped = { haem:[], bio:[], diab:[], thyroid:[], custom:[] };
+  const groups = { haem:'Haematology', coag:'Coagulogram', chem:'Clinical Chemistry', rft:'Renal Function Test', lft:'Liver Function Test', lipid:'Lipid Profile', electro:'Serum Electrolytes', sero:'Serology', urine:'Urine Examination', stool:'Stool Examination', hcg:'Pregnancy Test', semen:'Semen Analysis', rafq:'RA Factor', thyroid:'Thyroid Function', bio:'Biochemistry', diab:'Diabetes', custom:'Additional Tests' };
+  const grouped = {};
+  Object.keys(groups).forEach(function (g) { grouped[g] = []; });
   order.tests.forEach(function (name) {
     const row = Object.assign({}, getLabTestMeta(name), order.results[normalizeLabTestName(name)] || {});
-    grouped[row.group || 'custom'].push(row);
+    const g = row.group || 'custom';
+    if (!grouped[g]) grouped[g] = [];
+    grouped[g].push(row);
   });
+  // merge legacy bio/diab into chem for printing
+  if (grouped.bio && grouped.bio.length) grouped.chem = (grouped.chem || []).concat(grouped.bio);
+  if (grouped.diab && grouped.diab.length) grouped.chem = (grouped.chem || []).concat(grouped.diab);
   const insights = buildLabInsights(order);
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{margin:0;padding:0;box-sizing:border-box;print-color-adjust:economy;-webkit-print-color-adjust:economy}body{font-family:Arial,sans-serif;font-size:10.8px;color:#111;padding:0 12mm 12mm;background:#fff}@page{size:A4 portrait;margin:40mm 12mm 12mm}.pt-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;border:1px solid #9ca3af;border-radius:8px;padding:8px 10px;margin-bottom:10px;background:#fff}.pt-lbl{font-size:8.5px;color:#555;font-weight:700;text-transform:uppercase;letter-spacing:.3px}.section-hd{font-size:10.8px;font-weight:900;color:#111;text-transform:uppercase;letter-spacing:.5px;margin:11px 0 0;padding:6px 8px;background:#ececec;border-left:4px solid #666}.insights{margin:10px 0;padding:8px 10px;border:1px solid #bdbdbd;border-radius:8px;background:#f7f7f7;font-size:10.3px;line-height:1.52}table{width:100%;border-collapse:collapse;margin-top:8px}thead th{background:#666;color:#fff;padding:6px 8px;text-align:left;font-size:9px;font-weight:800;text-transform:uppercase}td{padding:6px 8px;border:1px solid #d7d7d7;font-size:10.1px;vertical-align:top}tr:nth-child(even){background:#fafafa}.flag-h{color:#111;font-weight:900;background:#e7e7e7}.flag-l{color:#111;font-weight:900;background:#f1f1f1}.flag-n{color:#111;font-weight:800}.footer{margin-top:14px;padding-top:8px;border-top:1px solid #c7c7c7}.signs{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:18px}.signline{border-bottom:1px solid #333;height:28px;margin-bottom:4px}.small{font-size:9px;color:#555}</style></head><body>
 <div class="pt-bar">
@@ -21483,8 +22159,21 @@ function renderCollectionDashboard() {
   setEl('rc-pending-total', fmt(0));
   setEl('rc-pending-total2', fmt(0));
   setEl('rc-ins-total', fmt(collected.filter(t=>t.mode==='Insurance').reduce((s,t)=>s+t.amount,0)));
+  // OPD / Investigations / Procedures breakdown
+  const opdTotal = collected.filter(function (t) {
+    return inferChargeCategoryFromService(t.service || t.for || t.desc || '') === 'consultation';
+  }).reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
+  const invTotal = collected.filter(function (t) {
+    return inferChargeCategoryFromService(t.service || t.for || t.desc || '') === 'diagnostic';
+  }).reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
+  const procTotal = collected.filter(function (t) {
+    return inferChargeCategoryFromService(t.service || t.for || t.desc || '') === 'surgery';
+  }).reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
+  setEl('rc-opd-total', fmt(opdTotal));
+  setEl('rc-inv-total', fmt(invTotal));
+  setEl('rc-proc-total', fmt(procTotal));
 
-  // Dept breakdown
+  // Dept breakdown — OPD / Investigation / Procedure & surgery shown inside each department (sums to dept total)
   const deptEl = document.getElementById('rc-dept-collection');
   if(deptEl) {
     const depts = ['ophtho','obg','psych','skin'];
@@ -21494,10 +22183,32 @@ function renderCollectionDashboard() {
       const dc = DEPT_COLORS[dept];
       const did = 'dept-txn-'+dept;
       if(!dTxn.length) return '';
+      const sumCat = function (want) {
+        return dTxn.filter(function (t) {
+          return inferChargeCategoryFromService(t.service || t.for || t.desc || '') === want;
+        }).reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
+      };
+      const opdD = sumCat('consultation');
+      const invD = sumCat('diagnostic');
+      const sxD = sumCat('surgery');
+      const otherD = dTxn.filter(function (t) {
+        const c = inferChargeCategoryFromService(t.service || t.for || t.desc || '');
+        return c !== 'consultation' && c !== 'diagnostic' && c !== 'surgery';
+      }).reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
+      const chk = Math.abs(dTotal - (opdD + invD + sxD + otherD)) < 0.5;
       return `<div style="border:1.5px solid ${dc.border};border-radius:var(--r);overflow:hidden;background:#fff">
         <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:${dc.bg};cursor:pointer" onclick="toggleDeptDetail('${did}')">
           <div style="flex:1">
             <div style="font-size:13px;font-weight:800;color:${dc.text}">${dc.label}</div>
+            <div style="font-size:10.5px;color:var(--g1);margin-top:4px;display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center">
+              <span style="cursor:pointer" onclick="event.stopPropagation();openRcCollectionDetailModal('${dept}','opd')">OPD <strong style="color:#166534">${fmt(opdD)}</strong></span>
+              <span style="opacity:.35">·</span>
+              <span style="cursor:pointer" onclick="event.stopPropagation();openRcCollectionDetailModal('${dept}','inv')">Inv <strong style="color:#1e40af">${fmt(invD)}</strong></span>
+              <span style="opacity:.35">·</span>
+              <span style="cursor:pointer" onclick="event.stopPropagation();openRcCollectionDetailModal('${dept}','sx')">Sx/Proc <strong style="color:#6b21a8">${fmt(sxD)}</strong></span>
+              ${otherD > 0 ? `<span style="opacity:.35">·</span><span style="cursor:pointer" onclick="event.stopPropagation();openRcCollectionDetailModal('${dept}','other')">Other <strong>${fmt(otherD)}</strong></span>` : ''}
+            </div>
+            ${!chk ? '<div style="font-size:9px;color:var(--orange);margin-top:4px">Note: category split may not match total if service text is unclear.</div>' : ''}
             <div style="font-size:10.5px;color:var(--g1);margin-top:2px">${dTxn.length} transaction${dTxn.length>1?'s':''} today</div>
           </div>
           <div style="text-align:right">
@@ -21537,6 +22248,45 @@ function renderCollectionDashboard() {
   }
 }
 
+function openRcCollectionDetailModal(dept, catKey) {
+  const today = new Date();
+  const todayKeyLocal = [
+    today.getFullYear(),
+    String(today.getMonth() + 1).padStart(2, '0'),
+    String(today.getDate()).padStart(2, '0')
+  ].join('-');
+  const collected = TRANSACTIONS.filter(function (t) {
+    return (t.centre || 'CHD') === getEffectiveCentre() && txnIsoDate(t) === todayKeyLocal && t.collected;
+  }).filter(function (t) { return t.dept === dept; });
+  let list = [];
+  if (catKey === 'other') {
+    list = collected.filter(function (t) {
+      const c = inferChargeCategoryFromService(t.service || t.for || t.desc || '');
+      return c !== 'consultation' && c !== 'diagnostic' && c !== 'surgery';
+    });
+  } else {
+    const want = catKey === 'opd' ? 'consultation' : catKey === 'inv' ? 'diagnostic' : catKey === 'sx' ? 'surgery' : '';
+    list = collected.filter(function (t) {
+      return inferChargeCategoryFromService(t.service || t.for || t.desc || '') === want;
+    });
+  }
+  const fmt = function (n) { return '₹' + n.toLocaleString('en-IN'); };
+  const dc = DEPT_COLORS[dept];
+  const title = (dc?.label || dept) + ' — ' + ({ opd: 'OPD / consultations', inv: 'Investigations & diagnostics', sx: 'Procedures & surgery', other: 'Other' }[catKey] || catKey);
+  const bodyEl = document.getElementById('m-rc-collection-detail-body');
+  const titleEl = document.getElementById('m-rc-collection-detail-title');
+  if (titleEl) titleEl.textContent = title;
+  if (!bodyEl) return;
+  bodyEl.innerHTML = list.length ? list.map(function (t) {
+    return '<div style="display:flex;align-items:center;gap:7px;padding:7px 8px;border-bottom:1px solid var(--g5);font-size:12px">'
+      + '<div style="flex:1"><div style="font-weight:800">' + escapeHtmlConsent(t.patient || '') + '</div><div style="font-size:10.5px;color:var(--g1)">' + escapeHtmlConsent(t.service || '—') + ' · ' + escapeHtmlConsent(t.time || '—') + '</div></div>'
+      + '<span class="badge bd-gray" style="font-size:9px">' + escapeHtmlConsent(t.mode || '—') + '</span>'
+      + '<div style="font-weight:900;color:#1a8c3c">' + fmt(getNetTransactionAmount(t)) + '</div>'
+      + '</div>';
+  }).join('') : '<div style="padding:14px;color:var(--g1);font-size:12px">No transactions in this category for today.</div>';
+  openM('m-rc-collection-detail');
+}
+window.openRcCollectionDetailModal = openRcCollectionDetailModal;
 function toggleDeptDetail(id) {
   const el = document.getElementById(id);
   const ch = document.getElementById('chev-'+id);
