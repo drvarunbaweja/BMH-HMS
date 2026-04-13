@@ -6779,11 +6779,12 @@ function renderIolInventoryPowerGrid(prefill) {
       <div style="font-size:12px;font-weight:900;color:#8a4200">${power}</div>
       <div style="display:flex;align-items:center;gap:6px;margin-top:6px">
         <button class="btn btn-xs btn-outline" type="button" onclick="adjustIolPowerQty('${power}',-1)">−</button>
-        <input type="number" min="0" max="9" value="${qty}" data-power="${power}" class="inv-iol-qty" style="width:54px;text-align:center;font-weight:900">
+        <input type="number" min="0" max="9" value="${qty}" data-power="${power}" class="inv-iol-qty" style="width:54px;text-align:center;font-weight:900" oninput="updateIolPowerCounter()">
         <button class="btn btn-xs btn-outline" type="button" onclick="adjustIolPowerQty('${power}',1)">+</button>
       </div>
     </div>`;
   }).join('');
+  updateIolPowerCounter();
 }
 window.renderIolInventoryPowerGrid = renderIolInventoryPowerGrid;
 function adjustIolPowerQty(power, delta) {
@@ -6791,8 +6792,24 @@ function adjustIolPowerQty(power, delta) {
   if (!input) return;
   const next = Math.max(0, Math.min(9, (parseInt(input.value, 10) || 0) + delta));
   input.value = String(next);
+  updateIolPowerCounter();
 }
 window.adjustIolPowerQty = adjustIolPowerQty;
+function updateIolPowerCounter() {
+  const box = document.getElementById('inv-iol-stock-box');
+  if (!box) return;
+  let counter = document.getElementById('inv-iol-power-counter');
+  if (!counter) {
+    counter = document.createElement('div');
+    counter.id = 'inv-iol-power-counter';
+    counter.style.cssText = 'margin:8px 0 10px;font-size:11px;font-weight:900;color:#8a4200;background:#fff3d8;border:1px solid #ead8a4;border-radius:8px;padding:6px 10px;display:inline-flex;gap:10px;align-items:center';
+    const target = box.querySelector('#inv-iol-brands-container') || box.firstElementChild;
+    box.insertBefore(counter, target);
+  }
+  const total = Array.from(box.querySelectorAll('.inv-iol-qty')).reduce(function (sum, el) { return sum + Math.max(0, Number(el.value) || 0); }, 0);
+  counter.textContent = 'IOL power counter: ' + total + ' unit' + (total === 1 ? '' : 's');
+}
+window.updateIolPowerCounter = updateIolPowerCounter;
 function buildIolInventoryRow(base, power, rowIndex, serialHint) {
   const brand = String(base.brand || '').trim();
   const company = String(base.company || '').trim();
@@ -6868,8 +6885,9 @@ function renderIolBrandPowerGrid(entryDiv) {
   const powers = [];
   for (let p = 3.0; p <= 30.0; p += 0.5) powers.push('+' + p.toFixed(2) + 'D');
   gridEl.innerHTML = powers.map(function (pw) {
-    return `<div style="background:#fff;border:1px solid #d2bb79;border-radius:7px;padding:6px 8px;text-align:center"><div style="font-size:11px;font-weight:700;margin-bottom:5px">${pw}</div><input type="number" class="inv-iol-qty" data-power="${pw}" min="0" value="0" style="width:100%;text-align:center;font-weight:800;font-size:13px"></div>`;
+    return `<div style="background:#fff;border:1px solid #d2bb79;border-radius:7px;padding:6px 8px;text-align:center"><div style="font-size:11px;font-weight:700;margin-bottom:5px">${pw}</div><input type="number" class="inv-iol-qty" data-power="${pw}" min="0" value="0" style="width:100%;text-align:center;font-weight:800;font-size:13px" oninput="updateIolPowerCounter()"></div>`;
   }).join('');
+  updateIolPowerCounter();
 }
 function readIolBrandEntrySerialMap(entryDiv) {
   const raw = String(entryDiv.querySelector('.iol-serial-map-field')?.value || '');
@@ -21310,7 +21328,22 @@ const CHARGES_DATA = [
   {cat:'Lab',    name:'Renal Function Test',             chd:0,   rpr:0},
   {cat:'Lab',    name:'Vitamin D / B12',                 chd:0,  rpr:0},
 ];
-const DEFAULT_ZERO_CHARGE_LAB_ROWS = [
+function getLabHeadingPlainLabel(label) {
+  return String(label || '').replace(/^[^\w(]+/u, '').trim();
+}
+function getLabChargeRowsFromInvestigationCategories() {
+  if (!Array.isArray(INVESTIGATION_CATEGORIES)) return [];
+  const rows = [];
+  INVESTIGATION_CATEGORIES.forEach(function (cat) {
+    const heading = getLabHeadingPlainLabel(cat.label || cat.id || 'Lab');
+    rows.push({ cat:'Lab', kind:'lab', parent:'', name: heading, chd:0, rpr:0 });
+    (cat.tests || []).forEach(function (test) {
+      rows.push({ cat:'Lab', kind:'lab', parent: heading, name: String(test || '').trim(), chd:0, rpr:0 });
+    });
+  });
+  return rows;
+}
+const DEFAULT_ZERO_CHARGE_LAB_ROWS = getLabChargeRowsFromInvestigationCategories().concat([
   {cat:'Lab', kind:'lab', parent:'', name:'CBC / Complete Blood Count', chd:0, rpr:0},
   {cat:'Lab', kind:'lab', parent:'', name:'HbA1c', chd:0, rpr:0},
   {cat:'Lab', kind:'lab', parent:'', name:'Lipid Profile', chd:0, rpr:0},
@@ -21342,7 +21375,13 @@ const DEFAULT_ZERO_CHARGE_LAB_ROWS = [
   {cat:'Lab', kind:'lab', parent:'', name:'Blood Group', chd:0, rpr:0},
   {cat:'Lab', kind:'lab', parent:'', name:'Dual Test', chd:0, rpr:0},
   {cat:'Lab', kind:'lab', parent:'', name:'Pap Smear', chd:0, rpr:0}
-];
+]).filter(function (row, idx, arr) {
+  const key = [String(row.parent || '').trim().toLowerCase(), String(row.name || '').trim().toLowerCase()].join('|');
+  return arr.findIndex(function (x) {
+    const k = [String(x.parent || '').trim().toLowerCase(), String(x.name || '').trim().toLowerCase()].join('|');
+    return k === key;
+  }) === idx;
+});
 const CRITICAL_CHARGE_ROWS = [
   {cat:'Eye', kind:'Eye', parent:'', name:'Consultation — Eye', chd:500, rpr:200},
   {cat:'Eye', kind:'Eye', parent:'', name:'Follow-up Consultation', chd:500, rpr:200},
