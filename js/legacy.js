@@ -1749,6 +1749,92 @@ function restoreRxFromVisitData(data) {
   renderRxDrugs && renderRxDrugs();
 }
 
+function buildPatientHeaderHoverText(p) {
+  if (!p) return '';
+  return [
+    p.name || 'Patient',
+    'BMSH ID: ' + (p.bmhId || '—'),
+    'Age/Sex: ' + ((p.age || '—') + 'Y / ' + (p.sex || '—')),
+    'Phone: ' + (p.mobile || p.mob || '—'),
+    'Alternate Phone: ' + (p.mob2 || p.altMobile || '—'),
+    'Address: ' + (p.address || p.addr || '—'),
+    'Relation: ' + (p.relation || p.rel || '—'),
+    'Doctor: ' + (p.assignedDoctor || p.doctor || '—'),
+    'Purpose: ' + (p.purpose || '—')
+  ].join('\n');
+}
+
+function setPatientHeaderMeta(nameId, p) {
+  const nameEl = document.getElementById(nameId);
+  if (!nameEl || !p) return;
+  const hover = buildPatientHeaderHoverText(p);
+  nameEl.title = hover;
+  const parent = nameEl.parentElement;
+  if (!parent) return;
+  let badge = parent.querySelector('[data-patient-age-badge-for="' + nameId + '"]');
+  if (!badge) {
+    badge = document.createElement('span');
+    badge.setAttribute('data-patient-age-badge-for', nameId);
+    badge.style.cssText = 'display:inline-flex;align-items:center;gap:4px;margin-left:6px;padding:1px 7px;border-radius:999px;background:rgba(26,60,110,.08);color:var(--bmh-blue);font-size:11px;font-weight:800;vertical-align:middle';
+    nameEl.insertAdjacentElement('afterend', badge);
+  }
+  badge.textContent = (p.age || '—') + 'Y / ' + (p.sex || '—');
+  badge.title = hover;
+}
+
+function rememberRxLibraryFromRows(deptKey, rows) {
+  if (!Array.isArray(rows) || !rows.length || typeof DRUG_LIBRARY === 'undefined') return;
+  const deptLabelMap = { ophtho: 'Ophthalmology', obg: 'OBG', psych: 'Neuropsychiatry', skin: 'Skin' };
+  const deptLabel = deptLabelMap[normalizeDeptKeyForQueue(deptKey)] || 'All';
+  let changed = false;
+  rows.forEach(function (row) {
+    if (!row || typeof row !== 'object') return;
+    const trade = stripLeadingDrugQueryPrefix(row.trade || row.brand || '').trim();
+    const generic = stripLeadingDrugQueryPrefix(row.generic || row.name || '').trim();
+    const type = String(row.drugType || row.type || '').trim() || (/eye\s*drop|drops?|ophthalmic/i.test([trade, generic].join(' ')) ? 'Eye Drop' : 'Tablet');
+    const freq = normalizeRxFreqLabel(row.freq || '');
+    const dur = normalizeRxDurationLabel(row.dur || '');
+    if (!trade && !generic) return;
+    const match = DRUG_LIBRARY.find(function (item) {
+      const itemTrade = String(item.trade || '').trim().toLowerCase();
+      const itemGeneric = String(item.generic || '').trim().toLowerCase();
+      const targetTrade = String(trade || '').trim().toLowerCase();
+      const targetGeneric = String(generic || '').trim().toLowerCase();
+      const sameDept = normalizeDrugDeptKey(item.dept || 'All') === normalizeDrugDeptKey(deptLabel) || normalizeDrugDeptKey(item.dept || 'All') === 'all';
+      if (!sameDept) return false;
+      return (!!targetTrade && itemTrade === targetTrade)
+        || (!!targetGeneric && itemGeneric === targetGeneric)
+        || (!!targetTrade && !!targetGeneric && itemTrade === targetGeneric && itemGeneric === targetTrade);
+    });
+    if (match) {
+      if (trade && match.trade !== trade) { match.trade = trade; changed = true; }
+      if (generic && match.generic !== generic) { match.generic = generic; changed = true; }
+      if (type && match.type !== type) { match.type = type; changed = true; }
+      if (freq && match.freq !== freq) { match.freq = freq; changed = true; }
+      if (dur && match.dur !== dur) { match.dur = dur; changed = true; }
+      if (deptLabel && normalizeDrugDeptKey(match.dept || 'All') === 'all') { match.dept = deptLabel; changed = true; }
+      normalizeDrugLibraryRow(match);
+      return;
+    }
+    DRUG_LIBRARY.push(normalizeDrugLibraryRow({
+      type: type,
+      trade: trade || generic,
+      generic: generic || trade,
+      freq: freq,
+      dur: dur,
+      dept: deptLabel
+    }));
+    changed = true;
+  });
+  if (changed) {
+    const merged = mergeDrugLibraryRows(DRUG_LIBRARY.slice());
+    DRUG_LIBRARY.length = 0;
+    merged.forEach(function (row) { DRUG_LIBRARY.push(row); });
+    saveDrugLibraryToStorage();
+    rebuildDrugGenericDatalist && rebuildDrugGenericDatalist();
+  }
+}
+
 function restoreCurrentPatientRxForDeptIfEmpty(dept) {
   if (typeof RX_DRUGS === 'undefined' || !Array.isArray(RX_DRUGS)) return;
   if (RX_DRUGS.length) return;
@@ -2478,6 +2564,7 @@ function addCustomChip(triggerEl, eye) {
   const container = triggerEl.closest('div[style*="flex-wrap"]');
   const newChip = document.createElement('span');
   newChip.className = 'sl-chip sel';
+  newChip.dataset.custom = '1';
   newChip.textContent = val;
   newChip.onclick = function(){ toggleChipEye(this, eye); };
   toggleChipEye(newChip, eye);
@@ -2517,6 +2604,12 @@ function openPatient(bmhId, opts) {
   opts = opts || {};
   const p = PATIENTS.find(x => x.bmhId === bmhId);
   if(!p) return;
+  const visitDateKey = function (visit) {
+    if (!visit || typeof visit !== 'object') return '';
+    const raw = visit.date || visit.createdAt || visit.updatedAt || visit.visitDate || visit.savedAt || '';
+    return raw ? localDateKey(raw) : '';
+  };
+  const lastVisitIsToday = visitDateKey(p.lastVisit) === localDateKey(new Date());
   window._suspendVisitAutosave = true;
   const unreadLabOrders = Array.isArray(p.investigationOrders) ? p.investigationOrders.filter(function (o) {
     return o && o.mode === 'send' && o.done && o.labReady && !o.doctorSeen;
@@ -2532,13 +2625,14 @@ function openPatient(bmhId, opts) {
   // ── 1. Stamp patient name & ID into every dept header ──────────
   ['ophtho-pt-nm','obg-pt-nm','psych-pt-nm','skin-pt-nm','ophtho-rp-nm'].forEach(id => {
     const e = document.getElementById(id); if(e) e.textContent = p.name;
+    setPatientHeaderMeta(id, p);
   });
   ['ophtho-pt-uid','obg-pt-uid','psych-pt-uid','skin-pt-uid'].forEach(id => {
     const e = document.getElementById(id); if(e) e.textContent = p.bmhId;
   });
   syncObgDoctorSelector(p.dept === 'obg' ? (p.doctor || CURRENT_USER?.name || 'Dr. Namrata Baweja') : '');
   ['obg-rx-ptname','psych-rx-ptname','skin-rx-ptname','oe-rx-ptname'].forEach(id => {
-    const e = document.getElementById(id); if(e) e.textContent = p.name;
+    const e = document.getElementById(id); if(e) { e.textContent = p.name; e.title = buildPatientHeaderHoverText(p); }
   });
   ['obg-rx-ptid','psych-rx-ptid','skin-rx-ptid','oe-rx-ptid'].forEach(id => {
     const e = document.getElementById(id); if(e) e.textContent = p.bmhId;
@@ -2568,6 +2662,9 @@ function openPatient(bmhId, opts) {
     if (el) el.checked = true;
   });
   // Slit lamp chips — deselect all, then re-select defaults (Normal chips)
+  const extraSlRows = document.getElementById('sl-extra-rows');
+  if (extraSlRows) extraSlRows.innerHTML = '';
+  document.querySelectorAll('.sl-chip[data-custom="1"]').forEach(function (chip) { chip.remove(); });
   document.querySelectorAll('.sl-chip').forEach(c => {
     c.classList.remove('sel');
     if(c.textContent.trim() === 'Normal' || c.textContent.trim() === 'Clear' ||
@@ -2578,9 +2675,17 @@ function openPatient(bmhId, opts) {
   // DX list — clear all including tags
   const dxList = document.getElementById('rx-diagnosis-list');
   if(dxList) dxList.innerHTML = '';
+  ['obg-dx-list', 'psych-dx-list', 'skin-dx-list'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = '';
+  });
   // Procedures/surgery list — clear
   const procList = document.getElementById('rx-proc-advised');
   if(procList) procList.innerHTML = '';
+  ['rx-proc-advised-obg', 'rx-proc-advised-psych', 'rx-proc-advised-skin'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = '';
+  });
   // CC rows — clear all inputs/selects to show 3 blank rows
   const ccContainer = document.getElementById('cc-rows');
   if(ccContainer) {
@@ -2640,14 +2745,20 @@ function openPatient(bmhId, opts) {
     window.scrollTo(0, 0);
   }
 
-  if(deptPage === 'ophtho' && p.lastVisit && typeof p.lastVisit === 'object') {
+  if(deptPage === 'ophtho' && lastVisitIsToday && p.lastVisit && typeof p.lastVisit === 'object') {
     populateOphthoForm(p.lastVisit);
   } else if(deptPage === 'obg') {
-    populateObgForm && populateObgForm(p.lastVisit || {});
+    populateObgForm && populateObgForm(lastVisitIsToday ? (p.lastVisit || {}) : {});
+    if (!lastVisitIsToday) refreshPreviousDiagnosisPanel('obg', p.lastVisit || {});
   } else if(deptPage === 'psych') {
-    populatePsychForm && populatePsychForm(p.lastVisit || {});
+    populatePsychForm && populatePsychForm(lastVisitIsToday ? (p.lastVisit || {}) : {});
+    if (!lastVisitIsToday) refreshPreviousDiagnosisPanel('psych', p.lastVisit || {});
   } else if(deptPage === 'skin') {
-    populateSkinForm && populateSkinForm(p.lastVisit || {});
+    populateSkinForm && populateSkinForm(lastVisitIsToday ? (p.lastVisit || {}) : {});
+    if (!lastVisitIsToday) refreshPreviousDiagnosisPanel('skin', p.lastVisit || {});
+  }
+  if (deptPage === 'ophtho' && !lastVisitIsToday) {
+    refreshPreviousDiagnosisPanel('ophtho', p.lastVisit || {});
   }
 
   // ── 5. Load past visits list + try to reload today's visit ─────
@@ -25262,13 +25373,16 @@ function buildQTableRow(p, sno, opts) {
   const onRow = p.preRegistered ? `checkInPatient('${p.bmhId}')` : (receptionQueue ? `openReceptionPatient('${p.bmhId}')` : (p._xrefEntry ? `openPatientForDept('${p.bmhId}','${p.dept}')` : `openPatient('${p.bmhId}')`));
   const nmEsc = (p.name||'').replace(/'/g,"\\'");
   const docShort = (p.assignedDoctor || p.doctor || '—').replace(/^Dr\.\s*/,'');
+  const nameLine = p.dept === 'obg'
+    ? ((p.age || '?') + 'Y · ' + (p.name || ''))
+    : (p.name || '');
   const vulnBadge = vuln ? '<span class="q-vuln-badge" title="Vulnerable — elderly (≥65) or flagged">⚠ VUL</span>' : '';
   const labHover = getUnreadLabResultsTitle(p);
   const labReadyBadge = patientHasUnreadLabResults(p) ? `<span title="${escapeHtmlConsent(labHover || 'Results ready')}" style="display:inline-flex;align-items:center;gap:4px;padding:1px 6px;border-radius:999px;background:#eafaf1;color:#166534;border:1px solid rgba(22,101,52,.25);font-size:9px;font-weight:900;animation:pulse 1.2s infinite">🧪 Results Ready</span>` : '';
   return `<tr class="${vuln ? 'row-vulnerable' : ''}" onclick="${onRow}" style="cursor:pointer;${dilLongWait?'animation:pulse 1.45s infinite;':''}">
     <td style="font-weight:900;color:var(--g2);font-size:12.5px">${sno}</td>
     <td><div style="display:flex;align-items:center;gap:6px"><span style="width:28px;height:28px;border-radius:50%;background:${p.color||'#1A3C6E'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:900;font-size:10px;flex-shrink:0">${p.initials||p.name[0]||'?'}</span>
-      <div><div style="font-weight:800;font-size:15px;line-height:1.05;display:flex;align-items:center;flex-wrap:nowrap;gap:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}${vulnBadge}${labReadyBadge}</div>
+      <div><div style="font-weight:800;font-size:15px;line-height:1.05;display:flex;align-items:center;flex-wrap:nowrap;gap:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${nameLine}${vulnBadge}${labReadyBadge}</div>
       <div style="font-size:11px;color:var(--g1)">${p.age||'?'}Y · ${(p.sex||'?')[0]} · ${p.mob||'—'}</div>${chargeHint?`<div style="margin-top:2px">${chargeHint}</div>`:''}</div></div></td>
     <td style="font-family:var(--mono);font-size:12px;color:var(--bmh-teal);font-weight:800;white-space:nowrap">${p.bmhId}</td>
     <td><span style="font-size:10px;padding:2px 6px;border-radius:6px;background:${deptColor}22;color:${deptColor};font-weight:800">${deptLabel}</span></td>
@@ -25663,8 +25777,17 @@ function getSelectedQueueDeptForAdmin() {
 }
 function renderDocQueue() {
   const todayKeyLocal = localDateKey(new Date());
+  const queueRawStamp = function (value) {
+    if (value === null || value === undefined || value === '') return 0;
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    const str = String(value).trim();
+    if (!str) return 0;
+    if (/^\d+$/.test(str)) return Number(str);
+    const parsed = Date.parse(str);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
   const queueSortStamp = function (p) {
-    return Date.parse(
+    return queueRawStamp(
       p?.checkinAt
       || p?.createdAt
       || p?.registeredAt
@@ -25672,7 +25795,12 @@ function renderDocQueue() {
       || p?.date
       || p?.updatedAt
       || ''
-    ) || 0;
+    );
+  };
+  const queueWaitMinutes = function (p) {
+    const stamp = queueSortStamp(p);
+    if (!stamp) return 0;
+    return Math.max(0, Math.floor((Date.now() - stamp) / 60000));
   };
   // Map doctor dept name to patient dept key
   const deptMap = {
@@ -25752,6 +25880,8 @@ function renderDocQueue() {
   }) : myPts).slice().sort(function (a, b) {
     const diff = queueSortStamp(a) - queueSortStamp(b);
     if (diff !== 0) return diff;
+    const waitDiff = queueWaitMinutes(b) - queueWaitMinutes(a);
+    if (waitDiff !== 0) return waitDiff;
     return String(a.bmhId || a._queueKey || '').localeCompare(String(b.bmhId || b._queueKey || ''));
   });
 
@@ -25824,7 +25954,7 @@ function saveVisit(dept, opts) {
   const uidMap = { ophtho:'ophtho-pt-uid', obg:'obg-pt-uid', psych:'psych-pt-uid', skin:'skin-pt-uid' };
   const nmMap  = { ophtho:'ophtho-pt-nm',  obg:'obg-pt-nm',  psych:'psych-pt-nm',  skin:'skin-pt-nm'  };
   const bmhId  = document.getElementById(uidMap[dept])?.textContent?.trim();
-  const ptName = document.getElementById(nmMap[dept])?.textContent?.trim();
+  const ptName = window.CURRENT_PATIENT?.name || document.getElementById(nmMap[dept])?.textContent?.trim();
   if(!bmhId || bmhId === '—') {
     if (!opts.silent) showToast('No patient selected — open a patient first','w'); return;
   }
@@ -26120,6 +26250,9 @@ function saveVisit(dept, opts) {
     visit.skinProcAdvised = [...document.querySelectorAll('#rx-proc-advised-skin [data-proc]')].map(function (e) { return e.dataset.proc; }).filter(Boolean);
     visit.rx = JSON.parse(JSON.stringify(RX_DRUGS || []));
     visit.procDone = getProcedureDoneStateForDept('skin');
+  }
+  if (Array.isArray(visit.rx) && visit.rx.length) {
+    rememberRxLibraryFromRows(dept, visit.rx);
   }
   if(typeof fbSet !== 'function') { showToast('Save not available (offline)', 'w'); return; }
   const patientPatch = { lastVisit: visit, lastVisitKey: visitKey, lastVisitDate: visit.date, lastDeptVisit: dept };
