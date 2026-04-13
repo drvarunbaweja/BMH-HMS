@@ -25394,16 +25394,13 @@ function buildQTableRow(p, sno, opts) {
   const onRow = p.preRegistered ? `checkInPatient('${p.bmhId}')` : (receptionQueue ? `openReceptionPatient('${p.bmhId}')` : (p._xrefEntry ? `openPatientForDept('${p.bmhId}','${p.dept}')` : `openPatient('${p.bmhId}')`));
   const nmEsc = (p.name||'').replace(/'/g,"\\'");
   const docShort = (p.assignedDoctor || p.doctor || '—').replace(/^Dr\.\s*/,'');
-  const nameLine = p.dept === 'obg'
-    ? ((p.age || '?') + 'Y · ' + (p.name || ''))
-    : (p.name || '');
   const vulnBadge = vuln ? '<span class="q-vuln-badge" title="Vulnerable — elderly (≥65) or flagged">⚠ VUL</span>' : '';
   const labHover = getUnreadLabResultsTitle(p);
   const labReadyBadge = patientHasUnreadLabResults(p) ? `<span title="${escapeHtmlConsent(labHover || 'Results ready')}" style="display:inline-flex;align-items:center;gap:4px;padding:1px 6px;border-radius:999px;background:#eafaf1;color:#166534;border:1px solid rgba(22,101,52,.25);font-size:9px;font-weight:900;animation:pulse 1.2s infinite">🧪 Results Ready</span>` : '';
   return `<tr class="${vuln ? 'row-vulnerable' : ''}" onclick="${onRow}" style="cursor:pointer;${dilLongWait?'animation:pulse 1.45s infinite;':''}">
     <td style="font-weight:900;color:var(--g2);font-size:12.5px">${sno}</td>
     <td><div style="display:flex;align-items:center;gap:6px"><span style="width:28px;height:28px;border-radius:50%;background:${p.color||'#1A3C6E'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:900;font-size:10px;flex-shrink:0">${p.initials||p.name[0]||'?'}</span>
-      <div><div style="font-weight:800;font-size:15px;line-height:1.05;display:flex;align-items:center;flex-wrap:nowrap;gap:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${nameLine}${vulnBadge}${labReadyBadge}</div>
+      <div><div style="font-weight:800;font-size:15px;line-height:1.05;display:flex;align-items:center;flex-wrap:nowrap;gap:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name || ''}${vulnBadge}${labReadyBadge}</div>
       <div style="font-size:11px;color:var(--g1)">${p.age||'?'}Y · ${(p.sex||'?')[0]} · ${p.mob||'—'}</div>${chargeHint?`<div style="margin-top:2px">${chargeHint}</div>`:''}</div></div></td>
     <td style="font-family:var(--mono);font-size:12px;color:var(--bmh-teal);font-weight:800;white-space:nowrap">${p.bmhId}</td>
     <td><span style="font-size:10px;padding:2px 6px;border-radius:6px;background:${deptColor}22;color:${deptColor};font-weight:800">${deptLabel}</span></td>
