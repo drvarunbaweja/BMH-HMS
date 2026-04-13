@@ -25656,6 +25656,17 @@ function getSelectedQueueDeptForAdmin() {
 }
 function renderDocQueue() {
   const todayKeyLocal = localDateKey(new Date());
+  const queueSortStamp = function (p) {
+    return Date.parse(
+      p?.checkinAt
+      || p?.createdAt
+      || p?.registeredAt
+      || p?.queueDate
+      || p?.date
+      || p?.updatedAt
+      || ''
+    ) || 0;
+  };
   // Map doctor dept name to patient dept key
   const deptMap = {
     Ophthalmology:'ophtho', OBG:'obg', Neuropsychiatry:'psych',
@@ -25719,7 +25730,7 @@ function renderDocQueue() {
       return !userDept || ptDept === userDept || (!ptDept && userDept === 'ophtho');
     });
   })();
-  const filteredPts = searchQ ? myPts.filter(function (p) {
+  const filteredPts = (searchQ ? myPts.filter(function (p) {
     const hay = [
       p.name,
       p.bmhId,
@@ -25731,7 +25742,11 @@ function renderDocQueue() {
       p.department
     ].map(function (v) { return String(v || '').toLowerCase(); }).join(' ');
     return hay.includes(searchQ);
-  }) : myPts;
+  }) : myPts).slice().sort(function (a, b) {
+    const diff = queueSortStamp(a) - queueSortStamp(b);
+    if (diff !== 0) return diff;
+    return String(a.bmhId || a._queueKey || '').localeCompare(String(b.bmhId || b._queueKey || ''));
+  });
 
   // Active list keeps all waiting patients visible; dilated patients also remain in dedicated dilated queue.
   const serialMap = new Map(filteredPts.map(function (p, idx) { return [p._queueKey || p.bmhId, idx + 1]; }));
