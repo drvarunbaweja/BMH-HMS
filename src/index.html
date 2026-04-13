@@ -1473,12 +1473,16 @@
           <div class="plan-panel-head">
             <div class="plan-panel-title">🧪 Investigations Ordered</div>
             <div style="display:flex;gap:5px">
-              <button class="btn btn-xs btn-outline" onclick="openM('m-order-invest')">+ Order More</button>
-              <button class="btn btn-xs btn-blue" onclick="addInvestigationOrder('advise')">Advise Only</button>
-              <button class="btn btn-xs btn-orange" onclick="addInvestigationOrder('send')">Advise + Send to Lab</button>
+              <button class="btn btn-xs btn-outline" onclick="openInvestigationOrderModal()">+ Order More</button>
+              <button class="btn btn-xs btn-gold" onclick="printCurrentInvestigations('oe')">🖨️ Print</button>
             </div>
           </div>
-          <div id="oe-inv-ordered-list" style="min-height:24px;font-size:11.5px;color:var(--g1);font-style:italic">None ordered</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+            <button class="btn btn-xs btn-blue inv-mode-tab active" data-dept="oe" onclick="switchInvestigationModeTab('oe','send',this)">Send to Lab</button>
+            <button class="btn btn-xs btn-outline inv-mode-tab" data-dept="oe" onclick="switchInvestigationModeTab('oe','advise',this)">Advised</button>
+          </div>
+          <div id="oe-inv-ordered-list-send" class="inv-mode-pane" data-dept="oe" data-mode="send" style="min-height:24px;font-size:11.5px;color:var(--g1);font-style:italic">None ordered</div>
+          <div id="oe-inv-ordered-list-advise" class="inv-mode-pane" data-dept="oe" data-mode="advise" style="display:none;min-height:24px;font-size:11.5px;color:var(--g1);font-style:italic">None ordered</div>
         </div>
         </div>
         </div>
@@ -2159,7 +2163,7 @@
               <div class="form-group"><label class="fl">EDD</label><input type="text" id="obg-edd-inp" readonly style="background:var(--green-lt);color:#1a8c3c;font-weight:800"></div>
               <div class="form-group"><label class="fl">Blood Group</label><select id="obg-blood-grp"><option value="">— Select —</option><option>O+ve</option><option>A+ve</option><option>B+ve</option><option>AB+ve</option><option>O-ve</option><option>A-ve</option><option>B-ve</option><option>AB-ve</option></select></div>
               <div class="form-group"><label class="fl">High-Risk Tag</label><select id="obg-risk"><option value="">Low risk</option><option>GDM</option><option>Hypertensive disorder</option><option>FGR / SGA</option><option>Previous LSCS</option><option>Multiple pregnancy</option><option>Rh negative</option><option>Placenta previa</option><option>Preterm risk</option></select></div>
-              <div class="form-group"><label class="fl">Primary Complaint</label><input type="text" id="obg-main-complaint" list="obg-main-complaint-list" placeholder="Type or select complaint" onchange="updateObgComputedFields()"><datalist id="obg-main-complaint-list"><option value="Routine review"></option><option value="Amenorrhoea / positive UPT"></option><option value="ANC routine review"></option><option value="Bleeding PV"></option><option value="Abdominal pain"></option><option value="Decreased fetal movements"></option><option value="Infertility evaluation"></option><option value="Irregular cycles"></option><option value="White discharge"></option><option value="Pelvic pain"></option></datalist></div>
+          <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">Primary Complaint <button type="button" onclick="addObgPrimaryComplaintOption()" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></label><input type="text" id="obg-main-complaint" list="obg-main-complaint-list" placeholder="Type or select complaint" onchange="updateObgComputedFields()" onblur="saveObgPrimaryComplaintFromField()"><datalist id="obg-main-complaint-list"><option value="Routine Review"></option><option value="Amenorrhoea / Positive UPT"></option><option value="ANC Routine Review"></option><option value="Bleeding PV"></option><option value="Abdominal Pain"></option><option value="Decreased Fetal Movements"></option><option value="Infertility Evaluation"></option><option value="Irregular Cycles"></option><option value="White Discharge"></option><option value="Pelvic Pain"></option></datalist></div>
               <div class="form-group"><label class="fl">Systemic Disease</label><select id="obg-systemic"><option value="">None declared</option><option>Diabetes mellitus</option><option>Hypertension</option><option>Thyroid disorder</option><option>Epilepsy</option><option>Cardiac disease</option><option>Asthma</option><option>Anaemia</option><option>TB / chronic infection</option><option>Autoimmune disorder</option></select></div>
             </div>
 
@@ -2432,8 +2436,19 @@
               </div>
             </div>
           <div style="margin-top:10px;background:#fff8e6;border:1.5px solid rgba(212,160,23,.35);border-radius:10px;padding:10px">
-            <div style="font-size:10px;font-weight:800;color:#8a4200;text-transform:uppercase;margin-bottom:5px">Investigation Summary</div>
-            <div id="obg-investigation-summary" style="font-size:12px;color:#8a4200">No investigations selected yet.</div>
+            <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+              <div style="font-size:10px;font-weight:800;color:#8a4200;text-transform:uppercase">Investigation Orders</div>
+              <div style="display:flex;gap:5px;flex-wrap:wrap">
+                <button class="btn btn-xs btn-outline" onclick="openInvestigationOrderModal()">+ Order</button>
+                <button class="btn btn-xs btn-gold" onclick="printCurrentInvestigations('obg')">🖨️ Print</button>
+              </div>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+              <button class="btn btn-xs btn-blue inv-mode-tab active" data-dept="obg" onclick="switchInvestigationModeTab('obg','send',this)">Send to Lab</button>
+              <button class="btn btn-xs btn-outline inv-mode-tab" data-dept="obg" onclick="switchInvestigationModeTab('obg','advise',this)">Advised</button>
+            </div>
+            <div id="obg-investigation-summary-send" class="inv-mode-pane" data-dept="obg" data-mode="send" style="font-size:12px;color:#8a4200">No investigations selected yet.</div>
+            <div id="obg-investigation-summary-advise" class="inv-mode-pane" data-dept="obg" data-mode="advise" style="display:none;font-size:12px;color:#8a4200">No investigations selected yet.</div>
           </div>
           </div>
 
@@ -2461,7 +2476,6 @@
             <option value="">— Template —</option>
           </select>
           <button class="btn btn-xs btn-outline" type="button" onclick="openRxTemplatePicker('obg')" style="flex:1;justify-content:flex-start">📋 Templates</button>
-          <button class="btn btn-xs btn-outline" onclick="openM('m-order-invest')">🧪 Investigations</button>
           <button class="btn btn-xs btn-gold" onclick="openSaveRxTemplate()">📋 Save Template</button>
           <div class="lang-sel" style="margin:0">
             <button class="lang-btn active" onclick="setLang('en',this)">EN</button>
@@ -2476,7 +2490,7 @@
               <div class="plan-panel-head"><div class="plan-panel-title">Diagnosis</div><button class="btn btn-xs btn-outline" onclick="addDxRow()">+ Add</button></div>
               <div id="obg-dx-list">
                 <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">
-                  <input type="text" class="dx-inp" placeholder="Type diagnosis…" style="flex:1;font-size:12px" autocomplete="off" oninput="filterDx(this)" onfocus="showDxDropdown(this);wireDxInputFocus(this)">
+                  <input type="text" class="dx-inp" placeholder="Type diagnosis…" style="flex:1;font-size:12px" autocomplete="off" data-dx-dept="obg" oninput="filterDx(this)" onfocus="showDxDropdown(this);wireDxInputFocus(this)">
                   <button class="btn btn-xs btn-gray" onclick="this.closest('div').remove()">✕</button>
                 </div>
               </div>
@@ -2485,7 +2499,7 @@
               <div class="prev-dx-title">Previous Diagnosis</div>
               <div id="obg-prev-dx-text" class="prev-dx-text">No previous active diagnosis</div>
               <select id="obg-prev-dx-status" style="margin-top:8px;font-size:11px;padding:5px 7px;border-radius:7px;border:1.5px solid var(--g4);width:100%" onchange="handlePreviousDiagnosisStatusChange('obg', this.value)">
-                <option value="carry">Carry forward</option>
+                <option value="carry">Going on</option>
                 <option value="resolved">Resolved</option>
               </select>
             </div>
@@ -2525,14 +2539,6 @@
             <option value="pa">Punjabi</option>
           </select>
           <button class="btn btn-gold btn-sm" onclick="openSaveRxTemplate()">📋 Save as Template</button>
-        </div>
-        <!-- Investigations -->
-        <div style="margin-bottom:10px">
-          <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:5px;display:flex;justify-content:space-between">
-            <span>🧪 Investigations Ordered</span>
-            <button class="btn btn-xs btn-outline" onclick="openM('m-order-invest')">+ Add</button>
-          </div>
-          <div id="obg-inv-list"><div style="font-size:11.5px;color:var(--g1);padding:5px 8px">None ordered</div></div>
         </div>
         <!-- Procedures -->
         <div class="plan-panel" style="margin-bottom:10px">
@@ -2862,7 +2868,7 @@
             <option value="">— Template —</option>
           </select>
           <button class="btn btn-xs btn-outline" type="button" onclick="openRxTemplatePicker('psych')" style="flex:1;justify-content:flex-start">📋 Templates</button>
-          <button class="btn btn-xs btn-outline" onclick="openM('m-order-invest')">🧪 Investigations</button>
+          <button class="btn btn-xs btn-outline" onclick="openInvestigationOrderModal()">🧪 Investigations</button>
           <button class="btn btn-xs btn-gold" onclick="openSaveRxTemplate()">📋 Save Template</button>
           <div class="lang-sel" style="margin:0">
             <button class="lang-btn active" onclick="setLang('en',this)">EN</button>
@@ -2921,11 +2927,19 @@
         </div>
         <!-- Investigations -->
         <div style="margin-bottom:10px">
-          <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:5px;display:flex;justify-content:space-between">
-            <span>🧪 Investigations Ordered</span>
-            <button class="btn btn-xs btn-outline" onclick="openM('m-order-invest')">+ Add</button>
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:5px">
+            <span style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase">🧪 Investigations Ordered</span>
+            <div style="display:flex;gap:5px;flex-wrap:wrap">
+              <button class="btn btn-xs btn-outline" onclick="openInvestigationOrderModal()">+ Add</button>
+              <button class="btn btn-xs btn-gold" onclick="printCurrentInvestigations('psych')">🖨️ Print</button>
+            </div>
           </div>
-          <div id="psych-inv-list"><div style="font-size:11.5px;color:var(--g1);padding:5px 8px">None ordered</div></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+            <button class="btn btn-xs btn-blue inv-mode-tab active" data-dept="psych" onclick="switchInvestigationModeTab('psych','send',this)">Send to Lab</button>
+            <button class="btn btn-xs btn-outline inv-mode-tab" data-dept="psych" onclick="switchInvestigationModeTab('psych','advise',this)">Advised</button>
+          </div>
+          <div id="psych-inv-list-send" class="inv-mode-pane" data-dept="psych" data-mode="send"><div style="font-size:11.5px;color:var(--g1);padding:5px 8px">None ordered</div></div>
+          <div id="psych-inv-list-advise" class="inv-mode-pane" data-dept="psych" data-mode="advise" style="display:none"><div style="font-size:11.5px;color:var(--g1);padding:5px 8px">None ordered</div></div>
         </div>
         <!-- Procedures -->
         <div class="plan-panel" style="margin-bottom:10px">
@@ -3113,7 +3127,7 @@
             <option value="">— Template —</option>
           </select>
           <button class="btn btn-xs btn-outline" type="button" onclick="openRxTemplatePicker('skin')" style="flex:1;justify-content:flex-start">📋 Templates</button>
-          <button class="btn btn-xs btn-outline" onclick="openM('m-order-invest')">🧪 Investigations</button>
+          <button class="btn btn-xs btn-outline" onclick="openInvestigationOrderModal()">🧪 Investigations</button>
           <button class="btn btn-xs btn-gold" onclick="openSaveRxTemplate()">📋 Save Template</button>
           <div class="lang-sel" style="margin:0">
             <button class="lang-btn active" onclick="setLang('en',this)">EN</button>
@@ -3172,11 +3186,19 @@
         </div>
         <!-- Investigations -->
         <div style="margin-bottom:10px">
-          <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:5px;display:flex;justify-content:space-between">
-            <span>🧪 Investigations Ordered</span>
-            <button class="btn btn-xs btn-outline" onclick="openM('m-order-invest')">+ Add</button>
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:5px">
+            <span style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase">🧪 Investigations Ordered</span>
+            <div style="display:flex;gap:5px;flex-wrap:wrap">
+              <button class="btn btn-xs btn-outline" onclick="openInvestigationOrderModal()">+ Add</button>
+              <button class="btn btn-xs btn-gold" onclick="printCurrentInvestigations('skin')">🖨️ Print</button>
+            </div>
           </div>
-          <div id="skin-inv-list"><div style="font-size:11.5px;color:var(--g1);padding:5px 8px">None ordered</div></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+            <button class="btn btn-xs btn-blue inv-mode-tab active" data-dept="skin" onclick="switchInvestigationModeTab('skin','send',this)">Send to Lab</button>
+            <button class="btn btn-xs btn-outline inv-mode-tab" data-dept="skin" onclick="switchInvestigationModeTab('skin','advise',this)">Advised</button>
+          </div>
+          <div id="skin-inv-list-send" class="inv-mode-pane" data-dept="skin" data-mode="send"><div style="font-size:11.5px;color:var(--g1);padding:5px 8px">None ordered</div></div>
+          <div id="skin-inv-list-advise" class="inv-mode-pane" data-dept="skin" data-mode="advise" style="display:none"><div style="font-size:11.5px;color:var(--g1);padding:5px 8px">None ordered</div></div>
         </div>
         <!-- Procedures -->
         <div class="plan-panel" style="margin-bottom:10px">
@@ -5034,7 +5056,8 @@
   <div id="selected-invest-list" style="font-size:12px;color:var(--tx3);min-height:24px">None selected</div>
 </div>
 <div style="display:flex;gap:8px;margin-top:12px">
-  <button class="btn btn-gold" style="flex:1" onclick="confirmInvestigations()">✅ Order &amp; Send to Lab</button>
+  <button class="btn btn-blue" style="flex:1" onclick="confirmInvestigations('advise')">📄 Advise Only</button>
+  <button class="btn btn-gold" style="flex:1" onclick="confirmInvestigations('send')">✅ Order &amp; Send to Lab</button>
   <button class="btn btn-gray" onclick="closeM('m-order-invest')">Cancel</button>
 </div>
 </div></div>
