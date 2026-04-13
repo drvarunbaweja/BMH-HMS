@@ -13393,16 +13393,37 @@ function applyLastRx() {
     const extraAdviceEl = document.getElementById('rx-extra-advice-text');
     if (extraAdviceEl) extraAdviceEl.value = visit.extraAdvice || '';
   } else if (dept === 'obg') {
+    const procContainer = document.getElementById('rx-proc-advised-obg');
+    if (procContainer && Array.isArray(visit.obgProcAdvised)) {
+      procContainer.innerHTML = '';
+      visit.obgProcAdvised.forEach(function (procName) {
+        addProcItemToContainer(procContainer, procName, 0, { silentLog: true, quiet: true });
+      });
+    }
     const adviceEl = document.getElementById('obg-advice');
     if (adviceEl) adviceEl.value = visit.obgAdvice || '';
     const extraAdviceEl = document.getElementById('obg-extra-advice');
     if (extraAdviceEl) extraAdviceEl.value = visit.obgExtraAdvice || '';
   } else if (dept === 'psych') {
+    const procContainer = document.getElementById('rx-proc-advised-psych');
+    if (procContainer && Array.isArray(visit.psychProcAdvised)) {
+      procContainer.innerHTML = '';
+      visit.psychProcAdvised.forEach(function (procName) {
+        addProcItemToContainer(procContainer, procName, 0, { silentLog: true, quiet: true });
+      });
+    }
     const adviceEl = document.getElementById('psych-advice');
     if (adviceEl) adviceEl.value = visit.psychAdvice || '';
     const extraAdviceEl = document.getElementById('psych-extra-advice');
     if (extraAdviceEl) extraAdviceEl.value = visit.psychExtraAdvice || '';
   } else if (dept === 'skin') {
+    const procContainer = document.getElementById('rx-proc-advised-skin');
+    if (procContainer && Array.isArray(visit.skinProcAdvised)) {
+      procContainer.innerHTML = '';
+      visit.skinProcAdvised.forEach(function (procName) {
+        addProcItemToContainer(procContainer, procName, 0, { silentLog: true, quiet: true });
+      });
+    }
     const adviceEl = document.getElementById('skin-advice');
     if (adviceEl) adviceEl.value = visit.skinAdvice || '';
     const extraAdviceEl = document.getElementById('skin-extra-advice');
@@ -26315,6 +26336,81 @@ function saveVisit(dept, opts) {
 function loadPastVisits(bmhId, dept) {
   const container = document.getElementById(dept === 'ophtho' ? 'past-visits-ophtho' : `past-visits-${dept}`);
   if(!container) return;
+  const fmtVisitDate = function (raw) {
+    const t = Date.parse(raw || '');
+    if (!Number.isNaN(t)) return new Date(t).toLocaleDateString('en-IN');
+    return String(raw || '');
+  };
+  const summarizeVisitHistory = function (visit, deptKey) {
+    if (!visit || typeof visit !== 'object') return '';
+    if (deptKey === 'ophtho') {
+      return [
+        visit.chiefComplaints,
+        visit.otherSystemic,
+        visit.familyHx,
+        visit.hxOcularMeds
+      ].filter(Boolean).join(' · ');
+    }
+    if (deptKey === 'obg') {
+      return [
+        visit.mainComplaint,
+        visit.systemicDisease,
+        visit.gravida,
+        visit.ga ? ('GA ' + visit.ga) : '',
+        visit.lmp ? ('LMP ' + visit.lmp) : ''
+      ].filter(Boolean).join(' · ');
+    }
+    if (deptKey === 'psych') {
+      return [
+        visit.chiefComplaint || visit['psych-chief'],
+        visit['psych-duration'],
+        visit['psych-family'],
+        visit['psych-personal'],
+        visit['psych-pastpsych'],
+        visit['psych-medical']
+      ].filter(Boolean).join(' · ');
+    }
+    if (deptKey === 'skin') {
+      return [
+        visit.chiefComplaint || visit['skin-chief'],
+        visit['skin-duration'],
+        visit['skin-site'],
+        visit['skin-medical'],
+        visit['skin-hormonal']
+      ].filter(Boolean).join(' · ');
+    }
+    return '';
+  };
+  const summarizeVisitPrescription = function (visit) {
+    const rxRows = Array.isArray(visit?.rx) ? visit.rx : [];
+    if (!rxRows.length) return '';
+    return rxRows.map(function (drug) {
+      const nm = rxDrugTradeName(drug) || drug.trade || drug.brand || drug.name || drug.generic || 'Drug';
+      const freq = normalizeRxFreqLabel(drug.freq || '');
+      const dur = normalizeRxDurationLabel(drug.dur || '');
+      return [nm, freq, dur].filter(Boolean).join(' — ');
+    }).join('<br>');
+  };
+  const summarizeVisitAdvice = function (visit) {
+    return [
+      visit?.advice,
+      visit?.extraAdvice,
+      visit?.obgAdvice,
+      visit?.obgExtraAdvice,
+      visit?.psychAdvice,
+      visit?.psychExtraAdvice,
+      visit?.skinAdvice,
+      visit?.skinExtraAdvice
+    ].filter(Boolean).join('<br>');
+  };
+  const summarizeVisitProcedures = function (visit) {
+    const rows = []
+      .concat(Array.isArray(visit?.procedures) ? visit.procedures : [])
+      .concat(Array.isArray(visit?.obgProcAdvised) ? visit.obgProcAdvised : [])
+      .concat(Array.isArray(visit?.psychProcAdvised) ? visit.psychProcAdvised : [])
+      .concat(Array.isArray(visit?.skinProcAdvised) ? visit.skinProcAdvised : []);
+    return Array.from(new Set(rows.filter(Boolean))).join(', ');
+  };
   const renderVisits = (visitsObj) => {
     const visits = Object.entries(visitsObj || {}).map(([id, v]) => ({ id, ...(v||{}) }))
       .sort((a,b) => String(b.date || b.createdAt || '').localeCompare(String(a.date || a.createdAt || '')));
@@ -26330,11 +26426,6 @@ function loadPastVisits(bmhId, dept) {
         if (ref.startsWith('pr') || ref.startsWith('pr-') || String(row.source || '').toLowerCase() === 'doctor') return false;
         return cat === 'diagnostic' || cat === 'surgery' || /oct|hvf|fundus|biomet|yag|capsulotomy|laser|topograph|specular|procedure|surgery|ivt|injection|pmics|phaco|trab|iol/.test(text);
       });
-      const visitDateKey = function (raw) {
-        const t = Date.parse(raw || '');
-        if (!Number.isNaN(t)) return new Date(t).toLocaleDateString('en-IN');
-        return String(raw || '');
-      };
       const surgeries = (OT_CASES || []).map(normalizeOTCaseRecord).filter(function (c) { return c.bmhId === bmhId; }).sort(function (a,b) {
         return String(b.date || '').localeCompare(String(a.date || ''));
       }).slice(0, 10);
@@ -26352,9 +26443,9 @@ function loadPastVisits(bmhId, dept) {
         { label: 'Prescription', get: function (v) { return Array.isArray(v.rx) && v.rx.length ? v.rx.map(function (d) { return rxDrugTradeName(d) || d.trade || d.name || 'Drug'; }).join(', ') : '—'; } }
       ];
       const rightHistory = recentVisits.map(function (v) {
-        const vDateKey = visitDateKey(v.date || v.createdAt || v.dateLabel);
+        const vDateKey = fmtVisitDate(v.date || v.createdAt || v.dateLabel);
         const doneItems = chargeLines.filter(function (row) {
-          return visitDateKey(row.ts || row.date) === vDateKey;
+          return fmtVisitDate(row.ts || row.date) === vDateKey;
         }).map(function (row) {
           return expandProcedureLabelForPrint(row.desc || row.name || row.service || row.for || '—');
         });
@@ -26407,9 +26498,13 @@ function loadPastVisits(bmhId, dept) {
     }
     container.innerHTML = visits.map(v => {
       const invs = Array.isArray(v.investigations) ? v.investigations : [];
-      const cc = Array.isArray(v.ccRows) ? v.ccRows.map(r => r.text).filter(Boolean).join(', ') : '';
-      const dx = Array.isArray(v.diagnoses) ? v.diagnoses.map(formatDxLineForPrint).filter(Boolean).join(', ') : (v.diagnosisText || '');
+      const cc = Array.isArray(v.ccRows) ? v.ccRows.map(r => r.text).filter(Boolean).join(', ') : (v.chiefComplaints || v.chiefComplaint || '');
+      const dx = Array.isArray(v.diagnoses) ? v.diagnoses.map(formatDxLineForPrint).filter(Boolean).join(', ') : (v.diagnosisText || v.dx || '');
       const obgDx = Array.isArray(v.presumptiveDx) ? v.presumptiveDx.join(', ') : '';
+      const historySummary = summarizeVisitHistory(v, dept);
+      const rxSummary = summarizeVisitPrescription(v);
+      const adviceSummary = summarizeVisitAdvice(v);
+      const procSummary = summarizeVisitProcedures(v);
       const obgMeta = dept === 'obg'
         ? `<div style="font-size:11px;margin-bottom:5px"><strong>Summary:</strong> ${(v.gravida || '—')} · ${v.ga || 'GA —'} · EDD ${v.edd || '—'}</div>
            ${obgDx ? `<div style="font-size:11px;margin-bottom:5px"><strong>Presumptive Dx:</strong> ${obgDx}</div>` : ''}
@@ -26422,7 +26517,11 @@ function loadPastVisits(bmhId, dept) {
         </div>
         ${obgMeta}
         ${cc ? `<div style="font-size:11px;margin-bottom:5px"><strong>Chief complaints:</strong> ${cc}</div>` : ''}
+        ${historySummary ? `<div style="font-size:11px;margin-bottom:5px"><strong>History:</strong> ${historySummary}</div>` : ''}
         ${dx ? `<div style="font-size:11px;margin-bottom:5px"><strong>Diagnosis:</strong> ${dx}</div>` : ''}
+        ${procSummary ? `<div style="font-size:11px;margin-bottom:5px"><strong>Procedures advised:</strong> ${procSummary}</div>` : ''}
+        ${rxSummary ? `<div style="font-size:11px;margin-bottom:5px"><strong>Prescription:</strong><div style="margin-top:4px;line-height:1.45">${rxSummary}</div></div>` : ''}
+        ${adviceSummary ? `<div style="font-size:11px;margin-bottom:5px"><strong>Instructions:</strong><div style="margin-top:4px;line-height:1.45">${adviceSummary}</div></div>` : ''}
         ${invs.length ? `<div style="margin-top:8px"><div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:5px">Investigations</div>${invs.map(inv => `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;background:var(--g6);border-radius:8px;margin-bottom:5px"><div><div style="font-size:11px;font-weight:700">${inv.name}</div><div style="font-size:10px;color:var(--g1)">${Math.round((inv.sizKB||0))} KB · ${new Date(inv.date||Date.now()).toLocaleDateString('en-IN')}</div></div><button class="btn btn-xs btn-outline" onclick="viewStoredInvestigation('${bmhId}','${inv.key}')">Open</button></div>`).join('')}</div>` : ''}
       </div>`;
     }).join('');
