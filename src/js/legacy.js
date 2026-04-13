@@ -6745,7 +6745,12 @@ function toggleInventoryIolBox() {
   if (!box) return;
   const isIol = /iol/i.test(bmhInventoryCategoryValue());
   box.style.display = isIol ? 'block' : 'none';
-  if (isIol) renderIolInventoryPowerGrid();
+  if (isIol) {
+    renderIolInventoryPowerGrid();
+    // Initialize multi-brand container with first entry if empty
+    const cont = document.getElementById('inv-iol-brands-container');
+    if (cont && cont.children.length === 0) addIolBrandEntry();
+  }
 }
 function readIolGridSerialMap() {
   const raw = String(document.getElementById('inv-iol-serial-map')?.value || '').trim();
@@ -6818,47 +6823,145 @@ function buildIolInventoryRow(base, power, rowIndex, serialHint) {
     iolModel: model
   };
 }
+// IOL Multi-brand support — render brand entry UI
+function addIolBrandEntry(prefill) {
+  const container = document.getElementById('inv-iol-brands-container');
+  if (!container) return;
+  const idx = container.children.length;
+  const p = prefill || {};
+  const div = document.createElement('div');
+  div.className = 'inv-iol-brand-entry';
+  div.dataset.idx = idx;
+  div.style.cssText = 'background:#fffbec;border:1px solid #ead8a4;border-radius:8px;padding:10px;margin-bottom:10px;position:relative';
+  div.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase">Brand Entry ${idx + 1}</div>
+      ${idx > 0 ? `<button class="btn btn-xs btn-gray" onclick="removeIolBrandEntry(this)">✕ Remove</button>` : ''}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
+      <div class="form-group" style="margin:0"><label class="fl">Brand</label><input type="text" class="iol-brand-field" placeholder="AcrySof / Tecnis / Appasamy" value="${escapeHtmlConsent(p.brand||'')}"></div>
+      <div class="form-group" style="margin:0"><label class="fl">Company</label><input type="text" class="iol-company-field" placeholder="Alcon / J&amp;J / Zeiss" value="${escapeHtmlConsent(p.company||'')}"></div>
+      <div class="form-group" style="margin:0"><label class="fl">Batch Number</label><input type="text" class="iol-model-field" placeholder="Batch from product line" value="${escapeHtmlConsent(p.batch||'')}"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:140px 140px 1fr;gap:8px;align-items:end;margin-bottom:8px">
+      <div class="form-group" style="margin:0"><label class="fl">Expiry</label><input type="text" class="iol-expiry-field" placeholder="MM/YYYY" value="${escapeHtmlConsent(p.exp||'')}"></div>
+      <div class="form-group" style="margin:0"><label class="fl">Cost ₹</label><input type="number" class="iol-cost-field" min="0" value="${p.cost||0}"></div>
+      <div class="form-group" style="margin:0"><label class="fl">Serial / batch map (optional)</label><textarea class="iol-serial-map-field" rows="2" style="width:100%;font-family:var(--mono);font-size:11px" placeholder="+21.00D: SER123,BATCH-A"></textarea></div>
+    </div>
+    <div class="iol-power-grid-container" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px"></div>
+  `;
+  container.appendChild(div);
+  // Render power grid for this entry
+  renderIolBrandPowerGrid(div);
+}
+function removeIolBrandEntry(btn) {
+  const entry = btn.closest('.inv-iol-brand-entry');
+  if (entry) entry.remove();
+}
+function syncIolVendorToAll(val) {
+  // Keep vendor field in sync (it's shared at top level)
+}
+function renderIolBrandPowerGrid(entryDiv) {
+  const gridEl = entryDiv.querySelector('.iol-power-grid-container');
+  if (!gridEl) return;
+  const powers = [];
+  for (let p = 3.0; p <= 30.0; p += 0.5) powers.push('+' + p.toFixed(2) + 'D');
+  gridEl.innerHTML = powers.map(function (pw) {
+    return `<div style="background:#fff;border:1px solid #d2bb79;border-radius:7px;padding:6px 8px;text-align:center"><div style="font-size:11px;font-weight:700;margin-bottom:5px">${pw}</div><input type="number" class="inv-iol-qty" data-power="${pw}" min="0" value="0" style="width:100%;text-align:center;font-weight:800;font-size:13px"></div>`;
+  }).join('');
+}
+function readIolBrandEntrySerialMap(entryDiv) {
+  const raw = String(entryDiv.querySelector('.iol-serial-map-field')?.value || '');
+  const out = {};
+  raw.split('|').forEach(function (seg) {
+    const parts = seg.split(':');
+    if (parts.length >= 2) {
+      const power = parts[0].trim();
+      out[power] = parts[1].split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+    }
+  });
+  return out;
+}
+window.addIolBrandEntry = addIolBrandEntry;
+window.removeIolBrandEntry = removeIolBrandEntry;
+window.syncIolVendorToAll = syncIolVendorToAll;
+
 function saveIolInventoryGrid() {
   const vendor = document.getElementById('inv-iol-vendor')?.value?.trim() || document.getElementById('inv-in-vendor')?.value?.trim() || '';
-  const brand = document.getElementById('inv-iol-brand')?.value?.trim() || '';
-  const company = document.getElementById('inv-iol-company')?.value?.trim() || '';
-  const batchNo = document.getElementById('inv-iol-model')?.value?.trim() || '';
-  const exp = document.getElementById('inv-iol-expiry')?.value?.trim() || document.getElementById('inv-in-exp')?.value?.trim() || '';
-  const cost = Number(document.getElementById('inv-iol-cost')?.value || document.getElementById('inv-in-cost')?.value || '0') || 0;
   const mrp = Number(document.getElementById('inv-in-mrp')?.value || '0') || 0;
-  const picked = Array.from(document.querySelectorAll('.inv-iol-qty')).map(function (input) {
-    return { power: String(input.dataset.power || ''), qty: Math.max(0, parseInt(input.value, 10) || 0) };
-  }).filter(function (row) { return row.qty > 0; });
-  if (!brand && !company && !batchNo) { showToast('Enter company / brand / batch for IOL stock', 'w'); return; }
-  if (!picked.length) { showToast('Select at least one IOL power quantity', 'w'); return; }
-  const serialMap = readIolGridSerialMap();
-  const base = {
-    vendor: vendor,
-    brand: brand,
-    company: company,
-    model: '',
-    batchNo: batchNo,
-    exp: exp,
-    cost: cost,
-    mrp: mrp,
-    min: 1,
-    store: bmhInventoryStoreValue() || 'Eye OT',
-    billMode: 'on-use'
-  };
+  const brandEntries = document.querySelectorAll('#inv-iol-brands-container .inv-iol-brand-entry');
+
+  // Support new multi-brand form AND legacy single-brand form
+  let allBrandData = [];
+  if (brandEntries.length > 0) {
+    brandEntries.forEach(function (entryDiv) {
+      const brand = entryDiv.querySelector('.iol-brand-field')?.value?.trim() || '';
+      const company = entryDiv.querySelector('.iol-company-field')?.value?.trim() || '';
+      const batchNo = entryDiv.querySelector('.iol-model-field')?.value?.trim() || '';
+      const exp = entryDiv.querySelector('.iol-expiry-field')?.value?.trim() || '';
+      const cost = Number(entryDiv.querySelector('.iol-cost-field')?.value || '0') || 0;
+      const picked = Array.from(entryDiv.querySelectorAll('.inv-iol-qty')).map(function (input) {
+        return { power: String(input.dataset.power || ''), qty: Math.max(0, parseInt(input.value, 10) || 0) };
+      }).filter(function (row) { return row.qty > 0; });
+      const serialMap = readIolBrandEntrySerialMap(entryDiv);
+      if (picked.length > 0) allBrandData.push({ brand, company, batchNo, exp, cost, picked, serialMap });
+    });
+  } else {
+    // Legacy single-brand fallback
+    const brand = document.getElementById('inv-iol-brand')?.value?.trim() || '';
+    const company = document.getElementById('inv-iol-company')?.value?.trim() || '';
+    const batchNo = document.getElementById('inv-iol-model')?.value?.trim() || '';
+    const exp = document.getElementById('inv-iol-expiry')?.value?.trim() || document.getElementById('inv-in-exp')?.value?.trim() || '';
+    const cost = Number(document.getElementById('inv-iol-cost')?.value || document.getElementById('inv-in-cost')?.value || '0') || 0;
+    const picked = Array.from(document.querySelectorAll('.inv-iol-qty')).map(function (input) {
+      return { power: String(input.dataset.power || ''), qty: Math.max(0, parseInt(input.value, 10) || 0) };
+    }).filter(function (row) { return row.qty > 0; });
+    const serialMap = readIolGridSerialMap();
+    if (picked.length > 0) allBrandData.push({ brand, company, batchNo, exp, cost, picked, serialMap });
+  }
+
+  if (!allBrandData.length) { showToast('Enter at least one IOL power quantity', 'w'); return; }
+  if (!allBrandData.some(function (b) { return b.brand || b.company || b.batchNo; })) {
+    showToast('Enter company / brand / batch for IOL stock', 'w'); return;
+  }
+  // Legacy single-brand kept for backward compat — fall through to new code
+  const brand = allBrandData[0].brand;
+  const company = allBrandData[0].company;
+  const batchNo = allBrandData[0].batchNo;
+  const exp = allBrandData[0].exp;
+  const cost = allBrandData[0].cost;
+  const picked = allBrandData[0].picked;
+  const serialMap = allBrandData[0].serialMap;
   let added = 0;
   try {
     bmhCompressFileToData(document.getElementById('inv-in-bill-file')?.files?.[0], function (billFile) {
       try {
-      picked.forEach(function (row) {
-        const hints = serialMap[row.power] || [];
-        for (let idx = 0; idx < row.qty; idx += 1) {
-          const invRow = buildIolInventoryRow(base, row.power, idx + 1, hints[idx] || null);
-          INVENTORY.push(invRow);
-          BCMAP[invRow.barcode] = invRow;
-          BCMAP[String(invRow.name).toLowerCase().substring(0, 15)] = invRow;
-          bmhRecordInventoryPurchase(invRow, 1, billFile || null);
-          added += 1;
-        }
+      // Process all brand entries
+      allBrandData.forEach(function (bd) {
+        const base = {
+          vendor: vendor,
+          brand: bd.brand,
+          company: bd.company,
+          model: '',
+          batchNo: bd.batchNo,
+          exp: bd.exp,
+          cost: bd.cost,
+          mrp: mrp,
+          min: 1,
+          store: bmhInventoryStoreValue() || 'Eye OT',
+          billMode: 'on-use'
+        };
+        bd.picked.forEach(function (row) {
+          const hints = bd.serialMap[row.power] || [];
+          for (let idx = 0; idx < row.qty; idx += 1) {
+            const invRow = buildIolInventoryRow(base, row.power, idx + 1, hints[idx] || null);
+            INVENTORY.push(invRow);
+            BCMAP[invRow.barcode] = invRow;
+            BCMAP[String(invRow.name).toLowerCase().substring(0, 15)] = invRow;
+            bmhRecordInventoryPurchase(invRow, 1, billFile || null);
+            added += 1;
+          }
+        });
       });
       saveInventoryStockToStorage();
       try {
@@ -6871,18 +6974,22 @@ function saveIolInventoryGrid() {
         renderInventoryStoreStock();
         renderInventoryPoAlerts();
         bmhRenderVendorTables();
+        const brandNames = allBrandData.map(function (b) { return [b.company, b.brand].filter(Boolean).join(' '); }).filter(Boolean).join(' + ');
         const log = document.getElementById('stock-in-log');
         if (log) {
           const d = document.createElement('div');
           d.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;background:var(--green-lt);border-radius:8px;margin-bottom:6px;font-size:12px';
-          d.innerHTML = `<span><strong>IOL stock saved</strong> · ${escapeHtmlConsent([company, brand].filter(Boolean).join(' ') || vendor || 'IOL')}</span><span style="font-weight:900;color:#1a8c3c">+${added}</span>`;
+          d.innerHTML = `<span><strong>IOL stock saved</strong> · ${escapeHtmlConsent(brandNames || vendor || 'IOL')} (${allBrandData.length} brand${allBrandData.length>1?'s':''})</span><span style="font-weight:900;color:#1a8c3c">+${added}</span>`;
           log.prepend(d);
         }
         const tabBtn = Array.from(document.querySelectorAll('#pg-inventory .ptab')).find(function (el) { return String(el.textContent || '').includes('Current Stock'); });
         if (tabBtn) ptab(tabBtn, 'inv-stock');
       } catch (e) { console.warn('IOL stock post-save UI refresh failed', e); }
-      showToast('Saved ✓', 's');
+      showToast('Saved ✓ — ' + added + ' IOL units added', 's');
       resetInventoryStockInForm(true);
+      // Clear brand entries and add fresh one
+      const cont = document.getElementById('inv-iol-brands-container');
+      if (cont) { cont.innerHTML = ''; addIolBrandEntry(); }
       } catch (e) {
         console.error('saveIolInventoryGrid callback failed', e);
         showToast('IOL stock save failed. ' + String(e?.message || 'Please retry.'), 'e');
@@ -11665,39 +11772,71 @@ const DRUG_LIBRARY = [
 ];
 
 const SELECTED_INVESTIGATIONS = [];
+// Legacy library kept for backward compatibility
 const INVESTIGATION_LIBRARY = {
-  blood: [
-    ['CBC (Complete Blood Count)', 850],
-    ['Fasting Blood Sugar', 250],
-    ['HbA1c', 600],
-    ['Serum Creatinine', 350],
-    ['Urea & Electrolytes', 700],
-    ['Liver Function Tests', 900],
-    ['Coagulation Profile', 1200],
-    ['HIV', 400],
-    ['HbsAg', 300],
-    ['VDRL', 300]
-  ],
-  diag: [
-    ['Chest X-Ray', 600],
-    ['ECG', 350],
-    ['Echocardiography', 2500],
-    ['USG Abdomen', 1200],
-    ['MRI Brain', 8000],
-    ['CT Scan Head', 5000]
-  ],
-  eye: [
-    ['Biometry (IOL Master)', 1200],
-    ['OCT Macula OU', 1800],
-    ['OCT Optic Disc OU', 1800],
-    ['HVF Visual Fields', 1500],
-    ['Fundus Photography', 600],
-    ['Corneal Topography', 1500],
-    ['Specular Microscopy', 1200],
-    ['ERG / VEP', 2500],
-    ['Fluorescein Angiography', 4000]
-  ]
+  blood: [['CBC (Complete Blood Count)', 850],['Fasting Blood Sugar', 250],['HbA1c', 600],['Serum Creatinine', 350],['Urea & Electrolytes', 700],['Liver Function Tests', 900],['Coagulation Profile', 1200],['HIV', 400],['HbsAg', 300],['VDRL', 300]],
+  diag: [['Chest X-Ray', 600],['ECG', 350],['Echocardiography', 2500],['USG Abdomen', 1200],['MRI Brain', 8000],['CT Scan Head', 5000]],
+  eye: [['Biometry (IOL Master)', 1200],['OCT Macula OU', 1800],['OCT Optic Disc OU', 1800],['HVF Visual Fields', 1500],['Fundus Photography', 600],['Corneal Topography', 1500],['Specular Microscopy', 1200],['ERG / VEP', 2500],['Fluorescein Angiography', 4000]]
 };
+// Investigation categories from lab Excel file
+const INVESTIGATION_CATEGORIES = [
+  { id:'haem', label:'🩸 Haematology', tests:[
+    'Hb (Haemoglobin)','T.L.C. (Total Leukocytes Count)','Neutrophils','Lymphocytes','Monocytes','Eosinophils','Basophils',
+    'Platelets Count','R.B.C. (Red Blood Cells)','P.C.V. (Packed Cell Volume)','M.C.V. (Mean Cell Volume)',
+    'M.C.H. (Mean Cell Haemoglobin)','M.C.H.C. (Mean Cell Haemoglobin Conc.)','E.S.R. (Erythrocytes Sedimentation Rate)','Malarial Parasite'
+  ]},
+  { id:'coag', label:'🔬 Coagulogram', tests:[
+    'B.T. (Bleeding Time)','C.T. (Clotting Time)','P.T. (Prothrombin Time)','P.T.I. (Prothrombin Time Index)',
+    'I.N.R. (International Normalised Ratio)','A.P.T.T (Activated Partial Thrombin Time)'
+  ]},
+  { id:'chem', label:'🧪 Chemistry', tests:[
+    'Fasting Glucose','Post Prandial Glucose','Post Lunch Glucose','Post Dinner Glucose','Random Glucose',
+    'CPK-MB','CPK-NAC','Amylase','S. Lipase','GAMA G.T.','LDH','TROP-T',
+    'Glycosylated Haemoglobin (HbA1c)','ABG (Average Blood Glucose)'
+  ]},
+  { id:'rft', label:'💉 RFT', tests:[
+    'B. Urea','S. Creatinine','S. Uric Acid','Spot Microalbuminuria','24 hrs. Microalbuminuria',
+    'Spot Urine Creatinine','24 hrs. Urine Creatinine','Urine Albumin-Creatinine Ratio',
+    '24 hrs. Urine Proteins','Total Volume (24hr)'
+  ]},
+  { id:'lft', label:'🫀 LFT', tests:[
+    'Total Bilirubin','Direct Bilirubin','Indirect Bilirubin','Total Proteins','Albumin','Globulin','A/G Ratio',
+    'S.G.O.T. (AST)','S.G.P.T. (ALT)','Alkaline Phosphatase'
+  ]},
+  { id:'lipid', label:'🫀 Lipid Profile', tests:[
+    'Total Cholesterol','Triglycerides','HDL Cholesterol','LDL','VLDL',
+    'Cholesterol/HDL Ratio','LDL/HDL Ratio','Non-HDL Cholesterol','Total Lipids'
+  ]},
+  { id:'electro', label:'⚡ Electrolytes', tests:[
+    'Sodium (Na+)','Potassium (K+)','Chloride (Cl-)','Calcium (Ca++)','Phosphorous','Magnesium (Mg)','Lithium (Li)'
+  ]},
+  { id:'sero', label:'🔬 Serology', tests:[
+    'Blood Group (ABO)','Rh. Anti-D','H.I.V. I & II','HBsAg','H.C.V. (Tridot)','V.D.R.L.',
+    'R.A. Factor','A.S.O.','C. Reactive Proteins',"Direct Coombs Test","Indirect Coombs Test",
+    'Malarial Antigens - P. Falciparum','Malarial Antigens - P. Vivax',
+    'Typhi Dot IgG','Typhi Dot IgM','Widal'
+  ]},
+  { id:'urine', label:'💧 Urine', tests:[
+    'Urine Colour','Urine Appearance','Urine Proteins','Urine Sugar','Urine pH','Specific Gravity',
+    'Acetone/Ketones','Bile Salt','Bile Pigment',"Urine Pus Cells","Urine RBC's",'Epithelial Cells',
+    'Calcium Oxalate Crystals','Triple Phosphate Crystals','Uric Acid Crystals','Amorphous Deposits',
+    'Budding Yeast','Fungal Hyphae','Mucus Fibers','Urine Bacteria'
+  ]},
+  { id:'stool', label:'🔬 Stool', tests:[
+    'Stool Colour','Stool Consistency','Stool Blood','Stool Mucous','Stool Parasite',
+    'Stool pH','Occult Blood','Veg. Form of Protozoa','Cyst of Protozoa','Ova/Eggs of Helminths',
+    'Stool Pus Cells','Stool Mucus Fibers','Fat Cells','Hanging Drop (Vibrio)'
+  ]},
+  { id:'hcg', label:'🤰 HCG', tests:['Human Chorionic Gonadotropin (HCG)']},
+  { id:'semen', label:'🔬 Semen', tests:[
+    'Semen Volume','Semen Colour','Semen Reaction','Semen Viscosity','Liquefaction Time',
+    'Semen Pus Cells',"Semen RBC's",'Spermatogonia','Total Sperm Count','Normal Morphology',
+    'Active Motile (1st Hr)','Active Motile (2nd Hr)','Active Motile (3rd Hr)','Active Motile (4th Hr)',
+    'Sluggish Motility (1st Hr)','Non-Motile (1st Hr)'
+  ]},
+  { id:'rafq', label:'🦴 RA Factor', tests:['R.A. Factor (Quantitative)']},
+  { id:'thyroid', label:'🦋 Thyroid', tests:['TSH','T3 (Triiodothyronine)','T4 (Thyroxine)','Free T3','Free T4','Anti-TPO Antibodies']}
+];
 const RX_FREQ_OPTIONS = ['Half-hourly','Hourly','Every 2 hours','Every 3 hours','Every 4 hours','Six times daily (6x/day)','Four times daily (QID)','Three times daily (TDS)','Twice daily (BD)','Once daily (OD)','At bedtime (HS)','Once weekly','As needed (PRN)'];
 const RX_DURATION_OPTIONS = ['½ day','1 day','2 days','3 days','4 days','5 days','6 days','7 days','10 days','13 days','1 week','2 weeks','3 weeks','4 weeks','6 weeks','1 month','2 months','3 months','4 months','5 months','6 months','12 months','Ongoing'];
 const RX_TYPE_OPTIONS = ['Eye Drop','Tablet','Capsule','Ointment','Cream','Gel','Syrup','Injection','Pessary','Lotion','Spray','Other'];
@@ -11960,45 +12099,34 @@ function addCustomRxOption(kind) {
   showToast('Saved for ' + (CURRENT_USER?.name || 'doctor') + ' ✓', 's');
 }
 function renderInvestigationChooser() {
-  const seen = new Set();
-  const dedupe = function (rows) {
-    return rows.filter(function (row) {
-      const name = String(row && row[0] || '').trim();
-      if (!name) return false;
-      const key = name.toLowerCase();
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-  };
-  const labDefaults = DEFAULT_ZERO_CHARGE_LAB_ROWS.map(function (row) { return [row.name, 0]; });
-  const labRows = dedupe((CHARGES_DATA || []).filter(function (row) {
-    return String(row?.cat || '').toLowerCase() === 'lab' || String(row?.kind || '').toLowerCase() === 'lab';
-  }).map(function (row) { return [normalizeInvestigationLabel(row.name), 0]; }).concat(labDefaults)).sort(function (a, b) {
-    return String(a[0] || '').localeCompare(String(b[0] || ''));
+  INVESTIGATION_CATEGORIES.forEach(function (cat) {
+    const el = document.getElementById('inv-' + cat.id + '-list');
+    if (!el) return;
+    el.innerHTML = cat.tests.map(function (name) {
+      return `<div class="invest-option" data-investigation-name="${String(name).replace(/"/g,'&quot;')}" data-price="0" data-inv-cat="${cat.id}" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--g6);border-radius:8px;cursor:pointer;user-select:none;-webkit-user-select:none"><input type="checkbox" tabindex="-1" aria-hidden="true" style="width:16px;height:16px;flex-shrink:0;pointer-events:none"><div style="flex:1"><div style="font-size:12px;font-weight:700">${name}</div><div style="font-size:10px;color:var(--g1)">${getInvestigationCategoryLabel(cat.id)}</div></div></div>`;
+    }).join('');
   });
-  const diagRows = dedupe((CHARGES_DATA || []).filter(function (row) {
-    const cat = String(row?.cat || '').toLowerCase();
-    const name = String(row?.name || '');
-    if (cat === 'lab') return false;
-    return /x-?ray|ecg|echo|usg|ultrasound|mri|ct scan|doppler/i.test(name);
-  }).map(function (row) { return [row.name, 0]; }));
-  const eyeRows = dedupe((CHARGES_DATA || []).filter(function (row) {
-    const cat = String(row?.cat || '').toLowerCase();
-    const name = String(row?.name || '');
-    if (cat !== 'eye') return false;
-    if (/consultation|follow-up|pre-op package/i.test(name)) return false;
-    return /biometry|oct|hvf|fundus|topography|specular|erg|vep|fluorescein|ubm|b-?scan/i.test(name);
-  }).map(function (row) { return [row.name, 0]; }));
-  const groups = [
-    ['inv-blood-list', labRows.length ? labRows : INVESTIGATION_LIBRARY.blood.map(function (x) { return [x[0], 0]; })],
-    ['inv-diag-list', diagRows.length ? diagRows : INVESTIGATION_LIBRARY.diag.map(function (x) { return [x[0], 0]; })],
-    ['inv-eye-list', eyeRows.length ? eyeRows : INVESTIGATION_LIBRARY.eye.map(function (x) { return [x[0], 0]; })]
-  ];
-  groups.forEach(([id, items]) => {
-    const el = document.getElementById(id);
-    if(!el) return;
-    el.innerHTML = items.map(([name, price]) => `<div class="invest-option" data-investigation-name="${String(name).replace(/"/g,'&quot;')}" data-price="${price}" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--g6);border-radius:8px;cursor:pointer;user-select:none;-webkit-user-select:none"><input type="checkbox" tabindex="-1" aria-hidden="true" style="width:16px;height:16px;flex-shrink:0;pointer-events:none"><div style="flex:1"><div style="font-size:12px;font-weight:700">${name}</div><div style="font-size:10px;color:var(--g1)">Outsourced lab / no charge</div></div></div>`).join('');
+  syncSelectedInvestigationCheckboxes();
+}
+function getInvestigationCategoryLabel(catId) {
+  const labels = { haem:'Haematology', coag:'Coagulogram', chem:'Chemistry', rft:'Renal Function', lft:'Liver Function', lipid:'Lipid Profile', electro:'Electrolytes', sero:'Serology', urine:'Urine Exam', stool:'Stool Exam', hcg:'Pregnancy Test', semen:'Semen Analysis', rafq:'RA Factor', thyroid:'Thyroid' };
+  return labels[catId] || catId;
+}
+function selectAllInvCat(catId) {
+  const cat = INVESTIGATION_CATEGORIES.find(function (c) { return c.id === catId; });
+  if (!cat) return;
+  const listEl = document.getElementById('inv-' + catId + '-list');
+  if (!listEl) return;
+  cat.tests.forEach(function (name) {
+    const card = listEl.querySelector('[data-investigation-name="' + String(name).replace(/"/g, '&quot;') + '"]');
+    if (!card) return;
+    const cb = card.querySelector('input[type=checkbox]');
+    if (cb && !cb.checked) {
+      const idx = SELECTED_INVESTIGATIONS.findIndex(function (i) { return i.name === name; });
+      if (idx === -1) SELECTED_INVESTIGATIONS.push({ name: name, price: 0 });
+      cb.checked = true;
+      card.style.background = 'var(--blue-lt)';
+    }
   });
   syncSelectedInvestigationCheckboxes();
 }
@@ -18042,23 +18170,163 @@ function getLabTestMeta(name) {
   const n = normalizeLabTestName(name);
   const low = n.toLowerCase();
   const defs = [
-    { re:/\bhb\b|haemoglobin/, group:'haem', unit:'g/dL', range:'12-16', purpose:'Haemoglobin helps assess anaemia status and oxygen-carrying capacity of blood.', normalNote:'Values in the reference range usually suggest adequate haemoglobin for age and sex, though symptoms and clinical context matter.', abnormalNote:'Low values may suggest anaemia or blood loss, while higher values can be seen with dehydration or other causes and need clinical correlation.' },
-    { re:/\btlc\b|total leucocyte|wbc/, group:'haem', unit:'/cumm', range:'4000-11000', purpose:'Total white blood cell count is used as a broad marker of immune and inflammatory activity.', normalNote:'A normal count does not rule out disease, but it is generally reassuring when interpreted with symptoms and examination.', abnormalNote:'High or low counts can occur with infection, inflammation, medicines, marrow disorders, or stress and must be interpreted clinically.' },
-    { re:/\bdlc\b/, group:'haem', unit:'%', range:'40-75', purpose:'Differential leucocyte count describes the distribution of white blood cell types.', normalNote:'Balanced differential counts usually support a stable immune profile.', abnormalNote:'Shifts in neutrophils, lymphocytes, eosinophils, or other subsets can point toward infection, allergy, stress, or hematologic disease.' },
-    { re:/\bplatelet/, group:'haem', unit:'lakh/cumm', range:'1.5-4.5', purpose:'Platelet count helps assess clotting support and bleeding risk.', normalNote:'Counts in the reference range are generally adequate for routine haemostasis.', abnormalNote:'Low platelet counts may increase bleeding risk, while high counts can be reactive or primary and should be interpreted with the overall blood picture.' },
-    { re:/\bcbc\b|complete blood count/, group:'haem', unit:'', range:'', purpose:'Complete blood count gives an overview of red cells, white cells, and platelets.', normalNote:'When all CBC components are within range, it supports a broadly stable blood profile.', abnormalNote:'A CBC is a screening panel; any abnormal component should be interpreted together with symptoms, examination, and sometimes repeat testing.' },
-    { re:/\brbs\b|blood sugar|glucose/, group:'diab', unit:'mg/dL', range:'70-140', purpose:'Glucose testing is used to screen for and monitor diabetes and glucose regulation.', normalNote:'Values within the stated range are generally acceptable depending on fasting or random testing conditions.', abnormalNote:'Single abnormal glucose readings do not always confirm diabetes and may require confirmation with repeat testing or HbA1c in the right clinical setting.' },
-    { re:/\bhba1c\b/, group:'diab', unit:'%', range:'4-5.6', purpose:'HbA1c reflects average blood glucose exposure over roughly the previous 2 to 3 months.', normalNote:'Lower values within the expected range are generally consistent with good long-term glycaemic control.', abnormalNote:'Higher values suggest poorer glucose control over time, but interpretation should consider anaemia, haemoglobin variants, and the clinical picture.' },
-    { re:/\burea\b/, group:'bio', unit:'mg/dL', range:'15-40', purpose:'Blood urea is a biochemical marker often used with creatinine to assess hydration and kidney-related metabolism.', normalNote:'Values in range are usually compatible with stable protein metabolism and renal handling.', abnormalNote:'High or low values can reflect dehydration, diet, catabolism, liver issues, or kidney-related causes and should be interpreted with creatinine and symptoms.' },
-    { re:/\bcreatinine\b/, group:'bio', unit:'mg/dL', range:'0.6-1.2', purpose:'Creatinine is used as a practical marker of kidney filtration function.', normalNote:'Values within range are usually reassuring, though kidney assessment is best interpreted with age, muscle mass, urine findings, and clinical context.', abnormalNote:'Abnormal creatinine does not automatically mean severe kidney disease; hydration, muscle mass, medicines, and acute illness can all influence the result.' },
-    { re:/\bsodium\b/, group:'bio', unit:'mEq/L', range:'135-145', purpose:'Sodium helps assess fluid balance and overall electrolyte status.', normalNote:'Normal sodium usually supports stable fluid and electrolyte regulation.', abnormalNote:'Abnormal sodium can occur in dehydration, fluid overload, endocrine conditions, medicines, and acute illness and should be assessed clinically.' },
-    { re:/\bpotassium\b/, group:'bio', unit:'mEq/L', range:'3.5-5.0', purpose:'Potassium is important for neuromuscular and cardiac function.', normalNote:'Values within range are generally consistent with stable potassium balance.', abnormalNote:'Low or high potassium may need prompt clinical attention in the right setting, especially when symptoms, kidney issues, or ECG changes are present.' },
-    { re:/\bbilirubin\b/, group:'bio', unit:'mg/dL', range:'0.2-1.2', purpose:'Bilirubin helps assess jaundice and liver-bile metabolism.', normalNote:'Normal bilirubin levels usually argue against significant jaundice at the time of testing.', abnormalNote:'Raised bilirubin can come from liver, bile duct, or red-cell causes and is interpreted best with liver enzymes and symptoms.' },
-    { re:/\bsgot\b|\bast\b/, group:'bio', unit:'U/L', range:'0-40', purpose:'AST is a liver-associated enzyme that can also rise from muscle-related causes.', normalNote:'Normal AST is generally reassuring when interpreted with ALT and bilirubin.', abnormalNote:'A raised AST does not always mean primary liver disease; muscle injury, medicines, alcohol, and systemic illness can contribute.' },
-    { re:/\bsgpt\b|\balt\b/, group:'bio', unit:'U/L', range:'0-40', purpose:'ALT is commonly used as a marker of liver cell injury.', normalNote:'Values within range are generally consistent with a stable liver enzyme pattern.', abnormalNote:'Raised ALT may reflect fatty liver, viral hepatitis, medicines, alcohol, or other causes and needs interpretation with history and other tests.' },
-    { re:/\btsh\b/, group:'thyroid', unit:'mIU/L', range:'0.4-4.5', purpose:'TSH is the main screening test for thyroid regulation.', normalNote:'A TSH within the reference interval often suggests euthyroid status, though free thyroid hormones may still be needed in some situations.', abnormalNote:'TSH abnormalities should be correlated with T3/T4, symptoms, pregnancy status, and ongoing thyroid treatment.' },
-    { re:/\bt3\b/, group:'thyroid', unit:'ng/mL', range:'0.8-2.0', purpose:'T3 helps assess the active thyroid hormone status in selected thyroid evaluations.', normalNote:'A value in range supports balanced thyroid hormone availability when interpreted with TSH and T4.', abnormalNote:'T3 changes alone should not be over-interpreted and usually need correlation with TSH, T4, and symptoms.' },
-    { re:/\bt4\b/, group:'thyroid', unit:'µg/dL', range:'5-12', purpose:'T4 reflects thyroid hormone availability and supports thyroid function assessment.', normalNote:'Values in range are generally consistent with stable thyroid hormone levels.', abnormalNote:'Abnormal values can occur in thyroid disease and also in binding-protein changes, pregnancy, or medication effects.' }
+    // ── HAEMATOLOGY ──────────────────────────────────────────────────
+    { re:/\bhb\b|haemoglobin/, group:'haem', unit:'gm/dl', range:'11-16' },
+    { re:/\btlc\b|total leuko|total leucocyte|wbc/, group:'haem', unit:'/cmm', range:'4000-11000' },
+    { re:/neutrophil/, group:'haem', unit:'%', range:'40-70' },
+    { re:/lymphocyte/, group:'haem', unit:'%', range:'30-45' },
+    { re:/monocyte/, group:'haem', unit:'%', range:'2-5' },
+    { re:/eosinophil/, group:'haem', unit:'%', range:'1-6' },
+    { re:/basophil/, group:'haem', unit:'%', range:'0-1' },
+    { re:/\bplatelet/, group:'haem', unit:'Lacs', range:'1.5-4.5' },
+    { re:/\bdlc\b|differential leuko/, group:'haem', unit:'%', range:'40-75' },
+    { re:/\brbc\b|red blood cell/, group:'haem', unit:'Million/cmm', range:'3.5-5.5' },
+    { re:/\bpcv\b|packed cell/, group:'haem', unit:'%', range:'33-48' },
+    { re:/\bmcv\b|mean cell vol/, group:'haem', unit:'fl', range:'80-95' },
+    { re:/\bmch\b(?!c)|mean cell haemoglobin(?! conc)/, group:'haem', unit:'pg', range:'27-32' },
+    { re:/\bmchc\b|mean cell haemoglobin conc/, group:'haem', unit:'gm/dl', range:'32-36' },
+    { re:/\besr\b|erythrocyte sedimentation/, group:'haem', unit:'mm/hr', range:'0-20' },
+    { re:/malarial parasite/, group:'haem', unit:'', range:'' },
+    { re:/\bcbc\b|complete blood count/, group:'haem', unit:'', range:'' },
+    // ── COAGULOGRAM ──────────────────────────────────────────────────
+    { re:/\bbt\b|bleeding time/, group:'coag', unit:'min', range:'1-6' },
+    { re:/\bct\b|clotting time/, group:'coag', unit:'min', range:'1-10' },
+    { re:/prothrombin time(?! index)|\bpt\b(?! index)/, group:'coag', unit:'sec', range:'11-16' },
+    { re:/prothrombin time index|\bpti\b/, group:'coag', unit:'%', range:'70-130', formula:'pti' },
+    { re:/\binr\b|international normalised/, group:'coag', unit:'', range:'0.8-1.2', formula:'inr' },
+    { re:/aptt|activated partial thrombin/, group:'coag', unit:'sec', range:'25-40' },
+    // ── CHEMISTRY ─────────────────────────────────────────────────────
+    { re:/fasting glucose|fasting blood sugar|\bfbs\b/, group:'chem', unit:'mg/dl', range:'70-110' },
+    { re:/post prandial|post-prandial|\bppbs\b|\bpp glucose/, group:'chem', unit:'mg/dl', range:'70-140' },
+    { re:/post lunch/, group:'chem', unit:'mg/dl', range:'70-140' },
+    { re:/post dinner/, group:'chem', unit:'mg/dl', range:'70-140' },
+    { re:/random glucose|random blood sugar|\brbs\b/, group:'chem', unit:'mg/dl', range:'70-160' },
+    { re:/\bhba1c\b|glycosylated haemoglobin/, group:'chem', unit:'%', range:'4.7-6.0', formula:'hba1c_interp' },
+    { re:/average blood glucose|\babg\b/, group:'chem', unit:'mg/dl', range:'90-150', formula:'abg' },
+    { re:/\bcpk-mb\b/, group:'chem', unit:'IU/L', range:'0-25' },
+    { re:/\bcpk-nac\b|\bcpk\b(?!-mb)/, group:'chem', unit:'IU/L', range:'25-200' },
+    { re:/\bamylase\b/, group:'chem', unit:'IU/L', range:'25-110' },
+    { re:/\blipase\b|s\. lipase/, group:'chem', unit:'IU/L', range:'20-300' },
+    { re:/gama g\.t\.|gamma gt|\bggt\b/, group:'chem', unit:'IU/L', range:'0-35' },
+    { re:/\bldh\b/, group:'chem', unit:'IU/L', range:'114-240' },
+    { re:/\btrop-t\b|troponin/, group:'chem', unit:'', range:'' },
+    // ── RFT ───────────────────────────────────────────────────────────
+    { re:/\burea\b|blood urea|\bbun\b/, group:'rft', unit:'mg/dl', range:'10-40' },
+    { re:/\bcreatinine\b/, group:'rft', unit:'mg/dl', range:'0.5-1.5' },
+    { re:/\buric acid\b/, group:'rft', unit:'mg/dl', range:'2-7' },
+    { re:/spot microalbumin/, group:'rft', unit:'mg/g Creatinine', range:'0-30' },
+    { re:/24.*microalbumin/, group:'rft', unit:'mg/24hr', range:'30-300' },
+    { re:/spot urine creatinine/, group:'rft', unit:'mg/dl', range:'25-400' },
+    { re:/24.*urine creatinine/, group:'rft', unit:'mg/24hr', range:'500-2000' },
+    { re:/albumin.*creatinine ratio|uacr/, group:'rft', unit:'mg/mmol', range:'3-30', formula:'uacr' },
+    { re:/24.*urine protein/, group:'rft', unit:'mg/24hr', range:'0-150' },
+    { re:/total volume.*24|24.*total volume/, group:'rft', unit:'ml/24hr', range:'' },
+    // ── LFT ───────────────────────────────────────────────────────────
+    { re:/total bilirubin/, group:'lft', unit:'mg/dl', range:'0.2-1.2' },
+    { re:/direct bilirubin/, group:'lft', unit:'mg/dl', range:'0.2-1.0' },
+    { re:/indirect bilirubin/, group:'lft', unit:'mg/dl', range:'0-0.2', formula:'ibili' },
+    { re:/total protein/, group:'lft', unit:'gm/dl', range:'6-8' },
+    { re:/\balbumin\b/, group:'lft', unit:'gm/dl', range:'3.8-5.0' },
+    { re:/\bglobulin\b/, group:'lft', unit:'gm/dl', range:'2.3-3.5', formula:'globulin' },
+    { re:/a\/g ratio|albumin.*globulin ratio/, group:'lft', unit:'', range:'0.9-2.0', formula:'agratio' },
+    { re:/\bsgot\b|\bast\b/, group:'lft', unit:'IU/L', range:'6-40' },
+    { re:/\bsgpt\b|\balt\b/, group:'lft', unit:'IU/L', range:'3-35' },
+    { re:/alkaline phosphatase|\balp\b/, group:'lft', unit:'U/L', range:'39-118' },
+    // ── LIPID ─────────────────────────────────────────────────────────
+    { re:/total cholesterol/, group:'lipid', unit:'mg/dl', range:'125-200' },
+    { re:/triglyceride/, group:'lipid', unit:'mg/dl', range:'60-165' },
+    { re:/hdl cholesterol|\bhdl\b/, group:'lipid', unit:'mg/dl', range:'30-70' },
+    { re:/\bldl\b(?! hdl)/, group:'lipid', unit:'mg/dl', range:'74-130', formula:'ldl' },
+    { re:/\bvldl\b/, group:'lipid', unit:'mg/dl', range:'10-32', formula:'vldl' },
+    { re:/cholesterol.*hdl.*ratio|chol.*hdl/, group:'lipid', unit:'', range:'3-5', formula:'cholhdl' },
+    { re:/ldl.*hdl.*ratio/, group:'lipid', unit:'', range:'1.5-3.5', formula:'ldhldl' },
+    { re:/non-hdl cholesterol/, group:'lipid', unit:'mg/dl', range:'0-160', formula:'nonhdl' },
+    { re:/total lipid/, group:'lipid', unit:'mg/dl', range:'400-700' },
+    // ── ELECTROLYTES ──────────────────────────────────────────────────
+    { re:/sodium|na\+/, group:'electro', unit:'mmol/L', range:'135-155' },
+    { re:/potassium|k\+/, group:'electro', unit:'mmol/L', range:'3.5-5.5' },
+    { re:/chloride|cl[-]/, group:'electro', unit:'mmol/L', range:'98-107' },
+    { re:/calcium|ca\+\+/, group:'electro', unit:'mg%', range:'8.4-11.5' },
+    { re:/phosphorous|phosphate|po4/, group:'electro', unit:'mg%', range:'2.5-4.8' },
+    { re:/magnesium|\bmg\b/, group:'electro', unit:'mmol/L', range:'1.7-2.2' },
+    { re:/lithium|\bli\b/, group:'electro', unit:'mEq/L', range:'0.5-1.0' },
+    // ── SEROLOGY ──────────────────────────────────────────────────────
+    { re:/blood group/, group:'sero', unit:'', range:'' },
+    { re:/rh.*anti|anti-d/, group:'sero', unit:'', range:'' },
+    { re:/hiv|h\.i\.v/, group:'sero', unit:'', range:'Non-Reactive' },
+    { re:/hbsag/, group:'sero', unit:'', range:'Non-Reactive' },
+    { re:/hcv|h\.c\.v/, group:'sero', unit:'', range:'Non-Reactive' },
+    { re:/\bvdrl\b/, group:'sero', unit:'', range:'Non-Reactive' },
+    { re:/r\.a\.factor|ra factor(?! quantit)/, group:'sero', unit:'', range:'Negative' },
+    { re:/\baso\b|anti.*streptol/, group:'sero', unit:'', range:'Negative' },
+    { re:/c\. reactive|c-reactive|\bcrp\b/, group:'sero', unit:'', range:'Negative' },
+    { re:/direct coombs/, group:'sero', unit:'', range:'Negative' },
+    { re:/indirect coombs/, group:'sero', unit:'', range:'Negative' },
+    { re:/malarial antigen/, group:'sero', unit:'', range:'Negative' },
+    { re:/typhi dot.*igg/, group:'sero', unit:'', range:'Negative' },
+    { re:/typhi dot.*igm/, group:'sero', unit:'', range:'Negative' },
+    { re:/\bwidal\b/, group:'sero', unit:'', range:'Negative' },
+    // ── URINE ─────────────────────────────────────────────────────────
+    { re:/urine colou?r/, group:'urine', unit:'', range:'Light Yellow' },
+    { re:/urine appearance/, group:'urine', unit:'', range:'Clear' },
+    { re:/urine protein/, group:'urine', unit:'', range:'Nil' },
+    { re:/urine sugar/, group:'urine', unit:'', range:'Nil' },
+    { re:/urine ph/, group:'urine', unit:'', range:'6.5' },
+    { re:/specific gravity/, group:'urine', unit:'', range:'1.005-1.030' },
+    { re:/acetone|ketone/, group:'urine', unit:'', range:'Negative' },
+    { re:/bile salt/, group:'urine', unit:'', range:'Negative' },
+    { re:/bile pigment/, group:'urine', unit:'', range:'Negative' },
+    { re:/urine pus cell/, group:'urine', unit:'', range:'Nil' },
+    { re:/urine rbc/, group:'urine', unit:'', range:'Nil' },
+    { re:/epithelial cell/, group:'urine', unit:'', range:'Nil' },
+    { re:/calcium oxalate/, group:'urine', unit:'', range:'Nil' },
+    { re:/triple phosphate/, group:'urine', unit:'', range:'Nil' },
+    { re:/uric acid crystal/, group:'urine', unit:'', range:'Nil' },
+    { re:/amorphous/, group:'urine', unit:'', range:'Nil' },
+    { re:/budding yeast/, group:'urine', unit:'', range:'Nil' },
+    { re:/fungal hyphae/, group:'urine', unit:'', range:'Nil' },
+    { re:/mucus fiber/, group:'urine', unit:'', range:'Nil' },
+    { re:/urine bacteria/, group:'urine', unit:'', range:'Nil' },
+    // ── STOOL ─────────────────────────────────────────────────────────
+    { re:/stool colou?r/, group:'stool', unit:'', range:'Brownish' },
+    { re:/stool consistency/, group:'stool', unit:'', range:'' },
+    { re:/stool blood/, group:'stool', unit:'', range:'Nil' },
+    { re:/stool mucou?s/, group:'stool', unit:'', range:'Nil' },
+    { re:/stool parasite/, group:'stool', unit:'', range:'Nil' },
+    { re:/stool ph/, group:'stool', unit:'', range:'6.5' },
+    { re:/occult blood/, group:'stool', unit:'', range:'Negative' },
+    { re:/veg.*protozoa|protozoa.*veg/, group:'stool', unit:'', range:'Nil' },
+    { re:/cyst.*protozoa/, group:'stool', unit:'', range:'Nil' },
+    { re:/ova|eggs.*helminth/, group:'stool', unit:'', range:'Nil' },
+    { re:/stool pus cell/, group:'stool', unit:'', range:'Nil' },
+    { re:/stool mucus fiber/, group:'stool', unit:'', range:'Nil' },
+    { re:/fat cell/, group:'stool', unit:'', range:'Nil' },
+    { re:/hanging drop|vibrio/, group:'stool', unit:'', range:'Negative' },
+    // ── HCG ───────────────────────────────────────────────────────────
+    { re:/chorionic gonadotropin|hcg/, group:'hcg', unit:'', range:'' },
+    // ── SEMEN ─────────────────────────────────────────────────────────
+    { re:/semen volume/, group:'semen', unit:'ml', range:'>=2.5' },
+    { re:/semen colou?r/, group:'semen', unit:'', range:'Creamy White' },
+    { re:/semen reaction/, group:'semen', unit:'', range:'Alkaline' },
+    { re:/semen viscosity/, group:'semen', unit:'', range:'' },
+    { re:/liquefaction time/, group:'semen', unit:'min', range:'0-30' },
+    { re:/semen pus cell/, group:'semen', unit:'', range:'Nil' },
+    { re:/semen rbc/, group:'semen', unit:'', range:'Nil' },
+    { re:/spermatogonia/, group:'semen', unit:'', range:'Nil' },
+    { re:/total sperm count/, group:'semen', unit:'Million/ml', range:'20-200' },
+    { re:/normal morphology/, group:'semen', unit:'%', range:'>30' },
+    { re:/active motile/, group:'semen', unit:'%', range:'>50' },
+    { re:/sluggish motility/, group:'semen', unit:'%', range:'' },
+    { re:/non-motile/, group:'semen', unit:'%', range:'' },
+    // ── RA FACTOR QUANTITATIVE ────────────────────────────────────────
+    { re:/ra factor.*quantit|quantit.*ra factor/, group:'rafq', unit:'IU/ml', range:'0-20' },
+    // ── THYROID ───────────────────────────────────────────────────────
+    { re:/\btsh\b/, group:'thyroid', unit:'mIU/L', range:'0.4-4.5' },
+    { re:/\bt3\b(?! all)/, group:'thyroid', unit:'ng/ml', range:'0.8-2.0' },
+    { re:/\bt4\b(?! all)/, group:'thyroid', unit:'µg/dl', range:'5-12' },
+    { re:/free t3/, group:'thyroid', unit:'pg/ml', range:'2.3-4.2' },
+    { re:/free t4/, group:'thyroid', unit:'ng/dl', range:'0.89-1.76' },
+    { re:/anti.*tpo|tpo antibod/, group:'thyroid', unit:'IU/ml', range:'0-35' }
   ];
   const hit = defs.find(function (d) { return d.re.test(low); });
   return Object.assign({
@@ -18066,6 +18334,7 @@ function getLabTestMeta(name) {
     group:'custom',
     unit:'',
     range:'',
+    formula: null,
     purpose:'This investigation should be interpreted in the clinical context of the patient.',
     normalNote:'Values within the printed reference interval are generally reassuring, but must be interpreted with symptoms and examination findings.',
     abnormalNote:'Abnormal results do not automatically indicate a serious problem and may need clinical correlation, repeat testing, or trend comparison.'
@@ -18173,13 +18442,20 @@ function renderLabReportPreview(order) {
   setTxt('lab-rpt-dr', order.dr || pt.assignedDoctor || pt.doctor || '—');
   setTxt('lab-rpt-date', formatDateIN(order.completedAt || order.date || new Date()));
   setTxt('lab-rpt-tech', order.tech || document.getElementById('lab-incharge')?.value || '—');
-  const byGroup = { haem:[], bio:[], diab:[], thyroid:[], custom:[] };
+  const ALL_LAB_GROUPS = ['haem','coag','chem','rft','lft','lipid','electro','sero','urine','stool','hcg','semen','rafq','thyroid','bio','diab','custom'];
+  const byGroup = {};
+  ALL_LAB_GROUPS.forEach(function (g) { byGroup[g] = []; });
   order.tests.forEach(function (name) {
     const saved = order.results[normalizeLabTestName(name)] || {};
     const meta = Object.assign({}, getLabTestMeta(name), saved);
-    byGroup[meta.group || 'custom'].push(meta);
+    const g = meta.group || 'custom';
+    if (!byGroup[g]) byGroup[g] = [];
+    byGroup[g].push(meta);
   });
-  ['haem','bio','diab','thyroid'].forEach(function (group) {
+  // 'bio' and 'diab' legacy groups fall back to 'chem' display
+  if (byGroup.bio && byGroup.bio.length) byGroup.chem = (byGroup.chem || []).concat(byGroup.bio);
+  if (byGroup.diab && byGroup.diag && byGroup.diab.length) byGroup.chem = (byGroup.chem || []).concat(byGroup.diab);
+  ['haem','coag','chem','rft','lft','lipid','electro','sero','urine','stool','hcg','semen','rafq','thyroid'].forEach(function (group) {
     const host = document.getElementById('lab-' + group);
     if (!host) return;
     host.innerHTML = (byGroup[group] || []).map(function (row) {
@@ -18298,6 +18574,73 @@ function flagLabVal(inp, testName) {
       inp.style.background = flag==='HIGH'?'var(--red-lt)':flag==='LOW'?'var(--orange-lt)':'var(--green-lt)';
     }
   }
+  calculateLabFormulas(testName);
+}
+// Auto-calculate derived fields when input values change
+function calculateLabFormulas(changedTestName) {
+  const getVal = function (testKey) {
+    const el = document.getElementById('lr-val-' + labTestKey(testKey));
+    return el ? parseFloat(el.value) : NaN;
+  };
+  const setVal = function (testKey, val) {
+    const el = document.getElementById('lr-val-' + labTestKey(testKey));
+    if (el && !isNaN(val)) {
+      el.value = val.toFixed(2);
+      el.style.background = 'var(--blue-lt)';
+    }
+  };
+  const low = (changedTestName || '').toLowerCase();
+  // PTI: (PT patient / PT control) × 100  — assume control = 14s
+  if (/prothrombin time(?! index)|\bpt\b/.test(low)) {
+    const pt = getVal('P.T. (Prothrombin Time)');
+    const control = 14;
+    if (!isNaN(pt)) {
+      setVal('P.T.I. (Prothrombin Time Index)', (control / pt) * 100);
+      setVal('I.N.R. (International Normalised Ratio)', parseFloat((pt / control).toFixed(2)));
+    }
+  }
+  // ABG from HbA1c: ABG = (HbA1c × 28.7) - 46.7
+  if (/hba1c|glycosylated haemoglobin/.test(low)) {
+    const hba1c = getVal('Glycosylated Haemoglobin (HbA1c)');
+    if (!isNaN(hba1c)) setVal('ABG (Average Blood Glucose)', (hba1c * 28.7) - 46.7);
+  }
+  // Lipid formulas
+  if (/total cholesterol|triglyceride|hdl/.test(low)) {
+    const chol = getVal('Total Cholesterol');
+    const tg = getVal('Triglycerides');
+    const hdl = getVal('HDL Cholesterol');
+    if (!isNaN(chol) && !isNaN(tg) && !isNaN(hdl)) {
+      const vldl = tg / 5;
+      const ldl = chol - hdl - vldl;
+      setVal('VLDL', vldl);
+      setVal('LDL', ldl);
+      setVal('Cholesterol/HDL Ratio', hdl > 0 ? chol / hdl : NaN);
+      setVal('LDL/HDL Ratio', hdl > 0 ? ldl / hdl : NaN);
+      setVal('Non-HDL Cholesterol', chol - hdl);
+    }
+  }
+  // LFT indirect bilirubin = Total - Direct
+  if (/total bilirubin|direct bilirubin/.test(low)) {
+    const total = getVal('Total Bilirubin');
+    const direct = getVal('Direct Bilirubin');
+    if (!isNaN(total) && !isNaN(direct)) setVal('Indirect Bilirubin', total - direct);
+  }
+  // LFT Globulin = Total Proteins - Albumin, A/G ratio = Albumin / Globulin
+  if (/total protein|albumin/.test(low)) {
+    const tp = getVal('Total Proteins');
+    const alb = getVal('Albumin');
+    if (!isNaN(tp) && !isNaN(alb)) {
+      const glob = tp - alb;
+      setVal('Globulin', glob);
+      if (glob > 0) setVal('A/G Ratio', alb / glob);
+    }
+  }
+  // RFT Urine Albumin-Creatinine Ratio
+  if (/spot microalbumin|spot urine creatinine/.test(low)) {
+    const alb = getVal('Spot Microalbuminuria');
+    const cr = getVal('Spot Urine Creatinine');
+    if (!isNaN(alb) && !isNaN(cr) && cr > 0) setVal('Urine Albumin-Creatinine Ratio', alb / cr);
+  }
 }
 
 function saveLabResults() {
@@ -18346,6 +18689,77 @@ function saveLabResults() {
   renderLabOrders();
   document.getElementById('lab-entry-panel').style.display = 'none';
   initLab();
+}
+
+// ── ADD PATIENT TO LAB MANUALLY ──────────────────────────────────────
+function searchLabAddPatient(query) {
+  const q = String(query || '').trim().toLowerCase();
+  const resultsEl = document.getElementById('lab-add-pt-results');
+  if (!resultsEl) return;
+  if (!q || q.length < 2) { resultsEl.style.display = 'none'; return; }
+  const today = new Date().toISOString().split('T')[0];
+  const matches = (window.PATIENTS || []).filter(function (p) {
+    if (!centreMatch(p)) return false;
+    const phone = String(p.mob || p.phone || '').replace(/\D/g, '');
+    const bmhId = String(p.bmhId || '').toLowerCase();
+    const name = String(p.name || '').toLowerCase();
+    return bmhId.includes(q) || phone.includes(q.replace(/\D/g,'')) || name.includes(q);
+  }).slice(0, 8);
+  if (!matches.length) {
+    resultsEl.style.display = 'block';
+    resultsEl.innerHTML = '<div style="padding:10px;font-size:11.5px;color:var(--g1)">No patients found for today</div>';
+    return;
+  }
+  resultsEl.style.display = 'block';
+  resultsEl.innerHTML = matches.map(function (p) {
+    return '<div onclick="selectLabAddPatient(\'' + p.bmhId + '\',\'' + String(p.name || '').replace(/'/g, '') + '\')" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--g5);display:flex;align-items:center;gap:8px" onmouseenter="this.style.background=\'var(--g6)\'" onmouseleave="this.style.background=\'\'"><div style="flex:1"><div style="font-size:12.5px;font-weight:800">' + escapeHtmlConsent(p.name || '') + '</div><div style="font-size:10.5px;color:var(--g1)">' + (p.bmhId || '') + ' · ' + (p.mob || '') + '</div></div></div>';
+  }).join('');
+}
+function selectLabAddPatient(bmhId, name) {
+  const inp = document.getElementById('lab-add-pt-bmhid');
+  const nameEl = document.getElementById('lab-add-pt-name');
+  const searchEl = document.getElementById('lab-add-pt-search');
+  const resultsEl = document.getElementById('lab-add-pt-results');
+  if (inp) inp.value = bmhId;
+  if (nameEl) nameEl.textContent = name + ' (' + bmhId + ')';
+  if (searchEl) searchEl.value = name;
+  if (resultsEl) resultsEl.style.display = 'none';
+}
+function addPatientToLab() {
+  const bmhId = document.getElementById('lab-add-pt-bmhid')?.value?.trim();
+  if (!bmhId) { showToast('Search and select a patient first', 'w'); return; }
+  const pt = (window.PATIENTS || []).find(function (p) { return p.bmhId === bmhId; });
+  if (!pt) { showToast('Patient not found', 'w'); return; }
+  // Check if already in queue
+  const existing = LAB_ORDERS.find(function (o) { return o.bmhId === bmhId; });
+  if (existing) {
+    openLabOrder(existing.id);
+    showToast(pt.name + ' is already in the lab queue', 'i');
+    return;
+  }
+  // Create a manual lab entry (walk-in) for this patient
+  const orders = Array.isArray(pt.investigationOrders) ? pt.investigationOrders : [];
+  const manualOrder = {
+    name: 'Manual Lab Entry',
+    mode: 'send',
+    date: new Date().toISOString().split('T')[0],
+    orderedBy: CURRENT_USER?.name || 'Lab',
+    done: false,
+    labReady: false,
+    doctorSeen: false,
+    isManualLabEntry: true
+  };
+  orders.push(manualOrder);
+  pt.investigationOrders = orders;
+  if (pt.bmhId) {
+    fbUpdate && fbUpdate('patients/' + pt.bmhId, { investigationOrders: orders }).catch(function(){});
+  }
+  // Clear search UI
+  const inp = document.getElementById('lab-add-pt-bmhid'); if (inp) inp.value = '';
+  const nameEl = document.getElementById('lab-add-pt-name'); if (nameEl) nameEl.textContent = '';
+  const searchEl = document.getElementById('lab-add-pt-search'); if (searchEl) searchEl.value = '';
+  renderLabOrders();
+  showToast(pt.name + ' added to lab queue ✓', 's');
 }
 
 function addCustomLabTest() {
@@ -18836,12 +19250,18 @@ function printLabReport() {
   const order = (sel && sel.value ? LAB_ORDERS.find(function (o) { return o.id === sel.value; }) : null) || activeLabOrder || LAB_ORDERS[0];
   if (!order) { showToast('No lab report selected', 'w'); return; }
   const pt = PATIENTS.find(function (x) { return x.bmhId === order.bmhId; }) || {};
-  const groups = { haem:'Haematology', bio:'Biochemistry', diab:'Diabetes', thyroid:'Thyroid', custom:'Additional Tests' };
-  const grouped = { haem:[], bio:[], diab:[], thyroid:[], custom:[] };
+  const groups = { haem:'Haematology', coag:'Coagulogram', chem:'Clinical Chemistry', rft:'Renal Function Test', lft:'Liver Function Test', lipid:'Lipid Profile', electro:'Serum Electrolytes', sero:'Serology', urine:'Urine Examination', stool:'Stool Examination', hcg:'Pregnancy Test', semen:'Semen Analysis', rafq:'RA Factor', thyroid:'Thyroid Function', bio:'Biochemistry', diab:'Diabetes', custom:'Additional Tests' };
+  const grouped = {};
+  Object.keys(groups).forEach(function (g) { grouped[g] = []; });
   order.tests.forEach(function (name) {
     const row = Object.assign({}, getLabTestMeta(name), order.results[normalizeLabTestName(name)] || {});
-    grouped[row.group || 'custom'].push(row);
+    const g = row.group || 'custom';
+    if (!grouped[g]) grouped[g] = [];
+    grouped[g].push(row);
   });
+  // merge legacy bio/diab into chem for printing
+  if (grouped.bio && grouped.bio.length) grouped.chem = (grouped.chem || []).concat(grouped.bio);
+  if (grouped.diab && grouped.diab.length) grouped.chem = (grouped.chem || []).concat(grouped.diab);
   const insights = buildLabInsights(order);
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{margin:0;padding:0;box-sizing:border-box;print-color-adjust:economy;-webkit-print-color-adjust:economy}body{font-family:Arial,sans-serif;font-size:10.8px;color:#111;padding:0 12mm 12mm;background:#fff}@page{size:A4 portrait;margin:40mm 12mm 12mm}.pt-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;border:1px solid #9ca3af;border-radius:8px;padding:8px 10px;margin-bottom:10px;background:#fff}.pt-lbl{font-size:8.5px;color:#555;font-weight:700;text-transform:uppercase;letter-spacing:.3px}.section-hd{font-size:10.8px;font-weight:900;color:#111;text-transform:uppercase;letter-spacing:.5px;margin:11px 0 0;padding:6px 8px;background:#ececec;border-left:4px solid #666}.insights{margin:10px 0;padding:8px 10px;border:1px solid #bdbdbd;border-radius:8px;background:#f7f7f7;font-size:10.3px;line-height:1.52}table{width:100%;border-collapse:collapse;margin-top:8px}thead th{background:#666;color:#fff;padding:6px 8px;text-align:left;font-size:9px;font-weight:800;text-transform:uppercase}td{padding:6px 8px;border:1px solid #d7d7d7;font-size:10.1px;vertical-align:top}tr:nth-child(even){background:#fafafa}.flag-h{color:#111;font-weight:900;background:#e7e7e7}.flag-l{color:#111;font-weight:900;background:#f1f1f1}.flag-n{color:#111;font-weight:800}.footer{margin-top:14px;padding-top:8px;border-top:1px solid #c7c7c7}.signs{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:18px}.signline{border-bottom:1px solid #333;height:28px;margin-bottom:4px}.small{font-size:9px;color:#555}</style></head><body>
 <div class="pt-bar">
@@ -21321,6 +21741,19 @@ function renderCollectionDashboard() {
   setEl('rc-pending-total', fmt(0));
   setEl('rc-pending-total2', fmt(0));
   setEl('rc-ins-total', fmt(collected.filter(t=>t.mode==='Insurance').reduce((s,t)=>s+t.amount,0)));
+  // OPD / Investigations / Procedures breakdown
+  const opdTotal = collected.filter(function (t) {
+    return inferChargeCategoryFromService(t.service || t.for || t.desc || '') === 'consultation';
+  }).reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
+  const invTotal = collected.filter(function (t) {
+    return inferChargeCategoryFromService(t.service || t.for || t.desc || '') === 'diagnostic';
+  }).reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
+  const procTotal = collected.filter(function (t) {
+    return inferChargeCategoryFromService(t.service || t.for || t.desc || '') === 'surgery';
+  }).reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
+  setEl('rc-opd-total', fmt(opdTotal));
+  setEl('rc-inv-total', fmt(invTotal));
+  setEl('rc-proc-total', fmt(procTotal));
 
   // Dept breakdown
   const deptEl = document.getElementById('rc-dept-collection');
