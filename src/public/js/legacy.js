@@ -12725,6 +12725,15 @@ function getCurrentDrugDeptLabel() {
   const key = normalizeDeptKeyForQueue(CURRENT_USER?.dept || window.CURRENT_PATIENT?.dept || '');
   return deptMap[key] || deptMap[String(CURRENT_USER?.dept || '').toLowerCase()] || 'All';
 }
+function normalizeDrugDeptKey(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (!raw || raw === 'all') return 'all';
+  if (raw === 'ophtho' || raw.includes('ophthalm')) return 'ophtho';
+  if (raw === 'obg' || raw.includes('gyn')) return 'obg';
+  if (raw === 'psych' || raw.includes('psychi')) return 'psych';
+  if (raw === 'skin' || raw.includes('derma') || raw.includes('cosmet')) return 'skin';
+  return raw;
+}
 
 function syncDrugDeptDefaults() {
   const dept = getCurrentDrugDeptLabel();
