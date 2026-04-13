@@ -5119,7 +5119,6 @@ function computeObgLivingIssueAge() {
 }
 function computeObgPresumptiveDx() {
   const guidance = computeObgGuidance();
-  const questionTopics = Object.keys(window.OBG_RECAP_QUESTION_MAP || {});
   return guidance.diagnoses;
 }
 function computeObgGuidance() {
@@ -5289,6 +5288,7 @@ function renderObgSummaryRail() {
   const ga = document.getElementById('obg-ga')?.textContent || '—';
   const edd = document.getElementById('obg-edd')?.textContent || '—';
   const guidance = computeObgGuidance();
+  const questionTopics = Object.keys(window.OBG_RECAP_QUESTION_MAP || {});
   const presumptive = guidance.diagnoses.join(' • ') || document.getElementById('obg-presumptive-chip')?.textContent || '—';
   const systemic = obgVal('obg-systemic') || 'None declared';
   const usgDue = obgFmtDate(obgVal('obg-usg-due') || obgVal('obg-usg-due-inline'));
