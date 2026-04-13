@@ -656,6 +656,8 @@ function openOTAddIolModal() {
 const AUTO_BILL = [];
 window.BMH_PATIENT_CHARGES = window.BMH_PATIENT_CHARGES || {};
 window.BMH_VENDOR_BILLS = window.BMH_VENDOR_BILLS || [];
+window.BMH_OFFICE_BILLS = window.BMH_OFFICE_BILLS || [];
+window.BMH_OFFICE_BILL_CATEGORIES = window.BMH_OFFICE_BILL_CATEGORIES || ['Electricity', 'Water', 'Biomedical waste', 'Rent', 'Maintenance', 'Security', 'Internet', 'Software', 'Other'];
 window.BMH_EXPENSES = window.BMH_EXPENSES || [];
 window.BMH_LEDGER = window.BMH_LEDGER || [];
 window.BMH_PURCHASES = window.BMH_PURCHASES || [];
@@ -680,6 +682,23 @@ const LAB_PANELS = {
   bio:[{n:'Sodium',u:'mEq/L',lo:136,hi:146,v:'',id:'na'},{n:'Potassium',u:'mEq/L',lo:3.5,hi:5.1,v:'',id:'k'},{n:'Creatinine',u:'mg/dL',lo:0.6,hi:1.3,v:'',id:'cr'},{n:'SGPT/ALT',u:'U/L',lo:7,hi:56,v:'',id:'alt'}],
   diab:[{n:'Fasting Blood Sugar',u:'mg/dL',lo:70,hi:100,v:'142',id:'fbs'},{n:'HbA1c',u:'%',lo:4.0,hi:5.6,v:'8.2',id:'hba1c'},{n:'PP Blood Sugar',u:'mg/dL',lo:70,hi:140,v:'',id:'ppbs'}],
   thyroid:[{n:'TSH',u:'mIU/L',lo:0.4,hi:4.0,v:'',id:'tsh'},{n:'Free T4',u:'ng/dL',lo:0.8,hi:1.8,v:'',id:'ft4'}]
+};
+const LAB_GROUP_HEAD_BLURBS = {
+  haem: 'Haematology measures blood cells and related indices — useful for anaemia, infection, and bleeding risk.',
+  coag: 'Coagulation tests show how blood clots — important before surgery and when on anticoagulants.',
+  chem: 'Clinical chemistry covers blood sugar, kidney markers, liver enzymes, and related metabolites.',
+  rft: 'Renal function tests assess how the kidneys filter waste and maintain fluid balance.',
+  lft: 'Liver function tests reflect liver cell health, bile flow, and protein production.',
+  lipid: 'Lipid profile measures blood fats and ratios linked to heart and vessel risk.',
+  electro: 'Serum electrolytes (sodium, potassium, chloride) reflect hydration, kidney function, and acid–base balance.',
+  sero: 'Serology detects antibodies or antigens for certain infections and immune conditions.',
+  urine: 'Urine examination screens for infection, blood, protein, glucose, and crystals.',
+  stool: 'Stool tests help assess digestion, infection, and occult bleeding.',
+  hcg: 'Beta-hCG confirms or supports evaluation of pregnancy.',
+  semen: 'Semen analysis evaluates fertility-related parameters such as count and motility.',
+  rafq: 'RA factor is one marker sometimes used alongside symptoms in inflammatory arthritis.',
+  thyroid: 'Thyroid tests assess gland function and common auto-antibodies when indicated.',
+  custom: 'Additional tests requested for your clinical situation.'
 };
 const IPD_PATIENTS = [];
 window.IPD_PATIENTS = IPD_PATIENTS; // expose globally
@@ -6711,6 +6730,14 @@ function loadBmhFinancials() {
     const pc = localStorage.getItem('bmh_patient_charges');
     if (pc) { const o = JSON.parse(pc); Object.keys(window.BMH_PATIENT_CHARGES).forEach(k=>delete window.BMH_PATIENT_CHARGES[k]); Object.assign(window.BMH_PATIENT_CHARGES, o); }
     const vb = localStorage.getItem('bmh_vendor_bills'); if (vb) { window.BMH_VENDOR_BILLS.length = 0; JSON.parse(vb).forEach(x=>window.BMH_VENDOR_BILLS.push(x)); }
+    const ob = localStorage.getItem('bmh_office_bills'); if (ob) { window.BMH_OFFICE_BILLS.length = 0; JSON.parse(ob).forEach(x=>window.BMH_OFFICE_BILLS.push(x)); }
+    try {
+      const oc = localStorage.getItem('bmh_office_bill_categories');
+      if (oc) {
+        const arr = JSON.parse(oc);
+        if (Array.isArray(arr) && arr.length) window.BMH_OFFICE_BILL_CATEGORIES = arr;
+      }
+    } catch (e) { /* noop */ }
     const ex = localStorage.getItem('bmh_expenses'); if (ex) { window.BMH_EXPENSES.length = 0; JSON.parse(ex).forEach(x=>window.BMH_EXPENSES.push(x)); }
     const lg = localStorage.getItem('bmh_ledger'); if (lg) { window.BMH_LEDGER.length = 0; JSON.parse(lg).forEach(x=>window.BMH_LEDGER.push(x)); }
     const pu = localStorage.getItem('bmh_purchases'); if (pu) { window.BMH_PURCHASES.length = 0; JSON.parse(pu).forEach(x=>window.BMH_PURCHASES.push(x)); }
@@ -6728,6 +6755,8 @@ function saveBmhFinancials() {
   try {
     localStorage.setItem('bmh_patient_charges', JSON.stringify(window.BMH_PATIENT_CHARGES));
     localStorage.setItem('bmh_vendor_bills', JSON.stringify(window.BMH_VENDOR_BILLS));
+    localStorage.setItem('bmh_office_bills', JSON.stringify(window.BMH_OFFICE_BILLS));
+    localStorage.setItem('bmh_office_bill_categories', JSON.stringify(window.BMH_OFFICE_BILL_CATEGORIES));
     localStorage.setItem('bmh_expenses', JSON.stringify(window.BMH_EXPENSES));
     localStorage.setItem('bmh_ledger', JSON.stringify(window.BMH_LEDGER));
     localStorage.setItem('bmh_purchases', JSON.stringify(window.BMH_PURCHASES));
@@ -6767,6 +6796,31 @@ function normalizeIolPowerValue(power) {
   const num = Number(m[1]);
   if (!isFinite(num)) return raw;
   return (num >= 0 ? '+' : '') + num.toFixed(2) + 'D';
+}
+function getInventoryIolStockCount(company, brand, power) {
+  const pNorm = normalizeIolPowerValue(power);
+  const c = normalizeInventoryCompareText(company || '');
+  const b = normalizeInventoryCompareText(brand || '');
+  if (!c && !b) return 0;
+  return (INVENTORY || []).reduce(function (sum, item) {
+    if (String(item.cat || '').toLowerCase() !== 'iol') return sum;
+    if (c && normalizeInventoryCompareText(item.iolCompany || item.vendor || '') !== c) return sum;
+    if (b && normalizeInventoryCompareText(item.iolBrand || '') !== b) return sum;
+    const ip = normalizeIolPowerValue(item.power || extractIolPower(item.name || ''));
+    if (pNorm && ip && pNorm !== ip) return sum;
+    return sum + Math.max(0, Number(item.stock) || 0);
+  }, 0);
+}
+function refreshIolBrandPowerStockLabels(entryDiv) {
+  if (!entryDiv) return;
+  const company = String(entryDiv.querySelector('.iol-company-field')?.value || '').trim();
+  const brand = String(entryDiv.querySelector('.iol-brand-field')?.value || '').trim();
+  entryDiv.querySelectorAll('.iol-power-cell').forEach(function (cell) {
+    const pw = cell.dataset.power || '';
+    const n = getInventoryIolStockCount(company, brand, pw);
+    const el = cell.querySelector('.iol-in-stock-display');
+    if (el) el.textContent = String(n);
+  });
 }
 function normalizeIolModelStem(text) {
   return String(text || '')
@@ -7052,13 +7106,26 @@ function renderIolBrandPowerGrid(entryDiv) {
       <div style="font-size:11px;font-weight:700;margin-bottom:5px">${pw}</div>
       <div style="display:flex;align-items:center;gap:4px;justify-content:center;margin-bottom:4px">
         <button type="button" class="btn btn-xs btn-gray" onclick="iolBrandPowerQtyDelta(this,-1)">−</button>
-        <input type="number" class="inv-iol-qty" data-power="${esc}" min="0" max="99" value="0" style="width:40px;text-align:center;font-weight:800;font-size:13px" oninput="iolBrandQtyInput(this)">
+        <div style="min-width:44px;text-align:center">
+          <div class="iol-in-stock-display" style="font-size:14px;font-weight:900;color:#1a8c3c;line-height:1.1">0</div>
+          <div style="font-size:8px;color:#6b7280;font-weight:700">in stock</div>
+        </div>
         <button type="button" class="btn btn-xs btn-gray" onclick="iolBrandPowerQtyDelta(this,1)">+</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;justify-content:center;margin-bottom:4px">
+        <span style="font-size:9px;color:var(--g1);font-weight:700">Add</span>
+        <input type="number" class="inv-iol-qty" data-power="${esc}" min="0" max="99" value="0" style="width:40px;text-align:center;font-weight:800;font-size:13px" oninput="iolBrandQtyInput(this)">
       </div>
       <button type="button" class="btn btn-xs btn-outline" style="font-size:10px;padding:2px 6px" onclick="iolToggleSnPanel(this)">S/n</button>
       <div class="iol-sn-slots" style="display:none;margin-top:6px;text-align:left"></div>
     </div>`;
   }).join('');
+  refreshIolBrandPowerStockLabels(entryDiv);
+  const br = entryDiv.querySelector('.iol-brand-field');
+  const co = entryDiv.querySelector('.iol-company-field');
+  const refresh = function () { refreshIolBrandPowerStockLabels(entryDiv); };
+  if (br && !br.dataset.iolStockBound) { br.addEventListener('input', refresh); br.dataset.iolStockBound = '1'; }
+  if (co && !co.dataset.iolStockBound) { co.addEventListener('input', refresh); co.dataset.iolStockBound = '1'; }
   updateIolPowerCounter();
 }
 function iolBrandPowerQtyDelta(btn, delta) {
@@ -7485,9 +7552,11 @@ function bindInventoryUsePatientSearch() {
 }
 function inferChargeCategoryFromService(forStr) {
   const s = (forStr || '').toLowerCase();
-  if (/oct|hvf|fundus|biomet|visual field|cbc|hb|thyroid|lipid|lab|investigation|diagnostic|erg|vep|topograph|specular/.test(s)) return 'diagnostic';
-  if (/surgery|phaco|trab|lasik|iol|pmics|injection|ivt|pack|procedure/.test(s)) return 'surgery';
-  if (/consult|follow/.test(s)) return 'consultation';
+  // Investigations & imaging first (avoid mis-tagging e.g. IOL Master / biometry as surgery)
+  if (/oct|hvf|fundus|biomet|visual field|cbc|hb|thyroid|lipid|lab|investigation|diagnostic|erg|vep|topograph|specular|pachymetry|gonioscopy|perimetry|b-?scan|ultrasound.*\beye\b|ffa|icg|angiograph|schirmer|tbut|dry\s*eye|corneal topography|aberrometry|i\.?\s*o\.?\s*l\.?\s*master|iol\s*master|lenstar|pentacam|specular microscopy/.test(s)) return 'diagnostic';
+  // Surgery / OT / procedures (broad; avoid bare "iol" so inventory text does not become surgery)
+  if (/\b(surgery|surgical|surgeon|cataract|phaco|phacoemulsification|sics|trab|trabeculectomy|lasik|prk|smile|vitrectomy|retina\s*surgery|glaucoma\s*surgery|keratoplasty|corneal\s*graft|pterygium|squint|strabismus|oculoplastic|dacryocystorhinostomy|dacryo|dcr|buckling|scleral\s*buckle|intravitreal|ivt|anti\s*-?\s*vegf|ot\b|o\.?\s*t\.?|theatre|theater|operating|operation\b|minor\s*ot|major\s*ot|ot\s*charges|theatre\s*charges|ot\s*time|anaesthesia.*surgery|capsulorhexis|iol\s*implant|iol\s*insertion|iol\s*charges|iol\s*package|iol\s*power|pmics|suture\s*removal|post\.?\s*op|postop|surgery\s*pack|pack\s*rate|surgery\s*charges|procedure\s*charges|operative|peribulbar|retrobulbar|sub-?tenon)/.test(s)) return 'surgery';
+  if (/consult|follow|review|opd|out\s*patient|first\s*visit|registration|consultation/.test(s)) return 'consultation';
   return 'other';
 }
 function bmhIsEEGCharge(row) {
@@ -8335,6 +8404,206 @@ function bmhRenderVendorTables() {
       </div>
     </div>` : '<div style="padding:12px;color:var(--g1);font-size:12px">No bills for this vendor.</div>';
   }
+  bmhRenderOfficeBillsDueBanner();
+}
+function bmhSetInvBillMode(mode) {
+  const v = document.getElementById('inv-panel-vendor');
+  const o = document.getElementById('inv-panel-office');
+  if (v) v.style.display = mode === 'office' ? 'none' : '';
+  if (o) o.style.display = mode === 'office' ? '' : 'none';
+  document.querySelectorAll('input[name="inv-bill-mode"]').forEach(function (r) { r.checked = r.value === mode; });
+  try { localStorage.setItem('bmh_inv_bill_mode', mode); } catch (e) { /* noop */ }
+  if (mode === 'office') {
+    bmhRenderOfficeBillsPanel();
+    bmhRenderOfficeBillsDueBanner();
+  } else {
+    bmhRenderVendorTables();
+  }
+}
+function bmhOnVendorTabOpen() {
+  try {
+    const m = localStorage.getItem('bmh_inv_bill_mode');
+    if (m === 'office') {
+      const r = document.querySelector('input[name="inv-bill-mode"][value="office"]');
+      if (r) r.checked = true;
+      bmhSetInvBillMode('office');
+    } else {
+      const r = document.querySelector('input[name="inv-bill-mode"][value="vendor"]');
+      if (r) r.checked = true;
+      bmhSetInvBillMode('vendor');
+    }
+  } catch (e) {
+    bmhRenderVendorTables();
+    bmhRenderOfficeBillsDueBanner();
+  }
+}
+window.bmhSetInvBillMode = bmhSetInvBillMode;
+window.bmhOnVendorTabOpen = bmhOnVendorTabOpen;
+function bmhPopulateOfficeCategoryDatalist() {
+  const dl = document.getElementById('inv-office-cat-datalist');
+  const sel = document.getElementById('inv-office-filter');
+  const fromBills = Array.from(new Set((window.BMH_OFFICE_BILLS || []).map(function (b) { return String(b.category || '').trim(); }).filter(Boolean)));
+  const cats = Array.from(new Set((window.BMH_OFFICE_BILL_CATEGORIES || []).concat(fromBills))).sort();
+  if (dl) dl.innerHTML = cats.map(function (c) { return '<option value="' + escapeHtmlConsent(c) + '"></option>'; }).join('');
+  if (sel) {
+    const cur = sel.value || '';
+    sel.innerHTML = '<option value="">All categories</option>' + cats.map(function (c) { return '<option value="' + escapeHtmlConsent(c) + '"' + (c === cur ? ' selected' : '') + '>' + escapeHtmlConsent(c) + '</option>'; }).join('');
+  }
+}
+function bmhRenderOfficeBillsPanel() {
+  bmhPopulateOfficeCategoryDatalist();
+  const host = document.getElementById('inv-office-bills-list');
+  const detail = document.getElementById('inv-office-detail');
+  const filter = String(document.getElementById('inv-office-filter')?.value || '').trim();
+  const rows = (window.BMH_OFFICE_BILLS || []).slice().reverse().filter(function (b) {
+    return !filter || String(b.category || '') === filter;
+  });
+  if (host) {
+    host.innerHTML = rows.length ? '<table class="rc-queue-table" style="width:100%"><thead><tr><th>Category</th><th>₹</th><th>Due</th><th></th></tr></thead><tbody>' + rows.map(function (b) {
+      const due = b.nextDueDate || b.dueDate || '—';
+      const out = Math.max(0, (Number(b.amount) || 0) - (Number(b.paidAmount) || 0));
+      const bid = String(b.id || '').replace(/'/g, "\\'");
+      return '<tr style="cursor:pointer" onclick="bmhSelectOfficeBill(\'' + bid + '\')"><td>' + escapeHtmlConsent(b.category || '') + '<div style="font-size:10px;color:var(--g1)">' + escapeHtmlConsent(b.label || '') + '</div></td><td>₹' + Number(b.amount || 0).toLocaleString('en-IN') + (out > 0 ? '<div style="font-size:10px;color:#b55a00">Due ₹' + out.toLocaleString('en-IN') + '</div>' : '') + '</td><td style="font-size:11px">' + escapeHtmlConsent(String(due).slice(0, 10)) + '</td><td>' + (b.billFile?.name || b.uploadedName ? '<span class="badge bd-gray">file</span>' : '—') + '</td></tr>';
+    }).join('') + '</tbody></table>' : '<div style="color:var(--g1);font-size:12px">No office bills yet.</div>';
+  }
+  const selId = window._bmhOfficeBillSel;
+  const b = (window.BMH_OFFICE_BILLS || []).find(function (x) { return x.id === selId; });
+  if (!detail) return;
+  if (!b) {
+    detail.innerHTML = '<div style="padding:12px;color:var(--g1);font-size:12px">Select a bill from the list or add one above.</div>';
+    return;
+  }
+  const out = Math.max(0, (Number(b.amount) || 0) - (Number(b.paidAmount) || 0));
+  const bid = String(b.id || '').replace(/'/g, "\\'");
+  detail.innerHTML = '<div style="font-size:13px;font-weight:900">' + escapeHtmlConsent(b.category || '') + '</div><div style="font-size:10px;color:var(--g1);margin-top:4px">' + escapeHtmlConsent(b.label || '') + '</div><div style="margin-top:10px;font-size:12px">Amount ₹' + Number(b.amount || 0).toLocaleString('en-IN') + ' · Paid ₹' + (Number(b.paidAmount) || 0).toLocaleString('en-IN') + ' · Outstanding ₹' + out.toLocaleString('en-IN') + '</div><div style="margin-top:8px;font-size:11px;color:var(--g1)">Last paid: ' + escapeHtmlConsent(String(b.lastPaidDate || '—').slice(0, 10)) + ' · Next due: ' + escapeHtmlConsent(String(b.nextDueDate || b.dueDate || '—').slice(0, 10)) + '</div><div style="margin-top:8px;font-size:11px">' + escapeHtmlConsent(b.paymentMode || '') + ' ' + escapeHtmlConsent(b.paymentRef || '') + '</div>' + (b.note ? '<div style="margin-top:6px;font-size:11px">' + escapeHtmlConsent(b.note) + '</div>' : '') + ((b.billFile && b.billFile.data) || b.uploadedName ? '<div style="margin-top:10px"><button type="button" class="btn btn-xs btn-blue" onclick="openInventoryBill(\'' + bid + '\')">Open attachment</button></div>' : '') + (out > 0 ? '<div style="margin-top:12px"><button type="button" class="btn btn-xs btn-gold" onclick="bmhMarkOfficeBillPaid(\'' + bid + '\')">Record payment</button></div>' : '') + (isAdminUser() ? '<div style="margin-top:8px"><button type="button" class="btn btn-xs btn-gray" onclick="bmhDeleteOfficeBill(\'' + bid + '\')">Delete</button></div>' : '');
+}
+function bmhSelectOfficeBill(id) {
+  window._bmhOfficeBillSel = id;
+  bmhRenderOfficeBillsPanel();
+}
+window.bmhRenderOfficeBillsPanel = bmhRenderOfficeBillsPanel;
+window.bmhSelectOfficeBill = bmhSelectOfficeBill;
+function bmhAddOfficeBillCategory() {
+  const name = prompt('New bill category name (e.g. CCTV maintenance):');
+  if (!name || !String(name).trim()) return;
+  const n = String(name).trim();
+  if (!(window.BMH_OFFICE_BILL_CATEGORIES || []).includes(n)) window.BMH_OFFICE_BILL_CATEGORIES.push(n);
+  saveBmhFinancials();
+  bmhPopulateOfficeCategoryDatalist();
+  showToast('Category added ✓', 's');
+}
+window.bmhAddOfficeBillCategory = bmhAddOfficeBillCategory;
+function bmhAddOfficeBill() {
+  const category = document.getElementById('inv-office-cat')?.value?.trim() || 'Other';
+  const label = document.getElementById('inv-office-label')?.value?.trim() || '';
+  const amt = parseFloat(document.getElementById('inv-office-amt')?.value || '0');
+  const lastPaid = document.getElementById('inv-office-last-paid')?.value || '';
+  const nextDue = document.getElementById('inv-office-next-due')?.value || '';
+  const payMode = document.getElementById('inv-office-pay-mode')?.value || 'Pending';
+  const ref = document.getElementById('inv-office-ref')?.value?.trim() || '';
+  const note = document.getElementById('inv-office-note')?.value?.trim() || '';
+  const f = document.getElementById('inv-office-file')?.files?.[0];
+  if (!(amt > 0)) { showToast('Enter amount', 'w'); return; }
+  bmhCompressFileToData(f, function (billFile) {
+    const paidAmt = payMode === 'Pending' ? 0 : amt;
+    const row = {
+      id: 'OB' + Date.now(),
+      category: category,
+      label: label,
+      amount: amt,
+      paidAmount: paidAmt,
+      lastPaidDate: lastPaid,
+      nextDueDate: nextDue,
+      dueDate: nextDue,
+      paymentMode: payMode,
+      paymentRef: ref,
+      note: note,
+      status: payMode === 'Pending' ? 'pending' : 'paid',
+      uploadedName: f ? f.name : '',
+      billFile: billFile || null,
+      createdAt: new Date().toISOString()
+    };
+    window.BMH_OFFICE_BILLS.push(row);
+    window._bmhOfficeBillSel = row.id;
+    saveBmhFinancials();
+    bmhRenderOfficeBillsPanel();
+    bmhRenderOfficeBillsDueBanner();
+    showToast('Office bill saved ✓', 's');
+    ['inv-office-label', 'inv-office-amt', 'inv-office-ref', 'inv-office-note'].forEach(function (id) { const el = document.getElementById(id); if (el) el.value = ''; });
+    const fe = document.getElementById('inv-office-file'); if (fe) fe.value = '';
+  });
+}
+window.bmhAddOfficeBill = bmhAddOfficeBill;
+function bmhMarkOfficeBillPaid(id) {
+  const b = (window.BMH_OFFICE_BILLS || []).find(function (x) { return x.id === id; });
+  if (!b) return;
+  const out = Math.max(0, (Number(b.amount) || 0) - (Number(b.paidAmount) || 0));
+  const amountStr = prompt('Amount paid', String(out));
+  if (amountStr === null) return;
+  const amt = Math.max(0, Number(amountStr || 0));
+  if (!(amt > 0)) { showToast('Enter amount', 'w'); return; }
+  b.paidAmount = (Number(b.paidAmount) || 0) + amt;
+  if (b.paidAmount >= (Number(b.amount) || 0)) b.status = 'paid';
+  else b.status = 'partial';
+  const pr = prompt('Payment ref / UTR:', b.paymentRef || '');
+  if (pr !== null) b.paymentRef = pr || b.paymentRef;
+  saveBmhFinancials();
+  bmhRenderOfficeBillsPanel();
+  bmhRenderOfficeBillsDueBanner();
+  showToast('Payment recorded ✓', 's');
+}
+window.bmhMarkOfficeBillPaid = bmhMarkOfficeBillPaid;
+function bmhDeleteOfficeBill(id) {
+  if (!isAdminUser()) { showToast('Only admin can delete', 'w'); return; }
+  const idx = (window.BMH_OFFICE_BILLS || []).findIndex(function (v) { return v.id === id; });
+  if (idx < 0) return;
+  if (!confirm('Delete this office bill?')) return;
+  window.BMH_OFFICE_BILLS.splice(idx, 1);
+  if (window._bmhOfficeBillSel === id) window._bmhOfficeBillSel = '';
+  saveBmhFinancials();
+  bmhRenderOfficeBillsPanel();
+  bmhRenderOfficeBillsDueBanner();
+  showToast('Deleted', 's');
+}
+window.bmhDeleteOfficeBill = bmhDeleteOfficeBill;
+function bmhRenderOfficeBillsDueBanner() {
+  const el = document.getElementById('inv-bill-due-banner');
+  if (!el) return;
+  const lines = [];
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const parseDay = function (s) {
+    if (!s) return null;
+    const d = new Date(String(s).slice(0, 10) + 'T12:00:00');
+    return isNaN(d.getTime()) ? null : d;
+  };
+  const daysUntil = function (d) {
+    if (!d) return null;
+    return Math.floor((d.getTime() - new Date(todayKey + 'T12:00:00').getTime()) / 86400000);
+  };
+  (window.BMH_OFFICE_BILLS || []).forEach(function (b) {
+    const due = b.nextDueDate || b.dueDate;
+    if (!due) return;
+    const d = parseDay(due);
+    if (d === null) return;
+    const diff = daysUntil(d);
+    if (diff === null || diff > 14) return;
+    const out = Math.max(0, (Number(b.amount) || 0) - (Number(b.paidAmount) || 0));
+    const label = (b.category || 'Bill') + (b.label ? ' — ' + b.label : '');
+    lines.push({ urgent: diff < 0, sort: diff, text: (diff < 0 ? '⚠️ Overdue: ' : '') + label + ' · due ' + String(due).slice(0, 10) + (out > 0 ? ' · ₹' + out.toLocaleString('en-IN') + ' pending' : '') });
+  });
+  (window.BMH_VENDOR_BILLS || []).forEach(function (v) {
+    const due = v.dueDate || v.billDateKey;
+    if (!due) return;
+    const d = parseDay(due);
+    if (d === null) return;
+    const diff = daysUntil(d);
+    if (diff === null || diff > 14) return;
+    const out = bmhVendorBillOutstanding(v);
+    if (out <= 0) return;
+    lines.push({ urgent: diff < 0, sort: diff, text: (diff < 0 ? '⚠️ Vendor overdue: ' : 'Vendor: ') + (v.vendor || '') + ' · ₹' + out.toLocaleString('en-IN') + ' · ' + String(due).slice(0, 10) });
+  });
+  lines.sort(function (a, b) { return a.sort - b.sort; });
+  el.innerHTML = lines.length ? '<div style="padding:10px 12px;border-radius:10px;border:1px solid #f59e0b;background:linear-gradient(180deg,#fff7ed,#fff);font-size:12px"><div style="font-weight:900;color:#8a4200;margin-bottom:6px">Due soon / urgent</div>' + lines.slice(0, 8).map(function (l) { return '<div style="margin-top:4px">' + escapeHtmlConsent(l.text) + '</div>'; }).join('') + '</div>' : '';
 }
 function bmhSyncVendorSearchFromSelect() {
   const sel = document.getElementById('inv-vendor-filter');
@@ -8849,7 +9118,8 @@ function bmhGeneratePurchaseOrderDraft(silent) {
 function openInventoryBill(id) {
   const purchase = (window.BMH_PURCHASES || []).find(function (r) { return r.id === id; });
   const vendorBill = (window.BMH_VENDOR_BILLS || []).find(function (r) { return r.id === id; });
-  const file = purchase?.billFile || vendorBill?.billFile || null;
+  const officeBill = (window.BMH_OFFICE_BILLS || []).find(function (r) { return r.id === id; });
+  const file = purchase?.billFile || vendorBill?.billFile || officeBill?.billFile || null;
   if (!file?.data) { showToast('Bill scan not available', 'w'); return; }
   const w = window.open('', '_blank');
   if (!w) { showToast('Allow popups to open bill scan', 'w'); return; }
@@ -18939,7 +19209,7 @@ function getLabTestMeta(name) {
     unit:'',
     range:'',
     formula: null,
-    purpose:'This investigation should be interpreted in the clinical context of the patient.',
+    purpose:'',
     normalNote:'Values within the printed reference interval are generally reassuring, but must be interpreted with symptoms and examination findings.',
     abnormalNote:'Abnormal results do not automatically indicate a serious problem and may need clinical correlation, repeat testing, or trend comparison.'
   }, hit || {}, exact || {});
@@ -19010,29 +19280,22 @@ function getPatientLabQueueEntries() {
 }
 function buildLabInsights(order) {
   if (!order || !order.results) return [];
-  const alerts = [];
-  const general = [];
+  const out = [];
+  const badPurpose = /^This investigation should be interpreted in the clinical context/i;
+  const seen = new Set();
   Object.keys(order.results).forEach(function (name) {
     const r = order.results[name] || {};
     const meta = Object.assign({}, getLabTestMeta(name), r);
     const flag = String(r.flag || '').toUpperCase();
-    if (meta.purpose) general.push(meta.purpose);
+    const purpose = String(meta.purpose || '').trim();
+    if (purpose && !badPurpose.test(purpose)) {
+      if (!seen.has(purpose)) { seen.add(purpose); out.push(purpose); }
+    }
     if (flag === 'HIGH' || flag === 'LOW') {
-      alerts.push(name + ' is ' + flag.toLowerCase() + '. ' + (meta.abnormalNote || 'This should be interpreted clinically and may need correlation with symptoms and repeat trends.'));
-    } else if (String(r.val || '').trim()) {
-      alerts.push(name + ': ' + (meta.normalNote || 'This result appears within the expected range and is best interpreted in overall clinical context.'));
+      const line = name + ' is ' + flag.toLowerCase() + '. ' + (meta.abnormalNote || 'Please correlate with symptoms and clinical findings.');
+      if (!seen.has(line)) { seen.add(line); out.push(line); }
     }
   });
-  const out = [];
-  const seen = new Set();
-  general.concat(alerts).forEach(function (line) {
-    const clean = String(line || '').trim();
-    if (!clean || seen.has(clean)) return;
-    seen.add(clean);
-    out.push(clean);
-  });
-  out.push('Reference ranges can vary by age, sex, laboratory method, and clinical setting.');
-  out.push('Isolated abnormal values do not necessarily indicate serious disease and should be correlated with the treating clinician.');
   return out.slice(0, 8);
 }
 function renderLabReportPreview(order) {
@@ -19199,13 +19462,11 @@ function calculateLabFormulas(changedTestName) {
     }
   };
   const low = (changedTestName || '').toLowerCase();
-  // PTI: (PT patient / PT control) × 100  — assume control = 14s
-  if (/prothrombin time(?! index)|\bpt\b/.test(low)) {
+  // P.T.I. = 1200 / P.T. (seconds); INR is not auto-filled (method/ISI varies)
+  if (/prothrombin time(?! index)|p\.?\s*t\.?\s*\(prothrombin/.test(low)) {
     const pt = getVal('P.T. (Prothrombin Time)');
-    const control = 14;
-    if (!isNaN(pt)) {
-      setVal('P.T.I. (Prothrombin Time Index)', (control / pt) * 100);
-      setVal('I.N.R. (International Normalised Ratio)', parseFloat((pt / control).toFixed(2)));
+    if (!isNaN(pt) && pt > 0) {
+      setVal('P.T.I. (Prothrombin Time Index)', 1200 / pt);
     }
   }
   // ABG from HbA1c: ABG = (HbA1c × 28.7) - 46.7
@@ -19254,6 +19515,7 @@ function calculateLabFormulas(changedTestName) {
 
 function saveLabResults() {
   if(!activeLabOrder) return;
+  ['P.T. (Prothrombin Time)','Glycosylated Haemoglobin (HbA1c)','Total Cholesterol','Total Bilirubin','Direct Bilirubin','Total Proteins','Albumin','Spot Microalbuminuria'].forEach(function (t) { calculateLabFormulas(t); });
   const tech = document.getElementById('lab-incharge')?.value || 'Lab Technician';
   const comments = document.getElementById('lab-comments')?.value?.trim() || '';
   const pt = PATIENTS.find(function (x) { return x.bmhId === activeLabOrder.bmhId; });
@@ -19870,11 +20132,13 @@ function printLabReport() {
     if (!grouped[g]) grouped[g] = [];
     grouped[g].push(row);
   });
-  // merge legacy bio/diab into chem for printing
+  // merge legacy bio/diab into chem for printing (avoid duplicate sections)
   if (grouped.bio && grouped.bio.length) grouped.chem = (grouped.chem || []).concat(grouped.bio);
   if (grouped.diab && grouped.diab.length) grouped.chem = (grouped.chem || []).concat(grouped.diab);
+  if (grouped.bio) grouped.bio = [];
+  if (grouped.diab) grouped.diab = [];
   const insights = buildLabInsights(order);
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{margin:0;padding:0;box-sizing:border-box;print-color-adjust:economy;-webkit-print-color-adjust:economy}body{font-family:Arial,sans-serif;font-size:10.8px;color:#111;padding:0 12mm 12mm;background:#fff}@page{size:A4 portrait;margin:40mm 12mm 12mm}.pt-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;border:1px solid #9ca3af;border-radius:8px;padding:8px 10px;margin-bottom:10px;background:#fff}.pt-lbl{font-size:8.5px;color:#555;font-weight:700;text-transform:uppercase;letter-spacing:.3px}.section-hd{font-size:10.8px;font-weight:900;color:#111;text-transform:uppercase;letter-spacing:.5px;margin:11px 0 0;padding:6px 8px;background:#ececec;border-left:4px solid #666}.insights{margin:10px 0;padding:8px 10px;border:1px solid #bdbdbd;border-radius:8px;background:#f7f7f7;font-size:10.3px;line-height:1.52}table{width:100%;border-collapse:collapse;margin-top:8px}thead th{background:#666;color:#fff;padding:6px 8px;text-align:left;font-size:9px;font-weight:800;text-transform:uppercase}td{padding:6px 8px;border:1px solid #d7d7d7;font-size:10.1px;vertical-align:top}tr:nth-child(even){background:#fafafa}.flag-h{color:#111;font-weight:900;background:#e7e7e7}.flag-l{color:#111;font-weight:900;background:#f1f1f1}.flag-n{color:#111;font-weight:800}.footer{margin-top:14px;padding-top:8px;border-top:1px solid #c7c7c7}.signs{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:18px}.signline{border-bottom:1px solid #333;height:28px;margin-bottom:4px}.small{font-size:9px;color:#555}</style></head><body>
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{margin:0;padding:0;box-sizing:border-box;print-color-adjust:economy;-webkit-print-color-adjust:economy}body{font-family:Arial,sans-serif;font-size:10.8px;color:#111;padding:0 12mm 12mm;background:#fff}@page{size:A4 portrait;margin:40mm 12mm 12mm}.pt-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;border:1px solid #9ca3af;border-radius:8px;padding:8px 10px;margin-bottom:10px;background:#fff}.pt-lbl{font-size:8.5px;color:#555;font-weight:700;text-transform:uppercase;letter-spacing:.3px}.lab-group-blurb{margin:10px 0 0;padding:6px 8px;font-size:9.5px;color:#555;line-height:1.45;background:#f9fafb;border-radius:6px;border:1px solid #e5e7eb}.section-hd{font-size:10.8px;font-weight:900;color:#111;text-transform:uppercase;letter-spacing:.5px;margin:11px 0 0;padding:6px 8px;background:#ececec;border-left:4px solid #666}.insights{margin:10px 0;padding:8px 10px;border:1px solid #bdbdbd;border-radius:8px;background:#f7f7f7;font-size:10.3px;line-height:1.52}table{width:100%;border-collapse:collapse;margin-top:8px}thead th{background:#666;color:#fff;padding:6px 8px;text-align:left;font-size:9px;font-weight:800;text-transform:uppercase}td{padding:6px 8px;border:1px solid #d7d7d7;font-size:10.1px;vertical-align:top}tr:nth-child(even){background:#fafafa}.flag-h{color:#111;font-weight:900;background:#e7e7e7}.flag-l{color:#111;font-weight:900;background:#f1f1f1}.flag-n{color:#111;font-weight:800}.footer{margin-top:14px;padding-top:8px;border-top:1px solid #c7c7c7}.signs{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:18px}.signline{border-bottom:1px solid #333;height:28px;margin-bottom:4px}.small{font-size:9px;color:#555}</style></head><body>
 <div class="pt-bar">
   <div><div class="pt-lbl">Patient</div><div style="font-weight:900">${escapeHtmlConsent(order.patient || pt.name || '—')}</div></div>
   <div><div class="pt-lbl">BMSH ID</div><div style="font-family:monospace;color:#222;font-weight:700">${escapeHtmlConsent(order.bmhId || pt.bmhId || '—')}</div></div>
@@ -19885,14 +20149,14 @@ function printLabReport() {
 </div>
 ${insights.length ? `<div class="insights"><div style="font-weight:900;margin-bottom:4px;color:#333">Interpretive notes</div>${insights.map(function (x) { return '<div>• ' + escapeHtmlConsent(x) + '</div>'; }).join('')}${order.comments ? '<div style="margin-top:6px"><b>Lab comment:</b> ' + escapeHtmlConsent(order.comments) + '</div>' : ''}</div>` : (order.comments ? `<div class="insights"><div style="font-weight:900;margin-bottom:4px;color:#333">Lab comment</div>${escapeHtmlConsent(order.comments)}</div>` : '')}
 ${Object.keys(groups).map(function (key) {
+  if (key === 'bio' || key === 'diab') return '';
   const rows = grouped[key] || [];
   if (!rows.length) return '';
-  return '<div class="section-hd">' + groups[key] + '</div><table><thead><tr><th>Test</th><th>Value</th><th>Unit</th><th>Normal Range</th><th>Flag</th></tr></thead><tbody>' + rows.map(function (row) {
+  const blurb = LAB_GROUP_HEAD_BLURBS[key] || '';
+  return (blurb ? '<div class="lab-group-blurb">' + escapeHtmlConsent(blurb) + '</div>' : '') + '<div class="section-hd">' + groups[key] + '</div><table><thead><tr><th>Test</th><th>Value</th><th>Unit</th><th>Normal Range</th><th>Flag</th></tr></thead><tbody>' + rows.map(function (row) {
     const flag = String(row.flag || '—');
     const cls = flag === 'HIGH' ? 'flag-h' : flag === 'LOW' ? 'flag-l' : 'flag-n';
-    const note = flag === 'HIGH' || flag === 'LOW'
-      ? (row.abnormalNote || '')
-      : (row.purpose || '');
+    const note = flag === 'HIGH' || flag === 'LOW' ? (row.abnormalNote || '') : '';
     return '<tr><td style="font-weight:700">' + escapeHtmlConsent(row.name || '') + (note ? '<div style="margin-top:3px;font-size:9px;color:#6b7280;line-height:1.35">' + escapeHtmlConsent(note) + '</div>' : '') + '</td><td class="' + cls + '">' + escapeHtmlConsent(row.val || '—') + '</td><td>' + escapeHtmlConsent(row.unit || '') + '</td><td>' + escapeHtmlConsent(row.range || '') + '</td><td class="' + cls + '">' + escapeHtmlConsent(flag || '—') + '</td></tr>';
   }).join('') + '</tbody></table>';
 }).join('')}
@@ -22500,13 +22764,53 @@ function openRcCollectionDetailModal(dept, catKey) {
   const titleEl = document.getElementById('m-rc-collection-detail-title');
   if (titleEl) titleEl.textContent = title;
   if (!bodyEl) return;
-  bodyEl.innerHTML = list.length ? list.map(function (t) {
+  const paidTotal = list.reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
+  const paidPatients = new Set(list.map(function (t) { return t.bmhId || ''; }).filter(Boolean)).size;
+  const wantCat = catKey === 'opd' ? 'consultation' : catKey === 'inv' ? 'diagnostic' : catKey === 'sx' ? 'surgery' : null;
+  let unpaid = [];
+  if (wantCat) {
+    unpaid = (PAY_REQUESTS || []).filter(function (r) {
+      if (String(r.status || '').toLowerCase() === 'paid') return false;
+      if (String(r.dept || '').toLowerCase() !== String(dept || '').toLowerCase()) return false;
+      return inferChargeCategoryFromService(r.for || '') === wantCat;
+    });
+  }
+  const unpaidTotal = unpaid.reduce(function (s, r) { return s + (Number(r.amount) || 0); }, 0);
+  const unpaidPatients = new Set(unpaid.map(function (r) { return r.bmhId || ''; }).filter(Boolean)).size;
+  const paidRows = list.map(function (t) {
     return '<div style="display:flex;align-items:center;gap:7px;padding:7px 8px;border-bottom:1px solid var(--g5);font-size:12px">'
       + '<div style="flex:1"><div style="font-weight:800">' + escapeHtmlConsent(t.patient || '') + '</div><div style="font-size:10.5px;color:var(--g1)">' + escapeHtmlConsent(t.service || '—') + ' · ' + escapeHtmlConsent(t.time || '—') + '</div></div>'
       + '<span class="badge bd-gray" style="font-size:9px">' + escapeHtmlConsent(t.mode || '—') + '</span>'
       + '<div style="font-weight:900;color:#1a8c3c">' + fmt(getNetTransactionAmount(t)) + '</div>'
       + '</div>';
-  }).join('') : '<div style="padding:14px;color:var(--g1);font-size:12px">No transactions in this category for today.</div>';
+  }).join('');
+  const unpaidRows = unpaid.map(function (r) {
+    return '<div style="display:flex;align-items:center;gap:7px;padding:7px 8px;border-bottom:1px solid var(--g5);font-size:12px">'
+      + '<div style="flex:1"><div style="font-weight:800">' + escapeHtmlConsent(r.patient || '') + '</div><div style="font-size:10.5px;color:var(--g1)">' + escapeHtmlConsent(r.for || '—') + '</div></div>'
+      + '<span class="badge bd-orange" style="font-size:9px">Pending</span>'
+      + '<div style="font-weight:900;color:#b45309">' + fmt(Number(r.amount) || 0) + '</div>'
+      + '</div>';
+  }).join('');
+  let html = '';
+  if (wantCat) {
+    html += '<div style="background:linear-gradient(180deg,#fff7ed,#fff);border:1px solid #f59e0b;border-radius:10px;padding:10px 12px;margin-bottom:12px">'
+      + '<div style="font-size:11px;font-weight:900;color:#8a4200;text-transform:uppercase;margin-bottom:6px">Today — paid vs unpaid</div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12px">'
+      + '<div><span style="color:var(--g1)">Paid (collected)</span><br><strong>' + paidPatients + '</strong> patient(s) · <strong style="color:#1a8c3c">' + fmt(paidTotal) + '</strong></div>'
+      + '<div><span style="color:var(--g1)">Unpaid (pending requests)</span><br><strong>' + unpaidPatients + '</strong> patient(s) · <strong style="color:#b45309">' + fmt(unpaidTotal) + '</strong></div>'
+      + '</div></div>';
+  }
+  if (wantCat) {
+    html += '<details open style="margin-bottom:8px;border:1px solid var(--g5);border-radius:8px;padding:8px 10px;background:#fff">'
+      + '<summary style="cursor:pointer;font-weight:800;font-size:12px">Collected transactions (' + list.length + ')</summary>'
+      + '<div style="margin-top:6px">' + (paidRows || '<div style="padding:10px;color:var(--g1);font-size:12px">No collected items in this category today.</div>') + '</div></details>';
+    html += '<details style="margin-bottom:8px;border:1px solid var(--g5);border-radius:8px;padding:8px 10px;background:#fff">'
+      + '<summary style="cursor:pointer;font-weight:800;font-size:12px">Pending payment requests (' + unpaid.length + ')</summary>'
+      + '<div style="margin-top:6px">' + (unpaidRows || '<div style="padding:10px;color:var(--g1);font-size:12px">No pending requests in this category.</div>') + '</div></details>';
+  } else {
+    html += list.length ? paidRows : '<div style="padding:14px;color:var(--g1);font-size:12px">No transactions in this category for today.</div>';
+  }
+  bodyEl.innerHTML = html;
   openM('m-rc-collection-detail');
 }
 window.openRcCollectionDetailModal = openRcCollectionDetailModal;
