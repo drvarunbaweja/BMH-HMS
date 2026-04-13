@@ -2454,31 +2454,21 @@
         </div>
         <!-- Diagnosis -->
         <div class="plan-panel" style="margin-bottom:10px">
-          <div class="diag-prev-wrap">
-            <div>
-              <div class="plan-panel-head"><div class="plan-panel-title">Diagnosis</div><button class="btn btn-xs btn-outline" onclick="addDxRow()">+ Add</button></div>
+          <div class="diag-prev-wrap" style="align-items:flex-start">
+            <div style="flex:1;min-width:0;max-width:min(56%,420px)">
+              <div class="plan-panel-head"><div class="plan-panel-title" style="font-size:12px">This visit — diagnosis</div><button class="btn btn-xs btn-outline" onclick="addDxRow()">+ Add</button></div>
               <div id="obg-dx-list">
                 <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">
-                  <input type="text" class="dx-inp" placeholder="ICD-10 code or diagnosis — type to search" style="flex:1;font-size:12px" autocomplete="off" data-dx-dept="obg" oninput="filterDx(this)" onfocus="showDxDropdown(this);wireDxInputFocus(this)">
+                  <input type="text" class="dx-inp" placeholder="ICD-10 code or diagnosis — type to search" style="flex:1;font-size:11px" autocomplete="off" data-dx-dept="obg" oninput="filterDx(this)" onfocus="showDxDropdown(this);wireDxInputFocus(this)">
                   <button class="btn btn-xs btn-gray" onclick="this.closest('div').remove()">✕</button>
                 </div>
               </div>
             </div>
-            <div class="prev-dx-box">
-              <div class="prev-dx-title">Previous Diagnosis</div>
-              <div id="obg-prev-dx-text" class="prev-dx-text">No previous active diagnosis</div>
-              <select id="obg-prev-dx-status" style="margin-top:8px;font-size:11px;padding:5px 7px;border-radius:7px;border:1.5px solid var(--g4);width:100%" onchange="handlePreviousDiagnosisStatusChange('obg', this.value)">
-                <option value="carry">Going on</option>
-                <option value="resolved">Resolved</option>
-              </select>
+            <div class="prev-dx-box" style="flex:1;min-width:200px;max-width:min(44%,340px)">
+              <div class="prev-dx-title">Previous visits (ongoing)</div>
+              <div id="obg-prev-dx-list" style="max-height:200px;overflow-y:auto;font-size:11px"></div>
             </div>
           </div>
-        </div>
-        <div class="plan-panel" style="background:#fffbeb;border-color:rgba(212,160,23,.4);margin-bottom:10px">
-          <div class="plan-panel-head"><div class="plan-panel-title" style="color:#8a4200">Instructions</div></div>
-          <div id="obg-advice-library" class="quick-library-grid"></div>
-          <textarea placeholder="Advice to patient…" style="width:100%;min-height:40px;margin-bottom:8px;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px" id="obg-advice"></textarea>
-          <textarea placeholder="Additional advice to patient…" style="width:100%;min-height:38px;margin-bottom:0;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px" id="obg-extra-advice"></textarea>
         </div>
         <div style="background:var(--g6);border-radius:var(--rsm);padding:8px 11px;margin-bottom:10px;border:1.5px solid var(--g4)">
           <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px">🖨️ Include in Printout (OBG)</div>
@@ -2537,6 +2527,19 @@
             <input type="date" id="rx-fu-date" style="flex:1">
             <button class="btn btn-blue btn-sm" onclick="bookFollowup()">📅 Book</button>
           </div>
+        </div>
+        <div class="plan-panel" style="background:#fffbeb;border-color:rgba(212,160,23,.4);margin-bottom:10px">
+          <div class="plan-panel-head"><div class="plan-panel-title" style="color:#8a4200;font-size:12px">Instructions</div></div>
+          <div id="obg-advice-library" class="quick-library-grid"></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+            <select id="obg-advice-quick" style="flex:1;min-width:180px;font-size:11px;padding:6px 8px;border-radius:var(--rsm);border:1.5px solid var(--g4)">
+              <option value="">— Add advice from list —</option>
+            </select>
+            <button type="button" class="btn btn-xs btn-blue" onclick="appendObgAdviceFromQuick()">+ Add</button>
+          </div>
+          <div id="obg-advice-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;min-height:28px"></div>
+          <textarea placeholder="Advice to patient…" style="width:100%;min-height:36px;margin-bottom:6px;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px;display:none" id="obg-advice" aria-hidden="true"></textarea>
+          <textarea placeholder="Additional advice…" style="width:100%;min-height:32px;margin-bottom:0;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px;display:none" id="obg-extra-advice" aria-hidden="true"></textarea>
         </div>
         <div style="display:flex;gap:7px;flex-wrap:wrap">
           <button class="btn btn-gold" style="flex:1;justify-content:center" onclick="printUnifiedRx('obg')">🖨️ Print Prescription</button>
@@ -3612,9 +3615,8 @@
 </div>
 <div class="page" id="pg-billing">
 <div class="ptabs" style="margin-bottom:12px">
-  <div class="ptab active" onclick="ptab(this,'bmh-bill-tab-patients')">👥 Patients &amp; bills</div>
-  <div class="ptab" onclick="ptab(this,'bmh-bill-tab-vendor')">🏪 Vendors &amp; expenses</div>
-  <div class="ptab" onclick="ptab(this,'bmh-bill-tab-ledger')">📒 Day book / ledger</div>
+  <div class="ptab active" onclick="bmhBillingTabSwitch(this,'current')">👤 Current patient</div>
+  <div class="ptab" onclick="bmhBillingTabSwitch(this,'search')">👥 Patients &amp; bills</div>
 </div>
 <div class="tab-content active" id="bmh-bill-tab-patients">
 <div class="g32">
@@ -3636,10 +3638,16 @@
       <button type="button" class="btn btn-xs btn-outline" onclick="bmhSetBillDeptFilter('psych')">Psych</button>
       <button type="button" class="btn btn-xs btn-outline" onclick="bmhSetBillDeptFilter('skin')">Skin</button>
     </div>
+    <div id="bmh-bill-search-toolbar" style="display:none">
     <div style="display:grid;grid-template-columns:1.2fr .9fr .9fr;gap:8px;margin-bottom:10px">
-      <div class="form-group" style="margin:0"><label class="fl">Search patient</label><input type="text" id="bmh-bill-patient-search" placeholder="Name / BMSH ID / mobile" oninput="bmhRenderBillPatientList()"></div>
-      <div class="form-group" style="margin:0"><label class="fl">Patient scope</label><select id="bmh-bill-patient-scope" onchange="bmhRenderBillPatientList()"><option value="focus">Selected patient only</option><option value="today">Today's patients</option><option value="date">Selected date</option><option value="admitted">Currently admitted</option><option value="all">All visible patients</option></select></div>
+      <div class="form-group" style="margin:0"><label class="fl">Search (name / BMSH ID / mobile)</label><input type="text" id="bmh-bill-patient-search" placeholder="Name / BMSH ID / mobile" oninput="bmhRenderBillPatientList()"></div>
+      <div class="form-group" style="margin:0"><label class="fl">Patient scope</label><select id="bmh-bill-patient-scope" onchange="bmhRenderBillPatientList()"><option value="focus">Selected patient only</option><option value="range">Date range</option><option value="date">Single date</option><option value="admitted">Currently admitted</option><option value="all">All visible patients</option></select></div>
       <div class="form-group" style="margin:0"><label class="fl">Date</label><input type="date" id="bmh-bill-date-filter" onchange="bmhRenderBillPatientList()"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;max-width:420px">
+      <div class="form-group" style="margin:0"><label class="fl">Date from</label><input type="date" id="bmh-bill-date-from" onchange="bmhRenderBillPatientList()"></div>
+      <div class="form-group" style="margin:0"><label class="fl">Date to</label><input type="date" id="bmh-bill-date-to" onchange="bmhRenderBillPatientList()"></div>
+    </div>
     </div>
     <div id="bmh-admin-daily-billing-panel" style="display:none;margin-bottom:12px"></div>
     <div id="bmh-bill-pt-list" style="max-height:200px;overflow:auto;border:1px solid var(--g5);border-radius:8px;margin-bottom:12px"></div>
@@ -3721,38 +3729,6 @@
     </div>
   </div>
 </div>
-</div>
-<div class="tab-content" id="bmh-bill-tab-vendor">
-  <div class="g32">
-    <div class="card">
-      <div class="card-hd"><div class="card-title">🏪 Vendor invoices (pending / paid)</div></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
-        <div class="form-group"><label class="fl">Vendor</label><input type="text" id="bmh-vend-name" placeholder="Supplier name"></div>
-        <div class="form-group"><label class="fl">Invoice no.</label><input type="text" id="bmh-vend-inv" placeholder="Invoice #"></div>
-        <div class="form-group"><label class="fl">Amount ₹</label><input type="number" id="bmh-vend-amt" placeholder="0"></div>
-        <div class="form-group"><label class="fl">Due date</label><input type="date" id="bmh-vend-due"></div>
-      </div>
-      <div class="form-group"><label class="fl">Upload scan / PDF (stored as filename for now)</label><input type="file" id="bmh-vend-file" accept="image/*,.pdf"></div>
-      <button type="button" class="btn btn-blue btn-sm" onclick="bmhAddVendorBill()">+ Add vendor bill</button>
-      <div id="bmh-vendor-table" style="margin-top:12px;font-size:12px"></div>
-    </div>
-    <div class="card">
-      <div class="card-hd"><div class="card-title">📤 Expenses</div></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <div class="form-group"><label class="fl">Description</label><input type="text" id="bmh-exp-desc" placeholder="e.g. Stationery"></div>
-        <div class="form-group"><label class="fl">Amount ₹</label><input type="number" id="bmh-exp-amt"></div>
-        <div class="form-group" style="grid-column:1/-1"><label class="fl">Category</label><input type="text" id="bmh-exp-cat" placeholder="Admin / OT / Marketing"></div>
-      </div>
-      <button type="button" class="btn btn-orange btn-sm" onclick="bmhAddExpense()">+ Post expense</button>
-      <div id="bmh-exp-list" style="margin-top:12px;font-size:12px"></div>
-    </div>
-  </div>
-</div>
-<div class="tab-content" id="bmh-bill-tab-ledger">
-  <div class="card">
-    <div class="card-hd"><div class="card-title">📒 Day book (receipts, payments, expenses)</div><button type="button" class="btn btn-outline btn-sm" onclick="bmhExportLedgerCsv()">Export CSV</button></div>
-    <div style="overflow-x:auto"><table class="rc-queue-table" style="min-width:720px"><thead><tr><th>Date</th><th>Type</th><th>Narration</th><th>Party</th><th style="text-align:right">Debit ₹</th><th style="text-align:right">Credit ₹</th><th>Ref</th></tr></thead><tbody id="bmh-ledger-body"></tbody></table></div>
-  </div>
 </div>
 </div>
 <div class="page" id="pg-tpa">
@@ -5624,6 +5600,8 @@
   }
 })();
 </script>
+
+<div id="dx-dropdown" style="display:none;z-index:100000;background:#fff;border:2px solid var(--blue);border-radius:var(--rsm);max-height:280px;overflow-y:auto;box-shadow:var(--sh-md)"></div>
 
 <!-- ═══ MAIN APP SCRIPT (legacy — being migrated to modules) ═══ -->
 <script defer src="%BASE_URL%js/legacy.js?v=20260411-queue-drugs"></script>
