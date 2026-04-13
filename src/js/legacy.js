@@ -1208,20 +1208,23 @@ function buildConsentPatientStripHtml(ptNm, ptId, ptAge, ptSex, ptMob, today, pr
 }
 const CERTIFICATE_LIBRARY_DEFAULTS = {
   ophtho: [
-    { id: 'ophtho-fitness', name: 'Fitness Certificate', title: 'Fitness Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, has been examined at Baweja Multispeciality Hospital.\n\nClinical diagnosis: {{diagnosis}}\nPlanned / completed procedure: {{procedure}}\n\nThe patient is presently fit for the advised ophthalmic treatment / procedure and for related routine activities as advised.\n\nAdditional remarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' },
-    { id: 'ophtho-leave', name: 'Leave Certificate', title: 'Leave Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, is under treatment at Baweja Multispeciality Hospital for {{diagnosis}}.\n\nThe patient is advised rest / medical leave from {{today}} for {{leave_days}} days.\n\nProcedure / treatment: {{procedure}}\nRemarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' }
+    { id: 'ophtho-fitness', category: 'OPD', name: 'Fitness Certificate', title: 'Fitness Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, has been examined at Baweja Multispeciality Hospital.\n\nClinical diagnosis: {{diagnosis}}\nPlanned / completed procedure: {{procedure}}\n\nThe patient is presently fit for the advised ophthalmic treatment / procedure and for related routine activities as advised.\n\nAdditional remarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' },
+    { id: 'ophtho-leave', category: 'OPD', name: 'Leave Certificate', title: 'Leave Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, is under treatment at Baweja Multispeciality Hospital for {{diagnosis}}.\n\nThe patient is advised rest / medical leave from {{today}} for {{leave_days}} days.\n\nProcedure / treatment: {{procedure}}\nRemarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' }
   ],
   obg: [
-    { id: 'obg-fitness', name: 'Fitness Certificate', title: 'Fitness Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, has been evaluated in the Obstetrics & Gynaecology department.\n\nDiagnosis: {{diagnosis}}\nPlanned / completed procedure: {{procedure}}\n\nThe patient is fit / under appropriate care as per current clinical status.\n\nRemarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' },
-    { id: 'obg-leave', name: 'Leave Certificate', title: 'Leave Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, is under OBG care at Baweja Multispeciality Hospital.\n\nDiagnosis: {{diagnosis}}\nThe patient is advised rest / medical leave from {{today}} for {{leave_days}} days.\n\nRemarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' }
+    { id: 'obg-fitness', category: 'OPD', name: 'Fitness Certificate', title: 'Fitness Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, has been evaluated in the Obstetrics & Gynaecology department.\n\nDiagnosis: {{diagnosis}}\nPlanned / completed procedure: {{procedure}}\n\nThe patient is fit / under appropriate care as per current clinical status.\n\nRemarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' },
+    { id: 'obg-leave', category: 'OPD', name: 'Leave Certificate', title: 'Leave Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, is under OBG care at Baweja Multispeciality Hospital.\n\nDiagnosis: {{diagnosis}}\nThe patient is advised rest / medical leave from {{today}} for {{leave_days}} days.\n\nRemarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' },
+    { id: 'obg-discharge-lscs', category: 'Discharge', name: 'LSCS Discharge Summary', title: 'Discharge Summary', body: 'Diagnosis / indication for LSCS:\n{{diagnosis}}\nProcedure performed:\n{{procedure}}\n\nMother condition at discharge:\nBaby condition at discharge:\n\nWound care, lochia, breastfeeding, diet, mobilisation, analgesics / antibiotics / supplements, and emergency warning signs explained.\n\nFollow-up: 48 hours, 7 days, 6 weeks or as advised.\n\nDate: {{today}}\nDoctor: {{doctor}}' },
+    { id: 'obg-discharge-nd', category: 'Discharge', name: 'Normal Delivery Discharge', title: 'Discharge Summary', body: 'Mode of delivery:\n{{procedure}}\n\nMother condition at discharge:\nBaby condition at discharge:\n\nBreastfeeding advice, bleeding warning signs, pain relief, contraception counselling, and follow-up instructions documented.\n\nDate: {{today}}\nDoctor: {{doctor}}' },
+    { id: 'obg-ot-notes', category: 'OT Notes', name: 'OT Procedure Note (template)', title: 'OT Notes', body: 'Procedure: {{procedure}}\nDiagnosis: {{diagnosis}}\n\nFindings:\n\nSpecimen:\n\nBlood loss:\n\nPost-op plan:\n\nDate: {{today}}\nDoctor: {{doctor}}' }
   ],
   psych: [
-    { id: 'psych-fitness', name: 'Fitness Certificate', title: 'Fitness Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, has been examined in Neuropsychiatry.\n\nDiagnosis: {{diagnosis}}\nCurrent treatment / plan: {{procedure}}\n\nThe patient is presently fit / under treatment as per the present clinical assessment.\n\nRemarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' },
-    { id: 'psych-leave', name: 'Leave Certificate', title: 'Leave Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, is undergoing treatment in Neuropsychiatry.\n\nDiagnosis: {{diagnosis}}\nThe patient is advised leave / rest from {{today}} for {{leave_days}} days.\n\nRemarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' }
+    { id: 'psych-fitness', category: 'OPD', name: 'Fitness Certificate', title: 'Fitness Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, has been examined in Neuropsychiatry.\n\nDiagnosis: {{diagnosis}}\nCurrent treatment / plan: {{procedure}}\n\nThe patient is presently fit / under treatment as per the present clinical assessment.\n\nRemarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' },
+    { id: 'psych-leave', category: 'OPD', name: 'Leave Certificate', title: 'Leave Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, is undergoing treatment in Neuropsychiatry.\n\nDiagnosis: {{diagnosis}}\nThe patient is advised leave / rest from {{today}} for {{leave_days}} days.\n\nRemarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' }
   ],
   skin: [
-    { id: 'skin-fitness', name: 'Fitness Certificate', title: 'Fitness Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, has been examined in Skin & Cosmetology.\n\nDiagnosis: {{diagnosis}}\nCurrent treatment / procedure: {{procedure}}\n\nThe patient is fit / under treatment as per present assessment.\n\nRemarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' },
-    { id: 'skin-leave', name: 'Leave Certificate', title: 'Leave Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, is under treatment in Skin & Cosmetology.\n\nDiagnosis: {{diagnosis}}\nThe patient is advised leave / recovery time from {{today}} for {{leave_days}} days.\n\nRemarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' }
+    { id: 'skin-fitness', category: 'OPD', name: 'Fitness Certificate', title: 'Fitness Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, has been examined in Skin & Cosmetology.\n\nDiagnosis: {{diagnosis}}\nCurrent treatment / procedure: {{procedure}}\n\nThe patient is fit / under treatment as per present assessment.\n\nRemarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' },
+    { id: 'skin-leave', category: 'OPD', name: 'Leave Certificate', title: 'Leave Certificate', body: 'This is to certify that {{patient_name}} ({{patient_id}}), {{age_sex}}, is under treatment in Skin & Cosmetology.\n\nDiagnosis: {{diagnosis}}\nThe patient is advised leave / recovery time from {{today}} for {{leave_days}} days.\n\nRemarks:\n{{remarks}}\n\nDate: {{today}}\nDoctor: {{doctor}}' }
   ]
 };
 let CERTIFICATE_TEMPLATES = {};
@@ -1247,9 +1250,65 @@ function activeClinicDeptKey() {
   if (active === 'pg-skin') return 'skin';
   return normalizeDeptKeyForQueue(window.CURRENT_PATIENT?.dept || CURRENT_USER?.dept || '') || 'ophtho';
 }
+function getCertificateTemplateCategoryList() {
+  const base = ['OPD', 'OT Notes', 'Discharge', 'General'];
+  try {
+    const extra = JSON.parse(localStorage.getItem('bmh_cert_extra_categories') || '[]');
+    if (Array.isArray(extra)) {
+      extra.forEach(function (x) {
+        const n = normalizeDeptTemplateLabel(String(x || ''));
+        if (n && !base.includes(n)) base.push(n);
+      });
+    }
+  } catch (e) {}
+  return base;
+}
+function ensureCertificateCategorySelects() {
+  const opts = getCertificateTemplateCategoryList();
+  const html = '<option value="all">All categories</option>' + opts.map(function (c) {
+    return '<option value="' + String(c).replace(/"/g, '&quot;') + '">' + String(c).replace(/</g, '&lt;') + '</option>';
+  }).join('');
+  const fil = document.getElementById('cert-template-category-filter');
+  const curF = fil ? fil.value : 'all';
+  if (fil) fil.innerHTML = html;
+  if (fil && [...fil.options].some(function (o) { return o.value === curF; })) fil.value = curF;
+  const cat = document.getElementById('cert-template-cat');
+  const curC = cat ? cat.value : '';
+  if (cat) {
+    cat.innerHTML = opts.map(function (c) {
+      return '<option value="' + String(c).replace(/"/g, '&quot;') + '">' + String(c).replace(/</g, '&lt;') + '</option>';
+    }).join('');
+    if ([...cat.options].some(function (o) { return o.value === curC; })) cat.value = curC;
+  }
+}
+function promptAddCertificateCategory() {
+  const raw = window.prompt('New template category name (e.g. Antenatal, Postnatal):');
+  if (!raw) return;
+  const name = normalizeDeptTemplateLabel(raw);
+  if (!name) return;
+  const list = getCertificateTemplateCategoryList();
+  if (!list.includes(name)) {
+    try {
+      const extra = JSON.parse(localStorage.getItem('bmh_cert_extra_categories') || '[]');
+      extra.push(name);
+      localStorage.setItem('bmh_cert_extra_categories', JSON.stringify(extra));
+    } catch (e) {}
+  }
+  ensureCertificateCategorySelects();
+  const cat = document.getElementById('cert-template-cat');
+  if (cat) cat.value = name;
+  showToast('Category added — pick it when saving a template', 's');
+}
+window.promptAddCertificateCategory = promptAddCertificateCategory;
 function getCertificateTemplatesForDept(dept) {
   const custom = Object.values(CERTIFICATE_TEMPLATES || {}).filter(function (tpl) { return tpl && tpl.dept === dept; });
-  return (CERTIFICATE_LIBRARY_DEFAULTS[dept] || []).concat(custom);
+  const filterEl = document.getElementById('cert-template-category-filter');
+  const filter = filterEl && filterEl.value ? filterEl.value : 'all';
+  const merge = (CERTIFICATE_LIBRARY_DEFAULTS[dept] || []).concat(custom);
+  if (filter === 'all') return merge;
+  return merge.filter(function (tpl) {
+    return String(tpl.category || 'General') === filter;
+  });
 }
 function buildCertificateContext(dept) {
   const pt = window.CURRENT_PATIENT || {};
@@ -1283,12 +1342,15 @@ function refreshCertificateTemplateList(dept) {
   const host = document.getElementById('cert-template-list');
   const sel = document.getElementById('cert-template-sel');
   if (!host || !sel) return;
+  ensureCertificateCategorySelects();
   const items = getCertificateTemplatesForDept(dept);
   sel.innerHTML = '<option value="">— Select certificate —</option>' + items.map(function (tpl) {
-    return '<option value="' + String(tpl.id).replace(/"/g, '&quot;') + '">' + String(tpl.name || tpl.title).replace(/</g, '&lt;') + '</option>';
+    const c = String(tpl.category || 'General');
+    return '<option value="' + String(tpl.id).replace(/"/g, '&quot;') + '">' + String(tpl.name || tpl.title).replace(/</g, '&lt;') + ' · ' + c + '</option>';
   }).join('');
   host.innerHTML = items.map(function (tpl) {
-    return '<button type="button" class="btn btn-outline btn-sm" style="justify-content:flex-start" onclick="applyCertificateTemplate(\'' + String(tpl.id).replace(/'/g, "\\'") + '\')">' + String(tpl.name || tpl.title).replace(/</g, '&lt;') + '</button>';
+    const c = String(tpl.category || 'General');
+    return '<button type="button" class="btn btn-outline btn-sm" style="justify-content:flex-start" onclick="applyCertificateTemplate(\'' + String(tpl.id).replace(/'/g, "\\'") + '\')">' + String(tpl.name || tpl.title).replace(/</g, '&lt;') + ' · ' + c + '</button>';
   }).join('');
 }
 function openCertificateModal(dept) {
@@ -1300,6 +1362,7 @@ function openCertificateModal(dept) {
   const docDisplay = document.getElementById('cert-doctor-display');
   if (ptDisplay) ptDisplay.value = [pt.name || '—', pt.bmhId || '—'].join(' · ');
   if (docDisplay) docDisplay.value = doctor;
+  ensureCertificateCategorySelects();
   refreshCertificateTemplateList(dk);
   const first = getCertificateTemplatesForDept(dk)[0];
   if (first) applyCertificateTemplate(first.id);
@@ -1307,18 +1370,21 @@ function openCertificateModal(dept) {
 }
 function applyCertificateTemplate(id) {
   const dept = window._currentCertificateDept || certificateDeptKeyFromUi();
-  const items = getCertificateTemplatesForDept(dept);
-  const tpl = items.find(function (t) { return t.id === id; }) || items[0];
+  const custom = Object.values(CERTIFICATE_TEMPLATES || {}).filter(function (tpl) { return tpl && tpl.dept === dept; });
+  const all = (CERTIFICATE_LIBRARY_DEFAULTS[dept] || []).concat(custom);
+  const tpl = all.find(function (t) { return t.id === id; }) || getCertificateTemplatesForDept(dept)[0];
   if (!tpl) return;
   const ctx = buildCertificateContext(dept);
   const titleEl = document.getElementById('cert-title');
   const bodyEl = document.getElementById('cert-body');
   const nameEl = document.getElementById('cert-template-name');
   const sel = document.getElementById('cert-template-sel');
+  const catEl = document.getElementById('cert-template-cat');
   if (sel) sel.value = tpl.id;
   if (titleEl) titleEl.value = tpl.title || tpl.name || 'Certificate';
   if (bodyEl) bodyEl.value = renderCertificateTemplateText(tpl.body || '', ctx);
   if (nameEl) nameEl.value = tpl.name || tpl.title || 'Certificate';
+  if (catEl) catEl.value = tpl.category || 'General';
 }
 function buildCertificatePrintHtml() {
   const dept = window._currentCertificateDept || certificateDeptKeyFromUi();
@@ -1346,7 +1412,8 @@ function saveCurrentCertificateTemplate() {
   const name = toDisplayTitleCase(document.getElementById('cert-template-name')?.value?.trim() || title || 'Certificate');
   if (!title || !body) { showToast('Enter certificate heading and body', 'w'); return; }
   const key = 'cert-' + dept + '-' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-  CERTIFICATE_TEMPLATES[key] = { id: key, dept: dept, name: name, title: title, body: body };
+  const cat = document.getElementById('cert-template-cat')?.value?.trim() || 'General';
+  CERTIFICATE_TEMPLATES[key] = { id: key, dept: dept, category: cat, name: name, title: title, body: body };
   saveCertificateTemplatesToStorage();
   refreshCertificateTemplateList(dept);
   const sel = document.getElementById('cert-template-sel');
@@ -6853,7 +6920,10 @@ function addIolBrandEntry(prefill) {
   div.style.cssText = 'background:#fffbec;border:1px solid #ead8a4;border-radius:8px;padding:10px;margin-bottom:10px;position:relative';
   div.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <div style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase">Brand Entry ${idx + 1}</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <div style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase">Brand Entry ${idx + 1}</div>
+        <button type="button" class="btn btn-xs btn-outline" title="Add another IOL brand" onclick="addIolBrandEntry()">＋</button>
+      </div>
       ${idx > 0 ? `<button class="btn btn-xs btn-gray" onclick="removeIolBrandEntry(this)">✕ Remove</button>` : ''}
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
@@ -6885,9 +6955,79 @@ function renderIolBrandPowerGrid(entryDiv) {
   const powers = [];
   for (let p = 3.0; p <= 30.0; p += 0.5) powers.push('+' + p.toFixed(2) + 'D');
   gridEl.innerHTML = powers.map(function (pw) {
-    return `<div style="background:#fff;border:1px solid #d2bb79;border-radius:7px;padding:6px 8px;text-align:center"><div style="font-size:11px;font-weight:700;margin-bottom:5px">${pw}</div><input type="number" class="inv-iol-qty" data-power="${pw}" min="0" value="0" style="width:100%;text-align:center;font-weight:800;font-size:13px" oninput="updateIolPowerCounter()"></div>`;
+    const esc = pw.replace(/"/g, '&quot;');
+    return `<div class="iol-power-cell" data-power="${esc}" style="background:#fff;border:1px solid #d2bb79;border-radius:7px;padding:6px 6px 8px;text-align:center">
+      <div style="font-size:11px;font-weight:700;margin-bottom:5px">${pw}</div>
+      <div style="display:flex;align-items:center;gap:4px;justify-content:center;margin-bottom:4px">
+        <button type="button" class="btn btn-xs btn-gray" onclick="iolBrandPowerQtyDelta(this,-1)">−</button>
+        <input type="number" class="inv-iol-qty" data-power="${esc}" min="0" max="99" value="0" style="width:40px;text-align:center;font-weight:800;font-size:13px" oninput="iolBrandQtyInput(this)">
+        <button type="button" class="btn btn-xs btn-gray" onclick="iolBrandPowerQtyDelta(this,1)">+</button>
+      </div>
+      <button type="button" class="btn btn-xs btn-outline" style="font-size:10px;padding:2px 6px" onclick="iolToggleSnPanel(this)">S/n</button>
+      <div class="iol-sn-slots" style="display:none;margin-top:6px;text-align:left"></div>
+    </div>`;
   }).join('');
   updateIolPowerCounter();
+}
+function iolBrandPowerQtyDelta(btn, delta) {
+  const cell = btn.closest('.iol-power-cell');
+  const inp = cell && cell.querySelector('.inv-iol-qty');
+  if (!inp) return;
+  let v = (parseInt(inp.value, 10) || 0) + delta;
+  v = Math.max(0, Math.min(99, v));
+  inp.value = String(v);
+  iolSyncSnSlots(cell);
+  updateIolPowerCounter();
+}
+function iolBrandQtyInput(inp) {
+  const cell = inp.closest('.iol-power-cell');
+  iolSyncSnSlots(cell);
+  updateIolPowerCounter();
+}
+function iolToggleSnPanel(btn) {
+  const cell = btn.closest('.iol-power-cell');
+  const wrap = cell && cell.querySelector('.iol-sn-slots');
+  if (!wrap) return;
+  const open = wrap.style.display !== 'block';
+  wrap.style.display = open ? 'block' : 'none';
+  wrap.dataset.open = open ? '1' : '0';
+  iolSyncSnSlots(cell);
+}
+function iolSyncSnSlots(cell) {
+  if (!cell) return;
+  const wrap = cell.querySelector('.iol-sn-slots');
+  const inp = cell.querySelector('.inv-iol-qty');
+  if (!wrap || !inp) return;
+  const n = Math.max(0, parseInt(inp.value, 10) || 0);
+  const open = wrap.dataset.open === '1';
+  if (!open) { wrap.innerHTML = ''; return; }
+  if (n === 0) {
+    wrap.innerHTML = '<div style="font-size:9px;color:var(--g1)">Set quantity first</div>';
+    return;
+  }
+  const keep = Array.from(wrap.querySelectorAll('.iol-sn-input')).map(function (el) { return el.value; });
+  wrap.innerHTML = '';
+  for (let i = 0; i < n; i += 1) {
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'iol-sn-input';
+    input.placeholder = 'S/N ' + (i + 1);
+    input.style.cssText = 'width:100%;font-size:10px;padding:3px 5px;border:1px solid var(--g4);border-radius:4px;box-sizing:border-box;margin-bottom:4px';
+    input.value = keep[i] || '';
+    wrap.appendChild(input);
+  }
+}
+window.iolBrandPowerQtyDelta = iolBrandPowerQtyDelta;
+window.iolBrandQtyInput = iolBrandQtyInput;
+window.iolToggleSnPanel = iolToggleSnPanel;
+function readIolBrandSerialMapFromGrid(entryDiv) {
+  const out = {};
+  entryDiv.querySelectorAll('.iol-power-cell').forEach(function (cell) {
+    const power = cell.dataset.power;
+    const sns = Array.from(cell.querySelectorAll('.iol-sn-input')).map(function (el) { return el.value.trim(); }).filter(Boolean);
+    if (sns.length) out[power] = sns;
+  });
+  return out;
 }
 function readIolBrandEntrySerialMap(entryDiv) {
   const raw = String(entryDiv.querySelector('.iol-serial-map-field')?.value || '');
@@ -6922,7 +7062,7 @@ function saveIolInventoryGrid() {
       const picked = Array.from(entryDiv.querySelectorAll('.inv-iol-qty')).map(function (input) {
         return { power: String(input.dataset.power || ''), qty: Math.max(0, parseInt(input.value, 10) || 0) };
       }).filter(function (row) { return row.qty > 0; });
-      const serialMap = readIolBrandEntrySerialMap(entryDiv);
+      const serialMap = Object.assign({}, readIolBrandEntrySerialMap(entryDiv), readIolBrandSerialMapFromGrid(entryDiv));
       if (picked.length > 0) allBrandData.push({ brand, company, batchNo, exp, cost, picked, serialMap });
     });
   } else {
@@ -9138,6 +9278,16 @@ function parseInventoryImportText(text) {
     ? 'IOL'
     : (primaryItem?.category || inferInventoryCategoryFromText(itemName || flat));
   const iolIdentity = parseIolIdentityFromItemName(primaryItem?.itemName || itemName || '');
+  let billTotal = 0;
+  const gtLine = lines.find(function (ln) { return /grand\s*total|net\s*payable|amount\s*payable|total\s*amount/i.test(String(ln || '')); });
+  if (gtLine) {
+    const nums = Array.from(String(gtLine).matchAll(/([0-9]+(?:\.[0-9]{1,2})?)/g)).map(function (m) { return Number(m[1]); }).filter(function (n) { return n > 0; });
+    if (nums.length) billTotal = nums[nums.length - 1];
+  }
+  if (!(billTotal > 0)) {
+    const gm = flat.match(/\b(?:grand\s*total|net\s*amount|amount\s*payable)\s*[:\-]?\s*(?:₹|rs\.?|inr)?\s*([0-9]+(?:\.[0-9]{1,2})?)/i);
+    if (gm) billTotal = Number(gm[1]) || 0;
+  }
   return {
     vendor: normalizeInventoryTextValue(vendor),
     invoiceNo: invoiceMatch ? invoiceMatch[1] : '',
@@ -9157,9 +9307,46 @@ function parseInventoryImportText(text) {
     company: iolIdentity.company || '',
     brand: iolIdentity.brand || '',
     model: iolIdentity.model || '',
-    lineItems: lineItems
+    lineItems: lineItems,
+    billTotal: billTotal
   };
 }
+function bmhMaybeRegisterVendorBillFromParsedImport(parsed, asset, mode) {
+  if (!parsed) return;
+  const vendor = String(parsed.vendor || '').trim();
+  let amt = Number(parsed.billTotal || 0) || Number(parsed.amount || 0) || 0;
+  if (!(amt > 0) && Array.isArray(parsed.lineItems)) {
+    amt = parsed.lineItems.reduce(function (s, x) { return s + (Number(x.total) || 0); }, 0);
+  }
+  if (!vendor || !(amt > 0)) return;
+  const inv = String(parsed.invoiceNo || '').trim();
+  const dayKey = new Date().toISOString().slice(0, 10);
+  const fileName = String(asset?.name || '');
+  const dup = (window.BMH_VENDOR_BILLS || []).some(function (v) {
+    if (String(v.vendor || '').trim() !== vendor || Math.abs(Number(v.amount) - amt) >= 0.5) return false;
+    if (inv && String(v.invoiceNo || '') === inv) return true;
+    return !!v.ocrSource && String(v.uploadedName || '') === fileName && String(v.createdAt || '').slice(0, 10) === dayKey;
+  });
+  if (dup) return;
+  const id = 'VB-OCR-' + Date.now();
+  const billFile = asset && asset.data ? { name: asset.name || '', data: asset.data } : null;
+  window.BMH_VENDOR_BILLS.push({
+    id: id,
+    vendor: vendor,
+    invoiceNo: inv || ('OCR ' + id.slice(-6)),
+    amount: amt,
+    dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+    status: 'pending',
+    uploadedName: fileName,
+    billFile: billFile,
+    createdAt: new Date().toISOString(),
+    ocrSource: true,
+    ocrMode: String(mode || '')
+  });
+  try { saveBmhFinancials(); } catch (e) {}
+  try { bmhRenderVendorTables(); } catch (e) {}
+}
+window.bmhMaybeRegisterVendorBillFromParsedImport = bmhMaybeRegisterVendorBillFromParsedImport;
 function getCurrentIolGridState() {
   const state = {};
   Array.from(document.querySelectorAll('.inv-iol-qty')).forEach(function (input) {
@@ -9751,6 +9938,7 @@ async function handleInventoryImportFile(mode, inp) {
     }
     if (mode === 'in') inventoryRememberBillMeta(parsed.vendor || '', document.getElementById('inv-in-dept')?.value || '', window._inventoryImportAssets[mode] || null);
     applyInventoryParsedData(parsed, mode);
+    bmhMaybeRegisterVendorBillFromParsedImport(parsed, window._inventoryImportAssets[mode], mode);
     renderInventoryImportReview(parsed, mode, combinedText);
     setInventoryImportStatus(mode, 'OCR complete. Please review the populated fields before saving.', '#1a8c3c');
     openInventoryBillReviewModal(mode);
@@ -10143,6 +10331,8 @@ function openInventoryStockGroup(groupId) {
 window.openInventoryStockGroup = openInventoryStockGroup;
 function renderStockList() {
   const el=document.getElementById('inv-stock-list');if(!el)return;
+  const admBtn = document.getElementById('btn-inv-clear-all');
+  if (admBtn) admBtn.style.display = (typeof isAdminUser === 'function' && isAdminUser()) ? 'inline-flex' : 'none';
   renderInventoryImportDatalists();
   const catFilter = bmhInventoryFilterValue('inv-stock-cat-filter');
   const storeFilter = bmhInventoryFilterValue('inv-stock-store-filter');
@@ -10217,6 +10407,20 @@ function renderStockList() {
   const totalEl = document.getElementById('inv-total-items');
   if (totalEl) totalEl.textContent = String(rows.reduce(function (s, i) { return s + Math.max(0, Number(i.stock) || 0); }, 0));
 }
+function adminClearAllInventoryStock() {
+  if (typeof isAdminUser !== 'function' || !isAdminUser()) { showToast('Only admin can clear inventory', 'w'); return; }
+  if (!confirm('Delete ALL current inventory rows? Barcode map will reset. This cannot be undone.')) return;
+  INVENTORY.length = 0;
+  if (typeof BCMAP === 'object' && BCMAP) { Object.keys(BCMAP).forEach(function (k) { delete BCMAP[k]; }); }
+  saveInventoryStockToStorage();
+  renderStockList();
+  renderInventoryPurchaseLog();
+  renderInventoryStoreStock();
+  renderInventoryPoAlerts();
+  try { bmhRenderVendorTables(); } catch (e) {}
+  showToast('Inventory cleared', 's');
+}
+window.adminClearAllInventoryStock = adminClearAllInventoryStock;
 function addInventoryVendorPrompt() {
   const name = normalizeInventoryTextValue(prompt('Vendor name') || '');
   if (!name) return;
@@ -11869,6 +12073,158 @@ const INVESTIGATION_CATEGORIES = [
   { id:'rafq', label:'🦴 RA Factor', tests:['R.A. Factor (Quantitative)']},
   { id:'thyroid', label:'🦋 Thyroid', tests:['TSH','T3 (Triiodothyronine)','T4 (Thyroxine)','Free T3','Free T4','Anti-TPO Antibodies']}
 ];
+/** Exact unit + reference interval per investigation label (matches INVESTIGATION_CATEGORIES) — overrides regex in getLabTestMeta */
+const LAB_RANGE_BY_EXACT_NAME = {};
+(function initLabRangeExactNames() {
+  const ROWS = [
+    ['Hb (Haemoglobin)', 'gm/dl', '11-16'],
+    ['T.L.C. (Total Leukocytes Count)', '/cmm', '4000-11000'],
+    ['Neutrophils', '%', '40-70'],
+    ['Lymphocytes', '%', '30-45'],
+    ['Monocytes', '%', '2-5'],
+    ['Eosinophils', '%', '1-6'],
+    ['Basophils', '%', '0-1'],
+    ['Platelets Count', 'Lacs', '1.5-4.5'],
+    ['R.B.C. (Red Blood Cells)', 'Million/cmm', '3.5-5.5'],
+    ['P.C.V. (Packed Cell Volume)', '%', '33-48'],
+    ['M.C.V. (Mean Cell Volume)', 'fl', '80-95'],
+    ['M.C.H. (Mean Cell Haemoglobin)', 'pg', '27-32'],
+    ['M.C.H.C. (Mean Cell Haemoglobin Conc.)', 'gm/dl', '32-36'],
+    ['E.S.R. (Erythrocytes Sedimentation Rate)', 'mm/hr', '0-20'],
+    ['Malarial Parasite', '', ''],
+    ['B.T. (Bleeding Time)', 'min', '1-6'],
+    ['C.T. (Clotting Time)', 'min', '1-10'],
+    ['P.T. (Prothrombin Time)', 'sec', '11-16'],
+    ['P.T.I. (Prothrombin Time Index)', '%', '70-130'],
+    ['I.N.R. (International Normalised Ratio)', '', '0.8-1.2'],
+    ['A.P.T.T (Activated Partial Thrombin Time)', 'sec', '25-40'],
+    ['Fasting Glucose', 'mg/dl', '70-110'],
+    ['Post Prandial Glucose', 'mg/dl', '70-140'],
+    ['Post Lunch Glucose', 'mg/dl', '70-140'],
+    ['Post Dinner Glucose', 'mg/dl', '70-140'],
+    ['Random Glucose', 'mg/dl', '70-160'],
+    ['CPK-MB', 'IU/L', '0-25'],
+    ['CPK-NAC', 'IU/L', '25-200'],
+    ['Amylase', 'IU/L', '25-110'],
+    ['S. Lipase', 'IU/L', '20-300'],
+    ['GAMA G.T.', 'IU/L', '0-35'],
+    ['LDH', 'IU/L', '114-240'],
+    ['TROP-T', '', ''],
+    ['Glycosylated Haemoglobin (HbA1c)', '%', '4.7-6.0'],
+    ['ABG (Average Blood Glucose)', 'mg/dl', '90-150'],
+    ['B. Urea', 'mg/dl', '10-40'],
+    ['S. Creatinine', 'mg/dl', '0.5-1.5'],
+    ['S. Uric Acid', 'mg/dl', '2-7'],
+    ['Spot Microalbuminuria', 'mg/g Creatinine', '0-30'],
+    ['24 hrs. Microalbuminuria', 'mg/24hr', '30-300'],
+    ['Spot Urine Creatinine', 'mg/dl', '25-400'],
+    ['24 hrs. Urine Creatinine', 'mg/24hr', '500-2000'],
+    ['Urine Albumin-Creatinine Ratio', 'mg/mmol', '3-30'],
+    ['24 hrs. Urine Proteins', 'mg/24hr', '0-150'],
+    ['Total Volume (24hr)', 'ml/24hr', ''],
+    ['Total Bilirubin', 'mg/dl', '0.2-1.2'],
+    ['Direct Bilirubin', 'mg/dl', '0.2-1.0'],
+    ['Indirect Bilirubin', 'mg/dl', '0-0.2'],
+    ['Total Proteins', 'gm/dl', '6-8'],
+    ['Albumin', 'gm/dl', '3.8-5.0'],
+    ['Globulin', 'gm/dl', '2.3-3.5'],
+    ['A/G Ratio', '', '0.9-2.0'],
+    ['S.G.O.T. (AST)', 'IU/L', '6-40'],
+    ['S.G.P.T. (ALT)', 'IU/L', '3-35'],
+    ['Alkaline Phosphatase', 'U/L', '39-118'],
+    ['Total Cholesterol', 'mg/dl', '125-200'],
+    ['Triglycerides', 'mg/dl', '60-165'],
+    ['HDL Cholesterol', 'mg/dl', '30-70'],
+    ['LDL', 'mg/dl', '74-130'],
+    ['VLDL', 'mg/dl', '10-32'],
+    ['Cholesterol/HDL Ratio', '', '3-5'],
+    ['LDL/HDL Ratio', '', '1.5-3.5'],
+    ['Non-HDL Cholesterol', 'mg/dl', '0-160'],
+    ['Total Lipids', 'mg/dl', '400-700'],
+    ['Sodium (Na+)', 'mmol/L', '135-155'],
+    ['Potassium (K+)', 'mmol/L', '3.5-5.5'],
+    ['Chloride (Cl-)', 'mmol/L', '98-107'],
+    ['Calcium (Ca++)', 'mg%', '8.4-11.5'],
+    ['Phosphorous', 'mg%', '2.5-4.8'],
+    ['Magnesium (Mg)', 'mmol/L', '1.7-2.2'],
+    ['Lithium (Li)', 'mEq/L', '0.5-1.0'],
+    ['Blood Group (ABO)', '', ''],
+    ['Rh. Anti-D', '', ''],
+    ['H.I.V. I & II', '', 'Non-Reactive'],
+    ['HBsAg', '', 'Non-Reactive'],
+    ['H.C.V. (Tridot)', '', 'Non-Reactive'],
+    ['V.D.R.L.', '', 'Non-Reactive'],
+    ['R.A. Factor', '', 'Negative'],
+    ['A.S.O.', '', 'Negative'],
+    ['C. Reactive Proteins', '', 'Negative'],
+    ['Direct Coombs Test', '', 'Negative'],
+    ['Indirect Coombs Test', '', 'Negative'],
+    ['Malarial Antigens - P. Falciparum', '', 'Negative'],
+    ['Malarial Antigens - P. Vivax', '', 'Negative'],
+    ['Typhi Dot IgG', '', 'Negative'],
+    ['Typhi Dot IgM', '', 'Negative'],
+    ['Widal', '', 'Negative'],
+    ['Urine Colour', '', 'Light Yellow'],
+    ['Urine Appearance', '', 'Clear'],
+    ['Urine Proteins', '', 'Nil'],
+    ['Urine Sugar', '', 'Nil'],
+    ['Urine pH', '', '6.5'],
+    ['Specific Gravity', '', '1.005-1.030'],
+    ['Acetone/Ketones', '', 'Negative'],
+    ['Bile Salt', '', 'Negative'],
+    ['Bile Pigment', '', 'Negative'],
+    ['Urine Pus Cells', '', 'Nil'],
+    ['Urine RBC\'s', '', 'Nil'],
+    ['Epithelial Cells', '', 'Nil'],
+    ['Calcium Oxalate Crystals', '', 'Nil'],
+    ['Triple Phosphate Crystals', '', 'Nil'],
+    ['Uric Acid Crystals', '', 'Nil'],
+    ['Amorphous Deposits', '', 'Nil'],
+    ['Budding Yeast', '', 'Nil'],
+    ['Fungal Hyphae', '', 'Nil'],
+    ['Mucus Fibers', '', 'Nil'],
+    ['Urine Bacteria', '', 'Nil'],
+    ['Stool Colour', '', 'Brownish'],
+    ['Stool Consistency', '', ''],
+    ['Stool Blood', '', 'Nil'],
+    ['Stool Mucous', '', 'Nil'],
+    ['Stool Parasite', '', 'Nil'],
+    ['Stool pH', '', '6.5'],
+    ['Occult Blood', '', 'Negative'],
+    ['Veg. Form of Protozoa', '', 'Nil'],
+    ['Cyst of Protozoa', '', 'Nil'],
+    ['Ova/Eggs of Helminths', '', 'Nil'],
+    ['Stool Pus Cells', '', 'Nil'],
+    ['Stool Mucus Fibers', '', 'Nil'],
+    ['Fat Cells', '', 'Nil'],
+    ['Hanging Drop (Vibrio)', '', 'Negative'],
+    ['Human Chorionic Gonadotropin (HCG)', '', ''],
+    ['Semen Volume', 'ml', '>=2.5'],
+    ['Semen Colour', '', 'Creamy White'],
+    ['Semen Reaction', '', 'Alkaline'],
+    ['Semen Viscosity', '', ''],
+    ['Liquefaction Time', 'min', '0-30'],
+    ['Semen Pus Cells', '', 'Nil'],
+    ['Semen RBC\'s', '', 'Nil'],
+    ['Spermatogonia', '', 'Nil'],
+    ['Total Sperm Count', 'Million/ml', '20-200'],
+    ['Normal Morphology', '%', '>30'],
+    ['Active Motile (1st Hr)', '%', '>50'],
+    ['Active Motile (2nd Hr)', '%', '>50'],
+    ['Active Motile (3rd Hr)', '%', '>50'],
+    ['Active Motile (4th Hr)', '%', '>50'],
+    ['Sluggish Motility (1st Hr)', '%', ''],
+    ['Non-Motile (1st Hr)', '%', ''],
+    ['R.A. Factor (Quantitative)', 'IU/ml', '0-20'],
+    ['TSH', 'mIU/L', '0.4-4.5'],
+    ['T3 (Triiodothyronine)', 'ng/ml', '0.8-2.0'],
+    ['T4 (Thyroxine)', 'µg/dl', '5-12'],
+    ['Free T3', 'pg/ml', '2.3-4.2'],
+    ['Free T4', 'ng/dl', '0.89-1.76'],
+    ['Anti-TPO Antibodies', 'IU/ml', '0-35']
+  ];
+  ROWS.forEach(function (r) { LAB_RANGE_BY_EXACT_NAME[r[0]] = { unit: r[1], range: r[2] }; });
+})();
 const RX_FREQ_OPTIONS = ['Half-hourly','Hourly','Every 2 hours','Every 3 hours','Every 4 hours','Six times daily (6x/day)','Four times daily (QID)','Three times daily (TDS)','Twice daily (BD)','Once daily (OD)','At bedtime (HS)','Once weekly','As needed (PRN)'];
 const RX_DURATION_OPTIONS = ['½ day','1 day','2 days','3 days','4 days','5 days','6 days','7 days','10 days','13 days','1 week','2 weeks','3 weeks','4 weeks','6 weeks','1 month','2 months','3 months','4 months','5 months','6 months','12 months','Ongoing'];
 const RX_TYPE_OPTIONS = ['Eye Drop','Tablet','Capsule','Ointment','Cream','Gel','Syrup','Injection','Pessary','Lotion','Spray','Other'];
@@ -17015,6 +17371,7 @@ function getAllDxEntriesForFilter() {
 function filterDx(inp) {
   const val = inp.value.toLowerCase();
   const isObg = String(inp?.dataset?.dxDept || '').toLowerCase() === 'obg' || inp?.closest?.('#obg-dx-list');
+  if (!val || val.length < 1) { hideDxDropdown(); return; }
   if(val.length < 2 && !isObg) { hideDxDropdown(); return; }
   const pool = getAllDxEntriesForFilter();
   const matches = pool.filter(function (d) {
@@ -17084,7 +17441,7 @@ function addDxRow() {
   const isObg = list.id === 'obg-dx-list';
   const d = document.createElement('div');
   d.style.cssText='display:flex;gap:6px;align-items:center;margin-top:5px';
-  d.innerHTML=`<input type="text" class="dx-inp" ${isObg ? 'data-dx-dept="obg"' : ''} placeholder="${isObg ? 'Type diagnosis…' : 'ICD-10 search or type free-text diagnosis…'}" oninput="filterDx(this)" onfocus="showDxDropdown(this);wireDxInputFocus(this)" style="flex:1" autocomplete="off">
+  d.innerHTML=`<input type="text" class="dx-inp" ${isObg ? 'data-dx-dept="obg"' : ''} placeholder="${isObg ? 'ICD-10 code or diagnosis — type to search' : 'ICD-10 search or type free-text diagnosis…'}" oninput="filterDx(this)" onfocus="showDxDropdown(this);wireDxInputFocus(this)" style="flex:1" autocomplete="off">
     <button type="button" class="btn btn-xs btn-gray" onclick="this.closest('div').remove()">✕</button>`;
   list.appendChild(d);
   const inp = d.querySelector('.dx-inp');
@@ -18361,6 +18718,7 @@ function getLabTestMeta(name) {
     { re:/anti.*tpo|tpo antibod/, group:'thyroid', unit:'IU/ml', range:'0-35' }
   ];
   const hit = defs.find(function (d) { return d.re.test(low); });
+  const exact = LAB_RANGE_BY_EXACT_NAME[n];
   return Object.assign({
     name: n,
     group:'custom',
@@ -18370,7 +18728,7 @@ function getLabTestMeta(name) {
     purpose:'This investigation should be interpreted in the clinical context of the patient.',
     normalNote:'Values within the printed reference interval are generally reassuring, but must be interpreted with symptoms and examination findings.',
     abnormalNote:'Abnormal results do not automatically indicate a serious problem and may need clinical correlation, repeat testing, or trend comparison.'
-  }, hit || {});
+  }, hit || {}, exact || {});
 }
 function formatLabAgeSex(pt) {
   return [pt?.age ? String(pt.age) + 'Y' : '', pt?.sex || ''].filter(Boolean).join(' / ') || '—';
@@ -21815,7 +22173,7 @@ function renderCollectionDashboard() {
   setEl('rc-inv-total', fmt(invTotal));
   setEl('rc-proc-total', fmt(procTotal));
 
-  // Dept breakdown
+  // Dept breakdown — OPD / Investigation / Procedure & surgery shown inside each department (sums to dept total)
   const deptEl = document.getElementById('rc-dept-collection');
   if(deptEl) {
     const depts = ['ophtho','obg','psych','skin'];
@@ -21825,10 +22183,32 @@ function renderCollectionDashboard() {
       const dc = DEPT_COLORS[dept];
       const did = 'dept-txn-'+dept;
       if(!dTxn.length) return '';
+      const sumCat = function (want) {
+        return dTxn.filter(function (t) {
+          return inferChargeCategoryFromService(t.service || t.for || t.desc || '') === want;
+        }).reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
+      };
+      const opdD = sumCat('consultation');
+      const invD = sumCat('diagnostic');
+      const sxD = sumCat('surgery');
+      const otherD = dTxn.filter(function (t) {
+        const c = inferChargeCategoryFromService(t.service || t.for || t.desc || '');
+        return c !== 'consultation' && c !== 'diagnostic' && c !== 'surgery';
+      }).reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
+      const chk = Math.abs(dTotal - (opdD + invD + sxD + otherD)) < 0.5;
       return `<div style="border:1.5px solid ${dc.border};border-radius:var(--r);overflow:hidden;background:#fff">
         <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:${dc.bg};cursor:pointer" onclick="toggleDeptDetail('${did}')">
           <div style="flex:1">
             <div style="font-size:13px;font-weight:800;color:${dc.text}">${dc.label}</div>
+            <div style="font-size:10.5px;color:var(--g1);margin-top:4px;display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center">
+              <span style="cursor:pointer" onclick="event.stopPropagation();openRcCollectionDetailModal('${dept}','opd')">OPD <strong style="color:#166534">${fmt(opdD)}</strong></span>
+              <span style="opacity:.35">·</span>
+              <span style="cursor:pointer" onclick="event.stopPropagation();openRcCollectionDetailModal('${dept}','inv')">Inv <strong style="color:#1e40af">${fmt(invD)}</strong></span>
+              <span style="opacity:.35">·</span>
+              <span style="cursor:pointer" onclick="event.stopPropagation();openRcCollectionDetailModal('${dept}','sx')">Sx/Proc <strong style="color:#6b21a8">${fmt(sxD)}</strong></span>
+              ${otherD > 0 ? `<span style="opacity:.35">·</span><span style="cursor:pointer" onclick="event.stopPropagation();openRcCollectionDetailModal('${dept}','other')">Other <strong>${fmt(otherD)}</strong></span>` : ''}
+            </div>
+            ${!chk ? '<div style="font-size:9px;color:var(--orange);margin-top:4px">Note: category split may not match total if service text is unclear.</div>' : ''}
             <div style="font-size:10.5px;color:var(--g1);margin-top:2px">${dTxn.length} transaction${dTxn.length>1?'s':''} today</div>
           </div>
           <div style="text-align:right">
@@ -21868,6 +22248,45 @@ function renderCollectionDashboard() {
   }
 }
 
+function openRcCollectionDetailModal(dept, catKey) {
+  const today = new Date();
+  const todayKeyLocal = [
+    today.getFullYear(),
+    String(today.getMonth() + 1).padStart(2, '0'),
+    String(today.getDate()).padStart(2, '0')
+  ].join('-');
+  const collected = TRANSACTIONS.filter(function (t) {
+    return (t.centre || 'CHD') === getEffectiveCentre() && txnIsoDate(t) === todayKeyLocal && t.collected;
+  }).filter(function (t) { return t.dept === dept; });
+  let list = [];
+  if (catKey === 'other') {
+    list = collected.filter(function (t) {
+      const c = inferChargeCategoryFromService(t.service || t.for || t.desc || '');
+      return c !== 'consultation' && c !== 'diagnostic' && c !== 'surgery';
+    });
+  } else {
+    const want = catKey === 'opd' ? 'consultation' : catKey === 'inv' ? 'diagnostic' : catKey === 'sx' ? 'surgery' : '';
+    list = collected.filter(function (t) {
+      return inferChargeCategoryFromService(t.service || t.for || t.desc || '') === want;
+    });
+  }
+  const fmt = function (n) { return '₹' + n.toLocaleString('en-IN'); };
+  const dc = DEPT_COLORS[dept];
+  const title = (dc?.label || dept) + ' — ' + ({ opd: 'OPD / consultations', inv: 'Investigations & diagnostics', sx: 'Procedures & surgery', other: 'Other' }[catKey] || catKey);
+  const bodyEl = document.getElementById('m-rc-collection-detail-body');
+  const titleEl = document.getElementById('m-rc-collection-detail-title');
+  if (titleEl) titleEl.textContent = title;
+  if (!bodyEl) return;
+  bodyEl.innerHTML = list.length ? list.map(function (t) {
+    return '<div style="display:flex;align-items:center;gap:7px;padding:7px 8px;border-bottom:1px solid var(--g5);font-size:12px">'
+      + '<div style="flex:1"><div style="font-weight:800">' + escapeHtmlConsent(t.patient || '') + '</div><div style="font-size:10.5px;color:var(--g1)">' + escapeHtmlConsent(t.service || '—') + ' · ' + escapeHtmlConsent(t.time || '—') + '</div></div>'
+      + '<span class="badge bd-gray" style="font-size:9px">' + escapeHtmlConsent(t.mode || '—') + '</span>'
+      + '<div style="font-weight:900;color:#1a8c3c">' + fmt(getNetTransactionAmount(t)) + '</div>'
+      + '</div>';
+  }).join('') : '<div style="padding:14px;color:var(--g1);font-size:12px">No transactions in this category for today.</div>';
+  openM('m-rc-collection-detail');
+}
+window.openRcCollectionDetailModal = openRcCollectionDetailModal;
 function toggleDeptDetail(id) {
   const el = document.getElementById(id);
   const ch = document.getElementById('chev-'+id);

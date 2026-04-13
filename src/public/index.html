@@ -2459,7 +2459,7 @@
               <div class="plan-panel-head"><div class="plan-panel-title">Diagnosis</div><button class="btn btn-xs btn-outline" onclick="addDxRow()">+ Add</button></div>
               <div id="obg-dx-list">
                 <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">
-                  <input type="text" class="dx-inp" placeholder="Type diagnosis…" style="flex:1;font-size:12px" autocomplete="off" data-dx-dept="obg" oninput="filterDx(this)" onfocus="showDxDropdown(this);wireDxInputFocus(this)">
+                  <input type="text" class="dx-inp" placeholder="ICD-10 code or diagnosis — type to search" style="flex:1;font-size:12px" autocomplete="off" data-dx-dept="obg" oninput="filterDx(this)" onfocus="showDxDropdown(this);wireDxInputFocus(this)">
                   <button class="btn btn-xs btn-gray" onclick="this.closest('div').remove()">✕</button>
                 </div>
               </div>
@@ -3451,7 +3451,10 @@
           <div class="form-group" style="margin:0"><label class="fl">Filter by category</label><select id="inv-stock-cat-filter" onchange="renderStockList()"></select></div>
           <div class="form-group" style="margin:0"><label class="fl">Filter by store</label><select id="inv-stock-store-filter" onchange="renderStockList()"></select></div>
         </div>
-        <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:10px"><button type="button" class="btn btn-outline btn-sm" onclick="bmhPrintInventorySection('Current Stock', '#inv-stock-list')">🖨️ Print current stock</button></div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
+          <button type="button" class="btn btn-outline btn-sm" onclick="bmhPrintInventorySection('Current Stock', '#inv-stock-list')">🖨️ Print current stock</button>
+          <button type="button" class="btn btn-xs btn-gray" id="btn-inv-clear-all" onclick="adminClearAllInventoryStock()" style="display:none">🗑️ Clear all inventory (admin)</button>
+        </div>
         <div id="inv-stock-list"></div>
       </div>
       <div class="tab-content" id="inv-expiry">
@@ -4915,11 +4918,18 @@
 <div id="ipd-monitor-body" style="max-height:72vh;overflow:auto;padding-right:4px"></div>
 </div></div>
 
+<div class="modal-ov" id="m-rc-collection-detail">
+<div class="modal" style="max-width:720px">
+<div class="modal-hd"><div class="modal-title" id="m-rc-collection-detail-title">Collection detail</div><button class="modal-close" onclick="closeM('m-rc-collection-detail')">✕</button></div>
+<div id="m-rc-collection-detail-body" style="max-height:72vh;overflow:auto;padding:4px 2px"></div>
+</div></div>
+
 <div class="modal-ov" id="m-certificates">
 <div class="modal" style="max-width:980px">
 <div class="modal-hd"><div class="modal-title">Department Certificates</div><button class="modal-close" onclick="closeM('m-certificates')">✕</button></div>
 <div class="fg" style="grid-template-columns:260px 1fr;gap:12px">
   <div class="card" style="padding:12px">
+    <div class="form-group"><label class="fl">Category</label><select id="cert-template-category-filter" onchange="refreshCertificateTemplateList(window._currentCertificateDept || certificateDeptKeyFromUi())"><option value="all">All categories</option><option value="OPD">OPD</option><option value="OT Notes">OT Notes</option><option value="Discharge">Discharge</option><option value="General">General</option></select></div>
     <div class="form-group"><label class="fl">Certificate</label><select id="cert-template-sel" onchange="applyCertificateTemplate(this.value)"><option value="">— Select certificate —</option></select></div>
     <div class="form-group"><label class="fl">Template name</label><input type="text" id="cert-template-name" placeholder="Certificate template name"></div>
     <div id="cert-template-list" style="display:flex;flex-direction:column;gap:6px;max-height:360px;overflow:auto"></div>
@@ -4929,9 +4939,11 @@
       <div class="form-group"><label class="fl">Patient</label><input type="text" id="cert-pt-display" readonly></div>
       <div class="form-group"><label class="fl">Doctor</label><input type="text" id="cert-doctor-display" readonly></div>
     </div>
+    <div class="form-group"><label class="fl">Category for new template</label><select id="cert-template-cat"><option value="OPD">OPD</option><option value="OT Notes">OT Notes</option><option value="Discharge">Discharge</option><option value="General">General</option></select></div>
     <div class="form-group"><label class="fl">Certificate heading</label><input type="text" id="cert-title"></div>
     <div class="form-group"><label class="fl">Certificate text</label><textarea id="cert-body" style="min-height:360px"></textarea></div>
     <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+      <button type="button" class="btn btn-xs btn-outline" onclick="promptAddCertificateCategory()">＋ Category</button>
       <button type="button" class="btn btn-outline" onclick="saveCurrentCertificateTemplate()">➕ Add To Templates</button>
       <button type="button" class="btn btn-gold" onclick="printCurrentCertificate()">🖨️ Print</button>
     </div>
