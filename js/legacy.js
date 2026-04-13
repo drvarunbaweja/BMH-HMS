@@ -5444,6 +5444,8 @@ function populateObgForm(visit) {
   populateObgPatientFromCurrent();
   renderObgPrimaryComplaintOptions();
   const data = visit || window.CURRENT_PATIENT?.lastVisit || {};
+  window.OBG_COMPLAINT_DETAILS = Array.isArray(data?.mainComplaintDetails) ? JSON.parse(JSON.stringify(data.mainComplaintDetails)) : [];
+  renderObgComplaintDetails();
   if(!data || typeof data !== 'object') {
     restoreProcedureDoneState('obg', null);
     initObgPregnancyStateFromVisit({});
@@ -5485,8 +5487,6 @@ function populateObgForm(visit) {
   const infChk = document.getElementById('obg-track-infertility'); if(infChk) infChk.checked = !!data.workflowInfertility;
   ['obg-anc-booking','obg-anc-warning','obg-anc-highrisk','obg-anc-fetal','obg-gyn-aub','obg-gyn-discharge','obg-gyn-pain','obg-gyn-menopause','obg-inf-ovulatory','obg-inf-tubal','obg-inf-endo','obg-inf-male','obg-redflag-bleeding','obg-redflag-leak','obg-redflag-headache','obg-redflag-pain','obg-redflag-fever','obg-redflag-decreasedfm','obg-redflag-swelling','obg-redflag-convulsions','obg-hr-prevlscs','obg-hr-gdm','obg-hr-pih','obg-hr-iugr','obg-hr-multiple','obg-hr-rhneg','obg-hr-placenta','obg-hr-anemia','obg-fetal-growthlag','obg-fetal-malpresentation','obg-fetal-lowliquor','obg-fetal-postdates','obg-aub-clots','obg-aub-intermenstrual','obg-aub-postcoital','obg-aub-anemia','obg-vag-pruritus','obg-vag-foul','obg-vag-dyspareunia','obg-vag-pidrisk','obg-pain-cyclical','obg-pain-severe','obg-pain-bowel','obg-pain-infertility','obg-inf-coital','obg-inf-pastpid','obg-inf-priorsurgery','obg-inf-galactorrhoea','obg-inf-hirsutism','obg-inf-maleabn','obg-inf-lowreserve','obg-inf-rpl']
     .forEach(id => { const el = document.getElementById(id); if(el && data[id] != null) el.checked = !!data[id]; });
-  const labs = Array.isArray(data.investigationChecklist) ? data.investigationChecklist : [];
-  document.querySelectorAll('.obg-lab').forEach(box => { box.checked = labs.includes(box.value); });
   initObgPregnancyStateFromVisit(data);
   toggleObgWorkflow();
   toggleObgCSectionIndication();
@@ -13248,7 +13248,6 @@ window.addEventListener('DOMContentLoaded', function() {
       if(ri) ri.checked = true;
     }
   } catch(e) {}
-  document.querySelectorAll('.obg-lab').forEach(box => box.addEventListener('change', renderObgInvestigationSummary));
   ['obg-risk','obg-main-complaint','obg-systemic','obg-bp','obg-urine-protein','obg-fetal-movement','obg-warning','obg-cycle','obg-discharge','obg-pelvic-pain','obg-clinical-impression','obg-infertility-type','obg-ovulation','obg-tubal-risk','obg-semen']
     .forEach(id => document.getElementById(id)?.addEventListener('change', updateObgComputedFields));
   ['obg-anc-booking','obg-anc-warning','obg-anc-highrisk','obg-anc-fetal','obg-gyn-aub','obg-gyn-discharge','obg-gyn-pain','obg-gyn-menopause','obg-inf-ovulatory','obg-inf-tubal','obg-inf-endo','obg-inf-male','obg-redflag-bleeding','obg-redflag-leak','obg-redflag-headache','obg-redflag-pain','obg-redflag-fever','obg-redflag-decreasedfm','obg-redflag-swelling','obg-redflag-convulsions','obg-hr-prevlscs','obg-hr-gdm','obg-hr-pih','obg-hr-iugr','obg-hr-multiple','obg-hr-rhneg','obg-hr-placenta','obg-hr-anemia','obg-fetal-growthlag','obg-fetal-malpresentation','obg-fetal-lowliquor','obg-fetal-postdates','obg-aub-clots','obg-aub-intermenstrual','obg-aub-postcoital','obg-aub-anemia','obg-vag-pruritus','obg-vag-foul','obg-vag-dyspareunia','obg-vag-pidrisk','obg-pain-cyclical','obg-pain-severe','obg-pain-bowel','obg-pain-infertility','obg-inf-coital','obg-inf-pastpid','obg-inf-priorsurgery','obg-inf-galactorrhoea','obg-inf-hirsutism','obg-inf-maleabn','obg-inf-lowreserve','obg-inf-rpl']
@@ -19714,6 +19713,44 @@ function saveObgPrimaryComplaintFromField() {
     renderObgPrimaryComplaintOptions();
   }
 }
+function renderObgComplaintDetails() {
+  const host = document.getElementById('obg-primary-complaint-details');
+  if (!host) return;
+  const rows = Array.isArray(window.OBG_COMPLAINT_DETAILS) ? window.OBG_COMPLAINT_DETAILS.filter(Boolean) : [];
+  if (!rows.length) {
+    host.innerHTML = '<div style="font-size:11px;color:var(--g1);font-style:italic;background:var(--g6);border-radius:8px;padding:7px 9px">Question-specific complaint details will appear here.</div>';
+    return;
+  }
+  host.innerHTML = rows.map(function (row, idx) {
+    const label = escapeHtmlConsent(row.label || 'Detail');
+    const value = escapeHtmlConsent(row.value || '');
+    return '<div style="display:flex;align-items:center;gap:7px;background:#f7faff;border:1px solid rgba(26,60,110,.14);border-radius:8px;padding:7px 9px">'
+      + '<div style="min-width:110px;font-size:10px;font-weight:900;color:var(--blue);text-transform:uppercase">' + label + '</div>'
+      + '<input type="text" value="' + value + '" style="flex:1;font-size:12px;border:1px solid var(--g4);border-radius:6px;padding:5px 7px" onchange="updateObgComplaintDetailValue(' + idx + ', this.value)">'
+      + '<button type="button" class="btn btn-xs btn-gray" onclick="removeObgComplaintDetail(' + idx + ')">✕</button>'
+      + '</div>';
+  }).join('');
+}
+function setObgComplaintDetail(label, value) {
+  const cleanLabel = toDisplayTitleCase(label || '');
+  const cleanValue = toDisplayTitleCase(value || '');
+  if (!cleanLabel || !cleanValue) return;
+  if (!Array.isArray(window.OBG_COMPLAINT_DETAILS)) window.OBG_COMPLAINT_DETAILS = [];
+  const existing = window.OBG_COMPLAINT_DETAILS.find(function (row) { return String(row.label || '').trim() === cleanLabel; });
+  if (existing) existing.value = cleanValue;
+  else window.OBG_COMPLAINT_DETAILS.push({ label: cleanLabel, value: cleanValue });
+  renderObgComplaintDetails();
+}
+function updateObgComplaintDetailValue(idx, value) {
+  if (!Array.isArray(window.OBG_COMPLAINT_DETAILS) || !window.OBG_COMPLAINT_DETAILS[idx]) return;
+  window.OBG_COMPLAINT_DETAILS[idx].value = toDisplayTitleCase(value || '');
+  renderObgComplaintDetails();
+}
+function removeObgComplaintDetail(idx) {
+  if (!Array.isArray(window.OBG_COMPLAINT_DETAILS)) return;
+  window.OBG_COMPLAINT_DETAILS.splice(idx, 1);
+  renderObgComplaintDetails();
+}
 function addObgPrimaryComplaintOption() {
   const raw = window.prompt('Add primary complaint');
   if (raw === null) return;
@@ -19729,16 +19766,8 @@ function addObgPrimaryComplaintOption() {
   updateObgComputedFields && updateObgComputedFields();
   showToast('Primary complaint saved ✓', 's');
 }
-function applyObgPrimaryComplaintText(text) {
-  const input = document.getElementById('obg-main-complaint');
-  if (!input) return;
-  const current = String(input.value || '').trim();
-  const next = toDisplayTitleCase(text || '');
-  if (!next) return;
-  const parts = current ? current.split(/\s*;\s*/).filter(Boolean) : [];
-  if (!parts.includes(next)) parts.push(next);
-  input.value = parts.join('; ');
-  saveObgPrimaryComplaintFromField();
+function applyObgPrimaryComplaintText(text, topic) {
+  setObgComplaintDetail(topic || 'Detail', text);
   updateObgComputedFields && updateObgComputedFields();
 }
 function renderObgRecapQuestionOptions(topic) {
@@ -19753,7 +19782,8 @@ function renderObgRecapQuestionOptions(topic) {
     + '<div style="display:flex;gap:6px;flex-wrap:wrap">'
     + options.map(function (item) {
       const safe = String(item).replace(/'/g, "\\'");
-      return '<button type="button" class="btn btn-xs btn-outline" style="background:#fff;border-color:rgba(212,160,23,.35);color:#8a4200" onclick="applyObgPrimaryComplaintText(\'' + safe + '\')">' + escapeHtmlConsent(item) + '</button>';
+      const safeTopic = String(topic || '').replace(/'/g, "\\'");
+      return '<button type="button" class="btn btn-xs btn-outline" style="background:#fff;border-color:rgba(212,160,23,.35);color:#8a4200" onclick="applyObgPrimaryComplaintText(\'' + safe + '\', \'' + safeTopic + '\')">' + escapeHtmlConsent(item) + '</button>';
     }).join('')
     + '<button type="button" class="btn btn-xs btn-gold" onclick="addObgRecapQuestionOption(\'' + String(topic).replace(/'/g, "\\'") + '\')">+ Add More</button></div>';
 }
@@ -19765,7 +19795,7 @@ function addObgRecapQuestionOption(topic) {
   if (!window.OBG_RECAP_QUESTION_MAP[topic]) window.OBG_RECAP_QUESTION_MAP[topic] = [];
   if (!window.OBG_RECAP_QUESTION_MAP[topic].includes(val)) window.OBG_RECAP_QUESTION_MAP[topic].push(val);
   saveObgRecapQuestionMap();
-  applyObgPrimaryComplaintText(val);
+  applyObgPrimaryComplaintText(val, topic);
   renderObgRecapQuestionOptions(topic);
 }
 function computePatientInitials(name) {
@@ -26388,6 +26418,7 @@ function saveVisit(dept, opts) {
     visit.bloodGroup = obgVal('obg-blood-grp');
     visit.riskTag = obgVal('obg-risk');
     visit.mainComplaint = obgVal('obg-main-complaint');
+    visit.mainComplaintDetails = JSON.parse(JSON.stringify(window.OBG_COMPLAINT_DETAILS || []));
     visit.systemicDisease = obgVal('obg-systemic');
     visit.lastDeliveryDate = obgVal('obg-last-delivery');
     visit.lastDeliveryMode = obgVal('obg-last-mode');
@@ -26426,7 +26457,6 @@ function saveVisit(dept, opts) {
     visit.visitDate = obgVal('obg-visit-date');
     visit.nextReview = obgVal('obg-next-review');
     visit.followupPlan = obgVal('obg-followup-plan');
-    visit.investigationChecklist = [...document.querySelectorAll('.obg-lab:checked')].map(x => x.value);
     OBG_VITAL_FIELD_IDS.forEach(function (id) { visit[id] = obgVal(id); });
     OBG_OBS_FIELD_IDS.forEach(id => { visit[id] = obgVal(id); });
     visit.obgObsComplications = [...document.querySelectorAll('.obg-obs-complication:checked')].map(x => x.value);

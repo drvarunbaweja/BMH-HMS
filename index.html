@@ -2166,7 +2166,7 @@
               <div class="form-group"><label class="fl">EDD</label><input type="text" id="obg-edd-inp" readonly style="background:var(--green-lt);color:#1a8c3c;font-weight:800"></div>
               <div class="form-group"><label class="fl">Blood Group</label><select id="obg-blood-grp"><option value="">— Select —</option><option>O+ve</option><option>A+ve</option><option>B+ve</option><option>AB+ve</option><option>O-ve</option><option>A-ve</option><option>B-ve</option><option>AB-ve</option></select></div>
               <div class="form-group"><label class="fl">High-Risk Tag</label><select id="obg-risk"><option value="">Low risk</option><option>GDM</option><option>Hypertensive disorder</option><option>FGR / SGA</option><option>Previous LSCS</option><option>Multiple pregnancy</option><option>Rh negative</option><option>Placenta previa</option><option>Preterm risk</option></select></div>
-          <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">Primary Complaint <button type="button" onclick="addObgPrimaryComplaintOption()" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></label><input type="text" id="obg-main-complaint" list="obg-main-complaint-list" placeholder="Type or select complaint" onchange="updateObgComputedFields()" onblur="saveObgPrimaryComplaintFromField()"><datalist id="obg-main-complaint-list"><option value="Routine Review"></option><option value="Amenorrhoea / Positive UPT"></option><option value="ANC Routine Review"></option><option value="Bleeding PV"></option><option value="Abdominal Pain"></option><option value="Decreased Fetal Movements"></option><option value="Infertility Evaluation"></option><option value="Irregular Cycles"></option><option value="White Discharge"></option><option value="Pelvic Pain"></option></datalist></div>
+          <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">Primary Complaint <button type="button" onclick="addObgPrimaryComplaintOption()" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></label><input type="text" id="obg-main-complaint" list="obg-main-complaint-list" placeholder="Type or select complaint" onchange="updateObgComputedFields()" onblur="saveObgPrimaryComplaintFromField()"><datalist id="obg-main-complaint-list"><option value="Routine Review"></option><option value="Amenorrhoea / Positive UPT"></option><option value="ANC Routine Review"></option><option value="Bleeding PV"></option><option value="Abdominal Pain"></option><option value="Decreased Fetal Movements"></option><option value="Infertility Evaluation"></option><option value="Irregular Cycles"></option><option value="White Discharge"></option><option value="Pelvic Pain"></option></datalist><div id="obg-primary-complaint-details" style="display:flex;flex-direction:column;gap:6px;margin-top:8px"></div></div>
               <div class="form-group"><label class="fl">Systemic Disease</label><select id="obg-systemic"><option value="">None declared</option><option>Diabetes mellitus</option><option>Hypertension</option><option>Thyroid disorder</option><option>Epilepsy</option><option>Cardiac disease</option><option>Asthma</option><option>Anaemia</option><option>TB / chronic infection</option><option>Autoimmune disorder</option></select></div>
             </div>
 
@@ -2403,40 +2403,9 @@
 
           <!-- INVESTIGATIONS -->
           <div class="tab-content" id="obg-investigations">
-            <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px">
-              <div style="background:var(--g6);border-radius:var(--rsm);padding:10px">
-                <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:8px">Booking / Routine Labs</div>
-                <div style="display:grid;gap:7px;font-size:12px">
-                  <label><input type="checkbox" class="obg-lab" value="CBC / Hb"> CBC / Hb</label>
-                  <label><input type="checkbox" class="obg-lab" value="Blood group & Rh"> Blood group & Rh</label>
-                  <label><input type="checkbox" class="obg-lab" value="Urine routine / culture"> Urine routine / culture</label>
-                  <label><input type="checkbox" class="obg-lab" value="Blood sugar / GTT"> Blood sugar / GTT</label>
-                  <label><input type="checkbox" class="obg-lab" value="TSH"> TSH</label>
-                  <label><input type="checkbox" class="obg-lab" value="HIV / HBsAg / VDRL"> HIV / HBsAg / VDRL</label>
-                </div>
-              </div>
-              <div style="background:var(--g6);border-radius:var(--rsm);padding:10px">
-                <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:8px">Imaging / Fetal Surveillance</div>
-                <div style="display:grid;gap:7px;font-size:12px">
-                  <label><input type="checkbox" class="obg-lab" value="Dating scan"> Dating scan</label>
-                  <label><input type="checkbox" class="obg-lab" value="NT scan"> NT scan</label>
-                  <label><input type="checkbox" class="obg-lab" value="Anomaly scan"> Anomaly scan</label>
-                  <label><input type="checkbox" class="obg-lab" value="Growth scan"> Growth scan</label>
-                  <label><input type="checkbox" class="obg-lab" value="NST / CTG"> NST / CTG</label>
-                  <label><input type="checkbox" class="obg-lab" value="BPP / Doppler"> BPP / Doppler</label>
-                </div>
-              </div>
-              <div style="background:var(--g6);border-radius:var(--rsm);padding:10px">
-                <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:8px">Infertility / Gynae Workup</div>
-                <div style="display:grid;gap:7px;font-size:12px">
-                  <label><input type="checkbox" class="obg-lab" value="AMH"> AMH</label>
-                  <label><input type="checkbox" class="obg-lab" value="FSH / LH / E2"> FSH / LH / E2</label>
-                  <label><input type="checkbox" class="obg-lab" value="Serum prolactin"> Serum prolactin</label>
-                  <label><input type="checkbox" class="obg-lab" value="TVS pelvis"> TVS pelvis</label>
-                  <label><input type="checkbox" class="obg-lab" value="HSG / SSG"> HSG / SSG</label>
-                  <label><input type="checkbox" class="obg-lab" value="Semen analysis"> Semen analysis</label>
-                </div>
-              </div>
+            <div style="background:var(--g6);border-radius:var(--rsm);padding:12px;margin-bottom:10px">
+              <div style="font-size:12px;font-weight:900;color:var(--bmh-blue);margin-bottom:4px">Investigations from Charges</div>
+              <div style="font-size:11px;color:var(--g1)">Use the order button below. All available investigations come live from `Settings -> Charges`, so any new investigation added there becomes available here automatically. Templates remain available in the order window.</div>
             </div>
           <div style="margin-top:10px;background:#fff8e6;border:1.5px solid rgba(212,160,23,.35);border-radius:10px;padding:10px">
             <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
