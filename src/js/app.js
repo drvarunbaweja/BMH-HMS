@@ -246,7 +246,7 @@ watchAuthState(
       if (user.role === 'lab') defer('listenLabOrders', 900)
     }, 300)
 
-    // Navigate to role's home page
+    // Navigate to role home unless the URL hash has a saved in-app route (same tab after F5).
     const homePages = {
       admin:       'pg-dashboard',
       reception:   'pg-reception',
@@ -256,8 +256,14 @@ watchAuthState(
       tpa:         'pg-tpa',
       inventory:   'pg-inventory',
     }
-    if (typeof window.nav === 'function') {
-      window.nav(homePages[user.role] || 'pg-reception')
+    const homeId = homePages[user.role] || 'pg-reception'
+    const goHome = () => {
+      if (typeof window.nav === 'function') window.nav(homeId)
+    }
+    if (typeof window.tryScheduleRouteRestoreFromHash === 'function') {
+      window.tryScheduleRouteRestoreFromHash(goHome)
+    } else {
+      goHome()
     }
   },
 

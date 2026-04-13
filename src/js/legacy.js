@@ -2067,6 +2067,46 @@ function getCurrentAppNavState() {
   const activeTab = tabTokens && tabTokens.length ? String(tabTokens[tabTokens.length - 1]).replace(/'/g, '') : '';
   return { page: activePage, tab: activeTab || '', patientId: window.CURRENT_PATIENT?.bmhId || '' };
 }
+/** Parse `#/page/tab/patientId` from the address bar (used after full reload / auth restore). */
+function parseAppRouteFromLocationHash() {
+  try {
+    const raw = (window.location.hash || '').replace(/^#\/?/, '').trim();
+    if (!raw) return null;
+    const parts = raw.split('/').filter(Boolean);
+    if (!parts.length) return null;
+    return { page: parts[0], tab: parts[1] || '', patientId: parts[2] || '' };
+  } catch (e) {
+    return null;
+  }
+}
+const _ROUTE_RESTORE_PAGES = new Set(['dashboard', 'doctor-queue', 'ophtho', 'obg', 'psych', 'skin', 'reception', 'billing', 'payments', 'lab', 'appointments', 'print-templates', 'consents', 'discharge', 'inventory', 'tpa', 'ipd', 'reports', 'settings', 'ot', 'centres', 'brochures']);
+/** After login, restore last URL route if valid; otherwise call fallback (usually role home). */
+function tryScheduleRouteRestoreFromHash(fallback) {
+  const state = parseAppRouteFromLocationHash();
+  if (!state || !state.page || !_ROUTE_RESTORE_PAGES.has(state.page)) {
+    if (typeof fallback === 'function') fallback();
+    return;
+  }
+  let attempts = 0;
+  const maxAttempts = 35;
+  function tick() {
+    attempts++;
+    if (state.patientId && (!Array.isArray(window.PATIENTS) || window.PATIENTS.length === 0) && attempts < maxAttempts) {
+      setTimeout(tick, 160);
+      return;
+    }
+    try {
+      if (typeof restoreAppNavState === 'function') restoreAppNavState(state);
+    } catch (e) {
+      console.warn('Route restore failed', e);
+      if (typeof fallback === 'function') fallback();
+      return;
+    }
+  }
+  setTimeout(tick, typeof fallback === 'function' ? 420 : 0);
+}
+window.parseAppRouteFromLocationHash = parseAppRouteFromLocationHash;
+window.tryScheduleRouteRestoreFromHash = tryScheduleRouteRestoreFromHash;
 function pushAppNavState(replace) {
   try {
     const state = getCurrentAppNavState();
@@ -14906,8 +14946,58 @@ const ICD10_EYE = [
   'H53.0 — Amblyopia ex anopsia','H54.0 — Blindness, both eyes',
   'S05.0 — Injury of conjunctiva and abrasion','Z01.0 — Routine eye examination',
 ];
+/** Curated ICD-10 strings for OBG / fertility / gynaecology prescription diagnosis (not ophthalmology). */
+const ICD10_OBG = [
+  'Z34.0 — Supervision of normal first pregnancy','Z34.8 — Supervision of other normal pregnancy','Z35.0 — High-risk pregnancy',
+  'O80 — Encounter for full-term uncomplicated delivery','O82 — Encounter for cesarean delivery without indication',
+  'O20.0 — Threatened abortion','O03.9 — Complete or unspecified spontaneous abortion without complication',
+  'O21.0 — Mild hyperemesis gravidarum','O21.1 — Hyperemesis gravidarum with metabolic disturbance',
+  'O14.0 — Mild to moderate pre-eclampsia','O14.1 — Severe pre-eclampsia','O14.2 — HELLP syndrome',
+  'O13 — Gestational hypertension without significant proteinuria','O24.4 — Gestational diabetes mellitus',
+  'O99.8 — Other maternal disease complicating pregnancy','O26.6 — Liver disorder in pregnancy',
+  'O48 — Prolonged pregnancy','O60.0 — Preterm labor without delivery','O47.0 — False labor before 37 weeks',
+  'O32.1 — Maternal care for breech presentation','O36.5 — Maternal care for poor fetal growth',
+  'O42.0 — Premature rupture of membranes before onset of labor','O69.1 — Cord around neck with compression',
+  'O90.0 — Disruption of cesarean wound','O90.2 — Postpartum hemorrhage','O91.2 — Nonpurulent mastitis',
+  'N92.0 — Excessive and frequent menstruation with regular cycle','N92.1 — Excessive and frequent menstruation with irregular cycle',
+  'N93.9 — Abnormal uterine/vaginal bleeding','N84.0 — Polyp of corpus uteri','N85.0 — Endometrial glandular hyperplasia',
+  'N80.0 — Endometriosis of uterus','N80.1 — Endometriosis of ovary','N80.9 — Endometriosis, unspecified',
+  'N73.6 — Female pelvic peritoneal adhesions','N76.0 — Acute vaginitis','N76.1 — Subacute and chronic vaginitis',
+  'N39.0 — Urinary tract infection','N39.8 — Other disorders of urinary system','N88.8 — Other noninflammatory disorders of cervix uteri',
+  'N97.9 — Female infertility, unspecified','N97.1 — Female infertility due to tubal factor',
+  'N97.2 — Female infertility of uterine origin','N97.8 — Other female infertility',
+  'O09.0 — Supervision of pregnancy with history of infertility','O09.1 — Supervision of pregnancy with history of abortive outcome',
+  'Z31.6 — Fertility counseling','Z31.69 — Other procreative investigation',
+  'N92.4 — Excessive bleeding in premenopause','N95.0 — Postmenopausal bleeding','N95.1 — Menopausal disorder',
+  'N94.4 — Primary dysmenorrhea','N94.5 — Secondary dysmenorrhea','N94.6 — Dysmenorrhea, unspecified',
+  'N39.3 — Stress incontinence','N81.1 — Cystocele','N81.2 — Incomplete uterovaginal prolapse',
+  'O99.5 — Mental disorder complicating pregnancy','O90.8 — Other complications of puerperium',
+  'O23.0 — Infections of kidney in pregnancy','O23.4 — Unspecified urinary tract infection in pregnancy',
+  'O99.3 — Mental disorders/diseases classifiable elsewhere complicating pregnancy',
+  'Z30.0 — Encounter for general counseling on contraception','Z30.2 — Encounter for sterilization',
+  'Z30.9 — Encounter for contraceptive management','Z32.0 — Encounter for pregnancy test',
+  'Z32.1 — Pregnancy confirmed','Z36.0 — Antenatal screening for chromosomal anomalies',
+  'O00.1 — Classical hydatidiform mole','O01.9 — Hydatidiform mole, unspecified','O02.1 — Missed abortion',
+  'N83.2 — Other ovarian cysts','N85.7 — Hematometra','N87.0 — Mild cervical dysplasia','N87.1 — Moderate cervical dysplasia',
+  'N92.6 — Irregular menstruation','N94.3 — Premenstrual tension syndrome','N95.2 — Postmenopausal atrophic vaginitis',
+  'O10.0 — Pre-existing essential hypertension complicating pregnancy','O11 — Pre-existing hypertension with pre-eclampsia',
+  'O24.0 — Pre-existing type 1 diabetes mellitus in pregnancy','O24.1 — Pre-existing type 2 diabetes mellitus in pregnancy',
+  'O46.8 — Other antepartum hemorrhage','O72.0 — Third-stage hemorrhage','O72.1 — Other immediate postpartum hemorrhage',
+  'O73.0 — Retained placenta without hemorrhage','O74.0 — Aspiration pneumonitis due to anesthesia during labor',
+  'O98.5 — Syphilis complicating pregnancy','O98.1 — Tuberculosis complicating pregnancy','O98.3 — Other viral disease complicating pregnancy',
+  'Z37.0 — Single live birth','Z37.2 — Twins, both liveborn','Z39.0 — Encounter for care immediately after delivery',
+  'Z39.1 — Encounter for lactation care','Z39.2 — Encounter for routine postpartum follow-up',
+];
 window.ICD10_EYE = ICD10_EYE;
 window.ICD10_DB = ICD10_DB;
+window.ICD10_OBG = ICD10_OBG;
+
+/** ICD-10 pool for prescription diagnosis autosuggest (OBG page uses OBG-only list). */
+function getRxDxIcdPool() {
+  const dept = typeof rxDeptKeyFromUi === 'function' ? rxDeptKeyFromUi() : 'ophtho';
+  if (dept === 'obg') return (window.ICD10_OBG || ICD10_OBG || []).concat();
+  return (window.ICD10_EYE || []).concat(window.ICD10_DB || []);
+}
 
 /** ICD-10 autosuggest for prescription diagnosis rows (#rx-diagnosis-rows .rx-dx-line) */
 function rxDxSuggest(inp) {
@@ -14915,7 +15005,7 @@ function rxDxSuggest(inp) {
   if (!drop || !drop.classList || !drop.classList.contains('rx-dx-drop')) return;
   const val = (inp.value || '').toLowerCase().trim();
   if (val.length < 1) { drop.style.display = 'none'; drop.innerHTML = ''; return; }
-  const allDx = (window.ICD10_EYE || []).concat(window.ICD10_DB || []);
+  const allDx = getRxDxIcdPool();
   const matches = [];
   allDx.forEach(function (entry) {
     const label = typeof entry === 'string' ? entry : (entry.full || (entry.code + ' — ' + entry.desc));
@@ -15011,7 +15101,7 @@ function dxSuggest(inp) {
   const dropId = inp.id + '-drop';
   const drop = document.getElementById(dropId); if(!drop) return;
   if(!val || val.length < 2) { drop.style.display='none'; return; }
-  const allDx = (window.ICD10_EYE||[]).concat(window.ICD10_DB||[]);
+  const allDx = typeof getRxDxIcdPool === 'function' ? getRxDxIcdPool() : (window.ICD10_EYE||[]).concat(window.ICD10_DB||[]);
   const matches = allDx.filter(s => {
     if(typeof s === 'string') return s.toLowerCase().includes(val);
     return (s.full||s.desc||'').toLowerCase().includes(val) || (s.code||'').toLowerCase().includes(val);
@@ -19450,6 +19540,71 @@ function normalizeLabTestName(name) {
 function labTestKey(name) {
   return normalizeLabTestName(name).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 }
+function labOrderHasTest(tests, name) {
+  const n = normalizeLabTestName(name);
+  return (tests || []).some(function (t) { return normalizeLabTestName(t) === n; });
+}
+/** Add derived/calculated rows to the lab entry grid when parent tests are on the order. */
+function expandLabEntryTestsWithDerived(tests) {
+  if (!Array.isArray(tests)) return [];
+  const out = tests.slice();
+  function has(nm) { return labOrderHasTest(out, nm); }
+  function add(nm) {
+    if (!has(nm)) out.push(nm);
+  }
+  if (has('P.T. (Prothrombin Time)')) add('P.T.I. (Prothrombin Time Index)');
+  if (has('Glycosylated Haemoglobin (HbA1c)')) add('ABG (Average Blood Glucose)');
+  const lipFull = has('Total Cholesterol') && has('Triglycerides') && has('HDL Cholesterol');
+  if (lipFull) {
+    ['VLDL', 'LDL', 'Cholesterol/HDL Ratio', 'HDL / Total Cholesterol Ratio', 'LDL/HDL Ratio', 'Non-HDL Cholesterol'].forEach(add);
+  } else {
+    if (has('Total Cholesterol') && has('HDL Cholesterol')) {
+      add('Cholesterol/HDL Ratio');
+      add('HDL / Total Cholesterol Ratio');
+    }
+  }
+  if (has('Total Bilirubin') && has('Direct Bilirubin')) add('Indirect Bilirubin');
+  if (has('Total Proteins') && has('Albumin')) {
+    add('Globulin');
+    add('A/G Ratio');
+  }
+  if (has('Spot Microalbuminuria') && has('Spot Urine Creatinine')) add('Urine Albumin-Creatinine Ratio');
+  return out;
+}
+/** Copy current entry grid + flags into activeLabOrder.results and refresh the print preview. */
+function syncLabActiveOrderResultsFromDom() {
+  if (!activeLabOrder) return;
+  const list = activeLabOrder._expandedEntryTests || activeLabOrder.tests;
+  if (!Array.isArray(list)) return;
+  if (!activeLabOrder.results) activeLabOrder.results = {};
+  list.forEach(function (t) {
+    const key = labTestKey(t);
+    const valEl = document.getElementById('lr-val-' + key);
+    if (!valEl) return;
+    const normalized = normalizeLabTestName(t);
+    const res = {
+      val: valEl.value || '',
+      unit: document.getElementById('lr-unit-' + key)?.value || '',
+      range: document.getElementById('lr-range-' + key)?.value || '',
+      flag: (document.getElementById('lr-flag-' + key)?.textContent || '—').trim(),
+    };
+    activeLabOrder.results[normalized] = Object.assign({}, getLabTestMeta(t), res);
+  });
+  renderLabReportPreview(activeLabOrder);
+}
+let _labPreviewSyncTimer;
+function scheduleLabPreviewSyncFromDom() {
+  clearTimeout(_labPreviewSyncTimer);
+  _labPreviewSyncTimer = setTimeout(function () { syncLabActiveOrderResultsFromDom(); }, 140);
+}
+function flushLabPreviewSyncFromDom() {
+  clearTimeout(_labPreviewSyncTimer);
+  syncLabActiveOrderResultsFromDom();
+}
+function labRangeInputFlag(testName) {
+  setLabFlagForTest(testName);
+  scheduleLabPreviewSyncFromDom();
+}
 function getLabTestMeta(name) {
   const n = normalizeLabTestName(name);
   const low = n.toLowerCase();
@@ -19733,7 +19888,7 @@ function renderLabReportPreview(order) {
   });
   // 'bio' and 'diab' legacy groups fall back to 'chem' display
   if (byGroup.bio && byGroup.bio.length) byGroup.chem = (byGroup.chem || []).concat(byGroup.bio);
-  if (byGroup.diab && byGroup.diag && byGroup.diab.length) byGroup.chem = (byGroup.chem || []).concat(byGroup.diab);
+  if (byGroup.diab && byGroup.diab.length) byGroup.chem = (byGroup.chem || []).concat(byGroup.diab);
   ['haem','coag','chem','rft','lft','lipid','electro','sero','urine','stool','hcg','semen','rafq','thyroid'].forEach(function (group) {
     const host = document.getElementById('lab-' + group);
     if (!host) return;
@@ -19811,6 +19966,7 @@ function renderLabOrders() {
 function openLabOrder(id) {
   const order = LAB_ORDERS.find(o=>o.id===id); if(!order) return;
   activeLabOrder = order;
+  activeLabOrder._expandedEntryTests = expandLabEntryTestsWithDerived(order.tests || []);
   const panel = document.getElementById('lab-entry-panel'); if(!panel) return;
   panel.style.display = 'block';
   document.getElementById('lab-entry-pt-name').textContent = order.patient + ' · ' + order.bmhId;
@@ -19819,9 +19975,10 @@ function openLabOrder(id) {
   const techInp = document.getElementById('lab-incharge'); if (techInp && !techInp.value) techInp.value = order.tech || '';
   const sel = document.getElementById('lab-pt-sel'); if (sel) sel.value = order.id;
 
-  // Build result entry fields for each test
+  // Build result entry fields for each test (including derived rows when parents exist)
   const fieldsEl = document.getElementById('lab-entry-fields'); if(!fieldsEl) return;
-  fieldsEl.innerHTML = order.tests.map(t => {
+  const entryTests = activeLabOrder._expandedEntryTests || order.tests;
+  fieldsEl.innerHTML = entryTests.map(t => {
     const saved = order.results[normalizeLabTestName(t)] || {};
     const meta = Object.assign({}, getLabTestMeta(t), saved);
     const key = labTestKey(t);
@@ -19829,11 +19986,11 @@ function openLabOrder(id) {
       <span style="font-size:12px;font-weight:800">${t}</span>
       <input type="text" placeholder="Value" value="${meta.val||''}" id="lr-val-${key}" style="font-size:12px;font-weight:800;text-align:center" oninput="flagLabVal(this,${JSON.stringify(t)})" onchange="flagLabVal(this,${JSON.stringify(t)})">
       <input type="text" placeholder="Unit" value="${meta.unit||''}" id="lr-unit-${key}" style="font-size:11px;text-align:center">
-      <input type="text" placeholder="Range" value="${meta.range||''}" id="lr-range-${key}" style="font-size:11px;text-align:center">
+      <input type="text" placeholder="Range" value="${meta.range||''}" id="lr-range-${key}" style="font-size:11px;text-align:center" oninput="labRangeInputFlag(${JSON.stringify(t)})" onchange="labRangeInputFlag(${JSON.stringify(t)})">
       <span id="lr-flag-${key}" style="font-size:10px;font-weight:800;text-align:center;color:${meta.flag==='HIGH'?'var(--red)':meta.flag==='LOW'?'var(--orange)':'#1a8c3c'}">${meta.flag||'—'}</span>
     </div>`;
   }).join('');
-  renderLabReportPreview(order);
+  recalculateAllLabDerived(true);
 }
 
 function setLabFlagForTest(testName) {
@@ -19842,12 +19999,12 @@ function setLabFlagForTest(testName) {
   const rangeEl = document.getElementById('lr-range-'+key);
   const flagEl = document.getElementById('lr-flag-'+key);
   if(!inp || !rangeEl || !flagEl) return;
-  const range = rangeEl.value;
-  const val = parseFloat(inp.value);
-  if(range && !isNaN(val)) {
-    const parts = range.split(/[-–]/);
-    if(parts.length===2) {
-      const lo = parseFloat(parts[0]), hi = parseFloat(parts[1]);
+  const range = String(rangeEl.value || '').trim();
+  const val = parseFloat(String(inp.value || '').replace(/,/g, ''));
+  if (range && !isNaN(val)) {
+    const parts = range.split(/\s*[-–—]\s*/).map(function (x) { return parseFloat(String(x).replace(/,/g, '').trim()); });
+    if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+      const lo = parts[0], hi = parts[1];
       const flag = val < lo ? 'LOW' : val > hi ? 'HIGH' : 'Normal';
       flagEl.textContent = flag;
       flagEl.style.color = flag==='HIGH'?'var(--red)':flag==='LOW'?'var(--orange)':'#1a8c3c';
@@ -19855,14 +20012,15 @@ function setLabFlagForTest(testName) {
     }
   }
 }
-function recalculateAllLabDerived() {
+function recalculateAllLabDerived(immediatePreviewSync) {
   ['P.T. (Prothrombin Time)', 'Glycosylated Haemoglobin (HbA1c)', 'Total Cholesterol', 'Triglycerides', 'HDL Cholesterol', 'LDL', 'Total Bilirubin', 'Direct Bilirubin', 'Total Proteins', 'Albumin', 'Spot Microalbuminuria', 'Spot Urine Creatinine'].forEach(function (t) {
     calculateLabFormulas(t);
   });
+  if (immediatePreviewSync) flushLabPreviewSyncFromDom();
+  else scheduleLabPreviewSyncFromDom();
 }
 function flagLabVal(inp, testName) {
   setLabFlagForTest(testName);
-  calculateLabFormulas(testName);
   recalculateAllLabDerived();
 }
 // Auto-calculate derived fields when input values change
@@ -19936,21 +20094,27 @@ function calculateLabFormulas(changedTestName) {
 
 function saveLabResults() {
   if(!activeLabOrder) return;
-  recalculateAllLabDerived();
+  recalculateAllLabDerived(true);
   const tech = document.getElementById('lab-incharge')?.value || 'Lab Technician';
   const comments = document.getElementById('lab-comments')?.value?.trim() || '';
   const pt = PATIENTS.find(function (x) { return x.bmhId === activeLabOrder.bmhId; });
   const orders = Array.isArray(pt?.investigationOrders) ? pt.investigationOrders : [];
-  activeLabOrder.tests.forEach(t => {
+  const entryNames = activeLabOrder._expandedEntryTests || activeLabOrder.tests;
+  (entryNames || []).forEach(function (t) {
     const key = labTestKey(t);
     const normalized = normalizeLabTestName(t);
     const res = {
       val: document.getElementById('lr-val-'+key)?.value || '',
       unit: document.getElementById('lr-unit-'+key)?.value || '',
       range: document.getElementById('lr-range-'+key)?.value || '',
-      flag: document.getElementById('lr-flag-'+key)?.textContent || '—',
+      flag: (document.getElementById('lr-flag-'+key)?.textContent || '—').trim(),
     };
     activeLabOrder.results[normalized] = Object.assign({}, getLabTestMeta(t), res);
+  });
+  (activeLabOrder.tests || []).forEach(function (t) {
+    const normalized = normalizeLabTestName(t);
+    const res = activeLabOrder.results[normalized];
+    if (!res) return;
     const target = orders.find(function (o) {
       return o && o.mode === 'send' && normalizeLabTestName(o.name) === normalized && (!o.done || !o.doctorSeen);
     });
@@ -19972,7 +20136,11 @@ function saveLabResults() {
   if (pt?.bmhId) {
     fbUpdate && fbUpdate('patients/' + pt.bmhId, { investigationOrders: orders }).catch(function(){});
   }
-  try { saveLabOrderToFirebase(activeLabOrder); } catch (e) {}
+  try {
+    const orderSnap = Object.assign({}, activeLabOrder);
+    delete orderSnap._expandedEntryTests;
+    saveLabOrderToFirebase(orderSnap);
+  } catch (e) {}
   document.getElementById('lab-rpt-tech').textContent = tech;
   renderLabReportPreview(activeLabOrder);
   renderDocQueue && renderDocQueue();
@@ -20223,7 +20391,7 @@ function scheduleVisitAutosaveFromElement(el) {
   clearTimeout(_visitAutosaveTimers[dept]);
   _visitAutosaveTimers[dept] = setTimeout(function () {
     saveVisit(dept, { silent: true, autosave: true });
-  }, 1200);
+  }, 2000);
 }
 function scheduleActiveClinicRxAutosave() {
   if (window._suspendVisitAutosave) return;
@@ -20237,7 +20405,7 @@ function scheduleActiveClinicRxAutosave() {
   clearTimeout(_rxAutosaveTimers[dept]);
   _rxAutosaveTimers[dept] = setTimeout(function () {
     saveVisit(dept, { silent: true, autosave: true });
-  }, 900);
+  }, 1400);
 }
 
 // ─── RX QUICK SEARCH ─────────────
@@ -21144,7 +21312,11 @@ function activateUserSession(user, profile, opts) {
 
   var pageMap = { Admin:'dashboard', Doctor:'doctor-queue', Reception:'reception', Lab:'lab', TPA:'tpa', Inventory:'inventory', Optometrist:'doctor-queue' };
   var firstPage = pageMap[profile.role] || 'dashboard';
-  if (typeof nav === 'function') nav(firstPage, null);
+  if (typeof tryScheduleRouteRestoreFromHash === 'function') {
+    tryScheduleRouteRestoreFromHash(function () { if (typeof nav === 'function') nav(firstPage, null); });
+  } else if (typeof nav === 'function') {
+    nav(firstPage, null);
+  }
 
   setTimeout(function() {
     try {
@@ -27533,10 +27705,14 @@ function buildQTableRow(p, sno, opts) {
     ? `<span style="font-size:10px;color:#1a8c3c">Paid</span>${advLbl ? ' · ' + advLbl : ''}`
     : (advLbl || '');
   const seenRow = isPatientMarkedSeen(p);
-  const statusTxt = p.preRegistered ? 'Pre-reg' : seenRow ? 'Seen' : p.dilated ? 'Dilated' : 'Waiting';
-  const statusBg = p.preRegistered ? '#f0f0f0' : seenRow ? 'var(--green-lt)' : p.dilated ? 'var(--blue-lt)' : 'var(--orange-lt)';
+  const statusTxt = p.preRegistered ? 'Pre-reg' : seenRow ? 'Seen' : p.dilated ? 'Dilated' : p._xrefPendingPay ? 'Awaiting pay' : 'Waiting';
+  const statusBg = p.preRegistered ? '#f0f0f0' : seenRow ? 'var(--green-lt)' : p.dilated ? 'var(--blue-lt)' : p._xrefPendingPay ? 'var(--orange-lt)' : 'var(--orange-lt)';
   const onRow = p.preRegistered ? `checkInPatient('${p.bmhId}')` : (receptionQueue ? `openReceptionPatient('${p.bmhId}')` : (p._xrefEntry ? `openPatientForDept('${p.bmhId}','${p.dept}')` : `openPatient('${p.bmhId}')`));
   const nmEsc = (p.name||'').replace(/'/g,"\\'");
+  const xrefIdEsc = String(p._xrefId || '').replace(/'/g, "\\'");
+  const markSeenClick = p._xrefId
+    ? `event.stopPropagation();markCrossRefSeen('${String(p.bmhId).replace(/'/g, "\\'")}','${xrefIdEsc}')`
+    : `markSeen('${String(p.bmhId).replace(/'/g, "\\'")}')`;
   const docShort = (p.assignedDoctor || p.doctor || '—').replace(/^Dr\.\s*/,'');
   const vulnBadge = vuln ? '<span class="q-vuln-badge" title="Vulnerable — elderly (≥65) or flagged">⚠ VUL</span>' : '';
   const labHover = getUnreadLabResultsTitle(p);
@@ -27556,7 +27732,7 @@ function buildQTableRow(p, sno, opts) {
     <td class="q-actions" onclick="event.stopPropagation()">
       ${p.preRegistered
         ? `<button type="button" title="Check In" style="background:var(--blue);color:#fff;border:none;border-radius:5px;padding:3px 8px;font-size:9px;font-weight:800;cursor:pointer" onclick="checkInPatient('${p.bmhId}')">Check in</button>`
-        : `${!seenRow?`<button type="button" title="Seen" style="background:var(--green);color:#fff;border:none;border-radius:5px;padding:3px 6px;font-size:9px;font-weight:800;cursor:pointer" onclick="markSeen('${p.bmhId}')">✓</button>`:''}
+        : `${!seenRow?`<button type="button" title="Seen" style="background:var(--green);color:#fff;border:none;border-radius:5px;padding:3px 6px;font-size:9px;font-weight:800;cursor:pointer" onclick="${markSeenClick}">✓</button>`:''}
       ${isOphtho&&!p.dilated&&!seenRow?`<button type="button" title="Dilate" style="background:var(--blue-lt);color:var(--blue);border:1.5px solid var(--blue);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="markDilated('${p.bmhId}','${nmEsc}')">💧</button>`:''}
       ${receptionQueue ? `<button type="button" title="Restore to doctor queue" style="background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1.5px solid var(--bmh-blue);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="event.stopPropagation();restorePatientToDoctorQueue('${p.bmhId}')">↩</button>` : ''}
       <button type="button" title="Cross-ref" style="background:rgba(11,123,140,.1);color:var(--teal);border:1.5px solid var(--teal);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="openXRefModal('${p.bmhId}')">↔️</button>
@@ -27581,6 +27757,26 @@ function markSeen(bmhId) {
   renderReceptionPage && renderReceptionPage();
   renderDashboard && renderDashboard();
 }
+/** Mark one cross-refer queue row as seen for that department (does not clear other departments' queues). */
+function markCrossRefSeen(bmhId, xrefId) {
+  const p = PATIENTS.find(function (x) { return x.bmhId === bmhId; });
+  if (!p || !Array.isArray(p.crossRefs) || !xrefId) {
+    showToast('Cross-refer entry not found', 'w');
+    return;
+  }
+  const nowIso = new Date().toISOString();
+  const refs = p.crossRefs.map(function (r) {
+    if (!r || String(r.id) !== String(xrefId)) return r;
+    return Object.assign({}, r, { seenAt: nowIso });
+  });
+  p.crossRefs = refs;
+  fbUpdate && fbUpdate('patients/' + bmhId, { crossRefs: sanitizeFirebaseValue(refs) }).catch(function () {});
+  renderDocQueue && renderDocQueue();
+  renderReceptionPage && renderReceptionPage();
+  renderDashboard && renderDashboard();
+  showToast('Cross-refer marked seen for this department ✓', 's');
+}
+window.markCrossRefSeen = markCrossRefSeen;
 /** Reception: restore a patient to the doctor queue if they were missing (re-check-in, clear removal flag). */
 function restorePatientToDoctorQueue(bmhId) {
   const p = PATIENTS.find(function (x) { return x.bmhId === bmhId; });
@@ -27930,7 +28126,7 @@ function issueRefundAtReception() {
 let _renderDocQueueTimer;
 function renderDocQueue() {
   clearTimeout(_renderDocQueueTimer);
-  _renderDocQueueTimer = setTimeout(_renderDocQueueImpl, 90);
+  _renderDocQueueTimer = setTimeout(_renderDocQueueImpl, 160);
 }
 function getActiveCrossRefsForPatient(p) {
   const refs = [];
@@ -28017,13 +28213,20 @@ function _renderDocQueueImpl() {
       }
       getActiveCrossRefsForPatient(p).forEach(function (xref) {
         const toKey = normalizeDeptKeyForQueue(xref.toDept || '');
-        const unpaidFee = xref.fee && xref.paid === false;
-        if (unpaidFee || toKey !== userDept) return;
+        if (toKey !== userDept) return;
+        const xrefSeen = !!xref.seenAt;
+        const pendingPay = !!(xref.fee && xref.paid === false);
+        const purposeSuffix = (pendingPay ? ' [Cross-ref: payment pending]' : '') + (xref.reason ? ' — ' + xref.reason : '');
         deptPts.push(Object.assign({}, p, {
           dept: xref.toDept,
           doctor: xref.toDoctor || p.doctor,
-          status: isPatientMarkedSeen(p) ? 'seen' : 'waiting',
+          seen: xrefSeen,
+          status: xrefSeen ? 'seen' : 'waiting',
+          seenAt: xref.seenAt || p.seenAt,
+          purpose: (p.purpose || '') + purposeSuffix,
           _xrefEntry: true,
+          _xrefId: String(xref.id || ''),
+          _xrefPendingPay: pendingPay,
           _queueKey: p.bmhId + '::' + (xref.id || (xref.toDept + '::' + (xref.toDoctor || '')))
         }));
       });
