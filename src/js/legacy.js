@@ -676,6 +676,49 @@ window.BMH_STORE_LOCATIONS = window.BMH_STORE_LOCATIONS || [
   'Labour Room','OBG OT','Eye OT','Minor OT','Procedure Room',
   'Eye CHD','Eye RPR','OBG CHD','OBG RPR','Skin CHD','Skin RPR','PSY CHD','PSY RPR'
 ];
+function bmhDefaultInventoryDeptRows() {
+  return [
+    { value: 'ophtho', label: 'Ophthalmology' },
+    { value: 'obg', label: 'OBG' },
+    { value: 'psych', label: 'Psychiatry' },
+    { value: 'skin', label: 'Skin' },
+    { value: 'general', label: 'General / Shared' },
+    { value: 'ot', label: 'OT / Procedure' },
+    { value: 'ipd', label: 'IPD / Ward' }
+  ];
+}
+function loadInventoryDeptRows() {
+  try {
+    const raw = JSON.parse(localStorage.getItem('bmh_inventory_depts') || 'null');
+    if (Array.isArray(raw) && raw.length && raw.every(function (r) { return r && r.value && r.label; })) return raw;
+  } catch (e) { /* noop */ }
+  return bmhDefaultInventoryDeptRows();
+}
+function saveInventoryDeptRows(rows) {
+  try { localStorage.setItem('bmh_inventory_depts', JSON.stringify(rows || [])); } catch (e) { /* noop */ }
+}
+function bmhLoadPersistedStoreLocations() {
+  try {
+    const raw = JSON.parse(localStorage.getItem('bmh_store_locations') || 'null');
+    if (Array.isArray(raw) && raw.length) {
+      window.BMH_STORE_LOCATIONS = raw.map(function (s) { return String(s || '').trim(); }).filter(Boolean);
+    }
+  } catch (e) { /* noop */ }
+}
+function saveInventoryStoreLocations() {
+  try { localStorage.setItem('bmh_store_locations', JSON.stringify((window.BMH_STORE_LOCATIONS || []).slice())); } catch (e) { /* noop */ }
+}
+function bmhBillingAdvanceReasonOptions() {
+  const def = ['Surgery package', 'IOL / implant booking', 'Admission deposit', 'Investigation block', 'Consultation block', 'Personal', 'Other'];
+  try {
+    const raw = JSON.parse(localStorage.getItem('bmh_billing_advance_reasons') || 'null');
+    if (Array.isArray(raw) && raw.length) return Array.from(new Set(def.concat(raw.map(function (x) { return String(x || '').trim(); }).filter(Boolean))));
+  } catch (e) { /* noop */ }
+  return def;
+}
+function bmhSaveBillingAdvanceReasonOptions(arr) {
+  try { localStorage.setItem('bmh_billing_advance_reasons', JSON.stringify(arr || [])); } catch (e) { /* noop */ }
+}
 
 const LAB_PANELS = {
   haem:[{n:'Haemoglobin',u:'g/dL',lo:11.5,hi:17.5,v:'',id:'hb'},{n:'WBC Count',u:'×10³/μL',lo:4.5,hi:11,v:'',id:'wbc'},{n:'Platelets',u:'×10³/μL',lo:150,hi:400,v:'',id:'plt'},{n:'PCV',u:'%',lo:36,hi:52,v:'',id:'pcv'}],
@@ -700,6 +743,28 @@ const LAB_GROUP_HEAD_BLURBS = {
   thyroid: 'Thyroid tests assess gland function and common auto-antibodies when indicated.',
   custom: 'Additional tests requested for your clinical situation.'
 };
+const LAB_TEST_PATIENT_BLURBS = [
+  { re: /haemoglobin|\bhb\b/i, text: 'Haemoglobin carries oxygen in red blood cells; it helps assess anaemia or polycythaemia.' },
+  { re: /wbc|leucocyte|tlc/i, text: 'White cells fight infection; counts shift with infection, inflammation, or bone marrow disorders.' },
+  { re: /platelet/i, text: 'Platelets help clotting; low counts can raise bleeding risk before procedures.' },
+  { re: /prothrombin|pti|\binr\b|aptt|bleeding time|clotting/i, text: 'Clotting tests assess bleeding risk and response to blood thinners.' },
+  { re: /creatinine|urea|bun|egfr/i, text: 'Kidney markers reflect how well the kidneys clear waste from blood.' },
+  { re: /sodium|potassium|chloride/i, text: 'Electrolytes balance fluids and nerves; levels shift with hydration, kidneys, and medications.' },
+  { re: /bilirubin|sgot|sgpt|alt|ast|alkaline|ggt|protein|albumin/i, text: 'Liver tests reflect liver cell injury, bile flow, and protein production.' },
+  { re: /cholesterol|hdl|ldl|triglyceride|lipid/i, text: 'Blood fats relate to heart and vessel risk over the long term.' },
+  { re: /hba1c|glycosylated|glucose|fbs|ppbs|rbs/i, text: 'Sugar tests screen for diabetes and monitor glucose control.' },
+  { re: /tsh|thyroid|free t3|free t4/i, text: 'Thyroid hormones regulate metabolism, energy, and many organ systems.' },
+  { re: /urine|urinalysis/i, text: 'Urine screening checks for infection, blood, protein, and other abnormalities.' },
+  { re: /stool/i, text: 'Stool tests help evaluate digestion, infection, and hidden bleeding.' },
+  { re: /vitamin|b12|d3|folate|iron/i, text: 'Nutrient levels support diagnosis of deficiency-related symptoms.' },
+  { re: /crp|esr|ra factor|vdrl|hbsag|hcv|hiv/i, text: 'Inflammation and infection markers support specific clinical questions.' },
+  { re: /cbc|complete blood/i, text: 'A blood count summarises red cells, white cells, and platelets together.' }
+];
+function getLabPatientBlurbForName(name) {
+  const low = String(name || '').toLowerCase();
+  const hit = LAB_TEST_PATIENT_BLURBS.find(function (b) { return b.re.test(low); });
+  return hit ? hit.text : '';
+}
 const IPD_PATIENTS = [];
 window.IPD_PATIENTS = IPD_PATIENTS; // expose globally
 window.XREF_LOG = window.XREF_LOG || [];
@@ -6931,7 +6996,9 @@ function consumeIolForOtCase(otCase) {
 function bmhNowISO() { return new Date().toISOString(); }
 function bmhDeptLabel(k) {
   const map = { ophtho:'Ophthalmology', obg:'OBG', psych:'Psychiatry', skin:'Skin', general:'General / Shared', ot:'OT / Procedure', ipd:'IPD / Ward' };
-  return map[k] || k || 'General';
+  if (map[k]) return map[k];
+  const hit = loadInventoryDeptRows().find(function (r) { return r.value === k; });
+  return (hit && hit.label) ? hit.label : (k || 'General');
 }
 function bmhInventoryDeptValue() { return document.getElementById('inv-in-dept')?.value || 'general'; }
 function bmhInventoryUseDeptValue() { return document.getElementById('inv-use-dept')?.value || 'general'; }
@@ -7836,21 +7903,116 @@ function bmhGetBillPatientsForView() {
 }
 function bmhSetBillDeptFilter(k) { window._bmhBillDeptFilter = k; renderBillingPage(); }
 window._bmhBillingTab = window._bmhBillingTab || 'current';
+function bmhRenderBillingAdvanceRows(reset) {
+  const host = document.getElementById('bmh-billing-advance-rows');
+  if (!host) return;
+  const reasons = bmhBillingAdvanceReasonOptions();
+  const opts = reasons.map(function (r) {
+    return '<option value="' + escapeHtmlConsent(r) + '">' + escapeHtmlConsent(r) + '</option>';
+  }).join('');
+  const rowHtml = '<div class="bmh-adv-row" style="display:grid;grid-template-columns:110px minmax(0,1.1fr) minmax(0,1fr);gap:8px;margin-bottom:8px;align-items:center">'
+    + '<input type="number" class="bmh-adv-amt" min="0" step="1" placeholder="₹" style="padding:6px;border-radius:6px;border:1px solid var(--g4);font-size:12px">'
+    + '<select class="bmh-adv-reason" style="padding:6px;border-radius:6px;border:1px solid var(--g4);font-size:12px">' + opts + '</select>'
+    + '<input type="text" class="bmh-adv-note" placeholder="Optional note" style="padding:6px;border-radius:6px;border:1px solid var(--g4);font-size:12px">'
+    + '</div>';
+  if (reset) host.innerHTML = rowHtml;
+  else host.insertAdjacentHTML('beforeend', rowHtml);
+}
+window.bmhRenderBillingAdvanceRows = bmhRenderBillingAdvanceRows;
+function bmhAddBillingAdvanceRow() {
+  bmhRenderBillingAdvanceRows(false);
+}
+window.bmhAddBillingAdvanceRow = bmhAddBillingAdvanceRow;
+function bmhPromptAddAdvanceReasonOption() {
+  const raw = prompt('New advance reason (saved on this device for the dropdown):');
+  if (!raw || !String(raw).trim()) return;
+  const n = String(raw).trim();
+  const list = bmhBillingAdvanceReasonOptions().slice();
+  if (!list.includes(n)) list.push(n);
+  bmhSaveBillingAdvanceReasonOptions(list);
+  bmhRenderBillingAdvanceRows(true);
+  showToast('Reason option added ✓', 's');
+}
+window.bmhPromptAddAdvanceReasonOption = bmhPromptAddAdvanceReasonOption;
+function bmhPostPatientAdvanceFromBilling() {
+  const bmhId = document.getElementById('bmh-bill-pt-select')?.value;
+  if (!bmhId) { showToast('Select a patient', 'w'); return; }
+  const pt = PATIENTS.find(function (p) { return p.bmhId === bmhId; });
+  if (!pt) return;
+  const mode = String(document.getElementById('bmh-billing-advance-mode')?.value || 'Cash');
+  let total = 0;
+  const parts = [];
+  document.querySelectorAll('#bmh-billing-advance-rows .bmh-adv-row').forEach(function (row) {
+    const amt = Math.max(0, Number(row.querySelector('.bmh-adv-amt')?.value || 0));
+    const reason = String(row.querySelector('.bmh-adv-reason')?.value || '').trim();
+    const note = String(row.querySelector('.bmh-adv-note')?.value || '').trim();
+    if (!(amt > 0)) return;
+    total += amt;
+    parts.push(reason + (note ? ' (' + note + ')' : ''));
+  });
+  if (!(total > 0)) { showToast('Enter at least one advance amount', 'w'); return; }
+  const txnId = 'TXN' + Date.now();
+  const service = 'Advance — ' + parts.join(' · ');
+  const txn = {
+    id: txnId,
+    patient: pt.name || bmhId,
+    bmhId: bmhId,
+    service: service,
+    amount: total,
+    mode: mode,
+    collected: true,
+    dept: pt.dept || 'ophtho',
+    time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+    date: new Date().toISOString(),
+    centre: pt.centre || CURRENT_USER?.centre || 'CHD',
+    createdBy: CURRENT_USER?.name || 'Billing',
+    type: 'advance',
+    source: 'billing-advance'
+  };
+  TRANSACTIONS.push(txn);
+  saveTransactionToFirebase && saveTransactionToFirebase(txn);
+  pt.advance = (Number(pt.advance) || 0) + total;
+  const purposeJoin = [String(pt.advancePurpose || '').trim(), parts.join(' · ')].filter(Boolean).join(' | ');
+  pt.advancePurpose = purposeJoin.slice(0, 500);
+  fbUpdate && fbUpdate('patients/' + bmhId, { advance: pt.advance, advancePurpose: pt.advancePurpose });
+  saveBmhFinancials();
+  bmhRenderBillingAdvanceRows(true);
+  bmhSelectBillPatient(bmhId);
+  showToast('Advance ₹' + total.toLocaleString('en-IN') + ' posted ✓', 's');
+  if (typeof renderCollectionDashboard === 'function') renderCollectionDashboard();
+}
+window.bmhPostPatientAdvanceFromBilling = bmhPostPatientAdvanceFromBilling;
 function bmhBillingTabSwitch(el, mode) {
   window._bmhBillingTab = mode === 'search' ? 'search' : 'current';
   document.querySelectorAll('#pg-billing > .ptabs .ptab').forEach(function (t) { t.classList.remove('active'); });
   if (el) el.classList.add('active');
   const toolbar = document.getElementById('bmh-bill-search-toolbar');
   if (toolbar) toolbar.style.display = window._bmhBillingTab === 'search' ? '' : 'none';
+  const advP = document.getElementById('bmh-billing-advance-panel');
+  if (advP) advP.style.display = window._bmhBillingTab === 'current' ? '' : 'none';
+  if (window._bmhBillingTab === 'current') bmhRenderBillingAdvanceRows(true);
   if (window._bmhBillingTab === 'current' && window.CURRENT_PATIENT && window.CURRENT_PATIENT.bmhId) {
     window._bmhSelectedBillPatient = window.CURRENT_PATIENT.bmhId;
   }
   bmhRenderBillPatientList();
   const sel = document.getElementById('bmh-bill-pt-select');
   bmhSelectBillPatient((sel && sel.value) || window._bmhSelectedBillPatient || '');
+  renderAdminDailyBillingPanel();
 }
 window.bmhBillingTabSwitch = bmhBillingTabSwitch;
 window._bmhQuickChargeDept = window._bmhQuickChargeDept || 'all';
+function bmhChargeLooksLikeLabInvestigation(item) {
+  const hay = (String(item?.name || '') + ' ' + String(item?.cat || '')).toLowerCase();
+  return /oct|biomet|hvf|fundus|topograph|specular|cbc|hba1c|thyroid|lipid|urine routine|stool|x-ray|ecg|profile|pathology|lab|blood sugar|fbs|ppbs|rbs|culture|serology|vdrl|hbsag|hcv|crp|esr|pt\/inr|coag|lft|rft|renal|liver function|lipid panel|investigation|angiograph|b-scan|perimetry|gonioscopy|pachymetry|schirmer|tbut|microalbumin|creatinine|urea/i.test(hay);
+}
+function bmhNormalizePatientDeptForQuickCharge(dept) {
+  const d = String(dept || '').toLowerCase();
+  if (/obg|gyn|obs/.test(d)) return 'obg';
+  if (/psych|neuro/.test(d)) return 'psych';
+  if (/skin|derm/.test(d)) return 'skin';
+  if (/oph|eye/.test(d)) return 'ophtho';
+  return 'ophtho';
+}
 function bmhRefreshQuickChargeDeptButtons() {
   document.querySelectorAll('[data-bmh-quick-dept]').forEach(function (btn) {
     const active = btn.getAttribute('data-bmh-quick-dept') === (window._bmhQuickChargeDept || 'all');
@@ -7879,10 +8041,15 @@ function bmhSelectBillPatient(bmhId) {
   if (aa && p) { aa.checked = (advAvail > 0); aa.disabled = !(advAvail > 0); }
   const tog = document.getElementById('bmh-pay-received-toggle');
   if (tog && tog.checked) bmhTogglePaymentForm(true);
+  if (p && window._bmhBillingTab === 'current') {
+    window._bmhQuickChargeDept = bmhNormalizePatientDeptForQuickCharge(p.dept);
+    bmhRefreshQuickChargeDeptButtons();
+  }
   bmhRenderQuickChargePanels();
   bmhRenderPatientFinancialSummary();
   bmhRenderBillLines();
   bmhUpdateBillTotals();
+  if (window._bmhBillingTab === 'current') bmhRenderBillingAdvanceRows(true);
 }
 function bmhRenderBillPatientList() {
   const el = document.getElementById('bmh-bill-pt-list'); if (!el) return;
@@ -8079,9 +8246,14 @@ function bmhQuickChargeGroups() {
       return String(a.name || '').localeCompare(String(b.name || ''));
     });
   };
-  const investigations = deptCharges.filter(c => /oct|biometry|hvf|fundus|topography|specular|cbc|hba1c|thyroid|lipid|urine|x-ray|ecg|scan|test|profile|angiography/i.test(c.name));
-  const surgeries = deptCharges.filter(c => /surgery|lscs|delivery|laparoscopy|trabeculectomy|lasik|pmics|implantation|capsulotomy|iridotomy|excision/i.test(c.name) || /sx/i.test(c.cat));
-  const procedures = deptCharges.filter(c => !investigations.includes(c) && !surgeries.includes(c) && !/consultation|follow-up/i.test(c.name));
+  const surgeries = deptCharges.filter(function (c) {
+    if (bmhChargeLooksLikeLabInvestigation(c)) return false;
+    return /surgery|lscs|delivery|laparoscopy|trabeculectomy|lasik|pmics|implantation|capsulotomy|iridotomy|excision/i.test(c.name) || /sx/i.test(c.cat);
+  });
+  const procedures = deptCharges.filter(function (c) {
+    if (bmhChargeLooksLikeLabInvestigation(c)) return false;
+    return !surgeries.includes(c) && !/consultation|follow-up/i.test(c.name);
+  });
   const medicines = (INVENTORY || []).filter(i => (i.stock || 0) > 0).slice(0, 8).map(i => ({ name: i.name, chd: i.mrp || 0, rpr: i.mrp || 0 }));
   const admittedIds = new Set((window.IPD_PATIENTS || []).filter(p => (p.status || 'admitted') !== 'discharged').map(p => p.bmhId));
   const showStay = !!(bmhId && admittedIds.has(bmhId));
@@ -8091,9 +8263,8 @@ function bmhQuickChargeGroups() {
     { name: 'Nursing Charges', chd: 500, rpr: 400 }
   ];
   const groups = [
-    { label: 'Investigations', items: sortByUsage(investigations).slice(0, 12), cat: 'diagnostic' },
-    { label: 'Procedures', items: sortByUsage(procedures).slice(0, 12), cat: 'procedure' },
-    { label: 'Surgeries', items: sortByUsage(surgeries).slice(0, 12), cat: 'surgery' },
+    { label: 'Procedures', items: sortByUsage(procedures).slice(0, 14), cat: 'procedure' },
+    { label: 'Surgeries', items: sortByUsage(surgeries).slice(0, 14), cat: 'surgery' },
     { label: 'Medicines / Consumables', items: medicines, cat: 'pharmacy' }
   ];
   if (showStay) groups.push({ label: 'Stay / Inpatient', items: stay, cat: 'stay' });
@@ -8114,6 +8285,7 @@ function bmhQuickChargeGroupedItems() {
     : CHARGES_DATA.slice();
   const groups = {};
   deptRows.forEach(function (row) {
+    if (bmhChargeLooksLikeLabInvestigation(row)) return;
     const heading = String(row.parent || row.name || '').trim();
     if (!heading) return;
     if (!groups[heading]) groups[heading] = { heading: heading, parentRow: null, children: [] };
@@ -8183,7 +8355,16 @@ function bmhRenderQuickChargePanels() {
       <div style="padding-top:2px">${rows}</div>
     </details>`;
   }).join('');
-  el.innerHTML = searchHtml + groupedHtml + groups.map(group => {
+  const labLikeCharges = (CHARGES_DATA || []).filter(function (c) {
+    if (!bmhChargeLooksLikeLabInvestigation(c)) return false;
+    return matchesQuickDept(c);
+  }).slice(0, 48);
+  const labGrid = labLikeCharges.length ? labLikeCharges.map(function (item) {
+    const amount = item[centre?.toLowerCase?.()] ?? item[centre] ?? item.chd ?? 0;
+    return cardHtml(item, amount, 'diagnostic', '#f8fafc');
+  }).join('') : '<div style="font-size:12px;color:var(--g1)">No lab-style charges for this department filter.</div>';
+  const expandedCatalog = '<details style="margin-top:12px;background:var(--g6);border:1px solid var(--g5);border-radius:10px;padding:8px 10px"><summary style="cursor:pointer;font-size:12px;font-weight:900;color:var(--bmh-blue)">Investigations &amp; lab catalogue</summary><div style="margin-top:8px;font-size:10.5px;color:var(--g1);margin-bottom:8px">Hidden from the main grid above. Use department buttons (Eye / OBG / …) to load another department&apos;s investigation tariffs.</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px">' + labGrid + '</div></details>';
+  el.innerHTML = searchHtml + groupedHtml + expandedCatalog + groups.map(group => {
     const items = group.items.map(item => {
       const amount = item[centre?.toLowerCase?.()] ?? item[centre] ?? item.chd ?? 0;
       return cardHtml(item, amount, group.cat, '#fff');
@@ -8310,7 +8491,67 @@ function bmhAppendLedger(row) {
   window.BMH_LEDGER.push(Object.assign({ id: 'L' + Date.now() + Math.random().toString(36).slice(2, 6) }, row));
   saveBmhFinancials();
 }
+window._bmhVendorBillSel = window._bmhVendorBillSel || '';
+function bmhRenderInvVendorHomeStrip() {
+  const el = document.getElementById('inv-vendor-home-strip');
+  if (!el) return;
+  const vPend = (window.BMH_VENDOR_BILLS || []).reduce(function (s, v) { return s + bmhVendorBillOutstanding(v); }, 0);
+  const vCnt = (window.BMH_VENDOR_BILLS || []).filter(function (v) { return bmhVendorBillOutstanding(v) > 0; }).length;
+  const oPend = (window.BMH_OFFICE_BILLS || []).reduce(function (s, b) {
+    return s + Math.max(0, (Number(b.amount) || 0) - (Number(b.paidAmount) || 0));
+  }, 0);
+  const oCnt = (window.BMH_OFFICE_BILLS || []).filter(function (b) {
+    return Math.max(0, (Number(b.amount) || 0) - (Number(b.paidAmount) || 0)) > 0;
+  }).length;
+  el.innerHTML = '<div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;font-size:12px">'
+    + '<span style="font-weight:900;color:var(--bmh-blue)">Vendor inventory pending: <span style="color:#b55a00">₹' + vPend.toLocaleString('en-IN') + '</span> · ' + vCnt + ' bill' + (vCnt === 1 ? '' : 's') + '</span>'
+    + '<span style="font-weight:900;color:#92400e">Utilities / other pending: ₹' + oPend.toLocaleString('en-IN') + ' · ' + oCnt + ' bill' + (oCnt === 1 ? '' : 's') + '</span>'
+    + '</div>';
+}
+window.bmhRenderInvVendorHomeStrip = bmhRenderInvVendorHomeStrip;
+function bmhGetFilteredVendorBillRows() {
+  const filterVendor = String(document.getElementById('inv-vendor-filter')?.value || document.getElementById('inv-vendor-search')?.value || '').trim();
+  const filterDateFrom = String(document.getElementById('inv-vendor-date-from')?.value || '').trim();
+  const filterDateTo = String(document.getElementById('inv-vendor-date-to')?.value || '').trim();
+  return (window.BMH_VENDOR_BILLS || []).slice().reverse().filter(function (v) {
+    const vendorOk = !filterVendor || normalizeInventoryCompareText(String(v.vendor || '')) === normalizeInventoryCompareText(filterVendor);
+    const dateKey = String(v.billDateKey || v.createdAt || '').slice(0, 10);
+    const dateOk = (!filterDateFrom || dateKey >= filterDateFrom) && (!filterDateTo || dateKey <= filterDateTo);
+    return vendorOk && dateOk;
+  });
+}
+function bmhSelectVendorBill(id) {
+  window._bmhVendorBillSel = String(id || '');
+  bmhRenderVendorTables();
+}
+window.bmhSelectVendorBill = bmhSelectVendorBill;
+function bmhPrintFilteredVendorBills() {
+  const rows = bmhGetFilteredVendorBillRows();
+  const body = rows.length ? rows.map(function (v) {
+    const out = bmhVendorBillOutstanding(v);
+    const paid = Number(v.paidAmount || 0);
+    const status = bmhVendorStatusLabel(v);
+    return '<tr><td>' + escapeHtmlConsent(v.vendor || '') + '</td><td>' + escapeHtmlConsent(v.invoiceNo || '—') + '</td><td>' + Number(v.amount || 0).toLocaleString('en-IN') + '</td><td>' + paid.toLocaleString('en-IN') + '</td><td>' + out.toLocaleString('en-IN') + '</td><td>' + escapeHtmlConsent(status) + '</td><td>' + escapeHtmlConsent(String(v.dueDate || (v.billMode === 'on-use' ? 'On use' : '—'))) + '</td></tr>';
+  }).join('') : '<tr><td colspan="7" style="text-align:center">No bills in current filter</td></tr>';
+  const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Vendor bills</title><style>body{font-family:Arial;font-size:11px;padding:12px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:6px;text-align:left}th{background:#eee}</style></head><body><h2>Vendor bills (filtered)</h2><table><thead><tr><th>Vendor</th><th>Invoice</th><th>Amount ₹</th><th>Paid ₹</th><th>Due ₹</th><th>Status</th><th>Due date</th></tr></thead><tbody>' + body + '</tbody></table></body></html>';
+  safePrint(html);
+}
+window.bmhPrintFilteredVendorBills = bmhPrintFilteredVendorBills;
+function bmhPrintFilteredOfficeBills() {
+  const filter = String(document.getElementById('inv-office-filter')?.value || '').trim();
+  const rows = (window.BMH_OFFICE_BILLS || []).slice().reverse().filter(function (b) {
+    return !filter || String(b.category || '') === filter;
+  });
+  const body = rows.length ? rows.map(function (b) {
+    const out = Math.max(0, (Number(b.amount) || 0) - (Number(b.paidAmount) || 0));
+    return '<tr><td>' + escapeHtmlConsent(b.category || '') + '</td><td>' + escapeHtmlConsent(b.label || '') + '</td><td>' + Number(b.amount || 0).toLocaleString('en-IN') + '</td><td>' + (Number(b.paidAmount) || 0).toLocaleString('en-IN') + '</td><td>' + out.toLocaleString('en-IN') + '</td><td>' + escapeHtmlConsent(String(b.nextDueDate || b.dueDate || '—').slice(0, 10)) + '</td></tr>';
+  }).join('') : '<tr><td colspan="6">No bills</td></tr>';
+  const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Office bills</title><style>body{font-family:Arial;font-size:11px;padding:12px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:6px}th{background:#eee}</style></head><body><h2>Utility / office bills</h2><table><thead><tr><th>Category</th><th>Label</th><th>Amount ₹</th><th>Paid ₹</th><th>Due ₹</th><th>Next due</th></tr></thead><tbody>' + body + '</tbody></table></body></html>';
+  safePrint(html);
+}
+window.bmhPrintFilteredOfficeBills = bmhPrintFilteredOfficeBills;
 function bmhRenderVendorTables() {
+  bmhRenderInvVendorHomeStrip();
   const vendorFilterEl = document.getElementById('inv-vendor-filter');
   const vendorSearchEl = document.getElementById('inv-vendor-search');
   if (vendorFilterEl) {
@@ -8324,22 +8565,24 @@ function bmhRenderVendorTables() {
     if (resolved) vendorFilterEl.value = resolved;
     else if (current) vendorFilterEl.value = current;
   }
+  const filteredRows = bmhGetFilteredVendorBillRows();
+  if (window._bmhVendorBillSel && !filteredRows.some(function (r) { return r.id === window._bmhVendorBillSel; })) window._bmhVendorBillSel = '';
+  const totalDue = filteredRows.reduce(function (s, v) { return s + bmhVendorBillOutstanding(v); }, 0);
   [document.getElementById('bmh-vendor-table'), document.getElementById('inv-vendor-table')].filter(Boolean).forEach(function (el) {
-    const filterVendor = String(document.getElementById('inv-vendor-filter')?.value || document.getElementById('inv-vendor-search')?.value || '').trim();
-    const filterDateFrom = String(document.getElementById('inv-vendor-date-from')?.value || '').trim();
-    const filterDateTo = String(document.getElementById('inv-vendor-date-to')?.value || '').trim();
-    const rows = window.BMH_VENDOR_BILLS.slice().reverse().filter(function (v) {
-      const vendorOk = !filterVendor || normalizeInventoryCompareText(String(v.vendor || '')) === normalizeInventoryCompareText(filterVendor);
-      const dateKey = String(v.billDateKey || v.createdAt || '').slice(0, 10);
-      const dateOk = (!filterDateFrom || dateKey >= filterDateFrom) && (!filterDateTo || dateKey <= filterDateTo);
-      return vendorOk && dateOk;
-    });
-    el.innerHTML = rows.length ? `<table class="rc-queue-table" style="width:100%"><thead><tr><th>Vendor</th><th>Inv</th><th>₹</th><th>Status</th><th>Bill</th><th></th></tr></thead><tbody>${rows.map(v => {
+    el.innerHTML = filteredRows.length ? `<table class="rc-queue-table" style="width:100%"><thead><tr><th style="width:36px"></th><th>Vendor / invoice</th><th>₹</th><th>Status</th><th>File</th><th></th></tr></thead><tbody>${filteredRows.map(function (v) {
       const out = bmhVendorBillOutstanding(v);
       const status = bmhVendorStatusLabel(v);
       const badge = status === 'paid' ? 'bd-green' : status === 'partial' ? 'bd-orange' : 'bd-orange';
-      return `<tr><td>${v.vendor}<div style="font-size:10px;color:var(--g1)">${escapeHtmlConsent(v.store || '')}${v.billMode === 'on-use' ? ' · on use' : ''}</div></td><td style="font-family:var(--mono);font-size:10px">${v.invoiceNo || '—'}</td><td>₹${v.amount.toLocaleString('en-IN')}<div style="font-size:10px;color:var(--g1)">Outstanding ₹${out.toLocaleString('en-IN')}</div></td><td><span class="badge ${badge}">${status}</span><div style="font-size:10px;color:var(--g1)">${v.dueDate || 'Due on use'}</div></td><td style="font-size:10px">${v.billFile?.name || v.uploadedName ? `<a href="#" onclick="event.preventDefault();openInventoryBill('${v.id}')">${escapeHtmlConsent(v.billFile?.name || v.uploadedName)}</a>` : '—'}</td><td>${out > 0 ? `<button type="button" class="btn btn-xs btn-gold" onclick="bmhMarkVendorPaid('${v.id}')">Pay bill</button>` : (v.paidRef || '—')}${isAdminUser() ? ` <button type="button" class="btn btn-xs btn-gray" onclick="bmhDeleteVendorBill('${v.id}')">Delete</button>` : ''}</td></tr>`;
-    }).join('')}</tbody></table>` : '<div style="color:var(--g1);font-size:12px">No vendor bills.</div>';
+      const selBg = v.id === window._bmhVendorBillSel ? 'background:var(--blue-lt);' : '';
+      return `<tr style="cursor:pointer;${selBg}" onclick="bmhSelectVendorBill('${v.id}')">
+        <td onclick="event.stopPropagation()">${out > 0 ? `<input type="checkbox" class="inv-vendor-bill-check" value="${escapeHtmlConsent(v.id)}" onclick="event.stopPropagation()">` : ''}</td>
+        <td><div style="font-weight:800">${escapeHtmlConsent(v.vendor || '')}</div><div style="font-family:var(--mono);font-size:10px;color:var(--bmh-teal)">${escapeHtmlConsent(v.invoiceNo || '—')}</div><div style="font-size:10px;color:var(--g1)">${escapeHtmlConsent(v.store || '')}${v.billMode === 'on-use' ? ' · on use' : ''}</div></td>
+        <td>₹${Number(v.amount || 0).toLocaleString('en-IN')}<div style="font-size:10px;color:${out > 0 ? '#b55a00' : 'var(--g1)'}">Due ₹${out.toLocaleString('en-IN')}</div></td>
+        <td><span class="badge ${badge}">${status}</span><div style="font-size:10px;color:var(--g1);margin-top:2px">${escapeHtmlConsent(v.dueDate || (v.billMode === 'on-use' ? 'On use' : '—'))}</div></td>
+        <td style="font-size:10px" onclick="event.stopPropagation()">${v.billFile?.name || v.uploadedName ? `<a href="#" onclick="event.preventDefault();openInventoryBill('${v.id}')">${escapeHtmlConsent(v.billFile?.name || v.uploadedName)}</a>` : '—'}</td>
+        <td onclick="event.stopPropagation">${out > 0 ? `<button type="button" class="btn btn-xs btn-gold" onclick="bmhMarkVendorPaid('${v.id}')">Pay</button>` : '—'}${isAdminUser() ? ` <button type="button" class="btn btn-xs btn-gray" onclick="bmhDeleteVendorBill('${v.id}')">Del</button>` : ''}</td>
+      </tr>`;
+    }).join('')}</tbody></table><div style="margin-top:8px;font-size:12px;font-weight:900;color:var(--bmh-blue)">Filtered total due ₹${totalDue.toLocaleString('en-IN')}</div>` : '<div style="color:var(--g1);font-size:12px">No vendor bills.</div>';
   });
   const mini = document.getElementById('inv-vendor-mini');
   if (mini) {
@@ -8356,31 +8599,27 @@ function bmhRenderVendorTables() {
       grouped[key].outstanding += bmhVendorBillOutstanding(v);
       grouped[key].count += 1;
     });
-    const rows = Object.values(grouped).sort(function (a,b) { return b.outstanding - a.outstanding; });
-    summaryEl.innerHTML = rows.length ? rows.map(function (r) {
+    const sumRows = Object.values(grouped).sort(function (a,b) { return b.outstanding - a.outstanding; });
+    summaryEl.innerHTML = sumRows.length ? sumRows.map(function (r) {
       return `<div style="padding:10px 0;border-bottom:1px solid var(--g5);font-size:12px;display:flex;justify-content:space-between;gap:10px;align-items:center;cursor:pointer" onclick="bmhFilterVendorFromSummary('${String(r.vendor).replace(/'/g, "\\'")}')">
         <div><strong>${escapeHtmlConsent(r.vendor)}</strong><div style="font-size:10px;color:var(--g1)">Bills ${r.count} · Total ₹${r.total.toLocaleString('en-IN')}</div></div>
-        <div style="display:flex;gap:8px;align-items:center"><span style="font-weight:900;color:${r.outstanding > 0 ? '#b55a00' : '#1a8c3c'}">Outstanding ₹${r.outstanding.toLocaleString('en-IN')}</span>${r.outstanding > 0 ? `<button type="button" class="btn btn-xs btn-gold" onclick="bmhPayVendorOutstanding('${String(r.vendor).replace(/'/g, "\\'")}')">Clear by bank / cheque</button>` : ''}</div>
+        <div style="display:flex;gap:8px;align-items:center"><span style="font-weight:900;color:${r.outstanding > 0 ? '#b55a00' : '#1a8c3c'}">Outstanding ₹${r.outstanding.toLocaleString('en-IN')}</span>${r.outstanding > 0 ? `<button type="button" class="btn btn-xs btn-gold" onclick="event.stopPropagation();bmhPayVendorOutstanding('${String(r.vendor).replace(/'/g, "\\'")}')">Clear by bank / cheque</button>` : ''}</div>
       </div>`;
     }).join('') : '<div style="padding:12px;color:var(--g1);font-size:12px">No vendor accounts yet.</div>';
   }
   const detailEl = document.getElementById('inv-vendor-detail');
   if (detailEl) {
-    const filterVendor = String(document.getElementById('inv-vendor-filter')?.value || document.getElementById('inv-vendor-search')?.value || '').trim();
-    const filterDateFrom = String(document.getElementById('inv-vendor-date-from')?.value || '').trim();
-    const filterDateTo = String(document.getElementById('inv-vendor-date-to')?.value || '').trim();
-    const rows = window.BMH_VENDOR_BILLS.slice().reverse().filter(function (v) {
-      const vendorOk = !filterVendor || normalizeInventoryCompareText(String(v.vendor || '')) === normalizeInventoryCompareText(filterVendor);
-      const dateKey = String(v.billDateKey || v.createdAt || '').slice(0, 10);
-      const dateOk = (!filterDateFrom || dateKey >= filterDateFrom) && (!filterDateTo || dateKey <= filterDateTo);
-      return vendorOk && dateOk;
-    });
-    const totalDue = rows.reduce(function (s, v) { return s + bmhVendorBillOutstanding(v); }, 0);
-    detailEl.innerHTML = rows.length ? rows.map(function (v) {
+    const v = filteredRows.find(function (r) { return r.id === window._bmhVendorBillSel; });
+    if (!v) {
+      detailEl.innerHTML = '<div style="padding:12px;color:var(--g1);font-size:12px">Click a bill in the list on the right for full detail, attachment, and payment.</div>'
+        + '<div style="padding:0 12px 12px;font-size:12px;font-weight:900;color:var(--bmh-blue)">Filtered total due ₹' + totalDue.toLocaleString('en-IN') + '</div>'
+        + '<div style="padding:0 12px 12px;display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn btn-outline btn-sm" onclick="bmhPaySelectedVendorBills()">Pay selected bills</button><button type="button" class="btn btn-gold btn-sm" onclick="bmhPayVendorOutstanding(document.getElementById(\'inv-vendor-filter\')?.value || \'\')">Part payment / vendor total</button></div>';
+    } else {
       const paid = Number(v.paidAmount || 0);
       const out = bmhVendorBillOutstanding(v);
       const status = out <= 0 ? 'paid' : (paid > 0 ? 'part paid' : 'due');
-      return `<div style="padding:10px 0;border-bottom:1px solid var(--g5);font-size:12px">
+      detailEl.innerHTML = `<div style="padding:12px;font-size:12px">
+        <div style="font-size:11px;font-weight:900;color:var(--g1);text-transform:uppercase;margin-bottom:6px">Selected bill</div>
         <div style="display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:10px;align-items:start">
           <div style="padding-top:2px">${out > 0 ? `<input type="checkbox" class="inv-vendor-bill-check" value="${escapeHtmlConsent(v.id)}">` : ''}</div>
           <div style="min-width:0">
@@ -8392,17 +8631,15 @@ function bmhRenderVendorTables() {
             <div style="font-weight:900;color:${out>0?'#b55a00':'#1a8c3c'}">₹${Number(v.amount || 0).toLocaleString('en-IN')}</div>
             <div style="margin-top:4px"><span class="badge ${status === 'paid' ? 'bd-green' : 'bd-orange'}">${status}</span></div>
             <div style="font-size:10px;color:${out>0?'#b55a00':'#1a8c3c'};margin-top:4px">Due ₹${out.toLocaleString('en-IN')}</div>
-            ${out > 0 ? `<div style="margin-top:6px;display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap"><button type="button" class="btn btn-xs btn-gold" onclick="bmhMarkVendorPaid('${v.id}')">Pay bill</button><button type="button" class="btn btn-xs btn-outline" onclick="bmhPayVendorOutstanding('${String(v.vendor || '').replace(/'/g, "\\'")}')">Part pay</button></div>` : ''}
+            ${out > 0 ? `<div style="margin-top:6px;display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap"><button type="button" class="btn btn-xs btn-gold" onclick="bmhMarkVendorPaid('${v.id}')">Pay bill</button><button type="button" class="btn btn-xs btn-outline" onclick="bmhPayVendorOutstanding('${String(v.vendor || '').replace(/'/g, "\\'")}')">Part pay vendor</button></div>` : ''}
           </div>
         </div>
+        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+          <button type="button" class="btn btn-outline btn-sm" onclick="bmhPaySelectedVendorBills()">Pay selected bills</button>
+          <button type="button" class="btn btn-gold btn-sm" onclick="bmhPayVendorOutstanding(document.getElementById('inv-vendor-filter')?.value || '')">Part payment / vendor total</button>
+        </div>
       </div>`;
-    }).join('') + `<div style="padding-top:12px;display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap">
-      <div style="font-size:13px;font-weight:900;color:var(--bmh-blue)">Total due ₹${totalDue.toLocaleString('en-IN')}</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button type="button" class="btn btn-outline btn-sm" onclick="bmhPaySelectedVendorBills()">Pay selected bills</button>
-        <button type="button" class="btn btn-gold btn-sm" onclick="bmhPayVendorOutstanding(document.getElementById('inv-vendor-filter')?.value || '')">Part payment / vendor total</button>
-      </div>
-    </div>` : '<div style="padding:12px;color:var(--g1);font-size:12px">No bills for this vendor.</div>';
+    }
   }
   bmhRenderOfficeBillsDueBanner();
 }
@@ -8419,6 +8656,7 @@ function bmhSetInvBillMode(mode) {
   } else {
     bmhRenderVendorTables();
   }
+  bmhRenderInvVendorHomeStrip();
 }
 function bmhOnVendorTabOpen() {
   try {
@@ -8476,6 +8714,7 @@ function bmhRenderOfficeBillsPanel() {
   const out = Math.max(0, (Number(b.amount) || 0) - (Number(b.paidAmount) || 0));
   const bid = String(b.id || '').replace(/'/g, "\\'");
   detail.innerHTML = '<div style="font-size:13px;font-weight:900">' + escapeHtmlConsent(b.category || '') + '</div><div style="font-size:10px;color:var(--g1);margin-top:4px">' + escapeHtmlConsent(b.label || '') + '</div><div style="margin-top:10px;font-size:12px">Amount ₹' + Number(b.amount || 0).toLocaleString('en-IN') + ' · Paid ₹' + (Number(b.paidAmount) || 0).toLocaleString('en-IN') + ' · Outstanding ₹' + out.toLocaleString('en-IN') + '</div><div style="margin-top:8px;font-size:11px;color:var(--g1)">Last paid: ' + escapeHtmlConsent(String(b.lastPaidDate || '—').slice(0, 10)) + ' · Next due: ' + escapeHtmlConsent(String(b.nextDueDate || b.dueDate || '—').slice(0, 10)) + '</div><div style="margin-top:8px;font-size:11px">' + escapeHtmlConsent(b.paymentMode || '') + ' ' + escapeHtmlConsent(b.paymentRef || '') + '</div>' + (b.note ? '<div style="margin-top:6px;font-size:11px">' + escapeHtmlConsent(b.note) + '</div>' : '') + ((b.billFile && b.billFile.data) || b.uploadedName ? '<div style="margin-top:10px"><button type="button" class="btn btn-xs btn-blue" onclick="openInventoryBill(\'' + bid + '\')">Open attachment</button></div>' : '') + (out > 0 ? '<div style="margin-top:12px"><button type="button" class="btn btn-xs btn-gold" onclick="bmhMarkOfficeBillPaid(\'' + bid + '\')">Record payment</button></div>' : '') + (isAdminUser() ? '<div style="margin-top:8px"><button type="button" class="btn btn-xs btn-gray" onclick="bmhDeleteOfficeBill(\'' + bid + '\')">Delete</button></div>' : '');
+  bmhRenderInvVendorHomeStrip();
 }
 function bmhSelectOfficeBill(id) {
   window._bmhOfficeBillSel = id;
@@ -8569,7 +8808,6 @@ window.bmhDeleteOfficeBill = bmhDeleteOfficeBill;
 function bmhRenderOfficeBillsDueBanner() {
   const el = document.getElementById('inv-bill-due-banner');
   if (!el) return;
-  const lines = [];
   const todayKey = new Date().toISOString().slice(0, 10);
   const parseDay = function (s) {
     if (!s) return null;
@@ -8580,30 +8818,62 @@ function bmhRenderOfficeBillsDueBanner() {
     if (!d) return null;
     return Math.floor((d.getTime() - new Date(todayKey + 'T12:00:00').getTime()) / 86400000);
   };
+  const pushLine = function (arr, urgent, sort, text) {
+    arr.push({ urgent: urgent, sort: sort, text: text });
+  };
+  const d15 = [];
+  const d30 = [];
+  const overdue = [];
+  const onUseVendor = [];
   (window.BMH_OFFICE_BILLS || []).forEach(function (b) {
     const due = b.nextDueDate || b.dueDate;
     if (!due) return;
     const d = parseDay(due);
     if (d === null) return;
     const diff = daysUntil(d);
-    if (diff === null || diff > 14) return;
+    if (diff === null || diff > 30) return;
     const out = Math.max(0, (Number(b.amount) || 0) - (Number(b.paidAmount) || 0));
+    if (out <= 0) return;
     const label = (b.category || 'Bill') + (b.label ? ' — ' + b.label : '');
-    lines.push({ urgent: diff < 0, sort: diff, text: (diff < 0 ? '⚠️ Overdue: ' : '') + label + ' · due ' + String(due).slice(0, 10) + (out > 0 ? ' · ₹' + out.toLocaleString('en-IN') + ' pending' : '') });
+    const txt = label + ' · due ' + String(due).slice(0, 10) + ' · ₹' + out.toLocaleString('en-IN') + ' pending';
+    if (diff < 0) pushLine(overdue, true, diff - 1000, '⚠️ Overdue: ' + txt);
+    else if (diff <= 15) pushLine(d15, false, diff, txt);
+    else pushLine(d30, false, diff + 100, txt);
   });
   (window.BMH_VENDOR_BILLS || []).forEach(function (v) {
+    const out = bmhVendorBillOutstanding(v);
+    if (!(out > 0)) return;
+    const onUse = String(v.billMode || '').toLowerCase() === 'on-use';
+    if (onUse) {
+      pushLine(onUseVendor, false, 500, '📦 Bill when used (IOL / consignment): ' + (v.vendor || 'Vendor') + ' · ₹' + out.toLocaleString('en-IN') + ' · ' + (v.invoiceNo || 'Invoice'));
+      return;
+    }
     const due = v.dueDate || v.billDateKey;
     if (!due) return;
     const d = parseDay(due);
     if (d === null) return;
     const diff = daysUntil(d);
-    if (diff === null || diff > 14) return;
-    const out = bmhVendorBillOutstanding(v);
-    if (out <= 0) return;
-    lines.push({ urgent: diff < 0, sort: diff, text: (diff < 0 ? '⚠️ Vendor overdue: ' : 'Vendor: ') + (v.vendor || '') + ' · ₹' + out.toLocaleString('en-IN') + ' · ' + String(due).slice(0, 10) });
+    if (diff === null || diff > 30) return;
+    const txt = (v.vendor || 'Vendor') + ' · ₹' + out.toLocaleString('en-IN') + ' · ' + String(due).slice(0, 10);
+    if (diff < 0) pushLine(overdue, true, diff - 1000, '⚠️ Vendor overdue: ' + txt);
+    else if (diff <= 15) pushLine(d15, false, diff, 'Vendor: ' + txt);
+    else pushLine(d30, false, diff + 100, 'Vendor: ' + txt);
   });
-  lines.sort(function (a, b) { return a.sort - b.sort; });
-  el.innerHTML = lines.length ? '<div style="padding:10px 12px;border-radius:10px;border:1px solid #f59e0b;background:linear-gradient(180deg,#fff7ed,#fff);font-size:12px"><div style="font-weight:900;color:#8a4200;margin-bottom:6px">Due soon / urgent</div>' + lines.slice(0, 8).map(function (l) { return '<div style="margin-top:4px">' + escapeHtmlConsent(l.text) + '</div>'; }).join('') + '</div>' : '';
+  const sortArr = function (a) { a.sort(function (x, y) { return x.sort - y.sort; }); };
+  [overdue, d15, d30, onUseVendor].forEach(sortArr);
+  const block = function (title, arr, color) {
+    if (!arr.length) return '';
+    return '<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(245,158,11,.35)"><div style="font-weight:900;color:' + (color || '#8a4200') + ';margin-bottom:4px;font-size:10.5px;text-transform:uppercase">' + title + '</div>' + arr.slice(0, 6).map(function (l) {
+      return '<div style="margin-top:3px;font-size:11.5px">' + escapeHtmlConsent(l.text) + '</div>';
+    }).join('') + '</div>';
+  };
+  const has = overdue.length || d15.length || d30.length || onUseVendor.length;
+  el.innerHTML = has ? '<div style="padding:10px 12px;border-radius:10px;border:1px solid #f59e0b;background:linear-gradient(180deg,#fff7ed,#fff);font-size:12px"><div style="font-weight:900;color:#8a4200;margin-bottom:2px">Calendar dues &amp; IOL vendor (on-use)</div>'
+    + block('Overdue', overdue, '#b91c1c')
+    + block('Due within 15 days', d15, '#8a4200')
+    + block('Due within 1 month (16–30 days)', d30, '#92400e')
+    + block('Bill when used (no fixed due date)', onUseVendor, '#1a3c6e')
+    + '</div>' : '';
 }
 function bmhSyncVendorSearchFromSelect() {
   const sel = document.getElementById('inv-vendor-filter');
@@ -8611,6 +8881,7 @@ function bmhSyncVendorSearchFromSelect() {
   if (sel && inp) inp.value = sel.value || '';
 }
 function bmhFilterVendorFromSummary(vendor) {
+  window._bmhVendorBillSel = '';
   const sel = document.getElementById('inv-vendor-filter');
   const inp = document.getElementById('inv-vendor-search');
   if (sel) sel.value = vendor || '';
@@ -8620,7 +8891,7 @@ function bmhFilterVendorFromSummary(vendor) {
 window.bmhSyncVendorSearchFromSelect = bmhSyncVendorSearchFromSelect;
 window.bmhFilterVendorFromSummary = bmhFilterVendorFromSummary;
 function bmhSelectedVendorBillIds() {
-  return Array.from(document.querySelectorAll('#inv-vendor-detail .inv-vendor-bill-check:checked')).map(function (el) {
+  return Array.from(document.querySelectorAll('.inv-vendor-bill-check:checked')).map(function (el) {
     return String(el.value || '').trim();
   }).filter(Boolean);
 }
@@ -8667,6 +8938,7 @@ function bmhDeleteVendorBill(id) {
   const bill = window.BMH_VENDOR_BILLS[idx];
   if (!confirm('Delete vendor bill ' + (bill.invoiceNo || bill.uploadedName || bill.vendor || '') + '?')) return;
   window.BMH_VENDOR_BILLS.splice(idx, 1);
+  if (window._bmhVendorBillSel === id) window._bmhVendorBillSel = '';
   saveBmhFinancials();
   bmhRenderVendorTables();
   showToast('Vendor bill deleted', 's');
@@ -8680,7 +8952,9 @@ function bmhAddVendorBill() {
   const f = document.getElementById('inv-vend-file')?.files?.[0] || document.getElementById('bmh-vend-file')?.files?.[0];
   if (!vendor || !(amt > 0)) { showToast('Vendor and amount required', 'w'); return; }
   bmhCompressFileToData(f, function (billFile) {
-    window.BMH_VENDOR_BILLS.push({ id: 'VB' + Date.now(), vendor, invoiceNo: inv, amount: amt, dueDate: due, status: 'pending', uploadedName: f ? f.name : '', billFile: billFile || null, createdAt: new Date().toISOString() });
+    const nid = 'VB' + Date.now();
+    window.BMH_VENDOR_BILLS.push({ id: nid, vendor, invoiceNo: inv, amount: amt, dueDate: due, status: 'pending', uploadedName: f ? f.name : '', billFile: billFile || null, createdAt: new Date().toISOString() });
+    window._bmhVendorBillSel = nid;
     saveBmhFinancials();
     bmhRenderVendorTables();
     showToast('Vendor bill recorded ✓', 's');
@@ -8976,21 +9250,6 @@ function bmhRecordPatientPayment() {
   };
   TRANSACTIONS.push(txn);
   saveTransactionToFirebase && saveTransactionToFirebase(txn);
-  if (insurerDue > 0) {
-    const existing = (PAY_REQUESTS || []).find(r => r.bmhId === bmhId && r.status === 'pending' && /Insurance|TPA|PMJAY|CGHS|ECHS/i.test(String(r.mode || '')));
-    if (existing) {
-      existing.amount = insurerDue;
-      existing.mode = mode;
-      existing.ins = insName || existing.ins || mode;
-      existing.policy = policy || existing.policy || '';
-      existing.date = new Date().toISOString();
-      fbUpdate && fbUpdate('payRequests/' + existing.id, { amount: existing.amount, mode: existing.mode, ins: existing.ins, policy: existing.policy, date: existing.date });
-    } else {
-      const prIns = { id:'PR' + Date.now(), patient: pt?.name || bmhId, bmhId, for:'Insurance / TPA due', amount: insurerDue, status:'pending', from:'Billing', dept: pt?.dept || 'ophtho', centre: pt?.centre || CURRENT_USER?.centre || 'CHD', mode, ins: insName || mode, policy, date:new Date().toISOString() };
-      PAY_REQUESTS.push(prIns);
-      fbSet && fbSet('payRequests/' + prIns.id, prIns);
-    }
-  }
   const advAdj = Number(bmhTotalsForPatient(bmhId).advanceApplied || 0);
   if (pt && advAdj > 0) {
     pt.advance = Math.max(0, (Number(pt.advance) || 0) - advAdj);
@@ -8998,6 +9257,44 @@ function bmhRecordPatientPayment() {
   }
   const updatedDue = bmhSyncPatientRunningBalance(bmhId);
   if (pt) pt.balance = updatedDue;
+  if (isInsuranceLikeMode(mode) && pt) {
+    const lines = window.BMH_PATIENT_CHARGES[bmhId] || [];
+    const topLine = lines.find(function (x) { return x && !x.isConcession; }) || lines[0];
+    const proc = String(topLine?.desc || topLine?.name || 'Hospital bill / cashless').slice(0, 120);
+    const claimedAmt = Math.max(Number(bmhBillPreviewTotal(bmhId)) || 0, amt + (insurerDue || 0));
+    const hospitalDue = Math.max(0, insurerDue > 0 ? insurerDue : updatedDue);
+    let existing = (PAY_REQUESTS || []).find(function (r) {
+      return r.bmhId === bmhId && r.status === 'pending' && isInsuranceLikeMode(r.mode || r.ins || '');
+    });
+    const prPayload = {
+      patient: pt.name || bmhId,
+      bmhId: bmhId,
+      for: proc,
+      procedure: proc,
+      diagnosis: String(pt.diagnosis || pt.purpose || '').slice(0, 120),
+      amount: hospitalDue,
+      claimedAmount: claimedAmt,
+      approvedAmount: Math.max(Number(existing?.approvedAmount) || 0, claimedAmt),
+      status: 'pending',
+      from: 'Billing',
+      dept: pt.dept || 'ophtho',
+      centre: pt.centre || CURRENT_USER?.centre || 'CHD',
+      mode: mode,
+      ins: insName || mode,
+      policy: policy || '',
+      date: new Date().toISOString(),
+      lastPaymentRef: ref,
+      lastPaymentAmt: amt
+    };
+    if (existing) {
+      Object.assign(existing, prPayload, { id: existing.id });
+      try { fbUpdate && fbUpdate('payRequests/' + existing.id, Object.assign({}, existing)); } catch (e) {}
+    } else {
+      const prIns = Object.assign({ id: 'PR' + Date.now() }, prPayload);
+      PAY_REQUESTS.push(prIns);
+      try { fbSet && fbSet('payRequests/' + prIns.id, prIns); } catch (e) {}
+    }
+  }
   const pendingNonInsurance = (PAY_REQUESTS || []).filter(function (r) {
     return r.bmhId === bmhId && r.status === 'pending' && !isInsuranceLikeMode(r.mode || r.ins || '');
   }).sort(function (a, b) { return new Date(a.date || 0) - new Date(b.date || 0); });
@@ -9037,6 +9334,7 @@ function bmhRecordPatientPayment() {
   showToast('Payment saved ✓', 's');
   renderBillingPage();
   renderDashboard && renderDashboard();
+  try { renderTpaPage && renderTpaPage(); } catch (e) {}
 }
 function bmhToggleBillingInsuranceFields() {
   const mode = document.getElementById('bmh-pay-mode')?.value || 'Cash';
@@ -10401,6 +10699,9 @@ function renderBillingPage() {
   bmhRenderBillingVendorSummary();
   const bToolbar = document.getElementById('bmh-bill-search-toolbar');
   if (bToolbar) bToolbar.style.display = window._bmhBillingTab === 'search' ? '' : 'none';
+  const advP = document.getElementById('bmh-billing-advance-panel');
+  if (advP) advP.style.display = window._bmhBillingTab === 'current' ? '' : 'none';
+  if (window._bmhBillingTab === 'current') bmhRenderBillingAdvanceRows(true);
   const bTabs = document.querySelectorAll('#pg-billing > .ptabs .ptab');
   if (bTabs.length >= 2) {
     bTabs[0].classList.toggle('active', window._bmhBillingTab === 'current');
@@ -10421,6 +10722,11 @@ window._bmhAdminBillingCat = window._bmhAdminBillingCat || 'all';
 function renderAdminDailyBillingPanel() {
   const wrap = document.getElementById('bmh-admin-daily-billing-panel');
   if (!wrap) return;
+  if (window._bmhBillingTab === 'current') {
+    wrap.style.display = 'none';
+    wrap.innerHTML = '';
+    return;
+  }
   if (!CURRENT_USER?.isAdmin) {
     wrap.style.display = 'none';
     wrap.innerHTML = '';
@@ -10642,7 +10948,110 @@ function renderInventoryExpiryCheck(withinMonths) {
   }).join('') : `<div style="padding:12px;color:var(--g1);font-size:12px">No items expiring within ${withinMonths || 1} month${(withinMonths || 1) === 1 ? '' : 's'}.</div>`;
 }
 window.renderInventoryExpiryCheck = renderInventoryExpiryCheck;
+function bmhPopulateInventoryDeptSelects() {
+  const rows = loadInventoryDeptRows();
+  const opts = rows.map(function (r) {
+    return '<option value="' + escapeHtmlConsent(r.value) + '">' + escapeHtmlConsent(r.label) + '</option>';
+  }).join('');
+  ['inv-in-dept', 'inv-use-dept'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const cur = el.value || '';
+    el.innerHTML = opts;
+    if (cur && rows.some(function (r) { return r.value === cur; })) el.value = cur;
+    else if (rows.length) el.value = rows[0].value;
+  });
+}
+window.bmhPopulateInventoryDeptSelects = bmhPopulateInventoryDeptSelects;
+function addInventoryDeptPrompt() {
+  const code = String(prompt('Department code (short, e.g. ent, derma)') || '').trim().toLowerCase().replace(/\s+/g, '-');
+  if (!code) return;
+  const label = String(prompt('Display name (e.g. ENT)') || '').trim();
+  if (!label) { showToast('Label required', 'w'); return; }
+  const rows = loadInventoryDeptRows().slice();
+  if (rows.some(function (r) { return r.value === code; })) { showToast('That code already exists', 'w'); return; }
+  rows.push({ value: code, label: label });
+  saveInventoryDeptRows(rows);
+  bmhPopulateInventoryDeptSelects();
+  showToast('Department added ✓', 's');
+}
+window.addInventoryDeptPrompt = addInventoryDeptPrompt;
+function deleteInventoryDeptPrompt() {
+  if (!CURRENT_USER?.isAdmin) { showToast('Only admin can remove departments', 'w'); return; }
+  const cur = document.getElementById('inv-in-dept')?.value || '';
+  if (!cur) return;
+  const rows = loadInventoryDeptRows();
+  if (rows.length <= 1) { showToast('Keep at least one department', 'w'); return; }
+  const defaults = bmhDefaultInventoryDeptRows().map(function (r) { return r.value; });
+  if (defaults.includes(cur) && !confirm('Remove a default department? Inventory rows may still reference this code.')) return;
+  const next = rows.filter(function (r) { return r.value !== cur; });
+  if (next.length === rows.length) return;
+  saveInventoryDeptRows(next);
+  bmhPopulateInventoryDeptSelects();
+  const inUse = (INVENTORY || []).some(function (i) { return String(i.dept || '') === cur; });
+  if (inUse) showToast('Department removed from list — existing stock rows still keep code "' + cur + '"', 'i');
+  else showToast('Department removed ✓', 's');
+}
+window.deleteInventoryDeptPrompt = deleteInventoryDeptPrompt;
+function deleteInventoryCategoryPrompt() {
+  if (!CURRENT_USER?.isAdmin) { showToast('Only admin can delete categories', 'w'); return; }
+  const sel = document.getElementById('inv-in-cat');
+  const name = normalizeInventoryTextValue(sel?.value || '');
+  if (!name) { showToast('Select a category first', 'w'); return; }
+  const used = (INVENTORY || []).filter(function (i) { return normalizeInventoryCompareText(i.cat || '') === normalizeInventoryCompareText(name); }).length;
+  const msg = used ? 'Category is used by ' + used + ' stock row(s). Remove from list anyway? (rows are not deleted.)' : 'Remove category "' + name + '" from the list?';
+  if (!confirm(msg)) return;
+  window.BMH_INVENTORY_CATEGORIES = (window.BMH_INVENTORY_CATEGORIES || []).filter(function (c) {
+    return normalizeInventoryCompareText(c) !== normalizeInventoryCompareText(name);
+  });
+  try { localStorage.setItem('bmh_inventory_categories', JSON.stringify(window.BMH_INVENTORY_CATEGORIES)); } catch (e) {}
+  bmhPopulateInventorySelectors();
+  showToast('Category removed from list ✓', 's');
+}
+window.deleteInventoryCategoryPrompt = deleteInventoryCategoryPrompt;
+function addInventoryStorePrompt() {
+  const name = normalizeInventoryTextValue(prompt('New store / location name') || '');
+  if (!name) return;
+  window.BMH_STORE_LOCATIONS = window.BMH_STORE_LOCATIONS || [];
+  if (!window.BMH_STORE_LOCATIONS.includes(name)) window.BMH_STORE_LOCATIONS.push(name);
+  saveInventoryStoreLocations();
+  bmhPopulateInventorySelectors();
+  const sel = document.getElementById('inv-in-store');
+  if (sel) sel.value = name;
+  showToast('Store added ✓', 's');
+}
+window.addInventoryStorePrompt = addInventoryStorePrompt;
+function deleteInventoryStorePrompt() {
+  if (!CURRENT_USER?.isAdmin) { showToast('Only admin can delete stores', 'w'); return; }
+  const name = normalizeInventoryTextValue(document.getElementById('inv-in-store')?.value || '');
+  if (!name) { showToast('Select a store first', 'w'); return; }
+  const used = (INVENTORY || []).some(function (i) { return String(i.store || '') === name; });
+  if (used && !confirm('This store is referenced on stock rows. Remove from list anyway?')) return;
+  window.BMH_STORE_LOCATIONS = (window.BMH_STORE_LOCATIONS || []).filter(function (s) { return s !== name; });
+  if (!window.BMH_STORE_LOCATIONS.length) {
+    window.BMH_STORE_LOCATIONS = ['Eye Central Store CHD','Eye Central Store RPR','Eye CHD','Eye RPR'];
+  }
+  saveInventoryStoreLocations();
+  bmhPopulateInventorySelectors();
+  showToast('Store removed from list ✓', 's');
+}
+window.deleteInventoryStorePrompt = deleteInventoryStorePrompt;
+function removeInventoryLearnedProductPrompt() {
+  const raw = String(document.getElementById('bc-in')?.value || prompt('Item / product name to remove from suggestions') || '').trim();
+  if (!raw) return;
+  const memory = loadInventoryOcrMemory();
+  const before = (memory.products || []).length;
+  memory.products = (memory.products || []).filter(function (v) {
+    return normalizeInventoryCompareText(v) !== normalizeInventoryCompareText(raw);
+  });
+  if (memory.products.length === before) { showToast('No matching saved item name', 'w'); return; }
+  saveInventoryOcrMemory();
+  renderInventoryImportDatalists();
+  showToast('Removed from item suggestions ✓', 's');
+}
+window.removeInventoryLearnedProductPrompt = removeInventoryLearnedProductPrompt;
 function bmhPopulateInventorySelectors() {
+  bmhLoadPersistedStoreLocations();
   try {
     const savedInvCats = JSON.parse(localStorage.getItem('bmh_inventory_categories') || 'null');
     if (Array.isArray(savedInvCats) && savedInvCats.length) {
@@ -10670,6 +11079,7 @@ function bmhPopulateInventorySelectors() {
   ['inv-ret-store'].forEach(function (id) {
     const el = document.getElementById(id); if (el) el.innerHTML = storeEditOpts;
   });
+  bmhPopulateInventoryDeptSelects();
   const dept = bmhInventoryDeptValue();
   const storeEl = document.getElementById('inv-in-store');
   if (storeEl && !storeEl.value) storeEl.value = bmhDefaultStoreForDept(dept);
@@ -10735,7 +11145,7 @@ function openInventoryStockGroup(groupId) {
           <div style="text-align:right">
             <div style="font-size:16px;font-weight:900;color:var(--green)">${Number(row.stock || 0)}</div>
             <div style="font-size:10px;color:var(--g1)">MRP ₹${Number(row.mrp || 0).toLocaleString('en-IN')} · Cost ₹${Number(row.cost || 0).toLocaleString('en-IN')}</div>
-            <button type="button" class="btn btn-xs btn-gray" style="margin-top:6px" onclick="deleteInventoryStockRow('${String(row.barcode || '').replace(/'/g, "\\'")}')">Delete</button>
+            ${typeof isAdminUser === 'function' && isAdminUser() ? `<button type="button" class="btn btn-xs btn-gray" style="margin-top:6px" onclick="deleteInventoryStockRow('${String(row.barcode || '').replace(/'/g, "\\'")}')">Delete</button>` : ''}
           </div>
         </div>
       </div>`;
@@ -10876,6 +11286,7 @@ function deleteInventoryVendorPrompt() {
 window.deleteInventoryVendorPrompt = deleteInventoryVendorPrompt;
 function deleteInventoryStockRow(barcode) {
   if (!CURRENT_USER) { showToast('Sign in to delete stock', 'w'); return; }
+  if (typeof isAdminUser !== 'function' || !isAdminUser()) { showToast('Only admin can delete stock rows', 'w'); return; }
   const idx = INVENTORY.findIndex(function (i) { return String(i.barcode || '') === String(barcode || ''); });
   if (idx < 0) return;
   const item = INVENTORY[idx];
@@ -19210,9 +19621,10 @@ function getLabTestMeta(name) {
     range:'',
     formula: null,
     purpose:'',
+    patientBlurb: getLabPatientBlurbForName(n),
     normalNote:'Values within the printed reference interval are generally reassuring, but must be interpreted with symptoms and examination findings.',
     abnormalNote:'Abnormal results do not automatically indicate a serious problem and may need clinical correlation, repeat testing, or trend comparison.'
-  }, hit || {}, exact || {});
+  }, hit || {}, exact || {}, { patientBlurb: getLabPatientBlurbForName(n) });
 }
 function formatLabAgeSex(pt) {
   return [pt?.age ? String(pt.age) + 'Y' : '', pt?.sex || ''].filter(Boolean).join(' / ') || '—';
@@ -19443,9 +19855,15 @@ function setLabFlagForTest(testName) {
     }
   }
 }
+function recalculateAllLabDerived() {
+  ['P.T. (Prothrombin Time)', 'Glycosylated Haemoglobin (HbA1c)', 'Total Cholesterol', 'Triglycerides', 'HDL Cholesterol', 'LDL', 'Total Bilirubin', 'Direct Bilirubin', 'Total Proteins', 'Albumin', 'Spot Microalbuminuria', 'Spot Urine Creatinine'].forEach(function (t) {
+    calculateLabFormulas(t);
+  });
+}
 function flagLabVal(inp, testName) {
   setLabFlagForTest(testName);
   calculateLabFormulas(testName);
+  recalculateAllLabDerived();
 }
 // Auto-calculate derived fields when input values change
 function calculateLabFormulas(changedTestName) {
@@ -19474,17 +19892,20 @@ function calculateLabFormulas(changedTestName) {
     const hba1c = getVal('Glycosylated Haemoglobin (HbA1c)');
     if (!isNaN(hba1c)) setVal('ABG (Average Blood Glucose)', (hba1c * 28.7) - 46.7);
   }
-  // Lipid formulas
-  if (/total cholesterol|triglyceride|hdl/.test(low)) {
+  // Lipid formulas (any lipid-related field may change)
+  if (/total cholesterol|triglyceride|hdl|\bldl\b|\bvldl\b|non-hdl|lipid/i.test(low)) {
     const chol = getVal('Total Cholesterol');
     const tg = getVal('Triglycerides');
     const hdl = getVal('HDL Cholesterol');
+    if (!isNaN(chol) && !isNaN(hdl) && hdl > 0) {
+      setVal('Cholesterol/HDL Ratio', chol / hdl);
+      setVal('HDL / Total Cholesterol Ratio', hdl / chol);
+    }
     if (!isNaN(chol) && !isNaN(tg) && !isNaN(hdl)) {
       const vldl = tg / 5;
       const ldl = chol - hdl - vldl;
       setVal('VLDL', vldl);
       setVal('LDL', ldl);
-      setVal('Cholesterol/HDL Ratio', hdl > 0 ? chol / hdl : NaN);
       setVal('LDL/HDL Ratio', hdl > 0 ? ldl / hdl : NaN);
       setVal('Non-HDL Cholesterol', chol - hdl);
     }
@@ -19515,7 +19936,7 @@ function calculateLabFormulas(changedTestName) {
 
 function saveLabResults() {
   if(!activeLabOrder) return;
-  ['P.T. (Prothrombin Time)','Glycosylated Haemoglobin (HbA1c)','Total Cholesterol','Total Bilirubin','Direct Bilirubin','Total Proteins','Albumin','Spot Microalbuminuria'].forEach(function (t) { calculateLabFormulas(t); });
+  recalculateAllLabDerived();
   const tech = document.getElementById('lab-incharge')?.value || 'Lab Technician';
   const comments = document.getElementById('lab-comments')?.value?.trim() || '';
   const pt = PATIENTS.find(function (x) { return x.bmhId === activeLabOrder.bmhId; });
@@ -20156,8 +20577,11 @@ ${Object.keys(groups).map(function (key) {
   return (blurb ? '<div class="lab-group-blurb">' + escapeHtmlConsent(blurb) + '</div>' : '') + '<div class="section-hd">' + groups[key] + '</div><table><thead><tr><th>Test</th><th>Value</th><th>Unit</th><th>Normal Range</th><th>Flag</th></tr></thead><tbody>' + rows.map(function (row) {
     const flag = String(row.flag || '—');
     const cls = flag === 'HIGH' ? 'flag-h' : flag === 'LOW' ? 'flag-l' : 'flag-n';
-    const note = flag === 'HIGH' || flag === 'LOW' ? (row.abnormalNote || '') : '';
-    return '<tr><td style="font-weight:700">' + escapeHtmlConsent(row.name || '') + (note ? '<div style="margin-top:3px;font-size:9px;color:#6b7280;line-height:1.35">' + escapeHtmlConsent(note) + '</div>' : '') + '</td><td class="' + cls + '">' + escapeHtmlConsent(row.val || '—') + '</td><td>' + escapeHtmlConsent(row.unit || '') + '</td><td>' + escapeHtmlConsent(row.range || '') + '</td><td class="' + cls + '">' + escapeHtmlConsent(flag || '—') + '</td></tr>';
+    const pblur = String(row.patientBlurb || getLabPatientBlurbForName(row.name) || '').trim();
+    const abn = flag === 'HIGH' || flag === 'LOW' ? String(row.abnormalNote || '').trim() : '';
+    const subParts = [pblur, abn].filter(Boolean);
+    const sub = subParts.length ? '<div style="margin-top:3px;font-size:9px;color:#6b7280;line-height:1.35">' + escapeHtmlConsent(subParts.join(' — ')) + '</div>' : '';
+    return '<tr><td style="font-weight:700">' + escapeHtmlConsent(row.name || '') + sub + '</td><td class="' + cls + '">' + escapeHtmlConsent(row.val || '—') + '</td><td>' + escapeHtmlConsent(row.unit || '') + '</td><td>' + escapeHtmlConsent(row.range || '') + '</td><td class="' + cls + '">' + escapeHtmlConsent(flag || '—') + '</td></tr>';
   }).join('') + '</tbody></table>';
 }).join('')}
 <div class="signs">
