@@ -2031,6 +2031,25 @@
           </div>
         </div>
 
+        <!-- Category breakdown: OPD / Investigations / Procedures -->
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px">
+          <div style="background:#f0fdf4;border-radius:var(--r);padding:10px;text-align:center;border:2px solid #86efac">
+            <div style="font-size:9px;font-weight:800;color:#166534;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">OPD</div>
+            <div style="font-size:11px;font-weight:700;color:#166534;margin-bottom:2px">New + Follow Up</div>
+            <div style="font-size:18px;font-weight:900;color:#166534" id="rc-opd-total">₹0</div>
+          </div>
+          <div style="background:#eff6ff;border-radius:var(--r);padding:10px;text-align:center;border:2px solid #93c5fd">
+            <div style="font-size:9px;font-weight:800;color:#1e40af;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">Investigations</div>
+            <div style="font-size:11px;font-weight:700;color:#1e40af;margin-bottom:2px">Lab &amp; Diagnostics</div>
+            <div style="font-size:18px;font-weight:900;color:#1e40af" id="rc-inv-total">₹0</div>
+          </div>
+          <div style="background:#fdf4ff;border-radius:var(--r);padding:10px;text-align:center;border:2px solid #d8b4fe">
+            <div style="font-size:9px;font-weight:800;color:#6b21a8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">Procedures / Surgery</div>
+            <div style="font-size:11px;font-weight:700;color:#6b21a8;margin-bottom:2px">OT &amp; Procedures</div>
+            <div style="font-size:18px;font-weight:900;color:#6b21a8" id="rc-proc-total">₹0</div>
+          </div>
+        </div>
+
         <!-- Department-wise breakdown -->
         <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Department-wise Collection — Click to expand</div>
         <div id="rc-dept-collection" style="display:flex;flex-direction:column;gap:6px"></div>
@@ -3274,7 +3293,18 @@
 <div class="g32">
   <div class="col">
     <div class="card">
-      <div class="card-hd"><div><div class="card-title">&#129514; Lab Patient Queue</div><div class="card-sub"><span class="live-dot"></span>Only patient, advised tests, and referring doctor are shown here</div></div><span class="badge bd-orange" id="lab-pending-ct">0 pending</span></div>
+      <div class="card-hd"><div><div class="card-title">&#129514; Lab Patient Queue</div><div class="card-sub"><span class="live-dot"></span>Patients with ordered investigations appear here</div></div><span class="badge bd-orange" id="lab-pending-ct">0 pending</span></div>
+      <div style="background:var(--blue-lt);border-radius:8px;padding:9px 10px;margin-bottom:10px;border:1px solid var(--blue)">
+        <div style="font-size:10px;font-weight:800;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.4px;margin-bottom:7px">➕ Add Patient to Lab</div>
+        <div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap">
+          <div style="flex:1;min-width:180px;position:relative">
+            <input type="text" id="lab-add-pt-search" placeholder="Search by BMSH ID or phone number" style="width:100%;font-size:12px" oninput="searchLabAddPatient(this.value)">
+            <div id="lab-add-pt-results" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:30;background:#fff;border:1px solid var(--g4);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.12);max-height:200px;overflow-y:auto;margin-top:4px"></div>
+          </div>
+          <div style="flex:1;min-width:120px"><input type="hidden" id="lab-add-pt-bmhid"><span id="lab-add-pt-name" style="font-size:12px;font-weight:700;color:var(--bmh-blue)"></span></div>
+          <button class="btn btn-blue btn-sm" onclick="addPatientToLab()">Add to Lab Queue</button>
+        </div>
+      </div>
       <div id="lab-ordered-list"></div>
     </div>
     <div class="card" id="lab-entry-panel" style="display:none">
@@ -3312,16 +3342,36 @@
         <div><div style="font-size:8.5px;color:#666;font-weight:700;text-transform:uppercase">Date</div><div style="font-weight:700" id="lab-rpt-date">&#8212;</div></div>
         <div><div style="font-size:8.5px;color:#666;font-weight:700;text-transform:uppercase">Lab Tech</div><div style="font-weight:700" id="lab-rpt-tech">&#8212;</div></div>
       </div>
-      <div class="ptabs">
-        <div class="ptab active" onclick="ptab(this,'lab-p-haem')">&#129754; Haematology</div>
-        <div class="ptab" onclick="ptab(this,'lab-p-bio')">&#129514; Biochemistry</div>
-        <div class="ptab" onclick="ptab(this,'lab-p-diab')">&#127846; Diabetes</div>
-        <div class="ptab" onclick="ptab(this,'lab-p-thyroid')">&#129419; Thyroid</div>
+      <div class="ptabs" style="flex-wrap:wrap">
+        <div class="ptab active" onclick="ptab(this,'lab-p-haem')">🩸 Haematology</div>
+        <div class="ptab" onclick="ptab(this,'lab-p-coag')">🔬 Coagulogram</div>
+        <div class="ptab" onclick="ptab(this,'lab-p-chem')">🧪 Chemistry</div>
+        <div class="ptab" onclick="ptab(this,'lab-p-rft')">💉 RFT</div>
+        <div class="ptab" onclick="ptab(this,'lab-p-lft')">🫀 LFT</div>
+        <div class="ptab" onclick="ptab(this,'lab-p-lipid')">🫀 Lipid</div>
+        <div class="ptab" onclick="ptab(this,'lab-p-electro')">⚡ Electrolytes</div>
+        <div class="ptab" onclick="ptab(this,'lab-p-sero')">🔬 Serology</div>
+        <div class="ptab" onclick="ptab(this,'lab-p-urine')">💧 Urine</div>
+        <div class="ptab" onclick="ptab(this,'lab-p-stool')">🔬 Stool</div>
+        <div class="ptab" onclick="ptab(this,'lab-p-hcg')">🤰 HCG</div>
+        <div class="ptab" onclick="ptab(this,'lab-p-semen')">🔬 Semen</div>
+        <div class="ptab" onclick="ptab(this,'lab-p-rafq')">🦴 RA Factor</div>
+        <div class="ptab" onclick="ptab(this,'lab-p-thyroid')">🦋 Thyroid</div>
         <div class="ptab" onclick="ptab(this,'lab-p-custom')">+ Custom</div>
       </div>
       <div class="tab-content active" id="lab-p-haem"><div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 65px;gap:5px;padding:4px 8px 5px;font-size:9.5px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px"><span>Test</span><span>Value</span><span>Unit</span><span>Normal Range</span><span>Flag</span></div><div id="lab-haem"></div></div>
-      <div class="tab-content" id="lab-p-bio"><div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 65px;gap:5px;padding:4px 8px 5px;font-size:9.5px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px"><span>Test</span><span>Value</span><span>Unit</span><span>Normal Range</span><span>Flag</span></div><div id="lab-bio"></div></div>
-      <div class="tab-content" id="lab-p-diab"><div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 65px;gap:5px;padding:4px 8px 5px;font-size:9.5px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px"><span>Test</span><span>Value</span><span>Unit</span><span>Normal Range</span><span>Flag</span></div><div id="lab-diab"></div></div>
+      <div class="tab-content" id="lab-p-coag"><div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 65px;gap:5px;padding:4px 8px 5px;font-size:9.5px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px"><span>Test</span><span>Value</span><span>Unit</span><span>Normal Range</span><span>Flag</span></div><div id="lab-coag"></div></div>
+      <div class="tab-content" id="lab-p-chem"><div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 65px;gap:5px;padding:4px 8px 5px;font-size:9.5px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px"><span>Test</span><span>Value</span><span>Unit</span><span>Normal Range</span><span>Flag</span></div><div id="lab-chem"></div></div>
+      <div class="tab-content" id="lab-p-rft"><div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 65px;gap:5px;padding:4px 8px 5px;font-size:9.5px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px"><span>Test</span><span>Value</span><span>Unit</span><span>Normal Range</span><span>Flag</span></div><div id="lab-rft"></div></div>
+      <div class="tab-content" id="lab-p-lft"><div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 65px;gap:5px;padding:4px 8px 5px;font-size:9.5px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px"><span>Test</span><span>Value</span><span>Unit</span><span>Normal Range</span><span>Flag</span></div><div id="lab-lft"></div></div>
+      <div class="tab-content" id="lab-p-lipid"><div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 65px;gap:5px;padding:4px 8px 5px;font-size:9.5px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px"><span>Test</span><span>Value</span><span>Unit</span><span>Normal Range</span><span>Flag</span></div><div id="lab-lipid"></div></div>
+      <div class="tab-content" id="lab-p-electro"><div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 65px;gap:5px;padding:4px 8px 5px;font-size:9.5px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px"><span>Test</span><span>Value</span><span>Unit</span><span>Normal Range</span><span>Flag</span></div><div id="lab-electro"></div></div>
+      <div class="tab-content" id="lab-p-sero"><div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 65px;gap:5px;padding:4px 8px 5px;font-size:9.5px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px"><span>Test</span><span>Value</span><span>Unit</span><span>Normal Range</span><span>Flag</span></div><div id="lab-sero"></div></div>
+      <div class="tab-content" id="lab-p-urine"><div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 65px;gap:5px;padding:4px 8px 5px;font-size:9.5px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px"><span>Test</span><span>Value</span><span>Unit</span><span>Normal Range</span><span>Flag</span></div><div id="lab-urine"></div></div>
+      <div class="tab-content" id="lab-p-stool"><div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 65px;gap:5px;padding:4px 8px 5px;font-size:9.5px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px"><span>Test</span><span>Value</span><span>Unit</span><span>Normal Range</span><span>Flag</span></div><div id="lab-stool"></div></div>
+      <div class="tab-content" id="lab-p-hcg"><div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 65px;gap:5px;padding:4px 8px 5px;font-size:9.5px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px"><span>Test</span><span>Value</span><span>Unit</span><span>Normal Range</span><span>Flag</span></div><div id="lab-hcg"></div></div>
+      <div class="tab-content" id="lab-p-semen"><div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 65px;gap:5px;padding:4px 8px 5px;font-size:9.5px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px"><span>Test</span><span>Value</span><span>Unit</span><span>Normal Range</span><span>Flag</span></div><div id="lab-semen"></div></div>
+      <div class="tab-content" id="lab-p-rafq"><div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 65px;gap:5px;padding:4px 8px 5px;font-size:9.5px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px"><span>Test</span><span>Value</span><span>Unit</span><span>Normal Range</span><span>Flag</span></div><div id="lab-rafq"></div></div>
       <div class="tab-content" id="lab-p-thyroid"><div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 65px;gap:5px;padding:4px 8px 5px;font-size:9.5px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px"><span>Test</span><span>Value</span><span>Unit</span><span>Normal Range</span><span>Flag</span></div><div id="lab-thyroid"></div></div>
       <div class="tab-content" id="lab-p-custom"><div style="padding:10px;background:var(--g6);border-radius:8px;border:2px dashed var(--g4);margin-bottom:8px"><div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:7px">Add Custom Test</div><div style="display:flex;gap:7px;flex-wrap:wrap"><input type="text" id="custom-test-name" placeholder="Test name" style="flex:2"><input type="text" id="custom-test-val" placeholder="Value" style="flex:1;min-width:60px"><input type="text" id="custom-test-unit" placeholder="Unit" style="flex:1;min-width:50px"><input type="text" id="custom-test-range" placeholder="Range" style="flex:1;min-width:80px"><button class="btn btn-blue btn-sm" onclick="addCustomLabTest()">+ Add</button></div></div><div id="custom-tests-list"></div></div>
       <div id="lab-rpt-insights" style="margin-top:10px;padding:10px 12px;border:1px solid #d8dde6;border-radius:8px;background:#fafafa;font-size:10.5px;line-height:1.55;color:#374151"></div>
@@ -3397,19 +3447,15 @@
               <button class="btn btn-xs btn-gold" onclick="saveIolInventoryGrid()">💾 Add selected IOL powers to stock</button>
             </div>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:10px">
-            <div class="form-group" style="margin:0"><label class="fl">Vendor Name</label><input type="text" id="inv-iol-vendor" list="inv-vendor-datalist" placeholder="Vendor / supplier"></div>
-            <div class="form-group" style="margin:0"><label class="fl">Brand</label><input type="text" id="inv-iol-brand" placeholder="AcrySof / Tecnis / Appasamy"></div>
-            <div class="form-group" style="margin:0"><label class="fl">Company</label><input type="text" id="inv-iol-company" placeholder="Alcon / J&J / Zeiss"></div>
-            <div class="form-group" style="margin:0"><label class="fl">Batch Number</label><input type="text" id="inv-iol-model" placeholder="Batch from product line"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+            <div class="form-group" style="margin:0"><label class="fl">Vendor Name</label><input type="text" id="inv-iol-vendor" list="inv-vendor-datalist" placeholder="Vendor / supplier" oninput="syncIolVendorToAll(this.value)"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Invoice No.</label><input type="text" id="inv-iol-invoice" placeholder="Bill / Invoice number"></div>
           </div>
-          <div style="display:grid;grid-template-columns:140px 140px 1fr;gap:8px;align-items:end;margin-bottom:10px">
-            <div class="form-group" style="margin:0"><label class="fl">Default Expiry</label><input type="text" id="inv-iol-expiry" placeholder="MM/YYYY"></div>
-            <div class="form-group" style="margin:0"><label class="fl">Default Cost ₹</label><input type="number" id="inv-iol-cost" min="0" value="0"></div>
-            <div class="form-group" style="margin:0"><label class="fl">Serial / batch map (optional)</label><textarea id="inv-iol-serial-map" rows="2" style="width:100%;font-family:var(--mono);font-size:11px" placeholder="+21.00D: SER123,BATCH-A | +21.50D: SER124,BATCH-A"></textarea></div>
+          <div id="inv-iol-brands-container">
+            <!-- Brand entries rendered here -->
           </div>
+          <button class="btn btn-outline btn-sm" style="margin-bottom:10px" onclick="addIolBrandEntry()">+ Add Another Brand</button>
           <div id="inv-iol-bill-review" style="display:none;background:#fff;border:1px dashed #d2bb79;border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:11px;color:#7a5f22"></div>
-          <div id="inv-iol-power-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px"></div>
         </div>
         <div id="stock-in-log" style="margin-top:10px"></div>
         <div class="card" style="margin-top:12px;background:var(--g6)">
@@ -5009,19 +5055,77 @@
     <button class="btn btn-gray btn-sm" type="button" onclick="clearSelectedInvestigations()">Clear selection</button>
   </div>
 </div>
-<div class="ptabs">
-  <div class="ptab active" onclick="ptab(this,'inv-blood')">🩸 Blood</div>
-  <div class="ptab" onclick="ptab(this,'inv-diag')">🔬 Diagnostic / Imaging</div>
-  <div class="ptab" onclick="ptab(this,'inv-eye')">👁️ Eye Investigations</div>
+<div class="ptabs" style="flex-wrap:wrap">
+  <div class="ptab active" onclick="ptab(this,'inv-haem')">🩸 Haematology</div>
+  <div class="ptab" onclick="ptab(this,'inv-coag')">🔬 Coagulogram</div>
+  <div class="ptab" onclick="ptab(this,'inv-chem')">🧪 Chemistry</div>
+  <div class="ptab" onclick="ptab(this,'inv-rft')">💉 RFT</div>
+  <div class="ptab" onclick="ptab(this,'inv-lft')">🫀 LFT</div>
+  <div class="ptab" onclick="ptab(this,'inv-lipid')">🫀 Lipid</div>
+  <div class="ptab" onclick="ptab(this,'inv-electro')">⚡ Electrolytes</div>
+  <div class="ptab" onclick="ptab(this,'inv-sero')">🔬 Serology</div>
+  <div class="ptab" onclick="ptab(this,'inv-urine')">💧 Urine</div>
+  <div class="ptab" onclick="ptab(this,'inv-stool')">🔬 Stool</div>
+  <div class="ptab" onclick="ptab(this,'inv-hcg')">🤰 HCG</div>
+  <div class="ptab" onclick="ptab(this,'inv-semen')">🔬 Semen</div>
+  <div class="ptab" onclick="ptab(this,'inv-rafq')">🦴 RA Factor</div>
+  <div class="ptab" onclick="ptab(this,'inv-thyroid')">🦋 Thyroid</div>
 </div>
-<div class="tab-content active" id="inv-blood">
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="inv-blood-list"></div>
+<div class="tab-content active" id="inv-haem">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase">Haematology</span><button class="btn btn-xs btn-outline" onclick="selectAllInvCat('haem')">☑ Select All</button></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="inv-haem-list"></div>
 </div>
-<div class="tab-content" id="inv-diag">
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="inv-diag-list"></div>
+<div class="tab-content" id="inv-coag">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase">Coagulogram</span><button class="btn btn-xs btn-outline" onclick="selectAllInvCat('coag')">☑ Select All</button></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="inv-coag-list"></div>
 </div>
-<div class="tab-content" id="inv-eye">
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="inv-eye-list"></div>
+<div class="tab-content" id="inv-chem">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase">Clinical Chemistry</span><button class="btn btn-xs btn-outline" onclick="selectAllInvCat('chem')">☑ Select All</button></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="inv-chem-list"></div>
+</div>
+<div class="tab-content" id="inv-rft">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase">Renal Function Test</span><button class="btn btn-xs btn-outline" onclick="selectAllInvCat('rft')">☑ Select All</button></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="inv-rft-list"></div>
+</div>
+<div class="tab-content" id="inv-lft">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase">Liver Function Test</span><button class="btn btn-xs btn-outline" onclick="selectAllInvCat('lft')">☑ Select All</button></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="inv-lft-list"></div>
+</div>
+<div class="tab-content" id="inv-lipid">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase">Lipid Profile</span><button class="btn btn-xs btn-outline" onclick="selectAllInvCat('lipid')">☑ Select All</button></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="inv-lipid-list"></div>
+</div>
+<div class="tab-content" id="inv-electro">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase">Serum Electrolytes</span><button class="btn btn-xs btn-outline" onclick="selectAllInvCat('electro')">☑ Select All</button></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="inv-electro-list"></div>
+</div>
+<div class="tab-content" id="inv-sero">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase">Serology</span><button class="btn btn-xs btn-outline" onclick="selectAllInvCat('sero')">☑ Select All</button></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="inv-sero-list"></div>
+</div>
+<div class="tab-content" id="inv-urine">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase">Urine Examination</span><button class="btn btn-xs btn-outline" onclick="selectAllInvCat('urine')">☑ Select All</button></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="inv-urine-list"></div>
+</div>
+<div class="tab-content" id="inv-stool">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase">Stool Examination</span><button class="btn btn-xs btn-outline" onclick="selectAllInvCat('stool')">☑ Select All</button></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="inv-stool-list"></div>
+</div>
+<div class="tab-content" id="inv-hcg">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase">Pregnancy Test</span><button class="btn btn-xs btn-outline" onclick="selectAllInvCat('hcg')">☑ Select All</button></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="inv-hcg-list"></div>
+</div>
+<div class="tab-content" id="inv-semen">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase">Semen Analysis</span><button class="btn btn-xs btn-outline" onclick="selectAllInvCat('semen')">☑ Select All</button></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="inv-semen-list"></div>
+</div>
+<div class="tab-content" id="inv-rafq">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase">RA Factor Quantitative</span><button class="btn btn-xs btn-outline" onclick="selectAllInvCat('rafq')">☑ Select All</button></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="inv-rafq-list"></div>
+</div>
+<div class="tab-content" id="inv-thyroid">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase">Thyroid Function</span><button class="btn btn-xs btn-outline" onclick="selectAllInvCat('thyroid')">☑ Select All</button></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="inv-thyroid-list"></div>
 </div>
 <div style="margin-top:12px;padding:10px;background:var(--g6);border-radius:var(--rsm)">
   <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:6px">Selected Investigations</div>
