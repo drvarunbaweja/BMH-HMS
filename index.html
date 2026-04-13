@@ -3376,7 +3376,7 @@
         <div class="ptab" onclick="ptab(this,'inv-expiry')">⏳ Expiry Check</div>
         <div class="ptab" onclick="ptab(this,'inv-stores')">🏬 Stores & Transfers</div>
         <div class="ptab" onclick="ptab(this,'inv-indent')">📝 Indents</div>
-        <div class="ptab" onclick="ptab(this,'inv-vendor')">🏪 Vendors</div>
+        <div class="ptab" onclick="ptab(this,'inv-vendor');bmhOnVendorTabOpen();">🏪 Vendors</div>
         <div class="ptab" onclick="ptab(this,'inv-ocr')">📒 Expenses &amp; Ledger</div>
       </div>
       <div class="tab-content active" id="inv-in">
@@ -3549,6 +3549,13 @@
         <div class="card"><div class="card-hd"><div class="card-title">Open indents</div></div><div id="inv-indent-list"></div></div>
       </div>
       <div class="tab-content" id="inv-vendor">
+        <div id="inv-bill-due-banner" style="margin-bottom:10px"></div>
+        <div style="margin-bottom:12px;display:flex;flex-wrap:wrap;gap:16px;align-items:center">
+          <span style="font-size:11px;font-weight:800;color:var(--g1);text-transform:uppercase">View</span>
+          <label style="font-size:12px;cursor:pointer"><input type="radio" name="inv-bill-mode" value="vendor" checked onchange="bmhSetInvBillMode(this.value)"> Vendors</label>
+          <label style="font-size:12px;cursor:pointer"><input type="radio" name="inv-bill-mode" value="office" onchange="bmhSetInvBillMode(this.value)"> Other bills (utilities)</label>
+        </div>
+        <div id="inv-panel-vendor">
         <div class="card" style="margin-bottom:12px">
           <div class="card-hd"><div><div class="card-title">Vendor outstanding summary</div><div class="card-sub">Cheque / bank-transfer clearances reduce the oldest outstanding bills first</div></div><button type="button" class="btn btn-outline btn-sm" onclick="bmhPrintInventorySection('Vendor Dues And Payments', '#inv-vendor')">🖨️ Print vendors</button></div>
           <div id="inv-vendor-summary"></div>
@@ -3576,6 +3583,39 @@
             <div class="card">
               <div class="card-hd"><div class="card-title">Vendor Bill Detail</div><button type="button" class="btn btn-gold btn-sm" onclick="bmhPayVendorOutstanding(document.getElementById('inv-vendor-filter')?.value || '')">Pay vendor total / part payment</button></div>
               <div id="inv-vendor-detail"></div>
+            </div>
+          </div>
+        </div>
+        </div>
+        <div id="inv-panel-office" style="display:none">
+          <div class="card" style="margin-bottom:12px">
+            <div class="card-hd"><div><div class="card-title">Utility &amp; office bills</div><div class="card-sub">Electricity, water, rent, biomedical waste, etc. — payment details, due dates, compressed scans</div></div></div>
+            <div class="g32" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+              <div class="form-group" style="margin:0"><label class="fl">Category</label><input type="text" id="inv-office-cat" list="inv-office-cat-datalist" placeholder="Select or type"></div>
+              <div class="form-group" style="margin:0"><label class="fl">Label / account</label><input type="text" id="inv-office-label" placeholder="e.g. CHD wing meter"></div>
+              <div class="form-group" style="margin:0"><label class="fl">Amount ₹</label><input type="number" id="inv-office-amt" min="0" step="1" placeholder="0"></div>
+              <div class="form-group" style="margin:0"><label class="fl">Last paid</label><input type="date" id="inv-office-last-paid"></div>
+              <div class="form-group" style="margin:0"><label class="fl">Next due / renew</label><input type="date" id="inv-office-next-due"></div>
+              <div class="form-group" style="margin:0"><label class="fl">Payment mode</label><select id="inv-office-pay-mode"><option value="Cash">Cash</option><option value="Online">Online</option><option value="Cheque">Cheque</option><option value="Bank Transfer">Bank Transfer</option><option value="Pending">Pending</option></select></div>
+              <div class="form-group" style="margin:0"><label class="fl">Ref / UTR</label><input type="text" id="inv-office-ref" placeholder="Reference"></div>
+              <div class="form-group" style="margin:0"><label class="fl">Notes</label><input type="text" id="inv-office-note" placeholder="Optional"></div>
+            </div>
+            <div class="form-group" style="margin-bottom:10px"><label class="fl">Upload scan / PDF</label><input type="file" id="inv-office-file" accept="image/*,.pdf"></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button type="button" class="btn btn-blue btn-sm" onclick="bmhAddOfficeBill()">+ Save bill</button>
+              <button type="button" class="btn btn-outline btn-sm" onclick="bmhAddOfficeBillCategory()">+ Add category</button>
+            </div>
+            <datalist id="inv-office-cat-datalist"></datalist>
+          </div>
+          <div class="g32" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="card">
+              <div class="card-hd"><div><div class="card-title">Bills</div><div class="card-sub">Non-vendor categories</div></div></div>
+              <div class="form-group" style="margin-bottom:10px"><label class="fl">Filter</label><select id="inv-office-filter" onchange="bmhRenderOfficeBillsPanel()"><option value="">All categories</option></select></div>
+              <div id="inv-office-bills-list" style="font-size:12px"></div>
+            </div>
+            <div class="card">
+              <div class="card-hd"><div class="card-title">Bill detail</div></div>
+              <div id="inv-office-detail"></div>
             </div>
           </div>
         </div>
