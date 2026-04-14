@@ -22602,8 +22602,22 @@ window.printUnifiedRx = function(deptId) {
   if(dxPack.notes) dxList.push(dxPack.notes);
 
   // ── Collect complaints ──
-  const cc   = document.getElementById('cc-text')?.value || '';
-  const ccDur = document.getElementById('dur-text')?.value || '';
+  const ccRows = [];
+  const pushCc = function (text, dur, eye) {
+    const t = String(text || '').trim();
+    if (!t) return;
+    const d = String(dur || '').trim();
+    const e = String(eye || '').trim();
+    ccRows.push([t, d, e].filter(Boolean).join(' · '));
+  };
+  document.querySelectorAll('#pg-ophtho #cc-rows .cc-row').forEach(function (row) {
+    pushCc(row.querySelector('.cc-inp')?.value, row.querySelector('.cc-dur')?.value, row.querySelector('.cc-eye')?.value);
+  });
+  if (!ccRows.length) {
+    const savedCc = String(window.CURRENT_PATIENT?.lastVisit?.chiefComplaints || '').trim();
+    if (savedCc) savedCc.split(/\s*;\s*/).filter(Boolean).forEach(function (line) { ccRows.push(line); });
+  }
+  const cc = ccRows.join('; ');
   const obgComplaint = document.getElementById('obg-main-complaint')?.value || window.CURRENT_PATIENT?.lastVisit?.mainComplaint || '';
 
   // ── Collect drugs (fallback to saved visit when UI state not restored, e.g. after reopening same day) ──
@@ -22777,7 +22791,7 @@ ${ptMob ? `<div class="phone-line">&#9990; ${ptMob} &nbsp;&nbsp;|&nbsp;&nbsp; BM
 
 ${postSurgeryRx ? `<div class="lbl-row" style="margin:4px 0 7px"><span class="lbl"></span><span class="lbl-val" style="font-weight:800;color:#222">The medication schedule after surgery</span></div>` : ''}
 
-${incCC && cc ? `<div class="lbl-row" style="margin-top:8px"><span class="lbl">Complaints:</span><span class="lbl-val">${cc}${ccDur?' ('+ccDur+')':''}</span></div>` : ''}
+${incCC && cc ? `<div class="lbl-row" style="margin-top:8px"><span class="lbl">Complaints:</span><span class="lbl-val">${escapeHtmlConsent(cc)}</span></div>` : ''}
 ${deptId==='obg' && obgIncComplaint && obgComplaint ? `<div class="lbl-row" style="margin-top:8px"><span class="lbl">Primary Complaint:</span><span class="lbl-val">${escapeHtmlConsent(obgComplaint)}</span></div>` : ''}
 ${deptId==='obg' && obgIncVitals ? `<div class="lbl-row" style="margin-top:8px"><span class="lbl">Vitals & LMP:</span><span class="lbl-val">${obgVitalsSummary.map(function (x) { return x[0] + ' ' + x[1]; }).join(' · ')}</span></div>` : ''}
 ${deptId==='obg' && obgIncAnc && obgAncOn ? `<div class="lbl-row" style="margin-top:8px"><span class="lbl">ANC:</span><span class="lbl-val">GPAL ${escapeHtmlConsent(obgAncSummary.gpal)} · GA ${escapeHtmlConsent(obgAncSummary.ga)} · EDD ${escapeHtmlConsent(obgAncSummary.edd)} · Hb ${escapeHtmlConsent(obgAncSummary.hb)} · Blood group ${escapeHtmlConsent(obgAncSummary.bloodGroup)}</span></div>` : ''}
@@ -28496,6 +28510,7 @@ function _renderDocQueueImpl() {
           });
     }
     const deptPts = [];
+    const xrefKeySeen = new Set();
     queueBasePts.forEach(function (p) {
       const ptDept = normalizeDeptKeyForQueue(p.dept || p.department || '');
       if (!userDept || ptDept === userDept || (!ptDept && userDept === 'ophtho')) {
@@ -28504,6 +28519,9 @@ function _renderDocQueueImpl() {
       getActiveCrossRefsForPatient(p).forEach(function (xref) {
         const toKey = normalizeDeptKeyForQueue(xref.toDept || '');
         if (toKey !== userDept) return;
+        const dedupeKey = String(p.bmhId || '') + '::' + String(toKey || '');
+        if (xrefKeySeen.has(dedupeKey)) return;
+        xrefKeySeen.add(dedupeKey);
         const xrefSeen = !!xref.seenAt;
         const pendingPay = !!(xref.fee && xref.paid === false);
         const purposeSuffix = (pendingPay ? ' [Cross-ref: payment pending]' : '') + (xref.reason ? ' — ' + xref.reason : '');
@@ -28517,7 +28535,7 @@ function _renderDocQueueImpl() {
           _xrefEntry: true,
           _xrefId: String(xref.id || ''),
           _xrefPendingPay: pendingPay,
-          _queueKey: p.bmhId + '::' + (xref.id || (xref.toDept + '::' + (xref.toDoctor || '')))
+          _queueKey: dedupeKey
         }));
       });
     });
