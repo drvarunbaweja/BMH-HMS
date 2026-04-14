@@ -308,8 +308,8 @@ function otChargeLooksLikeProcedure(row) {
   const name = String(row?.name || '').toLowerCase();
   const parent = String(row?.parent || '').toLowerCase();
   return /sx|surgery|procedure|laser|delivery|lap|operation/.test(cat)
-    || /trabeculectomy|lasik|pmics|iol|icl|staar|collamer|implantable|capsulotomy|iridotomy|excision|lscs|delivery|laparoscopy|hysteroscopy|chemical peel|prp|dcr|ptosis|squint|vitrectomy|injection|procedure/.test(name)
-    || /pmics|lscs|delivery|procedure|surgery|laser|iol|icl|collamer/.test(parent);
+    || /trabeculectomy|lasik|pmics|iol|icl|staar|collamer|implantable|capsulotomy|iridotomy|excision|incision|curettage|chalazion|lscs|delivery|laparoscopy|hysteroscopy|chemical peel|prp|dcr|ptosis|squint|vitrectomy|injection|procedure/.test(name)
+    || /pmics|lscs|delivery|procedure|surgery|laser|iol|icl|collamer|incision|curettage|chalazion/.test(parent);
 }
 function otProcedureBelongsToCaseKind(text, kind) {
   const val = String(text || '').toLowerCase();
@@ -351,7 +351,13 @@ function getOtProcedureOptions() {
     .filter(function (row) {
       return otChargeLooksLikeProcedure(row) && otProcedureBelongsToCaseKind((row.parent || row.name || ''), caseKind);
     })
-    .map(function (c) { return normalizeOtProcedureName(c.name); });
+    .reduce(function (arr, c) {
+      const nm = normalizeOtProcedureName(c.name);
+      const pr = normalizeOtProcedureName(c.parent);
+      if (nm) arr.push(nm);
+      if (pr) arr.push(pr);
+      return arr;
+    }, []);
   const eyeFallbacks = [
     'PMICS + IOL Implantation (OS)',
     'PMICS + IOL Implantation (OD)',
@@ -15103,12 +15109,43 @@ const ICD10_OBG = [
 window.ICD10_EYE = ICD10_EYE;
 window.ICD10_DB = ICD10_DB;
 window.ICD10_OBG = ICD10_OBG;
+window.CUSTOM_DX_LIBRARY = window.CUSTOM_DX_LIBRARY || { ophtho: [], obg: [], psych: [], skin: [] };
+function loadCustomDiagnosisLibrary() {
+  if (!window.fbOnce) return;
+  fbOnce('settings/customDiagnoses').then(function (data) {
+    if (!data || typeof data !== 'object') return;
+    const seed = { ophtho: [], obg: [], psych: [], skin: [] };
+    Object.keys(seed).forEach(function (k) {
+      seed[k] = Array.isArray(data[k]) ? data[k].map(function (v) { return String(v || '').trim(); }).filter(Boolean) : [];
+    });
+    window.CUSTOM_DX_LIBRARY = seed;
+  }).catch(function () {});
+}
+function saveCustomDiagnosisLibrary() {
+  if (!window.fbSet) return;
+  fbSet('settings/customDiagnoses', window.CUSTOM_DX_LIBRARY || { ophtho: [], obg: [], psych: [], skin: [] }).catch(function () {});
+}
+function rememberManualDiagnosis(text, dept) {
+  const clean = String(text || '').trim();
+  if (clean.length < 2) return;
+  const key = normalizeDeptKeyForQueue(dept || activeClinicDeptKey());
+  const bucket = (window.CUSTOM_DX_LIBRARY && window.CUSTOM_DX_LIBRARY[key]) || [];
+  if (!bucket.some(function (x) { return String(x || '').toLowerCase() === clean.toLowerCase(); })) {
+    bucket.push(clean);
+    window.CUSTOM_DX_LIBRARY[key] = bucket.slice(-300);
+    saveCustomDiagnosisLibrary();
+  }
+}
+function getCustomDiagnosisPool(dept) {
+  const key = normalizeDeptKeyForQueue(dept || activeClinicDeptKey());
+  return ((window.CUSTOM_DX_LIBRARY && window.CUSTOM_DX_LIBRARY[key]) || []).slice();
+}
 
 /** ICD-10 pool for prescription diagnosis autosuggest (OBG page uses OBG-only list). */
 function getRxDxIcdPool() {
   const dept = typeof rxDeptKeyFromUi === 'function' ? rxDeptKeyFromUi() : 'ophtho';
-  if (dept === 'obg') return (window.ICD10_OBG || ICD10_OBG || []).concat();
-  return (window.ICD10_EYE || []).concat(window.ICD10_DB || []);
+  if (dept === 'obg') return (window.ICD10_OBG || ICD10_OBG || []).concat(getCustomDiagnosisPool('obg'));
+  return (window.ICD10_EYE || []).concat(window.ICD10_DB || []).concat(getCustomDiagnosisPool(dept));
 }
 
 /** ICD-10 autosuggest for prescription diagnosis rows (#rx-diagnosis-rows .rx-dx-line) */
@@ -15161,6 +15198,7 @@ function rxDxApplyFreeText() {
   const v = inp.value.trim();
   if (!v) return;
   inp.value = v;
+  rememberManualDiagnosis(v, activeClinicDeptKey());
   inp.style.background = 'var(--green-lt)';
   inp.style.borderColor = 'var(--green)';
   if (drop && drop.classList && drop.classList.contains('rx-dx-drop')) { drop.style.display = 'none'; drop.innerHTML = ''; }
@@ -17979,6 +18017,7 @@ function addOTCase() {
     createdBy: CURRENT_USER?.name || 'System'
   };
   const normalized = normalizeOTCaseRecord(Object.assign({}, existing || {}, newCase));
+  if (normalized.dx) rememberManualDiagnosis(normalized.dx, normalized.caseKind === 'obg' ? 'obg' : 'ophtho');
   if (!normalized.dx) normalized.dx = getPreferredOtDiagnosis(normalized.procedure || proc) || normalized.dx;
   if (!normalized.postopDx) normalized.postopDx = getPreferredOtPostDiagnosis(normalized.procedure || proc) || normalized.postopDx;
   if (caseKind === 'obg') {
@@ -17996,19 +18035,19 @@ function addOTCase() {
   } else {
     OT_CASES.push(normalized);
   }
+  renderOTList();
+  renderIPD && renderIPD();
+  closeM('m-ot-add');
+  activeOTCase = normalized;
+  openOTCase(normalized.id);
   Promise.resolve(fbSet('otCases/' + normalized.id, normalized))
     .then(function () {
       if (admitToIpd) ensureIpdAdmissionFromOTCase(normalized, pt);
-      renderOTList();
-      renderIPD && renderIPD();
       showToast(`⚕️ ${ptName} ${editId ? 'updated in' : 'added to'} OT list ✓`,'s');
-      closeM('m-ot-add');
-      activeOTCase = normalized;
-      openOTCase(normalized.id);
     })
     .catch(function (e) {
       console.warn('OT save error:', e);
-      showToast('OT save failed. Please retry.', 'e');
+      showToast('OT saved locally. Cloud sync failed, will retry on next update.', 'w');
     })
     .finally(releaseOtSaveButton);
 }
@@ -18109,6 +18148,7 @@ function openOTAddModal(opts) {
   const editIdEl = document.getElementById('ot-add-case-id');
   if (editIdEl) editIdEl.value = opts.caseId || '';
   loadOTDiagnosisOptions();
+  loadCustomDiagnosisLibrary();
   populateOTDiagnosisOptions();
   populateOTPostOpDiagnosisOptions();
   populateOTProcedureOptions();
@@ -18493,6 +18533,11 @@ function getAllDxEntriesForFilter(isObg) {
         else out.push({ code: '', desc: entry, full: entry });
       }
     });
+    getCustomDiagnosisPool('obg').forEach(function (entry) {
+      const m = String(entry || '').match(/^([A-Z]\d{2}(?:\.\d+)?)\s*[—–-]\s*(.+)$/i);
+      if (m) out.push({ code: m[1], desc: m[2].trim(), full: String(entry) });
+      else out.push({ code: '', desc: String(entry || ''), full: String(entry || '') });
+    });
     return out;
   }
   (typeof ICD10_DB !== 'undefined' ? ICD10_DB : []).forEach(function (d) { out.push(d); });
@@ -18502,6 +18547,13 @@ function getAllDxEntriesForFilter(isObg) {
       if (m) out.push({ code: m[1], desc: m[2].trim(), full: entry });
       else out.push({ code: '', desc: entry, full: entry });
     } else if (entry && entry.code) out.push(entry);
+  });
+  ['ophtho', 'psych', 'skin'].forEach(function (dept) {
+    getCustomDiagnosisPool(dept).forEach(function (entry) {
+      const m = String(entry || '').match(/^([A-Z]\d{2}(?:\.\d+)?)\s*[—–-]\s*(.+)$/i);
+      if (m) out.push({ code: m[1], desc: m[2].trim(), full: String(entry) });
+      else out.push({ code: '', desc: String(entry || ''), full: String(entry || '') });
+    });
   });
   return out;
 }
@@ -18568,6 +18620,7 @@ function selectDxFreeText() {
   const v = activeInput.value.trim();
   if (!v) { hideDxDropdown(); return; }
   activeInput.value = v;
+  rememberManualDiagnosis(v, String(activeInput?.dataset?.dxDept || '').toLowerCase() === 'obg' ? 'obg' : activeClinicDeptKey());
   activeInput.style.background='var(--green-lt)';
   activeInput.style.borderColor='var(--green)';
   hideDxDropdown();
@@ -23384,6 +23437,7 @@ function logReferral(type, name, mobile, patient) {
 setTimeout(() => {
   if (typeof loadChargesFromLocalStorage === 'function') loadChargesFromLocalStorage();
   if (typeof loadDoctorCustomRxOptions === 'function') loadDoctorCustomRxOptions();
+  if (typeof loadCustomDiagnosisLibrary === 'function') loadCustomDiagnosisLibrary();
   if(document.getElementById('set-procs-list') || document.getElementById('charges-list')) renderChargesList();
   if(document.getElementById('dr-credentials-list')) renderDrCredentials();
   if (typeof loadDoctorProfilesFromLocalStorage === 'function') loadDoctorProfilesFromLocalStorage();
@@ -28839,6 +28893,8 @@ function saveVisit(dept, opts) {
     visit.diagnoses = dxRows;
     visit.diagnosisText = document.getElementById('rx-diagnosis-text')?.value?.trim() || '';
     visit.dx = dxRows.map(formatDxLineForPrint).filter(Boolean).join(' · ') || visit.diagnosisText || '';
+    dxRows.forEach(function (row) { rememberManualDiagnosis(row?.text || '', 'ophtho'); });
+    if (visit.diagnosisText) rememberManualDiagnosis(visit.diagnosisText, 'ophtho');
     visit.postSurgeryRx = !!document.getElementById('rx-post-surgery')?.checked;
     visit.positiveFindings = buildOphthoPositiveFindingsList().join('; ');
     visit.procedures = [...document.querySelectorAll('#rx-proc-advised [data-proc]')].map(e=>e.dataset.proc).filter(Boolean);
@@ -28977,6 +29033,7 @@ function saveVisit(dept, opts) {
       mergedDx.push(String(t).trim());
     });
     visit.obgDiagnoses = mergedDx;
+    mergedDx.forEach(function (line) { rememberManualDiagnosis(line, 'obg'); });
     visit.obgProcAdvised = [...document.querySelectorAll('#rx-proc-advised-obg [data-proc]')].map(function (e) { return e.dataset.proc; }).filter(Boolean);
     if (visit.obgDiagnoses.length) {
       visit.dx = [visit.obgDiagnoses.join(' · '), visit.dx].filter(Boolean).join(' · ');
@@ -28997,6 +29054,7 @@ function saveVisit(dept, opts) {
     visit.psychInvestigations = guidance.investigations;
     visit.psychTherapy = guidance.therapy;
     visit.psychDxList = [...document.querySelectorAll('#psych-dx-list .dx-inp')].map(function (e) { return e.value.trim(); }).filter(Boolean);
+    visit.psychDxList.forEach(function (line) { rememberManualDiagnosis(line, 'psych'); });
     const psychDxLine = visit.psychDxList.length ? visit.psychDxList.join(' · ') : '';
     const tagLine = Array.isArray(guidance.tags) ? guidance.tags.join(' · ') : '';
     visit.dx = [psychDxLine, tagLine, psychVal('psych-diagnosis')].filter(Boolean).join(' · ') || '';
@@ -29022,6 +29080,7 @@ function saveVisit(dept, opts) {
     visit.skinPlan = skinGuidance.management;
     visit.skinProcedural = skinGuidance.procedures;
     visit.skinDxList = [...document.querySelectorAll('#skin-dx-list .dx-inp')].map(function (e) { return e.value.trim(); }).filter(Boolean);
+    visit.skinDxList.forEach(function (line) { rememberManualDiagnosis(line, 'skin'); });
     const skinSelDx = [document.getElementById('skin-primary-dx')?.value || '', document.getElementById('skin-secondary-dx')?.value || ''].filter(function (x) { return x && x !== 'None'; });
     const skinDxLine = visit.skinDxList.length ? visit.skinDxList.join(' · ') : '';
     visit.dx = [skinDxLine, skinSelDx.join(' · ')].filter(Boolean).join(' · ');
