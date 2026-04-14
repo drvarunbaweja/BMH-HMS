@@ -1957,6 +1957,10 @@
           <div class="form-group" style="margin:6px 0 0"><label class="fl">Reason</label><input type="text" id="rc-refund-reason" placeholder="e.g. Duplicate payment, patient request…" style="background:#fff;font-size:12px"></div>
         </div>
 
+        <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;cursor:pointer;color:var(--g1)">
+          <input type="checkbox" id="rc-force-new-bmsh">
+          New BMSH ID (same phone as spouse / family — use next sequential BMSH number)
+        </label>
         <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
           <button class="btn btn-gold" style="flex:1;justify-content:center" onclick="registerPatient()">✅ Register &amp; Generate Token</button>
           <button type="button" class="btn btn-blue btn-sm" style="justify-content:center" onclick="updateExistingPatientFromReceptionForm((document.getElementById('rc-uid')||{}).textContent||'')">💾 Update patient</button>
@@ -3738,6 +3742,13 @@
       <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;cursor:pointer">
         <input type="checkbox" id="bmh-apply-advance" onchange="bmhUpdateBillTotals()"> Apply advance <span id="bmh-advance-available" style="font-weight:800;color:var(--blue)">₹0 available</span>
       </label>
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:12px;cursor:pointer;flex-wrap:wrap">
+        <input type="checkbox" id="bmh-bill-add-to-queue">
+        When saving payment, also add patient to <strong>My Patient Queue</strong> (today)
+      </label>
+      <div style="margin-bottom:10px">
+        <button type="button" class="btn btn-outline btn-sm" onclick="bmhAddPatientToDoctorQueue(document.getElementById('bmh-bill-pt-select')?.value)">🩺 Add selected patient to My Patient Queue</button>
+      </div>
       <div id="bill-discount-line" style="display:none;justify-content:space-between;margin-bottom:5px;font-size:12.5px;color:var(--orange)"><span>Discount</span><span style="font-weight:800" id="bill-discount-amt">₹0</span></div>
       <div id="bill-advance-line" style="display:none;justify-content:space-between;margin-bottom:5px;font-size:12.5px;color:var(--blue)"><span>Advance adjusted</span><span style="font-weight:800" id="bill-advance-amt">₹0</span></div>
       <div style="margin:10px 0 12px;padding:10px;border:1px solid var(--g5);border-radius:10px;background:#fff">
