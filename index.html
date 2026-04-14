@@ -4953,7 +4953,7 @@
   <div class="form-group"><label class="fl">Refer To</label><select id="xref-to"><option>Dr. Geeta Baweja — OBG</option><option>Dr. Namrata Baweja — OBG</option><option>Dr. Tarun Baweja — Psychiatry</option><option>Dr. Pooja Baweja — Skin</option><option>Dr. Varun Baweja — Ophthalmology</option></select></div>
   <div class="form-group"><label class="fl">Referral Type</label><select id="xref-fee-sel" onchange="document.getElementById('xref-fee-row').style.display=this.value==='yes'?'flex':'none'"><option value="no">Without Fee (Same Consultation)</option><option value="yes">With New Consultation Fee</option></select></div>
   <div class="form-group" id="xref-fee-row" style="display:none"><label class="fl">Consultation Fee ₹</label><input type="number" id="xref-fee-amt" value="800" placeholder="800"></div>
-  <div class="form-group"><label class="fl">Reason for referral</label><textarea id="xref-reason" placeholder="Clinical reason for referral…"></textarea></div>
+  <div class="form-group"><label class="fl">Reason for referral (optional)</label><textarea id="xref-reason" placeholder="Optional — clinical notes if any"></textarea></div>
   <div style="display:flex;gap:8px">
     <button class="btn btn-gold" style="flex:1" onclick="doXRef()">✅ Confirm Referral</button>
     <button class="btn btn-gray" onclick="closeM('m-xref')">Cancel</button>
