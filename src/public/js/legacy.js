@@ -3213,14 +3213,18 @@ window.rcOpenBillingForAndPrint = rcOpenBillingForAndPrint;
 // ═══════════════════════════════════════════════════════════════════
 function loadTodayVisitIntoForm(bmhId) {
   if(!bmhId || bmhId==='—') return;
-  const todayStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  const todayKeyLocal = localDateKey(new Date());
   fbOnce('visits/' + bmhId, data => {
     if ((window.CURRENT_PATIENT?.bmhId || '') !== bmhId) return;
     if(!data) return;
     // Find the most recent visit saved TODAY for ophtho
     const todayVisits = Object.values(data)
-      .filter(v => v.dept === 'ophtho' && v.date && v.date.startsWith(todayStr))
-      .sort((a,b) => b.date.localeCompare(a.date));
+      .filter(function (v) {
+        return v && v.dept === 'ophtho' && localDateKey(v.date || v.createdAt || v.updatedAt || v.savedAt) === todayKeyLocal;
+      })
+      .sort(function (a, b) {
+        return String(b.date || b.createdAt || '').localeCompare(String(a.date || a.createdAt || ''));
+      });
     if(!todayVisits.length) return; // No visit today → leave form blank
     const v = todayVisits[0];
     populateOphthoForm(v);
@@ -3231,14 +3235,16 @@ function loadTodayVisitIntoForm(bmhId) {
 /** Reload today's saved visit for OBG / psych / skin from Firebase (prescription + advice persist same day). */
 function loadTodayDeptVisitIntoForm(bmhId, dept) {
   if (!bmhId || bmhId === '—' || !dept) return;
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayKeyLocal = localDateKey(new Date());
   if (typeof fbOnce !== 'function') return;
   fbOnce('visits/' + bmhId, function (data) {
     if ((window.CURRENT_PATIENT?.bmhId || '') !== bmhId) return;
     if (!data) return;
     const todayVisits = Object.values(data)
-      .filter(function (v) { return v && v.dept === dept && v.date && String(v.date).startsWith(todayStr); })
-      .sort(function (a, b) { return String(b.date || '').localeCompare(String(a.date || '')); });
+      .filter(function (v) {
+        return v && v.dept === dept && localDateKey(v.date || v.createdAt || v.updatedAt || v.savedAt) === todayKeyLocal;
+      })
+      .sort(function (a, b) { return String(b.date || b.createdAt || '').localeCompare(String(a.date || a.createdAt || '')); });
     if (!todayVisits.length) return;
     const v = todayVisits[0];
     if (dept === 'obg') { populateObgForm(v); showToast("Today's OBG visit restored ✓", 'i'); }
@@ -3688,7 +3694,7 @@ function roundToNearestTenMinuteSlot(baseDate) {
 }
 function getNearestAppointmentSlot(dateStr, baseDate) {
   if (!dateStr) return '9:00 AM';
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayKeyLocal = localDateKey(new Date());
   const rounded = roundToNearestTenMinuteSlot(baseDate || new Date());
   if (dateStr !== todayStr) {
     return normalizeAptTimeLabel(String(rounded.hh).padStart(2, '0') + ':' + String(rounded.mm).padStart(2, '0'));
@@ -15953,7 +15959,8 @@ async function registerPatient() {
   const name = toTitleCaseName((fn + ' ' + ln).trim());
   const emailEarly = document.getElementById('rc-email')?.value?.trim() || '';
   const forceNewBmsh = !!document.getElementById('rc-force-new-bmsh')?.checked;
-  const existingPt = findSamePersonForRegistration({
+  const hintedExistingPt = (!forceNewBmsh && uidDisplayed) ? resolveActivePatientByBmhId(uidDisplayed) : null;
+  const existingPt = hintedExistingPt || findSamePersonForRegistration({
     uidDisplayed: uidDisplayed,
     name: name,
     mob: mob,
@@ -22147,8 +22154,11 @@ async function repairDuplicatePatientsByIdentity() {
       if (unique.length < 2) continue;
       const sorted = sortPatientsByCanonicalIdentity(unique);
       const canonical = sorted[0];
+      const canonicalAge = patientApproxAgeYears(canonical);
       for (let i = 1; i < sorted.length; i += 1) {
-        await mergeDuplicatePatientRecord(canonical.bmhId, sorted[i].bmhId);
+        const candidate = sorted[i];
+        if (!agesCloseEnough(canonicalAge, patientApproxAgeYears(candidate), 2)) continue;
+        await mergeDuplicatePatientRecord(canonical.bmhId, candidate.bmhId);
         repairs += 1;
       }
     }
