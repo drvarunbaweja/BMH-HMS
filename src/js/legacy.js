@@ -7696,7 +7696,7 @@ function inferChargeCategoryFromService(forStr) {
   if (/oct|hvf|fundus|biomet|visual field|cbc|hb|thyroid|lipid|lab|investigation|diagnostic|erg|vep|topograph|specular|pachymetry|gonioscopy|perimetry|b-?scan|ultrasound.*\beye\b|ffa|icg|angiograph|schirmer|tbut|dry\s*eye|corneal topography|aberrometry|i\.?\s*o\.?\s*l\.?\s*master|iol\s*master|lenstar|pentacam|specular microscopy/.test(s)) return 'diagnostic';
   // Surgery / OT / procedures (broad; avoid bare "iol" so inventory text does not become surgery)
   if (/\b(surgery|surgical|surgeon|cataract|phaco|phacoemulsification|sics|trab|trabeculectomy|lasik|prk|smile|vitrectomy|retina\s*surgery|glaucoma\s*surgery|keratoplasty|corneal\s*graft|pterygium|squint|strabismus|oculoplastic|dacryocystorhinostomy|dacryo|dcr|buckling|scleral\s*buckle|intravitreal|ivt|anti\s*-?\s*vegf|ot\b|o\.?\s*t\.?|theatre|theater|operating|operation\b|minor\s*ot|major\s*ot|ot\s*charges|theatre\s*charges|ot\s*time|anaesthesia.*surgery|capsulorhexis|iol\s*implant|iol\s*insertion|iol\s*charges|iol\s*package|iol\s*power|pmics|suture\s*removal|post\.?\s*op|postop|surgery\s*pack|pack\s*rate|surgery\s*charges|procedure\s*charges|operative|peribulbar|retrobulbar|sub-?tenon)/.test(s)) return 'surgery';
-  if (/consult|follow|review|opd|out\s*patient|first\s*visit|registration|consultation/.test(s)) return 'consultation';
+  if (/consult|follow|review|opd|out\s*patient|first\s*visit|registration|consultation|post\s*-?\s*op/.test(s)) return 'consultation';
   return 'other';
 }
 function bmhIsEEGCharge(row) {
@@ -23618,6 +23618,16 @@ function openRcCollectionDetailModal(dept, catKey) {
     });
   }
   const fmt = function (n) { return '₹' + n.toLocaleString('en-IN'); };
+  const isConsultationPurpose = function (purpose) {
+    const p = String(purpose || '').toLowerCase();
+    return /consult|follow|post\s*-?\s*op|opd|review|registration|new consultation/.test(p);
+  };
+  const todayConsultationPatients = (PATIENTS || []).filter(function (p) {
+    if (!p || !centreMatch(p)) return false;
+    if (String(p.dept || '').toLowerCase() !== String(dept || '').toLowerCase()) return false;
+    if (!isConsultationPurpose(p.purpose || '')) return false;
+    return localDateKey(p.checkinAt || p.createdAt || p.queueDate || p.visitDate || p.updatedAt) === todayKeyLocal;
+  });
   const dc = DEPT_COLORS[dept];
   const title = (dc?.label || dept) + ' — ' + ({ opd: 'OPD / consultations', inv: 'Investigations & diagnostics', sx: 'Procedures & surgery', other: 'Other' }[catKey] || catKey);
   const bodyEl = document.getElementById('m-rc-collection-detail-body');
@@ -23638,7 +23648,11 @@ function openRcCollectionDetailModal(dept, catKey) {
   const unpaidTotal = unpaid.reduce(function (s, r) { return s + (Number(r.amount) || 0); }, 0);
   const unpaidPatients = new Set(unpaid.map(function (r) { return r.bmhId || ''; }).filter(Boolean)).size;
   const paidRows = list.map(function (t) {
-    return '<div style="display:flex;align-items:center;gap:7px;padding:7px 8px;border-bottom:1px solid var(--g5);font-size:12px">'
+    const rowStyle = 'display:flex;align-items:center;gap:7px;padding:7px 8px;border-bottom:1px solid var(--g5);font-size:12px';
+    const attrs = t.bmhId
+      ? ' style="' + rowStyle + ';cursor:pointer" onclick="openPatient(\'' + String(t.bmhId).replace(/'/g, "\\'") + '\')"'
+      : ' style="' + rowStyle + '"';
+    return '<div' + attrs + '>'
       + '<div style="flex:1"><div style="font-weight:800">' + escapeHtmlConsent(t.patient || '') + '</div><div style="font-size:10.5px;color:var(--g1)">' + escapeHtmlConsent(t.service || '—') + ' · ' + escapeHtmlConsent(t.time || '—') + '</div></div>'
       + '<span class="badge bd-gray" style="font-size:9px">' + escapeHtmlConsent(t.mode || '—') + '</span>'
       + '<div style="font-weight:900;color:#1a8c3c">' + fmt(getNetTransactionAmount(t)) + '</div>'
@@ -23651,14 +23665,45 @@ function openRcCollectionDetailModal(dept, catKey) {
       + '<div style="font-weight:900;color:#b45309">' + fmt(Number(r.amount) || 0) + '</div>'
       + '</div>';
   }).join('');
+  const groupedByService = {};
+  list.forEach(function (t) {
+    const key = String(t.service || t.for || t.desc || 'Consultation').trim() || 'Consultation';
+    if (!groupedByService[key]) groupedByService[key] = { count: 0, amount: 0, bmhId: t.bmhId || '' };
+    groupedByService[key].count += 1;
+    groupedByService[key].amount += getNetTransactionAmount(t);
+    if (!groupedByService[key].bmhId && t.bmhId) groupedByService[key].bmhId = t.bmhId;
+  });
+  const groupedRows = Object.entries(groupedByService).sort(function (a, b) {
+    return b[1].amount - a[1].amount;
+  }).map(function (entry) {
+    const label = entry[0];
+    const g = entry[1];
+    const rowStyle = 'display:flex;justify-content:space-between;gap:8px;padding:6px 8px;border-bottom:1px solid var(--g5);font-size:11.5px';
+    const attrs = g.bmhId
+      ? ' style="' + rowStyle + ';cursor:pointer" onclick="openPatient(\'' + String(g.bmhId).replace(/'/g, "\\'") + '\')"'
+      : ' style="' + rowStyle + '"';
+    return '<div' + attrs + '><div><strong>' + escapeHtmlConsent(label) + '</strong> · ' + g.count + ' patient(s)</div><div style="font-weight:800">' + fmt(g.amount) + '</div></div>';
+  }).join('');
+  const consultPaidIds = new Set(list.filter(function (t) { return getNetTransactionAmount(t) > 0; }).map(function (t) { return t.bmhId || ''; }).filter(Boolean));
+  const totalConsultPts = new Set(todayConsultationPatients.map(function (p) { return p.bmhId; })).size;
+  const paidConsult = consultPaidIds.size;
+  const noFeeConsult = Math.max(0, totalConsultPts - paidConsult);
   let html = '';
   if (wantCat) {
+    const rightLabel = catKey === 'opd' ? 'No fee consultations' : 'Unpaid (pending requests)';
+    const rightCount = catKey === 'opd' ? noFeeConsult : unpaidPatients;
+    const rightAmt = catKey === 'opd' ? '' : (' · <strong style="color:#b45309">' + fmt(unpaidTotal) + '</strong>');
+    const leftPatients = catKey === 'opd' ? paidConsult : paidPatients;
+    const titleText = catKey === 'opd' ? 'Today — paid vs no-fee consultations' : 'Today — paid vs unpaid';
     html += '<div style="background:linear-gradient(180deg,#fff7ed,#fff);border:1px solid #f59e0b;border-radius:10px;padding:10px 12px;margin-bottom:12px">'
-      + '<div style="font-size:11px;font-weight:900;color:#8a4200;text-transform:uppercase;margin-bottom:6px">Today — paid vs unpaid</div>'
+      + '<div style="font-size:11px;font-weight:900;color:#8a4200;text-transform:uppercase;margin-bottom:6px">' + titleText + '</div>'
       + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12px">'
-      + '<div><span style="color:var(--g1)">Paid (collected)</span><br><strong>' + paidPatients + '</strong> patient(s) · <strong style="color:#1a8c3c">' + fmt(paidTotal) + '</strong></div>'
-      + '<div><span style="color:var(--g1)">Unpaid (pending requests)</span><br><strong>' + unpaidPatients + '</strong> patient(s) · <strong style="color:#b45309">' + fmt(unpaidTotal) + '</strong></div>'
+      + '<div><span style="color:var(--g1)">Paid (collected)</span><br><strong>' + leftPatients + '</strong> patient(s) · <strong style="color:#1a8c3c">' + fmt(paidTotal) + '</strong></div>'
+      + '<div><span style="color:var(--g1)">' + rightLabel + '</span><br><strong>' + rightCount + '</strong> patient(s)' + rightAmt + '</div>'
       + '</div></div>';
+    html += '<details open style="margin-bottom:8px;border:1px solid var(--g5);border-radius:8px;padding:8px 10px;background:#fff">'
+      + '<summary style="cursor:pointer;font-weight:800;font-size:12px">Service / purpose summary</summary>'
+      + '<div style="margin-top:6px">' + (groupedRows || '<div style="padding:10px;color:var(--g1);font-size:12px">No grouped items in this category.</div>') + '</div></details>';
   }
   if (wantCat) {
     html += '<details open style="margin-bottom:8px;border:1px solid var(--g5);border-radius:8px;padding:8px 10px;background:#fff">'
@@ -23685,7 +23730,10 @@ function toggleDeptDetail(id) {
 
 function printDayCollection() {
   const today = new Date().toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'});
-  const collected = TRANSACTIONS.filter(t=>t.collected);
+  const todayKeyLocal = localDateKey(new Date());
+  const collected = TRANSACTIONS.filter(function (t) {
+    return t.collected && (t.centre || 'CHD') === getEffectiveCentre() && txnIsoDate(t) === todayKeyLocal;
+  });
   const total = collected.reduce((s,t)=>s+getNetTransactionAmount(t),0);
   const fmt = n=>'₹'+n.toLocaleString('en-IN');
   const lhSrc = window.LH_SRC||'';
@@ -23724,6 +23772,38 @@ ${lhSrc?`<img src="${lhSrc}" style="width:100%;height:auto;margin-bottom:12px">`
 </body></html>`;
   safePrint(html);
   showToast('Collection summary sent to printer ✓','s');
+}
+
+function printDayCollectionByDept() {
+  const todayLabel = new Date().toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'});
+  const todayKeyLocal = localDateKey(new Date());
+  const txns = TRANSACTIONS.filter(function (t) {
+    return t.collected && (t.centre || 'CHD') === getEffectiveCentre() && txnIsoDate(t) === todayKeyLocal;
+  });
+  const depts = ['ophtho','obg','psych','skin'];
+  const fmt = function (n) { return '₹' + Number(n || 0).toLocaleString('en-IN'); };
+  const rows = depts.map(function (dept) {
+    const arr = txns.filter(function (t) { return String(t.dept || '').toLowerCase() === dept; });
+    const total = arr.reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
+    return '<tr>'
+      + '<td style="border:1px solid #ddd;padding:6px">' + (DEPT_COLORS[dept]?.label || dept) + '</td>'
+      + '<td style="border:1px solid #ddd;padding:6px;text-align:center">' + arr.length + '</td>'
+      + '<td style="border:1px solid #ddd;padding:6px;text-align:right;font-weight:800">' + fmt(total) + '</td>'
+      + '</tr>';
+  }).join('');
+  const grandTotal = txns.reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
+  const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>'
+    + 'body{font-family:Arial,sans-serif;padding:12mm}table{width:100%;border-collapse:collapse}'
+    + 'th{background:#1A3C6E;color:#fff;padding:8px;font-size:11px}td{font-size:11px}'
+    + '</style></head><body>'
+    + '<h2 style="margin:0 0 6px 0;color:#1A3C6E">Department-wise Collection Summary</h2>'
+    + '<div style="margin-bottom:12px;color:#555">' + todayLabel + '</div>'
+    + '<table><thead><tr><th>Department</th><th>Transactions</th><th>Total</th></tr></thead><tbody>'
+    + rows
+    + '<tr><td colspan="2" style="border:1px solid #ddd;padding:6px;text-align:right;font-weight:900">Grand Total</td><td style="border:1px solid #ddd;padding:6px;text-align:right;font-weight:900">' + fmt(grandTotal) + '</td></tr>'
+    + '</tbody></table></body></html>';
+  safePrint(html);
+  showToast('Department-wise summary sent to printer ✓','s');
 }
 
 // collectPayment delegates to markPaid — no override needed here
@@ -23969,17 +24049,14 @@ function deleteTransaction(txnId) {
   const t = TRANSACTIONS.find(x=>x.id===txnId);
   if(!t) { showToast('Transaction not found','w'); return; }
   const label = `₹${t.amount?.toLocaleString('en-IN')||'?'} — ${t.patient||'?'} (${t.service||'—'}, ${t.mode||'—'})`;
-  if(CURRENT_USER?.isAdmin) {
-    if(!confirm(`Delete this transaction?\n${label}\nThis cannot be undone.`)) return;
-    const idx = TRANSACTIONS.findIndex(x=>x.id===txnId);
-    TRANSACTIONS.splice(idx,1);
-    try { if(window.firebase&&firebase.database) firebase.database().ref(`transactions/${todayKey()}/${txnId}`).remove(); } catch(e){}
-    fbPush&&fbPush('auditLog',{user:CURRENT_USER.name,role:'Admin',action:'DELETE_TXN',item:label,timestamp:new Date().toISOString()});
-    showToast(`🗑️ Deleted: ${label}`,'i');
-    renderCollectionDashboard&&renderCollectionDashboard(); renderReceptionPage&&renderReceptionPage();
-  } else {
-    requestDeletion('transaction', txnId, label);
-  }
+  if(!confirm(`Delete this transaction?\n${label}\nThis cannot be undone.`)) return;
+  const idx = TRANSACTIONS.findIndex(x=>x.id===txnId);
+  if (idx < 0) return;
+  TRANSACTIONS.splice(idx,1);
+  try { if(window.firebase&&firebase.database) firebase.database().ref(`transactions/${todayKey()}/${txnId}`).remove(); } catch(e){}
+  fbPush&&fbPush('auditLog',{user:CURRENT_USER?.name||'Staff',role:CURRENT_USER?.role||'Staff',action:'DELETE_TXN',item:label,timestamp:new Date().toISOString()});
+  showToast(`🗑️ Deleted: ${label}`,'i');
+  renderCollectionDashboard&&renderCollectionDashboard(); renderReceptionPage&&renderReceptionPage();
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -27566,7 +27643,20 @@ function computeReceptionQueuePts() {
   const sub = window._rcQueueSubtab || 'waiting';
   if(sub === 'seen') pts = pts.filter(p=>isPatientMarkedSeen(p));
   else if(sub === 'waiting') pts = pts.filter(p=>!isPatientMarkedSeen(p));
-  return pts;
+  const queueStamp = function (p) {
+    const raw = p?.checkinAt || p?.createdAt || p?.registeredAt || p?.queueDate || p?.date || p?.updatedAt || '';
+    if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+    const text = String(raw || '').trim();
+    if (!text) return 0;
+    if (/^\d+$/.test(text)) return Number(text);
+    const parsed = Date.parse(text);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+  return pts.slice().sort(function (a, b) {
+    const byTime = queueStamp(a) - queueStamp(b);
+    if (byTime !== 0) return byTime;
+    return String(a.bmhId || '').localeCompare(String(b.bmhId || ''));
+  });
 }
 
 // ── renderReceptionPage — live computed ──────────

@@ -2039,7 +2039,10 @@
         <!-- All transactions log -->
         <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px;margin:14px 0 8px;display:flex;justify-content:space-between;align-items:center">
           <span>All Transactions Today</span>
-          <button class="btn btn-xs btn-outline" onclick="printDayCollection()">🖨️ Print Summary</button>
+          <span style="display:flex;gap:6px">
+            <button class="btn btn-xs btn-outline" onclick="printDayCollection()">🖨️ Print Summary</button>
+            <button class="btn btn-xs btn-outline" onclick="printDayCollectionByDept()">🖨️ Dept-wise</button>
+          </span>
         </div>
         <div id="rc-all-txn" style="display:flex;flex-direction:column;gap:5px"></div>
         <div style="margin-top:16px;padding-top:12px;border-top:1.5px solid var(--g4)">
