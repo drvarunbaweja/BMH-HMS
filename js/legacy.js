@@ -2803,7 +2803,8 @@ function openPatient(bmhId, opts) {
   };
   const targetDept = normalizeDeptKeyForQueue(opts.deptOverride || p.dept || '') || p.dept;
   const lastVisitRef = opts.deptOverride ? getLatestSavedVisitForDept(bmhId, targetDept) : p.lastVisit;
-  const lastVisitIsToday = visitDateKey(lastVisitRef) === localDateKey(new Date());
+  const allowTodayRestore = !opts.freshStart;
+  const lastVisitIsToday = allowTodayRestore && visitDateKey(lastVisitRef) === localDateKey(new Date());
   window._suspendVisitAutosave = true;
   const unreadLabOrders = Array.isArray(p.investigationOrders) ? p.investigationOrders.filter(function (o) {
     return o && o.mode === 'send' && o.done && o.labReady && !o.doctorSeen;
@@ -2957,10 +2958,12 @@ function openPatient(bmhId, opts) {
   // ── 5. Load past visits list + try to reload today's visit ─────
   setTimeout(() => {
     loadPastVisits(p.bmhId, targetDept);
-    if(targetDept === 'ophtho') loadTodayVisitIntoForm(p.bmhId);
-    else if(targetDept === 'obg') loadTodayDeptVisitIntoForm(p.bmhId, 'obg');
-    else if(targetDept === 'psych') loadTodayDeptVisitIntoForm(p.bmhId, 'psych');
-    else if(targetDept === 'skin') loadTodayDeptVisitIntoForm(p.bmhId, 'skin');
+    if (allowTodayRestore) {
+      if(targetDept === 'ophtho') loadTodayVisitIntoForm(p.bmhId);
+      else if(targetDept === 'obg') loadTodayDeptVisitIntoForm(p.bmhId, 'obg');
+      else if(targetDept === 'psych') loadTodayDeptVisitIntoForm(p.bmhId, 'psych');
+      else if(targetDept === 'skin') loadTodayDeptVisitIntoForm(p.bmhId, 'skin');
+    }
     renderCurrentPatientInvestigationUploads && renderCurrentPatientInvestigationUploads();
     renderOphthoRecap && renderOphthoRecap();
     if(targetDept === 'psych') renderPsychRail && renderPsychRail();
@@ -3081,7 +3084,7 @@ function rcToggleConsentSection(bmhId) {
   if (!opts.silentHistory && !window._appHistoryRestoring) pushAppNavState(false);
 }
 function openPatientForDept(bmhId, dept) {
-  openPatient(bmhId, { deptOverride: dept });
+  openPatient(bmhId, { deptOverride: dept, freshStart: true });
 }
 function rcPrintReceptionConsentFromPopup(bmhId) {
   const inp = document.getElementById('rc-consent-search');
@@ -5644,7 +5647,7 @@ function updateObgComputedFields() {
   syncObgAssessmentToHistory();
   const vitalsLmp = document.getElementById('obg-vitals-lmp');
   const assessLmp = document.getElementById('obg-lmp');
-  if (vitalsLmp && assessLmp && vitalsLmp.value && vitalsLmp.value !== assessLmp.value) assessLmp.value = vitalsLmp.value;
+  if (vitalsLmp && assessLmp && assessLmp.value && vitalsLmp.value !== assessLmp.value) vitalsLmp.value = assessLmp.value;
   const vitalsPresentation = document.getElementById('obg-vitals-fetal-presentation')?.value || '';
   const assessPresentation = document.getElementById('obg-present');
   if (assessPresentation && vitalsPresentation && !assessPresentation.value) assessPresentation.value = vitalsPresentation;
@@ -13344,13 +13347,34 @@ window.removeObgAdviceChip = function (idx) {
 window.appendObgAdviceFromQuick = function () {
   const sel = document.getElementById('obg-advice-quick');
   const v = (sel && sel.value) ? sel.value.trim() : '';
-  if (!v) { showToast('Pick an instruction line first', 'w'); return; }
+  if (!v) {
+    const typed = String(window.prompt('Type instruction to add') || '').trim();
+    if (!typed) { showToast('Pick or type an instruction line', 'w'); return; }
+    saveDeptTemplateOption('advice', 'obg', typed);
+    renderDeptAdviceLibrary('obg');
+    appendAdviceTemplateToTextarea('obg', typed);
+    return;
+  }
   appendAdviceTemplateToTextarea('obg', v);
 };
 function renderDeptAdviceLibrary(dept) {
   const host = document.getElementById(getDeptAdviceLibraryHostId(dept));
   if (!host) return;
   const bucket = getDoctorCustomRxOptionsForDept(dept);
+  const seededObgAdvice = [
+    'Maintain healthy weight',
+    'Exercise regularly',
+    'Take balanced high-protein diet',
+    'Avoid high sugar and junk food',
+    'Take prescribed supplements regularly',
+    'Adequate hydration and sleep',
+    'Avoid smoking and alcohol',
+    'Follow-up on scheduled date'
+  ];
+  if (dept === 'obg' && (!Array.isArray(bucket.advice) || !bucket.advice.length)) {
+    bucket.advice = seededObgAdvice.slice();
+    saveDoctorCustomRxOptions();
+  }
   const items = (bucket.advice || []).slice().sort(function (a, b) { return String(a).localeCompare(String(b)); });
   if (!items.length) {
     host.innerHTML = '<div style="font-size:10.5px;color:var(--g1);padding:6px 8px;border:1px dashed var(--g4);border-radius:8px;background:var(--g6)">Saved instructions will appear here like templates.</div>';
@@ -18445,8 +18469,18 @@ function printOTCard(id) {
 
 // ─── ICD-10 DATABASE ─────────────────
 
-function getAllDxEntriesForFilter() {
+function getAllDxEntriesForFilter(isObg) {
   const out = [];
+  if (isObg) {
+    (typeof ICD10_OBG !== 'undefined' ? ICD10_OBG : []).forEach(function (entry) {
+      if (typeof entry === 'string') {
+        const m = entry.match(/^([A-Z]\d{2}(?:\.\d+)?)\s*[—–-]\s*(.+)$/i);
+        if (m) out.push({ code: m[1], desc: m[2].trim(), full: entry });
+        else out.push({ code: '', desc: entry, full: entry });
+      }
+    });
+    return out;
+  }
   (typeof ICD10_DB !== 'undefined' ? ICD10_DB : []).forEach(function (d) { out.push(d); });
   (typeof ICD10_EYE !== 'undefined' ? ICD10_EYE : []).forEach(function (entry) {
     if (typeof entry === 'string') {
@@ -18463,7 +18497,7 @@ function filterDx(inp) {
   const isObg = String(inp?.dataset?.dxDept || '').toLowerCase() === 'obg' || inp?.closest?.('#obg-dx-list');
   if (!val || val.length < 1) { hideDxDropdown(); return; }
   if(val.length < 2 && !isObg) { hideDxDropdown(); return; }
-  const pool = getAllDxEntriesForFilter();
+  const pool = getAllDxEntriesForFilter(isObg);
   const matches = pool.filter(function (d) {
     const desc = (d.desc || '').toLowerCase();
     const code = (d.code || '').toLowerCase();
@@ -21737,8 +21771,11 @@ function setObgComplaintDetail(label, value) {
   if (!cleanLabel || !cleanValue) return;
   if (!Array.isArray(window.OBG_COMPLAINT_DETAILS)) window.OBG_COMPLAINT_DETAILS = [];
   const existing = window.OBG_COMPLAINT_DETAILS.find(function (row) { return String(row.label || '').trim() === cleanLabel; });
-  if (existing) existing.value = cleanValue;
-  else window.OBG_COMPLAINT_DETAILS.push({ label: cleanLabel, value: cleanValue });
+  if (existing) {
+    const parts = String(existing.value || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean);
+    if (!parts.some(function (x) { return x.toLowerCase() === cleanValue.toLowerCase(); })) parts.push(cleanValue);
+    existing.value = parts.join(', ');
+  } else window.OBG_COMPLAINT_DETAILS.push({ label: cleanLabel, value: cleanValue });
   renderObgComplaintDetails();
 }
 function updateObgComplaintDetailValue(idx, value) {
@@ -28343,7 +28380,6 @@ function augmentQueueBasePatientsWithCrossRefs(basePts, targetDeptKey) {
   if (!dk || !Array.isArray(basePts)) return basePts;
   const seen = new Set();
   basePts.forEach(function (p) { if (p && p.bmhId) seen.add(p.bmhId); });
-  const todayKeyLocal = localDateKey(new Date());
   const out = basePts.slice();
   (PATIENTS || []).forEach(function (p) {
     if (!p || p.queueRemoved || String(p.status || '').toLowerCase() === 'removed') return;
@@ -28354,17 +28390,8 @@ function augmentQueueBasePatientsWithCrossRefs(basePts, targetDeptKey) {
     });
     if (!xrefs.length) return;
     const include = xrefs.some(function (xr) {
-      if (patientQueueDateMatchesToday(p)) return true;
-      const stamps = [xr.createdAt, xr.at, p.checkinAt, p.updatedAt, p.visitDate, p.queueDate].filter(Boolean);
-      return stamps.some(function (raw) {
-        if (raw === null || raw === undefined || raw === '') return false;
-        const s = String(raw);
-        if (/^\d+$/.test(s)) {
-          try { return localDateKey(new Date(Number(s))) === todayKeyLocal; } catch (e) { return false; }
-        }
-        return localDateKey(s) === todayKeyLocal || s.slice(0, 10) === todayKeyLocal;
-      });
-    });
+      return !xr.seenAt;
+    }) || patientQueueDateMatchesToday(p);
     if (!include) return;
     seen.add(p.bmhId);
     out.push(p);
