@@ -3418,6 +3418,7 @@
             <div class="form-group" style="margin:0"><label class="fl">Min Qty</label><input type="number" id="inv-in-min" min="0" value="5"></div>
             <div class="form-group" style="margin:0"><label class="fl">Expiry</label><input type="text" id="inv-in-exp" placeholder="MM/YYYY"></div>
           </div></div>
+          <div class="inventory-scroll-x" style="margin-top:6px"><div class="form-group" style="margin:0;max-width:720px"><label class="fl">Generic name (of brand)</label><input type="text" id="inv-in-generic" placeholder="e.g. Moxifloxacin — for this stock line"></div></div>
           <datalist id="inv-vendor-datalist"></datalist>
           <datalist id="inv-item-datalist"></datalist>
           <div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin-top:8px">
@@ -3781,7 +3782,9 @@
               <select id="bmh-pay-mode" onchange="bmhToggleBillingInsuranceFields()"><option value="Cash">Cash</option><option value="UPI">UPI</option><option value="Card">Card</option><option value="NEFT">NEFT</option><option value="Cheque">Cheque</option><option value="Insurance/TPA">Insurance/TPA</option><option value="PMJAY / Ayushman">PMJAY / Ayushman</option><option value="CGHS/ECHS">CGHS/ECHS</option></select>
             </div>
             <div class="form-group" style="margin:0;grid-column:1/-1"><label class="fl">Cheque no. / UTR / ref no.</label><input type="text" id="bmh-pay-ref" placeholder="Required for bank / UPI reconciliation"></div>
+            <div class="form-group" style="margin:0;grid-column:1/-1"><label class="fl">Cashless / TPA approved ₹ (for this bill)</label><input type="number" id="bmh-pay-cashless-approved" min="0" step="1" placeholder="Leave blank if fully self-pay" oninput="bmhUpdateBillTotals()"></div>
           </div>
+          <div id="bmh-pay-cashless-split-hint" style="display:none;font-size:11px;font-weight:700;color:var(--bmh-teal);margin:-2px 0 8px;line-height:1.4"></div>
           <div id="bmh-pay-insurance-fields" style="display:none;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
             <div class="form-group" style="margin:0"><label class="fl">Insurance / TPA</label><input type="text" id="bmh-pay-insurer" placeholder="Insurer / TPA name"></div>
             <div class="form-group" style="margin:0"><label class="fl">Policy / pre-auth no.</label><input type="text" id="bmh-pay-policy" placeholder="Policy or pre-auth"></div>
@@ -3831,7 +3834,7 @@
 <div class="card" style="margin-bottom:14px">
   <div class="card-hd"><div class="card-title">TPA / Cashless Case Tracker</div><button class="btn btn-gold btn-sm" onclick="showToast('New pre-auth form opened ✓','i')">+ New Pre-auth</button></div>
   <div style="overflow-x:auto">
-    <table style="min-width:800px"><thead><tr><th>Patient</th><th>Insurer</th><th>Pre-auth No.</th><th>Procedure</th><th>Claimed ₹</th><th>Approved ₹</th><th>Received ₹</th><th>Pending ₹</th><th>Status</th></tr></thead>
+    <table style="min-width:800px"><thead><tr><th>Patient</th><th>Insurer</th><th>Pre-auth No.</th><th>Procedure</th><th>Cashless approved ₹</th><th>Approved ₹</th><th>Received ₹</th><th>Pending ₹</th><th>Status</th></tr></thead>
     <tbody id="tpa-case-body"></tbody></table>
   </div>
 </div>

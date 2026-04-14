@@ -166,30 +166,10 @@ const CENTRE_CHARGES = {
     'CBC':350,'HbA1c':500,'Lipid Profile':600,'Thyroid Profile':700,'Urine Routine':180
   }
 };
-const INVENTORY = [
-  {name:'Moxifloxacin 0.5% Eye Drop (Vigamox)',barcode:'MFX-001',cat:'Eye Drops',mrp:280,stock:24,min:10,exp:'12/2026'},
-  {name:'Prednisolone 1% Eye Drop (Pred Forte)',barcode:'PDN-002',cat:'Eye Drops',mrp:180,stock:3,min:10,exp:'06/2026'},
-  {name:'Carboxymethylcellulose 0.5% (Refresh)',barcode:'CMC-003',cat:'Eye Drops',mrp:95,stock:18,min:8,exp:'09/2026'},
-  {name:'Timolol 0.5% Eye Drop',barcode:'TIM-004',cat:'Eye Drops',mrp:65,stock:2,min:10,exp:'03/2027'},
-  {name:'AcrySof SN60WF IOL +21.0D',barcode:'IOL-021',cat:'IOL',mrp:18500,stock:8,min:3,exp:'12/2028'},
-  {name:'AcrySof SN60WF IOL +22.5D',barcode:'IOL-023',cat:'IOL',mrp:18500,stock:5,min:3,exp:'12/2028'},
-  {name:'Disposable OT Pack (Phaco)',barcode:'OTP-001',cat:'Surgical',mrp:1200,stock:15,min:5,exp:'06/2027'},
-  {name:'Bevacizumab 1.25mg (Avastin)',barcode:'BEV-001',cat:'IVT',mrp:1800,stock:4,min:3,exp:'08/2025'},
-  {name:'IV Mannitol 20% 300mL',barcode:'MAN-001',cat:'IV Fluids',mrp:85,stock:20,min:10,exp:'09/2026'},
-  {name:'Ringer Lactate 500mL',barcode:'RL-001',cat:'IV Fluids',mrp:45,stock:30,min:15,exp:'06/2027'},
-];
+const INVENTORY = [];
 const BCMAP = {};
-INVENTORY.forEach(i=>{BCMAP[i.barcode]=i;BCMAP[i.name.toLowerCase().substring(0,15)]=i;});
-/** Editable IOL / implant catalogue (Settings → Surgery Packs) */
-let IOL_CATALOG = [
-  { name:'AcrySof SN60WF +21.0 D', type:'Monofocal aspheric', mfr:'Alcon Vision', price:18500, barcode:'IOL-021' },
-  { name:'AcrySof SN60WF +22.5 D', type:'Monofocal aspheric', mfr:'Alcon Vision', price:18500, barcode:'IOL-023' },
-  { name:'AcrySof IQ +20.5 D', type:'Monofocal (yellow)', mfr:'Alcon Vision', price:19500, barcode:'' },
-  { name:'AcrySof IQ PanOptix +21.0 D', type:'Trifocal', mfr:'Alcon Vision', price:55000, barcode:'' },
-  { name:'Tecnis ZCB00 +21.0 D', type:'Monofocal', mfr:'Johnson & Johnson Vision', price:16000, barcode:'' },
-  { name:'ZEISS AT TORBI 709M +21.0 D', type:'Toric', mfr:'Carl Zeiss Meditec', price:38000, barcode:'' },
-  { name:'Hoya iSert 250 +21.0 D', type:'Preloaded hydrophobic', mfr:'Hoya', price:22000, barcode:'' },
-];
+/** Editable IOL / implant catalogue (Settings → Surgery Packs) — populated from your entries / Firebase */
+let IOL_CATALOG = [];
 function saveIolCatalogToStorage() {
   try { localStorage.setItem('bmh_iol_catalog', JSON.stringify(IOL_CATALOG)); } catch (e) { /* noop */ }
   if (window.FBDB) window.FBDB.ref('iolCatalog').set(IOL_CATALOG).catch(function () {});
@@ -6930,7 +6910,7 @@ function loadInventoryStockFromStorage() {
   } catch (e) { /* noop */ }
 }
 function saveInventoryStockToStorage() {
-  try { localStorage.setItem('bmh_inventory_stock', JSON.stringify(INVENTORY.map(i => ({ barcode: i.barcode, stock: i.stock, name: i.name, cat: i.cat, mrp: i.mrp, exp: i.exp, dept: i.dept, vendor: i.vendor, cost: i.cost, qr: i.qr, store: i.store, min: i.min, billMode: i.billMode, vendorBillingMode: i.vendorBillingMode, serialNo: i.serialNo, batchNo: i.batchNo, power: i.power, iolCompany: i.iolCompany, iolBrand: i.iolBrand, iolModel: i.iolModel } )))); } catch (e) { /* noop */ }
+  try { localStorage.setItem('bmh_inventory_stock', JSON.stringify(INVENTORY.map(i => ({ barcode: i.barcode, stock: i.stock, name: i.name, cat: i.cat, mrp: i.mrp, exp: i.exp, dept: i.dept, vendor: i.vendor, cost: i.cost, qr: i.qr, store: i.store, min: i.min, billMode: i.billMode, vendorBillingMode: i.vendorBillingMode, serialNo: i.serialNo, batchNo: i.batchNo, power: i.power, iolCompany: i.iolCompany, iolBrand: i.iolBrand, iolModel: i.iolModel, genericName: i.genericName } )))); } catch (e) { /* noop */ }
 }
 function normalizeIolPowerValue(power) {
   const raw = String(power || '').trim();
@@ -6945,9 +6925,9 @@ function getInventoryIolStockCount(company, brand, power) {
   const pNorm = normalizeIolPowerValue(power);
   const c = normalizeInventoryCompareText(company || '');
   const b = normalizeInventoryCompareText(brand || '');
-  if (!c && !b) return 0;
   return (INVENTORY || []).reduce(function (sum, item) {
-    if (String(item.cat || '').toLowerCase() !== 'iol') return sum;
+    const isIol = String(item.cat || '').toLowerCase() === 'iol' || /\biol\b/i.test(String(item.name || ''));
+    if (!isIol) return sum;
     if (c && normalizeInventoryCompareText(item.iolCompany || item.vendor || '') !== c) return sum;
     if (b && normalizeInventoryCompareText(item.iolBrand || '') !== b) return sum;
     const ip = normalizeIolPowerValue(item.power || extractIolPower(item.name || ''));
@@ -7253,19 +7233,27 @@ function renderIolBrandPowerGrid(entryDiv) {
       <div style="display:flex;align-items:center;gap:4px;justify-content:center;margin-bottom:4px">
         <button type="button" class="btn btn-xs btn-gray" onclick="iolBrandPowerQtyDelta(this,-1)">−</button>
         <div style="min-width:44px;text-align:center">
-          <div class="iol-in-stock-display" style="font-size:14px;font-weight:900;color:#1a8c3c;line-height:1.1">0</div>
-          <div style="font-size:8px;color:#6b7280;font-weight:700">in stock</div>
+          <div class="iol-qty-to-add" style="font-size:15px;font-weight:900;color:var(--bmh-blue);line-height:1.1">0</div>
+          <div style="font-size:8px;color:#6b7280;font-weight:700">to add</div>
         </div>
         <button type="button" class="btn btn-xs btn-gray" onclick="iolBrandPowerQtyDelta(this,1)">+</button>
       </div>
-      <div style="display:flex;align-items:center;gap:6px;justify-content:center;margin-bottom:4px">
-        <span style="font-size:9px;color:var(--g1);font-weight:700">Add</span>
-        <input type="number" class="inv-iol-qty" data-power="${esc}" min="0" max="99" value="0" style="width:40px;text-align:center;font-weight:800;font-size:13px" oninput="iolBrandQtyInput(this)">
+      <div style="display:flex;align-items:center;gap:4px;justify-content:center;margin-bottom:4px">
+        <div style="min-width:44px;text-align:center">
+          <div class="iol-in-stock-display" style="font-size:13px;font-weight:900;color:#1a8c3c;line-height:1.1">0</div>
+          <div style="font-size:8px;color:#6b7280;font-weight:700">in stock</div>
+        </div>
       </div>
+      <input type="hidden" class="inv-iol-qty" data-power="${esc}" value="0">
       <button type="button" class="btn btn-xs btn-outline" style="font-size:10px;padding:2px 6px" onclick="iolToggleSnPanel(this)">S/n</button>
       <div class="iol-sn-slots" style="display:none;margin-top:6px;text-align:left"></div>
     </div>`;
   }).join('');
+  entryDiv.querySelectorAll('.iol-power-cell').forEach(function (cell) {
+    const inp = cell.querySelector('.inv-iol-qty');
+    const addEl = cell.querySelector('.iol-qty-to-add');
+    if (inp && addEl) addEl.textContent = String(Math.max(0, parseInt(inp.value, 10) || 0));
+  });
   refreshIolBrandPowerStockLabels(entryDiv);
   const br = entryDiv.querySelector('.iol-brand-field');
   const co = entryDiv.querySelector('.iol-company-field');
@@ -7281,13 +7269,21 @@ function iolBrandPowerQtyDelta(btn, delta) {
   let v = (parseInt(inp.value, 10) || 0) + delta;
   v = Math.max(0, Math.min(99, v));
   inp.value = String(v);
+  const addEl = cell.querySelector('.iol-qty-to-add');
+  if (addEl) addEl.textContent = String(v);
   iolSyncSnSlots(cell);
   updateIolPowerCounter();
+  const entry = cell.closest('.inv-iol-brand-entry');
+  if (entry) refreshIolBrandPowerStockLabels(entry);
 }
 function iolBrandQtyInput(inp) {
   const cell = inp.closest('.iol-power-cell');
+  const addEl = cell && cell.querySelector('.iol-qty-to-add');
+  if (addEl && inp) addEl.textContent = String(Math.max(0, parseInt(inp.value, 10) || 0));
   iolSyncSnSlots(cell);
   updateIolPowerCounter();
+  const entry = cell && cell.closest('.inv-iol-brand-entry');
+  if (entry) refreshIolBrandPowerStockLabels(entry);
 }
 function iolToggleSnPanel(btn) {
   const cell = btn.closest('.iol-power-cell');
@@ -7481,7 +7477,7 @@ function reopenInventoryBillForMoreItems() {
 }
 window.reopenInventoryBillForMoreItems = reopenInventoryBillForMoreItems;
 function resetInventoryStockInForm(includeIol) {
-  ['inv-in-vendor','inv-in-invoice','bc-in','inv-in-qty','inv-in-cost','inv-in-mrp','inv-in-min','inv-in-exp'].forEach(function (id) {
+  ['inv-in-vendor','inv-in-invoice','bc-in','inv-in-generic','inv-in-qty','inv-in-cost','inv-in-mrp','inv-in-min','inv-in-exp'].forEach(function (id) {
     const el = document.getElementById(id);
     if (!el) return;
     if (id === 'inv-in-qty') el.value = '1';
@@ -8467,11 +8463,16 @@ function renderTpaPage() {
   const body = document.getElementById('tpa-case-body');
   if (!body) return;
   const claims = getDisplayTpaClaims();
-  const totalClaimed = claims.reduce(function (s, r) { return s + (Number(r.amount) || 0); }, 0);
+  const totalClaimed = claims.reduce(function (s, r) {
+    const v = Number(r.cashlessApprovedAmount || r.claimedAmount) || 0;
+    return s + v;
+  }, 0);
   const received = (TRANSACTIONS || []).filter(function (t) {
     return isInsuranceLikeMode(t.mode || t.ins || '');
   }).reduce(function (s, t) { return s + (Number(t.amount) || 0); }, 0);
-  const pending = claims.filter(function (r) { return r.status === 'pending'; }).reduce(function (s, r) { return s + (Number(r.amount) || 0); }, 0);
+  const pending = claims.filter(function (r) { return r.status === 'pending'; }).reduce(function (s, r) {
+    return s + (Number(r.amount) || 0);
+  }, 0);
   const rejected = claims.filter(function (r) { return r.status === 'rejected'; }).reduce(function (s, r) { return s + (Number(r.amount) || 0); }, 0);
   const set = function (id, val) { const el = document.getElementById(id); if (el) el.textContent = '₹' + Number(val || 0).toLocaleString('en-IN'); };
   set('tpa-total-claimed', totalClaimed);
@@ -8480,14 +8481,15 @@ function renderTpaPage() {
   set('tpa-total-rejected', rejected);
   body.innerHTML = claims.length ? claims.map(function (r) {
     const receivedAmt = (TRANSACTIONS || []).filter(function (t) { return t.bmhId === r.bmhId && isInsuranceLikeMode(t.mode || t.ins || ''); }).reduce(function (s, t) { return s + (Number(t.amount) || 0); }, 0);
-    const approvedAmt = Math.max(Number(r.approvedAmount) || 0, Number(r.amount) || 0);
+    const cashlessLine = Number(r.cashlessApprovedAmount || r.claimedAmount || 0) || 0;
+    const approvedAmt = Math.max(Number(r.approvedAmount) || 0, cashlessLine);
     const pendingAmt = Math.max(0, approvedAmt - receivedAmt);
     return `<tr style="cursor:pointer" onclick="openTPACaseDetail('${r.id}')">
       <td><div style="font-weight:800;font-size:12px">${r.patient || '—'}</div><div style="font-family:var(--mono);font-size:9px;color:var(--bmh-teal)">${r.bmhId || '—'}</div></td>
       <td><span class="badge bd-blue">${r.ins || r.mode || 'Insurance'}</span></td>
       <td style="font-family:var(--mono);font-size:10px">${r.policy || '—'}</td>
-      <td>${r.procedure || r.for || 'Hospital bill'}${r.diagnosis ? `<div style="font-size:10px;color:var(--g1)">${r.diagnosis}</div>` : ''}</td>
-      <td>₹${(Number(r.claimedAmount || r.amount) || 0).toLocaleString('en-IN')}</td>
+      <td>${r.procedure || r.for || 'Hospital bill'}${r.diagnosis ? `<div style="font-size:10px;color:var(--g1)">${r.diagnosis}</div>` : ''}${r.hospitalBillTotal ? `<div style="font-size:10px;color:var(--g1)">Bill total ₹${Number(r.hospitalBillTotal).toLocaleString('en-IN')}</div>` : ''}</td>
+      <td>₹${cashlessLine.toLocaleString('en-IN')}</td>
       <td>₹${approvedAmt.toLocaleString('en-IN')}</td>
       <td>₹${receivedAmt.toLocaleString('en-IN')}</td>
       <td style="font-weight:900;color:${pendingAmt > 0 ? 'var(--orange)' : 'var(--green)'}">₹${pendingAmt.toLocaleString('en-IN')}</td>
@@ -8540,6 +8542,20 @@ function bmhUpdateBillTotals() {
   a('bill-received', received + pendingNow);
   a('bill-balance-due', due);
   a('bill-total', total);
+  const hint = document.getElementById('bmh-pay-cashless-split-hint');
+  if (hint && bmhId) {
+    const cashlessApr = Math.max(0, Number(document.getElementById('bmh-pay-cashless-approved')?.value || 0));
+    if (cashlessApr > 0) {
+      const patientShare = Math.max(0, total - cashlessApr);
+      hint.style.display = 'block';
+      hint.textContent = 'Net ₹' + total.toLocaleString('en-IN') + ' · Cashless / TPA approved ₹' + cashlessApr.toLocaleString('en-IN') + ' · Patient share (cash/UPI/card) ₹' + patientShare.toLocaleString('en-IN');
+    } else {
+      hint.style.display = 'none';
+      hint.textContent = '';
+    }
+  } else if (hint) {
+    hint.style.display = 'none';
+  }
   if (bmhId) bmhSyncPatientRunningBalance(bmhId);
 }
 
@@ -8554,7 +8570,7 @@ function bmhTogglePaymentForm(on) {
 }
 window.bmhTogglePaymentForm = bmhTogglePaymentForm;
 function bmhClearPaymentDraft() {
-  ['bmh-pay-amt','bmh-pay-ref','bmh-pay-insurer','bmh-pay-policy','bmh-pay-insurer-due'].forEach(function (id) {
+  ['bmh-pay-amt','bmh-pay-ref','bmh-pay-insurer','bmh-pay-policy','bmh-pay-insurer-due','bmh-pay-cashless-approved'].forEach(function (id) {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
@@ -9304,14 +9320,19 @@ function bmhRecordPatientPayment() {
   const insName = document.getElementById('bmh-pay-insurer')?.value?.trim() || '';
   const policy = document.getElementById('bmh-pay-policy')?.value?.trim() || '';
   const insurerDue = Math.max(0, Number(document.getElementById('bmh-pay-insurer-due')?.value || 0));
+  const cashlessApr = Math.max(0, Number(document.getElementById('bmh-pay-cashless-approved')?.value || 0));
+  const netBill = Number(bmhTotalsForPatient(bmhId).total) || 0;
   const pt = PATIENTS.find(p => p.bmhId === bmhId);
   const billCtx = bmhGetEffectiveBillContext(bmhId);
   const txnId = 'TXN' + Date.now();
+  const splitLabel = cashlessApr > 0
+    ? ('Patient share · bill ₹' + netBill.toLocaleString('en-IN') + ' · cashless ₹' + cashlessApr.toLocaleString('en-IN'))
+    : '';
   const txn = {
     id: txnId,
     patient: pt?.name || bmhId,
     bmhId,
-    service: 'Billing payment',
+    service: cashlessApr > 0 && !isInsuranceLikeMode(mode) ? ('Billing — ' + splitLabel) : (cashlessApr > 0 && isInsuranceLikeMode(mode) ? ('TPA / cashless receipt — ' + splitLabel) : 'Billing payment'),
     amount: amt,
     mode,
     collected: true,
@@ -9325,7 +9346,9 @@ function bmhRecordPatientPayment() {
     createdBy: CURRENT_USER?.name || 'Billing',
     source: 'billing',
     type: 'billing-payment',
-    billCats: (billCtx.activeCats || []).slice()
+    billCats: (billCtx.activeCats || []).slice(),
+    cashlessApprovedAmount: cashlessApr > 0 ? cashlessApr : undefined,
+    hospitalBillTotal: cashlessApr > 0 ? netBill : undefined
   };
   TRANSACTIONS.push(txn);
   saveTransactionToFirebase && saveTransactionToFirebase(txn);
@@ -9336,7 +9359,49 @@ function bmhRecordPatientPayment() {
   }
   const updatedDue = bmhSyncPatientRunningBalance(bmhId);
   if (pt) pt.balance = updatedDue;
-  if (isInsuranceLikeMode(mode) && pt) {
+  const insReceivedTotal = (TRANSACTIONS || []).filter(function (t) {
+    return t.bmhId === bmhId && isInsuranceLikeMode(t.mode || t.ins || '');
+  }).reduce(function (s, t) { return s + (Number(t.amount) || 0); }, 0);
+  if (cashlessApr > 0 && pt) {
+    const lines = window.BMH_PATIENT_CHARGES[bmhId] || [];
+    const topLine = lines.find(function (x) { return x && !x.isConcession; }) || lines[0];
+    const proc = String(topLine?.desc || topLine?.name || 'Hospital bill / cashless').slice(0, 120);
+    const pendingTpa = Math.max(0, cashlessApr - insReceivedTotal);
+    let existing = (PAY_REQUESTS || []).find(function (r) {
+      return r.bmhId === bmhId && r.status === 'pending' && isInsuranceLikeMode(r.mode || r.ins || '');
+    });
+    const prPayload = {
+      patient: pt.name || bmhId,
+      bmhId: bmhId,
+      for: proc,
+      procedure: proc,
+      diagnosis: String(pt.diagnosis || pt.purpose || '').slice(0, 120),
+      claimedAmount: cashlessApr,
+      approvedAmount: cashlessApr,
+      cashlessApprovedAmount: cashlessApr,
+      hospitalBillTotal: netBill,
+      patientShareCollected: !isInsuranceLikeMode(mode) ? Math.max(0, amt) : 0,
+      amount: pendingTpa,
+      status: pendingTpa > 0 ? 'pending' : 'paid',
+      from: 'Billing',
+      dept: pt.dept || 'ophtho',
+      centre: pt.centre || CURRENT_USER?.centre || 'CHD',
+      mode: 'Insurance/TPA',
+      ins: insName || 'Insurance/TPA',
+      policy: policy || '',
+      date: new Date().toISOString(),
+      lastPaymentRef: ref,
+      lastPaymentAmt: amt
+    };
+    if (existing) {
+      Object.assign(existing, prPayload, { id: existing.id });
+      try { fbUpdate && fbUpdate('payRequests/' + existing.id, Object.assign({}, existing)); } catch (e) {}
+    } else {
+      const prIns = Object.assign({ id: 'PR' + Date.now() }, prPayload);
+      PAY_REQUESTS.push(prIns);
+      try { fbSet && fbSet('payRequests/' + prIns.id, prIns); } catch (e) {}
+    }
+  } else if (isInsuranceLikeMode(mode) && pt) {
     const lines = window.BMH_PATIENT_CHARGES[bmhId] || [];
     const topLine = lines.find(function (x) { return x && !x.isConcession; }) || lines[0];
     const proc = String(topLine?.desc || topLine?.name || 'Hospital bill / cashless').slice(0, 120);
@@ -9408,6 +9473,7 @@ function bmhRecordPatientPayment() {
   const pin = document.getElementById('bmh-pay-insurer'); if (pin) pin.value = '';
   const ppo = document.getElementById('bmh-pay-policy'); if (ppo) ppo.value = '';
   const pdu = document.getElementById('bmh-pay-insurer-due'); if (pdu) pdu.value = '';
+  const pca = document.getElementById('bmh-pay-cashless-approved'); if (pca) pca.value = '';
   const tog = document.getElementById('bmh-pay-received-toggle'); if (tog) tog.checked = false;
   bmhTogglePaymentForm(false);
   const addToQ = !!document.getElementById('bmh-bill-add-to-queue')?.checked;
@@ -11138,14 +11204,13 @@ function addInventoryStorePrompt() {
 }
 window.addInventoryStorePrompt = addInventoryStorePrompt;
 function deleteInventoryStorePrompt() {
-  if (!CURRENT_USER?.isAdmin) { showToast('Only admin can delete stores', 'w'); return; }
   const name = normalizeInventoryTextValue(document.getElementById('inv-in-store')?.value || '');
   if (!name) { showToast('Select a store first', 'w'); return; }
   const used = (INVENTORY || []).some(function (i) { return String(i.store || '') === name; });
   if (used && !confirm('This store is referenced on stock rows. Remove from list anyway?')) return;
   window.BMH_STORE_LOCATIONS = (window.BMH_STORE_LOCATIONS || []).filter(function (s) { return s !== name; });
   if (!window.BMH_STORE_LOCATIONS.length) {
-    window.BMH_STORE_LOCATIONS = ['Eye Central Store CHD','Eye Central Store RPR','Eye CHD','Eye RPR'];
+    window.BMH_STORE_LOCATIONS = ['Default store'];
   }
   saveInventoryStoreLocations();
   bmhPopulateInventorySelectors();
@@ -11436,7 +11501,15 @@ function deleteInventoryIolGroup(company, brand, power, store) {
   showToast('IOL stock deleted', 's');
 }
 window.deleteInventoryIolGroup = deleteInventoryIolGroup;
-function scanBC(mode) { const demo=INVENTORY.filter(i=>i.stock>0)[Math.floor(Math.random()*5)]; const inp=mode==='in'?document.getElementById('bc-in'):document.getElementById('bc-use'); if(inp)inp.value=demo.barcode; showToast('📷 Barcode scanned: '+demo.barcode,'i'); setTimeout(()=>processBC(mode,demo.barcode),400); }
+function scanBC(mode) {
+  const pool = INVENTORY.filter(function (i) { return (Number(i.stock) || 0) > 0; });
+  if (!pool.length) { showToast('No items in stock to simulate scan — add stock first', 'w'); return; }
+  const demo = pool[Math.floor(Math.random() * pool.length)];
+  const inp = mode === 'in' ? document.getElementById('bc-in') : document.getElementById('bc-use');
+  if (inp) inp.value = demo.barcode;
+  showToast('📷 Barcode scanned: ' + demo.barcode, 'i');
+  setTimeout(function () { processBC(mode, demo.barcode); }, 400);
+}
 
 function renderAutoBillLog(){const el=document.getElementById('auto-bill-log');if(!el)return;if(!AUTO_BILL.length){el.innerHTML='<div style="padding:12px;text-align:center;color:var(--g1);font-size:12px">No items billed yet</div>';return;}el.innerHTML=AUTO_BILL.slice().reverse().map(b=>{const pid=String(b.patient||'');return `<div style="display:flex;align-items:center;gap:9px;padding:9px;background:var(--green-lt);border-radius:8px;margin-bottom:6px;font-size:12px;border-left:3px solid var(--green)"><span style="font-size:14px">📦</span><div style="flex:1"><div style="font-weight:800">${b.item}</div><div style="font-family:var(--mono);font-size:9px;color:var(--bmh-teal)">${pid.slice(0,22)}</div></div><div style="text-align:right"><div style="font-weight:900;color:var(--green)">₹${(b.mrp||0).toLocaleString('en-IN')}</div><div style="font-size:9.5px;color:var(--g1)">${b.time||''}</div></div></div>`;}).join('');}
 function renderInventoryPurchaseLog() {
@@ -13248,10 +13321,22 @@ function loadDoctorCustomRxOptions() {
     }).catch(function () {});
   }
 }
+function ensureSharedRxCustomOptions() {
+  window.DOCTOR_RX_CUSTOM_OPTIONS = window.DOCTOR_RX_CUSTOM_OPTIONS || {};
+  if (!window.DOCTOR_RX_CUSTOM_OPTIONS['__shared__']) {
+    window.DOCTOR_RX_CUSTOM_OPTIONS['__shared__'] = { type: [], freq: [], dur: [] };
+  }
+  const b = window.DOCTOR_RX_CUSTOM_OPTIONS['__shared__'];
+  ['type', 'freq', 'dur'].forEach(function (k) {
+    if (!Array.isArray(b[k])) b[k] = [];
+  });
+  return b;
+}
 function getMergedRxOptions(kind) {
   const base = RX_CUSTOM_OPTION_DEFAULTS[kind] || [];
   const extra = getDoctorCustomRxOptions()[kind] || [];
-  return Array.from(new Set(base.concat(extra).filter(Boolean)));
+  const shared = (ensureSharedRxCustomOptions()[kind] || []);
+  return Array.from(new Set(base.concat(extra).concat(shared).filter(Boolean)));
 }
 function fillSelectWithOptions(id, kind) {
   const el = document.getElementById(id);
@@ -13525,7 +13610,17 @@ function addCustomRxOption(kind) {
   const value = kind === 'dur' ? raw : toDisplayTitleCase(raw);
   const bucket = getDoctorCustomRxOptions();
   if (!bucket[kind]) bucket[kind] = [];
-  if (!bucket[kind].includes(value)) bucket[kind].push(value);
+  const lc = value.toLowerCase();
+  if (!bucket[kind].some(function (x) { return String(x || '').trim().toLowerCase() === lc; })) {
+    bucket[kind].push(value);
+    bucket[kind].sort(function (a, b) { return String(a).localeCompare(String(b)); });
+  }
+  const shared = ensureSharedRxCustomOptions();
+  if (!shared[kind]) shared[kind] = [];
+  if (!shared[kind].some(function (x) { return String(x || '').trim().toLowerCase() === lc; })) {
+    shared[kind].push(value);
+    shared[kind].sort(function (a, b) { return String(a).localeCompare(String(b)); });
+  }
   saveDoctorCustomRxOptions();
   refreshCustomRxOptionSelects();
   if (kind === 'type') {
@@ -14470,6 +14565,7 @@ function handleDrugImportCsv(inp) {
 }
 
 function renderSettingsDrugs() {
+  if (typeof refreshCustomRxOptionSelects === 'function') refreshCustomRxOptionSelects();
   const el = document.getElementById('set-drugs-list'); if(!el) return;
   let changed = false;
   DRUG_LIBRARY.forEach(function (d) {
@@ -17138,7 +17234,7 @@ function saveTPAReceipt(prId) {
   const procedure = toTitleCaseName(document.getElementById('tpa-procedure-name')?.value || '');
   const eye = toTitleCaseName(document.getElementById('tpa-eye')?.value || '');
   const policyNo = (document.getElementById('tpa-policy-no')?.value || '').trim();
-  const claimedAmount = Math.max(0, Number(document.getElementById('tpa-claimed-amt')?.value || pr.claimedAmount || pr.amount || 0));
+  const claimedAmount = Math.max(0, Number(document.getElementById('tpa-claimed-amt')?.value || pr.cashlessApprovedAmount || pr.claimedAmount || 0));
   const amt = Number(document.getElementById('tpa-received-amt')?.value || 0);
   const date = document.getElementById('tpa-received-date')?.value || new Date().toISOString().slice(0, 10);
   const utr = document.getElementById('tpa-received-utr')?.value || '';
@@ -17149,14 +17245,17 @@ function saveTPAReceipt(prId) {
   pr.eye = eye || (normalizeQueueDeptForUser(pr.dept || '') === 'ophtho' ? '' : 'N/A');
   pr.policy = policyNo;
   pr.claimedAmount = claimedAmount;
-  pr.amount = claimedAmount || pr.amount || 0;
+  pr.cashlessApprovedAmount = claimedAmount;
   pr.approvedAmount = Math.max(Number(pr.approvedAmount || 0), claimedAmount || 0);
+  pr.amount = Math.max(0, claimedAmount - amt);
   pr.receivedAmount = amt;
   pr.receivedDate = date;
   pr.utr = utr;
   pr.notes = notes;
   pr.patientDue = patientDue;
-  if (amt > 0) pr.status = amt >= Math.max(0, claimedAmount || pr.amount || 0) ? 'paid' : 'partial';
+  if (claimedAmount > 0 && amt >= claimedAmount) pr.status = 'paid';
+  else if (amt > 0) pr.status = 'partial';
+  else pr.status = 'pending';
   const pt = PATIENTS.find(function (p) { return p.bmhId === pr.bmhId; });
   if (pt) {
     pt.ins = pr.ins || pr.mode || pt.ins || '';
@@ -17170,6 +17269,7 @@ function saveTPAReceipt(prId) {
       eye: pr.eye,
       policy: policyNo,
       claimedAmount: claimedAmount,
+      cashlessApprovedAmount: claimedAmount,
       amount: pr.amount,
       approvedAmount: pr.approvedAmount,
       receivedAmount: amt,
@@ -17415,6 +17515,7 @@ function bmhFindOrCreateInventoryItem(rawCode, translated) {
     name: translated || lookup,
     barcode: lookup || ('INV-' + Date.now()),
     qr: lookup || '',
+    genericName: String(document.getElementById('inv-in-generic')?.value || '').trim(),
     cat: bmhInventoryCategoryValue(),
     mrp: Number(document.getElementById('inv-in-mrp')?.value || '0') || 0,
     cost: Number(document.getElementById('inv-in-cost')?.value || '0') || 0,
@@ -17537,7 +17638,7 @@ function bmhRecordInventoryPurchase(item, qty, billFile) {
 // Extend processBC — stock in / patient use with inventory deduction + patient charge line
 function processBC(mode, code) {
   if (!code) return;
-  const translated = code.replace(/^MFX/, 'Moxifloxacin Eye Drop').replace(/^PDN/, 'Prednisolone Eye Drop').replace(/^IOL/, 'AcrySof IOL').replace(/^BEV/, 'Bevacizumab Injection').replace(/^MAN/, 'Mannitol IV');
+  const translated = String(code);
   const item = BCMAP[code] || BCMAP[code.toLowerCase().substring(0, 15)] || INVENTORY.find(x => x.name.toLowerCase() === String(code).toLowerCase());
   if (mode === 'in') {
     const qty = Math.max(1, Number(document.getElementById('inv-in-qty')?.value || '1'));
