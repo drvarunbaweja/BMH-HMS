@@ -5193,7 +5193,7 @@ const OBG_SUMMARY_LABELS = {
 function obgFmtDate(value, blank = '—') {
   if(!value) return blank;
   const d = new Date(value);
-  return isNaN(d.getTime()) ? blank : d.toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
+  return isNaN(d.getTime()) ? blank : formatDateIN(d);
 }
 function obgVal(id) {
   return document.getElementById(id)?.value?.trim?.() || '';
@@ -10983,6 +10983,8 @@ function printReceipt() { printBmhPatientBill(); }
 // LAB INIT (from v9)
 // ═══════════════════════════════════════
 function initLab() {
+  const dateFilter = document.getElementById('lab-date-filter');
+  if (dateFilter && !dateFilter.value) dateFilter.value = localDateKey(new Date());
   const dateEl = document.getElementById('lab-rpt-date');
   if (dateEl && !String(dateEl.textContent || '').trim()) dateEl.textContent = formatDateIN(new Date());
   renderLabOrders && renderLabOrders();
@@ -20040,12 +20042,22 @@ function getUnreadLabResultsTitle(pt) {
   return lines.join('\n');
 }
 function getPatientLabQueueEntries() {
+  const selectedDate = (document.getElementById('lab-date-filter')?.value || localDateKey(new Date())).slice(0, 10);
+  const dateMatches = function (value) {
+    if (!value) return false;
+    const raw = String(value);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw === selectedDate;
+    const d = new Date(raw);
+    if (!Number.isNaN(d.getTime())) return localDateKey(d) === selectedDate;
+    return raw === selectedDate || formatDateIN(raw) === formatDateIN(selectedDate);
+  };
   const out = [];
   PATIENTS.forEach(function (pt) {
     if (!pt || !centreMatch(pt)) return;
     const orders = Array.isArray(pt.investigationOrders) ? pt.investigationOrders.slice() : [];
     const relevant = orders.filter(function (o) {
       if (!o || o.mode !== 'send') return false;
+      if (!dateMatches(o.completedAt || o.date || o.createdAt)) return false;
       return !o.done || (o.labReady && !o.doctorSeen);
     });
     if (!relevant.length) return;
@@ -20176,7 +20188,10 @@ function renderLabOrders() {
   el.innerHTML = LAB_ORDERS.map(o => `<div style="padding:10px 12px;background:${o.status==='completed'?'var(--green-lt)':'var(--orange-lt)'};border-radius:var(--rsm);margin-bottom:7px;cursor:pointer;border-left:4px solid ${o.status==='completed'?'var(--green)':'var(--orange)'}" onclick="openLabOrder('${o.id}')">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
       <div style="font-size:13px;font-weight:900">${o.patient}</div>
-      <span class="badge ${o.status==='completed'?'bd-green':'bd-orange'}" style="font-size:9.5px">${o.status==='completed'?(o.unread?'🔔 Ready':'✅ Done'):'⏳ Pending'}</span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="badge ${o.status==='completed'?'bd-green':'bd-orange'}" style="font-size:9.5px">${o.status==='completed'?(o.unread?'🔔 Ready':'✅ Done'):'⏳ Pending'}</span>
+        ${o.status === 'pending' ? `<button type="button" class="btn btn-xs btn-gray" onclick="event.stopPropagation();deleteLabPendingBlock('${o.id}')">🗑️</button>` : ''}
+      </div>
     </div>
     <div style="font-family:var(--mono);font-size:9.5px;color:var(--bmh-teal);margin-bottom:4px">${o.bmhId} · ${o.age ? o.age+'Y' : '—'}${o.sex ? ' / '+o.sex : ''}</div>
     <div style="font-size:11px;color:var(--tx3)">Ref: ${o.dr} · ${o.date}</div>
@@ -20196,6 +20211,72 @@ function renderLabOrders() {
   }
   const first = activeLabOrder || LAB_ORDERS[0];
   if (first) renderLabReportPreview(first);
+  renderLabDateReportSearch(selectedLabDateKey());
+}
+
+function selectedLabDateKey() {
+  return (document.getElementById('lab-date-filter')?.value || localDateKey(new Date())).slice(0, 10);
+}
+
+function renderLabDateReportSearch(selectedDate) {
+  const listEl = document.getElementById('lab-report-date-list');
+  const countEl = document.getElementById('lab-report-date-count');
+  if (!listEl) return;
+  const day = (selectedDate || localDateKey(new Date())).slice(0, 10);
+  const rows = [];
+  (window.PATIENTS || []).forEach(function (pt) {
+    if (!pt || !centreMatch(pt)) return;
+    const uploads = pt.lastVisit && Array.isArray(pt.lastVisit.investigations) ? pt.lastVisit.investigations : [];
+    uploads.forEach(function (entry) {
+      if (!entry || !entry.date) return;
+      const key = localDateKey(entry.date);
+      if (key !== day) return;
+      rows.push({
+        bmhId: pt.bmhId,
+        patient: pt.name || 'Patient',
+        key: entry.key,
+        name: entry.name || 'Investigation',
+        sizKB: Math.round(Number(entry.sizKB) || 0),
+        date: entry.date
+      });
+    });
+  });
+  rows.sort(function (a, b) { return String(b.date || '').localeCompare(String(a.date || '')); });
+  if (countEl) countEl.textContent = rows.length + ' report' + (rows.length === 1 ? '' : 's');
+  listEl.innerHTML = rows.length ? rows.slice(0, 80).map(function (entry) {
+    return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;background:#fff;border:1px solid var(--g5);border-radius:8px;padding:7px 8px;margin-bottom:6px">'
+      + '<div style="min-width:0">'
+      + '<div style="font-size:11.5px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escapeHtmlConsent(entry.patient) + ' · ' + escapeHtmlConsent(entry.name) + '</div>'
+      + '<div style="font-size:10px;color:var(--g1)">' + escapeHtmlConsent(entry.bmhId) + ' · ' + escapeHtmlConsent(String(entry.sizKB || 0)) + ' KB · ' + escapeHtmlConsent(formatDateIN(entry.date)) + '</div>'
+      + '</div>'
+      + '<button type="button" class="btn btn-xs btn-outline" onclick="viewStoredInvestigation(\'' + String(entry.bmhId).replace(/'/g, "\\'") + '\',\'' + String(entry.key).replace(/'/g, "\\'") + '\')">Open</button>'
+      + '</div>';
+  }).join('') : '<div style="padding:8px;font-size:11.5px;color:var(--g1)">No compressed reports for this date.</div>';
+}
+
+function deleteLabPendingBlock(orderId) {
+  const order = LAB_ORDERS.find(function (o) { return o.id === orderId; });
+  if (!order || order.status !== 'pending') return;
+  const pt = (window.PATIENTS || []).find(function (p) { return p && p.bmhId === order.bmhId; });
+  if (!pt) return;
+  const targetDate = selectedLabDateKey();
+  const orders = Array.isArray(pt.investigationOrders) ? pt.investigationOrders.slice() : [];
+  const removable = orders.filter(function (o) {
+    return o && o.mode === 'send' && !o.done && localDateKey(o.date || o.createdAt) === targetDate;
+  });
+  if (!removable.length) { showToast('No pending lab tests found to delete', 'i'); return; }
+  if (!confirm('Delete pending lab block for ' + (pt.name || order.bmhId) + '?\nOnly untested rows for selected date will be removed.')) return;
+  pt.investigationOrders = orders.filter(function (o) { return !removable.includes(o); });
+  if (pt.bmhId) {
+    fbUpdate && fbUpdate('patients/' + pt.bmhId, { investigationOrders: pt.investigationOrders }).catch(function () {});
+  }
+  if (activeLabOrder && activeLabOrder.id === orderId) {
+    activeLabOrder = null;
+    const panel = document.getElementById('lab-entry-panel');
+    if (panel) panel.style.display = 'none';
+  }
+  renderLabOrders();
+  showToast('Pending lab block deleted ✓', 's');
 }
 
 function openLabOrder(id) {
@@ -20392,11 +20473,11 @@ function searchLabAddPatient(query) {
   const resultsEl = document.getElementById('lab-add-pt-results');
   if (!resultsEl) return;
   if (!q || q.length < 2) { resultsEl.style.display = 'none'; return; }
-  const today = new Date().toISOString().split('T')[0];
+  const targetDate = selectedLabDateKey();
   const matches = (window.PATIENTS || []).filter(function (p) {
     if (!centreMatch(p)) return false;
-    const visitDate = String(p.visitDate || p.regDate || p.date || p.createdAt || p.registeredAt || '').slice(0, 10);
-    if (visitDate !== today) return false;
+    const visitDate = localDateKey(p.visitDate || p.regDate || p.date || p.checkinAt || p.createdAt || p.registeredAt);
+    if (visitDate !== targetDate) return false;
     const phone = String(p.mob || p.phone || '').replace(/\D/g, '');
     const bmhId = String(p.bmhId || '').toLowerCase();
     const qDigits = q.replace(/\D/g,'');
@@ -21683,7 +21764,7 @@ function formatDateDDMMYY(value) {
   return dd + '/' + mm + '/' + yy;
 }
 function formatDateIN(value) {
-  return formatDateDDMMYYYY(value);
+  return formatDateDDMMYY(value);
 }
 function toTitleCaseName(value) {
   return String(value || '')

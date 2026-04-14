@@ -3281,7 +3281,17 @@
 <div class="g32">
   <div class="col">
     <div class="card">
-      <div class="card-hd"><div><div class="card-title">&#129514; Lab Patient Queue</div><div class="card-sub"><span class="live-dot"></span>Patients with ordered investigations appear here</div></div><span class="badge bd-orange" id="lab-pending-ct">0 pending</span></div>
+      <div class="card-hd" style="gap:8px;flex-wrap:wrap">
+        <div>
+          <div class="card-title">&#129514; Lab Patient Queue</div>
+          <div class="card-sub"><span class="live-dot"></span>Patients with ordered investigations appear here</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <label style="font-size:10.5px;font-weight:800;color:var(--g1)">Date</label>
+          <input type="date" id="lab-date-filter" style="font-size:11.5px" onchange="renderLabOrders()">
+          <span class="badge bd-orange" id="lab-pending-ct">0 pending</span>
+        </div>
+      </div>
       <div style="background:var(--blue-lt);border-radius:8px;padding:9px 10px;margin-bottom:10px;border:1px solid var(--blue)">
         <div style="font-size:10px;font-weight:800;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.4px;margin-bottom:7px">➕ Add Patient to Lab</div>
         <div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap">
@@ -3292,6 +3302,13 @@
           <div style="flex:1;min-width:120px"><input type="hidden" id="lab-add-pt-bmhid"><span id="lab-add-pt-name" style="font-size:12px;font-weight:700;color:var(--bmh-blue)"></span></div>
           <button class="btn btn-blue btn-sm" onclick="addPatientToLab()">Add to Lab Queue</button>
         </div>
+      </div>
+      <div style="background:#f8fafc;border-radius:10px;padding:10px;margin-bottom:10px;border:1px solid #dbe4f0">
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap">
+          <div style="font-size:10px;font-weight:800;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.4px">Compressed Reports on Selected Date</div>
+          <span id="lab-report-date-count" style="font-size:10.5px;color:var(--g1);font-weight:700"></span>
+        </div>
+        <div id="lab-report-date-list" style="margin-top:8px"></div>
       </div>
       <div id="lab-ordered-list"></div>
     </div>
