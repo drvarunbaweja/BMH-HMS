@@ -2801,7 +2801,9 @@ function openPatient(bmhId, opts) {
     const raw = visit.date || visit.createdAt || visit.updatedAt || visit.visitDate || visit.savedAt || '';
     return raw ? localDateKey(raw) : '';
   };
-  const lastVisitIsToday = visitDateKey(p.lastVisit) === localDateKey(new Date());
+  const targetDept = normalizeDeptKeyForQueue(opts.deptOverride || p.dept || '') || p.dept;
+  const lastVisitRef = opts.deptOverride ? getLatestSavedVisitForDept(bmhId, targetDept) : p.lastVisit;
+  const lastVisitIsToday = visitDateKey(lastVisitRef) === localDateKey(new Date());
   window._suspendVisitAutosave = true;
   const unreadLabOrders = Array.isArray(p.investigationOrders) ? p.investigationOrders.filter(function (o) {
     return o && o.mode === 'send' && o.done && o.labReady && !o.doctorSeen;
@@ -2822,7 +2824,7 @@ function openPatient(bmhId, opts) {
   ['ophtho-pt-uid','obg-pt-uid','psych-pt-uid','skin-pt-uid'].forEach(id => {
     const e = document.getElementById(id); if(e) e.textContent = p.bmhId;
   });
-  syncObgDoctorSelector(p.dept === 'obg' ? (p.doctor || CURRENT_USER?.name || 'Dr. Namrata Baweja') : '');
+  syncObgDoctorSelector(targetDept === 'obg' ? (p.doctor || CURRENT_USER?.name || 'Dr. Namrata Baweja') : '');
   ['obg-rx-ptname','psych-rx-ptname','skin-rx-ptname','oe-rx-ptname'].forEach(id => {
     const e = document.getElementById(id); if(e) { e.textContent = p.name; e.title = buildPatientHeaderHoverText(p); }
   });
@@ -2928,7 +2930,6 @@ function openPatient(bmhId, opts) {
   ['ophtho','obg','psych','skin'].forEach(function (deptKey) { restoreProcedureDoneState(deptKey, null); });
 
   // ── 4. Navigate to dept ────────────────────────────────────────
-  const targetDept = normalizeDeptKeyForQueue(opts.deptOverride || p.dept || '') || p.dept;
   const deptPage = { ophtho:'ophtho', obg:'obg', psych:'psych', skin:'skin' }[targetDept] || 'ophtho';
   nav(deptPage, null, { silentHistory: true });
   if (deptPage === 'ophtho') {
@@ -2937,33 +2938,33 @@ function openPatient(bmhId, opts) {
     window.scrollTo(0, 0);
   }
 
-  if(deptPage === 'ophtho' && lastVisitIsToday && p.lastVisit && typeof p.lastVisit === 'object') {
-    populateOphthoForm(p.lastVisit);
+  if(deptPage === 'ophtho' && lastVisitIsToday && lastVisitRef && typeof lastVisitRef === 'object') {
+    populateOphthoForm(lastVisitRef);
   } else if(deptPage === 'obg') {
-    populateObgForm && populateObgForm(lastVisitIsToday ? (p.lastVisit || {}) : {});
-    if (!lastVisitIsToday) refreshPreviousDiagnosisPanel('obg', p.lastVisit || {});
+    populateObgForm && populateObgForm(lastVisitIsToday ? (lastVisitRef || {}) : {});
+    if (!lastVisitIsToday) refreshPreviousDiagnosisPanel('obg', lastVisitRef || {});
   } else if(deptPage === 'psych') {
-    populatePsychForm && populatePsychForm(lastVisitIsToday ? (p.lastVisit || {}) : {});
-    if (!lastVisitIsToday) refreshPreviousDiagnosisPanel('psych', p.lastVisit || {});
+    populatePsychForm && populatePsychForm(lastVisitIsToday ? (lastVisitRef || {}) : {});
+    if (!lastVisitIsToday) refreshPreviousDiagnosisPanel('psych', lastVisitRef || {});
   } else if(deptPage === 'skin') {
-    populateSkinForm && populateSkinForm(lastVisitIsToday ? (p.lastVisit || {}) : {});
-    if (!lastVisitIsToday) refreshPreviousDiagnosisPanel('skin', p.lastVisit || {});
+    populateSkinForm && populateSkinForm(lastVisitIsToday ? (lastVisitRef || {}) : {});
+    if (!lastVisitIsToday) refreshPreviousDiagnosisPanel('skin', lastVisitRef || {});
   }
   if (deptPage === 'ophtho' && !lastVisitIsToday) {
-    refreshPreviousDiagnosisPanel('ophtho', p.lastVisit || {});
+    refreshPreviousDiagnosisPanel('ophtho', lastVisitRef || {});
   }
 
   // ── 5. Load past visits list + try to reload today's visit ─────
   setTimeout(() => {
-    loadPastVisits(p.bmhId, p.dept);
-    if(p.dept === 'ophtho') loadTodayVisitIntoForm(p.bmhId);
-    else if(p.dept === 'obg') loadTodayDeptVisitIntoForm(p.bmhId, 'obg');
-    else if(p.dept === 'psych') loadTodayDeptVisitIntoForm(p.bmhId, 'psych');
-    else if(p.dept === 'skin') loadTodayDeptVisitIntoForm(p.bmhId, 'skin');
+    loadPastVisits(p.bmhId, targetDept);
+    if(targetDept === 'ophtho') loadTodayVisitIntoForm(p.bmhId);
+    else if(targetDept === 'obg') loadTodayDeptVisitIntoForm(p.bmhId, 'obg');
+    else if(targetDept === 'psych') loadTodayDeptVisitIntoForm(p.bmhId, 'psych');
+    else if(targetDept === 'skin') loadTodayDeptVisitIntoForm(p.bmhId, 'skin');
     renderCurrentPatientInvestigationUploads && renderCurrentPatientInvestigationUploads();
     renderOphthoRecap && renderOphthoRecap();
-    if(p.dept === 'psych') renderPsychRail && renderPsychRail();
-    if(p.dept === 'skin') renderSkinRail && renderSkinRail();
+    if(targetDept === 'psych') renderPsychRail && renderPsychRail();
+    if(targetDept === 'skin') renderSkinRail && renderSkinRail();
   }, 300);
 }
 
@@ -3463,7 +3464,14 @@ function markPaid(id) {
   if(p) {
     // If this was a cross-refer payment — now route patient to target dept
     if(pr.xref && pr.xrefDept) {
+      const nowMs = Date.now();
+      const nowIso = new Date().toISOString();
       p.status = 'waiting';
+      p.seen = false;
+      p.checkinAt = nowMs;
+      p.updatedAt = nowIso;
+      p.visitDate = nowIso;
+      p.queueDate = nowIso;
       p.xrefPaid = true;
       const refs = Array.isArray(p.crossRefs) ? p.crossRefs.slice() : [];
       refs.forEach(function (r) {
@@ -3474,7 +3482,16 @@ function markPaid(id) {
         }
       });
       p.crossRefs = refs;
-      fbUpdate && fbUpdate('patients/' + pr.bmhId, { crossRefs: sanitizeFirebaseValue(refs), status: 'waiting', xrefPaid: true }).catch(()=>{});
+      fbUpdate && fbUpdate('patients/' + pr.bmhId, {
+        crossRefs: sanitizeFirebaseValue(refs),
+        status: 'waiting',
+        xrefPaid: true,
+        seen: false,
+        checkinAt: nowMs,
+        updatedAt: nowIso,
+        visitDate: nowIso,
+        queueDate: nowIso
+      }).catch(()=>{});
       // Mark xref as paid in log
       if(window.XREF_LOG) {
         const xr = window.XREF_LOG.find(x=>x.bmhId===pr.bmhId&&x.toDept===pr.xrefDept);
@@ -11961,8 +11978,10 @@ function doXRef(){
   }[toVal] || 'ophtho';
   const toDoctor = toVal.split(' — ')[0] || toVal;
   const fee  = document.getElementById('xref-fee-sel')?.value === 'yes';
-  const reason = document.getElementById('xref-reason')?.value || '';
+  const reason = document.getElementById('xref-reason')?.value?.trim() || '';
   const now  = new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+  const nowMs = Date.now();
+  const nowIso = new Date().toISOString();
 
   // Build log entry
   const xref = {
@@ -11993,8 +12012,23 @@ function doXRef(){
     p.xrefTo = toDept;
     p.xrefDoctor = toDoctor;
     p.status = 'waiting';
+    p.seen = false;
+    p.checkinAt = nowMs;
+    p.updatedAt = nowIso;
+    p.visitDate = nowIso;
+    p.queueDate = nowIso;
     if(!fee) {
-      fbUpdate && fbUpdate('patients/' + bmhId, { crossRefs: sanitizeFirebaseValue(refs), xrefTo: toDept, xrefDoctor: toDoctor, status: 'waiting' }).catch(()=>{});
+      fbUpdate && fbUpdate('patients/' + bmhId, {
+        crossRefs: sanitizeFirebaseValue(refs),
+        xrefTo: toDept,
+        xrefDoctor: toDoctor,
+        status: 'waiting',
+        seen: false,
+        checkinAt: nowMs,
+        updatedAt: nowIso,
+        visitDate: nowIso,
+        queueDate: nowIso
+      }).catch(()=>{});
       showToast(`↔️ ${ptName} added to ${toDoctor}'s queue ✓`,'s');
     } else {
       // Paid → send to reception as pulsating payment request
@@ -12009,7 +12043,13 @@ function doXRef(){
       };
       PAY_REQUESTS.push(xrPR);
       fbSet&&fbSet('payRequests/'+xrPR.id, xrPR);
-      fbUpdate && fbUpdate('patients/' + bmhId, { crossRefs: sanitizeFirebaseValue(refs), xrefTo: toDept, xrefDoctor: toDoctor }).catch(()=>{});
+      fbUpdate && fbUpdate('patients/' + bmhId, {
+        crossRefs: sanitizeFirebaseValue(refs),
+        xrefTo: toDept,
+        xrefDoctor: toDoctor,
+        updatedAt: nowIso,
+        visitDate: nowIso
+      }).catch(()=>{});
       showToast(`↔️ ${ptName} → ${toDoctor} — Payment request sent to Reception 💳`,'s');
     }
   }
@@ -15362,7 +15402,8 @@ function lookupByBMHID(val) {
   });
   const byId = (mergedById && activePatients.find(function (p) { return String(p?.bmhId || '') === String(mergedById.mergedInto || ''); }))
     || activePatients.find(p => String(p.bmhId || '').toUpperCase() === v || String(p.bmhId || '').toUpperCase().includes(v.replace('BMSH-','')));
-  const byPhone = activePatients.find(byPhoneMatch) || null;
+  const phoneMatches = activePatients.filter(byPhoneMatch);
+  const byPhone = phoneMatches.length === 1 ? phoneMatches[0] : null;
   const byName = val.length >= 3 ? activePatients.filter(p => p.name?.toLowerCase().includes(vLow)) : [];
   const single = byId || byPhone;
   if(single) {
@@ -15378,6 +15419,20 @@ function lookupByBMHID(val) {
           <button class="btn btn-xs btn-outline" onclick="openPatient('${single.bmhId}')">👁️ View Record</button>
         </div>
       </div>
+    </div>`;
+  } else if(phoneMatches.length > 1) {
+    const hits = phoneMatches.slice(0, 8);
+    el.innerHTML = `<div style="background:#fff;border:1.5px solid var(--orange);border-radius:8px;overflow:hidden">
+      <div style="padding:5px 10px;background:var(--orange-lt);font-size:10px;font-weight:800;color:var(--orange);text-transform:uppercase">Same phone — ${phoneMatches.length} patients (pick one or register new)</div>
+      ${hits.map(p=>`<div style="display:flex;align-items:center;gap:9px;padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--g5)" onmouseover="this.style.background='var(--g6)'" onmouseout="this.style.background=''">
+        <div style="width:30px;height:30px;border-radius:50%;background:${p.color||'#1A3C6E'};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:11px;flex-shrink:0">${p.initials||p.name[0]||'?'}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:800;font-size:12.5px">${p.name}</div>
+          <div style="font-size:10px;color:var(--g1);font-family:var(--mono)">${p.bmhId} · ${p.age||'?'}Y/${(p.sex||'?')[0]} · ${p.mob||'—'}</div>
+        </div>
+        <button class="btn btn-xs btn-gold" onclick="prefillExistingPatient('${p.bmhId}')">✏️ Prefill</button>
+        <button class="btn btn-xs btn-outline" onclick="openPatient('${p.bmhId}')">👁️</button>
+      </div>`).join('')}
     </div>`;
   } else if(byName.length) {
     // Show name search results (up to 5)
@@ -21896,7 +21951,6 @@ function findSamePersonForRegistration(opts) {
   const age = o.age || '';
   const dob = o.dob || '';
   const uidHint = String(o.uidDisplayed || '').trim();
-  const formAge = formApproxAgeYears(age, dob);
 
   const byUid = resolveActivePatientByBmhId(uidHint);
   if (byUid && samePersonRecordVsForm(byUid, { name: name, mob: mob, mob2: mob2, age: age, dob: dob })) {
@@ -21905,16 +21959,10 @@ function findSamePersonForRegistration(opts) {
 
   const matches = getPatientIdentityMatches({ name: name, mob: mob, mob2: mob2 });
   if (!matches.length) return null;
-
-  const narrowed = matches.filter(function (p) {
-    return agesCloseEnough(formAge, patientApproxAgeYears(p), 2);
+  const strict = matches.filter(function (p) {
+    return samePersonRecordVsForm(p, { name: name, mob: mob, mob2: mob2, age: age, dob: dob });
   });
-  if (narrowed.length) return sortPatientsByCanonicalIdentity(narrowed)[0];
-
-  if (matches.length && formAge == null && matches.every(function (p) { return patientApproxAgeYears(p) == null; })) {
-    return sortPatientsByCanonicalIdentity(matches)[0];
-  }
-
+  if (strict.length) return sortPatientsByCanonicalIdentity(strict)[0];
   return null;
 }
 function pickNewerRecordByDate(a, b) {
