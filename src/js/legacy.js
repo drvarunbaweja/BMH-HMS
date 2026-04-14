@@ -18051,6 +18051,31 @@ function addOTCase() {
     })
     .finally(releaseOtSaveButton);
 }
+function otQuickAddProcedureToCharges() {
+  const proc = String(document.getElementById('ot-add-proc')?.value || '').trim();
+  if (!proc) { showToast('Type/select procedure first', 'w'); return; }
+  const parent = parseOtProcedureSelection(proc).main || '';
+  const exists = (CHARGES_DATA || []).some(function (row) {
+    return String(row?.name || '').trim().toLowerCase() === proc.toLowerCase();
+  });
+  if (exists) { showToast('Procedure already exists in charges', 'i'); return; }
+  const chd = Number(window.prompt('CHD amount for "' + proc + '"', '0') || 0);
+  const rprRaw = window.prompt('RPR amount (leave blank to use CHD)', String(chd || 0));
+  const rpr = rprRaw === null || String(rprRaw).trim() === '' ? chd : Number(rprRaw || 0);
+  const cat = getSelectedOTCaseKind() === 'obg' ? 'OBG' : 'Eye Sx';
+  CHARGES_DATA.push({
+    cat: cat,
+    kind: 'surgery',
+    parent: parent && parent.toLowerCase() !== proc.toLowerCase() ? parent : '',
+    name: proc,
+    chd: Number.isFinite(chd) ? chd : 0,
+    rpr: Number.isFinite(rpr) ? rpr : (Number.isFinite(chd) ? chd : 0)
+  });
+  saveChargesToFirebase && saveChargesToFirebase();
+  renderChargesList && renderChargesList();
+  populateOTProcedureOptions(proc);
+  showToast('Procedure added to charges ✓', 's');
+}
 
 function lookupOTPatient(val) {
   const el = document.getElementById('ot-pt-lookup-result'); if(!el) return;
@@ -23611,6 +23636,7 @@ function renderCollectionDashboard() {
             </div>
             ${!chk ? '<div style="font-size:9px;color:var(--orange);margin-top:4px">Note: category split may not match total if service text is unclear.</div>' : ''}
             <div style="font-size:10.5px;color:var(--g1);margin-top:2px">${dTxn.length} transaction${dTxn.length>1?'s':''} today</div>
+            <div style="margin-top:6px"><button type="button" class="btn btn-xs btn-outline" onclick="event.stopPropagation();printRcCollectionDetail('${dept}','all')">🖨️ Print Dept</button></div>
           </div>
           <div style="text-align:right">
             <div style="font-size:18px;font-weight:900;color:${dc.text}">${fmt(dTotal)}</div>
@@ -23686,7 +23712,7 @@ function openRcCollectionDetailModal(dept, catKey) {
   const title = (dc?.label || dept) + ' — ' + ({ opd: 'OPD / consultations', inv: 'Investigations & diagnostics', sx: 'Procedures & surgery', other: 'Other' }[catKey] || catKey);
   const bodyEl = document.getElementById('m-rc-collection-detail-body');
   const titleEl = document.getElementById('m-rc-collection-detail-title');
-  if (titleEl) titleEl.textContent = title;
+  if (titleEl) titleEl.innerHTML = escapeHtmlConsent(title) + ' <button type="button" class="btn btn-xs btn-outline" style="margin-left:8px" onclick="printRcCollectionDetail(\'' + String(dept).replace(/'/g, "\\'") + '\',\'' + String(catKey).replace(/'/g, "\\'") + '\')">🖨️ Print</button>';
   if (!bodyEl) return;
   const paidTotal = list.reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
   const paidPatients = new Set(list.map(function (t) { return t.bmhId || ''; }).filter(Boolean)).size;
@@ -23836,28 +23862,103 @@ function printDayCollectionByDept() {
   });
   const depts = ['ophtho','obg','psych','skin'];
   const fmt = function (n) { return '₹' + Number(n || 0).toLocaleString('en-IN'); };
-  const rows = depts.map(function (dept) {
-    const arr = txns.filter(function (t) { return String(t.dept || '').toLowerCase() === dept; });
+  const isConsultPurpose = function (purpose) {
+    const p = String(purpose || '').toLowerCase();
+    return /consult|follow|post\s*-?\s*op|opd|review|registration|new consultation/.test(p);
+  };
+  const groupedLine = function (name, arr) {
     const total = arr.reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
-    return '<tr>'
-      + '<td style="border:1px solid #ddd;padding:6px">' + (DEPT_COLORS[dept]?.label || dept) + '</td>'
-      + '<td style="border:1px solid #ddd;padding:6px;text-align:center">' + arr.length + '</td>'
-      + '<td style="border:1px solid #ddd;padding:6px;text-align:right;font-weight:800">' + fmt(total) + '</td>'
-      + '</tr>';
+    const rate = arr.length ? (total / arr.length) : 0;
+    const rateText = Number.isInteger(rate) ? rate : Math.round(rate);
+    return '<div style="font-size:11px;margin-top:3px">' + escapeHtmlConsent(name) + ' — ' + arr.length + ' × ' + rateText + ' = <strong>' + fmt(total) + '</strong></div>';
+  };
+  const deptBlocks = depts.map(function (dept) {
+    const arr = txns.filter(function (t) { return String(t.dept || '').toLowerCase() === dept; });
+    if (!arr.length) return '';
+    const consult = arr.filter(function (t) { return inferChargeCategoryFromService(t.service || t.for || t.desc || '') === 'consultation'; });
+    const inv = arr.filter(function (t) { return inferChargeCategoryFromService(t.service || t.for || t.desc || '') === 'diagnostic'; });
+    const sx = arr.filter(function (t) { return inferChargeCategoryFromService(t.service || t.for || t.desc || '') === 'surgery'; });
+    const other = arr.filter(function (t) {
+      const c = inferChargeCategoryFromService(t.service || t.for || t.desc || '');
+      return c !== 'consultation' && c !== 'diagnostic' && c !== 'surgery';
+    });
+    const consultPts = new Set((PATIENTS || []).filter(function (p) {
+      return centreMatch(p) && String(p.dept || '').toLowerCase() === dept
+        && isConsultPurpose(p.purpose || '')
+        && localDateKey(p.checkinAt || p.createdAt || p.queueDate || p.visitDate || p.updatedAt) === todayKeyLocal;
+    }).map(function (p) { return p.bmhId; }));
+    const paidConsultPts = new Set(consult.filter(function (t) { return getNetTransactionAmount(t) > 0; }).map(function (t) { return t.bmhId || ''; }).filter(Boolean));
+    const noFeeConsult = Math.max(0, consultPts.size - paidConsultPts.size);
+    const byName = function (items) {
+      const map = {};
+      items.forEach(function (t) {
+        const k = String(t.service || t.for || t.desc || 'Service').trim() || 'Service';
+        if (!map[k]) map[k] = [];
+        map[k].push(t);
+      });
+      return Object.keys(map).sort().map(function (k) { return groupedLine(k, map[k]); }).join('');
+    };
+    const sxLines = sx.map(function (t) {
+      return '<div style="font-size:11px;margin-top:3px">- ' + escapeHtmlConsent(String(t.service || 'Surgery')) + ' - <strong>' + fmt(getNetTransactionAmount(t)) + '</strong></div>';
+    }).join('') || '<div style="font-size:11px;margin-top:3px;color:#666">No surgery entries</div>';
+    const deptTotal = arr.reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
+    const consultTotal = consult.reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
+    return '<div style="border:1px solid #d6dbe6;border-radius:10px;padding:10px 12px;margin-bottom:10px">'
+      + '<div style="font-size:15px;font-weight:900;color:#1A3C6E">' + escapeHtmlConsent(DEPT_COLORS[dept]?.label || dept) + '</div>'
+      + '<div style="margin-top:6px;font-size:12px"><strong>OPD:</strong> total ' + consultPts.size + ', no fee ' + noFeeConsult + ', paid ' + paidConsultPts.size + ' = <strong>' + fmt(consultTotal) + '</strong></div>'
+      + (consult.length ? byName(consult) : '<div style="font-size:11px;margin-top:3px;color:#666">No paid consultation rows</div>')
+      + '<div style="margin-top:8px;font-size:12px"><strong>Investigations:</strong></div>'
+      + (inv.length ? byName(inv) : '<div style="font-size:11px;margin-top:3px;color:#666">No investigation entries</div>')
+      + '<div style="margin-top:8px;font-size:12px"><strong>Surgery:</strong></div>'
+      + sxLines
+      + '<div style="margin-top:8px;font-size:12px"><strong>Other charges:</strong></div>'
+      + (other.length ? byName(other) : '<div style="font-size:11px;margin-top:3px;color:#666">No other entries</div>')
+      + '<div style="margin-top:9px;padding-top:7px;border-top:1px solid #e5e7eb;text-align:right;font-size:13px;font-weight:900">Department Total: ' + fmt(deptTotal) + '</div>'
+      + '</div>';
   }).join('');
   const grandTotal = txns.reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
-  const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>'
-    + 'body{font-family:Arial,sans-serif;padding:12mm}table{width:100%;border-collapse:collapse}'
-    + 'th{background:#1A3C6E;color:#fff;padding:8px;font-size:11px}td{font-size:11px}'
-    + '</style></head><body>'
-    + '<h2 style="margin:0 0 6px 0;color:#1A3C6E">Department-wise Collection Summary</h2>'
-    + '<div style="margin-bottom:12px;color:#555">' + todayLabel + '</div>'
-    + '<table><thead><tr><th>Department</th><th>Transactions</th><th>Total</th></tr></thead><tbody>'
-    + rows
-    + '<tr><td colspan="2" style="border:1px solid #ddd;padding:6px;text-align:right;font-weight:900">Grand Total</td><td style="border:1px solid #ddd;padding:6px;text-align:right;font-weight:900">' + fmt(grandTotal) + '</td></tr>'
+  const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:Arial,sans-serif;padding:10mm;color:#111}</style></head><body>'
+    + '<h2 style="margin:0;color:#1A3C6E">Department-wise Concise Collection Summary</h2>'
+    + '<div style="margin:6px 0 12px;color:#555">' + todayLabel + '</div>'
+    + (deptBlocks || '<div>No collections for today.</div>')
+    + '<div style="margin-top:10px;text-align:right;font-size:14px;font-weight:900">Grand Total: ' + fmt(grandTotal) + '</div>'
+    + '</body></html>';
+  safePrint(html);
+  showToast('Department-wise concise summary sent to printer ✓','s');
+}
+function printRcCollectionDetail(dept, catKey) {
+  const todayLabel = new Date().toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'});
+  const todayKeyLocal = localDateKey(new Date());
+  const txns = TRANSACTIONS.filter(function (t) {
+    return t.collected && (t.centre || 'CHD') === getEffectiveCentre() && txnIsoDate(t) === todayKeyLocal
+      && String(t.dept || '').toLowerCase() === String(dept || '').toLowerCase();
+  });
+  const rows = (catKey === 'all' ? txns : txns.filter(function (t) {
+    const c = inferChargeCategoryFromService(t.service || t.for || t.desc || '');
+    if (catKey === 'opd') return c === 'consultation';
+    if (catKey === 'inv') return c === 'diagnostic';
+    if (catKey === 'sx') return c === 'surgery';
+    if (catKey === 'other') return c !== 'consultation' && c !== 'diagnostic' && c !== 'surgery';
+    return true;
+  }));
+  const fmt = function (n) { return '₹' + Number(n || 0).toLocaleString('en-IN'); };
+  const total = rows.reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
+  const bodyRows = rows.map(function (t, i) {
+    return '<tr><td style="border:1px solid #ddd;padding:6px">' + (i + 1) + '</td>'
+      + '<td style="border:1px solid #ddd;padding:6px">' + escapeHtmlConsent(t.patient || '') + '</td>'
+      + '<td style="border:1px solid #ddd;padding:6px">' + escapeHtmlConsent(t.bmhId || '') + '</td>'
+      + '<td style="border:1px solid #ddd;padding:6px">' + escapeHtmlConsent(t.service || '') + '</td>'
+      + '<td style="border:1px solid #ddd;padding:6px">' + escapeHtmlConsent(t.mode || '') + '</td>'
+      + '<td style="border:1px solid #ddd;padding:6px;text-align:right;font-weight:800">' + fmt(getNetTransactionAmount(t)) + '</td></tr>';
+  }).join('');
+  const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:Arial;padding:12mm}table{width:100%;border-collapse:collapse}th{background:#1A3C6E;color:#fff;padding:7px;font-size:11px}</style></head><body>'
+    + '<h2 style="margin:0;color:#1A3C6E">Collection Detail - ' + escapeHtmlConsent((DEPT_COLORS[dept]?.label || dept) + (catKey && catKey !== 'all' ? (' / ' + catKey.toUpperCase()) : '')) + '</h2>'
+    + '<div style="margin:6px 0 10px;color:#555">' + todayLabel + '</div>'
+    + '<table><thead><tr><th>#</th><th>Patient</th><th>BMSH ID</th><th>Service</th><th>Mode</th><th>Amount</th></tr></thead><tbody>'
+    + (bodyRows || '<tr><td colspan="6" style="border:1px solid #ddd;padding:8px">No rows</td></tr>')
+    + '<tr><td colspan="5" style="border:1px solid #ddd;padding:7px;text-align:right;font-weight:900">Total</td><td style="border:1px solid #ddd;padding:7px;text-align:right;font-weight:900">' + fmt(total) + '</td></tr>'
     + '</tbody></table></body></html>';
   safePrint(html);
-  showToast('Department-wise summary sent to printer ✓','s');
 }
 
 // collectPayment delegates to markPaid — no override needed here
@@ -28137,7 +28238,7 @@ function buildQTableRow(p, sno, opts) {
       <div><div style="font-weight:800;font-size:15px;line-height:1.05;display:flex;align-items:center;flex-wrap:nowrap;gap:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name || ''}${vulnBadge}${labReadyBadge}</div>
       <div style="font-size:11px;color:var(--g1)">${p.age||'?'}Y · ${(p.sex||'?')[0]} · ${p.mob||'—'}</div>${chargeHint?`<div style="margin-top:2px">${chargeHint}</div>`:''}</div></div></td>
     <td style="font-family:var(--mono);font-size:12px;color:var(--bmh-teal);font-weight:800;white-space:nowrap">${p.bmhId}</td>
-    <td><span style="font-size:10px;padding:2px 6px;border-radius:6px;background:${deptColor}22;color:${deptColor};font-weight:800">${deptLabel}</span></td>
+    <td><span style="font-size:10px;padding:2px 6px;border-radius:6px;background:${deptColor}22;color:${deptColor};font-weight:800;cursor:pointer" title="Click to change department" onclick="event.stopPropagation();reassignReceptionPatientDept('${String(p.bmhId).replace(/'/g, "\\'")}','${String(p.dept || '').replace(/'/g, "\\'")}')">${deptLabel}</span></td>
     <td style="font-size:11px;max-width:108px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.doctor||''}">${docShort}</td>
     <td style="font-size:11px;color:var(--g1);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.purpose||''}">${p.purpose||'—'}</td>
     <td style="font-size:11px">${dilationCellHtml(p)}</td>
@@ -28171,6 +28272,58 @@ function markSeen(bmhId) {
   renderReceptionPage && renderReceptionPage();
   renderDashboard && renderDashboard();
 }
+function reassignReceptionPatientDept(bmhId, currentDept) {
+  const p = PATIENTS.find(function (x) { return x.bmhId === bmhId; });
+  if (!p) { showToast('Patient not found', 'w'); return; }
+  const sel = document.getElementById('rc-dept-change-select');
+  const info = document.getElementById('rc-dept-change-info');
+  if (!sel) return;
+  const nowDept = String(currentDept || p.dept || '').toLowerCase();
+  const deptMap = { ophtho: 'Eye', obg: 'OBG', psych: 'Psych', skin: 'Skin' };
+  sel.innerHTML = ['ophtho', 'obg', 'psych', 'skin'].filter(function (d) { return d !== nowDept; }).map(function (d) {
+    return '<option value="' + d + '">' + deptMap[d] + '</option>';
+  }).join('');
+  if (info) info.textContent = (p.name || '') + ' · ' + (p.bmhId || '') + ' · Current: ' + (deptMap[nowDept] || nowDept || '—');
+  window._rcDeptChangeTarget = { bmhId: bmhId, fromDept: nowDept };
+  openM('m-rc-dept-change');
+}
+function applyReceptionDeptChange() {
+  const cfg = window._rcDeptChangeTarget || {};
+  const bmhId = cfg.bmhId;
+  const oldDept = cfg.fromDept || '';
+  const target = String(document.getElementById('rc-dept-change-select')?.value || '').toLowerCase();
+  if (!bmhId || !target) { closeM('m-rc-dept-change'); return; }
+  const p = PATIENTS.find(function (x) { return x.bmhId === bmhId; });
+  if (!p) { showToast('Patient not found', 'w'); closeM('m-rc-dept-change'); return; }
+  const deptMap = { ophtho: 'Eye', obg: 'OBG', psych: 'Psych', skin: 'Skin' };
+  const nowKey = localDateKey(new Date());
+  const priorDept = oldDept || p.dept;
+  p.dept = target;
+  p.updatedAt = new Date().toISOString();
+  fbUpdate && fbUpdate('patients/' + bmhId, { dept: target, updatedAt: p.updatedAt }).catch(function () {});
+  (PAY_REQUESTS || []).forEach(function (r) {
+    if (r.bmhId !== bmhId) return;
+    if (String(r.status || '').toLowerCase() !== 'pending') return;
+    r.dept = target;
+    try { if (window.firebase && firebase.database) firebase.database().ref('payRequests/' + r.id + '/dept').set(target); } catch (e) {}
+  });
+  (TRANSACTIONS || []).forEach(function (t) {
+    if (t.bmhId !== bmhId) return;
+    if ((t.centre || 'CHD') !== getEffectiveCentre()) return;
+    if (txnIsoDate(t) !== nowKey) return;
+    if (priorDept && String(t.dept || '').toLowerCase() !== String(priorDept).toLowerCase()) return;
+    t.dept = target;
+    try { if (window.firebase && firebase.database) firebase.database().ref('transactions/' + todayKey() + '/' + t.id + '/dept').set(target); } catch (e) {}
+  });
+  renderReceptionPage && renderReceptionPage();
+  renderDocQueue && renderDocQueue();
+  renderCollectionDashboard && renderCollectionDashboard();
+  renderDeptSummary && renderDeptSummary();
+  closeM('m-rc-dept-change');
+  showToast('Department moved to ' + (deptMap[target] || target) + ' and related charges updated ✓', 's');
+}
+window.reassignReceptionPatientDept = reassignReceptionPatientDept;
+window.applyReceptionDeptChange = applyReceptionDeptChange;
 /** Mark one cross-refer queue row as seen for that department (does not clear other departments' queues). */
 function markCrossRefSeen(bmhId, xrefId) {
   const p = PATIENTS.find(function (x) { return x.bmhId === bmhId; });
