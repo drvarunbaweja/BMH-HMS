@@ -28288,6 +28288,41 @@ function getActiveCrossRefsForPatient(p) {
   else if (p?.xrefTo) refs.push({ id: 'legacy-xref', toDept: p.xrefTo, toDoctor: p.xrefDoctor, paid: !!p.xrefPaid, active: true });
   return refs.filter(function (r) { return r && r.toDept && r.active !== false; });
 }
+/** Patients with a cross-ref to `targetDeptKey` must appear in the doctor queue even when the
+ *  patient record was not refreshed for "today" (e.g. xref saves crossRefs without bumping visitDate). */
+function augmentQueueBasePatientsWithCrossRefs(basePts, targetDeptKey) {
+  const dk = normalizeDeptKeyForQueue(targetDeptKey || '');
+  if (!dk || !Array.isArray(basePts)) return basePts;
+  const seen = new Set();
+  basePts.forEach(function (p) { if (p && p.bmhId) seen.add(p.bmhId); });
+  const todayKeyLocal = localDateKey(new Date());
+  const out = basePts.slice();
+  (PATIENTS || []).forEach(function (p) {
+    if (!p || p.queueRemoved || String(p.status || '').toLowerCase() === 'removed') return;
+    if (!centreMatch(p)) return;
+    if (seen.has(p.bmhId)) return;
+    const xrefs = getActiveCrossRefsForPatient(p).filter(function (xr) {
+      return normalizeDeptKeyForQueue(xr.toDept || '') === dk;
+    });
+    if (!xrefs.length) return;
+    const include = xrefs.some(function (xr) {
+      if (patientQueueDateMatchesToday(p)) return true;
+      const stamps = [xr.createdAt, xr.at, p.checkinAt, p.updatedAt, p.visitDate, p.queueDate].filter(Boolean);
+      return stamps.some(function (raw) {
+        if (raw === null || raw === undefined || raw === '') return false;
+        const s = String(raw);
+        if (/^\d+$/.test(s)) {
+          try { return localDateKey(new Date(Number(s))) === todayKeyLocal; } catch (e) { return false; }
+        }
+        return localDateKey(s) === todayKeyLocal || s.slice(0, 10) === todayKeyLocal;
+      });
+    });
+    if (!include) return;
+    seen.add(p.bmhId);
+    out.push(p);
+  });
+  return out;
+}
 function getSelectedQueueDeptForAdmin() {
   const sel = document.getElementById('dq-admin-dept-filter');
   return String(sel?.value || 'all').trim().toLowerCase() || 'all';
@@ -28325,7 +28360,10 @@ function _renderDocQueueImpl() {
     Psychiatry:'psych', Skin:'skin', Cosmetology:'skin', Dermatology:'skin',
     'Skin & Cosmetology':'skin', Lab:'lab', Reception:'reception'
   };
-  const userDept = normalizeDeptKeyForQueue(deptMap[normalizeQueueDeptForUser(CURRENT_USER?.dept)] || normalizeQueueDeptForUser(CURRENT_USER?.dept) || '');
+  const rawUserDept = String(CURRENT_USER?.dept || '').trim();
+  const mappedFromDept = deptMap[rawUserDept]
+    || deptMap[Object.keys(deptMap).find(function (k) { return k.toLowerCase() === rawUserDept.toLowerCase(); }) || ''];
+  const userDept = normalizeDeptKeyForQueue(mappedFromDept || normalizeQueueDeptForUser(CURRENT_USER?.dept) || rawUserDept || '');
   const adminDeptFilter = (CURRENT_USER?.isAdmin || CURRENT_USER?.role === 'Reception') ? getSelectedQueueDeptForAdmin() : 'all';
   const effectiveQueueDept = adminDeptFilter !== 'all' ? adminDeptFilter : userDept;
   const queueDoctor = (CURRENT_USER?.isAdmin && adminDeptFilter === 'all')
@@ -28350,7 +28388,13 @@ function _renderDocQueueImpl() {
   }
   const searchQ = String(document.getElementById('dq-search')?.value || '').trim().toLowerCase();
   // Use the same "today's visible queue" basis as Reception, then narrow by department for doctors.
-  const queueBasePts = getTodayQueueBasePatients();
+  let queueBasePts = getTodayQueueBasePatients();
+  const xrefAugmentDept = (CURRENT_USER?.isAdmin || CURRENT_USER?.role === 'Reception')
+    ? (adminDeptFilter !== 'all' ? adminDeptFilter : '')
+    : userDept;
+  if (xrefAugmentDept) {
+    queueBasePts = augmentQueueBasePatientsWithCrossRefs(queueBasePts, xrefAugmentDept);
+  }
   const myPts = (() => {
     if (CURRENT_USER?.isAdmin || CURRENT_USER?.role === 'Reception') {
       return adminDeptFilter === 'all'
