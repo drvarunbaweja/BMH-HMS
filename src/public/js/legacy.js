@@ -9371,11 +9371,46 @@ function bmhRecordPatientPayment() {
   const pdu = document.getElementById('bmh-pay-insurer-due'); if (pdu) pdu.value = '';
   const tog = document.getElementById('bmh-pay-received-toggle'); if (tog) tog.checked = false;
   bmhTogglePaymentForm(false);
-  showToast('Payment saved ✓', 's');
+  const addToQ = !!document.getElementById('bmh-bill-add-to-queue')?.checked;
+  if (addToQ) bmhAddPatientToDoctorQueue(bmhId, { silentToast: true });
+  showToast(addToQ ? 'Payment saved — patient added to doctor queue ✓' : 'Payment saved ✓', 's');
   renderBillingPage();
   renderDashboard && renderDashboard();
   try { renderTpaPage && renderTpaPage(); } catch (e) {}
 }
+/** Billing / charges: put patient on today’s doctor queue (My Patient Queue). */
+function bmhAddPatientToDoctorQueue(bmhId, opts) {
+  const id = String(bmhId || '').trim();
+  if (!id) { showToast('Select a patient first', 'w'); return; }
+  const p = PATIENTS.find(function (x) { return x.bmhId === id; });
+  if (!p) { showToast('Patient not found — refresh patient list', 'w'); return; }
+  const nowIso = new Date().toISOString();
+  const today = nowIso.slice(0, 10);
+  const patch = {
+    status: 'waiting',
+    seen: false,
+    queueRemoved: false,
+    checkinAt: Date.now(),
+    visitDate: today,
+    queueDate: today,
+    purpose: p.purpose || 'Billing / charges',
+    updatedAt: nowIso
+  };
+  Object.assign(p, patch);
+  try {
+    fbUpdate && fbUpdate('patients/' + id, patch).catch(function () {});
+  } catch (e) {}
+  if (typeof window.patchPatientFirestore === 'function') {
+    window.patchPatientFirestore(id, patch).catch(function () {});
+  }
+  if (!opts || !opts.silentToast) {
+    showToast((p.name || 'Patient') + ' — added to today\'s doctor queue ✓', 's');
+  }
+  renderDocQueue && renderDocQueue();
+  renderReceptionPage && renderReceptionPage();
+  renderDashboard && renderDashboard();
+}
+window.bmhAddPatientToDoctorQueue = bmhAddPatientToDoctorQueue;
 function bmhToggleBillingInsuranceFields() {
   const mode = document.getElementById('bmh-pay-mode')?.value || 'Cash';
   const wrap = document.getElementById('bmh-pay-insurance-fields');
@@ -15831,14 +15866,15 @@ async function registerPatient() {
 
   const name = toTitleCaseName((fn + ' ' + ln).trim());
   const emailEarly = document.getElementById('rc-email')?.value?.trim() || '';
-  const existingPt = findCanonicalExistingPatientForRegistration({
+  const forceNewBmsh = !!document.getElementById('rc-force-new-bmsh')?.checked;
+  const existingPt = findSamePersonForRegistration({
     uidDisplayed: uidDisplayed,
     name: name,
-    fn: fn,
-    ln: ln,
     mob: mob,
     mob2: mob2,
-    email: emailEarly
+    age: age,
+    dob: dob,
+    forceNewId: forceNewBmsh
   });
   const isExistingRegistration = !!existingPt;
   const uid = isExistingRegistration ? existingPt.bmhId : await reserveNextBmhId();
@@ -16071,6 +16107,7 @@ function resetRegistrationForm() {
   });
   const fee=document.getElementById('rc-fee'); if(fee){ fee.value='0'; fee.disabled=false; }
   const nf=document.getElementById('rc-no-fee'); if(nf){ nf.checked=false; }
+  const fnb=document.getElementById('rc-force-new-bmsh'); if(fnb){ fnb.checked=false; }
   const sex=document.getElementById('rc-sex'); if(sex) sex.value='Male';
   const dept=document.getElementById('rc-dept'); if(dept) dept.value='ophtho';
   const payMode=document.getElementById('rc-pay-mode'); if(payMode) payMode.value='Cash';
@@ -21800,64 +21837,85 @@ function resolveActivePatientByBmhId(rawId) {
   if (isMergedPatientRecord(direct)) return null;
   return direct;
 }
-/** Prefer lowest BMSH number when several rows share a phone (duplicate registrations). */
-function findCanonicalPatientByPhoneKeys(mob, mob2) {
-  const keys = new Set([mob, mob2].map(normalizePatientPhoneKey).filter(Boolean));
-  if (!keys.size) return null;
-  const candidates = (PATIENTS || []).filter(function (p) {
-    if (!p || isMergedPatientRecord(p)) return false;
-    return getPatientPhoneKeys(p).some(function (k) { return keys.has(k); });
-  });
-  if (!candidates.length) return null;
-  return sortPatientsByCanonicalIdentity(candidates)[0] || null;
+/** Parse "45 Years", "45", etc. → integer years or null */
+function parseApproxAgeYearsFromString(value) {
+  const s = String(value || '').trim();
+  if (!s) return null;
+  const m = s.match(/(\d+)\s*(?:year|yr|yrs|y\.?)\b/i) || s.match(/^(\d{1,3})$/);
+  if (m) return Math.min(120, Math.max(0, parseInt(m[1], 10)));
+  return null;
 }
-/** Exact normalized full name — only when a single live row matches (safe for common-name false positives). */
-function findCanonicalPatientByUniqueName(name) {
-  const nKey = patientNameIdentityKey(name);
-  if (!nKey || nKey.length < 4) return null;
-  const cands = (PATIENTS || []).filter(function (p) {
-    if (!p || isMergedPatientRecord(p)) return false;
-    return patientNameIdentityKey(p.name || p.patient) === nKey;
-  });
-  if (cands.length !== 1) return null;
-  return cands[0];
+function yearsFromDobString(dobStr) {
+  if (!dobStr) return null;
+  const d = new Date(dobStr);
+  if (Number.isNaN(d.getTime())) return null;
+  const now = new Date();
+  let y = now.getFullYear() - d.getFullYear();
+  const mo = now.getMonth() - d.getMonth();
+  if (mo < 0 || (mo === 0 && now.getDate() < d.getDate())) y--;
+  return Math.max(0, Math.min(120, y));
 }
-function findCanonicalPatientByUniqueEmail(email) {
-  const e = String(email || '').trim().toLowerCase();
-  if (!e || e.length < 5 || !e.includes('@')) return null;
-  const cands = (PATIENTS || []).filter(function (p) {
-    if (!p || isMergedPatientRecord(p)) return false;
-    return String(p.email || '').trim().toLowerCase() === e;
-  });
-  if (cands.length !== 1) return null;
-  return cands[0];
+function formApproxAgeYears(ageStr, dobStr) {
+  const fromDob = yearsFromDobString(dobStr);
+  if (fromDob != null) return fromDob;
+  return parseApproxAgeYearsFromString(ageStr);
+}
+function patientApproxAgeYears(p) {
+  if (!p) return null;
+  const y = yearsFromDobString(p.dob);
+  if (y != null) return y;
+  return parseApproxAgeYearsFromString(p.age);
+}
+/** Same person if ages within maxGap years (shared phone / family: different names → not same). */
+function agesCloseEnough(a, b, maxGap) {
+  const max = typeof maxGap === 'number' ? maxGap : 2;
+  if (a == null || b == null) return true;
+  return Math.abs(Number(a) - Number(b)) <= max;
+}
+function samePersonRecordVsForm(p, form) {
+  if (!p || !form) return false;
+  const nk = patientNameIdentityKey(form.name || '');
+  if (!nk || patientNameIdentityKey(p.name || p.patient) !== nk) return false;
+  const fk = [form.mob, form.mob2].map(normalizePatientPhoneKey).filter(Boolean);
+  if (!fk.length) return false;
+  if (!getPatientPhoneKeys(p).some(function (k) { return fk.indexOf(k) >= 0; })) return false;
+  const fa = formApproxAgeYears(form.age, form.dob);
+  const pa = patientApproxAgeYears(p);
+  return agesCloseEnough(fa, pa, 2);
 }
 /**
- * Single place to decide "existing patient" for Reception Register — avoids issuing a second BMSH id
- * when name/phone/id/email already maps to someone in PATIENTS[].
+ * Reuse BMSH id only when name + phone match AND age is similar (husband/wife can share phone → different ids).
+ * Set forceNewId to always issue the next sequential BMSH id.
  */
-function findCanonicalExistingPatientForRegistration(opts) {
+function findSamePersonForRegistration(opts) {
   const o = opts || {};
-  const uidHint = String(o.uidDisplayed || o.bmhIdHint || '').trim();
+  if (o.forceNewId) return null;
   const name = String(o.name || '').trim();
   const mob = o.mob || '';
   const mob2 = o.mob2 || '';
-  const email = o.email || '';
+  const age = o.age || '';
+  const dob = o.dob || '';
+  const uidHint = String(o.uidDisplayed || '').trim();
+  const formAge = formApproxAgeYears(age, dob);
 
-  let hit = resolveActivePatientByBmhId(uidHint);
-  if (hit) return hit;
+  const byUid = resolveActivePatientByBmhId(uidHint);
+  if (byUid && samePersonRecordVsForm(byUid, { name: name, mob: mob, mob2: mob2, age: age, dob: dob })) {
+    return byUid;
+  }
 
-  hit = findCanonicalExistingPatientByIdentity({ name: name, mob: mob, mob2: mob2 });
-  if (hit) return hit;
+  const matches = getPatientIdentityMatches({ name: name, mob: mob, mob2: mob2 });
+  if (!matches.length) return null;
 
-  hit = findCanonicalPatientByPhoneKeys(mob, mob2);
-  if (hit) return hit;
+  const narrowed = matches.filter(function (p) {
+    return agesCloseEnough(formAge, patientApproxAgeYears(p), 2);
+  });
+  if (narrowed.length) return sortPatientsByCanonicalIdentity(narrowed)[0];
 
-  hit = findCanonicalPatientByUniqueName(name);
-  if (hit) return hit;
+  if (matches.length && formAge == null && matches.every(function (p) { return patientApproxAgeYears(p) == null; })) {
+    return sortPatientsByCanonicalIdentity(matches)[0];
+  }
 
-  hit = findCanonicalPatientByUniqueEmail(email);
-  return hit || null;
+  return null;
 }
 function pickNewerRecordByDate(a, b) {
   const aTime = Date.parse(a?.date || a?.createdAt || a?.updatedAt || '') || 0;
@@ -22000,53 +22058,6 @@ async function repairDuplicatePatientsByIdentity() {
       for (let i = 1; i < sorted.length; i += 1) {
         await mergeDuplicatePatientRecord(canonical.bmhId, sorted[i].bmhId);
         repairs += 1;
-      }
-    }
-    /** Same mobile number, name spelling variants (substring / typo clusters). */
-    function nameKeysLooselyCompatible(na, nb) {
-      const a = patientNameIdentityKey(na);
-      const b = patientNameIdentityKey(nb);
-      if (a && b && a === b) return true;
-      if (!a || !b) return false;
-      if (a.length >= 5 && b.length >= 5 && (a.includes(b) || b.includes(a))) return true;
-      return false;
-    }
-    const byPhone = new Map();
-    (source || []).forEach(function (p) {
-      if (!p || isMergedPatientRecord(p)) return;
-      getPatientPhoneKeys(p).forEach(function (phoneKey) {
-        if (!phoneKey) return;
-        if (!byPhone.has(phoneKey)) byPhone.set(phoneKey, []);
-        byPhone.get(phoneKey).push(p);
-      });
-    });
-    for (const phoneList of byPhone.values()) {
-      const unique = Array.from(new Map((phoneList || []).map(function (p) {
-        return [String(p?.bmhId || ''), p];
-      })).values());
-      if (unique.length < 2) continue;
-      const clusters = [];
-      unique.forEach(function (p) {
-        let placed = false;
-        for (let c = 0; c < clusters.length; c++) {
-          const rep = clusters[c][0];
-          if (nameKeysLooselyCompatible(p.name || p.patient, rep.name || rep.patient)) {
-            clusters[c].push(p);
-            placed = true;
-            break;
-          }
-        }
-        if (!placed) clusters.push([p]);
-      });
-      for (let ci = 0; ci < clusters.length; ci++) {
-        const cluster = clusters[ci];
-        if (cluster.length < 2) continue;
-        const sorted = sortPatientsByCanonicalIdentity(cluster);
-        const canonical = sorted[0];
-        for (let i = 1; i < sorted.length; i += 1) {
-          await mergeDuplicatePatientRecord(canonical.bmhId, sorted[i].bmhId);
-          repairs += 1;
-        }
       }
     }
     if (repairs) showToast('Patient IDs repaired and visit history merged ✓', 's');
