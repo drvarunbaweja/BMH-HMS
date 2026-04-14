@@ -2786,7 +2786,16 @@ function syncUcvaToRefraction(eye) {
   const src = document.getElementById(srcId);
   const dst = document.getElementById(dstId);
   if (!src || !dst) return;
-  dst.value = src.value || '';
+  const val = String(src.value || '').trim();
+  if (!val) { dst.value = ''; return; }
+  const hasOption = Array.from(dst.options || []).some(function (o) { return String(o.value || o.text || '').trim() === val; });
+  if (!hasOption) {
+    const opt = document.createElement('option');
+    opt.value = val;
+    opt.textContent = val;
+    dst.appendChild(opt);
+  }
+  dst.value = val;
 }
 
 // ═══════════════════════════════════════
@@ -3343,6 +3352,8 @@ function populateOphthoForm(v) {
   const PHX_IDS = ['phx-allergy','phx-diabetes_mellit','phx-hypertension','phx-heart_disease__','phx-asthma___copd','phx-headache___migr','phx-thyroid_disease','phx-renal_disease','phx-previous_surger','phx-bleeding_disord'];
   if(v.phxExtra && typeof v.phxExtra === 'object') {
     PHX_IDS.forEach(id => {
+      const yn = String(v.phxExtra[id]?.yn || '').trim();
+      if (yn === 'Y' || yn === 'N') setSel(id, yn);
       const durVal = buildPersistentHistoryDuration(v.phxExtra[id]?.dur || '', v.phxExtra[id]?.baseDate || '', new Date());
       setV(id+'-dur', durVal || '');
       setV(id+'-rx', v.phxExtra[id]?.rx || '');
@@ -4231,16 +4242,12 @@ function buildOphthoCaseSheetHtml() {
 
   const escHtml = (s) => (s == null ? '' : String(s)).replace(/</g, '&lt;');
   const PHX_SHORT = ['Allerg','DM','HTN','IHD','Asthma','Migr','Thyroid','Renal','Surg','Bleed'];
-  const ccStr = ccRows.map(c => c.text + (c.dur ? ' (' + c.dur + ')' : '') + (c.eye ? ' ' + c.eye : '')).join('; ') || '—';
-  const shouldPrintChiefComplaints = ccRows.length || ccStr !== '—' || chiefComplaintsEnabled;
-  const ccPrintHtml = ccRows.length
-    ? '<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:6px">'
-      + ccRows.map(function (c, idx) {
-          const parts = [String(c.text || '').trim(), String(c.dur || '').trim(), String(c.eye || '').trim()].filter(Boolean);
-          return '<div style="display:flex;gap:6px;align-items:flex-start"><span style="font-weight:900;min-width:16px;color:#1A3C6E">' + (idx + 1) + '.</span><span>' + escHtml(parts.join(' · ')) + '</span></div>';
-        }).join('')
-      + '</div>'
-    : '<div style="margin-bottom:6px"><b>CC:</b> ' + escHtml(ccStr) + '</div>';
+  const ccStr = ccRows.map(function (c) {
+    const parts = [String(c.text || '').trim(), String(c.dur || '').trim(), String(c.eye || '').trim()].filter(Boolean);
+    return parts.join(' · ');
+  }).filter(Boolean).join('; ') || '—';
+  const shouldPrintChiefComplaints = chiefComplaintsEnabled && ccStr !== '—';
+  const ccPrintHtml = '<div style="margin-bottom:6px"><b>CC:</b> ' + escHtml(ccStr) + '</div>';
   const phxRowsHtml = PHX_MAP.map(([id], i) => {
     const yn = document.getElementById(id)?.value || '—';
     const dur = (document.getElementById(id + '-dur')?.value || '').trim() || '—';
@@ -28755,6 +28762,7 @@ function saveVisit(dept, opts) {
         }
       }
       visit.phxExtra[id] = {
+        yn: document.getElementById(id)?.value || 'N',
         dur: durRaw,
         rx: document.getElementById(id+'-rx')?.value || '',
         baseDate: baseDate || ''
@@ -29049,6 +29057,10 @@ function loadPastVisits(bmhId, dept) {
       .concat(Array.isArray(visit?.obgProcAdvised) ? visit.obgProcAdvised : [])
       .concat(Array.isArray(visit?.psychProcAdvised) ? visit.psychProcAdvised : [])
       .concat(Array.isArray(visit?.skinProcAdvised) ? visit.skinProcAdvised : []);
+    if (visit?.procDone?.procedure) {
+      const sideHint = String(visit.procDone.notes || '').match(/(RE|LE|BE|OD|OS|OU|Right|Left|Both)/i);
+      rows.push(visit.procDone.procedure + (sideHint ? (' (' + sideHint[0].toUpperCase() + ')') : ''));
+    }
     return Array.from(new Set(rows.filter(Boolean))).join(', ');
   };
   const renderVisits = (visitsObj) => {
@@ -29071,13 +29083,20 @@ function loadPastVisits(bmhId, dept) {
       }).slice(0, 10);
       const recentVisits = visits.slice(0, 6);
       const metrics = [
-        { label: 'VA', get: function (v) { return [(v.ucvaOD || v.vaOD || ''), (v.ucvaOS || v.vaOS || '')].filter(Boolean).join(' / ') || '—'; } },
-        { label: 'IOP', get: function (v) { return [(v.iopGatOD || ''), (v.iopGatOS || '')].filter(Boolean).map(function (x) { return x + ' mmHg'; }).join(' / ') || '—'; } },
+        { label: 'VA', get: function (v) {
+          const re = v.ucvaOD || v.vaOD || '';
+          const le = v.ucvaOS || v.vaOS || '';
+          return [re ? ('RE ' + re) : '', le ? ('LE ' + le) : ''].filter(Boolean).join(' · ') || '—';
+        } },
+        { label: 'IOP', get: function (v) {
+          const re = v.iopGatOD || v.iopNctOD || '';
+          const le = v.iopGatOS || v.iopNctOS || '';
+          return [re ? ('RE ' + re + ' mmHg') : '', le ? ('LE ' + le + ' mmHg') : ''].filter(Boolean).join(' · ') || '—';
+        } },
         { label: 'Subjective Refraction', get: function (v) {
-          return [
-            [v.subjODsph, v.subjODcyl, v.subjODax, v.subjODva].filter(Boolean).join(' '),
-            [v.subjOSsph, v.subjOScyl, v.subjOSax, v.subjOSva].filter(Boolean).join(' ')
-          ].filter(Boolean).join(' | ') || '—';
+          const re = [v.subjODsph, v.subjODcyl, v.subjODax, v.subjODva].filter(Boolean).join(' ');
+          const le = [v.subjOSsph, v.subjOScyl, v.subjOSax, v.subjOSva].filter(Boolean).join(' ');
+          return [re ? ('RE ' + re) : '', le ? ('LE ' + le) : ''].filter(Boolean).join(' · ') || '—';
         } },
         { label: 'Diagnosis', get: function (v) { return Array.isArray(v.diagnoses) ? v.diagnoses.map(formatDxLineForPrint).filter(Boolean).join(', ') : (v.diagnosisText || '—'); } },
         { label: 'Prescription', get: function (v) { return Array.isArray(v.rx) && v.rx.length ? v.rx.map(function (d) { return rxDrugTradeName(d) || d.trade || d.name || 'Drug'; }).join(', ') : '—'; } }
@@ -29122,7 +29141,7 @@ function loadPastVisits(bmhId, dept) {
             return `<div style="padding:7px 0;border-bottom:1px solid var(--g5);font-size:10.5px;line-height:1.45">
               <div style="font-weight:800;color:var(--bmh-blue)">${formatDateIN(c.date)}</div>
               <div>${expandProcedureLabelForPrint(c.procedure || c.procedureMain || '—')}</div>
-              <div style="color:var(--g1)">${[c.site || c.eye || '—', c.iolType || '', c.iolPower || ''].filter(Boolean).join(' · ')}</div>
+              <div style="color:var(--g1)">${[(c.site || c.eye || '—').replace(/right/ig,'RE').replace(/left/ig,'LE').replace(/both/ig,'BE'), c.iolType || '', c.iolPower || ''].filter(Boolean).join(' · ')}</div>
             </div>`;
           }).join('') : '<div style="font-size:11px;color:var(--g1)">No surgery history saved yet.</div>'}
           <div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;letter-spacing:.45px;margin:12px 0 8px">Procedures / Diagnostics</div>
