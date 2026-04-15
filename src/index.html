@@ -483,17 +483,18 @@
 </div><!-- /pg-dashboard -->
 
 
-<!-- ════════════════════ DOCTOR QUEUE ════════════════════ -->
 <div class="page" id="pg-doctor-queue">
   <div class="card dq-queue-main">
     <div class="card-hd" style="flex-wrap:wrap;gap:10px;align-items:flex-start">
       <div><div class="card-title" id="dq-title">Dr. Varun Baweja — My Patients</div><div class="card-sub"><span class="live-dot"></span>Click any patient to open case sheet instantly</div></div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-left:auto">
         <button type="button" id="dq-approvals-pill" class="btn btn-outline btn-xs" style="display:none;animation:pulse 1.4s infinite;border-color:rgba(255,59,48,.5);color:#c0392b;font-weight:900" onclick="nav('settings',null);setTimeout(function(){var t=document.getElementById('set-approvals-tab'); if(t) t.click();},180)">🗑 0 approvals</button>
         <button type="button" class="btn btn-outline btn-xs" onclick="toggleQueueSidebarCollapse(true)">☰ Expand Menu</button>
         <button type="button" class="btn btn-gold btn-xs" onclick="openM('m-np')">+ Add Patient</button>
         <button type="button" class="btn btn-outline btn-xs" onclick="nav('ophtho',null)">👁️ Eye Exam</button>
         <button type="button" class="btn btn-outline btn-xs" onclick="nav('appointments',null)">📅 Appointments</button>
+        <button type="button" class="btn btn-outline btn-xs" onclick="mergeAllDuplicatePatients()" title="Merge duplicate patient records">🔄 Merge Duplicates</button>
+        <button type="button" class="btn btn-outline btn-xs" onclick="patchRegistrationWithEnhancedMatching()" title="Activate enhanced duplicate detection">🔍 Enhanced Detection</button>
         <button type="button" class="btn btn-outline btn-xs" onclick="openM('m-print-tpl')">🖨️ Print Template</button>
         <button type="button" class="btn btn-outline btn-xs" onclick="nav('discharge',null)">🏠 Discharge</button>
       </div>
@@ -1873,6 +1874,7 @@
           <div class="form-group"><label class="fl">Alternate Mobile</label><input type="tel" id="rc-mob2" placeholder="Alternate / WhatsApp number"></div>
           <div class="form-group"><label class="fl">Email</label><input type="email" id="rc-email" placeholder="email@example.com"></div>
           <div id="rc-phone-match" style="grid-column:1/-1"></div>
+          <div id="family-members-display" style="grid-column:1/-1;display:none;"></div>
           <div class="form-group full"><label class="fl">Address</label><input type="text" id="rc-addr" placeholder="Full address"></div>
           <div class="form-group"><label class="fl">Department</label><select id="rc-dept" onchange="updateRcDr();updatePurposeOptions();syncReceptionConsultationFee&&syncReceptionConsultationFee()"><option value="ophtho">Ophthalmology</option><option value="obg">OBG</option><option value="psych">Neuropsychiatry</option><option value="skin">Skin &amp; Cosmetology</option></select></div>
                     <!-- REFERRED BY - New Patient -->

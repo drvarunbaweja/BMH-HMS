@@ -43,10 +43,29 @@ function getHistoricalQueuePatients(targetDate) {
   const patients = window.PATIENTS || [];
   return patients.filter(function(p) {
     if (!p || p.queueRemoved || String(p.status || '').toLowerCase() === 'removed') return false;
-    if (!window.centreMatch?.(p)) return false;
+    if (!centreMatch(p)) return false;
     
     return patientQueueDateMatches(p, targetDate);
   });
+}
+
+function centreMatch(item) {
+  if (!item) return false;
+  const uc = getEffectiveCentre();
+  if(!uc) return true; // admin/BOTH - see everything
+  return patientCentreKey(item.centre) === patientCentreKey(uc);
+}
+
+function getEffectiveCentre() {
+  return document.getElementById('rc-centre')?.value || (window.CURRENT_USER?.centre || 'CHD');
+}
+
+function patientCentreKey(c) {
+  if (!c) return 'CHD';
+  const s = String(c).toLowerCase().trim();
+  if (s.includes('chd') || s.includes('chandigarh')) return 'CHD';
+  if (s.includes('rop') || s.includes('ropar') || s.includes('rupnagar')) return 'ROP';
+  return s;
 }
 
 function patientQueueDateMatches(p, targetDate) {
@@ -256,21 +275,47 @@ function renderPatientSearchResults(patientVisitHistory) {
     const p = item.patient;
     const visits = item.visitDates;
     
+    // Find family members with same phone
+    const familyMembers = getFamilyMembersWithSamePhone(p.mob || p.mobile || '');
+    const otherFamilyMembers = familyMembers.filter(member => member.bmhId !== p.bmhId);
+    
     return `
-      <div style="background:#fff;border:1px solid var(--g4);border-radius:8px;padding:12px;margin-bottom:8px;">
+      <div style="background:#fff;border:1px solid var(--g4);border-radius:8px;padding:12px;margin-bottom:8px;position:relative;">
+        ${otherFamilyMembers.length > 0 ? `
+          <div style="position:absolute;top:8px;right:8px;background:var(--bmh-gold);color:var(--bmh-blue);font-size:9px;font-weight:700;padding:2px 6px;border-radius:12px;text-transform:uppercase;letter-spacing:0.5px;">
+            ? Family: ${otherFamilyMembers.length}
+          </div>
+        ` : ''}
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
-          <div>
+          <div style="flex:1;">
             <div style="font-weight:600;color:var(--g2);font-size:13px;">${p.name || 'Unknown'}</div>
             <div style="color:var(--g1);font-size:11px;">BMSH ID: ${p.bmhId || 'N/A'}</div>
             <div style="color:var(--g1);font-size:11px;">Mobile: ${p.mob || p.mobile || 'N/A'}</div>
+            <div style="color:var(--g1);font-size:11px;">Age/Sex: ${p.age || 'N/A'} / ${p.sex || 'N/A'}</div>
           </div>
           <button type="button" class="btn btn-gold btn-xs" onclick="openPatientFromSearch('${p.bmhId}')">Open Patient</button>
         </div>
+        
+        ${otherFamilyMembers.length > 0 ? `
+          <div style="border-top:1px solid var(--g5);padding-top:8px;margin-bottom:8px;">
+            <div style="font-size:11px;font-weight:600;color:var(--g2);margin-bottom:4px;">? Family Members with Same Phone:</div>
+            <div style="display:flex;flex-wrap:wrap;gap:4px;">
+              ${otherFamilyMembers.map(member => `
+                <div style="background:var(--g6);border:1px solid var(--g5);border-radius:6px;padding:4px 8px;cursor:pointer;font-size:10px;"
+                     onclick="openPatientFromSearch('${member.bmhId}')" title="Open ${member.name}">
+                  <div style="font-weight:600;color:var(--g2);">${member.name}</div>
+                  <div style="color:var(--g1);font-size:9px;">${member.bmhId} ? ${member.age || '?'}y</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        ` : ''}
+        
         <div style="border-top:1px solid var(--g5);padding-top:8px;">
           <div style="font-size:11px;font-weight:600;color:var(--g2);margin-bottom:4px;">Visit History (${visits.length} visits):</div>
           <div style="display:flex;flex-wrap:wrap;gap:4px;">
             ${visits.map(date => `
-              <span style="background:var(--g6);border:1px solid var(--g5);border-radius:4px;padding:2px 6px;font-size:10px;color:var(--g1);cursor:pointer;" 
+              <span class="visit-date-chip" 
                     onclick="loadHistoricalQueueFromDate('${date}')" title="View queue for this date">
                 ${formatDisplayDate(date)}
               </span>
@@ -311,6 +356,348 @@ window.loadHistoricalQueueFromDate = function(date) {
     }
   }
 };
+
+// Enhanced Patient Deduplication System
+window.findDuplicatePatients = function() {
+  const patients = window.PATIENTS || [];
+  const duplicateGroups = [];
+  const processed = new Set();
+  
+  patients.forEach(function(patient) {
+    if (!patient || processed.has(patient.bmhId) || patient.mergedInto) return;
+    
+    const duplicates = findDuplicatesForPatient(patient, patients);
+    if (duplicates.length > 0) {
+      const group = [patient, ...duplicates];
+      duplicateGroups.push(group);
+      group.forEach(p => processed.add(p.bmhId));
+    }
+  });
+  
+  return duplicateGroups;
+};
+
+function findDuplicatesForPatient(targetPatient, allPatients) {
+  const duplicates = [];
+  const targetNameKey = patientNameIdentityKey(targetPatient.name || '');
+  const targetPhones = getPatientPhoneKeys(targetPatient);
+  const targetAddress = normalizeAddress(targetPatient.addr || '');
+  const targetAge = patientApproxAgeYears(targetPatient);
+  
+  allPatients.forEach(function(candidate) {
+    if (!candidate || candidate.bmhId === targetPatient.bmhId || candidate.mergedInto) return;
+    
+    // Strict matching criteria - only merge if it's clearly the same person
+    const nameMatch = patientNameIdentityKey(candidate.name || '') === targetNameKey;
+    const phoneMatch = targetPhones.some(phone => getPatientPhoneKeys(candidate).includes(phone));
+    const addressMatch = targetAddress && normalizeAddress(candidate.addr || '') === targetAddress;
+    const ageMatch = agesCloseEnough(targetAge, patientApproxAgeYears(candidate), 2); // Reduced age tolerance
+    
+    // Consider duplicate ONLY if:
+    // 1. Same Name + Same Phone + Age Close (primary criteria)
+    // 2. Same Name + Same Address + Age Close (secondary criteria)
+    // 3. Same Name + Same Phone + Same Address (strongest criteria)
+    
+    // NOTE: Different names with same phone are NOT considered duplicates (family members)
+    if (!nameMatch) return; // Must have same name to be considered duplicate
+    
+    if ((nameMatch && phoneMatch && ageMatch) || 
+        (nameMatch && addressMatch && ageMatch) ||
+        (nameMatch && phoneMatch && addressMatch)) {
+      duplicates.push(candidate);
+    }
+  });
+  
+  return duplicates;
+}
+
+function normalizeAddress(address) {
+  if (!address) return '';
+  return String(address)
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '') // Remove special characters
+    .replace(/\s+/g, ' ') // Normalize spaces
+    .trim();
+}
+
+function patientNameIdentityKey(name) {
+  if (!name) return '';
+  const s = String(name).toLowerCase().trim();
+  // Remove spaces, dots, and special characters for matching
+  return s.replace(/[^a-z]/g, '');
+}
+
+function getPatientPhoneKeys(patient) {
+  const phones = [];
+  if (patient.mob) phones.push(normalizePatientPhoneKey(patient.mob));
+  if (patient.mob2) phones.push(normalizePatientPhoneKey(patient.mob2));
+  if (patient.mobile) phones.push(normalizePatientPhoneKey(patient.mobile));
+  if (patient.altMobile) phones.push(normalizePatientPhoneKey(patient.altMobile));
+  return Array.from(new Set(phones.filter(Boolean)));
+}
+
+function normalizePatientPhoneKey(phone) {
+  if (!phone) return '';
+  const s = String(phone).replace(/\D/g, ''); // Remove all non-digits
+  if (s.length >= 10) {
+    // Return last 10 digits for Indian mobile numbers
+    return s.slice(-10);
+  }
+  return s;
+}
+
+function patientApproxAgeYears(patient) {
+  if (!patient) return null;
+  // Check DOB first
+  if (patient.dob) {
+    const dob = new Date(patient.dob);
+    if (!isNaN(dob.getTime())) {
+      const now = new Date();
+      let age = now.getFullYear() - dob.getFullYear();
+      const monthDiff = now.getMonth() - dob.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < dob.getDate())) {
+        age--;
+      }
+      return Math.max(0, Math.min(120, age));
+    }
+  }
+  // Fall back to age string parsing
+  const ageStr = String(patient.age || '');
+  const match = ageStr.match(/(\d+)\s*(?:year|yr|yrs|y\.?)\b/i) || ageStr.match(/^(\d{1,3})$/);
+  return match ? Math.min(120, Math.max(0, parseInt(match[1], 10))) : null;
+}
+
+function agesCloseEnough(age1, age2, maxGap = 2) {
+  if (age1 == null || age2 == null) return true;
+  return Math.abs(Number(age1) - Number(age2)) <= maxGap;
+}
+
+// Comprehensive Patient Merger
+window.mergeAllDuplicatePatients = async function() {
+  const duplicateGroups = findDuplicatePatients();
+  if (duplicateGroups.length === 0) {
+    window.showToast?.('No duplicate patients found', 's');
+    return;
+  }
+  
+  window.showToast?.(`Found ${duplicateGroups.length} groups of duplicate patients. Merging...`, 'i');
+  let mergedCount = 0;
+  
+  for (const group of duplicateGroups) {
+    if (group.length < 2) continue;
+    
+    // Sort by BMSH ID (lowest is canonical)
+    group.sort((a, b) => {
+      const idA = parseInt(String(a.bmhId || '').replace(/^BMSH-/i, '')) || 0;
+      const idB = parseInt(String(b.bmhId || '').replace(/^BMSH-/i, '')) || 0;
+      return idA - idB;
+    });
+    
+    const canonical = group[0];
+    const duplicates = group.slice(1);
+    
+    for (const duplicate of duplicates) {
+      try {
+        await mergeDuplicatePatientRecord(canonical.bmhId, duplicate.bmhId);
+        mergedCount++;
+      } catch (error) {
+        console.error('Failed to merge patient:', error);
+      }
+    }
+  }
+  
+  window.showToast?.(`Successfully merged ${mergedCount} duplicate patients!`, 's');
+  
+  // Refresh the patient list
+  if (typeof window.renderDocQueue === 'function') {
+    window.renderDocQueue();
+  }
+};
+
+// Enhanced registration to prevent future duplicates
+window.enhancedFindSamePerson = function(formData) {
+  const patients = window.PATIENTS || [];
+  const name = String(formData.name || '').trim();
+  const mob = String(formData.mob || formData.mobile || '').trim();
+  const mob2 = String(formData.mob2 || formData.altMobile || '').trim();
+  const addr = String(formData.addr || '').trim();
+  const age = formData.age || '';
+  const dob = formData.dob || '';
+  
+  if (!name) return null;
+  
+  const nameKey = patientNameIdentityKey(name);
+  const addressKey = normalizeAddress(addr);
+  const formAge = patientApproxAgeYears({ age, dob });
+  
+  let bestMatch = null;
+  let bestScore = 0;
+  
+  // First, check for family members with same phone (to show warning)
+  const familyMembers = [];
+  const formPhones = [mob, mob2].map(normalizePatientPhoneKey).filter(Boolean);
+  
+  patients.forEach(function(patient) {
+    if (!patient || patient.mergedInto) return;
+    
+    const patientNameKey = patientNameIdentityKey(patient.name || '');
+    const patientAddressKey = normalizeAddress(patient.addr || '');
+    const patientAge = patientApproxAgeYears(patient);
+    const patientPhones = getPatientPhoneKeys(patient);
+    
+    // Check for family members (same phone, different name)
+    const phoneMatch = formPhones.some(fp => patientPhones.includes(fp));
+    const nameDifferent = patientNameKey !== nameKey;
+    
+    if (phoneMatch && nameDifferent) {
+      familyMembers.push(patient);
+    }
+    
+    // Only consider exact name matches for duplicates
+    if (patientNameKey !== nameKey) return; // Skip if name is different
+    
+    let score = 0;
+    
+    // Name matching (must match - already verified above)
+    score += 40;
+    
+    // Phone matching (high weight)
+    if (phoneMatch) {
+      score += 30;
+    }
+    
+    // Address matching (medium weight)
+    if (addressKey && patientAddressKey === addressKey) {
+      score += 20;
+    }
+    
+    // Age matching (low weight)
+    if (agesCloseEnough(formAge, patientAge, 2)) { // Reduced tolerance
+      score += 10;
+    }
+    
+    // Bonus for exact phone + age match
+    if (phoneMatch && agesCloseEnough(formAge, patientAge, 2)) {
+      score += 10;
+    }
+    
+    // Only consider as duplicate if score is high enough (same name + phone/addr + age)
+    if (score > bestScore && score >= 70) { // Increased threshold
+      bestScore = score;
+      bestMatch = patient;
+    }
+  });
+  
+  // Store family members for UI display
+  window._potentialFamilyMembers = familyMembers;
+  
+  return bestMatch;
+};
+
+// Function to get family members with same phone
+window.getFamilyMembersWithSamePhone = function(phone) {
+  const patients = window.PATIENTS || [];
+  const phoneKey = normalizePatientPhoneKey(phone);
+  
+  return patients.filter(function(patient) {
+    if (!patient || patient.mergedInto) return false;
+    return getPatientPhoneKeys(patient).includes(phoneKey);
+  });
+};
+
+// Update the existing registration to use enhanced matching
+window.patchRegistrationWithEnhancedMatching = function() {
+  const originalFindSame = window.findSamePersonForRegistration;
+  
+  window.findSamePersonForRegistration = function(opts) {
+    // Try enhanced matching first
+    const enhancedMatch = window.enhancedFindSamePerson(opts);
+    
+    // Show family member warning if applicable
+    if (window._potentialFamilyMembers && window._potentialFamilyMembers.length > 0) {
+      showFamilyMemberWarning(window._potentialFamilyMembers, opts);
+    }
+    
+    if (enhancedMatch) {
+      return enhancedMatch;
+    }
+    
+    // Fall back to original logic
+    return originalFindSame ? originalFindSame(opts) : null;
+  };
+  
+  window.showToast?.('Enhanced duplicate detection activated for patient registration', 's');
+};
+
+// Show family member warning during registration
+function showFamilyMemberWarning(familyMembers, formData) {
+  const familyList = familyMembers.map(member => 
+    `? ${member.name} (${member.bmhId}) - ${member.age || '?'} years`
+  ).join('\n');
+  
+  const message = `Family members with same phone number found:\n\n${familyList}\n\nThis is normal for family registrations. Different names will get different BMSH IDs.`;
+  
+  // Show a non-blocking info message instead of warning
+  if (window.showToast) {
+    window.showToast(`? Found ${familyMembers.length} family member(s) with same phone`, 'i');
+  }
+  
+  // Optional: Show detailed family info in console for debugging
+  console.log('Family members with same phone:', familyMembers);
+}
+
+// Add phone number change handler to registration form
+window.setupFamilyMemberDetection = function() {
+  // Monitor phone number changes in registration form
+  const phoneInputs = ['rc-mob', 'rc-mob2', 'rc-mobile', 'rc-alt-mobile'];
+  
+  phoneInputs.forEach(function(inputId) {
+    const input = document.getElementById(inputId);
+    if (input) {
+      input.addEventListener('blur', function() {
+        const phone = input.value.trim();
+        if (phone && phone.length >= 10) {
+          checkForFamilyMembers(phone);
+        }
+      });
+    }
+  });
+};
+
+// Check and display family members for a given phone number
+function checkForFamilyMembers(phone) {
+  const familyMembers = getFamilyMembersWithSamePhone(phone);
+  if (familyMembers.length > 0) {
+    // Update family member display in registration form if exists
+    const familyDiv = document.getElementById('family-members-display');
+    if (familyDiv) {
+      familyDiv.innerHTML = `
+        <div style="background:var(--bmh-gold);color:var(--bmh-blue);padding:8px;border-radius:6px;margin-top:8px;font-size:11px;">
+          <div style="font-weight:700;margin-bottom:4px;">? Family Members with Same Phone:</div>
+          ${familyMembers.map(member => `
+            <div style="margin:2px 0;">${member.name} (${member.bmhId}) - ${member.age || '?'}y</div>
+          `).join('')}
+          <div style="margin-top:4px;font-style:italic;">Different names will get separate BMSH IDs</div>
+        </div>
+      `;
+      familyDiv.style.display = 'block';
+    }
+  } else {
+    const familyDiv = document.getElementById('family-members-display');
+    if (familyDiv) {
+      familyDiv.style.display = 'none';
+    }
+  }
+}
+
+// Initialize family member detection when DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(setupFamilyMemberDetection, 1000); // Delay to ensure form is loaded
+  });
+} else {
+  setTimeout(setupFamilyMemberDetection, 1000);
+}
 
 import { auth, watchConnectionStatus } from './firebase.js'
 import { loginUser as firebaseLoginUser, logoutUser, watchAuthState } from './auth.js'
