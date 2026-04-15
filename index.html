@@ -276,7 +276,7 @@
       #rc-qr-mobile-btn { display:flex !important; width:100%; justify-content:center; }
     }
   </style>
-  <script type="module" crossorigin src="/BMH-HMS/assets/main-BVDQYY7H.js"></script>
+  <script type="module" crossorigin src="/BMH-HMS/assets/main-Cg049wvY.js"></script>
   <link rel="modulepreload" crossorigin href="/BMH-HMS/assets/firebase-core-CsWAQJdo.js">
   <link rel="modulepreload" crossorigin href="/BMH-HMS/assets/firebase-db-CgsGjsaB.js">
   <link rel="stylesheet" crossorigin href="/BMH-HMS/assets/main-D2gw5hS9.css">
@@ -3535,6 +3535,8 @@
         </div>
         <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
           <button type="button" class="btn btn-outline btn-sm" onclick="bmhPrintInventorySection('Current Stock', '#inv-stock-list')">🖨️ Print current stock</button>
+          <button type="button" class="btn btn-blue btn-sm" onclick="checkInventoryVisibility()">🔍 Check Today's Entries</button>
+          <button type="button" class="btn btn-gold btn-sm" onclick="forceInventoryRefresh()">♻️ Refresh Inventory</button>
           <button type="button" class="btn btn-xs btn-gray" id="btn-inv-clear-all" onclick="adminClearAllInventoryStock()" style="display:none">🗑️ Clear all inventory (admin)</button>
         </div>
         <div id="inv-stock-list"></div>
