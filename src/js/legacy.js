@@ -2750,6 +2750,38 @@ function addCustomChip(triggerEl, eye) {
   showToast('"'+val+'" added ✓','i');
 }
 
+// Reset slit lamp examination blocks for new patient
+function resetSlitLampExamination() {
+  // Reset all slit lamp chips to default state
+  document.querySelectorAll('#oe-slitlamp .sl-chip').forEach(function(chip) {
+    chip.classList.remove('sel');
+    // Keep default "Normal" chips selected
+    if (chip.textContent.trim() === 'Normal') {
+      chip.classList.add('sel');
+    }
+  });
+  
+  // Clear custom slit lamp rows
+  const extraRowsContainer = document.getElementById('sl-extra-rows');
+  if (extraRowsContainer) {
+    extraRowsContainer.innerHTML = '';
+  }
+  
+  // Clear slit lamp notes
+  const slNotes = document.getElementById('sl-notes-text');
+  if (slNotes) {
+    slNotes.value = '';
+  }
+  
+  // Clear all slit lamp text inputs
+  document.querySelectorAll('#oe-slitlamp input[type="text"]').forEach(function(input) {
+    input.value = '';
+  });
+  
+  console.log('Slit lamp examination reset for new patient');
+}
+window.resetSlitLampExamination = resetSlitLampExamination;
+
 // ═══════════════════════════════════════
 // QR
 // ═══════════════════════════════════════
@@ -2838,6 +2870,10 @@ function openPatient(bmhId, opts) {
   // All textareas
   document.querySelectorAll('#pg-ophtho textarea, #pg-obg textarea, #pg-psych textarea, #pg-skin textarea')
     .forEach(el => { el.value = ''; });
+  
+  // Reset slit lamp examination blocks for new patient
+  resetSlitLampExamination();
+  
   // All selects — reset to index 0 (blank/first option)
   document.querySelectorAll('#pg-ophtho select, #pg-obg select, #pg-psych select, #pg-skin select')
     .forEach(el => { el.selectedIndex = 0; });
@@ -4429,8 +4465,8 @@ th{background:#eee;font-weight:900;text-align:center;font-size:8.8px}
         <img src="${escHtml(smallLogoSrc)}" alt="Baweja Hospital" style="width:40px;height:40px;object-fit:contain" onerror="this.style.display='none'">
       </div>
       <div style="flex:1;min-width:0;text-align:center">
-        <h1 style="font-size:12.4px;font-weight:900;letter-spacing:.45px;text-transform:uppercase;margin:0 0 3px 0;padding:0;border:none">Baweja Multispeciality Hospital — OPD</h1>
-        <div style="font-size:10px;line-height:1.42"><b>Today:</b> ${escHtml(today)} · <b>Pt:</b> ${escHtml(ptName)} · <b>Age/Sex:</b> ${escHtml(String(ptAge || '—'))}${ptSex ? '/' + escHtml(ptSex) : ''} · <b>Centre:</b> ${centre === 'CHD' ? 'CHD' : 'RPR'} · <b>Dr:</b> ${escHtml(drName)}</div>
+        <h1 style="font-size:12.4px;font-weight:900;letter-spacing:.45px;text-transform:uppercase;margin:0 0 3px 0;padding:0;border:none">${escHtml(ptName)}</h1>
+        <div style="font-size:10px;line-height:1.42"><b>Today:</b> ${escHtml(today)} · <b>Age/Sex:</b> ${escHtml(String(ptAge || '—'))}${ptSex ? '/' + escHtml(ptSex) : ''} · <b>Centre:</b> ${centre === 'CHD' ? 'CHD' : 'RPR'} · <b>Dr:</b> ${escHtml(drName)}</div>
         <div style="font-size:9.2px;line-height:1.35;margin-top:2px"><b>Ph:</b> ${escHtml(ptMob || '—')} · <b>Addr:</b> ${escHtml(ptAddr || '—')} · <b>Printed:</b> ${escHtml(printDate)}</div>
       </div>
     </div>
@@ -13484,31 +13520,49 @@ function renderDeptAdviceLibrary(dept) {
   const items = (bucket.advice || []).slice().sort(function (a, b) { return String(a).localeCompare(String(b)); });
   if (!items.length) {
     host.innerHTML = '<div style="font-size:10.5px;color:var(--g1);padding:6px 8px;border:1px dashed var(--g4);border-radius:8px;background:var(--g6)">Saved instructions will appear here like templates.</div>';
-    if (dept === 'obg') {
-      const q = document.getElementById('obg-advice-quick');
-      if (q) q.innerHTML = '<option value="">— Add advice from list —</option>';
-    }
+    updateDeptAdviceDropdown(dept, []);
     return;
   }
+  // Enhanced block display with better styling
   host.innerHTML = items.map(function (item) {
     const safeItem = String(item).replace(/"/g, '&quot;');
     const jsItem = String(item).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-    return '<div style="display:grid;grid-template-columns:minmax(0,1fr) 26px;gap:6px;align-items:start;background:#fff;border:1px solid var(--g5);border-radius:8px;padding:7px 8px">'
-      + '<button type="button" class="btn btn-xs btn-outline" style="justify-content:flex-start;text-align:left;white-space:normal;line-height:1.35;padding:6px 8px" title="' + safeItem + '" onclick="appendAdviceTemplateToTextarea(\'' + dept + '\',\'' + jsItem + '\')">📋 ' + escapeHtmlConsent(item) + '</button>'
-      + '<button type="button" class="btn btn-xs btn-gray" title="Delete" onclick="removeDeptAdviceTemplate(\'' + dept + '\',\'' + jsItem + '\')">✕</button>'
+    return '<div class="advice-block-item" style="display:grid;grid-template-columns:minmax(0,1fr) 26px;gap:6px;align-items:start;background:#fff;border:1px solid var(--g5);border-radius:8px;padding:8px 10px;margin-bottom:6px;transition:all .2s">'
+      + '<button type="button" class="btn btn-xs btn-outline" style="justify-content:flex-start;text-align:left;white-space:normal;line-height:1.4;padding:6px 10px;font-size:12px" title="' + safeItem + '" onclick="appendAdviceTemplateToTextarea(\'' + dept + '\',\'' + jsItem + '\')">📋 ' + escapeHtmlConsent(item) + '</button>'
+      + '<button type="button" class="btn btn-xs btn-gray" title="Delete" style="padding:4px 8px" onclick="removeDeptAdviceTemplate(\'' + dept + '\',\'' + jsItem + '\')">✕</button>'
       + '</div>';
   }).join('');
-  if (dept === 'obg') {
-    const q = document.getElementById('obg-advice-quick');
-    if (q) {
-      const cur = q.value;
-      q.innerHTML = '<option value="">— Add advice from list —</option>' + items.map(function (item) {
-        const safe = String(item).replace(/"/g, '&quot;');
-        return '<option value="' + safe + '">' + escapeHtmlConsent(item) + '</option>';
-      }).join('');
-      if ([].slice.call(q.options).some(function (o) { return o.value === cur; })) q.value = cur;
-    }
+  
+  // Update dropdown immediately for all departments
+  updateDeptAdviceDropdown(dept, items);
+}
+
+// New function to update advice dropdown immediately
+function updateDeptAdviceDropdown(dept, items) {
+  const dropdownId = getDeptAdviceDropdownId(dept);
+  const dropdown = document.getElementById(dropdownId);
+  if (!dropdown) return;
+  
+  const cur = dropdown.value;
+  dropdown.innerHTML = '<option value="">— Add advice from list —</option>' + items.map(function (item) {
+    const safe = String(item).replace(/"/g, '&quot;');
+    return '<option value="' + safe + '">' + escapeHtmlConsent(item) + '</option>';
+  }).join('');
+  
+  // Preserve current selection if it still exists
+  if (cur && [].slice.call(dropdown.options).some(function (o) { return o.value === cur; })) {
+    dropdown.value = cur;
   }
+}
+
+function getDeptAdviceDropdownId(dept) {
+  const mapping = {
+    'ophtho': 'oph-advice-quick',
+    'obg': 'obg-advice-quick',
+    'psych': 'psych-advice-quick',
+    'skin': 'skin-advice-quick'
+  };
+  return mapping[dept] || dept + '-advice-quick';
 }
 window.appendAdviceTemplateToTextarea = appendAdviceTemplateToTextarea;
 window.removeDeptAdviceTemplate = function removeDeptAdviceTemplate(dept, item) {
@@ -24408,6 +24462,21 @@ function deleteTransaction(txnId) {
   const t = TRANSACTIONS.find(x=>x.id===txnId);
   if(!t) { showToast('Transaction not found','w'); return; }
   const label = `₹${t.amount?.toLocaleString('en-IN')||'?'} — ${t.patient||'?'} (${t.service||'—'}, ${t.mode||'—'})`;
+  
+  // Check if reception user can bypass approval for amounts under 500 rupees
+  if (canBypassApproval(t.amount)) {
+    if(!confirm(`Delete this transaction (under ₹500)?\n${label}\nThis cannot be undone.`)) return;
+    const idx = TRANSACTIONS.findIndex(x=>x.id===txnId);
+    if (idx < 0) return;
+    TRANSACTIONS.splice(idx,1);
+    try { if(window.firebase&&firebase.database) firebase.database().ref(`transactions/${todayKey()}/${txnId}`).remove(); } catch(e){}
+    fbPush&&fbPush('auditLog',{user:CURRENT_USER?.name||'Staff',role:CURRENT_USER?.role||'Staff',action:'DELETE_TXN',item:label,timestamp:new Date().toISOString()});
+    showToast(`🗑️ Deleted: ${label}`,'i');
+    renderCollectionDashboard&&renderCollectionDashboard(); renderReceptionPage&&renderReceptionPage();
+    return;
+  }
+  
+  // Standard approval flow for amounts 500+ or non-reception users
   if(!confirm(`Delete this transaction?\n${label}\nThis cannot be undone.`)) return;
   const idx = TRANSACTIONS.findIndex(x=>x.id===txnId);
   if (idx < 0) return;
@@ -24420,6 +24489,7 @@ function deleteTransaction(txnId) {
 
 // ══════════════════════════════════════════════════════════════
 // DELETION APPROVAL SYSTEM — non-admins request, admins approve
+// Reception users can bypass approval for entries under 500 rupees
 // ══════════════════════════════════════════════════════════════
 window.PENDING_DELETE_REQUESTS = window.PENDING_DELETE_REQUESTS || [];
 window.ALL_DELETE_REQUESTS = window.ALL_DELETE_REQUESTS || [];
@@ -24428,6 +24498,19 @@ function isConsultationChargeEntry(pr) {
   const txt = String(pr?.for || pr?.service || pr?.desc || '').toLowerCase();
   return /\bconsultation\b|\bconsult\b/.test(txt);
 }
+
+function isReceptionUser() {
+  const role = String(CURRENT_USER?.role || '').toLowerCase();
+  const centre = String(CURRENT_USER?.centre || '').toLowerCase();
+  return (role === 'reception' && (centre.includes('rpr') || centre.includes('chd')));
+}
+
+function canBypassApproval(amount) {
+  if (!amount) return false;
+  const numericAmount = Number(amount) || 0;
+  return numericAmount < 500 && isReceptionUser();
+}
+
 function showDeleteApprovalRequiredPopup() {
   alert('This deletion requires admin approval.\n\nPlease request approval. Admin can review it in Settings > Approvals and approve to delete.');
 }

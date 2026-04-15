@@ -772,6 +772,55 @@ function isToday(timestamp) {
   return timestamp.startsWith(today);
 }
 
+// Page state persistence - maintain current page on refresh
+window.saveCurrentPage = function(pageId) {
+  try {
+    localStorage.setItem('bmh_current_page', pageId);
+  } catch (e) {
+    console.warn('Failed to save current page:', e);
+  }
+};
+
+window.restoreCurrentPage = function() {
+  try {
+    const savedPage = localStorage.getItem('bmh_current_page');
+    if (savedPage) {
+      const pageElement = document.getElementById(savedPage);
+      if (pageElement) {
+        // Find the navigation button for this page and click it
+        const navButton = document.querySelector(`.ni[onclick*="${savedPage}"]`);
+        if (navButton) {
+          setTimeout(() => {
+            navButton.click();
+            console.log('Restored page:', savedPage);
+          }, 100);
+          return true;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to restore current page:', e);
+  }
+  return false;
+};
+
+// Override the nav function to save page state
+const originalNav = window.nav;
+window.nav = function(pageKey, btn) {
+  const result = originalNav ? originalNav(pageKey, btn) : null;
+  saveCurrentPage('pg-' + pageKey);
+  return result;
+};
+
+// Initialize page state restoration
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(restoreCurrentPage, 500); // Restore page after navigation system loads
+  });
+} else {
+  setTimeout(restoreCurrentPage, 500);
+}
+
 // Initialize family member detection when DOM is ready
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', function() {
@@ -792,6 +841,7 @@ import { watchTransactions,
          watchPayRequests }     from './billing.js'
 import { watchLeads }           from './leads.js'
 import { todayKey }             from './utils.js'
+import { initializeInventoryFirebaseSync, syncInventoryWithFirebase } from './inventory.js'
 
 const SAVED_LOGIN_KEY = 'bmh_saved_login_v1'
 const USE_FIRESTORE_REALTIME_AFTER_LOGIN = false
@@ -978,10 +1028,19 @@ watchAuthState(
     }
     if (typeof window.loadDrugLibraryFromStorage === 'function') {
       try { window.loadDrugLibraryFromStorage() } catch (_) { /* noop */ }
-      setTimeout(() => {
-        try { window.loadDrugLibraryFromStorage({ forceRemote: true }) } catch (_) { /* noop */ }
-      }, 1500)
     }
+
+    // Initialize inventory Firebase sync
+    try {
+      initializeInventoryFirebaseSync();
+      syncInventoryWithFirebase();
+    } catch (e) {
+      console.warn('Inventory Firebase sync initialization failed:', e);
+    }
+
+    setTimeout(() => {
+      try { window.loadDrugLibraryFromStorage({ forceRemote: true }) } catch (_) { /* noop */ }
+    }, 1500)
     if (typeof window.loadConsentDataOverridesFromStorage === 'function') {
       try { window.loadConsentDataOverridesFromStorage() } catch (_) { /* noop */ }
     }
