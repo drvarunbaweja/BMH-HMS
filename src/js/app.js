@@ -690,13 +690,97 @@ function checkForFamilyMembers(phone) {
   }
 }
 
+// Inventory visibility helper functions
+window.checkInventoryVisibility = function() {
+  console.log('=== Inventory System Status ===');
+  console.log('Current stock items:', window.INVENTORY ? window.INVENTORY.length : 0);
+  console.log('Today\'s purchases:', window.BMH_PURCHASES ? window.BMH_PURCHASES.filter(p => isToday(p.ts)).length : 0);
+  console.log('Today\'s usage:', window.BMH_INVENTORY_USAGE ? window.BMH_INVENTORY_USAGE.filter(u => isToday(u.ts)).length : 0);
+  
+  // Force refresh inventory displays
+  if (typeof renderStockList === 'function') {
+    renderStockList();
+  }
+  if (typeof renderInventoryPurchaseLog === 'function') {
+    renderInventoryPurchaseLog();
+  }
+  if (typeof renderInventoryUsageLog === 'function') {
+    renderInventoryUsageLog();
+  }
+  
+  // Show today's entries summary
+  showTodayInventorySummary();
+};
+
+window.showTodayInventorySummary = function() {
+  const today = new Date().toISOString().slice(0, 10);
+  const todayPurchases = (window.BMH_PURCHASES || []).filter(p => p.ts && p.ts.startsWith(today));
+  const todayUsage = (window.BMH_INVENTORY_USAGE || []).filter(u => u.ts && u.ts.startsWith(today));
+  
+  console.log(`\n=== Today's Inventory Activity (${today}) ===`);
+  console.log(`Purchases: ${todayPurchases.length} items`);
+  console.log(`Usage: ${todayUsage.length} items`);
+  
+  if (todayPurchases.length > 0) {
+    console.log('\nToday\'s Purchases:');
+    todayPurchases.forEach(p => {
+      console.log(`- ${p.itemName} (+${p.qty}) - ${p.vendor || 'No vendor'} - Dept: ${p.dept || 'General'}`);
+    });
+  }
+  
+  if (todayUsage.length > 0) {
+    console.log('\nToday\'s Usage:');
+    todayUsage.forEach(u => {
+      console.log(`- ${u.itemName} (-${u.qty}) - Patient: ${u.patientName || 'Ward'} - Dept: ${u.dept || 'General'}`);
+    });
+  }
+  
+  // Show toast notification
+  const totalItems = todayPurchases.length + todayUsage.length;
+  if (totalItems > 0) {
+    window.showToast?.(`Today: ${todayPurchases.length} purchases, ${todayUsage.length} usage`, 's');
+  } else {
+    window.showToast?.('No inventory activity recorded today', 'i');
+  }
+};
+
+window.forceInventoryRefresh = function() {
+  // Reload inventory data from storage
+  if (typeof loadInventoryStockFromStorage === 'function') {
+    loadInventoryStockFromStorage();
+  }
+  if (typeof loadBmhFinancials === 'function') {
+    loadBmhFinancials();
+  }
+  
+  // Re-render all inventory displays
+  setTimeout(() => {
+    if (typeof renderStockList === 'function') renderStockList();
+    if (typeof renderInventoryPurchaseLog === 'function') renderInventoryPurchaseLog();
+    if (typeof renderInventoryUsageLog === 'function') renderInventoryUsageLog();
+    if (typeof renderInventoryStoreStock === 'function') renderInventoryStoreStock();
+    if (typeof renderInventoryPoAlerts === 'function') renderInventoryPoAlerts();
+    
+    window.showToast?.('Inventory displays refreshed', 's');
+  }, 500);
+};
+
+// Helper function to check if timestamp is today
+function isToday(timestamp) {
+  if (!timestamp) return false;
+  const today = new Date().toISOString().slice(0, 10);
+  return timestamp.startsWith(today);
+}
+
 // Initialize family member detection when DOM is ready
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', function() {
     setTimeout(setupFamilyMemberDetection, 1000); // Delay to ensure form is loaded
+    setTimeout(checkInventoryVisibility, 2000); // Check inventory after page load
   });
 } else {
   setTimeout(setupFamilyMemberDetection, 1000);
+  setTimeout(checkInventoryVisibility, 2000);
 }
 
 import { auth, watchConnectionStatus } from './firebase.js'
