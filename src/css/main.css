@@ -342,3 +342,135 @@ tbody td{padding:8px 9px;font-weight:500;vertical-align:middle}
 .rx-drug-row{display:grid;grid-template-columns:28px 1fr 80px 110px 90px 60px 60px 36px;gap:5px;padding:6px 8px;border-radius:var(--rsm);background:var(--g6);margin-bottom:5px;align-items:center;font-size:11.5px}
 .rx-drug-row:hover{background:var(--blue-lt)}
 .rx-drug-row select,.rx-drug-row input{border:1px solid var(--g4);border-radius:5px;padding:3px 5px;font-family:var(--font);font-size:11px;background:#fff;width:100%}
+
+/* ═══ HISTORICAL QUEUE & PATIENT SEARCH ═══ */
+#dq-historical-date {
+  min-width: 140px;
+  font-weight: 600;
+  color: var(--bmh-blue);
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  border-color: var(--bmh-blue);
+  transition: all 0.2s ease;
+}
+
+#dq-historical-date:hover {
+  border-color: var(--bmh-gold);
+  box-shadow: 0 0 0 2px rgba(212, 160, 23, 0.1);
+}
+
+#dq-historical-date:focus {
+  outline: none;
+  border-color: var(--bmh-blue);
+  box-shadow: 0 0 0 3px rgba(26, 60, 110, 0.1);
+}
+
+.patient-search-card {
+  background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+  border: 1.5px solid var(--g4);
+  border-radius: var(--rsm);
+  transition: all 0.2s ease;
+}
+
+.patient-search-card:hover {
+  border-color: var(--bmh-blue);
+  box-shadow: var(--sh-md);
+  transform: translateY(-1px);
+}
+
+#patient-search-name, #patient-search-id {
+  transition: all 0.2s ease;
+}
+
+#patient-search-name:focus, #patient-search-id:focus {
+  outline: none;
+  border-color: var(--bmh-blue);
+  box-shadow: 0 0 0 2px rgba(26, 60, 110, 0.1);
+}
+
+.visit-date-chip {
+  background: linear-gradient(180deg, var(--g6) 0%, #ffffff 100%);
+  border: 1.5px solid var(--g4);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--bmh-blue);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.visit-date-chip:hover {
+  background: var(--bmh-blue);
+  color: #fff;
+  border-color: var(--bmh-blue);
+  transform: scale(1.05);
+  box-shadow: var(--sh);
+}
+
+.visit-date-chip:active {
+  transform: scale(0.98);
+}
+
+.patient-result-item {
+  border-left: 3px solid var(--bmh-gold);
+  transition: all 0.2s ease;
+}
+
+.patient-result-item:hover {
+  border-left-color: var(--bmh-blue);
+  box-shadow: var(--sh-md);
+}
+
+.historical-queue-indicator {
+  background: var(--bmh-gold);
+  color: var(--bmh-blue);
+  font-size: 10px;
+  font-weight: 900;
+  padding: 2px 6px;
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-left: 8px;
+}
+
+.search-results-container {
+  max-height: 400px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--g4) transparent;
+}
+
+.search-results-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.search-results-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.search-results-container::-webkit-scrollbar-thumb {
+  background: var(--g4);
+  border-radius: 3px;
+}
+
+.search-results-container::-webkit-scrollbar-thumb:hover {
+  background: var(--g3);
+}
+
+@media (max-width: 768px) {
+  .patient-search-card .card-hd > div {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .patient-search-card input {
+    min-width: 100%;
+    margin-bottom: 8px;
+  }
+  
+  #dq-historical-date {
+    min-width: 120px;
+    font-size: 11px;
+  }
+}

@@ -524,7 +524,28 @@
         <div class="ptab" onclick="ptab(this,'dq-xref')">↔️ Cross-Refer</div>
         <div class="ptab" onclick="ptab(this,'dq-ipd')">🛏️ IPD</div>
         <div class="ptab" onclick="ptab(this,'dq-done')">✓ Done</div>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
+          <input type="date" id="dq-historical-date" onchange="loadHistoricalQueue()" style="padding:6px 10px;border:1.5px solid var(--g4);border-radius:8px;font-size:12px;font-family:var(--font);background:#fff;" title="Select date to view historical queue">
+          <button type="button" class="btn btn-outline btn-xs" onclick="clearHistoricalDate()" title="Clear date and show current queue">Today</button>
+        </div>
       </div>
+      
+      <!-- Patient Search Section -->
+      <div class="card" style="margin-bottom:12px;background:linear-gradient(180deg,#f8fbff 0%, #ffffff 100%);border:1.5px solid var(--g4);">
+        <div class="card-hd" style="padding:12px 16px;">
+          <div style="font-size:13px;font-weight:700;color:var(--g2);margin-bottom:8px;">🔍 Patient Search & Visit History</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <input type="text" id="patient-search-name" placeholder="Patient name..." style="flex:1;min-width:200px;padding:8px 12px;border:1.5px solid var(--g4);border-radius:8px;font-size:12px;font-family:var(--font);">
+            <input type="text" id="patient-search-id" placeholder="BMSH ID..." style="width:140px;padding:8px 12px;border:1.5px solid var(--g4);border-radius:8px;font-size:12px;font-family:var(--font);">
+            <button type="button" class="btn btn-gold btn-xs" onclick="searchPatientVisits()">Search</button>
+            <button type="button" class="btn btn-outline btn-xs" onclick="clearPatientSearch()">Clear</button>
+          </div>
+        </div>
+        <div id="patient-search-results" style="display:none;padding:0 16px 16px;">
+          <!-- Search results will be populated here -->
+        </div>
+      </div>
+      
       <div class="tab-content active" id="dq-active">
         <div class="rc-queue-table-wrap">
           <table class="rc-queue-table dq-queue-table" aria-label="Active queue">
