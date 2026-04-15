@@ -198,6 +198,9 @@ watchAuthState(
     }
     if (typeof window.loadDrugLibraryFromStorage === 'function') {
       try { window.loadDrugLibraryFromStorage() } catch (_) { /* noop */ }
+      setTimeout(() => {
+        try { window.loadDrugLibraryFromStorage({ forceRemote: true }) } catch (_) { /* noop */ }
+      }, 1500)
     }
     if (typeof window.loadConsentDataOverridesFromStorage === 'function') {
       try { window.loadConsentDataOverridesFromStorage() } catch (_) { /* noop */ }
@@ -236,6 +239,11 @@ watchAuthState(
         setTimeout(runner, delay)
       }
       safe('loadPatientsFromFirebase')
+      if (['admin', 'reception'].includes(String(user.role || '').toLowerCase())) {
+        setTimeout(() => {
+          safe('repairDuplicatePatientsByIdentity')
+        }, 4000)
+      }
       const eagerRoles = ['admin', 'reception', 'tpa']
       if (eagerRoles.includes(String(user.role || '').toLowerCase())) {
         defer('listenPayRequests', 120)
