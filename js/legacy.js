@@ -15829,15 +15829,14 @@ function lookupByPhone(val) {
   } else { matchEl.innerHTML=''; }
 }
 function prefillExistingPatient(bmhId) {
-  const p = PATIENTS.find(x=>x.bmhId===bmhId); if(!p) return;
-  if (p.mergedInto) {
-    prefillExistingPatient(p.mergedInto);
-    return;
-  }
-  const fn = document.getElementById('rc-fn'); if(fn) fn.value = p.name.split(' ')[0]||'';
-  const ln = document.getElementById('rc-ln'); if(ln) ln.value = p.name.split(' ').slice(1).join(' ')||'';
+  const p = (typeof resolveActivePatientByBmhId === 'function' ? resolveActivePatientByBmhId(bmhId) : null)
+    || PATIENTS.find(function (x) { return String(x?.bmhId || '') === String(bmhId || ''); });
+  if(!p) { showToast('Patient not found for prefill', 'w'); return; }
+  const name = String(p.name || p.patient || '').trim();
+  const fn = document.getElementById('rc-fn'); if(fn) fn.value = name.split(' ')[0]||'';
+  const ln = document.getElementById('rc-ln'); if(ln) ln.value = name.split(' ').slice(1).join(' ')||'';
   const rel = document.getElementById('rc-rel'); if(rel) rel.value = p.rel||'';
-  const mob = document.getElementById('rc-mob-inp')||document.getElementById('rc-mob'); if(mob) mob.value = p.mob||'';
+  const mob = document.getElementById('rc-mob-inp')||document.getElementById('rc-mob'); if(mob) mob.value = p.mob||p.mobile||'';
   const mob2 = document.getElementById('rc-mob2'); if(mob2) mob2.value = p.mob2||'';
   const email = document.getElementById('rc-email'); if(email) email.value = p.email||'';
   const addr = document.getElementById('rc-addr'); if(addr) addr.value = p.addr||'';
@@ -15847,6 +15846,12 @@ function prefillExistingPatient(bmhId) {
   const dept = document.getElementById('rc-dept'); if(dept && p.dept) { dept.value = p.dept; updateRcDr&&updateRcDr(); updatePurposeOptions&&updatePurposeOptions(); }
   const dr = document.getElementById('rc-dr'); if(dr && p.doctor) dr.value = p.doctor;
   const uidEl = document.getElementById('rc-uid'); if(uidEl) uidEl.textContent = p.bmhId;
+  const prefillBadge = document.getElementById('rc-prefill-badge');
+  if (prefillBadge) {
+    prefillBadge.textContent = 'Prefilled from existing patient: ' + p.bmhId;
+    prefillBadge.style.display = 'inline-flex';
+  }
+  const forceNew = document.getElementById('rc-force-new-bmsh'); if (forceNew) forceNew.checked = false;
   const advEl = document.getElementById('rc-advance-amt'); if(advEl) advEl.value = p.advance!=null?p.advance:'';
   const adpEl = document.getElementById('rc-advance-purpose'); if(adpEl) adpEl.value = p.advancePurpose||'';
   const nfEl = document.getElementById('rc-no-fee'); if(nfEl) { nfEl.checked = false; toggleRcNoFee(false); }
@@ -15856,7 +15861,7 @@ function prefillExistingPatient(bmhId) {
   // Switch to New Patient tab if on Queue tab
   const newTab = document.querySelector('#pg-reception .ptab');
   if(newTab && !newTab.classList.contains('active')) { ptab(newTab,'rc-new'); }
-  showToast(`✏️ ${p.name} prefilled — update details if needed and register ✓`,'s');
+  showToast(`✏️ ${name || p.bmhId} prefilled — update details if needed and register ✓`,'s');
 }
 function calcRcAge() {
   const dob = document.getElementById('rc-dob')?.value;
@@ -16122,6 +16127,7 @@ async function registerPatient() {
   const isPreReg = purposeVal==='Need to Check In' || purposeVal==='Not Checked In';
   const email = emailEarly;
   const currentIso = new Date().toISOString();
+  const queueDateToday = currentIso.slice(0, 10);
 
   const patient = Object.assign({}, existingPt || {}, {
     bmhId: uid, name, initials, color,
@@ -16133,6 +16139,11 @@ async function registerPatient() {
     advancePurpose: advPurpose || existingPt?.advancePurpose || (advAmt > 0 ? 'Advance on account' : ''),
     consultationNoFee: !!noFee,
     seen:false, dilated:false,
+    queueRemoved: false,
+    queueRemovedAt: null,
+    queueRemovedBy: '',
+    queueDate: queueDateToday,
+    visitDate: queueDateToday,
     preRegistered: isPreReg,
     createdAt: existingPt?.createdAt || currentIso,
     updatedAt: currentIso,
@@ -16255,7 +16266,8 @@ async function registerPatient() {
   fbUpdate&&fbUpdate('patients/'+uid,{
     checkinAt:patient.checkinAt,purpose,visitCount:patient.visitCount,ins:patient.ins||'', policy: patient.policy || '',
     advance:patient.advance, advancePurpose:patient.advancePurpose, consultationNoFee:patient.consultationNoFee,
-    refType: patient.refType || '', refName: patient.refName || '', refMobile: patient.refMobile || '', referredBy: patient.referredBy || ''
+    refType: patient.refType || '', refName: patient.refName || '', refMobile: patient.refMobile || '', referredBy: patient.referredBy || '',
+    queueRemoved: false, queueRemovedAt: null, queueRemovedBy: '', queueDate: patient.queueDate || queueDateToday, visitDate: patient.visitDate || queueDateToday
   });
   if (typeof window.patchPatientFirestore === 'function') {
     window.patchPatientFirestore(uid, {
@@ -16337,6 +16349,11 @@ function resetRegistrationForm() {
   const fee=document.getElementById('rc-fee'); if(fee){ fee.value='0'; fee.disabled=false; }
   const nf=document.getElementById('rc-no-fee'); if(nf){ nf.checked=false; }
   const fnb=document.getElementById('rc-force-new-bmsh'); if(fnb){ fnb.checked=false; }
+  const prefillBadge = document.getElementById('rc-prefill-badge');
+  if (prefillBadge) {
+    prefillBadge.style.display = 'none';
+    prefillBadge.textContent = 'Prefilled from existing patient';
+  }
   const sex=document.getElementById('rc-sex'); if(sex) sex.value='Male';
   const dept=document.getElementById('rc-dept'); if(dept) dept.value='ophtho';
   const payMode=document.getElementById('rc-pay-mode'); if(payMode) payMode.value='Cash';
