@@ -14467,9 +14467,11 @@ function repairDrugLibraryFromAllSources() {
 }
 window.repairDrugLibraryFromAllSources = repairDrugLibraryFromAllSources;
 
-function loadDrugLibraryFromStorage() {
-  if (window._bmhDrugLibraryLoadedOnce) return;
-  window._bmhDrugLibraryLoadedOnce = true;
+function loadDrugLibraryFromStorage(opts) {
+  opts = opts || {};
+  const forceRemote = !!opts.forceRemote;
+  if (window._bmhDrugLibraryLoadedOnce && !forceRemote) return;
+  if (!window._bmhDrugLibraryLoadedOnce) window._bmhDrugLibraryLoadedOnce = true;
   const applyMergedRows = function (remoteVal, opts) {
     opts = opts || {};
     const remoteArr = normalizeDrugLibrarySnapshot(remoteVal);
@@ -14488,10 +14490,12 @@ function loadDrugLibraryFromStorage() {
   };
 
   if (!window.FBDB) {
+    if (forceRemote) return;
     applyMergedRows(null, { repairCloud: false });
     return;
   }
   window.FBDB.ref('drugLibrary').once('value').then(function (snap) {
+    window._bmhDrugLibraryHydratedFromFirebase = true;
     const remoteArr = normalizeDrugLibrarySnapshot(snap.val());
     const localArr = readDrugLibraryRowsFromAllLocalSources();
     const repairCloud = (!!localArr.length && localArr.length > remoteArr.length) || (!remoteArr.length && localArr.length > 0);
@@ -22159,7 +22163,7 @@ function patientNameIdentityKey(value) {
 }
 function isMergedPatientRecord(p) {
   if (!p || typeof p !== 'object') return false;
-  if (p.mergedInto || p.inactive || p.queueRemoved) return true;
+  if (p.mergedInto || p.inactive) return true;
   return String(p.status || '').toLowerCase() === 'merged';
 }
 function getPatientPhoneKeys(record) {
@@ -22446,6 +22450,7 @@ async function repairDuplicatePatientsByIdentity() {
     window._bmhDuplicateRepairRunning = false;
   }
 }
+window.repairDuplicatePatientsByIdentity = repairDuplicatePatientsByIdentity;
 let _bmhDupRepairDebounceTimer;
 function scheduleDuplicatePatientRepair() {
   clearTimeout(_bmhDupRepairDebounceTimer);
