@@ -205,6 +205,7 @@ function renderIolCatalogList() {
         '<div style="flex:1"><div style="font-weight:800">' + row.name + '</div>' +
         '<div style="font-size:10.5px;color:var(--g1)">' + (row.type || '—') + ' · ' + (row.mfr || '—') + (row.barcode ? ' · ' + row.barcode : '') + '</div></div>' +
         '<div style="text-align:right;white-space:nowrap"><div style="font-weight:900;color:var(--blue)">MRP ₹' + Number(row.price || 0).toLocaleString('en-IN') + '</div></div>' +
+        '<button type="button" class="btn btn-xs btn-outline" onclick="editIolCatalogRow(' + i + ')">✎</button>' +
         '<button type="button" class="btn btn-xs btn-gray" onclick="deleteIolCatalogRow(' + i + ')">✕</button></div>';
     }).join('');
 }
@@ -214,6 +215,37 @@ function deleteIolCatalogRow(i) {
   IOL_CATALOG.splice(i, 1);
   saveIolCatalogToStorage();
   renderIolCatalogList();
+}
+function editIolCatalogRow(i) {
+  if (i < 0 || i >= IOL_CATALOG.length) return;
+  const row = IOL_CATALOG[i];
+  const name = prompt('Edit IOL name:', row.name);
+  if (name === null) return;
+  const type = prompt('Edit type (e.g., Monofocal, Toric):', row.type || 'Monofocal');
+  if (type === null) return;
+  const mfr = prompt('Edit manufacturer:', row.mfr || '');
+  if (mfr === null) return;
+  const price = prompt('Edit MRP:', row.price || '0');
+  if (price === null) return;
+  const barcode = prompt('Edit barcode:', row.barcode || '');
+  if (barcode === null) return;
+  const batch = prompt('Edit batch number:', row.batchNo || '');
+  if (batch === null) return;
+  const serial = prompt('Edit serial number:', row.serialNo || '');
+  if (serial === null) return;
+  IOL_CATALOG[i] = {
+    name: name || row.name,
+    type: type || row.type || 'Monofocal',
+    mfr: mfr || row.mfr || '',
+    price: parseInt(price, 10) || row.price || 0,
+    barcode: barcode || row.barcode || '',
+    batchNo: batch || row.batchNo || '',
+    serialNo: serial || row.serialNo || '',
+    power: extractIolPower(name || row.name) || row.power || ''
+  };
+  saveIolCatalogToStorage();
+  renderIolCatalogList();
+  showToast('IOL updated ✓', 's');
 }
 function addIolFromModal() {
   const name = document.getElementById('iol-add-name')?.value?.trim();
@@ -7266,6 +7298,20 @@ function addIolBrandEntry(prefill) {
   container.appendChild(div);
   // Render power grid for this entry
   renderIolBrandPowerGrid(div);
+  // Add auto-fill for company when brand is selected
+  const brandInput = div.querySelector('.iol-brand-field');
+  const companyInput = div.querySelector('.iol-company-field');
+  if (brandInput && companyInput) {
+    brandInput.addEventListener('change', function () {
+      const brandName = String(this.value || '').trim();
+      const catalogItem = (IOL_CATALOG || []).find(function (row) {
+        return String(row.name || '').toLowerCase() === brandName.toLowerCase();
+      });
+      if (catalogItem && catalogItem.mfr) {
+        companyInput.value = catalogItem.mfr;
+      }
+    });
+  }
 }
 function removeIolBrandEntry(btn) {
   const entry = btn.closest('.inv-iol-brand-entry');
@@ -8765,10 +8811,11 @@ function bmhRenderVendorTables() {
     else if (current) vendorFilterEl.value = current;
   }
   const filteredRows = bmhGetFilteredVendorBillRows();
-  if (window._bmhVendorBillSel && !filteredRows.some(function (r) { return r.id === window._bmhVendorBillSel; })) window._bmhVendorBillSel = '';
+  const selectedBill = window._bmhVendorBillSel ? (window.BMH_VENDOR_BILLS || []).find(function (v) { return v.id === window._bmhVendorBillSel; }) : null;
+  const displayRows = selectedBill && !filteredRows.some(function (r) { return r.id === selectedBill.id; }) ? [selectedBill].concat(filteredRows) : filteredRows;
   const totalDue = filteredRows.reduce(function (s, v) { return s + bmhVendorBillOutstanding(v); }, 0);
   [document.getElementById('bmh-vendor-table'), document.getElementById('inv-vendor-table')].filter(Boolean).forEach(function (el) {
-    el.innerHTML = filteredRows.length ? `<table class="rc-queue-table" style="width:100%"><thead><tr><th style="width:36px"></th><th>Vendor / invoice</th><th>₹</th><th>Status</th><th>File</th><th></th></tr></thead><tbody>${filteredRows.map(function (v) {
+    el.innerHTML = displayRows.length ? `<table class="rc-queue-table" style="width:100%"><thead><tr><th style="width:36px"></th><th>Vendor / invoice</th><th>₹</th><th>Status</th><th>File</th><th></th></tr></thead><tbody>${displayRows.map(function (v) {
       const out = bmhVendorBillOutstanding(v);
       const status = bmhVendorStatusLabel(v);
       const badge = status === 'paid' ? 'bd-green' : status === 'partial' ? 'bd-orange' : 'bd-orange';
@@ -8786,7 +8833,12 @@ function bmhRenderVendorTables() {
   const mini = document.getElementById('inv-vendor-mini');
   if (mini) {
     const pend = window.BMH_VENDOR_BILLS.filter(v => bmhVendorBillOutstanding(v) > 0);
-    mini.innerHTML = pend.length ? pend.map(v => `<div style="padding:6px;border-bottom:1px solid var(--g5);font-size:12px">${v.vendor} · ₹${bmhVendorBillOutstanding(v).toLocaleString('en-IN')} <span class="badge bd-orange">due</span><div style="font-size:10px;color:var(--g1)">${v.invoiceNo || '—'} · ${v.billFile?.name || v.uploadedName ? `<a href="#" onclick="event.preventDefault();openInventoryBill('${v.id}')">${escapeHtmlConsent(v.billFile?.name || v.uploadedName)}</a>` : 'No bill file'}</div></div>`).join('') : '<div style="color:var(--g1);font-size:12px">No pending vendor bills.</div>';
+    mini.innerHTML = pend.length ? pend.slice(0, 5).map(function (v) {
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;background:var(--g6);border-radius:6px;margin-bottom:4px;font-size:11px">
+        <span>${escapeHtmlConsent(v.vendor || '')}</span>
+        <span style="font-weight:900;color:#b55a00">₹${bmhVendorBillOutstanding(v).toLocaleString('en-IN')}</span>
+      </div>`;
+    }).join('') : '<div style="color:var(--g1);font-size:11px">No pending vendor bills</div>';
   }
   const summaryEl = document.getElementById('inv-vendor-summary');
   if (summaryEl) {
@@ -8808,7 +8860,7 @@ function bmhRenderVendorTables() {
   }
   const detailEl = document.getElementById('inv-vendor-detail');
   if (detailEl) {
-    const v = filteredRows.find(function (r) { return r.id === window._bmhVendorBillSel; });
+    const v = displayRows.find(function (r) { return r.id === window._bmhVendorBillSel; });
     if (!v) {
       detailEl.innerHTML = '<div style="padding:12px;color:var(--g1);font-size:12px">Click a bill in the list on the right for full detail, attachment, and payment.</div>'
         + '<div style="padding:0 12px 12px;font-size:12px;font-weight:900;color:var(--bmh-blue)">Filtered total due ₹' + totalDue.toLocaleString('en-IN') + '</div>'
@@ -8818,7 +8870,10 @@ function bmhRenderVendorTables() {
       const out = bmhVendorBillOutstanding(v);
       const status = out <= 0 ? 'paid' : (paid > 0 ? 'part paid' : 'due');
       detailEl.innerHTML = `<div style="padding:12px;font-size:12px">
-        <div style="font-size:11px;font-weight:900;color:var(--g1);text-transform:uppercase;margin-bottom:6px">Selected bill</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div style="font-size:11px;font-weight:900;color:var(--g1);text-transform:uppercase">Selected bill</div>
+          <button type="button" class="btn btn-xs btn-gray" onclick="bmhSelectVendorBill('')" title="Close">×</button>
+        </div>
         <div style="display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:10px;align-items:start">
           <div style="padding-top:2px">${out > 0 ? `<input type="checkbox" class="inv-vendor-bill-check" value="${escapeHtmlConsent(v.id)}">` : ''}</div>
           <div style="min-width:0">
@@ -8842,6 +8897,22 @@ function bmhRenderVendorTables() {
   }
   bmhRenderOfficeBillsDueBanner();
 }
+window.bmhRenderVendorTables = bmhRenderVendorTables;
+function forceInventoryRefresh() {
+  loadInventoryStockFromStorage();
+  loadBmhFinancials();
+  bmhPopulateInventorySelectors();
+  const catEl = document.getElementById('inv-stock-cat-filter');
+  const storeEl = document.getElementById('inv-stock-store-filter');
+  if (catEl) catEl.value = 'all';
+  if (storeEl) storeEl.value = 'all';
+  renderStockList();
+  renderInventoryPurchaseLog();
+  renderInventoryStoreStock();
+  renderInventoryPoAlerts();
+  showToast('Inventory refreshed ✓', 's');
+}
+window.forceInventoryRefresh = forceInventoryRefresh;
 function bmhSetInvBillMode(mode) {
   const v = document.getElementById('inv-panel-vendor');
   const o = document.getElementById('inv-panel-office');
@@ -9996,12 +10067,14 @@ function inventoryKnownBrandNames() {
   const names = [];
   (INVENTORY || []).forEach(function (i) { if (i?.iolBrand) names.push(String(i.iolBrand)); });
   (loadInventoryOcrMemory().brands || []).forEach(function (v) { names.push(String(v)); });
+  (IOL_CATALOG || []).forEach(function (row) { if (row?.name) names.push(String(row.name)); });
   return Array.from(new Set(names.map(function (v) { return normalizeInventoryTextValue(v); }).filter(Boolean)));
 }
 function inventoryKnownCompanyNames() {
   const names = [];
   (INVENTORY || []).forEach(function (i) { if (i?.iolCompany) names.push(String(i.iolCompany)); });
   (loadInventoryOcrMemory().companies || []).forEach(function (v) { names.push(String(v)); });
+  (IOL_CATALOG || []).forEach(function (row) { if (row?.mfr) names.push(String(row.mfr)); });
   return Array.from(new Set(names.map(function (v) { return normalizeInventoryTextValue(v); }).filter(Boolean)));
 }
 function inventoryKnownMrpMap() {
@@ -10350,7 +10423,7 @@ function bmhMaybeRegisterVendorBillFromParsedImport(parsed, asset, mode) {
   const dayKey = new Date().toISOString().slice(0, 10);
   const fileName = String(asset?.name || '');
   const dup = (window.BMH_VENDOR_BILLS || []).some(function (v) {
-    if (String(v.vendor || '').trim() !== vendor || Math.abs(Number(v.amount) - amt) >= 0.5) return false;
+    if (String(v.vendor || '').trim() !== vendor) return false;
     if (inv && String(v.invoiceNo || '') === inv) return true;
     return !!v.ocrSource && String(v.uploadedName || '') === fileName && String(v.createdAt || '').slice(0, 10) === dayKey;
   });
@@ -11353,16 +11426,8 @@ function addInventoryStorePrompt() {
 }
 window.addInventoryStorePrompt = addInventoryStorePrompt;
 function deleteInventoryStorePrompt() {
-  const name = normalizeInventoryTextValue(document.getElementById('inv-in-store')?.value || '');
-  if (!name) { showToast('Select a store first', 'w'); return; }
-  const used = (INVENTORY || []).some(function (i) { return String(i.store || '') === name; });
-  if (used && !confirm('This store is referenced on stock rows. Remove from list anyway?')) return;
-  window.BMH_STORE_LOCATIONS = (window.BMH_STORE_LOCATIONS || []).filter(function (s) { return s !== name; });
-  if (!window.BMH_STORE_LOCATIONS.length) {
-    window.BMH_STORE_LOCATIONS = ['Default store'];
-  }
-  saveInventoryStoreLocations();
-  bmhPopulateInventorySelectors();
+  showToast('Store locations cannot be deleted. Please contact admin if needed.', 'w');
+  return;
 }
 window.deleteInventoryStorePrompt = deleteInventoryStorePrompt;
 function addInventoryBarcodePrompt() {
