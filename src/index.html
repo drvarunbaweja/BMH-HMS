@@ -1470,6 +1470,11 @@
             </div>
           </div>
           <div id="oe-advice-library" class="quick-library-grid"></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+            <input type="text" id="oph-advice-quick-input" list="oph-advice-quick-list" placeholder="Type instruction and press Enter…" style="flex:1;min-width:220px;font-size:11px;padding:6px 8px;border-radius:var(--rsm);border:1.5px solid var(--g4)" onchange="commitDeptAdviceQuickEntry('ophtho', this)" onkeydown="handleDeptQuickEntryKey(event,'advice','ophtho',this)">
+            <datalist id="oph-advice-quick-list"></datalist>
+            <button type="button" class="btn btn-xs btn-blue" onclick="commitDeptAdviceQuickEntry('ophtho', document.getElementById('oph-advice-quick-input'))">+ Add</button>
+          </div>
           <textarea id="rx-advice-text" placeholder="Type instructions to patient or load from template…" onblur="ingestCustomAdviceLinesFromTextarea(this)" style="width:100%;min-height:48px;font-size:12px;border:1.5px solid rgba(212,160,23,.4);border-radius:6px;padding:6px 8px;background:#fff;font-family:var(--font);resize:vertical"></textarea>
           <textarea id="rx-extra-advice-text" placeholder="Additional instructions…" style="width:100%;min-height:38px;font-size:12px;border:1.5px solid rgba(212,160,23,.28);border-radius:6px;padding:6px 8px;background:#fff;font-family:var(--font);resize:vertical;margin-top:4px"></textarea>
         </div>
@@ -1477,6 +1482,8 @@
           <div class="plan-panel-head">
             <div class="plan-panel-title">Surgery / Procedure Advised</div>
             <div style="display:flex;gap:5px">
+              <input type="text" id="oph-proc-quick-input" list="oph-proc-quick-list" placeholder="Type procedure and press Enter…" style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:220px;border:1.5px solid var(--orange)" onchange="commitDeptProcedureQuickEntry('ophtho', this)" onkeydown="handleDeptQuickEntryKey(event,'procedure','ophtho',this)">
+              <datalist id="oph-proc-quick-list"></datalist>
               <select id="proc-add-dropdown" style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:180px" onchange="addProcFromDropdown(this)">
                 <option value="">— Select from list —</option>
                 <option value="__custom__">+ Add New Procedure…</option>
@@ -2536,6 +2543,8 @@
           <div class="plan-panel-head">
             <div class="plan-panel-title">Surgery / Procedure Advised</div>
             <div style="display:flex;gap:5px;flex-wrap:wrap">
+              <input type="text" id="obg-proc-quick-input" list="obg-proc-quick-list" placeholder="Type procedure and press Enter…" style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:220px;border:1.5px solid var(--orange)" onchange="commitDeptProcedureQuickEntry('obg', this)" onkeydown="handleDeptQuickEntryKey(event,'procedure','obg',this)">
+              <datalist id="obg-proc-quick-list"></datalist>
               <select id="obg-proc-add-dropdown" style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:190px;border:1.5px solid var(--orange)" onchange="addProcFromDropdownDept(this)">
                 <option value="">— Select procedure —</option>
                 <option value="__custom__|0">+ Add new procedure…</option>
@@ -2564,6 +2573,8 @@
           <div class="plan-panel-head"><div class="plan-panel-title" style="color:#8a4200;font-size:12px">Instructions</div></div>
           <div id="obg-advice-library" class="quick-library-grid"></div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+            <input type="text" id="obg-advice-quick-input" list="obg-advice-quick-list" placeholder="Type instruction and press Enter…" style="flex:1;min-width:220px;font-size:11px;padding:6px 8px;border-radius:var(--rsm);border:1.5px solid var(--g4)" onchange="commitDeptAdviceQuickEntry('obg', this)" onkeydown="handleDeptQuickEntryKey(event,'advice','obg',this)">
+            <datalist id="obg-advice-quick-list"></datalist>
             <select id="obg-advice-quick" style="flex:1;min-width:180px;font-size:11px;padding:6px 8px;border-radius:var(--rsm);border:1.5px solid var(--g4)">
               <option value="">— Add advice from list —</option>
             </select>
@@ -2905,6 +2916,11 @@
         <div class="plan-panel" style="background:#fffbeb;border-color:rgba(212,160,23,.4);margin-bottom:10px">
           <div class="plan-panel-head"><div class="plan-panel-title" style="color:#8a4200">Instructions</div></div>
           <div id="psych-advice-library" class="quick-library-grid"></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+            <input type="text" id="psych-advice-quick-input" list="psych-advice-quick-list" placeholder="Type instruction and press Enter…" style="flex:1;min-width:220px;font-size:11px;padding:6px 8px;border-radius:var(--rsm);border:1.5px solid var(--g4)" onchange="commitDeptAdviceQuickEntry('psych', this)" onkeydown="handleDeptQuickEntryKey(event,'advice','psych',this)">
+            <datalist id="psych-advice-quick-list"></datalist>
+            <button type="button" class="btn btn-xs btn-blue" onclick="commitDeptAdviceQuickEntry('psych', document.getElementById('psych-advice-quick-input'))">+ Add</button>
+          </div>
           <textarea placeholder="Advice to patient…" style="width:100%;min-height:40px;margin-bottom:8px;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px" id="psych-advice"></textarea>
           <textarea placeholder="Additional advice to patient…" style="width:100%;min-height:38px;margin-bottom:0;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px" id="psych-extra-advice"></textarea>
         </div>
@@ -2950,6 +2966,8 @@
           <div class="plan-panel-head">
             <div class="plan-panel-title">Surgery / Procedure Advised</div>
             <div style="display:flex;gap:5px;flex-wrap:wrap">
+              <input type="text" id="psych-proc-quick-input" list="psych-proc-quick-list" placeholder="Type procedure and press Enter…" style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:220px;border:1.5px solid var(--orange)" onchange="commitDeptProcedureQuickEntry('psych', this)" onkeydown="handleDeptQuickEntryKey(event,'procedure','psych',this)">
+              <datalist id="psych-proc-quick-list"></datalist>
               <select id="psych-proc-add-dropdown" style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:190px;border:1.5px solid var(--orange)" onchange="addProcFromDropdownDept(this)">
                 <option value="">— Select procedure —</option>
                 <option value="__custom__|0">+ Add new procedure…</option>
@@ -3164,6 +3182,11 @@
         <div class="plan-panel" style="background:#fffbeb;border-color:rgba(212,160,23,.4);margin-bottom:10px">
           <div class="plan-panel-head"><div class="plan-panel-title" style="color:#8a4200">Instructions</div></div>
           <div id="skin-advice-library" class="quick-library-grid"></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+            <input type="text" id="skin-advice-quick-input" list="skin-advice-quick-list" placeholder="Type instruction and press Enter…" style="flex:1;min-width:220px;font-size:11px;padding:6px 8px;border-radius:var(--rsm);border:1.5px solid var(--g4)" onchange="commitDeptAdviceQuickEntry('skin', this)" onkeydown="handleDeptQuickEntryKey(event,'advice','skin',this)">
+            <datalist id="skin-advice-quick-list"></datalist>
+            <button type="button" class="btn btn-xs btn-blue" onclick="commitDeptAdviceQuickEntry('skin', document.getElementById('skin-advice-quick-input'))">+ Add</button>
+          </div>
           <textarea placeholder="Advice to patient…" style="width:100%;min-height:40px;margin-bottom:8px;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px" id="skin-advice"></textarea>
           <textarea placeholder="Additional advice to patient…" style="width:100%;min-height:38px;margin-bottom:0;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px" id="skin-extra-advice"></textarea>
         </div>
@@ -3209,6 +3232,8 @@
           <div class="plan-panel-head">
             <div class="plan-panel-title">Surgery / Procedure Advised</div>
             <div style="display:flex;gap:5px;flex-wrap:wrap">
+              <input type="text" id="skin-proc-quick-input" list="skin-proc-quick-list" placeholder="Type procedure and press Enter…" style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:220px;border:1.5px solid var(--orange)" onchange="commitDeptProcedureQuickEntry('skin', this)" onkeydown="handleDeptQuickEntryKey(event,'procedure','skin',this)">
+              <datalist id="skin-proc-quick-list"></datalist>
               <select id="skin-proc-add-dropdown" style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:190px;border:1.5px solid var(--orange)" onchange="addProcFromDropdownDept(this)">
                 <option value="">— Select procedure —</option>
                 <option value="__custom__|0">+ Add new procedure…</option>
@@ -5456,7 +5481,7 @@
     <div class="form-group"><label class="fl">Scheduled Date</label><input type="date" id="ot-add-date"></div>
     <div class="form-group"><label class="fl">Scheduled Time</label><input type="time" id="ot-add-time" value="09:00"></div>
     <div class="form-group"><label class="fl">OT Room</label>
-      <select id="ot-add-room"><option>Eye OT</option><option>Gynae OT</option><option>Minor OT</option><option>Labour Room</option><option>Procedure Room</option></select>
+      <select id="ot-add-room"><option>Eye OT</option><option>Gynae OT</option><option>Minor OT</option><option>Laser Room</option><option>Labour Room</option><option>Procedure Room</option></select>
     </div>
     <div class="form-group"><label class="fl">Priority</label>
       <select id="ot-add-priority"><option value="elective">Elective</option><option value="urgent">Urgent</option><option value="emergency">Emergency</option></select>
@@ -5495,7 +5520,7 @@
     <div style="font-size:11px;font-weight:900;color:#c0004e;text-transform:uppercase;letter-spacing:.45px;margin-bottom:8px">OBG / LSCS OT Flow</div>
     <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
       <div class="form-group"><label class="fl">Gestation Age</label><input type="text" id="ot-add-obg-ga" placeholder="e.g. 38+4 weeks"></div>
-      <div class="form-group"><label class="fl">LSCS / Surgery Type</label><select id="ot-add-obg-type"><option value="Elective LSCS">Elective LSCS</option><option value="Emergency LSCS">Emergency LSCS</option><option value="Normal Delivery">Normal Delivery</option><option value="Assisted Delivery">Assisted Delivery</option><option value="MTP / Suction Evacuation">MTP / Suction Evacuation</option><option value="Painless Abortion">Painless Abortion</option><option value="Gynae Surgery">Gynae Surgery</option></select></div>
+      <div class="form-group"><label class="fl">LSCS / Surgery Type</label><select id="ot-add-obg-type"><option value="Elective LSCS">Elective LSCS</option><option value="Emergency LSCS">Emergency LSCS</option><option value="Normal Delivery">Normal Delivery</option><option value="Assisted Delivery">Assisted Delivery</option><option value="MTP / Suction Evacuation">MTP / Suction Evacuation</option><option value="IUCD Insertion / Removal">IUCD Insertion / Removal</option><option value="Painless Abortion">Painless Abortion</option><option value="Gynae Surgery">Gynae Surgery</option></select></div>
       <div class="form-group"><label class="fl">Presentation / Baby</label><input type="text" id="ot-add-obg-fetal" placeholder="Cephalic / single live foetus"></div>
       <div class="form-group"><label class="fl">Indication</label><input type="text" id="ot-add-obg-indication" placeholder="Previous LSCS / fetal distress / CPD"></div>
       <div class="form-group"><label class="fl">Liquor / Membranes</label><input type="text" id="ot-add-obg-liquor" placeholder="Clear / meconium / ruptured"></div>

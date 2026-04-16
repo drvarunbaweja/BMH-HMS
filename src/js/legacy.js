@@ -316,7 +316,7 @@ function mapLegacyOTRoomLabel(room) {
   if (!val) return '';
   if (/^ot-1/i.test(val) || /main/i.test(val)) return 'Eye OT';
   if (/^ot-2/i.test(val) || /minor/i.test(val)) return 'Minor OT';
-  if (/^ot-3/i.test(val) || /laser/i.test(val)) return 'Procedure Room';
+  if (/^ot-3/i.test(val) || /laser/i.test(val)) return 'Laser Room';
   return val;
 }
 function otChargeLooksLikeProcedure(row) {
@@ -330,7 +330,7 @@ function otChargeLooksLikeProcedure(row) {
 function otProcedureBelongsToCaseKind(text, kind) {
   const val = String(text || '').toLowerCase();
   if (!val) return kind !== 'obg';
-  const looksObg = /lscs|caes|cesare|delivery|labour|mtp|suction|evacuat|abortion|obg|gynae|hyster|lapar|ovarian|fibroid|cyst/.test(val);
+  const looksObg = /lscs|caes|cesare|delivery|labour|mtp|suction|evacuat|abortion|iucd|cu-t|obg|gynae|hyster|lapar|ovarian|fibroid|cyst/.test(val);
   if (kind === 'obg') return looksObg;
   return !looksObg;
 }
@@ -379,10 +379,15 @@ function getOtProcedureOptions() {
     'PMICS + IOL Implantation (OD)',
     'PMICS (Pinhole Micro Incision Cataract Surgery) + IOL (OU)',
     'Trabeculectomy',
+    'YAG Laser Capsulotomy',
+    'Peripheral Iridotomy Laser',
+    'Retinal Laser / PRP',
+    'Minor Procedure — Eye',
     'Pterygium Excision + Graft',
     'DCR (Dacryocystorhinostomy)',
     'Squint Surgery',
     'LASIK',
+    'Skin Laser / Minor Procedure',
     'Eyelid Surgery / Ptosis Repair',
     'Implantable Collamer Lens (Staar)',
     'PRP Treatment',
@@ -393,6 +398,7 @@ function getOtProcedureOptions() {
     'LSCS (Emergency)',
     'Normal Delivery',
     'MTP / Suction Evacuation',
+    'IUCD Insertion / Removal',
     'Painless Abortion',
     'Diagnostic Laparoscopy',
     'D&C / Hysteroscopy',
@@ -6575,12 +6581,49 @@ function dischargeActiveIPDPatient() {
 function otCaseNeedsObgFlow(procText, patientId) {
   const proc = String(procText || '').toLowerCase();
   const pt = patientId ? PATIENTS.find(function (p) { return p.bmhId === patientId; }) : null;
-  return /lscs|caes|cesare|delivery|obg|gynae|hyster|lapar/i.test(proc) || normalizeDeptKeyForQueue(pt?.dept || '') === 'obg';
+  return /lscs|caes|cesare|delivery|mtp|iucd|obg|gynae|hyster|lapar/i.test(proc) || normalizeDeptKeyForQueue(pt?.dept || '') === 'obg';
 }
 function getSelectedOTCaseKind() {
   if(document.getElementById('ot-case-kind-obg')?.checked) return 'obg';
   if(document.getElementById('ot-case-kind-eye')?.checked) return 'ophtho';
   return 'ophtho';
+}
+function otProcedureLooksLikeLaserOrMinor(procText) {
+  const proc = String(procText || '').toLowerCase();
+  return /laser|yag|capsulotomy|iridotomy|prp|ivt|injection|minor procedure|iucd|cu-t/.test(proc);
+}
+function otProcedureNeedsMinimalObgFlow(procText, obgType) {
+  const text = (String(procText || '') + ' ' + String(obgType || '')).toLowerCase();
+  return /mtp|suction|evacuat|abortion|iucd|cu-t/.test(text);
+}
+function toggleOTProcedureSpecificFields() {
+  const proc = document.getElementById('ot-add-proc')?.value || '';
+  const obgType = document.getElementById('ot-add-obg-type')?.value || '';
+  const laserMinor = otProcedureLooksLikeLaserOrMinor(proc);
+  const minimalObg = otProcedureNeedsMinimalObgFlow(proc, obgType);
+  ['ot-eye-fields', 'ot-eye-iol-summary', 'ot-icl-config-wrap'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const disable = laserMinor && getSelectedOTCaseKind() !== 'obg';
+    el.style.display = disable ? 'none' : '';
+    el.style.opacity = disable ? '0.45' : '';
+    el.querySelectorAll('input,select,textarea,button').forEach(function (field) {
+      field.disabled = !!disable;
+    });
+  });
+  ['ot-add-preop', 'ot-add-consent', 'ot-add-fasting'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.disabled = !!minimalObg;
+    el.style.opacity = minimalObg ? '0.6' : '';
+  });
+  ['ot-add-obg-ga', 'ot-add-obg-fetal', 'ot-add-obg-liquor', 'ot-add-obg-blood', 'ot-add-obg-anaes-note', 'ot-add-obg-baby', 'ot-add-obg-mother', 'ot-add-obg-doc-consent', 'ot-add-obg-doc-anaes', 'ot-add-obg-doc-blood', 'ot-add-obg-doc-newborn'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.disabled = !!minimalObg;
+    const wrap = el.closest('.form-group') || el.parentElement;
+    if (wrap) wrap.style.opacity = minimalObg ? '0.6' : '';
+  });
 }
 function toggleOTOBGFields() {
   const block = document.getElementById('ot-add-obg-block');
@@ -6595,7 +6638,10 @@ function toggleOTOBGFields() {
   if (eyeFields) eyeFields.style.display = visible ? 'none' : '';
   if (eyeSummary) eyeSummary.style.display = visible ? 'none' : '';
   if (siteWrap) siteWrap.style.display = visible ? 'none' : '';
-  if(!visible) return;
+  if(!visible) {
+    toggleOTProcedureSpecificFields();
+    return;
+  }
   const admitEl = document.getElementById('ot-add-admit');
   const admitBlock = document.getElementById('ot-add-admit-block');
   if(admitEl && !admitEl.checked) admitEl.checked = true;
@@ -6609,6 +6655,7 @@ function toggleOTOBGFields() {
   if(roomEl && (!roomEl.value || /^OT-/.test(roomEl.value) || roomEl.value === 'Eye OT')) roomEl.value = 'Labour Room';
   if(notesEl && !notesEl.value) notesEl.value = 'Pre-op vitals, fetal status, consent checked, labour / OT checklist, medicines and post-op monitoring.';
   toggleOtIclFields();
+  toggleOTProcedureSpecificFields();
 }
 function ipdVitalsStatus(vitals) {
   const flags = [];
@@ -13731,6 +13778,12 @@ function deleteDeptTemplateOption(kind, dept, rawValue) {
 function getDeptAdviceTextareaId(dept) {
   return { ophtho: 'rx-advice-text', obg: 'obg-advice', psych: 'psych-advice', skin: 'skin-advice' }[dept] || 'rx-advice-text';
 }
+function getDeptAdviceQuickInputId(dept) {
+  return { ophtho: 'oph-advice-quick-input', obg: 'obg-advice-quick-input', psych: 'psych-advice-quick-input', skin: 'skin-advice-quick-input' }[dept] || 'oph-advice-quick-input';
+}
+function getDeptAdviceQuickListId(dept) {
+  return { ophtho: 'oph-advice-quick-list', obg: 'obg-advice-quick-list', psych: 'psych-advice-quick-list', skin: 'skin-advice-quick-list' }[dept] || 'oph-advice-quick-list';
+}
 function getDeptAdviceLibraryHostId(dept) {
   return { ophtho: 'oe-advice-library', obg: 'obg-advice-library', psych: 'psych-advice-library', skin: 'skin-advice-library' }[dept] || 'oe-advice-library';
 }
@@ -13739,6 +13792,12 @@ function getDeptProcedureLibraryHostId(dept) {
 }
 function getDeptProcedureSelectId(dept) {
   return { ophtho: 'proc-add-dropdown', obg: 'obg-proc-add-dropdown', psych: 'psych-proc-add-dropdown', skin: 'skin-proc-add-dropdown' }[dept] || 'proc-add-dropdown';
+}
+function getDeptProcedureQuickInputId(dept) {
+  return { ophtho: 'oph-proc-quick-input', obg: 'obg-proc-quick-input', psych: 'psych-proc-quick-input', skin: 'skin-proc-quick-input' }[dept] || 'oph-proc-quick-input';
+}
+function getDeptProcedureQuickListId(dept) {
+  return { ophtho: 'oph-proc-quick-list', obg: 'obg-proc-quick-list', psych: 'psych-proc-quick-list', skin: 'skin-proc-quick-list' }[dept] || 'oph-proc-quick-list';
 }
 function getDeptProcedureContainerId(dept) {
   return { ophtho: 'rx-proc-advised', obg: 'rx-proc-advised-obg', psych: 'rx-proc-advised-psych', skin: 'rx-proc-advised-skin' }[dept] || 'rx-proc-advised';
@@ -13849,6 +13908,12 @@ function renderDeptAdviceLibrary(dept) {
 
 // New function to update advice dropdown immediately
 function updateDeptAdviceDropdown(dept, items) {
+  const datalist = document.getElementById(getDeptAdviceQuickListId(dept));
+  if (datalist) {
+    datalist.innerHTML = items.map(function (item) {
+      return '<option value="' + String(item).replace(/"/g, '&quot;') + '"></option>';
+    }).join('');
+  }
   const dropdownId = getDeptAdviceDropdownId(dept);
   const dropdown = document.getElementById(dropdownId);
   if (!dropdown) return;
@@ -13875,6 +13940,22 @@ function getDeptAdviceDropdownId(dept) {
   return mapping[dept] || dept + '-advice-quick';
 }
 window.appendAdviceTemplateToTextarea = appendAdviceTemplateToTextarea;
+window.handleDeptQuickEntryKey = function handleDeptQuickEntryKey(evt, kind, dept, input) {
+  if (!evt || evt.key !== 'Enter') return;
+  evt.preventDefault();
+  if (kind === 'procedure') window.commitDeptProcedureQuickEntry(dept, input);
+  else window.commitDeptAdviceQuickEntry(dept, input);
+};
+window.commitDeptAdviceQuickEntry = function commitDeptAdviceQuickEntry(dept, input) {
+  const el = typeof input === 'string' ? document.getElementById(input) : input;
+  if (!el) return;
+  const value = normalizeDeptTemplateLabel(el.value || '');
+  if (!value) return;
+  saveDeptTemplateOption('advice', dept, value);
+  renderDeptAdviceLibrary(dept);
+  appendAdviceTemplateToTextarea(dept, value);
+  el.value = '';
+};
 window.removeDeptAdviceTemplate = function removeDeptAdviceTemplate(dept, item) {
   deleteDeptTemplateOption('advice', dept, item);
   renderDeptAdviceLibrary(dept);
@@ -13928,12 +14009,23 @@ function getDeptProcedureRowsForPicker(dept) {
   });
 }
 function renderDeptProcedureSelect(dept) {
-  const sel = document.getElementById(getDeptProcedureSelectId(dept));
-  if (!sel) return;
   const rows = getDeptProcedureRowsForPicker(dept);
   const centre = getEffectiveCentre ? getEffectiveCentre() : (CURRENT_USER?.centre || 'CHD');
   const bucket = getDoctorCustomRxOptionsForDept(dept);
   const custom = (bucket.procedure || []).slice().sort(function (a, b) { return String(a).localeCompare(String(b)); });
+  const datalist = document.getElementById(getDeptProcedureQuickListId(dept));
+  if (datalist) {
+    const options = custom.slice();
+    rows.forEach(function (row) {
+      const label = (row.parent ? row.parent + ' — ' : '') + row.name;
+      if (!options.some(function (x) { return String(x).toLowerCase() === String(label).toLowerCase(); })) options.push(label);
+    });
+    datalist.innerHTML = options.map(function (item) {
+      return '<option value="' + String(item).replace(/"/g, '&quot;') + '"></option>';
+    }).join('');
+  }
+  const sel = document.getElementById(getDeptProcedureSelectId(dept));
+  if (!sel) return;
   let html = '<option value="">— Select procedure —</option>';
   if (custom.length) {
     html += '<optgroup label="Saved Procedures">';
@@ -13960,6 +14052,15 @@ function renderDeptProcedureSelect(dept) {
   html += '<option value="__custom__|0">+ Add new procedure…</option>';
   sel.innerHTML = html;
 }
+window.commitDeptProcedureQuickEntry = function commitDeptProcedureQuickEntry(dept, input) {
+  const el = typeof input === 'string' ? document.getElementById(input) : input;
+  if (!el) return;
+  const value = normalizeDeptTemplateLabel(el.value || '');
+  if (!value) return;
+  const container = document.getElementById(getDeptProcedureContainerId(dept));
+  addProcItemToContainer(container, value, 0);
+  el.value = '';
+};
 function refreshDeptAdviceAndProcedureUi() {
   ['ophtho', 'obg', 'psych', 'skin'].forEach(function (dept) {
     renderDeptAdviceLibrary(dept);
@@ -16279,12 +16380,30 @@ function genRcUID() {
 }
 window.genRcUID = genRcUID;
 
+function getKnownHighestBmhNumber() {
+  let maxNum = 55999;
+  (window.PATIENTS || []).forEach(function (p) {
+    const m = String(p?.bmhId || '').trim().match(/^BMSH-(\d{1,9})$/i);
+    if (!m) return;
+    const n = parseInt(m[1], 10);
+    if (Number.isFinite(n) && n > maxNum) maxNum = n;
+  });
+  try {
+    const ls = parseInt(localStorage.getItem('bmh_last_patient_num') || '0', 10);
+    if (Number.isFinite(ls) && ls > maxNum) maxNum = ls;
+  } catch (_) {}
+  const inMem = Number(window._nextPatientNum || 0) - 1;
+  if (Number.isFinite(inMem) && inMem > maxNum) maxNum = inMem;
+  return maxNum;
+}
+
 function reserveNextBmhId() {
   const localId = (typeof genRcUID === 'function' && genRcUID()) || ('BMSH-' + String((window._nextPatientNum || 56000)).padStart(6,'0'));
   if(!window.FBDB) return Promise.resolve(localId);
+  const localFloor = Math.max(55999, getKnownHighestBmhNumber());
 
   return window.FBDB.ref('settings/lastPatientNum').transaction(function(current) {
-    const base = (typeof current === 'number' && current >= 55999) ? current : 55999;
+    const base = Math.max((typeof current === 'number' && current >= 55999) ? current : 55999, localFloor);
     return base + 1;
   }).then(function(result) {
     const committed = result && result.committed;
@@ -18522,7 +18641,13 @@ function addOTCase() {
     normalized.iol = 'N/A';
     normalized.iolType = '';
     normalized.iolPower = '';
-    if (!/labour room/i.test(normalized.room || '')) normalized.room = obgCaseType === 'Normal Delivery' || obgCaseType === 'Assisted Delivery' ? 'Labour Room' : (normalized.room || 'Gynae OT');
+    if (!/labour room|laser room/i.test(normalized.room || '')) normalized.room = obgCaseType === 'Normal Delivery' || obgCaseType === 'Assisted Delivery' ? 'Labour Room' : (normalized.room || 'Gynae OT');
+  }
+  if (otProcedureLooksLikeLaserOrMinor(normalized.procedure || proc) && caseKind !== 'obg') {
+    normalized.iol = 'N/A';
+    normalized.iolType = '';
+    normalized.iolPower = '';
+    if (!normalized.room || /^eye ot$/i.test(normalized.room)) normalized.room = 'Laser Room';
   }
   if (editId) {
     const idx = OT_CASES.findIndex(function (c) { return c.id === editId; });
@@ -18638,6 +18763,7 @@ function fillOTFromPatient(bmhId) {
   populateOTProcedureOptions('');
   populateOTIolOptions(p.iol || p.iolType || '', p.iolPower || extractIolPower(p.iol || p.iolType || ''));
   toggleOTOBGFields();
+  toggleOTProcedureSpecificFields();
   // Clear lookup
   const el=document.getElementById('ot-pt-lookup-result'); if(el) el.innerHTML='';
   const lkp=document.getElementById('ot-pt-lookup'); if(lkp) lkp.value='';
@@ -18680,6 +18806,7 @@ function openOTAddModal(opts) {
       updateOTIolSummarySuggestions();
       refreshOTNotesTemplateSelect && refreshOTNotesTemplateSelect();
       toggleOTOBGFields();
+      toggleOTProcedureSpecificFields();
     });
     procEl.dataset.boundSuggest = '1';
   }
@@ -18698,6 +18825,11 @@ function openOTAddModal(opts) {
   if (iolPowerEl && !iolPowerEl.dataset.boundSummary) {
     iolPowerEl.addEventListener('change', syncOTIolSummary);
     iolPowerEl.dataset.boundSummary = '1';
+  }
+  const obgTypeEl = document.getElementById('ot-add-obg-type');
+  if (obgTypeEl && !obgTypeEl.dataset.boundMinorFlow) {
+    obgTypeEl.addEventListener('change', toggleOTProcedureSpecificFields);
+    obgTypeEl.dataset.boundMinorFlow = '1';
   }
   if (titleEl) titleEl.textContent = opts.caseId ? '⚕️ Edit OT Case' : '⚕️ Add OT Case';
   if (saveBtn) saveBtn.textContent = opts.caseId ? '💾 Update OT Case' : '✅ Add to OT List';
@@ -18759,6 +18891,7 @@ function openOTAddModal(opts) {
     if (ptSel && existing.bmhId) ptSel.value = existing.bmhId;
     toggleOTOBGFields();
     toggleOtIclFields();
+    toggleOTProcedureSpecificFields();
   } else if (opts.bmhId) {
     const admitEl = document.getElementById('ot-add-admit');
     const admitBlock = document.getElementById('ot-add-admit-block');
@@ -18773,6 +18906,7 @@ function openOTAddModal(opts) {
     fillOTFromPatient(opts.bmhId);
     toggleOTOBGFields();
     toggleOtIclFields();
+    toggleOTProcedureSpecificFields();
   } else {
     const eyeRadio = document.getElementById('ot-case-kind-eye');
     const obgRadio = document.getElementById('ot-case-kind-obg');
@@ -18805,6 +18939,7 @@ function openOTAddModal(opts) {
     if (ptSel) ptSel.value = '';
     toggleOTOBGFields();
     toggleOtIclFields();
+    toggleOTProcedureSpecificFields();
   }
   const procInpFinal = document.getElementById('ot-add-proc');
   if (procInpFinal) {
@@ -29473,7 +29608,11 @@ function _renderDocQueueImpl() {
       return adminDeptFilter === 'all'
         ? queueBasePts
         : queueBasePts.filter(function (p) {
-            return normalizeDeptKeyForQueue(p.dept || p.department || '') === adminDeptFilter;
+            const directDept = normalizeDeptKeyForQueue(p.dept || p.department || '');
+            if (directDept === adminDeptFilter) return true;
+            return getActiveCrossRefsForPatient(p).some(function (xref) {
+              return normalizeDeptKeyForQueue(xref.toDept || '') === adminDeptFilter && !xref.seenAt;
+            });
           });
     }
     const deptPts = [];
