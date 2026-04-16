@@ -23064,6 +23064,7 @@ window.printUnifiedRx = function(deptId) {
   const obgIncVitals = deptId === 'obg' ? (document.getElementById('obg-inc-vitals')?.checked ?? true) : false;
   const obgIncAnc = deptId === 'obg' ? (document.getElementById('obg-inc-anc')?.checked ?? true) : false;
   const obgIncComplaint = deptId === 'obg' ? (document.getElementById('obg-inc-complaint')?.checked ?? true) : false;
+  const obgIncObsHistory = deptId === 'obg' ? (document.getElementById('obg-inc-obs-history')?.checked ?? false) : false;
 
   // OBG / psych / skin: always print medicines, advice, investigations & procedures (no print checkboxes in UI)
   const forceFullDeptRx = deptId === 'obg' || deptId === 'psych' || deptId === 'skin';
@@ -23157,6 +23158,69 @@ window.printUnifiedRx = function(deptId) {
     hb: document.getElementById('obg-obs-hb')?.value || '—',
     bloodGroup: document.getElementById('obg-blood-grp')?.value || window.CURRENT_PATIENT?.lastVisit?.bloodGroup || document.getElementById('obg-obs-blood-group')?.value || '—'
   } : null;
+
+  // ── Collect obs history positive findings ──
+  const obgObsHistoryFindings = deptId === 'obg' ? (function() {
+    const findings = [];
+    const addIf = function(label, value) {
+      if (value && String(value).trim() !== '' && String(value).trim() !== '—' && String(value).trim() !== 'Select') {
+        findings.push(label + ': ' + value);
+      }
+    };
+    // Conception & complications
+    addIf('Conception', document.getElementById('obg-obs-conception')?.value);
+    const complications = [];
+    document.querySelectorAll('.obg-obs-complication:checked').forEach(function(cb) {
+      complications.push(cb.value);
+    });
+    if (complications.length > 0) {
+      findings.push('Complications: ' + complications.join(', '));
+    }
+    addIf('Complication Description', document.getElementById('obg-obs-complication-note')?.value);
+    addIf('Pregnancy Outcome', document.getElementById('obg-obs-preg-outcome')?.value);
+    addIf('Maturity', document.getElementById('obg-obs-maturity')?.value);
+    addIf('Gestation age', document.getElementById('obg-obs-gestation-age')?.value);
+    // Labour details
+    addIf('Mode of Delivery', document.getElementById('obg-obs-mode-delivery')?.value);
+    addIf('Caesarean Indication', document.getElementById('obg-obs-csection-indication')?.value);
+    addIf('Induction Done', document.getElementById('obg-obs-induction')?.value);
+    addIf('Induction Description', document.getElementById('obg-obs-induction-note')?.value);
+    addIf('Liquor', document.getElementById('obg-obs-liquor')?.value);
+    addIf('Liquor Description', document.getElementById('obg-obs-liquor-note')?.value);
+    addIf('Cord Round The Neck', document.getElementById('obg-obs-cord-neck')?.value);
+    addIf('Cord Description', document.getElementById('obg-obs-cord-neck-note')?.value);
+    addIf('Cord Clamping', document.getElementById('obg-obs-cord-clamp')?.value);
+    addIf('Cord Clamping Description', document.getElementById('obg-obs-cord-clamp-note')?.value);
+    addIf('Expulsion Of Placenta', document.getElementById('obg-obs-placenta')?.value);
+    addIf('Placenta Description', document.getElementById('obg-obs-placenta-note')?.value);
+    addIf('PPH', document.getElementById('obg-obs-pph')?.value);
+    addIf('PPH Description', document.getElementById('obg-obs-pph-note')?.value);
+    // Post natal period
+    addIf('Postnatal Period', document.getElementById('obg-obs-postnatal')?.value);
+    addIf('Postnatal Description', document.getElementById('obg-obs-postnatal-note')?.value);
+    addIf('Menstrual Return', document.getElementById('obg-obs-menstrual-return')?.value);
+    addIf('Birth Control Method', document.getElementById('obg-obs-birth-control')?.value);
+    addIf('Birth Control Description', document.getElementById('obg-obs-birth-control-note')?.value);
+    // Baby details
+    addIf('Baby Gender', document.getElementById('obg-obs-gender')?.value);
+    addIf('Birth Weight', document.getElementById('obg-obs-birth-weight')?.value);
+    addIf('Duration of Labour', document.getElementById('obg-obs-labour-duration')?.value);
+    addIf('Delivery Date', document.getElementById('obg-obs-delivery-date')?.value);
+    addIf('Delivery Time', document.getElementById('obg-obs-delivery-time')?.value);
+    addIf('Present Age', document.getElementById('obg-obs-present-age')?.value);
+    addIf('Delivery Location', document.getElementById('obg-obs-delivery-location')?.value);
+    addIf('Mark', document.getElementById('obg-obs-mark')?.value);
+    addIf('Cry', document.getElementById('obg-obs-cry')?.value);
+    addIf('APGAR Score', document.getElementById('obg-obs-apgar')?.value);
+    addIf('NICU Notes', document.getElementById('obg-obs-nicu')?.value);
+    addIf('NICU Description', document.getElementById('obg-obs-nicu-note')?.value);
+    addIf('Phototherapy', document.getElementById('obg-obs-phototherapy')?.value);
+    addIf('Phototherapy Description', document.getElementById('obg-obs-phototherapy-note')?.value);
+    addIf('Problems After Pregnancy', document.getElementById('obg-obs-post-preg-problems')?.value);
+    addIf('Breast Feed', document.getElementById('obg-obs-breastfeed')?.value);
+    addIf('Top Feed', document.getElementById('obg-obs-topfeed')?.value);
+    return findings;
+  })() : [];
 
   // ── Follow-up (per-dept date field; duplicate id=rx-fu-date would otherwise read Ophtho only) ──
   let fuDate = getDeptFollowUpDateInput(deptId)?.value || '';
@@ -23271,6 +23335,7 @@ ${incCC && cc ? `<div class="lbl-row" style="margin-top:8px"><span class="lbl">C
 ${deptId==='obg' && obgIncComplaint && obgComplaint ? `<div class="lbl-row" style="margin-top:8px"><span class="lbl">Primary Complaint:</span><span class="lbl-val">${escapeHtmlConsent(obgComplaint)}</span></div>` : ''}
 ${deptId==='obg' && obgIncVitals ? `<div class="lbl-row" style="margin-top:8px"><span class="lbl">Vitals & LMP:</span><span class="lbl-val">${obgVitalsSummary.map(function (x) { return x[0] + ' ' + x[1]; }).join(' · ')}</span></div>` : ''}
 ${deptId==='obg' && obgIncAnc && obgAncOn ? `<div class="lbl-row" style="margin-top:8px"><span class="lbl">ANC:</span><span class="lbl-val">GPAL ${escapeHtmlConsent(obgAncSummary.gpal)} · GA ${escapeHtmlConsent(obgAncSummary.ga)} · EDD ${escapeHtmlConsent(obgAncSummary.edd)} · Hb ${escapeHtmlConsent(obgAncSummary.hb)} · Blood group ${escapeHtmlConsent(obgAncSummary.bloodGroup)}</span></div>` : ''}
+${deptId==='obg' && obgIncObsHistory && obgObsHistoryFindings.length > 0 ? `<div style="margin:8px 0"><div class="lbl" style="margin-bottom:4px">Obstetric History (Positive Findings):</div><div class="lbl-val" style="display:block;line-height:1.6;padding:6px 8px;background:#fff8e6;border-left:3px solid #8a4200;border-radius:0 6px 6px 0">${escapeHtmlConsent(obgObsHistoryFindings.join(' · '))}</div></div>` : ''}
 
 ${showVA ? `
 <div class="sec-title">Visual Acuity Test:</div>
