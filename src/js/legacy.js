@@ -3391,8 +3391,11 @@ function populateOphthoForm(v) {
       setV(id+'-rx', v.phxExtra[id]?.rx || '');
     });
   }
+  setSel('poh-od-type', v.pohOdType || '');
   setV('poh-od-text', v.pohOdText || '');
+  setSel('poh-os-type', v.pohOsType || '');
   setV('poh-os-text', v.pohOsText || '');
+  if(v.ccEyePrimary) setSel('cc-eye-primary', v.ccEyePrimary);
   if(v.hxSpectacles) setSel('hx-spectacles', v.hxSpectacles);
   setV('hx-last-spec', v.hxLastSpec || '');
   setV('hx-ocular-meds', v.hxOcularMeds || '');
@@ -29562,8 +29565,11 @@ function saveVisit(dept, opts) {
     visit['refr-enable'] = !!document.getElementById('refr-enable')?.checked;
     ['refr-age','refr-stable','refr-occupation','refr-topo','refr-dryeye','refr-preg','refr-autoimmune','refr-kc','refr-allergy','refr-flap','refr-od-pachy','refr-os-pachy']
       .forEach(id => { visit[id] = document.getElementById(id)?.value || ''; });
+    visit.pohOdType = document.getElementById('poh-od-type')?.value || '';
     visit.pohOdText = document.getElementById('poh-od-text')?.value || '';
+    visit.pohOsType = document.getElementById('poh-os-type')?.value || '';
     visit.pohOsText = document.getElementById('poh-os-text')?.value || '';
+    visit.ccEyePrimary = document.getElementById('cc-eye-primary')?.value || '';
     const PHX_IDS = ['phx-allergy','phx-diabetes_mellit','phx-hypertension','phx-heart_disease__','phx-asthma___copd','phx-headache___migr','phx-thyroid_disease','phx-renal_disease','phx-previous_surger','phx-bleeding_disord'];
     visit.phxExtra = {};
     const prevPhxExtra = localPt?.lastVisit?.phxExtra || cachedVisits[todaysExistingKey || '']?.phxExtra || {};
