@@ -11353,8 +11353,16 @@ function addInventoryStorePrompt() {
 }
 window.addInventoryStorePrompt = addInventoryStorePrompt;
 function deleteInventoryStorePrompt() {
-  showToast('Store locations cannot be deleted. Please contact admin if needed.', 'w');
-  return;
+  const name = normalizeInventoryTextValue(document.getElementById('inv-in-store')?.value || '');
+  if (!name) { showToast('Select a store first', 'w'); return; }
+  const used = (INVENTORY || []).some(function (i) { return String(i.store || '') === name; });
+  if (used && !confirm('This store is referenced on stock rows. Remove from list anyway?')) return;
+  window.BMH_STORE_LOCATIONS = (window.BMH_STORE_LOCATIONS || []).filter(function (s) { return s !== name; });
+  if (!window.BMH_STORE_LOCATIONS.length) {
+    window.BMH_STORE_LOCATIONS = ['Default store'];
+  }
+  saveInventoryStoreLocations();
+  bmhPopulateInventorySelectors();
 }
 window.deleteInventoryStorePrompt = deleteInventoryStorePrompt;
 function addInventoryBarcodePrompt() {
@@ -11584,6 +11592,11 @@ function renderStockList() {
   renderInventoryImportDatalists();
   const catFilter = bmhInventoryFilterValue('inv-stock-cat-filter');
   const storeFilter = bmhInventoryFilterValue('inv-stock-store-filter');
+  // Ensure filters are set to 'all' if empty
+  const catEl = document.getElementById('inv-stock-cat-filter');
+  const storeEl = document.getElementById('inv-stock-store-filter');
+  if (catEl && !catEl.value) catEl.value = 'all';
+  if (storeEl && !storeEl.value) storeEl.value = 'all';
   const rows = INVENTORY.filter(function (i) {
     return (catFilter === 'all' || String(i.cat || '') === catFilter)
       && (storeFilter === 'all' || String(i.store || '') === storeFilter);
