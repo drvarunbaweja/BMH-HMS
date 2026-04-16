@@ -5420,6 +5420,9 @@
   <div class="form-group"><label class="fl">Age / Sex</label><input type="text" id="ot-age-sex" readonly style="background:var(--g6)"></div>
   <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">Pre-op Diagnosis <span style="display:flex;align-items:center;gap:6px"><button type="button" onclick="showToast('Type to search saved OT diagnoses. Use + to add a reusable diagnosis for future cases.','i')" style="background:var(--g6);color:var(--blue);border:1px solid var(--g4);border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">?</button><button type="button" onclick="addOTDiagnosisOption()" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></span></label><input type="text" id="ot-add-dx" list="ot-dx-list" placeholder="Type diagnosis to search or add"><datalist id="ot-dx-list"></datalist></div>
   <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between;gap:8px">Procedure / Surgery <button type="button" class="btn btn-xs btn-outline" onclick="otQuickAddProcedureToCharges()">+ Add to charges</button></label>
+    <select id="ot-add-proc-main" onchange="onOTProcedureMainChange(this.value)"><option value="">— Select main heading —</option></select>
+  </div>
+  <div class="form-group"><label class="fl">Final procedure label</label>
     <input type="text" id="ot-add-proc" list="ot-proc-list" placeholder="Type procedure to search" readonly onfocus="this.removeAttribute('readonly');populateOTProcedureOptions(this.value||'');" oninput="onOTProcedureInputChange(this.value)" onchange="onOTProcedureInputChange(this.value)"><datalist id="ot-proc-list"></datalist>
   </div>
   <div class="form-group" id="ot-add-proc-sub-wrap" style="display:none"><label class="fl">Procedure subheading / package</label>
@@ -5512,7 +5515,7 @@
 </div>
 <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
   <button class="btn btn-gold" style="flex:1;justify-content:center" id="ot-add-save-btn" onclick="addOTCase()">✅ Add to OT List</button>
-  <button class="btn btn-outline btn-sm" onclick="openM('m-consents')">📋 Generate Consent</button>
+  <button class="btn btn-outline btn-sm" onclick="openLikelyOtConsent()">📋 Generate Consent</button>
   <button class="btn btn-gray" onclick="closeM('m-ot-add')">Cancel</button>
 </div>
 </div>

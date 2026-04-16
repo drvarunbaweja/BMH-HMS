@@ -291,6 +291,10 @@ function addIolFromModal() {
   }
   saveIolCatalogToStorage();
   renderIolCatalogList();
+  renderInventoryImportDatalists && renderInventoryImportDatalists();
+  const currentMain = document.getElementById('ot-add-proc-main')?.value || '';
+  populateOTIolOptions && populateOTIolOptions();
+  populateOTProcedureMainSelect && populateOTProcedureMainSelect(currentMain || 'PMICS');
   populateOTIolOptions && populateOTIolOptions();
   closeM('m-add-iol');
   ['iol-add-name','iol-add-type','iol-add-mfr','iol-add-price','iol-add-barcode','iol-add-batch','iol-add-serial'].forEach(function (id) {
@@ -349,6 +353,18 @@ function getOtProcedureMainHeadings() {
     else if (n) out.add(n);
   });
   return Array.from(out).filter(Boolean).sort();
+}
+function populateOTProcedureMainSelect(selectedMain) {
+  const sel = document.getElementById('ot-add-proc-main');
+  if (!sel) return;
+  const current = normalizeOtProcedureName(selectedMain || sel.value || parseOtProcedureSelection(document.getElementById('ot-add-proc')?.value || '').main || '');
+  const mains = getOtProcedureMainHeadings();
+  const opts = mains.length ? mains : getOtProcedureOptions();
+  sel.innerHTML = '<option value="">— Select main heading —</option>' + opts.map(function (name) {
+    const safe = String(name).replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    return '<option value="' + safe + '">' + safe + '</option>';
+  }).join('');
+  if ([].slice.call(sel.options).some(function (o) { return o.value === current; })) sel.value = current;
 }
 function getOtProcedureSubheadingOptions(parent) {
   const caseKind = getSelectedOTCaseKind && getSelectedOTCaseKind();
@@ -430,7 +446,12 @@ function renderOTProcedureSubheading(mainHeading, selectedSub) {
   const sel = document.getElementById('ot-add-proc-sub');
   const wrap2 = document.getElementById('ot-add-proc-sub-wrap-2');
   const sel2 = document.getElementById('ot-add-proc-sub-2');
+  const mainSel = document.getElementById('ot-add-proc-main');
   if (!wrap || !sel || !wrap2 || !sel2) return;
+  if (mainSel) {
+    populateOTProcedureMainSelect(mainHeading || mainSel.value || '');
+    if (mainHeading && [].slice.call(mainSel.options).some(function (o) { return o.value === mainHeading; })) mainSel.value = mainHeading;
+  }
   const options = getOtProcedureSubheadingOptions(mainHeading);
   const selectedParts = String(selectedSub || '').split(/\s*\+\s*/).map(function (v) { return normalizeOtProcedureName(v); }).filter(Boolean);
   const selectedOne = selectedParts[0] || '';
@@ -517,7 +538,37 @@ function toggleOtIclFields() {
 function onOTProcedureInputChange(value) {
   populateOTProcedureOptions(document.getElementById('ot-add-proc')?.value || '', value || '');
   const parsed = parseOtProcedureSelection(value);
+  const mainSel = document.getElementById('ot-add-proc-main');
+  if (mainSel && parsed.main) {
+    populateOTProcedureMainSelect(parsed.main);
+    if ([].slice.call(mainSel.options).some(function (o) { return o.value === parsed.main; })) mainSel.value = parsed.main;
+  }
   renderOTProcedureSubheading(parsed.main, parsed.sub);
+  updateOTIolSummarySuggestions();
+  refreshOTNotesTemplateSelect && refreshOTNotesTemplateSelect();
+  toggleOTOBGFields();
+  toggleOtIclFields();
+}
+function onOTProcedureMainChange(value) {
+  const main = normalizeOtProcedureName(value);
+  const procEl = document.getElementById('ot-add-proc');
+  const subEl = document.getElementById('ot-add-proc-sub');
+  const subEl2 = document.getElementById('ot-add-proc-sub-2');
+  if (!procEl) return;
+  if (!main) {
+    procEl.value = '';
+    renderOTProcedureSubheading('', '');
+    updateOTIolSummarySuggestions();
+    refreshOTNotesTemplateSelect && refreshOTNotesTemplateSelect();
+    toggleOTOBGFields();
+    toggleOtIclFields();
+    return;
+  }
+  renderOTProcedureSubheading(main, '');
+  const first = subEl?.value || '';
+  const second = subEl2?.value || '';
+  procEl.value = composeOtProcedureLabel(main, [first, second]);
+  populateOTProcedureOptions(procEl.value || '');
   updateOTIolSummarySuggestions();
   refreshOTNotesTemplateSelect && refreshOTNotesTemplateSelect();
   toggleOTOBGFields();
@@ -553,6 +604,7 @@ function populateOTProcedureOptions(selected) {
   list.innerHTML = options.map(function (name) {
     return '<option value="' + String(name).replace(/"/g, '&quot;') + '"></option>';
   }).join('');
+  populateOTProcedureMainSelect(parseOtProcedureSelection(selected || input.value || '').main || document.getElementById('ot-add-proc-main')?.value || '');
   if (selected) input.value = selected;
   const parsed = parseOtProcedureSelection(selected || input.value || '');
   renderOTProcedureSubheading(parsed.main, parsed.sub);
@@ -2670,7 +2722,12 @@ function renderConsentModal() {
     const v = document.getElementById(ptIds[i])?.textContent?.trim();
     if (v && v !== '—' && v.startsWith('BMSH-')) { ptId = v; ptNm = document.getElementById(ptNms[i])?.textContent || ptNm; break; }
   }
+  if (ptId === '—') {
+    ptId = String(document.getElementById('ot-bmsh-id')?.value || activeOTCase?.bmhId || '—').trim() || '—';
+    ptNm = String(activeOTCase?.patient || '').trim() || ptNm;
+  }
   const pt = (typeof PATIENTS !== 'undefined' && PATIENTS.find) ? PATIENTS.find(function (p) { return p.bmhId === ptId; }) || {} : {};
+  if (pt && pt.name && (!ptNm || ptNm === '—')) ptNm = pt.name;
   const today = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   const nb = document.getElementById('cmb-name'); if (nb) nb.textContent = ptNm;
   const ib = document.getElementById('cmb-id'); if (ib) ib.textContent = ptId;
@@ -10333,8 +10390,10 @@ function bmhMaybeRegisterVendorBillFromParsedImport(parsed, asset, mode) {
   const inv = String(parsed.invoiceNo || '').trim();
   const dayKey = new Date().toISOString().slice(0, 10);
   const fileName = String(asset?.name || '');
+  const billGroup = [normalizeInventoryTextValue(vendor), inv || 'NOINV', dayKey].join('::');
   const dup = (window.BMH_VENDOR_BILLS || []).some(function (v) {
     if (String(v.vendor || '').trim() !== vendor || Math.abs(Number(v.amount) - amt) >= 0.5) return false;
+    if (String(v.billGroup || '') === billGroup) return true;
     if (inv && String(v.invoiceNo || '') === inv) return true;
     return !!v.ocrSource && String(v.uploadedName || '') === fileName && String(v.createdAt || '').slice(0, 10) === dayKey;
   });
@@ -10352,7 +10411,9 @@ function bmhMaybeRegisterVendorBillFromParsedImport(parsed, asset, mode) {
     billFile: billFile,
     createdAt: new Date().toISOString(),
     ocrSource: true,
-    ocrMode: String(mode || '')
+    ocrMode: String(mode || ''),
+    billGroup: billGroup,
+    billDateKey: dayKey
   });
   try { saveBmhFinancials(); } catch (e) {}
   try { bmhRenderVendorTables(); } catch (e) {}
@@ -17875,7 +17936,7 @@ function bmhRecordInventoryPurchase(item, qty, billFile) {
     ts:purchaseTs,
     billFile: billFile || null,
     billDateKey: new Date().toISOString().slice(0, 10),
-    billGroup: [normalizeInventoryTextValue(vendor), invoiceNo || 'NOINV', dept || 'general', new Date().toISOString().slice(0, 10)].join('::')
+    billGroup: [normalizeInventoryTextValue(vendor), invoiceNo || 'NOINV', new Date().toISOString().slice(0, 10)].join('::')
   };
   normalizeInventoryRecord(purchase);
   window.BMH_PURCHASES.push(purchase);
@@ -17883,11 +17944,10 @@ function bmhRecordInventoryPurchase(item, qty, billFile) {
   if (vendor && totalCost > 0) {
     const existingVendorBill = (window.BMH_VENDOR_BILLS || []).find(function (v) {
       return String(v.billGroup || '') === String(purchase.billGroup || '')
-        && String(v.vendor || '').trim() === vendor
-        && String(v.invoiceNo || '') === invoiceNo;
+        || (String(v.vendor || '').trim() === vendor && String(v.invoiceNo || '') === invoiceNo && !!invoiceNo);
     });
     if (existingVendorBill) {
-      existingVendorBill.amount = Number(existingVendorBill.amount || 0) + totalCost;
+      if (!existingVendorBill.ocrSource) existingVendorBill.amount = Number(existingVendorBill.amount || 0) + totalCost;
       existingVendorBill.uploadedName = existingVendorBill.uploadedName || billFile?.name || '';
       existingVendorBill.billFile = existingVendorBill.billFile || billFile || null;
       existingVendorBill.itemName = existingVendorBill.itemName || item.name;
@@ -18476,13 +18536,22 @@ function lookupOTPatient(val) {
   if(!val||val.length<3) { el.innerHTML=''; return; }
   const v = val.trim().toUpperCase();
   const vLow = val.trim().toLowerCase();
+  const compact = val.replace(/\s/g,'');
   // Search by BMSH ID, phone, or name
   const matches = PATIENTS.filter(x =>
     x.bmhId===v ||
     x.bmhId.includes(v.replace('BMSH-','')) ||
-    (x.mob && x.mob.replace(/\s/g,'').includes(val.replace(/\s/g,''))) ||
+    (x.mob && x.mob.replace(/\s/g,'').includes(compact)) ||
     (x.name && x.name.toLowerCase().includes(vLow))
   ).slice(0,5);
+  const exact = matches.find(function (p) {
+    return p.bmhId === v || String(p.mob || '').replace(/\s/g,'') === compact;
+  });
+  if (exact) {
+    fillOTFromPatient(exact.bmhId);
+    el.innerHTML = '';
+    return;
+  }
 
   if(matches.length===1) {
     const p=matches[0];
@@ -18545,8 +18614,11 @@ function fillOTFromPatient(bmhId) {
   setV('ot-add-site', p.eye || p.opEye || p.surgEye || p.operatingEye || 'N/A');
   if(p.doctor) { const drSel=document.getElementById('ot-add-surgeon'); if(drSel) drSel.value=p.doctor; }
   setV('ot-add-proc', '');
+  populateOTProcedureMainSelect('');
   const subSel = document.getElementById('ot-add-proc-sub');
   if (subSel) subSel.value = '';
+  const subSel2 = document.getElementById('ot-add-proc-sub-2');
+  if (subSel2) subSel2.value = '';
   populateOTProcedureOptions('');
   populateOTIolOptions(p.iol || p.iolType || '', p.iolPower || extractIolPower(p.iol || p.iolType || ''));
   toggleOTOBGFields();
@@ -18585,6 +18657,7 @@ function openOTAddModal(opts) {
   populateOTDiagnosisOptions();
   populateOTPostOpDiagnosisOptions();
   populateOTProcedureOptions();
+  populateOTProcedureMainSelect();
   populateOTIolOptions();
   const procEl = document.getElementById('ot-add-proc');
   if (procEl && !procEl.dataset.boundSuggest) {
@@ -18624,6 +18697,7 @@ function openOTAddModal(opts) {
     setV('ot-age-sex', `${existing.age||'?'}Y / ${existing.sex||'—'}`);
     populateOTDiagnosisOptions(existing.dx);
     populateOTProcedureOptions(existing.procedure);
+    populateOTProcedureMainSelect(existing.procedureMain || parseOtProcedureSelection(existing.procedure).main || '');
     setV('ot-add-site', existing.site);
     setV('ot-add-surgeon', existing.surgeon);
     setV('ot-add-anaes', existing.anaes);
@@ -18707,6 +18781,7 @@ function openOTAddModal(opts) {
     setV('ot-age-sex', '');
     setV('ot-add-dx', '');
     setV('ot-add-proc', '');
+    populateOTProcedureMainSelect('');
     setV('ot-add-site', 'Left Eye (OS)');
     setV('ot-add-iol', '');
     applyOtIclConfigToForm({ eyes:'one', oneType:'Regular', firstType:'Regular', secondType:'Regular' });
@@ -18724,6 +18799,57 @@ function openOTAddModal(opts) {
     populateOTProcedureOptions(procInpFinal.value || '');
   }
   openM('m-ot-add');
+}
+function getLikelyOtConsentIds(otCase) {
+  const proc = String(otCase?.procedure || otCase?.procedureMain || '').toLowerCase();
+  const out = [];
+  if (/phaco|pmics|cataract|pciol|iol/.test(proc)) out.push('consent-cataract-hi', 'consent-cataract-pa', 'c-phaco');
+  if (/ivt|intravitreal|anti-vegf|bevacizumab|ranibizumab|aflibercept/.test(proc)) out.push('c-ivt-vegf');
+  if (/steroid|ozurdex|triamcinolone/.test(proc)) out.push('c-ivt-steroid');
+  if (/trab/.test(proc)) out.push('c-trab');
+  if (/lasik/.test(proc)) out.push('c-lasik');
+  if (/pterygium/.test(proc)) out.push('c-pteryg');
+  if (/dcr/.test(proc)) out.push('c-dcr');
+  if (/squint/.test(proc)) out.push('c-squint');
+  if (/ptosis|eyelid/.test(proc)) out.push('c-ptosis');
+  if (/yag|capsulotomy/.test(proc)) out.push('c-yag');
+  if (/iridotomy|lpi/.test(proc)) out.push('c-lpi');
+  if (/trabeculoplasty|slt|alt/.test(proc)) out.push('c-alt');
+  if (/lscs|caesar|caesare|cesare/.test(proc)) out.push('c-lscs');
+  if (/normal delivery|assisted delivery|labour/.test(proc)) out.push('c-nd');
+  if (/laparoscopy/.test(proc)) out.push('c-lap');
+  if (/hysteroscopy|d&c|d and c/.test(proc)) out.push('c-hysteroscopy');
+  if (/iucd|iud|cu-t/.test(proc)) out.push('c-iucd');
+  if (/mtp|suction|evacuation|abortion/.test(proc)) out.push('obg-mtp-preop', 'obg-mtp-op', 'obg-mtp-postop');
+  return Array.from(new Set(out)).filter(function (id) { return !!getConsentEntry(id); });
+}
+function openLikelyOtConsent() {
+  const c = activeOTCase || {
+    bmhId: document.getElementById('ot-bmsh-id')?.value || '',
+    patient: (PATIENTS.find(function (p) { return p.bmhId === (document.getElementById('ot-bmsh-id')?.value || ''); }) || {}).name || '',
+    procedure: document.getElementById('ot-add-proc')?.value || '',
+    procedureMain: document.getElementById('ot-add-proc-main')?.value || ''
+  };
+  const likely = getLikelyOtConsentIds(c);
+  if (!likely.length) {
+    openM('m-consents');
+    renderConsentModal && renderConsentModal();
+    return;
+  }
+  if (likely.length === 1) {
+    const data = getConsentEntry(likely[0]);
+    if (data) {
+      printStructuredConsentThreeVariants(data);
+      showToast('Procedure consent sent to printer ✓', 's');
+      return;
+    }
+  }
+  openM('m-consents');
+  populateConsentTypeSelectors && populateConsentTypeSelectors();
+  const sel = document.getElementById('mc-type');
+  if (sel && likely[0] && [].slice.call(sel.options).some(function (o) { return o.value === likely[0]; })) sel.value = likely[0];
+  renderConsentModal && renderConsentModal();
+  showToast('Likely consents loaded for this OT procedure', 'i');
 }
 
 function saveOTNotes() {
