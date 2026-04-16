@@ -4164,32 +4164,6 @@
     </div>
     <div id="set-consent-data-list"></div>
   </div>
-  <!-- Surgery Packs inline section -->
-  <div class="card" style="margin-top:12px">
-    <div class="card-hd">
-      <div><div class="card-title">📦 Surgery Document Packs</div><div class="card-sub">Print patient-specific consents, forms, and discharge summary for any procedure</div></div>
-      <button class="btn btn-gold btn-xs" onclick="openM('m-new-tpl')">+ Custom Pack</button>
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px" id="set-consent-packs-grid">
-      ${[
-        {dept:'ophtho',icon:'👁️',label:'Cataract / Phaco',color:'var(--blue)'},
-        {dept:'ophtho',icon:'💉',label:'IVT Injection',color:'var(--blue)'},
-        {dept:'ophtho',icon:'👁️',label:'Trabeculectomy',color:'var(--blue)'},
-        {dept:'ophtho',icon:'🔬',label:'LASIK',color:'var(--blue)'},
-        {dept:'ophtho',icon:'✂️',label:'Squint / Ptosis',color:'var(--blue)'},
-        {dept:'obg',icon:'🤰',label:'LSCS Caesarean',color:'#c0004e'},
-        {dept:'obg',icon:'🤰',label:'Normal Delivery',color:'#c0004e'},
-        {dept:'obg',icon:'🔭',label:'Laparoscopy',color:'#c0004e'},
-        {dept:'psych',icon:'🧠',label:'Psychiatry (General)',color:'var(--orange)'},
-        {dept:'psych',icon:'⚡',label:'ECT',color:'var(--orange)'},
-        {dept:'skin',icon:'💆',label:'Chemical Peel / PRP',color:'var(--purple)'},
-      ].map(p=>`<div onclick="printSurgeryPack('${p.dept}')" style="background:${p.color}11;border:1.5px solid ${p.color}44;border-radius:10px;padding:12px;cursor:pointer;text-align:center" onmouseover="this.style.opacity='.8'" onmouseout="this.style.opacity='1'">
-        <div style="font-size:24px;margin-bottom:6px">${p.icon}</div>
-        <div style="font-size:11.5px;font-weight:800;color:${p.color}">${p.label}</div>
-        <div style="font-size:9.5px;color:var(--g1);margin-top:3px">Print full consent pack</div>
-      </div>`).join('')}
-    </div>
-  </div>
   <div class="card" style="margin-top:12px">
     <div class="card-hd">
       <div><div class="card-title">Custom consent &amp; form stubs</div><div class="card-sub">Editable department forms and saved text documents for surgery packs and quick printing</div></div>
@@ -4596,7 +4570,8 @@
         <div class="fg fg1" style="gap:8px">
           <div class="fg">
             <div class="form-group"><label class="fl">OT Notes Template</label><select id="ot-notes-template" onchange="applyOTNotesTemplate(this.value)"><option value="">— Select template —</option></select></div>
-            <div class="form-group"><label class="fl">Template hint</label><input type="text" value="Create OT note templates from Settings → Rx Templates using department OT / Operative Notes" readonly style="background:var(--g6);font-size:11px"></div>
+            <div class="form-group"><label class="fl">OT Follow-up Template</label><select id="ot-followup-template" onchange="applyOTFollowupTemplate(this.value)"><option value="">— Select follow-up template —</option></select></div>
+            <div class="form-group"><label class="fl">Template hint</label><input type="text" value="Create OT note and OT follow-up templates from Settings → Rx Templates" readonly style="background:var(--g6);font-size:11px"></div>
           </div>
           <div class="form-group"><label class="fl">Pre-op Diagnosis</label><input type="text" id="ot-preop-dx" list="ot-dx-list" placeholder="e.g. Cataract OS - Partially absorbed lens"></div>
           <div class="form-group"><label class="fl">Post-op Diagnosis</label><input type="text" id="ot-postop-dx" list="ot-postop-dx-list" placeholder="Confirmed post-op diagnosis"><datalist id="ot-postop-dx-list"></datalist></div>
@@ -4766,8 +4741,9 @@
 <div class="modal-hd"><div class="modal-title">Create Rx / OT notes template</div><button class="modal-close" onclick="closeM('m-add-rx-tpl')">✕</button></div>
 <div class="fg fg1" style="gap:9px">
   <div class="form-group"><label class="fl">Template Name</label><input type="text" id="rx-tpl-name-modal" placeholder="e.g. Post Phaco Day 1"></div>
-  <div class="form-group"><label class="fl">Department</label><select id="rx-tpl-dept-settings-modal"><option value="Ophthalmology">Ophthalmology</option><option value="OBG">OBG</option><option value="Psychiatry">Psychiatry</option><option value="Skin">Skin</option><option value="OT">OT / Operative Notes</option><option value="Discharge Card - Eye">Discharge Card - Eye</option><option value="Discharge Card - OBG">Discharge Card - OBG</option><option value="All">All</option></select></div>
+  <div class="form-group"><label class="fl">Department</label><select id="rx-tpl-dept-settings-modal"><option value="Ophthalmology">Ophthalmology</option><option value="OBG">OBG</option><option value="Psychiatry">Psychiatry</option><option value="Skin">Skin</option><option value="OT">OT / Operative Notes</option><option value="OT Follow-up">OT Follow-up</option><option value="Discharge Card - Eye">Discharge Card - Eye</option><option value="Discharge Card - OBG">Discharge Card - OBG</option><option value="All">All</option></select></div>
   <div class="form-group"><label class="fl">Surgery link for OT Notes</label><input type="text" id="rx-tpl-surgery-modal" list="rx-tpl-surgery-list" placeholder="e.g. PMICS + IOL Implantation"></div>
+  <div class="form-group full"><label class="fl">Follow-up / discharge instructions</label><textarea id="rx-tpl-notes-modal" placeholder="For OT Follow-up templates, enter one discharge instruction per line." style="min-height:90px"></textarea></div>
   <div class="form-group full"><label class="fl">Template rows</label><textarea id="rx-tpl-drugs-modal" placeholder="Moxifloxacin 0.5% — Four times daily (QID) — 7 days&#10;Prednisolone 1% — Four times daily (QID) — 4 weeks&#10;&#10;For OT Notes or Discharge Card templates, use one instruction per line." style="min-height:180px"></textarea></div>
   <button class="btn btn-gold" onclick="saveRxTemplate('modal')">💾 Save template</button>
 </div>
