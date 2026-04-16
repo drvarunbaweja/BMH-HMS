@@ -268,3 +268,14 @@ export function initializeInventoryFirebaseSync() {
   
   console.log('Inventory Firebase sync initialized')
 }
+
+// Expose functions to window for legacy.js access
+if (typeof window !== 'undefined') {
+  window.saveInventoryToFirebase = saveInventoryToFirebase
+  window.savePurchaseToFirebase = savePurchaseToFirebase
+  window.saveUsageToFirebase = saveUsageToFirebase
+  window.loadInventoryFromFirebase = loadInventoryFromFirebase
+  window.loadPurchasesFromFirebase = loadPurchasesFromFirebase
+  window.loadUsageFromFirebase = loadUsageFromFirebase
+  window.syncInventoryWithFirebase = syncInventoryWithFirebase
+}

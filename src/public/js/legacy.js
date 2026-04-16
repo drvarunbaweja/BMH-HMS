@@ -4429,8 +4429,8 @@ th{background:#eee;font-weight:900;text-align:center;font-size:8.8px}
         <img src="${escHtml(smallLogoSrc)}" alt="Baweja Hospital" style="width:40px;height:40px;object-fit:contain" onerror="this.style.display='none'">
       </div>
       <div style="flex:1;min-width:0;text-align:center">
-        <h1 style="font-size:12.4px;font-weight:900;letter-spacing:.45px;text-transform:uppercase;margin:0 0 3px 0;padding:0;border:none">Baweja Multispeciality Hospital — OPD</h1>
-        <div style="font-size:10px;line-height:1.42"><b>Today:</b> ${escHtml(today)} · <b>Pt:</b> ${escHtml(ptName)} · <b>Age/Sex:</b> ${escHtml(String(ptAge || '—'))}${ptSex ? '/' + escHtml(ptSex) : ''} · <b>Centre:</b> ${centre === 'CHD' ? 'CHD' : 'RPR'} · <b>Dr:</b> ${escHtml(drName)}</div>
+        <h1 style="font-size:16px;font-weight:900;letter-spacing:.45px;text-transform:uppercase;margin:0 0 4px 0;padding:0;border:none">${escHtml(ptName)}</h1>
+        <div style="font-size:10px;line-height:1.42"><b>Today:</b> ${escHtml(today)} · <b>Age/Sex:</b> ${escHtml(String(ptAge || '—'))}${ptSex ? '/' + escHtml(ptSex) : ''} · <b>Centre:</b> ${centre === 'CHD' ? 'CHD' : 'RPR'} · <b>Dr:</b> ${escHtml(drName)}</div>
         <div style="font-size:9.2px;line-height:1.35;margin-top:2px"><b>Ph:</b> ${escHtml(ptMob || '—')} · <b>Addr:</b> ${escHtml(ptAddr || '—')} · <b>Printed:</b> ${escHtml(printDate)}</div>
       </div>
     </div>

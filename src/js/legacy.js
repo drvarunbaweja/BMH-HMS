@@ -254,6 +254,10 @@ function addIolFromModal() {
     BCMAP[invRow.barcode] = invRow;
     BCMAP[String(invRow.name).toLowerCase().substring(0, 15)] = invRow;
     saveInventoryStockToStorage && saveInventoryStockToStorage();
+    // Save to Firebase
+    if (typeof window.saveInventoryToFirebase === 'function') {
+      window.saveInventoryToFirebase(invRow).catch(err => console.error('Firebase save error:', err));
+    }
     renderStockList && renderStockList();
   }
   saveIolCatalogToStorage();
@@ -4465,7 +4469,7 @@ th{background:#eee;font-weight:900;text-align:center;font-size:8.8px}
         <img src="${escHtml(smallLogoSrc)}" alt="Baweja Hospital" style="width:40px;height:40px;object-fit:contain" onerror="this.style.display='none'">
       </div>
       <div style="flex:1;min-width:0;text-align:center">
-        <h1 style="font-size:12.4px;font-weight:900;letter-spacing:.45px;text-transform:uppercase;margin:0 0 3px 0;padding:0;border:none">${escHtml(ptName)}</h1>
+        <h1 style="font-size:16px;font-weight:900;letter-spacing:.45px;text-transform:uppercase;margin:0 0 4px 0;padding:0;border:none">${escHtml(ptName)}</h1>
         <div style="font-size:10px;line-height:1.42"><b>Today:</b> ${escHtml(today)} · <b>Age/Sex:</b> ${escHtml(String(ptAge || '—'))}${ptSex ? '/' + escHtml(ptSex) : ''} · <b>Centre:</b> ${centre === 'CHD' ? 'CHD' : 'RPR'} · <b>Dr:</b> ${escHtml(drName)}</div>
         <div style="font-size:9.2px;line-height:1.35;margin-top:2px"><b>Ph:</b> ${escHtml(ptMob || '—')} · <b>Addr:</b> ${escHtml(ptAddr || '—')} · <b>Printed:</b> ${escHtml(printDate)}</div>
       </div>
@@ -7454,6 +7458,10 @@ function saveIolInventoryGrid() {
             INVENTORY.push(invRow);
             BCMAP[invRow.barcode] = invRow;
             BCMAP[String(invRow.name).toLowerCase().substring(0, 15)] = invRow;
+            // Save to Firebase
+            if (typeof window.saveInventoryToFirebase === 'function') {
+              window.saveInventoryToFirebase(invRow).catch(err => console.error('Firebase save error:', err));
+            }
             bmhRecordInventoryPurchase(invRow, 1, billFile || null);
             added += 1;
           }
@@ -9569,6 +9577,10 @@ function bmhUseInventoryItemForPatient(bmhId, item, opts) {
     showToast('Stock is lower than requested quantity — recording bill line anyway', 'w');
     item.stock = Math.max(0, Number(item.stock) || 0);
   }
+  // Save to Firebase
+  if (typeof window.saveInventoryToFirebase === 'function') {
+    window.saveInventoryToFirebase(item).catch(err => console.error('Firebase save error:', err));
+  }
   const mrp = Number(item.mrp) || 0;
   const cat = /IOL|IVT|Eye|Drop|IV|Injection|Glove|Cannula|Syringe/i.test((item.cat || '') + item.name) ? 'pharmacy' : 'consumable';
   if (usageMode !== 'consume') {
@@ -9672,7 +9684,12 @@ function saveInventoryTransfer() {
   if ((Number(item.stock) || 0) < qty) { showToast('Not enough stock to transfer', 'w'); return; }
   item.stock = Math.max(0, (Number(item.stock) || 0) - qty);
   let target = INVENTORY.find(function (x) { return x.barcode === item.barcode && String(x.store || '') === toStore; });
-  if (!target) { target = Object.assign({}, item, { stock: 0, store: toStore }); INVENTORY.push(target); }
+  if (!target) { target = Object.assign({}, item, { stock: 0, store: toStore }); INVENTORY.push(target); 
+    // Save to Firebase
+    if (typeof window.saveInventoryToFirebase === 'function') {
+      window.saveInventoryToFirebase(target).catch(err => console.error('Firebase save error:', err));
+    }
+  }
   target.stock = (Number(target.stock) || 0) + qty;
   window.BMH_INVENTORY_TRANSFERS.push({ id: 'TR' + Date.now(), itemName: item.name, barcode: item.barcode, fromStore, toStore, qty, ts: bmhNowISO(), user: CURRENT_USER?.name || 'Inventory' });
   saveInventoryStockToStorage();
@@ -9722,6 +9739,10 @@ function saveInventoryReturn() {
   if (!item) { showToast('Item not found in selected store', 'w'); return; }
   if ((Number(item.stock) || 0) < qty) { showToast('Not enough stock to return', 'w'); return; }
   item.stock = Math.max(0, (Number(item.stock) || 0) - qty);
+  // Save to Firebase
+  if (typeof window.saveInventoryToFirebase === 'function') {
+    window.saveInventoryToFirebase(item).catch(err => console.error('Firebase save error:', err));
+  }
   const ts = bmhNowISO();
   const returnValue = (Number(item.cost) || 0) * qty;
   const reduced = bmhApplyVendorReturn(item, qty, vendorOverride);
@@ -17604,6 +17625,10 @@ function bmhFindOrCreateInventoryItem(rawCode, translated) {
   };
   normalizeInventoryRecord(item);
   INVENTORY.push(item);
+  // Save to Firebase
+  if (typeof window.saveInventoryToFirebase === 'function') {
+    window.saveInventoryToFirebase(item).catch(err => console.error('Firebase save error:', err));
+  }
   BCMAP[item.barcode] = item;
   return item;
 }
@@ -17721,6 +17746,10 @@ function processBC(mode, code) {
     bmhCompressFileToData(document.getElementById('inv-in-bill-file')?.files?.[0], (billFile) => {
       try {
         target.stock = (target.stock || 0) + qty;
+        // Save to Firebase
+        if (typeof window.saveInventoryToFirebase === 'function') {
+          window.saveInventoryToFirebase(target).catch(err => console.error('Firebase save error:', err));
+        }
         bmhRecordInventoryPurchase(target, qty, billFile);
         saveInventoryStockToStorage();
         const catFilter = document.getElementById('inv-stock-cat-filter');
