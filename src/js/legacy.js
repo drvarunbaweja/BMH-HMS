@@ -7282,6 +7282,7 @@ function buildIolInventoryRow(base, power, rowIndex, serialHint) {
   const name = [company, brand, power].filter(Boolean).join(' ');
   const serialNo = String(serialHint?.serialNo || '').trim();
   const batchNo = String(serialHint?.batchNo || base.batchNo || '').trim();
+  const expiry = String(serialHint?.exp || base.exp || '').trim();
   const barcodeBase = serialNo || batchNo || ('IOL-' + power.replace(/[+.]/g, '') + '-' + Date.now());
   const barcode = barcodeBase + '-' + rowIndex;
   return {
@@ -7293,7 +7294,7 @@ function buildIolInventoryRow(base, power, rowIndex, serialHint) {
     cost: Number(base.cost || 0) || 0,
     stock: 1,
     min: Number(base.min || 1) || 1,
-    exp: base.exp || '',
+    exp: expiry,
     dept: 'ophtho',
     vendor: String(base.vendor || '').trim() || company,
     store: base.store || 'Eye OT',
@@ -7325,8 +7326,8 @@ function addIolBrandEntry(prefill) {
       ${idx > 0 ? `<button class="btn btn-xs btn-gray" onclick="removeIolBrandEntry(this)">✕ Remove</button>` : ''}
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
-      <div class="form-group" style="margin:0"><label class="fl">Brand</label><input type="text" class="iol-brand-field" list="inv-brand-datalist" placeholder="AcrySof / Tecnis / Appasamy" value="${escapeHtmlConsent(p.brand||'')}"></div>
-      <div class="form-group" style="margin:0"><label class="fl">Company</label><input type="text" class="iol-company-field" list="inv-company-datalist" placeholder="Alcon / J&amp;J / Zeiss" value="${escapeHtmlConsent(p.company||'')}"></div>
+      <div class="form-group" style="margin:0"><label class="fl">Brand</label><input type="text" class="iol-brand-field" list="inv-brand-datalist" placeholder="Pick from IOL catalogue" value="${escapeHtmlConsent(p.brand||'')}"></div>
+      <div class="form-group" style="margin:0"><label class="fl">Company</label><input type="text" class="iol-company-field" list="inv-company-datalist" placeholder="Auto-fills from catalogue" value="${escapeHtmlConsent(p.company||'')}"></div>
       <div class="form-group" style="margin:0"><label class="fl">Batch Number</label><input type="text" class="iol-model-field" placeholder="Batch from product line" value="${escapeHtmlConsent(p.batch||'')}"></div>
     </div>
     <div style="display:flex;gap:8px;margin-bottom:8px;font-size:10px">
@@ -7336,9 +7337,9 @@ function addIolBrandEntry(prefill) {
       <button type="button" class="btn btn-xs btn-gray" onclick="removeInventoryCompanyPrompt()">- Delete Company</button>
     </div>
     <div style="display:grid;grid-template-columns:140px 140px 1fr;gap:8px;align-items:end;margin-bottom:8px">
-      <div class="form-group" style="margin:0"><label class="fl">Expiry</label><input type="text" class="iol-expiry-field" placeholder="MM/YYYY" value="${escapeHtmlConsent(p.exp||'')}"></div>
+      <div class="form-group" style="margin:0"><label class="fl">Default Expiry</label><input type="text" class="iol-expiry-field" placeholder="MM/YY" value="${escapeHtmlConsent(p.exp||'')}"></div>
       <div class="form-group" style="margin:0"><label class="fl">Cost ₹</label><input type="number" class="iol-cost-field" min="0" value="${p.cost||0}"></div>
-      <div class="form-group" style="margin:0"><label class="fl">Serial / batch map (optional)</label><textarea class="iol-serial-map-field" rows="2" style="width:100%;font-family:var(--mono);font-size:11px" placeholder="+21.00D: SER123,BATCH-A"></textarea></div>
+      <div class="form-group" style="margin:0"><label class="fl">Counter Details</label><div style="font-size:11px;color:var(--g1);padding:6px 8px;border:1px dashed var(--g4);border-radius:6px;background:#fff">Use the <strong>Exp</strong> button under each power to save month/year expiry for each unit.</div></div>
     </div>
     <div class="iol-power-grid-container" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px"></div>
   `;
@@ -7349,15 +7350,18 @@ function addIolBrandEntry(prefill) {
   const brandInput = div.querySelector('.iol-brand-field');
   const companyInput = div.querySelector('.iol-company-field');
   if (brandInput && companyInput) {
-    brandInput.addEventListener('change', function () {
-      const brandName = String(this.value || '').trim();
+    const syncCatalogValues = function () {
+      const brandName = normalizeInventoryCompareText(brandInput.value || '');
       const catalogItem = (IOL_CATALOG || []).find(function (row) {
-        return String(row.name || '').toLowerCase() === brandName.toLowerCase();
+        return normalizeInventoryCompareText(row.name || '') === brandName;
       });
-      if (catalogItem && catalogItem.mfr) {
-        companyInput.value = catalogItem.mfr;
+      if (catalogItem) {
+        brandInput.value = normalizeInventoryTextValue(catalogItem.name || brandInput.value || '');
+        if (catalogItem.mfr) companyInput.value = normalizeInventoryTextValue(catalogItem.mfr);
       }
-    });
+    };
+    brandInput.addEventListener('change', syncCatalogValues);
+    brandInput.addEventListener('blur', syncCatalogValues);
   }
 }
 function removeIolBrandEntry(btn) {
@@ -7488,28 +7492,43 @@ function iolSyncExpirySlots(cell) {
     return;
   }
   const keepExp = Array.from(wrap.querySelectorAll('.iol-expiry-input')).map(function (el) { return el.value; });
-  const keepSn = Array.from(wrap.querySelectorAll('.iol-sn-input')).map(function (el) { return el.value; });
   wrap.innerHTML = '';
+  const monthOptions = ['<option value="">MM</option>'].concat(Array.from({ length: 12 }, function (_, idx) {
+    const mm = String(idx + 1).padStart(2, '0');
+    return '<option value="' + mm + '">' + mm + '</option>';
+  })).join('');
+  const yearOptions = ['<option value="">YY</option>'].concat(Array.from({ length: 20 }, function (_, idx) {
+    const yy = String((new Date().getFullYear() + idx) % 100).padStart(2, '0');
+    return '<option value="' + yy + '">' + yy + '</option>';
+  })).join('');
   for (let i = 0; i < n; i += 1) {
+    const keepVal = String(keepExp[i] || '').trim();
+    const match = keepVal.match(/^(\d{2})[\/-](\d{2,4})$/);
+    const mmValue = match ? match[1] : '';
+    const yyValue = match ? String(match[2]).slice(-2) : '';
     const expDiv = document.createElement('div');
     expDiv.style.cssText = 'margin-bottom:6px';
-    expDiv.innerHTML = `<div style="font-size:9px;color:var(--g1);margin-bottom:2px">Item ${i + 1} Expiry</div>`;
+    expDiv.innerHTML = `<div style="font-size:9px;color:var(--g1);margin-bottom:2px">Item ${i + 1} Expiry</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+        <select class="iol-expiry-mm" style="width:100%;font-size:10px;padding:3px 5px;border:1px solid var(--g4);border-radius:4px;box-sizing:border-box">${monthOptions}</select>
+        <select class="iol-expiry-yy" style="width:100%;font-size:10px;padding:3px 5px;border:1px solid var(--g4);border-radius:4px;box-sizing:border-box">${yearOptions}</select>
+      </div>`;
     const expInput = document.createElement('input');
-    expInput.type = 'text';
+    expInput.type = 'hidden';
     expInput.className = 'iol-expiry-input';
-    expInput.placeholder = 'MM/YYYY';
-    expInput.style.cssText = 'width:100%;font-size:10px;padding:3px 5px;border:1px solid var(--g4);border-radius:4px;box-sizing:border-box;margin-bottom:3px';
-    expInput.value = keepExp[i] || '';
+    expInput.value = keepVal;
     expDiv.appendChild(expInput);
-    if (n > 1) {
-      const snInput = document.createElement('input');
-      snInput.type = 'text';
-      snInput.className = 'iol-sn-input';
-      snInput.placeholder = 'Serial number ' + (i + 1);
-      snInput.style.cssText = 'width:100%;font-size:10px;padding:3px 5px;border:1px solid var(--g4);border-radius:4px;box-sizing:border-box';
-      snInput.value = keepSn[i] || '';
-      expDiv.appendChild(snInput);
-    }
+    const mmSel = expDiv.querySelector('.iol-expiry-mm');
+    const yySel = expDiv.querySelector('.iol-expiry-yy');
+    if (mmSel) mmSel.value = mmValue;
+    if (yySel) yySel.value = yyValue;
+    const syncValue = function () {
+      const mm = String(mmSel?.value || '').trim();
+      const yy = String(yySel?.value || '').trim();
+      expInput.value = mm && yy ? (mm + '/' + yy) : '';
+    };
+    if (mmSel) mmSel.addEventListener('change', syncValue);
+    if (yySel) yySel.addEventListener('change', syncValue);
     wrap.appendChild(expDiv);
   }
 }
@@ -7518,8 +7537,11 @@ function readIolBrandSerialMapFromGrid(entryDiv) {
   const out = {};
   entryDiv.querySelectorAll('.iol-power-cell').forEach(function (cell) {
     const power = cell.dataset.power;
-    const sns = Array.from(cell.querySelectorAll('.iol-sn-input')).map(function (el) { return el.value.trim(); }).filter(Boolean);
-    if (sns.length) out[power] = sns;
+    const expRows = Array.from(cell.querySelectorAll('.iol-expiry-input')).map(function (el) {
+      const exp = String(el.value || '').trim();
+      return exp ? { exp: exp } : null;
+    }).filter(Boolean);
+    if (expRows.length) out[power] = expRows;
   });
   return out;
 }
@@ -11473,8 +11495,37 @@ function addInventoryStorePrompt() {
 }
 window.addInventoryStorePrompt = addInventoryStorePrompt;
 function deleteInventoryStorePrompt() {
-  showToast('Store locations cannot be deleted. Please contact admin if needed.', 'w');
-  return;
+  if (!CURRENT_USER?.isAdmin) { showToast('Only admin can delete store locations', 'w'); return; }
+  const stores = (window.BMH_STORE_LOCATIONS || []).slice();
+  if (!stores.length) { showToast('No store locations in list', 'w'); return; }
+  const current = String(document.getElementById('inv-in-store')?.value || document.getElementById('inv-stock-store-filter')?.value || '').trim();
+  const toRemove = normalizeInventoryTextValue(prompt('Enter store / location to delete:\n' + stores.join('\n'), current) || '');
+  if (!toRemove) return;
+  const hit = stores.find(function (name) {
+    return normalizeInventoryCompareText(name) === normalizeInventoryCompareText(toRemove);
+  });
+  if (!hit) { showToast('Store location not found', 'w'); return; }
+  const linkedStock = (INVENTORY || []).reduce(function (sum, item) {
+    return normalizeInventoryCompareText(item.store || '') === normalizeInventoryCompareText(hit) ? sum + Math.max(0, Number(item.stock) || 0) : sum;
+  }, 0);
+  const msg = linkedStock
+    ? 'Delete "' + hit + '" from store/location suggestions? Existing stock rows will stay saved under this location.'
+    : 'Delete "' + hit + '" from store/location suggestions?';
+  if (!confirm(msg)) return;
+  window.BMH_STORE_LOCATIONS = stores.filter(function (name) {
+    return normalizeInventoryCompareText(name) !== normalizeInventoryCompareText(hit);
+  });
+  saveInventoryStoreLocations();
+  bmhPopulateInventorySelectors();
+  ['inv-in-store', 'inv-stock-store-filter', 'inv-tr-from', 'inv-tr-to', 'inv-indent-store', 'inv-indent-source', 'inv-ret-store'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el && normalizeInventoryCompareText(el.value || '') === normalizeInventoryCompareText(hit)) {
+      el.value = /filter/.test(id) ? 'all' : '';
+    }
+  });
+  renderStockList();
+  renderInventoryStoreStock();
+  showToast('Store removed from list ✓', 's');
 }
 window.deleteInventoryStorePrompt = deleteInventoryStorePrompt;
 function addInventoryBarcodePrompt() {
@@ -13872,6 +13923,16 @@ function renderDeptAdviceLibrary(dept) {
   const host = document.getElementById(getDeptAdviceLibraryHostId(dept));
   if (!host) return;
   const bucket = getDoctorCustomRxOptionsForDept(dept);
+  const seededOphthoAdvice = [
+    'Use eye drops exactly as advised',
+    'Do not rub the eyes',
+    'Wear dark glasses outdoors',
+    'Keep eyes clean and avoid dust',
+    'Come urgently if pain, redness, or sudden drop in vision',
+    'Review with reports on next visit',
+    'Use lubricating drops regularly',
+    'Strict blood sugar and BP control'
+  ];
   const seededObgAdvice = [
     'Maintain healthy weight',
     'Exercise regularly',
@@ -13882,7 +13943,10 @@ function renderDeptAdviceLibrary(dept) {
     'Avoid smoking and alcohol',
     'Follow-up on scheduled date'
   ];
-  if (dept === 'obg' && (!Array.isArray(bucket.advice) || !bucket.advice.length)) {
+  if (dept === 'ophtho' && (!Array.isArray(bucket.advice) || !bucket.advice.length)) {
+    bucket.advice = seededOphthoAdvice.slice();
+    saveDoctorCustomRxOptions();
+  } else if (dept === 'obg' && (!Array.isArray(bucket.advice) || !bucket.advice.length)) {
     bucket.advice = seededObgAdvice.slice();
     saveDoctorCustomRxOptions();
   }
@@ -13975,6 +14039,17 @@ function renderDeptProcedureLibrary(dept) {
   const host = document.getElementById(getDeptProcedureLibraryHostId(dept));
   if (!host) return;
   const bucket = getDoctorCustomRxOptionsForDept(dept);
+  if (dept === 'ophtho' && (!Array.isArray(bucket.procedure) || !bucket.procedure.length)) {
+    bucket.procedure = [
+      'Cataract Surgery Evaluation',
+      'YAG Laser Capsulotomy',
+      'Intravitreal Injection',
+      'Pterygium Excision',
+      'DCR / Syringing Advice',
+      'Retinal Laser'
+    ];
+    saveDoctorCustomRxOptions();
+  }
   const items = (bucket.procedure || []).slice().sort(function (a, b) { return String(a).localeCompare(String(b)); });
   if (!items.length) {
     host.innerHTML = '<div style="font-size:10.5px;color:var(--g1);padding:6px 8px;border:1px dashed var(--g4);border-radius:8px;background:var(--g6)">Saved procedures for this department will appear here.</div>';
@@ -25399,14 +25474,32 @@ function savePrescriptionToFirebase(bmhId, rxData) {
 // ── INVENTORY ─────────────────────────────────────────────────
 function saveInventoryItemToFirebase(item) {
   normalizeInventoryRecord(item);
-  fbSet(`inventory/${item.barcode}`, item);
+  if (!item || !item.barcode || !window.FBDB) return Promise.resolve();
+  return window.FBDB.ref('inventory/' + String(item.barcode).replace(/[.#$/\[\]]/g, '_')).set(item);
 }
+window.saveInventoryToFirebase = saveInventoryItemToFirebase;
 
 function loadInventoryFromFirebase() {
-  fbOnce('inventory', data => {
-    if(!data) return;
-    INVENTORY.length = 0;
-    Object.values(data).forEach(i => INVENTORY.push(i));
+  if (!window.FBDB) return Promise.resolve();
+  return window.FBDB.ref('inventory').once('value').then(function (snap) {
+    const data = snap.val();
+    if (!data || typeof data !== 'object') return;
+    Object.values(data).forEach(function (item) {
+      if (!item || !item.barcode) return;
+      normalizeInventoryRecord(item);
+      const existing = INVENTORY.find(function (row) { return String(row.barcode || '') === String(item.barcode || ''); });
+      if (existing) Object.assign(existing, item);
+      else INVENTORY.push(item);
+      BCMAP[item.barcode] = existing || item;
+      if (item.name) BCMAP[String(item.name).toLowerCase().substring(0, 15)] = existing || item;
+    });
+    saveInventoryStockToStorage();
+    renderInventoryImportDatalists();
+    renderStockList();
+    renderInventoryStoreStock();
+    renderInventoryPoAlerts();
+  }).catch(function (err) {
+    console.warn('Inventory Firebase load failed', err);
   });
 }
 
@@ -27622,6 +27715,7 @@ function renderSettingsPage() {
   loadRxTemplatesFromStorage && loadRxTemplatesFromStorage(function () {});
   loadConsentTemplatesFromStorage && loadConsentTemplatesFromStorage();
   loadIolCatalogFromStorage && loadIolCatalogFromStorage();
+  loadInventoryFromFirebase && loadInventoryFromFirebase();
   if (window.FBDB) {
     window.FBDB.ref('surgeryPacksCustom').once('value').then(function (snap) {
       const v = snap.val();
