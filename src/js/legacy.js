@@ -9932,6 +9932,18 @@ function inventoryKnownProductNames() {
   (loadInventoryOcrMemory().products || []).forEach(function (v) { names.push(String(v)); });
   return Array.from(new Set(names.map(function (v) { return normalizeInventoryTextValue(v); }).filter(Boolean)));
 }
+function inventoryKnownBrandNames() {
+  const names = [];
+  (INVENTORY || []).forEach(function (i) { if (i?.iolBrand) names.push(String(i.iolBrand)); });
+  (loadInventoryOcrMemory().brands || []).forEach(function (v) { names.push(String(v)); });
+  return Array.from(new Set(names.map(function (v) { return normalizeInventoryTextValue(v); }).filter(Boolean)));
+}
+function inventoryKnownCompanyNames() {
+  const names = [];
+  (INVENTORY || []).forEach(function (i) { if (i?.iolCompany) names.push(String(i.iolCompany)); });
+  (loadInventoryOcrMemory().companies || []).forEach(function (v) { names.push(String(v)); });
+  return Array.from(new Set(names.map(function (v) { return normalizeInventoryTextValue(v); }).filter(Boolean)));
+}
 function inventoryKnownMrpMap() {
   const map = {};
   []
@@ -9972,7 +9984,27 @@ function renderInventoryImportDatalists() {
     return '<option value="' + escapeHtmlConsent(name) + '"></option>';
   }).join('');
   const itemList = document.getElementById('inv-item-datalist');
-  if (itemList) itemList.innerHTML = inventoryKnownProductNames().map(function (name) {
+  if (itemList) {
+    const memory = loadInventoryOcrMemory();
+    const products = memory.products || [];
+    itemList.innerHTML = products.map(function (name) {
+      return '<option value="' + escapeHtmlConsent(name) + '"></option>';
+    }).join('');
+  }
+  const barcodeList = document.getElementById('inv-barcode-datalist');
+  if (barcodeList) {
+    const memory = loadInventoryOcrMemory();
+    const barcodes = memory.barcodes || [];
+    barcodeList.innerHTML = barcodes.map(function (code) {
+      return '<option value="' + escapeHtmlConsent(code) + '"></option>';
+    }).join('');
+  }
+  const brandList = document.getElementById('inv-brand-datalist');
+  if (brandList) brandList.innerHTML = inventoryKnownBrandNames().map(function (name) {
+    return '<option value="' + escapeHtmlConsent(name) + '"></option>';
+  }).join('');
+  const companyList = document.getElementById('inv-company-datalist');
+  if (companyList) companyList.innerHTML = inventoryKnownCompanyNames().map(function (name) {
     return '<option value="' + escapeHtmlConsent(name) + '"></option>';
   }).join('');
 }
@@ -11274,6 +11306,67 @@ function deleteInventoryStorePrompt() {
   showToast('Store removed from list ✓', 's');
 }
 window.deleteInventoryStorePrompt = deleteInventoryStorePrompt;
+function addInventoryBarcodePrompt() {
+  const barcode = prompt('Barcode to add to list');
+  if (!barcode) return;
+  const memory = loadInventoryOcrMemory();
+  memory.barcodes = memory.barcodes || [];
+  const normalized = String(barcode).trim();
+  if (memory.barcodes.includes(normalized)) { showToast('Barcode already in list', 'w'); return; }
+  memory.barcodes.push(normalized);
+  saveInventoryOcrMemory();
+  renderInventoryImportDatalists();
+  const barcodeInput = document.getElementById('bc-in');
+  if (barcodeInput) barcodeInput.value = normalized;
+  showToast('Barcode added to list ✓', 's');
+}
+window.addInventoryBarcodePrompt = addInventoryBarcodePrompt;
+function removeInventoryBarcodePrompt() {
+  const memory = loadInventoryOcrMemory();
+  memory.barcodes = memory.barcodes || [];
+  if (memory.barcodes.length === 0) { showToast('No barcodes in list', 'w'); return; }
+  const barcodeList = memory.barcodes.join('\n');
+  const toRemove = prompt('Enter barcode to remove from list:\n' + barcodeList);
+  if (!toRemove) return;
+  const index = memory.barcodes.indexOf(String(toRemove).trim());
+  if (index === -1) { showToast('Barcode not found', 'w'); return; }
+  memory.barcodes.splice(index, 1);
+  saveInventoryOcrMemory();
+  renderInventoryImportDatalists();
+  showToast('Barcode removed from list ✓', 's');
+}
+window.removeInventoryBarcodePrompt = removeInventoryBarcodePrompt;
+function addInventoryBrandPrompt() {
+  const brand = prompt('Brand to add to list');
+  if (!brand) return;
+  const memory = loadInventoryOcrMemory();
+  memory.brands = memory.brands || [];
+  const normalized = normalizeInventoryTextValue(brand);
+  if (memory.brands.includes(normalized)) { showToast('Brand already in list', 'w'); return; }
+  memory.brands.push(normalized);
+  saveInventoryOcrMemory();
+  renderInventoryImportDatalists();
+  const brandInput = document.getElementById('inv-in-generic');
+  if (brandInput) brandInput.value = normalized;
+  showToast('Brand added to list ✓', 's');
+}
+window.addInventoryBrandPrompt = addInventoryBrandPrompt;
+function removeInventoryBrandPrompt() {
+  const memory = loadInventoryOcrMemory();
+  memory.brands = memory.brands || [];
+  if (memory.brands.length === 0) { showToast('No brands in list', 'w'); return; }
+  const brandList = memory.brands.join('\n');
+  const toRemove = prompt('Enter brand to remove from list:\n' + brandList);
+  if (!toRemove) return;
+  const normalized = normalizeInventoryTextValue(toRemove);
+  const index = memory.brands.indexOf(normalized);
+  if (index === -1) { showToast('Brand not found', 'w'); return; }
+  memory.brands.splice(index, 1);
+  saveInventoryOcrMemory();
+  renderInventoryImportDatalists();
+  showToast('Brand removed from list ✓', 's');
+}
+window.removeInventoryBrandPrompt = removeInventoryBrandPrompt;
 function removeInventoryLearnedProductPrompt() {
   const raw = String(document.getElementById('bc-in')?.value || prompt('Item / product name to remove from suggestions') || '').trim();
   if (!raw) return;
@@ -11288,6 +11381,16 @@ function removeInventoryLearnedProductPrompt() {
   showToast('Removed from item suggestions ✓', 's');
 }
 window.removeInventoryLearnedProductPrompt = removeInventoryLearnedProductPrompt;
+function addInventoryProductPrompt() {
+  const name = normalizeInventoryTextValue(prompt('Item / product name to add to suggestions') || '');
+  if (!name) return;
+  learnInventoryOcrValue('itemName', name);
+  renderInventoryImportDatalists();
+  const itemInput = document.getElementById('bc-in');
+  if (itemInput) itemInput.value = name;
+  showToast('Item name added to suggestions ✓', 's');
+}
+window.addInventoryProductPrompt = addInventoryProductPrompt;
 function bmhPopulateInventorySelectors() {
   bmhLoadPersistedStoreLocations();
   try {
@@ -11449,7 +11552,15 @@ function renderStockList() {
       const low = g.totalStock <= min;
       const tone = critical ? 'var(--red)' : low ? 'var(--orange)' : 'var(--green)';
       const sub = g.kind === 'iol'
-        ? `${g.powers.size} power${g.powers.size === 1 ? '' : 's'} · ${g.stores.size} store${g.stores.size === 1 ? '' : 's'}`
+        ? (() => {
+            const powerCounts = {};
+            g.rows.forEach(function (r) {
+              const power = String(r.power || extractIolPower(r.name || '') || '');
+              if (power) powerCounts[power] = (powerCounts[power] || 0) + Number(r.stock || 0);
+            });
+            const powerStr = Object.keys(powerCounts).sort(function (a, b) { return parseFloat(a) - parseFloat(b); }).map(function (p) { return p + ' ' + powerCounts[p]; }).join(', ');
+            return powerStr || `${g.powers.size} power${g.powers.size === 1 ? '' : 's'}`;
+          })()
         : `${Array.from(g.categories).filter(Boolean).join(', ') || 'Stock item'} · ${g.stores.size} store${g.stores.size === 1 ? '' : 's'}`;
       return `<button type="button" class="inv-row ${critical?'critical':low?'low':''}" style="width:100%;text-align:left;border:none;cursor:pointer" onclick="openInventoryStockGroup('${g.id.replace(/'/g, "\\'")}')">
         <div style="flex:1;min-width:0">
@@ -29978,6 +30089,58 @@ function renderOphthoRecap() {
         </div>
         <div style="padding:9px 10px;border-radius:10px;background:#fff8e8;margin-bottom:8px;border:1px solid rgba(212,160,23,.24)">
           <div style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;margin-bottom:5px">Refractive suitability</div>
+          <div style="font-size:11px;line-height:1.5">${g.refractive.join('<br>') || 'Enable the refractive suitability checkbox in Biometry to assess candidacy and residual bed.'}</div>
+        </div>
+        <div style="padding:9px 10px;border-radius:10px;background:var(--g6);margin-bottom:8px">
+          <div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;margin-bottom:5px">Systemic history</div>
+          <div style="font-size:11px;line-height:1.45">${g.systemic.join(' • ') || 'No major systemic flags entered yet.'}</div>
+        </div>
+        ${visitHtml}
+        <details style="margin-top:8px;background:#fff;border:1px solid var(--g5);border-radius:10px;padding:8px 10px">
+          <summary style="cursor:pointer;font-size:11px;font-weight:800;color:var(--bmh-blue)">Payments & billing</summary>
+          <div style="margin-top:8px">${paymentHtml}</div>
+        </details>
+      </div>
+    </div>`;
+  };
+  if(typeof fbOnce === 'function') fbOnce(`visits/${pt.bmhId}`).then(renderWithVisits).catch(()=>renderWithVisits({}));
+  else renderWithVisits({});
+}
+
+window.addEventListener('DOMContentLoaded', function() {
+  preloadUserSettings && preloadUserSettings();
+  // Load saved creds
+  try {
+    const saved = localStorage.getItem('bmh_creds');
+    if(saved) {
+      const {u,p} = JSON.parse(saved);
+      const ui=document.getElementById('lg-email') || document.getElementById('lg-user');
+      const pi=document.getElementById('lg-pass');
+      const ri=document.getElementById('lg-remember');
+      if(ui&&u) ui.value=u;
+      if(pi&&p) pi.value=p;
+      if(ri) ri.checked=true;
+    }
+  } catch(e){}
+  try {
+    const sessionRaw = sessionStorage.getItem('bmh_active_session');
+    if(sessionRaw && !CURRENT_USER) {
+      const session = JSON.parse(sessionRaw);
+      const profile = session?.u ? USER_DB?.[String(session.u).toLowerCase()] : null;
+      if (profile && profile.disabled !== true) {
+        activateUserSession(String(session.u).toLowerCase(), profile, { showToastOnSuccess:false, auditLogin:false });
+      }
+    }
+  } catch(e){}
+});
+      const session = JSON.parse(sessionRaw);
+      const profile = session?.u ? USER_DB?.[String(session.u).toLowerCase()] : null;
+      if (profile && profile.disabled !== true) {
+        activateUserSession(String(session.u).toLowerCase(), profile, { showToastOnSuccess:false, auditLogin:false });
+      }
+    }
+  } catch(e){}
+});
           <div style="font-size:11px;line-height:1.5">${g.refractive.join('<br>') || 'Enable the refractive suitability checkbox in Biometry to assess candidacy and residual bed.'}</div>
         </div>
         <div style="padding:9px 10px;border-radius:10px;background:var(--g6);margin-bottom:8px">
