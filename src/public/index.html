@@ -1448,6 +1448,11 @@
             </div>
           </div>
           <div id="oe-advice-library" class="quick-library-grid"></div>
+          <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
+            <input type="text" id="oph-advice-quick-input" list="oph-advice-quick-list" placeholder="Type instruction and press Enter…" style="flex:1;min-width:220px;font-size:11px;padding:6px 8px;border-radius:var(--rsm);border:1.5px solid var(--g4)" onchange="commitDeptAdviceQuickEntry('ophtho', this)" onkeydown="handleDeptQuickEntryKey(event,'advice','ophtho',this)">
+            <datalist id="oph-advice-quick-list"></datalist>
+            <button type="button" class="btn btn-xs btn-blue" onclick="commitDeptAdviceQuickEntry('ophtho', document.getElementById('oph-advice-quick-input'))">+ Add</button>
+          </div>
           <textarea id="rx-advice-text" placeholder="Type instructions to patient or load from template…" onblur="ingestCustomAdviceLinesFromTextarea(this)" style="width:100%;min-height:48px;font-size:12px;border:1.5px solid rgba(212,160,23,.4);border-radius:6px;padding:6px 8px;background:#fff;font-family:var(--font);resize:vertical"></textarea>
           <textarea id="rx-extra-advice-text" placeholder="Additional instructions…" style="width:100%;min-height:38px;font-size:12px;border:1.5px solid rgba(212,160,23,.28);border-radius:6px;padding:6px 8px;background:#fff;font-family:var(--font);resize:vertical;margin-top:4px"></textarea>
         </div>
@@ -1455,6 +1460,8 @@
           <div class="plan-panel-head">
             <div class="plan-panel-title">Surgery / Procedure Advised</div>
             <div style="display:flex;gap:5px">
+              <input type="text" id="oph-proc-quick-input" list="oph-proc-quick-list" placeholder="Type procedure and press Enter…" style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:220px;border:1.5px solid var(--orange)" onchange="commitDeptProcedureQuickEntry('ophtho', this)" onkeydown="handleDeptQuickEntryKey(event,'procedure','ophtho',this)">
+              <datalist id="oph-proc-quick-list"></datalist>
               <select id="proc-add-dropdown" style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:180px" onchange="addProcFromDropdown(this)">
                 <option value="">— Select from list —</option>
                 <option value="__custom__">+ Add New Procedure…</option>
@@ -5402,7 +5409,7 @@
     </div>
   </div>
   <input type="hidden" id="ot-add-case-id">
-  <div class="form-group"><label class="fl">Lookup Patient (BMSH ID or Phone)</label><input type="text" id="ot-pt-lookup" placeholder="BMSH-XXXXXX or phone…" oninput="lookupOTPatient(this.value)"></div>
+  <div class="form-group"><label class="fl">Lookup Patient (BMSH ID or Phone)</label><div style="display:flex;gap:8px"><input type="text" id="ot-pt-lookup" placeholder="BMSH-XXXXXX or phone…" oninput="lookupOTPatient(this.value)" style="flex:1"><button type="button" class="btn btn-xs btn-gold" onclick="prefillOTLookupValue()">Prefill</button></div></div>
   <div id="ot-pt-lookup-result" style="margin-bottom:8px"></div>
   <div class="form-group"><label class="fl">Patient</label>
     <select id="ot-pt-sel" onchange="prefillOTCase(this.value)">
@@ -5418,6 +5425,9 @@
   <div class="form-group" id="ot-add-proc-sub-wrap" style="display:none"><label class="fl">Procedure subheading / package</label>
     <select id="ot-add-proc-sub" onchange="onOTProcedureSubheadingChange(this.value)"><option value="">— Select subheading —</option></select>
   </div>
+  <div class="form-group" id="ot-add-proc-sub-wrap-2" style="display:none"><label class="fl">Second subheading / package</label>
+    <select id="ot-add-proc-sub-2" onchange="onOTProcedureSubheadingChangeTwo(this.value)"><option value="">— Select second subheading —</option></select>
+  </div>
   <div class="form-group" id="ot-site-wrap"><label class="fl">Eye / Site</label>
     <select id="ot-add-site"><option>Left Eye (OS)</option><option>Right Eye (OD)</option><option>Both Eyes (OU)</option><option>N/A</option></select>
   </div>
@@ -5431,7 +5441,7 @@
     <div class="form-group"><label class="fl">Scheduled Date</label><input type="date" id="ot-add-date"></div>
     <div class="form-group"><label class="fl">Scheduled Time</label><input type="time" id="ot-add-time" value="09:00"></div>
     <div class="form-group"><label class="fl">OT Room</label>
-      <select id="ot-add-room"><option>Eye OT</option><option>Gynae OT</option><option>Minor OT</option><option>Labour Room</option><option>Procedure Room</option></select>
+      <select id="ot-add-room"><option>Eye OT</option><option>Gynae OT</option><option>Minor OT</option><option>Labour Room</option><option>Laser Room</option><option>Procedure Room</option></select>
     </div>
     <div class="form-group"><label class="fl">Priority</label>
       <select id="ot-add-priority"><option value="elective">Elective</option><option value="urgent">Urgent</option><option value="emergency">Emergency</option></select>

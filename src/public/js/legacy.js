@@ -205,8 +205,38 @@ function renderIolCatalogList() {
         '<div style="flex:1"><div style="font-weight:800">' + row.name + '</div>' +
         '<div style="font-size:10.5px;color:var(--g1)">' + (row.type || '—') + ' · ' + (row.mfr || '—') + (row.barcode ? ' · ' + row.barcode : '') + '</div></div>' +
         '<div style="text-align:right;white-space:nowrap"><div style="font-weight:900;color:var(--blue)">MRP ₹' + Number(row.price || 0).toLocaleString('en-IN') + '</div></div>' +
+        '<button type="button" class="btn btn-xs btn-outline" onclick="editIolCatalogRow(' + i + ')">✎</button>' +
         '<button type="button" class="btn btn-xs btn-gray" onclick="deleteIolCatalogRow(' + i + ')">✕</button></div>';
     }).join('');
+}
+function editIolCatalogRow(i) {
+  if (i < 0 || i >= IOL_CATALOG.length) return;
+  const row = IOL_CATALOG[i];
+  const name = prompt('Edit IOL name:', row.name || '');
+  if (name === null) return;
+  const type = prompt('Edit type:', row.type || 'Monofocal');
+  if (type === null) return;
+  const mfr = prompt('Edit manufacturer / company:', row.mfr || '');
+  if (mfr === null) return;
+  const price = prompt('Edit MRP:', String(row.price || 0));
+  if (price === null) return;
+  const barcode = prompt('Edit barcode:', row.barcode || '');
+  if (barcode === null) return;
+  const batchNo = prompt('Edit batch number:', row.batchNo || '');
+  if (batchNo === null) return;
+  IOL_CATALOG[i] = {
+    name: String(name || row.name || '').trim() || row.name,
+    type: String(type || row.type || 'Monofocal').trim() || 'Monofocal',
+    mfr: String(mfr || row.mfr || '').trim(),
+    price: Number(price || row.price || 0) || 0,
+    barcode: String(barcode || row.barcode || '').trim(),
+    batchNo: String(batchNo || row.batchNo || '').trim(),
+    serialNo: String(row.serialNo || '').trim(),
+    power: extractIolPower(name || row.name || '') || row.power || ''
+  };
+  saveIolCatalogToStorage();
+  renderIolCatalogList();
+  showToast('IOL catalogue updated ✓', 's');
 }
 function deleteIolCatalogRow(i) {
   if (i < 0 || i >= IOL_CATALOG.length) return;
@@ -254,6 +284,9 @@ function addIolFromModal() {
     BCMAP[invRow.barcode] = invRow;
     BCMAP[String(invRow.name).toLowerCase().substring(0, 15)] = invRow;
     saveInventoryStockToStorage && saveInventoryStockToStorage();
+    if (typeof window.saveInventoryToFirebase === 'function') {
+      window.saveInventoryToFirebase(invRow).catch(function (err) { console.error('Firebase save error:', err); });
+    }
     renderStockList && renderStockList();
   }
   saveIolCatalogToStorage();
@@ -280,7 +313,7 @@ function mapLegacyOTRoomLabel(room) {
   if (!val) return '';
   if (/^ot-1/i.test(val) || /main/i.test(val)) return 'Eye OT';
   if (/^ot-2/i.test(val) || /minor/i.test(val)) return 'Minor OT';
-  if (/^ot-3/i.test(val) || /laser/i.test(val)) return 'Procedure Room';
+  if (/^ot-3/i.test(val) || /laser/i.test(val)) return 'Laser Room';
   return val;
 }
 function otChargeLooksLikeProcedure(row) {
@@ -298,6 +331,12 @@ function otProcedureBelongsToCaseKind(text, kind) {
   if (kind === 'obg') return looksObg;
   return !looksObg;
 }
+function otProcedureMatchesDept(row, kind) {
+  const cat = String(row?.cat || '').toLowerCase();
+  const text = [row?.parent || '', row?.name || '', row?.cat || ''].join(' ').toLowerCase();
+  if (kind === 'obg') return /obg|gyn|gynae|labour|labor|delivery|lscs|mtp|abortion|hyster|lapar/.test(cat + ' ' + text);
+  return /eye|oph|cataract|glaucoma|retina|cornea|ocul|laser|yag|pterygium|dcr|trabeculectomy|pmics|phaco|icl|iol/.test(cat + ' ' + text);
+}
 function getOtProcedureMainHeadings() {
   const caseKind = getSelectedOTCaseKind && getSelectedOTCaseKind();
   const out = new Set();
@@ -305,7 +344,7 @@ function getOtProcedureMainHeadings() {
     const p = normalizeOtProcedureName(row.parent || '');
     const n = normalizeOtProcedureName(row.name || '');
     const target = p || n;
-    if (!otProcedureBelongsToCaseKind(target, caseKind)) return;
+    if (!otProcedureBelongsToCaseKind(target, caseKind) || !otProcedureMatchesDept(row, caseKind)) return;
     if (p) out.add(p);
     else if (n) out.add(n);
   });
@@ -320,7 +359,8 @@ function getOtProcedureSubheadingOptions(parent) {
     return otChargeLooksLikeProcedure(row)
       && normalizeOtProcedureName(row.parent || '') === target
       && name !== target
-      && otProcedureBelongsToCaseKind(target || name, caseKind);
+      && otProcedureBelongsToCaseKind(target || name, caseKind)
+      && otProcedureMatchesDept(row, caseKind);
   }).map(function (row) {
     return normalizeOtProcedureName(row.name || '');
   }).filter(Boolean))).sort();
@@ -329,7 +369,9 @@ function getOtProcedureOptions() {
   const caseKind = getSelectedOTCaseKind && getSelectedOTCaseKind();
   const fromCharges = CHARGES_DATA
     .filter(function (row) {
-      return otChargeLooksLikeProcedure(row) && otProcedureBelongsToCaseKind((row.parent || row.name || ''), caseKind);
+      return otChargeLooksLikeProcedure(row)
+        && otProcedureBelongsToCaseKind((row.parent || row.name || ''), caseKind)
+        && otProcedureMatchesDept(row, caseKind);
     })
     .reduce(function (arr, c) {
       const nm = normalizeOtProcedureName(c.name);
@@ -363,7 +405,8 @@ function getOtProcedureOptions() {
     'Other — specify in notes'
   ];
   const fallbacks = caseKind === 'obg' ? obgFallbacks : eyeFallbacks;
-  return Array.from(new Set(getOtProcedureMainHeadings().concat(fromCharges, fallbacks).filter(Boolean)));
+  const chargeOptions = Array.from(new Set(getOtProcedureMainHeadings().concat(fromCharges).filter(Boolean)));
+  return chargeOptions.length ? chargeOptions : Array.from(new Set(fallbacks.filter(Boolean)));
 }
 function parseOtProcedureSelection(value) {
   const raw = normalizeOtProcedureName(value);
@@ -385,22 +428,35 @@ function parseOtProcedureSelection(value) {
 function renderOTProcedureSubheading(mainHeading, selectedSub) {
   const wrap = document.getElementById('ot-add-proc-sub-wrap');
   const sel = document.getElementById('ot-add-proc-sub');
-  if (!wrap || !sel) return;
+  const wrap2 = document.getElementById('ot-add-proc-sub-wrap-2');
+  const sel2 = document.getElementById('ot-add-proc-sub-2');
+  if (!wrap || !sel || !wrap2 || !sel2) return;
   const options = getOtProcedureSubheadingOptions(mainHeading);
+  const selectedParts = String(selectedSub || '').split(/\s*\+\s*/).map(function (v) { return normalizeOtProcedureName(v); }).filter(Boolean);
+  const selectedOne = selectedParts[0] || '';
+  const selectedTwo = selectedParts[1] || '';
   if (!mainHeading || !options.length) {
     wrap.style.display = 'none';
+    wrap2.style.display = 'none';
     sel.innerHTML = '<option value="">— Select subheading —</option>';
+    sel2.innerHTML = '<option value="">— Select second subheading —</option>';
     return;
   }
   sel.innerHTML = '<option value="">— Select subheading —</option>' + options.map(function (name) {
     return '<option value="' + String(name).replace(/"/g, '&quot;') + '">' + String(name).replace(/</g, '&lt;') + '</option>';
   }).join('');
+  sel2.innerHTML = '<option value="">— Select second subheading —</option>' + options.map(function (name) {
+    return '<option value="' + String(name).replace(/"/g, '&quot;') + '">' + String(name).replace(/</g, '&lt;') + '</option>';
+  }).join('');
   wrap.style.display = '';
-  if ([].slice.call(sel.options).some(function (o) { return o.value === selectedSub; })) sel.value = selectedSub;
+  wrap2.style.display = '';
+  if ([].slice.call(sel.options).some(function (o) { return o.value === selectedOne; })) sel.value = selectedOne;
+  if ([].slice.call(sel2.options).some(function (o) { return o.value === selectedTwo; })) sel2.value = selectedTwo;
 }
 function composeOtProcedureLabel(mainHeading, subHeading) {
   const main = normalizeOtProcedureName(mainHeading);
-  const sub = normalizeOtProcedureName(subHeading);
+  const parts = Array.isArray(subHeading) ? subHeading : [subHeading];
+  const sub = parts.map(function (part) { return normalizeOtProcedureName(part); }).filter(Boolean).join(' + ');
   if (!main) return sub;
   if (!sub) return main;
   return main + ' — ' + sub;
@@ -471,7 +527,17 @@ function onOTProcedureSubheadingChange(value) {
   const procEl = document.getElementById('ot-add-proc');
   if (!procEl) return;
   const parsed = parseOtProcedureSelection(procEl.value);
-  procEl.value = composeOtProcedureLabel(parsed.main || procEl.value, value);
+  const second = document.getElementById('ot-add-proc-sub-2')?.value || '';
+  procEl.value = composeOtProcedureLabel(parsed.main || procEl.value, [value, second]);
+  updateOTIolSummarySuggestions();
+  refreshOTNotesTemplateSelect && refreshOTNotesTemplateSelect();
+}
+function onOTProcedureSubheadingChangeTwo(value) {
+  const procEl = document.getElementById('ot-add-proc');
+  if (!procEl) return;
+  const parsed = parseOtProcedureSelection(procEl.value);
+  const first = document.getElementById('ot-add-proc-sub')?.value || '';
+  procEl.value = composeOtProcedureLabel(parsed.main || procEl.value, [first, value]);
   updateOTIolSummarySuggestions();
   refreshOTNotesTemplateSelect && refreshOTNotesTemplateSelect();
 }
@@ -7159,6 +7225,7 @@ function buildIolInventoryRow(base, power, rowIndex, serialHint) {
   const name = [company, brand, power].filter(Boolean).join(' ');
   const serialNo = String(serialHint?.serialNo || '').trim();
   const batchNo = String(serialHint?.batchNo || base.batchNo || '').trim();
+  const expiry = String(serialHint?.exp || base.exp || '').trim();
   const barcodeBase = serialNo || batchNo || ('IOL-' + power.replace(/[+.]/g, '') + '-' + Date.now());
   const barcode = barcodeBase + '-' + rowIndex;
   return {
@@ -7170,7 +7237,7 @@ function buildIolInventoryRow(base, power, rowIndex, serialHint) {
     cost: Number(base.cost || 0) || 0,
     stock: 1,
     min: Number(base.min || 1) || 1,
-    exp: base.exp || '',
+    exp: expiry,
     dept: 'ophtho',
     vendor: String(base.vendor || '').trim() || company,
     store: base.store || 'Eye OT',
@@ -7202,20 +7269,37 @@ function addIolBrandEntry(prefill) {
       ${idx > 0 ? `<button class="btn btn-xs btn-gray" onclick="removeIolBrandEntry(this)">✕ Remove</button>` : ''}
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
-      <div class="form-group" style="margin:0"><label class="fl">Brand</label><input type="text" class="iol-brand-field" placeholder="AcrySof / Tecnis / Appasamy" value="${escapeHtmlConsent(p.brand||'')}"></div>
-      <div class="form-group" style="margin:0"><label class="fl">Company</label><input type="text" class="iol-company-field" placeholder="Alcon / J&amp;J / Zeiss" value="${escapeHtmlConsent(p.company||'')}"></div>
+      <div class="form-group" style="margin:0"><label class="fl" style="display:flex;align-items:center;justify-content:space-between;gap:6px">Brand <span style="display:flex;gap:4px"><button type="button" onclick="addInventoryBrandPrompt()" title="Add brand" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;font-weight:900">+</button><button type="button" onclick="removeInventoryBrandPrompt()" title="Delete brand" style="background:var(--g3);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;font-weight:900">−</button></span></label><input type="text" class="iol-brand-field" list="inv-brand-datalist" placeholder="Pick from IOL catalogue" value="${escapeHtmlConsent(p.brand||'')}"></div>
+      <div class="form-group" style="margin:0"><label class="fl" style="display:flex;align-items:center;justify-content:space-between;gap:6px">Company <span style="display:flex;gap:4px"><button type="button" onclick="addInventoryCompanyPrompt()" title="Add company" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;font-weight:900">+</button><button type="button" onclick="removeInventoryCompanyPrompt()" title="Delete company" style="background:var(--g3);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;font-weight:900">−</button></span></label><input type="text" class="iol-company-field" list="inv-company-datalist" placeholder="Auto-fills from catalogue" value="${escapeHtmlConsent(p.company||'')}"></div>
       <div class="form-group" style="margin:0"><label class="fl">Batch Number</label><input type="text" class="iol-model-field" placeholder="Batch from product line" value="${escapeHtmlConsent(p.batch||'')}"></div>
     </div>
     <div style="display:grid;grid-template-columns:140px 140px 1fr;gap:8px;align-items:end;margin-bottom:8px">
-      <div class="form-group" style="margin:0"><label class="fl">Expiry</label><input type="text" class="iol-expiry-field" placeholder="MM/YYYY" value="${escapeHtmlConsent(p.exp||'')}"></div>
+      <div class="form-group" style="margin:0"><label class="fl">Default Expiry</label><input type="text" class="iol-expiry-field" placeholder="MM/YY" value="${escapeHtmlConsent(p.exp||'')}"></div>
       <div class="form-group" style="margin:0"><label class="fl">Cost ₹</label><input type="number" class="iol-cost-field" min="0" value="${p.cost||0}"></div>
-      <div class="form-group" style="margin:0"><label class="fl">Serial / batch map (optional)</label><textarea class="iol-serial-map-field" rows="2" style="width:100%;font-family:var(--mono);font-size:11px" placeholder="+21.00D: SER123,BATCH-A"></textarea></div>
+      <div class="form-group" style="margin:0"><label class="fl">Per Power Counter</label><div style="font-size:11px;color:var(--g1);padding:6px 8px;border:1px dashed var(--g4);border-radius:6px;background:#fff">Use the <strong>Exp</strong> button under each power to save item-wise expiry.</div></div>
     </div>
     <div class="iol-power-grid-container" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px"></div>
   `;
   container.appendChild(div);
   // Render power grid for this entry
   renderIolBrandPowerGrid(div);
+  const brandInput = div.querySelector('.iol-brand-field');
+  const companyInput = div.querySelector('.iol-company-field');
+  if (brandInput && companyInput) {
+    const syncCatalogValues = function () {
+      const brandName = normalizeInventoryCompareText(brandInput.value || '');
+      const catalogItem = (IOL_CATALOG || []).find(function (row) {
+        return normalizeInventoryCompareText(row.name || '') === brandName;
+      });
+      if (catalogItem) {
+        brandInput.value = normalizeInventoryTextValue(catalogItem.name || brandInput.value || '');
+        if (catalogItem.mfr) companyInput.value = normalizeInventoryTextValue(catalogItem.mfr);
+      }
+      refreshIolBrandPowerStockLabels(div);
+    };
+    brandInput.addEventListener('change', syncCatalogValues);
+    brandInput.addEventListener('blur', syncCatalogValues);
+  }
 }
 function removeIolBrandEntry(btn) {
   const entry = btn.closest('.inv-iol-brand-entry');
@@ -7248,8 +7332,8 @@ function renderIolBrandPowerGrid(entryDiv) {
         </div>
       </div>
       <input type="hidden" class="inv-iol-qty" data-power="${esc}" value="0">
-      <button type="button" class="btn btn-xs btn-outline" style="font-size:10px;padding:2px 6px" onclick="iolToggleSnPanel(this)">S/n</button>
-      <div class="iol-sn-slots" style="display:none;margin-top:6px;text-align:left"></div>
+      <button type="button" class="btn btn-xs btn-outline" style="font-size:10px;padding:2px 6px" onclick="iolToggleExpiryPanel(this)">Exp</button>
+      <div class="iol-expiry-slots" style="display:none;margin-top:6px;text-align:left"></div>
     </div>`;
   }).join('');
   entryDiv.querySelectorAll('.iol-power-cell').forEach(function (cell) {
@@ -7274,7 +7358,7 @@ function iolBrandPowerQtyDelta(btn, delta) {
   inp.value = String(v);
   const addEl = cell.querySelector('.iol-qty-to-add');
   if (addEl) addEl.textContent = String(v);
-  iolSyncSnSlots(cell);
+  iolSyncExpirySlots(cell);
   updateIolPowerCounter();
   const entry = cell.closest('.inv-iol-brand-entry');
   if (entry) refreshIolBrandPowerStockLabels(entry);
@@ -7283,23 +7367,23 @@ function iolBrandQtyInput(inp) {
   const cell = inp.closest('.iol-power-cell');
   const addEl = cell && cell.querySelector('.iol-qty-to-add');
   if (addEl && inp) addEl.textContent = String(Math.max(0, parseInt(inp.value, 10) || 0));
-  iolSyncSnSlots(cell);
+  iolSyncExpirySlots(cell);
   updateIolPowerCounter();
   const entry = cell && cell.closest('.inv-iol-brand-entry');
   if (entry) refreshIolBrandPowerStockLabels(entry);
 }
-function iolToggleSnPanel(btn) {
+function iolToggleExpiryPanel(btn) {
   const cell = btn.closest('.iol-power-cell');
-  const wrap = cell && cell.querySelector('.iol-sn-slots');
+  const wrap = cell && cell.querySelector('.iol-expiry-slots');
   if (!wrap) return;
   const open = wrap.style.display !== 'block';
   wrap.style.display = open ? 'block' : 'none';
   wrap.dataset.open = open ? '1' : '0';
-  iolSyncSnSlots(cell);
+  iolSyncExpirySlots(cell);
 }
-function iolSyncSnSlots(cell) {
+function iolSyncExpirySlots(cell) {
   if (!cell) return;
-  const wrap = cell.querySelector('.iol-sn-slots');
+  const wrap = cell.querySelector('.iol-expiry-slots');
   const inp = cell.querySelector('.inv-iol-qty');
   if (!wrap || !inp) return;
   const n = Math.max(0, parseInt(inp.value, 10) || 0);
@@ -7309,41 +7393,64 @@ function iolSyncSnSlots(cell) {
     wrap.innerHTML = '<div style="font-size:9px;color:var(--g1)">Set quantity first</div>';
     return;
   }
-  const keep = Array.from(wrap.querySelectorAll('.iol-sn-input')).map(function (el) { return el.value; });
+  const keepExp = Array.from(wrap.querySelectorAll('.iol-expiry-input')).map(function (el) { return el.value; });
   wrap.innerHTML = '';
+  const monthOptions = ['<option value="">MM</option>'].concat(Array.from({ length: 12 }, function (_, idx) {
+    const mm = String(idx + 1).padStart(2, '0');
+    return '<option value="' + mm + '">' + mm + '</option>';
+  })).join('');
+  const yearOptions = ['<option value="">YY</option>'].concat(Array.from({ length: 20 }, function (_, idx) {
+    const yy = String((new Date().getFullYear() + idx) % 100).padStart(2, '0');
+    return '<option value="' + yy + '">' + yy + '</option>';
+  })).join('');
   for (let i = 0; i < n; i += 1) {
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'iol-sn-input';
-    input.placeholder = 'S/N ' + (i + 1);
-    input.style.cssText = 'width:100%;font-size:10px;padding:3px 5px;border:1px solid var(--g4);border-radius:4px;box-sizing:border-box;margin-bottom:4px';
-    input.value = keep[i] || '';
-    wrap.appendChild(input);
+    const keepVal = String(keepExp[i] || '').trim();
+    const match = keepVal.match(/^(\d{2})[\/-](\d{2,4})$/);
+    const mmValue = match ? match[1] : '';
+    const yyValue = match ? String(match[2]).slice(-2) : '';
+    const box = document.createElement('div');
+    box.style.cssText = 'margin-bottom:6px';
+    box.innerHTML = `<div style="font-size:9px;color:var(--g1);margin-bottom:2px">Item ${i + 1} Expiry</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+        <select class="iol-expiry-mm" style="width:100%;font-size:10px;padding:3px 5px;border:1px solid var(--g4);border-radius:4px">${monthOptions}</select>
+        <select class="iol-expiry-yy" style="width:100%;font-size:10px;padding:3px 5px;border:1px solid var(--g4);border-radius:4px">${yearOptions}</select>
+      </div>`;
+    const hidden = document.createElement('input');
+    hidden.type = 'hidden';
+    hidden.className = 'iol-expiry-input';
+    hidden.value = keepVal;
+    box.appendChild(hidden);
+    const mmSel = box.querySelector('.iol-expiry-mm');
+    const yySel = box.querySelector('.iol-expiry-yy');
+    if (mmSel) mmSel.value = mmValue;
+    if (yySel) yySel.value = yyValue;
+    const syncValue = function () {
+      const mm = String(mmSel?.value || '').trim();
+      const yy = String(yySel?.value || '').trim();
+      hidden.value = mm && yy ? (mm + '/' + yy) : '';
+    };
+    if (mmSel) mmSel.addEventListener('change', syncValue);
+    if (yySel) yySel.addEventListener('change', syncValue);
+    wrap.appendChild(box);
   }
 }
 window.iolBrandPowerQtyDelta = iolBrandPowerQtyDelta;
 window.iolBrandQtyInput = iolBrandQtyInput;
-window.iolToggleSnPanel = iolToggleSnPanel;
+window.iolToggleExpiryPanel = iolToggleExpiryPanel;
 function readIolBrandSerialMapFromGrid(entryDiv) {
   const out = {};
   entryDiv.querySelectorAll('.iol-power-cell').forEach(function (cell) {
     const power = cell.dataset.power;
-    const sns = Array.from(cell.querySelectorAll('.iol-sn-input')).map(function (el) { return el.value.trim(); }).filter(Boolean);
-    if (sns.length) out[power] = sns;
+    const expRows = Array.from(cell.querySelectorAll('.iol-expiry-input')).map(function (el) {
+      const exp = String(el.value || '').trim();
+      return exp ? { exp: exp } : null;
+    }).filter(Boolean);
+    if (expRows.length) out[power] = expRows;
   });
   return out;
 }
 function readIolBrandEntrySerialMap(entryDiv) {
-  const raw = String(entryDiv.querySelector('.iol-serial-map-field')?.value || '');
-  const out = {};
-  raw.split('|').forEach(function (seg) {
-    const parts = seg.split(':');
-    if (parts.length >= 2) {
-      const power = parts[0].trim();
-      out[power] = parts[1].split(',').map(function (s) { return s.trim(); }).filter(Boolean);
-    }
-  });
-  return out;
+  return {};
 }
 window.addIolBrandEntry = addIolBrandEntry;
 window.removeIolBrandEntry = removeIolBrandEntry;
@@ -7421,6 +7528,9 @@ function saveIolInventoryGrid() {
             INVENTORY.push(invRow);
             BCMAP[invRow.barcode] = invRow;
             BCMAP[String(invRow.name).toLowerCase().substring(0, 15)] = invRow;
+            if (typeof window.saveInventoryToFirebase === 'function') {
+              window.saveInventoryToFirebase(invRow).catch(function (err) { console.error('Firebase save error:', err); });
+            }
             bmhRecordInventoryPurchase(invRow, 1, billFile || null);
             added += 1;
           }
@@ -11086,6 +11196,7 @@ function checkLabVal(inp,lo,hi){const v=parseFloat(inp.value)||0;inp.className='
 // ═══════════════════════════════════════
 function initInventory() {
   loadInventoryStockFromStorage();
+  loadInventoryFromFirebase && loadInventoryFromFirebase();
   loadBmhFinancials();
   bmhPopulateInventorySelectors();
   const deptPick = document.getElementById('inv-in-dept');
@@ -11227,16 +11338,22 @@ function addInventoryStorePrompt() {
 }
 window.addInventoryStorePrompt = addInventoryStorePrompt;
 function deleteInventoryStorePrompt() {
-  const name = normalizeInventoryTextValue(document.getElementById('inv-in-store')?.value || '');
-  if (!name) { showToast('Select a store first', 'w'); return; }
-  const used = (INVENTORY || []).some(function (i) { return String(i.store || '') === name; });
-  if (used && !confirm('This store is referenced on stock rows. Remove from list anyway?')) return;
-  window.BMH_STORE_LOCATIONS = (window.BMH_STORE_LOCATIONS || []).filter(function (s) { return s !== name; });
-  if (!window.BMH_STORE_LOCATIONS.length) {
-    window.BMH_STORE_LOCATIONS = ['Default store'];
-  }
+  if (!CURRENT_USER?.isAdmin) { showToast('Only admin can delete store locations', 'w'); return; }
+  const stores = (window.BMH_STORE_LOCATIONS || []).slice();
+  if (!stores.length) { showToast('No store locations in list', 'w'); return; }
+  const current = normalizeInventoryTextValue(document.getElementById('inv-in-store')?.value || document.getElementById('inv-stock-store-filter')?.value || '');
+  const typed = normalizeInventoryTextValue(prompt('Enter store / location to delete:\n' + stores.join('\n'), current) || '');
+  if (!typed) return;
+  const hit = stores.find(function (s) { return normalizeInventoryCompareText(s) === normalizeInventoryCompareText(typed); });
+  if (!hit) { showToast('Store location not found', 'w'); return; }
+  const used = (INVENTORY || []).some(function (i) { return normalizeInventoryCompareText(i.store || '') === normalizeInventoryCompareText(hit); });
+  if (used && !confirm('This store is referenced on stock rows. Remove it from the picker list anyway?')) return;
+  window.BMH_STORE_LOCATIONS = stores.filter(function (s) { return normalizeInventoryCompareText(s) !== normalizeInventoryCompareText(hit); });
+  if (!window.BMH_STORE_LOCATIONS.length) window.BMH_STORE_LOCATIONS = ['Default store'];
   saveInventoryStoreLocations();
   bmhPopulateInventorySelectors();
+  renderStockList();
+  renderInventoryStoreStock();
   showToast('Store removed from list ✓', 's');
 }
 window.deleteInventoryStorePrompt = deleteInventoryStorePrompt;
@@ -13469,6 +13586,12 @@ function deleteDeptTemplateOption(kind, dept, rawValue) {
 function getDeptAdviceTextareaId(dept) {
   return { ophtho: 'rx-advice-text', obg: 'obg-advice', psych: 'psych-advice', skin: 'skin-advice' }[dept] || 'rx-advice-text';
 }
+function getDeptAdviceQuickInputId(dept) {
+  return { ophtho: 'oph-advice-quick-input', obg: 'obg-advice-quick-input', psych: 'psych-advice-quick-input', skin: 'skin-advice-quick-input' }[dept] || 'oph-advice-quick-input';
+}
+function getDeptAdviceQuickListId(dept) {
+  return { ophtho: 'oph-advice-quick-list', obg: 'obg-advice-quick-list', psych: 'psych-advice-quick-list', skin: 'skin-advice-quick-list' }[dept] || 'oph-advice-quick-list';
+}
 function getDeptAdviceLibraryHostId(dept) {
   return { ophtho: 'oe-advice-library', obg: 'obg-advice-library', psych: 'psych-advice-library', skin: 'skin-advice-library' }[dept] || 'oe-advice-library';
 }
@@ -13477,6 +13600,12 @@ function getDeptProcedureLibraryHostId(dept) {
 }
 function getDeptProcedureSelectId(dept) {
   return { ophtho: 'proc-add-dropdown', obg: 'obg-proc-add-dropdown', psych: 'psych-proc-add-dropdown', skin: 'skin-proc-add-dropdown' }[dept] || 'proc-add-dropdown';
+}
+function getDeptProcedureQuickInputId(dept) {
+  return { ophtho: 'oph-proc-quick-input', obg: 'obg-proc-quick-input', psych: 'psych-proc-quick-input', skin: 'skin-proc-quick-input' }[dept] || 'oph-proc-quick-input';
+}
+function getDeptProcedureQuickListId(dept) {
+  return { ophtho: 'oph-proc-quick-list', obg: 'obg-proc-quick-list', psych: 'psych-proc-quick-list', skin: 'skin-proc-quick-list' }[dept] || 'oph-proc-quick-list';
 }
 function getDeptProcedureContainerId(dept) {
   return { ophtho: 'rx-proc-advised', obg: 'rx-proc-advised-obg', psych: 'rx-proc-advised-psych', skin: 'rx-proc-advised-skin' }[dept] || 'rx-proc-advised';
@@ -13551,6 +13680,16 @@ function renderDeptAdviceLibrary(dept) {
   const host = document.getElementById(getDeptAdviceLibraryHostId(dept));
   if (!host) return;
   const bucket = getDoctorCustomRxOptionsForDept(dept);
+  const seededOphthoAdvice = [
+    'Use eye drops exactly as advised',
+    'Do not rub the eyes',
+    'Wear dark glasses outdoors',
+    'Keep eyes clean and avoid dust',
+    'Come urgently if pain, redness, or sudden drop in vision',
+    'Review with reports on next visit',
+    'Use lubricating drops regularly',
+    'Strict blood sugar and BP control'
+  ];
   const seededObgAdvice = [
     'Maintain healthy weight',
     'Exercise regularly',
@@ -13561,17 +13700,17 @@ function renderDeptAdviceLibrary(dept) {
     'Avoid smoking and alcohol',
     'Follow-up on scheduled date'
   ];
-  if (dept === 'obg' && (!Array.isArray(bucket.advice) || !bucket.advice.length)) {
+  if (dept === 'ophtho' && (!Array.isArray(bucket.advice) || !bucket.advice.length)) {
+    bucket.advice = seededOphthoAdvice.slice();
+    saveDoctorCustomRxOptions();
+  } else if (dept === 'obg' && (!Array.isArray(bucket.advice) || !bucket.advice.length)) {
     bucket.advice = seededObgAdvice.slice();
     saveDoctorCustomRxOptions();
   }
   const items = (bucket.advice || []).slice().sort(function (a, b) { return String(a).localeCompare(String(b)); });
   if (!items.length) {
     host.innerHTML = '<div style="font-size:10.5px;color:var(--g1);padding:6px 8px;border:1px dashed var(--g4);border-radius:8px;background:var(--g6)">Saved instructions will appear here like templates.</div>';
-    if (dept === 'obg') {
-      const q = document.getElementById('obg-advice-quick');
-      if (q) q.innerHTML = '<option value="">— Add advice from list —</option>';
-    }
+    updateDeptAdviceDropdown(dept, []);
     return;
   }
   host.innerHTML = items.map(function (item) {
@@ -13582,18 +13721,41 @@ function renderDeptAdviceLibrary(dept) {
       + '<button type="button" class="btn btn-xs btn-gray" title="Delete" onclick="removeDeptAdviceTemplate(\'' + dept + '\',\'' + jsItem + '\')">✕</button>'
       + '</div>';
   }).join('');
-  if (dept === 'obg') {
-    const q = document.getElementById('obg-advice-quick');
-    if (q) {
-      const cur = q.value;
-      q.innerHTML = '<option value="">— Add advice from list —</option>' + items.map(function (item) {
-        const safe = String(item).replace(/"/g, '&quot;');
-        return '<option value="' + safe + '">' + escapeHtmlConsent(item) + '</option>';
-      }).join('');
-      if ([].slice.call(q.options).some(function (o) { return o.value === cur; })) q.value = cur;
-    }
+  updateDeptAdviceDropdown(dept, items);
+}
+function updateDeptAdviceDropdown(dept, items) {
+  const datalist = document.getElementById(getDeptAdviceQuickListId(dept));
+  if (datalist) {
+    datalist.innerHTML = items.map(function (item) {
+      return '<option value="' + String(item).replace(/"/g, '&quot;') + '"></option>';
+    }).join('');
+  }
+  const quickSelectId = dept === 'obg' ? 'obg-advice-quick' : '';
+  const q = quickSelectId ? document.getElementById(quickSelectId) : null;
+  if (q) {
+    const cur = q.value;
+    q.innerHTML = '<option value="">— Add advice from list —</option>' + items.map(function (item) {
+      return '<option value="' + String(item).replace(/"/g, '&quot;') + '">' + escapeHtmlConsent(item) + '</option>';
+    }).join('');
+    if ([].slice.call(q.options).some(function (o) { return o.value === cur; })) q.value = cur;
   }
 }
+window.handleDeptQuickEntryKey = function handleDeptQuickEntryKey(evt, kind, dept, input) {
+  if (!evt || evt.key !== 'Enter') return;
+  evt.preventDefault();
+  if (kind === 'procedure') window.commitDeptProcedureQuickEntry(dept, input);
+  else window.commitDeptAdviceQuickEntry(dept, input);
+};
+window.commitDeptAdviceQuickEntry = function commitDeptAdviceQuickEntry(dept, input) {
+  const el = typeof input === 'string' ? document.getElementById(input) : input;
+  if (!el) return;
+  const value = normalizeDeptTemplateLabel(el.value || '');
+  if (!value) return;
+  saveDeptTemplateOption('advice', dept, value);
+  renderDeptAdviceLibrary(dept);
+  appendAdviceTemplateToTextarea(dept, value);
+  el.value = '';
+};
 window.appendAdviceTemplateToTextarea = appendAdviceTemplateToTextarea;
 window.removeDeptAdviceTemplate = function removeDeptAdviceTemplate(dept, item) {
   deleteDeptTemplateOption('advice', dept, item);
@@ -13614,6 +13776,10 @@ function renderDeptProcedureLibrary(dept) {
   const host = document.getElementById(getDeptProcedureLibraryHostId(dept));
   if (!host) return;
   const bucket = getDoctorCustomRxOptionsForDept(dept);
+  if (dept === 'ophtho' && (!Array.isArray(bucket.procedure) || !bucket.procedure.length)) {
+    bucket.procedure = ['Cataract Surgery Evaluation', 'YAG Laser Capsulotomy', 'Intravitreal Injection', 'Pterygium Excision', 'DCR / Syringing Advice', 'Retinal Laser'];
+    saveDoctorCustomRxOptions();
+  }
   const items = (bucket.procedure || []).slice().sort(function (a, b) { return String(a).localeCompare(String(b)); });
   if (!items.length) {
     host.innerHTML = '<div style="font-size:10.5px;color:var(--g1);padding:6px 8px;border:1px dashed var(--g4);border-radius:8px;background:var(--g6)">Saved procedures for this department will appear here.</div>';
@@ -13654,6 +13820,17 @@ function renderDeptProcedureSelect(dept) {
   const centre = getEffectiveCentre ? getEffectiveCentre() : (CURRENT_USER?.centre || 'CHD');
   const bucket = getDoctorCustomRxOptionsForDept(dept);
   const custom = (bucket.procedure || []).slice().sort(function (a, b) { return String(a).localeCompare(String(b)); });
+  const datalist = document.getElementById(getDeptProcedureQuickListId(dept));
+  if (datalist) {
+    const options = custom.slice();
+    rows.forEach(function (row) {
+      const label = (row.parent ? row.parent + ' — ' : '') + row.name;
+      if (!options.some(function (x) { return String(x).toLowerCase() === String(label).toLowerCase(); })) options.push(label);
+    });
+    datalist.innerHTML = options.map(function (item) {
+      return '<option value="' + String(item).replace(/"/g, '&quot;') + '"></option>';
+    }).join('');
+  }
   let html = '<option value="">— Select procedure —</option>';
   if (custom.length) {
     html += '<optgroup label="Saved Procedures">';
@@ -13680,6 +13857,15 @@ function renderDeptProcedureSelect(dept) {
   html += '<option value="__custom__|0">+ Add new procedure…</option>';
   sel.innerHTML = html;
 }
+window.commitDeptProcedureQuickEntry = function commitDeptProcedureQuickEntry(dept, input) {
+  const el = typeof input === 'string' ? document.getElementById(input) : input;
+  if (!el) return;
+  const value = normalizeDeptTemplateLabel(el.value || '');
+  if (!value) return;
+  const container = document.getElementById(getDeptProcedureContainerId(dept));
+  addProcItemToContainer(container, value, 0);
+  el.value = '';
+};
 function refreshDeptAdviceAndProcedureUi() {
   ['ophtho', 'obg', 'psych', 'skin'].forEach(function (dept) {
     renderDeptAdviceLibrary(dept);
@@ -18315,6 +18501,20 @@ function lookupOTPatient(val) {
   } else {
     el.innerHTML = val.length>=4 ? '<div style="font-size:11px;color:var(--g1);padding:5px 8px;background:var(--g6);border-radius:6px">No patient found — check BMSH ID or phone</div>' : '';
   }
+}
+function prefillOTLookupValue() {
+  const raw = String(document.getElementById('ot-pt-lookup')?.value || '').trim();
+  if (!raw) { showToast('Enter BMSH ID or phone first', 'w'); return; }
+  const upper = raw.toUpperCase();
+  const lower = raw.toLowerCase();
+  const matches = PATIENTS.filter(function (x) {
+    return x.bmhId === upper
+      || String(x.bmhId || '').includes(upper.replace('BMSH-', ''))
+      || (x.mob && x.mob.replace(/\s/g, '').includes(raw.replace(/\s/g, '')))
+      || (x.name && x.name.toLowerCase().includes(lower));
+  });
+  if (!matches.length) { showToast('No patient found for this BMSH ID / phone', 'w'); return; }
+  fillOTFromPatient(matches[0].bmhId);
 }
 
 function fillOTFromPatient(bmhId) {
@@ -24947,14 +25147,31 @@ function savePrescriptionToFirebase(bmhId, rxData) {
 // ── INVENTORY ─────────────────────────────────────────────────
 function saveInventoryItemToFirebase(item) {
   normalizeInventoryRecord(item);
-  fbSet(`inventory/${item.barcode}`, item);
+  if (!item || !item.barcode || !window.FBDB) return Promise.resolve();
+  return window.FBDB.ref('inventory/' + String(item.barcode).replace(/[.#$/\[\]]/g, '_')).set(item);
 }
+window.saveInventoryToFirebase = saveInventoryItemToFirebase;
 
 function loadInventoryFromFirebase() {
-  fbOnce('inventory', data => {
-    if(!data) return;
-    INVENTORY.length = 0;
-    Object.values(data).forEach(i => INVENTORY.push(i));
+  if (!window.FBDB) return Promise.resolve();
+  return window.FBDB.ref('inventory').once('value').then(function (snap) {
+    const data = snap.val();
+    if (!data || typeof data !== 'object') return;
+    Object.values(data).forEach(function (item) {
+      if (!item || !item.barcode) return;
+      normalizeInventoryRecord(item);
+      const existing = INVENTORY.find(function (row) { return String(row.barcode || '') === String(item.barcode || ''); });
+      if (existing) Object.assign(existing, item);
+      else INVENTORY.push(item);
+      BCMAP[item.barcode] = existing || item;
+      if (item.name) BCMAP[String(item.name).toLowerCase().substring(0, 15)] = existing || item;
+    });
+    saveInventoryStockToStorage();
+    renderStockList && renderStockList();
+    renderInventoryStoreStock && renderInventoryStoreStock();
+    renderInventoryPoAlerts && renderInventoryPoAlerts();
+  }).catch(function (err) {
+    console.warn('Inventory Firebase load failed', err);
   });
 }
 
