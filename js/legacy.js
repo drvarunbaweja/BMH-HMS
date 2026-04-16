@@ -9915,7 +9915,27 @@ function renderInventoryImportDatalists() {
     return '<option value="' + escapeHtmlConsent(name) + '"></option>';
   }).join('');
   const itemList = document.getElementById('inv-item-datalist');
-  if (itemList) itemList.innerHTML = inventoryKnownProductNames().map(function (name) {
+  if (itemList) {
+    const memory = loadInventoryOcrMemory();
+    const products = memory.products || [];
+    itemList.innerHTML = products.map(function (name) {
+      return '<option value="' + escapeHtmlConsent(name) + '"></option>';
+    }).join('');
+  }
+  const barcodeList = document.getElementById('inv-barcode-datalist');
+  if (barcodeList) {
+    const memory = loadInventoryOcrMemory();
+    const barcodes = memory.barcodes || [];
+    barcodeList.innerHTML = barcodes.map(function (code) {
+      return '<option value="' + escapeHtmlConsent(code) + '"></option>';
+    }).join('');
+  }
+  const brandList = document.getElementById('inv-brand-datalist');
+  if (brandList) brandList.innerHTML = inventoryKnownBrandNames().map(function (name) {
+    return '<option value="' + escapeHtmlConsent(name) + '"></option>';
+  }).join('');
+  const companyList = document.getElementById('inv-company-datalist');
+  if (companyList) companyList.innerHTML = inventoryKnownCompanyNames().map(function (name) {
     return '<option value="' + escapeHtmlConsent(name) + '"></option>';
   }).join('');
 }
@@ -11217,6 +11237,67 @@ function deleteInventoryStorePrompt() {
   showToast('Store removed from list ✓', 's');
 }
 window.deleteInventoryStorePrompt = deleteInventoryStorePrompt;
+function addInventoryBarcodePrompt() {
+  const barcode = prompt('Barcode to add to list');
+  if (!barcode) return;
+  const memory = loadInventoryOcrMemory();
+  memory.barcodes = memory.barcodes || [];
+  const normalized = String(barcode).trim();
+  if (memory.barcodes.includes(normalized)) { showToast('Barcode already in list', 'w'); return; }
+  memory.barcodes.push(normalized);
+  saveInventoryOcrMemory();
+  renderInventoryImportDatalists();
+  const barcodeInput = document.getElementById('bc-in');
+  if (barcodeInput) barcodeInput.value = normalized;
+  showToast('Barcode added to list ✓', 's');
+}
+window.addInventoryBarcodePrompt = addInventoryBarcodePrompt;
+function removeInventoryBarcodePrompt() {
+  const memory = loadInventoryOcrMemory();
+  memory.barcodes = memory.barcodes || [];
+  if (memory.barcodes.length === 0) { showToast('No barcodes in list', 'w'); return; }
+  const barcodeList = memory.barcodes.join('\n');
+  const toRemove = prompt('Enter barcode to remove from list:\n' + barcodeList);
+  if (!toRemove) return;
+  const index = memory.barcodes.indexOf(String(toRemove).trim());
+  if (index === -1) { showToast('Barcode not found', 'w'); return; }
+  memory.barcodes.splice(index, 1);
+  saveInventoryOcrMemory();
+  renderInventoryImportDatalists();
+  showToast('Barcode removed from list ✓', 's');
+}
+window.removeInventoryBarcodePrompt = removeInventoryBarcodePrompt;
+function addInventoryBrandPrompt() {
+  const brand = prompt('Brand to add to list');
+  if (!brand) return;
+  const memory = loadInventoryOcrMemory();
+  memory.brands = memory.brands || [];
+  const normalized = normalizeInventoryTextValue(brand);
+  if (memory.brands.includes(normalized)) { showToast('Brand already in list', 'w'); return; }
+  memory.brands.push(normalized);
+  saveInventoryOcrMemory();
+  renderInventoryImportDatalists();
+  const brandInput = document.getElementById('inv-in-generic');
+  if (brandInput) brandInput.value = normalized;
+  showToast('Brand added to list ✓', 's');
+}
+window.addInventoryBrandPrompt = addInventoryBrandPrompt;
+function removeInventoryBrandPrompt() {
+  const memory = loadInventoryOcrMemory();
+  memory.brands = memory.brands || [];
+  if (memory.brands.length === 0) { showToast('No brands in list', 'w'); return; }
+  const brandList = memory.brands.join('\n');
+  const toRemove = prompt('Enter brand to remove from list:\n' + brandList);
+  if (!toRemove) return;
+  const normalized = normalizeInventoryTextValue(toRemove);
+  const index = memory.brands.indexOf(normalized);
+  if (index === -1) { showToast('Brand not found', 'w'); return; }
+  memory.brands.splice(index, 1);
+  saveInventoryOcrMemory();
+  renderInventoryImportDatalists();
+  showToast('Brand removed from list ✓', 's');
+}
+window.removeInventoryBrandPrompt = removeInventoryBrandPrompt;
 function removeInventoryLearnedProductPrompt() {
   const raw = String(document.getElementById('bc-in')?.value || prompt('Item / product name to remove from suggestions') || '').trim();
   if (!raw) return;
