@@ -6968,11 +6968,13 @@ function getInventoryIolStockCount(company, brand, power) {
   const pNorm = normalizeIolPowerValue(power);
   const c = normalizeInventoryCompareText(company || '');
   const b = normalizeInventoryCompareText(brand || '');
+  // Only return stock if both company and brand are specified
+  if (!c || !b) return 0;
   return (INVENTORY || []).reduce(function (sum, item) {
     const isIol = String(item.cat || '').toLowerCase() === 'iol' || /\biol\b/i.test(String(item.name || ''));
     if (!isIol) return sum;
-    if (c && normalizeInventoryCompareText(item.iolCompany || item.vendor || '') !== c) return sum;
-    if (b && normalizeInventoryCompareText(item.iolBrand || '') !== b) return sum;
+    if (normalizeInventoryCompareText(item.iolCompany || item.vendor || '') !== c) return sum;
+    if (normalizeInventoryCompareText(item.iolBrand || '') !== b) return sum;
     const ip = normalizeIolPowerValue(item.power || extractIolPower(item.name || ''));
     if (pNorm && ip && pNorm !== ip) return sum;
     return sum + Math.max(0, Number(item.stock) || 0);
@@ -7242,9 +7244,15 @@ function addIolBrandEntry(prefill) {
       ${idx > 0 ? `<button class="btn btn-xs btn-gray" onclick="removeIolBrandEntry(this)">✕ Remove</button>` : ''}
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
-      <div class="form-group" style="margin:0"><label class="fl">Brand</label><input type="text" class="iol-brand-field" placeholder="AcrySof / Tecnis / Appasamy" value="${escapeHtmlConsent(p.brand||'')}"></div>
-      <div class="form-group" style="margin:0"><label class="fl">Company</label><input type="text" class="iol-company-field" placeholder="Alcon / J&amp;J / Zeiss" value="${escapeHtmlConsent(p.company||'')}"></div>
+      <div class="form-group" style="margin:0"><label class="fl">Brand</label><input type="text" class="iol-brand-field" list="inv-brand-datalist" placeholder="AcrySof / Tecnis / Appasamy" value="${escapeHtmlConsent(p.brand||'')}"></div>
+      <div class="form-group" style="margin:0"><label class="fl">Company</label><input type="text" class="iol-company-field" list="inv-company-datalist" placeholder="Alcon / J&amp;J / Zeiss" value="${escapeHtmlConsent(p.company||'')}"></div>
       <div class="form-group" style="margin:0"><label class="fl">Batch Number</label><input type="text" class="iol-model-field" placeholder="Batch from product line" value="${escapeHtmlConsent(p.batch||'')}"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:8px;font-size:10px">
+      <button type="button" class="btn btn-xs btn-outline" onclick="addInventoryBrandPrompt()">+ Add Brand</button>
+      <button type="button" class="btn btn-xs btn-gray" onclick="removeInventoryBrandPrompt()">- Delete Brand</button>
+      <button type="button" class="btn btn-xs btn-outline" onclick="addInventoryCompanyPrompt()">+ Add Company</button>
+      <button type="button" class="btn btn-xs btn-gray" onclick="removeInventoryCompanyPrompt()">- Delete Company</button>
     </div>
     <div style="display:grid;grid-template-columns:140px 140px 1fr;gap:8px;align-items:end;margin-bottom:8px">
       <div class="form-group" style="margin:0"><label class="fl">Expiry</label><input type="text" class="iol-expiry-field" placeholder="MM/YYYY" value="${escapeHtmlConsent(p.exp||'')}"></div>
@@ -7288,8 +7296,8 @@ function renderIolBrandPowerGrid(entryDiv) {
         </div>
       </div>
       <input type="hidden" class="inv-iol-qty" data-power="${esc}" value="0">
-      <button type="button" class="btn btn-xs btn-outline" style="font-size:10px;padding:2px 6px" onclick="iolToggleSnPanel(this)">S/n</button>
-      <div class="iol-sn-slots" style="display:none;margin-top:6px;text-align:left"></div>
+      <button type="button" class="btn btn-xs btn-outline" style="font-size:10px;padding:2px 6px" onclick="iolToggleExpiryPanel(this)">Exp</button>
+      <div class="iol-expiry-slots" style="display:none;margin-top:6px;text-align:left"></div>
     </div>`;
   }).join('');
   entryDiv.querySelectorAll('.iol-power-cell').forEach(function (cell) {
@@ -7308,13 +7316,12 @@ function renderIolBrandPowerGrid(entryDiv) {
 function iolBrandPowerQtyDelta(btn, delta) {
   const cell = btn.closest('.iol-power-cell');
   const inp = cell && cell.querySelector('.inv-iol-qty');
+  const addEl = cell && cell.querySelector('.iol-qty-to-add');
   if (!inp) return;
-  let v = (parseInt(inp.value, 10) || 0) + delta;
-  v = Math.max(0, Math.min(99, v));
+  const v = Math.max(0, parseInt(inp.value, 10) || 0) + delta;
   inp.value = String(v);
-  const addEl = cell.querySelector('.iol-qty-to-add');
   if (addEl) addEl.textContent = String(v);
-  iolSyncSnSlots(cell);
+  iolSyncExpirySlots(cell);
   updateIolPowerCounter();
   const entry = cell.closest('.inv-iol-brand-entry');
   if (entry) refreshIolBrandPowerStockLabels(entry);
@@ -7323,7 +7330,7 @@ function iolBrandQtyInput(inp) {
   const cell = inp.closest('.iol-power-cell');
   const addEl = cell && cell.querySelector('.iol-qty-to-add');
   if (addEl && inp) addEl.textContent = String(Math.max(0, parseInt(inp.value, 10) || 0));
-  iolSyncSnSlots(cell);
+  iolSyncExpirySlots(cell);
   updateIolPowerCounter();
   const entry = cell && cell.closest('.inv-iol-brand-entry');
   if (entry) refreshIolBrandPowerStockLabels(entry);
@@ -7364,6 +7371,54 @@ function iolSyncSnSlots(cell) {
 window.iolBrandPowerQtyDelta = iolBrandPowerQtyDelta;
 window.iolBrandQtyInput = iolBrandQtyInput;
 window.iolToggleSnPanel = iolToggleSnPanel;
+function iolToggleExpiryPanel(btn) {
+  const cell = btn.closest('.iol-power-cell');
+  const wrap = cell && cell.querySelector('.iol-expiry-slots');
+  if (!wrap) return;
+  const open = wrap.style.display !== 'block';
+  wrap.style.display = open ? 'block' : 'none';
+  wrap.dataset.open = open ? '1' : '0';
+  iolSyncExpirySlots(cell);
+}
+function iolSyncExpirySlots(cell) {
+  if (!cell) return;
+  const wrap = cell.querySelector('.iol-expiry-slots');
+  const inp = cell.querySelector('.inv-iol-qty');
+  if (!wrap || !inp) return;
+  const n = Math.max(0, parseInt(inp.value, 10) || 0);
+  const open = wrap.dataset.open === '1';
+  if (!open) { wrap.innerHTML = ''; return; }
+  if (n === 0) {
+    wrap.innerHTML = '<div style="font-size:9px;color:var(--g1)">Set quantity first</div>';
+    return;
+  }
+  const keepExp = Array.from(wrap.querySelectorAll('.iol-expiry-input')).map(function (el) { return el.value; });
+  const keepSn = Array.from(wrap.querySelectorAll('.iol-sn-input')).map(function (el) { return el.value; });
+  wrap.innerHTML = '';
+  for (let i = 0; i < n; i += 1) {
+    const expDiv = document.createElement('div');
+    expDiv.style.cssText = 'margin-bottom:6px';
+    expDiv.innerHTML = `<div style="font-size:9px;color:var(--g1);margin-bottom:2px">Item ${i + 1} Expiry</div>`;
+    const expInput = document.createElement('input');
+    expInput.type = 'text';
+    expInput.className = 'iol-expiry-input';
+    expInput.placeholder = 'MM/YYYY';
+    expInput.style.cssText = 'width:100%;font-size:10px;padding:3px 5px;border:1px solid var(--g4);border-radius:4px;box-sizing:border-box;margin-bottom:3px';
+    expInput.value = keepExp[i] || '';
+    expDiv.appendChild(expInput);
+    if (n > 1) {
+      const snInput = document.createElement('input');
+      snInput.type = 'text';
+      snInput.className = 'iol-sn-input';
+      snInput.placeholder = 'Serial number ' + (i + 1);
+      snInput.style.cssText = 'width:100%;font-size:10px;padding:3px 5px;border:1px solid var(--g4);border-radius:4px;box-sizing:border-box';
+      snInput.value = keepSn[i] || '';
+      expDiv.appendChild(snInput);
+    }
+    wrap.appendChild(expDiv);
+  }
+}
+window.iolToggleExpiryPanel = iolToggleExpiryPanel;
 function readIolBrandSerialMapFromGrid(entryDiv) {
   const out = {};
   entryDiv.querySelectorAll('.iol-power-cell').forEach(function (cell) {
@@ -11370,6 +11425,37 @@ function removeInventoryBrandPrompt() {
   showToast('Brand removed from list ✓', 's');
 }
 window.removeInventoryBrandPrompt = removeInventoryBrandPrompt;
+function addInventoryCompanyPrompt() {
+  const company = prompt('Company to add to list');
+  if (!company) return;
+  const memory = loadInventoryOcrMemory();
+  memory.companies = memory.companies || [];
+  const normalized = normalizeInventoryTextValue(company);
+  if (memory.companies.includes(normalized)) { showToast('Company already in list', 'w'); return; }
+  memory.companies.push(normalized);
+  saveInventoryOcrMemory();
+  renderInventoryImportDatalists();
+  const companyInput = document.querySelector('.iol-company-field');
+  if (companyInput) companyInput.value = normalized;
+  showToast('Company added to list ✓', 's');
+}
+window.addInventoryCompanyPrompt = addInventoryCompanyPrompt;
+function removeInventoryCompanyPrompt() {
+  const memory = loadInventoryOcrMemory();
+  memory.companies = memory.companies || [];
+  if (memory.companies.length === 0) { showToast('No companies in list', 'w'); return; }
+  const companyList = memory.companies.join('\n');
+  const toRemove = prompt('Enter company to remove from list:\n' + companyList);
+  if (!toRemove) return;
+  const normalized = normalizeInventoryTextValue(toRemove);
+  const index = memory.companies.indexOf(normalized);
+  if (index === -1) { showToast('Company not found', 'w'); return; }
+  memory.companies.splice(index, 1);
+  saveInventoryOcrMemory();
+  renderInventoryImportDatalists();
+  showToast('Company removed from list ✓', 's');
+}
+window.removeInventoryCompanyPrompt = removeInventoryCompanyPrompt;
 function removeInventoryLearnedProductPrompt() {
   const raw = String(document.getElementById('bc-in')?.value || prompt('Item / product name to remove from suggestions') || '').trim();
   if (!raw) return;
@@ -11512,72 +11598,90 @@ function renderStockList() {
     return !/^(MFX-001|PDN-002|CMC-003|TIM-004|IOL-021|IOL-023|OTP-001|BEV-001|MAN-001|RL-001)$/.test(String(i.barcode || ''));
   });
   const sectionMap = {};
-  const stockGroups = {};
   rows.forEach(function (i) {
     const deptKey = String(i.dept || 'general');
     sectionMap[deptKey] = sectionMap[deptKey] || [];
     const isIol = String(i.cat || '').toLowerCase() === 'iol';
-    const title = isIol
-      ? [i.iolCompany || i.vendor || '', i.iolBrand || ''].filter(Boolean).join(' ').trim() || String(i.name || 'IOL')
-      : String(i.name || 'Unnamed Item');
-    const groupKey = isIol
-      ? ['iol', deptKey, normalizeInventoryCompareText(i.iolCompany || i.vendor || ''), normalizeInventoryCompareText(i.iolBrand || '')].join('::')
-      : ['normal', deptKey, normalizeInventoryCompareText(i.name || ''), normalizeInventoryCompareText(i.cat || '')].join('::');
-    if (!stockGroups[groupKey]) {
-      stockGroups[groupKey] = {
-        id: groupKey,
-        kind: isIol ? 'iol' : 'normal',
-        dept: deptKey,
-        title: title + ' — ' + bmhDeptLabel(deptKey),
-        label: title,
-        rows: [],
-        totalStock: 0,
-        categories: new Set(),
-        stores: new Set(),
-        powers: new Set()
-      };
-      sectionMap[deptKey].push(stockGroups[groupKey]);
+    if (isIol) {
+      sectionMap[deptKey].push({ kind: 'iol', item: i });
+    } else {
+      sectionMap[deptKey].push({ kind: 'normal', item: i });
     }
-    const g = stockGroups[groupKey];
-    g.rows.push(i);
-    g.totalStock += Number(i.stock || 0);
-    g.categories.add(String(i.cat || ''));
-    g.stores.add(String(i.store || ''));
-    if (isIol) g.powers.add(String(i.power || extractIolPower(i.name || '') || ''));
   });
-  window._inventoryStockGroups = stockGroups;
+  window._inventoryStockGroups = {};
   const sectionKeys = Object.keys(sectionMap).sort(function (a, b) { return bmhDeptLabel(a).localeCompare(bmhDeptLabel(b)); });
   el.innerHTML = sectionKeys.map(function (deptKey) {
-    const cards = sectionMap[deptKey].sort(function (a, b) { return String(a.label || '').localeCompare(String(b.label || '')); }).map(function (g) {
-      const min = Math.max(1, ...g.rows.map(function (r) { return Number(r.min || 0) || 0; }), 1);
-      const pct = Math.min(100, (g.totalStock / (min * 3)) * 100);
-      const critical = g.totalStock <= 2;
-      const low = g.totalStock <= min;
-      const tone = critical ? 'var(--red)' : low ? 'var(--orange)' : 'var(--green)';
-      const sub = g.kind === 'iol'
-        ? (() => {
-            const powerCounts = {};
-            g.rows.forEach(function (r) {
-              const power = String(r.power || extractIolPower(r.name || '') || '');
-              if (power) powerCounts[power] = (powerCounts[power] || 0) + Number(r.stock || 0);
-            });
-            const powerStr = Object.keys(powerCounts).sort(function (a, b) { return parseFloat(a) - parseFloat(b); }).map(function (p) { return p + ' ' + powerCounts[p]; }).join(', ');
-            return powerStr || `${g.powers.size} power${g.powers.size === 1 ? '' : 's'}`;
-          })()
-        : `${Array.from(g.categories).filter(Boolean).join(', ') || 'Stock item'} · ${g.stores.size} store${g.stores.size === 1 ? '' : 's'}`;
-      return `<button type="button" class="inv-row ${critical?'critical':low?'low':''}" style="width:100%;text-align:left;border:none;cursor:pointer" onclick="openInventoryStockGroup('${g.id.replace(/'/g, "\\'")}')">
-        <div style="flex:1;min-width:0">
-          <div style="font-size:12px;font-weight:800">${escapeHtmlConsent(g.label)}</div>
-          <div style="font-size:10px;color:var(--g1);margin-top:2px">${escapeHtmlConsent(sub)}</div>
-          <div class="sb-bar"><div class="sb-fill" style="width:${pct}%;background:${tone}"></div></div>
-        </div>
-        <div style="text-align:right;flex-shrink:0">
-          <div style="font-size:17px;font-weight:900;color:${tone}">${Number(g.totalStock || 0)}</div>
-          <div style="font-size:10px;color:var(--g1)">${g.kind === 'iol' ? 'Open powers' : 'Open stock rows'}</div>
-        </div>
-      </button>`;
-    }).join('');
-    return `<div style="margin-bottom:14px"><div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">${bmhDeptLabel(deptKey)}</div>${cards}</div>`;
+    const items = sectionMap[deptKey];
+    const iolItems = items.filter(function (x) { return x.kind === 'iol'; });
+    const normalItems = items.filter(function (x) { return x.kind === 'normal'; });
+    let content = '';
+    if (iolItems.length > 0) {
+      const iolGroups = {};
+      iolItems.forEach(function (x) {
+        const i = x.item;
+        const brand = normalizeInventoryCompareText(i.iolBrand || '');
+        const company = normalizeInventoryCompareText(i.iolCompany || i.vendor || '');
+        const key = company + '::' + brand;
+        if (!iolGroups[key]) {
+          iolGroups[key] = {
+            company: i.iolCompany || i.vendor || '',
+            brand: i.iolBrand || '',
+            powers: {}
+          };
+        }
+        const power = String(i.power || extractIolPower(i.name || '') || '');
+        if (power) {
+          iolGroups[key].powers[power] = (iolGroups[key].powers[power] || 0) + Number(i.stock || 0);
+        }
+      });
+      const iolCards = Object.keys(iolGroups).sort().map(function (key) {
+        const g = iolGroups[key];
+        const powerRows = Object.keys(g.powers).sort(function (a, b) { return parseFloat(a) - parseFloat(b); }).map(function (p) {
+          return `<tr><td style="padding:4px 8px;border-bottom:1px solid var(--g4);font-size:11px">${escapeHtmlConsent(p)}</td><td style="padding:4px 8px;border-bottom:1px solid var(--g4);font-size:11px;text-align:center;font-weight:700">${g.powers[p]}</td></tr>`;
+        }).join('');
+        const totalStock = Object.values(g.powers).reduce(function (sum, v) { return sum + v; }, 0);
+        const tone = totalStock <= 2 ? 'var(--red)' : totalStock <= 5 ? 'var(--orange)' : 'var(--green)';
+        return `<div style="background:#fffbec;border:1px solid #ead8a4;border-radius:8px;padding:10px;margin-bottom:10px">
+          <div style="font-size:12px;font-weight:800;color:#8a4200;margin-bottom:6px">${escapeHtmlConsent([g.company, g.brand].filter(Boolean).join(' ') || 'IOL')}</div>
+          <table style="width:100%;border-collapse:collapse">
+            <thead><tr><th style="padding:4px 8px;border-bottom:2px solid #ead8a4;font-size:10px;text-align:left;color:#8a4200">Power</th><th style="padding:4px 8px;border-bottom:2px solid #ead8a4;font-size:10px;text-align:center;color:#8a4200">Qty</th></tr></thead>
+            <tbody>${powerRows}</tbody>
+          </table>
+          <div style="margin-top:6px;text-align:right;font-size:11px;color:var(--g1)">Total: <span style="font-weight:900;color:${tone}">${totalStock}</span></div>
+        </div>`;
+      }).join('');
+      content += `<div style="margin-bottom:14px"><div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">IOLs — ${bmhDeptLabel(deptKey)}</div>${iolCards}</div>`;
+    }
+    if (normalItems.length > 0) {
+      const normalGroups = {};
+      normalItems.forEach(function (x) {
+        const i = x.item;
+        const generic = normalizeInventoryCompareText(i.name || '');
+        if (!normalGroups[generic]) {
+          normalGroups[generic] = {
+            name: i.name || '',
+            brands: {}
+          };
+        }
+        const brand = normalizeInventoryCompareText(i.brand || i.cat || 'generic');
+        normalGroups[generic].brands[brand] = (normalGroups[generic].brands[brand] || 0) + Number(i.stock || 0);
+      });
+      const normalCards = Object.keys(normalGroups).sort().map(function (key) {
+        const g = normalGroups[key];
+        const brandRows = Object.keys(g.brands).sort().map(function (b) {
+          return `<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:11px"><span>${escapeHtmlConsent(b)}</span><span style="font-weight:700">${g.brands[b]}</span></div>`;
+        }).join('');
+        const totalStock = Object.values(g.brands).reduce(function (sum, v) { return sum + v; }, 0);
+        const tone = totalStock <= 2 ? 'var(--red)' : totalStock <= 5 ? 'var(--orange)' : 'var(--green)';
+        return `<div style="background:#f8fafc;border:1px solid var(--g4);border-radius:8px;padding:10px;margin-bottom:8px">
+          <div style="font-size:12px;font-weight:800;margin-bottom:6px">${escapeHtmlConsent(g.name)}</div>
+          <div>${brandRows}</div>
+          <div style="margin-top:4px;text-align:right;font-size:11px;color:var(--g1)">Total: <span style="font-weight:900;color:${tone}">${totalStock}</span></div>
+        </div>`;
+      }).join('');
+      content += `<div style="margin-bottom:14px"><div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Other Items — ${bmhDeptLabel(deptKey)}</div>${normalCards}</div>`;
+    }
+    return content;
   }).join('') || '<div style="padding:12px;color:var(--g1);font-size:12px">No stock items for this filter.</div>';
   const ilc = document.getElementById('inv-low-cnt');
   if (ilc) ilc.textContent = String(bmhInventoryLowItems().length);
