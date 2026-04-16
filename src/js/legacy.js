@@ -7112,7 +7112,9 @@ function bmhInventoryBillModeValue() { return document.getElementById('inv-in-bi
 function bmhInventoryStoreOptions() { return (window.BMH_STORE_LOCATIONS || []).slice(); }
 function bmhInventoryCategoryOptions() {
   const existing = Array.from(new Set((INVENTORY || []).map(function (i) { return String(i.cat || '').trim(); }).filter(Boolean)));
-  return Array.from(new Set((window.BMH_INVENTORY_CATEGORIES || []).concat(existing))).filter(Boolean);
+  const all = Array.from(new Set((window.BMH_INVENTORY_CATEGORIES || []).concat(existing))).filter(Boolean);
+  if (!all.includes('IOL')) all.push('IOL');
+  return all;
 }
 function bmhInventoryLowItems() {
   return (INVENTORY || []).filter(function (i) { return Number(i.stock || 0) <= Number(i.min || 0); });
@@ -11351,17 +11353,8 @@ function addInventoryStorePrompt() {
 }
 window.addInventoryStorePrompt = addInventoryStorePrompt;
 function deleteInventoryStorePrompt() {
-  const name = normalizeInventoryTextValue(document.getElementById('inv-in-store')?.value || '');
-  if (!name) { showToast('Select a store first', 'w'); return; }
-  const used = (INVENTORY || []).some(function (i) { return String(i.store || '') === name; });
-  if (used && !confirm('This store is referenced on stock rows. Remove from list anyway?')) return;
-  window.BMH_STORE_LOCATIONS = (window.BMH_STORE_LOCATIONS || []).filter(function (s) { return s !== name; });
-  if (!window.BMH_STORE_LOCATIONS.length) {
-    window.BMH_STORE_LOCATIONS = ['Default store'];
-  }
-  saveInventoryStoreLocations();
-  bmhPopulateInventorySelectors();
-  showToast('Store removed from list ✓', 's');
+  showToast('Store locations cannot be deleted. Please contact admin if needed.', 'w');
+  return;
 }
 window.deleteInventoryStorePrompt = deleteInventoryStorePrompt;
 function addInventoryBarcodePrompt() {
