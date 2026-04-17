@@ -7847,20 +7847,14 @@ function parseIolBillOcrText(text) {
   const lines = raw.split(/\n+/).map(function (line) { return line.trim(); }).filter(Boolean);
   const flat = lines.join(' ');
 
-  // Broader company / manufacturer detection
+  // Company / manufacturer detection — expanded
+  const companyRx = /\b(?:alcon|johnson\s*&?\s*johnson|j\s*&?\s*j|zeiss|carl\s*zeiss|appasamy|aurolab|rayner|hoya|staar|iridex|bausch(?:\s*(?:&|\+)\s*lomb)?|sifi|iol-?tec|biotech|lenstec|nidek|synergetics|physiol|freedom\s*optics|santen|sun\s*pharma|excel\s*ar|kb\s*meditech|k\.?b\.?\s*meditech|meditech|vision\s*arc|vision\s*care|globe\s*healthcare|optics\s*india|vihaa|acuity|novartis|ciba\s*vision)\b/i;
   const companyGuess = lines.find(function (line) {
-    return /\b(?:alcon|johnson\s*&?\s*johnson|j\s*&?\s*j|zeiss|carl\s*zeiss|appasamy|aurolab|rayner|hoya|staar|iridex|bausch(?:\s*(?:&|\+)\s*lomb)?|sifi|iol-tec|biotech|lenstec|nidek|synergetics|physiol|freedom\s*optics|santen|sun\s*pharma|excel\s*ar)\b/i.test(line)
-      && !/invoice|bill|gstin|amount|total|bank|address|phone|mob/i.test(line);
+    return companyRx.test(line) && !/invoice|bill|gstin|amount|total|bank|address|phone|mob/i.test(line);
   }) || '';
 
-  // Brand/model from first product description line
-  const iolBrandLine = lines.find(function (line) {
-    return /vivinex|impress|xy1|pciol|aciol|hydrophob|hydrophil|multifocal|toric|aspheric|symfony|panoptix|restor|tecnis|crystalens|acrysof|auroflex|aurovue|innoprima|comfort\s*\w+/i.test(line)
-      && !/invoice|bill|gstin|amount|total|bank/i.test(line);
-  }) || '';
-  const brandRx = /\b(vivinex|impress|xy1|acrysof|tecnis|symfony|panoptix|restor|crystalens|auroflex|aurovue|innoprima|comfort\s*\w+|clareon|vivity|alcon\s*\w+)\b/i;
-  const brandMatch = iolBrandLine.match(brandRx) || flat.match(brandRx);
-  const brandGuess = brandMatch ? brandMatch[1] : '';
+  // Brand keywords — covers Trusmart, Tru Smart Pro, and common brands
+  const brandRx = /\b(tru\s*smart\s*pro|trusmart\s*pro|tru\s*smart|trusmart|vivinex|impress|xy1|acrysof|tecnis|symfony|panoptix|restor|crystalens|auroflex|aurovue|innoprima|comfort\s*\w+|clareon|vivity|alcon\s*\w+|phakic|monofocal|multifocal|toric|aspheric|hydrophob|hydrophil)\b/i;
 
   // Global expiry fallback — prefer MM/YYYY
   const expiryGuess = flat.match(/\b(0[1-9]|1[0-2])\s*[\/-]\s*(20\d{2})\b/)
@@ -7869,66 +7863,106 @@ function parseIolBillOcrText(text) {
     ? (expiryGuess[1] + '/' + (expiryGuess[2].length === 2 ? '20' + expiryGuess[2] : expiryGuess[2]))
     : '';
 
-  const rows = {};
+  // ── Brand-section splitting ──
+  // A line is a brand header if it has a brand/IOL keyword, no power notation, no large numbers, not boilerplate
+  function _isBrandHeader(line) {
+    const hasBrand = brandRx.test(line) || /\biol\b/i.test(line);
+    if (!hasBrand) return false;
+    if (/[+-]?\d+(?:\.\d+)?\s*D\b/i.test(line)) return false; // has power — it's a detail row
+    if (/\b\d{5,}\b/.test(line)) return false;                  // has large numbers
+    if (/invoice|gstin|amount|total|bank|address|phone|mob|tax|cgst|sgst|gst|discount/i.test(line)) return false;
+    return true;
+  }
 
+  // Group consecutive lines under their brand header
+  const brandSections = [];
+  let curSection = { brand: '', lines: [] };
   lines.forEach(function (line) {
-    // Power: +20.00D, 20.00 D, -3.00D, +20D, "Power: +20.00"
-    const powerMatch = line.match(/([+-]?\d+(?:\.\d+)?)\s*D\b/i)
-      || line.match(/\bpower\s*[:=]?\s*([+-]?\d+(?:\.\d+)?)/i);
-    if (!powerMatch) return;
-    const power = normalizeIolPowerValue(powerMatch[1]);
-    if (!power) return;
-
-    // Serial: SN123456, SERIAL: ABC, S/N-123, also bare alpha-numeric patterns before batch
-    const serialMatch = line.match(/\b(?:SN|SERIAL|S\/N|SR\.?\s*NO\.?|S\.NO\.?)\s*[:\s#-]*([A-Z0-9-]{4,})\b/i)
-      || line.match(/\b([A-Z]{1,3}[0-9]{5,})\b(?![/\-]\d)/);
-
-    // Batch: BATCH: MX2404, LOT# BT24, B/N
-    const batchMatch = line.match(/\b(?:BATCH|LOT|B\/N|MFG\s*NO\.?)\s*[:\s#-]*([A-Z0-9-]{3,})\b/i);
-
-    // Per-line expiry (takes priority over global)
-    const expMatch = line.match(/\b(0[1-9]|1[0-2])\s*[\/-]\s*(20\d{2})\b/)
-      || line.match(/\b(0[1-9]|1[0-2])\s*[\/-]\s*(\d{2})\b/);
-    const lineExpiry = expMatch
-      ? (expMatch[1] + '/' + (expMatch[2].length === 2 ? '20' + expMatch[2] : expMatch[2]))
-      : '';
-
-    // Rate: last large number on the line (>500)
-    const rateNums = Array.from(line.matchAll(/\b([0-9]{4,6}(?:\.[0-9]{1,2})?)\b/g))
-      .map(function (m) { return Number(m[1]); }).filter(function (n) { return n > 500; });
-    const rate = rateNums.length ? rateNums[rateNums.length - 1] : 0;
-
-    if (!rows[power]) {
-      rows[power] = { qty: 0, serials: [], expiry: lineExpiry || globalExpiry };
+    if (_isBrandHeader(line)) {
+      if (curSection.lines.length || curSection.brand) brandSections.push(curSection);
+      const bm = line.match(brandRx);
+      curSection = { brand: bm ? bm[1] : line.trim(), lines: [] };
+    } else {
+      curSection.lines.push(line);
     }
-    if (lineExpiry && !rows[power].expiry) rows[power].expiry = lineExpiry;
-    rows[power].qty += 1;
-    rows[power].serials.push({
-      serialNo: serialMatch ? (serialMatch[1] || serialMatch[2] || '') : '',
-      batchNo: batchMatch ? batchMatch[1] : '',
-      rate: rate
+  });
+  if (curSection.lines.length || curSection.brand) brandSections.push(curSection);
+
+  // If no meaningful brand headers found, treat everything as one group
+  const hasBrandSections = brandSections.some(function (s) { return s.brand; });
+  const workSections = hasBrandSections ? brandSections : [{ brand: '', lines: lines }];
+
+  function _parseSection(sectionLines, fallbackExpiry) {
+    const rows = {};
+    sectionLines.forEach(function (line) {
+      const powerMatch = line.match(/([+-]?\d+(?:\.\d+)?)\s*D\b/i)
+        || line.match(/\bpower\s*[:=]?\s*([+-]?\d+(?:\.\d+)?)/i);
+      if (!powerMatch) return;
+      const power = normalizeIolPowerValue(powerMatch[1]);
+      if (!power) return;
+
+      const serialMatch = line.match(/\b(?:SN|SERIAL|S\/N|SR\.?\s*NO\.?|S\.NO\.?)\s*[:\s#-]*([A-Z0-9-]{4,})\b/i)
+        || line.match(/\b([A-Z]{1,3}[0-9]{5,})\b(?![/\-]\d)/);
+      const batchMatch = line.match(/\b(?:BATCH|LOT|B\/N|MFG\s*NO\.?)\s*[:\s#-]*([A-Z0-9-]{3,})\b/i);
+
+      const expMatch = line.match(/\b(0[1-9]|1[0-2])\s*[\/-]\s*(20\d{2})\b/)
+        || line.match(/\b(0[1-9]|1[0-2])\s*[\/-]\s*(\d{2})\b/);
+      const lineExpiry = expMatch
+        ? (expMatch[1] + '/' + (expMatch[2].length === 2 ? '20' + expMatch[2] : expMatch[2]))
+        : '';
+
+      const rateNums = Array.from(line.matchAll(/\b([0-9]{4,6}(?:\.[0-9]{1,2})?)\b/g))
+        .map(function (m) { return Number(m[1]); }).filter(function (n) { return n > 500; });
+      const rate = rateNums.length ? rateNums[rateNums.length - 1] : 0;
+
+      const qtyMatch = line.match(/\bqty\s*[:=]?\s*(\d+)/i) || line.match(/\b(\d+)\s*(?:nos?|pcs?|units?)\b/i);
+      const qty = qtyMatch ? Math.max(1, Number(qtyMatch[1])) : 1;
+
+      if (!rows[power]) rows[power] = { qty: 0, serials: [], expiry: lineExpiry || fallbackExpiry };
+      if (lineExpiry && !rows[power].expiry) rows[power].expiry = lineExpiry;
+      rows[power].qty += qty;
+      rows[power].serials.push({
+        serialNo: serialMatch ? (serialMatch[1] || serialMatch[2] || '') : '',
+        batchNo: batchMatch ? batchMatch[1] : '',
+        rate: rate
+      });
     });
-  });
 
-  // Fallback: structured table row "+20.00D SN123456 BT2024 06/2026 1 25000.00"
-  lines.forEach(function (line) {
-    const tableMatch = line.match(/^([+-]?\d+(?:\.\d+)?)\s*D\s+([A-Z0-9-]{4,})\s+([A-Z0-9-]{3,})\s+(\d{1,2}[\/-](?:20)?\d{2,4})\s+(\d+)\s+([\d]+\.?[\d]{0,2})/i);
-    if (!tableMatch) return;
-    const power = normalizeIolPowerValue(tableMatch[1]);
-    if (!power || rows[power]) return;
-    const expParts = String(tableMatch[4] || '').match(/(\d{1,2})[\/-](\d{2,4})/);
-    const expiry = expParts
-      ? (String(expParts[1]).padStart(2, '0') + '/' + (expParts[2].length === 2 ? '20' + expParts[2] : expParts[2]))
-      : globalExpiry;
-    rows[power] = {
-      qty: Number(tableMatch[5]) || 1,
-      expiry: expiry,
-      serials: [{ serialNo: tableMatch[2], batchNo: tableMatch[3], rate: Number(tableMatch[6]) || 0 }]
-    };
-  });
+    // Structured table fallback: "+20.00D SN123456 BT2024 06/2026 1 25000"
+    sectionLines.forEach(function (line) {
+      const tm = line.match(/^([+-]?\d+(?:\.\d+)?)\s*D\s+([A-Z0-9-]{4,})\s+([A-Z0-9-]{3,})\s+(\d{1,2}[\/-](?:20)?\d{2,4})\s+(\d+)\s+([\d]+\.?[\d]{0,2})/i);
+      if (!tm) return;
+      const power = normalizeIolPowerValue(tm[1]);
+      if (!power || rows[power]) return;
+      const expParts = String(tm[4] || '').match(/(\d{1,2})[\/-](\d{2,4})/);
+      const expiry = expParts
+        ? (String(expParts[1]).padStart(2, '0') + '/' + (expParts[2].length === 2 ? '20' + expParts[2] : expParts[2]))
+        : fallbackExpiry;
+      rows[power] = { qty: Number(tm[5]) || 1, expiry: expiry, serials: [{ serialNo: tm[2], batchNo: tm[3], rate: Number(tm[6]) || 0 }] };
+    });
 
-  if (!Object.keys(rows).length) return null;
-  return { company: companyGuess, brand: brandGuess, expiry: globalExpiry, rows: rows };
+    return rows;
+  }
+
+  // Parse each section
+  const parsedGroups = workSections.map(function (sec) {
+    const rows = _parseSection(sec.lines, globalExpiry);
+    if (!Object.keys(rows).length) return null;
+    const expiries = Object.values(rows).map(function (r) { return r.expiry; }).filter(Boolean);
+    const sectionExpiry = expiries.length ? expiries[0] : globalExpiry;
+    return { brand: sec.brand, company: companyGuess, rows: rows, expiry: sectionExpiry };
+  }).filter(Boolean);
+
+  if (!parsedGroups.length) return null;
+
+  const firstGroup = parsedGroups[0];
+  return {
+    company: companyGuess,
+    brand: firstGroup.brand,
+    expiry: firstGroup.expiry || globalExpiry,
+    rows: firstGroup.rows,
+    brandGroups: parsedGroups
+  };
 }
 function prepareIolInventoryFromBill() {
   const parsed = parseIolBillOcrText(document.getElementById('inv-ocr-text')?.value || '');
@@ -10563,7 +10597,7 @@ function extractInventoryLineItems(text) {
     const lineIsText = /[a-zA-Z]{4,}/.test(line) && !/\b\d{6,8}\b/.test(line) && !/\d{1,2}[\/-]\d{4}/.test(line);
     const nextIsData = /\b\d{6,8}\b/.test(next) && /\d{1,2}[\/-]\d{2,4}/.test(next) && /\d+\.\d{2}/.test(next);
     // Also merge IOL detail lines
-    const lineIsIolHead = /hoya|vivinex|impress|xy1|iol|intraocular/i.test(line);
+    const lineIsIolHead = /hoya|vivinex|impress|xy1|iol|intraocular|trusmart|tru\s*smart|meditech|aurolab|appasamy|rayner|zeiss|acrysof|tecnis|auroflex/i.test(line);
     const nextIsIolData = /[A-Z0-9-]{5,}/.test(next) && /\d+\.\d{2}/.test(next);
     if ((lineIsText && nextIsData) || (lineIsIolHead && nextIsIolData)) {
       lines.push(line + ' ' + next);
@@ -10773,7 +10807,7 @@ function parseInventoryImportText(text) {
   const lines = String(text || '').split(/\n+/).map(function (line) { return line.trim(); }).filter(Boolean);
   const vendorNames = inventoryKnownVendorNames();
   const vendor = vendorNames.find(function (name) { return flat.toLowerCase().includes(String(name).toLowerCase()); })
-    || lines.slice(0, 8).find(function (line) { return /medical|pharma|surgicals|healthcare|opticals|traders|distributors|labs|diagnostics/i.test(line); })
+    || lines.slice(0, 8).find(function (line) { return /medical|meditech|pharma|surgicals|healthcare|opticals|traders|distributors|labs|diagnostics|biotech|surgical|supplies|enterprise|solutions|optics/i.test(line) && !/invoice|bill|gstin|gst|total|amount|bank|phone|mob|email/i.test(line); })
     || '';
   const invoiceMatch = flat.match(/\b(?:invoice|inv|bill)\s*(?:no|number|#|no\.)?\s*[:\-]?\s*([A-Z]?[0-9]{3,}[A-Z0-9\/-]*)/i);
   const dateMatch = flat.match(/\b([0-3]?\d[\/.-][01]?\d[\/.-](?:20)?\d{2})\b/);
@@ -10831,7 +10865,7 @@ function bmhMaybeRegisterVendorBillFromParsedImport(parsed, asset, mode) {
   if (!(amt > 0) && Array.isArray(parsed.lineItems)) {
     amt = parsed.lineItems.reduce(function (s, x) { return s + (Number(x.total) || 0); }, 0);
   }
-  if (!vendor || !(amt > 0)) return;
+  if (!vendor) return;
   const inv = String(parsed.invoiceNo || '').trim();
   const dayKey = new Date().toISOString().slice(0, 10);
   const fileName = String(asset?.name || '');
@@ -10944,6 +10978,17 @@ function renderInventoryImportReview(parsed, mode, text) {
     learnedBits.push('Known product: <strong>' + escapeHtmlConsent(parsed.itemName) + '</strong>');
   }
   if (knownMrp > 0) learnedBits.push('Known MRP: <strong>₹' + knownMrp.toLocaleString('en-IN') + '</strong>');
+  // Multi-brand IOL group buttons — shown when the bill has multiple IOL brands
+  const iolBrandGroupHtml = Array.isArray(parsed.iolBrandGroups) && parsed.iolBrandGroups.length > 1
+    ? `<div style="margin-top:8px;padding:8px;background:#fff3e0;border-radius:8px;border:1px solid #f0a500">
+        <div style="font-size:10px;font-weight:800;color:#8a4200;text-transform:uppercase;margin-bottom:6px">Multiple IOL brands detected — fill form for each brand, then save separately</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">${parsed.iolBrandGroups.map(function (g, idx) {
+          const totalQty = Object.values(g.rows).reduce(function (s, r) { return s + (r.qty || 1); }, 0);
+          const label = (g.brand || 'Brand ' + (idx + 1)) + ' · ' + Object.keys(g.rows).length + ' powers · Qty ' + totalQty;
+          return `<button type="button" class="btn btn-xs btn-gold" onclick="fillIolBrandGroup('${mode}',${idx})">${escapeHtmlConsent(label)}</button>`;
+        }).join('')}</div>
+      </div>`
+    : '';
   const lineItemHtml = Array.isArray(parsed.lineItems) && parsed.lineItems.length
     ? `<div style="margin-top:8px"><div style="font-size:10px;font-weight:800;color:#8a4200;text-transform:uppercase;margin-bottom:6px">Extracted bill items</div><div style="display:flex;gap:6px;flex-wrap:wrap">${parsed.lineItems.slice(0, 8).map(function (item, idx) {
         const label = [item.itemName || 'Item', item.power || '', item.batchNo ? ('Batch ' + item.batchNo) : '', item.qty ? ('Qty ' + item.qty) : ''].filter(Boolean).join(' · ');
@@ -10955,8 +11000,12 @@ function renderInventoryImportReview(parsed, mode, text) {
         return `<button type="button" class="btn btn-xs btn-outline" onclick="applyInventorySuggestedCandidate('${mode}','${String(entry.name).replace(/'/g, "\\'")}')">${escapeHtmlConsent(entry.name)}</button>`;
       }).join('')}</div></div>`
     : '';
+  // Vendor bill amount hint when amount wasn't read
+  const vendorBillHint = parsed.vendor && !parsed.billTotal && !parsed.amount
+    ? `<div style="margin-top:6px;font-size:11px;color:#8a4200">Bill registered under vendor <strong>${escapeHtmlConsent(parsed.vendor)}</strong> — go to Vendor tab to add the bill amount manually.</div>`
+    : '';
   const popupHtml = `<div style="margin-top:8px"><button type="button" class="btn btn-xs btn-blue" onclick="openInventoryBillReviewModal('${mode}')">Open bill review popup</button></div>`;
-  setInventoryImportPreview(mode, (bits.length ? bits.join(' · ') : 'No clear fields detected automatically. Please review manually.') + (learnedBits.length ? `<div style="margin-top:8px;font-size:11px;color:#1a8c3c">${learnedBits.join(' · ')}</div>` : '') + lineItemHtml + candidateHtml + popupHtml);
+  setInventoryImportPreview(mode, (bits.length ? bits.join(' · ') : 'No clear fields detected automatically. Please review manually.') + (learnedBits.length ? `<div style="margin-top:8px;font-size:11px;color:#1a8c3c">${learnedBits.join(' · ')}</div>` : '') + iolBrandGroupHtml + lineItemHtml + candidateHtml + vendorBillHint + popupHtml);
   const ta = document.getElementById('inv-ocr-text');
   if (ta && text) ta.value = text;
 }
@@ -11505,48 +11554,47 @@ async function handleInventoryImportFile(mode, inp) {
 
     // ── IOL bills: run the dedicated IOL parser for accurate power-grid population ──
     const parsedIsIol = String(parsed.category || '').toLowerCase() === 'iol'
-      || (Array.isArray(parsed.lineItems) && parsed.lineItems.some(function (it) { return !!it.power; }));
+      || (Array.isArray(parsed.lineItems) && parsed.lineItems.some(function (it) { return !!it.power; }))
+      || /\b(?:iol|intraocular|trusmart|tru\s*smart|vivinex|impress|acrysof|tecnis|auroflex|aurovue)\b/i.test(combinedText);
     if (mode === 'in' && parsedIsIol) {
       const iolParsed = parseIolBillOcrText(combinedText);
       if (iolParsed && Object.keys(iolParsed.rows || {}).length) {
-        // Build power→qty map and serial map from the IOL parser
-        const pwQtyMap = {};
-        const serialParts = [];
-        Object.keys(iolParsed.rows).forEach(function (power) {
-          const row = iolParsed.rows[power];
-          pwQtyMap[power] = { qty: row.qty };
-          const serials = (row.serials || [])
-            .map(function (s) { return [s.serialNo || '', s.batchNo || ''].filter(Boolean).join(','); })
-            .filter(Boolean);
-          if (serials.length) serialParts.push(power + ': ' + serials.join('; '));
-        });
-        if (typeof renderIolInventoryPowerGrid === 'function') renderIolInventoryPowerGrid(pwQtyMap);
-        const smEl = document.getElementById('inv-iol-serial-map');
-        if (smEl && serialParts.length && !smEl.value) smEl.value = serialParts.join(' | ');
-        // Global expiry
-        if (iolParsed.expiry) {
-          const expEl = document.getElementById('inv-iol-expiry');
-          if (expEl && !expEl.value) expEl.value = iolParsed.expiry;
+        // Store brand groups so review can show per-brand buttons
+        parsed.iolBrandGroups = iolParsed.brandGroups || null;
+
+        // Fill form for the first brand group
+        function _fillIolGroup(group) {
+          const pwQtyMap = {};
+          const serialParts = [];
+          Object.keys(group.rows).forEach(function (power) {
+            const row = group.rows[power];
+            pwQtyMap[power] = { qty: row.qty };
+            const serials = (row.serials || [])
+              .map(function (s) { return [s.serialNo || '', s.batchNo || ''].filter(Boolean).join(','); })
+              .filter(Boolean);
+            if (serials.length) serialParts.push(power + ': ' + serials.join('; '));
+          });
+          if (typeof renderIolInventoryPowerGrid === 'function') renderIolInventoryPowerGrid(pwQtyMap);
+          const smEl = document.getElementById('inv-iol-serial-map');
+          if (smEl && serialParts.length && !smEl.value) smEl.value = serialParts.join(' | ');
+          if (group.expiry) { const el = document.getElementById('inv-iol-expiry'); if (el && !el.value) el.value = group.expiry; }
+          if (group.company) { const el = document.getElementById('inv-iol-company'); if (el && !el.value) el.value = group.company; }
+          if (group.brand) { const el = document.getElementById('inv-iol-brand'); if (el && !el.value) el.value = group.brand; }
         }
-        // Company / brand if the IOL parser found them and form is still empty
-        if (iolParsed.company) {
-          const compEl = document.getElementById('inv-iol-company');
-          if (compEl && !compEl.value) compEl.value = iolParsed.company;
-        }
-        if (iolParsed.brand) {
-          const brandEl = document.getElementById('inv-iol-brand');
-          if (brandEl && !brandEl.value) brandEl.value = iolParsed.brand;
-        }
-        // Per-power expiry: if every power has a distinct expiry, store them in the review text
+
+        const firstGroup = (iolParsed.brandGroups || [])[0] || { brand: iolParsed.brand, company: iolParsed.company, rows: iolParsed.rows, expiry: iolParsed.expiry };
+        _fillIolGroup(firstGroup);
+
+        // Status message
+        const multiInfo = iolParsed.brandGroups && iolParsed.brandGroups.length > 1
+          ? iolParsed.brandGroups.length + ' IOL brands: ' + iolParsed.brandGroups.map(function (g) { return g.brand || 'IOL'; }).join(', ') + '. Use buttons in the review to fill each brand separately.'
+          : Object.keys(iolParsed.rows).length + ' power(s) detected.';
         const perPowerExpiries = Object.entries(iolParsed.rows)
           .filter(function (kv) { return kv[1].expiry && kv[1].expiry !== iolParsed.expiry; })
           .map(function (kv) { return kv[0] + '→' + kv[1].expiry; });
-        if (perPowerExpiries.length) {
-          setInventoryImportStatus(mode,
-            'IOL bill parsed — ' + Object.keys(iolParsed.rows).length + ' power(s) detected. ' +
-            'Mixed expiries: ' + perPowerExpiries.join(', ') + '. Verify expiry per power before saving.',
-            '#8a4200');
-        }
+        setInventoryImportStatus(mode,
+          'IOL bill parsed — ' + multiInfo + (perPowerExpiries.length ? ' Mixed expiries: ' + perPowerExpiries.join(', ') + '.' : '') + ' Review and save each brand.',
+          (iolParsed.brandGroups && iolParsed.brandGroups.length > 1) ? '#8a4200' : '#1a8c3c');
       }
     }
 
@@ -11567,6 +11615,37 @@ async function handleInventoryImportFile(mode, inp) {
   }
 }
 window.handleInventoryImportFile = handleInventoryImportFile;
+
+// Fill the IOL stock-in form with data from a specific brand group in a multi-brand bill
+function fillIolBrandGroup(mode, groupIdx) {
+  const parsed = window._inventoryParsedImports && window._inventoryParsedImports[mode];
+  if (!parsed || !Array.isArray(parsed.iolBrandGroups)) { showToast('No brand groups detected', 'w'); return; }
+  const group = parsed.iolBrandGroups[groupIdx];
+  if (!group) return;
+
+  const pwQtyMap = {};
+  const serialParts = [];
+  Object.keys(group.rows).forEach(function (power) {
+    const row = group.rows[power];
+    pwQtyMap[power] = { qty: row.qty };
+    const serials = (row.serials || [])
+      .map(function (s) { return [s.serialNo || '', s.batchNo || ''].filter(Boolean).join(','); })
+      .filter(Boolean);
+    if (serials.length) serialParts.push(power + ': ' + serials.join('; '));
+  });
+
+  if (typeof renderIolInventoryPowerGrid === 'function') renderIolInventoryPowerGrid(pwQtyMap);
+  const smEl = document.getElementById('inv-iol-serial-map');
+  if (smEl) smEl.value = serialParts.join(' | ');
+  if (group.expiry) { const el = document.getElementById('inv-iol-expiry'); if (el) el.value = group.expiry; }
+  if (group.company) { const el = document.getElementById('inv-iol-company'); if (el) el.value = group.company; }
+  if (group.brand) { const el = document.getElementById('inv-iol-brand'); if (el) el.value = group.brand; }
+
+  const remaining = parsed.iolBrandGroups.length - 1 - groupIdx;
+  showToast('Form filled for ' + (group.brand || 'IOL brand ' + (groupIdx + 1)) + '. Save this, then click the next brand.' + (remaining > 0 ? ' (' + remaining + ' remaining)' : ''), 's');
+}
+window.fillIolBrandGroup = fillIolBrandGroup;
+
 function bmhOcrApplyToStockIn() {
   const ta = document.getElementById('inv-ocr-text')?.value?.trim().split('\n')[0]?.trim();
   if (!ta) { showToast('Paste OCR text first', 'w'); return; }
