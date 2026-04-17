@@ -7033,11 +7033,23 @@ function saveBmhFinancials() {
     localStorage.setItem('bmh_inventory_transfers', JSON.stringify(window.BMH_INVENTORY_TRANSFERS));
   } catch (e) { /* noop */ }
 }
+function readInventoryRowsFromLocalSnapshots() {
+  const keys = ['bmh_inventory_stock', 'bmh_inventory_stock_backup', 'bmh_inventory_stock_archive'];
+  const out = [];
+  keys.forEach(function (key) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return;
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) arr.filter(Boolean).forEach(function (row) { out.push(row); });
+    } catch (e) { /* noop */ }
+  });
+  return out;
+}
 function loadInventoryStockFromStorage() {
   try {
-    const s = localStorage.getItem('bmh_inventory_stock');
-    if (!s) return;
-    const arr = JSON.parse(s);
+    const primary = localStorage.getItem('bmh_inventory_stock');
+    const arr = primary ? JSON.parse(primary) : readInventoryRowsFromLocalSnapshots();
     if (!Array.isArray(arr)) return;
     arr.forEach(row => {
       const it = INVENTORY.find(x => x.barcode === row.barcode);
@@ -7054,7 +7066,14 @@ function loadInventoryStockFromStorage() {
   } catch (e) { /* noop */ }
 }
 function saveInventoryStockToStorage() {
-  try { localStorage.setItem('bmh_inventory_stock', JSON.stringify(INVENTORY.map(i => ({ barcode: i.barcode, stock: i.stock, name: i.name, cat: i.cat, mrp: i.mrp, exp: i.exp, dept: i.dept, vendor: i.vendor, cost: i.cost, qr: i.qr, store: i.store, min: i.min, billMode: i.billMode, vendorBillingMode: i.vendorBillingMode, serialNo: i.serialNo, batchNo: i.batchNo, power: i.power, iolCompany: i.iolCompany, iolBrand: i.iolBrand, iolModel: i.iolModel, genericName: i.genericName } )))); } catch (e) { /* noop */ }
+  try {
+    const next = JSON.stringify(INVENTORY.map(i => ({ barcode: i.barcode, stock: i.stock, name: i.name, cat: i.cat, mrp: i.mrp, exp: i.exp, dept: i.dept, vendor: i.vendor, cost: i.cost, qr: i.qr, store: i.store, min: i.min, billMode: i.billMode, vendorBillingMode: i.vendorBillingMode, serialNo: i.serialNo, batchNo: i.batchNo, power: i.power, iolCompany: i.iolCompany, iolBrand: i.iolBrand, iolModel: i.iolModel, genericName: i.genericName } )));
+    const prev = localStorage.getItem('bmh_inventory_stock');
+    if (prev && prev !== next) localStorage.setItem('bmh_inventory_stock_archive', prev);
+    localStorage.setItem('bmh_inventory_stock', next);
+    localStorage.setItem('bmh_inventory_stock_backup', next);
+    localStorage.setItem('bmh_inventory_stock_updated_at', String(Date.now()));
+  } catch (e) { /* noop */ }
 }
 function normalizeIolPowerValue(power) {
   const raw = String(power || '').trim();
@@ -8913,7 +8932,7 @@ function bmhRenderVendorTables() {
         <td>₹${Number(v.amount || 0).toLocaleString('en-IN')}<div style="font-size:10px;color:${out > 0 ? '#b55a00' : 'var(--g1)'}">Due ₹${out.toLocaleString('en-IN')}</div></td>
         <td><span class="badge ${badge}">${status}</span><div style="font-size:10px;color:var(--g1);margin-top:2px">${escapeHtmlConsent(v.dueDate || (v.billMode === 'on-use' ? 'On use' : '—'))}</div></td>
         <td style="font-size:10px" onclick="event.stopPropagation()">${v.billFile?.name || v.uploadedName ? `<a href="#" onclick="event.preventDefault();openInventoryBill('${v.id}')">${escapeHtmlConsent(v.billFile?.name || v.uploadedName)}</a>` : '—'}</td>
-        <td onclick="event.stopPropagation">${out > 0 ? `<button type="button" class="btn btn-xs btn-gold" onclick="bmhMarkVendorPaid('${v.id}')">Pay</button>` : '—'}${isAdminUser() ? ` <button type="button" class="btn btn-xs btn-gray" onclick="bmhDeleteVendorBill('${v.id}')">Del</button>` : ''}</td>
+        <td onclick="event.stopPropagation">${out > 0 ? `<button type="button" class="btn btn-xs btn-gold" onclick="bmhMarkVendorPaid('${v.id}')">Pay</button>` : '—'} <button type="button" class="btn btn-xs btn-outline" onclick="bmhEditVendorBill('${v.id}')">Edit</button>${isAdminUser() ? ` <button type="button" class="btn btn-xs btn-gray" onclick="bmhDeleteVendorBill('${v.id}')">Del</button>` : ''}</td>
       </tr>`;
     }).join('')}</tbody></table><div style="margin-top:8px;font-size:12px;font-weight:900;color:var(--bmh-blue)">Filtered total due ₹${totalDue.toLocaleString('en-IN')}</div>` : '<div style="color:var(--g1);font-size:12px">No vendor bills.</div>';
   });
@@ -8964,7 +8983,7 @@ function bmhRenderVendorTables() {
             <div style="font-weight:900;color:${out>0?'#b55a00':'#1a8c3c'}">₹${Number(v.amount || 0).toLocaleString('en-IN')}</div>
             <div style="margin-top:4px"><span class="badge ${status === 'paid' ? 'bd-green' : 'bd-orange'}">${status}</span></div>
             <div style="font-size:10px;color:${out>0?'#b55a00':'#1a8c3c'};margin-top:4px">Due ₹${out.toLocaleString('en-IN')}</div>
-            ${out > 0 ? `<div style="margin-top:6px;display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap"><button type="button" class="btn btn-xs btn-gold" onclick="bmhMarkVendorPaid('${v.id}')">Pay bill</button><button type="button" class="btn btn-xs btn-outline" onclick="bmhPayVendorOutstanding('${String(v.vendor || '').replace(/'/g, "\\'")}')">Part pay vendor</button></div>` : ''}
+            <div style="margin-top:6px;display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap">${out > 0 ? `<button type="button" class="btn btn-xs btn-gold" onclick="bmhMarkVendorPaid('${v.id}')">Pay bill</button>` : ''}<button type="button" class="btn btn-xs btn-outline" onclick="bmhEditVendorBill('${v.id}')">Edit</button><button type="button" class="btn btn-xs btn-outline" onclick="bmhPayVendorOutstanding('${String(v.vendor || '').replace(/'/g, "\\'")}')">Part pay vendor</button></div>
           </div>
         </div>
         <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
@@ -9277,6 +9296,22 @@ function bmhDeleteVendorBill(id) {
   showToast('Vendor bill deleted', 's');
 }
 window.bmhDeleteVendorBill = bmhDeleteVendorBill;
+function bmhEditVendorBill(id) {
+  const v = (window.BMH_VENDOR_BILLS || []).find(function (row) { return row.id === id; });
+  if (!v) return;
+  const nextAmount = prompt('Edit total bill amount', String(Number(v.amount || 0)));
+  if (nextAmount === null) return;
+  const nextPaid = prompt('Edit amount already paid', String(Number(v.paidAmount || 0)));
+  if (nextPaid === null) return;
+  const nextDueDate = prompt('Edit due date (YYYY-MM-DD or On use)', String(v.dueDate || (v.billMode === 'on-use' ? 'On use' : '')));
+  v.amount = Math.max(0, Number(nextAmount || 0));
+  v.paidAmount = Math.max(0, Number(nextPaid || 0));
+  v.dueDate = String(nextDueDate || '').trim();
+  saveBmhFinancials();
+  bmhRenderVendorTables();
+  showToast('Vendor bill updated ✓', 's');
+}
+window.bmhEditVendorBill = bmhEditVendorBill;
 function bmhAddVendorBill() {
   const vendor = document.getElementById('inv-vend-name')?.value?.trim() || document.getElementById('bmh-vend-name')?.value?.trim();
   const inv = document.getElementById('inv-vend-inv')?.value?.trim() || document.getElementById('bmh-vend-inv')?.value?.trim();
@@ -12199,7 +12234,11 @@ function addNewCharge(){
 }
 function saveChargesToLocalStorage() {
   try {
-    localStorage.setItem('bmh_charges_schedule', JSON.stringify(CHARGES_DATA));
+    const next = JSON.stringify(CHARGES_DATA);
+    const prev = localStorage.getItem('bmh_charges_schedule');
+    if (prev && prev !== next) localStorage.setItem('bmh_charges_schedule_archive', prev);
+    localStorage.setItem('bmh_charges_schedule', next);
+    localStorage.setItem('bmh_charges_schedule_backup', next);
     localStorage.setItem('bmh_centre_charges', JSON.stringify(CENTRE_CHARGES));
     localStorage.setItem('bmh_charges_schedule_updated_at', String(Date.now()));
     window._bmhLastLocalChargesRows = normalizeChargesRows(CHARGES_DATA).slice();
@@ -12275,7 +12314,7 @@ function applyLoadedChargesRows(rows) {
 }
 function loadChargesFromLocalStorage() {
   try {
-    const sch = localStorage.getItem('bmh_charges_schedule');
+    const sch = localStorage.getItem('bmh_charges_schedule') || localStorage.getItem('bmh_charges_schedule_backup') || localStorage.getItem('bmh_charges_schedule_archive');
     if (sch) {
       const arr = normalizeChargesRows(JSON.parse(sch));
       window._bmhLastLocalChargesRows = arr.slice();
@@ -12293,10 +12332,12 @@ function loadChargesFromLocalStorage() {
 }
 function saveChargesToFirebase(){
   saveChargesToLocalStorage();
-  if(!window.FBDB) return Promise.resolve();
+  if(!window.FBDB) { showToast('Saved locally ✓', 's'); return Promise.resolve(); }
   if (!window._bmhChargesCloudLoaded) {
-    console.warn('Skipping charge cloud sync until saved charges finish loading');
-    return Promise.resolve();
+    window._bmhPendingChargesSync = true;
+    console.warn('Queueing charge cloud sync until saved charges finish loading');
+    showToast('Saved locally ✓ Cloud sync queued', 's');
+    return Promise.resolve({ queued: true });
   }
   return Promise.all([
     window.FBDB.ref('centreCharges').set(CENTRE_CHARGES),
@@ -12347,6 +12388,10 @@ function loadChargesFromFirebase(){
     try { renderOTProcedureSubheading && renderOTProcedureSubheading(document.getElementById('ot-add-proc-main')?.value || ''); } catch (e) {}
     try { refreshRxTemplateSurgeryDatalist && refreshRxTemplateSurgeryDatalist(); } catch (e) {}
     try { refreshOTFollowupTemplateSelect && refreshOTFollowupTemplateSelect(); } catch (e) {}
+    if (window._bmhPendingChargesSync) {
+      window._bmhPendingChargesSync = false;
+      saveChargesToFirebase().catch(function () {});
+    }
   }).catch(()=>{
     window._bmhChargesCloudLoaded = true;
   });
@@ -15500,6 +15545,26 @@ const ICD10_DB = [
 ];
 
 const OT_CASES = [];
+function saveOTCasesToLocalStorage() {
+  try {
+    const next = JSON.stringify((OT_CASES || []).map(normalizeOTCaseRecord));
+    const prev = localStorage.getItem('bmh_ot_cases');
+    if (prev && prev !== next) localStorage.setItem('bmh_ot_cases_archive', prev);
+    localStorage.setItem('bmh_ot_cases', next);
+    localStorage.setItem('bmh_ot_cases_backup', next);
+    localStorage.setItem('bmh_ot_cases_updated_at', String(Date.now()));
+  } catch (e) { /* noop */ }
+}
+function loadOTCasesFromLocalStorage() {
+  try {
+    const raw = localStorage.getItem('bmh_ot_cases') || localStorage.getItem('bmh_ot_cases_backup') || localStorage.getItem('bmh_ot_cases_archive');
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr.map(normalizeOTCaseRecord).filter(Boolean) : [];
+  } catch (e) {
+    return [];
+  }
+}
 
 let activeOTCase = null;
 
@@ -17079,6 +17144,7 @@ function createOTCaseFromReceptionPanel(ptId, patientNameTrim) {
   };
   const normalized = normalizeOTCaseRecord(otCase);
   OT_CASES.push(normalized);
+  saveOTCasesToLocalStorage();
   fbSet('otCases/' + caseId, normalized);
   return normalized;
 }
@@ -18681,7 +18747,9 @@ function scheduleDefaultSurgeryFollowups(otCase) {
     made.push(apt);
   });
   c.autoFollowups = made.map(function (a) { return { date: a.date, time: a.time, label: a.purpose, dateLabel: formatFollowupDisplayDate(a.date) }; });
+  c.autoFollowups = made.map(function (a, idx) { return { date: a.date, time: a.time, label: dayOffsets[idx]?.label || 'Follow-up', dateLabel: formatFollowupDisplayDate(a.date) }; });
   source.autoFollowups = c.autoFollowups.slice();
+  saveOTCasesToLocalStorage();
   fbUpdate('otCases/' + c.id, { autoFollowups: c.autoFollowups }).catch(function () {});
   renderAptDay && renderAptDay();
 }
@@ -18838,6 +18906,7 @@ function addOTCase() {
   } else {
     OT_CASES.push(normalized);
   }
+  saveOTCasesToLocalStorage();
   renderOTList();
   renderIPD && renderIPD();
   closeM('m-ot-add');
@@ -25269,8 +25338,14 @@ function listenAppointments() {
 }
 
 // ── TRANSACTIONS / COLLECTIONS ───────────────────────────────
+function saveTodayTransactionsToLocal() {
+  try { localStorage.setItem('bmh_transactions_' + todayKey(), JSON.stringify(TRANSACTIONS || [])); } catch (e) { /* noop */ }
+}
 function saveTransactionToFirebase(txn) {
   const key = txn.id || fbKey();
+  const exists = (TRANSACTIONS || []).find(function (row) { return row.id === key; });
+  if (!exists) TRANSACTIONS.push(Object.assign({}, txn, { id: key }));
+  saveTodayTransactionsToLocal();
   fbSet(`transactions/${todayKey()}/${key}`, { ...txn, id: key });
 }
 
@@ -25282,6 +25357,7 @@ function deleteTransaction(txnId) {
   const idx = TRANSACTIONS.findIndex(x=>x.id===txnId);
   if (idx < 0) return;
   TRANSACTIONS.splice(idx,1);
+  saveTodayTransactionsToLocal();
   try { if(window.firebase&&firebase.database) firebase.database().ref(`transactions/${todayKey()}/${txnId}`).remove(); } catch(e){}
   fbPush&&fbPush('auditLog',{user:CURRENT_USER?.name||'Staff',role:CURRENT_USER?.role||'Staff',action:'DELETE_TXN',item:label,timestamp:new Date().toISOString()});
   showToast(`🗑️ Deleted: ${label}`,'i');
@@ -25444,13 +25520,24 @@ function bindDeptAdviceLibraryAutosave() {
 
 // ── Load OT Cases from Firebase on login ─────────────────────────────────────
 function loadOTCasesFromFirebase() {
+  const arr = window.OT_CASES || OT_CASES;
+  const localRows = loadOTCasesFromLocalStorage();
+  if (localRows.length) {
+    arr.length = 0;
+    localRows.forEach(function (row) { arr.push(normalizeOTCaseRecord(row)); });
+    renderOTListSafe && renderOTListSafe();
+  }
   if(!window.FBDB) return;
   window.FBDB.ref('otCases').once('value').then(snap => {
     const data = snap.val();
-    if(!data) return;
-    const arr = window.OT_CASES || OT_CASES;
-    arr.length = 0; // clear first to avoid duplicates on reload
-    Object.values(data).forEach(c => arr.push(normalizeOTCaseRecord(c)));
+    const mergedById = {};
+    localRows.forEach(function (row) { if (row?.id) mergedById[row.id] = normalizeOTCaseRecord(row); });
+    if (data) Object.values(data).forEach(function (c) { if (c?.id) mergedById[c.id] = normalizeOTCaseRecord(c); });
+    const merged = Object.values(mergedById);
+    if (!merged.length) return;
+    arr.length = 0;
+    merged.forEach(function (row) { arr.push(row); });
+    saveOTCasesToLocalStorage();
     renderOTListSafe && renderOTListSafe();
   }).catch(e => console.warn('OT load error:', e));
 }
@@ -25629,12 +25716,28 @@ function loadTodayTransactions() {
   const cacheKey = today + '|' + (CURRENT_USER?.isAdmin ? 'ALL' : centre);
   if (window._bmhTodayTransactionsLoadedKey === cacheKey) return;
   window._bmhTodayTransactionsLoadedKey = cacheKey;
+  try {
+    const localRaw = localStorage.getItem('bmh_transactions_' + todayKey());
+    if (localRaw) {
+      const localRows = JSON.parse(localRaw);
+      if (Array.isArray(localRows)) {
+        TRANSACTIONS.length = 0;
+        localRows.forEach(function (t) {
+          if (CURRENT_USER?.isAdmin || normalizeAppointmentCentreValue(t.centre || 'CHD') === centre) TRANSACTIONS.push(t);
+        });
+        renderCollectionDashboard && renderCollectionDashboard();
+      }
+    }
+  } catch (e) { /* noop */ }
   fbOnce(`transactions/${todayKey()}`, data => {
-    if(!data) return;
+    const merged = {};
+    (TRANSACTIONS || []).forEach(function (t) { if (t?.id) merged[t.id] = t; });
+    Object.values(data || {}).forEach(function (t) { if (t?.id) merged[t.id] = t; });
     TRANSACTIONS.length = 0;
-    Object.values(data).forEach(function (t) {
+    Object.values(merged).forEach(function (t) {
       if (CURRENT_USER?.isAdmin || normalizeAppointmentCentreValue(t.centre || 'CHD') === centre) TRANSACTIONS.push(t);
     });
+    saveTodayTransactionsToLocal();
     renderCollectionDashboard && renderCollectionDashboard();
   });
 }
@@ -25677,8 +25780,18 @@ function loadInventoryFromFirebase() {
   if (!window.FBDB) return Promise.resolve();
   return window.FBDB.ref('inventory').once('value').then(function (snap) {
     const data = snap.val();
-    if (!data || typeof data !== 'object') return;
-    Object.values(data).forEach(function (item) {
+    const remoteRows = (data && typeof data === 'object') ? Object.values(data) : [];
+    const localRows = readInventoryRowsFromLocalSnapshots();
+    const mergedByBarcode = {};
+    localRows.forEach(function (item) {
+      if (!item || !item.barcode) return;
+      mergedByBarcode[String(item.barcode)] = Object.assign({}, item);
+    });
+    remoteRows.forEach(function (item) {
+      if (!item || !item.barcode) return;
+      mergedByBarcode[String(item.barcode)] = Object.assign({}, mergedByBarcode[String(item.barcode)] || {}, item);
+    });
+    Object.values(mergedByBarcode).forEach(function (item) {
       if (!item || !item.barcode) return;
       normalizeInventoryRecord(item);
       const existing = INVENTORY.find(function (row) { return String(row.barcode || '') === String(item.barcode || ''); });
@@ -25688,6 +25801,9 @@ function loadInventoryFromFirebase() {
       if (item.name) BCMAP[String(item.name).toLowerCase().substring(0, 15)] = existing || item;
     });
     saveInventoryStockToStorage();
+    if (localRows.length > remoteRows.length) {
+      Object.values(mergedByBarcode).forEach(function (item) { saveInventoryItemToFirebase(item).catch(function () {}); });
+    }
     renderStockList && renderStockList();
     renderInventoryStoreStock && renderInventoryStoreStock();
     renderInventoryPoAlerts && renderInventoryPoAlerts();
