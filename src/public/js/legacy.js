@@ -12215,6 +12215,20 @@ function renderStockList() {
 }
 window.renderStockList = renderStockList;
 
+// Extract the best brand label for an IOL item.
+// Priority: iolBrand field → name stripped of power → iolCompany → vendor
+function _iolBrandLabel(i) {
+  const b = String(i.iolBrand || '').trim();
+  if (b) return b;
+  // Strip power notation and trailing numbers from item name
+  const stripped = String(i.name || '')
+    .replace(/[+-]?\d+(?:\.\d+)?\s*D\b.*/i, '')
+    .replace(/\s+\d+$/, '')
+    .trim();
+  if (stripped && stripped.length >= 3 && !/^IOL$/i.test(stripped)) return stripped;
+  return String(i.iolCompany || i.vendor || 'IOL').trim();
+}
+
 function _renderStockListNow() {
   window._stockListDirty = false;
   const el = document.getElementById('inv-stock-list');
@@ -12242,21 +12256,18 @@ function _renderStockListNow() {
     return;
   }
 
-  // ── Build dept → IOL brands + normal category groups ──
+  // ── Build dept → { iols: {brandKey→{brandLabel,company,powers}}, normals: {nameKey→{name,cat,stock}} } ──
   const deptMap = {};
   rows.forEach(function (i) {
     const dk = String(i.dept || 'general');
     if (!deptMap[dk]) deptMap[dk] = { iols: {}, normals: {} };
     const isIol = String(i.cat || '').toLowerCase() === 'iol';
     if (isIol) {
-      const company = String(i.iolCompany || i.vendor || 'Unknown').trim();
-      const brand   = String(i.iolBrand  || '').trim();
-      const bk = normalizeInventoryCompareText(company + ' ' + brand);
+      const brandLabel = _iolBrandLabel(i);
+      const company    = String(i.iolCompany || '').trim();
+      const bk         = normalizeInventoryCompareText(brandLabel);
       if (!deptMap[dk].iols[bk]) {
-        deptMap[dk].iols[bk] = {
-          label: [company, brand].filter(Boolean).join(' · '),
-          powers: {}
-        };
+        deptMap[dk].iols[bk] = { brandLabel: brandLabel, company: company, powers: {} };
       }
       const power = String(i.power || extractIolPower(i.name || '') || '?');
       deptMap[dk].iols[bk].powers[power] = (deptMap[dk].iols[bk].powers[power] || 0) + Math.max(0, Number(i.stock) || 0);
@@ -12270,12 +12281,12 @@ function _renderStockListNow() {
   });
 
   const deptKeys = Object.keys(deptMap).sort(function (a, b) { return bmhDeptLabel(a).localeCompare(bmhDeptLabel(b)); });
-  const trs = [];   // accumulate <tr> strings
+  const trs = [];
 
   deptKeys.forEach(function (dk, di) {
     const d        = deptMap[dk];
     const deptId   = 'sld' + di;
-    const iolBKeys = Object.keys(d.iols);
+    const iolBKeys = Object.keys(d.iols).sort();
     const normKeys = Object.keys(d.normals);
 
     const iolTotal  = iolBKeys.reduce(function (s, bk) {
@@ -12283,90 +12294,99 @@ function _renderStockListNow() {
     }, 0);
     const normTotal = normKeys.reduce(function (s, nk) { return s + d.normals[nk].stock; }, 0);
 
-    // ── Dept header row ──
-    const deptBadges = [
-      iolTotal  ? '<span style="background:rgba(255,255,255,.22);border-radius:4px;padding:1px 7px;font-size:10px;margin-left:4px">IOL&nbsp;' + iolTotal  + '</span>' : '',
+    // ── Dept header ──
+    const badges = [
+      iolTotal  ? '<span style="background:rgba(255,255,255,.22);border-radius:4px;padding:1px 7px;font-size:10px;margin-left:5px">IOL&nbsp;' + iolTotal  + '</span>' : '',
       normTotal ? '<span style="background:rgba(255,255,255,.22);border-radius:4px;padding:1px 7px;font-size:10px;margin-left:4px">Other&nbsp;' + normTotal + '</span>' : ''
     ].join('');
     trs.push(
       '<tr onclick="slToggle(\'' + deptId + '\')" style="cursor:pointer;background:var(--bmh-blue);color:#fff;user-select:none">' +
         '<td style="padding:8px 10px;font-size:11px;font-weight:900;letter-spacing:.6px;text-transform:uppercase;width:100%">' +
-          '<span id="c-' + deptId + '" style="display:inline-block;width:14px;font-size:9px;transition:transform .15s">▶</span> ' +
-          escapeHtmlConsent(bmhDeptLabel(dk)) + deptBadges +
+          '<span id="c-' + deptId + '" style="display:inline-block;width:14px;font-size:9px">▶</span> ' +
+          escapeHtmlConsent(bmhDeptLabel(dk)) + badges +
         '</td>' +
-        '<td style="padding:8px 10px;font-size:12px;font-weight:900;text-align:right;white-space:nowrap">' +
-          (iolTotal + normTotal) +
-        '</td>' +
+        '<td style="padding:8px 10px;font-size:12px;font-weight:900;text-align:right;white-space:nowrap">' + (iolTotal + normTotal) + '</td>' +
       '</tr>'
     );
 
-    // ── IOL section ──
+    // ── IOL brand mini-card grid (all brands visible at a glance when dept is open) ──
     if (iolBKeys.length) {
-      // IOL section sub-header
+      // Build the card HTML for every brand; cards are always shown when dept open
+      const cardHtml = iolBKeys.map(function (bk, bi) {
+        const b       = d.iols[bk];
+        const brandId = deptId + 'b' + bi;
+        const bTotal  = Object.values(b.powers).reduce(function (s, v) { return s + v; }, 0);
+        const pCount  = Object.keys(b.powers).length;
+        const bTone   = bTotal <= 2 ? '#c0392b' : bTotal <= 5 ? '#d35400' : '#1a6e35';
+        return (
+          '<div onclick="slToggleBrand(\'' + brandId + '\',\'' + deptId + '\')" ' +
+          'style="border:1.5px solid #e8c96a;border-radius:9px;padding:9px 8px 7px;text-align:center;cursor:pointer;background:#fff9e6;min-width:90px;flex:1 1 90px;user-select:none">' +
+            '<div style="font-size:11px;font-weight:900;color:#7a3a00;line-height:1.2;margin-bottom:2px">' + escapeHtmlConsent(b.brandLabel) + '</div>' +
+            (b.company ? '<div style="font-size:9px;color:#b57a00;margin-bottom:5px">' + escapeHtmlConsent(b.company) + '</div>' : '<div style="margin-bottom:5px"></div>') +
+            '<div id="c-' + brandId + '" style="font-size:20px;font-weight:900;color:' + bTone + ';line-height:1">' + bTotal + '</div>' +
+            '<div style="font-size:9px;color:#b57a00;margin-top:2px">' + pCount + ' power' + (pCount !== 1 ? 's' : '') + ' ▼</div>' +
+          '</div>'
+        );
+      }).join('');
+
+      // Single row containing the flex card grid — visible when dept open
       trs.push(
         '<tr data-parent="' + deptId + '" style="display:none;background:#fffbec">' +
-          '<td colspan="2" style="padding:5px 10px 4px 26px;font-size:10px;font-weight:900;color:#8a4200;letter-spacing:.5px;text-transform:uppercase">💊 IOLs — ' + iolBKeys.length + ' brand' + (iolBKeys.length !== 1 ? 's' : '') + '</td>' +
+          '<td colspan="2" style="padding:8px 10px 6px">' +
+            '<div style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">💊 IOLs</div>' +
+            '<div style="display:flex;flex-wrap:wrap;gap:8px">' + cardHtml + '</div>' +
+          '</td>' +
         '</tr>'
       );
 
-      iolBKeys.sort().forEach(function (bk, bi) {
-        const b        = d.iols[bk];
-        const brandId  = deptId + 'b' + bi;
-        const bTotal   = Object.values(b.powers).reduce(function (s, v) { return s + v; }, 0);
-        const pCount   = Object.keys(b.powers).length;
-        const bTone    = bTotal <= 2 ? 'var(--red)' : bTotal <= 5 ? 'var(--orange)' : '#1a6e35';
+      // Power detail rows for each brand — hidden until brand card clicked
+      // Tagged with data-dept so slToggle(dept) can clean them up on close
+      iolBKeys.forEach(function (bk, bi) {
+        const b       = d.iols[bk];
+        const brandId = deptId + 'b' + bi;
+        const powers  = Object.keys(b.powers).sort(function (a, b2) { return parseFloat(a) - parseFloat(b2); });
 
-        // Brand row
+        // Header row for the expanded brand
         trs.push(
-          '<tr data-parent="' + deptId + '" data-id="' + brandId + '" onclick="slToggle(\'' + brandId + '\')" ' +
-          'style="display:none;cursor:pointer;background:#fff9e8;border-left:3px solid #e8c96a;user-select:none">' +
-            '<td style="padding:7px 10px 7px 30px;font-size:11px;font-weight:700;color:#7a3a00">' +
-              '<span id="c-' + brandId + '" style="display:inline-block;width:14px;font-size:9px;color:#b57a00">▶</span> ' +
-              escapeHtmlConsent(b.label || 'IOL') +
-              '<span style="margin-left:8px;font-size:10px;color:#b57a00;font-weight:400">' + pCount + ' power' + (pCount !== 1 ? 's' : '') + '</span>' +
+          '<tr data-parent="' + brandId + '" data-dept="' + deptId + '" style="display:none;background:#fff3cc">' +
+            '<td colspan="2" style="padding:4px 14px 3px;font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;letter-spacing:.4px">' +
+              escapeHtmlConsent(b.brandLabel) + (b.company ? ' · ' + escapeHtmlConsent(b.company) : '') +
             '</td>' +
-            '<td style="padding:7px 10px;text-align:right;font-size:13px;font-weight:900;color:' + bTone + '">' + bTotal + '</td>' +
           '</tr>'
         );
-
-        // Power rows (hidden until brand row expanded)
-        Object.keys(b.powers).sort(function (a, b2) { return parseFloat(a) - parseFloat(b2); }).forEach(function (power) {
+        powers.forEach(function (power) {
           const qty   = b.powers[power];
-          const qTone = qty <= 1 ? 'var(--red)' : qty <= 3 ? 'var(--orange)' : '#1a6e35';
+          const qTone = qty <= 1 ? '#c0392b' : qty <= 3 ? '#d35400' : '#1a6e35';
           trs.push(
-            '<tr data-parent="' + brandId + '" style="display:none;background:#fffef5">' +
-              '<td style="padding:4px 10px 4px 50px;font-size:11px;color:var(--g1);font-family:var(--mono)">' +
-                escapeHtmlConsent(power) +
-              '</td>' +
-              '<td style="padding:4px 10px;text-align:right;font-size:12px;font-weight:800;color:' + qTone + '">' + qty + '</td>' +
+            '<tr data-parent="' + brandId + '" data-dept="' + deptId + '" style="display:none;background:#fffef5">' +
+              '<td style="padding:4px 14px 4px 26px;font-size:11px;color:var(--g1);font-family:var(--mono)">' + escapeHtmlConsent(power) + '</td>' +
+              '<td style="padding:4px 14px;text-align:right;font-size:12px;font-weight:900;color:' + qTone + '">' + qty + '</td>' +
             '</tr>'
           );
         });
       });
     }
 
-    // ── Non-IOL items, grouped by category ──
+    // ── Non-IOL items grouped by category (collapsible) ──
     if (normKeys.length) {
-      // Group by category
       const catGroups = {};
       normKeys.forEach(function (nk) {
-        const n   = d.normals[nk];
-        const cat = n.cat || 'General';
-        if (!catGroups[cat]) catGroups[cat] = [];
-        catGroups[cat].push(n);
+        const n = d.normals[nk];
+        const c = n.cat || 'General';
+        if (!catGroups[c]) catGroups[c] = [];
+        catGroups[c].push(n);
       });
 
       Object.keys(catGroups).sort().forEach(function (cat, ci) {
         const catId    = deptId + 'c' + ci;
         const items    = catGroups[cat];
         const catTotal = items.reduce(function (s, n) { return s + n.stock; }, 0);
-        const cTone    = catTotal <= 5 ? 'var(--red)' : catTotal <= 20 ? 'var(--orange)' : '#1a6e35';
+        const cTone    = catTotal <= 5 ? '#c0392b' : catTotal <= 20 ? '#d35400' : '#1a6e35';
 
-        // Category row
         trs.push(
           '<tr data-parent="' + deptId + '" data-id="' + catId + '" onclick="slToggle(\'' + catId + '\')" ' +
           'style="display:none;cursor:pointer;background:#f4f7fb;border-left:3px solid var(--g4);user-select:none">' +
-            '<td style="padding:7px 10px 7px 26px;font-size:11px;font-weight:700;color:var(--bmh-blue)">' +
+            '<td style="padding:7px 10px 7px 14px;font-size:11px;font-weight:700;color:var(--bmh-blue)">' +
               '<span id="c-' + catId + '" style="display:inline-block;width:14px;font-size:9px;color:var(--g2)">▶</span> ' +
               escapeHtmlConsent(cat) +
               '<span style="margin-left:8px;font-size:10px;color:var(--g2);font-weight:400">' + items.length + ' item' + (items.length !== 1 ? 's' : '') + '</span>' +
@@ -12375,12 +12395,11 @@ function _renderStockListNow() {
           '</tr>'
         );
 
-        // Item rows
         items.slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).forEach(function (n) {
-          const qTone = n.stock <= 2 ? 'var(--red)' : n.stock <= 5 ? 'var(--orange)' : 'var(--g1)';
+          const qTone = n.stock <= 2 ? '#c0392b' : n.stock <= 5 ? '#d35400' : 'var(--g1)';
           trs.push(
-            '<tr data-parent="' + catId + '" style="display:none;background:#fafcff">' +
-              '<td style="padding:5px 10px 5px 44px;font-size:11px;color:var(--g2)">' + escapeHtmlConsent(n.name) + '</td>' +
+            '<tr data-parent="' + catId + '" data-dept="' + deptId + '" style="display:none;background:#fafcff">' +
+              '<td style="padding:5px 10px 5px 36px;font-size:11px;color:var(--g2)">' + escapeHtmlConsent(n.name) + '</td>' +
               '<td style="padding:5px 10px;text-align:right;font-size:12px;font-weight:700;color:' + qTone + '">' + n.stock + '</td>' +
             '</tr>'
           );
@@ -12388,41 +12407,63 @@ function _renderStockListNow() {
       });
     }
 
-    // Thin spacer between departments
     trs.push('<tr><td colspan="2" style="height:4px;background:var(--g5)"></td></tr>');
   });
 
   el.innerHTML =
     '<table id="inv-stock-table" style="width:100%;border-collapse:collapse;font-size:12px;border:1px solid var(--g4);border-radius:10px;overflow:hidden">' +
-    trs.join('') +
-    '</table>';
+    trs.join('') + '</table>';
 }
 window._renderStockListNow = _renderStockListNow;
 
-// Toggle expand/collapse for dept, brand, or category rows.
-// Closing a parent also closes any open children automatically.
+// Toggle dept or category rows. When closing a dept, also resets any expanded brand cards.
 function slToggle(id) {
   const caret  = document.getElementById('c-' + id);
   const isOpen = caret && caret.textContent.trim() === '▼';
   const table  = document.getElementById('inv-stock-table');
   if (!table) return;
-  table.querySelectorAll('tr[data-parent="' + id + '"]').forEach(function (row) {
-    row.style.display = isOpen ? 'none' : '';
-    // When collapsing, also close any expanded child groups
-    if (isOpen) {
-      const cid = row.dataset.id;
-      if (cid) {
-        const cc = document.getElementById('c-' + cid);
-        if (cc && cc.textContent.trim() === '▼') {
-          cc.textContent = '▶';
-          table.querySelectorAll('tr[data-parent="' + cid + '"]').forEach(function (sub) { sub.style.display = 'none'; });
-        }
-      }
-    }
-  });
+
+  if (isOpen) {
+    // Closing: hide direct children
+    table.querySelectorAll('tr[data-parent="' + id + '"]').forEach(function (row) { row.style.display = 'none'; });
+    // Also hide any grandchildren tagged with data-dept (brand power rows, item rows)
+    table.querySelectorAll('tr[data-dept="' + id + '"]').forEach(function (row) { row.style.display = 'none'; });
+    // Reset caret on nested category rows
+    table.querySelectorAll('tr[data-parent="' + id + '"][data-id]').forEach(function (row) {
+      const cc = document.getElementById('c-' + row.dataset.id);
+      if (cc) cc.textContent = '▶';
+    });
+  } else {
+    // Opening: show only direct children
+    table.querySelectorAll('tr[data-parent="' + id + '"]').forEach(function (row) { row.style.display = ''; });
+  }
   if (caret) caret.textContent = isOpen ? '▶' : '▼';
 }
 window.slToggle = slToggle;
+
+// Toggle power rows for an IOL brand card (the card lives inside a grid div, not a <tr>).
+function slToggleBrand(brandId, deptId) {
+  const caret  = document.getElementById('c-' + brandId);
+  if (!caret) return;
+  const isOpen = caret.textContent.trim() === '▼' || caret.textContent.includes('▲');
+  const table  = document.getElementById('inv-stock-table');
+  if (!table) return;
+  table.querySelectorAll('tr[data-parent="' + brandId + '"]').forEach(function (row) {
+    row.style.display = isOpen ? 'none' : '';
+  });
+  // Update the card caret indicator
+  const cardCaret = caret.closest('div') && caret.closest('div').querySelector('div:last-child');
+  const pCount = table.querySelectorAll('tr[data-parent="' + brandId + '"]').length - 1; // minus header
+  if (caret.tagName !== 'SPAN') {
+    // caret is the total-number div — update the "N powers" div below it
+    const wrap = caret.parentElement;
+    if (wrap) {
+      const hint = wrap.querySelector('div:last-child');
+      if (hint) hint.textContent = pCount + ' power' + (pCount !== 1 ? 's' : '') + (isOpen ? ' ▼' : ' ▲');
+    }
+  }
+}
+window.slToggleBrand = slToggleBrand;
 function adminClearAllInventoryStock() {
   if (typeof isAdminUser !== 'function' || !isAdminUser()) { showToast('Only admin can clear inventory', 'w'); return; }
   if (!confirm('Delete ALL current inventory rows? Barcode map will reset. This cannot be undone.')) return;
@@ -19710,16 +19751,10 @@ function prefillOTCase(bmhId) {
 
 function openOTAddModal(opts) {
   opts = opts || {};
-  // Populate patient dropdown with today's patients + all patients
+  // Only reset the dropdown — patient lookup is handled by ot-pt-lookup search field
   const ptSel = document.getElementById('ot-pt-sel');
   if(ptSel) {
-    const today = new Date().toISOString().slice(0,10);
-    const todayPts = PATIENTS.filter(p=>p.createdAt?.startsWith(today)||p.checkinAt);
-    const otherPts = PATIENTS.filter(p=>!todayPts.some(x=>x.bmhId===p.bmhId)).slice(0,50);
-    const renderOpts = pts => pts.map(p=>`<option value="${p.bmhId}">${p.name} — ${p.bmhId} — ${p.age||'?'}Y/${p.sex||''}</option>`).join('');
-    ptSel.innerHTML = `<option value="">— Search above or select —</option>`;
-    if(todayPts.length) ptSel.innerHTML += `<optgroup label="Today's Patients">${renderOpts(todayPts)}</optgroup>`;
-    if(otherPts.length) ptSel.innerHTML += `<optgroup label="All Patients">${renderOpts(otherPts)}</optgroup>`;
+    ptSel.innerHTML = `<option value="">— Use BMSH ID lookup above —</option>`;
   }
   // Set today's date as default
   const dateEl=document.getElementById('ot-add-date'); if(dateEl&&!dateEl.value) dateEl.value=new Date().toISOString().split('T')[0];
