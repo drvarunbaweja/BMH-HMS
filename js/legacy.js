@@ -14965,6 +14965,16 @@ function choosePreferredDrugLibraryRows(localRows, remoteRows, currentRows, loca
   else base = localList.concat(remoteList);
   return mergeDrugLibraryRows(base.concat(currentList));
 }
+function getRecoveredDrugLibraryRows(localRows, remoteRows, currentRows) {
+  const rescueList = readDrugLibraryRowsFromAllLocalSources();
+  const merged = mergeDrugLibraryRows(
+    normalizeDrugLibrarySnapshot(localRows)
+      .concat(normalizeDrugLibrarySnapshot(remoteRows))
+      .concat(normalizeDrugLibrarySnapshot(currentRows))
+      .concat(rescueList)
+  );
+  return { rows: merged, rescueCount: normalizeDrugLibrarySnapshot(rescueList).length };
+}
 
 function getCurrentDrugDeptLabel() {
   const deptMap = {
@@ -15075,7 +15085,9 @@ function loadDrugLibraryFromStorage(opts) {
     const localTs = Number(localStorage.getItem('bmh_drug_library_updated_at') || 0) || 0;
     const remoteTs = Number(window._bmhDrugLibraryRemoteUpdatedAt || 0) || 0;
     DRUG_LIBRARY.length = 0;
-    const merged = choosePreferredDrugLibraryRows(localArr, remoteArr, currentArr, localTs, remoteTs);
+    let merged = choosePreferredDrugLibraryRows(localArr, remoteArr, currentArr, localTs, remoteTs);
+    const recovered = getRecoveredDrugLibraryRows(localArr, remoteArr, currentArr);
+    if (recovered.rows.length > merged.length) merged = recovered.rows;
     merged.forEach(function (x) { DRUG_LIBRARY.push(x); });
     persistDrugLibraryLocalSnapshots(DRUG_LIBRARY);
     renderSettingsDrugs && renderSettingsDrugs();
@@ -15100,8 +15112,13 @@ function loadDrugLibraryFromStorage(opts) {
     window._bmhDrugLibraryHydratedFromFirebase = true;
     const remoteArr = normalizeDrugLibrarySnapshot(snap.val());
     const localArr = readDrugLibraryFromLocalStorage();
+    const rescuedArr = readDrugLibraryRowsFromAllLocalSources();
     window._bmhDrugLibraryRemoteUpdatedAt = Number(metaSnap && metaSnap.val && metaSnap.val()?.updatedAt || 0) || 0;
-    const repairCloud = (!!localArr.length && localArr.length > remoteArr.length) || (!remoteArr.length && localArr.length > 0);
+    const repairCloud = (
+      (!!localArr.length && localArr.length > remoteArr.length) ||
+      (!!rescuedArr.length && rescuedArr.length > remoteArr.length) ||
+      (!remoteArr.length && (localArr.length > 0 || rescuedArr.length > 0))
+    );
     applyMergedRows(snap.val(), { repairCloud: repairCloud });
   }).catch(function () {
     applyMergedRows(null, { repairCloud: false });
@@ -15138,10 +15155,10 @@ function handleDrugImportCsv(inp) {
     const gi = idx(h => h.includes('generic'));
     const ci = idx(h => h.includes('compan'));
     const tyi = idx(h => h.includes('type') || h.includes('form') || h.includes('category') || h.includes('dosage form') || h === 'form');
+    const di = idx(h => h.includes('dept') || h.includes('department') || h.includes('speciality') || h.includes('specialty'));
     const tCol = ti >= 0 ? ti : 0;
     const gCol = gi >= 0 ? gi : 1;
     const typeCol = tyi >= 0 ? tyi : (header.length > 2 ? 2 : -1);
-    const deptDefault = document.getElementById('new-drug-dept')?.value || getCurrentDrugDeptLabel();
     let added = 0;
     for (let i = 1; i < lines.length; i++) {
       const cols = lines[i].split(',').map(x => x.trim().replace(/^"|"$/g, ''));
@@ -15149,6 +15166,8 @@ function handleDrugImportCsv(inp) {
       const generic = cols[gCol] || '';
       const company = ci >= 0 ? (cols[ci] || '') : '';
       const rawType = typeCol >= 0 ? (cols[typeCol] || '') : '';
+      const rawDept = di >= 0 ? (cols[di] || '') : '';
+      const importedDept = rawDept ? String(rawDept).trim() : 'All';
       if (!trade && !generic) continue;
       const drugType = normalizeDrugTypeFromCsv(rawType);
       DRUG_LIBRARY.push(normalizeDrugLibraryRow({
@@ -15157,7 +15176,7 @@ function handleDrugImportCsv(inp) {
         generic: generic || trade,
         freq: 'BD',
         dur: '1 Week',
-        dept: deptDefault,
+        dept: importedDept || 'All',
         company: company || ''
       }));
       added++;
