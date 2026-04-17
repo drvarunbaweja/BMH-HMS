@@ -4048,6 +4048,23 @@
         <button class="btn btn-gold" onclick="saveRxTemplate()">💾 Save OT Template</button>
       </div>
     </div>
+    <div class="card" style="margin-top:12px"><div class="card-hd"><div class="card-title">OT Follow-up Templates</div></div>
+      <div class="fg fg1" style="gap:8px">
+        <div style="font-size:12px;color:var(--g1);line-height:1.5">This template controls OT follow-up dates, discharge instructions, discharge summary dates, and post-op appointment booking. Link it by surgery main heading and it will also match linked subheadings.</div>
+        <div class="form-group"><label class="fl">Template Name</label><input type="text" id="fu-tpl-name" placeholder="e.g. Cataract Standard Follow-up"></div>
+        <div class="form-group"><label class="fl">OT Branch</label><select id="fu-tpl-dept-settings"><option value="OT - Eye">OT - Eye</option><option value="OT - OBG">OT - OBG</option></select></div>
+        <div class="form-group"><label class="fl">Linked Surgery / Main Heading</label><input type="text" id="fu-tpl-surgery" list="rx-tpl-surgery-list" placeholder="e.g. Pinhole Microincision Cataract Surgery"></div>
+        <div class="form-group full"><label class="fl">Follow-up Quick Clicks</label>
+          <div id="fu-tpl-presets" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+        </div>
+        <div class="form-group full"><label class="fl">Selected Follow-up Days</label>
+          <div id="fu-tpl-selected" style="display:flex;flex-wrap:wrap;gap:6px;min-height:32px;padding:6px 0"></div>
+          <input type="hidden" id="fu-tpl-offsets" value="">
+        </div>
+        <div class="form-group full"><label class="fl">Instructions</label><textarea id="fu-tpl-notes" placeholder="One instruction per line. These will print in the discharge card and summary." style="min-height:110px"></textarea></div>
+        <button class="btn btn-gold" onclick="saveOtFollowupTemplate()">💾 Save Follow-up Template</button>
+      </div>
+    </div>
   </div>
 </div>
 </div>

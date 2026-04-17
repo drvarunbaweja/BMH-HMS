@@ -14428,6 +14428,111 @@ function otTemplateMatchesProcedure(templateSurgery, activeProcedure) {
     return rowMatchesTemplate && rowMatchesProcedure;
   });
 }
+const OT_FOLLOWUP_PRESET_DAYS = [1, 3, 7, 14, 28, 42, 84];
+function formatOtFollowupLabel(days) {
+  const d = Number(days || 0);
+  if (!d) return '';
+  if (d === 1) return '1 day review';
+  if (d < 7) return d + ' day review';
+  if (d % 7 === 0) {
+    const weeks = d / 7;
+    return weeks + ' week review';
+  }
+  return d + ' day review';
+}
+function parseOtFollowupOffsets(value) {
+  if (Array.isArray(value)) return value.map(function (v) { return Number(v || 0); }).filter(function (v) { return v > 0; });
+  return String(value || '').split(',').map(function (v) { return Number(String(v).trim() || 0); }).filter(function (v) { return v > 0; });
+}
+function getSelectedOtFollowupOffsets() {
+  return Array.from(new Set(parseOtFollowupOffsets(document.getElementById('fu-tpl-offsets')?.value))).sort(function (a, b) { return a - b; });
+}
+function setSelectedOtFollowupOffsets(offsets) {
+  const hidden = document.getElementById('fu-tpl-offsets');
+  if (hidden) hidden.value = Array.from(new Set((offsets || []).map(function (v) { return Number(v || 0); }).filter(function (v) { return v > 0; }))).sort(function (a, b) { return a - b; }).join(',');
+  renderOtFollowupSelectedBlocks();
+}
+function renderOtFollowupPresetBlocks() {
+  const host = document.getElementById('fu-tpl-presets');
+  if (!host) return;
+  host.innerHTML = OT_FOLLOWUP_PRESET_DAYS.map(function (days) {
+    return '<button type="button" class="btn btn-xs btn-outline" onclick="toggleOtFollowupOffset(' + days + ')">' + formatOtFollowupLabel(days) + '</button>';
+  }).join('');
+}
+function renderOtFollowupSelectedBlocks() {
+  const host = document.getElementById('fu-tpl-selected');
+  if (!host) return;
+  const offsets = getSelectedOtFollowupOffsets();
+  host.innerHTML = offsets.length ? offsets.map(function (days) {
+    return '<span style="display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border-radius:999px;background:#eef3fb;border:1px solid #c8d7ef;font-size:11px;font-weight:800;color:#1A3C6E">' + formatOtFollowupLabel(days) + '<button type="button" onclick="toggleOtFollowupOffset(' + days + ')" style="background:none;border:none;color:#c0392b;cursor:pointer;font-size:12px;line-height:1;padding:0">✕</button></span>';
+  }).join('') : '<div style="font-size:11px;color:var(--g1)">Choose 2-3 follow-up timings from the quick clicks above.</div>';
+}
+function toggleOtFollowupOffset(days) {
+  const val = Number(days || 0);
+  if (!val) return;
+  const offsets = getSelectedOtFollowupOffsets();
+  const idx = offsets.indexOf(val);
+  if (idx >= 0) offsets.splice(idx, 1);
+  else offsets.push(val);
+  setSelectedOtFollowupOffsets(offsets);
+}
+function resetOtFollowupTemplateForm() {
+  ['fu-tpl-name','fu-tpl-surgery','fu-tpl-notes'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  const dept = document.getElementById('fu-tpl-dept-settings');
+  if (dept) dept.value = 'OT - Eye';
+  setSelectedOtFollowupOffsets([]);
+}
+function getOtFollowupTemplatePlan(entry, baseDate) {
+  const meta = entry?.meta || {};
+  const rows = Array.isArray(entry?.rows) ? entry.rows : [];
+  const offsets = parseOtFollowupOffsets(meta.followupOffsets && meta.followupOffsets.length ? meta.followupOffsets : rows.map(function (row) { return row.days; }));
+  const labels = rows.map(function (row, idx) {
+    return String(row.trade || row.name || row.generic || meta.followupLabels?.[idx] || '').trim();
+  });
+  const instructions = String(meta.notes || '').split(/\n+/).map(function (s) { return s.trim(); }).filter(Boolean);
+  const opDate = getIsoDateOnly(baseDate || new Date());
+  return offsets.map(function (days, idx) {
+    const iso = addDaysToIsoDate(opDate, days);
+    return {
+      days: days,
+      date: iso,
+      label: labels[idx] || formatOtFollowupLabel(days),
+      dateLabel: formatFollowupDisplayDate(iso)
+    };
+  }).filter(function (row) { return row.days > 0; }).sort(function (a, b) { return a.days - b.days; });
+}
+function saveOtFollowupTemplate() {
+  const name = toDisplayTitleCase(document.getElementById('fu-tpl-name')?.value?.trim());
+  if (!name) { showToast('Enter follow-up template name', 'w'); return; }
+  const surgery = document.getElementById('fu-tpl-surgery')?.value?.trim() || '';
+  const notes = document.getElementById('fu-tpl-notes')?.value?.trim() || '';
+  const deptSel = document.getElementById('fu-tpl-dept-settings');
+  const offsets = getSelectedOtFollowupOffsets();
+  if (!offsets.length) { showToast('Select at least one follow-up day', 'w'); return; }
+  const key = name.toLowerCase().replace(/\s+/g, '-');
+  RX_TEMPLATES_DATA[key] = offsets.map(function (days) {
+    return { trade: formatOtFollowupLabel(days), days: days };
+  });
+  RX_TEMPLATES_META[key] = {
+    dept: 'ot-followup',
+    name: name,
+    notes: notes,
+    surgery: surgery,
+    followupOffsets: offsets.slice(),
+    otArea: deptSel ? deptSel.value : 'OT - Eye'
+  };
+  saveRxTemplatesToStorage();
+  refreshRxTemplateSelects();
+  renderSetRxTplList && renderSetRxTplList();
+  refreshOTFollowupTemplateSelect && refreshOTFollowupTemplateSelect();
+  resetOtFollowupTemplateForm();
+  showToast('OT follow-up template "' + name + '" saved ✓', 's');
+}
+window.toggleOtFollowupOffset = toggleOtFollowupOffset;
+window.saveOtFollowupTemplate = saveOtFollowupTemplate;
 function getPreferredOtDiagnosis(procedureText) {
   const proc = String(procedureText || '').toLowerCase();
   if (/pmics|phaco|cataract/.test(proc)) return 'Cataract';
@@ -14522,6 +14627,9 @@ function renderSetRxTplList() {
         if (String(meta.dept || '').indexOf('dc-') === 0) {
           return row.trade || row.name || row.generic || 'Instruction';
         }
+        if (normalizeRxTemplateDeptKey(meta.dept || '') === 'ot-followup') {
+          return row.trade || row.name || row.generic || formatOtFollowupLabel(row.days || 0) || 'Follow-up';
+        }
         const nm = rxDrugTradeName(row) || row.trade || row.name || row.generic || 'Item';
         return nm + (row.freq ? ' · ' + row.freq : '') + (row.dur ? ' · ' + row.dur : '');
       }).join('<br>');
@@ -14530,6 +14638,7 @@ function renderSetRxTplList() {
         '<div style="flex:1"><div style="font-weight:800">' + n + '</div>' +
         '<div style="font-size:10.5px;color:var(--g1)">' + cnt + ' line(s) with saved frequency / duration' + '</div>' +
         (meta.surgery ? '<div style="font-size:10px;color:var(--bmh-blue);font-weight:800;margin-top:4px">Surgery: ' + String(meta.surgery).replace(/</g, '&lt;') + '</div>' : '') +
+        (normalizeRxTemplateDeptKey(meta.dept || '') === 'ot-followup' && meta.notes ? '<div style="font-size:10px;color:#8a4200;margin-top:4px;line-height:1.45">' + String(meta.notes).replace(/</g, '&lt;').replace(/\n/g, '<br>') + '</div>' : '') +
         (preview ? '<div style="font-size:10.5px;color:var(--tx3);margin-top:5px;line-height:1.45">' + preview + '</div>' : '') +
         '</div>' +
         '<button type="button" class="btn btn-xs btn-gold" data-rx-tpl-edit="' + encodeURIComponent(k) + '">✏️ Open / Edit</button>' +
@@ -14587,6 +14696,10 @@ function saveRxTemplateFromModal() {
 window.openEditRxTemplateModal = openEditRxTemplateModal;
 window.saveRxTemplateFromModal = saveRxTemplateFromModal;
 window.deleteRxTemplate = deleteRxTemplate;
+function initOtFollowupTemplateUi() {
+  renderOtFollowupPresetBlocks();
+  renderOtFollowupSelectedBlocks();
+}
 function getDischargeInstructionTemplateRows(specialty) {
   const deptKey = specialty === 'obg' ? 'dc-obg' : 'dc-ophtho';
   const matchKey = Object.keys(RX_TEMPLATES_META || {}).find(function (key) {
@@ -18425,7 +18538,11 @@ function scheduleDefaultSurgeryFollowups(otCase) {
   const source = otCase || {};
   const c = normalizeOTCaseRecord(source);
   if (!c.bmhId || !c.date) return;
-  const dayOffsets = [
+  const linkedTemplate = getOtFollowupTemplateEntry(c);
+  const plan = linkedTemplate ? getOtFollowupTemplatePlan(linkedTemplate, c.date) : [];
+  const dayOffsets = plan.length ? plan.map(function (row) {
+    return { days: row.days, label: row.label, type: 'post-op' };
+  }) : [
     { days: 1, label: 'Day 1 review (next morning)', type: 'post-op' },
     { days: 7, label: '1 week review', type: 'post-op' },
     { days: 14, label: '2 week review', type: 'post-op' }
@@ -18447,6 +18564,7 @@ function scheduleDefaultSurgeryFollowups(otCase) {
       doctor: c.surgeon || CURRENT_USER?.name || '',
       date: iso,
       type: cfg.type,
+      source: 'ot-followup-template',
       centre: c.centre || CURRENT_USER?.centre || 'CHD',
       status: 'booked'
     };
@@ -18997,6 +19115,7 @@ function saveOTNotes() {
   activeOTCase.procedure = procedure || activeOTCase.procedure;
   activeOTCase.iol = implant || activeOTCase.iol;
   activeOTCase.followupTemplateKey = document.getElementById('ot-followup-template')?.value || activeOTCase.followupTemplateKey || '';
+  if (activeOTCase.followupTemplateKey) scheduleDefaultSurgeryFollowups(activeOTCase);
   // Save to Firebase
   fbSet('otCases/' + activeOTCase.id, { ...activeOTCase, lastUpdated: new Date().toISOString(), updatedBy: CURRENT_USER?.name || 'System' })
     .then(() => showToast('Operative notes saved to database ✓', 's'))
@@ -19069,6 +19188,7 @@ function applyOTFollowupTemplate(key) {
   if (!activeOTCase) { showToast('Open an OT case first', 'w'); return; }
   activeOTCase.followupTemplateKey = key || '';
   fbUpdate && fbUpdate('otCases/' + activeOTCase.id, { followupTemplateKey: activeOTCase.followupTemplateKey }).catch(function () {});
+  if (key) scheduleDefaultSurgeryFollowups(activeOTCase);
   showToast(key ? 'OT follow-up template linked ✓' : 'OT follow-up template cleared', 's');
 }
 function applyOTNotesTemplate(key) {
@@ -23775,7 +23895,7 @@ ${incRxFinal && drugs.length && rxPrintMode !== 'plain_only' ? `
         const taperTimings = getRxTimingsText(tap);
         rows += `<tr style="background:#fff8e6">
           <td style="font-weight:700;color:#8a4200">↳</td>
-          <td class="left"><div class="rx-gen">${rxPlainLang === 'hi' ? `धीरे कम करें ${tapIdx + 1}` : rxPlainLang === 'pa' ? `ਹੌਲੀ ਘਟਾਓ ${tapIdx + 1}` : `Taper ${tapIdx + 1}`}</div></td>
+          <td class="left"><div class="rx-gen">${escapeHtmlConsent(taperLine || '')}</div></td>
           <td>${form}</td>
           <td>${route}</td>
           <td>${rxFreqPlain(tap.freq, rxPlainLang)||'—'}</td>
@@ -23785,7 +23905,7 @@ ${incRxFinal && drugs.length && rxPrintMode !== 'plain_only' ? `
           <td>${fmtIN(tap.dateTo)}</td>
         </tr>`;
         if (taperLine && rxPrintMode === 'both') {
-          rows += `<tr style="background:#fffaf0"><td class="left" colspan="9" style="padding-top:7px;padding-bottom:7px;font-size:11px;line-height:1.5"><div style="padding-left:8px">${escapeHtmlConsent(taperLine)}</div></td></tr>`;
+          rows += `<tr style="background:#fffaf0"><td class="left" colspan="9" style="padding-top:5px;padding-bottom:5px;font-size:10.5px;line-height:1.45"><div style="padding-left:8px">${escapeHtmlConsent(taperLine)}</div></td></tr>`;
         }
       });
       return rows;
@@ -23799,7 +23919,7 @@ ${incRxFinal && drugs.length && (rxPrintMode === 'plain' || rxPrintMode === 'pla
   ${drugs.map((d,i)=>{
     const plainLine = buildRxPlainInstructionLine(d, rxPlainLang, fmtIN);
     const taperRows = Array.isArray(d.taperRows) ? d.taperRows : (d.taperRow ? [d.taperRow] : []);
-    return `<div style="padding:7px 9px;border:1px solid #c8d0dc;border-radius:8px;background:#fafbfc;font-size:11px;line-height:1.6"><strong>${i+1}. ${escapeHtmlConsent((typeof rxDrugTradeName === 'function' ? rxDrugTradeName(d) : (d.brand||d.trade||d.name||'')) || 'Medicine')}</strong><div style="margin-top:4px">${escapeHtmlConsent(plainLine || '')}</div>${taperRows.map((tap, idx)=>`<div style="margin-top:4px;padding:4px 0 0 10px;color:#8a4200;border-top:1px dashed #ead7b6"><span style="font-weight:700;margin-right:6px">${escapeHtmlConsent(rxPlainLang === 'hi' ? `धीरे कम करें ${idx + 1}` : rxPlainLang === 'pa' ? `ਹੌਲੀ ਘਟਾਓ ${idx + 1}` : `Taper ${idx + 1}`)}</span>${escapeHtmlConsent(buildRxTaperSummaryLine({ ...d, freq: tap.freq, dur: tap.dur, dateFrom: tap.dateFrom, dateTo: tap.dateTo, activeTimes: tap.activeTimes || tap.times || [] }, rxPlainLang, fmtIN) || '')}</div>`).join('')}</div>`;
+    return `<div style="padding:7px 9px;border:1px solid #c8d0dc;border-radius:8px;background:#fafbfc;font-size:11px;line-height:1.6"><strong>${i+1}. ${escapeHtmlConsent((typeof rxDrugTradeName === 'function' ? rxDrugTradeName(d) : (d.brand||d.trade||d.name||'')) || 'Medicine')}</strong><div style="margin-top:4px">${escapeHtmlConsent(plainLine || '')}</div>${taperRows.map((tap)=>`<div style="margin-top:4px;padding-left:10px;color:#8a4200">${escapeHtmlConsent(buildRxTaperSummaryLine({ ...d, freq: tap.freq, dur: tap.dur, dateFrom: tap.dateFrom, dateTo: tap.dateTo, activeTimes: tap.activeTimes || tap.times || [] }, rxPlainLang, fmtIN) || '')}</div>`).join('')}</div>`;
   }).join('')}
 </div>` : ''}
 
@@ -24893,7 +25013,6 @@ function applyPatientsPayload(data) {
     showToast('Connected to database ✓','s');
   }
   genRcUID && genRcUID();
-  if (typeof scheduleDuplicatePatientRepair === 'function') scheduleDuplicatePatientRepair();
   _debouncedRenderDash();
 }
 function refreshPatientsFromFirebase() {
@@ -24905,19 +25024,22 @@ function refreshPatientsFromFirebase() {
     console.warn('patients refresh failed', e);
   }).finally(function () {
     window._bmhPatientsRefreshInFlight = false;
+    window._bmhPatientsLastRefreshAt = Date.now();
   });
 }
 function schedulePatientsRefreshLoop() {
   if (window._bmhPatientsRefreshLoopStarted) return;
   window._bmhPatientsRefreshLoopStarted = true;
-  window._bmhPatientsRefreshTimer = setInterval(function () {
+  const maybeRefresh = function () {
     if (document.visibilityState === 'hidden') return;
+    const last = Number(window._bmhPatientsLastRefreshAt || 0);
+    if (Date.now() - last < 120000) return;
     refreshPatientsFromFirebase();
-  }, 45000);
+  };
   document.addEventListener('visibilitychange', function () {
-    if (document.visibilityState === 'visible') refreshPatientsFromFirebase();
+    if (document.visibilityState === 'visible') maybeRefresh();
   });
-  window.addEventListener('focus', function () { refreshPatientsFromFirebase(); });
+  window.addEventListener('focus', function () { maybeRefresh(); });
 }
 window.refreshPatientsFromFirebase = refreshPatientsFromFirebase;
 
@@ -25631,10 +25753,11 @@ function getDischargePrintData(sel) {
   const diagnosis = lastOtCase?.dx || ptObj.lastVisit?.dx || ptObj.dx || ptObj.lastVisit?.clinicalImpression || tmpl.procedure || 'the diagnosed condition';
   const procedureName = lastOtCase?.procedure || ptObj.lastVisit?.procedure || ptObj.surgery || ptObj.surgeryAdvised || tmpl.procedure || 'the planned procedure';
   const joinDate = new Date(new Date(opDate).getTime() + (14 * 24 * 60 * 60 * 1000)).toISOString();
-  if (lastOtCase && (!Array.isArray(lastOtCase.autoFollowups) || lastOtCase.autoFollowups.length < 3)) {
+  const linkedPlan = linkedFuTemplate ? getOtFollowupTemplatePlan(linkedFuTemplate, opDate) : [];
+  if (lastOtCase && (!Array.isArray(lastOtCase.autoFollowups) || lastOtCase.autoFollowups.length < (linkedPlan.length || 3))) {
     scheduleDefaultSurgeryFollowups(lastOtCase);
   }
-  const followups = Array.isArray(lastOtCase?.autoFollowups) ? lastOtCase.autoFollowups.slice() : [];
+  const followups = Array.isArray(lastOtCase?.autoFollowups) && lastOtCase.autoFollowups.length ? lastOtCase.autoFollowups.slice() : linkedPlan.slice();
   return {
     sel: specialty,
     tmpl: DISCHARGE_TEMPLATES[specialty] || DISCHARGE_TEMPLATES.ophtho,
@@ -26121,8 +26244,10 @@ function renderDischargeBuilder() {
           const dt = f?.date ? formatDateIN(f.date) : (f?.dateLabel || '');
           return (f?.label || 'Follow-up') + (dt ? ': ' + dt : '') + (f?.time ? ' · ' + f.time : '');
         })
-      : (linkedFuTemplate?.rows?.length
-        ? linkedFuTemplate.rows.map(function (row) { return String(row.trade || row.name || row.generic || '').trim(); }).filter(Boolean)
+      : (linkedFuTemplate
+        ? getOtFollowupTemplatePlan(linkedFuTemplate, data.opDate).map(function (row) {
+            return row.label + (row.dateLabel ? ': ' + row.dateLabel : '');
+          })
         : [...tmpl.followup]);
     if(fuDateVal && !(data.followups && data.followups.length) && !(ophSnap && ophSnap.followups && ophSnap.followups.length)) {
       const fuFormatted = formatDateIN(fuDateVal);
@@ -27686,6 +27811,7 @@ function renderSettingsPage() {
   loadPrintLetterheadFromStorage && loadPrintLetterheadFromStorage();
   loadConsentDataOverridesFromStorage && loadConsentDataOverridesFromStorage();
   loadRxTemplatesFromStorage && loadRxTemplatesFromStorage(function () {});
+  initOtFollowupTemplateUi && initOtFollowupTemplateUi();
   loadConsentTemplatesFromStorage && loadConsentTemplatesFromStorage();
   loadIolCatalogFromStorage && loadIolCatalogFromStorage();
   if (window.FBDB) {
