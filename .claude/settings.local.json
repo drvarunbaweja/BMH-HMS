@@ -14,7 +14,8 @@
       "Bash(/Users/varunbaweja/Downloads/BMH-HMS/src/index.html:*)",
       "Bash(git add:*)",
       "Bash(git commit -m ':*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(wc -l /Users/varunbaweja/GitHub/BMH-HMS/src/js/*.js)"
     ]
   }
 }
