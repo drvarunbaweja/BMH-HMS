@@ -372,8 +372,7 @@ function populateOTProcedureMainSelect(selectedMain) {
   if (!sel) return;
   const current = normalizeOtProcedureName(selectedMain || sel.value || parseOtProcedureSelection(document.getElementById('ot-add-proc')?.value || '').main || '');
   const mains = getOtProcedureMainHeadings();
-  const opts = mains.length ? mains : getOtProcedureOptions();
-  sel.innerHTML = '<option value="">— Select main heading —</option>' + opts.map(function (name) {
+  sel.innerHTML = '<option value="">— Select main heading —</option>' + mains.map(function (name) {
     const safe = String(name).replace(/"/g, '&quot;').replace(/</g, '&lt;');
     return '<option value="' + safe + '">' + safe + '</option>';
   }).join('');
@@ -395,17 +394,21 @@ function getOtProcedureSubheadingOptions(parent) {
 }
 function getOtProcedureOptions() {
   const caseKind = getSelectedOTCaseKind && getSelectedOTCaseKind();
-  const fromCharges = CHARGES_DATA
+  const mainHeadings = getOtProcedureMainHeadings();
+  const subHeadings = CHARGES_DATA
     .filter(function (row) {
-      return otChargeLooksLikeProcedure(row) && otProcedureBelongsToCaseKind((row.parent || row.name || ''), caseKind);
+      const parent = normalizeOtProcedureName(row.parent || '');
+      const name = normalizeOtProcedureName(row.name || '');
+      return otChargeLooksLikeProcedure(row)
+        && parent
+        && name
+        && name !== parent
+        && otProcedureBelongsToCaseKind((row.parent || row.name || ''), caseKind);
     })
-    .reduce(function (arr, c) {
-      const nm = normalizeOtProcedureName(c.name);
-      const pr = normalizeOtProcedureName(c.parent);
-      if (nm) arr.push(nm);
-      if (pr) arr.push(pr);
-      return arr;
-    }, []);
+    .map(function (row) {
+      return normalizeOtProcedureName(row.name || '');
+    })
+    .filter(Boolean);
   const eyeFallbacks = [
     'PMICS + IOL Implantation (OS)',
     'PMICS + IOL Implantation (OD)',
@@ -437,7 +440,8 @@ function getOtProcedureOptions() {
     'Other — specify in notes'
   ];
   const fallbacks = caseKind === 'obg' ? obgFallbacks : eyeFallbacks;
-  return Array.from(new Set(getOtProcedureMainHeadings().concat(fromCharges, fallbacks).filter(Boolean)));
+  const chargeOptions = Array.from(new Set(mainHeadings.concat(subHeadings).filter(Boolean)));
+  return chargeOptions.length ? chargeOptions : Array.from(new Set(fallbacks.filter(Boolean)));
 }
 function parseOtProcedureSelection(value) {
   const raw = normalizeOtProcedureName(value);
@@ -23629,6 +23633,24 @@ function buildRxPlainInstructionLine(d, lang, fmtIN) {
   }
   return line;
 }
+function buildRxTaperSummaryLine(d, lang, fmtIN) {
+  const eye = Array.isArray(d.eye) ? d.eye[0] : d.eye;
+  const bits = [];
+  const eyeTxt = lang === 'en' ? rxEyePlainEn(eye) : rxEyePlain(eye, lang);
+  const freq = rxFreqPlain(d.freq, lang);
+  const dur = rxDurationPlain(d.dur, lang);
+  const df = fmtIN(d.dateFrom);
+  const dt = fmtIN(d.dateTo);
+  const timings = getRxTimingsText(d);
+  if (eyeTxt) bits.push(eyeTxt);
+  if (freq) bits.push(freq);
+  if (dur) bits.push(dur);
+  if (df && dt) bits.push(lang === 'hi' ? (df + ' से ' + dt) : (lang === 'pa' ? (df + ' ਤੋਂ ' + dt) : (df + ' to ' + dt)));
+  else if (df) bits.push(df);
+  else if (dt) bits.push(dt);
+  if (timings) bits.push((lang === 'hi' ? 'समय ' : (lang === 'pa' ? 'ਸਮਾਂ ' : 'Timings ')) + timings);
+  return bits.filter(Boolean).join(' • ');
+}
 
 function getDoctorPrescriptionPrintMode(profile) {
   const mode = String(profile?.rxPrintMode || '').trim().toLowerCase();
@@ -24013,11 +24035,12 @@ ${incRxFinal && drugs.length && rxPrintMode !== 'plain_only' ? `
         rows += `<tr style="background:#f7faff"><td class="left" colspan="9" style="padding-top:7px;padding-bottom:7px;font-size:11px;line-height:1.5"><div style="padding-left:8px">${escapeHtmlConsent(plainLine)}</div></td></tr>`;
       }
       taperRows.forEach((tap, tapIdx) => {
-        const taperLine = buildRxPlainInstructionLine({ ...d, freq: tap.freq, dur: tap.dur, dateFrom: tap.dateFrom, dateTo: tap.dateTo, taperRows: [] }, rxPlainLang, fmtIN);
+        const taperData = { ...d, freq: tap.freq, dur: tap.dur, dateFrom: tap.dateFrom, dateTo: tap.dateTo, activeTimes: tap.activeTimes || tap.times || [], taperRows: [] };
+        const taperLine = buildRxTaperSummaryLine(taperData, rxPlainLang, fmtIN);
         const taperTimings = getRxTimingsText(tap);
         rows += `<tr style="background:#fff8e6">
           <td style="font-weight:700;color:#8a4200">↳</td>
-          <td class="left"><div class="rx-name">${trade}</div><div class="rx-gen">${rxPlainLang === 'hi' ? `धीरे कम करें ${tapIdx + 1}` : rxPlainLang === 'pa' ? `ਹੌਲੀ ਘਟਾਓ ${tapIdx + 1}` : `Taper ${tapIdx + 1}`}</div></td>
+          <td class="left"><div class="rx-gen">${rxPlainLang === 'hi' ? `धीरे कम करें ${tapIdx + 1}` : rxPlainLang === 'pa' ? `ਹੌਲੀ ਘਟਾਓ ${tapIdx + 1}` : `Taper ${tapIdx + 1}`}</div></td>
           <td>${form}</td>
           <td>${route}</td>
           <td>${rxFreqPlain(tap.freq, rxPlainLang)||'—'}</td>
@@ -24041,7 +24064,7 @@ ${incRxFinal && drugs.length && (rxPrintMode === 'plain' || rxPrintMode === 'pla
   ${drugs.map((d,i)=>{
     const plainLine = buildRxPlainInstructionLine(d, rxPlainLang, fmtIN);
     const taperRows = Array.isArray(d.taperRows) ? d.taperRows : (d.taperRow ? [d.taperRow] : []);
-    return `<div style="padding:7px 9px;border:1px solid #c8d0dc;border-radius:8px;background:#fafbfc;font-size:11px;line-height:1.6"><strong>${i+1}. ${escapeHtmlConsent((typeof rxDrugTradeName === 'function' ? rxDrugTradeName(d) : (d.brand||d.trade||d.name||'')) || 'Medicine')}</strong><div style="margin-top:4px">${escapeHtmlConsent(plainLine || '')}</div>${taperRows.map((tap, idx)=>`<div style="margin-top:4px;padding-left:10px;color:#8a4200">↳ ${escapeHtmlConsent(buildRxPlainInstructionLine({ ...d, freq: tap.freq, dur: tap.dur, dateFrom: tap.dateFrom, dateTo: tap.dateTo, activeTimes: tap.activeTimes || tap.times || [] }, rxPlainLang, fmtIN) || ('Taper ' + (idx+1)))}</div>`).join('')}</div>`;
+    return `<div style="padding:7px 9px;border:1px solid #c8d0dc;border-radius:8px;background:#fafbfc;font-size:11px;line-height:1.6"><strong>${i+1}. ${escapeHtmlConsent((typeof rxDrugTradeName === 'function' ? rxDrugTradeName(d) : (d.brand||d.trade||d.name||'')) || 'Medicine')}</strong><div style="margin-top:4px">${escapeHtmlConsent(plainLine || '')}</div>${taperRows.map((tap, idx)=>`<div style="margin-top:4px;padding:4px 0 0 10px;color:#8a4200;border-top:1px dashed #ead7b6"><span style="font-weight:700;margin-right:6px">${escapeHtmlConsent(rxPlainLang === 'hi' ? `धीरे कम करें ${idx + 1}` : rxPlainLang === 'pa' ? `ਹੌਲੀ ਘਟਾਓ ${idx + 1}` : `Taper ${idx + 1}`)}</span>${escapeHtmlConsent(buildRxTaperSummaryLine({ ...d, freq: tap.freq, dur: tap.dur, dateFrom: tap.dateFrom, dateTo: tap.dateTo, activeTimes: tap.activeTimes || tap.times || [] }, rxPlainLang, fmtIN) || '')}</div>`).join('')}</div>`;
   }).join('')}
 </div>` : ''}
 
