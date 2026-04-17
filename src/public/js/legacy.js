@@ -12191,115 +12191,238 @@ function openInventoryStockGroup(groupId) {
   openM('m-inv-stock-detail');
 }
 window.openInventoryStockGroup = openInventoryStockGroup;
+// ── Lazy collapsible stock list ──────────────────────────────────────────────
+// renderStockList() is called from many places (after save, Firebase sync,
+// filter change, etc.).  It always updates the sidebar stats (fast), marks the
+// list as dirty, and only does the expensive HTML rebuild when the Current Stock
+// tab is actually open.  This prevents the 500+ row rebuild on every inventory
+// page open.
 function renderStockList() {
-  const el=document.getElementById('inv-stock-list');if(!el)return;
+  // Always refresh sidebar counters (O(n), fast)
+  const allRows = (INVENTORY || []).filter(function (i) {
+    return !/^(MFX-001|PDN-002|CMC-003|TIM-004|IOL-021|IOL-023|OTP-001|BEV-001|MAN-001|RL-001)$/.test(String(i.barcode || ''));
+  });
+  const ilc = document.getElementById('inv-low-cnt');
+  if (ilc) ilc.textContent = String(bmhInventoryLowItems().length);
+  const totalEl = document.getElementById('inv-total-items');
+  if (totalEl) totalEl.textContent = String(allRows.reduce(function (s, i) { return s + Math.max(0, Number(i.stock) || 0); }, 0));
+
+  window._stockListDirty = true;
+  // Only build the full table when the tab is visible
+  const tab = document.getElementById('inv-stock');
+  if (!tab || !tab.classList.contains('active')) return;
+  _renderStockListNow();
+}
+window.renderStockList = renderStockList;
+
+function _renderStockListNow() {
+  window._stockListDirty = false;
+  const el = document.getElementById('inv-stock-list');
+  if (!el) return;
+
   const admBtn = document.getElementById('btn-inv-clear-all');
   if (admBtn) admBtn.style.display = (typeof isAdminUser === 'function' && isAdminUser()) ? 'inline-flex' : 'none';
   renderInventoryImportDatalists();
-  const catFilter = bmhInventoryFilterValue('inv-stock-cat-filter');
-  const storeFilter = bmhInventoryFilterValue('inv-stock-store-filter');
-  // Ensure filters are set to 'all' if empty
+
   const catEl = document.getElementById('inv-stock-cat-filter');
   const storeEl = document.getElementById('inv-stock-store-filter');
   if (catEl && !catEl.value) catEl.value = 'all';
   if (storeEl && !storeEl.value) storeEl.value = 'all';
-  const rows = INVENTORY.filter(function (i) {
+  const catFilter = bmhInventoryFilterValue('inv-stock-cat-filter');
+  const storeFilter = bmhInventoryFilterValue('inv-stock-store-filter');
+
+  const rows = (INVENTORY || []).filter(function (i) {
     return (catFilter === 'all' || String(i.cat || '') === catFilter)
-      && (storeFilter === 'all' || String(i.store || '') === storeFilter);
-  }).filter(function (i) {
-    return !/^(MFX-001|PDN-002|CMC-003|TIM-004|IOL-021|IOL-023|OTP-001|BEV-001|MAN-001|RL-001)$/.test(String(i.barcode || ''));
+      && (storeFilter === 'all' || String(i.store || '') === storeFilter)
+      && !/^(MFX-001|PDN-002|CMC-003|TIM-004|IOL-021|IOL-023|OTP-001|BEV-001|MAN-001|RL-001)$/.test(String(i.barcode || ''));
   });
-  const sectionMap = {};
+
+  if (!rows.length) {
+    el.innerHTML = '<div style="padding:20px;color:var(--g1);font-size:12px;text-align:center">No stock items for this filter.</div>';
+    return;
+  }
+
+  // ── Build dept → IOL brands + normal category groups ──
+  const deptMap = {};
   rows.forEach(function (i) {
-    const deptKey = String(i.dept || 'general');
-    sectionMap[deptKey] = sectionMap[deptKey] || [];
+    const dk = String(i.dept || 'general');
+    if (!deptMap[dk]) deptMap[dk] = { iols: {}, normals: {} };
     const isIol = String(i.cat || '').toLowerCase() === 'iol';
     if (isIol) {
-      sectionMap[deptKey].push({ kind: 'iol', item: i });
+      const company = String(i.iolCompany || i.vendor || 'Unknown').trim();
+      const brand   = String(i.iolBrand  || '').trim();
+      const bk = normalizeInventoryCompareText(company + ' ' + brand);
+      if (!deptMap[dk].iols[bk]) {
+        deptMap[dk].iols[bk] = {
+          label: [company, brand].filter(Boolean).join(' · '),
+          powers: {}
+        };
+      }
+      const power = String(i.power || extractIolPower(i.name || '') || '?');
+      deptMap[dk].iols[bk].powers[power] = (deptMap[dk].iols[bk].powers[power] || 0) + Math.max(0, Number(i.stock) || 0);
     } else {
-      sectionMap[deptKey].push({ kind: 'normal', item: i });
+      const cat  = String(i.cat  || 'General').trim();
+      const name = String(i.name || '?').trim();
+      const nk   = normalizeInventoryCompareText(name);
+      if (!deptMap[dk].normals[nk]) deptMap[dk].normals[nk] = { name: name, cat: cat, stock: 0 };
+      deptMap[dk].normals[nk].stock += Math.max(0, Number(i.stock) || 0);
     }
   });
-  window._inventoryStockGroups = {};
-  const sectionKeys = Object.keys(sectionMap).sort(function (a, b) { return bmhDeptLabel(a).localeCompare(bmhDeptLabel(b)); });
-  el.innerHTML = sectionKeys.map(function (deptKey) {
-    const items = sectionMap[deptKey];
-    const iolItems = items.filter(function (x) { return x.kind === 'iol'; });
-    const normalItems = items.filter(function (x) { return x.kind === 'normal'; });
-    let content = '';
-    if (iolItems.length > 0) {
-      const iolGroups = {};
-      iolItems.forEach(function (x) {
-        const i = x.item;
-        const brand = normalizeInventoryCompareText(i.iolBrand || '');
-        const company = normalizeInventoryCompareText(i.iolCompany || i.vendor || '');
-        const key = company + '::' + brand;
-        if (!iolGroups[key]) {
-          iolGroups[key] = {
-            company: i.iolCompany || i.vendor || '',
-            brand: i.iolBrand || '',
-            powers: {}
-          };
-        }
-        const power = String(i.power || extractIolPower(i.name || '') || '');
-        if (power) {
-          iolGroups[key].powers[power] = (iolGroups[key].powers[power] || 0) + Number(i.stock || 0);
-        }
+
+  const deptKeys = Object.keys(deptMap).sort(function (a, b) { return bmhDeptLabel(a).localeCompare(bmhDeptLabel(b)); });
+  const trs = [];   // accumulate <tr> strings
+
+  deptKeys.forEach(function (dk, di) {
+    const d        = deptMap[dk];
+    const deptId   = 'sld' + di;
+    const iolBKeys = Object.keys(d.iols);
+    const normKeys = Object.keys(d.normals);
+
+    const iolTotal  = iolBKeys.reduce(function (s, bk) {
+      return s + Object.values(d.iols[bk].powers).reduce(function (ps, v) { return ps + v; }, 0);
+    }, 0);
+    const normTotal = normKeys.reduce(function (s, nk) { return s + d.normals[nk].stock; }, 0);
+
+    // ── Dept header row ──
+    const deptBadges = [
+      iolTotal  ? '<span style="background:rgba(255,255,255,.22);border-radius:4px;padding:1px 7px;font-size:10px;margin-left:4px">IOL&nbsp;' + iolTotal  + '</span>' : '',
+      normTotal ? '<span style="background:rgba(255,255,255,.22);border-radius:4px;padding:1px 7px;font-size:10px;margin-left:4px">Other&nbsp;' + normTotal + '</span>' : ''
+    ].join('');
+    trs.push(
+      '<tr onclick="slToggle(\'' + deptId + '\')" style="cursor:pointer;background:var(--bmh-blue);color:#fff;user-select:none">' +
+        '<td style="padding:8px 10px;font-size:11px;font-weight:900;letter-spacing:.6px;text-transform:uppercase;width:100%">' +
+          '<span id="c-' + deptId + '" style="display:inline-block;width:14px;font-size:9px;transition:transform .15s">▶</span> ' +
+          escapeHtmlConsent(bmhDeptLabel(dk)) + deptBadges +
+        '</td>' +
+        '<td style="padding:8px 10px;font-size:12px;font-weight:900;text-align:right;white-space:nowrap">' +
+          (iolTotal + normTotal) +
+        '</td>' +
+      '</tr>'
+    );
+
+    // ── IOL section ──
+    if (iolBKeys.length) {
+      // IOL section sub-header
+      trs.push(
+        '<tr data-parent="' + deptId + '" style="display:none;background:#fffbec">' +
+          '<td colspan="2" style="padding:5px 10px 4px 26px;font-size:10px;font-weight:900;color:#8a4200;letter-spacing:.5px;text-transform:uppercase">💊 IOLs — ' + iolBKeys.length + ' brand' + (iolBKeys.length !== 1 ? 's' : '') + '</td>' +
+        '</tr>'
+      );
+
+      iolBKeys.sort().forEach(function (bk, bi) {
+        const b        = d.iols[bk];
+        const brandId  = deptId + 'b' + bi;
+        const bTotal   = Object.values(b.powers).reduce(function (s, v) { return s + v; }, 0);
+        const pCount   = Object.keys(b.powers).length;
+        const bTone    = bTotal <= 2 ? 'var(--red)' : bTotal <= 5 ? 'var(--orange)' : '#1a6e35';
+
+        // Brand row
+        trs.push(
+          '<tr data-parent="' + deptId + '" data-id="' + brandId + '" onclick="slToggle(\'' + brandId + '\')" ' +
+          'style="display:none;cursor:pointer;background:#fff9e8;border-left:3px solid #e8c96a;user-select:none">' +
+            '<td style="padding:7px 10px 7px 30px;font-size:11px;font-weight:700;color:#7a3a00">' +
+              '<span id="c-' + brandId + '" style="display:inline-block;width:14px;font-size:9px;color:#b57a00">▶</span> ' +
+              escapeHtmlConsent(b.label || 'IOL') +
+              '<span style="margin-left:8px;font-size:10px;color:#b57a00;font-weight:400">' + pCount + ' power' + (pCount !== 1 ? 's' : '') + '</span>' +
+            '</td>' +
+            '<td style="padding:7px 10px;text-align:right;font-size:13px;font-weight:900;color:' + bTone + '">' + bTotal + '</td>' +
+          '</tr>'
+        );
+
+        // Power rows (hidden until brand row expanded)
+        Object.keys(b.powers).sort(function (a, b2) { return parseFloat(a) - parseFloat(b2); }).forEach(function (power) {
+          const qty   = b.powers[power];
+          const qTone = qty <= 1 ? 'var(--red)' : qty <= 3 ? 'var(--orange)' : '#1a6e35';
+          trs.push(
+            '<tr data-parent="' + brandId + '" style="display:none;background:#fffef5">' +
+              '<td style="padding:4px 10px 4px 50px;font-size:11px;color:var(--g1);font-family:var(--mono)">' +
+                escapeHtmlConsent(power) +
+              '</td>' +
+              '<td style="padding:4px 10px;text-align:right;font-size:12px;font-weight:800;color:' + qTone + '">' + qty + '</td>' +
+            '</tr>'
+          );
+        });
       });
-      const iolCards = Object.keys(iolGroups).sort().map(function (key) {
-        const g = iolGroups[key];
-        const powerRows = Object.keys(g.powers).sort(function (a, b) { return parseFloat(a) - parseFloat(b); }).map(function (p) {
-          return `<tr><td style="padding:4px 8px;border-bottom:1px solid var(--g4);font-size:11px">${escapeHtmlConsent(p)}</td><td style="padding:4px 8px;border-bottom:1px solid var(--g4);font-size:11px;text-align:center;font-weight:700">${g.powers[p]}</td></tr>`;
-        }).join('');
-        const totalStock = Object.values(g.powers).reduce(function (sum, v) { return sum + v; }, 0);
-        const tone = totalStock <= 2 ? 'var(--red)' : totalStock <= 5 ? 'var(--orange)' : 'var(--green)';
-        return `<div style="background:#fffbec;border:1px solid #ead8a4;border-radius:8px;padding:10px;margin-bottom:10px">
-          <div style="font-size:12px;font-weight:800;color:#8a4200;margin-bottom:6px">${escapeHtmlConsent([g.company, g.brand].filter(Boolean).join(' ') || 'IOL')}</div>
-          <table style="width:100%;border-collapse:collapse">
-            <thead><tr><th style="padding:4px 8px;border-bottom:2px solid #ead8a4;font-size:10px;text-align:left;color:#8a4200">Power</th><th style="padding:4px 8px;border-bottom:2px solid #ead8a4;font-size:10px;text-align:center;color:#8a4200">Qty</th></tr></thead>
-            <tbody>${powerRows}</tbody>
-          </table>
-          <div style="margin-top:6px;text-align:right;font-size:11px;color:var(--g1)">Total: <span style="font-weight:900;color:${tone}">${totalStock}</span></div>
-        </div>`;
-      }).join('');
-      content += `<div style="margin-bottom:14px"><div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">IOLs — ${bmhDeptLabel(deptKey)}</div>${iolCards}</div>`;
     }
-    if (normalItems.length > 0) {
-      const normalGroups = {};
-      normalItems.forEach(function (x) {
-        const i = x.item;
-        const generic = normalizeInventoryCompareText(i.name || '');
-        if (!normalGroups[generic]) {
-          normalGroups[generic] = {
-            name: i.name || '',
-            brands: {}
-          };
-        }
-        const brand = normalizeInventoryCompareText(i.brand || i.cat || 'generic');
-        normalGroups[generic].brands[brand] = (normalGroups[generic].brands[brand] || 0) + Number(i.stock || 0);
+
+    // ── Non-IOL items, grouped by category ──
+    if (normKeys.length) {
+      // Group by category
+      const catGroups = {};
+      normKeys.forEach(function (nk) {
+        const n   = d.normals[nk];
+        const cat = n.cat || 'General';
+        if (!catGroups[cat]) catGroups[cat] = [];
+        catGroups[cat].push(n);
       });
-      const normalCards = Object.keys(normalGroups).sort().map(function (key) {
-        const g = normalGroups[key];
-        const brandRows = Object.keys(g.brands).sort().map(function (b) {
-          return `<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:11px"><span>${escapeHtmlConsent(b)}</span><span style="font-weight:700">${g.brands[b]}</span></div>`;
-        }).join('');
-        const totalStock = Object.values(g.brands).reduce(function (sum, v) { return sum + v; }, 0);
-        const tone = totalStock <= 2 ? 'var(--red)' : totalStock <= 5 ? 'var(--orange)' : 'var(--green)';
-        return `<div style="background:#f8fafc;border:1px solid var(--g4);border-radius:8px;padding:10px;margin-bottom:8px">
-          <div style="font-size:12px;font-weight:800;margin-bottom:6px">${escapeHtmlConsent(g.name)}</div>
-          <div>${brandRows}</div>
-          <div style="margin-top:4px;text-align:right;font-size:11px;color:var(--g1)">Total: <span style="font-weight:900;color:${tone}">${totalStock}</span></div>
-        </div>`;
-      }).join('');
-      content += `<div style="margin-bottom:14px"><div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Other Items — ${bmhDeptLabel(deptKey)}</div>${normalCards}</div>`;
+
+      Object.keys(catGroups).sort().forEach(function (cat, ci) {
+        const catId    = deptId + 'c' + ci;
+        const items    = catGroups[cat];
+        const catTotal = items.reduce(function (s, n) { return s + n.stock; }, 0);
+        const cTone    = catTotal <= 5 ? 'var(--red)' : catTotal <= 20 ? 'var(--orange)' : '#1a6e35';
+
+        // Category row
+        trs.push(
+          '<tr data-parent="' + deptId + '" data-id="' + catId + '" onclick="slToggle(\'' + catId + '\')" ' +
+          'style="display:none;cursor:pointer;background:#f4f7fb;border-left:3px solid var(--g4);user-select:none">' +
+            '<td style="padding:7px 10px 7px 26px;font-size:11px;font-weight:700;color:var(--bmh-blue)">' +
+              '<span id="c-' + catId + '" style="display:inline-block;width:14px;font-size:9px;color:var(--g2)">▶</span> ' +
+              escapeHtmlConsent(cat) +
+              '<span style="margin-left:8px;font-size:10px;color:var(--g2);font-weight:400">' + items.length + ' item' + (items.length !== 1 ? 's' : '') + '</span>' +
+            '</td>' +
+            '<td style="padding:7px 10px;text-align:right;font-size:13px;font-weight:900;color:' + cTone + '">' + catTotal + '</td>' +
+          '</tr>'
+        );
+
+        // Item rows
+        items.slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).forEach(function (n) {
+          const qTone = n.stock <= 2 ? 'var(--red)' : n.stock <= 5 ? 'var(--orange)' : 'var(--g1)';
+          trs.push(
+            '<tr data-parent="' + catId + '" style="display:none;background:#fafcff">' +
+              '<td style="padding:5px 10px 5px 44px;font-size:11px;color:var(--g2)">' + escapeHtmlConsent(n.name) + '</td>' +
+              '<td style="padding:5px 10px;text-align:right;font-size:12px;font-weight:700;color:' + qTone + '">' + n.stock + '</td>' +
+            '</tr>'
+          );
+        });
+      });
     }
-    return content;
-  }).join('') || '<div style="padding:12px;color:var(--g1);font-size:12px">No stock items for this filter.</div>';
-  const ilc = document.getElementById('inv-low-cnt');
-  if (ilc) ilc.textContent = String(bmhInventoryLowItems().length);
-  const totalEl = document.getElementById('inv-total-items');
-  if (totalEl) totalEl.textContent = String(rows.reduce(function (s, i) { return s + Math.max(0, Number(i.stock) || 0); }, 0));
+
+    // Thin spacer between departments
+    trs.push('<tr><td colspan="2" style="height:4px;background:var(--g5)"></td></tr>');
+  });
+
+  el.innerHTML =
+    '<table id="inv-stock-table" style="width:100%;border-collapse:collapse;font-size:12px;border:1px solid var(--g4);border-radius:10px;overflow:hidden">' +
+    trs.join('') +
+    '</table>';
 }
+window._renderStockListNow = _renderStockListNow;
+
+// Toggle expand/collapse for dept, brand, or category rows.
+// Closing a parent also closes any open children automatically.
+function slToggle(id) {
+  const caret  = document.getElementById('c-' + id);
+  const isOpen = caret && caret.textContent.trim() === '▼';
+  const table  = document.getElementById('inv-stock-table');
+  if (!table) return;
+  table.querySelectorAll('tr[data-parent="' + id + '"]').forEach(function (row) {
+    row.style.display = isOpen ? 'none' : '';
+    // When collapsing, also close any expanded child groups
+    if (isOpen) {
+      const cid = row.dataset.id;
+      if (cid) {
+        const cc = document.getElementById('c-' + cid);
+        if (cc && cc.textContent.trim() === '▼') {
+          cc.textContent = '▶';
+          table.querySelectorAll('tr[data-parent="' + cid + '"]').forEach(function (sub) { sub.style.display = 'none'; });
+        }
+      }
+    }
+  });
+  if (caret) caret.textContent = isOpen ? '▶' : '▼';
+}
+window.slToggle = slToggle;
 function adminClearAllInventoryStock() {
   if (typeof isAdminUser !== 'function' || !isAdminUser()) { showToast('Only admin can clear inventory', 'w'); return; }
   if (!confirm('Delete ALL current inventory rows? Barcode map will reset. This cannot be undone.')) return;
