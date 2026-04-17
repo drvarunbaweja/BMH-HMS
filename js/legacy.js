@@ -326,7 +326,7 @@ function otChargeLooksLikeProcedure(row) {
   const name = String(row?.name || '').toLowerCase();
   const parent = String(row?.parent || '').toLowerCase();
   if (/consult|follow.?up|package|biometry|oct|field|photo|microscopy|scan/.test(cat + ' ' + name)) return false;
-  return /surgery|procedure|laser/.test(kind)
+  return /surgery|procedure|laser|minor/.test(kind)
     || /sx|surgery|procedure|laser|delivery|lap|operation|ot/.test(cat)
     || /trabeculectomy|lasik|pmics|iol|icl|staar|collamer|implantable|capsulotomy|iridotomy|excision|incision|curettage|chalazion|lscs|delivery|laparoscopy|hysteroscopy|chemical peel|prp|dcr|ptosis|squint|vitrectomy|injection|procedure/.test(name)
     || /pmics|lscs|delivery|procedure|surgery|laser|iol|icl|collamer|incision|curettage|chalazion/.test(parent);
@@ -366,7 +366,7 @@ function getOtProcedureMainHeadings() {
     const target = p || n;
     if (!otProcedureBelongsToCaseKind(target, caseKind) || !otProcedureMatchesDept(row, caseKind)) return;
     if (p) out.add(p);
-    else if (n) out.add(n);
+    else if (n && !normalizeOtProcedureName(row.parent || '')) out.add(n);
   });
   return Array.from(out).filter(Boolean).sort();
 }
@@ -10517,6 +10517,28 @@ function appendIolSerialMap(power, serialNo, batchNo) {
 }
 function mergeIolParsedSelection(parsed) {
   if (!parsed?.power) return;
+  const firstEntry = document.querySelector('#inv-iol-brands-container .inv-iol-brand-entry');
+  if (firstEntry) {
+    const powerKey = normalizeIolPowerValue(parsed.power || '') || String(parsed.power || '');
+    const cell = firstEntry.querySelector('.iol-power-cell[data-power="' + String(powerKey).replace(/"/g, '&quot;') + '"]');
+    const inp = cell && cell.querySelector('.inv-iol-qty');
+    if (inp) {
+      const nextQty = Math.max(1, Number(inp.value || 0) + Math.max(1, Number(parsed.qty || 1)));
+      inp.value = String(nextQty);
+      const addEl = cell.querySelector('.iol-qty-to-add');
+      if (addEl) addEl.textContent = String(nextQty);
+      iolSyncExpirySlots(cell);
+      appendIolBrandSerialMap(firstEntry, powerKey, parsed.serialNo || '', parsed.batchNo || '', parsed.exp || '');
+      if (parsed.exp) {
+        const entryExp = firstEntry.querySelector('.iol-expiry-field');
+        if (entryExp && !entryExp.value) entryExp.value = parsed.exp;
+      }
+      refreshIolBrandPowerStockLabels(firstEntry);
+      updateIolPowerCounter();
+      window._inventoryLastIolPower = powerKey;
+      return;
+    }
+  }
   const next = getCurrentIolGridState();
   next[parsed.power] = next[parsed.power] || { qty: 0 };
   next[parsed.power].qty = Math.max(1, Number(next[parsed.power].qty || 0) + Math.max(1, Number(parsed.qty || 1)));
@@ -12281,6 +12303,10 @@ function saveChargesToFirebase(){
     window.FBDB.ref('chargesSchedule').set(CHARGES_DATA),
     window.FBDB.ref('chargesScheduleMeta').set({ updatedAt: Date.now() })
   ]).then(function(res){
+    try { populateOTProcedureMainSelect && populateOTProcedureMainSelect(); } catch (e) {}
+    try { renderOTProcedureSubheading && renderOTProcedureSubheading(document.getElementById('ot-add-proc-main')?.value || ''); } catch (e) {}
+    try { refreshRxTemplateSurgeryDatalist && refreshRxTemplateSurgeryDatalist(); } catch (e) {}
+    try { refreshOTFollowupTemplateSelect && refreshOTFollowupTemplateSelect(); } catch (e) {}
     showToast('Saved to database ✓', 's');
     return res;
   }).catch(function(err){
@@ -12317,6 +12343,10 @@ function loadChargesFromFirebase(){
     renderChargesList && renderChargesList();
     renderCentresCharges && renderCentresCharges();
     syncReceptionConsultationFee && syncReceptionConsultationFee();
+    try { populateOTProcedureMainSelect && populateOTProcedureMainSelect(); } catch (e) {}
+    try { renderOTProcedureSubheading && renderOTProcedureSubheading(document.getElementById('ot-add-proc-main')?.value || ''); } catch (e) {}
+    try { refreshRxTemplateSurgeryDatalist && refreshRxTemplateSurgeryDatalist(); } catch (e) {}
+    try { refreshOTFollowupTemplateSelect && refreshOTFollowupTemplateSelect(); } catch (e) {}
   }).catch(()=>{
     window._bmhChargesCloudLoaded = true;
   });
@@ -14416,13 +14446,12 @@ function applyRxTemplateFromPicker(tplId) {
   closeM('m-rx-template-picker');
 }
 function getSurgeryTemplateSuggestions() {
-  return [...new Set((CHARGES_DATA || [])
-    .filter(function (row) {
-      const kind = String(row.kind || '').toLowerCase();
-      return kind === 'surgery' || String(row.cat || '').toLowerCase().includes('eye');
-    })
+  const mains = getOtProcedureMainHeadings();
+  const allProcedureNames = (CHARGES_DATA || [])
+    .filter(function (row) { return otChargeLooksLikeProcedure(row); })
     .flatMap(function (row) { return [String(row.parent || '').trim(), String(row.name || '').trim()]; })
-    .filter(Boolean))].sort();
+    .filter(Boolean);
+  return Array.from(new Set(mains.concat(allProcedureNames))).sort();
 }
 function normalizeOtTemplateKey(text) {
   return String(text || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -15059,6 +15088,7 @@ function repairDrugLibraryFromAllSources() {
     renderSettingsDrugs && renderSettingsDrugs();
     rebuildDrugGenericDatalist();
     syncDrugDeptDefaults();
+    try { renderRxDrugs && renderRxDrugs(); } catch (e) {}
     if (window.FBDB && DRUG_LIBRARY.length) {
       window.FBDB.ref('drugLibrary').set(DRUG_LIBRARY).catch(function () {});
     }
@@ -15093,6 +15123,11 @@ function loadDrugLibraryFromStorage(opts) {
     renderSettingsDrugs && renderSettingsDrugs();
     rebuildDrugGenericDatalist();
     syncDrugDeptDefaults();
+    try { renderRxDrugs && renderRxDrugs(); } catch (e) {}
+    try {
+      const activeInput = getActiveRxQuickSearchInput && getActiveRxQuickSearchInput();
+      if (activeInput && String(activeInput.value || '').trim().length >= 2) rxQuickSearch(String(activeInput.value || ''));
+    } catch (e) {}
     if (opts.repairCloud && window.FBDB && DRUG_LIBRARY.length) {
       window.FBDB.ref('drugLibrary').set(DRUG_LIBRARY).catch(function () {});
     }
@@ -26043,22 +26078,25 @@ function followupLineToDateOnly(line) {
 function buildOphFollowupVerticalPrintHtml(fus) {
   const esc = escapeHtmlConsent;
   const arr = Array.isArray(fus) ? fus : [];
-  const oneDay = arr[0] ? followupLineToDateOnly(arr[0]) : '—';
-  const oneWeek = arr[1] ? followupLineToDateOnly(arr[1]) : '—';
-  const finalDate = arr[2] ? followupLineToDateOnly(arr[2]) : '—';
+  const parseLabelAndDate = function (line, fallbackLabel) {
+    const raw = String(line || '').trim();
+    if (!raw) return { label: fallbackLabel, date: '—' };
+    const parts = raw.split(':');
+    if (parts.length > 1) return { label: String(parts[0] || fallbackLabel).trim() || fallbackLabel, date: followupLineToDateOnly(parts.slice(1).join(':')) };
+    return { label: fallbackLabel, date: followupLineToDateOnly(raw) };
+  };
   const row = function (lbl, dt) {
     return '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:6px 10px;border-bottom:1px solid #e2e6ed;font-size:12px;line-height:1.35">'
       + '<span style="font-weight:900;color:#1A3C6E;min-width:0">' + esc(lbl) + '</span>'
       + '<span style="font-weight:800;font-family:ui-monospace,monospace;font-size:12.5px;text-align:right;white-space:nowrap">' + esc(dt) + '</span>'
       + '</div>';
   };
-  let html = row('1 day', oneDay) + row('1 week', oneWeek) + row('2 weeks / final follow-up', finalDate);
-  for (let j = 3; j < arr.length; j++) {
-    html += '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:6px 10px;border-bottom:1px solid #e2e6ed;font-size:11px">'
-      + '<span style="font-weight:800;color:#555">Follow-up ' + (j + 1) + '</span>'
-      + '<span style="font-weight:800;font-family:ui-monospace,monospace;font-size:12px;text-align:right">' + esc(followupLineToDateOnly(arr[j])) + '</span>'
-      + '</div>';
-  }
+  let html = '';
+  arr.forEach(function (line, idx) {
+    const parsed = parseLabelAndDate(line, idx === 0 ? '1 day' : idx === 1 ? '1 week' : ('Follow-up ' + (idx + 1)));
+    html += row(parsed.label, parsed.date);
+  });
+  if (!arr.length) html = row('1 day', '—') + row('1 week', '—') + row('Final follow-up', '—');
   return '<div style="border:1px solid #cfd5de;border-radius:8px;overflow:hidden;background:#fafbfc">'
     + '<div style="font-size:9px;font-weight:900;color:#1A3C6E;text-transform:uppercase;letter-spacing:.4px;padding:7px 10px;background:#eef3fb;border-bottom:1px solid #cfd5de">Follow-up</div>'
     + html + '</div>';
@@ -27090,6 +27128,12 @@ const DRUG_LIBRARY_FULL = [
 
 // ── Drug quick search: Settings DRUG_LIBRARY + built-in DRUG_LIBRARY_FULL ───────
 let rxQuickPickList = [];
+function getDrugLibrarySearchPool() {
+  const live = Array.isArray(DRUG_LIBRARY) ? DRUG_LIBRARY.slice() : [];
+  let rescue = [];
+  try { rescue = typeof readDrugLibraryRowsFromAllLocalSources === 'function' ? readDrugLibraryRowsFromAllLocalSources() : []; } catch (e) { rescue = []; }
+  return mergeDrugLibraryRows(live.concat(rescue));
+}
 function rxQuickSearch(val) {
   val = (val || '').trim();
   const page = document.querySelector('.page.active');
@@ -27106,7 +27150,7 @@ function rxQuickSearch(val) {
   const deptKey = deptMap[tabId] || 'ophtho';
   const deptLabel = { oe: 'Ophthalmology', obg: 'OBG', psych: 'Neuropsychiatry', skin: 'Skin' }[tabId] || '';
 
-  const libSettings = typeof DRUG_LIBRARY !== 'undefined' ? DRUG_LIBRARY : [];
+  const libSettings = getDrugLibrarySearchPool();
   const fromSettings = libSettings.filter(d => {
     if (!rxDrugMatchesDept(d, deptKey, deptLabel)) return false;
     return String(d.trade || '').toLowerCase().includes(v) || String(d.generic || '').toLowerCase().includes(v);
