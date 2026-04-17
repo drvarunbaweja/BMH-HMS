@@ -7398,9 +7398,9 @@ function renderIolBrandSuggestMenu(entryDiv, query) {
   const input = entryDiv && entryDiv.querySelector('.iol-brand-field');
   if (!menu || !input) return;
   const q = normalizeInventoryCompareText(query || '');
-  const names = inventoryKnownBrandNames().filter(function (name) {
-    return (IOL_CATALOG || []).some(function (row) { return normalizeInventoryCompareText(row.name || '') === normalizeInventoryCompareText(name); });
-  });
+  const names = Array.from(new Set((IOL_CATALOG || []).map(function (row) {
+    return normalizeInventoryTextValue(row?.name || '');
+  }).filter(Boolean)));
   const filtered = (!q ? names : names.filter(function (name) { return normalizeInventoryCompareText(name).includes(q); })).slice(0, 30);
   if (!filtered.length) {
     menu.style.display = 'none';
@@ -10716,7 +10716,7 @@ function applyInventoryParsedData(parsed, mode) {
   const qtyEl = document.getElementById('inv-in-qty');
   if (qtyEl && parsed.qty) qtyEl.value = String(parsed.qty);
   const costEl = document.getElementById('inv-in-cost');
-  if (costEl && (parsed.cost || parsed.rate || parsed.amount)) costEl.value = String(parsed.cost || parsed.rate || parsed.amount);
+  if (costEl && (parsed.cost || parsed.rate)) costEl.value = String(parsed.cost || parsed.rate);
   const mrpEl = document.getElementById('inv-in-mrp');
   if (mrpEl && !Number(mrpEl.value || 0)) {
     const priorMrp = inventoryFindKnownMrp(parsed.itemName || '');
@@ -10749,7 +10749,7 @@ function applyInventoryParsedData(parsed, mode) {
     if (parsed.batchNo) setVal('inv-iol-model', parsed.batchNo || '');
     setVal('inv-iol-expiry', parsed.exp || '');
     const iolCost = document.getElementById('inv-iol-cost');
-    if (iolCost && (parsed.cost || parsed.rate || parsed.amount)) iolCost.value = String(parsed.cost || parsed.rate || parsed.amount);
+    if (iolCost && (parsed.cost || parsed.rate)) iolCost.value = String(parsed.cost || parsed.rate);
     if (!document.querySelector('#inv-iol-brands-container .inv-iol-brand-entry')) addIolBrandEntry();
     const firstEntry = document.querySelector('#inv-iol-brands-container .inv-iol-brand-entry');
     if (firstEntry) {
@@ -10762,7 +10762,7 @@ function applyInventoryParsedData(parsed, mode) {
       if (c && (parsed.company || iolIdentity.company)) c.value = parsed.company || iolIdentity.company || '';
       if (m && parsed.batchNo) m.value = parsed.batchNo;
       if (e && parsed.exp) e.value = parsed.exp;
-      if (cc && (parsed.cost || parsed.rate || parsed.amount)) cc.value = String(parsed.cost || parsed.rate || parsed.amount);
+      if (cc && (parsed.cost || parsed.rate)) cc.value = String(parsed.cost || parsed.rate);
       renderIolBrandSuggestMenu(firstEntry, b?.value || '');
       refreshIolBrandPowerStockLabels(firstEntry);
     }
@@ -12179,6 +12179,8 @@ function saveChargesToLocalStorage() {
   try {
     localStorage.setItem('bmh_charges_schedule', JSON.stringify(CHARGES_DATA));
     localStorage.setItem('bmh_centre_charges', JSON.stringify(CENTRE_CHARGES));
+    localStorage.setItem('bmh_charges_schedule_updated_at', String(Date.now()));
+    window._bmhLastLocalChargesRows = normalizeChargesRows(CHARGES_DATA).slice();
   } catch (e) { /* quota */ }
 }
 window._bmhLastLocalChargesRows = window._bmhLastLocalChargesRows || [];
@@ -12206,11 +12208,14 @@ function scoreChargesRows(rows) {
   });
   return (list.length * 10) + (parents.size * 20) + (customKinds.size * 5);
 }
-function choosePreferredChargesRows(localRows, remoteRows) {
+function choosePreferredChargesRows(localRows, remoteRows, localTs, remoteTs) {
   const localList = normalizeChargesRows(localRows);
   const remoteList = normalizeChargesRows(remoteRows);
   if (!remoteList.length) return localList;
   if (!localList.length) return remoteList;
+  const lts = Number(localTs || 0);
+  const rts = Number(remoteTs || 0);
+  if (lts && rts && lts !== rts) return lts > rts ? localList : remoteList;
   return scoreChargesRows(localList) > scoreChargesRows(remoteList) ? localList : remoteList;
 }
 const LEGACY_PMICS_CHARGE_HEADING = 'Pinhole Microincision Cataract Surgery + IOL Implantation';
@@ -12254,6 +12259,7 @@ function loadChargesFromLocalStorage() {
       window._bmhLastLocalChargesRows = arr.slice();
       applyLoadedChargesRows(arr);
     }
+    window._bmhLastLocalChargesUpdatedAt = Number(localStorage.getItem('bmh_charges_schedule_updated_at') || 0) || 0;
     const cc = localStorage.getItem('bmh_centre_charges');
     if (cc) {
       const d = JSON.parse(cc);
@@ -12272,7 +12278,8 @@ function saveChargesToFirebase(){
   }
   return Promise.all([
     window.FBDB.ref('centreCharges').set(CENTRE_CHARGES),
-    window.FBDB.ref('chargesSchedule').set(CHARGES_DATA)
+    window.FBDB.ref('chargesSchedule').set(CHARGES_DATA),
+    window.FBDB.ref('chargesScheduleMeta').set({ updatedAt: Date.now() })
   ]).then(function(res){
     showToast('Saved to database ✓', 's');
     return res;
@@ -12296,8 +12303,14 @@ function loadChargesFromFirebase(){
     renderCentresCharges && renderCentresCharges();
     syncReceptionConsultationFee && syncReceptionConsultationFee();
   }).catch(()=>{});
-  window.FBDB.ref('chargesSchedule').once('value').then(snap => {
-    const arr = choosePreferredChargesRows(window._bmhLastLocalChargesRows, snap.val());
+  Promise.all([
+    window.FBDB.ref('chargesSchedule').once('value'),
+    window.FBDB.ref('chargesScheduleMeta').once('value')
+  ]).then(function (pairs) {
+    const snap = pairs[0];
+    const metaSnap = pairs[1];
+    const remoteTs = Number(metaSnap && metaSnap.val && metaSnap.val()?.updatedAt || 0) || 0;
+    const arr = choosePreferredChargesRows(window._bmhLastLocalChargesRows, snap.val(), window._bmhLastLocalChargesUpdatedAt, remoteTs);
     window._bmhChargesCloudLoaded = true;
     if (!applyLoadedChargesRows(arr)) return;
     saveChargesToLocalStorage();
@@ -14934,7 +14947,23 @@ function mergeDrugLibraryRows(primaryRows) {
 
 function saveDrugLibraryToStorage() {
   persistDrugLibraryLocalSnapshots(DRUG_LIBRARY);
-  if (window.FBDB) window.FBDB.ref('drugLibrary').set(DRUG_LIBRARY).catch(() => {});
+  if (window.FBDB) {
+    const ts = Date.now();
+    window.FBDB.ref('drugLibrary').set(DRUG_LIBRARY).catch(() => {});
+    window.FBDB.ref('drugLibraryMeta').set({ updatedAt: ts }).catch(() => {});
+  }
+}
+function choosePreferredDrugLibraryRows(localRows, remoteRows, currentRows, localTs, remoteTs) {
+  const localList = normalizeDrugLibrarySnapshot(localRows);
+  const remoteList = normalizeDrugLibrarySnapshot(remoteRows);
+  const currentList = normalizeDrugLibrarySnapshot(currentRows);
+  const lts = Number(localTs || 0);
+  const rts = Number(remoteTs || 0);
+  let base = [];
+  if (lts && rts && lts !== rts) base = lts > rts ? localList : remoteList;
+  else if (localList.length !== remoteList.length) base = localList.length >= remoteList.length ? localList : remoteList;
+  else base = localList.concat(remoteList);
+  return mergeDrugLibraryRows(base.concat(currentList));
 }
 
 function getCurrentDrugDeptLabel() {
@@ -15002,6 +15031,7 @@ function persistDrugLibraryLocalSnapshots(rows) {
     if (prev && prev !== next) localStorage.setItem('bmh_drug_library_archive', prev);
     localStorage.setItem('bmh_drug_library', next);
     localStorage.setItem('bmh_drug_library_backup', next);
+    localStorage.setItem('bmh_drug_library_updated_at', String(Date.now()));
   } catch (e) { /* noop */ }
 }
 /**
@@ -15040,10 +15070,12 @@ function loadDrugLibraryFromStorage(opts) {
   const applyMergedRows = function (remoteVal, opts) {
     opts = opts || {};
     const remoteArr = normalizeDrugLibrarySnapshot(remoteVal);
-    const localArr = readDrugLibraryRowsFromAllLocalSources();
+    const localArr = readDrugLibraryFromLocalStorage();
     const currentArr = Array.isArray(DRUG_LIBRARY) ? DRUG_LIBRARY.slice() : [];
+    const localTs = Number(localStorage.getItem('bmh_drug_library_updated_at') || 0) || 0;
+    const remoteTs = Number(window._bmhDrugLibraryRemoteUpdatedAt || 0) || 0;
     DRUG_LIBRARY.length = 0;
-    const merged = mergeDrugLibraryRows(localArr.concat(remoteArr).concat(currentArr));
+    const merged = choosePreferredDrugLibraryRows(localArr, remoteArr, currentArr, localTs, remoteTs);
     merged.forEach(function (x) { DRUG_LIBRARY.push(x); });
     persistDrugLibraryLocalSnapshots(DRUG_LIBRARY);
     renderSettingsDrugs && renderSettingsDrugs();
@@ -15059,10 +15091,16 @@ function loadDrugLibraryFromStorage(opts) {
     applyMergedRows(null, { repairCloud: false });
     return;
   }
-  window.FBDB.ref('drugLibrary').once('value').then(function (snap) {
+  Promise.all([
+    window.FBDB.ref('drugLibrary').once('value'),
+    window.FBDB.ref('drugLibraryMeta').once('value')
+  ]).then(function (pairs) {
+    const snap = pairs[0];
+    const metaSnap = pairs[1];
     window._bmhDrugLibraryHydratedFromFirebase = true;
     const remoteArr = normalizeDrugLibrarySnapshot(snap.val());
-    const localArr = readDrugLibraryRowsFromAllLocalSources();
+    const localArr = readDrugLibraryFromLocalStorage();
+    window._bmhDrugLibraryRemoteUpdatedAt = Number(metaSnap && metaSnap.val && metaSnap.val()?.updatedAt || 0) || 0;
     const repairCloud = (!!localArr.length && localArr.length > remoteArr.length) || (!remoteArr.length && localArr.length > 0);
     applyMergedRows(snap.val(), { repairCloud: repairCloud });
   }).catch(function () {
@@ -15778,6 +15816,17 @@ window.ICD10_DB = ICD10_DB;
 window.ICD10_OBG = ICD10_OBG;
 window.CUSTOM_DX_LIBRARY = window.CUSTOM_DX_LIBRARY || { ophtho: [], obg: [], psych: [], skin: [] };
 function loadCustomDiagnosisLibrary() {
+  try {
+    const ls = localStorage.getItem('bmh_custom_diagnoses');
+    if (ls) {
+      const data = JSON.parse(ls);
+      const seed = { ophtho: [], obg: [], psych: [], skin: [] };
+      Object.keys(seed).forEach(function (k) {
+        seed[k] = Array.isArray(data[k]) ? data[k].map(function (v) { return String(v || '').trim(); }).filter(Boolean) : [];
+      });
+      window.CUSTOM_DX_LIBRARY = seed;
+    }
+  } catch (e) { /* noop */ }
   if (!window.fbOnce) return;
   fbOnce('settings/customDiagnoses').then(function (data) {
     if (!data || typeof data !== 'object') return;
@@ -15786,9 +15835,11 @@ function loadCustomDiagnosisLibrary() {
       seed[k] = Array.isArray(data[k]) ? data[k].map(function (v) { return String(v || '').trim(); }).filter(Boolean) : [];
     });
     window.CUSTOM_DX_LIBRARY = seed;
+    try { localStorage.setItem('bmh_custom_diagnoses', JSON.stringify(seed)); } catch (e) {}
   }).catch(function () {});
 }
 function saveCustomDiagnosisLibrary() {
+  try { localStorage.setItem('bmh_custom_diagnoses', JSON.stringify(window.CUSTOM_DX_LIBRARY || { ophtho: [], obg: [], psych: [], skin: [] })); } catch (e) {}
   if (!window.fbSet) return;
   fbSet('settings/customDiagnoses', window.CUSTOM_DX_LIBRARY || { ophtho: [], obg: [], psych: [], skin: [] }).catch(function () {});
 }
@@ -23895,7 +23946,7 @@ ${incRxFinal && drugs.length && rxPrintMode !== 'plain_only' ? `
         const taperTimings = getRxTimingsText(tap);
         rows += `<tr style="background:#fff8e6">
           <td style="font-weight:700;color:#8a4200">↳</td>
-          <td class="left"><div class="rx-gen">${escapeHtmlConsent(taperLine || '')}</div></td>
+          <td class="left"><div class="rx-gen"></div></td>
           <td>${form}</td>
           <td>${route}</td>
           <td>${rxFreqPlain(tap.freq, rxPlainLang)||'—'}</td>
@@ -23919,7 +23970,7 @@ ${incRxFinal && drugs.length && (rxPrintMode === 'plain' || rxPrintMode === 'pla
   ${drugs.map((d,i)=>{
     const plainLine = buildRxPlainInstructionLine(d, rxPlainLang, fmtIN);
     const taperRows = Array.isArray(d.taperRows) ? d.taperRows : (d.taperRow ? [d.taperRow] : []);
-    return `<div style="padding:7px 9px;border:1px solid #c8d0dc;border-radius:8px;background:#fafbfc;font-size:11px;line-height:1.6"><strong>${i+1}. ${escapeHtmlConsent((typeof rxDrugTradeName === 'function' ? rxDrugTradeName(d) : (d.brand||d.trade||d.name||'')) || 'Medicine')}</strong><div style="margin-top:4px">${escapeHtmlConsent(plainLine || '')}</div>${taperRows.map((tap)=>`<div style="margin-top:4px;padding-left:10px;color:#8a4200">${escapeHtmlConsent(buildRxTaperSummaryLine({ ...d, freq: tap.freq, dur: tap.dur, dateFrom: tap.dateFrom, dateTo: tap.dateTo, activeTimes: tap.activeTimes || tap.times || [] }, rxPlainLang, fmtIN) || '')}</div>`).join('')}</div>`;
+    return `<div style="padding:7px 9px;border:1px solid #c8d0dc;border-radius:8px;background:#fafbfc;font-size:11px;line-height:1.6"><strong>${i+1}. ${escapeHtmlConsent((typeof rxDrugTradeName === 'function' ? rxDrugTradeName(d) : (d.brand||d.trade||d.name||'')) || 'Medicine')}</strong><div style="margin-top:4px">${escapeHtmlConsent(plainLine || '')}</div>${taperRows.map((tap)=>`<div style="margin-top:3px;padding-left:10px;color:#8a4200">${escapeHtmlConsent(buildRxTaperSummaryLine({ ...d, freq: tap.freq, dur: tap.dur, dateFrom: tap.dateFrom, dateTo: tap.dateTo, activeTimes: tap.activeTimes || tap.times || [] }, rxPlainLang, fmtIN) || '')}</div>`).join('')}</div>`;
   }).join('')}
 </div>` : ''}
 
