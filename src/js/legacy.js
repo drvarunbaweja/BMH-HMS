@@ -7749,6 +7749,7 @@ function saveIolInventoryGrid() {
           const hints = bd.serialMap[row.power] || [];
           for (let idx = 0; idx < row.qty; idx += 1) {
             const invRow = buildIolInventoryRow(base, row.power, idx + 1, hints[idx] || null);
+            invRow._localAddedAt = Date.now();
             INVENTORY.push(invRow);
             BCMAP[invRow.barcode] = invRow;
             BCMAP[String(invRow.name).toLowerCase().substring(0, 15)] = invRow;
@@ -7845,20 +7846,89 @@ function parseIolBillOcrText(text) {
   if (!raw) return null;
   const lines = raw.split(/\n+/).map(function (line) { return line.trim(); }).filter(Boolean);
   const flat = lines.join(' ');
-  const companyGuess = lines.find(function (line) { return /alcon|johnson|zeiss|appasamy|aurolab|rayner|hoya/i.test(line); }) || '';
-  const expiryGuess = flat.match(/\b(0[1-9]|1[0-2])\s*[\/-]\s*(20\d{2}|\d{2})\b/);
+
+  // Broader company / manufacturer detection
+  const companyGuess = lines.find(function (line) {
+    return /\b(?:alcon|johnson\s*&?\s*johnson|j\s*&?\s*j|zeiss|carl\s*zeiss|appasamy|aurolab|rayner|hoya|staar|iridex|bausch(?:\s*(?:&|\+)\s*lomb)?|sifi|iol-tec|biotech|lenstec|nidek|synergetics|physiol|freedom\s*optics|santen|sun\s*pharma|excel\s*ar)\b/i.test(line)
+      && !/invoice|bill|gstin|amount|total|bank|address|phone|mob/i.test(line);
+  }) || '';
+
+  // Brand/model from first product description line
+  const iolBrandLine = lines.find(function (line) {
+    return /vivinex|impress|xy1|pciol|aciol|hydrophob|hydrophil|multifocal|toric|aspheric|symfony|panoptix|restor|tecnis|crystalens|acrysof|auroflex|aurovue|innoprima|comfort\s*\w+/i.test(line)
+      && !/invoice|bill|gstin|amount|total|bank/i.test(line);
+  }) || '';
+  const brandRx = /\b(vivinex|impress|xy1|acrysof|tecnis|symfony|panoptix|restor|crystalens|auroflex|aurovue|innoprima|comfort\s*\w+|clareon|vivity|alcon\s*\w+)\b/i;
+  const brandMatch = iolBrandLine.match(brandRx) || flat.match(brandRx);
+  const brandGuess = brandMatch ? brandMatch[1] : '';
+
+  // Global expiry fallback — prefer MM/YYYY
+  const expiryGuess = flat.match(/\b(0[1-9]|1[0-2])\s*[\/-]\s*(20\d{2})\b/)
+    || flat.match(/\b(0[1-9]|1[0-2])\s*[\/-]\s*(\d{2})\b/);
+  const globalExpiry = expiryGuess
+    ? (expiryGuess[1] + '/' + (expiryGuess[2].length === 2 ? '20' + expiryGuess[2] : expiryGuess[2]))
+    : '';
+
   const rows = {};
+
   lines.forEach(function (line) {
-    const powerMatch = line.match(/([+-]?\d+(?:\.\d+)?)\s*D\b/i);
+    // Power: +20.00D, 20.00 D, -3.00D, +20D, "Power: +20.00"
+    const powerMatch = line.match(/([+-]?\d+(?:\.\d+)?)\s*D\b/i)
+      || line.match(/\bpower\s*[:=]?\s*([+-]?\d+(?:\.\d+)?)/i);
     if (!powerMatch) return;
     const power = normalizeIolPowerValue(powerMatch[1]);
-    const serialMatch = line.match(/\b(?:SN|SERIAL|S\/N)[:\s-]*([A-Z0-9-]+)\b/i);
-    const batchMatch = line.match(/\b(?:BATCH|LOT)[:\s-]*([A-Z0-9-]+)\b/i);
-    rows[power] = rows[power] || { qty: 0, serials: [] };
+    if (!power) return;
+
+    // Serial: SN123456, SERIAL: ABC, S/N-123, also bare alpha-numeric patterns before batch
+    const serialMatch = line.match(/\b(?:SN|SERIAL|S\/N|SR\.?\s*NO\.?|S\.NO\.?)\s*[:\s#-]*([A-Z0-9-]{4,})\b/i)
+      || line.match(/\b([A-Z]{1,3}[0-9]{5,})\b(?![/\-]\d)/);
+
+    // Batch: BATCH: MX2404, LOT# BT24, B/N
+    const batchMatch = line.match(/\b(?:BATCH|LOT|B\/N|MFG\s*NO\.?)\s*[:\s#-]*([A-Z0-9-]{3,})\b/i);
+
+    // Per-line expiry (takes priority over global)
+    const expMatch = line.match(/\b(0[1-9]|1[0-2])\s*[\/-]\s*(20\d{2})\b/)
+      || line.match(/\b(0[1-9]|1[0-2])\s*[\/-]\s*(\d{2})\b/);
+    const lineExpiry = expMatch
+      ? (expMatch[1] + '/' + (expMatch[2].length === 2 ? '20' + expMatch[2] : expMatch[2]))
+      : '';
+
+    // Rate: last large number on the line (>500)
+    const rateNums = Array.from(line.matchAll(/\b([0-9]{4,6}(?:\.[0-9]{1,2})?)\b/g))
+      .map(function (m) { return Number(m[1]); }).filter(function (n) { return n > 500; });
+    const rate = rateNums.length ? rateNums[rateNums.length - 1] : 0;
+
+    if (!rows[power]) {
+      rows[power] = { qty: 0, serials: [], expiry: lineExpiry || globalExpiry };
+    }
+    if (lineExpiry && !rows[power].expiry) rows[power].expiry = lineExpiry;
     rows[power].qty += 1;
-    rows[power].serials.push({ serialNo: serialMatch ? serialMatch[1] : '', batchNo: batchMatch ? batchMatch[1] : '' });
+    rows[power].serials.push({
+      serialNo: serialMatch ? (serialMatch[1] || serialMatch[2] || '') : '',
+      batchNo: batchMatch ? batchMatch[1] : '',
+      rate: rate
+    });
   });
-  return { company: companyGuess, expiry: expiryGuess ? (expiryGuess[1] + '/' + expiryGuess[2]) : '', rows: rows };
+
+  // Fallback: structured table row "+20.00D SN123456 BT2024 06/2026 1 25000.00"
+  lines.forEach(function (line) {
+    const tableMatch = line.match(/^([+-]?\d+(?:\.\d+)?)\s*D\s+([A-Z0-9-]{4,})\s+([A-Z0-9-]{3,})\s+(\d{1,2}[\/-](?:20)?\d{2,4})\s+(\d+)\s+([\d]+\.?[\d]{0,2})/i);
+    if (!tableMatch) return;
+    const power = normalizeIolPowerValue(tableMatch[1]);
+    if (!power || rows[power]) return;
+    const expParts = String(tableMatch[4] || '').match(/(\d{1,2})[\/-](\d{2,4})/);
+    const expiry = expParts
+      ? (String(expParts[1]).padStart(2, '0') + '/' + (expParts[2].length === 2 ? '20' + expParts[2] : expParts[2]))
+      : globalExpiry;
+    rows[power] = {
+      qty: Number(tableMatch[5]) || 1,
+      expiry: expiry,
+      serials: [{ serialNo: tableMatch[2], batchNo: tableMatch[3], rate: Number(tableMatch[6]) || 0 }]
+    };
+  });
+
+  if (!Object.keys(rows).length) return null;
+  return { company: companyGuess, brand: brandGuess, expiry: globalExpiry, rows: rows };
 }
 function prepareIolInventoryFromBill() {
   const parsed = parseIolBillOcrText(document.getElementById('inv-ocr-text')?.value || '');
@@ -7866,25 +7936,46 @@ function prepareIolInventoryFromBill() {
     showToast('Paste IOL bill OCR text first for review', 'w');
     return;
   }
-  if (parsed.company && !document.getElementById('inv-iol-company')?.value) document.getElementById('inv-iol-company').value = parsed.company;
-  if (parsed.expiry && !document.getElementById('inv-iol-expiry')?.value) document.getElementById('inv-iol-expiry').value = parsed.expiry;
-  const review = document.getElementById('inv-iol-bill-review');
-  if (review) {
-    review.style.display = 'block';
-    review.innerHTML = '<strong>Bill review prepared.</strong> Please confirm powers, serial numbers, expiry, and model details before adding to stock.';
-  }
+  const setIfEmpty = function (id, value) {
+    if (!value) return;
+    const el = document.getElementById(id);
+    if (el && !el.value) el.value = value;
+  };
+  setIfEmpty('inv-iol-company', parsed.company);
+  setIfEmpty('inv-iol-brand', parsed.brand);
+  setIfEmpty('inv-iol-expiry', parsed.expiry);
+
+  // Build serial map (power: serialNo,batchNo; ...)
   const serialMapText = Object.keys(parsed.rows).sort(function (a, b) { return parseFloat(a) - parseFloat(b); }).map(function (power) {
-    return power + ': ' + parsed.rows[power].serials.map(function (row) {
-      return [row.serialNo || '', row.batchNo || ''].filter(Boolean).join(',');
+    const rowEntry = parsed.rows[power];
+    const serials = (rowEntry.serials || []).map(function (s) {
+      return [s.serialNo || '', s.batchNo || ''].filter(Boolean).join(',');
     }).filter(Boolean).join('; ');
+    return serials ? power + ': ' + serials : '';
   }).filter(Boolean).join(' | ');
   const serialMapEl = document.getElementById('inv-iol-serial-map');
-  if (serialMapEl && serialMapText) serialMapEl.value = serialMapText;
+  if (serialMapEl && serialMapText && !serialMapEl.value) serialMapEl.value = serialMapText;
+
+  // Populate power grid
   renderIolInventoryPowerGrid(Object.keys(parsed.rows).reduce(function (acc, power) {
     acc[power] = { qty: parsed.rows[power].qty };
     return acc;
   }, {}));
-  showToast('IOL bill details prepared for manual review ✓', 's');
+
+  // Show review card with per-power expiry info
+  const review = document.getElementById('inv-iol-bill-review');
+  if (review) {
+    const perExpiries = Object.entries(parsed.rows)
+      .filter(function (kv) { return kv[1].expiry; })
+      .map(function (kv) { return '<li>' + escapeHtmlConsent(kv[0]) + ' → ' + escapeHtmlConsent(kv[1].expiry) + '</li>'; })
+      .join('');
+    review.style.display = 'block';
+    review.innerHTML = '<strong>Bill prepared — ' + Object.keys(parsed.rows).length + ' power(s) detected.</strong>'
+      + (perExpiries ? '<div style="margin-top:6px;font-size:11px">Per-power expiry:<ul style="margin:4px 0 0 14px;padding:0">' + perExpiries + '</ul></div>' : '')
+      + '<div style="margin-top:6px;font-size:11px;color:var(--g1)">Verify expiry, serial numbers and cost before saving.</div>';
+  }
+
+  showToast('IOL bill prepared — ' + Object.keys(parsed.rows).length + ' power(s) ✓', 's');
 }
 window.prepareIolInventoryFromBill = prepareIolInventoryFromBill;
 function bmhDefaultStoreForDept(dept) {
@@ -10399,19 +10490,24 @@ function parseIolIdentityFromItemName(name) {
 function inferInventoryCategoryFromText(text) {
   const raw = String(text || '').toLowerCase();
   if (!raw) return '';
-  if (/iol|intraocular lens|staar|collamer|hydrophobic|hydrophilic|multifocal|toric/.test(raw)) return 'IOL';
-  if (/eye drop|drops|ophthalmic/.test(raw)) return 'Eye Drops';
+  if (/iol|intraocular lens|staar|collamer|hydrophobic|hydrophilic|multifocal|toric|pciol|aciol|phakic|vivinex|impress|acrysof|tecnis|symfony|panoptix|restor|crystalens|auroflex/.test(raw)) return 'IOL';
+  if (/viscoelastic|viscoat|provisc|healon|trypan blue/.test(raw)) return 'Viscoelastics';
+  if (/eye drop|drops|ophthalmic|moxiflox|tobramycin|timolol|latanoprost|brimonidine|dorzolamide|nepafenac|ketorolac|prednisolone|dexamethasone/.test(raw)) return 'Eye Drops';
   if (/glove/.test(raw)) return 'Gloves';
   if (/syringe/.test(raw)) return 'Syringes';
   if (/cannula|iv cannula/.test(raw)) return 'IV Cannulas';
-  if (/ringer lactate|dns|mannitol|fluid|iv/.test(raw)) return 'IV Fluids';
+  if (/ringer lactate|rl \d+|dns|d\.n\.s|mannitol|iv\s*fluid|normal saline|ns \d+/.test(raw)) return 'IV Fluids';
   if (/vaccine/.test(raw)) return 'Vaccines';
-  if (/suture/.test(raw)) return 'Sutures';
+  if (/suture|vicryl|prolene|ethilon|chromic|silk/.test(raw)) return 'Sutures';
   if (/kit/.test(raw)) return 'Kits';
   if (/serum/.test(raw)) return 'Serums';
   if (/cream|ointment|gel/.test(raw)) return 'Creams';
   if (/inj|injection|vial|ampoule|ampule/.test(raw)) return 'Injections';
-  if (/antibiotic|moxifloxacin|cef|azithro|amox|cipro/.test(raw)) return 'Antibiotics';
+  if (/tab|tablet|capsule|caps/.test(raw)) return 'Tablets';
+  if (/antibiotic|moxifloxacin|cef|azithro|amox|cipro|doxy|metro|linezolid/.test(raw)) return 'Antibiotics';
+  if (/bandage|gauze|cotton|dressing|pad|absorbent/.test(raw)) return 'Dressings';
+  if (/mask|apron|cap\b|gown|drape/.test(raw)) return 'Disposables';
+  if (/betadine|spirit|alcohol|sanitizer|soap|disinfect/.test(raw)) return 'Consumables';
   return '';
 }
 function findInventoryNameInText(text) {
@@ -10437,7 +10533,16 @@ function cleanInventoryImportText(text) {
     .map(function (line) { return line.trim().replace(/\s+/g, ' '); })
     .filter(Boolean)
     .filter(function (line) {
-      return !/goods once sold|taken back|receiver|authorized signatory|authorised signatory|all disputes|subject to|jurisdiction|bank details|terms and conditions|thank you|for optivision|dis amt|cgst|sgst|igst|taxable amt|grand total|sub total/i.test(line);
+      const lower = line.toLowerCase();
+      // Always discard pure boilerplate
+      if (/goods once sold|taken back|receiver|authorized signatory|authorised signatory|all disputes|subject to|jurisdiction|bank details|terms and conditions|thank you|for optivision|e\.?&\.?o\.?e\b/i.test(lower)) return false;
+      // Keep lines that carry product data even if they also mention tax keywords
+      if (/\b(?:tab|caps?|inj|drop|iol|cream|gel|oint|suture|glove|syringe|cannula|vaccine|vial|ampoule|solution|viscoelastic)\b/i.test(line)) return true;
+      if (/[+-]?\d+(?:\.\d+)?\s*D\b/i.test(line)) return true; // IOL power
+      if (/\b\d{6,8}\b/.test(line) && /\d{1,2}[\/-]\d{2,4}/.test(line)) return true; // HSN + date = product row
+      // Discard tax summary lines only when they have no product info
+      if (/dis\s*amt|cgst\s*@|sgst\s*@|igst\s*@|taxable\s*amt|grand\s*total|sub\s*total/i.test(lower)) return false;
+      return true;
     })
     .join('\n')
     .trim();
@@ -10446,71 +10551,175 @@ function extractInventoryLineItems(text) {
   const rows = [];
   const seen = new Set();
   const baseLines = String(text || '').split(/\n+/).map(function (line) { return line.trim().replace(/\s+/g, ' '); }).filter(Boolean);
+
+  // ── Phase 1: merge two-line format (item name on line N, numeric data on line N+1) ──
   const lines = [];
+  const usedIdx = new Set();
   for (let i = 0; i < baseLines.length; i += 1) {
+    if (usedIdx.has(i)) continue;
     const line = baseLines[i];
     const next = baseLines[i + 1] || '';
-    const isProductLead = /iol|intraocular lens|vivinex|hoya|xy1|inj|injection|tab|caps|capsule|drop|vial|ampoule|cream|gel|glove|syringe|cannula|suture|kit|serum|vaccine/i.test(line);
-    const isNumericDetail = /\b\d{6,8}\b/.test(next) && /\b\d{2}[\/-]\d{2}[\/-]\d{2,4}\b/.test(next) && /\d+\.\d{2}/.test(next);
-    if (isProductLead && isNumericDetail) {
+    // Text-heavy line followed by a data-heavy line = merge
+    const lineIsText = /[a-zA-Z]{4,}/.test(line) && !/\b\d{6,8}\b/.test(line) && !/\d{1,2}[\/-]\d{4}/.test(line);
+    const nextIsData = /\b\d{6,8}\b/.test(next) && /\d{1,2}[\/-]\d{2,4}/.test(next) && /\d+\.\d{2}/.test(next);
+    // Also merge IOL detail lines
+    const lineIsIolHead = /hoya|vivinex|impress|xy1|iol|intraocular/i.test(line);
+    const nextIsIolData = /[A-Z0-9-]{5,}/.test(next) && /\d+\.\d{2}/.test(next);
+    if ((lineIsText && nextIsData) || (lineIsIolHead && nextIsIolData)) {
       lines.push(line + ' ' + next);
+      usedIdx.add(i + 1);
       i += 1;
-      continue;
+    } else {
+      lines.push(line);
     }
-    lines.push(line);
   }
-  for (let i = 0; i < baseLines.length; i += 1) {
-    const lead = baseLines[i] || '';
-    const detail = baseLines[i + 1] || '';
-    if (!/hoya|vivinex|impress|xy1|iol/i.test(lead)) continue;
-    if (!/\b\d{6,8}\b/.test(detail) || !/[A-Z0-9-]{5,}/.test(detail) || !/\d+\.\d{2}/.test(detail)) continue;
-    lines.push((lead + ' ' + detail).trim());
-    i += 1;
-  }
+
+  // ── Phase 2: parse each candidate line ──
   lines.forEach(function (line) {
     const lower = line.toLowerCase();
-    if (/ludhiana|billed to|preet colony|opp\.? civil hospital|goods once sold|receiver|authorised signatory|grand total|sub total|terms|conditions|bank details|phone|mail|gstin/i.test(lower)) return;
-    const isRelevant = /iol|intraocular lens|vivinex|hoya|xy1|inj|injection|tab|caps|capsule|drop|vial|ampoule|cream|gel|glove|syringe|cannula|suture|kit|serum|vaccine/i.test(line)
-      || !!findInventoryCandidatesFromText(line, 1).length;
-    if (!isRelevant || /invoice|bill|grand total|sub total|cgst|sgst|igst|taxable/i.test(lower)) return;
-    const productLead = line.match(/((?:hoya\s+)?(?:vivinex\s+)?(?:impress\s+)?[a-z0-9-]+(?:\s+[a-z0-9+-]+){0,6})/i);
-    const itemName = normalizeInventoryTextValue(
-      (/hoya|vivinex|impress|xy1|iol/i.test(line) && productLead ? productLead[1] : '') ||
-      findInventoryNameInText(line) ||
-      line.replace(/\bhsn\b.*$/i, '').trim()
-    );
-    const hsnMatch = line.match(/\b(?:hsn|sac)\s*[:\-]?\s*([0-9]{4,8})\b/i) || line.match(/\b([0-9]{6,8})\b/);
-    const qtyMatch = line.match(/\b(?:qty|quantity)\s*[:x-]?\s*(\d{1,4})\b/i) || line.match(/\b(\d{1,3})\s*(?:pcs|piece|pieces|unit|units|nos?)\b/i) || line.match(/\b([0-9]{6,8})\s+(\d{1,3})\s+[A-Z0-9-]{3,}\s+\d{2}[\/-]\d{2}[\/-]\d{2,4}\b/i);
-    const expMatch = line.match(/\b([0-3]?\d[\/-][01]?\d[\/-](?:20)?\d{2})\b/);
-    const batchMatch = line.match(/\b(?:batch|lot)\s*(?:no|number|#)?\s*[:\-]?\s*([A-Z0-9-]{3,})\b/i);
-    const serialMatch = line.match(/\b(?:serial|s\/n|sn)\s*(?:no|number|#)?\s*[:\-]?\s*([A-Z0-9-]{3,})\b/i);
-    const powerMatch = line.match(/([+-]?\d+(?:\.\d+)?)\s*(?:d|diopter)\b/i) || line.match(/([+-]\d+(?:\.\d+)?)\b/);
-    const tableRowMatch = line.match(/\b([0-9]{6,8})\s+(\d{1,3})\s+([A-Z0-9-]{3,})\s+([0-3]?\d[\/-][01]?\d[\/-]\d{2,4})\s+([0-9]+(?:\.[0-9]{1,2})?)\s+([0-9]+(?:\.[0-9]{1,2})?)\s+([0-9]+(?:\.[0-9]{1,2})?)\s+([0-9]+(?:\.[0-9]{1,2})?)/i);
-    const numbers = Array.from(line.matchAll(/(?:₹|rs\.?|inr)?\s*([0-9]+(?:\.[0-9]{1,2})?)/gi)).map(function (m) { return Number(m[1] || 0); }).filter(Boolean);
-    const qty = Math.max(1, Number((tableRowMatch && tableRowMatch[2]) || qtyMatch?.[2] || qtyMatch?.[1] || 1));
-    const rate = tableRowMatch ? Number(tableRowMatch[5] || 0) : (numbers.length > 1 ? numbers[numbers.length - 2] : (numbers[0] || 0));
-    const gstAmount = tableRowMatch ? Number(tableRowMatch[7] || 0) : 0;
-    const total = tableRowMatch ? Number(tableRowMatch[8] || 0) : (numbers.length ? numbers[numbers.length - 1] : 0);
+
+    // Skip pure boilerplate / footer lines
+    if (/ludhiana|billed to|preet colony|opp\.?\s*civil hospital|goods once sold|receiver|authorised signatory|authorized signatory|grand total|sub total|terms\s*&?\s*cond|bank details|phone\s*:|mob\s*:|e-?mail|gstin\s*:|www\./i.test(lower)) return;
+    if (/^s\.?\s*no\.?\s*$|^sr\.?\s*no\.?\s*$|^qty\.?\s*$|^rate\.?\s*$/i.test(lower)) return;
+
+    // Detect if line has product-type keywords or known inventory candidates
+    const hasProdKw = /\b(?:iol|intraocular|vivinex|hoya|impress|xy1|eye\s*drop|drops|ophthalmic|tab\b|tablet|caps\b|capsule|inj\b|injection|vial|ampoule|cream|gel|oint|glove|syringe|cannula|suture|kit|serum|vaccine|solution|viscoelastic|viscoat|healon|bandage|gauze|dressing|betadine|spirit)\b/i.test(line);
+    const hasPower = /[+-]?\d+(?:\.\d+)?\s*D\b/i.test(line);
+    const hasHSN = /\b\d{6,8}\b/.test(line);
+    const hasDate = /\b\d{1,2}[\/-]\d{2,4}\b/.test(line);
+
+    // IOL line: has power notation
+    const isIolLine = hasPower;
+
+    if (!hasProdKw && !isIolLine && !(hasHSN && hasDate)) {
+      const cands = findInventoryCandidatesFromText(line, 1);
+      if (!cands.length) return;
+    }
+
+    // ── Extract fields ──
+
+    // HSN code (6–8 digits, not a date fragment)
+    const hsnMatch = line.match(/\b(?:hsn|sac)\s*[:\-]?\s*([0-9]{6,8})\b/i)
+      || line.match(/(?:^|\s)([0-9]{6,8})(?:\s|$)/);
+
+    // Expiry: prefer MM/YYYY, fallback MM/YY, fallback DD/MM/YYYY
+    const expMatch = line.match(/\b(0[1-9]|1[0-2])\s*[\/-]\s*(20\d{2})\b/)
+      || line.match(/\b(0[1-9]|1[0-2])\s*[\/-]\s*(\d{2})\b/)
+      || line.match(/\b[0-3]?\d[\/-][01]?\d[\/-]((?:20)?\d{2})\b/);
+    const expRaw = expMatch ? expMatch[0] : '';
+    // Normalise to MM/YYYY
+    let exp = '';
+    if (expRaw) {
+      const parts = expRaw.match(/(\d{1,2})[\/-](\d{2,4})/) || expRaw.match(/(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})/);
+      if (parts) {
+        if (parts.length === 4) {
+          // DD/MM/YYYY — take month+year
+          exp = String(parts[2]).padStart(2, '0') + '/' + (parts[3].length === 2 ? '20' + parts[3] : parts[3]);
+        } else {
+          exp = String(parts[1]).padStart(2, '0') + '/' + (parts[2].length === 2 ? '20' + parts[2] : parts[2]);
+        }
+      }
+    }
+
+    // Batch: explicit label takes priority, then alpha-num token before the expiry
+    const batchMatch = line.match(/\b(?:batch|lot|b\/n|mfg\s*no\.?)\s*[:\s#-]*([A-Z0-9-]{3,})\b/i);
+    let batchNo = batchMatch ? batchMatch[1] : '';
+    if (!batchNo && expRaw) {
+      // token immediately before the expiry date
+      const beforeExp = line.slice(0, line.indexOf(expRaw)).trim();
+      const tok = beforeExp.match(/\b([A-Z][A-Z0-9-]{2,})\s*$/);
+      if (tok) batchNo = tok[1];
+    }
+
+    // Serial
+    const serialMatch = line.match(/\b(?:sn|serial|s\/n|sr\.?\s*no\.?)\s*[:\s#-]*([A-Z0-9-]{4,})\b/i);
+    const serialNo = serialMatch ? serialMatch[1] : '';
+
+    // Power (IOL)
+    const powerMatch = isIolLine
+      ? (line.match(/([+-]?\d+(?:\.\d+)?)\s*D\b/i) || line.match(/\bpower\s*[:=]?\s*([+-]?\d+(?:\.\d+)?)/i))
+      : null;
+    const power = powerMatch ? normalizeIolPowerValue(powerMatch[1]) : '';
+
+    // ── Table row parsing (tries multiple column orders) ──
+    // Format A: HSN qty batch expiry rate [disc] cgst sgst total
+    const fmtA = line.match(/\b(\d{6,8})\s+(\d{1,3})\s+([A-Z0-9-]{3,})\s+\S+\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)/i);
+    // Format B: IOL row "power serial batch expiry qty rate total"
+    const fmtB = isIolLine && line.match(/([+-]?\d+(?:\.\d+)?)\s*D\s+([A-Z0-9-]{4,})\s+([A-Z0-9-]{3,})\s+(\d{1,2}[\/-]\d{2,4})\s+(\d+)\s+([\d.]+)\s+([\d.]+)/i);
+
+    let qty = 1, rate = 0, gstAmount = 0, total = 0;
+
+    if (fmtA) {
+      qty = Math.max(1, Number(fmtA[2]) || 1);
+      rate = Number(fmtA[5]) || 0;
+      gstAmount = (Number(fmtA[7]) || 0) + (Number(fmtA[8]) || 0);
+      total = Number(fmtA[9]) || 0;
+    } else if (fmtB) {
+      qty = Math.max(1, Number(fmtB[5]) || 1);
+      rate = Number(fmtB[6]) || 0;
+      total = Number(fmtB[7]) || 0;
+    } else {
+      // Fallback: extract all decimal numbers, classify by magnitude and position
+      const nums = Array.from(line.matchAll(/\b(\d+(?:\.\d{1,2})?)\b/g))
+        .map(function (m) { return Number(m[1]); })
+        .filter(function (n) { return n > 0 && n < 2000000; });
+      // qty = first small integer (≤999, whole number), after any S.No
+      const smallInts = nums.filter(function (n) { return n <= 999 && n === Math.floor(n); });
+      qty = smallInts.length > 0 ? Math.max(1, smallInts[0]) : 1;
+      // rate = second-to-last number if >1, total = last number
+      if (nums.length >= 2) {
+        total = nums[nums.length - 1];
+        rate = nums[nums.length - 2];
+      } else if (nums.length === 1) {
+        total = rate = nums[0];
+      }
+    }
+
+    // Item name
+    let itemName = '';
+    if (isIolLine) {
+      // For IOL: extract brand + model up to the power notation
+      const beforePower = line.slice(0, powerMatch ? line.search(/[+-]?\d+(?:\.\d+)?\s*D\b/i) : line.length).trim();
+      itemName = normalizeInventoryTextValue(findInventoryNameInText(beforePower) || beforePower.replace(/^\d+\s*/, '').trim());
+      if (!itemName) itemName = 'IOL';
+    } else {
+      // Strip leading S.No and trailing numeric/HSN block
+      const stripped = line
+        .replace(/^\d+\s+/, '')                          // leading serial number
+        .replace(/\b\d{6,8}\b.*$/, '')                    // HSN onward
+        .trim();
+      itemName = normalizeInventoryTextValue(findInventoryNameInText(line) || stripped);
+    }
+
+    if (!itemName && !isIolLine) return;
+
     const item = {
       rawLine: line,
       itemName: itemName,
-      hsn: tableRowMatch ? String(tableRowMatch[1] || '') : (hsnMatch ? String(hsnMatch[1] || '') : ''),
+      hsn: fmtA ? String(fmtA[1]) : (hsnMatch ? String(hsnMatch[1] || '') : ''),
       qty: qty,
-      exp: tableRowMatch ? String(tableRowMatch[4] || '') : (expMatch ? expMatch[1] : ''),
-      batchNo: tableRowMatch ? String(tableRowMatch[3] || '') : (batchMatch ? batchMatch[1] : ''),
-      serialNo: serialMatch ? serialMatch[1] : '',
-      power: powerMatch ? normalizeIolPowerValue(powerMatch[1]) : '',
+      exp: fmtB
+        ? (function () {
+            const p = String(fmtB[4] || '').match(/(\d{1,2})[\/-](\d{2,4})/);
+            return p ? (String(p[1]).padStart(2, '0') + '/' + (p[2].length === 2 ? '20' + p[2] : p[2])) : exp;
+          }())
+        : exp,
+      batchNo: fmtA ? String(fmtA[3]) : (fmtB ? String(fmtB[3]) : batchNo),
+      serialNo: fmtB ? String(fmtB[2]) : serialNo,
+      power: power,
       rate: rate,
       total: total,
       gstAmount: gstAmount,
-      cost: Number((rate || 0) + (gstAmount || 0)).toFixed ? Number(((rate || 0) + (gstAmount || 0)).toFixed(2)) : ((rate || 0) + (gstAmount || 0)),
-      category: inferInventoryCategoryFromText(itemName || line)
+      cost: Number(((rate || 0) + (qty > 0 ? (gstAmount || 0) / qty : 0)).toFixed(2)),
+      category: isIolLine ? 'IOL' : inferInventoryCategoryFromText(itemName || line)
     };
+
     const key = normalizeInventoryCompareText([item.itemName, item.batchNo, item.serialNo, item.power].join(' '));
     if (!key || seen.has(key)) return;
     seen.add(key);
     rows.push(item);
   });
+
   return rows;
 }
 function findInventoryCandidatesFromText(text, limit) {
@@ -10935,6 +11144,35 @@ function applyInventoryParsedData(parsed, mode) {
     const iolCost = document.getElementById('inv-iol-cost');
     if (iolCost && (parsed.cost || parsed.rate)) iolCost.value = String(parsed.cost || parsed.rate);
     mergeIolParsedSelection(Object.assign({}, parsed, { category: 'IOL', power: normalizeIolPowerValue(parsed.power || '') || parsed.power || '' }));
+
+    // Auto-populate IOL power grid and serial map from line items when available
+    const iolLines = Array.isArray(parsed.lineItems) ? parsed.lineItems.filter(function (it) { return !!it.power; }) : [];
+    if (iolLines.length > 0) {
+      const powerQtyMap = {};
+      const serialParts = [];
+      iolLines.forEach(function (it) {
+        const p = it.power;
+        if (!powerQtyMap[p]) powerQtyMap[p] = { qty: 0 };
+        powerQtyMap[p].qty += Math.max(1, Number(it.qty) || 1);
+        if (it.serialNo || it.batchNo) {
+          serialParts.push(p + ': ' + [it.serialNo || '', it.batchNo || ''].filter(Boolean).join(','));
+        }
+        // Use per-item expiry for the first IOL if global expiry not yet set
+        if (it.exp) {
+          const expEl = document.getElementById('inv-iol-expiry');
+          if (expEl && !expEl.value) expEl.value = it.exp;
+        }
+        // Use per-item rate for cost if not yet set
+        if (it.rate && iolCost && !iolCost.value) iolCost.value = String(it.rate);
+      });
+      if (Object.keys(powerQtyMap).length && typeof renderIolInventoryPowerGrid === 'function') {
+        renderIolInventoryPowerGrid(powerQtyMap);
+      }
+      if (serialParts.length) {
+        const smEl = document.getElementById('inv-iol-serial-map');
+        if (smEl && !smEl.value) smEl.value = serialParts.join(' | ');
+      }
+    }
   }
 }
 function duplicateInventoryBillReviewItem(mode) {
@@ -11264,9 +11502,57 @@ async function handleInventoryImportFile(mode, inp) {
     }
     if (mode === 'in') inventoryRememberBillMeta(parsed.vendor || '', document.getElementById('inv-in-dept')?.value || '', window._inventoryImportAssets[mode] || null);
     applyInventoryParsedData(parsed, mode);
+
+    // ── IOL bills: run the dedicated IOL parser for accurate power-grid population ──
+    const parsedIsIol = String(parsed.category || '').toLowerCase() === 'iol'
+      || (Array.isArray(parsed.lineItems) && parsed.lineItems.some(function (it) { return !!it.power; }));
+    if (mode === 'in' && parsedIsIol) {
+      const iolParsed = parseIolBillOcrText(combinedText);
+      if (iolParsed && Object.keys(iolParsed.rows || {}).length) {
+        // Build power→qty map and serial map from the IOL parser
+        const pwQtyMap = {};
+        const serialParts = [];
+        Object.keys(iolParsed.rows).forEach(function (power) {
+          const row = iolParsed.rows[power];
+          pwQtyMap[power] = { qty: row.qty };
+          const serials = (row.serials || [])
+            .map(function (s) { return [s.serialNo || '', s.batchNo || ''].filter(Boolean).join(','); })
+            .filter(Boolean);
+          if (serials.length) serialParts.push(power + ': ' + serials.join('; '));
+        });
+        if (typeof renderIolInventoryPowerGrid === 'function') renderIolInventoryPowerGrid(pwQtyMap);
+        const smEl = document.getElementById('inv-iol-serial-map');
+        if (smEl && serialParts.length && !smEl.value) smEl.value = serialParts.join(' | ');
+        // Global expiry
+        if (iolParsed.expiry) {
+          const expEl = document.getElementById('inv-iol-expiry');
+          if (expEl && !expEl.value) expEl.value = iolParsed.expiry;
+        }
+        // Company / brand if the IOL parser found them and form is still empty
+        if (iolParsed.company) {
+          const compEl = document.getElementById('inv-iol-company');
+          if (compEl && !compEl.value) compEl.value = iolParsed.company;
+        }
+        if (iolParsed.brand) {
+          const brandEl = document.getElementById('inv-iol-brand');
+          if (brandEl && !brandEl.value) brandEl.value = iolParsed.brand;
+        }
+        // Per-power expiry: if every power has a distinct expiry, store them in the review text
+        const perPowerExpiries = Object.entries(iolParsed.rows)
+          .filter(function (kv) { return kv[1].expiry && kv[1].expiry !== iolParsed.expiry; })
+          .map(function (kv) { return kv[0] + '→' + kv[1].expiry; });
+        if (perPowerExpiries.length) {
+          setInventoryImportStatus(mode,
+            'IOL bill parsed — ' + Object.keys(iolParsed.rows).length + ' power(s) detected. ' +
+            'Mixed expiries: ' + perPowerExpiries.join(', ') + '. Verify expiry per power before saving.',
+            '#8a4200');
+        }
+      }
+    }
+
     bmhMaybeRegisterVendorBillFromParsedImport(parsed, window._inventoryImportAssets[mode], mode);
     renderInventoryImportReview(parsed, mode, combinedText);
-    setInventoryImportStatus(mode, 'OCR complete. Please review the populated fields before saving.', '#1a8c3c');
+    if (!parsedIsIol) setInventoryImportStatus(mode, 'OCR complete. Please review the populated fields before saving.', '#1a8c3c');
     openInventoryBillReviewModal(mode);
     if (mode === 'ocr') {
       const tabBtn = Array.from(document.querySelectorAll('#pg-inventory .ptab')).find(function (el) { return String(el.textContent || '').includes('Photo / OCR'); });
@@ -18648,6 +18934,7 @@ function processBC(mode, code) {
     const target = item || bmhFindOrCreateInventoryItem(code, translated);
     bmhCompressFileToData(document.getElementById('inv-in-bill-file')?.files?.[0], (billFile) => {
       try {
+        target._localAddedAt = Date.now();
         target.stock = (target.stock || 0) + qty;
         // Save to Firebase
         if (typeof window.saveInventoryToFirebase === 'function') {

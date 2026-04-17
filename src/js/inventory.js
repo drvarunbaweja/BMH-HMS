@@ -218,13 +218,32 @@ export async function syncInventoryWithFirebase() {
 
 // Initialize inventory Firebase sync
 export function initializeInventoryFirebaseSync() {
-  // Watch inventory changes
+  // Watch inventory changes — merge instead of replace to avoid flickering optimistic adds
   watchInventory((inventory) => {
     if (window.INVENTORY) {
-      window.INVENTORY.length = 0
-      inventory.forEach(item => {
-        window.INVENTORY.push(item)
+      const now = Date.now()
+      const firebaseBarSet = new Set(inventory.map(item => item.barcode).filter(Boolean))
+
+      // Update existing items in-place from Firebase (preserves array references)
+      inventory.forEach(fbItem => {
+        if (!fbItem.barcode) return
+        const existing = window.INVENTORY.find(x => x.barcode === fbItem.barcode)
+        if (existing) {
+          Object.assign(existing, fbItem)
+          delete existing._localAddedAt // confirmed by Firebase, no longer optimistic
+        } else {
+          window.INVENTORY.push(fbItem)
+        }
       })
+
+      // Remove items Firebase no longer has, but keep optimistic adds < 60 s old
+      for (let i = window.INVENTORY.length - 1; i >= 0; i--) {
+        const item = window.INVENTORY[i]
+        if (!item.barcode || firebaseBarSet.has(item.barcode)) continue
+        if (now - (item._localAddedAt || 0) < 60000) continue // keep until Firebase confirms
+        window.INVENTORY.splice(i, 1)
+      }
+
       if (typeof saveInventoryStockToStorage === 'function') {
         saveInventoryStockToStorage()
       }
