@@ -24843,7 +24843,7 @@ window.printUnifiedRx = function(deptId) {
 
   // ── Collect drugs (fallback to saved visit when UI state not restored, e.g. after reopening same day) ──
   let drugs = typeof RX_DRUGS !== 'undefined' && Array.isArray(RX_DRUGS) ? RX_DRUGS : [];
-  if (forceFullDeptRx && (!drugs || !drugs.length)) {
+  if (forceDeptRxSections && (!drugs || !drugs.length)) {
     const savedRx = window.CURRENT_PATIENT?.lastVisit?.rx;
     if (Array.isArray(savedRx) && savedRx.length) drugs = JSON.parse(JSON.stringify(savedRx));
   }
@@ -25018,7 +25018,7 @@ window.printUnifiedRx = function(deptId) {
   const showGL = incGL && deptId==='oe' && hasMeaningfulRefraction();
   const showIOP = incIOP && deptId==='oe' && (iopGatOD||iopGatOS||iopNctOD||iopNctOS);
 
-  const rxEmptyNote = forceFullDeptRx && (!drugs || !drugs.length)
+  const rxEmptyNote = forceDeptRxSections && (!drugs || !drugs.length)
     ? `<div style="margin:8px 0;font-size:11px;color:#555;border:1px dashed #c8d0dc;padding:10px;border-radius:8px;background:#fafbfc">No medications on this prescription. Add drugs using the search above, then print again.</div>`
     : '';
 
