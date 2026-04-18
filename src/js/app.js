@@ -1030,13 +1030,8 @@ watchAuthState(
       try { window.loadDrugLibraryFromStorage() } catch (_) { /* noop */ }
     }
 
-    // Initialize inventory Firebase sync
-    try {
-      initializeInventoryFirebaseSync();
-      syncInventoryWithFirebase();
-    } catch (e) {
-      console.warn('Inventory Firebase sync initialization failed:', e);
-    }
+    // Inventory Firebase sync is deferred to first click on Inventory module
+    // to avoid slow startup. initInventory() in legacy.js calls it on demand.
 
     setTimeout(() => {
       try { window.loadDrugLibraryFromStorage({ forceRemote: true }) } catch (_) { /* noop */ }

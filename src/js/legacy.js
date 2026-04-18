@@ -12085,6 +12085,14 @@ function checkLabVal(inp,lo,hi){const v=parseFloat(inp.value)||0;inp.className='
 function initInventory() {
   loadInventoryStockFromStorage();
   loadBmhFinancials();
+  // Start Firebase real-time sync the first time the inventory module is opened
+  if (!window._bmhInventoryFirebaseSyncStarted) {
+    window._bmhInventoryFirebaseSyncStarted = true;
+    try {
+      if (typeof initializeInventoryFirebaseSync === 'function') initializeInventoryFirebaseSync();
+      if (typeof syncInventoryWithFirebase === 'function') syncInventoryWithFirebase();
+    } catch (e) { console.warn('Inventory Firebase sync failed', e); }
+  }
   bmhPopulateInventorySelectors();
   const deptPick = document.getElementById('inv-in-dept');
   if (deptPick) {
@@ -13204,7 +13212,7 @@ function renderCentresView() {
             <div style="font-size:11px;color:var(--g1)">Daily statement for ${formatDateIN(selectedDate)}</div>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <div style="background:var(--g6);border-radius:10px;padding:8px 10px;text-align:center;min-width:110px"><div style="font-size:10px;color:var(--g1);font-weight:800">OPD Entries</div><div style="font-size:18px;font-weight:900">${patients.length}</div></div>
+            <div style="background:var(--g6);border-radius:10px;padding:8px 10px;text-align:center;min-width:110px"><div style="font-size:10px;color:var(--g1);font-weight:800">OPD Entries</div><div style="font-size:18px;font-weight:900">${patients.filter(function(p){return !/diagnostic|investigation|procedure only|lab only/i.test(String(p.purpose||''));}).length}</div></div>
             <div style="background:var(--g6);border-radius:10px;padding:8px 10px;text-align:center;min-width:110px"><div style="font-size:10px;color:var(--g1);font-weight:800">Collected</div><div style="font-size:18px;font-weight:900;color:${centreMeta[centreCode].tone}">${fmt(centreTotal)}</div></div>
             <div style="background:var(--g6);border-radius:10px;padding:8px 10px;text-align:center;min-width:110px"><div style="font-size:10px;color:var(--g1);font-weight:800">TPA Due</div><div style="font-size:18px;font-weight:900;color:#b55a00">${fmt(centreTpaDue)}</div></div>
           </div>
@@ -13226,7 +13234,12 @@ function renderCentresView() {
     `;
   }
   const sheetEl = document.getElementById('centres-daily-sheet');
-  if (sheetEl) sheetEl.innerHTML = centreSheets.map(function (c) { return c.html; }).join('') || '<div class="card" style="padding:16px;color:var(--g1)">No daily data found for this date.</div>';
+  if (sheetEl) {
+    const sheetsHtml = centreSheets.map(function (c) { return c.html; }).join('');
+    sheetEl.innerHTML = sheetsHtml
+      ? '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px">' + sheetsHtml + '</div>'
+      : '<div class="card" style="padding:16px;color:var(--g1)">No daily data found for this date.</div>';
+  }
 }
 function renderCentresCharges(){
   const el=document.getElementById('centres-charge-list');if(!el)return;
@@ -13236,8 +13249,8 @@ function renderCentresCharges(){
   Object.entries(CENTRE_CHARGES.CHD).map(([k,v])=>`
     <div style="display:grid;grid-template-columns:1fr 100px 100px 50px;gap:4px;padding:5px 11px;border-bottom:1px solid var(--g5);font-size:12px;align-items:center">
       <span style="font-weight:600">${k}</span>
-      <input type="number" value="${v}" style="text-align:right;font-weight:800;color:var(--bmh-blue);font-size:12px;border:1px solid var(--g4);border-radius:4px;padding:2px 5px;width:100%" onchange="CENTRE_CHARGES.CHD['${k}']=+this.value;saveChargesToFirebase()">
-      <input type="number" value="${CENTRE_CHARGES.RPR[k]||v}" style="text-align:right;font-weight:800;color:#8a4200;font-size:12px;border:1px solid var(--g4);border-radius:4px;padding:2px 5px;width:100%" onchange="CENTRE_CHARGES.RPR['${k}']=+this.value;saveChargesToFirebase()">
+      <input type="number" value="${v}" style="text-align:right;font-weight:800;color:var(--bmh-blue);font-size:12px;border:1px solid var(--g4);border-radius:4px;padding:2px 5px;width:100%" onchange="CENTRE_CHARGES.CHD['${k}']=+this.value;saveChargesToFirebase().then(function(){showToast('Saved ✓','s');})">
+      <input type="number" value="${CENTRE_CHARGES.RPR[k]||v}" style="text-align:right;font-weight:800;color:#8a4200;font-size:12px;border:1px solid var(--g4);border-radius:4px;padding:2px 5px;width:100%" onchange="CENTRE_CHARGES.RPR['${k}']=+this.value;saveChargesToFirebase().then(function(){showToast('Saved ✓','s');})">
       <button onclick="deleteCharge('${k}')" style="background:none;border:none;color:var(--red);font-size:14px;cursor:pointer;padding:0">✕</button>
     </div>`).join('')+
   `<div style="padding:8px 11px;display:flex;gap:6px;flex-wrap:wrap">
@@ -13268,8 +13281,7 @@ function addNewCharge(){
   document.getElementById('new-charge-name').value='';
   document.getElementById('new-charge-chd').value='';
   document.getElementById('new-charge-rpr').value='';
-  saveChargesToFirebase(); renderCentresCharges();
-  showToast('Charge added ✓','s');
+  saveChargesToFirebase().then(function(){showToast('Charge added & saved to database ✓','s');renderCentresCharges();renderChargesList&&renderChargesList();});
 }
 function saveChargesToLocalStorage() {
   try {
@@ -16509,7 +16521,14 @@ function addDrugToLibrary() {
   closeM('m-add-drug');
   syncDrugDeptDefaults();
 }
-function removeDrugLib(i){DRUG_LIBRARY.splice(i,1);saveDrugLibraryToStorage();renderSettingsDrugs();}
+function removeDrugLib(i){
+  const name = DRUG_LIBRARY[i]?.trade || 'Drug';
+  DRUG_LIBRARY.splice(i,1);
+  invalidateDrugSearchPoolCache && invalidateDrugSearchPoolCache();
+  saveDrugLibraryToStorage();
+  renderSettingsDrugs();
+  showToast('"' + name + '" removed from library ✓', 's');
+}
 function filterDrugs(v) {
   const el = document.getElementById('set-drugs-list'); if (!el) return;
   const q = (v || '').toLowerCase().trim();
@@ -25671,9 +25690,9 @@ function renderChargesList() {
         const disabled = editable ? '' : 'disabled';
         return `<div style="display:grid;grid-template-columns:70px 1fr 90px 90px 40px;gap:5px;padding:4px 8px;border-bottom:1px solid var(--g5);align-items:center;font-size:11.5px">
           <span class="badge bd-gray" style="font-size:9px">${(c.kind || c.cat || '').toString().replace(/</g,'&lt;')}</span>
-          <input type="text" value="${c.name}" style="font-size:11.5px;font-weight:600" onchange="CHARGES_DATA[${gIdx}].name=this.value" ${disabled}>
-          <input type="number" value="${c.chd}" style="font-size:12px;font-weight:800;color:var(--bmh-blue);text-align:right" onchange="CHARGES_DATA[${gIdx}].chd=parseInt(this.value)" ${disabled}>
-          <input type="number" value="${c.rpr}" style="font-size:12px;font-weight:800;color:#8a4200;text-align:right" onchange="CHARGES_DATA[${gIdx}].rpr=parseInt(this.value)" ${disabled}>
+          <input type="text" value="${c.name}" style="font-size:11.5px;font-weight:600" onchange="CHARGES_DATA[${gIdx}].name=this.value;saveChargesToFirebase().then(function(){showToast('Saved ✓','s');})" ${disabled}>
+          <input type="number" value="${c.chd}" style="font-size:12px;font-weight:800;color:var(--bmh-blue);text-align:right" onchange="CHARGES_DATA[${gIdx}].chd=parseInt(this.value);CENTRE_CHARGES.CHD[CHARGES_DATA[${gIdx}].name]=parseInt(this.value);saveChargesToFirebase().then(function(){showToast('Saved ✓','s');})" ${disabled}>
+          <input type="number" value="${c.rpr}" style="font-size:12px;font-weight:800;color:#8a4200;text-align:right" onchange="CHARGES_DATA[${gIdx}].rpr=parseInt(this.value);CENTRE_CHARGES.RPR[CHARGES_DATA[${gIdx}].name]=parseInt(this.value);saveChargesToFirebase().then(function(){showToast('Saved ✓','s');})" ${disabled}>
           ${editable ? `<button class="btn btn-xs btn-gray" title="Delete charge" onclick="deleteChargeAt(${gIdx})">✕</button>` : '<span></span>'}
         </div>`;
       }).join(''); }).join('')}
@@ -26143,7 +26162,8 @@ function openRcCollectionDetailModal(dept, catKey) {
   const consultPaidIds = new Set(list.filter(function (t) { return getNetTransactionAmount(t) > 0; }).map(function (t) { return t.bmhId || ''; }).filter(Boolean));
   const totalConsultPts = new Set(todayConsultationPatients.map(function (p) { return p.bmhId; })).size;
   const paidConsult = consultPaidIds.size;
-  const noFeeConsult = Math.max(0, totalConsultPts - paidConsult);
+  // Only count patients explicitly marked as no-fee, not just those without a transaction
+  const noFeeConsult = todayConsultationPatients.filter(function (p) { return !!p.consultationNoFee; }).length;
   let html = '';
   if (wantCat) {
     const rightLabel = catKey === 'opd' ? 'No fee consultations' : 'Unpaid (pending requests)';
@@ -28527,7 +28547,7 @@ function getDrugLibrarySearchPool() {
 let _rxQuickSearchTimer = null;
 function rxQuickSearchDebounced(val) {
   clearTimeout(_rxQuickSearchTimer);
-  if ((val || '').trim().length < 2) { rxQuickSearch(val); return; } // hide immediately on clear
+  if ((val || '').trim().length < 1) { rxQuickSearch(val); return; } // hide immediately on clear
   _rxQuickSearchTimer = setTimeout(function () { rxQuickSearch(val); }, 120);
 }
 window.rxQuickSearchDebounced = rxQuickSearchDebounced;
@@ -28539,7 +28559,7 @@ function rxQuickSearch(val) {
   const targetDd = dd || document.getElementById('rx-quick-dropdown');
   if (!targetDd) return;
 
-  if (val.length < 2) { targetDd.style.display = 'none'; rxQuickPickList = []; return; }
+  if (val.length < 1) { targetDd.style.display = 'none'; rxQuickPickList = []; return; }
 
   const v = val.toLowerCase();
   const tabId = activeRxTab?.id?.replace('-rx', '') || 'oe';
@@ -28548,29 +28568,31 @@ function rxQuickSearch(val) {
   const deptLabel = { oe: 'Ophthalmology', obg: 'OBG', psych: 'Neuropsychiatry', skin: 'Skin' }[tabId] || '';
 
   const libSettings = getDrugLibrarySearchPool();
-  const fromSettings = libSettings.filter(d => {
-    if (!rxDrugMatchesDept(d, deptKey, deptLabel)) return false;
-    return String(d.trade || '').toLowerCase().includes(v) || String(d.generic || '').toLowerCase().includes(v);
-  }).slice(0, 8);
+  // Dept-matched first, then others as fallback (so cross-dept drugs still show)
+  const deptMatched = libSettings.filter(d => rxDrugMatchesDept(d, deptKey, deptLabel) &&
+    (String(d.trade || '').toLowerCase().includes(v) || String(d.generic || '').toLowerCase().includes(v)));
+  const crossDept = libSettings.filter(d => !rxDrugMatchesDept(d, deptKey, deptLabel) &&
+    (String(d.trade || '').toLowerCase().includes(v) || String(d.generic || '').toLowerCase().includes(v)));
+  // Show up to 20 dept-matched, plus up to 5 cross-dept
+  const fromSettings = deptMatched.slice(0, 20).concat(crossDept.slice(0, 5));
 
   const fromFull = (typeof DRUG_LIBRARY_FULL !== 'undefined' ? DRUG_LIBRARY_FULL : []).filter(d =>
     rxDrugMatchesDept(d, deptKey, deptLabel) &&
     (d.name.toLowerCase().includes(v) || d.brand.toLowerCase().includes(v))
   ).slice(0, 8);
 
-  const pickFromAll = function (pool) {
-    return pool.filter(function (d) {
-      return String(d.trade || d.brand || d.name || '').toLowerCase().includes(v) ||
-        String(d.generic || d.name || '').toLowerCase().includes(v);
-    }).slice(0, 10);
-  };
   let fsPairs = fromSettings.map(function (d) { return { kind: 'settings', d }; });
   let ffPairs = fromFull.map(function (d) { return { kind: 'full', d }; });
+  // If nothing matches at all, show everything (no dept filter)
   if (!fsPairs.length && !ffPairs.length) {
-    fsPairs = pickFromAll(libSettings).map(function (d) { return { kind: 'settings', d }; });
-    ffPairs = pickFromAll(typeof DRUG_LIBRARY_FULL !== 'undefined' ? DRUG_LIBRARY_FULL : []).map(function (d) { return { kind: 'full', d }; });
+    fsPairs = libSettings.filter(function (d) {
+      return String(d.trade || d.brand || d.name || '').toLowerCase().includes(v) || String(d.generic || d.name || '').toLowerCase().includes(v);
+    }).slice(0, 20).map(function (d) { return { kind: 'settings', d }; });
+    ffPairs = (typeof DRUG_LIBRARY_FULL !== 'undefined' ? DRUG_LIBRARY_FULL : []).filter(function (d) {
+      return String(d.brand || d.name || '').toLowerCase().includes(v) || String(d.name || '').toLowerCase().includes(v);
+    }).slice(0, 8).map(function (d) { return { kind: 'full', d }; });
   }
-  rxQuickPickList = fsPairs.concat(ffPairs).slice(0, 14);
+  rxQuickPickList = fsPairs.concat(ffPairs).slice(0, 25);
 
   if (!rxQuickPickList.length) { targetDd.style.display = 'none'; return; }
 
