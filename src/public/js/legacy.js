@@ -7799,18 +7799,36 @@ function saveIolInventoryGrid() {
         };
         bd.picked.forEach(function (row) {
           const hints = bd.serialMap[row.power] || [];
-          for (let idx = 0; idx < row.qty; idx += 1) {
-            const invRow = buildIolInventoryRow(base, row.power, idx + 1, hints[idx] || null);
-            invRow._localAddedAt = Date.now();
-            INVENTORY.push(invRow);
-            BCMAP[invRow.barcode] = invRow;
-            BCMAP[String(invRow.name).toLowerCase().substring(0, 15)] = invRow;
-            // Save to Firebase
+          // Check if an existing IOL item with same brand+power already exists — merge qty rather than create new row
+          const brandKey = normalizeInventoryCompareText(bd.brand || bd.company || '');
+          const existing = brandKey ? INVENTORY.find(function (x) {
+            return String(x.cat || '').toLowerCase() === 'iol'
+              && normalizeInventoryCompareText(_iolBrandLabel(x)) === brandKey
+              && String(x.power || extractIolPower(x.name || '') || '') === String(row.power || '');
+          }) : null;
+          if (existing) {
+            existing.stock = (Number(existing.stock) || 0) + row.qty;
+            if (bd.exp) existing.exp = bd.exp;
+            if (bd.batchNo) existing.batchNo = bd.batchNo;
+            existing._localAddedAt = Date.now();
             if (typeof window.saveInventoryToFirebase === 'function') {
-              window.saveInventoryToFirebase(invRow).catch(err => console.error('Firebase save error:', err));
+              window.saveInventoryToFirebase(existing).catch(err => console.error('Firebase save error:', err));
             }
-            bmhRecordInventoryPurchase(invRow, 1, billFile || null);
-            added += 1;
+            bmhRecordInventoryPurchase(existing, row.qty, billFile || null);
+            added += row.qty;
+          } else {
+            for (let idx = 0; idx < row.qty; idx += 1) {
+              const invRow = buildIolInventoryRow(base, row.power, idx + 1, hints[idx] || null);
+              invRow._localAddedAt = Date.now();
+              INVENTORY.push(invRow);
+              BCMAP[invRow.barcode] = invRow;
+              BCMAP[String(invRow.name).toLowerCase().substring(0, 15)] = invRow;
+              if (typeof window.saveInventoryToFirebase === 'function') {
+                window.saveInventoryToFirebase(invRow).catch(err => console.error('Firebase save error:', err));
+              }
+              bmhRecordInventoryPurchase(invRow, 1, billFile || null);
+              added += 1;
+            }
           }
         });
       });
@@ -12507,13 +12525,16 @@ function _renderStockListNow() {
         deptMap[dk].iols[bk] = { brandLabel: brandLabel, company: company, powers: {} };
       }
       const power = String(i.power || extractIolPower(i.name || '') || '?');
-      deptMap[dk].iols[bk].powers[power] = (deptMap[dk].iols[bk].powers[power] || 0) + Math.max(0, Number(i.stock) || 0);
+      if (!deptMap[dk].iols[bk].powers[power]) deptMap[dk].iols[bk].powers[power] = { qty: 0, barcodes: [] };
+      deptMap[dk].iols[bk].powers[power].qty += Math.max(0, Number(i.stock) || 0);
+      if (i.barcode) deptMap[dk].iols[bk].powers[power].barcodes.push(i.barcode);
     } else {
       const cat  = String(i.cat  || 'General').trim();
       const name = String(i.name || '?').trim();
       const nk   = normalizeInventoryCompareText(name);
-      if (!deptMap[dk].normals[nk]) deptMap[dk].normals[nk] = { name: name, cat: cat, stock: 0 };
+      if (!deptMap[dk].normals[nk]) deptMap[dk].normals[nk] = { name: name, cat: cat, stock: 0, barcodes: [] };
       deptMap[dk].normals[nk].stock += Math.max(0, Number(i.stock) || 0);
+      if (i.barcode) deptMap[dk].normals[nk].barcodes.push(i.barcode);
     }
   });
 
@@ -12527,7 +12548,7 @@ function _renderStockListNow() {
     const normKeys = Object.keys(d.normals);
 
     const iolTotal  = iolBKeys.reduce(function (s, bk) {
-      return s + Object.values(d.iols[bk].powers).reduce(function (ps, v) { return ps + v; }, 0);
+      return s + Object.values(d.iols[bk].powers).reduce(function (ps, v) { return ps + (v.qty || 0); }, 0);
     }, 0);
     const normTotal = normKeys.reduce(function (s, nk) { return s + d.normals[nk].stock; }, 0);
 
@@ -12552,7 +12573,7 @@ function _renderStockListNow() {
       const cardHtml = iolBKeys.map(function (bk, bi) {
         const b       = d.iols[bk];
         const brandId = deptId + 'b' + bi;
-        const bTotal  = Object.values(b.powers).reduce(function (s, v) { return s + v; }, 0);
+        const bTotal  = Object.values(b.powers).reduce(function (s, v) { return s + (v.qty || 0); }, 0);
         const pCount  = Object.keys(b.powers).length;
         const bTone   = bTotal <= 2 ? '#c0392b' : bTotal <= 5 ? '#d35400' : '#1a6e35';
         return (
@@ -12592,12 +12613,16 @@ function _renderStockListNow() {
           '</tr>'
         );
         powers.forEach(function (power) {
-          const qty   = b.powers[power];
+          const pData = b.powers[power];
+          const qty   = pData.qty || 0;
           const qTone = qty <= 1 ? '#c0392b' : qty <= 3 ? '#d35400' : '#1a6e35';
+          const barcodeJson = JSON.stringify(pData.barcodes || []).replace(/'/g, '&#39;');
           trs.push(
             '<tr data-parent="' + brandId + '" data-dept="' + deptId + '" style="display:none;background:#fffef5">' +
               '<td style="padding:4px 14px 4px 26px;font-size:11px;color:var(--g1);font-family:var(--mono)">' + escapeHtmlConsent(power) + '</td>' +
-              '<td style="padding:4px 14px;text-align:right;font-size:12px;font-weight:900;color:' + qTone + '">' + qty + '</td>' +
+              '<td style="padding:4px 14px;text-align:right;font-size:12px;font-weight:900;color:' + qTone + ';white-space:nowrap">' + qty +
+                '<button onclick="deleteInventoryItemsPrompt(' + barcodeJson.replace(/"/g, '&quot;') + ')" title="Delete all ' + qty + ' units of this power" style="margin-left:8px;background:none;border:none;color:var(--red);cursor:pointer;font-size:11px;padding:0 2px;vertical-align:middle">🗑</button>' +
+              '</td>' +
             '</tr>'
           );
         });
@@ -12634,10 +12659,13 @@ function _renderStockListNow() {
 
         items.slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).forEach(function (n) {
           const qTone = n.stock <= 2 ? '#c0392b' : n.stock <= 5 ? '#d35400' : 'var(--g1)';
+          const barcodeJson = JSON.stringify(n.barcodes || []).replace(/"/g, '&quot;');
           trs.push(
             '<tr data-parent="' + catId + '" data-dept="' + deptId + '" style="display:none;background:#fafcff">' +
               '<td style="padding:5px 10px 5px 36px;font-size:11px;color:var(--g2)">' + escapeHtmlConsent(n.name) + '</td>' +
-              '<td style="padding:5px 10px;text-align:right;font-size:12px;font-weight:700;color:' + qTone + '">' + n.stock + '</td>' +
+              '<td style="padding:5px 10px;text-align:right;font-size:12px;font-weight:700;color:' + qTone + ';white-space:nowrap">' + n.stock +
+                '<button onclick="deleteInventoryItemsPrompt(' + barcodeJson + ')" title="Delete this stock item" style="margin-left:8px;background:none;border:none;color:var(--red);cursor:pointer;font-size:11px;padding:0 2px;vertical-align:middle">🗑</button>' +
+              '</td>' +
             '</tr>'
           );
         });
@@ -12652,6 +12680,34 @@ function _renderStockListNow() {
     trs.join('') + '</table>';
 }
 window._renderStockListNow = _renderStockListNow;
+
+// Delete inventory items by their barcodes (with confirmation).
+function deleteInventoryItemsPrompt(barcodes) {
+  if (!Array.isArray(barcodes) || !barcodes.length) { showToast('No barcodes found for this item', 'w'); return; }
+  const count = barcodes.length;
+  const label = count === 1 ? '1 unit' : count + ' units';
+  if (!confirm('Delete ' + label + ' from inventory? This cannot be undone.')) return;
+  barcodes.forEach(function (bc) {
+    if (!bc) return;
+    // Remove from in-memory array
+    const idx = INVENTORY.findIndex(function (x) { return String(x.barcode || '') === String(bc); });
+    if (idx > -1) INVENTORY.splice(idx, 1);
+    // Remove from barcode map
+    if (BCMAP && BCMAP[bc]) delete BCMAP[bc];
+    // Remove from Firebase
+    if (window.FBDB) {
+      window.FBDB.ref('inventory/' + String(bc).replace(/[.#$/\[\]]/g, '_')).remove().catch(function () {});
+    }
+    // Remove from Firebase (inventory.js path)
+    if (typeof window.saveInventoryToFirebase === 'undefined' && window.FBDB) {
+      window.FBDB.ref('inventory/' + String(bc).replace(/[.#$/\[\]]/g, '_')).remove().catch(function () {});
+    }
+  });
+  saveInventoryStockToStorage && saveInventoryStockToStorage();
+  renderStockList && renderStockList();
+  showToast('Deleted ' + label + ' from inventory', 's');
+}
+window.deleteInventoryItemsPrompt = deleteInventoryItemsPrompt;
 
 // Toggle dept or category rows. When closing a dept, also resets any expanded brand cards.
 function slToggle(id) {
@@ -15978,6 +16034,7 @@ function mergeDrugLibraryRows(primaryRows) {
 }
 
 function saveDrugLibraryToStorage() {
+  invalidateDrugSearchPoolCache && invalidateDrugSearchPoolCache();
   persistDrugLibraryLocalSnapshots(DRUG_LIBRARY);
   if (window.FBDB) {
     const ts = Date.now();
@@ -16121,7 +16178,14 @@ function loadDrugLibraryFromStorage(opts) {
     let merged = choosePreferredDrugLibraryRows(localArr, remoteArr, currentArr, localTs, remoteTs);
     const recovered = getRecoveredDrugLibraryRows(localArr, remoteArr, currentArr);
     if (recovered.rows.length > merged.length) merged = recovered.rows;
-    merged.forEach(function (x) { DRUG_LIBRARY.push(x); });
+    // Strip any leading '?' characters that got saved from CSV imports
+    let qStripped = false;
+    merged.forEach(function (x) {
+      normalizeDrugLibraryRow(x);
+      if (x.trade && x.trade !== (x._rawTrade || x.trade)) qStripped = true;
+      DRUG_LIBRARY.push(x);
+    });
+    invalidateDrugSearchPoolCache && invalidateDrugSearchPoolCache();
     persistDrugLibraryLocalSnapshots(DRUG_LIBRARY);
     renderSettingsDrugs && renderSettingsDrugs();
     rebuildDrugGenericDatalist();
@@ -25407,28 +25471,26 @@ function upsertCriticalChargeRow(row) {
       && String(existing.parent || '') === String(row.parent || '')
       && String(existing.name || '').toLowerCase() === String(row.name || '').toLowerCase();
   });
-  const next = {
-    cat: row.cat || '',
-    kind: row.kind || row.cat || 'procedure',
-    parent: row.parent || '',
-    name: row.name || '',
-    chd: Number(row.chd || 0),
-    rpr: Number(row.rpr || 0)
-  };
-  if (idx >= 0) CHARGES_DATA[idx] = Object.assign({}, CHARGES_DATA[idx], next);
-  else CHARGES_DATA.push(next);
-  if (next.name) {
-    CENTRE_CHARGES.CHD[next.name] = next.chd;
-    CENTRE_CHARGES.RPR[next.name] = next.rpr;
+  if (idx < 0) {
+    // Only add on initial boot before any cloud/saved data has been applied.
+    // If cloud data is loaded and the item is missing, the user deleted it — keep it deleted.
+    if (!window._bmhChargesCloudLoaded) {
+      const next = { cat: row.cat || '', kind: row.kind || row.cat || 'procedure', parent: row.parent || '', name: row.name || '', chd: Number(row.chd || 0), rpr: Number(row.rpr || 0) };
+      CHARGES_DATA.push(next);
+      if (next.name) { CENTRE_CHARGES.CHD[next.name] = next.chd; CENTRE_CHARGES.RPR[next.name] = next.rpr; }
+    }
+    return;
+  }
+  // Item exists — sync CENTRE_CHARGES from the user's saved prices, never overwrite them with hardcoded defaults
+  const existing = CHARGES_DATA[idx];
+  if (existing.name) {
+    CENTRE_CHARGES.CHD[existing.name] = existing.chd;
+    CENTRE_CHARGES.RPR[existing.name] = existing.rpr;
   }
 }
 function ensureCriticalChargesLoaded() {
-  CENTRE_CHARGES.CHD['Consultation'] = 500;
-  CENTRE_CHARGES.RPR['Consultation'] = 200;
-  CENTRE_CHARGES.CHD['Follow-up Consultation'] = 500;
-  CENTRE_CHARGES.RPR['Follow-up Consultation'] = 200;
-  CENTRE_CHARGES.CHD['Follow-up'] = 500;
-  CENTRE_CHARGES.RPR['Follow-up'] = 200;
+  // Do NOT hardcode CENTRE_CHARGES prices here — they come from user-saved CHARGES_DATA via upsertCriticalChargeRow.
+  // Hardcoding them here would overwrite prices the user has changed and saved.
   CRITICAL_CHARGE_ROWS.forEach(upsertCriticalChargeRow);
   migrateLegacyPmicsChargeParents();
 }
@@ -28345,12 +28407,24 @@ const DRUG_LIBRARY_FULL = [
 
 // ── Drug quick search: Settings DRUG_LIBRARY + built-in DRUG_LIBRARY_FULL ───────
 let rxQuickPickList = [];
+// Cached drug search pool — rebuilt only when DRUG_LIBRARY changes (not on every keystroke).
+let _drugSearchPoolCache = null;
+function invalidateDrugSearchPoolCache() { _drugSearchPoolCache = null; }
 function getDrugLibrarySearchPool() {
+  if (_drugSearchPoolCache) return _drugSearchPoolCache;
   const live = Array.isArray(DRUG_LIBRARY) ? DRUG_LIBRARY.slice() : [];
-  let rescue = [];
-  try { rescue = typeof readDrugLibraryRowsFromAllLocalSources === 'function' ? readDrugLibraryRowsFromAllLocalSources() : []; } catch (e) { rescue = []; }
-  return mergeDrugLibraryRows(live.concat(rescue));
+  _drugSearchPoolCache = mergeDrugLibraryRows(live);
+  return _drugSearchPoolCache;
 }
+
+// Debounced wrapper — waits 120 ms after typing stops before running search.
+let _rxQuickSearchTimer = null;
+function rxQuickSearchDebounced(val) {
+  clearTimeout(_rxQuickSearchTimer);
+  if ((val || '').trim().length < 2) { rxQuickSearch(val); return; } // hide immediately on clear
+  _rxQuickSearchTimer = setTimeout(function () { rxQuickSearch(val); }, 120);
+}
+window.rxQuickSearchDebounced = rxQuickSearchDebounced;
 function rxQuickSearch(val) {
   val = (val || '').trim();
   const page = document.querySelector('.page.active');
