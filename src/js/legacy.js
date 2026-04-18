@@ -3256,8 +3256,24 @@ function rcToggleConsentSection(bmhId) {
   setTimeout(function () { window._suspendVisitAutosave = false; }, 900);
   if (!opts.silentHistory && !window._appHistoryRestoring) pushAppNavState(false);
 }
-function openPatientForDept(bmhId, dept) {
-  openPatient(bmhId, { deptOverride: dept, freshStart: true });
+function openPatientForDept(bmhId, dept, xrefId) {
+  const p = PATIENTS.find(function(x) { return x.bmhId === bmhId; });
+  if (!p) return;
+  // Find the specific cross-ref entry
+  const xref = xrefId && Array.isArray(p.crossRefs)
+    ? p.crossRefs.find(function(r) { return r && r.id === xrefId; })
+    : null;
+  // Block if payment is required but not yet cleared at reception
+  if (xref && xref.fee && !xref.paid) {
+    showToast('↔️ Cross-refer fee pending at reception — patient will appear once payment is cleared', 'w');
+    return;
+  }
+  // Use freshStart (blank form) only when cross-ref hasn't been consulted yet.
+  // If already marked seen (consultation done and saved), load today's saved visit for that dept.
+  const freshStart = !(xref && xref.seenAt);
+  // Store the active cross-ref ID so saveVisit can create a separate visit key if needed
+  window._currentXrefId = freshStart ? (xrefId || null) : null;
+  openPatient(bmhId, { deptOverride: dept, freshStart: freshStart });
 }
 function rcPrintReceptionConsentFromPopup(bmhId) {
   const inp = document.getElementById('rc-consent-search');
@@ -13293,11 +13309,13 @@ function doXRef(){
       const xrFee = parseInt(document.getElementById('xref-fee-amt')?.value||'800')||800;
       const xrPR = {
         id:'PR'+Date.now(), patient:ptName, bmhId,
-        for:`Cross-refer to ${toDoctor}`, amount:xrFee, status:'pending',
+        for:`Cross-refer to ${toDoctor}` + (reason ? ` (${reason.slice(0,40)})` : ''), amount:xrFee, status:'pending',
         from: CURRENT_USER?.name||'Doctor',
         dept: p?.dept || toDept,
+        centre: CURRENT_USER?.centre || p?.centre || 'CHD',
         date: new Date().toISOString(),
-        xref: true, xrefDept: toDept, xrefDoctor: toDoctor
+        xref: true, xrefDept: toDept, xrefDoctor: toDoctor,
+        xrefId: xref.id
       };
       PAY_REQUESTS.push(xrPR);
       fbSet&&fbSet('payRequests/'+xrPR.id, xrPR);
@@ -30268,10 +30286,26 @@ function buildQTableRow(p, sno, opts) {
     : (advLbl || '');
   const seenRow = isPatientMarkedSeen(p);
   const statusTxt = p.preRegistered ? 'Pre-reg' : seenRow ? 'Seen' : p.dilated ? 'Dilated' : p._xrefPendingPay ? 'Awaiting pay' : 'Waiting';
-  const statusBg = p.preRegistered ? '#f0f0f0' : seenRow ? 'var(--green-lt)' : p.dilated ? 'var(--blue-lt)' : p._xrefPendingPay ? 'var(--orange-lt)' : 'var(--orange-lt)';
-  const onRow = p.preRegistered ? `checkInPatient('${p.bmhId}')` : (receptionQueue ? `openReceptionPatient('${p.bmhId}')` : (p._xrefEntry ? `openPatientForDept('${p.bmhId}','${p.dept}')` : `openPatient('${p.bmhId}')`));
+  const statusBg = p.preRegistered ? '#f0f0f0' : seenRow ? 'var(--green-lt)' : p.dilated ? 'var(--blue-lt)' : p._xrefPendingPay ? '#fff3e0' : 'var(--orange-lt)';
   const nmEsc = (p.name||'').replace(/'/g,"\\'");
   const xrefIdEsc = String(p._xrefId || '').replace(/'/g, "\\'");
+  const onRow = p.preRegistered ? `checkInPatient('${p.bmhId}')`
+    : (receptionQueue ? `openReceptionPatient('${p.bmhId}')`
+    : (p._xrefEntry ? `openPatientForDept('${p.bmhId}','${p.dept}','${xrefIdEsc}')`
+    : `openPatient('${p.bmhId}')`));
+  // Badge showing active cross-refers OUT from this patient's row (originating dept view)
+  const deptShort = {ophtho:'Eye',obg:'OBG',psych:'Psych',skin:'Skin'};
+  const activeCrossRefsOut = !p._xrefEntry && typeof getActiveCrossRefsForPatient === 'function'
+    ? getActiveCrossRefsForPatient(p).filter(function(r) { return !r.seenAt; })
+    : [];
+  const xrefOutBadge = activeCrossRefsOut.length
+    ? `<span style="font-size:9px;padding:1px 5px;margin-left:4px;background:#e0f7fa;color:#00796b;border-radius:4px;font-weight:800;vertical-align:middle">↔ ${activeCrossRefsOut.map(function(r){return deptShort[r.toDept]||r.toDept||r.toDoctor||'?';}).join(', ')}</span>`
+    : '';
+  // Badge on cross-refer entry row showing which dept referred them in
+  const xrefFromDeptLabel = p._xrefEntry && p._xrefFromDept ? (deptShort[p._xrefFromDept] || p._xrefFromDept) : '';
+  const xrefInBadge = p._xrefEntry
+    ? `<span style="font-size:9px;padding:1px 5px;margin-left:4px;background:#fff3e0;color:#8a4200;border-radius:4px;font-weight:800;vertical-align:middle">${p._xrefPendingPay ? '💳 Pay' : '↔ Ref'}${xrefFromDeptLabel ? ' from ' + xrefFromDeptLabel : ''}</span>`
+    : '';
   const markSeenClick = p._xrefId
     ? `event.stopPropagation();markCrossRefSeen('${String(p.bmhId).replace(/'/g, "\\'")}','${xrefIdEsc}')`
     : `markSeen('${String(p.bmhId).replace(/'/g, "\\'")}')`;
@@ -30282,7 +30316,7 @@ function buildQTableRow(p, sno, opts) {
   return `<tr class="${vuln ? 'row-vulnerable' : ''}" onclick="${onRow}" style="cursor:pointer;${dilLongWait?'animation:pulse 1.45s infinite;':''}">
     <td style="font-weight:900;color:var(--g2);font-size:12.5px">${sno}</td>
     <td><div style="display:flex;align-items:center;gap:6px"><span style="width:28px;height:28px;border-radius:50%;background:${p.color||'#1A3C6E'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:900;font-size:10px;flex-shrink:0">${p.initials||p.name[0]||'?'}</span>
-      <div><div style="font-weight:800;font-size:15px;line-height:1.05;display:flex;align-items:center;flex-wrap:nowrap;gap:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name || ''}${vulnBadge}${labReadyBadge}</div>
+      <div><div style="font-weight:800;font-size:15px;line-height:1.05;display:flex;align-items:center;flex-wrap:nowrap;gap:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name || ''}${vulnBadge}${labReadyBadge}${xrefOutBadge}${xrefInBadge}</div>
       <div style="font-size:11px;color:var(--g1)">${p.age||'?'}Y · ${(p.sex||'?')[0]} · ${p.mob||'—'}</div>${chargeHint?`<div style="margin-top:2px">${chargeHint}</div>`:''}</div></div></td>
     <td style="font-family:var(--mono);font-size:12px;color:var(--bmh-teal);font-weight:800;white-space:nowrap">${p.bmhId}</td>
     <td><span style="font-size:10px;padding:2px 6px;border-radius:6px;background:${deptColor}22;color:${deptColor};font-weight:800;cursor:pointer" title="Click to change department" onclick="event.stopPropagation();reassignReceptionPatientDept('${String(p.bmhId).replace(/'/g, "\\'")}','${String(p.dept || '').replace(/'/g, "\\'")}')">${deptLabel}</span></td>
@@ -30879,9 +30913,10 @@ function _renderDocQueueImpl() {
           seen: xrefSeen,
           status: xrefSeen ? 'seen' : 'waiting',
           seenAt: xref.seenAt || p.seenAt,
-          purpose: (p.purpose || '') + purposeSuffix,
+          purpose: (xref.reason ? xref.reason + ' — ' : '') + (p.purpose || '') + purposeSuffix,
           _xrefEntry: true,
           _xrefId: String(xref.id || ''),
+          _xrefFromDept: xref.fromDept || '',
           _xrefPendingPay: pendingPay,
           _queueKey: dedupeKey
         }));
@@ -30992,12 +31027,17 @@ function saveVisit(dept, opts) {
   const localPt = window.CURRENT_PATIENT || PATIENTS.find(p => p.bmhId === bmhId);
   const todayKey = now.toISOString().split('T')[0];
   const cachedVisits = getCachedPatientVisits(bmhId);
-  const todaysExistingKey = (localPt?.lastVisitKey && String(localPt?.lastVisitDate || '').startsWith(todayKey) && localPt?.lastDeptVisit === dept)
+  // For cross-ref visits, always generate a new key so the cross-dept consultation
+  // doesn't overwrite an existing same-dept visit from earlier today.
+  const isXrefVisit = !!window._currentXrefId;
+  const todaysExistingKey = isXrefVisit ? null
+    : (localPt?.lastVisitKey && String(localPt?.lastVisitDate || '').startsWith(todayKey) && localPt?.lastDeptVisit === dept)
     ? localPt.lastVisitKey
     : (Object.entries(cachedVisits).find(function ([key, val]) {
         return val && val.dept === dept && String(val.date || '').startsWith(todayKey);
       }) || [null])[0];
   const visitKey = todaysExistingKey || ('V' + now.getTime());
+  if (isXrefVisit) window._currentXrefId = null; // clear after first save
   const visit = {
     id: visitKey,
     bmhId, ptName, dept,
