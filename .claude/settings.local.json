@@ -15,7 +15,11 @@
       "Bash(git add:*)",
       "Bash(git commit -m ':*)",
       "Bash(git push:*)",
-      "Bash(wc -l /Users/varunbaweja/GitHub/BMH-HMS/src/js/*.js)"
+      "Bash(wc -l /Users/varunbaweja/GitHub/BMH-HMS/src/js/*.js)",
+      "Bash(node --check src/public/js/legacy.js)",
+      "Bash(node --check src/js/legacy.js)",
+      "Bash(xxd)",
+      "Bash(LC_ALL=C sed -i '' \"s/\\\\xe2\\\\x80\\\\x98/'/g; s/\\\\xe2\\\\x80\\\\x99/'/g\" /Users/varunbaweja/GitHub/BMH-HMS/src/js/legacy.js)"
     ]
   }
 }
