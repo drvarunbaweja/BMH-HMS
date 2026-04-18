@@ -3021,7 +3021,11 @@ function openPatient(bmhId, opts) {
   document.querySelectorAll('#pg-ophtho input[type=checkbox], #pg-obg input[type=checkbox], #pg-psych input[type=checkbox], #pg-skin input[type=checkbox]')
     .forEach(el => { el.checked = false; });
   // Prescription print defaults (Eye) — keep these enabled by default on each patient open.
-  ['oe-inc-va', 'oe-inc-rx', 'oe-inc-proc', 'oe-inc-adv', 'oe-inc-gl'].forEach(function (id) {
+  ['oe-inc-va', 'oe-inc-rx', 'oe-inc-proc', 'oe-inc-adv', 'oe-inc-gl', 'oe-inc-inv'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) el.checked = true;
+  });
+  ['obg-inc-vitals', 'obg-inc-anc', 'obg-inc-complaint', 'obg-inc-inv'].forEach(function (id) {
     const el = document.getElementById(id);
     if (el) el.checked = true;
   });
@@ -24805,12 +24809,13 @@ window.printUnifiedRx = function(deptId) {
   const obgIncComplaint = deptId === 'obg' ? (document.getElementById('obg-inc-complaint')?.checked ?? true) : false;
   const obgIncObsHistory = deptId === 'obg' ? (document.getElementById('obg-inc-obs-history')?.checked ?? false) : false;
 
-  // OBG / psych / skin: always print medicines, advice, investigations & procedures (no print checkboxes in UI)
-  const forceFullDeptRx = deptId === 'obg' || deptId === 'psych' || deptId === 'skin';
-  const incRxFinal = forceFullDeptRx ? true : incRx;
-  const incAdvFinal = forceFullDeptRx ? true : incAdv;
-  const incInvFinal = forceFullDeptRx ? true : incInv;
-  const incPrcFinal = forceFullDeptRx ? true : incPrc;
+  // Some departments do not expose the full print toggle set in UI.
+  const forceDeptRxSections = deptId === 'obg' || deptId === 'psych' || deptId === 'skin';
+  const forceDeptInvestigationSection = deptId === 'psych' || deptId === 'skin';
+  const incRxFinal = forceDeptRxSections ? true : incRx;
+  const incAdvFinal = forceDeptRxSections ? true : incAdv;
+  const incInvFinal = forceDeptInvestigationSection ? true : incInv;
+  const incPrcFinal = forceDeptRxSections ? true : incPrc;
 
   // ── Collect diagnoses — Ophthalmology: numbered rows; other depts: *-dx-list ──
   const dxPack = typeof collectDeptDiagnosesForPrint === 'function' ? collectDeptDiagnosesForPrint(deptId) : { lines: [], notes: '' };
@@ -25041,6 +25046,8 @@ tr:nth-child(even) td{background:#f8f9fc}
 .rx-gen{font-size:8.8px;color:#666;font-style:italic;margin-top:1px}
 .rx-instr{font-size:9.4px;color:#222;margin-top:4px;padding:4px 7px;background:#f2f2f2;border-left:3px solid #666;border-radius:0 4px 4px 0;line-height:1.4}
 .proc-item{padding:4px 0;font-size:12.5px;font-weight:800;border-bottom:1px solid #eee;display:flex;align-items:center;gap:8px}
+.inv-wrap{display:flex;flex-wrap:wrap;gap:6px 8px;margin-top:2px}
+.inv-chip{display:inline-flex;align-items:center;max-width:48%;padding:5px 9px;border:1px solid #c8d0dc;border-radius:999px;background:#f8f9fc;font-size:10px;font-weight:700;color:#222;line-height:1.3;white-space:normal}
 .fu-box{background:#f2f2f2;border-radius:6px;padding:7px 14px;margin:8px 0;font-size:11.5px;font-weight:700;color:#222;display:inline-block;border:1.5px solid #c7c7c7}
 .sig-row{display:flex;justify-content:space-between;align-items:flex-end;margin-top:18px;padding-top:10px;border-top:1px solid #eee}
 .dr-name{font-family:'Playfair Display','Georgia',serif;font-size:14px;font-weight:700;color:#222}
@@ -25167,7 +25174,9 @@ ${procs.map(p=>`<div class="proc-item">&#9890; ${expandProcedureLabelForPrint(p)
 
 ${incInvFinal && patientInvestigationOrders.length ? `
 <div class="sec-title">Investigations Ordered:</div>
-${patientInvestigationOrders.map(o=>`<div class="proc-item">&#9514; ${o.name}${o.notes?' — '+o.notes:''}</div>`).join('')}` : ''}
+<div class="inv-wrap">
+${patientInvestigationOrders.map(o=>`<div class="inv-chip">${escapeHtmlConsent(o.name || 'Investigation')}${o.notes ? `<span style="font-weight:500"> — ${escapeHtmlConsent(o.notes)}</span>` : ''}</div>`).join('')}
+</div>` : ''}
 
 ${fuFormatted ? `<div style="margin:10px 0"><span class="fu-box">&#128197; Next Visit: ${fuFormatted}</span></div>` : ''}
 
