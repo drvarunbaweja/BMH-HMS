@@ -16131,12 +16131,16 @@ function buildDrugLibrarySeedRows() {
 function stripLeadingDrugQueryPrefix(s) {
   return String(s || '').replace(/^\?+\s*/, '').trim();
 }
+function generateDrugId() {
+  return 'dr_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
 function normalizeDrugLibraryRow(row) {
   if (!row || typeof row !== 'object') return row;
   row.trade = stripLeadingDrugQueryPrefix(row.trade || row.brand || row.name || '');
   row.generic = stripLeadingDrugQueryPrefix(row.generic || row.name || row.trade || row.brand || '');
   if (!row.trade) row.trade = row.generic;
   if (!row.generic) row.generic = row.trade;
+  if (!row._id) row._id = generateDrugId();
   return row;
 }
 function normalizeDrugLibrarySnapshot(val) {
@@ -16151,7 +16155,14 @@ function normalizeDrugLibrarySnapshot(val) {
 }
 function mergeDrugLibraryRows(primaryRows) {
   const merged = [];
-  const pushUnique = function (row) {
+  const idIndex = {};
+  const keyIndex = {};
+
+  function _rowKey(trade, generic, dept) {
+    return [String(trade || '').trim().toLowerCase(), String(generic || '').trim().toLowerCase(), String(dept || 'All').trim().toLowerCase()].join('|');
+  }
+
+  function addOrMerge(row) {
     if (!row) return;
     let trade = stripLeadingDrugQueryPrefix(row.trade || row.brand || row.name || '');
     let generic = stripLeadingDrugQueryPrefix(row.generic || row.name || row.trade || row.brand || '');
@@ -16159,22 +16170,53 @@ function mergeDrugLibraryRows(primaryRows) {
     if (!trade && !generic) return;
     if (!trade) trade = generic;
     if (!generic) generic = trade;
-    const key = [trade.toLowerCase(), generic.toLowerCase(), dept.toLowerCase()].join('|');
-    if (merged.some(function (x) {
-      return [String(x.trade || '').trim().toLowerCase(), String(x.generic || '').trim().toLowerCase(), String(x.dept || 'All').trim().toLowerCase()].join('|') === key;
-    })) return;
+    const key = _rowKey(trade, generic, dept);
+    const rowTs = Number(row._updatedAt || 0);
+    const rowId = row._id || null;
+
+    let existingIdx = -1;
+    if (rowId && idIndex[rowId] !== undefined) {
+      existingIdx = idIndex[rowId];
+    } else if (keyIndex[key] !== undefined) {
+      existingIdx = keyIndex[key];
+    }
+
+    if (existingIdx >= 0) {
+      const existing = merged[existingIdx];
+      const existingTs = Number(existing._updatedAt || 0);
+      if (rowTs > existingTs) {
+        const oldKey = _rowKey(existing.trade, existing.generic, existing.dept);
+        if (oldKey !== key) { delete keyIndex[oldKey]; keyIndex[key] = existingIdx; }
+        const resolvedId = rowId || existing._id || generateDrugId();
+        merged[existingIdx] = {
+          type: row.type || existing.type || 'Tablet',
+          trade: trade, generic: generic, freq: row.freq || existing.freq || 'BD',
+          dur: row.dur || existing.dur || '1 Week', dept: dept,
+          company: row.company || existing.company || '',
+          _id: resolvedId, _updatedAt: rowTs
+        };
+        idIndex[resolvedId] = existingIdx;
+        if (rowId && rowId !== resolvedId) idIndex[rowId] = existingIdx;
+      } else if (!existing._id && rowId) {
+        existing._id = rowId;
+        idIndex[rowId] = existingIdx;
+      }
+      return;
+    }
+
+    const newId = rowId || generateDrugId();
+    const idx = merged.length;
     merged.push({
-      type: row.type || 'Tablet',
-      trade: trade,
-      generic: generic,
-      freq: row.freq || 'BD',
-      dur: row.dur || '1 Week',
-      dept: dept,
-      company: row.company || ''
+      type: row.type || 'Tablet', trade: trade, generic: generic,
+      freq: row.freq || 'BD', dur: row.dur || '1 Week', dept: dept,
+      company: row.company || '', _id: newId, _updatedAt: rowTs
     });
-  };
-  (Array.isArray(primaryRows) ? primaryRows : []).forEach(pushUnique);
-  buildDrugLibrarySeedRows().forEach(pushUnique);
+    idIndex[newId] = idx;
+    keyIndex[key] = idx;
+  }
+
+  (Array.isArray(primaryRows) ? primaryRows : []).forEach(addOrMerge);
+  buildDrugLibrarySeedRows().forEach(addOrMerge);
   return merged;
 }
 
