@@ -1990,7 +1990,7 @@ function getActiveRxQuickSearchInput() {
 
 /** Follow-up date input for the prescription being printed (duplicate id="rx-fu-date" exists per dept). */
 function getDeptFollowUpDateInput(deptId) {
-  const wrapSel = { oe: '#pg-ophtho #oe-rx', obg: '#pg-obg #obg-rx', psych: '#pg-psych #psych-rx', skin: '#pg-skin #skin-rx' }[deptId];
+  const wrapSel = { oe: '#pg-ophtho #oe-rx', obg: '#pg-obg #obg-rx', psych: '#pg-psych #psych-plan', skin: '#pg-skin #skin-rx' }[deptId];
   if (wrapSel) {
     const wrap = document.querySelector(wrapSel);
     const inp = wrap && wrap.querySelector('#rx-fu-date');
@@ -1999,7 +1999,7 @@ function getDeptFollowUpDateInput(deptId) {
   return document.getElementById('rx-fu-date');
 }
 function getDeptFollowUpDisplayEl(deptId) {
-  const wrapSel = { oe: '#pg-ophtho #oe-rx', obg: '#pg-obg #obg-rx', psych: '#pg-psych #psych-rx', skin: '#pg-skin #skin-rx' }[deptId];
+  const wrapSel = { oe: '#pg-ophtho #oe-rx', obg: '#pg-obg #obg-rx', psych: '#pg-psych #psych-plan', skin: '#pg-skin #skin-rx' }[deptId];
   if (wrapSel) {
     const wrap = document.querySelector(wrapSel);
     const el = wrap && wrap.querySelector('#rx-fu-display');
@@ -5177,7 +5177,7 @@ function ptab(el, cId, opts) {
   else if (cId === 'obg-rx') restoreCurrentPatientRxForDeptIfEmpty('obg');
   else if (cId === 'psych-rx') restoreCurrentPatientRxForDeptIfEmpty('psych');
   else if (cId === 'skin-rx') restoreCurrentPatientRxForDeptIfEmpty('skin');
-  ['obg-rx-send-bar', 'psych-rx-send-bar', 'skin-rx-send-bar'].forEach(function (id) {
+  ['obg-rx-send-bar', 'psych-plan-send-bar', 'skin-rx-send-bar'].forEach(function (id) {
     const legacyBar = document.getElementById(id);
     if (legacyBar) legacyBar.style.display = 'none';
   });
@@ -6327,7 +6327,7 @@ function populatePsychForm(visit) {
   const pea = document.getElementById('psych-extra-advice');
   if (pea && data.psychExtraAdvice != null) pea.value = data.psychExtraAdvice;
   if (data.rxFuDate) {
-    const el = document.querySelector('#pg-psych #psych-rx #rx-fu-date');
+    const el = document.querySelector('#pg-psych #psych-plan #rx-fu-date');
     if (el) el.value = data.rxFuDate;
   }
   if (Array.isArray(data.psychDxList)) rebuildDxListFromValues('psych-dx-list', data.psychDxList);
@@ -16325,10 +16325,12 @@ function loadDrugLibraryFromStorage(opts) {
     const localArr = readDrugLibraryFromLocalStorage();
     const rescuedArr = readDrugLibraryRowsFromAllLocalSources();
     window._bmhDrugLibraryRemoteUpdatedAt = Number(metaSnap && metaSnap.val && metaSnap.val()?.updatedAt || 0) || 0;
+    const mergedLibrarySize = mergeDrugLibraryRows(localArr.concat(remoteArr).concat(rescuedArr)).length;
     const repairCloud = (
       (!!localArr.length && localArr.length > remoteArr.length) ||
       (!!rescuedArr.length && rescuedArr.length > remoteArr.length) ||
-      (!remoteArr.length && (localArr.length > 0 || rescuedArr.length > 0))
+      (!remoteArr.length && (localArr.length > 0 || rescuedArr.length > 0)) ||
+      mergedLibrarySize > remoteArr.length
     );
     applyMergedRows(snap.val(), { repairCloud: repairCloud });
   }).catch(function () {
@@ -16986,17 +16988,8 @@ function applyLastRx() {
     const extraAdviceEl = document.getElementById('obg-extra-advice');
     if (extraAdviceEl) extraAdviceEl.value = visit.obgExtraAdvice || '';
   } else if (dept === 'psych') {
-    const procContainer = document.getElementById('rx-proc-advised-psych');
-    if (procContainer && Array.isArray(visit.psychProcAdvised)) {
-      procContainer.innerHTML = '';
-      visit.psychProcAdvised.forEach(function (procName) {
-        addProcItemToContainer(procContainer, procName, 0, { silentLog: true, quiet: true });
-      });
-    }
-    const adviceEl = document.getElementById('psych-advice');
-    if (adviceEl) adviceEl.value = visit.psychAdvice || '';
-    const extraAdviceEl = document.getElementById('psych-extra-advice');
-    if (extraAdviceEl) extraAdviceEl.value = visit.psychExtraAdvice || '';
+    showToast('Last saved prescription applied ✓','s');
+    return;
   } else if (dept === 'skin') {
     const procContainer = document.getElementById('rx-proc-advised-skin');
     if (procContainer && Array.isArray(visit.skinProcAdvised)) {
@@ -17012,6 +17005,23 @@ function applyLastRx() {
   }
   showToast('Last saved prescription applied ✓','s');
 }
+function applyPrescriptionFromPastVisit(bmhId, dept, visitId) {
+  const visits = getCachedPatientVisits(bmhId) || {};
+  const visit = visits && visits[visitId];
+  if (!visit || !Array.isArray(visit.rx) || !visit.rx.length) {
+    showToast('No prescription found in that visit', 'i');
+    return;
+  }
+  restoreRxFromVisitData(visit);
+  if (dept === 'psych') {
+    const rxTabBtn = Array.from(document.querySelectorAll('#pg-psych .ptab')).find(function (el) {
+      return String(el.textContent || '').trim() === 'Prescription';
+    });
+    if (rxTabBtn) ptab(rxTabBtn, 'psych-rx');
+  }
+  showToast('Past visit prescription applied ✓', 's');
+}
+window.applyPrescriptionFromPastVisit = applyPrescriptionFromPastVisit;
 const ICD10_EYE = [
   'H26.9 — Cataract, unspecified','H26.0 — Infantile/Juvenile cataract','H26.1 — Traumatic cataract',
   'H25.1 — Nuclear cataract','H25.0 — Cortical cataract','H25.2 — Posterior subcapsular cataract',
@@ -22950,15 +22960,12 @@ function addRxFromQuick() {
     const val = inp?.value?.trim();
     if (!val) { showToast('Type a drug name first', 'w'); return; }
     const v = val.toLowerCase();
-    const fromSettings = (typeof DRUG_LIBRARY !== 'undefined' ? DRUG_LIBRARY : []).find(d =>
+    const fromSettings = getDrugLibrarySearchPool().find(d =>
       String(d.trade).toLowerCase().includes(v) || String(d.generic).toLowerCase().includes(v));
     if (fromSettings) {
       drug = { _from: 'settings', trade: fromSettings.trade, generic: fromSettings.generic, type: fromSettings.type, freq: fromSettings.freq, dur: fromSettings.dur, dept: fromSettings.dept };
     } else {
-      const fromFull = (typeof DRUG_LIBRARY_FULL !== 'undefined' ? DRUG_LIBRARY_FULL : []).find(d =>
-        d.name.toLowerCase().includes(v) || d.brand.toLowerCase().includes(v));
-      if (fromFull) drug = Object.assign({ _from: 'full' }, fromFull);
-      else drug = { _from: 'free', name: val, brand: val, type: 'Tablet', freq: 'Twice daily (BD)', dur: '1 Week', eye: 'Oral' };
+      drug = { _from: 'free', name: val, brand: val, type: 'Tablet', freq: 'Twice daily (BD)', dur: '1 Week', eye: 'Oral' };
     }
   }
 
@@ -23636,7 +23643,7 @@ function renderAllDeptSendBars() {
   renderDeptSendBar('psych', 'psych-top-send-bar');
   renderDeptSendBar('skin', 'skin-top-send-bar');
   renderDeptSendBar('obg', 'obg-rx-send-bar');
-  renderDeptSendBar('psych', 'psych-rx-send-bar');
+  renderDeptSendBar('psych', 'psych-plan-send-bar');
   renderDeptSendBar('skin', 'skin-rx-send-bar');
 }
 
@@ -23658,7 +23665,7 @@ function renderSendBarsForActiveDept(pageKey) {
   }
   if (pageKey === 'psych') {
     renderDeptSendBar && renderDeptSendBar('psych', 'psych-top-send-bar');
-    renderDeptSendBar && renderDeptSendBar('psych', 'psych-rx-send-bar');
+    renderDeptSendBar && renderDeptSendBar('psych', 'psych-plan-send-bar');
     return;
   }
   if (pageKey === 'skin') {
@@ -28531,7 +28538,13 @@ const DRUG_LIBRARY_FULL = [
 let rxQuickPickList = [];
 // Cached drug search pool — rebuilt only when DRUG_LIBRARY changes (not on every keystroke).
 let _drugSearchPoolCache = null;
-function invalidateDrugSearchPoolCache() { _drugSearchPoolCache = null; }
+let _drugSearchIndexCache = null;
+function invalidateDrugSearchPoolCache() { _drugSearchPoolCache = null; _drugSearchIndexCache = null; }
+function ensureDrugLibraryHydratedForSearch() {
+  try {
+    if (typeof loadDrugLibraryFromStorage === 'function') loadDrugLibraryFromStorage();
+  } catch (e) { /* noop */ }
+}
 function getDrugLibrarySearchPool() {
   if (_drugSearchPoolCache) return _drugSearchPoolCache;
   const live = Array.isArray(DRUG_LIBRARY) ? DRUG_LIBRARY.slice() : [];
@@ -28541,6 +28554,50 @@ function getDrugLibrarySearchPool() {
   // DRUG_LIBRARY_FULL seeds are already merged in via buildDrugLibrarySeedRows() inside mergeDrugLibraryRows
   _drugSearchPoolCache = mergeDrugLibraryRows(live.concat(rescue));
   return _drugSearchPoolCache;
+}
+function getDrugLibrarySearchIndex() {
+  if (_drugSearchIndexCache) return _drugSearchIndexCache;
+  _drugSearchIndexCache = getDrugLibrarySearchPool().map(function (d) {
+    const trade = String(d.trade || d.brand || d.name || '').trim();
+    const generic = String(d.generic || d.name || d.trade || '').trim();
+    const company = String(d.company || '').trim();
+    const type = String(d.type || '').trim();
+    return {
+      d: d,
+      trade: trade,
+      generic: generic,
+      company: company,
+      type: type,
+      tradeLower: trade.toLowerCase(),
+      genericLower: generic.toLowerCase(),
+      companyLower: company.toLowerCase(),
+      typeLower: type.toLowerCase(),
+      deptKey: normalizeDrugDeptKey(d.dept || 'All')
+    };
+  });
+  return _drugSearchIndexCache;
+}
+function scoreDrugLibrarySearchEntry(entry, query, deptKey, deptLabel) {
+  if (!entry || !query) return 0;
+  const deptMatch = rxDrugMatchesDept(entry.d, deptKey, deptLabel);
+  const q = query.toLowerCase();
+  const startsWord = function (text) {
+    return String(text || '').split(/[^a-z0-9]+/).some(function (part) { return part && part.startsWith(q); });
+  };
+  let score = deptMatch ? 1000 : 0;
+  if (entry.tradeLower === q) score += 700;
+  if (entry.genericLower === q) score += 650;
+  if (entry.tradeLower.startsWith(q)) score += 420;
+  if (entry.genericLower.startsWith(q)) score += 380;
+  if (startsWord(entry.tradeLower)) score += 260;
+  if (startsWord(entry.genericLower)) score += 240;
+  if (entry.tradeLower.includes(q)) score += 180;
+  if (entry.genericLower.includes(q)) score += 160;
+  if (entry.companyLower && entry.companyLower.includes(q)) score += 45;
+  if (entry.typeLower && entry.typeLower.includes(q)) score += 25;
+  if (deptMatch && entry.deptKey !== 'all') score += 12;
+  if (entry.deptKey === 'all') score += 6;
+  return score;
 }
 
 // Debounced wrapper — waits 120 ms after typing stops before running search.
@@ -28552,6 +28609,7 @@ function rxQuickSearchDebounced(val) {
 }
 window.rxQuickSearchDebounced = rxQuickSearchDebounced;
 function rxQuickSearch(val) {
+  ensureDrugLibraryHydratedForSearch();
   val = (val || '').trim();
   const page = document.querySelector('.page.active');
   const activeRxTab = page ? page.querySelector('.tab-content.active[id$="-rx"], .tab-content.active[id="oe-rx"]') : document.querySelector('.tab-content.active[id$="-rx"], .tab-content.active[id="oe-rx"]');
@@ -28567,32 +28625,19 @@ function rxQuickSearch(val) {
   const deptKey = deptMap[tabId] || 'ophtho';
   const deptLabel = { oe: 'Ophthalmology', obg: 'OBG', psych: 'Neuropsychiatry', skin: 'Skin' }[tabId] || '';
 
-  const libSettings = getDrugLibrarySearchPool();
-  // Dept-matched first, then others as fallback (so cross-dept drugs still show)
-  const deptMatched = libSettings.filter(d => rxDrugMatchesDept(d, deptKey, deptLabel) &&
-    (String(d.trade || '').toLowerCase().includes(v) || String(d.generic || '').toLowerCase().includes(v)));
-  const crossDept = libSettings.filter(d => !rxDrugMatchesDept(d, deptKey, deptLabel) &&
-    (String(d.trade || '').toLowerCase().includes(v) || String(d.generic || '').toLowerCase().includes(v)));
-  // Show up to 20 dept-matched, plus up to 5 cross-dept
-  const fromSettings = deptMatched.slice(0, 20).concat(crossDept.slice(0, 5));
-
-  const fromFull = (typeof DRUG_LIBRARY_FULL !== 'undefined' ? DRUG_LIBRARY_FULL : []).filter(d =>
-    rxDrugMatchesDept(d, deptKey, deptLabel) &&
-    (d.name.toLowerCase().includes(v) || d.brand.toLowerCase().includes(v))
-  ).slice(0, 8);
-
-  let fsPairs = fromSettings.map(function (d) { return { kind: 'settings', d }; });
-  let ffPairs = fromFull.map(function (d) { return { kind: 'full', d }; });
-  // If nothing matches at all, show everything (no dept filter)
-  if (!fsPairs.length && !ffPairs.length) {
-    fsPairs = libSettings.filter(function (d) {
-      return String(d.trade || d.brand || d.name || '').toLowerCase().includes(v) || String(d.generic || d.name || '').toLowerCase().includes(v);
-    }).slice(0, 20).map(function (d) { return { kind: 'settings', d }; });
-    ffPairs = (typeof DRUG_LIBRARY_FULL !== 'undefined' ? DRUG_LIBRARY_FULL : []).filter(function (d) {
-      return String(d.brand || d.name || '').toLowerCase().includes(v) || String(d.name || '').toLowerCase().includes(v);
-    }).slice(0, 8).map(function (d) { return { kind: 'full', d }; });
-  }
-  rxQuickPickList = fsPairs.concat(ffPairs).slice(0, 25);
+  const rankedMatches = getDrugLibrarySearchIndex()
+    .map(function (entry) {
+      return { entry: entry, score: scoreDrugLibrarySearchEntry(entry, v, deptKey, deptLabel) };
+    })
+    .filter(function (row) { return row.score > 0; })
+    .sort(function (a, b) {
+      if (b.score !== a.score) return b.score - a.score;
+      if (a.entry.trade.length !== b.entry.trade.length) return a.entry.trade.length - b.entry.trade.length;
+      return a.entry.trade.localeCompare(b.entry.trade);
+    });
+  rxQuickPickList = rankedMatches.slice(0, 80).map(function (row) {
+    return { kind: 'settings', d: row.entry.d };
+  });
 
   if (!rxQuickPickList.length) { targetDd.style.display = 'none'; return; }
 
@@ -28607,13 +28652,6 @@ function rxQuickSearch(val) {
         <div style="font-size:10.5px;color:var(--g1)">${d.type} · ${d.freq} · ${d.dur}</div>
       </div>`;
     }
-    const d = item.d;
-    return `<div onclick="selectRxQuickPick(${i})" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--g5)" onmouseover="this.style.background='var(--blue-lt)'" onmouseout="this.style.background=''">
-      <div style="font-size:10px;font-weight:800;color:var(--bmh-teal);text-transform:uppercase">Built-in</div>
-      <div style="font-size:13px;font-weight:900;color:#1A3C6E">${d.brand || d.name}</div>
-      <div style="font-size:10.5px;color:var(--g1);font-style:italic">${d.name ? '('+d.name+')' : ''}</div>
-      <div style="font-size:10.5px;color:var(--g1)">${d.type} · ${d.freq} · ${d.dur}</div>
-    </div>`;
   }).join('');
 }
 
@@ -31871,7 +31909,7 @@ function saveVisit(dept, opts) {
     visit.dx = [psychDxLine, tagLine, psychVal('psych-diagnosis')].filter(Boolean).join(' · ') || '';
     visit.psychAdvice = document.getElementById('psych-advice')?.value || '';
     visit.psychExtraAdvice = document.getElementById('psych-extra-advice')?.value || '';
-    visit.rxFuDate = document.querySelector('#pg-psych #psych-rx #rx-fu-date')?.value || '';
+    visit.rxFuDate = document.querySelector('#pg-psych #psych-plan #rx-fu-date')?.value || '';
     visit.followupDate = visit.rxFuDate || '';
     visit.psychProcAdvised = [...document.querySelectorAll('#rx-proc-advised-psych [data-proc]')].map(function (e) { return e.dataset.proc; }).filter(Boolean);
     visit.rx = JSON.parse(JSON.stringify(RX_DRUGS || []));
@@ -32160,7 +32198,10 @@ function loadPastVisits(bmhId, dept) {
       return `<div style="border:1px solid var(--g5);border-radius:10px;background:#fff;padding:12px;margin-bottom:10px">
         <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px">
           <div style="font-size:13px;font-weight:900;color:var(--bmh-blue)">${v.dateLabel || new Date(v.date || Date.now()).toLocaleDateString('en-IN')}</div>
-          <div style="font-size:10px;color:var(--g1)">${v.savedBy || v.doctor || ''}</div>
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            ${dept === 'psych' && rxSummary ? `<button type="button" class="btn btn-xs btn-outline" onclick="applyPrescriptionFromPastVisit('${String(bmhId).replace(/'/g, "\\'")}','psych','${String(v.id || '').replace(/'/g, "\\'")}')">📋 Last Rx</button>` : ''}
+            <div style="font-size:10px;color:var(--g1)">${v.savedBy || v.doctor || ''}</div>
+          </div>
         </div>
         ${obgMeta}
         ${cc ? `<div style="font-size:11px;margin-bottom:5px"><strong>Chief complaints:</strong> ${cc}</div>` : ''}
