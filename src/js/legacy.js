@@ -9161,6 +9161,21 @@ function bmhTogglePaymentForm(on) {
   bmhUpdateBillTotals();
 }
 window.bmhTogglePaymentForm = bmhTogglePaymentForm;
+function bmhSetPaymentSaveBusy(isBusy) {
+  window._bmhPaymentSaveInFlight = !!isBusy;
+  const buttons = Array.from(document.querySelectorAll('#bmh-pay-form button, button[onclick*="bmhRecordPatientPayment"]'));
+  buttons.forEach(function (btn) {
+    const label = btn.dataset.busyLabel || btn.textContent || 'Save payment';
+    if (!btn.dataset.busyLabel) btn.dataset.busyLabel = label;
+    const matchesSave = /save|record/i.test(label) || String(btn.getAttribute('onclick') || '').indexOf('bmhRecordPatientPayment') >= 0;
+    if (!matchesSave) return;
+    btn.disabled = !!isBusy;
+    btn.style.opacity = isBusy ? '0.65' : '';
+    btn.style.cursor = isBusy ? 'wait' : '';
+    btn.textContent = isBusy ? 'Saving payment...' : btn.dataset.busyLabel;
+  });
+}
+window.bmhSetPaymentSaveBusy = bmhSetPaymentSaveBusy;
 function bmhClearPaymentDraft() {
   ['bmh-pay-amt','bmh-pay-ref','bmh-pay-insurer','bmh-pay-policy','bmh-pay-insurer-due','bmh-pay-cashless-approved'].forEach(function (id) {
     const el = document.getElementById(id);
@@ -9172,6 +9187,7 @@ function bmhClearPaymentDraft() {
   if (toggle) toggle.checked = false;
   bmhToggleBillingInsuranceFields();
   bmhTogglePaymentForm(false);
+  bmhSetPaymentSaveBusy(false);
 }
 window.bmhClearPaymentDraft = bmhClearPaymentDraft;
 function bmhAppendLedger(row) {
@@ -9944,10 +9960,16 @@ function printBmhPaymentAck(txn) {
   printPaymentReceipt(txn);
 }
 function bmhRecordPatientPayment() {
+  if (window._bmhPaymentSaveInFlight) {
+    showToast('Payment is already being saved…', 'i');
+    return;
+  }
   const bmhId = document.getElementById('bmh-bill-pt-select')?.value;
   if (!bmhId) { showToast('Select a patient', 'w'); return; }
   const amt = parseFloat(document.getElementById('bmh-pay-amt')?.value || '0');
   if (!(amt > 0)) { showToast('Enter amount', 'w'); return; }
+  bmhSetPaymentSaveBusy(true);
+  try {
   const mode = document.getElementById('bmh-pay-mode')?.value || 'Cash';
   const ref = document.getElementById('bmh-pay-ref')?.value?.trim() || '';
   const insName = document.getElementById('bmh-pay-insurer')?.value?.trim() || '';
@@ -10108,20 +10130,16 @@ function bmhRecordPatientPayment() {
   }
   bmhAppendLedger({ date: new Date().toISOString(), type: 'Receipt', narration: 'Patient payment (' + mode + ')', dr: 0, cr: amt, party: pt?.name || bmhId, ref: ref || mode });
   saveBmhFinancials();
-  const pi = document.getElementById('bmh-pay-amt'); if (pi) pi.value = '';
-  const pr = document.getElementById('bmh-pay-ref'); if (pr) pr.value = '';
-  const pin = document.getElementById('bmh-pay-insurer'); if (pin) pin.value = '';
-  const ppo = document.getElementById('bmh-pay-policy'); if (ppo) ppo.value = '';
-  const pdu = document.getElementById('bmh-pay-insurer-due'); if (pdu) pdu.value = '';
-  const pca = document.getElementById('bmh-pay-cashless-approved'); if (pca) pca.value = '';
-  const tog = document.getElementById('bmh-pay-received-toggle'); if (tog) tog.checked = false;
-  bmhTogglePaymentForm(false);
+  bmhClearPaymentDraft();
   const addToQ = !!document.getElementById('bmh-bill-add-to-queue')?.checked;
   if (addToQ) bmhAddPatientToDoctorQueue(bmhId, { silentToast: true });
   showToast(addToQ ? 'Payment saved — patient added to doctor queue ✓' : 'Payment saved ✓', 's');
   renderBillingPage();
   renderDashboard && renderDashboard();
   try { renderTpaPage && renderTpaPage(); } catch (e) {}
+  } finally {
+    bmhSetPaymentSaveBusy(false);
+  }
 }
 /** Billing / charges: put patient on today's doctor queue (My Patient Queue). */
 function bmhAddPatientToDoctorQueue(bmhId, opts) {
