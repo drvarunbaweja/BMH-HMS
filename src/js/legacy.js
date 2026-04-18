@@ -4998,6 +4998,7 @@ function doLogin(name, dept, role, centre) {
   document.getElementById('sbav').textContent=name.replace('Dr. ','').split(' ').map(n=>n[0]).join('').substring(0,2);
   closeM('m-login');
   showToast('Logged in as '+name,'i');
+  loadDrugLibraryFromStorage && loadDrugLibraryFromStorage({ forceRemote: !!window.FBDB && !window._bmhDrugLibraryHydratedFromFirebase });
   // Build role-specific sidebar
   buildSidebarForRole(role, dept, name);
   if(role==='Doctor') nav('doctor-queue',null);
@@ -13081,7 +13082,7 @@ function renderCentresView() {
   const today = localDateKey(new Date());
   if (dateEl && !dateEl.value) dateEl.value = today;
   const selectedDate = dateEl?.value || today;
-  const centreCodes = (CURRENT_USER?.isAdmin || CURRENT_USER?.canSeeAllCentres) ? ['CHD', 'RPR'] : [normalizeAppointmentCentreValue(CURRENT_USER?.centre || 'CHD')];
+  const centreCodes = (CURRENT_USER?.isAdmin || CURRENT_USER?.canSeeAllCentres) ? ['RPR', 'CHD'] : [normalizeAppointmentCentreValue(CURRENT_USER?.centre || 'CHD')];
   const centreMeta = {
     CHD: { label: 'Chandigarh Centre', tone: 'var(--bmh-blue)' },
     RPR: { label: 'Ropar Centre', tone: '#8a4200' }
@@ -13124,6 +13125,25 @@ function renderCentresView() {
     });
     return Object.values(grouped).sort(function (a, b) { return b.amount - a.amount || a.label.localeCompare(b.label); });
   };
+  const isConsultationPurpose = function (purpose) {
+    return /consult|follow|post\s*-?\s*op|opd|review|registration|new consultation/.test(String(purpose || '').toLowerCase());
+  };
+  const getConsultationCounter = function (deptPatients, consultPatients, deptConsultTxns) {
+    const ids = new Set();
+    const pushId = function (value) {
+      const key = String(value || '').trim();
+      if (key) ids.add(key);
+    };
+    deptConsultTxns.forEach(function (txn) {
+      pushId(txn.bmhId || txn.patientId || txn.pid || txn.patient || '');
+    });
+    deptPatients.forEach(function (patient) {
+      if (!isConsultationPurpose(patient.purpose || '')) return;
+      if (!patient.consultationNoFee) return;
+      pushId(patient.bmhId || patient.id || patient.mobile || patient.name || '');
+    });
+    return ids.size || consultPatients.length;
+  };
   const centreSheets = centreCodes.map(function (centreCode) {
     const patients = visiblePatients.filter(function (p) { return normalizeAppointmentCentreValue(p.centre || 'CHD') === centreCode; });
     const txns = selectedTxn.filter(function (t) { return normalizeAppointmentCentreValue(t.centre || 'CHD') === centreCode; });
@@ -13151,6 +13171,7 @@ function renderCentresView() {
       const deptConsultTxns = deptTxns.filter(function (t) {
         return inferChargeCategoryFromService(t.service || t.for || t.desc || '') === 'consultation';
       });
+      const totalOpdCount = getConsultationCounter(deptPatients, consultPatients, deptConsultTxns);
       const diagnosticTxns = deptTxns.filter(function (t) {
         const cat = inferChargeCategoryFromService(t.service || t.for || t.desc || '');
         return cat === 'diagnostic' || cat === 'investigation' || /oct|hvf|fundus|biometry|topography|specular|cbc|test|scan|profile|blood|urine|ecg/i.test(String(t.service || ''));
@@ -13177,7 +13198,7 @@ function renderCentresView() {
           <div style="font-size:13px;font-weight:900;color:${centreMeta[centreCode].tone}">${fmt(deptTxns.reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0))}</div>
         </div>
         <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px">
-          <div style="background:var(--g6);border-radius:8px;padding:8px"><div style="font-size:10px;color:var(--g1);font-weight:800">Total OPD</div><div style="font-size:16px;font-weight:900">${consultPatients.length}</div><div style="font-size:10px;color:var(--g1)">New ${newCount} · Follow-up ${followCount}</div></div>
+          <div style="background:var(--g6);border-radius:8px;padding:8px"><div style="font-size:10px;color:var(--g1);font-weight:800">Total OPD</div><div style="font-size:16px;font-weight:900">${totalOpdCount}</div><div style="font-size:10px;color:var(--g1)">New ${newCount} · Follow-up ${followCount}</div></div>
           <div style="background:var(--g6);border-radius:8px;padding:8px"><div style="font-size:10px;color:var(--g1);font-weight:800">Consultation</div><div style="font-size:16px;font-weight:900">${fmt(deptConsultTxns.reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0))}</div><div style="font-size:10px;color:var(--g1)">Paid ${paidCount} · No fee ${noFeeCount}</div></div>
           <div style="background:var(--g6);border-radius:8px;padding:8px"><div style="font-size:10px;color:var(--g1);font-weight:800">Investigations / Minor</div><div style="font-size:16px;font-weight:900">${fmt(diagnosticTxns.reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0))}</div><div style="font-size:10px;color:var(--g1)">Entries ${diagnosticTxns.length}</div></div>
           <div style="background:var(--g6);border-radius:8px;padding:8px"><div style="font-size:10px;color:var(--g1);font-weight:800">Surgery Collection</div><div style="font-size:16px;font-weight:900">${fmt(surgeryTxns.reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0))}</div><div style="font-size:10px;color:var(--g1)">Cases ${deptOt.length}</div></div>
@@ -13199,11 +13220,22 @@ function renderCentresView() {
         </div>
       </div>`;
     }).join('');
+    const centreOpdCount = deptMeta.reduce(function (sum, dept) {
+      const deptPatients = patients.filter(function (p) { return normalizeDeptKeyForQueue(p.dept || '') === dept.key; });
+      const consultPatients = deptPatients.filter(function (p) {
+        return !/diagnostic|investigation|procedure only|lab/i.test(String(p.purpose || ''));
+      });
+      const deptConsultTxns = txns.filter(function (t) {
+        return normalizeDeptKeyForQueue(t.dept || '') === dept.key
+          && inferChargeCategoryFromService(t.service || t.for || t.desc || '') === 'consultation';
+      });
+      return sum + getConsultationCounter(deptPatients, consultPatients, deptConsultTxns);
+    }, 0);
     return {
       code: centreCode,
       total: centreTotal,
       tpaDue: centreTpaDue,
-      opd: patients.length,
+      opd: centreOpdCount,
       surgeries: otCases.length,
       html: `<div class="card" style="padding:14px;margin-bottom:12px">
         <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;margin-bottom:10px">
@@ -13212,7 +13244,7 @@ function renderCentresView() {
             <div style="font-size:11px;color:var(--g1)">Daily statement for ${formatDateIN(selectedDate)}</div>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <div style="background:var(--g6);border-radius:10px;padding:8px 10px;text-align:center;min-width:110px"><div style="font-size:10px;color:var(--g1);font-weight:800">OPD Entries</div><div style="font-size:18px;font-weight:900">${patients.filter(function(p){return !/diagnostic|investigation|procedure only|lab only/i.test(String(p.purpose||''));}).length}</div></div>
+            <div style="background:var(--g6);border-radius:10px;padding:8px 10px;text-align:center;min-width:110px"><div style="font-size:10px;color:var(--g1);font-weight:800">OPD Entries</div><div style="font-size:18px;font-weight:900">${centreOpdCount}</div></div>
             <div style="background:var(--g6);border-radius:10px;padding:8px 10px;text-align:center;min-width:110px"><div style="font-size:10px;color:var(--g1);font-weight:800">Collected</div><div style="font-size:18px;font-weight:900;color:${centreMeta[centreCode].tone}">${fmt(centreTotal)}</div></div>
             <div style="background:var(--g6);border-radius:10px;padding:8px 10px;text-align:center;min-width:110px"><div style="font-size:10px;color:var(--g1);font-weight:800">TPA Due</div><div style="font-size:18px;font-weight:900;color:#b55a00">${fmt(centreTpaDue)}</div></div>
           </div>
@@ -16274,7 +16306,8 @@ window.repairDrugLibraryFromAllSources = repairDrugLibraryFromAllSources;
 function loadDrugLibraryFromStorage(opts) {
   opts = opts || {};
   const forceRemote = !!opts.forceRemote;
-  if (window._bmhDrugLibraryLoadedOnce && !forceRemote) return;
+  const needsRemoteHydration = !!window.FBDB && !window._bmhDrugLibraryHydratedFromFirebase;
+  if (window._bmhDrugLibraryLoadedOnce && !forceRemote && !needsRemoteHydration) return;
   if (!window._bmhDrugLibraryLoadedOnce) window._bmhDrugLibraryLoadedOnce = true;
   const applyMergedRows = function (remoteVal, opts) {
     opts = opts || {};
@@ -16409,6 +16442,7 @@ function handleDrugImportCsv(inp) {
 }
 
 function renderSettingsDrugs() {
+  promoteMergedDrugLibraryIntoLive(getDrugLibrarySearchPool(), { persist: false });
   if (typeof refreshCustomRxOptionSelects === 'function') refreshCustomRxOptionSelects();
   const el = document.getElementById('set-drugs-list'); if(!el) return;
   let changed = false;
@@ -28540,9 +28574,21 @@ let rxQuickPickList = [];
 let _drugSearchPoolCache = null;
 let _drugSearchIndexCache = null;
 function invalidateDrugSearchPoolCache() { _drugSearchPoolCache = null; _drugSearchIndexCache = null; }
+function promoteMergedDrugLibraryIntoLive(rows, opts) {
+  const merged = Array.isArray(rows) ? rows : [];
+  if (!Array.isArray(DRUG_LIBRARY) || !merged.length || merged.length <= DRUG_LIBRARY.length) return false;
+  DRUG_LIBRARY.length = 0;
+  merged.forEach(function (row) { DRUG_LIBRARY.push(normalizeDrugLibraryRow(Object.assign({}, row))); });
+  invalidateDrugSearchPoolCache();
+  if (opts && opts.persist) saveDrugLibraryToStorage();
+  try { rebuildDrugGenericDatalist && rebuildDrugGenericDatalist(); } catch (e) {}
+  return true;
+}
 function ensureDrugLibraryHydratedForSearch() {
   try {
-    if (typeof loadDrugLibraryFromStorage === 'function') loadDrugLibraryFromStorage();
+    if (typeof loadDrugLibraryFromStorage === 'function') {
+      loadDrugLibraryFromStorage({ forceRemote: !!window.FBDB && !window._bmhDrugLibraryHydratedFromFirebase });
+    }
   } catch (e) { /* noop */ }
 }
 function getDrugLibrarySearchPool() {
@@ -28553,6 +28599,7 @@ function getDrugLibrarySearchPool() {
   try { rescue = typeof readDrugLibraryRowsFromAllLocalSources === 'function' ? readDrugLibraryRowsFromAllLocalSources() : []; } catch (e) { rescue = []; }
   // DRUG_LIBRARY_FULL seeds are already merged in via buildDrugLibrarySeedRows() inside mergeDrugLibraryRows
   _drugSearchPoolCache = mergeDrugLibraryRows(live.concat(rescue));
+  promoteMergedDrugLibraryIntoLive(_drugSearchPoolCache, { persist: false });
   return _drugSearchPoolCache;
 }
 function getDrugLibrarySearchIndex() {
@@ -29379,6 +29426,7 @@ ${apts.length ? `<table>
 
 // ── SETTINGS INIT ─────────────────────────────────
 function renderSettingsPage() {
+  loadDrugLibraryFromStorage && loadDrugLibraryFromStorage({ forceRemote: !!window.FBDB && !window._bmhDrugLibraryHydratedFromFirebase });
   loadPrintLetterheadFromStorage && loadPrintLetterheadFromStorage();
   loadConsentDataOverridesFromStorage && loadConsentDataOverridesFromStorage();
   loadRxTemplatesFromStorage && loadRxTemplatesFromStorage(function () {});
@@ -29487,6 +29535,7 @@ function logoutUser() {
   window._bmhLabOrdersListening = false;
   window._bmhTodayTransactionsLoadedKey = '';
   window._bmhDrugLibraryLoadedOnce = false;
+  window._bmhDrugLibraryHydratedFromFirebase = false;
   window._bmhPatientsRefreshInFlight = false;
   if (window._bmhPatientsRefreshTimer) {
     clearInterval(window._bmhPatientsRefreshTimer);
