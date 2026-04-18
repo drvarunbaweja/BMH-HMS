@@ -2351,8 +2351,8 @@ function nav(id, el, opts) {
 // RENDERS
 // ═══════════════════════════════════════
 function qCard(p, sno) {
-  const dilMin = p.dilated && p.dilatedTime ? Math.floor((Date.now()-p.dilatedTime)/60000) : 0;
-  const dilHtml = p.dilated ? `<div class="dil-badge w" id="dt-${p.bmhId.replace(/-/g,'')}">💧 ${dilMin}m</div>` : '';
+  const dilMin = getPatientActiveDilationMinutes(p);
+  const dilHtml = dilMin !== null ? `<div class="dil-badge w" id="dt-${p.bmhId.replace(/-/g,'')}">💧 ${dilMin}m</div>` : '';
   const payHtml = p.balance>0 ? `<div class="pay-badge-r">⚠️ Due ₹${p.balance.toLocaleString('en-IN')}</div>` : p.advance>0 ? `<div class="adv-badge">💙 Adv ₹${p.advance.toLocaleString('en-IN')}</div>` : '';
   const deptLabel = {ophtho:'Ophthalmology',obg:'OBG',psych:'Psychiatry',skin:'Skin'}[p.dept]||p.dept;
   const snoDiv = sno!==undefined ? `<div style="font-size:10px;font-weight:900;color:var(--g2);width:20px;text-align:center;flex-shrink:0;padding-top:2px">${sno}</div>` : '';
@@ -3622,7 +3622,15 @@ function populateOphthoForm(v) {
 
 function toggleSeen(id) {
   const p = PATIENTS.find(x=>x.bmhId===id); if (!p) return;
-  p.seen = !p.seen; if(p.seen) p.status='done';
+  p.seen = !p.seen;
+  p.status = p.seen ? 'done' : 'waiting';
+  if (p.seen) {
+    p.dilated = false;
+    p.dilatedTime = null;
+    p.seenAt = new Date().toISOString();
+  } else {
+    p.seenAt = null;
+  }
   showToast(p.seen?p.name+' marked as Seen ✓':p.name+' unmarked','s');
   renderDocQueue(); renderDashboard();
 }
@@ -3644,6 +3652,7 @@ function markCurrentPatientDilated() {
 function markPaid(id) {
   const pr = PAY_REQUESTS.find(x=>x.id===id); if (!pr) return;
   pr.status = 'paid';
+  pr.updatedAt = new Date().toISOString();
   // Record as collected transaction
   const txnId = 'TXN'+Date.now();
   const txn = {
@@ -3655,6 +3664,13 @@ function markPaid(id) {
     createdBy:CURRENT_USER?.name||'Reception'
   };
   TRANSACTIONS.push(txn);
+  txn.chargeAllocations = bmhAllocatePaymentToChargeLines(pr.bmhId, pr.amount, {
+    txnId: txnId,
+    payRequestId: pr.id,
+    date: txn.date,
+    mode: txn.mode,
+    by: txn.createdBy
+  });
   saveTransactionToFirebase&&saveTransactionToFirebase(txn);
   bmhAppendLedger({ date: new Date().toISOString(), type: 'Receipt', narration: 'Payment: ' + (pr.for || 'Service'), dr: 0, cr: pr.amount, party: pr.patient, ref: (pr.mode || 'Cash') + (pr.paymentRef ? ' ' + pr.paymentRef : '') });
   saveBmhFinancials();
@@ -3709,7 +3725,12 @@ function markPaid(id) {
     }
   }
   bmhSyncPatientRunningBalance(pr.bmhId);
-  fbUpdate && fbUpdate('payRequests/'+id,{status:'paid'}).catch(()=>{});
+  const remainingPending = (PAY_REQUESTS || []).filter(function (r) { return r.bmhId === pr.bmhId && r.status === 'pending'; });
+  if (p && !remainingPending.length) p.balance = 0;
+  fbUpdate && fbUpdate('payRequests/'+id,{status:'paid',updatedAt:pr.updatedAt}).catch(()=>{});
+  if (!remainingPending.length) {
+    fbUpdate && fbUpdate('patients/' + pr.bmhId, { balance: 0 }).catch(()=>{});
+  }
   renderDocQueue && renderDocQueue();
   renderDashboard && renderDashboard();
   renderReceptionPage && renderReceptionPage();
@@ -5360,7 +5381,15 @@ function renderOphthoPayList() {
   const myPay = PAY_REQUESTS.filter(p => p.bmhId === 'BMSH-000001');
   el.innerHTML = myPay.length ? myPay.map(payCardHtml).join('') : `<div style="font-size:12px;color:var(--g1);padding:8px 0;text-align:center">No pending charges</div>`;
 }
-setInterval(()=>PATIENTS.filter(p=>p.dilated&&p.dilatedTime).forEach(p=>{const el=document.getElementById('dt-'+p.bmhId.replace(/-/g,''));if(el){const m=Math.floor((Date.now()-p.dilatedTime)/60000);el.textContent='💧 '+m+'m';}}),15000);
+setInterval(function () {
+  PATIENTS.forEach(function (p) {
+    const el = document.getElementById('dt-' + p.bmhId.replace(/-/g, ''));
+    if (!el) return;
+    const m = getPatientActiveDilationMinutes(p);
+    if (m === null) return;
+    el.textContent = '💧 ' + m + 'm';
+  });
+}, 15000);
 
 // ═══ OBG ═══
 const OBG_SELECT_DIGITS = Array.from({length: 10}, (_, i) => String(i));
@@ -8217,6 +8246,7 @@ function addBmhPatientCharge(bmhId, row) {
   if (!bmhId) return;
   if (!window.BMH_PATIENT_CHARGES[bmhId]) window.BMH_PATIENT_CHARGES[bmhId] = [];
   if (!row.amount && row.rate != null) row.amount = (Number(row.qty) || 1) * (Number(row.rate) || 0);
+  row.paidAmount = Math.max(0, Number(row.paidAmount) || 0);
   window.BMH_PATIENT_CHARGES[bmhId].push(row);
   bmhEnsureEEGConcessionLine(bmhId, row);
   saveBmhFinancials();
@@ -8235,8 +8265,72 @@ function syncPayRequestToPatientCharges(pr) {
     amount: pr.amount,
     source: 'doctor',
     ref: pr.id,
-    ts: pr.date || new Date().toISOString()
+    ts: pr.date || new Date().toISOString(),
+    paidAmount: pr.status === 'paid' ? Math.max(0, Number(pr.amount) || 0) : 0
   });
+}
+function bmhGetChargeLinePaidAmount(line) {
+  if (!line) return 0;
+  const raw = Math.max(0, Number(line.paidAmount) || 0);
+  const amt = Math.max(0, Number(line.amount) || 0);
+  return Math.min(raw, amt);
+}
+function bmhGetChargeLineOutstanding(line) {
+  if (!line) return 0;
+  const amt = Number(line.amount) || 0;
+  if (amt <= 0) return 0;
+  return Math.max(0, amt - bmhGetChargeLinePaidAmount(line));
+}
+function bmhApplyPaymentAllocationToLine(line, amount, meta) {
+  if (!line || !(amount > 0)) return 0;
+  const outstanding = bmhGetChargeLineOutstanding(line);
+  if (!(outstanding > 0)) return 0;
+  const applied = Math.min(outstanding, amount);
+  line.paidAmount = bmhGetChargeLinePaidAmount(line) + applied;
+  if (!Array.isArray(line.paymentAllocations)) line.paymentAllocations = [];
+  line.paymentAllocations.push({
+    txnId: meta?.txnId || '',
+    payRequestId: meta?.payRequestId || '',
+    amount: applied,
+    date: meta?.date || new Date().toISOString(),
+    mode: meta?.mode || '',
+    by: meta?.by || CURRENT_USER?.name || ''
+  });
+  return applied;
+}
+function bmhAllocatePaymentToChargeLines(bmhId, amount, opts) {
+  const arr = window.BMH_PATIENT_CHARGES[bmhId] || [];
+  let remaining = Math.max(0, Number(amount) || 0);
+  const out = [];
+  if (!(remaining > 0) || !arr.length) return out;
+  let targetLines = arr.filter(function (line) {
+    return !line?.isConcession && (Number(line.amount) || 0) > 0;
+  });
+  if (opts?.payRequestId) {
+    targetLines = targetLines.filter(function (line) { return String(line.ref || '') === String(opts.payRequestId); });
+  } else if (Array.isArray(opts?.lineIds) && opts.lineIds.length) {
+    const lineIdSet = new Set(opts.lineIds.map(String));
+    targetLines = targetLines.filter(function (line) { return lineIdSet.has(String(line.id || '')); });
+  } else if (Array.isArray(opts?.categories) && opts.categories.length) {
+    const catSet = new Set(opts.categories.map(function (c) { return String(c || '').toLowerCase(); }));
+    targetLines = targetLines.filter(function (line) {
+      const cat = String(line.cat || inferChargeCategoryFromService(line.desc || line.name || '') || 'other').toLowerCase();
+      return catSet.has(cat);
+    });
+  }
+  targetLines.sort(function (a, b) {
+    return String(a.ts || a.date || '').localeCompare(String(b.ts || b.date || ''));
+  });
+  targetLines.forEach(function (line) {
+    if (!(remaining > 0)) return;
+    const applied = bmhApplyPaymentAllocationToLine(line, remaining, opts);
+    if (applied > 0) {
+      remaining -= applied;
+      out.push({ lineId: line.id, amount: applied, desc: line.desc || line.name || 'Charge' });
+    }
+  });
+  saveBmhFinancials();
+  return out;
 }
 /** Quick total for patient list (does not use another patient's discount inputs). */
 function bmhBillPreviewTotal(bmhId) {
@@ -8295,14 +8389,16 @@ function bmhGetEffectiveBillContext(bmhId) {
   });
   const nonConsultationLines = lines.filter(function (line) { return !consultationLines.includes(line); });
   const consultationChargeTotal = consultationLines.reduce(function (s, line) { return s + (Number(line.amount) || 0); }, 0);
-  const consultationReceived = bmhTotalReceivedForCategories(bmhId, ['consultation']);
+  const consultationReceived = consultationLines.reduce(function (s, line) {
+    return s + bmhGetChargeLinePaidAmount(line);
+  }, 0) || bmhTotalReceivedForCategories(bmhId, ['consultation']);
   const excludeSettledConsultation = nonConsultationLines.length > 0 && consultationChargeTotal > 0 && consultationReceived >= consultationChargeTotal;
   const effectiveLines = excludeSettledConsultation ? nonConsultationLines : lines;
   const activeCats = categories(effectiveLines);
   const effectiveCtx = { activeCats: activeCats, excludedSettledConsultation: excludeSettledConsultation };
-  const effectiveReceived = (TRANSACTIONS || []).filter(function (t) {
-    return t.bmhId === bmhId && bmhTransactionMatchesBillContext(t, effectiveCtx);
-  }).reduce(function (s, t) { return s + Math.max(0, Number(t.amount) || 0); }, 0);
+  const effectiveReceived = effectiveLines.reduce(function (s, line) {
+    return s + bmhGetChargeLinePaidAmount(line);
+  }, 0);
   const chargeTotal = effectiveLines.reduce(function (s, line) { return s + (Number(line.amount) || 0); }, 0);
   return {
     allLines: lines,
@@ -8333,6 +8429,14 @@ function bmhSyncPatientRunningBalance(bmhId) {
   pt.balance = due;
   fbUpdate && fbUpdate('patients/' + bmhId, { balance: due });
   return due;
+}
+function getQueueDisplayDueState(bmhId) {
+  const pendingPRs = (PAY_REQUESTS || []).filter(function (r) { return r.bmhId === bmhId && r.status === 'pending'; });
+  const paidPRs = (PAY_REQUESTS || []).filter(function (r) { return r.bmhId === bmhId && r.status === 'paid'; });
+  const pendingAmt = pendingPRs.reduce(function (s, r) { return s + (Number(r.amount) || 0); }, 0);
+  const computedDue = typeof bmhComputeBalanceDue === 'function' ? Number(bmhComputeBalanceDue(bmhId) || 0) : 0;
+  const due = pendingAmt > 0 ? Math.max(pendingAmt, computedDue) : 0;
+  return { due: due, pendingPRs: pendingPRs, paidPRs: paidPRs, pendingAmt: pendingAmt };
 }
 
 function bmhDeleteTransactionEntry(txnId) {
@@ -8647,10 +8751,14 @@ function bmhRenderBillLines() {
   lines.forEach(l => { const c = l.cat || 'other'; if (!byCat[c]) byCat[c] = []; byCat[c].push(l); });
   el.innerHTML = Object.keys(byCat).map(cat => `<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:800;color:var(--bmh-teal);text-transform:uppercase;margin-bottom:4px">${bmhCatLabel(cat)}</div>${byCat[cat].map(l => {
     const amt = Number(l.amount) || 0;
+    const paid = bmhGetChargeLinePaidAmount(l);
+    const due = bmhGetChargeLineOutstanding(l);
+    const settleHtml = amt > 0 ? `<div style="font-size:10px;color:${due > 0 ? '#8a4200' : '#1a8c3c'}">${paid > 0 ? 'Paid ₹' + paid.toLocaleString('en-IN') : 'Unpaid'}${amt > 0 ? ' · Due ₹' + due.toLocaleString('en-IN') : ''}</div>` : '';
     return `<div style="display:grid;grid-template-columns:minmax(0,1.6fr) 66px 88px 88px auto;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--g5);font-size:12px">
       <div style="min-width:0">
         <input type="text" value="${String(l.desc || '—').replace(/"/g,'&quot;')}" onchange="bmhUpdateChargeLine('${bmhId}','${l.id}','desc',this.value)" style="width:100%;font-size:12px;font-weight:700;border:none;background:transparent;padding:0">
         <div style="font-size:10px;color:var(--g1)">${l.source || '—'}</div>
+        ${settleHtml}
       </div>
       <input type="number" min="1" step="1" value="${Number(l.qty)||1}" onchange="bmhUpdateChargeLine('${bmhId}','${l.id}','qty',this.value)" style="font-size:11px;padding:6px;border-radius:6px;border:1px solid var(--g4);width:100%">
       <input type="number" min="0" step="1" value="${Number(l.rate)||amt}" onchange="bmhUpdateChargeLine('${bmhId}','${l.id}','rate',this.value)" style="font-size:11px;padding:6px;border-radius:6px;border:1px solid var(--g4);width:100%">
@@ -8692,12 +8800,14 @@ function bmhGetPatientFinancialSummary(bmhId) {
   const timeline = [];
 
   (billContext.allLines || []).forEach(l => {
+    const paid = bmhGetChargeLinePaidAmount(l);
+    const due = bmhGetChargeLineOutstanding(l);
     timeline.push({
       ts: l.ts || l.date || new Date().toISOString(),
       kind: 'charge',
       rowId: l.id,
       label: l.desc || 'Charge',
-      meta: [bmhCatLabel(l.cat), l.source].filter(Boolean).join(' · '),
+      meta: [bmhCatLabel(l.cat), l.source, paid > 0 ? ('Paid ₹' + paid.toLocaleString('en-IN')) : '', due > 0 ? ('Due ₹' + due.toLocaleString('en-IN')) : ''].filter(Boolean).join(' · '),
       amount: Number(l.amount) || 0
     });
   });
@@ -9873,6 +9983,13 @@ function bmhRecordPatientPayment() {
     cashlessApprovedAmount: cashlessApr > 0 ? cashlessApr : undefined,
     hospitalBillTotal: cashlessApr > 0 ? netBill : undefined
   };
+  txn.chargeAllocations = bmhAllocatePaymentToChargeLines(bmhId, amt, {
+    txnId: txnId,
+    date: txn.date,
+    mode: mode,
+    by: txn.createdBy,
+    categories: (billCtx.activeCats || []).slice()
+  });
   TRANSACTIONS.push(txn);
   saveTransactionToFirebase && saveTransactionToFirebase(txn);
   const advAdj = Number(bmhTotalsForPatient(bmhId).advanceApplied || 0);
@@ -15129,6 +15246,22 @@ const RX_TEMPLATES_META = {
   'discharge-eye-default': { dept: 'dc-ophtho', name: 'Discharge Card — Eye (default)', notes: '' },
   'discharge-obg-default': { dept: 'dc-obg', name: 'Discharge Card — OBG (default)', notes: '' },
 };
+function migrateOtTemplateStorageKeys() {
+  const nextData = {};
+  const nextMeta = {};
+  Object.keys(RX_TEMPLATES_DATA || {}).forEach(function (oldKey) {
+    const meta = RX_TEMPLATES_META[oldKey] || {};
+    const dept = normalizeRxTemplateDeptKey(meta.dept || 'all');
+    const typedKey = ((dept === 'ot' || dept === 'ot-followup') && oldKey.indexOf('::') < 0)
+      ? buildRxTemplateStorageKey(dept, meta.name || oldKey)
+      : oldKey;
+    nextData[typedKey] = RX_TEMPLATES_DATA[oldKey];
+    nextMeta[typedKey] = Object.assign({}, meta, { dept: dept });
+  });
+  RX_TEMPLATES_DATA = nextData;
+  Object.keys(RX_TEMPLATES_META).forEach(function (k) { delete RX_TEMPLATES_META[k]; });
+  Object.assign(RX_TEMPLATES_META, nextMeta);
+}
 function saveRxTemplatesToStorage() {
   try { localStorage.setItem('bmh_rx_templates', JSON.stringify({ data: RX_TEMPLATES_DATA, meta: RX_TEMPLATES_META })); } catch (e) { /* quota */ }
   if (window.FBDB) window.FBDB.ref('rxTemplates').set({ data: RX_TEMPLATES_DATA, meta: RX_TEMPLATES_META }).catch(function () {});
@@ -15146,9 +15279,11 @@ function loadRxTemplatesFromStorage(cb) {
     if (!RX_TEMPLATES_META[k] || typeof RX_TEMPLATES_META[k] !== 'object') return;
     RX_TEMPLATES_META[k].dept = normalizeRxTemplateDeptKey(RX_TEMPLATES_META[k].dept || 'all');
   });
+  migrateOtTemplateStorageKeys();
   if (!window.FBDB) {
     if (typeof refreshRxTemplateSelects === 'function') refreshRxTemplateSelects();
     if (typeof renderSetRxTplList === 'function') renderSetRxTplList();
+    saveRxTemplatesToStorage();
     if (typeof cb === 'function') cb();
     return;
   }
@@ -15160,6 +15295,8 @@ function loadRxTemplatesFromStorage(cb) {
       if (!RX_TEMPLATES_META[k] || typeof RX_TEMPLATES_META[k] !== 'object') return;
       RX_TEMPLATES_META[k].dept = normalizeRxTemplateDeptKey(RX_TEMPLATES_META[k].dept || 'all');
     });
+    migrateOtTemplateStorageKeys();
+    saveRxTemplatesToStorage();
     if (typeof refreshRxTemplateSelects === 'function') refreshRxTemplateSelects();
     if (typeof renderSetRxTplList === 'function') renderSetRxTplList();
     if (typeof cb === 'function') cb();
@@ -15273,6 +15410,11 @@ function getSurgeryTemplateSuggestions() {
 function normalizeOtTemplateKey(text) {
   return String(text || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
+function buildRxTemplateStorageKey(dept, name) {
+  const deptKey = normalizeRxTemplateDeptKey(dept || 'all');
+  const slug = String(name || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return (deptKey || 'all') + '::' + (slug || 'template');
+}
 function otTemplateMatchesProcedure(templateSurgery, activeProcedure) {
   const t = normalizeOtTemplateKey(templateSurgery);
   const p = normalizeOtTemplateKey(activeProcedure);
@@ -15286,6 +15428,28 @@ function otTemplateMatchesProcedure(templateSurgery, activeProcedure) {
     const rowMatchesProcedure = (parent && (parent.includes(p) || p.includes(parent))) || (name && (name.includes(p) || p.includes(name)));
     return rowMatchesTemplate && rowMatchesProcedure;
   });
+}
+function findMatchingOtFollowupTemplateKey(notesTemplateKey, procedureText) {
+  const noteMeta = RX_TEMPLATES_META[notesTemplateKey] || {};
+  const target = String(noteMeta.surgery || procedureText || noteMeta.name || '').trim();
+  if (!target) return '';
+  const keys = Object.keys(RX_TEMPLATES_DATA || {}).filter(function (key) {
+    return normalizeRxTemplateDeptKey(RX_TEMPLATES_META[key]?.dept || '') === 'ot-followup';
+  }).sort(function (a, b) {
+    const am = RX_TEMPLATES_META[a] || {};
+    const bm = RX_TEMPLATES_META[b] || {};
+    const aExact = normalizeOtTemplateKey(am.surgery || am.name || '') === normalizeOtTemplateKey(target);
+    const bExact = normalizeOtTemplateKey(bm.surgery || bm.name || '') === normalizeOtTemplateKey(target);
+    if (aExact !== bExact) return aExact ? -1 : 1;
+    const aMatch = otTemplateMatchesProcedure(am.surgery || am.name || '', target);
+    const bMatch = otTemplateMatchesProcedure(bm.surgery || bm.name || '', target);
+    if (aMatch !== bMatch) return aMatch ? -1 : 1;
+    return String(am.name || a).localeCompare(String(bm.name || b));
+  });
+  return keys.find(function (key) {
+    const meta = RX_TEMPLATES_META[key] || {};
+    return otTemplateMatchesProcedure(meta.surgery || meta.name || '', target);
+  }) || '';
 }
 const OT_FOLLOWUP_PRESET_DAYS = [1, 3, 7, 14, 28, 42, 84];
 function formatOtFollowupLabel(days) {
@@ -15371,7 +15535,7 @@ function saveOtFollowupTemplate() {
   const deptSel = document.getElementById('fu-tpl-dept-settings');
   const offsets = getSelectedOtFollowupOffsets();
   if (!offsets.length) { showToast('Select at least one follow-up day', 'w'); return; }
-  const key = name.toLowerCase().replace(/\s+/g, '-');
+  const key = buildRxTemplateStorageKey('ot-followup', name);
   RX_TEMPLATES_DATA[key] = offsets.map(function (days) {
     return { trade: formatOtFollowupLabel(days), days: days };
   });
@@ -18173,6 +18337,33 @@ function renderDeptSummary() {
   }).join('') || '<div style="padding:20px;text-align:center;color:var(--g1);font-size:12px">No charges sent today</div>';
 }
 
+function updateReceptionDeptSummaryTabBadge() {
+  const tab = Array.from(document.querySelectorAll('#pg-reception .ptab')).find(function (el) {
+    return (el.textContent || '').includes('Dept Summary');
+  });
+  if (!tab) return;
+  const centre = getEffectiveCentre();
+  const pending = (PAY_REQUESTS || []).filter(function (r) {
+    return r.status === 'pending' && (r.centre || 'CHD') === centre;
+  });
+  let badge = tab.querySelector('.rc-dept-summary-badge');
+  if (!pending.length) {
+    if (badge) badge.remove();
+    tab.style.animation = '';
+    tab.style.boxShadow = '';
+    return;
+  }
+  if (!badge) {
+    badge = document.createElement('span');
+    badge.className = 'rc-dept-summary-badge';
+    badge.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 6px;margin-left:6px;border-radius:999px;background:var(--orange);color:#fff;font-size:10px;font-weight:900;animation:pulse 1.35s infinite;vertical-align:middle';
+    tab.appendChild(badge);
+  }
+  badge.textContent = String(pending.length);
+  tab.style.animation = 'pulse 1.35s infinite';
+  tab.style.boxShadow = '0 0 0 2px rgba(255,149,0,.16) inset';
+}
+
 // ── printSurgeryPack — print all relevant consent forms for a dept or custom pack ──────────
 const SURGERY_PACK_DEFAULTS = [
   { id:'ophtho', dept:'Ophthalmology', icon:'👁️', label:'Ophthalmology surgery pack', desc:'Bilingual consent forms and related forms for eye procedures.', color:'var(--blue)', documentKeys:['cataract','ivt','lasik','pterygium'] },
@@ -19003,7 +19194,7 @@ function saveRxTemplate(mode) {
   const raw = document.getElementById('rx-tpl-drugs' + suffix)?.value || '';
   const arr = parseTemplateLines(raw, dept);
   if(!arr.length){showToast('Add one drug per line (e.g. Brand — frequency — duration)','w');return;}
-  const key = name.toLowerCase().replace(/\s+/g,'-');
+  const key = buildRxTemplateStorageKey(dept, name);
   RX_TEMPLATES_DATA[key] = arr;
   RX_TEMPLATES_META[key] = {
     dept,
@@ -20199,6 +20390,12 @@ function applyOTNotesTemplate(key) {
   if (narrative && !narrative.value.trim()) narrative.value = notesText;
   if (noteArea && !noteArea.value.trim()) noteArea.value = notesText;
   if (document.getElementById('ot-procedure') && !document.getElementById('ot-procedure').value.trim() && meta.surgery) document.getElementById('ot-procedure').value = meta.surgery;
+  const followupKey = findMatchingOtFollowupTemplateKey(key, document.getElementById('ot-procedure')?.value || meta.surgery || '');
+  const followupSel = document.getElementById('ot-followup-template');
+  if (followupKey && followupSel) {
+    followupSel.value = followupKey;
+    applyOTFollowupTemplate(followupKey);
+  }
   showToast('OT note template applied ✓', 's');
 }
 
@@ -24178,6 +24375,16 @@ function patientDoneQueueMatchesToday(p, todayKeyLocal) {
   if (p.seenAt && localDateKey(p.seenAt) === todayKeyLocal) return true;
   if (p.checkinAt && localDateKey(p.checkinAt) === todayKeyLocal) return true;
   return patientQueueDateMatchesToday(p);
+}
+function getPatientActiveDilationMinutes(p, nowTs) {
+  if (!p || p.dept !== 'ophtho') return null;
+  if (!p.dilated || !p.dilatedTime) return null;
+  if (isPatientMarkedSeen(p)) return null;
+  if (!patientQueueDateMatchesToday(p)) return null;
+  const stamp = Number(p.dilatedTime);
+  if (!Number.isFinite(stamp)) return null;
+  const now = Number.isFinite(nowTs) ? nowTs : Date.now();
+  return Math.max(0, Math.floor((now - stamp) / 60000));
 }
 function buildPersistentHistoryDuration(rawDur, baseDate, referenceDate) {
   const durText = String(rawDur || '').trim();
@@ -29979,6 +30186,7 @@ function _renderReceptionPageImpl() {
     badge.textContent = pending + ' pending';
   }
 
+  updateReceptionDeptSummaryTabBadge && updateReceptionDeptSummaryTabBadge();
   renderRcDeptDues && renderRcDeptDues();
   renderCollectionDashboard && renderCollectionDashboard();
 
@@ -30222,17 +30430,18 @@ function buildQCard(p, sno) {
   const waitMin = p.checkinAt ? Math.floor((now - p.checkinAt)/60000) : 0;
   const waitStr = waitMin < 60 ? waitMin+'m' : Math.floor(waitMin/60)+'h '+( waitMin%60)+'m';
   // Dilation time
-  const dilMin = p.dilated && p.dilatedTime ? Math.floor((now - p.dilatedTime)/60000) : 0;
-  const dilLongWait = p.dilated && dilMin >= 30;
-  const dilStr = p.dilated ? `💧${dilMin}m` : '';
+  const dilMin = getPatientActiveDilationMinutes(p, now);
+  const dilLongWait = dilMin !== null && dilMin >= 30;
+  const dilStr = dilMin !== null ? `💧${dilMin}m` : '';
   // Visit number (count past visits)
   const visitNo = (p.visitCount||1);
   const isNew = visitNo <= 1;
   // Charge status
-  const pendingPRs = PAY_REQUESTS.filter(r=>r.bmhId===p.bmhId&&r.status==='pending');
-  const pendingAmt = pendingPRs.reduce((s,r)=>s+r.amount,0);
-  const runningDue = Math.max(typeof bmhComputeBalanceDue === 'function' ? bmhComputeBalanceDue(p.bmhId) : (Number(p.balance) || 0), pendingAmt);
-  const paidPRs = PAY_REQUESTS.filter(r=>r.bmhId===p.bmhId&&r.status==='paid');
+  const queueDueState = getQueueDisplayDueState(p.bmhId);
+  const pendingPRs = queueDueState.pendingPRs;
+  const pendingAmt = queueDueState.pendingAmt;
+  const runningDue = queueDueState.due;
+  const paidPRs = queueDueState.paidPRs;
   const pendingPRIds = pendingPRs.map(r=>r.id);
   const surgeryDue = runningDue > 0 && patientHasSurgeryDue(p.bmhId);
   const chargeHtml = runningDue>0
@@ -30275,7 +30484,7 @@ function buildQCard(p, sno) {
       <div style="display:flex;gap:3px" onclick="event.stopPropagation()">
         ${p.preRegistered
           ? `<button title="Check In & Collect Fee" style="background:var(--blue);color:#fff;border:none;border-radius:5px;padding:2px 8px;font-size:9px;font-weight:800;cursor:pointer;line-height:1.6;animation:pulse 2s infinite" onclick="checkInPatient('${p.bmhId}')">✅ Check In</button>`
-          : `${!isPatientMarkedSeen(p)?`<button title="Mark Seen" style="background:var(--green);color:#fff;border:none;border-radius:5px;padding:2px 6px;font-size:9px;font-weight:800;cursor:pointer;line-height:1.4" onclick="markSeen('${p.bmhId}')">✓</button>`:''}
+          : `${!isPatientMarkedSeen(p)?`<button title="Mark Seen" style="background:var(--green);color:#fff;border:none;border-radius:5px;padding:2px 6px;font-size:9px;font-weight:800;cursor:pointer;line-height:1.4" onclick="markSeen('${p.bmhId}')">✓</button>`:`<button title="Move to Active" style="background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1.5px solid var(--bmh-blue);border-radius:5px;padding:2px 6px;font-size:9px;font-weight:800;cursor:pointer;line-height:1.4" onclick="restorePatientToActiveQueue('${p.bmhId}')">↩ Active</button>`}
         ${isOphtho&&!p.dilated&&!isPatientMarkedSeen(p)?`<button title="Dilate" style="background:var(--blue-lt);color:var(--blue);border:1.5px solid var(--blue);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="markDilated('${p.bmhId}','${p.name.replace(/'/g,"\\'")}')">💧</button>`:''}
         <button title="Cross-Refer" style="background:rgba(11,123,140,.1);color:var(--teal);border:1.5px solid var(--teal);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="openXRefModal('${p.bmhId}')">↔️</button>
         <button title="IPD" style="background:rgba(175,82,222,.1);color:var(--purple);border:1.5px solid var(--purple);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="openIPDFromQueue('${p.bmhId}')">🛏️</button>
@@ -30301,11 +30510,10 @@ function isPatientVulnerable(p) {
 /** Ophthalmology dilation elapsed (— if not eye / not dilated yet). */
 function dilationCellHtml(p) {
   if(p.dept!=='ophtho') return '<span style="color:var(--g2);font-size:10px">—</span>';
-  if(!p.dilated || !p.dilatedTime) {
+  const dilMin = getPatientActiveDilationMinutes(p);
+  if(dilMin === null) {
     return '<span style="font-size:10px;color:var(--g2)">—</span>';
   }
-  const now = Date.now();
-  const dilMin = Math.floor((now - p.dilatedTime)/60000);
   return `<span style="font-size:10px;font-weight:800;padding:3px 8px;border-radius:8px;background:var(--purple-lt);color:var(--purple);${dilMin>=30?'animation:pulse 1.35s infinite;':''}">${dilMin}m elapsed</span>`;
 }
 
@@ -30319,13 +30527,14 @@ function buildQTableRow(p, sno, opts) {
   const now = Date.now();
   const waitMin = p.checkinAt ? Math.floor((now - p.checkinAt)/60000) : 0;
   const waitStr = waitMin < 60 ? waitMin+'m' : Math.floor(waitMin/60)+'h '+(waitMin%60)+'m';
-  const dilMin = p.dilated && p.dilatedTime ? Math.floor((now - p.dilatedTime)/60000) : 0;
-  const dilLongWait = p.dilated && dilMin >= 30;
+  const dilMin = getPatientActiveDilationMinutes(p, now);
+  const dilLongWait = dilMin !== null && dilMin >= 30;
   const vuln = isPatientVulnerable(p);
-  const pendingPRs = PAY_REQUESTS.filter(r=>r.bmhId===p.bmhId&&r.status==='pending');
-  const pendingAmt = pendingPRs.reduce((s,r)=>s+r.amount,0);
-  const runningDue = Math.max(typeof bmhComputeBalanceDue === 'function' ? bmhComputeBalanceDue(p.bmhId) : (Number(p.balance) || 0), pendingAmt);
-  const paidPRs = PAY_REQUESTS.filter(r=>r.bmhId===p.bmhId&&r.status==='paid');
+  const queueDueState = getQueueDisplayDueState(p.bmhId);
+  const pendingPRs = queueDueState.pendingPRs;
+  const pendingAmt = queueDueState.pendingAmt;
+  const runningDue = queueDueState.due;
+  const paidPRs = queueDueState.paidPRs;
   const advLbl = (p.advance > 0) ? `<span style="font-size:9px;color:var(--blue);font-weight:800">Adv ₹${(p.advance||0).toLocaleString('en-IN')}</span>` : '';
   const surgeryDue = runningDue > 0 && patientHasSurgeryDue(p.bmhId);
   const chargeHint = runningDue>0
@@ -30362,6 +30571,17 @@ function buildQTableRow(p, sno, opts) {
   const vulnBadge = vuln ? '<span class="q-vuln-badge" title="Vulnerable — elderly (≥65) or flagged">⚠ VUL</span>' : '';
   const labHover = getUnreadLabResultsTitle(p);
   const labReadyBadge = patientHasUnreadLabResults(p) ? `<span title="${escapeHtmlConsent(labHover || 'Results ready')}" style="display:inline-flex;align-items:center;gap:4px;padding:1px 6px;border-radius:999px;background:#eafaf1;color:#166534;border:1px solid rgba(22,101,52,.25);font-size:9px;font-weight:900;animation:pulse 1.2s infinite">🧪 Results Ready</span>` : '';
+  const restoreSeenAction = seenRow
+    ? (p._xrefId
+      ? `restoreCrossRefToActive('${String(p.bmhId).replace(/'/g, "\\'")}','${xrefIdEsc}')`
+      : `restorePatientToActiveQueue('${String(p.bmhId).replace(/'/g, "\\'")}')`)
+    : '';
+  const doneActionHtml = seenRow
+    ? `<select title="Seen actions" style="max-width:110px;background:#fff;border:1.5px solid var(--g4);border-radius:5px;padding:2px 6px;font-size:9px;font-weight:800;cursor:pointer" onclick="event.stopPropagation()" onchange="event.stopPropagation(); if(this.value==='active'){ ${restoreSeenAction}; } this.value=''">
+        <option value="">Seen ▾</option>
+        <option value="active">Move to active</option>
+      </select>`
+    : '';
   return `<tr class="${vuln ? 'row-vulnerable' : ''}" onclick="${onRow}" style="cursor:pointer;${dilLongWait?'animation:pulse 1.45s infinite;':''}">
     <td style="font-weight:900;color:var(--g2);font-size:12.5px">${sno}</td>
     <td><div style="display:flex;align-items:center;gap:6px"><span style="width:28px;height:28px;border-radius:50%;background:${p.color||'#1A3C6E'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:900;font-size:10px;flex-shrink:0">${p.initials||p.name[0]||'?'}</span>
@@ -30377,7 +30597,7 @@ function buildQTableRow(p, sno, opts) {
     <td class="q-actions" onclick="event.stopPropagation()">
       ${p.preRegistered
         ? `<button type="button" title="Check In" style="background:var(--blue);color:#fff;border:none;border-radius:5px;padding:3px 8px;font-size:9px;font-weight:800;cursor:pointer" onclick="checkInPatient('${p.bmhId}')">Check in</button>`
-        : `${!seenRow?`<button type="button" title="Seen" style="background:var(--green);color:#fff;border:none;border-radius:5px;padding:3px 6px;font-size:9px;font-weight:800;cursor:pointer" onclick="${markSeenClick}">✓</button>`:''}
+        : `${!seenRow?`<button type="button" title="Seen" style="background:var(--green);color:#fff;border:none;border-radius:5px;padding:3px 6px;font-size:9px;font-weight:800;cursor:pointer" onclick="${markSeenClick}">✓</button>`:doneActionHtml}
       ${isOphtho&&!p.dilated&&!seenRow?`<button type="button" title="Dilate" style="background:var(--blue-lt);color:var(--blue);border:1.5px solid var(--blue);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="markDilated('${p.bmhId}','${nmEsc}')">💧</button>`:''}
       ${receptionQueue ? `<button type="button" title="Restore to doctor queue" style="background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1.5px solid var(--bmh-blue);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="event.stopPropagation();restorePatientToDoctorQueue('${p.bmhId}')">↩</button>` : ''}
       <button type="button" title="Cross-ref" style="background:rgba(11,123,140,.1);color:var(--teal);border:1.5px solid var(--teal);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="openXRefModal('${p.bmhId}')">↔️</button>
@@ -30396,8 +30616,8 @@ function toggleQueueSidebarCollapse(forceExpand) {
 function markSeen(bmhId) {
   const p = PATIENTS.find(x=>x.bmhId===bmhId);
   const nowIso = new Date().toISOString();
-  if(p) { p.seen=true; p.status='seen'; p.dilated=false; p.seenAt = nowIso; }
-  fbUpdate && fbUpdate('patients/'+bmhId,{seen:true,status:'seen',seenAt:nowIso}).catch(()=>{});
+  if(p) { p.seen=true; p.status='seen'; p.dilated=false; p.dilatedTime=null; p.seenAt = nowIso; }
+  fbUpdate && fbUpdate('patients/'+bmhId,{seen:true,status:'seen',dilated:false,dilatedTime:null,seenAt:nowIso}).catch(()=>{});
   renderDocQueue && renderDocQueue();
   renderReceptionPage && renderReceptionPage();
   renderDashboard && renderDashboard();
@@ -30491,6 +30711,50 @@ function restorePatientToDoctorQueue(bmhId) {
   renderDashboard && renderDashboard();
 }
 window.restorePatientToDoctorQueue = restorePatientToDoctorQueue;
+function restorePatientToActiveQueue(bmhId) {
+  const p = PATIENTS.find(function (x) { return x.bmhId === bmhId; });
+  if (!p) { showToast('Patient not found', 'w'); return; }
+  const nowIso = new Date().toISOString();
+  p.queueRemoved = false;
+  p.seen = false;
+  p.status = 'waiting';
+  p.seenAt = null;
+  p.updatedAt = nowIso;
+  if (!p.checkinAt) p.checkinAt = Date.now();
+  fbUpdate && fbUpdate('patients/' + bmhId, {
+    queueRemoved: false,
+    seen: false,
+    status: 'waiting',
+    seenAt: null,
+    updatedAt: nowIso,
+    checkinAt: p.checkinAt
+  }).catch(function () {});
+  showToast('Patient moved back to active queue ✓', 's');
+  renderDocQueue && renderDocQueue();
+  renderReceptionPage && renderReceptionPage();
+  renderDashboard && renderDashboard();
+}
+window.restorePatientToActiveQueue = restorePatientToActiveQueue;
+function restoreCrossRefToActive(bmhId, xrefId) {
+  const p = PATIENTS.find(function (x) { return x.bmhId === bmhId; });
+  if (!p || !Array.isArray(p.crossRefs) || !xrefId) {
+    showToast('Cross-refer entry not found', 'w');
+    return;
+  }
+  const refs = p.crossRefs.map(function (r) {
+    if (!r || String(r.id) !== String(xrefId)) return r;
+    const next = Object.assign({}, r);
+    delete next.seenAt;
+    return next;
+  });
+  p.crossRefs = refs;
+  fbUpdate && fbUpdate('patients/' + bmhId, { crossRefs: sanitizeFirebaseValue(refs) }).catch(function () {});
+  showToast('Cross-refer moved back to active queue ✓', 's');
+  renderDocQueue && renderDocQueue();
+  renderReceptionPage && renderReceptionPage();
+  renderDashboard && renderDashboard();
+}
+window.restoreCrossRefToActive = restoreCrossRefToActive;
 function markCurrentPatientSeen() {
   const ids = ['ophtho-pt-uid','obg-pt-uid','psych-pt-uid','skin-pt-uid'];
   const bmhId = (window.CURRENT_PATIENT?.bmhId || ids.map(function (id) { return document.getElementById(id)?.textContent?.trim(); }).find(Boolean) || '').trim();
