@@ -16230,6 +16230,9 @@ function normalizeDrugDeptKey(value) {
   if (raw === 'skin' || raw.includes('derma') || raw.includes('cosmet')) return 'skin';
   return raw;
 }
+function normalizeDrugSearchText(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
 
 function syncDrugDeptDefaults() {
   const dept = getCurrentDrugDeptLabel();
@@ -16516,6 +16519,7 @@ function normalizeDrugTypeFromCsv(s) {
 function handleDrugImportCsv(inp) {
   const file = inp.files && inp.files[0];
   if (!file) return;
+  const importDeptOverride = document.getElementById('drug-import-dept')?.value?.trim() || '';
   const reader = new FileReader();
   reader.onload = e => {
     const text = String(e.target.result || '');
@@ -16539,7 +16543,7 @@ function handleDrugImportCsv(inp) {
       const company = ci >= 0 ? (cols[ci] || '') : '';
       const rawType = typeCol >= 0 ? (cols[typeCol] || '') : '';
       const rawDept = di >= 0 ? (cols[di] || '') : '';
-      const importedDept = rawDept ? String(rawDept).trim() : 'All';
+      const importedDept = importDeptOverride || (rawDept ? String(rawDept).trim() : 'All');
       if (!trade && !generic) continue;
       const drugType = normalizeDrugTypeFromCsv(rawType);
       importedRows.push(normalizeDrugLibraryRow({
@@ -16561,7 +16565,7 @@ function handleDrugImportCsv(inp) {
     saveDrugLibraryToStorage();
     renderSettingsDrugs();
     rebuildDrugGenericDatalist();
-    showToast(added + ' row(s) imported from CSV ✓', 's');
+    showToast(added + ' row(s) imported from CSV' + (importDeptOverride ? ' for ' + importDeptOverride : '') + ' ✓', 's');
     inp.value = '';
   };
   reader.readAsText(file);
@@ -28744,8 +28748,12 @@ function getDrugLibrarySearchIndex() {
       type: type,
       tradeLower: trade.toLowerCase(),
       genericLower: generic.toLowerCase(),
+      tradeCompact: normalizeDrugSearchText(trade),
+      genericCompact: normalizeDrugSearchText(generic),
       companyLower: company.toLowerCase(),
+      companyCompact: normalizeDrugSearchText(company),
       typeLower: type.toLowerCase(),
+      typeCompact: normalizeDrugSearchText(type),
       deptKey: normalizeDrugDeptKey(d.dept || 'All')
     };
   });
@@ -28755,6 +28763,7 @@ function scoreDrugLibrarySearchEntry(entry, query, deptKey, deptLabel) {
   if (!entry || !query) return 0;
   const deptMatch = rxDrugMatchesDept(entry.d, deptKey, deptLabel);
   const q = query.toLowerCase();
+  const qCompact = normalizeDrugSearchText(query);
   const startsWord = function (text) {
     return String(text || '').split(/[^a-z0-9]+/).some(function (part) { return part && part.startsWith(q); });
   };
@@ -28767,8 +28776,16 @@ function scoreDrugLibrarySearchEntry(entry, query, deptKey, deptLabel) {
   if (startsWord(entry.genericLower)) score += 240;
   if (entry.tradeLower.includes(q)) score += 180;
   if (entry.genericLower.includes(q)) score += 160;
+  if (qCompact && entry.tradeCompact === qCompact) score += 620;
+  if (qCompact && entry.genericCompact === qCompact) score += 580;
+  if (qCompact && entry.tradeCompact.startsWith(qCompact)) score += 360;
+  if (qCompact && entry.genericCompact.startsWith(qCompact)) score += 320;
+  if (qCompact && entry.tradeCompact.includes(qCompact)) score += 170;
+  if (qCompact && entry.genericCompact.includes(qCompact)) score += 150;
   if (entry.companyLower && entry.companyLower.includes(q)) score += 45;
+  if (qCompact && entry.companyCompact && entry.companyCompact.includes(qCompact)) score += 40;
   if (entry.typeLower && entry.typeLower.includes(q)) score += 25;
+  if (qCompact && entry.typeCompact && entry.typeCompact.includes(qCompact)) score += 25;
   if (deptMatch && entry.deptKey !== 'all') score += 12;
   if (entry.deptKey === 'all') score += 6;
   return score;
