@@ -16290,10 +16290,14 @@ function repairDrugLibraryFromAllSources() {
     rebuildDrugGenericDatalist();
     syncDrugDeptDefaults();
     try { renderRxDrugs && renderRxDrugs(); } catch (e) {}
+    invalidateDrugSearchPoolCache && invalidateDrugSearchPoolCache();
     if (window.FBDB && DRUG_LIBRARY.length) {
-      window.FBDB.ref('drugLibrary').set(DRUG_LIBRARY).catch(function () {});
+      const ts = Date.now();
+      window.FBDB.ref('drugLibrary').set(DRUG_LIBRARY).then(function () {
+        window.FBDB.ref('drugLibraryMeta').set({ updatedAt: ts }).catch(function () {});
+      }).catch(function () {});
     }
-    showToast('Drug library restored: ' + DRUG_LIBRARY.length + ' rows (local backups + cloud) ✓', 's');
+    showToast('Drug library restored: ' + DRUG_LIBRARY.length + ' drugs ✓', 's');
   };
   if (!window.FBDB) {
     runMerge(null);
@@ -16334,13 +16338,28 @@ function loadDrugLibraryFromStorage(opts) {
     syncDrugDeptDefaults();
     try { renderRxDrugs && renderRxDrugs(); } catch (e) {}
     try {
+      // Re-run search on any active Rx input (even 1 char) so drugs appear after async Firebase load
       const activeInput = getActiveRxQuickSearchInput && getActiveRxQuickSearchInput();
-      if (activeInput && String(activeInput.value || '').trim().length >= 2) rxQuickSearch(String(activeInput.value || ''));
+      if (activeInput && String(activeInput.value || '').trim().length >= 1) rxQuickSearch(String(activeInput.value || ''));
     } catch (e) {}
     if (opts.repairCloud && window.FBDB && DRUG_LIBRARY.length) {
-      window.FBDB.ref('drugLibrary').set(DRUG_LIBRARY).catch(function () {});
+      // Write clean (no-? prefix) drug library back to Firebase so it's fixed permanently
+      window.FBDB.ref('drugLibrary').set(DRUG_LIBRARY).then(function () {
+        window.FBDB.ref('drugLibraryMeta').set({ updatedAt: Date.now() }).catch(function () {});
+      }).catch(function () {});
     }
   };
+
+  // Pre-populate DRUG_LIBRARY synchronously from localStorage so drugs are searchable
+  // immediately at login (before the async Firebase response arrives).
+  if (!DRUG_LIBRARY.length) {
+    const localImmediate = readDrugLibraryRowsFromAllLocalSources();
+    if (localImmediate.length) {
+      const seedMerged = mergeDrugLibraryRows(localImmediate);
+      seedMerged.forEach(function (x) { DRUG_LIBRARY.push(x); });
+      invalidateDrugSearchPoolCache && invalidateDrugSearchPoolCache();
+    }
+  }
 
   if (!window.FBDB) {
     if (forceRemote) return;
@@ -16359,7 +16378,12 @@ function loadDrugLibraryFromStorage(opts) {
     const rescuedArr = readDrugLibraryRowsFromAllLocalSources();
     window._bmhDrugLibraryRemoteUpdatedAt = Number(metaSnap && metaSnap.val && metaSnap.val()?.updatedAt || 0) || 0;
     const mergedLibrarySize = mergeDrugLibraryRows(localArr.concat(remoteArr).concat(rescuedArr)).length;
-    const repairCloud = (
+    // Detect ?-prefixed drugs that survived in Firebase from old CSV imports
+    const hasQPrefixedDrugs = remoteArr.some(function (row) {
+      return /^\?/.test(String(row.trade || row.brand || row.name || '')) ||
+             /^\?/.test(String(row.generic || ''));
+    });
+    const repairCloud = hasQPrefixedDrugs || (
       (!!localArr.length && localArr.length > remoteArr.length) ||
       (!!rescuedArr.length && rescuedArr.length > remoteArr.length) ||
       (!remoteArr.length && (localArr.length > 0 || rescuedArr.length > 0)) ||
