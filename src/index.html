@@ -2721,6 +2721,7 @@
         <div class="ptab" onclick="ptab(this,'psych-mse')">MSE</div>
         <div class="ptab" onclick="ptab(this,'psych-past')">Past Visits</div>
         <div class="ptab" onclick="ptab(this,'psych-scales')">Rating Scales</div>
+        <div class="ptab" onclick="ptab(this,'psych-plan')">Plan / Instructions</div>
         <div class="ptab" onclick="ptab(this,'psych-rx')">Prescription</div>
         <div class="ptab" onclick="ptab(this,'psych-notes')">Progress Notes</div>
       </div>
@@ -2877,23 +2878,8 @@
         </div>
       </div>
 
-      <!-- PSYCH RX -->
-      <div class="tab-content" id="psych-rx"><div id="psych-rx-send-bar"></div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;background:var(--g6);padding:7px;border-radius:var(--rsm)">
-          <button class="btn btn-xs btn-blue" onclick="applyLastRx()">📋 Last Rx</button>
-          <select style="display:none" onchange="applyRxTemplate(this.value)">
-            <option value="">— Template —</option>
-          </select>
-          <button class="btn btn-xs btn-outline" type="button" onclick="openRxTemplatePicker('psych')" style="flex:1;justify-content:flex-start">📋 Templates</button>
-          <button class="btn btn-xs btn-outline" onclick="openInvestigationOrderModal()">🧪 Investigations</button>
-          <button class="btn btn-xs btn-gold" onclick="openSaveRxTemplate()">📋 Save Template</button>
-          <div class="lang-sel" style="margin:0">
-            <button class="lang-btn active" onclick="setLang('en',this)">EN</button>
-            <button class="lang-btn" onclick="setLang('hi',this)">हिं</button>
-            <button class="lang-btn" onclick="setLang('pa',this)">ਪੰ</button>
-          </div>
-        </div>
-        <!-- Diagnosis -->
+      <!-- PSYCH PLAN -->
+      <div class="tab-content" id="psych-plan"><div id="psych-plan-send-bar"></div>
         <div class="plan-panel" style="margin-bottom:10px">
           <div class="diag-prev-wrap">
             <div>
@@ -2926,7 +2912,67 @@
           <textarea placeholder="Advice to patient…" style="width:100%;min-height:40px;margin-bottom:8px;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px" id="psych-advice"></textarea>
           <textarea placeholder="Additional advice to patient…" style="width:100%;min-height:38px;margin-bottom:0;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px" id="psych-extra-advice"></textarea>
         </div>
-        <!-- Drug quick search -->
+        <div style="margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:5px">
+            <span style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase">🧪 Investigations Ordered</span>
+            <div style="display:flex;gap:5px;flex-wrap:wrap">
+              <button class="btn btn-xs btn-outline" onclick="openInvestigationOrderModal()">+ Add</button>
+              <button class="btn btn-xs btn-gold" onclick="printCurrentInvestigations('psych')">🖨️ Print</button>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+            <button class="btn btn-xs btn-blue inv-mode-tab active" data-dept="psych" onclick="switchInvestigationModeTab('psych','send',this)">Send to Lab</button>
+            <button class="btn btn-xs btn-outline inv-mode-tab" data-dept="psych" onclick="switchInvestigationModeTab('psych','advise',this)">Advised</button>
+          </div>
+          <div id="psych-inv-list-send" class="inv-mode-pane" data-dept="psych" data-mode="send"><div style="font-size:11.5px;color:var(--g1);padding:5px 8px">None ordered</div></div>
+          <div id="psych-inv-list-advise" class="inv-mode-pane" data-dept="psych" data-mode="advise" style="display:none"><div style="font-size:11.5px;color:var(--g1);padding:5px 8px">None ordered</div></div>
+        </div>
+        <div class="plan-panel" style="margin-bottom:10px">
+          <div class="plan-panel-head">
+            <div class="plan-panel-title">Surgery / Procedure Advised</div>
+            <div style="display:flex;gap:5px;flex-wrap:wrap">
+              <input type="text" id="psych-proc-quick-input" list="psych-proc-quick-list" placeholder="Type procedure and press Enter…" style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:220px;border:1.5px solid var(--orange)" onchange="commitDeptProcedureQuickEntry('psych', this)" onkeydown="handleDeptQuickEntryKey(event,'procedure','psych',this)">
+              <datalist id="psych-proc-quick-list"></datalist>
+              <select id="psych-proc-add-dropdown" style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:190px;border:1.5px solid var(--orange)" onchange="addProcFromDropdownDept(this)">
+                <option value="">— Select procedure —</option>
+                <option value="__custom__|0">+ Add new procedure…</option>
+              </select>
+            </div>
+          </div>
+          <div id="psych-proc-library" class="quick-library-grid"></div>
+          <div id="rx-proc-advised-psych" style="min-height:28px">
+            <div class="proc-placeholder" style="font-size:11px;color:var(--g1);padding:5px 8px;font-style:italic;background:var(--g6);border-radius:6px">No procedure advised yet</div>
+          </div>
+        </div>
+        <div style="background:var(--g6);border-radius:var(--rsm);padding:7px 9px;margin-bottom:8px">
+          <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:5px">Next Appointment</div>
+          <div style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:5px">
+            <span style="font-size:9px;color:var(--g1);font-weight:700;align-self:center">D:</span><button class="btn btn-xs btn-gray" onclick="setFollowupDays(1,'day')">1D</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(2,'day')">2D</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(3,'day')">3D</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(4,'day')">4D</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(5,'day')">5D</button>
+            <span style="font-size:9px;color:var(--g1);font-weight:700;align-self:center;margin-left:3px">W:</span><button class="btn btn-xs btn-gray" onclick="setFollowupDays(1,'week')">1W</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(2,'week')">2W</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(3,'week')">3W</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(4,'week')">4W</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(5,'week')">5W</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(6,'week')">6W</button>
+            <span style="font-size:9px;color:var(--g1);font-weight:700;align-self:center;margin-left:3px">M:</span><button class="btn btn-xs btn-gray" onclick="setFollowupDays(1,'month')">1M</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(2,'month')">2M</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(3,'month')">3M</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(4,'month')">4M</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(6,'month')">6M</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(12,'month')">12M</button>
+          </div>
+          <div style="display:flex;gap:7px">
+            <input type="date" id="rx-fu-date" style="flex:1">
+            <button class="btn btn-blue btn-sm" onclick="bookFollowup()">📅 Book</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- PSYCH RX -->
+      <div class="tab-content" id="psych-rx">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;background:var(--g6);padding:7px;border-radius:var(--rsm)">
+          <button class="btn btn-xs btn-blue" onclick="applyLastRx()">📋 Last Rx</button>
+          <select style="display:none" onchange="applyRxTemplate(this.value)">
+            <option value="">— Template —</option>
+          </select>
+          <button class="btn btn-xs btn-outline" type="button" onclick="openRxTemplatePicker('psych')" style="flex:1;justify-content:flex-start">📋 Templates</button>
+          <button class="btn btn-xs btn-gold" onclick="openSaveRxTemplate()">📋 Save Template</button>
+          <div class="lang-sel" style="margin:0">
+            <button class="lang-btn active" onclick="setLang('en',this)">EN</button>
+            <button class="lang-btn" onclick="setLang('hi',this)">हिं</button>
+            <button class="lang-btn" onclick="setLang('pa',this)">ਪੰ</button>
+          </div>
+        </div>
         <div style="position:relative;margin-bottom:6px">
           <div style="display:flex;align-items:center;gap:6px;background:var(--blue-lt);border:2px solid var(--blue);border-radius:var(--rsm);padding:7px 10px">
             <span style="font-size:14px">💊</span>
@@ -2946,53 +2992,6 @@
             <option value="pa">Punjabi</option>
           </select>
           <button class="btn btn-gold btn-sm" onclick="openSaveRxTemplate()">📋 Save as Template</button>
-        </div>
-        <!-- Investigations -->
-        <div style="margin-bottom:10px">
-          <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:5px">
-            <span style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase">🧪 Investigations Ordered</span>
-            <div style="display:flex;gap:5px;flex-wrap:wrap">
-              <button class="btn btn-xs btn-outline" onclick="openInvestigationOrderModal()">+ Add</button>
-              <button class="btn btn-xs btn-gold" onclick="printCurrentInvestigations('psych')">🖨️ Print</button>
-            </div>
-          </div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
-            <button class="btn btn-xs btn-blue inv-mode-tab active" data-dept="psych" onclick="switchInvestigationModeTab('psych','send',this)">Send to Lab</button>
-            <button class="btn btn-xs btn-outline inv-mode-tab" data-dept="psych" onclick="switchInvestigationModeTab('psych','advise',this)">Advised</button>
-          </div>
-          <div id="psych-inv-list-send" class="inv-mode-pane" data-dept="psych" data-mode="send"><div style="font-size:11.5px;color:var(--g1);padding:5px 8px">None ordered</div></div>
-          <div id="psych-inv-list-advise" class="inv-mode-pane" data-dept="psych" data-mode="advise" style="display:none"><div style="font-size:11.5px;color:var(--g1);padding:5px 8px">None ordered</div></div>
-        </div>
-        <!-- Procedures -->
-        <div class="plan-panel" style="margin-bottom:10px">
-          <div class="plan-panel-head">
-            <div class="plan-panel-title">Surgery / Procedure Advised</div>
-            <div style="display:flex;gap:5px;flex-wrap:wrap">
-              <input type="text" id="psych-proc-quick-input" list="psych-proc-quick-list" placeholder="Type procedure and press Enter…" style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:220px;border:1.5px solid var(--orange)" onchange="commitDeptProcedureQuickEntry('psych', this)" onkeydown="handleDeptQuickEntryKey(event,'procedure','psych',this)">
-              <datalist id="psych-proc-quick-list"></datalist>
-              <select id="psych-proc-add-dropdown" style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:190px;border:1.5px solid var(--orange)" onchange="addProcFromDropdownDept(this)">
-                <option value="">— Select procedure —</option>
-                <option value="__custom__|0">+ Add new procedure…</option>
-              </select>
-            </div>
-          </div>
-          <div id="psych-proc-library" class="quick-library-grid"></div>
-          <div id="rx-proc-advised-psych" style="min-height:28px">
-            <div class="proc-placeholder" style="font-size:11px;color:var(--g1);padding:5px 8px;font-style:italic;background:var(--g6);border-radius:6px">No procedure advised yet</div>
-          </div>
-        </div>
-        <!-- Follow-up -->
-        <div style="background:var(--g6);border-radius:var(--rsm);padding:7px 9px;margin-bottom:8px">
-          <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:5px">Next Appointment</div>
-          <div style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:5px">
-            <span style="font-size:9px;color:var(--g1);font-weight:700;align-self:center">D:</span><button class="btn btn-xs btn-gray" onclick="setFollowupDays(1,'day')">1D</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(2,'day')">2D</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(3,'day')">3D</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(4,'day')">4D</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(5,'day')">5D</button>
-            <span style="font-size:9px;color:var(--g1);font-weight:700;align-self:center;margin-left:3px">W:</span><button class="btn btn-xs btn-gray" onclick="setFollowupDays(1,'week')">1W</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(2,'week')">2W</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(3,'week')">3W</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(4,'week')">4W</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(5,'week')">5W</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(6,'week')">6W</button>
-            <span style="font-size:9px;color:var(--g1);font-weight:700;align-self:center;margin-left:3px">M:</span><button class="btn btn-xs btn-gray" onclick="setFollowupDays(1,'month')">1M</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(2,'month')">2M</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(3,'month')">3M</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(4,'month')">4M</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(6,'month')">6M</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(12,'month')">12M</button>
-          </div>
-          <div style="display:flex;gap:7px">
-            <input type="date" id="rx-fu-date" style="flex:1">
-            <button class="btn btn-blue btn-sm" onclick="bookFollowup()">📅 Book</button>
-          </div>
         </div>
         <div style="display:flex;gap:7px;flex-wrap:wrap">
           <button class="btn btn-gold" style="flex:1;justify-content:center" onclick="printUnifiedRx('psych')">🖨️ Print Prescription</button>

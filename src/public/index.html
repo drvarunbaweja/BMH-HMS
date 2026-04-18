@@ -2694,6 +2694,7 @@
         <div class="ptab" onclick="ptab(this,'psych-mse')">MSE</div>
         <div class="ptab" onclick="ptab(this,'psych-past')">Past Visits</div>
         <div class="ptab" onclick="ptab(this,'psych-scales')">Rating Scales</div>
+        <div class="ptab" onclick="ptab(this,'psych-plan')">Plan / Instructions</div>
         <div class="ptab" onclick="ptab(this,'psych-rx')">Prescription</div>
         <div class="ptab" onclick="ptab(this,'psych-notes')">Progress Notes</div>
       </div>
@@ -2850,23 +2851,8 @@
         </div>
       </div>
 
-      <!-- PSYCH RX -->
-      <div class="tab-content" id="psych-rx"><div id="psych-rx-send-bar"></div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;background:var(--g6);padding:7px;border-radius:var(--rsm)">
-          <button class="btn btn-xs btn-blue" onclick="applyLastRx()">📋 Last Rx</button>
-          <select style="display:none" onchange="applyRxTemplate(this.value)">
-            <option value="">— Template —</option>
-          </select>
-          <button class="btn btn-xs btn-outline" type="button" onclick="openRxTemplatePicker('psych')" style="flex:1;justify-content:flex-start">📋 Templates</button>
-          <button class="btn btn-xs btn-outline" onclick="openInvestigationOrderModal()">🧪 Investigations</button>
-          <button class="btn btn-xs btn-gold" onclick="openSaveRxTemplate()">📋 Save Template</button>
-          <div class="lang-sel" style="margin:0">
-            <button class="lang-btn active" onclick="setLang('en',this)">EN</button>
-            <button class="lang-btn" onclick="setLang('hi',this)">हिं</button>
-            <button class="lang-btn" onclick="setLang('pa',this)">ਪੰ</button>
-          </div>
-        </div>
-        <!-- Diagnosis -->
+      <!-- PSYCH PLAN -->
+      <div class="tab-content" id="psych-plan"><div id="psych-plan-send-bar"></div>
         <div class="plan-panel" style="margin-bottom:10px">
           <div class="diag-prev-wrap">
             <div>
@@ -2891,31 +2877,14 @@
         <div class="plan-panel" style="background:#fffbeb;border-color:rgba(212,160,23,.4);margin-bottom:10px">
           <div class="plan-panel-head"><div class="plan-panel-title" style="color:#8a4200">Instructions</div></div>
           <div id="psych-advice-library" class="quick-library-grid"></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+            <input type="text" id="psych-advice-quick-input" list="psych-advice-quick-list" placeholder="Type instruction and press Enter…" style="flex:1;min-width:220px;font-size:11px;padding:6px 8px;border-radius:var(--rsm);border:1.5px solid var(--g4)" onchange="commitDeptAdviceQuickEntry('psych', this)" onkeydown="handleDeptQuickEntryKey(event,'advice','psych',this)">
+            <datalist id="psych-advice-quick-list"></datalist>
+            <button type="button" class="btn btn-xs btn-blue" onclick="commitDeptAdviceQuickEntry('psych', document.getElementById('psych-advice-quick-input'))">+ Add</button>
+          </div>
           <textarea placeholder="Advice to patient…" style="width:100%;min-height:40px;margin-bottom:8px;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px" id="psych-advice"></textarea>
           <textarea placeholder="Additional advice to patient…" style="width:100%;min-height:38px;margin-bottom:0;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px" id="psych-extra-advice"></textarea>
         </div>
-        <!-- Drug quick search -->
-        <div style="position:relative;margin-bottom:6px">
-          <div style="display:flex;align-items:center;gap:6px;background:var(--blue-lt);border:2px solid var(--blue);border-radius:var(--rsm);padding:7px 10px">
-            <span style="font-size:14px">💊</span>
-            <input type="text" id="rx-quick-search" placeholder="Type drug name to add (e.g. Sertraline, Clonazepam, Sodium Valproate)…"
-              oninput="rxQuickSearch(this.value)" autocomplete="off"
-              style="flex:1;border:none;background:transparent;outline:none;font-size:13px;font-family:var(--font);font-weight:600">
-            <button class="btn btn-blue btn-xs" onclick="openDrugLibraryAddFromQuick()">+ Add</button>
-          </div>
-          <div id="rx-quick-dropdown" style="display:none;position:absolute;z-index:200;background:#fff;border:2px solid var(--blue);border-top:none;border-radius:0 0 var(--rsm) var(--rsm);width:100%;max-height:220px;overflow-y:auto;box-shadow:var(--sh-md)"></div>
-        </div>
-        <div id="rx-drugs" style="border:1.5px solid var(--g4);border-top:none;border-radius:0 0 8px 8px;margin-bottom:8px;min-height:44px;min-width:0;max-width:100%;box-sizing:border-box"></div>
-        <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px">
-          <button class="btn btn-outline btn-sm" onclick="openM('m-add-rx-drug')">+ Full Drug Form</button>
-          <select style="font-size:11px;padding:6px 8px;border-radius:8px;border:1.5px solid var(--g4)" onchange="setRxLang(this.value)">
-            <option value="en">English</option>
-            <option value="hi">Hindi</option>
-            <option value="pa">Punjabi</option>
-          </select>
-          <button class="btn btn-gold btn-sm" onclick="openSaveRxTemplate()">📋 Save as Template</button>
-        </div>
-        <!-- Investigations -->
         <div style="margin-bottom:10px">
           <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:5px">
             <span style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase">🧪 Investigations Ordered</span>
@@ -2931,11 +2900,12 @@
           <div id="psych-inv-list-send" class="inv-mode-pane" data-dept="psych" data-mode="send"><div style="font-size:11.5px;color:var(--g1);padding:5px 8px">None ordered</div></div>
           <div id="psych-inv-list-advise" class="inv-mode-pane" data-dept="psych" data-mode="advise" style="display:none"><div style="font-size:11.5px;color:var(--g1);padding:5px 8px">None ordered</div></div>
         </div>
-        <!-- Procedures -->
         <div class="plan-panel" style="margin-bottom:10px">
           <div class="plan-panel-head">
             <div class="plan-panel-title">Surgery / Procedure Advised</div>
             <div style="display:flex;gap:5px;flex-wrap:wrap">
+              <input type="text" id="psych-proc-quick-input" list="psych-proc-quick-list" placeholder="Type procedure and press Enter…" style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:220px;border:1.5px solid var(--orange)" onchange="commitDeptProcedureQuickEntry('psych', this)" onkeydown="handleDeptQuickEntryKey(event,'procedure','psych',this)">
+              <datalist id="psych-proc-quick-list"></datalist>
               <select id="psych-proc-add-dropdown" style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:190px;border:1.5px solid var(--orange)" onchange="addProcFromDropdownDept(this)">
                 <option value="">— Select procedure —</option>
                 <option value="__custom__|0">+ Add new procedure…</option>
@@ -2947,7 +2917,6 @@
             <div class="proc-placeholder" style="font-size:11px;color:var(--g1);padding:5px 8px;font-style:italic;background:var(--g6);border-radius:6px">No procedure advised yet</div>
           </div>
         </div>
-        <!-- Follow-up -->
         <div style="background:var(--g6);border-radius:var(--rsm);padding:7px 9px;margin-bottom:8px">
           <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:5px">Next Appointment</div>
           <div style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:5px">
@@ -2959,6 +2928,43 @@
             <input type="date" id="rx-fu-date" style="flex:1">
             <button class="btn btn-blue btn-sm" onclick="bookFollowup()">📅 Book</button>
           </div>
+        </div>
+      </div>
+
+      <!-- PSYCH RX -->
+      <div class="tab-content" id="psych-rx">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;background:var(--g6);padding:7px;border-radius:var(--rsm)">
+          <button class="btn btn-xs btn-blue" onclick="applyLastRx()">📋 Last Rx</button>
+          <select style="display:none" onchange="applyRxTemplate(this.value)">
+            <option value="">— Template —</option>
+          </select>
+          <button class="btn btn-xs btn-outline" type="button" onclick="openRxTemplatePicker('psych')" style="flex:1;justify-content:flex-start">📋 Templates</button>
+          <button class="btn btn-xs btn-gold" onclick="openSaveRxTemplate()">📋 Save Template</button>
+          <div class="lang-sel" style="margin:0">
+            <button class="lang-btn active" onclick="setLang('en',this)">EN</button>
+            <button class="lang-btn" onclick="setLang('hi',this)">हिं</button>
+            <button class="lang-btn" onclick="setLang('pa',this)">ਪੰ</button>
+          </div>
+        </div>
+        <div style="position:relative;margin-bottom:6px">
+          <div style="display:flex;align-items:center;gap:6px;background:var(--blue-lt);border:2px solid var(--blue);border-radius:var(--rsm);padding:7px 10px">
+            <span style="font-size:14px">💊</span>
+            <input type="text" id="rx-quick-search" placeholder="Type drug name to add (e.g. Sertraline, Clonazepam, Sodium Valproate)…"
+              oninput="rxQuickSearchDebounced(this.value)" autocomplete="off"
+              style="flex:1;border:none;background:transparent;outline:none;font-size:13px;font-family:var(--font);font-weight:600">
+            <button class="btn btn-blue btn-xs" onclick="openDrugLibraryAddFromQuick()">+ Add</button>
+          </div>
+          <div id="rx-quick-dropdown" style="display:none;position:absolute;z-index:200;background:#fff;border:2px solid var(--blue);border-top:none;border-radius:0 0 var(--rsm) var(--rsm);width:100%;max-height:220px;overflow-y:auto;box-shadow:var(--sh-md)"></div>
+        </div>
+        <div id="rx-drugs" style="border:1.5px solid var(--g4);border-top:none;border-radius:0 0 8px 8px;margin-bottom:8px;min-height:44px;min-width:0;max-width:100%;box-sizing:border-box"></div>
+        <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px">
+          <button class="btn btn-outline btn-sm" onclick="openM('m-add-rx-drug')">+ Full Drug Form</button>
+          <select style="font-size:11px;padding:6px 8px;border-radius:8px;border:1.5px solid var(--g4)" onchange="setRxLang(this.value)">
+            <option value="en">English</option>
+            <option value="hi">Hindi</option>
+            <option value="pa">Punjabi</option>
+          </select>
+          <button class="btn btn-gold btn-sm" onclick="openSaveRxTemplate()">📋 Save as Template</button>
         </div>
         <div style="display:flex;gap:7px;flex-wrap:wrap">
           <button class="btn btn-gold" style="flex:1;justify-content:center" onclick="printUnifiedRx('psych')">🖨️ Print Prescription</button>
