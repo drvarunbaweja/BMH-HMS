@@ -29310,23 +29310,71 @@ function renderDrCredentials() {
     </div>`).join('');
 }
 
+function scoreDoctorProfileData(profile) {
+  if (!profile || typeof profile !== 'object') return 0;
+  let score = 0;
+  ['name','degrees','dept','reg','centre','signature','rxPrintMode'].forEach(function (key) {
+    if (String(profile[key] || '').trim()) score += 10;
+  });
+  if (String(profile.color || '').trim()) score += 4;
+  return score;
+}
+function mergeDoctorProfileRecord(baseProfile, incomingProfile) {
+  const merged = Object.assign({}, baseProfile || {});
+  const src = incomingProfile || {};
+  Object.keys(src).forEach(function (key) {
+    const nextVal = src[key];
+    if (typeof nextVal === 'string') {
+      if (nextVal.trim()) merged[key] = nextVal;
+      return;
+    }
+    if (nextVal != null) merged[key] = nextVal;
+  });
+  return merged;
+}
+function mergeDoctorProfilesDataset(baseData, incomingData) {
+  const merged = {};
+  Object.keys(baseData || {}).forEach(function (name) {
+    merged[name] = Object.assign({}, baseData[name] || {});
+  });
+  Object.keys(incomingData || {}).forEach(function (name) {
+    merged[name] = mergeDoctorProfileRecord(merged[name], incomingData[name]);
+  });
+  return merged;
+}
+function replaceDoctorProfiles(nextData) {
+  Object.keys(DOCTOR_PROFILES || {}).forEach(function (name) { delete DOCTOR_PROFILES[name]; });
+  Object.keys(nextData || {}).forEach(function (name) {
+    DOCTOR_PROFILES[name] = Object.assign({}, nextData[name] || {});
+  });
+}
+
 function saveDoctorProfilesToLocalStorage() {
   try {
-    localStorage.setItem('bmh_doctor_profiles', JSON.stringify(DOCTOR_PROFILES));
+    const next = JSON.stringify(DOCTOR_PROFILES);
+    const prev = localStorage.getItem('bmh_doctor_profiles');
+    if (prev && prev !== next) localStorage.setItem('bmh_doctor_profiles_archive', prev);
+    localStorage.setItem('bmh_doctor_profiles', next);
+    localStorage.setItem('bmh_doctor_profiles_backup', next);
   } catch (e) {
     showToast('Could not save credentials locally (data too large?)', 'w');
   }
 }
 function loadDoctorProfilesFromLocalStorage() {
   try {
-    const ls = localStorage.getItem('bmh_doctor_profiles');
-    if (!ls) return;
-    const data = JSON.parse(ls);
-    if (!data || typeof data !== 'object') return;
-    Object.keys(data).forEach(name => {
-      if (!DOCTOR_PROFILES[name]) DOCTOR_PROFILES[name] = {};
-      Object.assign(DOCTOR_PROFILES[name], data[name]);
+    const keys = ['bmh_doctor_profiles', 'bmh_doctor_profiles_backup', 'bmh_doctor_profiles_archive'];
+    let best = mergeDoctorProfilesDataset({}, DOCTOR_PROFILES);
+    keys.forEach(function (key) {
+      const ls = localStorage.getItem(key);
+      if (!ls) return;
+      const data = JSON.parse(ls);
+      if (!data || typeof data !== 'object') return;
+      const mergedCandidate = mergeDoctorProfilesDataset(best, data);
+      if (scoreDoctorProfileData(mergedCandidate['Dr. Varun Baweja']) + Object.keys(mergedCandidate).length >= scoreDoctorProfileData(best['Dr. Varun Baweja']) + Object.keys(best).length) {
+        best = mergedCandidate;
+      }
     });
+    replaceDoctorProfiles(best);
   } catch (e) { /* noop */ }
 }
 function saveDoctorCredentials() {
@@ -29362,14 +29410,17 @@ function loadDoctorProfilesFromFirebase() {
   if(!window.FBDB) return;
   window.FBDB.ref('doctorProfiles').once('value').then(snap => {
     const data = snap.val();
-    if(!data) return;
-    // Merge Firebase data into DOCTOR_PROFILES
-    Object.keys(data).forEach(name => {
-      if(!DOCTOR_PROFILES[name]) DOCTOR_PROFILES[name] = {};
-      Object.assign(DOCTOR_PROFILES[name], data[name]);
-    });
+    const remoteData = data && typeof data === 'object' ? data : {};
+    const currentMerged = mergeDoctorProfilesDataset({}, DOCTOR_PROFILES);
+    const mergedData = mergeDoctorProfilesDataset(currentMerged, remoteData);
+    replaceDoctorProfiles(mergedData);
     saveDoctorProfilesToLocalStorage();
     typeof renderDrCredentials === 'function' && renderDrCredentials();
+    const localScore = Object.values(mergedData).reduce(function (sum, profile) { return sum + scoreDoctorProfileData(profile); }, 0);
+    const remoteScore = Object.values(remoteData).reduce(function (sum, profile) { return sum + scoreDoctorProfileData(profile); }, 0);
+    if ((!data || !Object.keys(remoteData).length) || localScore > remoteScore) {
+      window.FBDB.ref('doctorProfiles').set(DOCTOR_PROFILES).catch(function(){});
+    }
   }).catch(()=>{});
 }
 window.loadDoctorProfilesFromFirebase = loadDoctorProfilesFromFirebase;
