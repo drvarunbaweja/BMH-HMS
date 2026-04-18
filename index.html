@@ -4006,6 +4006,15 @@
           <div class="form-group" style="margin-bottom:6px"><label class="fl">Import from CSV / Excel</label>
             <input type="file" id="drug-import-file" accept=".csv,.txt,text/csv" style="font-size:11px" onchange="handleDrugImportCsv(this)">
           </div>
+          <div class="form-group" style="margin-bottom:6px"><label class="fl">Import Department</label>
+            <select id="drug-import-dept" style="font-size:11px">
+              <option value="">Use CSV / All</option>
+              <option value="Ophthalmology">Ophthalmology</option>
+              <option value="OBG">OBG</option>
+              <option value="Neuropsychiatry">Neuropsychiatry</option>
+              <option value="Skin">Skin</option>
+            </select>
+          </div>
           <div style="font-size:10px;color:var(--g1)">Save Excel as <strong>CSV</strong> with columns: Trade / Brand, Generic, <strong>Type / form</strong> (e.g. eye drops, tablet, ointment), Company (optional). First row = headers.</div>
           <button type="button" class="btn btn-outline btn-sm" style="margin-top:8px" onclick="repairDrugLibraryFromAllSources && repairDrugLibraryFromAllSources()">↻ Restore drugs from backups + cloud</button>
           <div style="font-size:9px;color:var(--g1);margin-top:4px">Merges this browser’s saved lists and Firebase. Use on each PC if the library shrank after sync.</div>
