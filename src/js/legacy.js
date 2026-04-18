@@ -16516,6 +16516,32 @@ function normalizeDrugTypeFromCsv(s) {
   const title = s.trim();
   return title.charAt(0).toUpperCase() + title.slice(1);
 }
+function parseDrugCsvRow(line) {
+  const out = [];
+  let cur = '';
+  let inQuotes = false;
+  const src = String(line || '');
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i];
+    if (ch === '"') {
+      if (inQuotes && src[i + 1] === '"') {
+        cur += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+    if (ch === ',' && !inQuotes) {
+      out.push(cur.trim());
+      cur = '';
+      continue;
+    }
+    cur += ch;
+  }
+  out.push(cur.trim());
+  return out.map(function (cell) { return String(cell || '').trim().replace(/^"|"$/g, ''); });
+}
 function handleDrugImportCsv(inp) {
   const file = inp.files && inp.files[0];
   if (!file) return;
@@ -16525,19 +16551,19 @@ function handleDrugImportCsv(inp) {
     const text = String(e.target.result || '');
     const lines = text.split(/\r?\n/).filter(l => l.trim());
     if (lines.length < 2) { showToast('CSV needs a header row + data rows', 'w'); return; }
-    const header = lines[0].split(',').map(x => x.trim().toLowerCase().replace(/^"|"$/g, ''));
+    const header = parseDrugCsvRow(lines[0]).map(function (x) { return x.trim().toLowerCase(); });
     const idx = (pred) => header.findIndex(h => pred(h));
-    const ti = idx(h => h.includes('trade') || h.includes('brand') || h === 'name');
-    const gi = idx(h => h.includes('generic'));
+    const ti = idx(h => h.includes('trade') || h.includes('brand') || h === 'name' || h === 'trade name' || h === 'brand name');
+    const gi = idx(h => h.includes('generic') || h === 'generic name' || h === 'salt');
     const ci = idx(h => h.includes('compan'));
-    const tyi = idx(h => h.includes('type') || h.includes('form') || h.includes('category') || h.includes('dosage form') || h === 'form');
+    const tyi = idx(h => h.includes('type') || h.includes('form') || h.includes('category') || h.includes('dosage form') || h === 'form' || h === 'drug type' || h === 'medicine type');
     const di = idx(h => h.includes('dept') || h.includes('department') || h.includes('speciality') || h.includes('specialty'));
     const tCol = ti >= 0 ? ti : 0;
     const gCol = gi >= 0 ? gi : 1;
     const typeCol = tyi >= 0 ? tyi : (header.length > 2 ? 2 : -1);
     const importedRows = [];
     for (let i = 1; i < lines.length; i++) {
-      const cols = lines[i].split(',').map(x => x.trim().replace(/^"|"$/g, ''));
+      const cols = parseDrugCsvRow(lines[i]);
       const trade = cols[tCol] || '';
       const generic = cols[gCol] || '';
       const company = ci >= 0 ? (cols[ci] || '') : '';
