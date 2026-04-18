@@ -2407,9 +2407,8 @@ function payCardHtml(pr) {
       ${isp?`<div style="display:flex;gap:7px;flex-wrap:wrap">
         <div style="flex:1"><div style="font-size:9.5px;font-weight:700;color:var(--g1);margin-bottom:4px">Payment Mode</div>
           <select id="pay-mode-${pid}" style="font-size:12px;width:100%">
-            <option>Cash</option><option>UPI / PhonePe / GPay</option>
-            <option>Card (Debit/Credit)</option><option>NEFT / RTGS</option>
-            <option>Insurance / TPA</option><option>Cheque</option>
+            <option>Cash</option><option>UPI</option>
+            <option>Credit Card</option><option>Insurance/TPA</option>
           </select>
         </div>
         <button class="btn btn-green" style="align-self:flex-end;padding:8px 16px;font-size:12px;font-weight:800"
@@ -2443,6 +2442,30 @@ function collectPayment(reqId, pid) {
   const mode = modeEl ? modeEl.value : 'Cash';
   const req = PAY_REQUESTS.find(r=>r.id===reqId);
   if(req) req.mode = mode;
+  if (req && isInsuranceLikeMode(mode)) {
+    req.mode = 'Insurance/TPA';
+    req.ins = req.ins || 'Insurance/TPA';
+    req.status = 'pending';
+    req.claimedAmount = Math.max(Number(req.claimedAmount || 0), Number(req.amount || 0));
+    req.approvedAmount = Math.max(Number(req.approvedAmount || 0), Number(req.amount || 0));
+    req.cashlessApprovedAmount = Math.max(Number(req.cashlessApprovedAmount || 0), Number(req.amount || 0));
+    req.updatedAt = new Date().toISOString();
+    fbUpdate && fbUpdate('payRequests/' + req.id, {
+      mode: req.mode,
+      ins: req.ins,
+      status: 'pending',
+      claimedAmount: req.claimedAmount,
+      approvedAmount: req.approvedAmount,
+      cashlessApprovedAmount: req.cashlessApprovedAmount,
+      updatedAt: req.updatedAt
+    }).catch(function(){});
+    showToast('TPA / cashless claim moved to the TPA module ✓', 's');
+    renderReceptionPage && renderReceptionPage();
+    renderTpaPage && renderTpaPage();
+    renderDashboard && renderDashboard();
+    renderBillingPageIfActive && renderBillingPageIfActive();
+    return;
+  }
   markPaid(reqId);
   // After small delay, offer receipt
   setTimeout(()=>{
@@ -5076,7 +5099,7 @@ function renderPaymentsPage() {
   const centre = getEffectiveCentre();
   const todayKey = localDateKey(new Date());
   const reqs = (PAY_REQUESTS || []).filter(function (r) {
-    return (r.centre || 'CHD') === centre;
+    return (r.centre || 'CHD') === centre && !isInsuranceLikeMode(r.mode || r.ins || '');
   });
   const todayReqs = reqs.filter(function (r) {
     const stamp = r.date || r.createdAt || r.updatedAt || '';
@@ -5085,7 +5108,7 @@ function renderPaymentsPage() {
   const pending = todayReqs.filter(function (r) { return r.status === 'pending'; });
   const collected = todayReqs.filter(function (r) { return r.status === 'paid'; });
   const txns = (TRANSACTIONS || []).filter(function (t) {
-    return (t.centre || 'CHD') === centre && txnIsoDate(t) === todayKey;
+    return (t.centre || 'CHD') === centre && txnIsoDate(t) === todayKey && !isInsuranceLikeMode(t.mode || t.ins || '');
   });
   const modeTotals = {};
   txns.forEach(function (t) {
@@ -9989,10 +10012,11 @@ function bmhRecordPatientPayment() {
   const bmhId = document.getElementById('bmh-bill-pt-select')?.value;
   if (!bmhId) { showToast('Select a patient', 'w'); return; }
   const amt = parseFloat(document.getElementById('bmh-pay-amt')?.value || '0');
-  if (!(amt > 0)) { showToast('Enter amount', 'w'); return; }
+  const mode = document.getElementById('bmh-pay-mode')?.value || 'Cash';
+  const allowZeroForInsurance = isInsuranceLikeMode(mode);
+  if (amt < 0 || (!allowZeroForInsurance && !(amt > 0))) { showToast(allowZeroForInsurance ? 'Amount cannot be negative' : 'Enter amount', 'w'); return; }
   bmhSetPaymentSaveBusy(true);
   try {
-  const mode = document.getElementById('bmh-pay-mode')?.value || 'Cash';
   const ref = document.getElementById('bmh-pay-ref')?.value?.trim() || '';
   const insName = document.getElementById('bmh-pay-insurer')?.value?.trim() || '';
   const policy = document.getElementById('bmh-pay-policy')?.value?.trim() || '';
@@ -10034,8 +10058,10 @@ function bmhRecordPatientPayment() {
     by: txn.createdBy,
     categories: (billCtx.activeCats || []).slice()
   });
-  TRANSACTIONS.push(txn);
-  saveTransactionToFirebase && saveTransactionToFirebase(txn);
+  if (amt > 0) {
+    TRANSACTIONS.push(txn);
+    saveTransactionToFirebase && saveTransactionToFirebase(txn);
+  }
   const advAdj = Number(bmhTotalsForPatient(bmhId).advanceApplied || 0);
   if (pt && advAdj > 0) {
     pt.advance = Math.max(0, (Number(pt.advance) || 0) - advAdj);
@@ -10150,12 +10176,18 @@ function bmhRecordPatientPayment() {
       } catch (e) {}
     });
   }
-  bmhAppendLedger({ date: new Date().toISOString(), type: 'Receipt', narration: 'Patient payment (' + mode + ')', dr: 0, cr: amt, party: pt?.name || bmhId, ref: ref || mode });
-  saveBmhFinancials();
+  if (amt > 0) {
+    bmhAppendLedger({ date: new Date().toISOString(), type: 'Receipt', narration: 'Patient payment (' + mode + ')', dr: 0, cr: amt, party: pt?.name || bmhId, ref: ref || mode });
+  } else {
+    saveBmhFinancials();
+  }
   bmhClearPaymentDraft();
   const addToQ = !!document.getElementById('bmh-bill-add-to-queue')?.checked;
   if (addToQ) bmhAddPatientToDoctorQueue(bmhId, { silentToast: true });
-  showToast(addToQ ? 'Payment saved — patient added to doctor queue ✓' : 'Payment saved ✓', 's');
+  const savedMsg = amt > 0
+    ? (addToQ ? 'Payment saved — patient added to doctor queue ✓' : 'Payment saved ✓')
+    : (addToQ ? 'TPA / cashless claim saved — patient added to doctor queue ✓' : 'TPA / cashless claim saved ✓');
+  showToast(savedMsg, 's');
   renderBillingPage();
   renderDashboard && renderDashboard();
   try { renderTpaPage && renderTpaPage(); } catch (e) {}
@@ -12604,11 +12636,15 @@ function _renderStockListNow() {
         const brandId = deptId + 'b' + bi;
         const powers  = Object.keys(b.powers).sort(function (a, b2) { return parseFloat(a) - parseFloat(b2); });
 
-        // Header row for the expanded brand
+        // Header row for the expanded brand (with move-store button)
+        const allBrandBarcodesJson = JSON.stringify(
+          Object.values(b.powers).reduce(function (acc, p) { return acc.concat(p.barcodes || []); }, [])
+        ).replace(/"/g, '&quot;');
         trs.push(
           '<tr data-parent="' + brandId + '" data-dept="' + deptId + '" style="display:none;background:#fff3cc">' +
-            '<td colspan="2" style="padding:4px 14px 3px;font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;letter-spacing:.4px">' +
-              escapeHtmlConsent(b.brandLabel) + (b.company ? ' · ' + escapeHtmlConsent(b.company) : '') +
+            '<td colspan="2" style="padding:4px 14px 3px;font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;letter-spacing:.4px;display:flex;align-items:center;justify-content:space-between">' +
+              '<span>' + escapeHtmlConsent(b.brandLabel) + (b.company ? ' · ' + escapeHtmlConsent(b.company) : '') + '</span>' +
+              '<button onclick="moveInventoryBrandPrompt(' + allBrandBarcodesJson + ')" title="Move entire brand to another store/dept" style="font-size:10px;font-weight:700;padding:2px 8px;background:#1A3C6E;color:#fff;border:none;border-radius:5px;cursor:pointer;text-transform:none;letter-spacing:0">↔ Move</button>' +
             '</td>' +
           '</tr>'
         );
@@ -12619,7 +12655,7 @@ function _renderStockListNow() {
           const barcodeJson = JSON.stringify(pData.barcodes || []).replace(/'/g, '&#39;');
           trs.push(
             '<tr data-parent="' + brandId + '" data-dept="' + deptId + '" style="display:none;background:#fffef5">' +
-              '<td style="padding:4px 14px 4px 26px;font-size:11px;color:var(--g1);font-family:var(--mono)">' + escapeHtmlConsent(power) + '</td>' +
+              '<td style="padding:4px 14px 4px 26px;font-size:11px;color:#222;font-family:var(--mono)">' + escapeHtmlConsent(power) + '</td>' +
               '<td style="padding:4px 14px;text-align:right;font-size:12px;font-weight:900;color:' + qTone + ';white-space:nowrap">' + qty +
                 '<button onclick="deleteInventoryItemsPrompt(' + barcodeJson.replace(/"/g, '&quot;') + ')" title="Delete all ' + qty + ' units of this power" style="margin-left:8px;background:none;border:none;color:var(--red);cursor:pointer;font-size:11px;padding:0 2px;vertical-align:middle">🗑</button>' +
               '</td>' +
@@ -12645,15 +12681,19 @@ function _renderStockListNow() {
         const catTotal = items.reduce(function (s, n) { return s + n.stock; }, 0);
         const cTone    = catTotal <= 5 ? '#c0392b' : catTotal <= 20 ? '#d35400' : '#1a6e35';
 
+        const catAllBarcodesJson = JSON.stringify(
+          items.reduce(function (acc, n) { return acc.concat(n.barcodes || []); }, [])
+        ).replace(/"/g, '&quot;');
         trs.push(
-          '<tr data-parent="' + deptId + '" data-id="' + catId + '" onclick="slToggle(\'' + catId + '\')" ' +
-          'style="display:none;cursor:pointer;background:#f4f7fb;border-left:3px solid var(--g4);user-select:none">' +
-            '<td style="padding:7px 10px 7px 14px;font-size:11px;font-weight:700;color:var(--bmh-blue)">' +
+          '<tr data-parent="' + deptId + '" data-id="' + catId + '" style="display:none;background:#f4f7fb;border-left:3px solid var(--g4)">' +
+            '<td style="padding:7px 10px 7px 14px;font-size:11px;font-weight:700;color:var(--bmh-blue);cursor:pointer" onclick="slToggle(\'' + catId + '\')">' +
               '<span id="c-' + catId + '" style="display:inline-block;width:14px;font-size:9px;color:var(--g2)">▶</span> ' +
               escapeHtmlConsent(cat) +
               '<span style="margin-left:8px;font-size:10px;color:var(--g2);font-weight:400">' + items.length + ' item' + (items.length !== 1 ? 's' : '') + '</span>' +
             '</td>' +
-            '<td style="padding:7px 10px;text-align:right;font-size:13px;font-weight:900;color:' + cTone + '">' + catTotal + '</td>' +
+            '<td style="padding:7px 10px;text-align:right;font-size:13px;font-weight:900;color:' + cTone + ';white-space:nowrap">' + catTotal +
+              '<button onclick="moveInventoryBrandPrompt(' + catAllBarcodesJson + ')" title="Move all items in this category" style="margin-left:7px;font-size:10px;font-weight:700;padding:1px 6px;background:#1A3C6E;color:#fff;border:none;border-radius:4px;cursor:pointer;vertical-align:middle">↔</button>' +
+            '</td>' +
           '</tr>'
         );
 
@@ -12662,7 +12702,7 @@ function _renderStockListNow() {
           const barcodeJson = JSON.stringify(n.barcodes || []).replace(/"/g, '&quot;');
           trs.push(
             '<tr data-parent="' + catId + '" data-dept="' + deptId + '" style="display:none;background:#fafcff">' +
-              '<td style="padding:5px 10px 5px 36px;font-size:11px;color:var(--g2)">' + escapeHtmlConsent(n.name) + '</td>' +
+              '<td style="padding:5px 10px 5px 36px;font-size:11px;font-weight:600;color:#1a1a1a">' + escapeHtmlConsent(n.name) + '</td>' +
               '<td style="padding:5px 10px;text-align:right;font-size:12px;font-weight:700;color:' + qTone + ';white-space:nowrap">' + n.stock +
                 '<button onclick="deleteInventoryItemsPrompt(' + barcodeJson + ')" title="Delete this stock item" style="margin-left:8px;background:none;border:none;color:var(--red);cursor:pointer;font-size:11px;padding:0 2px;vertical-align:middle">🗑</button>' +
               '</td>' +
@@ -12708,6 +12748,67 @@ function deleteInventoryItemsPrompt(barcodes) {
   showToast('Deleted ' + label + ' from inventory', 's');
 }
 window.deleteInventoryItemsPrompt = deleteInventoryItemsPrompt;
+
+// Move entire brand/group of barcodes to a different store/dept.
+function moveInventoryBrandPrompt(barcodes) {
+  if (!Array.isArray(barcodes) || !barcodes.length) { showToast('No items found to move', 'w'); return; }
+  const storeList = (window.INVENTORY_STORES || [
+    'Eye Central Store CHD','Eye Central Store RPR','OBG Central Store CHD','OBG Central Store RPR',
+    'Labour Room','OBG OT','Eye OT','Minor OT','Procedure Room',
+    'Eye CHD','Eye RPR','OBG CHD','OBG RPR','Skin CHD','Skin RPR','PSY CHD','PSY RPR'
+  ]);
+  const deptList = loadInventoryDeptRows();
+  const storeOpts = storeList.map(function (s) { return '<option value="' + s.replace(/"/g,'&quot;') + '">' + s + '</option>'; }).join('');
+  const deptOpts = deptList.map(function (d) { return '<option value="' + d.value + '">' + d.label + '</option>'; }).join('');
+  const html =
+    '<div style="padding:16px;max-width:340px">' +
+    '<div style="font-size:14px;font-weight:900;margin-bottom:14px;color:#1A3C6E">Move ' + barcodes.length + ' unit(s) to…</div>' +
+    '<div class="form-group"><label class="fl">Store</label>' +
+    '<select id="_mv-store" style="font-size:12px"><option value="">— same store —</option>' + storeOpts + '</select></div>' +
+    '<div class="form-group"><label class="fl">Department</label>' +
+    '<select id="_mv-dept" style="font-size:12px"><option value="">— same dept —</option>' + deptOpts + '</select></div>' +
+    '<div style="display:flex;gap:10px;margin-top:14px">' +
+    '<button class="btn btn-blue" style="flex:1" onclick="doMoveInventoryBrand(' + JSON.stringify(barcodes).replace(/"/g,'&quot;') + ')">Move</button>' +
+    '<button class="btn btn-gray" style="flex:1" onclick="document.getElementById(\'m-move-inv-brand\').style.display=\'none\'">Cancel</button>' +
+    '</div></div>';
+  let modal = document.getElementById('m-move-inv-brand');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'm-move-inv-brand';
+    modal.className = 'modal-overlay';
+    modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center';
+    modal.onclick = function (e) { if (e.target === modal) modal.style.display = 'none'; };
+    const box = document.createElement('div');
+    box.id = 'm-move-inv-brand-box';
+    box.style.cssText = 'background:#fff;border-radius:14px;box-shadow:0 8px 40px rgba(0,0,0,.22);min-width:300px';
+    modal.appendChild(box);
+    document.body.appendChild(modal);
+  }
+  document.getElementById('m-move-inv-brand-box').innerHTML = html;
+  document.getElementById('m-move-inv-brand').style.cssText = 'display:flex;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center';
+}
+function doMoveInventoryBrand(barcodes) {
+  const newStore = document.getElementById('_mv-store')?.value || '';
+  const newDept  = document.getElementById('_mv-dept')?.value  || '';
+  if (!newStore && !newDept) { showToast('Select a store or department to move to', 'w'); return; }
+  let moved = 0;
+  barcodes.forEach(function (bc) {
+    const item = INVENTORY.find(function (x) { return String(x.barcode || '') === String(bc); });
+    if (!item) return;
+    if (newStore) item.store = newStore;
+    if (newDept)  item.dept  = newDept;
+    if (typeof window.saveInventoryToFirebase === 'function') {
+      window.saveInventoryToFirebase(item).catch(function () {});
+    }
+    moved++;
+  });
+  saveInventoryStockToStorage && saveInventoryStockToStorage();
+  renderStockList && renderStockList();
+  const _mvModal = document.getElementById('m-move-inv-brand'); if (_mvModal) _mvModal.style.display = 'none';
+  showToast('Moved ' + moved + ' unit(s) ✓', 's');
+}
+window.moveInventoryBrandPrompt = moveInventoryBrandPrompt;
+window.doMoveInventoryBrand = doMoveInventoryBrand;
 
 // Toggle dept or category rows. When closing a dept, also resets any expanded brand cards.
 function slToggle(id) {
@@ -16043,16 +16144,12 @@ function saveDrugLibraryToStorage() {
   }
 }
 function choosePreferredDrugLibraryRows(localRows, remoteRows, currentRows, localTs, remoteTs) {
-  const localList = normalizeDrugLibrarySnapshot(localRows);
-  const remoteList = normalizeDrugLibrarySnapshot(remoteRows);
+  // Always take the UNION of all sources — never discard drugs based on timestamps.
+  // Timestamps are unreliable across devices; losing 400 CSV drugs because remote ts > local ts is unacceptable.
+  const localList   = normalizeDrugLibrarySnapshot(localRows);
+  const remoteList  = normalizeDrugLibrarySnapshot(remoteRows);
   const currentList = normalizeDrugLibrarySnapshot(currentRows);
-  const lts = Number(localTs || 0);
-  const rts = Number(remoteTs || 0);
-  let base = [];
-  if (lts && rts && lts !== rts) base = lts > rts ? localList : remoteList;
-  else if (localList.length !== remoteList.length) base = localList.length >= remoteList.length ? localList : remoteList;
-  else base = localList.concat(remoteList);
-  return mergeDrugLibraryRows(base.concat(currentList));
+  return mergeDrugLibraryRows(localList.concat(remoteList).concat(currentList));
 }
 function getRecoveredDrugLibraryRows(localRows, remoteRows, currentRows) {
   const rescueList = readDrugLibraryRowsFromAllLocalSources();
@@ -16261,7 +16358,7 @@ function handleDrugImportCsv(inp) {
     const tCol = ti >= 0 ? ti : 0;
     const gCol = gi >= 0 ? gi : 1;
     const typeCol = tyi >= 0 ? tyi : (header.length > 2 ? 2 : -1);
-    let added = 0;
+    const importedRows = [];
     for (let i = 1; i < lines.length; i++) {
       const cols = lines[i].split(',').map(x => x.trim().replace(/^"|"$/g, ''));
       const trade = cols[tCol] || '';
@@ -16272,7 +16369,7 @@ function handleDrugImportCsv(inp) {
       const importedDept = rawDept ? String(rawDept).trim() : 'All';
       if (!trade && !generic) continue;
       const drugType = normalizeDrugTypeFromCsv(rawType);
-      DRUG_LIBRARY.push(normalizeDrugLibraryRow({
+      importedRows.push(normalizeDrugLibraryRow({
         type: drugType,
         trade: trade || generic,
         generic: generic || trade,
@@ -16281,8 +16378,13 @@ function handleDrugImportCsv(inp) {
         dept: importedDept || 'All',
         company: company || ''
       }));
-      added++;
     }
+    // Merge with existing library (deduplicates by trade+generic+dept key)
+    const merged = mergeDrugLibraryRows((Array.isArray(DRUG_LIBRARY) ? DRUG_LIBRARY.slice() : []).concat(importedRows));
+    const added = merged.length - (Array.isArray(DRUG_LIBRARY) ? DRUG_LIBRARY.length : 0);
+    DRUG_LIBRARY.length = 0;
+    merged.forEach(function (x) { DRUG_LIBRARY.push(x); });
+    invalidateDrugSearchPoolCache && invalidateDrugSearchPoolCache();
     saveDrugLibraryToStorage();
     renderSettingsDrugs();
     rebuildDrugGenericDatalist();
@@ -25840,7 +25942,7 @@ function renderCollectionDashboard() {
     String(today.getDate()).padStart(2, '0')
   ].join('-');
   const allTxn = TRANSACTIONS.filter(function (t) {
-    return (t.centre || 'CHD') === getEffectiveCentre() && txnIsoDate(t) === todayKeyLocal;
+    return (t.centre || 'CHD') === getEffectiveCentre() && txnIsoDate(t) === todayKeyLocal && !isInsuranceLikeMode(t.mode || t.ins || '');
   });
   const collected = allTxn.filter(t=>t.collected);
 
@@ -28413,7 +28515,11 @@ function invalidateDrugSearchPoolCache() { _drugSearchPoolCache = null; }
 function getDrugLibrarySearchPool() {
   if (_drugSearchPoolCache) return _drugSearchPoolCache;
   const live = Array.isArray(DRUG_LIBRARY) ? DRUG_LIBRARY.slice() : [];
-  _drugSearchPoolCache = mergeDrugLibraryRows(live);
+  // Include localStorage rescue so CSV drugs show even before Firebase responds
+  let rescue = [];
+  try { rescue = typeof readDrugLibraryRowsFromAllLocalSources === 'function' ? readDrugLibraryRowsFromAllLocalSources() : []; } catch (e) { rescue = []; }
+  // DRUG_LIBRARY_FULL seeds are already merged in via buildDrugLibrarySeedRows() inside mergeDrugLibraryRows
+  _drugSearchPoolCache = mergeDrugLibraryRows(live.concat(rescue));
   return _drugSearchPoolCache;
 }
 
