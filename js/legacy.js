@@ -17385,29 +17385,47 @@ function calcRcAge() {
   if(m < 0 || (m === 0 && now.getDate() < birth.getDate())) years--;
   ageEl.value = years + ' Years';
 }
-function genRcUID() {
-  // Only numeric BMSH-###### IDs participate in the sequence (CSV/hash imports are ignored)
-  let maxNum = 55999;
-  (window.PATIENTS||[]).forEach(p => {
-    const m = p.bmhId && String(p.bmhId).trim().match(/^BMSH-(\d{1,9})$/);
-    if(m){ const n=parseInt(m[1],10); if(n>maxNum) maxNum=n; }
+function getKnownHighestBmhNumber() {
+  // Derive the true floor from actual patient records (ignores any hardcoded minimums)
+  let maxNum = 0;
+  (window.PATIENTS || []).forEach(function (p) {
+    const m = String(p?.bmhId || '').trim().match(/^BMSH-(\d{1,9})$/i);
+    if (!m) return;
+    const n = parseInt(m[1], 10);
+    if (Number.isFinite(n) && n > maxNum) maxNum = n;
   });
-
-  // Also check localStorage so the counter survives page reloads even if RTDB is slow
+  // localStorage counter — only use it if it is in the same ballpark as the patient list
+  // (i.e. not wildly higher, which would indicate a corrupt/stale value)
   try {
     const ls = parseInt(localStorage.getItem('bmh_last_patient_num') || '0', 10);
-    if(ls > maxNum) maxNum = ls;
-  } catch(_) {}
+    if (Number.isFinite(ls) && ls > maxNum && ls < maxNum + 10000) maxNum = ls;
+  } catch (_) {}
+  const inMem = Number(window._nextPatientNum || 0) - 1;
+  if (Number.isFinite(inMem) && inMem > maxNum && inMem < maxNum + 10000) maxNum = inMem;
+  return maxNum;
+}
 
-  let localNext = maxNum + 1;
+function genRcUID() {
+  // Only numeric BMSH-###### IDs participate in the sequence (CSV/hash imports are ignored)
+  const maxNum = getKnownHighestBmhNumber();
+  const localNext = maxNum + 1;
   window._nextPatientNum = localNext;
   const el = document.getElementById('rc-uid');
   if(el) el.textContent = 'BMSH-' + String(localNext).padStart(6,'0');
 
   // Also check RTDB in case another device registered a patient (sequence must never lag server)
   if(window.fbOnce) {
-    fbOnce('settings/lastPatientNum').then(num => {
-      if(typeof num !== 'number' || num < 55999) return;
+    fbOnce('settings/lastPatientNum').then(function(num) {
+      if(typeof num !== 'number') return;
+      // RTDB value must be close to the local max — ignore if it's wildly higher (corruption)
+      const serverMax = getKnownHighestBmhNumber();
+      if (num > serverMax + 10000) {
+        // Server counter is corrupted — repair it to match the true local max
+        if (window.FBDB) {
+          window.FBDB.ref('settings/lastPatientNum').set(serverMax).catch(function(){});
+        }
+        return;
+      }
       const nextFromServer = num + 1;
       if(nextFromServer > (window._nextPatientNum || 0)) {
         window._nextPatientNum = nextFromServer;
@@ -17415,43 +17433,30 @@ function genRcUID() {
         const el2 = document.getElementById('rc-uid');
         if(el2) el2.textContent = 'BMSH-' + String(nextFromServer).padStart(6,'0');
       }
-    }).catch(()=>{});
+    }).catch(function(){});
   }
 
   return 'BMSH-' + String(window._nextPatientNum || localNext).padStart(6,'0');
 }
 window.genRcUID = genRcUID;
 
-function getKnownHighestBmhNumber() {
-  let maxNum = 55999;
-  (window.PATIENTS || []).forEach(function (p) {
-    const m = String(p?.bmhId || '').trim().match(/^BMSH-(\d{1,9})$/i);
-    if (!m) return;
-    const n = parseInt(m[1], 10);
-    if (Number.isFinite(n) && n > maxNum) maxNum = n;
-  });
-  try {
-    const ls = parseInt(localStorage.getItem('bmh_last_patient_num') || '0', 10);
-    if (Number.isFinite(ls) && ls > maxNum) maxNum = ls;
-  } catch (_) {}
-  const inMem = Number(window._nextPatientNum || 0) - 1;
-  if (Number.isFinite(inMem) && inMem > maxNum) maxNum = inMem;
-  return maxNum;
-}
-
 function reserveNextBmhId() {
-  const localId = (typeof genRcUID === 'function' && genRcUID()) || ('BMSH-' + String((window._nextPatientNum || 56000)).padStart(6,'0'));
+  const localFloor = getKnownHighestBmhNumber();
+  const localId = (typeof genRcUID === 'function' && genRcUID()) || ('BMSH-' + String(localFloor + 1).padStart(6,'0'));
   if(!window.FBDB) return Promise.resolve(localId);
-  const localFloor = Math.max(55999, getKnownHighestBmhNumber());
 
   return window.FBDB.ref('settings/lastPatientNum').transaction(function(current) {
-    const base = Math.max((typeof current === 'number' && current >= 55999) ? current : 55999, localFloor);
+    // If RTDB counter is wildly higher than local patient max, reset it first
+    if (typeof current === 'number' && current > localFloor + 10000) {
+      return localFloor + 1; // repair: start from true next
+    }
+    const base = (typeof current === 'number' && current > 0 && current >= localFloor) ? current : localFloor;
     return base + 1;
   }).then(function(result) {
     const committed = result && result.committed;
     const snap = result && result.snapshot;
     const nextNum = committed && snap ? snap.val() : null;
-    if(typeof nextNum === 'number' && nextNum >= 56000) {
+    if(typeof nextNum === 'number' && nextNum > 0) {
       window._nextPatientNum = nextNum;
       try { localStorage.setItem('bmh_last_patient_num', String(nextNum)); } catch(_) {}
       const reservedId = 'BMSH-' + String(nextNum).padStart(6,'0');
@@ -19035,7 +19040,7 @@ function openNewRxTemplateModal() {
 
 // BMSH ID generator (unified, no centre suffix)
 function genUID() {
-  const fallback = Math.max(56000, Number(window._nextPatientNum || 56000));
+  const fallback = getKnownHighestBmhNumber() + 1;
   const nextId = 'BMSH-' + String(fallback).padStart(6,'0');
   const el = document.getElementById('m-uid'); if(el) el.textContent = nextId;
   return nextId;
@@ -29855,10 +29860,51 @@ function renderAdminDashboardDetail(selectedDate, selectedTxn, overduePts, surge
 
 // ── Today’s reception queue (dept filter, no sub-tab) ─────────
 function getReceptionBasePts() {
-  let pts = getTodayQueueBasePatients();
-  const df = window._rcDeptFilter || 'all';
-  if(df !== 'all') pts = pts.filter(p=>p.dept===df);
-  return pts;
+  const df = window._rcDeptFilter || ‘all’;
+  // Start with today’s base patients
+  let basePts = getTodayQueueBasePatients();
+
+  // Augment with cross-referred patients for the selected dept (or all depts)
+  // so reception sees the patient in every dept they’ve been cross-referred to
+  const seen = new Set(basePts.map(function(p) { return p.bmhId; }));
+  const todayKeyLocal = localDateKey(new Date());
+  const xrefEntries = [];
+
+  (PATIENTS || []).forEach(function(p) {
+    if (!p || p.queueRemoved || String(p.status || ‘’).toLowerCase() === ‘removed’) return;
+    if (!centreMatch(p)) return;
+    const xrefs = getActiveCrossRefsForPatient(p).filter(function(xr) {
+      // Only include active (not yet fully seen) cross-refs
+      return !xr.seenAt;
+    });
+    if (!xrefs.length) return;
+
+    xrefs.forEach(function(xref) {
+      const toKey = normalizeDeptKeyForQueue(xref.toDept || ‘’);
+      if (df !== ‘all’ && toKey !== df) return;
+      const dedupeKey = String(p.bmhId || ‘’) + ‘::xref::’ + String(toKey || ‘’);
+      if (seen.has(dedupeKey)) return;
+      seen.add(dedupeKey);
+      const pendingPay = !!(xref.fee && xref.paid === false);
+      xrefEntries.push(Object.assign({}, p, {
+        dept: xref.toDept,
+        doctor: xref.toDoctor || p.doctor,
+        seen: false,
+        status: pendingPay ? ‘waiting’ : ‘waiting’,
+        purpose: (xref.reason ? xref.reason + ‘ — ‘ : ‘’) + (p.purpose || ‘’),
+        _xrefEntry: true,
+        _xrefId: String(xref.id || ‘’),
+        _xrefFromDept: xref.fromDept || ‘’,
+        _xrefPendingPay: pendingPay,
+        _queueKey: dedupeKey
+      }));
+    });
+  });
+
+  // Filter base patients by dept
+  if (df !== ‘all’) basePts = basePts.filter(function(p) { return p.dept === df; });
+
+  return basePts.concat(xrefEntries);
 }
 
 function computeReceptionQueuePts() {
