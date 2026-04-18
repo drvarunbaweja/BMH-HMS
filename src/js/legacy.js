@@ -17504,7 +17504,7 @@ function lookupByPhone(val) {
   } else { matchEl.innerHTML=''; }
 }
 function prefillExistingPatient(bmhId) {
-  const p = (typeof resolveActivePatientByBmhId === 'function' ? resolveActivePatientByBmhId(bmhId) : null)
+  const p = (typeof resolveExistingPatientForRegistration === 'function' ? resolveExistingPatientForRegistration(bmhId) : null)
     || PATIENTS.find(function (x) { return String(x?.bmhId || '') === String(bmhId || ''); });
   if(!p) { showToast('Patient not found for prefill', 'w'); return; }
   const name = String(p.name || p.patient || '').trim();
@@ -17732,8 +17732,9 @@ function ensureDailyReceptionReset() {
 /** Update demographics for an existing patient (same BMSH ID shown in form) — no new token / fee. */
 function updateExistingPatientFromReceptionForm(bmhId) {
   const uid = String(bmhId || '').trim();
-  if (!uid || !/^BMSH-/.test(uid)) { showToast('Load a patient first (prefill or search)', 'w'); return; }
-  const p = PATIENTS.find(function (x) { return x.bmhId === uid; });
+  if (!uid) { showToast('Load a patient first (prefill or search)', 'w'); return; }
+  const p = (typeof resolveExistingPatientForRegistration === 'function' ? resolveExistingPatientForRegistration(uid) : null)
+    || PATIENTS.find(function (x) { return String(x?.bmhId || '') === uid; });
   if (!p) { showToast('Patient not found', 'w'); return; }
   const fn = normalizeReceptionFieldValue('rc-fn', document.getElementById('rc-fn')?.value || '');
   const ln = normalizeReceptionFieldValue('rc-ln', document.getElementById('rc-ln')?.value || '');
@@ -17798,7 +17799,7 @@ async function registerPatient() {
   const name = toTitleCaseName((fn + ' ' + ln).trim());
   const emailEarly = document.getElementById('rc-email')?.value?.trim() || '';
   const forceNewBmsh = !!document.getElementById('rc-force-new-bmsh')?.checked;
-  const hintedExistingPt = (!forceNewBmsh && uidDisplayed) ? resolveActivePatientByBmhId(uidDisplayed) : null;
+  const hintedExistingPt = (!forceNewBmsh && uidDisplayed) ? resolveExistingPatientForRegistration(uidDisplayed) : null;
   const existingPt = hintedExistingPt || findSamePersonForRegistration({
     uidDisplayed: uidDisplayed,
     name: name,
@@ -17809,8 +17810,10 @@ async function registerPatient() {
     forceNewId: forceNewBmsh
   });
   const isExistingRegistration = !!existingPt;
-  const uid = isExistingRegistration ? existingPt.bmhId : await reserveNextBmhId();
-  if(!/^BMSH-\d{6,9}$/.test(uid)) { showToast('Could not generate a valid BMSH ID','e'); return; }
+  const uid = String(isExistingRegistration ? (existingPt && existingPt.bmhId) : (await reserveNextBmhId()) || '').trim();
+  if(isExistingRegistration) {
+    if(!uid) { showToast('Could not reuse the existing BMSH ID','e'); return; }
+  } else if(!/^BMSH-\d{6,9}$/.test(uid)) { showToast('Could not generate a valid BMSH ID','e'); return; }
   const uidEl = document.getElementById('rc-uid');
   if (uidEl) uidEl.textContent = uid;
   if (isExistingRegistration && String(uidDisplayed || '').trim() && String(uidDisplayed).trim() !== String(uid)) {
@@ -24083,6 +24086,25 @@ function resolveActivePatientByBmhId(rawId) {
   if (!direct) return null;
   if (direct.mergedInto) {
     const canon = (PATIENTS || []).find(function (x) { return String(x.bmhId) === String(direct.mergedInto); });
+    if (canon && !isMergedPatientRecord(canon)) return canon;
+    return null;
+  }
+  if (isMergedPatientRecord(direct)) return null;
+  return direct;
+}
+function resolveExistingPatientForRegistration(rawId) {
+  const id = String(rawId || '').trim();
+  if (!id) return null;
+  const canonical = resolveActivePatientByBmhId(id);
+  if (canonical) return canonical;
+  const direct = (PATIENTS || []).find(function (x) {
+    return String(x?.bmhId || '').trim().toLowerCase() === id.toLowerCase();
+  });
+  if (!direct) return null;
+  if (direct.mergedInto) {
+    const canon = (PATIENTS || []).find(function (x) {
+      return String(x?.bmhId || '').trim().toLowerCase() === String(direct.mergedInto || '').trim().toLowerCase();
+    });
     if (canon && !isMergedPatientRecord(canon)) return canon;
     return null;
   }
