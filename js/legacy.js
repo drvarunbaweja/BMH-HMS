@@ -8238,7 +8238,7 @@ function syncPayRequestToPatientCharges(pr) {
     ts: pr.date || new Date().toISOString()
   });
 }
-/** Quick total for patient list (does not use another patient’s discount inputs). */
+/** Quick total for patient list (does not use another patient's discount inputs). */
 function bmhBillPreviewTotal(bmhId) {
   const lines = window.BMH_PATIENT_CHARGES[bmhId] || [];
   const sub = lines.reduce((s, x) => s + (Number(x.amount) || 0), 0);
@@ -10006,7 +10006,7 @@ function bmhRecordPatientPayment() {
   renderDashboard && renderDashboard();
   try { renderTpaPage && renderTpaPage(); } catch (e) {}
 }
-/** Billing / charges: put patient on today’s doctor queue (My Patient Queue). */
+/** Billing / charges: put patient on today's doctor queue (My Patient Queue). */
 function bmhAddPatientToDoctorQueue(bmhId, opts) {
   const id = String(bmhId || '').trim();
   if (!id) { showToast('Select a patient first', 'w'); return; }
@@ -23510,7 +23510,7 @@ function patientCentreKey(value) {
   return normalizeAppointmentCentreValue(value) === 'RPR' ? 'RPR' : 'CHD';
 }
 /**
- * Which centre’s rows should live in PATIENTS[] for centre-locked users.
+ * Which centre's rows should live in PATIENTS[] for centre-locked users.
  * Returns null for admin / BOTH / canSeeAll — keep full Firebase mirror (doctor queue is all-centre; billing uses centreMatch).
  */
 function effectivePatientListCentreScope() {
@@ -29858,20 +29858,20 @@ function renderAdminDashboardDetail(selectedDate, selectedTxn, overduePts, surge
   }).join('') : '<div style="padding:14px;color:var(--g1);font-size:12px">No transactions for this date.</div>';
 }
 
-// ── Today’s reception queue (dept filter, no sub-tab) ─────────
+// ── Today's reception queue (dept filter, no sub-tab) ─────────
 function getReceptionBasePts() {
-  const df = window._rcDeptFilter || ‘all’;
-  // Start with today’s base patients
+  const df = window._rcDeptFilter || 'all';
+  // Start with today's base patients
   let basePts = getTodayQueueBasePatients();
 
   // Augment with cross-referred patients for the selected dept (or all depts)
-  // so reception sees the patient in every dept they’ve been cross-referred to
+  // so reception sees the patient in every dept they've been cross-referred to
   const seen = new Set(basePts.map(function(p) { return p.bmhId; }));
   const todayKeyLocal = localDateKey(new Date());
   const xrefEntries = [];
 
   (PATIENTS || []).forEach(function(p) {
-    if (!p || p.queueRemoved || String(p.status || ‘’).toLowerCase() === ‘removed’) return;
+    if (!p || p.queueRemoved || String(p.status || '').toLowerCase() === 'removed') return;
     if (!centreMatch(p)) return;
     const xrefs = getActiveCrossRefsForPatient(p).filter(function(xr) {
       // Only include active (not yet fully seen) cross-refs
@@ -29880,9 +29880,9 @@ function getReceptionBasePts() {
     if (!xrefs.length) return;
 
     xrefs.forEach(function(xref) {
-      const toKey = normalizeDeptKeyForQueue(xref.toDept || ‘’);
-      if (df !== ‘all’ && toKey !== df) return;
-      const dedupeKey = String(p.bmhId || ‘’) + ‘::xref::’ + String(toKey || ‘’);
+      const toKey = normalizeDeptKeyForQueue(xref.toDept || '');
+      if (df !== 'all' && toKey !== df) return;
+      const dedupeKey = String(p.bmhId || '') + '::xref::' + String(toKey || '');
       if (seen.has(dedupeKey)) return;
       seen.add(dedupeKey);
       const pendingPay = !!(xref.fee && xref.paid === false);
@@ -29890,11 +29890,11 @@ function getReceptionBasePts() {
         dept: xref.toDept,
         doctor: xref.toDoctor || p.doctor,
         seen: false,
-        status: pendingPay ? ‘waiting’ : ‘waiting’,
-        purpose: (xref.reason ? xref.reason + ‘ — ‘ : ‘’) + (p.purpose || ‘’),
+        status: pendingPay ? 'waiting' : 'waiting',
+        purpose: (xref.reason ? xref.reason + ' — ' : '') + (p.purpose || ''),
         _xrefEntry: true,
-        _xrefId: String(xref.id || ‘’),
-        _xrefFromDept: xref.fromDept || ‘’,
+        _xrefId: String(xref.id || ''),
+        _xrefFromDept: xref.fromDept || '',
         _xrefPendingPay: pendingPay,
         _queueKey: dedupeKey
       }));
@@ -29902,7 +29902,7 @@ function getReceptionBasePts() {
   });
 
   // Filter base patients by dept
-  if (df !== ‘all’) basePts = basePts.filter(function(p) { return p.dept === df; });
+  if (df !== 'all') basePts = basePts.filter(function(p) { return p.dept === df; });
 
   return basePts.concat(xrefEntries);
 }
