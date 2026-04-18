@@ -16264,6 +16264,108 @@ function readDrugLibraryRowsFromAllLocalSources() {
   });
   return out;
 }
+function readDrugLibraryRowsByLocalKey(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr.filter(Boolean) : [];
+  } catch (e) {
+    return [];
+  }
+}
+function findDrugMatchesInRows(rows, query) {
+  const q = String(query || '').trim().toLowerCase();
+  if (!q) return [];
+  return (Array.isArray(rows) ? rows : []).filter(function (row) {
+    const trade = String(row?.trade || row?.brand || row?.name || '').toLowerCase();
+    const generic = String(row?.generic || row?.name || '').toLowerCase();
+    return trade.includes(q) || generic.includes(q);
+  }).slice(0, 10).map(function (row) {
+    return {
+      trade: String(row?.trade || row?.brand || row?.name || '').trim(),
+      generic: String(row?.generic || row?.name || '').trim(),
+      dept: String(row?.dept || 'All').trim()
+    };
+  });
+}
+async function collectDrugLibraryDiagnostics() {
+  const memoryRows = Array.isArray(DRUG_LIBRARY) ? DRUG_LIBRARY.slice() : [];
+  const localMain = readDrugLibraryRowsByLocalKey('bmh_drug_library');
+  const localBackup = readDrugLibraryRowsByLocalKey('bmh_drug_library_backup');
+  const localArchive = readDrugLibraryRowsByLocalKey('bmh_drug_library_archive');
+  let remoteRows = [];
+  let remoteError = '';
+  try {
+    if (window.FBDB) {
+      const snap = await window.FBDB.ref('drugLibrary').once('value');
+      remoteRows = normalizeDrugLibrarySnapshot(snap.val());
+    }
+  } catch (e) {
+    remoteError = e?.message || 'Firebase read failed';
+  }
+  return {
+    memoryRows: memoryRows,
+    localMain: localMain,
+    localBackup: localBackup,
+    localArchive: localArchive,
+    remoteRows: remoteRows,
+    remoteError: remoteError
+  };
+}
+async function renderDrugLibraryDiagnostics() {
+  const summaryEl = document.getElementById('drug-diagnostics-summary');
+  const resultsEl = document.getElementById('drug-diagnostics-results');
+  if (!summaryEl || !resultsEl) return;
+  summaryEl.innerHTML = '<div style="grid-column:1 / -1;font-size:11px;color:var(--g1)">Loading diagnostics…</div>';
+  resultsEl.innerHTML = '<div style="font-size:11px;color:var(--g1)">Search a drug name to see where it exists.</div>';
+  const diag = await collectDrugLibraryDiagnostics();
+  window._drugLibraryDiagnosticsCache = diag;
+  const card = function (label, value, tone) {
+    return '<div style="border:1px solid var(--g5);border-radius:8px;padding:8px;background:#fff"><div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase">' + label + '</div><div style="font-size:18px;font-weight:900;color:' + tone + ';margin-top:4px">' + Number(value || 0).toLocaleString('en-IN') + '</div></div>';
+  };
+  summaryEl.innerHTML =
+    card('In Memory', diag.memoryRows.length, '#1A3C6E') +
+    card('Local Main', diag.localMain.length, '#1a8c3c') +
+    card('Local Backup', diag.localBackup.length, '#8a4200') +
+    card(diag.remoteError ? 'Firebase Error' : 'Firebase', diag.remoteRows.length, diag.remoteError ? '#c0392b' : '#6b21a8');
+  if (diag.remoteError) {
+    resultsEl.innerHTML = '<div style="font-size:11px;color:#c0392b">Firebase read error: ' + escapeHtmlConsent(diag.remoteError) + '</div>';
+  }
+}
+function runDrugLibraryDiagnosticsSearch() {
+  const resultsEl = document.getElementById('drug-diagnostics-results');
+  const q = document.getElementById('drug-diagnostics-query')?.value || '';
+  if (!resultsEl) return;
+  if (!String(q || '').trim()) {
+    resultsEl.innerHTML = '<div style="font-size:11px;color:var(--g1)">Enter a drug name to search.</div>';
+    return;
+  }
+  const diag = window._drugLibraryDiagnosticsCache;
+  if (!diag) {
+    resultsEl.innerHTML = '<div style="font-size:11px;color:var(--g1)">Refresh diagnostics first.</div>';
+    return;
+  }
+  const blocks = [
+    { label: 'In Memory', rows: diag.memoryRows },
+    { label: 'Local Main', rows: diag.localMain },
+    { label: 'Local Backup', rows: diag.localBackup },
+    { label: 'Local Archive', rows: diag.localArchive },
+    { label: 'Firebase', rows: diag.remoteRows }
+  ].map(function (source) {
+    const matches = findDrugMatchesInRows(source.rows, q);
+    const title = '<div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;margin-bottom:5px">' + source.label + ' · ' + matches.length + ' match(es)</div>';
+    const body = matches.length
+      ? matches.map(function (row) {
+          return '<div style="padding:5px 7px;border:1px solid var(--g5);border-radius:7px;background:#fff;margin-bottom:5px"><div style="font-weight:800;color:#1A3C6E">' + escapeHtmlConsent(row.trade || '—') + '</div><div style="font-size:10px;color:var(--g1)">' + escapeHtmlConsent(row.generic || '—') + ' · ' + escapeHtmlConsent(row.dept || 'All') + '</div></div>';
+        }).join('')
+      : '<div style="font-size:11px;color:var(--g1)">No match found</div>';
+    return '<div style="border:1px solid var(--g5);border-radius:8px;padding:8px;background:#fafafa">' + title + body + '</div>';
+  }).join('');
+  resultsEl.innerHTML = blocks;
+}
+window.renderDrugLibraryDiagnostics = renderDrugLibraryDiagnostics;
+window.runDrugLibraryDiagnosticsSearch = runDrugLibraryDiagnosticsSearch;
 function persistDrugLibraryLocalSnapshots(rows) {
   try {
     const next = JSON.stringify(Array.isArray(rows) ? rows : []);
@@ -16486,6 +16588,7 @@ function renderSettingsDrugs() {
   </div>`).join('');
   rebuildDrugGenericDatalist();
   syncDrugDeptDefaults();
+  renderDrugLibraryDiagnostics && renderDrugLibraryDiagnostics();
 }
 function addDrugToLibraryFromModal() {
   const type = document.getElementById('md-add-type')?.value;

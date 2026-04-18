@@ -3971,6 +3971,17 @@
           <button type="button" class="btn btn-outline btn-sm" style="margin-top:8px" onclick="repairDrugLibraryFromAllSources && repairDrugLibraryFromAllSources()">↻ Restore drugs from backups + cloud</button>
           <div style="font-size:9px;color:var(--g1);margin-top:4px">Merges this browser’s saved lists and Firebase. Use on each PC if the library shrank after sync.</div>
         </div>
+        <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--g4)">
+          <div class="card" style="background:#fffdf6;border:1.5px solid #ecd8aa;box-shadow:none">
+            <div class="card-hd"><div class="card-title" style="font-size:13px;color:#8a4200">Drug Library Diagnostics</div><button class="btn btn-xs btn-outline" type="button" onclick="renderDrugLibraryDiagnostics()">↻ Refresh</button></div>
+            <div id="drug-diagnostics-summary" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:10px"></div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+              <input type="text" id="drug-diagnostics-query" placeholder="Search exact uploaded drug name…" style="flex:1;min-width:220px;font-size:11px;padding:7px 9px;border-radius:8px;border:1.5px solid var(--g4)" onkeydown="if(event.key==='Enter'){event.preventDefault();runDrugLibraryDiagnosticsSearch();}">
+              <button type="button" class="btn btn-xs btn-blue" onclick="runDrugLibraryDiagnosticsSearch()">Search</button>
+            </div>
+            <div id="drug-diagnostics-results" style="font-size:11px;color:var(--g1)"></div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
