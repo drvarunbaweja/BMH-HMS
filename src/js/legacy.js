@@ -2894,33 +2894,29 @@ function addCustomChip(triggerEl, eye) {
 
 // Reset slit lamp examination blocks for new patient
 function resetSlitLampExamination() {
-  // Reset all slit lamp chips to default state
+  // Remove custom/extra rows added dynamically
+  const extraRowsContainer = document.getElementById('sl-extra-rows');
+  if (extraRowsContainer) extraRowsContainer.innerHTML = '';
+
+  // Remove all dynamically added custom chips
+  document.querySelectorAll('.sl-chip[data-custom="1"]').forEach(function(chip) { chip.remove(); });
+
+  // Reset all chips: remove sel, clear inline styles, re-select defaults
   document.querySelectorAll('#oe-slitlamp .sl-chip').forEach(function(chip) {
     chip.classList.remove('sel');
-    // Keep default "Normal" chips selected
-    if (chip.textContent.trim() === 'Normal') {
+    chip.style.background = '';
+    chip.style.color = '';
+    chip.style.borderColor = '';
+    const txt = chip.textContent.trim();
+    if (txt === 'Normal' || txt === 'Clear' || txt === 'Deep & Clear' || txt === 'Round & Reacting') {
       chip.classList.add('sel');
     }
   });
-  
-  // Clear custom slit lamp rows
-  const extraRowsContainer = document.getElementById('sl-extra-rows');
-  if (extraRowsContainer) {
-    extraRowsContainer.innerHTML = '';
-  }
-  
-  // Clear slit lamp notes
+
+  // Clear slit lamp notes and free-text inputs
   const slNotes = document.getElementById('sl-notes-text');
-  if (slNotes) {
-    slNotes.value = '';
-  }
-  
-  // Clear all slit lamp text inputs
-  document.querySelectorAll('#oe-slitlamp input[type="text"]').forEach(function(input) {
-    input.value = '';
-  });
-  
-  console.log('Slit lamp examination reset for new patient');
+  if (slNotes) slNotes.value = '';
+  document.querySelectorAll('#oe-slitlamp input[type="text"]').forEach(function(input) { input.value = ''; });
 }
 window.resetSlitLampExamination = resetSlitLampExamination;
 
@@ -3029,17 +3025,7 @@ function openPatient(bmhId, opts) {
     const el = document.getElementById(id);
     if (el) el.checked = true;
   });
-  // Slit lamp chips — deselect all, then re-select defaults (Normal chips)
-  const extraSlRows = document.getElementById('sl-extra-rows');
-  if (extraSlRows) extraSlRows.innerHTML = '';
-  document.querySelectorAll('.sl-chip[data-custom="1"]').forEach(function (chip) { chip.remove(); });
-  document.querySelectorAll('.sl-chip').forEach(c => {
-    c.classList.remove('sel');
-    if(c.textContent.trim() === 'Normal' || c.textContent.trim() === 'Clear' ||
-       c.textContent.trim() === 'Deep & Clear' || c.textContent.trim() === 'Round & Reacting') {
-      c.classList.add('sel');
-    }
-  });
+  // Slit lamp chips — already handled by resetSlitLampExamination() above (clears inline styles too)
   // DX list — clear all including tags
   const dxList = document.getElementById('rx-diagnosis-list');
   if(dxList) dxList.innerHTML = '';
@@ -3131,7 +3117,9 @@ function openPatient(bmhId, opts) {
   // ── 5. Load past visits list + try to reload today's visit ─────
   setTimeout(() => {
     loadPastVisits(p.bmhId, targetDept);
-    if (allowTodayRestore) {
+    // Always reload from Firebase for ophtho so CC rows, NV and refraction are never lost.
+    // For cross-ref freshStart, skip loading today's visit (blank form for new consultation).
+    if (!opts.freshStart) {
       if(targetDept === 'ophtho') loadTodayVisitIntoForm(p.bmhId);
       else if(targetDept === 'obg') loadTodayDeptVisitIntoForm(p.bmhId, 'obg');
       else if(targetDept === 'psych') loadTodayDeptVisitIntoForm(p.bmhId, 'psych');
@@ -3141,7 +3129,7 @@ function openPatient(bmhId, opts) {
     renderOphthoRecap && renderOphthoRecap();
     if(targetDept === 'psych') renderPsychRail && renderPsychRail();
     if(targetDept === 'skin') renderSkinRail && renderSkinRail();
-  }, 300);
+  }, 400);
 }
 
 /** Reception queue: open patient finances & visits — does not navigate to doctor examination. */
@@ -3394,21 +3382,36 @@ window.rcOpenBillingForAndPrint = rcOpenBillingForAndPrint;
 function loadTodayVisitIntoForm(bmhId) {
   if(!bmhId || bmhId==='—') return;
   const todayKeyLocal = localDateKey(new Date());
-  fbOnce('visits/' + bmhId, data => {
+
+  // 1. Fast path: restore from local cache immediately (no flicker)
+  const cachedVisits = getCachedPatientVisits(bmhId);
+  const cachedToday = Object.values(cachedVisits || {}).filter(function (v) {
+    return v && v.dept === 'ophtho' && localDateKey(v.date || v.createdAt || v.updatedAt || v.savedAt || '') === todayKeyLocal;
+  }).sort(function (a, b) {
+    return String(b.date || b.createdAt || '').localeCompare(String(a.date || a.createdAt || ''));
+  });
+  if (cachedToday.length && window.CURRENT_PATIENT?.bmhId === bmhId) {
+    populateOphthoForm(cachedToday[0]);
+  }
+
+  // 2. Confirm from Firebase (handles cases where save just completed)
+  fbOnce('visits/' + bmhId, function (data) {
     if ((window.CURRENT_PATIENT?.bmhId || '') !== bmhId) return;
     if(!data) return;
-    // Find the most recent visit saved TODAY for ophtho
     const todayVisits = Object.values(data)
       .filter(function (v) {
-        return v && v.dept === 'ophtho' && localDateKey(v.date || v.createdAt || v.updatedAt || v.savedAt) === todayKeyLocal;
+        return v && v.dept === 'ophtho' && localDateKey(v.date || v.createdAt || v.updatedAt || v.savedAt || '') === todayKeyLocal;
       })
       .sort(function (a, b) {
         return String(b.date || b.createdAt || '').localeCompare(String(a.date || a.createdAt || ''));
       });
-    if(!todayVisits.length) return; // No visit today → leave form blank
+    if(!todayVisits.length) return;
     const v = todayVisits[0];
+    // Merge into cache
+    cachedVisits[v.id || ('V' + Date.now())] = v;
+    cachePatientVisits(bmhId, cachedVisits);
     populateOphthoForm(v);
-    showToast("Today's visit data restored ✓", 'i');
+    if (!cachedToday.length) showToast("Today's visit data restored ✓", 'i');
   });
 }
 
