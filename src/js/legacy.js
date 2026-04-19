@@ -1427,8 +1427,51 @@ function buildCompactDocumentShell(title, ctx, bodyHtml, opts) {
     + '</section>';
 }
 function buildConsentPageShell(cd, ctx, variant) {
-  return buildCompactDocumentShell(cd.title, ctx, buildConsentParasHtml(cd, variant), {
+  return buildCompactDocumentShell(cd.title, ctx, buildConsentMetaBlockHtml(ctx) + buildConsentParasHtml(cd, variant), {
     subtitle: variant === 'en' ? '' : consentVariantSubtitle(variant)
+  });
+}
+function buildConsentMetaBlockHtml(ctx) {
+  const esc = escapeHtmlConsent;
+  const diagnosis = String(ctx?.diagnosis || '').trim();
+  const procedure = String(ctx?.procedure || '').trim();
+  const remarks = String(ctx?.remarks || '').trim();
+  if (!diagnosis && !procedure && !remarks) return '';
+  const row = function (label, value) {
+    if (!value) return '';
+    return '<div style="display:grid;grid-template-columns:120px 1fr;gap:8px;margin-bottom:6px">'
+      + '<div style="font-size:10px;font-weight:900;color:#1A3C6E;text-transform:uppercase">' + esc(label) + '</div>'
+      + '<div style="font-size:11px;line-height:1.55;color:#111">' + esc(value).replace(/\n/g, '<br>') + '</div>'
+      + '</div>';
+  };
+  return '<div style="margin-bottom:12px;padding:10px 12px;border:1px solid #d8deea;border-radius:8px;background:#f7fbff">'
+    + row('Diagnosis', diagnosis)
+    + row('Procedure', procedure)
+    + row('Details', remarks)
+    + '</div>';
+}
+function buildConsentTemplateData(ctx) {
+  const age = String(ctx?.ptAge || '').trim();
+  const sex = String(ctx?.ptSex || '').trim();
+  return {
+    patient_name: String(ctx?.ptNm || '').trim(),
+    patient_id: String(ctx?.ptId || '').trim(),
+    age: age,
+    sex: sex,
+    age_sex: [age, sex].filter(Boolean).join(' / '),
+    mobile: String(ctx?.ptMob || '').trim(),
+    diagnosis: String(ctx?.diagnosis || '').trim(),
+    procedure: String(ctx?.procedure || '').trim(),
+    remarks: String(ctx?.remarks || '').trim(),
+    today: String(ctx?.today || '').trim(),
+    doctor: String(ctx?.doctorName || '').trim()
+  };
+}
+function applyConsentTemplateData(text, ctx) {
+  const data = buildConsentTemplateData(ctx);
+  return String(text || '').replace(/\{\{([^}]+)\}\}/g, function (_, key) {
+    const field = String(key || '').trim();
+    return data[field] != null ? String(data[field]) : '';
   });
 }
 function buildConsentPatientStripHtml(ptNm, ptId, ptAge, ptSex, ptMob, today, procLine, doctorName) {
@@ -1659,6 +1702,9 @@ function saveCurrentCertificateTemplate() {
   showToast('Certificate template saved ✓', 's');
 }
 function collectConsentPrintContext() {
+  if (window._CONSENT_PRINT_CONTEXT && typeof window._CONSENT_PRINT_CONTEXT === 'object') {
+    return Object.assign({}, window._CONSENT_PRINT_CONTEXT);
+  }
   const ptIds = ['ophtho-pt-uid', 'obg-pt-uid', 'psych-pt-uid', 'skin-pt-uid'];
   const ptNms = ['ophtho-pt-nm', 'obg-pt-nm', 'psych-pt-nm', 'skin-pt-nm'];
   let ptId = window._CONSENT_PRINT_BMH_ID || '—'; let ptNm = '_______________';
@@ -1939,7 +1985,8 @@ function buildSavedOphthoCaseSheetPageForPatient(bmhId) {
   return buildCompactDocumentShell('Latest Eye Examination Case Sheet', collectConsentPrintContext(), body, { signatures: false });
 }
 function renderGenericDocumentPage(title, text, ctx, opts) {
-  const body = '<div style="white-space:pre-wrap;font-size:12px;line-height:1.9">' + escapeHtmlConsent(text || '').replace(/\n/g, '<br>') + '</div>';
+  const renderedText = applyConsentTemplateData(text || '', ctx || {});
+  const body = buildConsentMetaBlockHtml(ctx) + '<div style="white-space:pre-wrap;font-size:12px;line-height:1.9">' + escapeHtmlConsent(renderedText).replace(/\n/g, '<br>') + '</div>';
   return buildCompactDocumentShell(title, ctx, body, opts);
 }
 function renderImageDocumentPage(title, imgSrc, ctx) {
@@ -2730,9 +2777,13 @@ function buildConsentHTML(data, lang, pt) {
   compactCtx.ptId = ptId;
   compactCtx.today = today;
   compactCtx.doctorName = doc;
+  compactCtx.diagnosis = String(p.diagnosis || compactCtx.diagnosis || '').trim();
+  compactCtx.procedure = String(p.procedure || compactCtx.procedure || '').trim();
+  compactCtx.remarks = String(p.remarks || compactCtx.remarks || '').trim();
   return '<div style="margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid rgba(26,60,110,.15)">'
     + buildCompactDocumentHeader(String(data.title || ''), compactCtx, lang === 'en' ? '' : (lang === 'pa' ? 'English + ਪੰਜਾਬੀ' : 'English + हिंदी'))
     + '</div>'
+    + buildConsentMetaBlockHtml(compactCtx)
     + paras.map(function (p0, i) {
       return '<div class="consent-para"><div class="consent-eng" style="font-size:12.5px;line-height:1.7;color:var(--tx)">' + (i + 1) + '. ' + String(p0.en || '') + '</div>'
         + '<div class="consent-local" style="font-size:12px;color:var(--g1);margin-top:2px">' + String(p0[localKey] || '') + '</div></div>';
@@ -2816,7 +2867,19 @@ function renderConsentModal() {
   const lang = document.getElementById('mc-lang')?.value || 'pa';
   const data = getConsentEntry(type) || getConsentEntry('cataract');
   const el = document.getElementById('modal-consent-content'); if (!el) return;
-  el.innerHTML = buildConsentHTML(data, lang, { name: ptNm, id: ptId, age: pt.age || '—', sex: pt.sex || '—', mob: pt.mob || '—', date: today, doctor: window.CURRENT_USER?.name || '—' });
+  const ctx = collectConsentPrintContext();
+  el.innerHTML = buildConsentHTML(data, lang, {
+    name: ptNm,
+    id: ptId,
+    age: pt.age || '—',
+    sex: pt.sex || '—',
+    mob: pt.mob || '—',
+    date: today,
+    doctor: window.CURRENT_USER?.name || '—',
+    diagnosis: ctx.diagnosis || '',
+    procedure: ctx.procedure || '',
+    remarks: ctx.remarks || ''
+  });
 }
 function printConsentModal() {
   const type = document.getElementById('mc-type')?.value || 'cataract';
@@ -3254,10 +3317,50 @@ function openReceptionPatient(bmhId) {
     + '<div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:6px">Print consent</div>'
     + '<input type="text" id="rc-consent-search" list="rc-consent-dl" placeholder="Type to search consents for this department…" autocomplete="off" style="width:100%;font-size:12px;padding:8px;margin-bottom:8px;box-sizing:border-box" onfocus="populateRcConsentDatalist(\'' + String(bmhId).replace(/'/g, "\\'") + '\')">'
     + '<datalist id="rc-consent-dl"></datalist>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0">'
+    + '<input type="text" id="rc-consent-diagnosis" placeholder="Diagnosis" style="width:100%;font-size:12px;padding:8px;box-sizing:border-box">'
+    + '<input type="text" id="rc-consent-procedure" placeholder="Procedure / treatment" style="width:100%;font-size:12px;padding:8px;box-sizing:border-box">'
+    + '</div>'
+    + '<textarea id="rc-consent-remarks" placeholder="Additional details / notes for this consent" style="width:100%;min-height:72px;font-size:12px;padding:8px;box-sizing:border-box;margin-bottom:8px"></textarea>'
     + '<button type="button" class="btn btn-gold btn-sm" onclick="rcPrintReceptionConsentFromPopup(\'' + String(bmhId).replace(/'/g, "\\'") + '\')">🖨️ Print selected consent</button>'
     + '</div></div></div>';
   openM('m-rc-patient');
   setTimeout(function () { rcResetMoreChargeRows(); }, 20);
+}
+function getReceptionConsentDraftValues() {
+  return {
+    diagnosis: String(document.getElementById('rc-consent-diagnosis')?.value || '').trim(),
+    procedure: String(document.getElementById('rc-consent-procedure')?.value || '').trim(),
+    remarks: String(document.getElementById('rc-consent-remarks')?.value || '').trim()
+  };
+}
+function prefillRcConsentDraft(bmhId) {
+  const p = PATIENTS.find(function (x) { return x && x.bmhId === bmhId; }) || {};
+  const dx = document.getElementById('rc-consent-diagnosis');
+  const proc = document.getElementById('rc-consent-procedure');
+  const remarks = document.getElementById('rc-consent-remarks');
+  if (dx && !String(dx.value || '').trim()) dx.value = String(p.dx || p.diagnosis || p.lastVisit?.dx || '').trim();
+  if (proc && !String(proc.value || '').trim()) proc.value = String(p.purpose || p.lastVisit?.procedure || p.lastVisit?.procedures || '').trim();
+  if (remarks && !String(remarks.value || '').trim()) remarks.value = '';
+}
+function buildReceptionConsentContext(bmhId) {
+  const p = PATIENTS.find(function (x) { return x && x.bmhId === bmhId; }) || {};
+  const draft = getReceptionConsentDraftValues();
+  const ctx = collectConsentPrintContext();
+  const today = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+  ctx.ptId = p.bmhId || bmhId || ctx.ptId || '—';
+  ctx.ptNm = p.name || ctx.ptNm || '—';
+  ctx.ptAge = p.age || ctx.ptAge || '';
+  ctx.ptSex = p.sex || ctx.ptSex || '';
+  ctx.ptMob = p.mob || p.phone || ctx.ptMob || '';
+  ctx.today = today;
+  ctx.diagnosis = draft.diagnosis || '';
+  ctx.procedure = draft.procedure || '';
+  ctx.remarks = draft.remarks || '';
+  ctx.doctorName = window.CURRENT_USER?.name || ctx.doctorName || '—';
+  ctx.procLine = [ctx.procedure, ctx.diagnosis].filter(Boolean).join(' · ');
+  ctx.stripHtml = buildConsentPatientStripHtml(ctx.ptNm, ctx.ptId, ctx.ptAge, ctx.ptSex, ctx.ptMob, ctx.today, ctx.procLine, ctx.doctorName);
+  return ctx;
 }
 function populateRcConsentDatalist(bmhId) {
   const p = PATIENTS.find(function (x) { return x.bmhId === bmhId; });
@@ -3296,13 +3399,13 @@ function rcToggleConsentSection(bmhId) {
   panel.style.display = hidden ? 'block' : 'none';
   if (hidden) {
     populateRcConsentDatalist(bmhId);
+    prefillRcConsentDraft(bmhId);
     setTimeout(function () {
       const inp = document.getElementById('rc-consent-search');
       if (inp) inp.focus();
     }, 50);
   }
   setTimeout(function () { window._suspendVisitAutosave = false; }, 900);
-  if (!opts.silentHistory && !window._appHistoryRestoring) pushAppNavState(false);
 }
 function openPatientForDept(bmhId, dept, xrefId) {
   const p = PATIENTS.find(function(x) { return x.bmhId === bmhId; });
@@ -3338,11 +3441,14 @@ function rcPrintReceptionConsentFromPopup(bmhId) {
   }
   if (!id) { showToast('No matching consent — pick from the list', 'w'); return; }
   const prev = window._CONSENT_PRINT_BMH_ID;
+  const prevCtx = window._CONSENT_PRINT_CONTEXT;
   window._CONSENT_PRINT_BMH_ID = bmhId;
+  window._CONSENT_PRINT_CONTEXT = buildReceptionConsentContext(bmhId);
   try {
     printConsentFromLibrary(id);
   } finally {
     window._CONSENT_PRINT_BMH_ID = prev;
+    window._CONSENT_PRINT_CONTEXT = prevCtx;
   }
 }
 window.populateRcConsentDatalist = populateRcConsentDatalist;
