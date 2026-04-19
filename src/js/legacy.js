@@ -1369,11 +1369,17 @@ function sanitizeFirebaseKey(key) {
     .trim() || 'field';
 }
 function sanitizeFirebaseValue(value) {
-  if (Array.isArray(value)) return value.map(sanitizeFirebaseValue);
+  if (value === undefined) return null;
+  if (Array.isArray(value)) return value.map(function (item) {
+    const sanitized = sanitizeFirebaseValue(item);
+    return sanitized === undefined ? null : sanitized;
+  });
   if (!value || typeof value !== 'object') return value;
   const out = {};
   Object.keys(value).forEach(function (key) {
-    out[sanitizeFirebaseKey(key)] = sanitizeFirebaseValue(value[key]);
+    const sanitized = sanitizeFirebaseValue(value[key]);
+    if (sanitized === undefined) return;
+    out[sanitizeFirebaseKey(key)] = sanitized;
   });
   return out;
 }
