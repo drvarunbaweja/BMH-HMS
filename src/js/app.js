@@ -1035,6 +1035,10 @@ watchAuthState(
 
     setTimeout(() => {
       try { window.loadDrugLibraryFromStorage({ forceRemote: true }) } catch (_) { /* noop */ }
+      // Start real-time drug library listener after initial load settles
+      setTimeout(() => {
+        try { window.watchDrugLibraryFromFirebase && window.watchDrugLibraryFromFirebase() } catch (_) { /* noop */ }
+      }, 500)
     }, 1500)
     if (typeof window.loadConsentDataOverridesFromStorage === 'function') {
       try { window.loadConsentDataOverridesFromStorage() } catch (_) { /* noop */ }

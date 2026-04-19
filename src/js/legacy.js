@@ -1125,45 +1125,70 @@ const CONSENT_LIBRARY = [
 let CONSENT_DATA_OVERRIDES = {};
 let CONSENT_LIBRARY_OVERRIDES = {};
 function loadConsentDataOverridesFromStorage() {
+  let localDataSavedAt = 0, localLibSavedAt = 0;
   try {
     const ls = localStorage.getItem('bmh_consent_data_db');
     if (ls) {
       const o = JSON.parse(ls);
-      if (o && typeof o === 'object') CONSENT_DATA_OVERRIDES = o;
+      if (o && typeof o === 'object') {
+        localDataSavedAt = Number(o._savedAt || 0);
+        const data = o._savedAt ? o.data : o; // support old flat format
+        if (data && typeof data === 'object') CONSENT_DATA_OVERRIDES = data;
+      }
     }
   } catch (e) { /* noop */ }
   try {
     const ls2 = localStorage.getItem('bmh_consent_library_db');
     if (ls2) {
       const o2 = JSON.parse(ls2);
-      if (o2 && typeof o2 === 'object') CONSENT_LIBRARY_OVERRIDES = o2;
+      if (o2 && typeof o2 === 'object') {
+        localLibSavedAt = Number(o2._savedAt || 0);
+        const data2 = o2._savedAt ? o2.data : o2;
+        if (data2 && typeof data2 === 'object') CONSENT_LIBRARY_OVERRIDES = data2;
+      }
     }
   } catch (e) { /* noop */ }
   if (window.FBDB) {
     window.FBDB.ref('consentDataDb').once('value').then(function (snap) {
       const v = snap.val();
-      if (v && typeof v === 'object') {
-        CONSENT_DATA_OVERRIDES = v;
-        try { localStorage.setItem('bmh_consent_data_db', JSON.stringify(v)); } catch (e) {}
+      if (!v || typeof v !== 'object') return;
+      const remoteSavedAt = Number(v._savedAt || 0);
+      const remoteData = v._savedAt ? v.data : v;
+      if (remoteData && remoteSavedAt > localDataSavedAt) {
+        CONSENT_DATA_OVERRIDES = remoteData;
+        const payload = { data: remoteData, _savedAt: remoteSavedAt };
+        try { localStorage.setItem('bmh_consent_data_db', JSON.stringify(payload)); } catch (e) {}
+      } else if (localDataSavedAt > remoteSavedAt) {
+        saveConsentDataOverridesToStorage();
       }
     }).catch(function () {});
     window.FBDB.ref('consentLibraryDb').once('value').then(function (snap) {
       const v = snap.val();
-      if (v && typeof v === 'object') {
-        CONSENT_LIBRARY_OVERRIDES = v;
-        try { localStorage.setItem('bmh_consent_library_db', JSON.stringify(v)); } catch (e) {}
+      if (!v || typeof v !== 'object') return;
+      const remoteSavedAt = Number(v._savedAt || 0);
+      const remoteData = v._savedAt ? v.data : v;
+      if (remoteData && remoteSavedAt > localLibSavedAt) {
+        CONSENT_LIBRARY_OVERRIDES = remoteData;
+        const payload = { data: remoteData, _savedAt: remoteSavedAt };
+        try { localStorage.setItem('bmh_consent_library_db', JSON.stringify(payload)); } catch (e) {}
+      } else if (localLibSavedAt > remoteSavedAt) {
+        saveConsentLibraryOverridesToStorage();
       }
     }).catch(function () {});
   }
 }
 window.loadConsentDataOverridesFromStorage = loadConsentDataOverridesFromStorage;
 function saveConsentDataOverridesToStorage() {
-  try { localStorage.setItem('bmh_consent_data_db', JSON.stringify(CONSENT_DATA_OVERRIDES)); } catch (e) {}
-  if (window.FBDB) window.FBDB.ref('consentDataDb').set(CONSENT_DATA_OVERRIDES).catch(function () {});
+  const savedAt = Date.now();
+  const payload = { data: CONSENT_DATA_OVERRIDES, _savedAt: savedAt };
+  try { localStorage.setItem('bmh_consent_data_db', JSON.stringify(payload)); } catch (e) {}
+  if (window.FBDB) window.FBDB.ref('consentDataDb').set(payload).catch(function () {});
 }
 function saveConsentLibraryOverridesToStorage() {
-  try { localStorage.setItem('bmh_consent_library_db', JSON.stringify(CONSENT_LIBRARY_OVERRIDES)); } catch (e) {}
-  if (window.FBDB) window.FBDB.ref('consentLibraryDb').set(CONSENT_LIBRARY_OVERRIDES).catch(function () {});
+  const savedAt = Date.now();
+  const payload = { data: CONSENT_LIBRARY_OVERRIDES, _savedAt: savedAt };
+  try { localStorage.setItem('bmh_consent_library_db', JSON.stringify(payload)); } catch (e) {}
+  if (window.FBDB) window.FBDB.ref('consentLibraryDb').set(payload).catch(function () {});
 }
 function getMergedConsentData() {
   const out = {};
@@ -2484,7 +2509,9 @@ function cancelPayReq(reqId) {
 
 function getSavedHospitalSettings() {
   try {
-    return JSON.parse(localStorage.getItem('bmh_hospital_settings') || '{}') || {};
+    const raw = JSON.parse(localStorage.getItem('bmh_hospital_settings') || '{}') || {};
+    // New format: { values: {...}, _savedAt: ... }; old format: flat key-value map
+    return raw.values || raw;
   } catch (e) {
     return {};
   }
@@ -15486,40 +15513,50 @@ function migrateOtTemplateStorageKeys() {
   Object.assign(RX_TEMPLATES_META, nextMeta);
 }
 function saveRxTemplatesToStorage() {
-  try { localStorage.setItem('bmh_rx_templates', JSON.stringify({ data: RX_TEMPLATES_DATA, meta: RX_TEMPLATES_META })); } catch (e) { /* quota */ }
-  if (window.FBDB) window.FBDB.ref('rxTemplates').set({ data: RX_TEMPLATES_DATA, meta: RX_TEMPLATES_META }).catch(function () {});
+  const savedAt = Date.now();
+  const payload = { data: RX_TEMPLATES_DATA, meta: RX_TEMPLATES_META, _savedAt: savedAt };
+  try { localStorage.setItem('bmh_rx_templates', JSON.stringify(payload)); } catch (e) { /* quota */ }
+  if (window.FBDB) window.FBDB.ref('rxTemplates').set(payload).catch(function () {});
 }
-function loadRxTemplatesFromStorage(cb) {
-  try {
-    const ls = localStorage.getItem('bmh_rx_templates');
-    if (ls) {
-      const o = JSON.parse(ls);
-      if (o.data && typeof o.data === 'object') Object.assign(RX_TEMPLATES_DATA, o.data);
-      if (o.meta && typeof o.meta === 'object') Object.assign(RX_TEMPLATES_META, o.meta);
-    }
-  } catch (e) { /* noop */ }
+function _applyRxTemplatePayload(payload) {
+  // Fully replace in-memory state — deletions must persist, no additive merge
+  Object.keys(RX_TEMPLATES_DATA).forEach(function (k) { delete RX_TEMPLATES_DATA[k]; });
+  Object.keys(RX_TEMPLATES_META).forEach(function (k) { delete RX_TEMPLATES_META[k]; });
+  if (payload.data && typeof payload.data === 'object') Object.assign(RX_TEMPLATES_DATA, payload.data);
+  if (payload.meta && typeof payload.meta === 'object') Object.assign(RX_TEMPLATES_META, payload.meta);
   Object.keys(RX_TEMPLATES_META).forEach(function (k) {
     if (!RX_TEMPLATES_META[k] || typeof RX_TEMPLATES_META[k] !== 'object') return;
     RX_TEMPLATES_META[k].dept = normalizeRxTemplateDeptKey(RX_TEMPLATES_META[k].dept || 'all');
   });
   migrateOtTemplateStorageKeys();
+}
+function loadRxTemplatesFromStorage(cb) {
+  let localSavedAt = 0;
+  try {
+    const ls = localStorage.getItem('bmh_rx_templates');
+    if (ls) {
+      const o = JSON.parse(ls);
+      localSavedAt = Number(o._savedAt || 0);
+      _applyRxTemplatePayload(o);
+    }
+  } catch (e) { /* noop */ }
   if (!window.FBDB) {
     if (typeof refreshRxTemplateSelects === 'function') refreshRxTemplateSelects();
     if (typeof renderSetRxTplList === 'function') renderSetRxTplList();
-    saveRxTemplatesToStorage();
     if (typeof cb === 'function') cb();
     return;
   }
   window.FBDB.ref('rxTemplates').once('value').then(function (snap) {
     const v = snap.val();
-    if (v && v.data && typeof v.data === 'object') Object.assign(RX_TEMPLATES_DATA, v.data);
-    if (v && v.meta && typeof v.meta === 'object') Object.assign(RX_TEMPLATES_META, v.meta);
-    Object.keys(RX_TEMPLATES_META).forEach(function (k) {
-      if (!RX_TEMPLATES_META[k] || typeof RX_TEMPLATES_META[k] !== 'object') return;
-      RX_TEMPLATES_META[k].dept = normalizeRxTemplateDeptKey(RX_TEMPLATES_META[k].dept || 'all');
-    });
-    migrateOtTemplateStorageKeys();
-    saveRxTemplatesToStorage();
+    const remoteSavedAt = Number(v && v._savedAt || 0);
+    if (v && remoteSavedAt > localSavedAt) {
+      // Firebase is newer — replace local entirely (preserves deletions made on other machine)
+      _applyRxTemplatePayload(v);
+      try { localStorage.setItem('bmh_rx_templates', JSON.stringify(v)); } catch (e) { /* noop */ }
+    } else if (localSavedAt > remoteSavedAt && Object.keys(RX_TEMPLATES_DATA).length > 0) {
+      // Local is newer — push to Firebase so other machines get up-to-date state
+      saveRxTemplatesToStorage();
+    }
     if (typeof refreshRxTemplateSelects === 'function') refreshRxTemplateSelects();
     if (typeof renderSetRxTplList === 'function') renderSetRxTplList();
     if (typeof cb === 'function') cb();
@@ -16543,6 +16580,33 @@ function loadDrugLibraryFromStorage(opts) {
 }
 window.loadDrugLibraryFromStorage = loadDrugLibraryFromStorage;
 
+function watchDrugLibraryFromFirebase() {
+  if (!window.FBDB || window._bmhDrugLibraryWatchActive) return;
+  window._bmhDrugLibraryWatchActive = true;
+  window.FBDB.ref('drugLibrary').on('value', function (snap) {
+    const remoteArr = normalizeDrugLibrarySnapshot(snap.val());
+    if (!remoteArr.length) return;
+    const localArr = Array.isArray(DRUG_LIBRARY) ? DRUG_LIBRARY.slice() : [];
+    const merged = mergeDrugLibraryRows(localArr.concat(remoteArr));
+    const prevHash = localArr.map(function (d) { return (d._id || d.trade) + ':' + (d._updatedAt || 0); }).sort().join(',');
+    const nextHash = merged.map(function (d) { return (d._id || d.trade) + ':' + (d._updatedAt || 0); }).sort().join(',');
+    if (prevHash === nextHash) return;
+    DRUG_LIBRARY.length = 0;
+    merged.forEach(function (x) { DRUG_LIBRARY.push(x); });
+    invalidateDrugSearchPoolCache && invalidateDrugSearchPoolCache();
+    persistDrugLibraryLocalSnapshots(DRUG_LIBRARY);
+    renderSettingsDrugs && renderSettingsDrugs();
+    rebuildDrugGenericDatalist && rebuildDrugGenericDatalist();
+    // Push back to Firebase when local had drugs not in remote
+    const remoteHash = remoteArr.map(function (d) { return (d._id || d.trade) + ':' + (d._updatedAt || 0); }).sort().join(',');
+    if (nextHash !== remoteHash) {
+      window.FBDB.ref('drugLibrary').set(DRUG_LIBRARY).catch(function () {});
+      window.FBDB.ref('drugLibraryMeta').set({ updatedAt: Date.now() }).catch(function () {});
+    }
+  });
+}
+window.watchDrugLibraryFromFirebase = watchDrugLibraryFromFirebase;
+
 function normalizeDrugTypeFromCsv(s) {
   const t = String(s || '').toLowerCase().trim();
   if (!t) return 'Tablet';
@@ -16621,7 +16685,8 @@ function handleDrugImportCsv(inp) {
         freq: 'BD',
         dur: '1 Week',
         dept: importedDept || 'All',
-        company: company || ''
+        company: company || '',
+        _updatedAt: Date.now()
       }));
     }
     // Merge with existing library (deduplicates by trade+generic+dept key)
@@ -16670,7 +16735,7 @@ function addDrugToLibraryFromModal() {
   const dur = document.getElementById('md-add-dur')?.value;
   const dept = document.getElementById('md-add-dept')?.value;
   if (!trade || !generic) { showToast('Enter trade and generic name', 'w'); return; }
-  DRUG_LIBRARY.push(normalizeDrugLibraryRow({ type, trade, generic, freq, dur, dept }));
+  DRUG_LIBRARY.push(normalizeDrugLibraryRow({ type, trade, generic, freq, dur, dept, _updatedAt: Date.now() }));
   saveDrugLibraryToStorage();
   renderSettingsDrugs();
   rebuildDrugGenericDatalist();
@@ -16733,6 +16798,7 @@ function saveEditDrugLibrary() {
   DRUG_LIBRARY[i].freq = document.getElementById('md-edit-freq')?.value;
   DRUG_LIBRARY[i].dur = document.getElementById('md-edit-dur')?.value;
   DRUG_LIBRARY[i].dept = document.getElementById('md-edit-dept')?.value;
+  DRUG_LIBRARY[i]._updatedAt = Date.now();
   normalizeDrugLibraryRow(DRUG_LIBRARY[i]);
   saveDrugLibraryToStorage();
   renderSettingsDrugs();
@@ -16749,7 +16815,7 @@ function addDrugToLibrary() {
   const dur = document.getElementById('new-drug-dur')?.value;
   const dept = document.getElementById('new-drug-dept')?.value;
   if(!trade||!generic){showToast('Please enter trade and generic name','w');return;}
-  DRUG_LIBRARY.push(normalizeDrugLibraryRow({type,trade,generic,freq,dur,dept}));
+  DRUG_LIBRARY.push(normalizeDrugLibraryRow({type,trade,generic,freq,dur,dept,_updatedAt:Date.now()}));
   saveDrugLibraryToStorage();
   renderSettingsDrugs();
   showToast(`💊 ${trade} added to library ✓`,'s');
@@ -18850,8 +18916,10 @@ function saveSurgeryPackOverrides() {
 loadSurgeryPackOverrides();
 function saveCustomSurgeryPacks(arr) {
   window.BMH_CUSTOM_SURGERY_PACKS = Array.isArray(arr) ? arr.slice() : [];
+  const savedAt = Date.now();
   try { localStorage.setItem('bmh_surgery_packs_custom', JSON.stringify(arr)); } catch (e) { /* noop */ }
-  if (window.FBDB) window.FBDB.ref('surgeryPacksCustom').set(arr).catch(function () {});
+  try { localStorage.setItem('bmh_surgery_packs_saved_at', String(savedAt)); } catch (e) { /* noop */ }
+  if (window.FBDB) window.FBDB.ref('surgeryPacksCustom').set({ packs: arr, _savedAt: savedAt }).catch(function () {});
 }
 window.BMH_UPLOADED_CONSENTS = window.BMH_UPLOADED_CONSENTS || [];
 function normalizeSurgeryPackDeptKey(v) {
@@ -25642,19 +25710,58 @@ function saveDoctorSettings() {
 function saveHospitalSettings() {
   try {
     const host = document.getElementById('set-hospital');
+    const values = {};
     if (host) {
-      const values = {};
-      host.querySelectorAll('input, select, textarea').forEach(function (el) {
-        const key = el.id || el.previousElementSibling?.textContent || el.placeholder || ('field_' + Object.keys(values).length);
-        values[key] = el.value;
+      host.querySelectorAll('input[id], select[id], textarea[id]').forEach(function (el) {
+        values[el.id] = el.value;
       });
-      localStorage.setItem('bmh_hospital_settings', JSON.stringify(values));
     }
-    showToast('Saved ✓', 's');
+    const savedAt = Date.now();
+    const payload = { values: values, _savedAt: savedAt };
+    localStorage.setItem('bmh_hospital_settings', JSON.stringify(payload));
+    if (window.FBDB) {
+      showToast('Saving to cloud...', 'i');
+      window.FBDB.ref('hospitalSettings').set(payload)
+        .then(function () { showToast('Hospital settings saved to cloud ✓', 's'); })
+        .catch(function () { showToast('Saved locally (cloud sync failed)', 'w'); });
+    } else {
+      showToast('Saved ✓', 's');
+    }
   } catch (e) {
     showToast('Settings saved ✓', 's');
   }
 }
+function loadHospitalSettingsFromFirebase() {
+  let localSavedAt = 0;
+  try {
+    const raw = JSON.parse(localStorage.getItem('bmh_hospital_settings') || '{}') || {};
+    localSavedAt = Number(raw._savedAt || 0);
+  } catch (e) { /* noop */ }
+  if (!window.FBDB) return;
+  window.FBDB.ref('hospitalSettings').once('value').then(function (snap) {
+    const v = snap.val();
+    if (!v || typeof v !== 'object') return;
+    const remoteSavedAt = Number(v._savedAt || 0);
+    if (remoteSavedAt > localSavedAt && v.values) {
+      // Firebase is newer — restore form fields and update localStorage
+      localStorage.setItem('bmh_hospital_settings', JSON.stringify(v));
+      const host = document.getElementById('set-hospital');
+      if (host) {
+        Object.keys(v.values).forEach(function (key) {
+          const el = document.getElementById(key);
+          if (el) el.value = v.values[key];
+        });
+      }
+    } else if (localSavedAt > remoteSavedAt) {
+      // Local is newer — push to Firebase
+      try {
+        const raw = JSON.parse(localStorage.getItem('bmh_hospital_settings') || '{}');
+        if (raw.values) window.FBDB.ref('hospitalSettings').set(raw).catch(function () {});
+      } catch (e) { /* noop */ }
+    }
+  }).catch(function () {});
+}
+window.loadHospitalSettingsFromFirebase = loadHospitalSettingsFromFirebase;
 
 // Login disabled for testing
 
@@ -29417,13 +29524,14 @@ function replaceDoctorProfiles(nextData) {
   });
 }
 
-function saveDoctorProfilesToLocalStorage() {
+function saveDoctorProfilesToLocalStorage(savedAt) {
   try {
     const next = JSON.stringify(DOCTOR_PROFILES);
     const prev = localStorage.getItem('bmh_doctor_profiles');
     if (prev && prev !== next) localStorage.setItem('bmh_doctor_profiles_archive', prev);
     localStorage.setItem('bmh_doctor_profiles', next);
     localStorage.setItem('bmh_doctor_profiles_backup', next);
+    if (savedAt) localStorage.setItem('bmh_doctor_profiles_saved_at', String(savedAt));
   } catch (e) {
     showToast('Could not save credentials locally (data too large?)', 'w');
   }
@@ -29461,12 +29569,16 @@ function saveDoctorCredentials() {
       if(rxp !== undefined)  DOCTOR_PROFILES[name].rxPrintMode = rxp;
     }
   });
-  saveDoctorProfilesToLocalStorage();
-  // Save entire DOCTOR_PROFILES to Firebase for persistence
+  const savedAt = Date.now();
+  saveDoctorProfilesToLocalStorage(savedAt);
   if(window.FBDB) {
-    window.FBDB.ref('doctorProfiles').set(DOCTOR_PROFILES)
-      .then(() => showToast('Doctor credentials saved & synced ✓','s'))
-      .catch(() => showToast('Saved on this device (cloud sync failed)','w'));
+    showToast('Saving to cloud...', 'i');
+    Promise.all([
+      window.FBDB.ref('doctorProfiles').set(DOCTOR_PROFILES),
+      window.FBDB.ref('doctorProfilesMeta').set({ _savedAt: savedAt })
+    ])
+      .then(function () { showToast('Doctor credentials saved & synced ✓', 's'); })
+      .catch(function () { showToast('Saved on this device (cloud sync failed)', 'w'); });
   } else {
     showToast('Doctor credentials saved on this device ✓','s');
   }
@@ -29475,21 +29587,36 @@ function saveDoctorCredentials() {
 function loadDoctorProfilesFromFirebase() {
   loadDoctorProfilesFromLocalStorage();
   renderDrCredentials && renderDrCredentials();
-  if(!window.FBDB) return;
-  window.FBDB.ref('doctorProfiles').once('value').then(snap => {
-    const data = snap.val();
+  if (!window.FBDB) return;
+  const localSavedAt = Number(localStorage.getItem('bmh_doctor_profiles_saved_at') || 0);
+  Promise.all([
+    window.FBDB.ref('doctorProfiles').once('value'),
+    window.FBDB.ref('doctorProfilesMeta').once('value')
+  ]).then(function (pairs) {
+    const data = pairs[0].val();
+    const metaData = pairs[1].val();
     const remoteData = data && typeof data === 'object' ? data : {};
-    const currentMerged = mergeDoctorProfilesDataset({}, DOCTOR_PROFILES);
-    const mergedData = mergeDoctorProfilesDataset(currentMerged, remoteData);
-    replaceDoctorProfiles(mergedData);
-    saveDoctorProfilesToLocalStorage();
-    typeof renderDrCredentials === 'function' && renderDrCredentials();
-    const localScore = Object.values(mergedData).reduce(function (sum, profile) { return sum + scoreDoctorProfileData(profile); }, 0);
-    const remoteScore = Object.values(remoteData).reduce(function (sum, profile) { return sum + scoreDoctorProfileData(profile); }, 0);
-    if ((!data || !Object.keys(remoteData).length) || localScore > remoteScore) {
-      window.FBDB.ref('doctorProfiles').set(DOCTOR_PROFILES).catch(function(){});
+    const remoteSavedAt = Number((metaData && metaData._savedAt) || 0);
+    if (remoteSavedAt > localSavedAt) {
+      // Firebase is newer — use it as authoritative source (another machine saved changes)
+      replaceDoctorProfiles(remoteData);
+      saveDoctorProfilesToLocalStorage(remoteSavedAt);
+    } else if (localSavedAt > remoteSavedAt && Object.keys(DOCTOR_PROFILES).length > 0) {
+      // Local is newer — push local to Firebase
+      window.FBDB.ref('doctorProfiles').set(DOCTOR_PROFILES).catch(function () {});
+      window.FBDB.ref('doctorProfilesMeta').set({ _savedAt: localSavedAt }).catch(function () {});
+    } else {
+      // No timestamps on either side (first-time / legacy) — merge to get the best of both
+      const mergedData = mergeDoctorProfilesDataset(DOCTOR_PROFILES, remoteData);
+      replaceDoctorProfiles(mergedData);
+      saveDoctorProfilesToLocalStorage();
+      if (!Object.keys(remoteData).length) {
+        window.FBDB.ref('doctorProfiles').set(DOCTOR_PROFILES).catch(function () {});
+        window.FBDB.ref('doctorProfilesMeta').set({ _savedAt: Date.now() }).catch(function () {});
+      }
     }
-  }).catch(()=>{});
+    typeof renderDrCredentials === 'function' && renderDrCredentials();
+  }).catch(function () {});
 }
 window.loadDoctorProfilesFromFirebase = loadDoctorProfilesFromFirebase;
 
@@ -29552,15 +29679,21 @@ const CONSENT_TEMPLATES = [
   {id:'T002',type:'template',name:'Post-LSCS Discharge Template',dept:'obg',content:'Patient discharged after LSCS, both mother and baby well…'},
 ];
 function saveConsentTemplatesToStorage() {
-  try { localStorage.setItem('bmh_consent_templates', JSON.stringify(CONSENT_TEMPLATES)); } catch (e) { /* noop */ }
-  if (window.FBDB) window.FBDB.ref('consentTemplatesStub').set(CONSENT_TEMPLATES).catch(function () {});
+  const savedAt = Date.now();
+  const payload = { templates: CONSENT_TEMPLATES, _savedAt: savedAt };
+  try { localStorage.setItem('bmh_consent_templates', JSON.stringify(payload)); } catch (e) { /* noop */ }
+  if (window.FBDB) window.FBDB.ref('consentTemplatesStub').set(payload).catch(function () {});
 }
 function loadConsentTemplatesFromStorage() {
+  let localSavedAt = 0;
   try {
     const ls = localStorage.getItem('bmh_consent_templates');
     if (ls) {
-      const arr = JSON.parse(ls);
-      if (Array.isArray(arr) && arr.length) {
+      const o = JSON.parse(ls);
+      // Support old format (bare array) and new format ({ templates, _savedAt })
+      const arr = Array.isArray(o) ? o : (Array.isArray(o.templates) ? o.templates : null);
+      localSavedAt = Number(o._savedAt || 0);
+      if (arr && arr.length) {
         CONSENT_TEMPLATES.length = 0;
         arr.forEach(function (x) { CONSENT_TEMPLATES.push(x); });
       }
@@ -29568,11 +29701,20 @@ function loadConsentTemplatesFromStorage() {
   } catch (e) { /* noop */ }
   if (!window.FBDB) return;
   window.FBDB.ref('consentTemplatesStub').once('value').then(function (snap) {
-    const arr = snap.val();
-    if (Array.isArray(arr) && arr.length) {
+    const v = snap.val();
+    if (!v) return;
+    // Support old format (bare array) and new format ({ templates, _savedAt })
+    const remoteArr = Array.isArray(v) ? v : (Array.isArray(v.templates) ? v.templates : null);
+    const remoteSavedAt = Array.isArray(v) ? 0 : Number(v._savedAt || 0);
+    if (remoteArr && remoteSavedAt > localSavedAt) {
+      // Firebase is newer — replace local (preserves deletions from other machines)
       CONSENT_TEMPLATES.length = 0;
-      arr.forEach(function (x) { CONSENT_TEMPLATES.push(x); });
-      try { localStorage.setItem('bmh_consent_templates', JSON.stringify(CONSENT_TEMPLATES)); } catch (e) { /* noop */ }
+      remoteArr.forEach(function (x) { CONSENT_TEMPLATES.push(x); });
+      const newPayload = { templates: CONSENT_TEMPLATES, _savedAt: remoteSavedAt };
+      try { localStorage.setItem('bmh_consent_templates', JSON.stringify(newPayload)); } catch (e) { /* noop */ }
+    } else if (localSavedAt > remoteSavedAt && CONSENT_TEMPLATES.length > 0) {
+      // Local is newer — push to Firebase
+      saveConsentTemplatesToStorage();
     }
   }).catch(function () {});
 }
@@ -29697,12 +29839,19 @@ function renderSettingsPage() {
   loadConsentTemplatesFromStorage && loadConsentTemplatesFromStorage();
   loadIolCatalogFromStorage && loadIolCatalogFromStorage();
   loadInventoryFromFirebase && loadInventoryFromFirebase();
+  loadHospitalSettingsFromFirebase && loadHospitalSettingsFromFirebase();
   if (window.FBDB) {
+    const localPacksTs = Number(localStorage.getItem('bmh_surgery_packs_saved_at') || 0);
     window.FBDB.ref('surgeryPacksCustom').once('value').then(function (snap) {
       const v = snap.val();
-      if (Array.isArray(v) && v.length) {
-        window.BMH_CUSTOM_SURGERY_PACKS = v.slice();
-        try { localStorage.setItem('bmh_surgery_packs_custom', JSON.stringify(v)); } catch (e) { /* noop */ }
+      const remoteTs = Array.isArray(v) ? 0 : Number(v && v._savedAt || 0);
+      const packs = Array.isArray(v) ? v : (v && Array.isArray(v.packs) ? v.packs : null);
+      if (packs && packs.length && remoteTs > localPacksTs) {
+        window.BMH_CUSTOM_SURGERY_PACKS = packs.slice();
+        try { localStorage.setItem('bmh_surgery_packs_custom', JSON.stringify(packs)); } catch (e) { /* noop */ }
+        try { localStorage.setItem('bmh_surgery_packs_saved_at', String(remoteTs)); } catch (e) { /* noop */ }
+      } else if (localPacksTs > remoteTs && Array.isArray(window.BMH_CUSTOM_SURGERY_PACKS) && window.BMH_CUSTOM_SURGERY_PACKS.length) {
+        window.FBDB.ref('surgeryPacksCustom').set({ packs: window.BMH_CUSTOM_SURGERY_PACKS, _savedAt: localPacksTs }).catch(function () {});
       }
       renderSetPacksList && renderSetPacksList();
     }).catch(function () { renderSetPacksList && renderSetPacksList(); });
