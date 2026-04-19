@@ -1343,6 +1343,9 @@ function sanitizeFirebaseKey(key) {
     .replace(/\s+/g, ' ')
     .trim() || 'field';
 }
+function userSettingsPath(uname) {
+  return 'userSettings/' + sanitizeFirebaseKey(uname);
+}
 function sanitizeFirebaseValue(value) {
   if (value === undefined) return null;
   if (Array.isArray(value)) return value.map(function (item) {
@@ -1386,6 +1389,26 @@ function buildCompactDocumentHeader(title, ctx, subtitle) {
     + '<span style="font-weight:800;color:#666;text-transform:uppercase">BMSH ID</span><span style="font-size:10.5px;font-weight:900;font-family:ui-monospace,monospace;color:#1A3C6E">' + esc(ctx?.ptId || '—') + '</span>'
     + '</div></div>'
     + '<div style="padding:1px 0 6px;text-align:center"><div style="font-size:13px;font-weight:900;color:#111;line-height:1.15">' + esc(title) + '</div>' + (subtitle ? '<div style="font-size:9px;font-weight:800;color:#555;margin-top:2px">' + esc(subtitle) + '</div>' : '') + '</div>'
+    + '</div>';
+}
+function buildDischargePrintHeaderHtml(ptId, dateText, colorPrint) {
+  const esc = escapeHtmlConsent;
+  const hospitalLogoSrc = resolvePrintHeaderSrc();
+  const bmhLogoSrc = resolvePrintLogoSrc();
+  const blue = colorPrint ? '#1A3C6E' : '#444';
+  const gold = colorPrint ? '#D4A017' : '#777';
+  const metaBits = [ptId ? ('BMSH ID: ' + ptId) : '', dateText ? ('Date: ' + dateText) : ''].filter(Boolean);
+  return '<div class="dc-brand-header" style="display:grid;grid-template-columns:minmax(140px,1fr) minmax(180px,1.2fr) minmax(80px,.55fr);align-items:center;gap:12px;padding:10px 12px 8px;background:#fff;border-bottom:2px solid ' + gold + '">'
+    + '<div style="display:flex;align-items:center;justify-content:flex-start;min-width:0">'
+    + '<img src="' + esc(hospitalLogoSrc) + '" alt="Baweja Multispeciality Hospital" style="max-width:100%;max-height:54px;width:auto;height:auto;object-fit:contain" onerror="this.style.display=\'none\'">'
+    + '</div>'
+    + '<div style="text-align:center;min-width:0">'
+    + '<div style="font-size:20px;font-weight:900;letter-spacing:.5px;color:' + blue + ';text-transform:uppercase">Discharge Card</div>'
+    + (metaBits.length ? '<div style="margin-top:4px;font-size:10.5px;font-weight:700;color:#5b6470">' + esc(metaBits.join('  •  ')) + '</div>' : '')
+    + '</div>'
+    + '<div style="display:flex;align-items:center;justify-content:flex-end;min-width:0">'
+    + '<img src="' + esc(bmhLogoSrc) + '" alt="BMH" style="max-width:72px;max-height:54px;width:auto;height:auto;object-fit:contain" onerror="this.style.display=\'none\'">'
+    + '</div>'
     + '</div>';
 }
 function buildCompactDocumentShell(title, ctx, bodyHtml, opts) {
@@ -27967,9 +27990,7 @@ function buildOphthoDischargeA4LayoutPrintHtml(snap, data, colorPrint) {
   const fuCenter = buildOphFollowupVerticalPrintHtml(fus);
   return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>@page{size:A4 landscape;margin:4mm}body{font-family:Arial,sans-serif;color:#111;margin:0;padding:0;font-size:10.5px}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>'
     + '<div style="border:1px solid #aaa;border-radius:8px;overflow:hidden;max-height:200mm">'
-    + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;background:' + blue + ';color:#fff;padding:8px 11px">'
-    + '<div><div style="font-size:10px;opacity:.88">Discharge Card</div><div style="font-size:9px;opacity:.75">Baweja Multispeciality Hospital</div></div>'
-    + '<div style="text-align:right"><div style="font-size:12px;font-weight:900;color:' + gold + '">' + esc(ptId) + '</div><div style="font-size:9px;opacity:.85">Date: ' + esc(formatDateIN(new Date())) + '</div></div></div>'
+    + buildDischargePrintHeaderHtml(ptId, formatDateIN(new Date()), colorPrint)
     + '<div style="display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,0.42fr) minmax(0,1fr);gap:10px;align-items:stretch;padding:9px 11px;border-bottom:1px solid #ddd;min-height:0;max-height:92mm">'
     + '<div style="border:1px solid #e0e0e0;border-radius:8px;padding:10px 12px;font-size:11.4px;background:#fff">'
     + '<div style="font-size:9px;font-weight:900;color:' + blue + ';border-bottom:2px solid ' + gold + ';margin-bottom:8px;padding-bottom:4px;text-transform:uppercase;letter-spacing:.35px">Patient &amp; surgery</div>'
@@ -28015,6 +28036,12 @@ function buildDischargeCardPrintHtml() {
     return /discharge summary/i.test(String(el.textContent || '').trim());
   });
   if (headerTag) headerTag.textContent = 'Discharge Card';
+  const headerEl = clone.querySelector('.dc-header');
+  if (headerEl) {
+    const ptIdText = clone.querySelector('#dc-pt-id') ? String(clone.querySelector('#dc-pt-id').textContent || '').trim() : '';
+    const dateText = clone.querySelector('#dc-date') ? String(clone.querySelector('#dc-date').textContent || '').trim() : '';
+    headerEl.innerHTML = buildDischargePrintHeaderHtml(ptIdText, dateText, colorPrint);
+  }
   clone.querySelectorAll('[contenteditable]').forEach(function (node) {
     node.removeAttribute('contenteditable');
     node.style.borderBottom = 'none';
@@ -28047,7 +28074,7 @@ function buildDischargeCardPrintHtml() {
     inp.style.fontSize = '12px';
     inp.style.fontWeight = '800';
   });
-  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{font-family:Arial,sans-serif;color:#111;background:#fff;margin:0;padding:0;font-size:10.6px;line-height:1.12}@page{size:A4 landscape;margin:3mm}.print-wrap{transform:scale(.80);transform-origin:top left;width:124%;' + (colorPrint ? '' : 'filter:grayscale(100%) contrast(1.08)') + '}.discharge-card{border:1px solid #9a9a9a;border-radius:8px;overflow:hidden}.dc-header{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;background:' + (colorPrint ? '#1A3C6E' : '#666') + ' !important;padding:7px 9px}.dc-field-lbl{font-size:7.5px;font-weight:800;color:#555;text-transform:uppercase;letter-spacing:.35px}.dc-field-val{font-size:10.8px;font-weight:800;color:#111}.g2{display:grid;grid-template-columns:1fr 1fr}.drop-item{border-left:3px solid ' + (colorPrint ? '#1A3C6E' : '#666') + ';padding:4px 6px;border-radius:6px;background:' + (colorPrint ? '#eef3fb' : '#efefef') + ' !important;margin-bottom:4px}.drop-freq{display:flex;gap:2px;flex-wrap:wrap}.drop-time.active{background:' + (colorPrint ? '#1A3C6E' : '#666') + ' !important;color:#fff}.drop-time{display:inline-flex;align-items:center;justify-content:center;font-size:11.5px;padding:1px 4px;min-width:24px;border-radius:8px;border:1px solid #bdbdbd}.dc-med-row input,.dc-med-row select{font-size:12px !important;font-weight:800 !important}.card-title{font-size:11.8px!important}.card-sub,.muted{font-size:8.4px!important}.dc-instr-row{padding:2px 0 !important}.dc-instr-row div{font-size:9.6px !important;line-height:1.2 !important}</style></head><body><div class="print-wrap">'
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{font-family:Arial,sans-serif;color:#111;background:#fff;margin:0;padding:0;font-size:10.6px;line-height:1.12}@page{size:A4 landscape;margin:3mm}.print-wrap{transform:scale(.80);transform-origin:top left;width:124%;' + (colorPrint ? '' : 'filter:grayscale(100%) contrast(1.08)') + '}.discharge-card{border:1px solid #9a9a9a;border-radius:8px;overflow:hidden}.dc-header{display:block !important;background:#fff !important;padding:0 !important}.dc-field-lbl{font-size:7.5px;font-weight:800;color:#555;text-transform:uppercase;letter-spacing:.35px}.dc-field-val{font-size:10.8px;font-weight:800;color:#111}.g2{display:grid;grid-template-columns:1fr 1fr}.drop-item{border-left:3px solid ' + (colorPrint ? '#1A3C6E' : '#666') + ';padding:4px 6px;border-radius:6px;background:' + (colorPrint ? '#eef3fb' : '#efefef') + ' !important;margin-bottom:4px}.drop-freq{display:flex;gap:2px;flex-wrap:wrap}.drop-time.active{background:' + (colorPrint ? '#1A3C6E' : '#666') + ' !important;color:#fff}.drop-time{display:inline-flex;align-items:center;justify-content:center;font-size:11.5px;padding:1px 4px;min-width:24px;border-radius:8px;border:1px solid #bdbdbd}.dc-med-row input,.dc-med-row select{font-size:12px !important;font-weight:800 !important}.card-title{font-size:11.8px!important}.card-sub,.muted{font-size:8.4px!important}.dc-instr-row{padding:2px 0 !important}.dc-instr-row div{font-size:9.6px !important;line-height:1.2 !important}</style></head><body><div class="print-wrap">'
     + clone.outerHTML + '</div></body></html>';
 }
 
@@ -30019,7 +30046,7 @@ function changeMyPassword() {
   USER_DB[uname].pw = nw;
   CURRENT_USER.pw = nw;
   // Persist to Firebase
-  fbUpdate('userSettings/' + uname, { pw: nw, pwChangedAt: new Date().toISOString(), pwChangedBy: CURRENT_USER.name })
+  fbUpdate(userSettingsPath(uname), { pw: nw, pwChangedAt: new Date().toISOString(), pwChangedBy: CURRENT_USER.name })
     .catch(e => console.warn('Password save error:', e));
   document.getElementById('cpw-current').value = '';
   document.getElementById('cpw-new').value = '';
@@ -30081,7 +30108,7 @@ function setUserDisabled(uname, disabled) {
   if(uname === CURRENT_USER?.username && disabled) { showToast('You cannot disable your own account','w'); return; }
   if(!USER_DB[uname]) { showToast('User not found','w'); return; }
   USER_DB[uname].disabled = disabled;
-  fbUpdate('userSettings/' + uname, { disabled, updatedBy: CURRENT_USER.name, updatedAt: new Date().toISOString() })
+  fbUpdate(userSettingsPath(uname), { disabled, updatedBy: CURRENT_USER.name, updatedAt: new Date().toISOString() })
     .catch(e => console.warn('Disable user error:', e));
   showToast(disabled ? `🔴 ${USER_DB[uname].name} disabled` : `🟢 ${USER_DB[uname].name} enabled`, disabled?'w':'s');
   renderAdminUsersList();
@@ -30161,7 +30188,7 @@ function saveNewUser() {
   };
   USER_DB[uname] = newUser;
   // Persist to Firebase
-  fbSet('userSettings/' + uname, { ...newUser, username: uname })
+  fbSet(userSettingsPath(uname), { ...newUser, username: uname })
     .catch(e => console.warn('Add user error:', e));
   closeM('m-add-user');
   showToast(`✅ User @${uname} (${name}) created successfully`, 's');
@@ -30214,7 +30241,7 @@ function saveEditUser() {
 
   const updateData = { name, role, centre, dept, access, canSeeAllCentres: USER_DB[uname].canSeeAllCentres, isAdmin: USER_DB[uname].isAdmin, updatedBy: CURRENT_USER.name, updatedAt: new Date().toISOString() };
   if(newpw) updateData.pw = newpw;
-  fbUpdate('userSettings/' + uname, updateData).catch(e => console.warn('Edit user error:', e));
+  fbUpdate(userSettingsPath(uname), updateData).catch(e => console.warn('Edit user error:', e));
 
   // If editing own account, update CURRENT_USER too
   if(uname === CURRENT_USER?.username) {
