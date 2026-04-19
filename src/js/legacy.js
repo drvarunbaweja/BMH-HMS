@@ -1421,7 +1421,7 @@ function buildCompactDocumentHeader(title, ctx, subtitle) {
 function buildDischargePrintHeaderHtml(ptId, dateText, colorPrint) {
   const esc = escapeHtmlConsent;
   const leftLogoSrc = resolvePrintLogoSrc();
-  const rightLogoSrc = 'https://bawejahospital.com/img/logo-white.png';
+  const rightLogoSrc = resolveDischargeBmhLogoSrc();
   const blue = colorPrint ? '#1A3C6E' : '#444';
   const gold = colorPrint ? '#D4A017' : '#777';
   const metaBits = [ptId ? ('BMSH ID: ' + ptId) : '', dateText ? ('Date: ' + dateText) : ''].filter(Boolean);
@@ -1435,11 +1435,18 @@ function buildDischargePrintHeaderHtml(ptId, dateText, colorPrint) {
     + (metaBits.length ? '<div style="margin-top:6px;font-size:10.5px;font-weight:700;letter-spacing:.35px;color:#5b6470">' + esc(metaBits.join('  •  ')) + '</div>' : '')
     + '</div>'
     + '<div style="display:flex;align-items:center;justify-content:flex-end;min-width:0">'
-    + '<div style="display:inline-flex;align-items:center;justify-content:center;background:' + blue + ';border-radius:14px;padding:8px 12px;min-width:82px;min-height:58px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)">'
-    + '<img src="' + esc(rightLogoSrc) + '" alt="BMH" style="max-width:72px;max-height:40px;width:auto;height:auto;object-fit:contain" onerror="this.style.display=\'none\'">'
-    + '</div>'
+    + '<img src="' + esc(rightLogoSrc) + '" alt="BMH" style="max-width:84px;max-height:52px;width:auto;height:auto;object-fit:contain" onerror="this.style.display=\'none\'">'
     + '</div>'
     + '</div>';
+}
+function resolveDischargeBmhLogoSrc() {
+  const explicit = String(window.DISCHARGE_BMH_LOGO_SRC || '').trim();
+  if (explicit) return explicit;
+  try {
+    const base = document.querySelector('base')?.href || window.location.href;
+    return new URL('assets/bmh-logo-discharge.jpg', base).href;
+  } catch (e) {}
+  return 'https://bawejahospital.com/img/logo.png';
 }
 function buildCompactDocumentShell(title, ctx, bodyHtml, opts) {
   opts = opts || {};
@@ -20698,6 +20705,65 @@ function prefillOTLookupValue() {
   if (!matches.length) { showToast('No patient found for this BMSH ID / phone', 'w'); return; }
   fillOTFromPatient(matches[0].bmhId);
 }
+function inferOtObgTypeFromVisit(visit, procText) {
+  const hay = [procText, visit?.['obg-obs-mode-delivery'], visit?.['obg-obs-csection-indication'], visit?.clinicalImpression, visit?.dx, Array.isArray(visit?.obgProcAdvised) ? visit.obgProcAdvised.join(' ') : '']
+    .join(' ')
+    .toLowerCase();
+  if (/lscs|caesar|cesarean|caesarean/.test(hay)) return /emergency|distress|meconium|cord|cpd|failed|fetal distress/.test(hay) ? 'Emergency LSCS' : 'Elective LSCS';
+  if (/forceps|vaccum|vacuum|assisted/.test(hay)) return 'Assisted Delivery';
+  if (/normal delivery|vaginal delivery|normal labour|natural/.test(hay)) return 'Normal Delivery';
+  if (/mtp|suction|evacuation|d&c|abortion/.test(hay)) return /painless/.test(hay) ? 'Painless Abortion' : 'MTP / Suction Evacuation';
+  if (/iucd|cu-t|multiload/.test(hay)) return 'IUCD Insertion / Removal';
+  if (/hyst|lapar|cyst|myom|salping|gynae surgery/.test(hay)) return 'Gynae Surgery';
+  return '';
+}
+function prefillOtObgFieldsFromPatient(p) {
+  const visit = p?.lastVisit || {};
+  const setV = function (id, value) {
+    const el = document.getElementById(id);
+    if (el) el.value = value || '';
+  };
+  const joinBits = function (values) {
+    return values.map(function (value) { return String(value || '').trim(); }).filter(Boolean).join(' · ');
+  };
+  const obgType = inferOtObgTypeFromVisit(visit, document.getElementById('ot-add-proc')?.value || '');
+  const suggestedProcedure = String(document.getElementById('ot-add-proc')?.value || '').trim()
+    || (Array.isArray(visit.obgProcAdvised) && visit.obgProcAdvised[0])
+    || (Array.isArray(visit.planProcedures) && visit.planProcedures[0])
+    || visit['obg-obs-mode-delivery']
+    || '';
+  if (suggestedProcedure) {
+    setV('ot-add-proc', suggestedProcedure);
+    populateOTProcedureOptions(suggestedProcedure);
+  }
+  if (visit.dx || visit.clinicalImpression) {
+    populateOTDiagnosisOptions(visit.dx || visit.clinicalImpression || '');
+    setV('ot-add-dx', visit.dx || visit.clinicalImpression || '');
+  }
+  if (obgType) setV('ot-add-obg-type', obgType);
+  setV('ot-add-obg-ga', visit.ga || visit['obg-obs-gestation-age'] || '');
+  setV('ot-add-obg-indication', visit['obg-obs-csection-indication'] || visit.clinicalImpression || visit.dx || visit.mainComplaint || '');
+  setV('ot-add-obg-fetal', joinBits([visit.presentation, visit.fhr ? ('FHR ' + visit.fhr) : '', visit.fetalMovement ? ('FM ' + visit.fetalMovement) : '']));
+  setV('ot-add-obg-liquor', joinBits([visit['obg-obs-liquor'], visit['obg-obs-liquor-note'], visit['obg-obs-cord-neck']]));
+  setV('ot-add-obg-blood', joinBits([visit.bloodGroup, visit['obg-obs-rbs'] ? ('RBS ' + visit['obg-obs-rbs']) : '', visit.urineProtein ? ('Urine protein ' + visit.urineProtein) : '', visit.urineSugar ? ('Urine sugar ' + visit.urineSugar) : '']));
+  setV('ot-add-obg-anaes-note', joinBits([visit.bp ? ('BP ' + visit.bp) : '', visit.weight ? ('Wt ' + visit.weight) : '', visit.riskTag]));
+  setV('ot-add-obg-baby', joinBits([visit['obg-obs-gender'], visit['obg-obs-birth-weight'] ? ('Birth wt ' + visit['obg-obs-birth-weight']) : '', visit['obg-obs-apgar'] ? ('APGAR ' + visit['obg-obs-apgar']) : '', visit['obg-obs-nicu'] ? ('NICU ' + visit['obg-obs-nicu']) : '', visit['obg-obs-nicu-note']]));
+  setV('ot-add-obg-mother', joinBits([visit.bp ? ('BP ' + visit.bp) : '', visit.weight ? ('Wt ' + visit.weight) : '', visit.clinicalImpression, visit.ancNotes]));
+  const setChecked = function (id, value) {
+    const el = document.getElementById(id);
+    if (el) el.checked = !!value;
+  };
+  const deliveryFlow = /lscs|delivery/.test(String(obgType || '').toLowerCase()) || /delivery|labour|caesar|lscs/.test(String(suggestedProcedure || '').toLowerCase());
+  const majorOtFlow = /lscs|gynae surgery|mtp/.test(String(obgType || '').toLowerCase());
+  setChecked('ot-add-obg-doc-consent', deliveryFlow || majorOtFlow);
+  setChecked('ot-add-obg-doc-anaes', majorOtFlow);
+  setChecked('ot-add-obg-doc-blood', /lscs|placenta|pph|high-risk/.test(String([obgType, visit.riskTag, visit['obg-obs-pph']].join(' ')).toLowerCase()));
+  setChecked('ot-add-obg-doc-newborn', deliveryFlow);
+  const roomEl = document.getElementById('ot-add-room');
+  if (roomEl && (!roomEl.value || /eye ot/i.test(roomEl.value))) {
+    roomEl.value = /normal delivery|assisted delivery/.test(String(obgType || '').toLowerCase()) ? 'Labour Room' : 'Gynae OT';
+  }
+}
 
 function fillOTFromPatient(bmhId) {
   const p = PATIENTS.find(x=>x.bmhId===bmhId); if(!p) return;
@@ -20734,6 +20800,7 @@ function fillOTFromPatient(bmhId) {
   if (subSel2) subSel2.value = '';
   populateOTProcedureOptions('');
   populateOTIolOptions(p.iol || p.iolType || '', p.iolPower || extractIolPower(p.iol || p.iolType || ''));
+  if (isObg) prefillOtObgFieldsFromPatient(p);
   toggleOTOBGFields();
   toggleOTProcedureSpecificFields();
   // Clear lookup
@@ -28387,6 +28454,122 @@ function buildOphthoDischargeA4LayoutPrintHtml(snap, data, colorPrint) {
     + '<div style="display:flex;justify-content:space-between;padding:6px 12px;border-top:1px solid #ddd;font-size:8px;color:#555"><div>Patient / attendant signature</div><div>' + esc(CURRENT_USER?.name || 'Doctor') + '</div></div>'
     + '</div></body></html>';
 }
+function getObgDischargeContext(data) {
+  const visit = data?.ptObj?.lastVisit || {};
+  const ot = data?.lastOtCase || {};
+  const joinBits = function (values) {
+    return values.map(function (value) { return String(value || '').trim(); }).filter(Boolean).join(' · ');
+  };
+  const joinSentences = function (values) {
+    return values.map(function (value) { return String(value || '').trim(); }).filter(Boolean).join('. ');
+  };
+  const planManagement = Array.isArray(visit.planManagement) ? visit.planManagement.slice(0, 4).join(', ') : String(visit.planManagement || '').trim();
+  const planProcedures = Array.isArray(visit.planProcedures) ? visit.planProcedures.slice(0, 3).join(', ') : String(visit.planProcedures || '').trim();
+  const investigations = [
+    visit.bloodGroup ? ('Blood group ' + visit.bloodGroup) : '',
+    visit['obg-obs-rbs'] ? ('RBS ' + visit['obg-obs-rbs']) : '',
+    visit['obg-obs-tsh'] ? ('TSH ' + visit['obg-obs-tsh']) : '',
+    visit['obg-obs-gtt'] ? ('GTT ' + visit['obg-obs-gtt']) : '',
+    visit.urineProtein ? ('Urine protein ' + visit.urineProtein) : '',
+    visit.urineSugar ? ('Urine sugar ' + visit.urineSugar) : '',
+    visit['obg-obs-hiv'] ? ('HIV ' + visit['obg-obs-hiv']) : '',
+    visit['obg-obs-hbsag'] ? ('HBsAg ' + visit['obg-obs-hbsag']) : '',
+    visit['obg-obs-hcv'] ? ('HCV ' + visit['obg-obs-hcv']) : '',
+    visit['obg-obs-hplc'] ? ('HPLC ' + visit['obg-obs-hplc']) : '',
+    visit['obg-obs-vdrl'] ? ('VDRL ' + visit['obg-obs-vdrl']) : ''
+  ].filter(Boolean);
+  const babyBits = [
+    visit['obg-obs-gender'],
+    visit['obg-obs-birth-weight'] ? ('Birth wt ' + visit['obg-obs-birth-weight']) : '',
+    visit['obg-obs-apgar'] ? ('APGAR ' + visit['obg-obs-apgar']) : '',
+    visit['obg-obs-nicu'] ? ('NICU ' + visit['obg-obs-nicu']) : '',
+    visit['obg-obs-nicu-note']
+  ];
+  const motherBits = [
+    visit.bp ? ('BP ' + visit.bp) : '',
+    visit.weight ? ('Wt ' + visit.weight) : '',
+    visit.warningSign,
+    visit.clinicalImpression,
+    visit.ancNotes
+  ];
+  return {
+    ga: ot.obgGa || visit.ga || visit['obg-obs-gestation-age'] || '—',
+    gpal: visit.gravida || '—',
+    bloodGroup: visit.bloodGroup || visit['obg-obs-blood-group'] || '—',
+    procedure: ot.procedure || data.procedureName || visit['obg-obs-mode-delivery'] || 'OBG procedure',
+    modeOfDelivery: ot.obgCaseType || visit['obg-obs-mode-delivery'] || data.procedureName || '—',
+    indication: ot.obgIndication || visit['obg-obs-csection-indication'] || visit.clinicalImpression || visit.dx || visit.mainComplaint || '—',
+    deliveryDate: visit['obg-obs-delivery-date'] || ot.date || data.opDate || data.dischargeDate || '',
+    deliveryTime: visit['obg-obs-delivery-time'] || ot.scheduledTime || '',
+    deliveryLocation: visit['obg-obs-delivery-location'] || ot.room || '—',
+    liquor: ot.obgLiquor || joinBits([visit['obg-obs-liquor'], visit['obg-obs-liquor-note']]) || '—',
+    fetal: ot.obgFetal || joinBits([visit.presentation, visit.fhr ? ('FHR ' + visit.fhr) : '', visit.fetalMovement ? ('FM ' + visit.fetalMovement) : '']) || '—',
+    blood: ot.obgBlood || joinBits([visit.bloodGroup, visit['obg-obs-rbs'] ? ('RBS ' + visit['obg-obs-rbs']) : '', visit.urineProtein ? ('Urine protein ' + visit.urineProtein) : '', visit.urineSugar ? ('Urine sugar ' + visit.urineSugar) : '']) || '—',
+    anaesNote: ot.obgAnaesNote || joinBits([visit.bp ? ('BP ' + visit.bp) : '', visit.weight ? ('Wt ' + visit.weight) : '', visit.riskTag]) || '—',
+    baby: ot.obgBaby || joinBits(babyBits) || '—',
+    mother: ot.obgMother || joinBits(motherBits) || '—',
+    investigations: investigations,
+    obstetricCourse: joinSentences([visit.mainComplaint, visit.clinicalImpression, visit.ancNotes, planManagement, planProcedures, visit.followupPlan]) || 'Routine antenatal and post-delivery course documented in the case sheet.',
+    summary: joinSentences([
+      data.ptNm + ' was managed under the OBG unit with ' + (visit.dx || visit.clinicalImpression || visit.mainComplaint || 'the documented obstetric condition'),
+      'Procedure / delivery: ' + (ot.obgCaseType || visit['obg-obs-mode-delivery'] || data.procedureName || 'OBG procedure'),
+      'Indication: ' + (ot.obgIndication || visit['obg-obs-csection-indication'] || visit.clinicalImpression || visit.mainComplaint || 'as clinically indicated'),
+      'Mother status at discharge: ' + (ot.obgMother || joinBits(motherBits) || 'stable'),
+      'Baby status: ' + (ot.obgBaby || joinBits(babyBits) || 'stable')
+    ]) + '.'
+  };
+}
+function buildObgDischargeA4LayoutPrintHtml(snap, data, colorPrint) {
+  const esc = escapeHtmlConsent;
+  const ctx = getObgDischargeContext(data);
+  const blue = colorPrint ? '#8d1036' : '#333';
+  const surgeonName = data.lastOtCase?.surgeon || data.ptObj?.doctor || CURRENT_USER?.name || 'Dr. Varun Baweja';
+  const meds = (snap && Array.isArray(snap.medicines) ? snap.medicines : []).filter(function (row) { return String(row?.name || '').trim(); });
+  const instructions = (snap && Array.isArray(snap.instructions) ? snap.instructions : []).filter(Boolean);
+  const followups = (snap && Array.isArray(snap.followups) ? snap.followups : []).filter(Boolean);
+  const row = function (label, value) {
+    return '<div style="border:1px solid #e6dbe0;border-radius:10px;padding:8px 10px;background:#fff">'
+      + '<div style="font-size:8.5px;font-weight:900;color:#7b6a72;text-transform:uppercase;letter-spacing:.45px">' + esc(label) + '</div>'
+      + '<div style="font-size:11px;font-weight:800;line-height:1.45;color:#151515;margin-top:3px">' + esc(value || '—') + '</div>'
+      + '</div>';
+  };
+  const medRows = meds.map(function (med, idx) {
+    const timings = Array.isArray(med.activeTimes) && med.activeTimes.length ? med.activeTimes.join(' · ') : (med.freq || '—');
+    return '<tr><td style="border:1px solid #dfd6db;padding:6px 8px;font-size:10px">' + (idx + 1) + '</td><td style="border:1px solid #dfd6db;padding:6px 8px;font-size:10px;font-weight:800">' + esc(med.name || 'Medicine') + '</td><td style="border:1px solid #dfd6db;padding:6px 8px;font-size:10px">' + esc(timings) + '</td><td style="border:1px solid #dfd6db;padding:6px 8px;font-size:10px">' + esc(med.duration || '—') + '</td></tr>';
+  }).join('');
+  const followupRows = followups.map(function (line) {
+    return '<div style="padding:6px 10px;border:1px solid #e6dbe0;border-radius:8px;background:#fff;margin-top:6px;font-size:10.5px;font-weight:700;line-height:1.45">' + esc(line) + '</div>';
+  }).join('');
+  const instructionRows = instructions.map(function (line) {
+    return '<div style="margin-bottom:5px">• ' + esc(line) + '</div>';
+  }).join('');
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>@page{size:A4;margin:7mm}body{font-family:Georgia,\"Times New Roman\",serif;color:#111;margin:0;padding:0;background:#fff}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>'
+    + '<div style="border:1px solid #d8cdd2;border-radius:14px;overflow:hidden">'
+    + buildDischargePrintHeaderHtml(data.ptId || '—', formatDateIN(data.dischargeDate || new Date()), colorPrint)
+    + '<div style="padding:12px 14px 14px"><div style="text-align:center;margin-bottom:10px"><div style="font-size:21px;font-weight:900;letter-spacing:1.1px;color:' + blue + ';text-transform:uppercase">Obstetrics &amp; Gynaecology Discharge Card</div><div style="font-size:10px;color:#6e5c62;margin-top:4px">Delivery / LSCS / gynae discharge details</div></div>'
+    + '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">'
+    + row('Patient Name', data.ptNm || '—')
+    + row('BMSH ID', data.ptId || '—')
+    + row('Age / Sex', (data.ptObj?.age || '—') + ' / ' + (data.ptObj?.sex || '—'))
+    + row('GPAL', ctx.gpal)
+    + row('Gestation Age', ctx.ga)
+    + row('Blood Group', ctx.bloodGroup)
+    + row('Procedure', ctx.procedure)
+    + row('Mode of Delivery', ctx.modeOfDelivery)
+    + row('Indication', ctx.indication)
+    + row('Delivery Date / Time', [ctx.deliveryDate ? formatDateIN(ctx.deliveryDate) : '', ctx.deliveryTime].filter(Boolean).join(' · ') || '—')
+    + row('Delivery Location', ctx.deliveryLocation)
+    + row('Consultant', surgeonName)
+    + row('Fetal Details', ctx.fetal)
+    + row('Liquor / Membranes', ctx.liquor)
+    + row('Mother Status', ctx.mother)
+    + '</div>'
+    + '<div style="display:grid;grid-template-columns:1.1fr .9fr;gap:10px;margin-top:10px"><div style="border:1px solid #e6dbe0;border-radius:12px;padding:10px 12px;background:#fff"><div style="font-size:10px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.45px;margin-bottom:6px">Obstetric Course</div><div style="font-size:11.1px;line-height:1.75;color:#1d1d1d">' + esc(ctx.obstetricCourse) + '</div><div style="font-size:10px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.45px;margin:10px 0 6px">Discharge Summary</div><div style="font-size:11.1px;line-height:1.75;color:#1d1d1d">' + esc(ctx.summary) + '</div></div><div style="border:1px solid #efe3d0;border-radius:12px;padding:10px 12px;background:#fffaf3"><div style="font-size:10px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.45px;margin-bottom:6px">Investigations</div><div style="font-size:10.5px;line-height:1.65;color:#5a4630">' + (ctx.investigations.length ? ctx.investigations.map(function (item) { return '<div>• ' + esc(item) + '</div>'; }).join('') : '<div>• Routine investigation details documented in the case sheet</div>') + '</div><div style="font-size:10px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.45px;margin:10px 0 6px">Baby Outcome</div><div style="font-size:10.5px;line-height:1.65;color:#5a4630">' + esc(ctx.baby) + '</div><div style="font-size:10px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.45px;margin:10px 0 6px">Blood / Anaesthesia Notes</div><div style="font-size:10.5px;line-height:1.65;color:#5a4630">' + esc([ctx.blood, ctx.anaesNote].filter(Boolean).join(' | ')) + '</div></div></div>'
+    + (medRows ? '<div style="margin-top:10px;border:1px solid #e6dbe0;border-radius:12px;overflow:hidden"><div style="padding:8px 12px;background:#f9f2f4;font-size:10px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.45px">Medicines</div><table style="width:100%;border-collapse:collapse"><thead><tr style="background:#fcf8f9"><th style="border:1px solid #dfd6db;padding:6px 8px;font-size:9px">#</th><th style="border:1px solid #dfd6db;padding:6px 8px;font-size:9px">Medicine</th><th style="border:1px solid #dfd6db;padding:6px 8px;font-size:9px">Timing / Frequency</th><th style="border:1px solid #dfd6db;padding:6px 8px;font-size:9px">Duration</th></tr></thead><tbody>' + medRows + '</tbody></table></div>' : '')
+    + (instructionRows ? '<div style="margin-top:10px;border:1px solid #efe3d0;border-radius:12px;padding:10px 12px;background:#fffaf3"><div style="font-size:10px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.45px;margin-bottom:6px">Discharge Advice</div><div style="font-size:10.8px;line-height:1.7;color:#5a4630">' + instructionRows + '</div></div>' : '')
+    + (followupRows ? '<div style="margin-top:10px"><div style="font-size:10px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.45px;margin-bottom:4px">Follow-up</div>' + followupRows + '</div>' : '')
+    + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:18px"><div style="text-align:center"><div style="border-bottom:1px solid #333;height:32px"></div><div style="font-size:9px;color:#666;margin-top:4px">Patient / Attendant Signature</div></div><div style="text-align:center"><div style="border-bottom:1px solid #333;height:32px"></div><div style="font-size:9px;color:#666;margin-top:4px">Nursing / Duty Staff</div></div><div style="text-align:center"><div style="border-bottom:1px solid #333;height:32px"></div><div style="font-size:9px;color:#666;margin-top:4px">' + esc(surgeonName) + '</div></div></div></div></div></body></html>';
+}
 function buildDischargeCardPrintHtml() {
   const sel = document.getElementById('dc-specialty-sel')?.value || 'ophtho';
   const colorPrint = !!document.getElementById('dc-color-print')?.checked;
@@ -28394,6 +28577,12 @@ function buildDischargeCardPrintHtml() {
     const snap = collectDischargeCardSnapshotFromDom();
     const data = getDischargePrintData('ophtho');
     const custom = buildOphthoDischargeA4LayoutPrintHtml(snap, data, colorPrint);
+    if (custom) return custom;
+  }
+  if (sel === 'obg') {
+    const snap = collectDischargeCardSnapshotFromDom();
+    const data = getDischargePrintData('obg');
+    const custom = buildObgDischargeA4LayoutPrintHtml(snap, data, colorPrint);
     if (custom) return custom;
   }
   const card = document.getElementById('discharge-card');
