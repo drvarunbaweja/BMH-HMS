@@ -5225,6 +5225,7 @@ function setCentre(c, btn) {
   document.getElementById('tb-cp').textContent='📍 '+(c==='CHD'?'Chandigarh':'Ropar');
   const rcCentre = document.getElementById('rc-centre');
   if (rcCentre) rcCentre.value = c;
+  try { localStorage.setItem('bmh_admin_centre_pref', c); } catch (e) {}
   showToast('Switched to '+(c==='CHD'?'Chandigarh':'Ropar')+' Centre','i');
   syncReceptionConsultationFee && syncReceptionConsultationFee();
   rebuildPatientsArrayFromGlobalCache && rebuildPatientsArrayFromGlobalCache();
@@ -24311,12 +24312,19 @@ function activateUserSession(user, profile, opts) {
   if (shell) shell.style.display = 'flex';
 
   var cSel = document.getElementById('c-sel-row');
-  if(profile.centre === 'CHD' || profile.centre === 'RPR') {
-    var cLabel = profile.centre === 'CHD' ? 'Chandigarh' : 'Ropar';
+  var preferredCentre = profile.centre;
+  if (profile.isAdmin || profile.canSeeAllCentres || profile.centre === 'BOTH') {
+    try { preferredCentre = localStorage.getItem('bmh_admin_centre_pref') || 'RPR'; } catch (e) { preferredCentre = 'RPR'; }
+  }
+  preferredCentre = normalizeAppointmentCentreValue(preferredCentre || 'CHD');
+  if(preferredCentre === 'CHD' || preferredCentre === 'RPR') {
+    var cLabel = preferredCentre === 'CHD' ? 'Chandigarh' : 'Ropar';
     var tbCp = document.getElementById('tb-cp');
     if(tbCp) tbCp.textContent = '📍 ' + cLabel;
+    var rcCentre = document.getElementById('rc-centre');
+    if (rcCentre) rcCentre.value = preferredCentre;
     document.querySelectorAll('.c-btn').forEach(function(b){ b.classList.remove('active'); b.style.opacity = profile.isAdmin ? '1' : '0.5'; b.style.pointerEvents = profile.isAdmin ? '' : 'none'; });
-    var activeBtn = document.querySelector('.c-btn[data-centre="' + profile.centre + '"]');
+    var activeBtn = document.querySelector('.c-btn[data-centre="' + preferredCentre + '"]');
     if(activeBtn) { activeBtn.classList.add('active'); activeBtn.style.opacity='1'; }
     if(cSel && !profile.isAdmin) cSel.style.opacity = '0.6';
   } else {
