@@ -5438,6 +5438,7 @@ function renderOphthoPayList() {
 }
 setInterval(function () {
   PATIENTS.forEach(function (p) {
+    if (!p || typeof p.bmhId !== 'string') return;
     const el = document.getElementById('dt-' + p.bmhId.replace(/-/g, ''));
     if (!el) return;
     const m = getPatientActiveDilationMinutes(p);
@@ -14821,14 +14822,23 @@ const RX_CUSTOM_OPTION_DEFAULTS = {
   freq: RX_FREQ_OPTIONS.slice(),
   dur: RX_DURATION_OPTIONS.slice()
 };
+function makeFirebaseSafeKey(value) {
+  return String(value || '').trim().replace(/[.#$/\[\]]/g, '_');
+}
 function getDoctorRxOptionScope(deptOverride) {
   const dept = normalizeDeptKeyForQueue(deptOverride || (rxDeptKeyFromUi ? rxDeptKeyFromUi() : (CURRENT_USER?.dept || 'ophtho'))) || 'ophtho';
   const doctor = String(CURRENT_USER?.name || 'default').trim() || 'default';
-  return { dept: dept, doctor: doctor, key: doctor + '::' + dept };
+  return { dept: dept, doctor: doctor, key: makeFirebaseSafeKey(doctor) + '::' + makeFirebaseSafeKey(dept), legacyKey: doctor + '::' + dept };
 }
 function getDoctorCustomRxOptionsForDept(deptOverride) {
   window.DOCTOR_RX_CUSTOM_OPTIONS = window.DOCTOR_RX_CUSTOM_OPTIONS || {};
-  const scope = getDoctorRxOptionScope(deptOverride).key;
+  const scopeMeta = getDoctorRxOptionScope(deptOverride);
+  const scope = scopeMeta.key;
+  const legacyScope = scopeMeta.legacyKey;
+  if (legacyScope !== scope && window.DOCTOR_RX_CUSTOM_OPTIONS[legacyScope] && !window.DOCTOR_RX_CUSTOM_OPTIONS[scope]) {
+    window.DOCTOR_RX_CUSTOM_OPTIONS[scope] = window.DOCTOR_RX_CUSTOM_OPTIONS[legacyScope];
+    delete window.DOCTOR_RX_CUSTOM_OPTIONS[legacyScope];
+  }
   if (!window.DOCTOR_RX_CUSTOM_OPTIONS[scope]) {
     window.DOCTOR_RX_CUSTOM_OPTIONS[scope] = { type: [], freq: [], dur: [], advice: [], procedure: [], sendRecent: {} };
   }
@@ -14858,6 +14868,15 @@ function loadDoctorCustomRxOptions() {
     const raw = localStorage.getItem('bmh_doctor_rx_custom_options');
     if (raw) Object.assign(window.DOCTOR_RX_CUSTOM_OPTIONS, JSON.parse(raw) || {});
   } catch (e) {}
+  Object.keys(window.DOCTOR_RX_CUSTOM_OPTIONS).forEach(function (scopeKey) {
+    if (scopeKey === '__shared__' || scopeKey.indexOf('::') === -1) return;
+    const parts = scopeKey.split('::');
+    const safeKey = makeFirebaseSafeKey(parts[0]) + '::' + makeFirebaseSafeKey(parts.slice(1).join('::'));
+    if (safeKey !== scopeKey) {
+      if (!window.DOCTOR_RX_CUSTOM_OPTIONS[safeKey]) window.DOCTOR_RX_CUSTOM_OPTIONS[safeKey] = window.DOCTOR_RX_CUSTOM_OPTIONS[scopeKey];
+      delete window.DOCTOR_RX_CUSTOM_OPTIONS[scopeKey];
+    }
+  });
   if (window.FBDB) {
     window.FBDB.ref('doctorRxCustomOptions').once('value').then(function (snap) {
       const data = snap.val();
