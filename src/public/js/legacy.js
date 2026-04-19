@@ -17976,23 +17976,27 @@ function calcRcAge() {
   if(m < 0 || (m === 0 && now.getDate() < birth.getDate())) years--;
   ageEl.value = years + ' Years';
 }
+function isPrimaryBmhSequenceNumber(num) {
+  return Number.isFinite(num) && /^4\d+$/.test(String(Math.trunc(num)));
+}
 function getKnownHighestBmhNumber() {
-  // Derive the true floor from actual patient records (ignores any hardcoded minimums)
-  let maxNum = 0;
+  let maxPrimary = 0;
+  let maxFallback = 0;
   (window.PATIENTS || []).forEach(function (p) {
     const m = String(p?.bmhId || '').trim().match(/^BMSH-(\d{1,9})$/i);
     if (!m) return;
     const n = parseInt(m[1], 10);
-    if (Number.isFinite(n) && n > maxNum) maxNum = n;
+    if (!Number.isFinite(n)) return;
+    if (n > maxFallback) maxFallback = n;
+    if (isPrimaryBmhSequenceNumber(n) && n > maxPrimary) maxPrimary = n;
   });
-  // localStorage counter — only use it if it is in the same ballpark as the patient list
-  // (i.e. not wildly higher, which would indicate a corrupt/stale value)
+  let maxNum = maxPrimary || maxFallback;
   try {
     const ls = parseInt(localStorage.getItem('bmh_last_patient_num') || '0', 10);
-    if (Number.isFinite(ls) && ls > maxNum && ls < maxNum + 10000) maxNum = ls;
+    if (Number.isFinite(ls) && (!maxPrimary || isPrimaryBmhSequenceNumber(ls)) && ls > maxNum && ls < maxNum + 10000) maxNum = ls;
   } catch (_) {}
   const inMem = Number(window._nextPatientNum || 0) - 1;
-  if (Number.isFinite(inMem) && inMem > maxNum && inMem < maxNum + 10000) maxNum = inMem;
+  if (Number.isFinite(inMem) && (!maxPrimary || isPrimaryBmhSequenceNumber(inMem)) && inMem > maxNum && inMem < maxNum + 10000) maxNum = inMem;
   return maxNum;
 }
 
@@ -18008,6 +18012,7 @@ function genRcUID() {
   if(window.fbOnce) {
     fbOnce('settings/lastPatientNum').then(function(num) {
       if(typeof num !== 'number') return;
+      if (getKnownHighestBmhNumber() > 0 && !isPrimaryBmhSequenceNumber(num)) return;
       // RTDB value must be close to the local max — ignore if it's wildly higher (corruption)
       const serverMax = getKnownHighestBmhNumber();
       if (num > serverMax + 10000) {
@@ -18037,11 +18042,13 @@ function reserveNextBmhId() {
   if(!window.FBDB) return Promise.resolve(localId);
 
   return window.FBDB.ref('settings/lastPatientNum').transaction(function(current) {
+    const hasPrimarySeries = getKnownHighestBmhNumber() > 0;
+    const currentIsPrimary = typeof current === 'number' && isPrimaryBmhSequenceNumber(current);
     // If RTDB counter is wildly higher than local patient max, reset it first
-    if (typeof current === 'number' && current > localFloor + 10000) {
+    if (typeof current === 'number' && (current > localFloor + 10000 || (hasPrimarySeries && !currentIsPrimary))) {
       return localFloor + 1; // repair: start from true next
     }
-    const base = (typeof current === 'number' && current > 0 && current >= localFloor) ? current : localFloor;
+    const base = (typeof current === 'number' && current > 0 && current >= localFloor && (!hasPrimarySeries || currentIsPrimary)) ? current : localFloor;
     return base + 1;
   }).then(function(result) {
     const committed = result && result.committed;
@@ -18285,7 +18292,7 @@ async function registerPatient() {
   savePatientToFirebase(patient);
 
   const numFromId = parseInt(String(uid).replace(/^BMSH-/,''),10);
-  if(!isNaN(numFromId)) {
+  if(!isNaN(numFromId) && isPrimaryBmhSequenceNumber(numFromId)) {
     try { localStorage.setItem('bmh_last_patient_num', numFromId); } catch(_) {}
     window._nextPatientNum = numFromId + 1;
   }

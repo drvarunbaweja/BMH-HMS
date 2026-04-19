@@ -55,29 +55,47 @@ export function formatTime(iso) {
 }
 
 // ── ID generators (UPGRADED - CHRONOLOGICAL) ─────────────────────────────────
+function isPrimaryBmhSequenceNumber(num) {
+  return Number.isFinite(num) && /^4\d+$/.test(String(Math.trunc(num)))
+}
+
 export function newBmhId() {
-  const BASE_ID = 55999
-  let maxId = BASE_ID
+  let maxPrimaryId = 0
+  let maxFallbackId = 0
 
   if (typeof window !== 'undefined' && Array.isArray(window.PATIENTS)) {
     for (const p of window.PATIENTS) {
       const match = String(p?.bmhId || '').trim().match(/^BMSH-(\d{1,9})$/)
       if (!match) continue
       const num = parseInt(match[1], 10)
-      if (!Number.isNaN(num) && num > maxId) maxId = num
+      if (Number.isNaN(num)) continue
+      if (num > maxFallbackId) maxFallbackId = num
+      if (isPrimaryBmhSequenceNumber(num) && num > maxPrimaryId) maxPrimaryId = num
     }
   }
 
+  let maxId = maxPrimaryId || maxFallbackId
+
   if (typeof window !== 'undefined') {
     const nextKnown = parseInt(window._nextPatientNum || '0', 10)
-    if (!Number.isNaN(nextKnown) && nextKnown > 0) {
+    if (
+      !Number.isNaN(nextKnown) &&
+      nextKnown > 0 &&
+      (!maxPrimaryId || isPrimaryBmhSequenceNumber(nextKnown - 1))
+    ) {
       maxId = Math.max(maxId, nextKnown - 1)
     }
   }
 
   try {
     const cachedLast = parseInt(localStorage.getItem('bmh_last_patient_num') || '0', 10)
-    if (!Number.isNaN(cachedLast) && cachedLast > maxId) maxId = cachedLast
+    if (
+      !Number.isNaN(cachedLast) &&
+      (!maxPrimaryId || isPrimaryBmhSequenceNumber(cachedLast)) &&
+      cachedLast > maxId
+    ) {
+      maxId = cachedLast
+    }
   } catch (_) { /* ignore storage errors */ }
 
   const nextId = maxId + 1
