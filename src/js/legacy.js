@@ -20307,13 +20307,23 @@ function scheduleDefaultSurgeryFollowups(otCase) {
   renderAptDay && renderAptDay();
 }
 
-function toggleWHO(el) {
-  const checked = el.getAttribute('data-checked') !== '1';
+function setWHOChecked(el, checked) {
+  if (!el) return;
   el.setAttribute('data-checked', checked ? '1' : '0');
   el.style.background = checked ? 'var(--green)' : '#fff';
   el.style.borderColor = checked ? 'var(--green)' : 'var(--g4)';
   el.textContent = checked ? '✓' : '';
   el.style.color = checked ? '#fff' : '';
+}
+function toggleWHO(el) {
+  const checked = el.getAttribute('data-checked') !== '1';
+  setWHOChecked(el, checked);
+}
+function checkAllWHO(phase) {
+  const tab = document.getElementById('who-' + phase);
+  if (!tab) return;
+  tab.querySelectorAll('.who-cb').forEach(function (el) { setWHOChecked(el, true); });
+  showToast(`All WHO ${phase==='signin'?'Sign In':phase==='timeout'?'Time Out':'Sign Out'} items checked ✓`,'s');
 }
 
 function signOffWHO(phase) {
