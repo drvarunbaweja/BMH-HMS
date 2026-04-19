@@ -131,6 +131,8 @@ window.TRANSACTIONS = window.TRANSACTIONS || [];
 const TRANSACTIONS = window.TRANSACTIONS;
 window.PAY_REQUESTS = window.PAY_REQUESTS || [];
 const PAY_REQUESTS = window.PAY_REQUESTS;
+window.REFERRAL_PAYOUTS = window.REFERRAL_PAYOUTS || {};
+window.REFERRAL_REPORT_SELECTION = window.REFERRAL_REPORT_SELECTION || [];
 const APPOINTMENTS = [];
 const CENTRE_CHARGES = {
   CHD:{
@@ -1393,21 +1395,24 @@ function buildCompactDocumentHeader(title, ctx, subtitle) {
 }
 function buildDischargePrintHeaderHtml(ptId, dateText, colorPrint) {
   const esc = escapeHtmlConsent;
-  const hospitalLogoSrc = resolvePrintHeaderSrc();
-  const bmhLogoSrc = resolvePrintLogoSrc();
+  const leftLogoSrc = resolvePrintLogoSrc();
+  const rightLogoSrc = 'https://bawejahospital.com/img/logo-white.png';
   const blue = colorPrint ? '#1A3C6E' : '#444';
   const gold = colorPrint ? '#D4A017' : '#777';
   const metaBits = [ptId ? ('BMSH ID: ' + ptId) : '', dateText ? ('Date: ' + dateText) : ''].filter(Boolean);
-  return '<div class="dc-brand-header" style="display:grid;grid-template-columns:minmax(140px,1fr) minmax(180px,1.2fr) minmax(80px,.55fr);align-items:center;gap:12px;padding:10px 12px 8px;background:#fff;border-bottom:2px solid ' + gold + '">'
+  return '<div class="dc-brand-header" style="display:grid;grid-template-columns:minmax(108px,.7fr) minmax(220px,1.35fr) minmax(92px,.6fr);align-items:center;gap:14px;padding:10px 14px 10px;background:#fff;border-bottom:2px solid ' + gold + '">'
     + '<div style="display:flex;align-items:center;justify-content:flex-start;min-width:0">'
-    + '<img src="' + esc(hospitalLogoSrc) + '" alt="Baweja Multispeciality Hospital" style="max-width:100%;max-height:54px;width:auto;height:auto;object-fit:contain" onerror="this.style.display=\'none\'">'
+    + '<img src="' + esc(leftLogoSrc) + '" alt="Baweja Multispeciality Hospital" style="max-width:100%;max-height:58px;width:auto;height:auto;object-fit:contain" onerror="this.style.display=\'none\'">'
     + '</div>'
     + '<div style="text-align:center;min-width:0">'
-    + '<div style="font-size:20px;font-weight:900;letter-spacing:.5px;color:' + blue + ';text-transform:uppercase">Discharge Card</div>'
-    + (metaBits.length ? '<div style="margin-top:4px;font-size:10.5px;font-weight:700;color:#5b6470">' + esc(metaBits.join('  •  ')) + '</div>' : '')
+    + '<div style="font-family:Georgia,\'Times New Roman\',serif;font-size:28px;font-weight:700;letter-spacing:1.1px;color:' + blue + ';text-transform:uppercase;line-height:1.05">Discharge Card</div>'
+    + '<div style="width:84px;height:2px;background:' + gold + ';margin:6px auto 0;border-radius:999px"></div>'
+    + (metaBits.length ? '<div style="margin-top:6px;font-size:10.5px;font-weight:700;letter-spacing:.35px;color:#5b6470">' + esc(metaBits.join('  •  ')) + '</div>' : '')
     + '</div>'
     + '<div style="display:flex;align-items:center;justify-content:flex-end;min-width:0">'
-    + '<img src="' + esc(bmhLogoSrc) + '" alt="BMH" style="max-width:72px;max-height:54px;width:auto;height:auto;object-fit:contain" onerror="this.style.display=\'none\'">'
+    + '<div style="display:inline-flex;align-items:center;justify-content:center;background:' + blue + ';border-radius:14px;padding:8px 12px;min-width:82px;min-height:58px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)">'
+    + '<img src="' + esc(rightLogoSrc) + '" alt="BMH" style="max-width:72px;max-height:40px;width:auto;height:auto;object-fit:contain" onerror="this.style.display=\'none\'">'
+    + '</div>'
     + '</div>'
     + '</div>';
 }
@@ -21946,14 +21951,175 @@ function generateFinancialReport() {
 }
 
 function populateReferralDoctorDatalist() {
-  const dl = document.getElementById('rep-ref-doctor-list');
-  if (!dl) return;
-  const names = Array.from(new Set((PATIENTS || []).map(function (p) {
-    return toDisplayTitleCase(p?.referredBy || p?.refName || '');
-  }).filter(Boolean))).sort();
-  dl.innerHTML = names.map(function (name) {
-    return '<option value="' + String(name).replace(/"/g, '&quot;') + '">';
-  }).join('');
+  renderReferralDoctorPicker();
+}
+function isGenericReferralSourceName(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  return !raw || ['pro', 'doc', 'doctor', 'doctor referral', 'patient', 'patient referral', 'online', 'online / social media', 'camp', 'camp / opd drive', 'direct / walk-in', 'walk-in'].includes(raw);
+}
+function getReferralSourceName(entry) {
+  const named = toDisplayTitleCase(entry?.refName || '').trim();
+  if (named) return named;
+  const referred = toDisplayTitleCase(entry?.referredBy || '').trim();
+  if (referred && !isGenericReferralSourceName(referred)) return referred;
+  return '';
+}
+function getReferralDoctorOptions() {
+  const names = new Set();
+  (PATIENTS || []).forEach(function (p) {
+    const name = getReferralSourceName(p);
+    if (name) names.add(name);
+  });
+  REFERRAL_LOG.forEach(function (row) {
+    const name = toDisplayTitleCase(row?.name || '').trim();
+    if (name) names.add(name);
+  });
+  Object.keys(window.REFERRAL_PAYOUTS || {}).forEach(function (safeKey) {
+    const bucket = window.REFERRAL_PAYOUTS[safeKey] || {};
+    const name = toDisplayTitleCase(bucket.referrer || '').trim();
+    if (name) names.add(name);
+  });
+  return Array.from(names).sort();
+}
+function getSelectedReferralDoctors() {
+  const current = Array.isArray(window.REFERRAL_REPORT_SELECTION) ? window.REFERRAL_REPORT_SELECTION.slice().filter(Boolean) : [];
+  return Array.from(new Set(current.map(function (name) { return toDisplayTitleCase(name).trim(); }).filter(Boolean)));
+}
+function updateReferralDoctorInputSummary() {
+  const input = document.getElementById('rep-ref-doctor');
+  if (!input) return;
+  const options = getReferralDoctorOptions();
+  const selected = getSelectedReferralDoctors();
+  if (!options.length) {
+    input.value = '';
+    input.placeholder = 'No referral sources found yet';
+    return;
+  }
+  if (!selected.length || selected.length === options.length) {
+    input.value = '';
+    input.placeholder = 'All referral sources selected';
+    return;
+  }
+  input.value = selected.join(', ');
+}
+function setSelectedReferralDoctors(names) {
+  const options = getReferralDoctorOptions();
+  const optionSet = new Set(options);
+  window.REFERRAL_REPORT_SELECTION = Array.from(new Set((names || []).map(function (name) {
+    return toDisplayTitleCase(name).trim();
+  }).filter(function (name) {
+    return optionSet.has(name);
+  })));
+  try { localStorage.setItem('bmh_referral_report_selection', JSON.stringify(window.REFERRAL_REPORT_SELECTION)); } catch (e) {}
+  updateReferralDoctorInputSummary();
+  document.querySelectorAll('.rep-ref-doctor-chip input[type="checkbox"]').forEach(function (cb) {
+    cb.checked = window.REFERRAL_REPORT_SELECTION.includes(cb.value);
+  });
+}
+function selectAllReferralDoctors() {
+  setSelectedReferralDoctors(getReferralDoctorOptions());
+}
+function clearReferralDoctors() {
+  setSelectedReferralDoctors([]);
+}
+function renderReferralDoctorPicker() {
+  const wrap = document.getElementById('rep-ref-doctor-picker');
+  if (!wrap) return;
+  const options = getReferralDoctorOptions();
+  const selected = getSelectedReferralDoctors();
+  wrap.innerHTML = options.length ? options.map(function (name) {
+    const safe = String(name).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const checked = !selected.length || selected.includes(name);
+    return '<label class="rep-ref-doctor-chip" style="display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border:1px solid ' + (checked ? 'rgba(26,60,110,.28)' : 'var(--g4)') + ';border-radius:999px;background:' + (checked ? 'var(--blue-lt)' : '#fff') + ';font-size:11px;font-weight:800;color:' + (checked ? 'var(--blue)' : 'var(--tx)') + ';cursor:pointer">'
+      + '<input type="checkbox" value="' + safe + '" ' + (checked ? 'checked' : '') + ' onchange="toggleReferralDoctorSelection(this.value,this.checked)">'
+      + '<span>' + safe + '</span>'
+      + '</label>';
+  }).join('') : '<div style="font-size:12px;color:var(--g1)">No named referral sources have been used in reception yet.</div>';
+  if (!selected.length && options.length) window.REFERRAL_REPORT_SELECTION = options.slice();
+  updateReferralDoctorInputSummary();
+}
+function toggleReferralDoctorSelection(name, checked) {
+  const current = getSelectedReferralDoctors();
+  const next = checked ? current.concat([name]) : current.filter(function (item) { return item !== name; });
+  setSelectedReferralDoctors(next);
+}
+function loadReferralReportSelectionFromStorage() {
+  try {
+    const raw = JSON.parse(localStorage.getItem('bmh_referral_report_selection') || '[]');
+    if (Array.isArray(raw)) window.REFERRAL_REPORT_SELECTION = raw;
+  } catch (e) {}
+}
+function loadReferralPayoutsFromStorage() {
+  try {
+    const raw = JSON.parse(localStorage.getItem('bmh_referral_payouts') || '{}');
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) window.REFERRAL_PAYOUTS = raw;
+  } catch (e) {}
+  if (!window.FBDB) return;
+  window.FBDB.ref('referralPayouts').once('value').then(function (snap) {
+    const data = snap.val();
+    if (data && typeof data === 'object') {
+      window.REFERRAL_PAYOUTS = data;
+      try { localStorage.setItem('bmh_referral_payouts', JSON.stringify(window.REFERRAL_PAYOUTS)); } catch (e) {}
+      renderReferralDoctorPicker();
+      if (document.getElementById('rep-referral-result')?.innerHTML.trim()) generateReferralReport();
+    }
+  }).catch(function () {});
+}
+function saveReferralPayoutsToStorage() {
+  try { localStorage.setItem('bmh_referral_payouts', JSON.stringify(window.REFERRAL_PAYOUTS || {})); } catch (e) {}
+  if (window.FBDB) window.FBDB.ref('referralPayouts').set(window.REFERRAL_PAYOUTS || {}).catch(function () {});
+}
+function getReferralPayoutBucket(referrer) {
+  const safeKey = sanitizeFirebaseKey(referrer);
+  const existing = window.REFERRAL_PAYOUTS[safeKey] || {};
+  if (!Array.isArray(existing.entries)) existing.entries = Array.isArray(existing.payments) ? existing.payments.slice() : [];
+  existing.referrer = existing.referrer || referrer;
+  window.REFERRAL_PAYOUTS[safeKey] = existing;
+  return existing;
+}
+function getReferralPayoutEntries(referrer, fromVal, toVal) {
+  const bucket = getReferralPayoutBucket(referrer);
+  return (bucket.entries || []).filter(function (entry) {
+    const key = localDateKey(entry.date || entry.createdAt);
+    if (fromVal && key && key < fromVal) return false;
+    if (toVal && key && key > toVal) return false;
+    return true;
+  }).sort(function (a, b) {
+    return String(b.date || '').localeCompare(String(a.date || ''));
+  });
+}
+function saveReferralPayout(referrerEncoded) {
+  const referrer = decodeURIComponent(referrerEncoded || '');
+  if (!referrer) return;
+  const safeKey = sanitizeFirebaseKey(referrer);
+  const amount = Math.max(0, Number(document.getElementById('rep-ref-pay-amt-' + safeKey)?.value || 0));
+  const mode = document.getElementById('rep-ref-pay-mode-' + safeKey)?.value || 'UPI';
+  const date = document.getElementById('rep-ref-pay-date-' + safeKey)?.value || localDateKey(new Date());
+  const reference = toDisplayTitleCase(document.getElementById('rep-ref-pay-ref-' + safeKey)?.value || '').trim();
+  const notes = toDisplayTitleCase(document.getElementById('rep-ref-pay-notes-' + safeKey)?.value || '').trim();
+  if (amount <= 0) { showToast('Enter incentive amount first', 'w'); return; }
+  const bucket = getReferralPayoutBucket(referrer);
+  bucket.entries.unshift({
+    id: 'RFP' + Date.now(),
+    referrer: referrer,
+    amount: amount,
+    mode: mode,
+    date: date,
+    reference: reference,
+    notes: notes,
+    createdAt: new Date().toISOString(),
+    createdBy: CURRENT_USER?.name || 'User'
+  });
+  saveReferralPayoutsToStorage();
+  ['rep-ref-pay-amt-','rep-ref-pay-ref-','rep-ref-pay-notes-'].forEach(function (prefix) {
+    const el = document.getElementById(prefix + safeKey);
+    if (el) el.value = '';
+  });
+  const dateEl = document.getElementById('rep-ref-pay-date-' + safeKey);
+  if (dateEl) dateEl.value = localDateKey(new Date());
+  renderReferralDoctorPicker();
+  generateReferralReport();
+  showToast('Referral incentive payment saved', 's');
 }
 function isLikelySurgeryChargeLabel(value) {
   const hay = String(value || '').toLowerCase();
@@ -21963,7 +22129,7 @@ function getReferralReportRows() {
   const fromVal = document.getElementById('rep-ref-from')?.value || '';
   const toVal = document.getElementById('rep-ref-to')?.value || '';
   const deptFilter = document.getElementById('rep-ref-dept')?.value || '';
-  const doctorFilter = toDisplayTitleCase(document.getElementById('rep-ref-doctor')?.value || '').trim();
+  const doctorFilter = getSelectedReferralDoctors();
   const centreFilter = (CURRENT_USER?.isAdmin || CURRENT_USER?.canSeeAllCentres)
     ? ''
     : normalizeAppointmentCentreValue((typeof getEffectiveCentre === 'function' ? getEffectiveCentre() : (CURRENT_USER?.centre || 'CHD')) || 'CHD');
@@ -21975,10 +22141,10 @@ function getReferralReportRows() {
     return true;
   };
   const rows = (PATIENTS || []).filter(function (p) {
-    const referredBy = toDisplayTitleCase(p?.referredBy || p?.refName || '').trim();
+    const referredBy = getReferralSourceName(p);
     if (!referredBy) return false;
     if (deptFilter && String(p?.dept || '') !== deptFilter) return false;
-    if (doctorFilter && referredBy !== doctorFilter) return false;
+    if (doctorFilter.length && doctorFilter.length !== getReferralDoctorOptions().length && !doctorFilter.includes(referredBy)) return false;
     if (centreFilter && normalizeAppointmentCentreValue(p?.centre || centreFilter) !== centreFilter) return false;
     return inRange(p?.updatedAt || p?.createdAt || p?.registeredAt || p?.checkinAt || p?.queueDate || p?.date);
   }).map(function (p) {
@@ -22002,7 +22168,7 @@ function getReferralReportRows() {
       dept: p.dept || '',
       deptLabel: ({ ophtho:'Ophthalmology', obg:'OBG', psych:'Neuropsychiatry', skin:'Skin' })[p.dept] || p.dept || 'General',
       doctor: p.assignedDoctor || p.doctor || '—',
-      referredBy: toDisplayTitleCase(p.referredBy || p.refName || ''),
+      referredBy: getReferralSourceName(p),
       date: formatDateDDMMYYYY(p.updatedAt || p.createdAt || p.registeredAt || p.checkinAt || p.queueDate || p.date || ''),
       surgeryCharges: surgeryCharges,
       totalCharges: totalCharges,
@@ -22014,22 +22180,54 @@ function getReferralReportRows() {
   });
   return rows;
 }
+function getReferralReportSummary(rows) {
+  const fromVal = document.getElementById('rep-ref-from')?.value || '';
+  const toVal = document.getElementById('rep-ref-to')?.value || '';
+  const grouped = {};
+  rows.forEach(function (row) {
+    if (!grouped[row.referredBy]) grouped[row.referredBy] = { referrer: row.referredBy, patients: [], surgeryCharges: 0, totalCharges: 0 };
+    grouped[row.referredBy].patients.push(row);
+    grouped[row.referredBy].surgeryCharges += Number(row.surgeryCharges || 0);
+    grouped[row.referredBy].totalCharges += Number(row.totalCharges || 0);
+  });
+  return Object.values(grouped).map(function (group) {
+    const payments = getReferralPayoutEntries(group.referrer, fromVal, toVal);
+    const paidAmount = payments.reduce(function (sum, entry) { return sum + Number(entry.amount || 0); }, 0);
+    return Object.assign(group, {
+      paidAmount: paidAmount,
+      paymentCount: payments.length,
+      payments: payments,
+      payoutStatus: paidAmount > 0 ? 'Paid' : 'Pending'
+    });
+  }).sort(function (a, b) {
+    return a.referrer.localeCompare(b.referrer);
+  });
+}
 function buildReferralReportHtml(rows) {
-  const doctorFilter = toDisplayTitleCase(document.getElementById('rep-ref-doctor')?.value || '').trim();
+  const selectedDoctors = getSelectedReferralDoctors();
   const fromVal = document.getElementById('rep-ref-from')?.value || '';
   const toVal = document.getElementById('rep-ref-to')?.value || '';
   const deptFilter = document.getElementById('rep-ref-dept')?.value || '';
+  const doctorFilter = selectedDoctors.length && selectedDoctors.length !== getReferralDoctorOptions().length ? selectedDoctors.join(', ') : '';
   const title = doctorFilter ? ('Referral Report — ' + doctorFilter) : 'Referral Report';
   const totalSurgery = rows.reduce(function (sum, row) { return sum + (Number(row.surgeryCharges) || 0); }, 0);
   const totalOverall = rows.reduce(function (sum, row) { return sum + (Number(row.totalCharges) || 0); }, 0);
+  const summaryRows = getReferralReportSummary(rows);
   const esc = function (v) {
     return String(v || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   };
   return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>' + esc(title) + '</title>'
-    + '<style>body{font-family:Arial,sans-serif;margin:18px;color:#111} h1{font-size:18px;margin:0 0 6px} .sub{font-size:11px;color:#555;margin-bottom:12px} .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px} .card{border:1px solid #ddd;border-radius:10px;padding:10px;background:#fafafa} .label{font-size:10px;font-weight:700;text-transform:uppercase;color:#666} .val{font-size:18px;font-weight:900;margin-top:2px} table{width:100%;border-collapse:collapse;font-size:11px} th,td{border:1px solid #ddd;padding:6px;vertical-align:top;text-align:left} th{background:#f3f4f7} @page{size:A4 landscape;margin:10mm}</style></head><body>'
+    + '<style>body{font-family:Arial,sans-serif;margin:18px;color:#111} h1{font-size:18px;margin:0 0 6px} .sub{font-size:11px;color:#555;margin-bottom:12px} .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px} .card{border:1px solid #ddd;border-radius:10px;padding:10px;background:#fafafa} .label{font-size:10px;font-weight:700;text-transform:uppercase;color:#666} .val{font-size:18px;font-weight:900;margin-top:2px} table{width:100%;border-collapse:collapse;font-size:11px} th,td{border:1px solid #ddd;padding:6px;vertical-align:top;text-align:left} th{background:#f3f4f7} .pill{display:inline-block;padding:3px 8px;border-radius:999px;font-size:10px;font-weight:800}.pill.pending{background:#fff2cc;color:#8a5a00}.pill.paid{background:#dff5e2;color:#146c2e} @page{size:A4 landscape;margin:10mm}</style></head><body>'
     + '<h1>' + esc(title) + '</h1>'
     + '<div class="sub">Date range: ' + esc((fromVal ? formatDateDDMMYYYY(fromVal) : 'Beginning') + ' to ' + (toVal ? formatDateDDMMYYYY(toVal) : 'Today')) + ' · Department: ' + esc(deptFilter || 'All') + '</div>'
     + '<div class="cards"><div class="card"><div class="label">Referred Patients</div><div class="val">' + rows.length + '</div></div><div class="card"><div class="label">Surgery Charges</div><div class="val">₹' + totalSurgery.toLocaleString('en-IN') + '</div></div><div class="card"><div class="label">Total Charges</div><div class="val">₹' + totalOverall.toLocaleString('en-IN') + '</div></div></div>'
+    + (summaryRows.length ? '<table style="margin-bottom:14px"><thead><tr><th>Referrer</th><th>Patients</th><th>Surgery Revenue ₹</th><th>Total Revenue ₹</th><th>Incentive Status</th><th>Paid Incentive ₹</th><th>Payment Details</th></tr></thead><tbody>'
+      + summaryRows.map(function (row) {
+        const paymentText = row.payments.length ? row.payments.map(function (entry) {
+          return esc(formatDateDDMMYYYY(entry.date || entry.createdAt || '')) + ' · ' + esc(entry.mode || '—') + ' · ₹' + (Number(entry.amount || 0).toLocaleString('en-IN')) + (entry.reference ? (' · ' + esc(entry.reference)) : '');
+        }).join('<br>') : '—';
+        return '<tr><td style="font-weight:800">' + esc(row.referrer) + '</td><td>' + row.patients.length + '</td><td>₹' + row.surgeryCharges.toLocaleString('en-IN') + '</td><td>₹' + row.totalCharges.toLocaleString('en-IN') + '</td><td><span class="pill ' + (row.payoutStatus === 'Paid' ? 'paid' : 'pending') + '">' + esc(row.payoutStatus) + '</span></td><td>₹' + row.paidAmount.toLocaleString('en-IN') + '</td><td>' + paymentText + '</td></tr>';
+      }).join('') + '</tbody></table>' : '')
     + (rows.length ? '<table><thead><tr><th>#</th><th>Referred By</th><th>Patient</th><th>Phone</th><th>BMSH ID</th><th>Dept</th><th>Doctor</th><th>Date</th><th>Surgery Charges ₹</th><th>Total Charges ₹</th></tr></thead><tbody>'
       + rows.map(function (row, idx) {
         return '<tr><td>' + (idx + 1) + '</td><td>' + esc(row.referredBy) + '</td><td>' + esc(row.patient) + '</td><td>' + esc(row.mobile || '—') + '</td><td>' + esc(row.bmhId) + '</td><td>' + esc(row.deptLabel) + '</td><td>' + esc(row.doctor) + '</td><td>' + esc(row.date || '—') + '</td><td>₹' + (Number(row.surgeryCharges) || 0).toLocaleString('en-IN') + '</td><td>₹' + (Number(row.totalCharges) || 0).toLocaleString('en-IN') + '</td></tr>';
@@ -22041,6 +22239,7 @@ function generateReferralReport() {
   const el = document.getElementById('rep-referral-result');
   if (!el) return;
   const rows = getReferralReportRows();
+  const summaryRows = getReferralReportSummary(rows);
   const totalSurgery = rows.reduce(function (sum, row) { return sum + (Number(row.surgeryCharges) || 0); }, 0);
   const totalOverall = rows.reduce(function (sum, row) { return sum + (Number(row.totalCharges) || 0); }, 0);
   el.innerHTML = '<div class="card">'
@@ -22050,6 +22249,29 @@ function generateReferralReport() {
     + '<div style="background:var(--green-lt);border-radius:10px;padding:12px;text-align:center"><div style="font-size:10px;font-weight:800;text-transform:uppercase;color:var(--green)">Surgery Charges</div><div style="font-size:22px;font-weight:900;color:var(--green)">₹' + totalSurgery.toLocaleString('en-IN') + '</div></div>'
     + '<div style="background:var(--gold-lt,var(--orange-lt));border-radius:10px;padding:12px;text-align:center"><div style="font-size:10px;font-weight:800;text-transform:uppercase;color:var(--orange)">Total Charges</div><div style="font-size:22px;font-weight:900;color:var(--orange)">₹' + totalOverall.toLocaleString('en-IN') + '</div></div>'
     + '</div>'
+    + (summaryRows.length ? '<div style="display:grid;gap:12px;margin-bottom:14px">'
+      + summaryRows.map(function (group) {
+        const safeKey = sanitizeFirebaseKey(group.referrer);
+        const encoded = encodeURIComponent(group.referrer);
+        const paymentList = group.payments.length ? '<div style="display:grid;gap:6px;margin-top:10px">' + group.payments.map(function (entry) {
+          return '<div style="padding:8px 10px;border:1px solid var(--g4);border-radius:8px;background:#fff;font-size:11px;line-height:1.45"><b>' + formatDateDDMMYYYY(entry.date || entry.createdAt || '') + '</b> · ' + entry.mode + ' · ₹' + Number(entry.amount || 0).toLocaleString('en-IN') + (entry.reference ? ' · ' + entry.reference : '') + (entry.notes ? '<div style="color:var(--g1);margin-top:2px">' + entry.notes + '</div>' : '') + '</div>';
+        }).join('') + '</div>' : '<div style="font-size:11px;color:var(--g1);margin-top:10px">No incentive payment entered for this referrer in the selected date range.</div>';
+        return '<div style="border:1px solid var(--g4);border-radius:12px;padding:12px;background:var(--g6)">'
+          + '<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap">'
+          + '<div><div style="font-size:15px;font-weight:900;color:var(--blue)">' + group.referrer + '</div><div style="font-size:11px;color:var(--g1);margin-top:2px">' + group.patients.length + ' patients · Surgery ₹' + group.surgeryCharges.toLocaleString('en-IN') + ' · Total ₹' + group.totalCharges.toLocaleString('en-IN') + '</div></div>'
+          + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><span class="badge ' + (group.payoutStatus === 'Paid' ? 'bd-green' : 'bd-orange') + '">' + group.payoutStatus + '</span><span class="badge bd-blue">Paid ₹' + group.paidAmount.toLocaleString('en-IN') + '</span></div>'
+          + '</div>'
+          + '<div style="display:grid;grid-template-columns:repeat(5,minmax(120px,1fr));gap:8px;margin-top:10px">'
+          + '<input type="number" id="rep-ref-pay-amt-' + safeKey + '" placeholder="Incentive amount ₹">'
+          + '<select id="rep-ref-pay-mode-' + safeKey + '"><option value="UPI">UPI</option><option value="Cash">Cash</option><option value="Cheque">Cheque</option><option value="Bank Transfer">Bank Transfer</option><option value="Card">Card</option><option value="Other">Other</option></select>'
+          + '<input type="date" id="rep-ref-pay-date-' + safeKey + '" value="' + localDateKey(new Date()) + '">'
+          + '<input type="text" id="rep-ref-pay-ref-' + safeKey + '" placeholder="Ref / cheque no.">'
+          + '<button class="btn btn-blue btn-xs" type="button" onclick="saveReferralPayout(\'' + encoded + '\')">Save Payment</button>'
+          + '</div>'
+          + '<div style="margin-top:8px"><input type="text" id="rep-ref-pay-notes-' + safeKey + '" placeholder="Notes (optional)"></div>'
+          + paymentList
+          + '</div>';
+      }).join('') + '</div>' : '')
     + (rows.length ? '<table><thead><tr><th>#</th><th>Referred By</th><th>Patient</th><th>Phone</th><th>BMSH ID</th><th>Department</th><th>Doctor</th><th>Date</th><th>Surgery Charges ₹</th><th>Total Charges ₹</th></tr></thead><tbody>'
       + rows.map(function (row, idx) {
         return '<tr><td>' + (idx + 1) + '</td><td style="font-weight:800">' + row.referredBy + '</td><td style="font-weight:800">' + row.patient + '</td><td>' + (row.mobile || '—') + '</td><td style="font-family:var(--mono);font-size:10px">' + row.bmhId + '</td><td>' + row.deptLabel + '</td><td>' + row.doctor + '</td><td>' + (row.date || '—') + '</td><td style="font-weight:900">₹' + (Number(row.surgeryCharges) || 0).toLocaleString('en-IN') + '</td><td style="font-weight:900">₹' + (Number(row.totalCharges) || 0).toLocaleString('en-IN') + '</td></tr>';
@@ -26299,6 +26521,8 @@ setTimeout(() => {
   if (typeof loadObgRecapQuestionMap === 'function') loadObgRecapQuestionMap();
   if (typeof renderObgPrimaryComplaintOptions === 'function') renderObgPrimaryComplaintOptions();
   if (typeof refreshCustomRxOptionSelects === 'function') refreshCustomRxOptionSelects();
+  if (typeof loadReferralPayoutsFromStorage === 'function') loadReferralPayoutsFromStorage();
+  if (typeof loadReferralReportSelectionFromStorage === 'function') loadReferralReportSelectionFromStorage();
   if (typeof populateReferralDoctorDatalist === 'function') populateReferralDoctorDatalist();
   if (typeof bindReceptionTitleCaseFields === 'function') bindReceptionTitleCaseFields();
   document.getElementById('add-charge-cat')?.addEventListener('change', refreshChargeModalSuggestions);
