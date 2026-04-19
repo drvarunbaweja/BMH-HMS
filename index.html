@@ -4520,6 +4520,7 @@
             <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid var(--g5)"><div class="who-cb" onclick="toggleWHO(this)" style="width:22px;height:22px;border-radius:5px;border:2px solid var(--g4);background:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;cursor:pointer;flex-shrink:0"></div><div style="flex:1;font-size:12px">Eye to be operated — confirmed and marked?</div><select style="width:auto;font-size:11px;max-width:160px"><option>N/A</option><option>Right Eye (OD)</option><option>Left Eye (OS)</option><option>Both Eyes (OU)</option></select></div>
           </div>
           <div style="margin-top:10px;display:flex;gap:8px">
+            <button class="btn btn-outline btn-sm" onclick="checkAllWHO('signin')">☑️ Check all</button>
             <button class="btn btn-blue btn-sm" onclick="signOffWHO('signin')">✅ Sign In Complete</button>
           </div>
         </div>
@@ -4540,7 +4541,8 @@
             <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid var(--g5)"><div class="who-cb" onclick="toggleWHO(this)" style="width:22px;height:22px;border-radius:5px;border:2px solid var(--g4);background:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;cursor:pointer;flex-shrink:0"></div><div style="flex:1;font-size:12px">Implant / IOL model confirmed?</div><select style="width:auto;font-size:11px;max-width:160px"><option>Yes — IOL power confirmed</option><option>N/A</option></select></div>
             <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid var(--g5)"><div class="who-cb" onclick="toggleWHO(this)" style="width:22px;height:22px;border-radius:5px;border:2px solid var(--g4);background:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;cursor:pointer;flex-shrink:0"></div><div style="flex:1;font-size:12px">Microscope / equipment checked and functional?</div><select style="width:auto;font-size:11px;max-width:160px"><option>Yes</option><option>N/A</option></select></div>
           </div>
-          <div style="margin-top:10px">
+          <div style="margin-top:10px;display:flex;gap:8px">
+            <button class="btn btn-outline btn-sm" onclick="checkAllWHO('timeout')">☑️ Check all</button>
             <button class="btn btn-orange btn-sm" onclick="signOffWHO('timeout')">✅ Time Out Complete — Proceed to Incision</button>
           </div>
         </div>
@@ -4559,6 +4561,7 @@
             <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid var(--g5)"><div class="who-cb" onclick="toggleWHO(this)" style="width:22px;height:22px;border-radius:5px;border:2px solid var(--g4);background:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;cursor:pointer;flex-shrink:0"></div><div style="flex:1;font-size:12px">IOL sticker / implant label attached to OT notes?</div><select style="width:auto;font-size:11px;max-width:160px"><option>Yes</option><option>N/A</option></select></div>
           </div>
           <div style="margin-top:10px;display:flex;gap:8px">
+            <button class="btn btn-outline btn-sm" onclick="checkAllWHO('signout')">☑️ Check all</button>
             <button class="btn btn-green btn-sm" onclick="signOffWHO('signout')">✅ Sign Out Complete</button>
             <button class="btn btn-outline btn-sm" onclick="printWHOChecklist()">🖨️ Print Checklist</button>
           </div>
