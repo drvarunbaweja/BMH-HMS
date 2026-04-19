@@ -17669,11 +17669,10 @@ window.promptInstallApp = async function promptInstallApp() {
     showToast('Use Safari → Share → Add to Home Screen', 'i');
     return;
   }
-  showToast('Install option will appear when the browser is ready.', 'i');
+  showToast('Use the browser install option if it appears in the address bar or menu.', 'i');
 };
 
 window.addEventListener('beforeinstallprompt', function (e) {
-  try { e.preventDefault(); } catch (err) {}
   window._bmhDeferredInstallPrompt = e;
   window._bmhInstallPromptReady = true;
   updateInstallAppUi();
@@ -18870,7 +18869,12 @@ function renderDeptSummary() {
               <div style="font-size:10.5px;color:var(--g1)">${r.for||'—'} · ${r.from||'Doctor'}</div>
             </div>
             <div style="font-weight:900;font-size:13px;color:${r.status==='paid'?'#1a8c3c':'var(--orange)'}">₹${r.amount.toLocaleString('en-IN')}</div>
-            ${r.status==='pending'?`<button class="btn btn-xs" style="background:var(--green);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:10.5px;font-weight:800;cursor:pointer" onclick="markPaid('${r.id}')">Collect</button>`:`<span style="font-size:10px;background:var(--green-lt);color:#1a8c3c;padding:2px 8px;border-radius:10px;font-weight:700">✓ Paid</span>`}
+            ${r.status==='pending'?`<select id="pay-mode-${r.id}" style="height:28px;border:1px solid var(--g4);border-radius:6px;padding:0 6px;font-size:10.5px;background:#fff">
+              <option value="Cash"${isInsuranceLikeMode(r.mode || r.ins || '') ? '' : ' selected'}>Cash</option>
+              <option value="UPI"${String(r.mode || '').toLowerCase()==='upi' ? ' selected' : ''}>UPI</option>
+              <option value="Credit Card"${String(r.mode || '').toLowerCase()==='credit card' ? ' selected' : ''}>Credit Card</option>
+              <option value="Insurance/TPA"${isInsuranceLikeMode(r.mode || r.ins || '') ? ' selected' : ''}>Insurance/TPA</option>
+            </select><button class="btn btn-xs" style="background:var(--green);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:10.5px;font-weight:800;cursor:pointer" onclick="collectPayment('${r.id}','${r.id}')">Collect</button>`:`<span style="font-size:10px;background:var(--green-lt);color:#1a8c3c;padding:2px 8px;border-radius:10px;font-weight:700">✓ Paid</span>`}
             ${canDeleteDue ? `<button class="btn btn-xs btn-gray" onclick="deletePayRequest('${r.id}')" title="Delete due">✕</button>` : ''}
             <button class="btn btn-xs btn-outline" onclick="openXRefModal('${r.bmhId}')" title="Cross-refer">↔️</button>
             <button class="btn btn-xs" style="background:rgba(175,82,222,.1);color:var(--purple);border:1.5px solid var(--purple);border-radius:6px;padding:3px 6px;font-size:10px;cursor:pointer" onclick="openIPDFromQueue('${r.bmhId}')" title="IPD">🛏️</button>
@@ -21496,6 +21500,9 @@ function normalizePaymentMode(mode) {
   if (m.includes('neft') || m.includes('rtgs') || m.includes('bank')) return 'Bank Transfer';
   if (m.includes('credit') || m.includes('due')) return 'Credit / Due';
   return mode || 'Other';
+}
+function normalizePaymentModeLabel(mode) {
+  return normalizePaymentMode(mode);
 }
 
 function getProcedureReportRows() {
@@ -26511,6 +26518,13 @@ function openRcCollectionDetailModal(dept, catKey) {
       + '<div style="flex:1"><div style="font-weight:800">' + escapeHtmlConsent(r.patient || '') + '</div><div style="font-size:10.5px;color:var(--g1)">' + escapeHtmlConsent(r.for || '—') + '</div></div>'
       + '<span class="badge bd-orange" style="font-size:9px">Pending</span>'
       + '<div style="font-weight:900;color:#b45309">' + fmt(Number(r.amount) || 0) + '</div>'
+      + '<select id="pay-mode-' + String(r.id).replace(/"/g, '&quot;') + '" style="height:28px;border:1px solid var(--g4);border-radius:6px;padding:0 6px;font-size:10.5px;background:#fff">'
+      + '<option value="Cash"' + (isInsuranceLikeMode(r.mode || r.ins || '') ? '' : ' selected') + '>Cash</option>'
+      + '<option value="UPI"' + (String(r.mode || '').toLowerCase() === 'upi' ? ' selected' : '') + '>UPI</option>'
+      + '<option value="Credit Card"' + (String(r.mode || '').toLowerCase() === 'credit card' ? ' selected' : '') + '>Credit Card</option>'
+      + '<option value="Insurance/TPA"' + (isInsuranceLikeMode(r.mode || r.ins || '') ? ' selected' : '') + '>Insurance/TPA</option>'
+      + '</select>'
+      + '<button type="button" class="btn btn-xs" style="background:var(--green);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:10.5px;font-weight:800;cursor:pointer" onclick="collectPayment(\'' + String(r.id).replace(/'/g, "\\'") + '\',\'' + String(r.id).replace(/'/g, "\\'") + '\')">Collect</button>'
       + '</div>';
   }).join('');
   const groupedByService = {};
@@ -28930,7 +28944,8 @@ function getDrugLibrarySearchPool() {
   let rescue = [];
   try { rescue = typeof readDrugLibraryRowsFromAllLocalSources === 'function' ? readDrugLibraryRowsFromAllLocalSources() : []; } catch (e) { rescue = []; }
   // DRUG_LIBRARY_FULL seeds are already merged in via buildDrugLibrarySeedRows() inside mergeDrugLibraryRows
-  _drugSearchPoolCache = mergeDrugLibraryRows(live.concat(rescue));
+  const merged = mergeDrugLibraryRows(live.concat(rescue));
+  _drugSearchPoolCache = Array.isArray(merged) ? merged : [];
   promoteMergedDrugLibraryIntoLive(_drugSearchPoolCache, { persist: false });
   return _drugSearchPoolCache;
 }
