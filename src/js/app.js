@@ -809,6 +809,13 @@ const originalNav = window.nav;
 window.nav = function(pageKey, btn) {
   const result = originalNav ? originalNav(pageKey, btn) : null;
   saveCurrentPage('pg-' + pageKey);
+  if (pageKey === 'inventory') {
+    setTimeout(() => {
+      if (typeof window.checkInventoryVisibility === 'function') {
+        window.checkInventoryVisibility();
+      }
+    }, 150);
+  }
   return result;
 };
 
@@ -825,11 +832,9 @@ if (document.readyState === 'loading') {
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', function() {
     setTimeout(setupFamilyMemberDetection, 1000); // Delay to ensure form is loaded
-    setTimeout(checkInventoryVisibility, 2000); // Check inventory after page load
   });
 } else {
   setTimeout(setupFamilyMemberDetection, 1000);
-  setTimeout(checkInventoryVisibility, 2000);
 }
 
 import { auth, watchConnectionStatus } from './firebase.js'

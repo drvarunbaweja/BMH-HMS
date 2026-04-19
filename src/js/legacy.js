@@ -28944,14 +28944,21 @@ function getDrugLibrarySearchPool() {
   let rescue = [];
   try { rescue = typeof readDrugLibraryRowsFromAllLocalSources === 'function' ? readDrugLibraryRowsFromAllLocalSources() : []; } catch (e) { rescue = []; }
   // DRUG_LIBRARY_FULL seeds are already merged in via buildDrugLibrarySeedRows() inside mergeDrugLibraryRows
-  const merged = mergeDrugLibraryRows(live.concat(rescue));
+  let merged = [];
+  try {
+    merged = mergeDrugLibraryRows(live.concat(rescue));
+  } catch (e) {
+    console.warn('Drug library quick search pool rebuild failed', e);
+    merged = Array.isArray(live) ? live : [];
+  }
   _drugSearchPoolCache = Array.isArray(merged) ? merged : [];
   promoteMergedDrugLibraryIntoLive(_drugSearchPoolCache, { persist: false });
   return _drugSearchPoolCache;
 }
 function getDrugLibrarySearchIndex() {
   if (_drugSearchIndexCache) return _drugSearchIndexCache;
-  _drugSearchIndexCache = getDrugLibrarySearchPool().map(function (d) {
+  const pool = getDrugLibrarySearchPool();
+  _drugSearchIndexCache = (Array.isArray(pool) ? pool : []).map(function (d) {
     const trade = String(d.trade || d.brand || d.name || '').trim();
     const generic = String(d.generic || d.name || d.trade || '').trim();
     const company = String(d.company || '').trim();
@@ -29012,7 +29019,7 @@ let _rxQuickSearchTimer = null;
 function rxQuickSearchDebounced(val) {
   clearTimeout(_rxQuickSearchTimer);
   if ((val || '').trim().length < 1) { rxQuickSearch(val); return; } // hide immediately on clear
-  _rxQuickSearchTimer = setTimeout(function () { rxQuickSearch(val); }, 120);
+  _rxQuickSearchTimer = setTimeout(function () { rxQuickSearch(val); }, 60);
 }
 window.rxQuickSearchDebounced = rxQuickSearchDebounced;
 function rxQuickSearch(val) {
