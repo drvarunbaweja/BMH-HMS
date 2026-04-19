@@ -2382,7 +2382,7 @@ function nav(id, el, opts) {
   else if(pageKey==='billing')         deferPageWork(function(){ renderBillingPage && renderBillingPage(); });
   else if(pageKey==='tpa')             deferPageWork(function(){ renderTpaPage && renderTpaPage(); });
   else if(pageKey==='payments')        deferPageWork(function(){ renderPaymentsPage && renderPaymentsPage(); });
-  else if(pageKey==='reports')         deferPageWork(function(){ renderReports && renderReports(); });
+  else if(pageKey==='reports')         deferPageWork(function(){ if (typeof renderReports === 'function') renderReports(); });
   else if(pageKey==='brochures')       deferPageWork(function(){ renderBrochures && renderBrochures(); });
   else if(pageKey==='centres')         deferPageWork(function(){ renderCentresView && renderCentresView(); });
   else if(pageKey==='settings')        deferPageWork(function(){ renderSettingsPage && renderSettingsPage(); setTimeout(()=>{ renderConsentLibrary&&renderConsentLibrary('all'); loadChargesFromFirebase&&loadChargesFromFirebase(); loadDoctorProfilesFromFirebase&&loadDoctorProfilesFromFirebase(); loadDeletionRequests&&loadDeletionRequests(); },100); });
@@ -21516,6 +21516,53 @@ function normalizePaymentMode(mode) {
 function normalizePaymentModeLabel(mode) {
   return normalizePaymentMode(mode);
 }
+function normalizeProcedureReportName(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/nd[:\s-]*yag/gi, 'yag')
+    .replace(/capsulotomy/gi, 'capsulotomy')
+    .replace(/laser/gi, 'laser')
+    .replace(/pmics/gi, 'cataract')
+    .replace(/phaco(emulsification)?/gi, 'cataract')
+    .replace(/pciol|iol implantation|iol/gi, 'iol')
+    .replace(/intravitreal/gi, 'ivt')
+    .replace(/anti-vegf/gi, 'ivt')
+    .replace(/[\s/+(),.-]+/g, ' ')
+    .trim();
+}
+function procedureReportNamesMatch(a, b) {
+  const x = normalizeProcedureReportName(a);
+  const y = normalizeProcedureReportName(b);
+  if (!x || !y) return false;
+  return x === y || x.includes(y) || y.includes(x);
+}
+function getProcedureReportCompletionMatch(row, otRows) {
+  const otMatch = (otRows || []).find(function (c) {
+    if (!c || c.bmhId !== row.bmhId) return false;
+    return procedureReportNamesMatch(c.procedure || '', row.proc || '');
+  });
+  if (otMatch) {
+    return {
+      status: otMatch.status === 'completed' ? 'done' : 'scheduled',
+      date: otMatch.date || otMatch.scheduledDate || otMatch.scheduledTime || row.date || ''
+    };
+  }
+  const paidReq = (PAY_REQUESTS || []).find(function (r) {
+    if (!r || r.bmhId !== row.bmhId || String(r.status || '').toLowerCase() !== 'paid') return false;
+    return procedureReportNamesMatch(r.for || r.service || r.procedure || r.name || '', row.proc || '');
+  });
+  if (paidReq) {
+    return { status: 'done', date: paidReq.date || paidReq.paidAt || paidReq.updatedAt || row.date || '' };
+  }
+  const paidTxn = (TRANSACTIONS || []).find(function (t) {
+    if (!t || t.bmhId !== row.bmhId) return false;
+    return procedureReportNamesMatch(t.service || t.for || t.procedure || t.name || '', row.proc || '');
+  });
+  if (paidTxn) {
+    return { status: 'done', date: paidTxn.date || paidTxn.time || paidTxn.createdAt || row.date || '' };
+  }
+  return { status: 'advised', date: row.date || '' };
+}
 
 function getProcedureReportRows() {
   const fromVal = document.getElementById('rep-surg-from')?.value || '';
@@ -21539,20 +21586,19 @@ function getProcedureReportRows() {
     const dedupe = [row.bmhId, String(normalizedProc).toLowerCase(), String(visitDate || row.date || row.createdAt || '').slice(0, 10)].join('|');
     if (seen.has(dedupe)) return;
     seen.add(dedupe);
-    const otMatch = otRows.find(function (c) {
-      if (!c || c.bmhId !== row.bmhId) return false;
-      return normalizeOtTemplateKey(c.procedure || '').includes(normalizeOtTemplateKey(normalizedProc || ''))
-        || normalizeOtTemplateKey(normalizedProc || '').includes(normalizeOtTemplateKey(c.procedure || ''));
-    });
-    const derivedStatus = otMatch ? (otMatch.status === 'completed' ? 'done' : 'scheduled') : 'advised';
+    const completion = getProcedureReportCompletionMatch({
+      bmhId: row.bmhId,
+      proc: normalizedProc,
+      date: row.date || visitDate || row.createdAt || ''
+    }, otRows);
     advised.push({
       key,
       patient: row.patient || pt.name || '—',
       bmhId: row.bmhId,
       proc: normalizedProc,
-      date: row.date || visitDate || row.createdAt || '',
+      date: completion.date || row.date || visitDate || row.createdAt || '',
       doctor: row.doctor || pt.assignedDoctor || pt.doctor || '',
-      status: derivedStatus,
+      status: completion.status || 'advised',
       source: row.source || 'saved',
       mobile: row.mobile || pt.mob || '',
       ageSex: row.ageSex || ((pt.age || '—') + '/' + (pt.sex || '—')),
@@ -21764,8 +21810,8 @@ function generateSurgeryReport() {
   const esc = function(v){ return String(v || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
   el.innerHTML=`<div class="card">
     <div class="card-hd"><div><div class="card-title">⚕️ ${proc||'All Procedures'} — ${filtered.length} patients</div></div><button class="btn btn-gold btn-xs" onclick="printSurgeryReportCurrent()">🖨️ Print</button></div>
-    ${filtered.length?`<table><thead><tr><th>#</th><th>Patient</th><th>Phone</th><th>Age/Sex</th><th>BMSH ID</th><th>Procedure</th><th>Date Advised</th><th>Doctor</th><th>Centre</th><th>Status</th><th>Counsellor</th></tr></thead>
-    <tbody>${filtered.map((p,i)=>{ const follow=window.PROC_COUNSELLOR_LOG[p.key]||{}; return `<tr><td>${i+1}</td><td style="font-weight:800">${esc(p.patient)}${p.referredBy?`<div style="font-size:10px;color:var(--g1);margin-top:2px">Ref: ${esc(p.referredBy)}</div>`:''}${p.advice?`<div style="font-size:10px;color:var(--g1);margin-top:4px;line-height:1.35"><b>Advice:</b> ${esc(p.advice)}</div>`:''}</td><td>${esc(p.mobile||'—')}</td><td>${esc(p.ageSex||'—')}</td><td style="font-family:var(--mono);font-size:10px">${esc(p.bmhId)}</td><td>${esc(p.proc)}</td><td>${esc(p.date||'—')}</td><td>${esc(p.doctor)}</td><td>${esc(p.centre||'—')}</td><td><span class="badge ${p.status==='done'?'bd-green':p.status==='scheduled'?'bd-blue':'bd-orange'}">${esc(p.status||'Advised')}</span></td><td><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="btn btn-xs btn-outline" onclick="openCounsellorFollowup('${p.key}')">📞 Follow-up</button>${follow.status?`<span style="font-size:10px;color:var(--g1)">${esc(follow.status)}${follow.nextDate?` · ${esc(follow.nextDate)}`:''}</span>`:''}</div></td></tr>`; }).join('')}
+    ${filtered.length?`<table><thead><tr><th>#</th><th>Patient</th><th>Phone</th><th>Age/Sex</th><th>BMSH ID</th><th>Procedure</th><th>Relevant Date</th><th>Doctor</th><th>Centre</th><th>Status</th><th>Counsellor</th></tr></thead>
+    <tbody>${filtered.map((p,i)=>{ const follow=window.PROC_COUNSELLOR_LOG[p.key]||{}; const statusLabel=p.status==='done'?'Done':p.status==='scheduled'?'Scheduled':'Advised'; return `<tr><td>${i+1}</td><td style="font-weight:800">${esc(p.patient)}${p.referredBy?`<div style="font-size:10px;color:var(--g1);margin-top:2px">Ref: ${esc(p.referredBy)}</div>`:''}${p.advice?`<div style="font-size:10px;color:var(--g1);margin-top:4px;line-height:1.35"><b>Advice:</b> ${esc(p.advice)}</div>`:''}</td><td>${esc(p.mobile||'—')}</td><td>${esc(p.ageSex||'—')}</td><td style="font-family:var(--mono);font-size:10px">${esc(p.bmhId)}</td><td>${esc(p.proc)}</td><td>${esc(p.date||'—')}</td><td>${esc(p.doctor)}</td><td>${esc(p.centre||'—')}</td><td><span class="badge ${p.status==='done'?'bd-green':p.status==='scheduled'?'bd-blue':'bd-orange'}">${esc(statusLabel)}</span></td><td><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="btn btn-xs btn-outline" onclick="openCounsellorFollowup('${p.key}')">📞 Follow-up</button>${follow.status?`<span style="font-size:10px;color:var(--g1)">${esc(follow.status)}${follow.nextDate?` · ${esc(follow.nextDate)}`:''}</span>`:''}</div></td></tr>`; }).join('')}
     </tbody></table>`:'<div style="padding:20px;text-align:center;color:var(--g1)">No records found</div>'}
   </div>`;
 }
