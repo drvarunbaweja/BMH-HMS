@@ -4419,8 +4419,15 @@
         <div class="form-group"><label class="fl">Date From</label><input type="date" id="rep-ref-from"></div>
         <div class="form-group"><label class="fl">Date To</label><input type="date" id="rep-ref-to"></div>
         <div class="form-group"><label class="fl">Department</label><select id="rep-ref-dept"><option value="">All Departments</option><option value="ophtho">Ophthalmology</option><option value="obg">OBG</option><option value="psych">Neuropsychiatry</option><option value="skin">Skin</option></select></div>
-        <div class="form-group"><label class="fl">Referred By</label><input type="text" id="rep-ref-doctor" list="rep-ref-doctor-list" placeholder="Start typing doctor / referrer name"></div>
-        <datalist id="rep-ref-doctor-list"></datalist>
+        <div class="form-group" style="grid-column:1/-1">
+          <label class="fl">Referred By</label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+            <input type="text" id="rep-ref-doctor" readonly placeholder="All referral sources selected" style="flex:1;min-width:220px;background:var(--g6);cursor:default">
+            <button class="btn btn-outline btn-xs" type="button" onclick="selectAllReferralDoctors()">Select All</button>
+            <button class="btn btn-outline btn-xs" type="button" onclick="clearReferralDoctors()">Clear</button>
+          </div>
+          <div id="rep-ref-doctor-picker" style="display:flex;flex-wrap:wrap;gap:8px;padding:10px;border:1px solid var(--g4);border-radius:10px;background:var(--g6);min-height:46px"></div>
+        </div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
         <button class="btn btn-gold btn-sm" type="button" onclick="generateReferralReport()">📋 Generate Report</button>
