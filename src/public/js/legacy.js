@@ -26814,7 +26814,7 @@ function getDoctorPrescriptionPrintMode(profile) {
 }
 function getDoctorPrescriptionDesign(profile) {
   const mode = String(profile?.rxDesign || '').trim().toLowerCase();
-  if (['current','signature_classic','clinical_blocks','ribbon_timeline','compact_bilingual'].includes(mode)) return mode;
+  if (['current','option_a','option_b','signature_classic','clinical_blocks','ribbon_timeline','compact_bilingual'].includes(mode)) return mode;
   return 'current';
 }
 
@@ -27149,6 +27149,8 @@ window.printUnifiedRx = function(deptId) {
   const skinDermoscopy = deptId === 'skin' ? (document.getElementById('skin-dermoscopy')?.value || '') : '';
   const designCss = {
     current: '',
+    option_a: `body{background:#fff}.pt-name{color:#1a3c6e}.pt-name-bar{border-bottom:2px solid #1a3c6e}.sec-label{color:#1a3c6e}.sec-divider::before,.sec-divider::after{border-color:#1a3c6e}.diag-text{color:#1a3c6e;border-color:#1a3c6e}.rx-item{border-left:3px solid #1a3c6e;padding-left:10px}.rx-item-name{font-size:14px;color:#1a3c6e}.rx-item-instr{border-left:3px solid #1a3c6e;color:#222;font-style:normal}.dept-card-hdr{background:#1a3c6e}.taper-card{border-color:#1a3c6e}.taper-card-hdr{background:#1a3c6e}.inv-chip{border-color:#1a3c6e;background:#f0f4ff;color:#1a3c6e}.fu-box{border-color:#1a3c6e;color:#1a3c6e}`,
+    option_b: `body{background:#fff}.pt-name-bar{border-bottom:2px solid #0f7b82}.pt-name{color:#0f7b82}.sec-label{color:#0f7b82}.sec-divider::before,.sec-divider::after{border-color:#0f7b82}.diag-text{color:#222}.diag-rule-top,.diag-rule-bot{border-color:#0f7b82}.rx-item{background:#f5fffe;border-radius:8px;padding:8px 10px;border:1px solid #c0e8ea}.rx-item-name{color:#0f7b82;font-size:14px}.rx-item-instr{font-style:normal;font-weight:700;background:#fff;border:1px solid #c0e8ea;border-radius:6px;padding:6px 10px;border-left:3px solid #0f7b82}.rx-item-details{margin-top:4px}.dept-card-hdr{background:#0f7b82}.taper-card{border-color:#0f7b82}.taper-card-hdr{background:#0f7b82}.inv-chip{background:#e6f7f8;border-color:#0f7b82;color:#0f7b82}.fu-box{border-color:#0f7b82;color:#0f7b82}.rx-item-gen{color:#0f7b82}`,
     signature_classic: `body{background:#fcfcfb}.rx-item{padding:7px 10px;border:1px solid #dfe4ec;border-left:4px solid #c89a2b;border-radius:10px;margin-bottom:6px;background:#fff}.rx-item-name{font-size:14.5px}.rx-item-instr{font-size:11px;color:#2c3440;font-style:normal;font-weight:700}.advice-block{font-size:11px;font-style:normal;font-weight:700;background:#faf7f0;border-radius:8px;border-left:4px solid #c89a2b}.sec-label{color:#14345e}`,
     clinical_blocks: `body{background:#fbfdff}.rx-list{gap:8px}.rx-item{padding:10px 12px;border:1px solid #d8e4ef;border-radius:12px;background:#eef5fb}.rx-item-name{font-size:14px}.rx-item-details{margin-top:5px}.rx-item-instr{font-size:11px;color:#17324d;font-style:normal;font-weight:700;background:#fff;border:1px solid #dae5ef;border-radius:8px;padding:8px 10px;margin-top:8px}.advice-block{font-size:11px;font-style:normal;font-weight:700;background:#f2f7fb;border-radius:10px;border-left:4px solid #173a67}`,
     ribbon_timeline: `body{background:#fffdfa}.sec-label{color:#0f7b82}.rx-list{position:relative;padding-left:12px}.rx-list:before{content:'';position:absolute;left:2px;top:2px;bottom:2px;width:3px;border-radius:999px;background:linear-gradient(180deg,#0f7b82,#ef8b67)}.rx-item{position:relative;padding:8px 10px 8px 14px;border:1px solid #dde7e7;border-radius:12px;background:#fff;margin-bottom:8px}.rx-item:before{content:'';position:absolute;left:-18px;top:18px;width:10px;height:10px;border-radius:50%;background:#fff;border:3px solid #0f7b82}.rx-item-name{font-size:14px}.rx-item-instr{font-size:11px;font-style:normal;font-weight:700;background:#eef7f7;border-radius:8px;padding:8px 10px;margin-top:8px;border-left:none}`,
@@ -27184,7 +27186,7 @@ window.printUnifiedRx = function(deptId) {
   };
   const renderMedsByDesign = function () {
     if (!incRxFinal || !drugs.length) return rxEmptyNote || '';
-    if (rxDesign === 'current') return '';
+    if (rxDesign === 'current' || rxDesign === 'option_a' || rxDesign === 'option_b') return '';
     return `<div class="design-rx design-${rxDesign}">
       ${drugs.map(function (d, i) {
         const trade = (typeof rxDrugTradeName === 'function' ? rxDrugTradeName(d) : (d.brand || d.trade || '')) || '—';
@@ -27228,7 +27230,7 @@ window.printUnifiedRx = function(deptId) {
   };
   const renderDiagnosisByDesign = function () {
     if (!dxList.length) return '';
-    if (rxDesign === 'current') return '';
+    if (rxDesign === 'current' || rxDesign === 'option_a' || rxDesign === 'option_b') return '';
     const joined = dxList.map(escapeHtmlConsent).join(' · ');
     if (rxDesign === 'signature_classic') return `<div class="design-dx classic">${joined}</div>`;
     if (rxDesign === 'clinical_blocks') return `<div class="design-dx blocks"><div class="design-dx-title">Clinical Diagnosis</div><div class="design-dx-body">${joined}</div></div>`;
@@ -27236,7 +27238,7 @@ window.printUnifiedRx = function(deptId) {
     return `<div class="design-dx compact">${joined}</div>`;
   };
   const renderAdviceFollowByDesign = function () {
-    if (rxDesign === 'current') return '';
+    if (rxDesign === 'current' || rxDesign === 'option_a' || rxDesign === 'option_b') return '';
     const adviceBlock = incAdvFinal && adviceHtml ? `<div class="design-side-card"><div class="design-side-title">Instructions</div><div class="design-side-body">${adviceHtml}</div></div>` : '';
     const followBlock = fuFormatted ? `<div class="design-follow ${rxDesign}">Next Visit: ${fuFormatted}</div>` : '';
     if (!adviceBlock && !followBlock) return '';
@@ -31606,47 +31608,282 @@ function processCsvData(csvText) {
 }
 
 // ── DOCTOR CREDENTIALS ────────────────────────────
+let activeDrTab = '';
+const RX_DESIGN_OPTIONS = [
+  { key: 'current', label: 'Premium Letterhead' },
+  { key: 'option_a', label: 'Clinical Document' },
+  { key: 'option_b', label: 'Modern Clinical' },
+  { key: 'signature_classic', label: 'Signature Classic' },
+  { key: 'clinical_blocks', label: 'Clinical Blocks' },
+  { key: 'ribbon_timeline', label: 'Ribbon Timeline' },
+  { key: 'compact_bilingual', label: 'Compact Bilingual' }
+];
+
+function _drSafeKey(name) { return String(name).replace(/\s/g, '_'); }
+
+function _renderDesignThumbnail(key) {
+  // A tiny visual snippet matching each design's vibe
+  if (key === 'current') {
+    return `<div style="font-family:Georgia,serif;border-bottom:1px solid #333;padding-bottom:2px;margin-bottom:3px"><span style="font-size:10px;font-weight:700;color:#111">Patient Name</span></div>
+      <div style="border-top:1px solid #111;border-bottom:1px solid #111;text-align:center;font-size:8px;font-weight:700;color:#111;padding:2px 0;margin-bottom:3px">Diagnosis</div>
+      <div style="font-size:8px;font-weight:700;color:#111">Metformin 500</div>
+      <div style="font-size:7px;color:#888;font-style:italic">Metformin HCl</div>
+      <div style="font-size:7px;border-left:2px solid #ccc;padding-left:4px;margin-top:2px;color:#222">Take twice daily</div>`;
+  }
+  if (key === 'option_a') {
+    return `<div style="border-bottom:2px solid #1a3c6e;padding-bottom:2px;margin-bottom:3px"><span style="font-size:10px;font-weight:700;color:#1a3c6e">Patient Name</span></div>
+      <div style="border-left:3px solid #1a3c6e;padding-left:5px"><div style="font-size:8px;font-weight:700;color:#1a3c6e">Metformin 500</div><div style="font-size:7px;border-left:3px solid #1a3c6e;padding-left:3px;margin-top:2px;color:#222">Twice daily</div></div>`;
+  }
+  if (key === 'option_b') {
+    return `<div style="border-bottom:2px solid #0f7b82;padding-bottom:2px;margin-bottom:3px"><span style="font-size:10px;font-weight:700;color:#0f7b82">Patient Name</span></div>
+      <div style="background:#f5fffe;border:1px solid #c0e8ea;border-radius:6px;padding:4px"><div style="font-size:8px;font-weight:700;color:#0f7b82">Metformin 500</div><div style="font-size:7px;font-weight:700;background:#fff;border:1px solid #c0e8ea;border-radius:4px;padding:3px;margin-top:2px;border-left:3px solid #0f7b82">Twice daily</div></div>`;
+  }
+  if (key === 'signature_classic') {
+    return `<div style="font-family:Georgia,serif;color:#14345e;font-size:10px;font-weight:700;margin-bottom:3px">Patient Name</div>
+      <div style="padding:4px;border:1px solid #dfe4ec;border-left:4px solid #c89a2b;border-radius:6px;background:#fff"><div style="font-size:8px;font-weight:700">Metformin 500</div><div style="font-size:7px;font-weight:700;color:#2c3440;margin-top:2px">Twice daily</div></div>`;
+  }
+  if (key === 'clinical_blocks') {
+    return `<div style="color:#173a67;font-size:10px;font-weight:700;margin-bottom:3px">Patient Name</div>
+      <div style="padding:4px;border:1px solid #d8e4ef;border-radius:8px;background:#eef5fb"><div style="font-size:8px;font-weight:700;color:#173a67">Metformin 500</div><div style="font-size:7px;font-weight:700;color:#17324d;background:#fff;border:1px solid #dae5ef;border-radius:5px;padding:3px;margin-top:2px">Twice daily</div></div>`;
+  }
+  if (key === 'ribbon_timeline') {
+    return `<div style="color:#0f7b82;font-size:10px;font-weight:700;margin-bottom:3px">Patient Name</div>
+      <div style="position:relative;padding-left:10px;border-left:3px solid #0f7b82"><div style="position:absolute;left:-6px;top:4px;width:8px;height:8px;border-radius:50%;background:#fff;border:2px solid #0f7b82"></div><div style="border:1px solid #dde7e7;border-radius:6px;padding:4px;background:#fff"><div style="font-size:8px;font-weight:700">Metformin 500</div><div style="font-size:7px;font-weight:700;background:#eef7f7;border-radius:4px;padding:3px;margin-top:2px">Twice daily</div></div></div>`;
+  }
+  if (key === 'compact_bilingual') {
+    return `<div style="font-size:9px;font-weight:700;margin-bottom:2px;line-height:1.25">Patient Name</div>
+      <div style="font-size:8px;font-weight:700;line-height:1.25">Metformin 500</div>
+      <div style="font-size:7px;font-weight:700;color:#24384d;line-height:1.25">Take twice daily after meals</div>
+      <div style="font-size:7px;font-weight:700;color:#24384d;line-height:1.25">Vitamin D3 · Once weekly</div>`;
+  }
+  return '';
+}
+
 function renderDrCredentials() {
   const el = document.getElementById('dr-credentials-list'); if(!el) return;
-  el.innerHTML = Object.entries(DOCTOR_PROFILES||{}).map(([name,dr])=>`
-    <div style="border:1.5px solid var(--g4);border-radius:var(--r);padding:12px;margin-bottom:8px">
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;align-items:center">
-        <div class="form-group" style="margin:0"><label class="fl">Name</label><input type="text" value="${name}" style="font-size:12px" readonly></div>
-        <div class="form-group" style="margin:0"><label class="fl">Degrees</label><input type="text" id="dr-deg-${name.replace(/\s/g,'_')}" value="${dr.degrees||''}" placeholder="MBBS, MS, DNB…" style="font-size:12px"></div>
-        <div class="form-group" style="margin:0"><label class="fl">Reg No.</label><input type="text" id="dr-reg-${name.replace(/\s/g,'_')}" value="${dr.reg||''}" placeholder="PMC-XXXXX" style="font-size:12px"></div>
-        <div class="form-group" style="margin:0"><label class="fl">Specialty</label><input type="text" id="dr-spec-${name.replace(/\s/g,'_')}" value="${dr.dept||''}" placeholder="Ophthalmology…" style="font-size:12px"></div>
+  const names = Object.keys(DOCTOR_PROFILES||{});
+  if (!names.length) { el.innerHTML = '<div style="padding:12px;color:#666;font-size:12px">No doctors yet. Click "+ Add Doctor" below.</div>'; return; }
+  if (!activeDrTab || !DOCTOR_PROFILES[activeDrTab]) activeDrTab = names[0];
+  const name = activeDrTab;
+  const dr = DOCTOR_PROFILES[name] || {};
+  const key = _drSafeKey(name);
+  const selectedDesign = getDoctorPrescriptionDesign(dr);
+
+  const tabsHtml = names.map(n => {
+    const active = n === activeDrTab;
+    return `<div onclick="selectDrTab('${n.replace(/'/g, "\\'")}')" style="padding:8px 12px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:700;margin-bottom:4px;background:${active?'#1a3c6e':'#f3f4f6'};color:${active?'#fff':'#333'};border:1px solid ${active?'#1a3c6e':'#e4e6eb'}">${n}</div>`;
+  }).join('');
+
+  const sigPreview = dr.signature ? `<img src="${dr.signature}" alt="sig" style="height:50px;margin-top:4px;border:1px solid #ddd;border-radius:4px;background:#fff;padding:2px">` : '';
+
+  const formHtml = `
+    <div class="form-group" style="margin:0 0 8px"><label class="fl">Name</label><input type="text" value="${name}" style="font-size:12px" readonly></div>
+    <div class="form-group" style="margin:0 0 8px"><label class="fl">Degrees</label><input type="text" id="dr-deg-${key}" value="${dr.degrees||''}" placeholder="MBBS, MS, DNB…" style="font-size:12px"></div>
+    <div class="form-group" style="margin:0 0 8px"><label class="fl">Reg No.</label><input type="text" id="dr-reg-${key}" value="${dr.reg||''}" placeholder="PMC-XXXXX" style="font-size:12px"></div>
+    <div class="form-group" style="margin:0 0 8px"><label class="fl">Specialty</label><input type="text" id="dr-spec-${key}" value="${dr.dept||''}" placeholder="Ophthalmology…" style="font-size:12px"></div>
+    <div class="form-group" style="margin:0 0 8px"><label class="fl">Centre</label>
+      <select id="dr-centre-${key}" style="font-size:12px">
+        <option ${dr.centre==='CHD'?'selected':''}>CHD</option>
+        <option ${dr.centre==='RPR'?'selected':''}>RPR</option>
+        <option ${dr.centre==='CHD & RPR'?'selected':''}>CHD & RPR</option>
+      </select>
+    </div>
+    <div class="form-group" style="margin:0 0 8px"><label class="fl">Prescription Print Mode</label>
+      <select id="dr-rx-print-${key}" style="font-size:12px">
+        <option value="table" ${getDoctorPrescriptionPrintMode(dr)==='table'?'selected':''}>Table Only</option>
+        <option value="plain" ${getDoctorPrescriptionPrintMode(dr)==='plain'?'selected':''}>Plain Instructions With Timings</option>
+        <option value="both" ${getDoctorPrescriptionPrintMode(dr)==='both'?'selected':''}>Table + Instructions</option>
+        <option value="plain_only" ${getDoctorPrescriptionPrintMode(dr)==='plain_only'?'selected':''}>Plain Instructions Only</option>
+      </select>
+    </div>
+    <input type="hidden" id="dr-rx-design-${key}" value="${selectedDesign}">
+    <div class="form-group" style="margin:0 0 8px"><label class="fl">Signature upload</label>
+      <input type="file" accept="image/*" onchange="uploadDrSignature('${name.replace(/'/g, "\\'")}',this)" style="font-size:11px">
+      ${sigPreview}
+    </div>
+    <button class="btn btn-gold btn-sm" style="margin-top:6px" onclick="saveDoctorCredentials()">💾 Save</button>
+  `;
+
+  const designCardsHtml = RX_DESIGN_OPTIONS.map(opt => {
+    const isSel = opt.key === selectedDesign;
+    return `<div id="rxdc-${key}-${opt.key}" onclick="selectRxDesign('${opt.key}','${name.replace(/'/g, "\\'")}')" style="border:2px solid ${isSel?'#1a3c6e':'#ddd'};border-radius:8px;padding:6px;cursor:pointer;background:#fff;min-height:120px;box-shadow:${isSel?'0 0 0 2px rgba(26,60,110,.15)':'none'}">
+      <div style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#555;margin-bottom:4px">${opt.label}</div>
+      <div style="font-family:Georgia,serif">${_renderDesignThumbnail(opt.key)}</div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div style="display:flex;gap:14px;align-items:flex-start">
+      <div style="flex:0 0 45%;max-width:45%;border:1px solid #e4e6eb;border-radius:10px;padding:10px;background:#fafbfc;height:560px;display:flex;flex-direction:column">
+        <div style="max-height:150px;overflow-y:auto;margin-bottom:10px;padding-right:4px">${tabsHtml}</div>
+        <div style="flex:1;overflow-y:auto;padding-right:4px;border-top:1px solid #e4e6eb;padding-top:10px">${formHtml}</div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px">
-        <div class="form-group" style="margin:0"><label class="fl">Signature (upload)</label>
-          <input type="file" accept="image/*" onchange="uploadDrSignature('${name}',this)" style="font-size:11px">
-        </div>
-        <div class="form-group" style="margin:0"><label class="fl">Centre</label>
-          <select id="dr-centre-${name.replace(/\s/g,'_')}" style="font-size:12px">
-            <option ${dr.centre==='CHD'?'selected':''}>CHD</option>
-            <option ${dr.centre==='RPR'?'selected':''}>RPR</option>
-            <option ${dr.centre==='CHD & RPR'?'selected':''}>CHD & RPR</option>
-          </select>
-        </div>
-        <div class="form-group" style="margin:0"><label class="fl">Prescription Print</label>
-          <select id="dr-rx-print-${name.replace(/\s/g,'_')}" style="font-size:12px">
-            <option value="table" ${getDoctorPrescriptionPrintMode(dr)==='table'?'selected':''}>Table Only</option>
-            <option value="plain" ${getDoctorPrescriptionPrintMode(dr)==='plain'?'selected':''}>Plain Instructions With Timings</option>
-            <option value="both" ${getDoctorPrescriptionPrintMode(dr)==='both'?'selected':''}>Table + Instructions</option>
-            <option value="plain_only" ${getDoctorPrescriptionPrintMode(dr)==='plain_only'?'selected':''}>Plain Instructions Only</option>
-          </select>
-        </div>
-        <div class="form-group" style="margin:0"><label class="fl">Prescription Design</label>
-          <select id="dr-rx-design-${name.replace(/\s/g,'_')}" style="font-size:12px">
-            <option value="current" ${getDoctorPrescriptionDesign(dr)==='current'?'selected':''}>Current Default</option>
-            <option value="signature_classic" ${getDoctorPrescriptionDesign(dr)==='signature_classic'?'selected':''}>Signature Classic</option>
-            <option value="clinical_blocks" ${getDoctorPrescriptionDesign(dr)==='clinical_blocks'?'selected':''}>Clinical Blocks</option>
-            <option value="ribbon_timeline" ${getDoctorPrescriptionDesign(dr)==='ribbon_timeline'?'selected':''}>Ribbon Timeline</option>
-            <option value="compact_bilingual" ${getDoctorPrescriptionDesign(dr)==='compact_bilingual'?'selected':''}>Compact Bilingual</option>
-          </select>
+      <div style="flex:1;border:1px solid #e4e6eb;border-radius:10px;padding:10px;background:#fff">
+        <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#1a3c6e;margin-bottom:8px">Prescription Design</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">${designCardsHtml}</div>
+        <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#555;margin-bottom:6px">Live Preview</div>
+        <div style="overflow:hidden;height:427px;width:301px;border:1px solid #e4e6eb;border-radius:6px;background:#fff">
+          <iframe id="rx-design-preview-frame" style="width:794px;height:1123px;border:none;transform:scale(0.38);transform-origin:top left;display:block"></iframe>
         </div>
       </div>
-    </div>`).join('');
+    </div>
+  `;
+
+  // Populate live preview after DOM inserted
+  try { updateRxDesignPreview(selectedDesign, name); } catch(e) {}
 }
+
+function selectDrTab(name) {
+  activeDrTab = name;
+  renderDrCredentials();
+}
+window.selectDrTab = selectDrTab;
+
+function selectRxDesign(designKey, doctorName) {
+  if (DOCTOR_PROFILES[doctorName]) DOCTOR_PROFILES[doctorName].rxDesign = designKey;
+  const hid = document.getElementById('dr-rx-design-' + _drSafeKey(doctorName));
+  if (hid) hid.value = designKey;
+  // Update card highlights
+  const key = _drSafeKey(doctorName);
+  RX_DESIGN_OPTIONS.forEach(opt => {
+    const card = document.getElementById('rxdc-' + key + '-' + opt.key);
+    if (!card) return;
+    const sel = opt.key === designKey;
+    card.style.border = '2px solid ' + (sel ? '#1a3c6e' : '#ddd');
+    card.style.boxShadow = sel ? '0 0 0 2px rgba(26,60,110,.15)' : 'none';
+  });
+  updateRxDesignPreview(designKey, doctorName);
+}
+window.selectRxDesign = selectRxDesign;
+
+function updateRxDesignPreview(designKey, doctorName) {
+  const profile = (DOCTOR_PROFILES && DOCTOR_PROFILES[doctorName]) || {};
+  const html = generateRxDesignSampleHtml(designKey, profile, doctorName);
+  const frame = document.getElementById('rx-design-preview-frame');
+  if (frame) frame.srcdoc = html;
+}
+window.updateRxDesignPreview = updateRxDesignPreview;
+
+function generateRxDesignSampleHtml(designKey, profile, doctorName) {
+  profile = profile || {};
+  const designCssMap = {
+    current: '',
+    option_a: `body{background:#fff}.pt-name{color:#1a3c6e}.pt-name-bar{border-bottom:2px solid #1a3c6e}.sec-label{color:#1a3c6e}.sec-divider::before,.sec-divider::after{border-color:#1a3c6e}.diag-text{color:#1a3c6e;border-color:#1a3c6e}.rx-item{border-left:3px solid #1a3c6e;padding-left:10px}.rx-item-name{font-size:14px;color:#1a3c6e}.rx-item-instr{border-left:3px solid #1a3c6e;color:#222;font-style:normal}.dept-card-hdr{background:#1a3c6e}.taper-card{border-color:#1a3c6e}.taper-card-hdr{background:#1a3c6e}.inv-chip{border-color:#1a3c6e;background:#f0f4ff;color:#1a3c6e}.fu-box{border-color:#1a3c6e;color:#1a3c6e}`,
+    option_b: `body{background:#fff}.pt-name-bar{border-bottom:2px solid #0f7b82}.pt-name{color:#0f7b82}.sec-label{color:#0f7b82}.sec-divider::before,.sec-divider::after{border-color:#0f7b82}.diag-text{color:#222}.diag-rule-top,.diag-rule-bot{border-color:#0f7b82}.rx-item{background:#f5fffe;border-radius:8px;padding:8px 10px;border:1px solid #c0e8ea}.rx-item-name{color:#0f7b82;font-size:14px}.rx-item-instr{font-style:normal;font-weight:700;background:#fff;border:1px solid #c0e8ea;border-radius:6px;padding:6px 10px;border-left:3px solid #0f7b82}.rx-item-details{margin-top:4px}.dept-card-hdr{background:#0f7b82}.taper-card{border-color:#0f7b82}.taper-card-hdr{background:#0f7b82}.inv-chip{background:#e6f7f8;border-color:#0f7b82;color:#0f7b82}.fu-box{border-color:#0f7b82;color:#0f7b82}.rx-item-gen{color:#0f7b82}`,
+    signature_classic: `body{background:#fcfcfb}.rx-item{padding:7px 10px;border:1px solid #dfe4ec;border-left:4px solid #c89a2b;border-radius:10px;margin-bottom:6px;background:#fff}.rx-item-name{font-size:14.5px}.rx-item-instr{font-size:11px;color:#2c3440;font-style:normal;font-weight:700}.advice-block{font-size:11px;font-style:normal;font-weight:700;background:#faf7f0;border-radius:8px;border-left:4px solid #c89a2b}.sec-label{color:#14345e}`,
+    clinical_blocks: `body{background:#fbfdff}.rx-list{gap:8px}.rx-item{padding:10px 12px;border:1px solid #d8e4ef;border-radius:12px;background:#eef5fb}.rx-item-name{font-size:14px}.rx-item-details{margin-top:5px}.rx-item-instr{font-size:11px;color:#17324d;font-style:normal;font-weight:700;background:#fff;border:1px solid #dae5ef;border-radius:8px;padding:8px 10px;margin-top:8px}.advice-block{font-size:11px;font-style:normal;font-weight:700;background:#f2f7fb;border-radius:10px;border-left:4px solid #173a67}`,
+    ribbon_timeline: `body{background:#fffdfa}.sec-label{color:#0f7b82}.rx-list{position:relative;padding-left:12px}.rx-list:before{content:'';position:absolute;left:2px;top:2px;bottom:2px;width:3px;border-radius:999px;background:linear-gradient(180deg,#0f7b82,#ef8b67)}.rx-item{position:relative;padding:8px 10px 8px 14px;border:1px solid #dde7e7;border-radius:12px;background:#fff;margin-bottom:8px}.rx-item:before{content:'';position:absolute;left:-18px;top:18px;width:10px;height:10px;border-radius:50%;background:#fff;border:3px solid #0f7b82}.rx-item-name{font-size:14px}.rx-item-instr{font-size:11px;font-style:normal;font-weight:700;background:#eef7f7;border-radius:8px;padding:8px 10px;margin-top:8px;border-left:none}`,
+    compact_bilingual: `body{font-size:9.7px;padding:3.2mm 7mm 3mm;line-height:1.26}.pt-name{font-size:16px}.pt-subline{margin-bottom:2px}.sec-divider{margin:3px 0 2px}.rx-item{padding:3px 0 4px}.rx-item-name{font-size:12.8px}.rx-item-instr{font-size:10.8px;font-style:normal;font-weight:700;color:#24384d}.advice-block{font-size:10.6px;font-style:normal;font-weight:700;line-height:1.3}.fu-box{font-size:10px;padding:4px 8px}`
+  };
+  const extraCss = designCssMap[designKey] || '';
+  const headerSrc = (typeof resolvePrintHeaderSrc === 'function') ? resolvePrintHeaderSrc() : '';
+  const today = new Date();
+  const dateStr = today.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  const drName = String(doctorName || profile.name || 'Dr. Varun Baweja').trim();
+  const drDegrees = String(profile.degrees || 'MBBS, MD').trim();
+  const drReg = String(profile.reg || 'PMC-XXXXX').trim();
+  const drSpec = String(profile.dept || 'Specialist').trim();
+
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,300;0,400;0,700;0,900;1,400&family=Playfair+Display:wght@700&display=swap');
+*{margin:0;padding:0;box-sizing:border-box;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+@page{size:A4 portrait;margin:0}
+body{font-family:'Lato',sans-serif;font-size:10px;color:#1a1a1a;background:#fff;padding:3.5mm 8mm 3mm;line-height:1.3;overflow:hidden}
+.lh-img{width:100%;max-width:100%;height:auto;display:block;margin-bottom:6px}
+.pt-name-bar{display:flex;align-items:baseline;justify-content:space-between;border-bottom:1.5px solid #333;padding-bottom:3px;margin-bottom:2px}
+.pt-name{font-family:'Playfair Display','Georgia',serif;font-size:17px;font-weight:700;color:#111;letter-spacing:.2px}
+.pt-meta{font-size:10px;font-weight:300;color:#555;margin-left:8px;font-style:italic}
+.pt-date{font-size:9.5px;color:#555;font-weight:400}
+.pt-subline{font-size:9.5px;color:#444;margin-bottom:3px}
+.sec-divider{display:flex;align-items:center;gap:6px;margin:4px 0 3px}
+.sec-divider::before,.sec-divider::after{content:'';flex:1;border-top:1px solid #bbb}
+.sec-label{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#666;white-space:nowrap}
+.diag-rule-top{border-top:1.5px solid #111;margin-bottom:3px}
+.diag-rule-bot{border-top:1.5px solid #111;margin-top:3px}
+.diag-text{font-family:'Playfair Display','Georgia',serif;font-size:12px;font-weight:700;text-align:center;color:#111;padding:2px 0}
+.rx-list{display:flex;flex-direction:column;gap:0;margin-bottom:5px}
+.rx-item{padding:5px 0 6px 0;border-bottom:1px solid #e8e8e8}
+.rx-item:last-child{border-bottom:none;padding-bottom:0}
+.rx-item-num{font-size:9px;font-weight:900;color:#999;letter-spacing:.4px;margin-bottom:1px}
+.rx-item-name{font-family:'Playfair Display','Georgia',serif;font-size:14px;font-weight:700;color:#111;display:block;line-height:1.2}
+.rx-item-gen{font-size:9px;color:#888;font-style:italic;display:block;margin-bottom:3px}
+.rx-item-details{display:flex;flex-wrap:wrap;gap:0 12px;margin:2px 0 3px;align-items:center}
+.rx-detail-item{display:flex;align-items:center;gap:4px;font-size:9.5px;color:#444}
+.rx-detail-dot{width:3px;height:3px;border-radius:50%;background:#aaa;flex-shrink:0}
+.rx-item-instr{font-size:10.8px;color:#222;font-style:normal;line-height:1.3;padding-left:9px;border-left:2px solid #ccc;margin-top:4px;font-weight:600}
+.taper-card{margin:4px 0 5px;border:1.5px solid #333;border-radius:4px;overflow:hidden;font-size:9.5px}
+.taper-card-hdr{background:#222;color:#fff;padding:5px 10px;font-size:8.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase}
+.taper-steps-row{display:flex;align-items:stretch;background:#fafafa}
+.taper-step{flex:1;padding:6px 8px;text-align:center}
+.taper-step-period{font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#666;margin-bottom:3px}
+.taper-step-dose{font-family:'Playfair Display','Georgia',serif;font-size:15px;font-weight:700;color:#111;line-height:1;margin-bottom:2px}
+.taper-step-timing{font-size:9px;color:#555;font-weight:700;margin-bottom:2px}
+.advice-block{font-size:10.8px;color:#222;padding:4px 8px;border-left:2px solid #bbb;line-height:1.32;margin-bottom:3px;font-style:normal;font-weight:600}
+.fu-box{background:#f2f2f2;border-radius:4px;padding:4px 10px;margin:4px 0;font-size:10.5px;font-weight:700;color:#222;display:inline-block;border:1.5px solid #bbb}
+.sig-row{display:flex;justify-content:space-between;align-items:flex-end;margin-top:7px;padding-top:6px;border-top:1px solid #ddd}
+.dr-name{font-family:'Playfair Display','Georgia',serif;font-size:13px;font-weight:700;color:#111}
+.dr-deg{font-size:9.5px;color:#555;margin-top:2px;font-style:italic}
+.dr-spec{font-size:10px;font-weight:700;color:#333;margin-top:2px}
+.dr-reg{font-size:8.5px;color:#888;margin-top:1px}
+${extraCss}
+</style></head><body>
+${headerSrc ? `<img class="lh-img" src="${headerSrc}" alt="letterhead">` : ''}
+<div class="pt-name-bar">
+  <div><span class="pt-name">Smt. Sample Patient</span><span class="pt-meta">35Y / Female</span></div>
+  <div class="pt-date">${dateStr}</div>
+</div>
+<div class="pt-subline">BMSH-SAMPLE · Sample preview · +91 ••••• •••••</div>
+<div class="sec-divider"><span class="sec-label">Diagnosis</span></div>
+<div class="diag-rule-top"></div>
+<div class="diag-text">Sample Diagnosis · Type 2</div>
+<div class="diag-rule-bot"></div>
+<div class="sec-divider"><span class="sec-label">Rx — Medications</span></div>
+<div class="rx-list">
+  <div class="rx-item">
+    <div class="rx-item-num">1</div>
+    <span class="rx-item-name">Metformin 500</span>
+    <span class="rx-item-gen">Metformin HCl · Tablet</span>
+    <div class="rx-item-details">
+      <div class="rx-detail-item"><span class="rx-detail-dot"></span>Twice daily</div>
+      <div class="rx-detail-item"><span class="rx-detail-dot"></span>Morning & Night</div>
+      <div class="rx-detail-item"><span class="rx-detail-dot"></span>1 month</div>
+    </div>
+    <div class="rx-item-instr">Take one tablet twice a day for 1 month.</div>
+    <div class="taper-card"><div class="taper-card-hdr">Taper Plan — Metformin 500</div>
+      <div class="taper-steps-row">
+        <div class="taper-step"><div class="taper-step-period">Step 1</div><div class="taper-step-dose">Once daily</div><div class="taper-step-timing">15 days</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="rx-item">
+    <div class="rx-item-num">2</div>
+    <span class="rx-item-name">Vitamin D3</span>
+    <span class="rx-item-gen">Cholecalciferol 60K · Capsule</span>
+    <div class="rx-item-details">
+      <div class="rx-detail-item"><span class="rx-detail-dot"></span>Once weekly</div>
+      <div class="rx-detail-item"><span class="rx-detail-dot"></span>Sunday morning</div>
+      <div class="rx-detail-item"><span class="rx-detail-dot"></span>3 months</div>
+    </div>
+    <div class="rx-item-instr">Take one capsule once a week for 3 months.</div>
+  </div>
+</div>
+<div class="sec-divider"><span class="sec-label">Instructions</span></div>
+<div class="advice-block">Take after meals · Monitor blood sugar weekly</div>
+<div class="fu-box">Follow-up: 3 months</div>
+<div class="sig-row">
+  <div></div>
+  <div style="text-align:right">
+    ${profile.signature ? `<img src="${profile.signature}" style="height:36px;display:block;margin-left:auto">` : ''}
+    <div class="dr-name">${drName}</div>
+    <div class="dr-deg">${drDegrees}</div>
+    <div class="dr-spec">${drSpec}</div>
+    <div class="dr-reg">Reg: ${drReg}</div>
+  </div>
+</div>
+</body></html>`;
+}
+window.generateRxDesignSampleHtml = generateRxDesignSampleHtml;
 
 function scoreDoctorProfileData(profile) {
   if (!profile || typeof profile !== 'object') return 0;
