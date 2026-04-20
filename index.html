@@ -5493,8 +5493,8 @@
   <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between;gap:8px">Procedure / Surgery <button type="button" class="btn btn-xs btn-outline" onclick="otQuickAddProcedureToCharges()">+ Add to charges</button></label>
     <select id="ot-add-proc-main" onchange="onOTProcedureMainChange(this.value)"><option value="">— Select main heading —</option></select>
   </div>
-  <div class="form-group"><label class="fl">Final procedure label</label>
-    <input type="text" id="ot-add-proc" list="ot-proc-list" placeholder="Type procedure to search" readonly onfocus="this.removeAttribute('readonly');populateOTProcedureOptions(this.value||'');" oninput="onOTProcedureInputChange(this.value)" onchange="onOTProcedureInputChange(this.value)"><datalist id="ot-proc-list"></datalist>
+  <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">Final procedure label <button type="button" onclick="addOTProcedureOption()" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></label>
+    <input type="text" id="ot-add-proc" list="ot-proc-list" placeholder="Type procedure to search or add" readonly onfocus="this.removeAttribute('readonly');populateOTProcedureOptions(this.value||'');" oninput="onOTProcedureInputChange(this.value)" onchange="onOTProcedureInputChange(this.value)"><datalist id="ot-proc-list"></datalist>
   </div>
   <div class="form-group" id="ot-add-proc-sub-wrap" style="display:none"><label class="fl">Procedure subheading / package</label>
     <select id="ot-add-proc-sub" onchange="onOTProcedureSubheadingChange(this.value)"><option value="">— Select subheading —</option></select>
@@ -5508,8 +5508,8 @@
   <div class="form-group"><label class="fl">Surgeon</label>
     <select id="ot-add-surgeon"><option>Dr. Varun Baweja</option><option>Dr. Geeta Baweja</option><option>Dr. Namrata Baweja</option><option>Dr. Tarun Baweja</option><option>Dr. Pooja Baweja</option></select>
   </div>
-  <div class="form-group"><label class="fl">Anaesthesia Type</label>
-    <select id="ot-add-anaes"><option>Topical (Eye Drops)</option><option>Peribulbar Block</option><option>Sub-Tenon Block</option><option>Spinal</option><option>General Anaesthesia</option></select>
+  <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">Anaesthesia Type <button type="button" onclick="addOTAnaesthesiaOption()" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></label>
+    <input type="text" id="ot-add-anaes" list="ot-anaes-list" placeholder="Type or select anaesthesia"><datalist id="ot-anaes-list"></datalist>
   </div>
   <div class="fg">
     <div class="form-group"><label class="fl">Scheduled Date</label><input type="date" id="ot-add-date"></div>
@@ -5555,14 +5555,20 @@
     <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
       <div class="form-group"><label class="fl">Gestation Age</label><input type="text" id="ot-add-obg-ga" placeholder="e.g. 38+4 weeks"></div>
       <div class="form-group"><label class="fl">LSCS / Surgery Type</label><select id="ot-add-obg-type"><option value="Elective LSCS">Elective LSCS</option><option value="Emergency LSCS">Emergency LSCS</option><option value="Normal Delivery">Normal Delivery</option><option value="Assisted Delivery">Assisted Delivery</option><option value="MTP / Suction Evacuation">MTP / Suction Evacuation</option><option value="IUCD Insertion / Removal">IUCD Insertion / Removal</option><option value="Painless Abortion">Painless Abortion</option><option value="Gynae Surgery">Gynae Surgery</option></select></div>
-      <div class="form-group"><label class="fl">Presentation / Baby</label><input type="text" id="ot-add-obg-fetal" placeholder="Cephalic / single live foetus"></div>
-      <div class="form-group"><label class="fl">Indication</label><input type="text" id="ot-add-obg-indication" placeholder="Previous LSCS / fetal distress / CPD"></div>
-      <div class="form-group"><label class="fl">Liquor / Membranes</label><input type="text" id="ot-add-obg-liquor" placeholder="Clear / meconium / ruptured"></div>
+      <div class="form-group"><label class="fl">Presentation / Baby</label><input type="text" id="ot-add-obg-fetal" list="ot-obg-fetal-list" placeholder="Cephalic / single live foetus"></div>
+      <div class="form-group"><label class="fl">Indication</label><input type="text" id="ot-add-obg-indication" list="ot-obg-indication-list" placeholder="Previous LSCS / fetal distress / CPD"></div>
+      <div class="form-group"><label class="fl">Liquor / Membranes</label><input type="text" id="ot-add-obg-liquor" list="ot-obg-liquor-list" placeholder="Clear / meconium / ruptured"></div>
       <div class="form-group"><label class="fl">Blood Arranged</label><input type="text" id="ot-add-obg-blood" placeholder="e.g. 2 units O+ve"></div>
-      <div class="form-group"><label class="fl">Anaesthesia Team Note</label><input type="text" id="ot-add-obg-anaes-note" placeholder="Spinal fit / GA backup"></div>
-      <div class="form-group"><label class="fl">Baby Outcome / NICU</label><input type="text" id="ot-add-obg-baby" placeholder="Live birth / NICU standby"></div>
-      <div class="form-group"><label class="fl">Mother Status</label><input type="text" id="ot-add-obg-mother" placeholder="Stable / high-risk / anaemic"></div>
+      <div class="form-group"><label class="fl">Anaesthesia Team Note</label><input type="text" id="ot-add-obg-anaes-note" list="ot-obg-anaes-note-list" placeholder="Spinal fit / GA backup"></div>
+      <div class="form-group"><label class="fl">Baby Outcome / NICU</label><input type="text" id="ot-add-obg-baby" list="ot-obg-baby-list" placeholder="Live birth / NICU standby"></div>
+      <div class="form-group"><label class="fl">Mother Status</label><input type="text" id="ot-add-obg-mother" list="ot-obg-mother-list" placeholder="Stable / high-risk / anaemic"></div>
       <div class="form-group" style="grid-column:1/-1"><label class="fl">Paperwork / Documents</label><div style="display:flex;gap:10px;flex-wrap:wrap;font-size:11px;padding:6px 0"><label><input type="checkbox" id="ot-add-obg-doc-consent"> LSCS consent</label><label><input type="checkbox" id="ot-add-obg-doc-anaes"> Anaesthesia consent</label><label><input type="checkbox" id="ot-add-obg-doc-blood"> Blood transfusion consent</label><label><input type="checkbox" id="ot-add-obg-doc-newborn"> Neonatal / newborn sheet</label></div></div>
+      <datalist id="ot-obg-fetal-list"><option>Cephalic</option><option>Breech</option><option>Transverse lie</option><option>Oblique lie</option><option>Twin pregnancy</option><option>Single live foetus</option><option>Fetal distress</option></datalist>
+      <datalist id="ot-obg-indication-list"><option>Previous LSCS</option><option>Fetal distress</option><option>CPD</option><option>Failed induction</option><option>Non-progress of labour</option><option>Breech presentation</option><option>Placenta previa</option><option>PROM</option><option>Meconium stained liquor</option><option>PIH / Severe pre-eclampsia</option></datalist>
+      <datalist id="ot-obg-liquor-list"><option>Clear</option><option>Thin meconium</option><option>Thick meconium</option><option>Blood stained</option><option>Ruptured membranes</option><option>Intact membranes</option><option>Scanty liquor</option></datalist>
+      <datalist id="ot-obg-anaes-note-list"><option>Spinal fit</option><option>Spinal with GA backup</option><option>High-risk anaesthesia review done</option><option>GA planned</option><option>NBM confirmed</option></datalist>
+      <datalist id="ot-obg-baby-list"><option>Live birth</option><option>Live birth / NICU standby</option><option>NICU observation</option><option>NICU admission</option><option>Healthy cry at birth</option></datalist>
+      <datalist id="ot-obg-mother-list"><option>Stable</option><option>High-risk</option><option>Anaemic</option><option>PIH</option><option>Stable post-op</option><option>PPH risk</option></datalist>
     </div>
   </div>
   <div class="form-group full" style="background:var(--g6);border:1px solid var(--g4);border-radius:10px;padding:10px">
