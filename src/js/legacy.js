@@ -15463,6 +15463,7 @@ const RX_FREQ_OPTIONS = ['Half-hourly','Hourly','Every 2 hours','Every 3 hours',
 const RX_DURATION_OPTIONS = ['½ day','1 day','2 days','3 days','4 days','5 days','6 days','7 days','10 days','13 days','1 week','2 weeks','3 weeks','4 weeks','6 weeks','1 month','2 months','3 months','4 months','5 months','6 months','12 months','Ongoing'];
 const RX_TYPE_OPTIONS = ['Eye Drop','Tablet','Capsule','Ointment','Cream','Gel','Syrup','Injection','Pessary','Lotion','Spray','Other'];
 const RX_SITE_OPTIONS = ['Right Eye (OD)','Left Eye (OS)','Both Eyes (OU)','Oral','Topical','IM / IV','Nasal','Ear','Vaginal'];
+const RX_MEAL_TIMING_OPTIONS = ['','Before breakfast','After breakfast','Before lunch','After lunch','Before dinner','After dinner','Before food','After food','30 minutes before food','With milk','At bedtime'];
 const RX_CUSTOM_OPTION_DEFAULTS = {
   type: RX_TYPE_OPTIONS.slice(),
   freq: RX_FREQ_OPTIONS.slice(),
@@ -24538,6 +24539,7 @@ function renderRxDrugs() {
   const durOpts=RX_DURATION_OPTIONS;
   const typeOpts=RX_TYPE_OPTIONS;
   const eyeOpts=RX_SITE_OPTIONS;
+  const mealOpts=RX_MEAL_TIMING_OPTIONS;
   const lang = typeof rxLang!=='undefined'?rxLang:'en';
   const rxAlerts = computeRxInteractionAlerts();
   const rowGridCols = showRouteSite
@@ -24568,7 +24570,7 @@ function renderRxDrugs() {
   const nameInput = 'width:100%;box-sizing:border-box;min-height:34px;font-size:12.5px;padding:6px 8px;border:1.5px solid #1A3C6E;border-radius:8px;background:#fff;color:#1A3C6E;font-weight:800';
   const subInput = 'width:100%;box-sizing:border-box;min-height:28px;font-size:10.5px;padding:4px 8px;border:1.5px solid #d1d1d6;border-radius:8px;background:#fff;color:#6a6a6a;font-style:italic;margin-top:4px';
   const header = `<div style="display:grid;grid-template-columns:${rowGridCols};gap:8px;align-items:end;padding:8px 10px;background:#f2f5fb;border:1px solid #d6dce8;border-radius:10px 10px 0 0;font-size:9.5px;font-weight:900;color:#465066;text-transform:uppercase;letter-spacing:.45px">
-    <div>Name</div><div>Type</div>${showRouteSite ? '<div>Eye</div>' : ''}<div>Frequency</div><div>Duration</div><div>From</div><div>To</div><div>Actions</div>
+    <div>Name</div><div>Type</div>${showRouteSite ? '<div>Eye</div>' : ''}<div>Frequency / Instructions</div><div>Duration</div><div>From</div><div>To</div><div>Actions</div>
   </div>`;
   const renderRow = (baseDrug, row, i, prefix, opts = {}) => {
     const isTaper = !!opts.isTaper;
@@ -24604,7 +24606,13 @@ function renderRxDrugs() {
         </div>
         <div><select onchange="${prefix}.drugType=this.value;${prefix}.type=this.value;renderRxDrugs()" style="${inputBase}">${typeOpts.map(t=>`<option${(row.drugType || row.type || baseDrug.drugType || baseDrug.type || 'Tablet')===t?' selected':''}>${t}</option>`).join('')}</select></div>
         ${showRouteSite ? `<div><select onchange="${prefix}.eye=[this.value];renderRxDrugs()" style="${inputBase}">${eyeOpts.map(e=>`<option${(((row.eye && row.eye[0]) || (baseDrug.eye && baseDrug.eye[0]) || 'Oral')===e)?' selected':''}>${e}</option>`).join('')}</select></div>` : ''}
-        <div><select onchange="${prefix}.freq=this.value;window.syncRxDrugDates(${i})" style="${inputBase}">${freqOpts.map(f=>`<option${rowFreq===f?' selected':''}>${f}</option>`).join('')}</select></div>
+        <div>
+          <select onchange="${prefix}.freq=this.value;window.syncRxDrugDates(${i})" style="${inputBase}">${freqOpts.map(f=>`<option${rowFreq===f?' selected':''}>${f}</option>`).join('')}</select>
+          <select onchange="${prefix}.mealTiming=this.value;renderRxDrugs()" style="${subInput}">
+            <option value="">Meal / intake note</option>
+            ${mealOpts.filter(Boolean).map(opt=>`<option value="${esc(opt)}"${String(row.mealTiming || baseDrug.mealTiming || '')===opt?' selected':''}>${opt}</option>`).join('')}
+          </select>
+        </div>
         <div><select onchange="${prefix}.dur=this.value;window.syncRxDrugDates(${i})" style="${inputBase}">${durOpts.map(v=>`<option${rowDur===v?' selected':''}>${v}</option>`).join('')}</select></div>
         <div><input type="date" value="${esc(row.dateFrom || '')}" onchange="${prefix}.dateFrom=this.value;window.syncRxDrugDates(${i})" style="${inputBase}"></div>
         <div><input type="date" value="${esc(row.dateTo || '')}" onchange="${prefix}.dateTo=this.value;renderRxDrugs()" style="${inputBase}"></div>
@@ -26317,6 +26325,58 @@ function rxDurationPlain(dur, lang) {
   }
   return en;
 }
+function rxMealTimingPlainEn(value) {
+  const v = String(value || '').trim().toLowerCase();
+  if (!v) return '';
+  if (v === 'before breakfast') return 'before breakfast';
+  if (v === 'after breakfast') return 'after breakfast';
+  if (v === 'before lunch') return 'before lunch';
+  if (v === 'after lunch') return 'after lunch';
+  if (v === 'before dinner') return 'before dinner';
+  if (v === 'after dinner') return 'after dinner';
+  if (v === 'before food') return 'before food';
+  if (v === 'after food') return 'after food';
+  if (v === '30 minutes before food') return '30 minutes before food';
+  if (v === 'with milk') return 'with milk';
+  if (v === 'at bedtime') return 'at bedtime';
+  return String(value || '').trim();
+}
+function rxMealTimingPlain(value, lang) {
+  const en = rxMealTimingPlainEn(value);
+  if (lang === 'hi') {
+    const map = {
+      'before breakfast':'नाश्ते से पहले',
+      'after breakfast':'नाश्ते के बाद',
+      'before lunch':'दोपहर के खाने से पहले',
+      'after lunch':'दोपहर के खाने के बाद',
+      'before dinner':'रात के खाने से पहले',
+      'after dinner':'रात के खाने के बाद',
+      'before food':'खाने से पहले',
+      'after food':'खाने के बाद',
+      '30 minutes before food':'खाने से 30 मिनट पहले',
+      'with milk':'दूध के साथ',
+      'at bedtime':'सोने से पहले'
+    };
+    return map[en] || en;
+  }
+  if (lang === 'pa') {
+    const map = {
+      'before breakfast':'ਨਾਸ਼ਤੇ ਤੋਂ ਪਹਿਲਾਂ',
+      'after breakfast':'ਨਾਸ਼ਤੇ ਤੋਂ ਬਾਅਦ',
+      'before lunch':'ਦੁਪਹਿਰ ਦੇ ਖਾਣੇ ਤੋਂ ਪਹਿਲਾਂ',
+      'after lunch':'ਦੁਪਹਿਰ ਦੇ ਖਾਣੇ ਤੋਂ ਬਾਅਦ',
+      'before dinner':'ਰਾਤ ਦੇ ਖਾਣੇ ਤੋਂ ਪਹਿਲਾਂ',
+      'after dinner':'ਰਾਤ ਦੇ ਖਾਣੇ ਤੋਂ ਬਾਅਦ',
+      'before food':'ਖਾਣੇ ਤੋਂ ਪਹਿਲਾਂ',
+      'after food':'ਖਾਣੇ ਤੋਂ ਬਾਅਦ',
+      '30 minutes before food':'ਖਾਣੇ ਤੋਂ 30 ਮਿੰਟ ਪਹਿਲਾਂ',
+      'with milk':'ਦੂਧ ਨਾਲ',
+      'at bedtime':'ਸੋਣ ਤੋਂ ਪਹਿਲਾਂ'
+    };
+    return map[en] || en;
+  }
+  return en;
+}
 function rxEyePlainEn(eye) {
   const e = String(eye || '');
   if (/Right Eye|\(OD\)/i.test(e)) return 'the right eye';
@@ -26360,6 +26420,22 @@ function rxOralDosePhraseEn(d) {
   if (/tablet|tab\b/.test(t)) return 'one tablet';
   return 'one tablet';
 }
+function rxOralDosePhrase(d, lang) {
+  const t = String(d.drugType || d.type || '').toLowerCase();
+  if (lang === 'hi') {
+    if (/capsule|cap\b/.test(t)) return 'एक कैप्सूल';
+    if (/syrup|suspension|elixir/.test(t)) return 'निर्धारित मात्रा';
+    if (/powder|sachet/.test(t)) return 'एक सैशे';
+    return 'एक टैबलेट';
+  }
+  if (lang === 'pa') {
+    if (/capsule|cap\b/.test(t)) return 'ਇੱਕ ਕੈਪਸੂਲ';
+    if (/syrup|suspension|elixir/.test(t)) return 'ਨਿਰਧਾਰਿਤ ਮਾਤਰਾ';
+    if (/powder|sachet/.test(t)) return 'ਇੱਕ ਸੈਸ਼ੇ';
+    return 'ਇੱਕ ਗੋਲੀ';
+  }
+  return rxOralDosePhraseEn(d);
+}
 function rxPlainIsEyeDrop(d) {
   const form = String(d.drugType || d.type || '').toLowerCase();
   return /drop|eyedrop|eye drop/.test(form) || (/eye/i.test(form) && /drop/i.test(String(d.name || '')));
@@ -26379,6 +26455,7 @@ function buildRxPlainInstructionLine(d, lang, fmtIN) {
   const freq = rxFreqPlain(d.freq, lang);
   const dur = rxDurationPlain(d.dur, lang);
   const eyeTxt = rxEyePlain(eye, lang);
+  const mealTxt = rxMealTimingPlain(d.mealTiming, lang);
   const df = fmtIN(d.dateFrom);
   const dt = fmtIN(d.dateTo);
   const form = String(d.drugType || d.type || '').toLowerCase();
@@ -26394,7 +26471,7 @@ function buildRxPlainInstructionLine(d, lang, fmtIN) {
     } else if (/injection/i.test(form)) {
       line = 'निर्देशानुसार दें, ' + freq + ', ' + dur + ', ' + df + ' से ' + dt + ' तक।';
     } else if (oralEn) {
-      line = 'निर्देशानुसार दिन में दवा लें (' + freq + '), ' + dur + ', ' + df + ' से ' + dt + ' तक।';
+      line = 'दिन में ' + rxOralDosePhrase(d, lang) + ' ' + (mealTxt ? (mealTxt + ' ') : '') + freq + ' लें, ' + df + ' से ' + dt + ' तक' + (dur && !/जैसा बताया गया है/i.test(dur) ? ' (' + dur + ')' : '') + '।';
     } else {
       line = (eyeTxt ? eyeTxt + ' — ' : '') + freq + ', ' + dur + ', ' + df + ' से ' + dt + ' तक।';
     }
@@ -26406,7 +26483,7 @@ function buildRxPlainInstructionLine(d, lang, fmtIN) {
     } else if (/injection/i.test(form)) {
       line = 'ਨਿਰਦੇਸ਼ ਅਨੁਸਾਰ ਦਿਓ, ' + freq + ', ' + dur + ', ' + df + ' ਤੋਂ ' + dt + ' ਤੱਕ।';
     } else if (oralEn) {
-      line = 'ਨਿਰਦੇਸ਼ ਅਨੁਸਾਰ ਦਵਾਈ ਲਓ (' + freq + '), ' + dur + ', ' + df + ' ਤੋਂ ' + dt + ' ਤੱਕ।';
+      line = rxOralDosePhrase(d, lang) + ' ' + (mealTxt ? (mealTxt + ' ') : '') + freq + ' ਲਓ, ' + df + ' ਤੋਂ ' + dt + ' ਤੱਕ' + (dur && !/ਜਿਵੇਂ ਦੱਸਿਆ ਗਿਆ ਹੈ/i.test(dur) ? ' (' + dur + ')' : '') + '।';
     } else {
       line = (eyeTxt ? eyeTxt + ' — ' : '') + freq + ', ' + dur + ', ' + df + ' ਤੋਂ ' + dt + ' ਤੱਕ।';
     }
@@ -26423,10 +26500,10 @@ function buildRxPlainInstructionLine(d, lang, fmtIN) {
     } else if (/pessary/i.test(form)) {
       line = 'Insert as directed ' + freq + ' for ' + dur + ', from ' + df + ' to ' + dt + '.';
     } else {
-      line = 'Take ' + rxOralDosePhraseEn(d) + ' ' + freq + ' for ' + dur + ', from ' + df + ' to ' + dt + '.';
+      line = 'Take ' + rxOralDosePhraseEn(d) + (mealTxt ? (' ' + mealTxt) : '') + ' ' + freq + ', from ' + df + ' to ' + dt + (dur && !/as directed/i.test(dur) ? ' for ' + dur : '') + '.';
     }
   }
-  const timings = getRxTimingsText(d);
+  const timings = mealTxt ? '' : getRxTimingsText(d);
   if (timings) {
     if (lang === 'hi') line += ' समय: ' + timings + '।';
     else if (lang === 'pa') line += ' ਸਮਾਂ: ' + timings + '।';
@@ -26442,8 +26519,10 @@ function buildRxTaperSummaryLine(d, lang, fmtIN) {
   const dur = rxDurationPlain(d.dur, lang);
   const df = fmtIN(d.dateFrom);
   const dt = fmtIN(d.dateTo);
-  const timings = getRxTimingsText(d);
+  const mealTxt = rxMealTimingPlain(d.mealTiming, lang);
+  const timings = mealTxt ? '' : getRxTimingsText(d);
   if (eyeTxt) bits.push(eyeTxt);
+  if (mealTxt) bits.push(mealTxt);
   if (freq) bits.push(freq);
   if (dur) bits.push(dur);
   if (df && dt) bits.push(lang === 'hi' ? (df + ' से ' + dt) : (lang === 'pa' ? (df + ' ਤੋਂ ' + dt) : (df + ' to ' + dt)));
@@ -26460,6 +26539,7 @@ function getDoctorPrescriptionPrintMode(profile) {
 }
 
 function getRxTimingsText(d) {
+  if (d && d.mealTiming) return rxMealTimingPlainEn(d.mealTiming);
   const explicit = Array.isArray(d.activeTimes) && d.activeTimes.length
     ? d.activeTimes
     : (Array.isArray(d.times) && d.times.length ? d.times : []);
@@ -26479,6 +26559,55 @@ function getRxTimingsText(d) {
   if (/once weekly/.test(freq)) return 'Once Weekly';
   if (/prn|as needed/.test(freq)) return 'As Needed';
   return '—';
+}
+function formatBmhIdForDisplay(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '—';
+  const stripped = raw.replace(/^BMSH[\s:-]*/i, '').trim();
+  return stripped || raw;
+}
+function getPsychMseSummaryRows() {
+  const defaults = {
+    'psych-appearance':'Adequately groomed',
+    'psych-behaviour':'Cooperative',
+    'psych-psychomotor':'Retardation present',
+    'psych-eyecontact':'Good',
+    'psych-speech-rate':'Slow',
+    'psych-speech-volume':'Low',
+    'psych-speech-tone':'',
+    'psych-subjective-mood':'',
+    'psych-affect':'Depressed, congruent',
+    'psych-thought-form':'Logical & coherent',
+    'psych-thought-content':'Low self-worth, hopelessness',
+    'psych-hallucinations':'None',
+    'psych-orientation':'Fully oriented (time, place, person)',
+    'psych-memory':'Intact',
+    'psych-insight':'Grade 1 — Absent',
+    'psych-judgement':'Intact'
+  };
+  const labels = {
+    'psych-appearance':'Appearance',
+    'psych-behaviour':'Behaviour',
+    'psych-psychomotor':'Psychomotor',
+    'psych-eyecontact':'Eye Contact',
+    'psych-speech-rate':'Speech Rate',
+    'psych-speech-volume':'Speech Volume',
+    'psych-speech-tone':'Speech Tone',
+    'psych-subjective-mood':'Subjective Mood',
+    'psych-affect':'Affect',
+    'psych-thought-form':'Thought Form',
+    'psych-thought-content':'Thought Content',
+    'psych-hallucinations':'Hallucinations',
+    'psych-orientation':'Orientation',
+    'psych-memory':'Memory',
+    'psych-insight':'Insight',
+    'psych-judgement':'Judgement'
+  };
+  return Object.keys(defaults).map(function (id) {
+    const value = String(document.getElementById(id)?.value || '').trim();
+    if (!value || value === String(defaults[id] || '')) return null;
+    return { key: labels[id] || id, value: value };
+  }).filter(Boolean);
 }
 
 // ─── UPDATED printUnifiedRx with doctor degrees + safePrint ─────────────
@@ -26698,10 +26827,11 @@ window.printUnifiedRx = function(deptId) {
   // ── Patient info ──
   const cpt = window.CURRENT_PATIENT || {};
   const ptName  = cpt.name || document.getElementById(deptId+'-rx-ptname')?.textContent || document.getElementById('ophtho-pt-nm')?.textContent || 'Patient';
-  const ptId    = cpt.bmhId || document.getElementById(deptId+'-rx-ptid')?.textContent   || document.getElementById('ophtho-pt-uid')?.textContent || '—';
+  const ptIdRaw = cpt.bmhId || document.getElementById(deptId+'-rx-ptid')?.textContent   || document.getElementById('ophtho-pt-uid')?.textContent || '—';
+  const ptId    = formatBmhIdForDisplay(ptIdRaw);
   const ptAge   = document.getElementById(deptId+'-rx-agesex')?.textContent || ((cpt.age != null && cpt.sex) ? `${cpt.age}Y / ${cpt.sex}` : '—');
-  const ptMob   = cpt.mob || PATIENTS?.find(p=>p.bmhId===ptId)?.mob || '';
-  const patientInvestigationOrders = (Array.isArray(cpt.investigationOrders) ? cpt.investigationOrders : INVESTIGATION_ORDERS).filter(o => !o.done && (!o.bmhId || o.bmhId === ptId));
+  const ptMob   = cpt.mob || PATIENTS?.find(p=>p.bmhId===ptIdRaw)?.mob || '';
+  const patientInvestigationOrders = (Array.isArray(cpt.investigationOrders) ? cpt.investigationOrders : INVESTIGATION_ORDERS).filter(o => !o.done && (!o.bmhId || o.bmhId === ptIdRaw));
 
   // ── Letterhead: uploaded header, LH, or same-origin asset (fixes missing header on GitHub Pages) ──
   const lhImgSrc = resolvePrintHeaderSrc();
@@ -26730,11 +26860,7 @@ window.printUnifiedRx = function(deptId) {
 
   // ── Psychiatry MSE fields ──
   const psychChief = deptId === 'psych' ? (document.getElementById('psych-chief')?.value || window.CURRENT_PATIENT?.lastVisit?.chiefComplaint || '') : '';
-  const psychCoreSyndrome = deptId === 'psych' ? (document.getElementById('psych-core-syndrome')?.value || '') : '';
-  const psychRisk = deptId === 'psych' ? (document.getElementById('psych-risk')?.value || '') : '';
-  const psychSleep = deptId === 'psych' ? (document.getElementById('psych-sleep')?.value || '') : '';
-  const psychAffect = deptId === 'psych' ? (document.getElementById('psych-affect')?.value || '') : '';
-  const psychInsight = deptId === 'psych' ? (document.getElementById('psych-insight')?.value || '') : '';
+  const psychMseRows = deptId === 'psych' ? getPsychMseSummaryRows() : [];
 
   // ── Dermatology / Skin fields ──
   const skinChief = deptId === 'skin' ? (document.getElementById('skin-chief')?.value || '') : '';
@@ -26746,37 +26872,37 @@ window.printUnifiedRx = function(deptId) {
 @import url('https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,300;0,400;0,700;0,900;1,400&family=Playfair+Display:wght@700&display=swap');
 *{margin:0;padding:0;box-sizing:border-box;print-color-adjust:exact;-webkit-print-color-adjust:exact}
 @page{size:A4 portrait;margin:0}
-body{font-family:'Lato',sans-serif;font-size:10.5px;color:#1a1a1a;background:#fff;padding:4.5mm 10mm 4mm;line-height:1.42;overflow:hidden}
-.lh-img{width:100%;max-width:100%;height:auto;display:block;margin-bottom:6px}
+body{font-family:'Lato',sans-serif;font-size:10px;color:#1a1a1a;background:#fff;padding:3.5mm 8mm 3mm;line-height:1.3;overflow:hidden}
+.lh-img{width:100%;max-width:100%;height:auto;display:block;margin-bottom:4px}
 /* Patient header */
-.pt-name-bar{display:flex;align-items:baseline;justify-content:space-between;border-bottom:1.5px solid #333;padding-bottom:4px;margin-bottom:3px}
+.pt-name-bar{display:flex;align-items:baseline;justify-content:space-between;border-bottom:1.5px solid #333;padding-bottom:3px;margin-bottom:2px}
 .pt-name{font-family:'Playfair Display','Georgia',serif;font-size:17px;font-weight:700;color:#111;letter-spacing:.2px}
 .pt-meta{font-size:10px;font-weight:300;color:#555;margin-left:8px;font-style:italic}
 .pt-date{font-size:9.5px;color:#555;font-weight:400}
-.pt-subline{font-size:9.5px;color:#444;margin-bottom:5px}
+.pt-subline{font-size:9.5px;color:#444;margin-bottom:3px}
 /* Section dividers */
-.sec-divider{display:flex;align-items:center;gap:6px;margin:5px 0 4px}
+.sec-divider{display:flex;align-items:center;gap:6px;margin:4px 0 3px}
 .sec-divider::before,.sec-divider::after{content:'';flex:1;border-top:1px solid #bbb}
 .sec-label{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#666;white-space:nowrap}
 /* Diagnosis */
 .diag-rule-top{border-top:1.5px solid #111;margin-bottom:3px}
 .diag-rule-bot{border-top:1.5px solid #111;margin-top:3px}
-.diag-text{font-family:'Playfair Display','Georgia',serif;font-size:13px;font-weight:700;text-align:center;color:#111;padding:3px 0}
+.diag-text{font-family:'Playfair Display','Georgia',serif;font-size:12px;font-weight:700;text-align:center;color:#111;padding:2px 0}
 /* Post-surgery flag */
 .postsurg-flag{font-size:10px;font-weight:800;color:#222;border:1.5px solid #555;display:inline-block;padding:2px 10px;border-radius:3px;margin-bottom:4px;letter-spacing:.3px}
 /* Complaint / plain text block */
-.cc-text{font-size:10.5px;color:#333;font-style:italic;margin:2px 0 4px;padding-left:6px}
+.cc-text{font-size:10.2px;color:#333;font-style:italic;margin:2px 0 3px;padding-left:6px}
 /* Dept card (OBG summary, PSY MSE, skin exam) */
-.dept-card{border:1px solid #ccc;border-radius:3px;margin-bottom:5px;overflow:hidden;font-size:10px}
+.dept-card{border:1px solid #ccc;border-radius:3px;margin-bottom:4px;overflow:hidden;font-size:9.6px}
 .dept-card-hdr{background:#222;color:#fff;font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;padding:3px 8px}
-.dept-card-row{display:flex;border-bottom:1px solid #e8e8e8;min-height:18px}
+.dept-card-row{display:flex;border-bottom:1px solid #e8e8e8;min-height:16px}
 .dept-card-row:last-child{border-bottom:none}
 .dept-card-key{font-weight:700;color:#333;padding:2px 6px;min-width:90px;font-size:9.5px;text-transform:uppercase;letter-spacing:.4px;background:#f5f5f5;display:flex;align-items:center}
 .dept-card-val{padding:2px 8px;color:#111;font-size:10px;display:flex;align-items:center;flex:1}
 /* Vitals inline */
 .vitals-inline{font-size:10px;color:#222;margin-bottom:4px;line-height:1.6}
 /* VA / Glass tables */
-table{width:100%;border-collapse:collapse;font-size:9.8px;margin-bottom:5px}
+table{width:100%;border-collapse:collapse;font-size:9.6px;margin-bottom:4px}
 th{background:#444;color:#fff;border:1px solid #444;padding:3px 5px;font-weight:700;text-align:center;font-size:8.5px;letter-spacing:.3px;text-transform:uppercase}
 td{border:1px solid #ccc;padding:3px 5px;text-align:center;vertical-align:middle}
 td.left{text-align:left}
@@ -26787,12 +26913,12 @@ tr:nth-child(even) td{background:#f6f6f6}
 .rx-oe-name{font-family:'Playfair Display','Georgia',serif;font-weight:700;font-size:10.5px;color:#111}
 .rx-oe-gen{font-size:8.5px;color:#666;font-style:italic;margin-top:1px}
 /* List-format medicines */
-.rx-list{display:flex;flex-direction:column;gap:4px;margin-bottom:5px}
-.rx-item{padding:4px 8px;border-left:2px solid #555}
-.rx-item-name{font-family:'Playfair Display','Georgia',serif;font-size:12.5px;font-weight:700;color:#111}
+.rx-list{display:flex;flex-direction:column;gap:3px;margin-bottom:4px}
+.rx-item{padding:3px 8px;border-left:2px solid #555}
+.rx-item-name{font-family:'Playfair Display','Georgia',serif;font-size:13.4px;font-weight:700;color:#111}
 .rx-item-gen{font-size:9px;color:#666;font-style:italic}
-.rx-item-details{font-size:10px;color:#333;margin-top:1px}
-.rx-item-instr{font-size:9.5px;color:#444;font-style:italic;margin-top:2px;padding-left:8px;border-left:2px solid #bbb;line-height:1.4}
+.rx-item-details{font-size:9.6px;color:#333;margin-top:1px}
+.rx-item-instr{font-size:10.8px;color:#222;font-style:normal;margin-top:2px;padding-left:8px;border-left:2px solid #bbb;line-height:1.28;font-weight:600}
 /* Taper card */
 .taper-card{margin:3px 0 4px;border:1px solid #bbb;border-radius:3px;overflow:hidden;font-size:9.5px}
 .taper-card-hdr{background:#222;color:#fff;padding:3px 8px;font-size:8.5px;font-weight:700;letter-spacing:.5px}
@@ -26808,18 +26934,18 @@ tr:nth-child(even) td{background:#f6f6f6}
 .inv-wrap{display:flex;flex-wrap:wrap;gap:4px 6px;margin-top:2px}
 .inv-chip{display:inline-flex;align-items:center;padding:3px 8px;background:#f0f0f0;border:1px solid #ccc;border-radius:3px;font-size:9.5px;font-weight:700;color:#222;line-height:1.3}
 /* Instructions */
-.advice-block{font-size:10px;color:#222;padding:4px 8px;border-left:2px solid #bbb;line-height:1.5;margin-bottom:4px;font-style:italic}
+.advice-block{font-size:10.8px;color:#222;padding:4px 8px;border-left:2px solid #bbb;line-height:1.32;margin-bottom:3px;font-style:normal;font-weight:600}
 /* Follow-up */
-.fu-box{background:#f2f2f2;border-radius:4px;padding:5px 12px;margin:5px 0;font-size:11px;font-weight:700;color:#222;display:inline-block;border:1.5px solid #bbb}
+.fu-box{background:#f2f2f2;border-radius:4px;padding:4px 10px;margin:4px 0;font-size:10.5px;font-weight:700;color:#222;display:inline-block;border:1.5px solid #bbb}
 /* Signature row */
-.sig-row{display:flex;justify-content:space-between;align-items:flex-end;margin-top:10px;padding-top:7px;border-top:1px solid #ddd}
+.sig-row{display:flex;justify-content:space-between;align-items:flex-end;margin-top:7px;padding-top:6px;border-top:1px solid #ddd}
 .dr-name{font-family:'Playfair Display','Georgia',serif;font-size:13px;font-weight:700;color:#111}
 .dr-deg{font-size:9.5px;color:#555;margin-top:2px;font-style:italic}
 .dr-spec{font-size:10px;font-weight:700;color:#333;margin-top:2px}
 .dr-reg{font-size:8.5px;color:#888;margin-top:1px}
 .qr-lbl{font-size:8.5px;color:#666;margin-top:3px;text-align:center}
 /* Watermark */
-.watermark{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-30deg);font-size:80px;font-weight:900;color:rgba(0,0,0,.03);font-family:'Playfair Display','Georgia',serif;white-space:nowrap;pointer-events:none;z-index:0}
+.watermark{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-30deg);font-size:72px;font-weight:900;color:rgba(0,0,0,.03);font-family:'Playfair Display','Georgia',serif;white-space:nowrap;pointer-events:none;z-index:0}
 /* OE plain instruction row */
 .oe-plain-row td{font-size:10px;font-style:italic;color:#444;background:#f8f8f8}
 </style></head><body>
@@ -26874,16 +27000,13 @@ ${deptId==='obg' && obgIncObsHistory && obgObsHistoryFindings.length > 0 ? `
 <div class="sec-divider"><span class="sec-label">Obstetric History</span></div>
 <div class="advice-block">${escapeHtmlConsent(obgObsHistoryFindings.join(' · '))}</div>` : ''}
 
-${deptId==='psych' && (psychChief||psychCoreSyndrome||psychRisk||psychSleep||psychAffect||psychInsight) ? `
+${deptId==='psych' && psychMseRows.length ? `
 <div class="sec-divider"><span class="sec-label">Mental Status Summary</span></div>
 <div class="dept-card">
   <div class="dept-card-hdr">MENTAL STATUS SUMMARY</div>
-  ${psychChief ? `<div class="dept-card-row"><div class="dept-card-key">Chief Complaint</div><div class="dept-card-val">${escapeHtmlConsent(psychChief)}</div></div>` : ''}
-  ${psychCoreSyndrome ? `<div class="dept-card-row"><div class="dept-card-key">Core Syndrome</div><div class="dept-card-val">${escapeHtmlConsent(psychCoreSyndrome)}</div></div>` : ''}
-  ${psychRisk ? `<div class="dept-card-row"><div class="dept-card-key">Current Risk</div><div class="dept-card-val">${psychRisk !== 'Low' ? `<b>${escapeHtmlConsent(psychRisk)}</b>` : escapeHtmlConsent(psychRisk)}</div></div>` : ''}
-  ${psychSleep ? `<div class="dept-card-row"><div class="dept-card-key">Sleep</div><div class="dept-card-val">${escapeHtmlConsent(psychSleep)}</div></div>` : ''}
-  ${psychAffect ? `<div class="dept-card-row"><div class="dept-card-key">Affect</div><div class="dept-card-val">${escapeHtmlConsent(psychAffect)}</div></div>` : ''}
-  ${psychInsight ? `<div class="dept-card-row"><div class="dept-card-key">Insight</div><div class="dept-card-val">${escapeHtmlConsent(psychInsight)}</div></div>` : ''}
+  ${psychMseRows.map(function (row) {
+    return `<div class="dept-card-row"><div class="dept-card-key">${escapeHtmlConsent(row.key)}</div><div class="dept-card-val">${escapeHtmlConsent(row.value)}</div></div>`;
+  }).join('')}
 </div>` : ''}
 
 ${deptId==='skin' && (skinChief||skinPrimaryDx||skinDermoscopy) ? `
@@ -27064,7 +27187,7 @@ ${fuFormatted ? `<div style="margin:5px 0"><span class="fu-box">Next Visit: ${fu
 
 <div class="sig-row">
   <div class="qr-side">
-    <img src="https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(ptId)}&color=222222&bgcolor=ffffff&margin=2" alt="Patient QR" style="width:65px;height:65px;border:1px solid #ccc;border-radius:3px;display:block">
+    <img src="https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(ptIdRaw)}&color=222222&bgcolor=ffffff&margin=2" alt="Patient QR" style="width:65px;height:65px;border:1px solid #ccc;border-radius:3px;display:block">
     <div class="qr-lbl">BMSH ID: ${ptId}</div>
   </div>
   <div class="dr-side" style="text-align:right">
