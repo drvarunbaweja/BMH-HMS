@@ -35,12 +35,26 @@
     .dq-queue-main .rc-queue-table td { font-size:11.5px; }
     .dq-queue-main .rc-queue-table th { font-size:11px; }
     .dq-queue-main .ptab { font-size:13px; }
-    .dq-head-grid {
-      display:grid;
-      grid-template-columns:minmax(0,1.1fr) auto minmax(270px,.9fr);
-      gap:12px;
-      align-items:center;
-      width:100%;
+    .tb-dept-jump {
+      min-width:180px;
+      padding:8px 10px;
+      border:1.5px solid rgba(255,255,255,.28);
+      border-radius:10px;
+      background:rgba(255,255,255,.98);
+      color:var(--tx);
+      font-size:12px;
+      font-family:var(--font);
+      font-weight:800;
+      display:none;
+    }
+    .tb-clinical .tb-title {
+      display:none;
+    }
+    .tb-clinical .tb-dept-jump {
+      display:block;
+    }
+    .tb-clinical .srch {
+      min-width:340px;
     }
     .dq-head-titlewrap {
       display:flex;
@@ -72,23 +86,53 @@
       display:flex;
       align-items:center;
       gap:8px;
-      flex-wrap:wrap;
+      flex-wrap:nowrap;
       margin-left:auto;
+      min-width:0;
     }
     .dq-inline-tools input,
     .dq-inline-tools select {
-      padding:6px 10px;
+      padding:5px 9px;
       border:1.5px solid var(--g4);
       border-radius:8px;
-      font-size:12px;
+      font-size:11.5px;
       font-family:var(--font);
       background:#fff;
     }
     .dq-inline-tools .visit-name {
-      width:220px;
+      width:165px;
     }
     .dq-inline-tools .visit-id {
-      width:140px;
+      width:110px;
+    }
+    .dq-queue-toolbar {
+      display:flex;
+      align-items:center;
+      gap:8px;
+      flex-wrap:nowrap;
+      overflow-x:auto;
+      margin-bottom:10px;
+      scrollbar-width:thin;
+    }
+    .dq-queue-toolbar .ptab {
+      flex:0 0 auto;
+    }
+    #dq-historical-date {
+      width:135px;
+      flex:0 0 auto;
+    }
+    .np-existing-search {
+      margin-bottom:12px;
+      padding:12px;
+      background:linear-gradient(180deg,#f8fbff 0%, #ffffff 100%);
+      border:1.5px solid var(--g4);
+      border-radius:12px;
+    }
+    .np-existing-results {
+      display:none;
+      margin-top:10px;
+      max-height:220px;
+      overflow:auto;
     }
     #pg-ophtho .ptabs,
     #pg-obg .ptabs,
@@ -249,6 +293,7 @@
       .modal { width:calc(100vw - 18px) !important; max-height:92vh; overflow:auto; }
       .topbar { gap:8px; flex-wrap:wrap; }
       .topbar .srch { order:3; width:100%; min-width:0; }
+      .topbar .tb-dept-jump { order:2; width:100%; }
       .g32, .g2, .sg4, .fg, .fg1 { grid-template-columns:1fr !important; display:grid !important; }
       table { display:block; overflow-x:auto; -webkit-overflow-scrolling:touch; }
       #main-content [style*="grid-template-columns"] { grid-template-columns:1fr !important; }
@@ -448,8 +493,15 @@
     <img src="https://bawejahospital.com/img/logo-white.png" style="height:24px;width:auto;object-fit:contain;flex-shrink:0" alt="BMH" onerror="this.style.display='none'">
     <div class="tb-title" id="ptitle">Dashboard</div>
     <div class="cp-pill" id="tb-cp">📍 Chandigarh</div>
-    <div class="srch"><span style="color:rgba(255,255,255,.5)">🔍</span><input type="text" placeholder="BMH ID / Name…"></div>
-    <button class="btn btn-gold btn-sm no-print" onclick="openM('m-np')">+ New Patient</button>
+    <select id="tb-dept-jump" class="tb-dept-jump" onchange="handleTopbarDeptChange()">
+      <option value="doctor-queue">Patient Queue</option>
+      <option value="ophtho">Ophthalmology</option>
+      <option value="obg">OBG</option>
+      <option value="psych">Neuropsychiatry</option>
+      <option value="skin">Skin & Cosmetology</option>
+    </select>
+    <div class="srch"><span style="color:rgba(255,255,255,.5)">🔍</span><input type="text" id="tb-global-search" placeholder="Search patient, BMSH ID or phone…" oninput="handleTopbarSearchInput()" onkeydown="handleTopbarSearchKeydown(event)"></div>
+    <button class="btn btn-gold btn-sm no-print" onclick="openNewPatientDialog()">+ New Patient</button>
   </div>
   <div class="content" id="main-content">
 
@@ -547,26 +599,19 @@
 
 <div class="page" id="pg-doctor-queue">
   <div class="card dq-queue-main">
-    <div class="card-hd">
-      <div class="dq-head-grid">
-        <div class="dq-head-titlewrap">
-          <div class="card-title" id="dq-title">My Patient Queue</div>
-          <div class="dq-head-meta" id="dq-doctor-meta">Dr. Varun Baweja · Ophthalmology</div>
-        </div>
-        <select id="dq-admin-dept-filter" onchange="renderDocQueue()" style="display:none;min-width:170px;border:1.5px solid rgba(255,255,255,.45);border-radius:10px;padding:7px 10px;background:#fff;color:var(--tx);font-size:12px;font-family:var(--font);justify-self:center">
-          <option value="all">All departments</option>
-          <option value="ophtho">Eye</option>
-          <option value="obg">OBG</option>
-          <option value="psych">Neuropsychiatry</option>
-          <option value="skin">Skin & Cosmetology</option>
-        </select>
-        <div class="dq-search-shell">
-          <span style="font-size:13px;color:var(--g1)">🔍</span>
-          <input type="text" id="dq-search" placeholder="Search queue patient, BMSH ID, mobile, purpose or doctor…" oninput="renderDocQueue()" style="border:none;outline:none;background:transparent;width:100%;font-size:12px;font-family:var(--font)">
-        </div>
-      </div>
+    <div id="dq-top-state" style="display:none">
+      <div id="dq-title"></div>
+      <div id="dq-doctor-meta"></div>
+      <select id="dq-admin-dept-filter" onchange="renderDocQueue()">
+        <option value="all">All departments</option>
+        <option value="ophtho">Eye</option>
+        <option value="obg">OBG</option>
+        <option value="psych">Neuropsychiatry</option>
+        <option value="skin">Skin & Cosmetology</option>
+      </select>
+      <input type="text" id="dq-search" oninput="renderDocQueue()">
     </div>
-      <div class="ptabs" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+      <div class="ptabs dq-queue-toolbar">
         <div class="ptab active" onclick="ptab(this,'dq-active')">Active</div>
         <div class="ptab" id="dq-tab-dil" onclick="ptab(this,'dq-dil')">💧 Dilated</div>
         <div class="ptab" onclick="ptab(this,'dq-xref')">↔️ Cross-Refer</div>
@@ -4720,6 +4765,11 @@
 <div style="background:linear-gradient(135deg,var(--bmh-blue),var(--bmh-teal));border-radius:8px;padding:10px 14px;margin-bottom:12px">
   <div style="font-size:9px;font-weight:800;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.5px">Patient BMH ID (auto-generated)</div>
   <div style="font-family:var(--mono);font-size:18px;font-weight:900;color:var(--bmh-gold)" id="m-uid">BMSH-000003</div>
+</div>
+<div class="np-existing-search">
+  <div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;letter-spacing:.45px;margin-bottom:7px">Find existing patient first</div>
+  <input type="text" id="np-existing-search" placeholder="Search by BMSH ID, phone or patient name" oninput="searchNewPatientExistingRecord(this.value)">
+  <div id="np-existing-results" class="np-existing-results"></div>
 </div>
 <div class="fg">
   <div class="form-group"><label class="fl">First Name</label><input type="text" id="np-fn" placeholder="First name" oninput="genUID()"></div>

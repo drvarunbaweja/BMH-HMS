@@ -2479,6 +2479,7 @@ function nav(id, el, opts) {
   ['oe','obg','psych','skin'].forEach(d => {
     const e2 = document.getElementById(d+'-rx-date'); if(e2) e2.textContent = today;
   });
+  syncTopbarHeaderForPage(pageKey);
   const ensureRealtimeDataForPage = function () {
     try {
       if (pageKey === 'appointments' || pageKey === 'dashboard') {
@@ -2531,6 +2532,135 @@ function nav(id, el, opts) {
   updateDepartmentRailVisibility(pageKey);
   if (!opts.silentHistory && !window._appHistoryRestoring) pushAppNavState(false);
 }
+
+function getActivePageKey() {
+  const activePage = document.querySelector('.page.active');
+  const rawId = activePage ? String(activePage.id || '') : '';
+  return rawId.indexOf('pg-') === 0 ? rawId.slice(3) : rawId;
+}
+function syncTopbarQueueSearch(query, shouldRender) {
+  const dqSearch = document.getElementById('dq-search');
+  if (dqSearch && dqSearch.value !== query) dqSearch.value = query;
+  if (shouldRender && typeof renderDocQueue === 'function') renderDocQueue();
+}
+function syncTopbarHeaderForPage(pageKey) {
+  const topbar = document.querySelector('.topbar');
+  const titleEl = document.getElementById('ptitle');
+  const searchEl = document.getElementById('tb-global-search');
+  const deptEl = document.getElementById('tb-dept-jump');
+  const clinicalPages = ['doctor-queue', 'ophtho', 'obg', 'psych', 'skin'];
+  const isClinical = clinicalPages.indexOf(pageKey) >= 0;
+  if (topbar) topbar.classList.toggle('tb-clinical', isClinical);
+  if (titleEl) {
+    titleEl.style.display = isClinical ? 'none' : '';
+    if (!isClinical && !titleEl.textContent.trim()) titleEl.textContent = 'Dashboard';
+  }
+  if (deptEl) {
+    deptEl.style.display = isClinical ? '' : 'none';
+    if (isClinical && deptEl.value !== pageKey) deptEl.value = pageKey;
+  }
+  if (searchEl) {
+    searchEl.placeholder = isClinical
+      ? 'Search queue patient, BMSH ID, mobile or phone...'
+      : 'BMH ID / Name...';
+    if (pageKey === 'doctor-queue') {
+      const pending = typeof window._pendingTopbarQueueSearch === 'string'
+        ? window._pendingTopbarQueueSearch
+        : (document.getElementById('dq-search')?.value || '');
+      if (searchEl.value !== pending) searchEl.value = pending;
+      syncTopbarQueueSearch(searchEl.value, false);
+    } else if (!isClinical) {
+      searchEl.value = '';
+    }
+  }
+}
+window.handleTopbarDeptChange = function () {
+  const deptEl = document.getElementById('tb-dept-jump');
+  const nextPage = String(deptEl?.value || '').trim();
+  if (!nextPage) return;
+  nav(nextPage, null);
+};
+window.handleTopbarSearchInput = function () {
+  const searchEl = document.getElementById('tb-global-search');
+  const query = String(searchEl?.value || '');
+  const pageKey = getActivePageKey();
+  window._pendingTopbarQueueSearch = query;
+  if (pageKey === 'doctor-queue') syncTopbarQueueSearch(query, true);
+};
+window.handleTopbarSearchKeydown = function (ev) {
+  if (!ev || ev.key !== 'Enter') return;
+  const searchEl = document.getElementById('tb-global-search');
+  const query = String(searchEl?.value || '');
+  const pageKey = getActivePageKey();
+  window._pendingTopbarQueueSearch = query;
+  if (pageKey === 'doctor-queue') {
+    syncTopbarQueueSearch(query, true);
+    return;
+  }
+  if (['ophtho', 'obg', 'psych', 'skin'].indexOf(pageKey) >= 0) {
+    nav('doctor-queue', null);
+  }
+};
+window.openNewPatientDialog = function () {
+  const searchEl = document.getElementById('np-existing-search');
+  const resultsEl = document.getElementById('np-existing-results');
+  if (searchEl) searchEl.value = '';
+  if (resultsEl) {
+    resultsEl.innerHTML = '';
+    resultsEl.style.display = 'none';
+  }
+  openM('m-np');
+};
+window.searchNewPatientExistingRecord = function (rawQuery) {
+  const q = String(rawQuery || '').trim().toLowerCase();
+  const resultsEl = document.getElementById('np-existing-results');
+  if (!resultsEl) return;
+  if (!q) {
+    resultsEl.innerHTML = '';
+    resultsEl.style.display = 'none';
+    return;
+  }
+  const digits = q.replace(/\D/g, '');
+  const matches = (PATIENTS || []).filter(function (p) {
+    if (!p || isMergedPatientRecord(p)) return false;
+    const bmhId = String(p.bmhId || '').toLowerCase();
+    const name = String(p.name || p.patient || '').toLowerCase();
+    const phones = [p.mob, p.mobile, p.mob2, p.altMobile].map(function (x) { return String(x || '').replace(/\D/g, ''); }).filter(Boolean);
+    return bmhId.includes(q)
+      || name.includes(q)
+      || (digits.length >= 4 && phones.some(function (num) { return num.includes(digits); }));
+  }).slice(0, 8);
+  if (!matches.length) {
+    resultsEl.innerHTML = '<div style="padding:10px 8px;text-align:center;color:var(--g2);font-size:12px">No existing patient found. You can continue with a new patient.</div>';
+    resultsEl.style.display = 'block';
+    return;
+  }
+  resultsEl.innerHTML = matches.map(function (p) {
+    const safeId = String(p.bmhId || '').replace(/'/g, "\\'");
+    const subMeta = [p.mobile || p.mob || '', p.age || '', p.sex || ''].filter(Boolean).join(' · ');
+    return '<div style="background:var(--blue-lt);border-radius:10px;padding:10px 12px;margin-bottom:8px;border-left:3px solid var(--bmh-blue)">' +
+      '<div style="display:flex;align-items:center;gap:10px">' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-size:12.5px;font-weight:900;color:var(--tx)">' + String(p.name || p.patient || 'Patient') + '</div>' +
+          '<div style="font-family:var(--mono);font-size:10.5px;color:var(--bmh-blue);margin-top:2px">' + String(p.bmhId || '') + '</div>' +
+          '<div style="font-size:10.5px;color:var(--g1);margin-top:2px">' + subMeta + '</div>' +
+        '</div>' +
+        '<div style="display:flex;flex-direction:column;gap:5px">' +
+          '<button class="btn btn-xs btn-gold" onclick="useExistingPatientFromNewPatient(\'' + safeId + '\')">Use Existing</button>' +
+          '<button class="btn btn-xs btn-outline" onclick="openPatient(\'' + safeId + '\');closeM(\'m-np\')">Open Record</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+  resultsEl.style.display = 'block';
+};
+window.useExistingPatientFromNewPatient = function (bmhId) {
+  closeM('m-np');
+  nav('reception', null);
+  setTimeout(function () {
+    prefillExistingPatient(bmhId);
+  }, 120);
+};
 
 // ═══════════════════════════════════════
 // RENDERS
