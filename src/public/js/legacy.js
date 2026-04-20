@@ -21165,12 +21165,16 @@ function lookupOTPatient(val) {
   const vLow = val.trim().toLowerCase();
   const compact = val.replace(/\s/g,'');
   // Search by BMSH ID, phone, or name
-  const matches = PATIENTS.filter(x =>
-    x.bmhId===v ||
-    x.bmhId.includes(v.replace('BMSH-','')) ||
-    (x.mob && x.mob.replace(/\s/g,'').includes(compact)) ||
-    (x.name && x.name.toLowerCase().includes(vLow))
-  ).slice(0,5);
+  const matches = (PATIENTS || []).filter(function (x) {
+    if (!x) return false;
+    const bmhId = String(x.bmhId || '').toUpperCase();
+    const phone = String(x.mob || x.mobile || '').replace(/\s/g, '');
+    const name = String(x.name || '').toLowerCase();
+    return bmhId === v
+      || bmhId.includes(v.replace('BMSH-', ''))
+      || phone.includes(compact)
+      || name.includes(vLow);
+  }).slice(0,5);
   if(matches.length===1) {
     const p=matches[0];
     el.innerHTML = `<div style="background:var(--green-lt);border-radius:8px;padding:9px;border-left:3px solid var(--green);display:flex;align-items:center;gap:9px">
@@ -21195,10 +21199,14 @@ function prefillOTLookupValue() {
   const upper = raw.toUpperCase();
   const lower = raw.toLowerCase();
   const matches = PATIENTS.filter(function (x) {
-    return x.bmhId === upper
-      || String(x.bmhId || '').includes(upper.replace('BMSH-', ''))
-      || (x.mob && x.mob.replace(/\s/g, '').includes(raw.replace(/\s/g, '')))
-      || (x.name && x.name.toLowerCase().includes(lower));
+    if (!x) return false;
+    const bmhId = String(x.bmhId || '').toUpperCase();
+    const phone = String(x.mob || x.mobile || '').replace(/\s/g, '');
+    const name = String(x.name || '').toLowerCase();
+    return bmhId === upper
+      || bmhId.includes(upper.replace('BMSH-', ''))
+      || phone.includes(raw.replace(/\s/g, ''))
+      || name.includes(lower);
   });
   if (!matches.length) { showToast('No patient found for this BMSH ID / phone', 'w'); return; }
   fillOTFromPatient(matches[0].bmhId);
