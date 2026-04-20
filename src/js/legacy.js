@@ -367,6 +367,11 @@ function getOtProcedureMainHeadings() {
     if (p) out.add(p);
     else if (n && !normalizeOtProcedureName(row.parent || '')) out.add(n);
   });
+  const customDept = caseKind === 'obg' ? 'obg' : 'ophtho';
+  (getDoctorCustomRxOptionsForDept(customDept).procedure || []).forEach(function (name) {
+    const label = normalizeOtProcedureName(name);
+    if (label) out.add(label);
+  });
   return Array.from(out).filter(Boolean).sort();
 }
 function populateOTProcedureMainSelect(selectedMain) {
@@ -442,7 +447,11 @@ function getOtProcedureOptions() {
     'Other — specify in notes'
   ];
   const fallbacks = caseKind === 'obg' ? obgFallbacks : eyeFallbacks;
-  const chargeOptions = Array.from(new Set(mainHeadings.concat(subHeadings).filter(Boolean)));
+  const customDept = caseKind === 'obg' ? 'obg' : 'ophtho';
+  const customOptions = (getDoctorCustomRxOptionsForDept(customDept).procedure || []).map(function (name) {
+    return normalizeOtProcedureName(name);
+  }).filter(Boolean);
+  const chargeOptions = Array.from(new Set(mainHeadings.concat(subHeadings).concat(customOptions).filter(Boolean)));
   return chargeOptions.length ? chargeOptions : Array.from(new Set(fallbacks.filter(Boolean)));
 }
 function parseOtProcedureSelection(value) {
@@ -703,6 +712,92 @@ function addOTDiagnosisOption() {
   }
   populateOTDiagnosisOptions(val);
   showToast('OT diagnosis added ✓', 's');
+}
+window.OT_ANAESTHESIA_OPTIONS = window.OT_ANAESTHESIA_OPTIONS || [];
+function getOtAnaesthesiaOptions() {
+  const defaults = [
+    'Topical (Eye Drops)',
+    'Peribulbar Block',
+    'Sub-Tenon Block',
+    'Retrobulbar Block',
+    'Local Anaesthesia',
+    'Spinal',
+    'Spinal Anaesthesia',
+    'Epidural',
+    'General Anaesthesia',
+    'General Anaesthesia — LMA',
+    'General Anaesthesia — ETT',
+    'Sedation'
+  ];
+  return Array.from(new Set([].concat(window.OT_ANAESTHESIA_OPTIONS || [], defaults).map(function (item) {
+    return normalizeDeptTemplateLabel(item);
+  }).filter(Boolean)));
+}
+function populateOTAnaesthesiaOptions(selected) {
+  const input = document.getElementById('ot-add-anaes');
+  const list = document.getElementById('ot-anaes-list');
+  if (!input || !list) return;
+  const options = getOtAnaesthesiaOptions();
+  list.innerHTML = options.map(function (name) {
+    return '<option value="' + String(name).replace(/"/g, '&quot;') + '"></option>';
+  }).join('');
+  if (selected) input.value = selected;
+}
+function saveOTAnaesthesiaOption(rawValue) {
+  const value = normalizeDeptTemplateLabel(rawValue);
+  if (!value) return '';
+  if (!(window.OT_ANAESTHESIA_OPTIONS || []).some(function (x) { return String(x).trim().toLowerCase() === value.toLowerCase(); })) {
+    window.OT_ANAESTHESIA_OPTIONS.push(value);
+    try {
+      localStorage.setItem('bmh_ot_anaesthesia_options', JSON.stringify(window.OT_ANAESTHESIA_OPTIONS));
+    } catch (e) {}
+    fbSet && fbSet('settings/otAnaesthesiaOptions', window.OT_ANAESTHESIA_OPTIONS).catch(function () {});
+  }
+  populateOTAnaesthesiaOptions(value);
+  return value;
+}
+function loadOTAnaesthesiaOptions() {
+  try {
+    const raw = localStorage.getItem('bmh_ot_anaesthesia_options');
+    if (raw) window.OT_ANAESTHESIA_OPTIONS = JSON.parse(raw) || [];
+  } catch (e) {}
+  if (!window.fbOnce) {
+    populateOTAnaesthesiaOptions(document.getElementById('ot-add-anaes')?.value || '');
+    return;
+  }
+  fbOnce('settings/otAnaesthesiaOptions').then(function (data) {
+    if (Array.isArray(data) && data.length) {
+      window.OT_ANAESTHESIA_OPTIONS = Array.from(new Set([].concat(window.OT_ANAESTHESIA_OPTIONS || [], data)));
+      try {
+        localStorage.setItem('bmh_ot_anaesthesia_options', JSON.stringify(window.OT_ANAESTHESIA_OPTIONS));
+      } catch (e) {}
+    }
+    populateOTAnaesthesiaOptions(document.getElementById('ot-add-anaes')?.value || '');
+  }).catch(function () {
+    populateOTAnaesthesiaOptions(document.getElementById('ot-add-anaes')?.value || '');
+  });
+}
+function saveOtProcedureOption(rawValue, deptOverride) {
+  const dept = deptOverride || (getSelectedOTCaseKind && getSelectedOTCaseKind() === 'obg' ? 'obg' : 'ophtho');
+  return saveDeptTemplateOption('procedure', dept, rawValue);
+}
+function addOTAnaesthesiaOption() {
+  const current = document.getElementById('ot-add-anaes')?.value || '';
+  const typed = normalizeDeptTemplateLabel(current || window.prompt('Enter anaesthesia option to reuse in OT cases:') || '');
+  if (!typed) return;
+  saveOTAnaesthesiaOption(typed);
+  showToast('OT anaesthesia added ✓', 's');
+}
+function addOTProcedureOption() {
+  const procEl = document.getElementById('ot-add-proc');
+  const value = normalizeDeptTemplateLabel(procEl?.value || window.prompt('Enter OT procedure / surgery to reuse:') || '');
+  if (!value) return;
+  if (procEl) procEl.value = value;
+  saveOtProcedureOption(value, getSelectedOTCaseKind && getSelectedOTCaseKind() === 'obg' ? 'obg' : 'ophtho');
+  populateOTProcedureOptions(value);
+  renderDeptProcedureLibrary(getSelectedOTCaseKind && getSelectedOTCaseKind() === 'obg' ? 'obg' : 'ophtho');
+  renderDeptProcedureSelect(getSelectedOTCaseKind && getSelectedOTCaseKind() === 'obg' ? 'obg' : 'ophtho');
+  showToast('OT procedure saved for reuse ✓', 's');
 }
 function getOtIolChoices() {
   const catalog = (IOL_CATALOG || []).map(function (row) {
@@ -20943,6 +21038,9 @@ function addOTCase() {
     createdBy: CURRENT_USER?.name || 'System'
   };
   const normalized = normalizeOTCaseRecord(Object.assign({}, existing || {}, newCase));
+  if (normalized.procedure) saveOtProcedureOption(normalized.procedure, caseKind === 'obg' ? 'obg' : 'ophtho');
+  if (normalized.procedureMain) saveOtProcedureOption(normalized.procedureMain, caseKind === 'obg' ? 'obg' : 'ophtho');
+  if (normalized.anaes) normalized.anaes = saveOTAnaesthesiaOption(normalized.anaes) || normalized.anaes;
   if (normalized.dx) rememberManualDiagnosis(normalized.dx, normalized.caseKind === 'obg' ? 'obg' : 'ophtho');
   if (!normalized.dx) normalized.dx = getPreferredOtDiagnosis(normalized.procedure || proc) || normalized.dx;
   if (!normalized.postopDx) normalized.postopDx = getPreferredOtPostDiagnosis(normalized.procedure || proc) || normalized.postopDx;
@@ -21178,11 +21276,13 @@ function openOTAddModal(opts) {
   const editIdEl = document.getElementById('ot-add-case-id');
   if (editIdEl) editIdEl.value = opts.caseId || '';
   loadOTDiagnosisOptions();
+  loadOTAnaesthesiaOptions();
   loadCustomDiagnosisLibrary();
   populateOTDiagnosisOptions();
   populateOTPostOpDiagnosisOptions();
   populateOTProcedureOptions();
   populateOTProcedureMainSelect();
+  populateOTAnaesthesiaOptions();
   populateOTIolOptions();
   const procEl = document.getElementById('ot-add-proc');
   if (procEl && !procEl.dataset.boundSuggest) {
@@ -25867,6 +25967,13 @@ function addProcFromDropdownDept(sel) {
 function addProcItemToContainer(container, procName, price, opts) {
   opts = opts || {};
   if(!container || !procName) return;
+  const dept = container.id === 'rx-proc-advised-obg' ? 'obg'
+    : container.id === 'rx-proc-advised-psych' ? 'psych'
+    : container.id === 'rx-proc-advised-skin' ? 'skin'
+    : 'ophtho';
+  saveDeptTemplateOption('procedure', dept, procName);
+  renderDeptProcedureLibrary(dept);
+  renderDeptProcedureSelect(dept);
   const placeholder = container.querySelector('.proc-placeholder');
   if(placeholder) placeholder.remove();
   const existing = Array.from(container.querySelectorAll('[data-proc]')).map(e=>e.dataset.proc);
@@ -25880,13 +25987,6 @@ function addProcItemToContainer(container, procName, price, opts) {
     + '<button class="btn btn-xs btn-gold" onclick="nav(\'brochures\',null)" title="Patient brochure">📄</button>'
     + '<button class="btn btn-xs" style="background:#CC0000;color:#fff;padding:2px 7px" onclick="this.closest(\'[data-proc]\').remove()">✕</button>';
   container.appendChild(d);
-  const dept = container.id === 'rx-proc-advised-obg' ? 'obg'
-    : container.id === 'rx-proc-advised-psych' ? 'psych'
-    : container.id === 'rx-proc-advised-skin' ? 'skin'
-    : 'ophtho';
-  saveDeptTemplateOption('procedure', dept, procName);
-  renderDeptProcedureLibrary(dept);
-  renderDeptProcedureSelect(dept);
   if (!opts.silentLog && PROCEDURE_ADVISED_LOG) pushProcedureAdvisedLog(procName, { price });
   if (!opts.quiet) showToast('⚕️ "'+procName+'" added ✓','s');
 }
