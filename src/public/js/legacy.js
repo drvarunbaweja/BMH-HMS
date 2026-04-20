@@ -31729,42 +31729,28 @@ function renderDrCredentials() {
         <option ${dr.centre==='CHD & RPR'?'selected':''}>CHD & RPR</option>
       </select>
     </div>
-    <div class="form-group" style="margin:0 0 8px"><label class="fl">Prescription Print Mode</label>
-      <select id="dr-rx-print-${key}" style="font-size:12px">
-        <option value="table" ${getDoctorPrescriptionPrintMode(dr)==='table'?'selected':''}>Table Only</option>
-        <option value="plain" ${getDoctorPrescriptionPrintMode(dr)==='plain'?'selected':''}>Plain Instructions With Timings</option>
-        <option value="both" ${getDoctorPrescriptionPrintMode(dr)==='both'?'selected':''}>Table + Instructions</option>
-        <option value="plain_only" ${getDoctorPrescriptionPrintMode(dr)==='plain_only'?'selected':''}>Plain Instructions Only</option>
+    <div class="form-group" style="margin:0 0 8px"><label class="fl">Prescription Design</label>
+      <select id="dr-rx-design-${key}" style="font-size:12px" onchange="selectRxDesign(this.value,'${name.replace(/'/g, "\\'")}')">
+        ${RX_DESIGN_OPTIONS.map(opt => `<option value="${opt.key}" ${opt.key===selectedDesign?'selected':''}>${opt.label}</option>`).join('')}
       </select>
     </div>
-    <input type="hidden" id="dr-rx-design-${key}" value="${selectedDesign}">
-    <div class="form-group" style="margin:0 0 8px"><label class="fl">Signature upload</label>
+    <div class="form-group" style="margin:0 0 8px"><label class="fl">Signature</label>
       <input type="file" accept="image/*" onchange="uploadDrSignature('${name.replace(/'/g, "\\'")}',this)" style="font-size:11px">
       ${sigPreview}
     </div>
     <button class="btn btn-gold btn-sm" style="margin-top:6px" onclick="saveDoctorCredentials()">💾 Save</button>
   `;
 
-  const designCardsHtml = RX_DESIGN_OPTIONS.map(opt => {
-    const isSel = opt.key === selectedDesign;
-    return `<div id="rxdc-${key}-${opt.key}" onclick="selectRxDesign('${opt.key}','${name.replace(/'/g, "\\'")}')" style="border:2px solid ${isSel?'#1a3c6e':'#ddd'};border-radius:8px;padding:6px;cursor:pointer;background:#fff;min-height:120px;box-shadow:${isSel?'0 0 0 2px rgba(26,60,110,.15)':'none'}">
-      <div style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#555;margin-bottom:4px">${opt.label}</div>
-      <div style="font-family:Georgia,serif">${_renderDesignThumbnail(opt.key)}</div>
-    </div>`;
-  }).join('');
-
   el.innerHTML = `
     <div style="display:flex;gap:14px;align-items:flex-start">
-      <div style="flex:0 0 45%;max-width:45%;border:1px solid #e4e6eb;border-radius:10px;padding:10px;background:#fafbfc;height:560px;display:flex;flex-direction:column">
-        <div style="max-height:150px;overflow-y:auto;margin-bottom:10px;padding-right:4px">${tabsHtml}</div>
+      <div style="flex:0 0 42%;max-width:42%;border:1px solid #e4e6eb;border-radius:10px;padding:10px;background:#fafbfc;height:610px;display:flex;flex-direction:column">
+        <div style="max-height:160px;overflow-y:auto;margin-bottom:10px;padding-right:4px">${tabsHtml}</div>
         <div style="flex:1;overflow-y:auto;padding-right:4px;border-top:1px solid #e4e6eb;padding-top:10px">${formHtml}</div>
       </div>
-      <div style="flex:1;border:1px solid #e4e6eb;border-radius:10px;padding:10px;background:#fff">
-        <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#1a3c6e;margin-bottom:8px">Prescription Design</div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">${designCardsHtml}</div>
-        <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#555;margin-bottom:6px">Live Preview</div>
-        <div style="overflow:hidden;height:427px;width:301px;border:1px solid #e4e6eb;border-radius:6px;background:#fff">
-          <iframe id="rx-design-preview-frame" style="width:794px;height:1123px;border:none;transform:scale(0.38);transform-origin:top left;display:block"></iframe>
+      <div style="flex:1;border:1px solid #e4e6eb;border-radius:10px;padding:10px;background:#fff;height:610px;display:flex;flex-direction:column">
+        <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#1a3c6e;margin-bottom:8px">Prescription Preview</div>
+        <div style="flex:1;overflow:hidden;border:1px solid #e4e6eb;border-radius:6px;background:#f9f9f9;position:relative">
+          <iframe id="rx-design-preview-frame" style="width:794px;height:1123px;border:none;transform:scale(0.5);transform-origin:top left;display:block"></iframe>
         </div>
       </div>
     </div>
@@ -31782,17 +31768,9 @@ window.selectDrTab = selectDrTab;
 
 function selectRxDesign(designKey, doctorName) {
   if (DOCTOR_PROFILES[doctorName]) DOCTOR_PROFILES[doctorName].rxDesign = designKey;
-  const hid = document.getElementById('dr-rx-design-' + _drSafeKey(doctorName));
-  if (hid) hid.value = designKey;
-  // Update card highlights
-  const key = _drSafeKey(doctorName);
-  RX_DESIGN_OPTIONS.forEach(opt => {
-    const card = document.getElementById('rxdc-' + key + '-' + opt.key);
-    if (!card) return;
-    const sel = opt.key === designKey;
-    card.style.border = '2px solid ' + (sel ? '#1a3c6e' : '#ddd');
-    card.style.boxShadow = sel ? '0 0 0 2px rgba(26,60,110,.15)' : 'none';
-  });
+  // Keep the dropdown in sync if called programmatically
+  const sel = document.getElementById('dr-rx-design-' + _drSafeKey(doctorName));
+  if (sel && sel.value !== designKey) sel.value = designKey;
   updateRxDesignPreview(designKey, doctorName);
 }
 window.selectRxDesign = selectRxDesign;
@@ -32020,14 +31998,12 @@ function saveDoctorCredentials() {
     const reg  = document.getElementById('dr-reg-'+key)?.value;
     const spec = document.getElementById('dr-spec-'+key)?.value;
     const ctr  = document.getElementById('dr-centre-'+key)?.value;
-    const rxp  = document.getElementById('dr-rx-print-'+key)?.value;
     const rxd  = document.getElementById('dr-rx-design-'+key)?.value;
     if(DOCTOR_PROFILES[name]) {
       if(deg !== undefined)  DOCTOR_PROFILES[name].degrees = deg;
       if(reg !== undefined)  DOCTOR_PROFILES[name].reg     = reg;
       if(spec !== undefined) DOCTOR_PROFILES[name].dept    = spec;
       if(ctr !== undefined)  DOCTOR_PROFILES[name].centre  = ctr;
-      if(rxp !== undefined)  DOCTOR_PROFILES[name].rxPrintMode = rxp;
       if(rxd !== undefined)  DOCTOR_PROFILES[name].rxDesign = rxd;
     }
   });
