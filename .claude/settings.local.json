@@ -37,7 +37,8 @@
       "Bash(\"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\" --headless=new --disable-gpu --screenshot=\"/tmp/rx-ss-c.png\" --window-size=780,2200 \"file:///tmp/rx-preview-c.html\")",
       "Bash(node --input-type=module)",
       "Bash(node -e ' *)",
-      "Bash(\"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\" --headless=new --disable-gpu --screenshot=\"/tmp/rx-final.png\" --window-size=794,2400 \"file:///tmp/rx-final-preview.html\")"
+      "Bash(\"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\" --headless=new --disable-gpu --screenshot=\"/tmp/rx-final.png\" --window-size=794,2400 \"file:///tmp/rx-final-preview.html\")",
+      "Bash(git commit -m ' *)"
     ]
   }
 }
