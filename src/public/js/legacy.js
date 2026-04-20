@@ -16212,6 +16212,8 @@ function normalizeInvestigationDeptForUi(dept) {
 }
 function openInvestigationOrderModal(mode) {
   window.CURRENT_INVESTIGATION_ORDER_MODE = mode === 'advise' ? 'advise' : 'send';
+  loadLabMasterOverrides && loadLabMasterOverrides();
+  renderInvestigationChooserSafe && renderInvestigationChooserSafe();
   openM('m-order-invest');
 }
 function switchInvestigationModeTab(dept, mode, btn) {
@@ -18660,6 +18662,7 @@ function confirmInvestigations(modeArg) {
   const centre = pt.centre || CURRENT_USER?.centre || 'CHD';
   const doctor = document.getElementById('sbnm')?.textContent || CURRENT_USER?.name || 'Doctor';
   const orderMode = modeArg === 'advise' ? 'advise' : (modeArg === 'send' ? 'send' : (window.CURRENT_INVESTIGATION_ORDER_MODE === 'advise' ? 'advise' : 'send'));
+  const nowIso = new Date().toISOString();
   SELECTED_INVESTIGATIONS.forEach((inv, idx) => {
     const existing = orders.find(o => !o.done && o.name === inv.name);
     if(existing) return;
@@ -18668,8 +18671,8 @@ function confirmInvestigations(modeArg) {
       name: inv.name,
       notes: '',
       price: Number(inv.price) || 0,
-      date: new Date().toLocaleDateString('en-IN'),
-      orderedAt: new Date().toISOString(),
+      date: nowIso.slice(0, 10),
+      orderedAt: nowIso,
       mode: orderMode,
       done: false,
       patient: pt.name,
@@ -23594,7 +23597,8 @@ function addInvestigationOrder(mode) {
   const orderMode = mode === 'send' ? 'send' : 'advise';
   const orders = getCurrentPatientInvestigationOrders();
   const orderId = 'INV' + Date.now();
-  orders.push({id:orderId, name, notes, mode: orderMode, date: new Date().toISOString(), done: false, patient: pt.name, bmhId: pt.bmhId, dept: pt.dept || 'ophtho', centre: pt.centre || CURRENT_USER?.centre || 'CHD', orderedBy: CURRENT_USER?.name || ''});
+  const nowIso = new Date().toISOString();
+  orders.push({id:orderId, name, notes, mode: orderMode, date: nowIso.slice(0, 10), orderedAt: nowIso, done: false, patient: pt.name, bmhId: pt.bmhId, dept: pt.dept || 'ophtho', centre: pt.centre || CURRENT_USER?.centre || 'CHD', orderedBy: CURRENT_USER?.name || ''});
   syncCurrentPatientInvestigationOrders();
   persistCurrentPatientInvestigationOrders();
   renderInvestigationOrders();
@@ -23976,7 +23980,7 @@ function buildLabOrderSnapshotForPatientDate(pt, selectedDate) {
     return raw === day || formatDateIN(raw) === formatDateIN(day);
   };
   const relevant = (Array.isArray(pt.investigationOrders) ? pt.investigationOrders : []).filter(function (o) {
-    return o && o.mode === 'send' && o.done && o.labReady && dateMatches(o.completedAt || o.date || o.createdAt);
+    return o && o.mode === 'send' && o.done && o.labReady && dateMatches(o.completedAt || o.orderedAt || o.date || o.createdAt);
   });
   if (!relevant.length) return null;
   const latest = relevant.slice().sort(function (a, b) {
@@ -24005,6 +24009,15 @@ function buildLabOrderSnapshotForPatientDate(pt, selectedDate) {
     unread: relevant.some(function (o) { return !o.doctorSeen; })
   };
 }
+function getLabOrderDateKey(order) {
+  if (!order) return '';
+  const raw = order.completedAt || order.orderedAt || order.date || order.createdAt || '';
+  if (!raw) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(raw))) return String(raw).slice(0, 10);
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) return localDateKey(parsed);
+  return localDateKey(raw);
+}
 function getPatientLabQueueEntries() {
   const selectedDate = (document.getElementById('lab-date-filter')?.value || localDateKey(new Date())).slice(0, 10);
   const dateMatches = function (value) {
@@ -24021,7 +24034,7 @@ function getPatientLabQueueEntries() {
     const orders = Array.isArray(pt.investigationOrders) ? pt.investigationOrders.slice() : [];
     const relevant = orders.filter(function (o) {
       if (!o || o.mode !== 'send') return false;
-      if (!dateMatches(o.completedAt || o.date || o.createdAt)) return false;
+      if (!dateMatches(o.completedAt || o.orderedAt || o.date || o.createdAt)) return false;
       return !o.done || (o.labReady && !o.doctorSeen);
     });
     if (!relevant.length) return;
@@ -24154,7 +24167,7 @@ function renderLabOrders() {
       <div style="font-size:13px;font-weight:900">${o.patient}</div>
       <div style="display:flex;align-items:center;gap:6px">
         <span class="badge ${o.status==='completed'?'bd-green':'bd-orange'}" style="font-size:9.5px">${o.status==='completed'?(o.unread?'🔔 Ready':'✅ Done'):'⏳ Pending'}</span>
-        ${o.status === 'pending' ? `<button type="button" class="btn btn-xs btn-gray" onclick="event.stopPropagation();deleteLabPendingBlock('${o.id}')">🗑️</button>` : ''}
+        <button type="button" class="btn btn-xs btn-gray" title="${o.status === 'pending' ? 'Delete pending lab block' : 'Delete lab block for selected date'}" onclick="event.stopPropagation();deleteLabOrderGroup('${o.id}')">🗑️</button>
       </div>
     </div>
     <div style="font-family:var(--mono);font-size:9.5px;color:var(--bmh-teal);margin-bottom:4px">${o.bmhId} · ${o.age ? o.age+'Y' : '—'}${o.sex ? ' / '+o.sex : ''}</div>
@@ -24251,6 +24264,34 @@ function deleteLabPendingBlock(orderId) {
   renderLabOrders();
   showToast('Pending lab block deleted ✓', 's');
 }
+function deleteLabOrderGroup(orderId) {
+  const order = LAB_ORDERS.find(function (o) { return o.id === orderId; });
+  if (!order) return;
+  const pt = (window.PATIENTS || []).find(function (p) { return p && p.bmhId === order.bmhId; });
+  if (!pt) return;
+  const targetDate = selectedLabDateKey();
+  const orders = Array.isArray(pt.investigationOrders) ? pt.investigationOrders.slice() : [];
+  const removable = orders.filter(function (row) {
+    return row && row.mode === 'send' && getLabOrderDateKey(row) === targetDate;
+  });
+  if (!removable.length) { showToast('No lab entries found to delete for this date', 'i'); return; }
+  const promptText = order.status === 'pending'
+    ? 'Delete pending lab block for '
+    : 'Delete completed lab block for ';
+  if (!confirm(promptText + (pt.name || order.bmhId) + '?\nAll lab tests for the selected date will be removed from the lab module.')) return;
+  pt.investigationOrders = orders.filter(function (row) { return !removable.includes(row); });
+  if (pt.bmhId) {
+    fbUpdate && fbUpdate('patients/' + pt.bmhId, { investigationOrders: pt.investigationOrders }).catch(function () {});
+  }
+  if (activeLabOrder && activeLabOrder.bmhId === order.bmhId && getLabOrderDateKey(activeLabOrder) === targetDate) {
+    activeLabOrder = null;
+    const panel = document.getElementById('lab-entry-panel');
+    if (panel) panel.style.display = 'none';
+  }
+  renderLabOrders();
+  showToast('Lab block deleted ✓', 's');
+}
+window.deleteLabOrderGroup = deleteLabOrderGroup;
 
 function openLabOrder(id) {
   const order = LAB_ORDERS.find(o=>o.id===id); if(!order) return;

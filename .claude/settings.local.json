@@ -38,7 +38,8 @@
       "Bash(node --input-type=module)",
       "Bash(node -e ' *)",
       "Bash(\"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\" --headless=new --disable-gpu --screenshot=\"/tmp/rx-final.png\" --window-size=794,2400 \"file:///tmp/rx-final-preview.html\")",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(node -e \"const fs=require\\('fs'\\);const code=fs.readFileSync\\('src/public/js/legacy.js','utf8'\\);try{new Function\\(code\\);console.log\\('OK'\\)}catch\\(e\\){console.log\\('ERR',e.message\\)}\")"
     ]
   }
 }
