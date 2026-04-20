@@ -31411,6 +31411,25 @@ function replaceDoctorProfiles(nextData) {
     DOCTOR_PROFILES[name] = Object.assign({}, nextData[name] || {});
   });
 }
+function serializeDoctorProfilesForFirebase(source) {
+  const out = {};
+  Object.keys(source || {}).forEach(function (name) {
+    const safeKey = makeFirebaseSafeKey(name);
+    out[safeKey] = Object.assign({}, source[name] || {}, { name: name });
+  });
+  return out;
+}
+function deserializeDoctorProfilesFromFirebase(source) {
+  const out = {};
+  Object.keys(source || {}).forEach(function (key) {
+    const row = Object.assign({}, source[key] || {});
+    const name = String(row.name || key || '').trim();
+    if (!name) return;
+    delete row.name;
+    out[name] = row;
+  });
+  return out;
+}
 
 function saveDoctorProfilesToLocalStorage(savedAt) {
   try {
@@ -31460,11 +31479,12 @@ function saveDoctorCredentials() {
     }
   });
   const savedAt = Date.now();
+  const firebasePayload = serializeDoctorProfilesForFirebase(DOCTOR_PROFILES);
   saveDoctorProfilesToLocalStorage(savedAt);
   if(window.FBDB) {
     showToast('Saving to cloud...', 'i');
     Promise.all([
-      window.FBDB.ref('doctorProfiles').set(DOCTOR_PROFILES),
+      window.FBDB.ref('doctorProfiles').set(firebasePayload),
       window.FBDB.ref('doctorProfilesMeta').set({ _savedAt: savedAt })
     ])
       .then(function () { showToast('Doctor credentials saved & synced ✓', 's'); })
@@ -31485,7 +31505,7 @@ function loadDoctorProfilesFromFirebase() {
   ]).then(function (pairs) {
     const data = pairs[0].val();
     const metaData = pairs[1].val();
-    const remoteData = data && typeof data === 'object' ? data : {};
+    const remoteData = data && typeof data === 'object' ? deserializeDoctorProfilesFromFirebase(data) : {};
     const remoteSavedAt = Number((metaData && metaData._savedAt) || 0);
     if (remoteSavedAt > localSavedAt) {
       // Firebase is newer — use it as authoritative source (another machine saved changes)
@@ -31493,7 +31513,7 @@ function loadDoctorProfilesFromFirebase() {
       saveDoctorProfilesToLocalStorage(remoteSavedAt);
     } else if (localSavedAt > remoteSavedAt && Object.keys(DOCTOR_PROFILES).length > 0) {
       // Local is newer — push local to Firebase
-      window.FBDB.ref('doctorProfiles').set(DOCTOR_PROFILES).catch(function () {});
+      window.FBDB.ref('doctorProfiles').set(serializeDoctorProfilesForFirebase(DOCTOR_PROFILES)).catch(function () {});
       window.FBDB.ref('doctorProfilesMeta').set({ _savedAt: localSavedAt }).catch(function () {});
     } else {
       // No timestamps on either side (first-time / legacy) — merge to get the best of both
@@ -31501,7 +31521,7 @@ function loadDoctorProfilesFromFirebase() {
       replaceDoctorProfiles(mergedData);
       saveDoctorProfilesToLocalStorage();
       if (!Object.keys(remoteData).length) {
-        window.FBDB.ref('doctorProfiles').set(DOCTOR_PROFILES).catch(function () {});
+        window.FBDB.ref('doctorProfiles').set(serializeDoctorProfilesForFirebase(DOCTOR_PROFILES)).catch(function () {});
         window.FBDB.ref('doctorProfilesMeta').set({ _savedAt: Date.now() }).catch(function () {});
       }
     }
@@ -31552,7 +31572,7 @@ function uploadDrSignature(name, inp) {
   reader.onload = e => {
     if(DOCTOR_PROFILES[name]) DOCTOR_PROFILES[name].signature = e.target.result;
     saveDoctorProfilesToLocalStorage();
-    if (window.FBDB) window.FBDB.ref('doctorProfiles').set(DOCTOR_PROFILES).catch(function(){});
+    if (window.FBDB) window.FBDB.ref('doctorProfiles').set(serializeDoctorProfilesForFirebase(DOCTOR_PROFILES)).catch(function(){});
     showToast('Signature uploaded for '+name+' ✓','s');
   };
   reader.readAsDataURL(file);
