@@ -4370,6 +4370,14 @@
 <!-- ════════════════════ REPORTS ════════════════════ -->
 </div><!-- /pg-ipd -->
 <div class="page" id="pg-reports">
+  <div style="display:flex;align-items:center;gap:10px;padding:8px 14px 6px;background:var(--g6);border-bottom:1px solid var(--g5);flex-wrap:wrap">
+    <span style="font-size:11px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px">Centre</span>
+    <select id="rep-centre" style="font-size:12px;border-radius:8px;padding:3px 10px;border:1px solid var(--g4)">
+      <option value="">Both Centres</option>
+      <option value="CHD">Chandigarh</option>
+      <option value="RPR">Ropar</option>
+    </select>
+  </div>
   <div class="ptabs">
     <div class="ptab active" onclick="ptab(this,'rep-daily')">📅 Daily Summary</div>
     <div class="ptab" onclick="ptab(this,'rep-patient')">🔍 Patient Search</div>
@@ -4377,6 +4385,7 @@
     <div class="ptab" onclick="ptab(this,'rep-investigation')">🧪 Investigations Advised</div>
     <div class="ptab" onclick="ptab(this,'rep-financial')">💰 Financial</div>
     <div class="ptab" onclick="ptab(this,'rep-referrals')">👨‍⚕️ Referrals</div>
+    <div class="ptab" onclick="ptab(this,'rep-dues');generatePendingDuesReport()">💸 Pending Dues</div>
   </div>
 
   <!-- DAILY SUMMARY -->
@@ -4490,6 +4499,10 @@
     </div>
     <button class="btn btn-gold" onclick="generateFinancialReport()">💰 Generate Report</button>
     <div id="rep-financial-result" style="margin-top:14px"></div>
+  </div>
+
+  <div class="tab-content" id="rep-dues">
+    <div id="rep-dues-result" style="margin-top:6px"></div>
   </div>
 
   <div class="tab-content" id="rep-referrals">
