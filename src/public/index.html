@@ -292,28 +292,28 @@
       <div style="font-size:18px;font-weight:900;color:#fff;margin-bottom:4px">Welcome back</div>
       <div style="font-size:12px;color:rgba(255,255,255,.5);margin-bottom:22px">Sign in with your BMH credentials</div>
       <div style="margin-bottom:14px">
-        <label style="display:block;font-size:10.5px;font-weight:700;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Email</label>
-        <input id="lg-email" type="email" placeholder="e.g. drvarun@bawejahospital.com" autocomplete="email"
+        <label for="lg-email" style="display:block;font-size:10.5px;font-weight:700;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Email</label>
+        <input id="lg-email" name="email" type="email" placeholder="e.g. drvarun@bawejahospital.com" autocomplete="email" aria-describedby="lg-err"
           onkeydown="if(event.key==='Enter')document.getElementById('lg-pass').focus()"
           style="width:100%;background:rgba(255,255,255,.1);border:1.5px solid rgba(255,255,255,.15);border-radius:10px;padding:11px 14px;color:#fff;font-size:14px;font-family:var(--font);outline:none;box-sizing:border-box"
           onfocus="this.style.borderColor='rgba(212,160,23,.8)'" onblur="this.style.borderColor='rgba(255,255,255,.15)'">
       </div>
       <div style="margin-bottom:20px">
-        <label style="display:block;font-size:10.5px;font-weight:700;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Password</label>
+        <label for="lg-pass" style="display:block;font-size:10.5px;font-weight:700;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Password</label>
         <div style="position:relative">
-          <input id="lg-pass" type="password" placeholder="••••••••••" autocomplete="current-password"
+          <input id="lg-pass" name="password" type="password" placeholder="••••••••••" autocomplete="current-password" aria-describedby="lg-err"
             onkeydown="if(event.key==='Enter')window._loginUser()"
             style="width:100%;background:rgba(255,255,255,.1);border:1.5px solid rgba(255,255,255,.15);border-radius:10px;padding:11px 44px 11px 14px;color:#fff;font-size:14px;font-family:var(--font);outline:none;box-sizing:border-box"
             onfocus="this.style.borderColor='rgba(212,160,23,.8)'" onblur="this.style.borderColor='rgba(255,255,255,.15)'">
-          <button onclick="(function(){var i=document.getElementById('lg-pass');i.type=i.type==='password'?'text':'password'})()" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:rgba(255,255,255,.4);cursor:pointer;font-size:16px">👁</button>
+          <button type="button" aria-label="Show or hide password" onclick="(function(){var i=document.getElementById('lg-pass');i.type=i.type==='password'?'text':'password'})()" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:rgba(255,255,255,.4);cursor:pointer;font-size:16px">👁</button>
         </div>
       </div>
-      <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:rgba(255,255,255,.75);margin:-6px 0 16px 0;cursor:pointer">
+      <label for="lg-remember" style="display:flex;align-items:center;gap:8px;font-size:12px;color:rgba(255,255,255,.75);margin:-6px 0 16px 0;cursor:pointer">
         <input id="lg-remember" type="checkbox" style="accent-color:#d4a017;cursor:pointer">
         <span>Remember me</span>
       </label>
-      <div id="lg-err" style="display:none;background:rgba(255,59,48,.15);border:1px solid rgba(255,59,48,.3);border-radius:8px;padding:9px 12px;font-size:12px;color:#ff6b6b;margin-bottom:14px;text-align:center"></div>
-      <button onclick="window._loginUser()" style="width:100%;background:linear-gradient(135deg,#d4a017,#f0c040);color:#1a1a1a;border:none;border-radius:10px;padding:13px;font-size:14px;font-weight:900;cursor:pointer;font-family:var(--font)">
+      <div id="lg-err" role="alert" aria-live="polite" style="display:none;background:rgba(255,59,48,.15);border:1px solid rgba(255,59,48,.3);border-radius:8px;padding:9px 12px;font-size:12px;color:#ff6b6b;margin-bottom:14px;text-align:center"></div>
+      <button type="button" onclick="window._loginUser()" style="width:100%;background:linear-gradient(135deg,#d4a017,#f0c040);color:#1a1a1a;border:none;border-radius:10px;padding:13px;font-size:14px;font-weight:900;cursor:pointer;font-family:var(--font)">
         Sign In →
       </button>
     </div>
@@ -1171,8 +1171,8 @@
             <option>Single Vision Near</option>
             <option>Anti-Reflective Coating</option>
           </select></div>
-          <div class="form-group"><label class="fl">Near Vision OD</label><input type="text" placeholder="N6"></div>
-          <div class="form-group"><label class="fl">Near Vision OS</label><input type="text" placeholder="N8"></div>
+          <div class="form-group"><label class="fl">Near Vision OD</label><input type="text" id="nv-od-final-manual" placeholder="N6"></div>
+          <div class="form-group"><label class="fl">Near Vision OS</label><input type="text" id="nv-os-final-manual" placeholder="N8"></div>
         </div>
       </div>
 
@@ -1524,7 +1524,7 @@
         </div>
         <div id="rx-drugs" style="margin-bottom:4px;min-width:0;max-width:100%;box-sizing:border-box"></div>
         <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
-          <button class="btn btn-outline btn-sm" onclick="openM('m-add-rx-drug')">+ Full Drug Form</button>
+          <button class="btn btn-outline btn-sm" onclick="openAddRxDrugModal()">+ Full Drug Form</button>
           <label style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:var(--g1);cursor:pointer"><input type="radio" name="rx-lang" checked onchange="setRxLang('en')"> EN</label>
           <label style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:var(--g1);cursor:pointer"><input type="radio" name="rx-lang" onchange="setRxLang('hi')"> HI</label>
           <label style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:var(--g1);cursor:pointer"><input type="radio" name="rx-lang" onchange="setRxLang('pa')"> PA</label>
@@ -2510,7 +2510,7 @@
         </div>
         <div id="rx-drugs" style="border:1.5px solid var(--g4);border-top:none;border-radius:0 0 8px 8px;margin-bottom:8px;min-height:44px;min-width:0;max-width:100%;box-sizing:border-box"></div>
         <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px">
-          <button class="btn btn-outline btn-sm" onclick="openM('m-add-rx-drug')">+ Full Drug Form</button>
+          <button class="btn btn-outline btn-sm" onclick="openAddRxDrugModal()">+ Full Drug Form</button>
           <select style="font-size:11px;padding:6px 8px;border-radius:8px;border:1.5px solid var(--g4)" onchange="setRxLang(this.value)">
             <option value="en">English</option>
             <option value="hi">Hindi</option>
@@ -2959,7 +2959,7 @@
         </div>
         <div id="rx-drugs" style="border:1.5px solid var(--g4);border-top:none;border-radius:0 0 8px 8px;margin-bottom:8px;min-height:44px;min-width:0;max-width:100%;box-sizing:border-box"></div>
         <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px">
-          <button class="btn btn-outline btn-sm" onclick="openM('m-add-rx-drug')">+ Full Drug Form</button>
+          <button class="btn btn-outline btn-sm" onclick="openAddRxDrugModal()">+ Full Drug Form</button>
           <select style="font-size:11px;padding:6px 8px;border-radius:8px;border:1.5px solid var(--g4)" onchange="setRxLang(this.value)">
             <option value="en">English</option>
             <option value="hi">Hindi</option>
@@ -3173,7 +3173,7 @@
         </div>
         <div id="rx-drugs" style="border:1.5px solid var(--g4);border-top:none;border-radius:0 0 8px 8px;margin-bottom:8px;min-height:44px;min-width:0;max-width:100%;box-sizing:border-box"></div>
         <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px">
-          <button class="btn btn-outline btn-sm" onclick="openM('m-add-rx-drug')">+ Full Drug Form</button>
+          <button class="btn btn-outline btn-sm" onclick="openAddRxDrugModal()">+ Full Drug Form</button>
           <select style="font-size:11px;padding:6px 8px;border-radius:8px;border:1.5px solid var(--g4)" onchange="setRxLang(this.value)">
             <option value="en">English</option>
             <option value="hi">Hindi</option>
@@ -5114,14 +5114,14 @@
 <div class="modal-ov" id="m-add-rx-drug">
 <div class="modal"><div class="modal-hd"><div class="modal-title">💊 Add Drug / Drop</div><button class="modal-close" onclick="closeM('m-add-rx-drug')">✕</button></div>
 <div class="fg fg1" style="gap:9px">
-  <div class="form-group"><label class="fl">Type</label><select id="new-rx-type"><option>Eye Drop</option><option>Tablet</option><option>Capsule</option><option>Ointment</option><option>Injection</option><option>Syrup</option><option>Pessary</option><option>Gel</option><option>Cream</option><option>Lotion</option><option>Spray</option></select></div>
+  <div class="form-group"><label class="fl">Type</label><select id="new-rx-type" onchange="syncAddRxDrugModalType()"><option>Eye Drop</option><option>Tablet</option><option>Capsule</option><option>Ointment</option><option>Injection</option><option>Syrup</option><option>Pessary</option><option>Gel</option><option>Cream</option><option>Lotion</option><option>Spray</option></select></div>
   <div class="form-group"><label class="fl">Trade Name (Brand)</label>
     <input type="text" id="new-rx-trade" placeholder="e.g. Vigamox" oninput="lookupGeneric(this.value)" list="drug-trade-list">
     <datalist id="drug-trade-list"></datalist>
   </div>
   <div class="form-group"><label class="fl">Generic Name (auto-fills)</label><input type="text" id="new-rx-generic" placeholder="Generic name (auto)"></div>
   <div class="fg">
-    <div class="form-group"><label class="fl">Eye / Site</label><select id="new-rx-eye"><option>Right Eye (OD)</option><option>Left Eye (OS)</option><option>Both Eyes (OU)</option><option>Oral</option><option>Topical</option><option>IM / IV</option><option>Nasal</option><option>Ear</option><option>Vaginal</option></select></div>
+    <div class="form-group" id="new-rx-eye-wrap"><label class="fl">Eye / Site</label><select id="new-rx-eye"><option>Right Eye (OD)</option><option>Left Eye (OS)</option><option>Both Eyes (OU)</option><option>Oral</option><option>Topical</option><option>IM / IV</option><option>Nasal</option><option>Ear</option><option>Vaginal</option></select></div>
     <div class="form-group"><label class="fl">Frequency</label><select id="new-rx-freq">
       <option>Half-hourly</option><option>Hourly</option><option>Every 2 hours</option><option>Every 3 hours</option><option>Every 4 hours</option><option>Six times daily (6x/day)</option><option>Four times daily (QID)</option><option>Three times daily (TDS)</option><option>Twice daily (BD)</option><option>Once daily (OD)</option><option>At bedtime (HS)</option><option>Once weekly</option><option>As needed (PRN)</option>
     </select></div>
@@ -5766,7 +5766,7 @@
 <div id="dx-dropdown" style="display:none;z-index:100000;background:#fff;border:2px solid var(--blue);border-radius:var(--rsm);max-height:280px;overflow-y:auto;box-shadow:var(--sh-md)"></div>
 
 <!-- ═══ MAIN APP SCRIPT (legacy — being migrated to modules) ═══ -->
-<script defer src="%BASE_URL%js/legacy.js?v=20260420-obg-discharge-logo-autofill"></script>
+<script defer src="%BASE_URL%js/legacy.js?v=20260420-reception-queue-fix"></script>
 
 <!-- ═══ QR DECODER BRIDGE ═══ -->
 <script type="module" src="./js/qr-decoder.js"></script>
