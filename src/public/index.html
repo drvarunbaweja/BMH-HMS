@@ -36,6 +36,61 @@
     .dq-queue-main .rc-queue-table td { font-size:11.5px; }
     .dq-queue-main .rc-queue-table th { font-size:11px; }
     .dq-queue-main .ptab { font-size:13px; }
+    .dq-head-grid {
+      display:grid;
+      grid-template-columns:minmax(0,1.1fr) auto minmax(270px,.9fr);
+      gap:12px;
+      align-items:center;
+      width:100%;
+    }
+    .dq-head-titlewrap {
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex-wrap:wrap;
+      min-width:0;
+    }
+    .dq-head-meta {
+      font-size:12px;
+      font-weight:800;
+      color:rgba(255,255,255,.92);
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      max-width:100%;
+    }
+    .dq-search-shell {
+      display:flex;
+      align-items:center;
+      gap:8px;
+      min-width:0;
+      background:#fff;
+      border:1.5px solid var(--g4);
+      border-radius:10px;
+      padding:7px 10px;
+    }
+    .dq-inline-tools {
+      display:flex;
+      align-items:center;
+      gap:8px;
+      flex-wrap:wrap;
+      margin-left:auto;
+    }
+    .dq-inline-tools input,
+    .dq-inline-tools select {
+      padding:6px 10px;
+      border:1.5px solid var(--g4);
+      border-radius:8px;
+      font-size:12px;
+      font-family:var(--font);
+      background:#fff;
+    }
+    .dq-inline-tools .visit-name {
+      width:220px;
+    }
+    .dq-inline-tools .visit-id {
+      width:140px;
+    }
     #pg-ophtho .ptabs,
     #pg-obg .ptabs,
     #pg-psych .ptabs,
@@ -250,6 +305,9 @@
       .dept-diag-grid,
       .diag-prev-wrap,
       .oe-plan-grid { grid-template-columns:1fr; }
+      .dq-head-grid { grid-template-columns:1fr; }
+      .dq-inline-tools .visit-name,
+      .dq-inline-tools .visit-id { width:100%; }
       .prev-dx-box { min-height:0; }
       #m-ipd-monitor .modal { width:calc(100vw - 10px) !important; max-width:none !important; margin:0 auto; }
       #ipd-monitor-body { padding-right:0 !important; }
@@ -487,45 +545,41 @@
 <!-- ════════════════════ DOCTOR QUEUE ════════════════════ -->
 <div class="page" id="pg-doctor-queue">
   <div class="card dq-queue-main">
-    <div class="card-hd" style="flex-wrap:wrap;gap:10px;align-items:flex-start">
-      <div><div class="card-title" id="dq-title">Dr. Varun Baweja — My Patients</div><div class="card-sub"><span class="live-dot"></span>Click any patient to open case sheet instantly</div></div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto">
-        <button type="button" id="dq-approvals-pill" class="btn btn-outline btn-xs" style="display:none;animation:pulse 1.4s infinite;border-color:rgba(255,59,48,.5);color:#c0392b;font-weight:900" onclick="nav('settings',null);setTimeout(function(){var t=document.getElementById('set-approvals-tab'); if(t) t.click();},180)">🗑 0 approvals</button>
-        <button type="button" class="btn btn-outline btn-xs" onclick="toggleQueueSidebarCollapse(true)">☰ Expand Menu</button>
-        <button type="button" class="btn btn-gold btn-xs" onclick="openM('m-np')">+ Add Patient</button>
-        <button type="button" class="btn btn-outline btn-xs" onclick="nav('ophtho',null)">👁️ Eye Exam</button>
-        <button type="button" class="btn btn-outline btn-xs" onclick="nav('appointments',null)">📅 Appointments</button>
-        <button type="button" class="btn btn-outline btn-xs" onclick="openM('m-print-tpl')">🖨️ Print Template</button>
-        <button type="button" class="btn btn-outline btn-xs" onclick="nav('discharge',null)">🏠 Discharge</button>
+    <div class="card-hd">
+      <div class="dq-head-grid">
+        <div class="dq-head-titlewrap">
+          <div class="card-title" id="dq-title">My Patient Queue</div>
+          <div class="dq-head-meta" id="dq-doctor-meta">Dr. Varun Baweja · Ophthalmology</div>
+        </div>
+        <select id="dq-admin-dept-filter" onchange="renderDocQueue()" style="display:none;min-width:170px;border:1.5px solid rgba(255,255,255,.45);border-radius:10px;padding:7px 10px;background:#fff;color:var(--tx);font-size:12px;font-family:var(--font);justify-self:center">
+          <option value="all">All departments</option>
+          <option value="ophtho">Eye</option>
+          <option value="obg">OBG</option>
+          <option value="psych">Neuropsychiatry</option>
+          <option value="skin">Skin & Cosmetology</option>
+        </select>
+        <div class="dq-search-shell">
+          <span style="font-size:13px;color:var(--g1)">🔍</span>
+          <input type="text" id="dq-search" placeholder="Search queue patient, BMSH ID, mobile, purpose or doctor…" oninput="renderDocQueue()" style="border:none;outline:none;background:transparent;width:100%;font-size:12px;font-family:var(--font)">
+        </div>
       </div>
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
-      <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:240px;background:#fff;border:1.5px solid var(--g4);border-radius:10px;padding:7px 10px">
-        <span style="font-size:13px;color:var(--g1)">🔍</span>
-        <input type="text" id="dq-search" placeholder="Search patient, BMSH ID, mobile, purpose or doctor…" oninput="renderDocQueue()" style="border:none;outline:none;background:transparent;width:100%;font-size:12px;font-family:var(--font)">
-      </div>
-      <select id="dq-admin-dept-filter" onchange="renderDocQueue()" style="display:none;min-width:170px;border:1.5px solid var(--g4);border-radius:10px;padding:7px 10px;background:#fff;font-size:12px;font-family:var(--font)">
-        <option value="all">All departments</option>
-        <option value="ophtho">Eye</option>
-        <option value="obg">OBG</option>
-        <option value="psych">Neuropsychiatry</option>
-        <option value="skin">Skin & Cosmetology</option>
-      </select>
-      <button type="button" class="btn btn-outline btn-xs" onclick="const q=document.getElementById('dq-search'); if(q){q.value='';} renderDocQueue();">Clear Search</button>
-    </div>
-    <div class="dq-toolbar" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;padding:10px 12px;background:var(--g6);border-radius:var(--rsm);margin-bottom:12px;border:1px solid var(--g5)">
-      <div style="flex:1;min-width:160px">
-        <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">💳 Payment status</div>
-        <div id="dq-pay" style="font-size:11px;color:var(--g1);min-height:18px"></div>
-      </div>
-    </div>
-      <div class="ptabs">
+      <div class="ptabs" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px">
         <div class="ptab active" onclick="ptab(this,'dq-active')">Active</div>
         <div class="ptab" id="dq-tab-dil" onclick="ptab(this,'dq-dil')">💧 Dilated</div>
         <div class="ptab" onclick="ptab(this,'dq-xref')">↔️ Cross-Refer</div>
         <div class="ptab" onclick="ptab(this,'dq-ipd')">🛏️ IPD</div>
         <div class="ptab" onclick="ptab(this,'dq-done')">✓ Done</div>
+        <div class="dq-inline-tools">
+          <input type="text" class="visit-name" id="patient-search-name" placeholder="Visit history: patient name...">
+          <input type="text" class="visit-id" id="patient-search-id" placeholder="BMSH ID...">
+          <button type="button" class="btn btn-gold btn-xs" onclick="searchPatientVisits()">Search</button>
+          <button type="button" class="btn btn-outline btn-xs" onclick="clearPatientSearch()">Clear</button>
+          <input type="date" id="dq-historical-date" onchange="loadHistoricalQueue()" title="Select date to view historical queue">
+          <button type="button" class="btn btn-outline btn-xs" onclick="clearHistoricalDate()" title="Clear date and show current queue">Today</button>
+        </div>
       </div>
+      <div id="patient-search-results" style="display:none;margin-bottom:12px;padding:14px 16px;background:linear-gradient(180deg,#f8fbff 0%, #ffffff 100%);border:1.5px solid var(--g4);border-radius:12px;"></div>
       <div class="tab-content active" id="dq-active">
         <div class="rc-queue-table-wrap">
           <table class="rc-queue-table dq-queue-table" aria-label="Active queue">

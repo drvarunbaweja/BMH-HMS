@@ -33159,8 +33159,20 @@ function _renderDocQueueImpl() {
   const queueDoctor = (CURRENT_USER?.isAdmin && adminDeptFilter === 'all')
     ? 'Hospital'
     : getEffectiveDoctorNameForDept(effectiveQueueDept || CURRENT_USER?.dept || '');
+  const deptLabelMap = {
+    ophtho: 'Ophthalmology',
+    obg: 'OBG',
+    psych: 'Neuropsychiatry',
+    skin: 'Skin & Cosmetology',
+    all: 'All Departments'
+  };
   const titleEl = document.getElementById('dq-title');
-  if (titleEl) titleEl.textContent = `${queueDoctor} — My Patients`;
+  if (titleEl) titleEl.textContent = 'My Patient Queue';
+  const metaEl = document.getElementById('dq-doctor-meta');
+  if (metaEl) {
+    const labelKey = adminDeptFilter !== 'all' ? adminDeptFilter : (effectiveQueueDept || 'all');
+    metaEl.textContent = `${queueDoctor} · ${deptLabelMap[labelKey] || labelKey || 'Department'}`;
+  }
   const adminDeptSel = document.getElementById('dq-admin-dept-filter');
   if (adminDeptSel) {
     adminDeptSel.style.display = (CURRENT_USER?.isAdmin || CURRENT_USER?.role === 'Reception') ? '' : 'none';
