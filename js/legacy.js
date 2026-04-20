@@ -330,7 +330,9 @@ function otChargeLooksLikeProcedure(row) {
   const kind = String(row?.kind || '').toLowerCase();
   const name = String(row?.name || '').toLowerCase();
   const parent = String(row?.parent || '').toLowerCase();
-  if (/consult|follow.?up|package|biometry|oct|field|photo|microscopy|scan/.test(cat + ' ' + name)) return false;
+  const blob = [cat, kind, name, parent].join(' ');
+  if (/consult|follow.?up|biometry|oct|field|photo|microscopy|scan|x-?ray|ultra.?sound|usg|ecg|echo|lab|investigation|test|registration|admission|bed|room|ward|nursing|medicine|drug|optical|spectacle|lens/.test(blob)) return false;
+  if (parent && !/consult|follow.?up|biometry|oct|field|photo|microscopy|scan|test|lab|investigation/.test(parent)) return true;
   return /surgery|procedure|laser|minor/.test(kind)
     || /sx|surgery|procedure|laser|delivery|lap|operation|ot/.test(cat)
     || /trabeculectomy|lasik|pmics|iol|icl|staar|collamer|implantable|capsulotomy|iridotomy|excision|incision|curettage|chalazion|lscs|delivery|laparoscopy|hysteroscopy|chemical peel|prp|dcr|ptosis|squint|vitrectomy|injection|procedure/.test(name)
@@ -5047,7 +5049,7 @@ function printPsychSheet() { if(typeof window.printUnifiedRx === 'function') { w
 function printSkinSheet() { if(typeof window.printUnifiedRx === 'function') { window.printUnifiedRx('skin'); } else { showToast('Skin summary printing ✓','s'); setTimeout(()=>window.print(),300); } }
 function printDischarge() {
   renderDischargeBuilder();
-  persistOphDischargeSnapshotToOtCase();
+  if ((document.getElementById('dc-specialty-sel')?.value || 'ophtho') === 'ophtho') persistOphDischargeSnapshotToOtCase();
   const html = buildDischargeCardPrintHtml();
   if (!html) { showToast('Select a patient first', 'w'); return; }
   safePrint(html);
@@ -28434,7 +28436,6 @@ const DISCHARGE_TEMPLATES = {
 };
 
 function getDischargePrintData(sel) {
-  const specialty = sel || document.getElementById('dc-specialty-sel')?.value || 'ophtho';
   const ptObj = window.CURRENT_PATIENT || PATIENTS.find(function (p) {
     const ids = ['ophtho-pt-uid', 'obg-pt-uid', 'psych-pt-uid', 'skin-pt-uid'];
     const id = ids.map(function (i) { return document.getElementById(i)?.textContent?.trim(); }).find(function (v) { return v && v !== '—'; });
@@ -28442,8 +28443,33 @@ function getDischargePrintData(sel) {
   }) || {};
   const ptId = ptObj.bmhId || '—';
   const ptNm = ptObj.name || document.getElementById('ophtho-pt-nm')?.textContent || document.getElementById('obg-pt-nm')?.textContent || '— Select Patient —';
+  const inferSpecialty = function () {
+    const forced = sel || document.getElementById('dc-specialty-sel')?.value || '';
+    const activeCase = normalizeOTCaseRecord(window.activeOTCase || {});
+    const matchingCases = OT_CASES.slice().reverse().map(normalizeOTCaseRecord).filter(function (c) {
+      return c.bmhId === ptId;
+    });
+    const latestObgCase = matchingCases.find(function (c) { return c.caseKind === 'obg'; }) || null;
+    const latestEyeCase = matchingCases.find(function (c) { return c.caseKind !== 'obg'; }) || null;
+    if (forced === 'obg' || forced === 'ophtho') {
+      if (forced === 'obg' && (latestObgCase || normalizeDeptKeyForQueue(ptObj.dept || '') === 'obg' || activeCase.caseKind === 'obg')) return 'obg';
+      if (forced === 'ophtho' && (latestEyeCase || normalizeDeptKeyForQueue(ptObj.dept || '') !== 'obg')) return 'ophtho';
+    }
+    if (activeCase?.bmhId === ptId && activeCase.caseKind === 'obg') return 'obg';
+    if (activeCase?.bmhId === ptId && activeCase.caseKind && activeCase.caseKind !== 'obg') return 'ophtho';
+    if (latestObgCase && !latestEyeCase) return 'obg';
+    if (latestEyeCase && !latestObgCase) return 'ophtho';
+    if (normalizeDeptKeyForQueue(ptObj.dept || '') === 'obg') return 'obg';
+    return forced === 'obg' ? 'obg' : 'ophtho';
+  };
+  const specialty = inferSpecialty();
   const tmpl = DISCHARGE_TEMPLATES[specialty] || DISCHARGE_TEMPLATES.ophtho;
-  const lastOtCase = OT_CASES.slice().reverse().map(normalizeOTCaseRecord).find(c => c.bmhId === ptObj.bmhId) || null;
+  const lastOtCase = OT_CASES.slice().reverse().map(normalizeOTCaseRecord).find(function (c) {
+    if (c.bmhId !== ptObj.bmhId) return false;
+    return specialty === 'obg' ? c.caseKind === 'obg' : c.caseKind !== 'obg';
+  }) || OT_CASES.slice().reverse().map(normalizeOTCaseRecord).find(function (c) {
+    return c.bmhId === ptObj.bmhId;
+  }) || null;
   const linkedFuTemplate = specialty === 'ophtho' ? getOtFollowupTemplateEntry(lastOtCase) : null;
   const ipdStay = (window.IPD_PATIENTS || []).slice().reverse().find(x => x.bmhId === ptObj.bmhId) || null;
   const livePostSurgeryRx = !!document.getElementById('rx-post-surgery')?.checked;
@@ -28971,7 +28997,10 @@ function renderDischargeBuilder() {
   const pg = document.getElementById('pg-discharge'); if(!pg) return;
   const ctrl = document.getElementById('dc-specialty-ctrl');
   if(!ctrl) return;
-  const sel = document.getElementById('dc-specialty-sel')?.value || 'ophtho';
+  const specialtySel = document.getElementById('dc-specialty-sel');
+  const resolved = getDischargePrintData(specialtySel?.value || '').sel || specialtySel?.value || 'ophtho';
+  if (specialtySel && specialtySel.value !== resolved) specialtySel.value = resolved;
+  const sel = resolved;
   const data = getDischargePrintData(sel);
   const ptObj = data.ptObj;
   const ptId = data.ptId;
