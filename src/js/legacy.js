@@ -17622,13 +17622,8 @@ function populateSelectors() {
 // Deferred init — runs after ALL declarations are parsed
 // This prevents "Cannot access X before initialization" TDZ errors
 window.addEventListener('DOMContentLoaded', function() {
-  try { loadBmhFinancials && loadBmhFinancials(); } catch (e) {}
   try { loadInventoryStockFromStorage && loadInventoryStockFromStorage(); } catch (e) {}
-  try { renderDashboard && renderDashboard(); } catch(e) {}
-  try { renderIPD && renderIPD(); } catch(e) {}
   try { initQR && initQR(); } catch(e) {}
-  try { renderRxDrugs && renderRxDrugs(); } catch(e) {}
-  try { renderInvestigationChooser && renderInvestigationChooser(); } catch(e) {}
   try { loadInvestigationTemplatesFromStorage && loadInvestigationTemplatesFromStorage(); } catch(e) {}
   try { refreshInvestigationTemplateSelect && refreshInvestigationTemplateSelect(); } catch(e) {}
   try { buildRefractionDropdowns && buildRefractionDropdowns(); } catch(e) {}
@@ -25140,17 +25135,30 @@ function activateUserSession(user, profile, opts) {
     try {
       if (typeof loadPatientsFromFirebase === 'function')  loadPatientsFromFirebase();
       deferBootstrap(function() {
+        if (typeof loadBmhFinancials === 'function') loadBmhFinancials();
+      }, 180);
+      deferBootstrap(function() {
         var hotRoles = ['Admin', 'Reception', 'TPA'];
         if (hotRoles.indexOf(String(profile.role || '')) !== -1) {
           if (typeof listenPayRequests === 'function') listenPayRequests();
-          if (typeof listenAppointments === 'function') listenAppointments();
+        }
+      }, 320);
+      deferBootstrap(function() {
+        var hotRoles = ['Admin', 'Reception', 'TPA'];
+        if (hotRoles.indexOf(String(profile.role || '')) !== -1) {
           if (typeof loadTodayTransactions === 'function') loadTodayTransactions();
         }
-      }, 120);
+      }, 650);
+      deferBootstrap(function() {
+        var hotRoles = ['Admin', 'Reception', 'TPA'];
+        if (hotRoles.indexOf(String(profile.role || '')) !== -1) {
+          if (typeof listenAppointments === 'function') listenAppointments();
+        }
+      }, 900);
       deferBootstrap(function() {
         if (typeof listenDeletionRequestsForApprover === 'function') listenDeletionRequestsForApprover();
         if (profile.role === 'Lab' && typeof listenLabOrders === 'function') listenLabOrders();
-      }, 900);
+      }, 1250);
       deferBootstrap(function() {
         if (!window.FBDB) return;
         window.FBDB.ref('userSettings').once('value').then(function(snap) {
@@ -27798,17 +27806,41 @@ function _debouncedRenderDash() {
     renderActivePageAfterRealtimeUpdate();
   }, 300);
 }
-
 function applyPatientsPayload(data) {
   const all = data ? Object.values(data) : [];
-  window._BMH_ALL_PATIENTS_CACHE = all.map(function (p) { return normalizePatientRecord(p); });
-  rebuildPatientsArrayFromGlobalCache();
-  if(!_fbPatientsLoaded) {
-    _fbPatientsLoaded = true;
-    showToast('Connected to database ✓','s');
+  const chunkSize = 250;
+  const normalized = [];
+  let idx = 0;
+  if (window._bmhPatientsApplyTimer) {
+    clearTimeout(window._bmhPatientsApplyTimer);
+    window._bmhPatientsApplyTimer = null;
   }
-  genRcUID && genRcUID();
-  _debouncedRenderDash();
+  window._bmhPatientsHydrating = true;
+  const finish = function () {
+    window._BMH_ALL_PATIENTS_CACHE = normalized;
+    rebuildPatientsArrayFromGlobalCache();
+    window._bmhPatientsHydrating = false;
+    if(!_fbPatientsLoaded) {
+      _fbPatientsLoaded = true;
+      showToast('Connected to database ✓','s');
+    }
+    genRcUID && genRcUID();
+    _debouncedRenderDash();
+  };
+  const pump = function () {
+    const end = Math.min(idx + chunkSize, all.length);
+    for (; idx < end; idx += 1) normalized.push(normalizePatientRecord(all[idx]));
+    if (idx < all.length) {
+      window._bmhPatientsApplyTimer = setTimeout(pump, 0);
+    } else {
+      finish();
+    }
+  };
+  if (!all.length) {
+    finish();
+    return;
+  }
+  pump();
 }
 function refreshPatientsFromFirebase() {
   if (window._bmhPatientsRefreshInFlight || !window.FBDB) return Promise.resolve();
