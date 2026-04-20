@@ -22379,7 +22379,9 @@ function getProcedureReportCompletionMatch(row, otRows) {
   if (otMatch) {
     return {
       status: otMatch.status === 'completed' ? 'done' : 'scheduled',
-      date: otMatch.date || otMatch.scheduledDate || otMatch.scheduledTime || row.date || ''
+      date: otMatch.date || otMatch.scheduledDate || otMatch.scheduledTime || row.date || '',
+      otProcedure: otMatch.status === 'completed' ? (otMatch.procedure || '') : '',
+      otId: otMatch.id || ''
     };
   }
   const paidReq = (PAY_REQUESTS || []).find(function (r) {
@@ -22404,6 +22406,7 @@ function getProcedureReportRows() {
   const toVal = document.getElementById('rep-surg-to')?.value || '';
   const proc = (document.getElementById('rep-surg-name')?.value || '').trim().toLowerCase();
   const statusFilter = document.getElementById('rep-surg-status')?.value || '';
+  const centreFilter = document.getElementById('rep-centre')?.value || '';
   const dateOk = function(v) {
     const d = String(v || '').split('T')[0];
     if (!d) return true;
@@ -22415,6 +22418,8 @@ function getProcedureReportRows() {
   const advised = [];
   const seen = new Set();
   const pushRow = function (row, idx, pt, deptKey, visitDate) {
+    const rowCentre = row.centre || pt.centre || '';
+    if (centreFilter && normalizeAppointmentCentreValue(rowCentre || 'CHD') !== centreFilter) return;
     const key = row.id || ('adv-' + idx + '-' + row.bmhId + '-' + row.proc);
     const normalizedProc = expandProcedureLabelForPrint(row.proc);
     if (!normalizedProc) return;
@@ -22434,10 +22439,11 @@ function getProcedureReportRows() {
       date: completion.date || row.date || visitDate || row.createdAt || '',
       doctor: row.doctor || pt.assignedDoctor || pt.doctor || '',
       status: completion.status || 'advised',
+      otProcedure: completion.otProcedure || '',
       source: row.source || 'saved',
       mobile: row.mobile || pt.mob || '',
       ageSex: row.ageSex || ((pt.age || '—') + '/' + (pt.sex || '—')),
-      centre: row.centre || pt.centre || '',
+      centre: rowCentre,
       referredBy: row.referredBy || pt.referredBy || '',
       advice: row.advice || pt.lastVisit?.advice || '',
       dept: row.dept || deptKey || normalizeDeptKeyForQueue(pt.dept || '')
@@ -22545,8 +22551,9 @@ function generateDailyReport() {
   const rangeTo   = toVal   || today;
   const todayLabel = new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
 
-  const selectedCentre = normalizeAppointmentCentreValue((typeof getEffectiveCentre === 'function' ? getEffectiveCentre() : (CURRENT_USER?.centre || 'CHD')) || 'CHD');
-  const allowAllCentres = !!(CURRENT_USER?.isAdmin || CURRENT_USER?.canSeeAllCentres);
+  const repCentreFilter = document.getElementById('rep-centre')?.value || '';
+  const selectedCentre = repCentreFilter || normalizeAppointmentCentreValue((typeof getEffectiveCentre === 'function' ? getEffectiveCentre() : (CURRENT_USER?.centre || 'CHD')) || 'CHD');
+  const allowAllCentres = !repCentreFilter && !!(CURRENT_USER?.isAdmin || CURRENT_USER?.canSeeAllCentres);
   const inRange = function (p) {
     const d = localDateKey(p.checkinAt || p.createdAt || p.registeredAt || p.updatedAt || p.queueDate || p.date);
     if (!d) return false;
@@ -22645,8 +22652,8 @@ function generateSurgeryReport() {
   const esc = function(v){ return String(v || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
   el.innerHTML=`<div class="card">
     <div class="card-hd"><div><div class="card-title">⚕️ ${proc||'All Procedures'} — ${filtered.length} patients</div></div><button class="btn btn-gold btn-xs" onclick="printSurgeryReportCurrent()">🖨️ Print</button></div>
-    ${filtered.length?`<table><thead><tr><th>#</th><th>Patient</th><th>Phone</th><th>Age/Sex</th><th>BMSH ID</th><th>Procedure</th><th>Relevant Date</th><th>Doctor</th><th>Centre</th><th>Status</th><th>Counsellor</th></tr></thead>
-    <tbody>${filtered.map((p,i)=>{ const follow=window.PROC_COUNSELLOR_LOG[p.key]||{}; const statusLabel=p.status==='done'?'Done':p.status==='scheduled'?'Scheduled':'Advised'; return `<tr><td>${i+1}</td><td style="font-weight:800">${esc(p.patient)}${p.referredBy?`<div style="font-size:10px;color:var(--g1);margin-top:2px">Ref: ${esc(p.referredBy)}</div>`:''}${p.advice?`<div style="font-size:10px;color:var(--g1);margin-top:4px;line-height:1.35"><b>Advice:</b> ${esc(p.advice)}</div>`:''}</td><td>${esc(p.mobile||'—')}</td><td>${esc(p.ageSex||'—')}</td><td style="font-family:var(--mono);font-size:10px">${esc(p.bmhId)}</td><td>${esc(p.proc)}</td><td>${esc(p.date||'—')}</td><td>${esc(p.doctor)}</td><td>${esc(p.centre||'—')}</td><td><span class="badge ${p.status==='done'?'bd-green':p.status==='scheduled'?'bd-blue':'bd-orange'}">${esc(statusLabel)}</span></td><td><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="btn btn-xs btn-outline" onclick="openCounsellorFollowup('${p.key}')">📞 Follow-up</button>${follow.status?`<span style="font-size:10px;color:var(--g1)">${esc(follow.status)}${follow.nextDate?` · ${esc(follow.nextDate)}`:''}</span>`:''}</div></td></tr>`; }).join('')}
+    ${filtered.length?`<table><thead><tr><th>#</th><th>Patient</th><th>Phone</th><th>Age/Sex</th><th>BMSH ID</th><th>Procedure Advised</th><th>OT — Done As</th><th>Relevant Date</th><th>Doctor</th><th>Centre</th><th>Status</th><th>Counsellor</th></tr></thead>
+    <tbody>${filtered.map((p,i)=>{ const follow=window.PROC_COUNSELLOR_LOG[p.key]||{}; const statusLabel=p.status==='done'?'Done':p.status==='scheduled'?'Scheduled':'Advised'; const otDoneCell = p.otProcedure ? `<div style="font-size:11px;font-weight:800;color:var(--green)">✅ ${esc(p.otProcedure)}</div>` : (p.status==='scheduled'?`<span style="font-size:10px;color:var(--blue)">Scheduled</span>`:'<span style="font-size:10px;color:var(--g1)">—</span>'); return `<tr><td>${i+1}</td><td style="font-weight:800">${esc(p.patient)}${p.referredBy?`<div style="font-size:10px;color:var(--g1);margin-top:2px">Ref: ${esc(p.referredBy)}</div>`:''}${p.advice?`<div style="font-size:10px;color:var(--g1);margin-top:4px;line-height:1.35"><b>Advice:</b> ${esc(p.advice)}</div>`:''}</td><td>${esc(p.mobile||'—')}</td><td>${esc(p.ageSex||'—')}</td><td style="font-family:var(--mono);font-size:10px">${esc(p.bmhId)}</td><td>${esc(p.proc)}</td><td>${otDoneCell}</td><td>${esc(p.date||'—')}</td><td>${esc(p.doctor)}</td><td>${esc(p.centre||'—')}</td><td><span class="badge ${p.status==='done'?'bd-green':p.status==='scheduled'?'bd-blue':'bd-orange'}">${esc(statusLabel)}</span></td><td><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="btn btn-xs btn-outline" onclick="openCounsellorFollowup('${p.key}')">📞 Follow-up</button>${follow.status?`<span style="font-size:10px;color:var(--g1)">${esc(follow.status)}${follow.nextDate?` · ${esc(follow.nextDate)}`:''}</span>`:''}</div></td></tr>`; }).join('')}
     </tbody></table>`:'<div style="padding:20px;text-align:center;color:var(--g1)">No records found</div>'}
   </div>`;
 }
@@ -22683,7 +22690,8 @@ function generateFinancialReport() {
   const el=document.getElementById('rep-financial-result'); if(!el) return;
   const fromVal = document.getElementById('rep-fin-from')?.value || new Date().toISOString().split('T')[0];
   const toVal   = document.getElementById('rep-fin-to')?.value   || new Date().toISOString().split('T')[0];
-  const txAll = TRANSACTIONS.filter(t=>{const d=(t.date||'').split('T')[0]; return d>=fromVal&&d<=toVal;});
+  const repFinCentre = document.getElementById('rep-centre')?.value || '';
+  const txAll = TRANSACTIONS.filter(t=>{const d=(t.date||'').split('T')[0]; if(d<fromVal||d>toVal) return false; if(repFinCentre && normalizeAppointmentCentreValue(t.centre||'CHD')!==repFinCentre) return false; return true;});
   const deptLabel = function (dept) {
     const d = String(dept || '').toLowerCase();
     if (d === 'ophtho') return 'Eye';
@@ -22755,6 +22763,43 @@ function generateFinancialReport() {
     </tbody></table>`:'<div style="padding:20px;text-align:center;color:var(--g1);font-size:12.5px">No transactions recorded for this period.<br><span style="font-size:11px">Payments collected at reception will appear here.</span></div>'}
   </div>`;
 }
+
+function generatePendingDuesReport() {
+  const el = document.getElementById('rep-dues-result'); if (!el) return;
+  const centreFilter = document.getElementById('rep-centre')?.value || '';
+  const esc = function (v) { return String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
+  const deptLabel = function (d) { return ({ophtho:'Ophthalmology',obg:'OBG',psych:'Neuropsychiatry',skin:'Skin & Cosmetology'})[String(d||'').toLowerCase()] || d || 'General'; };
+  const pending = (PAY_REQUESTS || []).filter(function (pr) {
+    if (!pr) return false;
+    if (pr.collected || String(pr.status || '').toLowerCase() === 'paid') return false;
+    if (centreFilter && normalizeAppointmentCentreValue(pr.centre || 'CHD') !== centreFilter) return false;
+    return true;
+  }).slice().sort(function (a, b) { return String(b.date || b.createdAt || '').localeCompare(String(a.date || a.createdAt || '')); });
+  const total = pending.reduce(function (s, pr) { return s + (parseFloat(pr.amount) || 0); }, 0);
+  if (!pending.length) {
+    el.innerHTML = '<div style="padding:30px;text-align:center;color:var(--g1)"><div style="font-size:32px;margin-bottom:8px">✅</div><div style="font-size:13px;font-weight:700">No pending dues' + (centreFilter ? ' for ' + (centreFilter === 'CHD' ? 'Chandigarh' : 'Ropar') : '') + '</div></div>';
+    return;
+  }
+  el.innerHTML = '<div class="card">'
+    + '<div class="card-hd"><div><div class="card-title">💸 Pending Dues — ' + pending.length + ' charges</div><div class="card-sub">Total outstanding: ₹' + total.toLocaleString('en-IN') + '</div></div><button class="btn btn-gold btn-xs" onclick="generatePendingDuesReport()">🔄 Refresh</button></div>'
+    + '<table><thead><tr><th>#</th><th>Patient</th><th>BMSH ID</th><th>For</th><th>Amount ₹</th><th>Department</th><th>Centre</th><th>Date</th><th>Action</th></tr></thead><tbody>'
+    + pending.map(function (pr, i) {
+      const canDel = !!(CURRENT_USER?.isAdmin) || isConsultationChargeEntry(pr) || !!pr.linkedInvestigationOrderId || /oct|hvf|biometry|fundus|topography|scan|cbc|blood|test|profile|urine|ecg|investigation/i.test(String(pr.for || pr.service || ''));
+      return '<tr>'
+        + '<td>' + (i + 1) + '</td>'
+        + '<td style="font-weight:800">' + esc(pr.patient || '—') + '</td>'
+        + '<td style="font-family:var(--mono);font-size:10px">' + esc(pr.bmhId || '—') + '</td>'
+        + '<td>' + esc(pr.for || pr.service || pr.desc || '—') + '</td>'
+        + '<td style="font-weight:900;color:var(--orange)">₹' + (parseFloat(pr.amount) || 0).toLocaleString('en-IN') + '</td>'
+        + '<td>' + esc(deptLabel(pr.dept)) + '</td>'
+        + '<td><span class="badge ' + (normalizeAppointmentCentreValue(pr.centre || 'CHD') === 'RPR' ? 'bd-orange' : 'bd-blue') + '">' + esc(normalizeAppointmentCentreValue(pr.centre || 'CHD')) + '</span></td>'
+        + '<td style="font-size:10.5px">' + esc(formatDateIN(pr.date || pr.createdAt || '') || '—') + '</td>'
+        + '<td><button class="btn btn-xs btn-gray" onclick="deletePayRequest(\'' + String(pr.id).replace(/'/g, '') + '\');generatePendingDuesReport()" title="Delete due">🗑️ Delete</button></td>'
+        + '</tr>';
+    }).join('')
+    + '</tbody></table></div>';
+}
+window.generatePendingDuesReport = generatePendingDuesReport;
 
 function populateReferralDoctorDatalist() {
   renderReferralDoctorPicker();
@@ -22936,9 +22981,10 @@ function getReferralReportRows() {
   const toVal = document.getElementById('rep-ref-to')?.value || '';
   const deptFilter = document.getElementById('rep-ref-dept')?.value || '';
   const doctorFilter = getSelectedReferralDoctors();
-  const centreFilter = (CURRENT_USER?.isAdmin || CURRENT_USER?.canSeeAllCentres)
+  const repRefCentre = document.getElementById('rep-centre')?.value || '';
+  const centreFilter = repRefCentre || ((CURRENT_USER?.isAdmin || CURRENT_USER?.canSeeAllCentres)
     ? ''
-    : normalizeAppointmentCentreValue((typeof getEffectiveCentre === 'function' ? getEffectiveCentre() : (CURRENT_USER?.centre || 'CHD')) || 'CHD');
+    : normalizeAppointmentCentreValue((typeof getEffectiveCentre === 'function' ? getEffectiveCentre() : (CURRENT_USER?.centre || 'CHD')) || 'CHD'));
   const inRange = function (value) {
     const key = localDateKey(value);
     if (!key) return !fromVal && !toVal;
@@ -23339,7 +23385,7 @@ function addInvestigationOrder(mode) {
   const orderMode = mode === 'send' ? 'send' : 'advise';
   const orders = getCurrentPatientInvestigationOrders();
   const orderId = 'INV' + Date.now();
-  orders.push({id:orderId, name, notes, mode: orderMode, date: new Date().toLocaleDateString('en-IN'), done: false, patient: pt.name, bmhId: pt.bmhId, dept: pt.dept || 'ophtho', centre: pt.centre || CURRENT_USER?.centre || 'CHD'});
+  orders.push({id:orderId, name, notes, mode: orderMode, date: new Date().toISOString(), done: false, patient: pt.name, bmhId: pt.bmhId, dept: pt.dept || 'ophtho', centre: pt.centre || CURRENT_USER?.centre || 'CHD', orderedBy: CURRENT_USER?.name || ''});
   syncCurrentPatientInvestigationOrders();
   persistCurrentPatientInvestigationOrders();
   renderInvestigationOrders();
