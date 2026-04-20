@@ -37,7 +37,9 @@
     .dq-queue-main .rc-queue-table th { font-size:11px; }
     .dq-queue-main .ptab { font-size:13px; }
     .tb-dept-jump {
-      min-width:180px;
+      width:auto;
+      min-width:0;
+      max-width:fit-content;
       padding:8px 10px;
       border:1.5px solid rgba(255,255,255,.28);
       border-radius:10px;
@@ -491,7 +493,6 @@
     <div class="tb-title" id="ptitle">Dashboard</div>
     <div class="cp-pill" id="tb-cp">📍 Chandigarh</div>
     <select id="tb-dept-jump" class="tb-dept-jump" onchange="handleTopbarDeptChange()">
-      <option value="doctor-queue">Patient Queue</option>
       <option value="ophtho">Ophthalmology</option>
       <option value="obg">OBG</option>
       <option value="psych">Neuropsychiatry</option>

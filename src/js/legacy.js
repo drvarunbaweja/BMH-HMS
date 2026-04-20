@@ -2582,7 +2582,16 @@ function syncTopbarHeaderForPage(pageKey) {
   }
   if (deptEl) {
     deptEl.style.display = isClinical ? '' : 'none';
-    if (isClinical && deptEl.value !== pageKey) deptEl.value = pageKey;
+    if (isClinical) {
+      const activeQueueDept = String(
+        window._pendingTopbarQueueDept
+        || document.getElementById('dq-admin-dept-filter')?.value
+        || normalizeDeptKeyForQueue(CURRENT_USER?.dept || '')
+        || 'ophtho'
+      ).trim().toLowerCase();
+      const nextDeptValue = pageKey === 'doctor-queue' ? activeQueueDept : pageKey;
+      if (nextDeptValue && deptEl.value !== nextDeptValue) deptEl.value = nextDeptValue;
+    }
   }
   if (searchEl) {
     searchEl.placeholder = isClinical
@@ -2601,9 +2610,12 @@ function syncTopbarHeaderForPage(pageKey) {
 }
 function handleTopbarDeptChange() {
   const deptEl = document.getElementById('tb-dept-jump');
-  const nextPage = String(deptEl?.value || '').trim();
-  if (!nextPage) return;
-  nav(nextPage, null);
+  const nextDept = String(deptEl?.value || '').trim().toLowerCase();
+  if (!nextDept) return;
+  window._pendingTopbarQueueDept = nextDept;
+  const queueDeptEl = document.getElementById('dq-admin-dept-filter');
+  if (queueDeptEl) queueDeptEl.value = nextDept;
+  nav('doctor-queue', null);
 }
 window.handleTopbarDeptChange = handleTopbarDeptChange;
 function handleTopbarSearchInput() {
