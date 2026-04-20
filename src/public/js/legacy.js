@@ -9660,6 +9660,32 @@ function bmhQuickAddCharge(name, amount, cat) {
   showToast(name + ' added to bill ✓', 's');
 }
 window.bmhQuickAddCharge = bmhQuickAddCharge;
+window._bmhQuickChargeOpenPanels = window._bmhQuickChargeOpenPanels || {};
+function bmhQuickChargePanelKey(key) {
+  return String(key || '').trim().toLowerCase();
+}
+function bmhIsQuickChargePanelOpen(key) {
+  return !!window._bmhQuickChargeOpenPanels[bmhQuickChargePanelKey(key)];
+}
+function bmhSetQuickChargePanelOpen(key, open) {
+  const safeKey = bmhQuickChargePanelKey(key);
+  if (!safeKey) return;
+  if (open) window._bmhQuickChargeOpenPanels[safeKey] = true;
+  else delete window._bmhQuickChargeOpenPanels[safeKey];
+}
+function bmhToggleQuickChargePanel(event, key) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  const details = event && event.currentTarget && event.currentTarget.closest
+    ? event.currentTarget.closest('details')
+    : null;
+  const nextOpen = details ? !details.open : !bmhIsQuickChargePanelOpen(key);
+  bmhSetQuickChargePanelOpen(key, nextOpen);
+  if (details) details.open = nextOpen;
+}
+window.bmhToggleQuickChargePanel = bmhToggleQuickChargePanel;
 function bmhRenderQuickChargePanels() {
   const el = document.getElementById('bmh-quick-charge-panels');
   if (!el) return;
@@ -9697,13 +9723,16 @@ function bmhRenderQuickChargePanels() {
       </div>
     </div>` : '';
   const groupedHtml = bmhQuickChargeGroupedItems().map(function (group) {
+    const groupPanelKey = 'group:' + group.heading;
+    const groupPanelArg = String(groupPanelKey).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    const groupOpenAttr = bmhIsQuickChargePanelOpen(groupPanelKey) ? ' open' : '';
     const rows = group.children.map(function (item) {
       const amount = item[centre?.toLowerCase?.()] ?? item[centre] ?? item.chd ?? 0;
       const title = String(item.name || '');
       return `<button type="button" class="btn btn-xs btn-outline" style="display:flex;justify-content:space-between;gap:8px;width:100%;margin-bottom:6px;padding:8px 10px;border-radius:8px;text-align:left;background:#fff" onclick="bmhQuickAddCharge('${String(title).replace(/'/g, "\\'")}', ${Number(amount) || 0}, '${item.kind || 'procedure'}')"><span style="font-size:11.5px;font-weight:800;line-height:1.3">${title}</span><span style="font-size:11.5px;font-weight:900;color:var(--bmh-blue);white-space:nowrap">₹${(Number(amount) || 0).toLocaleString('en-IN')}</span></button>`;
     }).join('');
-    return `<details style="margin-bottom:10px;background:#fff;border:1px solid var(--g5);border-radius:10px;padding:0 10px 8px">
-      <summary style="cursor:pointer;list-style:none;padding:10px 0;font-size:12px;font-weight:900;color:var(--bmh-blue)">${group.heading}</summary>
+    return `<details${groupOpenAttr} style="margin-bottom:10px;background:#fff;border:1px solid var(--g5);border-radius:10px;padding:0 10px 8px">
+      <summary style="cursor:pointer;list-style:none;padding:10px 0;font-size:12px;font-weight:900;color:var(--bmh-blue)" onclick="bmhToggleQuickChargePanel(event, '${groupPanelArg}')">${group.heading}</summary>
       <div style="padding-top:2px">${rows}</div>
     </details>`;
   }).join('');
@@ -9715,7 +9744,9 @@ function bmhRenderQuickChargePanels() {
     const amount = item[centre?.toLowerCase?.()] ?? item[centre] ?? item.chd ?? 0;
     return cardHtml(item, amount, 'diagnostic', '#f8fafc');
   }).join('') : '<div style="font-size:12px;color:var(--g1)">No lab-style charges for this department filter.</div>';
-  const expandedCatalog = '<details style="margin-top:12px;background:var(--g6);border:1px solid var(--g5);border-radius:10px;padding:8px 10px"><summary style="cursor:pointer;font-size:12px;font-weight:900;color:var(--bmh-blue)">Investigations &amp; lab catalogue</summary><div style="margin-top:8px;font-size:10.5px;color:var(--g1);margin-bottom:8px">Hidden from the main grid above. Use department buttons (Eye / OBG / …) to load another department&apos;s investigation tariffs.</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px">' + labGrid + '</div></details>';
+  const labPanelKey = 'catalog:lab';
+  const labPanelArg = String(labPanelKey).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  const expandedCatalog = '<details' + (bmhIsQuickChargePanelOpen(labPanelKey) ? ' open' : '') + ' style="margin-top:12px;background:var(--g6);border:1px solid var(--g5);border-radius:10px;padding:8px 10px"><summary style="cursor:pointer;font-size:12px;font-weight:900;color:var(--bmh-blue)" onclick="bmhToggleQuickChargePanel(event, \'' + labPanelArg + '\')">Investigations &amp; lab catalogue</summary><div style="margin-top:8px;font-size:10.5px;color:var(--g1);margin-bottom:8px">Hidden from the main grid above. Use department buttons (Eye / OBG / …) to load another department&apos;s investigation tariffs.</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px">' + labGrid + '</div></details>';
   el.innerHTML = searchHtml + groupedHtml + expandedCatalog + groups.map(group => {
     const items = group.items.map(item => {
       const amount = item[centre?.toLowerCase?.()] ?? item[centre] ?? item.chd ?? 0;
