@@ -354,7 +354,7 @@ function getStructuredConsentDept(key) {
 function otProcedureBelongsToCaseKind(text, kind) {
   const val = String(text || '').toLowerCase();
   if (!val) return kind !== 'obg';
-  const looksObg = /lscs|caes|cesare|delivery|labour|mtp|suction|evacuat|abortion|iucd|cu-t|obg|gynae|hyster|lapar|ovarian|fibroid|cyst/.test(val);
+  const looksObg = /lscs|caes|cesare|delivery|labour|mtp|suction|evacuat|abortion|terminat|pregnan|iucd|cu-t|obg|gynae|hyster|lapar|ovarian|fibroid|cyst/.test(val);
   if (kind === 'obg') return looksObg;
   return !looksObg;
 }
@@ -21669,9 +21669,9 @@ function printOTNotes() {
       <div class="field"><div class="field-lbl">Pre-op Diagnosis</div><div class="field-val">${get('ot-preop-dx')}</div></div>
       <div class="field"><div class="field-lbl">Post-op Diagnosis</div><div class="field-val">${get('ot-postop-dx')}</div></div>
       <div class="field"><div class="field-lbl">Procedure Performed</div><div class="field-val">${get('ot-procedure')}</div></div>
-      <div class="field"><div class="field-lbl">Implant / IOL</div><div class="field-val">${get('ot-implant')}</div></div>
+      ${get('ot-implant') ? `<div class="field"><div class="field-lbl">Implant / IOL</div><div class="field-val">${get('ot-implant')}</div></div>` : ''}
       <div class="field"><div class="field-lbl">Anaesthesia</div><div class="field-val">${get('ot-anaes-type')}</div></div>
-      <div class="field"><div class="field-lbl">Anaesthesiologist</div><div class="field-val">${get('ot-anaes-dr')||'—'}</div></div>
+      ${get('ot-anaes-dr') ? `<div class="field"><div class="field-lbl">Anaesthesiologist</div><div class="field-val">${get('ot-anaes-dr')}</div></div>` : ''}
       <div class="field"><div class="field-lbl">Complications</div><div class="field-val" style="color:${get('ot-complications')&&get('ot-complications')!=='None'?'#FF3B30':'#1a8c3c'}">${get('ot-complications')||'None'}</div></div>
       <div class="field"><div class="field-lbl">Blood Loss</div><div class="field-val">${document.getElementById('ot-blood-loss')?.value||'Minimal'}</div></div>
     </div>
@@ -21698,24 +21698,18 @@ function printOTNotes() {
     <div class="sec-title">OT Team</div>
     <div class="grid3">
       <div class="field"><div class="field-lbl">Surgeon</div><div class="field-val">${document.getElementById('ot-notes-surgeon')?.value||''}</div></div>
-      <div class="field"><div class="field-lbl">Scrub Nurse</div><div class="field-val">${document.getElementById('ot-scrub-nurse')?.value||c?.scrubNurse||''}</div></div>
-      <div class="field"><div class="field-lbl">Circulating Nurse</div><div class="field-val">${document.getElementById('ot-circ-nurse')?.value||c?.circNurse||''}</div></div>
+      ${(document.getElementById('ot-scrub-nurse')?.value||c?.scrubNurse) ? `<div class="field"><div class="field-lbl">Scrub Nurse</div><div class="field-val">${document.getElementById('ot-scrub-nurse')?.value||c?.scrubNurse||''}</div></div>` : ''}
+      ${(document.getElementById('ot-circ-nurse')?.value||c?.circNurse) ? `<div class="field"><div class="field-lbl">Circulating Nurse</div><div class="field-val">${document.getElementById('ot-circ-nurse')?.value||c?.circNurse||''}</div></div>` : ''}
     </div>
   </div>
 
-  <div class="section">
-    <div class="sec-title">Operative Findings</div>
-    <div style="font-size:12px;line-height:1.8;min-height:40px">${get('ot-findings')}</div>
-  </div>
+  ${get('ot-findings') ? `<div class="section"><div class="sec-title">Operative Findings</div><div style="font-size:12px;line-height:1.8">${get('ot-findings')}</div></div>` : ''}
 
-  <div class="section">
-    <div class="sec-title">Operative Narrative</div>
-    <div style="font-size:12px;line-height:1.9;min-height:80px">${get('ot-narrative')}</div>
-  </div>
+  ${get('ot-narrative') ? `<div class="section"><div class="sec-title">Operative Narrative</div><div style="font-size:12px;line-height:1.9">${get('ot-narrative')}</div></div>` : ''}
 
   <div class="section">
     <div class="sec-title">Post-op Instructions</div>
-    <div style="font-size:12px;line-height:1.8;min-height:40px">${document.getElementById('ot-notes')?.value||'Standard post-op care.'}</div>
+    <div style="font-size:12px;line-height:1.8">${document.getElementById('ot-notes')?.value||'Standard post-op care.'}</div>
   </div>
 
   <div class="section">
@@ -29028,11 +29022,16 @@ function buildObgDischargeA4LayoutPrintHtml(snap, data, colorPrint) {
   const meds = (snap && Array.isArray(snap.medicines) ? snap.medicines : []).filter(function (row) { return String(row?.name || '').trim(); });
   const instructions = (snap && Array.isArray(snap.instructions) ? snap.instructions : []).filter(Boolean);
   const followups = (snap && Array.isArray(snap.followups) ? snap.followups : []).filter(Boolean);
+  const isDeliveryCase = /lscs|delivery|normal|assisted|caes/i.test(String(ctx.modeOfDelivery || ctx.procedure || ''));
+  const hasVal = function (v) { return v && v !== '—'; };
   const row = function (label, value) {
     return '<div style="border:1px solid #e6dbe0;border-radius:10px;padding:8px 10px;background:#fff">'
       + '<div style="font-size:8.5px;font-weight:900;color:#7b6a72;text-transform:uppercase;letter-spacing:.45px">' + esc(label) + '</div>'
       + '<div style="font-size:11px;font-weight:800;line-height:1.45;color:#151515;margin-top:3px">' + esc(value || '—') + '</div>'
       + '</div>';
+  };
+  const rowIf = function (label, value) {
+    return hasVal(value) ? row(label, value) : '';
   };
   const medRows = meds.map(function (med, idx) {
     const timings = Array.isArray(med.activeTimes) && med.activeTimes.length ? med.activeTimes.join(' · ') : (med.freq || '—');
@@ -29044,6 +29043,10 @@ function buildObgDischargeA4LayoutPrintHtml(snap, data, colorPrint) {
   const instructionRows = instructions.map(function (line) {
     return '<div style="margin-bottom:5px">• ' + esc(line) + '</div>';
   }).join('');
+  const deliveryDateStr = [ctx.deliveryDate ? formatDateIN(ctx.deliveryDate) : '', ctx.deliveryTime].filter(Boolean).join(' · ');
+  const rightPanelExtra = isDeliveryCase
+    ? '<div style="font-size:10px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.45px;margin:10px 0 6px">Baby Outcome</div><div style="font-size:10.5px;line-height:1.65;color:#5a4630">' + esc(ctx.baby) + '</div>'
+    : '';
   return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>@page{size:A4;margin:7mm}body{font-family:Georgia,\"Times New Roman\",serif;color:#111;margin:0;padding:0;background:#fff}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>'
     + '<div style="border:1px solid #d8cdd2;border-radius:14px;overflow:hidden">'
     + buildDischargePrintHeaderHtml(data.ptId || '—', formatDateIN(data.dischargeDate || new Date()), colorPrint)
@@ -29052,20 +29055,20 @@ function buildObgDischargeA4LayoutPrintHtml(snap, data, colorPrint) {
     + row('Patient Name', data.ptNm || '—')
     + row('BMSH ID', data.ptId || '—')
     + row('Age / Sex', (data.ptObj?.age || '—') + ' / ' + (data.ptObj?.sex || '—'))
-    + row('GPAL', ctx.gpal)
-    + row('Gestation Age', ctx.ga)
-    + row('Blood Group', ctx.bloodGroup)
+    + rowIf('GPAL', ctx.gpal)
+    + rowIf('Gestation Age', ctx.ga)
+    + rowIf('Blood Group', ctx.bloodGroup)
     + row('Procedure', ctx.procedure)
-    + row('Mode of Delivery', ctx.modeOfDelivery)
+    + (isDeliveryCase ? row('Mode of Delivery', ctx.modeOfDelivery) : '')
     + row('Indication', ctx.indication)
-    + row('Delivery Date / Time', [ctx.deliveryDate ? formatDateIN(ctx.deliveryDate) : '', ctx.deliveryTime].filter(Boolean).join(' · ') || '—')
-    + row('Delivery Location', ctx.deliveryLocation)
+    + (isDeliveryCase ? rowIf('Delivery Date / Time', deliveryDateStr) : '')
+    + (isDeliveryCase ? rowIf('Delivery Location', ctx.deliveryLocation) : '')
     + row('Consultant', surgeonName)
-    + row('Fetal Details', ctx.fetal)
-    + row('Liquor / Membranes', ctx.liquor)
-    + row('Mother Status', ctx.mother)
+    + (isDeliveryCase ? rowIf('Fetal Details', ctx.fetal) : '')
+    + (isDeliveryCase ? rowIf('Liquor / Membranes', ctx.liquor) : '')
+    + rowIf('Mother Status', ctx.mother)
     + '</div>'
-    + '<div style="display:grid;grid-template-columns:1.1fr .9fr;gap:10px;margin-top:10px"><div style="border:1px solid #e6dbe0;border-radius:12px;padding:10px 12px;background:#fff"><div style="font-size:10px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.45px;margin-bottom:6px">Obstetric Course</div><div style="font-size:11.1px;line-height:1.75;color:#1d1d1d">' + esc(ctx.obstetricCourse) + '</div><div style="font-size:10px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.45px;margin:10px 0 6px">Discharge Summary</div><div style="font-size:11.1px;line-height:1.75;color:#1d1d1d">' + esc(ctx.summary) + '</div></div><div style="border:1px solid #efe3d0;border-radius:12px;padding:10px 12px;background:#fffaf3"><div style="font-size:10px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.45px;margin-bottom:6px">Investigations</div><div style="font-size:10.5px;line-height:1.65;color:#5a4630">' + (ctx.investigations.length ? ctx.investigations.map(function (item) { return '<div>• ' + esc(item) + '</div>'; }).join('') : '<div>• Routine investigation details documented in the case sheet</div>') + '</div><div style="font-size:10px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.45px;margin:10px 0 6px">Baby Outcome</div><div style="font-size:10.5px;line-height:1.65;color:#5a4630">' + esc(ctx.baby) + '</div><div style="font-size:10px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.45px;margin:10px 0 6px">Blood / Anaesthesia Notes</div><div style="font-size:10.5px;line-height:1.65;color:#5a4630">' + esc([ctx.blood, ctx.anaesNote].filter(Boolean).join(' | ')) + '</div></div></div>'
+    + '<div style="display:grid;grid-template-columns:1.1fr .9fr;gap:10px;margin-top:10px"><div style="border:1px solid #e6dbe0;border-radius:12px;padding:10px 12px;background:#fff"><div style="font-size:10px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.45px;margin-bottom:6px">Obstetric Course</div><div style="font-size:11.1px;line-height:1.75;color:#1d1d1d">' + esc(ctx.obstetricCourse) + '</div><div style="font-size:10px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.45px;margin:10px 0 6px">Discharge Summary</div><div style="font-size:11.1px;line-height:1.75;color:#1d1d1d">' + esc(ctx.summary) + '</div></div><div style="border:1px solid #efe3d0;border-radius:12px;padding:10px 12px;background:#fffaf3"><div style="font-size:10px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.45px;margin-bottom:6px">Investigations</div><div style="font-size:10.5px;line-height:1.65;color:#5a4630">' + (ctx.investigations.length ? ctx.investigations.map(function (item) { return '<div>• ' + esc(item) + '</div>'; }).join('') : '<div>• Routine investigation details documented in the case sheet</div>') + '</div>' + rightPanelExtra + '<div style="font-size:10px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.45px;margin:10px 0 6px">Blood / Anaesthesia Notes</div><div style="font-size:10.5px;line-height:1.65;color:#5a4630">' + esc([ctx.blood, ctx.anaesNote].filter(function (v) { return hasVal(v); }).join(' | ') || '—') + '</div></div></div>'
     + (medRows ? '<div style="margin-top:10px;border:1px solid #e6dbe0;border-radius:12px;overflow:hidden"><div style="padding:8px 12px;background:#f9f2f4;font-size:10px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.45px">Medicines</div><table style="width:100%;border-collapse:collapse"><thead><tr style="background:#fcf8f9"><th style="border:1px solid #dfd6db;padding:6px 8px;font-size:9px">#</th><th style="border:1px solid #dfd6db;padding:6px 8px;font-size:9px">Medicine</th><th style="border:1px solid #dfd6db;padding:6px 8px;font-size:9px">Timing / Frequency</th><th style="border:1px solid #dfd6db;padding:6px 8px;font-size:9px">Duration</th></tr></thead><tbody>' + medRows + '</tbody></table></div>' : '')
     + (instructionRows ? '<div style="margin-top:10px;border:1px solid #efe3d0;border-radius:12px;padding:10px 12px;background:#fffaf3"><div style="font-size:10px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.45px;margin-bottom:6px">Discharge Advice</div><div style="font-size:10.8px;line-height:1.7;color:#5a4630">' + instructionRows + '</div></div>' : '')
     + (followupRows ? '<div style="margin-top:10px"><div style="font-size:10px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.45px;margin-bottom:4px">Follow-up</div>' + followupRows + '</div>' : '')
