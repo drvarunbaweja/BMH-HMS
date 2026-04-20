@@ -26783,25 +26783,28 @@ td.left{text-align:left}
 tr:nth-child(even) td{background:#f6f6f6}
 .flag-h{font-weight:700;color:#111;text-decoration:underline}
 .flag-n{color:#444}
-/* OE medicine table */
-.rx-oe-name{font-family:'Playfair Display','Georgia',serif;font-weight:700;font-size:10.5px;color:#111}
-.rx-oe-gen{font-size:8.5px;color:#666;font-style:italic;margin-top:1px}
-/* List-format medicines */
-.rx-list{display:flex;flex-direction:column;gap:4px;margin-bottom:5px}
-.rx-item{padding:4px 8px;border-left:2px solid #555}
-.rx-item-name{font-family:'Playfair Display','Georgia',serif;font-size:12.5px;font-weight:700;color:#111}
-.rx-item-gen{font-size:9px;color:#666;font-style:italic}
-.rx-item-details{font-size:10px;color:#333;margin-top:1px}
-.rx-item-instr{font-size:9.5px;color:#444;font-style:italic;margin-top:2px;padding-left:8px;border-left:2px solid #bbb;line-height:1.4}
+/* Medicine list — all depts */
+.rx-list{display:flex;flex-direction:column;gap:0;margin-bottom:5px}
+.rx-item{padding:5px 0 6px 0;border-bottom:1px solid #e8e8e8}
+.rx-item:last-child{border-bottom:none;padding-bottom:0}
+.rx-item-num{font-size:9px;font-weight:900;color:#999;letter-spacing:.4px;margin-bottom:1px}
+.rx-item-name{font-family:'Playfair Display','Georgia',serif;font-size:13px;font-weight:700;color:#111;display:block;line-height:1.2}
+.rx-item-gen{font-size:9px;color:#888;font-style:italic;display:block;margin-bottom:3px}
+.rx-item-details{display:flex;flex-wrap:wrap;gap:0 12px;margin:2px 0 3px;align-items:center}
+.rx-detail-item{display:flex;align-items:center;gap:4px;font-size:9.5px;color:#444}
+.rx-detail-dot{width:3px;height:3px;border-radius:50%;background:#aaa;flex-shrink:0}
+.rx-item-instr{font-size:9.5px;color:#555;font-style:italic;line-height:1.45;padding-left:9px;border-left:2px solid #ccc;margin-top:2px}
 /* Taper card */
-.taper-card{margin:3px 0 4px;border:1px solid #bbb;border-radius:3px;overflow:hidden;font-size:9.5px}
-.taper-card-hdr{background:#222;color:#fff;padding:3px 8px;font-size:8.5px;font-weight:700;letter-spacing:.5px}
-.taper-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:0}
-.taper-step{border-right:1px solid #ddd;border-bottom:1px solid #ddd;padding:3px 6px}
-.taper-step:nth-child(3n){border-right:none}
-.taper-step-period{font-size:8.5px;font-weight:700;color:#333;text-transform:uppercase;letter-spacing:.4px}
-.taper-step-dose{font-size:10px;color:#111;margin-top:1px}
-.taper-step-instr{font-size:8.5px;color:#555;font-style:italic;margin-top:1px;line-height:1.3}
+.taper-card{margin:4px 0 5px;border:1.5px solid #333;border-radius:4px;overflow:hidden;font-size:9.5px}
+.taper-card-hdr{background:#222;color:#fff;padding:5px 10px;font-size:8.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase}
+.taper-steps-row{display:flex;align-items:stretch;background:#fafafa}
+.taper-step{flex:1;padding:6px 8px;text-align:center;border-right:1px solid #e0e0e0}
+.taper-step:last-child{border-right:none}
+.taper-step-period{font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#666;margin-bottom:3px}
+.taper-step-dose{font-family:'Playfair Display','Georgia',serif;font-size:15px;font-weight:700;color:#111;line-height:1;margin-bottom:2px}
+.taper-step-timing{font-size:9px;color:#555;font-weight:700;margin-bottom:2px}
+.taper-step-instr{font-size:8.5px;color:#666;font-style:italic;line-height:1.35;margin-top:2px}
+.taper-arrow{display:flex;align-items:center;justify-content:center;color:#aaa;font-size:14px;padding:0 2px;flex-shrink:0}
 /* Procedures */
 .proc-item{padding:3px 0;font-size:11px;font-weight:800;border-bottom:1px solid #eee;display:flex;align-items:center;gap:6px}
 /* Investigations */
@@ -26921,90 +26924,48 @@ ${incPos && deptId==='oe' ? `
 
 ${incRxFinal && drugs.length ? `<div class="sec-divider"><span class="sec-label">Medicine (Rx)</span></div>` : ''}
 
-${incRxFinal && drugs.length && deptId === 'oe' && rxPrintMode !== 'plain_only' ? (() => {
-  const showRxRoute = true;
-  const rxColSpan = 9;
-  return `<table>
-  <thead><tr><th>#</th><th class="left">Name</th><th>Form</th><th>Route / Eye</th><th>Frequency</th><th>Timings</th><th>Duration</th><th>From</th><th>To</th></tr></thead>
-  <tbody>
-    ${drugs.map((d,i)=>{
-      const trade = (typeof rxDrugTradeName === 'function' ? rxDrugTradeName(d) : (d.brand||d.trade||'')) || '—';
-      const gen = (typeof rxDrugGenericName === 'function' ? rxDrugGenericName(d) : (d.name||d.generic||'')) || '—';
-      const form = d.drugType || d.type || '—';
-      const route = (d.eye && d.eye[0]) || '—';
-      const timings = getRxTimingsText(d);
-      const plainLine = buildRxPlainInstructionLine(d, rxPlainLang, fmtIN);
-      const taperRows = Array.isArray(d.taperRows) ? d.taperRows : (d.taperRow ? [d.taperRow] : []);
-      let rows = `<tr>
-        <td style="font-weight:700;color:#333">${i+1}</td>
-        <td class="left"><div class="rx-oe-name">${trade}</div><div class="rx-oe-gen">${gen}</div></td>
-        <td>${form}</td>
-        <td>${route}</td>
-        <td>${d.freq||'—'}</td>
-        <td>${timings}</td>
-        <td>${d.dur||'—'}</td>
-        <td>${fmtIN(d.dateFrom)}</td>
-        <td>${fmtIN(d.dateTo)}</td>
-      </tr>`;
-      if (plainLine && rxPrintMode === 'both') {
-        rows += `<tr class="oe-plain-row"><td class="left" colspan="${rxColSpan}" style="padding:4px 8px;line-height:1.45"><div style="padding-left:6px">${escapeHtmlConsent(plainLine)}</div></td></tr>`;
-      }
-      taperRows.forEach((tap) => {
-        const taperData = { ...d, freq: tap.freq, dur: tap.dur, dateFrom: tap.dateFrom, dateTo: tap.dateTo, activeTimes: tap.activeTimes || tap.times || [], taperRows: [] };
-        const taperLine = buildRxTaperSummaryLine(taperData, rxPlainLang, fmtIN);
-        const taperTimings = getRxTimingsText(tap);
-        rows += `<tr style="background:#f5f5f5">
-          <td style="font-weight:700;color:#555">&#8627;</td>
-          <td class="left"><div class="rx-oe-gen" style="font-style:normal;font-size:9px;color:#555">taper</div></td>
-          <td>${form}</td>
-          <td>${route}</td>
-          <td>${rxFreqPlain(tap.freq, rxPlainLang)||'—'}</td>
-          <td>${taperTimings}</td>
-          <td>${rxDurationPlain(tap.dur, rxPlainLang)||'—'}</td>
-          <td>${fmtIN(tap.dateFrom)}</td>
-          <td>${fmtIN(tap.dateTo)}</td>
-        </tr>`;
-        if (taperLine && rxPrintMode === 'both') {
-          rows += `<tr class="oe-plain-row"><td class="left" colspan="${rxColSpan}" style="padding:3px 8px;line-height:1.4"><div style="padding-left:6px">${escapeHtmlConsent(taperLine)}</div></td></tr>`;
-        }
-      });
-      return rows;
-    }).join('')}
-  </tbody>
-</table>`;
-})() : ''}
-
-${incRxFinal && drugs.length && deptId !== 'oe' && rxPrintMode !== 'plain_only' ? (() => {
+${incRxFinal && drugs.length && rxPrintMode !== 'plain_only' ? (() => {
   return `<div class="rx-list">
   ${drugs.map((d,i)=>{
     const trade = (typeof rxDrugTradeName === 'function' ? rxDrugTradeName(d) : (d.brand||d.trade||'')) || '—';
     const gen = (typeof rxDrugGenericName === 'function' ? rxDrugGenericName(d) : (d.name||d.generic||'')) || '—';
     const form = d.drugType || d.type || '';
+    const route = deptId === 'oe' ? (Array.isArray(d.eye) ? d.eye[0] : d.eye) || '' : '';
     const timings = getRxTimingsText(d);
     const plainLine = buildRxPlainInstructionLine(d, rxPlainLang, fmtIN);
     const taperRows = Array.isArray(d.taperRows) ? d.taperRows : (d.taperRow ? [d.taperRow] : []);
-    const detailParts = [d.freq, timings, d.dur, fmtIN(d.dateFrom)&&fmtIN(d.dateTo)?fmtIN(d.dateFrom)+' – '+fmtIN(d.dateTo):''].filter(Boolean);
+    const detailParts = [
+      d.freq || '',
+      timings || '',
+      route ? route : '',
+      d.dur || '',
+      (fmtIN(d.dateFrom) && fmtIN(d.dateTo)) ? fmtIN(d.dateFrom) + ' \u2013 ' + fmtIN(d.dateTo) : ''
+    ].filter(Boolean);
     let html2 = `<div class="rx-item">
-      <div><span style="font-size:10.5px;font-weight:700;color:#555;margin-right:4px">${i+1}.</span><span class="rx-item-name">${escapeHtmlConsent(trade)}</span>${gen&&gen!=='—'?` <span class="rx-item-gen">(${escapeHtmlConsent(gen)})</span>`:''}</div>
-      ${form?`<div style="font-size:9px;color:#888;margin-top:1px">${escapeHtmlConsent(form)}</div>`:''}
-      ${detailParts.length?`<div class="rx-item-details">${detailParts.map(p=>escapeHtmlConsent(p)).join(' &nbsp;·&nbsp; ')}</div>`:''}
-      ${plainLine&&(rxPrintMode==='both'||rxPrintMode==='plain')?`<div class="rx-item-instr">${escapeHtmlConsent(plainLine)}</div>`:''}
+      <div class="rx-item-num">${i+1}.</div>
+      <span class="rx-item-name">${escapeHtmlConsent(trade)}</span>
+      <span class="rx-item-gen">${gen && gen !== '—' ? escapeHtmlConsent(gen) : ''}${form ? (gen && gen !== '—' ? ' \u00b7 ' : '') + escapeHtmlConsent(form) : ''}</span>
+      ${detailParts.length ? `<div class="rx-item-details">${detailParts.map(p=>`<span class="rx-detail-item"><span class="rx-detail-dot"></span>${escapeHtmlConsent(p)}</span>`).join('')}</div>` : ''}
+      ${plainLine ? `<div class="rx-item-instr">${escapeHtmlConsent(plainLine)}</div>` : ''}
     </div>`;
     if (taperRows.length) {
-      const taperSteps = taperRows.map((tap,ti)=>{
+      const taperStepHtml = taperRows.map((tap,ti)=>{
         const taperData = { ...d, freq: tap.freq, dur: tap.dur, dateFrom: tap.dateFrom, dateTo: tap.dateTo, activeTimes: tap.activeTimes || tap.times || [], taperRows: [] };
         const taperLine2 = buildRxTaperSummaryLine(taperData, rxPlainLang, fmtIN);
         const tapTimings = getRxTimingsText(tap);
-        const tapDets = [rxFreqPlain(tap.freq,rxPlainLang), tapTimings, rxDurationPlain(tap.dur,rxPlainLang)].filter(Boolean).join(' · ');
+        const tapFreq = rxFreqPlain(tap.freq, rxPlainLang) || '';
+        const tapDur = rxDurationPlain(tap.dur, rxPlainLang) || '';
+        const arrow = ti < taperRows.length - 1 ? '<div class="taper-arrow">&#8594;</div>' : '';
         return `<div class="taper-step">
-          <div class="taper-step-period">Step ${ti+1}</div>
-          <div class="taper-step-dose">${tapDets||'—'}</div>
-          ${taperLine2?`<div class="taper-step-instr">${escapeHtmlConsent(taperLine2)}</div>`:''}
-        </div>`;
+          <div class="taper-step-period">Step ${ti+1}${tap.dateFrom && tap.dateTo ? ' &nbsp;\u00b7&nbsp; ' + fmtIN(tap.dateFrom) + '\u2013' + fmtIN(tap.dateTo) : ''}</div>
+          <div class="taper-step-dose">${tapFreq || '—'}</div>
+          <div class="taper-step-timing">${tapTimings || tapDur || ''}</div>
+          ${taperLine2 ? `<div class="taper-step-instr">${escapeHtmlConsent(taperLine2)}</div>` : ''}
+        </div>${arrow}`;
       }).join('');
       html2 += `<div class="taper-card">
-        <div class="taper-card-hdr">&#11015; TAPERING SCHEDULE &nbsp;—&nbsp; <em>${escapeHtmlConsent(trade)}</em></div>
-        <div class="taper-grid">${taperSteps}</div>
+        <div class="taper-card-hdr">&#11015; Tapering Schedule &nbsp;\u2014&nbsp; <em>${escapeHtmlConsent(trade)}</em></div>
+        <div class="taper-steps-row">${taperStepHtml}</div>
       </div>`;
     }
     return html2;
@@ -27016,27 +26977,34 @@ ${incRxFinal && drugs.length && rxPrintMode === 'plain_only' ? (() => {
   return `<div class="rx-list">
   ${drugs.map((d,i)=>{
     const trade = (typeof rxDrugTradeName === 'function' ? rxDrugTradeName(d) : (d.brand||d.trade||'')) || '—';
+    const gen = (typeof rxDrugGenericName === 'function' ? rxDrugGenericName(d) : (d.name||d.generic||'')) || '—';
+    const form = d.drugType || d.type || '';
     const plainLine = buildRxPlainInstructionLine(d, rxPlainLang, fmtIN);
     const taperRows = Array.isArray(d.taperRows) ? d.taperRows : (d.taperRow ? [d.taperRow] : []);
     let html3 = `<div class="rx-item">
-      <div><span style="font-size:10.5px;font-weight:700;color:#555;margin-right:4px">${i+1}.</span><span class="rx-item-name">${escapeHtmlConsent(trade)}</span></div>
-      ${plainLine?`<div class="rx-item-instr">${escapeHtmlConsent(plainLine)}</div>`:''}
+      <div class="rx-item-num">${i+1}.</div>
+      <span class="rx-item-name">${escapeHtmlConsent(trade)}</span>
+      <span class="rx-item-gen">${gen && gen !== '—' ? escapeHtmlConsent(gen) : ''}${form ? (gen && gen !== '—' ? ' \u00b7 ' : '') + escapeHtmlConsent(form) : ''}</span>
+      ${plainLine ? `<div class="rx-item-instr">${escapeHtmlConsent(plainLine)}</div>` : ''}
     </div>`;
     if (taperRows.length) {
-      const taperSteps = taperRows.map((tap,ti)=>{
+      const taperStepHtml = taperRows.map((tap,ti)=>{
         const taperData = { ...d, freq: tap.freq, dur: tap.dur, dateFrom: tap.dateFrom, dateTo: tap.dateTo, activeTimes: tap.activeTimes || tap.times || [], taperRows: [] };
         const taperLine3 = buildRxTaperSummaryLine(taperData, rxPlainLang, fmtIN);
         const tapTimings = getRxTimingsText(tap);
-        const tapDets = [rxFreqPlain(tap.freq,rxPlainLang), tapTimings, rxDurationPlain(tap.dur,rxPlainLang)].filter(Boolean).join(' · ');
+        const tapFreq = rxFreqPlain(tap.freq, rxPlainLang) || '';
+        const tapDur = rxDurationPlain(tap.dur, rxPlainLang) || '';
+        const arrow = ti < taperRows.length - 1 ? '<div class="taper-arrow">&#8594;</div>' : '';
         return `<div class="taper-step">
-          <div class="taper-step-period">Step ${ti+1}</div>
-          <div class="taper-step-dose">${tapDets||'—'}</div>
-          ${taperLine3?`<div class="taper-step-instr">${escapeHtmlConsent(taperLine3)}</div>`:''}
-        </div>`;
+          <div class="taper-step-period">Step ${ti+1}${tap.dateFrom && tap.dateTo ? ' \u00b7 ' + fmtIN(tap.dateFrom) + '\u2013' + fmtIN(tap.dateTo) : ''}</div>
+          <div class="taper-step-dose">${tapFreq || '—'}</div>
+          <div class="taper-step-timing">${tapTimings || tapDur || ''}</div>
+          ${taperLine3 ? `<div class="taper-step-instr">${escapeHtmlConsent(taperLine3)}</div>` : ''}
+        </div>${arrow}`;
       }).join('');
       html3 += `<div class="taper-card">
-        <div class="taper-card-hdr">&#11015; TAPERING SCHEDULE &nbsp;—&nbsp; <em>${escapeHtmlConsent(trade)}</em></div>
-        <div class="taper-grid">${taperSteps}</div>
+        <div class="taper-card-hdr">&#11015; Tapering Schedule \u2014 <em>${escapeHtmlConsent(trade)}</em></div>
+        <div class="taper-steps-row">${taperStepHtml}</div>
       </div>`;
     }
     return html3;
