@@ -2574,20 +2574,22 @@ function syncTopbarHeaderForPage(pageKey) {
     }
   }
 }
-window.handleTopbarDeptChange = function () {
+function handleTopbarDeptChange() {
   const deptEl = document.getElementById('tb-dept-jump');
   const nextPage = String(deptEl?.value || '').trim();
   if (!nextPage) return;
   nav(nextPage, null);
-};
-window.handleTopbarSearchInput = function () {
+}
+window.handleTopbarDeptChange = handleTopbarDeptChange;
+function handleTopbarSearchInput() {
   const searchEl = document.getElementById('tb-global-search');
   const query = String(searchEl?.value || '');
   const pageKey = getActivePageKey();
   window._pendingTopbarQueueSearch = query;
   if (pageKey === 'doctor-queue') syncTopbarQueueSearch(query, true);
-};
-window.handleTopbarSearchKeydown = function (ev) {
+}
+window.handleTopbarSearchInput = handleTopbarSearchInput;
+function handleTopbarSearchKeydown(ev) {
   if (!ev || ev.key !== 'Enter') return;
   const searchEl = document.getElementById('tb-global-search');
   const query = String(searchEl?.value || '');
@@ -2600,8 +2602,9 @@ window.handleTopbarSearchKeydown = function (ev) {
   if (['ophtho', 'obg', 'psych', 'skin'].indexOf(pageKey) >= 0) {
     nav('doctor-queue', null);
   }
-};
-window.openNewPatientDialog = function () {
+}
+window.handleTopbarSearchKeydown = handleTopbarSearchKeydown;
+function openNewPatientDialog() {
   const searchEl = document.getElementById('np-existing-search');
   const resultsEl = document.getElementById('np-existing-results');
   if (searchEl) searchEl.value = '';
@@ -2610,8 +2613,9 @@ window.openNewPatientDialog = function () {
     resultsEl.style.display = 'none';
   }
   openM('m-np');
-};
-window.searchNewPatientExistingRecord = function (rawQuery) {
+}
+window.openNewPatientDialog = openNewPatientDialog;
+function searchNewPatientExistingRecord(rawQuery) {
   const q = String(rawQuery || '').trim().toLowerCase();
   const resultsEl = document.getElementById('np-existing-results');
   if (!resultsEl) return;
@@ -2653,14 +2657,16 @@ window.searchNewPatientExistingRecord = function (rawQuery) {
     '</div>';
   }).join('');
   resultsEl.style.display = 'block';
-};
-window.useExistingPatientFromNewPatient = function (bmhId) {
+}
+window.searchNewPatientExistingRecord = searchNewPatientExistingRecord;
+function useExistingPatientFromNewPatient(bmhId) {
   closeM('m-np');
   nav('reception', null);
   setTimeout(function () {
     prefillExistingPatient(bmhId);
   }, 120);
-};
+}
+window.useExistingPatientFromNewPatient = useExistingPatientFromNewPatient;
 
 // ═══════════════════════════════════════
 // RENDERS
@@ -21179,18 +21185,24 @@ function lookupOTPatient(val) {
     const p=matches[0];
     el.innerHTML = `<div style="background:var(--green-lt);border-radius:8px;padding:9px;border-left:3px solid var(--green);display:flex;align-items:center;gap:9px">
       <div style="flex:1;font-size:12.5px"><strong>${p.name}</strong> · ${p.bmhId} · ${p.age||'?'}Y/${p.sex||''}</div>
-      <button class="btn btn-xs btn-gold" onclick="fillOTFromPatient('${p.bmhId}')">✅ Prefill</button>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-xs btn-gold" onclick="fillOTFromPatient('${p.bmhId}')">✅ Prefill</button>
+        <button class="btn btn-xs btn-outline" onclick="openPatient('${p.bmhId}')">Open</button>
+      </div>
     </div>`;
   } else if(matches.length>1) {
     el.innerHTML = `<div style="border:1.5px solid var(--blue);border-radius:8px;overflow:hidden">
       <div style="padding:5px 10px;background:var(--blue-lt);font-size:10px;font-weight:800;color:var(--blue)">${matches.length} patients found</div>
       ${matches.map(p=>`<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--g5)">
         <div style="flex:1;font-size:12px"><strong>${p.name}</strong> · ${p.bmhId} · ${p.age||'?'}Y/${(p.sex||'?')[0]}</div>
-        <button class="btn btn-xs btn-gold" onclick="fillOTFromPatient('${p.bmhId}')">Prefill</button>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn btn-xs btn-gold" onclick="fillOTFromPatient('${p.bmhId}')">Prefill</button>
+          <button class="btn btn-xs btn-outline" onclick="openPatient('${p.bmhId}')">Open</button>
+        </div>
       </div>`).join('')}
     </div>`;
   } else {
-    el.innerHTML = val.length>=4 ? '<div style="font-size:11px;color:var(--g1);padding:5px 8px;background:var(--g6);border-radius:6px">No patient found — check BMSH ID or phone</div>' : '';
+    el.innerHTML = val.length>=4 ? '<div style="font-size:11px;color:var(--g1);padding:8px;background:var(--g6);border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:8px"><span>No patient found — check BMSH ID or phone</span><button class="btn btn-xs btn-gold" onclick="openNewPatientDialog()">+ New Patient</button></div>' : '';
   }
 }
 function prefillOTLookupValue() {
