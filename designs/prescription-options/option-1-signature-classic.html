@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prescription Option 1 - Signature Classic</title>
+  <style>
+    :root{
+      --navy:#16355f;
+      --gold:#cb9b2f;
+      --ink:#1a1f2b;
+      --muted:#5e6a78;
+      --line:#dde3ea;
+      --paper:#fcfcfb;
+      --blue-wash:#eef4fa;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:#dbe5ef;font-family:Georgia,"Times New Roman",serif;color:var(--ink);padding:28px}
+    .page{
+      max-width:860px;
+      margin:0 auto;
+      background:var(--paper);
+      box-shadow:0 28px 80px rgba(20,32,51,.18);
+      border-radius:20px;
+      overflow:hidden;
+    }
+    .header img{width:100%;display:block}
+    .content{padding:26px 34px 28px}
+    .rx-title{
+      display:flex;
+      justify-content:space-between;
+      align-items:end;
+      gap:20px;
+      padding-bottom:14px;
+      border-bottom:2px solid var(--navy);
+    }
+    .rx-title h1{margin:0;font-size:36px;color:var(--navy);letter-spacing:.02em}
+    .rx-title p{margin:0;font-size:14px;color:var(--muted);font-family:Inter,system-ui,sans-serif}
+    .patient{
+      margin-top:18px;
+      display:grid;
+      grid-template-columns:2fr 1fr 1fr;
+      gap:14px;
+    }
+    .field{
+      background:var(--blue-wash);
+      border:1px solid var(--line);
+      border-radius:14px;
+      padding:12px 14px;
+    }
+    .label{
+      font:800 11px/1 Inter,system-ui,sans-serif;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+      color:var(--muted);
+      margin-bottom:8px;
+    }
+    .value{font:700 18px/1.2 Georgia,serif;color:var(--navy)}
+    .value.small{font:700 15px/1.35 Inter,system-ui,sans-serif;color:var(--ink)}
+    .section{margin-top:18px}
+    .section-head{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-bottom:10px;
+    }
+    .section-head h2{
+      margin:0;
+      font-size:14px;
+      color:var(--navy);
+      font-family:Inter,system-ui,sans-serif;
+      text-transform:uppercase;
+      letter-spacing:.12em;
+    }
+    .diag{
+      padding:14px 18px;
+      border:1px solid var(--line);
+      border-left:5px solid var(--gold);
+      border-radius:16px;
+      background:#fff;
+      font:700 18px/1.5 Georgia,serif;
+    }
+    .med{
+      border:1px solid var(--line);
+      border-radius:18px;
+      padding:16px 18px;
+      margin-bottom:12px;
+      background:#fff;
+    }
+    .med-top{
+      display:flex;
+      justify-content:space-between;
+      gap:20px;
+      align-items:start;
+    }
+    .name{
+      margin:0;
+      font-size:24px;
+      color:var(--navy);
+      line-height:1.1;
+    }
+    .generic{
+      margin-top:4px;
+      font:600 13px/1.4 Inter,system-ui,sans-serif;
+      color:var(--muted);
+    }
+    .dose{
+      text-align:right;
+      font:800 13px/1.4 Inter,system-ui,sans-serif;
+      color:#5d4b16;
+      background:#fbf2dc;
+      border:1px solid #ecd8a1;
+      border-radius:12px;
+      padding:9px 12px;
+      min-width:170px;
+    }
+    .sentence{
+      margin-top:12px;
+      padding:12px 14px;
+      border-radius:14px;
+      background:#f7f9fc;
+      font:700 17px/1.5 Georgia,serif;
+    }
+    .taper{
+      margin-top:12px;
+      border-radius:14px;
+      background:linear-gradient(180deg,#fff8e9 0%, #fff 100%);
+      border:1px solid #eed8a3;
+      padding:12px 14px;
+      font-family:Inter,system-ui,sans-serif;
+    }
+    .taper strong{display:block;color:#7d5400;font-size:12px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}
+    .taper-line{font-size:14px;line-height:1.55;color:#584a28}
+    .grid2{display:grid;grid-template-columns:1.2fr .8fr;gap:16px;margin-top:16px}
+    .panel{
+      border:1px solid var(--line);
+      border-radius:16px;
+      padding:16px;
+      background:#fff;
+    }
+    .panel ul{margin:0;padding-left:18px;font:600 14px/1.7 Inter,system-ui,sans-serif;color:#364152}
+    .next{
+      display:inline-block;
+      margin-top:12px;
+      padding:10px 14px;
+      border-radius:999px;
+      background:var(--navy);
+      color:#fff;
+      font:800 13px/1 Inter,system-ui,sans-serif;
+      letter-spacing:.06em;
+      text-transform:uppercase;
+    }
+    .sign{
+      margin-top:24px;
+      display:flex;
+      justify-content:space-between;
+      align-items:end;
+      border-top:1px solid var(--line);
+      padding-top:18px;
+      font-family:Inter,system-ui,sans-serif;
+    }
+    .doctor{
+      text-align:right;
+    }
+    .doctor .doc-name{font:700 22px/1.2 Georgia,serif;color:var(--navy)}
+    .doctor .meta{font:600 13px/1.5 Inter,system-ui,sans-serif;color:var(--muted)}
+    .back{
+      display:inline-block;
+      margin:18px auto 0;
+      text-decoration:none;
+      color:var(--navy);
+      font:700 14px/1 Inter,system-ui,sans-serif;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="header"><img src="../../src/public/assets/bmh-logo-discharge.jpg" alt="Hospital Header"></div>
+    <div class="content">
+      <div class="rx-title">
+        <div>
+          <h1>Prescription</h1>
+          <p>Elegant, premium, and still clinically clear</p>
+        </div>
+        <p>20 Apr 2026</p>
+      </div>
+
+      <div class="patient">
+        <div class="field"><div class="label">Patient</div><div class="value">Mrs. Ritu Sharma</div></div>
+        <div class="field"><div class="label">BMSH ID</div><div class="value small">461245</div></div>
+        <div class="field"><div class="label">Age / Sex</div><div class="value small">34 Y / F</div></div>
+      </div>
+
+      <div class="section">
+        <div class="section-head"><h2>Diagnosis</h2></div>
+        <div class="diag">Generalized Anxiety Disorder with insomnia</div>
+      </div>
+
+      <div class="section">
+        <div class="section-head"><h2>Medicines</h2><span class="label">Sentence-led instructions</span></div>
+
+        <div class="med">
+          <div class="med-top">
+            <div>
+              <h3 class="name">Escitalopram 10 mg</h3>
+              <div class="generic">Nexito / Feliz S • Tablet</div>
+            </div>
+            <div class="dose">Once daily<br>After breakfast<br>3 months</div>
+          </div>
+          <div class="sentence">Take one tablet after breakfast once a day from 20/04/2026 to 19/07/2026.</div>
+        </div>
+
+        <div class="med">
+          <div class="med-top">
+            <div>
+              <h3 class="name">Clonazepam 0.25 mg</h3>
+              <div class="generic">Clonotril • Tablet</div>
+            </div>
+            <div class="dose">At bedtime<br>2 weeks</div>
+          </div>
+          <div class="sentence">Take one tablet at bedtime once a day from 20/04/2026 to 03/05/2026.</div>
+          <div class="taper">
+            <strong>Taper plan</strong>
+            <div class="taper-line">Week 1: one tablet at bedtime daily.</div>
+            <div class="taper-line">Week 2: half tablet at bedtime daily, then stop.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="panel">
+          <div class="section-head"><h2>Instructions</h2></div>
+          <ul>
+            <li>Do not stop medicines suddenly without review.</li>
+            <li>Avoid alcohol and night driving if feeling drowsy.</li>
+            <li>Continue sleep hygiene and fixed wake-up timing.</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <div class="section-head"><h2>Follow Up</h2></div>
+          <div class="value small">Review after 14 days</div>
+          <div class="next">Next Visit: 04 May 2026</div>
+        </div>
+      </div>
+
+      <div class="sign">
+        <div class="meta">QR / digital verification can sit here</div>
+        <div class="doctor">
+          <div class="doc-name">Dr. Tarun Baweja</div>
+          <div class="meta">MD Psychiatry</div>
+          <div class="meta">Reg. No. 28451</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div style="text-align:center"><a class="back" href="./index.html">Back to design gallery</a></div>
+</body>
+</html>

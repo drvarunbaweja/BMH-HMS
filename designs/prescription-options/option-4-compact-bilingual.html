@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prescription Option 4 - Compact Bilingual</title>
+  <style>
+    :root{
+      --navy:#14365e;
+      --teal:#0e7a80;
+      --slate:#465467;
+      --line:#d8e0e8;
+      --paper:#fff;
+      --wash:#f5f8fc;
+      --mint:#eef8f6;
+      --amber:#fff6df;
+      --ink:#1b2430;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      padding:22px;
+      background:#edf2f7;
+      font-family:Inter,system-ui,sans-serif;
+      color:var(--ink);
+    }
+    .page{
+      max-width:900px;
+      margin:0 auto;
+      background:var(--paper);
+      border-radius:22px;
+      overflow:hidden;
+      box-shadow:0 24px 60px rgba(16,24,40,.14);
+    }
+    .page img{width:100%;display:block}
+    .pad{padding:18px 20px 24px}
+    .topline{
+      display:flex;
+      justify-content:space-between;
+      align-items:end;
+      gap:14px;
+      border-bottom:2px solid var(--navy);
+      padding-bottom:10px;
+    }
+    .topline h1{margin:0;font-size:29px;color:var(--navy)}
+    .topline .sub{font-size:13px;color:var(--slate)}
+    .meta{
+      display:grid;
+      grid-template-columns:1.6fr .8fr .8fr .8fr;
+      gap:10px;
+      margin-top:12px;
+    }
+    .cell{
+      border:1px solid var(--line);
+      border-radius:14px;
+      background:var(--wash);
+      padding:10px 12px;
+    }
+    .k{font-size:10px;text-transform:uppercase;letter-spacing:.08em;font-weight:900;color:#667085;margin-bottom:6px}
+    .v{font-size:15px;font-weight:800;color:var(--navy);line-height:1.3}
+    .layout{
+      display:grid;
+      grid-template-columns:1.35fr .65fr;
+      gap:12px;
+      margin-top:12px;
+    }
+    .panel{
+      border:1px solid var(--line);
+      border-radius:16px;
+      padding:14px;
+      background:#fff;
+    }
+    .panel h2{
+      margin:0 0 10px;
+      font-size:12px;
+      text-transform:uppercase;
+      letter-spacing:.1em;
+      color:var(--navy);
+    }
+    .dx{
+      border-left:4px solid var(--gold, #cb9b2f);
+      padding-left:10px;
+      font-size:18px;
+      font-weight:900;
+      line-height:1.35;
+      color:#153d66;
+    }
+    table{
+      width:100%;
+      border-collapse:collapse;
+      overflow:hidden;
+      border-radius:14px;
+      border:1px solid var(--line);
+    }
+    th,td{
+      padding:10px 9px;
+      vertical-align:top;
+      text-align:left;
+      border-bottom:1px solid var(--line);
+      font-size:13px;
+      line-height:1.45;
+    }
+    th{
+      background:#eff5fb;
+      color:var(--navy);
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.08em;
+      font-weight:900;
+    }
+    tr:last-child td{border-bottom:none}
+    .drug-name{font-size:15px;font-weight:900;color:var(--navy)}
+    .drug-sub{font-size:12px;color:#667085;margin-top:3px}
+    .instr{
+      font-weight:700;
+      color:#243b53;
+    }
+    .multi{
+      margin-top:6px;
+      display:grid;
+      gap:4px;
+      font-size:12px;
+      line-height:1.45;
+      color:#4c5b6e;
+    }
+    .multi span{
+      display:block;
+      padding:6px 7px;
+      border-radius:10px;
+      background:var(--mint);
+    }
+    .taper{
+      margin-top:6px;
+      padding:7px 8px;
+      border-radius:10px;
+      background:var(--amber);
+      border:1px solid #ecd7a0;
+      font-size:12px;
+      line-height:1.5;
+      font-weight:700;
+      color:#73540e;
+    }
+    .side-list{
+      display:grid;
+      gap:10px;
+    }
+    .mini{
+      border:1px solid var(--line);
+      border-radius:14px;
+      padding:12px;
+      background:var(--wash);
+    }
+    .mini ul{margin:0;padding-left:18px;font-size:13px;line-height:1.75;color:#334155;font-weight:700}
+    .follow{
+      background:linear-gradient(135deg,var(--navy),#28517f);
+      color:#fff;
+      border-radius:14px;
+      padding:14px 12px;
+      font-size:15px;
+      font-weight:800;
+      line-height:1.5;
+    }
+    .back{
+      display:block;
+      width:max-content;
+      margin:18px auto 0;
+      text-decoration:none;
+      color:var(--navy);
+      font-weight:800;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <img src="../../src/public/assets/bmh-logo-discharge.jpg" alt="Hospital Header">
+    <div class="pad">
+      <div class="topline">
+        <div>
+          <h1>Prescription</h1>
+          <div class="sub">Compact one-page bilingual-ready layout</div>
+        </div>
+        <div class="sub">20 Apr 2026</div>
+      </div>
+
+      <div class="meta">
+        <div class="cell"><div class="k">Patient</div><div class="v">Mrs. Sunita Devi</div></div>
+        <div class="cell"><div class="k">BMSH ID</div><div class="v">464772</div></div>
+        <div class="cell"><div class="k">Age / Sex</div><div class="v">28 / F</div></div>
+        <div class="cell"><div class="k">Dept</div><div class="v">OBG</div></div>
+      </div>
+
+      <div class="layout">
+        <div class="panel">
+          <h2>Diagnosis</h2>
+          <div class="dx">Iron deficiency anaemia in pregnancy</div>
+
+          <h2 style="margin-top:14px">Medicines</h2>
+          <table>
+            <thead>
+              <tr>
+                <th style="width:28%">Medicine</th>
+                <th style="width:20%">Schedule</th>
+                <th>Instruction Sentence</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <div class="drug-name">Ferrous Ascorbate</div>
+                  <div class="drug-sub">Tablet • Oral</div>
+                </td>
+                <td>Twice daily<br>After food<br>2 months</td>
+                <td>
+                  <div class="instr">Take one tablet after food twice a day till 19/06/2026.</div>
+                  <div class="multi">
+                    <span>हिंदी: खाने के बाद एक टैबलेट दिन में 2 बार लें।</span>
+                    <span>ਪੰਜਾਬੀ: ਖਾਣੇ ਤੋਂ ਬਾਅਦ ਇੱਕ ਗੋਲੀ ਦਿਨ ਵਿੱਚ 2 ਵਾਰ ਲਓ।</span>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="drug-name">Calcium + Vitamin D3</div>
+                  <div class="drug-sub">Tablet • Oral</div>
+                </td>
+                <td>Once daily<br>With milk<br>2 months</td>
+                <td>
+                  <div class="instr">Take one tablet with milk once a day till 19/06/2026.</div>
+                  <div class="multi">
+                    <span>हिंदी: दूध के साथ एक टैबलेट दिन में 1 बार लें।</span>
+                    <span>ਪੰਜਾਬੀ: ਦੂਧ ਨਾਲ ਇੱਕ ਗੋਲੀ ਦਿਨ ਵਿੱਚ 1 ਵਾਰ ਲਓ।</span>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="drug-name">Doxylamine + Pyridoxine</div>
+                  <div class="drug-sub">Tablet • Oral</div>
+                </td>
+                <td>At bedtime<br>7 days</td>
+                <td>
+                  <div class="instr">Take one tablet at bedtime once a day till 26/04/2026.</div>
+                  <div class="taper">Optional taper block can sit here if this medicine needs step-down dosing.</div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="side-list">
+          <div class="mini">
+            <div class="k">Advice</div>
+            <ul>
+              <li>Iron-rich diet and good hydration.</li>
+              <li>Take calcium and iron at separate times.</li>
+              <li>Report vomiting, bleeding, or reduced fetal movement early.</li>
+            </ul>
+          </div>
+          <div class="mini">
+            <div class="k">Doctor</div>
+            <div class="v">Dr. Namrata Baweja</div>
+            <div style="margin-top:6px;font-size:13px;color:#667085;font-weight:700">MS OBG</div>
+          </div>
+          <div class="follow">
+            Next Visit<br>
+            04 May 2026
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <a class="back" href="./index.html">Back to design gallery</a>
+</body>
+</html>

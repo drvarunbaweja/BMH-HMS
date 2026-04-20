@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prescription Option 3 - Ribbon Timeline</title>
+  <style>
+    :root{
+      --navy:#13385d;
+      --teal:#0f7b82;
+      --coral:#ef8b67;
+      --mist:#eef7f7;
+      --paper:#fffdfa;
+      --line:#d6e2e2;
+      --ink:#1d2939;
+      --muted:#667085;
+      --gold:#b98d27;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      padding:24px;
+      background:
+        radial-gradient(circle at top left, rgba(15,123,130,.12), transparent 22%),
+        radial-gradient(circle at bottom right, rgba(239,139,103,.12), transparent 24%),
+        #f7f7f4;
+      font-family:Inter,system-ui,sans-serif;
+      color:var(--ink);
+    }
+    .sheet{
+      max-width:900px;
+      margin:0 auto;
+      background:var(--paper);
+      border-radius:28px;
+      overflow:hidden;
+      box-shadow:0 28px 80px rgba(16,24,40,.14);
+    }
+    .sheet img{width:100%;display:block}
+    .pad{padding:22px 26px 28px}
+    .hero{
+      display:grid;
+      grid-template-columns:1.2fr .8fr;
+      gap:16px;
+      align-items:start;
+      margin-bottom:16px;
+    }
+    .hero-card{
+      background:linear-gradient(135deg,#163e69 0%, #0f7b82 100%);
+      color:#fff;
+      border-radius:22px;
+      padding:18px 20px;
+      min-height:150px;
+    }
+    .hero-card .eyebrow{
+      font-size:11px;
+      letter-spacing:.12em;
+      text-transform:uppercase;
+      font-weight:900;
+      color:rgba(255,255,255,.7);
+      margin-bottom:10px;
+    }
+    .hero-card h1{
+      margin:0;
+      font-size:34px;
+      line-height:1.04;
+      letter-spacing:-.03em;
+    }
+    .hero-card p{
+      margin:10px 0 0;
+      max-width:440px;
+      line-height:1.6;
+      color:rgba(255,255,255,.9);
+      font-size:14px;
+    }
+    .meta{
+      display:grid;
+      gap:12px;
+    }
+    .meta .box{
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius:18px;
+      padding:14px;
+    }
+    .box .k{
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.08em;
+      font-weight:800;
+      color:var(--muted);
+      margin-bottom:6px;
+    }
+    .box .v{
+      font-size:17px;
+      font-weight:800;
+      color:var(--navy);
+      line-height:1.25;
+    }
+    .ribbon{
+      position:relative;
+      margin-top:8px;
+      padding-left:28px;
+    }
+    .ribbon::before{
+      content:"";
+      position:absolute;
+      left:8px;
+      top:0;
+      bottom:0;
+      width:4px;
+      border-radius:999px;
+      background:linear-gradient(180deg,var(--teal),var(--coral));
+    }
+    .node{
+      position:relative;
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius:18px;
+      padding:16px 16px 16px 18px;
+      margin-bottom:14px;
+      box-shadow:0 10px 24px rgba(16,24,40,.05);
+    }
+    .node::before{
+      content:"";
+      position:absolute;
+      left:-26px;
+      top:24px;
+      width:14px;
+      height:14px;
+      border-radius:50%;
+      background:#fff;
+      border:4px solid var(--teal);
+    }
+    .tag{
+      display:inline-block;
+      margin-bottom:10px;
+      padding:5px 9px;
+      border-radius:999px;
+      font-size:11px;
+      font-weight:900;
+      text-transform:uppercase;
+      letter-spacing:.08em;
+      background:#eff7f8;
+      color:var(--teal);
+    }
+    .drug{
+      display:flex;
+      justify-content:space-between;
+      gap:16px;
+      margin-bottom:10px;
+    }
+    .drug h2{
+      margin:0;
+      font-size:23px;
+      line-height:1.08;
+      color:var(--navy);
+    }
+    .drug .sub{
+      margin-top:5px;
+      font-size:13px;
+      color:var(--muted);
+    }
+    .right{
+      min-width:210px;
+      text-align:right;
+      font-size:13px;
+      line-height:1.65;
+      color:#445467;
+      font-weight:800;
+    }
+    .sentence{
+      background:var(--mist);
+      border-radius:14px;
+      padding:12px 13px;
+      font-size:15px;
+      line-height:1.65;
+      font-weight:700;
+    }
+    .taper{
+      margin-top:10px;
+      border-radius:14px;
+      border:1px solid #f1d5c7;
+      background:#fff5ef;
+      padding:12px 14px;
+    }
+    .taper .k2{
+      font-size:11px;
+      font-weight:900;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+      color:#a45134;
+      margin-bottom:8px;
+    }
+    .taper-grid{
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:8px;
+    }
+    .step{
+      background:#fff;
+      border-radius:12px;
+      padding:10px;
+      border:1px solid #f0d3c3;
+    }
+    .step strong{display:block;font-size:12px;color:#a45134;margin-bottom:6px}
+    .step span{font-size:13px;line-height:1.5;color:#6c4250;font-weight:700}
+    .footer{
+      margin-top:18px;
+      display:grid;
+      grid-template-columns:1.05fr .95fr;
+      gap:14px;
+    }
+    .panel{
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius:18px;
+      padding:16px;
+    }
+    .panel h3{
+      margin:0 0 10px;
+      font-size:13px;
+      text-transform:uppercase;
+      letter-spacing:.1em;
+      color:var(--navy);
+    }
+    ul{margin:0;padding-left:18px;font-size:14px;line-height:1.8;color:#344054;font-weight:600}
+    .review{
+      background:linear-gradient(135deg,#f5ead1,#fff8eb);
+      border:1px solid #ead6a4;
+      border-radius:16px;
+      padding:14px;
+      margin-top:10px;
+      color:#674f16;
+      font-weight:800;
+    }
+    .back{
+      display:block;
+      width:max-content;
+      margin:18px auto 0;
+      text-decoration:none;
+      color:var(--navy);
+      font-weight:800;
+    }
+  </style>
+</head>
+<body>
+  <div class="sheet">
+    <img src="../../src/public/assets/bmh-logo-discharge.jpg" alt="Hospital Header">
+    <div class="pad">
+      <div class="hero">
+        <div class="hero-card">
+          <div class="eyebrow">Option 3</div>
+          <h1>Ribbon Timeline Prescription</h1>
+          <p>More visually distinctive, with each medicine treated as an important action block rather than just another line in a list.</p>
+        </div>
+        <div class="meta">
+          <div class="box"><div class="k">Patient</div><div class="v">Mrs. Jasmeet Kaur</div></div>
+          <div class="box"><div class="k">BMSH ID</div><div class="v">463004</div></div>
+          <div class="box"><div class="k">Diagnosis</div><div class="v">Migraine with anxiety overlay</div></div>
+        </div>
+      </div>
+
+      <div class="ribbon">
+        <section class="node">
+          <div class="tag">Morning medicine</div>
+          <div class="drug">
+            <div>
+              <h2>Propranolol 20 mg</h2>
+              <div class="sub">Tablet • Oral • Preventive</div>
+            </div>
+            <div class="right">Twice daily<br>After breakfast and after dinner<br>30 days</div>
+          </div>
+          <div class="sentence">Take one tablet after breakfast and one tablet after dinner every day till 19/05/2026.</div>
+        </section>
+
+        <section class="node">
+          <div class="tag">Rescue medicine</div>
+          <div class="drug">
+            <div>
+              <h2>Rizatriptan 10 mg</h2>
+              <div class="sub">Tablet • As needed at headache onset</div>
+            </div>
+            <div class="right">As needed<br>Max advised in review note</div>
+          </div>
+          <div class="sentence">Take one tablet as needed at the start of severe headache. Do not repeat more than advised by the doctor.</div>
+        </section>
+
+        <section class="node">
+          <div class="tag">Night taper</div>
+          <div class="drug">
+            <div>
+              <h2>Amitriptyline 10 mg</h2>
+              <div class="sub">Tablet • Bedtime medicine</div>
+            </div>
+            <div class="right">At bedtime<br>With taper plan</div>
+          </div>
+          <div class="sentence">Take one tablet at bedtime daily for the first week, then reduce gradually as per taper.</div>
+          <div class="taper">
+            <div class="k2">Taper Plan</div>
+            <div class="taper-grid">
+              <div class="step"><strong>Week 1</strong><span>One tablet at bedtime daily</span></div>
+              <div class="step"><strong>Week 2</strong><span>Half tablet at bedtime daily</span></div>
+              <div class="step"><strong>Week 3</strong><span>Half tablet on alternate nights, then stop</span></div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div class="footer">
+        <div class="panel">
+          <h3>General Instructions</h3>
+          <ul>
+            <li>Maintain a headache diary and note sleep triggers.</li>
+            <li>Keep hydration good and avoid missed meals.</li>
+            <li>Return urgently if new weakness, vision loss, or persistent vomiting appears.</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h3>Review</h3>
+          <div style="font-size:16px;font-weight:800;color:var(--navy);line-height:1.5">Follow up after 2 weeks</div>
+          <div class="review">Next Visit: 04 May 2026</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <a class="back" href="./index.html">Back to design gallery</a>
+</body>
+</html>
