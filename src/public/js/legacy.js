@@ -8737,6 +8737,21 @@ function getNetTransactionAmount(txn) {
   if (amt <= 0) return 0;
   return amt;
 }
+function transactionHasChargeCategory(txn, category) {
+  const want = String(category || '').toLowerCase().trim();
+  if (!txn || !want) return false;
+  const billCats = Array.isArray(txn.billCats) ? txn.billCats.map(function (c) { return String(c || '').toLowerCase(); }) : [];
+  if (billCats.includes(want)) return true;
+  if (Array.isArray(txn.chargeAllocations) && txn.chargeAllocations.length && txn.bmhId) {
+    const lines = window.BMH_PATIENT_CHARGES[txn.bmhId] || [];
+    return txn.chargeAllocations.some(function (alloc) {
+      const line = lines.find(function (row) { return String(row?.id || '') === String(alloc?.lineId || ''); });
+      const cat = String(line?.cat || inferChargeCategoryFromService(line?.desc || line?.name || '') || 'other').toLowerCase();
+      return cat === want;
+    });
+  }
+  return String(inferChargeCategoryFromService(txn.service || txn.for || txn.desc || '') || 'other').toLowerCase() === want;
+}
 function addBmhPatientCharge(bmhId, row) {
   if (!bmhId) return;
   if (!window.BMH_PATIENT_CHARGES[bmhId]) window.BMH_PATIENT_CHARGES[bmhId] = [];
@@ -13663,16 +13678,16 @@ function renderCentresView() {
       const noFeeCount = consultPatients.filter(function (p) { return !!p.consultationNoFee; }).length;
       const paidCount = Math.max(0, consultPatients.length - noFeeCount);
       const deptConsultTxns = deptTxns.filter(function (t) {
-        return inferChargeCategoryFromService(t.service || t.for || t.desc || '') === 'consultation';
+        return transactionHasChargeCategory(t, 'consultation');
       });
       const totalOpdCount = getConsultationCounter(deptPatients, consultPatients, deptConsultTxns);
       const diagnosticTxns = deptTxns.filter(function (t) {
-        const cat = inferChargeCategoryFromService(t.service || t.for || t.desc || '');
-        return cat === 'diagnostic' || cat === 'investigation' || /oct|hvf|fundus|biometry|topography|specular|cbc|test|scan|profile|blood|urine|ecg/i.test(String(t.service || ''));
+        return transactionHasChargeCategory(t, 'diagnostic')
+          || /oct|hvf|fundus|biometry|topography|specular|cbc|test|scan|profile|blood|urine|ecg/i.test(String(t.service || ''));
       });
       const surgeryTxns = deptTxns.filter(function (t) {
-        const cat = inferChargeCategoryFromService(t.service || t.for || t.desc || '');
-        return cat === 'surgery' || /surgery|procedure|pmics|phaco|iol|delivery|lscs|laser|capsulotomy|ivt|injection|mtp|laparoscopy/i.test(String(t.service || ''));
+        return transactionHasChargeCategory(t, 'surgery')
+          || /surgery|procedure|pmics|phaco|iol|delivery|lscs|laser|capsulotomy|ivt|injection|mtp|laparoscopy/i.test(String(t.service || ''));
       });
       const cashTxns = deptTxns.filter(function (t) { return normalizePaymentMode(t.mode) === 'Cash'; });
       const onlineTxns = deptTxns.filter(function (t) {
@@ -13684,7 +13699,8 @@ function renderCentresView() {
       const claimDue = deptClaims.reduce(function (s, r) {
         const claimed = Number(r.claimedAmount || r.amount || 0);
         const received = Number(r.receivedAmount || 0);
-        return s + Math.max(0, claimed - received);
+        const patientDue = Number(r.patientDue || 0);
+        return s + Math.max(0, claimed - received) + patientDue;
       }, 0);
       return `<div style="border:1px solid var(--g5);border-radius:12px;padding:12px;background:#fff;margin-bottom:10px">
         <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:8px">
@@ -13709,7 +13725,7 @@ function renderCentresView() {
           <div style="border:1px solid var(--g5);border-radius:8px;padding:8px">
             <div style="font-size:10px;font-weight:900;color:#b55a00;text-transform:uppercase;margin-bottom:6px">TPA / Cashless Due</div>
             <div style="font-size:18px;font-weight:900;color:#b55a00;margin-bottom:6px">${fmt(claimDue)}</div>
-            ${deptClaims.length ? deptClaims.map(function (r) { return `<div style="font-size:11px;padding:4px 0;border-bottom:1px solid var(--g5)"><strong>${esc(r.patient || 'Patient')}</strong><div style="color:var(--g1)">${esc(r.procedure || r.for || 'Claim')} · ${fmt(Math.max(0, Number(r.claimedAmount || r.amount || 0) - Number(r.receivedAmount || 0)))}</div></div>`; }).join('') : '<div style="font-size:11px;color:var(--g1)">No cashless due</div>'}
+            ${deptClaims.length ? deptClaims.map(function (r) { const insurerDue = Math.max(0, Number(r.claimedAmount || r.amount || 0) - Number(r.receivedAmount || 0)); const patientDue = Number(r.patientDue || 0); const parts = []; if (insurerDue > 0) parts.push('Insurer ' + fmt(insurerDue)); if (patientDue > 0) parts.push('Patient ' + fmt(patientDue)); return `<div style="font-size:11px;padding:4px 0;border-bottom:1px solid var(--g5)"><strong>${esc(r.patient || 'Patient')}</strong><div style="color:var(--g1)">${esc(r.procedure || r.for || 'Claim')} · ${esc(parts.join(' · ') || fmt(0))}</div></div>`; }).join('') : '<div style="font-size:11px;color:var(--g1)">No cashless due</div>'}
           </div>
         </div>
       </div>`;
@@ -13721,7 +13737,7 @@ function renderCentresView() {
       });
       const deptConsultTxns = txns.filter(function (t) {
         return normalizeDeptKeyForQueue(t.dept || '') === dept.key
-          && inferChargeCategoryFromService(t.service || t.for || t.desc || '') === 'consultation';
+          && transactionHasChargeCategory(t, 'consultation');
       });
       return sum + getConsultationCounter(deptPatients, consultPatients, deptConsultTxns);
     }, 0);
@@ -15987,40 +16003,57 @@ function migrateOtTemplateStorageKeys() {
   Object.assign(RX_TEMPLATES_META, nextMeta);
 }
 function saveRxTemplatesToStorage() {
-  try { localStorage.setItem('bmh_rx_templates', JSON.stringify({ data: RX_TEMPLATES_DATA, meta: RX_TEMPLATES_META })); } catch (e) { /* quota */ }
-  if (window.FBDB) window.FBDB.ref('rxTemplates').set({ data: RX_TEMPLATES_DATA, meta: RX_TEMPLATES_META }).catch(function () {});
+  const savedAt = Date.now();
+  const payload = { data: RX_TEMPLATES_DATA, meta: RX_TEMPLATES_META, _savedAt: savedAt };
+  try { localStorage.setItem('bmh_rx_templates', JSON.stringify(payload)); } catch (e) { /* quota */ }
+  if (window.FBDB) window.FBDB.ref('rxTemplates').set(payload).catch(function () {});
 }
-function loadRxTemplatesFromStorage(cb) {
+function getCurrentRxTemplateSavedAt() {
+  let savedAt = 0;
   try {
     const ls = localStorage.getItem('bmh_rx_templates');
-    if (ls) {
-      const o = JSON.parse(ls);
-      if (o.data && typeof o.data === 'object') Object.assign(RX_TEMPLATES_DATA, o.data);
-      if (o.meta && typeof o.meta === 'object') Object.assign(RX_TEMPLATES_META, o.meta);
-    }
+    if (ls) savedAt = Number(JSON.parse(ls)?._savedAt || 0);
   } catch (e) { /* noop */ }
+  return Math.max(savedAt, Number(window._bmhRxTemplatesSavedAt || 0));
+}
+function _applyRxTemplatePayload(payload) {
+  Object.keys(RX_TEMPLATES_DATA).forEach(function (k) { delete RX_TEMPLATES_DATA[k]; });
+  Object.keys(RX_TEMPLATES_META).forEach(function (k) { delete RX_TEMPLATES_META[k]; });
+  if (payload.data && typeof payload.data === 'object') Object.assign(RX_TEMPLATES_DATA, payload.data);
+  if (payload.meta && typeof payload.meta === 'object') Object.assign(RX_TEMPLATES_META, payload.meta);
   Object.keys(RX_TEMPLATES_META).forEach(function (k) {
     if (!RX_TEMPLATES_META[k] || typeof RX_TEMPLATES_META[k] !== 'object') return;
     RX_TEMPLATES_META[k].dept = normalizeRxTemplateDeptKey(RX_TEMPLATES_META[k].dept || 'all');
   });
   migrateOtTemplateStorageKeys();
+  window._bmhRxTemplatesSavedAt = Number(payload?._savedAt || 0);
+}
+function loadRxTemplatesFromStorage(cb) {
+  let localSavedAt = 0;
+  try {
+    const ls = localStorage.getItem('bmh_rx_templates');
+    if (ls) {
+      const o = JSON.parse(ls);
+      localSavedAt = Number(o._savedAt || 0);
+      _applyRxTemplatePayload(o);
+    }
+  } catch (e) { /* noop */ }
   if (!window.FBDB) {
     if (typeof refreshRxTemplateSelects === 'function') refreshRxTemplateSelects();
     if (typeof renderSetRxTplList === 'function') renderSetRxTplList();
-    saveRxTemplatesToStorage();
     if (typeof cb === 'function') cb();
     return;
   }
   window.FBDB.ref('rxTemplates').once('value').then(function (snap) {
     const v = snap.val();
-    if (v && v.data && typeof v.data === 'object') Object.assign(RX_TEMPLATES_DATA, v.data);
-    if (v && v.meta && typeof v.meta === 'object') Object.assign(RX_TEMPLATES_META, v.meta);
-    Object.keys(RX_TEMPLATES_META).forEach(function (k) {
-      if (!RX_TEMPLATES_META[k] || typeof RX_TEMPLATES_META[k] !== 'object') return;
-      RX_TEMPLATES_META[k].dept = normalizeRxTemplateDeptKey(RX_TEMPLATES_META[k].dept || 'all');
-    });
-    migrateOtTemplateStorageKeys();
-    saveRxTemplatesToStorage();
+    const remoteSavedAt = Number(v && v._savedAt || 0);
+    localSavedAt = getCurrentRxTemplateSavedAt();
+    if (v && remoteSavedAt > localSavedAt) {
+      _applyRxTemplatePayload(v);
+      try { localStorage.setItem('bmh_rx_templates', JSON.stringify(v)); } catch (e) { /* noop */ }
+    } else if (localSavedAt > remoteSavedAt && Object.keys(RX_TEMPLATES_DATA).length > 0) {
+      saveRxTemplatesToStorage();
+    }
     if (typeof refreshRxTemplateSelects === 'function') refreshRxTemplateSelects();
     if (typeof renderSetRxTplList === 'function') renderSetRxTplList();
     if (typeof cb === 'function') cb();
@@ -27163,13 +27196,13 @@ function renderCollectionDashboard() {
   setEl('rc-ins-total', fmt(collected.filter(t=>t.mode==='Insurance').reduce((s,t)=>s+t.amount,0)));
   // OPD / Investigations / Procedures breakdown
   const opdTotal = collected.filter(function (t) {
-    return inferChargeCategoryFromService(t.service || t.for || t.desc || '') === 'consultation';
+    return transactionHasChargeCategory(t, 'consultation');
   }).reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
   const invTotal = collected.filter(function (t) {
-    return inferChargeCategoryFromService(t.service || t.for || t.desc || '') === 'diagnostic';
+    return transactionHasChargeCategory(t, 'diagnostic');
   }).reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
   const procTotal = collected.filter(function (t) {
-    return inferChargeCategoryFromService(t.service || t.for || t.desc || '') === 'surgery';
+    return transactionHasChargeCategory(t, 'surgery');
   }).reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
   setEl('rc-opd-total', fmt(opdTotal));
   setEl('rc-inv-total', fmt(invTotal));
@@ -27187,7 +27220,7 @@ function renderCollectionDashboard() {
       if(!dTxn.length) return '';
       const sumCat = function (want) {
         return dTxn.filter(function (t) {
-          return inferChargeCategoryFromService(t.service || t.for || t.desc || '') === want;
+          return transactionHasChargeCategory(t, want);
         }).reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
       };
       const opdD = sumCat('consultation');
@@ -31576,6 +31609,7 @@ function renderDashboard() {
     const deptTxnsToday = TRANSACTIONS.filter(function (t) {
       return txnDay(t) === today && txnOk(t) && centreMatch(t) && normalizeDeptKeyForQueue(t.dept || '') === currentDeptKey;
     });
+    const deptSurgeryTxnsToday = deptTxnsToday.filter(function (t) { return transactionHasChargeCategory(t, 'surgery'); });
 
     setEl('db-cl-opd', String(todayPts.length));
     setEl('db-cl-ipd', String(newPts));
@@ -31583,7 +31617,7 @@ function renderDashboard() {
     setEl('db-apts', String(diagToday));
     setEl('db-cl-checked', String(todaySurgeries));
     setEl('db-cl-collection', '₹' + deptTxnsToday.reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0).toLocaleString('en-IN'));
-    setEl('db-pending', '₹' + surgeryCollection.toLocaleString('en-IN'));
+    setEl('db-pending', '₹' + deptSurgeryTxnsToday.reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0).toLocaleString('en-IN'));
     setEl('db-stock-dup', String((window.IPD_PATIENTS || IPD_PATIENTS || []).filter(function (p) {
       return centreMatch(p) && normalizeDeptKeyForQueue(p.dept || '') === currentDeptKey && (p.status || 'admitted') !== 'discharged';
     }).length));
