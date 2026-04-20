@@ -20,7 +20,24 @@
       "Bash(node --check src/js/legacy.js)",
       "Bash(xxd)",
       "Bash(LC_ALL=C sed -i '' \"s/\\\\xe2\\\\x80\\\\x98/'/g; s/\\\\xe2\\\\x80\\\\x99/'/g\" /Users/varunbaweja/GitHub/BMH-HMS/src/js/legacy.js)",
-      "Bash(grep -n \"loadDrugLib\" /Users/varunbaweja/GitHub/BMH-HMS/src/js/legacy.js /Users/varunbaweja/GitHub/BMH-HMS/src/index.html /Users/varunbaweja/GitHub/BMH-HMS/src/js/*.js)"
+      "Bash(grep -n \"loadDrugLib\" /Users/varunbaweja/GitHub/BMH-HMS/src/js/legacy.js /Users/varunbaweja/GitHub/BMH-HMS/src/index.html /Users/varunbaweja/GitHub/BMH-HMS/src/js/*.js)",
+      "Bash(node -e \"require\\('puppeteer'\\)\")",
+      "Bash(node -e \"require\\('playwright'\\)\")",
+      "Bash(\"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\" --headless=new --disable-gpu --print-to-pdf=\"/tmp/rx-opt-a.pdf\" --no-pdf-header-footer --print-to-pdf-no-header \"file:///tmp/rx-preview-a.html\")",
+      "Bash(\"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\" --headless=new --disable-gpu --print-to-pdf=\"/tmp/rx-opt-b.pdf\" --no-pdf-header-footer --print-to-pdf-no-header \"file:///tmp/rx-preview-b.html\")",
+      "Bash(\"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\" --headless=new --disable-gpu --print-to-pdf=\"/tmp/rx-opt-c.pdf\" --no-pdf-header-footer --print-to-pdf-no-header \"file:///tmp/rx-preview-c.html\")",
+      "Bash(\"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\" --headless=new --disable-gpu --print-to-pdf=\"/tmp/rx-opt-b.pdf\" --no-pdf-header-footer \"file:///tmp/rx-preview-b.html\")",
+      "Bash(\"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\" --headless=new --disable-gpu --print-to-pdf=\"/tmp/rx-opt-c.pdf\" --no-pdf-header-footer \"file:///tmp/rx-preview-c.html\")",
+      "Bash(convert --version)",
+      "Bash(qlmanage -t -s 1600 -o /tmp /tmp/rx-opt-a.pdf)",
+      "Bash(qlmanage -t -s 1600 -o /tmp /tmp/rx-opt-b.pdf)",
+      "Bash(qlmanage -t -s 1600 -o /tmp /tmp/rx-opt-c.pdf)",
+      "Bash(\"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\" --headless=new --disable-gpu --screenshot=\"/tmp/rx-ss-a.png\" --window-size=780,2200 \"file:///tmp/rx-preview-a.html\")",
+      "Bash(\"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\" --headless=new --disable-gpu --screenshot=\"/tmp/rx-ss-b.png\" --window-size=780,2200 \"file:///tmp/rx-preview-b.html\")",
+      "Bash(\"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\" --headless=new --disable-gpu --screenshot=\"/tmp/rx-ss-c.png\" --window-size=780,2200 \"file:///tmp/rx-preview-c.html\")",
+      "Bash(node --input-type=module)",
+      "Bash(node -e ' *)",
+      "Bash(\"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\" --headless=new --disable-gpu --screenshot=\"/tmp/rx-final.png\" --window-size=794,2400 \"file:///tmp/rx-final-preview.html\")"
     ]
   }
 }
