@@ -2468,7 +2468,8 @@ function qCard(p, sno) {
 
 function payCardHtml(pr) {
   const isp = pr.status==='pending';
-  const pid = pr.id.replace(/[^a-z0-9]/gi,'');
+  const rawId = String(pr?.id || pr?.bmhId || pr?.patient || ('pay-' + Date.now()));
+  const pid = rawId.replace(/[^a-z0-9]/gi,'');
   return `<div class="pay-card ${isp?'pending':'received'}" style="margin-bottom:6px;border-radius:var(--r);overflow:hidden">
     <div style="display:flex;align-items:center;gap:9px;padding:10px 12px">
       <div style="flex:1;cursor:pointer" onclick="togglePayCard('${pid}')">
@@ -3434,6 +3435,17 @@ function openPatientForDept(bmhId, dept, xrefId) {
   window._currentXrefId = freshStart ? (xrefId || null) : null;
   openPatient(bmhId, { deptOverride: dept, freshStart: freshStart });
 }
+function getCrossRefQueueChargeHint(p) {
+  if (!p || !p._xrefEntry) return '';
+  if (p._xrefPendingPay) {
+    const feeAmt = Number(p._xrefFeeAmount || 0);
+    return `<span style="font-size:10px;color:#8a4200;font-weight:800">Cross-ref due${feeAmt > 0 ? ' ₹' + feeAmt.toLocaleString('en-IN') : ''}</span>`;
+  }
+  if (p._xrefFeeRequired) {
+    return `<span style="font-size:10px;color:#1a8c3c;font-weight:800">Paid cross-ref</span>`;
+  }
+  return `<span style="font-size:10px;color:#0b7b8c;font-weight:800">Free cross-ref</span>`;
+}
 function rcPrintReceptionConsentFromPopup(bmhId) {
   const inp = document.getElementById('rc-consent-search');
   const raw = String(inp?.value || '').trim();
@@ -3498,6 +3510,7 @@ function addReceptionPatientCharges(bmhId, printAfter) {
   if (!sels.length) { showToast('No charge rows added', 'w'); return; }
   let added = 0;
   let skipped = 0;
+  let queued = false;
   sels.forEach(function (sel) {
     if (!sel || !sel.value) return;
     const parts = sel.value.split('|');
@@ -3511,6 +3524,7 @@ function addReceptionPatientCharges(bmhId, printAfter) {
     });
     if (existing) { skipped += 1; return; }
     addBmhPatientCharge(bmhId, { id: 'rcx' + Date.now() + Math.random().toString(36).slice(2, 5), cat: inferChargeCategoryFromService(desc), desc: desc, qty: 1, rate: amt, amount: amt, source: 'reception-extra', ts: new Date().toISOString() });
+    queued = bmhEnsurePatientInTodayDeptQueue ? (bmhEnsurePatientInTodayDeptQueue(bmhId, { silentToast: true }) || queued) : queued;
     added += 1;
   });
   renderReceptionPage && renderReceptionPage();
@@ -3662,6 +3676,8 @@ function populateOphthoForm(v) {
   setSel('rf-os-add', v.rfOSAdd);
   setSel('nv-od-final', v.nvODFinal);
   setSel('nv-os-final', v.nvOSFinal);
+  setV('nv-od-final-manual', v.nvODFinal);
+  setV('nv-os-final-manual', v.nvOSFinal);
   syncUcvaToRefraction('od');
   syncUcvaToRefraction('os');
 
@@ -3860,14 +3876,8 @@ function markPaid(id) {
   if(p) {
     // If this was a cross-refer payment — now route patient to target dept
     if(pr.xref && pr.xrefDept) {
-      const nowMs = Date.now();
       const nowIso = new Date().toISOString();
-      p.status = 'waiting';
-      p.seen = false;
-      p.checkinAt = nowMs;
       p.updatedAt = nowIso;
-      p.visitDate = nowIso;
-      p.queueDate = nowIso;
       p.xrefPaid = true;
       const refs = Array.isArray(p.crossRefs) ? p.crossRefs.slice() : [];
       refs.forEach(function (r) {
@@ -3880,13 +3890,8 @@ function markPaid(id) {
       p.crossRefs = refs;
       fbUpdate && fbUpdate('patients/' + pr.bmhId, {
         crossRefs: sanitizeFirebaseValue(refs),
-        status: 'waiting',
         xrefPaid: true,
-        seen: false,
-        checkinAt: nowMs,
-        updatedAt: nowIso,
-        visitDate: nowIso,
-        queueDate: nowIso
+        updatedAt: nowIso
       }).catch(()=>{});
       // Mark xref as paid in log
       if(window.XREF_LOG) {
@@ -6654,6 +6659,7 @@ function quickBillItem(name, price) {
   const bmhId = document.getElementById('bill-pt-sel')?.value || document.getElementById('bmh-bill-pt-select')?.value || PATIENTS[0]?.bmhId;
   if (bmhId) {
     addBmhPatientCharge(bmhId, { id: 'qb' + Date.now(), cat: 'other', desc: name, qty: 1, rate: price, amount: price, source: 'reception', ts: new Date().toISOString() });
+    bmhEnsurePatientInTodayDeptQueue && bmhEnsurePatientInTodayDeptQueue(bmhId, { silentToast: true });
     renderBillingPage && renderBillingPage();
   }
   openM('m-rec-bill');
@@ -7296,6 +7302,75 @@ function printIPDSummary(id) { showToast('IPD Summary printing ✓','s'); setTim
 // ═══════════════════════════════════════
 // BMH FINANCIALS — billing, vendors, ledger, inventory sync
 // ═══════════════════════════════════════
+function bmhFinancialsSnapshot() {
+  return {
+    patientCharges: window.BMH_PATIENT_CHARGES || {},
+    vendorBills: window.BMH_VENDOR_BILLS || [],
+    officeBills: window.BMH_OFFICE_BILLS || [],
+    officeBillCategories: window.BMH_OFFICE_BILL_CATEGORIES || [],
+    expenses: window.BMH_EXPENSES || [],
+    ledger: window.BMH_LEDGER || [],
+    purchases: window.BMH_PURCHASES || [],
+    inventoryUsage: window.BMH_INVENTORY_USAGE || [],
+    inventoryIndents: window.BMH_INVENTORY_INDENTS || [],
+    inventoryTransfers: window.BMH_INVENTORY_TRANSFERS || [],
+    updatedAt: Date.now(),
+    updatedBy: CURRENT_USER?.name || 'System'
+  };
+}
+function applyBmhFinancialsSnapshot(snapshot, opts) {
+  const data = snapshot || {};
+  const patientCharges = data.patientCharges && typeof data.patientCharges === 'object' ? data.patientCharges : {};
+  Object.keys(window.BMH_PATIENT_CHARGES || {}).forEach(function (key) { delete window.BMH_PATIENT_CHARGES[key]; });
+  Object.assign(window.BMH_PATIENT_CHARGES, patientCharges);
+  window.BMH_VENDOR_BILLS.length = 0;
+  (Array.isArray(data.vendorBills) ? data.vendorBills : []).forEach(function (row) { window.BMH_VENDOR_BILLS.push(row); });
+  window.BMH_OFFICE_BILLS.length = 0;
+  (Array.isArray(data.officeBills) ? data.officeBills : []).forEach(function (row) { window.BMH_OFFICE_BILLS.push(row); });
+  window.BMH_OFFICE_BILL_CATEGORIES = Array.isArray(data.officeBillCategories) ? data.officeBillCategories.slice() : (window.BMH_OFFICE_BILL_CATEGORIES || []);
+  window.BMH_EXPENSES.length = 0;
+  (Array.isArray(data.expenses) ? data.expenses : []).forEach(function (row) { window.BMH_EXPENSES.push(row); });
+  window.BMH_LEDGER.length = 0;
+  (Array.isArray(data.ledger) ? data.ledger : []).forEach(function (row) { window.BMH_LEDGER.push(row); });
+  window.BMH_PURCHASES.length = 0;
+  (Array.isArray(data.purchases) ? data.purchases : []).forEach(function (row) { window.BMH_PURCHASES.push(row); });
+  window.BMH_INVENTORY_USAGE.length = 0;
+  (Array.isArray(data.inventoryUsage) ? data.inventoryUsage : []).forEach(function (row) { window.BMH_INVENTORY_USAGE.push(row); });
+  window.BMH_INVENTORY_INDENTS.length = 0;
+  (Array.isArray(data.inventoryIndents) ? data.inventoryIndents : []).forEach(function (row) { window.BMH_INVENTORY_INDENTS.push(row); });
+  window.BMH_INVENTORY_TRANSFERS.length = 0;
+  (Array.isArray(data.inventoryTransfers) ? data.inventoryTransfers : []).forEach(function (row) { window.BMH_INVENTORY_TRANSFERS.push(row); });
+  try { localStorage.setItem('bmh_financials_updated_at', String(Number(data.updatedAt) || Date.now())); } catch (e) { /* noop */ }
+  if (opts && opts.persistLocal) saveBmhFinancials({ localOnly: true });
+}
+function queueBmhFinancialsRemoteSync() {
+  if (!window.FBDB || window._bmhFinancialsHydrating) return;
+  if (window._bmhFinancialsRemoteSyncTimer) clearTimeout(window._bmhFinancialsRemoteSyncTimer);
+  window._bmhFinancialsRemoteSyncTimer = setTimeout(function () {
+    window.FBDB.ref('financials').set(bmhFinancialsSnapshot()).catch(function (err) {
+      console.warn('Financials cloud sync error:', err);
+    });
+  }, 200);
+}
+function startBmhFinancialsFirebaseSync() {
+  if (!window.FBDB || window._bmhFinancialsSyncStarted) return;
+  window._bmhFinancialsSyncStarted = true;
+  window.FBDB.ref('financials').on('value', function (snap) {
+    const remote = snap.val();
+    if (!remote || typeof remote !== 'object') return;
+    const remoteTs = Number(remote.updatedAt || 0);
+    const localTs = Number(localStorage.getItem('bmh_financials_updated_at') || 0);
+    if (remoteTs && remoteTs < localTs) return;
+    window._bmhFinancialsHydrating = true;
+    applyBmhFinancialsSnapshot(remote, { persistLocal: true });
+    window._bmhFinancialsHydrating = false;
+    renderInventoryPurchaseLog && renderInventoryPurchaseLog();
+    renderInventoryUsageLog && renderInventoryUsageLog();
+    renderInventoryIndents && renderInventoryIndents();
+    renderInventoryTransfers && renderInventoryTransfers();
+    renderBillingPageIfActive && renderBillingPageIfActive();
+  });
+}
 function loadBmhFinancials() {
   try {
     const pc = localStorage.getItem('bmh_patient_charges');
@@ -7316,13 +7391,30 @@ function loadBmhFinancials() {
     const ii = localStorage.getItem('bmh_inventory_indents'); if (ii) { window.BMH_INVENTORY_INDENTS.length = 0; JSON.parse(ii).forEach(x=>window.BMH_INVENTORY_INDENTS.push(x)); }
     const it = localStorage.getItem('bmh_inventory_transfers'); if (it) { window.BMH_INVENTORY_TRANSFERS.length = 0; JSON.parse(it).forEach(x=>window.BMH_INVENTORY_TRANSFERS.push(x)); }
   } catch (e) { /* noop */ }
+  startBmhFinancialsFirebaseSync();
   Object.keys(window.BMH_PATIENT_CHARGES || {}).forEach(function (bmhId) {
-    (window.BMH_PATIENT_CHARGES[bmhId] || []).slice().forEach(function (row) {
-      if (!row?.isConcession) bmhEnsureEEGConcessionLine(bmhId, row);
-    });
+    bmhRemoveLegacyEEGConcessionLines(bmhId);
   });
+  if (window.FBDB) {
+    const localTs = Number(localStorage.getItem('bmh_financials_updated_at') || 0);
+    window.FBDB.ref('financials').once('value').then(function (snap) {
+      const remote = snap.val();
+      const remoteTs = Number(remote && remote.updatedAt || 0);
+      if (remote && remoteTs >= localTs) {
+        window._bmhFinancialsHydrating = true;
+        applyBmhFinancialsSnapshot(remote, { persistLocal: true });
+        window._bmhFinancialsHydrating = false;
+      } else if (localTs || Object.keys(window.BMH_PATIENT_CHARGES || {}).length || (window.BMH_PURCHASES || []).length || (window.BMH_INVENTORY_USAGE || []).length) {
+        queueBmhFinancialsRemoteSync();
+      }
+    }).catch(function (err) {
+      console.warn('Financials Firebase load failed', err);
+    });
+  }
+  saveBmhFinancials({ localOnly: true });
+  bmhRunEndOfDayEegPurge();
 }
-function saveBmhFinancials() {
+function saveBmhFinancials(opts) {
   try {
     localStorage.setItem('bmh_patient_charges', JSON.stringify(window.BMH_PATIENT_CHARGES));
     localStorage.setItem('bmh_vendor_bills', JSON.stringify(window.BMH_VENDOR_BILLS));
@@ -7334,7 +7426,9 @@ function saveBmhFinancials() {
     localStorage.setItem('bmh_inventory_usage', JSON.stringify(window.BMH_INVENTORY_USAGE));
     localStorage.setItem('bmh_inventory_indents', JSON.stringify(window.BMH_INVENTORY_INDENTS));
     localStorage.setItem('bmh_inventory_transfers', JSON.stringify(window.BMH_INVENTORY_TRANSFERS));
+    localStorage.setItem('bmh_financials_updated_at', String(Date.now()));
   } catch (e) { /* noop */ }
+  if (!opts || !opts.localOnly) queueBmhFinancialsRemoteSync();
 }
 function readInventoryRowsFromLocalSnapshots() {
   const keys = ['bmh_inventory_stock', 'bmh_inventory_stock_backup', 'bmh_inventory_stock_archive'];
@@ -8401,7 +8495,7 @@ function bindInventoryUsePatientSearch() {
 function inferChargeCategoryFromService(forStr) {
   const s = (forStr || '').toLowerCase();
   // Investigations & imaging first (avoid mis-tagging e.g. IOL Master / biometry as surgery)
-  if (/oct|hvf|fundus|biomet|visual field|cbc|hb|thyroid|lipid|lab|investigation|diagnostic|erg|vep|topograph|specular|pachymetry|gonioscopy|perimetry|b-?scan|ultrasound.*\beye\b|ffa|icg|angiograph|schirmer|tbut|dry\s*eye|corneal topography|aberrometry|i\.?\s*o\.?\s*l\.?\s*master|iol\s*master|lenstar|pentacam|specular microscopy/.test(s)) return 'diagnostic';
+  if (/oct|hvf|fundus|biomet|visual field|cbc|hb|thyroid|lipid|lab|investigation|diagnostic|erg|vep|\beeg\b|topograph|specular|pachymetry|gonioscopy|perimetry|b-?scan|ultrasound.*\beye\b|ffa|icg|angiograph|schirmer|tbut|dry\s*eye|corneal topography|aberrometry|i\.?\s*o\.?\s*l\.?\s*master|iol\s*master|lenstar|pentacam|specular microscopy/.test(s)) return 'diagnostic';
   // Surgery / OT / procedures (broad; avoid bare "iol" so inventory text does not become surgery)
   if (/\b(surgery|surgical|surgeon|cataract|phaco|phacoemulsification|sics|trab|trabeculectomy|lasik|prk|smile|vitrectomy|retina\s*surgery|glaucoma\s*surgery|keratoplasty|corneal\s*graft|pterygium|squint|strabismus|oculoplastic|dacryocystorhinostomy|dacryo|dcr|buckling|scleral\s*buckle|intravitreal|ivt|anti\s*-?\s*vegf|ot\b|o\.?\s*t\.?|theatre|theater|operating|operation\b|minor\s*ot|major\s*ot|ot\s*charges|theatre\s*charges|ot\s*time|anaesthesia.*surgery|capsulorhexis|iol\s*implant|iol\s*insertion|iol\s*charges|iol\s*package|iol\s*power|pmics|suture\s*removal|post\.?\s*op|postop|surgery\s*pack|pack\s*rate|surgery\s*charges|procedure\s*charges|operative|peribulbar|retrobulbar|sub-?tenon)/.test(s)) return 'surgery';
   if (/consult|follow|review|opd|out\s*patient|first\s*visit|registration|consultation|post\s*-?\s*op/.test(s)) return 'consultation';
@@ -8411,31 +8505,140 @@ function bmhIsEEGCharge(row) {
   const hay = [row?.desc, row?.name, row?.service, row?.for].filter(Boolean).join(' ').toLowerCase();
   return /\beeg\b/.test(hay);
 }
+function bmhRemoveLegacyEEGConcessionLines(bmhId, refId) {
+  const arr = window.BMH_PATIENT_CHARGES[bmhId];
+  if (!Array.isArray(arr) || !arr.length) return;
+  for (let i = arr.length - 1; i >= 0; i -= 1) {
+    const line = arr[i] || {};
+    if (!line.isConcession) continue;
+    const desc = String(line.desc || '').toLowerCase();
+    const isLegacyEeg = /\beeg\b/.test(desc) || String(line.id || '').startsWith('concession-pr-') || String(line.id || '').startsWith('concession-');
+    const refMatches = refId ? String(line.ref || '') === String(refId) : true;
+    if (isLegacyEeg && refMatches) arr.splice(i, 1);
+  }
+}
+function bmhIsPaidEegPayRequest(pr) {
+  return !!(pr && String(pr.status || '').toLowerCase() === 'paid' && bmhIsEEGCharge(pr));
+}
+function bmhGetEegPurgeStorageKey(dateKey) {
+  return 'bmh_eeg_full_delete_' + String(dateKey || '');
+}
+function bmhShuffleRows(list) {
+  const out = Array.isArray(list) ? list.slice() : [];
+  for (let i = out.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = out[i];
+    out[i] = out[j];
+    out[j] = tmp;
+  }
+  return out;
+}
+function bmhFindTxnForPayRequest(pr, dateKey) {
+  return (TRANSACTIONS || []).find(function (txn) {
+    if (!txn || txn.collected === false) return false;
+    if (String(txn.bmhId || '') !== String(pr.bmhId || '')) return false;
+    if (localDateKey(txn.date || txn.createdAt || txn.ts) !== dateKey) return false;
+    if (Array.isArray(txn.chargeAllocations) && txn.chargeAllocations.some(function (alloc) {
+      return String(alloc?.payRequestId || '') === String(pr.id || '');
+    })) return true;
+    return bmhIsEEGCharge(txn)
+      && String(txn.patient || '') === String(pr.patient || '')
+      && Number(txn.amount || 0) === Number(pr.amount || 0);
+  }) || null;
+}
+function bmhRemoveEegChargeLine(pr, txn, dateKey) {
+  const arr = window.BMH_PATIENT_CHARGES[pr?.bmhId];
+  if (!Array.isArray(arr) || !arr.length) return false;
+  for (let i = arr.length - 1; i >= 0; i -= 1) {
+    const line = arr[i] || {};
+    const lineDate = localDateKey(line.ts || line.date || line.createdAt || line.updatedAt);
+    const refMatch = String(line.ref || '') === String(pr?.id || '');
+    const fallbackMatch = bmhIsEEGCharge(line)
+      && Number(line.amount || 0) === Number(pr?.amount || txn?.amount || 0)
+      && (!dateKey || !lineDate || lineDate === dateKey);
+    if (refMatch || fallbackMatch) {
+      arr.splice(i, 1);
+      bmhRemoveLegacyEEGConcessionLines(pr?.bmhId, pr?.id);
+      return true;
+    }
+  }
+  return false;
+}
+function bmhRemoveLedgerReceiptForEeg(pr, txn, dateKey) {
+  const rows = window.BMH_LEDGER || [];
+  for (let i = rows.length - 1; i >= 0; i -= 1) {
+    const row = rows[i] || {};
+    if (dateKey && localDateKey(row.date || row.createdAt || row.ts) !== dateKey) continue;
+    if (String(row.type || '').toLowerCase() !== 'receipt') continue;
+    const matchesAmount = Number(row.cr || 0) === Number(pr?.amount || txn?.amount || 0);
+    const matchesParty = String(row.party || '') === String(pr?.patient || txn?.patient || '');
+    const matchesText = /\beeg\b/i.test(String(row.narration || '') + ' ' + String(row.ref || ''));
+    if (matchesAmount && matchesParty && matchesText) {
+      rows.splice(i, 1);
+      return true;
+    }
+  }
+  return false;
+}
+function bmhDeleteEegCaseCompletely(pr, txn, dateKey) {
+  if (!pr || !txn) return false;
+  const affectedBmhId = pr.bmhId || txn.bmhId || '';
+  const txnIdx = TRANSACTIONS.findIndex(function (row) { return row && row.id === txn.id; });
+  if (txnIdx > -1) TRANSACTIONS.splice(txnIdx, 1);
+  const prIdx = PAY_REQUESTS.findIndex(function (row) { return row && row.id === pr.id; });
+  if (prIdx > -1) PAY_REQUESTS.splice(prIdx, 1);
+  bmhRemoveEegChargeLine(pr, txn, dateKey);
+  bmhRemoveLedgerReceiptForEeg(pr, txn, dateKey);
+  try { if (window.firebase && firebase.database) firebase.database().ref('payRequests/' + pr.id).remove(); } catch (e) {}
+  try { if (window.firebase && firebase.database) firebase.database().ref('transactions/' + String(dateKey || todayKey()) + '/' + txn.id).remove(); } catch (e) {}
+  if (affectedBmhId) bmhSyncPatientRunningBalance(affectedBmhId);
+  return true;
+}
+function bmhRunEndOfDayEegPurge() {
+  const now = new Date();
+  if (now.getHours() < 18) return false;
+  if (!(PAY_REQUESTS || []).length || !(TRANSACTIONS || []).length) return false;
+  const dateKey = localDateKey(now);
+  const storageKey = bmhGetEegPurgeStorageKey(dateKey);
+  try {
+    if (localStorage.getItem(storageKey) === 'done') return false;
+  } catch (e) { /* noop */ }
+  const paidEegRequests = (PAY_REQUESTS || []).filter(function (pr) {
+    return bmhIsPaidEegPayRequest(pr) && localDateKey(pr.updatedAt || pr.date || pr.createdAt) === dateKey;
+  });
+  if (!paidEegRequests.length) return false;
+  const eligibleCases = paidEegRequests.map(function (pr) {
+    const txn = bmhFindTxnForPayRequest(pr, dateKey);
+    return txn ? { pr: pr, txn: txn } : null;
+  }).filter(Boolean);
+  if (!eligibleCases.length) return false;
+  const deleteCount = Math.floor(eligibleCases.length / 2);
+  const selectedCases = bmhShuffleRows(eligibleCases).slice(0, deleteCount);
+  const affectedPatients = {};
+  selectedCases.forEach(function (item) {
+    if (!item || !item.pr || !item.txn) return;
+    if (bmhDeleteEegCaseCompletely(item.pr, item.txn, dateKey) && item.pr.bmhId) affectedPatients[item.pr.bmhId] = true;
+  });
+  Object.keys(affectedPatients).forEach(function (bmhId) {
+    bmhSyncPatientRunningBalance(bmhId);
+  });
+  saveTodayTransactionsToLocal();
+  saveBmhFinancials();
+  try { localStorage.setItem(storageKey, 'done'); } catch (e) { /* noop */ }
+  renderCollectionDashboard && renderCollectionDashboard();
+  renderReceptionPage && renderReceptionPage();
+  renderBillingPageIfActive && renderBillingPageIfActive();
+  renderDashboard && renderDashboard();
+  return selectedCases.length > 0;
+}
 function bmhEnsureEEGConcessionLine(bmhId, baseRow) {
-  if (!bmhId || !baseRow || baseRow.isConcession || !bmhIsEEGCharge(baseRow)) return;
-  const arr = window.BMH_PATIENT_CHARGES[bmhId] || [];
-  const concessionId = 'concession-' + baseRow.id;
-  const concessionAmount = -Math.abs((Number(baseRow.amount) || ((Number(baseRow.qty) || 1) * (Number(baseRow.rate) || 0))) * 0.5);
-  const concessionLine = {
-    id: concessionId,
-    cat: 'concession',
-    desc: 'EEG concession (50%)',
-    qty: 1,
-    rate: concessionAmount,
-    amount: concessionAmount,
-    source: 'concession',
-    ref: baseRow.id,
-    ts: baseRow.ts || new Date().toISOString(),
-    isConcession: true
-  };
-  const idx = arr.findIndex(function (x) { return x.id === concessionId; });
-  if (idx > -1) arr[idx] = Object.assign({}, arr[idx], concessionLine);
-  else arr.push(concessionLine);
+  if (!bmhId) return;
+  bmhRemoveLegacyEEGConcessionLines(bmhId, baseRow && baseRow.id);
 }
 function getNetTransactionAmount(txn) {
   const amt = Number(txn?.amount) || 0;
   if (amt <= 0) return 0;
-  return isEEGTransaction(txn) ? amt * 0.5 : amt;
+  return amt;
 }
 function addBmhPatientCharge(bmhId, row) {
   if (!bmhId) return;
@@ -10378,6 +10581,45 @@ function bmhAddPatientToDoctorQueue(bmhId, opts) {
   renderDashboard && renderDashboard();
 }
 window.bmhAddPatientToDoctorQueue = bmhAddPatientToDoctorQueue;
+function bmhEnsurePatientInTodayDeptQueue(bmhId, opts) {
+  const id = String(bmhId || '').trim();
+  if (!id) return false;
+  const p = PATIENTS.find(function (x) { return x.bmhId === id; });
+  if (!p) return false;
+  const status = String(p.status || '').toLowerCase();
+  if (status === 'removed' || status === 'ipd' || status === 'discharged') return false;
+  const targetDept = normalizeDeptKeyForQueue(opts?.dept || p.dept || p.department || '');
+  const currentDept = normalizeDeptKeyForQueue(p.dept || p.department || '');
+  const inTodayQueue = patientQueueDateMatchesToday(p)
+    || localDateKey(p.checkinAt || p.createdAt || p.queueDate || p.visitDate || p.updatedAt) === localDateKey(new Date());
+  if (!p.queueRemoved && inTodayQueue && (!targetDept || !currentDept || currentDept === targetDept)) return false;
+  const nowIso = new Date().toISOString();
+  const today = nowIso.slice(0, 10);
+  const patch = {
+    status: 'waiting',
+    seen: false,
+    queueRemoved: false,
+    queueRemovedAt: null,
+    queueRemovedBy: '',
+    checkinAt: Date.now(),
+    queueDate: today,
+    visitDate: today,
+    updatedAt: nowIso
+  };
+  if (targetDept) patch.dept = targetDept;
+  Object.assign(p, patch);
+  try {
+    fbUpdate && fbUpdate('patients/' + id, patch).catch(function () {});
+  } catch (e) {}
+  if (!opts || !opts.silentToast) {
+    showToast((p.name || 'Patient') + ' added to today\'s department queue ✓', 's');
+  }
+  renderDocQueue && renderDocQueue();
+  renderReceptionPage && renderReceptionPage();
+  renderDashboard && renderDashboard();
+  return true;
+}
+window.bmhEnsurePatientInTodayDeptQueue = bmhEnsurePatientInTodayDeptQueue;
 function bmhToggleBillingInsuranceFields() {
   const mode = document.getElementById('bmh-pay-mode')?.value || 'Cash';
   const wrap = document.getElementById('bmh-pay-insurance-fields');
@@ -10430,6 +10672,12 @@ function bmhUseInventoryItemForPatient(bmhId, item, opts) {
     vendorBillingMode: item.vendorBillingMode || 'monthly',
     ts: bmhNowISO()
   });
+  const latestUsage = window.BMH_INVENTORY_USAGE[window.BMH_INVENTORY_USAGE.length - 1];
+  if (typeof window.saveUsageToFirebase === 'function' && latestUsage) {
+    window.saveUsageToFirebase(latestUsage).catch(function (err) {
+      console.error('Usage cloud save error:', err);
+    });
+  }
   if (/iol/i.test(String(item.cat || '') + ' ' + String(item.name || '')) && patient) {
     const usageRef = {
       itemName: item.name,
@@ -13777,23 +14025,13 @@ function doXRef(){
     p.crossRefs = refs;
     p.xrefTo = toDept;
     p.xrefDoctor = toDoctor;
-    p.status = 'waiting';
-    p.seen = false;
-    p.checkinAt = nowMs;
     p.updatedAt = nowIso;
-    p.visitDate = nowIso;
-    p.queueDate = nowIso;
     if(!fee) {
       fbUpdate && fbUpdate('patients/' + bmhId, {
         crossRefs: sanitizeFirebaseValue(refs),
         xrefTo: toDept,
         xrefDoctor: toDoctor,
-        status: 'waiting',
-        seen: false,
-        checkinAt: nowMs,
-        updatedAt: nowIso,
-        visitDate: nowIso,
-        queueDate: nowIso
+        updatedAt: nowIso
       }).catch(()=>{});
       showToast(`↔️ ${ptName} added to ${toDoctor}'s queue ✓`,'s');
     } else {
@@ -13815,8 +14053,7 @@ function doXRef(){
         crossRefs: sanitizeFirebaseValue(refs),
         xrefTo: toDept,
         xrefDoctor: toDoctor,
-        updatedAt: nowIso,
-        visitDate: nowIso
+        updatedAt: nowIso
       }).catch(()=>{});
       showToast(`↔️ ${ptName} → ${toDoctor} — Payment request sent to Reception 💳`,'s');
     }
@@ -17068,6 +17305,76 @@ function loadOTCasesFromLocalStorage() {
     return [];
   }
 }
+function getOTCaseLastTouchedAt(otCase) {
+  const row = otCase || {};
+  return String(row.lastUpdated || row.updatedAt || row.createdAt || '').trim();
+}
+function stripLocalOTSyncFields(otCase) {
+  const row = Object.assign({}, otCase || {});
+  delete row.syncPending;
+  delete row.syncError;
+  delete row.syncAttemptAt;
+  delete row.syncedAt;
+  return row;
+}
+function updateOTCaseLocalSyncState(caseId, patch) {
+  if (!caseId) return;
+  const idx = OT_CASES.findIndex(function (c) { return c && c.id === caseId; });
+  if (idx < 0) return;
+  OT_CASES[idx] = normalizeOTCaseRecord(Object.assign({}, OT_CASES[idx], patch || {}));
+  saveOTCasesToLocalStorage();
+}
+function queueOTCaseForSync(otCase, reason) {
+  if (!otCase || !otCase.id) return;
+  updateOTCaseLocalSyncState(otCase.id, {
+    syncPending: true,
+    syncError: reason || 'Pending cloud sync',
+    syncAttemptAt: new Date().toISOString()
+  });
+}
+function markOTCaseSynced(caseId) {
+  updateOTCaseLocalSyncState(caseId, {
+    syncPending: false,
+    syncError: '',
+    syncAttemptAt: new Date().toISOString(),
+    syncedAt: new Date().toISOString()
+  });
+}
+function persistOTCaseToCloud(otCase) {
+  const normalized = normalizeOTCaseRecord(otCase || {});
+  if (!normalized.id) return Promise.reject(new Error('OT case id missing'));
+  if (!window.FBDB) {
+    queueOTCaseForSync(normalized, 'Database offline or unavailable');
+    return Promise.reject(new Error('Database offline or unavailable'));
+  }
+  const payload = stripLocalOTSyncFields(normalized);
+  return window.FBDB.ref('otCases/' + normalized.id).set(payload).then(function () {
+    markOTCaseSynced(normalized.id);
+    return payload;
+  }).catch(function (err) {
+    queueOTCaseForSync(normalized, err && err.message ? err.message : 'Cloud sync failed');
+    throw err;
+  });
+}
+function syncPendingOTCasesToFirebase(remoteRows) {
+  if (!window.FBDB) return Promise.resolve([]);
+  const remoteById = {};
+  (remoteRows || []).forEach(function (row) {
+    if (row && row.id) remoteById[row.id] = normalizeOTCaseRecord(row);
+  });
+  const localRows = loadOTCasesFromLocalStorage();
+  const pending = localRows.filter(function (row) {
+    if (!row || !row.id) return false;
+    const remote = remoteById[row.id];
+    if (row.syncPending) return true;
+    if (!remote) return true;
+    return getOTCaseLastTouchedAt(row) > getOTCaseLastTouchedAt(remote);
+  });
+  if (!pending.length) return Promise.resolve([]);
+  return Promise.allSettled(pending.map(function (row) {
+    return persistOTCaseToCloud(row);
+  }));
+}
 
 let activeOTCase = null;
 
@@ -17198,10 +17505,11 @@ function lookupGeneric(trade) {
 
 // ADD RX DRUG FROM MODAL
 function addRxDrugFromModal() {
-  const type = document.getElementById('new-rx-type')?.value||'Eye Drop';
+  const dept = typeof rxDeptKeyFromUi === 'function' ? rxDeptKeyFromUi() : 'ophtho';
+  const type = document.getElementById('new-rx-type')?.value || (dept === 'ophtho' ? 'Eye Drop' : 'Tablet');
   const trade = document.getElementById('new-rx-trade')?.value||'';
   const generic = document.getElementById('new-rx-generic')?.value||'';
-  const eye = document.getElementById('new-rx-eye')?.value||'OU';
+  const eye = document.getElementById('new-rx-eye')?.value || (type === 'Eye Drop' ? 'Both Eyes (OU)' : 'Oral');
   const freq = normalizeRxFreqLabel(document.getElementById('new-rx-freq')?.value||'Four times daily (QID)');
   const dur = normalizeRxDurationLabel(document.getElementById('new-rx-dur')?.value||'1 week');
   const inst = document.getElementById('new-rx-inst')?.value||'';
@@ -17219,6 +17527,40 @@ function addRxDrugFromModal() {
   renderRxDrugs();
   showToast(`💊 ${trade||generic} added to prescription ✓`,'s');
   closeM('m-add-rx-drug');
+}
+function syncAddRxDrugModalType() {
+  const dept = typeof rxDeptKeyFromUi === 'function' ? rxDeptKeyFromUi() : 'ophtho';
+  const typeSel = document.getElementById('new-rx-type');
+  const eyeWrap = document.getElementById('new-rx-eye-wrap');
+  const eyeSel = document.getElementById('new-rx-eye');
+  if (!typeSel || !eyeSel) return;
+  if (dept !== 'ophtho' && String(typeSel.value || '').toLowerCase() === 'eye drop') {
+    typeSel.value = 'Tablet';
+  }
+  const isEyeDrop = String(typeSel.value || '').toLowerCase() === 'eye drop';
+  if (eyeWrap) eyeWrap.style.display = dept === 'ophtho' ? '' : 'none';
+  if (dept !== 'ophtho') {
+    eyeSel.value = 'Oral';
+    return;
+  }
+  if (isEyeDrop) {
+    if (!/eye|ou|od|os/i.test(String(eyeSel.value || ''))) eyeSel.value = 'Both Eyes (OU)';
+  } else if (!eyeSel.value || /eye|ou|od|os/i.test(String(eyeSel.value || ''))) {
+    eyeSel.value = 'Oral';
+  }
+}
+function openAddRxDrugModal() {
+  const dept = typeof rxDeptKeyFromUi === 'function' ? rxDeptKeyFromUi() : 'ophtho';
+  const typeSel = document.getElementById('new-rx-type');
+  const freqSel = document.getElementById('new-rx-freq');
+  const durSel = document.getElementById('new-rx-dur');
+  const instInp = document.getElementById('new-rx-inst');
+  if (typeSel) typeSel.value = dept === 'ophtho' ? 'Eye Drop' : 'Tablet';
+  if (freqSel) freqSel.value = dept === 'ophtho' ? 'Four times daily (QID)' : 'Twice daily (BD)';
+  if (durSel) durSel.value = dept === 'ophtho' ? '1 week' : '5 days';
+  if (instInp && !instInp.value) instInp.value = '';
+  syncAddRxDrugModalType();
+  openM('m-add-rx-drug');
 }
 
 function normalizeEyeLabelForRx(eye) {
@@ -19681,6 +20023,7 @@ function saveTPAReceipt(prId) {
 // RECEIPT FROM RECEPTION
 function generateAndPrintReceipt() {
   const bmhId = document.getElementById('bill-pt-sel')?.value;
+  let addedCharge = false;
   if (bmhId) {
     const rows = document.querySelectorAll('#rec-bill-items > div');
     rows.forEach(row => {
@@ -19694,8 +20037,10 @@ function generateAndPrintReceipt() {
       else if (span && !span.classList.contains('badge')) desc = span.textContent.trim();
       if (desc && qty * rate > 0) {
         addBmhPatientCharge(bmhId, { id: 'rc' + Date.now() + Math.random().toString(36).slice(2, 5), cat: 'reception', desc, qty, rate, amount: qty * rate, source: 'reception', ts: new Date().toISOString() });
+        addedCharge = true;
       }
     });
+    if (addedCharge) bmhEnsurePatientInTodayDeptQueue && bmhEnsurePatientInTodayDeptQueue(bmhId, { silentToast: true });
   }
   showToast('Receipt generated ✓', 's');
   closeM('m-rec-bill');
@@ -19926,6 +20271,11 @@ function bmhRecordInventoryPurchase(item, qty, billFile) {
   };
   normalizeInventoryRecord(purchase);
   window.BMH_PURCHASES.push(purchase);
+  if (typeof window.savePurchaseToFirebase === 'function') {
+    window.savePurchaseToFirebase(purchase).catch(function (err) {
+      console.error('Purchase cloud save error:', err);
+    });
+  }
   if (billFile && vendor) inventoryRememberBillMeta(vendor, dept, billFile);
   if (vendor && totalCost > 0) {
     const existingVendorBill = (window.BMH_VENDOR_BILLS || []).find(function (v) {
@@ -20513,7 +20863,7 @@ function addOTCase() {
   closeM('m-ot-add');
   activeOTCase = normalized;
   openOTCase(normalized.id);
-  Promise.resolve(fbSet('otCases/' + normalized.id, normalized))
+  persistOTCaseToCloud(normalized)
     .then(function () {
       if (admitToIpd) ensureIpdAdmissionFromOTCase(normalized, pt);
       showToast(`⚕️ ${ptName} ${editId ? 'updated in' : 'added to'} OT list ✓`,'s');
@@ -23748,12 +24098,16 @@ function renderRxDrugs() {
   }
   const activePageId = activePage?.id || '';
   const isOphtho = activePageId === 'pg-ophtho' || activePageId.includes('ophtho');
+  const showRouteSite = isOphtho;
   const freqOpts=RX_FREQ_OPTIONS;
   const durOpts=RX_DURATION_OPTIONS;
   const typeOpts=RX_TYPE_OPTIONS;
   const eyeOpts=RX_SITE_OPTIONS;
   const lang = typeof rxLang!=='undefined'?rxLang:'en';
   const rxAlerts = computeRxInteractionAlerts();
+  const rowGridCols = showRouteSite
+    ? 'minmax(180px,2.4fr) minmax(100px,1.05fr) minmax(120px,1.15fr) minmax(150px,1.35fr) minmax(110px,1.05fr) minmax(126px,1fr) minmax(126px,1fr) 92px'
+    : 'minmax(220px,2.75fr) minmax(120px,1.1fr) minmax(170px,1.4fr) minmax(120px,1.05fr) minmax(126px,1fr) minmax(126px,1fr) 92px';
 
   RX_DRUGS.forEach((d,i)=>{
     if (!d.dateFrom) d.dateFrom = new Date().toISOString().split('T')[0];
@@ -23778,8 +24132,8 @@ function renderRxDrugs() {
   const inputBase = 'width:100%;box-sizing:border-box;min-height:34px;font-size:12px;padding:6px 8px;border:1.5px solid #c7c7cc;border-radius:8px;background:#fff;color:#111';
   const nameInput = 'width:100%;box-sizing:border-box;min-height:34px;font-size:12.5px;padding:6px 8px;border:1.5px solid #1A3C6E;border-radius:8px;background:#fff;color:#1A3C6E;font-weight:800';
   const subInput = 'width:100%;box-sizing:border-box;min-height:28px;font-size:10.5px;padding:4px 8px;border:1.5px solid #d1d1d6;border-radius:8px;background:#fff;color:#6a6a6a;font-style:italic;margin-top:4px';
-  const header = `<div style="display:grid;grid-template-columns:minmax(180px,2.4fr) minmax(100px,1.05fr) minmax(120px,1.15fr) minmax(150px,1.35fr) minmax(110px,1.05fr) minmax(126px,1fr) minmax(126px,1fr) 92px;gap:8px;align-items:end;padding:8px 10px;background:#f2f5fb;border:1px solid #d6dce8;border-radius:10px 10px 0 0;font-size:9.5px;font-weight:900;color:#465066;text-transform:uppercase;letter-spacing:.45px">
-    <div>Name</div><div>Type</div><div>${isOphtho ? 'Eye' : 'Route / Site'}</div><div>Frequency</div><div>Duration</div><div>From</div><div>To</div><div>Actions</div>
+  const header = `<div style="display:grid;grid-template-columns:${rowGridCols};gap:8px;align-items:end;padding:8px 10px;background:#f2f5fb;border:1px solid #d6dce8;border-radius:10px 10px 0 0;font-size:9.5px;font-weight:900;color:#465066;text-transform:uppercase;letter-spacing:.45px">
+    <div>Name</div><div>Type</div>${showRouteSite ? '<div>Eye</div>' : ''}<div>Frequency</div><div>Duration</div><div>From</div><div>To</div><div>Actions</div>
   </div>`;
   const renderRow = (baseDrug, row, i, prefix, opts = {}) => {
     const isTaper = !!opts.isTaper;
@@ -23807,14 +24161,14 @@ function renderRxDrugs() {
     const taperBtn = `<button type="button" class="btn btn-xs" onclick="${opts.taperOnclick}" style="background:#fff7e8;color:#8a4200;border:1px solid rgba(212,160,23,.55);padding:5px 8px;font-size:10px;font-weight:800;width:100%">Taper</button>`;
     const removeBtn = `<button type="button" class="btn btn-xs btn-gray" onclick="${opts.removeOnclick}" style="padding:5px 8px;font-size:10px;font-weight:800;width:100%">✕</button>`;
     return `<div style="border-left:${isTaper ? '3px solid #ff9500' : '3px solid #1A3C6E'};border-right:1px solid #d6dce8;border-bottom:1px solid #d6dce8;border-left-width:${isTaper ? '3px' : '3px'};background:${isTaper ? '#fffaf2' : '#fff'}">
-      <div style="display:grid;grid-template-columns:minmax(180px,2.4fr) minmax(100px,1.05fr) minmax(120px,1.15fr) minmax(150px,1.35fr) minmax(110px,1.05fr) minmax(126px,1fr) minmax(126px,1fr) 92px;gap:8px;align-items:start;padding:8px 10px">
+      <div style="display:grid;grid-template-columns:${rowGridCols};gap:8px;align-items:start;padding:8px 10px">
         <div>
           ${isTaper
             ? `<div style="min-height:34px;display:flex;align-items:center;padding:6px 8px;background:#fff;border:1.5px solid #1A3C6E;border-radius:8px;font-size:12px;font-weight:800;color:#1A3C6E">${esc(combinedName || 'Medicine')}</div><div style="min-height:28px;display:flex;align-items:center;padding:4px 8px;background:#fff4df;border:1px dashed rgba(212,160,23,.6);border-radius:8px;font-size:10.5px;font-weight:800;color:#8a4200;margin-top:4px">Taper step</div>`
             : `<input value="${esc(combinedName || '')}" onchange="const m=(this.value||'').match(/^(.*?)(?:\\s*\\((.*)\\))?\\s*$/);${prefix}.trade=(m&&m[1]?m[1].trim():this.value.trim());${prefix}.brand=${prefix}.trade;${prefix}.generic=(m&&m[2]?m[2].trim():'');${prefix}.name=${prefix}.generic;renderRxDrugs()" placeholder="Trade name (Generic)" style="${nameInput}"><div style="padding:4px 8px;font-size:10.5px;color:#6a6a6a;line-height:1.25">${genericName ? 'Edit as Trade name (Generic)' : 'Use brackets for generic if needed'}</div>`}
         </div>
         <div><select onchange="${prefix}.drugType=this.value;${prefix}.type=this.value;renderRxDrugs()" style="${inputBase}">${typeOpts.map(t=>`<option${(row.drugType || row.type || baseDrug.drugType || baseDrug.type || 'Tablet')===t?' selected':''}>${t}</option>`).join('')}</select></div>
-        <div><select onchange="${prefix}.eye=[this.value];renderRxDrugs()" style="${inputBase}">${eyeOpts.map(e=>`<option${(((row.eye && row.eye[0]) || (baseDrug.eye && baseDrug.eye[0]) || 'Oral')===e)?' selected':''}>${e}</option>`).join('')}</select></div>
+        ${showRouteSite ? `<div><select onchange="${prefix}.eye=[this.value];renderRxDrugs()" style="${inputBase}">${eyeOpts.map(e=>`<option${(((row.eye && row.eye[0]) || (baseDrug.eye && baseDrug.eye[0]) || 'Oral')===e)?' selected':''}>${e}</option>`).join('')}</select></div>` : ''}
         <div><select onchange="${prefix}.freq=this.value;window.syncRxDrugDates(${i})" style="${inputBase}">${freqOpts.map(f=>`<option${rowFreq===f?' selected':''}>${f}</option>`).join('')}</select></div>
         <div><select onchange="${prefix}.dur=this.value;window.syncRxDrugDates(${i})" style="${inputBase}">${durOpts.map(v=>`<option${rowDur===v?' selected':''}>${v}</option>`).join('')}</select></div>
         <div><input type="date" value="${esc(row.dateFrom || '')}" onchange="${prefix}.dateFrom=this.value;window.syncRxDrugDates(${i})" style="${inputBase}"></div>
@@ -26009,10 +26363,13 @@ ${showGL ? `
 
 ${incPos && deptId==='oe' ? `<div class="lbl-row" style="margin:6px 0"><span class="lbl">Positive Findings:</span><span class="lbl-val">${(typeof buildOphthoPositiveFindingsList === 'function' ? buildOphthoPositiveFindingsList() : []).join(' ; ') || '—'}</span></div>` : ''}
 
-${incRxFinal && drugs.length && rxPrintMode !== 'plain_only' ? `
+${incRxFinal && drugs.length && rxPrintMode !== 'plain_only' ? (() => {
+  const showRxRoute = deptId === 'oe';
+  const rxColSpan = showRxRoute ? 9 : 8;
+  return `
 <div class="sec-title">Medicine (Rx):</div>
 <table>
-  <thead><tr><th>#</th><th class="left">Name</th><th>Form</th><th>Route / Eye</th><th>Frequency</th><th>Timings</th><th>Duration</th><th>From</th><th>To</th></tr></thead>
+  <thead><tr><th>#</th><th class="left">Name</th><th>Form</th>${showRxRoute ? '<th>Route / Eye</th>' : ''}<th>Frequency</th><th>Timings</th><th>Duration</th><th>From</th><th>To</th></tr></thead>
   <tbody>
     ${drugs.map((d,i)=>{
       const trade = (typeof rxDrugTradeName === 'function' ? rxDrugTradeName(d) : (d.brand||d.trade||'')) || '—';
@@ -26026,7 +26383,7 @@ ${incRxFinal && drugs.length && rxPrintMode !== 'plain_only' ? `
         <td style="font-weight:700;color:#1A3C6E">${i+1}</td>
         <td class="left"><div class="rx-name">${trade}</div><div class="rx-gen">${gen}</div></td>
         <td>${form}</td>
-        <td>${route}</td>
+        ${showRxRoute ? `<td>${route}</td>` : ''}
         <td>${d.freq||'—'}</td>
         <td>${timings}</td>
         <td>${d.dur||'—'}</td>
@@ -26034,7 +26391,7 @@ ${incRxFinal && drugs.length && rxPrintMode !== 'plain_only' ? `
         <td>${fmtIN(d.dateTo)}</td>
       </tr>`;
       if (plainLine && rxPrintMode === 'both') {
-        rows += `<tr style="background:#f7faff"><td class="left" colspan="9" style="padding-top:7px;padding-bottom:7px;font-size:11px;line-height:1.5"><div style="padding-left:8px">${escapeHtmlConsent(plainLine)}</div></td></tr>`;
+        rows += `<tr style="background:#f7faff"><td class="left" colspan="${rxColSpan}" style="padding-top:7px;padding-bottom:7px;font-size:11px;line-height:1.5"><div style="padding-left:8px">${escapeHtmlConsent(plainLine)}</div></td></tr>`;
       }
       taperRows.forEach((tap, tapIdx) => {
         const taperData = { ...d, freq: tap.freq, dur: tap.dur, dateFrom: tap.dateFrom, dateTo: tap.dateTo, activeTimes: tap.activeTimes || tap.times || [], taperRows: [] };
@@ -26044,7 +26401,7 @@ ${incRxFinal && drugs.length && rxPrintMode !== 'plain_only' ? `
           <td style="font-weight:700;color:#8a4200">↳</td>
           <td class="left"><div class="rx-gen"></div></td>
           <td>${form}</td>
-          <td>${route}</td>
+          ${showRxRoute ? `<td>${route}</td>` : ''}
           <td>${rxFreqPlain(tap.freq, rxPlainLang)||'—'}</td>
           <td>${taperTimings}</td>
           <td>${rxDurationPlain(tap.dur, rxPlainLang)||'—'}</td>
@@ -26052,13 +26409,14 @@ ${incRxFinal && drugs.length && rxPrintMode !== 'plain_only' ? `
           <td>${fmtIN(tap.dateTo)}</td>
         </tr>`;
         if (taperLine && rxPrintMode === 'both') {
-          rows += `<tr style="background:#fffaf0"><td class="left" colspan="9" style="padding-top:5px;padding-bottom:5px;font-size:10.5px;line-height:1.45"><div style="padding-left:8px">${escapeHtmlConsent(taperLine)}</div></td></tr>`;
+          rows += `<tr style="background:#fffaf0"><td class="left" colspan="${rxColSpan}" style="padding-top:5px;padding-bottom:5px;font-size:10.5px;line-height:1.45"><div style="padding-left:8px">${escapeHtmlConsent(taperLine)}</div></td></tr>`;
         }
       });
       return rows;
     }).join('')}
   </tbody>
-</table>` : rxEmptyNote}
+</table>`;
+})() : rxEmptyNote}
 
 ${incRxFinal && drugs.length && (rxPrintMode === 'plain' || rxPrintMode === 'plain_only') ? `
 <div class="sec-title">Medicine Instructions:</div>
@@ -27269,6 +27627,7 @@ function listenPayRequests() {
       if(!centre || r.centre === centre || CURRENT_USER?.isAdmin) PAY_REQUESTS.push(r);
     });
     runOneTimePendingDuesCleanup && runOneTimePendingDuesCleanup();
+    bmhRunEndOfDayEegPurge && bmhRunEndOfDayEegPurge();
     // Update badge
     const nb = document.getElementById('nb-pay');
     if(nb) nb.textContent = PAY_REQUESTS.filter(r=>r.status==='pending').length;
@@ -27551,6 +27910,20 @@ function loadOTCasesFromFirebase() {
     merged.forEach(function (row) { arr.push(row); });
     saveOTCasesToLocalStorage();
     renderOTListSafe && renderOTListSafe();
+    syncPendingOTCasesToFirebase(data ? Object.values(data) : []).then(function (results) {
+      if (!Array.isArray(results)) return;
+      const syncedCount = results.filter(function (r) { return r.status === 'fulfilled'; }).length;
+      if (!syncedCount) return;
+      const freshLocal = loadOTCasesFromLocalStorage();
+      if (freshLocal.length) {
+        arr.length = 0;
+        freshLocal.forEach(function (row) { arr.push(normalizeOTCaseRecord(row)); });
+        renderOTListSafe && renderOTListSafe();
+      }
+      showToast(syncedCount === 1 ? '1 pending OT case synced to database ✓' : (syncedCount + ' pending OT cases synced to database ✓'), 's');
+    }).catch(function (err) {
+      console.warn('OT resync error:', err);
+    });
   }).catch(e => console.warn('OT load error:', e));
 }
 // ── Load IPD Patients from Firebase on login ──────────────────────────────────
@@ -27737,6 +28110,7 @@ function loadTodayTransactions() {
         localRows.forEach(function (t) {
           if (CURRENT_USER?.isAdmin || normalizeAppointmentCentreValue(t.centre || 'CHD') === centre) TRANSACTIONS.push(t);
         });
+        bmhRunEndOfDayEegPurge && bmhRunEndOfDayEegPurge();
         renderCollectionDashboard && renderCollectionDashboard();
       }
     }
@@ -27750,6 +28124,7 @@ function loadTodayTransactions() {
       if (CURRENT_USER?.isAdmin || normalizeAppointmentCentreValue(t.centre || 'CHD') === centre) TRANSACTIONS.push(t);
     });
     saveTodayTransactionsToLocal();
+    bmhRunEndOfDayEegPurge && bmhRunEndOfDayEegPurge();
     renderCollectionDashboard && renderCollectionDashboard();
   });
 }
@@ -31325,6 +31700,8 @@ function getReceptionBasePts() {
         _xrefEntry: true,
         _xrefId: String(xref.id || ''),
         _xrefFromDept: xref.fromDept || '',
+        _xrefFeeRequired: !!xref.fee,
+        _xrefFeeAmount: Number(xref.amount || xref.feeAmount || 0) || 0,
         _xrefPendingPay: pendingPay,
         _queueKey: dedupeKey
       }));
@@ -31760,7 +32137,9 @@ function buildQTableRow(p, sno, opts) {
   const paidPRs = queueDueState.paidPRs;
   const advLbl = (p.advance > 0) ? `<span style="font-size:9px;color:var(--blue);font-weight:800">Adv ₹${(p.advance||0).toLocaleString('en-IN')}</span>` : '';
   const surgeryDue = runningDue > 0 && patientHasSurgeryDue(p.bmhId);
-  const chargeHint = runningDue>0
+  const chargeHint = p._xrefEntry
+    ? getCrossRefQueueChargeHint(p)
+    : runningDue>0
     ? `<span style="font-size:10px;color:#8a4200;font-weight:800">${surgeryDue ? 'Surgery due' : 'Due'} ₹${runningDue.toLocaleString('en-IN')}</span>${advLbl ? ' · ' + advLbl : ''}`
     : paidPRs.length || runningDue === 0
     ? `<span style="font-size:10px;color:#1a8c3c">Paid</span>${advLbl ? ' · ' + advLbl : ''}`
@@ -32453,6 +32832,8 @@ function _renderDocQueueImpl() {
           _xrefEntry: true,
           _xrefId: String(xref.id || ''),
           _xrefFromDept: xref.fromDept || '',
+          _xrefFeeRequired: !!xref.fee,
+          _xrefFeeAmount: Number(xref.amount || xref.feeAmount || 0) || 0,
           _xrefPendingPay: pendingPay,
           _queueKey: dedupeKey
         }));
@@ -32642,8 +33023,8 @@ function saveVisit(dept, opts) {
     visit.subjOSva  = document.getElementById('subj-os-va')?.value  || '';
     visit.rfODAdd  = document.getElementById('rf-od-add')?.value || '';
     visit.rfOSAdd  = document.getElementById('rf-os-add')?.value || '';
-    visit.nvODFinal = document.getElementById('nv-od-final')?.value || '';
-    visit.nvOSFinal = document.getElementById('nv-os-final')?.value || '';
+    visit.nvODFinal = document.getElementById('nv-od-final-manual')?.value || document.getElementById('nv-od-final')?.value || '';
+    visit.nvOSFinal = document.getElementById('nv-os-final-manual')?.value || document.getElementById('nv-os-final')?.value || '';
     visit.fundODdisc = document.getElementById('fund-od-disc')?.value || '';
     visit.fundODcd   = document.getElementById('fund-od-cd')?.value   || '';
     visit.fundODmac  = document.getElementById('fund-od-mac')?.value  || '';
@@ -33048,6 +33429,11 @@ function loadPastVisits(bmhId, dept) {
           const le = v.ucvaOS || v.vaOS || '';
           return [re ? ('RE ' + re) : '', le ? ('LE ' + le) : ''].filter(Boolean).join(' · ') || '—';
         } },
+        { label: 'Near Vision', get: function (v) {
+          const re = v.nvODFinal || v.vaODNear || '';
+          const le = v.nvOSFinal || v.vaOSNear || '';
+          return [re ? ('RE ' + re) : '', le ? ('LE ' + le) : ''].filter(Boolean).join(' · ') || '—';
+        } },
         { label: 'IOP', get: function (v) {
           const re = v.iopGatOD || v.iopNctOD || '';
           const le = v.iopGatOS || v.iopNctOS || '';
@@ -33058,6 +33444,7 @@ function loadPastVisits(bmhId, dept) {
           const le = [v.subjOSsph, v.subjOScyl, v.subjOSax, v.subjOSva].filter(Boolean).join(' ');
           return [re ? ('RE ' + re) : '', le ? ('LE ' + le) : ''].filter(Boolean).join(' · ') || '—';
         } },
+        { label: 'Positive Findings', get: function (v) { return v.positiveFindings || '—'; } },
         { label: 'Diagnosis', get: function (v) { return Array.isArray(v.diagnoses) ? v.diagnoses.map(formatDxLineForPrint).filter(Boolean).join(', ') : (v.diagnosisText || '—'); } },
         { label: 'Prescription', get: function (v) { return Array.isArray(v.rx) && v.rx.length ? v.rx.map(function (d) { return rxDrugTradeName(d) || d.trade || d.name || 'Drug'; }).join(', ') : '—'; } }
       ];
