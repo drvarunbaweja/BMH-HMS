@@ -12790,6 +12790,8 @@ function initLab() {
   if (dateFilter && !dateFilter.value) dateFilter.value = localDateKey(new Date());
   const dateEl = document.getElementById('lab-rpt-date');
   if (dateEl && !String(dateEl.textContent || '').trim()) dateEl.textContent = formatDateIN(new Date());
+  loadLabMasterOverrides && loadLabMasterOverrides();
+  renderInvestigationChooserSafe && renderInvestigationChooserSafe();
   renderLabOrders && renderLabOrders();
 }
 function checkLabVal(inp,lo,hi){const v=parseFloat(inp.value)||0;inp.className='lab-val-inp '+(v<lo?'val-low':v>hi?'val-high':'val-ok');}
@@ -15490,6 +15492,170 @@ const LAB_RANGE_BY_EXACT_NAME = {};
   ];
   ROWS.forEach(function (r) { LAB_RANGE_BY_EXACT_NAME[r[0]] = { unit: r[1], range: r[2] }; });
 })();
+const DEFAULT_INVESTIGATION_CATEGORIES = JSON.parse(JSON.stringify(INVESTIGATION_CATEGORIES));
+const DEFAULT_LAB_RANGE_BY_EXACT_NAME = JSON.parse(JSON.stringify(LAB_RANGE_BY_EXACT_NAME));
+function resetLabMasterToDefaults() {
+  INVESTIGATION_CATEGORIES.length = 0;
+  DEFAULT_INVESTIGATION_CATEGORIES.forEach(function (cat) {
+    INVESTIGATION_CATEGORIES.push({
+      id: cat.id,
+      label: cat.label,
+      tests: Array.isArray(cat.tests) ? cat.tests.slice() : []
+    });
+  });
+  Object.keys(LAB_RANGE_BY_EXACT_NAME).forEach(function (key) { delete LAB_RANGE_BY_EXACT_NAME[key]; });
+  Object.keys(DEFAULT_LAB_RANGE_BY_EXACT_NAME).forEach(function (key) {
+    LAB_RANGE_BY_EXACT_NAME[key] = Object.assign({}, DEFAULT_LAB_RANGE_BY_EXACT_NAME[key]);
+  });
+}
+function normalizeLabMasterCategoryId(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (!raw) return 'custom';
+  const direct = {
+    haematology: 'haem', hematology: 'haem', haem: 'haem',
+    coagulogram: 'coag', coagulation: 'coag', coag: 'coag',
+    chemistry: 'chem', biochemistry: 'chem', biochemical: 'chem', chem: 'chem',
+    rft: 'rft', renal: 'rft', kidney: 'rft',
+    lft: 'lft', liver: 'lft',
+    lipid: 'lipid', lipidprofile: 'lipid',
+    electrolyte: 'electro', electrolytes: 'electro', electro: 'electro',
+    serology: 'sero', sero: 'sero',
+    urine: 'urine', urinalysis: 'urine',
+    stool: 'stool',
+    hcg: 'hcg', pregnancy: 'hcg',
+    semen: 'semen',
+    rafq: 'rafq', ra: 'rafq',
+    thyroid: 'thyroid',
+    custom: 'custom'
+  };
+  const squashed = raw.replace(/[^a-z]+/g, '');
+  return direct[raw] || direct[squashed] || squashed || 'custom';
+}
+function normalizeLabMasterRow(row, fallbackCategory) {
+  if (!row) return null;
+  if (typeof row === 'string') {
+    const label = String(row || '').trim();
+    return label ? { name: label, group: normalizeLabMasterCategoryId(fallbackCategory) } : null;
+  }
+  if (typeof row !== 'object') return null;
+  const name = String(row.name || row.test || row.label || row.investigation || row.title || '').trim();
+  if (!name) return null;
+  const group = normalizeLabMasterCategoryId(row.group || row.category || row.cat || fallbackCategory || 'custom');
+  return {
+    name: name,
+    group: group,
+    unit: String(row.unit || row.units || '').trim(),
+    range: String(row.range || row.referenceRange || row.reference || row.normalRange || '').trim(),
+    purpose: String(row.purpose || row.narrative || row.interpretation || '').trim(),
+    patientBlurb: String(row.patientBlurb || row.description || row.summary || '').trim(),
+    normalNote: String(row.normalNote || row.normalNarrative || '').trim(),
+    abnormalNote: String(row.abnormalNote || row.abnormalNarrative || row.alert || '').trim()
+  };
+}
+function applyLabMasterDataset(dataset) {
+  if (!dataset) return false;
+  let rows = [];
+  let categories = [];
+  if (Array.isArray(dataset)) {
+    rows = dataset.slice();
+  } else if (Array.isArray(dataset.rows)) {
+    rows = dataset.rows.slice();
+  } else if (Array.isArray(dataset.tests)) {
+    rows = dataset.tests.slice();
+  } else if (dataset.byName && typeof dataset.byName === 'object') {
+    rows = Object.keys(dataset.byName).map(function (name) {
+      return Object.assign({ name: name }, dataset.byName[name] || {});
+    });
+  }
+  if (Array.isArray(dataset.categories)) {
+    categories = dataset.categories.slice();
+  } else if (dataset.groups && typeof dataset.groups === 'object') {
+    categories = Object.keys(dataset.groups).map(function (key) {
+      return { id: key, label: key, tests: dataset.groups[key] };
+    });
+  }
+  const normalizedRows = [];
+  categories.forEach(function (cat) {
+    const catId = normalizeLabMasterCategoryId(cat && (cat.id || cat.label || cat.name));
+    const tests = Array.isArray(cat?.tests) ? cat.tests : [];
+    tests.forEach(function (row) {
+      const normalized = normalizeLabMasterRow(row, catId);
+      if (normalized) normalizedRows.push(normalized);
+    });
+  });
+  rows.forEach(function (row) {
+    const normalized = normalizeLabMasterRow(row, '');
+    if (normalized) normalizedRows.push(normalized);
+  });
+  if (!normalizedRows.length) return false;
+  resetLabMasterToDefaults();
+  const grouped = {};
+  normalizedRows.forEach(function (row) {
+    if (!grouped[row.group]) grouped[row.group] = [];
+    if (!grouped[row.group].some(function (name) { return String(name).toLowerCase() === row.name.toLowerCase(); })) {
+      grouped[row.group].push(row.name);
+    }
+    LAB_RANGE_BY_EXACT_NAME[row.name] = Object.assign({}, LAB_RANGE_BY_EXACT_NAME[row.name] || {}, row);
+  });
+  Object.keys(grouped).forEach(function (groupId) {
+    const existing = INVESTIGATION_CATEGORIES.find(function (cat) { return cat.id === groupId; });
+    if (existing) {
+      existing.tests = grouped[groupId].slice();
+      return;
+    }
+    INVESTIGATION_CATEGORIES.push({
+      id: groupId,
+      label: toDisplayTitleCase(groupId),
+      tests: grouped[groupId].slice()
+    });
+  });
+  return true;
+}
+function renderInvestigationChooserSafe() {
+  try { renderInvestigationChooser && renderInvestigationChooser(); } catch (e) {}
+  try { refreshInvestigationTemplateSelect && refreshInvestigationTemplateSelect(); } catch (e) {}
+  try { syncSelectedInvestigationCheckboxes && syncSelectedInvestigationCheckboxes(); } catch (e) {}
+}
+function loadLabMasterOverrides() {
+  if (window._bmhLabMasterLoadStarted) return;
+  window._bmhLabMasterLoadStarted = true;
+  const tryApply = function (payload) {
+    if (!payload) return false;
+    const ok = applyLabMasterDataset(payload);
+    if (ok) {
+      window._bmhLabMasterLoaded = true;
+      try { localStorage.setItem('bmh_lab_master', JSON.stringify(payload)); } catch (e) {}
+      renderInvestigationChooserSafe();
+    }
+    return ok;
+  };
+  try {
+    const localRaw = localStorage.getItem('bmh_lab_master');
+    if (localRaw && tryApply(JSON.parse(localRaw))) return;
+  } catch (e) {}
+  if (!window.fbOnce) {
+    renderInvestigationChooserSafe();
+    return;
+  }
+  const candidatePaths = [
+    'settings/labMaster',
+    'settings/labMasterData',
+    'settings/labInvestigationMaster',
+    'settings/investigationMaster'
+  ];
+  Promise.all(candidatePaths.map(function (path) {
+    return fbOnce(path).then(function (data) { return { path: path, data: data }; }).catch(function () { return { path: path, data: null }; });
+  })).then(function (results) {
+    let applied = false;
+    results.forEach(function (result) {
+      if (applied || !result.data) return;
+      applied = tryApply(result.data);
+    });
+    if (!applied) renderInvestigationChooserSafe();
+  }).catch(function () {
+    renderInvestigationChooserSafe();
+  });
+}
 const RX_FREQ_OPTIONS = ['Half-hourly','Hourly','Every 2 hours','Every 3 hours','Every 4 hours','Six times daily (6x/day)','Four times daily (QID)','Three times daily (TDS)','Twice daily (BD)','Once daily (OD)','At bedtime (HS)','Once weekly','As needed (PRN)'];
 const RX_DURATION_OPTIONS = ['½ day','1 day','2 days','3 days','4 days','5 days','6 days','7 days','10 days','13 days','1 week','2 weeks','3 weeks','4 weeks','6 weeks','1 month','2 months','3 months','4 months','5 months','6 months','12 months','Ongoing'];
 const RX_TYPE_OPTIONS = ['Eye Drop','Tablet','Capsule','Ointment','Cream','Gel','Syrup','Injection','Pessary','Lotion','Spray','Other'];
@@ -23239,6 +23405,17 @@ function currentPatientVisitInvestigationBucket() {
   if(!Array.isArray(pt.lastVisit.investigations)) pt.lastVisit.investigations = [];
   return { pt, list: pt.lastVisit.investigations };
 }
+function looksLikeOphthoImagingUpload(entry) {
+  const hay = [entry?.name, entry?.category, entry?.type].filter(Boolean).join(' ').toLowerCase();
+  return /biometry|iol master|oct|hvf|fundus|topography|specular|angiography|b-?scan|pentacam|lenstar|ophth|eye/.test(hay);
+}
+function isLabReportUpload(entry) {
+  if (!entry) return false;
+  const category = String(entry.category || '').trim().toLowerCase();
+  if (category === 'lab-report') return true;
+  if (category === 'ophtho-imaging' || category === 'biometry') return false;
+  return !looksLikeOphthoImagingUpload(entry);
+}
 function renderCurrentPatientInvestigationUploads(entries) {
   const list = document.getElementById('bio-uploads-list');
   if(!list) return;
@@ -23273,16 +23450,16 @@ function handleInvestigationUpload(input) {
           const compressed = canvas.toDataURL('image/jpeg', 0.72);
           const sizKB = Math.round(compressed.length * 0.75 / 1024);
           const key = 'inv_' + Date.now();
-          const entry = { key, name: file.name, type: 'image/jpeg', data: compressed, bmhId, date: new Date().toISOString(), sizKB };
+          const entry = { key, name: file.name, type: 'image/jpeg', category: looksLikeOphthoImagingUpload({ name: file.name, type: 'image/jpeg' }) ? 'ophtho-imaging' : 'lab-report', data: compressed, bmhId, date: new Date().toISOString(), sizKB };
           // Save to Firebase
           // Store compressed data in session for display
           window.INV_UPLOADS = window.INV_UPLOADS || {};
           window.INV_UPLOADS[key] = entry;
-          const persist = window.fbSet ? fbSet(`investigations/${bmhId}/${key}`, { key, name: file.name, type: 'image/jpeg', bmhId, date: entry.date, sizKB, data: compressed }) : Promise.resolve();
+          const persist = window.fbSet ? fbSet(`investigations/${bmhId}/${key}`, { key, name: file.name, type: 'image/jpeg', category: entry.category, bmhId, date: entry.date, sizKB, data: compressed }) : Promise.resolve();
           persist.then(() => {
             if(visitBucket) {
               visitBucket.list = visitBucket.list || [];
-              visitBucket.list.unshift({ key, name: file.name, type: 'image/jpeg', date: entry.date, sizKB, bmhId });
+              visitBucket.list.unshift({ key, name: file.name, type: 'image/jpeg', category: entry.category, date: entry.date, sizKB, bmhId });
               fbUpdate && fbUpdate('patients/' + visitBucket.pt.bmhId, { lastVisit: visitBucket.pt.lastVisit }).catch(()=>{});
             }
             renderCurrentPatientInvestigationUploads && renderCurrentPatientInvestigationUploads();
@@ -23301,14 +23478,14 @@ function handleInvestigationUpload(input) {
       reader.onload = e => {
         const key = 'inv_' + Date.now();
         const sizKB = Math.round(file.size / 1024);
-        const entry = { key, name: file.name, type: file.type, data: e.target.result, bmhId, date: new Date().toISOString(), sizKB };
+        const entry = { key, name: file.name, type: file.type, category: looksLikeOphthoImagingUpload({ name: file.name, type: file.type }) ? 'ophtho-imaging' : 'lab-report', data: e.target.result, bmhId, date: new Date().toISOString(), sizKB };
         window.INV_UPLOADS = window.INV_UPLOADS || {};
         window.INV_UPLOADS[key] = entry;
-        const persist = window.fbSet ? fbSet(`investigations/${bmhId}/${key}`, { key, name: file.name, type: file.type, bmhId, date: entry.date, sizKB, data: e.target.result }) : Promise.resolve();
+        const persist = window.fbSet ? fbSet(`investigations/${bmhId}/${key}`, { key, name: file.name, type: file.type, category: entry.category, bmhId, date: entry.date, sizKB, data: e.target.result }) : Promise.resolve();
         persist.then(() => {
           if(visitBucket) {
             visitBucket.list = visitBucket.list || [];
-            visitBucket.list.unshift({ key, name: file.name, type: file.type, date: entry.date, sizKB, bmhId });
+            visitBucket.list.unshift({ key, name: file.name, type: file.type, category: entry.category, date: entry.date, sizKB, bmhId });
             fbUpdate && fbUpdate('patients/' + visitBucket.pt.bmhId, { lastVisit: visitBucket.pt.lastVisit }).catch(()=>{});
           }
           renderCurrentPatientInvestigationUploads && renderCurrentPatientInvestigationUploads();
@@ -23770,6 +23947,64 @@ function getUnreadLabResultsTitle(pt) {
   });
   return lines.join('\n');
 }
+function buildUnreadLabResultsTooltipHtml(pt) {
+  const orders = (Array.isArray(pt?.investigationOrders) ? pt.investigationOrders : []).filter(function (o) {
+    return o && o.mode === 'send' && o.done && o.labReady && !o.doctorSeen;
+  });
+  if (!orders.length) return '';
+  const rows = orders.map(function (o) {
+    const nm = normalizeLabTestName(o.name || 'Test');
+    const val = String(o?.result?.val || '').trim() || 'Pending value';
+    const unit = String(o?.result?.unit || '').trim();
+    const flag = String(o?.result?.flag || o?.flag || '').trim();
+    return '<div style="margin-bottom:4px"><span style="font-weight:800;color:#111">' + escapeHtmlConsent(nm) + ':</span> '
+      + escapeHtmlConsent([val, unit].filter(Boolean).join(' ')) 
+      + (flag && flag !== 'Normal' && flag !== '—' ? ' <span style="font-weight:900;color:#b42318">(' + escapeHtmlConsent(flag) + ')</span>' : '')
+      + '</div>';
+  }).join('');
+  return '<span style="display:none;position:absolute;left:0;top:calc(100% + 6px);z-index:35;width:min(360px,80vw);padding:10px 12px;border-radius:10px;background:#fff;border:1px solid #d0d7de;box-shadow:0 14px 34px rgba(0,0,0,.16);font-size:10.5px;line-height:1.45;color:#374151;white-space:normal"><div style="font-size:10px;font-weight:900;color:#166534;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Lab Results Ready</div>' + rows + '</span>';
+}
+function buildLabOrderSnapshotForPatientDate(pt, selectedDate) {
+  if (!pt) return null;
+  const day = (selectedDate || localDateKey(new Date())).slice(0, 10);
+  const dateMatches = function (value) {
+    if (!value) return false;
+    const raw = String(value);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw === day;
+    const d = new Date(raw);
+    if (!Number.isNaN(d.getTime())) return localDateKey(d) === day;
+    return raw === day || formatDateIN(raw) === formatDateIN(day);
+  };
+  const relevant = (Array.isArray(pt.investigationOrders) ? pt.investigationOrders : []).filter(function (o) {
+    return o && o.mode === 'send' && o.done && o.labReady && dateMatches(o.completedAt || o.date || o.createdAt);
+  });
+  if (!relevant.length) return null;
+  const latest = relevant.slice().sort(function (a, b) {
+    return String(b.completedAt || b.date || '').localeCompare(String(a.completedAt || a.date || ''));
+  })[0] || {};
+  return {
+    id: 'LABH-' + pt.bmhId + '-' + day,
+    bmhId: pt.bmhId,
+    patient: pt.name,
+    age: pt.age || '',
+    sex: pt.sex || '',
+    dr: latest.orderedBy || pt.assignedDoctor || pt.doctor || 'Doctor',
+    dept: pt.dept || 'ophtho',
+    centre: pt.centre || CURRENT_USER?.centre || 'CHD',
+    date: latest.date || latest.completedAt || day,
+    completedAt: latest.completedAt || latest.date || day,
+    tests: relevant.map(function (o) { return normalizeLabTestName(o.name); }),
+    orders: relevant.map(function (o) { return Object.assign({}, o); }),
+    results: relevant.reduce(function (acc, o) {
+      acc[normalizeLabTestName(o.name)] = Object.assign({}, getLabTestMeta(o.name), o.result || {}, { flag: (o.result && o.result.flag) || o.flag || '—' });
+      return acc;
+    }, {}),
+    comments: latest.labComments || '',
+    tech: latest.labTech || '',
+    status: 'completed',
+    unread: relevant.some(function (o) { return !o.doctorSeen; })
+  };
+}
 function getPatientLabQueueEntries() {
   const selectedDate = (document.getElementById('lab-date-filter')?.value || localDateKey(new Date())).slice(0, 10);
   const dateMatches = function (value) {
@@ -23955,19 +24190,16 @@ function renderLabDateReportSearch(selectedDate) {
   const rows = [];
   (window.PATIENTS || []).forEach(function (pt) {
     if (!pt || !centreMatch(pt)) return;
-    const uploads = pt.lastVisit && Array.isArray(pt.lastVisit.investigations) ? pt.lastVisit.investigations : [];
-    uploads.forEach(function (entry) {
-      if (!entry || !entry.date) return;
-      const key = localDateKey(entry.date);
-      if (key !== day) return;
-      rows.push({
-        bmhId: pt.bmhId,
-        patient: pt.name || 'Patient',
-        key: entry.key,
-        name: entry.name || 'Investigation',
-        sizKB: Math.round(Number(entry.sizKB) || 0),
-        date: entry.date
-      });
+    const snapshot = buildLabOrderSnapshotForPatientDate(pt, day);
+    if (!snapshot) return;
+    rows.push({
+      bmhId: pt.bmhId,
+      patient: pt.name || 'Patient',
+      name: snapshot.tests.join(', '),
+      testCount: snapshot.tests.length,
+      date: snapshot.completedAt || snapshot.date,
+      tech: snapshot.tech || '',
+      unread: snapshot.unread
     });
   });
   rows.sort(function (a, b) { return String(b.date || '').localeCompare(String(a.date || '')); });
@@ -23975,13 +24207,25 @@ function renderLabDateReportSearch(selectedDate) {
   listEl.innerHTML = rows.length ? rows.slice(0, 80).map(function (entry) {
     return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;background:#fff;border:1px solid var(--g5);border-radius:8px;padding:7px 8px;margin-bottom:6px">'
       + '<div style="min-width:0">'
-      + '<div style="font-size:11.5px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escapeHtmlConsent(entry.patient) + ' · ' + escapeHtmlConsent(entry.name) + '</div>'
-      + '<div style="font-size:10px;color:var(--g1)">' + escapeHtmlConsent(entry.bmhId) + ' · ' + escapeHtmlConsent(String(entry.sizKB || 0)) + ' KB · ' + escapeHtmlConsent(formatDateIN(entry.date)) + '</div>'
+      + '<div style="font-size:11.5px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escapeHtmlConsent(entry.patient) + ' · ' + escapeHtmlConsent((entry.testCount || 0) + ' test' + (entry.testCount === 1 ? '' : 's')) + (entry.unread ? ' <span style="color:#166534">• Ready</span>' : '') + '</div>'
+      + '<div style="font-size:10px;color:var(--g1)">' + escapeHtmlConsent(entry.bmhId) + ' · ' + escapeHtmlConsent(entry.tech || 'Lab') + ' · ' + escapeHtmlConsent(formatDateIN(entry.date)) + '</div>'
       + '</div>'
-      + '<button type="button" class="btn btn-xs btn-outline" onclick="viewStoredInvestigation(\'' + String(entry.bmhId).replace(/'/g, "\\'") + '\',\'' + String(entry.key).replace(/'/g, "\\'") + '\')">Open</button>'
+      + '<button type="button" class="btn btn-xs btn-outline" onclick="openHistoricalLabReport(\'' + String(entry.bmhId).replace(/'/g, "\\'") + '\',\'' + String(day).replace(/'/g, "\\'") + '\')">Open</button>'
       + '</div>';
-  }).join('') : '<div style="padding:8px;font-size:11.5px;color:var(--g1)">No compressed reports for this date.</div>';
+  }).join('') : '<div style="padding:8px;font-size:11.5px;color:var(--g1)">No lab reports for this date.</div>';
 }
+function openHistoricalLabReport(bmhId, dateKey) {
+  const pt = (window.PATIENTS || []).find(function (row) { return row && row.bmhId === bmhId; });
+  const snapshot = buildLabOrderSnapshotForPatientDate(pt, dateKey);
+  if (!snapshot) { showToast('Lab report not found', 'w'); return; }
+  activeLabOrder = snapshot;
+  const panel = document.getElementById('lab-entry-panel');
+  if (panel) panel.style.display = 'none';
+  const sel = document.getElementById('lab-pt-sel');
+  if (sel) sel.value = '';
+  renderLabReportPreview(snapshot);
+}
+window.openHistoricalLabReport = openHistoricalLabReport;
 
 function deleteLabPendingBlock(orderId) {
   const order = LAB_ORDERS.find(function (o) { return o.id === orderId; });
@@ -33266,7 +33510,8 @@ function buildQTableRow(p, sno, opts) {
   const docShort = (p.assignedDoctor || p.doctor || '—').replace(/^Dr\.\s*/,'');
   const vulnBadge = vuln ? '<span class="q-vuln-badge" title="Vulnerable — elderly (≥65) or flagged">⚠ VUL</span>' : '';
   const labHover = getUnreadLabResultsTitle(p);
-  const labReadyBadge = patientHasUnreadLabResults(p) ? `<span title="${escapeHtmlConsent(labHover || 'Results ready')}" style="display:inline-flex;align-items:center;gap:4px;padding:1px 6px;border-radius:999px;background:#eafaf1;color:#166534;border:1px solid rgba(22,101,52,.25);font-size:9px;font-weight:900;animation:pulse 1.2s infinite">🧪 Results Ready</span>` : '';
+  const labTooltip = buildUnreadLabResultsTooltipHtml(p);
+  const labReadyBadge = patientHasUnreadLabResults(p) ? `<span title="${escapeHtmlConsent(labHover || 'Results ready')}" onmouseenter="const tip=this.querySelector('.lab-ready-tip');if(tip)tip.style.display='block'" onmouseleave="const tip=this.querySelector('.lab-ready-tip');if(tip)tip.style.display='none'" style="position:relative;display:inline-flex;align-items:center;gap:4px;padding:1px 6px;border-radius:999px;background:#eafaf1;color:#166534;border:1px solid rgba(22,101,52,.25);font-size:9px;font-weight:900;animation:pulse 1.2s infinite">🧪 Results Ready${labTooltip.replace('<span style="display:none;', '<span class="lab-ready-tip" style="display:none;')}</span>` : '';
   const restoreSeenAction = seenRow
     ? (p._xrefId
       ? `restoreCrossRefToActive('${String(p.bmhId).replace(/'/g, "\\'")}','${xrefIdEsc}')`
