@@ -26879,6 +26879,98 @@ window.printUnifiedRx = function(deptId) {
     ribbon_timeline: `body{background:#fffdfa}.sec-label{color:#0f7b82}.rx-list{position:relative;padding-left:12px}.rx-list:before{content:'';position:absolute;left:2px;top:2px;bottom:2px;width:3px;border-radius:999px;background:linear-gradient(180deg,#0f7b82,#ef8b67)}.rx-item{position:relative;padding:8px 10px 8px 14px;border:1px solid #dde7e7;border-radius:12px;background:#fff;margin-bottom:8px}.rx-item:before{content:'';position:absolute;left:-18px;top:18px;width:10px;height:10px;border-radius:50%;background:#fff;border:3px solid #0f7b82}.rx-item-name{font-size:14px}.rx-item-instr{font-size:11px;font-style:normal;font-weight:700;background:#eef7f7;border-radius:8px;padding:8px 10px;margin-top:8px;border-left:none}`,
     compact_bilingual: `body{font-size:9.7px;padding:3.2mm 7mm 3mm;line-height:1.26}.pt-name{font-size:16px}.pt-subline{margin-bottom:2px}.sec-divider{margin:3px 0 2px}.rx-item{padding:3px 0 4px}.rx-item-name{font-size:12.8px}.rx-item-instr{font-size:10.8px;font-style:normal;font-weight:700;color:#24384d}.advice-block{font-size:10.6px;font-style:normal;font-weight:700;line-height:1.3}.fu-box{font-size:10px;padding:4px 8px}`
   }[rxDesign] || '';
+  const renderRxTaperDesign = function (trade, taperRows) {
+    if (!taperRows.length) return '';
+    if (rxDesign === 'signature_classic') {
+      return `<div class="design-taper classic"><div class="design-taper-title">Taper Plan — ${escapeHtmlConsent(trade)}</div>${taperRows.map(function (tap, ti) {
+        const taperData = { freq: tap.freq, dur: tap.dur, dateFrom: tap.dateFrom, dateTo: tap.dateTo, eye: tap.eye, mealTiming: tap.mealTiming, activeTimes: tap.activeTimes || tap.times || [] };
+        return `<div class="design-taper-line"><strong>Step ${ti + 1}:</strong> ${escapeHtmlConsent(buildRxTaperSummaryLine(taperData, rxPlainLang, fmtIN))}</div>`;
+      }).join('')}</div>`;
+    }
+    if (rxDesign === 'clinical_blocks') {
+      return `<div class="design-taper blocks"><div class="design-taper-title">Taper Schedule</div><div class="design-taper-grid">${taperRows.map(function (tap, ti) {
+        const taperData = { freq: tap.freq, dur: tap.dur, dateFrom: tap.dateFrom, dateTo: tap.dateTo, eye: tap.eye, mealTiming: tap.mealTiming, activeTimes: tap.activeTimes || tap.times || [] };
+        return `<div class="design-taper-box"><div class="design-step">Step ${ti + 1}</div><div class="design-step-line">${escapeHtmlConsent(buildRxTaperSummaryLine(taperData, rxPlainLang, fmtIN))}</div></div>`;
+      }).join('')}</div></div>`;
+    }
+    if (rxDesign === 'ribbon_timeline') {
+      return `<div class="design-taper ribbon"><div class="design-taper-title">Taper Journey</div>${taperRows.map(function (tap, ti) {
+        const taperData = { freq: tap.freq, dur: tap.dur, dateFrom: tap.dateFrom, dateTo: tap.dateTo, eye: tap.eye, mealTiming: tap.mealTiming, activeTimes: tap.activeTimes || tap.times || [] };
+        return `<div class="design-ribbon-step"><span class="design-ribbon-dot"></span><div><strong>Step ${ti + 1}</strong><div>${escapeHtmlConsent(buildRxTaperSummaryLine(taperData, rxPlainLang, fmtIN))}</div></div></div>`;
+      }).join('')}</div>`;
+    }
+    if (rxDesign === 'compact_bilingual') {
+      return `<div class="design-taper compact"><div class="design-taper-title">Taper</div>${taperRows.map(function (tap, ti) {
+        const taperData = { freq: tap.freq, dur: tap.dur, dateFrom: tap.dateFrom, dateTo: tap.dateTo, eye: tap.eye, mealTiming: tap.mealTiming, activeTimes: tap.activeTimes || tap.times || [] };
+        return `<div class="design-taper-line"><strong>${ti + 1}.</strong> ${escapeHtmlConsent(buildRxTaperSummaryLine(taperData, rxPlainLang, fmtIN))}</div>`;
+      }).join('')}</div>`;
+    }
+    return '';
+  };
+  const renderMedsByDesign = function () {
+    if (!incRxFinal || !drugs.length) return rxEmptyNote || '';
+    if (rxDesign === 'current') return '';
+    return `<div class="design-rx design-${rxDesign}">
+      ${drugs.map(function (d, i) {
+        const trade = (typeof rxDrugTradeName === 'function' ? rxDrugTradeName(d) : (d.brand || d.trade || '')) || '—';
+        const gen = (typeof rxDrugGenericName === 'function' ? rxDrugGenericName(d) : (d.name || d.generic || '')) || '';
+        const form = d.drugType || d.type || '';
+        const route = deptId === 'oe' ? ((Array.isArray(d.eye) ? d.eye[0] : d.eye) || '') : '';
+        const timings = getRxTimingsText(d);
+        const plainLine = buildRxPlainInstructionLine(d, rxPlainLang, fmtIN);
+        const taperRows = Array.isArray(d.taperRows) ? d.taperRows : (d.taperRow ? [d.taperRow] : []);
+        const meta = [d.freq || '', timings || '', route || '', d.dur || ''].filter(Boolean).join(' · ');
+        if (rxDesign === 'signature_classic') {
+          return `<div class="design-med classic">
+            <div class="design-med-top"><div><div class="design-med-name">${i + 1}. ${escapeHtmlConsent(trade)}</div>${gen ? `<div class="design-med-sub">${escapeHtmlConsent(gen)}${form ? ' · ' + escapeHtmlConsent(form) : ''}</div>` : (form ? `<div class="design-med-sub">${escapeHtmlConsent(form)}</div>` : '')}</div><div class="design-med-chip">${escapeHtmlConsent(meta || 'As prescribed')}</div></div>
+            <div class="design-med-instr">${escapeHtmlConsent(plainLine || '')}</div>
+            ${renderRxTaperDesign(trade, taperRows)}
+          </div>`;
+        }
+        if (rxDesign === 'clinical_blocks') {
+          return `<div class="design-med blocks">
+            <div class="design-med-top"><div><div class="design-med-name">${escapeHtmlConsent(trade)}</div><div class="design-med-sub">${[gen, form].filter(Boolean).map(escapeHtmlConsent).join(' · ')}</div></div><div class="design-med-pills">${[d.freq, timings, d.dur].filter(Boolean).map(function (x) { return `<span>${escapeHtmlConsent(x)}</span>`; }).join('')}</div></div>
+            <div class="design-med-instr">${escapeHtmlConsent(plainLine || '')}</div>
+            ${renderRxTaperDesign(trade, taperRows)}
+          </div>`;
+        }
+        if (rxDesign === 'ribbon_timeline') {
+          return `<div class="design-med ribbon">
+            <div class="design-med-tag">Medicine ${i + 1}</div>
+            <div class="design-med-top"><div><div class="design-med-name">${escapeHtmlConsent(trade)}</div><div class="design-med-sub">${[gen, form].filter(Boolean).map(escapeHtmlConsent).join(' · ')}</div></div><div class="design-med-right">${escapeHtmlConsent(meta || '')}</div></div>
+            <div class="design-med-instr">${escapeHtmlConsent(plainLine || '')}</div>
+            ${renderRxTaperDesign(trade, taperRows)}
+          </div>`;
+        }
+        return `<div class="design-med compact">
+          <div class="design-med-top"><div class="design-med-name">${escapeHtmlConsent(trade)}</div><div class="design-med-right">${escapeHtmlConsent(meta || '')}</div></div>
+          ${gen || form ? `<div class="design-med-sub">${[gen, form].filter(Boolean).map(escapeHtmlConsent).join(' · ')}</div>` : ''}
+          <div class="design-med-instr">${escapeHtmlConsent(plainLine || '')}</div>
+          ${renderRxTaperDesign(trade, taperRows)}
+        </div>`;
+      }).join('')}
+    </div>`;
+  };
+  const renderDiagnosisByDesign = function () {
+    if (!dxList.length) return '';
+    if (rxDesign === 'current') return '';
+    const joined = dxList.map(escapeHtmlConsent).join(' · ');
+    if (rxDesign === 'signature_classic') return `<div class="design-dx classic">${joined}</div>`;
+    if (rxDesign === 'clinical_blocks') return `<div class="design-dx blocks"><div class="design-dx-title">Clinical Diagnosis</div><div class="design-dx-body">${joined}</div></div>`;
+    if (rxDesign === 'ribbon_timeline') return `<div class="design-dx ribbon"><div class="design-dx-title">Diagnosis</div><div class="design-dx-body">${joined}</div></div>`;
+    return `<div class="design-dx compact">${joined}</div>`;
+  };
+  const renderAdviceFollowByDesign = function () {
+    if (rxDesign === 'current') return '';
+    const adviceBlock = incAdvFinal && adviceHtml ? `<div class="design-side-card"><div class="design-side-title">Instructions</div><div class="design-side-body">${adviceHtml}</div></div>` : '';
+    const followBlock = fuFormatted ? `<div class="design-follow ${rxDesign}">Next Visit: ${fuFormatted}</div>` : '';
+    if (!adviceBlock && !followBlock) return '';
+    if (rxDesign === 'compact_bilingual') return `<div class="design-bottom compact">${adviceBlock}${followBlock}</div>`;
+    return `<div class="design-bottom">${adviceBlock}${followBlock}</div>`;
+  };
+  const designedDiagnosis = renderDiagnosisByDesign();
+  const designedMeds = renderMedsByDesign();
+  const designedAdviceFollow = renderAdviceFollowByDesign();
 
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>
@@ -26964,6 +27056,67 @@ tr:nth-child(even) td{background:#f6f6f6}
 .watermark{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-30deg);font-size:80px;font-weight:900;color:rgba(0,0,0,.03);font-family:'Playfair Display','Georgia',serif;white-space:nowrap;pointer-events:none;z-index:0}
 /* OE plain instruction row */
 .oe-plain-row td{font-size:10px;font-style:italic;color:#444;background:#f8f8f8}
+/* Full design variants */
+.design-dx.classic{padding:14px 18px;border:1px solid #d9e0ea;border-left:5px solid #c89a2b;border-radius:16px;background:#fffdf8;font-family:'Playfair Display','Georgia',serif;font-size:19px;font-weight:700;line-height:1.5;color:#14345e}
+.design-dx.blocks,.design-dx.ribbon,.design-dx.compact{border:1px solid #d9e5ef;border-radius:16px;background:#fff;padding:12px 14px}
+.design-dx-title{font-size:10px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;color:#667085;margin-bottom:6px}
+.design-dx.blocks .design-dx-body{font-size:19px;font-weight:900;line-height:1.3;color:#173a67}
+.design-dx.ribbon{background:linear-gradient(135deg,#163e69,#0f7b82);color:#fff;border:none}
+.design-dx.ribbon .design-dx-title{color:rgba(255,255,255,.72)}
+.design-dx.ribbon .design-dx-body{font-size:20px;font-weight:800;line-height:1.3}
+.design-dx.compact{font-size:16px;font-weight:800;line-height:1.4;color:#153d66;background:#f6f9fc}
+.design-rx{margin-bottom:6px}
+.design-med{margin-bottom:10px}
+.design-med:last-child{margin-bottom:0}
+.design-med-top{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}
+.design-med-name{font-family:'Playfair Display','Georgia',serif;color:#14345e}
+.design-med-sub{font-size:9.8px;color:#667085;line-height:1.45;margin-top:3px}
+.design-med-instr{line-height:1.45}
+.design-med.classic{border:1px solid #dfe4ec;border-radius:18px;padding:14px 16px;background:#fff;box-shadow:0 8px 22px rgba(20,52,94,.05)}
+.design-med.classic .design-med-name{font-size:24px}
+.design-med.classic .design-med-chip{min-width:170px;text-align:right;font-size:11px;font-weight:900;color:#5d4b16;background:#fbf2dc;border:1px solid #ecd8a1;border-radius:12px;padding:9px 12px}
+.design-med.classic .design-med-instr{margin-top:12px;padding:12px 14px;border-radius:14px;background:#f7f9fc;font-family:'Playfair Display','Georgia',serif;font-size:17px;font-weight:700;color:#24384d}
+.design-med.blocks{border:1px solid #d8e4ef;border-radius:18px;padding:14px;background:#eef5fb}
+.design-med.blocks .design-med-name{font-size:20px}
+.design-med.blocks .design-med-pills{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;max-width:250px}
+.design-med.blocks .design-med-pills span{padding:7px 10px;border-radius:999px;background:#fff;border:1px solid #d7e0ea;font-size:12px;font-weight:800;color:#35506d}
+.design-med.blocks .design-med-instr{margin-top:10px;background:#fff;border-radius:14px;padding:11px 12px;font-size:15px;font-weight:700;color:#24384d}
+.design-med.ribbon{position:relative;border:1px solid #dde7e7;border-radius:18px;padding:16px 16px 16px 18px;background:#fff;box-shadow:0 10px 24px rgba(16,24,40,.05)}
+.design-med.ribbon .design-med-tag{display:inline-block;margin-bottom:10px;padding:5px 9px;border-radius:999px;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.08em;background:#eff7f8;color:#0f7b82}
+.design-med.ribbon .design-med-name{font-size:23px}
+.design-med.ribbon .design-med-right{min-width:180px;text-align:right;font-size:12px;line-height:1.6;color:#445467;font-weight:800}
+.design-med.ribbon .design-med-instr{margin-top:10px;background:#eef7f7;border-radius:14px;padding:12px 13px;font-size:15px;font-weight:700;color:#24384d}
+.design-med.compact{border:1px solid #d8e0e8;border-radius:14px;padding:10px 12px;background:#fff}
+.design-med.compact .design-med-name{font-size:16px;font-weight:700}
+.design-med.compact .design-med-right{font-size:11px;font-weight:800;color:#445467}
+.design-med.compact .design-med-instr{margin-top:7px;font-size:13px;font-weight:700;color:#24384d}
+.design-taper{margin-top:10px}
+.design-taper-title{font-size:11px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px}
+.design-taper.classic{border-radius:14px;background:linear-gradient(180deg,#fff8e9 0%, #fff 100%);border:1px solid #eed8a3;padding:12px 14px}
+.design-taper.classic .design-taper-title{color:#7d5400}
+.design-taper-line{font-size:13px;line-height:1.6;color:#5a4630;font-weight:700}
+.design-taper.blocks{border-radius:14px;background:#fff2d8;border:1px solid #ebcf8c;padding:12px}
+.design-taper.blocks .design-taper-title{color:#7b5900}
+.design-taper-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.design-taper-box{background:#fff;border-radius:12px;padding:10px;border:1px solid #f0dcb0}
+.design-step{font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.08em;color:#7b5900;margin-bottom:6px}
+.design-step-line{font-size:12px;line-height:1.5;color:#6b4f18;font-weight:700}
+.design-taper.ribbon{border-radius:14px;border:1px solid #f1d5c7;background:#fff5ef;padding:12px 14px}
+.design-taper.ribbon .design-taper-title{color:#a45134}
+.design-ribbon-step{display:flex;gap:10px;align-items:flex-start;margin-top:8px;font-size:13px;line-height:1.5;color:#6c4250;font-weight:700}
+.design-ribbon-dot{width:10px;height:10px;border-radius:50%;background:#ef8b67;margin-top:5px;flex-shrink:0}
+.design-taper.compact{border-radius:10px;background:#fff6df;border:1px solid #ecd7a0;padding:8px 10px}
+.design-taper.compact .design-taper-title{color:#73540e;margin-bottom:5px}
+.design-bottom{display:grid;grid-template-columns:1.2fr .8fr;gap:14px;margin-top:10px}
+.design-bottom.compact{grid-template-columns:1fr}
+.design-side-card{border:1px solid #d8e0e8;border-radius:16px;padding:14px;background:#fff}
+.design-side-title{font-size:12px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;color:#14345e;margin-bottom:8px}
+.design-side-body{font-size:11px;line-height:1.7;color:#344054;font-weight:700}
+.design-follow{align-self:start;border-radius:16px;padding:14px;font-size:15px;font-weight:800;line-height:1.5}
+.design-follow.signature_classic{background:#fbf2dc;border:1px solid #ecd8a1;color:#674f16}
+.design-follow.clinical_blocks{background:linear-gradient(135deg,#173a67,#285385);color:#fff}
+.design-follow.ribbon_timeline{background:linear-gradient(135deg,#f5ead1,#fff8eb);border:1px solid #ead6a4;color:#674f16}
+.design-follow.compact_bilingual{background:linear-gradient(135deg,#14365e,#28517f);color:#fff}
 ${designCss}
 </style></head><body>
 
@@ -26991,11 +27144,12 @@ ${(incCC && cc) || (deptId==='obg' && obgIncComplaint && obgComplaint) || (deptI
   skinChief
 )}</div>` : ''}
 
-${dxList.length ? `
+${dxList.length && rxDesign === 'current' ? `
 <div class="sec-divider"><span class="sec-label">Diagnosis</span></div>
 <div class="diag-rule-top"></div>
 <div class="diag-text">${dxList.map(d=>escapeHtmlConsent(d)).join(' &nbsp;·&nbsp; ')}</div>
 <div class="diag-rule-bot"></div>` : ''}
+${rxDesign !== 'current' ? designedDiagnosis : ''}
 
 ${deptId==='obg' && obgIncAnc && obgAncOn ? `
 <div class="sec-divider"><span class="sec-label">OBG Clinical Summary</span></div>
@@ -27059,9 +27213,10 @@ ${incPos && deptId==='oe' ? `
 <div class="sec-divider"><span class="sec-label">Positive Findings</span></div>
 <div class="cc-text">${(typeof buildOphthoPositiveFindingsList === 'function' ? buildOphthoPositiveFindingsList() : []).join('; ') || '—'}</div>` : ''}
 
-${incRxFinal && drugs.length ? `<div class="sec-divider"><span class="sec-label">Medicine (Rx)</span></div>` : ''}
+${incRxFinal && drugs.length && rxDesign === 'current' ? `<div class="sec-divider"><span class="sec-label">Medicine (Rx)</span></div>` : ''}
+${rxDesign !== 'current' ? designedMeds : ''}
 
-${incRxFinal && drugs.length && rxPrintMode !== 'plain_only' ? (() => {
+${incRxFinal && drugs.length && rxPrintMode !== 'plain_only' && rxDesign === 'current' ? (() => {
   return `<div class="rx-list">
   ${drugs.map((d,i)=>{
     const trade = (typeof rxDrugTradeName === 'function' ? rxDrugTradeName(d) : (d.brand||d.trade||'')) || '—';
@@ -27110,7 +27265,7 @@ ${incRxFinal && drugs.length && rxPrintMode !== 'plain_only' ? (() => {
 </div>`;
 })() : ''}
 
-${incRxFinal && drugs.length && rxPrintMode === 'plain_only' ? (() => {
+${incRxFinal && drugs.length && rxPrintMode === 'plain_only' && rxDesign === 'current' ? (() => {
   return `<div class="rx-list">
   ${drugs.map((d,i)=>{
     const trade = (typeof rxDrugTradeName === 'function' ? rxDrugTradeName(d) : (d.brand||d.trade||'')) || '—';
@@ -27161,11 +27316,12 @@ ${incInvFinal && patientInvestigationOrders.length ? `
 ${patientInvestigationOrders.map((o,oi)=>`<div class="inv-chip"><span style="font-weight:400;color:#888;margin-right:4px">${oi+1}.</span>${escapeHtmlConsent(o.name || 'Investigation')}${o.notes ? `<span style="font-weight:500"> — ${escapeHtmlConsent(o.notes)}</span>` : ''}</div>`).join('')}
 </div>` : ''}
 
-${incAdvFinal && adviceHtml ? `
+${incAdvFinal && adviceHtml && rxDesign === 'current' ? `
 <div class="sec-divider"><span class="sec-label">Instructions</span></div>
 <div class="advice-block">${adviceHtml}</div>` : ''}
 
-${fuFormatted ? `<div style="margin:5px 0"><span class="fu-box">Next Visit: ${fuFormatted}</span></div>` : ''}
+${fuFormatted && rxDesign === 'current' ? `<div style="margin:5px 0"><span class="fu-box">Next Visit: ${fuFormatted}</span></div>` : ''}
+${rxDesign !== 'current' ? designedAdviceFollow : ''}
 
 <div class="sig-row">
   <div class="qr-side">
