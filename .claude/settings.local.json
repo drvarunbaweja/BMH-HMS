@@ -46,7 +46,9 @@
       "Bash(npx firebase-tools *)",
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('tokens:', list\\(d.get\\('tokens',{}\\).keys\\(\\)\\)[:2] if d.get\\('tokens'\\) else 'none'\\)\")",
       "Bash(npx gh-pages *)",
-      "Bash(git fetch *)"
+      "Bash(git fetch *)",
+      "WebFetch(domain:www.bawejahospital.com)",
+      "WebFetch(domain:www.bmhchandigarh.com)"
     ]
   }
 }
