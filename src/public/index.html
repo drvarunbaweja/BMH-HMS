@@ -719,6 +719,7 @@
         <div style="display:flex;gap:5px;flex-wrap:wrap">
           <button class="btn btn-sm btn-gray" onclick="nav('doctor-queue',null)" title="Back to Queue">← Queue</button>
           <button class="btn btn-sm btn-green" onclick="markCurrentPatientSeen()">✓ Seen</button>
+          <label style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--g4);border-radius:999px;background:#fff7ef;font-size:11px;font-weight:800;color:#7a3e00"><span>Visit Date</span><input type="date" id="ophtho-visit-date" style="padding:2px 6px;border-radius:6px;border:1px solid var(--g4);font-size:11px"></label>
           <label style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--g4);border-radius:999px;background:var(--g6);font-size:11px;font-weight:800;color:var(--g1);cursor:pointer"><input type="checkbox" id="proc-done-toggle-ophtho" onchange="handleProcedureDoneToggle('ophtho',this.checked)"> Procedure done</label>
           <button class="btn btn-sm btn-gray" onclick="openM('m-consents')">📋 Consents</button>
           <button class="btn btn-sm btn-outline" onclick="saveAndPrintRx('ophtho')">💾🖨️ Save &amp; Print</button>
@@ -2204,6 +2205,7 @@
         <div style="display:flex;gap:5px;flex-wrap:wrap">
           <button class="btn btn-sm btn-gray" onclick="nav('doctor-queue',null)" title="Back to Queue">← Queue</button>
           <button class="btn btn-sm btn-green" onclick="markCurrentPatientSeen()">✓ Seen</button>
+          <label style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--g4);border-radius:999px;background:#fff7ef;font-size:11px;font-weight:800;color:#7a3e00"><span>Visit Date</span><input type="date" id="obg-visit-date-top" oninput="document.getElementById('obg-visit-date').value=this.value" style="padding:2px 6px;border-radius:6px;border:1px solid var(--g4);font-size:11px"></label>
           <label style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--g4);border-radius:999px;background:var(--g6);font-size:11px;font-weight:800;color:var(--g1);cursor:pointer"><input type="checkbox" id="proc-done-toggle-obg" onchange="handleProcedureDoneToggle('obg',this.checked)"> Procedure done</label>
           <button class="btn btn-sm btn-gray" onclick="openM('m-consents');document.getElementById('mc-type').value='obg-lscs';renderConsentModal()">📋 LSCS Consent</button>
           <button class="btn btn-sm btn-outline" onclick="printOBGCard()">🖨️ Print ANC Card</button>
@@ -2783,6 +2785,7 @@
         <div style="display:flex;gap:5px;flex-wrap:wrap">
           <button class="btn btn-sm btn-gray" onclick="nav('doctor-queue',null)" title="Back to Queue">← Queue</button>
           <button class="btn btn-sm btn-green" onclick="markCurrentPatientSeen()">✓ Seen</button>
+          <label style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--g4);border-radius:999px;background:#fff7ef;font-size:11px;font-weight:800;color:#7a3e00"><span>Visit Date</span><input type="date" id="psych-visit-date" style="padding:2px 6px;border-radius:6px;border:1px solid var(--g4);font-size:11px"></label>
           <label style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--g4);border-radius:999px;background:var(--g6);font-size:11px;font-weight:800;color:var(--g1);cursor:pointer"><input type="checkbox" id="proc-done-toggle-psych" onchange="handleProcedureDoneToggle('psych',this.checked)"> Procedure done</label>
           <button class="btn btn-sm btn-outline" onclick="printPsychSheet()">🖨️ Print</button>
           <button class="btn btn-sm btn-gold" onclick="saveVisit('psych')">💾 Save</button>
@@ -3121,6 +3124,7 @@
         <div style="display:flex;gap:5px;flex-wrap:wrap">
           <button class="btn btn-sm btn-gray" onclick="nav('doctor-queue',null)" title="Back to Queue">← Queue</button>
           <button class="btn btn-sm btn-green" onclick="markCurrentPatientSeen()">✓ Seen</button>
+          <label style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--g4);border-radius:999px;background:#fff7ef;font-size:11px;font-weight:800;color:#7a3e00"><span>Visit Date</span><input type="date" id="skin-visit-date" style="padding:2px 6px;border-radius:6px;border:1px solid var(--g4);font-size:11px"></label>
           <label style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--g4);border-radius:999px;background:var(--g6);font-size:11px;font-weight:800;color:var(--g1);cursor:pointer"><input type="checkbox" id="proc-done-toggle-skin" onchange="handleProcedureDoneToggle('skin',this.checked)"> Procedure done</label>
           <button class="btn btn-sm btn-outline" onclick="printSkinSheet()">🖨️ Print</button>
           <button class="btn btn-sm btn-gold" onclick="saveVisit('skin')">💾 Save</button>
@@ -5203,6 +5207,16 @@
       <div class="form-group"><label class="fl">Patient</label><input type="text" id="cert-pt-display" readonly></div>
       <div class="form-group"><label class="fl">Doctor</label><input type="text" id="cert-doctor-display" readonly></div>
     </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+      <div class="form-group"><label class="fl">Diagnosis Preset</label><select id="cert-diagnosis-preset" onchange="refreshCertificateDraftFromCurrentTemplate()"><option value="">Auto / from case sheet</option></select></div>
+      <div class="form-group"><label class="fl">Custom Diagnosis / Condition</label><input type="text" id="cert-diagnosis-custom" placeholder="Type if not in the list" oninput="refreshCertificateDraftFromCurrentTemplate()"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
+      <div class="form-group"><label class="fl">Certificate Date</label><input type="date" id="cert-certificate-date" onchange="refreshCertificateDraftFromCurrentTemplate()"></div>
+      <div class="form-group"><label class="fl">Leave From</label><input type="date" id="cert-leave-from" onchange="refreshCertificateDraftFromCurrentTemplate()"></div>
+      <div class="form-group"><label class="fl">Leave To</label><input type="date" id="cert-leave-to" onchange="refreshCertificateDraftFromCurrentTemplate()"></div>
+    </div>
+    <div class="form-group"><label class="fl">Remarks / Additional Notes</label><input type="text" id="cert-remarks" placeholder="Optional certificate note" oninput="refreshCertificateDraftFromCurrentTemplate()"></div>
     <div class="form-group"><label class="fl">Category for new template</label><select id="cert-template-cat"><option value="OPD">OPD</option><option value="OT Notes">OT Notes</option><option value="Discharge">Discharge</option><option value="General">General</option></select></div>
     <div class="form-group"><label class="fl">Certificate heading</label><input type="text" id="cert-title"></div>
     <div class="form-group"><label class="fl">Certificate text</label><textarea id="cert-body" style="min-height:360px"></textarea></div>
