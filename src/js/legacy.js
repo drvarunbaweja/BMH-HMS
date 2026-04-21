@@ -7764,7 +7764,6 @@ function loadBmhFinancials() {
     });
   }
   saveBmhFinancials({ localOnly: true });
-  bmhRefreshAdvanceBalances({ localOnly: true });
   bmhRunEndOfDayEegPurge();
 }
 function saveBmhFinancials(opts) {
@@ -9320,7 +9319,8 @@ function bmhDeletePendingDueEntry(prId) {
 window.bmhDeletePendingDueEntry = bmhDeletePendingDueEntry;
 
 function bmhGetAdvanceAvailableForPatient(bmhId) {
-  return bmhSyncPatientAdvanceBalance(bmhId, { localOnly: true });
+  const p = PATIENTS.find(x => x.bmhId === bmhId);
+  return Math.max(0, Number(p?.advance) || 0);
 }
 
 function bmhTotalsForPatient(bmhId) {
@@ -28966,7 +28966,6 @@ function applyPatientsPayload(data) {
   const finish = function () {
     window._BMH_ALL_PATIENTS_CACHE = normalized;
     rebuildPatientsArrayFromGlobalCache();
-    bmhRefreshAdvanceBalances({ localOnly: true });
     window._bmhPatientsHydrating = false;
     if(!_fbPatientsLoaded) {
       _fbPatientsLoaded = true;
@@ -29570,7 +29569,6 @@ function loadTodayTransactions() {
         localRows.forEach(function (t) {
           if (CURRENT_USER?.isAdmin || normalizeAppointmentCentreValue(t.centre || 'CHD') === centre) TRANSACTIONS.push(t);
         });
-        bmhRefreshAdvanceBalances({ localOnly: true });
         bmhRunEndOfDayEegPurge && bmhRunEndOfDayEegPurge();
         renderCollectionDashboard && renderCollectionDashboard();
       }
@@ -29585,7 +29583,6 @@ function loadTodayTransactions() {
       if (CURRENT_USER?.isAdmin || normalizeAppointmentCentreValue(t.centre || 'CHD') === centre) TRANSACTIONS.push(t);
     });
     saveTodayTransactionsToLocal();
-    bmhRefreshAdvanceBalances({ localOnly: true });
     bmhRunEndOfDayEegPurge && bmhRunEndOfDayEegPurge();
     renderCollectionDashboard && renderCollectionDashboard();
   });
