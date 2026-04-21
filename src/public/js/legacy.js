@@ -3517,6 +3517,7 @@ function openPatient(bmhId, opts) {
     if (!lastVisitIsToday) refreshPreviousDiagnosisPanel('skin', lastVisitRef || {});
   }
   if (deptPage === 'ophtho' && !lastVisitIsToday) {
+    prefillPositiveOphthoHistoryFromVisit(getLatestSavedVisitForDept(p.bmhId, 'ophtho') || lastVisitRef || {}, new Date());
     refreshPreviousDiagnosisPanel('ophtho', lastVisitRef || {});
   }
 
@@ -4509,21 +4510,77 @@ function buildOphthoPositiveFindingsList() {
       if (osVals.length) addLine(label, osVals.join(', '), 'Left Eye');
     }
   });
-  addLine('Disc', document.getElementById('fund-od-disc')?.value || '', 'Right Eye');
-  addLine('Disc', document.getElementById('fund-os-disc')?.value || '', 'Left Eye');
-  addLine('C/D Ratio', document.getElementById('fund-od-cd')?.value || '', 'Right Eye');
-  addLine('C/D Ratio', document.getElementById('fund-os-cd')?.value || '', 'Left Eye');
-  addLine('Macula', document.getElementById('fund-od-mac')?.value || '', 'Right Eye');
-  addLine('Macula', document.getElementById('fund-os-mac')?.value || '', 'Left Eye');
-  addLine('Vessels', document.getElementById('fund-od-ves')?.value || '', 'Right Eye');
-  addLine('Vessels', document.getElementById('fund-os-ves')?.value || '', 'Left Eye');
-  addLine('Periphery', document.getElementById('fund-od-per')?.value || '', 'Right Eye');
-  addLine('Periphery', document.getElementById('fund-os-per')?.value || '', 'Left Eye');
   addLine('Fundus', document.getElementById('fundus-od')?.value || '', 'Right Eye');
   addLine('Fundus', document.getElementById('fundus-os')?.value || '', 'Left Eye');
   const slNotes = (document.getElementById('sl-notes-text')?.value || '').trim();
   if (slNotes) lines.push('Slit Lamp Notes - ' + slNotes);
   return [...new Set(lines.filter(Boolean))];
+}
+const OPHTHO_PHX_LABELS = {
+  'phx-allergy':'Allergy',
+  'phx-diabetes_mellit':'Diabetes Mellitus',
+  'phx-hypertension':'Hypertension',
+  'phx-heart_disease__':'Heart Disease / IHD',
+  'phx-asthma___copd':'Asthma / COPD',
+  'phx-headache___migr':'Headache / Migraine',
+  'phx-thyroid_disease':'Thyroid Disease',
+  'phx-renal_disease':'Renal Disease',
+  'phx-previous_surger':'Previous Surgery',
+  'phx-bleeding_disord':'Bleeding Disorder'
+};
+function getOphthoPositiveSystemicHistoryLines(visit, referenceDate) {
+  if (!visit || typeof visit !== 'object') return [];
+  const ref = referenceDate ? new Date(referenceDate) : new Date();
+  const lines = [];
+  Object.entries(OPHTHO_PHX_LABELS).forEach(function ([id, label]) {
+    const entry = visit.phxExtra && typeof visit.phxExtra === 'object' ? visit.phxExtra[id] : null;
+    const yn = String(entry?.yn || visit[id] || '').trim();
+    if (yn !== 'Y' && yn !== '?') return;
+    const parts = [];
+    const dur = buildPersistentHistoryDuration(entry?.dur || '', entry?.baseDate || '', ref);
+    const rx = String(entry?.rx || '').trim();
+    if (dur) parts.push(dur);
+    if (rx) parts.push(rx);
+    lines.push(parts.length ? `${label}${yn === '?' ? ' (?)' : ''} (${parts.join(' · ')})` : `${label}${yn === '?' ? ' (?)' : ''}`);
+  });
+  const otherSystemic = String(visit.otherSystemic || '').trim();
+  if (otherSystemic) lines.push('Other: ' + otherSystemic);
+  return lines;
+}
+function summarizeOphthoPastOcularHistory(visit) {
+  if (!visit || typeof visit !== 'object') return '';
+  const normalizePoh = function (type, text) {
+    const typeTxt = String(type || '').trim();
+    const textTxt = String(text || '').trim();
+    const typeIgnored = !typeTxt || /^no previous history$/i.test(typeTxt);
+    if (typeIgnored && !textTxt) return '';
+    return [typeIgnored ? '' : typeTxt, textTxt].filter(Boolean).join(' - ');
+  };
+  const od = normalizePoh(visit.pohOdType, visit.pohOdText);
+  const os = normalizePoh(visit.pohOsType, visit.pohOsText);
+  return [od ? ('OD ' + od) : '', os ? ('OS ' + os) : ''].filter(Boolean).join(' · ');
+}
+function summarizeOphthoNearAdd(visit) {
+  if (!visit || typeof visit !== 'object') return '';
+  const re = String(visit.rfODAdd || '').trim();
+  const le = String(visit.rfOSAdd || '').trim();
+  return [re ? ('RE ' + re) : '', le ? ('LE ' + le) : ''].filter(Boolean).join(' · ');
+}
+function prefillPositiveOphthoHistoryFromVisit(visit, referenceDate) {
+  if (!visit || typeof visit !== 'object') return;
+  Object.keys(OPHTHO_PHX_LABELS).forEach(function (id) {
+    const entry = visit.phxExtra && typeof visit.phxExtra === 'object' ? visit.phxExtra[id] : null;
+    const yn = String(entry?.yn || visit[id] || '').trim();
+    if (yn !== 'Y' && yn !== '?') return;
+    const sel = document.getElementById(id);
+    if (sel) sel.value = yn;
+    const durInput = document.getElementById(id + '-dur');
+    if (durInput) durInput.value = buildPersistentHistoryDuration(entry?.dur || '', entry?.baseDate || '', referenceDate || new Date());
+    const rxInput = document.getElementById(id + '-rx');
+    if (rxInput) rxInput.value = String(entry?.rx || '').trim();
+  });
+  const otherSystemic = document.getElementById('hx-other-systemic');
+  if (otherSystemic && !String(otherSystemic.value || '').trim()) otherSystemic.value = String(visit.otherSystemic || '').trim();
 }
 function toggleRxPostSurgeryNote() {
   const note = document.getElementById('rx-post-surgery-note');
@@ -34963,9 +35020,10 @@ function loadPastVisits(bmhId, dept) {
     if (deptKey === 'ophtho') {
       return [
         visit.chiefComplaints,
-        visit.otherSystemic,
-        visit.familyHx,
-        visit.hxOcularMeds
+        getOphthoPositiveSystemicHistoryLines(visit, visit.date || visit.createdAt || new Date()).join(', '),
+        summarizeOphthoPastOcularHistory(visit),
+        visit.familyHx ? ('Family: ' + visit.familyHx) : '',
+        visit.hxOcularMeds ? ('Ocular meds: ' + visit.hxOcularMeds) : ''
       ].filter(Boolean).join(' · ');
     }
     if (deptKey === 'obg') {
@@ -35072,6 +35130,8 @@ function loadPastVisits(bmhId, dept) {
           const le = [v.subjOSsph, v.subjOScyl, v.subjOSax, v.subjOSva].filter(Boolean).join(' ');
           return [re ? ('RE ' + re) : '', le ? ('LE ' + le) : ''].filter(Boolean).join(' · ') || '—';
         } },
+        { label: 'Near Add', get: function (v) { return summarizeOphthoNearAdd(v) || '—'; } },
+        { label: 'Past Ocular Hx / Surgery', get: function (v) { return summarizeOphthoPastOcularHistory(v) || '—'; } },
         { label: 'Positive Findings', get: function (v) { return v.positiveFindings || '—'; } },
         { label: 'Diagnosis', get: function (v) { return Array.isArray(v.diagnoses) ? v.diagnoses.map(formatDxLineForPrint).filter(Boolean).join(', ') : (v.diagnosisText || '—'); } },
         { label: 'Prescription', get: function (v) { return Array.isArray(v.rx) && v.rx.length ? v.rx.map(function (d) { return rxDrugTradeName(d) || d.trade || d.name || 'Drug'; }).join(', ') : '—'; } }
@@ -35269,6 +35329,18 @@ function renderOphthoRecap() {
   const renderWithVisits = (visitsObj) => {
     cachePatientVisits(pt.bmhId, visitsObj || {});
     const g = computeOphthoGuidance();
+    const currentSystemicVisit = {
+      phxExtra: Object.keys(OPHTHO_PHX_LABELS).reduce(function (acc, id) {
+        acc[id] = {
+          yn: document.getElementById(id)?.value || pt.lastVisit?.phxExtra?.[id]?.yn || '',
+          dur: document.getElementById(id + '-dur')?.value || pt.lastVisit?.phxExtra?.[id]?.dur || '',
+          rx: document.getElementById(id + '-rx')?.value || pt.lastVisit?.phxExtra?.[id]?.rx || '',
+          baseDate: pt.lastVisit?.phxExtra?.[id]?.baseDate || ''
+        };
+        return acc;
+      }, {}),
+      otherSystemic: document.getElementById('hx-other-systemic')?.value || pt.lastVisit?.otherSystemic || ''
+    };
     const visits = Object.values(visitsObj || {})
       .filter(v => v && v.dept === 'ophtho')
       .sort((a,b)=>String(b.date || '').localeCompare(String(a.date || '')))
@@ -35277,6 +35349,9 @@ function renderOphthoRecap() {
       const dx = Array.isArray(v.diagnoses) && v.diagnoses.length ? v.diagnoses.slice(0,2).map(formatDxLineForPrint).filter(Boolean).join(', ') : (v.diagnosisText || '—');
       const rx = Array.isArray(v.rx) && v.rx.length ? v.rx.slice(0,2).map(d => rxDrugTradeName(d) || d.trade || d.name || 'Drug').join(', ') : 'No prescription';
       const spec = [v.hxSpectacles, v.hxLastSpec].filter(Boolean).join(' · ') || 'No glasses note';
+      const historySnippet = summarizeVisitHistory(v, 'ophtho');
+      const pohSnippet = summarizeOphthoPastOcularHistory(v);
+      const addSnippet = summarizeOphthoNearAdd(v);
       return `<div style="padding:9px 10px;border:1px solid var(--g5);border-radius:10px;background:#fff;margin-bottom:7px">
         <div style="display:flex;justify-content:space-between;gap:6px;align-items:flex-start;margin-bottom:4px">
           <div style="font-size:11px;font-weight:800;color:var(--bmh-blue)">${v.dateLabel || new Date(v.date || Date.now()).toLocaleDateString('en-IN')}</div>
@@ -35284,6 +35359,9 @@ function renderOphthoRecap() {
         </div>
         <div style="font-size:10.5px;line-height:1.42"><b>Dx:</b> ${dx}</div>
         <div style="font-size:10.5px;line-height:1.42;margin-top:3px"><b>Rx:</b> ${rx}</div>
+        ${historySnippet ? `<div style="font-size:10.5px;line-height:1.42;margin-top:3px"><b>History:</b> ${historySnippet}</div>` : ''}
+        ${pohSnippet ? `<div style="font-size:10.5px;line-height:1.42;margin-top:3px"><b>Past ocular hx:</b> ${pohSnippet}</div>` : ''}
+        ${addSnippet ? `<div style="font-size:10.5px;line-height:1.42;margin-top:3px"><b>Near add:</b> ${addSnippet}</div>` : ''}
         <div style="font-size:10px;color:var(--g1);line-height:1.36;margin-top:3px"><b>Glasses:</b> ${spec}</div>
       </div>`;
     }).join('') : '<div style="padding:10px;border:1px dashed var(--g4);border-radius:10px;background:#fff;color:var(--g1);font-size:11px">No previous ophthalmology visits saved yet.</div>';
@@ -35312,9 +35390,9 @@ function renderOphthoRecap() {
           <div style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;margin-bottom:5px">Refractive suitability</div>
           <div style="font-size:11px;line-height:1.5">${g.refractive.join('<br>') || 'Enable the refractive suitability checkbox in Biometry to assess candidacy and residual bed.'}</div>
         </div>
-        <div style="padding:9px 10px;border-radius:10px;background:var(--g6);margin-bottom:8px">
-          <div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;margin-bottom:5px">Systemic history</div>
-          <div style="font-size:11px;line-height:1.45">${g.systemic.join(' • ') || 'No major systemic flags entered yet.'}</div>
+        <div style="padding:9px 10px;border-radius:10px;background:#fff1f2;margin-bottom:8px;border:1px solid rgba(127,29,29,.16)">
+          <div style="font-size:10px;font-weight:900;color:#7f1d1d;text-transform:uppercase;margin-bottom:5px">Systemic history</div>
+          <div style="font-size:11px;line-height:1.45;color:#7f1d1d;font-weight:800">${getOphthoPositiveSystemicHistoryLines(currentSystemicVisit, new Date()).join(' • ') || g.systemic.join(' • ') || 'No major systemic flags entered yet.'}</div>
         </div>
         ${visitHtml}
         <details style="margin-top:8px;background:#fff;border:1px solid var(--g5);border-radius:10px;padding:8px 10px">
