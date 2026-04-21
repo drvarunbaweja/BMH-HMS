@@ -4786,6 +4786,17 @@ function rxDrugGenericName(d) {
   if (s && t && s.toLowerCase() === t.toLowerCase()) return '';
   return s ? String(s) : '';
 }
+function getRxSiteLabel(d) {
+  if (!d) return '';
+  const raw = Array.isArray(d.eye) ? d.eye[0] : (d.eye || d.site || d.route || d.location || '');
+  const normalized = normalizeEyeLabelForRx(raw);
+  const label = Array.isArray(normalized) ? normalized[0] : normalized;
+  if (label) return String(label).trim();
+  if (rxPlainIsEyeDrop(d)) return 'Both Eyes (OU)';
+  if (rxPlainIsTopicalCream(d)) return 'Topical';
+  if (isRxPlainOral(d)) return 'Oral';
+  return '';
+}
 function getRxDoctorDisplayName() {
   const active = document.querySelector('.page.active')?.id || '';
   if (active.includes('obg')) return document.getElementById('obg-rx-doctor')?.textContent?.trim() || getEffectiveDoctorNameForDept('obg');
@@ -26847,7 +26858,7 @@ function isRxPlainOral(d) {
   return /tablet|capsule|oral|syrup|tab|suspension|powder|sachet|mouth|mg tab|mcg tab/.test(form) || (!/drop|ointment|gel|cream|lotion|eye\b/.test(form));
 }
 function buildRxPlainInstructionLine(d, lang, fmtIN) {
-  const eye = Array.isArray(d.eye) ? d.eye[0] : d.eye;
+  const eye = getRxSiteLabel(d);
   const freq = rxFreqPlain(d.freq, lang);
   const dur = rxDurationPlain(d.dur, lang);
   const eyeTxt = rxEyePlain(eye, lang);
@@ -26908,7 +26919,7 @@ function buildRxPlainInstructionLine(d, lang, fmtIN) {
   return line;
 }
 function buildRxTaperSummaryLine(d, lang, fmtIN) {
-  const eye = Array.isArray(d.eye) ? d.eye[0] : d.eye;
+  const eye = getRxSiteLabel(d);
   const bits = [];
   const eyeTxt = lang === 'en' ? rxEyePlainEn(eye) : rxEyePlain(eye, lang);
   const freq = rxFreqPlain(d.freq, lang);
@@ -27313,7 +27324,7 @@ window.printUnifiedRx = function(deptId) {
         const trade = (typeof rxDrugTradeName === 'function' ? rxDrugTradeName(d) : (d.brand || d.trade || '')) || '—';
         const gen = (typeof rxDrugGenericName === 'function' ? rxDrugGenericName(d) : (d.name || d.generic || '')) || '';
         const form = d.drugType || d.type || '';
-        const route = deptId === 'oe' ? ((Array.isArray(d.eye) ? d.eye[0] : d.eye) || '') : '';
+        const route = getRxSiteLabel(d);
         const timings = getRxTimingsText(d);
         const plainLine = buildRxPlainInstructionLine(d, rxPlainLang, fmtIN);
         const taperRows = Array.isArray(d.taperRows) ? d.taperRows : (d.taperRow ? [d.taperRow] : []);
@@ -27620,7 +27631,7 @@ ${incRxFinal && drugs.length && rxPrintMode !== 'plain_only' && rxDesign === 'cu
     const trade = (typeof rxDrugTradeName === 'function' ? rxDrugTradeName(d) : (d.brand||d.trade||'')) || '—';
     const gen = (typeof rxDrugGenericName === 'function' ? rxDrugGenericName(d) : (d.name||d.generic||'')) || '—';
     const form = d.drugType || d.type || '';
-    const route = deptId === 'oe' ? (Array.isArray(d.eye) ? d.eye[0] : d.eye) || '' : '';
+    const route = getRxSiteLabel(d);
     const timings = getRxTimingsText(d);
     const plainLine = buildRxPlainInstructionLine(d, rxPlainLang, fmtIN);
     const taperRows = Array.isArray(d.taperRows) ? d.taperRows : (d.taperRow ? [d.taperRow] : []);
