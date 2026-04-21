@@ -4143,11 +4143,19 @@ function markPaid(id) {
   saveBmhFinancials();
   // Deduct from advance if applicable
   const pt = PATIENTS.find(x=>x.bmhId===pr.bmhId);
-  if(pt && pt.advance > 0) {
-    const deduct = Math.min(pt.advance, pr.amount);
-    pt.advance = Math.max(0, pt.advance - deduct);
-    fbUpdate&&fbUpdate('patients/'+pr.bmhId,{advance:pt.advance});
-    if(deduct>0) showToast(`💙 Advance ₹${deduct.toLocaleString('en-IN')} deducted from ${pr.patient}'s advance balance`,'i');
+  if (pt) {
+    const advAvail = bmhSyncPatientAdvanceBalance(pr.bmhId, { localOnly: true });
+    const deduct = Math.min(advAvail, Math.max(0, Number(pr.amount) || 0));
+    if (deduct > 0) {
+      bmhRecordAdvanceAdjustment(pr.bmhId, deduct, 'Advance used against due — ' + (pr.for || 'Service'), {
+        dept: pr.dept,
+        centre: pr.centre,
+        mode: pr.mode,
+        createdBy: CURRENT_USER?.name || 'System'
+      });
+      bmhSyncPatientAdvanceBalance(pr.bmhId);
+      showToast(`💙 Advance ₹${deduct.toLocaleString('en-IN')} deducted from ${pr.patient}'s advance balance`,'i');
+    }
   }
   const p = PATIENTS.find(x=>x.bmhId===pr.bmhId);
   if(p) {
@@ -7756,6 +7764,7 @@ function loadBmhFinancials() {
     });
   }
   saveBmhFinancials({ localOnly: true });
+  bmhRefreshAdvanceBalances({ localOnly: true });
   bmhRunEndOfDayEegPurge();
 }
 function saveBmhFinancials(opts) {
@@ -9179,6 +9188,85 @@ function bmhComputeBalanceDue(bmhId, totalOverride) {
   return Math.max(0, targetTotal - received);
 }
 
+function bmhIsAdvanceTransaction(txn) {
+  if (!txn) return false;
+  return String(txn.type || '').toLowerCase() === 'advance'
+    || String(txn.source || '').toLowerCase() === 'billing-advance'
+    || /\badvance\b/i.test(String(txn.service || txn.for || txn.desc || ''));
+}
+function bmhIsAdvanceAdjustmentTransaction(txn) {
+  if (!txn) return false;
+  return String(txn.type || '').toLowerCase() === 'advance-adjustment'
+    || String(txn.source || '').toLowerCase() === 'advance-adjustment';
+}
+function bmhComputeAdvanceBalanceForPatient(bmhId) {
+  if (!bmhId) return 0;
+  const txns = (TRANSACTIONS || []).filter(function (t) { return t && t.bmhId === bmhId; });
+  const received = txns.filter(bmhIsAdvanceTransaction).reduce(function (sum, txn) {
+    return sum + Math.max(0, Number(txn.amount) || 0);
+  }, 0);
+  const adjusted = txns.filter(bmhIsAdvanceAdjustmentTransaction).reduce(function (sum, txn) {
+    return sum + Math.max(0, Number(txn.amount) || 0);
+  }, 0);
+  return Math.max(0, received - adjusted);
+}
+function bmhRecordAdvanceAdjustment(bmhId, amount, reason, meta) {
+  const adjAmt = Math.max(0, Number(amount) || 0);
+  if (!bmhId || !(adjAmt > 0)) return null;
+  const pt = PATIENTS.find(function (x) { return x.bmhId === bmhId; }) || {};
+  const txn = {
+    id: 'TXN' + Date.now() + 'ADV',
+    patient: pt.name || bmhId,
+    bmhId: bmhId,
+    service: reason || 'Advance used',
+    amount: adjAmt,
+    mode: meta?.mode || 'Adjustment',
+    collected: false,
+    dept: meta?.dept || pt.dept || 'ophtho',
+    time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+    date: new Date().toISOString(),
+    centre: meta?.centre || pt.centre || CURRENT_USER?.centre || 'CHD',
+    createdBy: meta?.createdBy || CURRENT_USER?.name || 'System',
+    type: 'advance-adjustment',
+    source: 'advance-adjustment'
+  };
+  TRANSACTIONS.push(txn);
+  saveTransactionToFirebase && saveTransactionToFirebase(txn);
+  return txn;
+}
+function bmhSyncPatientAdvanceBalance(bmhId, opts) {
+  if (!bmhId) return 0;
+  const pt = PATIENTS.find(function (x) { return x.bmhId === bmhId; });
+  let nextAdvance = bmhComputeAdvanceBalanceForPatient(bmhId);
+  if (!pt) return nextAdvance;
+  const currentAdvance = Math.max(0, Number(pt.advance) || 0);
+  if (!opts?.allowIncrease && nextAdvance > currentAdvance) nextAdvance = currentAdvance;
+  const patch = {};
+  if (Math.abs(currentAdvance - nextAdvance) > 0.009) {
+    pt.advance = nextAdvance;
+    patch.advance = nextAdvance;
+  }
+  if (opts?.purposeAppend) {
+    const currentPurpose = String(pt.advancePurpose || '').trim();
+    const addition = String(opts.purposeAppend || '').trim();
+    const mergedPurpose = [currentPurpose, addition].filter(Boolean).join(' | ').slice(0, 500);
+    if (mergedPurpose !== currentPurpose) {
+      pt.advancePurpose = mergedPurpose;
+      patch.advancePurpose = mergedPurpose;
+    }
+  }
+  if (Object.keys(patch).length && !opts?.localOnly) {
+    fbUpdate && fbUpdate('patients/' + bmhId, patch);
+    if (typeof window.patchPatientFirestore === 'function') window.patchPatientFirestore(bmhId, patch).catch(function () {});
+  }
+  return nextAdvance;
+}
+function bmhRefreshAdvanceBalances(opts) {
+  (PATIENTS || []).forEach(function (pt) {
+    if (pt && pt.bmhId) bmhSyncPatientAdvanceBalance(pt.bmhId, opts);
+  });
+}
+
 function bmhSyncPatientRunningBalance(bmhId) {
   const pt = PATIENTS.find(x => x.bmhId === bmhId);
   if (!pt) return 0;
@@ -9232,8 +9320,7 @@ function bmhDeletePendingDueEntry(prId) {
 window.bmhDeletePendingDueEntry = bmhDeletePendingDueEntry;
 
 function bmhGetAdvanceAvailableForPatient(bmhId) {
-  const p = PATIENTS.find(x => x.bmhId === bmhId);
-  return Math.max(0, Number(p?.advance) || 0);
+  return bmhSyncPatientAdvanceBalance(bmhId, { localOnly: true });
 }
 
 function bmhTotalsForPatient(bmhId) {
@@ -9389,10 +9476,7 @@ function bmhPostPatientAdvanceFromBilling() {
   };
   TRANSACTIONS.push(txn);
   saveTransactionToFirebase && saveTransactionToFirebase(txn);
-  pt.advance = (Number(pt.advance) || 0) + total;
-  const purposeJoin = [String(pt.advancePurpose || '').trim(), parts.join(' · ')].filter(Boolean).join(' | ');
-  pt.advancePurpose = purposeJoin.slice(0, 500);
-  fbUpdate && fbUpdate('patients/' + bmhId, { advance: pt.advance, advancePurpose: pt.advancePurpose });
+  bmhSyncPatientAdvanceBalance(bmhId, { allowIncrease: true, purposeAppend: parts.join(' · ') });
   saveBmhFinancials();
   bmhRenderBillingAdvanceRows(true);
   bmhSelectBillPatient(bmhId);
@@ -10807,8 +10891,13 @@ function bmhRecordPatientPayment() {
   }
   const advAdj = Number(bmhTotalsForPatient(bmhId).advanceApplied || 0);
   if (pt && advAdj > 0) {
-    pt.advance = Math.max(0, (Number(pt.advance) || 0) - advAdj);
-    fbUpdate && fbUpdate('patients/' + bmhId, { advance: pt.advance });
+    bmhRecordAdvanceAdjustment(bmhId, advAdj, 'Advance used in billing', {
+      dept: pt.dept,
+      centre: pt.centre,
+      mode: mode,
+      createdBy: CURRENT_USER?.name || 'Billing'
+    });
+    bmhSyncPatientAdvanceBalance(bmhId);
   }
   const updatedDue = bmhSyncPatientRunningBalance(bmhId);
   if (pt) pt.balance = updatedDue;
@@ -12874,6 +12963,7 @@ function checkLabVal(inp,lo,hi){const v=parseFloat(inp.value)||0;inp.className='
 // ═══════════════════════════════════════
 function initInventory() {
   loadInventoryStockFromStorage();
+  loadInventoryFromFirebase && loadInventoryFromFirebase();
   loadBmhFinancials();
   // Start Firebase real-time sync the first time the inventory module is opened
   if (!window._bmhInventoryFirebaseSyncStarted) {
@@ -19412,7 +19502,7 @@ async function registerPatient() {
     dept, doctor: dr, assignedDoctor: dr,
     centre, status: isPreReg ? 'pre-registered' : 'waiting',
     balance: Number(existingPt?.balance || 0),
-    advance: advAmt > 0 ? advAmt : Number(existingPt?.advance || 0),
+    advance: Number(existingPt?.advance || 0),
     advancePurpose: advPurpose || existingPt?.advancePurpose || (advAmt > 0 ? 'Advance on account' : ''),
     consultationNoFee: !!noFee,
     seen:false, dilated:false,
@@ -19538,6 +19628,7 @@ async function registerPatient() {
     };
     TRANSACTIONS.push(txna);
     saveTransactionToFirebase&&saveTransactionToFirebase(txna);
+    bmhSyncPatientAdvanceBalance(uid, { allowIncrease: true, purposeAppend: advPurpose || 'Advance on account' });
   }
 
   fbUpdate&&fbUpdate('patients/'+uid,{
@@ -19727,16 +19818,12 @@ function scheduleSurgery() {
       dept: PATIENTS.find(p=>p.bmhId===ptId)?.dept || 'ophtho',
       time:new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
       date:new Date().toISOString(), centre:CURRENT_USER?.centre||'CHD',
-      createdBy:CURRENT_USER?.name||'Reception'
+      createdBy:CURRENT_USER?.name||'Reception',
+      type:'advance'
     };
     TRANSACTIONS.push(txn);
     saveTransactionToFirebase && saveTransactionToFirebase(txn);
-    // Store advance on patient record so it can be deducted at final billing
-    const advPt = PATIENTS.find(p=>p.bmhId===ptId);
-    if(advPt) {
-      advPt.advance = (advPt.advance||0) + advAmt;
-      fbUpdate && fbUpdate('patients/'+ptId, {advance:advPt.advance});
-    }
+    bmhSyncPatientAdvanceBalance(ptId, { allowIncrease: true, purposeAppend: 'Surgery Advance — ' + sType });
     // Also store advance details on the OT case itself
     otCase.advancePaid = advAmt;
     fbUpdate && fbUpdate('otCases/'+otCase.id, {advancePaid:advAmt});
@@ -28873,6 +28960,7 @@ function applyPatientsPayload(data) {
   const finish = function () {
     window._BMH_ALL_PATIENTS_CACHE = normalized;
     rebuildPatientsArrayFromGlobalCache();
+    bmhRefreshAdvanceBalances({ localOnly: true });
     window._bmhPatientsHydrating = false;
     if(!_fbPatientsLoaded) {
       _fbPatientsLoaded = true;
@@ -29476,6 +29564,7 @@ function loadTodayTransactions() {
         localRows.forEach(function (t) {
           if (CURRENT_USER?.isAdmin || normalizeAppointmentCentreValue(t.centre || 'CHD') === centre) TRANSACTIONS.push(t);
         });
+        bmhRefreshAdvanceBalances({ localOnly: true });
         bmhRunEndOfDayEegPurge && bmhRunEndOfDayEegPurge();
         renderCollectionDashboard && renderCollectionDashboard();
       }
@@ -29490,6 +29579,7 @@ function loadTodayTransactions() {
       if (CURRENT_USER?.isAdmin || normalizeAppointmentCentreValue(t.centre || 'CHD') === centre) TRANSACTIONS.push(t);
     });
     saveTodayTransactionsToLocal();
+    bmhRefreshAdvanceBalances({ localOnly: true });
     bmhRunEndOfDayEegPurge && bmhRunEndOfDayEegPurge();
     renderCollectionDashboard && renderCollectionDashboard();
   });
