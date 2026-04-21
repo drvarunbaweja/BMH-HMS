@@ -9878,7 +9878,11 @@ async function bmhSaveAndPrintBill() {
   try {
     showToast('Saving bill to cloud…', 'i');
     // saveBill is exposed globally via app.js → bills.js
-    const savedBill = await (window.bmhSaveBillToCloud || (function () { throw new Error('bills module not loaded'); }))(billData);
+    if (!window.bmhSaveBillToCloud) {
+      console.error('bmhSaveAndPrintBill: window.bmhSaveBillToCloud not found. app.js may not have loaded.');
+      throw new Error('Cloud billing module not ready. Please refresh the page and try again.');
+    }
+    const savedBill = await window.bmhSaveBillToCloud(billData);
 
     // Record the patient-paid portion as a transaction if received
     if (amountReceived > 0) {
