@@ -27088,10 +27088,14 @@ window.printUnifiedRx = function(deptId) {
   const cc = ccRows.join('; ');
   const obgComplaint = document.getElementById('obg-main-complaint')?.value || window.CURRENT_PATIENT?.lastVisit?.mainComplaint || '';
 
-  // ── Collect drugs (fallback to saved visit when UI state not restored, e.g. after reopening same day) ──
+  // ── Collect drugs (fallback to latest saved visit when UI state is blank/stale at print time) ──
   let drugs = typeof RX_DRUGS !== 'undefined' && Array.isArray(RX_DRUGS) ? RX_DRUGS : [];
-  if (forceDeptRxSections && (!drugs || !drugs.length)) {
-    const savedRx = window.CURRENT_PATIENT?.lastVisit?.rx;
+  if (!drugs || !drugs.length) {
+    const currentBmhId = window.CURRENT_PATIENT?.bmhId || document.getElementById((saveDept || deptId) + '-pt-uid')?.textContent?.trim() || document.getElementById('ophtho-pt-uid')?.textContent?.trim() || '';
+    const savedVisit = currentBmhId && typeof getLatestSavedVisitForDept === 'function'
+      ? getLatestSavedVisitForDept(currentBmhId, saveDept)
+      : null;
+    const savedRx = savedVisit?.rx || window.CURRENT_PATIENT?.lastVisit?.rx;
     if (Array.isArray(savedRx) && savedRx.length) drugs = JSON.parse(JSON.stringify(savedRx));
   }
   const rxPlainLang = typeof rxLang !== 'undefined' ? rxLang : 'en';
