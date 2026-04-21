@@ -43,7 +43,7 @@
       padding-bottom:10px;
     }
     .topline h1{margin:0;font-size:29px;color:var(--navy)}
-    .topline .sub{font-size:13px;color:var(--slate)}
+    .topline .sub{font-size:18px;color:var(--navy);font-weight:800}
     .meta{
       display:grid;
       grid-template-columns:1.6fr .8fr .8fr .8fr;
@@ -57,7 +57,22 @@
       padding:10px 12px;
     }
     .k{font-size:10px;text-transform:uppercase;letter-spacing:.08em;font-weight:900;color:#667085;margin-bottom:6px}
-    .v{font-size:15px;font-weight:800;color:var(--navy);line-height:1.3}
+    .v{font-size:21px;font-weight:800;color:var(--navy);line-height:1.3}
+    .meta-extra{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:10px;
+      margin-top:10px;
+    }
+    .mini-table{
+      border:1px solid var(--line);
+      border-radius:14px;
+      background:#fff;
+      padding:10px 12px;
+    }
+    .mini-table h3{margin:0 0 8px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--teal)}
+    .mini-table-row{display:grid;grid-template-columns:44px 1fr auto;gap:8px;font-size:12px;font-weight:700;color:#334155;padding:5px 0;border-bottom:1px dashed #dbe3ea}
+    .mini-table-row:last-child{border-bottom:none}
     .layout{
       display:grid;
       grid-template-columns:1.35fr .65fr;
@@ -187,6 +202,19 @@
         <div class="cell"><div class="k">BMSH ID</div><div class="v">464772</div></div>
         <div class="cell"><div class="k">Age / Sex</div><div class="v">28 / F</div></div>
         <div class="cell"><div class="k">Dept</div><div class="v">OBG</div></div>
+      </div>
+
+      <div class="meta-extra">
+        <div class="mini-table">
+          <h3>Visual Acuity</h3>
+          <div class="mini-table-row"><span>OD</span><span>UCVA 6/9, BCVA 6/6</span><strong>N6</strong></div>
+          <div class="mini-table-row"><span>OS</span><span>UCVA 6/12, BCVA 6/6</span><strong>N6</strong></div>
+        </div>
+        <div class="mini-table">
+          <h3>Glasses / Findings</h3>
+          <div class="mini-table-row"><span>OD</span><span>-0.50 DS</span><strong>Normal</strong></div>
+          <div class="mini-table-row"><span>OS</span><span>-0.75 DS</span><strong>Normal</strong></div>
+        </div>
       </div>
 
       <div class="layout">

@@ -27986,6 +27986,7 @@ window.printUnifiedRx = function(deptId) {
   const showVA = incVA && deptId==='oe' && [vaOD, vaOS, subjODva, subjOSva, nvOD, nvOS].some(hasMeaningfulText);
   const showGL = incGL && deptId==='oe' && hasMeaningfulRefraction();
   const showIOP = incIOP && deptId==='oe' && (iopGatOD||iopGatOS||iopNctOD||iopNctOS);
+  const typographyCss = buildDoctorRxTypographyCss(getDoctorProfileTypographyForCentre(doctorProfile, cpt.centre || CURRENT_USER?.centre || getEffectiveCentre?.() || 'CHD'));
 
   const rxEmptyNote = forceDeptRxSections && (!drugs || !drugs.length)
     ? `<div style="margin:8px 0;font-size:11px;color:#555;border:1px dashed #c8d0dc;padding:10px;border-radius:8px;background:#fafbfc">No medications on this prescription. Add drugs using the search above, then print again.</div>`
@@ -28103,7 +28104,7 @@ window.printUnifiedRx = function(deptId) {
 
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,300;0,400;0,700;0,900;1,400&family=Playfair+Display:wght@700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Inter:wght@400;600;700;800&family=Lato:ital,wght@0,300;0,400;0,700;0,900;1,400&family=Libre+Baskerville:wght@400;700&family=Playfair+Display:wght@700&family=Source+Sans+3:wght@400;600;700;800&display=swap');
 *{margin:0;padding:0;box-sizing:border-box;print-color-adjust:exact;-webkit-print-color-adjust:exact}
 @page{size:A4 portrait;margin:0}
 body{font-family:'Lato',sans-serif;font-size:10px;color:#1a1a1a;background:#fff;padding:3.5mm 8mm 3mm;line-height:1.3;overflow:hidden}
@@ -28246,6 +28247,7 @@ tr:nth-child(even) td{background:#f6f6f6}
 .design-follow.clinical_blocks{background:linear-gradient(135deg,#173a67,#285385);color:#fff}
 .design-follow.ribbon_timeline{background:linear-gradient(135deg,#f5ead1,#fff8eb);border:1px solid #ead6a4;color:#674f16}
 .design-follow.compact_bilingual{background:linear-gradient(135deg,#14365e,#28517f);color:#fff}
+${typographyCss}
 ${designCss}
 </style></head><body>
 
@@ -32462,6 +32464,7 @@ function processCsvData(csvText) {
 // ── DOCTOR CREDENTIALS ────────────────────────────
 let activeDrTab = '';
 let activeDrDesignCentre = 'CHD';
+let doctorProfileAutosaveTimer = null;
 const RX_DESIGN_OPTIONS = [
   { key: 'current', label: 'Premium Letterhead' },
   { key: 'option_a', label: 'Clinical Document' },
@@ -32471,6 +32474,22 @@ const RX_DESIGN_OPTIONS = [
   { key: 'ribbon_timeline', label: 'Ribbon Timeline' },
   { key: 'compact_bilingual', label: 'Compact Bilingual' }
 ];
+const RX_TYPOGRAPHY_FONT_OPTIONS = [
+  { key: 'classic', label: 'Classic Serif', heading: "'Playfair Display','Georgia',serif", body: "'Lato',sans-serif" },
+  { key: 'editorial', label: 'Editorial Contrast', heading: "'Cormorant Garamond','Times New Roman',serif", body: "'Source Sans 3','Arial',sans-serif" },
+  { key: 'clinical', label: 'Clinical Sans', heading: "'Inter','Segoe UI',sans-serif", body: "'Inter','Segoe UI',sans-serif" },
+  { key: 'formal', label: 'Formal Letter', heading: "'Libre Baskerville','Georgia',serif", body: "'Source Sans 3','Arial',sans-serif" }
+];
+const DEFAULT_RX_TYPOGRAPHY = {
+  fontCombo: 'classic',
+  patientNameSize: 17,
+  dateSize: 9.5,
+  headingSize: 8.5,
+  medicineSize: 14,
+  headingWeight: 700,
+  headingItalic: false,
+  headingUnderline: false
+};
 
 function _drSafeKey(name) { return String(name).replace(/\s/g, '_'); }
 function getDoctorProfileDesignForCentre(profile, centre) {
@@ -32482,6 +32501,118 @@ function setDoctorProfileDesignForCentre(profile, centre, designKey) {
   const ctr = normalizeAppointmentCentreValue(centre || 'CHD');
   if (ctr === 'RPR') profile.rxDesignRPR = designKey;
   else profile.rxDesignCHD = designKey;
+}
+function clampRxTypographyNumber(value, fallback, min, max) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return fallback;
+  return Math.min(max, Math.max(min, num));
+}
+function normalizeDoctorRxTypography(raw) {
+  const next = Object.assign({}, DEFAULT_RX_TYPOGRAPHY, raw || {});
+  const allowedCombos = RX_TYPOGRAPHY_FONT_OPTIONS.map(function (opt) { return opt.key; });
+  next.fontCombo = allowedCombos.includes(next.fontCombo) ? next.fontCombo : DEFAULT_RX_TYPOGRAPHY.fontCombo;
+  next.patientNameSize = clampRxTypographyNumber(next.patientNameSize, DEFAULT_RX_TYPOGRAPHY.patientNameSize, 14, 28);
+  next.dateSize = clampRxTypographyNumber(next.dateSize, DEFAULT_RX_TYPOGRAPHY.dateSize, 8, 18);
+  next.headingSize = clampRxTypographyNumber(next.headingSize, DEFAULT_RX_TYPOGRAPHY.headingSize, 8, 18);
+  next.medicineSize = clampRxTypographyNumber(next.medicineSize, DEFAULT_RX_TYPOGRAPHY.medicineSize, 11, 22);
+  next.headingWeight = clampRxTypographyNumber(next.headingWeight, DEFAULT_RX_TYPOGRAPHY.headingWeight, 400, 900);
+  next.headingItalic = !!next.headingItalic;
+  next.headingUnderline = !!next.headingUnderline;
+  return next;
+}
+function getDoctorProfileTypographyForCentre(profile, centre) {
+  const ctr = normalizeAppointmentCentreValue(centre || 'CHD');
+  const shared = normalizeDoctorRxTypography(profile?.rxTypography || {});
+  const scoped = normalizeDoctorRxTypography(ctr === 'RPR' ? profile?.rxTypographyRPR : profile?.rxTypographyCHD);
+  return Object.assign({}, shared, scoped);
+}
+function setDoctorProfileTypographyForCentre(profile, centre, nextTypography) {
+  if (!profile) return;
+  const ctr = normalizeAppointmentCentreValue(centre || 'CHD');
+  const normalized = normalizeDoctorRxTypography(nextTypography);
+  profile.rxTypography = Object.assign({}, normalized);
+  if (ctr === 'RPR') profile.rxTypographyRPR = Object.assign({}, normalized);
+  else profile.rxTypographyCHD = Object.assign({}, normalized);
+}
+function getRxTypographyFontPair(fontCombo) {
+  return RX_TYPOGRAPHY_FONT_OPTIONS.find(function (opt) { return opt.key === fontCombo; }) || RX_TYPOGRAPHY_FONT_OPTIONS[0];
+}
+function buildDoctorRxTypographyCss(typography) {
+  const t = normalizeDoctorRxTypography(typography);
+  const fonts = getRxTypographyFontPair(t.fontCombo);
+  const headingDecoration = t.headingUnderline ? 'underline' : 'none';
+  const headingStyle = t.headingItalic ? 'italic' : 'normal';
+  return `
+body{font-family:${fonts.body}}
+.pt-name{font-family:${fonts.heading};font-size:${t.patientNameSize}px}
+.pt-date{font-family:${fonts.body};font-size:${t.dateSize}px;font-weight:${t.headingWeight};font-style:${headingStyle};text-decoration:${headingDecoration}}
+.sec-label,.design-dx-title,.design-side-title,.design-taper-title,.design-med-tag,.section-pill,.rx-heading-accent{font-family:${fonts.heading};font-size:${t.headingSize}px;font-weight:${t.headingWeight};font-style:${headingStyle};text-decoration:${headingDecoration}}
+.rx-item-name,.design-med-name,.diag-text,.design-dx-body{font-family:${fonts.heading};font-size:${t.medicineSize}px}
+`;
+}
+function persistDoctorProfilesState(opts) {
+  const options = Object.assign({ notify: false }, opts || {});
+  const savedAt = Date.now();
+  const firebasePayload = serializeDoctorProfilesForFirebase(DOCTOR_PROFILES);
+  saveDoctorProfilesToLocalStorage(savedAt);
+  if (!window.FBDB) {
+    if (options.notify) showToast('Doctor credentials saved on this device ✓', 's');
+    return Promise.resolve();
+  }
+  if (options.notify) showToast('Saving to cloud...', 'i');
+  return Promise.all([
+    window.FBDB.ref('doctorProfiles').set(firebasePayload),
+    window.FBDB.ref('doctorProfilesMeta').set({ _savedAt: savedAt })
+  ]).then(function () {
+    if (options.notify) showToast('Doctor credentials saved & synced ✓', 's');
+  }).catch(function () {
+    if (options.notify) showToast('Saved on this device (cloud sync failed)', 'w');
+  });
+}
+function scheduleDoctorProfilesAutosave() {
+  try { clearTimeout(doctorProfileAutosaveTimer); } catch (e) {}
+  doctorProfileAutosaveTimer = setTimeout(function () {
+    persistDoctorProfilesState({ notify: false });
+  }, 650);
+}
+function updateDoctorProfileField(doctorName, field, value) {
+  if (!DOCTOR_PROFILES[doctorName]) return;
+  DOCTOR_PROFILES[doctorName][field] = value;
+  scheduleDoctorProfilesAutosave();
+  const previewCentre = activeDrDesignCentre || DOCTOR_PROFILES[doctorName].centre || 'CHD';
+  updateRxDesignPreview(getDoctorPrescriptionDesign(DOCTOR_PROFILES[doctorName], previewCentre), doctorName, previewCentre);
+}
+window.updateDoctorProfileField = updateDoctorProfileField;
+function updateDoctorTypographySetting(doctorName, field, value, valueType) {
+  const profile = DOCTOR_PROFILES[doctorName];
+  if (!profile) return;
+  const current = getDoctorProfileTypographyForCentre(profile, activeDrDesignCentre);
+  let nextValue = value;
+  if (valueType === 'number') nextValue = Number(value);
+  if (valueType === 'boolean') nextValue = !!value;
+  current[field] = nextValue;
+  setDoctorProfileTypographyForCentre(profile, activeDrDesignCentre, current);
+  scheduleDoctorProfilesAutosave();
+  const label = document.getElementById('dr-typo-' + _drSafeKey(doctorName) + '-' + field + '-value');
+  if (label) label.textContent = String(current[field]);
+  updateRxDesignPreview(getDoctorPrescriptionDesign(profile, activeDrDesignCentre), doctorName, activeDrDesignCentre);
+}
+window.updateDoctorTypographySetting = updateDoctorTypographySetting;
+let _doctorProfilesLiveWatchStarted = false;
+function startDoctorProfilesLiveSync() {
+  if (!window.FBDB || _doctorProfilesLiveWatchStarted) return;
+  _doctorProfilesLiveWatchStarted = true;
+  window.FBDB.ref('doctorProfilesMeta').on('value', function (metaSnap) {
+    const remoteSavedAt = Number((metaSnap.val() && metaSnap.val()._savedAt) || 0);
+    const localSavedAt = Number(localStorage.getItem('bmh_doctor_profiles_saved_at') || 0);
+    if (!remoteSavedAt || remoteSavedAt <= localSavedAt) return;
+    window.FBDB.ref('doctorProfiles').once('value').then(function (snap) {
+      const remoteData = deserializeDoctorProfilesFromFirebase(snap.val() || {});
+      replaceDoctorProfiles(remoteData);
+      saveDoctorProfilesToLocalStorage(remoteSavedAt);
+      if (typeof renderDrCredentials === 'function' && document.getElementById('dr-credentials-list')) renderDrCredentials();
+    }).catch(function () {});
+  });
 }
 
 function _renderDesignThumbnail(key) {
@@ -32533,6 +32664,7 @@ function renderDrCredentials() {
   const defaultDesignCentre = normalizeAppointmentCentreValue(activeDrDesignCentre || dr.centre || CURRENT_USER?.centre || 'CHD');
   activeDrDesignCentre = defaultDesignCentre;
   const selectedDesign = getDoctorPrescriptionDesign(dr, activeDrDesignCentre);
+  const typography = getDoctorProfileTypographyForCentre(dr, activeDrDesignCentre);
 
   const tabsHtml = names.map(n => {
     const active = n === activeDrTab;
@@ -32540,14 +32672,40 @@ function renderDrCredentials() {
   }).join('');
 
   const sigPreview = dr.signature ? `<img src="${dr.signature}" alt="sig" style="height:50px;margin-top:4px;border:1px solid #ddd;border-radius:4px;background:#fff;padding:2px">` : '';
+  const typographyControls = `
+    <div style="margin:10px 0 8px;padding:10px;border:1px solid #e4e6eb;border-radius:10px;background:#fff">
+      <div style="font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.5px;color:#1a3c6e;margin-bottom:8px">Typography Controls</div>
+      <div class="fg" style="grid-template-columns:1fr 1fr;gap:8px">
+        <div class="form-group" style="margin:0"><label class="fl">Font Combination</label>
+          <select style="font-size:12px" onchange="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','fontCombo',this.value,'string')">
+            ${RX_TYPOGRAPHY_FONT_OPTIONS.map(function (opt) { return `<option value="${opt.key}" ${opt.key === typography.fontCombo ? 'selected' : ''}>${opt.label}</option>`; }).join('')}
+          </select>
+        </div>
+        <div class="form-group" style="margin:0"><label class="fl">Heading Weight</label>
+          <select style="font-size:12px" onchange="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','headingWeight',this.value,'number')">
+            ${[600,700,800,900].map(function (weight) { return `<option value="${weight}" ${Number(typography.headingWeight) === weight ? 'selected' : ''}>${weight}</option>`; }).join('')}
+          </select>
+        </div>
+        <div class="form-group" style="margin:0"><label class="fl">Patient Name Size (<span id="dr-typo-${key}-patientNameSize-value">${typography.patientNameSize}</span>px)</label><input type="range" min="14" max="28" step="1" value="${typography.patientNameSize}" oninput="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','patientNameSize',this.value,'number')"></div>
+        <div class="form-group" style="margin:0"><label class="fl">Date Size (<span id="dr-typo-${key}-dateSize-value">${typography.dateSize}</span>px)</label><input type="range" min="8" max="18" step="0.5" value="${typography.dateSize}" oninput="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','dateSize',this.value,'number')"></div>
+        <div class="form-group" style="margin:0"><label class="fl">Heading Size (<span id="dr-typo-${key}-headingSize-value">${typography.headingSize}</span>px)</label><input type="range" min="8" max="18" step="0.5" value="${typography.headingSize}" oninput="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','headingSize',this.value,'number')"></div>
+        <div class="form-group" style="margin:0"><label class="fl">Medicine Size (<span id="dr-typo-${key}-medicineSize-value">${typography.medicineSize}</span>px)</label><input type="range" min="11" max="22" step="0.5" value="${typography.medicineSize}" oninput="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','medicineSize',this.value,'number')"></div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">
+        <label style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:#334155"><input type="checkbox" ${typography.headingItalic ? 'checked' : ''} onchange="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','headingItalic',this.checked,'boolean')">Italic headings</label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:#334155"><input type="checkbox" ${typography.headingUnderline ? 'checked' : ''} onchange="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','headingUnderline',this.checked,'boolean')">Underline headings</label>
+      </div>
+      <div style="font-size:10px;color:var(--g1);margin-top:6px">These values are saved separately for ${activeDrDesignCentre}, preview live on the right, and sync with the doctor profile.</div>
+    </div>
+  `;
 
   const formHtml = `
     <div class="form-group" style="margin:0 0 8px"><label class="fl">Name</label><input type="text" value="${name}" style="font-size:12px" readonly></div>
-    <div class="form-group" style="margin:0 0 8px"><label class="fl">Degrees</label><input type="text" id="dr-deg-${key}" value="${dr.degrees||''}" placeholder="MBBS, MS, DNB…" style="font-size:12px"></div>
-    <div class="form-group" style="margin:0 0 8px"><label class="fl">Reg No.</label><input type="text" id="dr-reg-${key}" value="${dr.reg||''}" placeholder="PMC-XXXXX" style="font-size:12px"></div>
-    <div class="form-group" style="margin:0 0 8px"><label class="fl">Specialty</label><input type="text" id="dr-spec-${key}" value="${dr.dept||''}" placeholder="Ophthalmology…" style="font-size:12px"></div>
+    <div class="form-group" style="margin:0 0 8px"><label class="fl">Degrees</label><input type="text" id="dr-deg-${key}" value="${dr.degrees||''}" placeholder="MBBS, MS, DNB…" style="font-size:12px" oninput="updateDoctorProfileField('${name.replace(/'/g, "\\'")}','degrees',this.value)"></div>
+    <div class="form-group" style="margin:0 0 8px"><label class="fl">Reg No.</label><input type="text" id="dr-reg-${key}" value="${dr.reg||''}" placeholder="PMC-XXXXX" style="font-size:12px" oninput="updateDoctorProfileField('${name.replace(/'/g, "\\'")}','reg',this.value)"></div>
+    <div class="form-group" style="margin:0 0 8px"><label class="fl">Specialty</label><input type="text" id="dr-spec-${key}" value="${dr.dept||''}" placeholder="Ophthalmology…" style="font-size:12px" oninput="updateDoctorProfileField('${name.replace(/'/g, "\\'")}','dept',this.value)"></div>
     <div class="form-group" style="margin:0 0 8px"><label class="fl">Centre</label>
-      <select id="dr-centre-${key}" style="font-size:12px">
+      <select id="dr-centre-${key}" style="font-size:12px" onchange="updateDoctorProfileField('${name.replace(/'/g, "\\'")}','centre',this.value)">
         <option ${dr.centre==='CHD'?'selected':''}>CHD</option>
         <option ${dr.centre==='RPR'?'selected':''}>RPR</option>
         <option ${dr.centre==='CHD & RPR'?'selected':''}>CHD & RPR</option>
@@ -32565,11 +32723,13 @@ function renderDrCredentials() {
       </select>
       <div style="font-size:10px;color:var(--g1);margin-top:4px">Saved separately for ${activeDrDesignCentre}. If blank, the shared fallback design is used.</div>
     </div>
+    ${typographyControls}
     <div class="form-group" style="margin:0 0 8px"><label class="fl">Signature</label>
       <input type="file" accept="image/*" onchange="uploadDrSignature('${name.replace(/'/g, "\\'")}',this)" style="font-size:11px">
       ${sigPreview}
     </div>
     <button class="btn btn-gold btn-sm" style="margin-top:6px" onclick="saveDoctorCredentials()">💾 Save</button>
+    <div style="font-size:10px;color:var(--g1);margin-top:6px">Edits autosave locally and push to cloud shortly after changes. Use Save for an immediate sync.</div>
   `;
 
   el.innerHTML = `
@@ -32616,6 +32776,7 @@ function selectRxDesign(designKey, doctorName) {
   const sel = document.getElementById('dr-rx-design-' + _drSafeKey(doctorName));
   if (sel && sel.value !== designKey) sel.value = designKey;
   updateRxDesignPreview(designKey, doctorName, activeDrDesignCentre);
+  scheduleDoctorProfilesAutosave();
 }
 window.selectRxDesign = selectRxDesign;
 
@@ -32630,6 +32791,7 @@ window.updateRxDesignPreview = updateRxDesignPreview;
 function generateRxDesignSampleHtml(designKey, profile, doctorName, centre) {
   profile = profile || {};
   const previewCentre = normalizeAppointmentCentreValue(centre || 'CHD');
+  const typographyCss = buildDoctorRxTypographyCss(getDoctorProfileTypographyForCentre(profile, previewCentre));
   const designCssMap = {
     current: '',
     option_a: `body{background:#fff}.pt-name{color:#1a3c6e}.pt-name-bar{border-bottom:2px solid #1a3c6e}.sec-label{color:#1a3c6e}.sec-divider::before,.sec-divider::after{border-color:#1a3c6e}.diag-text{color:#1a3c6e;border-color:#1a3c6e}.rx-item{border-left:3px solid #1a3c6e;padding-left:10px}.rx-item-name{font-size:14px;color:#1a3c6e}.rx-item-instr{border-left:3px solid #1a3c6e;color:#222;font-style:normal}.dept-card-hdr{background:#1a3c6e}.taper-card{border-color:#1a3c6e}.taper-card-hdr{background:#1a3c6e}.inv-chip{border-color:#1a3c6e;background:#f0f4ff;color:#1a3c6e}.fu-box{border-color:#1a3c6e;color:#1a3c6e}`,
@@ -32650,7 +32812,7 @@ function generateRxDesignSampleHtml(designKey, profile, doctorName, centre) {
 
   return `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,300;0,400;0,700;0,900;1,400&family=Playfair+Display:wght@700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Inter:wght@400;600;700;800&family=Lato:ital,wght@0,300;0,400;0,700;0,900;1,400&family=Libre+Baskerville:wght@400;700&family=Playfair+Display:wght@700&family=Source+Sans+3:wght@400;600;700;800&display=swap');
 *{margin:0;padding:0;box-sizing:border-box;print-color-adjust:exact;-webkit-print-color-adjust:exact}
 @page{size:A4 portrait;margin:0}
 body{font-family:'Lato',sans-serif;font-size:10px;color:#1a1a1a;background:#fff;padding:3.5mm 8mm 3mm;line-height:1.3;overflow:hidden}
@@ -32690,6 +32852,7 @@ body{font-family:'Lato',sans-serif;font-size:10px;color:#1a1a1a;background:#fff;
 .dr-deg{font-size:9.5px;color:#555;margin-top:2px;font-style:italic}
 .dr-spec{font-size:10px;font-weight:700;color:#333;margin-top:2px}
 .dr-reg{font-size:8.5px;color:#888;margin-top:1px}
+${typographyCss}
 ${extraCss}
 </style></head><body>
 ${headerSrc ? `<img class="lh-img" src="${headerSrc}" alt="letterhead">` : ''}
@@ -32732,6 +32895,16 @@ ${headerSrc ? `<img class="lh-img" src="${headerSrc}" alt="letterhead">` : ''}
     <div class="rx-item-instr">Take one capsule once a week for 3 months.</div>
   </div>
 </div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px">
+  <div style="border:1px solid #d9e2ec;border-radius:8px;padding:8px;background:#f8fbff">
+    <div class="section-pill" style="margin-bottom:6px;color:#173a67">Chief Complaints</div>
+    <div style="font-size:10.4px;line-height:1.45;color:#334155">Blurred vision for 2 weeks · Headache in evening · Watering in both eyes</div>
+  </div>
+  <div style="border:1px solid #d9e2ec;border-radius:8px;padding:8px;background:#fffdf7">
+    <div class="section-pill" style="margin-bottom:6px;color:#8a5a00">Procedure Advised</div>
+    <div style="font-size:10.4px;line-height:1.45;color:#4b5563">OCT Macula · Refraction review · IOP recheck</div>
+  </div>
+</div>
 <div class="sec-divider"><span class="sec-label">Instructions</span></div>
 <div class="advice-block">Take after meals · Monitor blood sugar weekly</div>
 <div class="fu-box">Follow-up: 3 months</div>
@@ -32752,7 +32925,7 @@ window.generateRxDesignSampleHtml = generateRxDesignSampleHtml;
 function scoreDoctorProfileData(profile) {
   if (!profile || typeof profile !== 'object') return 0;
   let score = 0;
-  ['name','degrees','dept','reg','centre','signature','rxPrintMode','rxDesign','rxDesignCHD','rxDesignRPR'].forEach(function (key) {
+  ['name','degrees','dept','reg','centre','signature','rxPrintMode','rxDesign','rxDesignCHD','rxDesignRPR','rxTypography','rxTypographyCHD','rxTypographyRPR'].forEach(function (key) {
     if (String(profile[key] || '').trim()) score += 10;
   });
   if (String(profile.color || '').trim()) score += 4;
@@ -32837,37 +33010,7 @@ function loadDoctorProfilesFromLocalStorage() {
   } catch (e) { /* noop */ }
 }
 function saveDoctorCredentials() {
-  Object.keys(DOCTOR_PROFILES||{}).forEach(name => {
-    const key = name.replace(/\s/g,'_');
-    const deg  = document.getElementById('dr-deg-'+key)?.value;
-    const reg  = document.getElementById('dr-reg-'+key)?.value;
-    const spec = document.getElementById('dr-spec-'+key)?.value;
-    const ctr  = document.getElementById('dr-centre-'+key)?.value;
-    const rxdCtr = document.getElementById('dr-rx-design-centre-'+key)?.value;
-    const rxd  = document.getElementById('dr-rx-design-'+key)?.value;
-    if(DOCTOR_PROFILES[name]) {
-      if(deg !== undefined)  DOCTOR_PROFILES[name].degrees = deg;
-      if(reg !== undefined)  DOCTOR_PROFILES[name].reg     = reg;
-      if(spec !== undefined) DOCTOR_PROFILES[name].dept    = spec;
-      if(ctr !== undefined)  DOCTOR_PROFILES[name].centre  = ctr;
-      if(rxd !== undefined)  DOCTOR_PROFILES[name].rxDesign = rxd;
-      if(rxd !== undefined && rxdCtr !== undefined) setDoctorProfileDesignForCentre(DOCTOR_PROFILES[name], rxdCtr, rxd);
-    }
-  });
-  const savedAt = Date.now();
-  const firebasePayload = serializeDoctorProfilesForFirebase(DOCTOR_PROFILES);
-  saveDoctorProfilesToLocalStorage(savedAt);
-  if(window.FBDB) {
-    showToast('Saving to cloud...', 'i');
-    Promise.all([
-      window.FBDB.ref('doctorProfiles').set(firebasePayload),
-      window.FBDB.ref('doctorProfilesMeta').set({ _savedAt: savedAt })
-    ])
-      .then(function () { showToast('Doctor credentials saved & synced ✓', 's'); })
-      .catch(function () { showToast('Saved on this device (cloud sync failed)', 'w'); });
-  } else {
-    showToast('Doctor credentials saved on this device ✓','s');
-  }
+  persistDoctorProfilesState({ notify: true });
 }
 
 function loadDoctorProfilesFromFirebase() {
@@ -32902,6 +33045,7 @@ function loadDoctorProfilesFromFirebase() {
       }
     }
     typeof renderDrCredentials === 'function' && renderDrCredentials();
+    startDoctorProfilesLiveSync();
   }).catch(function () {});
 }
 window.loadDoctorProfilesFromFirebase = loadDoctorProfilesFromFirebase;
@@ -32948,7 +33092,7 @@ function uploadDrSignature(name, inp) {
   reader.onload = e => {
     if(DOCTOR_PROFILES[name]) DOCTOR_PROFILES[name].signature = e.target.result;
     saveDoctorProfilesToLocalStorage();
-    if (window.FBDB) window.FBDB.ref('doctorProfiles').set(serializeDoctorProfilesForFirebase(DOCTOR_PROFILES)).catch(function(){});
+    persistDoctorProfilesState({ notify: false });
     showToast('Signature uploaded for '+name+' ✓','s');
   };
   reader.readAsDataURL(file);
