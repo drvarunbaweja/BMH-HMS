@@ -27031,7 +27031,10 @@ function getDoctorPrescriptionPrintMode(profile) {
   if (['table', 'plain', 'both', 'plain_only'].includes(mode)) return mode;
   return 'both';
 }
-function getDoctorPrescriptionDesign(profile) {
+function getDoctorPrescriptionDesign(profile, centre) {
+  const ctr = normalizeAppointmentCentreValue(centre || getEffectiveCentre?.() || CURRENT_USER?.centre || profile?.centre || 'CHD');
+  const centreMode = String(ctr === 'RPR' ? (profile?.rxDesignRPR || '') : (profile?.rxDesignCHD || '')).trim().toLowerCase();
+  if (['current','option_a','option_b','signature_classic','clinical_blocks','ribbon_timeline','compact_bilingual'].includes(centreMode)) return centreMode;
   const mode = String(profile?.rxDesign || '').trim().toLowerCase();
   if (['current','option_a','option_b','signature_classic','clinical_blocks','ribbon_timeline','compact_bilingual'].includes(mode)) return mode;
   return 'current';
@@ -27113,6 +27116,9 @@ function getPsychMseSummaryRows() {
 window.printUnifiedRx = function(deptId) {
   const saveDeptMap = { oe:'ophtho', ophtho:'ophtho', obg:'obg', psych:'psych', skin:'skin' };
   const saveDept = saveDeptMap[deptId] || '';
+  if (saveDept && typeof restoreCurrentPatientRxForDeptIfEmpty === 'function') {
+    restoreCurrentPatientRxForDeptIfEmpty(saveDept);
+  }
   if (saveDept) {
     try { saveVisit(saveDept, { silent: true, autosave: true }); } catch (e) { console.warn('rx pre-print save failed', e); }
   }
@@ -27322,14 +27328,14 @@ window.printUnifiedRx = function(deptId) {
   if (!doctorDegrees && doctorNameMatchesCurrentUser(doctorName)) {
     doctorDegrees = String(CURRENT_USER?.degrees || '').trim();
   }
+  const cpt = window.CURRENT_PATIENT || {};
   const rxPrintMode = getDoctorPrescriptionPrintMode(doctorProfile);
-  const rxDesign = getDoctorPrescriptionDesign(doctorProfile);
+  const rxDesign = getDoctorPrescriptionDesign(doctorProfile, cpt.centre || CURRENT_USER?.centre || getEffectiveCentre?.() || 'CHD');
   const doctorSpec    = {oe:'Ophthalmologist',obg:'Obstetrician & Gynaecologist',psych:'Neuropsychiatrist',skin:'Dermatologist'}[deptId]||'Specialist';
   const doctorReg     = String(doctorProfile.reg || '').trim();
   const doctorPhone   = '6280048805';
 
   // ── Patient info ──
-  const cpt = window.CURRENT_PATIENT || {};
   const ptName  = cpt.name || document.getElementById(deptId+'-rx-ptname')?.textContent || document.getElementById('ophtho-pt-nm')?.textContent || 'Patient';
   const ptIdRaw = cpt.bmhId || document.getElementById(deptId+'-rx-ptid')?.textContent   || document.getElementById('ophtho-pt-uid')?.textContent || '—';
   const ptId    = formatBmhIdForDisplay(ptIdRaw);
@@ -31835,6 +31841,7 @@ function processCsvData(csvText) {
 
 // ── DOCTOR CREDENTIALS ────────────────────────────
 let activeDrTab = '';
+let activeDrDesignCentre = 'CHD';
 const RX_DESIGN_OPTIONS = [
   { key: 'current', label: 'Premium Letterhead' },
   { key: 'option_a', label: 'Clinical Document' },
@@ -31846,6 +31853,16 @@ const RX_DESIGN_OPTIONS = [
 ];
 
 function _drSafeKey(name) { return String(name).replace(/\s/g, '_'); }
+function getDoctorProfileDesignForCentre(profile, centre) {
+  const ctr = normalizeAppointmentCentreValue(centre || 'CHD');
+  return ctr === 'RPR' ? String(profile?.rxDesignRPR || '').trim() : String(profile?.rxDesignCHD || '').trim();
+}
+function setDoctorProfileDesignForCentre(profile, centre, designKey) {
+  if (!profile) return;
+  const ctr = normalizeAppointmentCentreValue(centre || 'CHD');
+  if (ctr === 'RPR') profile.rxDesignRPR = designKey;
+  else profile.rxDesignCHD = designKey;
+}
 
 function _renderDesignThumbnail(key) {
   // A tiny visual snippet matching each design's vibe
@@ -31893,7 +31910,9 @@ function renderDrCredentials() {
   const name = activeDrTab;
   const dr = DOCTOR_PROFILES[name] || {};
   const key = _drSafeKey(name);
-  const selectedDesign = getDoctorPrescriptionDesign(dr);
+  const defaultDesignCentre = normalizeAppointmentCentreValue(activeDrDesignCentre || dr.centre || CURRENT_USER?.centre || 'CHD');
+  activeDrDesignCentre = defaultDesignCentre;
+  const selectedDesign = getDoctorPrescriptionDesign(dr, activeDrDesignCentre);
 
   const tabsHtml = names.map(n => {
     const active = n === activeDrTab;
@@ -31914,10 +31933,17 @@ function renderDrCredentials() {
         <option ${dr.centre==='CHD & RPR'?'selected':''}>CHD & RPR</option>
       </select>
     </div>
+    <div class="form-group" style="margin:0 0 8px"><label class="fl">Prescription Design Centre</label>
+      <select id="dr-rx-design-centre-${key}" style="font-size:12px" onchange="selectDrRxDesignCentre(this.value,'${name.replace(/'/g, "\\'")}')">
+        <option value="CHD" ${activeDrDesignCentre==='CHD'?'selected':''}>CHD</option>
+        <option value="RPR" ${activeDrDesignCentre==='RPR'?'selected':''}>RPR</option>
+      </select>
+    </div>
     <div class="form-group" style="margin:0 0 8px"><label class="fl">Prescription Design</label>
       <select id="dr-rx-design-${key}" style="font-size:12px" onchange="selectRxDesign(this.value,'${name.replace(/'/g, "\\'")}')">
         ${RX_DESIGN_OPTIONS.map(opt => `<option value="${opt.key}" ${opt.key===selectedDesign?'selected':''}>${opt.label}</option>`).join('')}
       </select>
+      <div style="font-size:10px;color:var(--g1);margin-top:4px">Saved separately for ${activeDrDesignCentre}. If blank, the shared fallback design is used.</div>
     </div>
     <div class="form-group" style="margin:0 0 8px"><label class="fl">Signature</label>
       <input type="file" accept="image/*" onchange="uploadDrSignature('${name.replace(/'/g, "\\'")}',this)" style="font-size:11px">
@@ -31951,25 +31977,39 @@ function selectDrTab(name) {
 }
 window.selectDrTab = selectDrTab;
 
+function selectDrRxDesignCentre(centre, doctorName) {
+  activeDrDesignCentre = normalizeAppointmentCentreValue(centre || 'CHD');
+  const profile = DOCTOR_PROFILES[doctorName] || {};
+  const sel = document.getElementById('dr-rx-design-' + _drSafeKey(doctorName));
+  const nextDesign = getDoctorPrescriptionDesign(profile, activeDrDesignCentre);
+  if (sel) sel.value = nextDesign;
+  updateRxDesignPreview(nextDesign, doctorName, activeDrDesignCentre);
+}
+window.selectDrRxDesignCentre = selectDrRxDesignCentre;
+
 function selectRxDesign(designKey, doctorName) {
-  if (DOCTOR_PROFILES[doctorName]) DOCTOR_PROFILES[doctorName].rxDesign = designKey;
+  if (DOCTOR_PROFILES[doctorName]) {
+    DOCTOR_PROFILES[doctorName].rxDesign = designKey;
+    setDoctorProfileDesignForCentre(DOCTOR_PROFILES[doctorName], activeDrDesignCentre, designKey);
+  }
   // Keep the dropdown in sync if called programmatically
   const sel = document.getElementById('dr-rx-design-' + _drSafeKey(doctorName));
   if (sel && sel.value !== designKey) sel.value = designKey;
-  updateRxDesignPreview(designKey, doctorName);
+  updateRxDesignPreview(designKey, doctorName, activeDrDesignCentre);
 }
 window.selectRxDesign = selectRxDesign;
 
-function updateRxDesignPreview(designKey, doctorName) {
+function updateRxDesignPreview(designKey, doctorName, centre) {
   const profile = (DOCTOR_PROFILES && DOCTOR_PROFILES[doctorName]) || {};
-  const html = generateRxDesignSampleHtml(designKey, profile, doctorName);
+  const html = generateRxDesignSampleHtml(designKey, profile, doctorName, centre || activeDrDesignCentre || CURRENT_USER?.centre || 'CHD');
   const frame = document.getElementById('rx-design-preview-frame');
   if (frame) frame.srcdoc = html;
 }
 window.updateRxDesignPreview = updateRxDesignPreview;
 
-function generateRxDesignSampleHtml(designKey, profile, doctorName) {
+function generateRxDesignSampleHtml(designKey, profile, doctorName, centre) {
   profile = profile || {};
+  const previewCentre = normalizeAppointmentCentreValue(centre || 'CHD');
   const designCssMap = {
     current: '',
     option_a: `body{background:#fff}.pt-name{color:#1a3c6e}.pt-name-bar{border-bottom:2px solid #1a3c6e}.sec-label{color:#1a3c6e}.sec-divider::before,.sec-divider::after{border-color:#1a3c6e}.diag-text{color:#1a3c6e;border-color:#1a3c6e}.rx-item{border-left:3px solid #1a3c6e;padding-left:10px}.rx-item-name{font-size:14px;color:#1a3c6e}.rx-item-instr{border-left:3px solid #1a3c6e;color:#222;font-style:normal}.dept-card-hdr{background:#1a3c6e}.taper-card{border-color:#1a3c6e}.taper-card-hdr{background:#1a3c6e}.inv-chip{border-color:#1a3c6e;background:#f0f4ff;color:#1a3c6e}.fu-box{border-color:#1a3c6e;color:#1a3c6e}`,
@@ -32035,7 +32075,7 @@ ${extraCss}
 ${headerSrc ? `<img class="lh-img" src="${headerSrc}" alt="letterhead">` : ''}
 <div class="pt-name-bar">
   <div><span class="pt-name">Smt. Sample Patient</span><span class="pt-meta">35Y / Female</span></div>
-  <div class="pt-date">${dateStr}</div>
+  <div class="pt-date">${dateStr} · ${previewCentre}</div>
 </div>
 <div class="pt-subline">BMSH-SAMPLE · Sample preview · +91 ••••• •••••</div>
 <div class="sec-divider"><span class="sec-label">Diagnosis</span></div>
@@ -32092,7 +32132,7 @@ window.generateRxDesignSampleHtml = generateRxDesignSampleHtml;
 function scoreDoctorProfileData(profile) {
   if (!profile || typeof profile !== 'object') return 0;
   let score = 0;
-  ['name','degrees','dept','reg','centre','signature','rxPrintMode','rxDesign'].forEach(function (key) {
+  ['name','degrees','dept','reg','centre','signature','rxPrintMode','rxDesign','rxDesignCHD','rxDesignRPR'].forEach(function (key) {
     if (String(profile[key] || '').trim()) score += 10;
   });
   if (String(profile.color || '').trim()) score += 4;
@@ -32183,6 +32223,7 @@ function saveDoctorCredentials() {
     const reg  = document.getElementById('dr-reg-'+key)?.value;
     const spec = document.getElementById('dr-spec-'+key)?.value;
     const ctr  = document.getElementById('dr-centre-'+key)?.value;
+    const rxdCtr = document.getElementById('dr-rx-design-centre-'+key)?.value;
     const rxd  = document.getElementById('dr-rx-design-'+key)?.value;
     if(DOCTOR_PROFILES[name]) {
       if(deg !== undefined)  DOCTOR_PROFILES[name].degrees = deg;
@@ -32190,6 +32231,7 @@ function saveDoctorCredentials() {
       if(spec !== undefined) DOCTOR_PROFILES[name].dept    = spec;
       if(ctr !== undefined)  DOCTOR_PROFILES[name].centre  = ctr;
       if(rxd !== undefined)  DOCTOR_PROFILES[name].rxDesign = rxd;
+      if(rxd !== undefined && rxdCtr !== undefined) setDoctorProfileDesignForCentre(DOCTOR_PROFILES[name], rxdCtr, rxd);
     }
   });
   const savedAt = Date.now();
