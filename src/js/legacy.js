@@ -27213,12 +27213,12 @@ window.printUnifiedRx = function(deptId) {
   const skinDermoscopy = deptId === 'skin' ? (document.getElementById('skin-dermoscopy')?.value || '') : '';
   const designCss = {
     current: '',
-    option_a: `body{background:#fff}.pt-name{color:#1a3c6e}.pt-name-bar{border-bottom:2px solid #1a3c6e}.sec-label{color:#1a3c6e}.sec-divider::before,.sec-divider::after{border-color:#1a3c6e}.diag-text{color:#1a3c6e;border-color:#1a3c6e}.rx-item{border-left:3px solid #1a3c6e;padding-left:10px}.rx-item-name{font-size:14px;color:#1a3c6e}.rx-item-instr{border-left:3px solid #1a3c6e;color:#222;font-style:normal}.dept-card-hdr{background:#1a3c6e}.taper-card{border-color:#1a3c6e}.taper-card-hdr{background:#1a3c6e}.inv-chip{border-color:#1a3c6e;background:#f0f4ff;color:#1a3c6e}.fu-box{border-color:#1a3c6e;color:#1a3c6e}`,
-    option_b: `body{background:#fff}.pt-name-bar{border-bottom:2px solid #0f7b82}.pt-name{color:#0f7b82}.sec-label{color:#0f7b82}.sec-divider::before,.sec-divider::after{border-color:#0f7b82}.diag-text{color:#222}.diag-rule-top,.diag-rule-bot{border-color:#0f7b82}.rx-item{background:#f5fffe;border-radius:8px;padding:8px 10px;border:1px solid #c0e8ea}.rx-item-name{color:#0f7b82;font-size:14px}.rx-item-instr{font-style:normal;font-weight:700;background:#fff;border:1px solid #c0e8ea;border-radius:6px;padding:6px 10px;border-left:3px solid #0f7b82}.rx-item-details{margin-top:4px}.dept-card-hdr{background:#0f7b82}.taper-card{border-color:#0f7b82}.taper-card-hdr{background:#0f7b82}.inv-chip{background:#e6f7f8;border-color:#0f7b82;color:#0f7b82}.fu-box{border-color:#0f7b82;color:#0f7b82}.rx-item-gen{color:#0f7b82}`,
-    signature_classic: `body{background:#fcfcfb}.rx-item{padding:7px 10px;border:1px solid #dfe4ec;border-left:4px solid #c89a2b;border-radius:10px;margin-bottom:6px;background:#fff}.rx-item-name{font-size:14.5px}.rx-item-instr{font-size:11px;color:#2c3440;font-style:normal;font-weight:700}.advice-block{font-size:11px;font-style:normal;font-weight:700;background:#faf7f0;border-radius:8px;border-left:4px solid #c89a2b}.sec-label{color:#14345e}`,
-    clinical_blocks: `body{background:#fbfdff}.rx-list{gap:8px}.rx-item{padding:10px 12px;border:1px solid #d8e4ef;border-radius:12px;background:#eef5fb}.rx-item-name{font-size:14px}.rx-item-details{margin-top:5px}.rx-item-instr{font-size:11px;color:#17324d;font-style:normal;font-weight:700;background:#fff;border:1px solid #dae5ef;border-radius:8px;padding:8px 10px;margin-top:8px}.advice-block{font-size:11px;font-style:normal;font-weight:700;background:#f2f7fb;border-radius:10px;border-left:4px solid #173a67}`,
-    ribbon_timeline: `body{background:#fffdfa}.sec-label{color:#0f7b82}.rx-list{position:relative;padding-left:12px}.rx-list:before{content:'';position:absolute;left:2px;top:2px;bottom:2px;width:3px;border-radius:999px;background:linear-gradient(180deg,#0f7b82,#ef8b67)}.rx-item{position:relative;padding:8px 10px 8px 14px;border:1px solid #dde7e7;border-radius:12px;background:#fff;margin-bottom:8px}.rx-item:before{content:'';position:absolute;left:-18px;top:18px;width:10px;height:10px;border-radius:50%;background:#fff;border:3px solid #0f7b82}.rx-item-name{font-size:14px}.rx-item-instr{font-size:11px;font-style:normal;font-weight:700;background:#eef7f7;border-radius:8px;padding:8px 10px;margin-top:8px;border-left:none}`,
-    compact_bilingual: `body{font-size:9.7px;padding:3.2mm 7mm 3mm;line-height:1.26}.pt-name{font-size:16px}.pt-subline{margin-bottom:2px}.sec-divider{margin:3px 0 2px}.rx-item{padding:3px 0 4px}.rx-item-name{font-size:12.8px}.rx-item-instr{font-size:10.8px;font-style:normal;font-weight:700;color:#24384d}.advice-block{font-size:10.6px;font-style:normal;font-weight:700;line-height:1.3}.fu-box{font-size:10px;padding:4px 8px}`
+    option_a: `body{background:#fff}.pt-name{color:#111}.pt-name-bar{border-bottom:2px solid #1a3c6e}.sec-label{color:#111}.sec-divider::before,.sec-divider::after{border-color:#1a3c6e}.diag-text{color:#111;border-color:#1a3c6e}.rx-item{border-left:3px solid #1a3c6e;padding-left:10px}.rx-item-name{font-size:14px;color:#111}.rx-item-instr{border-left:3px solid #1a3c6e;color:#111;font-style:normal}.dept-card-hdr{background:#1a3c6e}.taper-card{border-color:#1a3c6e}.taper-card-hdr{background:#1a3c6e}.inv-chip{border-color:#1a3c6e;background:#f0f4ff;color:#111}.fu-box{border-color:#1a3c6e;color:#111}`,
+    option_b: `body{background:#fff}.pt-name-bar{border-bottom:2px solid #0f7b82}.pt-name{color:#111}.sec-label{color:#111}.sec-divider::before,.sec-divider::after{border-color:#0f7b82}.diag-text{color:#111}.diag-rule-top,.diag-rule-bot{border-color:#0f7b82}.rx-item{background:#f5fffe;border-radius:8px;padding:8px 10px;border:1px solid #c0e8ea}.rx-item-name{color:#111;font-size:14px}.rx-item-instr{font-style:normal;font-weight:700;color:#111;background:#fff;border:1px solid #c0e8ea;border-radius:6px;padding:6px 10px;border-left:3px solid #0f7b82}.rx-item-details{margin-top:4px}.dept-card-hdr{background:#0f7b82}.taper-card{border-color:#0f7b82}.taper-card-hdr{background:#0f7b82}.inv-chip{background:#e6f7f8;border-color:#0f7b82;color:#111}.fu-box{border-color:#0f7b82;color:#111}.rx-item-gen{color:#111}`,
+    signature_classic: `body{background:#fcfcfb}.rx-item{padding:7px 10px;border:1px solid #dfe4ec;border-left:4px solid #c89a2b;border-radius:10px;margin-bottom:6px;background:#fff}.rx-item-name{font-size:14.5px;color:#111}.rx-item-instr{font-size:11px;color:#111;font-style:normal;font-weight:700}.advice-block{font-size:11px;color:#111;font-style:normal;font-weight:700;background:#faf7f0;border-radius:8px;border-left:4px solid #c89a2b}.sec-label{color:#111}`,
+    clinical_blocks: `body{background:#fbfdff}.rx-list{gap:8px}.rx-item{padding:10px 12px;border:1px solid #d8e4ef;border-radius:12px;background:#eef5fb}.rx-item-name{font-size:14px;color:#111}.rx-item-details{margin-top:5px}.rx-item-instr{font-size:11px;color:#111;font-style:normal;font-weight:700;background:#fff;border:1px solid #dae5ef;border-radius:8px;padding:8px 10px;margin-top:8px}.advice-block{font-size:11px;color:#111;font-style:normal;font-weight:700;background:#f2f7fb;border-radius:10px;border-left:4px solid #173a67}`,
+    ribbon_timeline: `body{background:#fffdfa}.sec-label{color:#111}.rx-list{position:relative;padding-left:12px}.rx-list:before{content:'';position:absolute;left:2px;top:2px;bottom:2px;width:3px;border-radius:999px;background:linear-gradient(180deg,#0f7b82,#ef8b67)}.rx-item{position:relative;padding:8px 10px 8px 14px;border:1px solid #dde7e7;border-radius:12px;background:#fff;margin-bottom:8px}.rx-item:before{content:'';position:absolute;left:-18px;top:18px;width:10px;height:10px;border-radius:50%;background:#fff;border:3px solid #0f7b82}.rx-item-name{font-size:14px;color:#111}.rx-item-instr{font-size:11px;color:#111;font-style:normal;font-weight:700;background:#eef7f7;border-radius:8px;padding:8px 10px;margin-top:8px;border-left:none}`,
+    compact_bilingual: `body{font-size:9.7px;padding:3.2mm 7mm 3mm;line-height:1.26}.pt-name{font-size:16px;color:#111}.pt-subline{margin-bottom:2px}.sec-divider{margin:3px 0 2px}.rx-item{padding:3px 0 4px}.rx-item-name{font-size:12.8px;color:#111}.rx-item-instr{font-size:10.8px;font-style:normal;font-weight:700;color:#111}.advice-block{font-size:10.6px;color:#111;font-style:normal;font-weight:700;line-height:1.3}.fu-box{font-size:10px;padding:4px 8px;color:#111}`
   }[rxDesign] || '';
   const renderRxTaperDesign = function (trade, taperRows) {
     if (!taperRows.length) return '';
@@ -27323,13 +27323,13 @@ body{font-family:'Lato',sans-serif;font-size:10px;color:#1a1a1a;background:#fff;
 /* Patient header */
 .pt-name-bar{display:flex;align-items:baseline;justify-content:space-between;border-bottom:1.5px solid #333;padding-bottom:3px;margin-bottom:2px}
 .pt-name{font-family:'Playfair Display','Georgia',serif;font-size:17px;font-weight:700;color:#111;letter-spacing:.2px}
-.pt-meta{font-size:10px;font-weight:300;color:#555;margin-left:8px;font-style:italic}
-.pt-date{font-size:9.5px;color:#555;font-weight:400}
-.pt-subline{font-size:9.5px;color:#444;margin-bottom:3px}
+.pt-meta{font-size:10px;font-weight:300;color:#111;margin-left:8px;font-style:italic}
+.pt-date{font-size:9.5px;color:#111;font-weight:400}
+.pt-subline{font-size:9.5px;color:#111;margin-bottom:3px}
 /* Section dividers */
 .sec-divider{display:flex;align-items:center;gap:6px;margin:4px 0 3px}
 .sec-divider::before,.sec-divider::after{content:'';flex:1;border-top:1px solid #bbb}
-.sec-label{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#666;white-space:nowrap}
+.sec-label{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#111;white-space:nowrap}
 /* Diagnosis */
 .diag-rule-top{border-top:1.5px solid #111;margin-bottom:3px}
 .diag-rule-bot{border-top:1.5px solid #111;margin-top:3px}
@@ -27359,12 +27359,12 @@ tr:nth-child(even) td{background:#f6f6f6}
 .rx-list{display:flex;flex-direction:column;gap:0;margin-bottom:5px}
 .rx-item{padding:5px 0 6px 0;border-bottom:1px solid #e8e8e8}
 .rx-item:last-child{border-bottom:none;padding-bottom:0}
-.rx-item-num{font-size:9px;font-weight:900;color:#999;letter-spacing:.4px;margin-bottom:1px}
+.rx-item-num{font-size:9px;font-weight:900;color:#111;letter-spacing:.4px;margin-bottom:1px}
 .rx-item-name{font-family:'Playfair Display','Georgia',serif;font-size:14px;font-weight:700;color:#111;display:block;line-height:1.2}
-.rx-item-gen{font-size:9px;color:#888;font-style:italic;display:block;margin-bottom:3px}
+.rx-item-gen{font-size:9px;color:#111;font-style:italic;display:block;margin-bottom:3px}
 .rx-item-details{display:flex;flex-wrap:wrap;gap:0 12px;margin:2px 0 3px;align-items:center}
-.rx-detail-item{display:flex;align-items:center;gap:4px;font-size:9.5px;color:#444}
-.rx-detail-dot{width:3px;height:3px;border-radius:50%;background:#aaa;flex-shrink:0}
+.rx-detail-item{display:flex;align-items:center;gap:4px;font-size:9.5px;color:#111}
+.rx-detail-dot{width:3px;height:3px;border-radius:50%;background:#111;flex-shrink:0}
 .rx-item-instr{font-size:10.8px;color:#222;font-style:normal;line-height:1.3;padding-left:9px;border-left:2px solid #ccc;margin-top:4px;font-weight:600}
 /* Taper card */
 .taper-card{margin:4px 0 5px;border:1.5px solid #333;border-radius:4px;overflow:hidden;font-size:9.5px}
@@ -27372,9 +27372,9 @@ tr:nth-child(even) td{background:#f6f6f6}
 .taper-steps-row{display:flex;align-items:stretch;background:#fafafa}
 .taper-step{flex:1;padding:6px 8px;text-align:center;border-right:1px solid #e0e0e0}
 .taper-step:last-child{border-right:none}
-.taper-step-period{font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#666;margin-bottom:3px}
+.taper-step-period{font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#111;margin-bottom:3px}
 .taper-step-dose{font-family:'Playfair Display','Georgia',serif;font-size:15px;font-weight:700;color:#111;line-height:1;margin-bottom:2px}
-.taper-step-timing{font-size:9px;color:#555;font-weight:700;margin-bottom:2px}
+.taper-step-timing{font-size:9px;color:#111;font-weight:700;margin-bottom:2px}
 .taper-step-instr{font-size:8.5px;color:#666;font-style:italic;line-height:1.35;margin-top:2px}
 .taper-arrow{display:flex;align-items:center;justify-content:center;color:#aaa;font-size:14px;padding:0 2px;flex-shrink:0}
 /* Procedures */
@@ -27389,9 +27389,9 @@ tr:nth-child(even) td{background:#f6f6f6}
 /* Signature row */
 .sig-row{display:flex;justify-content:space-between;align-items:flex-end;margin-top:7px;padding-top:6px;border-top:1px solid #ddd}
 .dr-name{font-family:'Playfair Display','Georgia',serif;font-size:13px;font-weight:700;color:#111}
-.dr-deg{font-size:9.5px;color:#555;margin-top:2px;font-style:italic}
-.dr-spec{font-size:10px;font-weight:700;color:#333;margin-top:2px}
-.dr-reg{font-size:8.5px;color:#888;margin-top:1px}
+.dr-deg{font-size:9.5px;color:#111;margin-top:2px;font-style:italic}
+.dr-spec{font-size:10px;font-weight:700;color:#111;margin-top:2px}
+.dr-reg{font-size:8.5px;color:#111;margin-top:1px}
 .qr-lbl{font-size:8.5px;color:#666;margin-top:3px;text-align:center}
 /* Watermark */
 .watermark{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-30deg);font-size:80px;font-weight:900;color:rgba(0,0,0,.03);font-family:'Playfair Display','Georgia',serif;white-space:nowrap;pointer-events:none;z-index:0}
@@ -33665,7 +33665,7 @@ function buildQCard(p, sno) {
     ? `<span style="background:var(--green-lt);color:#1a8c3c;border:1px solid var(--green);border-radius:10px;padding:1px 6px;font-size:9px;font-weight:800">✓ Paid</span>`
     : p.advance>0 ? `<span style="background:var(--blue-lt);color:var(--blue);border:1px solid rgba(0,122,255,.3);border-radius:10px;padding:1px 6px;font-size:9px;font-weight:800">💙 Adv ₹${p.advance.toLocaleString('en-IN')}</span>` : '';
   const statusBadge = p.preRegistered
-    ? `<span style="background:#f0f0f0;color:#888;border-radius:10px;padding:1px 7px;font-size:9px;font-weight:800;border:1px dashed #bbb">⏳ Need to Check In</span>`
+    ? `<span style="background:#e2e8f0;color:#334155;border-radius:10px;padding:1px 7px;font-size:9px;font-weight:800;border:1px dashed #94a3b8">⏳ Need to Check In</span>`
     : p.seen
     ? `<span style="background:var(--green-lt);color:#1a8c3c;border-radius:10px;padding:1px 7px;font-size:9px;font-weight:800">Seen</span>`
     : p.dilated

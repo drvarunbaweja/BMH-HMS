@@ -10,8 +10,8 @@
   --green:#34C759;--green-lt:#e6f9ed;--red:#FF3B30;--red-lt:#fde8e8;
   --orange:#FF9500;--orange-lt:#fff3e0;--purple:#AF52DE;--purple-lt:#f3eeff;
   --teal:#32ADE6;--teal-lt:#e0f5ff;--indigo:#5856D6;--pink:#FF2D55;
-  --g1:#8E8E93;--g2:#AEAEB2;--g3:#C7C7CC;--g4:#D1D1D6;--g5:#E5E5EA;--g6:#F2F2F7;
-  --tx:#1C1C1E;--tx3:#636366;
+  --g1:#475569;--g2:#1f2937;--g3:#94A3B8;--g4:#CBD5E1;--g5:#E2E8F0;--g6:#F8FAFC;
+  --tx:#111827;--tx3:#334155;
   --sh:0 2px 14px rgba(0,0,0,.07);--sh-md:0 4px 24px rgba(0,0,0,.1);--sh-lg:0 8px 40px rgba(0,0,0,.13);
   --r:14px;--rsm:10px;--font:'Nunito',sans-serif;--mono:'JetBrains Mono',monospace;
 }
