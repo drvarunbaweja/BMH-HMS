@@ -844,6 +844,7 @@ import { sendPasswordResetEmail } from 'firebase/auth'
 import { watchAppointments }    from './appointments.js'
 import { watchTransactions,
          watchPayRequests }     from './billing.js'
+import { watchBills, saveBill, incrementBillPrintCount } from './bills.js'
 import { watchLeads }           from './leads.js'
 import { todayKey }             from './utils.js'
 import { initializeInventoryFirebaseSync, syncInventoryWithFirebase } from './inventory.js'
@@ -874,6 +875,10 @@ if (document.readyState === 'loading') {
 // Legacy hooks — registration saves to RTDB + must mirror to Firestore for live PATIENTS[]
 window.upsertPatientFirestore = upsertPatientFirestore
 window.patchPatientFirestore = (bmhId, data) => updatePatient(bmhId, data)
+
+// Bills module — exposed globally so legacy.js billing functions can call them
+window.bmhSaveBillToCloud        = saveBill
+window.bmhIncrementBillPrintCount = incrementBillPrintCount
 
 /** Admin: send Firebase password-reset email (works for accounts that sign in with that email). */
 window.sendUserPasswordResetEmail = async function (email) {
@@ -1065,6 +1070,10 @@ watchAuthState(
         listeners.push(watchLeads(centre))
       }
     }
+
+    // Always start the bills watcher — this is the new Firestore bills collection
+    // used for cloud-persistent bill storage, independent of the legacy RTDB system.
+    listeners.push(watchBills(centre))
 
     watchConnectionStatus('fb-status')
 

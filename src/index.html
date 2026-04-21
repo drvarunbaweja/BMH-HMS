@@ -3830,144 +3830,294 @@
 </div>
 <div class="page" id="pg-billing">
 <div class="ptabs" style="margin-bottom:12px">
-  <div class="ptab active" onclick="bmhBillingTabSwitch(this,'current')">👤 Current patient</div>
-  <div class="ptab" onclick="bmhBillingTabSwitch(this,'search')">👥 Patients &amp; bills</div>
+  <div class="ptab active" onclick="bmhBillingTabSwitch(this,’current’)">💳 New Bill</div>
+  <div class="ptab" onclick="bmhBillingTabSwitch(this,’search’)">📋 Bills &amp; History</div>
 </div>
+
+<!-- ── TAB 1: NEW BILL ─────────────────────────────────────────────────────── -->
 <div class="tab-content active" id="bmh-bill-tab-patients">
 <div class="g32">
-  <div class="card">
-    <div class="card-hd"><div><div class="card-title" id="bmh-bill-card-title">💳 Billing — select a patient</div><div style="font-family:var(--mono);font-size:9px;color:var(--bmh-teal)" id="bmh-bill-card-sub">Today’s visits by department</div></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <label style="font-size:11px;color:var(--g1)">Paper</label>
-        <select id="bmh-print-size" style="font-size:11px;padding:4px 8px;border-radius:6px" onchange="BMH_BILL_PRINT_SIZE=this.value">
-          <option value="A4">A4 full width</option>
-          <option value="A5">Half A4 (A5)</option>
-        </select>
+
+  <!-- LEFT: Patient card + Charge lines + Payment -->
+  <div class="col">
+
+    <!-- Patient selection card -->
+    <div class="card">
+      <div class="card-hd">
+        <div>
+          <div class="card-title" id="bmh-bill-card-title">💳 Billing</div>
+          <div style="font-family:var(--mono);font-size:9px;color:var(--bmh-teal)" id="bmh-bill-card-sub">Search or select a patient to begin</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <label style="font-size:11px;color:var(--g1)">Paper</label>
+          <select id="bmh-print-size" style="font-size:11px;padding:4px 8px;border-radius:6px" onchange="BMH_BILL_PRINT_SIZE=this.value">
+            <option value="A4">A4</option>
+            <option value="A5">A5 / Half</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Quick patient search (type-ahead) -->
+      <div style="position:relative;margin-bottom:10px">
+        <input type="text" id="bmh-bill-quick-search" placeholder="Type patient name, BMSH ID or mobile to search…" style="width:100%" oninput="bmhBillQuickSearch(this.value)" autocomplete="off">
+        <div id="bmh-bill-quick-results" style="display:none;position:absolute;top:calc(100% + 2px);left:0;right:0;background:#fff;border:1px solid var(--g4);border-radius:8px;max-height:200px;overflow-y:auto;z-index:200;box-shadow:0 4px 16px rgba(0,0,0,.14)"></div>
+      </div>
+
+      <!-- Dept filter buttons -->
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;align-items:center">
+        <span style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase">Dept</span>
+        <button type="button" class="btn btn-xs btn-outline" onclick="bmhSetBillDeptFilter(‘all’)">All</button>
+        <button type="button" class="btn btn-xs btn-outline" onclick="bmhSetBillDeptFilter(‘ophtho’)">Eye</button>
+        <button type="button" class="btn btn-xs btn-outline" onclick="bmhSetBillDeptFilter(‘obg’)">OBG</button>
+        <button type="button" class="btn btn-xs btn-outline" onclick="bmhSetBillDeptFilter(‘psych’)">Psych</button>
+        <button type="button" class="btn btn-xs btn-outline" onclick="bmhSetBillDeptFilter(‘skin’)">Skin</button>
+      </div>
+
+      <!-- Search toolbar (shown in History tab mode) -->
+      <div id="bmh-bill-search-toolbar" style="display:none">
+        <div style="display:grid;grid-template-columns:1.2fr .9fr .9fr;gap:8px;margin-bottom:10px">
+          <div class="form-group" style="margin:0"><label class="fl">Name / BMSH ID / mobile</label><input type="text" id="bmh-bill-patient-search" placeholder="Name / BMSH ID / mobile" oninput="bmhRenderBillPatientList()"></div>
+          <div class="form-group" style="margin:0"><label class="fl">Patient scope</label><select id="bmh-bill-patient-scope" onchange="bmhRenderBillPatientList()"><option value="focus">Selected patient</option><option value="range">Date range</option><option value="date">Single date</option><option value="admitted">Currently admitted</option><option value="all">All patients</option></select></div>
+          <div class="form-group" style="margin:0"><label class="fl">Date</label><input type="date" id="bmh-bill-date-filter" onchange="bmhRenderBillPatientList()"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;max-width:420px">
+          <div class="form-group" style="margin:0"><label class="fl">From</label><input type="date" id="bmh-bill-date-from" onchange="bmhRenderBillPatientList()"></div>
+          <div class="form-group" style="margin:0"><label class="fl">To</label><input type="date" id="bmh-bill-date-to" onchange="bmhRenderBillPatientList()"></div>
+        </div>
+      </div>
+
+      <div id="bmh-admin-daily-billing-panel" style="display:none;margin-bottom:12px"></div>
+      <div id="bmh-bill-pt-list" style="max-height:160px;overflow:auto;border:1px solid var(--g5);border-radius:8px;margin-bottom:10px"></div>
+      <div class="form-group" style="margin-bottom:8px"><label class="fl">Selected patient</label><select id="bmh-bill-pt-select" onchange="bmhSelectBillPatient(this.value)"></select></div>
+      <div id="bmh-bill-summary" style="margin-bottom:10px"></div>
+    </div>
+
+    <!-- Advance panel -->
+    <div id="bmh-billing-advance-panel" style="display:none;margin-bottom:12px">
+      <div class="card" style="background:var(--blue-lt);border:1px solid var(--g4)">
+        <div class="card-hd"><div class="card-title" style="color:var(--bmh-blue)">Add Advance (on account)</div></div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin-bottom:10px">
+          <div class="form-group" style="margin:0"><label class="fl">Mode</label><select id="bmh-billing-advance-mode"><option value="Cash">Cash</option><option value="UPI">UPI</option><option value="Card">Card</option><option value="NEFT">NEFT</option><option value="Cheque">Cheque</option></select></div>
+        </div>
+        <div id="bmh-billing-advance-rows"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;align-items:center">
+          <button type="button" class="btn btn-outline btn-xs" onclick="bmhAddBillingAdvanceRow()">+ Another line</button>
+          <button type="button" class="btn btn-blue btn-sm" onclick="bmhPostPatientAdvanceFromBilling()">Post advance</button>
+          <button type="button" class="btn btn-xs btn-gray" onclick="bmhPromptAddAdvanceReasonOption()">+ Add reason</button>
+        </div>
+        <div style="font-size:10px;color:var(--g1);margin-top:8px">Adds to patient’s advance balance — deducted at billing time from any terminal.</div>
       </div>
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center">
-      <span style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase">Department</span>
-      <button type="button" class="btn btn-xs btn-outline" onclick="bmhSetBillDeptFilter('all')">All</button>
-      <button type="button" class="btn btn-xs btn-outline" onclick="bmhSetBillDeptFilter('ophtho')">Eye</button>
-      <button type="button" class="btn btn-xs btn-outline" onclick="bmhSetBillDeptFilter('obg')">OBG</button>
-      <button type="button" class="btn btn-xs btn-outline" onclick="bmhSetBillDeptFilter('psych')">Psych</button>
-      <button type="button" class="btn btn-xs btn-outline" onclick="bmhSetBillDeptFilter('skin')">Skin</button>
-    </div>
-    <div id="bmh-bill-search-toolbar" style="display:none">
-    <div style="display:grid;grid-template-columns:1.2fr .9fr .9fr;gap:8px;margin-bottom:10px">
-      <div class="form-group" style="margin:0"><label class="fl">Search (name / BMSH ID / mobile)</label><input type="text" id="bmh-bill-patient-search" placeholder="Name / BMSH ID / mobile" oninput="bmhRenderBillPatientList()"></div>
-      <div class="form-group" style="margin:0"><label class="fl">Patient scope</label><select id="bmh-bill-patient-scope" onchange="bmhRenderBillPatientList()"><option value="focus">Selected patient only</option><option value="range">Date range</option><option value="date">Single date</option><option value="admitted">Currently admitted</option><option value="all">All visible patients</option></select></div>
-      <div class="form-group" style="margin:0"><label class="fl">Date</label><input type="date" id="bmh-bill-date-filter" onchange="bmhRenderBillPatientList()"></div>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;max-width:420px">
-      <div class="form-group" style="margin:0"><label class="fl">Date from</label><input type="date" id="bmh-bill-date-from" onchange="bmhRenderBillPatientList()"></div>
-      <div class="form-group" style="margin:0"><label class="fl">Date to</label><input type="date" id="bmh-bill-date-to" onchange="bmhRenderBillPatientList()"></div>
-    </div>
-    </div>
-    <div id="bmh-admin-daily-billing-panel" style="display:none;margin-bottom:12px"></div>
-    <div id="bmh-bill-pt-list" style="max-height:200px;overflow:auto;border:1px solid var(--g5);border-radius:8px;margin-bottom:12px"></div>
-    <div class="form-group" style="margin-bottom:10px"><label class="fl">Selected patient</label><select id="bmh-bill-pt-select" onchange="bmhSelectBillPatient(this.value)"></select></div>
-    <div id="bmh-bill-summary" style="margin-bottom:12px"></div>
-    <div id="bmh-billing-advance-panel" style="display:none;margin-bottom:12px;padding:12px 14px;background:var(--blue-lt);border:1px solid var(--g4);border-radius:10px">
-      <div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Add advance (on account)</div>
-      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin-bottom:10px">
-        <div class="form-group" style="margin:0"><label class="fl">Mode</label><select id="bmh-billing-advance-mode"><option value="Cash">Cash</option><option value="UPI">UPI</option><option value="Card">Card</option><option value="NEFT">NEFT</option><option value="Cheque">Cheque</option></select></div>
+
+    <!-- Charge lines card -->
+    <div class="card">
+      <div class="card-hd">
+        <div class="card-title">Charge Lines</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button type="button" class="btn btn-xs btn-outline" onclick="bmhAddManualBillLine()">+ Manual line</button>
+          <button type="button" class="btn btn-xs btn-blue" onclick="bmhFindChargeAndAdd()">+ Search &amp; add</button>
+        </div>
       </div>
-      <div id="bmh-billing-advance-rows"></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;align-items:center">
-        <button type="button" class="btn btn-outline btn-xs" onclick="bmhAddBillingAdvanceRow()">+ Another line</button>
-        <button type="button" class="btn btn-blue btn-sm" onclick="bmhPostPatientAdvanceFromBilling()">Post advance to patient</button>
-        <button type="button" class="btn btn-xs btn-gray" onclick="bmhPromptAddAdvanceReasonOption()">+ Add reason option</button>
+      <div id="bmh-bill-items-wrap">
+        <div id="bmh-bill-lines"></div>
       </div>
-      <div style="font-size:10px;color:var(--g1);margin-top:8px">Increases the patient’s advance balance (same as reception advance). Use multiple lines for split purposes.</div>
-    </div>
-    <div id="bmh-bill-items-wrap">
-      <div style="font-size:10px;font-weight:800;color:var(--bmh-blue);text-transform:uppercase;margin-bottom:6px">Charge lines (investigations, diagnostics, surgery, consumables, pharmacy, OT, reception…)</div>
-      <div id="bmh-bill-lines"></div>
-    </div>
-    <div style="display:flex;gap:8px;align-items:end;margin:10px 0;flex-wrap:wrap">
-      <div class="form-group" style="margin:0;flex:1;min-width:240px"><label class="fl">Search procedures / investigations / room rent</label><input type="text" id="bmh-charge-search" placeholder="Type any charge name..." oninput="bmhRenderQuickChargePanels()"></div>
-      <button type="button" class="btn btn-blue btn-sm" onclick="bmhFindChargeAndAdd()">+ Add searched charge</button>
-    </div>
-    <button type="button" class="btn btn-outline btn-sm" style="margin:8px 0" onclick="bmhAddManualBillLine()">+ Add manual line</button>
-    <div style="background:var(--g6);border-radius:var(--rsm);padding:12px;margin-bottom:12px">
-      <div style="font-size:11px;font-weight:800;color:var(--bmh-blue);margin-bottom:8px">📦 Scan / type item → add to this patient’s bill</div>
-      <div style="display:flex;gap:8px">
-        <input type="text" id="bill-scan-input" placeholder="Barcode or item name…" style="flex:1">
-        <button type="button" class="btn btn-gold btn-sm" onclick="scanToBill()">Add</button>
+      <!-- Charge search -->
+      <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">
+        <input type="text" id="bmh-charge-search" placeholder="Search any charge / procedure / drug…" style="flex:1;min-width:180px" oninput="bmhRenderQuickChargePanels()">
       </div>
-      <div id="bill-scan-log" style="margin-top:8px"></div>
-    </div>
-    <div style="background:var(--g6);border-radius:8px;padding:12px" id="bill-totals">
-      <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:12.5px"><span>Subtotal</span><span style="font-weight:800" id="bill-sub">₹0</span></div>
-      <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:12.5px;align-items:center;gap:8px"><span>Discount ₹</span><input type="number" id="bmh-bill-discount" value="0" min="0" step="1" style="width:88px;text-align:right;font-size:12px" oninput="bmhUpdateBillTotals()"></div>
-      <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;cursor:pointer">
-        <input type="checkbox" id="bmh-apply-advance" onchange="bmhUpdateBillTotals()"> Apply advance <span id="bmh-advance-available" style="font-weight:800;color:var(--blue)">₹0 available</span>
-      </label>
-      <label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:12px;cursor:pointer;flex-wrap:wrap">
-        <input type="checkbox" id="bmh-bill-add-to-queue">
-        When saving payment, also add patient to <strong>My Patient Queue</strong> (today)
-      </label>
-      <div style="margin-bottom:10px">
-        <button type="button" class="btn btn-outline btn-sm" onclick="bmhAddPatientToDoctorQueue(document.getElementById('bmh-bill-pt-select')?.value)">🩺 Add selected patient to My Patient Queue</button>
+      <!-- Barcode scan -->
+      <div style="background:var(--g6);border-radius:8px;padding:10px;margin-top:10px">
+        <div style="font-size:11px;font-weight:800;color:var(--bmh-blue);margin-bottom:6px">Scan / type item → add to bill</div>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="bill-scan-input" placeholder="Barcode or item name…" style="flex:1">
+          <button type="button" class="btn btn-gold btn-sm" onclick="scanToBill()">Add</button>
+        </div>
+        <div id="bill-scan-log" style="margin-top:6px"></div>
       </div>
-      <div id="bill-discount-line" style="display:none;justify-content:space-between;margin-bottom:5px;font-size:12.5px;color:var(--orange)"><span>Discount</span><span style="font-weight:800" id="bill-discount-amt">₹0</span></div>
-      <div id="bill-advance-line" style="display:none;justify-content:space-between;margin-bottom:5px;font-size:12.5px;color:var(--blue)"><span>Advance adjusted</span><span style="font-weight:800" id="bill-advance-amt">₹0</span></div>
-      <div style="margin:10px 0 12px;padding:10px;border:1px solid var(--g5);border-radius:10px;background:#fff">
-        <div style="font-size:11px;font-weight:800;color:var(--g1);margin-bottom:8px">Payment received</div>
+    </div>
+
+    <!-- Totals + TPA + Payment card -->
+    <div class="card" id="bill-totals">
+      <div class="card-hd"><div class="card-title">Payment</div></div>
+
+      <!-- Totals summary -->
+      <div style="background:var(--g6);border-radius:8px;padding:12px;margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:12.5px"><span>Subtotal</span><span style="font-weight:800" id="bill-sub">₹0</span></div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:12.5px;align-items:center;gap:8px">
+          <span>Discount ₹</span>
+          <input type="number" id="bmh-bill-discount" value="0" min="0" step="1" style="width:88px;text-align:right;font-size:12px" oninput="bmhUpdateBillTotals()">
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px;cursor:pointer">
+          <input type="checkbox" id="bmh-apply-advance" onchange="bmhUpdateBillTotals()">
+          Apply advance &nbsp;<span id="bmh-advance-available" style="font-weight:900;color:var(--blue);font-size:13px">₹0 available</span>
+        </label>
+        <div id="bill-discount-line" style="display:none;justify-content:space-between;margin-bottom:5px;font-size:12.5px;color:var(--orange)"><span>Discount</span><span style="font-weight:800" id="bill-discount-amt">₹0</span></div>
+        <div id="bill-advance-line" style="display:none;justify-content:space-between;margin-bottom:5px;font-size:12.5px;color:var(--blue)"><span>Advance adjusted</span><span style="font-weight:800" id="bill-advance-amt">₹0</span></div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:12.5px"><span>Chargeable (after disc./adv.)</span><span style="font-weight:700" id="bill-taxable">₹0</span></div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:12.5px;color:#1a8c3c"><span>Received so far</span><span style="font-weight:800" id="bill-received">₹0</span></div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:12.5px;color:#8a4200"><span>Balance due</span><span style="font-weight:800" id="bill-balance-due">₹0</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:15px;font-weight:900;color:var(--bmh-blue);border-top:1px solid var(--g4);padding-top:8px;margin-top:6px"><span>Net total</span><span id="bill-total">₹0</span></div>
+      </div>
+
+      <!-- TPA / Cashless section -->
+      <div style="margin-bottom:12px;padding:12px 14px;background:#eef6fb;border:1px solid #b3d4e8;border-radius:10px">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;cursor:pointer;margin-bottom:0">
+          <input type="checkbox" id="bmh-is-tpa" onchange="bmhToggleTpaSection(this.checked)">
+          TPA / Cashless patient
+        </label>
+        <div id="bmh-tpa-section" style="display:none;margin-top:10px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+            <div class="form-group" style="margin:0"><label class="fl">TPA / Insurance company</label><input type="text" id="bmh-tpa-company" placeholder="e.g. Star Health, CGHS, PMJAY…"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Policy / Pre-auth no.</label><input type="text" id="bmh-tpa-policy-no" placeholder="Policy or pre-auth number"></div>
+            <div class="form-group" style="margin:0"><label class="fl">TPA pays ₹</label><input type="number" id="bmh-tpa-amount" min="0" step="1" placeholder="Amount billed to TPA" oninput="bmhUpdateTpaSplit()"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Patient pays ₹ (0 = fully cashless)</label><input type="number" id="bmh-patient-pays" min="0" step="1" value="0" placeholder="0" oninput="bmhUpdateTpaSplit()"></div>
+          </div>
+          <div id="bmh-tpa-split-hint" style="display:none;font-size:11px;color:var(--bmh-teal);font-weight:700;padding:6px 8px;background:#d8eef9;border-radius:6px;line-height:1.5"></div>
+        </div>
+      </div>
+
+      <!-- Payment received section -->
+      <div style="margin-bottom:12px;padding:12px;border:1px solid var(--g5);border-radius:10px;background:#fff">
+        <div style="font-size:11px;font-weight:800;color:var(--g1);margin-bottom:8px">Payment received now</div>
         <label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:12px;cursor:pointer">
           <input type="checkbox" id="bmh-pay-received-toggle" onchange="bmhTogglePaymentForm(this.checked)">
-          Mark payment received now
+          Mark payment received
         </label>
         <div id="bmh-pay-form" style="display:none">
+          <!-- Payment mode quick-select buttons -->
+          <div style="margin-bottom:10px">
+            <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Payment mode</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap" id="bmh-pay-mode-btns">
+              <button type="button" class="btn btn-sm" style="background:var(--bmh-blue);color:#fff" data-mode="Cash" onclick="bmhSelectPayMode(‘Cash’)">Cash</button>
+              <button type="button" class="btn btn-outline btn-sm" data-mode="UPI" onclick="bmhSelectPayMode(‘UPI’)">UPI</button>
+              <button type="button" class="btn btn-outline btn-sm" data-mode="Card" onclick="bmhSelectPayMode(‘Card’)">Card</button>
+              <button type="button" class="btn btn-outline btn-sm" data-mode="NEFT" onclick="bmhSelectPayMode(‘NEFT’)">NEFT</button>
+              <button type="button" class="btn btn-outline btn-sm" data-mode="Cheque" onclick="bmhSelectPayMode(‘Cheque’)">Cheque</button>
+              <button type="button" class="btn btn-outline btn-sm" data-mode="Insurance/TPA" onclick="bmhSelectPayMode(‘Insurance/TPA’)">Insurance/TPA</button>
+              <button type="button" class="btn btn-outline btn-sm" data-mode="PMJAY / Ayushman" onclick="bmhSelectPayMode(‘PMJAY / Ayushman’)">PMJAY</button>
+              <button type="button" class="btn btn-outline btn-sm" data-mode="CGHS/ECHS" onclick="bmhSelectPayMode(‘CGHS/ECHS’)">CGHS/ECHS</button>
+            </div>
+            <!-- Hidden select kept for backward-compatible JS (bmhRecordPatientPayment reads this) -->
+            <select id="bmh-pay-mode" style="display:none" onchange="bmhToggleBillingInsuranceFields()">
+              <option value="Cash">Cash</option><option value="UPI">UPI</option><option value="Card">Card</option>
+              <option value="NEFT">NEFT</option><option value="Cheque">Cheque</option>
+              <option value="Insurance/TPA">Insurance/TPA</option>
+              <option value="PMJAY / Ayushman">PMJAY / Ayushman</option>
+              <option value="CGHS/ECHS">CGHS/ECHS</option>
+            </select>
+          </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
             <div class="form-group" style="margin:0"><label class="fl">Amount received ₹</label><input type="number" id="bmh-pay-amt" placeholder="Amount" oninput="bmhUpdateBillTotals()"></div>
-            <div class="form-group" style="margin:0"><label class="fl">Mode of payment</label>
-              <select id="bmh-pay-mode" onchange="bmhToggleBillingInsuranceFields()"><option value="Cash">Cash</option><option value="UPI">UPI</option><option value="Card">Card</option><option value="NEFT">NEFT</option><option value="Cheque">Cheque</option><option value="Insurance/TPA">Insurance/TPA</option><option value="PMJAY / Ayushman">PMJAY / Ayushman</option><option value="CGHS/ECHS">CGHS/ECHS</option></select>
-            </div>
-            <div class="form-group" style="margin:0;grid-column:1/-1"><label class="fl">Cheque no. / UTR / ref no.</label><input type="text" id="bmh-pay-ref" placeholder="Required for bank / UPI reconciliation"></div>
+            <div class="form-group" style="margin:0"><label class="fl">UTR / Cheque / ref no.</label><input type="text" id="bmh-pay-ref" placeholder="Required for bank / UPI"></div>
             <div class="form-group" style="margin:0;grid-column:1/-1"><label class="fl">Cashless / TPA approved ₹ (for this bill)</label><input type="number" id="bmh-pay-cashless-approved" min="0" step="1" placeholder="Leave blank if fully self-pay" oninput="bmhUpdateBillTotals()"></div>
           </div>
           <div id="bmh-pay-cashless-split-hint" style="display:none;font-size:11px;font-weight:700;color:var(--bmh-teal);margin:-2px 0 8px;line-height:1.4"></div>
           <div id="bmh-pay-insurance-fields" style="display:none;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-            <div class="form-group" style="margin:0"><label class="fl">Insurance / TPA</label><input type="text" id="bmh-pay-insurer" placeholder="Insurer / TPA name"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Insurance / TPA name</label><input type="text" id="bmh-pay-insurer" placeholder="Insurer / TPA name"></div>
             <div class="form-group" style="margin:0"><label class="fl">Policy / pre-auth no.</label><input type="text" id="bmh-pay-policy" placeholder="Policy or pre-auth"></div>
             <div class="form-group" style="margin:0;grid-column:1/-1"><label class="fl">Amount still due to hospital ₹</label><input type="number" id="bmh-pay-insurer-due" placeholder="Pending from insurer / TPA"></div>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button type="button" class="btn btn-gold" onclick="bmhRecordPatientPayment()">✓ Save payment</button>
-            <button type="button" class="btn btn-outline btn-sm" onclick="bmhClearPaymentDraft()">Clear draft</button>
+            <button type="button" class="btn btn-gold" onclick="bmhRecordPatientPayment()">✓ Save payment (RTDB)</button>
+            <button type="button" class="btn btn-outline btn-sm" onclick="bmhClearPaymentDraft()">Clear</button>
           </div>
         </div>
       </div>
-      <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:12.5px"><span>Chargeable total (after disc. / adv.)</span><span style="font-weight:700" id="bill-taxable">₹0</span></div>
-      <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:12.5px;color:#1a8c3c"><span>Received so far</span><span style="font-weight:800" id="bill-received">₹0</span></div>
-      <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:12.5px;color:#8a4200"><span>Balance due</span><span style="font-weight:800" id="bill-balance-due">₹0</span></div>
-      <div style="display:flex;justify-content:space-between;font-size:15px;font-weight:900;color:var(--bmh-blue);border-top:1px solid var(--g4);padding-top:8px;margin-top:6px"><span>Net total</span><span id="bill-total">₹0</span></div>
+
+      <!-- Queue option -->
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:12px;cursor:pointer;flex-wrap:wrap">
+        <input type="checkbox" id="bmh-bill-add-to-queue">
+        Also add patient to <strong>My Patient Queue</strong> when saving
+      </label>
+      <div style="margin-bottom:14px">
+        <button type="button" class="btn btn-outline btn-sm" onclick="bmhAddPatientToDoctorQueue(document.getElementById(‘bmh-bill-pt-select’)?.value)">Add to My Queue now</button>
+      </div>
+
+      <!-- Primary action: Save to Cloud + Print -->
+      <div style="display:flex;gap:8px;flex-wrap:wrap;padding:12px;background:var(--blue-lt);border-radius:10px;border:1px solid var(--g4)">
+        <button type="button" class="btn btn-blue" style="font-size:14px;padding:10px 20px" onclick="bmhSaveAndPrintBill()">💾 Save Bill to Cloud + Print</button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="printBmhPatientBill()">🖨️ Preview only</button>
+      </div>
+      <div style="font-size:10px;color:var(--g1);margin-top:6px">Saving to cloud stores the bill permanently in Firestore — visible and reprintable from any terminal using BMSH ID.</div>
     </div>
-    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-      <button type="button" class="btn btn-blue" onclick="printBmhPatientBill()">🖨️ Print full bill</button>
-      <button type="button" class="btn btn-outline btn-sm" onclick="showToast('Share via WhatsApp from print preview','i')">📱</button>
-    </div>
-  </div>
+
+  </div><!-- /left col -->
+
+  <!-- RIGHT: Quick charges + vendor -->
   <div class="col">
-    <div class="card"><div class="card-hd"><div class="card-title">⚡ Quick Add Charges</div><div class="card-sub">Click once to add directly into the selected patient's bill</div></div>
+    <div class="card">
+      <div class="card-hd">
+        <div class="card-title">⚡ Quick Add Charges</div>
+        <div class="card-sub">Click once to add to selected patient’s bill</div>
+      </div>
       <div id="bmh-quick-charge-dept-filter" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
-        <button type="button" class="btn btn-xs btn-gold" data-bmh-quick-dept="all" onclick="bmhSetQuickChargeDeptFilter('all')">All</button>
-        <button type="button" class="btn btn-xs btn-outline" data-bmh-quick-dept="ophtho" onclick="bmhSetQuickChargeDeptFilter('ophtho')">Eye</button>
-        <button type="button" class="btn btn-xs btn-outline" data-bmh-quick-dept="obg" onclick="bmhSetQuickChargeDeptFilter('obg')">OBG</button>
-        <button type="button" class="btn btn-xs btn-outline" data-bmh-quick-dept="psych" onclick="bmhSetQuickChargeDeptFilter('psych')">Neuropsychiatry</button>
-        <button type="button" class="btn btn-xs btn-outline" data-bmh-quick-dept="skin" onclick="bmhSetQuickChargeDeptFilter('skin')">Skin / Cosmetology</button>
+        <button type="button" class="btn btn-xs btn-gold" data-bmh-quick-dept="all" onclick="bmhSetQuickChargeDeptFilter(‘all’)">All</button>
+        <button type="button" class="btn btn-xs btn-outline" data-bmh-quick-dept="ophtho" onclick="bmhSetQuickChargeDeptFilter(‘ophtho’)">Eye</button>
+        <button type="button" class="btn btn-xs btn-outline" data-bmh-quick-dept="obg" onclick="bmhSetQuickChargeDeptFilter(‘obg’)">OBG</button>
+        <button type="button" class="btn btn-xs btn-outline" data-bmh-quick-dept="psych" onclick="bmhSetQuickChargeDeptFilter(‘psych’)">Neuropsychiatry</button>
+        <button type="button" class="btn btn-xs btn-outline" data-bmh-quick-dept="skin" onclick="bmhSetQuickChargeDeptFilter(‘skin’)">Skin</button>
       </div>
       <div id="bmh-quick-charge-panels"></div>
     </div>
-    <div class="card"><div class="card-hd"><div class="card-title">Pending vendor dues (inventory)</div><div class="card-sub">Link bills under Inventory → Vendors</div></div>
+    <div class="card">
+      <div class="card-hd"><div class="card-title">Pending vendor dues</div><div class="card-sub">Link bills under Inventory → Vendors</div></div>
       <div id="bmh-bill-vendor-summary" style="font-size:12px"></div>
     </div>
   </div>
-</div>
-</div>
-</div>
+
+</div><!-- /g32 -->
+</div><!-- /tab-content new bill -->
+
+<!-- ── TAB 2: BILL HISTORY ────────────────────────────────────────────────── -->
+<div class="tab-content" id="bmh-bill-tab-history" style="display:none">
+  <div class="card">
+    <div class="card-hd">
+      <div>
+        <div class="card-title">Find &amp; Reprint Bills</div>
+        <div class="card-sub">Searches cloud-saved bills — visible from any terminal</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;margin-bottom:10px;align-items:end">
+      <div class="form-group" style="margin:0">
+        <label class="fl">BMSH ID, patient name, or bill number</label>
+        <input type="text" id="bmh-bill-history-search" placeholder="e.g. BMSH-123456 or patient name…" oninput="bmhSearchBillHistory(this.value)">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label class="fl">Date</label>
+        <input type="date" id="bmh-bill-history-date" onchange="bmhSearchBillHistory(document.getElementById(‘bmh-bill-history-search’).value)">
+      </div>
+      <button type="button" class="btn btn-blue btn-sm" style="align-self:flex-end" onclick="bmhSearchBillHistory(document.getElementById(‘bmh-bill-history-search’).value)">Search</button>
+    </div>
+    <div id="bmh-bill-history-results">
+      <div style="text-align:center;color:var(--g1);padding:28px;font-size:13px">Search by BMSH ID or patient name to find saved bills</div>
+    </div>
+  </div>
+
+  <!-- Admin daily billing panel (shown in history tab) -->
+  <div id="bmh-admin-daily-billing-panel-hist" style="margin-top:12px"></div>
+
+  <!-- Legacy patient search section (kept for multi-patient operations) -->
+  <div class="card" style="margin-top:12px">
+    <div class="card-hd"><div class="card-title">Multi-patient charge view</div><div class="card-sub">Filter patients by date / scope for batch billing</div></div>
+    <div style="display:grid;grid-template-columns:1.2fr .9fr .9fr;gap:8px;margin-bottom:10px">
+      <div class="form-group" style="margin:0"><label class="fl">Name / BMSH ID / mobile</label><input type="text" id="bmh-bill-patient-search" placeholder="Name / BMSH ID / mobile" oninput="bmhRenderBillPatientList()"></div>
+      <div class="form-group" style="margin:0"><label class="fl">Patient scope</label><select id="bmh-bill-patient-scope" onchange="bmhRenderBillPatientList()"><option value="focus">Selected patient</option><option value="range">Date range</option><option value="date">Single date</option><option value="admitted">Currently admitted</option><option value="all">All patients</option></select></div>
+      <div class="form-group" style="margin:0"><label class="fl">Date</label><input type="date" id="bmh-bill-date-filter" onchange="bmhRenderBillPatientList()"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;max-width:420px">
+      <div class="form-group" style="margin:0"><label class="fl">From</label><input type="date" id="bmh-bill-date-from" onchange="bmhRenderBillPatientList()"></div>
+      <div class="form-group" style="margin:0"><label class="fl">To</label><input type="date" id="bmh-bill-date-to" onchange="bmhRenderBillPatientList()"></div>
+    </div>
+    <div id="bmh-admin-daily-billing-panel" style="display:none;margin-bottom:12px"></div>
+    <div id="bmh-bill-pt-list-hist" style="max-height:200px;overflow:auto;border:1px solid var(--g5);border-radius:8px;margin-bottom:10px"></div>
+  </div>
+</div><!-- /tab-content history -->
+
+<!-- Hidden selects kept for backward-compat JS that reads these -->
+<select id="lab-pt-sel" style="display:none"></select>
+<select id="use-pt" style="display:none"></select>
+
+</div><!-- /pg-billing -->
 <div class="page" id="pg-tpa">
 <div class="sg4">
   <div class="sc blue"><div class="sc-lbl">Total Claimed MTD</div><div class="sc-val blue" id="tpa-total-claimed">₹0</div></div>
