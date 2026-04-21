@@ -3976,36 +3976,36 @@
         </div>
       </div>
 
-      <!-- Payment received section -->
+      <!-- Payment section — mode buttons always visible, amount fields shown on toggle -->
       <div style="margin-bottom:12px;padding:12px;border:1px solid var(--g5);border-radius:10px;background:#fff">
-        <div style="font-size:11px;font-weight:800;color:var(--g1);margin-bottom:8px">Payment received now</div>
-        <label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:12px;cursor:pointer">
+        <div style="font-size:11px;font-weight:800;color:var(--g1);margin-bottom:8px">Payment mode</div>
+
+        <!-- Payment mode quick-select buttons — ALWAYS VISIBLE -->
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px" id="bmh-pay-mode-btns">
+          <button type="button" class="btn btn-sm" style="background:var(--bmh-blue);color:#fff" data-mode="Cash" onclick="bmhSelectPayMode(‘Cash’)">💵 Cash</button>
+          <button type="button" class="btn btn-outline btn-sm" data-mode="UPI" onclick="bmhSelectPayMode(‘UPI’)">📱 UPI</button>
+          <button type="button" class="btn btn-outline btn-sm" data-mode="Card" onclick="bmhSelectPayMode(‘Card’)">💳 Card</button>
+          <button type="button" class="btn btn-outline btn-sm" data-mode="NEFT" onclick="bmhSelectPayMode(‘NEFT’)">🏦 NEFT</button>
+          <button type="button" class="btn btn-outline btn-sm" data-mode="Cheque" onclick="bmhSelectPayMode(‘Cheque’)">📄 Cheque</button>
+          <button type="button" class="btn btn-outline btn-sm" data-mode="Insurance/TPA" onclick="bmhSelectPayMode(‘Insurance/TPA’)">🏥 TPA</button>
+          <button type="button" class="btn btn-outline btn-sm" data-mode="PMJAY / Ayushman" onclick="bmhSelectPayMode(‘PMJAY / Ayushman’)">🟩 PMJAY</button>
+          <button type="button" class="btn btn-outline btn-sm" data-mode="CGHS/ECHS" onclick="bmhSelectPayMode(‘CGHS/ECHS’)">🔵 CGHS</button>
+        </div>
+        <!-- Hidden select kept for backward-compatible JS (bmhRecordPatientPayment reads this) -->
+        <select id="bmh-pay-mode" style="display:none" onchange="bmhToggleBillingInsuranceFields()">
+          <option value="Cash">Cash</option><option value="UPI">UPI</option><option value="Card">Card</option>
+          <option value="NEFT">NEFT</option><option value="Cheque">Cheque</option>
+          <option value="Insurance/TPA">Insurance/TPA</option>
+          <option value="PMJAY / Ayushman">PMJAY / Ayushman</option>
+          <option value="CGHS/ECHS">CGHS/ECHS</option>
+        </select>
+
+        <!-- Amount + ref toggle -->
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;cursor:pointer">
           <input type="checkbox" id="bmh-pay-received-toggle" onchange="bmhTogglePaymentForm(this.checked)">
-          Mark payment received
+          Payment received — enter amount &amp; reference
         </label>
         <div id="bmh-pay-form" style="display:none">
-          <!-- Payment mode quick-select buttons -->
-          <div style="margin-bottom:10px">
-            <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Payment mode</div>
-            <div style="display:flex;gap:6px;flex-wrap:wrap" id="bmh-pay-mode-btns">
-              <button type="button" class="btn btn-sm" style="background:var(--bmh-blue);color:#fff" data-mode="Cash" onclick="bmhSelectPayMode(‘Cash’)">Cash</button>
-              <button type="button" class="btn btn-outline btn-sm" data-mode="UPI" onclick="bmhSelectPayMode(‘UPI’)">UPI</button>
-              <button type="button" class="btn btn-outline btn-sm" data-mode="Card" onclick="bmhSelectPayMode(‘Card’)">Card</button>
-              <button type="button" class="btn btn-outline btn-sm" data-mode="NEFT" onclick="bmhSelectPayMode(‘NEFT’)">NEFT</button>
-              <button type="button" class="btn btn-outline btn-sm" data-mode="Cheque" onclick="bmhSelectPayMode(‘Cheque’)">Cheque</button>
-              <button type="button" class="btn btn-outline btn-sm" data-mode="Insurance/TPA" onclick="bmhSelectPayMode(‘Insurance/TPA’)">Insurance/TPA</button>
-              <button type="button" class="btn btn-outline btn-sm" data-mode="PMJAY / Ayushman" onclick="bmhSelectPayMode(‘PMJAY / Ayushman’)">PMJAY</button>
-              <button type="button" class="btn btn-outline btn-sm" data-mode="CGHS/ECHS" onclick="bmhSelectPayMode(‘CGHS/ECHS’)">CGHS/ECHS</button>
-            </div>
-            <!-- Hidden select kept for backward-compatible JS (bmhRecordPatientPayment reads this) -->
-            <select id="bmh-pay-mode" style="display:none" onchange="bmhToggleBillingInsuranceFields()">
-              <option value="Cash">Cash</option><option value="UPI">UPI</option><option value="Card">Card</option>
-              <option value="NEFT">NEFT</option><option value="Cheque">Cheque</option>
-              <option value="Insurance/TPA">Insurance/TPA</option>
-              <option value="PMJAY / Ayushman">PMJAY / Ayushman</option>
-              <option value="CGHS/ECHS">CGHS/ECHS</option>
-            </select>
-          </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
             <div class="form-group" style="margin:0"><label class="fl">Amount received ₹</label><input type="number" id="bmh-pay-amt" placeholder="Amount" oninput="bmhUpdateBillTotals()"></div>
             <div class="form-group" style="margin:0"><label class="fl">UTR / Cheque / ref no.</label><input type="text" id="bmh-pay-ref" placeholder="Required for bank / UPI"></div>
@@ -6071,7 +6071,7 @@
 <div id="dx-dropdown" style="display:none;z-index:100000;background:#fff;border:2px solid var(--blue);border-radius:var(--rsm);max-height:280px;overflow-y:auto;box-shadow:var(--sh-md)"></div>
 
 <!-- ═══ MAIN APP SCRIPT (legacy — being migrated to modules) ═══ -->
-<script defer src="%BASE_URL%js/legacy.js?v=20260422-billing-fixes-v3"></script>
+<script defer src="%BASE_URL%js/legacy.js?v=20260422-billing-fixes-v4"></script>
 
 <!-- ═══ QR DECODER BRIDGE ═══ -->
 <script type="module" src="./js/qr-decoder.js"></script>
