@@ -32993,6 +32993,13 @@ function selectExistingPatient(bmhId) {
 // ── renderDashboard — admin (finance/stock) vs clinical (doctors) ────
 function renderDashboard() {
   try { updateInstallAppUi && updateInstallAppUi(); } catch (e) {}
+  if (window._bmhPatientsHydrating || window._bmhFinancialsHydrating) {
+    if (window._dashHydrationRetryTimer) clearTimeout(window._dashHydrationRetryTimer);
+    window._dashHydrationRetryTimer = setTimeout(function () {
+      if (getActivePageId() === 'pg-dashboard') renderDashboard();
+    }, 600);
+    return;
+  }
   const today = new Date().toISOString().split('T')[0];
   const adminDateEl = document.getElementById('db-admin-date');
   if (adminDateEl && !adminDateEl.value) adminDateEl.value = today;
