@@ -114,8 +114,8 @@ service cloud.firestore {
     // and front-desk staff; writable by front-desk/admin; void by admin only.
     match /bills/{billId} {
       allow read:   if isSignedIn();
-      allow create: if isFrontDesk() || isAdmin();
-      allow update: if isAdmin();   // void only
+      allow create: if isSignedIn();   // any authenticated staff can save a bill
+      allow update: if isAdmin();      // void only
       allow delete: if isAdmin();
     }
 
