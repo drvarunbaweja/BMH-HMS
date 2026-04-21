@@ -9034,8 +9034,8 @@ function inferChargeCategoryFromService(forStr) {
   const s = (forStr || '').toLowerCase();
   // Investigations & imaging first (avoid mis-tagging e.g. IOL Master / biometry as surgery)
   if (/oct|hvf|fundus|biomet|visual field|cbc|hb|thyroid|lipid|lab|investigation|diagnostic|erg|vep|\beeg\b|topograph|specular|pachymetry|gonioscopy|perimetry|b-?scan|ultrasound.*\beye\b|ffa|icg|angiograph|schirmer|tbut|dry\s*eye|corneal topography|aberrometry|i\.?\s*o\.?\s*l\.?\s*master|iol\s*master|lenstar|pentacam|specular microscopy/.test(s)) return 'diagnostic';
-  // Surgery / OT / procedures (broad; avoid bare "iol" so inventory text does not become surgery)
-  if (/\b(surgery|surgical|surgeon|cataract|phaco|phacoemulsification|sics|trab|trabeculectomy|lasik|prk|smile|vitrectomy|retina\s*surgery|glaucoma\s*surgery|keratoplasty|corneal\s*graft|pterygium|squint|strabismus|oculoplastic|dacryocystorhinostomy|dacryo|dcr|buckling|scleral\s*buckle|intravitreal|ivt|anti\s*-?\s*vegf|ot\b|o\.?\s*t\.?|theatre|theater|operating|operation\b|minor\s*ot|major\s*ot|ot\s*charges|theatre\s*charges|ot\s*time|anaesthesia.*surgery|capsulorhexis|iol\s*implant|iol\s*insertion|iol\s*charges|iol\s*package|iol\s*power|pmics|suture\s*removal|post\.?\s*op|postop|surgery\s*pack|pack\s*rate|surgery\s*charges|procedure\s*charges|operative|peribulbar|retrobulbar|sub-?tenon)/.test(s)) return 'surgery';
+  // Surgery / OT / procedures (broad; includes IOL/lens implants used in cataract surgery)
+  if (/\b(surgery|surgical|surgeon|cataract|phaco|phacoemulsification|sics|trab|trabeculectomy|lasik|prk|smile|vitrectomy|retina\s*surgery|glaucoma\s*surgery|keratoplasty|corneal\s*graft|pterygium|squint|strabismus|oculoplastic|dacryocystorhinostomy|dacryo|dcr|buckling|scleral\s*buckle|intravitreal|ivt|anti\s*-?\s*vegf|ot\b|o\.?\s*t\.?|theatre|theater|operating|operation\b|minor\s*ot|major\s*ot|ot\s*charges|theatre\s*charges|ot\s*time|anaesthesia.*surgery|capsulorhexis|iol\s*implant|iol\s*insertion|iol\s*charges|iol\s*package|iol\s*power|pmics|suture\s*removal|post\.?\s*op|postop|surgery\s*pack|pack\s*rate|surgery\s*charges|procedure\s*charges|operative|peribulbar|retrobulbar|sub-?tenon|foldable\s*lens|indian\s*lens|indian\s*foldable|foreign\s*lens|hydrophilic|hydrophobic|acrylic\s*lens|toric\s*lens|multifocal\s*lens|monofocal\s*lens|intraocular\s*lens|lens\s*implant|lens\s*package|lens\s*charges|viscoelastic|trypan\s*blue|oph.*pack|cataract.*pack|eye\s*drops.*surgery|surgical.*kit|diathermy|endothelial\s*keratoplasty|dsek|dmek|dalk|hema|c3r|cross.?link)/.test(s)) return 'surgery';
   if (/consult|follow|review|opd|out\s*patient|first\s*visit|registration|consultation|post\s*-?\s*op/.test(s)) return 'consultation';
   return 'other';
 }
@@ -9818,6 +9818,8 @@ window.bmhUpdateTpaSplit = bmhUpdateTpaSplit;
 
 // ── Save bill to Firestore cloud + print ──────────────────────────────────────
 async function bmhSaveAndPrintBill() {
+  // Prevent double-press
+  if (window._bmhBillSaveInFlight) { showToast('Bill save already in progress…', 'i'); return; }
   const bmhId = document.getElementById('bmh-bill-pt-select')?.value || window._bmhSelectedBillPatient;
   if (!bmhId) { showToast('Select a patient first', 'w'); return; }
   const pt = (window.PATIENTS || []).find(function (p) { return p.bmhId === bmhId; });
@@ -9826,6 +9828,12 @@ async function bmhSaveAndPrintBill() {
   const lines = (window.BMH_PATIENT_CHARGES && window.BMH_PATIENT_CHARGES[bmhId]) || [];
   const billableLines = lines.filter(function (l) { return Number(l.amount) > 0; });
   if (!billableLines.length) { showToast('No charge lines to bill — add charges first', 'w'); return; }
+
+  // Set button busy state
+  window._bmhBillSaveInFlight = true;
+  const saveBtn = document.querySelector('button[onclick*="bmhSaveAndPrintBill"]');
+  const saveBtnOrigText = saveBtn ? saveBtn.textContent : '';
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '⏳ Saving to cloud…'; saveBtn.style.opacity = '0.75'; }
 
   const totals = typeof bmhTotalsForPatient === 'function' ? bmhTotalsForPatient(bmhId) : {};
   const sub            = Number(totals.sub)           || 0;
@@ -9913,12 +9921,43 @@ async function bmhSaveAndPrintBill() {
 
     // Print the bill using the saved bill data
     bmhPrintSavedBill(savedBill);
-    showToast('Bill saved to cloud and sent to print ✓', 's');
+    showToast('✅ Bill ' + (savedBill.billNo || '') + ' saved to cloud and sent to print', 's');
+
+    // ── Reset billing form ──────────────────────────────────────────────────
+    // Clear charge lines for this patient
+    if (window.BMH_PATIENT_CHARGES) window.BMH_PATIENT_CHARGES[bmhId] = [];
+    // Clear discount, TPA, advance-applied UI fields
+    const discEl = document.getElementById('bmh-bill-discount');
+    if (discEl) discEl.value = '';
+    const advCb = document.getElementById('bmh-apply-advance');
+    if (advCb) { advCb.checked = false; }
+    const tpaCb = document.getElementById('bmh-is-tpa');
+    if (tpaCb) { tpaCb.checked = false; bmhToggleTpaSection(false); }
+    ['bmh-tpa-company','bmh-tpa-policy-no','bmh-tpa-amount','bmh-patient-pays'].forEach(function (id) { const e = document.getElementById(id); if (e) e.value = ''; });
+    // Clear payment form
+    bmhClearPaymentDraft();
+    // Clear quick search box
+    const qs = document.getElementById('bmh-bill-quick-search');
+    if (qs) qs.value = '';
+    const qsBox = document.getElementById('bmh-bill-quick-results');
+    if (qsBox) qsBox.style.display = 'none';
+    // De-select patient (reset title)
+    window._bmhSelectedBillPatient = '';
+    const titleEl = document.getElementById('bmh-bill-card-title');
+    if (titleEl) titleEl.textContent = '💳 Billing';
+    const subEl = document.getElementById('bmh-bill-card-sub');
+    if (subEl) subEl.textContent = 'Search or select a patient to begin';
+    // ── end reset ───────────────────────────────────────────────────────────
+
     if (typeof renderBillingPageIfActive === 'function') renderBillingPageIfActive();
     if (typeof renderDashboard === 'function') renderDashboard();
   } catch (err) {
     console.error('bmhSaveAndPrintBill error:', err);
-    showToast('Error saving bill: ' + (err.message || 'Unknown error') + ' — try Print preview only', 'e');
+    showToast('❌ Error saving bill: ' + (err.message || 'Unknown error') + ' — try "Preview only" instead', 'e');
+  } finally {
+    // Always restore button
+    window._bmhBillSaveInFlight = false;
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = saveBtnOrigText; saveBtn.style.opacity = ''; }
   }
 }
 window.bmhSaveAndPrintBill = bmhSaveAndPrintBill;
@@ -13345,6 +13384,11 @@ function renderBillingPage() {
   if (window._bmhBillingTab === 'search') {
     bmhSearchBillHistory(document.getElementById('bmh-bill-history-search')?.value || '');
   }
+  // Keep backward-compat selects populated (some legacy helpers still read these)
+  const labSel = document.getElementById('lab-pt-sel');
+  if (labSel) labSel.innerHTML = PATIENTS.map(p => `<option value="${p.bmhId}">${p.name} — ${p.bmhId}</option>`).join('');
+  const usel = document.getElementById('use-pt');
+  if (usel) usel.innerHTML = PATIENTS.map(p => `<option value="${p.bmhId}">${p.name} — ${p.bmhId}</option>`).join('');
   renderAdminDailyBillingPanel();
 }
 function renderBillingPageIfActive() {
