@@ -115,7 +115,11 @@ service cloud.firestore {
     match /bills/{billId} {
       allow read:   if isSignedIn();
       allow create: if isSignedIn();   // any authenticated staff can save a bill
-      allow update: if isAdmin();      // void only
+      allow update: if isAdmin()
+                    || (isSignedIn()
+                        && request.resource.data.diff(resource.data).changedKeys().hasOnly(['printCount'])
+                        && request.resource.data.printCount is int
+                        && request.resource.data.printCount >= resource.data.printCount);
       allow delete: if isAdmin();
     }
 

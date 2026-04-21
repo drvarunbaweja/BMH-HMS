@@ -879,6 +879,7 @@ const AUTO_BILL = [];
 window.BMH_PATIENT_CHARGES = window.BMH_PATIENT_CHARGES || {};
 window.BMH_VENDOR_BILLS = window.BMH_VENDOR_BILLS || [];
 window.BMH_OFFICE_BILLS = window.BMH_OFFICE_BILLS || [];
+window.BMH_SAVED_BILLS = window.BMH_SAVED_BILLS || [];
 window.BMH_OFFICE_BILL_CATEGORIES = window.BMH_OFFICE_BILL_CATEGORIES || ['Electricity', 'Water', 'Biomedical waste', 'Rent', 'Maintenance', 'Security', 'Internet', 'Software', 'Other'];
 window.BMH_EXPENSES = window.BMH_EXPENSES || [];
 window.BMH_LEDGER = window.BMH_LEDGER || [];
@@ -7845,6 +7846,7 @@ function bmhFinancialsSnapshot() {
     patientCharges: window.BMH_PATIENT_CHARGES || {},
     vendorBills: window.BMH_VENDOR_BILLS || [],
     officeBills: window.BMH_OFFICE_BILLS || [],
+    savedBills: window.BMH_SAVED_BILLS || [],
     officeBillCategories: window.BMH_OFFICE_BILL_CATEGORIES || [],
     expenses: window.BMH_EXPENSES || [],
     ledger: window.BMH_LEDGER || [],
@@ -7865,6 +7867,8 @@ function applyBmhFinancialsSnapshot(snapshot, opts) {
   (Array.isArray(data.vendorBills) ? data.vendorBills : []).forEach(function (row) { window.BMH_VENDOR_BILLS.push(row); });
   window.BMH_OFFICE_BILLS.length = 0;
   (Array.isArray(data.officeBills) ? data.officeBills : []).forEach(function (row) { window.BMH_OFFICE_BILLS.push(row); });
+  window.BMH_SAVED_BILLS.length = 0;
+  (Array.isArray(data.savedBills) ? data.savedBills : []).forEach(function (row) { window.BMH_SAVED_BILLS.push(row); });
   window.BMH_OFFICE_BILL_CATEGORIES = Array.isArray(data.officeBillCategories) ? data.officeBillCategories.slice() : (window.BMH_OFFICE_BILL_CATEGORIES || []);
   window.BMH_EXPENSES.length = 0;
   (Array.isArray(data.expenses) ? data.expenses : []).forEach(function (row) { window.BMH_EXPENSES.push(row); });
@@ -7915,6 +7919,7 @@ function loadBmhFinancials() {
     if (pc) { const o = JSON.parse(pc); Object.keys(window.BMH_PATIENT_CHARGES).forEach(k=>delete window.BMH_PATIENT_CHARGES[k]); Object.assign(window.BMH_PATIENT_CHARGES, o); }
     const vb = localStorage.getItem('bmh_vendor_bills'); if (vb) { window.BMH_VENDOR_BILLS.length = 0; JSON.parse(vb).forEach(x=>window.BMH_VENDOR_BILLS.push(x)); }
     const ob = localStorage.getItem('bmh_office_bills'); if (ob) { window.BMH_OFFICE_BILLS.length = 0; JSON.parse(ob).forEach(x=>window.BMH_OFFICE_BILLS.push(x)); }
+    const sb = localStorage.getItem('bmh_saved_bills'); if (sb) { window.BMH_SAVED_BILLS.length = 0; JSON.parse(sb).forEach(x=>window.BMH_SAVED_BILLS.push(x)); }
     try {
       const oc = localStorage.getItem('bmh_office_bill_categories');
       if (oc) {
@@ -7957,6 +7962,7 @@ function saveBmhFinancials(opts) {
     localStorage.setItem('bmh_patient_charges', JSON.stringify(window.BMH_PATIENT_CHARGES));
     localStorage.setItem('bmh_vendor_bills', JSON.stringify(window.BMH_VENDOR_BILLS));
     localStorage.setItem('bmh_office_bills', JSON.stringify(window.BMH_OFFICE_BILLS));
+    localStorage.setItem('bmh_saved_bills', JSON.stringify(window.BMH_SAVED_BILLS));
     localStorage.setItem('bmh_office_bill_categories', JSON.stringify(window.BMH_OFFICE_BILL_CATEGORIES));
     localStorage.setItem('bmh_expenses', JSON.stringify(window.BMH_EXPENSES));
     localStorage.setItem('bmh_ledger', JSON.stringify(window.BMH_LEDGER));
@@ -9362,8 +9368,6 @@ function bmhGetEffectiveBillContext(bmhId) {
   };
 }
 function bmhGetPendingRecordedPaymentAmount() {
-  const toggle = document.getElementById('bmh-pay-received-toggle');
-  if (!toggle || !toggle.checked) return 0;
   return Math.max(0, Number(document.getElementById('bmh-pay-amt')?.value || 0));
 }
 
@@ -9776,6 +9780,7 @@ document.addEventListener('click', function (e) {
 
 // ── Payment mode button selector ──────────────────────────────────────────────
 function bmhSelectPayMode(mode) {
+  mode = bmhNormalizedPaymentMode(mode);
   // Keep the hidden select in sync (bmhRecordPatientPayment reads it)
   const sel = document.getElementById('bmh-pay-mode');
   if (sel) { sel.value = mode; sel.dispatchEvent(new Event('change')); }
@@ -9786,6 +9791,7 @@ function bmhSelectPayMode(mode) {
     btn.style.color = isActive ? '#fff' : '';
     btn.className = isActive ? 'btn btn-sm' : 'btn btn-outline btn-sm';
   });
+  bmhTogglePaymentModeFields();
 }
 window.bmhSelectPayMode = bmhSelectPayMode;
 
@@ -9816,6 +9822,143 @@ function bmhUpdateTpaSplit() {
 }
 window.bmhUpdateTpaSplit = bmhUpdateTpaSplit;
 
+function bmhNormalizedPaymentMode(mode) {
+  const raw = String(mode || '').trim();
+  if (!raw) return 'Cash';
+  if (/cghs/i.test(raw)) return 'ECHS';
+  return raw;
+}
+function bmhTogglePaymentModeFields() {
+  const mode = bmhNormalizedPaymentMode(document.getElementById('bmh-pay-mode')?.value || 'Cash');
+  const insurerWrap = document.getElementById('bmh-pay-insurance-fields');
+  const refWrap = document.getElementById('bmh-pay-ref-wrap');
+  const isInsurance = /Insurance|TPA|PMJAY|ECHS|Cashless/i.test(mode);
+  const needsRef = /NEFT|Cheque|UPI|Card/i.test(mode);
+  if (insurerWrap) insurerWrap.style.display = isInsurance ? 'grid' : 'none';
+  if (refWrap) refWrap.style.display = needsRef ? '' : 'none';
+  const tpaCb = document.getElementById('bmh-is-tpa');
+  if (tpaCb) {
+    tpaCb.checked = isInsurance;
+    bmhToggleTpaSection(isInsurance);
+  }
+}
+window.bmhTogglePaymentModeFields = bmhTogglePaymentModeFields;
+
+function bmhBuildBillPayloadFromUi(bmhId, opts) {
+  const pt = (window.PATIENTS || []).find(function (p) { return p.bmhId === bmhId; });
+  if (!pt) throw new Error('Patient not found');
+  const lines = (window.BMH_PATIENT_CHARGES && window.BMH_PATIENT_CHARGES[bmhId]) || [];
+  const billableLines = lines.filter(function (l) { return Number(l.amount) > 0; });
+  if (!billableLines.length) throw new Error('No charge lines to bill');
+  const totals = typeof bmhTotalsForPatient === 'function' ? bmhTotalsForPatient(bmhId) : {};
+  const sub = Number(totals.sub) || 0;
+  const discount = Number(totals.discount) || 0;
+  const advanceApplied = Number(totals.advanceApplied) || 0;
+  const netPayable = Number(totals.taxable != null ? totals.taxable : sub - discount - advanceApplied) || 0;
+  const paymentMode = bmhNormalizedPaymentMode(document.getElementById('bmh-pay-mode')?.value || 'Cash');
+  const amountReceived = Math.max(0, Number(document.getElementById('bmh-pay-amt')?.value || 0));
+  const paymentRef = (document.getElementById('bmh-pay-ref')?.value || '').trim();
+  const isTPA = !!document.getElementById('bmh-is-tpa')?.checked || /Insurance|TPA|PMJAY|ECHS|Cashless/i.test(paymentMode);
+  const tpaCompany = (document.getElementById('bmh-tpa-company')?.value || '').trim() || (document.getElementById('bmh-pay-insurer')?.value || '').trim();
+  const tpaPolicy = (document.getElementById('bmh-tpa-policy-no')?.value || '').trim() || (document.getElementById('bmh-pay-policy')?.value || '').trim();
+  const tpaAmount = isTPA ? Math.max(0, Number(document.getElementById('bmh-tpa-amount')?.value || document.getElementById('bmh-pay-cashless-approved')?.value || 0)) : 0;
+  const patientPays = isTPA ? Math.max(0, Number(document.getElementById('bmh-patient-pays')?.value || amountReceived || 0)) : amountReceived;
+  return {
+    bmhId: bmhId,
+    patientName: pt.name || '',
+    age: String(pt.age || ''),
+    sex: pt.sex || '',
+    dept: pt.dept || '',
+    doctor: pt.doctor || '',
+    mobile: pt.mob || '',
+    centre: pt.centre || (window.CURRENT_USER?.centre) || 'CHD',
+    date: todayKey(),
+    items: billableLines.map(function (l) { return { desc: l.desc || l.name || '', qty: Number(l.qty) || 1, rate: Number(l.rate) || Number(l.amount) || 0, amount: Number(l.amount) || 0, cat: l.cat || 'other' }; }),
+    subtotal: sub,
+    discount: discount,
+    advanceApplied: advanceApplied,
+    netPayable: netPayable,
+    paymentMode: paymentMode,
+    amountReceived: amountReceived,
+    paymentRef: paymentRef,
+    isTPA: isTPA,
+    tpaAmount: tpaAmount,
+    tpaCompany: tpaCompany,
+    tpaPolicy: tpaPolicy,
+    patientPays: patientPays,
+    status: opts?.status || 'saved',
+    createdAt: new Date().toISOString(),
+    createdBy: window.CURRENT_USER?.name || 'Billing'
+  };
+}
+function bmhSaveBillRecordToRtdb(billData) {
+  const id = 'RBILL-' + Date.now();
+  const centre = billData.centre || CURRENT_USER?.centre || 'CHD';
+  const record = Object.assign({
+    id: id,
+    billNo: 'RBILL-' + centre + '-' + String(Date.now()).slice(-8),
+    source: 'rtdb',
+    printCount: 0
+  }, billData || {});
+  window.BMH_SAVED_BILLS.unshift(record);
+  saveBmhFinancials();
+  return record;
+}
+function bmhGetSavedBillsForHistory() {
+  const merged = {};
+  (window.BMH_SAVED_BILLS || []).forEach(function (bill) {
+    if (!bill || !bill.id) return;
+    merged[bill.id] = bill;
+  });
+  (window.BILLS || []).forEach(function (bill) {
+    if (!bill || !bill.id) return;
+    merged[bill.id] = bill;
+  });
+  return Object.keys(merged).map(function (id) { return merged[id]; }).sort(function (a, b) {
+    return String(b.createdAt || b.date || '').localeCompare(String(a.createdAt || a.date || ''));
+  });
+}
+window.bmhGetSavedBillsForHistory = bmhGetSavedBillsForHistory;
+function bmhAskPrintChoice() {
+  const raw = String(prompt('Print what?\nType: both / bill / receipt / none', 'both') || 'none').trim().toLowerCase();
+  if (['both', 'bill', 'receipt', 'none'].includes(raw)) return raw;
+  return 'both';
+}
+function bmhPrintReceiptFromBill(bill) {
+  if (!bill) return;
+  const receiptAmount = Math.max(0, Number(bill.amountReceived || bill.patientPays || 0));
+  if (!(receiptAmount > 0)) {
+    showToast('No received amount available for receipt', 'w');
+    return;
+  }
+  printPaymentReceipt({
+    id: bill.id || bill.billNo || ('B' + Date.now()),
+    bmhId: bill.bmhId,
+    patient: bill.patientName,
+    amount: receiptAmount,
+    date: bill.createdAt || new Date().toISOString(),
+    mode: bill.paymentMode || 'Cash',
+    paymentRef: bill.paymentRef || '',
+    for: 'Hospital bill ' + String(bill.billNo || bill.id || '')
+  });
+}
+function bmhHandleBillPrintingChoice(bill, choice) {
+  const printChoice = choice || 'none';
+  if (printChoice === 'bill' || printChoice === 'both') bmhPrintSavedBill(bill);
+  if (printChoice === 'receipt' || printChoice === 'both') bmhPrintReceiptFromBill(bill);
+}
+async function bmhSaveBillToRtdbOnly() {
+  const bmhId = document.getElementById('bmh-bill-pt-select')?.value || window._bmhSelectedBillPatient;
+  if (!bmhId) { showToast('Select a patient first', 'w'); return; }
+  const billData = bmhBuildBillPayloadFromUi(bmhId, { status: 'saved-rtdb' });
+  const savedBill = bmhSaveBillRecordToRtdb(billData);
+  showToast('Bill saved to RTDB ✓', 's');
+  const choice = bmhAskPrintChoice();
+  bmhHandleBillPrintingChoice(savedBill, choice);
+  bmhSearchBillHistory(document.getElementById('bmh-bill-history-search')?.value || '');
+}
+window.bmhSaveBillToRtdbOnly = bmhSaveBillToRtdbOnly;
+
 // ── Save bill to Firestore cloud + print ──────────────────────────────────────
 async function bmhSaveAndPrintBill() {
   // Prevent double-press
@@ -9825,60 +9968,30 @@ async function bmhSaveAndPrintBill() {
   const pt = (window.PATIENTS || []).find(function (p) { return p.bmhId === bmhId; });
   if (!pt) { showToast('Patient not found in patient list', 'w'); return; }
 
-  const lines = (window.BMH_PATIENT_CHARGES && window.BMH_PATIENT_CHARGES[bmhId]) || [];
-  const billableLines = lines.filter(function (l) { return Number(l.amount) > 0; });
-  if (!billableLines.length) { showToast('No charge lines to bill — add charges first', 'w'); return; }
-
   // Set button busy state
   window._bmhBillSaveInFlight = true;
   const saveBtn = document.querySelector('button[onclick*="bmhSaveAndPrintBill"]');
   const saveBtnOrigText = saveBtn ? saveBtn.textContent : '';
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '⏳ Saving to cloud…'; saveBtn.style.opacity = '0.75'; }
 
-  const totals = typeof bmhTotalsForPatient === 'function' ? bmhTotalsForPatient(bmhId) : {};
-  const sub            = Number(totals.sub)           || 0;
-  const discount       = Number(totals.discount)      || 0;
-  const advanceApplied = Number(totals.advanceApplied)|| 0;
-  const taxable        = Number(totals.taxable != null ? totals.taxable : sub - discount - advanceApplied) || 0;
-
-  const isTPA      = !!document.getElementById('bmh-is-tpa')?.checked;
-  const tpaAmount  = isTPA ? (Number(document.getElementById('bmh-tpa-amount')?.value)  || 0) : 0;
-  const tpaCompany = isTPA ? (document.getElementById('bmh-tpa-company')?.value?.trim() || '')  : '';
-  const tpaPolicy  = isTPA ? (document.getElementById('bmh-tpa-policy-no')?.value?.trim() || '') : '';
-  const patientPays= isTPA ? (Number(document.getElementById('bmh-patient-pays')?.value) || 0)  : taxable;
-
-  const payMode        = document.getElementById('bmh-pay-mode')?.value || 'Cash';
-  const amountReceived = isTPA ? patientPays : (Number(document.getElementById('bmh-pay-amt')?.value) || 0);
-  const payRef         = document.getElementById('bmh-pay-ref')?.value?.trim() || '';
-
-  const billData = {
-    bmhId,
-    patientName:    pt.name    || '',
-    age:            String(pt.age || ''),
-    sex:            pt.sex     || '',
-    dept:           pt.dept    || '',
-    doctor:         pt.doctor  || '',
-    mobile:         pt.mob     || '',
-    centre:         pt.centre  || (window.CURRENT_USER?.centre) || 'CHD',
-    items: billableLines.map(function (l) { return { desc: l.desc || l.name || '', qty: Number(l.qty) || 1, rate: Number(l.rate) || Number(l.amount) || 0, amount: Number(l.amount) || 0, cat: l.cat || 'other' }; }),
-    subtotal:       sub,
-    discount,
-    advanceApplied,
-    netPayable:     taxable,
-    paymentMode:    payMode,
-    amountReceived,
-    paymentRef:     payRef,
-    isTPA,
-    tpaAmount,
-    tpaCompany,
-    tpaPolicy,
-    patientPays,
-  };
+  const billData = bmhBuildBillPayloadFromUi(bmhId, { status: 'finalized' });
+  const discount = Number(billData.discount) || 0;
+  const advanceApplied = Number(billData.advanceApplied) || 0;
+  const taxable = Number(billData.netPayable) || 0;
+  const isTPA = !!billData.isTPA;
+  const tpaAmount = Number(billData.tpaAmount) || 0;
+  const tpaCompany = billData.tpaCompany || '';
+  const tpaPolicy = billData.tpaPolicy || '';
+  const patientPays = Number(billData.patientPays) || 0;
+  const payMode = billData.paymentMode || 'Cash';
+  const amountReceived = Number(billData.amountReceived) || 0;
+  const payRef = billData.paymentRef || '';
 
   try {
     showToast('Saving bill to cloud…', 'i');
-    // saveBill is exposed globally via app.js → bills.js
     const savedBill = await (window.bmhSaveBillToCloud || (function () { throw new Error('bills module not loaded'); }))(billData);
+    window.BMH_SAVED_BILLS.unshift(Object.assign({ source: 'cloud' }, savedBill));
+    saveBmhFinancials({ localOnly: true });
 
     // Record the patient-paid portion as a transaction if received
     if (amountReceived > 0) {
@@ -9919,9 +10032,9 @@ async function bmhSaveAndPrintBill() {
     const addToQ = !!document.getElementById('bmh-bill-add-to-queue')?.checked;
     if (addToQ && typeof bmhAddPatientToDoctorQueue === 'function') bmhAddPatientToDoctorQueue(bmhId, { silentToast: true });
 
-    // Print the bill using the saved bill data
-    bmhPrintSavedBill(savedBill);
-    showToast('✅ Bill ' + (savedBill.billNo || '') + ' saved to cloud and sent to print', 's');
+    const choice = bmhAskPrintChoice();
+    bmhHandleBillPrintingChoice(savedBill, choice);
+    showToast('✅ Bill ' + (savedBill.billNo || '') + ' saved to cloud ✓', 's');
 
     // ── Reset billing form ──────────────────────────────────────────────────
     // Clear charge lines for this patient
@@ -9988,6 +10101,17 @@ function bmhPrintSavedBill(bill) {
 
   const tpaLine = bill.isTPA && bill.tpaAmount > 0
     ? '<div style="margin-top:6px;font-size:10px;padding:6px 8px;background:#e0f0ff;border-radius:6px">TPA / Cashless: <strong>' + esc(bill.tpaCompany || 'Insurance') + '</strong>' + (bill.tpaPolicy ? ' · Policy: ' + esc(bill.tpaPolicy) : '') + ' · TPA pays ₹' + Number(bill.tpaAmount).toLocaleString('en-IN') + ' · Patient pays ₹' + Number(bill.patientPays || 0).toLocaleString('en-IN') + '</div>' : '';
+  const dueAmount = Math.max(0, Number(bill.netPayable || 0) - Number(bill.amountReceived || 0));
+  const totalsStack = [
+    ['Amount charged', Number(bill.subtotal || 0)],
+    ['Advance', Number(bill.advanceApplied || 0)],
+    ['Discount', Number(bill.discount || 0)],
+    ['Amount received', Number(bill.amountReceived || 0)],
+    ['Due', dueAmount]
+  ].map(function (row, idx) {
+    const isLast = idx === 4;
+    return '<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:' + (isLast ? 'none' : '1px solid #e5e7eb') + ';font-size:' + (isLast ? '13px' : '12px') + ';font-weight:' + (isLast ? '900' : '700') + ';color:' + (isLast ? '#8a4200' : '#243b53') + '"><span>' + row[0] + '</span><span>₹' + Number(row[1] || 0).toLocaleString('en-IN') + '</span></div>';
+  }).join('');
 
   const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Bill — ' + esc(bill.patientName) + '</title><style>'
     + '@import url(\'https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap\');'
@@ -10014,7 +10138,7 @@ function bmhPrintSavedBill(bill) {
     + '<div class="ptbox"><div class="nm">' + esc(bill.patientName || 'Patient') + '</div><div class="id">' + esc(bill.bmhId || '') + '</div><div style="font-size:9.5px;color:#555;margin-top:4px">' + (bill.age ? esc(String(bill.age)) + 'Y ' : '') + esc(bill.sex || '') + (bill.dept ? ' · ' + esc(bill.dept) : '') + (bill.doctor ? ' · ' + esc(bill.doctor) : '') + '</div></div>'
     + '<table><thead><tr><th colspan="2">Description</th><th>Qty</th><th style="text-align:right">Amount</th></tr></thead><tbody>' + (bodyRows || '<tr><td colspan="4" style="padding:9px;text-align:center;color:#888">No charge lines</td></tr>') + '</tbody></table>'
     + (bill.discount > 0 || bill.advanceApplied > 0 ? '<div style="font-size:9.5px;text-align:right;margin-bottom:6px;color:#444">' + (bill.discount > 0 ? 'Discount ₹' + Number(bill.discount).toLocaleString('en-IN') : '') + (bill.discount > 0 && bill.advanceApplied > 0 ? ' · ' : '') + (bill.advanceApplied > 0 ? 'Advance adjusted ₹' + Number(bill.advanceApplied).toLocaleString('en-IN') : '') + '</div>' : '')
-    + '<div class="totbar"><div class="big">Net payable: ₹' + Number(bill.netPayable || 0).toLocaleString('en-IN') + '</div><div class="sub">Payment mode: ' + esc(bill.paymentMode || 'Cash') + (bill.paymentRef ? ' · Ref: ' + esc(bill.paymentRef) : '') + (bill.amountReceived > 0 ? ' · Received ₹' + Number(bill.amountReceived).toLocaleString('en-IN') : '') + '</div></div>'
+    + '<div style="margin-top:12px;border:1px solid #d7dce5;border-radius:10px;padding:10px 12px;background:#fbfcfe">' + totalsStack + '<div style="display:flex;justify-content:space-between;padding-top:8px;margin-top:6px;border-top:2px solid #1A3C6E;font-size:15px;font-weight:900;color:#1A3C6E"><span>Net total</span><span>₹' + Number(bill.netPayable || 0).toLocaleString('en-IN') + '</span></div><div style="font-size:10px;color:#555;margin-top:6px">Mode: ' + esc(bill.paymentMode || 'Cash') + (bill.paymentRef ? ' · Ref: ' + esc(bill.paymentRef) : '') + '</div></div>'
     + tpaLine
     + '<div class="foot">Bill No: ' + esc(bill.billNo || bill.id || '') + ' · Saved ' + today + ' · Computer-generated receipt. Please retain for your records.</div>'
     + '<script>window.onload=()=>window.print()<\/script></body></html>';
@@ -10034,7 +10158,7 @@ function bmhSearchBillHistory(q) {
   const sq = String(q || '').trim().toLowerCase();
 
   // Filter from in-memory BILLS cache populated by watchBills()
-  let bills = (window.BILLS || []).filter(function (b) { return b.status !== 'void'; });
+  let bills = bmhGetSavedBillsForHistory().filter(function (b) { return b.status !== 'void'; });
   if (sq.length >= 2) {
     bills = bills.filter(function (b) {
       return String(b.bmhId || '').toLowerCase().includes(sq)
@@ -10057,7 +10181,7 @@ function bmhSearchBillHistory(q) {
 
   if (!bills.length) {
     const msg = !window.BILLS || window.BILLS.length === 0
-      ? 'No cloud-saved bills yet — use "💾 Save Bill to Cloud + Print" on the New Bill tab to create them'
+      ? 'No saved bills yet — use Save or Save & Print on the New Bill tab to create them'
       : 'No bills found for this search';
     resultEl.innerHTML = '<div style="text-align:center;color:var(--g1);padding:24px;font-size:13px">' + msg + '</div>';
     return;
@@ -10076,7 +10200,7 @@ function bmhSearchBillHistory(q) {
       + '<div style="font-size:10px;color:var(--g1)">' + esc(dateStr) + '</div>'
       + '<div style="font-weight:900;color:var(--bmh-blue)">₹' + Number(b.netPayable || 0).toLocaleString('en-IN') + '<div style="font-size:9.5px;font-weight:400;color:var(--g1)">' + esc(b.paymentMode || '') + (b.isTPA ? ' + TPA' : '') + '</div></div>'
       + '<div style="font-size:10px">' + (b.printCount > 0 ? 'Printed ' + b.printCount + 'x' : 'Not printed') + '</div>'
-      + '<button type="button" class="btn btn-outline btn-sm" onclick="bmhPrintSavedBill((window.BILLS||[]).find(function(x){return x.id===\'' + b.id + '\';}))">Print</button>'
+      + '<button type="button" class="btn btn-outline btn-sm" onclick="bmhPrintSavedBill((bmhGetSavedBillsForHistory()||[]).find(function(x){return x.id===\'' + b.id + '\';}))">Print</button>'
       + '</div>';
   }).join('');
 }
@@ -10120,8 +10244,7 @@ function bmhSelectBillPatient(bmhId) {
   const al = document.getElementById('bmh-advance-available');
   if (p && al) al.textContent = '₹' + (Number(advAvail) || 0).toLocaleString('en-IN') + ' available';
   if (aa && p) { aa.checked = (advAvail > 0); aa.disabled = !(advAvail > 0); }
-  const tog = document.getElementById('bmh-pay-received-toggle');
-  if (tog && tog.checked) bmhTogglePaymentForm(true);
+  bmhTogglePaymentForm(true);
   if (p && window._bmhBillingTab === 'current') {
     window._bmhQuickChargeDept = bmhNormalizePatientDeptForQuickCharge(p.dept);
     bmhRefreshQuickChargeDeptButtons();
@@ -10604,8 +10727,7 @@ function bmhUpdateBillTotals() {
 
 function bmhTogglePaymentForm(on) {
   const wrap = document.getElementById('bmh-pay-form');
-  if (wrap) wrap.style.display = on ? 'block' : 'none';
-  if (!on) { bmhUpdateBillTotals(); return; }
+  if (wrap) wrap.style.display = 'block';
   // Re-sync payment mode buttons to match the hidden select
   const currentMode = document.getElementById('bmh-pay-mode')?.value || 'Cash';
   bmhSelectPayMode(currentMode);
@@ -10638,10 +10760,8 @@ function bmhClearPaymentDraft() {
   const mode = document.getElementById('bmh-pay-mode');
   if (mode) mode.value = 'Cash';
   bmhSelectPayMode('Cash'); // reset button visual states too
-  const toggle = document.getElementById('bmh-pay-received-toggle');
-  if (toggle) toggle.checked = false;
   bmhToggleBillingInsuranceFields();
-  bmhTogglePaymentForm(false);
+  bmhTogglePaymentForm(true);
   bmhSetPaymentSaveBusy(false);
 }
 window.bmhClearPaymentDraft = bmhClearPaymentDraft;
@@ -11683,10 +11803,7 @@ function bmhEnsurePatientInTodayDeptQueue(bmhId, opts) {
 }
 window.bmhEnsurePatientInTodayDeptQueue = bmhEnsurePatientInTodayDeptQueue;
 function bmhToggleBillingInsuranceFields() {
-  const mode = document.getElementById('bmh-pay-mode')?.value || 'Cash';
-  const wrap = document.getElementById('bmh-pay-insurance-fields');
-  if (!wrap) return;
-  wrap.style.display = /Insurance|TPA|PMJAY|CGHS|ECHS/i.test(mode) ? 'grid' : 'none';
+  bmhTogglePaymentModeFields();
 }
 function bmhUseInventoryItemForPatient(bmhId, item, opts) {
   if (!bmhId || !item) return;
@@ -19484,7 +19601,7 @@ function toggleInsField() {
   const f1 = document.getElementById('rc-ins-field');
   const f2 = document.getElementById('rc-ins-policy');
   const f3 = document.getElementById('rc-ins-claimed');
-  const show = mode==='Insurance/TPA'||mode==='PMJAY / Ayushman'||mode==='CGHS/ECHS';
+  const show = mode==='Insurance/TPA'||mode==='PMJAY / Ayushman'||mode==='ECHS';
   if(f1) f1.style.display = show?'flex':'none';
   if(f2) f2.style.display = show?'flex':'none';
   if(f3) f3.style.display = show?'flex':'none';
@@ -20184,7 +20301,7 @@ async function registerPatient() {
     });
   }
 
-  const isInsurance = payMode.includes('Insurance')||payMode.includes('PMJAY')||payMode.includes('CGHS')||payMode.includes('TPA');
+  const isInsurance = payMode.includes('Insurance')||payMode.includes('PMJAY')||payMode.includes('ECHS')||payMode.includes('TPA')||payMode.includes('CGHS');
   const isCreditDue = payMode === 'Credit / Due';
   const previousDue = isExistingRegistration
     ? Math.max(
@@ -20288,8 +20405,6 @@ async function registerPatient() {
   if (dueReceivedNow && previousDue > 0) {
     setTimeout(function () {
       rcOpenBillingFor(uid);
-      const toggle = document.getElementById('bmh-pay-received-toggle');
-      if (toggle) toggle.checked = true;
       bmhTogglePaymentForm(true);
       const amtEl = document.getElementById('bmh-pay-amt');
       if (amtEl) amtEl.value = String(previousDue);
