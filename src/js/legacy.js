@@ -9696,6 +9696,9 @@ function bmhBillingTabSwitch(el, mode) {
   bmhSelectBillPatient((sel && sel.value) || window._bmhSelectedBillPatient || '');
   renderAdminDailyBillingPanel();
   if (window._bmhBillingTab === 'search') {
+    // Pre-fill today's date on first open
+    const histDate = document.getElementById('bmh-bill-history-date');
+    if (histDate && !histDate.value) histDate.value = new Date().toISOString().slice(0, 10);
     bmhSearchBillHistory(document.getElementById('bmh-bill-history-search')?.value || '');
   }
 }
@@ -9706,18 +9709,24 @@ function bmhBillQuickSearch(val) {
   const q = String(val || '').trim().toLowerCase();
   const box = document.getElementById('bmh-bill-quick-results');
   if (!box) return;
-  if (q.length < 2) { box.style.display = 'none'; return; }
-  const matches = (window.PATIENTS || []).filter(function (p) {
+  if (q.length < 1) { box.style.display = 'none'; return; }
+  const allPts = window.PATIENTS || [];
+  if (!allPts.length) {
+    box.innerHTML = '<div style="padding:10px;color:var(--g1);font-size:12px">Patient list loading — please wait a moment</div>';
+    box.style.display = '';
+    return;
+  }
+  const matches = allPts.filter(function (p) {
     return String(p.name || '').toLowerCase().includes(q)
       || String(p.bmhId || '').toLowerCase().includes(q)
       || String(p.mob || '').toLowerCase().includes(q)
       || String(p.mob2 || '').toLowerCase().includes(q);
   }).slice(0, 12);
-  if (!matches.length) { box.innerHTML = '<div style="padding:10px;color:var(--g1);font-size:12px">No patients found</div>'; box.style.display = ''; return; }
+  if (!matches.length) { box.innerHTML = '<div style="padding:10px;color:var(--g1);font-size:12px">No patients found for "' + q + '"</div>'; box.style.display = ''; return; }
   box.innerHTML = matches.map(function (p) {
     const adv = Number(p.advance) > 0 ? ' <span style="color:var(--blue);font-weight:800">Adv ₹' + Number(p.advance).toLocaleString('en-IN') + '</span>' : '';
     const esc = String(p.name || '').replace(/'/g, "\\'");
-    return '<div style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--g5);font-size:12px" onmousedown="bmhBillQuickSelectPatient(\'' + p.bmhId + '\')" style="hover:background:var(--g6)">'
+    return '<div style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--g5);font-size:12px" onmousedown="bmhBillQuickSelectPatient(\'' + p.bmhId + '\')" onmouseover="this.style.background=\'var(--g6)\'" onmouseout="this.style.background=\'\'">'
       + '<span style="font-weight:800">' + (p.name || '—') + '</span>'
       + ' <span style="font-family:var(--mono);font-size:10px;color:var(--bmh-teal)">' + (p.bmhId || '') + '</span>'
       + ' <span style="font-size:10px;color:var(--g1)">' + (p.dept || '') + '</span>'
@@ -9998,12 +10007,19 @@ function bmhSearchBillHistory(q) {
   if (dateFilter) {
     bills = bills.filter(function (b) { return String(b.date || '').startsWith(dateFilter); });
   }
-  bills = bills.slice(0, 50);
+  // Default view (no query, no date): show today's bills; if none, show last 50 overall
+  if (!sq && !dateFilter) {
+    const today = new Date().toISOString().slice(0, 10);
+    const todayBills = bills.filter(function (b) { return String(b.date || '').startsWith(today); });
+    bills = todayBills.length ? todayBills : bills.slice(0, 50);
+  } else {
+    bills = bills.slice(0, 50);
+  }
 
   if (!bills.length) {
-    const msg = sq.length < 2 && !dateFilter
-      ? 'Type a BMSH ID or patient name to search cloud-saved bills'
-      : 'No bills found for this search — only bills saved using "Save Bill to Cloud" appear here';
+    const msg = !window.BILLS || window.BILLS.length === 0
+      ? 'No cloud-saved bills yet — use "💾 Save Bill to Cloud + Print" on the New Bill tab to create them'
+      : 'No bills found for this search';
     resultEl.innerHTML = '<div style="text-align:center;color:var(--g1);padding:24px;font-size:13px">' + msg + '</div>';
     return;
   }
@@ -10551,6 +10567,9 @@ function bmhTogglePaymentForm(on) {
   const wrap = document.getElementById('bmh-pay-form');
   if (wrap) wrap.style.display = on ? 'block' : 'none';
   if (!on) { bmhUpdateBillTotals(); return; }
+  // Re-sync payment mode buttons to match the hidden select
+  const currentMode = document.getElementById('bmh-pay-mode')?.value || 'Cash';
+  bmhSelectPayMode(currentMode);
   const bmhId = document.getElementById('bmh-bill-pt-select')?.value;
   const amtEl = document.getElementById('bmh-pay-amt');
   if (bmhId && amtEl && !amtEl.value) amtEl.value = String(bmhComputeBalanceDue(bmhId));
@@ -10579,6 +10598,7 @@ function bmhClearPaymentDraft() {
   });
   const mode = document.getElementById('bmh-pay-mode');
   if (mode) mode.value = 'Cash';
+  bmhSelectPayMode('Cash'); // reset button visual states too
   const toggle = document.getElementById('bmh-pay-received-toggle');
   if (toggle) toggle.checked = false;
   bmhToggleBillingInsuranceFields();
