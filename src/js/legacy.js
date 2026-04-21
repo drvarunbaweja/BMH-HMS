@@ -3381,6 +3381,8 @@ function openPatient(bmhId, opts) {
 
   // ── Set global current patient for printOphthoSheet etc. ───────
   window.CURRENT_PATIENT = p;
+  window._ophthoDirtyPatientId = p.bmhId;
+  window._ophthoFormDirtyAt = 0;
 
   // ── 1. Stamp patient name & ID into every dept header ──────────
   ['ophtho-pt-nm','obg-pt-nm','psych-pt-nm','skin-pt-nm','ophtho-rp-nm'].forEach(id => {
@@ -3842,6 +3844,7 @@ window.rcOpenBillingForAndPrint = rcOpenBillingForAndPrint;
 function loadTodayVisitIntoForm(bmhId) {
   if(!bmhId || bmhId==='—') return;
   const todayKeyLocal = localDateKey(new Date());
+  const restoreStartedAt = Date.now();
 
   // 1. Fast path: restore from local cache immediately (no flicker)
   const cachedVisits = getCachedPatientVisits(bmhId);
@@ -3850,13 +3853,14 @@ function loadTodayVisitIntoForm(bmhId) {
   }).sort(function (a, b) {
     return String(b.date || b.createdAt || '').localeCompare(String(a.date || a.createdAt || ''));
   });
-  if (cachedToday.length && window.CURRENT_PATIENT?.bmhId === bmhId) {
+  if (cachedToday.length && window.CURRENT_PATIENT?.bmhId === bmhId && !shouldSkipOphthoRestore(bmhId, restoreStartedAt)) {
     populateOphthoForm(cachedToday[0]);
   }
 
   // 2. Confirm from Firebase (handles cases where save just completed)
   fbOnce('visits/' + bmhId, function (data) {
     if ((window.CURRENT_PATIENT?.bmhId || '') !== bmhId) return;
+    if (shouldSkipOphthoRestore(bmhId, restoreStartedAt)) return;
     if(!data) return;
     const todayVisits = Object.values(data)
       .filter(function (v) {
@@ -3944,8 +3948,8 @@ function populateOphthoForm(v) {
   setRfField('subj-os-sph', v.subjOSsph); setRfField('subj-os-cyl', v.subjOScyl); setRfField('subj-os-ax', v.subjOSax);
   setSel('subj-od-va', v.subjODva);
   setSel('subj-os-va', v.subjOSva);
-  setSel('rf-od-add', v.rfODAdd);
-  setSel('rf-os-add', v.rfOSAdd);
+  setRfField('rf-od-add', v.rfODAdd);
+  setRfField('rf-os-add', v.rfOSAdd);
   setSel('nv-od-final', v.nvODFinal);
   setSel('nv-os-final', v.nvOSFinal);
   setV('nv-od-final-manual', v.nvODFinal);
@@ -18043,8 +18047,14 @@ window.addEventListener('DOMContentLoaded', function() {
       document.getElementById(id)?.addEventListener('input', renderOphthoRecap);
     });
   document.querySelectorAll('.cc-inp').forEach(el => el.addEventListener('input', renderOphthoRecap));
-  document.addEventListener('input', function (e) { scheduleVisitAutosaveFromElement(e.target); }, true);
-  document.addEventListener('change', function (e) { scheduleVisitAutosaveFromElement(e.target); }, true);
+  document.addEventListener('input', function (e) {
+    markOphthoFormDirtyFromElement(e.target);
+    scheduleVisitAutosaveFromElement(e.target);
+  }, true);
+  document.addEventListener('change', function (e) {
+    markOphthoFormDirtyFromElement(e.target);
+    scheduleVisitAutosaveFromElement(e.target);
+  }, true);
   window.addEventListener('popstate', function (e) {
     if (e.state && (e.state.page || e.state.patientId || e.state.tab)) {
       restoreAppNavState(e.state);
@@ -24722,6 +24732,19 @@ function scheduleVisitAutosaveFromElement(el) {
   _visitAutosaveTimers[dept] = setTimeout(function () {
     saveVisit(dept, { silent: true, autosave: true });
   }, 2000);
+}
+function markOphthoFormDirtyFromElement(el) {
+  if (!el || window._suspendVisitAutosave) return;
+  const page = el.closest?.('.page');
+  if (!page || page.id !== 'pg-ophtho') return;
+  const bmhId = document.getElementById('ophtho-pt-uid')?.textContent?.trim();
+  if (!bmhId || bmhId === '—') return;
+  window._ophthoDirtyPatientId = bmhId;
+  window._ophthoFormDirtyAt = Date.now();
+}
+function shouldSkipOphthoRestore(bmhId, restoreStartedAt) {
+  if (!bmhId || !restoreStartedAt) return false;
+  return window._ophthoDirtyPatientId === bmhId && Number(window._ophthoFormDirtyAt || 0) > Number(restoreStartedAt || 0);
 }
 function scheduleActiveClinicRxAutosave() {
   if (window._suspendVisitAutosave) return;
