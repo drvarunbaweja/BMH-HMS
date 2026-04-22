@@ -5523,15 +5523,24 @@ function sendQuickCharge(name, amount, bmhIdOverride) {
   showToast('📤 '+name+' ₹'+parseInt(amount).toLocaleString('en-IN')+' → Reception pulsing ✓','s');
 }
 function bookFollowup() {
-  const d = document.getElementById('rx-fu-date')?.value;
+  const activeDept = document.querySelector('.page.active')?.id === 'pg-psych' ? 'psych'
+    : document.querySelector('.page.active')?.id === 'pg-obg' ? 'obg'
+    : document.querySelector('.page.active')?.id === 'pg-skin' ? 'skin'
+    : 'oe';
+  const d = getDeptFollowupInput(activeDept)?.value || document.getElementById('rx-fu-date')?.value;
   if(!d) { showToast('Please select a follow-up date first','w'); return; }
   const fuDate = new Date(d);
   const formatted = fuDate.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
-  const ptName = document.getElementById('ophtho-pt-nm')?.textContent ||
+  const ptName = window.CURRENT_PATIENT?.name ||
+                 document.getElementById('ophtho-pt-nm')?.textContent ||
                  document.getElementById('obg-pt-nm')?.textContent ||
                  document.getElementById('psych-pt-nm')?.textContent ||
                  document.getElementById('skin-pt-nm')?.textContent || 'Patient';
-  const ptId   = document.getElementById('ophtho-pt-uid')?.textContent || '—';
+  const ptId   = window.CURRENT_PATIENT?.bmhId ||
+                 document.getElementById('psych-pt-uid')?.textContent ||
+                 document.getElementById('obg-pt-uid')?.textContent ||
+                 document.getElementById('skin-pt-uid')?.textContent ||
+                 document.getElementById('ophtho-pt-uid')?.textContent || '—';
   const ptMob  = PATIENTS.find(p=>p.bmhId===ptId)?.mob || '';
   const doc    = CURRENT_USER?.name || 'Doctor';
   const dept   = CURRENT_USER?.dept || 'Ophthalmology';
@@ -5561,7 +5570,7 @@ function bookFollowup() {
   if(typeof saveAppointmentToFirebase==='function') saveAppointmentToFirebase(apt);
 
   // Update UI
-  const fuDisplay = document.getElementById('rx-fu-display');
+  const fuDisplay = getDeptRxRoot(activeDept).querySelector('#rx-fu-display') || document.getElementById('rx-fu-display');
   if(fuDisplay) {
     fuDisplay.textContent = '📅 ' + formatted;
     fuDisplay.style.color = 'var(--green)';
@@ -7794,7 +7803,12 @@ function setFollowupDays(n, unit) {
   else if(u==='w'||u==='week') d.setDate(d.getDate()+n*7);
   else if(u==='m'||u==='month') d.setMonth(d.getMonth()+n);
   const v = d.toISOString().split('T')[0];
-  document.querySelectorAll('#rx-fu-date').forEach(e=>e.value=v);
+  const activeDept = document.querySelector('.page.active')?.id === 'pg-psych' ? 'psych'
+    : document.querySelector('.page.active')?.id === 'pg-obg' ? 'obg'
+    : document.querySelector('.page.active')?.id === 'pg-skin' ? 'skin'
+    : 'oe';
+  const fuInput = getDeptFollowupInput(activeDept);
+  if(fuInput) fuInput.value = v;
   bookFollowupApt(d, n, unit);
 }
 
@@ -10311,6 +10325,60 @@ function scorePrintRxRows(rows) {
   }, 0);
 }
 
+function getDeptRxRoot(deptId) {
+  const map = { oe:'oe-rx', obg:'obg-rx', psych:'psych-rx', skin:'skin-rx' };
+  return document.getElementById(map[deptId]) || document.querySelector('.tab-content.active') || document;
+}
+
+function getDeptFollowupInput(deptId) {
+  const root = getDeptRxRoot(deptId);
+  return root.querySelector('#rx-fu-date, [id$="-rx-fu-date"]') || document.getElementById('rx-fu-date');
+}
+
+function normalizePrintRxRows(rows) {
+  return (Array.isArray(rows) ? rows : []).map(row => {
+    const routeOrEye = Array.isArray(row?.eye) ? row.eye.filter(Boolean)[0] : (row?.eye || row?.route || '');
+    return {
+      name: String(row?.name || row?.trade || '').trim(),
+      brand: String(row?.brand || row?.generic || '').trim(),
+      eye: routeOrEye ? [String(routeOrEye).trim()] : [],
+      freq: String(row?.freq || row?.frequency || '').trim(),
+      dur: String(row?.dur || row?.duration || '').trim(),
+      taper: String(row?.taper || '').trim(),
+      lang: row?.lang && typeof row.lang === 'object' ? row.lang : { en: String(row?.instructions || '').trim() }
+    };
+  }).filter(row => row.name || row.brand);
+}
+
+function collectRenderedRxRows(deptId) {
+  const root = getDeptRxRoot(deptId);
+  const rows = Array.from(root.querySelectorAll('#rx-drugs > div'));
+  return rows.map(row => {
+    const cells = Array.from(row.children);
+    if(cells.length < 5) return null;
+    const infoCell = cells[1];
+    const infoChildren = Array.from(infoCell.children || []);
+    const selects = Array.from(row.querySelectorAll('select'));
+    const isOphtho = deptId === 'oe';
+    const routeOrEye = isOphtho ? (selects[0]?.value || '') : 'Oral';
+    const freq = selects[isOphtho ? 1 : 0]?.value || '';
+    const dur = selects[isOphtho ? 2 : 1]?.value || '';
+    const taper = selects[isOphtho ? 3 : 2]?.value || '';
+    const name = infoChildren[0]?.textContent?.trim() || '';
+    const brand = infoChildren[1]?.textContent?.trim() || '';
+    const extra = infoChildren.slice(2).map(el => el.textContent?.trim() || '').filter(Boolean).join(' ');
+    return {
+      name,
+      brand: brand && brand !== name ? brand : '',
+      eye: routeOrEye ? [routeOrEye] : [],
+      freq,
+      dur,
+      taper: taper && taper !== '—' ? taper : '',
+      lang: extra ? { en: extra } : {}
+    };
+  }).filter(Boolean);
+}
+
 function getLatestVisitRxForDept(bmhId, deptId, cb) {
   if(!bmhId || bmhId === '—' || typeof fbOnce !== 'function' || !window.FBDB) {
     cb([]);
@@ -10319,7 +10387,7 @@ function getLatestVisitRxForDept(bmhId, deptId, cb) {
   fbOnce('visits/' + bmhId, data => {
     const visits = data
       ? Object.values(data)
-          .filter(v => v && v.dept === deptId)
+          .filter(v => v && [deptId, deptId === 'psych' ? 'psy' : '', deptId === 'oe' ? 'ophtho' : ''].filter(Boolean).includes(v.dept))
           .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
       : [];
     const bestVisit = visits.find(v => Array.isArray(v.rx) && v.rx.length) || null;
@@ -10347,7 +10415,8 @@ window.printUnifiedRx = function(deptId) {
   const ccDur = document.getElementById('dur-text')?.value || '';
 
   // ── Collect drugs ──
-  const liveDrugs = Array.isArray(window.RX_DRUGS) ? window.RX_DRUGS.slice() : [];
+  const liveDrugs = normalizePrintRxRows(Array.isArray(window.RX_DRUGS) ? window.RX_DRUGS.slice() : []);
+  const renderedDrugs = normalizePrintRxRows(collectRenderedRxRows(deptId));
 
   // ── Collect procedures ──
   const _pc1 = document.getElementById('rx-proc-advised-'+deptId);
@@ -10379,10 +10448,9 @@ window.printUnifiedRx = function(deptId) {
   const nvOS  = document.getElementById('ucva-os-near')?.value||'';
 
   // ── Follow-up — scope to the active dept tab to avoid reading ophtho's #rx-fu-date ──
-  const _fuWrap = deptId === 'psych' ? document.getElementById('psych-plan') : deptId === 'obg' ? document.getElementById('obg-rx') : deptId === 'skin' ? document.getElementById('skin-rx') : null;
-  const fuDate  = (_fuWrap ? _fuWrap.querySelector('#rx-fu-date') : document.getElementById('rx-fu-date'))?.value || document.getElementById('rx-fu-date')?.value || '';
+  const fuDate  = getDeptFollowupInput(deptId)?.value || '';
   const fuFormatted = fuDate ? new Date(fuDate).toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'}) : '';
-  const advice  = document.getElementById(deptId+'-advice')?.value || document.querySelector('#pg-ophtho textarea[placeholder*="Advice"]')?.value || '';
+  const advice  = getDeptRxRoot(deptId).querySelector(`#${deptId}-advice, #rx-advice-text, #psych-advice, #skin-advice`)?.value || document.querySelector('#pg-ophtho textarea[placeholder*="Advice"]')?.value || '';
 
   // ── Doctor info ──
   const doctorName    = CURRENT_USER?.name || 'Dr. Varun Baweja';
@@ -10486,7 +10554,8 @@ ${drugs.length ? `
       const eye0 = (d.eye&&d.eye[0])||'';
       // Date range
       const sd = new Date();
-      const durNum = d.dur?((d.dur.includes('Week')||d.dur.includes('week'))?parseInt(d.dur)*7:(d.dur.includes('Month')||d.dur.includes('month'))?parseInt(d.dur)*30:parseInt(d.dur)||7):7;
+      const durText = String(d.dur || '');
+      const durNum = durText ? ((durText.includes('Week')||durText.includes('week')) ? (parseInt(durText,10) || 1) * 7 : (durText.includes('Month')||durText.includes('month')) ? (parseInt(durText,10) || 1) * 30 : parseInt(durText,10) || 7) : 7;
       const ed = new Date(sd); ed.setDate(ed.getDate()+durNum);
       const fmt = dt=>dt.toLocaleDateString('en-IN',{day:'2-digit',month:'2-digit',year:'numeric'});
       const sds=fmt(sd), eds=fmt(ed);
@@ -10499,21 +10568,23 @@ ${drugs.length ? `
         'Topical':          ['topically',        'लगाएं',           'ਲਗਾਓ'],
       };
       const [eEN,eHI,ePA] = eyeMap[eye0]||[eye0,eye0,eye0];
-      const isEyeDrop = eye0.includes('Eye')||(d.name&&d.name.toLowerCase().includes('drop'));
+      const drugName = String(d.name || d.brand || '').trim();
+      const genericName = String(d.brand || '').trim();
+      const isEyeDrop = eye0.includes('Eye') || drugName.toLowerCase().includes('drop');
       const instrEN = isEyeDrop
-        ? `Instil 1 drop in ${eEN}, ${d.freq||''}, for ${d.dur||''} (${sds} to ${eds})`
-        : `${d.freq||''} ${eEN}, for ${d.dur||''} (${sds} to ${eds})`;
+        ? `Instil 1 drop in ${eEN}, ${d.freq||''}, for ${durText||''} (${sds} to ${eds})`
+        : `${d.freq||''} ${eEN}, for ${durText||''} (${sds} to ${eds})`;
       const instrHI = isEyeDrop
-        ? `${eHI} 1 बूँद डालें, ${d.freq||''}, ${d.dur||''} (${sds} से ${eds} तक)`
-        : `${eHI} ${d.freq||''} लें, ${d.dur||''} (${sds} से ${eds} तक)`;
+        ? `${eHI} 1 बूँद डालें, ${d.freq||''}, ${durText||''} (${sds} से ${eds} तक)`
+        : `${eHI} ${d.freq||''} लें, ${durText||''} (${sds} से ${eds} तक)`;
       const instrPA = isEyeDrop
-        ? `${ePA} 1 ਬੂੰਦ ਪਾਓ, ${d.freq||''}, ${d.dur||''} (${sds} ਤੋਂ ${eds} ਤੱਕ)`
-        : `${ePA} ${d.freq||''} ਲਓ, ${d.dur||''} (${sds} ਤੋਂ ${eds} ਤੱਕ)`;
+        ? `${ePA} 1 ਬੂੰਦ ਪਾਓ, ${d.freq||''}, ${durText||''} (${sds} ਤੋਂ ${eds} ਤੱਕ)`
+        : `${ePA} ${d.freq||''} ਲਓ, ${durText||''} (${sds} ਤੋਂ ${eds} ਤੱਕ)`;
       return `<tr>
         <td style="font-weight:700;color:#1A3C6E;vertical-align:top;width:28px">${i+1}.</td>
         <td class="left" colspan="4">
-          <div class="rx-name">${d.name||''}</div>
-          ${d.brand&&d.brand!==d.name?`<div class="rx-gen">(${d.brand})</div>`:''}
+          <div class="rx-name">${drugName}</div>
+          ${genericName&&genericName!==drugName?`<div class="rx-gen">(${genericName})</div>`:''}
           <div class="rx-instr">
             ${rxLang==='hi' ? instrHI : rxLang==='pa' ? instrPA : instrEN}
           </div>
@@ -10556,13 +10627,15 @@ ${fuFormatted ? `<div style="margin:10px 0"><span class="fu-box">&#128197; Next 
 
   if(deptId === 'psych') {
     getLatestVisitRxForDept(ptId, 'psych', savedRx => {
-      const resolvedDrugs = scorePrintRxRows(savedRx) > scorePrintRxRows(liveDrugs) ? savedRx : liveDrugs;
+      const normalizedSavedRx = normalizePrintRxRows(savedRx);
+      const resolvedDrugs = [liveDrugs, renderedDrugs, normalizedSavedRx]
+        .sort((a, b) => scorePrintRxRows(b) - scorePrintRxRows(a))[0] || [];
       finishPrint(resolvedDrugs);
     });
     return;
   }
 
-  finishPrint(liveDrugs);
+  finishPrint(scorePrintRxRows(renderedDrugs) > scorePrintRxRows(liveDrugs) ? renderedDrugs : liveDrugs);
 };
 
 // ─── SETTINGS — Doctor profile edit ─────────────
