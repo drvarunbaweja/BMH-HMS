@@ -2419,22 +2419,27 @@ function collectRenderedRxRowsForPrint(deptId) {
   const rows = [];
   rxRoot.querySelectorAll('div[style*="border-left"]').forEach(function (card) {
     const nameInput = card.querySelector('input[placeholder*="Trade name"]');
+    const nameStatic = card.querySelector('div[style*="border:1.5px solid #1A3C6E"]');
     const selects = card.querySelectorAll('select');
-    if (!nameInput || selects.length < 4) return;
-    const label = String(nameInput.value || '').trim();
+    const label = String(nameInput?.value || nameStatic?.textContent || '').trim();
     if (!label) return;
     const match = label.match(/^(.*?)(?:\s*\((.*)\))?\s*$/);
     const trade = String(match && match[1] ? match[1] : label).trim();
     const generic = String(match && match[2] ? match[2] : '').trim();
+    const typeSelect = selects[0];
+    const routeSelect = deptId === 'oe' ? selects[1] : null;
+    const freqSelect = selects[deptId === 'oe' ? 2 : 1];
+    const durationSelect = selects[deptId === 'oe' ? 3 : 2];
+    const fallbackInstruction = card.querySelector('div[style*="font-size:10.5px;color:#6a6a6a"]')?.textContent || '';
     rows.push({
       trade: trade,
       brand: trade,
       generic: generic,
       name: generic || trade,
-      drugType: selects[0]?.value || '',
-      eye: deptId === 'oe' ? [selects[1]?.value || 'Oral'] : ['Oral'],
-      freq: selects[deptId === 'oe' ? 2 : 1]?.value || '',
-      dur: selects[deptId === 'oe' ? 3 : 2]?.value || ''
+      drugType: typeSelect?.value || '',
+      eye: deptId === 'oe' ? [routeSelect?.value || 'Oral'] : ['Oral'],
+      freq: freqSelect?.value || fallbackInstruction || '',
+      dur: durationSelect?.value || ''
     });
   });
   return rows;
@@ -28866,9 +28871,9 @@ const CHARGES_DATA = [
   {cat:'Eye Sx', name:'PMICS + IOL Implantation',        chd:10000,rpr:8500},
   {cat:'Eye Sx', name:'Trabeculectomy',                  chd:42000,rpr:38000},
   {cat:'Eye Sx', kind:'procedure', parent:'', name:'Intravitreal Injection', chd:0, rpr:0},
-  {cat:'Eye Sx', kind:'procedure', parent:'Intravitreal Injection', name:'Anti-VEGF Injection', chd:8000, rpr:7000},
-  {cat:'Eye Sx', kind:'procedure', parent:'Intravitreal Injection', name:'Ozurdex Implant', chd:22000, rpr:20000},
-  {cat:'Eye Sx', kind:'procedure', parent:'Intravitreal Injection', name:'Triamcinolone / Steroid Injection', chd:6000, rpr:5000},
+  {cat:'Eye Sx', kind:'procedure', parent:'Intravitreal Injection', name:'Ranibizumab', chd:8000, rpr:7000},
+  {cat:'Eye Sx', kind:'procedure', parent:'Intravitreal Injection', name:'Bevacizumab (Avastin)', chd:7000, rpr:6000},
+  {cat:'Eye Sx', kind:'procedure', parent:'Intravitreal Injection', name:'Triamcinolone', chd:6000, rpr:5000},
   {cat:'Eye Sx', name:'IVT Injection (Anti-VEGF)',       chd:8000, rpr:7000},
   {cat:'Eye Sx', name:'LASIK (per eye)',                 chd:45000,rpr:40000},
   {cat:'Eye Sx', name:'Pterygium Excision + Graft',      chd:8000, rpr:7000},
@@ -28910,7 +28915,7 @@ const CHARGES_DATA = [
   {cat:'OBG',    name:'Hysteroscopy',                    chd:22000, rpr:19000},
   {cat:'OBG',    name:'IUCD Removal',                    chd:2500,  rpr:2000},
   {cat:'OBG',    name:'Cervical Cerclage',               chd:18000, rpr:15000},
-  {cat:'Psych',  name:'EEG',                             chd:2500,  rpr:2000},
+  {cat:'Psych',  name:'EEG',                             chd:2500,  rpr:1200},
   {cat:'Psych',  name:'Psychology Testing',              chd:3500,  rpr:3000},
   {cat:'Skin',   name:'Patch Test (Contact Dermatitis)', chd:3500,  rpr:3000},
   {cat:'Skin',   name:'Excision Biopsy (Small)',         chd:4500,  rpr:3800},
@@ -28995,9 +29000,10 @@ const CRITICAL_CHARGE_ROWS = [
   {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery', name:'Premium Multifocal IOL Implantation', chd:70000, rpr:65000},
   {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery', name:'Premium 1 Piece Preloaded Trifocal IOL Implantation', chd:95000, rpr:85000},
   {cat:'Eye Sx', kind:'procedure', parent:'', name:'Intravitreal Injection', chd:0, rpr:0},
-  {cat:'Eye Sx', kind:'procedure', parent:'Intravitreal Injection', name:'Anti-VEGF Injection', chd:8000, rpr:7000},
-  {cat:'Eye Sx', kind:'procedure', parent:'Intravitreal Injection', name:'Ozurdex Implant', chd:22000, rpr:20000},
-  {cat:'Eye Sx', kind:'procedure', parent:'Intravitreal Injection', name:'Triamcinolone / Steroid Injection', chd:6000, rpr:5000},
+  {cat:'Eye Sx', kind:'procedure', parent:'Intravitreal Injection', name:'Ranibizumab', chd:8000, rpr:7000},
+  {cat:'Eye Sx', kind:'procedure', parent:'Intravitreal Injection', name:'Bevacizumab (Avastin)', chd:7000, rpr:6000},
+  {cat:'Eye Sx', kind:'procedure', parent:'Intravitreal Injection', name:'Triamcinolone', chd:6000, rpr:5000},
+  {cat:'Psych', name:'EEG', chd:2500, rpr:1200},
   {cat:'OBG', kind:'procedure', parent:'', name:'Medical Termination Of Pregnancy', chd:0, rpr:0},
   {cat:'OBG', kind:'procedure', parent:'Medical Termination Of Pregnancy', name:'4 weeks', chd:5000, rpr:4500},
   {cat:'OBG', kind:'procedure', parent:'Medical Termination Of Pregnancy', name:'6 weeks', chd:7000, rpr:6500},
