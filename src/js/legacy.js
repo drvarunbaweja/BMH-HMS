@@ -14931,7 +14931,9 @@ function addNewCharge(){
   document.getElementById('new-charge-rpr').value='';
   saveChargesToFirebase().then(function(){showToast('Charge added & saved to database ✓','s');renderCentresCharges();renderChargesList&&renderChargesList();});
 }
-function saveChargesToLocalStorage() {
+function saveChargesToLocalStorage(opts) {
+  const options = Object.assign({}, opts || {});
+  const savedAt = Number(options.updatedAt || Date.now()) || Date.now();
   try {
     const next = JSON.stringify(CHARGES_DATA);
     const prev = localStorage.getItem('bmh_charges_schedule');
@@ -14939,8 +14941,9 @@ function saveChargesToLocalStorage() {
     localStorage.setItem('bmh_charges_schedule', next);
     localStorage.setItem('bmh_charges_schedule_backup', next);
     localStorage.setItem('bmh_centre_charges', JSON.stringify(CENTRE_CHARGES));
-    localStorage.setItem('bmh_charges_schedule_updated_at', String(Date.now()));
+    localStorage.setItem('bmh_charges_schedule_updated_at', String(savedAt));
     window._bmhLastLocalChargesRows = normalizeChargesRows(CHARGES_DATA).slice();
+    window._bmhLastLocalChargesUpdatedAt = savedAt;
   } catch (e) { /* quota */ }
 }
 window._bmhLastLocalChargesRows = window._bmhLastLocalChargesRows || [];
@@ -14993,23 +14996,28 @@ function migrateLegacyPmicsChargeParents() {
 function applyLoadedChargesRows(rows) {
   if (!Array.isArray(rows) || !rows.length) return false;
   CHARGES_DATA.length = 0;
+  const nextCentreCharges = { CHD: {}, RPR: {} };
   rows.forEach(function (row) {
     if (!row || typeof row !== 'object') return;
-    CHARGES_DATA.push({
+    const nextRow = {
       cat: row.cat || '',
       kind: row.kind || row.cat || 'procedure',
       parent: row.parent || '',
       name: row.name || '',
       chd: Number(row.chd || 0),
       rpr: Number(row.rpr || 0)
-    });
+    };
+    CHARGES_DATA.push(nextRow);
+    if (nextRow.name) {
+      nextCentreCharges.CHD[nextRow.name] = nextRow.chd;
+      nextCentreCharges.RPR[nextRow.name] = nextRow.rpr;
+    }
   });
   migrateLegacyPmicsChargeParents();
-  CHARGES_DATA.forEach(function (c) {
-    if (!c.name) return;
-    CENTRE_CHARGES.CHD[c.name] = c.chd;
-    CENTRE_CHARGES.RPR[c.name] = c.rpr;
-  });
+  Object.keys(CENTRE_CHARGES.CHD || {}).forEach(function (key) { delete CENTRE_CHARGES.CHD[key]; });
+  Object.keys(CENTRE_CHARGES.RPR || {}).forEach(function (key) { delete CENTRE_CHARGES.RPR[key]; });
+  Object.assign(CENTRE_CHARGES.CHD, nextCentreCharges.CHD);
+  Object.assign(CENTRE_CHARGES.RPR, nextCentreCharges.RPR);
   ensureCriticalChargesLoaded();
   return CHARGES_DATA.length > 0;
 }
@@ -15032,7 +15040,8 @@ function loadChargesFromLocalStorage() {
   } catch (e) { /* noop */ }
 }
 function saveChargesToFirebase(){
-  saveChargesToLocalStorage();
+  const savedAt = Date.now();
+  saveChargesToLocalStorage({ updatedAt: savedAt });
   if(!window.FBDB) { showToast('Saved locally ✓', 's'); return Promise.resolve(); }
   if (!window._bmhChargesCloudLoaded) {
     window._bmhPendingChargesSync = true;
@@ -15043,9 +15052,9 @@ function saveChargesToFirebase(){
   return Promise.all([
     window.FBDB.ref('centreCharges').set(CENTRE_CHARGES),
     window.FBDB.ref('chargesSchedule').set(CHARGES_DATA),
-    window.FBDB.ref('chargesScheduleMeta').set({ updatedAt: Date.now() })
+    window.FBDB.ref('chargesScheduleMeta').set({ updatedAt: savedAt })
   ]).then(function(res){
-    window._bmhLastRemoteChargesUpdatedAt = Date.now();
+    window._bmhLastRemoteChargesUpdatedAt = savedAt;
     try { populateOTProcedureMainSelect && populateOTProcedureMainSelect(); } catch (e) {}
     try { renderOTProcedureSubheading && renderOTProcedureSubheading(document.getElementById('ot-add-proc-main')?.value || ''); } catch (e) {}
     try { refreshRxTemplateSurgeryDatalist && refreshRxTemplateSurgeryDatalist(); } catch (e) {}
@@ -15062,8 +15071,7 @@ function applyChargesFromCloudSnapshot(rows, remoteTs) {
   if (!applied) return false;
   window._bmhChargesCloudLoaded = true;
   window._bmhLastRemoteChargesUpdatedAt = Number(remoteTs || Date.now()) || Date.now();
-  try { localStorage.setItem('bmh_charges_schedule_updated_at', String(window._bmhLastRemoteChargesUpdatedAt)); } catch (e) { /* noop */ }
-  saveChargesToLocalStorage();
+  saveChargesToLocalStorage({ updatedAt: window._bmhLastRemoteChargesUpdatedAt });
   renderChargesList && renderChargesList();
   renderCentresCharges && renderCentresCharges();
   syncReceptionConsultationFee && syncReceptionConsultationFee();
@@ -15103,7 +15111,7 @@ function loadChargesFromFirebase(){
     if(d.CHD) Object.assign(CENTRE_CHARGES.CHD, d.CHD);
     if(d.RPR) Object.assign(CENTRE_CHARGES.RPR, d.RPR);
     ensureCriticalChargesLoaded();
-    saveChargesToLocalStorage();
+    saveChargesToLocalStorage({ updatedAt: window._bmhLastLocalChargesUpdatedAt || Date.now() });
     renderCentresCharges && renderCentresCharges();
     syncReceptionConsultationFee && syncReceptionConsultationFee();
   }).catch(()=>{});
@@ -18912,6 +18920,7 @@ function populateSelectors() {
 // This prevents "Cannot access X before initialization" TDZ errors
 window.addEventListener('DOMContentLoaded', function() {
   try { loadInventoryStockFromStorage && loadInventoryStockFromStorage(); } catch (e) {}
+  try { setTimeout(function(){ loadChargesFromFirebase && loadChargesFromFirebase(); }, 60); } catch (e) {}
   try { initQR && initQR(); } catch(e) {}
   try { loadInvestigationTemplatesFromStorage && loadInvestigationTemplatesFromStorage(); } catch(e) {}
   try { refreshInvestigationTemplateSelect && refreshInvestigationTemplateSelect(); } catch(e) {}
@@ -27970,13 +27979,17 @@ window.printUnifiedRx = function(deptId) {
   const obgComplaint = document.getElementById('obg-main-complaint')?.value || window.CURRENT_PATIENT?.lastVisit?.mainComplaint || '';
 
   // ── Collect drugs (fallback to latest saved visit when UI state is blank/stale at print time) ──
-  let drugs = typeof RX_DRUGS !== 'undefined' && Array.isArray(RX_DRUGS) ? RX_DRUGS : [];
+  const currentBmhId = window.CURRENT_PATIENT?.bmhId || document.getElementById((saveDept || deptId) + '-pt-uid')?.textContent?.trim() || document.getElementById('ophtho-pt-uid')?.textContent?.trim() || '';
+  const latestDeptVisit = currentBmhId && saveDept && typeof getLatestSavedVisitForDept === 'function'
+    ? getLatestSavedVisitForDept(currentBmhId, saveDept)
+    : null;
+  const latestDeptRx = Array.isArray(latestDeptVisit?.rx) ? latestDeptVisit.rx : [];
+  const currentEditorRx = typeof RX_DRUGS !== 'undefined' && Array.isArray(RX_DRUGS) ? RX_DRUGS : [];
+  let drugs = latestDeptRx.length ? JSON.parse(JSON.stringify(latestDeptRx)) : currentEditorRx;
   if (!drugs || !drugs.length) {
-    const currentBmhId = window.CURRENT_PATIENT?.bmhId || document.getElementById((saveDept || deptId) + '-pt-uid')?.textContent?.trim() || document.getElementById('ophtho-pt-uid')?.textContent?.trim() || '';
-    const savedVisit = currentBmhId && typeof getLatestSavedVisitForDept === 'function'
-      ? getLatestSavedVisitForDept(currentBmhId, saveDept)
-      : null;
-    const savedRx = savedVisit?.rx || window.CURRENT_PATIENT?.lastVisit?.rx;
+    const savedRx = window.CURRENT_PATIENT?.lastVisit?.lastDeptVisit === saveDept
+      ? window.CURRENT_PATIENT?.lastVisit?.rx
+      : window.CURRENT_PATIENT?.lastVisit?.rx;
     if (Array.isArray(savedRx) && savedRx.length) drugs = JSON.parse(JSON.stringify(savedRx));
   }
   const rxPlainLang = typeof rxLang !== 'undefined' ? rxLang : 'en';
