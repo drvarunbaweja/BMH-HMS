@@ -10312,7 +10312,7 @@ function scorePrintRxRows(rows) {
 }
 
 function getLatestVisitRxForDept(bmhId, deptId, cb) {
-  if(!bmhId || bmhId === '—' || typeof fbOnce !== 'function') {
+  if(!bmhId || bmhId === '—' || typeof fbOnce !== 'function' || !window.FBDB) {
     cb([]);
     return;
   }
@@ -10378,8 +10378,9 @@ window.printUnifiedRx = function(deptId) {
   const nvOD  = document.getElementById('ucva-od-near')?.value||'';
   const nvOS  = document.getElementById('ucva-os-near')?.value||'';
 
-  // ── Follow-up ──
-  const fuDate  = document.getElementById('rx-fu-date')?.value;
+  // ── Follow-up — scope to the active dept tab to avoid reading ophtho's #rx-fu-date ──
+  const _fuWrap = deptId === 'psych' ? document.getElementById('psych-plan') : deptId === 'obg' ? document.getElementById('obg-rx') : deptId === 'skin' ? document.getElementById('skin-rx') : null;
+  const fuDate  = (_fuWrap ? _fuWrap.querySelector('#rx-fu-date') : document.getElementById('rx-fu-date'))?.value || document.getElementById('rx-fu-date')?.value || '';
   const fuFormatted = fuDate ? new Date(fuDate).toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'}) : '';
   const advice  = document.getElementById(deptId+'-advice')?.value || document.querySelector('#pg-ophtho textarea[placeholder*="Advice"]')?.value || '';
 
@@ -11805,7 +11806,7 @@ function fbPush(path, data)   { return window.FBDB ? window.FBDB.ref(path).push(
 function fbUpdate(path, data) { return window.FBDB ? window.FBDB.ref(path).update(data) : Promise.resolve(); }
 function fbRemove(path)       { return window.FBDB ? window.FBDB.ref(path).remove()     : Promise.resolve(); }
 function fbOn(path, cb)       { if (window.FBDB) window.FBDB.ref(path).on('value', function(s){ cb(s.val()); }); }
-function fbOnce(path, cb)     { if (window.FBDB) window.FBDB.ref(path).once('value').then(function(s){ cb(s.val()); }); }
+function fbOnce(path, cb)     { if (window.FBDB) { window.FBDB.ref(path).once('value').then(function(s){ cb(s.val()); }).catch(function(){ if(cb) cb(null); }); } else if(cb) { cb(null); } }
 function fbKey()              { return window.FBDB ? window.FBDB.ref().push().key : 'local-' + Date.now(); }
 function todayKey()           { return new Date().toISOString().split('T')[0]; }
 // ═══════════════════════════════════════════════════════════
