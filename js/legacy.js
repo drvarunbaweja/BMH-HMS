@@ -28297,7 +28297,7 @@ window.printUnifiedRx = function(deptId) {
 @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Inter:wght@400;600;700;800&family=Lato:ital,wght@0,300;0,400;0,700;0,900;1,400&family=Libre+Baskerville:wght@400;700&family=Playfair+Display:wght@700&family=Source+Sans+3:wght@400;600;700;800&display=swap');
 *{margin:0;padding:0;box-sizing:border-box;print-color-adjust:exact;-webkit-print-color-adjust:exact}
 @page{size:A4 portrait;margin:0}
-body{font-family:'Lato',sans-serif;font-size:10px;color:#1a1a1a;background:#fff;padding:3.5mm 8mm 3mm;line-height:1.3;overflow:hidden}
+body{font-family:'Lato',sans-serif;font-size:10px;color:#1a1a1a;background:#fff;padding:3.5mm 8mm 3mm;line-height:1.3;overflow:visible}
 .lh-img{width:100%;max-width:100%;height:auto;display:block;margin-bottom:6px}
 /* Patient header */
 .pt-name-bar{display:flex;align-items:baseline;justify-content:space-between;border-bottom:1.5px solid #333;padding-bottom:3px;margin-bottom:2px}
