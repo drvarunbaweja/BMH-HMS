@@ -9629,11 +9629,11 @@ function bmhPromptAddAdvanceReasonOption() {
   showToast('Reason option added ✓', 's');
 }
 window.bmhPromptAddAdvanceReasonOption = bmhPromptAddAdvanceReasonOption;
-function bmhPostPatientAdvanceFromBilling() {
+function bmhCollectBillingAdvanceDraft() {
   const bmhId = document.getElementById('bmh-bill-pt-select')?.value;
-  if (!bmhId) { showToast('Select a patient', 'w'); return; }
+  if (!bmhId) { showToast('Select a patient', 'w'); return null; }
   const pt = PATIENTS.find(function (p) { return p.bmhId === bmhId; });
-  if (!pt) return;
+  if (!pt) return null;
   const mode = String(document.getElementById('bmh-billing-advance-mode')?.value || 'Cash');
   let total = 0;
   const parts = [];
@@ -9645,10 +9645,10 @@ function bmhPostPatientAdvanceFromBilling() {
     total += amt;
     parts.push(reason + (note ? ' (' + note + ')' : ''));
   });
-  if (!(total > 0)) { showToast('Enter at least one advance amount', 'w'); return; }
+  if (!(total > 0)) { showToast('Enter at least one advance amount', 'w'); return null; }
   const txnId = 'TXN' + Date.now();
   const service = 'Advance — ' + parts.join(' · ');
-  const txn = {
+  return {
     id: txnId,
     patient: pt.name || bmhId,
     bmhId: bmhId,
@@ -9664,13 +9664,32 @@ function bmhPostPatientAdvanceFromBilling() {
     type: 'advance',
     source: 'billing-advance'
   };
+}
+function bmhPostPatientAdvanceFromBilling(opts) {
+  const options = Object.assign({ printReceipt: false }, opts || {});
+  const txn = bmhCollectBillingAdvanceDraft();
+  if (!txn) return;
+  const bmhId = txn.bmhId;
   TRANSACTIONS.push(txn);
   saveTransactionToFirebase && saveTransactionToFirebase(txn);
-  bmhSyncPatientAdvanceBalance(bmhId, { allowIncrease: true, purposeAppend: parts.join(' · ') });
+  bmhSyncPatientAdvanceBalance(bmhId, { allowIncrease: true, purposeAppend: String(txn.service || '').replace(/^Advance\s+—\s*/,'') });
   saveBmhFinancials();
   bmhRenderBillingAdvanceRows(true);
   bmhSelectBillPatient(bmhId);
-  showToast('Advance ₹' + total.toLocaleString('en-IN') + ' posted ✓', 's');
+  showToast('Advance ₹' + Number(txn.amount || 0).toLocaleString('en-IN') + ' posted ✓', 's');
+  if (options.printReceipt && typeof printPaymentReceipt === 'function') {
+    printPaymentReceipt({
+      id: txn.id,
+      patient: txn.patient,
+      bmhId: txn.bmhId,
+      amount: txn.amount,
+      mode: txn.mode,
+      date: txn.date,
+      paymentRef: txn.paymentRef || '',
+      service: txn.service,
+      for: txn.service
+    });
+  }
   if (typeof renderCollectionDashboard === 'function') renderCollectionDashboard();
 }
 window.bmhPostPatientAdvanceFromBilling = bmhPostPatientAdvanceFromBilling;
@@ -14926,6 +14945,8 @@ function saveChargesToLocalStorage() {
 }
 window._bmhLastLocalChargesRows = window._bmhLastLocalChargesRows || [];
 window._bmhChargesCloudLoaded = !!window._bmhChargesCloudLoaded;
+window._bmhLastRemoteChargesUpdatedAt = Number(window._bmhLastRemoteChargesUpdatedAt || 0) || 0;
+let _chargesLiveWatchStarted = false;
 function normalizeChargesRows(raw) {
   if (Array.isArray(raw)) return raw.filter(Boolean);
   if (raw && typeof raw === 'object') {
@@ -15024,6 +15045,7 @@ function saveChargesToFirebase(){
     window.FBDB.ref('chargesSchedule').set(CHARGES_DATA),
     window.FBDB.ref('chargesScheduleMeta').set({ updatedAt: Date.now() })
   ]).then(function(res){
+    window._bmhLastRemoteChargesUpdatedAt = Date.now();
     try { populateOTProcedureMainSelect && populateOTProcedureMainSelect(); } catch (e) {}
     try { renderOTProcedureSubheading && renderOTProcedureSubheading(document.getElementById('ot-add-proc-main')?.value || ''); } catch (e) {}
     try { refreshRxTemplateSurgeryDatalist && refreshRxTemplateSurgeryDatalist(); } catch (e) {}
@@ -15033,6 +15055,41 @@ function saveChargesToFirebase(){
   }).catch(function(err){
     console.warn('saveChargesToFirebase error:', err);
     throw err;
+  });
+}
+function applyChargesFromCloudSnapshot(rows, remoteTs) {
+  const applied = applyLoadedChargesRows(normalizeChargesRows(rows));
+  if (!applied) return false;
+  window._bmhChargesCloudLoaded = true;
+  window._bmhLastRemoteChargesUpdatedAt = Number(remoteTs || Date.now()) || Date.now();
+  try { localStorage.setItem('bmh_charges_schedule_updated_at', String(window._bmhLastRemoteChargesUpdatedAt)); } catch (e) { /* noop */ }
+  saveChargesToLocalStorage();
+  renderChargesList && renderChargesList();
+  renderCentresCharges && renderCentresCharges();
+  syncReceptionConsultationFee && syncReceptionConsultationFee();
+  try { populateOTProcedureMainSelect && populateOTProcedureMainSelect(); } catch (e) {}
+  try { renderOTProcedureSubheading && renderOTProcedureSubheading(document.getElementById('ot-add-proc-main')?.value || ''); } catch (e) {}
+  try { refreshRxTemplateSurgeryDatalist && refreshRxTemplateSurgeryDatalist(); } catch (e) {}
+  try { refreshOTFollowupTemplateSelect && refreshOTFollowupTemplateSelect(); } catch (e) {}
+  return true;
+}
+function startChargesLiveSync() {
+  if (!window.FBDB || _chargesLiveWatchStarted) return;
+  _chargesLiveWatchStarted = true;
+  window.FBDB.ref('chargesScheduleMeta').on('value', function (metaSnap) {
+    const remoteTs = Number((metaSnap.val() && metaSnap.val().updatedAt) || 0);
+    const localTs = Number(localStorage.getItem('bmh_charges_schedule_updated_at') || 0);
+    if (!remoteTs || remoteTs <= localTs || remoteTs <= Number(window._bmhLastRemoteChargesUpdatedAt || 0)) return;
+    Promise.all([
+      window.FBDB.ref('chargesSchedule').once('value'),
+      window.FBDB.ref('centreCharges').once('value')
+    ]).then(function (pairs) {
+      const scheduleVal = pairs[0].val();
+      const centreVal = pairs[1].val();
+      if (centreVal && centreVal.CHD) Object.assign(CENTRE_CHARGES.CHD, centreVal.CHD);
+      if (centreVal && centreVal.RPR) Object.assign(CENTRE_CHARGES.RPR, centreVal.RPR);
+      if (applyChargesFromCloudSnapshot(scheduleVal, remoteTs)) showToast('Latest charges synced from cloud ✓', 's');
+    }).catch(function () {});
   });
 }
 function loadChargesFromFirebase(){
@@ -15058,22 +15115,15 @@ function loadChargesFromFirebase(){
     const metaSnap = pairs[1];
     const remoteTs = Number(metaSnap && metaSnap.val && metaSnap.val()?.updatedAt || 0) || 0;
     const arr = choosePreferredChargesRows(window._bmhLastLocalChargesRows, snap.val(), window._bmhLastLocalChargesUpdatedAt, remoteTs);
-    window._bmhChargesCloudLoaded = true;
-    if (!applyLoadedChargesRows(arr)) return;
-    saveChargesToLocalStorage();
-    renderChargesList && renderChargesList();
-    renderCentresCharges && renderCentresCharges();
-    syncReceptionConsultationFee && syncReceptionConsultationFee();
-    try { populateOTProcedureMainSelect && populateOTProcedureMainSelect(); } catch (e) {}
-    try { renderOTProcedureSubheading && renderOTProcedureSubheading(document.getElementById('ot-add-proc-main')?.value || ''); } catch (e) {}
-    try { refreshRxTemplateSurgeryDatalist && refreshRxTemplateSurgeryDatalist(); } catch (e) {}
-    try { refreshOTFollowupTemplateSelect && refreshOTFollowupTemplateSelect(); } catch (e) {}
+    applyChargesFromCloudSnapshot(arr, remoteTs);
     if (window._bmhPendingChargesSync) {
       window._bmhPendingChargesSync = false;
       saveChargesToFirebase().catch(function () {});
     }
+    startChargesLiveSync();
   }).catch(()=>{
     window._bmhChargesCloudLoaded = true;
+    startChargesLiveSync();
   });
 }
 
@@ -28243,8 +28293,8 @@ body{font-family:'Lato',sans-serif;font-size:10px;color:#1a1a1a;background:#fff;
 /* Complaint / plain text block */
 .cc-text{font-size:10.2px;color:#333;font-style:italic;margin:2px 0 3px;padding-left:6px}
 /* Dept card (OBG summary, PSY MSE, skin exam) */
-.dept-card{border:1px solid #ccc;border-radius:3px;margin-bottom:4px;overflow:hidden;font-size:9.6px}
-.dept-card-hdr{background:#222;color:#fff;font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;padding:3px 8px}
+.dept-card{border:1px solid #d6dbe1;border-radius:8px;margin-bottom:4px;overflow:hidden;font-size:9.6px;background:#fbfbfb}
+.dept-card-hdr{background:#f1f3f5;color:#222;font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;padding:4px 8px;border-bottom:1px solid #d6dbe1}
 .dept-card-row{display:flex;border-bottom:1px solid #e8e8e8;min-height:16px}
 .dept-card-row:last-child{border-bottom:none}
 .dept-card-key{font-weight:700;color:#333;padding:2px 6px;min-width:90px;font-size:9.5px;text-transform:uppercase;letter-spacing:.4px;background:#f5f5f5;display:flex;align-items:center}
@@ -28253,10 +28303,10 @@ body{font-family:'Lato',sans-serif;font-size:10px;color:#1a1a1a;background:#fff;
 .vitals-inline{font-size:10px;color:#222;margin-bottom:4px;line-height:1.6}
 /* VA / Glass tables */
 table{width:100%;border-collapse:collapse;font-size:9.6px;margin-bottom:4px}
-th{background:#444;color:#fff;border:1px solid #444;padding:3px 5px;font-weight:700;text-align:center;font-size:8.5px;letter-spacing:.3px;text-transform:uppercase}
-td{border:1px solid #ccc;padding:3px 5px;text-align:center;vertical-align:middle}
+th{background:#f2f4f6;color:#222;border:1px solid #cfd5dc;padding:3px 5px;font-weight:700;text-align:center;font-size:8.5px;letter-spacing:.3px;text-transform:uppercase}
+td{border:1px solid #d5dae0;padding:3px 5px;text-align:center;vertical-align:middle}
 td.left{text-align:left}
-tr:nth-child(even) td{background:#f6f6f6}
+tr:nth-child(even) td{background:#fafafa}
 .flag-h{font-weight:700;color:#111;text-decoration:underline}
 .flag-n{color:#444}
 /* Medicine list — all depts */
@@ -28271,8 +28321,8 @@ tr:nth-child(even) td{background:#f6f6f6}
 .rx-detail-dot{width:3px;height:3px;border-radius:50%;background:#111;flex-shrink:0}
 .rx-item-instr{font-size:10.8px;color:#222;font-style:normal;line-height:1.3;padding-left:9px;border-left:2px solid #ccc;margin-top:4px;font-weight:600}
 /* Taper card */
-.taper-card{margin:4px 0 5px;border:1.5px solid #333;border-radius:4px;overflow:hidden;font-size:9.5px}
-.taper-card-hdr{background:#222;color:#fff;padding:5px 10px;font-size:8.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase}
+.taper-card{margin:4px 0 5px;border:1px solid #d5dbe2;border-radius:10px;overflow:hidden;font-size:9.5px;background:#fbfbfb}
+.taper-card-hdr{background:#f2f4f6;color:#333;padding:5px 10px;font-size:8.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;border-bottom:1px solid #d5dbe2}
 .taper-steps-row{display:flex;align-items:stretch;background:#fafafa}
 .taper-step{flex:1;padding:6px 8px;text-align:center;border-right:1px solid #e0e0e0}
 .taper-step:last-child{border-right:none}
@@ -28289,7 +28339,7 @@ tr:nth-child(even) td{background:#f6f6f6}
 /* Instructions */
 .advice-block{font-size:10.8px;color:#222;padding:4px 8px;border-left:2px solid #bbb;line-height:1.32;margin-bottom:3px;font-style:normal;font-weight:600}
 /* Follow-up */
-.fu-box{background:#f2f2f2;border-radius:4px;padding:4px 10px;margin:4px 0;font-size:10.5px;font-weight:700;color:#222;display:inline-block;border:1.5px solid #bbb}
+.fu-box{background:#f7f8f9;border-radius:999px;padding:5px 12px;margin:4px 0;font-size:10.5px;font-weight:700;color:#222;display:inline-block;border:1px solid #cfd5dc}
 /* Signature row */
 .sig-row{display:flex;justify-content:space-between;align-items:flex-end;margin-top:7px;padding-top:6px;border-top:1px solid #ddd}
 .dr-name{font-family:'Playfair Display','Georgia',serif;font-size:13px;font-weight:700;color:#111}
@@ -28306,9 +28356,9 @@ tr:nth-child(even) td{background:#f6f6f6}
 .design-dx.blocks,.design-dx.ribbon,.design-dx.compact{border:1px solid #d9e5ef;border-radius:16px;background:#fff;padding:12px 14px}
 .design-dx-title{font-size:10px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;color:#667085;margin-bottom:6px}
 .design-dx.blocks .design-dx-body{font-size:19px;font-weight:900;line-height:1.3;color:#173a67}
-.design-dx.ribbon{background:linear-gradient(135deg,#163e69,#0f7b82);color:#fff;border:none}
-.design-dx.ribbon .design-dx-title{color:rgba(255,255,255,.72)}
-.design-dx.ribbon .design-dx-body{font-size:20px;font-weight:800;line-height:1.3}
+.design-dx.ribbon{background:#f3f5f7;color:#222;border:1px solid #d8dde3}
+.design-dx.ribbon .design-dx-title{color:#6b7280}
+.design-dx.ribbon .design-dx-body{font-size:20px;font-weight:800;line-height:1.3;color:#1f2937}
 .design-dx.compact{font-size:16px;font-weight:800;line-height:1.4;color:#153d66;background:#f6f9fc}
 .design-rx{margin-bottom:6px}
 .design-med{margin-bottom:10px}
@@ -28358,10 +28408,10 @@ tr:nth-child(even) td{background:#f6f6f6}
 .design-side-title{font-size:12px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;color:#14345e;margin-bottom:8px}
 .design-side-body{font-size:11px;line-height:1.7;color:#344054;font-weight:700}
 .design-follow{align-self:start;border-radius:16px;padding:14px;font-size:15px;font-weight:800;line-height:1.5}
-.design-follow.signature_classic{background:#fbf2dc;border:1px solid #ecd8a1;color:#674f16}
-.design-follow.clinical_blocks{background:linear-gradient(135deg,#173a67,#285385);color:#fff}
-.design-follow.ribbon_timeline{background:linear-gradient(135deg,#f5ead1,#fff8eb);border:1px solid #ead6a4;color:#674f16}
-.design-follow.compact_bilingual{background:linear-gradient(135deg,#14365e,#28517f);color:#fff}
+.design-follow.signature_classic{background:#f7f7f6;border:1px solid #d9d5c9;color:#4b5563}
+.design-follow.clinical_blocks{background:#f4f6f8;border:1px solid #d8dde3;color:#374151}
+.design-follow.ribbon_timeline{background:#f8f7f3;border:1px solid #ddd7c8;color:#4b5563}
+.design-follow.compact_bilingual{background:#f4f6f8;border:1px solid #d8dde3;color:#374151}
 ${typographyCss}
 ${designCss}
 </style></head><body>
@@ -28436,24 +28486,28 @@ ${deptId==='skin' && (skinChief||skinPrimaryDx||skinDermoscopy) ? `
 </div>` : ''}
 
 ${showVA ? `
+<div class="oe-eye-block">
 <div class="sec-divider"><span class="sec-label">Visual Acuity</span></div>
-<table>
+<table class="oe-eye-table">
   <thead><tr><th>Eye</th><th>UCDVA</th>${showIOP?'<th>IOP (GAT)</th>':''}${showIOP&&(iopNctOD||iopNctOS)?'<th>IOP (NCT)</th>':''}<th>DVA</th><th>NVA</th></tr></thead>
   <tbody>
     <tr><td><b>OD (Right)</b></td><td>${vaOD||'—'}</td>${showIOP?`<td class="${parseFloat(iopGatOD)>21?'flag-h':'flag-n'}">${iopGatOD?iopGatOD+' mmHg':'—'}</td>`:''}${showIOP&&(iopNctOD||iopNctOS)?`<td class="${parseFloat(iopNctOD)>21?'flag-h':'flag-n'}">${iopNctOD?iopNctOD+' mmHg':'—'}</td>`:''}<td>${subjODva||'—'}</td><td>${nvOD||'—'}</td></tr>
     <tr><td><b>OS (Left)</b></td><td>${vaOS||'—'}</td>${showIOP?`<td class="${parseFloat(iopGatOS)>21?'flag-h':'flag-n'}">${iopGatOS?iopGatOS+' mmHg':'—'}</td>`:''}${showIOP&&(iopNctOD||iopNctOS)?`<td class="${parseFloat(iopNctOS)>21?'flag-h':'flag-n'}">${iopNctOS?iopNctOS+' mmHg':'—'}</td>`:''}<td>${subjOSva||'—'}</td><td>${nvOS||'—'}</td></tr>
   </tbody>
-</table>` : ''}
+</table>
+</div>` : ''}
 
 ${showGL ? `
+<div class="oe-eye-block">
 <div class="sec-divider"><span class="sec-label">Glass Prescription</span></div>
-<table>
+<table class="oe-eye-table">
   <thead><tr><th>Eye</th><th>SPH</th><th>CYL</th><th>AXIS</th><th>ADD</th><th>DVA</th><th>NVA</th></tr></thead>
   <tbody>
     <tr><td><b>OD (Right)</b></td><td>${rfODSph||'0'}</td><td>${rfODCyl||'0'}</td><td>${rfODAx||'0°'}</td><td>${addOD||'—'}</td><td>${subjODva||vaOD||'—'}</td><td>${nvOD||'—'}</td></tr>
     <tr><td><b>OS (Left)</b></td><td>${rfOSSph||'0'}</td><td>${rfOSCyl||'0'}</td><td>${rfOSAx||'0°'}</td><td>${addOS||'—'}</td><td>${subjOSva||vaOS||'—'}</td><td>${nvOS||'—'}</td></tr>
   </tbody>
-</table>` : ''}
+</table>
+</div>` : ''}
 
 ${incPos && deptId==='oe' ? `
 <div class="sec-divider"><span class="sec-label">Positive Findings</span></div>
@@ -28601,7 +28655,8 @@ function saveDoctorSettings() {
     if(deg) DOCTOR_PROFILES[name].degrees = deg;
     if(reg)  DOCTOR_PROFILES[name].reg = reg;
   });
-  showToast('Saved ✓','s');
+  if (typeof persistDoctorProfilesState === 'function') persistDoctorProfilesState({ notify: true });
+  else showToast('Saved ✓','s');
 }
 function saveHospitalSettings() {
   try {
@@ -28626,6 +28681,31 @@ function saveHospitalSettings() {
   } catch (e) {
     showToast('Settings saved ✓', 's');
   }
+}
+let _hospitalSettingsLiveWatchStarted = false;
+function startHospitalSettingsLiveSync() {
+  if (!window.FBDB || _hospitalSettingsLiveWatchStarted) return;
+  _hospitalSettingsLiveWatchStarted = true;
+  window.FBDB.ref('hospitalSettings').on('value', function (snap) {
+    const v = snap.val();
+    if (!v || typeof v !== 'object' || !v.values) return;
+    let localSavedAt = 0;
+    try {
+      const raw = JSON.parse(localStorage.getItem('bmh_hospital_settings') || '{}') || {};
+      localSavedAt = Number(raw._savedAt || 0);
+    } catch (e) { /* noop */ }
+    const remoteSavedAt = Number(v._savedAt || 0);
+    if (!remoteSavedAt || remoteSavedAt <= localSavedAt) return;
+    localStorage.setItem('bmh_hospital_settings', JSON.stringify(v));
+    const host = document.getElementById('set-hospital');
+    if (host) {
+      Object.keys(v.values).forEach(function (key) {
+        const el = document.getElementById(key);
+        if (el) el.value = v.values[key];
+      });
+    }
+    showToast('Latest hospital settings synced from cloud ✓', 's');
+  });
 }
 function loadHospitalSettingsFromFirebase() {
   let localSavedAt = 0;
@@ -28655,7 +28735,10 @@ function loadHospitalSettingsFromFirebase() {
         if (raw.values) window.FBDB.ref('hospitalSettings').set(raw).catch(function () {});
       } catch (e) { /* noop */ }
     }
-  }).catch(function () {});
+    startHospitalSettingsLiveSync();
+  }).catch(function () {
+    startHospitalSettingsLiveSync();
+  });
 }
 window.loadHospitalSettingsFromFirebase = loadHospitalSettingsFromFirebase;
 
@@ -32601,6 +32684,7 @@ const DEFAULT_RX_TYPOGRAPHY = {
   dateSize: 9.5,
   headingSize: 8.5,
   medicineSize: 14,
+  eyeBlockScale: 1,
   headingWeight: 700,
   headingItalic: false,
   headingUnderline: false
@@ -32630,6 +32714,7 @@ function normalizeDoctorRxTypography(raw) {
   next.dateSize = clampRxTypographyNumber(next.dateSize, DEFAULT_RX_TYPOGRAPHY.dateSize, 8, 18);
   next.headingSize = clampRxTypographyNumber(next.headingSize, DEFAULT_RX_TYPOGRAPHY.headingSize, 8, 18);
   next.medicineSize = clampRxTypographyNumber(next.medicineSize, DEFAULT_RX_TYPOGRAPHY.medicineSize, 11, 22);
+  next.eyeBlockScale = clampRxTypographyNumber(next.eyeBlockScale, DEFAULT_RX_TYPOGRAPHY.eyeBlockScale, 0.8, 1.4);
   next.headingWeight = clampRxTypographyNumber(next.headingWeight, DEFAULT_RX_TYPOGRAPHY.headingWeight, 400, 900);
   next.headingItalic = !!next.headingItalic;
   next.headingUnderline = !!next.headingUnderline;
@@ -32663,6 +32748,10 @@ body{font-family:${fonts.body}}
 .pt-date{font-family:${fonts.body};font-size:${t.dateSize}px;font-weight:${t.headingWeight};font-style:${headingStyle};text-decoration:${headingDecoration}}
 .sec-label,.design-dx-title,.design-side-title,.design-taper-title,.design-med-tag,.section-pill,.rx-heading-accent{font-family:${fonts.heading};font-size:${t.headingSize}px;font-weight:${t.headingWeight};font-style:${headingStyle};text-decoration:${headingDecoration}}
 .rx-item-name,.design-med-name,.diag-text,.design-dx-body{font-family:${fonts.heading};font-size:${t.medicineSize}px}
+.oe-eye-block .sec-label{font-size:calc(${t.headingSize}px * ${t.eyeBlockScale})}
+.oe-eye-table{font-size:calc(9.6px * ${t.eyeBlockScale})}
+.oe-eye-table th{font-size:calc(8.5px * ${t.eyeBlockScale});padding:calc(3px * ${t.eyeBlockScale}) calc(5px * ${t.eyeBlockScale})}
+.oe-eye-table td{font-size:calc(9.6px * ${t.eyeBlockScale});padding:calc(3px * ${t.eyeBlockScale}) calc(5px * ${t.eyeBlockScale})}
 `;
 }
 function persistDoctorProfilesState(opts) {
@@ -32780,6 +32869,7 @@ function renderDrCredentials() {
   activeDrDesignCentre = defaultDesignCentre;
   const selectedDesign = getDoctorPrescriptionDesign(dr, activeDrDesignCentre);
   const typography = getDoctorProfileTypographyForCentre(dr, activeDrDesignCentre);
+  const isEyeDoctor = /oph|eye/i.test(String(dr.dept || ''));
 
   const tabsHtml = names.map(n => {
     const active = n === activeDrTab;
@@ -32805,6 +32895,7 @@ function renderDrCredentials() {
         <div class="form-group" style="margin:0"><label class="fl">Date Size (<span id="dr-typo-${key}-dateSize-value">${typography.dateSize}</span>px)</label><input type="range" min="8" max="18" step="0.5" value="${typography.dateSize}" oninput="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','dateSize',this.value,'number')"></div>
         <div class="form-group" style="margin:0"><label class="fl">Heading Size (<span id="dr-typo-${key}-headingSize-value">${typography.headingSize}</span>px)</label><input type="range" min="8" max="18" step="0.5" value="${typography.headingSize}" oninput="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','headingSize',this.value,'number')"></div>
         <div class="form-group" style="margin:0"><label class="fl">Medicine Size (<span id="dr-typo-${key}-medicineSize-value">${typography.medicineSize}</span>px)</label><input type="range" min="11" max="22" step="0.5" value="${typography.medicineSize}" oninput="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','medicineSize',this.value,'number')"></div>
+        ${isEyeDoctor ? `<div class="form-group" style="margin:0"><label class="fl">Eye VA / Refraction / IOP Block (<span id="dr-typo-${key}-eyeBlockScale-value">${Number(typography.eyeBlockScale || 1).toFixed(2)}</span>x)</label><input type="range" min="0.8" max="1.4" step="0.05" value="${typography.eyeBlockScale || 1}" oninput="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','eyeBlockScale',this.value,'number')"></div>` : ''}
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">
         <label style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:#334155"><input type="checkbox" ${typography.headingItalic ? 'checked' : ''} onchange="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','headingItalic',this.checked,'boolean')">Italic headings</label>
@@ -32909,8 +33000,8 @@ function generateRxDesignSampleHtml(designKey, profile, doctorName, centre) {
   const typographyCss = buildDoctorRxTypographyCss(getDoctorProfileTypographyForCentre(profile, previewCentre));
   const designCssMap = {
     current: '',
-    option_a: `body{background:#fff}.pt-name{color:#1a3c6e}.pt-name-bar{border-bottom:2px solid #1a3c6e}.sec-label{color:#1a3c6e}.sec-divider::before,.sec-divider::after{border-color:#1a3c6e}.diag-text{color:#1a3c6e;border-color:#1a3c6e}.rx-item{border-left:3px solid #1a3c6e;padding-left:10px}.rx-item-name{font-size:14px;color:#1a3c6e}.rx-item-instr{border-left:3px solid #1a3c6e;color:#222;font-style:normal}.dept-card-hdr{background:#1a3c6e}.taper-card{border-color:#1a3c6e}.taper-card-hdr{background:#1a3c6e}.inv-chip{border-color:#1a3c6e;background:#f0f4ff;color:#1a3c6e}.fu-box{border-color:#1a3c6e;color:#1a3c6e}`,
-    option_b: `body{background:#fff}.pt-name-bar{border-bottom:2px solid #0f7b82}.pt-name{color:#0f7b82}.sec-label{color:#0f7b82}.sec-divider::before,.sec-divider::after{border-color:#0f7b82}.diag-text{color:#222}.diag-rule-top,.diag-rule-bot{border-color:#0f7b82}.rx-item{background:#f5fffe;border-radius:8px;padding:8px 10px;border:1px solid #c0e8ea}.rx-item-name{color:#0f7b82;font-size:14px}.rx-item-instr{font-style:normal;font-weight:700;background:#fff;border:1px solid #c0e8ea;border-radius:6px;padding:6px 10px;border-left:3px solid #0f7b82}.rx-item-details{margin-top:4px}.dept-card-hdr{background:#0f7b82}.taper-card{border-color:#0f7b82}.taper-card-hdr{background:#0f7b82}.inv-chip{background:#e6f7f8;border-color:#0f7b82;color:#0f7b82}.fu-box{border-color:#0f7b82;color:#0f7b82}.rx-item-gen{color:#0f7b82}`,
+    option_a: `body{background:#fff}.pt-name{color:#374151}.pt-name-bar{border-bottom:1px solid #cfd5dc}.sec-label{color:#4b5563}.sec-divider::before,.sec-divider::after{border-color:#cfd5dc}.diag-text{color:#1f2937;border-color:#cfd5dc}.rx-item{border-left:2px solid #b8c0c9;padding-left:10px}.rx-item-name{font-size:14px;color:#1f2937}.rx-item-instr{border-left:2px solid #cfd5dc;color:#222;font-style:normal}.dept-card-hdr{background:#f1f3f5}.taper-card{border-color:#d5dbe2}.taper-card-hdr{background:#f2f4f6;color:#333}.inv-chip{border-color:#cfd5dc;background:#f5f6f7;color:#374151}.fu-box{border-color:#cfd5dc;color:#374151}`,
+    option_b: `body{background:#fff}.pt-name-bar{border-bottom:1px solid #cfd5dc}.pt-name{color:#1f2937}.sec-label{color:#4b5563}.sec-divider::before,.sec-divider::after{border-color:#cfd5dc}.diag-text{color:#222}.diag-rule-top,.diag-rule-bot{border-color:#cfd5dc}.rx-item{background:#f7f8f9;border-radius:8px;padding:8px 10px;border:1px solid #d9dee4}.rx-item-name{color:#1f2937;font-size:14px}.rx-item-instr{font-style:normal;font-weight:700;background:#fff;border:1px solid #d9dee4;border-radius:6px;padding:6px 10px;border-left:2px solid #cfd5dc}.rx-item-details{margin-top:4px}.dept-card-hdr{background:#f1f3f5}.taper-card{border-color:#d5dbe2}.taper-card-hdr{background:#f2f4f6;color:#333}.inv-chip{background:#f5f6f7;border-color:#cfd5dc;color:#374151}.fu-box{border-color:#cfd5dc;color:#374151}.rx-item-gen{color:#667085}`,
     signature_classic: `body{background:#fcfcfb}.rx-item{padding:7px 10px;border:1px solid #dfe4ec;border-left:4px solid #c89a2b;border-radius:10px;margin-bottom:6px;background:#fff}.rx-item-name{font-size:14.5px}.rx-item-instr{font-size:11px;color:#2c3440;font-style:normal;font-weight:700}.advice-block{font-size:11px;font-style:normal;font-weight:700;background:#faf7f0;border-radius:8px;border-left:4px solid #c89a2b}.sec-label{color:#14345e}`,
     clinical_blocks: `body{background:#fbfdff}.rx-list{gap:8px}.rx-item{padding:10px 12px;border:1px solid #d8e4ef;border-radius:12px;background:#eef5fb}.rx-item-name{font-size:14px}.rx-item-details{margin-top:5px}.rx-item-instr{font-size:11px;color:#17324d;font-style:normal;font-weight:700;background:#fff;border:1px solid #dae5ef;border-radius:8px;padding:8px 10px;margin-top:8px}.advice-block{font-size:11px;font-style:normal;font-weight:700;background:#f2f7fb;border-radius:10px;border-left:4px solid #173a67}`,
     ribbon_timeline: `body{background:#fffdfa}.sec-label{color:#0f7b82}.rx-list{position:relative;padding-left:12px}.rx-list:before{content:'';position:absolute;left:2px;top:2px;bottom:2px;width:3px;border-radius:999px;background:linear-gradient(180deg,#0f7b82,#ef8b67)}.rx-item{position:relative;padding:8px 10px 8px 14px;border:1px solid #dde7e7;border-radius:12px;background:#fff;margin-bottom:8px}.rx-item:before{content:'';position:absolute;left:-18px;top:18px;width:10px;height:10px;border-radius:50%;background:#fff;border:3px solid #0f7b82}.rx-item-name{font-size:14px}.rx-item-instr{font-size:11px;font-style:normal;font-weight:700;background:#eef7f7;border-radius:8px;padding:8px 10px;margin-top:8px;border-left:none}`,
@@ -32953,15 +33044,15 @@ body{font-family:'Lato',sans-serif;font-size:10px;color:#1a1a1a;background:#fff;
 .rx-detail-item{display:flex;align-items:center;gap:4px;font-size:9.5px;color:#444}
 .rx-detail-dot{width:3px;height:3px;border-radius:50%;background:#aaa;flex-shrink:0}
 .rx-item-instr{font-size:10.8px;color:#222;font-style:normal;line-height:1.3;padding-left:9px;border-left:2px solid #ccc;margin-top:4px;font-weight:600}
-.taper-card{margin:4px 0 5px;border:1.5px solid #333;border-radius:4px;overflow:hidden;font-size:9.5px}
-.taper-card-hdr{background:#222;color:#fff;padding:5px 10px;font-size:8.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase}
+.taper-card{margin:4px 0 5px;border:1px solid #d5dbe2;border-radius:10px;overflow:hidden;font-size:9.5px;background:#fbfbfb}
+.taper-card-hdr{background:#f2f4f6;color:#333;padding:5px 10px;font-size:8.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;border-bottom:1px solid #d5dbe2}
 .taper-steps-row{display:flex;align-items:stretch;background:#fafafa}
 .taper-step{flex:1;padding:6px 8px;text-align:center}
 .taper-step-period{font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#666;margin-bottom:3px}
 .taper-step-dose{font-family:'Playfair Display','Georgia',serif;font-size:15px;font-weight:700;color:#111;line-height:1;margin-bottom:2px}
 .taper-step-timing{font-size:9px;color:#555;font-weight:700;margin-bottom:2px}
 .advice-block{font-size:10.8px;color:#222;padding:4px 8px;border-left:2px solid #bbb;line-height:1.32;margin-bottom:3px;font-style:normal;font-weight:600}
-.fu-box{background:#f2f2f2;border-radius:4px;padding:4px 10px;margin:4px 0;font-size:10.5px;font-weight:700;color:#222;display:inline-block;border:1.5px solid #bbb}
+.fu-box{background:#f7f8f9;border-radius:999px;padding:5px 12px;margin:4px 0;font-size:10.5px;font-weight:700;color:#222;display:inline-block;border:1px solid #cfd5dc}
 .sig-row{display:flex;justify-content:space-between;align-items:flex-end;margin-top:7px;padding-top:6px;border-top:1px solid #ddd}
 .dr-name{font-family:'Playfair Display','Georgia',serif;font-size:13px;font-weight:700;color:#111}
 .dr-deg{font-size:9.5px;color:#555;margin-top:2px;font-style:italic}
