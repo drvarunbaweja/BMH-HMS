@@ -764,36 +764,52 @@
         <div style="font-size:10px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px;padding-bottom:4px;border-bottom:2px solid var(--g5)">Chief Complaint &amp; Ocular History</div>
         <!-- Chief Complaints — 4 rows, each with autocomplete + duration -->
         <div id="cc-rows" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">
-          <div class="cc-row" style="display:grid;grid-template-columns:1fr 130px 110px;gap:6px;align-items:center">
+          <div class="cc-row" style="display:grid;grid-template-columns:1fr 170px 110px;gap:6px;align-items:center">
             <div style="position:relative">
               <input type="text" class="cc-inp" id="cc1" placeholder="Chief complaint 1 (e.g. Decreased vision…)" oninput="ccSuggest(this)" autocomplete="off" style="width:100%;font-size:12px">
               <div class="cc-drop" style="display:none;position:absolute;z-index:300;background:#fff;border:1.5px solid var(--blue);border-top:none;border-radius:0 0 8px 8px;width:100%;max-height:180px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.15)"></div>
             </div>
-            <input type="text" class="cc-dur" placeholder="Duration" style="font-size:12px">
+            <div style="display:grid;grid-template-columns:60px 1fr;gap:5px;align-items:center">
+              <select class="cc-dur-num" onchange="syncCcDurationRow(this)" style="font-size:12px"><option value="">No.</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option></select>
+              <select class="cc-dur-unit" onchange="syncCcDurationRow(this)" style="font-size:12px"><option value="">Unit</option><option value="days">Days</option><option value="weeks">Weeks</option><option value="months">Months</option><option value="years">Years</option></select>
+              <input type="hidden" class="cc-dur" value="">
+            </div>
             <select class="cc-eye" style="font-size:12px"><option value="">Eye —</option><option>Both (OU)</option><option>Right (OD)</option><option>Left (OS)</option></select>
           </div>
-          <div class="cc-row" style="display:grid;grid-template-columns:1fr 130px 110px;gap:6px;align-items:center">
+          <div class="cc-row" style="display:grid;grid-template-columns:1fr 170px 110px;gap:6px;align-items:center">
             <div style="position:relative">
               <input type="text" class="cc-inp" id="cc2" placeholder="Chief complaint 2 (optional)" oninput="ccSuggest(this)" autocomplete="off" style="width:100%;font-size:12px">
               <div class="cc-drop" style="display:none;position:absolute;z-index:300;background:#fff;border:1.5px solid var(--blue);border-top:none;border-radius:0 0 8px 8px;width:100%;max-height:180px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.15)"></div>
             </div>
-            <input type="text" class="cc-dur" placeholder="Duration" style="font-size:12px">
+            <div style="display:grid;grid-template-columns:60px 1fr;gap:5px;align-items:center">
+              <select class="cc-dur-num" onchange="syncCcDurationRow(this)" style="font-size:12px"><option value="">No.</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option></select>
+              <select class="cc-dur-unit" onchange="syncCcDurationRow(this)" style="font-size:12px"><option value="">Unit</option><option value="days">Days</option><option value="weeks">Weeks</option><option value="months">Months</option><option value="years">Years</option></select>
+              <input type="hidden" class="cc-dur" value="">
+            </div>
             <select class="cc-eye" style="font-size:12px"><option value="">Eye —</option><option>Both (OU)</option><option>Right (OD)</option><option>Left (OS)</option></select>
           </div>
-          <div class="cc-row" style="display:grid;grid-template-columns:1fr 130px 110px;gap:6px;align-items:center">
+          <div class="cc-row" style="display:grid;grid-template-columns:1fr 170px 110px;gap:6px;align-items:center">
             <div style="position:relative">
               <input type="text" class="cc-inp" id="cc3" placeholder="Chief complaint 3 (optional)" oninput="ccSuggest(this)" autocomplete="off" style="width:100%;font-size:12px">
               <div class="cc-drop" style="display:none;position:absolute;z-index:300;background:#fff;border:1.5px solid var(--blue);border-top:none;border-radius:0 0 8px 8px;width:100%;max-height:180px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.15)"></div>
             </div>
-            <input type="text" class="cc-dur" placeholder="Duration" style="font-size:12px">
+            <div style="display:grid;grid-template-columns:60px 1fr;gap:5px;align-items:center">
+              <select class="cc-dur-num" onchange="syncCcDurationRow(this)" style="font-size:12px"><option value="">No.</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option></select>
+              <select class="cc-dur-unit" onchange="syncCcDurationRow(this)" style="font-size:12px"><option value="">Unit</option><option value="days">Days</option><option value="weeks">Weeks</option><option value="months">Months</option><option value="years">Years</option></select>
+              <input type="hidden" class="cc-dur" value="">
+            </div>
             <select class="cc-eye" style="font-size:12px"><option value="">Eye —</option><option>Both (OU)</option><option>Right (OD)</option><option>Left (OS)</option></select>
           </div>
-          <div class="cc-row" style="display:grid;grid-template-columns:1fr 130px 110px;gap:6px;align-items:center">
+          <div class="cc-row" style="display:grid;grid-template-columns:1fr 170px 110px;gap:6px;align-items:center">
             <div style="position:relative">
               <input type="text" class="cc-inp" id="cc4" placeholder="Chief complaint 4 (optional)" oninput="ccSuggest(this)" autocomplete="off" style="width:100%;font-size:12px">
               <div class="cc-drop" style="display:none;position:absolute;z-index:300;background:#fff;border:1.5px solid var(--blue);border-top:none;border-radius:0 0 8px 8px;width:100%;max-height:180px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.15)"></div>
             </div>
-            <input type="text" class="cc-dur" placeholder="Duration" style="font-size:12px">
+            <div style="display:grid;grid-template-columns:60px 1fr;gap:5px;align-items:center">
+              <select class="cc-dur-num" onchange="syncCcDurationRow(this)" style="font-size:12px"><option value="">No.</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option></select>
+              <select class="cc-dur-unit" onchange="syncCcDurationRow(this)" style="font-size:12px"><option value="">Unit</option><option value="days">Days</option><option value="weeks">Weeks</option><option value="months">Months</option><option value="years">Years</option></select>
+              <input type="hidden" class="cc-dur" value="">
+            </div>
             <select class="cc-eye" style="font-size:12px"><option value="">Eye —</option><option>Both (OU)</option><option>Right (OD)</option><option>Left (OS)</option></select>
           </div>
         </div>
@@ -1555,8 +1571,7 @@
             <datalist id="oph-advice-quick-list"></datalist>
             <button type="button" class="btn btn-xs btn-blue" onclick="commitDeptAdviceQuickEntry('ophtho', document.getElementById('oph-advice-quick-input'))">+ Add</button>
           </div>
-          <textarea id="rx-advice-text" placeholder="Type instructions to patient or load from template…" onblur="ingestCustomAdviceLinesFromTextarea(this)" style="width:100%;min-height:48px;font-size:12px;border:1.5px solid rgba(212,160,23,.4);border-radius:6px;padding:6px 8px;background:#fff;font-family:var(--font);resize:vertical"></textarea>
-          <textarea id="rx-extra-advice-text" placeholder="Additional instructions…" style="width:100%;min-height:38px;font-size:12px;border:1.5px solid rgba(212,160,23,.28);border-radius:6px;padding:6px 8px;background:#fff;font-family:var(--font);resize:vertical;margin-top:4px"></textarea>
+          <textarea id="rx-advice-text" placeholder="Type instructions to patient or load from template…" oninput="ingestCustomAdviceLinesFromTextarea(this)" onblur="ingestCustomAdviceLinesFromTextarea(this)" style="width:100%;min-height:48px;font-size:12px;border:1.5px solid rgba(212,160,23,.4);border-radius:6px;padding:6px 8px;background:#fff;font-family:var(--font);resize:vertical"></textarea>
         </div>
         <div class="plan-panel">
           <div class="plan-panel-head">
@@ -2644,9 +2659,10 @@
             <span style="font-size:9px;color:var(--g1);font-weight:700;align-self:center;margin-left:3px">W:</span><button class="btn btn-xs btn-gray" onclick="setFollowupDays(1,'week')">1W</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(2,'week')">2W</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(3,'week')">3W</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(4,'week')">4W</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(5,'week')">5W</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(6,'week')">6W</button>
             <span style="font-size:9px;color:var(--g1);font-weight:700;align-self:center;margin-left:3px">M:</span><button class="btn btn-xs btn-gray" onclick="setFollowupDays(1,'month')">1M</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(2,'month')">2M</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(3,'month')">3M</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(4,'month')">4M</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(6,'month')">6M</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(12,'month')">12M</button>
           </div>
-          <div style="display:flex;gap:7px">
+          <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
             <input type="date" id="rx-fu-date" style="flex:1">
             <button class="btn btn-blue btn-sm" onclick="bookFollowup()">📅 Book</button>
+            <button class="btn btn-gold btn-sm" onclick="printUnifiedRx('obg')">🖨️ Print Prescription</button>
           </div>
         </div>
         <div class="plan-panel" style="background:#fffbeb;border-color:rgba(212,160,23,.4);margin-bottom:10px">
