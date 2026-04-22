@@ -27985,14 +27985,23 @@ window.printUnifiedRx = function(deptId) {
     : null;
   const latestDeptRx = Array.isArray(latestDeptVisit?.rx) ? latestDeptVisit.rx : [];
   const currentEditorRx = typeof RX_DRUGS !== 'undefined' && Array.isArray(RX_DRUGS) ? RX_DRUGS : [];
-  let drugs = latestDeptRx.length ? JSON.parse(JSON.stringify(latestDeptRx)) : currentEditorRx;
+  const rxPlainLang = typeof rxLang !== 'undefined' ? rxLang : 'en';
+  const scoreRxRows = function (rows) {
+    return (Array.isArray(rows) ? rows : []).reduce(function (score, row) {
+      if (!row || typeof row !== 'object') return score;
+      let next = score + 10;
+      if (String(rxDrugTradeName(row) || row.trade || row.brand || row.name || '').trim()) next += 4;
+      if (String(buildRxPlainInstructionLine(row, rxPlainLang, fmtIN) || '').trim()) next += 6;
+      if (Array.isArray(row.taperRows) && row.taperRows.length) next += row.taperRows.length * 3;
+      return next;
+    }, 0);
+  };
+  const preferredRxRows = scoreRxRows(currentEditorRx) >= scoreRxRows(latestDeptRx) ? currentEditorRx : latestDeptRx;
+  let drugs = Array.isArray(preferredRxRows) && preferredRxRows.length ? JSON.parse(JSON.stringify(preferredRxRows)) : [];
   if (!drugs || !drugs.length) {
-    const savedRx = window.CURRENT_PATIENT?.lastVisit?.lastDeptVisit === saveDept
-      ? window.CURRENT_PATIENT?.lastVisit?.rx
-      : window.CURRENT_PATIENT?.lastVisit?.rx;
+    const savedRx = Array.isArray(window.CURRENT_PATIENT?.lastVisit?.rx) ? window.CURRENT_PATIENT.lastVisit.rx : [];
     if (Array.isArray(savedRx) && savedRx.length) drugs = JSON.parse(JSON.stringify(savedRx));
   }
-  const rxPlainLang = typeof rxLang !== 'undefined' ? rxLang : 'en';
   const postSurgeryRx = deptId === 'oe' ? !!document.getElementById('rx-post-surgery')?.checked : false;
   const plainInstrBlocks = drugs.length ? drugs.map(function (d) {
     return buildRxPlainInstructionLine(d, rxPlainLang, fmtIN);
