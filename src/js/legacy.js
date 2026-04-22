@@ -28289,6 +28289,9 @@ window.printUnifiedRx = function(deptId) {
   const designedDiagnosis = renderDiagnosisByDesign();
   const designedMeds = renderMedsByDesign();
   const designedAdviceFollow = renderAdviceFollowByDesign();
+  // option_a and option_b are CSS-only variants of the 'current' rx-list layout.
+  // They must use the same inline rx-list renderer — NOT the designedMeds block.
+  const isListDesign = rxDesign === 'current' || rxDesign === 'option_a' || rxDesign === 'option_b';
 
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>
@@ -28536,10 +28539,10 @@ ${incPos && deptId==='oe' ? `
 <div class="sec-divider"><span class="sec-label">Positive Findings</span></div>
 <div class="cc-text">${(typeof buildOphthoPositiveFindingsList === 'function' ? buildOphthoPositiveFindingsList() : []).join('; ') || '—'}</div>` : ''}
 
-${incRxFinal && drugs.length && rxDesign === 'current' ? `<div class="sec-divider"><span class="sec-label">Medicine (Rx)</span></div>` : ''}
-${rxDesign !== 'current' ? designedMeds : ''}
+${incRxFinal && drugs.length && isListDesign ? `<div class="sec-divider"><span class="sec-label">Medicine (Rx)</span></div>` : ''}
+${!isListDesign ? designedMeds : ''}
 
-${incRxFinal && drugs.length && rxPrintMode !== 'plain_only' && rxDesign === 'current' ? (() => {
+${incRxFinal && drugs.length && rxPrintMode !== 'plain_only' && isListDesign ? (() => {
   return `<div class="rx-list">
   ${drugs.map((d,i)=>{
     const trade = (typeof rxDrugTradeName === 'function' ? rxDrugTradeName(d) : (d.brand||d.trade||'')) || '—';
@@ -28588,7 +28591,7 @@ ${incRxFinal && drugs.length && rxPrintMode !== 'plain_only' && rxDesign === 'cu
 </div>`;
 })() : ''}
 
-${incRxFinal && drugs.length && rxPrintMode === 'plain_only' && rxDesign === 'current' ? (() => {
+${incRxFinal && drugs.length && rxPrintMode === 'plain_only' && isListDesign ? (() => {
   return `<div class="rx-list">
   ${drugs.map((d,i)=>{
     const trade = (typeof rxDrugTradeName === 'function' ? rxDrugTradeName(d) : (d.brand||d.trade||'')) || '—';
@@ -28639,12 +28642,12 @@ ${!psychPrescriptionPrintOnly && incInvFinal && patientInvestigationOrders.lengt
 ${patientInvestigationOrders.map((o,oi)=>`<div class="inv-chip"><span style="font-weight:400;color:#888;margin-right:4px">${oi+1}.</span>${escapeHtmlConsent(o.name || 'Investigation')}${o.notes ? `<span style="font-weight:500"> — ${escapeHtmlConsent(o.notes)}</span>` : ''}</div>`).join('')}
 </div>` : ''}
 
-${incAdvFinal && adviceHtml && rxDesign === 'current' ? `
+${incAdvFinal && adviceHtml && isListDesign ? `
 <div class="sec-divider"><span class="sec-label">Instructions</span></div>
 <div class="advice-block">${adviceHtml}</div>` : ''}
 
-${fuFormatted && rxDesign === 'current' ? `<div style="margin:5px 0"><span class="fu-box">Next Visit: ${fuFormatted}</span></div>` : ''}
-${rxDesign !== 'current' ? designedAdviceFollow : ''}
+${fuFormatted && isListDesign ? `<div style="margin:5px 0"><span class="fu-box">Next Visit: ${fuFormatted}</span></div>` : ''}
+${!isListDesign ? designedAdviceFollow : ''}
 
 <div class="sig-row">
   <div class="qr-side">
