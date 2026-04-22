@@ -2826,7 +2826,6 @@
         <div class="ptab" onclick="ptab(this,'psych-past')">Past Visits</div>
         <div class="ptab" onclick="ptab(this,'psych-scales')">Rating Scales</div>
         <div class="ptab" onclick="ptab(this,'psych-plan')">Plan / Instructions</div>
-        <div class="ptab" onclick="ptab(this,'psych-investigations')">Investigations</div>
         <div class="ptab" onclick="ptab(this,'psych-rx')">Prescription</div>
         <div class="ptab" onclick="ptab(this,'psych-notes')">Progress Notes</div>
       </div>
@@ -3017,6 +3016,21 @@
           <textarea placeholder="Advice to patient…" style="width:100%;min-height:40px;margin-bottom:8px;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px" id="psych-advice"></textarea>
           <textarea placeholder="Additional advice to patient…" style="width:100%;min-height:38px;margin-bottom:0;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px" id="psych-extra-advice"></textarea>
         </div>
+        <div style="margin-bottom:10px;background:#fff8e6;border:1.5px solid rgba(212,160,23,.35);border-radius:10px;padding:10px">
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+            <div style="font-size:10px;font-weight:800;color:#8a4200;text-transform:uppercase">Investigation Orders</div>
+            <div style="display:flex;gap:5px;flex-wrap:wrap">
+              <button class="btn btn-xs btn-outline" onclick="openInvestigationOrderModal()">+ Order</button>
+              <button class="btn btn-xs btn-gold" onclick="printCurrentInvestigations('psych')">🖨️ Print</button>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+            <button class="btn btn-xs btn-blue inv-mode-tab active" data-dept="psych" onclick="switchInvestigationModeTab('psych','send',this)">Send to Lab</button>
+            <button class="btn btn-xs btn-outline inv-mode-tab" data-dept="psych" onclick="switchInvestigationModeTab('psych','advise',this)">Advised</button>
+          </div>
+          <div id="psych-inv-list-send" class="inv-mode-pane" data-dept="psych" data-mode="send"><div style="font-size:11.5px;color:var(--g1);padding:5px 8px">None ordered</div></div>
+          <div id="psych-inv-list-advise" class="inv-mode-pane" data-dept="psych" data-mode="advise" style="display:none"><div style="font-size:11.5px;color:var(--g1);padding:5px 8px">None ordered</div></div>
+        </div>
         <div class="plan-panel" style="margin-bottom:10px">
           <div class="plan-panel-head">
             <div class="plan-panel-title">Surgery / Procedure Advised</div>
@@ -3045,28 +3059,6 @@
             <input type="date" id="rx-fu-date" style="flex:1">
             <button class="btn btn-blue btn-sm" onclick="bookFollowup()">📅 Book</button>
           </div>
-        </div>
-      </div>
-
-      <div class="tab-content" id="psych-investigations">
-        <div style="background:var(--g6);border-radius:var(--rsm);padding:12px;margin-bottom:10px">
-          <div style="font-size:12px;font-weight:900;color:var(--bmh-blue);margin-bottom:4px">Investigations from Charges</div>
-          <div style="font-size:11px;color:var(--g1)">Use the order button below. All available investigations come live from Settings -> Charges, so any new investigation added there becomes available here automatically. Templates remain available in the order window.</div>
-        </div>
-        <div style="margin-bottom:10px;background:#fff8e6;border:1.5px solid rgba(212,160,23,.35);border-radius:10px;padding:10px">
-          <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
-            <div style="font-size:10px;font-weight:800;color:#8a4200;text-transform:uppercase">Investigation Orders</div>
-            <div style="display:flex;gap:5px;flex-wrap:wrap">
-              <button class="btn btn-xs btn-outline" onclick="openInvestigationOrderModal()">+ Order</button>
-              <button class="btn btn-xs btn-gold" onclick="printCurrentInvestigations('psych')">🖨️ Print</button>
-            </div>
-          </div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
-            <button class="btn btn-xs btn-blue inv-mode-tab active" data-dept="psych" onclick="switchInvestigationModeTab('psych','send',this)">Send to Lab</button>
-            <button class="btn btn-xs btn-outline inv-mode-tab" data-dept="psych" onclick="switchInvestigationModeTab('psych','advise',this)">Advised</button>
-          </div>
-          <div id="psych-inv-list-send" class="inv-mode-pane" data-dept="psych" data-mode="send"><div style="font-size:11.5px;color:var(--g1);padding:5px 8px">None ordered</div></div>
-          <div id="psych-inv-list-advise" class="inv-mode-pane" data-dept="psych" data-mode="advise" style="display:none"><div style="font-size:11.5px;color:var(--g1);padding:5px 8px">None ordered</div></div>
         </div>
       </div>
 
@@ -3203,7 +3195,6 @@
         <div class="ptab" onclick="ptab(this,'skin-past')">Past Visits</div>
         <div class="ptab" onclick="ptab(this,'skin-exam')">Skin Examination</div>
         <div class="ptab" onclick="ptab(this,'skin-procedures')">Procedures</div>
-        <div class="ptab" onclick="ptab(this,'skin-investigations')">Investigations</div>
         <div class="ptab" onclick="ptab(this,'skin-rx')">Prescription</div>
         <div class="ptab" onclick="ptab(this,'skin-cosmetology')">Cosmetology</div>
       </div>
@@ -3336,6 +3327,21 @@
           <textarea placeholder="Advice to patient…" style="width:100%;min-height:40px;margin-bottom:8px;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px" id="skin-advice"></textarea>
           <textarea placeholder="Additional advice to patient…" style="width:100%;min-height:38px;margin-bottom:0;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px" id="skin-extra-advice"></textarea>
         </div>
+        <div style="margin-bottom:10px;background:#fff8e6;border:1.5px solid rgba(212,160,23,.35);border-radius:10px;padding:10px">
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+            <div style="font-size:10px;font-weight:800;color:#8a4200;text-transform:uppercase">Investigation Orders</div>
+            <div style="display:flex;gap:5px;flex-wrap:wrap">
+              <button class="btn btn-xs btn-outline" onclick="openInvestigationOrderModal()">+ Order</button>
+              <button class="btn btn-xs btn-gold" onclick="printCurrentInvestigations('skin')">🖨️ Print</button>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+            <button class="btn btn-xs btn-blue inv-mode-tab active" data-dept="skin" onclick="switchInvestigationModeTab('skin','send',this)">Send to Lab</button>
+            <button class="btn btn-xs btn-outline inv-mode-tab" data-dept="skin" onclick="switchInvestigationModeTab('skin','advise',this)">Advised</button>
+          </div>
+          <div id="skin-inv-list-send" class="inv-mode-pane" data-dept="skin" data-mode="send"><div style="font-size:11.5px;color:var(--g1);padding:5px 8px">None ordered</div></div>
+          <div id="skin-inv-list-advise" class="inv-mode-pane" data-dept="skin" data-mode="advise" style="display:none"><div style="font-size:11.5px;color:var(--g1);padding:5px 8px">None ordered</div></div>
+        </div>
         <!-- Drug quick search -->
         <div style="position:relative;margin-bottom:6px">
           <div style="display:flex;align-items:center;gap:6px;background:var(--blue-lt);border:2px solid var(--blue);border-radius:var(--rsm);padding:7px 10px">
@@ -3393,28 +3399,6 @@
           <button class="wa-btn" onclick="showToast('Sent via WhatsApp ✓','s')">📱</button>
           <button class="btn btn-gray btn-sm" onclick="showToast('SMS sent ✓','s')">📨</button>
         </div></div>
-
-      <div class="tab-content" id="skin-investigations">
-        <div style="background:var(--g6);border-radius:var(--rsm);padding:12px;margin-bottom:10px">
-          <div style="font-size:12px;font-weight:900;color:var(--bmh-blue);margin-bottom:4px">Investigations from Charges</div>
-          <div style="font-size:11px;color:var(--g1)">Use the order button below. All available investigations come live from Settings -> Charges, so any new investigation added there becomes available here automatically. Templates remain available in the order window.</div>
-        </div>
-        <div style="margin-bottom:10px;background:#fff8e6;border:1.5px solid rgba(212,160,23,.35);border-radius:10px;padding:10px">
-          <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
-            <div style="font-size:10px;font-weight:800;color:#8a4200;text-transform:uppercase">Investigation Orders</div>
-            <div style="display:flex;gap:5px;flex-wrap:wrap">
-              <button class="btn btn-xs btn-outline" onclick="openInvestigationOrderModal()">+ Order</button>
-              <button class="btn btn-xs btn-gold" onclick="printCurrentInvestigations('skin')">🖨️ Print</button>
-            </div>
-          </div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
-            <button class="btn btn-xs btn-blue inv-mode-tab active" data-dept="skin" onclick="switchInvestigationModeTab('skin','send',this)">Send to Lab</button>
-            <button class="btn btn-xs btn-outline inv-mode-tab" data-dept="skin" onclick="switchInvestigationModeTab('skin','advise',this)">Advised</button>
-          </div>
-          <div id="skin-inv-list-send" class="inv-mode-pane" data-dept="skin" data-mode="send"><div style="font-size:11.5px;color:var(--g1);padding:5px 8px">None ordered</div></div>
-          <div id="skin-inv-list-advise" class="inv-mode-pane" data-dept="skin" data-mode="advise" style="display:none"><div style="font-size:11.5px;color:var(--g1);padding:5px 8px">None ordered</div></div>
-        </div>
-      </div>
 
       <!-- COSMETOLOGY -->
       <div class="tab-content" id="skin-cosmetology">
