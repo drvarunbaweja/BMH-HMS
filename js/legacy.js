@@ -4289,8 +4289,8 @@ function populateOphthoForm(v) {
   renderOphthoRecap && renderOphthoRecap();
 
   // Advice text
-  setV('rx-advice-text', v.advice || '');
-  setV('rx-extra-advice-text', v.extraAdvice || '');
+  setV('rx-advice-text', [v.advice || '', v.extraAdvice || ''].filter(Boolean).join('\n'));
+  setV('rx-extra-advice-text', '');
   restoreProcedureDoneState('ophtho', v.procDone || null);
   refreshPreviousDiagnosisPanel('ophtho', v);
 
@@ -4307,7 +4307,7 @@ function populateOphthoForm(v) {
       rows.forEach(function (row, idx) {
         row.style.display = idx < Math.max(fallbackCcRows.length, 3) ? '' : 'none';
         const inp = row.querySelector('.cc-inp'); if(inp) inp.value = fallbackCcRows[idx]?.text || '';
-        const dur = row.querySelector('.cc-dur'); if(dur) dur.value = fallbackCcRows[idx]?.dur || '';
+        setCcDurationControls(row, fallbackCcRows[idx]?.dur || '');
         const eye = row.querySelector('.cc-eye'); if(eye) eye.value = fallbackCcRows[idx]?.eye || '';
       });
     }
@@ -12236,6 +12236,7 @@ function inventoryKnownProductNames() {
   (INVENTORY || []).forEach(function (i) { if (i?.name) names.push(String(i.name)); });
   (IOL_CATALOG || []).forEach(function (row) { if (row?.name) names.push(String(row.name)); });
   (window.BMH_PURCHASES || []).forEach(function (row) { if (row?.itemName) names.push(String(row.itemName)); });
+  (loadInventoryOcrMemory().barcodes || []).forEach(function (v) { names.push(String(v)); });
   (loadInventoryOcrMemory().products || []).forEach(function (v) { names.push(String(v)); });
   return Array.from(new Set(names.map(function (v) { return normalizeInventoryTextValue(v); }).filter(Boolean)));
 }
@@ -12302,9 +12303,8 @@ function renderInventoryImportDatalists() {
   }
   const barcodeList = document.getElementById('inv-barcode-datalist');
   if (barcodeList) {
-    const memory = loadInventoryOcrMemory();
-    const barcodes = memory.barcodes || [];
-    barcodeList.innerHTML = barcodes.map(function (code) {
+    const codes = inventoryKnownProductNames();
+    barcodeList.innerHTML = codes.map(function (code) {
       return '<option value="' + escapeHtmlConsent(code) + '"></option>';
     }).join('');
   }
@@ -17056,17 +17056,10 @@ function getDeptProcedureRowsForPicker(dept) {
   });
 }
 function renderDeptProcedureSelect(dept) {
-  const rows = getDeptProcedureRowsForPicker(dept);
-  const centre = getEffectiveCentre ? getEffectiveCentre() : (CURRENT_USER?.centre || 'CHD');
   const custom = getMergedDeptTemplateOptions('procedure', dept);
   const datalist = document.getElementById(getDeptProcedureQuickListId(dept));
   if (datalist) {
-    const options = custom.slice();
-    rows.forEach(function (row) {
-      const label = (row.parent ? row.parent + ' — ' : '') + row.name;
-      if (!options.some(function (x) { return String(x).toLowerCase() === String(label).toLowerCase(); })) options.push(label);
-    });
-    datalist.innerHTML = options.map(function (item) {
+    datalist.innerHTML = custom.map(function (item) {
       return '<option value="' + String(item).replace(/"/g, '&quot;') + '"></option>';
     }).join('');
   }
@@ -17080,21 +17073,6 @@ function renderDeptProcedureSelect(dept) {
     });
     html += '</optgroup>';
   }
-  const grouped = {};
-  rows.forEach(function (row) {
-    const grp = String(row.parent || row.cat || 'Procedures');
-    if (!grouped[grp]) grouped[grp] = [];
-    grouped[grp].push(row);
-  });
-  Object.keys(grouped).sort().forEach(function (grp) {
-    html += '<optgroup label="' + escapeHtmlConsent(grp) + '">';
-    grouped[grp].forEach(function (row) {
-      const amount = centre === 'RPR' ? Number(row.rpr || 0) : Number(row.chd || 0);
-      const label = (row.parent ? row.parent + ' — ' : '') + row.name;
-      html += '<option value="' + String(label).replace(/"/g, '&quot;') + '|' + amount + '">' + escapeHtmlConsent(label) + '</option>';
-    });
-    html += '</optgroup>';
-  });
   html += '<option value="__custom__|0">+ Add new procedure…</option>';
   sel.innerHTML = html;
 }
@@ -21824,6 +21802,7 @@ function bmhRecordInventoryPurchase(item, qty, billFile) {
   normalizeInventoryRecord(item);
   if (item.vendor) learnInventoryOcrValue('vendor', item.vendor);
   if (item.name) learnInventoryOcrValue('itemName', item.name);
+  if (item.name) learnInventoryOcrValue('product', item.name);
   if (item.iolCompany) learnInventoryOcrValue('company', item.iolCompany);
   if (item.iolBrand) learnInventoryOcrValue('brand', item.iolBrand);
   if (item.batchNo) learnInventoryOcrValue('batchNo', item.batchNo);
@@ -21905,6 +21884,43 @@ function bmhRecordInventoryPurchase(item, qty, billFile) {
   bmhRenderVendorTables();
   renderInventoryPoAlerts();
 }
+function syncCcDurationRow(source) {
+  const row = source && source.closest ? source.closest('.cc-row') : source;
+  if (!row) return '';
+  const num = String(row.querySelector('.cc-dur-num')?.value || '').trim();
+  const unit = String(row.querySelector('.cc-dur-unit')?.value || '').trim();
+  const hidden = row.querySelector('.cc-dur');
+  const label = num && unit ? (num + ' ' + unit) : '';
+  if (hidden) hidden.value = label;
+  return label;
+}
+window.syncCcDurationRow = syncCcDurationRow;
+function setCcDurationControls(row, rawValue) {
+  if (!row) return;
+  const raw = String(rawValue || '').trim();
+  const numSel = row.querySelector('.cc-dur-num');
+  const unitSel = row.querySelector('.cc-dur-unit');
+  const hidden = row.querySelector('.cc-dur');
+  let nextNum = '';
+  let nextUnit = '';
+  const match = raw.match(/^(\d{1,2})\s*(day|days|week|weeks|month|months|year|years)$/i);
+  if (match) {
+    nextNum = String(Math.max(1, Math.min(10, Number(match[1]) || 0)));
+    const token = String(match[2] || '').toLowerCase();
+    if (token.startsWith('day')) nextUnit = 'days';
+    else if (token.startsWith('week')) nextUnit = 'weeks';
+    else if (token.startsWith('month')) nextUnit = 'months';
+    else if (token.startsWith('year')) nextUnit = 'years';
+  }
+  if (numSel) numSel.value = nextNum;
+  if (unitSel) unitSel.value = nextUnit;
+  if (hidden) hidden.value = nextNum && nextUnit ? (nextNum + ' ' + nextUnit) : raw;
+}
+function initCcDurationControls() {
+  document.querySelectorAll('#pg-ophtho #cc-rows .cc-row').forEach(function (row) {
+    setCcDurationControls(row, row.querySelector('.cc-dur')?.value || '');
+  });
+}
 // Extend processBC — stock in / patient use with inventory deduction + patient charge line
 function processBC(mode, code) {
   if (!code) return;
@@ -21923,6 +21939,7 @@ function processBC(mode, code) {
         }
         bmhRecordInventoryPurchase(target, qty, billFile);
         saveInventoryStockToStorage();
+        renderInventoryImportDatalists && renderInventoryImportDatalists();
         const catFilter = document.getElementById('inv-stock-cat-filter');
         const storeFilter = document.getElementById('inv-stock-store-filter');
         if (catFilter) catFilter.value = 'all';
@@ -28181,7 +28198,7 @@ window.printUnifiedRx = function(deptId) {
   let fuDate = getDeptFollowUpDateInput(deptId)?.value || '';
   const fuFormatted = fuDate ? formatDateIN(fuDate) : '';
   const advice  = (deptId === 'oe'
-    ? [document.getElementById('rx-advice-text')?.value || '', document.getElementById('rx-extra-advice-text')?.value || ''].filter(Boolean).join('\n')
+    ? [document.getElementById('rx-advice-text')?.value || ''].filter(Boolean).join('\n')
     : [document.getElementById(deptId+'-advice')?.value || '', document.getElementById(deptId+'-extra-advice')?.value || ''].filter(Boolean).join('\n')) || '';
   const adviceHtml = String(advice || '').trim()
     ? escapeHtmlConsent(String(advice).trim()).replace(/\n/g, '<br>')
@@ -29338,6 +29355,7 @@ setTimeout(() => {
   if (typeof loadConsentTemplatesFromStorage === 'function') loadConsentTemplatesFromStorage();
   if (typeof loadIolCatalogFromStorage === 'function') loadIolCatalogFromStorage();
   if (typeof loadObgPrimaryComplaintOptions === 'function') loadObgPrimaryComplaintOptions();
+  if (typeof initCcDurationControls === 'function') initCcDurationControls();
   if (typeof loadObgRecapQuestionMap === 'function') loadObgRecapQuestionMap();
   if (typeof renderObgPrimaryComplaintOptions === 'function') renderObgPrimaryComplaintOptions();
   if (typeof refreshCustomRxOptionSelects === 'function') refreshCustomRxOptionSelects();
@@ -30304,6 +30322,7 @@ function bindDeptAdviceLibraryAutosave() {
     if (!el || !ids.includes(el.id)) return;
     ingestCustomAdviceLinesFromTextarea(el);
   };
+  document.addEventListener('input', handler, true);
   document.addEventListener('change', handler, true);
   document.addEventListener('blur', handler, true);
 }
@@ -36056,7 +36075,7 @@ function saveVisit(dept, opts) {
       };
     });
     visit.advice = document.getElementById('rx-advice-text')?.value || '';
-    visit.extraAdvice = document.getElementById('rx-extra-advice-text')?.value || '';
+    visit.extraAdvice = '';
     visit.procDone = getProcedureDoneStateForDept('ophtho');
   } else if(dept === 'obg') {
     const obgCheckboxIds = ['obg-anc-booking','obg-anc-warning','obg-anc-highrisk','obg-anc-fetal','obg-gyn-aub','obg-gyn-discharge','obg-gyn-pain','obg-gyn-menopause','obg-inf-ovulatory','obg-inf-tubal','obg-inf-endo','obg-inf-male','obg-redflag-bleeding','obg-redflag-leak','obg-redflag-headache','obg-redflag-pain','obg-redflag-fever','obg-redflag-decreasedfm','obg-redflag-swelling','obg-redflag-convulsions','obg-hr-prevlscs','obg-hr-gdm','obg-hr-pih','obg-hr-iugr','obg-hr-multiple','obg-hr-rhneg','obg-hr-placenta','obg-hr-anemia','obg-fetal-growthlag','obg-fetal-malpresentation','obg-fetal-lowliquor','obg-fetal-postdates','obg-aub-clots','obg-aub-intermenstrual','obg-aub-postcoital','obg-aub-anemia','obg-vag-pruritus','obg-vag-foul','obg-vag-dyspareunia','obg-vag-pidrisk','obg-pain-cyclical','obg-pain-severe','obg-pain-bowel','obg-pain-infertility','obg-inf-coital','obg-inf-pastpid','obg-inf-priorsurgery','obg-inf-galactorrhoea','obg-inf-hirsutism','obg-inf-maleabn','obg-inf-lowreserve','obg-inf-rpl'];
