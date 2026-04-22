@@ -2431,17 +2431,36 @@ ${['Cataract Surgery','IVT Injection','LASIK','Glaucoma Surgery','Anaesthesia','
           </div>
         </div>
         <!-- Follow-up -->
-        <div style="background:var(--g6);border-radius:var(--rsm);padding:7px 9px;margin-bottom:8px">
-          <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:5px">Next Appointment</div>
-          <div style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:5px">
-            <span style="font-size:9px;color:var(--g1);font-weight:700;align-self:center">D:</span><button class="btn btn-xs btn-gray" onclick="setFollowupDays(1,'day')">1D</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(2,'day')">2D</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(3,'day')">3D</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(4,'day')">4D</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(5,'day')">5D</button>
-            <span style="font-size:9px;color:var(--g1);font-weight:700;align-self:center;margin-left:3px">W:</span><button class="btn btn-xs btn-gray" onclick="setFollowupDays(1,'week')">1W</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(2,'week')">2W</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(3,'week')">3W</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(4,'week')">4W</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(5,'week')">5W</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(6,'week')">6W</button>
-            <span style="font-size:9px;color:var(--g1);font-weight:700;align-self:center;margin-left:3px">M:</span><button class="btn btn-xs btn-gray" onclick="setFollowupDays(1,'month')">1M</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(2,'month')">2M</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(3,'month')">3M</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(4,'month')">4M</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(6,'month')">6M</button><button class="btn btn-xs btn-gray" onclick="setFollowupDays(12,'month')">12M</button>
+        <div style="background:linear-gradient(135deg,var(--g6),#f4f7fb);border-radius:var(--rsm);padding:9px 10px;margin-bottom:8px;border:1px solid var(--g4)">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+            <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase">Next Appointment</div>
+            <div id="psych-rx-fu-display" style="font-size:11.5px;color:var(--green);font-weight:800"></div>
           </div>
-          <div style="display:flex;gap:7px">
-            <input type="date" id="rx-fu-date" style="flex:1">
+          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">
+            <span style="font-size:9px;color:var(--g1);font-weight:700;align-self:center">Days:</span>
+            <button class="btn btn-xs btn-gray" onclick="setFollowupDays(1,'day')">1D</button>
+            <button class="btn btn-xs btn-gray" onclick="setFollowupDays(2,'day')">2D</button>
+            <button class="btn btn-xs btn-gray" onclick="setFollowupDays(3,'day')">3D</button>
+            <button class="btn btn-xs btn-gray" onclick="setFollowupDays(5,'day')">5D</button>
+            <span style="font-size:9px;color:var(--g1);font-weight:700;align-self:center;margin-left:4px">Weeks:</span>
+            <button class="btn btn-xs btn-gray" onclick="setFollowupDays(1,'week')">1W</button>
+            <button class="btn btn-xs btn-gray" onclick="setFollowupDays(2,'week')">2W</button>
+            <button class="btn btn-xs btn-gray" onclick="setFollowupDays(3,'week')">3W</button>
+            <button class="btn btn-xs btn-gray" onclick="setFollowupDays(4,'week')">4W</button>
+            <button class="btn btn-xs btn-gray" onclick="setFollowupDays(6,'week')">6W</button>
+            <span style="font-size:9px;color:var(--g1);font-weight:700;align-self:center;margin-left:4px">Months:</span>
+            <button class="btn btn-xs btn-gray" onclick="setFollowupDays(1,'month')">1M</button>
+            <button class="btn btn-xs btn-gray" onclick="setFollowupDays(2,'month')">2M</button>
+            <button class="btn btn-xs btn-gray" onclick="setFollowupDays(3,'month')">3M</button>
+            <button class="btn btn-xs btn-gray" onclick="setFollowupDays(4,'month')">4M</button>
+            <button class="btn btn-xs btn-gray" onclick="setFollowupDays(6,'month')">6M</button>
+            <button class="btn btn-xs btn-gray" onclick="setFollowupDays(12,'month')">12M</button>
+          </div>
+          <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+            <input type="date" id="rx-fu-date" style="flex:1;min-width:150px">
             <button class="btn btn-blue btn-sm" onclick="bookFollowup()">📅 Book</button>
           </div>
+          <div id="rx-fu-display" style="font-size:11.5px;color:var(--green);font-weight:800;margin-top:6px"></div>
         </div>
         <textarea placeholder="Advice to patient…" style="width:100%;min-height:40px;margin-bottom:8px;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px" id="obg-advice"></textarea>
         <div style="display:flex;gap:7px;flex-wrap:wrap">
@@ -7813,9 +7832,21 @@ function setFollowupDays(n, unit) {
 }
 
 function bookFollowupApt(date, n, unit) {
-  const ptId   = document.querySelector('[id$="-rx-ptid"]')?.textContent||document.getElementById('ophtho-pt-uid')?.textContent||'';
-  const ptName = document.querySelector('[id$="-rx-ptname"]')?.textContent||document.getElementById('ophtho-pt-nm')?.textContent||'Patient';
-  const unitLabel = unit==='D'?'day':unit==='W'?'week':'month';
+  const activeDept = document.querySelector('.page.active')?.id === 'pg-psych' ? 'psych'
+    : document.querySelector('.page.active')?.id === 'pg-obg' ? 'obg'
+    : document.querySelector('.page.active')?.id === 'pg-skin' ? 'skin'
+    : 'oe';
+  const rxRoot = getDeptRxRoot(activeDept);
+  const ptId   = window.CURRENT_PATIENT?.bmhId
+    || rxRoot.querySelector('[id$="-rx-ptid"]')?.textContent
+    || document.getElementById('ophtho-pt-uid')?.textContent
+    || '—';
+  const ptName = window.CURRENT_PATIENT?.name
+    || rxRoot.querySelector('[id$="-rx-ptname"]')?.textContent
+    || document.getElementById('ophtho-pt-nm')?.textContent
+    || 'Patient';
+  const u = (unit||'').toLowerCase();
+  const unitLabel = u==='day'||u==='d' ? 'day' : u==='week'||u==='w' ? 'week' : 'month';
   const apt = {
     id:'APT-'+Date.now(), patient:ptName, bmhId:ptId,
     mob:PATIENTS.find(p=>p.bmhId===ptId)?.mob||'',
