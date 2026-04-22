@@ -28185,6 +28185,7 @@ window.printUnifiedRx = function(deptId) {
   // ── Psychiatry MSE fields ──
   const psychChief = deptId === 'psych' ? (document.getElementById('psych-chief')?.value || window.CURRENT_PATIENT?.lastVisit?.chiefComplaint || '') : '';
   const psychMseRows = deptId === 'psych' ? getPsychMseSummaryRows() : [];
+  const psychPrescriptionPrintOnly = deptId === 'psych';
 
   // ── Dermatology / Skin fields ──
   const skinChief = deptId === 'skin' ? (document.getElementById('skin-chief')?.value || '') : '';
@@ -28456,7 +28457,7 @@ ${lhImgSrc ? `<img src="${lhImgSrc}" class="lh-img" alt="Baweja Multispeciality 
 
 ${postSurgeryRx ? `<div style="margin:4px 0"><span class="postsurg-flag">POST-SURGERY PRESCRIPTION</span></div>` : ''}
 
-${(incCC && cc) || (deptId==='obg' && obgIncComplaint && obgComplaint) || (deptId==='psych' && psychChief) || (deptId==='skin' && skinChief) ? `
+${(!psychPrescriptionPrintOnly && ((incCC && cc) || (deptId==='obg' && obgIncComplaint && obgComplaint) || (deptId==='psych' && psychChief) || (deptId==='skin' && skinChief))) ? `
 <div class="sec-divider"><span class="sec-label">Chief Complaints</span></div>
 <div class="cc-text">${escapeHtmlConsent(
   (incCC && cc) ? cc :
@@ -28465,12 +28466,12 @@ ${(incCC && cc) || (deptId==='obg' && obgIncComplaint && obgComplaint) || (deptI
   skinChief
 )}</div>` : ''}
 
-${dxList.length && rxDesign === 'current' ? `
+${(!psychPrescriptionPrintOnly && dxList.length && rxDesign === 'current') ? `
 <div class="sec-divider"><span class="sec-label">Diagnosis</span></div>
 <div class="diag-rule-top"></div>
 <div class="diag-text">${dxList.map(d=>escapeHtmlConsent(d)).join(' &nbsp;·&nbsp; ')}</div>
 <div class="diag-rule-bot"></div>` : ''}
-${rxDesign !== 'current' ? designedDiagnosis : ''}
+${(!psychPrescriptionPrintOnly && rxDesign !== 'current') ? designedDiagnosis : ''}
 
 ${deptId==='obg' && obgIncAnc && obgAncOn ? `
 <div class="sec-divider"><span class="sec-label">OBG Clinical Summary</span></div>
@@ -28492,7 +28493,7 @@ ${deptId==='obg' && obgIncObsHistory && obgObsHistoryFindings.length > 0 ? `
 <div class="sec-divider"><span class="sec-label">Obstetric History</span></div>
 <div class="advice-block">${escapeHtmlConsent(obgObsHistoryFindings.join(' · '))}</div>` : ''}
 
-${deptId==='psych' && psychMseRows.length ? `
+${deptId==='psych' && !psychPrescriptionPrintOnly && psychMseRows.length ? `
 <div class="sec-divider"><span class="sec-label">Mental Status Summary</span></div>
 <div class="dept-card">
   <div class="dept-card-hdr">MENTAL STATUS SUMMARY</div>
@@ -28631,11 +28632,11 @@ ${incRxFinal && drugs.length && rxPrintMode === 'plain_only' && rxDesign === 'cu
 
 ${!incRxFinal || !drugs.length ? rxEmptyNote : ''}
 
-${incPrcFinal && procs.length ? `
+${!psychPrescriptionPrintOnly && incPrcFinal && procs.length ? `
 <div class="sec-divider"><span class="sec-label">Procedure / Surgery Advised</span></div>
 ${procs.map(p=>`<div class="proc-item">&#9890; ${expandProcedureLabelForPrint(p)}</div>`).join('')}` : ''}
 
-${incInvFinal && patientInvestigationOrders.length ? `
+${!psychPrescriptionPrintOnly && incInvFinal && patientInvestigationOrders.length ? `
 <div class="sec-divider"><span class="sec-label">Investigations Ordered</span></div>
 <div class="inv-wrap">
 ${patientInvestigationOrders.map((o,oi)=>`<div class="inv-chip"><span style="font-weight:400;color:#888;margin-right:4px">${oi+1}.</span>${escapeHtmlConsent(o.name || 'Investigation')}${o.notes ? `<span style="font-weight:500"> — ${escapeHtmlConsent(o.notes)}</span>` : ''}</div>`).join('')}
