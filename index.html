@@ -10170,6 +10170,7 @@ function loginUser(evt) {
       if(cSel) cSel.style.opacity = '1';
       document.querySelectorAll('.c-btn').forEach(function(b){ b.style.opacity='1'; b.style.pointerEvents=''; });
     }
+    if (typeof configureReceptionCentreSelect === 'function') configureReceptionCentreSelect();
 
     // Topbar
     var sbnm = document.getElementById('sbnm'); if (sbnm) sbnm.textContent = profile.name;
@@ -10262,6 +10263,24 @@ function getUserCentre() {
   if(!CURRENT_USER) return null;
   if(CURRENT_USER.canSeeAllCentres || CURRENT_USER.isAdmin || CURRENT_USER.centre === 'BOTH') return null;
   return CURRENT_USER.centre;
+}
+function configureReceptionCentreSelect() {
+  var centreEl = document.getElementById('rc-centre');
+  if(!centreEl) return null;
+  var lockedCentre = getUserCentre();
+  var currentCentre = centreEl.value || CURRENT_USER?.centre || 'CHD';
+  currentCentre = currentCentre === 'RPR' ? 'RPR' : 'CHD';
+  var options = lockedCentre
+    ? [{ value: lockedCentre, label: lockedCentre === 'RPR' ? 'Ropar' : 'Chandigarh' }]
+    : [{ value: 'CHD', label: 'Chandigarh' }, { value: 'RPR', label: 'Ropar' }];
+  centreEl.innerHTML = options.map(function(opt) {
+    return '<option value="' + opt.value + '">' + opt.label + '</option>';
+  }).join('');
+  centreEl.value = options.some(function(opt) { return opt.value === currentCentre; }) ? currentCentre : options[0].value;
+  centreEl.disabled = !!lockedCentre;
+  centreEl.style.opacity = lockedCentre ? '0.7' : '1';
+  centreEl.title = lockedCentre ? ('Locked to ' + options[0].label + ' for this login') : '';
+  return centreEl.value;
 }
 // Returns true if an item (patient/IPD/OT/transaction) belongs to the user's visible centres
 function centreMatch(item) {
@@ -13932,6 +13951,7 @@ function resetRegistrationForm() {
   // Refresh dependent dropdowns
   updateRcDr && updateRcDr();
   updatePurposeOptions && updatePurposeOptions();
+  configureReceptionCentreSelect && configureReceptionCentreSelect();
   // Generate new BMSH ID
   genRcUID && genRcUID();
 }

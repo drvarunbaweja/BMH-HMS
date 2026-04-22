@@ -20163,16 +20163,42 @@ function getReceptionConsultationRate(centre) {
   return 0;
 }
 
+function configureReceptionCentreSelect() {
+  const centreEl = document.getElementById('rc-centre');
+  if(!centreEl) return null;
+
+  const lockedCentre = getUserCentre();
+  const currentCentre = normalizeAppointmentCentreValue(
+    centreEl.value || getEffectiveCentre() || CURRENT_USER?.centre || 'CHD'
+  );
+  const centreOptions = lockedCentre
+    ? [{ value: lockedCentre, label: lockedCentre === 'RPR' ? 'Ropar' : 'Chandigarh' }]
+    : [
+        { value: 'CHD', label: 'Chandigarh' },
+        { value: 'RPR', label: 'Ropar' }
+      ];
+
+  centreEl.innerHTML = centreOptions.map(function(opt) {
+    return '<option value="' + opt.value + '">' + opt.label + '</option>';
+  }).join('');
+
+  const selectedCentre = centreOptions.some(function(opt) { return opt.value === currentCentre; })
+    ? currentCentre
+    : centreOptions[0].value;
+  centreEl.value = selectedCentre;
+  centreEl.disabled = !!lockedCentre;
+  centreEl.style.opacity = lockedCentre ? '0.7' : '1';
+  centreEl.title = lockedCentre ? ('Locked to ' + centreOptions[0].label + ' for this login') : '';
+
+  return selectedCentre;
+}
+
 function syncReceptionCentreAndFee() {
   const centreEl = document.getElementById('rc-centre');
   const feeEl = document.getElementById('rc-fee');
   if(!centreEl || !feeEl) return;
 
-  const lockedCentre = getUserCentre();
-  const centre = getReceptionSelectedCentre();
-  centreEl.value = centre;
-  centreEl.disabled = !!lockedCentre;
-  centreEl.style.opacity = lockedCentre ? '0.7' : '1';
+  const centre = configureReceptionCentreSelect() || getReceptionSelectedCentre();
 
   if(document.getElementById('rc-no-fee')?.checked) {
     feeEl.value = '0';
@@ -20550,6 +20576,7 @@ function resetRegistrationForm() {
   const surgPanel=document.getElementById('rc-surgery-panel'); if(surgPanel) surgPanel.style.display='none';
   updateRcDr && updateRcDr();
   updatePurposeOptions && updatePurposeOptions();
+  configureReceptionCentreSelect && configureReceptionCentreSelect();
   syncReceptionConsultationFee && syncReceptionConsultationFee();
   genRcUID && genRcUID();
 }
