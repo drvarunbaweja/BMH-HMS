@@ -3904,9 +3904,10 @@
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;align-items:center">
           <button type="button" class="btn btn-outline btn-xs" onclick="bmhAddBillingAdvanceRow()">+ Another line</button>
           <button type="button" class="btn btn-blue btn-sm" onclick="bmhPostPatientAdvanceFromBilling()">Post advance</button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="bmhPostPatientAdvanceFromBilling({ printReceipt: true })">🧾 Post + Receipt</button>
           <button type="button" class="btn btn-xs btn-gray" onclick="bmhPromptAddAdvanceReasonOption()">+ Add reason</button>
         </div>
-        <div style="font-size:10px;color:var(--g1);margin-top:8px">Adds to patient’s advance balance — deducted at billing time from any terminal.</div>
+        <div style="font-size:10px;color:var(--g1);margin-top:8px">Adds to patient’s advance balance — deducted at billing time from any terminal. Use Post + Receipt when you want the advance receipt immediately.</div>
       </div>
     </div>
 
