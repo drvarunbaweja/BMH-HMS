@@ -2387,7 +2387,7 @@ function getActiveRxQuickSearchInput() {
 
 /** Follow-up date input for the prescription being printed (duplicate id="rx-fu-date" exists per dept). */
 function getDeptFollowUpDateInput(deptId) {
-  const wrapSel = { oe: '#pg-ophtho #oe-rx', obg: '#pg-obg #obg-rx', psych: '#pg-psych #psych-plan', skin: '#pg-skin #skin-rx' }[deptId];
+  const wrapSel = { oe: '#pg-ophtho #oe-rx', obg: '#pg-obg #obg-rx', psych: '#pg-psych #psych-rx', skin: '#pg-skin #skin-rx' }[deptId];
   if (wrapSel) {
     const wrap = document.querySelector(wrapSel);
     const inp = wrap && wrap.querySelector('#rx-fu-date');
@@ -2396,13 +2396,48 @@ function getDeptFollowUpDateInput(deptId) {
   return document.getElementById('rx-fu-date');
 }
 function getDeptFollowUpDisplayEl(deptId) {
-  const wrapSel = { oe: '#pg-ophtho #oe-rx', obg: '#pg-obg #obg-rx', psych: '#pg-psych #psych-plan', skin: '#pg-skin #skin-rx' }[deptId];
+  const wrapSel = { oe: '#pg-ophtho #oe-rx', obg: '#pg-obg #obg-rx', psych: '#pg-psych #psych-rx', skin: '#pg-skin #skin-rx' }[deptId];
   if (wrapSel) {
     const wrap = document.querySelector(wrapSel);
     const el = wrap && wrap.querySelector('#rx-fu-display');
     if (el) return el;
   }
   return document.getElementById('rx-fu-display');
+}
+function getDeptRxEditorRoot(deptId) {
+  const wrapSel = { oe: '#pg-ophtho #oe-rx', obg: '#pg-obg #obg-rx', psych: '#pg-psych #psych-rx', skin: '#pg-skin #skin-rx' }[deptId];
+  if (wrapSel) {
+    const wrap = document.querySelector(wrapSel);
+    if (wrap) return wrap;
+  }
+  return document.querySelector('.page.active') || document;
+}
+function collectRenderedRxRowsForPrint(deptId) {
+  const root = getDeptRxEditorRoot(deptId);
+  const rxRoot = root && root.querySelector('.rx-drugs-root');
+  if (!rxRoot) return [];
+  const rows = [];
+  rxRoot.querySelectorAll('div[style*="border-left"]').forEach(function (card) {
+    const nameInput = card.querySelector('input[placeholder*="Trade name"]');
+    const selects = card.querySelectorAll('select');
+    if (!nameInput || selects.length < 4) return;
+    const label = String(nameInput.value || '').trim();
+    if (!label) return;
+    const match = label.match(/^(.*?)(?:\s*\((.*)\))?\s*$/);
+    const trade = String(match && match[1] ? match[1] : label).trim();
+    const generic = String(match && match[2] ? match[2] : '').trim();
+    rows.push({
+      trade: trade,
+      brand: trade,
+      generic: generic,
+      name: generic || trade,
+      drugType: selects[0]?.value || '',
+      eye: deptId === 'oe' ? [selects[1]?.value || 'Oral'] : ['Oral'],
+      freq: selects[deptId === 'oe' ? 2 : 1]?.value || '',
+      dur: selects[deptId === 'oe' ? 3 : 2]?.value || ''
+    });
+  });
+  return rows;
 }
 
 function wireDxInputFocus(inp) {
@@ -7021,7 +7056,7 @@ function populatePsychForm(visit) {
   const pea = document.getElementById('psych-extra-advice');
   if (pea && data.psychExtraAdvice != null) pea.value = data.psychExtraAdvice;
   if (data.rxFuDate) {
-    const el = document.querySelector('#pg-psych #psych-plan #rx-fu-date');
+    const el = document.querySelector('#pg-psych #psych-rx #rx-fu-date');
     if (el) el.value = data.rxFuDate;
   }
   if (Array.isArray(data.psychDxList)) rebuildDxListFromValues('psych-dx-list', data.psychDxList);
@@ -14946,6 +14981,11 @@ function saveChargesToLocalStorage(opts) {
     window._bmhLastLocalChargesUpdatedAt = savedAt;
   } catch (e) { /* quota */ }
 }
+function saveCentreChargesMapsToLocalStorage() {
+  try {
+    localStorage.setItem('bmh_centre_charges', JSON.stringify(CENTRE_CHARGES));
+  } catch (e) { /* noop */ }
+}
 window._bmhLastLocalChargesRows = window._bmhLastLocalChargesRows || [];
 window._bmhChargesCloudLoaded = !!window._bmhChargesCloudLoaded;
 window._bmhLastRemoteChargesUpdatedAt = Number(window._bmhLastRemoteChargesUpdatedAt || 0) || 0;
@@ -15067,7 +15107,8 @@ function saveChargesToFirebase(){
   });
 }
 function applyChargesFromCloudSnapshot(rows, remoteTs) {
-  const applied = applyLoadedChargesRows(normalizeChargesRows(rows));
+  const incomingRows = normalizeChargesRows(rows);
+  const applied = applyLoadedChargesRows(incomingRows);
   if (!applied) return false;
   window._bmhChargesCloudLoaded = true;
   window._bmhLastRemoteChargesUpdatedAt = Number(remoteTs || Date.now()) || Date.now();
@@ -15079,6 +15120,11 @@ function applyChargesFromCloudSnapshot(rows, remoteTs) {
   try { renderOTProcedureSubheading && renderOTProcedureSubheading(document.getElementById('ot-add-proc-main')?.value || ''); } catch (e) {}
   try { refreshRxTemplateSurgeryDatalist && refreshRxTemplateSurgeryDatalist(); } catch (e) {}
   try { refreshOTFollowupTemplateSelect && refreshOTFollowupTemplateSelect(); } catch (e) {}
+  if (JSON.stringify(normalizeChargesRows(CHARGES_DATA)) !== JSON.stringify(incomingRows)) {
+    setTimeout(function () {
+      if (window.FBDB) saveChargesToFirebase().catch(function () {});
+    }, 50);
+  }
   return true;
 }
 function startChargesLiveSync() {
@@ -15111,7 +15157,7 @@ function loadChargesFromFirebase(){
     if(d.CHD) Object.assign(CENTRE_CHARGES.CHD, d.CHD);
     if(d.RPR) Object.assign(CENTRE_CHARGES.RPR, d.RPR);
     ensureCriticalChargesLoaded();
-    saveChargesToLocalStorage({ updatedAt: window._bmhLastLocalChargesUpdatedAt || Date.now() });
+    saveCentreChargesMapsToLocalStorage();
     renderCentresCharges && renderCentresCharges();
     syncReceptionConsultationFee && syncReceptionConsultationFee();
   }).catch(()=>{});
@@ -27985,6 +28031,7 @@ window.printUnifiedRx = function(deptId) {
     : null;
   const latestDeptRx = Array.isArray(latestDeptVisit?.rx) ? latestDeptVisit.rx : [];
   const currentEditorRx = typeof RX_DRUGS !== 'undefined' && Array.isArray(RX_DRUGS) ? RX_DRUGS : [];
+  const renderedEditorRx = typeof collectRenderedRxRowsForPrint === 'function' ? collectRenderedRxRowsForPrint(deptId) : [];
   const rxPlainLang = typeof rxLang !== 'undefined' ? rxLang : 'en';
   const scoreRxRows = function (rows) {
     return (Array.isArray(rows) ? rows : []).reduce(function (score, row) {
@@ -27996,7 +28043,9 @@ window.printUnifiedRx = function(deptId) {
       return next;
     }, 0);
   };
-  const preferredRxRows = scoreRxRows(currentEditorRx) >= scoreRxRows(latestDeptRx) ? currentEditorRx : latestDeptRx;
+  const preferredRxRows = [currentEditorRx, renderedEditorRx, latestDeptRx].sort(function (a, b) {
+    return scoreRxRows(b) - scoreRxRows(a);
+  })[0] || [];
   let drugs = Array.isArray(preferredRxRows) && preferredRxRows.length ? JSON.parse(JSON.stringify(preferredRxRows)) : [];
   if (!drugs || !drugs.length) {
     const savedRx = Array.isArray(window.CURRENT_PATIENT?.lastVisit?.rx) ? window.CURRENT_PATIENT.lastVisit.rx : [];
@@ -28816,6 +28865,10 @@ const CHARGES_DATA = [
   {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery', name:'Premium 1 Piece Preloaded Trifocal IOL Implantation', chd:95000, rpr:85000},
   {cat:'Eye Sx', name:'PMICS + IOL Implantation',        chd:10000,rpr:8500},
   {cat:'Eye Sx', name:'Trabeculectomy',                  chd:42000,rpr:38000},
+  {cat:'Eye Sx', kind:'procedure', parent:'', name:'Intravitreal Injection', chd:0, rpr:0},
+  {cat:'Eye Sx', kind:'procedure', parent:'Intravitreal Injection', name:'Anti-VEGF Injection', chd:8000, rpr:7000},
+  {cat:'Eye Sx', kind:'procedure', parent:'Intravitreal Injection', name:'Ozurdex Implant', chd:22000, rpr:20000},
+  {cat:'Eye Sx', kind:'procedure', parent:'Intravitreal Injection', name:'Triamcinolone / Steroid Injection', chd:6000, rpr:5000},
   {cat:'Eye Sx', name:'IVT Injection (Anti-VEGF)',       chd:8000, rpr:7000},
   {cat:'Eye Sx', name:'LASIK (per eye)',                 chd:45000,rpr:40000},
   {cat:'Eye Sx', name:'Pterygium Excision + Graft',      chd:8000, rpr:7000},
@@ -28826,6 +28879,11 @@ const CHARGES_DATA = [
   {cat:'OBG',    name:'LSCS (Elective)',                 chd:45000,rpr:40000},
   {cat:'OBG',    name:'Normal Delivery',                 chd:25000,rpr:22000},
   {cat:'OBG',    name:'Diagnostic Laparoscopy',          chd:20000,rpr:18000},
+  {cat:'OBG',    kind:'procedure', parent:'', name:'Medical Termination Of Pregnancy', chd:0, rpr:0},
+  {cat:'OBG',    kind:'procedure', parent:'Medical Termination Of Pregnancy', name:'4 weeks', chd:5000, rpr:4500},
+  {cat:'OBG',    kind:'procedure', parent:'Medical Termination Of Pregnancy', name:'6 weeks', chd:7000, rpr:6500},
+  {cat:'OBG',    kind:'procedure', parent:'Medical Termination Of Pregnancy', name:'8 weeks', chd:9000, rpr:8500},
+  {cat:'OBG',    kind:'procedure', parent:'Medical Termination Of Pregnancy', name:'10 weeks', chd:12000, rpr:11000},
   {cat:'Psych',  name:'Psychiatry Consultation',         chd:500,  rpr:200},
   {cat:'Psych',  name:'Follow-up Consultation',          chd:500,  rpr:200},
   {cat:'Psych',  name:'Psychotherapy Session',           chd:1200, rpr:1000},
@@ -28935,7 +28993,16 @@ const CRITICAL_CHARGE_ROWS = [
   {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery', name:'Indian Multifocal IOL Implantation', chd:45000, rpr:35000},
   {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery', name:'Premium 1 Piece Preloaded Advanced Monofocal IOL Implantation', chd:50000, rpr:45000},
   {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery', name:'Premium Multifocal IOL Implantation', chd:70000, rpr:65000},
-  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery', name:'Premium 1 Piece Preloaded Trifocal IOL Implantation', chd:95000, rpr:85000}
+  {cat:'Eye Sx', kind:'surgery', parent:'Pinhole Microincision Cataract Surgery', name:'Premium 1 Piece Preloaded Trifocal IOL Implantation', chd:95000, rpr:85000},
+  {cat:'Eye Sx', kind:'procedure', parent:'', name:'Intravitreal Injection', chd:0, rpr:0},
+  {cat:'Eye Sx', kind:'procedure', parent:'Intravitreal Injection', name:'Anti-VEGF Injection', chd:8000, rpr:7000},
+  {cat:'Eye Sx', kind:'procedure', parent:'Intravitreal Injection', name:'Ozurdex Implant', chd:22000, rpr:20000},
+  {cat:'Eye Sx', kind:'procedure', parent:'Intravitreal Injection', name:'Triamcinolone / Steroid Injection', chd:6000, rpr:5000},
+  {cat:'OBG', kind:'procedure', parent:'', name:'Medical Termination Of Pregnancy', chd:0, rpr:0},
+  {cat:'OBG', kind:'procedure', parent:'Medical Termination Of Pregnancy', name:'4 weeks', chd:5000, rpr:4500},
+  {cat:'OBG', kind:'procedure', parent:'Medical Termination Of Pregnancy', name:'6 weeks', chd:7000, rpr:6500},
+  {cat:'OBG', kind:'procedure', parent:'Medical Termination Of Pregnancy', name:'8 weeks', chd:9000, rpr:8500},
+  {cat:'OBG', kind:'procedure', parent:'Medical Termination Of Pregnancy', name:'10 weeks', chd:12000, rpr:11000}
 ];
 CRITICAL_CHARGE_ROWS.push.apply(CRITICAL_CHARGE_ROWS, DEFAULT_ZERO_CHARGE_LAB_ROWS);
 function upsertCriticalChargeRow(row) {
@@ -29005,16 +29072,54 @@ function canEditChargeCategory(cat) {
   if ((dept.includes('skin') || dept.includes('derm') || dept.includes('cosmet')) && c.includes('skin')) return true;
   return false;
 }
+const CHARGE_SETTINGS_DEPT_TABS = [
+  { key: 'eye', label: 'Eye', match: /^eye/i },
+  { key: 'obg', label: 'OBG', match: /^obg/i },
+  { key: 'psych', label: 'Psych', match: /^psych/i },
+  { key: 'skin', label: 'Skin', match: /^skin/i },
+  { key: 'lab', label: 'Lab', match: /^lab/i }
+];
+window._chargeSettingsDeptTab = window._chargeSettingsDeptTab || 'eye';
+function getChargeSettingsTabForCategory(cat) {
+  const raw = String(cat || '').trim();
+  const tab = CHARGE_SETTINGS_DEPT_TABS.find(function (entry) { return entry.match.test(raw); });
+  return tab ? tab.key : 'eye';
+}
+function setChargeSettingsDeptTab(tabKey) {
+  window._chargeSettingsDeptTab = String(tabKey || 'eye');
+  renderChargesList();
+}
+window.setChargeSettingsDeptTab = setChargeSettingsDeptTab;
+function updateChargeKindAt(idx, nextKind) {
+  const row = CHARGES_DATA[idx];
+  if (!row) return;
+  if (!isCurrentUserAdmin() && !canEditChargeCategory(row.cat)) { showToast('You can edit charges only for your own department', 'w'); return; }
+  row.kind = String(nextKind || 'procedure').trim() || 'procedure';
+  saveChargesToFirebase().then(function () {
+    renderChargesList();
+    showToast('Charge type saved ✓', 's');
+  }).catch(function () { showToast('Save failed. Please retry.', 'e'); });
+}
+window.updateChargeKindAt = updateChargeKindAt;
 
 function renderChargesList() {
   const el = document.getElementById('set-procs-list') || document.getElementById('charges-list');
   if(!el) return;
-  const cats = [...new Set(CHARGES_DATA.map(c=>c.cat))];
+  const allCats = [...new Set(CHARGES_DATA.map(c=>c.cat))];
+  const visibleCats = allCats.filter(function (cat) {
+    return getChargeSettingsTabForCategory(cat) === window._chargeSettingsDeptTab;
+  });
+  const tabsHtml = CHARGE_SETTINGS_DEPT_TABS.map(function (tab) {
+    const active = tab.key === window._chargeSettingsDeptTab;
+    return `<button type="button" class="btn btn-sm ${active ? 'btn-gold' : 'btn-outline'}" onclick="setChargeSettingsDeptTab('${tab.key}')">${tab.label}</button>`;
+  }).join('');
   el.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
+    ${tabsHtml}
+  </div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
     <button type="button" class="btn btn-gold btn-sm" onclick="openAddChargeModal()">+ Add Procedure</button>
     <button type="button" class="btn btn-outline btn-sm" onclick="saveCharges()">💾 Save &amp; sync to cloud</button>
-    <span style="font-size:11px;color:var(--g1)">Doctors can edit charges for their own departments. Use main heading + subcategory for grouped surgery packages.</span>
-  </div>` + cats.map(cat => {
+    <span style="font-size:11px;color:var(--g1)">One shared cloud schedule is now treated as the source of truth. Use the left selector to mark each row as procedure / surgery / investigation / lab.</span>
+  </div>` + visibleCats.map(cat => {
     const rows = CHARGES_DATA.filter(c=>c.cat===cat);
     const editable = canEditChargeCategory(cat);
     const groups = {};
@@ -29040,8 +29145,8 @@ function renderChargesList() {
         return parentHtml + childRows.map((c,i)=>{
         const gIdx = CHARGES_DATA.indexOf(c);
         const disabled = editable ? '' : 'disabled';
-        return `<div style="display:grid;grid-template-columns:70px 1fr 90px 90px 40px;gap:5px;padding:4px 8px;border-bottom:1px solid var(--g5);align-items:center;font-size:11.5px">
-          <span class="badge bd-gray" style="font-size:9px">${(c.kind || c.cat || '').toString().replace(/</g,'&lt;')}</span>
+        return `<div style="display:grid;grid-template-columns:96px 1fr 90px 90px 40px;gap:5px;padding:4px 8px;border-bottom:1px solid var(--g5);align-items:center;font-size:11.5px">
+          ${editable ? `<select style="font-size:10px;padding:4px 6px;border-radius:6px;border:1px solid var(--g4);font-weight:800;background:#fff" onchange="updateChargeKindAt(${gIdx},this.value)">${['procedure','surgery','investigation','lab','consultation'].map(function (kind) { return '<option value="' + kind + '"' + (String(c.kind || '').toLowerCase() === kind ? ' selected' : '') + '>' + kind.toUpperCase() + '</option>'; }).join('')}</select>` : `<span class="badge bd-gray" style="font-size:9px">${(c.kind || c.cat || '').toString().replace(/</g,'&lt;')}</span>`}
           <input type="text" value="${c.name}" style="font-size:11.5px;font-weight:600" onchange="CHARGES_DATA[${gIdx}].name=this.value;saveChargesToFirebase().then(function(){showToast('Saved ✓','s');})" ${disabled}>
           <input type="number" value="${c.chd}" style="font-size:12px;font-weight:800;color:var(--bmh-blue);text-align:right" onchange="CHARGES_DATA[${gIdx}].chd=parseInt(this.value);CENTRE_CHARGES.CHD[CHARGES_DATA[${gIdx}].name]=parseInt(this.value);saveChargesToFirebase().then(function(){showToast('Saved ✓','s');})" ${disabled}>
           <input type="number" value="${c.rpr}" style="font-size:12px;font-weight:800;color:#8a4200;text-align:right" onchange="CHARGES_DATA[${gIdx}].rpr=parseInt(this.value);CENTRE_CHARGES.RPR[CHARGES_DATA[${gIdx}].name]=parseInt(this.value);saveChargesToFirebase().then(function(){showToast('Saved ✓','s');})" ${disabled}>
@@ -32768,12 +32873,14 @@ function buildDoctorRxTypographyCss(typography) {
   const fonts = getRxTypographyFontPair(t.fontCombo);
   const headingDecoration = t.headingUnderline ? 'underline' : 'none';
   const headingStyle = t.headingItalic ? 'italic' : 'normal';
+  const instructionSize = Math.max(10, Math.min(18, Number(t.medicineSize || DEFAULT_RX_TYPOGRAPHY.medicineSize) * 0.78)).toFixed(1);
   return `
 body{font-family:${fonts.body}}
 .pt-name{font-family:${fonts.heading};font-size:${t.patientNameSize}px}
 .pt-date{font-family:${fonts.body};font-size:${t.dateSize}px;font-weight:${t.headingWeight};font-style:${headingStyle};text-decoration:${headingDecoration}}
 .sec-label,.design-dx-title,.design-side-title,.design-taper-title,.design-med-tag,.section-pill,.rx-heading-accent{font-family:${fonts.heading};font-size:${t.headingSize}px;font-weight:${t.headingWeight};font-style:${headingStyle};text-decoration:${headingDecoration}}
 .rx-item-name,.design-med-name,.diag-text,.design-dx-body{font-family:${fonts.heading};font-size:${t.medicineSize}px}
+.rx-item-instr,.design-med-instr,.design-side-body,.advice-block{font-size:${instructionSize}px}
 .oe-eye-block .sec-label{font-size:calc(${t.headingSize}px * ${t.eyeBlockScale})}
 .oe-eye-table{font-size:calc(9.6px * ${t.eyeBlockScale})}
 .oe-eye-table th{font-size:calc(8.5px * ${t.eyeBlockScale});padding:calc(3px * ${t.eyeBlockScale}) calc(5px * ${t.eyeBlockScale})}
@@ -36060,7 +36167,7 @@ function saveVisit(dept, opts) {
     visit.dx = [psychDxLine, tagLine, psychVal('psych-diagnosis')].filter(Boolean).join(' · ') || '';
     visit.psychAdvice = document.getElementById('psych-advice')?.value || '';
     visit.psychExtraAdvice = document.getElementById('psych-extra-advice')?.value || '';
-    visit.rxFuDate = document.querySelector('#pg-psych #psych-plan #rx-fu-date')?.value || '';
+    visit.rxFuDate = document.querySelector('#pg-psych #psych-rx #rx-fu-date')?.value || '';
     visit.followupDate = visit.rxFuDate || '';
     visit.psychProcAdvised = [...document.querySelectorAll('#rx-proc-advised-psych [data-proc]')].map(function (e) { return e.dataset.proc; }).filter(Boolean);
     visit.rx = JSON.parse(JSON.stringify(RX_DRUGS || []));
