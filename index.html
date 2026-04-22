@@ -10291,6 +10291,42 @@ function addProcItem(procName, price) {
 }
 
 // ─── UPDATED printUnifiedRx with doctor degrees + safePrint ─────────────
+function scorePrintRxRows(rows) {
+  return (Array.isArray(rows) ? rows : []).reduce((score, row) => {
+    if(!row) return score;
+    const name = String(row.name || row.brand || '').trim();
+    const freq = String(row.freq || '').trim();
+    const dur  = String(row.dur || '').trim();
+    const eye  = Array.isArray(row.eye) ? row.eye.filter(Boolean).join(' ') : String(row.eye || '').trim();
+    const lang = row.lang && typeof row.lang === 'object'
+      ? Object.values(row.lang).filter(Boolean).join(' ').trim()
+      : '';
+    return score
+      + (name ? 5 : 0)
+      + (freq ? 2 : 0)
+      + (dur ? 2 : 0)
+      + (eye ? 1 : 0)
+      + (lang ? 2 : 0)
+      + (row.taper ? 1 : 0);
+  }, 0);
+}
+
+function getLatestVisitRxForDept(bmhId, deptId, cb) {
+  if(!bmhId || bmhId === '—' || typeof fbOnce !== 'function') {
+    cb([]);
+    return;
+  }
+  fbOnce('visits/' + bmhId, data => {
+    const visits = data
+      ? Object.values(data)
+          .filter(v => v && v.dept === deptId)
+          .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
+      : [];
+    const bestVisit = visits.find(v => Array.isArray(v.rx) && v.rx.length) || null;
+    cb(bestVisit && Array.isArray(bestVisit.rx) ? bestVisit.rx : []);
+  });
+}
+
 window.printUnifiedRx = function(deptId) {
   const today = new Date().toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'});
   ['oe','obg','psych','skin'].forEach(d=>{const e=document.getElementById(d+'-rx-date');if(e)e.textContent=today;});
@@ -10311,7 +10347,7 @@ window.printUnifiedRx = function(deptId) {
   const ccDur = document.getElementById('dur-text')?.value || '';
 
   // ── Collect drugs ──
-  const drugs = typeof RX_DRUGS !== 'undefined' ? RX_DRUGS : [];
+  const liveDrugs = Array.isArray(window.RX_DRUGS) ? window.RX_DRUGS.slice() : [];
 
   // ── Collect procedures ──
   const _pc1 = document.getElementById('rx-proc-advised-'+deptId);
@@ -10368,6 +10404,7 @@ window.printUnifiedRx = function(deptId) {
   const showGL = incGL && deptId==='oe' && (rfODSph||rfOSSph||rfODCyl||rfOSCyl);
   const showIOP = incIOP && deptId==='oe' && (iopGatOD||iopGatOS||iopNctOD||iopNctOS);
 
+  function finishPrint(drugs) {
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,300;0,400;0,700;0,900;1,400&family=Playfair+Display:wght@700&display=swap');
@@ -10514,6 +10551,17 @@ ${fuFormatted ? `<div style="margin:10px 0"><span class="fu-box">&#128197; Next 
 
   safePrint(html);
   showToast('Prescription sent to print preview ✓','s');
+  }
+
+  if(deptId === 'psych') {
+    getLatestVisitRxForDept(ptId, 'psych', savedRx => {
+      const resolvedDrugs = scorePrintRxRows(savedRx) > scorePrintRxRows(liveDrugs) ? savedRx : liveDrugs;
+      finishPrint(resolvedDrugs);
+    });
+    return;
+  }
+
+  finishPrint(liveDrugs);
 };
 
 // ─── SETTINGS — Doctor profile edit ─────────────
