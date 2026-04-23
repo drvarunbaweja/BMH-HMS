@@ -172,6 +172,33 @@ const INVENTORY = [];
 const BCMAP = {};
 /** Editable IOL / implant catalogue (Settings → Surgery Packs) — populated from your entries / Firebase */
 let IOL_CATALOG = [];
+function getIolCatalogNormalizedRows() {
+  return (IOL_CATALOG || []).map(function (row) {
+    const name = normalizeInventoryTextValue(row?.name || '');
+    if (!name) return null;
+    const type = normalizeInventoryTextValue(row?.type || 'IOL');
+    const mfr = normalizeInventoryTextValue(row?.mfr || row?.manufacturer || '');
+    const barcode = normalizeInventoryTextValue(row?.barcode || row?.sku || '');
+    const power = normalizeIolPowerValue(row?.power || extractIolPower(name));
+    return {
+      name: name,
+      type: type || 'IOL',
+      mfr: mfr,
+      price: Number(row?.price || 0) || 0,
+      barcode: barcode,
+      batchNo: normalizeInventoryTextValue(row?.batchNo || ''),
+      serialNo: normalizeInventoryTextValue(row?.serialNo || ''),
+      power: power
+    };
+  }).filter(Boolean);
+}
+function findIolCatalogEntryByName(rawName) {
+  const wanted = normalizeInventoryCompareText(rawName || '');
+  if (!wanted) return null;
+  return getIolCatalogNormalizedRows().find(function (row) {
+    return normalizeInventoryCompareText(row.name || '') === wanted;
+  }) || null;
+}
 function saveIolCatalogToStorage() {
   try { localStorage.setItem('bmh_iol_catalog', JSON.stringify(IOL_CATALOG)); } catch (e) { /* noop */ }
   if (window.FBDB) window.FBDB.ref('iolCatalog').set(IOL_CATALOG).catch(function () {});
@@ -802,22 +829,14 @@ function addOTProcedureOption() {
   showToast('OT procedure saved for reuse ✓', 's');
 }
 function getOtIolChoices() {
-  const catalog = (IOL_CATALOG || []).map(function (row) {
-    return { name: row.name, type: row.type || 'IOL', price: Number(row.price || 0), barcode: row.barcode || '', power: extractIolPower(row.name) };
-  });
-  const inventoryIols = (INVENTORY || []).filter(function (item) {
-    const cat = String(item.cat || '').toLowerCase();
-    const nm = String(item.name || '').toLowerCase();
-    return cat.includes('iol') || /\biol\b|acrysof|tecnis|panoptix|toric|trifocal/.test(nm);
-  }).map(function (item) {
-    return { name: item.name, type: item.cat || 'IOL', price: Number(item.mrp || 0), barcode: item.barcode || '', power: extractIolPower(item.name) };
-  });
-  const seen = {};
-  return catalog.concat(inventoryIols).filter(function (row) {
-    const key = String(row.name || '').toLowerCase();
-    if (!key || seen[key]) return false;
-    seen[key] = true;
-    return true;
+  return getIolCatalogNormalizedRows().map(function (row) {
+    return {
+      name: row.name,
+      type: row.type || 'IOL',
+      price: Number(row.price || 0) || 0,
+      barcode: row.barcode || '',
+      power: row.power || extractIolPower(row.name)
+    };
   });
 }
 function populateOTIolOptions(selectedName, selectedPower) {
@@ -927,9 +946,49 @@ function bmhLoadPersistedStoreLocations() {
       window.BMH_STORE_LOCATIONS = raw.map(function (s) { return String(s || '').trim(); }).filter(Boolean);
     }
   } catch (e) { /* noop */ }
+  if (window._bmhStoreLocationsCloudLoaded || !window.FBDB) return;
+  window._bmhStoreLocationsCloudLoaded = true;
+  window.FBDB.ref('settings/inventory/storeLocations').once('value').then(function (snap) {
+    const raw = snap.val();
+    if (!Array.isArray(raw) || !raw.length) return;
+    window.BMH_STORE_LOCATIONS = raw.map(function (s) { return String(s || '').trim(); }).filter(Boolean);
+    try { localStorage.setItem('bmh_store_locations', JSON.stringify(window.BMH_STORE_LOCATIONS)); } catch (e) { /* noop */ }
+    if (typeof bmhPopulateInventorySelectors === 'function') bmhPopulateInventorySelectors();
+  }).catch(function () {});
 }
 function saveInventoryStoreLocations() {
   try { localStorage.setItem('bmh_store_locations', JSON.stringify((window.BMH_STORE_LOCATIONS || []).slice())); } catch (e) { /* noop */ }
+  if (window.FBDB) {
+    window.FBDB.ref('settings/inventory/storeLocations').set((window.BMH_STORE_LOCATIONS || []).slice()).catch(function () {});
+  }
+}
+function loadInventoryHiddenStoreLocations() {
+  if (window._bmhInventoryHiddenStoreLocations) return window._bmhInventoryHiddenStoreLocations;
+  let list = [];
+  try {
+    const raw = JSON.parse(localStorage.getItem('bmh_store_locations_hidden') || 'null');
+    if (Array.isArray(raw)) list = raw;
+  } catch (e) { /* noop */ }
+  window._bmhInventoryHiddenStoreLocations = list.map(function (s) { return normalizeInventoryTextValue(s); }).filter(Boolean);
+  if (!window._bmhInventoryHiddenStoreLocationsCloudLoaded && window.FBDB) {
+    window._bmhInventoryHiddenStoreLocationsCloudLoaded = true;
+    window.FBDB.ref('settings/inventory/storeLocationsHidden').once('value').then(function (snap) {
+      const raw = snap.val();
+      if (!Array.isArray(raw)) return;
+      window._bmhInventoryHiddenStoreLocations = raw.map(function (s) { return normalizeInventoryTextValue(s); }).filter(Boolean);
+      try { localStorage.setItem('bmh_store_locations_hidden', JSON.stringify(window._bmhInventoryHiddenStoreLocations)); } catch (e) {}
+      if (typeof bmhPopulateInventorySelectors === 'function') bmhPopulateInventorySelectors();
+    }).catch(function () {});
+  }
+  return window._bmhInventoryHiddenStoreLocations;
+}
+function saveInventoryHiddenStoreLocations() {
+  const rows = (window._bmhInventoryHiddenStoreLocations || []).map(function (s) { return normalizeInventoryTextValue(s); }).filter(Boolean);
+  window._bmhInventoryHiddenStoreLocations = Array.from(new Set(rows));
+  try { localStorage.setItem('bmh_store_locations_hidden', JSON.stringify(window._bmhInventoryHiddenStoreLocations)); } catch (e) { /* noop */ }
+  if (window.FBDB) {
+    window.FBDB.ref('settings/inventory/storeLocationsHidden').set(window._bmhInventoryHiddenStoreLocations).catch(function () {});
+  }
 }
 function bmhBillingAdvanceReasonOptions() {
   const def = ['Surgery package', 'IOL / implant booking', 'Admission deposit', 'Investigation block', 'Consultation block', 'Personal', 'Other'];
@@ -3785,6 +3844,7 @@ function openReceptionPatient(bmhId) {
   const pendAmt = pend.reduce((s, r) => s + (Number(r.amount) || 0), 0);
   const adv = Number(p.advance) || 0;
   const bal = Number(p.balance) || 0;
+  const showRestoreQueueBtn = patientNeedsReceptionQueueRestore(p);
   const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
   const chargeOpts = (CHARGES_DATA || []).slice().sort(function (a, b) { return String(a.name||'').localeCompare(String(b.name||'')); }).map(function (c) {
     const amt = getChargeForProcedure(c.name, p.centre || CURRENT_USER?.centre || 'CHD');
@@ -3820,6 +3880,7 @@ function openReceptionPatient(bmhId) {
     + '</div></div></div>'
     + '<div style="margin-top:14px;display:flex;flex-wrap:wrap;gap:8px">'
     + '<button type="button" class="btn btn-gold btn-sm" onclick="rcOpenBillingFor(\'' + String(bmhId).replace(/'/g, "\\'") + '\')">💳 Billing / charges</button>'
+    + (showRestoreQueueBtn ? receptionQueueRestoreButtonHtml(bmhId, { label: '↩ Restore to queue', title: 'Restore this patient to today\'s queue', style: 'background:#fff;color:var(--bmh-blue);border:1px solid var(--bmh-blue);border-radius:6px;padding:6px 10px;font-size:11px;font-weight:800;cursor:pointer' }) : '')
     + '<button type="button" class="btn btn-outline btn-sm" onclick="closeM(\'m-rc-patient\');openReceptionPatientEdit(\'' + String(bmhId).replace(/'/g, "\\'") + '\')">✏️ Edit / change details</button>'
     + '<button type="button" class="btn btn-outline btn-sm" onclick="closeM(\'m-rc-patient\');openPatient(\'' + String(bmhId).replace(/'/g, "\\'") + '\')">👁️ Open doctor record</button>'
     + '<button type="button" class="btn btn-outline btn-sm" onclick="rcToggleConsentSection(\'' + String(bmhId).replace(/'/g, "\\'") + '\')">📋 Add consent</button>'
@@ -8210,7 +8271,14 @@ function bmhInventoryUseDeptValue() { return document.getElementById('inv-use-de
 function bmhInventoryCategoryValue() { return document.getElementById('inv-in-cat')?.value || 'Miscellaneous'; }
 function bmhInventoryStoreValue() { return document.getElementById('inv-in-store')?.value || ''; }
 function bmhInventoryBillModeValue() { return document.getElementById('inv-in-bill-mode')?.value || 'monthly'; }
-function bmhInventoryStoreOptions() { return (window.BMH_STORE_LOCATIONS || []).slice(); }
+function bmhInventoryStoreOptions() {
+  const hidden = loadInventoryHiddenStoreLocations();
+  return (window.BMH_STORE_LOCATIONS || []).filter(function (name) {
+    return !hidden.some(function (hiddenName) {
+      return normalizeInventoryCompareText(hiddenName) === normalizeInventoryCompareText(name);
+    });
+  });
+}
 function bmhInventoryCategoryOptions() {
   const existing = Array.from(new Set((INVENTORY || []).map(function (i) { return String(i.cat || '').trim(); }).filter(Boolean)));
   const all = Array.from(new Set((window.BMH_INVENTORY_CATEGORIES || []).concat(existing))).filter(Boolean);
@@ -8348,8 +8416,8 @@ function addIolBrandEntry(prefill) {
       ${idx > 0 ? `<button class="btn btn-xs btn-gray" onclick="removeIolBrandEntry(this)">✕ Remove</button>` : ''}
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
-      <div class="form-group" style="margin:0"><label class="fl">Brand</label><input type="text" class="iol-brand-field" list="inv-brand-datalist" placeholder="Pick from IOL catalogue" value="${escapeHtmlConsent(p.brand||'')}"></div>
-      <div class="form-group" style="margin:0"><label class="fl">Company</label><input type="text" class="iol-company-field" list="inv-company-datalist" placeholder="Auto-fills from catalogue" value="${escapeHtmlConsent(p.company||'')}"></div>
+      <div class="form-group" style="margin:0"><label class="fl">Brand</label><input type="text" class="iol-brand-field" list="iol-brand-datalist" placeholder="Pick from IOL catalogue" value="${escapeHtmlConsent(p.brand||'')}"></div>
+      <div class="form-group" style="margin:0"><label class="fl">Company</label><input type="text" class="iol-company-field" list="iol-company-datalist" placeholder="Auto-fills from catalogue" value="${escapeHtmlConsent(p.company||'')}"></div>
       <div class="form-group" style="margin:0"><label class="fl">Batch Number</label><input type="text" class="iol-model-field" placeholder="Batch from product line" value="${escapeHtmlConsent(p.batch||'')}"></div>
     </div>
     <div style="display:flex;gap:8px;margin-bottom:8px;font-size:10px">
@@ -8373,16 +8441,16 @@ function addIolBrandEntry(prefill) {
   const companyInput = div.querySelector('.iol-company-field');
   if (brandInput && companyInput) {
     const syncCatalogValues = function () {
-      const brandName = normalizeInventoryCompareText(brandInput.value || '');
-      const catalogItem = (IOL_CATALOG || []).find(function (row) {
-        return normalizeInventoryCompareText(row.name || '') === brandName;
-      });
+      const catalogItem = findIolCatalogEntryByName(brandInput.value || '');
       if (catalogItem) {
         brandInput.value = normalizeInventoryTextValue(catalogItem.name || brandInput.value || '');
-        if (catalogItem.mfr) companyInput.value = normalizeInventoryTextValue(catalogItem.mfr);
+        companyInput.value = normalizeInventoryTextValue(catalogItem.mfr || companyInput.value || '');
       }
+      refreshIolBrandPowerStockLabels(div);
     };
+    brandInput.setAttribute('autocomplete', 'off');
     brandInput.addEventListener('change', syncCatalogValues);
+    brandInput.addEventListener('input', syncCatalogValues);
     brandInput.addEventListener('blur', syncCatalogValues);
   }
 }
@@ -8592,8 +8660,10 @@ function saveIolInventoryGrid() {
   let allBrandData = [];
   if (brandEntries.length > 0) {
     brandEntries.forEach(function (entryDiv) {
-      const brand = entryDiv.querySelector('.iol-brand-field')?.value?.trim() || '';
-      const company = entryDiv.querySelector('.iol-company-field')?.value?.trim() || '';
+      const pickedBrand = entryDiv.querySelector('.iol-brand-field')?.value?.trim() || '';
+      const catalogItem = findIolCatalogEntryByName(pickedBrand);
+      const brand = catalogItem?.name || pickedBrand;
+      const company = catalogItem?.mfr || entryDiv.querySelector('.iol-company-field')?.value?.trim() || '';
       const batchNo = entryDiv.querySelector('.iol-model-field')?.value?.trim() || '';
       const exp = entryDiv.querySelector('.iol-expiry-field')?.value?.trim() || '';
       const cost = Number(entryDiv.querySelector('.iol-cost-field')?.value || '0') || 0;
@@ -8601,6 +8671,10 @@ function saveIolInventoryGrid() {
         return { power: String(input.dataset.power || ''), qty: Math.max(0, parseInt(input.value, 10) || 0) };
       }).filter(function (row) { return row.qty > 0; });
       const serialMap = Object.assign({}, readIolBrandEntrySerialMap(entryDiv), readIolBrandSerialMapFromGrid(entryDiv));
+      if (picked.length > 0 && !catalogItem) {
+        allBrandData.push({ invalidBrand: pickedBrand });
+        return;
+      }
       if (picked.length > 0) allBrandData.push({ brand, company, batchNo, exp, cost, picked, serialMap });
     });
   } else {
@@ -8618,6 +8692,11 @@ function saveIolInventoryGrid() {
   }
 
   if (!allBrandData.length) { showToast('Enter at least one IOL power quantity', 'w'); return; }
+  const invalidBrand = allBrandData.find(function (b) { return b.invalidBrand; });
+  if (invalidBrand) {
+    showToast('Pick IOL brand from Settings → Surgery Pack catalogue: ' + invalidBrand.invalidBrand, 'w');
+    return;
+  }
   if (!allBrandData.some(function (b) { return b.brand || b.company || b.batchNo; })) {
     showToast('Enter company / brand / batch for IOL stock', 'w'); return;
   }
@@ -9950,6 +10029,68 @@ function bmhBuildBillPayloadFromUi(bmhId, opts) {
     createdBy: window.CURRENT_USER?.name || 'Billing'
   };
 }
+function bmhGetPrimaryBillLineLabel(bmhId, items) {
+  const liveLines = ((window.BMH_PATIENT_CHARGES && window.BMH_PATIENT_CHARGES[bmhId]) || []).filter(function (row) {
+    return row && Number(row.amount || 0) > 0;
+  });
+  const topLive = liveLines.find(function (row) { return row && !row.isConcession; }) || liveLines[0];
+  if (topLive && String(topLive.desc || topLive.name || '').trim()) return String(topLive.desc || topLive.name || '').trim().slice(0, 120);
+  const topSaved = (items || []).find(function (row) { return row && Number(row.amount || 0) > 0; });
+  return String(topSaved?.desc || 'Hospital bill / due adjustment').trim().slice(0, 120);
+}
+function bmhUpsertInsurancePayRequestFromBilling(opts) {
+  const o = opts || {};
+  const bmhId = String(o.bmhId || '').trim();
+  if (!bmhId) return null;
+  const pt = o.patient || PATIENTS.find(function (p) { return p && p.bmhId === bmhId; }) || {};
+  const approvedAmount = Math.max(0, Number(o.approvedAmount || o.claimedAmount || 0));
+  const insurerAlreadyReceived = Math.max(0, Number(o.insurerAlreadyReceived || 0));
+  const insurerDueExplicit = Math.max(0, Number(o.insurerDue || 0));
+  const pendingInsurerAmount = Math.max(insurerDueExplicit, Math.max(0, approvedAmount - insurerAlreadyReceived));
+  const procedure = String(o.procedure || bmhGetPrimaryBillLineLabel(bmhId, o.items)).trim() || 'Hospital bill / due adjustment';
+  const diagnosis = String(o.diagnosis || pt.diagnosis || pt.dx || pt.purpose || '').trim().slice(0, 120);
+  const insurer = String(o.insurer || o.mode || pt.ins || 'Insurance/TPA').trim();
+  const policy = String(o.policy || pt.policy || '').trim();
+  const centre = o.centre || pt.centre || CURRENT_USER?.centre || 'CHD';
+  const dept = o.dept || pt.dept || 'ophtho';
+  let existing = (PAY_REQUESTS || []).find(function (r) {
+    return r && r.bmhId === bmhId && isInsuranceLikeMode(r.mode || r.ins || '') && String(r.status || '').toLowerCase() !== 'rejected' && (o.billId ? String(r.billId || '') === String(o.billId) : true);
+  });
+  const payload = {
+    patient: pt.name || o.patientName || bmhId,
+    bmhId: bmhId,
+    for: procedure,
+    procedure: procedure,
+    diagnosis: diagnosis,
+    amount: pendingInsurerAmount,
+    claimedAmount: approvedAmount,
+    approvedAmount: Math.max(approvedAmount, Number(existing?.approvedAmount || 0)),
+    cashlessApprovedAmount: approvedAmount,
+    hospitalBillTotal: Math.max(0, Number(o.hospitalBillTotal || approvedAmount || 0)),
+    patientShareCollected: Math.max(0, Number(o.patientShareCollected || 0)),
+    patientDue: Math.max(0, Number(o.patientDue || 0)),
+    status: pendingInsurerAmount > 0 ? (insurerAlreadyReceived > 0 ? 'partial' : 'pending') : 'paid',
+    from: 'Billing',
+    dept: dept,
+    centre: centre,
+    mode: 'Insurance/TPA',
+    ins: insurer,
+    policy: policy,
+    date: new Date().toISOString(),
+    billId: o.billId || existing?.billId || '',
+    lastPaymentRef: o.paymentRef || '',
+    lastPaymentAmt: Math.max(0, Number(o.patientShareCollected || 0))
+  };
+  if (existing) {
+    Object.assign(existing, payload, { id: existing.id });
+    try { fbUpdate && fbUpdate('payRequests/' + existing.id, Object.assign({}, existing)); } catch (e) {}
+    return existing;
+  }
+  const created = Object.assign({ id: 'PR' + Date.now() }, payload);
+  PAY_REQUESTS.push(created);
+  try { fbSet && fbSet('payRequests/' + created.id, created); } catch (e) {}
+  return created;
+}
 function bmhSaveBillRecordToRtdb(billData) {
   const id = 'RBILL-' + Date.now();
   const centre = billData.centre || CURRENT_USER?.centre || 'CHD';
@@ -10048,11 +10189,7 @@ async function bmhSaveAndPrintBill() {
 
   try {
     showToast('Saving bill to cloud…', 'i');
-    if (!window.bmhSaveBillToCloud) {
-      console.error('bmhSaveAndPrintBill: window.bmhSaveBillToCloud not found. app.js may not have loaded.');
-      throw new Error('Cloud billing module not ready. Please refresh the page and try again.');
-    }
-    const savedBill = await window.bmhSaveBillToCloud(billData);
+    const savedBill = await (window.bmhSaveBillToCloud || (function () { throw new Error('bills module not loaded'); }))(billData);
     window.BMH_SAVED_BILLS.unshift(Object.assign({ source: 'cloud' }, savedBill));
     saveBmhFinancials({ localOnly: true });
 
@@ -10084,13 +10221,45 @@ async function bmhSaveAndPrintBill() {
       if (typeof bmhSyncPatientAdvanceBalance === 'function') bmhSyncPatientAdvanceBalance(bmhId);
     }
 
-    // Create TPA pay-request for the TPA portion
-    if (isTPA && tpaAmount > 0) {
-      const firstItem = (billData.items || [])[0];
-      const prIns = { id: 'PR' + Date.now(), patient: pt.name, bmhId, for: firstItem?.desc || 'Hospital bill', procedure: firstItem?.desc || 'Hospital bill', amount: tpaAmount, claimedAmount: tpaAmount, status: 'pending', centre: pt.centre || (window.CURRENT_USER?.centre) || 'CHD', dept: pt.dept || 'ophtho', mode: 'Insurance/TPA', ins: tpaCompany, policy: tpaPolicy, date: new Date().toISOString(), billId: savedBill.id };
-      if (window.PAY_REQUESTS) window.PAY_REQUESTS.push(prIns);
-      try { if (typeof fbSet === 'function') fbSet('payRequests/' + prIns.id, prIns); } catch (e) {}
+    if (pt) {
+      pt.ins = isTPA ? (tpaCompany || pt.ins || 'Insurance/TPA') : (pt.ins || '');
+      pt.policy = isTPA ? (tpaPolicy || pt.policy || '') : (pt.policy || '');
+      try {
+        fbUpdate && fbUpdate('patients/' + bmhId, {
+          ins: pt.ins || '',
+          policy: pt.policy || '',
+          updatedAt: new Date().toISOString()
+        });
+      } catch (e) {}
     }
+
+    // Create / update TPA pay-request for the TPA portion
+    if (isTPA && tpaAmount > 0) {
+      const insurerAlreadyReceived = (TRANSACTIONS || []).filter(function (t) {
+        return t && t.bmhId === bmhId && isInsuranceLikeMode(t.mode || t.ins || '');
+      }).reduce(function (sum, t) { return sum + Math.max(0, Number(t.amount || 0)); }, 0);
+      bmhUpsertInsurancePayRequestFromBilling({
+        bmhId: bmhId,
+        patient: pt,
+        patientName: pt?.name || '',
+        items: billData.items || [],
+        procedure: bmhGetPrimaryBillLineLabel(bmhId, billData.items || []),
+        diagnosis: pt?.diagnosis || pt?.dx || pt?.purpose || '',
+        insurer: tpaCompany,
+        policy: tpaPolicy,
+        approvedAmount: tpaAmount,
+        insurerAlreadyReceived: insurerAlreadyReceived,
+        patientShareCollected: amountReceived,
+        patientDue: Math.max(0, Number(savedBill.netPayable || 0) - amountReceived - tpaAmount),
+        hospitalBillTotal: Number(savedBill.netPayable || 0),
+        centre: pt?.centre || (window.CURRENT_USER?.centre) || 'CHD',
+        dept: pt?.dept || 'ophtho',
+        paymentRef: payRef,
+        billId: savedBill.id
+      });
+    }
+
+    if (typeof bmhSyncPatientRunningBalance === 'function') bmhSyncPatientRunningBalance(bmhId);
 
     // Add to queue if checkbox ticked
     const addToQ = !!document.getElementById('bmh-bill-add-to-queue')?.checked;
@@ -10201,6 +10370,7 @@ function bmhPrintSavedBill(bill) {
     + '<div class="rcp"><div><strong>' + esc(bill.billNo || bill.id || '') + '</strong><div style="margin-top:2px">Patient bill / receipt</div></div><div style="text-align:right">' + today + '<br>' + timeStr + '</div></div>'
     + '<div class="ptbox"><div class="nm">' + esc(bill.patientName || 'Patient') + '</div><div class="id">' + esc(bill.bmhId || '') + '</div><div style="font-size:9.5px;color:#555;margin-top:4px">' + (bill.age ? esc(String(bill.age)) + 'Y ' : '') + esc(bill.sex || '') + (bill.dept ? ' · ' + esc(bill.dept) : '') + (bill.doctor ? ' · ' + esc(bill.doctor) : '') + '</div></div>'
     + '<table><thead><tr><th colspan="2">Description</th><th>Qty</th><th style="text-align:right">Amount</th></tr></thead><tbody>' + (bodyRows || '<tr><td colspan="4" style="padding:9px;text-align:center;color:#888">No charge lines</td></tr>') + '</tbody></table>'
+    + (bill.discount > 0 || bill.advanceApplied > 0 ? '<div style="font-size:9.5px;text-align:right;margin-bottom:6px;color:#444">' + (bill.discount > 0 ? 'Discount ₹' + Number(bill.discount).toLocaleString('en-IN') : '') + (bill.discount > 0 && bill.advanceApplied > 0 ? ' · ' : '') + (bill.advanceApplied > 0 ? 'Advance adjusted ₹' + Number(bill.advanceApplied).toLocaleString('en-IN') : '') + '</div>' : '')
     + '<div style="margin-top:12px;border:1px solid #d7dce5;border-radius:10px;padding:10px 12px;background:#fbfcfe">' + totalsStack + '<div style="display:flex;justify-content:space-between;padding-top:8px;margin-top:6px;border-top:2px solid #1A3C6E;font-size:15px;font-weight:900;color:#1A3C6E"><span>Net total</span><span>₹' + Number(bill.netPayable || 0).toLocaleString('en-IN') + '</span></div><div style="font-size:10px;color:#555;margin-top:6px">Mode: ' + esc(bill.paymentMode || 'Cash') + (bill.paymentRef ? ' · Ref: ' + esc(bill.paymentRef) : '') + '</div></div>'
     + tpaLine
     + '<div class="foot">Bill No: ' + esc(bill.billNo || bill.id || '') + ' · Saved ' + today + ' · Computer-generated receipt. Please retain for your records.</div>'
@@ -10213,6 +10383,42 @@ function bmhPrintSavedBill(bill) {
 }
 window.bmhPrintSavedBill = bmhPrintSavedBill;
 
+async function bmhDeleteSavedBillRecord(billId) {
+  const id = String(billId || '').trim();
+  if (!id) return;
+  if (!(CURRENT_USER?.isAdmin || CURRENT_USER?.role === 'Reception')) {
+    showToast('Only admin / reception can delete saved bills', 'w');
+    return;
+  }
+  const bill = bmhGetSavedBillsForHistory().find(function (row) { return String(row?.id || '') === id; });
+  if (!bill) {
+    showToast('Saved bill not found', 'w');
+    return;
+  }
+  if (!confirm('Delete bill ' + String(bill.billNo || bill.id || '') + ' for ' + String(bill.patientName || 'patient') + '?\n\nThis removes the saved bill record from bill history. Charges and payments stay untouched.')) return;
+  try {
+    if (bill.source === 'rtdb') {
+      window.BMH_SAVED_BILLS = (window.BMH_SAVED_BILLS || []).filter(function (row) { return String(row?.id || '') !== id; });
+      saveBmhFinancials({ localOnly: true });
+    } else if (typeof window.bmhDeleteBillInCloud === 'function') {
+      await window.bmhDeleteBillInCloud(id);
+      window.BMH_SAVED_BILLS = (window.BMH_SAVED_BILLS || []).filter(function (row) { return String(row?.id || '') !== id; });
+      saveBmhFinancials({ localOnly: true });
+    } else if (typeof window.bmhVoidBillInCloud === 'function') {
+      await window.bmhVoidBillInCloud(id, 'Deleted from billing history');
+    } else {
+      throw new Error('Bill delete service not available');
+    }
+    bmhSearchBillHistory(document.getElementById('bmh-bill-history-search')?.value || '');
+    renderBillingPageIfActive();
+    showToast('Saved bill deleted ✓', 's');
+  } catch (e) {
+    console.error('bill delete failed', e);
+    showToast('Could not delete saved bill', 'e');
+  }
+}
+window.bmhDeleteSavedBillRecord = bmhDeleteSavedBillRecord;
+
 // ── Bill history search (searches Firestore BILLS array) ──────────────────────
 function bmhSearchBillHistory(q) {
   const resultEl = document.getElementById('bmh-bill-history-results');
@@ -10220,6 +10426,7 @@ function bmhSearchBillHistory(q) {
   const dateFilter = document.getElementById('bmh-bill-history-date')?.value || '';
   const sq = String(q || '').trim().toLowerCase();
 
+  // Filter from in-memory BILLS cache populated by watchBills()
   let bills = bmhGetSavedBillsForHistory().filter(function (b) { return b.status !== 'void'; });
   if (sq.length >= 2) {
     bills = bills.filter(function (b) {
@@ -10262,7 +10469,10 @@ function bmhSearchBillHistory(q) {
       + '<div style="font-size:10px;color:var(--g1)">' + esc(dateStr) + '</div>'
       + '<div style="font-weight:900;color:var(--bmh-blue)">₹' + Number(b.netPayable || 0).toLocaleString('en-IN') + '<div style="font-size:9.5px;font-weight:400;color:var(--g1)">' + esc(b.paymentMode || '') + (b.isTPA ? ' + TPA' : '') + '</div></div>'
       + '<div style="font-size:10px">' + (b.printCount > 0 ? 'Printed ' + b.printCount + 'x' : 'Not printed') + '</div>'
+      + '<div style="display:flex;gap:6px;justify-content:flex-end">'
       + '<button type="button" class="btn btn-outline btn-sm" onclick="bmhPrintSavedBill((bmhGetSavedBillsForHistory()||[]).find(function(x){return x.id===\'' + b.id + '\';}))">Print</button>'
+      + ((CURRENT_USER?.isAdmin || CURRENT_USER?.role === 'Reception') ? '<button type="button" class="btn btn-xs btn-gray" onclick="bmhDeleteSavedBillRecord(\'' + b.id + '\')">Delete</button>' : '')
+      + '</div>'
       + '</div>';
   }).join('');
 }
@@ -11643,6 +11853,17 @@ function bmhRecordPatientPayment() {
     cashlessApprovedAmount: cashlessApr > 0 ? cashlessApr : undefined,
     hospitalBillTotal: cashlessApr > 0 ? netBill : undefined
   };
+  if (pt && (insName || policy || cashlessApr > 0 || isInsuranceLikeMode(mode))) {
+    pt.ins = insName || pt.ins || (isInsuranceLikeMode(mode) ? 'Insurance/TPA' : '');
+    pt.policy = policy || pt.policy || '';
+    try {
+      fbUpdate && fbUpdate('patients/' + bmhId, {
+        ins: pt.ins || '',
+        policy: pt.policy || '',
+        updatedAt: new Date().toISOString()
+      });
+    } catch (e) {}
+  }
   txn.chargeAllocations = bmhAllocatePaymentToChargeLines(bmhId, amt, {
     txnId: txnId,
     date: txn.date,
@@ -11669,82 +11890,27 @@ function bmhRecordPatientPayment() {
   const insReceivedTotal = (TRANSACTIONS || []).filter(function (t) {
     return t.bmhId === bmhId && isInsuranceLikeMode(t.mode || t.ins || '');
   }).reduce(function (s, t) { return s + (Number(t.amount) || 0); }, 0);
-  if (cashlessApr > 0 && pt) {
-    const lines = window.BMH_PATIENT_CHARGES[bmhId] || [];
-    const topLine = lines.find(function (x) { return x && !x.isConcession; }) || lines[0];
-    const proc = String(topLine?.desc || topLine?.name || 'Hospital bill / cashless').slice(0, 120);
-    const pendingTpa = Math.max(0, cashlessApr - insReceivedTotal);
-    let existing = (PAY_REQUESTS || []).find(function (r) {
-      return r.bmhId === bmhId && r.status === 'pending' && isInsuranceLikeMode(r.mode || r.ins || '');
-    });
-    const prPayload = {
-      patient: pt.name || bmhId,
+  if ((cashlessApr > 0 || isInsuranceLikeMode(mode)) && pt) {
+    const claimedAmt = cashlessApr > 0
+      ? cashlessApr
+      : Math.max(Number(bmhBillPreviewTotal(bmhId)) || 0, amt + (insurerDue || 0));
+    bmhUpsertInsurancePayRequestFromBilling({
       bmhId: bmhId,
-      for: proc,
-      procedure: proc,
-      diagnosis: String(pt.diagnosis || pt.purpose || '').slice(0, 120),
-      claimedAmount: cashlessApr,
-      approvedAmount: cashlessApr,
-      cashlessApprovedAmount: cashlessApr,
-      hospitalBillTotal: netBill,
+      patient: pt,
+      procedure: bmhGetPrimaryBillLineLabel(bmhId),
+      diagnosis: String(pt.diagnosis || pt.dx || pt.purpose || '').slice(0, 120),
+      insurer: insName || mode || 'Insurance/TPA',
+      policy: policy || '',
+      approvedAmount: claimedAmt,
+      insurerAlreadyReceived: insReceivedTotal,
+      insurerDue: insurerDue,
       patientShareCollected: !isInsuranceLikeMode(mode) ? Math.max(0, amt) : 0,
-      amount: pendingTpa,
-      status: pendingTpa > 0 ? 'pending' : 'paid',
-      from: 'Billing',
-      dept: pt.dept || 'ophtho',
+      patientDue: updatedDue,
+      hospitalBillTotal: netBill,
       centre: pt.centre || CURRENT_USER?.centre || 'CHD',
-      mode: 'Insurance/TPA',
-      ins: insName || 'Insurance/TPA',
-      policy: policy || '',
-      date: new Date().toISOString(),
-      lastPaymentRef: ref,
-      lastPaymentAmt: amt
-    };
-    if (existing) {
-      Object.assign(existing, prPayload, { id: existing.id });
-      try { fbUpdate && fbUpdate('payRequests/' + existing.id, Object.assign({}, existing)); } catch (e) {}
-    } else {
-      const prIns = Object.assign({ id: 'PR' + Date.now() }, prPayload);
-      PAY_REQUESTS.push(prIns);
-      try { fbSet && fbSet('payRequests/' + prIns.id, prIns); } catch (e) {}
-    }
-  } else if (isInsuranceLikeMode(mode) && pt) {
-    const lines = window.BMH_PATIENT_CHARGES[bmhId] || [];
-    const topLine = lines.find(function (x) { return x && !x.isConcession; }) || lines[0];
-    const proc = String(topLine?.desc || topLine?.name || 'Hospital bill / cashless').slice(0, 120);
-    const claimedAmt = Math.max(Number(bmhBillPreviewTotal(bmhId)) || 0, amt + (insurerDue || 0));
-    const hospitalDue = Math.max(0, insurerDue > 0 ? insurerDue : updatedDue);
-    let existing = (PAY_REQUESTS || []).find(function (r) {
-      return r.bmhId === bmhId && r.status === 'pending' && isInsuranceLikeMode(r.mode || r.ins || '');
+      dept: pt.dept || 'ophtho',
+      paymentRef: ref
     });
-    const prPayload = {
-      patient: pt.name || bmhId,
-      bmhId: bmhId,
-      for: proc,
-      procedure: proc,
-      diagnosis: String(pt.diagnosis || pt.purpose || '').slice(0, 120),
-      amount: hospitalDue,
-      claimedAmount: claimedAmt,
-      approvedAmount: Math.max(Number(existing?.approvedAmount) || 0, claimedAmt),
-      status: 'pending',
-      from: 'Billing',
-      dept: pt.dept || 'ophtho',
-      centre: pt.centre || CURRENT_USER?.centre || 'CHD',
-      mode: mode,
-      ins: insName || mode,
-      policy: policy || '',
-      date: new Date().toISOString(),
-      lastPaymentRef: ref,
-      lastPaymentAmt: amt
-    };
-    if (existing) {
-      Object.assign(existing, prPayload, { id: existing.id });
-      try { fbUpdate && fbUpdate('payRequests/' + existing.id, Object.assign({}, existing)); } catch (e) {}
-    } else {
-      const prIns = Object.assign({ id: 'PR' + Date.now() }, prPayload);
-      PAY_REQUESTS.push(prIns);
-      try { fbSet && fbSet('payRequests/' + prIns.id, prIns); } catch (e) {}
-    }
   }
   const pendingNonInsurance = (PAY_REQUESTS || []).filter(function (r) {
     return r.bmhId === bmhId && r.status === 'pending' && !isInsuranceLikeMode(r.mode || r.ins || '');
@@ -12197,12 +12363,37 @@ function loadInventoryOcrMemory() {
   } catch (e) {
     window.BMH_INVENTORY_OCR_MEMORY = {};
   }
+  if (!window._bmhInventoryOcrMemoryCloudLoaded && window.FBDB) {
+    window._bmhInventoryOcrMemoryCloudLoaded = true;
+    window.FBDB.ref('settings/inventory/ocrMemory').once('value').then(function (snap) {
+      const data = snap.val();
+      if (!data || typeof data !== 'object') return;
+      window.BMH_INVENTORY_OCR_MEMORY = Object.assign({}, window.BMH_INVENTORY_OCR_MEMORY || {}, data);
+      try {
+        localStorage.setItem('bmh_inventory_ocr_memory', JSON.stringify(window.BMH_INVENTORY_OCR_MEMORY));
+      } catch (e) {}
+      renderInventoryImportDatalists && renderInventoryImportDatalists();
+    }).catch(function () {});
+  }
   return window.BMH_INVENTORY_OCR_MEMORY;
+}
+function getInventorySuggestionHiddenMap() {
+  const memory = loadInventoryOcrMemory();
+  memory.hiddenProducts = Array.isArray(memory.hiddenProducts) ? memory.hiddenProducts : [];
+  const map = {};
+  memory.hiddenProducts.forEach(function (value) {
+    const key = normalizeInventoryCompareText(value);
+    if (key) map[key] = true;
+  });
+  return map;
 }
 function saveInventoryOcrMemory() {
   try {
     localStorage.setItem('bmh_inventory_ocr_memory', JSON.stringify(loadInventoryOcrMemory()));
   } catch (e) { /* noop */ }
+  if (window.FBDB) {
+    window.FBDB.ref('settings/inventory/ocrMemory').set(loadInventoryOcrMemory()).catch(function () {});
+  }
 }
 function learnInventoryOcrValue(target, value) {
   const raw = normalizeInventoryTextValue(value);
@@ -12219,6 +12410,11 @@ function learnInventoryOcrValue(target, value) {
   const bucket = bucketMap[String(target || '')];
   if (!bucket) return;
   memory[bucket] = Array.isArray(memory[bucket]) ? memory[bucket] : [];
+  if (bucket === 'products') {
+    memory.hiddenProducts = (memory.hiddenProducts || []).filter(function (v) {
+      return normalizeInventoryCompareText(v) !== normalizeInventoryCompareText(raw);
+    });
+  }
   if (!memory[bucket].some(function (v) { return normalizeInventoryCompareText(v) === normalizeInventoryCompareText(raw); })) {
     memory[bucket].push(raw);
     saveInventoryOcrMemory();
@@ -12232,13 +12428,33 @@ function inventoryKnownVendorNames() {
   return Array.from(new Set(names.map(function (v) { return normalizeInventoryTextValue(v); }).filter(Boolean)));
 }
 function inventoryKnownProductNames() {
+  const hidden = getInventorySuggestionHiddenMap();
   const names = [];
-  (INVENTORY || []).forEach(function (i) { if (i?.name) names.push(String(i.name)); });
-  (IOL_CATALOG || []).forEach(function (row) { if (row?.name) names.push(String(row.name)); });
+  (INVENTORY || []).forEach(function (i) {
+    if (i?.name) names.push(String(i.name));
+    if (i?.barcode) names.push(String(i.barcode));
+  });
+  (IOL_CATALOG || []).forEach(function (row) {
+    if (row?.name) names.push(String(row.name));
+    if (row?.barcode) names.push(String(row.barcode));
+  });
   (window.BMH_PURCHASES || []).forEach(function (row) { if (row?.itemName) names.push(String(row.itemName)); });
   (loadInventoryOcrMemory().barcodes || []).forEach(function (v) { names.push(String(v)); });
   (loadInventoryOcrMemory().products || []).forEach(function (v) { names.push(String(v)); });
-  return Array.from(new Set(names.map(function (v) { return normalizeInventoryTextValue(v); }).filter(Boolean)));
+  return Array.from(new Set(names.map(function (v) { return normalizeInventoryTextValue(v); }).filter(function (v) {
+    const key = normalizeInventoryCompareText(v);
+    return !!v && !hidden[key];
+  })));
+}
+function inventoryKnownIolCatalogBrandNames() {
+  return Array.from(new Set(getIolCatalogNormalizedRows().map(function (row) {
+    return normalizeInventoryTextValue(row.name || '');
+  }).filter(Boolean)));
+}
+function inventoryKnownIolCatalogCompanyNames() {
+  return Array.from(new Set(getIolCatalogNormalizedRows().map(function (row) {
+    return normalizeInventoryTextValue(row.mfr || '');
+  }).filter(Boolean)));
 }
 function inventoryKnownBrandNames() {
   const names = [];
@@ -12296,7 +12512,10 @@ function renderInventoryImportDatalists() {
   const itemList = document.getElementById('inv-item-datalist');
   if (itemList) {
     const memory = loadInventoryOcrMemory();
-    const products = memory.products || [];
+    const hidden = getInventorySuggestionHiddenMap();
+    const products = (memory.products || []).filter(function (name) {
+      return !hidden[normalizeInventoryCompareText(name)];
+    });
     itemList.innerHTML = products.map(function (name) {
       return '<option value="' + escapeHtmlConsent(name) + '"></option>';
     }).join('');
@@ -12314,6 +12533,14 @@ function renderInventoryImportDatalists() {
   }).join('');
   const companyList = document.getElementById('inv-company-datalist');
   if (companyList) companyList.innerHTML = inventoryKnownCompanyNames().map(function (name) {
+    return '<option value="' + escapeHtmlConsent(name) + '"></option>';
+  }).join('');
+  const iolBrandList = document.getElementById('iol-brand-datalist');
+  if (iolBrandList) iolBrandList.innerHTML = inventoryKnownIolCatalogBrandNames().map(function (name) {
+    return '<option value="' + escapeHtmlConsent(name) + '"></option>';
+  }).join('');
+  const iolCompanyList = document.getElementById('iol-company-datalist');
+  if (iolCompanyList) iolCompanyList.innerHTML = inventoryKnownIolCatalogCompanyNames().map(function (name) {
     return '<option value="' + escapeHtmlConsent(name) + '"></option>';
   }).join('');
 }
@@ -13884,6 +14111,10 @@ function addInventoryStorePrompt() {
   if (!name) return;
   window.BMH_STORE_LOCATIONS = window.BMH_STORE_LOCATIONS || [];
   if (!window.BMH_STORE_LOCATIONS.includes(name)) window.BMH_STORE_LOCATIONS.push(name);
+  window._bmhInventoryHiddenStoreLocations = (loadInventoryHiddenStoreLocations() || []).filter(function (v) {
+    return normalizeInventoryCompareText(v) !== normalizeInventoryCompareText(name);
+  });
+  saveInventoryHiddenStoreLocations();
   saveInventoryStoreLocations();
   bmhPopulateInventorySelectors();
   const sel = document.getElementById('inv-in-store');
@@ -13912,6 +14143,10 @@ function deleteInventoryStorePrompt() {
   window.BMH_STORE_LOCATIONS = stores.filter(function (name) {
     return normalizeInventoryCompareText(name) !== normalizeInventoryCompareText(hit);
   });
+  const hidden = loadInventoryHiddenStoreLocations().slice();
+  if (!hidden.some(function (name) { return normalizeInventoryCompareText(name) === normalizeInventoryCompareText(hit); })) hidden.push(hit);
+  window._bmhInventoryHiddenStoreLocations = hidden;
+  saveInventoryHiddenStoreLocations();
   saveInventoryStoreLocations();
   bmhPopulateInventorySelectors();
   ['inv-in-store', 'inv-stock-store-filter', 'inv-tr-from', 'inv-tr-to', 'inv-indent-store', 'inv-indent-source', 'inv-ret-store'].forEach(function (id) {
@@ -13940,19 +14175,57 @@ function addInventoryBarcodePrompt() {
   showToast('Barcode added to list ✓', 's');
 }
 window.addInventoryBarcodePrompt = addInventoryBarcodePrompt;
+function parseInventoryIndexedSelectionInput(raw, items) {
+  const src = String(raw || '').trim();
+  const list = Array.isArray(items) ? items.slice() : [];
+  if (!src || !list.length) return [];
+  const chosen = [];
+  src.split(',').map(function (token) { return token.trim(); }).filter(Boolean).forEach(function (token) {
+    if (/^\d+$/.test(token)) {
+      const idx = Number(token) - 1;
+      if (idx >= 0 && idx < list.length) chosen.push(list[idx]);
+      return;
+    }
+    const hit = list.find(function (item) {
+      return normalizeInventoryCompareText(item) === normalizeInventoryCompareText(token);
+    });
+    if (hit) chosen.push(hit);
+  });
+  return Array.from(new Set(chosen.map(function (item) { return normalizeInventoryTextValue(item); }).filter(Boolean)));
+}
 function removeInventoryBarcodePrompt() {
   const memory = loadInventoryOcrMemory();
   memory.barcodes = memory.barcodes || [];
-  if (memory.barcodes.length === 0) { showToast('No barcodes in list', 'w'); return; }
-  const barcodeList = memory.barcodes.join('\n');
-  const toRemove = prompt('Enter barcode to remove from list:\n' + barcodeList);
+  memory.products = memory.products || [];
+  memory.hiddenProducts = Array.isArray(memory.hiddenProducts) ? memory.hiddenProducts : [];
+  const combined = inventoryKnownProductNames();
+  if (combined.length === 0) { showToast('No trade names or barcodes in list', 'w'); return; }
+  const barcodeList = combined.map(function (item, idx) { return (idx + 1) + '. ' + item; }).join('\n');
+  const defaultValue = String(document.getElementById('bc-in')?.value || '').trim();
+  const toRemove = prompt('Enter trade name / barcode numbers to remove (example: 1,2,5):\n' + barcodeList, defaultValue);
   if (!toRemove) return;
-  const index = memory.barcodes.indexOf(String(toRemove).trim());
-  if (index === -1) { showToast('Barcode not found', 'w'); return; }
-  memory.barcodes.splice(index, 1);
+  const selectedItems = parseInventoryIndexedSelectionInput(toRemove, combined);
+  if (!selectedItems.length) { showToast('No matching trade names / barcodes selected', 'w'); return; }
+  const beforeBarcodes = memory.barcodes.length;
+  const beforeProducts = memory.products.length;
+  selectedItems.forEach(function (entry) {
+    const wanted = normalizeInventoryCompareText(entry);
+    memory.barcodes = memory.barcodes.filter(function (item) {
+      return normalizeInventoryCompareText(item) !== wanted;
+    });
+    memory.products = memory.products.filter(function (item) {
+      return normalizeInventoryCompareText(item) !== wanted;
+    });
+    if (!memory.hiddenProducts.some(function (item) { return normalizeInventoryCompareText(item) === wanted; })) {
+      memory.hiddenProducts.push(normalizeInventoryTextValue(entry));
+    }
+  });
+  if (memory.barcodes.length === beforeBarcodes && memory.products.length === beforeProducts) {
+    showToast('Selected trade names / barcodes were already hidden', 'i');
+  }
   saveInventoryOcrMemory();
   renderInventoryImportDatalists();
-  showToast('Barcode removed from list ✓', 's');
+  showToast(selectedItems.length + ' trade name / barcode entr' + (selectedItems.length === 1 ? 'y' : 'ies') + ' removed from list ✓', 's');
 }
 window.removeInventoryBarcodePrompt = removeInventoryBarcodePrompt;
 function addInventoryBrandPrompt() {
@@ -13978,8 +14251,17 @@ function removeInventoryBrandPrompt() {
   const toRemove = prompt('Enter brand to remove from list:\n' + brandList);
   if (!toRemove) return;
   const normalized = normalizeInventoryTextValue(toRemove);
-  const index = memory.brands.indexOf(normalized);
-  if (index === -1) { showToast('Brand not found', 'w'); return; }
+  const index = memory.brands.findIndex(function (item) {
+    return normalizeInventoryCompareText(item) === normalizeInventoryCompareText(normalized);
+  });
+  if (index === -1) {
+    if (findIolCatalogEntryByName(normalized)) {
+      showToast('IOL brands now come from Settings → Surgery Pack catalogue. Edit or remove it there.', 'i');
+      return;
+    }
+    showToast('Brand not found', 'w');
+    return;
+  }
   memory.brands.splice(index, 1);
   saveInventoryOcrMemory();
   renderInventoryImportDatalists();
@@ -14009,8 +14291,20 @@ function removeInventoryCompanyPrompt() {
   const toRemove = prompt('Enter company to remove from list:\n' + companyList);
   if (!toRemove) return;
   const normalized = normalizeInventoryTextValue(toRemove);
-  const index = memory.companies.indexOf(normalized);
-  if (index === -1) { showToast('Company not found', 'w'); return; }
+  const index = memory.companies.findIndex(function (item) {
+    return normalizeInventoryCompareText(item) === normalizeInventoryCompareText(normalized);
+  });
+  if (index === -1) {
+    const catalogCompanyExists = getIolCatalogNormalizedRows().some(function (row) {
+      return normalizeInventoryCompareText(row.mfr || '') === normalizeInventoryCompareText(normalized);
+    });
+    if (catalogCompanyExists) {
+      showToast('IOL companies now come from Settings → Surgery Pack catalogue. Edit or remove the IOL there.', 'i');
+      return;
+    }
+    showToast('Company not found', 'w');
+    return;
+  }
   memory.companies.splice(index, 1);
   saveInventoryOcrMemory();
   renderInventoryImportDatalists();
@@ -16833,6 +17127,7 @@ function appendAdviceTemplateToTextarea(dept, text) {
   const lines = String(ta.value || '').split('\n').map(function (line) { return String(line || '').trim(); }).filter(Boolean);
   if (!lines.some(function (line) { return line.toLowerCase() === value.toLowerCase(); })) lines.push(value);
   ta.value = lines.join('\n');
+  ta.dispatchEvent(new Event('input', { bubbles: true }));
   ta.dispatchEvent(new Event('change', { bubbles: true }));
   if (dept === 'obg') renderObgAdviceChipsFromTextarea();
 }
@@ -18116,11 +18411,17 @@ function mergeDrugLibraryRows(primaryRows) {
 function saveDrugLibraryToStorage() {
   invalidateDrugSearchPoolCache && invalidateDrugSearchPoolCache();
   persistDrugLibraryLocalSnapshots(DRUG_LIBRARY);
+  watchDrugLibraryFromFirebase && watchDrugLibraryFromFirebase();
   if (window.FBDB) {
     const ts = Date.now();
     window.FBDB.ref('drugLibrary').set(DRUG_LIBRARY).catch(() => {});
     window.FBDB.ref('drugLibraryMeta').set({ updatedAt: ts }).catch(() => {});
   }
+  renderRxDrugs && renderRxDrugs();
+  try {
+    const activeInput = getActiveRxQuickSearchInput && getActiveRxQuickSearchInput();
+    if (activeInput && String(activeInput.value || '').trim().length >= 1) rxQuickSearch(String(activeInput.value || ''));
+  } catch (e) {}
 }
 function choosePreferredDrugLibraryRows(localRows, remoteRows, currentRows, localTs, remoteTs) {
   // Always take the UNION of all sources — never discard drugs based on timestamps.
@@ -18351,6 +18652,7 @@ function loadDrugLibraryFromStorage(opts) {
   opts = opts || {};
   const forceRemote = !!opts.forceRemote;
   const needsRemoteHydration = !!window.FBDB && !window._bmhDrugLibraryHydratedFromFirebase;
+  watchDrugLibraryFromFirebase && watchDrugLibraryFromFirebase();
   if (window._bmhDrugLibraryLoadedOnce && !forceRemote && !needsRemoteHydration) return;
   if (!window._bmhDrugLibraryLoadedOnce) window._bmhDrugLibraryLoadedOnce = true;
   const applyMergedRows = function (remoteVal, opts) {
@@ -18453,6 +18755,11 @@ function watchDrugLibraryFromFirebase() {
     persistDrugLibraryLocalSnapshots(DRUG_LIBRARY);
     renderSettingsDrugs && renderSettingsDrugs();
     rebuildDrugGenericDatalist && rebuildDrugGenericDatalist();
+    renderRxDrugs && renderRxDrugs();
+    try {
+      const activeInput = getActiveRxQuickSearchInput && getActiveRxQuickSearchInput();
+      if (activeInput && String(activeInput.value || '').trim().length >= 1) rxQuickSearch(String(activeInput.value || ''));
+    } catch (e) {}
     // Push back to Firebase when local had drugs not in remote
     const remoteHash = remoteArr.map(function (d) { return (d._id || d.trade) + ':' + (d._updatedAt || 0); }).sort().join(',');
     if (nextHash !== remoteHash) {
@@ -20051,6 +20358,72 @@ function getKnownHighestBmhNumber() {
   if (Number.isFinite(inMem) && (!maxPrimary || isPrimaryBmhSequenceNumber(inMem)) && inMem > maxNum && inMem < maxNum + 10000) maxNum = inMem;
   return maxNum;
 }
+function parseBmhSequenceNumber(value) {
+  const m = String(value || '').trim().match(/^BMSH-(\d{1,9})$/i);
+  if (!m) return NaN;
+  return parseInt(m[1], 10);
+}
+function isBmhIdAllocatedToAnotherPatient(bmhId, exceptBmhId) {
+  const target = String(bmhId || '').trim();
+  const except = String(exceptBmhId || '').trim();
+  if (!target) return false;
+  return (window.PATIENTS || []).some(function (p) {
+    const existingId = String(p?.bmhId || '').trim();
+    if (!existingId || existingId !== target) return false;
+    if (except && existingId === except) return false;
+    return true;
+  });
+}
+function findNextAvailableBmhId(startValue, exceptBmhId) {
+  let nextNum = parseBmhSequenceNumber(startValue);
+  if (!Number.isFinite(nextNum) || nextNum <= 0) nextNum = getKnownHighestBmhNumber() + 1;
+  let attempts = 0;
+  while (attempts < 10000) {
+    const candidate = 'BMSH-' + String(nextNum).padStart(6, '0');
+    if (!isBmhIdAllocatedToAnotherPatient(candidate, exceptBmhId)) return candidate;
+    nextNum += 1;
+    attempts += 1;
+  }
+  return '';
+}
+function syncBmhSequenceFloor(bmhId) {
+  const num = parseBmhSequenceNumber(bmhId);
+  if (!Number.isFinite(num) || !isPrimaryBmhSequenceNumber(num)) return;
+  try { localStorage.setItem('bmh_last_patient_num', String(num)); } catch (_) {}
+  if (!window._nextPatientNum || window._nextPatientNum <= num) window._nextPatientNum = num + 1;
+  const el = document.getElementById('rc-uid');
+  if (el) el.textContent = 'BMSH-' + String(window._nextPatientNum).padStart(6, '0');
+  if (window.FBDB) {
+    window.FBDB.ref('settings/lastPatientNum').transaction(function (current) {
+      const existing = typeof current === 'number' ? current : 0;
+      return existing >= num ? existing : num;
+    }).catch(function () {});
+  }
+}
+function patientNeedsReceptionQueueRestore(patient, deptOverride) {
+  const p = patient || null;
+  if (!p) return false;
+  const status = String(p.status || '').toLowerCase();
+  if (status === 'ipd' || status === 'discharged') return false;
+  const targetDept = normalizeDeptKeyForQueue(deptOverride || p.dept || p.department || '');
+  const currentDept = normalizeDeptKeyForQueue(p.dept || p.department || '');
+  const inTodayQueue = patientQueueDateMatchesToday(p)
+    || localDateKey(p.checkinAt || p.createdAt || p.queueDate || p.visitDate || p.updatedAt) === localDateKey(new Date());
+  if (p.queueRemoved || status === 'removed' || status === 'seen' || p.seen) return true;
+  if (!inTodayQueue) return true;
+  if (targetDept && currentDept && targetDept !== currentDept) return true;
+  return false;
+}
+function receptionQueueRestoreButtonHtml(bmhId, opts) {
+  const id = String(bmhId || '').trim();
+  if (!id) return '';
+  const patient = (window.PATIENTS || []).find(function (p) { return String(p?.bmhId || '').trim() === id; });
+  if (!patient || !patientNeedsReceptionQueueRestore(patient)) return '';
+  const title = String(opts?.title || 'Restore to queue');
+  const label = String(opts?.label || '↩');
+  const style = String(opts?.style || 'background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1px solid var(--bmh-blue);border-radius:6px;padding:3px 7px;font-size:10px;font-weight:800;cursor:pointer;flex-shrink:0');
+  return '<button type="button" title="' + escapeHtmlConsent(title) + '" onclick="event.stopPropagation();restorePatientToDoctorQueue(\'' + id.replace(/'/g, "\\'") + '\')" style="' + style + '">' + escapeHtmlConsent(label) + '</button>';
+}
 
 function genRcUID() {
   // Only numeric BMSH-###### IDs participate in the sequence (CSV/hash imports are ignored)
@@ -20322,10 +20695,19 @@ async function registerPatient() {
     forceNewId: forceNewBmsh
   });
   const isExistingRegistration = !!existingPt;
-  const uid = String(isExistingRegistration ? (existingPt && existingPt.bmhId) : (await reserveNextBmhId()) || '').trim();
+  let uid = String(isExistingRegistration ? (existingPt && existingPt.bmhId) : (await reserveNextBmhId()) || '').trim();
   if(isExistingRegistration) {
     if(!uid) { showToast('Could not reuse the existing BMSH ID','e'); return; }
   } else if(!/^BMSH-\d{6,9}$/.test(uid)) { showToast('Could not generate a valid BMSH ID','e'); return; }
+  if (!isExistingRegistration) {
+    const safeUid = findNextAvailableBmhId(uid, existingPt?.bmhId || '');
+    if (!safeUid) { showToast('Could not generate a conflict-free BMSH ID', 'e'); return; }
+    if (safeUid !== uid) {
+      uid = safeUid;
+      showToast('Previous BMSH ID already existed — assigned next available ID ' + uid, 'i');
+    }
+    syncBmhSequenceFloor(uid);
+  }
   const uidEl = document.getElementById('rc-uid');
   if (uidEl) uidEl.textContent = uid;
   if (isExistingRegistration && String(uidDisplayed || '').trim() && String(uidDisplayed).trim() !== String(uid)) {
@@ -20369,11 +20751,7 @@ async function registerPatient() {
 
   savePatientToFirebase(patient);
 
-  const numFromId = parseInt(String(uid).replace(/^BMSH-/,''),10);
-  if(!isNaN(numFromId) && isPrimaryBmhSequenceNumber(numFromId)) {
-    try { localStorage.setItem('bmh_last_patient_num', numFromId); } catch(_) {}
-    window._nextPatientNum = numFromId + 1;
-  }
+  syncBmhSequenceFloor(uid);
 
   let fee = parseFloat(document.getElementById('rc-fee')?.value || getReceptionConsultationRate(centre) || 0) || 0;
   if(noFee) fee = 0;
@@ -20511,6 +20889,9 @@ async function registerPatient() {
   }
 
   maybeScheduleSameDaySurgeryOTFromRegistration(patient);
+  if (!isPreReg) {
+    bmhEnsurePatientInTodayDeptQueue(uid, { dept: dept, silentToast: true });
+  }
 
   if(!isInsurance && !isCreditDue && !isPreReg && fee>0) {
     setTimeout(()=>{
@@ -27477,6 +27858,23 @@ function isPatientMarkedSeen(p) {
   const st = String(p.status || '').toLowerCase();
   return st === 'seen' || st === 'done';
 }
+function dedupeQueueEntriesByKey(rows) {
+  const map = new Map();
+  (rows || []).forEach(function (row) {
+    if (!row) return;
+    const key = String(row._queueKey || row.bmhId || '').trim();
+    if (!key) return;
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, row);
+      return;
+    }
+    const existingStamp = Date.parse(existing.updatedAt || existing.createdAt || existing.queueDate || '') || Number(existing.checkinAt || 0) || 0;
+    const nextStamp = Date.parse(row.updatedAt || row.createdAt || row.queueDate || '') || Number(row.checkinAt || 0) || 0;
+    if (nextStamp >= existingStamp) map.set(key, row);
+  });
+  return Array.from(map.values());
+}
 function localDateKey(value) {
   const d = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(d.getTime())) return '';
@@ -27509,12 +27907,12 @@ function patientQueueDateMatchesToday(p) {
 }
 function getTodayQueueBasePatients() {
   const todayKeyLocal = localDateKey(new Date());
-  return PATIENTS.filter(function (p) {
+  return dedupeQueueEntriesByKey(PATIENTS.filter(function (p) {
     if (!p || p.queueRemoved || String(p.status || '').toLowerCase() === 'removed') return false;
     if (!centreMatch(p)) return false;
     if (!patientQueueDateMatchesToday(p) && !(p.checkinAt && localDateKey(p.checkinAt) === todayKeyLocal)) return false;
     return true;
-  });
+  }));
 }
 /** Seen / done row belongs in “Done today” (same serial as active list). */
 function patientDoneQueueMatchesToday(p, todayKeyLocal) {
@@ -27929,9 +28327,9 @@ function getDoctorPrescriptionPrintMode(profile) {
 function getDoctorPrescriptionDesign(profile, centre) {
   const ctr = normalizeAppointmentCentreValue(centre || getEffectiveCentre?.() || CURRENT_USER?.centre || profile?.centre || 'CHD');
   const centreMode = String(ctr === 'RPR' ? (profile?.rxDesignRPR || '') : (profile?.rxDesignCHD || '')).trim().toLowerCase();
-  if (['current','option_a','option_b','signature_classic','clinical_blocks','ribbon_timeline','compact_bilingual'].includes(centreMode)) return centreMode;
+  if (['current','option_a','option_b','signature_classic','clinical_blocks','ribbon_timeline','compact_bilingual','editorial_columns','left_label_ledger','vertical_dx_column','mono_chart'].includes(centreMode)) return centreMode;
   const mode = String(profile?.rxDesign || '').trim().toLowerCase();
-  if (['current','option_a','option_b','signature_classic','clinical_blocks','ribbon_timeline','compact_bilingual'].includes(mode)) return mode;
+  if (['current','option_a','option_b','signature_classic','clinical_blocks','ribbon_timeline','compact_bilingual','editorial_columns','left_label_ledger','vertical_dx_column','mono_chart'].includes(mode)) return mode;
   return 'current';
 }
 
@@ -28296,7 +28694,11 @@ window.printUnifiedRx = function(deptId) {
     signature_classic: `body{background:#fcfcfb}.rx-item{padding:7px 10px;border:1px solid #dfe4ec;border-left:4px solid #c89a2b;border-radius:10px;margin-bottom:6px;background:#fff}.rx-item-name{font-size:14.5px;color:#111}.rx-item-instr{font-size:11px;color:#111;font-style:normal;font-weight:700}.advice-block{font-size:11px;color:#111;font-style:normal;font-weight:700;background:#faf7f0;border-radius:8px;border-left:4px solid #c89a2b}.sec-label{color:#111}`,
     clinical_blocks: `body{background:#fbfdff}.rx-list{gap:8px}.rx-item{padding:10px 12px;border:1px solid #d8e4ef;border-radius:12px;background:#eef5fb}.rx-item-name{font-size:14px;color:#111}.rx-item-details{margin-top:5px}.rx-item-instr{font-size:11px;color:#111;font-style:normal;font-weight:700;background:#fff;border:1px solid #dae5ef;border-radius:8px;padding:8px 10px;margin-top:8px}.advice-block{font-size:11px;color:#111;font-style:normal;font-weight:700;background:#f2f7fb;border-radius:10px;border-left:4px solid #173a67}`,
     ribbon_timeline: `body{background:#fffdfa}.sec-label{color:#111}.rx-list{position:relative;padding-left:12px}.rx-list:before{content:'';position:absolute;left:2px;top:2px;bottom:2px;width:3px;border-radius:999px;background:linear-gradient(180deg,#0f7b82,#ef8b67)}.rx-item{position:relative;padding:8px 10px 8px 14px;border:1px solid #dde7e7;border-radius:12px;background:#fff;margin-bottom:8px}.rx-item:before{content:'';position:absolute;left:-18px;top:18px;width:10px;height:10px;border-radius:50%;background:#fff;border:3px solid #0f7b82}.rx-item-name{font-size:14px;color:#111}.rx-item-instr{font-size:11px;color:#111;font-style:normal;font-weight:700;background:#eef7f7;border-radius:8px;padding:8px 10px;margin-top:8px;border-left:none}`,
-    compact_bilingual: `body{font-size:9.7px;padding:3.2mm 7mm 3mm;line-height:1.26}.pt-name{font-size:16px;color:#111}.pt-subline{margin-bottom:2px}.sec-divider{margin:3px 0 2px}.rx-item{padding:3px 0 4px}.rx-item-name{font-size:12.8px;color:#111}.rx-item-instr{font-size:10.8px;font-style:normal;font-weight:700;color:#111}.advice-block{font-size:10.6px;color:#111;font-style:normal;font-weight:700;line-height:1.3}.fu-box{font-size:10px;padding:4px 8px;color:#111}`
+    compact_bilingual: `body{font-size:9.7px;padding:3.2mm 7mm 3mm;line-height:1.26}.pt-name{font-size:16px;color:#111}.pt-subline{margin-bottom:2px}.sec-divider{margin:3px 0 2px}.rx-item{padding:3px 0 4px}.rx-item-name{font-size:12.8px;color:#111}.rx-item-instr{font-size:10.8px;font-style:normal;font-weight:700;color:#111}.advice-block{font-size:10.6px;color:#111;font-style:normal;font-weight:700;line-height:1.3}.fu-box{font-size:10px;padding:4px 8px;color:#111}`,
+    editorial_columns: `body{background:#fbfbfa}.sec-label{color:#111}.pt-name-bar{border-bottom:2px solid #111}.diag-text{color:#111}.advice-block{font-weight:700;background:#f4f4f3;border-left:4px solid #111;border-radius:10px}.fu-box{background:#f2f2f1;border-color:#bdbdb9;color:#111}`,
+    left_label_ledger: `body{background:#fff}.sec-label{color:#111}.pt-name-bar{border-bottom:2px solid #2f2f2f}.advice-block{font-weight:700;background:#f6f6f6;border-left:4px solid #2f2f2f;border-radius:10px}.fu-box{background:#f3f3f3;border-color:#cfcfcf;color:#111}`,
+    vertical_dx_column: `body{background:#fcfcfc}.sec-label{color:#111}.pt-name-bar{border-bottom:1px solid #999}.advice-block{font-weight:700;background:#f7f7f7;border-left:4px solid #555;border-radius:8px}.fu-box{background:#f5f5f5;border-color:#cfcfcf;color:#111}`,
+    mono_chart: `body{font-family:'Source Sans 3','Courier New',monospace;background:#fff}.pt-name-bar{border-bottom:2px double #222}.pt-name{letter-spacing:.08em}.sec-label{color:#111}.advice-block{font-family:'Source Sans 3','Courier New',monospace;background:#f5f5f5;border:1px solid #cfcfcf;border-left:4px solid #111;border-radius:0}.fu-box{border-radius:4px;background:#f2f2f2;border-color:#bdbdbd;color:#111}`
   }[rxDesign] || '';
   const renderRxTaperDesign = function (trade, taperRows) {
     if (!taperRows.length) return '';
@@ -28320,6 +28722,12 @@ window.printUnifiedRx = function(deptId) {
     }
     if (rxDesign === 'compact_bilingual') {
       return `<div class="design-taper compact"><div class="design-taper-title">Taper</div>${taperRows.map(function (tap, ti) {
+        const taperData = { freq: tap.freq, dur: tap.dur, dateFrom: tap.dateFrom, dateTo: tap.dateTo, eye: tap.eye, mealTiming: tap.mealTiming, activeTimes: tap.activeTimes || tap.times || [] };
+        return `<div class="design-taper-line"><strong>${ti + 1}.</strong> ${escapeHtmlConsent(buildRxTaperSummaryLine(taperData, rxPlainLang, fmtIN))}</div>`;
+      }).join('')}</div>`;
+    }
+    if (rxDesign === 'editorial_columns' || rxDesign === 'left_label_ledger' || rxDesign === 'vertical_dx_column' || rxDesign === 'mono_chart') {
+      return `<div class="design-taper ${rxDesign}"><div class="design-taper-title">Taper Plan</div>${taperRows.map(function (tap, ti) {
         const taperData = { freq: tap.freq, dur: tap.dur, dateFrom: tap.dateFrom, dateTo: tap.dateTo, eye: tap.eye, mealTiming: tap.mealTiming, activeTimes: tap.activeTimes || tap.times || [] };
         return `<div class="design-taper-line"><strong>${ti + 1}.</strong> ${escapeHtmlConsent(buildRxTaperSummaryLine(taperData, rxPlainLang, fmtIN))}</div>`;
       }).join('')}</div>`;
@@ -28361,6 +28769,43 @@ window.printUnifiedRx = function(deptId) {
             ${renderRxTaperDesign(trade, taperRows)}
           </div>`;
         }
+        if (rxDesign === 'editorial_columns') {
+          return `<div class="design-med editorial">
+            <div class="design-med-kicker">Rx ${i + 1}</div>
+            <div class="design-med-top"><div><div class="design-med-name">${escapeHtmlConsent(trade)}</div>${gen || form ? `<div class="design-med-sub">${[gen, form].filter(Boolean).map(escapeHtmlConsent).join(' · ')}</div>` : ''}</div><div class="design-med-right">${escapeHtmlConsent(meta || 'As prescribed')}</div></div>
+            <div class="design-med-columns"><div class="design-med-col-label">Directions</div><div class="design-med-instr">${escapeHtmlConsent(plainLine || '')}</div></div>
+            ${renderRxTaperDesign(trade, taperRows)}
+          </div>`;
+        }
+        if (rxDesign === 'left_label_ledger') {
+          return `<div class="design-med ledger">
+            <div class="design-med-ledger-label">#${i + 1}</div>
+            <div class="design-med-ledger-body">
+              <div class="design-med-top"><div><div class="design-med-name">${escapeHtmlConsent(trade)}</div>${gen || form ? `<div class="design-med-sub">${[gen, form].filter(Boolean).map(escapeHtmlConsent).join(' · ')}</div>` : ''}</div><div class="design-med-right">${escapeHtmlConsent(meta || 'As prescribed')}</div></div>
+              <div class="design-med-instr">${escapeHtmlConsent(plainLine || '')}</div>
+              ${renderRxTaperDesign(trade, taperRows)}
+            </div>
+          </div>`;
+        }
+        if (rxDesign === 'vertical_dx_column') {
+          return `<div class="design-med vertical">
+            <div class="design-med-serial">${i + 1}</div>
+            <div class="design-med-vertical-body">
+              <div class="design-med-top"><div><div class="design-med-name">${escapeHtmlConsent(trade)}</div>${gen || form ? `<div class="design-med-sub">${[gen, form].filter(Boolean).map(escapeHtmlConsent).join(' · ')}</div>` : ''}</div><div class="design-med-right">${escapeHtmlConsent(meta || 'As prescribed')}</div></div>
+              <div class="design-med-instr">${escapeHtmlConsent(plainLine || '')}</div>
+              ${renderRxTaperDesign(trade, taperRows)}
+            </div>
+          </div>`;
+        }
+        if (rxDesign === 'mono_chart') {
+          return `<div class="design-med mono">
+            <div class="design-med-mono-head"><span>ITEM ${String(i + 1).padStart(2, '0')}</span><span>${escapeHtmlConsent(meta || 'Schedule pending')}</span></div>
+            <div class="design-med-name">${escapeHtmlConsent(trade)}</div>
+            ${gen || form ? `<div class="design-med-sub">${[gen, form].filter(Boolean).map(escapeHtmlConsent).join(' / ')}</div>` : ''}
+            <div class="design-med-instr">${escapeHtmlConsent(plainLine || '')}</div>
+            ${renderRxTaperDesign(trade, taperRows)}
+          </div>`;
+        }
         return `<div class="design-med compact">
           <div class="design-med-top"><div class="design-med-name">${escapeHtmlConsent(trade)}</div><div class="design-med-right">${escapeHtmlConsent(meta || '')}</div></div>
           ${gen || form ? `<div class="design-med-sub">${[gen, form].filter(Boolean).map(escapeHtmlConsent).join(' · ')}</div>` : ''}
@@ -28377,6 +28822,10 @@ window.printUnifiedRx = function(deptId) {
     if (rxDesign === 'signature_classic') return `<div class="design-dx classic">${joined}</div>`;
     if (rxDesign === 'clinical_blocks') return `<div class="design-dx blocks"><div class="design-dx-title">Clinical Diagnosis</div><div class="design-dx-body">${joined}</div></div>`;
     if (rxDesign === 'ribbon_timeline') return `<div class="design-dx ribbon"><div class="design-dx-title">Diagnosis</div><div class="design-dx-body">${joined}</div></div>`;
+    if (rxDesign === 'editorial_columns') return `<div class="design-dx editorial"><div class="design-dx-title">Assessment</div><div class="design-dx-body">${joined}</div></div>`;
+    if (rxDesign === 'left_label_ledger') return `<div class="design-dx ledger"><div class="design-dx-ledger-label">Dx</div><div class="design-dx-body">${joined}</div></div>`;
+    if (rxDesign === 'vertical_dx_column') return `<div class="design-dx vertical"><div class="design-dx-rail">Diagnosis</div><div class="design-dx-body">${joined}</div></div>`;
+    if (rxDesign === 'mono_chart') return `<div class="design-dx mono"><div class="design-dx-title">DX LOG</div><div class="design-dx-body">${joined}</div></div>`;
     return `<div class="design-dx compact">${joined}</div>`;
   };
   const renderAdviceFollowByDesign = function () {
@@ -28390,43 +28839,46 @@ window.printUnifiedRx = function(deptId) {
   const designedDiagnosis = renderDiagnosisByDesign();
   const designedMeds = renderMedsByDesign();
   const designedAdviceFollow = renderAdviceFollowByDesign();
+  // option_a and option_b are CSS-only variants of the 'current' rx-list layout.
+  // They must use the same inline rx-list renderer — NOT the designedMeds block.
+  const isListDesign = rxDesign === 'current' || rxDesign === 'option_a' || rxDesign === 'option_b';
 
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Inter:wght@400;600;700;800&family=Lato:ital,wght@0,300;0,400;0,700;0,900;1,400&family=Libre+Baskerville:wght@400;700&family=Playfair+Display:wght@700&family=Source+Sans+3:wght@400;600;700;800&display=swap');
 *{margin:0;padding:0;box-sizing:border-box;print-color-adjust:exact;-webkit-print-color-adjust:exact}
 @page{size:A4 portrait;margin:0}
-body{font-family:'Lato',sans-serif;font-size:10px;color:#1a1a1a;background:#fff;padding:3.5mm 8mm 3mm;line-height:1.3;overflow:visible}
+body{font-family:'Lato',sans-serif;font-size:9.5px;color:#1a1a1a;background:#fff;padding:2.7mm 7mm 2.5mm;line-height:1.22;overflow:visible}
 .lh-img{width:100%;max-width:100%;height:auto;display:block;margin-bottom:6px}
 /* Patient header */
 .pt-name-bar{display:flex;align-items:baseline;justify-content:space-between;border-bottom:1.5px solid #333;padding-bottom:3px;margin-bottom:2px}
-.pt-name{font-family:'Playfair Display','Georgia',serif;font-size:17px;font-weight:700;color:#111;letter-spacing:.2px}
+.pt-name{font-family:'Playfair Display','Georgia',serif;font-size:16px;font-weight:700;color:#111;letter-spacing:.2px}
 .pt-meta{font-size:10px;font-weight:300;color:#111;margin-left:8px;font-style:italic}
 .pt-date{font-size:9.5px;color:#111;font-weight:400}
-.pt-subline{font-size:9.5px;color:#111;margin-bottom:3px}
+.pt-subline{font-size:8.8px;color:#111;margin-bottom:3px}
 /* Section dividers */
-.sec-divider{display:flex;align-items:center;gap:6px;margin:4px 0 3px}
+.sec-divider{display:flex;align-items:center;gap:6px;margin:3px 0 2px}
 .sec-divider::before,.sec-divider::after{content:'';flex:1;border-top:1px solid #bbb}
 .sec-label{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#111;white-space:nowrap}
 /* Diagnosis */
 .diag-rule-top{border-top:1.5px solid #111;margin-bottom:3px}
 .diag-rule-bot{border-top:1.5px solid #111;margin-top:3px}
-.diag-text{font-family:'Playfair Display','Georgia',serif;font-size:12px;font-weight:700;text-align:center;color:#111;padding:2px 0}
+.diag-text{font-family:'Playfair Display','Georgia',serif;font-size:11px;font-weight:700;text-align:center;color:#111;padding:1px 0}
 /* Post-surgery flag */
 .postsurg-flag{font-size:10px;font-weight:800;color:#222;border:1.5px solid #555;display:inline-block;padding:2px 10px;border-radius:3px;margin-bottom:4px;letter-spacing:.3px}
 /* Complaint / plain text block */
-.cc-text{font-size:10.2px;color:#333;font-style:italic;margin:2px 0 3px;padding-left:6px}
+.cc-text{font-size:9.6px;color:#333;font-style:italic;margin:1px 0 2px;padding-left:6px}
 /* Dept card (OBG summary, PSY MSE, skin exam) */
-.dept-card{border:1px solid #d6dbe1;border-radius:8px;margin-bottom:4px;overflow:hidden;font-size:9.6px;background:#fbfbfb}
+.dept-card{border:1px solid #d6dbe1;border-radius:8px;margin-bottom:4px;overflow:hidden;font-size:9.2px;background:#fbfbfb;page-break-inside:avoid;break-inside:avoid}
 .dept-card-hdr{background:#f1f3f5;color:#222;font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;padding:4px 8px;border-bottom:1px solid #d6dbe1}
 .dept-card-row{display:flex;border-bottom:1px solid #e8e8e8;min-height:16px}
 .dept-card-row:last-child{border-bottom:none}
 .dept-card-key{font-weight:700;color:#333;padding:2px 6px;min-width:90px;font-size:9.5px;text-transform:uppercase;letter-spacing:.4px;background:#f5f5f5;display:flex;align-items:center}
 .dept-card-val{padding:2px 8px;color:#111;font-size:10px;display:flex;align-items:center;flex:1}
 /* Vitals inline */
-.vitals-inline{font-size:10px;color:#222;margin-bottom:4px;line-height:1.6}
+.vitals-inline{font-size:9.4px;color:#222;margin-bottom:3px;line-height:1.45}
 /* VA / Glass tables */
-table{width:100%;border-collapse:collapse;font-size:9.6px;margin-bottom:4px}
+table{width:100%;border-collapse:collapse;font-size:9.1px;margin-bottom:3px}
 th{background:#f2f4f6;color:#222;border:1px solid #cfd5dc;padding:3px 5px;font-weight:700;text-align:center;font-size:8.5px;letter-spacing:.3px;text-transform:uppercase}
 td{border:1px solid #d5dae0;padding:3px 5px;text-align:center;vertical-align:middle}
 td.left{text-align:left}
@@ -28434,18 +28886,18 @@ tr:nth-child(even) td{background:#fafafa}
 .flag-h{font-weight:700;color:#111;text-decoration:underline}
 .flag-n{color:#444}
 /* Medicine list — all depts */
-.rx-list{display:flex;flex-direction:column;gap:0;margin-bottom:5px}
-.rx-item{padding:5px 0 6px 0;border-bottom:1px solid #e8e8e8}
+.rx-list{display:flex;flex-direction:column;gap:0;margin-bottom:4px}
+.rx-item{padding:4px 0 5px 0;border-bottom:1px solid #e8e8e8;page-break-inside:avoid;break-inside:avoid}
 .rx-item:last-child{border-bottom:none;padding-bottom:0}
 .rx-item-num{font-size:9px;font-weight:900;color:#111;letter-spacing:.4px;margin-bottom:1px}
-.rx-item-name{font-family:'Playfair Display','Georgia',serif;font-size:14px;font-weight:700;color:#111;display:block;line-height:1.2}
+.rx-item-name{font-family:'Playfair Display','Georgia',serif;font-size:13px;font-weight:700;color:#111;display:block;line-height:1.15}
 .rx-item-gen{font-size:9px;color:#111;font-style:italic;display:block;margin-bottom:3px}
 .rx-item-details{display:flex;flex-wrap:wrap;gap:0 12px;margin:2px 0 3px;align-items:center}
 .rx-detail-item{display:flex;align-items:center;gap:4px;font-size:9.5px;color:#111}
 .rx-detail-dot{width:3px;height:3px;border-radius:50%;background:#111;flex-shrink:0}
-.rx-item-instr{font-size:10.8px;color:#222;font-style:normal;line-height:1.3;padding-left:9px;border-left:2px solid #ccc;margin-top:4px;font-weight:600}
+.rx-item-instr{font-size:10px;color:#222;font-style:normal;line-height:1.25;padding-left:8px;border-left:2px solid #ccc;margin-top:3px;font-weight:600}
 /* Taper card */
-.taper-card{margin:4px 0 5px;border:1px solid #d5dbe2;border-radius:10px;overflow:hidden;font-size:9.5px;background:#fbfbfb}
+.taper-card{margin:3px 0 4px;border:1px solid #d5dbe2;border-radius:10px;overflow:hidden;font-size:9px;background:#fbfbfb;page-break-inside:avoid;break-inside:avoid}
 .taper-card-hdr{background:#f2f4f6;color:#333;padding:5px 10px;font-size:8.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;border-bottom:1px solid #d5dbe2}
 .taper-steps-row{display:flex;align-items:stretch;background:#fafafa}
 .taper-step{flex:1;padding:6px 8px;text-align:center;border-right:1px solid #e0e0e0}
@@ -28456,14 +28908,14 @@ tr:nth-child(even) td{background:#fafafa}
 .taper-step-instr{font-size:8.5px;color:#666;font-style:italic;line-height:1.35;margin-top:2px}
 .taper-arrow{display:flex;align-items:center;justify-content:center;color:#aaa;font-size:14px;padding:0 2px;flex-shrink:0}
 /* Procedures */
-.proc-item{padding:3px 0;font-size:11px;font-weight:800;border-bottom:1px solid #eee;display:flex;align-items:center;gap:6px}
+.proc-item{padding:2px 0;font-size:10px;font-weight:800;border-bottom:1px solid #eee;display:flex;align-items:center;gap:6px}
 /* Investigations */
 .inv-wrap{display:flex;flex-wrap:wrap;gap:4px 6px;margin-top:2px}
-.inv-chip{display:inline-flex;align-items:center;padding:3px 8px;background:#f0f0f0;border:1px solid #ccc;border-radius:3px;font-size:9.5px;font-weight:700;color:#222;line-height:1.3}
+.inv-chip{display:inline-flex;align-items:center;padding:3px 8px;background:#f0f0f0;border:1px solid #ccc;border-radius:3px;font-size:9px;font-weight:700;color:#222;line-height:1.2}
 /* Instructions */
-.advice-block{font-size:10.8px;color:#222;padding:4px 8px;border-left:2px solid #bbb;line-height:1.32;margin-bottom:3px;font-style:normal;font-weight:600}
+.advice-block{font-size:9.9px;color:#222;padding:4px 8px;border-left:2px solid #bbb;line-height:1.24;margin-bottom:3px;font-style:normal;font-weight:600;page-break-inside:avoid;break-inside:avoid}
 /* Follow-up */
-.fu-box{background:#f7f8f9;border-radius:999px;padding:5px 12px;margin:4px 0;font-size:10.5px;font-weight:700;color:#222;display:inline-block;border:1px solid #cfd5dc}
+.fu-box{background:#f7f8f9;border-radius:999px;padding:4px 10px;margin:3px 0;font-size:9.7px;font-weight:700;color:#222;display:inline-block;border:1px solid #cfd5dc}
 /* Signature row */
 .sig-row{display:flex;justify-content:space-between;align-items:flex-end;margin-top:7px;padding-top:6px;border-top:1px solid #ddd}
 .dr-name{font-family:'Playfair Display','Georgia',serif;font-size:13px;font-weight:700;color:#111}
@@ -28476,39 +28928,77 @@ tr:nth-child(even) td{background:#fafafa}
 /* OE plain instruction row */
 .oe-plain-row td{font-size:10px;font-style:italic;color:#444;background:#f8f8f8}
 /* Full design variants */
-.design-dx.classic{padding:14px 18px;border:1px solid #d9e0ea;border-left:5px solid #c89a2b;border-radius:16px;background:#fffdf8;font-family:'Playfair Display','Georgia',serif;font-size:19px;font-weight:700;line-height:1.5;color:#14345e}
+.design-dx.classic{padding:11px 14px;border:1px solid #d9e0ea;border-left:5px solid #c89a2b;border-radius:16px;background:#fffdf8;font-family:'Playfair Display','Georgia',serif;font-size:15px;font-weight:700;line-height:1.35;color:#14345e;page-break-inside:avoid;break-inside:avoid}
 .design-dx.blocks,.design-dx.ribbon,.design-dx.compact{border:1px solid #d9e5ef;border-radius:16px;background:#fff;padding:12px 14px}
 .design-dx-title{font-size:10px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;color:#667085;margin-bottom:6px}
-.design-dx.blocks .design-dx-body{font-size:19px;font-weight:900;line-height:1.3;color:#173a67}
+.design-dx.blocks .design-dx-body{font-size:15px;font-weight:900;line-height:1.25;color:#173a67}
 .design-dx.ribbon{background:#f3f5f7;color:#222;border:1px solid #d8dde3}
 .design-dx.ribbon .design-dx-title{color:#6b7280}
-.design-dx.ribbon .design-dx-body{font-size:20px;font-weight:800;line-height:1.3;color:#1f2937}
+.design-dx.ribbon .design-dx-body{font-size:15px;font-weight:800;line-height:1.25;color:#1f2937}
+.design-dx.editorial,.design-dx.ledger,.design-dx.vertical,.design-dx.mono{border:1px solid #d5d5d5;border-radius:16px;background:#fff;padding:12px 14px}
+.design-dx.editorial{background:linear-gradient(90deg,#f2f2f0 0 24%,#fff 24% 100%);padding-left:18px}
+.design-dx.editorial .design-dx-title{color:#444}
+.design-dx.editorial .design-dx-body{font-size:19px;font-weight:800;line-height:1.35;color:#111}
+.design-dx.ledger{display:grid;grid-template-columns:68px 1fr;padding:0;overflow:hidden}
+.design-dx-ledger-label{background:#2f2f2f;color:#fff;font-size:11px;font-weight:900;letter-spacing:.18em;text-transform:uppercase;display:flex;align-items:center;justify-content:center}
+.design-dx.ledger .design-dx-body{padding:14px 16px;font-size:18px;font-weight:800;line-height:1.35;color:#111}
+.design-dx.vertical{display:grid;grid-template-columns:28px 1fr;gap:10px;padding:12px}
+.design-dx-rail{writing-mode:vertical-rl;transform:rotate(180deg);font-size:9px;letter-spacing:.24em;text-transform:uppercase;color:#666;font-weight:900;text-align:center}
+.design-dx.vertical .design-dx-body{font-size:13px;font-weight:800;line-height:1.5;color:#111}
+.design-dx.mono{border-style:dashed;border-radius:10px;background:#fbfbfb}
+.design-dx.mono .design-dx-title{font-family:'Source Sans 3','Courier New',monospace;color:#111}
+.design-dx.mono .design-dx-body{font-family:'Source Sans 3','Courier New',monospace;font-size:16px;font-weight:700;line-height:1.45;color:#111}
 .design-dx.compact{font-size:16px;font-weight:800;line-height:1.4;color:#153d66;background:#f6f9fc}
-.design-rx{margin-bottom:6px}
-.design-med{margin-bottom:10px}
+.design-rx{margin-bottom:5px}
+.design-rx.design-editorial_columns{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.design-med{margin-bottom:8px;page-break-inside:avoid;break-inside:avoid}
 .design-med:last-child{margin-bottom:0}
 .design-med-top{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}
 .design-med-name{font-family:'Playfair Display','Georgia',serif;color:#14345e}
 .design-med-sub{font-size:9.8px;color:#667085;line-height:1.45;margin-top:3px}
 .design-med-instr{line-height:1.45}
-.design-med.classic{border:1px solid #dfe4ec;border-radius:18px;padding:14px 16px;background:#fff;box-shadow:0 8px 22px rgba(20,52,94,.05)}
-.design-med.classic .design-med-name{font-size:24px}
-.design-med.classic .design-med-chip{min-width:170px;text-align:right;font-size:11px;font-weight:900;color:#5d4b16;background:#fbf2dc;border:1px solid #ecd8a1;border-radius:12px;padding:9px 12px}
-.design-med.classic .design-med-instr{margin-top:12px;padding:12px 14px;border-radius:14px;background:#f7f9fc;font-family:'Playfair Display','Georgia',serif;font-size:17px;font-weight:700;color:#24384d}
-.design-med.blocks{border:1px solid #d8e4ef;border-radius:18px;padding:14px;background:#eef5fb}
-.design-med.blocks .design-med-name{font-size:20px}
+.design-med.classic{border:1px solid #dfe4ec;border-radius:18px;padding:12px 13px;background:#fff;box-shadow:none}
+.design-med.classic .design-med-name{font-size:18px}
+.design-med.classic .design-med-chip{min-width:138px;text-align:right;font-size:10px;font-weight:900;color:#5d4b16;background:#fbf2dc;border:1px solid #ecd8a1;border-radius:12px;padding:7px 9px}
+.design-med.classic .design-med-instr{margin-top:8px;padding:9px 10px;border-radius:14px;background:#f7f9fc;font-family:'Playfair Display','Georgia',serif;font-size:13px;font-weight:700;color:#24384d}
+.design-med.blocks{border:1px solid #d8e4ef;border-radius:18px;padding:11px 12px;background:#eef5fb}
+.design-med.blocks .design-med-name{font-size:17px}
 .design-med.blocks .design-med-pills{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;max-width:250px}
 .design-med.blocks .design-med-pills span{padding:7px 10px;border-radius:999px;background:#fff;border:1px solid #d7e0ea;font-size:12px;font-weight:800;color:#35506d}
-.design-med.blocks .design-med-instr{margin-top:10px;background:#fff;border-radius:14px;padding:11px 12px;font-size:15px;font-weight:700;color:#24384d}
-.design-med.ribbon{position:relative;border:1px solid #dde7e7;border-radius:18px;padding:16px 16px 16px 18px;background:#fff;box-shadow:0 10px 24px rgba(16,24,40,.05)}
+.design-med.blocks .design-med-instr{margin-top:8px;background:#fff;border-radius:14px;padding:9px 10px;font-size:12.5px;font-weight:700;color:#24384d}
+.design-med.ribbon{position:relative;border:1px solid #dde7e7;border-radius:18px;padding:12px 12px 12px 14px;background:#fff;box-shadow:none}
 .design-med.ribbon .design-med-tag{display:inline-block;margin-bottom:10px;padding:5px 9px;border-radius:999px;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.08em;background:#eff7f8;color:#0f7b82}
-.design-med.ribbon .design-med-name{font-size:23px}
-.design-med.ribbon .design-med-right{min-width:180px;text-align:right;font-size:12px;line-height:1.6;color:#445467;font-weight:800}
-.design-med.ribbon .design-med-instr{margin-top:10px;background:#eef7f7;border-radius:14px;padding:12px 13px;font-size:15px;font-weight:700;color:#24384d}
-.design-med.compact{border:1px solid #d8e0e8;border-radius:14px;padding:10px 12px;background:#fff}
-.design-med.compact .design-med-name{font-size:16px;font-weight:700}
+.design-med.ribbon .design-med-name{font-size:18px}
+.design-med.ribbon .design-med-right{min-width:150px;text-align:right;font-size:10px;line-height:1.45;color:#445467;font-weight:800}
+.design-med.ribbon .design-med-instr{margin-top:8px;background:#eef7f7;border-radius:14px;padding:9px 10px;font-size:12.5px;font-weight:700;color:#24384d}
+.design-med.compact{border:1px solid #d8e0e8;border-radius:14px;padding:8px 10px;background:#fff}
+.design-med.compact .design-med-name{font-size:14px;font-weight:700}
 .design-med.compact .design-med-right{font-size:11px;font-weight:800;color:#445467}
 .design-med.compact .design-med-instr{margin-top:7px;font-size:13px;font-weight:700;color:#24384d}
+.design-med.editorial{border:1px solid #d8d8d4;border-radius:18px;padding:16px;background:#fff;break-inside:avoid}
+.design-med.editorial .design-med-kicker{font-size:10px;font-weight:900;letter-spacing:.2em;text-transform:uppercase;color:#666;margin-bottom:10px}
+.design-med.editorial .design-med-name{font-size:21px;color:#111}
+.design-med.editorial .design-med-right{font-size:11px;font-weight:900;color:#333;text-align:right;min-width:150px}
+.design-med-columns{display:grid;grid-template-columns:70px 1fr;gap:12px;align-items:start;margin-top:11px}
+.design-med-col-label{font-size:9px;font-weight:900;letter-spacing:.18em;text-transform:uppercase;color:#666;padding-top:3px}
+.design-med.editorial .design-med-instr{margin-top:0;padding:0;border:none;background:none;font-size:14px;font-weight:700;color:#111}
+.design-med.ledger{display:grid;grid-template-columns:62px 1fr;border:1px solid #d9d9d9;border-radius:16px;overflow:hidden;background:#fff}
+.design-med-ledger-label{background:#2f2f2f;color:#fff;font-size:13px;font-weight:900;display:flex;align-items:center;justify-content:center}
+.design-med-ledger-body{padding:14px 15px}
+.design-med.ledger .design-med-name{font-size:20px;color:#111}
+.design-med.ledger .design-med-right{font-size:11px;font-weight:800;color:#333;text-align:right;min-width:160px}
+.design-med.ledger .design-med-instr{margin-top:9px;border-left:none;padding-left:0;font-size:14px;font-weight:700;color:#111}
+.design-med.vertical{display:grid;grid-template-columns:30px 1fr;gap:10px;border-bottom:1px solid #d7d7d7;padding:0 0 10px 0}
+.design-med.vertical .design-med-serial{writing-mode:vertical-rl;transform:rotate(180deg);font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:#666;font-weight:900;text-align:center;padding-top:4px}
+.design-med-vertical-body{border:1px solid #dadada;border-radius:14px;padding:12px 14px;background:#fff}
+.design-med.vertical .design-med-name{font-size:19px;color:#111}
+.design-med.vertical .design-med-right{font-size:10.5px;font-weight:800;color:#444;text-align:right;min-width:150px}
+.design-med.vertical .design-med-instr{margin-top:8px;border-left:none;padding-left:0;font-size:13px;color:#111;background:#f7f7f7;border-radius:10px;padding:10px 12px}
+.design-med.mono{border:1px dashed #8f8f8f;border-radius:8px;padding:12px;background:#fff;font-family:'Source Sans 3','Courier New',monospace}
+.design-med-mono-head{display:flex;justify-content:space-between;gap:12px;font-size:10px;font-weight:900;letter-spacing:.16em;text-transform:uppercase;color:#333;border-bottom:1px solid #c8c8c8;padding-bottom:5px;margin-bottom:8px}
+.design-med.mono .design-med-name{font-family:'Source Sans 3','Courier New',monospace;font-size:18px;letter-spacing:.04em;color:#111}
+.design-med.mono .design-med-sub{font-family:'Source Sans 3','Courier New',monospace;font-size:10px;color:#555;text-transform:uppercase}
+.design-med.mono .design-med-instr{margin-top:8px;border-left:none;padding:0;font-family:'Source Sans 3','Courier New',monospace;font-size:13px;color:#111}
 .design-taper{margin-top:10px}
 .design-taper-title{font-size:11px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px}
 .design-taper.classic{border-radius:14px;background:linear-gradient(180deg,#fff8e9 0%, #fff 100%);border:1px solid #eed8a3;padding:12px 14px}
@@ -28526,19 +29016,23 @@ tr:nth-child(even) td{background:#fafafa}
 .design-ribbon-dot{width:10px;height:10px;border-radius:50%;background:#ef8b67;margin-top:5px;flex-shrink:0}
 .design-taper.compact{border-radius:10px;background:#fff6df;border:1px solid #ecd7a0;padding:8px 10px}
 .design-taper.compact .design-taper-title{color:#73540e;margin-bottom:5px}
-.design-bottom{display:grid;grid-template-columns:1.2fr .8fr;gap:14px;margin-top:10px}
+.design-taper.editorial_columns,.design-taper.left_label_ledger,.design-taper.vertical_dx_column,.design-taper.mono_chart{border-radius:10px;background:#f6f6f6;border:1px solid #d2d2d2;padding:9px 10px}
+.design-taper.editorial_columns .design-taper-title,.design-taper.left_label_ledger .design-taper-title,.design-taper.vertical_dx_column .design-taper-title,.design-taper.mono_chart .design-taper-title{color:#333}
+.design-bottom{display:grid;grid-template-columns:1.2fr .8fr;gap:10px;margin-top:8px;page-break-inside:avoid;break-inside:avoid}
 .design-bottom.compact{grid-template-columns:1fr}
-.design-side-card{border:1px solid #d8e0e8;border-radius:16px;padding:14px;background:#fff}
+.design-bottom.vertical_dx_column{grid-template-columns:1fr 240px}
+.design-side-card{border:1px solid #d8e0e8;border-radius:16px;padding:10px 11px;background:#fff}
 .design-side-title{font-size:12px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;color:#14345e;margin-bottom:8px}
-.design-side-body{font-size:11px;line-height:1.7;color:#344054;font-weight:700}
-.design-follow{align-self:start;border-radius:16px;padding:14px;font-size:15px;font-weight:800;line-height:1.5}
+.design-side-body{font-size:9.8px;line-height:1.45;color:#344054;font-weight:700}
+.design-follow{align-self:start;border-radius:16px;padding:10px 11px;font-size:11.5px;font-weight:800;line-height:1.35}
 .design-follow.signature_classic{background:#f7f7f6;border:1px solid #d9d5c9;color:#4b5563}
 .design-follow.clinical_blocks{background:#f4f6f8;border:1px solid #d8dde3;color:#374151}
 .design-follow.ribbon_timeline{background:#f8f7f3;border:1px solid #ddd7c8;color:#4b5563}
 .design-follow.compact_bilingual{background:#f4f6f8;border:1px solid #d8dde3;color:#374151}
+.design-follow.editorial_columns,.design-follow.left_label_ledger,.design-follow.vertical_dx_column,.design-follow.mono_chart{background:#f3f3f3;border:1px solid #d0d0d0;color:#111}
 ${typographyCss}
 ${designCss}
-</style></head><body>
+</style></head><body class="rx-print rx-${rxDesign}">
 
 <div class="watermark">BMSH</div>
 
@@ -28637,10 +29131,10 @@ ${incPos && deptId==='oe' ? `
 <div class="sec-divider"><span class="sec-label">Positive Findings</span></div>
 <div class="cc-text">${(typeof buildOphthoPositiveFindingsList === 'function' ? buildOphthoPositiveFindingsList() : []).join('; ') || '—'}</div>` : ''}
 
-${incRxFinal && drugs.length && rxDesign === 'current' ? `<div class="sec-divider"><span class="sec-label">Medicine (Rx)</span></div>` : ''}
-${rxDesign !== 'current' ? designedMeds : ''}
+${incRxFinal && drugs.length && isListDesign ? `<div class="sec-divider"><span class="sec-label">Medicine (Rx)</span></div>` : ''}
+${!isListDesign ? designedMeds : ''}
 
-${incRxFinal && drugs.length && rxPrintMode !== 'plain_only' && rxDesign === 'current' ? (() => {
+${incRxFinal && drugs.length && rxPrintMode !== 'plain_only' && isListDesign ? (() => {
   return `<div class="rx-list">
   ${drugs.map((d,i)=>{
     const trade = (typeof rxDrugTradeName === 'function' ? rxDrugTradeName(d) : (d.brand||d.trade||'')) || '—';
@@ -28689,7 +29183,7 @@ ${incRxFinal && drugs.length && rxPrintMode !== 'plain_only' && rxDesign === 'cu
 </div>`;
 })() : ''}
 
-${incRxFinal && drugs.length && rxPrintMode === 'plain_only' && rxDesign === 'current' ? (() => {
+${incRxFinal && drugs.length && rxPrintMode === 'plain_only' && isListDesign ? (() => {
   return `<div class="rx-list">
   ${drugs.map((d,i)=>{
     const trade = (typeof rxDrugTradeName === 'function' ? rxDrugTradeName(d) : (d.brand||d.trade||'')) || '—';
@@ -28740,12 +29234,12 @@ ${!psychPrescriptionPrintOnly && incInvFinal && patientInvestigationOrders.lengt
 ${patientInvestigationOrders.map((o,oi)=>`<div class="inv-chip"><span style="font-weight:400;color:#888;margin-right:4px">${oi+1}.</span>${escapeHtmlConsent(o.name || 'Investigation')}${o.notes ? `<span style="font-weight:500"> — ${escapeHtmlConsent(o.notes)}</span>` : ''}</div>`).join('')}
 </div>` : ''}
 
-${incAdvFinal && adviceHtml && rxDesign === 'current' ? `
+${incAdvFinal && adviceHtml && isListDesign ? `
 <div class="sec-divider"><span class="sec-label">Instructions</span></div>
 <div class="advice-block">${adviceHtml}</div>` : ''}
 
-${fuFormatted && rxDesign === 'current' ? `<div style="margin:5px 0"><span class="fu-box">Next Visit: ${fuFormatted}</span></div>` : ''}
-${rxDesign !== 'current' ? designedAdviceFollow : ''}
+${fuFormatted && isListDesign ? `<div style="margin:5px 0"><span class="fu-box">Next Visit: ${fuFormatted}</span></div>` : ''}
+${!isListDesign ? designedAdviceFollow : ''}
 
 <div class="sig-row">
   <div class="qr-side">
@@ -29563,6 +30057,7 @@ function renderCollectionDashboard() {
               <div style="flex:1"><div style="font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap">${t.patient}${t.type==='advance' ? '<span class="badge" style="font-size:8px;background:var(--blue-lt);color:var(--blue);border:1px solid var(--blue)">Advance</span>' : ''}</div><div style="font-size:10.5px;color:var(--g1)">${t.service||'—'} · ${t.time||'—'}</div></div>
               <span class="badge bd-gray" style="font-size:9.5px">${t.mode||'—'}</span>
               <div style="font-weight:800;color:#1a8c3c">${fmt(t.amount)}</div>
+              ${receptionQueueRestoreButtonHtml(t.bmhId, { label: '↩', title: 'Restore this patient to today\\'s queue', style: 'background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1px solid var(--bmh-blue);border-radius:5px;padding:2px 6px;font-size:10px;cursor:pointer;flex-shrink:0' })}
               <button title="Delete" onclick="deleteTransaction('${t.id}')" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--red);padding:0 2px">🗑️</button>
             </div>`).join('') : '<div style="padding:8px;color:var(--g1);font-size:11.5px">No collected payments yet</div>'}
         </div>
@@ -29583,6 +30078,7 @@ function renderCollectionDashboard() {
         <span class="badge bd-gray" style="font-size:9.5px">${t.mode||'—'}</span>
         <div style="font-weight:900;color:${t.collected?'#1a8c3c':'var(--orange)'};font-size:13px">₹${t.amount.toLocaleString('en-IN')}</div>
         <span class="badge ${t.collected?'bd-green':'bd-orange'}" style="font-size:9.5px">${t.collected?'✅':'⏳'}</span>
+        ${receptionQueueRestoreButtonHtml(t.bmhId, { label: '↩', title: 'Restore this patient to today\\'s queue', style: 'background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1px solid var(--bmh-blue);border-radius:5px;padding:2px 6px;font-size:11px;cursor:pointer;flex-shrink:0' })}
         <button title="Delete this transaction" onclick="deleteTransaction('${t.id}')" style="background:var(--red-lt);color:var(--red);border:1px solid rgba(255,59,48,.3);border-radius:5px;padding:2px 6px;font-size:11px;cursor:pointer;flex-shrink:0">🗑️</button>
       </div>`).join('')
     : '<div style="padding:16px;text-align:center;color:var(--g1);font-size:12px">No transactions today</div>';
@@ -29650,6 +30146,7 @@ function openRcCollectionDetailModal(dept, catKey) {
       + '<div style="flex:1"><div style="font-weight:800">' + escapeHtmlConsent(t.patient || '') + '</div><div style="font-size:10.5px;color:var(--g1)">' + escapeHtmlConsent(t.service || '—') + ' · ' + escapeHtmlConsent(t.time || '—') + '</div></div>'
       + '<span class="badge bd-gray" style="font-size:9px">' + escapeHtmlConsent(t.mode || '—') + '</span>'
       + '<div style="font-weight:900;color:#1a8c3c">' + fmt(getNetTransactionAmount(t)) + '</div>'
+      + receptionQueueRestoreButtonHtml(t.bmhId, { label: '↩', title: 'Restore this patient to today\'s queue', style: 'background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1px solid var(--bmh-blue);border-radius:5px;padding:2px 6px;font-size:10px;cursor:pointer;flex-shrink:0' })
       + '</div>';
   }).join('');
   const unpaidRows = unpaid.map(function (r) {
@@ -29657,6 +30154,7 @@ function openRcCollectionDetailModal(dept, catKey) {
       + '<div style="flex:1"><div style="font-weight:800">' + escapeHtmlConsent(r.patient || '') + '</div><div style="font-size:10.5px;color:var(--g1)">' + escapeHtmlConsent(r.for || '—') + '</div></div>'
       + '<span class="badge bd-orange" style="font-size:9px">Pending</span>'
       + '<div style="font-weight:900;color:#b45309">' + fmt(Number(r.amount) || 0) + '</div>'
+      + receptionQueueRestoreButtonHtml(r.bmhId, { label: '↩', title: 'Restore this patient to today\'s queue', style: 'background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1px solid var(--bmh-blue);border-radius:5px;padding:2px 6px;font-size:10px;cursor:pointer;flex-shrink:0' })
       + '<select id="pay-mode-' + String(r.id).replace(/"/g, '&quot;') + '" style="height:28px;border:1px solid var(--g4);border-radius:6px;padding:0 6px;font-size:10.5px;background:#fff">'
       + '<option value="Cash"' + (isInsuranceLikeMode(r.mode || r.ins || '') ? '' : ' selected') + '>Cash</option>'
       + '<option value="UPI"' + (String(r.mode || '').toLowerCase() === 'upi' ? ' selected' : '') + '>UPI</option>'
@@ -32275,6 +32773,7 @@ function promoteMergedDrugLibraryIntoLive(rows, opts) {
 }
 function ensureDrugLibraryHydratedForSearch() {
   try {
+    watchDrugLibraryFromFirebase && watchDrugLibraryFromFirebase();
     if (typeof loadDrugLibraryFromStorage === 'function') {
       loadDrugLibraryFromStorage({ forceRemote: !!window.FBDB && !window._bmhDrugLibraryHydratedFromFirebase });
     }
@@ -32853,7 +33352,11 @@ const RX_DESIGN_OPTIONS = [
   { key: 'signature_classic', label: 'Signature Classic' },
   { key: 'clinical_blocks', label: 'Clinical Blocks' },
   { key: 'ribbon_timeline', label: 'Ribbon Timeline' },
-  { key: 'compact_bilingual', label: 'Compact Bilingual' }
+  { key: 'compact_bilingual', label: 'Compact Bilingual' },
+  { key: 'editorial_columns', label: 'Editorial Columns' },
+  { key: 'left_label_ledger', label: 'Left Label Ledger' },
+  { key: 'vertical_dx_column', label: 'Vertical Diagnosis Rail' },
+  { key: 'mono_chart', label: 'Mono Chart' }
 ];
 const RX_TYPOGRAPHY_FONT_OPTIONS = [
   { key: 'classic', label: 'Classic Serif', heading: "'Playfair Display','Georgia',serif", body: "'Lato',sans-serif" },
@@ -33039,6 +33542,21 @@ function _renderDesignThumbnail(key) {
       <div style="font-size:7px;font-weight:700;color:#24384d;line-height:1.25">Take twice daily after meals</div>
       <div style="font-size:7px;font-weight:700;color:#24384d;line-height:1.25">Vitamin D3 · Once weekly</div>`;
   }
+  if (key === 'editorial_columns') {
+    return `<div style="border-bottom:2px solid #111;padding-bottom:2px;margin-bottom:3px"><span style="font-size:10px;font-weight:700;color:#111">Patient Name</span></div>
+      <div style="border:1px solid #d8d8d4;border-radius:8px;padding:4px;background:#fff"><div style="font-size:7px;font-weight:900;letter-spacing:.16em;text-transform:uppercase;color:#666;margin-bottom:3px">Rx 01</div><div style="font-size:8px;font-weight:700;color:#111">Metformin 500</div><div style="display:grid;grid-template-columns:28px 1fr;gap:5px;margin-top:3px"><div style="font-size:6px;font-weight:900;letter-spacing:.15em;text-transform:uppercase;color:#666">DIR</div><div style="font-size:7px;font-weight:700;color:#111">Take twice daily</div></div></div>`;
+  }
+  if (key === 'left_label_ledger') {
+    return `<div style="border-bottom:2px solid #2f2f2f;padding-bottom:2px;margin-bottom:3px"><span style="font-size:10px;font-weight:700;color:#111">Patient Name</span></div>
+      <div style="display:grid;grid-template-columns:26px 1fr;border:1px solid #d9d9d9;border-radius:8px;overflow:hidden"><div style="background:#2f2f2f;color:#fff;font-size:8px;font-weight:900;display:flex;align-items:center;justify-content:center">#1</div><div style="padding:4px;background:#fff"><div style="font-size:8px;font-weight:700;color:#111">Metformin 500</div><div style="font-size:7px;font-weight:700;color:#111;margin-top:2px">Take twice daily</div></div></div>`;
+  }
+  if (key === 'vertical_dx_column') {
+    return `<div style="display:grid;grid-template-columns:16px 1fr;gap:6px;border:1px solid #d9d9d9;border-radius:8px;padding:4px;background:#fff;margin-bottom:3px"><div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:6px;font-weight:900;letter-spacing:.18em;text-transform:uppercase;color:#666;text-align:center">Diagnosis</div><div style="font-size:7px;font-weight:700;color:#111;line-height:1.35">Dry eye syndrome · Chronic allergy</div></div>
+      <div style="display:grid;grid-template-columns:16px 1fr;gap:6px;border:1px solid #d9d9d9;border-radius:8px;padding:4px;background:#fff"><div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:6px;font-weight:900;letter-spacing:.18em;text-transform:uppercase;color:#666;text-align:center">Rx 1</div><div><div style="font-size:8px;font-weight:700;color:#111">Carboxymethylcellulose</div><div style="font-size:7px;font-weight:700;color:#111;margin-top:2px;background:#f7f7f7;border-radius:4px;padding:3px">Use four times daily</div></div></div>`;
+  }
+  if (key === 'mono_chart') {
+    return `<div style="border:1px dashed #8f8f8f;padding:4px;background:#fff;font-family:'Courier New',monospace"><div style="display:flex;justify-content:space-between;font-size:6px;font-weight:900;letter-spacing:.15em;text-transform:uppercase;color:#333;border-bottom:1px solid #c8c8c8;padding-bottom:2px;margin-bottom:3px"><span>Item 01</span><span>Twice daily</span></div><div style="font-size:8px;font-weight:700;color:#111">Metformin 500</div><div style="font-size:7px;font-weight:700;color:#111;margin-top:2px">Take one tablet after breakfast and dinner.</div></div>`;
+  }
   return '';
 }
 
@@ -33190,7 +33708,11 @@ function generateRxDesignSampleHtml(designKey, profile, doctorName, centre) {
     signature_classic: `body{background:#fcfcfb}.rx-item{padding:7px 10px;border:1px solid #dfe4ec;border-left:4px solid #c89a2b;border-radius:10px;margin-bottom:6px;background:#fff}.rx-item-name{font-size:14.5px}.rx-item-instr{font-size:11px;color:#2c3440;font-style:normal;font-weight:700}.advice-block{font-size:11px;font-style:normal;font-weight:700;background:#faf7f0;border-radius:8px;border-left:4px solid #c89a2b}.sec-label{color:#14345e}`,
     clinical_blocks: `body{background:#fbfdff}.rx-list{gap:8px}.rx-item{padding:10px 12px;border:1px solid #d8e4ef;border-radius:12px;background:#eef5fb}.rx-item-name{font-size:14px}.rx-item-details{margin-top:5px}.rx-item-instr{font-size:11px;color:#17324d;font-style:normal;font-weight:700;background:#fff;border:1px solid #dae5ef;border-radius:8px;padding:8px 10px;margin-top:8px}.advice-block{font-size:11px;font-style:normal;font-weight:700;background:#f2f7fb;border-radius:10px;border-left:4px solid #173a67}`,
     ribbon_timeline: `body{background:#fffdfa}.sec-label{color:#0f7b82}.rx-list{position:relative;padding-left:12px}.rx-list:before{content:'';position:absolute;left:2px;top:2px;bottom:2px;width:3px;border-radius:999px;background:linear-gradient(180deg,#0f7b82,#ef8b67)}.rx-item{position:relative;padding:8px 10px 8px 14px;border:1px solid #dde7e7;border-radius:12px;background:#fff;margin-bottom:8px}.rx-item:before{content:'';position:absolute;left:-18px;top:18px;width:10px;height:10px;border-radius:50%;background:#fff;border:3px solid #0f7b82}.rx-item-name{font-size:14px}.rx-item-instr{font-size:11px;font-style:normal;font-weight:700;background:#eef7f7;border-radius:8px;padding:8px 10px;margin-top:8px;border-left:none}`,
-    compact_bilingual: `body{font-size:9.7px;padding:3.2mm 7mm 3mm;line-height:1.26}.pt-name{font-size:16px}.pt-subline{margin-bottom:2px}.sec-divider{margin:3px 0 2px}.rx-item{padding:3px 0 4px}.rx-item-name{font-size:12.8px}.rx-item-instr{font-size:10.8px;font-style:normal;font-weight:700;color:#24384d}.advice-block{font-size:10.6px;font-style:normal;font-weight:700;line-height:1.3}.fu-box{font-size:10px;padding:4px 8px}`
+    compact_bilingual: `body{font-size:9.7px;padding:3.2mm 7mm 3mm;line-height:1.26}.pt-name{font-size:16px}.pt-subline{margin-bottom:2px}.sec-divider{margin:3px 0 2px}.rx-item{padding:3px 0 4px}.rx-item-name{font-size:12.8px}.rx-item-instr{font-size:10.8px;font-style:normal;font-weight:700;color:#24384d}.advice-block{font-size:10.6px;font-style:normal;font-weight:700;line-height:1.3}.fu-box{font-size:10px;padding:4px 8px}`,
+    editorial_columns: `body{background:#fbfbfa}.pt-name-bar{border-bottom:2px solid #111}.sec-label{color:#111}.fu-box{background:#f2f2f1;border-color:#bdbdb9;color:#111}`,
+    left_label_ledger: `body{background:#fff}.pt-name-bar{border-bottom:2px solid #2f2f2f}.sec-label{color:#111}.fu-box{background:#f3f3f3;border-color:#cfcfcf;color:#111}`,
+    vertical_dx_column: `body{background:#fcfcfc}.pt-name-bar{border-bottom:1px solid #999}.sec-label{color:#111}.fu-box{background:#f5f5f5;border-color:#cfcfcf;color:#111}`,
+    mono_chart: `body{font-family:'Source Sans 3','Courier New',monospace;background:#fff}.pt-name-bar{border-bottom:2px double #222}.pt-name{letter-spacing:.08em}.sec-label{color:#111}.fu-box{border-radius:4px;background:#f2f2f2;border-color:#bdbdbd;color:#111}`
   };
   const extraCss = designCssMap[designKey] || '';
   const headerSrc = (typeof resolvePrintHeaderSrc === 'function') ? resolvePrintHeaderSrc() : '';
@@ -33200,6 +33722,74 @@ function generateRxDesignSampleHtml(designKey, profile, doctorName, centre) {
   const drDegrees = String(profile.degrees || 'MBBS, MD').trim();
   const drReg = String(profile.reg || 'PMC-XXXXX').trim();
   const drSpec = String(profile.dept || 'Specialist').trim();
+  const previewDiagnosisHtml = (function () {
+    if (designKey === 'editorial_columns') return `<div class="design-dx editorial"><div class="design-dx-title">Assessment</div><div class="design-dx-body">Sample Diagnosis · Type 2</div></div>`;
+    if (designKey === 'left_label_ledger') return `<div class="design-dx ledger"><div class="design-dx-ledger-label">Dx</div><div class="design-dx-body">Sample Diagnosis · Type 2</div></div>`;
+    if (designKey === 'vertical_dx_column') return `<div class="design-dx vertical"><div class="design-dx-rail">Diagnosis</div><div class="design-dx-body">Dry eye syndrome · Chronic allergy · Review after 2 weeks</div></div>`;
+    if (designKey === 'mono_chart') return `<div class="design-dx mono"><div class="design-dx-title">DX LOG</div><div class="design-dx-body">Sample Diagnosis · Type 2</div></div>`;
+    return `<div class="diag-rule-top"></div><div class="diag-text">Sample Diagnosis · Type 2</div><div class="diag-rule-bot"></div>`;
+  })();
+  const previewRxHtml = (function () {
+    if (designKey === 'editorial_columns') {
+      return `<div class="design-rx design-editorial_columns">
+        <div class="design-med editorial"><div class="design-med-kicker">Rx 01</div><div class="design-med-top"><div><div class="design-med-name">Metformin 500</div><div class="design-med-sub">Metformin HCl · Tablet</div></div><div class="design-med-right">Twice daily · 1 month</div></div><div class="design-med-columns"><div class="design-med-col-label">Directions</div><div class="design-med-instr">Take one tablet twice a day for 1 month.</div></div></div>
+        <div class="design-med editorial"><div class="design-med-kicker">Rx 02</div><div class="design-med-top"><div><div class="design-med-name">Vitamin D3</div><div class="design-med-sub">Cholecalciferol 60K · Capsule</div></div><div class="design-med-right">Once weekly · 3 months</div></div><div class="design-med-columns"><div class="design-med-col-label">Directions</div><div class="design-med-instr">Take one capsule once a week for 3 months.</div></div></div>
+      </div>`;
+    }
+    if (designKey === 'left_label_ledger') {
+      return `<div class="design-rx">
+        <div class="design-med ledger"><div class="design-med-ledger-label">#1</div><div class="design-med-ledger-body"><div class="design-med-top"><div><div class="design-med-name">Metformin 500</div><div class="design-med-sub">Metformin HCl · Tablet</div></div><div class="design-med-right">Twice daily · 1 month</div></div><div class="design-med-instr">Take one tablet twice a day for 1 month.</div></div></div>
+        <div class="design-med ledger"><div class="design-med-ledger-label">#2</div><div class="design-med-ledger-body"><div class="design-med-top"><div><div class="design-med-name">Vitamin D3</div><div class="design-med-sub">Cholecalciferol 60K · Capsule</div></div><div class="design-med-right">Once weekly · 3 months</div></div><div class="design-med-instr">Take one capsule once a week for 3 months.</div></div></div>
+      </div>`;
+    }
+    if (designKey === 'vertical_dx_column') {
+      return `<div class="design-rx">
+        <div class="design-med vertical"><div class="design-med-serial">Rx 1</div><div class="design-med-vertical-body"><div class="design-med-top"><div><div class="design-med-name">Carboxymethylcellulose</div><div class="design-med-sub">Lubricant eye drops</div></div><div class="design-med-right">Four times daily · 2 weeks</div></div><div class="design-med-instr">Instill one drop in both eyes four times daily.</div></div></div>
+        <div class="design-med vertical"><div class="design-med-serial">Rx 2</div><div class="design-med-vertical-body"><div class="design-med-top"><div><div class="design-med-name">Olopatadine</div><div class="design-med-sub">Anti-allergic eye drops</div></div><div class="design-med-right">Twice daily · 2 weeks</div></div><div class="design-med-instr">Instill one drop twice daily and avoid rubbing the eyes.</div></div></div>
+      </div>`;
+    }
+    if (designKey === 'mono_chart') {
+      return `<div class="design-rx">
+        <div class="design-med mono"><div class="design-med-mono-head"><span>Item 01</span><span>Twice daily / 1 month</span></div><div class="design-med-name">METFORMIN 500</div><div class="design-med-sub">METFORMIN HCL / TABLET</div><div class="design-med-instr">Take one tablet after breakfast and dinner.</div></div>
+        <div class="design-med mono"><div class="design-med-mono-head"><span>Item 02</span><span>Once weekly / 3 months</span></div><div class="design-med-name">VITAMIN D3</div><div class="design-med-sub">CHOLECALCIFEROL / CAPSULE</div><div class="design-med-instr">Take one capsule every Sunday morning.</div></div>
+      </div>`;
+    }
+    return `<div class="rx-list">
+      <div class="rx-item">
+        <div class="rx-item-num">1</div>
+        <span class="rx-item-name">Metformin 500</span>
+        <span class="rx-item-gen">Metformin HCl · Tablet</span>
+        <div class="rx-item-details">
+          <div class="rx-detail-item"><span class="rx-detail-dot"></span>Twice daily</div>
+          <div class="rx-detail-item"><span class="rx-detail-dot"></span>Morning & Night</div>
+          <div class="rx-detail-item"><span class="rx-detail-dot"></span>1 month</div>
+        </div>
+        <div class="rx-item-instr">Take one tablet twice a day for 1 month.</div>
+        <div class="taper-card"><div class="taper-card-hdr">Taper Plan — Metformin 500</div>
+          <div class="taper-steps-row">
+            <div class="taper-step"><div class="taper-step-period">Step 1</div><div class="taper-step-dose">Once daily</div><div class="taper-step-timing">15 days</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="rx-item">
+        <div class="rx-item-num">2</div>
+        <span class="rx-item-name">Vitamin D3</span>
+        <span class="rx-item-gen">Cholecalciferol 60K · Capsule</span>
+        <div class="rx-item-details">
+          <div class="rx-detail-item"><span class="rx-detail-dot"></span>Once weekly</div>
+          <div class="rx-detail-item"><span class="rx-detail-dot"></span>Sunday morning</div>
+          <div class="rx-detail-item"><span class="rx-detail-dot"></span>3 months</div>
+        </div>
+        <div class="rx-item-instr">Take one capsule once a week for 3 months.</div>
+      </div>
+    </div>`;
+  })();
+  const previewAdviceHtml = (function () {
+    if (['editorial_columns','left_label_ledger','vertical_dx_column','mono_chart'].includes(designKey)) {
+      return `<div class="design-bottom ${designKey}"><div class="design-side-card"><div class="design-side-title">Instructions</div><div class="design-side-body">Take after meals<br>Monitor blood sugar weekly</div></div><div class="design-follow ${designKey}">Follow-up: 3 months</div></div>`;
+    }
+    return `<div class="advice-block">Take after meals · Monitor blood sugar weekly</div><div class="fu-box">Follow-up: 3 months</div>`;
+  })();
 
   return `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>
@@ -33243,6 +33833,56 @@ body{font-family:'Lato',sans-serif;font-size:10px;color:#1a1a1a;background:#fff;
 .dr-deg{font-size:9.5px;color:#555;margin-top:2px;font-style:italic}
 .dr-spec{font-size:10px;font-weight:700;color:#333;margin-top:2px}
 .dr-reg{font-size:8.5px;color:#888;margin-top:1px}
+.design-dx.editorial,.design-dx.ledger,.design-dx.vertical,.design-dx.mono{border:1px solid #d5d5d5;border-radius:16px;background:#fff;padding:12px 14px}
+.design-dx.editorial{background:linear-gradient(90deg,#f2f2f0 0 24%,#fff 24% 100%);padding-left:18px}
+.design-dx.editorial .design-dx-title{font-size:10px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;color:#444;margin-bottom:6px}
+.design-dx.editorial .design-dx-body{font-size:19px;font-weight:800;line-height:1.35;color:#111}
+.design-dx.ledger{display:grid;grid-template-columns:68px 1fr;padding:0;overflow:hidden}
+.design-dx-ledger-label{background:#2f2f2f;color:#fff;font-size:11px;font-weight:900;letter-spacing:.18em;text-transform:uppercase;display:flex;align-items:center;justify-content:center}
+.design-dx.ledger .design-dx-body{padding:14px 16px;font-size:18px;font-weight:800;line-height:1.35;color:#111}
+.design-dx.vertical{display:grid;grid-template-columns:28px 1fr;gap:10px;padding:12px}
+.design-dx-rail{writing-mode:vertical-rl;transform:rotate(180deg);font-size:9px;letter-spacing:.24em;text-transform:uppercase;color:#666;font-weight:900;text-align:center}
+.design-dx.vertical .design-dx-body{font-size:13px;font-weight:800;line-height:1.5;color:#111}
+.design-dx.mono{border-style:dashed;border-radius:10px;background:#fbfbfb}
+.design-dx.mono .design-dx-title{font-size:10px;font-weight:900;letter-spacing:.12em;text-transform:uppercase;color:#111;margin-bottom:6px;font-family:'Source Sans 3','Courier New',monospace}
+.design-dx.mono .design-dx-body{font-family:'Source Sans 3','Courier New',monospace;font-size:16px;font-weight:700;line-height:1.45;color:#111}
+.design-rx.design-editorial_columns{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.design-med{margin-bottom:10px}
+.design-med-top{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}
+.design-med-name{font-family:'Playfair Display','Georgia',serif;color:#111}
+.design-med-sub{font-size:9.8px;color:#667085;line-height:1.45;margin-top:3px}
+.design-med-instr{line-height:1.45}
+.design-med.editorial{border:1px solid #d8d8d4;border-radius:18px;padding:16px;background:#fff}
+.design-med.editorial .design-med-kicker{font-size:10px;font-weight:900;letter-spacing:.2em;text-transform:uppercase;color:#666;margin-bottom:10px}
+.design-med.editorial .design-med-name{font-size:21px}
+.design-med.editorial .design-med-right{font-size:11px;font-weight:900;color:#333;text-align:right;min-width:150px}
+.design-med-columns{display:grid;grid-template-columns:70px 1fr;gap:12px;align-items:start;margin-top:11px}
+.design-med-col-label{font-size:9px;font-weight:900;letter-spacing:.18em;text-transform:uppercase;color:#666;padding-top:3px}
+.design-med.editorial .design-med-instr{margin-top:0;padding:0;border:none;background:none;font-size:14px;font-weight:700;color:#111}
+.design-med.ledger{display:grid;grid-template-columns:62px 1fr;border:1px solid #d9d9d9;border-radius:16px;overflow:hidden;background:#fff}
+.design-med-ledger-label{background:#2f2f2f;color:#fff;font-size:13px;font-weight:900;display:flex;align-items:center;justify-content:center}
+.design-med-ledger-body{padding:14px 15px}
+.design-med.ledger .design-med-name{font-size:20px}
+.design-med.ledger .design-med-right{font-size:11px;font-weight:800;color:#333;text-align:right;min-width:160px}
+.design-med.ledger .design-med-instr{margin-top:9px;border-left:none;padding-left:0;font-size:14px;font-weight:700;color:#111}
+.design-med.vertical{display:grid;grid-template-columns:30px 1fr;gap:10px;padding:0 0 10px 0}
+.design-med.vertical .design-med-serial{writing-mode:vertical-rl;transform:rotate(180deg);font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:#666;font-weight:900;text-align:center;padding-top:4px}
+.design-med-vertical-body{border:1px solid #dadada;border-radius:14px;padding:12px 14px;background:#fff}
+.design-med.vertical .design-med-name{font-size:19px}
+.design-med.vertical .design-med-right{font-size:10.5px;font-weight:800;color:#444;text-align:right;min-width:150px}
+.design-med.vertical .design-med-instr{margin-top:8px;border-left:none;font-size:13px;color:#111;background:#f7f7f7;border-radius:10px;padding:10px 12px}
+.design-med.mono{border:1px dashed #8f8f8f;border-radius:8px;padding:12px;background:#fff;font-family:'Source Sans 3','Courier New',monospace}
+.design-med-mono-head{display:flex;justify-content:space-between;gap:12px;font-size:10px;font-weight:900;letter-spacing:.16em;text-transform:uppercase;color:#333;border-bottom:1px solid #c8c8c8;padding-bottom:5px;margin-bottom:8px}
+.design-med.mono .design-med-name{font-family:'Source Sans 3','Courier New',monospace;font-size:18px;letter-spacing:.04em}
+.design-med.mono .design-med-sub{font-family:'Source Sans 3','Courier New',monospace;font-size:10px;color:#555;text-transform:uppercase}
+.design-med.mono .design-med-instr{margin-top:8px;border-left:none;padding:0;font-family:'Source Sans 3','Courier New',monospace;font-size:13px;color:#111}
+.design-bottom{display:grid;grid-template-columns:1.2fr .8fr;gap:14px;margin-top:10px}
+.design-bottom.vertical_dx_column{grid-template-columns:1fr 240px}
+.design-side-card{border:1px solid #d8e0e8;border-radius:16px;padding:14px;background:#fff}
+.design-side-title{font-size:12px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;color:#111;margin-bottom:8px}
+.design-side-body{font-size:11px;line-height:1.7;color:#344054;font-weight:700}
+.design-follow{align-self:start;border-radius:16px;padding:14px;font-size:15px;font-weight:800;line-height:1.5}
+.design-follow.editorial_columns,.design-follow.left_label_ledger,.design-follow.vertical_dx_column,.design-follow.mono_chart{background:#f3f3f3;border:1px solid #d0d0d0;color:#111}
 ${typographyCss}
 ${extraCss}
 </style></head><body>
@@ -33253,39 +33893,9 @@ ${headerSrc ? `<img class="lh-img" src="${headerSrc}" alt="letterhead">` : ''}
 </div>
 <div class="pt-subline">BMSH-SAMPLE · Sample preview · +91 ••••• •••••</div>
 <div class="sec-divider"><span class="sec-label">Diagnosis</span></div>
-<div class="diag-rule-top"></div>
-<div class="diag-text">Sample Diagnosis · Type 2</div>
-<div class="diag-rule-bot"></div>
+${previewDiagnosisHtml}
 <div class="sec-divider"><span class="sec-label">Rx — Medications</span></div>
-<div class="rx-list">
-  <div class="rx-item">
-    <div class="rx-item-num">1</div>
-    <span class="rx-item-name">Metformin 500</span>
-    <span class="rx-item-gen">Metformin HCl · Tablet</span>
-    <div class="rx-item-details">
-      <div class="rx-detail-item"><span class="rx-detail-dot"></span>Twice daily</div>
-      <div class="rx-detail-item"><span class="rx-detail-dot"></span>Morning & Night</div>
-      <div class="rx-detail-item"><span class="rx-detail-dot"></span>1 month</div>
-    </div>
-    <div class="rx-item-instr">Take one tablet twice a day for 1 month.</div>
-    <div class="taper-card"><div class="taper-card-hdr">Taper Plan — Metformin 500</div>
-      <div class="taper-steps-row">
-        <div class="taper-step"><div class="taper-step-period">Step 1</div><div class="taper-step-dose">Once daily</div><div class="taper-step-timing">15 days</div></div>
-      </div>
-    </div>
-  </div>
-  <div class="rx-item">
-    <div class="rx-item-num">2</div>
-    <span class="rx-item-name">Vitamin D3</span>
-    <span class="rx-item-gen">Cholecalciferol 60K · Capsule</span>
-    <div class="rx-item-details">
-      <div class="rx-detail-item"><span class="rx-detail-dot"></span>Once weekly</div>
-      <div class="rx-detail-item"><span class="rx-detail-dot"></span>Sunday morning</div>
-      <div class="rx-detail-item"><span class="rx-detail-dot"></span>3 months</div>
-    </div>
-    <div class="rx-item-instr">Take one capsule once a week for 3 months.</div>
-  </div>
-</div>
+${previewRxHtml}
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px">
   <div style="border:1px solid #d9e2ec;border-radius:8px;padding:8px;background:#f8fbff">
     <div class="section-pill" style="margin-bottom:6px;color:#173a67">Chief Complaints</div>
@@ -33297,8 +33907,7 @@ ${headerSrc ? `<img class="lh-img" src="${headerSrc}" alt="letterhead">` : ''}
   </div>
 </div>
 <div class="sec-divider"><span class="sec-label">Instructions</span></div>
-<div class="advice-block">Take after meals · Monitor blood sugar weekly</div>
-<div class="fu-box">Follow-up: 3 months</div>
+${previewAdviceHtml}
 <div class="sig-row">
   <div></div>
   <div style="text-align:right">
@@ -33769,6 +34378,7 @@ function logoutUser() {
   window._bmhTodayTransactionsLoadedKey = '';
   window._bmhDrugLibraryLoadedOnce = false;
   window._bmhDrugLibraryHydratedFromFirebase = false;
+  window._bmhDrugLibraryWatchActive = false;
   window._bmhPatientsRefreshInFlight = false;
   if (window._bmhPatientsRefreshTimer) {
     clearInterval(window._bmhPatientsRefreshTimer);
@@ -34649,16 +35259,17 @@ function getReceptionBasePts() {
   const df = window._rcDeptFilter || 'all';
   // Start with today's base patients
   let basePts = getTodayQueueBasePatients();
+  const todayBaseIds = new Set(basePts.map(function (p) { return String(p?.bmhId || '').trim(); }).filter(Boolean));
 
   // Augment with cross-referred patients for the selected dept (or all depts)
   // so reception sees the patient in every dept they've been cross-referred to
   const seen = new Set(basePts.map(function(p) { return p.bmhId; }));
-  const todayKeyLocal = localDateKey(new Date());
   const xrefEntries = [];
 
   (PATIENTS || []).forEach(function(p) {
     if (!p || p.queueRemoved || String(p.status || '').toLowerCase() === 'removed') return;
     if (!centreMatch(p)) return;
+    if (!todayBaseIds.has(String(p.bmhId || '').trim())) return;
     const xrefs = getActiveCrossRefsForPatient(p).filter(function(xr) {
       // Only include active (not yet fully seen) cross-refs
       return !xr.seenAt;
@@ -34692,11 +35303,11 @@ function getReceptionBasePts() {
   // Filter base patients by dept
   if (df !== 'all') basePts = basePts.filter(function(p) { return p.dept === df; });
 
-  return basePts.concat(xrefEntries);
+  return dedupeQueueEntriesByKey(basePts.concat(xrefEntries));
 }
 
 function computeReceptionQueuePts() {
-  let pts = getReceptionBasePts();
+  let pts = dedupeQueueEntriesByKey(getReceptionBasePts());
   const sub = window._rcQueueSubtab || 'waiting';
   if(sub === 'seen') pts = pts.filter(p=>isPatientMarkedSeen(p));
   else if(sub === 'waiting') pts = pts.filter(p=>!isPatientMarkedSeen(p));
@@ -35282,13 +35893,11 @@ window.markCrossRefSeen = markCrossRefSeen;
 function restorePatientToDoctorQueue(bmhId) {
   const p = PATIENTS.find(function (x) { return x.bmhId === bmhId; });
   if (!p) { showToast('Patient not found', 'w'); return; }
-  p.queueRemoved = false;
-  p.status = (p.status === 'removed' || !p.status) ? 'waiting' : p.status;
-  if (p.status === 'seen') p.status = 'waiting';
-  p.seen = false;
-  p.checkinAt = Date.now();
-  const patch = { queueRemoved: false, status: p.status, seen: false, checkinAt: p.checkinAt };
-  fbUpdate && fbUpdate('patients/' + bmhId, patch).catch(function () {});
+  const restored = bmhEnsurePatientInTodayDeptQueue(bmhId, { dept: p.dept || p.department || '', silentToast: true });
+  if (!restored && !patientNeedsReceptionQueueRestore(p, p.dept || p.department || '')) {
+    showToast('Patient is already present in today\'s queue', 'i');
+    return;
+  }
   showToast('Patient sent back to doctor queue ✓', 's');
   renderDocQueue && renderDocQueue();
   renderReceptionPage && renderReceptionPage();
