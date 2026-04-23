@@ -9536,7 +9536,8 @@ function bmhRecordAdvanceAdjustment(bmhId, amount, reason, meta) {
     centre: meta?.centre || pt.centre || CURRENT_USER?.centre || 'CHD',
     createdBy: meta?.createdBy || CURRENT_USER?.name || 'System',
     type: 'advance-adjustment',
-    source: 'advance-adjustment'
+    source: 'advance-adjustment',
+    billId: meta?.billId || ''
   };
   TRANSACTIONS.push(txn);
   saveTransactionToFirebase && saveTransactionToFirebase(txn);
@@ -9986,13 +9987,18 @@ function bmhBuildBillPayloadFromUi(bmhId, opts) {
   const pt = (window.PATIENTS || []).find(function (p) { return p.bmhId === bmhId; });
   if (!pt) throw new Error('Patient not found');
   const lines = (window.BMH_PATIENT_CHARGES && window.BMH_PATIENT_CHARGES[bmhId]) || [];
-  const billableLines = lines.filter(function (l) { return Number(l.amount) > 0; });
+  const billableLines = lines.filter(function (l) {
+    return l && !l.isConcession && Math.max(0, Number(l.amount || 0) - bmhGetChargeLinePaidAmount(l)) > 0;
+  });
   if (!billableLines.length) throw new Error('No charge lines to bill');
-  const totals = typeof bmhTotalsForPatient === 'function' ? bmhTotalsForPatient(bmhId) : {};
-  const sub = Number(totals.sub) || 0;
-  const discount = Number(totals.discount) || 0;
-  const advanceApplied = Number(totals.advanceApplied) || 0;
-  const netPayable = Number(totals.taxable != null ? totals.taxable : sub - discount - advanceApplied) || 0;
+  const sub = billableLines.reduce(function (sum, line) {
+    return sum + Math.max(0, Number(line.amount || 0) - bmhGetChargeLinePaidAmount(line));
+  }, 0);
+  const discount = Math.max(0, Number(document.getElementById('bmh-bill-discount')?.value || 0));
+  const advAvail = Math.max(0, Number(bmhGetAdvanceAvailableForPatient(bmhId)) || 0);
+  const advanceApplied = document.getElementById('bmh-apply-advance')?.checked ? Math.min(advAvail, Math.max(0, sub - discount)) : 0;
+  const afterDiscount = Math.max(0, sub - discount);
+  const netPayable = Math.max(0, afterDiscount - advanceApplied);
   const paymentMode = bmhNormalizedPaymentMode(document.getElementById('bmh-pay-mode')?.value || 'Cash');
   const amountReceived = Math.max(0, Number(document.getElementById('bmh-pay-amt')?.value || 0));
   const paymentRef = (document.getElementById('bmh-pay-ref')?.value || '').trim();
@@ -10011,7 +10017,17 @@ function bmhBuildBillPayloadFromUi(bmhId, opts) {
     mobile: pt.mob || '',
     centre: pt.centre || (window.CURRENT_USER?.centre) || 'CHD',
     date: todayKey(),
-    items: billableLines.map(function (l) { return { desc: l.desc || l.name || '', qty: Number(l.qty) || 1, rate: Number(l.rate) || Number(l.amount) || 0, amount: Number(l.amount) || 0, cat: l.cat || 'other' }; }),
+    items: billableLines.map(function (l) {
+      const outstanding = Math.max(0, Number(l.amount || 0) - bmhGetChargeLinePaidAmount(l));
+      return {
+        lineId: l.id || '',
+        desc: l.desc || l.name || '',
+        qty: Number(l.qty) || 1,
+        rate: Number(l.rate) || Number(l.amount) || 0,
+        amount: outstanding,
+        cat: l.cat || 'other'
+      };
+    }),
     subtotal: sub,
     discount: discount,
     advanceApplied: advanceApplied,
@@ -10028,6 +10044,33 @@ function bmhBuildBillPayloadFromUi(bmhId, opts) {
     createdAt: new Date().toISOString(),
     createdBy: window.CURRENT_USER?.name || 'Billing'
   };
+}
+function bmhReversePaymentAllocationForTxn(txn) {
+  if (!txn || !txn.bmhId || !Array.isArray(txn.chargeAllocations) || !txn.chargeAllocations.length) return;
+  const lines = window.BMH_PATIENT_CHARGES[txn.bmhId] || [];
+  txn.chargeAllocations.forEach(function (alloc) {
+    const line = lines.find(function (row) { return String(row?.id || '') === String(alloc?.lineId || ''); });
+    if (!line) return;
+    const rollbackAmt = Math.max(0, Number(alloc?.amount || 0));
+    line.paidAmount = Math.max(0, bmhGetChargeLinePaidAmount(line) - rollbackAmt);
+    if (Array.isArray(line.paymentAllocations) && line.paymentAllocations.length) {
+      let remaining = rollbackAmt;
+      for (let i = line.paymentAllocations.length - 1; i >= 0; i -= 1) {
+        const pa = line.paymentAllocations[i] || {};
+        if (String(pa.txnId || '') !== String(txn.id || '')) continue;
+        const paAmt = Math.max(0, Number(pa.amount || 0));
+        if (remaining >= paAmt) {
+          remaining -= paAmt;
+          line.paymentAllocations.splice(i, 1);
+        } else {
+          pa.amount = Math.max(0, paAmt - remaining);
+          remaining = 0;
+          break;
+        }
+      }
+    }
+  });
+  saveBmhFinancials();
 }
 function bmhGetPrimaryBillLineLabel(bmhId, items) {
   const liveLines = ((window.BMH_PATIENT_CHARGES && window.BMH_PATIENT_CHARGES[bmhId]) || []).filter(function (row) {
@@ -10131,6 +10174,7 @@ function bmhPrintReceiptFromBill(bill) {
     showToast('No received amount available for receipt', 'w');
     return;
   }
+  const primaryLabel = bmhGetPrimaryBillLineLabel(bill.bmhId, bill.items || []);
   printPaymentReceipt({
     id: bill.id || bill.billNo || ('B' + Date.now()),
     bmhId: bill.bmhId,
@@ -10139,7 +10183,8 @@ function bmhPrintReceiptFromBill(bill) {
     date: bill.createdAt || new Date().toISOString(),
     mode: bill.paymentMode || 'Cash',
     paymentRef: bill.paymentRef || '',
-    for: 'Hospital bill ' + String(bill.billNo || bill.id || '')
+    service: primaryLabel,
+    for: primaryLabel + ' · Bill ' + String(bill.billNo || bill.id || '')
   });
 }
 function bmhHandleBillPrintingChoice(bill, choice) {
@@ -10196,9 +10241,10 @@ async function bmhSaveAndPrintBill() {
     // Record the patient-paid portion as a transaction if received
     if (amountReceived > 0) {
       const txnId = 'TXN' + Date.now();
+      const primaryLabel = bmhGetPrimaryBillLineLabel(bmhId, billData.items || []);
       const txn = {
         id: txnId, patient: pt.name, bmhId,
-        service: 'Bill ' + savedBill.billNo,
+        service: primaryLabel,
         amount: amountReceived, mode: payMode, paymentRef: payRef,
         dept: pt.dept || 'ophtho',
         time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
@@ -10208,7 +10254,16 @@ async function bmhSaveAndPrintBill() {
         createdBy: window.CURRENT_USER?.name || 'Billing',
         type: 'billing-payment',
         billId: savedBill.id,
+        billNo: savedBill.billNo || '',
+        billCats: Array.from(new Set((billData.items || []).map(function (row) { return String(row?.cat || 'other').toLowerCase(); }))),
       };
+      txn.chargeAllocations = bmhAllocatePaymentToChargeLines(bmhId, amountReceived, {
+        txnId: txnId,
+        date: txn.date,
+        mode: payMode,
+        by: txn.createdBy,
+        lineIds: (billData.items || []).map(function (row) { return row.lineId; }).filter(Boolean)
+      });
       if (window.TRANSACTIONS) window.TRANSACTIONS.push(txn);
       if (typeof saveTransactionToFirebase === 'function') saveTransactionToFirebase(txn);
     }
@@ -10265,13 +10320,10 @@ async function bmhSaveAndPrintBill() {
     const addToQ = !!document.getElementById('bmh-bill-add-to-queue')?.checked;
     if (addToQ && typeof bmhAddPatientToDoctorQueue === 'function') bmhAddPatientToDoctorQueue(bmhId, { silentToast: true });
 
-    const choice = bmhAskPrintChoice();
-    bmhHandleBillPrintingChoice(savedBill, choice);
-    showToast('✅ Bill ' + (savedBill.billNo || '') + ' saved to cloud ✓', 's');
-
+  const choice = bmhAskPrintChoice();
+  bmhHandleBillPrintingChoice(savedBill, choice);
+  showToast('✅ Bill ' + (savedBill.billNo || '') + ' saved to cloud ✓', 's');
     // ── Reset billing form ──────────────────────────────────────────────────
-    // Clear charge lines for this patient
-    if (window.BMH_PATIENT_CHARGES) window.BMH_PATIENT_CHARGES[bmhId] = [];
     // Clear discount, TPA, advance-applied UI fields
     const discEl = document.getElementById('bmh-bill-discount');
     if (discEl) discEl.value = '';
@@ -10395,8 +10447,28 @@ async function bmhDeleteSavedBillRecord(billId) {
     showToast('Saved bill not found', 'w');
     return;
   }
-  if (!confirm('Delete bill ' + String(bill.billNo || bill.id || '') + ' for ' + String(bill.patientName || 'patient') + '?\n\nThis removes the saved bill record from bill history. Charges and payments stay untouched.')) return;
+  if (!confirm('Delete bill ' + String(bill.billNo || bill.id || '') + ' for ' + String(bill.patientName || 'patient') + '?\n\nThis will remove the saved bill and also reverse linked collected amount / TPA entries for that bill.')) return;
   try {
+    const linkedTxns = (TRANSACTIONS || []).filter(function (txn) {
+      return txn && String(txn.billId || '') === id;
+    });
+    const linkedClaims = (PAY_REQUESTS || []).filter(function (row) {
+      return row && String(row.billId || '') === id;
+    });
+    linkedTxns.forEach(function (txn) {
+      bmhReversePaymentAllocationForTxn(txn);
+      const idx = TRANSACTIONS.findIndex(function (row) { return row && row.id === txn.id; });
+      if (idx > -1) TRANSACTIONS.splice(idx, 1);
+      try {
+        const txnDateKey = localDateKey(txn.date || txn.createdAt || txn.ts || new Date().toISOString());
+        if (window.firebase && firebase.database) firebase.database().ref('transactions/' + txnDateKey + '/' + txn.id).remove();
+      } catch (e) {}
+    });
+    linkedClaims.forEach(function (row) {
+      const idx = PAY_REQUESTS.findIndex(function (entry) { return entry && entry.id === row.id; });
+      if (idx > -1) PAY_REQUESTS.splice(idx, 1);
+      try { if (window.firebase && firebase.database) firebase.database().ref('payRequests/' + row.id).remove(); } catch (e) {}
+    });
     if (bill.source === 'rtdb') {
       window.BMH_SAVED_BILLS = (window.BMH_SAVED_BILLS || []).filter(function (row) { return String(row?.id || '') !== id; });
       saveBmhFinancials({ localOnly: true });
@@ -10409,6 +10481,11 @@ async function bmhDeleteSavedBillRecord(billId) {
     } else {
       throw new Error('Bill delete service not available');
     }
+    if (bill.bmhId) {
+      bmhSyncPatientAdvanceBalance(bill.bmhId);
+      bmhSyncPatientRunningBalance(bill.bmhId);
+    }
+    try { renderTpaPage && renderTpaPage(); } catch (e) {}
     bmhSearchBillHistory(document.getElementById('bmh-bill-history-search')?.value || '');
     renderBillingPageIfActive();
     showToast('Saved bill deleted ✓', 's');
@@ -11824,9 +11901,11 @@ function bmhRecordPatientPayment() {
   const policy = document.getElementById('bmh-pay-policy')?.value?.trim() || '';
   const insurerDue = Math.max(0, Number(document.getElementById('bmh-pay-insurer-due')?.value || 0));
   const cashlessApr = Math.max(0, Number(document.getElementById('bmh-pay-cashless-approved')?.value || 0));
-  const netBill = Number(bmhTotalsForPatient(bmhId).total) || 0;
-  const pt = PATIENTS.find(p => p.bmhId === bmhId);
   const billCtx = bmhGetEffectiveBillContext(bmhId);
+  const netBill = Math.max(0, (billCtx.lines || []).reduce(function (sum, line) {
+    return sum + bmhGetChargeLineOutstanding(line);
+  }, 0));
+  const pt = PATIENTS.find(p => p.bmhId === bmhId);
   const txnId = 'TXN' + Date.now();
   const splitLabel = cashlessApr > 0
     ? ('Patient share · bill ₹' + netBill.toLocaleString('en-IN') + ' · cashless ₹' + cashlessApr.toLocaleString('en-IN'))
@@ -11893,7 +11972,7 @@ function bmhRecordPatientPayment() {
   if ((cashlessApr > 0 || isInsuranceLikeMode(mode)) && pt) {
     const claimedAmt = cashlessApr > 0
       ? cashlessApr
-      : Math.max(Number(bmhBillPreviewTotal(bmhId)) || 0, amt + (insurerDue || 0));
+      : Math.max(netBill, amt + (insurerDue || 0));
     bmhUpsertInsurancePayRequestFromBilling({
       bmhId: bmhId,
       patient: pt,
