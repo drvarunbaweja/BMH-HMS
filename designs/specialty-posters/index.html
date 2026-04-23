@@ -1,947 +1,770 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>BMH Specialty Poster Concepts</title>
-  <style>
-    :root{
-      --paper:#f6f0e7;
-      --ink:#16202b;
-      --muted:#5f6d7c;
-      --card:#fffdf8;
-      --line:rgba(18,32,49,.12);
-      --shadow:0 28px 60px rgba(17,24,39,.14);
-      --radius:34px;
-      --serif:"Iowan Old Style","Palatino Linotype","Book Antiqua",Palatino,serif;
-      --sans:"Avenir Next","Segoe UI","Trebuchet MS",sans-serif;
-      --display:"Baskerville","Times New Roman",serif;
-    }
-    *{box-sizing:border-box}
-    body{
-      margin:0;
-      color:var(--ink);
-      font-family:var(--sans);
-      background:
-        radial-gradient(circle at 12% 8%, rgba(255,255,255,.8), transparent 24%),
-        radial-gradient(circle at 88% 0%, rgba(255,220,170,.32), transparent 24%),
-        linear-gradient(180deg, #ecf2f9 0%, #f8f3eb 55%, #f2ede4 100%);
-      min-height:100vh;
-    }
-    .shell{max-width:1500px;margin:0 auto;padding:34px 20px 80px}
-    .hero{
-      position:relative;
-      overflow:hidden;
-      padding:32px;
-      border-radius:32px;
-      background:
-        radial-gradient(circle at top left, rgba(255,255,255,.8), transparent 30%),
-        linear-gradient(135deg, rgba(15,38,79,.98), rgba(23,88,119,.92) 45%, rgba(237,177,74,.78));
-      color:#fff;
-      box-shadow:var(--shadow);
-    }
-    .hero::after{
-      content:"";
-      position:absolute;
-      inset:auto -90px -120px auto;
-      width:340px;
-      height:340px;
-      border-radius:50%;
-      background:radial-gradient(circle, rgba(255,255,255,.22), rgba(255,255,255,0));
-      pointer-events:none;
-    }
-    .eyebrow{
-      display:inline-flex;
-      align-items:center;
-      gap:8px;
-      padding:8px 14px;
-      border-radius:999px;
-      font-size:12px;
-      font-weight:800;
-      text-transform:uppercase;
-      letter-spacing:.12em;
-      background:rgba(255,255,255,.13);
-      border:1px solid rgba(255,255,255,.16);
-    }
-    h1{
-      margin:16px 0 12px;
-      max-width:940px;
-      font:400 54px/1 var(--display);
-      letter-spacing:-.03em;
-    }
-    .hero p{
-      margin:0;
-      max-width:960px;
-      color:rgba(255,255,255,.86);
-      font-size:17px;
-      line-height:1.7;
-    }
-    .hero-meta{
-      display:flex;
-      flex-wrap:wrap;
-      gap:12px;
-      margin-top:20px;
-    }
-    .hero-meta span{
-      padding:10px 14px;
-      border-radius:999px;
-      background:rgba(255,255,255,.12);
-      border:1px solid rgba(255,255,255,.14);
-      font-size:13px;
-      font-weight:700;
-      color:#fff;
-    }
-    .filters{
-      display:flex;
-      flex-wrap:wrap;
-      gap:12px;
-      margin:26px 0 24px;
-    }
-    .filters button{
-      appearance:none;
-      border:none;
-      cursor:pointer;
-      padding:11px 16px;
-      border-radius:999px;
-      background:#fff;
-      color:#203142;
-      box-shadow:0 10px 25px rgba(19,31,54,.08);
-      border:1px solid rgba(18,32,49,.08);
-      font:800 13px/1 var(--sans);
-      letter-spacing:.04em;
-      text-transform:uppercase;
-    }
-    .filters button.active{
-      background:#183b67;
-      color:#fff;
-      border-color:#183b67;
-    }
-    .grid{
-      display:grid;
-      grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
-      gap:22px;
-    }
-    .poster{
-      position:relative;
-      display:grid;
-      grid-template-rows:auto 1fr auto;
-      min-height:880px;
-      border-radius:var(--radius);
-      overflow:hidden;
-      color:#fff;
-      box-shadow:var(--shadow);
-      isolation:isolate;
-      border:1px solid rgba(255,255,255,.18);
-    }
-    .poster::before{
-      content:"";
-      position:absolute;
-      inset:0;
-      background:
-        radial-gradient(circle at 15% 10%, rgba(255,255,255,.22), transparent 24%),
-        radial-gradient(circle at 85% 20%, rgba(255,255,255,.18), transparent 22%),
-        linear-gradient(160deg, var(--bg-1), var(--bg-2) 56%, var(--bg-3));
-      z-index:-3;
-    }
-    .poster::after{
-      content:"";
-      position:absolute;
-      inset:0;
-      background:
-        linear-gradient(180deg, rgba(255,255,255,.06), transparent 26%, rgba(11,18,29,.14) 100%),
-        repeating-linear-gradient(135deg, rgba(255,255,255,.05) 0 2px, transparent 2px 16px);
-      mix-blend-mode:soft-light;
-      z-index:-2;
-      pointer-events:none;
-    }
-    .poster-top{
-      padding:22px 24px 0;
-      display:flex;
-      justify-content:space-between;
-      gap:12px;
-      align-items:flex-start;
-    }
-    .brand{
-      display:flex;
-      flex-direction:column;
-      gap:5px;
-      max-width:220px;
-    }
-    .brand-mark{
-      width:42px;
-      height:42px;
-      display:grid;
-      place-items:center;
-      border-radius:14px;
-      background:rgba(255,255,255,.14);
-      border:1px solid rgba(255,255,255,.2);
-      font:900 17px/1 var(--sans);
-      letter-spacing:.06em;
-    }
-    .brand-name{
-      font:800 12px/1.35 var(--sans);
-      letter-spacing:.16em;
-      text-transform:uppercase;
-      color:rgba(255,255,255,.86);
-    }
-    .brand-sub{
-      font:600 12px/1.5 var(--sans);
-      color:rgba(255,255,255,.7);
-    }
-    .option-chip{
-      padding:9px 12px;
-      border-radius:999px;
-      background:rgba(10,16,25,.22);
-      backdrop-filter:blur(12px);
-      border:1px solid rgba(255,255,255,.18);
-      font:800 11px/1 var(--sans);
-      letter-spacing:.12em;
-      text-transform:uppercase;
-      white-space:nowrap;
-    }
-    .poster-body{
-      padding:22px 24px 14px;
-      display:grid;
-      gap:16px;
-      align-content:start;
-    }
-    .specialty{
-      display:inline-flex;
-      align-items:center;
-      gap:8px;
-      width:max-content;
-      padding:8px 12px;
-      border-radius:999px;
-      background:rgba(255,255,255,.12);
-      border:1px solid rgba(255,255,255,.16);
-      font:800 12px/1 var(--sans);
-      letter-spacing:.08em;
-      text-transform:uppercase;
-    }
-    .headline{
-      margin:0;
-      max-width:10ch;
-      font:400 64px/.94 var(--display);
-      letter-spacing:-.05em;
-    }
-    .tagline{
-      margin:0;
-      max-width:20ch;
-      font:700 20px/1.35 var(--serif);
-      color:rgba(255,255,255,.92);
-    }
-    .visual{
-      position:relative;
-      min-height:200px;
-      border-radius:30px;
-      overflow:hidden;
-      background:linear-gradient(180deg, rgba(255,255,255,.16), rgba(255,255,255,.03));
-      border:1px solid rgba(255,255,255,.16);
-      box-shadow:inset 0 1px 0 rgba(255,255,255,.18);
-    }
-    .visual .halo,
-    .visual .orb,
-    .visual .swoop,
-    .visual .ground,
-    .visual .line,
-    .visual .figure,
-    .visual .bike,
-    .visual .baby,
-    .visual .petal,
-    .visual .spark,
-    .visual .eye-ring{
-      position:absolute;
-      display:block;
-    }
-    .visual .halo{
-      width:200px;
-      height:200px;
-      right:-30px;
-      top:-16px;
-      border-radius:50%;
-      background:radial-gradient(circle, rgba(255,255,255,.42), rgba(255,255,255,.02) 68%);
-      filter:blur(1px);
-    }
-    .visual .orb{
-      width:150px;
-      height:150px;
-      left:-26px;
-      bottom:-18px;
-      border-radius:50%;
-      background:radial-gradient(circle, rgba(255,214,140,.46), rgba(255,214,140,0) 70%);
-    }
-    .visual .swoop{
-      inset:auto auto 18px -30px;
-      width:210px;
-      height:90px;
-      border-radius:999px;
-      background:rgba(255,255,255,.08);
-      transform:rotate(-8deg);
-    }
-    .visual .ground{
-      left:0;
-      right:0;
-      bottom:0;
-      height:42%;
-      background:linear-gradient(180deg, rgba(11,22,32,0), rgba(11,22,32,.32));
-    }
-    .visual .line{
-      width:220px;
-      height:220px;
-      border-radius:50%;
-      border:1px solid rgba(255,255,255,.14);
-      right:-70px;
-      bottom:-50px;
-    }
-    .visual .figure{
-      left:50%;
-      bottom:18px;
-      width:92px;
-      height:170px;
-      transform:translateX(-50%);
-      border-radius:48px 48px 18px 18px;
-      background:linear-gradient(180deg, rgba(255,255,255,.92), rgba(255,255,255,.18));
-      filter:drop-shadow(0 18px 30px rgba(0,0,0,.18));
-    }
-    .visual .figure::before{
-      content:"";
-      position:absolute;
-      top:-30px;
-      left:24px;
-      width:44px;
-      height:44px;
-      border-radius:50%;
-      background:rgba(255,255,255,.95);
-    }
-    .visual .figure::after{
-      content:"";
-      position:absolute;
-      left:-36px;
-      top:28px;
-      width:164px;
-      height:44px;
-      border-radius:999px;
-      background:linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,.48), rgba(255,255,255,0));
-      transform:rotate(-10deg);
-    }
-    .visual .bike{
-      left:50%;
-      bottom:18px;
-      width:210px;
-      height:120px;
-      transform:translateX(-50%);
-    }
-    .visual .bike::before,
-    .visual .bike::after{
-      content:"";
-      position:absolute;
-      bottom:0;
-      width:54px;
-      height:54px;
-      border-radius:50%;
-      border:4px solid rgba(255,255,255,.76);
-    }
-    .visual .bike::before{left:14px}
-    .visual .bike::after{right:14px}
-    .visual .bike span{
-      position:absolute;
-      left:56px;
-      right:56px;
-      bottom:26px;
-      height:4px;
-      background:rgba(255,255,255,.76);
-      transform:skew(-26deg);
-      transform-origin:left center;
-    }
-    .visual .baby{
-      left:50%;
-      bottom:28px;
-      width:180px;
-      height:140px;
-      transform:translateX(-50%);
-      border-radius:100px 100px 80px 80px;
-      background:radial-gradient(circle at 50% 28%, rgba(255,255,255,.98) 0 16%, rgba(255,255,255,.46) 18%, rgba(255,255,255,.16) 68%);
-      filter:drop-shadow(0 18px 22px rgba(0,0,0,.16));
-    }
-    .visual .petal{
-      width:70px;
-      height:160px;
-      border-radius:70px 70px 8px 8px;
-      background:linear-gradient(180deg, rgba(255,255,255,.66), rgba(255,255,255,.08));
-      filter:blur(.3px);
-    }
-    .visual .spark{
-      width:7px;
-      height:7px;
-      border-radius:50%;
-      background:rgba(255,255,255,.85);
-      box-shadow:0 0 18px rgba(255,255,255,.75);
-    }
-    .visual .eye-ring{
-      left:50%;
-      top:50%;
-      width:220px;
-      height:120px;
-      transform:translate(-50%,-44%);
-      border-radius:120px / 72px;
-      border:3px solid rgba(255,255,255,.7);
-      box-shadow:0 0 0 16px rgba(255,255,255,.06);
-    }
-    .visual .eye-ring::before{
-      content:"";
-      position:absolute;
-      left:50%;
-      top:50%;
-      width:62px;
-      height:62px;
-      transform:translate(-50%,-50%);
-      border-radius:50%;
-      background:radial-gradient(circle, rgba(255,255,255,.96), rgba(255,255,255,.2) 65%, rgba(255,255,255,.04));
-      box-shadow:0 0 34px rgba(255,255,255,.5);
-    }
-    .visual-note{
-      margin:0;
-      font-size:13px;
-      line-height:1.65;
-      color:rgba(255,255,255,.78);
-    }
-    .poster-content{
-      display:grid;
-      gap:14px;
-      padding:18px;
-      border-radius:28px;
-      background:rgba(13,20,31,.18);
-      border:1px solid rgba(255,255,255,.15);
-      backdrop-filter:blur(12px);
-    }
-    .poster-content h3{
-      margin:0;
-      font:800 12px/1 var(--sans);
-      letter-spacing:.14em;
-      text-transform:uppercase;
-      color:rgba(255,255,255,.74);
-    }
-    .facilities{
-      display:grid;
-      gap:10px;
-    }
-    .facility{
-      display:flex;
-      gap:10px;
-      align-items:flex-start;
-      font:600 14px/1.55 var(--sans);
-      color:#fff;
-    }
-    .facility::before{
-      content:"";
-      width:10px;
-      height:10px;
-      margin-top:7px;
-      flex:0 0 auto;
-      border-radius:50%;
-      background:var(--accent);
-      box-shadow:0 0 18px color-mix(in srgb, var(--accent) 70%, white 30%);
-    }
-    .mini-grid{
-      display:grid;
-      grid-template-columns:1fr 1fr;
-      gap:10px;
-    }
-    .mini-card{
-      padding:12px 13px;
-      border-radius:20px;
-      background:rgba(255,255,255,.08);
-      border:1px solid rgba(255,255,255,.12);
-    }
-    .mini-card strong{
-      display:block;
-      margin-bottom:5px;
-      font:800 11px/1 var(--sans);
-      letter-spacing:.12em;
-      text-transform:uppercase;
-      color:rgba(255,255,255,.68);
-    }
-    .mini-card span{
-      font:700 13px/1.5 var(--sans);
-      color:#fff;
-    }
-    .poster-foot{
-      padding:0 24px 24px;
-      display:grid;
-      gap:12px;
-    }
-    .cta{
-      display:flex;
-      justify-content:space-between;
-      align-items:center;
-      gap:14px;
-      padding:15px 18px;
-      border-radius:22px;
-      background:rgba(255,255,255,.12);
-      border:1px solid rgba(255,255,255,.15);
-      font:700 13px/1.5 var(--sans);
-    }
-    .cta strong{
-      display:block;
-      font-size:16px;
-      margin-bottom:2px;
-    }
-    .print-note{
-      padding:13px 16px;
-      border-radius:18px;
-      background:rgba(8,14,24,.18);
-      border:1px solid rgba(255,255,255,.12);
-      color:rgba(255,255,255,.78);
-      font:700 12px/1.55 var(--sans);
-      letter-spacing:.03em;
-    }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BMH Specialty Posters — English</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,900;1,400;1,700&family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@300;400;500;600;700;800;900&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0f0f13; font-family: 'Inter', sans-serif; color: #fff; }
 
-    .theme-ophtho{--bg-1:#081d46;--bg-2:#0f5d95;--bg-3:#7bd6ff;--accent:#9be7ff}
-    .theme-psych{--bg-1:#15313d;--bg-2:#207a7f;--bg-3:#ffd166;--accent:#ffe195}
-    .theme-obg{--bg-1:#442053;--bg-2:#d04a84;--bg-3:#ffd8aa;--accent:#ffd1e5}
-    .theme-skin{--bg-1:#4b2d34;--bg-2:#b77252;--bg-3:#f5d8c7;--accent:#ffe7d5}
+.nav {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(15,15,19,0.96); backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  padding: 14px 36px; display: flex; gap: 20px; align-items: center; flex-wrap: wrap;
+}
+.nav-title { color: rgba(255,255,255,0.3); font-size: 11px; margin-right: auto; letter-spacing: 0.1em; text-transform: uppercase; }
+.nav a {
+  color: rgba(255,255,255,0.45); text-decoration: none; font-size: 11px; font-weight: 500;
+  letter-spacing: 0.05em; text-transform: uppercase; transition: color 0.2s; padding: 5px 12px; border-radius: 5px;
+}
+.nav a:hover { color: #fff; background: rgba(255,255,255,0.08); }
+.nav-lang {
+  background: rgba(255,200,60,0.12); border: 1px solid rgba(255,200,60,0.3); color: #ffc83c;
+  text-decoration: none; font-size: 11px; font-weight: 700; padding: 6px 14px; border-radius: 5px;
+  letter-spacing: 0.04em; transition: all 0.2s;
+}
+.nav-lang:hover { background: rgba(255,200,60,0.22); color: #ffc83c !important; }
 
-    .style-dream .visual{background:linear-gradient(180deg, rgba(255,255,255,.24), rgba(255,255,255,.05) 40%, rgba(5,10,15,.16))}
-    .style-editorial .visual{background:linear-gradient(135deg, rgba(255,255,255,.18), rgba(255,255,255,.04)), radial-gradient(circle at 74% 34%, rgba(255,255,255,.24), transparent 24%)}
-    .style-luxury .visual{background:linear-gradient(180deg, rgba(255,255,255,.14), rgba(9,16,25,.08)), repeating-linear-gradient(90deg, rgba(255,255,255,.06) 0 1px, transparent 1px 14px)}
-    .style-motion .visual{background:linear-gradient(135deg, rgba(255,255,255,.1), rgba(255,255,255,.03)), radial-gradient(circle at 28% 24%, rgba(255,255,255,.18), transparent 22%)}
+.section { padding: 64px 36px; }
+.section-header { text-align: center; margin-bottom: 44px; }
+.section-header h2 { font-family: 'Playfair Display', serif; font-size: 36px; font-weight: 700; margin-bottom: 6px; }
+.section-header p { color: rgba(255,255,255,0.32); font-size: 13px; }
+.badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 12px; }
 
-    .scene-bicycle .figure{left:54%;bottom:52px;width:74px;height:122px}
-    .scene-bicycle .figure::before{left:20px;width:36px;height:36px;top:-24px}
-    .scene-bicycle .bike{display:block}
-    .scene-bicycle .figure::after{transform:rotate(-18deg)}
+.variants-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; max-width: 1380px; margin: 0 auto; }
+.variant-wrap { display: flex; flex-direction: column; gap: 10px; }
+.variant-label { text-align: center; font-size: 11px; color: rgba(255,255,255,0.28); font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; }
 
-    .scene-eye .eye-ring{display:block}
-    .scene-eye .figure{display:none}
+.poster {
+  width: 100%; aspect-ratio: 2/3; position: relative; overflow: hidden;
+  border-radius: 3px; box-shadow: 0 10px 50px rgba(0,0,0,0.55);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.poster:hover { transform: translateY(-6px); box-shadow: 0 28px 80px rgba(0,0,0,0.72); }
 
-    .scene-mother .baby{display:block}
-    .scene-mother .figure{left:40%;height:185px;width:104px}
-    .scene-mother .figure::after{left:-10px;top:48px;width:150px;transform:rotate(26deg)}
+/* ─── LOGO HELPER ─── */
+.bmh-logo { height: 34px; width: auto; object-fit: contain; display: block; }
+.bmh-logo-sm { height: 26px; width: auto; object-fit: contain; display: block; }
 
-    .scene-bloom .figure{height:150px;width:92px}
-    .scene-bloom .petal.p1{left:30px;bottom:4px;transform:rotate(-26deg)}
-    .scene-bloom .petal.p2{left:86px;bottom:14px;transform:rotate(-8deg)}
-    .scene-bloom .petal.p3{right:96px;bottom:14px;transform:rotate(12deg)}
-    .scene-bloom .petal.p4{right:34px;bottom:4px;transform:rotate(28deg)}
+/* ─── SECTION DIVIDER ─── */
+.section-sep { height: 1px; background: rgba(255,255,255,0.05); margin: 0 36px; }
+.badge-psy { background: rgba(180,122,255,0.12); color: #b47aff; border: 1px solid rgba(180,122,255,0.25); }
+.badge-oph { background: rgba(0,180,255,0.12); color: #00b4ff; border: 1px solid rgba(0,180,255,0.25); }
+.badge-gyn { background: rgba(255,111,168,0.12); color: #ff6fa8; border: 1px solid rgba(255,111,168,0.25); }
+.badge-skn { background: rgba(212,168,67,0.12); color: #d4a843; border: 1px solid rgba(212,168,67,0.25); }
 
-    .scene-skyline .line{display:block}
-    .scene-skyline .spark.s1{left:24px;top:34px}
-    .scene-skyline .spark.s2{right:38px;top:54px}
-    .scene-skyline .spark.s3{left:50%;top:18px}
+/* ═══════════════════════════════════════════════════
+   PSYCHIATRY POSTER STYLES
+═══════════════════════════════════════════════════ */
 
-    .hidden{display:none}
+/* PSY-A : Deep Violet */
+.psy-a { background: linear-gradient(170deg,#10052a 0%,#1e0a45 45%,#080f2a 100%); display:flex; flex-direction:column; }
+.psy-a .hero { flex:0 0 57%; position:relative; overflow:hidden; }
+.psy-a .hero img { width:100%; height:100%; object-fit:cover; object-position:center 25%; filter:saturate(.85) brightness(.8); }
+.psy-a .hero::after { content:''; position:absolute; inset:0; background:linear-gradient(to bottom,rgba(16,5,42,.05) 25%,rgba(16,5,42,.65) 70%,#10052a 100%); }
+.psy-a .hero-text { position:absolute; bottom:0; left:0; right:0; z-index:2; padding:22px 24px 8px; }
+.psy-a .tagline { font-family:'Playfair Display',serif; font-size:clamp(18px,3vw,28px); font-weight:400; font-style:italic; line-height:1.2; color:#dcc8ff; }
+.psy-a .tagline strong { display:block; font-style:normal; font-weight:900; color:#fff; font-size:1.3em; letter-spacing:-.02em; margin-top:4px; }
+.psy-a .body { flex:1; padding:14px 22px 18px; display:flex; flex-direction:column; gap:10px; }
+.psy-a .dept-pill { display:inline-flex; align-items:center; background:rgba(180,122,255,.15); border:1px solid rgba(180,122,255,.35); border-radius:20px; padding:3px 11px; font-size:9px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:#b47aff; width:fit-content; }
+.psy-a .fac-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px 10px; }
+.psy-a .fac { font-size:10px; color:rgba(255,255,255,.72); display:flex; align-items:flex-start; gap:5px; line-height:1.35; }
+.psy-a .fac::before { content:'◈'; color:#b47aff; font-size:7px; flex-shrink:0; margin-top:2px; }
+.psy-a .footer { display:flex; align-items:center; justify-content:space-between; border-top:1px solid rgba(180,122,255,.12); padding-top:9px; margin-top:auto; }
+.psy-a .contact { font-size:8.5px; color:rgba(255,255,255,.28); text-align:right; line-height:1.7; }
 
-    @media (max-width:880px){
-      h1{font-size:42px}
-      .poster{min-height:820px}
-      .headline{font-size:54px}
-    }
-    @media (max-width:640px){
-      .shell{padding:20px 14px 60px}
-      .hero{padding:24px}
-      h1{font-size:34px}
-      .poster{min-height:auto}
-      .headline{font-size:46px}
-      .mini-grid{grid-template-columns:1fr}
-      .cta{flex-direction:column;align-items:flex-start}
-    }
-  </style>
+/* PSY-B : Golden Dawn */
+.psy-b { background:#08070a; display:flex; flex-direction:column; }
+.psy-b .hero { flex:0 0 63%; position:relative; overflow:hidden; }
+.psy-b .hero img { width:100%; height:100%; object-fit:cover; object-position:center 20%; }
+.psy-b .hero::after { content:''; position:absolute; inset:0; background:linear-gradient(to bottom,rgba(8,7,10,0) 45%,#08070a 100%); }
+.psy-b .big-text { position:absolute; top:0; left:0; right:0; z-index:3; padding:20px 22px; display:flex; flex-direction:column; gap:7px; }
+.psy-b .dept-tag { display:inline-block; background:#ff9a3c; color:#000; font-size:8px; font-weight:800; letter-spacing:.14em; text-transform:uppercase; padding:4px 10px; border-radius:2px; width:fit-content; }
+.psy-b .main-tagline { font-family:'Montserrat',sans-serif; font-weight:900; line-height:.92; font-size:clamp(26px,4vw,42px); color:#fff; text-shadow:0 2px 30px rgba(0,0,0,.6); }
+.psy-b .main-tagline span { color:#ff9a3c; }
+.psy-b .sub { font-size:9.5px; color:rgba(255,255,255,.5); font-weight:300; letter-spacing:.04em; margin-top:5px; }
+.psy-b .body { flex:1; padding:14px 20px 16px; display:flex; flex-direction:column; gap:9px; }
+.psy-b .divider { height:1px; background:linear-gradient(to right,#ff9a3c,rgba(255,154,60,.3),transparent); }
+.psy-b .fac-list { display:flex; flex-direction:column; gap:4px; }
+.psy-b .fac { font-size:10px; color:rgba(255,255,255,.65); display:flex; align-items:center; gap:8px; }
+.psy-b .fac::before { content:''; width:16px; height:1px; background:#ff9a3c; flex-shrink:0; }
+.psy-b .footer { display:flex; align-items:center; justify-content:space-between; border-top:1px solid rgba(255,255,255,.06); padding-top:9px; margin-top:auto; }
+.psy-b .contact { font-size:8.5px; color:rgba(255,255,255,.28); text-align:right; line-height:1.7; }
+
+/* PSY-C : Fresh Meadow */
+.psy-c { background:linear-gradient(180deg,#f4f8f1 0%,#e8f2e4 100%); color:#1a2b18; display:flex; flex-direction:column; }
+.psy-c .hero { flex:0 0 53%; position:relative; overflow:hidden; }
+.psy-c .hero img { width:100%; height:100%; object-fit:cover; object-position:center 15%; }
+.psy-c .hero::after { content:''; position:absolute; inset:0; background:linear-gradient(to bottom,rgba(244,248,241,0) 45%,#f4f8f1 100%); }
+.psy-c .green-bar { height:4px; background:linear-gradient(to right,#3a8c5c,#6dc48a,#3a8c5c); }
+.psy-c .body { flex:1; padding:16px 22px 18px; display:flex; flex-direction:column; gap:11px; }
+.psy-c .dept-name { font-size:9px; font-weight:700; letter-spacing:.16em; text-transform:uppercase; color:#3a8c5c; }
+.psy-c .tagline { font-family:'Cormorant Garamond',serif; font-size:clamp(19px,3vw,27px); font-weight:300; line-height:1.2; color:#1a2b18; }
+.psy-c .tagline strong { font-weight:600; color:#2d6e47; display:block; }
+.psy-c .fac-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px 11px; }
+.psy-c .fac { font-size:10px; color:#3a5a3a; display:flex; align-items:flex-start; gap:5px; line-height:1.3; }
+.psy-c .fac::before { content:'✦'; color:#3a8c5c; font-size:7px; flex-shrink:0; margin-top:2px; }
+.psy-c .footer { display:flex; align-items:center; justify-content:space-between; border-top:1px solid rgba(58,140,92,.18); padding-top:9px; margin-top:auto; }
+.psy-c .contact { font-size:8.5px; color:#6a9a6a; text-align:right; line-height:1.7; }
+
+/* ═══════════════════════════════════════════════════
+   OPHTHALMOLOGY POSTER STYLES
+═══════════════════════════════════════════════════ */
+
+/* OPH-A : Cataract & Glaucoma / MIGS — Deep Blue */
+.oph-a { background:linear-gradient(165deg,#010e22 0%,#021830 55%,#000b1e 100%); display:flex; flex-direction:column; }
+.oph-a .hero { flex:0 0 52%; position:relative; overflow:hidden; }
+.oph-a .hero img { width:100%; height:100%; object-fit:cover; object-position:center; filter:saturate(1.1) brightness(.85); }
+.oph-a .hero::after { content:''; position:absolute; inset:0; background:linear-gradient(to bottom,rgba(1,14,34,.05) 25%,rgba(1,14,34,.55) 70%,#010e22 100%); }
+.oph-a .body { flex:1; padding:14px 22px 16px; display:flex; flex-direction:column; gap:10px; }
+.oph-a .dept-name { font-size:9px; font-weight:700; letter-spacing:.16em; text-transform:uppercase; color:#00b4ff; }
+.oph-a .spec-title { font-family:'Playfair Display',serif; font-size:clamp(17px,2.6vw,23px); font-weight:700; line-height:1.15; color:#fff; }
+.oph-a .spec-title em { color:#00b4ff; font-style:italic; }
+.oph-a .migs-box { background:rgba(0,180,255,.1); border:1px solid rgba(0,180,255,.35); border-radius:5px; padding:8px 11px; }
+.oph-a .migs-label { font-size:8px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; color:#00b4ff; margin-bottom:3px; }
+.oph-a .migs-title { font-family:'Montserrat',sans-serif; font-weight:800; font-size:11px; color:#fff; line-height:1.2; }
+.oph-a .migs-sub { font-size:9px; color:rgba(255,255,255,.5); margin-top:2px; }
+.oph-a .fac-title { font-size:8px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:rgba(255,255,255,.3); }
+.oph-a .fac-grid { display:grid; grid-template-columns:1fr 1fr; gap:3px 10px; }
+.oph-a .fac { font-size:9.5px; color:rgba(255,255,255,.65); display:flex; align-items:flex-start; gap:5px; line-height:1.3; }
+.oph-a .fac::before { content:'◉'; color:#00b4ff; font-size:7px; flex-shrink:0; margin-top:2px; }
+.oph-a .footer { display:flex; align-items:center; justify-content:space-between; border-top:1px solid rgba(0,180,255,.1); padding-top:9px; margin-top:auto; }
+.oph-a .contact { font-size:8.5px; color:rgba(255,255,255,.28); text-align:right; line-height:1.7; }
+
+/* OPH-B : Refractive Surgery — Gold */
+.oph-b { background:#080808; display:flex; flex-direction:column; }
+.oph-b .hero { flex:0 0 54%; position:relative; overflow:hidden; }
+.oph-b .hero img { width:100%; height:100%; object-fit:cover; object-position:center; filter:sepia(.1) contrast(1.06) brightness(.88); }
+.oph-b .hero::after { content:''; position:absolute; inset:0; background:linear-gradient(to bottom,rgba(8,8,8,0) 35%,#080808 100%); }
+.oph-b .laser-badge { position:absolute; top:16px; left:16px; z-index:3; background:rgba(192,152,60,.15); border:1px solid rgba(192,152,60,.45); backdrop-filter:blur(10px); border-radius:3px; padding:5px 11px; font-size:8px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; color:#c9a84c; }
+.oph-b .body { flex:1; padding:13px 20px 15px; display:flex; flex-direction:column; gap:9px; }
+.oph-b .dept-name { font-size:9px; font-weight:700; letter-spacing:.16em; text-transform:uppercase; color:#c9a84c; }
+.oph-b .spec-title { font-family:'Montserrat',sans-serif; font-weight:900; font-size:clamp(15px,2.3vw,20px); text-transform:uppercase; color:#fff; line-height:1.05; }
+.oph-b .spec-title span { color:#c9a84c; display:block; }
+.oph-b .refrac-box { display:flex; flex-direction:column; gap:5px; }
+.oph-b .refrac-item { background:rgba(201,168,76,.08); border-left:2px solid #c9a84c; padding:6px 10px; }
+.oph-b .refrac-name { font-size:11px; font-weight:700; color:#f0d070; }
+.oph-b .refrac-desc { font-size:9px; color:rgba(255,255,255,.45); margin-top:1px; }
+.oph-b .gold-line { height:1px; background:linear-gradient(to right,#c9a84c,rgba(201,168,76,.3),transparent); }
+.oph-b .fac-title { font-size:8px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:rgba(255,255,255,.28); }
+.oph-b .fac-grid { display:grid; grid-template-columns:1fr 1fr; gap:3px 10px; }
+.oph-b .fac { font-size:9.5px; color:rgba(255,255,255,.6); display:flex; align-items:flex-start; gap:5px; line-height:1.3; }
+.oph-b .fac::before { content:'—'; color:#c9a84c; font-size:9px; flex-shrink:0; }
+.oph-b .footer { display:flex; align-items:center; justify-content:space-between; border-top:1px solid rgba(201,168,76,.15); padding-top:9px; margin-top:auto; }
+.oph-b .contact { font-size:8.5px; color:rgba(255,255,255,.28); text-align:right; line-height:1.7; }
+
+/* OPH-C : Complete Eye Care — Clean White */
+.oph-c { background:#fff; color:#111; display:flex; flex-direction:column; }
+.oph-c .blue-top { height:5px; background:linear-gradient(to right,#0044a0,#0099f0,#0044a0); }
+.oph-c .hero { flex:0 0 52%; position:relative; overflow:hidden; }
+.oph-c .hero img { width:100%; height:100%; object-fit:cover; object-position:center; }
+.oph-c .hero::after { content:''; position:absolute; inset:0; background:linear-gradient(to bottom,rgba(255,255,255,0) 42%,rgba(255,255,255,.88) 100%); }
+.oph-c .body { flex:1; padding:14px 22px 18px; display:flex; flex-direction:column; gap:11px; }
+.oph-c .dept-name { font-size:9px; font-weight:700; letter-spacing:.16em; text-transform:uppercase; color:#0055b3; }
+.oph-c .tagline { font-family:'Playfair Display',serif; font-size:clamp(17px,2.5vw,23px); font-weight:700; line-height:1.2; color:#111; }
+.oph-c .tagline span { color:#0055b3; font-style:italic; }
+.oph-c .fac-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px 10px; }
+.oph-c .fac { font-size:10px; color:#444; display:flex; align-items:flex-start; gap:5px; line-height:1.3; }
+.oph-c .fac::before { content:'◆'; color:#0055b3; font-size:7px; flex-shrink:0; margin-top:2px; }
+.oph-c .tech-strip { background:#f0f6ff; border:1px solid #d0e4f8; border-radius:4px; padding:6px 10px; font-size:9px; color:#0055b3; font-weight:600; text-align:center; }
+.oph-c .footer { display:flex; align-items:center; justify-content:space-between; border-top:2px solid #f0f0f0; padding-top:9px; margin-top:auto; }
+.oph-c .contact { font-size:8.5px; color:#999; text-align:right; line-height:1.7; }
+
+/* ═══════════════════════════════════════════════════
+   GYNAECOLOGY POSTER STYLES
+═══════════════════════════════════════════════════ */
+
+/* GYN-A : Midnight Rose */
+.gyn-a { background:linear-gradient(165deg,#160010 0%,#240520 50%,#100016 100%); display:flex; flex-direction:column; }
+.gyn-a .hero { flex:0 0 60%; position:relative; overflow:hidden; }
+.gyn-a .hero img { width:100%; height:100%; object-fit:cover; object-position:center 20%; filter:saturate(.9) brightness(.85); }
+.gyn-a .hero::after { content:''; position:absolute; inset:0; background:linear-gradient(to bottom,rgba(22,0,16,.08) 28%,rgba(22,0,16,.62) 68%,#160010 100%); }
+.gyn-a .hero-text { position:absolute; bottom:0; left:0; right:0; z-index:3; padding:20px 22px 8px; }
+.gyn-a .hero-tagline { font-family:'Playfair Display',serif; font-size:clamp(17px,2.7vw,24px); font-style:italic; font-weight:400; color:#ffd0e8; line-height:1.2; }
+.gyn-a .hero-tagline strong { display:block; font-style:normal; font-weight:900; color:#fff; font-size:1.2em; margin-top:3px; }
+.gyn-a .body { flex:1; padding:13px 22px 16px; display:flex; flex-direction:column; gap:10px; }
+.gyn-a .dept-name { font-size:9px; font-weight:700; letter-spacing:.15em; text-transform:uppercase; color:#ff6fa8; }
+.gyn-a .fac-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px 10px; }
+.gyn-a .fac { font-size:10px; color:rgba(255,255,255,.72); display:flex; align-items:flex-start; gap:5px; line-height:1.3; }
+.gyn-a .fac::before { content:'♡'; color:#ff6fa8; font-size:9px; flex-shrink:0; }
+.gyn-a .footer { display:flex; align-items:center; justify-content:space-between; border-top:1px solid rgba(255,111,168,.15); padding-top:9px; margin-top:auto; }
+.gyn-a .contact { font-size:8.5px; color:rgba(255,255,255,.28); text-align:right; line-height:1.7; }
+
+/* GYN-B : Warm Peach */
+.gyn-b { background:linear-gradient(180deg,#fff8f4 0%,#ffece2 100%); color:#2a1810; display:flex; flex-direction:column; }
+.gyn-b .hero { flex:0 0 54%; position:relative; overflow:hidden; }
+.gyn-b .hero img { width:100%; height:100%; object-fit:cover; object-position:center 20%; }
+.gyn-b .hero::after { content:''; position:absolute; inset:0; background:linear-gradient(to bottom,rgba(255,248,244,0) 40%,rgba(255,248,244,.9) 100%); }
+.gyn-b .peach-bar { height:4px; background:linear-gradient(to right,#d4744a,#f09070,#d4744a); }
+.gyn-b .body { flex:1; padding:14px 22px 16px; display:flex; flex-direction:column; gap:11px; }
+.gyn-b .dept-name { font-size:9px; font-weight:700; letter-spacing:.15em; text-transform:uppercase; color:#c05030; }
+.gyn-b .tagline { font-family:'Cormorant Garamond',serif; font-size:clamp(18px,2.7vw,25px); font-weight:300; line-height:1.2; color:#2a1810; }
+.gyn-b .tagline strong { font-weight:600; color:#c05030; display:block; }
+.gyn-b .fac-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px 10px; }
+.gyn-b .fac { font-size:10px; color:#5a3828; display:flex; align-items:flex-start; gap:5px; line-height:1.3; }
+.gyn-b .fac::before { content:'◈'; color:#d4744a; font-size:8px; flex-shrink:0; margin-top:2px; }
+.gyn-b .footer { display:flex; align-items:center; justify-content:space-between; border-top:1px solid rgba(192,80,48,.15); padding-top:9px; margin-top:auto; }
+.gyn-b .contact { font-size:8.5px; color:#c05030; text-align:right; line-height:1.7; }
+
+/* GYN-C : Bold Magenta */
+.gyn-c { background:#080007; display:flex; flex-direction:column; }
+.gyn-c .hero { flex:0 0 62%; position:relative; overflow:hidden; }
+.gyn-c .hero img { width:100%; height:100%; object-fit:cover; object-position:center 20%; filter:saturate(1.05) brightness(.88); }
+.gyn-c .hero::before { content:''; position:absolute; inset:0; z-index:1; background:linear-gradient(135deg,rgba(200,0,90,.2) 0%,transparent 55%); }
+.gyn-c .hero::after { content:''; position:absolute; inset:0; z-index:1; background:linear-gradient(to bottom,transparent 40%,#080007 100%); }
+.gyn-c .dept-strip { position:absolute; top:0; left:0; right:0; z-index:4; background:linear-gradient(to right,#c00060,#e8007a); padding:7px 18px; font-size:8.5px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; display:flex; justify-content:space-between; }
+.gyn-c .body { flex:1; padding:13px 20px 15px; display:flex; flex-direction:column; gap:9px; }
+.gyn-c .tagline { font-family:'Montserrat',sans-serif; font-weight:900; font-size:clamp(17px,2.5vw,23px); line-height:1.0; text-transform:uppercase; }
+.gyn-c .tagline span { color:#e8007a; display:block; }
+.gyn-c .fac-list { display:flex; flex-direction:column; gap:3px; }
+.gyn-c .fac { font-size:10px; color:rgba(255,255,255,.68); display:flex; gap:8px; align-items:center; }
+.gyn-c .fac::before { content:''; width:16px; height:1px; background:#e8007a; flex-shrink:0; }
+.gyn-c .footer { display:flex; align-items:center; justify-content:space-between; border-top:1px solid rgba(232,0,122,.15); padding-top:9px; margin-top:auto; }
+.gyn-c .contact { font-size:8.5px; color:rgba(255,255,255,.28); text-align:right; line-height:1.7; }
+
+/* ═══════════════════════════════════════════════════
+   SKIN & COSMETOLOGY POSTER STYLES
+═══════════════════════════════════════════════════ */
+
+/* SKN-A : Champagne Noir */
+.skn-a { background:linear-gradient(165deg,#0d0b06 0%,#1a1609 50%,#0d0b06 100%); display:flex; flex-direction:column; }
+.skn-a .hero { flex:0 0 60%; position:relative; overflow:hidden; }
+.skn-a .hero img { width:100%; height:100%; object-fit:cover; object-position:center 20%; filter:saturate(.95) brightness(.88); }
+.skn-a .hero::after { content:''; position:absolute; inset:0; background:linear-gradient(to bottom,rgba(13,11,6,0) 30%,rgba(13,11,6,.58) 68%,#0d0b06 100%); }
+.skn-a .body { flex:1; padding:14px 22px 16px; display:flex; flex-direction:column; gap:10px; }
+.skn-a .dept-name { font-size:9px; font-weight:700; letter-spacing:.18em; text-transform:uppercase; color:#d4a843; }
+.skn-a .tagline { font-family:'Playfair Display',serif; font-size:clamp(17px,2.5vw,23px); font-weight:700; line-height:1.2; color:#fff; }
+.skn-a .tagline em { color:#d4a843; font-style:italic; }
+.skn-a .fac-grid { display:grid; grid-template-columns:1fr 1fr; gap:3px 10px; }
+.skn-a .fac { font-size:10px; color:rgba(255,255,255,.68); display:flex; align-items:flex-start; gap:5px; line-height:1.3; }
+.skn-a .fac::before { content:'✦'; color:#d4a843; font-size:7px; flex-shrink:0; margin-top:2px; }
+.skn-a .pioneer { background:rgba(212,168,67,.1); border:1px solid rgba(212,168,67,.28); border-radius:4px; padding:6px 10px; font-size:9px; color:#d4a843; font-weight:600; text-align:center; }
+.skn-a .footer { display:flex; align-items:center; justify-content:space-between; border-top:1px solid rgba(212,168,67,.15); padding-top:9px; margin-top:auto; }
+.skn-a .contact { font-size:8.5px; color:rgba(255,255,255,.28); text-align:right; line-height:1.7; }
+
+/* SKN-B : Blush & Clean */
+.skn-b { background:#fafafa; color:#111; display:flex; flex-direction:column; }
+.skn-b .hero { flex:0 0 58%; position:relative; overflow:hidden; }
+.skn-b .hero img { width:100%; height:100%; object-fit:cover; object-position:center 20%; }
+.skn-b .hero::after { content:''; position:absolute; inset:0; background:linear-gradient(to bottom,rgba(250,250,250,0) 38%,rgba(250,250,250,.88) 100%); }
+.skn-b .body { flex:1; padding:12px 20px 16px; display:flex; flex-direction:column; gap:9px; }
+.skn-b .dept-name { font-size:9px; font-weight:700; letter-spacing:.15em; text-transform:uppercase; color:#c85080; }
+.skn-b .tagline { font-family:'Playfair Display',serif; font-size:clamp(16px,2.4vw,21px); font-weight:700; line-height:1.2; color:#111; }
+.skn-b .tagline span { color:#c85080; font-style:italic; }
+.skn-b .fac-grid { display:grid; grid-template-columns:1fr 1fr; gap:3px 10px; }
+.skn-b .fac { font-size:9.5px; color:#555; display:flex; align-items:flex-start; gap:5px; line-height:1.3; }
+.skn-b .fac::before { content:'◆'; color:#c85080; font-size:7px; flex-shrink:0; margin-top:2px; }
+.skn-b .pioneer { background:linear-gradient(to right,#c85080,#e090b0); border-radius:4px; padding:6px 10px; font-size:9.5px; color:#fff; font-weight:600; text-align:center; }
+.skn-b .footer { display:flex; align-items:center; justify-content:space-between; border-top:2px solid #f0f0f0; padding-top:9px; margin-top:auto; }
+.skn-b .contact { font-size:8.5px; color:#aaa; text-align:right; line-height:1.7; }
+
+/* SKN-C : Violet Night */
+.skn-c { background:linear-gradient(165deg,#090614 0%,#130828 50%,#090614 100%); display:flex; flex-direction:column; }
+.skn-c .hero { flex:0 0 61%; position:relative; overflow:hidden; }
+.skn-c .hero img { width:100%; height:100%; object-fit:cover; object-position:center 20%; filter:saturate(1.1); }
+.skn-c .hero::before { content:''; position:absolute; inset:0; z-index:1; background:radial-gradient(ellipse at 65% 25%,rgba(190,90,255,.22) 0%,transparent 55%); }
+.skn-c .hero::after { content:''; position:absolute; inset:0; z-index:1; background:linear-gradient(to bottom,rgba(9,6,20,0) 30%,rgba(9,6,20,.58) 68%,#090614 100%); }
+.skn-c .body { flex:1; padding:13px 20px 15px; display:flex; flex-direction:column; gap:9px; }
+.skn-c .dept-name { font-size:9px; font-weight:700; letter-spacing:.18em; text-transform:uppercase; color:#c87aff; }
+.skn-c .tagline { font-family:'Playfair Display',serif; font-size:clamp(16px,2.4vw,22px); font-weight:700; line-height:1.2; color:#fff; }
+.skn-c .tagline em { color:#c87aff; font-style:italic; }
+.skn-c .fac-grid { display:grid; grid-template-columns:1fr 1fr; gap:3px 10px; }
+.skn-c .fac { font-size:10px; color:rgba(255,255,255,.68); display:flex; align-items:flex-start; gap:5px; line-height:1.3; }
+.skn-c .fac::before { content:'◈'; color:#c87aff; font-size:8px; flex-shrink:0; margin-top:2px; }
+.skn-c .pioneer { background:rgba(200,122,255,.1); border:1px solid rgba(200,122,255,.25); border-radius:4px; padding:6px 10px; font-size:9px; color:#c87aff; font-weight:600; text-align:center; }
+.skn-c .footer { display:flex; align-items:center; justify-content:space-between; border-top:1px solid rgba(200,122,255,.15); padding-top:9px; margin-top:auto; }
+.skn-c .contact { font-size:8.5px; color:rgba(255,255,255,.28); text-align:right; line-height:1.7; }
+</style>
 </head>
 <body>
-  <div class="shell">
-    <section class="hero">
-      <div class="eyebrow">BMH Poster Concepts</div>
-      <h1>Four specialties. Four visual directions each. Built to stop people mid-step.</h1>
-      <p>These concept posters are designed as premium review boards for Baweja Multispeciality Hospital. Each specialty gets four visually distinct options with the factual facility list taken from your public hospital pages, while the hero visuals are art-directed for eye-catching print impact. Once you pick the winning route, we can translate the exact same design system into Punjabi.</p>
-      <div class="hero-meta">
-        <span>16 total concepts</span>
-        <span>Punjabi-ready copy structure</span>
-        <span>Print-friendly poster proportions</span>
-        <span>Hospital facilities already mapped</span>
-      </div>
-    </section>
 
-    <div class="filters" id="filters">
-      <button class="active" data-filter="all">All Posters</button>
-      <button data-filter="ophtho">Ophthalmology</button>
-      <button data-filter="psych">Psychiatry</button>
-      <button data-filter="obg">OBG / Fertility</button>
-      <button data-filter="skin">Skin & Cosmetology</button>
+<div class="nav">
+  <span class="nav-title">BMH Specialty Posters — English</span>
+  <a href="#psychiatry">Psychiatry</a>
+  <a href="#ophthalmology">Ophthalmology</a>
+  <a href="#gynaecology">Gynaecology</a>
+  <a href="#skin">Skin</a>
+  <a href="punjabi.html" class="nav-lang">ਪੰਜਾਬੀ ਵਿੱਚ ਦੇਖੋ →</a>
+</div>
+
+<!-- ═══════════════════════════════
+     1. PSYCHIATRY
+═══════════════════════════════ -->
+<section class="section" id="psychiatry">
+  <div class="section-header">
+    <div class="badge badge-psy">Specialty 1</div>
+    <h2>Neuropsychiatry</h2>
+    <p>3 design variants · like one? we'll print it in Punjabi too</p>
+  </div>
+  <div class="variants-grid">
+
+    <!-- PSY A -->
+    <div class="variant-wrap">
+      <div class="poster psy-a">
+        <div class="hero">
+          <img src="https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?auto=format&fit=crop&w=600&q=85"
+               alt="Carefree woman cycling, hair blowing"
+               onerror="this.src='https://images.unsplash.com/photo-1502126324834-38f8e02d7160?auto=format&fit=crop&w=600&q=85'">
+          <div class="hero-text">
+            <div class="tagline">Let go. Breathe.<br><strong>Free Your Mind.</strong></div>
+          </div>
+        </div>
+        <div class="body">
+          <div class="dept-pill">Neuropsychiatry · UK & India Trained Specialists</div>
+          <div class="fac-grid">
+            <div class="fac">Depression &amp; Anxiety</div>
+            <div class="fac">Mania Treatment</div>
+            <div class="fac">Personality Disorders</div>
+            <div class="fac">De-Addiction OPD</div>
+            <div class="fac">Advanced EEG Assessment</div>
+            <div class="fac">Biofeedback Therapy</div>
+            <div class="fac">Epilepsy &amp; Seizures</div>
+            <div class="fac">Child Behaviour Care</div>
+            <div class="fac">Psychological Counselling</div>
+            <div class="fac">Family Support Program</div>
+          </div>
+          <div class="footer">
+            <img src="https://bawejahospital.com/img/logo-white.png" alt="BMH" class="bmh-logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
+            <div style="display:none; font-family:'Montserrat',sans-serif; font-weight:800; font-size:13px;">BMH</div>
+            <div class="contact">+91-81466 22802<br>bawejahospital.com · Rupnagar</div>
+          </div>
+        </div>
+      </div>
+      <div class="variant-label">Option A — Deep Violet</div>
     </div>
 
-    <section class="grid" id="poster-grid"></section>
-  </div>
-
-  <script>
-    const common = {
-      hospital: "Baweja Multispeciality Hospital",
-      phone: "+91-81466 22802",
-      address: "1571/39, opposite Civil Hospital, Preet Colony, Rupnagar",
-      printNote: "Layout is intentionally Punjabi-friendly: short headline block, separate facilities stack, and enough space to swap in Gurmukhi without breaking the poster."
-    };
-
-    const specialties = {
-      ophtho: {
-        label: "Ophthalmology",
-        icon: "Eye Care",
-        theme: "theme-ophtho",
-        doctor: "Ophthalmic & Refractive Care",
-        facilities: [
-          "MICS and Ellips FX cataract removal with painless, injection-free and bandage-free positioning.",
-          "Diabetes and retinal disease care with in-house OCT, Green Laser and FFA support.",
-          "Glaucoma management including iStent Inject and other micro-invasive options.",
-          "LASIK and refractive correction for spectacle-free vision goals.",
-          "Cornea services for diagnosis and treatment of corneal disorders.",
-          "TOMEY Optical Biometer for high-accuracy cataract planning.",
-          "AMO Signature Phacoemulsification System for dense cataracts with minimal phaco power."
-        ]
-      },
-      psych: {
-        label: "Psychiatry",
-        icon: "Mind Care",
-        theme: "theme-psych",
-        doctor: "Neuropsychiatry & De-addiction Care",
-        facilities: [
-          "Comprehensive psychiatric treatment for depression, anxiety, mania and personality disorders.",
-          "Support for epilepsy and childhood behavioural concerns including tantrums and emotional difficulty.",
-          "Detailed EEG assessment for diagnosis of neurological and psychiatric conditions.",
-          "Biofeedback therapy to reduce stress and improve self-regulation.",
-          "Specialised OPD de-addiction care with counselling, medical support and family involvement.",
-          "Discreet, empathetic and complete mental health care under one roof."
-        ]
-      },
-      obg: {
-        label: "OBG / Fertility",
-        icon: "Women's Health",
-        theme: "theme-obg",
-        doctor: "Women's Health, Pregnancy & Fertility",
-        facilities: [
-          "Normal pregnancy care with comprehensive antenatal follow-up.",
-          "Painless deliveries and safe Caesarean section support for high-risk pregnancies.",
-          "Infertility treatment including IUI and IVF pathways.",
-          "PCOS / PCOD management and personalised hormonal care.",
-          "Medical termination of pregnancy with guided, discreet care.",
-          "Advanced surgeries: laparoscopy, sterilisation, ovarian cyst, tubal pregnancy, hysterectomy, cervical circlage and hysteroscopy.",
-          "Fully equipped operation theatre, private rooms and newborn phototherapy support."
-        ]
-      },
-      skin: {
-        label: "Skin & Cosmetology",
-        icon: "Aesthetic Care",
-        theme: "theme-skin",
-        doctor: "Advanced Dermatology & Laser Aesthetics",
-        facilities: [
-          "Hydrafacial and face rejuvenation for deep cleansing, hydration and glow restoration.",
-          "Acne and scar treatment for clearer, healthier-looking skin.",
-          "Mole, wart and scar removal with Co2 Laser support.",
-          "Laser hair reduction with SHR/IPL and Diode systems.",
-          "Custom skin rejuvenation peels and anti-ageing care.",
-          "Cryolipolysis for non-invasive body fat reduction.",
-          "Tattoo removal with Nd:YAG Laser and advanced in-house laser technology."
-        ]
-      }
-    };
-
-    const posters = [
-      {
-        specialty: "psych",
-        option: "Option 1",
-        style: "style-motion scene-bicycle",
-        headline: "Free Your Mind",
-        tagline: "A carefree bicycle ride, open air, flying hair, and the feeling of finally breathing light again.",
-        visual: "AI visual cue: young woman cycling through a sunlit open road, wind in her hair, soft teal sky, cinematic hope, no clinical stiffness.",
-        micro1: "Best For",
-        micro1Value: "Outdoor hoarding or waiting-lounge statement poster",
-        micro2: "Mood",
-        micro2Value: "Liberation, recovery, motion",
-        accentLine: "Hope can return quietly, and then all at once."
-      },
-      {
-        specialty: "psych",
-        option: "Option 2",
-        style: "style-dream scene-bloom",
-        headline: "Come Back To Yourself",
-        tagline: "Soft, healing, and deeply human. Built around emotional recovery rather than fear-based mental health messaging.",
-        visual: "AI visual cue: graceful portrait dissolving into birds and petals, gentle morning light, calm expression, premium editorial mental health campaign.",
-        micro1: "Best For",
-        micro1Value: "Consultation area, brochure cover, women-focused campaign",
-        micro2: "Mood",
-        micro2Value: "Soft confidence, trust, dignity",
-        accentLine: "Care that helps the mind feel safe enough to heal."
-      },
-      {
-        specialty: "psych",
-        option: "Option 3",
-        style: "style-editorial scene-skyline",
-        headline: "Calm Is A Direction",
-        tagline: "A more modern, metropolitan psychiatry poster with strong luxury-clinic energy and a premium campaign look.",
-        visual: "AI visual cue: elegant silhouette against a glowing city dusk, floating light particles, reflective mood, high-fashion medical poster aesthetic.",
-        micro1: "Best For",
-        micro1Value: "Reception feature wall, urban campaign print",
-        micro2: "Mood",
-        micro2Value: "Modern, poised, aspirational",
-        accentLine: "Evidence-based care with warmth, privacy and steadiness."
-      },
-      {
-        specialty: "psych",
-        option: "Option 4",
-        style: "style-luxury scene-eye",
-        headline: "Unburden The Noise",
-        tagline: "This option turns the invisible pressure of stress into a visual release, making the message feel memorable from a distance.",
-        visual: "AI visual cue: abstract mind-space with opening horizon, luminous center, emotional release, premium textured poster finish.",
-        micro1: "Best For",
-        micro1Value: "High-visibility corridor or brand campaign set",
-        micro2: "Mood",
-        micro2Value: "Conceptual, artistic, striking",
-        accentLine: "From anxiety to balance, one guided step at a time."
-      },
-      {
-        specialty: "ophtho",
-        option: "Option 1",
-        style: "style-editorial scene-eye",
-        headline: "See The World New",
-        tagline: "Clean, sharp and premium. Built around clarity, light and the emotional impact of getting your vision back.",
-        visual: "AI visual cue: luminous human eye blended with horizon light, crystal focus, rich navy gradients, premium ophthalmology campaign.",
-        micro1: "Best For",
-        micro1Value: "Cataract and LASIK awareness poster",
-        micro2: "Mood",
-        micro2Value: "Precision, optimism, trust",
-        accentLine: "Advanced eye care with technology that feels world-class."
-      },
-      {
-        specialty: "ophtho",
-        option: "Option 2",
-        style: "style-motion scene-skyline",
-        headline: "Precision In Every Ray",
-        tagline: "A high-tech ophthalmology concept with scan-like graphics, laser cues and strong retina-glaucoma sophistication.",
-        visual: "AI visual cue: futuristic eye scan, subtle laser arcs, medical-luxury visual language, not generic hospital stock.",
-        micro1: "Best For",
-        micro1Value: "Retina, glaucoma and advanced technology communication",
-        micro2: "Mood",
-        micro2Value: "High-tech, advanced, premium",
-        accentLine: "Detailed diagnostics. Confident surgery. Clearer outcomes."
-      },
-      {
-        specialty: "ophtho",
-        option: "Option 3",
-        style: "style-dream scene-bloom",
-        headline: "Light Returns",
-        tagline: "This version leans emotional and family-friendly, ideal for cataract recovery and senior patient trust-building.",
-        visual: "AI visual cue: older patient looking into golden daylight with relieved expression, elegant soft-focus photography, uplifting and dignified.",
-        micro1: "Best For",
-        micro1Value: "Senior eye care, cataract and family counselling areas",
-        micro2: "Mood",
-        micro2Value: "Warmth, relief, reassurance",
-        accentLine: "From blur to brilliance, with comfort-first cataract care."
-      },
-      {
-        specialty: "ophtho",
-        option: "Option 4",
-        style: "style-luxury scene-eye",
-        headline: "Sharper Than Ever",
-        tagline: "An assertive, bold ophthalmology poster that feels premium enough for large-format print and street-facing branding.",
-        visual: "AI visual cue: ultra-detailed iris close-up, metallic blue highlights, luxury clinic branding, bold contrast and elegant light falloff.",
-        micro1: "Best For",
-        micro1Value: "Outdoor branding, flagship campaign wall",
-        micro2: "Mood",
-        micro2Value: "Bold, elite, memorable",
-        accentLine: "Technology-led eye care under one roof."
-      },
-      {
-        specialty: "obg",
-        option: "Option 1",
-        style: "style-dream scene-mother",
-        headline: "Held With Care",
-        tagline: "A graceful women's health poster that feels warm, elevated and deeply reassuring without becoming sentimental or dated.",
-        visual: "AI visual cue: elegant mother silhouette with newborn glow, blush and gold palette, premium maternity campaign, soft cinematic light.",
-        micro1: "Best For",
-        micro1Value: "Labour room entrance, antenatal clinic, reception",
-        micro2: "Mood",
-        micro2Value: "Warmth, safety, tenderness",
-        accentLine: "From first scan to first cry, complete mother and child care."
-      },
-      {
-        specialty: "obg",
-        option: "Option 2",
-        style: "style-editorial scene-bloom",
-        headline: "For Every Chapter Of Her",
-        tagline: "This route expands beyond pregnancy alone, making it strong for OBG, fertility and women's surgical care together.",
-        visual: "AI visual cue: poised woman framed by blooming forms and surgical-light glow, modern women's health campaign with dignity and strength.",
-        micro1: "Best For",
-        micro1Value: "Combined OBG and fertility service promotion",
-        micro2: "Mood",
-        micro2Value: "Strong, elegant, complete",
-        accentLine: "Pregnancy, fertility and gynaecological care with modern expertise."
-      },
-      {
-        specialty: "obg",
-        option: "Option 3",
-        style: "style-motion scene-skyline",
-        headline: "Where Families Begin",
-        tagline: "A hopeful fertility-first concept that still accommodates pregnancy, delivery and surgical facilities beautifully.",
-        visual: "AI visual cue: couple in soft silhouette with future-home horizon, refined blush gradients, subtle optimism, premium fertility poster.",
-        micro1: "Best For",
-        micro1Value: "Fertility campaign, IUI/IVF counselling zone",
-        micro2: "Mood",
-        micro2Value: "Hope, possibility, trust",
-        accentLine: "Advanced fertility care for journeys that need both science and heart."
-      },
-      {
-        specialty: "obg",
-        option: "Option 4",
-        style: "style-luxury scene-mother",
-        headline: "Modern Care For Women",
-        tagline: "This one feels more premium-clinic and less maternity-specific, ideal if you want a broad women's health brand piece.",
-        visual: "AI visual cue: fashion-editorial portrait of confident woman with soft rose illumination, premium healthcare poster that feels international.",
-        micro1: "Best For",
-        micro1Value: "Flagship women's health poster across the hospital",
-        micro2: "Mood",
-        micro2Value: "Confident, polished, high-end",
-        accentLine: "Empathetic women's healthcare backed by advanced surgery and fertility services."
-      },
-      {
-        specialty: "skin",
-        option: "Option 1",
-        style: "style-editorial scene-bloom",
-        headline: "Glow With Confidence",
-        tagline: "A beauty-forward poster with enough sophistication to feel premium, but still grounded in real dermatology and laser care.",
-        visual: "AI visual cue: radiant woman in warm natural light, luminous skin, airy florals, high-end editorial beauty campaign with clinical polish.",
-        micro1: "Best For",
-        micro1Value: "Cosmetology reception, social poster print, brochure cover",
-        micro2: "Mood",
-        micro2Value: "Radiance, aspiration, elegance",
-        accentLine: "Advanced skin care that looks refined and feels medically sound."
-      },
-      {
-        specialty: "skin",
-        option: "Option 2",
-        style: "style-motion scene-skyline",
-        headline: "Laser. Lift. Renew.",
-        tagline: "A stronger technology-led route for laser, hair reduction and procedure-based cosmetology communication.",
-        visual: "AI visual cue: chic portrait with subtle laser lines and reflective surfaces, premium med-aesthetic poster, cinematic contrast.",
-        micro1: "Best For",
-        micro1Value: "Procedure menu wall, laser zone branding",
-        micro2: "Mood",
-        micro2Value: "Modern, sleek, performance-led",
-        accentLine: "In-house laser technology with beauty outcomes that feel premium."
-      },
-      {
-        specialty: "skin",
-        option: "Option 3",
-        style: "style-dream scene-bloom",
-        headline: "Skin That Feels Like You",
-        tagline: "This version softens the category and makes the promise about confidence, natural results and long-term skin health.",
-        visual: "AI visual cue: close portrait with dewy texture, calm earth tones, minimal luxury beauty poster, intimate and honest.",
-        micro1: "Best For",
-        micro1Value: "Dermatology plus cosmetology combined communication",
-        micro2: "Mood",
-        micro2Value: "Natural, calm, premium",
-        accentLine: "Customised plans for acne, scars, rejuvenation and healthy skin confidence."
-      },
-      {
-        specialty: "skin",
-        option: "Option 4",
-        style: "style-luxury scene-eye",
-        headline: "Beauty Meets Precision",
-        tagline: "The most luxe and dramatic cosmetology route, suitable for premium print where you want instant visual pull.",
-        visual: "AI visual cue: sculptural beauty portrait, champagne tones, polished glass texture, luxury aesthetic medicine campaign.",
-        micro1: "Best For",
-        micro1Value: "Flagship wall poster or premium outdoor promotion",
-        micro2: "Mood",
-        micro2Value: "Luxury, drama, aspiration",
-        accentLine: "Natural-looking results powered by advanced laser and aesthetic technology."
-      }
-    ];
-
-    function sceneMarkup(style) {
-      const petals = style.includes("scene-bloom")
-        ? '<span class="petal p1"></span><span class="petal p2"></span><span class="petal p3"></span><span class="petal p4"></span>'
-        : "";
-      const skyline = style.includes("scene-skyline")
-        ? '<span class="spark s1"></span><span class="spark s2"></span><span class="spark s3"></span>'
-        : "";
-      const eye = style.includes("scene-eye") ? '<span class="eye-ring"></span>' : "";
-      const mother = style.includes("scene-mother") ? '<span class="baby"></span>' : "";
-      const bike = style.includes("scene-bicycle") ? '<div class="bike"><span></span></div>' : "";
-      return `
-        <div class="visual ${style}">
-          <span class="halo"></span>
-          <span class="orb"></span>
-          <span class="swoop"></span>
-          <span class="line"></span>
-          <div class="figure"></div>
-          ${bike}
-          ${mother}
-          ${petals}
-          ${skyline}
-          ${eye}
-          <span class="ground"></span>
+    <!-- PSY B -->
+    <div class="variant-wrap">
+      <div class="poster psy-b">
+        <div class="hero">
+          <img src="https://images.unsplash.com/photo-1490730141103-6cac27aaab94?auto=format&fit=crop&w=600&q=85"
+               alt="Woman arms open in sunlit field"
+               onerror="this.src='https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=600&q=85'">
+          <div class="big-text">
+            <div class="dept-tag">Neuropsychiatry</div>
+            <div class="main-tagline">FREE<br><span>YOUR</span><br>MIND.</div>
+            <div class="sub">Empathetic · Discreet · Complete Psychiatric Care</div>
+          </div>
         </div>
-      `;
-    }
+        <div class="body">
+          <div class="divider"></div>
+          <div class="fac-list">
+            <div class="fac">Depression &amp; Anxiety Treatment</div>
+            <div class="fac">Mania &amp; Personality Disorders</div>
+            <div class="fac">Substance De-Addiction (OPD)</div>
+            <div class="fac">Advanced EEG Assessment</div>
+            <div class="fac">Biofeedback Therapy</div>
+            <div class="fac">Epilepsy Management</div>
+            <div class="fac">Child Behavioural Therapy</div>
+            <div class="fac">Counselling &amp; Family Support</div>
+          </div>
+          <div class="footer">
+            <img src="https://bawejahospital.com/img/logo-white.png" alt="BMH" class="bmh-logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
+            <div style="display:none; font-family:'Montserrat',sans-serif; font-weight:800; font-size:13px;">BMH</div>
+            <div class="contact">+91-81466 22802<br>Rupnagar, Punjab</div>
+          </div>
+        </div>
+      </div>
+      <div class="variant-label">Option B — Golden Dawn</div>
+    </div>
 
-    function renderPosters(filter = "all") {
-      const grid = document.getElementById("poster-grid");
-      const selected = posters.filter(p => filter === "all" || p.specialty === filter);
-      grid.innerHTML = selected.map(poster => {
-        const spec = specialties[poster.specialty];
-        return `
-          <article class="poster ${spec.theme} ${poster.style}" data-specialty="${poster.specialty}">
-            <div class="poster-top">
-              <div class="brand">
-                <div class="brand-mark">BMH</div>
-                <div class="brand-name">${common.hospital}</div>
-                <div class="brand-sub">${spec.doctor}</div>
-              </div>
-              <div class="option-chip">${poster.option}</div>
-            </div>
-            <div class="poster-body">
-              <div class="specialty">${spec.icon} / ${spec.label}</div>
-              <h2 class="headline">${poster.headline}</h2>
-              <p class="tagline">${poster.tagline}</p>
-              ${sceneMarkup(poster.style)}
-              <p class="visual-note">${poster.visual}</p>
-              <div class="poster-content">
-                <h3>Facilities</h3>
-                <div class="facilities">
-                  ${spec.facilities.map(item => `<div class="facility">${item}</div>`).join("")}
-                </div>
-                <div class="mini-grid">
-                  <div class="mini-card">
-                    <strong>${poster.micro1}</strong>
-                    <span>${poster.micro1Value}</span>
-                  </div>
-                  <div class="mini-card">
-                    <strong>${poster.micro2}</strong>
-                    <span>${poster.micro2Value}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div class="poster-foot">
-              <div class="cta">
-                <div>
-                  <strong>${poster.accentLine}</strong>
-                  ${common.address}
-                </div>
-                <div>${common.phone}</div>
-              </div>
-              <div class="print-note">${common.printNote}</div>
-            </div>
-          </article>
-        `;
-      }).join("");
-    }
+    <!-- PSY C — fresh meadow, better portrait -->
+    <div class="variant-wrap">
+      <div class="poster psy-c">
+        <div class="hero">
+          <!-- Beautiful, joyful woman portrait in nature -->
+          <img src="https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=600&q=85"
+               alt="Joyful woman cycling, hair blowing in wind"
+               onerror="this.src='https://images.unsplash.com/photo-1524250502761-1ac6f2e30d43?auto=format&fit=crop&w=600&q=85'">
+        </div>
+        <div class="green-bar"></div>
+        <div class="body">
+          <div class="dept-name">Neuropsychiatry</div>
+          <div class="tagline">Your mind deserves<br><strong>to breathe freely.</strong></div>
+          <div class="fac-grid">
+            <div class="fac">Depression &amp; Anxiety</div>
+            <div class="fac">Mania Treatment</div>
+            <div class="fac">Personality Disorders</div>
+            <div class="fac">De-Addiction OPD</div>
+            <div class="fac">Advanced EEG</div>
+            <div class="fac">Biofeedback Therapy</div>
+            <div class="fac">Epilepsy &amp; Seizures</div>
+            <div class="fac">Child Behaviour Care</div>
+            <div class="fac">Psychological Counselling</div>
+            <div class="fac">Family Support</div>
+          </div>
+          <div class="footer">
+            <img src="https://bawejahospital.com/img/logo.png" alt="BMH" class="bmh-logo" style="filter:saturate(1)" onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
+            <div style="display:none; font-family:'Montserrat',sans-serif; font-weight:800; font-size:13px; color:#1a2b18;">BMH</div>
+            <div class="contact">+91-81466 22802<br>bawejahospital.com</div>
+          </div>
+        </div>
+      </div>
+      <div class="variant-label">Option C — Fresh Meadow</div>
+    </div>
 
-    renderPosters();
+  </div>
+</section>
+<div class="section-sep"></div>
 
-    document.getElementById("filters").addEventListener("click", event => {
-      const button = event.target.closest("button[data-filter]");
-      if (!button) return;
-      document.querySelectorAll("#filters button").forEach(btn => btn.classList.remove("active"));
-      button.classList.add("active");
-      renderPosters(button.dataset.filter);
-    });
-  </script>
+<!-- ═══════════════════════════════
+     2. OPHTHALMOLOGY
+═══════════════════════════════ -->
+<section class="section" id="ophthalmology">
+  <div class="section-header">
+    <div class="badge badge-oph">Specialty 2</div>
+    <h2>Ophthalmology</h2>
+    <p>Sub-specialty focused designs — Cataract/MIGS · Refractive · Full Overview</p>
+  </div>
+  <div class="variants-grid">
+
+    <!-- OPH A: Cataract & Glaucoma with MIGS highlight -->
+    <div class="variant-wrap">
+      <div class="poster oph-a">
+        <div class="hero">
+          <img src="https://bawejahospital.com/img/robotic-ai-cataract-surgery.webp"
+               alt="Robotic AI cataract surgery"
+               onerror="this.src='https://images.unsplash.com/photo-1559757148-5c350d0d3c56?auto=format&fit=crop&w=600&q=85'">
+        </div>
+        <div class="body">
+          <div class="dept-name">Ophthalmology · Cataract &amp; Glaucoma</div>
+          <div class="spec-title">Advanced Cataract &amp;<br><em>Glaucoma Care.</em></div>
+          <div class="migs-box">
+            <div class="migs-label">⭑ Highlighted Procedure</div>
+            <div class="migs-title">MIGS — Minimally Invasive Glaucoma Surgery</div>
+            <div class="migs-sub">Faster recovery · Less risk · Superior outcomes</div>
+          </div>
+          <div class="fac-title">Also Available</div>
+          <div class="fac-grid">
+            <div class="fac">Robotic AI Cataract Surgery</div>
+            <div class="fac">Blade-Free Phacoemulsification</div>
+            <div class="fac">Glaucoma Management</div>
+            <div class="fac">IOP Control &amp; Monitoring</div>
+            <div class="fac">Corneal Evaluation</div>
+            <div class="fac">Retina Assessment</div>
+          </div>
+          <div class="footer">
+            <img src="https://bawejahospital.com/img/logo-white.png" alt="BMH" class="bmh-logo-sm" onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
+            <div style="display:none; font-family:'Montserrat',sans-serif; font-weight:800; font-size:13px;">BMH</div>
+            <div class="contact">+91-81466 22802<br>Rupnagar, Punjab</div>
+          </div>
+        </div>
+      </div>
+      <div class="variant-label">Option A — Cataract &amp; MIGS</div>
+    </div>
+
+    <!-- OPH B: Refractive Surgery highlight -->
+    <div class="variant-wrap">
+      <div class="poster oph-b">
+        <div class="hero">
+          <img src="https://bawejahospital.com/img/blade-free-lasik.webp"
+               alt="Blade-free LASIK refractive surgery"
+               onerror="this.src='https://images.unsplash.com/photo-1576091160550-2173dba999ef?auto=format&fit=crop&w=600&q=85'">
+          <div class="laser-badge">Refractive Surgery</div>
+        </div>
+        <div class="body">
+          <div class="dept-name">Ophthalmology · Refractive Surgery</div>
+          <div class="spec-title">Freedom from<br><span>Glasses &amp; Lenses.</span></div>
+          <div class="refrac-box">
+            <div class="refrac-item">
+              <div class="refrac-name">Blade-Free LASIK</div>
+              <div class="refrac-desc">Painless · No blade · Same-day vision</div>
+            </div>
+            <div class="refrac-item">
+              <div class="refrac-name">CLEAR — Corneal Lenticule Extraction</div>
+              <div class="refrac-desc">Flapless · Ultra-precise · Latest technology</div>
+            </div>
+          </div>
+          <div class="gold-line"></div>
+          <div class="fac-title">Also Available</div>
+          <div class="fac-grid">
+            <div class="fac">Refractive Error Assessment</div>
+            <div class="fac">Myopia / Hyperopia / Astigmatism</div>
+            <div class="fac">Pre-surgical Suitability Eval</div>
+            <div class="fac">Corneal Topography</div>
+            <div class="fac">Post-op Follow-up Care</div>
+            <div class="fac">Custom Wavefront Analysis</div>
+          </div>
+          <div class="footer">
+            <img src="https://bawejahospital.com/img/logo-white.png" alt="BMH" class="bmh-logo-sm" onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
+            <div style="display:none; font-family:'Montserrat',sans-serif; font-weight:800; font-size:13px; color:#c9a84c;">BMH</div>
+            <div class="contact">+91-81466 22802<br>Rupnagar, Punjab</div>
+          </div>
+        </div>
+      </div>
+      <div class="variant-label">Option B — Refractive Surgery</div>
+    </div>
+
+    <!-- OPH C: Complete Eye Care overview -->
+    <div class="variant-wrap">
+      <div class="poster oph-c">
+        <div class="blue-top"></div>
+        <div class="hero">
+          <img src="https://bawejahospital.com/img/ophthalmology.webp"
+               alt="Ophthalmology — complete eye care"
+               onerror="this.src='https://images.unsplash.com/photo-1512072703071-aefd4bd0c5c5?auto=format&fit=crop&w=600&q=85'">
+        </div>
+        <div class="body">
+          <div class="dept-name">Ophthalmology · Complete Eye Care</div>
+          <div class="tagline">Life is more beautiful<br>when you <span>see it clearly.</span></div>
+          <div class="fac-grid">
+            <div class="fac">Robotic AI Cataract Surgery</div>
+            <div class="fac">Blade-Free LASIK</div>
+            <div class="fac">CLEAR Lens Extraction</div>
+            <div class="fac">MIGS (Glaucoma)</div>
+            <div class="fac">Retina Surgery</div>
+            <div class="fac">Refractive Surgery</div>
+            <div class="fac">Complete Eye Diagnostics</div>
+            <div class="fac">Corneal Procedures</div>
+          </div>
+          <div class="tech-strip">✦ First in Region — Robotic AI Eye Surgery · NAABH Certified</div>
+          <div class="footer">
+            <img src="https://bawejahospital.com/img/logo.png" alt="BMH" class="bmh-logo-sm" onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
+            <div style="display:none; font-family:'Montserrat',sans-serif; font-weight:800; font-size:13px; color:#0055b3;">BMH</div>
+            <div class="contact">+91-81466 22802<br>bawejahospital.com</div>
+          </div>
+        </div>
+      </div>
+      <div class="variant-label">Option C — Complete Eye Care</div>
+    </div>
+
+  </div>
+</section>
+<div class="section-sep"></div>
+
+<!-- ═══════════════════════════════
+     3. OBSTETRICS & GYNAECOLOGY
+═══════════════════════════════ -->
+<section class="section" id="gynaecology">
+  <div class="section-header">
+    <div class="badge badge-gyn">Specialty 3</div>
+    <h2>Obstetrics &amp; Gynaecology</h2>
+    <p>3 design variants</p>
+  </div>
+  <div class="variants-grid">
+
+    <!-- GYN A -->
+    <div class="variant-wrap">
+      <div class="poster gyn-a">
+        <div class="hero">
+          <img src="https://images.unsplash.com/photo-1555252333-9f8e92e65df9?auto=format&fit=crop&w=600&q=85"
+               alt="Mother cradling newborn — tender moment"
+               onerror="this.src='https://images.unsplash.com/photo-1492725764893-90b379c2b6e7?auto=format&fit=crop&w=600&q=85'">
+          <div class="hero-text">
+            <div class="hero-tagline">Where life's<br><strong>most beautiful journeys begin.</strong></div>
+          </div>
+        </div>
+        <div class="body">
+          <div class="dept-name">Obstetrics &amp; Gynaecology</div>
+          <div class="fac-grid">
+            <div class="fac">Painless Deliveries</div>
+            <div class="fac">High-Risk Pregnancy</div>
+            <div class="fac">Caesarean Section</div>
+            <div class="fac">IUI &amp; IVF Infertility</div>
+            <div class="fac">PCOS/PCOD Management</div>
+            <div class="fac">Diagnostic Laparoscopy</div>
+            <div class="fac">Hysterectomy (all types)</div>
+            <div class="fac">Diagnostic Hysteroscopy</div>
+            <div class="fac">Newborn &amp; NICU Care</div>
+            <div class="fac">Phototherapy for Jaundice</div>
+          </div>
+          <div class="footer">
+            <img src="https://bawejahospital.com/img/logo-white.png" alt="BMH" class="bmh-logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
+            <div style="display:none; font-family:'Montserrat',sans-serif; font-weight:800; font-size:13px;">BMH</div>
+            <div class="contact">+91-81466 22802<br>Rupnagar, Punjab</div>
+          </div>
+        </div>
+      </div>
+      <div class="variant-label">Option A — Midnight Rose</div>
+    </div>
+
+    <!-- GYN B -->
+    <div class="variant-wrap">
+      <div class="poster gyn-b">
+        <div class="hero">
+          <img src="https://images.unsplash.com/photo-1531983412531-1f49a365ffed?auto=format&fit=crop&w=600&q=85"
+               alt="Pregnant woman — serene and beautiful"
+               onerror="this.src='https://images.unsplash.com/photo-1491013516836-7db643ee125a?auto=format&fit=crop&w=600&q=85'">
+        </div>
+        <div class="peach-bar"></div>
+        <div class="body">
+          <div class="dept-name">Obstetrics &amp; Gynaecology</div>
+          <div class="tagline">Every new life deserves<br><strong>the very best start.</strong></div>
+          <div class="fac-grid">
+            <div class="fac">Painless Deliveries</div>
+            <div class="fac">Caesarean Sections</div>
+            <div class="fac">IUI &amp; IVF Infertility</div>
+            <div class="fac">PCOS/PCOD Management</div>
+            <div class="fac">High-Risk Pregnancy Care</div>
+            <div class="fac">Diagnostic Laparoscopy</div>
+            <div class="fac">Hysterectomy (all types)</div>
+            <div class="fac">Diagnostic Hysteroscopy</div>
+            <div class="fac">Complete Antenatal Care</div>
+            <div class="fac">Newborn Phototherapy</div>
+          </div>
+          <div class="footer">
+            <img src="https://bawejahospital.com/img/logo.png" alt="BMH" class="bmh-logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
+            <div style="display:none; font-family:'Montserrat',sans-serif; font-weight:800; font-size:13px; color:#2a1810;">BMH</div>
+            <div class="contact">+91-81466 22802<br>bawejahospital.com</div>
+          </div>
+        </div>
+      </div>
+      <div class="variant-label">Option B — Warm Peach</div>
+    </div>
+
+    <!-- GYN C — replaced with BMH own image -->
+    <div class="variant-wrap">
+      <div class="poster gyn-c">
+        <div class="hero">
+          <img src="https://bawejahospital.com/img/obstetrics-gynaecology.webp"
+               alt="Obstetrics and Gynaecology — Baweja Hospital"
+               onerror="this.src='https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&w=600&q=85'">
+          <div class="dept-strip">
+            <span>Obs &amp; Gynaecology</span>
+            <span>Pioneer Care · First in Region</span>
+          </div>
+        </div>
+        <div class="body">
+          <div class="tagline">BORN TO<br><span>CARE</span> FOR YOU.</div>
+          <div class="fac-list">
+            <div class="fac">Painless Deliveries</div>
+            <div class="fac">Caesarean Sections</div>
+            <div class="fac">IUI &amp; IVF Infertility Treatments</div>
+            <div class="fac">PCOS/PCOD Management</div>
+            <div class="fac">Laparoscopic Surgery</div>
+            <div class="fac">All Hysterectomy Types</div>
+            <div class="fac">Diagnostic Hysteroscopy</div>
+            <div class="fac">High-Risk Pregnancy Care</div>
+            <div class="fac">Complete Antenatal Support</div>
+            <div class="fac">Newborn &amp; NICU Care</div>
+          </div>
+          <div class="footer">
+            <img src="https://bawejahospital.com/img/logo-white.png" alt="BMH" class="bmh-logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
+            <div style="display:none; font-family:'Montserrat',sans-serif; font-weight:800; font-size:13px;">BMH</div>
+            <div class="contact">+91-81466 22802<br>Rupnagar, Punjab</div>
+          </div>
+        </div>
+      </div>
+      <div class="variant-label">Option C — Bold Magenta</div>
+    </div>
+
+  </div>
+</section>
+<div class="section-sep"></div>
+
+<!-- ═══════════════════════════════
+     4. SKIN & COSMETOLOGY
+═══════════════════════════════ -->
+<section class="section" id="skin">
+  <div class="section-header">
+    <div class="badge badge-skn">Specialty 4</div>
+    <h2>Skin &amp; Cosmetology</h2>
+    <p>3 design variants</p>
+  </div>
+  <div class="variants-grid">
+
+    <!-- SKN A -->
+    <div class="variant-wrap">
+      <div class="poster skn-a">
+        <div class="hero">
+          <img src="https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&w=600&q=85"
+               alt="Woman with glowing radiant skin"
+               onerror="this.src='https://images.unsplash.com/photo-1515377905703-c4788e51af15?auto=format&fit=crop&w=600&q=85'">
+        </div>
+        <div class="body">
+          <div class="dept-name">Skin &amp; Cosmetology</div>
+          <div class="tagline">Reveal your skin's<br><em>true radiance.</em></div>
+          <div class="fac-grid">
+            <div class="fac">Hydrafacial &amp; Rejuvenation</div>
+            <div class="fac">Acne &amp; Scar Treatment</div>
+            <div class="fac">CO₂ Laser Mole Removal</div>
+            <div class="fac">Laser Hair Reduction</div>
+            <div class="fac">Skin Rejuvenation Peels</div>
+            <div class="fac">Fat Freezing (Cryolipolysis)</div>
+            <div class="fac">Nd:YAG Tattoo Removal</div>
+            <div class="fac">SHR / IPL / Diode Lasers</div>
+          </div>
+          <div class="pioneer">✦ First &amp; Only Multi-Laser Cosmetology Centre in the Region · FDA Approved</div>
+          <div class="footer">
+            <img src="https://bawejahospital.com/img/logo-white.png" alt="BMH" class="bmh-logo-sm" onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
+            <div style="display:none; font-family:'Montserrat',sans-serif; font-weight:800; font-size:13px;">BMH</div>
+            <div class="contact">+91-81466 22802<br>Rupnagar, Punjab</div>
+          </div>
+        </div>
+      </div>
+      <div class="variant-label">Option A — Champagne Noir</div>
+    </div>
+
+    <!-- SKN B -->
+    <div class="variant-wrap">
+      <div class="poster skn-b">
+        <div class="hero">
+          <img src="https://images.unsplash.com/photo-1596755389378-c31d21fd1273?auto=format&fit=crop&w=600&q=85"
+               alt="Beautiful clear glowing skin"
+               onerror="this.src='https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=600&q=85'">
+        </div>
+        <div class="body">
+          <div class="dept-name">Skin &amp; Cosmetology</div>
+          <div class="tagline">Your most <span>confident</span><br>skin awaits.</div>
+          <div class="fac-grid">
+            <div class="fac">Hydrafacial &amp; Rejuvenation</div>
+            <div class="fac">Acne &amp; Scar Treatment</div>
+            <div class="fac">CO₂ Laser Procedures</div>
+            <div class="fac">Laser Hair Reduction</div>
+            <div class="fac">Skin Rejuvenation Peels</div>
+            <div class="fac">Cryolipolysis Fat Freezing</div>
+            <div class="fac">Nd:YAG Tattoo Removal</div>
+            <div class="fac">FDA-Approved Technologies</div>
+          </div>
+          <div class="pioneer">First Multi-Laser Cosmetology Centre in the Region</div>
+          <div class="footer">
+            <img src="https://bawejahospital.com/img/logo.png" alt="BMH" class="bmh-logo-sm" onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
+            <div style="display:none; font-family:'Montserrat',sans-serif; font-weight:800; font-size:13px; color:#c85080;">BMH</div>
+            <div class="contact">+91-81466 22802<br>bawejahospital.com</div>
+          </div>
+        </div>
+      </div>
+      <div class="variant-label">Option B — Blush &amp; Clean</div>
+    </div>
+
+    <!-- SKN C -->
+    <div class="variant-wrap">
+      <div class="poster skn-c">
+        <div class="hero">
+          <img src="https://images.unsplash.com/photo-1598440947619-2c35fc9aa908?auto=format&fit=crop&w=600&q=85"
+               alt="Glowing skin under violet light"
+               onerror="this.src='https://images.unsplash.com/photo-1516975080664-ed2fc6a32937?auto=format&fit=crop&w=600&q=85'">
+        </div>
+        <div class="body">
+          <div class="dept-name">Skin &amp; Cosmetology</div>
+          <div class="tagline">Glow from within.<br><em>Shine without limits.</em></div>
+          <div class="fac-grid">
+            <div class="fac">Hydrafacial &amp; Rejuvenation</div>
+            <div class="fac">Acne &amp; Scar Treatment</div>
+            <div class="fac">CO₂ Laser Skin Procedures</div>
+            <div class="fac">Laser Hair Reduction</div>
+            <div class="fac">Skin Rejuvenation Peels</div>
+            <div class="fac">Cryolipolysis (Fat Freezing)</div>
+            <div class="fac">Nd:YAG Tattoo Removal</div>
+            <div class="fac">SHR / IPL / Diode Lasers</div>
+          </div>
+          <div class="pioneer">✦ First Multi-Laser Cosmetology Centre · FDA Approved</div>
+          <div class="footer">
+            <img src="https://bawejahospital.com/img/logo-white.png" alt="BMH" class="bmh-logo-sm" onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
+            <div style="display:none; font-family:'Montserrat',sans-serif; font-weight:800; font-size:13px;">BMH</div>
+            <div class="contact">+91-81466 22802<br>Rupnagar, Punjab</div>
+          </div>
+        </div>
+      </div>
+      <div class="variant-label">Option C — Violet Night</div>
+    </div>
+
+  </div>
+</section>
+<div style="height:72px"></div>
+
 </body>
 </html>

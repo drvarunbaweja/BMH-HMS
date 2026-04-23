@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="pa">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BMH ਖਾਸ ਵਿਭਾਗ ਪੋਸਟਰ — ਪੰਜਾਬੀ</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Gurmukhi:wght@300;400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,700;0,900;1,400;1,700&family=Montserrat:wght@700;800;900&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0f0f13; font-family: 'Noto Sans Gurmukhi', 'Inter', sans-serif; color: #fff; }
+
+.nav {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(15,15,19,0.96); backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  padding: 14px 36px; display: flex; gap: 20px; align-items: center; flex-wrap: wrap;
+}
+.nav-title { color: rgba(255,255,255,0.3); font-size: 12px; margin-right: auto; letter-spacing: 0.04em; }
+.nav a {
+  color: rgba(255,255,255,0.45); text-decoration: none; font-size: 12px; font-weight: 500;
+  transition: color 0.2s; padding: 5px 12px; border-radius: 5px; font-family: 'Noto Sans Gurmukhi', sans-serif;
+}
+.nav a:hover { color: #fff; background: rgba(255,255,255,0.08); }
+.nav-lang {
+  background: rgba(100,200,100,0.12); border: 1px solid rgba(100,200,100,0.3); color: #6cda6c;
+  text-decoration: none; font-size: 11px; font-weight: 700; padding: 6px 14px; border-radius: 5px;
+  letter-spacing: 0.04em; transition: all 0.2s; font-family: 'Inter', sans-serif;
+}
+.nav-lang:hover { background: rgba(100,200,100,0.22); color: #6cda6c !important; }
+
+.section { padding: 64px 36px; }
+.section-header { text-align: center; margin-bottom: 44px; }
+.section-header h2 { font-family: 'Noto Sans Gurmukhi', sans-serif; font-size: 34px; font-weight: 800; margin-bottom: 6px; }
+.section-header p { color: rgba(255,255,255,0.32); font-size: 13px; font-family: 'Noto Sans Gurmukhi', sans-serif; }
+.badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 12px; font-family: 'Inter', sans-serif; }
+
+.variants-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; max-width: 1380px; margin: 0 auto; }
+.variant-wrap { display: flex; flex-direction: column; gap: 10px; }
+.variant-label { text-align: center; font-size: 11px; color: rgba(255,255,255,0.28); font-weight: 500; letter-spacing: 0.06em; font-family: 'Noto Sans Gurmukhi', sans-serif; }
+
+.poster {
+  width: 100%; aspect-ratio: 2/3; position: relative; overflow: hidden;
+  border-radius: 3px; box-shadow: 0 10px 50px rgba(0,0,0,0.55);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.poster:hover { transform: translateY(-6px); box-shadow: 0 28px 80px rgba(0,0,0,0.72); }
+
+/* Gurmukhi text sizes — slightly larger for readability */
+.pa { font-family: 'Noto Sans Gurmukhi', sans-serif; }
+.bmh-logo { height: 34px; width: auto; object-fit: contain; display: block; }
+.bmh-logo-sm { height: 26px; width: auto; object-fit: contain; display: block; }
+
+.section-sep { height: 1px; background: rgba(255,255,255,0.05); margin: 0 36px; }
+.badge-psy { background: rgba(180,122,255,0.12); color: #b47aff; border: 1px solid rgba(180,122,255,0.25); }
+.badge-oph { background: rgba(0,180,255,0.12); color: #00b4ff; border: 1px solid rgba(0,180,255,0.25); }
+.badge-gyn { background: rgba(255,111,168,0.12); color: #ff6fa8; border: 1px solid rgba(255,111,168,0.25); }
+.badge-skn { background: rgba(212,168,67,0.12); color: #d4a843; border: 1px solid rgba(212,168,67,0.25); }
+
+/* ═══════════════════════════════════════════════════
+   PSYCHIATRY
+═══════════════════════════════════════════════════ */
+
+.psy-a { background: linear-gradient(170deg,#10052a 0%,#1e0a45 45%,#080f2a 100%); display:flex; flex-direction:column; }
+.psy-a .hero { flex:0 0 57%; position:relative; overflow:hidden; }
+.psy-a .hero img { width:100%; height:100%; object-fit:cover; object-position:center 25%; filter:saturate(.85) brightness(.8); }
+.psy-a .hero::after { content:''; position:absolute; inset:0; background:linear-gradient(to bottom,rgba(16,5,42,.05) 25%,rgba(16,5,42,.65) 70%,#10052a 100%); }
+.psy-a .hero-text { position:absolute; bottom:0; left:0; right:0; z-index:2; padding:22px 24px 8px; }
+.psy-a .tagline { font-family:'Noto Sans Gurmukhi',sans-serif; font-size:clamp(16px,2.6vw,24px); font-weight:700; line-height:1.3; color:#dcc8ff; }
+.psy-a .tagline strong { display:block; font-weight:900; color:#fff; font-size:1.25em; margin-top:4px; }
+.psy-a .body { flex:1; padding:14px 22px 18px; display:flex; flex-direction:column; gap:10px; }
+.psy-a .dept-pill { display:inline-flex; align-items:center; background:rgba(180,122,255,.15); border:1px solid rgba(180,122,255,.35); border-radius:20px; padding:3px 11px; font-size:9px; font-weight:700; color:#b47aff; width:fit-content; font-family:'Noto Sans Gurmukhi',sans-serif; }
+.psy-a .fac-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px 10px; }
+.psy-a .fac { font-size:10px; color:rgba(255,255,255,.72); display:flex; align-items:flex-start; gap:5px; line-height:1.45; font-family:'Noto Sans Gurmukhi',sans-serif; }
+.psy-a .fac::before { content:'◈'; color:#b47aff; font-size:7px; flex-shrink:0; margin-top:3px; }
+.psy-a .footer { display:flex; align-items:center; justify-content:space-between; border-top:1px solid rgba(180,122,255,.12); padding-top:9px; margin-top:auto; }
+.psy-a .contact { font-size:8.5px; color:rgba(255,255,255,.28); text-align:right; line-height:1.7; font-family:'Noto Sans Gurmukhi',sans-serif; }
+
+.psy-b { background:#08070a; display:flex; flex-direction:column; }
+.psy-b .hero { flex:0 0 63%; position:relative; overflow:hidden; }
+.psy-b .hero img { width:100%; height:100%; object-fit:cover; object-position:center 20%; }
+.psy-b .hero::after { content:''; position:absolute; inset:0; background:linear-gradient(to bottom,rgba(8,7,10,0) 45%,#08070a 100%); }
+.psy-b .big-text { position:absolute; top:0; left:0; right:0; z-index:3; padding:20px 22px; display:flex; flex-direction:column; gap:7px; }
+.psy-b .dept-tag { display:inline-block; background:#ff9a3c; color:#000; font-size:9px; font-weight:800; padding:4px 10px; border-radius:2px; width:fit-content; font-family:'Noto Sans Gurmukhi',sans-serif; }
+.psy-b .main-tagline { font-family:'Noto Sans Gurmukhi',sans-serif; font-weight:900; line-height:1.0; font-size:clamp(22px,3.4vw,36px); color:#fff; text-shadow:0 2px 30px rgba(0,0,0,.6); }
+.psy-b .main-tagline span { color:#ff9a3c; }
+.psy-b .sub { font-size:9.5px; color:rgba(255,255,255,.5); font-weight:400; margin-top:5px; font-family:'Noto Sans Gurmukhi',sans-serif; }
+.psy-b .body { flex:1; padding:14px 20px 16px; display:flex; flex-direction:column; gap:9px; }
+.psy-b .divider { height:1px; background:linear-gradient(to right,#ff9a3c,rgba(255,154,60,.3),transparent); }
+.psy-b .fac-list { display:flex; flex-direction:column; gap:4px; }
+.psy-b .fac { font-size:10px; color:rgba(255,255,255,.65); display:flex; align-items:center; gap:8px; font-family:'Noto Sans Gurmukhi',sans-serif; }
+.psy-b .fac::before { content:''; width:16px; height:1px; background:#ff9a3c; flex-shrink:0; }
+.psy-b .footer { display:flex; align-items:center; justify-content:space-between; border-top:1px solid rgba(255,255,255,.06); padding-top:9px; margin-top:auto; }
+.psy-b .contact { font-size:8.5px; color:rgba(255,255,255,.28); text-align:right; line-height:1.7; font-family:'Noto Sans Gurmukhi',sans-serif; }
+
+.psy-c { background:linear-gradient(180deg,#f4f8f1 0%,#e8f2e4 100%); color:#1a2b18; display:flex; flex-direction:column; }
+.psy-c .hero { flex:0 0 53%; position:relative; overflow:hidden; }
+.psy-c .hero img { width:100%; height:100%; object-fit:cover; object-position:center 15%; }
+.psy-c .hero::after { content:''; position:absolute; inset:0; background:linear-gradient(to bottom,rgba(244,248,241,0) 45%,#f4f8f1 100%); }
+.psy-c .green-bar { height:4px; background:linear-gradient(to right,#3a8c5c,#6dc48a,#3a8c5c); }
+.psy-c .body { flex:1; padding:16px 22px 18px; display:flex; flex-direction:column; gap:11px; }
+.psy-c .dept-name { font-size:9px; font-weight:700; letter-spacing:.06em; text-transform:none; color:#3a8c5c; font-family:'Noto Sans Gurmukhi',sans-serif; }
+.psy-c .tagline { font-family:'Noto Sans Gurmukhi',sans-serif; font-size:clamp(16px,2.5vw,22px); font-weight:500; line-height:1.35; color:#1a2b18; }
+.psy-c .tagline strong { font-weight:800; color:#2d6e47; display:block; }
+.psy-c .fac-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px 11px; }
+.psy-c .fac { font-size:10px; color:#3a5a3a; display:flex; align-items:flex-start; gap:5px; line-height:1.45; font-family:'Noto Sans Gurmukhi',sans-serif; }
+.psy-c .fac::before { content:'✦'; color:#3a8c5c; font-size:7px; flex-shrink:0; margin-top:3px; }
+.psy-c .footer { display:flex; align-items:center; justify-content:space-between; border-top:1px solid rgba(58,140,92,.18); padding-top:9px; margin-top:auto; }
+.psy-c .contact { font-size:8.5px; color:#6a9a6a; text-align:right; line-height:1.7; font-family:'Noto Sans Gurmukhi',sans-serif; }
+
+/* ═══════════════════════════════════════════════════
+   OPHTHALMOLOGY
+═══════════════════════════════════════════════════ */
+
+.oph-a { background:linear-gradient(165deg,#010e22 0%,#021830 55%,#000b1e 100%); display:flex; flex-direction:column; }
+.oph-a .hero { flex:0 0 52%; position:relative; overflow:hidden; }
+.oph-a .hero img { width:100%; height:100%; object-fit:cover; object-position:center; filter:saturate(1.1) brightness(.85); }
+.oph-a .hero::after { content:''; position:absolute; inset:0; background:linear-gradient(to bottom,rgba(1,14,34,.05) 25%,rgba(1,14,34,.55) 70%,#010e22 100%); }
+.oph-a .body { flex:1; padding:14px 22px 16px; display:flex; flex-direction:column; gap:10px; }
+.oph-a .dept-name { font-size:9px; font-weight:700; color:#00b4ff; font-family:'Noto Sans Gurmukhi',sans-serif; }
+.oph-a .spec-title { font-family:'Noto Sans Gurmukhi',sans-serif; font-size:clamp(14px,2.2vw,20px); font-weight:800; line-height:1.3; color:#fff; }
+.oph-a .spec-title em { color:#00b4ff; font-style:normal; }
+.oph-a .migs-box { background:rgba(0,180,255,.1); border:1px solid rgba(0,180,255,.35); border-radius:5px; padding:8px 11px; }
+.oph-a .migs-label { font-size:8px; font-weight:800; letter-spacing:.06em; color:#00b4ff; margin-bottom:3px; font-family:'Noto Sans Gurmukhi',sans-serif; }
+.oph-a .migs-title { font-family:'Noto Sans Gurmukhi',sans-serif; font-weight:800; font-size:10.5px; color:#fff; line-height:1.35; }
+.oph-a .migs-sub { font-size:8.5px; color:rgba(255,255,255,.5); margin-top:2px; font-family:'Noto Sans Gurmukhi',sans-serif; }
+.oph-a .fac-title { font-size:8px; font-weight:700; color:rgba(255,255,255,.3); font-family:'Noto Sans Gurmukhi',sans-serif; }
+.oph-a .fac-grid { display:grid; grid-template-columns:1fr 1fr; gap:3px 10px; }
+.oph-a .fac { font-size:9.5px; color:rgba(255,255,255,.65); display:flex; align-items:flex-start; gap:5px; line-height:1.4; font-family:'Noto Sans Gurmukhi',sans-serif; }
+.oph-a .fac::before { content:'◉'; color:#00b4ff; font-size:7px; flex-shrink:0; margin-top:2px; }
+.oph-a .footer { display:flex; align-items:center; justify-content:space-between; border-top:1px solid rgba(0,180,255,.1); padding-top:9px; margin-top:auto; }
+.oph-a .contact { font-size:8.5px; color:rgba(255,255,255,.28); text-align:right; line-height:1.7; font-family:'Noto Sans Gurmukhi',sans-serif; }
+
+.oph-b { background:#080808; display:flex; flex-direction:column; }
+.oph-b .hero { flex:0 0 54%; position:relative; overflow:hidden; }
+.oph-b .hero img { width:100%; height:100%; object-fit:cover; object-position:center; filter:sepia(.1) contrast(1.06) brightness(.88); }
+.oph-b .hero::after { content:''; position:absolute; inset:0; background:linear-gradient(to bottom,rgba(8,8,8,0) 35%,#080808 100%); }
+.oph-b .laser-badge { position:absolute; top:16px; left:16px; z-index:3; background:rgba(192,152,60,.15); border:1px solid rgba(192,152,60,.45); backdrop-filter:blur(10px); border-radius:3px; padding:5px 11px; font-size:8px; font-weight:800; color:#c9a84c; font-family:'Noto Sans Gurmukhi',sans-serif; }
+.oph-b .body { flex:1; padding:13px 20px 15px; display:flex; flex-direction:column; gap:9px; }
+.oph-b .dept-name { font-size:9px; font-weight:700; color:#c9a84c; font-family:'Noto Sans Gurmukhi',sans-serif; }
+.oph-b .spec-title { font-family:'Noto Sans Gurmukhi',sans-serif; font-weight:900; font-size:clamp(14px,2vw,19px); color:#fff; line-height:1.25; }
+.oph-b .spec-title span { color:#c9a84c; display:block; }
+.oph-b .refrac-box { display:flex; flex-direction:column; gap:5px; }
+.oph-b .refrac-item { background:rgba(201,168,76,.08); border-left:2px solid #c9a84c; padding:6px 10px; }
+.oph-b .refrac-name { font-size:10.5px; font-weight:700; color:#f0d070; font-family:'Noto Sans Gurmukhi',sans-serif; }
+.oph-b .refrac-desc { font-size:9px; color:rgba(255,255,255,.45); margin-top:1px; font-family:'Noto Sans Gurmukhi',sans-serif; }
+.oph-b .gold-line { height:1px; background:linear-gradient(to right,#c9a84c,rgba(201,168,76,.3),transparent); }
+.oph-b .fac-title { font-size:8px; font-weight:700; color:rgba(255,255,255,.28); font-family:'Noto Sans Gurmukhi',sans-serif; }
+.oph-b .fac-grid { display:grid; grid-template-columns:1fr 1fr; gap:3px 10px; }
+.oph-b .fac { font-size:9.5px; color:rgba(255,255,255,.6); display:flex; align-items:flex-start; gap:5px; line-height:1.4; font-family:'Noto Sans Gurmukhi',sans-serif; }
+.oph-b .fac::before { content:'—'; color:#c9a84c; font-size:9px; flex-shrink:0; }
+.oph-b .footer { display:flex; align-items:center; justify-content:space-between; border-top:1px solid rgba(201,168,76,.15); padding-top:9px; margin-top:auto; }
+.oph-b .contact { font-size:8.5px; color:rgba(255,255,255,.28); text-align:right; line-height:1.7; font-family:'Noto Sans Gurmukhi',sans-serif; }
+
+.oph-c { background:#fff; color:#111; display:flex; flex-direction:column; }
+.oph-c .blue-top { height:5px; background:linear-gradient(to right,#0044a0,#0099f0,#0044a0); }
+.oph-c .hero { flex:0 0 52%; position:relative; overflow:hidden; }
+.oph-c .hero img { width:100%; height:100%; object-fit:cover; object-position:center; }
+.oph-c .hero::after { content:''; position:absolute; inset:0; background:linear-gradient(to bottom,rgba(255,255,255,0) 42%,rgba(255,255,255,.88) 100%); }
+.oph-c .body { flex:1; padding:14px 22px 18px; display:flex; flex-direction:column; gap:11px; }
+.oph-c .dept-name { font-size:9px; font-weight:700; color:#0055b3; font-family:'Noto Sans Gurmukhi',sans-serif; }
+.oph-c .tagline { font-family:'Noto Sans Gurmukhi',sans-serif; font-size:clamp(14px,2.2vw,20px); font-weight:700; line-height:1.35; color:#111; }
+.oph-c .tagline span { color:#0055b3; }
+.oph-c .fac-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px 10px; }
+.oph-c .fac { font-size:10px; color:#444; display:flex; align-items:flex-start; gap:5px; line-height:1.4; font-family:'Noto Sans Gurmukhi',sans-serif; }
+.oph-c .fac::before { content:'◆'; color:#0055b3; font-size:7px; flex-shrink:0; margin-top:2px; }
+.oph-c .tech-strip { background:#f0f6ff; border:1px solid #d0e4f8; border-radius:4px; padding:6px 10px; font-size:9px; color:#0055b3; font-weight:700; text-align:center; font-family:'Noto Sans Gurmukhi',sans-serif; }
+.oph-c .footer { display:flex; align-items:center; justify-content:space-between; border-top:2px solid #f0f0f0; padding-top:9px; margin-top:auto; }
+.oph-c .contact { font-size:8.5px; color:#999; text-align:right; line-height:1.7; font-family:'Noto Sans Gurmukhi',sans-serif; }
+
+/* ═══════════════════════════════════════════════════
+   GYNAECOLOGY
+═══════════════════════════════════════════════════ */
+
+.gyn-a { background:linear-gradient(165deg,#160010 0%,#240520 50%,#100016 100%); display:flex; flex-direction:column; }
+.gyn-a .hero { flex:0 0 60%; position:relative; overflow:hidden; }
+.gyn-a .hero img { width:100%; height:100%; object-fit:cover; object-position:center 20%; filter:saturate(.9) brightness(.85); }
+.gyn-a .hero::after { content:''; position:absolute; inset:0; background:linear-gradient(to bottom,rgba(22,0,16,.08) 28%,rgba(22,0,16,.62) 68%,#160010 100%); }
+.gyn-a .hero-text { position:absolute; bottom:0; left:0; right:0; z-index:3; padding:20px 22px 8px; }
+.gyn-a .hero-tagline { font-family:'Noto Sans Gurmukhi',sans-serif; font-size:clamp(14px,2.3vw,21px); font-weight:600; color:#ffd0e8; line-height:1.35; }
+.gyn-a .hero-tagline strong { display:block; font-weight:900; color:#fff; font-size:1.15em; margin-top:3px; }
+.gyn-a .body { flex:1; padding:13px 22px 16px; display:flex; flex-direction:column; gap:10px; }
+.gyn-a .dept-name { font-size:9px; font-weight:700; color:#ff6fa8; font-family:'Noto Sans Gurmukhi',sans-serif; }
+.gyn-a .fac-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px 10px; }
+.gyn-a .fac { font-size:10px; color:rgba(255,255,255,.72); display:flex; align-items:flex-start; gap:5px; line-height:1.4; font-family:'Noto Sans Gurmukhi',sans-serif; }
+.gyn-a .fac::before { content:'♡'; color:#ff6fa8; font-size:9px; flex-shrink:0; }
+.gyn-a .footer { display:flex; align-items:center; justify-content:space-between; border-top:1px solid rgba(255,111,168,.15); padding-top:9px; margin-top:auto; }
+.gyn-a .contact { font-size:8.5px; color:rgba(255,255,255,.28); text-align:right; line-height:1.7; font-family:'Noto Sans Gurmukhi',sans-serif; }
+
+.gyn-b { background:linear-gradient(180deg,#fff8f4 0%,#ffece2 100%); color:#2a1810; display:flex; flex-direction:column; }
+.gyn-b .hero { flex:0 0 54%; position:relative; overflow:hidden; }
+.gyn-b .hero img { width:100%; height:100%; object-fit:cover; object-position:center 20%; }
+.gyn-b .hero::after { content:''; position:absolute; inset:0; background:linear-gradient(to bottom,rgba(255,248,244,0) 40%,rgba(255,248,244,.9) 100%); }
+.gyn-b .peach-bar { height:4px; background:linear-gradient(to right,#d4744a,#f09070,#d4744a); }
+.gyn-b .body { flex:1; padding:14px 22px 16px; display:flex; flex-direction:column; gap:11px; }
+.gyn-b .dept-name { font-size:9px; font-weight:700; color:#c05030; font-family:'Noto Sans Gurmukhi',sans-serif; }
+.gyn-b .tagline { font-family:'Noto Sans Gurmukhi',sans-serif; font-size:clamp(14px,2.2vw,20px); font-weight:500; line-height:1.4; color:#2a1810; }
+.gyn-b .tagline strong { font-weight:800; color:#c05030; display:block; }
+.gyn-b .fac-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px 10px; }
+.gyn-b .fac { font-size:10px; color:#5a3828; display:flex; align-items:flex-start; gap:5px; line-height:1.4; font-family:'Noto Sans Gurmukhi',sans-serif; }
+.gyn-b .fac::before { content:'◈'; color:#d4744a; font-size:8px; flex-shrink:0; margin-top:2px; }
+.gyn-b .footer { display:flex; align-items:center; justify-content:space-between; border-top:1px solid rgba(192,80,48,.15); padding-top:9px; margin-top:auto; }
+.gyn-b .contact { font-size:8.5px; color:#c05030; text-align:right; line-height:1.7; font-family:'Noto Sans Gurmukhi',sans-serif; }
+
+.gyn-c { background:#080007; display:flex; flex-direction:column; }
+.gyn-c .hero { flex:0 0 62%; position:relative; overflow:hidden; }
+.gyn-c .hero img { width:100%; height:100%; object-fit:cover; object-position:center 20%; filter:saturate(1.05) brightness(.88); }
+.gyn-c .hero::before { content:''; position:absolute; inset:0; z-index:1; background:linear-gradient(135deg,rgba(200,0,90,.2) 0%,transparent 55%); }
+.gyn-c .hero::after { content:''; position:absolute; inset:0; z-index:1; background:linear-gradient(to bottom,transparent 40%,#080007 100%); }
+.gyn-c .dept-strip { position:absolute; top:0; left:0; right:0; z-index:4; background:linear-gradient(to right,#c00060,#e8007a); padding:7px 18px; font-size:8.5px; font-weight:800; display:flex; justify-content:space-between; font-family:'Noto Sans Gurmukhi',sans-serif; }
+.gyn-c .body { flex:1; padding:13px 20px 15px; display:flex; flex-direction:column; gap:9px; }
+.gyn-c .tagline { font-family:'Noto Sans Gurmukhi',sans-serif; font-weight:900; font-size:clamp(16px,2.4vw,22px); line-height:1.2; }
+.gyn-c .tagline span { color:#e8007a; display:block; }
+.gyn-c .fac-list { display:flex; flex-direction:column; gap:3px; }
+.gyn-c .fac { font-size:10px; color:rgba(255,255,255,.68); display:flex; gap:8px; align-items:center; font-family:'Noto Sans Gurmukhi',sans-serif; }
+.gyn-c .fac::before { content:''; width:16px; height:1px; background:#e8007a; flex-shrink:0; }
+.gyn-c .footer { display:flex; align-items:center; justify-content:space-between; border-top:1px solid rgba(232,0,122,.15); padding-top:9px; margin-top:auto; }
+.gyn-c .contact { font-size:8.5px; color:rgba(255,255,255,.28); text-align:right; line-height:1.7; font-family:'Noto Sans Gurmukhi',sans-serif; }
+
+/* ═══════════════════════════════════════════════════
+   SKIN & COSMETOLOGY
+═══════════════════════════════════════════════════ */
+
+.skn-a { background:linear-gradient(165deg,#0d0b06 0%,#1a1609 50%,#0d0b06 100%); display:flex; flex-direction:column; }
+.skn-a .hero { flex:0 0 60%; position:relative; overflow:hidden; }
+.skn-a .hero img { width:100%; height:100%; object-fit:cover; object-position:center 20%; filter:saturate(.95) brightness(.88); }
+.skn-a .hero::after { content:''; position:absolute; inset:0; background:linear-gradient(to bottom,rgba(13,11,6,0) 30%,rgba(13,11,6,.58) 68%,#0d0b06 100%); }
+.skn-a .body { flex:1; padding:14px 22px 16px; display:flex; flex-direction:column; gap:10px; }
+.skn-a .dept-name { font-size:9px; font-weight:700; color:#d4a843; font-family:'Noto Sans Gurmukhi',sans-serif; }
+.skn-a .tagline { font-family:'Noto Sans Gurmukhi',sans-serif; font-size:clamp(15px,2.2vw,21px); font-weight:700; line-height:1.35; color:#fff; }
+.skn-a .tagline em { color:#d4a843; font-style:normal; font-weight:800; }
+.skn-a .fac-grid { display:grid; grid-template-columns:1fr 1fr; gap:3px 10px; }
+.skn-a .fac { font-size:10px; color:rgba(255,255,255,.68); display:flex; align-items:flex-start; gap:5px; line-height:1.4; font-family:'Noto Sans Gurmukhi',sans-serif; }
+.skn-a .fac::before { content:'✦'; color:#d4a843; font-size:7px; flex-shrink:0; margin-top:3px; }
+.skn-a .pioneer { background:rgba(212,168,67,.1); border:1px solid rgba(212,168,67,.28); border-radius:4px; padding:6px 10px; font-size:9px; color:#d4a843; font-weight:700; text-align:center; font-family:'Noto Sans Gurmukhi',sans-serif; }
+.skn-a .footer { display:flex; align-items:center; justify-content:space-between; border-top:1px solid rgba(212,168,67,.15); padding-top:9px; margin-top:auto; }
+.skn-a .contact { font-size:8.5px; color:rgba(255,255,255,.28); text-align:right; line-height:1.7; font-family:'Noto Sans Gurmukhi',sans-serif; }
+
+.skn-b { background:#fafafa; color:#111; display:flex; flex-direction:column; }
+.skn-b .hero { flex:0 0 58%; position:relative; overflow:hidden; }
+.skn-b .hero img { width:100%; height:100%; object-fit:cover; object-position:center 20%; }
+.skn-b .hero::after { content:''; position:absolute; inset:0; background:linear-gradient(to bottom,rgba(250,250,250,0) 38%,rgba(250,250,250,.88) 100%); }
+.skn-b .body { flex:1; padding:12px 20px 16px; display:flex; flex-direction:column; gap:9px; }
+.skn-b .dept-name { font-size:9px; font-weight:700; color:#c85080; font-family:'Noto Sans Gurmukhi',sans-serif; }
+.skn-b .tagline { font-family:'Noto Sans Gurmukhi',sans-serif; font-size:clamp(14px,2.1vw,19px); font-weight:700; line-height:1.4; color:#111; }
+.skn-b .tagline span { color:#c85080; }
+.skn-b .fac-grid { display:grid; grid-template-columns:1fr 1fr; gap:3px 10px; }
+.skn-b .fac { font-size:9.5px; color:#555; display:flex; align-items:flex-start; gap:5px; line-height:1.4; font-family:'Noto Sans Gurmukhi',sans-serif; }
+.skn-b .fac::before { content:'◆'; color:#c85080; font-size:7px; flex-shrink:0; margin-top:2px; }
+.skn-b .pioneer { background:linear-gradient(to right,#c85080,#e090b0); border-radius:4px; padding:6px 10px; font-size:9.5px; color:#fff; font-weight:700; text-align:center; font-family:'Noto Sans Gurmukhi',sans-serif; }
+.skn-b .footer { display:flex; align-items:center; justify-content:space-between; border-top:2px solid #f0f0f0; padding-top:9px; margin-top:auto; }
+.skn-b .contact { font-size:8.5px; color:#aaa; text-align:right; line-height:1.7; font-family:'Noto Sans Gurmukhi',sans-serif; }
+
+.skn-c { background:linear-gradient(165deg,#090614 0%,#130828 50%,#090614 100%); display:flex; flex-direction:column; }
+.skn-c .hero { flex:0 0 61%; position:relative; overflow:hidden; }
+.skn-c .hero img { width:100%; height:100%; object-fit:cover; object-position:center 20%; filter:saturate(1.1); }
+.skn-c .hero::before { content:''; position:absolute; inset:0; z-index:1; background:radial-gradient(ellipse at 65% 25%,rgba(190,90,255,.22) 0%,transparent 55%); }
+.skn-c .hero::after { content:''; position:absolute; inset:0; z-index:1; background:linear-gradient(to bottom,rgba(9,6,20,0) 30%,rgba(9,6,20,.58) 68%,#090614 100%); }
+.skn-c .body { flex:1; padding:13px 20px 15px; display:flex; flex-direction:column; gap:9px; }
+.skn-c .dept-name { font-size:9px; font-weight:700; color:#c87aff; font-family:'Noto Sans Gurmukhi',sans-serif; }
+.skn-c .tagline { font-family:'Noto Sans Gurmukhi',sans-serif; font-size:clamp(14px,2.1vw,20px); font-weight:700; line-height:1.35; color:#fff; }
+.skn-c .tagline em { color:#c87aff; font-style:normal; font-weight:800; }
+.skn-c .fac-grid { display:grid; grid-template-columns:1fr 1fr; gap:3px 10px; }
+.skn-c .fac { font-size:10px; color:rgba(255,255,255,.68); display:flex; align-items:flex-start; gap:5px; line-height:1.4; font-family:'Noto Sans Gurmukhi',sans-serif; }
+.skn-c .fac::before { content:'◈'; color:#c87aff; font-size:8px; flex-shrink:0; margin-top:2px; }
+.skn-c .pioneer { background:rgba(200,122,255,.1); border:1px solid rgba(200,122,255,.25); border-radius:4px; padding:6px 10px; font-size:9px; color:#c87aff; font-weight:700; text-align:center; font-family:'Noto Sans Gurmukhi',sans-serif; }
+.skn-c .footer { display:flex; align-items:center; justify-content:space-between; border-top:1px solid rgba(200,122,255,.15); padding-top:9px; margin-top:auto; }
+.skn-c .contact { font-size:8.5px; color:rgba(255,255,255,.28); text-align:right; line-height:1.7; font-family:'Noto Sans Gurmukhi',sans-serif; }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <span class="nav-title">BMH ਖਾਸ ਵਿਭਾਗ ਪੋਸਟਰ — ਪੰਜਾਬੀ</span>
+  <a href="#psychiatry">ਮਾਨਸਿਕ ਰੋਗ</a>
+  <a href="#ophthalmology">ਅੱਖਾਂ</a>
+  <a href="#gynaecology">ਸਤਰੀ ਰੋਗ</a>
+  <a href="#skin">ਚਮੜੀ</a>
+  <a href="index.html" class="nav-lang">View in English →</a>
+</div>
+
+<!-- ═══════════════════════════════
+     1. ਮਾਨਸਿਕ ਰੋਗ / ਨਿਊਰੋਸਾਈਕਿਆਟ੍ਰੀ
+═══════════════════════════════ -->
+<section class="section" id="psychiatry">
+  <div class="section-header">
+    <div class="badge badge-psy">ਵਿਭਾਗ 1</div>
+    <h2>ਨਿਊਰੋਸਾਈਕਿਆਟ੍ਰੀ (ਮਾਨਸਿਕ ਰੋਗ)</h2>
+    <p>3 ਡਿਜ਼ਾਈਨ ਵਿਕਲਪ — ਪਸੰਦੀਦਾ ਚੁਣੋ</p>
+  </div>
+  <div class="variants-grid">
+
+    <!-- PSY A -->
+    <div class="variant-wrap">
+      <div class="poster psy-a">
+        <div class="hero">
+          <img src="https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?auto=format&fit=crop&w=600&q=85" alt="ਸੁਤੰਤਰ ਔਰਤ ਸਾਈਕਲ 'ਤੇ">
+          <div class="hero-text">
+            <div class="tagline">ਛੱਡੋ। ਸਾਹ ਲਓ।<br><strong>ਮਨ ਆਜ਼ਾਦ ਕਰੋ।</strong></div>
+          </div>
+        </div>
+        <div class="body">
+          <div class="dept-pill">ਨਿਊਰੋਸਾਈਕਿਆਟ੍ਰੀ · UK ਅਤੇ ਭਾਰਤ ਤੋਂ ਸਿੱਖਿਅਤ ਮਾਹਿਰ</div>
+          <div class="fac-grid">
+            <div class="fac">ਡਿਪਰੈਸ਼ਨ ਅਤੇ ਚਿੰਤਾ</div>
+            <div class="fac">ਮੇਨੀਆ ਦਾ ਇਲਾਜ</div>
+            <div class="fac">ਸ਼ਖ਼ਸੀਅਤ ਵਿਕਾਰ</div>
+            <div class="fac">ਨਸ਼ਾ ਮੁਕਤੀ ਕਲੀਨਿਕ</div>
+            <div class="fac">ਐਡਵਾਂਸਡ EEG ਜਾਂਚ</div>
+            <div class="fac">ਬਾਇਓਫੀਡਬੈਕ ਥੈਰੇਪੀ</div>
+            <div class="fac">ਮਿਰਗੀ ਅਤੇ ਦੌਰੇ</div>
+            <div class="fac">ਬੱਚਿਆਂ ਦੀ ਵਿਵਹਾਰ ਸੰਭਾਲ</div>
+            <div class="fac">ਮਨੋਵਿਗਿਆਨਕ ਸਲਾਹ</div>
+            <div class="fac">ਪਰਿਵਾਰਕ ਸਹਾਇਤਾ ਪ੍ਰੋਗਰਾਮ</div>
+          </div>
+          <div class="footer">
+            <img src="https://bawejahospital.com/img/logo-white.png" alt="BMH" class="bmh-logo" onerror="this.style.display='none'">
+            <div class="contact">+91-81466 22802<br>bawejahospital.com · ਰੂਪਨਗਰ</div>
+          </div>
+        </div>
+      </div>
+      <div class="variant-label">ਵਿਕਲਪ A — ਗੂੜਾ ਜਾਮਨੀ</div>
+    </div>
+
+    <!-- PSY B -->
+    <div class="variant-wrap">
+      <div class="poster psy-b">
+        <div class="hero">
+          <img src="https://images.unsplash.com/photo-1490730141103-6cac27aaab94?auto=format&fit=crop&w=600&q=85" alt="ਖੁੱਲ੍ਹੇ ਮੈਦਾਨ ਵਿੱਚ ਔਰਤ">
+          <div class="big-text">
+            <div class="dept-tag">ਨਿਊਰੋਸਾਈਕਿਆਟ੍ਰੀ</div>
+            <div class="main-tagline">ਮਨ<br><span>ਆਜ਼ਾਦ</span><br>ਕਰੋ।</div>
+            <div class="sub">ਦਰਦ ਭਰਿਆ ਇਲਾਜ · ਗੁਪਤ · ਸੰਪੂਰਨ ਮਾਨਸਿਕ ਦੇਖਭਾਲ</div>
+          </div>
+        </div>
+        <div class="body">
+          <div class="divider"></div>
+          <div class="fac-list">
+            <div class="fac">ਡਿਪਰੈਸ਼ਨ ਅਤੇ ਚਿੰਤਾ ਦਾ ਇਲਾਜ</div>
+            <div class="fac">ਮੇਨੀਆ ਅਤੇ ਸ਼ਖ਼ਸੀਅਤ ਵਿਕਾਰ</div>
+            <div class="fac">ਨਸ਼ਾ ਮੁਕਤੀ ਕਲੀਨਿਕ (OPD)</div>
+            <div class="fac">ਐਡਵਾਂਸਡ EEG ਜਾਂਚ</div>
+            <div class="fac">ਬਾਇਓਫੀਡਬੈਕ ਥੈਰੇਪੀ</div>
+            <div class="fac">ਮਿਰਗੀ ਦਾ ਪ੍ਰਬੰਧਨ</div>
+            <div class="fac">ਬੱਚਿਆਂ ਦੀ ਵਿਵਹਾਰ ਥੈਰੇਪੀ</div>
+            <div class="fac">ਪਰਿਵਾਰਕ ਸਲਾਹ ਅਤੇ ਸਹਾਇਤਾ</div>
+          </div>
+          <div class="footer">
+            <img src="https://bawejahospital.com/img/logo-white.png" alt="BMH" class="bmh-logo" onerror="this.style.display='none'">
+            <div class="contact">+91-81466 22802<br>ਰੂਪਨਗਰ, ਪੰਜਾਬ</div>
+          </div>
+        </div>
+      </div>
+      <div class="variant-label">ਵਿਕਲਪ B — ਸੁਨਹਿਰੀ ਸਵੇਰ</div>
+    </div>
+
+    <!-- PSY C -->
+    <div class="variant-wrap">
+      <div class="poster psy-c">
+        <div class="hero">
+          <img src="https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=600&q=85" alt="ਖੁਸ਼ ਔਰਤ ਸਾਈਕਲ ਚਲਾਉਂਦੀ"
+               onerror="this.src='https://images.unsplash.com/photo-1524250502761-1ac6f2e30d43?auto=format&fit=crop&w=600&q=85'">
+        </div>
+        <div class="green-bar"></div>
+        <div class="body">
+          <div class="dept-name">ਨਿਊਰੋਸਾਈਕਿਆਟ੍ਰੀ</div>
+          <div class="tagline">ਤੁਹਾਡੇ ਮਨ ਨੂੰ<br><strong>ਆਜ਼ਾਦੀ ਦਾ ਹੱਕ ਹੈ।</strong></div>
+          <div class="fac-grid">
+            <div class="fac">ਡਿਪਰੈਸ਼ਨ ਅਤੇ ਚਿੰਤਾ</div>
+            <div class="fac">ਮੇਨੀਆ ਦਾ ਇਲਾਜ</div>
+            <div class="fac">ਸ਼ਖ਼ਸੀਅਤ ਵਿਕਾਰ</div>
+            <div class="fac">ਨਸ਼ਾ ਮੁਕਤੀ ਕਲੀਨਿਕ</div>
+            <div class="fac">ਐਡਵਾਂਸਡ EEG</div>
+            <div class="fac">ਬਾਇਓਫੀਡਬੈਕ ਥੈਰੇਪੀ</div>
+            <div class="fac">ਮਿਰਗੀ ਅਤੇ ਦੌਰੇ</div>
+            <div class="fac">ਬੱਚਿਆਂ ਦੀ ਵਿਵਹਾਰ ਸੰਭਾਲ</div>
+            <div class="fac">ਮਨੋਵਿਗਿਆਨਕ ਸਲਾਹ</div>
+            <div class="fac">ਪਰਿਵਾਰਕ ਸਹਾਇਤਾ</div>
+          </div>
+          <div class="footer">
+            <img src="https://bawejahospital.com/img/logo.png" alt="BMH" class="bmh-logo" onerror="this.style.display='none'">
+            <div class="contact">+91-81466 22802<br>bawejahospital.com</div>
+          </div>
+        </div>
+      </div>
+      <div class="variant-label">ਵਿਕਲਪ C — ਹਰਾ ਬਾਗ਼</div>
+    </div>
+
+  </div>
+</section>
+<div class="section-sep"></div>
+
+<!-- ═══════════════════════════════
+     2. ਅੱਖਾਂ ਦਾ ਵਿਭਾਗ
+═══════════════════════════════ -->
+<section class="section" id="ophthalmology">
+  <div class="section-header">
+    <div class="badge badge-oph">ਵਿਭਾਗ 2</div>
+    <h2>ਅੱਖਾਂ ਦੀ ਦੇਖਭਾਲ (ਓਫਥੈਲਮੋਲੋਜੀ)</h2>
+    <p>ਮੋਤੀਆਬਿੰਦ/MIGS · ਰਿਫ੍ਰੈਕਟਿਵ · ਸੰਪੂਰਨ ਅੱਖ ਸੇਵਾਵਾਂ</p>
+  </div>
+  <div class="variants-grid">
+
+    <!-- OPH A: Cataract & MIGS -->
+    <div class="variant-wrap">
+      <div class="poster oph-a">
+        <div class="hero">
+          <img src="https://bawejahospital.com/img/robotic-ai-cataract-surgery.webp" alt="ਰੋਬੋਟਿਕ AI ਮੋਤੀਆਬਿੰਦ ਓਪਰੇਸ਼ਨ"
+               onerror="this.src='https://images.unsplash.com/photo-1559757148-5c350d0d3c56?auto=format&fit=crop&w=600&q=85'">
+        </div>
+        <div class="body">
+          <div class="dept-name">ਅੱਖਾਂ · ਮੋਤੀਆਬਿੰਦ ਅਤੇ ਕਾਲਾ ਮੋਤੀਆ</div>
+          <div class="spec-title">ਮੋਤੀਆਬਿੰਦ ਅਤੇ<br><em>ਕਾਲੇ ਮੋਤੀਏ ਦਾ ਉੱਨਤ ਇਲਾਜ</em></div>
+          <div class="migs-box">
+            <div class="migs-label">⭑ ਖਾਸ ਇਲਾਜ</div>
+            <div class="migs-title">MIGS — ਨਿਊਨਤਮ ਦਖਲਅੰਦਾਜ਼ੀ ਕਾਲਾ ਮੋਤੀਆ ਓਪਰੇਸ਼ਨ</div>
+            <div class="migs-sub">ਜਲਦੀ ਠੀਕ · ਘੱਟ ਜੋਖਮ · ਬਿਹਤਰ ਨਤੀਜੇ</div>
+          </div>
+          <div class="fac-title">ਹੋਰ ਸੇਵਾਵਾਂ</div>
+          <div class="fac-grid">
+            <div class="fac">ਰੋਬੋਟਿਕ AI ਮੋਤੀਆਬਿੰਦ ਓਪਰੇਸ਼ਨ</div>
+            <div class="fac">ਬਲੇਡ-ਰਹਿਤ ਫੇਕੋਇਮਲਸੀਫਿਕੇਸ਼ਨ</div>
+            <div class="fac">ਕਾਲੇ ਮੋਤੀਏ ਦਾ ਪ੍ਰਬੰਧਨ</div>
+            <div class="fac">IOP ਕੰਟਰੋਲ ਅਤੇ ਨਿਗਰਾਨੀ</div>
+            <div class="fac">ਕਾਰਨੀਅਲ ਮੁਲਾਂਕਣ</div>
+            <div class="fac">ਰੈਟੀਨਾ ਜਾਂਚ</div>
+          </div>
+          <div class="footer">
+            <img src="https://bawejahospital.com/img/logo-white.png" alt="BMH" class="bmh-logo-sm" onerror="this.style.display='none'">
+            <div class="contact">+91-81466 22802<br>ਰੂਪਨਗਰ, ਪੰਜਾਬ</div>
+          </div>
+        </div>
+      </div>
+      <div class="variant-label">ਵਿਕਲਪ A — ਮੋਤੀਆਬਿੰਦ ਅਤੇ MIGS</div>
+    </div>
+
+    <!-- OPH B: Refractive -->
+    <div class="variant-wrap">
+      <div class="poster oph-b">
+        <div class="hero">
+          <img src="https://bawejahospital.com/img/blade-free-lasik.webp" alt="ਬਲੇਡ-ਰਹਿਤ LASIK ਸਰਜਰੀ"
+               onerror="this.src='https://images.unsplash.com/photo-1576091160550-2173dba999ef?auto=format&fit=crop&w=600&q=85'">
+          <div class="laser-badge">ਰਿਫ੍ਰੈਕਟਿਵ ਸਰਜਰੀ</div>
+        </div>
+        <div class="body">
+          <div class="dept-name">ਅੱਖਾਂ · ਰਿਫ੍ਰੈਕਟਿਵ ਸਰਜਰੀ</div>
+          <div class="spec-title">ਐਨਕਾਂ ਅਤੇ ਲੈਂਸਾਂ<br><span>ਤੋਂ ਆਜ਼ਾਦੀ।</span></div>
+          <div class="refrac-box">
+            <div class="refrac-item">
+              <div class="refrac-name">ਬਲੇਡ-ਰਹਿਤ LASIK</div>
+              <div class="refrac-desc">ਦਰਦਰਹਿਤ · ਬਿਨਾਂ ਬਲੇਡ · ਉਸੇ ਦਿਨ ਨਜ਼ਰ</div>
+            </div>
+            <div class="refrac-item">
+              <div class="refrac-name">CLEAR — ਕਾਰਨੀਅਲ ਲੈਂਟੀਕਿਊਲ ਐਕਸਟ੍ਰੈਕਸ਼ਨ</div>
+              <div class="refrac-desc">ਫਲੈਪ-ਰਹਿਤ · ਅਤਿ-ਸਟੀਕ · ਨਵੀਨਤਮ ਤਕਨੀਕ</div>
+            </div>
+          </div>
+          <div class="gold-line"></div>
+          <div class="fac-title">ਹੋਰ ਸੇਵਾਵਾਂ</div>
+          <div class="fac-grid">
+            <div class="fac">ਰਿਫ੍ਰੈਕਟਿਵ ਗਲਤੀ ਜਾਂਚ</div>
+            <div class="fac">ਨੇੜੇ / ਦੂਰ / ਤਿਰਛੀ ਨਜ਼ਰ</div>
+            <div class="fac">ਓਪਰੇਸ਼ਨ ਤੋਂ ਪਹਿਲਾਂ ਜਾਂਚ</div>
+            <div class="fac">ਕਾਰਨੀਅਲ ਟੋਪੋਗ੍ਰਾਫੀ</div>
+            <div class="fac">ਓਪਰੇਸ਼ਨ ਤੋਂ ਬਾਅਦ ਦੇਖਭਾਲ</div>
+            <div class="fac">ਕਸਟਮ ਵੇਵਫਰੰਟ ਵਿਸ਼ਲੇਸ਼ਣ</div>
+          </div>
+          <div class="footer">
+            <img src="https://bawejahospital.com/img/logo-white.png" alt="BMH" class="bmh-logo-sm" onerror="this.style.display='none'">
+            <div class="contact">+91-81466 22802<br>ਰੂਪਨਗਰ, ਪੰਜਾਬ</div>
+          </div>
+        </div>
+      </div>
+      <div class="variant-label">ਵਿਕਲਪ B — ਰਿਫ੍ਰੈਕਟਿਵ ਸਰਜਰੀ</div>
+    </div>
+
+    <!-- OPH C: Complete -->
+    <div class="variant-wrap">
+      <div class="poster oph-c">
+        <div class="blue-top"></div>
+        <div class="hero">
+          <img src="https://bawejahospital.com/img/ophthalmology.webp" alt="ਸੰਪੂਰਨ ਅੱਖਾਂ ਦੀ ਦੇਖਭਾਲ"
+               onerror="this.src='https://images.unsplash.com/photo-1512072703071-aefd4bd0c5c5?auto=format&fit=crop&w=600&q=85'">
+        </div>
+        <div class="body">
+          <div class="dept-name">ਅੱਖਾਂ · ਸੰਪੂਰਨ ਅੱਖ ਸੇਵਾਵਾਂ</div>
+          <div class="tagline">ਜ਼ਿੰਦਗੀ ਹੋਰ ਖ਼ੂਬਸੂਰਤ ਹੈ<br>ਜਦੋਂ <span>ਨਜ਼ਰ ਸਾਫ਼ ਹੋਵੇ।</span></div>
+          <div class="fac-grid">
+            <div class="fac">ਰੋਬੋਟਿਕ AI ਮੋਤੀਆਬਿੰਦ ਓਪਰੇਸ਼ਨ</div>
+            <div class="fac">ਬਲੇਡ-ਰਹਿਤ LASIK</div>
+            <div class="fac">CLEAR ਲੈਂਸ ਪ੍ਰਕਿਰਿਆ</div>
+            <div class="fac">MIGS (ਕਾਲਾ ਮੋਤੀਆ)</div>
+            <div class="fac">ਰੈਟੀਨਾ ਓਪਰੇਸ਼ਨ</div>
+            <div class="fac">ਰਿਫ੍ਰੈਕਟਿਵ ਸਰਜਰੀ</div>
+            <div class="fac">ਪੂਰਣ ਅੱਖਾਂ ਦੀ ਜਾਂਚ</div>
+            <div class="fac">ਕਾਰਨੀਅਲ ਇਲਾਜ</div>
+          </div>
+          <div class="tech-strip">✦ ਖੇਤਰ ਵਿੱਚ ਪਹਿਲੇ — ਰੋਬੋਟਿਕ AI ਅੱਖ ਓਪਰੇਸ਼ਨ · NAABH ਪ੍ਰਮਾਣਿਤ</div>
+          <div class="footer">
+            <img src="https://bawejahospital.com/img/logo.png" alt="BMH" class="bmh-logo-sm" onerror="this.style.display='none'">
+            <div class="contact">+91-81466 22802<br>bawejahospital.com</div>
+          </div>
+        </div>
+      </div>
+      <div class="variant-label">ਵਿਕਲਪ C — ਸੰਪੂਰਨ ਅੱਖ ਸੇਵਾਵਾਂ</div>
+    </div>
+
+  </div>
+</section>
+<div class="section-sep"></div>
+
+<!-- ═══════════════════════════════
+     3. ਪ੍ਰਸੂਤੀ ਅਤੇ ਗਾਇਨੀਕੋਲੋਜੀ
+═══════════════════════════════ -->
+<section class="section" id="gynaecology">
+  <div class="section-header">
+    <div class="badge badge-gyn">ਵਿਭਾਗ 3</div>
+    <h2>ਪ੍ਰਸੂਤੀ ਅਤੇ ਗਾਇਨੀਕੋਲੋਜੀ</h2>
+    <p>3 ਡਿਜ਼ਾਈਨ ਵਿਕਲਪ</p>
+  </div>
+  <div class="variants-grid">
+
+    <!-- GYN A -->
+    <div class="variant-wrap">
+      <div class="poster gyn-a">
+        <div class="hero">
+          <img src="https://images.unsplash.com/photo-1555252333-9f8e92e65df9?auto=format&fit=crop&w=600&q=85" alt="ਮਾਂ ਅਤੇ ਨਵਜੰਮਾ ਬੱਚਾ"
+               onerror="this.src='https://images.unsplash.com/photo-1492725764893-90b379c2b6e7?auto=format&fit=crop&w=600&q=85'">
+          <div class="hero-text">
+            <div class="hero-tagline">ਜਿੱਥੇ ਜ਼ਿੰਦਗੀ ਦੇ<br><strong>ਸਭ ਤੋਂ ਖ਼ੂਬਸੂਰਤ ਸਫ਼ਰ ਸ਼ੁਰੂ ਹੁੰਦੇ ਹਨ।</strong></div>
+          </div>
+        </div>
+        <div class="body">
+          <div class="dept-name">ਪ੍ਰਸੂਤੀ ਅਤੇ ਗਾਇਨੀਕੋਲੋਜੀ</div>
+          <div class="fac-grid">
+            <div class="fac">ਦਰਦਰਹਿਤ ਜਣੇਪਾ</div>
+            <div class="fac">ਉੱਚ-ਜੋਖਮ ਗਰਭ ਸੰਭਾਲ</div>
+            <div class="fac">ਸਿਜ਼ੇਰੀਅਨ ਓਪਰੇਸ਼ਨ</div>
+            <div class="fac">IUI ਅਤੇ IVF ਇਲਾਜ</div>
+            <div class="fac">PCOS/PCOD ਪ੍ਰਬੰਧਨ</div>
+            <div class="fac">ਲੈਪ੍ਰੋਸਕੋਪਿਕ ਜਾਂਚ</div>
+            <div class="fac">ਬੱਚੇਦਾਨੀ ਓਪਰੇਸ਼ਨ</div>
+            <div class="fac">ਡਾਇਗਨੌਸਟਿਕ ਹਿਸਟਰੋਸਕੋਪੀ</div>
+            <div class="fac">ਨਵਜੰਮੇ ਅਤੇ NICU ਦੇਖਭਾਲ</div>
+            <div class="fac">ਪੀਲੀਆ ਲਈ ਫੋਟੋਥੈਰੇਪੀ</div>
+          </div>
+          <div class="footer">
+            <img src="https://bawejahospital.com/img/logo-white.png" alt="BMH" class="bmh-logo" onerror="this.style.display='none'">
+            <div class="contact">+91-81466 22802<br>ਰੂਪਨਗਰ, ਪੰਜਾਬ</div>
+          </div>
+        </div>
+      </div>
+      <div class="variant-label">ਵਿਕਲਪ A — ਰਾਤੀ ਗੁਲਾਬੀ</div>
+    </div>
+
+    <!-- GYN B -->
+    <div class="variant-wrap">
+      <div class="poster gyn-b">
+        <div class="hero">
+          <img src="https://images.unsplash.com/photo-1531983412531-1f49a365ffed?auto=format&fit=crop&w=600&q=85" alt="ਗਰਭਵਤੀ ਔਰਤ — ਸ਼ਾਂਤ ਅਤੇ ਖ਼ੂਬਸੂਰਤ"
+               onerror="this.src='https://images.unsplash.com/photo-1491013516836-7db643ee125a?auto=format&fit=crop&w=600&q=85'">
+        </div>
+        <div class="peach-bar"></div>
+        <div class="body">
+          <div class="dept-name">ਪ੍ਰਸੂਤੀ ਅਤੇ ਗਾਇਨੀਕੋਲੋਜੀ</div>
+          <div class="tagline">ਹਰ ਨਵੀਂ ਜ਼ਿੰਦਗੀ ਨੂੰ<br><strong>ਸਭ ਤੋਂ ਵਧੀਆ ਸ਼ੁਰੂਆਤ ਮਿਲੇ।</strong></div>
+          <div class="fac-grid">
+            <div class="fac">ਦਰਦਰਹਿਤ ਜਣੇਪਾ</div>
+            <div class="fac">ਸਿਜ਼ੇਰੀਅਨ ਓਪਰੇਸ਼ਨ</div>
+            <div class="fac">IUI ਅਤੇ IVF ਇਲਾਜ</div>
+            <div class="fac">PCOS/PCOD ਪ੍ਰਬੰਧਨ</div>
+            <div class="fac">ਉੱਚ-ਜੋਖਮ ਗਰਭ ਸੰਭਾਲ</div>
+            <div class="fac">ਲੈਪ੍ਰੋਸਕੋਪਿਕ ਜਾਂਚ</div>
+            <div class="fac">ਬੱਚੇਦਾਨੀ ਓਪਰੇਸ਼ਨ</div>
+            <div class="fac">ਡਾਇਗਨੌਸਟਿਕ ਹਿਸਟਰੋਸਕੋਪੀ</div>
+            <div class="fac">ਮੁਕੰਮਲ ਗਰਭਕਾਲੀਨ ਸੰਭਾਲ</div>
+            <div class="fac">ਪੀਲੀਆ ਲਈ ਫੋਟੋਥੈਰੇਪੀ</div>
+          </div>
+          <div class="footer">
+            <img src="https://bawejahospital.com/img/logo.png" alt="BMH" class="bmh-logo" onerror="this.style.display='none'">
+            <div class="contact">+91-81466 22802<br>bawejahospital.com</div>
+          </div>
+        </div>
+      </div>
+      <div class="variant-label">ਵਿਕਲਪ B — ਨਿੱਘਾ ਆੜੂ</div>
+    </div>
+
+    <!-- GYN C -->
+    <div class="variant-wrap">
+      <div class="poster gyn-c">
+        <div class="hero">
+          <img src="https://bawejahospital.com/img/obstetrics-gynaecology.webp" alt="ਪ੍ਰਸੂਤੀ ਅਤੇ ਗਾਇਨੀਕੋਲੋਜੀ"
+               onerror="this.src='https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&w=600&q=85'">
+          <div class="dept-strip">
+            <span>ਪ੍ਰਸੂਤੀ ਅਤੇ ਗਾਇਨੀਕੋਲੋਜੀ</span>
+            <span>ਖੇਤਰ ਵਿੱਚ ਅਗਾਂਹਵਧੂ</span>
+          </div>
+        </div>
+        <div class="body">
+          <div class="tagline">ਤੁਹਾਡੀ ਦੇਖਭਾਲ<br><span>ਸਾਡਾ ਫਰਜ਼।</span></div>
+          <div class="fac-list">
+            <div class="fac">ਦਰਦਰਹਿਤ ਜਣੇਪਾ</div>
+            <div class="fac">ਸਿਜ਼ੇਰੀਅਨ ਓਪਰੇਸ਼ਨ</div>
+            <div class="fac">IUI ਅਤੇ IVF ਬਾਂਝਪਣ ਇਲਾਜ</div>
+            <div class="fac">PCOS/PCOD ਪ੍ਰਬੰਧਨ</div>
+            <div class="fac">ਲੈਪ੍ਰੋਸਕੋਪਿਕ ਸਰਜਰੀ</div>
+            <div class="fac">ਬੱਚੇਦਾਨੀ ਓਪਰੇਸ਼ਨ (ਸਾਰੀਆਂ ਕਿਸਮਾਂ)</div>
+            <div class="fac">ਡਾਇਗਨੌਸਟਿਕ ਹਿਸਟਰੋਸਕੋਪੀ</div>
+            <div class="fac">ਉੱਚ-ਜੋਖਮ ਗਰਭ ਸੰਭਾਲ</div>
+            <div class="fac">ਮੁਕੰਮਲ ਗਰਭਕਾਲੀਨ ਸੰਭਾਲ</div>
+            <div class="fac">ਨਵਜੰਮੇ ਅਤੇ NICU ਦੇਖਭਾਲ</div>
+          </div>
+          <div class="footer">
+            <img src="https://bawejahospital.com/img/logo-white.png" alt="BMH" class="bmh-logo" onerror="this.style.display='none'">
+            <div class="contact">+91-81466 22802<br>ਰੂਪਨਗਰ, ਪੰਜਾਬ</div>
+          </div>
+        </div>
+      </div>
+      <div class="variant-label">ਵਿਕਲਪ C — ਗੂੜਾ ਮੈਜੈਂਟਾ</div>
+    </div>
+
+  </div>
+</section>
+<div class="section-sep"></div>
+
+<!-- ═══════════════════════════════
+     4. ਚਮੜੀ ਅਤੇ ਕਾਸਮੈਟੋਲੋਜੀ
+═══════════════════════════════ -->
+<section class="section" id="skin">
+  <div class="section-header">
+    <div class="badge badge-skn">ਵਿਭਾਗ 4</div>
+    <h2>ਚਮੜੀ ਅਤੇ ਕਾਸਮੈਟੋਲੋਜੀ</h2>
+    <p>3 ਡਿਜ਼ਾਈਨ ਵਿਕਲਪ</p>
+  </div>
+  <div class="variants-grid">
+
+    <!-- SKN A -->
+    <div class="variant-wrap">
+      <div class="poster skn-a">
+        <div class="hero">
+          <img src="https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&w=600&q=85" alt="ਚਮਕਦੀ ਚਮੜੀ ਵਾਲੀ ਔਰਤ"
+               onerror="this.src='https://images.unsplash.com/photo-1515377905703-c4788e51af15?auto=format&fit=crop&w=600&q=85'">
+        </div>
+        <div class="body">
+          <div class="dept-name">ਚਮੜੀ ਅਤੇ ਕਾਸਮੈਟੋਲੋਜੀ</div>
+          <div class="tagline">ਆਪਣੀ ਚਮੜੀ ਦੀ<br><em>ਅਸਲ ਚਮਕ ਉਜਾਗਰ ਕਰੋ।</em></div>
+          <div class="fac-grid">
+            <div class="fac">ਹਾਈਡ੍ਰਾਫੇਸ਼ੀਅਲ ਅਤੇ ਨਵੀਨੀਕਰਨ</div>
+            <div class="fac">ਮੁਹਾਸੇ ਅਤੇ ਦਾਗ਼ਾਂ ਦਾ ਇਲਾਜ</div>
+            <div class="fac">CO₂ ਲੇਜ਼ਰ ਮੋਲ ਹਟਾਉਣਾ</div>
+            <div class="fac">ਲੇਜ਼ਰ ਵਾਲ ਹਟਾਉਣਾ</div>
+            <div class="fac">ਸਕਿਨ ਪੀਲ ਇਲਾਜ</div>
+            <div class="fac">ਚਰਬੀ ਜਮਾਉਣ ਦੀ ਤਕਨੀਕ</div>
+            <div class="fac">Nd:YAG ਟੈਟੂ ਹਟਾਉਣਾ</div>
+            <div class="fac">SHR / IPL / ਡਾਇਓਡ ਲੇਜ਼ਰ</div>
+          </div>
+          <div class="pioneer">✦ ਖੇਤਰ ਵਿੱਚ ਪਹਿਲਾ ਮਲਟੀ-ਲੇਜ਼ਰ ਕਾਸਮੈਟੋਲੋਜੀ ਕੇਂਦਰ · FDA ਪ੍ਰਵਾਣਿਤ</div>
+          <div class="footer">
+            <img src="https://bawejahospital.com/img/logo-white.png" alt="BMH" class="bmh-logo-sm" onerror="this.style.display='none'">
+            <div class="contact">+91-81466 22802<br>ਰੂਪਨਗਰ, ਪੰਜਾਬ</div>
+          </div>
+        </div>
+      </div>
+      <div class="variant-label">ਵਿਕਲਪ A — ਸੋਨੇ ਦੀ ਰਾਤ</div>
+    </div>
+
+    <!-- SKN B -->
+    <div class="variant-wrap">
+      <div class="poster skn-b">
+        <div class="hero">
+          <img src="https://images.unsplash.com/photo-1596755389378-c31d21fd1273?auto=format&fit=crop&w=600&q=85" alt="ਸਾਫ਼ ਅਤੇ ਚਮਕਦੀ ਚਮੜੀ"
+               onerror="this.src='https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=600&q=85'">
+        </div>
+        <div class="body">
+          <div class="dept-name">ਚਮੜੀ ਅਤੇ ਕਾਸਮੈਟੋਲੋਜੀ</div>
+          <div class="tagline">ਤੁਹਾਡੀ ਸਭ ਤੋਂ <span>ਆਤਮਵਿਸ਼ਵਾਸੀ</span><br>ਚਮੜੀ ਤੁਹਾਡੀ ਉਡੀਕ ਕਰਦੀ ਹੈ।</div>
+          <div class="fac-grid">
+            <div class="fac">ਹਾਈਡ੍ਰਾਫੇਸ਼ੀਅਲ ਅਤੇ ਨਵੀਨੀਕਰਨ</div>
+            <div class="fac">ਮੁਹਾਸੇ ਅਤੇ ਦਾਗ਼ਾਂ ਦਾ ਇਲਾਜ</div>
+            <div class="fac">CO₂ ਲੇਜ਼ਰ ਪ੍ਰਕਿਰਿਆਵਾਂ</div>
+            <div class="fac">ਲੇਜ਼ਰ ਵਾਲ ਹਟਾਉਣਾ</div>
+            <div class="fac">ਸਕਿਨ ਪੀਲ ਇਲਾਜ</div>
+            <div class="fac">ਕ੍ਰਾਇਓਲੀਪੋਲੀਸਿਸ ਚਰਬੀ ਇਲਾਜ</div>
+            <div class="fac">Nd:YAG ਟੈਟੂ ਹਟਾਉਣਾ</div>
+            <div class="fac">FDA-ਪ੍ਰਵਾਣਿਤ ਤਕਨੀਕਾਂ</div>
+          </div>
+          <div class="pioneer">ਖੇਤਰ ਵਿੱਚ ਪਹਿਲਾ ਮਲਟੀ-ਲੇਜ਼ਰ ਕਾਸਮੈਟੋਲੋਜੀ ਕੇਂਦਰ</div>
+          <div class="footer">
+            <img src="https://bawejahospital.com/img/logo.png" alt="BMH" class="bmh-logo-sm" onerror="this.style.display='none'">
+            <div class="contact">+91-81466 22802<br>bawejahospital.com</div>
+          </div>
+        </div>
+      </div>
+      <div class="variant-label">ਵਿਕਲਪ B — ਗੁਲਾਬੀ ਸਾਫ਼</div>
+    </div>
+
+    <!-- SKN C -->
+    <div class="variant-wrap">
+      <div class="poster skn-c">
+        <div class="hero">
+          <img src="https://images.unsplash.com/photo-1598440947619-2c35fc9aa908?auto=format&fit=crop&w=600&q=85" alt="ਜਾਮਨੀ ਰੋਸ਼ਨੀ ਵਿੱਚ ਚਮਕਦੀ ਚਮੜੀ"
+               onerror="this.src='https://images.unsplash.com/photo-1516975080664-ed2fc6a32937?auto=format&fit=crop&w=600&q=85'">
+        </div>
+        <div class="body">
+          <div class="dept-name">ਚਮੜੀ ਅਤੇ ਕਾਸਮੈਟੋਲੋਜੀ</div>
+          <div class="tagline">ਅੰਦਰੋਂ ਚਮਕੋ।<br><em>ਬੇਹੱਦ ਦਮਕੋ।</em></div>
+          <div class="fac-grid">
+            <div class="fac">ਹਾਈਡ੍ਰਾਫੇਸ਼ੀਅਲ ਅਤੇ ਨਵੀਨੀਕਰਨ</div>
+            <div class="fac">ਮੁਹਾਸੇ ਅਤੇ ਦਾਗ਼ਾਂ ਦਾ ਇਲਾਜ</div>
+            <div class="fac">CO₂ ਲੇਜ਼ਰ ਚਮੜੀ ਇਲਾਜ</div>
+            <div class="fac">ਲੇਜ਼ਰ ਵਾਲ ਹਟਾਉਣਾ</div>
+            <div class="fac">ਸਕਿਨ ਪੀਲ ਇਲਾਜ</div>
+            <div class="fac">ਕ੍ਰਾਇਓਲੀਪੋਲੀਸਿਸ ਚਰਬੀ ਇਲਾਜ</div>
+            <div class="fac">Nd:YAG ਟੈਟੂ ਹਟਾਉਣਾ</div>
+            <div class="fac">SHR / IPL / ਡਾਇਓਡ ਲੇਜ਼ਰ</div>
+          </div>
+          <div class="pioneer">✦ ਪਹਿਲਾ ਮਲਟੀ-ਲੇਜ਼ਰ ਕਾਸਮੈਟੋਲੋਜੀ ਕੇਂਦਰ · FDA ਪ੍ਰਵਾਣਿਤ</div>
+          <div class="footer">
+            <img src="https://bawejahospital.com/img/logo-white.png" alt="BMH" class="bmh-logo-sm" onerror="this.style.display='none'">
+            <div class="contact">+91-81466 22802<br>ਰੂਪਨਗਰ, ਪੰਜਾਬ</div>
+          </div>
+        </div>
+      </div>
+      <div class="variant-label">ਵਿਕਲਪ C — ਜਾਮਨੀ ਰਾਤ</div>
+    </div>
+
+  </div>
+</section>
+<div style="height:72px"></div>
+
+</body>
+</html>
