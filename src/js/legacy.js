@@ -3816,6 +3816,7 @@ function openReceptionPatient(bmhId) {
   const pendAmt = pend.reduce((s, r) => s + (Number(r.amount) || 0), 0);
   const adv = Number(p.advance) || 0;
   const bal = Number(p.balance) || 0;
+  const showRestoreQueueBtn = patientNeedsReceptionQueueRestore(p);
   const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
   const chargeOpts = (CHARGES_DATA || []).slice().sort(function (a, b) { return String(a.name||'').localeCompare(String(b.name||'')); }).map(function (c) {
     const amt = getChargeForProcedure(c.name, p.centre || CURRENT_USER?.centre || 'CHD');
@@ -3851,6 +3852,7 @@ function openReceptionPatient(bmhId) {
     + '</div></div></div>'
     + '<div style="margin-top:14px;display:flex;flex-wrap:wrap;gap:8px">'
     + '<button type="button" class="btn btn-gold btn-sm" onclick="rcOpenBillingFor(\'' + String(bmhId).replace(/'/g, "\\'") + '\')">💳 Billing / charges</button>'
+    + (showRestoreQueueBtn ? '<button type="button" class="btn btn-outline btn-sm" onclick="restorePatientToDoctorQueue(\'' + String(bmhId).replace(/'/g, "\\'") + '\')">↩ Restore to queue</button>' : '')
     + '<button type="button" class="btn btn-outline btn-sm" onclick="closeM(\'m-rc-patient\');openReceptionPatientEdit(\'' + String(bmhId).replace(/'/g, "\\'") + '\')">✏️ Edit / change details</button>'
     + '<button type="button" class="btn btn-outline btn-sm" onclick="closeM(\'m-rc-patient\');openPatient(\'' + String(bmhId).replace(/'/g, "\\'") + '\')">👁️ Open doctor record</button>'
     + '<button type="button" class="btn btn-outline btn-sm" onclick="rcToggleConsentSection(\'' + String(bmhId).replace(/'/g, "\\'") + '\')">📋 Add consent</button>'
@@ -18230,11 +18232,17 @@ function mergeDrugLibraryRows(primaryRows) {
 function saveDrugLibraryToStorage() {
   invalidateDrugSearchPoolCache && invalidateDrugSearchPoolCache();
   persistDrugLibraryLocalSnapshots(DRUG_LIBRARY);
+  watchDrugLibraryFromFirebase && watchDrugLibraryFromFirebase();
   if (window.FBDB) {
     const ts = Date.now();
     window.FBDB.ref('drugLibrary').set(DRUG_LIBRARY).catch(() => {});
     window.FBDB.ref('drugLibraryMeta').set({ updatedAt: ts }).catch(() => {});
   }
+  renderRxDrugs && renderRxDrugs();
+  try {
+    const activeInput = getActiveRxQuickSearchInput && getActiveRxQuickSearchInput();
+    if (activeInput && String(activeInput.value || '').trim().length >= 1) rxQuickSearch(String(activeInput.value || ''));
+  } catch (e) {}
 }
 function choosePreferredDrugLibraryRows(localRows, remoteRows, currentRows, localTs, remoteTs) {
   // Always take the UNION of all sources — never discard drugs based on timestamps.
@@ -18465,6 +18473,7 @@ function loadDrugLibraryFromStorage(opts) {
   opts = opts || {};
   const forceRemote = !!opts.forceRemote;
   const needsRemoteHydration = !!window.FBDB && !window._bmhDrugLibraryHydratedFromFirebase;
+  watchDrugLibraryFromFirebase && watchDrugLibraryFromFirebase();
   if (window._bmhDrugLibraryLoadedOnce && !forceRemote && !needsRemoteHydration) return;
   if (!window._bmhDrugLibraryLoadedOnce) window._bmhDrugLibraryLoadedOnce = true;
   const applyMergedRows = function (remoteVal, opts) {
@@ -18567,6 +18576,11 @@ function watchDrugLibraryFromFirebase() {
     persistDrugLibraryLocalSnapshots(DRUG_LIBRARY);
     renderSettingsDrugs && renderSettingsDrugs();
     rebuildDrugGenericDatalist && rebuildDrugGenericDatalist();
+    renderRxDrugs && renderRxDrugs();
+    try {
+      const activeInput = getActiveRxQuickSearchInput && getActiveRxQuickSearchInput();
+      if (activeInput && String(activeInput.value || '').trim().length >= 1) rxQuickSearch(String(activeInput.value || ''));
+    } catch (e) {}
     // Push back to Firebase when local had drugs not in remote
     const remoteHash = remoteArr.map(function (d) { return (d._id || d.trade) + ':' + (d._updatedAt || 0); }).sort().join(',');
     if (nextHash !== remoteHash) {
@@ -20165,6 +20179,62 @@ function getKnownHighestBmhNumber() {
   if (Number.isFinite(inMem) && (!maxPrimary || isPrimaryBmhSequenceNumber(inMem)) && inMem > maxNum && inMem < maxNum + 10000) maxNum = inMem;
   return maxNum;
 }
+function parseBmhSequenceNumber(value) {
+  const m = String(value || '').trim().match(/^BMSH-(\d{1,9})$/i);
+  if (!m) return NaN;
+  return parseInt(m[1], 10);
+}
+function isBmhIdAllocatedToAnotherPatient(bmhId, exceptBmhId) {
+  const target = String(bmhId || '').trim();
+  const except = String(exceptBmhId || '').trim();
+  if (!target) return false;
+  return (window.PATIENTS || []).some(function (p) {
+    const existingId = String(p?.bmhId || '').trim();
+    if (!existingId || existingId !== target) return false;
+    if (except && existingId === except) return false;
+    return true;
+  });
+}
+function findNextAvailableBmhId(startValue, exceptBmhId) {
+  let nextNum = parseBmhSequenceNumber(startValue);
+  if (!Number.isFinite(nextNum) || nextNum <= 0) nextNum = getKnownHighestBmhNumber() + 1;
+  let attempts = 0;
+  while (attempts < 10000) {
+    const candidate = 'BMSH-' + String(nextNum).padStart(6, '0');
+    if (!isBmhIdAllocatedToAnotherPatient(candidate, exceptBmhId)) return candidate;
+    nextNum += 1;
+    attempts += 1;
+  }
+  return '';
+}
+function syncBmhSequenceFloor(bmhId) {
+  const num = parseBmhSequenceNumber(bmhId);
+  if (!Number.isFinite(num) || !isPrimaryBmhSequenceNumber(num)) return;
+  try { localStorage.setItem('bmh_last_patient_num', String(num)); } catch (_) {}
+  if (!window._nextPatientNum || window._nextPatientNum <= num) window._nextPatientNum = num + 1;
+  const el = document.getElementById('rc-uid');
+  if (el) el.textContent = 'BMSH-' + String(window._nextPatientNum).padStart(6, '0');
+  if (window.FBDB) {
+    window.FBDB.ref('settings/lastPatientNum').transaction(function (current) {
+      const existing = typeof current === 'number' ? current : 0;
+      return existing >= num ? existing : num;
+    }).catch(function () {});
+  }
+}
+function patientNeedsReceptionQueueRestore(patient, deptOverride) {
+  const p = patient || null;
+  if (!p) return false;
+  const status = String(p.status || '').toLowerCase();
+  if (status === 'ipd' || status === 'discharged') return false;
+  const targetDept = normalizeDeptKeyForQueue(deptOverride || p.dept || p.department || '');
+  const currentDept = normalizeDeptKeyForQueue(p.dept || p.department || '');
+  const inTodayQueue = patientQueueDateMatchesToday(p)
+    || localDateKey(p.checkinAt || p.createdAt || p.queueDate || p.visitDate || p.updatedAt) === localDateKey(new Date());
+  if (p.queueRemoved || status === 'removed' || status === 'seen' || p.seen) return true;
+  if (!inTodayQueue) return true;
+  if (targetDept && currentDept && targetDept !== currentDept) return true;
+  return false;
+}
 
 function genRcUID() {
   // Only numeric BMSH-###### IDs participate in the sequence (CSV/hash imports are ignored)
@@ -20436,10 +20506,19 @@ async function registerPatient() {
     forceNewId: forceNewBmsh
   });
   const isExistingRegistration = !!existingPt;
-  const uid = String(isExistingRegistration ? (existingPt && existingPt.bmhId) : (await reserveNextBmhId()) || '').trim();
+  let uid = String(isExistingRegistration ? (existingPt && existingPt.bmhId) : (await reserveNextBmhId()) || '').trim();
   if(isExistingRegistration) {
     if(!uid) { showToast('Could not reuse the existing BMSH ID','e'); return; }
   } else if(!/^BMSH-\d{6,9}$/.test(uid)) { showToast('Could not generate a valid BMSH ID','e'); return; }
+  if (!isExistingRegistration) {
+    const safeUid = findNextAvailableBmhId(uid, existingPt?.bmhId || '');
+    if (!safeUid) { showToast('Could not generate a conflict-free BMSH ID', 'e'); return; }
+    if (safeUid !== uid) {
+      uid = safeUid;
+      showToast('Previous BMSH ID already existed — assigned next available ID ' + uid, 'i');
+    }
+    syncBmhSequenceFloor(uid);
+  }
   const uidEl = document.getElementById('rc-uid');
   if (uidEl) uidEl.textContent = uid;
   if (isExistingRegistration && String(uidDisplayed || '').trim() && String(uidDisplayed).trim() !== String(uid)) {
@@ -20483,11 +20562,7 @@ async function registerPatient() {
 
   savePatientToFirebase(patient);
 
-  const numFromId = parseInt(String(uid).replace(/^BMSH-/,''),10);
-  if(!isNaN(numFromId) && isPrimaryBmhSequenceNumber(numFromId)) {
-    try { localStorage.setItem('bmh_last_patient_num', numFromId); } catch(_) {}
-    window._nextPatientNum = numFromId + 1;
-  }
+  syncBmhSequenceFloor(uid);
 
   let fee = parseFloat(document.getElementById('rc-fee')?.value || getReceptionConsultationRate(centre) || 0) || 0;
   if(noFee) fee = 0;
@@ -20625,6 +20700,9 @@ async function registerPatient() {
   }
 
   maybeScheduleSameDaySurgeryOTFromRegistration(patient);
+  if (!isPreReg) {
+    bmhEnsurePatientInTodayDeptQueue(uid, { dept: dept, silentToast: true });
+  }
 
   if(!isInsurance && !isCreditDue && !isPreReg && fee>0) {
     setTimeout(()=>{
@@ -32392,6 +32470,7 @@ function promoteMergedDrugLibraryIntoLive(rows, opts) {
 }
 function ensureDrugLibraryHydratedForSearch() {
   try {
+    watchDrugLibraryFromFirebase && watchDrugLibraryFromFirebase();
     if (typeof loadDrugLibraryFromStorage === 'function') {
       loadDrugLibraryFromStorage({ forceRemote: !!window.FBDB && !window._bmhDrugLibraryHydratedFromFirebase });
     }
@@ -33886,6 +33965,7 @@ function logoutUser() {
   window._bmhTodayTransactionsLoadedKey = '';
   window._bmhDrugLibraryLoadedOnce = false;
   window._bmhDrugLibraryHydratedFromFirebase = false;
+  window._bmhDrugLibraryWatchActive = false;
   window._bmhPatientsRefreshInFlight = false;
   if (window._bmhPatientsRefreshTimer) {
     clearInterval(window._bmhPatientsRefreshTimer);
@@ -35399,13 +35479,11 @@ window.markCrossRefSeen = markCrossRefSeen;
 function restorePatientToDoctorQueue(bmhId) {
   const p = PATIENTS.find(function (x) { return x.bmhId === bmhId; });
   if (!p) { showToast('Patient not found', 'w'); return; }
-  p.queueRemoved = false;
-  p.status = (p.status === 'removed' || !p.status) ? 'waiting' : p.status;
-  if (p.status === 'seen') p.status = 'waiting';
-  p.seen = false;
-  p.checkinAt = Date.now();
-  const patch = { queueRemoved: false, status: p.status, seen: false, checkinAt: p.checkinAt };
-  fbUpdate && fbUpdate('patients/' + bmhId, patch).catch(function () {});
+  const restored = bmhEnsurePatientInTodayDeptQueue(bmhId, { dept: p.dept || p.department || '', silentToast: true });
+  if (!restored && !patientNeedsReceptionQueueRestore(p, p.dept || p.department || '')) {
+    showToast('Patient is already present in today\'s queue', 'i');
+    return;
+  }
   showToast('Patient sent back to doctor queue ✓', 's');
   renderDocQueue && renderDocQueue();
   renderReceptionPage && renderReceptionPage();
