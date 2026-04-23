@@ -172,6 +172,33 @@ const INVENTORY = [];
 const BCMAP = {};
 /** Editable IOL / implant catalogue (Settings → Surgery Packs) — populated from your entries / Firebase */
 let IOL_CATALOG = [];
+function getIolCatalogNormalizedRows() {
+  return (IOL_CATALOG || []).map(function (row) {
+    const name = normalizeInventoryTextValue(row?.name || '');
+    if (!name) return null;
+    const type = normalizeInventoryTextValue(row?.type || 'IOL');
+    const mfr = normalizeInventoryTextValue(row?.mfr || row?.manufacturer || '');
+    const barcode = normalizeInventoryTextValue(row?.barcode || row?.sku || '');
+    const power = normalizeIolPowerValue(row?.power || extractIolPower(name));
+    return {
+      name: name,
+      type: type || 'IOL',
+      mfr: mfr,
+      price: Number(row?.price || 0) || 0,
+      barcode: barcode,
+      batchNo: normalizeInventoryTextValue(row?.batchNo || ''),
+      serialNo: normalizeInventoryTextValue(row?.serialNo || ''),
+      power: power
+    };
+  }).filter(Boolean);
+}
+function findIolCatalogEntryByName(rawName) {
+  const wanted = normalizeInventoryCompareText(rawName || '');
+  if (!wanted) return null;
+  return getIolCatalogNormalizedRows().find(function (row) {
+    return normalizeInventoryCompareText(row.name || '') === wanted;
+  }) || null;
+}
 function saveIolCatalogToStorage() {
   try { localStorage.setItem('bmh_iol_catalog', JSON.stringify(IOL_CATALOG)); } catch (e) { /* noop */ }
   if (window.FBDB) window.FBDB.ref('iolCatalog').set(IOL_CATALOG).catch(function () {});
@@ -802,22 +829,14 @@ function addOTProcedureOption() {
   showToast('OT procedure saved for reuse ✓', 's');
 }
 function getOtIolChoices() {
-  const catalog = (IOL_CATALOG || []).map(function (row) {
-    return { name: row.name, type: row.type || 'IOL', price: Number(row.price || 0), barcode: row.barcode || '', power: extractIolPower(row.name) };
-  });
-  const inventoryIols = (INVENTORY || []).filter(function (item) {
-    const cat = String(item.cat || '').toLowerCase();
-    const nm = String(item.name || '').toLowerCase();
-    return cat.includes('iol') || /\biol\b|acrysof|tecnis|panoptix|toric|trifocal/.test(nm);
-  }).map(function (item) {
-    return { name: item.name, type: item.cat || 'IOL', price: Number(item.mrp || 0), barcode: item.barcode || '', power: extractIolPower(item.name) };
-  });
-  const seen = {};
-  return catalog.concat(inventoryIols).filter(function (row) {
-    const key = String(row.name || '').toLowerCase();
-    if (!key || seen[key]) return false;
-    seen[key] = true;
-    return true;
+  return getIolCatalogNormalizedRows().map(function (row) {
+    return {
+      name: row.name,
+      type: row.type || 'IOL',
+      price: Number(row.price || 0) || 0,
+      barcode: row.barcode || '',
+      power: row.power || extractIolPower(row.name)
+    };
   });
 }
 function populateOTIolOptions(selectedName, selectedPower) {
@@ -927,9 +946,21 @@ function bmhLoadPersistedStoreLocations() {
       window.BMH_STORE_LOCATIONS = raw.map(function (s) { return String(s || '').trim(); }).filter(Boolean);
     }
   } catch (e) { /* noop */ }
+  if (window._bmhStoreLocationsCloudLoaded || !window.FBDB) return;
+  window._bmhStoreLocationsCloudLoaded = true;
+  window.FBDB.ref('settings/inventory/storeLocations').once('value').then(function (snap) {
+    const raw = snap.val();
+    if (!Array.isArray(raw) || !raw.length) return;
+    window.BMH_STORE_LOCATIONS = raw.map(function (s) { return String(s || '').trim(); }).filter(Boolean);
+    try { localStorage.setItem('bmh_store_locations', JSON.stringify(window.BMH_STORE_LOCATIONS)); } catch (e) { /* noop */ }
+    if (typeof bmhPopulateInventorySelectors === 'function') bmhPopulateInventorySelectors();
+  }).catch(function () {});
 }
 function saveInventoryStoreLocations() {
   try { localStorage.setItem('bmh_store_locations', JSON.stringify((window.BMH_STORE_LOCATIONS || []).slice())); } catch (e) { /* noop */ }
+  if (window.FBDB) {
+    window.FBDB.ref('settings/inventory/storeLocations').set((window.BMH_STORE_LOCATIONS || []).slice()).catch(function () {});
+  }
 }
 function bmhBillingAdvanceReasonOptions() {
   const def = ['Surgery package', 'IOL / implant booking', 'Admission deposit', 'Investigation block', 'Consultation block', 'Personal', 'Other'];
@@ -8348,8 +8379,8 @@ function addIolBrandEntry(prefill) {
       ${idx > 0 ? `<button class="btn btn-xs btn-gray" onclick="removeIolBrandEntry(this)">✕ Remove</button>` : ''}
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
-      <div class="form-group" style="margin:0"><label class="fl">Brand</label><input type="text" class="iol-brand-field" list="inv-brand-datalist" placeholder="Pick from IOL catalogue" value="${escapeHtmlConsent(p.brand||'')}"></div>
-      <div class="form-group" style="margin:0"><label class="fl">Company</label><input type="text" class="iol-company-field" list="inv-company-datalist" placeholder="Auto-fills from catalogue" value="${escapeHtmlConsent(p.company||'')}"></div>
+      <div class="form-group" style="margin:0"><label class="fl">Brand</label><input type="text" class="iol-brand-field" list="iol-brand-datalist" placeholder="Pick from IOL catalogue" value="${escapeHtmlConsent(p.brand||'')}"></div>
+      <div class="form-group" style="margin:0"><label class="fl">Company</label><input type="text" class="iol-company-field" list="iol-company-datalist" placeholder="Auto-fills from catalogue" value="${escapeHtmlConsent(p.company||'')}"></div>
       <div class="form-group" style="margin:0"><label class="fl">Batch Number</label><input type="text" class="iol-model-field" placeholder="Batch from product line" value="${escapeHtmlConsent(p.batch||'')}"></div>
     </div>
     <div style="display:flex;gap:8px;margin-bottom:8px;font-size:10px">
@@ -8373,16 +8404,16 @@ function addIolBrandEntry(prefill) {
   const companyInput = div.querySelector('.iol-company-field');
   if (brandInput && companyInput) {
     const syncCatalogValues = function () {
-      const brandName = normalizeInventoryCompareText(brandInput.value || '');
-      const catalogItem = (IOL_CATALOG || []).find(function (row) {
-        return normalizeInventoryCompareText(row.name || '') === brandName;
-      });
+      const catalogItem = findIolCatalogEntryByName(brandInput.value || '');
       if (catalogItem) {
         brandInput.value = normalizeInventoryTextValue(catalogItem.name || brandInput.value || '');
-        if (catalogItem.mfr) companyInput.value = normalizeInventoryTextValue(catalogItem.mfr);
+        companyInput.value = normalizeInventoryTextValue(catalogItem.mfr || companyInput.value || '');
       }
+      refreshIolBrandPowerStockLabels(div);
     };
+    brandInput.setAttribute('autocomplete', 'off');
     brandInput.addEventListener('change', syncCatalogValues);
+    brandInput.addEventListener('input', syncCatalogValues);
     brandInput.addEventListener('blur', syncCatalogValues);
   }
 }
@@ -8592,8 +8623,10 @@ function saveIolInventoryGrid() {
   let allBrandData = [];
   if (brandEntries.length > 0) {
     brandEntries.forEach(function (entryDiv) {
-      const brand = entryDiv.querySelector('.iol-brand-field')?.value?.trim() || '';
-      const company = entryDiv.querySelector('.iol-company-field')?.value?.trim() || '';
+      const pickedBrand = entryDiv.querySelector('.iol-brand-field')?.value?.trim() || '';
+      const catalogItem = findIolCatalogEntryByName(pickedBrand);
+      const brand = catalogItem?.name || pickedBrand;
+      const company = catalogItem?.mfr || entryDiv.querySelector('.iol-company-field')?.value?.trim() || '';
       const batchNo = entryDiv.querySelector('.iol-model-field')?.value?.trim() || '';
       const exp = entryDiv.querySelector('.iol-expiry-field')?.value?.trim() || '';
       const cost = Number(entryDiv.querySelector('.iol-cost-field')?.value || '0') || 0;
@@ -8601,6 +8634,10 @@ function saveIolInventoryGrid() {
         return { power: String(input.dataset.power || ''), qty: Math.max(0, parseInt(input.value, 10) || 0) };
       }).filter(function (row) { return row.qty > 0; });
       const serialMap = Object.assign({}, readIolBrandEntrySerialMap(entryDiv), readIolBrandSerialMapFromGrid(entryDiv));
+      if (picked.length > 0 && !catalogItem) {
+        allBrandData.push({ invalidBrand: pickedBrand });
+        return;
+      }
       if (picked.length > 0) allBrandData.push({ brand, company, batchNo, exp, cost, picked, serialMap });
     });
   } else {
@@ -8618,6 +8655,11 @@ function saveIolInventoryGrid() {
   }
 
   if (!allBrandData.length) { showToast('Enter at least one IOL power quantity', 'w'); return; }
+  const invalidBrand = allBrandData.find(function (b) { return b.invalidBrand; });
+  if (invalidBrand) {
+    showToast('Pick IOL brand from Settings → Surgery Pack catalogue: ' + invalidBrand.invalidBrand, 'w');
+    return;
+  }
   if (!allBrandData.some(function (b) { return b.brand || b.company || b.batchNo; })) {
     showToast('Enter company / brand / batch for IOL stock', 'w'); return;
   }
@@ -12194,12 +12236,27 @@ function loadInventoryOcrMemory() {
   } catch (e) {
     window.BMH_INVENTORY_OCR_MEMORY = {};
   }
+  if (!window._bmhInventoryOcrMemoryCloudLoaded && window.FBDB) {
+    window._bmhInventoryOcrMemoryCloudLoaded = true;
+    window.FBDB.ref('settings/inventory/ocrMemory').once('value').then(function (snap) {
+      const data = snap.val();
+      if (!data || typeof data !== 'object') return;
+      window.BMH_INVENTORY_OCR_MEMORY = Object.assign({}, window.BMH_INVENTORY_OCR_MEMORY || {}, data);
+      try {
+        localStorage.setItem('bmh_inventory_ocr_memory', JSON.stringify(window.BMH_INVENTORY_OCR_MEMORY));
+      } catch (e) {}
+      renderInventoryImportDatalists && renderInventoryImportDatalists();
+    }).catch(function () {});
+  }
   return window.BMH_INVENTORY_OCR_MEMORY;
 }
 function saveInventoryOcrMemory() {
   try {
     localStorage.setItem('bmh_inventory_ocr_memory', JSON.stringify(loadInventoryOcrMemory()));
   } catch (e) { /* noop */ }
+  if (window.FBDB) {
+    window.FBDB.ref('settings/inventory/ocrMemory').set(loadInventoryOcrMemory()).catch(function () {});
+  }
 }
 function learnInventoryOcrValue(target, value) {
   const raw = normalizeInventoryTextValue(value);
@@ -12230,12 +12287,28 @@ function inventoryKnownVendorNames() {
 }
 function inventoryKnownProductNames() {
   const names = [];
-  (INVENTORY || []).forEach(function (i) { if (i?.name) names.push(String(i.name)); });
-  (IOL_CATALOG || []).forEach(function (row) { if (row?.name) names.push(String(row.name)); });
+  (INVENTORY || []).forEach(function (i) {
+    if (i?.name) names.push(String(i.name));
+    if (i?.barcode) names.push(String(i.barcode));
+  });
+  (IOL_CATALOG || []).forEach(function (row) {
+    if (row?.name) names.push(String(row.name));
+    if (row?.barcode) names.push(String(row.barcode));
+  });
   (window.BMH_PURCHASES || []).forEach(function (row) { if (row?.itemName) names.push(String(row.itemName)); });
   (loadInventoryOcrMemory().barcodes || []).forEach(function (v) { names.push(String(v)); });
   (loadInventoryOcrMemory().products || []).forEach(function (v) { names.push(String(v)); });
   return Array.from(new Set(names.map(function (v) { return normalizeInventoryTextValue(v); }).filter(Boolean)));
+}
+function inventoryKnownIolCatalogBrandNames() {
+  return Array.from(new Set(getIolCatalogNormalizedRows().map(function (row) {
+    return normalizeInventoryTextValue(row.name || '');
+  }).filter(Boolean)));
+}
+function inventoryKnownIolCatalogCompanyNames() {
+  return Array.from(new Set(getIolCatalogNormalizedRows().map(function (row) {
+    return normalizeInventoryTextValue(row.mfr || '');
+  }).filter(Boolean)));
 }
 function inventoryKnownBrandNames() {
   const names = [];
@@ -12311,6 +12384,14 @@ function renderInventoryImportDatalists() {
   }).join('');
   const companyList = document.getElementById('inv-company-datalist');
   if (companyList) companyList.innerHTML = inventoryKnownCompanyNames().map(function (name) {
+    return '<option value="' + escapeHtmlConsent(name) + '"></option>';
+  }).join('');
+  const iolBrandList = document.getElementById('iol-brand-datalist');
+  if (iolBrandList) iolBrandList.innerHTML = inventoryKnownIolCatalogBrandNames().map(function (name) {
+    return '<option value="' + escapeHtmlConsent(name) + '"></option>';
+  }).join('');
+  const iolCompanyList = document.getElementById('iol-company-datalist');
+  if (iolCompanyList) iolCompanyList.innerHTML = inventoryKnownIolCatalogCompanyNames().map(function (name) {
     return '<option value="' + escapeHtmlConsent(name) + '"></option>';
   }).join('');
 }
@@ -13940,16 +14021,30 @@ window.addInventoryBarcodePrompt = addInventoryBarcodePrompt;
 function removeInventoryBarcodePrompt() {
   const memory = loadInventoryOcrMemory();
   memory.barcodes = memory.barcodes || [];
-  if (memory.barcodes.length === 0) { showToast('No barcodes in list', 'w'); return; }
-  const barcodeList = memory.barcodes.join('\n');
-  const toRemove = prompt('Enter barcode to remove from list:\n' + barcodeList);
+  memory.products = memory.products || [];
+  const combined = Array.from(new Set([].concat(memory.barcodes, memory.products).map(function (v) {
+    return normalizeInventoryTextValue(v);
+  }).filter(Boolean)));
+  if (combined.length === 0) { showToast('No trade names or barcodes in list', 'w'); return; }
+  const barcodeList = combined.join('\n');
+  const toRemove = prompt('Enter trade name / barcode to remove from list:\n' + barcodeList, String(document.getElementById('bc-in')?.value || '').trim());
   if (!toRemove) return;
-  const index = memory.barcodes.indexOf(String(toRemove).trim());
-  if (index === -1) { showToast('Barcode not found', 'w'); return; }
-  memory.barcodes.splice(index, 1);
+  const wanted = normalizeInventoryCompareText(toRemove);
+  const beforeBarcodes = memory.barcodes.length;
+  const beforeProducts = memory.products.length;
+  memory.barcodes = memory.barcodes.filter(function (item) {
+    return normalizeInventoryCompareText(item) !== wanted;
+  });
+  memory.products = memory.products.filter(function (item) {
+    return normalizeInventoryCompareText(item) !== wanted;
+  });
+  if (memory.barcodes.length === beforeBarcodes && memory.products.length === beforeProducts) {
+    showToast('Trade name / barcode not found', 'w');
+    return;
+  }
   saveInventoryOcrMemory();
   renderInventoryImportDatalists();
-  showToast('Barcode removed from list ✓', 's');
+  showToast('Trade name / barcode removed from list ✓', 's');
 }
 window.removeInventoryBarcodePrompt = removeInventoryBarcodePrompt;
 function addInventoryBrandPrompt() {
@@ -13975,8 +14070,17 @@ function removeInventoryBrandPrompt() {
   const toRemove = prompt('Enter brand to remove from list:\n' + brandList);
   if (!toRemove) return;
   const normalized = normalizeInventoryTextValue(toRemove);
-  const index = memory.brands.indexOf(normalized);
-  if (index === -1) { showToast('Brand not found', 'w'); return; }
+  const index = memory.brands.findIndex(function (item) {
+    return normalizeInventoryCompareText(item) === normalizeInventoryCompareText(normalized);
+  });
+  if (index === -1) {
+    if (findIolCatalogEntryByName(normalized)) {
+      showToast('IOL brands now come from Settings → Surgery Pack catalogue. Edit or remove it there.', 'i');
+      return;
+    }
+    showToast('Brand not found', 'w');
+    return;
+  }
   memory.brands.splice(index, 1);
   saveInventoryOcrMemory();
   renderInventoryImportDatalists();
@@ -14006,8 +14110,20 @@ function removeInventoryCompanyPrompt() {
   const toRemove = prompt('Enter company to remove from list:\n' + companyList);
   if (!toRemove) return;
   const normalized = normalizeInventoryTextValue(toRemove);
-  const index = memory.companies.indexOf(normalized);
-  if (index === -1) { showToast('Company not found', 'w'); return; }
+  const index = memory.companies.findIndex(function (item) {
+    return normalizeInventoryCompareText(item) === normalizeInventoryCompareText(normalized);
+  });
+  if (index === -1) {
+    const catalogCompanyExists = getIolCatalogNormalizedRows().some(function (row) {
+      return normalizeInventoryCompareText(row.mfr || '') === normalizeInventoryCompareText(normalized);
+    });
+    if (catalogCompanyExists) {
+      showToast('IOL companies now come from Settings → Surgery Pack catalogue. Edit or remove the IOL there.', 'i');
+      return;
+    }
+    showToast('Company not found', 'w');
+    return;
+  }
   memory.companies.splice(index, 1);
   saveInventoryOcrMemory();
   renderInventoryImportDatalists();
@@ -16830,6 +16946,7 @@ function appendAdviceTemplateToTextarea(dept, text) {
   const lines = String(ta.value || '').split('\n').map(function (line) { return String(line || '').trim(); }).filter(Boolean);
   if (!lines.some(function (line) { return line.toLowerCase() === value.toLowerCase(); })) lines.push(value);
   ta.value = lines.join('\n');
+  ta.dispatchEvent(new Event('input', { bubbles: true }));
   ta.dispatchEvent(new Event('change', { bubbles: true }));
   if (dept === 'obg') renderObgAdviceChipsFromTextarea();
 }
