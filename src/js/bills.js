@@ -9,7 +9,7 @@
 import { db }                   from './firebase.js'
 import {
   collection, doc,
-  addDoc, updateDoc, getDocs,
+  addDoc, updateDoc, getDocs, deleteDoc,
   query, where, orderBy, limit, onSnapshot
 }                               from 'firebase/firestore'
 import { CURRENT_USER }         from './auth.js'
@@ -156,6 +156,12 @@ export async function voidBill(billId, reason) {
   // Update cache
   const cached = (window.BILLS || []).find(b => b.id === billId)
   if (cached) { cached.status = 'void'; cached.voidReason = reason || '' }
+}
+
+export async function deleteBill(billId) {
+  await deleteDoc(doc(db, 'bills', billId))
+  const idx = (window.BILLS || []).findIndex(b => b.id === billId)
+  if (idx >= 0) window.BILLS.splice(idx, 1)
 }
 
 // ── Increment print count (best-effort, non-blocking) ────────────────────────

@@ -10029,6 +10029,68 @@ function bmhBuildBillPayloadFromUi(bmhId, opts) {
     createdBy: window.CURRENT_USER?.name || 'Billing'
   };
 }
+function bmhGetPrimaryBillLineLabel(bmhId, items) {
+  const liveLines = ((window.BMH_PATIENT_CHARGES && window.BMH_PATIENT_CHARGES[bmhId]) || []).filter(function (row) {
+    return row && Number(row.amount || 0) > 0;
+  });
+  const topLive = liveLines.find(function (row) { return row && !row.isConcession; }) || liveLines[0];
+  if (topLive && String(topLive.desc || topLive.name || '').trim()) return String(topLive.desc || topLive.name || '').trim().slice(0, 120);
+  const topSaved = (items || []).find(function (row) { return row && Number(row.amount || 0) > 0; });
+  return String(topSaved?.desc || 'Hospital bill / due adjustment').trim().slice(0, 120);
+}
+function bmhUpsertInsurancePayRequestFromBilling(opts) {
+  const o = opts || {};
+  const bmhId = String(o.bmhId || '').trim();
+  if (!bmhId) return null;
+  const pt = o.patient || PATIENTS.find(function (p) { return p && p.bmhId === bmhId; }) || {};
+  const approvedAmount = Math.max(0, Number(o.approvedAmount || o.claimedAmount || 0));
+  const insurerAlreadyReceived = Math.max(0, Number(o.insurerAlreadyReceived || 0));
+  const insurerDueExplicit = Math.max(0, Number(o.insurerDue || 0));
+  const pendingInsurerAmount = Math.max(insurerDueExplicit, Math.max(0, approvedAmount - insurerAlreadyReceived));
+  const procedure = String(o.procedure || bmhGetPrimaryBillLineLabel(bmhId, o.items)).trim() || 'Hospital bill / due adjustment';
+  const diagnosis = String(o.diagnosis || pt.diagnosis || pt.dx || pt.purpose || '').trim().slice(0, 120);
+  const insurer = String(o.insurer || o.mode || pt.ins || 'Insurance/TPA').trim();
+  const policy = String(o.policy || pt.policy || '').trim();
+  const centre = o.centre || pt.centre || CURRENT_USER?.centre || 'CHD';
+  const dept = o.dept || pt.dept || 'ophtho';
+  let existing = (PAY_REQUESTS || []).find(function (r) {
+    return r && r.bmhId === bmhId && isInsuranceLikeMode(r.mode || r.ins || '') && String(r.status || '').toLowerCase() !== 'rejected' && (o.billId ? String(r.billId || '') === String(o.billId) : true);
+  });
+  const payload = {
+    patient: pt.name || o.patientName || bmhId,
+    bmhId: bmhId,
+    for: procedure,
+    procedure: procedure,
+    diagnosis: diagnosis,
+    amount: pendingInsurerAmount,
+    claimedAmount: approvedAmount,
+    approvedAmount: Math.max(approvedAmount, Number(existing?.approvedAmount || 0)),
+    cashlessApprovedAmount: approvedAmount,
+    hospitalBillTotal: Math.max(0, Number(o.hospitalBillTotal || approvedAmount || 0)),
+    patientShareCollected: Math.max(0, Number(o.patientShareCollected || 0)),
+    patientDue: Math.max(0, Number(o.patientDue || 0)),
+    status: pendingInsurerAmount > 0 ? (insurerAlreadyReceived > 0 ? 'partial' : 'pending') : 'paid',
+    from: 'Billing',
+    dept: dept,
+    centre: centre,
+    mode: 'Insurance/TPA',
+    ins: insurer,
+    policy: policy,
+    date: new Date().toISOString(),
+    billId: o.billId || existing?.billId || '',
+    lastPaymentRef: o.paymentRef || '',
+    lastPaymentAmt: Math.max(0, Number(o.patientShareCollected || 0))
+  };
+  if (existing) {
+    Object.assign(existing, payload, { id: existing.id });
+    try { fbUpdate && fbUpdate('payRequests/' + existing.id, Object.assign({}, existing)); } catch (e) {}
+    return existing;
+  }
+  const created = Object.assign({ id: 'PR' + Date.now() }, payload);
+  PAY_REQUESTS.push(created);
+  try { fbSet && fbSet('payRequests/' + created.id, created); } catch (e) {}
+  return created;
+}
 function bmhSaveBillRecordToRtdb(billData) {
   const id = 'RBILL-' + Date.now();
   const centre = billData.centre || CURRENT_USER?.centre || 'CHD';
@@ -10159,12 +10221,45 @@ async function bmhSaveAndPrintBill() {
       if (typeof bmhSyncPatientAdvanceBalance === 'function') bmhSyncPatientAdvanceBalance(bmhId);
     }
 
-    // Create TPA pay-request for the TPA portion
-    if (isTPA && tpaAmount > 0) {
-      const prIns = { id: 'PR' + Date.now(), patient: pt.name, bmhId, for: billableLines[0]?.desc || 'Hospital bill', procedure: billableLines[0]?.desc || 'Hospital bill', amount: tpaAmount, claimedAmount: tpaAmount, status: 'pending', centre: pt.centre || (window.CURRENT_USER?.centre) || 'CHD', dept: pt.dept || 'ophtho', mode: 'Insurance/TPA', ins: tpaCompany, policy: tpaPolicy, date: new Date().toISOString(), billId: savedBill.id };
-      if (window.PAY_REQUESTS) window.PAY_REQUESTS.push(prIns);
-      try { if (typeof fbSet === 'function') fbSet('payRequests/' + prIns.id, prIns); } catch (e) {}
+    if (pt) {
+      pt.ins = isTPA ? (tpaCompany || pt.ins || 'Insurance/TPA') : (pt.ins || '');
+      pt.policy = isTPA ? (tpaPolicy || pt.policy || '') : (pt.policy || '');
+      try {
+        fbUpdate && fbUpdate('patients/' + bmhId, {
+          ins: pt.ins || '',
+          policy: pt.policy || '',
+          updatedAt: new Date().toISOString()
+        });
+      } catch (e) {}
     }
+
+    // Create / update TPA pay-request for the TPA portion
+    if (isTPA && tpaAmount > 0) {
+      const insurerAlreadyReceived = (TRANSACTIONS || []).filter(function (t) {
+        return t && t.bmhId === bmhId && isInsuranceLikeMode(t.mode || t.ins || '');
+      }).reduce(function (sum, t) { return sum + Math.max(0, Number(t.amount || 0)); }, 0);
+      bmhUpsertInsurancePayRequestFromBilling({
+        bmhId: bmhId,
+        patient: pt,
+        patientName: pt?.name || '',
+        items: billData.items || [],
+        procedure: bmhGetPrimaryBillLineLabel(bmhId, billData.items || []),
+        diagnosis: pt?.diagnosis || pt?.dx || pt?.purpose || '',
+        insurer: tpaCompany,
+        policy: tpaPolicy,
+        approvedAmount: tpaAmount,
+        insurerAlreadyReceived: insurerAlreadyReceived,
+        patientShareCollected: amountReceived,
+        patientDue: Math.max(0, Number(savedBill.netPayable || 0) - amountReceived - tpaAmount),
+        hospitalBillTotal: Number(savedBill.netPayable || 0),
+        centre: pt?.centre || (window.CURRENT_USER?.centre) || 'CHD',
+        dept: pt?.dept || 'ophtho',
+        paymentRef: payRef,
+        billId: savedBill.id
+      });
+    }
+
+    if (typeof bmhSyncPatientRunningBalance === 'function') bmhSyncPatientRunningBalance(bmhId);
 
     // Add to queue if checkbox ticked
     const addToQ = !!document.getElementById('bmh-bill-add-to-queue')?.checked;
@@ -10288,6 +10383,42 @@ function bmhPrintSavedBill(bill) {
 }
 window.bmhPrintSavedBill = bmhPrintSavedBill;
 
+async function bmhDeleteSavedBillRecord(billId) {
+  const id = String(billId || '').trim();
+  if (!id) return;
+  if (!(CURRENT_USER?.isAdmin || CURRENT_USER?.role === 'Reception')) {
+    showToast('Only admin / reception can delete saved bills', 'w');
+    return;
+  }
+  const bill = bmhGetSavedBillsForHistory().find(function (row) { return String(row?.id || '') === id; });
+  if (!bill) {
+    showToast('Saved bill not found', 'w');
+    return;
+  }
+  if (!confirm('Delete bill ' + String(bill.billNo || bill.id || '') + ' for ' + String(bill.patientName || 'patient') + '?\n\nThis removes the saved bill record from bill history. Charges and payments stay untouched.')) return;
+  try {
+    if (bill.source === 'rtdb') {
+      window.BMH_SAVED_BILLS = (window.BMH_SAVED_BILLS || []).filter(function (row) { return String(row?.id || '') !== id; });
+      saveBmhFinancials({ localOnly: true });
+    } else if (typeof window.bmhDeleteBillInCloud === 'function') {
+      await window.bmhDeleteBillInCloud(id);
+      window.BMH_SAVED_BILLS = (window.BMH_SAVED_BILLS || []).filter(function (row) { return String(row?.id || '') !== id; });
+      saveBmhFinancials({ localOnly: true });
+    } else if (typeof window.bmhVoidBillInCloud === 'function') {
+      await window.bmhVoidBillInCloud(id, 'Deleted from billing history');
+    } else {
+      throw new Error('Bill delete service not available');
+    }
+    bmhSearchBillHistory(document.getElementById('bmh-bill-history-search')?.value || '');
+    renderBillingPageIfActive();
+    showToast('Saved bill deleted ✓', 's');
+  } catch (e) {
+    console.error('bill delete failed', e);
+    showToast('Could not delete saved bill', 'e');
+  }
+}
+window.bmhDeleteSavedBillRecord = bmhDeleteSavedBillRecord;
+
 // ── Bill history search (searches Firestore BILLS array) ──────────────────────
 function bmhSearchBillHistory(q) {
   const resultEl = document.getElementById('bmh-bill-history-results');
@@ -10338,7 +10469,10 @@ function bmhSearchBillHistory(q) {
       + '<div style="font-size:10px;color:var(--g1)">' + esc(dateStr) + '</div>'
       + '<div style="font-weight:900;color:var(--bmh-blue)">₹' + Number(b.netPayable || 0).toLocaleString('en-IN') + '<div style="font-size:9.5px;font-weight:400;color:var(--g1)">' + esc(b.paymentMode || '') + (b.isTPA ? ' + TPA' : '') + '</div></div>'
       + '<div style="font-size:10px">' + (b.printCount > 0 ? 'Printed ' + b.printCount + 'x' : 'Not printed') + '</div>'
+      + '<div style="display:flex;gap:6px;justify-content:flex-end">'
       + '<button type="button" class="btn btn-outline btn-sm" onclick="bmhPrintSavedBill((bmhGetSavedBillsForHistory()||[]).find(function(x){return x.id===\'' + b.id + '\';}))">Print</button>'
+      + ((CURRENT_USER?.isAdmin || CURRENT_USER?.role === 'Reception') ? '<button type="button" class="btn btn-xs btn-gray" onclick="bmhDeleteSavedBillRecord(\'' + b.id + '\')">Delete</button>' : '')
+      + '</div>'
       + '</div>';
   }).join('');
 }
@@ -11719,6 +11853,17 @@ function bmhRecordPatientPayment() {
     cashlessApprovedAmount: cashlessApr > 0 ? cashlessApr : undefined,
     hospitalBillTotal: cashlessApr > 0 ? netBill : undefined
   };
+  if (pt && (insName || policy || cashlessApr > 0 || isInsuranceLikeMode(mode))) {
+    pt.ins = insName || pt.ins || (isInsuranceLikeMode(mode) ? 'Insurance/TPA' : '');
+    pt.policy = policy || pt.policy || '';
+    try {
+      fbUpdate && fbUpdate('patients/' + bmhId, {
+        ins: pt.ins || '',
+        policy: pt.policy || '',
+        updatedAt: new Date().toISOString()
+      });
+    } catch (e) {}
+  }
   txn.chargeAllocations = bmhAllocatePaymentToChargeLines(bmhId, amt, {
     txnId: txnId,
     date: txn.date,
@@ -11745,82 +11890,27 @@ function bmhRecordPatientPayment() {
   const insReceivedTotal = (TRANSACTIONS || []).filter(function (t) {
     return t.bmhId === bmhId && isInsuranceLikeMode(t.mode || t.ins || '');
   }).reduce(function (s, t) { return s + (Number(t.amount) || 0); }, 0);
-  if (cashlessApr > 0 && pt) {
-    const lines = window.BMH_PATIENT_CHARGES[bmhId] || [];
-    const topLine = lines.find(function (x) { return x && !x.isConcession; }) || lines[0];
-    const proc = String(topLine?.desc || topLine?.name || 'Hospital bill / cashless').slice(0, 120);
-    const pendingTpa = Math.max(0, cashlessApr - insReceivedTotal);
-    let existing = (PAY_REQUESTS || []).find(function (r) {
-      return r.bmhId === bmhId && r.status === 'pending' && isInsuranceLikeMode(r.mode || r.ins || '');
-    });
-    const prPayload = {
-      patient: pt.name || bmhId,
+  if ((cashlessApr > 0 || isInsuranceLikeMode(mode)) && pt) {
+    const claimedAmt = cashlessApr > 0
+      ? cashlessApr
+      : Math.max(Number(bmhBillPreviewTotal(bmhId)) || 0, amt + (insurerDue || 0));
+    bmhUpsertInsurancePayRequestFromBilling({
       bmhId: bmhId,
-      for: proc,
-      procedure: proc,
-      diagnosis: String(pt.diagnosis || pt.purpose || '').slice(0, 120),
-      claimedAmount: cashlessApr,
-      approvedAmount: cashlessApr,
-      cashlessApprovedAmount: cashlessApr,
-      hospitalBillTotal: netBill,
+      patient: pt,
+      procedure: bmhGetPrimaryBillLineLabel(bmhId),
+      diagnosis: String(pt.diagnosis || pt.dx || pt.purpose || '').slice(0, 120),
+      insurer: insName || mode || 'Insurance/TPA',
+      policy: policy || '',
+      approvedAmount: claimedAmt,
+      insurerAlreadyReceived: insReceivedTotal,
+      insurerDue: insurerDue,
       patientShareCollected: !isInsuranceLikeMode(mode) ? Math.max(0, amt) : 0,
-      amount: pendingTpa,
-      status: pendingTpa > 0 ? 'pending' : 'paid',
-      from: 'Billing',
-      dept: pt.dept || 'ophtho',
+      patientDue: updatedDue,
+      hospitalBillTotal: netBill,
       centre: pt.centre || CURRENT_USER?.centre || 'CHD',
-      mode: 'Insurance/TPA',
-      ins: insName || 'Insurance/TPA',
-      policy: policy || '',
-      date: new Date().toISOString(),
-      lastPaymentRef: ref,
-      lastPaymentAmt: amt
-    };
-    if (existing) {
-      Object.assign(existing, prPayload, { id: existing.id });
-      try { fbUpdate && fbUpdate('payRequests/' + existing.id, Object.assign({}, existing)); } catch (e) {}
-    } else {
-      const prIns = Object.assign({ id: 'PR' + Date.now() }, prPayload);
-      PAY_REQUESTS.push(prIns);
-      try { fbSet && fbSet('payRequests/' + prIns.id, prIns); } catch (e) {}
-    }
-  } else if (isInsuranceLikeMode(mode) && pt) {
-    const lines = window.BMH_PATIENT_CHARGES[bmhId] || [];
-    const topLine = lines.find(function (x) { return x && !x.isConcession; }) || lines[0];
-    const proc = String(topLine?.desc || topLine?.name || 'Hospital bill / cashless').slice(0, 120);
-    const claimedAmt = Math.max(Number(bmhBillPreviewTotal(bmhId)) || 0, amt + (insurerDue || 0));
-    const hospitalDue = Math.max(0, insurerDue > 0 ? insurerDue : updatedDue);
-    let existing = (PAY_REQUESTS || []).find(function (r) {
-      return r.bmhId === bmhId && r.status === 'pending' && isInsuranceLikeMode(r.mode || r.ins || '');
+      dept: pt.dept || 'ophtho',
+      paymentRef: ref
     });
-    const prPayload = {
-      patient: pt.name || bmhId,
-      bmhId: bmhId,
-      for: proc,
-      procedure: proc,
-      diagnosis: String(pt.diagnosis || pt.purpose || '').slice(0, 120),
-      amount: hospitalDue,
-      claimedAmount: claimedAmt,
-      approvedAmount: Math.max(Number(existing?.approvedAmount) || 0, claimedAmt),
-      status: 'pending',
-      from: 'Billing',
-      dept: pt.dept || 'ophtho',
-      centre: pt.centre || CURRENT_USER?.centre || 'CHD',
-      mode: mode,
-      ins: insName || mode,
-      policy: policy || '',
-      date: new Date().toISOString(),
-      lastPaymentRef: ref,
-      lastPaymentAmt: amt
-    };
-    if (existing) {
-      Object.assign(existing, prPayload, { id: existing.id });
-      try { fbUpdate && fbUpdate('payRequests/' + existing.id, Object.assign({}, existing)); } catch (e) {}
-    } else {
-      const prIns = Object.assign({ id: 'PR' + Date.now() }, prPayload);
-      PAY_REQUESTS.push(prIns);
-      try { fbSet && fbSet('payRequests/' + prIns.id, prIns); } catch (e) {}
-    }
   }
   const pendingNonInsurance = (PAY_REQUESTS || []).filter(function (r) {
     return r.bmhId === bmhId && r.status === 'pending' && !isInsuranceLikeMode(r.mode || r.ins || '');
@@ -14085,6 +14175,24 @@ function addInventoryBarcodePrompt() {
   showToast('Barcode added to list ✓', 's');
 }
 window.addInventoryBarcodePrompt = addInventoryBarcodePrompt;
+function parseInventoryIndexedSelectionInput(raw, items) {
+  const src = String(raw || '').trim();
+  const list = Array.isArray(items) ? items.slice() : [];
+  if (!src || !list.length) return [];
+  const chosen = [];
+  src.split(',').map(function (token) { return token.trim(); }).filter(Boolean).forEach(function (token) {
+    if (/^\d+$/.test(token)) {
+      const idx = Number(token) - 1;
+      if (idx >= 0 && idx < list.length) chosen.push(list[idx]);
+      return;
+    }
+    const hit = list.find(function (item) {
+      return normalizeInventoryCompareText(item) === normalizeInventoryCompareText(token);
+    });
+    if (hit) chosen.push(hit);
+  });
+  return Array.from(new Set(chosen.map(function (item) { return normalizeInventoryTextValue(item); }).filter(Boolean)));
+}
 function removeInventoryBarcodePrompt() {
   const memory = loadInventoryOcrMemory();
   memory.barcodes = memory.barcodes || [];
@@ -14092,31 +14200,32 @@ function removeInventoryBarcodePrompt() {
   memory.hiddenProducts = Array.isArray(memory.hiddenProducts) ? memory.hiddenProducts : [];
   const combined = inventoryKnownProductNames();
   if (combined.length === 0) { showToast('No trade names or barcodes in list', 'w'); return; }
-  const barcodeList = combined.join('\n');
-  const toRemove = prompt('Enter trade name / barcode to remove from list:\n' + barcodeList, String(document.getElementById('bc-in')?.value || '').trim());
+  const barcodeList = combined.map(function (item, idx) { return (idx + 1) + '. ' + item; }).join('\n');
+  const defaultValue = String(document.getElementById('bc-in')?.value || '').trim();
+  const toRemove = prompt('Enter trade name / barcode numbers to remove (example: 1,2,5):\n' + barcodeList, defaultValue);
   if (!toRemove) return;
-  const wanted = normalizeInventoryCompareText(toRemove);
-  const existedInSuggestions = combined.some(function (item) {
-    return normalizeInventoryCompareText(item) === wanted;
-  });
+  const selectedItems = parseInventoryIndexedSelectionInput(toRemove, combined);
+  if (!selectedItems.length) { showToast('No matching trade names / barcodes selected', 'w'); return; }
   const beforeBarcodes = memory.barcodes.length;
   const beforeProducts = memory.products.length;
-  memory.barcodes = memory.barcodes.filter(function (item) {
-    return normalizeInventoryCompareText(item) !== wanted;
+  selectedItems.forEach(function (entry) {
+    const wanted = normalizeInventoryCompareText(entry);
+    memory.barcodes = memory.barcodes.filter(function (item) {
+      return normalizeInventoryCompareText(item) !== wanted;
+    });
+    memory.products = memory.products.filter(function (item) {
+      return normalizeInventoryCompareText(item) !== wanted;
+    });
+    if (!memory.hiddenProducts.some(function (item) { return normalizeInventoryCompareText(item) === wanted; })) {
+      memory.hiddenProducts.push(normalizeInventoryTextValue(entry));
+    }
   });
-  memory.products = memory.products.filter(function (item) {
-    return normalizeInventoryCompareText(item) !== wanted;
-  });
-  if (!memory.hiddenProducts.some(function (item) { return normalizeInventoryCompareText(item) === wanted; })) {
-    memory.hiddenProducts.push(normalizeInventoryTextValue(toRemove));
-  }
-  if (memory.barcodes.length === beforeBarcodes && memory.products.length === beforeProducts && !existedInSuggestions) {
-    showToast('Trade name / barcode not found', 'w');
-    return;
+  if (memory.barcodes.length === beforeBarcodes && memory.products.length === beforeProducts) {
+    showToast('Selected trade names / barcodes were already hidden', 'i');
   }
   saveInventoryOcrMemory();
   renderInventoryImportDatalists();
-  showToast('Trade name / barcode removed from list ✓', 's');
+  showToast(selectedItems.length + ' trade name / barcode entr' + (selectedItems.length === 1 ? 'y' : 'ies') + ' removed from list ✓', 's');
 }
 window.removeInventoryBarcodePrompt = removeInventoryBarcodePrompt;
 function addInventoryBrandPrompt() {
@@ -28218,9 +28327,9 @@ function getDoctorPrescriptionPrintMode(profile) {
 function getDoctorPrescriptionDesign(profile, centre) {
   const ctr = normalizeAppointmentCentreValue(centre || getEffectiveCentre?.() || CURRENT_USER?.centre || profile?.centre || 'CHD');
   const centreMode = String(ctr === 'RPR' ? (profile?.rxDesignRPR || '') : (profile?.rxDesignCHD || '')).trim().toLowerCase();
-  if (['current','option_a','option_b','signature_classic','clinical_blocks','ribbon_timeline','compact_bilingual'].includes(centreMode)) return centreMode;
+  if (['current','option_a','option_b','signature_classic','clinical_blocks','ribbon_timeline','compact_bilingual','editorial_columns','left_label_ledger','vertical_dx_column','mono_chart'].includes(centreMode)) return centreMode;
   const mode = String(profile?.rxDesign || '').trim().toLowerCase();
-  if (['current','option_a','option_b','signature_classic','clinical_blocks','ribbon_timeline','compact_bilingual'].includes(mode)) return mode;
+  if (['current','option_a','option_b','signature_classic','clinical_blocks','ribbon_timeline','compact_bilingual','editorial_columns','left_label_ledger','vertical_dx_column','mono_chart'].includes(mode)) return mode;
   return 'current';
 }
 
@@ -28585,7 +28694,11 @@ window.printUnifiedRx = function(deptId) {
     signature_classic: `body{background:#fcfcfb}.rx-item{padding:7px 10px;border:1px solid #dfe4ec;border-left:4px solid #c89a2b;border-radius:10px;margin-bottom:6px;background:#fff}.rx-item-name{font-size:14.5px;color:#111}.rx-item-instr{font-size:11px;color:#111;font-style:normal;font-weight:700}.advice-block{font-size:11px;color:#111;font-style:normal;font-weight:700;background:#faf7f0;border-radius:8px;border-left:4px solid #c89a2b}.sec-label{color:#111}`,
     clinical_blocks: `body{background:#fbfdff}.rx-list{gap:8px}.rx-item{padding:10px 12px;border:1px solid #d8e4ef;border-radius:12px;background:#eef5fb}.rx-item-name{font-size:14px;color:#111}.rx-item-details{margin-top:5px}.rx-item-instr{font-size:11px;color:#111;font-style:normal;font-weight:700;background:#fff;border:1px solid #dae5ef;border-radius:8px;padding:8px 10px;margin-top:8px}.advice-block{font-size:11px;color:#111;font-style:normal;font-weight:700;background:#f2f7fb;border-radius:10px;border-left:4px solid #173a67}`,
     ribbon_timeline: `body{background:#fffdfa}.sec-label{color:#111}.rx-list{position:relative;padding-left:12px}.rx-list:before{content:'';position:absolute;left:2px;top:2px;bottom:2px;width:3px;border-radius:999px;background:linear-gradient(180deg,#0f7b82,#ef8b67)}.rx-item{position:relative;padding:8px 10px 8px 14px;border:1px solid #dde7e7;border-radius:12px;background:#fff;margin-bottom:8px}.rx-item:before{content:'';position:absolute;left:-18px;top:18px;width:10px;height:10px;border-radius:50%;background:#fff;border:3px solid #0f7b82}.rx-item-name{font-size:14px;color:#111}.rx-item-instr{font-size:11px;color:#111;font-style:normal;font-weight:700;background:#eef7f7;border-radius:8px;padding:8px 10px;margin-top:8px;border-left:none}`,
-    compact_bilingual: `body{font-size:9.7px;padding:3.2mm 7mm 3mm;line-height:1.26}.pt-name{font-size:16px;color:#111}.pt-subline{margin-bottom:2px}.sec-divider{margin:3px 0 2px}.rx-item{padding:3px 0 4px}.rx-item-name{font-size:12.8px;color:#111}.rx-item-instr{font-size:10.8px;font-style:normal;font-weight:700;color:#111}.advice-block{font-size:10.6px;color:#111;font-style:normal;font-weight:700;line-height:1.3}.fu-box{font-size:10px;padding:4px 8px;color:#111}`
+    compact_bilingual: `body{font-size:9.7px;padding:3.2mm 7mm 3mm;line-height:1.26}.pt-name{font-size:16px;color:#111}.pt-subline{margin-bottom:2px}.sec-divider{margin:3px 0 2px}.rx-item{padding:3px 0 4px}.rx-item-name{font-size:12.8px;color:#111}.rx-item-instr{font-size:10.8px;font-style:normal;font-weight:700;color:#111}.advice-block{font-size:10.6px;color:#111;font-style:normal;font-weight:700;line-height:1.3}.fu-box{font-size:10px;padding:4px 8px;color:#111}`,
+    editorial_columns: `body{background:#fbfbfa}.sec-label{color:#111}.pt-name-bar{border-bottom:2px solid #111}.diag-text{color:#111}.advice-block{font-weight:700;background:#f4f4f3;border-left:4px solid #111;border-radius:10px}.fu-box{background:#f2f2f1;border-color:#bdbdb9;color:#111}`,
+    left_label_ledger: `body{background:#fff}.sec-label{color:#111}.pt-name-bar{border-bottom:2px solid #2f2f2f}.advice-block{font-weight:700;background:#f6f6f6;border-left:4px solid #2f2f2f;border-radius:10px}.fu-box{background:#f3f3f3;border-color:#cfcfcf;color:#111}`,
+    vertical_dx_column: `body{background:#fcfcfc}.sec-label{color:#111}.pt-name-bar{border-bottom:1px solid #999}.advice-block{font-weight:700;background:#f7f7f7;border-left:4px solid #555;border-radius:8px}.fu-box{background:#f5f5f5;border-color:#cfcfcf;color:#111}`,
+    mono_chart: `body{font-family:'Source Sans 3','Courier New',monospace;background:#fff}.pt-name-bar{border-bottom:2px double #222}.pt-name{letter-spacing:.08em}.sec-label{color:#111}.advice-block{font-family:'Source Sans 3','Courier New',monospace;background:#f5f5f5;border:1px solid #cfcfcf;border-left:4px solid #111;border-radius:0}.fu-box{border-radius:4px;background:#f2f2f2;border-color:#bdbdbd;color:#111}`
   }[rxDesign] || '';
   const renderRxTaperDesign = function (trade, taperRows) {
     if (!taperRows.length) return '';
@@ -28609,6 +28722,12 @@ window.printUnifiedRx = function(deptId) {
     }
     if (rxDesign === 'compact_bilingual') {
       return `<div class="design-taper compact"><div class="design-taper-title">Taper</div>${taperRows.map(function (tap, ti) {
+        const taperData = { freq: tap.freq, dur: tap.dur, dateFrom: tap.dateFrom, dateTo: tap.dateTo, eye: tap.eye, mealTiming: tap.mealTiming, activeTimes: tap.activeTimes || tap.times || [] };
+        return `<div class="design-taper-line"><strong>${ti + 1}.</strong> ${escapeHtmlConsent(buildRxTaperSummaryLine(taperData, rxPlainLang, fmtIN))}</div>`;
+      }).join('')}</div>`;
+    }
+    if (rxDesign === 'editorial_columns' || rxDesign === 'left_label_ledger' || rxDesign === 'vertical_dx_column' || rxDesign === 'mono_chart') {
+      return `<div class="design-taper ${rxDesign}"><div class="design-taper-title">Taper Plan</div>${taperRows.map(function (tap, ti) {
         const taperData = { freq: tap.freq, dur: tap.dur, dateFrom: tap.dateFrom, dateTo: tap.dateTo, eye: tap.eye, mealTiming: tap.mealTiming, activeTimes: tap.activeTimes || tap.times || [] };
         return `<div class="design-taper-line"><strong>${ti + 1}.</strong> ${escapeHtmlConsent(buildRxTaperSummaryLine(taperData, rxPlainLang, fmtIN))}</div>`;
       }).join('')}</div>`;
@@ -28650,6 +28769,43 @@ window.printUnifiedRx = function(deptId) {
             ${renderRxTaperDesign(trade, taperRows)}
           </div>`;
         }
+        if (rxDesign === 'editorial_columns') {
+          return `<div class="design-med editorial">
+            <div class="design-med-kicker">Rx ${i + 1}</div>
+            <div class="design-med-top"><div><div class="design-med-name">${escapeHtmlConsent(trade)}</div>${gen || form ? `<div class="design-med-sub">${[gen, form].filter(Boolean).map(escapeHtmlConsent).join(' · ')}</div>` : ''}</div><div class="design-med-right">${escapeHtmlConsent(meta || 'As prescribed')}</div></div>
+            <div class="design-med-columns"><div class="design-med-col-label">Directions</div><div class="design-med-instr">${escapeHtmlConsent(plainLine || '')}</div></div>
+            ${renderRxTaperDesign(trade, taperRows)}
+          </div>`;
+        }
+        if (rxDesign === 'left_label_ledger') {
+          return `<div class="design-med ledger">
+            <div class="design-med-ledger-label">#${i + 1}</div>
+            <div class="design-med-ledger-body">
+              <div class="design-med-top"><div><div class="design-med-name">${escapeHtmlConsent(trade)}</div>${gen || form ? `<div class="design-med-sub">${[gen, form].filter(Boolean).map(escapeHtmlConsent).join(' · ')}</div>` : ''}</div><div class="design-med-right">${escapeHtmlConsent(meta || 'As prescribed')}</div></div>
+              <div class="design-med-instr">${escapeHtmlConsent(plainLine || '')}</div>
+              ${renderRxTaperDesign(trade, taperRows)}
+            </div>
+          </div>`;
+        }
+        if (rxDesign === 'vertical_dx_column') {
+          return `<div class="design-med vertical">
+            <div class="design-med-serial">${i + 1}</div>
+            <div class="design-med-vertical-body">
+              <div class="design-med-top"><div><div class="design-med-name">${escapeHtmlConsent(trade)}</div>${gen || form ? `<div class="design-med-sub">${[gen, form].filter(Boolean).map(escapeHtmlConsent).join(' · ')}</div>` : ''}</div><div class="design-med-right">${escapeHtmlConsent(meta || 'As prescribed')}</div></div>
+              <div class="design-med-instr">${escapeHtmlConsent(plainLine || '')}</div>
+              ${renderRxTaperDesign(trade, taperRows)}
+            </div>
+          </div>`;
+        }
+        if (rxDesign === 'mono_chart') {
+          return `<div class="design-med mono">
+            <div class="design-med-mono-head"><span>ITEM ${String(i + 1).padStart(2, '0')}</span><span>${escapeHtmlConsent(meta || 'Schedule pending')}</span></div>
+            <div class="design-med-name">${escapeHtmlConsent(trade)}</div>
+            ${gen || form ? `<div class="design-med-sub">${[gen, form].filter(Boolean).map(escapeHtmlConsent).join(' / ')}</div>` : ''}
+            <div class="design-med-instr">${escapeHtmlConsent(plainLine || '')}</div>
+            ${renderRxTaperDesign(trade, taperRows)}
+          </div>`;
+        }
         return `<div class="design-med compact">
           <div class="design-med-top"><div class="design-med-name">${escapeHtmlConsent(trade)}</div><div class="design-med-right">${escapeHtmlConsent(meta || '')}</div></div>
           ${gen || form ? `<div class="design-med-sub">${[gen, form].filter(Boolean).map(escapeHtmlConsent).join(' · ')}</div>` : ''}
@@ -28666,6 +28822,10 @@ window.printUnifiedRx = function(deptId) {
     if (rxDesign === 'signature_classic') return `<div class="design-dx classic">${joined}</div>`;
     if (rxDesign === 'clinical_blocks') return `<div class="design-dx blocks"><div class="design-dx-title">Clinical Diagnosis</div><div class="design-dx-body">${joined}</div></div>`;
     if (rxDesign === 'ribbon_timeline') return `<div class="design-dx ribbon"><div class="design-dx-title">Diagnosis</div><div class="design-dx-body">${joined}</div></div>`;
+    if (rxDesign === 'editorial_columns') return `<div class="design-dx editorial"><div class="design-dx-title">Assessment</div><div class="design-dx-body">${joined}</div></div>`;
+    if (rxDesign === 'left_label_ledger') return `<div class="design-dx ledger"><div class="design-dx-ledger-label">Dx</div><div class="design-dx-body">${joined}</div></div>`;
+    if (rxDesign === 'vertical_dx_column') return `<div class="design-dx vertical"><div class="design-dx-rail">Diagnosis</div><div class="design-dx-body">${joined}</div></div>`;
+    if (rxDesign === 'mono_chart') return `<div class="design-dx mono"><div class="design-dx-title">DX LOG</div><div class="design-dx-body">${joined}</div></div>`;
     return `<div class="design-dx compact">${joined}</div>`;
   };
   const renderAdviceFollowByDesign = function () {
@@ -28775,8 +28935,22 @@ tr:nth-child(even) td{background:#fafafa}
 .design-dx.ribbon{background:#f3f5f7;color:#222;border:1px solid #d8dde3}
 .design-dx.ribbon .design-dx-title{color:#6b7280}
 .design-dx.ribbon .design-dx-body{font-size:20px;font-weight:800;line-height:1.3;color:#1f2937}
+.design-dx.editorial,.design-dx.ledger,.design-dx.vertical,.design-dx.mono{border:1px solid #d5d5d5;border-radius:16px;background:#fff;padding:12px 14px}
+.design-dx.editorial{background:linear-gradient(90deg,#f2f2f0 0 24%,#fff 24% 100%);padding-left:18px}
+.design-dx.editorial .design-dx-title{color:#444}
+.design-dx.editorial .design-dx-body{font-size:19px;font-weight:800;line-height:1.35;color:#111}
+.design-dx.ledger{display:grid;grid-template-columns:68px 1fr;padding:0;overflow:hidden}
+.design-dx-ledger-label{background:#2f2f2f;color:#fff;font-size:11px;font-weight:900;letter-spacing:.18em;text-transform:uppercase;display:flex;align-items:center;justify-content:center}
+.design-dx.ledger .design-dx-body{padding:14px 16px;font-size:18px;font-weight:800;line-height:1.35;color:#111}
+.design-dx.vertical{display:grid;grid-template-columns:28px 1fr;gap:10px;padding:12px}
+.design-dx-rail{writing-mode:vertical-rl;transform:rotate(180deg);font-size:9px;letter-spacing:.24em;text-transform:uppercase;color:#666;font-weight:900;text-align:center}
+.design-dx.vertical .design-dx-body{font-size:13px;font-weight:800;line-height:1.5;color:#111}
+.design-dx.mono{border-style:dashed;border-radius:10px;background:#fbfbfb}
+.design-dx.mono .design-dx-title{font-family:'Source Sans 3','Courier New',monospace;color:#111}
+.design-dx.mono .design-dx-body{font-family:'Source Sans 3','Courier New',monospace;font-size:16px;font-weight:700;line-height:1.45;color:#111}
 .design-dx.compact{font-size:16px;font-weight:800;line-height:1.4;color:#153d66;background:#f6f9fc}
 .design-rx{margin-bottom:6px}
+.design-rx.design-editorial_columns{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .design-med{margin-bottom:10px}
 .design-med:last-child{margin-bottom:0}
 .design-med-top{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}
@@ -28801,6 +28975,30 @@ tr:nth-child(even) td{background:#fafafa}
 .design-med.compact .design-med-name{font-size:16px;font-weight:700}
 .design-med.compact .design-med-right{font-size:11px;font-weight:800;color:#445467}
 .design-med.compact .design-med-instr{margin-top:7px;font-size:13px;font-weight:700;color:#24384d}
+.design-med.editorial{border:1px solid #d8d8d4;border-radius:18px;padding:16px;background:#fff;break-inside:avoid}
+.design-med.editorial .design-med-kicker{font-size:10px;font-weight:900;letter-spacing:.2em;text-transform:uppercase;color:#666;margin-bottom:10px}
+.design-med.editorial .design-med-name{font-size:21px;color:#111}
+.design-med.editorial .design-med-right{font-size:11px;font-weight:900;color:#333;text-align:right;min-width:150px}
+.design-med-columns{display:grid;grid-template-columns:70px 1fr;gap:12px;align-items:start;margin-top:11px}
+.design-med-col-label{font-size:9px;font-weight:900;letter-spacing:.18em;text-transform:uppercase;color:#666;padding-top:3px}
+.design-med.editorial .design-med-instr{margin-top:0;padding:0;border:none;background:none;font-size:14px;font-weight:700;color:#111}
+.design-med.ledger{display:grid;grid-template-columns:62px 1fr;border:1px solid #d9d9d9;border-radius:16px;overflow:hidden;background:#fff}
+.design-med-ledger-label{background:#2f2f2f;color:#fff;font-size:13px;font-weight:900;display:flex;align-items:center;justify-content:center}
+.design-med-ledger-body{padding:14px 15px}
+.design-med.ledger .design-med-name{font-size:20px;color:#111}
+.design-med.ledger .design-med-right{font-size:11px;font-weight:800;color:#333;text-align:right;min-width:160px}
+.design-med.ledger .design-med-instr{margin-top:9px;border-left:none;padding-left:0;font-size:14px;font-weight:700;color:#111}
+.design-med.vertical{display:grid;grid-template-columns:30px 1fr;gap:10px;border-bottom:1px solid #d7d7d7;padding:0 0 10px 0}
+.design-med.vertical .design-med-serial{writing-mode:vertical-rl;transform:rotate(180deg);font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:#666;font-weight:900;text-align:center;padding-top:4px}
+.design-med-vertical-body{border:1px solid #dadada;border-radius:14px;padding:12px 14px;background:#fff}
+.design-med.vertical .design-med-name{font-size:19px;color:#111}
+.design-med.vertical .design-med-right{font-size:10.5px;font-weight:800;color:#444;text-align:right;min-width:150px}
+.design-med.vertical .design-med-instr{margin-top:8px;border-left:none;padding-left:0;font-size:13px;color:#111;background:#f7f7f7;border-radius:10px;padding:10px 12px}
+.design-med.mono{border:1px dashed #8f8f8f;border-radius:8px;padding:12px;background:#fff;font-family:'Source Sans 3','Courier New',monospace}
+.design-med-mono-head{display:flex;justify-content:space-between;gap:12px;font-size:10px;font-weight:900;letter-spacing:.16em;text-transform:uppercase;color:#333;border-bottom:1px solid #c8c8c8;padding-bottom:5px;margin-bottom:8px}
+.design-med.mono .design-med-name{font-family:'Source Sans 3','Courier New',monospace;font-size:18px;letter-spacing:.04em;color:#111}
+.design-med.mono .design-med-sub{font-family:'Source Sans 3','Courier New',monospace;font-size:10px;color:#555;text-transform:uppercase}
+.design-med.mono .design-med-instr{margin-top:8px;border-left:none;padding:0;font-family:'Source Sans 3','Courier New',monospace;font-size:13px;color:#111}
 .design-taper{margin-top:10px}
 .design-taper-title{font-size:11px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px}
 .design-taper.classic{border-radius:14px;background:linear-gradient(180deg,#fff8e9 0%, #fff 100%);border:1px solid #eed8a3;padding:12px 14px}
@@ -28818,8 +29016,11 @@ tr:nth-child(even) td{background:#fafafa}
 .design-ribbon-dot{width:10px;height:10px;border-radius:50%;background:#ef8b67;margin-top:5px;flex-shrink:0}
 .design-taper.compact{border-radius:10px;background:#fff6df;border:1px solid #ecd7a0;padding:8px 10px}
 .design-taper.compact .design-taper-title{color:#73540e;margin-bottom:5px}
+.design-taper.editorial_columns,.design-taper.left_label_ledger,.design-taper.vertical_dx_column,.design-taper.mono_chart{border-radius:10px;background:#f6f6f6;border:1px solid #d2d2d2;padding:9px 10px}
+.design-taper.editorial_columns .design-taper-title,.design-taper.left_label_ledger .design-taper-title,.design-taper.vertical_dx_column .design-taper-title,.design-taper.mono_chart .design-taper-title{color:#333}
 .design-bottom{display:grid;grid-template-columns:1.2fr .8fr;gap:14px;margin-top:10px}
 .design-bottom.compact{grid-template-columns:1fr}
+.design-bottom.vertical_dx_column{grid-template-columns:1fr 240px}
 .design-side-card{border:1px solid #d8e0e8;border-radius:16px;padding:14px;background:#fff}
 .design-side-title{font-size:12px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;color:#14345e;margin-bottom:8px}
 .design-side-body{font-size:11px;line-height:1.7;color:#344054;font-weight:700}
@@ -28828,6 +29029,7 @@ tr:nth-child(even) td{background:#fafafa}
 .design-follow.clinical_blocks{background:#f4f6f8;border:1px solid #d8dde3;color:#374151}
 .design-follow.ribbon_timeline{background:#f8f7f3;border:1px solid #ddd7c8;color:#4b5563}
 .design-follow.compact_bilingual{background:#f4f6f8;border:1px solid #d8dde3;color:#374151}
+.design-follow.editorial_columns,.design-follow.left_label_ledger,.design-follow.vertical_dx_column,.design-follow.mono_chart{background:#f3f3f3;border:1px solid #d0d0d0;color:#111}
 ${typographyCss}
 ${designCss}
 </style></head><body>
@@ -33150,7 +33352,11 @@ const RX_DESIGN_OPTIONS = [
   { key: 'signature_classic', label: 'Signature Classic' },
   { key: 'clinical_blocks', label: 'Clinical Blocks' },
   { key: 'ribbon_timeline', label: 'Ribbon Timeline' },
-  { key: 'compact_bilingual', label: 'Compact Bilingual' }
+  { key: 'compact_bilingual', label: 'Compact Bilingual' },
+  { key: 'editorial_columns', label: 'Editorial Columns' },
+  { key: 'left_label_ledger', label: 'Left Label Ledger' },
+  { key: 'vertical_dx_column', label: 'Vertical Diagnosis Rail' },
+  { key: 'mono_chart', label: 'Mono Chart' }
 ];
 const RX_TYPOGRAPHY_FONT_OPTIONS = [
   { key: 'classic', label: 'Classic Serif', heading: "'Playfair Display','Georgia',serif", body: "'Lato',sans-serif" },
@@ -33336,6 +33542,21 @@ function _renderDesignThumbnail(key) {
       <div style="font-size:7px;font-weight:700;color:#24384d;line-height:1.25">Take twice daily after meals</div>
       <div style="font-size:7px;font-weight:700;color:#24384d;line-height:1.25">Vitamin D3 · Once weekly</div>`;
   }
+  if (key === 'editorial_columns') {
+    return `<div style="border-bottom:2px solid #111;padding-bottom:2px;margin-bottom:3px"><span style="font-size:10px;font-weight:700;color:#111">Patient Name</span></div>
+      <div style="border:1px solid #d8d8d4;border-radius:8px;padding:4px;background:#fff"><div style="font-size:7px;font-weight:900;letter-spacing:.16em;text-transform:uppercase;color:#666;margin-bottom:3px">Rx 01</div><div style="font-size:8px;font-weight:700;color:#111">Metformin 500</div><div style="display:grid;grid-template-columns:28px 1fr;gap:5px;margin-top:3px"><div style="font-size:6px;font-weight:900;letter-spacing:.15em;text-transform:uppercase;color:#666">DIR</div><div style="font-size:7px;font-weight:700;color:#111">Take twice daily</div></div></div>`;
+  }
+  if (key === 'left_label_ledger') {
+    return `<div style="border-bottom:2px solid #2f2f2f;padding-bottom:2px;margin-bottom:3px"><span style="font-size:10px;font-weight:700;color:#111">Patient Name</span></div>
+      <div style="display:grid;grid-template-columns:26px 1fr;border:1px solid #d9d9d9;border-radius:8px;overflow:hidden"><div style="background:#2f2f2f;color:#fff;font-size:8px;font-weight:900;display:flex;align-items:center;justify-content:center">#1</div><div style="padding:4px;background:#fff"><div style="font-size:8px;font-weight:700;color:#111">Metformin 500</div><div style="font-size:7px;font-weight:700;color:#111;margin-top:2px">Take twice daily</div></div></div>`;
+  }
+  if (key === 'vertical_dx_column') {
+    return `<div style="display:grid;grid-template-columns:16px 1fr;gap:6px;border:1px solid #d9d9d9;border-radius:8px;padding:4px;background:#fff;margin-bottom:3px"><div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:6px;font-weight:900;letter-spacing:.18em;text-transform:uppercase;color:#666;text-align:center">Diagnosis</div><div style="font-size:7px;font-weight:700;color:#111;line-height:1.35">Dry eye syndrome · Chronic allergy</div></div>
+      <div style="display:grid;grid-template-columns:16px 1fr;gap:6px;border:1px solid #d9d9d9;border-radius:8px;padding:4px;background:#fff"><div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:6px;font-weight:900;letter-spacing:.18em;text-transform:uppercase;color:#666;text-align:center">Rx 1</div><div><div style="font-size:8px;font-weight:700;color:#111">Carboxymethylcellulose</div><div style="font-size:7px;font-weight:700;color:#111;margin-top:2px;background:#f7f7f7;border-radius:4px;padding:3px">Use four times daily</div></div></div>`;
+  }
+  if (key === 'mono_chart') {
+    return `<div style="border:1px dashed #8f8f8f;padding:4px;background:#fff;font-family:'Courier New',monospace"><div style="display:flex;justify-content:space-between;font-size:6px;font-weight:900;letter-spacing:.15em;text-transform:uppercase;color:#333;border-bottom:1px solid #c8c8c8;padding-bottom:2px;margin-bottom:3px"><span>Item 01</span><span>Twice daily</span></div><div style="font-size:8px;font-weight:700;color:#111">Metformin 500</div><div style="font-size:7px;font-weight:700;color:#111;margin-top:2px">Take one tablet after breakfast and dinner.</div></div>`;
+  }
   return '';
 }
 
@@ -33487,7 +33708,11 @@ function generateRxDesignSampleHtml(designKey, profile, doctorName, centre) {
     signature_classic: `body{background:#fcfcfb}.rx-item{padding:7px 10px;border:1px solid #dfe4ec;border-left:4px solid #c89a2b;border-radius:10px;margin-bottom:6px;background:#fff}.rx-item-name{font-size:14.5px}.rx-item-instr{font-size:11px;color:#2c3440;font-style:normal;font-weight:700}.advice-block{font-size:11px;font-style:normal;font-weight:700;background:#faf7f0;border-radius:8px;border-left:4px solid #c89a2b}.sec-label{color:#14345e}`,
     clinical_blocks: `body{background:#fbfdff}.rx-list{gap:8px}.rx-item{padding:10px 12px;border:1px solid #d8e4ef;border-radius:12px;background:#eef5fb}.rx-item-name{font-size:14px}.rx-item-details{margin-top:5px}.rx-item-instr{font-size:11px;color:#17324d;font-style:normal;font-weight:700;background:#fff;border:1px solid #dae5ef;border-radius:8px;padding:8px 10px;margin-top:8px}.advice-block{font-size:11px;font-style:normal;font-weight:700;background:#f2f7fb;border-radius:10px;border-left:4px solid #173a67}`,
     ribbon_timeline: `body{background:#fffdfa}.sec-label{color:#0f7b82}.rx-list{position:relative;padding-left:12px}.rx-list:before{content:'';position:absolute;left:2px;top:2px;bottom:2px;width:3px;border-radius:999px;background:linear-gradient(180deg,#0f7b82,#ef8b67)}.rx-item{position:relative;padding:8px 10px 8px 14px;border:1px solid #dde7e7;border-radius:12px;background:#fff;margin-bottom:8px}.rx-item:before{content:'';position:absolute;left:-18px;top:18px;width:10px;height:10px;border-radius:50%;background:#fff;border:3px solid #0f7b82}.rx-item-name{font-size:14px}.rx-item-instr{font-size:11px;font-style:normal;font-weight:700;background:#eef7f7;border-radius:8px;padding:8px 10px;margin-top:8px;border-left:none}`,
-    compact_bilingual: `body{font-size:9.7px;padding:3.2mm 7mm 3mm;line-height:1.26}.pt-name{font-size:16px}.pt-subline{margin-bottom:2px}.sec-divider{margin:3px 0 2px}.rx-item{padding:3px 0 4px}.rx-item-name{font-size:12.8px}.rx-item-instr{font-size:10.8px;font-style:normal;font-weight:700;color:#24384d}.advice-block{font-size:10.6px;font-style:normal;font-weight:700;line-height:1.3}.fu-box{font-size:10px;padding:4px 8px}`
+    compact_bilingual: `body{font-size:9.7px;padding:3.2mm 7mm 3mm;line-height:1.26}.pt-name{font-size:16px}.pt-subline{margin-bottom:2px}.sec-divider{margin:3px 0 2px}.rx-item{padding:3px 0 4px}.rx-item-name{font-size:12.8px}.rx-item-instr{font-size:10.8px;font-style:normal;font-weight:700;color:#24384d}.advice-block{font-size:10.6px;font-style:normal;font-weight:700;line-height:1.3}.fu-box{font-size:10px;padding:4px 8px}`,
+    editorial_columns: `body{background:#fbfbfa}.pt-name-bar{border-bottom:2px solid #111}.sec-label{color:#111}.fu-box{background:#f2f2f1;border-color:#bdbdb9;color:#111}`,
+    left_label_ledger: `body{background:#fff}.pt-name-bar{border-bottom:2px solid #2f2f2f}.sec-label{color:#111}.fu-box{background:#f3f3f3;border-color:#cfcfcf;color:#111}`,
+    vertical_dx_column: `body{background:#fcfcfc}.pt-name-bar{border-bottom:1px solid #999}.sec-label{color:#111}.fu-box{background:#f5f5f5;border-color:#cfcfcf;color:#111}`,
+    mono_chart: `body{font-family:'Source Sans 3','Courier New',monospace;background:#fff}.pt-name-bar{border-bottom:2px double #222}.pt-name{letter-spacing:.08em}.sec-label{color:#111}.fu-box{border-radius:4px;background:#f2f2f2;border-color:#bdbdbd;color:#111}`
   };
   const extraCss = designCssMap[designKey] || '';
   const headerSrc = (typeof resolvePrintHeaderSrc === 'function') ? resolvePrintHeaderSrc() : '';
@@ -33497,6 +33722,74 @@ function generateRxDesignSampleHtml(designKey, profile, doctorName, centre) {
   const drDegrees = String(profile.degrees || 'MBBS, MD').trim();
   const drReg = String(profile.reg || 'PMC-XXXXX').trim();
   const drSpec = String(profile.dept || 'Specialist').trim();
+  const previewDiagnosisHtml = (function () {
+    if (designKey === 'editorial_columns') return `<div class="design-dx editorial"><div class="design-dx-title">Assessment</div><div class="design-dx-body">Sample Diagnosis · Type 2</div></div>`;
+    if (designKey === 'left_label_ledger') return `<div class="design-dx ledger"><div class="design-dx-ledger-label">Dx</div><div class="design-dx-body">Sample Diagnosis · Type 2</div></div>`;
+    if (designKey === 'vertical_dx_column') return `<div class="design-dx vertical"><div class="design-dx-rail">Diagnosis</div><div class="design-dx-body">Dry eye syndrome · Chronic allergy · Review after 2 weeks</div></div>`;
+    if (designKey === 'mono_chart') return `<div class="design-dx mono"><div class="design-dx-title">DX LOG</div><div class="design-dx-body">Sample Diagnosis · Type 2</div></div>`;
+    return `<div class="diag-rule-top"></div><div class="diag-text">Sample Diagnosis · Type 2</div><div class="diag-rule-bot"></div>`;
+  })();
+  const previewRxHtml = (function () {
+    if (designKey === 'editorial_columns') {
+      return `<div class="design-rx design-editorial_columns">
+        <div class="design-med editorial"><div class="design-med-kicker">Rx 01</div><div class="design-med-top"><div><div class="design-med-name">Metformin 500</div><div class="design-med-sub">Metformin HCl · Tablet</div></div><div class="design-med-right">Twice daily · 1 month</div></div><div class="design-med-columns"><div class="design-med-col-label">Directions</div><div class="design-med-instr">Take one tablet twice a day for 1 month.</div></div></div>
+        <div class="design-med editorial"><div class="design-med-kicker">Rx 02</div><div class="design-med-top"><div><div class="design-med-name">Vitamin D3</div><div class="design-med-sub">Cholecalciferol 60K · Capsule</div></div><div class="design-med-right">Once weekly · 3 months</div></div><div class="design-med-columns"><div class="design-med-col-label">Directions</div><div class="design-med-instr">Take one capsule once a week for 3 months.</div></div></div>
+      </div>`;
+    }
+    if (designKey === 'left_label_ledger') {
+      return `<div class="design-rx">
+        <div class="design-med ledger"><div class="design-med-ledger-label">#1</div><div class="design-med-ledger-body"><div class="design-med-top"><div><div class="design-med-name">Metformin 500</div><div class="design-med-sub">Metformin HCl · Tablet</div></div><div class="design-med-right">Twice daily · 1 month</div></div><div class="design-med-instr">Take one tablet twice a day for 1 month.</div></div></div>
+        <div class="design-med ledger"><div class="design-med-ledger-label">#2</div><div class="design-med-ledger-body"><div class="design-med-top"><div><div class="design-med-name">Vitamin D3</div><div class="design-med-sub">Cholecalciferol 60K · Capsule</div></div><div class="design-med-right">Once weekly · 3 months</div></div><div class="design-med-instr">Take one capsule once a week for 3 months.</div></div></div>
+      </div>`;
+    }
+    if (designKey === 'vertical_dx_column') {
+      return `<div class="design-rx">
+        <div class="design-med vertical"><div class="design-med-serial">Rx 1</div><div class="design-med-vertical-body"><div class="design-med-top"><div><div class="design-med-name">Carboxymethylcellulose</div><div class="design-med-sub">Lubricant eye drops</div></div><div class="design-med-right">Four times daily · 2 weeks</div></div><div class="design-med-instr">Instill one drop in both eyes four times daily.</div></div></div>
+        <div class="design-med vertical"><div class="design-med-serial">Rx 2</div><div class="design-med-vertical-body"><div class="design-med-top"><div><div class="design-med-name">Olopatadine</div><div class="design-med-sub">Anti-allergic eye drops</div></div><div class="design-med-right">Twice daily · 2 weeks</div></div><div class="design-med-instr">Instill one drop twice daily and avoid rubbing the eyes.</div></div></div>
+      </div>`;
+    }
+    if (designKey === 'mono_chart') {
+      return `<div class="design-rx">
+        <div class="design-med mono"><div class="design-med-mono-head"><span>Item 01</span><span>Twice daily / 1 month</span></div><div class="design-med-name">METFORMIN 500</div><div class="design-med-sub">METFORMIN HCL / TABLET</div><div class="design-med-instr">Take one tablet after breakfast and dinner.</div></div>
+        <div class="design-med mono"><div class="design-med-mono-head"><span>Item 02</span><span>Once weekly / 3 months</span></div><div class="design-med-name">VITAMIN D3</div><div class="design-med-sub">CHOLECALCIFEROL / CAPSULE</div><div class="design-med-instr">Take one capsule every Sunday morning.</div></div>
+      </div>`;
+    }
+    return `<div class="rx-list">
+      <div class="rx-item">
+        <div class="rx-item-num">1</div>
+        <span class="rx-item-name">Metformin 500</span>
+        <span class="rx-item-gen">Metformin HCl · Tablet</span>
+        <div class="rx-item-details">
+          <div class="rx-detail-item"><span class="rx-detail-dot"></span>Twice daily</div>
+          <div class="rx-detail-item"><span class="rx-detail-dot"></span>Morning & Night</div>
+          <div class="rx-detail-item"><span class="rx-detail-dot"></span>1 month</div>
+        </div>
+        <div class="rx-item-instr">Take one tablet twice a day for 1 month.</div>
+        <div class="taper-card"><div class="taper-card-hdr">Taper Plan — Metformin 500</div>
+          <div class="taper-steps-row">
+            <div class="taper-step"><div class="taper-step-period">Step 1</div><div class="taper-step-dose">Once daily</div><div class="taper-step-timing">15 days</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="rx-item">
+        <div class="rx-item-num">2</div>
+        <span class="rx-item-name">Vitamin D3</span>
+        <span class="rx-item-gen">Cholecalciferol 60K · Capsule</span>
+        <div class="rx-item-details">
+          <div class="rx-detail-item"><span class="rx-detail-dot"></span>Once weekly</div>
+          <div class="rx-detail-item"><span class="rx-detail-dot"></span>Sunday morning</div>
+          <div class="rx-detail-item"><span class="rx-detail-dot"></span>3 months</div>
+        </div>
+        <div class="rx-item-instr">Take one capsule once a week for 3 months.</div>
+      </div>
+    </div>`;
+  })();
+  const previewAdviceHtml = (function () {
+    if (['editorial_columns','left_label_ledger','vertical_dx_column','mono_chart'].includes(designKey)) {
+      return `<div class="design-bottom ${designKey}"><div class="design-side-card"><div class="design-side-title">Instructions</div><div class="design-side-body">Take after meals<br>Monitor blood sugar weekly</div></div><div class="design-follow ${designKey}">Follow-up: 3 months</div></div>`;
+    }
+    return `<div class="advice-block">Take after meals · Monitor blood sugar weekly</div><div class="fu-box">Follow-up: 3 months</div>`;
+  })();
 
   return `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>
@@ -33540,6 +33833,56 @@ body{font-family:'Lato',sans-serif;font-size:10px;color:#1a1a1a;background:#fff;
 .dr-deg{font-size:9.5px;color:#555;margin-top:2px;font-style:italic}
 .dr-spec{font-size:10px;font-weight:700;color:#333;margin-top:2px}
 .dr-reg{font-size:8.5px;color:#888;margin-top:1px}
+.design-dx.editorial,.design-dx.ledger,.design-dx.vertical,.design-dx.mono{border:1px solid #d5d5d5;border-radius:16px;background:#fff;padding:12px 14px}
+.design-dx.editorial{background:linear-gradient(90deg,#f2f2f0 0 24%,#fff 24% 100%);padding-left:18px}
+.design-dx.editorial .design-dx-title{font-size:10px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;color:#444;margin-bottom:6px}
+.design-dx.editorial .design-dx-body{font-size:19px;font-weight:800;line-height:1.35;color:#111}
+.design-dx.ledger{display:grid;grid-template-columns:68px 1fr;padding:0;overflow:hidden}
+.design-dx-ledger-label{background:#2f2f2f;color:#fff;font-size:11px;font-weight:900;letter-spacing:.18em;text-transform:uppercase;display:flex;align-items:center;justify-content:center}
+.design-dx.ledger .design-dx-body{padding:14px 16px;font-size:18px;font-weight:800;line-height:1.35;color:#111}
+.design-dx.vertical{display:grid;grid-template-columns:28px 1fr;gap:10px;padding:12px}
+.design-dx-rail{writing-mode:vertical-rl;transform:rotate(180deg);font-size:9px;letter-spacing:.24em;text-transform:uppercase;color:#666;font-weight:900;text-align:center}
+.design-dx.vertical .design-dx-body{font-size:13px;font-weight:800;line-height:1.5;color:#111}
+.design-dx.mono{border-style:dashed;border-radius:10px;background:#fbfbfb}
+.design-dx.mono .design-dx-title{font-size:10px;font-weight:900;letter-spacing:.12em;text-transform:uppercase;color:#111;margin-bottom:6px;font-family:'Source Sans 3','Courier New',monospace}
+.design-dx.mono .design-dx-body{font-family:'Source Sans 3','Courier New',monospace;font-size:16px;font-weight:700;line-height:1.45;color:#111}
+.design-rx.design-editorial_columns{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.design-med{margin-bottom:10px}
+.design-med-top{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}
+.design-med-name{font-family:'Playfair Display','Georgia',serif;color:#111}
+.design-med-sub{font-size:9.8px;color:#667085;line-height:1.45;margin-top:3px}
+.design-med-instr{line-height:1.45}
+.design-med.editorial{border:1px solid #d8d8d4;border-radius:18px;padding:16px;background:#fff}
+.design-med.editorial .design-med-kicker{font-size:10px;font-weight:900;letter-spacing:.2em;text-transform:uppercase;color:#666;margin-bottom:10px}
+.design-med.editorial .design-med-name{font-size:21px}
+.design-med.editorial .design-med-right{font-size:11px;font-weight:900;color:#333;text-align:right;min-width:150px}
+.design-med-columns{display:grid;grid-template-columns:70px 1fr;gap:12px;align-items:start;margin-top:11px}
+.design-med-col-label{font-size:9px;font-weight:900;letter-spacing:.18em;text-transform:uppercase;color:#666;padding-top:3px}
+.design-med.editorial .design-med-instr{margin-top:0;padding:0;border:none;background:none;font-size:14px;font-weight:700;color:#111}
+.design-med.ledger{display:grid;grid-template-columns:62px 1fr;border:1px solid #d9d9d9;border-radius:16px;overflow:hidden;background:#fff}
+.design-med-ledger-label{background:#2f2f2f;color:#fff;font-size:13px;font-weight:900;display:flex;align-items:center;justify-content:center}
+.design-med-ledger-body{padding:14px 15px}
+.design-med.ledger .design-med-name{font-size:20px}
+.design-med.ledger .design-med-right{font-size:11px;font-weight:800;color:#333;text-align:right;min-width:160px}
+.design-med.ledger .design-med-instr{margin-top:9px;border-left:none;padding-left:0;font-size:14px;font-weight:700;color:#111}
+.design-med.vertical{display:grid;grid-template-columns:30px 1fr;gap:10px;padding:0 0 10px 0}
+.design-med.vertical .design-med-serial{writing-mode:vertical-rl;transform:rotate(180deg);font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:#666;font-weight:900;text-align:center;padding-top:4px}
+.design-med-vertical-body{border:1px solid #dadada;border-radius:14px;padding:12px 14px;background:#fff}
+.design-med.vertical .design-med-name{font-size:19px}
+.design-med.vertical .design-med-right{font-size:10.5px;font-weight:800;color:#444;text-align:right;min-width:150px}
+.design-med.vertical .design-med-instr{margin-top:8px;border-left:none;font-size:13px;color:#111;background:#f7f7f7;border-radius:10px;padding:10px 12px}
+.design-med.mono{border:1px dashed #8f8f8f;border-radius:8px;padding:12px;background:#fff;font-family:'Source Sans 3','Courier New',monospace}
+.design-med-mono-head{display:flex;justify-content:space-between;gap:12px;font-size:10px;font-weight:900;letter-spacing:.16em;text-transform:uppercase;color:#333;border-bottom:1px solid #c8c8c8;padding-bottom:5px;margin-bottom:8px}
+.design-med.mono .design-med-name{font-family:'Source Sans 3','Courier New',monospace;font-size:18px;letter-spacing:.04em}
+.design-med.mono .design-med-sub{font-family:'Source Sans 3','Courier New',monospace;font-size:10px;color:#555;text-transform:uppercase}
+.design-med.mono .design-med-instr{margin-top:8px;border-left:none;padding:0;font-family:'Source Sans 3','Courier New',monospace;font-size:13px;color:#111}
+.design-bottom{display:grid;grid-template-columns:1.2fr .8fr;gap:14px;margin-top:10px}
+.design-bottom.vertical_dx_column{grid-template-columns:1fr 240px}
+.design-side-card{border:1px solid #d8e0e8;border-radius:16px;padding:14px;background:#fff}
+.design-side-title{font-size:12px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;color:#111;margin-bottom:8px}
+.design-side-body{font-size:11px;line-height:1.7;color:#344054;font-weight:700}
+.design-follow{align-self:start;border-radius:16px;padding:14px;font-size:15px;font-weight:800;line-height:1.5}
+.design-follow.editorial_columns,.design-follow.left_label_ledger,.design-follow.vertical_dx_column,.design-follow.mono_chart{background:#f3f3f3;border:1px solid #d0d0d0;color:#111}
 ${typographyCss}
 ${extraCss}
 </style></head><body>
@@ -33550,39 +33893,9 @@ ${headerSrc ? `<img class="lh-img" src="${headerSrc}" alt="letterhead">` : ''}
 </div>
 <div class="pt-subline">BMSH-SAMPLE · Sample preview · +91 ••••• •••••</div>
 <div class="sec-divider"><span class="sec-label">Diagnosis</span></div>
-<div class="diag-rule-top"></div>
-<div class="diag-text">Sample Diagnosis · Type 2</div>
-<div class="diag-rule-bot"></div>
+${previewDiagnosisHtml}
 <div class="sec-divider"><span class="sec-label">Rx — Medications</span></div>
-<div class="rx-list">
-  <div class="rx-item">
-    <div class="rx-item-num">1</div>
-    <span class="rx-item-name">Metformin 500</span>
-    <span class="rx-item-gen">Metformin HCl · Tablet</span>
-    <div class="rx-item-details">
-      <div class="rx-detail-item"><span class="rx-detail-dot"></span>Twice daily</div>
-      <div class="rx-detail-item"><span class="rx-detail-dot"></span>Morning & Night</div>
-      <div class="rx-detail-item"><span class="rx-detail-dot"></span>1 month</div>
-    </div>
-    <div class="rx-item-instr">Take one tablet twice a day for 1 month.</div>
-    <div class="taper-card"><div class="taper-card-hdr">Taper Plan — Metformin 500</div>
-      <div class="taper-steps-row">
-        <div class="taper-step"><div class="taper-step-period">Step 1</div><div class="taper-step-dose">Once daily</div><div class="taper-step-timing">15 days</div></div>
-      </div>
-    </div>
-  </div>
-  <div class="rx-item">
-    <div class="rx-item-num">2</div>
-    <span class="rx-item-name">Vitamin D3</span>
-    <span class="rx-item-gen">Cholecalciferol 60K · Capsule</span>
-    <div class="rx-item-details">
-      <div class="rx-detail-item"><span class="rx-detail-dot"></span>Once weekly</div>
-      <div class="rx-detail-item"><span class="rx-detail-dot"></span>Sunday morning</div>
-      <div class="rx-detail-item"><span class="rx-detail-dot"></span>3 months</div>
-    </div>
-    <div class="rx-item-instr">Take one capsule once a week for 3 months.</div>
-  </div>
-</div>
+${previewRxHtml}
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px">
   <div style="border:1px solid #d9e2ec;border-radius:8px;padding:8px;background:#f8fbff">
     <div class="section-pill" style="margin-bottom:6px;color:#173a67">Chief Complaints</div>
@@ -33594,8 +33907,7 @@ ${headerSrc ? `<img class="lh-img" src="${headerSrc}" alt="letterhead">` : ''}
   </div>
 </div>
 <div class="sec-divider"><span class="sec-label">Instructions</span></div>
-<div class="advice-block">Take after meals · Monitor blood sugar weekly</div>
-<div class="fu-box">Follow-up: 3 months</div>
+${previewAdviceHtml}
 <div class="sig-row">
   <div></div>
   <div style="text-align:right">

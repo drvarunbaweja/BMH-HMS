@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BMH Specialty Poster Concepts</title>
+  <style>
+    :root{
+      --paper:#f6f0e7;
+      --ink:#16202b;
+      --muted:#5f6d7c;
+      --card:#fffdf8;
+      --line:rgba(18,32,49,.12);
+      --shadow:0 28px 60px rgba(17,24,39,.14);
+      --radius:34px;
+      --serif:"Iowan Old Style","Palatino Linotype","Book Antiqua",Palatino,serif;
+      --sans:"Avenir Next","Segoe UI","Trebuchet MS",sans-serif;
+      --display:"Baskerville","Times New Roman",serif;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      color:var(--ink);
+      font-family:var(--sans);
+      background:
+        radial-gradient(circle at 12% 8%, rgba(255,255,255,.8), transparent 24%),
+        radial-gradient(circle at 88% 0%, rgba(255,220,170,.32), transparent 24%),
+        linear-gradient(180deg, #ecf2f9 0%, #f8f3eb 55%, #f2ede4 100%);
+      min-height:100vh;
+    }
+    .shell{max-width:1500px;margin:0 auto;padding:34px 20px 80px}
+    .hero{
+      position:relative;
+      overflow:hidden;
+      padding:32px;
+      border-radius:32px;
+      background:
+        radial-gradient(circle at top left, rgba(255,255,255,.8), transparent 30%),
+        linear-gradient(135deg, rgba(15,38,79,.98), rgba(23,88,119,.92) 45%, rgba(237,177,74,.78));
+      color:#fff;
+      box-shadow:var(--shadow);
+    }
+    .hero::after{
+      content:"";
+      position:absolute;
+      inset:auto -90px -120px auto;
+      width:340px;
+      height:340px;
+      border-radius:50%;
+      background:radial-gradient(circle, rgba(255,255,255,.22), rgba(255,255,255,0));
+      pointer-events:none;
+    }
+    .eyebrow{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:8px 14px;
+      border-radius:999px;
+      font-size:12px;
+      font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:.12em;
+      background:rgba(255,255,255,.13);
+      border:1px solid rgba(255,255,255,.16);
+    }
+    h1{
+      margin:16px 0 12px;
+      max-width:940px;
+      font:400 54px/1 var(--display);
+      letter-spacing:-.03em;
+    }
+    .hero p{
+      margin:0;
+      max-width:960px;
+      color:rgba(255,255,255,.86);
+      font-size:17px;
+      line-height:1.7;
+    }
+    .hero-meta{
+      display:flex;
+      flex-wrap:wrap;
+      gap:12px;
+      margin-top:20px;
+    }
+    .hero-meta span{
+      padding:10px 14px;
+      border-radius:999px;
+      background:rgba(255,255,255,.12);
+      border:1px solid rgba(255,255,255,.14);
+      font-size:13px;
+      font-weight:700;
+      color:#fff;
+    }
+    .filters{
+      display:flex;
+      flex-wrap:wrap;
+      gap:12px;
+      margin:26px 0 24px;
+    }
+    .filters button{
+      appearance:none;
+      border:none;
+      cursor:pointer;
+      padding:11px 16px;
+      border-radius:999px;
+      background:#fff;
+      color:#203142;
+      box-shadow:0 10px 25px rgba(19,31,54,.08);
+      border:1px solid rgba(18,32,49,.08);
+      font:800 13px/1 var(--sans);
+      letter-spacing:.04em;
+      text-transform:uppercase;
+    }
+    .filters button.active{
+      background:#183b67;
+      color:#fff;
+      border-color:#183b67;
+    }
+    .grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
+      gap:22px;
+    }
+    .poster{
+      position:relative;
+      display:grid;
+      grid-template-rows:auto 1fr auto;
+      min-height:880px;
+      border-radius:var(--radius);
+      overflow:hidden;
+      color:#fff;
+      box-shadow:var(--shadow);
+      isolation:isolate;
+      border:1px solid rgba(255,255,255,.18);
+    }
+    .poster::before{
+      content:"";
+      position:absolute;
+      inset:0;
+      background:
+        radial-gradient(circle at 15% 10%, rgba(255,255,255,.22), transparent 24%),
+        radial-gradient(circle at 85% 20%, rgba(255,255,255,.18), transparent 22%),
+        linear-gradient(160deg, var(--bg-1), var(--bg-2) 56%, var(--bg-3));
+      z-index:-3;
+    }
+    .poster::after{
+      content:"";
+      position:absolute;
+      inset:0;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.06), transparent 26%, rgba(11,18,29,.14) 100%),
+        repeating-linear-gradient(135deg, rgba(255,255,255,.05) 0 2px, transparent 2px 16px);
+      mix-blend-mode:soft-light;
+      z-index:-2;
+      pointer-events:none;
+    }
+    .poster-top{
+      padding:22px 24px 0;
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      align-items:flex-start;
+    }
+    .brand{
+      display:flex;
+      flex-direction:column;
+      gap:5px;
+      max-width:220px;
+    }
+    .brand-mark{
+      width:42px;
+      height:42px;
+      display:grid;
+      place-items:center;
+      border-radius:14px;
+      background:rgba(255,255,255,.14);
+      border:1px solid rgba(255,255,255,.2);
+      font:900 17px/1 var(--sans);
+      letter-spacing:.06em;
+    }
+    .brand-name{
+      font:800 12px/1.35 var(--sans);
+      letter-spacing:.16em;
+      text-transform:uppercase;
+      color:rgba(255,255,255,.86);
+    }
+    .brand-sub{
+      font:600 12px/1.5 var(--sans);
+      color:rgba(255,255,255,.7);
+    }
+    .option-chip{
+      padding:9px 12px;
+      border-radius:999px;
+      background:rgba(10,16,25,.22);
+      backdrop-filter:blur(12px);
+      border:1px solid rgba(255,255,255,.18);
+      font:800 11px/1 var(--sans);
+      letter-spacing:.12em;
+      text-transform:uppercase;
+      white-space:nowrap;
+    }
+    .poster-body{
+      padding:22px 24px 14px;
+      display:grid;
+      gap:16px;
+      align-content:start;
+    }
+    .specialty{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      width:max-content;
+      padding:8px 12px;
+      border-radius:999px;
+      background:rgba(255,255,255,.12);
+      border:1px solid rgba(255,255,255,.16);
+      font:800 12px/1 var(--sans);
+      letter-spacing:.08em;
+      text-transform:uppercase;
+    }
+    .headline{
+      margin:0;
+      max-width:10ch;
+      font:400 64px/.94 var(--display);
+      letter-spacing:-.05em;
+    }
+    .tagline{
+      margin:0;
+      max-width:20ch;
+      font:700 20px/1.35 var(--serif);
+      color:rgba(255,255,255,.92);
+    }
+    .visual{
+      position:relative;
+      min-height:200px;
+      border-radius:30px;
+      overflow:hidden;
+      background:linear-gradient(180deg, rgba(255,255,255,.16), rgba(255,255,255,.03));
+      border:1px solid rgba(255,255,255,.16);
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.18);
+    }
+    .visual .halo,
+    .visual .orb,
+    .visual .swoop,
+    .visual .ground,
+    .visual .line,
+    .visual .figure,
+    .visual .bike,
+    .visual .baby,
+    .visual .petal,
+    .visual .spark,
+    .visual .eye-ring{
+      position:absolute;
+      display:block;
+    }
+    .visual .halo{
+      width:200px;
+      height:200px;
+      right:-30px;
+      top:-16px;
+      border-radius:50%;
+      background:radial-gradient(circle, rgba(255,255,255,.42), rgba(255,255,255,.02) 68%);
+      filter:blur(1px);
+    }
+    .visual .orb{
+      width:150px;
+      height:150px;
+      left:-26px;
+      bottom:-18px;
+      border-radius:50%;
+      background:radial-gradient(circle, rgba(255,214,140,.46), rgba(255,214,140,0) 70%);
+    }
+    .visual .swoop{
+      inset:auto auto 18px -30px;
+      width:210px;
+      height:90px;
+      border-radius:999px;
+      background:rgba(255,255,255,.08);
+      transform:rotate(-8deg);
+    }
+    .visual .ground{
+      left:0;
+      right:0;
+      bottom:0;
+      height:42%;
+      background:linear-gradient(180deg, rgba(11,22,32,0), rgba(11,22,32,.32));
+    }
+    .visual .line{
+      width:220px;
+      height:220px;
+      border-radius:50%;
+      border:1px solid rgba(255,255,255,.14);
+      right:-70px;
+      bottom:-50px;
+    }
+    .visual .figure{
+      left:50%;
+      bottom:18px;
+      width:92px;
+      height:170px;
+      transform:translateX(-50%);
+      border-radius:48px 48px 18px 18px;
+      background:linear-gradient(180deg, rgba(255,255,255,.92), rgba(255,255,255,.18));
+      filter:drop-shadow(0 18px 30px rgba(0,0,0,.18));
+    }
+    .visual .figure::before{
+      content:"";
+      position:absolute;
+      top:-30px;
+      left:24px;
+      width:44px;
+      height:44px;
+      border-radius:50%;
+      background:rgba(255,255,255,.95);
+    }
+    .visual .figure::after{
+      content:"";
+      position:absolute;
+      left:-36px;
+      top:28px;
+      width:164px;
+      height:44px;
+      border-radius:999px;
+      background:linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,.48), rgba(255,255,255,0));
+      transform:rotate(-10deg);
+    }
+    .visual .bike{
+      left:50%;
+      bottom:18px;
+      width:210px;
+      height:120px;
+      transform:translateX(-50%);
+    }
+    .visual .bike::before,
+    .visual .bike::after{
+      content:"";
+      position:absolute;
+      bottom:0;
+      width:54px;
+      height:54px;
+      border-radius:50%;
+      border:4px solid rgba(255,255,255,.76);
+    }
+    .visual .bike::before{left:14px}
+    .visual .bike::after{right:14px}
+    .visual .bike span{
+      position:absolute;
+      left:56px;
+      right:56px;
+      bottom:26px;
+      height:4px;
+      background:rgba(255,255,255,.76);
+      transform:skew(-26deg);
+      transform-origin:left center;
+    }
+    .visual .baby{
+      left:50%;
+      bottom:28px;
+      width:180px;
+      height:140px;
+      transform:translateX(-50%);
+      border-radius:100px 100px 80px 80px;
+      background:radial-gradient(circle at 50% 28%, rgba(255,255,255,.98) 0 16%, rgba(255,255,255,.46) 18%, rgba(255,255,255,.16) 68%);
+      filter:drop-shadow(0 18px 22px rgba(0,0,0,.16));
+    }
+    .visual .petal{
+      width:70px;
+      height:160px;
+      border-radius:70px 70px 8px 8px;
+      background:linear-gradient(180deg, rgba(255,255,255,.66), rgba(255,255,255,.08));
+      filter:blur(.3px);
+    }
+    .visual .spark{
+      width:7px;
+      height:7px;
+      border-radius:50%;
+      background:rgba(255,255,255,.85);
+      box-shadow:0 0 18px rgba(255,255,255,.75);
+    }
+    .visual .eye-ring{
+      left:50%;
+      top:50%;
+      width:220px;
+      height:120px;
+      transform:translate(-50%,-44%);
+      border-radius:120px / 72px;
+      border:3px solid rgba(255,255,255,.7);
+      box-shadow:0 0 0 16px rgba(255,255,255,.06);
+    }
+    .visual .eye-ring::before{
+      content:"";
+      position:absolute;
+      left:50%;
+      top:50%;
+      width:62px;
+      height:62px;
+      transform:translate(-50%,-50%);
+      border-radius:50%;
+      background:radial-gradient(circle, rgba(255,255,255,.96), rgba(255,255,255,.2) 65%, rgba(255,255,255,.04));
+      box-shadow:0 0 34px rgba(255,255,255,.5);
+    }
+    .visual-note{
+      margin:0;
+      font-size:13px;
+      line-height:1.65;
+      color:rgba(255,255,255,.78);
+    }
+    .poster-content{
+      display:grid;
+      gap:14px;
+      padding:18px;
+      border-radius:28px;
+      background:rgba(13,20,31,.18);
+      border:1px solid rgba(255,255,255,.15);
+      backdrop-filter:blur(12px);
+    }
+    .poster-content h3{
+      margin:0;
+      font:800 12px/1 var(--sans);
+      letter-spacing:.14em;
+      text-transform:uppercase;
+      color:rgba(255,255,255,.74);
+    }
+    .facilities{
+      display:grid;
+      gap:10px;
+    }
+    .facility{
+      display:flex;
+      gap:10px;
+      align-items:flex-start;
+      font:600 14px/1.55 var(--sans);
+      color:#fff;
+    }
+    .facility::before{
+      content:"";
+      width:10px;
+      height:10px;
+      margin-top:7px;
+      flex:0 0 auto;
+      border-radius:50%;
+      background:var(--accent);
+      box-shadow:0 0 18px color-mix(in srgb, var(--accent) 70%, white 30%);
+    }
+    .mini-grid{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:10px;
+    }
+    .mini-card{
+      padding:12px 13px;
+      border-radius:20px;
+      background:rgba(255,255,255,.08);
+      border:1px solid rgba(255,255,255,.12);
+    }
+    .mini-card strong{
+      display:block;
+      margin-bottom:5px;
+      font:800 11px/1 var(--sans);
+      letter-spacing:.12em;
+      text-transform:uppercase;
+      color:rgba(255,255,255,.68);
+    }
+    .mini-card span{
+      font:700 13px/1.5 var(--sans);
+      color:#fff;
+    }
+    .poster-foot{
+      padding:0 24px 24px;
+      display:grid;
+      gap:12px;
+    }
+    .cta{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:14px;
+      padding:15px 18px;
+      border-radius:22px;
+      background:rgba(255,255,255,.12);
+      border:1px solid rgba(255,255,255,.15);
+      font:700 13px/1.5 var(--sans);
+    }
+    .cta strong{
+      display:block;
+      font-size:16px;
+      margin-bottom:2px;
+    }
+    .print-note{
+      padding:13px 16px;
+      border-radius:18px;
+      background:rgba(8,14,24,.18);
+      border:1px solid rgba(255,255,255,.12);
+      color:rgba(255,255,255,.78);
+      font:700 12px/1.55 var(--sans);
+      letter-spacing:.03em;
+    }
+
+    .theme-ophtho{--bg-1:#081d46;--bg-2:#0f5d95;--bg-3:#7bd6ff;--accent:#9be7ff}
+    .theme-psych{--bg-1:#15313d;--bg-2:#207a7f;--bg-3:#ffd166;--accent:#ffe195}
+    .theme-obg{--bg-1:#442053;--bg-2:#d04a84;--bg-3:#ffd8aa;--accent:#ffd1e5}
+    .theme-skin{--bg-1:#4b2d34;--bg-2:#b77252;--bg-3:#f5d8c7;--accent:#ffe7d5}
+
+    .style-dream .visual{background:linear-gradient(180deg, rgba(255,255,255,.24), rgba(255,255,255,.05) 40%, rgba(5,10,15,.16))}
+    .style-editorial .visual{background:linear-gradient(135deg, rgba(255,255,255,.18), rgba(255,255,255,.04)), radial-gradient(circle at 74% 34%, rgba(255,255,255,.24), transparent 24%)}
+    .style-luxury .visual{background:linear-gradient(180deg, rgba(255,255,255,.14), rgba(9,16,25,.08)), repeating-linear-gradient(90deg, rgba(255,255,255,.06) 0 1px, transparent 1px 14px)}
+    .style-motion .visual{background:linear-gradient(135deg, rgba(255,255,255,.1), rgba(255,255,255,.03)), radial-gradient(circle at 28% 24%, rgba(255,255,255,.18), transparent 22%)}
+
+    .scene-bicycle .figure{left:54%;bottom:52px;width:74px;height:122px}
+    .scene-bicycle .figure::before{left:20px;width:36px;height:36px;top:-24px}
+    .scene-bicycle .bike{display:block}
+    .scene-bicycle .figure::after{transform:rotate(-18deg)}
+
+    .scene-eye .eye-ring{display:block}
+    .scene-eye .figure{display:none}
+
+    .scene-mother .baby{display:block}
+    .scene-mother .figure{left:40%;height:185px;width:104px}
+    .scene-mother .figure::after{left:-10px;top:48px;width:150px;transform:rotate(26deg)}
+
+    .scene-bloom .figure{height:150px;width:92px}
+    .scene-bloom .petal.p1{left:30px;bottom:4px;transform:rotate(-26deg)}
+    .scene-bloom .petal.p2{left:86px;bottom:14px;transform:rotate(-8deg)}
+    .scene-bloom .petal.p3{right:96px;bottom:14px;transform:rotate(12deg)}
+    .scene-bloom .petal.p4{right:34px;bottom:4px;transform:rotate(28deg)}
+
+    .scene-skyline .line{display:block}
+    .scene-skyline .spark.s1{left:24px;top:34px}
+    .scene-skyline .spark.s2{right:38px;top:54px}
+    .scene-skyline .spark.s3{left:50%;top:18px}
+
+    .hidden{display:none}
+
+    @media (max-width:880px){
+      h1{font-size:42px}
+      .poster{min-height:820px}
+      .headline{font-size:54px}
+    }
+    @media (max-width:640px){
+      .shell{padding:20px 14px 60px}
+      .hero{padding:24px}
+      h1{font-size:34px}
+      .poster{min-height:auto}
+      .headline{font-size:46px}
+      .mini-grid{grid-template-columns:1fr}
+      .cta{flex-direction:column;align-items:flex-start}
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <section class="hero">
+      <div class="eyebrow">BMH Poster Concepts</div>
+      <h1>Four specialties. Four visual directions each. Built to stop people mid-step.</h1>
+      <p>These concept posters are designed as premium review boards for Baweja Multispeciality Hospital. Each specialty gets four visually distinct options with the factual facility list taken from your public hospital pages, while the hero visuals are art-directed for eye-catching print impact. Once you pick the winning route, we can translate the exact same design system into Punjabi.</p>
+      <div class="hero-meta">
+        <span>16 total concepts</span>
+        <span>Punjabi-ready copy structure</span>
+        <span>Print-friendly poster proportions</span>
+        <span>Hospital facilities already mapped</span>
+      </div>
+    </section>
+
+    <div class="filters" id="filters">
+      <button class="active" data-filter="all">All Posters</button>
+      <button data-filter="ophtho">Ophthalmology</button>
+      <button data-filter="psych">Psychiatry</button>
+      <button data-filter="obg">OBG / Fertility</button>
+      <button data-filter="skin">Skin & Cosmetology</button>
+    </div>
+
+    <section class="grid" id="poster-grid"></section>
+  </div>
+
+  <script>
+    const common = {
+      hospital: "Baweja Multispeciality Hospital",
+      phone: "+91-81466 22802",
+      address: "1571/39, opposite Civil Hospital, Preet Colony, Rupnagar",
+      printNote: "Layout is intentionally Punjabi-friendly: short headline block, separate facilities stack, and enough space to swap in Gurmukhi without breaking the poster."
+    };
+
+    const specialties = {
+      ophtho: {
+        label: "Ophthalmology",
+        icon: "Eye Care",
+        theme: "theme-ophtho",
+        doctor: "Ophthalmic & Refractive Care",
+        facilities: [
+          "MICS and Ellips FX cataract removal with painless, injection-free and bandage-free positioning.",
+          "Diabetes and retinal disease care with in-house OCT, Green Laser and FFA support.",
+          "Glaucoma management including iStent Inject and other micro-invasive options.",
+          "LASIK and refractive correction for spectacle-free vision goals.",
+          "Cornea services for diagnosis and treatment of corneal disorders.",
+          "TOMEY Optical Biometer for high-accuracy cataract planning.",
+          "AMO Signature Phacoemulsification System for dense cataracts with minimal phaco power."
+        ]
+      },
+      psych: {
+        label: "Psychiatry",
+        icon: "Mind Care",
+        theme: "theme-psych",
+        doctor: "Neuropsychiatry & De-addiction Care",
+        facilities: [
+          "Comprehensive psychiatric treatment for depression, anxiety, mania and personality disorders.",
+          "Support for epilepsy and childhood behavioural concerns including tantrums and emotional difficulty.",
+          "Detailed EEG assessment for diagnosis of neurological and psychiatric conditions.",
+          "Biofeedback therapy to reduce stress and improve self-regulation.",
+          "Specialised OPD de-addiction care with counselling, medical support and family involvement.",
+          "Discreet, empathetic and complete mental health care under one roof."
+        ]
+      },
+      obg: {
+        label: "OBG / Fertility",
+        icon: "Women's Health",
+        theme: "theme-obg",
+        doctor: "Women's Health, Pregnancy & Fertility",
+        facilities: [
+          "Normal pregnancy care with comprehensive antenatal follow-up.",
+          "Painless deliveries and safe Caesarean section support for high-risk pregnancies.",
+          "Infertility treatment including IUI and IVF pathways.",
+          "PCOS / PCOD management and personalised hormonal care.",
+          "Medical termination of pregnancy with guided, discreet care.",
+          "Advanced surgeries: laparoscopy, sterilisation, ovarian cyst, tubal pregnancy, hysterectomy, cervical circlage and hysteroscopy.",
+          "Fully equipped operation theatre, private rooms and newborn phototherapy support."
+        ]
+      },
+      skin: {
+        label: "Skin & Cosmetology",
+        icon: "Aesthetic Care",
+        theme: "theme-skin",
+        doctor: "Advanced Dermatology & Laser Aesthetics",
+        facilities: [
+          "Hydrafacial and face rejuvenation for deep cleansing, hydration and glow restoration.",
+          "Acne and scar treatment for clearer, healthier-looking skin.",
+          "Mole, wart and scar removal with Co2 Laser support.",
+          "Laser hair reduction with SHR/IPL and Diode systems.",
+          "Custom skin rejuvenation peels and anti-ageing care.",
+          "Cryolipolysis for non-invasive body fat reduction.",
+          "Tattoo removal with Nd:YAG Laser and advanced in-house laser technology."
+        ]
+      }
+    };
+
+    const posters = [
+      {
+        specialty: "psych",
+        option: "Option 1",
+        style: "style-motion scene-bicycle",
+        headline: "Free Your Mind",
+        tagline: "A carefree bicycle ride, open air, flying hair, and the feeling of finally breathing light again.",
+        visual: "AI visual cue: young woman cycling through a sunlit open road, wind in her hair, soft teal sky, cinematic hope, no clinical stiffness.",
+        micro1: "Best For",
+        micro1Value: "Outdoor hoarding or waiting-lounge statement poster",
+        micro2: "Mood",
+        micro2Value: "Liberation, recovery, motion",
+        accentLine: "Hope can return quietly, and then all at once."
+      },
+      {
+        specialty: "psych",
+        option: "Option 2",
+        style: "style-dream scene-bloom",
+        headline: "Come Back To Yourself",
+        tagline: "Soft, healing, and deeply human. Built around emotional recovery rather than fear-based mental health messaging.",
+        visual: "AI visual cue: graceful portrait dissolving into birds and petals, gentle morning light, calm expression, premium editorial mental health campaign.",
+        micro1: "Best For",
+        micro1Value: "Consultation area, brochure cover, women-focused campaign",
+        micro2: "Mood",
+        micro2Value: "Soft confidence, trust, dignity",
+        accentLine: "Care that helps the mind feel safe enough to heal."
+      },
+      {
+        specialty: "psych",
+        option: "Option 3",
+        style: "style-editorial scene-skyline",
+        headline: "Calm Is A Direction",
+        tagline: "A more modern, metropolitan psychiatry poster with strong luxury-clinic energy and a premium campaign look.",
+        visual: "AI visual cue: elegant silhouette against a glowing city dusk, floating light particles, reflective mood, high-fashion medical poster aesthetic.",
+        micro1: "Best For",
+        micro1Value: "Reception feature wall, urban campaign print",
+        micro2: "Mood",
+        micro2Value: "Modern, poised, aspirational",
+        accentLine: "Evidence-based care with warmth, privacy and steadiness."
+      },
+      {
+        specialty: "psych",
+        option: "Option 4",
+        style: "style-luxury scene-eye",
+        headline: "Unburden The Noise",
+        tagline: "This option turns the invisible pressure of stress into a visual release, making the message feel memorable from a distance.",
+        visual: "AI visual cue: abstract mind-space with opening horizon, luminous center, emotional release, premium textured poster finish.",
+        micro1: "Best For",
+        micro1Value: "High-visibility corridor or brand campaign set",
+        micro2: "Mood",
+        micro2Value: "Conceptual, artistic, striking",
+        accentLine: "From anxiety to balance, one guided step at a time."
+      },
+      {
+        specialty: "ophtho",
+        option: "Option 1",
+        style: "style-editorial scene-eye",
+        headline: "See The World New",
+        tagline: "Clean, sharp and premium. Built around clarity, light and the emotional impact of getting your vision back.",
+        visual: "AI visual cue: luminous human eye blended with horizon light, crystal focus, rich navy gradients, premium ophthalmology campaign.",
+        micro1: "Best For",
+        micro1Value: "Cataract and LASIK awareness poster",
+        micro2: "Mood",
+        micro2Value: "Precision, optimism, trust",
+        accentLine: "Advanced eye care with technology that feels world-class."
+      },
+      {
+        specialty: "ophtho",
+        option: "Option 2",
+        style: "style-motion scene-skyline",
+        headline: "Precision In Every Ray",
+        tagline: "A high-tech ophthalmology concept with scan-like graphics, laser cues and strong retina-glaucoma sophistication.",
+        visual: "AI visual cue: futuristic eye scan, subtle laser arcs, medical-luxury visual language, not generic hospital stock.",
+        micro1: "Best For",
+        micro1Value: "Retina, glaucoma and advanced technology communication",
+        micro2: "Mood",
+        micro2Value: "High-tech, advanced, premium",
+        accentLine: "Detailed diagnostics. Confident surgery. Clearer outcomes."
+      },
+      {
+        specialty: "ophtho",
+        option: "Option 3",
+        style: "style-dream scene-bloom",
+        headline: "Light Returns",
+        tagline: "This version leans emotional and family-friendly, ideal for cataract recovery and senior patient trust-building.",
+        visual: "AI visual cue: older patient looking into golden daylight with relieved expression, elegant soft-focus photography, uplifting and dignified.",
+        micro1: "Best For",
+        micro1Value: "Senior eye care, cataract and family counselling areas",
+        micro2: "Mood",
+        micro2Value: "Warmth, relief, reassurance",
+        accentLine: "From blur to brilliance, with comfort-first cataract care."
+      },
+      {
+        specialty: "ophtho",
+        option: "Option 4",
+        style: "style-luxury scene-eye",
+        headline: "Sharper Than Ever",
+        tagline: "An assertive, bold ophthalmology poster that feels premium enough for large-format print and street-facing branding.",
+        visual: "AI visual cue: ultra-detailed iris close-up, metallic blue highlights, luxury clinic branding, bold contrast and elegant light falloff.",
+        micro1: "Best For",
+        micro1Value: "Outdoor branding, flagship campaign wall",
+        micro2: "Mood",
+        micro2Value: "Bold, elite, memorable",
+        accentLine: "Technology-led eye care under one roof."
+      },
+      {
+        specialty: "obg",
+        option: "Option 1",
+        style: "style-dream scene-mother",
+        headline: "Held With Care",
+        tagline: "A graceful women's health poster that feels warm, elevated and deeply reassuring without becoming sentimental or dated.",
+        visual: "AI visual cue: elegant mother silhouette with newborn glow, blush and gold palette, premium maternity campaign, soft cinematic light.",
+        micro1: "Best For",
+        micro1Value: "Labour room entrance, antenatal clinic, reception",
+        micro2: "Mood",
+        micro2Value: "Warmth, safety, tenderness",
+        accentLine: "From first scan to first cry, complete mother and child care."
+      },
+      {
+        specialty: "obg",
+        option: "Option 2",
+        style: "style-editorial scene-bloom",
+        headline: "For Every Chapter Of Her",
+        tagline: "This route expands beyond pregnancy alone, making it strong for OBG, fertility and women's surgical care together.",
+        visual: "AI visual cue: poised woman framed by blooming forms and surgical-light glow, modern women's health campaign with dignity and strength.",
+        micro1: "Best For",
+        micro1Value: "Combined OBG and fertility service promotion",
+        micro2: "Mood",
+        micro2Value: "Strong, elegant, complete",
+        accentLine: "Pregnancy, fertility and gynaecological care with modern expertise."
+      },
+      {
+        specialty: "obg",
+        option: "Option 3",
+        style: "style-motion scene-skyline",
+        headline: "Where Families Begin",
+        tagline: "A hopeful fertility-first concept that still accommodates pregnancy, delivery and surgical facilities beautifully.",
+        visual: "AI visual cue: couple in soft silhouette with future-home horizon, refined blush gradients, subtle optimism, premium fertility poster.",
+        micro1: "Best For",
+        micro1Value: "Fertility campaign, IUI/IVF counselling zone",
+        micro2: "Mood",
+        micro2Value: "Hope, possibility, trust",
+        accentLine: "Advanced fertility care for journeys that need both science and heart."
+      },
+      {
+        specialty: "obg",
+        option: "Option 4",
+        style: "style-luxury scene-mother",
+        headline: "Modern Care For Women",
+        tagline: "This one feels more premium-clinic and less maternity-specific, ideal if you want a broad women's health brand piece.",
+        visual: "AI visual cue: fashion-editorial portrait of confident woman with soft rose illumination, premium healthcare poster that feels international.",
+        micro1: "Best For",
+        micro1Value: "Flagship women's health poster across the hospital",
+        micro2: "Mood",
+        micro2Value: "Confident, polished, high-end",
+        accentLine: "Empathetic women's healthcare backed by advanced surgery and fertility services."
+      },
+      {
+        specialty: "skin",
+        option: "Option 1",
+        style: "style-editorial scene-bloom",
+        headline: "Glow With Confidence",
+        tagline: "A beauty-forward poster with enough sophistication to feel premium, but still grounded in real dermatology and laser care.",
+        visual: "AI visual cue: radiant woman in warm natural light, luminous skin, airy florals, high-end editorial beauty campaign with clinical polish.",
+        micro1: "Best For",
+        micro1Value: "Cosmetology reception, social poster print, brochure cover",
+        micro2: "Mood",
+        micro2Value: "Radiance, aspiration, elegance",
+        accentLine: "Advanced skin care that looks refined and feels medically sound."
+      },
+      {
+        specialty: "skin",
+        option: "Option 2",
+        style: "style-motion scene-skyline",
+        headline: "Laser. Lift. Renew.",
+        tagline: "A stronger technology-led route for laser, hair reduction and procedure-based cosmetology communication.",
+        visual: "AI visual cue: chic portrait with subtle laser lines and reflective surfaces, premium med-aesthetic poster, cinematic contrast.",
+        micro1: "Best For",
+        micro1Value: "Procedure menu wall, laser zone branding",
+        micro2: "Mood",
+        micro2Value: "Modern, sleek, performance-led",
+        accentLine: "In-house laser technology with beauty outcomes that feel premium."
+      },
+      {
+        specialty: "skin",
+        option: "Option 3",
+        style: "style-dream scene-bloom",
+        headline: "Skin That Feels Like You",
+        tagline: "This version softens the category and makes the promise about confidence, natural results and long-term skin health.",
+        visual: "AI visual cue: close portrait with dewy texture, calm earth tones, minimal luxury beauty poster, intimate and honest.",
+        micro1: "Best For",
+        micro1Value: "Dermatology plus cosmetology combined communication",
+        micro2: "Mood",
+        micro2Value: "Natural, calm, premium",
+        accentLine: "Customised plans for acne, scars, rejuvenation and healthy skin confidence."
+      },
+      {
+        specialty: "skin",
+        option: "Option 4",
+        style: "style-luxury scene-eye",
+        headline: "Beauty Meets Precision",
+        tagline: "The most luxe and dramatic cosmetology route, suitable for premium print where you want instant visual pull.",
+        visual: "AI visual cue: sculptural beauty portrait, champagne tones, polished glass texture, luxury aesthetic medicine campaign.",
+        micro1: "Best For",
+        micro1Value: "Flagship wall poster or premium outdoor promotion",
+        micro2: "Mood",
+        micro2Value: "Luxury, drama, aspiration",
+        accentLine: "Natural-looking results powered by advanced laser and aesthetic technology."
+      }
+    ];
+
+    function sceneMarkup(style) {
+      const petals = style.includes("scene-bloom")
+        ? '<span class="petal p1"></span><span class="petal p2"></span><span class="petal p3"></span><span class="petal p4"></span>'
+        : "";
+      const skyline = style.includes("scene-skyline")
+        ? '<span class="spark s1"></span><span class="spark s2"></span><span class="spark s3"></span>'
+        : "";
+      const eye = style.includes("scene-eye") ? '<span class="eye-ring"></span>' : "";
+      const mother = style.includes("scene-mother") ? '<span class="baby"></span>' : "";
+      const bike = style.includes("scene-bicycle") ? '<div class="bike"><span></span></div>' : "";
+      return `
+        <div class="visual ${style}">
+          <span class="halo"></span>
+          <span class="orb"></span>
+          <span class="swoop"></span>
+          <span class="line"></span>
+          <div class="figure"></div>
+          ${bike}
+          ${mother}
+          ${petals}
+          ${skyline}
+          ${eye}
+          <span class="ground"></span>
+        </div>
+      `;
+    }
+
+    function renderPosters(filter = "all") {
+      const grid = document.getElementById("poster-grid");
+      const selected = posters.filter(p => filter === "all" || p.specialty === filter);
+      grid.innerHTML = selected.map(poster => {
+        const spec = specialties[poster.specialty];
+        return `
+          <article class="poster ${spec.theme} ${poster.style}" data-specialty="${poster.specialty}">
+            <div class="poster-top">
+              <div class="brand">
+                <div class="brand-mark">BMH</div>
+                <div class="brand-name">${common.hospital}</div>
+                <div class="brand-sub">${spec.doctor}</div>
+              </div>
+              <div class="option-chip">${poster.option}</div>
+            </div>
+            <div class="poster-body">
+              <div class="specialty">${spec.icon} / ${spec.label}</div>
+              <h2 class="headline">${poster.headline}</h2>
+              <p class="tagline">${poster.tagline}</p>
+              ${sceneMarkup(poster.style)}
+              <p class="visual-note">${poster.visual}</p>
+              <div class="poster-content">
+                <h3>Facilities</h3>
+                <div class="facilities">
+                  ${spec.facilities.map(item => `<div class="facility">${item}</div>`).join("")}
+                </div>
+                <div class="mini-grid">
+                  <div class="mini-card">
+                    <strong>${poster.micro1}</strong>
+                    <span>${poster.micro1Value}</span>
+                  </div>
+                  <div class="mini-card">
+                    <strong>${poster.micro2}</strong>
+                    <span>${poster.micro2Value}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="poster-foot">
+              <div class="cta">
+                <div>
+                  <strong>${poster.accentLine}</strong>
+                  ${common.address}
+                </div>
+                <div>${common.phone}</div>
+              </div>
+              <div class="print-note">${common.printNote}</div>
+            </div>
+          </article>
+        `;
+      }).join("");
+    }
+
+    renderPosters();
+
+    document.getElementById("filters").addEventListener("click", event => {
+      const button = event.target.closest("button[data-filter]");
+      if (!button) return;
+      document.querySelectorAll("#filters button").forEach(btn => btn.classList.remove("active"));
+      button.classList.add("active");
+      renderPosters(button.dataset.filter);
+    });
+  </script>
+</body>
+</html>
