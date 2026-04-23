@@ -962,6 +962,34 @@ function saveInventoryStoreLocations() {
     window.FBDB.ref('settings/inventory/storeLocations').set((window.BMH_STORE_LOCATIONS || []).slice()).catch(function () {});
   }
 }
+function loadInventoryHiddenStoreLocations() {
+  if (window._bmhInventoryHiddenStoreLocations) return window._bmhInventoryHiddenStoreLocations;
+  let list = [];
+  try {
+    const raw = JSON.parse(localStorage.getItem('bmh_store_locations_hidden') || 'null');
+    if (Array.isArray(raw)) list = raw;
+  } catch (e) { /* noop */ }
+  window._bmhInventoryHiddenStoreLocations = list.map(function (s) { return normalizeInventoryTextValue(s); }).filter(Boolean);
+  if (!window._bmhInventoryHiddenStoreLocationsCloudLoaded && window.FBDB) {
+    window._bmhInventoryHiddenStoreLocationsCloudLoaded = true;
+    window.FBDB.ref('settings/inventory/storeLocationsHidden').once('value').then(function (snap) {
+      const raw = snap.val();
+      if (!Array.isArray(raw)) return;
+      window._bmhInventoryHiddenStoreLocations = raw.map(function (s) { return normalizeInventoryTextValue(s); }).filter(Boolean);
+      try { localStorage.setItem('bmh_store_locations_hidden', JSON.stringify(window._bmhInventoryHiddenStoreLocations)); } catch (e) {}
+      if (typeof bmhPopulateInventorySelectors === 'function') bmhPopulateInventorySelectors();
+    }).catch(function () {});
+  }
+  return window._bmhInventoryHiddenStoreLocations;
+}
+function saveInventoryHiddenStoreLocations() {
+  const rows = (window._bmhInventoryHiddenStoreLocations || []).map(function (s) { return normalizeInventoryTextValue(s); }).filter(Boolean);
+  window._bmhInventoryHiddenStoreLocations = Array.from(new Set(rows));
+  try { localStorage.setItem('bmh_store_locations_hidden', JSON.stringify(window._bmhInventoryHiddenStoreLocations)); } catch (e) { /* noop */ }
+  if (window.FBDB) {
+    window.FBDB.ref('settings/inventory/storeLocationsHidden').set(window._bmhInventoryHiddenStoreLocations).catch(function () {});
+  }
+}
 function bmhBillingAdvanceReasonOptions() {
   const def = ['Surgery package', 'IOL / implant booking', 'Admission deposit', 'Investigation block', 'Consultation block', 'Personal', 'Other'];
   try {
@@ -3852,7 +3880,7 @@ function openReceptionPatient(bmhId) {
     + '</div></div></div>'
     + '<div style="margin-top:14px;display:flex;flex-wrap:wrap;gap:8px">'
     + '<button type="button" class="btn btn-gold btn-sm" onclick="rcOpenBillingFor(\'' + String(bmhId).replace(/'/g, "\\'") + '\')">💳 Billing / charges</button>'
-    + (showRestoreQueueBtn ? '<button type="button" class="btn btn-outline btn-sm" onclick="restorePatientToDoctorQueue(\'' + String(bmhId).replace(/'/g, "\\'") + '\')">↩ Restore to queue</button>' : '')
+    + (showRestoreQueueBtn ? receptionQueueRestoreButtonHtml(bmhId, { label: '↩ Restore to queue', title: 'Restore this patient to today\'s queue', style: 'background:#fff;color:var(--bmh-blue);border:1px solid var(--bmh-blue);border-radius:6px;padding:6px 10px;font-size:11px;font-weight:800;cursor:pointer' }) : '')
     + '<button type="button" class="btn btn-outline btn-sm" onclick="closeM(\'m-rc-patient\');openReceptionPatientEdit(\'' + String(bmhId).replace(/'/g, "\\'") + '\')">✏️ Edit / change details</button>'
     + '<button type="button" class="btn btn-outline btn-sm" onclick="closeM(\'m-rc-patient\');openPatient(\'' + String(bmhId).replace(/'/g, "\\'") + '\')">👁️ Open doctor record</button>'
     + '<button type="button" class="btn btn-outline btn-sm" onclick="rcToggleConsentSection(\'' + String(bmhId).replace(/'/g, "\\'") + '\')">📋 Add consent</button>'
@@ -8243,7 +8271,14 @@ function bmhInventoryUseDeptValue() { return document.getElementById('inv-use-de
 function bmhInventoryCategoryValue() { return document.getElementById('inv-in-cat')?.value || 'Miscellaneous'; }
 function bmhInventoryStoreValue() { return document.getElementById('inv-in-store')?.value || ''; }
 function bmhInventoryBillModeValue() { return document.getElementById('inv-in-bill-mode')?.value || 'monthly'; }
-function bmhInventoryStoreOptions() { return (window.BMH_STORE_LOCATIONS || []).slice(); }
+function bmhInventoryStoreOptions() {
+  const hidden = loadInventoryHiddenStoreLocations();
+  return (window.BMH_STORE_LOCATIONS || []).filter(function (name) {
+    return !hidden.some(function (hiddenName) {
+      return normalizeInventoryCompareText(hiddenName) === normalizeInventoryCompareText(name);
+    });
+  });
+}
 function bmhInventoryCategoryOptions() {
   const existing = Array.from(new Set((INVENTORY || []).map(function (i) { return String(i.cat || '').trim(); }).filter(Boolean)));
   const all = Array.from(new Set((window.BMH_INVENTORY_CATEGORIES || []).concat(existing))).filter(Boolean);
@@ -12252,6 +12287,16 @@ function loadInventoryOcrMemory() {
   }
   return window.BMH_INVENTORY_OCR_MEMORY;
 }
+function getInventorySuggestionHiddenMap() {
+  const memory = loadInventoryOcrMemory();
+  memory.hiddenProducts = Array.isArray(memory.hiddenProducts) ? memory.hiddenProducts : [];
+  const map = {};
+  memory.hiddenProducts.forEach(function (value) {
+    const key = normalizeInventoryCompareText(value);
+    if (key) map[key] = true;
+  });
+  return map;
+}
 function saveInventoryOcrMemory() {
   try {
     localStorage.setItem('bmh_inventory_ocr_memory', JSON.stringify(loadInventoryOcrMemory()));
@@ -12275,6 +12320,11 @@ function learnInventoryOcrValue(target, value) {
   const bucket = bucketMap[String(target || '')];
   if (!bucket) return;
   memory[bucket] = Array.isArray(memory[bucket]) ? memory[bucket] : [];
+  if (bucket === 'products') {
+    memory.hiddenProducts = (memory.hiddenProducts || []).filter(function (v) {
+      return normalizeInventoryCompareText(v) !== normalizeInventoryCompareText(raw);
+    });
+  }
   if (!memory[bucket].some(function (v) { return normalizeInventoryCompareText(v) === normalizeInventoryCompareText(raw); })) {
     memory[bucket].push(raw);
     saveInventoryOcrMemory();
@@ -12288,6 +12338,7 @@ function inventoryKnownVendorNames() {
   return Array.from(new Set(names.map(function (v) { return normalizeInventoryTextValue(v); }).filter(Boolean)));
 }
 function inventoryKnownProductNames() {
+  const hidden = getInventorySuggestionHiddenMap();
   const names = [];
   (INVENTORY || []).forEach(function (i) {
     if (i?.name) names.push(String(i.name));
@@ -12300,7 +12351,10 @@ function inventoryKnownProductNames() {
   (window.BMH_PURCHASES || []).forEach(function (row) { if (row?.itemName) names.push(String(row.itemName)); });
   (loadInventoryOcrMemory().barcodes || []).forEach(function (v) { names.push(String(v)); });
   (loadInventoryOcrMemory().products || []).forEach(function (v) { names.push(String(v)); });
-  return Array.from(new Set(names.map(function (v) { return normalizeInventoryTextValue(v); }).filter(Boolean)));
+  return Array.from(new Set(names.map(function (v) { return normalizeInventoryTextValue(v); }).filter(function (v) {
+    const key = normalizeInventoryCompareText(v);
+    return !!v && !hidden[key];
+  })));
 }
 function inventoryKnownIolCatalogBrandNames() {
   return Array.from(new Set(getIolCatalogNormalizedRows().map(function (row) {
@@ -12368,7 +12422,10 @@ function renderInventoryImportDatalists() {
   const itemList = document.getElementById('inv-item-datalist');
   if (itemList) {
     const memory = loadInventoryOcrMemory();
-    const products = memory.products || [];
+    const hidden = getInventorySuggestionHiddenMap();
+    const products = (memory.products || []).filter(function (name) {
+      return !hidden[normalizeInventoryCompareText(name)];
+    });
     itemList.innerHTML = products.map(function (name) {
       return '<option value="' + escapeHtmlConsent(name) + '"></option>';
     }).join('');
@@ -13964,6 +14021,10 @@ function addInventoryStorePrompt() {
   if (!name) return;
   window.BMH_STORE_LOCATIONS = window.BMH_STORE_LOCATIONS || [];
   if (!window.BMH_STORE_LOCATIONS.includes(name)) window.BMH_STORE_LOCATIONS.push(name);
+  window._bmhInventoryHiddenStoreLocations = (loadInventoryHiddenStoreLocations() || []).filter(function (v) {
+    return normalizeInventoryCompareText(v) !== normalizeInventoryCompareText(name);
+  });
+  saveInventoryHiddenStoreLocations();
   saveInventoryStoreLocations();
   bmhPopulateInventorySelectors();
   const sel = document.getElementById('inv-in-store');
@@ -13992,6 +14053,10 @@ function deleteInventoryStorePrompt() {
   window.BMH_STORE_LOCATIONS = stores.filter(function (name) {
     return normalizeInventoryCompareText(name) !== normalizeInventoryCompareText(hit);
   });
+  const hidden = loadInventoryHiddenStoreLocations().slice();
+  if (!hidden.some(function (name) { return normalizeInventoryCompareText(name) === normalizeInventoryCompareText(hit); })) hidden.push(hit);
+  window._bmhInventoryHiddenStoreLocations = hidden;
+  saveInventoryHiddenStoreLocations();
   saveInventoryStoreLocations();
   bmhPopulateInventorySelectors();
   ['inv-in-store', 'inv-stock-store-filter', 'inv-tr-from', 'inv-tr-to', 'inv-indent-store', 'inv-indent-source', 'inv-ret-store'].forEach(function (id) {
@@ -14024,14 +14089,16 @@ function removeInventoryBarcodePrompt() {
   const memory = loadInventoryOcrMemory();
   memory.barcodes = memory.barcodes || [];
   memory.products = memory.products || [];
-  const combined = Array.from(new Set([].concat(memory.barcodes, memory.products).map(function (v) {
-    return normalizeInventoryTextValue(v);
-  }).filter(Boolean)));
+  memory.hiddenProducts = Array.isArray(memory.hiddenProducts) ? memory.hiddenProducts : [];
+  const combined = inventoryKnownProductNames();
   if (combined.length === 0) { showToast('No trade names or barcodes in list', 'w'); return; }
   const barcodeList = combined.join('\n');
   const toRemove = prompt('Enter trade name / barcode to remove from list:\n' + barcodeList, String(document.getElementById('bc-in')?.value || '').trim());
   if (!toRemove) return;
   const wanted = normalizeInventoryCompareText(toRemove);
+  const existedInSuggestions = combined.some(function (item) {
+    return normalizeInventoryCompareText(item) === wanted;
+  });
   const beforeBarcodes = memory.barcodes.length;
   const beforeProducts = memory.products.length;
   memory.barcodes = memory.barcodes.filter(function (item) {
@@ -14040,7 +14107,10 @@ function removeInventoryBarcodePrompt() {
   memory.products = memory.products.filter(function (item) {
     return normalizeInventoryCompareText(item) !== wanted;
   });
-  if (memory.barcodes.length === beforeBarcodes && memory.products.length === beforeProducts) {
+  if (!memory.hiddenProducts.some(function (item) { return normalizeInventoryCompareText(item) === wanted; })) {
+    memory.hiddenProducts.push(normalizeInventoryTextValue(toRemove));
+  }
+  if (memory.barcodes.length === beforeBarcodes && memory.products.length === beforeProducts && !existedInSuggestions) {
     showToast('Trade name / barcode not found', 'w');
     return;
   }
@@ -20234,6 +20304,16 @@ function patientNeedsReceptionQueueRestore(patient, deptOverride) {
   if (!inTodayQueue) return true;
   if (targetDept && currentDept && targetDept !== currentDept) return true;
   return false;
+}
+function receptionQueueRestoreButtonHtml(bmhId, opts) {
+  const id = String(bmhId || '').trim();
+  if (!id) return '';
+  const patient = (window.PATIENTS || []).find(function (p) { return String(p?.bmhId || '').trim() === id; });
+  if (!patient || !patientNeedsReceptionQueueRestore(patient)) return '';
+  const title = String(opts?.title || 'Restore to queue');
+  const label = String(opts?.label || '↩');
+  const style = String(opts?.style || 'background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1px solid var(--bmh-blue);border-radius:6px;padding:3px 7px;font-size:10px;font-weight:800;cursor:pointer;flex-shrink:0');
+  return '<button type="button" title="' + escapeHtmlConsent(title) + '" onclick="event.stopPropagation();restorePatientToDoctorQueue(\'' + id.replace(/'/g, "\\'") + '\')" style="' + style + '">' + escapeHtmlConsent(label) + '</button>';
 }
 
 function genRcUID() {
@@ -27669,6 +27749,23 @@ function isPatientMarkedSeen(p) {
   const st = String(p.status || '').toLowerCase();
   return st === 'seen' || st === 'done';
 }
+function dedupeQueueEntriesByKey(rows) {
+  const map = new Map();
+  (rows || []).forEach(function (row) {
+    if (!row) return;
+    const key = String(row._queueKey || row.bmhId || '').trim();
+    if (!key) return;
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, row);
+      return;
+    }
+    const existingStamp = Date.parse(existing.updatedAt || existing.createdAt || existing.queueDate || '') || Number(existing.checkinAt || 0) || 0;
+    const nextStamp = Date.parse(row.updatedAt || row.createdAt || row.queueDate || '') || Number(row.checkinAt || 0) || 0;
+    if (nextStamp >= existingStamp) map.set(key, row);
+  });
+  return Array.from(map.values());
+}
 function localDateKey(value) {
   const d = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(d.getTime())) return '';
@@ -27701,12 +27798,12 @@ function patientQueueDateMatchesToday(p) {
 }
 function getTodayQueueBasePatients() {
   const todayKeyLocal = localDateKey(new Date());
-  return PATIENTS.filter(function (p) {
+  return dedupeQueueEntriesByKey(PATIENTS.filter(function (p) {
     if (!p || p.queueRemoved || String(p.status || '').toLowerCase() === 'removed') return false;
     if (!centreMatch(p)) return false;
     if (!patientQueueDateMatchesToday(p) && !(p.checkinAt && localDateKey(p.checkinAt) === todayKeyLocal)) return false;
     return true;
-  });
+  }));
 }
 /** Seen / done row belongs in “Done today” (same serial as active list). */
 function patientDoneQueueMatchesToday(p, todayKeyLocal) {
@@ -29758,6 +29855,7 @@ function renderCollectionDashboard() {
               <div style="flex:1"><div style="font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap">${t.patient}${t.type==='advance' ? '<span class="badge" style="font-size:8px;background:var(--blue-lt);color:var(--blue);border:1px solid var(--blue)">Advance</span>' : ''}</div><div style="font-size:10.5px;color:var(--g1)">${t.service||'—'} · ${t.time||'—'}</div></div>
               <span class="badge bd-gray" style="font-size:9.5px">${t.mode||'—'}</span>
               <div style="font-weight:800;color:#1a8c3c">${fmt(t.amount)}</div>
+              ${receptionQueueRestoreButtonHtml(t.bmhId, { label: '↩', title: 'Restore this patient to today\\'s queue', style: 'background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1px solid var(--bmh-blue);border-radius:5px;padding:2px 6px;font-size:10px;cursor:pointer;flex-shrink:0' })}
               <button title="Delete" onclick="deleteTransaction('${t.id}')" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--red);padding:0 2px">🗑️</button>
             </div>`).join('') : '<div style="padding:8px;color:var(--g1);font-size:11.5px">No collected payments yet</div>'}
         </div>
@@ -29778,6 +29876,7 @@ function renderCollectionDashboard() {
         <span class="badge bd-gray" style="font-size:9.5px">${t.mode||'—'}</span>
         <div style="font-weight:900;color:${t.collected?'#1a8c3c':'var(--orange)'};font-size:13px">₹${t.amount.toLocaleString('en-IN')}</div>
         <span class="badge ${t.collected?'bd-green':'bd-orange'}" style="font-size:9.5px">${t.collected?'✅':'⏳'}</span>
+        ${receptionQueueRestoreButtonHtml(t.bmhId, { label: '↩', title: 'Restore this patient to today\\'s queue', style: 'background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1px solid var(--bmh-blue);border-radius:5px;padding:2px 6px;font-size:11px;cursor:pointer;flex-shrink:0' })}
         <button title="Delete this transaction" onclick="deleteTransaction('${t.id}')" style="background:var(--red-lt);color:var(--red);border:1px solid rgba(255,59,48,.3);border-radius:5px;padding:2px 6px;font-size:11px;cursor:pointer;flex-shrink:0">🗑️</button>
       </div>`).join('')
     : '<div style="padding:16px;text-align:center;color:var(--g1);font-size:12px">No transactions today</div>';
@@ -29845,6 +29944,7 @@ function openRcCollectionDetailModal(dept, catKey) {
       + '<div style="flex:1"><div style="font-weight:800">' + escapeHtmlConsent(t.patient || '') + '</div><div style="font-size:10.5px;color:var(--g1)">' + escapeHtmlConsent(t.service || '—') + ' · ' + escapeHtmlConsent(t.time || '—') + '</div></div>'
       + '<span class="badge bd-gray" style="font-size:9px">' + escapeHtmlConsent(t.mode || '—') + '</span>'
       + '<div style="font-weight:900;color:#1a8c3c">' + fmt(getNetTransactionAmount(t)) + '</div>'
+      + receptionQueueRestoreButtonHtml(t.bmhId, { label: '↩', title: 'Restore this patient to today\'s queue', style: 'background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1px solid var(--bmh-blue);border-radius:5px;padding:2px 6px;font-size:10px;cursor:pointer;flex-shrink:0' })
       + '</div>';
   }).join('');
   const unpaidRows = unpaid.map(function (r) {
@@ -29852,6 +29952,7 @@ function openRcCollectionDetailModal(dept, catKey) {
       + '<div style="flex:1"><div style="font-weight:800">' + escapeHtmlConsent(r.patient || '') + '</div><div style="font-size:10.5px;color:var(--g1)">' + escapeHtmlConsent(r.for || '—') + '</div></div>'
       + '<span class="badge bd-orange" style="font-size:9px">Pending</span>'
       + '<div style="font-weight:900;color:#b45309">' + fmt(Number(r.amount) || 0) + '</div>'
+      + receptionQueueRestoreButtonHtml(r.bmhId, { label: '↩', title: 'Restore this patient to today\'s queue', style: 'background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1px solid var(--bmh-blue);border-radius:5px;padding:2px 6px;font-size:10px;cursor:pointer;flex-shrink:0' })
       + '<select id="pay-mode-' + String(r.id).replace(/"/g, '&quot;') + '" style="height:28px;border:1px solid var(--g4);border-radius:6px;padding:0 6px;font-size:10.5px;background:#fff">'
       + '<option value="Cash"' + (isInsuranceLikeMode(r.mode || r.ins || '') ? '' : ' selected') + '>Cash</option>'
       + '<option value="UPI"' + (String(r.mode || '').toLowerCase() === 'upi' ? ' selected' : '') + '>UPI</option>'
@@ -34846,16 +34947,17 @@ function getReceptionBasePts() {
   const df = window._rcDeptFilter || 'all';
   // Start with today's base patients
   let basePts = getTodayQueueBasePatients();
+  const todayBaseIds = new Set(basePts.map(function (p) { return String(p?.bmhId || '').trim(); }).filter(Boolean));
 
   // Augment with cross-referred patients for the selected dept (or all depts)
   // so reception sees the patient in every dept they've been cross-referred to
   const seen = new Set(basePts.map(function(p) { return p.bmhId; }));
-  const todayKeyLocal = localDateKey(new Date());
   const xrefEntries = [];
 
   (PATIENTS || []).forEach(function(p) {
     if (!p || p.queueRemoved || String(p.status || '').toLowerCase() === 'removed') return;
     if (!centreMatch(p)) return;
+    if (!todayBaseIds.has(String(p.bmhId || '').trim())) return;
     const xrefs = getActiveCrossRefsForPatient(p).filter(function(xr) {
       // Only include active (not yet fully seen) cross-refs
       return !xr.seenAt;
@@ -34889,11 +34991,11 @@ function getReceptionBasePts() {
   // Filter base patients by dept
   if (df !== 'all') basePts = basePts.filter(function(p) { return p.dept === df; });
 
-  return basePts.concat(xrefEntries);
+  return dedupeQueueEntriesByKey(basePts.concat(xrefEntries));
 }
 
 function computeReceptionQueuePts() {
-  let pts = getReceptionBasePts();
+  let pts = dedupeQueueEntriesByKey(getReceptionBasePts());
   const sub = window._rcQueueSubtab || 'waiting';
   if(sub === 'seen') pts = pts.filter(p=>isPatientMarkedSeen(p));
   else if(sub === 'waiting') pts = pts.filter(p=>!isPatientMarkedSeen(p));
