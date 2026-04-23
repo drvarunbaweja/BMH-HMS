@@ -30057,7 +30057,7 @@ function renderCollectionDashboard() {
               <div style="flex:1"><div style="font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap">${t.patient}${t.type==='advance' ? '<span class="badge" style="font-size:8px;background:var(--blue-lt);color:var(--blue);border:1px solid var(--blue)">Advance</span>' : ''}</div><div style="font-size:10.5px;color:var(--g1)">${t.service||'—'} · ${t.time||'—'}</div></div>
               <span class="badge bd-gray" style="font-size:9.5px">${t.mode||'—'}</span>
               <div style="font-weight:800;color:#1a8c3c">${fmt(t.amount)}</div>
-              ${receptionQueueRestoreButtonHtml(t.bmhId, { label: '↩', title: 'Restore this patient to today\\'s queue', style: 'background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1px solid var(--bmh-blue);border-radius:5px;padding:2px 6px;font-size:10px;cursor:pointer;flex-shrink:0' })}
+              ${receptionQueueRestoreButtonHtml(t.bmhId, { label: '↩', title: "Restore this patient to today's queue", style: 'background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1px solid var(--bmh-blue);border-radius:5px;padding:2px 6px;font-size:10px;cursor:pointer;flex-shrink:0' })}
               <button title="Delete" onclick="deleteTransaction('${t.id}')" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--red);padding:0 2px">🗑️</button>
             </div>`).join('') : '<div style="padding:8px;color:var(--g1);font-size:11.5px">No collected payments yet</div>'}
         </div>
@@ -30078,7 +30078,7 @@ function renderCollectionDashboard() {
         <span class="badge bd-gray" style="font-size:9.5px">${t.mode||'—'}</span>
         <div style="font-weight:900;color:${t.collected?'#1a8c3c':'var(--orange)'};font-size:13px">₹${t.amount.toLocaleString('en-IN')}</div>
         <span class="badge ${t.collected?'bd-green':'bd-orange'}" style="font-size:9.5px">${t.collected?'✅':'⏳'}</span>
-        ${receptionQueueRestoreButtonHtml(t.bmhId, { label: '↩', title: 'Restore this patient to today\\'s queue', style: 'background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1px solid var(--bmh-blue);border-radius:5px;padding:2px 6px;font-size:11px;cursor:pointer;flex-shrink:0' })}
+        ${receptionQueueRestoreButtonHtml(t.bmhId, { label: '↩', title: "Restore this patient to today's queue", style: 'background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1px solid var(--bmh-blue);border-radius:5px;padding:2px 6px;font-size:11px;cursor:pointer;flex-shrink:0' })}
         <button title="Delete this transaction" onclick="deleteTransaction('${t.id}')" style="background:var(--red-lt);color:var(--red);border:1px solid rgba(255,59,48,.3);border-radius:5px;padding:2px 6px;font-size:11px;cursor:pointer;flex-shrink:0">🗑️</button>
       </div>`).join('')
     : '<div style="padding:16px;text-align:center;color:var(--g1);font-size:12px">No transactions today</div>';
