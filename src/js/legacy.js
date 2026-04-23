@@ -28848,37 +28848,37 @@ window.printUnifiedRx = function(deptId) {
 @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Inter:wght@400;600;700;800&family=Lato:ital,wght@0,300;0,400;0,700;0,900;1,400&family=Libre+Baskerville:wght@400;700&family=Playfair+Display:wght@700&family=Source+Sans+3:wght@400;600;700;800&display=swap');
 *{margin:0;padding:0;box-sizing:border-box;print-color-adjust:exact;-webkit-print-color-adjust:exact}
 @page{size:A4 portrait;margin:0}
-body{font-family:'Lato',sans-serif;font-size:10px;color:#1a1a1a;background:#fff;padding:3.5mm 8mm 3mm;line-height:1.3;overflow:visible}
+body{font-family:'Lato',sans-serif;font-size:9.5px;color:#1a1a1a;background:#fff;padding:2.7mm 7mm 2.5mm;line-height:1.22;overflow:visible}
 .lh-img{width:100%;max-width:100%;height:auto;display:block;margin-bottom:6px}
 /* Patient header */
 .pt-name-bar{display:flex;align-items:baseline;justify-content:space-between;border-bottom:1.5px solid #333;padding-bottom:3px;margin-bottom:2px}
-.pt-name{font-family:'Playfair Display','Georgia',serif;font-size:17px;font-weight:700;color:#111;letter-spacing:.2px}
+.pt-name{font-family:'Playfair Display','Georgia',serif;font-size:16px;font-weight:700;color:#111;letter-spacing:.2px}
 .pt-meta{font-size:10px;font-weight:300;color:#111;margin-left:8px;font-style:italic}
 .pt-date{font-size:9.5px;color:#111;font-weight:400}
-.pt-subline{font-size:9.5px;color:#111;margin-bottom:3px}
+.pt-subline{font-size:8.8px;color:#111;margin-bottom:3px}
 /* Section dividers */
-.sec-divider{display:flex;align-items:center;gap:6px;margin:4px 0 3px}
+.sec-divider{display:flex;align-items:center;gap:6px;margin:3px 0 2px}
 .sec-divider::before,.sec-divider::after{content:'';flex:1;border-top:1px solid #bbb}
 .sec-label{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#111;white-space:nowrap}
 /* Diagnosis */
 .diag-rule-top{border-top:1.5px solid #111;margin-bottom:3px}
 .diag-rule-bot{border-top:1.5px solid #111;margin-top:3px}
-.diag-text{font-family:'Playfair Display','Georgia',serif;font-size:12px;font-weight:700;text-align:center;color:#111;padding:2px 0}
+.diag-text{font-family:'Playfair Display','Georgia',serif;font-size:11px;font-weight:700;text-align:center;color:#111;padding:1px 0}
 /* Post-surgery flag */
 .postsurg-flag{font-size:10px;font-weight:800;color:#222;border:1.5px solid #555;display:inline-block;padding:2px 10px;border-radius:3px;margin-bottom:4px;letter-spacing:.3px}
 /* Complaint / plain text block */
-.cc-text{font-size:10.2px;color:#333;font-style:italic;margin:2px 0 3px;padding-left:6px}
+.cc-text{font-size:9.6px;color:#333;font-style:italic;margin:1px 0 2px;padding-left:6px}
 /* Dept card (OBG summary, PSY MSE, skin exam) */
-.dept-card{border:1px solid #d6dbe1;border-radius:8px;margin-bottom:4px;overflow:hidden;font-size:9.6px;background:#fbfbfb}
+.dept-card{border:1px solid #d6dbe1;border-radius:8px;margin-bottom:4px;overflow:hidden;font-size:9.2px;background:#fbfbfb;page-break-inside:avoid;break-inside:avoid}
 .dept-card-hdr{background:#f1f3f5;color:#222;font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;padding:4px 8px;border-bottom:1px solid #d6dbe1}
 .dept-card-row{display:flex;border-bottom:1px solid #e8e8e8;min-height:16px}
 .dept-card-row:last-child{border-bottom:none}
 .dept-card-key{font-weight:700;color:#333;padding:2px 6px;min-width:90px;font-size:9.5px;text-transform:uppercase;letter-spacing:.4px;background:#f5f5f5;display:flex;align-items:center}
 .dept-card-val{padding:2px 8px;color:#111;font-size:10px;display:flex;align-items:center;flex:1}
 /* Vitals inline */
-.vitals-inline{font-size:10px;color:#222;margin-bottom:4px;line-height:1.6}
+.vitals-inline{font-size:9.4px;color:#222;margin-bottom:3px;line-height:1.45}
 /* VA / Glass tables */
-table{width:100%;border-collapse:collapse;font-size:9.6px;margin-bottom:4px}
+table{width:100%;border-collapse:collapse;font-size:9.1px;margin-bottom:3px}
 th{background:#f2f4f6;color:#222;border:1px solid #cfd5dc;padding:3px 5px;font-weight:700;text-align:center;font-size:8.5px;letter-spacing:.3px;text-transform:uppercase}
 td{border:1px solid #d5dae0;padding:3px 5px;text-align:center;vertical-align:middle}
 td.left{text-align:left}
@@ -28886,18 +28886,18 @@ tr:nth-child(even) td{background:#fafafa}
 .flag-h{font-weight:700;color:#111;text-decoration:underline}
 .flag-n{color:#444}
 /* Medicine list — all depts */
-.rx-list{display:flex;flex-direction:column;gap:0;margin-bottom:5px}
-.rx-item{padding:5px 0 6px 0;border-bottom:1px solid #e8e8e8}
+.rx-list{display:flex;flex-direction:column;gap:0;margin-bottom:4px}
+.rx-item{padding:4px 0 5px 0;border-bottom:1px solid #e8e8e8;page-break-inside:avoid;break-inside:avoid}
 .rx-item:last-child{border-bottom:none;padding-bottom:0}
 .rx-item-num{font-size:9px;font-weight:900;color:#111;letter-spacing:.4px;margin-bottom:1px}
-.rx-item-name{font-family:'Playfair Display','Georgia',serif;font-size:14px;font-weight:700;color:#111;display:block;line-height:1.2}
+.rx-item-name{font-family:'Playfair Display','Georgia',serif;font-size:13px;font-weight:700;color:#111;display:block;line-height:1.15}
 .rx-item-gen{font-size:9px;color:#111;font-style:italic;display:block;margin-bottom:3px}
 .rx-item-details{display:flex;flex-wrap:wrap;gap:0 12px;margin:2px 0 3px;align-items:center}
 .rx-detail-item{display:flex;align-items:center;gap:4px;font-size:9.5px;color:#111}
 .rx-detail-dot{width:3px;height:3px;border-radius:50%;background:#111;flex-shrink:0}
-.rx-item-instr{font-size:10.8px;color:#222;font-style:normal;line-height:1.3;padding-left:9px;border-left:2px solid #ccc;margin-top:4px;font-weight:600}
+.rx-item-instr{font-size:10px;color:#222;font-style:normal;line-height:1.25;padding-left:8px;border-left:2px solid #ccc;margin-top:3px;font-weight:600}
 /* Taper card */
-.taper-card{margin:4px 0 5px;border:1px solid #d5dbe2;border-radius:10px;overflow:hidden;font-size:9.5px;background:#fbfbfb}
+.taper-card{margin:3px 0 4px;border:1px solid #d5dbe2;border-radius:10px;overflow:hidden;font-size:9px;background:#fbfbfb;page-break-inside:avoid;break-inside:avoid}
 .taper-card-hdr{background:#f2f4f6;color:#333;padding:5px 10px;font-size:8.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;border-bottom:1px solid #d5dbe2}
 .taper-steps-row{display:flex;align-items:stretch;background:#fafafa}
 .taper-step{flex:1;padding:6px 8px;text-align:center;border-right:1px solid #e0e0e0}
@@ -28908,14 +28908,14 @@ tr:nth-child(even) td{background:#fafafa}
 .taper-step-instr{font-size:8.5px;color:#666;font-style:italic;line-height:1.35;margin-top:2px}
 .taper-arrow{display:flex;align-items:center;justify-content:center;color:#aaa;font-size:14px;padding:0 2px;flex-shrink:0}
 /* Procedures */
-.proc-item{padding:3px 0;font-size:11px;font-weight:800;border-bottom:1px solid #eee;display:flex;align-items:center;gap:6px}
+.proc-item{padding:2px 0;font-size:10px;font-weight:800;border-bottom:1px solid #eee;display:flex;align-items:center;gap:6px}
 /* Investigations */
 .inv-wrap{display:flex;flex-wrap:wrap;gap:4px 6px;margin-top:2px}
-.inv-chip{display:inline-flex;align-items:center;padding:3px 8px;background:#f0f0f0;border:1px solid #ccc;border-radius:3px;font-size:9.5px;font-weight:700;color:#222;line-height:1.3}
+.inv-chip{display:inline-flex;align-items:center;padding:3px 8px;background:#f0f0f0;border:1px solid #ccc;border-radius:3px;font-size:9px;font-weight:700;color:#222;line-height:1.2}
 /* Instructions */
-.advice-block{font-size:10.8px;color:#222;padding:4px 8px;border-left:2px solid #bbb;line-height:1.32;margin-bottom:3px;font-style:normal;font-weight:600}
+.advice-block{font-size:9.9px;color:#222;padding:4px 8px;border-left:2px solid #bbb;line-height:1.24;margin-bottom:3px;font-style:normal;font-weight:600;page-break-inside:avoid;break-inside:avoid}
 /* Follow-up */
-.fu-box{background:#f7f8f9;border-radius:999px;padding:5px 12px;margin:4px 0;font-size:10.5px;font-weight:700;color:#222;display:inline-block;border:1px solid #cfd5dc}
+.fu-box{background:#f7f8f9;border-radius:999px;padding:4px 10px;margin:3px 0;font-size:9.7px;font-weight:700;color:#222;display:inline-block;border:1px solid #cfd5dc}
 /* Signature row */
 .sig-row{display:flex;justify-content:space-between;align-items:flex-end;margin-top:7px;padding-top:6px;border-top:1px solid #ddd}
 .dr-name{font-family:'Playfair Display','Georgia',serif;font-size:13px;font-weight:700;color:#111}
@@ -28928,13 +28928,13 @@ tr:nth-child(even) td{background:#fafafa}
 /* OE plain instruction row */
 .oe-plain-row td{font-size:10px;font-style:italic;color:#444;background:#f8f8f8}
 /* Full design variants */
-.design-dx.classic{padding:14px 18px;border:1px solid #d9e0ea;border-left:5px solid #c89a2b;border-radius:16px;background:#fffdf8;font-family:'Playfair Display','Georgia',serif;font-size:19px;font-weight:700;line-height:1.5;color:#14345e}
+.design-dx.classic{padding:11px 14px;border:1px solid #d9e0ea;border-left:5px solid #c89a2b;border-radius:16px;background:#fffdf8;font-family:'Playfair Display','Georgia',serif;font-size:15px;font-weight:700;line-height:1.35;color:#14345e;page-break-inside:avoid;break-inside:avoid}
 .design-dx.blocks,.design-dx.ribbon,.design-dx.compact{border:1px solid #d9e5ef;border-radius:16px;background:#fff;padding:12px 14px}
 .design-dx-title{font-size:10px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;color:#667085;margin-bottom:6px}
-.design-dx.blocks .design-dx-body{font-size:19px;font-weight:900;line-height:1.3;color:#173a67}
+.design-dx.blocks .design-dx-body{font-size:15px;font-weight:900;line-height:1.25;color:#173a67}
 .design-dx.ribbon{background:#f3f5f7;color:#222;border:1px solid #d8dde3}
 .design-dx.ribbon .design-dx-title{color:#6b7280}
-.design-dx.ribbon .design-dx-body{font-size:20px;font-weight:800;line-height:1.3;color:#1f2937}
+.design-dx.ribbon .design-dx-body{font-size:15px;font-weight:800;line-height:1.25;color:#1f2937}
 .design-dx.editorial,.design-dx.ledger,.design-dx.vertical,.design-dx.mono{border:1px solid #d5d5d5;border-radius:16px;background:#fff;padding:12px 14px}
 .design-dx.editorial{background:linear-gradient(90deg,#f2f2f0 0 24%,#fff 24% 100%);padding-left:18px}
 .design-dx.editorial .design-dx-title{color:#444}
@@ -28949,30 +28949,30 @@ tr:nth-child(even) td{background:#fafafa}
 .design-dx.mono .design-dx-title{font-family:'Source Sans 3','Courier New',monospace;color:#111}
 .design-dx.mono .design-dx-body{font-family:'Source Sans 3','Courier New',monospace;font-size:16px;font-weight:700;line-height:1.45;color:#111}
 .design-dx.compact{font-size:16px;font-weight:800;line-height:1.4;color:#153d66;background:#f6f9fc}
-.design-rx{margin-bottom:6px}
+.design-rx{margin-bottom:5px}
 .design-rx.design-editorial_columns{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.design-med{margin-bottom:10px}
+.design-med{margin-bottom:8px;page-break-inside:avoid;break-inside:avoid}
 .design-med:last-child{margin-bottom:0}
 .design-med-top{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}
 .design-med-name{font-family:'Playfair Display','Georgia',serif;color:#14345e}
 .design-med-sub{font-size:9.8px;color:#667085;line-height:1.45;margin-top:3px}
 .design-med-instr{line-height:1.45}
-.design-med.classic{border:1px solid #dfe4ec;border-radius:18px;padding:14px 16px;background:#fff;box-shadow:0 8px 22px rgba(20,52,94,.05)}
-.design-med.classic .design-med-name{font-size:24px}
-.design-med.classic .design-med-chip{min-width:170px;text-align:right;font-size:11px;font-weight:900;color:#5d4b16;background:#fbf2dc;border:1px solid #ecd8a1;border-radius:12px;padding:9px 12px}
-.design-med.classic .design-med-instr{margin-top:12px;padding:12px 14px;border-radius:14px;background:#f7f9fc;font-family:'Playfair Display','Georgia',serif;font-size:17px;font-weight:700;color:#24384d}
-.design-med.blocks{border:1px solid #d8e4ef;border-radius:18px;padding:14px;background:#eef5fb}
-.design-med.blocks .design-med-name{font-size:20px}
+.design-med.classic{border:1px solid #dfe4ec;border-radius:18px;padding:12px 13px;background:#fff;box-shadow:none}
+.design-med.classic .design-med-name{font-size:18px}
+.design-med.classic .design-med-chip{min-width:138px;text-align:right;font-size:10px;font-weight:900;color:#5d4b16;background:#fbf2dc;border:1px solid #ecd8a1;border-radius:12px;padding:7px 9px}
+.design-med.classic .design-med-instr{margin-top:8px;padding:9px 10px;border-radius:14px;background:#f7f9fc;font-family:'Playfair Display','Georgia',serif;font-size:13px;font-weight:700;color:#24384d}
+.design-med.blocks{border:1px solid #d8e4ef;border-radius:18px;padding:11px 12px;background:#eef5fb}
+.design-med.blocks .design-med-name{font-size:17px}
 .design-med.blocks .design-med-pills{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;max-width:250px}
 .design-med.blocks .design-med-pills span{padding:7px 10px;border-radius:999px;background:#fff;border:1px solid #d7e0ea;font-size:12px;font-weight:800;color:#35506d}
-.design-med.blocks .design-med-instr{margin-top:10px;background:#fff;border-radius:14px;padding:11px 12px;font-size:15px;font-weight:700;color:#24384d}
-.design-med.ribbon{position:relative;border:1px solid #dde7e7;border-radius:18px;padding:16px 16px 16px 18px;background:#fff;box-shadow:0 10px 24px rgba(16,24,40,.05)}
+.design-med.blocks .design-med-instr{margin-top:8px;background:#fff;border-radius:14px;padding:9px 10px;font-size:12.5px;font-weight:700;color:#24384d}
+.design-med.ribbon{position:relative;border:1px solid #dde7e7;border-radius:18px;padding:12px 12px 12px 14px;background:#fff;box-shadow:none}
 .design-med.ribbon .design-med-tag{display:inline-block;margin-bottom:10px;padding:5px 9px;border-radius:999px;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.08em;background:#eff7f8;color:#0f7b82}
-.design-med.ribbon .design-med-name{font-size:23px}
-.design-med.ribbon .design-med-right{min-width:180px;text-align:right;font-size:12px;line-height:1.6;color:#445467;font-weight:800}
-.design-med.ribbon .design-med-instr{margin-top:10px;background:#eef7f7;border-radius:14px;padding:12px 13px;font-size:15px;font-weight:700;color:#24384d}
-.design-med.compact{border:1px solid #d8e0e8;border-radius:14px;padding:10px 12px;background:#fff}
-.design-med.compact .design-med-name{font-size:16px;font-weight:700}
+.design-med.ribbon .design-med-name{font-size:18px}
+.design-med.ribbon .design-med-right{min-width:150px;text-align:right;font-size:10px;line-height:1.45;color:#445467;font-weight:800}
+.design-med.ribbon .design-med-instr{margin-top:8px;background:#eef7f7;border-radius:14px;padding:9px 10px;font-size:12.5px;font-weight:700;color:#24384d}
+.design-med.compact{border:1px solid #d8e0e8;border-radius:14px;padding:8px 10px;background:#fff}
+.design-med.compact .design-med-name{font-size:14px;font-weight:700}
 .design-med.compact .design-med-right{font-size:11px;font-weight:800;color:#445467}
 .design-med.compact .design-med-instr{margin-top:7px;font-size:13px;font-weight:700;color:#24384d}
 .design-med.editorial{border:1px solid #d8d8d4;border-radius:18px;padding:16px;background:#fff;break-inside:avoid}
@@ -29018,13 +29018,13 @@ tr:nth-child(even) td{background:#fafafa}
 .design-taper.compact .design-taper-title{color:#73540e;margin-bottom:5px}
 .design-taper.editorial_columns,.design-taper.left_label_ledger,.design-taper.vertical_dx_column,.design-taper.mono_chart{border-radius:10px;background:#f6f6f6;border:1px solid #d2d2d2;padding:9px 10px}
 .design-taper.editorial_columns .design-taper-title,.design-taper.left_label_ledger .design-taper-title,.design-taper.vertical_dx_column .design-taper-title,.design-taper.mono_chart .design-taper-title{color:#333}
-.design-bottom{display:grid;grid-template-columns:1.2fr .8fr;gap:14px;margin-top:10px}
+.design-bottom{display:grid;grid-template-columns:1.2fr .8fr;gap:10px;margin-top:8px;page-break-inside:avoid;break-inside:avoid}
 .design-bottom.compact{grid-template-columns:1fr}
 .design-bottom.vertical_dx_column{grid-template-columns:1fr 240px}
-.design-side-card{border:1px solid #d8e0e8;border-radius:16px;padding:14px;background:#fff}
+.design-side-card{border:1px solid #d8e0e8;border-radius:16px;padding:10px 11px;background:#fff}
 .design-side-title{font-size:12px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;color:#14345e;margin-bottom:8px}
-.design-side-body{font-size:11px;line-height:1.7;color:#344054;font-weight:700}
-.design-follow{align-self:start;border-radius:16px;padding:14px;font-size:15px;font-weight:800;line-height:1.5}
+.design-side-body{font-size:9.8px;line-height:1.45;color:#344054;font-weight:700}
+.design-follow{align-self:start;border-radius:16px;padding:10px 11px;font-size:11.5px;font-weight:800;line-height:1.35}
 .design-follow.signature_classic{background:#f7f7f6;border:1px solid #d9d5c9;color:#4b5563}
 .design-follow.clinical_blocks{background:#f4f6f8;border:1px solid #d8dde3;color:#374151}
 .design-follow.ribbon_timeline{background:#f8f7f3;border:1px solid #ddd7c8;color:#4b5563}
@@ -29032,7 +29032,7 @@ tr:nth-child(even) td{background:#fafafa}
 .design-follow.editorial_columns,.design-follow.left_label_ledger,.design-follow.vertical_dx_column,.design-follow.mono_chart{background:#f3f3f3;border:1px solid #d0d0d0;color:#111}
 ${typographyCss}
 ${designCss}
-</style></head><body>
+</style></head><body class="rx-print rx-${rxDesign}">
 
 <div class="watermark">BMSH</div>
 

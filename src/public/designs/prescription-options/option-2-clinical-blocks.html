@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prescription Option 2 - Clinical Blocks</title>
+  <style>
+    :root{
+      --navy:#173a67;
+      --teal:#107b83;
+      --blue:#edf6f8;
+      --ice:#f7fbff;
+      --line:#d6e2ea;
+      --ink:#17212d;
+      --muted:#58677a;
+      --amber:#fff2d8;
+      --amber-line:#ebcf8c;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      background:linear-gradient(180deg,#e8f0f8 0%, #f8fbfe 100%);
+      font-family:Inter,system-ui,sans-serif;
+      color:var(--ink);
+      padding:24px;
+    }
+    .sheet{
+      max-width:900px;
+      margin:0 auto;
+      background:#fff;
+      border-radius:24px;
+      overflow:hidden;
+      box-shadow:0 26px 70px rgba(20,36,58,.14);
+    }
+    .sheet img{width:100%;display:block}
+    .pad{padding:22px 24px 26px}
+    .top{
+      display:grid;
+      grid-template-columns:1.4fr .8fr .8fr .8fr;
+      gap:12px;
+      margin-bottom:16px;
+    }
+    .box{
+      border:1px solid var(--line);
+      background:var(--ice);
+      border-radius:16px;
+      padding:13px 14px;
+    }
+    .k{
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.08em;
+      font-weight:800;
+      color:var(--muted);
+      margin-bottom:8px;
+    }
+    .v{
+      font-size:23px;
+      font-weight:800;
+      color:var(--navy);
+      line-height:1.2;
+    }
+    .title{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-bottom:12px;
+    }
+    .title h1{
+      margin:0;
+      font-size:30px;
+      color:var(--navy);
+      letter-spacing:-.02em;
+    }
+    .subtitle{font-size:18px;color:var(--navy);font-weight:800}
+    .mini-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+    .mini-card{border:1px solid var(--line);border-radius:16px;padding:14px;background:#fff}
+    .mini-card h3{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--teal)}
+    .va-table{display:grid;grid-template-columns:auto 1fr auto;gap:6px 8px;font-size:13px;line-height:1.45;color:#334155}
+    .va-table strong{color:var(--navy)}
+    .row{
+      display:grid;
+      grid-template-columns:1.15fr .85fr;
+      gap:14px;
+      margin-top:14px;
+    }
+    .panel{
+      border:1px solid var(--line);
+      border-radius:18px;
+      padding:16px;
+      background:#fff;
+    }
+    .panel h2{
+      margin:0 0 12px;
+      font-size:13px;
+      text-transform:uppercase;
+      letter-spacing:.1em;
+      color:var(--navy);
+    }
+    .dx{
+      font-size:22px;
+      font-weight:900;
+      line-height:1.25;
+      color:#12385f;
+    }
+    .med{
+      border:1px solid var(--line);
+      border-radius:16px;
+      padding:14px;
+      background:var(--blue);
+      margin-bottom:12px;
+    }
+    .med:last-child{margin-bottom:0}
+    .med-head{
+      display:flex;
+      justify-content:space-between;
+      gap:14px;
+      align-items:start;
+      margin-bottom:10px;
+    }
+    .med-name{
+      margin:0;
+      font-size:20px;
+      color:var(--navy);
+      line-height:1.15;
+      font-weight:900;
+    }
+    .med-sub{font-size:13px;color:var(--muted);margin-top:4px}
+    .chipcol{
+      display:flex;
+      flex-wrap:wrap;
+      justify-content:flex-end;
+      gap:8px;
+      max-width:240px;
+    }
+    .chip{
+      padding:7px 10px;
+      border-radius:999px;
+      background:#fff;
+      border:1px solid var(--line);
+      font-size:12px;
+      font-weight:800;
+      color:#35506d;
+    }
+    .instruction{
+      background:#fff;
+      border-radius:14px;
+      padding:11px 12px;
+      font-size:15px;
+      line-height:1.6;
+      font-weight:700;
+      color:#24384d;
+    }
+    .taper{
+      margin-top:10px;
+      background:var(--amber);
+      border:1px solid var(--amber-line);
+      border-radius:14px;
+      padding:12px;
+    }
+    .taper .tt{
+      font-size:11px;
+      font-weight:900;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+      color:#7b5900;
+      margin-bottom:8px;
+    }
+    .taper ol{
+      margin:0;
+      padding-left:18px;
+      font-size:14px;
+      line-height:1.65;
+      color:#694f14;
+      font-weight:700;
+    }
+    ul{margin:0;padding-left:18px;color:#344054;font-size:14px;line-height:1.75;font-weight:600}
+    .review{
+      background:linear-gradient(135deg,var(--navy),#285385);
+      color:#fff;
+      border-radius:16px;
+      padding:14px;
+      margin-top:12px;
+    }
+    .review .k{color:rgba(255,255,255,.7);margin-bottom:6px}
+    .review .v{color:#fff}
+    .back{
+      display:block;
+      width:max-content;
+      margin:18px auto 0;
+      color:var(--navy);
+      text-decoration:none;
+      font-weight:800;
+    }
+  </style>
+</head>
+<body>
+  <div class="sheet">
+    <img src="../../assets/bmh-logo-discharge.jpg" alt="Hospital Header">
+    <div class="pad">
+      <div class="title">
+        <div>
+          <h1>Prescription</h1>
+          <div class="subtitle">High-clarity block design with obvious taper and instruction zones</div>
+        </div>
+        <div class="subtitle">20 Apr 2026</div>
+      </div>
+
+      <div class="top">
+        <div class="box"><div class="k">Patient</div><div class="v">Mr. Harpreet Singh</div></div>
+        <div class="box"><div class="k">BMSH ID</div><div class="v">462118</div></div>
+        <div class="box"><div class="k">Age / Sex</div><div class="v">52 / M</div></div>
+        <div class="box"><div class="k">Dept</div><div class="v">Medicine</div></div>
+      </div>
+
+      <div class="row">
+        <div class="panel">
+          <h2>Diagnosis</h2>
+          <div class="dx">Acute gastritis with reflux symptoms</div>
+        </div>
+        <div class="panel">
+          <h2>Visit Summary</h2>
+          <ul>
+            <li>Burning epigastric pain after meals</li>
+            <li>No red flag bleeding symptoms</li>
+            <li>Dietary modification advised</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="mini-grid">
+        <div class="mini-card">
+          <h3>Chief Complaints</h3>
+          <ul>
+            <li>Burning after meals</li>
+            <li>Acid regurgitation at night</li>
+            <li>Bloating for 5 days</li>
+          </ul>
+        </div>
+        <div class="mini-card">
+          <h3>Visual Acuity / Glasses</h3>
+          <div class="va-table">
+            <span>OD</span><span>UCVA 6/9, BCVA 6/6</span><strong>-0.50 DS</strong>
+            <span>OS</span><span>UCVA 6/12, BCVA 6/6</span><strong>-0.75 DS</strong>
+          </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="panel">
+          <h2>Medicines</h2>
+
+          <div class="med">
+            <div class="med-head">
+              <div>
+                <div class="med-name">Pantoprazole 40 mg</div>
+                <div class="med-sub">Tablet • Oral</div>
+              </div>
+              <div class="chipcol">
+                <span class="chip">Once daily</span>
+                <span class="chip">30 min before food</span>
+                <span class="chip">14 days</span>
+              </div>
+            </div>
+            <div class="instruction">Take one tablet 30 minutes before food once a day till 03/05/2026.</div>
+          </div>
+
+          <div class="med">
+            <div class="med-head">
+              <div>
+                <div class="med-name">Sucralfate Syrup</div>
+                <div class="med-sub">Liquid • Oral</div>
+              </div>
+              <div class="chipcol">
+                <span class="chip">Twice daily</span>
+                <span class="chip">Before food</span>
+                <span class="chip">7 days</span>
+              </div>
+            </div>
+            <div class="instruction">Take the measured dose before food twice a day till 26/04/2026.</div>
+          </div>
+
+          <div class="med">
+            <div class="med-head">
+              <div>
+                <div class="med-name">Clonazepam 0.25 mg</div>
+                <div class="med-sub">Tablet • Short course with taper</div>
+              </div>
+              <div class="chipcol">
+                <span class="chip">At bedtime</span>
+                <span class="chip">7 days</span>
+              </div>
+            </div>
+            <div class="instruction">Take one tablet at bedtime once a day till 26/04/2026.</div>
+            <div class="taper">
+              <div class="tt">Taper Schedule</div>
+              <ol>
+                <li>Days 1 to 5: one tablet at bedtime.</li>
+                <li>Days 6 and 7: half tablet at bedtime, then stop.</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Instructions</h2>
+          <ul>
+            <li>Avoid very spicy food, tea on empty stomach, and late-night meals.</li>
+            <li>Take meals on time and keep hydration adequate.</li>
+            <li>Return early if vomiting, black stools, or severe pain develops.</li>
+          </ul>
+
+          <div class="review">
+            <div class="k">Follow Up</div>
+            <div class="v">Review after 7 days</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <a class="back" href="./index.html">Back to design gallery</a>
+</body>
+</html>
