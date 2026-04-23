@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prescription Design Options</title>
+  <style>
+    :root{
+      --navy:#14345e;
+      --teal:#0f7c82;
+      --gold:#c89a2b;
+      --cream:#f8f4ea;
+      --ink:#18212c;
+      --muted:#667085;
+      --line:#d8dee7;
+      --white:#ffffff;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      color:var(--ink);
+      background:
+        radial-gradient(circle at top right, rgba(15,124,130,.10), transparent 26%),
+        linear-gradient(180deg, #eff5fb 0%, #f8fbfe 42%, #fff 100%);
+      min-height:100vh;
+    }
+    .wrap{max-width:1120px;margin:0 auto;padding:32px 20px 60px}
+    .hero{
+      background:rgba(255,255,255,.88);
+      border:1px solid rgba(20,52,94,.10);
+      backdrop-filter:blur(8px);
+      border-radius:24px;
+      padding:28px;
+      box-shadow:0 24px 70px rgba(20,52,94,.10);
+      margin-bottom:24px;
+    }
+    .eyebrow{
+      display:inline-block;
+      padding:6px 10px;
+      border-radius:999px;
+      font-size:12px;
+      font-weight:800;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+      color:var(--navy);
+      background:rgba(20,52,94,.08);
+      margin-bottom:12px;
+    }
+    h1{
+      margin:0 0 10px;
+      font-size:34px;
+      line-height:1.05;
+      color:var(--navy);
+    }
+    .hero p{
+      margin:0;
+      max-width:860px;
+      font-size:16px;
+      line-height:1.65;
+      color:#415167;
+    }
+    .cards{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+      gap:18px;
+    }
+    .card{
+      display:flex;
+      flex-direction:column;
+      gap:14px;
+      background:var(--white);
+      border:1px solid rgba(20,52,94,.10);
+      border-radius:22px;
+      padding:18px;
+      box-shadow:0 18px 40px rgba(16,24,40,.06);
+    }
+    .badge{
+      width:max-content;
+      padding:5px 10px;
+      border-radius:999px;
+      font-size:11px;
+      font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:.08em;
+      color:#6a4a00;
+      background:#fff4d6;
+    }
+    .card h2{
+      margin:0;
+      font-size:22px;
+      color:var(--navy);
+    }
+    .card p{
+      margin:0;
+      color:var(--muted);
+      font-size:14px;
+      line-height:1.6;
+      flex:1;
+    }
+    .traits{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+    }
+    .traits span{
+      border:1px solid var(--line);
+      border-radius:999px;
+      padding:6px 10px;
+      font-size:12px;
+      color:#415167;
+      background:#fbfcfe;
+    }
+    a.open{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      text-decoration:none;
+      padding:12px 14px;
+      border-radius:14px;
+      background:linear-gradient(135deg,var(--navy),#285188);
+      color:#fff;
+      font-weight:800;
+      box-shadow:0 12px 24px rgba(20,52,94,.18);
+    }
+    .note{
+      margin-top:22px;
+      padding:16px 18px;
+      border-radius:18px;
+      background:#fffdf7;
+      border:1px solid #f1dfb1;
+      color:#6a5a21;
+      font-size:14px;
+      line-height:1.6;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <div class="eyebrow">BMH Prescription Concepts</div>
+      <h1>Clickable prescription design options</h1>
+      <p>Each option below uses the hospital header from the software and shows a full prescription with patient identity, diagnosis, medicines, meal instructions, taper schedule, and follow-up. These are concept screens so we can pick a visual direction before wiring the final version into print.</p>
+    </section>
+
+    <section class="cards">
+      <article class="card">
+        <div class="badge">Option 1</div>
+        <h2>Signature Classic</h2>
+        <p>A polished medical letterhead style with strong hierarchy, elegant medicine emphasis, and a disciplined one-page structure. Best if you want premium but still familiar.</p>
+        <div class="traits">
+          <span>Premium</span>
+          <span>Doctor signature focus</span>
+          <span>Clear medicine list</span>
+          <span>Safe for all departments</span>
+        </div>
+        <a class="open" href="./option-1-signature-classic.html">Open Design</a>
+      </article>
+
+      <article class="card">
+        <div class="badge">Option 2</div>
+        <h2>Clinical Blocks</h2>
+        <p>A card-based structure with strong separation for diagnosis, medicines, taper, and instructions. Best if readability and quick scanning matter most for patients and pharmacists.</p>
+        <div class="traits">
+          <span>Very readable</span>
+          <span>Card sections</span>
+          <span>Taper highlighted</span>
+          <span>Modern hospital feel</span>
+        </div>
+        <a class="open" href="./option-2-clinical-blocks.html">Open Design</a>
+      </article>
+
+      <article class="card">
+        <div class="badge">Option 3</div>
+        <h2>Ribbon Timeline</h2>
+        <p>A more distinctive design with a visual medicine timeline and sentence-led instructions. Best if you want the printout to feel memorable and patient-friendly.</p>
+        <div class="traits">
+          <span>Aesthetic</span>
+          <span>Sentence-based Rx</span>
+          <span>Timeline feel</span>
+          <span>Friendly for multilingual print</span>
+        </div>
+        <a class="open" href="./option-3-ribbon-timeline.html">Open Design</a>
+      </article>
+
+      <article class="card">
+        <div class="badge">Option 4</div>
+        <h2>Compact Bilingual</h2>
+        <p>A compact, highly structured one-page layout designed for busy OPD use where English plus Hindi or Punjabi instructions may need to coexist cleanly.</p>
+        <div class="traits">
+          <span>One-page first</span>
+          <span>Multilingual ready</span>
+          <span>Dense but neat</span>
+          <span>Best for high volume</span>
+        </div>
+        <a class="open" href="./option-4-compact-bilingual.html">Open Design</a>
+      </article>
+    </section>
+
+    <div class="note">
+      Current header note: these mockups use the header asset available in the repo. If your live software is using a custom uploaded letterhead in Settings, we can swap that exact header into the final chosen design next.
+    </div>
+  </div>
+</body>
+</html>
