@@ -20453,6 +20453,28 @@ function isBmhIdAllocatedToAnotherPatient(bmhId, exceptBmhId) {
     return true;
   });
 }
+function isBmhIdAllocatedLocally(bmhId, exceptBmhId) {
+  return isBmhIdAllocatedToAnotherPatient(bmhId, exceptBmhId);
+}
+function isBmhIdAllocatedInDb(bmhId, exceptBmhId) {
+  const target = String(bmhId || '').trim();
+  const except = String(exceptBmhId || '').trim();
+  if (!target || !window.FBDB) return Promise.resolve(false);
+  return window.FBDB.ref('patients/' + target).once('value').then(function (snap) {
+    const row = snap && snap.val ? snap.val() : null;
+    if (!row) return false;
+    const existingId = String(row.bmhId || target).trim();
+    if (!existingId || existingId !== target) return false;
+    if (except && existingId === except) return false;
+    return true;
+  }).catch(function () {
+    return false;
+  });
+}
+async function isBmhIdAllocatedAnywhere(bmhId, exceptBmhId) {
+  if (isBmhIdAllocatedLocally(bmhId, exceptBmhId)) return true;
+  return isBmhIdAllocatedInDb(bmhId, exceptBmhId);
+}
 function findNextAvailableBmhId(startValue, exceptBmhId) {
   let nextNum = parseBmhSequenceNumber(startValue);
   if (!Number.isFinite(nextNum) || nextNum <= 0) nextNum = getKnownHighestBmhNumber() + 1;
@@ -20496,8 +20518,10 @@ function patientNeedsReceptionQueueRestore(patient, deptOverride) {
 function receptionQueueRestoreButtonHtml(bmhId, opts) {
   const id = String(bmhId || '').trim();
   if (!id) return '';
-  const patient = (window.PATIENTS || []).find(function (p) { return String(p?.bmhId || '').trim() === id; });
-  if (!patient || !patientNeedsReceptionQueueRestore(patient)) return '';
+  const matches = (window.PATIENTS || []).filter(function (p) {
+    return String(p?.bmhId || '').trim() === id;
+  });
+  if (!matches.length || !matches.some(function (patient) { return patientNeedsReceptionQueueRestore(patient); })) return '';
   const title = String(opts?.title || 'Restore to queue');
   const label = String(opts?.label || '↩');
   const style = String(opts?.style || 'background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1px solid var(--bmh-blue);border-radius:6px;padding:3px 7px;font-size:10px;font-weight:800;cursor:pointer;flex-shrink:0');
@@ -20507,7 +20531,8 @@ function receptionQueueRestoreButtonHtml(bmhId, opts) {
 function genRcUID() {
   // Only numeric BMSH-###### IDs participate in the sequence (CSV/hash imports are ignored)
   const maxNum = getKnownHighestBmhNumber();
-  const localNext = maxNum + 1;
+  const localNextId = findNextAvailableBmhId('BMSH-' + String(maxNum + 1).padStart(6,'0'));
+  const localNext = parseBmhSequenceNumber(localNextId);
   window._nextPatientNum = localNext;
   const el = document.getElementById('rc-uid');
   if(el) el.textContent = 'BMSH-' + String(localNext).padStart(6,'0');
@@ -20542,7 +20567,7 @@ window.genRcUID = genRcUID;
 
 function reserveNextBmhId() {
   const localFloor = getKnownHighestBmhNumber();
-  const localId = (typeof genRcUID === 'function' && genRcUID()) || ('BMSH-' + String(localFloor + 1).padStart(6,'0'));
+  const localId = (typeof genRcUID === 'function' && genRcUID()) || findNextAvailableBmhId('BMSH-' + String(localFloor + 1).padStart(6,'0'));
   if(!window.FBDB) return Promise.resolve(localId);
 
   return window.FBDB.ref('settings/lastPatientNum').transaction(function(current) {
@@ -20570,6 +20595,19 @@ function reserveNextBmhId() {
   }).catch(function() {
     return localId;
   });
+}
+async function reserveNextUniqueBmhId(exceptBmhId) {
+  const except = String(exceptBmhId || '').trim();
+  let attempts = 0;
+  while (attempts < 250) {
+    const candidate = String(await reserveNextBmhId() || '').trim();
+    if (candidate && !await isBmhIdAllocatedAnywhere(candidate, except)) {
+      syncBmhSequenceFloor(candidate);
+      return candidate;
+    }
+    attempts += 1;
+  }
+  return '';
 }
 
 window._rcDeptFilter = window._rcDeptFilter || 'all';
@@ -20774,12 +20812,23 @@ async function registerPatient() {
     forceNewId: forceNewBmsh
   });
   const isExistingRegistration = !!existingPt;
-  let uid = String(isExistingRegistration ? (existingPt && existingPt.bmhId) : (await reserveNextBmhId()) || '').trim();
+  let uid = String(isExistingRegistration ? (existingPt && existingPt.bmhId) : (await reserveNextUniqueBmhId()) || '').trim();
   if(isExistingRegistration) {
     if(!uid) { showToast('Could not reuse the existing BMSH ID','e'); return; }
   } else if(!/^BMSH-\d{6,9}$/.test(uid)) { showToast('Could not generate a valid BMSH ID','e'); return; }
   if (!isExistingRegistration) {
-    const safeUid = findNextAvailableBmhId(uid, existingPt?.bmhId || '');
+    const safeUid = await (async function () {
+      let candidate = String(uid || '').trim();
+      let nextNum = parseBmhSequenceNumber(candidate);
+      let tries = 0;
+      while (tries < 250) {
+        if (candidate && !await isBmhIdAllocatedAnywhere(candidate, existingPt?.bmhId || '')) return candidate;
+        nextNum = Number.isFinite(nextNum) ? nextNum + 1 : (getKnownHighestBmhNumber() + 1);
+        candidate = 'BMSH-' + String(nextNum).padStart(6, '0');
+        tries += 1;
+      }
+      return '';
+    })();
     if (!safeUid) { showToast('Could not generate a conflict-free BMSH ID', 'e'); return; }
     if (safeUid !== uid) {
       uid = safeUid;
