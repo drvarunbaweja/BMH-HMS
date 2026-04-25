@@ -60,6 +60,19 @@ function stopListeners() {
   listeners.length = 0
 }
 
+function runAfterStartup(fn, delay = 1200) {
+  const runner = () => {
+    try { fn() } catch (_) { /* noop */ }
+  }
+  setTimeout(() => {
+    if (typeof window.requestIdleCallback === 'function') {
+      window.requestIdleCallback(runner, { timeout: 1200 })
+      return
+    }
+    runner()
+  }, delay)
+}
+
 // ── Login gate DOM helpers ────────────────────────────────────────────────────
 function showLoginGate() {
   const gate  = document.getElementById('login-gate')
@@ -193,18 +206,18 @@ watchAuthState(
       try { window.syncLegacyCurrentUserFromFirebase() } catch (_) { /* noop */ }
     }
 
-    if (typeof window.loadDoctorProfilesFromFirebase === 'function') {
-      try { window.loadDoctorProfilesFromFirebase() } catch (_) { /* noop */ }
-    }
+    runAfterStartup(() => {
+      if (typeof window.loadDoctorProfilesFromFirebase === 'function') window.loadDoctorProfilesFromFirebase()
+    }, 1800)
     if (typeof window.loadDrugLibraryFromStorage === 'function') {
-      try { window.loadDrugLibraryFromStorage() } catch (_) { /* noop */ }
+      try { window.loadDrugLibraryFromStorage({ localOnly: true }) } catch (_) { /* noop */ }
       setTimeout(() => {
         try { window.loadDrugLibraryFromStorage({ forceRemote: true }) } catch (_) { /* noop */ }
-      }, 1500)
+      }, 4500)
     }
-    if (typeof window.loadConsentDataOverridesFromStorage === 'function') {
-      try { window.loadConsentDataOverridesFromStorage() } catch (_) { /* noop */ }
-    }
+    runAfterStartup(() => {
+      if (typeof window.loadConsentDataOverridesFromStorage === 'function') window.loadConsentDataOverridesFromStorage()
+    }, 2200)
 
     const centre = user.centre || 'CHD'
     const today  = todayKey()

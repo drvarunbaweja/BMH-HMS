@@ -902,6 +902,19 @@ function stopListeners() {
   listeners.length = 0
 }
 
+function runAfterStartup(fn, delay = 1200) {
+  const runner = () => {
+    try { fn() } catch (_) { /* noop */ }
+  }
+  setTimeout(() => {
+    if (typeof window.requestIdleCallback === 'function') {
+      window.requestIdleCallback(runner, { timeout: 1200 })
+      return
+    }
+    runner()
+  }, delay)
+}
+
 // ── Login gate DOM helpers ────────────────────────────────────────────────────
 function showLoginGate() {
   const gate  = document.getElementById('login-gate')
@@ -1035,11 +1048,11 @@ watchAuthState(
       try { window.syncLegacyCurrentUserFromFirebase() } catch (_) { /* noop */ }
     }
 
-    if (typeof window.loadDoctorProfilesFromFirebase === 'function') {
-      try { window.loadDoctorProfilesFromFirebase() } catch (_) { /* noop */ }
-    }
+    runAfterStartup(() => {
+      if (typeof window.loadDoctorProfilesFromFirebase === 'function') window.loadDoctorProfilesFromFirebase()
+    }, 1800)
     if (typeof window.loadDrugLibraryFromStorage === 'function') {
-      try { window.loadDrugLibraryFromStorage() } catch (_) { /* noop */ }
+      try { window.loadDrugLibraryFromStorage({ localOnly: true }) } catch (_) { /* noop */ }
     }
 
     // Inventory Firebase sync is deferred to first click on Inventory module
@@ -1051,10 +1064,10 @@ watchAuthState(
       setTimeout(() => {
         try { window.watchDrugLibraryFromFirebase && window.watchDrugLibraryFromFirebase() } catch (_) { /* noop */ }
       }, 500)
-    }, 1500)
-    if (typeof window.loadConsentDataOverridesFromStorage === 'function') {
-      try { window.loadConsentDataOverridesFromStorage() } catch (_) { /* noop */ }
-    }
+    }, 4500)
+    runAfterStartup(() => {
+      if (typeof window.loadConsentDataOverridesFromStorage === 'function') window.loadConsentDataOverridesFromStorage()
+    }, 2200)
 
     const centre = user.centre || 'CHD'
     const today  = todayKey()
@@ -1075,7 +1088,9 @@ watchAuthState(
 
     // Always start the bills watcher — this is the new Firestore bills collection
     // used for cloud-persistent bill storage, independent of the legacy RTDB system.
-    listeners.push(watchBills(centre))
+    runAfterStartup(() => {
+      listeners.push(watchBills(centre))
+    }, 2500)
 
     watchConnectionStatus('fb-status')
 

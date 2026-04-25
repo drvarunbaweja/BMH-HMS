@@ -2284,6 +2284,46 @@ function getLatestSavedVisitForDept(bmhId, dept) {
   }
   return visits[0] || null;
 }
+function isObgBackdatedHistoryEntry(visit) {
+  if (!visit || visit.dept !== 'obg') return false;
+  const key = localDateKey(visit.visitDate || visit.date || '');
+  return !!key && key < localDateKey(new Date());
+}
+function buildObgCarryForwardProfile(visit) {
+  const profile = JSON.parse(JSON.stringify(visit || {}));
+  delete profile.id;
+  delete profile.date;
+  delete profile.dateLabel;
+  delete profile.visitDate;
+  delete profile.nextReview;
+  delete profile.followupPlan;
+  delete profile.followupDate;
+  delete profile.rxFuDate;
+  delete profile.rx;
+  delete profile.obgAdvice;
+  delete profile.obgExtraAdvice;
+  delete profile.obgProcAdvised;
+  delete profile.procDone;
+  delete profile.savedBy;
+  delete profile.createdAt;
+  delete profile.updatedAt;
+  OBG_VITAL_FIELD_IDS.forEach(function (id) { delete profile[id]; });
+  profile.obgCarryForward = true;
+  profile.obgCarryForwardSourceDate = visit.visitDate || (visit.date ? localDateKey(visit.date) : '');
+  profile.obgCarryForwardUpdatedAt = new Date().toISOString();
+  return profile;
+}
+function getObgCarryForwardProfileForPatient(patient, latestVisit) {
+  const profile = patient && patient.obgCarryForward && typeof patient.obgCarryForward === 'object'
+    ? patient.obgCarryForward
+    : null;
+  if (profile) return JSON.parse(JSON.stringify(profile));
+  if (latestVisit && latestVisit.dept === 'obg') {
+    const fallback = buildObgCarryForwardProfile(latestVisit);
+    return fallback;
+  }
+  return {};
+}
 function buildSavedOphthoCaseSheetPageForPatient(bmhId) {
   const pt = (typeof PATIENTS !== 'undefined' ? PATIENTS.find(function (p) { return p.bmhId === bmhId; }) : null) || {};
   const visit = getLatestSavedVisitForDept(bmhId, 'ophtho');
@@ -3713,7 +3753,7 @@ function openPatient(bmhId, opts) {
     const el = document.getElementById(id);
     if (el) el.checked = true;
   });
-  ['obg-inc-vitals', 'obg-inc-anc', 'obg-inc-complaint', 'obg-inc-inv'].forEach(function (id) {
+  ['obg-inc-vitals', 'obg-inc-anc', 'obg-inc-complaint', 'obg-inc-inv', 'obg-inc-obs-history'].forEach(function (id) {
     const el = document.getElementById(id);
     if (el) el.checked = true;
   });
@@ -3793,8 +3833,12 @@ function openPatient(bmhId, opts) {
   if(deptPage === 'ophtho' && lastVisitIsToday && lastVisitRef && typeof lastVisitRef === 'object') {
     populateOphthoForm(lastVisitRef);
   } else if(deptPage === 'obg') {
-    populateObgForm && populateObgForm(lastVisitIsToday ? (lastVisitRef || {}) : {});
-    if (!lastVisitIsToday) refreshPreviousDiagnosisPanel('obg', lastVisitRef || {});
+    const obgCarryForward = lastVisitIsToday ? (lastVisitRef || {}) : getObgCarryForwardProfileForPatient(p, lastVisitRef || {});
+    populateObgForm && populateObgForm(obgCarryForward);
+    if (!lastVisitIsToday) {
+      ensureDeptVisitDateDefault('obg');
+      refreshPreviousDiagnosisPanel('obg', lastVisitRef || {});
+    }
   } else if(deptPage === 'psych') {
     populatePsychForm && populatePsychForm(lastVisitIsToday ? (lastVisitRef || {}) : {});
     if (!lastVisitIsToday) refreshPreviousDiagnosisPanel('psych', lastVisitRef || {});
@@ -18730,6 +18774,7 @@ window.repairDrugLibraryFromAllSources = repairDrugLibraryFromAllSources;
 function loadDrugLibraryFromStorage(opts) {
   opts = opts || {};
   const forceRemote = !!opts.forceRemote;
+  const localOnly = !!opts.localOnly;
   const needsRemoteHydration = !!window.FBDB && !window._bmhDrugLibraryHydratedFromFirebase;
   watchDrugLibraryFromFirebase && watchDrugLibraryFromFirebase();
   if (window._bmhDrugLibraryLoadedOnce && !forceRemote && !needsRemoteHydration) return;
@@ -18781,6 +18826,14 @@ function loadDrugLibraryFromStorage(opts) {
       seedMerged.forEach(function (x) { DRUG_LIBRARY.push(x); });
       invalidateDrugSearchPoolCache && invalidateDrugSearchPoolCache();
     }
+  }
+
+  if (localOnly) {
+    renderSettingsDrugs && renderSettingsDrugs();
+    rebuildDrugGenericDatalist();
+    syncDrugDeptDefaults();
+    try { renderRxDrugs && renderRxDrugs(); } catch (e) {}
+    return;
   }
 
   if (!window.FBDB) {
@@ -37083,6 +37136,38 @@ function saveVisit(dept, opts) {
   }
   if (Array.isArray(visit.rx) && visit.rx.length) {
     rememberRxLibraryFromRows(dept, visit.rx);
+  }
+  if (dept === 'obg' && isObgBackdatedHistoryEntry(visit)) {
+    const profile = buildObgCarryForwardProfile(visit);
+    const profileForCloud = sanitizeFirebaseValue(profile);
+    if (localPt) localPt.obgCarryForward = JSON.parse(JSON.stringify(profile));
+    if (window.CURRENT_PATIENT && window.CURRENT_PATIENT.bmhId === bmhId) {
+      window.CURRENT_PATIENT.obgCarryForward = JSON.parse(JSON.stringify(profile));
+    }
+    const patch = {
+      obgCarryForward: profileForCloud,
+      obgCarryForwardUpdatedAt: new Date().toISOString()
+    };
+    const writes = [];
+    if (typeof fbUpdate === 'function') writes.push(fbUpdate('patients/' + bmhId, patch));
+    if (typeof window.patchPatientFirestore === 'function') {
+      writes.push(window.patchPatientFirestore(bmhId, patch).catch(function () {}));
+    }
+    if (!writes.length) {
+      if (!opts.silent) showToast('Save not available (offline)', 'w');
+      return;
+    }
+    Promise.all(writes)
+      .then(function () {
+        if (!opts.silent) showToast('OBG history updated. Backdated entry was not added to past visits.', 's');
+        try { renderObgSummaryRail && renderObgSummaryRail(); } catch (e) {}
+        document.dispatchEvent(new CustomEvent('bmh:patientsUpdated'));
+      })
+      .catch(function (e) {
+        if (!opts.silent) showToast('Save failed: ' + e.message, 'w');
+        else console.warn('OBG carry-forward save failed', e);
+      });
+    return;
   }
   if(typeof fbSet !== 'function') { showToast('Save not available (offline)', 'w'); return; }
   const patientPatch = { lastVisit: visit, lastVisitKey: visitKey, lastVisitDate: visit.date, lastDeptVisit: dept };
