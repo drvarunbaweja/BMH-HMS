@@ -18733,6 +18733,7 @@ function loadDrugLibraryFromStorage(opts) {
   const needsRemoteHydration = !!window.FBDB && !window._bmhDrugLibraryHydratedFromFirebase;
   watchDrugLibraryFromFirebase && watchDrugLibraryFromFirebase();
   if (window._bmhDrugLibraryLoadedOnce && !forceRemote && !needsRemoteHydration) return;
+  if (window._bmhDrugLibraryLoadInFlight && (forceRemote || needsRemoteHydration)) return;
   if (!window._bmhDrugLibraryLoadedOnce) window._bmhDrugLibraryLoadedOnce = true;
   const applyMergedRows = function (remoteVal, opts) {
     opts = opts || {};
@@ -18787,6 +18788,7 @@ function loadDrugLibraryFromStorage(opts) {
     applyMergedRows(null, { repairCloud: false });
     return;
   }
+  window._bmhDrugLibraryLoadInFlight = true;
   Promise.all([
     window.FBDB.ref('drugLibrary').once('value'),
     window.FBDB.ref('drugLibraryMeta').once('value')
@@ -18813,6 +18815,8 @@ function loadDrugLibraryFromStorage(opts) {
     applyMergedRows(snap.val(), { repairCloud: repairCloud });
   }).catch(function () {
     applyMergedRows(null, { repairCloud: false });
+  }).finally(function () {
+    window._bmhDrugLibraryLoadInFlight = false;
   });
 }
 window.loadDrugLibraryFromStorage = loadDrugLibraryFromStorage;
@@ -28568,7 +28572,7 @@ window.printUnifiedRx = function(deptId) {
   const obgIncVitals = deptId === 'obg' ? (document.getElementById('obg-inc-vitals')?.checked ?? true) : false;
   const obgIncAnc = deptId === 'obg' ? (document.getElementById('obg-inc-anc')?.checked ?? true) : false;
   const obgIncComplaint = deptId === 'obg' ? (document.getElementById('obg-inc-complaint')?.checked ?? true) : false;
-  const obgIncObsHistory = deptId === 'obg' ? (document.getElementById('obg-inc-obs-history')?.checked ?? false) : false;
+  const obgIncObsHistory = deptId === 'obg' ? (document.getElementById('obg-inc-obs-history')?.checked ?? true) : false;
 
   // Some departments do not expose the full print toggle set in UI.
   const forceDeptRxSections = deptId === 'obg' || deptId === 'psych' || deptId === 'skin';
@@ -28746,6 +28750,88 @@ window.printUnifiedRx = function(deptId) {
     addIf('Top Feed', document.getElementById('obg-obs-topfeed')?.value);
     return findings;
   })() : [];
+  const obgPrescriptionPregnancySummary = deptId === 'obg' ? (function () {
+    const clean = function (value) {
+      const raw = String(value == null ? '' : value).trim();
+      if (!raw || raw === '—' || raw === 'Select') return '';
+      return raw;
+    };
+    const fmtShortDate = function (value) {
+      const raw = clean(value);
+      if (!raw) return '';
+      const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (m) return m[3] + '-' + m[2] + '-' + m[1];
+      return raw;
+    };
+    const pick = function () {
+      for (let i = 0; i < arguments.length; i += 1) {
+        const v = clean(arguments[i]);
+        if (v) return v;
+      }
+      return '';
+    };
+    const pregPick = function (entry, id) { return clean(entry && entry[id]); };
+    const joinParts = function (parts) { return parts.map(clean).filter(Boolean).join(' | '); };
+    try { if (typeof stashCurrentObgPregnancyEntry === 'function') stashCurrentObgPregnancyEntry(); } catch (e) {}
+    const savedVisit = latestDeptVisit || window.CURRENT_PATIENT?.lastVisit || {};
+    const pregnancies = (Array.isArray(window.OBG_PREGNANCIES) && window.OBG_PREGNANCIES.length
+      ? window.OBG_PREGNANCIES
+      : (Array.isArray(savedVisit.obgPregnancies) ? savedVisit.obgPregnancies : []))
+      .filter(function (entry) {
+        return typeof hasObgPregnancyEntryData === 'function' ? hasObgPregnancyEntryData(entry) : !!entry;
+      });
+    const historyLines = pregnancies.filter(function (entry) {
+      return !/^present pregnancy$/i.test(pregPick(entry, 'obg-obs-preg-outcome'));
+    }).map(function (entry, idx) {
+      const outcome = pregPick(entry, 'obg-obs-preg-outcome');
+      const modeRaw = pregPick(entry, 'obg-obs-mode-delivery');
+      const mode = /^normal$/i.test(modeRaw) ? 'Normal Delivery' : modeRaw;
+      const birthWeight = pregPick(entry, 'obg-obs-birth-weight');
+      const birthWeightText = birthWeight ? ('Birth weight: ' + birthWeight + (/\bkg\b/i.test(birthWeight) ? '' : ' Kg')) : '';
+      const notes = joinParts([
+        pregPick(entry, 'obg-obs-csection-indication'),
+        pregPick(entry, 'obg-obs-complication-note'),
+        pregPick(entry, 'obg-obs-post-preg-problems')
+      ]);
+      const pieces = [
+        outcome,
+        pregPick(entry, 'obg-obs-gestation-age'),
+        pregPick(entry, 'obg-obs-maturity'),
+        mode,
+        birthWeightText,
+        pregPick(entry, 'obg-obs-present-age'),
+        pregPick(entry, 'obg-obs-gender'),
+        fmtShortDate(pregPick(entry, 'obg-obs-delivery-date')),
+        notes
+      ].filter(Boolean);
+      return {
+        label: (typeof getObgPregnancyOrdinal === 'function' ? getObgPregnancyOrdinal(idx + 1) : String(idx + 1)) + ' Pregnancy',
+        text: pieces.join(' | ')
+      };
+    }).filter(function (line) { return clean(line.text); });
+    const g = pick(document.getElementById('obg-g')?.value, savedVisit.g, '0');
+    const p = pick(document.getElementById('obg-p')?.value, savedVisit.p, '0');
+    const a = pick(document.getElementById('obg-a')?.value, savedVisit.a, '0');
+    const l = pick(document.getElementById('obg-l')?.value, savedVisit.l, '0');
+    const lmp = fmtShortDate(pick(document.getElementById('obg-lmp')?.value, document.getElementById('obg-obs-lmp')?.value, savedVisit.lmp, savedVisit['obg-obs-lmp']));
+    const eddDates = fmtShortDate(pick(document.getElementById('obg-edd-inp')?.value, document.getElementById('obg-edd')?.textContent, document.getElementById('obg-obs-edd-date')?.value, savedVisit.edd, savedVisit['obg-obs-edd-date']));
+    const gaDates = pick(document.getElementById('obg-ga')?.textContent, document.getElementById('obg-obs-ga-date')?.value, savedVisit.ga, savedVisit['obg-obs-ga-date']);
+    const eddUsg = fmtShortDate(pick(document.getElementById('obg-obs-edd-usg')?.value, savedVisit['obg-obs-edd-usg']));
+    const gaUsg = pick(document.getElementById('obg-obs-ga-usg')?.value, savedVisit['obg-obs-ga-usg']);
+    const presentLines = [
+      'G: ' + g + ' | P: ' + p + ' | A: ' + a + ' | L: ' + l,
+      joinParts([
+        lmp ? ('LMP: ' + lmp) : '',
+        eddDates ? ('EDD (by dates): ' + eddDates) : '',
+        gaDates ? ('GA (by dates): ' + gaDates) : ''
+      ]),
+      joinParts([
+        eddUsg ? ('EDD (by USG): ' + eddUsg) : '',
+        gaUsg ? ('GA (by USG): ' + gaUsg) : ''
+      ])
+    ].filter(Boolean);
+    return { historyLines: historyLines, presentLines: presentLines };
+  })() : { historyLines: [], presentLines: [] };
 
   // ── Follow-up (per-dept date field; duplicate id=rx-fu-date would otherwise read Ophtho only) ──
   let fuDate = getDeptFollowUpDateInput(deptId)?.value || '';
@@ -29003,6 +29089,11 @@ body{font-family:'Lato',sans-serif;font-size:9.5px;color:#1a1a1a;background:#fff
 .dept-card-row:last-child{border-bottom:none}
 .dept-card-key{font-weight:700;color:#333;padding:2px 6px;min-width:90px;font-size:9.5px;text-transform:uppercase;letter-spacing:.4px;background:#f5f5f5;display:flex;align-items:center}
 .dept-card-val{padding:2px 8px;color:#111;font-size:10px;display:flex;align-items:center;flex:1}
+.obg-print-box{border:1px solid #222;border-radius:8px;margin:4px 0 6px;padding:7px 9px;page-break-inside:avoid;break-inside:avoid}
+.obg-print-title{font-size:12px;font-weight:900;color:#111;margin-bottom:5px}
+.obg-print-list{list-style:none;margin:0;padding:0}
+.obg-print-list li{position:relative;padding-left:13px;margin:2px 0;font-size:11.5px;line-height:1.35;color:#111;font-weight:700}
+.obg-print-list li::before{content:'o';position:absolute;left:0;top:0;font-size:10px;font-weight:700}
 /* Vitals inline */
 .vitals-inline{font-size:9.4px;color:#222;margin-bottom:3px;line-height:1.45}
 /* VA / Glass tables */
@@ -29193,25 +29284,27 @@ ${(!psychPrescriptionPrintOnly && dxList.length && rxDesign === 'current') ? `
 <div class="diag-rule-bot"></div>` : ''}
 ${(!psychPrescriptionPrintOnly && rxDesign !== 'current') ? designedDiagnosis : ''}
 
-${deptId==='obg' && obgIncAnc && obgAncOn ? `
-<div class="sec-divider"><span class="sec-label">OBG Clinical Summary</span></div>
-<div class="dept-card">
-  <div class="dept-card-hdr">OBG CLINICAL SUMMARY</div>
-  ${obgAncSummary.gpal && obgAncSummary.gpal !== '—' ? `<div class="dept-card-row"><div class="dept-card-key">GPAL</div><div class="dept-card-val">${escapeHtmlConsent(obgAncSummary.gpal)}</div></div>` : ''}
-  ${obgAncSummary.ga && obgAncSummary.ga !== '—' ? `<div class="dept-card-row"><div class="dept-card-key">Gest. Age</div><div class="dept-card-val">${escapeHtmlConsent(obgAncSummary.ga)}</div></div>` : ''}
-  ${obgAncSummary.edd && obgAncSummary.edd !== '—' ? `<div class="dept-card-row"><div class="dept-card-key">EDD</div><div class="dept-card-val">${escapeHtmlConsent(obgAncSummary.edd)}</div></div>` : ''}
-  ${obgAncSummary.hb && obgAncSummary.hb !== '—' ? `<div class="dept-card-row"><div class="dept-card-key">Hb</div><div class="dept-card-val">${escapeHtmlConsent(obgAncSummary.hb)}</div></div>` : ''}
-  ${obgAncSummary.bloodGroup && obgAncSummary.bloodGroup !== '—' ? `<div class="dept-card-row"><div class="dept-card-key">Blood Group</div><div class="dept-card-val">${escapeHtmlConsent(obgAncSummary.bloodGroup)}</div></div>` : ''}
-  ${dxList.length ? `<div class="dept-card-row"><div class="dept-card-key">Plan / Dx</div><div class="dept-card-val">${dxList.map(d=>escapeHtmlConsent(d)).join('; ')}</div></div>` : ''}
+${deptId==='obg' && obgIncObsHistory && obgPrescriptionPregnancySummary.historyLines.length ? `
+<div class="obg-print-box">
+  <div class="obg-print-title">Obstetric History</div>
+  <ul class="obg-print-list">${obgPrescriptionPregnancySummary.historyLines.map(function (line) { return `<li><b>${escapeHtmlConsent(line.label)}:</b> ${escapeHtmlConsent(line.text)}</li>`; }).join('')}</ul>
+</div>` : ''}
+
+${deptId==='obg' && obgIncAnc && obgAncOn && obgPrescriptionPregnancySummary.presentLines.length ? `
+<div class="obg-print-box">
+  <div class="obg-print-title">Present Pregnancy</div>
+  <ul class="obg-print-list">${obgPrescriptionPregnancySummary.presentLines.map(function (line) { return `<li>${escapeHtmlConsent(line)}</li>`; }).join('')}</ul>
 </div>` : ''}
 
 ${deptId==='obg' && obgIncVitals ? `
 <div class="sec-divider"><span class="sec-label">ANC Vitals</span></div>
 <div class="vitals-inline">${obgVitalsSummary.filter(function(x){return x[1]&&x[1]!=='—'&&x[1]!=='/'}).map(function(x){return '<b>'+x[0]+'</b> '+escapeHtmlConsent(x[1])}).join(' &nbsp;·&nbsp; ')}</div>` : ''}
 
-${deptId==='obg' && obgIncObsHistory && obgObsHistoryFindings.length > 0 ? `
-<div class="sec-divider"><span class="sec-label">Obstetric History</span></div>
-<div class="advice-block">${escapeHtmlConsent(obgObsHistoryFindings.join(' · '))}</div>` : ''}
+${deptId==='obg' && obgIncObsHistory && !obgPrescriptionPregnancySummary.historyLines.length && obgObsHistoryFindings.length > 0 ? `
+<div class="obg-print-box">
+  <div class="obg-print-title">Obstetric History</div>
+  <ul class="obg-print-list"><li>${escapeHtmlConsent(obgObsHistoryFindings.join(' | '))}</li></ul>
+</div>` : ''}
 
 ${deptId==='psych' && !psychPrescriptionPrintOnly && psychMseRows.length ? `
 <div class="sec-divider"><span class="sec-label">Mental Status Summary</span></div>
