@@ -1416,7 +1416,7 @@ function resolvePrintHeaderSrc() {
   if (tag && tag.src) return tag.src;
   try {
     const base = document.querySelector('base')?.href || window.location.href;
-    const local = new URL('assets/hospital-header.jpg', base).href;
+    const local = new URL('assets/bmh-logo-discharge.jpg', base).href;
     if (local) return local;
   } catch (e) { /* noop */ }
   return 'https://bawejahospital.com/img/logo.png';
