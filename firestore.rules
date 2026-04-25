@@ -129,6 +129,22 @@ service cloud.firestore {
       allow write:  if isAdmin() || role() == 'inventory';
     }
 
+    // ── /inventory_purchases ────────────────────────────────────────────────
+    // Purchase intake is stored here by the Inventory module.
+    match /inventory_purchases/{purchaseId} {
+      allow read:   if isSignedIn();
+      allow write:  if isAdmin() || role() == 'inventory';
+    }
+
+    // ── /inventory_usage ────────────────────────────────────────────────────
+    // Patient-linked inventory consumption may be created from clinical flows.
+    match /inventory_usage/{usageId} {
+      allow read:   if isSignedIn();
+      allow create: if isSignedIn() && role() in ['admin', 'inventory', 'doctor', 'optometrist', 'reception'];
+      allow update: if isAdmin() || role() == 'inventory';
+      allow delete: if isAdmin() || role() == 'inventory';
+    }
+
     // ── /purchaseOrders ──────────────────────────────────────────────────────
     match /purchaseOrders/{orderId} {
       allow read:   if isSignedIn() && role() in ['admin', 'inventory'];
