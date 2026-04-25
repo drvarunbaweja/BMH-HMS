@@ -1637,7 +1637,7 @@
           <div style="display:flex;align-items:center;gap:6px;background:var(--blue-lt);border:2px solid var(--blue);border-radius:var(--rsm);padding:7px 10px">
             <span style="font-size:14px">💊</span>
             <input type="text" id="rx-quick-search" placeholder="Type drug name to add (e.g. Vigamox, Timolol)…"
-              oninput="rxQuickSearch(this.value)" autocomplete="off"
+              oninput="rxQuickSearchDebounced(this.value)" autocomplete="off"
               style="flex:1;border:none;background:transparent;outline:none;font-size:13px;font-family:var(--font);font-weight:600">
             <button class="btn btn-blue btn-xs" onclick="openDrugLibraryAddFromQuick()">+ Add</button>
           </div>
@@ -2616,7 +2616,7 @@
             <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="obg-inc-anc" checked> ANC details (if ANC checked)</label>
             <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="obg-inc-complaint" checked> Primary complaint</label>
             <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="obg-inc-inv" checked> Lab Investigations</label>
-            <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="obg-inc-obs-history"> Obs History (positive findings)</label>
+            <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="obg-inc-obs-history" checked> Obstetric history</label>
           </div>
         </div>
         <!-- Drug quick search -->
@@ -2624,7 +2624,7 @@
           <div style="display:flex;align-items:center;gap:6px;background:var(--blue-lt);border:2px solid var(--blue);border-radius:var(--rsm);padding:7px 10px">
             <span style="font-size:14px">💊</span>
             <input type="text" id="rx-quick-search" placeholder="Type drug name to add (e.g. Dydrogesterone, Metformin, Labetalol)…"
-              oninput="rxQuickSearch(this.value)" autocomplete="off"
+              oninput="rxQuickSearchDebounced(this.value)" autocomplete="off"
               style="flex:1;border:none;background:transparent;outline:none;font-size:13px;font-family:var(--font);font-weight:600">
             <button class="btn btn-blue btn-xs" onclick="openDrugLibraryAddFromQuick()">+ Add</button>
           </div>
@@ -3336,7 +3336,7 @@
           <div style="display:flex;align-items:center;gap:6px;background:var(--blue-lt);border:2px solid var(--blue);border-radius:var(--rsm);padding:7px 10px">
             <span style="font-size:14px">💊</span>
             <input type="text" id="rx-quick-search" placeholder="Type drug name to add (e.g. Tretinoin, Doxycycline, Hydroquinone)…"
-              oninput="rxQuickSearch(this.value)" autocomplete="off"
+              oninput="rxQuickSearchDebounced(this.value)" autocomplete="off"
               style="flex:1;border:none;background:transparent;outline:none;font-size:13px;font-family:var(--font);font-weight:600">
             <button class="btn btn-blue btn-xs" onclick="openDrugLibraryAddFromQuick()">+ Add</button>
           </div>
