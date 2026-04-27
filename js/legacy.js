@@ -9676,31 +9676,30 @@ function bmhGetEffectiveBillContext(bmhId) {
       return String(line.cat || inferChargeCategoryFromService(line.desc || line.name || '') || 'other').toLowerCase();
     }).filter(Boolean)));
   };
-  const consultationLines = lines.filter(function (line) {
+  const billableLines = lines.filter(function (line) {
+    return line && !line.isConcession && bmhGetChargeLineOutstanding(line) > 0;
+  });
+  const settledLines = lines.filter(function (line) {
+    return line && !line.isConcession && (Number(line.amount) || 0) > 0 && bmhGetChargeLineOutstanding(line) <= 0;
+  });
+  const settledConsultationTotal = settledLines.filter(function (line) {
     return String(line.cat || '').toLowerCase() === 'consultation'
       || inferChargeCategoryFromService(line.desc || line.name || '') === 'consultation';
-  });
-  const nonConsultationLines = lines.filter(function (line) { return !consultationLines.includes(line); });
-  const consultationChargeTotal = consultationLines.reduce(function (s, line) { return s + (Number(line.amount) || 0); }, 0);
-  const consultationReceived = consultationLines.reduce(function (s, line) {
-    return s + bmhGetChargeLinePaidAmount(line);
-  }, 0) || bmhTotalReceivedForCategories(bmhId, ['consultation']);
-  const excludeSettledConsultation = nonConsultationLines.length > 0 && consultationChargeTotal > 0 && consultationReceived >= consultationChargeTotal;
-  const effectiveLines = excludeSettledConsultation ? nonConsultationLines : lines;
+  }).reduce(function (s, line) { return s + (Number(line.amount) || 0); }, 0);
+  const effectiveLines = billableLines;
   const activeCats = categories(effectiveLines);
-  const effectiveCtx = { activeCats: activeCats, excludedSettledConsultation: excludeSettledConsultation };
-  const effectiveReceived = effectiveLines.reduce(function (s, line) {
-    return s + bmhGetChargeLinePaidAmount(line);
-  }, 0);
-  const chargeTotal = effectiveLines.reduce(function (s, line) { return s + (Number(line.amount) || 0); }, 0);
+  const effectiveReceived = 0;
+  const chargeTotal = effectiveLines.reduce(function (s, line) { return s + bmhGetChargeLineOutstanding(line); }, 0);
   return {
     allLines: lines,
     lines: effectiveLines,
     activeCats: activeCats,
     chargeTotal: chargeTotal,
     received: effectiveReceived,
-    excludedSettledConsultation: excludeSettledConsultation,
-    excludedConsultationChargeTotal: excludeSettledConsultation ? consultationChargeTotal : 0
+    excludedSettledConsultation: settledConsultationTotal > 0,
+    excludedConsultationChargeTotal: settledConsultationTotal,
+    settledLines: settledLines,
+    settledChargeTotal: settledLines.reduce(function (s, line) { return s + (Number(line.amount) || 0); }, 0)
   };
 }
 function bmhGetPendingRecordedPaymentAmount() {
@@ -9853,7 +9852,7 @@ function bmhGetAdvanceAvailableForPatient(bmhId) {
 function bmhTotalsForPatient(bmhId) {
   const ctx = bmhGetEffectiveBillContext(bmhId);
   const lines = ctx.lines;
-  const sub = lines.reduce((s, x) => s + (Number(x.amount) || 0), 0);
+  const sub = lines.reduce((s, x) => s + bmhGetChargeLineOutstanding(x), 0);
   const disc = Math.max(0, parseFloat(document.getElementById('bmh-bill-discount')?.value) || 0);
   const afterDisc = Math.max(0, sub - disc);
   const advAvail = Math.max(0, Number(bmhGetAdvanceAvailableForPatient(bmhId)) || 0);
@@ -11408,10 +11407,10 @@ window.bmhGetPaymentSplitsFromUi = bmhGetPaymentSplitsFromUi;
 function bmhSyncSplitPaymentTotal() {
   const splits = bmhGetPaymentSplitsFromUi();
   const total = splits.reduce(function (sum, row) { return sum + row.amount; }, 0);
-  const amtEl = document.getElementById('bmh-pay-amt');
-  if (amtEl) amtEl.value = total > 0 ? String(total) : '';
   const modeEl = document.getElementById('bmh-pay-mode');
   if (modeEl && splits.length === 1) modeEl.value = splits[0].mode;
+  const totalEl = document.getElementById('bmh-split-total');
+  if (totalEl) totalEl.textContent = total > 0 ? ('Split total ₹' + total.toLocaleString('en-IN')) : '';
   bmhUpdateBillTotals();
 }
 window.bmhSyncSplitPaymentTotal = bmhSyncSplitPaymentTotal;
