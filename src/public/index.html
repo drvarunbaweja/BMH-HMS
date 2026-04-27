@@ -3703,8 +3703,11 @@
         </div>
         <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
           <button type="button" class="btn btn-outline btn-sm" onclick="bmhPrintInventorySection('Current Stock', '#inv-stock-list')">🖨️ Print current stock</button>
+          <button type="button" class="btn btn-blue btn-sm" onclick="checkInventoryVisibility()">🔍 Check Today's Entries</button>
+          <button type="button" class="btn btn-gold btn-sm" onclick="forceInventoryRefresh()">♻️ Refresh Inventory</button>
           <button type="button" class="btn btn-xs btn-gray" id="btn-inv-clear-all" onclick="adminClearAllInventoryStock()" style="display:none">🗑️ Clear all inventory (admin)</button>
         </div>
+        <div id="inv-today-movement-panel" style="display:none;margin-bottom:12px"></div>
         <div id="inv-stock-list"></div>
       </div>
       <div class="tab-content" id="inv-expiry">
