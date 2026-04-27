@@ -16751,12 +16751,14 @@ function printOBGCard() {
   };
   const bpFromVitals = joinBits([text('obg-vitals-bp-sys'), text('obg-vitals-bp-dia')], '/');
   const ptName = pt.name || text('obg-pt-nm', '-');
+  const salutation = pt.salutation || pt.title || pt.prefix || text('pt-salutation') || text('patient-salutation') || '';
+  const patientDisplayName = joinBits([salutation, ptName], ' ');
   const ptId = pt.bmhId || text('obg-pt-uid', '-');
-  const ptAge = pt.age ? `${pt.age} Years` : '-';
-  const ptSex = pt.gender || pt.sex || 'Female';
+  const ptAge = pt.age ? `${pt.age} Years` : '';
+  const ptSex = pt.gender || pt.sex || '';
   const gravida = text('obg-gpal-chip') || `G:${text('obg-g', '0')} P:${text('obg-p', '0')} A:${text('obg-a', '0')} L:${text('obg-l', '0')}`;
   const doctor = getSelectedObgDoctorName ? getSelectedObgDoctorName() : (pt.doctor || CURRENT_USER?.name || 'Dr. Namrata Baweja');
-  const doctorLine = doctor.includes('Geeta') ? 'Dr. Geeta Baweja, MS (OBG)' : doctor.includes('Namrata') ? 'Dr. Namrata Baweja, MS (OBG)' : `${doctor}, MS (OBG)`;
+  const doctorLine = clean(doctor);
   const lmp = text('obg-lmp') || text('obg-obs-lmp');
   const edd = text('obg-edd-inp') || text('obg-edd') || text('obg-obs-edd-date');
   const ga = text('obg-ga');
@@ -16930,16 +16932,18 @@ function printOBGCard() {
   body{font-family:'Trebuchet MS',Arial,'Helvetica Neue',sans-serif;background:#fff;color:#17233a}
   .anc-page{width:285mm;min-height:198mm;padding:5mm;border:1px solid #2d3442;background:#fff;page-break-after:always;position:relative;overflow:hidden}
   .anc-page:last-child{page-break-after:auto}
-  .front{display:grid;grid-template-columns:1.78fr .92fr;gap:5mm}
+  .front{display:block}
+  .front-body{display:grid;grid-template-columns:1.78fr .92fr;gap:5mm;align-items:start}
   .back{display:grid;grid-template-rows:auto 1fr auto;gap:4mm}
-  .brand-row{display:grid;grid-template-columns:58mm 1fr 30mm;align-items:center;gap:4mm;border-bottom:1.4px solid #2d3442;padding-bottom:2mm;margin-bottom:2mm}
+  .brand-row{display:grid;grid-template-columns:62mm 1fr 32mm;align-items:center;gap:4mm;border-bottom:1.4px solid #2d3442;padding-bottom:2mm;margin-bottom:2mm}
   .logo{height:18mm;max-width:58mm;object-fit:contain}
   .bmh-logo{height:16mm;max-width:30mm;object-fit:contain;justify-self:end}
   .mini-logo{height:11mm;max-width:34mm;object-fit:contain}
   .brand-title{font-size:15px;font-weight:900;letter-spacing:.5px;color:#183760;text-transform:uppercase}
   .brand-sub{font-size:8px;color:#5b6778;margin-top:1mm}
   .page-title{font-family:Georgia,'Times New Roman',serif;font-size:23px;font-weight:900;text-transform:uppercase;text-align:center;color:#183760;letter-spacing:1.2px;line-height:1}
-  .patient-script{font-family:Georgia,'Times New Roman',serif;font-size:13px;font-weight:800;color:#b91c1c;text-align:right;margin-top:1.2mm}
+  .patient-script{font-family:Georgia,'Times New Roman',serif;font-size:16px;font-weight:900;color:#b91c1c;text-align:center;margin-top:1.4mm}
+  .patient-meta{text-align:center;font-size:9px;font-weight:800;color:#334155;margin-top:.8mm;letter-spacing:.2px}
   .accent{height:2px;background:linear-gradient(90deg,#1f4f8f,#d72f2f,#1f4f8f);margin:1.5mm 0 2mm}
   .side-head{display:grid;grid-template-columns:1fr auto;gap:3mm;align-items:center;margin-bottom:2mm}
   .record-box{border:1.5px solid #1f2f4a;background:#fff}
@@ -16965,23 +16969,29 @@ function printOBGCard() {
   .lab-line b{font-weight:700;color:#121b2a}
   .footer{position:absolute;left:5mm;right:5mm;bottom:3mm;display:flex;justify-content:space-between;font-size:7.2px;color:#536174}
   .compact td{height:7.5mm}
-  .right-panel{display:grid;grid-template-rows:auto auto 1fr;gap:2.5mm}
+  .right-panel{display:grid;gap:2.5mm}
+  .exam-box .record-body{padding:1.4mm 2mm}
+  .exam-box .field-line{min-height:4.8mm}
   </style>
   </head><body>
   <section class="anc-page front">
-    <div>
+    <div class="front-head">
       <div class="brand-row">
         <div>
           <img class="logo" src="${escapeHtmlConsent(leftLogoSrc)}" alt="Baweja Multispeciality Hospital">
         </div>
         <div>
           <div class="page-title">Ante Natal Card</div>
-          <div class="patient-script">${escBlank(ptName)}</div>
+          <div class="patient-script">${escBlank(patientDisplayName)}</div>
+          <div class="patient-meta">${escBlank(joinBits([ptAge, ptSex], ' / '))}</div>
         </div>
         <img class="bmh-logo" src="${escapeHtmlConsent(rightLogoSrc)}" alt="BMH">
       </div>
       <div class="brand-sub">Ropar Branch: 1571/39, Preet Colony, Rupnagar | Chandigarh Branch: SCO 100, Sec 40-C <span style="float:right">Printed: ${escapeHtmlConsent(today)}</span></div>
       <div class="accent"></div>
+    </div>
+    <div class="front-body">
+    <div>
       <div class="identity-grid" style="margin-bottom:2mm">
         ${labelledLine('Pre pregnancy wt', text('obg-vitals-weight') || weightKg)}
         ${labelledLine('Tetanus toxoid', vaccineSummary)}
@@ -16998,15 +17008,11 @@ function printOBGCard() {
       </table>
     </div>
     <div class="right-panel">
-      <div class="side-head">
-        <div class="brand-title">Antenatal Record</div>
-        <img class="mini-logo" src="${escapeHtmlConsent(rightLogoSrc)}" alt="BMH">
-      </div>
       <div class="record-box">
         <div class="record-title">Patient Details</div>
         <div class="record-body">
-          ${labelledLine('Name', ptName)}
-          ${labelledLine('Age/Sex/BMHID', `${ptAge} / ${ptSex} / ${ptId}`)}
+          ${labelledLine('Name', patientDisplayName)}
+          ${labelledLine('Age/Sex/BMHID', joinBits([ptAge, ptSex, ptId], ' / '))}
           ${labelledLine('Consultant', doctorLine)}
           ${labelledLine('Married for', marriedFor)}
           <div class="field-two">${labelledLine('G P A L', gravida)}${labelledLine('Blood group', blood)}</div>
@@ -17018,7 +17024,7 @@ function printOBGCard() {
           ${clinicalLine('Family/Risk history', risk)}
         </div>
       </div>
-      <div class="record-box">
+      <div class="record-box exam-box">
         <div class="record-title">Examination</div>
         <div class="record-body">
           <div class="field-two">${clinicalLine('Ht', heightCm ? `${heightCm} cm` : '')}${clinicalLine('Wt', weightKg ? `${weightKg} kg` : '')}</div>
@@ -17038,6 +17044,7 @@ function printOBGCard() {
         </div>
       </div>
     </div>
+    </div>
     <div class="footer"><span>Baweja Multispeciality Hospital ANC card - front</span><span>Review with all reports at each visit</span></div>
   </section>
 
@@ -17045,10 +17052,13 @@ function printOBGCard() {
     <div>
       <div class="brand-row">
         <div>
-          <div class="brand-title">Obstetric History, Investigations and Ultrasound</div>
-          <div class="brand-sub">${esc(ptName)} | ${esc(ptId)} | ${esc(gravida)} | LMP ${fmtDate(lmp)} | EDD ${fmtDate(edd)}</div>
+          <img class="logo" src="${escapeHtmlConsent(leftLogoSrc)}" alt="Baweja Multispeciality Hospital">
         </div>
-        <img class="mini-logo" src="${escapeHtmlConsent(rightLogoSrc)}" alt="BMH">
+        <div>
+          <div class="brand-title" style="text-align:center">Obstetric History, Investigations and Ultrasound</div>
+          <div class="brand-sub" style="text-align:center">${esc(patientDisplayName)} | ${esc(joinBits([ptAge, ptSex], ' / '))} | ${esc(ptId)} | ${esc(gravida)} | LMP ${fmtDate(lmp)} | EDD ${fmtDate(edd)}</div>
+        </div>
+        <img class="bmh-logo" src="${escapeHtmlConsent(rightLogoSrc)}" alt="BMH">
       </div>
       <div class="section-title soft-title">Obstetrics History (GPAL)</div>
       <table class="compact">
@@ -23504,6 +23514,7 @@ function addOTCase() {
   }
 
   const existing = editId ? normalizeOTCaseRecord(OT_CASES.find(function (c) { return c.id === editId; }) || {}) : null;
+  const nowIso = new Date().toISOString();
   const newCase = {
     id: editId || ('OT-'+Date.now()), bmhId:ptId, patient:ptName,
     age:pt?.age||'—', sex:pt?.sex||'—',
@@ -23519,8 +23530,10 @@ function addOTCase() {
     signIn:false, timeOut:false, signOut:false,
     scrubNurse:'', circNurse:'',
     color:pt?.color||'#1A3C6E', initials:ptName.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase(),
-    createdAt: new Date().toISOString(),
-    createdBy: CURRENT_USER?.name || 'System'
+    createdAt: existing?.createdAt || nowIso,
+    createdBy: existing?.createdBy || CURRENT_USER?.name || 'System',
+    lastUpdated: nowIso,
+    updatedBy: CURRENT_USER?.name || 'System'
   };
   const normalized = normalizeOTCaseRecord(Object.assign({}, existing || {}, newCase));
   if (normalized.procedure) saveOtProcedureOption(normalized.procedure, caseKind === 'obg' ? 'obg' : 'ophtho');
@@ -31120,11 +31133,11 @@ function printDayCollectionByDept() {
   const deptBlocks = depts.map(function (dept) {
     const arr = txns.filter(function (t) { return String(t.dept || '').toLowerCase() === dept; });
     if (!arr.length) return '';
-    const consult = arr.filter(function (t) { return inferChargeCategoryFromService(t.service || t.for || t.desc || '') === 'consultation'; });
-    const inv = arr.filter(function (t) { return inferChargeCategoryFromService(t.service || t.for || t.desc || '') === 'diagnostic'; });
-    const sx = arr.filter(function (t) { return inferChargeCategoryFromService(t.service || t.for || t.desc || '') === 'surgery'; });
+    const consult = arr.filter(function (t) { return transactionHasChargeCategory(t, 'consultation'); });
+    const inv = arr.filter(function (t) { return transactionHasChargeCategory(t, 'diagnostic'); });
+    const sx = arr.filter(function (t) { return transactionHasChargeCategory(t, 'surgery'); });
     const other = arr.filter(function (t) {
-      const c = inferChargeCategoryFromService(t.service || t.for || t.desc || '');
+      const c = transactionHasChargeCategory(t, 'consultation') ? 'consultation' : transactionHasChargeCategory(t, 'diagnostic') ? 'diagnostic' : transactionHasChargeCategory(t, 'surgery') ? 'surgery' : inferChargeCategoryFromService(t.service || t.for || t.desc || '');
       return c !== 'consultation' && c !== 'diagnostic' && c !== 'surgery';
     });
     const consultPts = new Set((PATIENTS || []).filter(function (p) {
@@ -31689,8 +31702,22 @@ function loadOTCasesFromFirebase() {
   window.FBDB.ref('otCases').once('value').then(snap => {
     const data = snap.val();
     const mergedById = {};
-    localRows.forEach(function (row) { if (row?.id) mergedById[row.id] = normalizeOTCaseRecord(row); });
-    if (data) Object.values(data).forEach(function (c) { if (c?.id) mergedById[c.id] = normalizeOTCaseRecord(c); });
+    localRows.forEach(function (row) {
+      if (!row?.id) return;
+      mergedById[row.id] = normalizeOTCaseRecord(row);
+    });
+    if (data) Object.values(data).forEach(function (c) {
+      if (!c?.id) return;
+      const normalizedRemote = normalizeOTCaseRecord(c);
+      const existingLocal = mergedById[c.id];
+      if (!existingLocal) {
+        mergedById[c.id] = normalizedRemote;
+        return;
+      }
+      mergedById[c.id] = getOTCaseLastTouchedAt(existingLocal) >= getOTCaseLastTouchedAt(normalizedRemote)
+        ? existingLocal
+        : normalizedRemote;
+    });
     const merged = Object.values(mergedById);
     if (!merged.length) return;
     arr.length = 0;
