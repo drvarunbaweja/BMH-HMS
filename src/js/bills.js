@@ -118,6 +118,11 @@ export async function saveBill(data) {
     paymentMode:    data.paymentMode    || 'Cash',
     amountReceived: Number(data.amountReceived) || 0,
     paymentRef:     data.paymentRef     || '',
+    paymentSplits:  (Array.isArray(data.paymentSplits) ? data.paymentSplits : []).map(row => ({
+      mode:   row.mode || 'Cash',
+      amount: Number(row.amount) || 0,
+      ref:    row.ref || '',
+    })).filter(row => row.amount > 0),
 
     // TPA / Cashless fields
     isTPA:          !!data.isTPA,

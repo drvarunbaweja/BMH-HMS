@@ -4000,6 +4000,13 @@
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
             <div class="form-group" style="margin:0"><label class="fl">Amount received ₹</label><input type="number" id="bmh-pay-amt" placeholder="Amount received" oninput="bmhUpdateBillTotals()"></div>
             <div class="form-group" style="margin:0;display:none" id="bmh-pay-ref-wrap"><label class="fl">Cheque No. / UTR / Transaction No.</label><input type="text" id="bmh-pay-ref" placeholder="Enter transaction details"></div>
+            <div style="grid-column:1/-1;border:1px solid var(--g5);border-radius:8px;padding:8px;background:var(--g6)">
+              <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:6px">
+                <div style="font-size:10px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase">Split patient payment</div>
+                <button type="button" class="btn btn-xs btn-outline" onclick="bmhAddPaymentSplitRow('UPI','','')">+ Add mode</button>
+              </div>
+              <div id="bmh-payment-splits"></div>
+            </div>
             <div class="form-group" style="margin:0;grid-column:1/-1"><label class="fl">Cashless / TPA approved ₹ (for this bill)</label><input type="number" id="bmh-pay-cashless-approved" min="0" step="1" placeholder="Leave blank if not TPA / cashless" oninput="bmhUpdateBillTotals()"></div>
           </div>
           <div id="bmh-pay-cashless-split-hint" style="display:none;font-size:11px;font-weight:700;color:var(--bmh-teal);margin:-2px 0 8px;line-height:1.4"></div>
