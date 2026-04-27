@@ -16729,6 +16729,10 @@ function printOBGCard() {
     const raw = clean(value);
     return raw ? escapeHtmlConsent(raw) : '-';
   };
+  const escBlank = function (value) {
+    const raw = clean(value);
+    return raw ? escapeHtmlConsent(raw) : '';
+  };
   const fmtDate = function (value) {
     const raw = clean(value);
     return raw ? escapeHtmlConsent(obgFmtDate(raw, '-')) : '-';
@@ -16742,6 +16746,9 @@ function printOBGCard() {
   };
   const withNote = function (main, note) {
     return joinBits([main, note], ' - ') || '-';
+  };
+  const withNoteBlank = function (main, note) {
+    return joinBits([main, note], ' - ');
   };
   const bpFromVitals = joinBits([text('obg-vitals-bp-sys'), text('obg-vitals-bp-dia')], '/');
   const ptName = pt.name || text('obg-pt-nm', '-');
@@ -16757,9 +16764,9 @@ function printOBGCard() {
   const blood = text('obg-blood-grp') || text('obg-obs-blood-group') || pt.bloodGroup || '-';
   const husbandBg = text('obg-obs-husband-bg', '-');
   const marriedFor = text('obg-obs-married-duration', '-');
-  const risk = text('obg-risk', 'Low risk');
-  const complaint = text('obg-main-complaint', 'Routine review');
-  const systemic = text('obg-systemic', 'None declared');
+  const risk = text('obg-risk');
+  const complaint = text('obg-main-complaint');
+  const systemic = text('obg-systemic');
   const heightCm = text('obg-vitals-height');
   const weightKg = text('obg-weight') || text('obg-vitals-weight');
   const heightM = Number(heightCm || 0) / 100;
@@ -16787,6 +16794,17 @@ function printOBGCard() {
   const labelledLine = function (label, value) {
     return `<div class="field-line"><span>${escapeHtmlConsent(label)}</span><b>${esc(value)}</b></div>`;
   };
+  const clinicalLine = function (label, value) {
+    return `<div class="field-line"><span>${escapeHtmlConsent(label)}</span><b>${escBlank(value)}</b></div>`;
+  };
+  const buildAssetUrl = function (assetName) {
+    try {
+      const base = document.querySelector('base')?.href || window.location.href;
+      return new URL('assets/' + assetName, base).href;
+    } catch (e) {
+      return 'assets/' + assetName;
+    }
+  };
 
   const currentVisit = {
     date: text('obg-visit-date'),
@@ -16798,7 +16816,7 @@ function printOBGCard() {
     fhr: text('obg-fhr'),
     remarks: joinBits([text('obg-anc-notes'), text('obg-warning'), text('obg-followup-plan')], ' - '),
     complaint,
-    nextReview: text('obg-next-review')
+    nextReview: text('obg-next-review') || document.querySelector('#pg-obg #obg-rx #rx-fu-date')?.value || text('rx-fu-date')
   };
   const cachedVisitRows = Object.values(getCachedPatientVisits(ptId) || {})
     .filter(function (v) { return v && v.dept === 'obg'; })
@@ -16813,7 +16831,7 @@ function printOBGCard() {
         fhr: v.fhr || '',
         remarks: joinBits([v.ancNotes, v.warningSign, v.followupPlan], ' - '),
         complaint: v.mainComplaint || '',
-        nextReview: v.nextReview || v.followupDate || ''
+        nextReview: v.nextReview || v.rxFuDate || v.followupDate || ''
       };
     });
   const visitMap = new Map();
@@ -16838,8 +16856,8 @@ function printOBGCard() {
       place: pregText(entry, 'obg-obs-delivery-location'),
       labourComp: joinBits([
         pregText(entry, 'obg-obs-csection-indication'),
-        withNote(pregText(entry, 'obg-obs-pph'), pregText(entry, 'obg-obs-pph-note')),
-        withNote(pregText(entry, 'obg-obs-nicu'), pregText(entry, 'obg-obs-nicu-note'))
+        withNoteBlank(pregText(entry, 'obg-obs-pph'), pregText(entry, 'obg-obs-pph-note')),
+        withNoteBlank(pregText(entry, 'obg-obs-nicu'), pregText(entry, 'obg-obs-nicu-note'))
       ], ' - '),
       baby: joinBits([
         pregText(entry, 'obg-obs-gender'),
@@ -16858,9 +16876,22 @@ function printOBGCard() {
     return `${row[0]}: ${row[1] ? obgFmtDate(row[1], '-') : (row[2] || '-')}`;
   }).join(' | ');
 
+  const completedLabOrders = (Array.isArray(pt.investigationOrders) ? pt.investigationOrders : [])
+    .filter(function (order) { return order && (order.done || order.labReady || order.completedAt) && order.result; })
+    .sort(function (a, b) { return String(b.completedAt || b.date || '').localeCompare(String(a.completedAt || a.date || '')); });
+  const labResultValue = function (patterns, fallback) {
+    const pats = (Array.isArray(patterns) ? patterns : [patterns]).map(function (p) { return p instanceof RegExp ? p : new RegExp(String(p), 'i'); });
+    for (const order of completedLabOrders) {
+      const name = typeof normalizeLabTestName === 'function' ? normalizeLabTestName(order.name || '') : String(order.name || '').toLowerCase();
+      if (!pats.some(function (re) { return re.test(name); })) continue;
+      const res = order.result || {};
+      return joinBits([res.val, res.unit], ' ');
+    }
+    return clean(fallback);
+  };
   const labLine = function (label, value, dateId) {
     const dateVal = dateId ? text(dateId) : '';
-    return `<div class="lab-line"><span>${escapeHtmlConsent(label)}</span><b>${esc(withNote(value, dateVal ? obgFmtDate(dateVal, '-') : ''))}</b></div>`;
+    return `<div class="lab-line"><span>${escapeHtmlConsent(label)}</span><b>${escBlank(withNoteBlank(value, dateVal ? obgFmtDate(dateVal, '-') : ''))}</b></div>`;
   };
   const ultrasoundRows = [
     {
@@ -16870,20 +16901,20 @@ function printOBGCard() {
       fl: '',
       hc: '',
       ac: '',
-      placenta: withNote(text('obg-obs-placenta'), text('obg-obs-placenta-note')),
-      liquor: withNote(text('obg-obs-liquor'), text('obg-obs-liquor-note')),
+      placenta: withNoteBlank(text('obg-obs-placenta'), text('obg-obs-placenta-note')),
+      liquor: withNoteBlank(text('obg-obs-liquor'), text('obg-obs-liquor-note')),
       cmf: text('obg-fetal-movement')
     }
   ];
   while (ultrasoundRows.length < 7) ultrasoundRows.push({});
 
-  const logoSrc = typeof resolvePrintLogoSrc === 'function' ? resolvePrintLogoSrc() : '';
-  const headerSrc = typeof resolvePrintHeaderSrc === 'function' ? resolvePrintHeaderSrc() : logoSrc;
+  const leftLogoSrc = buildAssetUrl('baweja-1.png');
+  const rightLogoSrc = buildAssetUrl('bmh.jpg');
   const symptoms = {
-    vomiting: /vomit|nausea/i.test(complaint),
-    headache: !!document.getElementById('obg-redflag-headache')?.checked,
-    bleeding: !!document.getElementById('obg-redflag-bleeding')?.checked,
-    fetalMovement: /reduced|absent/i.test(text('obg-fetal-movement')) || !!document.getElementById('obg-redflag-decreasedfm')?.checked
+    vomiting: /vomit|nausea/i.test(complaint) ? 'Yes' : '',
+    headache: document.getElementById('obg-redflag-headache')?.checked ? 'Yes' : '',
+    bleeding: document.getElementById('obg-redflag-bleeding')?.checked ? 'Yes' : '',
+    fetalMovement: document.getElementById('obg-redflag-decreasedfm')?.checked ? 'Concern' : text('obg-fetal-movement')
   };
   const significantFindings = joinBits([
     risk,
@@ -16891,24 +16922,26 @@ function printOBGCard() {
     text('obg-warning'),
     text('obg-anc-notes'),
     text('obg-obs-genetic-note')
-  ], ' | ') || 'No significant finding recorded';
+  ], ' | ');
 
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
   <style>
   *{margin:0;padding:0;box-sizing:border-box;print-color-adjust:exact;-webkit-print-color-adjust:exact}
   @page{size:A4 landscape;margin:6mm}
-  body{font-family:Arial,'Helvetica Neue',sans-serif;background:#fff;color:#17233a}
-  .anc-page{width:285mm;min-height:198mm;padding:5mm;border:1px solid #1f2f4a;background:linear-gradient(180deg,#fff 0%,#fbfdff 100%);page-break-after:always;position:relative;overflow:hidden}
+  body{font-family:'Trebuchet MS',Arial,'Helvetica Neue',sans-serif;background:#fff;color:#17233a}
+  .anc-page{width:285mm;min-height:198mm;padding:5mm;border:1px solid #2d3442;background:#fff;page-break-after:always;position:relative;overflow:hidden}
   .anc-page:last-child{page-break-after:auto}
   .front{display:grid;grid-template-columns:1.78fr .92fr;gap:5mm}
   .back{display:grid;grid-template-rows:auto 1fr auto;gap:4mm}
-  .brand-row{display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #183760;padding-bottom:2mm;margin-bottom:2mm}
-  .logo{height:16mm;max-width:52mm;object-fit:contain}
-  .mini-logo{height:11mm;max-width:40mm;object-fit:contain}
+  .brand-row{display:grid;grid-template-columns:58mm 1fr 30mm;align-items:center;gap:4mm;border-bottom:1.4px solid #2d3442;padding-bottom:2mm;margin-bottom:2mm}
+  .logo{height:18mm;max-width:58mm;object-fit:contain}
+  .bmh-logo{height:16mm;max-width:30mm;object-fit:contain;justify-self:end}
+  .mini-logo{height:11mm;max-width:34mm;object-fit:contain}
   .brand-title{font-size:15px;font-weight:900;letter-spacing:.5px;color:#183760;text-transform:uppercase}
   .brand-sub{font-size:8px;color:#5b6778;margin-top:1mm}
-  .page-title{font-size:15px;font-weight:900;text-transform:uppercase;text-align:center;color:#183760;letter-spacing:.4px}
-  .accent{height:3px;background:linear-gradient(90deg,#183760,#c8922b,#28a06d);margin:1.5mm 0 2mm}
+  .page-title{font-family:Georgia,'Times New Roman',serif;font-size:23px;font-weight:900;text-transform:uppercase;text-align:center;color:#183760;letter-spacing:1.2px;line-height:1}
+  .patient-script{font-family:Georgia,'Times New Roman',serif;font-size:13px;font-weight:800;color:#b91c1c;text-align:right;margin-top:1.2mm}
+  .accent{height:2px;background:linear-gradient(90deg,#1f4f8f,#d72f2f,#1f4f8f);margin:1.5mm 0 2mm}
   .side-head{display:grid;grid-template-columns:1fr auto;gap:3mm;align-items:center;margin-bottom:2mm}
   .record-box{border:1.5px solid #1f2f4a;background:#fff}
   .record-title{background:#eaf1fb;color:#183760;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.35px;text-align:center;padding:1.5mm;border-bottom:1px solid #1f2f4a}
@@ -16917,17 +16950,16 @@ function printOBGCard() {
   .field-line span{font-weight:800;color:#3e4c61;text-transform:uppercase}
   .field-line b{font-size:9px;color:#101c2f}
   .field-two{display:grid;grid-template-columns:1fr 1fr;gap:2mm}
-  .section-title{background:#183760;color:#fff;text-align:center;text-transform:uppercase;font-size:8.5px;font-weight:900;letter-spacing:.35px;padding:1.2mm;border:1px solid #183760}
-  .soft-title{background:#fff6df;color:#4b3510;border-color:#c8922b}
-  .green-title{background:#eefaf3;color:#125c3b;border-color:#28a06d}
+  .section-title{background:#e9edf3;color:#111827;text-align:center;text-transform:uppercase;font-size:8.5px;font-weight:900;letter-spacing:.35px;padding:1.2mm;border:1px solid #2d3442}
+  .soft-title,.green-title{background:#f2f3f5;color:#111827;border-color:#2d3442}
   table{width:100%;border-collapse:collapse;table-layout:fixed}
-  th{background:#eaf1fb;border:1px solid #1f2f4a;color:#17233a;font-size:7.3px;font-weight:900;text-transform:uppercase;line-height:1.1;padding:1.25mm .8mm;text-align:center}
-  td{border:1px solid #1f2f4a;font-size:7.6px;line-height:1.15;padding:1.2mm .9mm;vertical-align:top;height:8.5mm;word-break:break-word}
+  th{background:#edf0f4;border:1px solid #2d3442;color:#17233a;font-size:7.3px;font-weight:900;text-transform:uppercase;line-height:1.1;padding:1.25mm .8mm;text-align:center}
+  td{border:1px solid #2d3442;font-size:7.6px;line-height:1.15;padding:1.2mm .9mm;vertical-align:top;height:8.5mm;word-break:break-word}
   .anc-grid th{font-size:7px}
   .anc-grid td{height:12mm}
   .identity-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.5mm}
   .tiny{font-size:7px;color:#596579}
-  .note-strip{border:1px solid #c8922b;background:#fffaf0;padding:1.8mm;font-size:8.2px;line-height:1.25;margin-top:2mm}
+  .note-strip{border:1px solid #8d96a5;background:#fafafa;padding:1.8mm;font-size:8.2px;line-height:1.25;margin-top:2mm}
   .labs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4mm;align-items:start}
   .lab-line{display:grid;grid-template-columns:30mm 1fr;gap:2mm;border-bottom:1px solid #9ca8ba;min-height:6.5mm;align-items:center;font-size:8px}
   .lab-line span{font-weight:900;color:#324257}
@@ -16941,11 +16973,15 @@ function printOBGCard() {
     <div>
       <div class="brand-row">
         <div>
-          <img class="logo" src="${escapeHtmlConsent(headerSrc)}" alt="Baweja Multispeciality Hospital">
-          <div class="brand-sub">Ropar Branch: 1571/39, Preet Colony, Rupnagar | Chandigarh Branch: SCO 100, Sec 40-C</div>
+          <img class="logo" src="${escapeHtmlConsent(leftLogoSrc)}" alt="Baweja Multispeciality Hospital">
         </div>
-        <div class="tiny">Printed: ${escapeHtmlConsent(today)}</div>
+        <div>
+          <div class="page-title">Ante Natal Card</div>
+          <div class="patient-script">${escBlank(ptName)}</div>
+        </div>
+        <img class="bmh-logo" src="${escapeHtmlConsent(rightLogoSrc)}" alt="BMH">
       </div>
+      <div class="brand-sub">Ropar Branch: 1571/39, Preet Colony, Rupnagar | Chandigarh Branch: SCO 100, Sec 40-C <span style="float:right">Printed: ${escapeHtmlConsent(today)}</span></div>
       <div class="accent"></div>
       <div class="identity-grid" style="margin-bottom:2mm">
         ${labelledLine('Pre pregnancy wt', text('obg-vitals-weight') || weightKg)}
@@ -16964,8 +17000,8 @@ function printOBGCard() {
     </div>
     <div class="right-panel">
       <div class="side-head">
-        <img class="mini-logo" src="${escapeHtmlConsent(logoSrc)}" alt="BMH">
-        <div class="page-title">Antenatal Record</div>
+        <div class="brand-title">Antenatal Record</div>
+        <img class="mini-logo" src="${escapeHtmlConsent(rightLogoSrc)}" alt="BMH">
       </div>
       <div class="record-box">
         <div class="record-title">Patient Details</div>
@@ -16979,27 +17015,27 @@ function printOBGCard() {
           ${labelledLine('LMP', fmtDate(lmp))}
           ${labelledLine('EDD', fmtDate(edd))}
           ${labelledLine('GA', ga)}
-          ${labelledLine('Past history', systemic)}
-          ${labelledLine('Family/Risk history', risk)}
+          ${clinicalLine('Past history', systemic)}
+          ${clinicalLine('Family/Risk history', risk)}
         </div>
       </div>
       <div class="record-box">
         <div class="record-title">Examination</div>
         <div class="record-body">
-          <div class="field-two">${labelledLine('Ht', heightCm ? `${heightCm} cm` : '')}${labelledLine('Wt', weightKg ? `${weightKg} kg` : '')}</div>
-          <div class="field-two">${labelledLine('BMI', bmi)}${labelledLine('BP', text('obg-bp') || bpFromVitals)}</div>
-          <div class="field-two">${labelledLine('Pulse', text('obg-vitals-pulse'))}${labelledLine('Oedema', document.getElementById('obg-redflag-swelling')?.checked ? 'Yes' : 'No')}</div>
-          <div class="field-two">${labelledLine('Pallor', /anemia/i.test(joinBits([risk, complications.join(' ')])) ? 'Yes' : 'No')}${labelledLine('Thyroid', /thyroid/i.test(joinBits([risk, systemic, complications.join(' ')])) ? 'Yes' : 'No')}</div>
-          ${labelledLine('Breast/Chest/CVS', text('obg-systemic'))}
+          <div class="field-two">${clinicalLine('Ht', heightCm ? `${heightCm} cm` : '')}${clinicalLine('Wt', weightKg ? `${weightKg} kg` : '')}</div>
+          <div class="field-two">${clinicalLine('BMI', bmi)}${clinicalLine('BP', text('obg-bp') || bpFromVitals)}</div>
+          <div class="field-two">${clinicalLine('Pulse', text('obg-vitals-pulse'))}${clinicalLine('Oedema', document.getElementById('obg-redflag-swelling')?.checked ? 'Yes' : '')}</div>
+          <div class="field-two">${clinicalLine('Pallor', /anemia/i.test(joinBits([risk, complications.join(' ')])) ? 'Yes' : '')}${clinicalLine('Thyroid', /thyroid/i.test(joinBits([risk, systemic, complications.join(' ')])) ? 'Yes' : '')}</div>
+          ${clinicalLine('Breast/Chest/CVS', text('obg-systemic'))}
         </div>
       </div>
       <div class="record-box">
         <div class="record-title">History of Present Pregnancy</div>
         <div class="record-body">
-          <div class="field-two">${labelledLine('Vomiting', symptoms.vomiting ? 'Yes' : 'No')}${labelledLine('Headache', symptoms.headache ? 'Yes' : 'No')}</div>
-          <div class="field-two">${labelledLine('HOPP Bleeding', symptoms.bleeding ? 'Yes' : 'No')}${labelledLine('Fetal movement', symptoms.fetalMovement ? 'Concern' : (text('obg-fetal-movement') || 'No concern'))}</div>
-          ${labelledLine('Specific complaint', complaint)}
-          <div class="note-strip"><b>Any other significant finding:</b> ${esc(significantFindings)}</div>
+          <div class="field-two">${clinicalLine('Vomiting', symptoms.vomiting)}${clinicalLine('Headache', symptoms.headache)}</div>
+          <div class="field-two">${clinicalLine('HOPP Bleeding', symptoms.bleeding)}${clinicalLine('Fetal movement', symptoms.fetalMovement)}</div>
+          ${clinicalLine('Specific complaint', complaint)}
+          <div class="note-strip"><b>Any other significant finding:</b> ${escBlank(significantFindings)}</div>
         </div>
       </div>
     </div>
@@ -17013,7 +17049,7 @@ function printOBGCard() {
           <div class="brand-title">Obstetric History, Investigations and Ultrasound</div>
           <div class="brand-sub">${esc(ptName)} | ${esc(ptId)} | ${esc(gravida)} | LMP ${fmtDate(lmp)} | EDD ${fmtDate(edd)}</div>
         </div>
-        <img class="mini-logo" src="${escapeHtmlConsent(logoSrc)}" alt="BMH">
+        <img class="mini-logo" src="${escapeHtmlConsent(rightLogoSrc)}" alt="BMH">
       </div>
       <div class="section-title soft-title">Obstetrics History (GPAL)</div>
       <table class="compact">
@@ -17030,28 +17066,28 @@ function printOBGCard() {
     <div class="labs">
       <div>
         <div class="section-title green-title">Routine Investigations</div>
-        ${labLine('Hb 1st week', text('obg-obs-hb'))}
+        ${labLine('Hb 1st week', labResultValue([/^hb\b|haemoglobin|hemoglobin/i], text('obg-obs-hb')))}
         ${labLine('Hb 28 week', '')}
         ${labLine('Hb 32 week', '')}
-        ${labLine('Urine R/M', joinBits([text('obg-urine-protein') ? `Protein ${text('obg-urine-protein')}` : '', text('obg-urine-sugar') ? `Sugar ${text('obg-urine-sugar')}` : '']))}
+        ${labLine('Urine R/M', labResultValue([/urine.*protein|urine.*sugar|urine colour|urine appearance|urine proteins/i], joinBits([text('obg-urine-protein') ? `Protein ${text('obg-urine-protein')}` : '', text('obg-urine-sugar') ? `Sugar ${text('obg-urine-sugar')}` : ''])))}
         ${labLine('Urine C/S', '')}
-        ${labLine('Blood Group (Rh)', blood)}
+        ${labLine('Blood Group (Rh)', labResultValue([/blood group|rh/i], blood))}
       </div>
       <div>
         <div class="section-title">Serology and Metabolic</div>
-        ${labLine('VDRL', text('obg-obs-vdrl'), 'obg-obs-vdrl-date')}
-        ${labLine('HBsAg', text('obg-obs-hbsag'), 'obg-obs-hbsag-date')}
-        ${labLine('HCV', text('obg-obs-hcv'), 'obg-obs-hcv-date')}
-        ${labLine('HIV', text('obg-obs-hiv'), 'obg-obs-hiv-date')}
-        ${labLine('TSH', text('obg-obs-tsh'))}
-        ${labLine('GTT/RBS', joinBits([text('obg-obs-gtt') ? `GTT ${text('obg-obs-gtt')}` : '', text('obg-obs-rbs') ? `RBS ${text('obg-obs-rbs')}` : '']))}
+        ${labLine('VDRL', labResultValue([/vdrl/i], text('obg-obs-vdrl')), 'obg-obs-vdrl-date')}
+        ${labLine('HBsAg', labResultValue([/hbsag|hepatitis b/i], text('obg-obs-hbsag')), 'obg-obs-hbsag-date')}
+        ${labLine('HCV', labResultValue([/hcv|hepatitis c/i], text('obg-obs-hcv')), 'obg-obs-hcv-date')}
+        ${labLine('HIV', labResultValue([/hiv/i], text('obg-obs-hiv')), 'obg-obs-hiv-date')}
+        ${labLine('TSH', labResultValue([/^tsh$|thyroid stimulating/i], text('obg-obs-tsh')))}
+        ${labLine('GTT/RBS', joinBits([labResultValue([/gtt|glucose tolerance/i], text('obg-obs-gtt')) ? `GTT ${labResultValue([/gtt|glucose tolerance/i], text('obg-obs-gtt'))}` : '', labResultValue([/random glucose|rbs/i], text('obg-obs-rbs')) ? `RBS ${labResultValue([/random glucose|rbs/i], text('obg-obs-rbs'))}` : '']))}
       </div>
       <div>
         <div class="section-title soft-title">Special Investigation</div>
         ${labLine('ICT', '')}
         ${labLine('Pap Smear', '')}
         ${labLine('Stool Ova/Cyst', '')}
-        ${labLine('LFT', '')}
+        ${labLine('LFT', labResultValue([/total bilirubin|sgot|sgpt|alkaline phosphatase|liver function/i]))}
         ${labLine('Peripheral Smear', '')}
         ${labLine('LA / ACA', '')}
       </div>
