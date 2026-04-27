@@ -16733,17 +16733,15 @@ function printOBGCard() {
     const raw = clean(value);
     return raw ? escapeHtmlConsent(obgFmtDate(raw, '-')) : '-';
   };
+  const fmtDateCell = function (value) {
+    const raw = clean(value);
+    return raw ? obgFmtDate(raw, '-') : '';
+  };
   const joinBits = function (bits, sep) {
     return bits.map(clean).filter(Boolean).join(sep || ' | ');
   };
   const withNote = function (main, note) {
     return joinBits([main, note], ' - ') || '-';
-  };
-  const yesNo = function (value) {
-    const raw = clean(value).toLowerCase();
-    if (!raw) return 'No';
-    if (/^(no|none|nil|normal|not assessed|not done|negative|non-reactive)$/i.test(raw)) return 'No';
-    return 'Yes';
   };
   const bpFromVitals = joinBits([text('obg-vitals-bp-sys'), text('obg-vitals-bp-dia')], '/');
   const ptName = pt.name || text('obg-pt-nm', '-');
@@ -16780,7 +16778,8 @@ function printOBGCard() {
     return joinBits([list.join(', '), pregText(entry, 'obg-obs-complication-note')], ' - ');
   };
   const cell = function (value, cls) {
-    return `<td${cls ? ` class="${cls}"` : ''}>${esc(value)}</td>`;
+    const raw = clean(value);
+    return `<td${cls ? ` class="${cls}"` : ''}>${raw ? escapeHtmlConsent(raw) : '&nbsp;'}</td>`;
   };
   const blankCell = function () {
     return '<td>&nbsp;</td>';
@@ -16958,7 +16957,7 @@ function printOBGCard() {
         </tr></thead>
         <tbody>
           ${visitRows.map(function (row) {
-            return `<tr>${cell(fmtDate(row.date))}${cell(row.ga)}${cell(row.weight)}${cell(row.bp)}${cell(row.fundalHeight)}${cell(row.presentation)}${cell(row.fhr)}${cell(row.remarks)}${cell(row.complaint)}${cell(fmtDate(row.nextReview))}</tr>`;
+            return `<tr>${cell(fmtDateCell(row.date))}${cell(row.ga)}${cell(row.weight)}${cell(row.bp)}${cell(row.fundalHeight)}${cell(row.presentation)}${cell(row.fhr)}${cell(row.remarks)}${cell(row.complaint)}${cell(fmtDateCell(row.nextReview))}</tr>`;
           }).join('')}
         </tbody>
       </table>
@@ -17023,7 +17022,7 @@ function printOBGCard() {
         </tr></thead>
         <tbody>
           ${pregRows.map(function (row) {
-            return `<tr>${row.index ? cell(row.index) : blankCell()}${cell(fmtDate(row.date))}${cell(row.duration)}${cell(row.pregnancyComp)}${cell(row.type)}${cell(row.place)}${cell(row.labourComp)}${cell(row.baby)}</tr>`;
+            return `<tr>${row.index ? cell(row.index) : blankCell()}${cell(fmtDateCell(row.date))}${cell(row.duration)}${cell(row.pregnancyComp)}${cell(row.type)}${cell(row.place)}${cell(row.labourComp)}${cell(row.baby)}</tr>`;
           }).join('')}
         </tbody>
       </table>
@@ -17063,7 +17062,7 @@ function printOBGCard() {
         <thead><tr><th>Date</th><th>POG</th><th>BPD</th><th>FL</th><th>HC</th><th>AC</th><th>Placenta</th><th>Liquor</th><th>CMF</th></tr></thead>
         <tbody>
           ${ultrasoundRows.map(function (row) {
-            return `<tr>${cell(fmtDate(row.date))}${cell(row.pog)}${cell(row.bpd)}${cell(row.fl)}${cell(row.hc)}${cell(row.ac)}${cell(row.placenta)}${cell(row.liquor)}${cell(row.cmf)}</tr>`;
+            return `<tr>${cell(fmtDateCell(row.date))}${cell(row.pog)}${cell(row.bpd)}${cell(row.fl)}${cell(row.hc)}${cell(row.ac)}${cell(row.placenta)}${cell(row.liquor)}${cell(row.cmf)}</tr>`;
           }).join('')}
         </tbody>
       </table>
