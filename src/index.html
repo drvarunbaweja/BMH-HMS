@@ -3690,6 +3690,20 @@
           <div id="inv-import-status-use" style="font-size:11px;color:var(--g1);margin-top:8px"></div>
           <div id="inv-import-preview-use" style="margin-top:8px;font-size:11px;color:var(--tx3)"></div>
         </div>
+        <div style="border:1px solid var(--g4);border-radius:10px;padding:10px;margin-bottom:10px;background:#fff">
+          <div style="display:grid;grid-template-columns:minmax(220px,1fr) 120px 110px;gap:8px;align-items:end">
+            <div class="form-group" style="margin:0;position:relative">
+              <label class="fl">Manual stock item</label>
+              <input type="text" id="inv-use-item-search" placeholder="Type medicine / consumable name…" autocomplete="off">
+              <input type="hidden" id="inv-use-item-key">
+              <div id="inv-use-item-results" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:24;background:#fff;border:1px solid var(--g4);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.12);max-height:260px;overflow-y:auto;margin-top:4px"></div>
+            </div>
+            <div class="form-group" style="margin:0"><label class="fl">Item qty</label><input type="number" id="inv-use-item-qty" min="1" value="1"></div>
+            <button type="button" class="btn btn-blue btn-sm" onclick="addInventoryUseDraftItem()">+ Add item</button>
+          </div>
+          <div id="inv-use-draft-list" style="margin-top:10px"></div>
+          <div style="display:flex;justify-content:flex-end;margin-top:10px"><button type="button" class="btn btn-orange btn-sm" onclick="saveInventoryUseDraft()">Save selected items</button></div>
+        </div>
         <div style="display:flex;gap:8px"><input type="text" id="bc-use" placeholder="Barcode / item name…" style="flex:1"><button class="btn btn-orange btn-sm" onclick="processBC('use',document.getElementById('bc-use').value)">Use →</button></div>
         <div id="use-log" style="margin-top:10px"></div>
         <div class="card" style="margin-top:12px;background:var(--g6)">

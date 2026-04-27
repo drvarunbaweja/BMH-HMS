@@ -9199,6 +9199,186 @@ function bindInventoryUsePatientSearch() {
   });
   input.dataset.boundInventorySearch = '1';
 }
+window.BMH_INVENTORY_USE_DRAFT = window.BMH_INVENTORY_USE_DRAFT || [];
+function bmhParseInventoryExpiryTime(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return Number.MAX_SAFE_INTEGER;
+  const iso = raw.match(/^(\d{4})-(\d{1,2})(?:-(\d{1,2}))?$/);
+  if (iso) return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3] || 1)).getTime();
+  const dmY = raw.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})$/);
+  if (dmY) return new Date(Number(dmY[3].length === 2 ? '20' + dmY[3] : dmY[3]), Number(dmY[2]) - 1, Number(dmY[1])).getTime();
+  const t = Date.parse(raw);
+  return Number.isNaN(t) ? Number.MAX_SAFE_INTEGER : t;
+}
+function bmhInventoryItemSearchHaystack(item) {
+  return [item?.name, item?.genericName, item?.cat, item?.barcode, item?.batchNo, item?.serialNo, item?.store, item?.vendor]
+    .filter(Boolean).join(' ').toLowerCase();
+}
+function bmhSortInventoryUseMatches(rows) {
+  return rows.slice().sort(function (a, b) {
+    return String(a.name || '').localeCompare(String(b.name || ''))
+      || bmhParseInventoryExpiryTime(a.exp) - bmhParseInventoryExpiryTime(b.exp)
+      || String(a.batchNo || '').localeCompare(String(b.batchNo || ''))
+      || String(a.barcode || '').localeCompare(String(b.barcode || ''));
+  });
+}
+function bmhInventoryItemKey(item) {
+  return [item?.barcode, item?.batchNo, item?.serialNo, item?.store, item?.exp, item?.name].map(function (v) {
+    return String(v || '').replace(/\|/g, '/');
+  }).join('|');
+}
+function bmhFindInventoryItemByKey(key) {
+  const wanted = String(key || '');
+  if (!wanted) return null;
+  return (INVENTORY || []).find(function (item) { return bmhInventoryItemKey(item) === wanted; }) || null;
+}
+function bmhInventoryUseItemLabel(item) {
+  return [
+    item?.name || 'Stock item',
+    item?.exp ? 'Exp ' + item.exp : '',
+    item?.batchNo ? 'Batch ' + item.batchNo : '',
+    item?.store ? bmhFormatStoreLabel(item.store) : '',
+    item?.barcode ? 'BC ' + item.barcode : ''
+  ].filter(Boolean).join(' · ');
+}
+function bmhFindInventoryUseItems(query) {
+  const q = String(query || '').trim().toLowerCase();
+  if (!q || q.length < 2) return [];
+  const tokens = q.split(/\s+/).filter(Boolean);
+  return bmhSortInventoryUseMatches((INVENTORY || []).filter(function (item) {
+    if (Number(item.stock || 0) <= 0) return false;
+    const hay = bmhInventoryItemSearchHaystack(item);
+    return tokens.every(function (token) { return hay.includes(token); });
+  })).slice(0, 30);
+}
+function bmhFindInventoryItemForText(raw) {
+  const q = String(raw || '').trim().toLowerCase();
+  if (!q) return null;
+  const exact = bmhSortInventoryUseMatches((INVENTORY || []).filter(function (item) {
+    return Number(item.stock || 0) > 0 && (
+      String(item.barcode || '').toLowerCase() === q
+      || String(item.name || '').toLowerCase() === q
+      || bmhInventoryUseItemLabel(item).toLowerCase() === q
+    );
+  }));
+  if (exact.length) return exact[0];
+  return bmhFindInventoryUseItems(q)[0] || null;
+}
+function selectInventoryUseItem(key) {
+  const item = bmhFindInventoryItemByKey(decodeURIComponent(String(key || '')));
+  const input = document.getElementById('inv-use-item-search');
+  const hidden = document.getElementById('inv-use-item-key');
+  const results = document.getElementById('inv-use-item-results');
+  if (!item || !input || !hidden) return;
+  hidden.value = bmhInventoryItemKey(item);
+  input.value = bmhInventoryUseItemLabel(item);
+  if (results) results.style.display = 'none';
+}
+window.selectInventoryUseItem = selectInventoryUseItem;
+function renderInventoryUseItemResults(query) {
+  const box = document.getElementById('inv-use-item-results');
+  if (!box) return;
+  const rows = bmhFindInventoryUseItems(query);
+  if (!String(query || '').trim() || String(query || '').trim().length < 2) {
+    box.style.display = 'none';
+    box.innerHTML = '';
+    return;
+  }
+  if (!rows.length) {
+    box.innerHTML = '<div style="padding:10px 12px;font-size:12px;color:var(--g1)">No stock item found</div>';
+    box.style.display = 'block';
+    return;
+  }
+  box.innerHTML = rows.map(function (item) {
+    const key = encodeURIComponent(bmhInventoryItemKey(item));
+    const stockColor = Number(item.stock || 0) <= Number(item.min || 0) ? 'var(--orange)' : 'var(--green)';
+    return `<button type="button" style="display:block;width:100%;text-align:left;padding:10px 12px;background:#fff;border:0;border-bottom:1px solid var(--g5);cursor:pointer" onclick="selectInventoryUseItem('${key}')">
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+        <span style="font-weight:900;font-size:12px">${escapeHtmlConsent(item.name || 'Stock item')}</span>
+        <span style="font-weight:900;font-size:11px;color:${stockColor}">Stock ${Number(item.stock || 0)}</span>
+      </div>
+      <div style="font-size:10px;color:var(--g1);margin-top:3px">${escapeHtmlConsent([item.exp ? 'Exp ' + item.exp : '', item.batchNo ? 'Batch ' + item.batchNo : '', item.store ? bmhFormatStoreLabel(item.store) : '', item.barcode || ''].filter(Boolean).join(' · '))}</div>
+    </button>`;
+  }).join('');
+  box.style.display = 'block';
+}
+function renderInventoryUseDraftList() {
+  const el = document.getElementById('inv-use-draft-list');
+  if (!el) return;
+  const rows = window.BMH_INVENTORY_USE_DRAFT || [];
+  el.innerHTML = rows.length ? rows.map(function (row, idx) {
+    const item = bmhFindInventoryItemByKey(row.key) || row.item || {};
+    return `<div style="display:grid;grid-template-columns:minmax(0,1fr) 80px 30px;gap:8px;align-items:center;padding:8px;border:1px solid var(--g5);border-radius:8px;background:var(--g6);margin-bottom:7px">
+      <div><div style="font-size:12px;font-weight:900;color:var(--bmh-blue)">${escapeHtmlConsent(item.name || row.name || 'Stock item')}</div><div style="font-size:10px;color:var(--g1)">${escapeHtmlConsent([item.exp ? 'Exp ' + item.exp : '', item.batchNo ? 'Batch ' + item.batchNo : '', item.store ? bmhFormatStoreLabel(item.store) : '', item.barcode || ''].filter(Boolean).join(' · '))}</div></div>
+      <input type="number" min="1" value="${Math.max(1, Number(row.qty || 1))}" onchange="window.BMH_INVENTORY_USE_DRAFT[${idx}].qty=Math.max(1,Number(this.value)||1)" style="font-size:12px">
+      <button type="button" class="btn btn-xs btn-gray" onclick="removeInventoryUseDraftItem(${idx})">✕</button>
+    </div>`;
+  }).join('') : '<div style="padding:9px 10px;border:1px dashed var(--g4);border-radius:8px;background:var(--g6);font-size:11px;color:var(--g1)">No stock items selected yet.</div>';
+}
+function addInventoryUseDraftItem() {
+  const hidden = document.getElementById('inv-use-item-key');
+  const input = document.getElementById('inv-use-item-search');
+  const qtyEl = document.getElementById('inv-use-item-qty');
+  const item = bmhFindInventoryItemByKey(hidden?.value || '') || bmhFindInventoryItemForText(input?.value || '');
+  if (!item) { showToast('Select a stock item from the list first', 'w'); return; }
+  const qty = Math.max(1, Number(qtyEl?.value || 1) || 1);
+  window.BMH_INVENTORY_USE_DRAFT.push({ key: bmhInventoryItemKey(item), name: item.name, qty });
+  if (input) input.value = '';
+  if (hidden) hidden.value = '';
+  if (qtyEl) qtyEl.value = '1';
+  renderInventoryUseDraftList();
+}
+window.addInventoryUseDraftItem = addInventoryUseDraftItem;
+function removeInventoryUseDraftItem(idx) {
+  window.BMH_INVENTORY_USE_DRAFT.splice(idx, 1);
+  renderInventoryUseDraftList();
+}
+window.removeInventoryUseDraftItem = removeInventoryUseDraftItem;
+function saveInventoryUseDraft() {
+  const bmhId = document.getElementById('use-pt')?.value || '';
+  if (!bmhId) { showToast('Search and select a patient by BMSH ID / phone first', 'w'); return; }
+  const rows = (window.BMH_INVENTORY_USE_DRAFT || []).slice();
+  if (!rows.length) { showToast('Add at least one stock item first', 'w'); return; }
+  const useMode = document.getElementById('inv-use-mode')?.value || 'bill';
+  const dept = bmhInventoryUseDeptValue();
+  const groupId = 'IUG' + Date.now();
+  let saved = 0;
+  rows.forEach(function (row) {
+    const item = bmhFindInventoryItemByKey(row.key);
+    if (!item) return;
+    bmhUseInventoryItemForPatient(bmhId, item, { descSuffix: '(inventory use)', qty: Math.max(1, Number(row.qty || 1)), mode: useMode, dept, groupId });
+    saved += 1;
+  });
+  window.BMH_INVENTORY_USE_DRAFT.length = 0;
+  renderInventoryUseDraftList();
+  const log = document.getElementById('use-log');
+  if (log && saved) {
+    const d = document.createElement('div');
+    d.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;background:var(--orange-lt);border-radius:8px;margin-bottom:6px;font-size:12px';
+    d.innerHTML = `<span><strong>${saved} stock item${saved === 1 ? '' : 's'}</strong> · ${bmhId}</span><span style="font-weight:900;color:#8a4200">${useMode === 'bill' ? 'Billed' : 'Consumed'}</span>`;
+    log.prepend(d);
+  }
+  showToast(saved + ' item' + (saved === 1 ? '' : 's') + ' saved for patient usage ✓', 's');
+}
+window.saveInventoryUseDraft = saveInventoryUseDraft;
+function bindInventoryUseItemSearch() {
+  const input = document.getElementById('inv-use-item-search');
+  const hidden = document.getElementById('inv-use-item-key');
+  const results = document.getElementById('inv-use-item-results');
+  if (!input || input.dataset.boundInventoryItemSearch) return;
+  input.addEventListener('input', function () {
+    if (hidden) hidden.value = '';
+    renderInventoryUseItemResults(this.value);
+  });
+  input.addEventListener('focus', function () { renderInventoryUseItemResults(this.value); });
+  document.addEventListener('click', function (e) {
+    if (!results || !input) return;
+    if (e.target === input || results.contains(e.target)) return;
+    results.style.display = 'none';
+  });
+  input.dataset.boundInventoryItemSearch = '1';
+  renderInventoryUseDraftList();
+}
 function inferChargeCategoryFromService(forStr) {
   const s = (forStr || '').toLowerCase();
   // Investigations & imaging first (avoid mis-tagging e.g. IOL Master / biometry as surgery)
@@ -12183,6 +12363,7 @@ function bmhUseInventoryItemForPatient(bmhId, item, opts) {
       amount: mrp * qty,
       source: 'inventory',
       ref: item.barcode,
+      groupId: opts?.groupId || '',
       ts: new Date().toISOString()
     });
     AUTO_BILL.push({ item: item.name, mrp, qty, patient: bmhId, time: new Date().toLocaleTimeString() });
@@ -12199,6 +12380,7 @@ function bmhUseInventoryItemForPatient(bmhId, item, opts) {
     mrp,
     cost: Number(item.cost || 0),
     mode: usageMode,
+    groupId: opts?.groupId || '',
     vendorBillingMode: item.vendorBillingMode || 'monthly',
     ts: bmhNowISO()
   });
@@ -14134,6 +14316,7 @@ function initInventory() {
   renderInventoryExpensePanel();
   renderInventoryLedgerPanel();
   bindInventoryUsePatientSearch();
+  bindInventoryUseItemSearch();
   const ilc = document.getElementById('inv-low-cnt');
   if (ilc) ilc.textContent = INVENTORY.filter(i => i.stock <= i.min).length;
   const totalEl = document.getElementById('inv-total-items');
@@ -22518,7 +22701,7 @@ function initCcDurationControls() {
 function processBC(mode, code) {
   if (!code) return;
   const translated = String(code);
-  const item = BCMAP[code] || BCMAP[code.toLowerCase().substring(0, 15)] || INVENTORY.find(x => x.name.toLowerCase() === String(code).toLowerCase());
+  const item = BCMAP[code] || BCMAP[code.toLowerCase().substring(0, 15)] || bmhFindInventoryItemForText(code);
   if (mode === 'in') {
     const qty = Math.max(1, Number(document.getElementById('inv-in-qty')?.value || '1'));
     const target = item || bmhFindOrCreateInventoryItem(code, translated);
@@ -26848,12 +27031,10 @@ function fillProcedureDoneDatalists(dept) {
     }).join('');
   }
   if (stockList) {
-    stockList.innerHTML = (INVENTORY || []).filter(function (item) {
+    stockList.innerHTML = bmhSortInventoryUseMatches((INVENTORY || []).filter(function (item) {
       return Number(item.stock || 0) > 0;
-    }).slice().sort(function (a, b) {
-      return String(a.name || '').localeCompare(String(b.name || ''));
-    }).map(function (item) {
-      const label = [item.name, item.barcode, item.store].filter(Boolean).join(' · ');
+    })).map(function (item) {
+      const label = bmhInventoryUseItemLabel(item);
       return '<option value="' + String(label).replace(/"/g, '&quot;') + '"></option>';
     }).join('');
   }
@@ -26911,13 +27092,7 @@ window.removeProcedureUsageRow = removeProcedureUsageRow;
 function findInventoryItemForProcedureUse(raw) {
   const q = String(raw || '').trim().toLowerCase();
   if (!q) return null;
-  return (INVENTORY || []).find(function (item) {
-    const label = [item.name, item.barcode, item.store].filter(Boolean).join(' · ').toLowerCase();
-    return label === q || String(item.barcode || '').toLowerCase() === q || String(item.name || '').toLowerCase() === q;
-  }) || (INVENTORY || []).find(function (item) {
-    const label = [item.name, item.barcode, item.store].filter(Boolean).join(' · ').toLowerCase();
-    return label.includes(q) || String(item.name || '').toLowerCase().includes(q) || String(item.barcode || '').toLowerCase().includes(q);
-  }) || null;
+  return bmhFindInventoryItemForText(q);
 }
 function openProcedureDoneModalForDept(dept) {
   if (!window.CURRENT_PATIENT?.bmhId) { showToast('Open a patient first', 'w'); return; }
