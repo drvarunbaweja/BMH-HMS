@@ -3697,13 +3697,6 @@ function openPatient(bmhId, opts) {
   const allowTodayRestore = !opts.freshStart;
   const lastVisitIsToday = allowTodayRestore && visitDateKey(lastVisitRef) === localDateKey(new Date());
   window._suspendVisitAutosave = true;
-  const unreadLabOrders = Array.isArray(p.investigationOrders) ? p.investigationOrders.filter(function (o) {
-    return o && o.mode === 'send' && o.done && o.labReady && !o.doctorSeen;
-  }) : [];
-  if (unreadLabOrders.length) {
-    unreadLabOrders.forEach(function (o) { o.doctorSeen = true; });
-    fbUpdate && fbUpdate('patients/' + p.bmhId, { investigationOrders: p.investigationOrders }).catch(function(){});
-  }
 
   // ── Set global current patient for printOphthoSheet etc. ───────
   window.CURRENT_PATIENT = p;
@@ -14264,6 +14257,7 @@ function initLab() {
   if (dateEl && !String(dateEl.textContent || '').trim()) dateEl.textContent = formatDateIN(new Date());
   loadLabMasterOverrides && loadLabMasterOverrides();
   renderInvestigationChooserSafe && renderInvestigationChooserSafe();
+  populateLabManualTestDatalist && populateLabManualTestDatalist();
   renderLabOrders && renderLabOrders();
 }
 function checkLabVal(inp,lo,hi){const v=parseFloat(inp.value)||0;inp.className='lab-val-inp '+(v<lo?'val-low':v>hi?'val-high':'val-ok');}
@@ -16893,7 +16887,7 @@ const INVESTIGATION_CATEGORIES = [
     'Urine Colour','Urine Appearance','Urine Proteins','Urine Sugar','Urine pH','Specific Gravity',
     'Acetone/Ketones','Bile Salt','Bile Pigment',"Urine Pus Cells","Urine RBC's",'Epithelial Cells',
     'Calcium Oxalate Crystals','Triple Phosphate Crystals','Uric Acid Crystals','Amorphous Deposits',
-    'Budding Yeast','Fungal Hyphae','Mucus Fibers','Urine Bacteria'
+    'Budding Yeast','Fungal Hyphae','Mucus Fibers','Urine Bacteria','Urine Pregnancy Test (UPT)'
   ]},
   { id:'stool', label:'🔬 Stool', tests:[
     'Stool Colour','Stool Consistency','Stool Blood','Stool Mucous','Stool Parasite',
@@ -17021,6 +17015,7 @@ const LAB_RANGE_BY_EXACT_NAME = {};
     ['Fungal Hyphae', '', 'Nil'],
     ['Mucus Fibers', '', 'Nil'],
     ['Urine Bacteria', '', 'Nil'],
+    ['Urine Pregnancy Test (UPT)', '', 'Negative'],
     ['Stool Colour', '', 'Brownish'],
     ['Stool Consistency', '', ''],
     ['Stool Blood', '', 'Nil'],
@@ -17736,6 +17731,22 @@ function getInvestigationCategoryLabel(catId) {
   const labels = { haem:'Haematology', coag:'Coagulogram', chem:'Chemistry', rft:'Renal Function', lft:'Liver Function', lipid:'Lipid Profile', electro:'Electrolytes', sero:'Serology', urine:'Urine Exam', stool:'Stool Exam', hcg:'Pregnancy Test', semen:'Semen Analysis', rafq:'RA Factor', thyroid:'Thyroid' };
   return labels[catId] || catId;
 }
+function upsertLabMasterTestFromCharge(parent, name) {
+  const testName = normalizeInvestigationLabel(name || parent);
+  if (!testName) return;
+  const groupId = normalizeLabMasterCategoryId(parent || getLabTestMeta(testName).group || 'custom');
+  let cat = INVESTIGATION_CATEGORIES.find(function (row) { return row.id === groupId; });
+  if (!cat) {
+    cat = { id: groupId, label: toDisplayTitleCase(groupId), tests: [] };
+    INVESTIGATION_CATEGORIES.push(cat);
+  }
+  if (!cat.tests.some(function (x) { return String(x || '').trim().toLowerCase() === testName.toLowerCase(); })) {
+    cat.tests.push(testName);
+    cat.tests.sort(function (a, b) { return String(a).localeCompare(String(b)); });
+  }
+  LAB_RANGE_BY_EXACT_NAME[testName] = Object.assign({}, LAB_RANGE_BY_EXACT_NAME[testName] || {}, getLabTestMeta(testName), { group: groupId, name: testName });
+  renderInvestigationChooserSafe && renderInvestigationChooserSafe();
+}
 function selectAllInvCat(catId) {
   const cat = INVESTIGATION_CATEGORIES.find(function (c) { return c.id === catId; });
   if (!cat) return;
@@ -17784,6 +17795,7 @@ function getCurrentInvestigationDeptKey() {
   return 'ophtho';
 }
 window.CURRENT_INVESTIGATION_ORDER_MODE = window.CURRENT_INVESTIGATION_ORDER_MODE || 'send';
+window.CURRENT_INVESTIGATION_TEMPLATE_SELECTIONS = window.CURRENT_INVESTIGATION_TEMPLATE_SELECTIONS || [];
 function normalizeInvestigationDeptForUi(dept) {
   const key = String(dept || getCurrentInvestigationDeptKey() || '').toLowerCase();
   if (key === 'oe' || key.includes('oph')) return 'oe';
@@ -17872,6 +17884,7 @@ function syncSelectedInvestigationCheckboxes() {
 }
 function clearSelectedInvestigations() {
   SELECTED_INVESTIGATIONS.length = 0;
+  window.CURRENT_INVESTIGATION_TEMPLATE_SELECTIONS = [];
   syncSelectedInvestigationCheckboxes();
 }
 function refreshInvestigationTemplateSelect() {
@@ -17892,14 +17905,20 @@ function refreshInvestigationTemplateSelect() {
 }
 function applyInvestigationTemplate(key) {
   if(!key || !INVESTIGATION_TEMPLATES_DATA[key]) return;
-  clearSelectedInvestigations();
+  window.CURRENT_INVESTIGATION_TEMPLATE_SELECTIONS = window.CURRENT_INVESTIGATION_TEMPLATE_SELECTIONS || [];
   const names = new Set(INVESTIGATION_TEMPLATES_DATA[key] || []);
+  const meta = INVESTIGATION_TEMPLATES_META[key] || { dept: 'all', name: key };
+  const existingTemplate = window.CURRENT_INVESTIGATION_TEMPLATE_SELECTIONS.find(function (row) { return row && row.key === key; });
+  if (existingTemplate) existingTemplate.names = Array.from(new Set((existingTemplate.names || []).concat(Array.from(names))));
+  else window.CURRENT_INVESTIGATION_TEMPLATE_SELECTIONS.push({ key: key, name: meta.name || key, names: Array.from(names) });
   document.querySelectorAll('#m-order-invest .invest-option').forEach(el => {
     const label = el.getAttribute('data-investigation-name')?.trim();
     if(!label || !names.has(label)) return;
     const cb = el.querySelector('input[type=checkbox]');
     if(cb && !cb.checked) toggleInvestigation(el, label, Number(el.getAttribute('data-price')) || 0);
   });
+  syncSelectedInvestigationCheckboxes();
+  showToast('Template added: ' + (meta.name || key), 's');
 }
 function saveInvestigationTemplateFromSelection() {
   if(!SELECTED_INVESTIGATIONS.length) {
@@ -20277,14 +20296,24 @@ function confirmInvestigations(modeArg) {
   const doctor = document.getElementById('sbnm')?.textContent || CURRENT_USER?.name || 'Doctor';
   const orderMode = modeArg === 'advise' ? 'advise' : (modeArg === 'send' ? 'send' : (window.CURRENT_INVESTIGATION_ORDER_MODE === 'advise' ? 'advise' : 'send'));
   const nowIso = new Date().toISOString();
+  const templateSelections = Array.isArray(window.CURRENT_INVESTIGATION_TEMPLATE_SELECTIONS) ? window.CURRENT_INVESTIGATION_TEMPLATE_SELECTIONS : [];
+  const templateForName = function (name) {
+    const clean = String(name || '').trim();
+    return templateSelections.find(function (tpl) {
+      return tpl && Array.isArray(tpl.names) && tpl.names.some(function (n) { return String(n || '').trim() === clean; });
+    }) || null;
+  };
   SELECTED_INVESTIGATIONS.forEach((inv, idx) => {
     const existing = orders.find(o => !o.done && o.name === inv.name);
     if(existing) return;
+    const tpl = templateForName(inv.name);
     const order = {
       id: 'INV' + Date.now() + idx,
       name: inv.name,
       notes: '',
       price: Number(inv.price) || 0,
+      templateKey: tpl ? tpl.key : '',
+      templateName: tpl ? tpl.name : '',
       date: nowIso.slice(0, 10),
       orderedAt: nowIso,
       mode: orderMode,
@@ -25477,12 +25506,28 @@ function renderInvestigationOrders() {
   el.innerHTML = orders.map((o,i) => `<div style="display:flex;align-items:center;gap:7px;padding:6px 8px;background:${o.done?'var(--green-lt)':'var(--orange-lt)'};border-radius:7px;margin-top:5px;font-size:12px">
     <span style="font-size:14px">${o.done?'✅':'🧪'}</span>
     <div style="flex:1"><div style="font-weight:700">${o.name}</div>${o.notes?`<div style="font-size:10.5px;color:var(--g1)">${o.notes}</div>`:''}
-    <div style="font-size:9.5px;color:var(--g1)">${o.date} · ${o.mode === 'send' ? 'Sent to lab' : 'Advice only'}</div></div>
+    <div style="font-size:9.5px;color:var(--g1)">${o.date} · ${o.mode === 'send' ? 'Sent to lab' : 'Advice only'}${o.templateName ? ' · Template: ' + escapeHtmlConsent(o.templateName) : ''}</div>
+    ${o.done && o.result ? `<div style="margin-top:4px;font-size:11px;color:#166534;font-weight:800">${escapeHtmlConsent([o.result.val || 'Result saved', o.result.unit || '', o.result.flag && o.result.flag !== '—' ? '(' + o.result.flag + ')' : ''].filter(Boolean).join(' '))}</div>${o.labComments ? `<div style="font-size:10.5px;color:var(--g1);margin-top:2px">${escapeHtmlConsent(o.labComments)}</div>` : ''}` : ''}</div>
+    ${o.labReady && !o.doctorSeen ? `<button class="btn btn-xs btn-outline" onclick="markInvestigationResultReviewed(${JSON.stringify(o.id)})">Reviewed</button>` : ''}
     <button class="btn btn-xs ${o.done?'btn-gray':'btn-green'}" onclick="getCurrentPatientInvestigationOrders()[${i}].done=!getCurrentPatientInvestigationOrders()[${i}].done;syncCurrentPatientInvestigationOrders();persistCurrentPatientInvestigationOrders();renderOeInvOrderedList();renderInvestigationOrders()">${o.done?'Undo':'Done ✓'}</button>
     <button class="btn btn-xs btn-gray" onclick="cancelInvestigationReceptionRequest(${JSON.stringify(o.id)})">&#x2715;</button>
   </div>`).join('');
   renderDeptInvestigationPanels();
 }
+function markInvestigationResultReviewed(orderId) {
+  const orders = getCurrentPatientInvestigationOrders();
+  const order = orders.find(function (row) { return row && row.id === orderId; });
+  if (!order) return;
+  order.doctorSeen = true;
+  order.reviewedAt = new Date().toISOString();
+  syncCurrentPatientInvestigationOrders();
+  persistCurrentPatientInvestigationOrders();
+  renderOeInvOrderedList && renderOeInvOrderedList();
+  renderInvestigationOrders && renderInvestigationOrders();
+  renderDocQueue && renderDocQueue();
+  showToast('Lab result marked reviewed ✓', 's');
+}
+window.markInvestigationResultReviewed = markInvestigationResultReviewed;
 
 // (Legacy duplicate printUnifiedRx removed — use window.printUnifiedRx below.)
 
@@ -26326,31 +26371,55 @@ function selectLabAddPatient(bmhId, name) {
   if (searchEl) searchEl.value = name;
   if (resultsEl) resultsEl.style.display = 'none';
 }
+function populateLabManualTestDatalist() {
+  const dl = document.getElementById('lab-add-test-list');
+  if (!dl) return;
+  const names = [];
+  (INVESTIGATION_CATEGORIES || []).forEach(function (cat) {
+    (cat.tests || []).forEach(function (name) { if (name) names.push(name); });
+  });
+  dl.innerHTML = Array.from(new Set(names)).sort().map(function (name) {
+    return '<option value="' + String(name).replace(/"/g, '&quot;') + '"></option>';
+  }).join('');
+}
+function parseManualLabTests(value) {
+  return String(value || '').split(/[,;\n]+/).map(function (x) { return normalizeInvestigationLabel(x); }).filter(Boolean);
+}
 function addPatientToLab() {
   const bmhId = document.getElementById('lab-add-pt-bmhid')?.value?.trim();
   if (!bmhId) { showToast('Search and select a patient first', 'w'); return; }
   const pt = (window.PATIENTS || []).find(function (p) { return p.bmhId === bmhId; });
   if (!pt) { showToast('Patient not found', 'w'); return; }
-  // Check if already in queue
-  const existing = LAB_ORDERS.find(function (o) { return o.bmhId === bmhId; });
-  if (existing) {
-    openLabOrder(existing.id);
-    showToast(pt.name + ' is already in the lab queue', 'i');
-    return;
-  }
-  // Create a manual lab entry (walk-in) for this patient
+  const requestedTests = parseManualLabTests(document.getElementById('lab-add-tests')?.value || '');
+  if (!requestedTests.length) { showToast('Enter one or more lab investigations', 'w'); return; }
   const orders = Array.isArray(pt.investigationOrders) ? pt.investigationOrders : [];
-  const manualOrder = {
-    name: 'Manual Lab Entry',
-    mode: 'send',
-    date: new Date().toISOString().split('T')[0],
-    orderedBy: CURRENT_USER?.name || 'Lab',
-    done: false,
-    labReady: false,
-    doctorSeen: false,
-    isManualLabEntry: true
-  };
-  orders.push(manualOrder);
+  const nowIso = new Date().toISOString();
+  let added = 0;
+  requestedTests.forEach(function (testName, idx) {
+    const alreadyPending = orders.some(function (o) {
+      return o && o.mode === 'send' && !o.done && normalizeLabTestName(o.name).toLowerCase() === testName.toLowerCase();
+    });
+    if (alreadyPending) return;
+    orders.push({
+      id: 'LABMAN' + Date.now() + idx,
+      name: testName,
+      mode: 'send',
+      date: nowIso.slice(0, 10),
+      orderedAt: nowIso,
+      orderedBy: CURRENT_USER?.name || 'Lab',
+      done: false,
+      labReady: false,
+      doctorSeen: false,
+      patient: pt.name,
+      bmhId: pt.bmhId,
+      dept: pt.dept || 'lab',
+      centre: pt.centre || CURRENT_USER?.centre || 'CHD',
+      isManualLabEntry: true
+    });
+    added += 1;
+    upsertLabMasterTestFromCharge(getLabTestMeta(testName).group || 'custom', testName);
+  });
+  if (!added) { showToast('Those investigations are already pending for this patient', 'i'); return; }
   pt.investigationOrders = orders;
   if (pt.bmhId) {
     fbUpdate && fbUpdate('patients/' + pt.bmhId, { investigationOrders: orders }).catch(function(){});
@@ -26359,7 +26428,10 @@ function addPatientToLab() {
   const inp = document.getElementById('lab-add-pt-bmhid'); if (inp) inp.value = '';
   const nameEl = document.getElementById('lab-add-pt-name'); if (nameEl) nameEl.textContent = '';
   const searchEl = document.getElementById('lab-add-pt-search'); if (searchEl) searchEl.value = '';
+  const testsEl = document.getElementById('lab-add-tests'); if (testsEl) testsEl.value = '';
   renderLabOrders();
+  const refreshed = LAB_ORDERS.find(function (o) { return o.bmhId === bmhId; });
+  if (refreshed) openLabOrder(refreshed.id);
   showToast(pt.name + ' added to lab queue ✓', 's');
 }
 
@@ -29093,6 +29165,23 @@ window.printUnifiedRx = function(deptId) {
   const ptAge   = document.getElementById(deptId+'-rx-agesex')?.textContent || ((cpt.age != null && cpt.sex) ? `${cpt.age}Y / ${cpt.sex}` : '—');
   const ptMob   = cpt.mob || PATIENTS?.find(p=>p.bmhId===ptIdRaw)?.mob || '';
   const patientInvestigationOrders = (Array.isArray(cpt.investigationOrders) ? cpt.investigationOrders : INVESTIGATION_ORDERS).filter(o => !o.done && (!o.bmhId || o.bmhId === ptIdRaw));
+  const patientInvestigationPrintRows = (function () {
+    const rows = [];
+    const seenTemplates = new Set();
+    patientInvestigationOrders.forEach(function (o) {
+      const tplName = String(o.templateName || '').trim();
+      if (tplName && String(o.mode || 'advise') === 'advise') {
+        const key = String(o.templateKey || tplName).toLowerCase();
+        if (!seenTemplates.has(key)) {
+          seenTemplates.add(key);
+          rows.push({ name: tplName, notes: 'Template' });
+        }
+        return;
+      }
+      rows.push(o);
+    });
+    return rows;
+  })();
 
   // ── Letterhead: uploaded header, LH, or same-origin asset (fixes missing header on GitHub Pages) ──
   const lhImgSrc = resolvePrintHeaderSrc();
@@ -29677,10 +29766,10 @@ ${!psychPrescriptionPrintOnly && incPrcFinal && procs.length ? `
 <div class="sec-divider"><span class="sec-label">Procedure / Surgery Advised</span></div>
 ${procs.map(p=>`<div class="proc-item">&#9890; ${expandProcedureLabelForPrint(p)}</div>`).join('')}` : ''}
 
-${!psychPrescriptionPrintOnly && incInvFinal && patientInvestigationOrders.length ? `
+${!psychPrescriptionPrintOnly && incInvFinal && patientInvestigationPrintRows.length ? `
 <div class="sec-divider"><span class="sec-label">Investigations Ordered</span></div>
 <div class="inv-wrap">
-${patientInvestigationOrders.map((o,oi)=>`<div class="inv-chip"><span style="font-weight:400;color:#888;margin-right:4px">${oi+1}.</span>${escapeHtmlConsent(o.name || 'Investigation')}${o.notes ? `<span style="font-weight:500"> — ${escapeHtmlConsent(o.notes)}</span>` : ''}</div>`).join('')}
+${patientInvestigationPrintRows.map((o,oi)=>`<div class="inv-chip"><span style="font-weight:400;color:#888;margin-right:4px">${oi+1}.</span>${escapeHtmlConsent(o.name || 'Investigation')}${o.notes ? `<span style="font-weight:500"> — ${escapeHtmlConsent(o.notes)}</span>` : ''}</div>`).join('')}
 </div>` : ''}
 
 ${incAdvFinal && adviceHtml && isListDesign ? `
@@ -30240,11 +30329,12 @@ window.deleteChargeAt = deleteChargeAt;
 window.saveChargeFromModal = saveChargeFromModal;
 window.saveCharges = saveCharges;
 function saveChargeFromModal() {
-  const cat = document.getElementById('add-charge-cat')?.value || 'Eye';
-  if (!isCurrentUserAdmin() && !canEditChargeCategory(cat)) { showToast('You can edit charges only for your own department', 'w'); return; }
+  const rawCat = document.getElementById('add-charge-cat')?.value || 'Eye';
   const rawParent = document.getElementById('add-charge-parent')?.value?.trim() || '';
   const rawName = document.getElementById('add-charge-name')?.value?.trim();
   const kind = document.getElementById('add-charge-kind')?.value || 'procedure';
+  const cat = String(kind).toLowerCase() === 'lab' ? 'Lab' : rawCat;
+  if (!isCurrentUserAdmin() && !canEditChargeCategory(cat)) { showToast('You can edit charges only for your own department', 'w'); return; }
   const chd = parseInt(document.getElementById('add-charge-chd')?.value || '0', 10) || 0;
   const rpr = parseInt(document.getElementById('add-charge-rpr')?.value || '0', 10) || 0;
   const isLabCharge = String(cat).toLowerCase() === 'lab' || String(kind).toLowerCase() === 'lab';
@@ -30266,6 +30356,7 @@ function saveChargeFromModal() {
   }
   CENTRE_CHARGES.CHD[finalName] = chd;
   CENTRE_CHARGES.RPR[finalName] = rpr;
+  if (isLabCharge) upsertLabMasterTestFromCharge(finalParent, finalName);
   saveChargesToFirebase().then(function(){
     renderChargesList();
     renderCentresCharges();
@@ -36097,6 +36188,9 @@ function buildQCard(p, sno) {
     : p.dilated
     ? `<span style="background:var(--blue-lt);color:var(--blue);border-radius:10px;padding:1px 7px;font-size:9px;font-weight:800">💧Dilated</span>`
     : `<span style="background:var(--orange-lt);color:#8a4200;border-radius:10px;padding:1px 7px;font-size:9px;font-weight:800">Waiting</span>`;
+  const labHover = getUnreadLabResultsTitle(p);
+  const labTooltip = buildUnreadLabResultsTooltipHtml(p);
+  const labReadyBadge = patientHasUnreadLabResults(p) ? `<span title="${escapeHtmlConsent(labHover || 'Results ready')}" onmouseenter="const tip=this.querySelector('.lab-ready-tip');if(tip)tip.style.display='block'" onmouseleave="const tip=this.querySelector('.lab-ready-tip');if(tip)tip.style.display='none'" style="position:relative;display:inline-flex;align-items:center;gap:4px;padding:1px 6px;border-radius:999px;background:#eafaf1;color:#166534;border:1px solid rgba(22,101,52,.25);font-size:9px;font-weight:900;animation:pulse 1.2s infinite">🧪 Results Ready${labTooltip.replace('<span style="display:none;', '<span class="lab-ready-tip" style="display:none;')}</span>` : '';
 
   const cardBg = p.preRegistered ? '#f8f8f8' : '#fff';
   const cardBorder = p.preRegistered ? '1px dashed #ccc' : '1px solid var(--g5)';
@@ -36109,6 +36203,7 @@ function buildQCard(p, sno) {
         <span style="font-weight:800;font-size:14px;white-space:nowrap">${p.name}</span>
         <span style="font-size:9px;padding:1px 5px;border-radius:8px;background:${deptColor}22;color:${deptColor};font-weight:800;border:1px solid ${deptColor}44">${deptLabel}</span>
         ${isNew?'<span style="font-size:9px;padding:1px 5px;border-radius:8px;background:#e8f5e9;color:#1a8c3c;font-weight:800;border:1px solid #a5d6a7">NEW</span>':'<span style="font-size:9px;padding:1px 5px;border-radius:8px;background:#e3f2fd;color:var(--blue);font-weight:800;border:1px solid #bbdefb">V'+visitNo+'</span>'}
+        ${labReadyBadge}
         ${chargeHtml}
       </div>
       <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:2px">
