@@ -3488,7 +3488,8 @@
             <div id="lab-add-pt-results" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:30;background:#fff;border:1px solid var(--g4);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.12);max-height:200px;overflow-y:auto;margin-top:4px"></div>
           </div>
           <div style="flex:1;min-width:120px"><input type="hidden" id="lab-add-pt-bmhid"><span id="lab-add-pt-name" style="font-size:12px;font-weight:700;color:var(--bmh-blue)"></span></div>
-          <button class="btn btn-blue btn-sm" onclick="addPatientToLab()">Add to Lab Queue</button>
+          <div style="flex:1.4;min-width:220px"><input type="text" id="lab-add-tests" list="lab-add-test-list" placeholder="Investigations, comma separated" style="width:100%;font-size:12px"><datalist id="lab-add-test-list"></datalist></div>
+          <button class="btn btn-blue btn-sm" onclick="addPatientToLab()">Add Tests</button>
         </div>
       </div>
       <div style="background:#f8fafc;border-radius:10px;padding:10px;margin-bottom:10px;border:1px solid #dbe4f0">
