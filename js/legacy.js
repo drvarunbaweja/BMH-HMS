@@ -6067,6 +6067,8 @@ function ptab(el, cId, opts) {
     if (legacyBar) legacyBar.style.display = 'none';
   });
   updateDepartmentRailVisibility(pageKey, cId);
+  if (pageKey === 'inventory' && cId === 'inv-use') renderInventoryUsageLog && renderInventoryUsageLog();
+  if (pageKey === 'inventory' && cId === 'inv-stock') renderInventoryTodayEntries && renderInventoryTodayEntries();
   if (!opts.silentHistory && !window._appHistoryRestoring) pushAppNavState(false);
 }
 function openM(id){
@@ -9213,6 +9215,7 @@ function selectInventoryUsePatient(bmhId) {
   if (results) results.style.display = 'none';
   const deptPick = document.getElementById('inv-use-dept');
   if (deptPick) deptPick.value = bmhDefaultInventoryDeptForPatient(pt.bmhId);
+  renderInventoryUsageLog();
 }
 window.selectInventoryUsePatient = selectInventoryUsePatient;
 function renderInventoryUsePatientResults(query) {
@@ -9240,6 +9243,7 @@ function bindInventoryUsePatientSearch() {
   if (!input || input.dataset.boundInventorySearch) return;
   input.addEventListener('input', function () {
     if (hidden) hidden.value = '';
+    renderInventoryUsageLog();
     renderInventoryUsePatientResults(this.value);
   });
   input.addEventListener('focus', function () {
@@ -15504,13 +15508,64 @@ function renderInventoryUsageLog() {
   const el = document.getElementById('inv-usage-log');
   if (!el) return;
   const rows = (window.BMH_INVENTORY_USAGE || []).slice().reverse();
-  el.innerHTML = rows.length ? rows.map(r => `<div style="padding:10px 0;border-bottom:1px solid var(--g5);font-size:12px">
+  const selectedBmhId = String(document.getElementById('use-pt')?.value || '').trim();
+  const selectedRows = selectedBmhId ? rows.filter(function (r) { return String(r.bmhId || '').trim() === selectedBmhId; }) : [];
+  const selectedPatient = selectedBmhId ? (PATIENTS || []).find(function (p) { return String(p.bmhId || '') === selectedBmhId; }) : null;
+  const patientPanel = selectedBmhId ? `<div style="border:1px solid var(--g4);border-radius:10px;background:#fff;margin-bottom:10px;overflow:hidden">
+    <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;padding:10px 12px;background:var(--blue-lt)">
+      <div><div style="font-size:13px;font-weight:900;color:var(--bmh-blue)">${escapeHtmlConsent(selectedPatient?.name || selectedBmhId)}</div><div style="font-size:10px;color:var(--g1);margin-top:2px">${escapeHtmlConsent(selectedBmhId)} · Saved consumables / medicines for this patient</div></div>
+      <div style="font-size:12px;font-weight:900;color:var(--bmh-blue)">${selectedRows.reduce(function (s, r) { return s + Math.abs(Number(r.qty || 0)); }, 0)} item${selectedRows.length === 1 ? '' : 's'}</div>
+    </div>
+    ${selectedRows.length ? selectedRows.map(function (r) {
+      return `<div style="display:grid;grid-template-columns:minmax(0,1fr) 92px;gap:10px;padding:9px 12px;border-top:1px solid var(--g5);font-size:12px">
+        <div style="min-width:0"><strong>${escapeHtmlConsent(r.itemName || 'Stock item')}</strong><div style="font-size:10px;color:var(--g1);margin-top:3px">${escapeHtmlConsent([bmhDeptLabel(r.dept || 'general'), bmhFormatStoreLabel(r.store), r.barcode ? 'BC ' + r.barcode : '', r.groupId ? 'Group ' + r.groupId : ''].filter(Boolean).join(' · '))}</div></div>
+        <div style="text-align:right"><div style="font-weight:900;color:${r.mode === 'bill' ? 'var(--green)' : 'var(--orange)'}">${r.mode === 'bill' ? 'Billed' : 'Consumed'} × ${Number(r.qty || 0)}</div><div style="font-size:9px;color:var(--g1);margin-top:3px">${r.ts ? new Date(r.ts).toLocaleDateString('en-IN') : ''}</div></div>
+      </div>`;
+    }).join('') : '<div style="padding:12px;border-top:1px solid var(--g5);font-size:12px;color:var(--g1);text-align:center">No saved consumables for this selected patient yet.</div>'}
+  </div>` : '';
+  const allPanel = rows.length ? rows.map(r => `<div style="padding:10px 0;border-bottom:1px solid var(--g5);font-size:12px">
     <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
-      <div><strong>${r.itemName}</strong> <span style="font-family:var(--mono);font-size:10px;color:var(--bmh-teal)">${r.bmhId || ''}</span></div>
+      <div><strong>${escapeHtmlConsent(r.itemName || 'Stock item')}</strong> <span style="font-family:var(--mono);font-size:10px;color:var(--bmh-teal)">${escapeHtmlConsent(r.bmhId || '')}</span></div>
       <div style="font-weight:900;color:${r.mode === 'bill' ? '#1a8c3c' : '#8a4200'}">${r.mode === 'bill' ? 'Billed' : 'Consumed'} · Qty ${r.qty}</div>
     </div>
-    <div style="font-size:10px;color:var(--g1);margin-top:4px">${bmhDeptLabel(r.dept)} · ${bmhFormatStoreLabel(r.store)} · ${r.patientName || 'Ward stock'} · ${new Date(r.ts).toLocaleString('en-IN')}</div>
+    <div style="font-size:10px;color:var(--g1);margin-top:4px">${bmhDeptLabel(r.dept)} · ${bmhFormatStoreLabel(r.store)} · ${escapeHtmlConsent(r.patientName || 'Ward stock')} · ${r.ts ? new Date(r.ts).toLocaleString('en-IN') : ''}</div>
   </div>`).join('') : '<div style="padding:12px;color:var(--g1);font-size:12px">No patient-linked usage recorded yet.</div>';
+  el.innerHTML = patientPanel + allPanel;
+}
+function bmhInventoryUsageMovementKey(row) {
+  const day = localDateKey(row?.ts || row?.date || row?.createdAt || row?.updatedAt || '');
+  return [
+    String(row?.bmhId || '').trim().toLowerCase(),
+    String(row?.itemName || row?.desc || row?.name || '').replace(/\s*\((inventory use|billing scan|not in stock \/ OCR)\)\s*$/i, '').trim().toLowerCase(),
+    Math.abs(Number(row?.qty || 0)),
+    day
+  ].join('|');
+}
+function bmhPatientChargeInventoryMovementRows() {
+  const out = [];
+  const usageKeys = new Set((window.BMH_INVENTORY_USAGE || []).map(bmhInventoryUsageMovementKey));
+  Object.keys(window.BMH_PATIENT_CHARGES || {}).forEach(function (bmhId) {
+    const patient = (PATIENTS || []).find(function (p) { return String(p.bmhId || '') === String(bmhId || ''); });
+    ((window.BMH_PATIENT_CHARGES || {})[bmhId] || []).forEach(function (line) {
+      if (String(line?.source || '').toLowerCase() !== 'inventory') return;
+      const row = {
+        id: line.id || 'charge-' + bmhId + '-' + out.length,
+        bmhId: bmhId,
+        patientName: patient?.name || bmhId,
+        dept: line.dept || patient?.dept || 'general',
+        store: line.store || '',
+        itemName: String(line.desc || 'Inventory item').replace(/\s*\((inventory use|billing scan|not in stock \/ OCR)\)\s*$/i, '').trim(),
+        barcode: line.ref || line.barcode || '',
+        qty: Number(line.qty || 1),
+        mrp: Number(line.rate || 0),
+        mode: 'bill',
+        ts: line.ts || line.date || line.createdAt || line.updatedAt || ''
+      };
+      if (usageKeys.has(bmhInventoryUsageMovementKey(row))) return;
+      out.push(row);
+    });
+  });
+  return out;
 }
 function getInventoryTodayMovementRows(dateKey) {
   const day = dateKey || localDateKey(new Date());
@@ -15557,7 +15612,7 @@ function getInventoryTodayMovementRows(dateKey) {
       row.ts
     );
   });
-  (window.BMH_INVENTORY_USAGE || []).forEach(function (row) {
+  (window.BMH_INVENTORY_USAGE || []).concat(bmhPatientChargeInventoryMovementRows()).forEach(function (row) {
     push(
       row.mode === 'bill' ? 'Used on patient / billed' : 'Used on patient',
       row,
