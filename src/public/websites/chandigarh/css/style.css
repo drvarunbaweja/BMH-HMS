@@ -3579,6 +3579,10 @@ select.form-control {
   display: none;
 }
 
+.mobile-sticky-cta {
+  display: none;
+}
+
 .hero-section {
   min-height: 760px;
   margin-top: 0;
@@ -3648,13 +3652,13 @@ select.form-control {
 }
 
 .doctor-img-area {
-  background: linear-gradient(180deg, #f8fbff 0%, #e8eef7 100%);
+  background: linear-gradient(180deg, #eef6fb 0%, #dfeaf3 100%);
 }
 
 .doctor-img-area img {
-  object-fit: contain;
-  object-position: center bottom;
-  padding-top: 10px;
+  object-fit: cover;
+  object-position: center 18%;
+  padding-top: 0;
   filter: saturate(1.05) contrast(1.03);
 }
 
@@ -3800,6 +3804,64 @@ select.form-control {
   .primary-nav { display: none; }
   .hamburger { display: flex; }
   .procedure-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 1024px) {
+  body {
+    padding-bottom: calc(82px + env(safe-area-inset-bottom));
+  }
+
+  .mobile-sticky-cta {
+    position: fixed;
+    left: 10px;
+    right: 10px;
+    bottom: max(10px, env(safe-area-inset-bottom));
+    z-index: 9999;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1.18fr;
+    gap: 8px;
+    padding: 8px;
+    border: 1px solid rgba(10,31,68,.12);
+    border-radius: 18px;
+    background: rgba(255,255,255,.96);
+    box-shadow: 0 18px 42px rgba(10,31,68,.22);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+  }
+
+  .mobile-sticky-cta__item {
+    min-width: 0;
+    min-height: 50px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 3px;
+    border: 0;
+    border-radius: 13px;
+    background: #f3f8fc;
+    color: var(--primary);
+    font: 800 12px/1.1 Inter, system-ui, sans-serif;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .mobile-sticky-cta__item--primary {
+    background: var(--accent);
+    color: var(--primary);
+  }
+
+  .mobile-sticky-cta__icon {
+    font-size: 10px;
+    line-height: 1;
+    letter-spacing: .8px;
+    text-transform: uppercase;
+    opacity: .78;
+  }
+
+  .trial-hms-login {
+    bottom: calc(92px + env(safe-area-inset-bottom)) !important;
+  }
 }
 
 @media (max-width: 760px) {
