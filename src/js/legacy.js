@@ -4507,7 +4507,9 @@ function markPaid(id) {
     dept:pr.dept||PATIENTS.find(x=>x.bmhId===pr.bmhId)?.dept||'ophtho',
     time:new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
     date:new Date().toISOString(), centre:pr.centre||CURRENT_USER?.centre||'CHD',
-    createdBy:CURRENT_USER?.name||'Reception'
+    createdBy:CURRENT_USER?.name||'Reception',
+    payRequestId: pr.id,
+    billCats: [inferChargeCategoryFromService(pr.for || pr.service || 'Service')]
   };
   TRANSACTIONS.push(txn);
   txn.chargeAllocations = bmhAllocatePaymentToChargeLines(pr.bmhId, pr.amount, {
@@ -10560,12 +10562,28 @@ function bmhBillToSyntheticCollectionTxn(bill) {
     })))
   };
 }
+function bmhCollectionTxnMatchesPayRequest(txn, pr) {
+  if (!txn || !pr || !isCollectedTxn(txn)) return false;
+  const prId = String(pr.id || '');
+  if (prId && String(txn.payRequestId || '') === prId) return true;
+  if (prId && Array.isArray(txn.chargeAllocations) && txn.chargeAllocations.some(function (alloc) {
+    return String(alloc?.payRequestId || '') === prId;
+  })) return true;
+  if (String(txn.bmhId || '') !== String(pr.bmhId || '')) return false;
+  if (localDateKey(txn.date || txn.createdAt || txn.ts) !== localDateKey(pr.updatedAt || pr.date || pr.createdAt)) return false;
+  const txnAmount = Math.max(0, Number(txn.amount || 0));
+  const prAmount = Math.max(0, Number(pr.amount || 0));
+  if (Math.abs(txnAmount - prAmount) > 0.5) return false;
+  const txnService = String(txn.service || txn.for || txn.desc || '').trim().toLowerCase();
+  const prService = String(pr.for || pr.service || pr.desc || '').trim().toLowerCase();
+  return !!txnService && !!prService && txnService === prService;
+}
 function bmhPayRequestToSyntheticCollectionTxn(pr) {
   if (!pr || String(pr.status || '').toLowerCase() !== 'paid') return null;
   const amount = Math.max(0, Number(pr.amount || 0));
   if (!(amount > 0)) return null;
   const prId = String(pr.id || '');
-  if (prId && (TRANSACTIONS || []).some(function (txn) { return String(txn.payRequestId || '') === prId && isCollectedTxn(txn); })) return null;
+  if ((TRANSACTIONS || []).some(function (txn) { return bmhCollectionTxnMatchesPayRequest(txn, pr); })) return null;
   const pt = (PATIENTS || []).find(function (p) { return p.bmhId === pr.bmhId; }) || {};
   return {
     id: 'PRTXN-' + prId,

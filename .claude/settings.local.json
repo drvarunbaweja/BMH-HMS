@@ -56,7 +56,9 @@
       "Bash(curl -s -o /dev/null -w \"logo: %{http_code}\\\\n\" \"https://bawejahospital.com/img/logo.png\")",
       "WebSearch",
       "WebFetch(domain:bmhchandigarh.com)",
-      "WebFetch(domain:www.practo.com)"
+      "WebFetch(domain:www.practo.com)",
+      "Bash(python3 -c ' *)",
+      "Bash(git -C /Users/varunbaweja/GitHub/BMH-HMS log --oneline -5)"
     ]
   }
 }
