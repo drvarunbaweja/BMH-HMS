@@ -4677,6 +4677,7 @@
     <div class="card" style="margin-bottom:14px">
       <div class="card-hd"><div class="card-title">⚕️ Patients Advised Surgery / Procedure</div></div>
       <div class="fg">
+        <div class="form-group"><label class="fl">Report View</label><select id="rep-surg-source"><option value="advised">Procedure advised list</option><option value="ot">OT list only</option><option value="all">Advised + OT list</option></select></div>
         <div class="form-group"><label class="fl">Procedure / Surgery</label>
           <input type="text" id="rep-surg-name" placeholder="e.g. Phaco, Trabeculectomy, LSCS…" list="rep-surg-list">
           <datalist id="rep-surg-list">
@@ -4687,7 +4688,7 @@
         </div>
         <div class="form-group"><label class="fl">Date Range From</label><input type="date" id="rep-surg-from"></div>
         <div class="form-group"><label class="fl">Date Range To</label><input type="date" id="rep-surg-to"></div>
-        <div class="form-group"><label class="fl">Status</label><select id="rep-surg-status"><option value="">All</option><option value="advised">Advised — Not Done</option><option value="scheduled">Scheduled</option><option value="done">Completed</option></select></div>
+        <div class="form-group"><label class="fl">Status</label><select id="rep-surg-status"><option value="">All</option><option value="advised">Advised — Not Done</option><option value="scheduled">Scheduled</option><option value="pending">OT Pending</option><option value="in-progress">OT In Progress</option><option value="done">Completed</option><option value="postponed">Postponed</option></select></div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
         <button class="btn btn-gold btn-sm" onclick="generateSurgeryReport()">📋 Generate List</button>
