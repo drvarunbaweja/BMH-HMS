@@ -30107,8 +30107,9 @@ window.printUnifiedRx = function(deptId) {
 @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Inter:wght@400;600;700;800&family=Lato:ital,wght@0,300;0,400;0,700;0,900;1,400&family=Libre+Baskerville:wght@400;700&family=Playfair+Display:wght@700&family=Source+Sans+3:wght@400;600;700;800&display=swap');
 *{margin:0;padding:0;box-sizing:border-box;print-color-adjust:exact;-webkit-print-color-adjust:exact}
 @page{size:A4 portrait;margin:0}
-body{font-family:'Lato',sans-serif;font-size:9.5px;color:#1a1a1a;background:#fff;padding:2.7mm 7mm 2.5mm;line-height:1.22;overflow:visible}
-.lh-img{width:100%;max-width:100%;height:auto;display:block;margin-bottom:6px}
+body{font-family:'Lato',sans-serif;font-size:9.5px;color:#1a1a1a;background:#fff;padding:2.7mm 7mm 2.5mm;line-height:1.28;overflow:visible}
+body > *:not(.lh-img){filter:grayscale(1)}
+.lh-img{width:100%;max-width:100%;height:auto;display:block;margin-bottom:6px;filter:none!important}
 /* Patient header */
 .pt-name-bar{display:flex;align-items:baseline;justify-content:space-between;border-bottom:1.5px solid #333;padding-bottom:3px;margin-bottom:2px}
 .pt-name{font-family:'Playfair Display','Georgia',serif;font-size:16px;font-weight:700;color:#111;letter-spacing:.2px}
@@ -30151,15 +30152,15 @@ tr:nth-child(even) td{background:#fafafa}
 .flag-n{color:#444}
 /* Medicine list — all depts */
 .rx-list{display:flex;flex-direction:column;gap:0;margin-bottom:4px}
-.rx-item{padding:4px 0 5px 0;border-bottom:1px solid #e8e8e8;page-break-inside:avoid;break-inside:avoid}
+.rx-item{padding:5px 0 6px 0;border-bottom:1px solid #e8e8e8;page-break-inside:avoid;break-inside:avoid}
 .rx-item:last-child{border-bottom:none;padding-bottom:0}
 .rx-item-num{font-size:9px;font-weight:900;color:#111;letter-spacing:.4px;margin-bottom:1px}
-.rx-item-name{font-family:'Playfair Display','Georgia',serif;font-size:13px;font-weight:700;color:#111;display:block;line-height:1.15}
+.rx-item-name{font-family:'Playfair Display','Georgia',serif;font-size:13px;font-weight:700;color:#111;display:block;line-height:1.22}
 .rx-item-gen{font-size:9px;color:#111;font-style:italic;display:block;margin-bottom:3px}
 .rx-item-details{display:flex;flex-wrap:wrap;gap:0 12px;margin:2px 0 3px;align-items:center}
 .rx-detail-item{display:flex;align-items:center;gap:4px;font-size:9.5px;color:#111}
 .rx-detail-dot{width:3px;height:3px;border-radius:50%;background:#111;flex-shrink:0}
-.rx-item-instr{font-size:10px;color:#222;font-style:normal;line-height:1.25;padding-left:8px;border-left:2px solid #ccc;margin-top:3px;font-weight:600}
+.rx-item-instr{font-size:11.2px;color:#222;font-style:normal;line-height:1.45;padding-left:9px;border-left:2px solid #ccc;margin-top:4px;font-weight:600}
 /* Taper card */
 .taper-card{margin:3px 0 4px;border:1px solid #d5dbe2;border-radius:10px;overflow:hidden;font-size:9px;background:#fbfbfb;page-break-inside:avoid;break-inside:avoid}
 .taper-card-hdr{background:#f2f4f6;color:#333;padding:5px 10px;font-size:8.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;border-bottom:1px solid #d5dbe2}
@@ -30172,12 +30173,12 @@ tr:nth-child(even) td{background:#fafafa}
 .taper-step-instr{font-size:8.5px;color:#666;font-style:italic;line-height:1.35;margin-top:2px}
 .taper-arrow{display:flex;align-items:center;justify-content:center;color:#aaa;font-size:14px;padding:0 2px;flex-shrink:0}
 /* Procedures */
-.proc-item{padding:2px 0;font-size:10px;font-weight:800;border-bottom:1px solid #eee;display:flex;align-items:center;gap:6px}
+.proc-item{padding:3px 0;font-size:11.4px;line-height:1.45;font-weight:800;border-bottom:1px solid #eee;display:flex;align-items:center;gap:7px}
 /* Investigations */
 .inv-wrap{display:flex;flex-wrap:wrap;gap:4px 6px;margin-top:2px}
 .inv-chip{display:inline-flex;align-items:center;padding:3px 8px;background:#f0f0f0;border:1px solid #ccc;border-radius:3px;font-size:9px;font-weight:700;color:#222;line-height:1.2}
 /* Instructions */
-.advice-block{font-size:9.9px;color:#222;padding:4px 8px;border-left:2px solid #bbb;line-height:1.24;margin-bottom:3px;font-style:normal;font-weight:600;page-break-inside:avoid;break-inside:avoid}
+.advice-block{font-size:11.2px;color:#222;padding:5px 9px;border-left:2px solid #bbb;line-height:1.45;margin-bottom:3px;font-style:normal;font-weight:600;page-break-inside:avoid;break-inside:avoid}
 /* Follow-up */
 .fu-box{background:#f7f8f9;border-radius:999px;padding:4px 10px;margin:3px 0;font-size:9.7px;font-weight:700;color:#222;display:inline-block;border:1px solid #cfd5dc}
 /* Signature row */
@@ -30220,7 +30221,7 @@ tr:nth-child(even) td{background:#fafafa}
 .design-med-top{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}
 .design-med-name{font-family:'Playfair Display','Georgia',serif;color:#14345e}
 .design-med-sub{font-size:9.8px;color:#667085;line-height:1.45;margin-top:3px}
-.design-med-instr{line-height:1.45}
+.design-med-instr{line-height:1.52}
 .design-med.classic{border:1px solid #dfe4ec;border-radius:18px;padding:12px 13px;background:#fff;box-shadow:none}
 .design-med.classic .design-med-name{font-size:18px}
 .design-med.classic .design-med-chip{min-width:138px;text-align:right;font-size:10px;font-weight:900;color:#5d4b16;background:#fbf2dc;border:1px solid #ecd8a1;border-radius:12px;padding:7px 9px}
@@ -30285,9 +30286,9 @@ tr:nth-child(even) td{background:#fafafa}
 .design-bottom{display:grid;grid-template-columns:1.2fr .8fr;gap:10px;margin-top:8px;page-break-inside:avoid;break-inside:avoid}
 .design-bottom.compact{grid-template-columns:1fr}
 .design-bottom.vertical_dx_column{grid-template-columns:1fr 240px}
-.design-side-card{border:1px solid #d8e0e8;border-radius:16px;padding:10px 11px;background:#fff}
+.design-side-card{border:1px solid #d8e0e8;border-radius:16px;padding:11px 12px;background:#fff}
 .design-side-title{font-size:12px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;color:#14345e;margin-bottom:8px}
-.design-side-body{font-size:9.8px;line-height:1.45;color:#344054;font-weight:700}
+.design-side-body{font-size:11.2px;line-height:1.58;color:#344054;font-weight:700}
 .design-follow{align-self:start;border-radius:16px;padding:10px 11px;font-size:11.5px;font-weight:800;line-height:1.35}
 .design-follow.signature_classic{background:#f7f7f6;border:1px solid #d9d5c9;color:#4b5563}
 .design-follow.clinical_blocks{background:#f4f6f8;border:1px solid #d8dde3;color:#374151}
@@ -34729,14 +34730,17 @@ function buildDoctorRxTypographyCss(typography) {
   const fonts = getRxTypographyFontPair(t.fontCombo);
   const headingDecoration = t.headingUnderline ? 'underline' : 'none';
   const headingStyle = t.headingItalic ? 'italic' : 'normal';
-  const instructionSize = Math.max(10, Math.min(18, Number(t.medicineSize || DEFAULT_RX_TYPOGRAPHY.medicineSize) * 0.78)).toFixed(1);
+  const medicineSize = Number(t.medicineSize || DEFAULT_RX_TYPOGRAPHY.medicineSize);
+  const instructionSize = Math.max(11.2, Math.min(19, medicineSize * 0.9)).toFixed(1);
+  const procedureSize = Math.max(11.2, Math.min(18, medicineSize * 0.84)).toFixed(1);
   return `
 body{font-family:${fonts.body}}
 .pt-name{font-family:${fonts.heading};font-size:${t.patientNameSize}px}
 .pt-date{font-family:${fonts.body};font-size:${t.dateSize}px;font-weight:${t.headingWeight};font-style:${headingStyle};text-decoration:${headingDecoration}}
 .sec-label,.design-dx-title,.design-side-title,.design-taper-title,.design-med-tag,.section-pill,.rx-heading-accent{font-family:${fonts.heading};font-size:${t.headingSize}px;font-weight:${t.headingWeight};font-style:${headingStyle};text-decoration:${headingDecoration}}
 .rx-item-name,.design-med-name,.diag-text,.design-dx-body{font-family:${fonts.heading};font-size:${t.medicineSize}px}
-.rx-item-instr,.design-med-instr,.design-side-body,.advice-block{font-size:${instructionSize}px}
+.rx-item-instr,.design-med-instr,.design-side-body,.advice-block{font-size:${instructionSize}px!important;line-height:1.48!important}
+.proc-item{font-size:${procedureSize}px!important;line-height:1.45!important}
 .oe-eye-block .sec-label{font-size:calc(${t.headingSize}px * ${t.eyeBlockScale})}
 .oe-eye-table{font-size:calc(9.6px * ${t.eyeBlockScale})}
 .oe-eye-table th{font-size:calc(8.5px * ${t.eyeBlockScale});padding:calc(3px * ${t.eyeBlockScale}) calc(5px * ${t.eyeBlockScale})}
@@ -35097,7 +35101,7 @@ function generateRxDesignSampleHtml(designKey, profile, doctorName, centre) {
 @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Inter:wght@400;600;700;800&family=Lato:ital,wght@0,300;0,400;0,700;0,900;1,400&family=Libre+Baskerville:wght@400;700&family=Playfair+Display:wght@700&family=Source+Sans+3:wght@400;600;700;800&display=swap');
 *{margin:0;padding:0;box-sizing:border-box;print-color-adjust:exact;-webkit-print-color-adjust:exact}
 @page{size:A4 portrait;margin:0}
-body{font-family:'Lato',sans-serif;font-size:10px;color:#1a1a1a;background:#fff;padding:3.5mm 8mm 3mm;line-height:1.3;overflow:hidden}
+body{font-family:'Lato',sans-serif;font-size:10px;color:#1a1a1a;background:#fff;padding:3.5mm 8mm 3mm;line-height:1.34;overflow:hidden}
 .lh-img{width:100%;max-width:100%;height:auto;display:block;margin-bottom:6px}
 .pt-name-bar{display:flex;align-items:baseline;justify-content:space-between;border-bottom:1.5px solid #333;padding-bottom:3px;margin-bottom:2px}
 .pt-name{font-family:'Playfair Display','Georgia',serif;font-size:17px;font-weight:700;color:#111;letter-spacing:.2px}
@@ -35119,7 +35123,7 @@ body{font-family:'Lato',sans-serif;font-size:10px;color:#1a1a1a;background:#fff;
 .rx-item-details{display:flex;flex-wrap:wrap;gap:0 12px;margin:2px 0 3px;align-items:center}
 .rx-detail-item{display:flex;align-items:center;gap:4px;font-size:9.5px;color:#444}
 .rx-detail-dot{width:3px;height:3px;border-radius:50%;background:#aaa;flex-shrink:0}
-.rx-item-instr{font-size:10.8px;color:#222;font-style:normal;line-height:1.3;padding-left:9px;border-left:2px solid #ccc;margin-top:4px;font-weight:600}
+.rx-item-instr{font-size:11.2px;color:#222;font-style:normal;line-height:1.45;padding-left:9px;border-left:2px solid #ccc;margin-top:4px;font-weight:600}
 .taper-card{margin:4px 0 5px;border:1px solid #d5dbe2;border-radius:10px;overflow:hidden;font-size:9.5px;background:#fbfbfb}
 .taper-card-hdr{background:#f2f4f6;color:#333;padding:5px 10px;font-size:8.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;border-bottom:1px solid #d5dbe2}
 .taper-steps-row{display:flex;align-items:stretch;background:#fafafa}
@@ -35127,7 +35131,7 @@ body{font-family:'Lato',sans-serif;font-size:10px;color:#1a1a1a;background:#fff;
 .taper-step-period{font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#666;margin-bottom:3px}
 .taper-step-dose{font-family:'Playfair Display','Georgia',serif;font-size:15px;font-weight:700;color:#111;line-height:1;margin-bottom:2px}
 .taper-step-timing{font-size:9px;color:#555;font-weight:700;margin-bottom:2px}
-.advice-block{font-size:10.8px;color:#222;padding:4px 8px;border-left:2px solid #bbb;line-height:1.32;margin-bottom:3px;font-style:normal;font-weight:600}
+.advice-block{font-size:11.2px;color:#222;padding:5px 9px;border-left:2px solid #bbb;line-height:1.45;margin-bottom:3px;font-style:normal;font-weight:600}
 .fu-box{background:#f7f8f9;border-radius:999px;padding:5px 12px;margin:4px 0;font-size:10.5px;font-weight:700;color:#222;display:inline-block;border:1px solid #cfd5dc}
 .sig-row{display:flex;justify-content:space-between;align-items:flex-end;margin-top:7px;padding-top:6px;border-top:1px solid #ddd}
 .dr-name{font-family:'Playfair Display','Georgia',serif;font-size:13px;font-weight:700;color:#111}
@@ -35204,7 +35208,7 @@ ${previewRxHtml}
   </div>
   <div style="border:1px solid #d9e2ec;border-radius:8px;padding:8px;background:#fffdf7">
     <div class="section-pill" style="margin-bottom:6px;color:#8a5a00">Procedure Advised</div>
-    <div style="font-size:10.4px;line-height:1.45;color:#4b5563">OCT Macula · Refraction review · IOP recheck</div>
+    <div style="font-size:11.2px;line-height:1.55;color:#4b5563">OCT Macula · Refraction review · IOP recheck</div>
   </div>
 </div>
 <div class="sec-divider"><span class="sec-label">Instructions</span></div>
