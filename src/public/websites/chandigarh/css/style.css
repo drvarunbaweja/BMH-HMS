@@ -3651,6 +3651,119 @@ select.form-control {
   width: min(760px, 90vw);
 }
 
+.hero-slide::after {
+  display: none;
+}
+
+.hero-slide--migs::before {
+  background:
+    linear-gradient(90deg, rgba(10,31,68,.95) 0%, rgba(10,31,68,.76) 48%, rgba(13,107,94,.32) 100%),
+    linear-gradient(135deg, #0a1f44 0%, #0d6b5e 100%);
+}
+
+.hero-slide--lasik::before {
+  background:
+    linear-gradient(90deg, rgba(10,31,68,.95) 0%, rgba(10,31,68,.72) 48%, rgba(14,116,144,.28) 100%),
+    linear-gradient(135deg, #081b3d 0%, #0e7490 100%);
+}
+
+.hero-slide--cataract::before {
+  background:
+    linear-gradient(90deg, rgba(10,31,68,.96) 0%, rgba(10,31,68,.70) 48%, rgba(232,184,75,.24) 100%),
+    linear-gradient(135deg, #0a1f44 0%, #3d0d7a 100%);
+}
+
+.hero-slide--gynaec::before {
+  background:
+    linear-gradient(90deg, rgba(10,31,68,.94) 0%, rgba(42,38,57,.70) 48%, rgba(201,151,59,.24) 100%),
+    linear-gradient(135deg, #2b1530 0%, #0d6b5e 100%);
+}
+
+.hero-slide--psychiatry::before {
+  background:
+    linear-gradient(90deg, rgba(10,31,68,.94) 0%, rgba(10,31,68,.70) 48%, rgba(77,139,92,.25) 100%),
+    linear-gradient(135deg, #0a1f44 0%, #32664f 100%);
+}
+
+.hero-slide--aesthetics::before {
+  background:
+    linear-gradient(90deg, rgba(10,31,68,.94) 0%, rgba(10,31,68,.70) 48%, rgba(201,151,59,.22) 100%),
+    linear-gradient(135deg, #1b2437 0%, #8a6f64 100%);
+}
+
+.hero-slide--legacy::before {
+  background:
+    linear-gradient(90deg, rgba(10,31,68,.96) 0%, rgba(10,31,68,.74) 48%, rgba(10,31,68,.20) 100%),
+    url("../images/hero/bmh-chandigarh-banner.webp") center / cover no-repeat;
+}
+
+.hero-media {
+  position: absolute;
+  right: clamp(28px, 6vw, 90px);
+  top: 50%;
+  z-index: 2;
+  width: min(42vw, 610px);
+  aspect-ratio: 16 / 10;
+  margin: 0;
+  border-radius: 30px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.24);
+  box-shadow: 0 34px 90px rgba(0,0,0,.34);
+  transform: translateY(-46%) scale(.96);
+  opacity: 0;
+  transition: opacity .75s ease .25s, transform .75s cubic-bezier(.2,.8,.2,1) .25s;
+}
+
+.hero-slide.active .hero-media {
+  opacity: 1;
+  transform: translateY(-50%) scale(1);
+}
+
+.hero-media::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    linear-gradient(90deg, rgba(10,31,68,.18), transparent 34%),
+    linear-gradient(180deg, transparent 60%, rgba(10,31,68,.28));
+  pointer-events: none;
+}
+
+.hero-media img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.hero-media figcaption {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 16px;
+  z-index: 2;
+  display: inline-flex;
+  width: fit-content;
+  max-width: calc(100% - 36px);
+  padding: 9px 13px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.92);
+  color: var(--primary);
+  font: 800 12px/1.2 Inter, system-ui, sans-serif;
+  box-shadow: 0 10px 26px rgba(0,0,0,.18);
+}
+
+.hero-media--migs img,
+.hero-media--lasik img {
+  object-position: center;
+}
+
+.hero-media--legacy {
+  width: min(39vw, 560px);
+  aspect-ratio: 4 / 3;
+}
+
 .doctor-img-area {
   background: linear-gradient(180deg, #eef6fb 0%, #dfeaf3 100%);
 }
@@ -3804,6 +3917,13 @@ select.form-control {
   .primary-nav { display: none; }
   .hamburger { display: flex; }
   .procedure-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .hero-media {
+    right: 26px;
+    width: min(38vw, 430px);
+  }
+  .hero-title {
+    font-size: clamp(3rem, 7vw, 4.5rem);
+  }
 }
 
 @media (max-width: 1024px) {
@@ -3887,7 +4007,33 @@ select.form-control {
   .hero-slide-content {
     padding: 0 24px;
   }
-  .hero-slide::after { display: none; }
+  .hero-media {
+    left: 24px;
+    right: 24px;
+    top: auto;
+    bottom: 88px;
+    width: auto;
+    height: 170px;
+    aspect-ratio: auto;
+    border-radius: 20px;
+    transform: translateY(16px) scale(.98);
+  }
+  .hero-slide.active .hero-media {
+    transform: translateY(0) scale(1);
+  }
+  .hero-media figcaption {
+    display: none;
+  }
+  .hero-title {
+    font-size: clamp(2.5rem, 11vw, 3.4rem);
+  }
+  .hero-subtitle {
+    font-size: 1rem;
+    max-width: 100%;
+  }
+  .hero-cta-group {
+    gap: 10px;
+  }
   .procedure-grid,
   .procedure-card--wide {
     grid-template-columns: 1fr;
