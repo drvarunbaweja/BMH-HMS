@@ -3426,3 +3426,375 @@ select.form-control {
     max-width: 100%;
   }
 }
+
+/* ============================================================
+   TRIAL SITE COMPATIBILITY PATCH
+   Keeps the copied Chandigarh website visually intact under
+   /websites/chandigarh/ without changing the HMS app.
+   ============================================================ */
+.site-header {
+  top: 40px;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 10px 30px rgba(10, 31, 68, 0.08);
+}
+
+.header-inner {
+  width: min(1220px, calc(100% - 48px));
+  min-height: 82px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 22px;
+}
+
+.site-logo {
+  display: inline-flex;
+  align-items: center;
+  min-width: 260px;
+  gap: 12px;
+}
+
+.site-logo .logo-mark {
+  display: none;
+}
+
+.site-logo::before {
+  content: "";
+  width: 210px;
+  height: 72px;
+  display: block;
+  background: url("../images/brand/baweja-1.png") center left / contain no-repeat;
+}
+
+.logo-text {
+  display: none;
+}
+
+.primary-nav {
+  flex: 1 1 auto;
+  display: flex;
+  justify-content: center;
+}
+
+.nav-list {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.nav-item-dropdown {
+  position: relative;
+}
+
+.nav-dropdown-toggle {
+  border: 0;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nav-dropdown {
+  position: absolute;
+  top: calc(100% + 12px);
+  left: 0;
+  min-width: 260px;
+  padding: 10px;
+  border-radius: 14px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(8px);
+  transition: var(--transition-fast);
+}
+
+.nav-item-dropdown:hover .nav-dropdown,
+.nav-item-dropdown.open .nav-dropdown {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+}
+
+.header-actions::before {
+  content: "";
+  width: 92px;
+  height: 48px;
+  display: block;
+  background: url("../images/brand/bmh.jpg") center / contain no-repeat;
+}
+
+.header-phone {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--primary);
+  font-weight: 700;
+  font-family: Inter, sans-serif;
+  white-space: nowrap;
+}
+
+.hero-section {
+  min-height: 760px;
+  margin-top: 0;
+  background: #0A1F44;
+}
+
+.hero-slide {
+  isolation: isolate;
+}
+
+.hero-slide::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background:
+    linear-gradient(90deg, rgba(10,31,68,.92) 0%, rgba(10,31,68,.72) 46%, rgba(10,31,68,.22) 100%),
+    url("../images/hero/bmh-chandigarh-banner.webp") center / cover no-repeat;
+}
+
+.hero-slide::after {
+  content: "";
+  position: absolute;
+  top: 18%;
+  right: 7%;
+  z-index: 1;
+  width: min(36vw, 430px);
+  aspect-ratio: 1 / 1;
+  border-radius: 32px;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(255,255,255,.18), transparent 42%),
+    linear-gradient(135deg, rgba(255,255,255,.16), rgba(232,184,75,.08));
+  border: 1px solid rgba(255,255,255,.2);
+  box-shadow: 0 30px 80px rgba(0,0,0,.25);
+}
+
+.hero-slide--migs::after {
+  background:
+    radial-gradient(circle at 50% 50%, rgba(34,168,200,.24), transparent 42%),
+    linear-gradient(135deg, rgba(255,255,255,.16), rgba(13,107,94,.24));
+}
+
+.hero-slide--lasik::after {
+  background:
+    linear-gradient(90deg, transparent 48%, rgba(255,255,255,.5) 49%, transparent 51%),
+    radial-gradient(circle at 50% 50%, rgba(232,184,75,.32), transparent 38%),
+    linear-gradient(135deg, rgba(255,255,255,.18), rgba(14,116,144,.22));
+}
+
+.hero-slide--cataract::after {
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255,255,255,.2) 0 26%, rgba(232,184,75,.28) 27% 31%, transparent 32%),
+    linear-gradient(135deg, rgba(255,255,255,.16), rgba(61,13,122,.22));
+}
+
+.hero-slide--gynaec::after,
+.hero-slide--legacy::after {
+  background:
+    radial-gradient(circle at 38% 36%, rgba(255,255,255,.3), transparent 24%),
+    linear-gradient(135deg, rgba(255,255,255,.16), rgba(201,151,59,.24));
+}
+
+.hero-slide-content {
+  position: relative;
+  z-index: 2;
+  width: min(760px, 90vw);
+}
+
+.doctor-img-area {
+  background: linear-gradient(180deg, #f8fbff 0%, #e8eef7 100%);
+}
+
+.doctor-img-area img {
+  object-fit: contain;
+  object-position: center bottom;
+  padding-top: 10px;
+  filter: saturate(1.05) contrast(1.03);
+}
+
+.procedure-showcase {
+  background: linear-gradient(180deg, #ffffff 0%, #f4f8ff 100%);
+}
+
+.procedure-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.procedure-card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.procedure-card--wide {
+  grid-column: span 2;
+  display: grid;
+  grid-template-columns: 45% 1fr;
+}
+
+.procedure-visual {
+  min-height: 190px;
+  position: relative;
+  overflow: hidden;
+  background: #0A1F44;
+}
+
+.procedure-visual::before,
+.procedure-visual::after,
+.procedure-visual span {
+  content: "";
+  position: absolute;
+  display: block;
+}
+
+.procedure-visual--cataract {
+  background: radial-gradient(circle at 50% 50%, #f7fbff 0 22%, #e8b84b 23% 27%, #0e7490 28% 34%, #0a1f44 35%);
+}
+
+.procedure-visual--robotic {
+  background: linear-gradient(135deg, #0a1f44, #3d0d7a);
+}
+.procedure-visual--robotic::before {
+  inset: 28px 42px;
+  border: 2px solid rgba(255,255,255,.65);
+  border-radius: 50%;
+}
+.procedure-visual--robotic::after {
+  left: 50%;
+  top: 20px;
+  width: 3px;
+  height: 150px;
+  background: #e8b84b;
+  transform: rotate(28deg);
+}
+
+.procedure-visual--smile {
+  background: radial-gradient(circle at 52% 52%, rgba(255,255,255,.92) 0 18%, rgba(34,168,200,.35) 19% 24%, transparent 25%), linear-gradient(135deg, #0e7490, #0a1f44);
+}
+.procedure-visual--smile::after {
+  left: 22%;
+  right: 22%;
+  top: 50%;
+  height: 4px;
+  border-radius: 99px;
+  background: #fff;
+}
+
+.procedure-visual--topo {
+  background: repeating-radial-gradient(circle at 50% 50%, rgba(232,184,75,.95) 0 2px, transparent 3px 15px), linear-gradient(135deg, #0a1f44, #0e7490);
+}
+
+.procedure-visual--migs {
+  background: linear-gradient(135deg, #0d6b5e, #0a1f44);
+}
+.procedure-visual--migs::before {
+  left: 17%;
+  top: 42%;
+  width: 66%;
+  height: 10px;
+  border-radius: 99px;
+  background: rgba(255,255,255,.88);
+  box-shadow: 0 28px 0 rgba(232,184,75,.9);
+}
+.procedure-visual--migs::after {
+  right: 20%;
+  top: 30%;
+  width: 34px;
+  height: 90px;
+  border-radius: 99px;
+  border: 4px solid rgba(255,255,255,.9);
+}
+
+.procedure-copy {
+  padding: 22px;
+}
+
+.procedure-kicker {
+  display: inline-flex;
+  margin-bottom: 10px;
+  color: var(--accent-dark);
+  font: 800 11px/1 Inter, sans-serif;
+  letter-spacing: 1.8px;
+  text-transform: uppercase;
+}
+
+.procedure-copy h3 {
+  font-size: 1.45rem;
+  color: var(--primary);
+  margin-bottom: 10px;
+}
+
+.procedure-copy p {
+  color: var(--text-mid);
+  font-size: .94rem;
+}
+
+@media (max-width: 1100px) {
+  .primary-nav { display: none; }
+  .hamburger { display: flex; }
+  .mobile-menu {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: min(390px, 92vw);
+    height: 100dvh;
+    padding: 112px 28px 36px;
+    background: var(--white);
+    z-index: 199;
+    transform: translateX(110%);
+    transition: transform .35s ease;
+    box-shadow: var(--shadow-xl);
+    overflow-y: auto;
+  }
+  .mobile-menu.open { transform: translateX(0); }
+  .procedure-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 760px) {
+  .top-bar { display: none; }
+  .site-header { top: 0; }
+  .header-inner {
+    width: calc(100% - 28px);
+    min-height: 74px;
+    gap: 10px;
+  }
+  .site-logo { min-width: 0; }
+  .site-logo::before {
+    width: 150px;
+    height: 54px;
+  }
+  .header-actions::before,
+  .header-phone,
+  .header-actions .btn { display: none; }
+  .hero-section {
+    min-height: 680px;
+    padding-top: 74px;
+  }
+  .hero-slide-content {
+    padding: 0 24px;
+  }
+  .hero-slide::after { display: none; }
+  .procedure-grid,
+  .procedure-card--wide {
+    grid-template-columns: 1fr;
+  }
+  .procedure-card--wide { grid-column: auto; }
+}
