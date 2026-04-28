@@ -14489,6 +14489,9 @@ function initInventory() {
   renderInventoryLedgerPanel();
   bindInventoryUsePatientSearch();
   bindInventoryUseItemSearch();
+  const movementDate = document.getElementById('inv-movement-date');
+  if (movementDate && !movementDate.value) movementDate.value = localDateKey(new Date());
+  renderInventoryTodayEntries && renderInventoryTodayEntries({ preserveVisibility: true });
   const ilc = document.getElementById('inv-low-cnt');
   if (ilc) ilc.textContent = INVENTORY.filter(i => i.stock <= i.min).length;
   const totalEl = document.getElementById('inv-total-items');
@@ -15458,10 +15461,18 @@ function renderInventoryUsageLog() {
 }
 function getInventoryTodayMovementRows(dateKey) {
   const day = dateKey || localDateKey(new Date());
+  const deptFilter = String(document.getElementById('inv-movement-dept')?.value || 'all').trim().toLowerCase();
+  const deptMatches = function (row) {
+    if (!deptFilter || deptFilter === 'all') return true;
+    return [row?.dept, row?.fromDept, row?.toDept].some(function (value) {
+      return normalizeDeptKeyForQueue(value || '') === deptFilter || String(value || '').trim().toLowerCase() === deptFilter;
+    });
+  };
   const rows = [];
   const push = function (kind, row, qty, title, meta, tone, sortAt) {
     const stamp = sortAt || row?.ts || row?.createdAt || row?.date || '';
     if (localDateKey(stamp) !== day) return;
+    if (!deptMatches(row)) return;
     rows.push({
       kind,
       id: row?.id || kind + '-' + rows.length,
@@ -15552,7 +15563,11 @@ function renderInventoryTodayEntries(opts) {
   if (!panel) return;
   const wasVisible = panel.style.display !== 'none';
   if (opts && opts.preserveVisibility && !wasVisible) return;
-  const rows = getInventoryTodayMovementRows(localDateKey(new Date()));
+  const dateEl = document.getElementById('inv-movement-date');
+  const selectedDate = dateEl?.value || localDateKey(new Date());
+  if (dateEl && !dateEl.value) dateEl.value = selectedDate;
+  const deptFilter = String(document.getElementById('inv-movement-dept')?.value || 'all');
+  const rows = getInventoryTodayMovementRows(selectedDate);
   const added = rows.filter(function (r) { return r.qty > 0; }).reduce(function (s, r) { return s + r.qty; }, 0);
   const used = rows.filter(function (r) { return /used/i.test(r.kind); }).reduce(function (s, r) { return s + Math.abs(r.qty); }, 0);
   const moved = rows.filter(function (r) { return /transfer/i.test(r.kind); }).reduce(function (s, r) { return s + Math.abs(r.qty); }, 0);
@@ -15560,7 +15575,7 @@ function renderInventoryTodayEntries(opts) {
   panel.style.display = 'block';
   panel.innerHTML = `<div style="border:1px solid var(--g4);border-radius:10px;background:#fff;overflow:hidden">
     <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;padding:10px 12px;background:var(--blue-lt)">
-      <div><div style="font-size:13px;font-weight:900;color:var(--bmh-blue)">Today's Inventory Entries</div><div style="font-size:10px;color:var(--g1);margin-top:2px">${formatDateIN(new Date())} · Added ${added} · Used ${used} · Transferred ${moved} · Removed ${removed}</div></div>
+      <div><div style="font-size:13px;font-weight:900;color:var(--bmh-blue)">Inventory Movement Entries</div><div style="font-size:10px;color:var(--g1);margin-top:2px">${formatDateIN(selectedDate)} · ${deptFilter === 'all' ? 'All departments' : bmhDeptLabel(deptFilter)} · Added ${added} · Used ${used} · Transferred ${moved} · Removed ${removed}</div></div>
       <button type="button" class="btn btn-xs btn-gray" onclick="document.getElementById('inv-today-movement-panel').style.display='none'">Close</button>
     </div>
     ${rows.length ? '<div style="max-height:360px;overflow:auto">' + rows.map(function (r) {
@@ -15570,11 +15585,13 @@ function renderInventoryTodayEntries(opts) {
         <div style="min-width:0"><div style="font-weight:900;color:var(--tx);line-height:1.25">${escapeHtmlConsent(r.itemName)}</div><div style="font-size:10px;color:var(--g1);margin-top:3px;line-height:1.4">${escapeHtmlConsent(r.meta || '')}</div></div>
         <div style="text-align:right;font-weight:900;color:${r.qty < 0 ? 'var(--red)' : 'var(--green)'}">${qtyLabel}</div>
       </div>`;
-    }).join('') + '</div>' : '<div style="padding:18px;text-align:center;color:var(--g1);font-size:12px;border-top:1px solid var(--g5)">No stock movement recorded today.</div>'}
+    }).join('') + '</div>' : '<div style="padding:18px;text-align:center;color:var(--g1);font-size:12px;border-top:1px solid var(--g5)">No stock movement recorded for this date.</div>'}
   </div>`;
 }
 window.renderInventoryTodayEntries = renderInventoryTodayEntries;
 function checkInventoryVisibility() {
+  const dateEl = document.getElementById('inv-movement-date');
+  if (dateEl) dateEl.value = localDateKey(new Date());
   renderInventoryTodayEntries();
   const panel = document.getElementById('inv-today-movement-panel');
   if (panel && panel.scrollIntoView) panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -38129,11 +38146,21 @@ function loadPastVisits(bmhId, dept) {
       .concat(Array.isArray(visit?.obgProcAdvised) ? visit.obgProcAdvised : [])
       .concat(Array.isArray(visit?.psychProcAdvised) ? visit.psychProcAdvised : [])
       .concat(Array.isArray(visit?.skinProcAdvised) ? visit.skinProcAdvised : []);
-    if (visit?.procDone?.procedure) {
-      const sideHint = String(visit.procDone.notes || '').match(/(RE|LE|BE|OD|OS|OU|Right|Left|Both)/i);
-      rows.push(visit.procDone.procedure + (sideHint ? (' (' + sideHint[0].toUpperCase() + ')') : ''));
-    }
     return Array.from(new Set(rows.filter(Boolean))).join(', ');
+  };
+  const summarizeProcedureDoneConsumables = function (visit) {
+    const items = Array.isArray(visit?.procDone?.items) ? visit.procDone.items : [];
+    return items.map(function (row) {
+      const name = String(row?.name || '').trim();
+      if (!name) return '';
+      const qty = Math.max(1, Number(row.qty || row.appliedQty || 1));
+      return name + (qty > 1 ? ' x' + qty : '');
+    }).filter(Boolean).join(', ');
+  };
+  const summarizeProcedureDoneLine = function (visit) {
+    if (!visit?.procDone?.procedure) return '';
+    const sideHint = String(visit.procDone.notes || '').match(/\b(RE|LE|BE|OD|OS|OU|Right|Left|Both)\b/i);
+    return visit.procDone.procedure + (sideHint ? (' (' + sideHint[0].toUpperCase() + ')') : '');
   };
   const renderVisits = (visitsObj) => {
     const visits = Object.entries(visitsObj || {}).map(([id, v]) => ({ id, ...(v||{}) }))
@@ -38179,6 +38206,8 @@ function loadPastVisits(bmhId, dept) {
         { label: 'Past Ocular Hx / Surgery', get: function (v) { return summarizeOphthoPastOcularHistory(v) || '—'; } },
         { label: 'Positive Findings', get: function (v) { return v.positiveFindings || '—'; } },
         { label: 'Diagnosis', get: function (v) { return Array.isArray(v.diagnoses) ? v.diagnoses.map(formatDxLineForPrint).filter(Boolean).join(', ') : (v.diagnosisText || '—'); } },
+        { label: 'Procedure done', get: function (v) { return summarizeProcedureDoneLine(v) || '—'; } },
+        { label: 'Consumables used', get: function (v) { return summarizeProcedureDoneConsumables(v) || '—'; } },
         { label: 'Prescription', get: function (v) { return Array.isArray(v.rx) && v.rx.length ? v.rx.map(function (d) { return rxDrugTradeName(d) || d.trade || d.name || 'Drug'; }).join(', ') : '—'; } }
       ];
       const rightHistory = recentVisits.map(function (v) {
@@ -38189,7 +38218,9 @@ function loadPastVisits(bmhId, dept) {
           return expandProcedureLabelForPrint(row.desc || row.name || row.service || row.for || '—');
         });
         const savedProc = Array.isArray(v.procedures) ? v.procedures.map(expandProcedureLabelForPrint).filter(Boolean) : [];
-        const combinedDone = Array.from(new Set(doneItems.concat(savedProc))).filter(Boolean);
+        const procDone = summarizeProcedureDoneLine(v);
+        const consumables = summarizeProcedureDoneConsumables(v);
+        const combinedDone = Array.from(new Set(doneItems.concat(savedProc).concat(procDone ? [procDone] : []).concat(consumables ? ['Consumables: ' + consumables] : []))).filter(Boolean);
         return { date: v.dateLabel || new Date(v.date || Date.now()).toLocaleDateString('en-IN'), items: combinedDone };
       }).filter(function (x) { return x.items.length; });
       container.innerHTML = `<div style="display:grid;grid-template-columns:1.35fr .85fr;gap:10px">
@@ -38244,6 +38275,8 @@ function loadPastVisits(bmhId, dept) {
       const rxSummary = summarizeVisitPrescription(v);
       const adviceSummary = summarizeVisitAdvice(v);
       const procSummary = summarizeVisitProcedures(v);
+      const procDoneLine = summarizeProcedureDoneLine(v);
+      const consumablesSummary = summarizeProcedureDoneConsumables(v);
       const obgMeta = dept === 'obg'
         ? `<div style="font-size:11px;margin-bottom:5px"><strong>Summary:</strong> ${(v.gravida || '—')} · ${v.ga || 'GA —'} · EDD ${v.edd || '—'}</div>
            ${obgDx ? `<div style="font-size:11px;margin-bottom:5px"><strong>Presumptive Dx:</strong> ${obgDx}</div>` : ''}
@@ -38261,7 +38294,9 @@ function loadPastVisits(bmhId, dept) {
         ${cc ? `<div style="font-size:11px;margin-bottom:5px"><strong>Chief complaints:</strong> ${cc}</div>` : ''}
         ${historySummary ? `<div style="font-size:11px;margin-bottom:5px"><strong>History:</strong> ${historySummary}</div>` : ''}
         ${dx ? `<div style="font-size:11px;margin-bottom:5px"><strong>Diagnosis:</strong> ${dx}</div>` : ''}
-        ${procSummary ? `<div style="font-size:11px;margin-bottom:5px"><strong>Procedures advised:</strong> ${procSummary}</div>` : ''}
+        ${procSummary ? `<div style="font-size:11px;margin-bottom:5px"><strong>Procedures:</strong> ${procSummary}</div>` : ''}
+        ${procDoneLine ? `<div style="font-size:11px;margin-bottom:5px"><strong>Procedure done:</strong> ${procDoneLine}</div>` : ''}
+        ${consumablesSummary ? `<div style="font-size:11px;margin-bottom:5px"><strong>Consumables used:</strong> ${consumablesSummary}</div>` : ''}
         ${rxSummary ? `<div style="font-size:11px;margin-bottom:5px"><strong>Prescription:</strong><div style="margin-top:4px;line-height:1.45">${rxSummary}</div></div>` : ''}
         ${adviceSummary ? `<div style="font-size:11px;margin-bottom:5px"><strong>Instructions:</strong><div style="margin-top:4px;line-height:1.45">${adviceSummary}</div></div>` : ''}
         ${invs.length ? `<div style="margin-top:8px"><div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:5px">Investigations</div>${invs.map(inv => `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;background:var(--g6);border-radius:8px;margin-bottom:5px"><div><div style="font-size:11px;font-weight:700">${inv.name}</div><div style="font-size:10px;color:var(--g1)">${Math.round((inv.sizKB||0))} KB · ${new Date(inv.date||Date.now()).toLocaleDateString('en-IN')}</div></div><button class="btn btn-xs btn-outline" onclick="viewStoredInvestigation('${bmhId}','${inv.key}')">Open</button></div>`).join('')}</div>` : ''}
