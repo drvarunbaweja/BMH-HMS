@@ -3713,9 +3713,11 @@
         </div>
       </div>
       <div class="tab-content" id="inv-stock">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:10px">
           <div class="form-group" style="margin:0"><label class="fl">Filter by category</label><select id="inv-stock-cat-filter" onchange="renderStockList()"></select></div>
           <div class="form-group" style="margin:0"><label class="fl">Filter by store</label><select id="inv-stock-store-filter" onchange="renderStockList()"></select></div>
+          <div class="form-group" style="margin:0"><label class="fl">Movement date</label><input type="date" id="inv-movement-date" onchange="renderInventoryTodayEntries()"></div>
+          <div class="form-group" style="margin:0"><label class="fl">Movement dept</label><select id="inv-movement-dept" onchange="renderInventoryTodayEntries()"><option value="all">All departments</option><option value="ophtho">Ophthalmology</option><option value="obg">OBG</option><option value="psych">Neuropsychiatry</option><option value="skin">Skin</option><option value="lab">Lab</option><option value="general">General / store</option></select></div>
         </div>
         <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
           <button type="button" class="btn btn-outline btn-sm" onclick="bmhPrintInventorySection('Current Stock', '#inv-stock-list')">🖨️ Print current stock</button>
@@ -3723,7 +3725,7 @@
           <button type="button" class="btn btn-gold btn-sm" onclick="forceInventoryRefresh()">♻️ Refresh Inventory</button>
           <button type="button" class="btn btn-xs btn-gray" id="btn-inv-clear-all" onclick="adminClearAllInventoryStock()" style="display:none">🗑️ Clear all inventory (admin)</button>
         </div>
-        <div id="inv-today-movement-panel" style="display:none;margin-bottom:12px"></div>
+        <div id="inv-today-movement-panel" style="margin-bottom:12px"></div>
         <div id="inv-stock-list"></div>
       </div>
       <div class="tab-content" id="inv-expiry">

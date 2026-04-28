@@ -53,7 +53,10 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"https://bawejahospital.com/img/logo-white.png\")",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"https://bawejahospital.com/img/logo.png\")",
       "Bash(curl -s -o /dev/null -w \"logo-white: %{http_code}\\\\n\" \"https://bawejahospital.com/img/logo-white.png\")",
-      "Bash(curl -s -o /dev/null -w \"logo: %{http_code}\\\\n\" \"https://bawejahospital.com/img/logo.png\")"
+      "Bash(curl -s -o /dev/null -w \"logo: %{http_code}\\\\n\" \"https://bawejahospital.com/img/logo.png\")",
+      "WebSearch",
+      "WebFetch(domain:bmhchandigarh.com)",
+      "WebFetch(domain:www.practo.com)"
     ]
   }
 }
