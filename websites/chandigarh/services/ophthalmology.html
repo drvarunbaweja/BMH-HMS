@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Eye Care &amp; Ophthalmology | Chandigarh's Finest Eye Hospital | BMH</title>
+  <meta name="description" content="Comprehensive eye care at Baweja Multispeciality Hospital, Chandigarh. Cataract, glaucoma, retina, cornea, diabetic eye disease, pediatric ophthalmology. UK-trained surgeon Dr. Varun Baweja. Book: +91-81466-22802" />
+  <meta name="robots" content="noindex, nofollow" />
+  <meta property="og:title" content="Eye Care &amp; Ophthalmology | Chandigarh's Finest Eye Hospital | BMH" />
+  <meta property="og:description" content="Comprehensive eye care at Baweja Multispeciality Hospital, Chandigarh. Cataract, glaucoma, retina, cornea, diabetic eye disease, pediatric ophthalmology." />
+  <meta property="og:type" content="website" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@400;600;700&display=swap" rel="stylesheet" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "MedicalSpecialty",
+    "name": "Ophthalmology",
+    "description": "Comprehensive eye care including cataract surgery, LASIK, glaucoma management, retinal diseases, cornea services, pediatric ophthalmology, and diabetic eye clinic at Baweja Multispeciality Hospital, Chandigarh.",
+    "url": "https://bmhchandigarh.com/services/ophthalmology.html",
+    "provider": {
+      "@type": "Hospital",
+      "name": "Baweja Multispeciality Hospital",
+      "address": {
+        "@type": "PostalAddress",
+        "streetAddress": "SCO #100, Near DPS, Sector 40C",
+        "addressLocality": "Chandigarh",
+        "addressCountry": "IN"
+      },
+      "telephone": "+918146622802"
+    },
+    "medicalSpecialty": "Ophthalmology",
+    "availableService": [
+      {"@type": "MedicalProcedure", "name": "Robotic AI Cataract Surgery"},
+      {"@type": "MedicalProcedure", "name": "Blade-Free LASIK"},
+      {"@type": "MedicalProcedure", "name": "MIGS Glaucoma Surgery"},
+      {"@type": "MedicalProcedure", "name": "Retinal Disease Treatment"},
+      {"@type": "MedicalProcedure", "name": "Cornea Transplant"},
+      {"@type": "MedicalProcedure", "name": "Pediatric Ophthalmology"}
+    ]
+  }
+  </script>
+  <style>
+    :root {
+      --primary: #1a5276;
+      --primary-light: #2e86c1;
+      --accent: #e8a838;
+      --accent-light: #f4c76a;
+      --text-dark: #1a1a2e;
+      --text-mid: #4a4a6a;
+      --text-light: #7a7a9a;
+      --bg-light: #f8faff;
+      --bg-white: #ffffff;
+      --border: #e2e8f0;
+      --shadow-sm: 0 2px 8px rgba(26,82,118,0.08);
+      --shadow-md: 0 8px 32px rgba(26,82,118,0.12);
+      --shadow-lg: 0 20px 60px rgba(26,82,118,0.16);
+      --radius: 12px;
+      --radius-lg: 20px;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Inter', sans-serif; color: var(--text-dark); background: var(--bg-white); line-height: 1.6; }
+
+    /* TOP BAR */
+    .top-bar { background: var(--primary); color: #fff; padding: 8px 0; font-size: 13px; }
+    .top-bar .container { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+    .top-bar a { color: #fff; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
+    .top-bar a:hover { color: var(--accent-light); }
+    .top-bar .tb-right { display: flex; gap: 20px; }
+
+    /* NAVBAR */
+    .navbar { background: #fff; box-shadow: var(--shadow-sm); position: sticky; top: 0; z-index: 1000; }
+    .navbar .container { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; }
+    .logo { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+    .logo-icon { width: 48px; height: 48px; background: var(--primary); border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .logo-text .name { font-size: 17px; font-weight: 800; color: var(--primary); line-height: 1.1; }
+    .logo-text .tagline { font-size: 11px; color: var(--text-light); letter-spacing: 0.5px; }
+    .nav-links { display: flex; align-items: center; gap: 6px; list-style: none; }
+    .nav-links a { text-decoration: none; color: var(--text-mid); font-size: 14px; font-weight: 500; padding: 8px 12px; border-radius: 8px; transition: all 0.2s; white-space: nowrap; }
+    .nav-links a:hover, .nav-links a.active { color: var(--primary); background: var(--bg-light); }
+    .nav-links .dropdown { position: relative; }
+    .nav-links .dropdown > a::after { content: ' ▾'; font-size: 10px; }
+    .dropdown-menu { display: none; position: absolute; top: calc(100% + 8px); left: 0; background: #fff; border-radius: var(--radius); box-shadow: var(--shadow-md); min-width: 220px; z-index: 999; padding: 8px 0; }
+    .dropdown-menu a { display: block; padding: 10px 18px; font-size: 13.5px; color: var(--text-mid); }
+    .dropdown-menu a:hover { background: var(--bg-light); color: var(--primary); border-radius: 0; }
+    .nav-links .dropdown:hover .dropdown-menu { display: block; }
+    .nav-cta { background: var(--accent); color: #fff !important; border-radius: 8px; font-weight: 600 !important; padding: 9px 18px !important; }
+    .nav-cta:hover { background: #d4932e !important; color: #fff !important; }
+    .hamburger { display: none; flex-direction: column; gap: 5px; cursor: pointer; background: none; border: none; padding: 4px; }
+    .hamburger span { display: block; width: 24px; height: 2px; background: var(--primary); border-radius: 2px; transition: all 0.3s; }
+    .mobile-nav { display: none; background: #fff; border-top: 1px solid var(--border); padding: 16px 20px; }
+    .mobile-nav.open { display: block; }
+    .mobile-nav a { display: block; padding: 10px 0; color: var(--text-mid); text-decoration: none; font-size: 15px; font-weight: 500; border-bottom: 1px solid var(--border); }
+    .mobile-nav a:last-child { border-bottom: none; }
+
+    /* CONTAINER */
+    .container { max-width: 1200px; margin: 0 auto; padding: 0 20px; }
+
+    /* PAGE HERO */
+    .page-hero { background: linear-gradient(135deg, var(--primary) 0%, #0d3b6b 60%, #1a2a4a 100%); color: #fff; padding: 80px 20px 60px; position: relative; overflow: hidden; }
+    .page-hero::before { content: ''; position: absolute; top: -50%; right: -10%; width: 600px; height: 600px; background: radial-gradient(circle, rgba(232,168,56,0.15) 0%, transparent 70%); border-radius: 50%; }
+    .page-hero .container { position: relative; z-index: 1; }
+    .breadcrumb { display: flex; align-items: center; gap: 8px; font-size: 13px; color: rgba(255,255,255,0.7); margin-bottom: 20px; flex-wrap: wrap; }
+    .breadcrumb a { color: rgba(255,255,255,0.7); text-decoration: none; }
+    .breadcrumb a:hover { color: var(--accent-light); }
+    .breadcrumb span { color: rgba(255,255,255,0.4); }
+    .page-hero h1 { font-family: 'Playfair Display', serif; font-size: clamp(32px, 5vw, 54px); font-weight: 700; line-height: 1.15; margin-bottom: 18px; }
+    .page-hero p { font-size: clamp(15px, 2vw, 18px); color: rgba(255,255,255,0.85); max-width: 680px; line-height: 1.7; }
+    .hero-badge { display: inline-flex; align-items: center; gap: 8px; background: rgba(232,168,56,0.2); border: 1px solid rgba(232,168,56,0.4); color: var(--accent-light); font-size: 13px; font-weight: 600; padding: 6px 14px; border-radius: 50px; margin-bottom: 16px; }
+
+    /* SECTIONS */
+    section { padding: 80px 0; }
+    section:nth-child(even) { background: var(--bg-light); }
+    .section-tag { display: inline-block; background: rgba(26,82,118,0.08); color: var(--primary); font-size: 12px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; padding: 5px 14px; border-radius: 50px; margin-bottom: 14px; }
+    .section-title { font-family: 'Playfair Display', serif; font-size: clamp(26px, 4vw, 40px); font-weight: 700; color: var(--text-dark); margin-bottom: 16px; line-height: 1.2; }
+    .section-sub { font-size: 16px; color: var(--text-mid); max-width: 680px; line-height: 1.7; }
+
+    /* REVEAL ANIMATIONS */
+    .reveal, .reveal-left, .reveal-right { opacity: 0; transform: translateY(30px); transition: opacity 0.7s ease, transform 0.7s ease; }
+    .reveal-left { transform: translateX(-40px); }
+    .reveal-right { transform: translateX(40px); }
+    .revealed { opacity: 1 !important; transform: none !important; }
+
+    /* INTRO SECTION */
+    .intro-section .container { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; align-items: center; }
+    .intro-text p { font-size: 16px; color: var(--text-mid); line-height: 1.8; margin-bottom: 20px; }
+    .intro-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 30px; }
+    .stat-box { background: var(--bg-light); border-radius: var(--radius); padding: 20px; text-align: center; border: 1px solid var(--border); }
+    .stat-box .num { font-size: 32px; font-weight: 800; color: var(--primary); display: block; line-height: 1; }
+    .stat-box .label { font-size: 12px; color: var(--text-light); margin-top: 6px; }
+    .intro-visual { background: linear-gradient(135deg, var(--primary), var(--primary-light)); border-radius: var(--radius-lg); padding: 40px; color: #fff; }
+    .intro-visual h3 { font-family: 'Playfair Display', serif; font-size: 22px; margin-bottom: 20px; }
+    .highlight-list { list-style: none; display: flex; flex-direction: column; gap: 14px; }
+    .highlight-list li { display: flex; align-items: flex-start; gap: 12px; font-size: 14px; line-height: 1.5; }
+    .highlight-list li::before { content: ''; width: 20px; height: 20px; background: var(--accent); border-radius: 50%; flex-shrink: 0; margin-top: 2px; display: flex; align-items: center; justify-content: center; }
+
+    /* SERVICES GRID */
+    .services-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 24px; margin-top: 48px; }
+    .service-card { background: #fff; border-radius: var(--radius-lg); padding: 30px; border: 1px solid var(--border); box-shadow: var(--shadow-sm); transition: all 0.3s; position: relative; overflow: hidden; }
+    .service-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, var(--primary), var(--accent)); transform: scaleX(0); transition: transform 0.3s; transform-origin: left; }
+    .service-card:hover { box-shadow: var(--shadow-md); transform: translateY(-4px); }
+    .service-card:hover::before { transform: scaleX(1); }
+    .service-icon { width: 52px; height: 52px; background: rgba(26,82,118,0.08); border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-bottom: 18px; }
+    .service-icon svg { width: 26px; height: 26px; stroke: var(--primary); fill: none; stroke-width: 1.8; }
+    .service-card h3 { font-size: 17px; font-weight: 700; color: var(--text-dark); margin-bottom: 10px; }
+    .service-card p { font-size: 13.5px; color: var(--text-mid); line-height: 1.65; }
+    .service-card .card-link { display: inline-flex; align-items: center; gap: 6px; color: var(--primary); font-size: 13px; font-weight: 600; text-decoration: none; margin-top: 14px; }
+    .service-card .card-link:hover { color: var(--accent); }
+    .service-card .tag { display: inline-block; background: rgba(232,168,56,0.12); color: var(--accent); font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 50px; margin-bottom: 12px; }
+
+    /* TECHNOLOGY SECTION */
+    .tech-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; margin-top: 40px; }
+    .tech-card { background: #fff; border-radius: var(--radius); padding: 24px 20px; text-align: center; border: 1px solid var(--border); }
+    .tech-card .tech-icon { width: 50px; height: 50px; background: linear-gradient(135deg, var(--primary), var(--primary-light)); border-radius: 12px; margin: 0 auto 14px; display: flex; align-items: center; justify-content: center; }
+    .tech-card .tech-icon svg { width: 24px; height: 24px; stroke: #fff; fill: none; stroke-width: 1.8; }
+    .tech-card h4 { font-size: 14px; font-weight: 700; color: var(--text-dark); margin-bottom: 8px; }
+    .tech-card p { font-size: 12.5px; color: var(--text-light); line-height: 1.5; }
+
+    /* DOCTOR SECTION */
+    .doctor-card { background: #fff; border-radius: var(--radius-lg); padding: 40px; box-shadow: var(--shadow-md); display: flex; gap: 36px; align-items: flex-start; border: 1px solid var(--border); }
+    .doctor-avatar { width: 120px; height: 120px; border-radius: 50%; background: linear-gradient(135deg, var(--primary), var(--primary-light)); flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 42px; font-weight: 800; color: #fff; }
+    .doctor-info h3 { font-family: 'Playfair Display', serif; font-size: 26px; color: var(--text-dark); margin-bottom: 6px; }
+    .doctor-info .designation { font-size: 14px; color: var(--primary); font-weight: 600; margin-bottom: 16px; }
+    .doctor-info p { font-size: 15px; color: var(--text-mid); line-height: 1.7; }
+    .doctor-badges { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+    .badge { background: var(--bg-light); border: 1px solid var(--border); color: var(--text-mid); font-size: 12px; font-weight: 500; padding: 5px 12px; border-radius: 50px; }
+
+    /* FAQ */
+    .faq-list { display: flex; flex-direction: column; gap: 16px; margin-top: 40px; max-width: 860px; }
+    .faq-item { background: #fff; border-radius: var(--radius); border: 1px solid var(--border); overflow: hidden; }
+    .faq-q { display: flex; justify-content: space-between; align-items: center; padding: 20px 24px; cursor: pointer; font-weight: 600; font-size: 15px; color: var(--text-dark); gap: 16px; }
+    .faq-q:hover { color: var(--primary); }
+    .faq-q svg { width: 20px; height: 20px; stroke: var(--primary); flex-shrink: 0; transition: transform 0.3s; }
+    .faq-item.open .faq-q svg { transform: rotate(180deg); }
+    .faq-a { display: none; padding: 0 24px 20px; font-size: 14.5px; color: var(--text-mid); line-height: 1.75; border-top: 1px solid var(--border); padding-top: 16px; }
+    .faq-item.open .faq-a { display: block; }
+
+    /* CTA */
+    .cta-section { background: linear-gradient(135deg, var(--primary) 0%, #0d3b6b 100%); color: #fff; text-align: center; }
+    .cta-section h2 { font-family: 'Playfair Display', serif; font-size: clamp(28px, 4vw, 44px); margin-bottom: 16px; }
+    .cta-section p { font-size: 17px; color: rgba(255,255,255,0.85); margin-bottom: 36px; max-width: 600px; margin-left: auto; margin-right: auto; }
+    .cta-buttons { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+    .btn { display: inline-flex; align-items: center; gap: 8px; padding: 14px 28px; border-radius: 10px; font-size: 15px; font-weight: 600; text-decoration: none; cursor: pointer; border: none; transition: all 0.2s; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: #d4932e; transform: translateY(-2px); box-shadow: 0 8px 24px rgba(232,168,56,0.4); }
+    .btn-outline { background: transparent; color: #fff; border: 2px solid rgba(255,255,255,0.5); }
+    .btn-outline:hover { background: rgba(255,255,255,0.1); border-color: #fff; }
+    .btn-white { background: #fff; color: var(--primary); }
+    .btn-white:hover { background: var(--bg-light); transform: translateY(-2px); }
+
+    /* FOOTER */
+    .footer { background: #0d1b2a; color: rgba(255,255,255,0.75); }
+    .footer-top { padding: 60px 0 40px; }
+    .footer-grid { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 48px; }
+    .footer-logo .name { font-size: 20px; font-weight: 800; color: #fff; margin-bottom: 8px; }
+    .footer-logo .tagline { font-size: 13px; color: rgba(255,255,255,0.5); margin-bottom: 20px; }
+    .footer-logo p { font-size: 13.5px; line-height: 1.7; color: rgba(255,255,255,0.6); margin-bottom: 20px; }
+    .footer-contact-item { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; margin-bottom: 12px; }
+    .footer-contact-item svg { width: 16px; height: 16px; stroke: var(--accent); flex-shrink: 0; margin-top: 2px; }
+    .footer-col h4 { font-size: 14px; font-weight: 700; color: #fff; margin-bottom: 18px; letter-spacing: 0.5px; }
+    .footer-col ul { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+    .footer-col ul li a { color: rgba(255,255,255,0.65); text-decoration: none; font-size: 13.5px; transition: color 0.2s; }
+    .footer-col ul li a:hover { color: var(--accent-light); }
+    .footer-bottom { border-top: 1px solid rgba(255,255,255,0.08); padding: 20px 0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; font-size: 12.5px; color: rgba(255,255,255,0.4); }
+    .footer-bottom a { color: rgba(255,255,255,0.5); text-decoration: none; }
+    .footer-bottom a:hover { color: var(--accent-light); }
+
+    /* WHATSAPP FLOAT */
+    .wa-float { position: fixed; bottom: 28px; right: 28px; z-index: 9999; }
+    .wa-float a { display: flex; align-items: center; gap: 10px; background: #25d366; color: #fff; font-size: 14px; font-weight: 600; padding: 13px 20px; border-radius: 50px; text-decoration: none; box-shadow: 0 8px 24px rgba(37,211,102,0.4); transition: all 0.3s; }
+    .wa-float a:hover { transform: translateY(-3px); box-shadow: 0 12px 32px rgba(37,211,102,0.5); }
+    .wa-float svg { width: 22px; height: 22px; fill: #fff; }
+
+    /* MODAL */
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 10000; align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(4px); }
+    .modal-overlay.open { display: flex; }
+    .modal { background: #fff; border-radius: var(--radius-lg); padding: 40px; max-width: 500px; width: 100%; position: relative; box-shadow: var(--shadow-lg); max-height: 90vh; overflow-y: auto; }
+    .modal-close { position: absolute; top: 16px; right: 16px; background: var(--bg-light); border: none; width: 34px; height: 34px; border-radius: 50%; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; color: var(--text-mid); }
+    .modal-close:hover { background: var(--border); }
+    .modal h2 { font-family: 'Playfair Display', serif; font-size: 24px; color: var(--text-dark); margin-bottom: 6px; }
+    .modal .sub { font-size: 13.5px; color: var(--text-light); margin-bottom: 24px; }
+    .form-group { margin-bottom: 18px; }
+    .form-group label { display: block; font-size: 13px; font-weight: 600; color: var(--text-mid); margin-bottom: 7px; }
+    .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 11px 14px; border: 1.5px solid var(--border); border-radius: 8px; font-size: 14px; font-family: 'Inter', sans-serif; color: var(--text-dark); transition: border-color 0.2s; background: #fff; }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: var(--primary); }
+    .form-group textarea { resize: vertical; min-height: 90px; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .btn-submit { width: 100%; background: var(--primary); color: #fff; border: none; padding: 14px; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; font-family: 'Inter', sans-serif; transition: all 0.2s; margin-top: 4px; }
+    .btn-submit:hover { background: #0d3b6b; }
+
+    /* RESPONSIVE */
+    @media (max-width: 900px) {
+      .intro-section .container { grid-template-columns: 1fr; gap: 40px; }
+      .footer-grid { grid-template-columns: 1fr 1fr; gap: 32px; }
+      .doctor-card { flex-direction: column; align-items: center; text-align: center; }
+      .doctor-badges { justify-content: center; }
+      .nav-links { display: none; }
+      .hamburger { display: flex; }
+    }
+    @media (max-width: 600px) {
+      .footer-grid { grid-template-columns: 1fr; }
+      .services-grid { grid-template-columns: 1fr; }
+      .form-row { grid-template-columns: 1fr; }
+      .top-bar .container { flex-direction: column; align-items: flex-start; }
+      .intro-stats { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="top-bar">
+  <div class="container">
+    <div class="tb-left">
+      <a href="tel:+918146622802">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.09 10.8a19.79 19.79 0 01-3.07-8.67A2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 14.92v2z"/></svg>
+        +91-81466-22802
+      </a>
+      &nbsp;&nbsp;|&nbsp;&nbsp; Mon–Sat 9AM–6PM
+    </div>
+    <div class="tb-right">
+      <a href="https://wa.me/918146622802" target="_blank" rel="noopener">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+        WhatsApp
+      </a>
+      <a href="../contact.html">Contact Us</a>
+    </div>
+  </div>
+</div>
+
+<!-- NAVBAR -->
+<nav class="navbar">
+  <div class="container">
+    <a href="../index.html" class="logo">
+      <div class="logo-icon">
+        <svg width="28" height="28" fill="none" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/><path d="M2 17l10 5 10-5" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/><path d="M2 12l10 5 10-5" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="logo-text">
+        <div class="name">Baweja Multispeciality Hospital</div>
+        <div class="tagline">Chandigarh · Sector 40C</div>
+      </div>
+    </a>
+    <ul class="nav-links">
+      <li><a href="../index.html">Home</a></li>
+      <li class="dropdown">
+        <a href="#" class="active">Services</a>
+        <div class="dropdown-menu">
+          <a href="ophthalmology.html">Ophthalmology</a>
+          <a href="glaucoma-migs.html">MIGS Glaucoma Surgery</a>
+          <a href="lasik.html">LASIK &amp; Vision Correction</a>
+          <a href="cataract-surgery.html">Cataract Surgery</a>
+          <a href="gynaecology.html">Gynaecology</a>
+          <a href="neuropsychiatry.html">Neuropsychiatry &amp; Skin</a>
+        </div>
+      </li>
+      <li><a href="../doctors.html">Our Doctors</a></li>
+      <li><a href="../blog/index.html">Health Blog</a></li>
+      <li><a href="../contact.html">Contact</a></li>
+      <li><a href="#" class="nav-cta" onclick="openModal(); return false;">Book Appointment</a></li>
+    </ul>
+    <button class="hamburger" onclick="toggleMobileNav()" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+  <div class="mobile-nav" id="mobileNav">
+    <a href="../index.html">Home</a>
+    <a href="ophthalmology.html">Ophthalmology</a>
+    <a href="glaucoma-migs.html">MIGS Glaucoma</a>
+    <a href="lasik.html">LASIK</a>
+    <a href="cataract-surgery.html">Cataract Surgery</a>
+    <a href="gynaecology.html">Gynaecology</a>
+    <a href="neuropsychiatry.html">Neuropsychiatry &amp; Skin</a>
+    <a href="../doctors.html">Our Doctors</a>
+    <a href="../contact.html">Contact</a>
+    <a href="#" onclick="openModal(); return false;" style="color: var(--accent); font-weight: 700;">Book Appointment</a>
+  </div>
+</nav>
+
+<!-- PAGE HERO -->
+<section class="page-hero">
+  <div class="container">
+    <div class="breadcrumb">
+      <a href="../index.html">Home</a>
+      <span>›</span>
+      <a href="#">Services</a>
+      <span>›</span>
+      <span>Ophthalmology</span>
+    </div>
+    <div class="hero-badge">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+      Chandigarh's First Dedicated Retina Department
+    </div>
+    <h1>Eye Care &amp; Ophthalmology</h1>
+    <p>Chandigarh's most advanced eye care centre — from routine examinations to pioneering surgical procedures.</p>
+  </div>
+</section>
+
+<!-- INTRO SECTION -->
+<section class="intro-section" style="background: var(--bg-white);">
+  <div class="container">
+    <div class="reveal-left intro-text">
+      <div class="section-tag">About Our Eye Department</div>
+      <h2 class="section-title">A Legacy of Sight-Saving Care</h2>
+      <p>Home to Chandigarh's first dedicated retina department, BMH's ophthalmology centre is where cutting-edge technology meets world-class surgical expertise. Dr. Varun Baweja, trained at the NHS in the United Kingdom, leads a team delivering internationally benchmarked eye care with advanced diagnostic technology.</p>
+      <p>From a child's first eye test to pioneering robotic AI cataract surgery and MIGS glaucoma procedures, every patient receives personalised, evidence-based care in a facility equipped to global standards.</p>
+      <div class="intro-stats">
+        <div class="stat-box">
+          <span class="num">10,000+</span>
+          <div class="label">Cataract Surgeries Performed</div>
+        </div>
+        <div class="stat-box">
+          <span class="num">98%</span>
+          <div class="label">Patient Satisfaction Rate</div>
+        </div>
+        <div class="stat-box">
+          <span class="num">8+</span>
+          <div class="label">Sub-Specialities</div>
+        </div>
+        <div class="stat-box">
+          <span class="num">NHS</span>
+          <div class="label">UK-Trained Surgeon</div>
+        </div>
+      </div>
+    </div>
+    <div class="reveal-right">
+      <div class="intro-visual">
+        <h3>Why Patients Choose BMH</h3>
+        <ul class="highlight-list">
+          <li>First dedicated Retina Department in Chandigarh</li>
+          <li>Robotic AI cataract surgery — first in the region</li>
+          <li>NHS-trained ophthalmic surgeon with UK experience</li>
+          <li>Advanced diagnostics: OCT, FFA, TOMEY Biometer</li>
+          <li>No-injection, no-stitch, no-bandage cataract procedures</li>
+          <li>Blade-free LASIK with femtosecond laser precision</li>
+          <li>MIGS glaucoma — revolutionary minimally invasive approach</li>
+          <li>Covered under CGHS, ECHS, and major insurance panels</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SERVICES SECTION -->
+<section style="background: var(--bg-light);">
+  <div class="container">
+    <div class="reveal" style="text-align: center; margin-bottom: 10px;">
+      <div class="section-tag">Our Eye Services</div>
+      <h2 class="section-title">Comprehensive Eye Care Under One Roof</h2>
+      <p class="section-sub" style="margin: 0 auto;">Every eye condition, every age group — covered by a specialist team with the most advanced equipment available in the region.</p>
+    </div>
+    <div class="services-grid">
+
+      <div class="service-card reveal">
+        <div class="service-icon">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M2 12s3.636-7 10-7 10 7 10 7-3.636 7-10 7S2 12 2 12z"/></svg>
+        </div>
+        <div class="tag">Most Advanced</div>
+        <h3>Robotic AI Cataract Surgery</h3>
+        <p>MICS with Ellips FX platform. AI pre-plans every procedure. No injections, no stitches, no bandage. Back to activities within 24 hours.</p>
+        <a href="cataract-surgery.html" class="card-link">Learn More →</a>
+      </div>
+
+      <div class="service-card reveal">
+        <div class="service-icon">
+          <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        </div>
+        <div class="tag">Specs Removal</div>
+        <h3>LASIK &amp; Refractive Surgery</h3>
+        <p>Blade-Free LASIK, CLEAR, and SMILE vision correction. Permanent freedom from glasses and contact lenses using femtosecond technology.</p>
+        <a href="lasik.html" class="card-link">Learn More →</a>
+      </div>
+
+      <div class="service-card reveal">
+        <div class="service-icon">
+          <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <div class="tag">Revolutionary</div>
+        <h3>MIGS Glaucoma Surgery</h3>
+        <p>Minimally Invasive Glaucoma Surgery — micro-incisions under 2mm, zero stitches, day-1 return to activity. The new gold standard in glaucoma care.</p>
+        <a href="glaucoma-migs.html" class="card-link">Learn More →</a>
+      </div>
+
+      <div class="service-card reveal">
+        <div class="service-icon">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>
+        </div>
+        <h3>Glaucoma Management</h3>
+        <p>Comprehensive medical and surgical glaucoma management including IOP monitoring, visual field testing, and advanced drainage procedures.</p>
+      </div>
+
+      <div class="service-card reveal">
+        <div class="service-icon">
+          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+        </div>
+        <h3>Retinal Diseases</h3>
+        <p>Treatment for diabetic retinopathy, age-related macular degeneration (AMD), retinal tears and detachment. FFA imaging for precise diagnosis.</p>
+      </div>
+
+      <div class="service-card reveal">
+        <div class="service-icon">
+          <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20A10 10 0 0012 2z"/><path d="M12 8v8M8 12h8"/></svg>
+        </div>
+        <h3>Cornea Services</h3>
+        <p>Full-thickness and lamellar corneal transplant surgery, keratoconus management with collagen cross-linking, and corneal infections.</p>
+      </div>
+
+      <div class="service-card reveal">
+        <div class="service-icon">
+          <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+        </div>
+        <h3>Pediatric Eye Care</h3>
+        <p>Dedicated children's ophthalmology: squint (strabismus) correction, amblyopia (lazy eye) treatment, paediatric spectacle prescriptions, and congenital conditions.</p>
+      </div>
+
+      <div class="service-card reveal">
+        <div class="service-icon">
+          <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
+        </div>
+        <div class="tag">Annual Screening</div>
+        <h3>Diabetic Eye Clinic</h3>
+        <p>Dedicated diabetic retinopathy screening, laser photocoagulation, anti-VEGF injections, and annual eye examination programmes for diabetic patients.</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- TECHNOLOGY SECTION -->
+<section style="background: var(--bg-white);">
+  <div class="container">
+    <div class="reveal" style="text-align: center;">
+      <div class="section-tag">Our Equipment</div>
+      <h2 class="section-title">Technology That Sets Standards</h2>
+      <p class="section-sub" style="margin: 0 auto;">Every piece of equipment at BMH's eye department has been chosen to deliver the highest diagnostic accuracy and surgical precision available.</p>
+    </div>
+    <div class="tech-grid">
+
+      <div class="tech-card reveal">
+        <div class="tech-icon">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M2 12s3.636-7 10-7 10 7 10 7-3.636 7-10 7S2 12 2 12z"/></svg>
+        </div>
+        <h4>TOMEY Optical Biometer</h4>
+        <p>Ultra-precise IOL power calculation and corneal mapping for cataract surgery AI planning.</p>
+      </div>
+
+      <div class="tech-card reveal">
+        <div class="tech-icon">
+          <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+        </div>
+        <h4>AMO Signature Phaco</h4>
+        <p>Advanced phacoemulsification platform enabling micro-incision cataract surgery with Ellips FX technology.</p>
+      </div>
+
+      <div class="tech-card reveal">
+        <div class="tech-icon">
+          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+        </div>
+        <h4>Optical Coherence Tomography (OCT)</h4>
+        <p>High-resolution retinal imaging for glaucoma, macular diseases, and optic nerve assessment.</p>
+      </div>
+
+      <div class="tech-card reveal">
+        <div class="tech-icon">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20"/></svg>
+        </div>
+        <h4>FFA Imaging</h4>
+        <p>Fundus Fluorescein Angiography for precise mapping of retinal vasculature in diabetic and vascular retinal diseases.</p>
+      </div>
+
+      <div class="tech-card reveal">
+        <div class="tech-icon">
+          <svg viewBox="0 0 24 24"><path d="M12 2v20M2 12h20"/><circle cx="12" cy="12" r="4"/></svg>
+        </div>
+        <h4>Green Laser</h4>
+        <p>Argon green laser for diabetic retinopathy photocoagulation, retinal tears, and vascular occlusions.</p>
+      </div>
+
+      <div class="tech-card reveal">
+        <div class="tech-icon">
+          <svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        </div>
+        <h4>Femtosecond Laser</h4>
+        <p>Blade-free, computer-guided laser for precise LASIK flap creation and corneal incisions — zero human error.</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- DOCTOR SECTION -->
+<section style="background: var(--bg-light);">
+  <div class="container">
+    <div class="reveal" style="text-align: center; margin-bottom: 40px;">
+      <div class="section-tag">Meet Your Surgeon</div>
+      <h2 class="section-title">In Expert Hands</h2>
+    </div>
+    <div class="doctor-card reveal">
+      <div class="doctor-avatar">VB</div>
+      <div class="doctor-info">
+        <h3>Dr. Varun Baweja</h3>
+        <div class="designation">MS Ophthalmology · NHS Fellow (UK) · Senior Consultant Eye Surgeon</div>
+        <p>UK-trained NHS Fellow. Pioneer of LASIK, MIGS glaucoma surgery, and robotic AI cataract surgery in the region. Dr. Varun Baweja trained at some of the United Kingdom's most prestigious NHS eye units, bringing internationally benchmarked surgical protocols and outcomes to Chandigarh. He is the driving force behind BMH's first dedicated retina department and has performed over 10,000 sight-restoring procedures.</p>
+        <div class="doctor-badges">
+          <span class="badge">MS Ophthalmology</span>
+          <span class="badge">NHS Fellow, UK</span>
+          <span class="badge">MIGS Specialist</span>
+          <span class="badge">Robotic AI Cataract Pioneer</span>
+          <span class="badge">LASIK Expert</span>
+          <span class="badge">Retina Specialist</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ SECTION -->
+<section style="background: var(--bg-white);">
+  <div class="container">
+    <div class="reveal" style="text-align: center; margin-bottom: 10px;">
+      <div class="section-tag">FAQs</div>
+      <h2 class="section-title">Frequently Asked Questions</h2>
+      <p class="section-sub" style="margin: 0 auto;">Your eye health questions, answered by our expert team.</p>
+    </div>
+    <div class="faq-list">
+
+      <div class="faq-item reveal">
+        <div class="faq-q" onclick="toggleFaq(this)">
+          Is cataract surgery painful?
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+        <div class="faq-a">No. Robotic AI cataract surgery at BMH is performed with topical anaesthetic drops only — no injections, no stitches, no bandage. You are awake and completely comfortable throughout the 15–20 minute procedure. Most patients report zero pain during or after surgery.</div>
+      </div>
+
+      <div class="faq-item reveal">
+        <div class="faq-q" onclick="toggleFaq(this)">
+          What is the best age for LASIK?
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+        <div class="faq-a">LASIK is typically recommended for patients aged 18–45 who have had a stable spectacle prescription for at least 12 months. Dr. Varun Baweja will assess your corneal thickness, topography, and overall ocular health to confirm suitability. Patients outside this age range may be assessed for alternative procedures such as CLEAR or implantable lens options.</div>
+      </div>
+
+      <div class="faq-item reveal">
+        <div class="faq-q" onclick="toggleFaq(this)">
+          How is MIGS different from traditional glaucoma surgery?
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+        <div class="faq-a">Traditional trabeculectomy involves large incisions, sutures, and a recovery period of several weeks with significant risk of complications including infection and hypotony. MIGS (Minimally Invasive Glaucoma Surgery) uses micro-incisions under 2mm — no stitches, minimal trauma, and patients typically return to normal activities within 24–48 hours. The risk profile is dramatically lower.</div>
+      </div>
+
+      <div class="faq-item reveal">
+        <div class="faq-q" onclick="toggleFaq(this)">
+          Can glaucoma be cured?
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+        <div class="faq-a">Glaucoma cannot be reversed — any optic nerve damage already sustained is permanent. However, with MIGS and medical management, we can effectively halt the progression of glaucoma and protect the remaining vision for life. Early detection through regular IOP checks and OCT imaging is key to preserving sight.</div>
+      </div>
+
+      <div class="faq-item reveal">
+        <div class="faq-q" onclick="toggleFaq(this)">
+          How long does LASIK take?
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+        <div class="faq-a">The LASIK procedure itself takes approximately 10–15 minutes per eye. You will spend around 1–2 hours at the centre on the day of surgery for pre-operative checks, the procedure, and initial recovery. Most patients drive themselves home the following morning and return to work within 24–48 hours.</div>
+      </div>
+
+      <div class="faq-item reveal">
+        <div class="faq-q" onclick="toggleFaq(this)">
+          Do you treat children's eye problems?
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+        <div class="faq-a">Yes. We have a dedicated pediatric ophthalmology clinic for squint (strabismus) correction, lazy eye (amblyopia) therapy, paediatric spectacle prescriptions, congenital cataract, and childhood glaucoma. Early intervention is critical in children's eye problems, and our team is specially trained to work with young patients in a child-friendly environment.</div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- CTA SECTION -->
+<section class="cta-section">
+  <div class="container">
+    <div class="reveal">
+      <h2>See the World More Clearly</h2>
+      <p>Book a consultation with Dr. Varun Baweja and take the first step toward better eye health — whether it's cataract surgery, LASIK, glaucoma care, or a routine eye check.</p>
+      <div class="cta-buttons">
+        <a href="#" class="btn btn-primary" onclick="openModal(); return false;">
+          <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+          Book Appointment
+        </a>
+        <a href="tel:+918146622802" class="btn btn-outline">
+          <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.09 10.8a19.79 19.79 0 01-3.07-8.67A2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 14.92v2z"/></svg>
+          Call +91-81466-22802
+        </a>
+        <a href="https://wa.me/918146622802" class="btn btn-outline" target="_blank">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+          WhatsApp Us
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer class="footer">
+  <div class="footer-top">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-logo">
+          <div class="name">Baweja Multispeciality Hospital</div>
+          <div class="tagline">Chandigarh's Centre of Excellence</div>
+          <p>SCO #100, Near DPS, Sector 40C, Chandigarh. A multi-department tertiary care hospital delivering internationally benchmarked healthcare to the people of Chandigarh, Punjab, and Himachal Pradesh.</p>
+          <div class="footer-contact-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.09 10.8a19.79 19.79 0 01-3.07-8.67A2 2 0 012 0h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 14.92v2z"/></svg>
+            <a href="tel:+918146622802" style="color: rgba(255,255,255,0.6); text-decoration: none;">+91-81466-22802</a>
+          </div>
+          <div class="footer-contact-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            <span>SCO #100, Near DPS, Sector 40C, Chandigarh</span>
+          </div>
+          <div class="footer-contact-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+            <span>Mon–Sat: 9:00 AM – 6:00 PM</span>
+          </div>
+        </div>
+        <div class="footer-col">
+          <h4>Eye Services</h4>
+          <ul>
+            <li><a href="ophthalmology.html">Eye Care Overview</a></li>
+            <li><a href="cataract-surgery.html">Cataract Surgery</a></li>
+            <li><a href="lasik.html">LASIK &amp; Vision Correction</a></li>
+            <li><a href="glaucoma-migs.html">MIGS Glaucoma</a></li>
+            <li><a href="ophthalmology.html#retina">Retinal Diseases</a></li>
+            <li><a href="ophthalmology.html#cornea">Cornea Services</a></li>
+            <li><a href="ophthalmology.html#pediatric">Pediatric Eye Care</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h4>Other Services</h4>
+          <ul>
+            <li><a href="gynaecology.html">Gynaecology</a></li>
+            <li><a href="neuropsychiatry.html">Neuropsychiatry</a></li>
+            <li><a href="neuropsychiatry.html#skin">Skin &amp; Aesthetics</a></li>
+            <li><a href="../doctors.html">Our Doctors</a></li>
+            <li><a href="../contact.html">Contact Us</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h4>Quick Links</h4>
+          <ul>
+            <li><a href="../index.html">Home</a></li>
+            <li><a href="../blog/index.html">Health Blog</a></li>
+            <li><a href="../contact.html">Directions</a></li>
+            <li><a href="https://wa.me/918146622802" target="_blank">WhatsApp</a></li>
+            <li><a href="#" onclick="openModal(); return false;">Book Appointment</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <div class="container" style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+      <span>© 2025 Baweja Multispeciality Hospital, Chandigarh. All rights reserved.</span>
+      <span>SCO #100, Sector 40C, Chandigarh | <a href="tel:+918146622802">+91-81466-22802</a></span>
+    </div>
+  </div>
+</footer>
+
+<!-- WHATSAPP FLOAT -->
+<div class="wa-float">
+  <a href="https://wa.me/918146622802" target="_blank" rel="noopener" aria-label="Chat on WhatsApp">
+    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+    Chat with Us
+  </a>
+</div>
+
+<!-- APPOINTMENT MODAL -->
+<div class="modal-overlay" id="appointmentModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()" aria-label="Close">✕</button>
+    <h2>Book an Appointment</h2>
+    <p class="sub">Fill in your details and our team will confirm within 2 hours (Mon–Sat, 9AM–6PM).</p>
+    <form onsubmit="submitAppointment(event)">
+      <div class="form-row">
+        <div class="form-group">
+          <label>First Name *</label>
+          <input type="text" placeholder="Amit" required />
+        </div>
+        <div class="form-group">
+          <label>Last Name *</label>
+          <input type="text" placeholder="Sharma" required />
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Phone Number *</label>
+        <input type="tel" placeholder="+91 98765 43210" required />
+      </div>
+      <div class="form-group">
+        <label>Department</label>
+        <select>
+          <option value="">Select Department</option>
+          <option value="ophthalmology" selected>Eye Care / Ophthalmology</option>
+          <option value="cataract">Cataract Surgery</option>
+          <option value="lasik">LASIK / Vision Correction</option>
+          <option value="glaucoma">Glaucoma / MIGS</option>
+          <option value="gynaecology">Gynaecology</option>
+          <option value="neuropsychiatry">Neuropsychiatry</option>
+          <option value="skin">Skin &amp; Aesthetics</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Preferred Date</label>
+        <input type="date" />
+      </div>
+      <div class="form-group">
+        <label>Message / Concern (Optional)</label>
+        <textarea placeholder="Briefly describe your concern..."></textarea>
+      </div>
+      <button type="submit" class="btn-submit">Confirm Appointment Request</button>
+    </form>
+  </div>
+</div>
+
+<script src="../js/main.js"></script>
+<script>
+  function openModal() {
+    document.getElementById('appointmentModal').classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeModal() {
+    document.getElementById('appointmentModal').classList.remove('open');
+    document.body.style.overflow = '';
+  }
+  document.getElementById('appointmentModal').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+  });
+  function submitAppointment(e) {
+    e.preventDefault();
+    alert('Thank you! Your appointment request has been received. Our team will call you within 2 hours to confirm.');
+    closeModal();
+  }
+  function toggleMobileNav() {
+    document.getElementById('mobileNav').classList.toggle('open');
+  }
+  function toggleFaq(el) {
+    const item = el.parentElement;
+    item.classList.toggle('open');
+  }
+  // Reveal on scroll
+  const revealEls = document.querySelectorAll('.reveal, .reveal-left, .reveal-right');
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('revealed'); } });
+  }, { threshold: 0.12 });
+  revealEls.forEach(el => observer.observe(el));
+</script>
+</body>
+</html>
