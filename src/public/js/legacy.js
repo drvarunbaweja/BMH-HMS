@@ -2346,8 +2346,8 @@ function buildSavedOphthoCaseSheetPageForPatient(bmhId) {
     const os = (bucket.os || []).join(', ');
     if (!od && !os) return '';
     return '<tr><td style="border:1px solid #bbb;padding:4px 5px;font-weight:700;background:#f6f7fb;width:24%">' + esc(label.replace(/_/g, '/')) + '</td>'
-      + '<td style="border:1px solid #bbb;padding:4px 5px">' + esc(od || '—') + '</td>'
-      + '<td style="border:1px solid #bbb;padding:4px 5px">' + esc(os || '—') + '</td></tr>';
+      + '<td style="border:1px solid #bbb;padding:4px 5px;font-weight:900">' + esc(od || '—') + '</td>'
+      + '<td style="border:1px solid #bbb;padding:4px 5px;font-weight:900">' + esc(os || '—') + '</td></tr>';
   }).filter(Boolean).join('');
   const pachyOD = visit.pachyOD || '—';
   const pachyOS = visit.pachyOS || '—';
@@ -3860,6 +3860,12 @@ function openPatient(bmhId, opts) {
     renderOphthoRecap && renderOphthoRecap();
     if(targetDept === 'psych') renderPsychRail && renderPsychRail();
     if(targetDept === 'skin') renderSkinRail && renderSkinRail();
+    setTimeout(function () {
+      const draftDept = normalizeDeptKeyForQueue(targetDept) || targetDept;
+      if (['ophtho', 'obg', 'psych', 'skin'].includes(draftDept) && (window.CURRENT_PATIENT?.bmhId || '') === p.bmhId) {
+        restoreDeptPlanDraft(draftDept, p.bmhId);
+      }
+    }, 650);
   }, 400);
 }
 
@@ -5428,7 +5434,7 @@ function buildOphthoCaseSheetHtml() {
 </tr>
 </tbody>
 </table>`;
-  const ocularField = (label, val) => `<tr><td style="font-size:8px;font-weight:700;padding:3px 4px;border:1px solid #bbb;width:19%;vertical-align:top;background:#f2f2f2;line-height:1.2">${escHtml(label)}</td><td style="font-size:8.6px;padding:3px 4px;border:1px solid #bbb;word-break:break-word;line-height:1.24">${escHtml(val) || '—'}</td></tr>`;
+  const ocularField = (label, val) => `<tr><td style="font-size:8px;font-weight:700;padding:3px 4px;border:1px solid #bbb;width:19%;vertical-align:top;background:#f2f2f2;line-height:1.2">${escHtml(label)}</td><td style="font-size:8.6px;font-weight:900;padding:3px 4px;border:1px solid #bbb;word-break:break-word;line-height:1.24">${escHtml(val) || '—'}</td></tr>`;
   const fieldLinePrint = (label, val) => ocularField(label, val);
   const slJoin = (struct, eye) => (slData[struct]?.[eye] || []).join(', ');
   const anteriorPrint = (eye) => `<table style="border-collapse:collapse;width:100%">${fieldLinePrint('Lids/Lashes', slJoin('Lids/Lashes', eye))}${fieldLinePrint('Conjunctiva', slJoin('Conjunctiva', eye))}${fieldLinePrint('Cornea', slJoin('Cornea', eye))}${fieldLinePrint('Iris / Pupil', [slJoin('Iris', eye), slJoin('Pupil', eye)].filter(Boolean).join(' · '))}${fieldLinePrint('A/C', slJoin('AC', eye))}${fieldLinePrint('Lens', slJoin('Lens', eye))}</table>`;
@@ -17949,6 +17955,53 @@ function getDeptProcedureQuickListId(dept) {
 function getDeptProcedureContainerId(dept) {
   return { ophtho: 'rx-proc-advised', obg: 'rx-proc-advised-obg', psych: 'rx-proc-advised-psych', skin: 'rx-proc-advised-skin' }[dept] || 'rx-proc-advised';
 }
+function getDeptPlanDraftKey(dept, bmhId) {
+  const ptId = String(bmhId || window.CURRENT_PATIENT?.bmhId || '').trim();
+  if (!ptId) return '';
+  const day = typeof localDateKey === 'function' ? localDateKey(new Date()) : new Date().toISOString().slice(0, 10);
+  return 'bmh_dept_plan_draft_' + String(dept || 'ophtho') + '_' + ptId + '_' + day;
+}
+function saveDeptPlanDraft(dept) {
+  const key = getDeptPlanDraftKey(dept);
+  if (!key) return;
+  const procHost = document.getElementById(getDeptProcedureContainerId(dept));
+  const payload = {
+    advice: document.getElementById(getDeptAdviceTextareaId(dept))?.value || '',
+    procedures: procHost ? Array.from(procHost.querySelectorAll('[data-proc]')).map(function (el) { return el.dataset.proc || ''; }).filter(Boolean) : [],
+    savedAt: new Date().toISOString()
+  };
+  try { localStorage.setItem(key, JSON.stringify(payload)); } catch (e) {}
+}
+function restoreDeptPlanDraft(dept, bmhId) {
+  const key = getDeptPlanDraftKey(dept, bmhId);
+  if (!key) return;
+  let payload = null;
+  try { payload = JSON.parse(localStorage.getItem(key) || 'null'); } catch (e) {}
+  if (!payload || typeof payload !== 'object') return;
+  const adviceEl = document.getElementById(getDeptAdviceTextareaId(dept));
+  if (adviceEl && !String(adviceEl.value || '').trim() && String(payload.advice || '').trim()) {
+    adviceEl.value = payload.advice;
+    syncDeptAdviceLibraryFromTextarea(dept);
+  }
+  const procHost = document.getElementById(getDeptProcedureContainerId(dept));
+  if (procHost && !procHost.querySelector('[data-proc]') && Array.isArray(payload.procedures)) {
+    payload.procedures.forEach(function (procName) {
+      addProcItemToContainer(procHost, procName, 0, { silentLog: true, quiet: true });
+    });
+  }
+}
+window.restoreDeptPlanDraft = restoreDeptPlanDraft;
+function removeProcItemAndSave(btn) {
+  const row = btn && btn.closest ? btn.closest('[data-proc]') : null;
+  const host = row ? row.parentElement : null;
+  const dept = host && host.id === 'rx-proc-advised-obg' ? 'obg'
+    : host && host.id === 'rx-proc-advised-psych' ? 'psych'
+    : host && host.id === 'rx-proc-advised-skin' ? 'skin'
+    : 'ophtho';
+  if (row) row.remove();
+  saveDeptPlanDraft(dept);
+}
+window.removeProcItemAndSave = removeProcItemAndSave;
 function appendAdviceTemplateToTextarea(dept, text) {
   const ta = document.getElementById(getDeptAdviceTextareaId(dept));
   if (!ta) return;
@@ -17960,6 +18013,7 @@ function appendAdviceTemplateToTextarea(dept, text) {
   ta.dispatchEvent(new Event('input', { bubbles: true }));
   ta.dispatchEvent(new Event('change', { bubbles: true }));
   if (dept === 'obg') renderObgAdviceChipsFromTextarea();
+  saveDeptPlanDraft(dept);
 }
 function renderObgAdviceChipsFromTextarea() {
   const ta = document.getElementById('obg-advice');
@@ -18115,6 +18169,7 @@ window.commitDeptAdviceQuickEntry = function commitDeptAdviceQuickEntry(dept, in
   saveDeptTemplateOption('advice', dept, value);
   renderDeptAdviceLibrary(dept);
   appendAdviceTemplateToTextarea(dept, value);
+  saveDeptPlanDraft(dept);
   el.value = '';
 };
 window.removeDeptAdviceTemplate = function removeDeptAdviceTemplate(dept, item) {
@@ -18131,6 +18186,7 @@ function syncDeptAdviceLibraryFromTextarea(dept) {
   });
   renderDeptAdviceLibrary(dept);
   if (dept === 'obg') renderObgAdviceChipsFromTextarea();
+  saveDeptPlanDraft(dept);
 }
 function renderDeptProcedureLibrary(dept) {
   const host = document.getElementById(getDeptProcedureLibraryHostId(dept));
@@ -18163,6 +18219,7 @@ function renderDeptProcedureLibrary(dept) {
 window.addDeptSavedProcedure = function addDeptSavedProcedure(dept, item) {
   const container = document.getElementById(getDeptProcedureContainerId(dept));
   addProcItemToContainer(container, item, 0, { quiet: true });
+  saveDeptPlanDraft(dept);
 };
 window.removeDeptProcedureTemplate = function removeDeptProcedureTemplate(dept, item) {
   deleteDeptTemplateOption('procedure', dept, item);
@@ -18208,6 +18265,7 @@ window.commitDeptProcedureQuickEntry = function commitDeptProcedureQuickEntry(de
   if (!value) return;
   const container = document.getElementById(getDeptProcedureContainerId(dept));
   addProcItemToContainer(container, value, 0);
+  saveDeptPlanDraft(dept);
   el.value = '';
 };
 function refreshDeptAdviceAndProcedureUi() {
@@ -27552,6 +27610,7 @@ function addProcFromDropdown(sel) {
   const dept = 'ophtho';
   const container = document.getElementById(getDeptProcedureContainerId(dept));
   if (procName) addProcItemToContainer(container, procName, price);
+  saveDeptPlanDraft(dept);
   sel.value = '';
 }
 
@@ -27561,6 +27620,7 @@ function addProcAdvised() {
   if(!val) return;
   const next = saveDeptTemplateOption('procedure', dept, val);
   addProcItemToContainer(document.getElementById(getDeptProcedureContainerId(dept)), next || val, 0);
+  saveDeptPlanDraft(dept);
   renderDeptProcedureLibrary(dept);
   renderDeptProcedureSelect(dept);
 }
@@ -28960,6 +29020,7 @@ function addProcFromDropdownDept(sel) {
     || sel.closest('[class*="tab-content"]')?.querySelector('[id^="rx-proc-advised"]')
     || document.getElementById('rx-proc-advised');
   addProcItemToContainer(container, name, price);
+  saveDeptPlanDraft(dept);
   sel.value = '';
 }
 
@@ -28984,8 +29045,9 @@ function addProcItemToContainer(container, procName, price, opts) {
     + '<div style="flex:1"><div style="font-size:14px;font-weight:900;color:var(--bmh-blue)">'+procName+'</div>'
     + '</div>'
     + '<button class="btn btn-xs btn-gold" onclick="nav(\'brochures\',null)" title="Patient brochure">📄</button>'
-    + '<button class="btn btn-xs" style="background:#CC0000;color:#fff;padding:2px 7px" onclick="this.closest(\'[data-proc]\').remove()">✕</button>';
+    + '<button class="btn btn-xs" style="background:#CC0000;color:#fff;padding:2px 7px" onclick="removeProcItemAndSave(this)">✕</button>';
   container.appendChild(d);
+  saveDeptPlanDraft(dept);
   if (!opts.silentLog && PROCEDURE_ADVISED_LOG) pushProcedureAdvisedLog(procName, { price });
   if (!opts.quiet) showToast('⚕️ "'+procName+'" added ✓','s');
 }
@@ -37824,6 +37886,7 @@ function saveVisit(dept, opts) {
     visit.advice = document.getElementById('rx-advice-text')?.value || '';
     visit.extraAdvice = '';
     visit.procDone = getProcedureDoneStateForDept('ophtho');
+    saveDeptPlanDraft('ophtho');
   } else if(dept === 'obg') {
     const obgCheckboxIds = ['obg-anc-booking','obg-anc-warning','obg-anc-highrisk','obg-anc-fetal','obg-gyn-aub','obg-gyn-discharge','obg-gyn-pain','obg-gyn-menopause','obg-inf-ovulatory','obg-inf-tubal','obg-inf-endo','obg-inf-male','obg-redflag-bleeding','obg-redflag-leak','obg-redflag-headache','obg-redflag-pain','obg-redflag-fever','obg-redflag-decreasedfm','obg-redflag-swelling','obg-redflag-convulsions','obg-hr-prevlscs','obg-hr-gdm','obg-hr-pih','obg-hr-iugr','obg-hr-multiple','obg-hr-rhneg','obg-hr-placenta','obg-hr-anemia','obg-fetal-growthlag','obg-fetal-malpresentation','obg-fetal-lowliquor','obg-fetal-postdates','obg-aub-clots','obg-aub-intermenstrual','obg-aub-postcoital','obg-aub-anemia','obg-vag-pruritus','obg-vag-foul','obg-vag-dyspareunia','obg-vag-pidrisk','obg-pain-cyclical','obg-pain-severe','obg-pain-bowel','obg-pain-infertility','obg-inf-coital','obg-inf-pastpid','obg-inf-priorsurgery','obg-inf-galactorrhoea','obg-inf-hirsutism','obg-inf-maleabn','obg-inf-lowreserve','obg-inf-rpl'];
     stashCurrentObgPregnancyEntry();
