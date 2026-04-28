@@ -2285,6 +2285,53 @@ function getLatestSavedVisitForDept(bmhId, dept) {
   }
   return visits[0] || null;
 }
+function visitHasPrescriptionRx(visit) {
+  return !!(visit && Array.isArray(visit.rx) && visit.rx.length);
+}
+function getLatestSavedPrescriptionVisitForDept(bmhId, dept) {
+  if (!bmhId) return null;
+  const localPt = (typeof PATIENTS !== 'undefined' ? PATIENTS.find(function (p) { return p.bmhId === bmhId; }) : null) || null;
+  const rows = Object.values(getCachedPatientVisits(bmhId) || {}).filter(function (v) {
+    return v && v.dept === dept && visitHasPrescriptionRx(v);
+  });
+  if (localPt?.lastVisit && localPt.lastDeptVisit === dept && visitHasPrescriptionRx(localPt.lastVisit)) {
+    rows.push(localPt.lastVisit);
+  }
+  rows.sort(function (a, b) {
+    return String(b.rxPrintedAt || b.date || b.createdAt || b.updatedAt || '').localeCompare(String(a.rxPrintedAt || a.date || a.createdAt || a.updatedAt || ''));
+  });
+  return rows[0] || null;
+}
+function fetchLatestSavedPrescriptionVisitForDept(bmhId, dept) {
+  const cached = getLatestSavedPrescriptionVisitForDept(bmhId, dept);
+  if (cached || typeof fbOnce !== 'function' || !bmhId) return Promise.resolve(cached);
+  return fbOnce('visits/' + bmhId).then(function (data) {
+    if (data && typeof data === 'object') cachePatientVisits(bmhId, data);
+    return getLatestSavedPrescriptionVisitForDept(bmhId, dept);
+  }).catch(function () {
+    return getLatestSavedPrescriptionVisitForDept(bmhId, dept);
+  });
+}
+function getLastPrintedRxStorageKey(bmhId, dept) {
+  const ptId = String(bmhId || '').trim();
+  const dk = normalizeDeptKeyForQueue(dept || '') || dept || '';
+  return ptId && dk ? ('bmh_last_printed_rx_' + dk + '_' + ptId) : '';
+}
+function saveLastPrintedRxSnapshot(bmhId, dept, snapshot) {
+  const key = getLastPrintedRxStorageKey(bmhId, dept);
+  if (!key || !snapshot || !Array.isArray(snapshot.rx) || !snapshot.rx.length) return;
+  try { localStorage.setItem(key, JSON.stringify(snapshot)); } catch (e) {}
+}
+function getLastPrintedRxSnapshotForDept(bmhId, dept) {
+  const key = getLastPrintedRxStorageKey(bmhId, dept);
+  if (!key) return null;
+  try {
+    const snap = JSON.parse(localStorage.getItem(key) || 'null');
+    return visitHasPrescriptionRx(snap) ? snap : null;
+  } catch (e) {
+    return null;
+  }
+}
 function isObgBackdatedHistoryEntry(visit) {
   if (!visit || visit.dept !== 'obg') return false;
   const key = localDateKey(visit.visitDate || visit.date || '');
@@ -2651,7 +2698,7 @@ function restoreCurrentPatientRxForDeptIfEmpty(dept) {
   if (RX_DRUGS.length) return;
   const bmhId = window.CURRENT_PATIENT?.bmhId;
   if (!bmhId) return;
-  const visit = getLatestSavedVisitForDept(bmhId, dept);
+  const visit = getLastPrintedRxSnapshotForDept(bmhId, dept) || getLatestSavedPrescriptionVisitForDept(bmhId, dept);
   if (visit && Array.isArray(visit.rx) && visit.rx.length) {
     restoreRxFromVisitData(visit);
   }
@@ -20451,53 +20498,59 @@ function applyLastRx() {
   const dept = activeClinicDeptKey();
   const bmhId = window.CURRENT_PATIENT?.bmhId;
   if (!bmhId) { showToast('Open a patient first', 'w'); return; }
-  const visit = getLatestSavedVisitForDept(bmhId, dept);
-  if (!visit || !Array.isArray(visit.rx) || !visit.rx.length) {
-    showToast('No saved prescription found for this department', 'i');
-    return;
-  }
-  restoreRxFromVisitData(visit);
-  if (dept === 'ophtho') {
-    const procContainer = document.getElementById('rx-proc-advised');
-    if (procContainer && Array.isArray(visit.procedures)) {
-      procContainer.innerHTML = '';
-      visit.procedures.forEach(function (procName) {
-        addProcItemToContainer(procContainer, procName, 0, { silentLog: true, quiet: true });
-      });
+  const applyVisit = function (visit) {
+    if (!visit || !Array.isArray(visit.rx) || !visit.rx.length) {
+      showToast('No previously printed prescription found for this department', 'i');
+      return;
     }
-    const adviceEl = document.getElementById('rx-advice-text');
-    if (adviceEl) adviceEl.value = visit.advice || '';
-    const extraAdviceEl = document.getElementById('rx-extra-advice-text');
-    if (extraAdviceEl) extraAdviceEl.value = visit.extraAdvice || '';
-  } else if (dept === 'obg') {
-    const procContainer = document.getElementById('rx-proc-advised-obg');
-    if (procContainer && Array.isArray(visit.obgProcAdvised)) {
-      procContainer.innerHTML = '';
-      visit.obgProcAdvised.forEach(function (procName) {
-        addProcItemToContainer(procContainer, procName, 0, { silentLog: true, quiet: true });
-      });
+    restoreRxFromVisitData(visit);
+    if (dept === 'ophtho') {
+      const procContainer = document.getElementById('rx-proc-advised');
+      if (procContainer && Array.isArray(visit.procedures)) {
+        procContainer.innerHTML = '';
+        visit.procedures.forEach(function (procName) {
+          addProcItemToContainer(procContainer, procName, 0, { silentLog: true, quiet: true });
+        });
+      }
+      const adviceEl = document.getElementById('rx-advice-text');
+      if (adviceEl) adviceEl.value = visit.advice || '';
+      const extraAdviceEl = document.getElementById('rx-extra-advice-text');
+      if (extraAdviceEl) extraAdviceEl.value = visit.extraAdvice || '';
+    } else if (dept === 'obg') {
+      const procContainer = document.getElementById('rx-proc-advised-obg');
+      if (procContainer && Array.isArray(visit.obgProcAdvised)) {
+        procContainer.innerHTML = '';
+        visit.obgProcAdvised.forEach(function (procName) {
+          addProcItemToContainer(procContainer, procName, 0, { silentLog: true, quiet: true });
+        });
+      }
+      const adviceEl = document.getElementById('obg-advice');
+      if (adviceEl) adviceEl.value = visit.obgAdvice || visit.advice || '';
+      const extraAdviceEl = document.getElementById('obg-extra-advice');
+      if (extraAdviceEl) extraAdviceEl.value = visit.obgExtraAdvice || visit.extraAdvice || '';
+    } else if (dept === 'psych') {
+      const adviceEl = document.getElementById('psych-advice');
+      if (adviceEl) adviceEl.value = visit.psychAdvice || visit.advice || '';
+      const extraAdviceEl = document.getElementById('psych-extra-advice');
+      if (extraAdviceEl) extraAdviceEl.value = visit.psychExtraAdvice || visit.extraAdvice || '';
+    } else if (dept === 'skin') {
+      const procContainer = document.getElementById('rx-proc-advised-skin');
+      if (procContainer && Array.isArray(visit.skinProcAdvised)) {
+        procContainer.innerHTML = '';
+        visit.skinProcAdvised.forEach(function (procName) {
+          addProcItemToContainer(procContainer, procName, 0, { silentLog: true, quiet: true });
+        });
+      }
+      const adviceEl = document.getElementById('skin-advice');
+      if (adviceEl) adviceEl.value = visit.skinAdvice || visit.advice || '';
+      const extraAdviceEl = document.getElementById('skin-extra-advice');
+      if (extraAdviceEl) extraAdviceEl.value = visit.skinExtraAdvice || visit.extraAdvice || '';
     }
-    const adviceEl = document.getElementById('obg-advice');
-    if (adviceEl) adviceEl.value = visit.obgAdvice || '';
-    const extraAdviceEl = document.getElementById('obg-extra-advice');
-    if (extraAdviceEl) extraAdviceEl.value = visit.obgExtraAdvice || '';
-  } else if (dept === 'psych') {
-    showToast('Last saved prescription applied ✓','s');
-    return;
-  } else if (dept === 'skin') {
-    const procContainer = document.getElementById('rx-proc-advised-skin');
-    if (procContainer && Array.isArray(visit.skinProcAdvised)) {
-      procContainer.innerHTML = '';
-      visit.skinProcAdvised.forEach(function (procName) {
-        addProcItemToContainer(procContainer, procName, 0, { silentLog: true, quiet: true });
-      });
-    }
-    const adviceEl = document.getElementById('skin-advice');
-    if (adviceEl) adviceEl.value = visit.skinAdvice || '';
-    const extraAdviceEl = document.getElementById('skin-extra-advice');
-    if (extraAdviceEl) extraAdviceEl.value = visit.skinExtraAdvice || '';
-  }
-  showToast('Last saved prescription applied ✓','s');
+    showToast('Last printed prescription applied ✓','s');
+  };
+  const printed = getLastPrintedRxSnapshotForDept(bmhId, dept);
+  if (printed) { applyVisit(printed); return; }
+  fetchLatestSavedPrescriptionVisitForDept(bmhId, dept).then(applyVisit);
 }
 function applyPrescriptionFromPastVisit(bmhId, dept, visitId) {
   const visits = getCachedPatientVisits(bmhId) || {};
@@ -25026,6 +25079,7 @@ function getProcedureReportRows() {
   const toVal = document.getElementById('rep-surg-to')?.value || '';
   const proc = (document.getElementById('rep-surg-name')?.value || '').trim().toLowerCase();
   const statusFilter = document.getElementById('rep-surg-status')?.value || '';
+  const sourceFilter = document.getElementById('rep-surg-source')?.value || 'advised';
   const centreFilter = document.getElementById('rep-centre')?.value || '';
   const dateOk = function(v) {
     const d = String(v || '').split('T')[0];
@@ -25108,12 +25162,68 @@ function getProcedureReportRows() {
       });
     });
   });
-  return advised.filter(function (row) {
+  const otReportRows = otRows.map(function (c, idx) {
+    const pt = PATIENTS.find(function (p) { return p.bmhId === c.bmhId; }) || {};
+    const rowCentre = c.centre || pt.centre || '';
+    const normalizedProc = expandProcedureLabelForPrint(c.procedure || c.procedureMain || c.proc || '');
+    const rawStatus = String(c.status || 'pending').toLowerCase();
+    return {
+      key: 'ot-' + (c.id || idx),
+      patient: c.patient || pt.name || '—',
+      bmhId: c.bmhId || pt.bmhId || '',
+      proc: normalizedProc,
+      date: c.date || c.scheduledDate || c.scheduledTime || c.createdAt || '',
+      doctor: c.surgeon || c.doctor || pt.assignedDoctor || pt.doctor || '',
+      status: rawStatus === 'inprogress' ? 'in-progress' : rawStatus,
+      otProcedure: normalizedProc,
+      otId: c.id || '',
+      source: 'ot',
+      mobile: c.mobile || pt.mob || '',
+      ageSex: c.ageSex || [c.age || pt.age || '—', c.sex || pt.sex || '—'].join('/'),
+      centre: rowCentre,
+      referredBy: c.referredBy || pt.referredBy || '',
+      advice: c.notes || c.remarks || '',
+      dept: c.dept || normalizeDeptKeyForQueue(pt.dept || '')
+    };
+  }).filter(function (row) {
+    if (centreFilter && normalizeAppointmentCentreValue(row.centre || 'CHD') !== centreFilter) return false;
+    if (!row.proc) return false;
+    return true;
+  });
+  const combinedRows = sourceFilter === 'ot'
+    ? otReportRows
+    : sourceFilter === 'all'
+      ? advised.concat(otReportRows)
+      : advised;
+  return combinedRows.filter(function (row) {
     if (proc && !String(row.proc || '').toLowerCase().includes(proc)) return false;
-    if (statusFilter && row.status !== statusFilter) return false;
+    if (statusFilter) {
+      const status = String(row.status || '').toLowerCase();
+      if (statusFilter === 'done') {
+        if (status !== 'done' && status !== 'completed') return false;
+      } else if (status !== statusFilter) {
+        return false;
+      }
+    }
     if (!dateOk(row.date)) return false;
     return true;
   });
+}
+function procedureReportStatusLabel(status) {
+  const s = String(status || '').toLowerCase();
+  if (s === 'done' || s === 'completed') return 'Completed';
+  if (s === 'scheduled') return 'Scheduled';
+  if (s === 'pending') return 'OT Pending';
+  if (s === 'in-progress') return 'In Progress';
+  if (s === 'postponed') return 'Postponed';
+  return 'Advised';
+}
+function procedureReportStatusBadge(status) {
+  const s = String(status || '').toLowerCase();
+  if (s === 'done' || s === 'completed') return 'bd-green';
+  if (s === 'scheduled' || s === 'in-progress') return 'bd-blue';
+  if (s === 'postponed') return 'bd-red';
+  return 'bd-orange';
 }
 
 function buildProcedureReportHtml(rows, title) {
@@ -25125,7 +25235,7 @@ function buildProcedureReportHtml(rows, title) {
         const follow = window.PROC_COUNSELLOR_LOG[p.key] || {};
         const remark = [follow.status, follow.remark, follow.nextDate].filter(Boolean).join(' · ');
         const advice = p.advice ? ('<div class="muted" style="margin-top:4px;line-height:1.35"><b>Advice:</b> ' + esc(p.advice) + '</div>') : '';
-        return '<tr><td>' + (i + 1) + '</td><td style="font-weight:800">' + esc(p.patient) + advice + '</td><td>' + esc(p.mobile || '—') + '</td><td>' + esc(p.ageSex || '—') + '</td><td style="font-family:monospace">' + esc(p.bmhId) + '</td><td>' + esc(p.proc) + '</td><td>' + esc(p.date) + '</td><td>' + esc(p.doctor) + '</td><td>' + esc(p.centre || '—') + '</td><td>' + esc(p.status) + '</td><td>' + (remark ? esc(remark) : '<span class="muted">No follow-up saved</span>') + '</td></tr>';
+        return '<tr><td>' + (i + 1) + '</td><td style="font-weight:800">' + esc(p.patient) + advice + '</td><td>' + esc(p.mobile || '—') + '</td><td>' + esc(p.ageSex || '—') + '</td><td style="font-family:monospace">' + esc(p.bmhId) + '</td><td>' + esc(p.proc) + '</td><td>' + esc(p.date) + '</td><td>' + esc(p.doctor) + '</td><td>' + esc(p.centre || '—') + '</td><td>' + esc(procedureReportStatusLabel(p.status)) + '</td><td>' + (remark ? esc(remark) : '<span class="muted">No follow-up saved</span>') + '</td></tr>';
       }).join('')
     + '</tbody></table>' : '<div style="padding:20px;text-align:center;color:#666">No procedure records found for the current filter.</div>')
     + '</body></html>';
@@ -25273,7 +25383,7 @@ function generateSurgeryReport() {
   el.innerHTML=`<div class="card">
     <div class="card-hd"><div><div class="card-title">⚕️ ${proc||'All Procedures'} — ${filtered.length} patients</div></div><button class="btn btn-gold btn-xs" onclick="printSurgeryReportCurrent()">🖨️ Print</button></div>
     ${filtered.length?`<table><thead><tr><th>#</th><th>Patient</th><th>Phone</th><th>Age/Sex</th><th>BMSH ID</th><th>Procedure Advised</th><th>OT — Done As</th><th>Relevant Date</th><th>Doctor</th><th>Centre</th><th>Status</th><th>Counsellor</th></tr></thead>
-    <tbody>${filtered.map((p,i)=>{ const follow=window.PROC_COUNSELLOR_LOG[p.key]||{}; const statusLabel=p.status==='done'?'Done':p.status==='scheduled'?'Scheduled':'Advised'; const otDoneCell = p.otProcedure ? `<div style="font-size:11px;font-weight:800;color:var(--green)">✅ ${esc(p.otProcedure)}</div>` : (p.status==='scheduled'?`<span style="font-size:10px;color:var(--blue)">Scheduled</span>`:'<span style="font-size:10px;color:var(--g1)">—</span>'); return `<tr><td>${i+1}</td><td style="font-weight:800">${esc(p.patient)}${p.referredBy?`<div style="font-size:10px;color:var(--g1);margin-top:2px">Ref: ${esc(p.referredBy)}</div>`:''}${p.advice?`<div style="font-size:10px;color:var(--g1);margin-top:4px;line-height:1.35"><b>Advice:</b> ${esc(p.advice)}</div>`:''}</td><td>${esc(p.mobile||'—')}</td><td>${esc(p.ageSex||'—')}</td><td style="font-family:var(--mono);font-size:10px">${esc(p.bmhId)}</td><td>${esc(p.proc)}</td><td>${otDoneCell}</td><td>${esc(p.date||'—')}</td><td>${esc(p.doctor)}</td><td>${esc(p.centre||'—')}</td><td><span class="badge ${p.status==='done'?'bd-green':p.status==='scheduled'?'bd-blue':'bd-orange'}">${esc(statusLabel)}</span></td><td><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="btn btn-xs btn-outline" onclick="openCounsellorFollowup('${p.key}')">📞 Follow-up</button>${follow.status?`<span style="font-size:10px;color:var(--g1)">${esc(follow.status)}${follow.nextDate?` · ${esc(follow.nextDate)}`:''}</span>`:''}</div></td></tr>`; }).join('')}
+    <tbody>${filtered.map((p,i)=>{ const follow=window.PROC_COUNSELLOR_LOG[p.key]||{}; const statusLabel=procedureReportStatusLabel(p.status); const badgeClass=procedureReportStatusBadge(p.status); const otDoneCell = p.otProcedure ? `<div style="font-size:11px;font-weight:800;color:var(--green)">${String(p.source||'')==='ot'?'OT:':'✅'} ${esc(p.otProcedure)}</div>` : (p.status==='scheduled'?`<span style="font-size:10px;color:var(--blue)">Scheduled</span>`:'<span style="font-size:10px;color:var(--g1)">—</span>'); return `<tr><td>${i+1}</td><td style="font-weight:800">${esc(p.patient)}${p.referredBy?`<div style="font-size:10px;color:var(--g1);margin-top:2px">Ref: ${esc(p.referredBy)}</div>`:''}${p.advice?`<div style="font-size:10px;color:var(--g1);margin-top:4px;line-height:1.35"><b>Advice:</b> ${esc(p.advice)}</div>`:''}</td><td>${esc(p.mobile||'—')}</td><td>${esc(p.ageSex||'—')}</td><td style="font-family:var(--mono);font-size:10px">${esc(p.bmhId)}</td><td>${esc(p.proc)}</td><td>${otDoneCell}</td><td>${esc(p.date||'—')}</td><td>${esc(p.doctor)}</td><td>${esc(p.centre||'—')}</td><td><span class="badge ${badgeClass}">${esc(statusLabel)}</span></td><td><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="btn btn-xs btn-outline" onclick="openCounsellorFollowup('${p.key}')">📞 Follow-up</button>${follow.status?`<span style="font-size:10px;color:var(--g1)">${esc(follow.status)}${follow.nextDate?` · ${esc(follow.nextDate)}`:''}</span>`:''}</div></td></tr>`; }).join('')}
     </tbody></table>`:'<div style="padding:20px;text-align:center;color:var(--g1)">No records found</div>'}
   </div>`;
 }
@@ -29505,7 +29615,7 @@ window.printUnifiedRx = function(deptId) {
   // ── Collect drugs (fallback to latest saved visit when UI state is blank/stale at print time) ──
   const currentBmhId = window.CURRENT_PATIENT?.bmhId || document.getElementById((saveDept || deptId) + '-pt-uid')?.textContent?.trim() || document.getElementById('ophtho-pt-uid')?.textContent?.trim() || '';
   const latestDeptVisit = currentBmhId && saveDept && typeof getLatestSavedVisitForDept === 'function'
-    ? getLatestSavedVisitForDept(currentBmhId, saveDept)
+    ? (getLatestSavedPrescriptionVisitForDept(currentBmhId, saveDept) || getLatestSavedVisitForDept(currentBmhId, saveDept))
     : null;
   const latestDeptRx = Array.isArray(latestDeptVisit?.rx) ? latestDeptVisit.rx : [];
   const currentEditorRx = typeof RX_DRUGS !== 'undefined' && Array.isArray(RX_DRUGS) ? RX_DRUGS : [];
@@ -29738,6 +29848,28 @@ window.printUnifiedRx = function(deptId) {
   const adviceHtml = String(advice || '').trim()
     ? escapeHtmlConsent(String(advice).trim()).replace(/\n/g, '<br>')
     : '';
+  if (currentBmhId && saveDept && drugs.length) {
+    const printedSnapshot = {
+      dept: saveDept,
+      rx: JSON.parse(JSON.stringify(drugs)),
+      advice: deptId === 'oe' ? advice : '',
+      extraAdvice: '',
+      obgAdvice: deptId === 'obg' ? document.getElementById('obg-advice')?.value || '' : '',
+      obgExtraAdvice: deptId === 'obg' ? document.getElementById('obg-extra-advice')?.value || '' : '',
+      psychAdvice: deptId === 'psych' ? document.getElementById('psych-advice')?.value || '' : '',
+      psychExtraAdvice: deptId === 'psych' ? document.getElementById('psych-extra-advice')?.value || '' : '',
+      skinAdvice: deptId === 'skin' ? document.getElementById('skin-advice')?.value || '' : '',
+      skinExtraAdvice: deptId === 'skin' ? document.getElementById('skin-extra-advice')?.value || '' : '',
+      procedures: deptId === 'oe' ? procs.slice() : [],
+      obgProcAdvised: deptId === 'obg' ? procs.slice() : [],
+      psychProcAdvised: deptId === 'psych' ? procs.slice() : [],
+      skinProcAdvised: deptId === 'skin' ? procs.slice() : [],
+      rxPrintedAt: new Date().toISOString(),
+      date: new Date().toISOString(),
+      source: 'printedRx'
+    };
+    saveLastPrintedRxSnapshot(currentBmhId, saveDept, printedSnapshot);
+  }
 
   // ── Doctor info (logged-in doctor on prescription) — prefer saved Settings → Doctors credentials ──
   const doctorDisplay = typeof getRxDoctorDisplayName === 'function' ? getRxDoctorDisplayName() : (CURRENT_USER?.name || 'Dr. Varun Baweja');
