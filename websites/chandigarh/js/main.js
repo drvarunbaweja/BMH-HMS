@@ -1054,7 +1054,61 @@ const initTrialLoginLink = () => {
 };
 
 /* ============================================================
-   22. BACK TO TOP BUTTON
+   22. MOBILE STICKY CTA BAR
+   ============================================================ */
+const initMobileStickyCta = () => {
+  if (!window.location.pathname.includes('/websites/chandigarh')) return;
+  if ($('.mobile-sticky-cta')) return;
+
+  const phone = '+918146622802';
+  const whatsapp = '918146622802';
+  const bar = document.createElement('nav');
+  bar.className = 'mobile-sticky-cta';
+  bar.setAttribute('aria-label', 'Quick patient actions');
+  bar.innerHTML = `
+    <a class="mobile-sticky-cta__item" href="tel:${phone}" data-cta="call" aria-label="Call Baweja Multispeciality Hospital">
+      <span class="mobile-sticky-cta__icon" aria-hidden="true">Call</span>
+      <span>Call</span>
+    </a>
+    <a class="mobile-sticky-cta__item" href="https://wa.me/${whatsapp}?text=Hello%20Baweja%20Multispeciality%20Hospital%2C%20I%20would%20like%20to%20book%20an%20appointment." data-cta="whatsapp" aria-label="Chat on WhatsApp">
+      <span class="mobile-sticky-cta__icon" aria-hidden="true">WA</span>
+      <span>WhatsApp</span>
+    </a>
+    <button class="mobile-sticky-cta__item mobile-sticky-cta__item--primary" type="button" data-cta="appointment" aria-label="Open appointment booking form">
+      <span class="mobile-sticky-cta__icon" aria-hidden="true">Appt</span>
+      <span>Appointment</span>
+    </button>
+  `;
+
+  bar.addEventListener('click', (e) => {
+    const target = e.target.closest('[data-cta]');
+    if (!target) return;
+
+    window.dataLayer = window.dataLayer || [];
+    window.dataLayer.push({
+      event: 'mobile_sticky_cta_click',
+      cta_type: target.getAttribute('data-cta'),
+      page_path: window.location.pathname
+    });
+
+    if (target.getAttribute('data-cta') !== 'appointment') return;
+    e.preventDefault();
+
+    const overlay = $('#appt-modal');
+    if (!overlay) return;
+    overlay.classList.add('open');
+    overlay.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('mobile-open');
+    requestAnimationFrame(() => {
+      overlay.querySelector('input, select, textarea')?.focus();
+    });
+  });
+
+  document.body.appendChild(bar);
+};
+
+/* ============================================================
+   23. BACK TO TOP BUTTON
    ============================================================ */
 const initBackToTop = () => {
   // Create button
@@ -1244,6 +1298,7 @@ const init = () => {
   initPhoneInputs();
   initCopyPhone();
   initTrialLoginLink();
+  initMobileStickyCta();
   initBackToTop();
   initScrollSpy();
   initVideoModal();
