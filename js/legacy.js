@@ -10503,6 +10503,32 @@ function bmhBillToSyntheticCollectionTxn(bill) {
     })))
   };
 }
+function bmhPayRequestToSyntheticCollectionTxn(pr) {
+  if (!pr || String(pr.status || '').toLowerCase() !== 'paid') return null;
+  const amount = Math.max(0, Number(pr.amount || 0));
+  if (!(amount > 0)) return null;
+  const prId = String(pr.id || '');
+  if (prId && (TRANSACTIONS || []).some(function (txn) { return String(txn.payRequestId || '') === prId && isCollectedTxn(txn); })) return null;
+  const pt = (PATIENTS || []).find(function (p) { return p.bmhId === pr.bmhId; }) || {};
+  return {
+    id: 'PRTXN-' + prId,
+    payRequestId: prId,
+    patient: pr.patient || pt.name || pr.bmhId || '',
+    bmhId: pr.bmhId || '',
+    service: pr.for || pr.service || 'Service',
+    amount: amount,
+    mode: pr.mode || 'Cash',
+    paymentRef: pr.paymentRef || '',
+    dept: pr.dept || pt.dept || 'ophtho',
+    time: new Date(pr.updatedAt || pr.date || Date.now()).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+    date: pr.updatedAt || pr.date || new Date().toISOString(),
+    centre: pr.centre || pt.centre || 'CHD',
+    createdAt: pr.updatedAt || pr.date || '',
+    collected: true,
+    source: 'pay-request',
+    type: 'pay-request-payment'
+  };
+}
 function bmhGetCollectionTransactionsForDate(centreOrCentres, dateKey) {
   const centres = Array.isArray(centreOrCentres) ? centreOrCentres : [centreOrCentres || getEffectiveCentre()];
   const wanted = new Set(centres.map(function (c) { return normalizeAppointmentCentreValue(c || 'CHD'); }));
@@ -10513,6 +10539,12 @@ function bmhGetCollectionTransactionsForDate(centreOrCentres, dateKey) {
     if (!wanted.has(normalizeAppointmentCentreValue(bill.centre || 'CHD'))) return;
     if (localDateKey(bill.createdAt || bill.date) !== dateKey) return;
     const synthetic = bmhBillToSyntheticCollectionTxn(bill);
+    if (synthetic) rows.push(synthetic);
+  });
+  (PAY_REQUESTS || []).forEach(function (pr) {
+    if (!wanted.has(normalizeAppointmentCentreValue(pr.centre || 'CHD'))) return;
+    if (localDateKey(pr.updatedAt || pr.date) !== dateKey) return;
+    const synthetic = bmhPayRequestToSyntheticCollectionTxn(pr);
     if (synthetic) rows.push(synthetic);
   });
   return rows;
@@ -31093,7 +31125,12 @@ function renderCollectionDashboard() {
   // All transactions
   const allEl = document.getElementById('rc-all-txn');
   if(allEl) {
-    allEl.innerHTML = allTxn.length ? allTxn.slice().reverse().map(t=>`
+    const pendingToday = (PAY_REQUESTS || []).filter(function (r) {
+      if (!r || String(r.status || '').toLowerCase() === 'paid') return false;
+      if (!centreMatch(r)) return false;
+      return localDateKey(r.updatedAt || r.date || r.createdAt) === todayKeyLocal;
+    });
+    const paidHtml = collected.length ? collected.slice().reverse().map(t=>`
       <div style="display:flex;align-items:center;gap:9px;padding:8px 12px;background:${t.collected?'#fff':'var(--orange-lt)'};border-radius:var(--rsm);border:1px solid ${t.collected?'var(--g5)':'rgba(255,149,0,.3)'}">
         <div style="font-size:16px">${DEPT_COLORS[t.dept]?.label?.split(' ')[0]||'🏥'}</div>
         <div style="flex:1">
@@ -31105,8 +31142,24 @@ function renderCollectionDashboard() {
         <span class="badge ${t.collected?'bd-green':'bd-orange'}" style="font-size:9.5px">${t.collected?'✅':'⏳'}</span>
         ${receptionQueueRestoreButtonHtml(t.bmhId, { label: '↩', title: "Restore this patient to today's queue", style: 'background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1px solid var(--bmh-blue);border-radius:5px;padding:2px 6px;font-size:11px;cursor:pointer;flex-shrink:0' })}
         <button title="Delete this transaction" onclick="deleteTransaction('${t.id}')" style="background:var(--red-lt);color:var(--red);border:1px solid rgba(255,59,48,.3);border-radius:5px;padding:2px 6px;font-size:11px;cursor:pointer;flex-shrink:0">🗑️</button>
-      </div>`).join('')
-    : '<div style="padding:16px;text-align:center;color:var(--g1);font-size:12px">No transactions today</div>';
+      </div>`).join('') : '<div style="padding:10px;color:var(--g1);font-size:12px">No paid transactions today.</div>';
+    const unpaidHtml = pendingToday.length ? pendingToday.slice().reverse().map(function (r) {
+      const dept = normalizeDeptKeyForQueue(r.dept || '');
+      return `
+      <div style="display:flex;align-items:center;gap:9px;padding:8px 12px;background:var(--orange-lt);border-radius:var(--rsm);border:1px solid rgba(255,149,0,.3)">
+        <div style="font-size:16px">${DEPT_COLORS[dept]?.label?.split(' ')[0]||'🏥'}</div>
+        <div style="flex:1">
+          <div style="font-size:12.5px;font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap">${r.patient||'—'} <span style="font-family:monospace;font-size:10px;color:var(--bmh-teal)">${r.bmhId||''}</span></div>
+          <div style="font-size:11px;color:var(--g1)">${r.for||r.service||'—'}</div>
+        </div>
+        <span class="badge bd-orange" style="font-size:9.5px">⏳ Pending</span>
+        <div style="font-weight:900;color:var(--orange);font-size:13px">₹${Number(r.amount||0).toLocaleString('en-IN')}</div>
+      </div>`;
+    }).join('') : '<div style="padding:10px;color:var(--g1);font-size:12px">No unpaid requests today.</div>';
+    allEl.innerHTML = '<div style="font-size:11px;font-weight:900;color:#166534;text-transform:uppercase;margin-bottom:6px">Paid patients</div>'
+      + paidHtml
+      + '<div style="font-size:11px;font-weight:900;color:#8a4200;text-transform:uppercase;margin:10px 0 6px">Unpaid patients</div>'
+      + unpaidHtml;
   }
 }
 
