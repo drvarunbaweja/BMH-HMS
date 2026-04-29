@@ -231,18 +231,14 @@ const initNavigation = () => {
     e.preventDefault();
     closeMobileMenu();
 
-    const headerH = header.offsetHeight + (topBar?.offsetHeight || 0);
+    const headerH = header.offsetHeight;
     const top = target.getBoundingClientRect().top + window.scrollY - headerH - 20;
     window.scrollTo({ top, behavior: 'smooth' });
   });
 
-  // ── Offset body for sticky header + top bar ───────────────
+  // ── Header sits in normal flow, then sticks after the top bar scrolls away.
   const setHeaderOffset = () => {
-    const totalH = header.offsetHeight + (topBar?.offsetHeight || 0);
-    // For pages with page-hero, no offset needed (hero has padding-top)
-    if (!$('.page-hero') && !$('.hero-section')) {
-      document.body.style.paddingTop = totalH + 'px';
-    }
+    document.body.style.paddingTop = '';
   };
 
   setHeaderOffset();
@@ -760,8 +756,7 @@ const initPageHeroOffset = () => {
   if (!pageHero || !header) return;
 
   const setOffset = () => {
-    const totalH = header.offsetHeight + (topBar?.offsetHeight || 0);
-    pageHero.style.paddingTop = (totalH + 40) + 'px';
+    pageHero.style.paddingTop = '';
   };
 
   setOffset();
