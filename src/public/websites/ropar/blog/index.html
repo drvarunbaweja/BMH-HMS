@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Health Blog | Expert Eye Care & Women's Health Insights | Baweja Hospital Ropar</title>
+  <meta name="description" content="Expert health articles from the doctors at Baweja Hospital Ropar. Topics covering cataract surgery, LASIK, glaucoma, MIGS, diabetic eye disease, and women's health in Punjab." />
+  <link rel="canonical" href="https://www.bawejahospital.com/blog/" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <!-- GA4 -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-XXXXXXXXXX',{'send_page_view':true});</script>
+  <!-- Meta Pixel -->
+  <script>!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','YOUR_PIXEL_ID');fbq('track','PageView');</script>
+  <style>
+    .blog-index-hero {
+      background: linear-gradient(135deg, var(--primary) 0%, #1a5c45 100%);
+      padding: 7rem 0 4rem;
+      color: #fff;
+      text-align: center;
+    }
+    .blog-index-hero h1 {
+      font-family: var(--font-heading);
+      font-size: clamp(2.2rem, 5vw, 3.5rem);
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 1rem;
+    }
+    .blog-index-hero p {
+      font-size: 1.1rem;
+      color: rgba(255,255,255,0.8);
+      max-width: 580px;
+      margin: 0 auto;
+      line-height: 1.6;
+    }
+    .blog-grid-section {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 5rem 2rem;
+    }
+    .blog-grid-section h2 {
+      font-family: var(--font-heading);
+      font-size: 1.4rem;
+      color: var(--text-muted);
+      font-weight: 400;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 2.5rem;
+    }
+    .blog-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: 2rem;
+    }
+    .blog-card {
+      background: #fff;
+      border: 1px solid rgba(11,61,46,0.1);
+      border-radius: 16px;
+      overflow: hidden;
+      transition: transform 0.25s, box-shadow 0.25s;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 2px 12px rgba(11,61,46,0.06);
+    }
+    .blog-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 16px 40px rgba(11,61,46,0.12);
+    }
+    .blog-card-thumb {
+      height: 200px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 4rem;
+      flex-shrink: 0;
+    }
+    .blog-card-body {
+      padding: 1.75rem;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+    .blog-card-meta {
+      display: flex;
+      gap: 1rem;
+      font-family: var(--font-body);
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin-bottom: 0.75rem;
+      flex-wrap: wrap;
+    }
+    .blog-card-tag {
+      display: inline-block;
+      background: rgba(11,61,46,0.07);
+      color: var(--secondary);
+      border-radius: 12px;
+      padding: 0.2rem 0.7rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .blog-card-title {
+      font-family: var(--font-heading);
+      font-size: 1.3rem;
+      font-weight: 600;
+      color: var(--primary);
+      line-height: 1.3;
+      margin-bottom: 0.75rem;
+      text-decoration: none;
+      display: block;
+    }
+    .blog-card-title:hover { color: var(--secondary); }
+    .blog-card-excerpt {
+      font-family: var(--font-body);
+      font-size: 0.92rem;
+      color: var(--text);
+      line-height: 1.65;
+      flex: 1;
+      margin-bottom: 1.5rem;
+    }
+    .blog-card-read-more {
+      font-family: var(--font-body);
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: var(--secondary);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition: gap 0.2s;
+    }
+    .blog-card-read-more:hover { gap: 0.8rem; }
+    /* Featured card */
+    .blog-card.featured {
+      grid-column: span 2;
+      flex-direction: row;
+    }
+    @media (max-width: 760px) { .blog-card.featured { grid-column: span 1; flex-direction: column; } }
+    .blog-card.featured .blog-card-thumb { width: 260px; height: auto; flex-shrink: 0; border-radius: 0; }
+    @media (max-width: 760px) { .blog-card.featured .blog-card-thumb { width: 100%; height: 200px; } }
+    .blog-card.featured .blog-card-title { font-size: 1.6rem; }
+    .featured-badge {
+      display: inline-block;
+      background: var(--accent);
+      color: #fff;
+      border-radius: 4px;
+      padding: 0.2rem 0.65rem;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 0.6rem;
+    }
+  </style>
+</head>
+<body>
+  <!-- Top Bar -->
+  <div class="top-bar">
+    <div class="container">
+      <div class="top-bar-content">
+        <div class="top-bar-left">
+          <a href="tel:+911234567890" class="top-bar-link">📞 +91 12345 67890</a>
+          <a href="https://wa.me/911234567890" class="top-bar-link" target="_blank" rel="noopener">💬 WhatsApp</a>
+        </div>
+        <div class="top-bar-right">
+          <span>🕐 Mon–Sat: 9am–7pm</span>
+          <a href="../index.html#appointment" class="top-bar-cta">Book Appointment</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header class="site-header" id="site-header">
+    <div class="container">
+      <nav class="site-nav">
+        <a href="../index.html" class="site-logo">
+          <img src="../images/baweja-logo.png" alt="Baweja Hospital" class="logo-img-main" height="48" />
+          <img src="../images/bmh-logo.jpg" alt="BMH" class="logo-img-mark" height="44" />
+        </a>
+        <button class="hamburger" id="hamburger" aria-label="Toggle Menu" aria-expanded="false">
+          <span></span><span></span><span></span>
+        </button>
+        <ul class="primary-nav" id="primary-nav">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../about.html">About</a></li>
+          <li class="has-dropdown">
+            <a href="#" aria-haspopup="true">Specialities ▾</a>
+            <ul class="dropdown">
+              <li><a href="../services/ophthalmology.html">Ophthalmology</a></li>
+              <li><a href="../services/cataract-surgery.html">Cataract Surgery</a></li>
+              <li><a href="../services/lasik.html">LASIK / Refractive</a></li>
+              <li><a href="../services/glaucoma.html">Glaucoma &amp; MIGS</a></li>
+              <li><a href="../services/gynaecology.html">Gynaecology</a></li>
+              <li><a href="../services/general-medicine.html">General Medicine</a></li>
+            </ul>
+          </li>
+          <li><a href="index.html" class="active">Blog</a></li>
+          <li><a href="../index.html#contact">Contact</a></li>
+          <li><a href="../index.html#appointment" class="nav-cta">Book Now</a></li>
+        </ul>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <section class="blog-index-hero">
+    <div class="container">
+      <h1>Health Insights from Our Doctors</h1>
+      <p>Expert articles on eye care, women's health, and general medicine — written by the specialists at Baweja Hospital Ropar.</p>
+    </div>
+  </section>
+
+  <!-- Blog Grid -->
+  <section class="blog-grid-section">
+    <h2>All Articles</h2>
+    <div class="blog-grid">
+
+      <!-- Featured: UK Surgeon -->
+      <div class="blog-card featured reveal">
+        <div class="blog-card-thumb" style="background:linear-gradient(135deg,#0B3D2E,#2D8A72);">🇬🇧</div>
+        <div class="blog-card-body">
+          <span class="featured-badge">Featured</span>
+          <div class="blog-card-meta">
+            <span class="blog-card-tag">About Us</span>
+            <span>📅 January 2025</span>
+            <span>⏱ 8 min</span>
+          </div>
+          <a href="uk-trained-surgeon-ropar.html" class="blog-card-title">Why I Left London's NHS to Bring World-Class Eye Care to Ropar</a>
+          <p class="blog-card-excerpt">Dr. Varun Baweja trained at Moorfields Eye Hospital NHS London — one of the world's top ophthalmology centres — then came home to Ropar. The first surgeon in India to implant iStent Inject W glaucoma stents tells his story.</p>
+          <a href="uk-trained-surgeon-ropar.html" class="blog-card-read-more">Read Article →</a>
+        </div>
+      </div>
+
+      <!-- Cataract -->
+      <div class="blog-card reveal">
+        <div class="blog-card-thumb" style="background:linear-gradient(135deg,#0B3D2E,#1a5c45);">👁</div>
+        <div class="blog-card-body">
+          <div class="blog-card-meta">
+            <span class="blog-card-tag">Eye Care</span>
+            <span>📅 December 2024</span>
+            <span>⏱ 7 min</span>
+          </div>
+          <a href="cataract-surgery-ropar.html" class="blog-card-title">Cataract Surgery in Ropar: What to Expect Before, During &amp; After</a>
+          <p class="blog-card-excerpt">Modern cataract surgery takes 15 minutes, requires no injections or stitches, and can be combined with premium lens implants for spectacle-free vision. A complete guide from our surgical team.</p>
+          <a href="cataract-surgery-ropar.html" class="blog-card-read-more">Read Article →</a>
+        </div>
+      </div>
+
+      <!-- Glaucoma -->
+      <div class="blog-card reveal">
+        <div class="blog-card-thumb" style="background:linear-gradient(135deg,#1a3a2a,#0B3D2E);">⚠️</div>
+        <div class="blog-card-body">
+          <div class="blog-card-meta">
+            <span class="blog-card-tag">Glaucoma</span>
+            <span>📅 November 2024</span>
+            <span>⏱ 8 min</span>
+          </div>
+          <a href="glaucoma-silent-thief-sight.html" class="blog-card-title">Glaucoma: The Silent Thief of Sight — What Every Punjabi Family Should Know</a>
+          <p class="blog-card-excerpt">Glaucoma causes irreversible blindness — often with no pain, no redness, and no warning. Dr. Varun Baweja explains risk factors, the role of MIGS, and why Punjab has a particular problem with late diagnosis.</p>
+          <a href="glaucoma-silent-thief-sight.html" class="blog-card-read-more">Read Article →</a>
+        </div>
+      </div>
+
+      <!-- LASIK -->
+      <div class="blog-card reveal">
+        <div class="blog-card-thumb" style="background:linear-gradient(135deg,#2D8A72,#0B3D2E);">✨</div>
+        <div class="blog-card-body">
+          <div class="blog-card-meta">
+            <span class="blog-card-tag">LASIK</span>
+            <span>📅 October 2024</span>
+            <span>⏱ 6 min</span>
+          </div>
+          <a href="lasik-eye-surgery-ropar.html" class="blog-card-title">LASIK Eye Surgery in Ropar: SMILE Pro, Contoura &amp; What's Right for You</a>
+          <p class="blog-card-excerpt">Not all laser vision correction is the same. SMILE Pro, Contoura LASIK, and standard LASIK each have advantages. Our guide helps you understand candidacy, the procedure, and what results to expect.</p>
+          <a href="lasik-eye-surgery-ropar.html" class="blog-card-read-more">Read Article →</a>
+        </div>
+      </div>
+
+      <!-- Diabetic Eye -->
+      <div class="blog-card reveal">
+        <div class="blog-card-thumb" style="background:linear-gradient(135deg,#C97B30,#8a5510);">🩺</div>
+        <div class="blog-card-body">
+          <div class="blog-card-meta">
+            <span class="blog-card-tag">Diabetes</span>
+            <span>📅 February 2025</span>
+            <span>⏱ 7 min</span>
+          </div>
+          <a href="diabetic-eye-disease-punjab.html" class="blog-card-title">Diabetic Eye Disease in Punjab: When Sugar Damages Your Sight</a>
+          <p class="blog-card-excerpt">Punjab has one of India's highest rates of Type 2 diabetes. Diabetic retinopathy has no symptoms in early stages — yet is the leading cause of preventable blindness in working-age adults. Know the risks.</p>
+          <a href="diabetic-eye-disease-punjab.html" class="blog-card-read-more">Read Article →</a>
+        </div>
+      </div>
+
+      <!-- Women's Health -->
+      <div class="blog-card reveal">
+        <div class="blog-card-thumb" style="background:linear-gradient(135deg,#2D8A72,#1a5c45);">🌸</div>
+        <div class="blog-card-body">
+          <div class="blog-card-meta">
+            <span class="blog-card-tag">Women's Health</span>
+            <span>📅 March 2025</span>
+            <span>⏱ 9 min</span>
+          </div>
+          <a href="womens-health-safe-delivery.html" class="blog-card-title">Safe Delivery &amp; Women's Health: What Every Woman in Punjab Should Know</a>
+          <p class="blog-card-excerpt">Dr. Namrata Baweja discusses why early antenatal care saves lives, the truth about normal delivery vs. C-section, warning signs in pregnancy, and the advantages of laparoscopic gynaecological surgery.</p>
+          <a href="womens-health-safe-delivery.html" class="blog-card-read-more">Read Article →</a>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- CTA Section -->
+  <section style="background:linear-gradient(135deg,var(--primary),#1a5c45);padding:4rem 2rem;text-align:center;color:#fff;">
+    <div style="max-width:600px;margin:0 auto;">
+      <h2 style="font-family:var(--font-heading);font-size:2rem;color:#fff;margin-bottom:0.75rem;">Have a question for our doctors?</h2>
+      <p style="color:rgba(255,255,255,0.8);margin-bottom:2rem;font-size:1rem;">Book a consultation at Baweja Hospital Ropar. Our specialists are here to help.</p>
+      <div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap;">
+        <a href="../index.html#appointment" style="background:var(--accent);color:#fff;padding:0.9rem 2.2rem;border-radius:8px;text-decoration:none;font-weight:700;font-family:var(--font-body);">Book Appointment</a>
+        <a href="https://wa.me/911234567890" target="_blank" rel="noopener" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.35);color:#fff;padding:0.9rem 2.2rem;border-radius:8px;text-decoration:none;font-weight:600;font-family:var(--font-body);">WhatsApp Us</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-col footer-brand">
+          <a href="../index.html" class="footer-logo">
+            <img src="../images/baweja-logo.png" alt="Baweja Hospital" height="40" />
+          </a>
+          <p>Baweja Hospital, Ropar — world-class eye care and women's health services in Punjab since 2010.</p>
+        </div>
+        <div class="footer-col">
+          <h4>Specialities</h4>
+          <ul>
+            <li><a href="../services/ophthalmology.html">Ophthalmology</a></li>
+            <li><a href="../services/cataract-surgery.html">Cataract Surgery</a></li>
+            <li><a href="../services/lasik.html">LASIK</a></li>
+            <li><a href="../services/glaucoma.html">Glaucoma &amp; MIGS</a></li>
+            <li><a href="../services/gynaecology.html">Gynaecology</a></li>
+            <li><a href="../services/general-medicine.html">General Medicine</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h4>Hospital</h4>
+          <ul>
+            <li><a href="../about.html">About Us</a></li>
+            <li><a href="index.html">Blog</a></li>
+            <li><a href="../index.html#contact">Contact</a></li>
+            <li><a href="../index.html#appointment">Book Appointment</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h4>Contact</h4>
+          <address style="font-style:normal;font-size:0.9rem;color:rgba(255,255,255,0.7);line-height:1.8;">
+            Baweja Hospital<br/>Near Civil Hospital, Ropar<br/>Punjab — 140001<br/>
+            <a href="tel:+911234567890" style="color:rgba(255,255,255,0.7);">+91 12345 67890</a>
+          </address>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>© 2025 Baweja Hospital, Ropar. All rights reserved.</p>
+      </div>
+    </div>
+  </footer>
+
+  <a href="https://wa.me/911234567890" class="whatsapp-float" target="_blank" rel="noopener" aria-label="Chat on WhatsApp">
+    <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+  </a>
+
+  <script src="../js/main.js"></script>
+</body>
+</html>
