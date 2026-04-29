@@ -3433,12 +3433,17 @@ select.form-control {
    /websites/chandigarh/ without changing the HMS app.
    ============================================================ */
 .site-header {
-  top: 40px;
+  position: sticky;
+  top: 0;
   background: rgba(255, 255, 255, 0.96);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   border-bottom: 1px solid var(--border);
   box-shadow: 0 10px 30px rgba(10, 31, 68, 0.08);
+}
+
+.top-bar {
+  position: relative;
 }
 
 .header-inner {
@@ -4119,5 +4124,267 @@ select.form-control {
 @media (max-width: 900px) {
   .chd-social-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Lightweight visual education blocks for service pages */
+.visual-education {
+  padding: 72px 0;
+  background: #f7fbfd;
+}
+
+.visual-education--white {
+  background: #fff;
+}
+
+.visual-education__header {
+  max-width: 760px;
+  margin: 0 auto 34px;
+  text-align: center;
+}
+
+.visual-education__eyebrow {
+  display: inline-flex;
+  margin-bottom: 12px;
+  color: var(--accent);
+  font-size: .78rem;
+  font-weight: 800;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+.visual-education__title {
+  margin: 0 0 12px;
+  color: var(--primary);
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 1.12;
+}
+
+.visual-education__text {
+  margin: 0 auto;
+  color: #475569;
+  font-size: 1rem;
+  line-height: 1.8;
+}
+
+.visual-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 22px;
+}
+
+.visual-card {
+  display: grid;
+  grid-template-rows: 180px auto;
+  overflow: hidden;
+  border: 1px solid rgba(10, 31, 68, .08);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 16px 40px rgba(10, 31, 68, .08);
+}
+
+.visual-card__body {
+  padding: 22px;
+}
+
+.visual-card__body h3 {
+  margin: 0 0 8px;
+  color: var(--primary);
+  font-size: 1.05rem;
+  line-height: 1.3;
+}
+
+.visual-card__body p {
+  margin: 0;
+  color: #64748b;
+  font-size: .9rem;
+  line-height: 1.65;
+}
+
+.edu-visual {
+  position: relative;
+  min-height: 180px;
+  background: linear-gradient(135deg, #e0f2fe, #f8fafc);
+}
+
+.edu-visual::before,
+.edu-visual::after {
+  content: "";
+  position: absolute;
+}
+
+.edu-visual--cataract-clear::before,
+.edu-visual--cataract-cloudy::before,
+.edu-visual--glaucoma-field::before {
+  inset: 36px 62px;
+  border-radius: 50%;
+  border: 12px solid #e2e8f0;
+  background: radial-gradient(circle at center, #111827 0 12%, #3b82f6 13% 30%, #93c5fd 31% 48%, #f8fafc 49%);
+}
+
+.edu-visual--cataract-clear::after {
+  inset: 48px 75px;
+  border-radius: 50%;
+  background: radial-gradient(circle, transparent 0 48%, rgba(255,255,255,.55) 49% 52%, transparent 53%);
+}
+
+.edu-visual--cataract-cloudy::after {
+  inset: 28px 52px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 25%, rgba(255,255,255,.88), rgba(226,232,240,.72) 38%, rgba(148,163,184,.55) 62%, rgba(15,23,42,.18));
+  backdrop-filter: blur(2px);
+}
+
+.edu-visual--robotic::before {
+  left: 36px;
+  right: 36px;
+  top: 76px;
+  height: 34px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #bfdbfe, #fff, #bfdbfe);
+  box-shadow: inset 0 0 0 3px #dbeafe;
+}
+
+.edu-visual--robotic::after {
+  left: 50%;
+  top: 18px;
+  width: 5px;
+  height: 92px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: #38bdf8;
+  box-shadow: 0 0 28px #38bdf8, -42px 54px 0 -1px #22c55e, 42px 54px 0 -1px #22c55e;
+}
+
+.edu-visual--glaucoma-field::after {
+  inset: 28px 42px;
+  border-radius: 50%;
+  background: radial-gradient(circle, transparent 0 30%, rgba(15,23,42,.08) 31% 44%, rgba(15,23,42,.58) 45% 100%);
+}
+
+.edu-visual--glaucoma-tests {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  padding: 28px;
+  background: #ecfeff;
+}
+
+.edu-visual--glaucoma-tests span {
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: #fff;
+  color: #0f766e;
+  font-size: .72rem;
+  font-weight: 800;
+  text-align: center;
+  box-shadow: inset 0 0 0 1px rgba(15,118,110,.14);
+}
+
+.edu-visual--laser::before {
+  left: 34px;
+  right: 34px;
+  top: 76px;
+  height: 36px;
+  border-radius: 999px;
+  background: radial-gradient(circle at center, #111827 0 12%, #0ea5e9 13% 28%, #e0f2fe 29%);
+}
+
+.edu-visual--laser::after {
+  left: 0;
+  top: 83px;
+  width: 100%;
+  height: 8px;
+  background: linear-gradient(90deg, transparent, #ef4444 35%, #f97316 50%, #ef4444 65%, transparent);
+  box-shadow: 0 0 20px rgba(239,68,68,.7);
+}
+
+.edu-visual--surface::before {
+  left: 34px;
+  right: 34px;
+  top: 82px;
+  height: 34px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #bae6fd 0 44%, #f8fafc 45%);
+}
+
+.edu-visual--surface::after {
+  left: 48px;
+  right: 48px;
+  top: 72px;
+  height: 5px;
+  border-radius: 999px;
+  background: repeating-linear-gradient(90deg, #0284c7 0 12px, #7dd3fc 12px 24px);
+}
+
+.edu-visual--mind {
+  background: linear-gradient(135deg, #f0f9ff, #fdf2f8);
+}
+
+.edu-visual--mind::before {
+  left: 50%;
+  top: 34px;
+  width: 90px;
+  height: 90px;
+  transform: translateX(-50%);
+  border-radius: 45% 55% 48% 52%;
+  background: #fff;
+  box-shadow: inset 0 0 0 3px #bfdbfe, 0 16px 28px rgba(14,165,233,.12);
+}
+
+.edu-visual--mind::after {
+  left: 50%;
+  top: 76px;
+  width: 116px;
+  height: 2px;
+  transform: translateX(-50%);
+  background: linear-gradient(90deg, transparent, #0ea5e9, transparent);
+  box-shadow: 0 22px 0 #f59e0b, 0 -22px 0 #22c55e;
+}
+
+.edu-visual--obg::before {
+  left: 54px;
+  right: 54px;
+  top: 34px;
+  bottom: 34px;
+  border-radius: 46% 46% 52% 52%;
+  background: #fff7ed;
+  box-shadow: inset 0 0 0 4px #fed7aa;
+}
+
+.edu-visual--obg::after {
+  left: 50%;
+  top: 58px;
+  width: 54px;
+  height: 54px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: #fdba74;
+  box-shadow: 0 0 0 16px rgba(251,146,60,.16);
+}
+
+.seo-callout {
+  margin-top: 28px;
+  padding: 22px 24px;
+  border-left: 4px solid var(--accent);
+  border-radius: 8px;
+  background: #fff;
+  color: #334155;
+  box-shadow: 0 12px 32px rgba(10,31,68,.07);
+}
+
+.seo-callout strong {
+  color: var(--primary);
+}
+
+@media (max-width: 920px) {
+  .visual-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .visual-card {
+    grid-template-rows: 170px auto;
   }
 }
