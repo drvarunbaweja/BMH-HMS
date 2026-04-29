@@ -1,8 +1,8 @@
 /**
  * ============================================================
- * BAWEJA MULTISPECIALITY HOSPITAL — CHANDIGARH
+ * BAWEJA HOSPITAL — ROPAR
  * main.js — Premium Vanilla JS
- * bmhchandigarh.com
+ * bawejahospital.com
  * ============================================================
  */
 
@@ -125,7 +125,7 @@ const initCursor = () => {
 const initNavigation = () => {
   const header      = $('.site-header');
   const hamburger   = $('.hamburger');
-  const mobileMenu  = $('.mobile-menu, .mobile-nav-menu');
+  const mobileMenu  = $('.mobile-nav-menu');
   const mobileOverlay = $('.mobile-nav-overlay');
   const topBar      = $('.top-bar');
 
@@ -149,7 +149,6 @@ const initNavigation = () => {
     mobileOverlay?.classList.add('open');
     document.body.classList.add('mobile-open');
     hamburger?.setAttribute('aria-expanded', 'true');
-    mobileMenu?.setAttribute('aria-hidden', 'false');
   };
 
   const closeMobileMenu = () => {
@@ -158,7 +157,6 @@ const initNavigation = () => {
     mobileOverlay?.classList.remove('open');
     document.body.classList.remove('mobile-open');
     hamburger?.setAttribute('aria-expanded', 'false');
-    mobileMenu?.setAttribute('aria-hidden', 'true');
   };
 
   hamburger?.addEventListener('click', () => {
@@ -170,9 +168,9 @@ const initNavigation = () => {
   mobileOverlay?.addEventListener('click', closeMobileMenu);
 
   // Close when a real mobile nav destination is clicked. Dropdown toggles stay open.
-  $$('.mobile-nav-link, .mobile-dropdown-item, .mobile-nav-sub a').forEach(link => {
+  $$('.mobile-nav-link, .mobile-nav-sub a').forEach(link => {
     link.addEventListener('click', () => {
-      if (link.matches('button, [aria-controls]')) return;
+      if (link.matches('button, [data-has-dropdown], [aria-controls]')) return;
       closeMobileMenu();
     });
   });
@@ -618,11 +616,10 @@ const initModal = () => {
   const modal      = overlay.querySelector('.appt-modal');
   const closeBtn   = overlay.querySelector('.modal-close');
   const form       = overlay.querySelector('form');
-  const successDiv = overlay.querySelector('.modal-success, .form-success, #form-success');
+  const successDiv = overlay.querySelector('.modal-success');
 
   const openModal = () => {
     overlay.classList.add('open');
-    overlay.setAttribute('aria-hidden', 'false');
     document.body.classList.add('mobile-open');
     // Focus first input
     requestAnimationFrame(() => {
@@ -633,7 +630,6 @@ const initModal = () => {
 
   const closeModal = () => {
     overlay.classList.remove('open');
-    overlay.setAttribute('aria-hidden', 'true');
     document.body.classList.remove('mobile-open');
   };
 
@@ -656,50 +652,20 @@ const initModal = () => {
     if (e.key === 'Escape' && overlay.classList.contains('open')) closeModal();
   });
 
-  // Form submission: GitHub Pages trial capture.
+  // Form submission
   form?.addEventListener('submit', (e) => {
     e.preventDefault();
 
-    if (!form.checkValidity()) {
-      form.reportValidity();
-      return;
-    }
-
     const submitBtn = form.querySelector('[type="submit"]');
-    const originalText = submitBtn?.textContent || 'Request Appointment';
     if (submitBtn) {
       submitBtn.disabled = true;
       submitBtn.textContent = 'Sending…';
     }
 
-    const data = Object.fromEntries(new FormData(form).entries());
-    const lead = {
-      ...data,
-      page: window.location.pathname,
-      source: 'github-pages-trial',
-      createdAt: new Date().toISOString(),
-      utm: Object.fromEntries(new URLSearchParams(window.location.search).entries())
-    };
-
-    window.dataLayer = window.dataLayer || [];
-    window.dataLayer.push({
-      event: 'appointment_lead_trial',
-      lead_service: lead.service || '',
-      page_path: lead.page
-    });
-
-    try {
-      const leads = JSON.parse(localStorage.getItem('bmh_chandigarh_trial_leads') || '[]');
-      leads.push(lead);
-      localStorage.setItem('bmh_chandigarh_trial_leads', JSON.stringify(leads));
-    } catch (err) {
-      console.warn('Unable to store trial lead locally', err);
-    }
-
+    // Simulate async submission
     setTimeout(() => {
       form.style.display = 'none';
       if (successDiv) {
-        successDiv.hidden = false;
         successDiv.classList.add('show');
       }
 
@@ -710,13 +676,10 @@ const initModal = () => {
         setTimeout(() => {
           form.style.display = '';
           form.reset();
-          if (successDiv) {
-            successDiv.classList.remove('show');
-            successDiv.hidden = true;
-          }
+          if (successDiv) successDiv.classList.remove('show');
           if (submitBtn) {
             submitBtn.disabled = false;
-            submitBtn.textContent = originalText;
+            submitBtn.textContent = 'Book Appointment';
           }
         }, 400);
       }, 4000);
@@ -1034,8 +997,6 @@ const initCopyPhone = () => {
   $$('a[href^="tel:"]').forEach(link => {
     link.addEventListener('click', (e) => {
       const num = link.href.replace('tel:', '');
-      window.dataLayer = window.dataLayer || [];
-      window.dataLayer.push({ event: 'phone_click', phone_number: num });
       if (navigator.clipboard) {
         navigator.clipboard.writeText(num).catch(() => {});
       }
@@ -1044,94 +1005,7 @@ const initCopyPhone = () => {
 };
 
 /* ============================================================
-   21. REVIEW MODE HMS LOGIN LINK
-   ============================================================ */
-const initTrialLoginLink = () => {
-  if (!window.location.pathname.includes('/websites/chandigarh')) return;
-  if ($('.trial-hms-login')) return;
-
-  const base = window.location.pathname.includes('/BMH-HMS/') ? '/BMH-HMS/' : '/';
-  const link = document.createElement('a');
-  link.href = base;
-  link.className = 'trial-hms-login';
-  link.textContent = 'HMS Login';
-  link.setAttribute('aria-label', 'Open BMH HMS software login');
-  link.style.cssText = `
-    position: fixed;
-    left: 16px;
-    bottom: 16px;
-    z-index: 10000;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 42px;
-    padding: 10px 14px;
-    border-radius: 999px;
-    background: #0A1F44;
-    color: #fff;
-    font: 700 13px/1 Inter, system-ui, sans-serif;
-    text-decoration: none;
-    box-shadow: 0 12px 28px rgba(10,31,68,.25);
-  `;
-  document.body.appendChild(link);
-};
-
-/* ============================================================
-   22. MOBILE STICKY CTA BAR
-   ============================================================ */
-const initMobileStickyCta = () => {
-  if (!window.location.pathname.includes('/websites/chandigarh')) return;
-  if ($('.mobile-sticky-cta')) return;
-
-  const phone = '+918146622802';
-  const whatsapp = '918146622802';
-  const bar = document.createElement('nav');
-  bar.className = 'mobile-sticky-cta';
-  bar.setAttribute('aria-label', 'Quick patient actions');
-  bar.innerHTML = `
-    <a class="mobile-sticky-cta__item" href="tel:${phone}" data-cta="call" aria-label="Call Baweja Multispeciality Hospital">
-      <span class="mobile-sticky-cta__icon" aria-hidden="true">Call</span>
-      <span>Call</span>
-    </a>
-    <a class="mobile-sticky-cta__item" href="https://wa.me/${whatsapp}?text=Hello%20Baweja%20Multispeciality%20Hospital%2C%20I%20would%20like%20to%20book%20an%20appointment." data-cta="whatsapp" aria-label="Chat on WhatsApp">
-      <span class="mobile-sticky-cta__icon" aria-hidden="true">WA</span>
-      <span>WhatsApp</span>
-    </a>
-    <button class="mobile-sticky-cta__item mobile-sticky-cta__item--primary" type="button" data-cta="appointment" aria-label="Open appointment booking form">
-      <span class="mobile-sticky-cta__icon" aria-hidden="true">Appt</span>
-      <span>Appointment</span>
-    </button>
-  `;
-
-  bar.addEventListener('click', (e) => {
-    const target = e.target.closest('[data-cta]');
-    if (!target) return;
-
-    window.dataLayer = window.dataLayer || [];
-    window.dataLayer.push({
-      event: 'mobile_sticky_cta_click',
-      cta_type: target.getAttribute('data-cta'),
-      page_path: window.location.pathname
-    });
-
-    if (target.getAttribute('data-cta') !== 'appointment') return;
-    e.preventDefault();
-
-    const overlay = $('#appt-modal');
-    if (!overlay) return;
-    overlay.classList.add('open');
-    overlay.setAttribute('aria-hidden', 'false');
-    document.body.classList.add('mobile-open');
-    requestAnimationFrame(() => {
-      overlay.querySelector('input, select, textarea')?.focus();
-    });
-  });
-
-  document.body.appendChild(bar);
-};
-
-/* ============================================================
-   23. BACK TO TOP BUTTON
+   21. BACK TO TOP BUTTON
    ============================================================ */
 const initBackToTop = () => {
   // Create button
@@ -1252,22 +1126,22 @@ const initVideoModal = () => {
    24. MOBILE NAV DROPDOWN TOGGLE
    ============================================================ */
 const initMobileDropdowns = () => {
-  $$('.mobile-dropdown-toggle, .mobile-nav-link[data-has-dropdown]').forEach(link => {
-    const sub = document.getElementById(link.getAttribute('aria-controls')) || link.nextElementSibling;
+  $$('.mobile-nav-link[data-has-dropdown]').forEach(link => {
+    const sub = link.nextElementSibling;
     if (!sub) return;
-
-    const setOpen = (isOpen) => {
-      link.setAttribute('aria-expanded', String(isOpen));
-      sub.hidden = !isOpen;
-      sub.classList.toggle('open', isOpen);
-    };
-
-    setOpen(false);
 
     link.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      setOpen(link.getAttribute('aria-expanded') !== 'true');
+
+      const isOpen = sub.style.maxHeight && sub.style.maxHeight !== '0px';
+      link.setAttribute('aria-expanded', String(!isOpen));
+      sub.style.maxHeight   = isOpen ? '0px' : sub.scrollHeight + 'px';
+      sub.style.overflow    = 'hidden';
+      sub.style.transition  = 'max-height 0.35s ease';
+
+      const chevron = link.querySelector('.mobile-chevron');
+      if (chevron) chevron.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(180deg)';
     });
   });
 };
@@ -1280,7 +1154,7 @@ const initAnnouncementBanner = () => {
   const dismiss = $('.announcement-dismiss');
   if (!banner || !dismiss) return;
 
-  const dismissed = sessionStorage.getItem('bmh-banner-dismissed');
+  const dismissed = sessionStorage.getItem('bh-ropar-banner-dismissed');
   if (dismissed) {
     banner.style.display = 'none';
     return;
@@ -1295,7 +1169,7 @@ const initAnnouncementBanner = () => {
       banner.style.opacity    = '0';
     });
     setTimeout(() => { banner.style.display = 'none'; }, 350);
-    sessionStorage.setItem('bmh-banner-dismissed', '1');
+    sessionStorage.setItem('bh-ropar-banner-dismissed', '1');
   });
 };
 
@@ -1323,8 +1197,6 @@ const init = () => {
   initForms();
   initPhoneInputs();
   initCopyPhone();
-  initTrialLoginLink();
-  initMobileStickyCta();
   initBackToTop();
   initScrollSpy();
   initVideoModal();
