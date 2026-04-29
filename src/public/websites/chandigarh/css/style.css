@@ -4074,3 +4074,50 @@ select.form-control {
   }
   .procedure-card--wide { grid-column: auto; }
 }
+
+.chd-social-section {
+  background: #f7fbfd;
+}
+
+.chd-social-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.chd-social-card {
+  min-height: 210px;
+  padding: 28px;
+  border: 1px solid rgba(10, 31, 68, .08);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 18px 45px rgba(10, 31, 68, .08);
+}
+
+.chd-social-tag {
+  display: inline-flex;
+  margin-bottom: 16px;
+  color: var(--accent);
+  font-size: .78rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.chd-social-card h3 {
+  margin: 0 0 10px;
+  color: var(--primary);
+  font-size: 1.25rem;
+}
+
+.chd-social-card p {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.7;
+}
+
+@media (max-width: 900px) {
+  .chd-social-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -123,6 +123,40 @@ h1,h2,h3,h4,h5,h6{font-family:'Cormorant Garamond',Georgia,serif;line-height:1.2
 .mobile-menu-phone{display:flex;align-items:center;gap:8px;padding:12px 16px;background:var(--light-bg);border-radius:var(--radius-sm);font-size:.9rem;font-weight:600;color:var(--primary)}
 @media(max-width:1023px){.primary-nav{display:none}.header-phone{display:none}.hamburger{display:flex}.mobile-nav-overlay{display:block;pointer-events:none}.mobile-nav-menu{display:block}}
 
+/* Ropar trial differentiation: warmer Punjab-inspired editorial layer */
+body{background:#fffdf7}
+.top-bar{background:#6f1d1b}
+.site-header{border-bottom-color:#f1d9b2}
+.hero-section{background:#451414}
+.hero-slide::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 80% 20%,rgba(255,183,77,.22),transparent 32%),linear-gradient(135deg,rgba(69,20,20,.94),rgba(11,61,46,.9));z-index:0}
+.hero-slide-2::before{background:radial-gradient(circle at 78% 30%,rgba(48,148,164,.26),transparent 30%),linear-gradient(135deg,#321313,#0d4d47)}
+.hero-slide-3::before{background:radial-gradient(circle at 76% 28%,rgba(248,184,139,.25),transparent 34%),linear-gradient(135deg,#511d2d,#743019)}
+.hero-slide-4::before{background:radial-gradient(circle at 80% 22%,rgba(255,214,102,.22),transparent 34%),linear-gradient(135deg,#203816,#5f2b15)}
+.hero-inner::after{content:"ਰੋਪੜ ਦੀ ਸੇਵਾ";position:absolute;right:5vw;bottom:9vh;font-family:'Cormorant Garamond',serif;font-size:clamp(3rem,8vw,8rem);font-weight:700;color:rgba(255,255,255,.08);pointer-events:none}
+.achievement-ribbon{background:rgba(255,255,255,.13);border-color:rgba(255,183,77,.4)}
+.hero-card{border:1px solid rgba(255,214,143,.22);background:rgba(255,250,240,.12)}
+.service-card,.why-item,.blog-card,.testimonial-card{border-radius:14px}
+.service-card:hover{border-color:#d69a35}
+.ropar-extra-card{background:linear-gradient(180deg,#fffef9,#fff7e6)}
+.doctors-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.doctor-card-inner{background:#fffaf0;border:1px solid #f0d6a4}
+.doctor-photo-wrap img{aspect-ratio:4/5;object-fit:cover;border-radius:12px}
+.compact-doctor .doctor-photo-wrap{max-width:170px}
+.compact-doctor{display:grid;grid-template-columns:170px 1fr;gap:22px;align-items:center}
+.migs-banner{background:linear-gradient(135deg,#112f35,#441818)}
+.migs-stats{position:relative}
+.migs-stats::before{content:"";position:absolute;inset:-18px;border-radius:24px;background:url("../images/migs-devices.jpg") center/cover no-repeat;opacity:.12;filter:saturate(1.15);pointer-events:none}
+.ropar-social-section{background:#fff7e6}
+.social-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px}
+.social-card{background:#fff;border:1px solid #edd2a0;border-radius:16px;padding:20px;box-shadow:var(--shadow-sm)}
+.social-card-media{height:160px;border-radius:12px;background:linear-gradient(135deg,#6f1d1b,#d69a35);display:flex;align-items:center;justify-content:center;color:#fff;font-size:2.4rem;font-weight:800;margin-bottom:16px}
+.social-card-media-migs{background:linear-gradient(135deg,#0b3d2e,#2d8a72)}
+.social-card-media-event{background:linear-gradient(135deg,#202f53,#945c20)}
+.social-pill{display:inline-flex;padding:5px 10px;border-radius:999px;background:#fff0cc;color:#8a4a00;font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px}
+.social-card h3{font-size:1.35rem;color:#3c1b10;margin-bottom:8px}
+.social-card p{color:var(--text-mid);font-size:.92rem}
+@media(max-width:900px){.doctors-grid,.social-grid{grid-template-columns:1fr}.compact-doctor{grid-template-columns:1fr}.compact-doctor .doctor-photo-wrap{max-width:100%}.hero-inner::after{display:none}}
+
 /* BUTTONS */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font-family:'Inter',sans-serif;font-weight:600;border:none;cursor:pointer;transition:var(--transition);text-decoration:none;line-height:1;letter-spacing:.01em;border-radius:var(--radius-sm)}
 .btn-primary{background:linear-gradient(135deg,var(--primary),var(--primary-light));color:white;box-shadow:0 4px 16px rgba(11,61,46,.3)}
