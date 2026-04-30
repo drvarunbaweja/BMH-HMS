@@ -14554,9 +14554,11 @@ function initLab() {
   if (dateFilter && !dateFilter.value) dateFilter.value = localDateKey(new Date());
   const dateEl = document.getElementById('lab-rpt-date');
   if (dateEl && !String(dateEl.textContent || '').trim()) dateEl.textContent = formatDateIN(new Date());
+  loadInvestigationTemplatesFromStorage && loadInvestigationTemplatesFromStorage();
   loadLabMasterOverrides && loadLabMasterOverrides();
   renderInvestigationChooserSafe && renderInvestigationChooserSafe();
   populateLabManualTestDatalist && populateLabManualTestDatalist();
+  renderLabTemplateManager && renderLabTemplateManager();
   renderLabOrders && renderLabOrders();
 }
 function checkLabVal(inp,lo,hi){const v=parseFloat(inp.value)||0;inp.className='lab-val-inp '+(v<lo?'val-low':v>hi?'val-high':'val-ok');}
@@ -18761,6 +18763,78 @@ function saveInvestigationTemplateFromSelection() {
   if(sel) sel.value = key;
   showToast('Investigation template saved ✓','s');
 }
+function deptLabelForInvestigationTemplate(dept) {
+  const labels = { all: 'All Departments', ophtho: 'Ophthalmology', obg: 'OBG', psych: 'Neuropsychiatry', skin: 'Skin' };
+  return labels[String(dept || 'all')] || String(dept || 'All Departments');
+}
+function renderLabTemplateManager() {
+  const host = document.getElementById('lab-template-list');
+  if (!host) return;
+  loadInvestigationTemplatesFromStorage && loadInvestigationTemplatesFromStorage();
+  const grouped = {};
+  Object.keys(INVESTIGATION_TEMPLATES_DATA || {}).forEach(function (key) {
+    const meta = INVESTIGATION_TEMPLATES_META[key] || {};
+    const dept = meta.dept || 'all';
+    if (!grouped[dept]) grouped[dept] = [];
+    grouped[dept].push({ key: key, name: meta.name || key, tests: INVESTIGATION_TEMPLATES_DATA[key] || [] });
+  });
+  const deptOrder = ['all', 'ophtho', 'obg', 'psych', 'skin'].concat(Object.keys(grouped).filter(function (d) {
+    return !['all', 'ophtho', 'obg', 'psych', 'skin'].includes(d);
+  }));
+  const html = deptOrder.filter(function (dept) { return grouped[dept] && grouped[dept].length; }).map(function (dept) {
+    const rows = grouped[dept].sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); }).map(function (tpl) {
+      const safeKey = String(tpl.key).replace(/'/g, "\\'");
+      const testText = (tpl.tests || []).join(', ');
+      return '<div style="border:1px solid var(--g5);border-radius:8px;background:#fff;padding:8px 9px;margin-bottom:6px">'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px">'
+        + '<div style="min-width:0"><div style="font-size:12px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escapeHtmlConsent(tpl.name) + '</div>'
+        + '<div style="font-size:10px;color:var(--g1);margin-top:2px">' + escapeHtmlConsent((tpl.tests || []).length + ' test' + ((tpl.tests || []).length === 1 ? '' : 's')) + '</div></div>'
+        + '<div style="display:flex;gap:5px;flex-shrink:0"><button type="button" class="btn btn-xs btn-outline" onclick="loadLabTemplateIntoManualTests(\'' + safeKey + '\')">Use</button><button type="button" class="btn btn-xs btn-gray" onclick="deleteLabInvestigationTemplate(\'' + safeKey + '\')">✕</button></div>'
+        + '</div><div style="font-size:10.5px;color:var(--tx3);line-height:1.35;margin-top:5px">' + escapeHtmlConsent(testText) + '</div></div>';
+    }).join('');
+    return '<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.45px;margin-bottom:6px">' + escapeHtmlConsent(deptLabelForInvestigationTemplate(dept)) + '</div>' + rows + '</div>';
+  }).join('');
+  host.innerHTML = html || '<div style="padding:10px;border:1px dashed var(--g4);border-radius:8px;color:var(--g1);font-size:11.5px;background:#fff">No investigation templates saved yet.</div>';
+}
+function saveLabInvestigationTemplate() {
+  const name = normalizeInvestigationLabel(document.getElementById('lab-tpl-name')?.value || '');
+  const dept = document.getElementById('lab-tpl-dept')?.value || 'all';
+  const tests = parseManualLabTests(document.getElementById('lab-tpl-tests')?.value || '');
+  if (!name) { showToast('Enter template name', 'w'); return; }
+  if (!tests.length) { showToast('Enter tests for this template', 'w'); return; }
+  const key = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || ('lab-template-' + Date.now());
+  INVESTIGATION_TEMPLATES_DATA[key] = Array.from(new Set(tests));
+  INVESTIGATION_TEMPLATES_META[key] = { dept: dept, name: name };
+  tests.forEach(function (testName) { upsertLabMasterTestFromCharge(getLabTestMeta(testName).group || 'custom', testName); });
+  saveInvestigationTemplatesToStorage();
+  ['lab-tpl-name', 'lab-tpl-tests'].forEach(function (id) { const el = document.getElementById(id); if (el) el.value = ''; });
+  refreshInvestigationTemplateSelect && refreshInvestigationTemplateSelect();
+  renderLabTemplateManager();
+  showToast('Lab template saved ✓', 's');
+}
+function loadLabTemplateIntoManualTests(key) {
+  const tests = INVESTIGATION_TEMPLATES_DATA[key] || [];
+  const el = document.getElementById('lab-add-tests') || document.getElementById('lab-tpl-tests');
+  if (!el || !tests.length) return;
+  const current = parseManualLabTests(el.value || '');
+  el.value = Array.from(new Set(current.concat(tests))).join(', ');
+  showToast('Template loaded into lab tests ✓', 's');
+}
+function deleteLabInvestigationTemplate(key) {
+  const meta = INVESTIGATION_TEMPLATES_META[key] || {};
+  if (!key || !INVESTIGATION_TEMPLATES_DATA[key]) return;
+  if (!confirm('Delete investigation template "' + (meta.name || key) + '"?')) return;
+  delete INVESTIGATION_TEMPLATES_DATA[key];
+  delete INVESTIGATION_TEMPLATES_META[key];
+  saveInvestigationTemplatesToStorage();
+  refreshInvestigationTemplateSelect && refreshInvestigationTemplateSelect();
+  renderLabTemplateManager();
+  showToast('Template deleted ✓', 's');
+}
+window.renderLabTemplateManager = renderLabTemplateManager;
+window.saveLabInvestigationTemplate = saveLabInvestigationTemplate;
+window.loadLabTemplateIntoManualTests = loadLabTemplateIntoManualTests;
+window.deleteLabInvestigationTemplate = deleteLabInvestigationTemplate;
 let RX_TEMPLATES_DATA = {
   'post-phaco': [{trade:'Vigamox',generic:'Moxifloxacin 0.5%',type:'Eye Drop',eye:'OS',freq:'QID',dur:'1 Week'},{trade:'Pred Forte',generic:'Prednisolone 1%',type:'Eye Drop',eye:'OS',freq:'QID→Taper',dur:'4 Weeks'},{trade:'Refresh Tears',generic:'CMC 0.5%',type:'Eye Drop',eye:'OU',freq:'PRN',dur:'1 Month'}],
   'post-ivt': [{trade:'Vigamox',generic:'Moxifloxacin 0.5%',type:'Eye Drop',eye:'OS',freq:'QID',dur:'3 Days'},{trade:'Refresh Tears',generic:'CMC 0.5%',type:'Eye Drop',eye:'OU',freq:'PRN',dur:'1 Month'}],
@@ -27839,8 +27913,13 @@ function printLabReport() {
   const groups = { haem:'Haematology', coag:'Coagulogram', chem:'Clinical Chemistry', rft:'Renal Function Test', lft:'Liver Function Test', lipid:'Lipid Profile', electro:'Serum Electrolytes', sero:'Serology', urine:'Urine Examination', stool:'Stool Examination', hcg:'Pregnancy Test', semen:'Semen Analysis', rafq:'RA Factor', thyroid:'Thyroid Function', bio:'Biochemistry', diab:'Diabetes', custom:'Additional Tests' };
   const grouped = {};
   Object.keys(groups).forEach(function (g) { grouped[g] = []; });
+  const hasPrintableLabValue = function (row) {
+    const val = String(row && row.val != null ? row.val : '').trim();
+    return !!val && val !== '—';
+  };
   order.tests.forEach(function (name) {
     const row = Object.assign({}, getLabTestMeta(name), order.results[normalizeLabTestName(name)] || {});
+    if (!hasPrintableLabValue(row)) return;
     const g = row.group || 'custom';
     if (!grouped[g]) grouped[g] = [];
     grouped[g].push(row);
@@ -27850,7 +27929,12 @@ function printLabReport() {
   if (grouped.diab && grouped.diab.length) grouped.chem = (grouped.chem || []).concat(grouped.diab);
   if (grouped.bio) grouped.bio = [];
   if (grouped.diab) grouped.diab = [];
-  const insights = buildLabInsights(order);
+  const printableResults = {};
+  Object.keys(grouped).forEach(function (g) {
+    (grouped[g] || []).forEach(function (row) { printableResults[normalizeLabTestName(row.name)] = row; });
+  });
+  const printableOrder = Object.assign({}, order, { results: printableResults, tests: Object.keys(printableResults) });
+  const insights = buildLabInsights(printableOrder);
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{margin:0;padding:0;box-sizing:border-box;print-color-adjust:economy;-webkit-print-color-adjust:economy}body{font-family:Arial,sans-serif;font-size:10.8px;color:#111;padding:40mm 12mm 12mm;background:#fff}@page{size:A4 portrait;margin:0}.pt-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;border:1px solid #9ca3af;border-radius:8px;padding:8px 10px;margin-bottom:10px;background:#fff}.pt-lbl{font-size:8.5px;color:#555;font-weight:700;text-transform:uppercase;letter-spacing:.3px}.lab-group-blurb{margin:10px 0 0;padding:6px 8px;font-size:9.5px;color:#555;line-height:1.45;background:#f9fafb;border-radius:6px;border:1px solid #e5e7eb}.section-hd{font-size:10.8px;font-weight:900;color:#111;text-transform:uppercase;letter-spacing:.5px;margin:11px 0 0;padding:6px 8px;background:#ececec;border-left:4px solid #666}.insights{margin:10px 0;padding:8px 10px;border:1px solid #bdbdbd;border-radius:8px;background:#f7f7f7;font-size:10.3px;line-height:1.52}table{width:100%;border-collapse:collapse;margin-top:8px}thead th{background:#666;color:#fff;padding:6px 8px;text-align:left;font-size:9px;font-weight:800;text-transform:uppercase}td{padding:6px 8px;border:1px solid #d7d7d7;font-size:10.1px;vertical-align:top}tr:nth-child(even){background:#fafafa}.flag-h{color:#111;font-weight:900;background:#e7e7e7}.flag-l{color:#111;font-weight:900;background:#f1f1f1}.flag-n{color:#111;font-weight:800}.footer{margin-top:14px;padding-top:8px;border-top:1px solid #c7c7c7}.signs{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:18px}.signline{border-bottom:1px solid #333;height:28px;margin-bottom:4px}.small{font-size:9px;color:#555}</style></head><body>
 <div class="pt-bar">
   <div><div class="pt-lbl">Patient</div><div style="font-weight:900">${escapeHtmlConsent(order.patient || pt.name || '—')}</div></div>
