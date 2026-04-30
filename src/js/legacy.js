@@ -14725,7 +14725,7 @@ function addInventoryStorePrompt() {
 }
 window.addInventoryStorePrompt = addInventoryStorePrompt;
 function deleteInventoryStorePrompt() {
-  if (!CURRENT_USER?.isAdmin) { showToast('Only admin can delete store locations', 'w'); return; }
+  if (!(CURRENT_USER?.isAdmin || (typeof isAdminUser === 'function' && isAdminUser()))) { showToast('Only admin can delete store locations', 'w'); return; }
   const stores = (window.BMH_STORE_LOCATIONS || []).slice();
   if (!stores.length) { showToast('No store locations in list', 'w'); return; }
   const current = String(document.getElementById('inv-in-store')?.value || document.getElementById('inv-stock-store-filter')?.value || '').trim();
@@ -15484,8 +15484,8 @@ function addInventoryVendorPrompt() {
 }
 window.addInventoryVendorPrompt = addInventoryVendorPrompt;
 function deleteInventoryVendorPrompt() {
-  if (!CURRENT_USER?.isAdmin) { showToast('Only admin can delete vendors', 'w'); return; }
-  const vendor = String(document.getElementById('inv-vendor-filter')?.value || document.getElementById('inv-vendor-search')?.value || '').trim();
+  if (!(CURRENT_USER?.isAdmin || (typeof isAdminUser === 'function' && isAdminUser()))) { showToast('Only admin can delete vendors', 'w'); return; }
+  const vendor = String(document.getElementById('inv-vendor-filter')?.value || document.getElementById('inv-vendor-search')?.value || document.getElementById('inv-in-vendor')?.value || '').trim();
   if (!vendor) { showToast('Select a vendor first', 'w'); return; }
   const billCount = (window.BMH_VENDOR_BILLS || []).filter(function (v) { return normalizeInventoryCompareText(v.vendor || '') === normalizeInventoryCompareText(vendor); }).length;
   const msg = billCount
@@ -15501,8 +15501,10 @@ function deleteInventoryVendorPrompt() {
   saveBmhFinancials();
   const search = document.getElementById('inv-vendor-search');
   const filter = document.getElementById('inv-vendor-filter');
+  const stockIn = document.getElementById('inv-in-vendor');
   if (search) search.value = '';
   if (filter) filter.value = '';
+  if (stockIn && normalizeInventoryCompareText(stockIn.value || '') === normalizeInventoryCompareText(vendor)) stockIn.value = '';
   renderInventoryImportDatalists();
   bmhRenderVendorTables();
   showToast('Vendor deleted', 's');
@@ -27916,6 +27918,71 @@ function getChargeAmountForRow(row) {
   const centre = typeof getEffectiveCentre === 'function' ? getEffectiveCentre() : (CURRENT_USER?.centre || 'CHD');
   return centre === 'RPR' ? Number(row?.rpr || 0) : Number(row?.chd || 0);
 }
+function bmhProcedureDeptStoreHints(dept) {
+  if (dept === 'ophtho') return ['eye', 'oph', 'minor ot'];
+  if (dept === 'obg') return ['obg', 'labour', 'labor'];
+  if (dept === 'psych') return ['psych', 'psy'];
+  if (dept === 'skin') return ['skin', 'derma'];
+  return [dept || 'general'];
+}
+function bmhProcedureStockMatchesDept(item, dept) {
+  const itemDept = normalizeDeptKeyForQueue(item?.dept || '');
+  if (itemDept && itemDept === dept) return true;
+  if (dept === 'ophtho' && String(item?.cat || '').toLowerCase() === 'iol') return true;
+  const hay = [item?.store, item?.cat, item?.name].filter(Boolean).join(' ').toLowerCase();
+  return bmhProcedureDeptStoreHints(dept).some(function (hint) { return hay.includes(hint); });
+}
+function bmhProcedureStockRows(dept) {
+  return bmhSortInventoryUseMatches((INVENTORY || []).filter(function (item) {
+    return Number(item.stock || 0) > 0 && bmhProcedureStockMatchesDept(item, dept);
+  }));
+}
+function bmhProcedureStockCategory(item) {
+  const cat = String(item?.cat || '').trim();
+  if (/iol/i.test(cat + ' ' + item?.name)) return 'IOL';
+  if (/inj|injection|vial|ampoule|ampule/i.test(cat + ' ' + item?.name)) return 'Injection';
+  if (/suture/i.test(cat + ' ' + item?.name)) return 'Suture';
+  if (/drop|ointment|tablet|capsule|drug|pharmacy|medicine/i.test(cat + ' ' + item?.name)) return 'Medicine';
+  if (/glove|syringe|cannula|drape|blade|consum/i.test(cat + ' ' + item?.name)) return 'Consumable';
+  return cat || 'Other stock';
+}
+function bmhProcedureStockBatchLabel(item) {
+  return [item?.exp ? 'Exp ' + item.exp : 'No expiry', item?.batchNo ? 'Batch ' + item.batchNo : '', item?.store ? bmhFormatStoreLabel(item.store) : '', 'Stock ' + Number(item?.stock || 0)].filter(Boolean).join(' · ');
+}
+function findProcedureDoneOTCase(dept) {
+  const pt = window.CURRENT_PATIENT || {};
+  const bmhId = String(pt.bmhId || '').trim();
+  if (!bmhId) return null;
+  const patientName = normalizeInventoryCompareText(pt.name || '');
+  const rows = (window.OT_CASES || OT_CASES || []).map(normalizeOTCaseRecord).filter(function (c) {
+    const sameId = String(c.bmhId || '').trim() === bmhId;
+    const sameName = patientName && normalizeInventoryCompareText(c.patient || c.name || '') === patientName;
+    const caseDept = c.caseKind === 'obg' ? 'obg' : normalizeDeptKeyForQueue(c.dept || c.caseKind || 'ophtho');
+    return (sameId || (sameName && String(c.bmhId || '').trim() === bmhId)) && (!dept || caseDept === dept || dept === 'ophtho' && caseDept === 'ophtho');
+  });
+  return rows.sort(function (a, b) {
+    return (Date.parse(b.date || b.scheduledTime || b.lastUpdated || '') || 0) - (Date.parse(a.date || a.scheduledTime || a.lastUpdated || '') || 0);
+  })[0] || null;
+}
+function renderProcedureDoneOtMatch(otCase) {
+  const el = document.getElementById('proc-done-ot-match');
+  if (!el) return;
+  if (!otCase) {
+    el.style.display = 'none';
+    el.innerHTML = '';
+    return;
+  }
+  el.style.display = 'block';
+  el.innerHTML = '<strong>OT match found:</strong> ' + escapeHtmlConsent([otCase.procedure, otCase.site || otCase.eye, otCase.date ? formatDateIN(otCase.date) : '', otCase.iol && otCase.iol !== 'N/A' ? otCase.iol : ''].filter(Boolean).join(' · '));
+}
+function addAnotherProcedureDonePrompt() {
+  const input = document.getElementById('proc-done-name');
+  if (!input) return;
+  const extra = normalizeInventoryTextValue(prompt('Add another performed procedure') || '');
+  if (!extra) return;
+  input.value = [input.value, extra].map(function (v) { return String(v || '').trim(); }).filter(Boolean).join(', ');
+}
+window.addAnotherProcedureDonePrompt = addAnotherProcedureDonePrompt;
 function fillProcedureDoneDatalists(dept) {
   const chargeList = document.getElementById('proc-done-charge-list');
   const stockList = document.getElementById('proc-done-stock-list');
@@ -27926,21 +27993,68 @@ function fillProcedureDoneDatalists(dept) {
     }).join('');
   }
   if (stockList) {
-    stockList.innerHTML = bmhSortInventoryUseMatches((INVENTORY || []).filter(function (item) {
-      return Number(item.stock || 0) > 0;
-    })).map(function (item) {
+    stockList.innerHTML = bmhProcedureStockRows(dept).map(function (item) {
       const label = bmhInventoryUseItemLabel(item);
       return '<option value="' + String(label).replace(/"/g, '&quot;') + '"></option>';
     }).join('');
   }
 }
+function renderProcedureStockBrowser(dept, view, value) {
+  const host = document.getElementById('proc-done-stock-browser');
+  if (!host) return;
+  const rows = bmhProcedureStockRows(dept);
+  if (!rows.length) {
+    host.innerHTML = '<div style="padding:10px;border:1px dashed var(--g4);border-radius:8px;background:var(--g6);font-size:11px;color:var(--g1);margin-bottom:8px">No department-specific stock currently available.</div>';
+    return;
+  }
+  const btn = function (label, onclick, tone) {
+    return '<button type="button" onclick="' + onclick + '" style="border:1px solid var(--g4);background:#fff;color:' + (tone || 'var(--bmh-blue)') + ';border-radius:8px;padding:7px 9px;font-size:11px;font-weight:900;cursor:pointer;text-align:left">' + escapeHtmlConsent(label) + '</button>';
+  };
+  let html = '<div style="border:1px solid var(--g4);border-radius:10px;background:var(--g6);padding:9px;margin-bottom:8px">';
+  html += '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:7px"><div style="font-size:11px;font-weight:900;color:var(--g1);text-transform:uppercase">Pick stock from ' + escapeHtmlConsent(bmhDeptLabel(dept)) + '</div>' + (view ? '<button type="button" class="btn btn-xs btn-gray" onclick="renderProcedureStockBrowser(\'' + dept + '\')">Categories</button>' : '') + '</div>';
+  if (!view) {
+    const cats = Array.from(new Set(rows.map(bmhProcedureStockCategory))).sort();
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:7px">' + cats.map(function (cat) {
+      const total = rows.filter(function (i) { return bmhProcedureStockCategory(i) === cat; }).reduce(function (s, i) { return s + Number(i.stock || 0); }, 0);
+      return btn(cat + ' · ' + total, 'renderProcedureStockBrowser(\'' + dept + '\',\'cat\',\'' + encodeURIComponent(cat) + '\')', cat === 'IOL' ? '#8a5a00' : 'var(--bmh-blue)');
+    }).join('') + '</div>';
+  } else if (view === 'cat') {
+    const cat = decodeURIComponent(value || '');
+    const catRows = rows.filter(function (i) { return bmhProcedureStockCategory(i) === cat; });
+    if (cat === 'IOL') {
+      const brands = Array.from(new Set(catRows.map(function (i) { return _iolBrandLabel(i); }).filter(Boolean))).sort();
+      html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:7px">' + brands.map(function (brand) {
+        const total = catRows.filter(function (i) { return _iolBrandLabel(i) === brand; }).reduce(function (s, i) { return s + Number(i.stock || 0); }, 0);
+        return btn(brand + ' · ' + total, 'renderProcedureStockBrowser(\'' + dept + '\',\'iol\',\'' + encodeURIComponent(brand) + '\')', '#8a5a00');
+      }).join('') + '</div>';
+    } else {
+      const names = Array.from(new Set(catRows.map(function (i) { return i.name || 'Stock item'; }))).sort();
+      html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:7px">' + names.map(function (name) {
+        const total = catRows.filter(function (i) { return String(i.name || '') === name; }).reduce(function (s, i) { return s + Number(i.stock || 0); }, 0);
+        return btn(name + ' · ' + total, 'selectProcedureStockName(\'' + dept + '\',\'' + encodeURIComponent(name) + '\')');
+      }).join('') + '</div>';
+    }
+  } else if (view === 'iol') {
+    const brand = decodeURIComponent(value || '');
+    const brandRows = rows.filter(function (i) { return bmhProcedureStockCategory(i) === 'IOL' && _iolBrandLabel(i) === brand; });
+    const powers = Array.from(new Set(brandRows.map(function (i) { return String(i.power || extractIolPower(i.name || '') || 'No power'); }))).sort(function (a, b) { return parseFloat(a) - parseFloat(b); });
+    html += '<div style="font-size:11px;font-weight:900;color:#8a5a00;margin-bottom:7px">' + escapeHtmlConsent(brand) + ' powers in stock</div>';
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:7px">' + powers.map(function (power) {
+      const powerRows = brandRows.filter(function (i) { return String(i.power || extractIolPower(i.name || '') || 'No power') === power; });
+      const total = powerRows.reduce(function (s, i) { return s + Number(i.stock || 0); }, 0);
+      return btn(power + ' · ' + total, 'selectProcedureStockIolPower(\'' + dept + '\',\'' + encodeURIComponent(brand) + '\',\'' + encodeURIComponent(power) + '\')', '#8a5a00');
+    }).join('') + '</div>';
+  }
+  host.innerHTML = html + '</div>';
+}
+window.renderProcedureStockBrowser = renderProcedureStockBrowser;
 function renderProcedureUsageRows(items) {
   const host = document.getElementById('proc-done-usage-list');
   if (!host) return;
   const rows = Array.isArray(items) ? items : [];
   host.innerHTML = rows.length ? rows.map(function (row, idx) {
     return `<div style="display:grid;grid-template-columns:minmax(0,1.7fr) 90px 120px 95px 28px;gap:8px;align-items:end;padding:8px;border:1px solid var(--g5);border-radius:8px;background:#fff;margin-bottom:7px">
-      <div class="form-group" style="margin:0"><label class="fl">Stock item</label><input type="text" class="proc-stock-name" list="proc-done-stock-list" value="${escapeHtmlConsent(row.name || '')}" placeholder="Type stock item / barcode"></div>
+      <div class="form-group" style="margin:0"><label class="fl">Stock item</label><input type="hidden" class="proc-stock-key" value="${escapeHtmlConsent(row.key || '')}"><input type="text" class="proc-stock-name" list="proc-done-stock-list" value="${escapeHtmlConsent(row.name || '')}" placeholder="Type stock item / barcode"><div style="font-size:9px;color:var(--g1);margin-top:2px">${escapeHtmlConsent(row.detail || '')}</div></div>
       <div class="form-group" style="margin:0"><label class="fl">Qty</label><input type="number" class="proc-stock-qty" min="1" value="${Math.max(1, Number(row.qty || 1))}"></div>
       <label style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:var(--g1);padding-bottom:8px"><input type="checkbox" class="proc-stock-bill"${row.billPatient ? ' checked' : ''}> Bill patient</label>
       <div style="font-size:10px;color:var(--g1);padding-bottom:8px">Applied: ${Number(row.appliedQty || 0)}</div>
@@ -27954,6 +28068,8 @@ function getProcedureDraftFromModal() {
     const prev = (window.BMH_PROC_DONE_STATE && window.BMH_PROC_DONE_STATE[dept] && window.BMH_PROC_DONE_STATE[dept].items && window.BMH_PROC_DONE_STATE[dept].items[idx]) || {};
     return {
       name: row.querySelector('.proc-stock-name')?.value?.trim() || '',
+      key: row.querySelector('.proc-stock-key')?.value?.trim() || prev.key || '',
+      detail: prev.detail || '',
       qty: Math.max(1, Number(row.querySelector('.proc-stock-qty')?.value || '1')),
       billPatient: !!row.querySelector('.proc-stock-bill')?.checked,
       appliedQty: Number(prev.appliedQty || 0)
@@ -27976,6 +28092,47 @@ function addProcedureUsageRow(seed) {
   renderProcedureUsageRows(next);
 }
 window.addProcedureUsageRow = addProcedureUsageRow;
+function addProcedureStockItemToDraft(item, qty) {
+  if (!item) return;
+  addProcedureUsageRow({
+    key: bmhInventoryItemKey(item),
+    name: bmhInventoryUseItemLabel(item),
+    detail: bmhProcedureStockBatchLabel(item),
+    qty: Math.max(1, Number(qty || 1)),
+    billPatient: false,
+    appliedQty: 0
+  });
+}
+function selectProcedureStockName(dept, encodedName) {
+  const name = decodeURIComponent(encodedName || '');
+  const matches = bmhProcedureStockRows(dept).filter(function (item) { return String(item.name || '') === name; });
+  if (!matches.length) return;
+  if (matches.length === 1) {
+    addProcedureStockItemToDraft(matches[0], 1);
+    return;
+  }
+  const exact = bmhSortInventoryUseMatches(matches);
+  const lines = exact.map(function (item, idx) {
+    return (idx + 1) + '. ' + bmhProcedureStockBatchLabel(item);
+  }).join('\n');
+  const picked = Number(prompt('Select expiry / batch for ' + name + ':\n' + lines, '1') || 0) - 1;
+  if (picked < 0 || picked >= exact.length) { showToast('No batch selected', 'w'); return; }
+  addProcedureStockItemToDraft(exact[picked], 1);
+}
+window.selectProcedureStockName = selectProcedureStockName;
+function selectProcedureStockIolPower(dept, encodedBrand, encodedPower) {
+  const brand = decodeURIComponent(encodedBrand || '');
+  const power = decodeURIComponent(encodedPower || '');
+  const matches = bmhProcedureStockRows(dept).filter(function (item) {
+    return bmhProcedureStockCategory(item) === 'IOL'
+      && _iolBrandLabel(item) === brand
+      && String(item.power || extractIolPower(item.name || '') || 'No power') === power;
+  });
+  const item = bmhSortInventoryUseMatches(matches)[0];
+  if (!item) { showToast('Selected IOL power is not in stock', 'w'); return; }
+  addProcedureStockItemToDraft(item, 1);
+}
+window.selectProcedureStockIolPower = selectProcedureStockIolPower;
 function removeProcedureUsageRow(idx) {
   const dept = document.getElementById('proc-done-dept')?.value || activeClinicDeptKey();
   const current = getProcedureDraftFromModal();
@@ -27989,14 +28146,22 @@ function findInventoryItemForProcedureUse(raw) {
   if (!q) return null;
   return bmhFindInventoryItemForText(q);
 }
+function findInventoryItemForProcedureRow(row) {
+  return bmhFindInventoryItemByKey(row?.key || '') || findInventoryItemForProcedureUse(row?.name || '');
+}
 function openProcedureDoneModalForDept(dept) {
   if (!window.CURRENT_PATIENT?.bmhId) { showToast('Open a patient first', 'w'); return; }
   fillProcedureDoneDatalists(dept);
   const state = getProcedureDoneStateForDept(dept) || { enabled:true, procedure:'', amount:0, notes:'', items:[] };
+  const otMatch = findProcedureDoneOTCase(dept);
+  if (!state.procedure && otMatch?.procedure) state.procedure = otMatch.procedure;
+  if (!state.notes && otMatch) state.notes = [otMatch.site || otMatch.eye, otMatch.iol && otMatch.iol !== 'N/A' ? otMatch.iol : ''].filter(Boolean).join(' · ');
   const hidden = document.getElementById('proc-done-dept'); if (hidden) hidden.value = dept;
   const nameEl = document.getElementById('proc-done-name'); if (nameEl) nameEl.value = state.procedure || '';
   const amtEl = document.getElementById('proc-done-amount'); if (amtEl) amtEl.value = state.amount || '';
   const notesEl = document.getElementById('proc-done-notes'); if (notesEl) notesEl.value = state.notes || '';
+  renderProcedureDoneOtMatch(otMatch);
+  renderProcedureStockBrowser(dept);
   renderProcedureUsageRows(state.items || []);
   openM('m-procedure-done');
 }
@@ -28040,7 +28205,7 @@ function saveProcedureDoneModal() {
     });
   }
   state.items = (state.items || []).map(function (row) {
-    const invItem = findInventoryItemForProcedureUse(row.name);
+    const invItem = findInventoryItemForProcedureRow(row);
     const prevApplied = Number(row.appliedQty || 0);
     const delta = Math.max(0, Number(row.qty || 0) - prevApplied);
     if (invItem && delta > 0) {

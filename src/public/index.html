@@ -3588,7 +3588,7 @@
           <div class="inventory-scroll-x"><div class="inventory-wide-grid" style="display:grid;grid-template-columns:1.1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px">
             <div class="form-group" style="margin:0"><label class="fl" style="display:flex;align-items:center;justify-content:space-between;gap:6px">Department <span style="display:flex;gap:4px"><button type="button" onclick="addInventoryDeptPrompt()" title="Add department" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;font-weight:900">+</button><button type="button" onclick="deleteInventoryDeptPrompt()" title="Remove department" style="background:var(--g3);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;font-weight:900">−</button></span></label><select id="inv-in-dept"></select></div>
             <div class="form-group" style="margin:0"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">Category <span style="display:flex;gap:4px"><button type="button" onclick="addInventoryCategoryPrompt()" title="Add category" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button><button type="button" onclick="deleteInventoryCategoryPrompt()" title="Delete category from list" style="background:var(--g3);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;font-weight:900">−</button></span></label><select id="inv-in-cat"></select></div>
-            <div class="form-group" style="margin:0"><label class="fl">Vendor</label><input type="text" id="inv-in-vendor" list="inv-vendor-datalist" placeholder="Vendor / supplier"></div>
+            <div class="form-group" style="margin:0"><label class="fl" style="display:flex;align-items:center;justify-content:space-between;gap:6px">Vendor <span style="display:flex;gap:4px"><button type="button" onclick="addInventoryVendorPrompt()" title="Add vendor" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;font-weight:900">+</button><button type="button" onclick="deleteInventoryVendorPrompt()" title="Remove vendor" style="background:var(--g3);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;font-weight:900">−</button></span></label><input type="text" id="inv-in-vendor" list="inv-vendor-datalist" placeholder="Vendor / supplier"></div>
             <div class="form-group" style="margin:0"><label class="fl">Invoice No.</label><input type="text" id="inv-in-invoice" placeholder="Bill / GRN"></div>
           </div></div>
           <div class="inventory-scroll-x"><div class="inventory-wide-grid" style="display:grid;grid-template-columns:1.5fr 1fr 100px 100px 100px 115px 115px;gap:8px">
@@ -5073,6 +5073,7 @@
 </div>
 <div class="fg fg1" style="gap:10px">
   <input type="hidden" id="proc-done-dept">
+  <div id="proc-done-ot-match" style="display:none;border:1px solid var(--g4);border-radius:10px;background:var(--blue-lt);padding:9px 10px;font-size:12px;color:var(--bmh-blue)"></div>
   <div style="display:grid;grid-template-columns:1.4fr 120px 1fr;gap:8px;align-items:end">
     <div class="form-group" style="margin:0">
       <label class="fl">Procedure performed</label>
@@ -5090,9 +5091,10 @@
   </div>
   <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
     <div style="font-size:11px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px">Consumables / stock used</div>
-    <button class="btn btn-xs btn-outline" type="button" onclick="addProcedureUsageRow()">+ Add stock used</button>
+    <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-xs btn-outline" type="button" onclick="addAnotherProcedureDonePrompt()">+ Add procedure</button><button class="btn btn-xs btn-outline" type="button" onclick="addProcedureUsageRow()">+ Add stock used</button></div>
   </div>
   <datalist id="proc-done-stock-list"></datalist>
+  <div id="proc-done-stock-browser"></div>
   <div id="proc-done-usage-list"></div>
   <div style="display:flex;justify-content:flex-end;gap:8px">
     <button class="btn btn-outline" type="button" onclick="closeM('m-procedure-done')">Close</button>
