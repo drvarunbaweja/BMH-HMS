@@ -3506,6 +3506,16 @@
         </div>
         <div id="lab-report-date-list" style="margin-top:8px"></div>
       </div>
+      <div style="background:#fffaf0;border-radius:10px;padding:10px;margin-bottom:10px;border:1px solid rgba(212,160,23,.35)">
+        <div style="font-size:10px;font-weight:800;color:#8a4200;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Investigation Templates</div>
+        <div style="display:grid;grid-template-columns:1fr 120px;gap:7px;margin-bottom:7px">
+          <input type="text" id="lab-tpl-name" placeholder="Template name" style="font-size:12px">
+          <select id="lab-tpl-dept" style="font-size:12px"><option value="all">All</option><option value="ophtho">Eye</option><option value="obg">OBG</option><option value="psych">Psych</option><option value="skin">Skin</option></select>
+        </div>
+        <textarea id="lab-tpl-tests" placeholder="Tests, comma separated" style="width:100%;min-height:48px;font-size:12px;margin-bottom:7px"></textarea>
+        <button type="button" class="btn btn-gold btn-sm" onclick="saveLabInvestigationTemplate()">Save Template</button>
+        <div id="lab-template-list" style="margin-top:10px"></div>
+      </div>
       <div id="lab-ordered-list"></div>
     </div>
     <div class="card" id="lab-entry-panel" style="display:none">
