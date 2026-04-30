@@ -12654,7 +12654,7 @@ function bmhToggleBillingInsuranceFields() {
   bmhTogglePaymentModeFields();
 }
 function bmhUseInventoryItemForPatient(bmhId, item, opts) {
-  if (!bmhId || !item) return;
+  if (!bmhId || !item) return null;
   const qty = Math.max(1, Number(opts?.qty) || 1);
   const descSuffix = opts?.descSuffix ? ' ' + opts.descSuffix : '';
   const usageMode = opts?.mode || 'bill';
@@ -12685,7 +12685,7 @@ function bmhUseInventoryItemForPatient(bmhId, item, opts) {
     });
     AUTO_BILL.push({ item: item.name, mrp, qty, patient: bmhId, time: new Date().toLocaleTimeString() });
   }
-  window.BMH_INVENTORY_USAGE.push({
+  const usageRow = {
     id:'IU' + Date.now() + Math.random().toString(36).slice(2, 5),
     bmhId,
     patientName: patient?.name || bmhId,
@@ -12693,6 +12693,14 @@ function bmhUseInventoryItemForPatient(bmhId, item, opts) {
     store: item.store || '',
     itemName: item.name,
     barcode: item.barcode,
+    batchNo: item.batchNo || '',
+    serialNo: item.serialNo || '',
+    exp: item.exp || '',
+    category: item.cat || '',
+    company: item.company || item.iolCompany || '',
+    source: opts?.source || 'inventory',
+    procedure: opts?.procedure || '',
+    procedureRef: opts?.procedureRef || '',
     qty,
     mrp,
     cost: Number(item.cost || 0),
@@ -12700,8 +12708,9 @@ function bmhUseInventoryItemForPatient(bmhId, item, opts) {
     groupId: opts?.groupId || '',
     vendorBillingMode: item.vendorBillingMode || 'monthly',
     ts: bmhNowISO()
-  });
-  const latestUsage = window.BMH_INVENTORY_USAGE[window.BMH_INVENTORY_USAGE.length - 1];
+  };
+  window.BMH_INVENTORY_USAGE.push(usageRow);
+  const latestUsage = usageRow;
   if (typeof window.saveUsageToFirebase === 'function' && latestUsage) {
     window.saveUsageToFirebase(latestUsage).catch(function (err) {
       console.error('Usage cloud save error:', err);
@@ -12729,6 +12738,7 @@ function bmhUseInventoryItemForPatient(bmhId, item, opts) {
   renderInventoryPoAlerts();
   renderInventoryStoreStock();
   renderBillingPageIfActive && renderBillingPageIfActive();
+  return usageRow;
 }
 function bmhGeneratePurchaseOrderDraft(silent) {
   const low = bmhInventoryLowItems();
@@ -15678,7 +15688,7 @@ function renderInventoryUsageLog() {
     </div>
     ${selectedRows.length ? selectedRows.map(function (r) {
       return `<div style="display:grid;grid-template-columns:minmax(0,1fr) 92px;gap:10px;padding:9px 12px;border-top:1px solid var(--g5);font-size:12px">
-        <div style="min-width:0"><strong>${escapeHtmlConsent(r.itemName || 'Stock item')}</strong><div style="font-size:10px;color:var(--g1);margin-top:3px">${escapeHtmlConsent([bmhDeptLabel(r.dept || 'general'), bmhFormatStoreLabel(r.store), r.barcode ? 'BC ' + r.barcode : '', r.groupId ? 'Group ' + r.groupId : ''].filter(Boolean).join(' · '))}</div></div>
+        <div style="min-width:0"><strong>${escapeHtmlConsent(r.itemName || 'Stock item')}</strong><div style="font-size:10px;color:var(--g1);margin-top:3px">${escapeHtmlConsent([bmhDeptLabel(r.dept || 'general'), bmhFormatStoreLabel(r.store), r.source === 'procedure-done' ? 'Procedure: ' + (r.procedure || 'Procedure done') : '', r.exp ? 'Exp ' + r.exp : '', r.batchNo ? 'Batch ' + r.batchNo : '', r.barcode ? 'BC ' + r.barcode : '', r.groupId ? 'Group ' + r.groupId : ''].filter(Boolean).join(' · '))}</div></div>
         <div style="text-align:right"><div style="font-weight:900;color:${r.mode === 'bill' ? 'var(--green)' : 'var(--orange)'}">${r.mode === 'bill' ? 'Billed' : 'Consumed'} × ${Number(r.qty || 0)}</div><div style="font-size:9px;color:var(--g1);margin-top:3px">${r.ts ? new Date(r.ts).toLocaleDateString('en-IN') : ''}</div></div>
       </div>`;
     }).join('') : '<div style="padding:12px;border-top:1px solid var(--g5);font-size:12px;color:var(--g1);text-align:center">No saved consumables for this selected patient yet.</div>'}
@@ -15688,7 +15698,7 @@ function renderInventoryUsageLog() {
       <div><strong>${escapeHtmlConsent(r.itemName || 'Stock item')}</strong> <span style="font-family:var(--mono);font-size:10px;color:var(--bmh-teal)">${escapeHtmlConsent(r.bmhId || '')}</span></div>
       <div style="font-weight:900;color:${r.mode === 'bill' ? '#1a8c3c' : '#8a4200'}">${r.mode === 'bill' ? 'Billed' : 'Consumed'} · Qty ${r.qty}</div>
     </div>
-    <div style="font-size:10px;color:var(--g1);margin-top:4px">${bmhDeptLabel(r.dept)} · ${bmhFormatStoreLabel(r.store)} · ${escapeHtmlConsent(r.patientName || 'Ward stock')} · ${r.ts ? new Date(r.ts).toLocaleString('en-IN') : ''}</div>
+    <div style="font-size:10px;color:var(--g1);margin-top:4px">${bmhDeptLabel(r.dept)} · ${bmhFormatStoreLabel(r.store)} · ${r.source === 'procedure-done' ? 'Procedure: ' + escapeHtmlConsent(r.procedure || 'Procedure done') + ' · ' : ''}${escapeHtmlConsent(r.patientName || 'Ward stock')} · ${r.ts ? new Date(r.ts).toLocaleString('en-IN') : ''}</div>
   </div>`).join('') : '<div style="padding:12px;color:var(--g1);font-size:12px">No patient-linked usage recorded yet.</div>';
   el.innerHTML = patientPanel + allPanel;
 }
@@ -15781,8 +15791,11 @@ function getInventoryTodayMovementRows(dateKey) {
       [
         row.patientName || row.bmhId || 'Patient',
         row.bmhId || '',
+        row.source === 'procedure-done' ? 'Procedure ' + (row.procedure || 'Procedure done') : '',
         bmhDeptLabel(row.dept || 'general'),
         bmhFormatStoreLabel(row.store),
+        row.exp ? 'Exp ' + row.exp : '',
+        row.batchNo ? 'Batch ' + row.batchNo : '',
         row.mode ? 'Mode ' + row.mode : '',
         row.barcode ? 'BC ' + row.barcode : ''
       ].filter(Boolean).join(' · '),
@@ -28473,6 +28486,7 @@ function saveProcedureDoneModal() {
   if (!dept || !bmhId) { showToast('Open a patient first', 'w'); return; }
   const state = getProcedureDraftFromModal();
   if (!state.procedure) { showToast('Select the performed procedure first', 'w'); return; }
+  const groupId = 'PCDU' + Date.now();
   const chargeRows = getProcedureDoneChargeRows(dept);
   const matchedRow = chargeRows.find(function (row) {
     const label = (row.parent ? row.parent + ' — ' : '') + row.name;
@@ -28497,21 +28511,36 @@ function saveProcedureDoneModal() {
       ts: new Date().toISOString()
     });
   }
+  let usedCount = 0;
   state.items = (state.items || []).map(function (row) {
     const invItem = findInventoryItemForProcedureRow(row);
     const prevApplied = Number(row.appliedQty || 0);
     const delta = Math.max(0, Number(row.qty || 0) - prevApplied);
     if (invItem && delta > 0) {
-      bmhUseInventoryItemForPatient(bmhId, invItem, { qty: delta, mode: row.billPatient ? 'bill' : 'consume', dept: dept });
+      const usage = bmhUseInventoryItemForPatient(bmhId, invItem, {
+        qty: delta,
+        mode: row.billPatient ? 'bill' : 'consume',
+        dept: dept,
+        source: 'procedure-done',
+        procedure: state.procedure,
+        procedureRef: procRef,
+        groupId: groupId
+      });
       row.appliedQty = prevApplied + delta;
       row.barcode = invItem.barcode || '';
+      row.key = bmhInventoryItemKey(invItem);
+      row.detail = bmhProcedureStockBatchLabel(invItem);
+      if (usage) usedCount += 1;
     }
     return row;
   });
   setProcedureDoneStateForDept(dept, state);
   closeM('m-procedure-done');
   saveVisit(dept, { silent: true });
-  showToast('Procedure done details saved ✓', 's');
+  renderInventoryUsageLog && renderInventoryUsageLog();
+  renderInventoryTodayEntries && renderInventoryTodayEntries();
+  renderStockList && renderStockList();
+  showToast('Procedure done details saved' + (usedCount ? ' · ' + usedCount + ' stock movement' + (usedCount === 1 ? '' : 's') : '') + ' ✓', 's');
 }
 window.saveProcedureDoneModal = saveProcedureDoneModal;
 function restoreProcedureDoneState(dept, data) {
