@@ -5930,6 +5930,33 @@ function buildSidebarForRole(role, dept, name) {
   const allowNav = function(key, html) {
     return (!accessModules || !accessModules.length || accessModules.includes(key)) ? html : '';
   };
+  const navHtmlByKey = {
+    dashboard: `<div class="ni" onclick="nav('dashboard',this)"><div class="ni-ic">📊</div>Dashboard</div>`,
+    reception: `<div class="ni" onclick="nav('reception',this)"><div class="ni-ic">🧾</div>Reception<span class="nbadge pulse" id="nb-rec">0</span></div>`,
+    appointments: `<div class="ni" onclick="nav('appointments',this)"><div class="ni-ic">📅</div>Appointments</div>`,
+    'doctor-queue': `<div class="ni" onclick="nav('doctor-queue',this)"><div class="ni-ic">🩺</div>Patient Queue<span class="nbadge pulse" id="nb-dq">0</span></div>`,
+    ophtho: `<div class="ni" onclick="nav('ophtho',this)"><div class="ni-ic">👁️</div>Eye Examination</div>`,
+    obg: `<div class="ni" onclick="nav('obg',this)"><div class="ni-ic">🤰</div>OBG Clinic</div>`,
+    psych: `<div class="ni" onclick="nav('psych',this)"><div class="ni-ic">🧠</div>Neuropsychiatry</div>`,
+    skin: `<div class="ni" onclick="nav('skin',this)"><div class="ni-ic">💆</div>Skin & Cosmetology</div>`,
+    lab: `<div class="ni" onclick="nav('lab',this)"><div class="ni-ic">🧪</div>Lab Module</div>`,
+    inventory: `<div class="ni" onclick="nav('inventory',this)"><div class="ni-ic">📦</div>Inventory<span class="nbadge" id="nb-inv"></span></div>`,
+    ipd: `<div class="ni" onclick="nav('ipd',this)"><div class="ni-ic">🛏️</div>IPD Patients<span class="nbadge" id="nb-ipd"></span></div>`,
+    ot: `<div class="ni" onclick="nav('ot',this)"><div class="ni-ic">🔬</div>OT Module</div>`,
+    billing: `<div class="ni" onclick="nav('billing',this)"><div class="ni-ic">💳</div>Billing<span class="nbadge pulse" id="nb-pay"></span></div>`,
+    payments: `<div class="ni" onclick="nav('payments',this)"><div class="ni-ic">💰</div>Payments</div>`,
+    tpa: `<div class="ni" onclick="nav('tpa',this)"><div class="ni-ic">🏦</div>TPA / Cashless</div>`,
+    reports: `<div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>`,
+    settings: `<div class="ni" onclick="nav('settings',this)"><div class="ni-ic">⚙️</div>Settings</div>`
+  };
+  const appendApprovedModules = function () {
+    if (!accessModules || !accessModules.length) return;
+    const existing = nav_el.innerHTML;
+    const extras = accessModules.filter(function (key) {
+      return navHtmlByKey[key] && !existing.includes("nav('" + key + "'");
+    }).map(function (key) { return navHtmlByKey[key]; }).join('');
+    if (extras) nav_el.innerHTML += '<div class="ngrp">Approved Access</div>' + extras;
+  };
   if(role==='Doctor') {
     const deptNav = {
       'Ophthalmology': '<div class="ni" onclick="nav(\'ophtho\',this)"><div class="ni-ic">👁️</div>Eye Examination</div>',
@@ -5993,6 +6020,7 @@ function buildSidebarForRole(role, dept, name) {
       <div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>`;
   }
   // Admin role keeps the full default sidebar — no change needed
+  appendApprovedModules();
 }
 function setCentre(c, btn) {
   // Only admin/BOTH users can switch — centre-locked users are blocked
@@ -14677,8 +14705,26 @@ function addInventoryDeptPrompt() {
   showToast('Department added ✓', 's');
 }
 window.addInventoryDeptPrompt = addInventoryDeptPrompt;
+function bmhRequireInventoryDeletePin() {
+  if (!(CURRENT_USER?.isAdmin || (typeof isAdminUser === 'function' && isAdminUser()))) {
+    showToast('Only admin can delete inventory records', 'w');
+    return false;
+  }
+  const now = Date.now();
+  if (Number(window._bmhInventoryDeletePinValidUntil || 0) > now) return true;
+  const pin = prompt('Enter admin inventory deletion PIN');
+  if (pin !== '2080') {
+    showToast('Incorrect inventory deletion PIN', 'w');
+    return false;
+  }
+  window._bmhInventoryDeletePinValidUntil = now + (10 * 60 * 1000);
+  showToast('Inventory delete PIN accepted for 10 minutes', 's');
+  return true;
+}
+window.bmhRequireInventoryDeletePin = bmhRequireInventoryDeletePin;
 function deleteInventoryDeptPrompt() {
   if (!CURRENT_USER?.isAdmin) { showToast('Only admin can remove departments', 'w'); return; }
+  if (!bmhRequireInventoryDeletePin()) return;
   const cur = document.getElementById('inv-in-dept')?.value || '';
   if (!cur) return;
   const rows = loadInventoryDeptRows();
@@ -14696,6 +14742,7 @@ function deleteInventoryDeptPrompt() {
 window.deleteInventoryDeptPrompt = deleteInventoryDeptPrompt;
 function deleteInventoryCategoryPrompt() {
   if (!CURRENT_USER?.isAdmin) { showToast('Only admin can delete categories', 'w'); return; }
+  if (!bmhRequireInventoryDeletePin()) return;
   const sel = document.getElementById('inv-in-cat');
   const name = normalizeInventoryTextValue(sel?.value || '');
   if (!name) { showToast('Select a category first', 'w'); return; }
@@ -14728,6 +14775,7 @@ function addInventoryStorePrompt() {
 window.addInventoryStorePrompt = addInventoryStorePrompt;
 function deleteInventoryStorePrompt() {
   if (!(CURRENT_USER?.isAdmin || (typeof isAdminUser === 'function' && isAdminUser()))) { showToast('Only admin can delete store locations', 'w'); return; }
+  if (!bmhRequireInventoryDeletePin()) return;
   const stores = (window.BMH_STORE_LOCATIONS || []).slice();
   if (!stores.length) { showToast('No store locations in list', 'w'); return; }
   const current = String(document.getElementById('inv-in-store')?.value || document.getElementById('inv-stock-store-filter')?.value || '').trim();
@@ -14798,6 +14846,7 @@ function parseInventoryIndexedSelectionInput(raw, items) {
   return Array.from(new Set(chosen.map(function (item) { return normalizeInventoryTextValue(item); }).filter(Boolean)));
 }
 function removeInventoryBarcodePrompt() {
+  if (!bmhRequireInventoryDeletePin()) return;
   const memory = loadInventoryOcrMemory();
   memory.barcodes = memory.barcodes || [];
   memory.products = memory.products || [];
@@ -14848,6 +14897,7 @@ function addInventoryBrandPrompt() {
 }
 window.addInventoryBrandPrompt = addInventoryBrandPrompt;
 function removeInventoryBrandPrompt() {
+  if (!bmhRequireInventoryDeletePin()) return;
   const memory = loadInventoryOcrMemory();
   memory.brands = memory.brands || [];
   if (memory.brands.length === 0) { showToast('No brands in list', 'w'); return; }
@@ -14888,6 +14938,7 @@ function addInventoryCompanyPrompt() {
 }
 window.addInventoryCompanyPrompt = addInventoryCompanyPrompt;
 function removeInventoryCompanyPrompt() {
+  if (!bmhRequireInventoryDeletePin()) return;
   const memory = loadInventoryOcrMemory();
   memory.companies = memory.companies || [];
   if (memory.companies.length === 0) { showToast('No companies in list', 'w'); return; }
@@ -14916,6 +14967,7 @@ function removeInventoryCompanyPrompt() {
 }
 window.removeInventoryCompanyPrompt = removeInventoryCompanyPrompt;
 function removeInventoryLearnedProductPrompt() {
+  if (!bmhRequireInventoryDeletePin()) return;
   const raw = String(document.getElementById('bc-in')?.value || prompt('Item / product name to remove from suggestions') || '').trim();
   if (!raw) return;
   const memory = loadInventoryOcrMemory();
@@ -15288,6 +15340,7 @@ window._renderStockListNow = _renderStockListNow;
 
 // Delete inventory items by their barcodes (with confirmation).
 function deleteInventoryItemsPrompt(barcodes) {
+  if (!bmhRequireInventoryDeletePin()) return;
   if (!Array.isArray(barcodes) || !barcodes.length) { showToast('No barcodes found for this item', 'w'); return; }
   const count = barcodes.length;
   const label = count === 1 ? '1 unit' : count + ' units';
@@ -15460,6 +15513,7 @@ function slToggleBrand(brandId, deptId) {
 window.slToggleBrand = slToggleBrand;
 function adminClearAllInventoryStock() {
   if (typeof isAdminUser !== 'function' || !isAdminUser()) { showToast('Only admin can clear inventory', 'w'); return; }
+  if (!bmhRequireInventoryDeletePin()) return;
   if (!confirm('Delete ALL current inventory rows? Barcode map will reset. This cannot be undone.')) return;
   INVENTORY.length = 0;
   if (typeof BCMAP === 'object' && BCMAP) { Object.keys(BCMAP).forEach(function (k) { delete BCMAP[k]; }); }
@@ -15487,6 +15541,7 @@ function addInventoryVendorPrompt() {
 window.addInventoryVendorPrompt = addInventoryVendorPrompt;
 function deleteInventoryVendorPrompt() {
   if (!(CURRENT_USER?.isAdmin || (typeof isAdminUser === 'function' && isAdminUser()))) { showToast('Only admin can delete vendors', 'w'); return; }
+  if (!bmhRequireInventoryDeletePin()) return;
   const vendor = String(document.getElementById('inv-vendor-filter')?.value || document.getElementById('inv-vendor-search')?.value || document.getElementById('inv-in-vendor')?.value || '').trim();
   if (!vendor) { showToast('Select a vendor first', 'w'); return; }
   const billCount = (window.BMH_VENDOR_BILLS || []).filter(function (v) { return normalizeInventoryCompareText(v.vendor || '') === normalizeInventoryCompareText(vendor); }).length;
@@ -15515,6 +15570,7 @@ window.deleteInventoryVendorPrompt = deleteInventoryVendorPrompt;
 function deleteInventoryStockRow(barcode) {
   if (!CURRENT_USER) { showToast('Sign in to delete stock', 'w'); return; }
   if (typeof isAdminUser !== 'function' || !isAdminUser()) { showToast('Only admin can delete stock rows', 'w'); return; }
+  if (!bmhRequireInventoryDeletePin()) return;
   const idx = INVENTORY.findIndex(function (i) { return String(i.barcode || '') === String(barcode || ''); });
   if (idx < 0) return;
   const item = INVENTORY[idx];
@@ -15530,6 +15586,7 @@ function deleteInventoryStockRow(barcode) {
 window.deleteInventoryStockRow = deleteInventoryStockRow;
 function deleteInventoryIolGroup(company, brand, power, store) {
   if (!CURRENT_USER?.isAdmin) { showToast('Only admin can delete stock', 'w'); return; }
+  if (!bmhRequireInventoryDeletePin()) return;
   const matches = INVENTORY.filter(function (i) {
     return String(i.cat || '').toLowerCase() === 'iol'
       && String(i.iolCompany || i.vendor || '') === String(company || '')
@@ -28087,8 +28144,15 @@ function bmhProcedureStockMatchesDept(item, dept) {
 }
 function bmhProcedureStockRows(dept) {
   return bmhSortInventoryUseMatches((INVENTORY || []).filter(function (item) {
-    return Number(item.stock || 0) > 0 && bmhProcedureStockMatchesDept(item, dept);
+    return Number(item.stock || 0) > 0;
   }));
+}
+function bmhProcedureStockRowsForStore(dept, store) {
+  const rows = bmhProcedureStockRows(dept);
+  if (store == null) return rows;
+  return rows.filter(function (item) {
+    return normalizeInventoryCompareText(item.store || '') === normalizeInventoryCompareText(store);
+  });
 }
 function bmhProcedureStockCategory(item) {
   const cat = String(item?.cat || '').trim();
@@ -28163,39 +28227,53 @@ function renderProcedureStockBrowser(dept, view, value) {
   const btn = function (label, onclick, tone) {
     return '<button type="button" onclick="' + onclick + '" style="border:1px solid var(--g4);background:#fff;color:' + (tone || 'var(--bmh-blue)') + ';border-radius:8px;padding:7px 9px;font-size:11px;font-weight:900;cursor:pointer;text-align:left">' + escapeHtmlConsent(label) + '</button>';
   };
+  const navButton = view ? '<button type="button" class="btn btn-xs btn-gray" onclick="renderProcedureStockBrowser(\'' + dept + '\')">Stores</button>' : '';
   let html = '<div style="border:1px solid var(--g4);border-radius:10px;background:var(--g6);padding:9px;margin-bottom:8px">';
-  html += '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:7px"><div style="font-size:11px;font-weight:900;color:var(--g1);text-transform:uppercase">Pick stock from ' + escapeHtmlConsent(bmhDeptLabel(dept)) + '</div>' + (view ? '<button type="button" class="btn btn-xs btn-gray" onclick="renderProcedureStockBrowser(\'' + dept + '\')">Categories</button>' : '') + '</div>';
+  html += '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:7px"><div style="font-size:11px;font-weight:900;color:var(--g1);text-transform:uppercase">Pick stock by store / location</div>' + navButton + '</div>';
   if (!view) {
-    const cats = Array.from(new Set(rows.map(bmhProcedureStockCategory))).sort();
-    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:7px">' + cats.map(function (cat) {
-      const total = rows.filter(function (i) { return bmhProcedureStockCategory(i) === cat; }).reduce(function (s, i) { return s + Number(i.stock || 0); }, 0);
-      return btn(cat + ' · ' + total, 'renderProcedureStockBrowser(\'' + dept + '\',\'cat\',\'' + encodeURIComponent(cat) + '\')', cat === 'IOL' ? '#8a5a00' : 'var(--bmh-blue)');
+    const stores = Array.from(new Set(rows.map(function (i) { return i.store || 'No store'; }))).sort();
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:7px">' + stores.map(function (store) {
+      const total = rows.filter(function (i) { return String(i.store || 'No store') === store; }).reduce(function (s, i) { return s + Number(i.stock || 0); }, 0);
+      return btn(store + ' · ' + total, 'renderProcedureStockBrowser(\'' + dept + '\',\'store\',\'' + encodeURIComponent(store) + '\')');
+    }).join('') + '</div>';
+  } else if (view === 'store') {
+    const store = decodeURIComponent(value || '');
+    const storeRows = bmhProcedureStockRowsForStore(dept, store === 'No store' ? '' : store);
+    const cats = Array.from(new Set(storeRows.map(bmhProcedureStockCategory))).sort();
+    html += '<div style="font-size:11px;font-weight:900;color:var(--bmh-blue);margin-bottom:7px">' + escapeHtmlConsent(store) + '</div>';
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:7px">' + cats.map(function (cat) {
+      const total = storeRows.filter(function (i) { return bmhProcedureStockCategory(i) === cat; }).reduce(function (s, i) { return s + Number(i.stock || 0); }, 0);
+      return btn(cat + ' · ' + total, 'renderProcedureStockBrowser(\'' + dept + '\',\'cat\',\'' + encodeURIComponent(store) + '||' + encodeURIComponent(cat) + '\')', cat === 'IOL' ? '#8a5a00' : 'var(--bmh-blue)');
     }).join('') + '</div>';
   } else if (view === 'cat') {
-    const cat = decodeURIComponent(value || '');
-    const catRows = rows.filter(function (i) { return bmhProcedureStockCategory(i) === cat; });
+    const parts = String(value || '').split('||');
+    const store = decodeURIComponent(parts[0] || '');
+    const cat = decodeURIComponent(parts[1] || parts[0] || '');
+    const catRows = bmhProcedureStockRowsForStore(dept, store === 'No store' ? '' : store).filter(function (i) { return bmhProcedureStockCategory(i) === cat; });
     if (cat === 'IOL') {
       const brands = Array.from(new Set(catRows.map(function (i) { return _iolBrandLabel(i); }).filter(Boolean))).sort();
       html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:7px">' + brands.map(function (brand) {
         const total = catRows.filter(function (i) { return _iolBrandLabel(i) === brand; }).reduce(function (s, i) { return s + Number(i.stock || 0); }, 0);
-        return btn(brand + ' · ' + total, 'renderProcedureStockBrowser(\'' + dept + '\',\'iol\',\'' + encodeURIComponent(brand) + '\')', '#8a5a00');
+        return btn(brand + ' · ' + total, 'renderProcedureStockBrowser(\'' + dept + '\',\'iol\',\'' + encodeURIComponent(store) + '||' + encodeURIComponent(brand) + '\')', '#8a5a00');
       }).join('') + '</div>';
     } else {
       const names = Array.from(new Set(catRows.map(function (i) { return i.name || 'Stock item'; }))).sort();
       html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:7px">' + names.map(function (name) {
         const total = catRows.filter(function (i) { return String(i.name || '') === name; }).reduce(function (s, i) { return s + Number(i.stock || 0); }, 0);
-        return btn(name + ' · ' + total, 'selectProcedureStockName(\'' + dept + '\',\'' + encodeURIComponent(name) + '\')');
+        return btn(name + ' · ' + total, 'selectProcedureStockName(\'' + dept + '\',\'' + encodeURIComponent(name) + '\',\'' + encodeURIComponent(store) + '\')');
       }).join('') + '</div>';
     }
   } else if (view === 'iol') {
-    const brand = decodeURIComponent(value || '');
-    const brandRows = rows.filter(function (i) { return bmhProcedureStockCategory(i) === 'IOL' && _iolBrandLabel(i) === brand; });
+    const parts = String(value || '').split('||');
+    const store = decodeURIComponent(parts[0] || '');
+    const brand = decodeURIComponent(parts[1] || '');
+    const brandRows = bmhProcedureStockRowsForStore(dept, store === 'No store' ? '' : store).filter(function (i) { return bmhProcedureStockCategory(i) === 'IOL' && _iolBrandLabel(i) === brand; });
     const powers = Array.from(new Set(brandRows.map(function (i) { return String(i.power || extractIolPower(i.name || '') || 'No power'); }))).sort(function (a, b) { return parseFloat(a) - parseFloat(b); });
     html += '<div style="font-size:11px;font-weight:900;color:#8a5a00;margin-bottom:7px">' + escapeHtmlConsent(brand) + ' powers in stock</div>';
     html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:7px">' + powers.map(function (power) {
       const powerRows = brandRows.filter(function (i) { return String(i.power || extractIolPower(i.name || '') || 'No power') === power; });
       const total = powerRows.reduce(function (s, i) { return s + Number(i.stock || 0); }, 0);
-      return btn(power + ' · ' + total, 'selectProcedureStockIolPower(\'' + dept + '\',\'' + encodeURIComponent(brand) + '\',\'' + encodeURIComponent(power) + '\')', '#8a5a00');
+      return btn(power + ' · ' + total, 'selectProcedureStockIolPower(\'' + dept + '\',\'' + encodeURIComponent(brand) + '\',\'' + encodeURIComponent(power) + '\',\'' + encodeURIComponent(store) + '\')', '#8a5a00');
     }).join('') + '</div>';
   }
   host.innerHTML = html + '</div>';
@@ -28256,9 +28334,10 @@ function addProcedureStockItemToDraft(item, qty) {
     appliedQty: 0
   });
 }
-function selectProcedureStockName(dept, encodedName) {
+function selectProcedureStockName(dept, encodedName, encodedStore) {
   const name = decodeURIComponent(encodedName || '');
-  const matches = bmhProcedureStockRows(dept).filter(function (item) { return String(item.name || '') === name; });
+  const store = decodeURIComponent(encodedStore || '');
+  const matches = bmhProcedureStockRowsForStore(dept, store === 'No store' ? '' : store).filter(function (item) { return String(item.name || '') === name; });
   if (!matches.length) return;
   if (matches.length === 1) {
     addProcedureStockItemToDraft(matches[0], 1);
@@ -28273,10 +28352,11 @@ function selectProcedureStockName(dept, encodedName) {
   addProcedureStockItemToDraft(exact[picked], 1);
 }
 window.selectProcedureStockName = selectProcedureStockName;
-function selectProcedureStockIolPower(dept, encodedBrand, encodedPower) {
+function selectProcedureStockIolPower(dept, encodedBrand, encodedPower, encodedStore) {
   const brand = decodeURIComponent(encodedBrand || '');
   const power = decodeURIComponent(encodedPower || '');
-  const matches = bmhProcedureStockRows(dept).filter(function (item) {
+  const store = decodeURIComponent(encodedStore || '');
+  const matches = bmhProcedureStockRowsForStore(dept, store === 'No store' ? '' : store).filter(function (item) {
     return bmhProcedureStockCategory(item) === 'IOL'
       && _iolBrandLabel(item) === brand
       && String(item.power || extractIolPower(item.name || '') || 'No power') === power;
