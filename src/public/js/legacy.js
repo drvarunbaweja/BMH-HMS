@@ -17986,13 +17986,79 @@ function getMergedDeptTemplateOptions(kind, dept) {
     return String(a).localeCompare(String(b));
   });
 }
-function saveDoctorCustomRxOptions() {
+function persistDoctorCustomRxOptionsLocally() {
   try {
     localStorage.setItem('bmh_doctor_rx_custom_options', JSON.stringify(window.DOCTOR_RX_CUSTOM_OPTIONS || {}));
   } catch (e) {}
+}
+function saveDoctorCustomRxOptions(opts) {
+  opts = opts || {};
+  persistDoctorCustomRxOptionsLocally();
+  if (opts.localOnly) return;
   if (window.FBDB) {
     window.FBDB.ref('doctorRxCustomOptions').set(window.DOCTOR_RX_CUSTOM_OPTIONS || {}).catch(function () {});
   }
+}
+function normalizeDeptTemplateKind(kind) {
+  const k = String(kind || '').trim().toLowerCase();
+  return k === 'procedure' || k === 'advice' ? k : '';
+}
+function getDeptTemplateDatabasePath(kind, dept, value) {
+  const k = normalizeDeptTemplateKind(kind);
+  const d = normalizeDeptKeyForQueue(dept || '') || 'ophtho';
+  const label = normalizeDeptTemplateLabel(value);
+  if (!k || !label) return '';
+  return 'deptPlanTemplates/' + makeFirebaseSafeKey(d) + '/' + k + '/' + makeFirebaseSafeKey(label.toLowerCase()).slice(0, 140);
+}
+function saveDeptTemplateOptionToDatabase(kind, dept, value) {
+  const path = getDeptTemplateDatabasePath(kind, dept, value);
+  if (!path) return;
+  const payload = {
+    kind: normalizeDeptTemplateKind(kind),
+    dept: normalizeDeptKeyForQueue(dept || '') || 'ophtho',
+    value: normalizeDeptTemplateLabel(value),
+    updatedAt: new Date().toISOString(),
+    updatedBy: CURRENT_USER?.name || 'System'
+  };
+  try {
+    if (typeof fbSet === 'function') fbSet(path, payload);
+    else if (window.FBDB) window.FBDB.ref(path).set(payload).catch(function () {});
+  } catch (e) {}
+}
+function deleteDeptTemplateOptionFromDatabase(kind, dept, value) {
+  const path = getDeptTemplateDatabasePath(kind, dept, value);
+  if (!path || !window.FBDB) return;
+  try { window.FBDB.ref(path).remove().catch(function () {}); } catch (e) {}
+}
+function mergeDeptPlanTemplatesFromDatabase(data) {
+  if (!data || typeof data !== 'object') return false;
+  let changed = false;
+  Object.keys(data).forEach(function (deptKey) {
+    const bucket = getSharedDeptTemplateBucket(deptKey);
+    ['advice', 'procedure'].forEach(function (kind) {
+      const rows = data[deptKey] && data[deptKey][kind];
+      if (!rows || typeof rows !== 'object') return;
+      Object.keys(rows).forEach(function (rowKey) {
+        const row = rows[rowKey];
+        const value = normalizeDeptTemplateLabel(typeof row === 'string' ? row : row && row.value);
+        if (!value) return;
+        if (!Array.isArray(bucket[kind])) bucket[kind] = [];
+        if (!bucket[kind].some(function (x) { return String(x || '').trim().toLowerCase() === value.toLowerCase(); })) {
+          bucket[kind].push(value);
+          changed = true;
+        }
+      });
+      bucket[kind].sort(function (a, b) { return String(a).localeCompare(String(b)); });
+    });
+  });
+  return changed;
+}
+function loadDeptPlanTemplatesFromDatabase() {
+  if (!window.FBDB) return;
+  window.FBDB.ref('deptPlanTemplates').once('value').then(function (snap) {
+    if (mergeDeptPlanTemplatesFromDatabase(snap.val())) persistDoctorCustomRxOptionsLocally();
+    refreshDeptAdviceAndProcedureUi();
+  }).catch(function () {});
 }
 function loadDoctorCustomRxOptions() {
   window.DOCTOR_RX_CUSTOM_OPTIONS = window.DOCTOR_RX_CUSTOM_OPTIONS || {};
@@ -18019,6 +18085,7 @@ function loadDoctorCustomRxOptions() {
         renderAllDeptSendBars();
       }
     }).catch(function () {});
+    loadDeptPlanTemplatesFromDatabase();
   }
 }
 function ensureSharedRxCustomOptions() {
@@ -18080,6 +18147,7 @@ function saveDeptTemplateOption(kind, dept, rawValue) {
     }
   }
   saveDoctorCustomRxOptions();
+  saveDeptTemplateOptionToDatabase(kind, dept, value);
   return value;
 }
 function deleteDeptTemplateOption(kind, dept, rawValue) {
@@ -18095,6 +18163,7 @@ function deleteDeptTemplateOption(kind, dept, rawValue) {
     }
   }
   saveDoctorCustomRxOptions();
+  deleteDeptTemplateOptionFromDatabase(kind, dept, rawValue);
 }
 function getDeptAdviceTextareaId(dept) {
   return { ophtho: 'rx-advice-text', obg: 'obg-advice', psych: 'psych-advice', skin: 'skin-advice' }[dept] || 'rx-advice-text';
@@ -30154,6 +30223,11 @@ window.printUnifiedRx = function(deptId) {
   const adviceHtml = String(advice || '').trim()
     ? escapeHtmlConsent(String(advice).trim()).replace(/\n/g, '<br>')
     : '';
+  if (saveDept) {
+    try { syncDeptAdviceLibraryFromTextarea(saveDept); } catch (e) {}
+    procs.forEach(function (procName) { saveDeptTemplateOption('procedure', saveDept, procName); });
+    try { saveDeptPlanDraft(saveDept); } catch (e) {}
+  }
   if (currentBmhId && saveDept && drugs.length) {
     const printedSnapshot = {
       dept: saveDept,
