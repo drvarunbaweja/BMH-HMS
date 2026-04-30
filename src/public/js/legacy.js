@@ -3820,7 +3820,7 @@ function openPatient(bmhId, opts) {
   document.querySelectorAll('#pg-ophtho input[type=checkbox], #pg-obg input[type=checkbox], #pg-psych input[type=checkbox], #pg-skin input[type=checkbox]')
     .forEach(el => { el.checked = false; });
   // Prescription print defaults (Eye) — keep these enabled by default on each patient open.
-  ['oe-inc-va', 'oe-inc-rx', 'oe-inc-proc', 'oe-inc-adv', 'oe-inc-gl', 'oe-inc-inv'].forEach(function (id) {
+  ['oe-inc-va', 'oe-inc-iop', 'oe-inc-rx', 'oe-inc-proc', 'oe-inc-adv', 'oe-inc-gl', 'oe-inc-inv'].forEach(function (id) {
     const el = document.getElementById(id);
     if (el) el.checked = true;
   });
@@ -29775,6 +29775,28 @@ window.printUnifiedRx = function(deptId) {
   const iopGatOS = document.getElementById('iop-gat-os')?.value||'';
   const iopNctOD = document.getElementById('iop-nct-od')?.value||'';
   const iopNctOS = document.getElementById('iop-nct-os')?.value||'';
+  const pachyOD = document.getElementById('pachy-od')?.value || window.CURRENT_PATIENT?.lastVisit?.pachyOD || '';
+  const pachyOS = document.getElementById('pachy-os')?.value || window.CURRENT_PATIENT?.lastVisit?.pachyOS || '';
+  const iopCorrODRaw = document.getElementById('iop-corr-od')?.textContent?.trim() || window.CURRENT_PATIENT?.lastVisit?.iopCorrOD || '';
+  const iopCorrOSRaw = document.getElementById('iop-corr-os')?.textContent?.trim() || window.CURRENT_PATIENT?.lastVisit?.iopCorrOS || '';
+  const correctedIopForPrint = function (gat, pachy, raw) {
+    const g = Number(gat || 0);
+    const p = Number(pachy || 0);
+    if (g > 0 && p > 0 && typeof getEhlersFactor === 'function') {
+      const factor = getEhlersFactor(p);
+      if (factor) {
+        const sign = factor >= 0 ? '+' : '';
+        return String(Math.round(g + factor)) + ' mmHg (' + sign + factor + ')';
+      }
+      return '';
+    }
+    const text = String(raw || '').trim();
+    const m = text.match(/\(([+-]?\d+)\)/);
+    if (m && Number(m[1]) !== 0) return text.replace(/^Ehlers\s+corr:\s*/i, '');
+    return '';
+  };
+  const iopCorrOD = correctedIopForPrint(iopGatOD, pachyOD, iopCorrODRaw);
+  const iopCorrOS = correctedIopForPrint(iopGatOS, pachyOS, iopCorrOSRaw);
 
   // ── VA values ──
   const vaOD = document.getElementById('ucva-od-dist')?.value || document.getElementById('va-od-uc')?.value||'';
@@ -30050,6 +30072,8 @@ window.printUnifiedRx = function(deptId) {
   const showVA = incVA && deptId==='oe' && [vaOD, vaOS, subjODva, subjOSva, nvOD, nvOS].some(hasMeaningfulText);
   const showGL = incGL && deptId==='oe' && hasMeaningfulRefraction();
   const showIOP = incIOP && deptId==='oe' && (iopGatOD||iopGatOS||iopNctOD||iopNctOS);
+  const showCorrectedIOP = showIOP && (iopCorrOD || iopCorrOS);
+  const showEyeVitals = showVA || showIOP;
   const typographyCss = buildDoctorRxTypographyCss(getDoctorProfileTypographyForCentre(doctorProfile, cpt.centre || CURRENT_USER?.centre || getEffectiveCentre?.() || 'CHD'));
 
   const rxEmptyNote = forceDeptRxSections && (!drugs || !drugs.length)
@@ -30489,14 +30513,14 @@ ${deptId==='skin' && (skinChief||skinPrimaryDx||skinDermoscopy) ? `
   ${skinDermoscopy ? `<div class="dept-card-row"><div class="dept-card-key">Dermoscopy</div><div class="dept-card-val">${escapeHtmlConsent(skinDermoscopy)}</div></div>` : ''}
 </div>` : ''}
 
-${showVA ? `
+${showEyeVitals ? `
 <div class="oe-eye-block">
-<div class="sec-divider"><span class="sec-label">Visual Acuity</span></div>
+<div class="sec-divider"><span class="sec-label">${showVA && showIOP ? 'Visual Acuity / IOP' : showIOP ? 'IOP' : 'Visual Acuity'}</span></div>
 <table class="oe-eye-table">
-  <thead><tr><th>Eye</th><th>UCDVA</th>${showIOP?'<th>IOP (GAT)</th>':''}${showIOP&&(iopNctOD||iopNctOS)?'<th>IOP (NCT)</th>':''}<th>DVA</th><th>NVA</th></tr></thead>
+  <thead><tr><th>Eye</th>${showVA?'<th>UCDVA</th>':''}${showIOP?'<th>IOP (GAT)</th>':''}${showIOP&&(iopNctOD||iopNctOS)?'<th>IOP (NCT)</th>':''}${showCorrectedIOP?'<th>Corrected IOP</th>':''}${showVA?'<th>DVA</th><th>NVA</th>':''}</tr></thead>
   <tbody>
-    <tr><td><b>OD (Right)</b></td><td>${vaOD||'—'}</td>${showIOP?`<td class="${parseFloat(iopGatOD)>21?'flag-h':'flag-n'}">${iopGatOD?iopGatOD+' mmHg':'—'}</td>`:''}${showIOP&&(iopNctOD||iopNctOS)?`<td class="${parseFloat(iopNctOD)>21?'flag-h':'flag-n'}">${iopNctOD?iopNctOD+' mmHg':'—'}</td>`:''}<td>${subjODva||'—'}</td><td>${nvOD||'—'}</td></tr>
-    <tr><td><b>OS (Left)</b></td><td>${vaOS||'—'}</td>${showIOP?`<td class="${parseFloat(iopGatOS)>21?'flag-h':'flag-n'}">${iopGatOS?iopGatOS+' mmHg':'—'}</td>`:''}${showIOP&&(iopNctOD||iopNctOS)?`<td class="${parseFloat(iopNctOS)>21?'flag-h':'flag-n'}">${iopNctOS?iopNctOS+' mmHg':'—'}</td>`:''}<td>${subjOSva||'—'}</td><td>${nvOS||'—'}</td></tr>
+    <tr><td><b>OD (Right)</b></td>${showVA?`<td>${vaOD||'—'}</td>`:''}${showIOP?`<td class="${parseFloat(iopGatOD)>21?'flag-h':'flag-n'}">${iopGatOD?iopGatOD+' mmHg':'—'}</td>`:''}${showIOP&&(iopNctOD||iopNctOS)?`<td class="${parseFloat(iopNctOD)>21?'flag-h':'flag-n'}">${iopNctOD?iopNctOD+' mmHg':'—'}</td>`:''}${showCorrectedIOP?`<td class="${parseFloat(iopCorrOD)>21?'flag-h':'flag-n'}">${iopCorrOD||'—'}</td>`:''}${showVA?`<td>${subjODva||'—'}</td><td>${nvOD||'—'}</td>`:''}</tr>
+    <tr><td><b>OS (Left)</b></td>${showVA?`<td>${vaOS||'—'}</td>`:''}${showIOP?`<td class="${parseFloat(iopGatOS)>21?'flag-h':'flag-n'}">${iopGatOS?iopGatOS+' mmHg':'—'}</td>`:''}${showIOP&&(iopNctOD||iopNctOS)?`<td class="${parseFloat(iopNctOS)>21?'flag-h':'flag-n'}">${iopNctOS?iopNctOS+' mmHg':'—'}</td>`:''}${showCorrectedIOP?`<td class="${parseFloat(iopCorrOS)>21?'flag-h':'flag-n'}">${iopCorrOS||'—'}</td>`:''}${showVA?`<td>${subjOSva||'—'}</td><td>${nvOS||'—'}</td>`:''}</tr>
   </tbody>
 </table>
 </div>` : ''}
