@@ -8270,7 +8270,7 @@ function loadInventoryStockFromStorage() {
 }
 function saveInventoryStockToStorage() {
   try {
-    const next = JSON.stringify(INVENTORY.map(i => ({ barcode: i.barcode, stock: i.stock, name: i.name, cat: i.cat, mrp: i.mrp, exp: i.exp, dept: i.dept, vendor: i.vendor, cost: i.cost, qr: i.qr, store: i.store, min: i.min, billMode: i.billMode, vendorBillingMode: i.vendorBillingMode, serialNo: i.serialNo, batchNo: i.batchNo, power: i.power, iolCompany: i.iolCompany, iolBrand: i.iolBrand, iolModel: i.iolModel, genericName: i.genericName } )));
+    const next = JSON.stringify(INVENTORY.map(i => ({ barcode: i.barcode, stock: i.stock, name: i.name, cat: i.cat, mrp: i.mrp, exp: i.exp, dept: i.dept, vendor: i.vendor, company: i.company, cost: i.cost, qr: i.qr, store: i.store, min: i.min, billMode: i.billMode, vendorBillingMode: i.vendorBillingMode, serialNo: i.serialNo, batchNo: i.batchNo, power: i.power, iolCompany: i.iolCompany, iolBrand: i.iolBrand, iolModel: i.iolModel, genericName: i.genericName } )));
     const prev = localStorage.getItem('bmh_inventory_stock');
     if (prev && prev !== next) localStorage.setItem('bmh_inventory_stock_archive', prev);
     localStorage.setItem('bmh_inventory_stock', next);
@@ -8977,7 +8977,7 @@ function reopenInventoryBillForMoreItems() {
 }
 window.reopenInventoryBillForMoreItems = reopenInventoryBillForMoreItems;
 function resetInventoryStockInForm(includeIol) {
-  ['inv-in-vendor','inv-in-invoice','bc-in','inv-in-generic','inv-in-qty','inv-in-cost','inv-in-mrp','inv-in-min','inv-in-exp'].forEach(function (id) {
+  ['inv-in-vendor','inv-in-invoice','bc-in','inv-in-company','inv-in-generic','inv-in-qty','inv-in-cost','inv-in-mrp','inv-in-min','inv-in-exp'].forEach(function (id) {
     const el = document.getElementById(id);
     if (!el) return;
     if (id === 'inv-in-qty') el.value = '1';
@@ -9330,7 +9330,7 @@ function bmhParseInventoryExpiryTime(value) {
   return Number.isNaN(t) ? Number.MAX_SAFE_INTEGER : t;
 }
 function bmhInventoryItemSearchHaystack(item) {
-  return [item?.name, item?.genericName, item?.cat, item?.barcode, item?.batchNo, item?.serialNo, item?.store, item?.vendor]
+  return [item?.name, item?.company, item?.genericName, item?.cat, item?.barcode, item?.batchNo, item?.serialNo, item?.store, item?.vendor]
     .filter(Boolean).join(' ').toLowerCase();
 }
 function bmhSortInventoryUseMatches(rows) {
@@ -12988,12 +12988,14 @@ function loadInventoryOcrMemory() {
   } catch (e) {
     window.BMH_INVENTORY_OCR_MEMORY = {};
   }
+  migrateInventoryVendorSuggestionsToCompanies();
   if (!window._bmhInventoryOcrMemoryCloudLoaded && window.FBDB) {
     window._bmhInventoryOcrMemoryCloudLoaded = true;
     window.FBDB.ref('settings/inventory/ocrMemory').once('value').then(function (snap) {
       const data = snap.val();
       if (!data || typeof data !== 'object') return;
       window.BMH_INVENTORY_OCR_MEMORY = Object.assign({}, window.BMH_INVENTORY_OCR_MEMORY || {}, data);
+      migrateInventoryVendorSuggestionsToCompanies();
       try {
         localStorage.setItem('bmh_inventory_ocr_memory', JSON.stringify(window.BMH_INVENTORY_OCR_MEMORY));
       } catch (e) {}
@@ -13001,6 +13003,33 @@ function loadInventoryOcrMemory() {
     }).catch(function () {});
   }
   return window.BMH_INVENTORY_OCR_MEMORY;
+}
+function isInventoryVendorExceptionName(name) {
+  const key = normalizeInventoryCompareText(name || '');
+  return key === normalizeInventoryCompareText('Optivision Surgicals') || key === normalizeInventoryCompareText('KB Surgitech');
+}
+function migrateInventoryVendorSuggestionsToCompanies() {
+  const memory = window.BMH_INVENTORY_OCR_MEMORY || {};
+  if (memory.vendorCompanyMigrationV2) return;
+  const vendors = Array.isArray(memory.vendors) ? memory.vendors.slice() : [];
+  const moveToCompanies = [];
+  vendors.forEach(function (name) {
+    const clean = normalizeInventoryTextValue(name);
+    if (clean && !isInventoryVendorExceptionName(clean)) moveToCompanies.push(clean);
+  });
+  memory.vendors = vendors.map(normalizeInventoryTextValue).filter(function (name) {
+    return name && isInventoryVendorExceptionName(name);
+  });
+  memory.companies = Array.isArray(memory.companies) ? memory.companies : [];
+  moveToCompanies.forEach(function (name) {
+    if (!memory.companies.some(function (v) { return normalizeInventoryCompareText(v) === normalizeInventoryCompareText(name); })) {
+      memory.companies.push(name);
+    }
+  });
+  memory.vendorCompanyMigrationV2 = true;
+  window.BMH_INVENTORY_OCR_MEMORY = memory;
+  try { localStorage.setItem('bmh_inventory_ocr_memory', JSON.stringify(memory)); } catch (e) {}
+  if (window.FBDB) window.FBDB.ref('settings/inventory/ocrMemory').set(memory).catch(function () {});
 }
 function getInventorySuggestionHiddenMap() {
   const memory = loadInventoryOcrMemory();
@@ -13047,9 +13076,8 @@ function learnInventoryOcrValue(target, value) {
 }
 function inventoryKnownVendorNames() {
   const names = [];
-  (window.BMH_VENDOR_BILLS || []).forEach(function (v) { if (v?.vendor) names.push(String(v.vendor)); });
-  (INVENTORY || []).forEach(function (i) { if (i?.vendor) names.push(String(i.vendor)); });
   (loadInventoryOcrMemory().vendors || []).forEach(function (v) { names.push(String(v)); });
+  ['Optivision Surgicals', 'KB Surgitech'].forEach(function (v) { names.push(v); });
   return Array.from(new Set(names.map(function (v) { return normalizeInventoryTextValue(v); }).filter(Boolean)));
 }
 function inventoryKnownProductNames() {
@@ -13090,7 +13118,12 @@ function inventoryKnownBrandNames() {
 }
 function inventoryKnownCompanyNames() {
   const names = [];
-  (INVENTORY || []).forEach(function (i) { if (i?.iolCompany) names.push(String(i.iolCompany)); });
+  (INVENTORY || []).forEach(function (i) {
+    if (i?.company) names.push(String(i.company));
+    if (i?.iolCompany) names.push(String(i.iolCompany));
+    if (i?.vendor && !isInventoryVendorExceptionName(i.vendor)) names.push(String(i.vendor));
+  });
+  (window.BMH_VENDOR_BILLS || []).forEach(function (v) { if (v?.vendor && !isInventoryVendorExceptionName(v.vendor)) names.push(String(v.vendor)); });
   (loadInventoryOcrMemory().companies || []).forEach(function (v) { names.push(String(v)); });
   (IOL_CATALOG || []).forEach(function (row) { if (row?.mfr) names.push(String(row.mfr)); });
   return Array.from(new Set(names.map(function (v) { return normalizeInventoryTextValue(v); }).filter(Boolean)));
@@ -13758,7 +13791,8 @@ function applyInventoryParsedLineItem(mode, idx) {
     rate: item.rate || parsed.rate || 0,
     amount: item.total || parsed.amount || 0,
     cost: item.cost || parsed.cost || 0,
-    category: item.category || parsed.category || ''
+    category: item.category || parsed.category || '',
+    company: item.company || parsed.company || ''
   });
   applyInventoryParsedData(merged, mode);
   setInventoryImportStatus(mode, 'Selected extracted item for review.', '#1a8c3c');
@@ -13787,7 +13821,7 @@ function applyInventoryFieldFromChip(target, value, mode) {
       }, mode);
       break;
     case 'company':
-      set('inv-iol-company', safe); learnInventoryOcrValue('company', safe); break;
+      set('inv-in-company', safe); set('inv-iol-company', safe); learnInventoryOcrValue('company', safe); break;
     case 'brand':
       set('inv-iol-brand', safe); learnInventoryOcrValue('brand', safe); break;
     case 'batchNo':
@@ -13850,6 +13884,7 @@ function applyInventoryParsedData(parsed, mode) {
     vendor: 'inv-in-vendor',
     invoiceNo: 'inv-in-invoice',
     itemName: 'bc-in',
+    company: 'inv-in-company',
     exp: 'inv-in-exp'
   };
   Object.keys(fieldMap).forEach(function (key) {
@@ -14923,7 +14958,7 @@ function removeInventoryBrandPrompt() {
 }
 window.removeInventoryBrandPrompt = removeInventoryBrandPrompt;
 function addInventoryCompanyPrompt() {
-  const company = prompt('Company to add to list');
+  const company = document.getElementById('inv-in-company')?.value || prompt('Company to add to list');
   if (!company) return;
   const memory = loadInventoryOcrMemory();
   memory.companies = memory.companies || [];
@@ -14932,7 +14967,7 @@ function addInventoryCompanyPrompt() {
   memory.companies.push(normalized);
   saveInventoryOcrMemory();
   renderInventoryImportDatalists();
-  const companyInput = document.querySelector('.iol-company-field');
+  const companyInput = document.getElementById('inv-in-company') || document.querySelector('.iol-company-field');
   if (companyInput) companyInput.value = normalized;
   showToast('Company added to list ✓', 's');
 }
@@ -21625,6 +21660,7 @@ function prefillExistingPatient(bmhId) {
   const advEl = document.getElementById('rc-advance-amt'); if(advEl) advEl.value = p.advance!=null?p.advance:'';
   const adpEl = document.getElementById('rc-advance-purpose'); if(adpEl) adpEl.value = p.advancePurpose||'';
   const nfEl = document.getElementById('rc-no-fee'); if(nfEl) { nfEl.checked = false; toggleRcNoFee(false); }
+  setReceptionPurposeDefaultForVisit(true);
   // Clear search/match areas
   ['rc-phone-match','rc-bmhid-result'].forEach(id=>{const e=document.getElementById(id);if(e)e.innerHTML='';});
   const sr = document.getElementById('rc-phone-results'); if(sr) sr.style.display='none';
@@ -21935,6 +21971,21 @@ function syncReceptionCentreAndFee() {
 }
 window.syncReceptionConsultationFee = syncReceptionCentreAndFee;
 
+function setReceptionPurposeDefaultForVisit(isExistingPatient) {
+  const sel = document.getElementById('rc-purpose');
+  if (!sel) return;
+  const current = String(sel.value || '').trim();
+  const isConsultationChoice = !current || /^(New Consultation|Follow-up)$/i.test(current);
+  if (!isConsultationChoice) return;
+  const target = isExistingPatient ? 'Follow-up' : 'New Consultation';
+  if ([...sel.options].some(function (opt) { return opt.textContent === target || opt.value === target; })) {
+    sel.value = target;
+  }
+  checkSurgeryPurpose && checkSurgeryPurpose();
+  syncReceptionConsultationFee && syncReceptionConsultationFee();
+}
+window.setReceptionPurposeDefaultForVisit = setReceptionPurposeDefaultForVisit;
+
 function setRcQueueSubtab(mode, btnEl) {
   window._rcQueueSubtab = mode;
   const wrap = document.getElementById('rc-queue-subtabs');
@@ -22076,6 +22127,7 @@ async function registerPatient() {
   const colors = ['#1A3C6E','#0B7B8C','#FF2D55','#AF52DE','#34C759','#FF9500','#5856D6','#FF3B30'];
   const color = existingPt?.color || colors[Math.floor(Math.random()*colors.length)];
 
+  setReceptionPurposeDefaultForVisit(isExistingRegistration);
   const purposeVal = normalizeReceptionFieldValue('rc-purpose', document.getElementById('rc-purpose')?.value||'New Consultation');
   const isPreReg = purposeVal==='Need to Check In' || purposeVal==='Not Checked In';
   const email = emailEarly;
@@ -22318,6 +22370,7 @@ function resetRegistrationForm() {
   const surgPanel=document.getElementById('rc-surgery-panel'); if(surgPanel) surgPanel.style.display='none';
   updateRcDr && updateRcDr();
   updatePurposeOptions && updatePurposeOptions();
+  setReceptionPurposeDefaultForVisit(false);
   configureReceptionCentreSelect && configureReceptionCentreSelect();
   syncReceptionConsultationFee && syncReceptionConsultationFee();
   genRcUID && genRcUID();
@@ -23520,6 +23573,7 @@ function bmhFindOrCreateInventoryItem(rawCode, translated) {
     name: translated || lookup,
     barcode: lookup || ('INV-' + Date.now()),
     qr: lookup || '',
+    company: String(document.getElementById('inv-in-company')?.value || '').trim(),
     genericName: String(document.getElementById('inv-in-generic')?.value || '').trim(),
     cat: bmhInventoryCategoryValue(),
     mrp: Number(document.getElementById('inv-in-mrp')?.value || '0') || 0,
@@ -23546,6 +23600,9 @@ function bmhRecordInventoryPurchase(item, qty, billFile) {
     || document.getElementById('inv-iol-vendor')?.value?.trim()
     || String(item.vendor || '').trim()
     || '';
+  const company = document.getElementById('inv-in-company')?.value?.trim()
+    || String(item.company || item.iolCompany || '').trim()
+    || '';
   const invoiceNo = document.getElementById('inv-in-invoice')?.value?.trim()
     || String(item.invoiceNo || '').trim()
     || '';
@@ -23563,10 +23620,12 @@ function bmhRecordInventoryPurchase(item, qty, billFile) {
   item.min = minQty;
   item.store = store;
   item.vendor = vendor || item.vendor || '';
+  item.company = company || item.company || '';
   item.vendorBillingMode = billMode;
   item.exp = document.getElementById('inv-in-exp')?.value || item.exp || '';
   normalizeInventoryRecord(item);
   if (item.vendor) learnInventoryOcrValue('vendor', item.vendor);
+  if (item.company) learnInventoryOcrValue('company', item.company);
   if (item.name) learnInventoryOcrValue('itemName', item.name);
   if (item.name) learnInventoryOcrValue('product', item.name);
   if (item.iolCompany) learnInventoryOcrValue('company', item.iolCompany);
@@ -23583,6 +23642,7 @@ function bmhRecordInventoryPurchase(item, qty, billFile) {
     dept,
     store,
     category,
+    company,
     vendor,
     invoiceNo,
     qty,
