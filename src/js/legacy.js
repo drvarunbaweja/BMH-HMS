@@ -3727,6 +3727,36 @@ function syncUcvaToRefraction(eye) {
   }
   dst.value = val;
 }
+function getOphthoCprSaveCheckbox() {
+  return document.getElementById('cpr-save') || document.getElementById('oe-cpr-save');
+}
+function buildOphthoCprHistoryPayload(visit) {
+  const clean = function (v) {
+    const s = String(v == null ? '' : v).trim();
+    return s && s !== '—' ? s : '';
+  };
+  const payload = {
+    od: { sph: clean(visit?.cycODsph), cyl: clean(visit?.cycODcyl), ax: clean(visit?.cycODax) },
+    os: { sph: clean(visit?.cycOSsph), cyl: clean(visit?.cycOScyl), ax: clean(visit?.cycOSax) }
+  };
+  const hasAny = ['od', 'os'].some(function (eye) {
+    return payload[eye].sph || payload[eye].cyl || payload[eye].ax;
+  });
+  return hasAny ? payload : null;
+}
+function summarizeOphthoCprHistory(visit) {
+  if (!visit || typeof visit !== 'object') return '';
+  const cpr = visit.cprHistory || (visit.cprChecked ? buildOphthoCprHistoryPayload(visit) : null);
+  if (!cpr) return '';
+  const lineFor = function (label, row) {
+    const parts = [row?.sph, row?.cyl, row?.ax].map(function (v) {
+      const s = String(v == null ? '' : v).trim();
+      return s && s !== '—' ? s : '';
+    }).filter(Boolean);
+    return parts.length ? (label + ' ' + parts.join(' / ')) : '';
+  };
+  return [lineFor('RE', cpr.od), lineFor('LE', cpr.os)].filter(Boolean).join(' · ');
+}
 
 // ═══════════════════════════════════════
 // INTERACTIONS
@@ -4323,6 +4353,8 @@ function populateOphthoForm(v) {
   // Refraction — Cycloplegic
   setRfField('cyc-od-sph', v.cycODsph); setRfField('cyc-od-cyl', v.cycODcyl); setRfField('cyc-od-ax', v.cycODax);
   setRfField('cyc-os-sph', v.cycOSsph); setRfField('cyc-os-cyl', v.cycOScyl); setRfField('cyc-os-ax', v.cycOSax);
+  const cprSave = getOphthoCprSaveCheckbox();
+  if (cprSave) cprSave.checked = !!(v.cprChecked || v.cprHistory);
   // Refraction — Subjective
   setRfField('subj-od-sph', v.subjODsph); setRfField('subj-od-cyl', v.subjODcyl); setRfField('subj-od-ax', v.subjODax);
   setRfField('subj-os-sph', v.subjOSsph); setRfField('subj-os-cyl', v.subjOScyl); setRfField('subj-os-ax', v.subjOSax);
@@ -9780,6 +9812,7 @@ function bmhComputeBalanceDue(bmhId, totalOverride) {
 
 function bmhIsAdvanceTransaction(txn) {
   if (!txn) return false;
+  if (bmhIsAdvanceAdjustmentTransaction(txn)) return false;
   return String(txn.type || '').toLowerCase() === 'advance'
     || String(txn.source || '').toLowerCase() === 'billing-advance'
     || /\badvance\b/i.test(String(txn.service || txn.for || txn.desc || ''));
@@ -9873,6 +9906,18 @@ function getQueueDisplayDueState(bmhId) {
   const computedDue = typeof bmhComputeBalanceDue === 'function' ? Number(bmhComputeBalanceDue(bmhId) || 0) : 0;
   const due = pendingAmt > 0 ? Math.max(pendingAmt, computedDue) : 0;
   return { due: due, pendingPRs: pendingPRs, paidPRs: paidPRs, pendingAmt: pendingAmt };
+}
+function getQueueDisplayAdvanceBalance(p) {
+  if (!p || !p.bmhId) return 0;
+  const hasPatientTransactions = Array.isArray(TRANSACTIONS) && TRANSACTIONS.some(function (txn) { return txn && txn.bmhId === p.bmhId; });
+  if (!hasPatientTransactions) return Math.max(0, Number(p.advance) || 0);
+  if (typeof bmhSyncPatientAdvanceBalance === 'function') {
+    return Math.max(0, Number(bmhSyncPatientAdvanceBalance(p.bmhId)) || 0);
+  }
+  if (typeof bmhComputeAdvanceBalanceForPatient === 'function') {
+    return Math.max(0, Number(bmhComputeAdvanceBalanceForPatient(p.bmhId)) || 0);
+  }
+  return Math.max(0, Number(p.advance) || 0);
 }
 
 function bmhDeleteTransactionEntry(txnId) {
@@ -10760,6 +10805,7 @@ async function bmhSaveAndPrintBill() {
 
     if (typeof renderBillingPageIfActive === 'function') renderBillingPageIfActive();
     if (typeof renderDashboard === 'function') renderDashboard();
+    if (typeof renderDocQueue === 'function') renderDocQueue();
   } catch (err) {
     console.error('bmhSaveAndPrintBill error:', err);
     showToast('❌ Error saving bill: ' + (err.message || 'Unknown error') + ' — try "Preview only" instead', 'e');
@@ -11095,7 +11141,7 @@ function bmhGetPatientFinancialSummary(bmhId) {
   const payRequests = (PAY_REQUESTS || []).filter(r => r.bmhId === bmhId).slice().sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
   const chargeTotal = billContext.chargeTotal;
   const paidTotal = billContext.received;
-  const advanceTotal = txns.filter(t => t.type === 'advance' || /advance/i.test(t.service || '')).reduce((s, t) => s + Math.max(0, Number(t.amount) || 0), 0);
+  const advanceTotal = txns.filter(bmhIsAdvanceTransaction).reduce((s, t) => s + Math.max(0, Number(t.amount) || 0), 0);
   const pendingTotal = payRequests.filter(function (r) {
     return r.status === 'pending' && !isInsuranceLikeMode(r.mode || r.ins || '');
   }).reduce((s, r) => s + Math.max(0, Number(r.amount) || 0), 0);
@@ -37012,13 +37058,14 @@ function buildQCard(p, sno) {
   const pendingAmt = queueDueState.pendingAmt;
   const runningDue = queueDueState.due;
   const paidPRs = queueDueState.paidPRs;
+  const advanceBalance = getQueueDisplayAdvanceBalance(p);
   const pendingPRIds = pendingPRs.map(r=>r.id);
   const surgeryDue = runningDue > 0 && patientHasSurgeryDue(p.bmhId);
   const chargeHtml = runningDue>0
     ? `<span onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;gap:3px;background:rgba(255,149,0,.15);color:#8a4200;border:1px solid rgba(255,149,0,.4);border-radius:10px;padding:1px 6px;font-size:9px;font-weight:800;animation:pulse 2s infinite">⚠️ ${surgeryDue ? 'Surgery due' : 'Due'} ₹${runningDue.toLocaleString('en-IN')}${pendingAmt>0?`<button title="Delete all pending charges for this patient" onclick="event.stopPropagation();deletePatientPendingCharges('${p.bmhId}')" style="background:none;border:none;cursor:pointer;padding:0 0 0 2px;font-size:10px;color:#c0392b;line-height:1">🗑</button>`:''}</span>`
     : paidPRs.length
     ? `<span style="background:var(--green-lt);color:#1a8c3c;border:1px solid var(--green);border-radius:10px;padding:1px 6px;font-size:9px;font-weight:800">✓ Paid</span>`
-    : p.advance>0 ? `<span style="background:var(--blue-lt);color:var(--blue);border:1px solid rgba(0,122,255,.3);border-radius:10px;padding:1px 6px;font-size:9px;font-weight:800">💙 Adv ₹${p.advance.toLocaleString('en-IN')}</span>` : '';
+    : advanceBalance>0 ? `<span style="background:var(--blue-lt);color:var(--blue);border:1px solid rgba(0,122,255,.3);border-radius:10px;padding:1px 6px;font-size:9px;font-weight:800">💙 Adv ₹${advanceBalance.toLocaleString('en-IN')}</span>` : '';
   const statusBadge = p.preRegistered
     ? `<span style="background:#e2e8f0;color:#334155;border-radius:10px;padding:1px 7px;font-size:9px;font-weight:800;border:1px dashed #94a3b8">⏳ Need to Check In</span>`
     : p.seen
@@ -37109,7 +37156,8 @@ function buildQTableRow(p, sno, opts) {
   const pendingAmt = queueDueState.pendingAmt;
   const runningDue = queueDueState.due;
   const paidPRs = queueDueState.paidPRs;
-  const advLbl = (p.advance > 0) ? `<span style="font-size:9px;color:var(--blue);font-weight:800">Adv ₹${(p.advance||0).toLocaleString('en-IN')}</span>` : '';
+  const advanceBalance = getQueueDisplayAdvanceBalance(p);
+  const advLbl = (advanceBalance > 0) ? `<span style="font-size:9px;color:var(--blue);font-weight:800">Adv ₹${advanceBalance.toLocaleString('en-IN')}</span>` : '';
   const surgeryDue = runningDue > 0 && patientHasSurgeryDue(p.bmhId);
   const chargeHint = p._xrefEntry
     ? getCrossRefQueueChargeHint(p)
@@ -37999,6 +38047,8 @@ function saveVisit(dept, opts) {
     visit.cycOSsph = document.getElementById('cyc-os-sph')?.value || '';
     visit.cycOScyl = document.getElementById('cyc-os-cyl')?.value || '';
     visit.cycOSax  = document.getElementById('cyc-os-ax')?.value  || '';
+    visit.cprChecked = !!getOphthoCprSaveCheckbox()?.checked;
+    if (visit.cprChecked) visit.cprHistory = buildOphthoCprHistoryPayload(visit);
     visit.subjODsph = document.getElementById('subj-od-sph')?.value || '';
     visit.subjODcyl = document.getElementById('subj-od-cyl')?.value || '';
     visit.subjODax  = document.getElementById('subj-od-ax')?.value  || '';
@@ -38474,6 +38524,7 @@ function loadPastVisits(bmhId, dept) {
           const le = [v.subjOSsph, v.subjOScyl, v.subjOSax, v.subjOSva].filter(Boolean).join(' ');
           return [re ? ('RE ' + re) : '', le ? ('LE ' + le) : ''].filter(Boolean).join(' · ') || '—';
         } },
+        { label: 'CPR', get: function (v) { return summarizeOphthoCprHistory(v) || '—'; } },
         { label: 'Near Add', get: function (v) { return summarizeOphthoNearAdd(v) || '—'; } },
         { label: 'Past Ocular Hx / Surgery', get: function (v) { return summarizeOphthoPastOcularHistory(v) || '—'; } },
         { label: 'Positive Findings', get: function (v) { return v.positiveFindings || '—'; } },
@@ -38704,6 +38755,7 @@ function renderOphthoRecap() {
       const historySnippet = summarizeVisitHistory(v, 'ophtho');
       const pohSnippet = summarizeOphthoPastOcularHistory(v);
       const addSnippet = summarizeOphthoNearAdd(v);
+      const cprSnippet = summarizeOphthoCprHistory(v);
       return `<div style="padding:9px 10px;border:1px solid var(--g5);border-radius:10px;background:#fff;margin-bottom:7px">
         <div style="display:flex;justify-content:space-between;gap:6px;align-items:flex-start;margin-bottom:4px">
           <div style="font-size:11px;font-weight:800;color:var(--bmh-blue)">${v.dateLabel || new Date(v.date || Date.now()).toLocaleDateString('en-IN')}</div>
@@ -38713,6 +38765,7 @@ function renderOphthoRecap() {
         <div style="font-size:10.5px;line-height:1.42;margin-top:3px"><b>Rx:</b> ${rx}</div>
         ${historySnippet ? `<div style="font-size:10.5px;line-height:1.42;margin-top:3px"><b>History:</b> ${historySnippet}</div>` : ''}
         ${pohSnippet ? `<div style="font-size:10.5px;line-height:1.42;margin-top:3px"><b>Past ocular hx:</b> ${pohSnippet}</div>` : ''}
+        ${cprSnippet ? `<div style="font-size:10.5px;line-height:1.42;margin-top:3px"><b>CPR:</b> ${cprSnippet}</div>` : ''}
         ${addSnippet ? `<div style="font-size:10.5px;line-height:1.42;margin-top:3px"><b>Near add:</b> ${addSnippet}</div>` : ''}
         <div style="font-size:10px;color:var(--g1);line-height:1.36;margin-top:3px"><b>Glasses:</b> ${spec}</div>
       </div>`;
