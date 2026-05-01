@@ -21894,13 +21894,16 @@ window._rcQueueSubtab = window._rcQueueSubtab || 'waiting';
 
 function toggleRcNoFee(on) {
   const fee = document.getElementById('rc-fee');
+  const feeSelect = document.getElementById('rc-fee-select');
   if(!fee) return;
   if(on) {
     fee.value = '0';
     fee.disabled = true;
+    if (feeSelect) feeSelect.disabled = true;
     return;
   }
   fee.disabled = false;
+  if (feeSelect) feeSelect.disabled = false;
   syncReceptionConsultationFee && syncReceptionConsultationFee();
 }
 
@@ -21933,6 +21936,45 @@ function getReceptionConsultationRate(centre) {
     if(direct) return direct;
   }
   return 0;
+}
+
+function shouldShowReceptionOphthoChdFeeChoice() {
+  const centre = normalizeAppointmentCentreValue(document.getElementById('rc-centre')?.value || getReceptionSelectedCentre() || 'CHD');
+  const dept = document.getElementById('rc-dept')?.value || 'ophtho';
+  const serviceName = getReceptionConsultationServiceName();
+  return centre === 'CHD' && dept === 'ophtho' && !!serviceName;
+}
+
+function applyReceptionFeeChoice() {
+  const select = document.getElementById('rc-fee-select');
+  const feeEl = document.getElementById('rc-fee');
+  if (!select || !feeEl) return;
+  const amount = Math.max(0, Number(select.value || 0));
+  feeEl.value = String(amount);
+}
+window.applyReceptionFeeChoice = applyReceptionFeeChoice;
+
+function updateReceptionFeeChoiceUi(standardAmount) {
+  const select = document.getElementById('rc-fee-select');
+  const feeEl = document.getElementById('rc-fee');
+  if (!select || !feeEl) return;
+  const show = shouldShowReceptionOphthoChdFeeChoice();
+  if (!show) {
+    select.style.display = 'none';
+    select.innerHTML = '';
+    feeEl.style.display = '';
+    return;
+  }
+  const standard = Math.max(0, Number(standardAmount || 0));
+  const current = Number(feeEl.value || 0);
+  select.innerHTML = [
+    '<option value="' + standard + '">Regular consultation - ₹' + standard.toLocaleString('en-IN') + '</option>',
+    '<option value="300">Special consultation - ₹300</option>'
+  ].join('');
+  select.value = current === 300 ? '300' : String(standard);
+  select.style.display = '';
+  feeEl.style.display = 'none';
+  applyReceptionFeeChoice();
 }
 
 function configureReceptionCentreSelect() {
@@ -21981,6 +22023,7 @@ function syncReceptionCentreAndFee() {
   feeEl.disabled = false;
   const amount = getReceptionConsultationRate(centre);
   feeEl.value = String(amount);
+  updateReceptionFeeChoiceUi(amount);
 }
 window.syncReceptionConsultationFee = syncReceptionCentreAndFee;
 

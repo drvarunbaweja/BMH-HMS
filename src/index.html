@@ -2021,7 +2021,7 @@
             </select>
           </div>
           <div class="form-group"><label class="fl">Centre</label><select id="rc-centre" onchange="syncReceptionConsultationFee&&syncReceptionConsultationFee()"><option value="CHD">Chandigarh</option><option value="RPR">Ropar</option></select></div>
-          <div class="form-group"><label class="fl">Consultation Fee ₹</label><input type="number" id="rc-fee" value="0"></div>
+          <div class="form-group"><label class="fl">Consultation Fee ₹</label><select id="rc-fee-select" onchange="applyReceptionFeeChoice()" style="display:none;margin-bottom:4px"></select><input type="number" id="rc-fee" value="0"></div>
           <div class="form-group full" style="flex-direction:row;align-items:center;gap:10px;padding:8px 10px;background:var(--g6);border-radius:var(--rsm);border:1.5px dashed var(--g4)">
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;font-weight:800;color:var(--bmh-blue);margin:0">
               <input type="checkbox" id="rc-no-fee" onchange="toggleRcNoFee(this.checked)" style="width:auto">
