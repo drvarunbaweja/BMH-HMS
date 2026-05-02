@@ -1258,7 +1258,7 @@
                 <td style="border:1px solid var(--g4)"><input list="dl-rf-ax" id="subj-od-ax" style="width:54px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-ax-inp" autocomplete="off"></td>
                 <td style="border:1px solid var(--g4)"><select id="subj-od-va" style="width:58px;font-size:10px;padding:2px 2px;border:none;background:transparent"><option value="">—</option><option>6/6</option><option>6/6p</option><option>6/9</option><option>6/9p</option><option>6/12</option><option>6/12p</option><option>6/18</option><option>6/18p</option><option>6/24</option><option>6/24p</option><option>6/36</option><option>6/36p</option><option>6/60</option><option>6/60p</option><option>5/60</option><option>4/60</option><option>3/60</option><option>2/60</option><option>1/60</option><option>CF</option><option>HM</option><option>PL</option><option>NPL</option><option>NI</option></select></td>
                 <td style="border:1px solid var(--g4)"><input list="dl-rf-addspec" id="rf-od-add" style="width:55px;font-size:10px;padding:2px 2px;border:none;background:transparent" placeholder="Add" autocomplete="off"></td>
-                <td style="border:1px solid var(--g4)"><select id="nv-od-final" style="width:50px;font-size:10px;padding:2px 2px;border:none;background:transparent"><option>—</option><option>N5</option><option>N6</option><option>N8</option><option>N10</option><option>N12</option><option>N18</option><option>N24</option><option>N36</option></select></td>
+                <td style="border:1px solid var(--g4)"><input list="dl-nv" id="nv-od-final" style="width:50px;font-size:10px;padding:2px 2px;border:none;background:transparent" placeholder="N6" autocomplete="off"></td>
               </tr>
               <tr>
                 <td style="font-weight:900;background:#e8f5e9;border:1px solid var(--g4);padding:4px 7px">OS</td>
@@ -1276,7 +1276,7 @@
                 <td style="border:1px solid var(--g4)"><input list="dl-rf-ax" id="subj-os-ax" style="width:54px;font-size:10px;padding:2px 2px;border:none;background:transparent" class="rf-ax-inp" autocomplete="off"></td>
                 <td style="border:1px solid var(--g4)"><select id="subj-os-va" style="width:58px;font-size:10px;padding:2px 2px;border:none;background:transparent"><option value="">—</option><option>6/6</option><option>6/6p</option><option>6/9</option><option>6/9p</option><option>6/12</option><option>6/12p</option><option>6/18</option><option>6/18p</option><option>6/24</option><option>6/24p</option><option>6/36</option><option>6/36p</option><option>6/60</option><option>6/60p</option><option>5/60</option><option>4/60</option><option>3/60</option><option>2/60</option><option>1/60</option><option>CF</option><option>HM</option><option>PL</option><option>NPL</option><option>NI</option></select></td>
                 <td style="border:1px solid var(--g4)"><input list="dl-rf-addspec" id="rf-os-add" style="width:55px;font-size:10px;padding:2px 2px;border:none;background:transparent" placeholder="Add" autocomplete="off"></td>
-                <td style="border:1px solid var(--g4)"><select id="nv-os-final" style="width:50px;font-size:10px;padding:2px 2px;border:none;background:transparent"><option>—</option><option>N5</option><option>N6</option><option>N8</option><option>N10</option><option>N12</option><option>N18</option><option>N24</option><option>N36</option></select></td>
+                <td style="border:1px solid var(--g4)"><input list="dl-nv" id="nv-os-final" style="width:50px;font-size:10px;padding:2px 2px;border:none;background:transparent" placeholder="N8" autocomplete="off"></td>
               </tr>
             </tbody>
           </table>
@@ -1284,6 +1284,7 @@
           <datalist id="dl-rf-cyl"></datalist>
           <datalist id="dl-rf-ax"></datalist>
           <datalist id="dl-rf-addspec"></datalist>
+          <datalist id="dl-nv"><option value="N5"></option><option value="N6"></option><option value="N8"></option><option value="N10"></option><option value="N12"></option><option value="N18"></option><option value="N24"></option><option value="N36"></option><option value="n6/n8"></option></datalist>
         </div>
         <div class="fg3">
           <div class="form-group"><label class="fl">IPD (mm)</label><input type="text" id="ipd-val" placeholder="62"></div>
@@ -1679,13 +1680,13 @@
           <div style="display:flex;gap:14px;flex-wrap:wrap">
             <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-cc" checked> Chief Complaints</label>
             <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-va" checked> Visual Acuity</label>
-            <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-iop" checked> IOP</label>
+            <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-iop"> IOP</label>
             <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-refr" checked> Refraction</label>
             <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-posfind" checked> Positive Findings</label>
             <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-diag" checked> Diagrams</label>
             <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-rx" checked> Medications</label>
             <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-proc" checked> Procedures Advised</label>
-            <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-inv" checked> Lab Investigations</label>
+            <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-inv"> Lab Investigations</label>
             <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-adv" checked> Instructions</label>
             <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-gl" checked> Glass Prescription</label>
           </div>

@@ -3820,9 +3820,13 @@ function openPatient(bmhId, opts) {
   document.querySelectorAll('#pg-ophtho input[type=checkbox], #pg-obg input[type=checkbox], #pg-psych input[type=checkbox], #pg-skin input[type=checkbox]')
     .forEach(el => { el.checked = false; });
   // Prescription print defaults (Eye) — keep these enabled by default on each patient open.
-  ['oe-inc-va', 'oe-inc-iop', 'oe-inc-rx', 'oe-inc-proc', 'oe-inc-adv', 'oe-inc-gl', 'oe-inc-inv'].forEach(function (id) {
+  ['oe-inc-va', 'oe-inc-rx', 'oe-inc-proc', 'oe-inc-adv', 'oe-inc-gl'].forEach(function (id) {
     const el = document.getElementById(id);
     if (el) el.checked = true;
+  });
+  ['oe-inc-iop', 'oe-inc-inv'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) el.checked = false;
   });
   ['obg-inc-vitals', 'obg-inc-anc', 'obg-inc-complaint', 'obg-inc-inv', 'obg-inc-obs-history'].forEach(function (id) {
     const el = document.getElementById(id);
@@ -4312,7 +4316,20 @@ function loadTodayDeptVisitIntoForm(bmhId, dept) {
 
 function populateOphthoForm(v) {
   function setV(id, val) { const el=document.getElementById(id); if(el&&val!==undefined&&val!==null) el.value=val; }
-  function setSel(id, val) { const el=document.getElementById(id); if(el&&val){ for(let i=0;i<el.options.length;i++){if(el.options[i].value===val||el.options[i].text===val){el.selectedIndex=i;break;}} } }
+  function setSel(id, val) {
+    const el = document.getElementById(id);
+    if (!el || !val) return;
+    if (!el.options) {
+      el.value = val;
+      return;
+    }
+    for (let i = 0; i < el.options.length; i++) {
+      if (el.options[i].value === val || el.options[i].text === val) {
+        el.selectedIndex = i;
+        return;
+      }
+    }
+  }
   function setRfField(id, val) {
     if (val === undefined || val === null || val === '') return;
     const el = document.getElementById(id);
@@ -38662,8 +38679,8 @@ function saveVisit(dept, opts) {
     visit.subjOSva  = document.getElementById('subj-os-va')?.value  || '';
     visit.rfODAdd  = document.getElementById('rf-od-add')?.value || '';
     visit.rfOSAdd  = document.getElementById('rf-os-add')?.value || '';
-    visit.nvODFinal = document.getElementById('nv-od-final-manual')?.value || document.getElementById('nv-od-final')?.value || '';
-    visit.nvOSFinal = document.getElementById('nv-os-final-manual')?.value || document.getElementById('nv-os-final')?.value || '';
+    visit.nvODFinal = document.getElementById('nv-od-final')?.value || document.getElementById('nv-od-final-manual')?.value || '';
+    visit.nvOSFinal = document.getElementById('nv-os-final')?.value || document.getElementById('nv-os-final-manual')?.value || '';
     visit.fundODdisc = document.getElementById('fund-od-disc')?.value || '';
     visit.fundODcd   = document.getElementById('fund-od-cd')?.value   || '';
     visit.fundODmac  = document.getElementById('fund-od-mac')?.value  || '';
