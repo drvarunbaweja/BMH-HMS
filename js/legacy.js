@@ -8350,24 +8350,54 @@ function normalizeIolModelStem(text) {
     .trim()
     .toLowerCase();
 }
+function normalizeIolNameForMatch(text) {
+  return normalizeInventoryCompareText(normalizeIolModelStem(text || '').replace(/\biol\b/g, ' '));
+}
+function iolInventoryNameMatchesCase(item, caseIolName) {
+  const wanted = normalizeIolNameForMatch(caseIolName || '');
+  if (!wanted) return true;
+  const candidates = [
+    item.iolBrand,
+    item.iolModel,
+    item.name,
+    _iolBrandLabel(item)
+  ].map(normalizeIolNameForMatch).filter(Boolean);
+  return candidates.some(function (name) {
+    return name === wanted || name.includes(wanted) || wanted.includes(name);
+  });
+}
 function describeIolInventoryItem(item) {
   const bits = [
+    item.exp ? ('Exp ' + item.exp) : '',
     item.serialNo ? ('Serial ' + item.serialNo) : '',
     item.batchNo ? ('Batch ' + item.batchNo) : '',
-    item.barcode ? ('Code ' + item.barcode) : ''
+    item.barcode ? ('Code ' + item.barcode) : '',
+    (Number(item.stock) || 0) > 1 ? ('Stock ' + Number(item.stock)) : ''
   ].filter(Boolean);
   return [item.name, bits.join(' · ')].filter(Boolean).join(' — ');
 }
 function chooseIolInventoryItem(matches, desiredPower) {
   if (!matches.length) return null;
   if (matches.length === 1) return matches[0];
-  const lines = matches.slice(0, 9).map(function (item, idx) {
-    return (idx + 1) + '. ' + describeIolInventoryItem(item);
+  const groups = {};
+  matches.forEach(function (item) {
+    const exp = String(item.exp || '').trim() || 'No expiry recorded';
+    if (!groups[exp]) groups[exp] = [];
+    groups[exp].push(item);
   });
-  const choice = window.prompt('More than one IOL is in stock for power ' + (desiredPower || 'selected power') + '. Enter the serial option number used:\n\n' + lines.join('\n'), '1');
+  const expiries = Object.keys(groups);
+  if (expiries.length === 1) return groups[expiries[0]][0];
+  const lines = expiries.slice(0, 9).map(function (exp, idx) {
+    const group = groups[exp] || [];
+    const stock = group.reduce(function (sum, item) { return sum + Math.max(0, Number(item.stock) || 0); }, 0);
+    const sample = group[0] || {};
+    return (idx + 1) + '. Exp ' + exp + ' — ' + stock + ' in stock' + (sample.batchNo ? ' · Batch ' + sample.batchNo : '');
+  });
+  const choice = window.prompt('Check IOL expiry date for power ' + (desiredPower || 'selected power') + '. Enter the expiry option used:\n\n' + lines.join('\n'), '1');
   if (choice == null) return false;
   const idx = Math.max(1, parseInt(choice, 10) || 0) - 1;
-  return matches[idx] || null;
+  const expiry = expiries[idx];
+  return expiry ? (groups[expiry] || [])[0] || null : null;
 }
 function consumeIolForOtCase(otCase) {
   const c = otCase || {};
@@ -8375,30 +8405,22 @@ function consumeIolForOtCase(otCase) {
   const chosenPower = normalizeIolPowerValue(c.iolPower || extractIolPower(c.iol || c.iolType || ''));
   const rawPower = String(c.iolPower || '').trim();
   if (rawPower.includes('/') || rawPower.includes(',')) return { changed: false };
-  const modelStem = normalizeIolModelStem(c.iolType || c.iol || '');
+  const caseIolName = c.iolType || c.iol || '';
+  if (!chosenPower) {
+    return { changed: false, pending: true, reason: 'IOL power not recorded for expiry stock check' };
+  }
   let matches = (INVENTORY || []).filter(function (item) {
     if ((Number(item.stock) || 0) <= 0) return false;
     if (!/iol/i.test(String(item.cat || '') + ' ' + String(item.name || ''))) return false;
     const itemPower = normalizeIolPowerValue(item.power || extractIolPower(item.name || ''));
-    if (chosenPower && itemPower && itemPower !== chosenPower) return false;
-    if (modelStem) {
-      const itemStem = normalizeIolModelStem(item.name || '');
-      return !itemStem || itemStem.includes(modelStem) || modelStem.includes(itemStem);
-    }
-    return true;
+    if (chosenPower !== itemPower) return false;
+    return iolInventoryNameMatchesCase(item, caseIolName);
   });
-  if (!matches.length && chosenPower) {
-    matches = (INVENTORY || []).filter(function (item) {
-      return (Number(item.stock) || 0) > 0
-        && /iol/i.test(String(item.cat || '') + ' ' + String(item.name || ''))
-        && normalizeIolPowerValue(item.power || extractIolPower(item.name || '')) === chosenPower;
-    });
-  }
   if (!matches.length) {
     return {
       changed: false,
       pending: true,
-      reason: 'No matching IOL stock found for ' + (chosenPower || 'selected lens')
+      reason: 'No matching IOL stock found for ' + [caseIolName, chosenPower].filter(Boolean).join(' ')
     };
   }
   const chosen = chooseIolInventoryItem(matches, chosenPower);
@@ -8424,6 +8446,7 @@ function consumeIolForOtCase(otCase) {
   c.iolInventoryBarcode = chosen.barcode || '';
   c.iolSerial = chosen.serialNo || '';
   c.iolBatch = chosen.batchNo || '';
+  c.iolExpiry = chosen.exp || '';
   c.iolPower = c.iolPower || chosen.power || extractIolPower(chosen.name || '');
   const patient = PATIENTS.find(function (p) { return p.bmhId === c.bmhId; });
   const usageRef = {
@@ -8431,6 +8454,7 @@ function consumeIolForOtCase(otCase) {
     barcode: chosen.barcode || '',
     serialNo: chosen.serialNo || '',
     batchNo: chosen.batchNo || '',
+    exp: chosen.exp || '',
     power: c.iolPower || '',
     usedAt: bmhNowISO(),
     vendor: chosen.vendor || ''
@@ -8445,6 +8469,7 @@ function consumeIolForOtCase(otCase) {
       iolInventoryBarcode: c.iolInventoryBarcode,
       iolSerial: c.iolSerial,
       iolBatch: c.iolBatch,
+      iolExpiry: c.iolExpiry,
       iolPower: c.iolPower
     }
   };
@@ -8919,16 +8944,23 @@ function saveIolInventoryGrid() {
         };
         bd.picked.forEach(function (row) {
           const hints = bd.serialMap[row.power] || [];
-          // Check if an existing IOL item with same brand+power already exists — merge qty rather than create new row
+          // Merge only identical brand+power+expiry rows so mixed-expiry IOL stock stays selectable at OT completion.
           const brandKey = normalizeInventoryCompareText(bd.brand || bd.company || '');
-          const existing = brandKey ? INVENTORY.find(function (x) {
+          const rowExpiries = Array.from(new Set(Array.from({ length: row.qty }, function (_, idx) {
+            return hints[idx] || { exp: bd.exp };
+          }).map(function (h) {
+            return String((h && h.exp) || bd.exp || '').trim();
+          })));
+          const rowExp = rowExpiries[0] || '';
+          const existing = (brandKey && rowExpiries.length <= 1) ? INVENTORY.find(function (x) {
             return String(x.cat || '').toLowerCase() === 'iol'
               && normalizeInventoryCompareText(_iolBrandLabel(x)) === brandKey
-              && String(x.power || extractIolPower(x.name || '') || '') === String(row.power || '');
+              && String(x.power || extractIolPower(x.name || '') || '') === String(row.power || '')
+              && String(x.exp || '').trim() === rowExp;
           }) : null;
           if (existing) {
             existing.stock = (Number(existing.stock) || 0) + row.qty;
-            if (bd.exp) existing.exp = bd.exp;
+            if (rowExp) existing.exp = rowExp;
             if (bd.batchNo) existing.batchNo = bd.batchNo;
             existing._localAddedAt = Date.now();
             if (typeof window.saveInventoryToFirebase === 'function') {
