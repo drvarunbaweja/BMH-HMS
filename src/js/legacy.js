@@ -25330,6 +25330,26 @@ function computeRxEndAndTaperDates(d) {
     prevTo = tr.dateTo;
   });
 }
+function ensureRxDrugPrintDates(d) {
+  if (!d) return;
+  if (!d.dateFrom) d.dateFrom = new Date().toISOString().split('T')[0];
+  if (!d.dateTo) {
+    const n = durationLabelToDays(d.dur);
+    const half = String(d.dur || '').includes('½') || String(d.dur || '').toLowerCase().includes('half');
+    d.dateTo = (n <= 1 && half) ? d.dateFrom : addDaysToIsoDate(d.dateFrom, Math.max(0, Math.round(n) - 1));
+  }
+  let prevTo = d.dateTo || d.dateFrom;
+  ensureRxTaperRows(d).forEach(function (tr) {
+    if (!tr.dur) tr.dur = normalizeRxDurationLabel(d.dur);
+    if (!tr.dateFrom) tr.dateFrom = addDaysToIsoDate(prevTo, 1);
+    if (!tr.dateTo) {
+      const tn = durationLabelToDays(tr.dur || d.dur);
+      const half = String(tr.dur || d.dur || '').includes('½') || String(tr.dur || d.dur || '').toLowerCase().includes('half');
+      tr.dateTo = (tn <= 1 && half) ? tr.dateFrom : addDaysToIsoDate(tr.dateFrom, Math.max(0, Math.round(tn) - 1));
+    }
+    prevTo = tr.dateTo || tr.dateFrom || prevTo;
+  });
+}
 function syncRxDrugDates(idx) {
   const d = RX_DRUGS[idx];
   if (!d) return;
@@ -27936,8 +27956,7 @@ function renderRxDrugs() {
       dateTo: row.dateTo || ''
     }, lang, (iso)=> {
       if (!iso) return '—';
-      const t = Date.parse(iso);
-      return Number.isNaN(t) ? String(iso) : new Date(t).toLocaleDateString('en-IN',{day:'2-digit',month:'2-digit',year:'numeric'});
+      return formatDateIN(iso);
     });
     const tradeName = rxDrugTradeName(baseDrug) || '';
     const genericName = rxDrugGenericName(baseDrug) || '';
@@ -27963,8 +27982,8 @@ function renderRxDrugs() {
           </select>
         </div>
         <div><select onchange="${prefix}.dur=this.value;window.syncRxDrugDates(${i})" style="${inputBase}">${durOpts.map(v=>`<option${rowDur===v?' selected':''}>${v}</option>`).join('')}</select></div>
-        <div><input type="date" value="${esc(row.dateFrom || '')}" onchange="${prefix}.dateFrom=this.value;window.syncRxDrugDates(${i})" style="${inputBase}"></div>
-        <div><input type="date" value="${esc(row.dateTo || '')}" onchange="${prefix}.dateTo=this.value;renderRxDrugs()" style="${inputBase}"></div>
+        <div><input type="text" inputmode="numeric" placeholder="dd/mm/yyyy" value="${esc(row.dateFrom ? formatDateDDMMYYYY(row.dateFrom) : '')}" onchange="${prefix}.dateFrom=parseDisplayDateToIso(this.value);this.value=formatDateDDMMYYYY(${prefix}.dateFrom);window.syncRxDrugDates(${i})" style="${inputBase}"></div>
+        <div><input type="text" inputmode="numeric" placeholder="dd/mm/yyyy" value="${esc(row.dateTo ? formatDateDDMMYYYY(row.dateTo) : '')}" onchange="${prefix}.dateTo=parseDisplayDateToIso(this.value);this.value=formatDateDDMMYYYY(${prefix}.dateTo);renderRxDrugs()" style="${inputBase}"></div>
         <div style="display:flex;flex-direction:column;gap:6px">${taperBtn}${removeBtn}</div>
       </div>
     </div>`;
@@ -29045,7 +29064,23 @@ function formatDateDDMMYY(value) {
   return dd + '/' + mm + '/' + yy;
 }
 function formatDateIN(value) {
-  return formatDateDDMMYY(value);
+  return formatDateDDMMYYYY(value);
+}
+function parseDisplayDateToIso(value) {
+  const raw = String(value || '').trim();
+  if (!raw || raw === '—') return '';
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (iso) return iso[1] + '-' + iso[2] + '-' + iso[3];
+  const dmy = raw.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2}|\d{4})$/);
+  if (dmy) {
+    const dd = String(dmy[1]).padStart(2, '0');
+    const mm = String(dmy[2]).padStart(2, '0');
+    const yyyy = dmy[3].length === 2 ? ('20' + dmy[3]) : dmy[3];
+    return yyyy + '-' + mm + '-' + dd;
+  }
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return raw;
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
 function toTitleCaseName(value) {
   return String(value || '')
@@ -30288,6 +30323,9 @@ window.printUnifiedRx = function(deptId) {
     const savedRx = Array.isArray(window.CURRENT_PATIENT?.lastVisit?.rx) ? window.CURRENT_PATIENT.lastVisit.rx : [];
     if (Array.isArray(savedRx) && savedRx.length) drugs = JSON.parse(JSON.stringify(savedRx));
   }
+  drugs.forEach(function (d) {
+    if (typeof ensureRxDrugPrintDates === 'function') ensureRxDrugPrintDates(d);
+  });
   const postSurgeryRx = deptId === 'oe' ? !!document.getElementById('rx-post-surgery')?.checked : false;
   const plainInstrBlocks = drugs.length ? drugs.map(function (d) {
     return buildRxPlainInstructionLine(d, rxPlainLang, fmtIN);
@@ -30626,10 +30664,10 @@ window.printUnifiedRx = function(deptId) {
   const skinDermoscopy = deptId === 'skin' ? (document.getElementById('skin-dermoscopy')?.value || '') : '';
   const designCss = {
     current: '',
-    option_a: `body{background:#fff}.pt-name{color:#111}.pt-name-bar{border-bottom:2px solid #1a3c6e}.sec-label{color:#111}.sec-divider::before,.sec-divider::after{border-color:#1a3c6e}.diag-text{color:#111;border-color:#1a3c6e}.rx-item{border-left:3px solid #1a3c6e;padding-left:10px}.rx-item-name{font-size:14px;color:#111}.rx-item-instr{border-left:3px solid #1a3c6e;color:#111;font-style:normal}.dept-card-hdr{background:#1a3c6e}.taper-card{border-color:#1a3c6e}.taper-card-hdr{background:#1a3c6e}.inv-chip{border-color:#1a3c6e;background:#f0f4ff;color:#111}.fu-box{border-color:#1a3c6e;color:#111}`,
-    option_b: `body{background:#fff}.pt-name-bar{border-bottom:2px solid #0f7b82}.pt-name{color:#111}.sec-label{color:#111}.sec-divider::before,.sec-divider::after{border-color:#0f7b82}.diag-text{color:#111}.diag-rule-top,.diag-rule-bot{border-color:#0f7b82}.rx-item{background:#f5fffe;border-radius:8px;padding:8px 10px;border:1px solid #c0e8ea}.rx-item-name{color:#111;font-size:14px}.rx-item-instr{font-style:normal;font-weight:700;color:#111;background:#fff;border:1px solid #c0e8ea;border-radius:6px;padding:6px 10px;border-left:3px solid #0f7b82}.rx-item-details{margin-top:4px}.dept-card-hdr{background:#0f7b82}.taper-card{border-color:#0f7b82}.taper-card-hdr{background:#0f7b82}.inv-chip{background:#e6f7f8;border-color:#0f7b82;color:#111}.fu-box{border-color:#0f7b82;color:#111}.rx-item-gen{color:#111}`,
-    signature_classic: `body{background:#fcfcfb}.rx-item{padding:7px 10px;border:1px solid #dfe4ec;border-left:4px solid #c89a2b;border-radius:10px;margin-bottom:6px;background:#fff}.rx-item-name{font-size:14.5px;color:#111}.rx-item-instr{font-size:11px;color:#111;font-style:normal;font-weight:700}.advice-block{font-size:11px;color:#111;font-style:normal;font-weight:700;background:#faf7f0;border-radius:8px;border-left:4px solid #c89a2b}.sec-label{color:#111}`,
-    clinical_blocks: `body{background:#fbfdff}.rx-list{gap:8px}.rx-item{padding:10px 12px;border:1px solid #d8e4ef;border-radius:12px;background:#eef5fb}.rx-item-name{font-size:14px;color:#111}.rx-item-details{margin-top:5px}.rx-item-instr{font-size:11px;color:#111;font-style:normal;font-weight:700;background:#fff;border:1px solid #dae5ef;border-radius:8px;padding:8px 10px;margin-top:8px}.advice-block{font-size:11px;color:#111;font-style:normal;font-weight:700;background:#f2f7fb;border-radius:10px;border-left:4px solid #173a67}`,
+    option_a: `body{background:#fff}.pt-name{color:#111}.pt-name-bar{border-bottom:2px solid #1a3c6e}.sec-label{color:#111}.sec-divider::before,.sec-divider::after{border-color:#1a3c6e}.diag-text{color:#111;border-color:#1a3c6e}.rx-item{border-left:3px solid #1a3c6e;padding-left:10px}.rx-item-name{font-size:14px;color:#111}.rx-item-instr{font-size:9.6px;border-left:3px solid #1a3c6e;color:#111;font-style:normal}.dept-card-hdr{background:#1a3c6e}.taper-card{border-color:#1a3c6e}.taper-card-hdr{background:#1a3c6e}.inv-chip{border-color:#1a3c6e;background:#f0f4ff;color:#111}.fu-box{border-color:#1a3c6e;color:#111}`,
+    option_b: `body{background:#fff}.pt-name-bar{border-bottom:2px solid #0f7b82}.pt-name{color:#111}.sec-label{color:#111}.sec-divider::before,.sec-divider::after{border-color:#0f7b82}.diag-text{color:#111}.diag-rule-top,.diag-rule-bot{border-color:#0f7b82}.rx-item{background:#f5fffe;border-radius:8px;padding:8px 10px;border:1px solid #c0e8ea}.rx-item-name{color:#111;font-size:14px}.rx-item-instr{font-size:9.6px;font-style:normal;font-weight:700;color:#111;background:#fff;border:1px solid #c0e8ea;border-radius:6px;padding:6px 8px;border-left:3px solid #0f7b82}.rx-item-details{margin-top:4px}.dept-card-hdr{background:#0f7b82}.taper-card{border-color:#0f7b82}.taper-card-hdr{background:#0f7b82}.inv-chip{background:#e6f7f8;border-color:#0f7b82;color:#111}.fu-box{border-color:#0f7b82;color:#111}.rx-item-gen{color:#111}`,
+    signature_classic: `body{background:#fcfcfb}.rx-item{padding:6px 9px;border:1px solid #dfe4ec;border-left:4px solid #c89a2b;border-radius:10px;margin-bottom:5px;background:#fff}.rx-item-name{font-size:14.5px;color:#111}.rx-item-instr{font-size:9.6px;color:#111;font-style:normal;font-weight:700}.advice-block{font-size:10px;color:#111;font-style:normal;font-weight:700;background:#faf7f0;border-radius:8px;border-left:4px solid #c89a2b}.sec-label{color:#111}`,
+    clinical_blocks: `body{background:#fbfdff}.rx-list{gap:6px}.rx-item{padding:8px 10px;border:1px solid #d8e4ef;border-radius:10px;background:#eef5fb}.rx-item-name{font-size:14px;color:#111}.rx-item-details{margin-top:4px}.rx-item-instr{font-size:9.6px;color:#111;font-style:normal;font-weight:700;background:#fff;border:1px solid #dae5ef;border-radius:8px;padding:6px 8px;margin-top:5px}.advice-block{font-size:10px;color:#111;font-style:normal;font-weight:700;background:#f2f7fb;border-radius:10px;border-left:4px solid #173a67}`,
     ribbon_timeline: `body{background:#fffdfa}.sec-label{color:#111}.rx-list{position:relative;padding-left:12px}.rx-list:before{content:'';position:absolute;left:2px;top:2px;bottom:2px;width:3px;border-radius:999px;background:linear-gradient(180deg,#0f7b82,#ef8b67)}.rx-item{position:relative;padding:8px 10px 8px 14px;border:1px solid #dde7e7;border-radius:12px;background:#fff;margin-bottom:8px}.rx-item:before{content:'';position:absolute;left:-18px;top:18px;width:10px;height:10px;border-radius:50%;background:#fff;border:3px solid #0f7b82}.rx-item-name{font-size:14px;color:#111}.rx-item-instr{font-size:11px;color:#111;font-style:normal;font-weight:700;background:#eef7f7;border-radius:8px;padding:8px 10px;margin-top:8px;border-left:none}`,
     compact_bilingual: `body{font-size:9.7px;padding:3.2mm 7mm 3mm;line-height:1.26}.pt-name{font-size:16px;color:#111}.pt-subline{margin-bottom:2px}.sec-divider{margin:3px 0 2px}.rx-item{padding:3px 0 4px}.rx-item-name{font-size:12.8px;color:#111}.rx-item-instr{font-size:10.8px;font-style:normal;font-weight:700;color:#111}.advice-block{font-size:10.6px;color:#111;font-style:normal;font-weight:700;line-height:1.3}.fu-box{font-size:10px;padding:4px 8px;color:#111}`,
     editorial_columns: `body{background:#fbfbfa}.sec-label{color:#111}.pt-name-bar{border-bottom:2px solid #111}.diag-text{color:#111}.advice-block{font-weight:700;background:#f4f4f3;border-left:4px solid #111;border-radius:10px}.fu-box{background:#f2f2f1;border-color:#bdbdb9;color:#111}`,
@@ -30684,16 +30722,17 @@ window.printUnifiedRx = function(deptId) {
         const plainLine = buildRxPlainInstructionLine(d, rxPlainLang, fmtIN);
         const taperRows = Array.isArray(d.taperRows) ? d.taperRows : (d.taperRow ? [d.taperRow] : []);
         const meta = [d.freq || '', timings || '', route || '', d.dur || ''].filter(Boolean).join(' · ');
+        const formBadge = form ? `<span class="rx-form-inline">${escapeHtmlConsent(form)}</span>` : '';
         if (rxDesign === 'signature_classic') {
           return `<div class="design-med classic">
-            <div class="design-med-top"><div><div class="design-med-name">${i + 1}. ${escapeHtmlConsent(trade)}</div>${gen ? `<div class="design-med-sub">${escapeHtmlConsent(gen)}${form ? ' · ' + escapeHtmlConsent(form) : ''}</div>` : (form ? `<div class="design-med-sub">${escapeHtmlConsent(form)}</div>` : '')}</div><div class="design-med-chip">${escapeHtmlConsent(meta || 'As prescribed')}</div></div>
+            <div class="design-med-top"><div><div class="design-med-name">${i + 1}. ${escapeHtmlConsent(trade)} ${formBadge}</div>${gen ? `<div class="design-med-sub">${escapeHtmlConsent(gen)}</div>` : ''}</div></div>
             <div class="design-med-instr">${escapeHtmlConsent(plainLine || '')}</div>
             ${renderRxTaperDesign(trade, taperRows)}
           </div>`;
         }
         if (rxDesign === 'clinical_blocks') {
           return `<div class="design-med blocks">
-            <div class="design-med-top"><div><div class="design-med-name">${escapeHtmlConsent(trade)}</div><div class="design-med-sub">${[gen, form].filter(Boolean).map(escapeHtmlConsent).join(' · ')}</div></div><div class="design-med-pills">${[d.freq, timings, d.dur].filter(Boolean).map(function (x) { return `<span>${escapeHtmlConsent(x)}</span>`; }).join('')}</div></div>
+            <div class="design-med-top"><div><div class="design-med-name">${escapeHtmlConsent(trade)} ${formBadge}</div>${gen ? `<div class="design-med-sub">${escapeHtmlConsent(gen)}</div>` : ''}</div></div>
             <div class="design-med-instr">${escapeHtmlConsent(plainLine || '')}</div>
             ${renderRxTaperDesign(trade, taperRows)}
           </div>`;
@@ -30755,7 +30794,7 @@ window.printUnifiedRx = function(deptId) {
   const renderDiagnosisByDesign = function () {
     if (!dxList.length) return '';
     if (rxDesign === 'current' || rxDesign === 'option_a' || rxDesign === 'option_b') return '';
-    const joined = dxList.map(escapeHtmlConsent).join(' · ');
+    const joined = dxList.map(function (line) { return '<div>' + escapeHtmlConsent(line) + '</div>'; }).join('');
     if (rxDesign === 'signature_classic') return `<div class="design-dx classic">${joined}</div>`;
     if (rxDesign === 'clinical_blocks') return `<div class="design-dx blocks"><div class="design-dx-title">Clinical Diagnosis</div><div class="design-dx-body">${joined}</div></div>`;
     if (rxDesign === 'ribbon_timeline') return `<div class="design-dx ribbon"><div class="design-dx-title">Diagnosis</div><div class="design-dx-body">${joined}</div></div>`;
@@ -30785,7 +30824,9 @@ window.printUnifiedRx = function(deptId) {
 @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Inter:wght@400;600;700;800&family=Lato:ital,wght@0,300;0,400;0,700;0,900;1,400&family=Libre+Baskerville:wght@400;700&family=Playfair+Display:wght@700&family=Source+Sans+3:wght@400;600;700;800&display=swap');
 *{margin:0;padding:0;box-sizing:border-box;print-color-adjust:exact;-webkit-print-color-adjust:exact}
 @page{size:A4 portrait;margin:0}
-body{font-family:'Lato',sans-serif;font-size:9.5px;color:#1a1a1a;background:#fff;padding:2.7mm 7mm 2.5mm;line-height:1.28;overflow:visible}
+html,body{width:210mm;min-height:297mm}
+body{font-family:'Lato',sans-serif;font-size:9.2px;color:#1a1a1a;background:#fff;padding:2.4mm 6mm 2.2mm;line-height:1.24;overflow:visible}
+@media print{body{zoom:.94}}
 body > *:not(.lh-img){filter:grayscale(1)}
 .lh-img{width:100%;max-width:100%;height:auto;display:block;margin-bottom:6px;filter:none!important}
 /* Patient header */
@@ -30801,7 +30842,8 @@ body > *:not(.lh-img){filter:grayscale(1)}
 /* Diagnosis */
 .diag-rule-top{border-top:1.5px solid #111;margin-bottom:3px}
 .diag-rule-bot{border-top:1.5px solid #111;margin-top:3px}
-.diag-text{font-family:'Playfair Display','Georgia',serif;font-size:11px;font-weight:700;text-align:center;color:#111;padding:1px 0}
+.diag-text{font-size:8.6px;font-weight:700;text-align:left;color:#111;padding:1px 0 1px 14px;line-height:1.25}
+.diag-line{display:block;margin:0 0 1px}
 /* Post-surgery flag */
 .postsurg-flag{font-size:10px;font-weight:800;color:#222;border:1.5px solid #555;display:inline-block;padding:2px 10px;border-radius:3px;margin-bottom:4px;letter-spacing:.3px}
 /* Complaint / plain text block */
@@ -30834,11 +30876,12 @@ tr:nth-child(even) td{background:#fafafa}
 .rx-item:last-child{border-bottom:none;padding-bottom:0}
 .rx-item-num{font-size:9px;font-weight:900;color:#111;letter-spacing:.4px;margin-bottom:1px}
 .rx-item-name{font-family:'Playfair Display','Georgia',serif;font-size:13px;font-weight:700;color:#111;display:block;line-height:1.22}
-.rx-item-gen{font-size:9px;color:#111;font-style:italic;display:block;margin-bottom:3px}
-.rx-item-details{display:flex;flex-wrap:wrap;gap:0 12px;margin:2px 0 3px;align-items:center}
+.rx-form-inline{display:inline-block;vertical-align:baseline;margin-left:6px;font-family:'Lato',sans-serif;font-size:8px;font-weight:800;color:#111;border:1px solid #cfd5dc;border-radius:999px;padding:1px 5px;line-height:1.2}
+.rx-item-gen{font-size:8.8px;color:#111;font-style:italic;display:block;margin:1px 0 2px 18px}
+.rx-item-details{display:flex;flex-wrap:wrap;gap:0 12px;margin:2px 0 2px 18px;align-items:center}
 .rx-detail-item{display:flex;align-items:center;gap:4px;font-size:9.5px;color:#111}
 .rx-detail-dot{width:3px;height:3px;border-radius:50%;background:#111;flex-shrink:0}
-.rx-item-instr{font-size:11.2px;color:#222;font-style:normal;line-height:1.45;padding-left:9px;border-left:2px solid #ccc;margin-top:4px;font-weight:600}
+.rx-item-instr{font-size:9.6px;color:#222;font-style:normal;line-height:1.32;padding-left:8px;border-left:2px solid #ccc;margin:3px 0 0 18px;font-weight:600}
 /* Taper card */
 .taper-card{margin:3px 0 4px;border:1px solid #d5dbe2;border-radius:10px;overflow:hidden;font-size:9px;background:#fbfbfb;page-break-inside:avoid;break-inside:avoid}
 .taper-card-hdr{background:#f2f4f6;color:#333;padding:5px 10px;font-size:8.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;border-bottom:1px solid #d5dbe2}
@@ -30871,44 +30914,44 @@ tr:nth-child(even) td{background:#fafafa}
 /* OE plain instruction row */
 .oe-plain-row td{font-size:10px;font-style:italic;color:#444;background:#f8f8f8}
 /* Full design variants */
-.design-dx.classic{padding:11px 14px;border:1px solid #d9e0ea;border-left:5px solid #c89a2b;border-radius:16px;background:#fffdf8;font-family:'Playfair Display','Georgia',serif;font-size:15px;font-weight:700;line-height:1.35;color:#14345e;page-break-inside:avoid;break-inside:avoid}
+.design-dx.classic{padding:6px 10px;border:1px solid #d9e0ea;border-left:4px solid #c89a2b;border-radius:10px;background:#fffdf8;font-size:8.8px;font-weight:700;line-height:1.28;color:#111;page-break-inside:avoid;break-inside:avoid}
 .design-dx.blocks,.design-dx.ribbon,.design-dx.compact{border:1px solid #d9e5ef;border-radius:16px;background:#fff;padding:12px 14px}
 .design-dx-title{font-size:10px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;color:#667085;margin-bottom:6px}
-.design-dx.blocks .design-dx-body{font-size:15px;font-weight:900;line-height:1.25;color:#173a67}
+.design-dx.blocks .design-dx-body{font-size:8.8px;font-weight:800;line-height:1.28;color:#111}
 .design-dx.ribbon{background:#f3f5f7;color:#222;border:1px solid #d8dde3}
 .design-dx.ribbon .design-dx-title{color:#6b7280}
-.design-dx.ribbon .design-dx-body{font-size:15px;font-weight:800;line-height:1.25;color:#1f2937}
+.design-dx.ribbon .design-dx-body{font-size:8.8px;font-weight:800;line-height:1.28;color:#1f2937}
 .design-dx.editorial,.design-dx.ledger,.design-dx.vertical,.design-dx.mono{border:1px solid #d5d5d5;border-radius:16px;background:#fff;padding:12px 14px}
 .design-dx.editorial{background:linear-gradient(90deg,#f2f2f0 0 24%,#fff 24% 100%);padding-left:18px}
 .design-dx.editorial .design-dx-title{color:#444}
-.design-dx.editorial .design-dx-body{font-size:19px;font-weight:800;line-height:1.35;color:#111}
+.design-dx.editorial .design-dx-body{font-size:8.8px;font-weight:800;line-height:1.28;color:#111}
 .design-dx.ledger{display:grid;grid-template-columns:68px 1fr;padding:0;overflow:hidden}
 .design-dx-ledger-label{background:#2f2f2f;color:#fff;font-size:11px;font-weight:900;letter-spacing:.18em;text-transform:uppercase;display:flex;align-items:center;justify-content:center}
-.design-dx.ledger .design-dx-body{padding:14px 16px;font-size:18px;font-weight:800;line-height:1.35;color:#111}
+.design-dx.ledger .design-dx-body{padding:8px 10px;font-size:8.8px;font-weight:800;line-height:1.28;color:#111}
 .design-dx.vertical{display:grid;grid-template-columns:28px 1fr;gap:10px;padding:12px}
 .design-dx-rail{writing-mode:vertical-rl;transform:rotate(180deg);font-size:9px;letter-spacing:.24em;text-transform:uppercase;color:#666;font-weight:900;text-align:center}
-.design-dx.vertical .design-dx-body{font-size:13px;font-weight:800;line-height:1.5;color:#111}
+.design-dx.vertical .design-dx-body{font-size:8.8px;font-weight:800;line-height:1.28;color:#111}
 .design-dx.mono{border-style:dashed;border-radius:10px;background:#fbfbfb}
 .design-dx.mono .design-dx-title{font-family:'Source Sans 3','Courier New',monospace;color:#111}
-.design-dx.mono .design-dx-body{font-family:'Source Sans 3','Courier New',monospace;font-size:16px;font-weight:700;line-height:1.45;color:#111}
-.design-dx.compact{font-size:16px;font-weight:800;line-height:1.4;color:#153d66;background:#f6f9fc}
+.design-dx.mono .design-dx-body{font-family:'Source Sans 3','Courier New',monospace;font-size:8.8px;font-weight:700;line-height:1.28;color:#111}
+.design-dx.compact{font-size:8.8px;font-weight:800;line-height:1.28;color:#153d66;background:#f6f9fc}
 .design-rx{margin-bottom:5px}
 .design-rx.design-editorial_columns{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .design-med{margin-bottom:8px;page-break-inside:avoid;break-inside:avoid}
 .design-med:last-child{margin-bottom:0}
 .design-med-top{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}
 .design-med-name{font-family:'Playfair Display','Georgia',serif;color:#14345e}
-.design-med-sub{font-size:9.8px;color:#667085;line-height:1.45;margin-top:3px}
-.design-med-instr{line-height:1.52}
+.design-med-sub{font-size:9px;color:#111;font-style:italic;line-height:1.32;margin:2px 0 0 18px}
+.design-med-instr{line-height:1.34;margin-left:18px}
 .design-med.classic{border:1px solid #dfe4ec;border-radius:18px;padding:12px 13px;background:#fff;box-shadow:none}
-.design-med.classic .design-med-name{font-size:18px}
+.design-med.classic .design-med-name{font-size:17px}
 .design-med.classic .design-med-chip{min-width:138px;text-align:right;font-size:10px;font-weight:900;color:#5d4b16;background:#fbf2dc;border:1px solid #ecd8a1;border-radius:12px;padding:7px 9px}
-.design-med.classic .design-med-instr{margin-top:8px;padding:9px 10px;border-radius:14px;background:#f7f9fc;font-family:'Playfair Display','Georgia',serif;font-size:13px;font-weight:700;color:#24384d}
+.design-med.classic .design-med-instr{margin-top:5px;padding:6px 8px;border-radius:10px;background:#f7f9fc;font-family:'Lato',sans-serif;font-size:9.8px;font-weight:700;color:#24384d}
 .design-med.blocks{border:1px solid #d8e4ef;border-radius:18px;padding:11px 12px;background:#eef5fb}
-.design-med.blocks .design-med-name{font-size:17px}
+.design-med.blocks .design-med-name{font-size:16px}
 .design-med.blocks .design-med-pills{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;max-width:250px}
 .design-med.blocks .design-med-pills span{padding:7px 10px;border-radius:999px;background:#fff;border:1px solid #d7e0ea;font-size:12px;font-weight:800;color:#35506d}
-.design-med.blocks .design-med-instr{margin-top:8px;background:#fff;border-radius:14px;padding:9px 10px;font-size:12.5px;font-weight:700;color:#24384d}
+.design-med.blocks .design-med-instr{margin-top:5px;background:#fff;border-radius:10px;padding:6px 8px;font-size:9.8px;font-weight:700;color:#24384d}
 .design-med.ribbon{position:relative;border:1px solid #dde7e7;border-radius:18px;padding:12px 12px 12px 14px;background:#fff;box-shadow:none}
 .design-med.ribbon .design-med-tag{display:inline-block;margin-bottom:10px;padding:5px 9px;border-radius:999px;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.08em;background:#eff7f8;color:#0f7b82}
 .design-med.ribbon .design-med-name{font-size:18px}
@@ -31004,7 +31047,7 @@ ${(!psychPrescriptionPrintOnly && ((incCC && cc) || (deptId==='obg' && obgIncCom
 ${(!psychPrescriptionPrintOnly && dxList.length && rxDesign === 'current') ? `
 <div class="sec-divider"><span class="sec-label">Diagnosis</span></div>
 <div class="diag-rule-top"></div>
-<div class="diag-text">${dxList.map(d=>escapeHtmlConsent(d)).join(' &nbsp;·&nbsp; ')}</div>
+<div class="diag-text">${dxList.map(function (d) { return '<span class="diag-line">' + escapeHtmlConsent(d) + '</span>'; }).join('')}</div>
 <div class="diag-rule-bot"></div>` : ''}
 ${(!psychPrescriptionPrintOnly && rxDesign !== 'current') ? designedDiagnosis : ''}
 
@@ -31098,9 +31141,8 @@ ${incRxFinal && drugs.length && rxPrintMode !== 'plain_only' && isListDesign ? (
     ].filter(Boolean);
     let html2 = `<div class="rx-item">
       <div class="rx-item-num">${i+1}.</div>
-      <span class="rx-item-name">${escapeHtmlConsent(trade)}</span>
-      <span class="rx-item-gen">${gen && gen !== '—' ? escapeHtmlConsent(gen) : ''}${form ? (gen && gen !== '—' ? ' \u00b7 ' : '') + escapeHtmlConsent(form) : ''}</span>
-      ${detailParts.length ? `<div class="rx-item-details">${detailParts.map(p=>`<span class="rx-detail-item"><span class="rx-detail-dot"></span>${escapeHtmlConsent(p)}</span>`).join('')}</div>` : ''}
+      <span class="rx-item-name">${escapeHtmlConsent(trade)}${form ? ' <span class="rx-form-inline">' + escapeHtmlConsent(form) + '</span>' : ''}</span>
+      <span class="rx-item-gen">${gen && gen !== '—' ? escapeHtmlConsent(gen) : ''}</span>
       ${plainLine ? `<div class="rx-item-instr">${escapeHtmlConsent(plainLine)}</div>` : ''}
     </div>`;
     if (taperRows.length) {
@@ -31138,8 +31180,8 @@ ${incRxFinal && drugs.length && rxPrintMode === 'plain_only' && isListDesign ? (
     const taperRows = Array.isArray(d.taperRows) ? d.taperRows : (d.taperRow ? [d.taperRow] : []);
     let html3 = `<div class="rx-item">
       <div class="rx-item-num">${i+1}.</div>
-      <span class="rx-item-name">${escapeHtmlConsent(trade)}</span>
-      <span class="rx-item-gen">${gen && gen !== '—' ? escapeHtmlConsent(gen) : ''}${form ? (gen && gen !== '—' ? ' \u00b7 ' : '') + escapeHtmlConsent(form) : ''}</span>
+      <span class="rx-item-name">${escapeHtmlConsent(trade)}${form ? ' <span class="rx-form-inline">' + escapeHtmlConsent(form) + '</span>' : ''}</span>
+      <span class="rx-item-gen">${gen && gen !== '—' ? escapeHtmlConsent(gen) : ''}</span>
       ${plainLine ? `<div class="rx-item-instr">${escapeHtmlConsent(plainLine)}</div>` : ''}
     </div>`;
     if (taperRows.length) {
@@ -35409,15 +35451,17 @@ function buildDoctorRxTypographyCss(typography) {
   const headingDecoration = t.headingUnderline ? 'underline' : 'none';
   const headingStyle = t.headingItalic ? 'italic' : 'normal';
   const medicineSize = Number(t.medicineSize || DEFAULT_RX_TYPOGRAPHY.medicineSize);
-  const instructionSize = Math.max(11.2, Math.min(19, medicineSize * 0.9)).toFixed(1);
+  const instructionSize = Math.max(9.2, Math.min(11, medicineSize * 0.68)).toFixed(1);
   const procedureSize = Math.max(11.2, Math.min(18, medicineSize * 0.84)).toFixed(1);
   return `
 body{font-family:${fonts.body}}
 .pt-name{font-family:${fonts.heading};font-size:${t.patientNameSize}px}
 .pt-date{font-family:${fonts.body};font-size:${t.dateSize}px;font-weight:${t.headingWeight};font-style:${headingStyle};text-decoration:${headingDecoration}}
 .sec-label,.design-dx-title,.design-side-title,.design-taper-title,.design-med-tag,.section-pill,.rx-heading-accent{font-family:${fonts.heading};font-size:${t.headingSize}px;font-weight:${t.headingWeight};font-style:${headingStyle};text-decoration:${headingDecoration}}
-.rx-item-name,.design-med-name,.diag-text,.design-dx-body{font-family:${fonts.heading};font-size:${t.medicineSize}px}
-.rx-item-instr,.design-med-instr,.design-side-body,.advice-block{font-size:${instructionSize}px!important;line-height:1.48!important}
+.rx-item-name,.design-med-name{font-family:${fonts.heading};font-size:${t.medicineSize}px}
+.diag-text,.design-dx-body{font-family:${fonts.body};font-size:8.8px!important}
+.rx-item-instr,.design-med-instr{font-size:${instructionSize}px!important;line-height:1.34!important}
+.design-side-body,.advice-block{font-size:${instructionSize}px!important;line-height:1.42!important}
 .proc-item{font-size:${procedureSize}px!important;line-height:1.45!important}
 .oe-eye-block .sec-label{font-size:calc(${t.headingSize}px * ${t.eyeBlockScale})}
 .oe-eye-table{font-size:calc(9.6px * ${t.eyeBlockScale})}
