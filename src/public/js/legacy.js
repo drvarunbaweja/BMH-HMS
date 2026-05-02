@@ -7027,6 +7027,8 @@ function populateObgForm(visit) {
   updateObgComputedFields();
 
   restoreRxFromVisitData(data);
+  const obgPostSurgeryRx = document.getElementById('obg-post-surgery-rx');
+  if (obgPostSurgeryRx) obgPostSurgeryRx.checked = !!data.postSurgeryRx;
   const oa = document.getElementById('obg-advice');
   if (oa && data.obgAdvice != null) oa.value = data.obgAdvice;
   const oea = document.getElementById('obg-extra-advice');
@@ -24132,6 +24134,101 @@ function calcOTDurations() {
   const el3=document.getElementById('dur-total-ot'); if(el3) el3.textContent=fmt(ptIn&&ptOut?ptOut-ptIn:null);
 }
 
+function isObgDeliveryOtCase(otCase) {
+  const c = normalizeOTCaseRecord(otCase || {});
+  if (c.caseKind !== 'obg') return false;
+  const hay = [c.procedure, c.obgCaseType, c.procedureMain, c.procedureSub, c.dx].join(' ').toLowerCase();
+  return /lscs|caesar|caesarean|cesarean|normal delivery|assisted delivery|delivery|labour/.test(hay);
+}
+function obgCompletionOutcomeDefaults(otCase) {
+  const c = normalizeOTCaseRecord(otCase || {});
+  const saved = c.obgDeliveryOutcome || {};
+  return Object.assign({
+    babyDob: getIsoDateOnly(c.date || new Date()),
+    babyTime: c.timings?.procEnd || c.scheduledTime || '',
+    babySex: '',
+    babyWeight: '',
+    babyApgar: '',
+    babyOutcome: 'Live Birth',
+    postOpPeriod: 'Uneventful',
+    diet: 'Orally allowed',
+    investigationsManual: ''
+  }, saved || {});
+}
+function openObgOtCompletionPopup(caseId) {
+  const c = (OT_CASES || []).find(function (row) { return row && row.id === caseId; });
+  if (!c || !isObgDeliveryOtCase(c)) return;
+  const data = obgCompletionOutcomeDefaults(c);
+  const esc = escapeHtmlConsent;
+  let modal = document.getElementById('obg-ot-complete-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'obg-ot-complete-modal';
+    document.body.appendChild(modal);
+  }
+  modal.style.cssText = 'position:fixed;inset:0;z-index:10050;background:rgba(15,23,42,.48);display:flex;align-items:center;justify-content:center;padding:18px';
+  modal.innerHTML = `
+    <div style="width:min(860px,96vw);max-height:92vh;overflow:auto;background:#fff;border-radius:12px;box-shadow:0 22px 70px rgba(0,0,0,.28);border:1px solid var(--g4)">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;padding:14px 16px;border-bottom:1px solid var(--g5);background:#fff7fa">
+        <div><div style="font-size:15px;font-weight:900;color:#8d1036">Delivery / LSCS Completion Details</div><div style="font-size:11px;color:var(--g1);margin-top:2px">${esc(c.patient || '')} · ${esc(c.bmhId || '')}</div></div>
+        <button class="btn btn-xs btn-outline" onclick="closeObgOtCompletionPopup()">Close</button>
+      </div>
+      <div style="padding:14px 16px;display:grid;gap:12px">
+        <div style="border:1px solid var(--g4);border-radius:10px;padding:12px;background:#fff">
+          <div style="font-size:11px;font-weight:900;color:#8d1036;text-transform:uppercase;margin-bottom:9px">Details of Baby</div>
+          <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px">
+            <div class="form-group" style="margin:0"><label class="fl">Date of birth</label><input id="obg-out-baby-dob" type="date" value="${esc(data.babyDob || '')}"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Time of birth</label><input id="obg-out-baby-time" type="time" value="${esc(data.babyTime || '')}"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Sex</label><select id="obg-out-baby-sex"><option></option><option${data.babySex==='Male'?' selected':''}>Male</option><option${data.babySex==='Female'?' selected':''}>Female</option><option${data.babySex==='Ambiguous'?' selected':''}>Ambiguous</option></select></div>
+            <div class="form-group" style="margin:0"><label class="fl">Weight</label><input id="obg-out-baby-weight" type="text" placeholder="e.g. 2.8 kg" value="${esc(data.babyWeight || '')}"></div>
+            <div class="form-group" style="margin:0"><label class="fl">APGAR score</label><input id="obg-out-baby-apgar" type="text" placeholder="e.g. 8/10, 9/10" value="${esc(data.babyApgar || '')}"></div>
+            <div class="form-group" style="margin:0"><label class="fl">Outcome</label><select id="obg-out-baby-outcome"><option${data.babyOutcome==='Live Birth'?' selected':''}>Live Birth</option><option${data.babyOutcome==='Still Birth'?' selected':''}>Still Birth</option></select></div>
+          </div>
+        </div>
+        <div style="border:1px solid var(--g4);border-radius:10px;padding:12px;background:#fff">
+          <div style="font-size:11px;font-weight:900;color:#8d1036;text-transform:uppercase;margin-bottom:9px">Post Operative / Post Delivery Period</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div class="form-group" style="margin:0"><label class="fl">Post operative period</label><input id="obg-out-postop" list="obg-out-postop-list" value="${esc(data.postOpPeriod || '')}"><datalist id="obg-out-postop-list"><option>Uneventful</option><option>Fever</option><option>PPH</option><option>Wound soakage</option><option>Pain abdomen</option><option>Raised BP</option><option>Anaemia</option></datalist></div>
+            <div class="form-group" style="margin:0"><label class="fl">Diet</label><input id="obg-out-diet" list="obg-out-diet-list" value="${esc(data.diet || '')}"><datalist id="obg-out-diet-list"><option>Orally allowed</option><option>Semi solids</option><option>Liquids</option><option>Soft diet</option><option>Normal diet</option></datalist></div>
+          </div>
+        </div>
+        <div style="border:1px solid var(--g4);border-radius:10px;padding:12px;background:#fff">
+          <div style="font-size:11px;font-weight:900;color:#8d1036;text-transform:uppercase;margin-bottom:9px">Manual Investigations, if not done in hospital</div>
+          <textarea id="obg-out-investigations" placeholder="One investigation per line, e.g. Hb 11.2 gm/dl" style="min-height:92px;line-height:1.45">${esc(data.investigationsManual || '')}</textarea>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid var(--g5);background:var(--g6)">
+        <button class="btn btn-outline" onclick="closeObgOtCompletionPopup()">Cancel</button>
+        <button class="btn btn-gold" onclick="saveObgOtCompletionOutcome('${String(caseId).replace(/'/g, "\\'")}')">Save Details</button>
+      </div>
+    </div>`;
+}
+function closeObgOtCompletionPopup() {
+  const modal = document.getElementById('obg-ot-complete-modal');
+  if (modal) modal.style.display = 'none';
+}
+function saveObgOtCompletionOutcome(caseId) {
+  const idx = (OT_CASES || []).findIndex(function (row) { return row && row.id === caseId; });
+  if (idx < 0) return;
+  const outcome = {
+    babyDob: document.getElementById('obg-out-baby-dob')?.value || '',
+    babyTime: document.getElementById('obg-out-baby-time')?.value || '',
+    babySex: document.getElementById('obg-out-baby-sex')?.value || '',
+    babyWeight: document.getElementById('obg-out-baby-weight')?.value || '',
+    babyApgar: document.getElementById('obg-out-baby-apgar')?.value || '',
+    babyOutcome: document.getElementById('obg-out-baby-outcome')?.value || '',
+    postOpPeriod: document.getElementById('obg-out-postop')?.value || '',
+    diet: document.getElementById('obg-out-diet')?.value || '',
+    investigationsManual: document.getElementById('obg-out-investigations')?.value || '',
+    updatedAt: new Date().toISOString(),
+    updatedBy: CURRENT_USER?.name || 'System'
+  };
+  OT_CASES[idx].obgDeliveryOutcome = outcome;
+  fbUpdate && fbUpdate('otCases/' + caseId, { obgDeliveryOutcome: outcome }).catch(function (e) { console.warn('OBG outcome save error:', e); });
+  closeObgOtCompletionPopup();
+  showToast('Delivery / LSCS completion details saved ✓', 's');
+}
+
 function updateOTStatus(id, status) {
   const c = OT_CASES.find(x=>x.id===id); if(!c) return;
   c.status = status;
@@ -24146,6 +24243,7 @@ function updateOTStatus(id, status) {
     }
     if (consumeResult?.updates) extraUpdates = Object.assign(extraUpdates, consumeResult.updates);
     scheduleDefaultSurgeryFollowups(c);
+    if (isObgDeliveryOtCase(c)) setTimeout(function () { openObgOtCompletionPopup(id); }, 120);
   }
   fbUpdate('otCases/' + id, Object.assign({ status: c.status, lastUpdated: c.lastUpdated }, extraUpdates)).catch(e => console.warn('OT status save error:', e));
   renderOTList();
@@ -30387,7 +30485,9 @@ window.printUnifiedRx = function(deptId) {
   drugs.forEach(function (d) {
     if (typeof ensureRxDrugPrintDates === 'function') ensureRxDrugPrintDates(d);
   });
-  const postSurgeryRx = deptId === 'oe' ? !!document.getElementById('rx-post-surgery')?.checked : false;
+  const postSurgeryRx = deptId === 'oe'
+    ? !!document.getElementById('rx-post-surgery')?.checked
+    : (deptId === 'obg' ? !!document.getElementById('obg-post-surgery-rx')?.checked : false);
   const plainInstrBlocks = drugs.length ? drugs.map(function (d) {
     return buildRxPlainInstructionLine(d, rxPlainLang, fmtIN);
   }).filter(Boolean) : [];
@@ -33416,12 +33516,20 @@ function getDischargePrintData(sel) {
   }) || null;
   const linkedFuTemplate = specialty === 'ophtho' ? getOtFollowupTemplateEntry(lastOtCase) : null;
   const ipdStay = (window.IPD_PATIENTS || []).slice().reverse().find(x => x.bmhId === ptObj.bmhId) || null;
-  const livePostSurgeryRx = !!document.getElementById('rx-post-surgery')?.checked;
-  const savedPostSurgeryRx = !!ptObj.lastVisit?.postSurgeryRx;
+  const deptForRx = specialty === 'obg' ? 'obg' : 'ophtho';
+  const markedPrescriptionVisit = (typeof getCachedPatientVisits === 'function' ? Object.values(getCachedPatientVisits(ptId) || {}) : [])
+    .filter(function (v) { return v && v.dept === deptForRx && v.postSurgeryRx && Array.isArray(v.rx) && v.rx.length; })
+    .sort(function (a, b) { return String(b.date || '').localeCompare(String(a.date || '')); })[0] || null;
+  const livePostSurgeryRx = specialty === 'obg'
+    ? !!document.getElementById('obg-post-surgery-rx')?.checked
+    : !!document.getElementById('rx-post-surgery')?.checked;
+  const savedPostSurgeryRx = !!(markedPrescriptionVisit || (ptObj.lastVisit?.dept === deptForRx && ptObj.lastVisit?.postSurgeryRx));
   const lastRxData = (livePostSurgeryRx && RX_DRUGS && RX_DRUGS.length)
     ? JSON.parse(JSON.stringify(RX_DRUGS))
-    : (savedPostSurgeryRx && Array.isArray(ptObj.lastVisit?.rx) && ptObj.lastVisit.rx.length)
-      ? JSON.parse(JSON.stringify(ptObj.lastVisit.rx))
+    : (markedPrescriptionVisit && Array.isArray(markedPrescriptionVisit.rx) && markedPrescriptionVisit.rx.length)
+      ? JSON.parse(JSON.stringify(markedPrescriptionVisit.rx))
+      : (savedPostSurgeryRx && Array.isArray(ptObj.lastVisit?.rx) && ptObj.lastVisit.rx.length)
+        ? JSON.parse(JSON.stringify(ptObj.lastVisit.rx))
       : (RX_DRUGS && RX_DRUGS.length)
         ? JSON.parse(JSON.stringify(RX_DRUGS))
         : (Array.isArray(ptObj.lastVisit?.rx) && ptObj.lastVisit.rx.length ? JSON.parse(JSON.stringify(ptObj.lastVisit.rx)) : []);
@@ -33750,9 +33858,24 @@ function buildOphthoDischargeA4LayoutPrintHtml(snap, data, colorPrint) {
     + '<div style="display:flex;justify-content:space-between;padding:6px 12px;border-top:1px solid #ddd;font-size:8px;color:#555"><div>Patient / attendant signature</div><div>' + esc(CURRENT_USER?.name || 'Doctor') + '</div></div>'
     + '</div></body></html>';
 }
+function collectObgHospitalInvestigationLines(ptObj) {
+  const orders = Array.isArray(ptObj?.investigationOrders) ? ptObj.investigationOrders : [];
+  return orders.filter(function (order) {
+    return order && order.mode === 'send' && (order.done || order.labReady || order.completedAt) && (order.result || order.results);
+  }).sort(function (a, b) {
+    return String(b.completedAt || b.date || b.createdAt || '').localeCompare(String(a.completedAt || a.date || a.createdAt || ''));
+  }).slice(0, 10).map(function (order) {
+    const name = normalizeLabTestName(order.name || (Array.isArray(order.tests) ? order.tests.join(', ') : 'Investigation'));
+    const res = order.result || {};
+    const val = [res.val, res.unit].filter(Boolean).join(' ');
+    const flag = res.flag && res.flag !== '—' && res.flag !== 'Normal' ? (' (' + res.flag + ')') : '';
+    return [name, val ? ': ' + val + flag : ''].join('');
+  }).filter(Boolean);
+}
 function getObgDischargeContext(data) {
   const visit = data?.ptObj?.lastVisit || {};
   const ot = data?.lastOtCase || {};
+  const outcome = ot.obgDeliveryOutcome || {};
   const joinBits = function (values) {
     return values.map(function (value) { return String(value || '').trim(); }).filter(Boolean).join(' · ');
   };
@@ -33761,7 +33884,11 @@ function getObgDischargeContext(data) {
   };
   const planManagement = Array.isArray(visit.planManagement) ? visit.planManagement.slice(0, 4).join(', ') : String(visit.planManagement || '').trim();
   const planProcedures = Array.isArray(visit.planProcedures) ? visit.planProcedures.slice(0, 3).join(', ') : String(visit.planProcedures || '').trim();
-  const investigations = [
+  const hospitalInvestigations = collectObgHospitalInvestigationLines(data?.ptObj || {});
+  const manualInvestigations = String(outcome.investigationsManual || visit.obgDischargeInvestigationsManual || '').split(/\n+/).map(function (line) {
+    return line.trim();
+  }).filter(Boolean);
+  const investigations = hospitalInvestigations.length ? hospitalInvestigations : (manualInvestigations.length ? manualInvestigations : [
     visit.bloodGroup ? ('Blood group ' + visit.bloodGroup) : '',
     visit['obg-obs-rbs'] ? ('RBS ' + visit['obg-obs-rbs']) : '',
     visit['obg-obs-tsh'] ? ('TSH ' + visit['obg-obs-tsh']) : '',
@@ -33773,11 +33900,14 @@ function getObgDischargeContext(data) {
     visit['obg-obs-hcv'] ? ('HCV ' + visit['obg-obs-hcv']) : '',
     visit['obg-obs-hplc'] ? ('HPLC ' + visit['obg-obs-hplc']) : '',
     visit['obg-obs-vdrl'] ? ('VDRL ' + visit['obg-obs-vdrl']) : ''
-  ].filter(Boolean);
+  ].filter(Boolean));
+  const babyDob = outcome.babyDob || visit['obg-obs-delivery-date'] || ot.date || data.opDate || '';
+  const babyTime = outcome.babyTime || visit['obg-obs-delivery-time'] || ot.scheduledTime || '';
   const babyBits = [
-    visit['obg-obs-gender'],
-    visit['obg-obs-birth-weight'] ? ('Birth wt ' + visit['obg-obs-birth-weight']) : '',
-    visit['obg-obs-apgar'] ? ('APGAR ' + visit['obg-obs-apgar']) : '',
+    outcome.babyOutcome || '',
+    outcome.babySex || visit['obg-obs-gender'],
+    outcome.babyWeight ? ('Wt ' + outcome.babyWeight) : (visit['obg-obs-birth-weight'] ? ('Birth wt ' + visit['obg-obs-birth-weight']) : ''),
+    outcome.babyApgar ? ('APGAR ' + outcome.babyApgar) : (visit['obg-obs-apgar'] ? ('APGAR ' + visit['obg-obs-apgar']) : ''),
     visit['obg-obs-nicu'] ? ('NICU ' + visit['obg-obs-nicu']) : '',
     visit['obg-obs-nicu-note']
   ];
@@ -33795,23 +33925,34 @@ function getObgDischargeContext(data) {
     procedure: ot.procedure || data.procedureName || visit['obg-obs-mode-delivery'] || 'OBG procedure',
     modeOfDelivery: ot.obgCaseType || visit['obg-obs-mode-delivery'] || data.procedureName || '—',
     indication: ot.obgIndication || visit['obg-obs-csection-indication'] || visit.clinicalImpression || visit.dx || visit.mainComplaint || '—',
-    deliveryDate: visit['obg-obs-delivery-date'] || ot.date || data.opDate || data.dischargeDate || '',
-    deliveryTime: visit['obg-obs-delivery-time'] || ot.scheduledTime || '',
+    deliveryDate: babyDob,
+    deliveryTime: babyTime,
     deliveryLocation: visit['obg-obs-delivery-location'] || ot.room || '—',
+    admissionDate: data.ipdStay?.admittedAt || data.opDate || ot.date || '',
+    surgeryDate: ot.date || data.opDate || '',
+    dischargeDate: data.dischargeDate || '',
     liquor: ot.obgLiquor || joinBits([visit['obg-obs-liquor'], visit['obg-obs-liquor-note']]) || '—',
     fetal: ot.obgFetal || joinBits([visit.presentation, visit.fhr ? ('FHR ' + visit.fhr) : '', visit.fetalMovement ? ('FM ' + visit.fetalMovement) : '']) || '—',
     blood: ot.obgBlood || joinBits([visit.bloodGroup, visit['obg-obs-rbs'] ? ('RBS ' + visit['obg-obs-rbs']) : '', visit.urineProtein ? ('Urine protein ' + visit.urineProtein) : '', visit.urineSugar ? ('Urine sugar ' + visit.urineSugar) : '']) || '—',
     anaesNote: ot.obgAnaesNote || joinBits([visit.bp ? ('BP ' + visit.bp) : '', visit.weight ? ('Wt ' + visit.weight) : '', visit.riskTag]) || '—',
     baby: ot.obgBaby || joinBits(babyBits) || '—',
+    babyOutcome: joinBits([
+      babyDob ? ('DOB ' + formatDateIN(babyDob)) : '',
+      babyTime ? ('Time ' + babyTime) : '',
+      joinBits(babyBits)
+    ]) || '—',
     mother: ot.obgMother || joinBits(motherBits) || '—',
+    postOpPeriod: outcome.postOpPeriod || 'Uneventful',
+    diet: outcome.diet || 'Orally allowed',
     investigations: investigations,
-    obstetricCourse: joinSentences([visit.mainComplaint, visit.clinicalImpression, visit.ancNotes, planManagement, planProcedures, visit.followupPlan]) || 'Routine antenatal and post-delivery course documented in the case sheet.',
+    investigationsSource: hospitalInvestigations.length ? 'hospital' : (manualInvestigations.length ? 'manual' : 'case-sheet'),
     summary: joinSentences([
       data.ptNm + ' was managed under the OBG unit with ' + (visit.dx || visit.clinicalImpression || visit.mainComplaint || 'the documented obstetric condition'),
       'Procedure / delivery: ' + (ot.obgCaseType || visit['obg-obs-mode-delivery'] || data.procedureName || 'OBG procedure'),
       'Indication: ' + (ot.obgIndication || visit['obg-obs-csection-indication'] || visit.clinicalImpression || visit.mainComplaint || 'as clinically indicated'),
-      'Mother status at discharge: ' + (ot.obgMother || joinBits(motherBits) || 'stable'),
-      'Baby status: ' + (ot.obgBaby || joinBits(babyBits) || 'stable')
+      'Post-operative / post-delivery period: ' + (outcome.postOpPeriod || 'uneventful'),
+      'Diet: ' + (outcome.diet || 'orally allowed'),
+      'Mother status at discharge: ' + (ot.obgMother || joinBits(motherBits) || 'stable')
     ]) + '.'
   };
 }
@@ -33826,9 +33967,9 @@ function buildObgDischargeA4LayoutPrintHtml(snap, data, colorPrint) {
   const isDeliveryCase = /lscs|delivery|normal|assisted|caes/i.test(String(ctx.modeOfDelivery || ctx.procedure || ''));
   const hasVal = function (v) { return v && v !== '—'; };
   const row = function (label, value) {
-    return '<div style="border:1px solid #e6dbe0;border-radius:10px;padding:8px 10px;background:#fff">'
-      + '<div style="font-size:8.5px;font-weight:900;color:#7b6a72;text-transform:uppercase;letter-spacing:.45px">' + esc(label) + '</div>'
-      + '<div style="font-size:11px;font-weight:800;line-height:1.45;color:#151515;margin-top:3px">' + esc(value || '—') + '</div>'
+    return '<div style="border:1px solid #e6dbe0;border-radius:8px;padding:5px 7px;background:#fff">'
+      + '<div style="font-size:7.6px;font-weight:900;color:#7b6a72;text-transform:uppercase;letter-spacing:.3px">' + esc(label) + '</div>'
+      + '<div style="font-size:9.3px;font-weight:800;line-height:1.25;color:#151515;margin-top:2px">' + esc(value || '—') + '</div>'
       + '</div>';
   };
   const rowIf = function (label, value) {
@@ -33836,23 +33977,23 @@ function buildObgDischargeA4LayoutPrintHtml(snap, data, colorPrint) {
   };
   const medRows = meds.map(function (med, idx) {
     const timings = Array.isArray(med.activeTimes) && med.activeTimes.length ? med.activeTimes.join(' · ') : (med.freq || '—');
-    return '<tr><td style="border:1px solid #dfd6db;padding:6px 8px;font-size:10px">' + (idx + 1) + '</td><td style="border:1px solid #dfd6db;padding:6px 8px;font-size:10px;font-weight:800">' + esc(med.name || 'Medicine') + '</td><td style="border:1px solid #dfd6db;padding:6px 8px;font-size:10px">' + esc(timings) + '</td><td style="border:1px solid #dfd6db;padding:6px 8px;font-size:10px">' + esc(med.duration || '—') + '</td></tr>';
+    return '<tr><td style="border:1px solid #dfd6db;padding:4px 6px;font-size:9px">' + (idx + 1) + '</td><td style="border:1px solid #dfd6db;padding:4px 6px;font-size:9px;font-weight:800">' + esc(med.name || 'Medicine') + '</td><td style="border:1px solid #dfd6db;padding:4px 6px;font-size:9px">' + esc(timings) + '</td><td style="border:1px solid #dfd6db;padding:4px 6px;font-size:9px">' + esc(med.duration || '—') + '</td></tr>';
   }).join('');
   const followupRows = followups.map(function (line) {
-    return '<div style="padding:6px 10px;border:1px solid #e6dbe0;border-radius:8px;background:#fff;margin-top:6px;font-size:10.5px;font-weight:700;line-height:1.45">' + esc(line) + '</div>';
+    return '<div style="padding:4px 8px;border:1px solid #e6dbe0;border-radius:8px;background:#fff;margin-top:4px;font-size:9.4px;font-weight:700;line-height:1.25">' + esc(line) + '</div>';
   }).join('');
   const instructionRows = instructions.map(function (line) {
     return '<div style="margin-bottom:5px">• ' + esc(line) + '</div>';
   }).join('');
   const deliveryDateStr = [ctx.deliveryDate ? formatDateIN(ctx.deliveryDate) : '', ctx.deliveryTime].filter(Boolean).join(' · ');
   const rightPanelExtra = isDeliveryCase
-    ? '<div style="font-size:10px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.45px;margin:10px 0 6px">Baby Outcome</div><div style="font-size:10.5px;line-height:1.65;color:#5a4630">' + esc(ctx.baby) + '</div>'
+    ? '<div style="font-size:9.5px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.4px;margin:7px 0 4px">Baby Outcome</div><div style="font-size:9.6px;line-height:1.35;color:#5a4630">' + esc(ctx.babyOutcome || ctx.baby) + '</div>'
     : '';
-  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>@page{size:A4;margin:7mm}body{font-family:Georgia,\"Times New Roman\",serif;color:#111;margin:0;padding:0;background:#fff}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>'
-    + '<div style="border:1px solid #d8cdd2;border-radius:14px;overflow:hidden">'
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>@page{size:A4;margin:5mm}body{font-family:Georgia,\"Times New Roman\",serif;color:#111;margin:0;padding:0;background:#fff}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>'
+    + '<div style="border:1px solid #d8cdd2;border-radius:12px;overflow:hidden">'
     + buildDischargePrintHeaderHtml(data.ptId || '—', formatDateIN(data.dischargeDate || new Date()), colorPrint)
-    + '<div style="padding:12px 14px 14px"><div style="text-align:center;margin-bottom:10px"><div style="font-size:21px;font-weight:900;letter-spacing:1.1px;color:' + blue + ';text-transform:uppercase">Obstetrics &amp; Gynaecology Discharge Card</div><div style="font-size:10px;color:#6e5c62;margin-top:4px">Delivery / LSCS / gynae discharge details</div></div>'
-    + '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">'
+    + '<div style="padding:8px 10px 10px"><div style="text-align:center;margin-bottom:7px"><div style="font-size:18px;font-weight:900;letter-spacing:.9px;color:' + blue + ';text-transform:uppercase">Obstetrics &amp; Gynaecology Discharge Card</div></div>'
+    + '<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px">'
     + row('Patient Name', data.ptNm || '—')
     + row('BMSH ID', data.ptId || '—')
     + row('Age / Sex', (data.ptObj?.age || '—') + ' / ' + (data.ptObj?.sex || '—'))
@@ -33862,18 +34003,23 @@ function buildObgDischargeA4LayoutPrintHtml(snap, data, colorPrint) {
     + row('Procedure', ctx.procedure)
     + (isDeliveryCase ? row('Mode of Delivery', ctx.modeOfDelivery) : '')
     + row('Indication', ctx.indication)
+    + rowIf('Date of Admission', ctx.admissionDate ? formatDateIN(ctx.admissionDate) : '')
+    + rowIf('Date of Surgery', ctx.surgeryDate ? formatDateIN(ctx.surgeryDate) : '')
+    + rowIf('Date of Discharge', ctx.dischargeDate ? formatDateIN(ctx.dischargeDate) : '')
     + (isDeliveryCase ? rowIf('Delivery Date / Time', deliveryDateStr) : '')
     + (isDeliveryCase ? rowIf('Delivery Location', ctx.deliveryLocation) : '')
     + row('Consultant', surgeonName)
     + (isDeliveryCase ? rowIf('Fetal Details', ctx.fetal) : '')
     + (isDeliveryCase ? rowIf('Liquor / Membranes', ctx.liquor) : '')
     + rowIf('Mother Status', ctx.mother)
+    + row('Post-op / Post-delivery', ctx.postOpPeriod)
+    + row('Diet', ctx.diet)
     + '</div>'
-    + '<div style="display:grid;grid-template-columns:1.1fr .9fr;gap:10px;margin-top:10px"><div style="border:1px solid #e6dbe0;border-radius:12px;padding:10px 12px;background:#fff"><div style="font-size:10px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.45px;margin-bottom:6px">Obstetric Course</div><div style="font-size:11.1px;line-height:1.75;color:#1d1d1d">' + esc(ctx.obstetricCourse) + '</div><div style="font-size:10px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.45px;margin:10px 0 6px">Discharge Summary</div><div style="font-size:11.1px;line-height:1.75;color:#1d1d1d">' + esc(ctx.summary) + '</div></div><div style="border:1px solid #efe3d0;border-radius:12px;padding:10px 12px;background:#fffaf3"><div style="font-size:10px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.45px;margin-bottom:6px">Investigations</div><div style="font-size:10.5px;line-height:1.65;color:#5a4630">' + (ctx.investigations.length ? ctx.investigations.map(function (item) { return '<div>• ' + esc(item) + '</div>'; }).join('') : '<div>• Routine investigation details documented in the case sheet</div>') + '</div>' + rightPanelExtra + '<div style="font-size:10px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.45px;margin:10px 0 6px">Blood / Anaesthesia Notes</div><div style="font-size:10.5px;line-height:1.65;color:#5a4630">' + esc([ctx.blood, ctx.anaesNote].filter(function (v) { return hasVal(v); }).join(' | ') || '—') + '</div></div></div>'
-    + (medRows ? '<div style="margin-top:10px;border:1px solid #e6dbe0;border-radius:12px;overflow:hidden"><div style="padding:8px 12px;background:#f9f2f4;font-size:10px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.45px">Medicines</div><table style="width:100%;border-collapse:collapse"><thead><tr style="background:#fcf8f9"><th style="border:1px solid #dfd6db;padding:6px 8px;font-size:9px">#</th><th style="border:1px solid #dfd6db;padding:6px 8px;font-size:9px">Medicine</th><th style="border:1px solid #dfd6db;padding:6px 8px;font-size:9px">Timing / Frequency</th><th style="border:1px solid #dfd6db;padding:6px 8px;font-size:9px">Duration</th></tr></thead><tbody>' + medRows + '</tbody></table></div>' : '')
-    + (instructionRows ? '<div style="margin-top:10px;border:1px solid #efe3d0;border-radius:12px;padding:10px 12px;background:#fffaf3"><div style="font-size:10px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.45px;margin-bottom:6px">Discharge Advice</div><div style="font-size:10.8px;line-height:1.7;color:#5a4630">' + instructionRows + '</div></div>' : '')
-    + (followupRows ? '<div style="margin-top:10px"><div style="font-size:10px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.45px;margin-bottom:4px">Follow-up</div>' + followupRows + '</div>' : '')
-    + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:18px"><div style="text-align:center"><div style="border-bottom:1px solid #333;height:32px"></div><div style="font-size:9px;color:#666;margin-top:4px">Patient / Attendant Signature</div></div><div style="text-align:center"><div style="border-bottom:1px solid #333;height:32px"></div><div style="font-size:9px;color:#666;margin-top:4px">Nursing / Duty Staff</div></div><div style="text-align:center"><div style="border-bottom:1px solid #333;height:32px"></div><div style="font-size:9px;color:#666;margin-top:4px">' + esc(surgeonName) + '</div></div></div></div></div></body></html>';
+    + '<div style="display:grid;grid-template-columns:1.08fr .92fr;gap:7px;margin-top:7px"><div style="border:1px solid #e6dbe0;border-radius:10px;padding:7px 9px;background:#fff"><div style="font-size:9.5px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Discharge Summary</div><div style="font-size:10.1px;line-height:1.38;color:#1d1d1d">' + esc(ctx.summary) + '</div></div><div style="border:1px solid #efe3d0;border-radius:10px;padding:7px 9px;background:#fffaf3"><div style="font-size:9.5px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Investigations ' + (ctx.investigationsSource === 'hospital' ? '(Hospital)' : '(Manual / Case Sheet)') + '</div><div style="font-size:9.5px;line-height:1.35;color:#5a4630">' + (ctx.investigations.length ? ctx.investigations.slice(0, 8).map(function (item) { return '<div>• ' + esc(item) + '</div>'; }).join('') : '<div>• Routine investigation details documented in the case sheet</div>') + '</div>' + rightPanelExtra + '<div style="font-size:9.5px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.4px;margin:7px 0 4px">Blood / Anaesthesia Notes</div><div style="font-size:9.5px;line-height:1.35;color:#5a4630">' + esc([ctx.blood, ctx.anaesNote].filter(function (v) { return hasVal(v); }).join(' | ') || '—') + '</div></div></div>'
+    + (medRows ? '<div style="margin-top:7px;border:1px solid #e6dbe0;border-radius:10px;overflow:hidden"><div style="padding:5px 9px;background:#f9f2f4;font-size:9.5px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.4px">Medicines</div><table style="width:100%;border-collapse:collapse"><thead><tr style="background:#fcf8f9"><th style="border:1px solid #dfd6db;padding:4px 6px;font-size:8.5px">#</th><th style="border:1px solid #dfd6db;padding:4px 6px;font-size:8.5px">Medicine</th><th style="border:1px solid #dfd6db;padding:4px 6px;font-size:8.5px">Timing / Frequency</th><th style="border:1px solid #dfd6db;padding:4px 6px;font-size:8.5px">Duration</th></tr></thead><tbody>' + medRows + '</tbody></table></div>' : '')
+    + (instructionRows ? '<div style="margin-top:7px;border:1px solid #efe3d0;border-radius:10px;padding:7px 9px;background:#fffaf3"><div style="font-size:9.5px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Discharge Advice</div><div style="font-size:9.7px;line-height:1.35;color:#5a4630">' + instructionRows + '</div></div>' : '')
+    + (followupRows ? '<div style="margin-top:7px"><div style="font-size:9.5px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px">Follow-up</div>' + followupRows + '</div>' : '')
+    + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:10px"><div style="text-align:center"><div style="border-bottom:1px solid #333;height:24px"></div><div style="font-size:8px;color:#666;margin-top:3px">Patient / Attendant Signature</div></div><div style="text-align:center"><div style="border-bottom:1px solid #333;height:24px"></div><div style="font-size:8px;color:#666;margin-top:3px">Nursing / Duty Staff</div></div><div style="text-align:center"><div style="border-bottom:1px solid #333;height:24px"></div><div style="font-size:8px;color:#666;margin-top:3px">' + esc(surgeonName) + '</div></div></div></div></div></body></html>';
 }
 function buildDischargeCardPrintHtml() {
   const sel = document.getElementById('dc-specialty-sel')?.value || 'ophtho';
@@ -38943,6 +39089,7 @@ function saveVisit(dept, opts) {
     visit.obgExtraAdvice = document.getElementById('obg-extra-advice')?.value || '';
     visit.rxFuDate = document.querySelector('#pg-obg #obg-rx #rx-fu-date')?.value || '';
     visit.followupDate = visit.rxFuDate || '';
+    visit.postSurgeryRx = !!document.getElementById('obg-post-surgery-rx')?.checked;
     const leftLines = [...document.querySelectorAll('#obg-dx-list .dx-inp')].map(function (e) { return e.value.trim(); }).filter(Boolean);
     const prevLedger = getObgDxLedger(localPt).filter(function (x) { return !x.resolved; });
     const carriedTexts = prevLedger.map(function (x) { return x.text; });

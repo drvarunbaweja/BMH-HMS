@@ -2594,6 +2594,10 @@
           </select>
           <button class="btn btn-xs btn-outline" type="button" onclick="openRxTemplatePicker('obg')" style="flex:1;justify-content:flex-start">📋 Templates</button>
           <button class="btn btn-xs btn-gold" onclick="openSaveRxTemplate()">📋 Save Template</button>
+          <label style="display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;color:var(--g1);padding:4px 2px;user-select:none;cursor:pointer">
+            <input type="checkbox" id="obg-post-surgery-rx">
+            Delivery / LSCS / Post-op
+          </label>
           <div class="lang-sel" style="margin:0">
             <button class="lang-btn active" onclick="setLang('en',this)">EN</button>
             <button class="lang-btn" onclick="setLang('hi',this)">हिं</button>
@@ -4272,7 +4276,7 @@
           <div id="fu-tpl-selected" style="display:flex;flex-wrap:wrap;gap:6px;min-height:32px;padding:6px 0"></div>
           <input type="hidden" id="fu-tpl-offsets" value="">
         </div>
-        <div class="form-group full"><label class="fl">Instructions</label><textarea id="fu-tpl-notes" placeholder="One instruction per line. These will print in the discharge card and summary." style="min-height:110px"></textarea></div>
+        <div class="form-group full"><label class="fl">Instructions</label><textarea id="fu-tpl-notes" placeholder="One instruction per line. These will print in the discharge card and summary." style="min-height:240px;line-height:1.55;white-space:pre-wrap"></textarea></div>
         <button class="btn btn-gold" onclick="saveOtFollowupTemplate()">💾 Save Follow-up Template</button>
       </div>
     </div>
