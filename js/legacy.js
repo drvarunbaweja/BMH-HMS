@@ -3778,6 +3778,11 @@ function openPatient(bmhId, opts) {
 
   // ── Set global current patient for printOphthoSheet etc. ───────
   window.CURRENT_PATIENT = p;
+  window._activePatientDeptOverride = opts.deptOverride || '';
+  if (!opts.deptOverride) {
+    window._activeXrefContext = null;
+    window._currentXrefId = null;
+  }
   window._ophthoDirtyPatientId = p.bmhId;
   window._ophthoFormDirtyAt = 0;
 
@@ -4119,7 +4124,14 @@ function openPatientForDept(bmhId, dept, xrefId) {
   // Use freshStart (blank form) only when cross-ref hasn't been consulted yet.
   // If already marked seen (consultation done and saved), load today's saved visit for that dept.
   const freshStart = !(xref && xref.seenAt);
-  // Store the active cross-ref ID so saveVisit can create a separate visit key if needed
+  // Store the active cross-ref context so save / done affects only this referred dept row.
+  window._activeXrefContext = xrefId ? {
+    bmhId: bmhId,
+    dept: normalizeDeptKeyForQueue(dept || '') || dept,
+    xrefId: String(xrefId || ''),
+    fromDept: xref?.fromDept || '',
+    visitKey: xref?.lastVisitKey || ''
+  } : null;
   window._currentXrefId = freshStart ? (xrefId || null) : null;
   openPatient(bmhId, { deptOverride: dept, freshStart: freshStart });
 }
@@ -22050,7 +22062,7 @@ function setReceptionPurposeDefaultForVisit(isExistingPatient) {
   const current = String(sel.value || '').trim();
   const isConsultationChoice = !current || /^(New Consultation|Follow-up)$/i.test(current);
   if (!isConsultationChoice) return;
-  const target = isExistingPatient ? 'Follow-up' : 'New Consultation';
+  const target = isExistingPatient ? 'Follow-up' : (current || 'New Consultation');
   if ([...sel.options].some(function (opt) { return opt.textContent === target || opt.value === target; })) {
     sel.value = target;
   }
@@ -22246,7 +22258,7 @@ async function registerPatient() {
   const insName = normalizeReceptionFieldValue('rc-ins-name', document.getElementById('rc-ins-name')?.value||'');
   const policyNo = (document.getElementById('rc-policy')?.value || '').trim();
   const claimAmountInput = Math.max(0, Number(document.getElementById('rc-claim-amt')?.value || 0));
-  patient.checkinAt = Date.now();
+  patient.checkinAt = isPreReg ? null : Date.now();
   patient.purpose = purpose;
   patient.refType = refType;
   patient.refName = refName;
@@ -37697,9 +37709,11 @@ function buildQCard(p, sno) {
   const labTooltip = buildUnreadLabResultsTooltipHtml(p);
   const labReadyBadge = patientHasUnreadLabResults(p) ? `<span title="${escapeHtmlConsent(labHover || 'Results ready')}" onmouseenter="const tip=this.querySelector('.lab-ready-tip');if(tip)tip.style.display='block'" onmouseleave="const tip=this.querySelector('.lab-ready-tip');if(tip)tip.style.display='none'" style="position:relative;display:inline-flex;align-items:center;gap:4px;padding:1px 6px;border-radius:999px;background:#eafaf1;color:#166534;border:1px solid rgba(22,101,52,.25);font-size:9px;font-weight:900;animation:pulse 1.2s infinite">🧪 Results Ready${labTooltip.replace('<span style="display:none;', '<span class="lab-ready-tip" style="display:none;')}</span>` : '';
 
+  const cardClick = p.preRegistered ? '' : `openPatient('${p.bmhId}')`;
+  const cardCursor = p.preRegistered ? 'default' : 'pointer';
   const cardBg = p.preRegistered ? '#f8f8f8' : '#fff';
   const cardBorder = p.preRegistered ? '1px dashed #ccc' : '1px solid var(--g5)';
-  return `<div class="q-card compact ${p.status}" onclick="${p.preRegistered?`checkInPatient('${p.bmhId}')`:`openPatient('${p.bmhId}')`}" style="cursor:pointer;padding:6px 9px;margin-bottom:4px;border-radius:8px;border:${cardBorder};background:${cardBg};display:flex;align-items:center;gap:7px;opacity:${p.preRegistered?'.75':'1'}"
+  return `<div class="q-card compact ${p.status}" onclick="${cardClick}" style="cursor:${cardCursor};padding:6px 9px;margin-bottom:4px;border-radius:8px;border:${cardBorder};background:${cardBg};display:flex;align-items:center;gap:7px;opacity:${p.preRegistered?'.75':'1'}"
     onmouseover="this.style.background='var(--g6)'" onmouseout="this.style.background='${cardBg}'">
     ${sno!==undefined?`<div style="font-size:12px;font-weight:900;color:var(--g2);width:20px;text-align:center;flex-shrink:0">${sno}</div>`:''}
     <div style="width:30px;height:30px;border-radius:50%;background:${p.color||'#1A3C6E'};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:11px;flex-shrink:0">${p.initials||p.name[0]||'?'}</div>
@@ -37724,7 +37738,7 @@ function buildQCard(p, sno) {
       ${p.dilated && dilLongWait ? statusBadge.replace('">💧Dilated',';animation:pulse 1.35s infinite">💧Dilated') : statusBadge}
       <div style="display:flex;gap:3px" onclick="event.stopPropagation()">
         ${p.preRegistered
-          ? `<button title="Check In & Collect Fee" style="background:var(--blue);color:#fff;border:none;border-radius:5px;padding:2px 8px;font-size:9px;font-weight:800;cursor:pointer;line-height:1.6;animation:pulse 2s infinite" onclick="checkInPatient('${p.bmhId}')">✅ Check In</button>`
+          ? `<button title="Check In & Collect Fee" style="background:var(--green);color:#fff;border:none;border-radius:5px;padding:2px 8px;font-size:9px;font-weight:800;cursor:pointer;line-height:1.6;animation:pulse 2s infinite" onclick="markSeen('${String(p.bmhId).replace(/'/g, "\\'")}')">✓ Check In</button>`
           : `${!isPatientMarkedSeen(p)?`<button title="Mark Seen" style="background:var(--green);color:#fff;border:none;border-radius:5px;padding:2px 6px;font-size:9px;font-weight:800;cursor:pointer;line-height:1.4" onclick="markSeen('${p.bmhId}')">✓</button>`:`<button title="Move to Active" style="background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1.5px solid var(--bmh-blue);border-radius:5px;padding:2px 6px;font-size:9px;font-weight:800;cursor:pointer;line-height:1.4" onclick="restorePatientToActiveQueue('${p.bmhId}')">↩ Active</button>`}
         ${isOphtho&&!p.dilated&&!isPatientMarkedSeen(p)?`<button title="Dilate" style="background:var(--blue-lt);color:var(--blue);border:1.5px solid var(--blue);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="markDilated('${p.bmhId}','${p.name.replace(/'/g,"\\'")}')">💧</button>`:''}
         <button title="Cross-Refer" style="background:rgba(11,123,140,.1);color:var(--teal);border:1.5px solid var(--teal);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="openXRefModal('${p.bmhId}')">↔️</button>
@@ -37762,11 +37776,12 @@ function dilationCellHtml(p) {
 function buildQTableRow(p, sno, opts) {
   opts = opts || {};
   const receptionQueue = !!opts.receptionQueue;
+  const isPreRegRow = !!p.preRegistered;
   const deptLabel = {ophtho:'Eye',obg:'OBG',psych:'Psych',skin:'Skin',lab:'Lab'}[p.dept]||p.dept||'—';
   const deptColor = {ophtho:'var(--blue)',obg:'#c0004e',psych:'var(--orange)',skin:'var(--purple)',lab:'var(--teal)'}[p.dept]||'var(--g2)';
   const isOphtho = p.dept==='ophtho';
   const now = Date.now();
-  const waitMin = p.checkinAt ? Math.floor((now - p.checkinAt)/60000) : 0;
+  const waitMin = (!isPreRegRow && p.checkinAt) ? Math.floor((now - p.checkinAt)/60000) : 0;
   const waitStr = waitMin < 60 ? waitMin+'m' : Math.floor(waitMin/60)+'h '+(waitMin%60)+'m';
   const dilMin = getPatientActiveDilationMinutes(p, now);
   const dilLongWait = dilMin !== null && dilMin >= 30;
@@ -37787,11 +37802,11 @@ function buildQTableRow(p, sno, opts) {
     ? `<span style="font-size:10px;color:#1a8c3c">Paid</span>${advLbl ? ' · ' + advLbl : ''}`
     : (advLbl || '');
   const seenRow = isPatientMarkedSeen(p);
-  const statusTxt = p.preRegistered ? 'Pre-reg' : seenRow ? 'Seen' : p.dilated ? 'Dilated' : p._xrefPendingPay ? 'Awaiting pay' : 'Waiting';
-  const statusBg = p.preRegistered ? '#f0f0f0' : seenRow ? 'var(--green-lt)' : p.dilated ? 'var(--blue-lt)' : p._xrefPendingPay ? '#fff3e0' : 'var(--orange-lt)';
+  const statusTxt = isPreRegRow ? 'Need check in' : seenRow ? 'Seen' : p.dilated ? 'Dilated' : p._xrefPendingPay ? 'Awaiting pay' : 'Waiting';
+  const statusBg = isPreRegRow ? '#f0f0f0' : seenRow ? 'var(--green-lt)' : p.dilated ? 'var(--blue-lt)' : p._xrefPendingPay ? '#fff3e0' : 'var(--orange-lt)';
   const nmEsc = (p.name||'').replace(/'/g,"\\'");
   const xrefIdEsc = String(p._xrefId || '').replace(/'/g, "\\'");
-  const onRow = p.preRegistered ? `checkInPatient('${p.bmhId}')`
+  const onRow = isPreRegRow ? ''
     : (receptionQueue ? `openReceptionPatient('${p.bmhId}')`
     : (p._xrefEntry ? `openPatientForDept('${p.bmhId}','${p.dept}','${xrefIdEsc}')`
     : `openPatient('${p.bmhId}')`));
@@ -37827,7 +37842,12 @@ function buildQTableRow(p, sno, opts) {
         <option value="active">Move to active</option>
       </select>`
     : '';
-  return `<tr class="${vuln ? 'row-vulnerable' : ''}" onclick="${onRow}" style="cursor:pointer;${dilLongWait?'animation:pulse 1.45s infinite;':''}">
+  const rowClass = `${vuln ? 'row-vulnerable' : ''}${isPreRegRow ? ' q-row-precheckin' : ''}`.trim();
+  const rowStyle = isPreRegRow
+    ? 'cursor:default;background:#f8fafc;color:#64748b;opacity:.76;'
+    : `cursor:pointer;${dilLongWait?'animation:pulse 1.45s infinite;':''}`;
+  const actionCellStyle = isPreRegRow ? 'opacity:1;color:initial' : '';
+  return `<tr class="${rowClass}" onclick="${onRow}" style="${rowStyle}">
     <td style="font-weight:900;color:var(--g2);font-size:12.5px">${sno}</td>
     <td><div style="display:flex;align-items:center;gap:6px"><span style="width:28px;height:28px;border-radius:50%;background:${p.color||'#1A3C6E'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:900;font-size:10px;flex-shrink:0">${p.initials||p.name[0]||'?'}</span>
       <div><div style="font-weight:800;font-size:15px;line-height:1.05;display:flex;align-items:center;flex-wrap:nowrap;gap:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name || ''}${vulnBadge}${labReadyBadge}${xrefOutBadge}${xrefInBadge}</div>
@@ -37837,11 +37857,11 @@ function buildQTableRow(p, sno, opts) {
     <td style="font-size:11px;max-width:108px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.doctor||''}">${docShort}</td>
     <td style="font-size:11px;color:var(--g1);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.purpose||''}">${p.purpose||'—'}</td>
     <td style="font-size:11px">${dilationCellHtml(p)}</td>
-    <td style="font-size:11px;color:var(--g2)">${p.preRegistered?'—':waitStr}</td>
+    <td style="font-size:11px;color:var(--g2)">${isPreRegRow?'—':waitStr}</td>
     <td><span style="font-size:10px;padding:2px 6px;border-radius:6px;background:${statusBg};font-weight:800;${dilLongWait?'box-shadow:0 0 0 1px rgba(88,86,214,.18);':''}">${statusTxt}</span></td>
-    <td class="q-actions" onclick="event.stopPropagation()">
-      ${p.preRegistered
-        ? `<button type="button" title="Check In" style="background:var(--blue);color:#fff;border:none;border-radius:5px;padding:3px 8px;font-size:9px;font-weight:800;cursor:pointer" onclick="checkInPatient('${p.bmhId}')">Check in</button>`
+    <td class="q-actions" style="${actionCellStyle}" onclick="event.stopPropagation()">
+      ${isPreRegRow
+        ? `<button type="button" title="Check In" style="background:var(--green);color:#fff;border:none;border-radius:5px;padding:3px 8px;font-size:9px;font-weight:800;cursor:pointer" onclick="markSeen('${String(p.bmhId).replace(/'/g, "\\'")}')">✓ Check in</button>`
         : `${!seenRow?`<button type="button" title="Seen" style="background:var(--green);color:#fff;border:none;border-radius:5px;padding:3px 6px;font-size:9px;font-weight:800;cursor:pointer" onclick="${markSeenClick}">✓</button>`:doneActionHtml}
       ${isOphtho&&!p.dilated&&!seenRow?`<button type="button" title="Dilate" style="background:var(--blue-lt);color:var(--blue);border:1.5px solid var(--blue);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="markDilated('${p.bmhId}','${nmEsc}')">💧</button>`:''}
       ${receptionQueue ? `<button type="button" title="Restore to doctor queue" style="background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1.5px solid var(--bmh-blue);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="event.stopPropagation();restorePatientToDoctorQueue('${p.bmhId}')">↩</button>` : ''}
@@ -37860,6 +37880,10 @@ function toggleQueueSidebarCollapse(forceExpand) {
 
 function markSeen(bmhId) {
   const p = PATIENTS.find(x=>x.bmhId===bmhId);
+  if (p && p.preRegistered) {
+    checkInPatient(bmhId);
+    return;
+  }
   const nowIso = new Date().toISOString();
   if(p) { p.seen=true; p.status='seen'; p.dilated=false; p.dilatedTime=null; p.seenAt = nowIso; }
   fbUpdate && fbUpdate('patients/'+bmhId,{seen:true,status:'seen',dilated:false,dilatedTime:null,seenAt:nowIso}).catch(()=>{});
@@ -38002,6 +38026,13 @@ function markCurrentPatientSeen() {
   const ids = ['ophtho-pt-uid','obg-pt-uid','psych-pt-uid','skin-pt-uid'];
   const bmhId = (window.CURRENT_PATIENT?.bmhId || ids.map(function (id) { return document.getElementById(id)?.textContent?.trim(); }).find(Boolean) || '').trim();
   if(!bmhId || bmhId === '—') { showToast('Open a patient first', 'w'); return; }
+  const activeDept = activeClinicDeptKey();
+  const xrefCtx = window._activeXrefContext;
+  if (xrefCtx && xrefCtx.bmhId === bmhId && normalizeDeptKeyForQueue(xrefCtx.dept || '') === activeDept && xrefCtx.xrefId) {
+    markCrossRefSeen(bmhId, xrefCtx.xrefId);
+    if (typeof nav === 'function') setTimeout(function () { nav('doctor-queue', null); }, 80);
+    return;
+  }
   markSeen(bmhId);
   showToast('Patient marked seen ✓', 's');
   if (typeof nav === 'function') {
@@ -38338,6 +38369,33 @@ function getActiveCrossRefsForPatient(p) {
   else if (p?.xrefTo) refs.push({ id: 'legacy-xref', toDept: p.xrefTo, toDoctor: p.xrefDoctor, paid: !!p.xrefPaid, active: true });
   return refs.filter(function (r) { return r && r.toDept && r.active !== false; });
 }
+function buildCrossRefQueuePatient(p, xref, fallbackDept) {
+  const toKey = normalizeDeptKeyForQueue(xref?.toDept || fallbackDept || '');
+  const xrefSeen = !!xref?.seenAt;
+  const pendingPay = !!(xref?.fee && xref.paid === false);
+  const dedupeKey = [
+    String(p?.bmhId || ''),
+    'xref',
+    String(toKey || ''),
+    String(xref?.id || '')
+  ].filter(Boolean).join('::');
+  const purposeSuffix = (pendingPay ? ' [Cross-ref: payment pending]' : '') + (xref?.reason ? ' — ' + xref.reason : '');
+  return Object.assign({}, p, {
+    dept: xref?.toDept || toKey || p?.dept,
+    doctor: xref?.toDoctor || p?.doctor,
+    seen: xrefSeen,
+    status: xrefSeen ? 'seen' : 'waiting',
+    seenAt: xref?.seenAt || '',
+    purpose: (xref?.reason ? xref.reason + ' — ' : '') + (p?.purpose || '') + purposeSuffix,
+    _xrefEntry: true,
+    _xrefId: String(xref?.id || ''),
+    _xrefFromDept: xref?.fromDept || '',
+    _xrefFeeRequired: !!xref?.fee,
+    _xrefFeeAmount: Number(xref?.amount || xref?.feeAmount || 0) || 0,
+    _xrefPendingPay: pendingPay,
+    _queueKey: dedupeKey
+  });
+}
 /** Patients with a cross-ref to `targetDeptKey` must appear in the doctor queue even when the
  *  patient record was not refreshed for "today" (e.g. xref saves crossRefs without bumping visitDate). */
 function augmentQueueBasePatientsWithCrossRefs(basePts, targetDeptKey) {
@@ -38355,7 +38413,7 @@ function augmentQueueBasePatientsWithCrossRefs(basePts, targetDeptKey) {
     });
     if (!xrefs.length) return;
     const include = xrefs.some(function (xr) {
-      return !xr.seenAt;
+      return !xr.seenAt || localDateKey(xr.seenAt) === localDateKey(new Date());
     }) || patientQueueDateMatchesToday(p);
     if (!include) return;
     seen.add(p.bmhId);
@@ -38390,6 +38448,7 @@ function _renderDocQueueImpl() {
     );
   };
   const queueWaitMinutes = function (p) {
+    if (p?.preRegistered) return 0;
     const stamp = queueSortStamp(p);
     if (!stamp) return 0;
     return Math.max(0, Math.floor((Date.now() - stamp) / 60000));
@@ -38449,15 +38508,28 @@ function _renderDocQueueImpl() {
   }
   const myPts = (() => {
     if (CURRENT_USER?.isAdmin || CURRENT_USER?.role === 'Reception') {
-      return adminDeptFilter === 'all'
-        ? queueBasePts
-        : queueBasePts.filter(function (p) {
-            const directDept = normalizeDeptKeyForQueue(p.dept || p.department || '');
-            if (directDept === adminDeptFilter) return true;
-            return getActiveCrossRefsForPatient(p).some(function (xref) {
-              return normalizeDeptKeyForQueue(xref.toDept || '') === adminDeptFilter && !xref.seenAt;
-            });
-          });
+      if (adminDeptFilter === 'all') return queueBasePts;
+      const adminRows = [];
+      const seenAdminKeys = new Set();
+      queueBasePts.forEach(function (p) {
+        const directDept = normalizeDeptKeyForQueue(p.dept || p.department || '');
+        if (directDept === adminDeptFilter) {
+          const directKey = String(p.bmhId || '');
+          if (directKey && !seenAdminKeys.has(directKey)) {
+            seenAdminKeys.add(directKey);
+            adminRows.push(Object.assign({}, p, { _queueKey: directKey }));
+          }
+        }
+        getActiveCrossRefsForPatient(p).forEach(function (xref) {
+          const toKey = normalizeDeptKeyForQueue(xref.toDept || '');
+          if (toKey !== adminDeptFilter) return;
+          const row = buildCrossRefQueuePatient(p, xref, adminDeptFilter);
+          if (seenAdminKeys.has(row._queueKey)) return;
+          seenAdminKeys.add(row._queueKey);
+          adminRows.push(row);
+        });
+      });
+      return adminRows;
     }
     const deptPts = [];
     const xrefKeySeen = new Set();
@@ -38472,24 +38544,9 @@ function _renderDocQueueImpl() {
         const dedupeKey = String(p.bmhId || '') + '::' + String(toKey || '');
         if (xrefKeySeen.has(dedupeKey)) return;
         xrefKeySeen.add(dedupeKey);
-        const xrefSeen = !!xref.seenAt;
-        const pendingPay = !!(xref.fee && xref.paid === false);
-        const purposeSuffix = (pendingPay ? ' [Cross-ref: payment pending]' : '') + (xref.reason ? ' — ' + xref.reason : '');
-        deptPts.push(Object.assign({}, p, {
-          dept: xref.toDept,
-          doctor: xref.toDoctor || p.doctor,
-          seen: xrefSeen,
-          status: xrefSeen ? 'seen' : 'waiting',
-          seenAt: xref.seenAt || p.seenAt,
-          purpose: (xref.reason ? xref.reason + ' — ' : '') + (p.purpose || '') + purposeSuffix,
-          _xrefEntry: true,
-          _xrefId: String(xref.id || ''),
-          _xrefFromDept: xref.fromDept || '',
-          _xrefFeeRequired: !!xref.fee,
-          _xrefFeeAmount: Number(xref.amount || xref.feeAmount || 0) || 0,
-          _xrefPendingPay: pendingPay,
-          _queueKey: dedupeKey
-        }));
+        const row = buildCrossRefQueuePatient(p, xref, userDept);
+        row._queueKey = dedupeKey;
+        deptPts.push(row);
       });
     });
     if (deptPts.length) return deptPts;
@@ -38584,6 +38641,7 @@ function renderDrSettings() {
 // ════════════════════════════════════════════════════════════════════════════
 function saveVisit(dept, opts) {
   opts = opts || {};
+  dept = normalizeDeptKeyForQueue(dept || window._activePatientDeptOverride || activeClinicDeptKey()) || dept;
   const uidMap = { ophtho:'ophtho-pt-uid', obg:'obg-pt-uid', psych:'psych-pt-uid', skin:'skin-pt-uid' };
   const nmMap  = { ophtho:'ophtho-pt-nm',  obg:'obg-pt-nm',  psych:'psych-pt-nm',  skin:'skin-pt-nm'  };
   const bmhId  = document.getElementById(uidMap[dept])?.textContent?.trim();
@@ -38600,18 +38658,29 @@ function saveVisit(dept, opts) {
   const cachedVisits = getCachedPatientVisits(bmhId);
   // For cross-ref visits, always generate a new key so the cross-dept consultation
   // doesn't overwrite an existing same-dept visit from earlier today.
-  const isXrefVisit = !!window._currentXrefId;
+  const activeXref = window._activeXrefContext
+    && window._activeXrefContext.bmhId === bmhId
+    && normalizeDeptKeyForQueue(window._activeXrefContext.dept || '') === dept
+    ? Object.assign({}, window._activeXrefContext)
+    : null;
+  const activeXrefId = activeXref?.xrefId || window._currentXrefId || '';
+  const isXrefVisit = !!activeXrefId;
+  const xrefVisitKey = activeXref?.visitKey || '';
   const todaysExistingKey = isXrefVisit ? null
     : (localPt?.lastVisitKey && String(localPt?.lastVisitDate || '').startsWith(todayKey) && localPt?.lastDeptVisit === dept)
     ? localPt.lastVisitKey
     : (Object.entries(cachedVisits).find(function ([key, val]) {
         return val && val.dept === dept && String(val.date || '').startsWith(todayKey);
       }) || [null])[0];
-  const visitKey = todaysExistingKey || ('V' + now.getTime());
-  if (isXrefVisit) window._currentXrefId = null; // clear after first save
+  const visitKey = xrefVisitKey || todaysExistingKey || ('V' + now.getTime());
+  if (activeXrefId && window._activeXrefContext && window._activeXrefContext.bmhId === bmhId) {
+    window._activeXrefContext.visitKey = visitKey;
+  }
   const visit = {
     id: visitKey,
     bmhId, ptName, dept,
+    xrefId: activeXrefId || '',
+    xrefFromDept: activeXref?.fromDept || '',
     date: now.toISOString(),
     dateLabel: now.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}),
     doctor: getEffectiveDoctorNameForDept(dept),
@@ -38999,6 +39068,23 @@ function saveVisit(dept, opts) {
       try { renderPsychRail && renderPsychRail(); } catch (e) { console.warn('post-save renderPsychRail failed', e); }
       try { renderSkinRail && renderSkinRail(); } catch (e) { console.warn('post-save renderSkinRail failed', e); }
       try { refreshPreviousDiagnosisPanel(dept, visit); } catch (e) { console.warn('post-save refreshPreviousDiagnosisPanel failed', e); }
+      if (activeXrefId && !opts.autosave) {
+        try {
+          const nowSeen = new Date().toISOString();
+          const pt = PATIENTS.find(function (x) { return x.bmhId === bmhId; });
+          if (pt && Array.isArray(pt.crossRefs)) {
+            const refs = pt.crossRefs.map(function (r) {
+              if (!r || String(r.id) !== String(activeXrefId)) return r;
+              return Object.assign({}, r, { seenAt: r.seenAt || nowSeen, lastVisitKey: visitKey, lastSavedAt: nowSeen });
+            });
+            pt.crossRefs = refs;
+            fbUpdate && fbUpdate('patients/' + bmhId, { crossRefs: sanitizeFirebaseValue(refs) }).catch(function () {});
+          }
+          window._currentXrefId = null;
+        } catch (xrefSaveErr) {
+          console.warn('cross-ref seen update failed', xrefSaveErr);
+        }
+      }
       document.dispatchEvent(new CustomEvent('bmh:patientsUpdated'));
     })
     .catch(e => {
