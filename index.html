@@ -5107,19 +5107,26 @@
 
 <div class="modal-ov" id="m-edit-rx-tpl">
 <div class="modal modal-lg">
-<div class="modal-hd"><div class="modal-title">Edit Rx template</div><button class="modal-close" onclick="closeM('m-edit-rx-tpl')">✕</button></div>
+<div class="modal-hd"><div class="modal-title" id="edit-rx-tpl-title">Edit Rx template</div><button class="modal-close" onclick="closeM('m-edit-rx-tpl')">✕</button></div>
 <div class="fg fg1" style="gap:9px">
   <input type="hidden" id="edit-rx-tpl-key">
   <div class="form-group"><label class="fl">Display name</label><input type="text" id="edit-rx-tpl-name" style="font-size:13px"></div>
   <div class="form-group"><label class="fl">Department</label>
-    <select id="edit-rx-tpl-dept" style="font-size:13px">
-      <option value="ophtho">Ophthalmology</option><option value="obg">OBG</option><option value="psych">Neuropsychiatry</option><option value="skin">Skin</option><option value="ot">OT / Operative Notes</option><option value="dc-ophtho">Discharge Card — Eye</option><option value="dc-obg">Discharge Card — OBG</option><option value="all">All</option>
+    <select id="edit-rx-tpl-dept" style="font-size:13px" onchange="syncRxTemplateEditorMode()">
+      <option value="ophtho">Ophthalmology</option><option value="obg">OBG</option><option value="psych">Neuropsychiatry</option><option value="skin">Skin</option><option value="ot">OT / Operative Notes</option><option value="ot-followup">OT Follow-up</option><option value="dc-ophtho">Discharge Card — Eye</option><option value="dc-obg">Discharge Card — OBG</option><option value="all">All</option>
     </select>
   </div>
-  <div class="form-group"><label class="fl">Surgery link for OT Notes</label><input type="text" id="edit-rx-tpl-surgery" list="rx-tpl-surgery-list" placeholder="Optional"></div>
+  <div class="form-group" id="edit-rx-tpl-surgery-wrap"><label class="fl">Surgery link for OT Notes</label><input type="text" id="edit-rx-tpl-surgery" list="rx-tpl-surgery-list" placeholder="Optional"></div>
   <div class="form-group"><label class="fl">Notes</label><input type="text" id="edit-rx-tpl-notes" placeholder="Optional" style="font-size:13px"></div>
-  <div class="form-group full"><label class="fl">Template rows</label><textarea id="edit-rx-tpl-lines" rows="14" style="width:100%;font-size:12px;box-sizing:border-box" placeholder="One line per medicine, OT note step, or discharge instruction"></textarea></div>
-  <button type="button" class="btn btn-gold" onclick="saveRxTemplateFromModal()">💾 Save template</button>
+  <div class="form-group full" id="edit-rx-tpl-mini-wrap">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">
+      <label class="fl" style="margin:0">Medicines</label>
+      <button type="button" class="btn btn-xs btn-outline" onclick="addRxTemplateMiniRow()">+ Add Medicine</button>
+    </div>
+    <div id="edit-rx-tpl-mini-rows" style="overflow-x:auto"></div>
+  </div>
+  <div class="form-group full" id="edit-rx-tpl-lines-wrap"><label class="fl">Template rows</label><textarea id="edit-rx-tpl-lines" rows="14" style="width:100%;font-size:12px;box-sizing:border-box" placeholder="One line per OT note step, follow-up instruction, or discharge instruction"></textarea></div>
+  <button type="button" class="btn btn-gold" id="edit-rx-tpl-save-btn" onclick="saveRxTemplateFromModal()">💾 Save template</button>
 </div>
 </div>
 </div>
@@ -6125,7 +6132,10 @@
   <div class="form-group"><label class="fl">Notes / Description</label>
     <input type="text" id="tpl-notes-inp" placeholder="Optional description for this template">
   </div>
-  <button class="btn btn-gold" onclick="saveRxAsTemplate()">💾 Save Template</button>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn btn-gold" style="flex:1" onclick="saveRxAsTemplate()">💾 Save Template</button>
+    <button class="btn btn-outline" style="flex:1;display:none" id="tpl-update-btn" onclick="saveRxAsTemplate('update')">💾 Update Template</button>
+  </div>
 </div>
 </div>
 </div>
