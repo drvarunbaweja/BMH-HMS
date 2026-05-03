@@ -19217,6 +19217,113 @@ function buildRxTemplateStorageKey(dept, name) {
   const slug = String(name || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   return (deptKey || 'all') + '::' + (slug || 'template');
 }
+function isPrescriptionTemplateDept(dept) {
+  return ['ophtho','obg','psych','skin','all'].includes(normalizeRxTemplateDeptKey(dept || 'all'));
+}
+function escapeRxTemplateHtml(value) {
+  return String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+}
+function rxTemplateOptionHtml(options, selected, fallback) {
+  const value = String(selected || '');
+  const list = Array.from(new Set((options || []).concat(value && !(options || []).includes(value) ? [value] : [], fallback ? [fallback] : []))).filter(Boolean);
+  return list.map(function (opt) {
+    return '<option value="' + escapeRxTemplateHtml(opt) + '"' + (value === opt ? ' selected' : '') + '>' + escapeRxTemplateHtml(opt) + '</option>';
+  }).join('');
+}
+function rxTemplateRowsForMiniEditor(rows) {
+  return (rows || []).map(function (row) {
+    return {
+      trade: rxDrugTradeName(row) || row.trade || row.brand || row.name || '',
+      generic: rxDrugGenericName(row) || row.generic || row.name || '',
+      type: row.type || row.drugType || 'Tablet',
+      eye: Array.isArray(row.eye) ? (row.eye[0] || '') : (row.eye || ''),
+      freq: row.freq || '',
+      dur: row.dur || '',
+      taperRows: Array.isArray(row.taperRows) ? row.taperRows.map(function (tr) { return Object.assign({}, tr); }) : []
+    };
+  });
+}
+function renderRxTemplateMiniEditor(rows) {
+  const host = document.getElementById('edit-rx-tpl-mini-rows');
+  if (!host) return;
+  const list = rxTemplateRowsForMiniEditor(rows);
+  if (!list.length) list.push({ trade: '', generic: '', type: 'Tablet', eye: '', freq: '', dur: '', taperRows: [] });
+  host.innerHTML = list.map(function (row, idx) {
+    return '<div class="rx-tpl-med-row" style="display:grid;grid-template-columns:minmax(130px,1.35fr) minmax(130px,1.25fr) minmax(95px,.85fr) minmax(95px,.9fr) minmax(110px,1fr) minmax(100px,.9fr) 34px;gap:6px;align-items:end;padding:8px;background:#fff;border:1px solid var(--g4);border-radius:8px;margin-bottom:6px">'
+      + '<div><label class="fl">Brand / trade</label><input type="text" data-rx-tpl-field="trade" value="' + escapeRxTemplateHtml(row.trade) + '" placeholder="Medicine name"></div>'
+      + '<div><label class="fl">Generic</label><input type="text" data-rx-tpl-field="generic" value="' + escapeRxTemplateHtml(row.generic) + '" placeholder="Generic"></div>'
+      + '<div><label class="fl">Type</label><select data-rx-tpl-field="type">' + rxTemplateOptionHtml(RX_TYPE_OPTIONS, row.type, 'Tablet') + '</select></div>'
+      + '<div><label class="fl">Eye / route</label><select data-rx-tpl-field="eye">' + rxTemplateOptionHtml(RX_SITE_OPTIONS, row.eye, 'Oral') + '</select></div>'
+      + '<div><label class="fl">Frequency</label><select data-rx-tpl-field="freq">' + rxTemplateOptionHtml(RX_FREQ_OPTIONS, normalizeRxFreqLabel(row.freq || ''), '') + '</select></div>'
+      + '<div><label class="fl">Duration</label><select data-rx-tpl-field="dur">' + rxTemplateOptionHtml(RX_DURATION_OPTIONS, normalizeRxDurationLabel(row.dur || ''), '') + '</select></div>'
+      + '<button type="button" class="btn btn-xs btn-gray" style="width:32px;height:32px;padding:0" title="Remove medicine" onclick="removeRxTemplateMiniRow(this)">✕</button>'
+      + '</div>';
+  }).join('');
+}
+function addRxTemplateMiniRow(seed) {
+  const rows = collectRxTemplateMiniRows({ keepEmpty: true });
+  rows.push(Object.assign({ trade: '', generic: '', type: 'Tablet', eye: '', freq: '', dur: '' }, seed || {}));
+  renderRxTemplateMiniEditor(rows);
+}
+function removeRxTemplateMiniRow(btn) {
+  const row = btn && btn.closest ? btn.closest('.rx-tpl-med-row') : null;
+  if (row) row.remove();
+  const host = document.getElementById('edit-rx-tpl-mini-rows');
+  if (host && !host.querySelector('.rx-tpl-med-row')) addRxTemplateMiniRow();
+}
+function collectRxTemplateMiniRows(opts) {
+  const keepEmpty = !!(opts && opts.keepEmpty);
+  return Array.from(document.querySelectorAll('#edit-rx-tpl-mini-rows .rx-tpl-med-row')).map(function (row) {
+    const val = function (field) {
+      return String(row.querySelector('[data-rx-tpl-field="' + field + '"]')?.value || '').trim();
+    };
+    const trade = val('trade');
+    const generic = val('generic');
+    return {
+      trade: trade,
+      brand: trade,
+      generic: generic,
+      name: generic || trade,
+      type: val('type') || 'Tablet',
+      eye: val('eye'),
+      freq: val('freq'),
+      dur: val('dur'),
+      taperRows: []
+    };
+  }).filter(function (row) {
+    return keepEmpty || row.trade || row.generic;
+  });
+}
+function syncRxTemplateEditorMode() {
+  const dept = normalizeRxTemplateDeptKey(document.getElementById('edit-rx-tpl-dept')?.value || 'all');
+  const miniWrap = document.getElementById('edit-rx-tpl-mini-wrap');
+  const linesWrap = document.getElementById('edit-rx-tpl-lines-wrap');
+  const surgeryWrap = document.getElementById('edit-rx-tpl-surgery-wrap');
+  const useMini = isPrescriptionTemplateDept(dept);
+  if (!useMini && linesWrap) {
+    const lines = document.getElementById('edit-rx-tpl-lines');
+    if (lines && !String(lines.value || '').trim()) lines.value = serializeTemplateRows(collectRxTemplateMiniRows(), dept);
+  }
+  if (miniWrap) miniWrap.style.display = useMini ? '' : 'none';
+  if (linesWrap) linesWrap.style.display = useMini ? 'none' : '';
+  if (surgeryWrap) surgeryWrap.style.display = dept === 'ot' ? '' : 'none';
+  if (useMini && !document.querySelector('#edit-rx-tpl-mini-rows .rx-tpl-med-row')) renderRxTemplateMiniEditor([]);
+}
+function resolveRxTemplateSaveTarget(dept, name, currentKey) {
+  let targetKey = currentKey || buildRxTemplateStorageKey(dept, name);
+  const sameNameKey = Object.keys(RX_TEMPLATES_META || {}).find(function (key) {
+    const meta = RX_TEMPLATES_META[key] || {};
+    return key !== currentKey
+      && normalizeRxTemplateDeptKey(meta.dept || 'all') === dept
+      && String(meta.name || key).trim().toLowerCase() === String(name || '').trim().toLowerCase();
+  }) || (!currentKey && RX_TEMPLATES_DATA[targetKey] ? targetKey : '');
+  if (!sameNameKey) return { key: targetKey, name: name };
+  const overwrite = confirm('A template named "' + name + '" already exists in this department.\n\nOK = overwrite it\nCancel = save as a new template');
+  if (overwrite) return { key: sameNameKey, name: name };
+  const newName = toDisplayTitleCase(prompt('Save as new template name:', name + ' Copy') || '');
+  if (!newName) return null;
+  return { key: buildRxTemplateStorageKey(dept, newName), name: newName };
+}
 function otTemplateMatchesProcedure(templateSurgery, activeProcedure) {
   const t = normalizeOtTemplateKey(templateSurgery);
   const p = normalizeOtTemplateKey(activeProcedure);
@@ -19446,38 +19553,58 @@ function renderSetRxTplList() {
   const el = document.getElementById('set-rx-tpl-list');
   if (!el) return;
   const deptOrder = ['ophtho','obg','psych','skin','ot','ot-followup','dc-ophtho','dc-obg','all'];
-  const deptLabMap = { ophtho: 'Eye', obg: 'OBG', psych: 'Psych', skin: 'Skin', ot: 'OT Notes', 'ot-followup': 'OT Follow-up', 'dc-ophtho': 'Discharge Card — Eye', 'dc-obg': 'Discharge Card — OBG', all: 'All Departments' };
-  const groups = deptOrder.map(function (deptKey) {
-    const rows = Object.keys(RX_TEMPLATES_DATA).filter(function (k) {
-      return normalizeRxTemplateDeptKey(RX_TEMPLATES_META[k]?.dept || 'all') === deptKey;
-    }).map(function (k) {
-      const meta = RX_TEMPLATES_META[k] || { dept: 'all', name: k, notes: '' };
-      const n = meta.name || k;
-      const arr = RX_TEMPLATES_DATA[k] || [];
-      const preview = arr.slice(0, 2).map(function (row) {
-        if (String(meta.dept || '').indexOf('dc-') === 0) {
-          return row.trade || row.name || row.generic || 'Instruction';
-        }
-        if (normalizeRxTemplateDeptKey(meta.dept || '') === 'ot-followup') {
-          return row.trade || row.name || row.generic || formatOtFollowupLabel(row.days || 0) || 'Follow-up';
-        }
-        const nm = rxDrugTradeName(row) || row.trade || row.name || row.generic || 'Item';
-        return nm + (row.freq ? ' · ' + row.freq : '') + (row.dur ? ' · ' + row.dur : '');
-      }).join('<br>');
-      const cnt = arr.length;
-      return '<div style="display:flex;align-items:flex-start;gap:10px;padding:10px;background:var(--g6);border-radius:8px;margin-bottom:6px;font-size:12px">' +
-        '<div style="flex:1"><div style="font-weight:800">' + n + '</div>' +
-        '<div style="font-size:10.5px;color:var(--g1)">' + cnt + ' line(s) with saved frequency / duration' + '</div>' +
-        (meta.surgery ? '<div style="font-size:10px;color:var(--bmh-blue);font-weight:800;margin-top:4px">Surgery: ' + String(meta.surgery).replace(/</g, '&lt;') + '</div>' : '') +
-        (normalizeRxTemplateDeptKey(meta.dept || '') === 'ot-followup' && meta.notes ? '<div style="font-size:10px;color:#8a4200;margin-top:4px;line-height:1.45">' + String(meta.notes).replace(/</g, '&lt;').replace(/\n/g, '<br>') + '</div>' : '') +
-        (preview ? '<div style="font-size:10.5px;color:var(--tx3);margin-top:5px;line-height:1.45">' + preview + '</div>' : '') +
-        '</div>' +
-        '<button type="button" class="btn btn-xs btn-gold" data-rx-tpl-edit="' + encodeURIComponent(k) + '">✏️ Open / Edit</button>' +
-        '<button type="button" class="btn btn-xs btn-gray" data-rx-tpl-del="' + encodeURIComponent(k) + '">🗑️ Delete</button></div>';
-    }).join('');
-    return rows ? '<div style="margin-bottom:12px"><div style="font-size:10px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;margin-bottom:6px">' + deptLabMap[deptKey] + '</div>' + rows + '</div>' : '';
+  const deptLabMap = { ophtho: 'Eye', obg: 'OBG', psych: 'Psych', skin: 'Skin', ot: 'OT Notes', 'ot-followup': 'OT Follow-up', 'dc-ophtho': 'DC Eye', 'dc-obg': 'DC OBG', all: 'All' };
+  window._settingsRxTemplateDeptTab = deptOrder.includes(window._settingsRxTemplateDeptTab) ? window._settingsRxTemplateDeptTab : 'ophtho';
+  const counts = {};
+  deptOrder.forEach(function (deptKey) { counts[deptKey] = 0; });
+  Object.keys(RX_TEMPLATES_DATA || {}).forEach(function (k) {
+    const deptKey = normalizeRxTemplateDeptKey(RX_TEMPLATES_META[k]?.dept || 'all');
+    counts[deptKey] = (counts[deptKey] || 0) + 1;
+  });
+  const activeDept = window._settingsRxTemplateDeptTab;
+  const tabs = deptOrder.map(function (deptKey) {
+    const active = deptKey === activeDept;
+    return '<button type="button" class="btn btn-xs ' + (active ? 'btn-blue' : 'btn-outline') + '" data-rx-tpl-tab="' + deptKey + '" style="padding:4px 8px;border-radius:999px;font-size:10.5px">'
+      + deptLabMap[deptKey] + ' <span style="opacity:.7">(' + (counts[deptKey] || 0) + ')</span></button>';
   }).join('');
-  el.innerHTML = groups || '<div style="padding:16px;color:var(--g1);font-size:12px">No templates yet</div>';
+  const rows = Object.keys(RX_TEMPLATES_DATA || {}).filter(function (k) {
+    return normalizeRxTemplateDeptKey(RX_TEMPLATES_META[k]?.dept || 'all') === activeDept;
+  }).sort(function (a, b) {
+    return String(RX_TEMPLATES_META[a]?.name || a).localeCompare(String(RX_TEMPLATES_META[b]?.name || b));
+  }).map(function (k) {
+    const meta = RX_TEMPLATES_META[k] || { dept: 'all', name: k, notes: '' };
+    const n = meta.name || k;
+    const arr = RX_TEMPLATES_DATA[k] || [];
+    const deptKey = normalizeRxTemplateDeptKey(meta.dept || '');
+    const preview = arr.slice(0, 3).map(function (row) {
+      if (String(meta.dept || '').indexOf('dc-') === 0) {
+        return escapeRxTemplateHtml(row.trade || row.name || row.generic || 'Instruction');
+      }
+      if (deptKey === 'ot-followup') {
+        return escapeRxTemplateHtml(row.trade || row.name || row.generic || formatOtFollowupLabel(row.days || 0) || 'Follow-up');
+      }
+      const nm = rxDrugTradeName(row) || row.trade || row.name || row.generic || 'Item';
+      return escapeRxTemplateHtml(nm + (row.freq ? ' · ' + row.freq : '') + (row.dur ? ' · ' + row.dur : ''));
+    }).join('<br>');
+    const lineLabel = isPrescriptionTemplateDept(deptKey) ? 'medicine(s)' : 'line(s)';
+    return '<div style="display:flex;align-items:flex-start;gap:10px;padding:10px;background:var(--g6);border-radius:8px;margin-bottom:6px;font-size:12px">' +
+      '<div style="flex:1;min-width:0"><div style="font-weight:800">' + escapeRxTemplateHtml(n) + '</div>' +
+      '<div style="font-size:10.5px;color:var(--g1)">' + arr.length + ' ' + lineLabel + '</div>' +
+      (meta.surgery ? '<div style="font-size:10px;color:var(--bmh-blue);font-weight:800;margin-top:4px">Surgery: ' + escapeRxTemplateHtml(meta.surgery) + '</div>' : '') +
+      (deptKey === 'ot-followup' && meta.notes ? '<div style="font-size:10px;color:#8a4200;margin-top:4px;line-height:1.45">' + escapeRxTemplateHtml(meta.notes).replace(/\n/g, '<br>') + '</div>' : '') +
+      (preview ? '<div style="font-size:10.5px;color:var(--tx3);margin-top:5px;line-height:1.45">' + preview + '</div>' : '') +
+      '</div>' +
+      '<button type="button" class="btn btn-xs btn-gold" data-rx-tpl-edit="' + encodeURIComponent(k) + '">✏️ Open / Edit</button>' +
+      '<button type="button" class="btn btn-xs btn-gray" data-rx-tpl-del="' + encodeURIComponent(k) + '">🗑️ Delete</button></div>';
+  }).join('');
+  el.innerHTML = '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px">' + tabs + '</div>'
+    + (rows || '<div style="padding:16px;color:var(--g1);font-size:12px">No templates saved under ' + escapeRxTemplateHtml(deptLabMap[activeDept] || activeDept) + ' yet.</div>');
+  el.querySelectorAll('[data-rx-tpl-tab]').forEach(function (btn) {
+    btn.onclick = function () {
+      window._settingsRxTemplateDeptTab = btn.getAttribute('data-rx-tpl-tab') || 'ophtho';
+      renderSetRxTplList();
+    };
+  });
   el.querySelectorAll('[data-rx-tpl-edit]').forEach(function (btn) {
     btn.onclick = function () {
       openEditRxTemplateModal(decodeURIComponent(btn.getAttribute('data-rx-tpl-edit') || ''));
@@ -19516,34 +19643,52 @@ function openEditRxTemplateModal(key) {
   const sInp = document.getElementById('edit-rx-tpl-surgery');
   const notesInp = document.getElementById('edit-rx-tpl-notes');
   const lInp = document.getElementById('edit-rx-tpl-lines');
+  const title = document.getElementById('edit-rx-tpl-title');
+  const saveBtn = document.getElementById('edit-rx-tpl-save-btn');
   if (kInp) kInp.value = key;
   if (nInp) nInp.value = toDisplayTitleCase(meta.name || key);
   if (dInp) dInp.value = normalizeRxTemplateDeptKey(meta.dept || 'all');
   if (sInp) sInp.value = meta.surgery || '';
   if (notesInp) notesInp.value = meta.notes || '';
   if (lInp) lInp.value = serializeTemplateRows(RX_TEMPLATES_DATA[key], meta.dept || 'all');
+  if (title) title.textContent = 'Edit Rx template';
+  if (saveBtn) saveBtn.innerHTML = '💾 Update template';
+  renderRxTemplateMiniEditor(RX_TEMPLATES_DATA[key] || []);
+  syncRxTemplateEditorMode();
   refreshRxTemplateSurgeryDatalist();
   openM('m-edit-rx-tpl');
 }
 function saveRxTemplateFromModal() {
-  const key = document.getElementById('edit-rx-tpl-key')?.value;
-  if (!key || !RX_TEMPLATES_DATA[key]) { showToast('Invalid template', 'w'); return; }
-  const name = toDisplayTitleCase(document.getElementById('edit-rx-tpl-name')?.value?.trim() || key);
+  const currentKey = document.getElementById('edit-rx-tpl-key')?.value || '';
+  const name = toDisplayTitleCase(document.getElementById('edit-rx-tpl-name')?.value?.trim() || currentKey);
+  if (!name) { showToast('Enter template name', 'w'); return; }
   const dept = normalizeRxTemplateDeptKey(document.getElementById('edit-rx-tpl-dept')?.value || 'all');
   const surgery = document.getElementById('edit-rx-tpl-surgery')?.value?.trim() || '';
   const notes = document.getElementById('edit-rx-tpl-notes')?.value?.trim() || '';
-  const arr = parseTemplateLines(document.getElementById('edit-rx-tpl-lines')?.value || '', dept);
-  if (!arr.length) { showToast('Add at least one template row', 'w'); return; }
-  RX_TEMPLATES_DATA[key] = arr;
-  RX_TEMPLATES_META[key] = { dept: dept, name: name, notes: notes, surgery: surgery };
+  const arr = isPrescriptionTemplateDept(dept)
+    ? collectRxTemplateMiniRows()
+    : parseTemplateLines(document.getElementById('edit-rx-tpl-lines')?.value || '', dept);
+  if (!arr.length) { showToast(isPrescriptionTemplateDept(dept) ? 'Add at least one medicine' : 'Add at least one template row', 'w'); return; }
+  const target = resolveRxTemplateSaveTarget(dept, name, currentKey);
+  if (!target) return;
+  if (currentKey && target.key !== currentKey) {
+    delete RX_TEMPLATES_DATA[currentKey];
+    delete RX_TEMPLATES_META[currentKey];
+  }
+  RX_TEMPLATES_DATA[target.key] = arr;
+  RX_TEMPLATES_META[target.key] = { dept: dept, name: target.name, notes: notes, surgery: surgery };
   saveRxTemplatesToStorage();
   refreshRxTemplateSelects();
   renderSetRxTplList();
   closeM('m-edit-rx-tpl');
-  showToast((String(dept).indexOf('dc-') === 0 ? 'Discharge card template saved ✓' : 'Rx template saved ✓'), 's');
+  showToast((String(dept).indexOf('dc-') === 0 ? 'Discharge card template saved ✓' : (currentKey ? 'Template updated ✓' : 'Template saved ✓')), 's');
 }
 window.openEditRxTemplateModal = openEditRxTemplateModal;
 window.saveRxTemplateFromModal = saveRxTemplateFromModal;
+window.openNewRxTemplateModal = openNewRxTemplateModal;
+window.addRxTemplateMiniRow = addRxTemplateMiniRow;
+window.removeRxTemplateMiniRow = removeRxTemplateMiniRow;
+window.syncRxTemplateEditorMode = syncRxTemplateEditorMode;
 window.deleteRxTemplate = deleteRxTemplate;
 function initOtFollowupTemplateUi() {
   renderOtFollowupPresetBlocks();
@@ -20921,6 +21066,7 @@ function applyRxTemplate(tplId) {
   if(!tplId) return;
   const tpl = RX_TEMPLATES_DATA[tplId];
   if(!tpl) return;
+  window._activeRxTemplateKey = tplId;
   tpl.forEach(d => {
     const trade = d.trade;
     const gen = d.generic || d.trade;
@@ -23650,11 +23796,12 @@ function saveRxTemplate(mode) {
   const raw = document.getElementById('rx-tpl-drugs' + suffix)?.value || '';
   const arr = parseTemplateLines(raw, dept);
   if(!arr.length){showToast('Add one drug per line (e.g. Brand — frequency — duration)','w');return;}
-  const key = buildRxTemplateStorageKey(dept, name);
-  RX_TEMPLATES_DATA[key] = arr;
-  RX_TEMPLATES_META[key] = {
+  const target = resolveRxTemplateSaveTarget(dept, name, '');
+  if (!target) return;
+  RX_TEMPLATES_DATA[target.key] = arr;
+  RX_TEMPLATES_META[target.key] = {
     dept,
-    name,
+    name: target.name,
     notes: document.getElementById('rx-tpl-notes' + suffix)?.value?.trim() || '',
     surgery,
     otArea: !suffix && deptSel ? deptSel.value : ''
@@ -23672,14 +23819,29 @@ function saveRxTemplate(mode) {
     if (deptSel) deptSel.value = 'OT - Eye';
   }
   if (mode === 'modal') closeM('m-add-rx-tpl');
-  showToast((String(dept).indexOf('dc-') === 0 ? 'Discharge card template "'+name+'" saved ✓' : (dept === 'ot' && !suffix ? 'OT template "'+name+'" saved ✓' : (dept === 'ot-followup' ? 'OT follow-up template "'+name+'" saved ✓' : 'Template "'+name+'" saved ✓'))),'s');
+  showToast((String(dept).indexOf('dc-') === 0 ? 'Discharge card template "'+target.name+'" saved ✓' : (dept === 'ot' && !suffix ? 'OT template "'+target.name+'" saved ✓' : (dept === 'ot-followup' ? 'OT follow-up template "'+target.name+'" saved ✓' : 'Template "'+target.name+'" saved ✓'))),'s');
 }
 function openNewRxTemplateModal() {
-  ['rx-tpl-name-modal','rx-tpl-drugs-modal','rx-tpl-surgery-modal','rx-tpl-notes-modal'].forEach(function (id) { const el = document.getElementById(id); if (el) el.value = ''; });
-  const deptSel = document.getElementById('rx-tpl-dept-settings-modal');
-  if (deptSel) deptSel.value = 'Ophthalmology';
+  const kInp = document.getElementById('edit-rx-tpl-key');
+  const nInp = document.getElementById('edit-rx-tpl-name');
+  const dInp = document.getElementById('edit-rx-tpl-dept');
+  const sInp = document.getElementById('edit-rx-tpl-surgery');
+  const notesInp = document.getElementById('edit-rx-tpl-notes');
+  const lInp = document.getElementById('edit-rx-tpl-lines');
+  const title = document.getElementById('edit-rx-tpl-title');
+  const saveBtn = document.getElementById('edit-rx-tpl-save-btn');
+  if (kInp) kInp.value = '';
+  if (nInp) nInp.value = '';
+  if (dInp) dInp.value = window._settingsRxTemplateDeptTab || 'ophtho';
+  if (sInp) sInp.value = '';
+  if (notesInp) notesInp.value = '';
+  if (lInp) lInp.value = '';
+  if (title) title.textContent = 'New Rx template';
+  if (saveBtn) saveBtn.innerHTML = '💾 Save template';
+  renderRxTemplateMiniEditor([]);
+  syncRxTemplateEditorMode();
   refreshRxTemplateSurgeryDatalist();
-  openM('m-add-rx-tpl');
+  openM('m-edit-rx-tpl');
 }
 
 // IOP PACHYMETRY CORRECTION
@@ -28265,6 +28427,17 @@ function computeRxInteractionAlerts() {
 function openSaveRxTemplate() {
   const deptInp = document.getElementById('tpl-dept-inp');
   if (deptInp) deptInp.value = normalizeRxTemplateDeptKey(rxDeptKeyFromUi());
+  const activeKey = window._activeRxTemplateKey && RX_TEMPLATES_DATA[window._activeRxTemplateKey] ? window._activeRxTemplateKey : '';
+  const activeMeta = activeKey ? (RX_TEMPLATES_META[activeKey] || {}) : {};
+  const nameInp = document.getElementById('tpl-name-inp');
+  const notesInp = document.getElementById('tpl-notes-inp');
+  const updateBtn = document.getElementById('tpl-update-btn');
+  if (activeKey) {
+    if (nameInp && !nameInp.value) nameInp.value = toDisplayTitleCase(activeMeta.name || activeKey);
+    if (notesInp && !notesInp.value) notesInp.value = activeMeta.notes || '';
+    if (deptInp) deptInp.value = normalizeRxTemplateDeptKey(activeMeta.dept || deptInp.value || 'all');
+  }
+  if (updateBtn) updateBtn.style.display = activeKey ? '' : 'none';
   const preview = document.getElementById('tpl-preview-drugs');
   if(preview) preview.innerHTML = RX_DRUGS.length
     ? RX_DRUGS.map((d,i)=>{
@@ -28274,13 +28447,15 @@ function openSaveRxTemplate() {
     : '<span style="color:var(--g1)">No drugs in prescription</span>';
   openM('m-save-rx-tpl');
 }
-function saveRxAsTemplate() {
+function saveRxAsTemplate(mode) {
   const name = toDisplayTitleCase(document.getElementById('tpl-name-inp')?.value?.trim()); if(!name){showToast('Enter template name','w');return;}
   if(!RX_DRUGS.length){showToast('No drugs to save','w');return;}
   const dept = normalizeRxTemplateDeptKey(document.getElementById('tpl-dept-inp')?.value || 'all');
   const notes = document.getElementById('tpl-notes-inp')?.value?.trim() || '';
-  const key = name.toLowerCase().replace(/\s+/g,'-');
-  if(typeof RX_TEMPLATES_DATA!=='undefined') RX_TEMPLATES_DATA[key] = RX_DRUGS.map(d=>{
+  const activeKey = mode === 'update' && window._activeRxTemplateKey && RX_TEMPLATES_DATA[window._activeRxTemplateKey] ? window._activeRxTemplateKey : '';
+  const target = resolveRxTemplateSaveTarget(dept, name, activeKey);
+  if (!target) return;
+  if(typeof RX_TEMPLATES_DATA!=='undefined') RX_TEMPLATES_DATA[target.key] = RX_DRUGS.map(d=>{
     const eyeVal = Array.isArray(d.eye) ? d.eye[0] : d.eye;
     const taperRows = ensureRxTaperRows(d);
     return {
@@ -28293,16 +28468,17 @@ function saveRxAsTemplate() {
       taperRows:taperRows.length ? taperRows.map(tr => ({...tr})) : []
     };
   });
-  if (typeof RX_TEMPLATES_META !== 'undefined') RX_TEMPLATES_META[key] = { dept, name, notes };
+  if (typeof RX_TEMPLATES_META !== 'undefined') RX_TEMPLATES_META[target.key] = { dept, name: target.name, notes };
+  window._activeRxTemplateKey = target.key;
   saveRxTemplatesToStorage();
   refreshRxTemplateSelects();
   if (typeof renderSetRxTplList === 'function') renderSetRxTplList();
   document.querySelectorAll('[onchange*="applyRxTemplate"],#rx-tpl-sel').forEach(sel=>{
-    if(![...sel.options].find(o=>o.value===key)){
-      const opt=document.createElement('option'); opt.value=key; opt.textContent=name; sel.appendChild(opt);
+    if(![...sel.options].find(o=>o.value===target.key)){
+      const opt=document.createElement('option'); opt.value=target.key; opt.textContent=target.name; sel.appendChild(opt);
     }
   });
-  showToast('📋 Template "'+name+'" saved ✓','s');
+  showToast(mode === 'update' ? '📋 Template "'+target.name+'" updated ✓' : '📋 Template "'+target.name+'" saved ✓','s');
   closeM('m-save-rx-tpl');
   const ni=document.getElementById('tpl-name-inp'); if(ni)ni.value='';
   const nn=document.getElementById('tpl-notes-inp'); if(nn)nn.value='';
