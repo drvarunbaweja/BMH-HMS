@@ -19338,6 +19338,11 @@ function saveOtFollowupTemplate() {
   const offsets = getSelectedOtFollowupOffsets();
   if (!offsets.length) { showToast('Select at least one follow-up day', 'w'); return; }
   const key = buildRxTemplateStorageKey('ot-followup', name);
+  const oldKey = window._editingOtFollowupTemplateKey || '';
+  if (oldKey && oldKey !== key) {
+    delete RX_TEMPLATES_DATA[oldKey];
+    delete RX_TEMPLATES_META[oldKey];
+  }
   RX_TEMPLATES_DATA[key] = offsets.map(function (days) {
     return { trade: formatOtFollowupLabel(days), days: days };
   });
@@ -19353,6 +19358,7 @@ function saveOtFollowupTemplate() {
   refreshRxTemplateSelects();
   renderSetRxTplList && renderSetRxTplList();
   refreshOTFollowupTemplateSelect && refreshOTFollowupTemplateSelect();
+  window._editingOtFollowupTemplateKey = '';
   resetOtFollowupTemplateForm();
   showToast('OT follow-up template "' + name + '" saved ✓', 's');
 }
@@ -19486,6 +19492,24 @@ function renderSetRxTplList() {
 function openEditRxTemplateModal(key) {
   if (!key || !RX_TEMPLATES_DATA[key]) return;
   const meta = RX_TEMPLATES_META[key] || { dept: 'all', name: key, notes: '' };
+  if (normalizeRxTemplateDeptKey(meta.dept || '') === 'ot-followup') {
+    window._editingOtFollowupTemplateKey = key;
+    const nameEl = document.getElementById('fu-tpl-name');
+    const deptEl = document.getElementById('fu-tpl-dept-settings');
+    const surgeryEl = document.getElementById('fu-tpl-surgery');
+    const notesEl = document.getElementById('fu-tpl-notes');
+    if (nameEl) nameEl.value = toDisplayTitleCase(meta.name || key);
+    if (deptEl) deptEl.value = meta.otArea || 'OT - Eye';
+    if (surgeryEl) surgeryEl.value = meta.surgery || '';
+    if (notesEl) notesEl.value = String(meta.notes || '').replace(/\r\n/g, '\n');
+    const offsets = parseOtFollowupOffsets(meta.followupOffsets && meta.followupOffsets.length ? meta.followupOffsets : (RX_TEMPLATES_DATA[key] || []).map(function (row) { return row.days; }));
+    setSelectedOtFollowupOffsets(offsets);
+    const target = document.getElementById('fu-tpl-name');
+    if (target && target.scrollIntoView) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (notesEl) setTimeout(function () { notesEl.focus(); }, 150);
+    showToast('OT follow-up template loaded in the full editor below', 'i');
+    return;
+  }
   const kInp = document.getElementById('edit-rx-tpl-key');
   const nInp = document.getElementById('edit-rx-tpl-name');
   const dInp = document.getElementById('edit-rx-tpl-dept');
@@ -24143,6 +24167,7 @@ function isObgDeliveryOtCase(otCase) {
 function obgCompletionOutcomeDefaults(otCase) {
   const c = normalizeOTCaseRecord(otCase || {});
   const saved = c.obgDeliveryOutcome || {};
+  const lab = collectObgDischargeInvestigationTable(PATIENTS.find(function (p) { return p.bmhId === c.bmhId; }) || {}, saved);
   return Object.assign({
     babyDob: getIsoDateOnly(c.date || new Date()),
     babyTime: c.timings?.procEnd || c.scheduledTime || '',
@@ -24152,8 +24177,15 @@ function obgCompletionOutcomeDefaults(otCase) {
     babyOutcome: 'Live Birth',
     postOpPeriod: 'Uneventful',
     diet: 'Orally allowed',
+    investigations: lab,
     investigationsManual: ''
   }, saved || {});
+}
+function obgInvestigationInputRow(key, label, data) {
+  const esc = escapeHtmlConsent;
+  const value = data?.investigations?.[key] || data?.[key] || '';
+  return '<tr><td style="border:1px solid var(--g4);padding:7px 8px;font-size:12px;font-weight:900">' + esc(label) + '</td>'
+    + '<td style="border:1px solid var(--g4);padding:5px"><input id="obg-out-inv-' + key + '" type="text" value="' + esc(value) + '" style="width:100%;font-size:12px;font-weight:800"></td></tr>';
 }
 function openObgOtCompletionPopup(caseId) {
   const c = (OT_CASES || []).find(function (row) { return row && row.id === caseId; });
@@ -24193,8 +24225,17 @@ function openObgOtCompletionPopup(caseId) {
           </div>
         </div>
         <div style="border:1px solid var(--g4);border-radius:10px;padding:12px;background:#fff">
-          <div style="font-size:11px;font-weight:900;color:#8d1036;text-transform:uppercase;margin-bottom:9px">Manual Investigations, if not done in hospital</div>
-          <textarea id="obg-out-investigations" placeholder="One investigation per line, e.g. Hb 11.2 gm/dl" style="min-height:92px;line-height:1.45">${esc(data.investigationsManual || '')}</textarea>
+          <div style="font-size:11px;font-weight:900;color:#8d1036;text-transform:uppercase;margin-bottom:9px">Investigations</div>
+          <div style="font-size:10.5px;color:var(--g1);margin-bottom:8px">Values auto-fill from hospital lab records for this BMSH ID when available. Otherwise type them here.</div>
+          <table style="width:100%;border-collapse:collapse;background:#fff">
+            <tbody>
+              ${obgInvestigationInputRow('bloodGroup', 'Blood Group', data)}
+              ${obgInvestigationInputRow('hb', 'Hb', data)}
+              ${obgInvestigationInputRow('hiv', 'HIV', data)}
+              ${obgInvestigationInputRow('hbsag', 'HBsAg', data)}
+              ${obgInvestigationInputRow('vdrl', 'VDRL', data)}
+            </tbody>
+          </table>
         </div>
       </div>
       <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid var(--g5);background:var(--g6)">
@@ -24219,11 +24260,18 @@ function saveObgOtCompletionOutcome(caseId) {
     babyOutcome: document.getElementById('obg-out-baby-outcome')?.value || '',
     postOpPeriod: document.getElementById('obg-out-postop')?.value || '',
     diet: document.getElementById('obg-out-diet')?.value || '',
-    investigationsManual: document.getElementById('obg-out-investigations')?.value || '',
+    investigations: {
+      bloodGroup: document.getElementById('obg-out-inv-bloodGroup')?.value || '',
+      hb: document.getElementById('obg-out-inv-hb')?.value || '',
+      hiv: document.getElementById('obg-out-inv-hiv')?.value || '',
+      hbsag: document.getElementById('obg-out-inv-hbsag')?.value || '',
+      vdrl: document.getElementById('obg-out-inv-vdrl')?.value || ''
+    },
     updatedAt: new Date().toISOString(),
     updatedBy: CURRENT_USER?.name || 'System'
   };
   OT_CASES[idx].obgDeliveryOutcome = outcome;
+  saveOTCasesToLocalStorage && saveOTCasesToLocalStorage();
   fbUpdate && fbUpdate('otCases/' + caseId, { obgDeliveryOutcome: outcome }).catch(function (e) { console.warn('OBG outcome save error:', e); });
   closeObgOtCompletionPopup();
   showToast('Delivery / LSCS completion details saved ✓', 's');
@@ -24235,6 +24283,10 @@ function updateOTStatus(id, status) {
   c.lastUpdated = new Date().toISOString();
   let extraUpdates = {};
   if (status === 'completed') {
+    c.completedAt = c.completedAt || c.lastUpdated;
+    c.dischargeDate = c.dischargeDate || c.completedAt;
+    extraUpdates.completedAt = c.completedAt;
+    extraUpdates.dischargeDate = c.dischargeDate;
     const consumeResult = consumeIolForOtCase(c);
     if (consumeResult?.pending) {
       c.iolInventoryPending = true;
@@ -24246,6 +24298,7 @@ function updateOTStatus(id, status) {
     if (isObgDeliveryOtCase(c)) setTimeout(function () { openObgOtCompletionPopup(id); }, 120);
   }
   fbUpdate('otCases/' + id, Object.assign({ status: c.status, lastUpdated: c.lastUpdated }, extraUpdates)).catch(e => console.warn('OT status save error:', e));
+  saveOTCasesToLocalStorage && saveOTCasesToLocalStorage();
   renderOTList();
   showToast(`${c.patient} — status updated to ${c.status} ✓`,'s');
   if(activeOTCase?.id===id) openOTCase(id);
@@ -33535,7 +33588,9 @@ function getDischargePrintData(sel) {
         : (Array.isArray(ptObj.lastVisit?.rx) && ptObj.lastVisit.rx.length ? JSON.parse(JSON.stringify(ptObj.lastVisit.rx)) : []);
   const visitDate = ptObj.lastVisit?.date || ptObj.createdAt || new Date().toISOString();
   const opDate = lastOtCase?.date || lastOtCase?.scheduledDate || ipdStay?.admittedAt || visitDate;
-  const dischargeDate = ipdStay?.dischargedAt || new Date().toISOString();
+  const dischargeDate = specialty === 'obg'
+    ? (lastOtCase?.dischargeDate || lastOtCase?.completedAt || new Date().toISOString())
+    : (ipdStay?.dischargedAt || new Date().toISOString());
   const findings = [ptObj.lastVisit?.positiveFindings, ptObj.positiveFindings, ptObj.lastVisit?.chiefComplaints].filter(Boolean).join('; ') || 'clinical findings noted in the case sheet';
   const diagnosis = lastOtCase?.dx || ptObj.lastVisit?.dx || ptObj.dx || ptObj.lastVisit?.clinicalImpression || tmpl.procedure || 'the diagnosed condition';
   const procedureName = lastOtCase?.procedure || ptObj.lastVisit?.procedure || ptObj.surgery || ptObj.surgeryAdvised || tmpl.procedure || 'the planned procedure';
@@ -33859,18 +33914,55 @@ function buildOphthoDischargeA4LayoutPrintHtml(snap, data, colorPrint) {
     + '</div></body></html>';
 }
 function collectObgHospitalInvestigationLines(ptObj) {
+  const table = collectObgDischargeInvestigationTable(ptObj || {}, {});
+  return [
+    table.bloodGroup ? ('Blood Group: ' + table.bloodGroup) : '',
+    table.hb ? ('Hb: ' + table.hb) : '',
+    table.hiv ? ('HIV: ' + table.hiv) : '',
+    table.hbsag ? ('HBsAg: ' + table.hbsag) : '',
+    table.vdrl ? ('VDRL: ' + table.vdrl) : ''
+  ].filter(Boolean);
+}
+function collectObgDischargeInvestigationTable(ptObj, savedOutcome) {
+  const visit = ptObj?.lastVisit || {};
+  const out = Object.assign({
+    bloodGroup: visit.bloodGroup || visit['obg-obs-blood-group'] || '',
+    hb: '',
+    hiv: '',
+    hbsag: '',
+    vdrl: ''
+  }, (savedOutcome && savedOutcome.investigations) || {});
   const orders = Array.isArray(ptObj?.investigationOrders) ? ptObj.investigationOrders : [];
-  return orders.filter(function (order) {
+  orders.filter(function (order) {
     return order && order.mode === 'send' && (order.done || order.labReady || order.completedAt) && (order.result || order.results);
   }).sort(function (a, b) {
     return String(b.completedAt || b.date || b.createdAt || '').localeCompare(String(a.completedAt || a.date || a.createdAt || ''));
-  }).slice(0, 10).map(function (order) {
+  }).forEach(function (order) {
     const name = normalizeLabTestName(order.name || (Array.isArray(order.tests) ? order.tests.join(', ') : 'Investigation'));
     const res = order.result || {};
     const val = [res.val, res.unit].filter(Boolean).join(' ');
-    const flag = res.flag && res.flag !== '—' && res.flag !== 'Normal' ? (' (' + res.flag + ')') : '';
-    return [name, val ? ': ' + val + flag : ''].join('');
-  }).filter(Boolean);
+    if (!val) return;
+    if (!out.hb && /\bhb\b|haemoglobin|hemoglobin/i.test(name)) out.hb = val;
+    else if (!out.hiv && /\bhiv\b/i.test(name)) out.hiv = val;
+    else if (!out.hbsag && /hbsag|hepatitis\s*b/i.test(name)) out.hbsag = val;
+    else if (!out.vdrl && /vdrl/i.test(name)) out.vdrl = val;
+    else if (!out.bloodGroup && /blood\s*group/i.test(name)) out.bloodGroup = val;
+  });
+  return out;
+}
+function buildObgInvestigationPrintTable(inv) {
+  const esc = escapeHtmlConsent;
+  const rows = [
+    ['Blood Group', inv?.bloodGroup || ''],
+    ['Hb', inv?.hb || ''],
+    ['HIV', inv?.hiv || ''],
+    ['HBsAg', inv?.hbsag || ''],
+    ['VDRL', inv?.vdrl || '']
+  ];
+  return '<table style="width:100%;border-collapse:collapse;font-size:9.4px;background:#fff"><tbody>' + rows.map(function (row) {
+    return '<tr><td style="border:1px solid #e2d6dc;padding:4px 6px;font-weight:900;color:#5a4630;width:42%">' + esc(row[0]) + '</td>'
+      + '<td style="border:1px solid #e2d6dc;padding:4px 6px;min-height:18px">' + esc(row[1] || ' ') + '</td></tr>';
+  }).join('') + '</tbody></table>';
 }
 function getObgDischargeContext(data) {
   const visit = data?.ptObj?.lastVisit || {};
@@ -33884,23 +33976,8 @@ function getObgDischargeContext(data) {
   };
   const planManagement = Array.isArray(visit.planManagement) ? visit.planManagement.slice(0, 4).join(', ') : String(visit.planManagement || '').trim();
   const planProcedures = Array.isArray(visit.planProcedures) ? visit.planProcedures.slice(0, 3).join(', ') : String(visit.planProcedures || '').trim();
-  const hospitalInvestigations = collectObgHospitalInvestigationLines(data?.ptObj || {});
-  const manualInvestigations = String(outcome.investigationsManual || visit.obgDischargeInvestigationsManual || '').split(/\n+/).map(function (line) {
-    return line.trim();
-  }).filter(Boolean);
-  const investigations = hospitalInvestigations.length ? hospitalInvestigations : (manualInvestigations.length ? manualInvestigations : [
-    visit.bloodGroup ? ('Blood group ' + visit.bloodGroup) : '',
-    visit['obg-obs-rbs'] ? ('RBS ' + visit['obg-obs-rbs']) : '',
-    visit['obg-obs-tsh'] ? ('TSH ' + visit['obg-obs-tsh']) : '',
-    visit['obg-obs-gtt'] ? ('GTT ' + visit['obg-obs-gtt']) : '',
-    visit.urineProtein ? ('Urine protein ' + visit.urineProtein) : '',
-    visit.urineSugar ? ('Urine sugar ' + visit.urineSugar) : '',
-    visit['obg-obs-hiv'] ? ('HIV ' + visit['obg-obs-hiv']) : '',
-    visit['obg-obs-hbsag'] ? ('HBsAg ' + visit['obg-obs-hbsag']) : '',
-    visit['obg-obs-hcv'] ? ('HCV ' + visit['obg-obs-hcv']) : '',
-    visit['obg-obs-hplc'] ? ('HPLC ' + visit['obg-obs-hplc']) : '',
-    visit['obg-obs-vdrl'] ? ('VDRL ' + visit['obg-obs-vdrl']) : ''
-  ].filter(Boolean));
+  const investigationTable = collectObgDischargeInvestigationTable(data?.ptObj || {}, outcome);
+  const hasInvestigationValue = Object.keys(investigationTable).some(function (key) { return String(investigationTable[key] || '').trim(); });
   const babyDob = outcome.babyDob || visit['obg-obs-delivery-date'] || ot.date || data.opDate || '';
   const babyTime = outcome.babyTime || visit['obg-obs-delivery-time'] || ot.scheduledTime || '';
   const babyBits = [
@@ -33928,9 +34005,9 @@ function getObgDischargeContext(data) {
     deliveryDate: babyDob,
     deliveryTime: babyTime,
     deliveryLocation: visit['obg-obs-delivery-location'] || ot.room || '—',
-    admissionDate: data.ipdStay?.admittedAt || data.opDate || ot.date || '',
+    admissionDate: ot.admissionDate || ot.date || data.opDate || '',
     surgeryDate: ot.date || data.opDate || '',
-    dischargeDate: data.dischargeDate || '',
+    dischargeDate: ot.dischargeDate || ot.completedAt || data.dischargeDate || '',
     liquor: ot.obgLiquor || joinBits([visit['obg-obs-liquor'], visit['obg-obs-liquor-note']]) || '—',
     fetal: ot.obgFetal || joinBits([visit.presentation, visit.fhr ? ('FHR ' + visit.fhr) : '', visit.fetalMovement ? ('FM ' + visit.fetalMovement) : '']) || '—',
     blood: ot.obgBlood || joinBits([visit.bloodGroup, visit['obg-obs-rbs'] ? ('RBS ' + visit['obg-obs-rbs']) : '', visit.urineProtein ? ('Urine protein ' + visit.urineProtein) : '', visit.urineSugar ? ('Urine sugar ' + visit.urineSugar) : '']) || '—',
@@ -33944,16 +34021,16 @@ function getObgDischargeContext(data) {
     mother: ot.obgMother || joinBits(motherBits) || '—',
     postOpPeriod: outcome.postOpPeriod || 'Uneventful',
     diet: outcome.diet || 'Orally allowed',
-    investigations: investigations,
-    investigationsSource: hospitalInvestigations.length ? 'hospital' : (manualInvestigations.length ? 'manual' : 'case-sheet'),
-    summary: joinSentences([
-      data.ptNm + ' was managed under the OBG unit with ' + (visit.dx || visit.clinicalImpression || visit.mainComplaint || 'the documented obstetric condition'),
-      'Procedure / delivery: ' + (ot.obgCaseType || visit['obg-obs-mode-delivery'] || data.procedureName || 'OBG procedure'),
-      'Indication: ' + (ot.obgIndication || visit['obg-obs-csection-indication'] || visit.clinicalImpression || visit.mainComplaint || 'as clinically indicated'),
-      'Post-operative / post-delivery period: ' + (outcome.postOpPeriod || 'uneventful'),
-      'Diet: ' + (outcome.diet || 'orally allowed'),
-      'Mother status at discharge: ' + (ot.obgMother || joinBits(motherBits) || 'stable')
-    ]) + '.'
+    investigationTable: investigationTable,
+    investigationsSource: hasInvestigationValue ? 'hospital/manual' : 'manual-entry',
+    summaryBullets: [
+      data.ptNm + ' was admitted under the OBG unit for ' + (visit.dx || visit.clinicalImpression || visit.mainComplaint || 'the documented obstetric condition') + '.',
+      'Procedure / delivery: ' + (ot.obgCaseType || visit['obg-obs-mode-delivery'] || data.procedureName || 'OBG procedure') + '.',
+      'Indication: ' + (ot.obgIndication || visit['obg-obs-csection-indication'] || visit.clinicalImpression || visit.mainComplaint || 'as clinically indicated') + '.',
+      'Post-operative / post-delivery period: ' + (outcome.postOpPeriod || 'uneventful') + '.',
+      'Diet: ' + (outcome.diet || 'orally allowed') + '.',
+      'Mother status at discharge: ' + (ot.obgMother || joinBits(motherBits) || 'stable') + '.'
+    ]
   };
 }
 function buildObgDischargeA4LayoutPrintHtml(snap, data, colorPrint) {
@@ -33986,6 +34063,9 @@ function buildObgDischargeA4LayoutPrintHtml(snap, data, colorPrint) {
     return '<div style="margin-bottom:5px">• ' + esc(line) + '</div>';
   }).join('');
   const deliveryDateStr = [ctx.deliveryDate ? formatDateIN(ctx.deliveryDate) : '', ctx.deliveryTime].filter(Boolean).join(' · ');
+  const summaryBulletHtml = (ctx.summaryBullets || []).map(function (line) {
+    return '<div style="display:flex;gap:5px;margin-bottom:3px"><span>•</span><span>' + esc(line) + '</span></div>';
+  }).join('');
   const rightPanelExtra = isDeliveryCase
     ? '<div style="font-size:9.5px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.4px;margin:7px 0 4px">Baby Outcome</div><div style="font-size:9.6px;line-height:1.35;color:#5a4630">' + esc(ctx.babyOutcome || ctx.baby) + '</div>'
     : '';
@@ -34015,7 +34095,7 @@ function buildObgDischargeA4LayoutPrintHtml(snap, data, colorPrint) {
     + row('Post-op / Post-delivery', ctx.postOpPeriod)
     + row('Diet', ctx.diet)
     + '</div>'
-    + '<div style="display:grid;grid-template-columns:1.08fr .92fr;gap:7px;margin-top:7px"><div style="border:1px solid #e6dbe0;border-radius:10px;padding:7px 9px;background:#fff"><div style="font-size:9.5px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Discharge Summary</div><div style="font-size:10.1px;line-height:1.38;color:#1d1d1d">' + esc(ctx.summary) + '</div></div><div style="border:1px solid #efe3d0;border-radius:10px;padding:7px 9px;background:#fffaf3"><div style="font-size:9.5px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Investigations ' + (ctx.investigationsSource === 'hospital' ? '(Hospital)' : '(Manual / Case Sheet)') + '</div><div style="font-size:9.5px;line-height:1.35;color:#5a4630">' + (ctx.investigations.length ? ctx.investigations.slice(0, 8).map(function (item) { return '<div>• ' + esc(item) + '</div>'; }).join('') : '<div>• Routine investigation details documented in the case sheet</div>') + '</div>' + rightPanelExtra + '<div style="font-size:9.5px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.4px;margin:7px 0 4px">Blood / Anaesthesia Notes</div><div style="font-size:9.5px;line-height:1.35;color:#5a4630">' + esc([ctx.blood, ctx.anaesNote].filter(function (v) { return hasVal(v); }).join(' | ') || '—') + '</div></div></div>'
+    + '<div style="display:grid;grid-template-columns:1.08fr .92fr;gap:7px;margin-top:7px"><div style="border:1px solid #e6dbe0;border-radius:10px;padding:7px 9px;background:#fff"><div style="font-size:9.5px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Discharge Summary</div><div style="font-size:10.1px;line-height:1.38;color:#1d1d1d">' + summaryBulletHtml + '</div></div><div style="border:1px solid #efe3d0;border-radius:10px;padding:7px 9px;background:#fffaf3"><div style="font-size:9.5px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Investigations</div>' + buildObgInvestigationPrintTable(ctx.investigationTable) + rightPanelExtra + '<div style="font-size:9.5px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.4px;margin:7px 0 4px">Blood / Anaesthesia Notes</div><div style="font-size:9.5px;line-height:1.35;color:#5a4630">' + esc([ctx.blood, ctx.anaesNote].filter(function (v) { return hasVal(v); }).join(' | ') || '—') + '</div></div></div>'
     + (medRows ? '<div style="margin-top:7px;border:1px solid #e6dbe0;border-radius:10px;overflow:hidden"><div style="padding:5px 9px;background:#f9f2f4;font-size:9.5px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.4px">Medicines</div><table style="width:100%;border-collapse:collapse"><thead><tr style="background:#fcf8f9"><th style="border:1px solid #dfd6db;padding:4px 6px;font-size:8.5px">#</th><th style="border:1px solid #dfd6db;padding:4px 6px;font-size:8.5px">Medicine</th><th style="border:1px solid #dfd6db;padding:4px 6px;font-size:8.5px">Timing / Frequency</th><th style="border:1px solid #dfd6db;padding:4px 6px;font-size:8.5px">Duration</th></tr></thead><tbody>' + medRows + '</tbody></table></div>' : '')
     + (instructionRows ? '<div style="margin-top:7px;border:1px solid #efe3d0;border-radius:10px;padding:7px 9px;background:#fffaf3"><div style="font-size:9.5px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Discharge Advice</div><div style="font-size:9.7px;line-height:1.35;color:#5a4630">' + instructionRows + '</div></div>' : '')
     + (followupRows ? '<div style="margin-top:7px"><div style="font-size:9.5px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px">Follow-up</div>' + followupRows + '</div>' : '')
