@@ -33964,6 +33964,21 @@ function buildObgInvestigationPrintTable(inv) {
       + '<td style="border:1px solid #e2d6dc;padding:4px 6px;min-height:18px">' + esc(row[1] || ' ') + '</td></tr>';
   }).join('') + '</tbody></table>';
 }
+function buildObgBabyOutcomePrintTable(ctx) {
+  const esc = escapeHtmlConsent;
+  const rows = [
+    ['Date of Birth', ctx?.babyDob ? formatDateIN(ctx.babyDob) : ''],
+    ['Time of Birth', ctx?.babyTime || ''],
+    ['Sex', ctx?.babySex || ''],
+    ['Weight', ctx?.babyWeight || ''],
+    ['APGAR Score', ctx?.babyApgar || ''],
+    ['Outcome', ctx?.babyBirthOutcome || '']
+  ];
+  return '<table style="width:100%;border-collapse:collapse;font-size:9.4px;background:#fff"><tbody>' + rows.map(function (row) {
+    return '<tr><td style="border:1px solid #e2d6dc;padding:4px 6px;font-weight:900;color:#5a4630;width:42%">' + esc(row[0]) + '</td>'
+      + '<td style="border:1px solid #e2d6dc;padding:4px 6px;min-height:18px">' + esc(row[1] || ' ') + '</td></tr>';
+  }).join('') + '</tbody></table>';
+}
 function getObgDischargeContext(data) {
   const visit = data?.ptObj?.lastVisit || {};
   const ot = data?.lastOtCase || {};
@@ -34013,6 +34028,12 @@ function getObgDischargeContext(data) {
     blood: ot.obgBlood || joinBits([visit.bloodGroup, visit['obg-obs-rbs'] ? ('RBS ' + visit['obg-obs-rbs']) : '', visit.urineProtein ? ('Urine protein ' + visit.urineProtein) : '', visit.urineSugar ? ('Urine sugar ' + visit.urineSugar) : '']) || '—',
     anaesNote: ot.obgAnaesNote || joinBits([visit.bp ? ('BP ' + visit.bp) : '', visit.weight ? ('Wt ' + visit.weight) : '', visit.riskTag]) || '—',
     baby: ot.obgBaby || joinBits(babyBits) || '—',
+    babyDob: babyDob,
+    babyTime: babyTime,
+    babySex: outcome.babySex || visit['obg-obs-gender'] || '',
+    babyWeight: outcome.babyWeight || visit['obg-obs-birth-weight'] || '',
+    babyApgar: outcome.babyApgar || visit['obg-obs-apgar'] || '',
+    babyBirthOutcome: outcome.babyOutcome || '',
     babyOutcome: joinBits([
       babyDob ? ('DOB ' + formatDateIN(babyDob)) : '',
       babyTime ? ('Time ' + babyTime) : '',
@@ -34067,7 +34088,7 @@ function buildObgDischargeA4LayoutPrintHtml(snap, data, colorPrint) {
     return '<div style="display:flex;gap:5px;margin-bottom:3px"><span>•</span><span>' + esc(line) + '</span></div>';
   }).join('');
   const rightPanelExtra = isDeliveryCase
-    ? '<div style="font-size:9.5px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.4px;margin:7px 0 4px">Baby Outcome</div><div style="font-size:9.6px;line-height:1.35;color:#5a4630">' + esc(ctx.babyOutcome || ctx.baby) + '</div>'
+    ? '<div style="font-size:9.5px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.4px;margin:7px 0 4px">Baby Outcome</div>' + buildObgBabyOutcomePrintTable(ctx)
     : '';
   return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>@page{size:A4;margin:5mm}body{font-family:Georgia,\"Times New Roman\",serif;color:#111;margin:0;padding:0;background:#fff}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>'
     + '<div style="border:1px solid #d8cdd2;border-radius:12px;overflow:hidden">'
@@ -34095,7 +34116,7 @@ function buildObgDischargeA4LayoutPrintHtml(snap, data, colorPrint) {
     + row('Post-op / Post-delivery', ctx.postOpPeriod)
     + row('Diet', ctx.diet)
     + '</div>'
-    + '<div style="display:grid;grid-template-columns:1.08fr .92fr;gap:7px;margin-top:7px"><div style="border:1px solid #e6dbe0;border-radius:10px;padding:7px 9px;background:#fff"><div style="font-size:9.5px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Discharge Summary</div><div style="font-size:10.1px;line-height:1.38;color:#1d1d1d">' + summaryBulletHtml + '</div></div><div style="border:1px solid #efe3d0;border-radius:10px;padding:7px 9px;background:#fffaf3"><div style="font-size:9.5px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Investigations</div>' + buildObgInvestigationPrintTable(ctx.investigationTable) + rightPanelExtra + '<div style="font-size:9.5px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.4px;margin:7px 0 4px">Blood / Anaesthesia Notes</div><div style="font-size:9.5px;line-height:1.35;color:#5a4630">' + esc([ctx.blood, ctx.anaesNote].filter(function (v) { return hasVal(v); }).join(' | ') || '—') + '</div></div></div>'
+    + '<div style="display:grid;grid-template-columns:1.08fr .92fr;gap:7px;margin-top:7px"><div style="border:1px solid #e6dbe0;border-radius:10px;padding:7px 9px;background:#fff"><div style="font-size:9.5px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Discharge Summary</div><div style="font-size:10.1px;line-height:1.38;color:#1d1d1d">' + summaryBulletHtml + '</div></div><div style="border:1px solid #efe3d0;border-radius:10px;padding:7px 9px;background:#fffaf3"><div style="font-size:9.5px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Investigations</div>' + buildObgInvestigationPrintTable(ctx.investigationTable) + rightPanelExtra + '</div></div>'
     + (medRows ? '<div style="margin-top:7px;border:1px solid #e6dbe0;border-radius:10px;overflow:hidden"><div style="padding:5px 9px;background:#f9f2f4;font-size:9.5px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.4px">Medicines</div><table style="width:100%;border-collapse:collapse"><thead><tr style="background:#fcf8f9"><th style="border:1px solid #dfd6db;padding:4px 6px;font-size:8.5px">#</th><th style="border:1px solid #dfd6db;padding:4px 6px;font-size:8.5px">Medicine</th><th style="border:1px solid #dfd6db;padding:4px 6px;font-size:8.5px">Timing / Frequency</th><th style="border:1px solid #dfd6db;padding:4px 6px;font-size:8.5px">Duration</th></tr></thead><tbody>' + medRows + '</tbody></table></div>' : '')
     + (instructionRows ? '<div style="margin-top:7px;border:1px solid #efe3d0;border-radius:10px;padding:7px 9px;background:#fffaf3"><div style="font-size:9.5px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Discharge Advice</div><div style="font-size:9.7px;line-height:1.35;color:#5a4630">' + instructionRows + '</div></div>' : '')
     + (followupRows ? '<div style="margin-top:7px"><div style="font-size:9.5px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px">Follow-up</div>' + followupRows + '</div>' : '')
