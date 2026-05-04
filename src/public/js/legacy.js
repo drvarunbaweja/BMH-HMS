@@ -37850,13 +37850,7 @@ function computeReceptionQueuePts() {
   if(sub === 'seen') pts = pts.filter(p=>isPatientMarkedSeen(p));
   else if(sub === 'waiting') pts = pts.filter(p=>!isPatientMarkedSeen(p));
   const queueStamp = function (p) {
-    const raw = p?.checkinAt || p?.createdAt || p?.registeredAt || p?.queueDate || p?.date || p?.updatedAt || '';
-    if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
-    const text = String(raw || '').trim();
-    if (!text) return 0;
-    if (/^\d+$/.test(text)) return Number(text);
-    const parsed = Date.parse(text);
-    return Number.isFinite(parsed) ? parsed : 0;
+    return getPatientQueueStamp(p);
   };
   return pts.slice().sort(function (a, b) {
     const byTime = queueStamp(a) - queueStamp(b);
@@ -38151,14 +38145,57 @@ function updateNCTHighlight(eye, val) {
 }
 
 // ── buildQCard — patient queue card ─────────────
+function queueRawStamp(value) {
+  if (value === null || value === undefined || value === '') return 0;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  const str = String(value).trim();
+  if (!str) return 0;
+  if (/^\d+$/.test(str)) return Number(str);
+  const parsed = Date.parse(str);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+function patientQueueCandidateStamps(p) {
+  return [
+    p?.checkinAt,
+    p?.createdAt,
+    p?.registeredAt,
+    p?.queueDate,
+    p?.date,
+    p?.updatedAt
+  ].map(queueRawStamp).filter(function (stamp) {
+    return stamp > 0;
+  });
+}
+function getPatientQueueStamp(p, now) {
+  const refNow = Number.isFinite(now) ? now : Date.now();
+  const stamps = patientQueueCandidateStamps(p);
+  if (!stamps.length) return 0;
+  const futureGraceMs = 2 * 60 * 1000;
+  const nonFuture = stamps.filter(function (stamp) {
+    return stamp <= refNow + futureGraceMs;
+  });
+  if (nonFuture.length) return nonFuture[0];
+  return Math.min.apply(null, stamps);
+}
+function getPatientQueueWaitMinutes(p, now) {
+  if (p?.preRegistered) return 0;
+  const refNow = Number.isFinite(now) ? now : Date.now();
+  const stamp = getPatientQueueStamp(p, refNow);
+  if (!stamp) return 0;
+  return Math.max(0, Math.floor((refNow - stamp) / 60000));
+}
+function formatQueueWaitMinutes(waitMin) {
+  const mins = Math.max(0, Number(waitMin || 0));
+  return mins < 60 ? mins + 'm' : Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm';
+}
 function buildQCard(p, sno) {
   const deptLabel = {ophtho:'Eye',obg:'OBG',psych:'Psych',skin:'Skin',lab:'Lab'}[p.dept]||p.dept||'—';
   const deptColor = {ophtho:'var(--blue)',obg:'#c0004e',psych:'var(--orange)',skin:'var(--purple)',lab:'var(--teal)'}[p.dept]||'var(--g2)';
   const isOphtho = p.dept==='ophtho';
   const now = Date.now();
   // Waiting time
-  const waitMin = p.checkinAt ? Math.floor((now - p.checkinAt)/60000) : 0;
-  const waitStr = waitMin < 60 ? waitMin+'m' : Math.floor(waitMin/60)+'h '+( waitMin%60)+'m';
+  const waitMin = getPatientQueueWaitMinutes(p, now);
+  const waitStr = formatQueueWaitMinutes(waitMin);
   // Dilation time
   const dilMin = getPatientActiveDilationMinutes(p, now);
   const dilLongWait = dilMin !== null && dilMin >= 30;
@@ -38263,8 +38300,8 @@ function buildQTableRow(p, sno, opts) {
   const deptColor = {ophtho:'var(--blue)',obg:'#c0004e',psych:'var(--orange)',skin:'var(--purple)',lab:'var(--teal)'}[p.dept]||'var(--g2)';
   const isOphtho = p.dept==='ophtho';
   const now = Date.now();
-  const waitMin = (!isPreRegRow && p.checkinAt) ? Math.floor((now - p.checkinAt)/60000) : 0;
-  const waitStr = waitMin < 60 ? waitMin+'m' : Math.floor(waitMin/60)+'h '+(waitMin%60)+'m';
+  const waitMin = getPatientQueueWaitMinutes(p, now);
+  const waitStr = formatQueueWaitMinutes(waitMin);
   const dilMin = getPatientActiveDilationMinutes(p, now);
   const dilLongWait = dilMin !== null && dilMin >= 30;
   const vuln = isPatientVulnerable(p);
@@ -38909,31 +38946,11 @@ function getSelectedQueueDeptForAdmin() {
 }
 function _renderDocQueueImpl() {
   const todayKeyLocal = localDateKey(new Date());
-  const queueRawStamp = function (value) {
-    if (value === null || value === undefined || value === '') return 0;
-    if (typeof value === 'number' && Number.isFinite(value)) return value;
-    const str = String(value).trim();
-    if (!str) return 0;
-    if (/^\d+$/.test(str)) return Number(str);
-    const parsed = Date.parse(str);
-    return Number.isFinite(parsed) ? parsed : 0;
-  };
   const queueSortStamp = function (p) {
-    return queueRawStamp(
-      p?.checkinAt
-      || p?.createdAt
-      || p?.registeredAt
-      || p?.queueDate
-      || p?.date
-      || p?.updatedAt
-      || ''
-    );
+    return getPatientQueueStamp(p);
   };
   const queueWaitMinutes = function (p) {
-    if (p?.preRegistered) return 0;
-    const stamp = queueSortStamp(p);
-    if (!stamp) return 0;
-    return Math.max(0, Math.floor((Date.now() - stamp) / 60000));
+    return getPatientQueueWaitMinutes(p);
   };
   // Map doctor dept name to patient dept key
   const deptMap = {
