@@ -8328,7 +8328,7 @@ function loadInventoryStockFromStorage() {
 }
 function saveInventoryStockToStorage() {
   try {
-    const next = JSON.stringify(INVENTORY.map(i => ({ barcode: i.barcode, stock: i.stock, name: i.name, cat: i.cat, mrp: i.mrp, exp: i.exp, dept: i.dept, vendor: i.vendor, company: i.company, cost: i.cost, qr: i.qr, store: i.store, min: i.min, billMode: i.billMode, vendorBillingMode: i.vendorBillingMode, serialNo: i.serialNo, batchNo: i.batchNo, power: i.power, iolCompany: i.iolCompany, iolBrand: i.iolBrand, iolModel: i.iolModel, genericName: i.genericName } )));
+    const next = JSON.stringify(INVENTORY.map(i => ({ barcode: i.barcode, stock: i.stock, name: i.name, cat: i.cat, mrp: i.mrp, exp: i.exp, dept: i.dept, vendor: i.vendor, company: i.company, invoiceNo: i.invoiceNo, cost: i.cost, qr: i.qr, store: i.store, min: i.min, billMode: i.billMode, vendorBillingMode: i.vendorBillingMode, serialNo: i.serialNo, batchNo: i.batchNo, power: i.power, iolCompany: i.iolCompany, iolBrand: i.iolBrand, iolModel: i.iolModel, genericName: i.genericName } )));
     const prev = localStorage.getItem('bmh_inventory_stock');
     if (prev && prev !== next) localStorage.setItem('bmh_inventory_stock_archive', prev);
     localStorage.setItem('bmh_inventory_stock', next);
@@ -15174,10 +15174,159 @@ function ensureInventoryStockDetailModal() {
   document.body.appendChild(modal);
   return modal;
 }
+function bmhInventoryJsString(value) {
+  return JSON.stringify(String(value || '')).replace(/"/g, '&quot;');
+}
+function bmhFindInventoryStockItem(barcode) {
+  const key = String(barcode || '');
+  return (INVENTORY || []).find(function (row) { return String(row.barcode || '') === key; }) || null;
+}
+function bmhFindInventoryPurchaseForItem(item) {
+  if (!item) return null;
+  const rows = (window.BMH_PURCHASES || []).slice().reverse();
+  const barcode = String(item.barcode || '');
+  if (barcode) {
+    const byBarcode = rows.find(function (row) { return String(row.barcode || '') === barcode; });
+    if (byBarcode) return byBarcode;
+  }
+  const name = normalizeInventoryCompareText(item.name || '');
+  const vendor = normalizeInventoryCompareText(item.vendor || '');
+  const store = normalizeInventoryCompareText(item.store || '');
+  return rows.find(function (row) {
+    if (name && normalizeInventoryCompareText(row.itemName || row.name || '') !== name) return false;
+    if (vendor && normalizeInventoryCompareText(row.vendor || '') !== vendor) return false;
+    if (store && normalizeInventoryCompareText(row.store || '') !== store) return false;
+    return true;
+  }) || null;
+}
+function bmhInventoryStockInvoiceNo(item) {
+  return String(item?.invoiceNo || bmhFindInventoryPurchaseForItem(item)?.invoiceNo || '').trim();
+}
+function bmhInventoryStockRowMetaHtml(row) {
+  const inv = bmhInventoryStockInvoiceNo(row);
+  return [
+    row.vendor ? 'Vendor: ' + escapeHtmlConsent(row.vendor) : '',
+    row.company ? 'Company: ' + escapeHtmlConsent(row.company) : '',
+    inv ? 'Inv: ' + escapeHtmlConsent(inv) : '',
+    row.batchNo ? 'Batch: ' + escapeHtmlConsent(row.batchNo) : '',
+    row.serialNo ? 'Serial: ' + escapeHtmlConsent(row.serialNo) : '',
+    row.exp ? 'Exp: ' + escapeHtmlConsent(row.exp) : ''
+  ].filter(Boolean).join(' · ');
+}
+function openInventoryStockEdit(barcode) {
+  const item = bmhFindInventoryStockItem(barcode);
+  if (!item) { showToast('Stock item not found', 'w'); return; }
+  const purchase = bmhFindInventoryPurchaseForItem(item) || {};
+  const inv = bmhInventoryStockInvoiceNo(item);
+  ensureInventoryStockDetailModal();
+  const titleEl = document.getElementById('inv-stock-detail-title');
+  const bodyEl = document.getElementById('inv-stock-detail-body');
+  if (titleEl) titleEl.textContent = 'Edit Stock Item';
+  if (!bodyEl) return;
+  const deptOpts = loadInventoryDeptRows().map(function (r) {
+    return '<option value="' + escapeHtmlConsent(r.value) + '"' + (String(item.dept || 'general') === String(r.value) ? ' selected' : '') + '>' + escapeHtmlConsent(r.label) + '</option>';
+  }).join('');
+  const catList = bmhInventoryCategoryOptions().map(function (c) { return '<option value="' + escapeHtmlConsent(c) + '"></option>'; }).join('');
+  const storeList = bmhInventoryStoreOptions().map(function (s) { return '<option value="' + escapeHtmlConsent(s) + '"></option>'; }).join('');
+  bodyEl.innerHTML = `
+    <div style="padding:12px">
+      <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">
+        <div class="form-group" style="margin:0"><label class="fl">Name / Trade Name</label><input id="inv-stock-edit-name" type="text" value="${escapeHtmlConsent(item.name || '')}" placeholder="Stock item name"></div>
+        <div class="form-group" style="margin:0"><label class="fl">Company</label><input id="inv-stock-edit-company" type="text" value="${escapeHtmlConsent(item.company || item.iolCompany || purchase.company || '')}" placeholder="Company"></div>
+        <div class="form-group" style="margin:0"><label class="fl">Vendor Name</label><input id="inv-stock-edit-vendor" type="text" value="${escapeHtmlConsent(item.vendor || purchase.vendor || '')}" placeholder="Vendor"></div>
+        <div class="form-group" style="margin:0"><label class="fl">Bill / Invoice Number</label><input id="inv-stock-edit-invoice" type="text" value="${escapeHtmlConsent(inv)}" placeholder="Invoice number"></div>
+        <div class="form-group" style="margin:0"><label class="fl">Category</label><input id="inv-stock-edit-cat" list="inv-stock-edit-cat-list" type="text" value="${escapeHtmlConsent(item.cat || purchase.category || '')}" placeholder="Category"><datalist id="inv-stock-edit-cat-list">${catList}</datalist></div>
+        <div class="form-group" style="margin:0"><label class="fl">Department</label><select id="inv-stock-edit-dept">${deptOpts}</select></div>
+        <div class="form-group" style="margin:0"><label class="fl">Store Location</label><input id="inv-stock-edit-store" list="inv-stock-edit-store-list" type="text" value="${escapeHtmlConsent(item.store || purchase.store || '')}" placeholder="Store"><datalist id="inv-stock-edit-store-list">${storeList}</datalist></div>
+        <div class="form-group" style="margin:0"><label class="fl">Expiry Date</label><input id="inv-stock-edit-exp" type="date" value="${escapeHtmlConsent(String(item.exp || '').slice(0, 10))}"></div>
+        <div class="form-group" style="margin:0"><label class="fl">Serial Number</label><input id="inv-stock-edit-serial" type="text" value="${escapeHtmlConsent(item.serialNo || '')}" placeholder="Serial number"></div>
+        <div class="form-group" style="margin:0"><label class="fl">Batch Number</label><input id="inv-stock-edit-batch" type="text" value="${escapeHtmlConsent(item.batchNo || '')}" placeholder="Batch number"></div>
+        <div class="form-group" style="margin:0"><label class="fl">Stock Qty</label><input id="inv-stock-edit-qty" type="number" min="0" step="1" value="${Number(item.stock || 0)}"></div>
+        <div class="form-group" style="margin:0"><label class="fl">Minimum Qty</label><input id="inv-stock-edit-min" type="number" min="0" step="1" value="${Number(item.min || 0)}"></div>
+        <div class="form-group" style="margin:0"><label class="fl">Cost</label><input id="inv-stock-edit-cost" type="number" min="0" step="0.01" value="${Number(item.cost || purchase.cost || 0)}"></div>
+        <div class="form-group" style="margin:0"><label class="fl">MRP</label><input id="inv-stock-edit-mrp" type="number" min="0" step="0.01" value="${Number(item.mrp || purchase.mrp || 0)}"></div>
+      </div>
+      <div style="margin-top:10px;font-size:10px;color:var(--g1);font-family:var(--mono)">Barcode: ${escapeHtmlConsent(item.barcode || '—')}</div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:14px">
+        <button type="button" class="btn btn-outline btn-sm" onclick="openInventoryStockGroup(window._inventoryLastStockGroupId || '')">Back</button>
+        <button type="button" class="btn btn-blue btn-sm" onclick="saveInventoryStockEdit(${bmhInventoryJsString(item.barcode || '')})">Save / Update</button>
+      </div>
+    </div>`;
+  openM('m-inv-stock-detail');
+}
+window.openInventoryStockEdit = openInventoryStockEdit;
+function saveInventoryStockEdit(barcode) {
+  const item = bmhFindInventoryStockItem(barcode);
+  if (!item) { showToast('Stock item not found', 'w'); return; }
+  const purchase = bmhFindInventoryPurchaseForItem(item);
+  const oldName = item.name || '';
+  item.name = normalizeInventoryTextValue(document.getElementById('inv-stock-edit-name')?.value || '');
+  if (!item.name) { showToast('Enter stock item name', 'w'); return; }
+  item.company = normalizeInventoryTextValue(document.getElementById('inv-stock-edit-company')?.value || '');
+  item.vendor = normalizeInventoryTextValue(document.getElementById('inv-stock-edit-vendor')?.value || '');
+  item.invoiceNo = String(document.getElementById('inv-stock-edit-invoice')?.value || '').trim();
+  item.cat = normalizeInventoryTextValue(document.getElementById('inv-stock-edit-cat')?.value || item.cat || 'Miscellaneous');
+  item.dept = document.getElementById('inv-stock-edit-dept')?.value || item.dept || 'general';
+  item.store = normalizeInventoryTextValue(document.getElementById('inv-stock-edit-store')?.value || '');
+  item.exp = document.getElementById('inv-stock-edit-exp')?.value || '';
+  item.serialNo = String(document.getElementById('inv-stock-edit-serial')?.value || '').trim();
+  item.batchNo = String(document.getElementById('inv-stock-edit-batch')?.value || '').trim();
+  item.stock = Math.max(0, Number(document.getElementById('inv-stock-edit-qty')?.value || 0));
+  item.min = Math.max(0, Number(document.getElementById('inv-stock-edit-min')?.value || 0));
+  item.cost = Math.max(0, Number(document.getElementById('inv-stock-edit-cost')?.value || 0));
+  item.mrp = Math.max(0, Number(document.getElementById('inv-stock-edit-mrp')?.value || 0));
+  if (String(item.cat || '').toLowerCase() === 'iol') {
+    item.iolCompany = item.company || item.iolCompany || '';
+    item.iolBrand = item.iolBrand || item.name || '';
+    item.power = item.power || extractIolPower(item.name || '') || '';
+  }
+  normalizeInventoryRecord(item);
+  if (item.name) {
+    learnInventoryOcrValue('itemName', item.name);
+    learnInventoryOcrValue('product', item.name);
+  }
+  if (item.vendor) learnInventoryOcrValue('vendor', item.vendor);
+  if (item.company) learnInventoryOcrValue('company', item.company);
+  if (item.batchNo) learnInventoryOcrValue('batchNo', item.batchNo);
+  if (Number(item.mrp || 0) > 0) rememberInventoryMrp(item.name, item.mrp);
+  if (item.barcode) BCMAP[item.barcode] = item;
+  if (oldName && BCMAP[String(oldName).toLowerCase().substring(0, 15)] === item) delete BCMAP[String(oldName).toLowerCase().substring(0, 15)];
+  if (item.name) BCMAP[String(item.name).toLowerCase().substring(0, 15)] = item;
+  if (purchase) {
+    purchase.itemName = item.name;
+    purchase.category = item.cat;
+    purchase.dept = item.dept;
+    purchase.store = item.store;
+    purchase.vendor = item.vendor;
+    purchase.company = item.company;
+    purchase.invoiceNo = item.invoiceNo;
+    purchase.cost = item.cost;
+    purchase.mrp = item.mrp;
+    purchase.totalCost = Number(purchase.qty || 0) * item.cost;
+    normalizeInventoryRecord(purchase);
+    if (typeof window.savePurchaseToFirebase === 'function') {
+      window.savePurchaseToFirebase(purchase).catch(function (err) { console.error('Purchase cloud save error:', err); });
+    }
+  }
+  saveInventoryStockToStorage && saveInventoryStockToStorage();
+  saveBmhFinancials && saveBmhFinancials();
+  if (typeof window.saveInventoryToFirebase === 'function') {
+    window.saveInventoryToFirebase(item).catch(function (err) { console.error('Firebase save error:', err); });
+  }
+  renderStockList && renderStockList();
+  renderInventoryStoreStock && renderInventoryStoreStock();
+  renderInventoryPoAlerts && renderInventoryPoAlerts();
+  renderInventoryImportDatalists && renderInventoryImportDatalists();
+  renderInventoryTodayEntries && renderInventoryTodayEntries({ preserveVisibility: true });
+  showToast('Stock item updated ✓', 's');
+  openInventoryStockEdit(item.barcode || barcode);
+}
+window.saveInventoryStockEdit = saveInventoryStockEdit;
 function openInventoryStockGroup(groupId) {
   const groups = window._inventoryStockGroups || {};
   const group = groups[groupId];
   if (!group) return;
+  window._inventoryLastStockGroupId = groupId;
   ensureInventoryStockDetailModal();
   const titleEl = document.getElementById('inv-stock-detail-title');
   const bodyEl = document.getElementById('inv-stock-detail-body');
@@ -15188,8 +15337,9 @@ function openInventoryStockGroup(groupId) {
     (group.rows || []).forEach(function (row) {
       const power = String(row.power || extractIolPower(row.name || '') || 'No power');
       const key = [power, row.store || ''].join('||');
-      byPower[key] = byPower[key] || { power: power, store: row.store || '', sample: row, stock: 0, serials: [] };
+      byPower[key] = byPower[key] || { power: power, store: row.store || '', sample: row, stock: 0, serials: [], items: [] };
       byPower[key].stock += Number(row.stock || 0);
+      byPower[key].items.push(row);
       if (row.serialNo || row.batchNo) byPower[key].serials.push([row.serialNo || '', row.batchNo || ''].filter(Boolean).join(' / '));
     });
     bodyEl.innerHTML = Object.values(byPower).sort(function (a, b) { return String(a.power).localeCompare(String(b.power), undefined, { numeric: true }); }).map(function (row) {
@@ -15199,7 +15349,12 @@ function openInventoryStockGroup(groupId) {
           <div>
             <div style="font-weight:900;font-size:13px;color:var(--bmh-blue)">${escapeHtmlConsent(row.power)}</div>
             <div style="font-size:11px;color:var(--g1);margin-top:3px">${bmhFormatStoreLabel(row.store)} · Stock ${Number(row.stock || 0)} · Exp ${escapeHtmlConsent(sample.exp || '—')}</div>
-            <div style="font-size:10px;color:var(--g1);margin-top:3px">${sample.vendor ? 'Vendor: ' + escapeHtmlConsent(sample.vendor) + ' · ' : ''}${sample.batchNo ? 'Batch: ' + escapeHtmlConsent(sample.batchNo) + ' · ' : ''}${row.serials.length ? 'Serials: ' + escapeHtmlConsent(row.serials.slice(0,8).join(', ')) : ''}</div>
+            <div style="font-size:10px;color:var(--g1);margin-top:3px">${bmhInventoryStockRowMetaHtml(sample)}${row.serials.length ? (bmhInventoryStockRowMetaHtml(sample) ? ' · ' : '') + 'Serials: ' + escapeHtmlConsent(row.serials.slice(0,8).join(', ')) : ''}</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px">
+              ${(row.items || []).slice().sort(function (a, b) { return String(a.exp || '').localeCompare(String(b.exp || '')) || String(a.serialNo || a.barcode || '').localeCompare(String(b.serialNo || b.barcode || '')); }).map(function (item) {
+                return `<button type="button" class="btn btn-xs btn-outline" onclick="openInventoryStockEdit(${bmhInventoryJsString(item.barcode || '')})">${escapeHtmlConsent(item.serialNo || item.batchNo || item.exp || item.barcode || 'Edit')}</button>`;
+              }).join('')}
+            </div>
           </div>
           <div style="text-align:right">
             <div style="font-size:16px;font-weight:900;color:var(--green)">₹${Number(sample.mrp || 0).toLocaleString('en-IN')}</div>
@@ -15216,11 +15371,12 @@ function openInventoryStockGroup(groupId) {
           <div>
             <div style="font-weight:900;font-size:13px;color:var(--bmh-blue)">${escapeHtmlConsent(row.name || '')}</div>
             <div style="font-size:11px;color:var(--g1);margin-top:3px">${escapeHtmlConsent(row.cat || '')} · ${bmhDeptLabel(row.dept || 'general')} · ${bmhFormatStoreLabel(row.store)} · Stock ${Number(row.stock || 0)}</div>
-            <div style="font-size:10px;color:var(--g1);margin-top:3px">${row.vendor ? 'Vendor: ' + escapeHtmlConsent(row.vendor) + ' · ' : ''}${row.batchNo ? 'Batch: ' + escapeHtmlConsent(row.batchNo) + ' · ' : ''}${row.serialNo ? 'Serial: ' + escapeHtmlConsent(row.serialNo) + ' · ' : ''}${row.exp ? 'Exp: ' + escapeHtmlConsent(row.exp) : ''}</div>
+            <div style="font-size:10px;color:var(--g1);margin-top:3px">${bmhInventoryStockRowMetaHtml(row)}</div>
           </div>
           <div style="text-align:right">
             <div style="font-size:16px;font-weight:900;color:var(--green)">${Number(row.stock || 0)}</div>
             <div style="font-size:10px;color:var(--g1)">MRP ₹${Number(row.mrp || 0).toLocaleString('en-IN')} · Cost ₹${Number(row.cost || 0).toLocaleString('en-IN')}</div>
+            <button type="button" class="btn btn-xs btn-blue" style="margin-top:6px" onclick="openInventoryStockEdit(${bmhInventoryJsString(row.barcode || '')})">Edit</button>
             ${typeof isAdminUser === 'function' && isAdminUser() ? `<button type="button" class="btn btn-xs btn-gray" style="margin-top:6px" onclick="deleteInventoryStockRow('${String(row.barcode || '').replace(/'/g, "\\'")}')">Delete</button>` : ''}
           </div>
         </div>
@@ -15272,6 +15428,7 @@ function _renderStockListNow() {
   window._stockListDirty = false;
   const el = document.getElementById('inv-stock-list');
   if (!el) return;
+  window._inventoryStockGroups = {};
 
   const admBtn = document.getElementById('btn-inv-clear-all');
   if (admBtn) admBtn.style.display = (typeof isAdminUser === 'function' && isAdminUser()) ? 'inline-flex' : 'none';
@@ -15309,15 +15466,17 @@ function _renderStockListNow() {
         deptMap[dk].iols[bk] = { brandLabel: brandLabel, company: company, powers: {} };
       }
       const power = String(i.power || extractIolPower(i.name || '') || '?');
-      if (!deptMap[dk].iols[bk].powers[power]) deptMap[dk].iols[bk].powers[power] = { qty: 0, barcodes: [] };
+      if (!deptMap[dk].iols[bk].powers[power]) deptMap[dk].iols[bk].powers[power] = { qty: 0, barcodes: [], rows: [] };
       deptMap[dk].iols[bk].powers[power].qty += Math.max(0, Number(i.stock) || 0);
+      deptMap[dk].iols[bk].powers[power].rows.push(i);
       if (i.barcode) deptMap[dk].iols[bk].powers[power].barcodes.push(i.barcode);
     } else {
       const cat  = String(i.cat  || 'General').trim();
       const name = String(i.name || '?').trim();
       const nk   = normalizeInventoryCompareText(name);
-      if (!deptMap[dk].normals[nk]) deptMap[dk].normals[nk] = { name: name, cat: cat, stock: 0, barcodes: [] };
+      if (!deptMap[dk].normals[nk]) deptMap[dk].normals[nk] = { name: name, cat: cat, stock: 0, barcodes: [], rows: [] };
       deptMap[dk].normals[nk].stock += Math.max(0, Number(i.stock) || 0);
+      deptMap[dk].normals[nk].rows.push(i);
       if (i.barcode) deptMap[dk].normals[nk].barcodes.push(i.barcode);
     }
   });
@@ -15405,11 +15564,17 @@ function _renderStockListNow() {
           const qty   = pData.qty || 0;
           const qTone = qty <= 1 ? '#c0392b' : qty <= 3 ? '#d35400' : '#1a6e35';
           const barcodeJson = JSON.stringify(pData.barcodes || []).replace(/'/g, '&#39;');
+          const groupId = 'stk-iol-' + di + '-' + bi + '-' + String(power).replace(/[^a-z0-9]+/gi, '-');
+          window._inventoryStockGroups[groupId] = {
+            kind: 'iol',
+            title: [bmhDeptLabel(dk), b.brandLabel, power].filter(Boolean).join(' · '),
+            rows: pData.rows || []
+          };
           trs.push(
-            '<tr data-parent="' + brandId + '" data-dept="' + deptId + '" style="display:none;background:#fffef5">' +
-              '<td style="padding:4px 14px 4px 26px;font-size:11px;color:#222;font-family:var(--mono)">' + escapeHtmlConsent(power) + '</td>' +
+            '<tr data-parent="' + brandId + '" data-dept="' + deptId + '" onclick="openInventoryStockGroup(\'' + groupId + '\')" style="display:none;background:#fffef5;cursor:pointer">' +
+              '<td style="padding:4px 14px 4px 26px;font-size:11px;color:#222;font-family:var(--mono);text-decoration:underline;text-underline-offset:2px">' + escapeHtmlConsent(power) + '</td>' +
               '<td style="padding:4px 14px;text-align:right;font-size:12px;font-weight:900;color:' + qTone + ';white-space:nowrap">' + qty +
-                '<button onclick="deleteInventoryItemsPrompt(' + barcodeJson.replace(/"/g, '&quot;') + ')" title="Delete all ' + qty + ' units of this power" style="margin-left:8px;background:none;border:none;color:var(--red);cursor:pointer;font-size:11px;padding:0 2px;vertical-align:middle">🗑</button>' +
+                '<button onclick="event.stopPropagation();deleteInventoryItemsPrompt(' + barcodeJson.replace(/"/g, '&quot;') + ')" title="Delete all ' + qty + ' units of this power" style="margin-left:8px;background:none;border:none;color:var(--red);cursor:pointer;font-size:11px;padding:0 2px;vertical-align:middle">🗑</button>' +
               '</td>' +
             '</tr>'
           );
@@ -15452,11 +15617,17 @@ function _renderStockListNow() {
         items.slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).forEach(function (n) {
           const qTone = n.stock <= 2 ? '#c0392b' : n.stock <= 5 ? '#d35400' : 'var(--g1)';
           const barcodeJson = JSON.stringify(n.barcodes || []).replace(/"/g, '&quot;');
+          const groupId = 'stk-normal-' + di + '-' + ci + '-' + normalizeInventoryCompareText(n.name || '').replace(/[^a-z0-9]+/g, '-');
+          window._inventoryStockGroups[groupId] = {
+            kind: 'normal',
+            title: [bmhDeptLabel(dk), n.cat, n.name].filter(Boolean).join(' · '),
+            rows: n.rows || []
+          };
           trs.push(
-            '<tr data-parent="' + catId + '" data-dept="' + deptId + '" style="display:none;background:#fafcff">' +
-              '<td style="padding:5px 10px 5px 36px;font-size:11px;font-weight:600;color:#1a1a1a">' + escapeHtmlConsent(n.name) + '</td>' +
+            '<tr data-parent="' + catId + '" data-dept="' + deptId + '" onclick="openInventoryStockGroup(\'' + groupId + '\')" style="display:none;background:#fafcff;cursor:pointer">' +
+              '<td style="padding:5px 10px 5px 36px;font-size:11px;font-weight:600;color:#1a1a1a;text-decoration:underline;text-underline-offset:2px">' + escapeHtmlConsent(n.name) + '</td>' +
               '<td style="padding:5px 10px;text-align:right;font-size:12px;font-weight:700;color:' + qTone + ';white-space:nowrap">' + n.stock +
-                '<button onclick="deleteInventoryItemsPrompt(' + barcodeJson + ')" title="Delete this stock item" style="margin-left:8px;background:none;border:none;color:var(--red);cursor:pointer;font-size:11px;padding:0 2px;vertical-align:middle">🗑</button>' +
+                '<button onclick="event.stopPropagation();deleteInventoryItemsPrompt(' + barcodeJson + ')" title="Delete this stock item" style="margin-left:8px;background:none;border:none;color:var(--red);cursor:pointer;font-size:11px;padding:0 2px;vertical-align:middle">🗑</button>' +
               '</td>' +
             '</tr>'
           );
@@ -23980,6 +24151,7 @@ function bmhRecordInventoryPurchase(item, qty, billFile) {
   item.store = store;
   item.vendor = vendor || item.vendor || '';
   item.company = company || item.company || '';
+  item.invoiceNo = invoiceNo || item.invoiceNo || '';
   item.vendorBillingMode = billMode;
   item.exp = document.getElementById('inv-in-exp')?.value || item.exp || '';
   normalizeInventoryRecord(item);
