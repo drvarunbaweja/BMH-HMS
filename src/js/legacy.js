@@ -2564,21 +2564,25 @@ function collectRenderedRxRowsForPrint(deptId) {
   const rxRoot = root && root.querySelector('.rx-drugs-root');
   if (!rxRoot) return [];
   const rows = [];
-  rxRoot.querySelectorAll('div[style*="border-left"]').forEach(function (card) {
-    const nameInput = card.querySelector('input[placeholder*="Trade name"]');
+  const readRenderedRow = function (card, isTaper) {
+    const nameInput = isTaper ? null : card.querySelector('input[placeholder*="Trade name"]');
     const nameStatic = card.querySelector('div[style*="border:1.5px solid #1A3C6E"]');
-    const selects = card.querySelectorAll('select');
+    const selects = Array.from(card.querySelectorAll('select'));
+    const dateInputs = Array.from(card.querySelectorAll('input[placeholder*="dd/mm"]'));
     const label = String(nameInput?.value || nameStatic?.textContent || '').trim();
-    if (!label) return;
+    if (!label && !isTaper) return null;
     const match = label.match(/^(.*?)(?:\s*\((.*)\))?\s*$/);
     const trade = String(match && match[1] ? match[1] : label).trim();
     const generic = String(match && match[2] ? match[2] : '').trim();
     const typeSelect = selects[0];
     const routeSelect = deptId === 'oe' ? selects[1] : null;
     const freqSelect = selects[deptId === 'oe' ? 2 : 1];
-    const durationSelect = selects[deptId === 'oe' ? 3 : 2];
+    const mealSelect = selects[deptId === 'oe' ? 3 : 2];
+    const durationSelect = selects[deptId === 'oe' ? 4 : 3];
+    const fromIso = parseDisplayDateToIso(dateInputs[0]?.value || '');
+    const toIso = parseDisplayDateToIso(dateInputs[1]?.value || '');
     const fallbackInstruction = card.querySelector('div[style*="font-size:10.5px;color:#6a6a6a"]')?.textContent || '';
-    rows.push({
+    return {
       trade: trade,
       brand: trade,
       generic: generic,
@@ -2586,8 +2590,31 @@ function collectRenderedRxRowsForPrint(deptId) {
       drugType: typeSelect?.value || '',
       eye: deptId === 'oe' ? [routeSelect?.value || 'Oral'] : ['Oral'],
       freq: freqSelect?.value || fallbackInstruction || '',
-      dur: durationSelect?.value || ''
+      mealTiming: mealSelect?.value || '',
+      dur: durationSelect?.value || '',
+      dateFrom: fromIso || '',
+      dateTo: toIso || ''
+    };
+  };
+  Array.from(rxRoot.children).forEach(function (drugCard) {
+    const rowEls = Array.from(drugCard.children || []).filter(function (el) {
+      return String(el.getAttribute && el.getAttribute('style') || '').includes('border-left');
     });
+    if (!rowEls.length) return;
+    const main = readRenderedRow(rowEls[0], false);
+    if (!main) return;
+    main.taperRows = rowEls.slice(1).map(function (tapEl) {
+      const tap = readRenderedRow(tapEl, true) || {};
+      return {
+        freq: tap.freq || '',
+        mealTiming: tap.mealTiming || main.mealTiming || '',
+        dur: tap.dur || main.dur || '',
+        dateFrom: tap.dateFrom || '',
+        dateTo: tap.dateTo || '',
+        eye: tap.eye || main.eye
+      };
+    });
+    rows.push(main);
   });
   return rows;
 }
