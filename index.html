@@ -3735,6 +3735,11 @@
         <div id="use-log" style="margin-top:10px"></div>
         <div class="card" style="margin-top:12px;background:var(--g6)">
           <div class="card-hd"><div><div class="card-title">Patient-linked Usage</div><div class="card-sub">Every item used gets linked to a patient, department, stock balance, and billing line</div></div></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:10px">
+            <div class="form-group" style="margin:0;min-width:180px"><label class="fl">Usage date</label><input type="date" id="inv-usage-date" onchange="renderInventoryUsageLog()"></div>
+            <button type="button" class="btn btn-outline btn-sm" onclick="clearInventoryUsageDateFilter()">All dates</button>
+            <button type="button" class="btn btn-blue btn-sm" onclick="printInventoryPatientUsageReport()">Print usage report</button>
+          </div>
           <div id="inv-usage-log"></div>
         </div>
       </div>
