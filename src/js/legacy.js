@@ -37884,7 +37884,7 @@ function computeReceptionQueuePts() {
   if(sub === 'seen') pts = pts.filter(p=>isPatientMarkedSeen(p));
   else if(sub === 'waiting') pts = pts.filter(p=>!isPatientMarkedSeen(p));
   const queueStamp = function (p) {
-    return getPatientQueueStamp(p);
+    return getPatientQueueStamp(p, Date.now(), { fallbackNow: true });
   };
   return pts.slice().sort(function (a, b) {
     const byTime = queueStamp(a) - queueStamp(b);
@@ -38188,7 +38188,11 @@ function queueRawStamp(value) {
   const parsed = Date.parse(str);
   return Number.isFinite(parsed) ? parsed : 0;
 }
-function patientQueueCandidateStamps(p) {
+function queueStampIsDateOnly(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(value || '').trim());
+}
+function patientQueueCandidateStamps(p, now) {
+  const todayKeyLocal = localDateKey(Number.isFinite(now) ? new Date(now) : new Date());
   return [
     p?.checkinAt,
     p?.createdAt,
@@ -38196,20 +38200,35 @@ function patientQueueCandidateStamps(p) {
     p?.queueDate,
     p?.date,
     p?.updatedAt
-  ].map(queueRawStamp).filter(function (stamp) {
-    return stamp > 0;
+  ].map(function (raw) {
+    return {
+      raw: raw,
+      stamp: queueRawStamp(raw),
+      dateOnly: queueStampIsDateOnly(raw)
+    };
+  }).filter(function (item) {
+    return item.stamp > 0 && localDateKey(item.stamp) === todayKeyLocal;
   });
 }
-function getPatientQueueStamp(p, now) {
+function getPatientQueueStamp(p, now, opts) {
+  opts = opts || {};
   const refNow = Number.isFinite(now) ? now : Date.now();
-  const stamps = patientQueueCandidateStamps(p);
-  if (!stamps.length) return 0;
+  const candidates = patientQueueCandidateStamps(p, refNow);
+  if (!candidates.length) return opts.fallbackNow ? refNow : 0;
   const futureGraceMs = 2 * 60 * 1000;
-  const nonFuture = stamps.filter(function (stamp) {
-    return stamp <= refNow + futureGraceMs;
+  const timed = candidates.filter(function (item) {
+    return !item.dateOnly;
   });
-  if (nonFuture.length) return nonFuture[0];
-  return Math.min.apply(null, stamps);
+  const source = timed.length ? timed : candidates;
+  const nonFuture = source.filter(function (item) {
+    return item.stamp <= refNow + futureGraceMs;
+  });
+  const chosen = nonFuture.length ? nonFuture[0] : source.reduce(function (min, item) {
+    return item.stamp < min.stamp ? item : min;
+  }, source[0]);
+  if (!chosen || !chosen.stamp) return opts.fallbackNow ? refNow : 0;
+  if (chosen.dateOnly) return opts.fallbackNow ? refNow : 0;
+  return chosen.stamp;
 }
 function getPatientQueueWaitMinutes(p, now) {
   if (p?.preRegistered) return 0;
@@ -38981,7 +39000,7 @@ function getSelectedQueueDeptForAdmin() {
 function _renderDocQueueImpl() {
   const todayKeyLocal = localDateKey(new Date());
   const queueSortStamp = function (p) {
-    return getPatientQueueStamp(p);
+    return getPatientQueueStamp(p, Date.now(), { fallbackNow: true });
   };
   const queueWaitMinutes = function (p) {
     return getPatientQueueWaitMinutes(p);
