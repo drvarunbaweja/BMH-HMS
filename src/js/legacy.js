@@ -18125,11 +18125,12 @@ const RX_FREQ_OPTIONS = ['Half-hourly','Hourly','Every 2 hours','Every 3 hours',
 const RX_DURATION_OPTIONS = ['½ day','1 day','2 days','3 days','4 days','5 days','6 days','7 days','10 days','13 days','1 week','2 weeks','3 weeks','4 weeks','6 weeks','1 month','2 months','3 months','4 months','5 months','6 months','12 months','Ongoing'];
 const RX_TYPE_OPTIONS = ['Eye Drop','Tablet','Capsule','Ointment','Cream','Gel','Syrup','Injection','Pessary','Lotion','Spray','Other'];
 const RX_SITE_OPTIONS = ['Right Eye (OD)','Left Eye (OS)','Both Eyes (OU)','Oral','Topical','IM / IV','Nasal','Ear','Vaginal'];
-const RX_MEAL_TIMING_OPTIONS = ['','Before breakfast','After breakfast','Before lunch','After lunch','Before dinner','After dinner','Before food','After food','30 minutes before food','With milk','At bedtime'];
+const RX_MEAL_TIMING_OPTIONS = ['','1/2 Tablet','5ml syrup','2ml syrup','Before breakfast','After breakfast','Before lunch','After lunch','Before dinner','After dinner','Before food','After food','30 minutes before food','With milk','At bedtime'];
 const RX_CUSTOM_OPTION_DEFAULTS = {
   type: RX_TYPE_OPTIONS.slice(),
   freq: RX_FREQ_OPTIONS.slice(),
-  dur: RX_DURATION_OPTIONS.slice()
+  dur: RX_DURATION_OPTIONS.slice(),
+  meal: RX_MEAL_TIMING_OPTIONS.slice()
 };
 function makeFirebaseSafeKey(value) {
   return String(value || '').trim().replace(/[.#$/\[\]]/g, '_');
@@ -18149,12 +18150,13 @@ function getDoctorCustomRxOptionsForDept(deptOverride) {
     delete window.DOCTOR_RX_CUSTOM_OPTIONS[legacyScope];
   }
   if (!window.DOCTOR_RX_CUSTOM_OPTIONS[scope]) {
-    window.DOCTOR_RX_CUSTOM_OPTIONS[scope] = { type: [], freq: [], dur: [], advice: [], procedure: [], sendRecent: {} };
+    window.DOCTOR_RX_CUSTOM_OPTIONS[scope] = { type: [], freq: [], dur: [], meal: [], advice: [], procedure: [], sendRecent: {} };
   }
   const bucket = window.DOCTOR_RX_CUSTOM_OPTIONS[scope];
   if (!Array.isArray(bucket.type)) bucket.type = [];
   if (!Array.isArray(bucket.freq)) bucket.freq = [];
   if (!Array.isArray(bucket.dur)) bucket.dur = [];
+  if (!Array.isArray(bucket.meal)) bucket.meal = [];
   if (!Array.isArray(bucket.advice)) bucket.advice = [];
   if (!Array.isArray(bucket.procedure)) bucket.procedure = [];
   if (!bucket.sendRecent || typeof bucket.sendRecent !== 'object') bucket.sendRecent = {};
@@ -18288,10 +18290,10 @@ function loadDoctorCustomRxOptions() {
 function ensureSharedRxCustomOptions() {
   window.DOCTOR_RX_CUSTOM_OPTIONS = window.DOCTOR_RX_CUSTOM_OPTIONS || {};
   if (!window.DOCTOR_RX_CUSTOM_OPTIONS['__shared__']) {
-    window.DOCTOR_RX_CUSTOM_OPTIONS['__shared__'] = { type: [], freq: [], dur: [] };
+    window.DOCTOR_RX_CUSTOM_OPTIONS['__shared__'] = { type: [], freq: [], dur: [], meal: [] };
   }
   const b = window.DOCTOR_RX_CUSTOM_OPTIONS['__shared__'];
-  ['type', 'freq', 'dur'].forEach(function (k) {
+  ['type', 'freq', 'dur', 'meal'].forEach(function (k) {
     if (!Array.isArray(b[k])) b[k] = [];
   });
   return b;
@@ -18709,11 +18711,10 @@ function refreshDeptAdviceAndProcedureUi() {
     renderDeptProcedureSelect(dept);
   });
 }
-function addCustomRxOption(kind) {
-  const labels = { type: 'drug type', freq: 'frequency', dur: 'default duration' };
-  const raw = window.prompt('Add a new ' + (labels[kind] || kind) + ' for this doctor and department:')?.trim();
-  if (!raw) return;
-  const value = kind === 'dur' ? raw : toDisplayTitleCase(raw);
+function saveCustomRxOptionValue(kind, raw) {
+  const rawText = String(raw || '').trim();
+  if (!rawText) return '';
+  const value = (kind === 'dur' || kind === 'meal') ? rawText : toDisplayTitleCase(rawText);
   const bucket = getDoctorCustomRxOptions();
   if (!bucket[kind]) bucket[kind] = [];
   const lc = value.toLowerCase();
@@ -18729,6 +18730,13 @@ function addCustomRxOption(kind) {
   }
   saveDoctorCustomRxOptions();
   refreshCustomRxOptionSelects();
+  return value;
+}
+function addCustomRxOption(kind) {
+  const labels = { type: 'drug type', freq: 'frequency', dur: 'default duration', meal: 'meal / intake note' };
+  const raw = window.prompt('Add a new ' + (labels[kind] || kind) + ' for this doctor and department:')?.trim();
+  const value = saveCustomRxOptionValue(kind, raw);
+  if (!value) return;
   if (kind === 'type') {
     ['new-drug-type','md-add-type','md-edit-type'].forEach(function (id) { const el = document.getElementById(id); if (el) el.value = value; });
   } else if (kind === 'freq') {
@@ -18737,6 +18745,21 @@ function addCustomRxOption(kind) {
     ['new-drug-dur','md-add-dur','md-edit-dur'].forEach(function (id) { const el = document.getElementById(id); if (el) el.value = value; });
   }
   showToast('Saved for ' + (CURRENT_USER?.name || 'doctor') + ' ✓', 's');
+}
+function addCustomRxMealTiming(drugIdx, taperIdx) {
+  const raw = window.prompt('Add meal / intake note (for example: 1/2 Tablet, 5ml syrup, 2ml syrup):')?.trim();
+  const value = saveCustomRxOptionValue('meal', raw);
+  if (!value) return;
+  const drug = Array.isArray(RX_DRUGS) ? RX_DRUGS[drugIdx] : null;
+  if (drug) {
+    if (typeof taperIdx === 'number' && Array.isArray(drug.taperRows) && drug.taperRows[taperIdx]) {
+      drug.taperRows[taperIdx].mealTiming = value;
+    } else {
+      drug.mealTiming = value;
+    }
+  }
+  renderRxDrugs && renderRxDrugs();
+  showToast('Intake note saved ✓', 's');
 }
 function renderInvestigationChooser() {
   INVESTIGATION_CATEGORIES.forEach(function (cat) {
@@ -28309,7 +28332,7 @@ function renderRxDrugs() {
   const durOpts=RX_DURATION_OPTIONS;
   const typeOpts=RX_TYPE_OPTIONS;
   const eyeOpts=RX_SITE_OPTIONS;
-  const mealOpts=RX_MEAL_TIMING_OPTIONS;
+  const mealOpts = getMergedRxOptions('meal');
   const lang = typeof rxLang!=='undefined'?rxLang:'en';
   const rxAlerts = computeRxInteractionAlerts();
   const rowGridCols = showRouteSite
@@ -28377,10 +28400,13 @@ function renderRxDrugs() {
         ${showRouteSite ? `<div><select onchange="${prefix}.eye=[this.value];renderRxDrugs()" style="${inputBase}">${eyeOpts.map(e=>`<option${(((row.eye && row.eye[0]) || (baseDrug.eye && baseDrug.eye[0]) || 'Oral')===e)?' selected':''}>${e}</option>`).join('')}</select></div>` : ''}
         <div>
           <select onchange="${prefix}.freq=this.value;window.syncRxDrugDates(${i})" style="${inputBase}">${freqOpts.map(f=>`<option${rowFreq===f?' selected':''}>${f}</option>`).join('')}</select>
-          <select onchange="${prefix}.mealTiming=this.value;renderRxDrugs()" style="${subInput}">
-            <option value="">Meal / intake note</option>
-            ${mealOpts.filter(Boolean).map(opt=>`<option value="${esc(opt)}"${String(row.mealTiming || baseDrug.mealTiming || '')===opt?' selected':''}>${opt}</option>`).join('')}
-          </select>
+	          <div style="display:flex;align-items:center;gap:5px;margin-top:4px">
+	            <select onchange="${prefix}.mealTiming=this.value;renderRxDrugs()" style="${subInput};margin-top:0;flex:1">
+	              <option value="">Meal / intake note</option>
+	              ${mealOpts.filter(Boolean).map(opt=>`<option value="${esc(opt)}"${String(row.mealTiming || baseDrug.mealTiming || '')===opt?' selected':''}>${opt}</option>`).join('')}
+	            </select>
+	            <button type="button" title="Add intake note" onclick="${opts.mealOnclick || `addCustomRxMealTiming(${i})`}" style="width:24px;height:24px;border-radius:50%;border:none;background:var(--blue);color:#fff;font-size:14px;font-weight:900;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</button>
+	          </div>
         </div>
         <div><select onchange="${prefix}.dur=this.value;window.syncRxDrugDates(${i})" style="${inputBase}">${durOpts.map(v=>`<option${rowDur===v?' selected':''}>${v}</option>`).join('')}</select></div>
         <div><input type="text" inputmode="numeric" placeholder="dd/mm/yyyy" value="${esc(row.dateFrom ? formatDateDDMMYYYY(row.dateFrom) : '')}" onchange="${prefix}.dateFrom=parseDisplayDateToIso(this.value);this.value=formatDateDDMMYYYY(${prefix}.dateFrom);window.syncRxDrugDates(${i})" style="${inputBase}"></div>
@@ -28396,15 +28422,17 @@ function renderRxDrugs() {
       const mainPrefix = `RX_DRUGS[${i}]`;
       return `<div style="border-radius:10px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.05)">
         ${header}
-        ${renderRow(d, d, i, mainPrefix, {
-          taperOnclick:`window.addTaperRow(${i})`,
-          removeOnclick:`window.removeDrug(${i})`
-        })}
-        ${taperRows.map((tap, tapIdx) => renderRow(d, tap, i, `RX_DRUGS[${i}].taperRows[${tapIdx}]`, {
-          isTaper:true,
-          taperOnclick:`window.addTaperRow(${i},null,${tapIdx})`,
-          removeOnclick:`window.clearTaperRow(${i},${tapIdx})`
-        })).join('')}
+	        ${renderRow(d, d, i, mainPrefix, {
+	          taperOnclick:`window.addTaperRow(${i})`,
+	          removeOnclick:`window.removeDrug(${i})`,
+	          mealOnclick:`addCustomRxMealTiming(${i})`
+	        })}
+	        ${taperRows.map((tap, tapIdx) => renderRow(d, tap, i, `RX_DRUGS[${i}].taperRows[${tapIdx}]`, {
+	          isTaper:true,
+	          taperOnclick:`window.addTaperRow(${i},null,${tapIdx})`,
+	          removeOnclick:`window.clearTaperRow(${i},${tapIdx})`,
+	          mealOnclick:`addCustomRxMealTiming(${i},${tapIdx})`
+	        })).join('')}
       </div>`;
     }).join('')}
   </div>`;
@@ -30365,6 +30393,9 @@ function rxMealTimingPlainEn(value) {
   if (v === 'at bedtime') return 'at bedtime';
   return String(value || '').trim();
 }
+function rxMealTimingIsDoseNote(value) {
+  return /(?:^|\s)(?:\d+(?:\/\d+)?|½|half)\s*(?:tab|tablet|cap|capsule|ml|mL|syrup|spoon|drops?)/i.test(String(value || '').trim());
+}
 function rxMealTimingPlain(value, lang) {
   const en = rxMealTimingPlainEn(value);
   if (lang === 'hi') {
@@ -30495,7 +30526,8 @@ function buildRxPlainInstructionLine(d, lang, fmtIN) {
     } else if (/injection/i.test(form)) {
       line = 'निर्देशानुसार दें, ' + freq + ', ' + dur + ', ' + df + ' से ' + dt + ' तक।';
     } else if (oralEn) {
-      line = 'दिन में ' + rxOralDosePhrase(d, lang) + ' ' + (mealTxt ? (mealTxt + ' ') : '') + freq + ' लें, ' + df + ' से ' + dt + ' तक' + (dur && !/जैसा बताया गया है/i.test(dur) ? ' (' + dur + ')' : '') + '।';
+      const doseText = rxMealTimingIsDoseNote(mealTxt) ? mealTxt : (rxOralDosePhrase(d, lang) + (mealTxt ? (' ' + mealTxt) : ''));
+      line = 'दिन में ' + doseText + ' ' + freq + ' लें, ' + df + ' से ' + dt + ' तक' + (dur && !/जैसा बताया गया है/i.test(dur) ? ' (' + dur + ')' : '') + '।';
     } else {
       line = (eyeTxt ? eyeTxt + ' — ' : '') + freq + ', ' + dur + ', ' + df + ' से ' + dt + ' तक।';
     }
@@ -30507,7 +30539,8 @@ function buildRxPlainInstructionLine(d, lang, fmtIN) {
     } else if (/injection/i.test(form)) {
       line = 'ਨਿਰਦੇਸ਼ ਅਨੁਸਾਰ ਦਿਓ, ' + freq + ', ' + dur + ', ' + df + ' ਤੋਂ ' + dt + ' ਤੱਕ।';
     } else if (oralEn) {
-      line = rxOralDosePhrase(d, lang) + ' ' + (mealTxt ? (mealTxt + ' ') : '') + freq + ' ਲਓ, ' + df + ' ਤੋਂ ' + dt + ' ਤੱਕ' + (dur && !/ਜਿਵੇਂ ਦੱਸਿਆ ਗਿਆ ਹੈ/i.test(dur) ? ' (' + dur + ')' : '') + '।';
+      const doseText = rxMealTimingIsDoseNote(mealTxt) ? mealTxt : (rxOralDosePhrase(d, lang) + (mealTxt ? (' ' + mealTxt) : ''));
+      line = doseText + ' ' + freq + ' ਲਓ, ' + df + ' ਤੋਂ ' + dt + ' ਤੱਕ' + (dur && !/ਜਿਵੇਂ ਦੱਸਿਆ ਗਿਆ ਹੈ/i.test(dur) ? ' (' + dur + ')' : '') + '।';
     } else {
       line = (eyeTxt ? eyeTxt + ' — ' : '') + freq + ', ' + dur + ', ' + df + ' ਤੋਂ ' + dt + ' ਤੱਕ।';
     }
@@ -30524,7 +30557,8 @@ function buildRxPlainInstructionLine(d, lang, fmtIN) {
     } else if (/pessary/i.test(form)) {
       line = 'Insert as directed ' + freq + ' for ' + dur + ', from ' + df + ' to ' + dt + '.';
     } else {
-      line = 'Take ' + rxOralDosePhraseEn(d) + (mealTxt ? (' ' + mealTxt) : '') + ' ' + freq + ', from ' + df + ' to ' + dt + (dur && !/as directed/i.test(dur) ? ' for ' + dur : '') + '.';
+      const doseText = rxMealTimingIsDoseNote(mealTxt) ? mealTxt : (rxOralDosePhraseEn(d) + (mealTxt ? (' ' + mealTxt) : ''));
+      line = 'Take ' + doseText + ' ' + freq + ', from ' + df + ' to ' + dt + (dur && !/as directed/i.test(dur) ? ' for ' + dur : '') + '.';
     }
   }
   const timings = mealTxt ? '' : getRxTimingsText(d);
