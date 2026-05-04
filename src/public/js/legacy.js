@@ -24786,6 +24786,7 @@ function addOTCase() {
   closeM('m-ot-add');
   activeOTCase = normalized;
   openOTCase(normalized.id);
+  releaseOtSaveButton();
   persistOTCaseToCloud(normalized)
     .then(function () {
       if (admitToIpd) ensureIpdAdmissionFromOTCase(normalized, pt);
@@ -24794,8 +24795,7 @@ function addOTCase() {
     .catch(function (e) {
       console.warn('OT save error:', e);
       showToast('OT saved locally. Cloud sync failed, will retry on next update.', 'w');
-    })
-    .finally(releaseOtSaveButton);
+    });
 }
 function otQuickAddProcedureToCharges() {
   const proc = String(document.getElementById('ot-add-proc')?.value || '').trim();
@@ -24991,8 +24991,90 @@ function prefillOTCase(bmhId) {
   fillOTFromPatient(bmhId);
 }
 
+function resetOTAddCaseForm() {
+  window._savingOTCase = false;
+  const today = new Date().toISOString().split('T')[0];
+  const setV = function (id, value) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.value = value == null ? '' : value;
+  };
+  const setSelect = function (id, value) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (value != null && Array.from(el.options || []).some(function (opt) { return opt.value === value || opt.textContent === value; })) {
+      el.value = value;
+    } else {
+      el.selectedIndex = 0;
+    }
+  };
+  const setChecked = function (id, value) {
+    const el = document.getElementById(id);
+    if (el) el.checked = !!value;
+  };
+  const ptSel = document.getElementById('ot-pt-sel');
+  if (ptSel) {
+    ptSel.innerHTML = '<option value="">— Use BMSH ID lookup above —</option>';
+    ptSel.value = '';
+  }
+  setV('ot-add-case-id', '');
+  setV('ot-pt-lookup', '');
+  const lookupResult = document.getElementById('ot-pt-lookup-result');
+  if (lookupResult) lookupResult.innerHTML = '';
+  setV('ot-bmsh-id', '');
+  setV('ot-age-sex', '');
+  setV('ot-add-dx', '');
+  setV('ot-add-proc', '');
+  setSelect('ot-add-proc-main', '');
+  setSelect('ot-add-proc-sub', '');
+  setSelect('ot-add-proc-sub-2', '');
+  const subWrap = document.getElementById('ot-add-proc-sub-wrap');
+  const subWrap2 = document.getElementById('ot-add-proc-sub-wrap-2');
+  if (subWrap) subWrap.style.display = 'none';
+  if (subWrap2) subWrap2.style.display = 'none';
+  setSelect('ot-add-site', 'Left Eye (OS)');
+  setSelect('ot-add-surgeon', '');
+  setV('ot-add-anaes', '');
+  setV('ot-add-date', today);
+  setV('ot-add-time', '09:00');
+  setSelect('ot-add-room', 'Eye OT');
+  setSelect('ot-add-priority', 'elective');
+  setSelect('ot-add-iol-model', '');
+  setSelect('ot-add-iol-power', '');
+  setV('ot-add-iol', '');
+  applyOtIclConfigToForm({ eyes:'one', oneType:'Regular', firstType:'Regular', secondType:'Regular' });
+  setSelect('ot-add-preop', 'Yes — complete');
+  setSelect('ot-add-consent', 'Yes — signed');
+  setSelect('ot-add-fasting', 'Yes — fasted 6+ hrs');
+  setV('ot-add-notes', '');
+  ['ot-add-obg-type','ot-add-obg-ga','ot-add-obg-indication','ot-add-obg-fetal','ot-add-obg-liquor','ot-add-obg-blood','ot-add-obg-anaes-note','ot-add-obg-baby','ot-add-obg-mother'].forEach(function (id) {
+    setV(id, '');
+  });
+  ['ot-add-obg-doc-consent','ot-add-obg-doc-anaes','ot-add-obg-doc-blood','ot-add-obg-doc-newborn'].forEach(function (id) {
+    setChecked(id, false);
+  });
+  setChecked('ot-add-admit', false);
+  const admitBlock = document.getElementById('ot-add-admit-block');
+  if (admitBlock) admitBlock.style.display = 'none';
+  setSelect('ot-add-admit-type', 'Day Care');
+  setV('ot-add-admit-ward', '');
+  setV('ot-add-admit-room', '');
+  setSelect('ot-add-admit-monitoring', '6h');
+  setV('ot-add-admit-notes', '');
+  const eyeRadio = document.getElementById('ot-case-kind-eye');
+  const obgRadio = document.getElementById('ot-case-kind-obg');
+  if (eyeRadio) eyeRadio.checked = true;
+  if (obgRadio) obgRadio.checked = false;
+  const saveBtn = document.getElementById('ot-add-save-btn');
+  if (saveBtn) {
+    saveBtn.disabled = false;
+    saveBtn.textContent = '✅ Add to OT List';
+  }
+}
+
 function openOTAddModal(opts) {
   opts = opts || {};
+  if (!opts.caseId) resetOTAddCaseForm();
   // Only reset the dropdown — patient lookup is handled by ot-pt-lookup search field
   const ptSel = document.getElementById('ot-pt-sel');
   if(ptSel) {
