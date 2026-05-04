@@ -23348,6 +23348,10 @@ function normalizeOTCaseRecord(c) {
     ophDischargeSnapshot: src.ophDischargeSnapshot || null,
   });
 }
+function getOTCaseDateKey(c) {
+  const row = c || {};
+  return localDateKey(row.date || row.scheduledDate || row.otDate || row.surgeryDate || row.createdAt || row.updatedAt || '');
+}
 function resolveSurgeryPackForCase(otCase) {
   const c = normalizeOTCaseRecord(otCase);
   const procedure = String(c.procedure || '').toLowerCase();
@@ -24771,6 +24775,12 @@ function addOTCase() {
     OT_CASES.push(normalized);
   }
   saveOTCasesToLocalStorage();
+  const otListDate = document.getElementById('ot-date-inp');
+  if (otListDate && normalized.date) otListDate.value = getOTCaseDateKey(normalized) || normalized.date;
+  const surgeonFilter = document.getElementById('ot-surgeon-sel');
+  if (surgeonFilter && surgeonFilter.value && surgeonFilter.value !== 'All Surgeons' && surgeonFilter.value !== normalized.surgeon) {
+    surgeonFilter.value = 'All Surgeons';
+  }
   renderOTList();
   renderIPD && renderIPD();
   closeM('m-ot-add');
@@ -38074,7 +38084,7 @@ function renderOTList() {
   const surgeonFilter = document.getElementById('ot-surgeon-sel')?.value || '';
   OT_CASES.forEach(function (c, idx) { OT_CASES[idx] = normalizeOTCaseRecord(c); });
   let cases = OT_CASES.filter(c => centreMatch(c));
-  if(dateFilter) cases = cases.filter(c => (c.date||c.scheduledDate||'') === dateFilter);
+  if(dateFilter) cases = cases.filter(c => getOTCaseDateKey(c) === dateFilter);
   if(surgeonFilter && surgeonFilter !== 'All Surgeons') cases = cases.filter(c => c.surgeon === surgeonFilter);
 
   const buildCard = (c,i) => {
