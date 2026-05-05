@@ -39574,9 +39574,7 @@ function _renderDocQueueImpl() {
   const done    = filteredPts.filter(function (p) {
     return patientDoneQueueMatchesToday(p, todayKeyLocal);
   });
-  const activeSerialMap = new Map(active.map(function (p, idx) { return [p._queueKey || p.bmhId, idx + 1]; }));
-  const dilatedSerialMap = new Map(dilated.map(function (p, idx) { return [p._queueKey || p.bmhId, idx + 1]; }));
-  const doneSerialMap = new Map(done.map(function (p, idx) { return [p._queueKey || p.bmhId, idx + 1]; }));
+  const serialMap = new Map(filteredPts.map(function (p, idx) { return [p._queueKey || p.bmhId, idx + 1]; }));
   const xrefs   = (window.XREF_LOG||[]).filter(x => !effectiveQueueDept || x.fromDept===effectiveQueueDept || x.toDept===effectiveQueueDept);
   const ipdPts  = (window.IPD_PATIENTS||[]).filter(p => {
     const ipdDept = normalizeDeptKeyForQueue(p.dept || p.department || '');
@@ -39586,13 +39584,13 @@ function _renderDocQueueImpl() {
   const emptyRow = label => `<tr><td colspan="10" style="text-align:center;padding:24px;color:var(--g2);font-size:12.5px">No ${label} patients</td></tr>`;
 
   const ae = document.getElementById('dq-active-list');
-  if(ae) ae.innerHTML = active.length ? active.map((p)=>buildQTableRow(p, activeSerialMap.get(p._queueKey || p.bmhId) || '')).join('') : emptyRow('active');
+  if(ae) ae.innerHTML = active.length ? active.map((p)=>buildQTableRow(p, serialMap.get(p._queueKey || p.bmhId) || '')).join('') : emptyRow('active');
 
   const de = document.getElementById('dq-dil-list');
-  if(de) de.innerHTML = dilated.length ? dilated.map((p)=>buildQTableRow(p, dilatedSerialMap.get(p._queueKey || p.bmhId) || '')).join('') : emptyRow('dilated');
+  if(de) de.innerHTML = dilated.length ? dilated.map((p)=>buildQTableRow(p, serialMap.get(p._queueKey || p.bmhId) || '')).join('') : emptyRow('dilated');
 
   const dne = document.getElementById('dq-done-list');
-  if(dne) dne.innerHTML = done.length ? done.map((p)=>buildQTableRow(p, doneSerialMap.get(p._queueKey || p.bmhId) || '')).join('') : emptyRow('done');
+  if(dne) dne.innerHTML = done.length ? done.map((p)=>buildQTableRow(p, serialMap.get(p._queueKey || p.bmhId) || '')).join('') : emptyRow('done');
 
   // Dilated tab visibility — only show for ophtho
   const dilTab = document.getElementById('dq-tab-dil');

@@ -100,16 +100,15 @@ function renderHistoricalQueue(patients, selectedDate) {
   // Update all queue tabs with historical data
   const active = sortedPatients.filter(p => !isPatientMarkedSeen(p));
   const done = sortedPatients.filter(p => isPatientMarkedSeen(p));
-  const activeSerialMap = new Map(active.map(function(p, idx) { return [p.bmhId, idx + 1]; }));
-  const doneSerialMap = new Map(done.map(function(p, idx) { return [p.bmhId, idx + 1]; }));
+  const serialMap = new Map(sortedPatients.map(function(p, idx) { return [p.bmhId, idx + 1]; }));
   
   const emptyRow = label => `<tr><td colspan="10" style="text-align:center;padding:24px;color:var(--g2);font-size:12.5px">No ${label} patients for ${formatDisplayDate(selectedDate)}</td></tr>`;
   
   const ae = document.getElementById('dq-active-list');
-  if(ae) ae.innerHTML = active.length ? active.map((p)=>buildQTableRow(p, activeSerialMap.get(p.bmhId) || '')).join('') : emptyRow('active');
+  if(ae) ae.innerHTML = active.length ? active.map((p)=>buildQTableRow(p, serialMap.get(p.bmhId) || '')).join('') : emptyRow('active');
   
   const dne = document.getElementById('dq-done-list');
-  if(dne) dne.innerHTML = done.length ? done.map((p)=>buildQTableRow(p, doneSerialMap.get(p.bmhId) || '')).join('') : emptyRow('done');
+  if(dne) dne.innerHTML = done.length ? done.map((p)=>buildQTableRow(p, serialMap.get(p.bmhId) || '')).join('') : emptyRow('done');
   
   // Clear other tabs for historical view
   const de = document.getElementById('dq-dil-list');
