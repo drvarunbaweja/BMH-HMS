@@ -12675,7 +12675,7 @@ function bmhAddPatientToDoctorQueue(bmhId, opts) {
   const p = PATIENTS.find(function (x) { return x.bmhId === id; });
   if (!p) { showToast('Patient not found — refresh patient list', 'w'); return; }
   const nowIso = new Date().toISOString();
-  const today = nowIso.slice(0, 10);
+  const today = localDateKey(new Date());
   const patch = {
     status: 'waiting',
     seen: false,
@@ -12710,11 +12710,10 @@ function bmhEnsurePatientInTodayDeptQueue(bmhId, opts) {
   if (status === 'removed' || status === 'ipd' || status === 'discharged') return false;
   const targetDept = normalizeDeptKeyForQueue(opts?.dept || p.dept || p.department || '');
   const currentDept = normalizeDeptKeyForQueue(p.dept || p.department || '');
-  const inTodayQueue = patientQueueDateMatchesToday(p)
-    || localDateKey(p.checkinAt || p.createdAt || p.queueDate || p.visitDate || p.updatedAt) === localDateKey(new Date());
+  const inTodayQueue = patientQueueDateMatchesToday(p);
   if (!p.queueRemoved && inTodayQueue && (!targetDept || !currentDept || currentDept === targetDept)) return false;
   const nowIso = new Date().toISOString();
-  const today = nowIso.slice(0, 10);
+  const today = localDateKey(new Date());
   const patch = {
     status: 'waiting',
     seen: false,
@@ -22666,7 +22665,7 @@ function setRcQueueSubtab(mode, btnEl) {
 
 function ensureDailyReceptionReset() {
   const k = 'bmh_reception_calendar_day';
-  const today = new Date().toISOString().slice(0,10);
+  const today = localDateKey(new Date());
   try {
     const last = localStorage.getItem(k);
     const banner = document.getElementById('rc-daily-banner');
@@ -22801,7 +22800,7 @@ async function registerPatient() {
   const isPreReg = purposeVal==='Need to Check In' || purposeVal==='Not Checked In';
   const email = emailEarly;
   const currentIso = new Date().toISOString();
-  const queueDateToday = currentIso.slice(0, 10);
+  const queueDateToday = localDateKey(new Date());
 
   const patient = Object.assign({}, existingPt || {}, {
     bmhId: uid, name, initials, color,
@@ -22957,7 +22956,7 @@ async function registerPatient() {
     }).catch(() => {});
   }
 
-  const todayPts = PATIENTS.filter(p=> p.createdAt && p.createdAt.startsWith(new Date().toISOString().slice(0,10)));
+  const todayPts = getTodayQueueBasePatients ? getTodayQueueBasePatients() : PATIENTS.filter(p=> patientQueueDateMatchesToday(p));
   const token = todayPts.length;
 
   showToast(`✅ ${name} registered — Token #${token}`, 's');
@@ -30577,7 +30576,7 @@ function patientQueueDateMatchesToday(p) {
     return c && c.bmhId === p.bmhId && String(c.status || '').toLowerCase() === 'completed'
       && localDateKey(c.date || c.surgeryDate || c.otDate || c.updatedAt || c.createdAt) === todayKeyLocal;
   });
-  const stamps = [p.checkinAt, p.createdAt, p.seenAt, p.updatedAt, p.registeredAt, p.visitDate, p.queueDate, p.appointmentDate, p.dischargedAt].filter(Boolean);
+  const stamps = [p.checkinAt, p.queueDate, p.visitDate, p.appointmentDate, p.createdAt, p.registeredAt].filter(Boolean);
   if (!stamps.length) {
     return !!otDoneToday;
   }
@@ -30603,8 +30602,6 @@ function getTodayQueueBasePatients() {
 /** Seen / done row belongs in “Done today” (same serial as active list). */
 function patientDoneQueueMatchesToday(p, todayKeyLocal) {
   if (!isPatientMarkedSeen(p)) return false;
-  if (p.seenAt && localDateKey(p.seenAt) === todayKeyLocal) return true;
-  if (p.checkinAt && localDateKey(p.checkinAt) === todayKeyLocal) return true;
   return patientQueueDateMatchesToday(p);
 }
 function getPatientActiveDilationMinutes(p, nowTs) {
@@ -37743,8 +37740,26 @@ function selectExistingPatient(bmhId) {
   const r = document.getElementById('rc-phone-results');
   if(r) r.style.display='none';
   // Mark as waiting for today
+  const nowIso = new Date().toISOString();
+  const today = localDateKey(new Date());
   p.status = 'waiting';
   p.seen   = false;
+  p.seenAt = null;
+  p.checkinAt = Date.now();
+  p.queueDate = today;
+  p.visitDate = today;
+  p.queueRemoved = false;
+  p.updatedAt = nowIso;
+  fbUpdate && fbUpdate('patients/' + bmhId, {
+    status: 'waiting',
+    seen: false,
+    seenAt: null,
+    checkinAt: p.checkinAt,
+    queueDate: today,
+    visitDate: today,
+    queueRemoved: false,
+    updatedAt: nowIso
+  }).catch(function () {});
   // Show in queue
   showToast('✅ ' + p.name + ' checked in for visit', 's');
   renderReceptionPage && renderReceptionPage();
@@ -38621,8 +38636,9 @@ function patientQueueCandidateStamps(p, now) {
     p?.createdAt,
     p?.registeredAt,
     p?.queueDate,
-    p?.date,
-    p?.updatedAt
+    p?.visitDate,
+    p?.appointmentDate,
+    p?.date
   ].map(function (raw) {
     return {
       raw: raw,
@@ -39052,8 +39068,10 @@ function checkInPatient(bmhId) {
     TRANSACTIONS.push(txn);
     saveTransactionToFirebase&&saveTransactionToFirebase(txn);
   }
-  p.status='waiting'; p.preRegistered=false; p.checkinAt=Date.now();
-  fbUpdate&&fbUpdate('patients/'+bmhId,{status:'waiting',preRegistered:false,checkinAt:p.checkinAt});
+  const nowIso = new Date().toISOString();
+  const today = localDateKey(new Date());
+  p.status='waiting'; p.preRegistered=false; p.seen=false; p.seenAt=null; p.checkinAt=Date.now(); p.queueDate=today; p.visitDate=today; p.queueRemoved=false; p.updatedAt=nowIso;
+  fbUpdate&&fbUpdate('patients/'+bmhId,{status:'waiting',preRegistered:false,seen:false,seenAt:null,checkinAt:p.checkinAt,queueDate:today,visitDate:today,queueRemoved:false,updatedAt:nowIso});
   showToast(`✅ ${p.name} checked in — Token issued`,'s');
   renderDocQueue && renderDocQueue();
   renderReceptionPage && renderReceptionPage();
@@ -39551,12 +39569,14 @@ function _renderDocQueueImpl() {
   });
 
   // Active list keeps all waiting patients visible; dilated patients also remain in dedicated dilated queue.
-  const serialMap = new Map(filteredPts.map(function (p, idx) { return [p._queueKey || p.bmhId, idx + 1]; }));
   const active  = filteredPts.filter(function (p) { return !isPatientMarkedSeen(p); });
   const dilated = filteredPts.filter(function (p) { return p.dilated && !isPatientMarkedSeen(p); });
   const done    = filteredPts.filter(function (p) {
     return patientDoneQueueMatchesToday(p, todayKeyLocal);
   });
+  const activeSerialMap = new Map(active.map(function (p, idx) { return [p._queueKey || p.bmhId, idx + 1]; }));
+  const dilatedSerialMap = new Map(dilated.map(function (p, idx) { return [p._queueKey || p.bmhId, idx + 1]; }));
+  const doneSerialMap = new Map(done.map(function (p, idx) { return [p._queueKey || p.bmhId, idx + 1]; }));
   const xrefs   = (window.XREF_LOG||[]).filter(x => !effectiveQueueDept || x.fromDept===effectiveQueueDept || x.toDept===effectiveQueueDept);
   const ipdPts  = (window.IPD_PATIENTS||[]).filter(p => {
     const ipdDept = normalizeDeptKeyForQueue(p.dept || p.department || '');
@@ -39566,13 +39586,13 @@ function _renderDocQueueImpl() {
   const emptyRow = label => `<tr><td colspan="10" style="text-align:center;padding:24px;color:var(--g2);font-size:12.5px">No ${label} patients</td></tr>`;
 
   const ae = document.getElementById('dq-active-list');
-  if(ae) ae.innerHTML = active.length ? active.map((p)=>buildQTableRow(p, serialMap.get(p._queueKey || p.bmhId) || '')).join('') : emptyRow('active');
+  if(ae) ae.innerHTML = active.length ? active.map((p)=>buildQTableRow(p, activeSerialMap.get(p._queueKey || p.bmhId) || '')).join('') : emptyRow('active');
 
   const de = document.getElementById('dq-dil-list');
-  if(de) de.innerHTML = dilated.length ? dilated.map((p)=>buildQTableRow(p, serialMap.get(p._queueKey || p.bmhId) || '')).join('') : emptyRow('dilated');
+  if(de) de.innerHTML = dilated.length ? dilated.map((p)=>buildQTableRow(p, dilatedSerialMap.get(p._queueKey || p.bmhId) || '')).join('') : emptyRow('dilated');
 
   const dne = document.getElementById('dq-done-list');
-  if(dne) dne.innerHTML = done.length ? done.map((p)=>buildQTableRow(p, serialMap.get(p._queueKey || p.bmhId) || '')).join('') : emptyRow('done');
+  if(dne) dne.innerHTML = done.length ? done.map((p)=>buildQTableRow(p, doneSerialMap.get(p._queueKey || p.bmhId) || '')).join('') : emptyRow('done');
 
   // Dilated tab visibility — only show for ophtho
   const dilTab = document.getElementById('dq-tab-dil');
