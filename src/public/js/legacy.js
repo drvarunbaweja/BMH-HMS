@@ -17786,7 +17786,7 @@ function printOBGCard() {
       ], ' | ')
     };
   });
-  while (pregRows.length < 8) pregRows.push({});
+  while (pregRows.length < 6) pregRows.push({});
 
   const vaccineSummary = [
     ['T1', text('obg-vax-1-date'), text('obg-vax-1-status')],
@@ -17826,7 +17826,7 @@ function printOBGCard() {
       cmf: text('obg-fetal-movement')
     }
   ];
-  while (ultrasoundRows.length < 7) ultrasoundRows.push({});
+  while (ultrasoundRows.length < 5) ultrasoundRows.push({});
 
   const leftLogoSrc = buildAssetUrl('baweja-1.png');
   const rightLogoSrc = buildAssetUrl('bmh.jpg');
@@ -17875,32 +17875,32 @@ function printOBGCard() {
   .record-body{padding:2mm}
   .field-line{display:grid;grid-template-columns:31mm 1fr;min-height:5.5mm;border-bottom:1px solid #d7deea;align-items:center;font-size:8.3px}
   .field-line span{font-weight:800;color:#3e4c61;text-transform:uppercase}
-  .field-line b{font-size:9px;color:#101c2f}
+  .field-line b{font-size:11px;color:#101c2f;line-height:1.22;overflow-wrap:anywhere}
   .field-two{display:grid;grid-template-columns:1fr 1fr;gap:2mm}
   .section-title{background:#e9edf3;color:#111827;text-align:center;text-transform:uppercase;font-size:8.5px;font-weight:900;letter-spacing:.35px;padding:1.2mm;border:1px solid #2d3442}
   .back .section-title{font-size:7.4px;padding:.65mm;line-height:1}
   .soft-title,.green-title{background:#f2f3f5;color:#111827;border-color:#2d3442}
   table{width:100%;border-collapse:collapse;table-layout:fixed}
   th{background:#edf0f4;border:1px solid #2d3442;color:#17233a;font-size:7.3px;font-weight:900;text-transform:uppercase;line-height:1.1;padding:1.25mm .8mm;text-align:center}
-  td{border:1px solid #2d3442;font-size:7.6px;line-height:1.15;padding:1.2mm .9mm;vertical-align:top;height:8.5mm;word-break:break-word}
+  td{border:1px solid #2d3442;font-size:9.2px;line-height:1.22;padding:1.25mm 1mm;vertical-align:top;height:8.5mm;word-break:normal;overflow-wrap:anywhere}
   .anc-grid th{font-size:7px}
-  .anc-grid td{height:12mm}
+  .anc-grid td{height:13.5mm;font-size:9.6px;line-height:1.24}
   .identity-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.5mm}
   .tiny{font-size:7px;color:#596579}
   .note-strip{border:1px solid #8d96a5;background:#fafafa;padding:1.8mm;font-size:8.2px;line-height:1.25;margin-top:2mm}
   .labs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4mm;align-items:start}
   .lab-line{display:grid;grid-template-columns:30mm 1fr;gap:2mm;border-bottom:1px solid #9ca8ba;min-height:6.5mm;align-items:center;font-size:8px}
   .lab-line span{font-weight:900;color:#324257}
-  .lab-line b{font-weight:700;color:#121b2a}
+  .lab-line b{font-weight:800;color:#121b2a;font-size:9.2px;line-height:1.18;overflow-wrap:anywhere}
   .footer{position:absolute;left:5mm;right:5mm;bottom:3mm;display:flex;justify-content:space-between;font-size:7.2px;color:#536174}
   .compact td{height:7.5mm}
   .back th{font-size:6.4px;padding:.75mm .55mm;line-height:1}
-  .back td{font-size:6.9px;padding:.65mm .55mm;height:6.2mm;line-height:1.05}
-  .back .compact td{height:5.7mm}
+  .back td{font-size:8.2px;padding:.75mm .65mm;height:6.6mm;line-height:1.12}
+  .back .compact td{height:6mm}
   .back .labs{gap:2.2mm}
-  .back .lab-line{grid-template-columns:24mm 1fr;gap:1mm;min-height:4.5mm;font-size:6.8px}
-  .back .lab-line span{font-size:6.8px}
-  .back .lab-line b{font-size:6.8px}
+  .back .lab-line{grid-template-columns:24mm 1fr;gap:1mm;min-height:5mm;font-size:7.4px}
+  .back .lab-line span{font-size:7.2px}
+  .back .lab-line b{font-size:8.2px}
   .back .footer{bottom:1.5mm;font-size:6.4px}
   .right-panel{display:grid;gap:2.5mm}
   .exam-box .record-body{padding:1.4mm 2mm}
