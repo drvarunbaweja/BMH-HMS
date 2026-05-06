@@ -30639,7 +30639,17 @@ function getTodayQueueBasePatients() {
 /** Seen / done row belongs in “Done today” (same serial as active list). */
 function patientDoneQueueMatchesToday(p, todayKeyLocal) {
   if (!isPatientMarkedSeen(p)) return false;
-  return patientQueueDateMatchesToday(p);
+  if (p._xrefEntry) return p.seenAt && localDateKey(p.seenAt) === todayKeyLocal;
+  if (p.seenAt) return localDateKey(p.seenAt) === todayKeyLocal;
+  return p.checkinAt && localDateKey(p.checkinAt) === todayKeyLocal;
+}
+function patientActiveQueueMatchesToday(p, todayKeyLocal) {
+  if (!p || isPatientMarkedSeen(p)) return false;
+  if (p._xrefEntry) return crossRefQueueDateMatchesToday({ createdAt: p._xrefCreatedAt || p.queueDate || p.visitDate });
+  if (p.checkinAt) return localDateKey(p.checkinAt) === todayKeyLocal;
+  return [p.queueDate, p.visitDate].filter(Boolean).some(function (raw) {
+    return localDateKey(raw) === todayKeyLocal || String(raw || '').slice(0, 10) === todayKeyLocal;
+  });
 }
 function getPatientActiveDilationMinutes(p, nowTs) {
   if (!p || p.dept !== 'ophtho') return null;
@@ -38346,6 +38356,7 @@ function getReceptionBasePts() {
         _xrefFeeRequired: !!xref.fee,
         _xrefFeeAmount: Number(xref.amount || xref.feeAmount || 0) || 0,
         _xrefPendingPay: pendingPay,
+        _xrefCreatedAt: xref.createdAt || '',
         _queueKey: dedupeKey
       }));
     });
@@ -38359,9 +38370,11 @@ function getReceptionBasePts() {
 
 function computeReceptionQueuePts() {
   let pts = dedupeQueueEntriesByKey(getReceptionBasePts());
+  const todayKeyLocal = localDateKey(new Date());
   const sub = window._rcQueueSubtab || 'waiting';
-  if(sub === 'seen') pts = pts.filter(p=>isPatientMarkedSeen(p));
-  else if(sub === 'waiting') pts = pts.filter(p=>!isPatientMarkedSeen(p));
+  if(sub === 'seen') pts = pts.filter(p=>patientDoneQueueMatchesToday(p, todayKeyLocal));
+  else if(sub === 'waiting') pts = pts.filter(p=>patientActiveQueueMatchesToday(p, todayKeyLocal));
+  else pts = pts.filter(p=>patientActiveQueueMatchesToday(p, todayKeyLocal) || patientDoneQueueMatchesToday(p, todayKeyLocal));
   const queueStamp = function (p) {
     return getPatientQueueStamp(p, Date.now(), { fallbackNow: true });
   };
@@ -39453,6 +39466,7 @@ function buildCrossRefQueuePatient(p, xref, fallbackDept) {
     _xrefFeeRequired: !!xref?.fee,
     _xrefFeeAmount: Number(xref?.amount || xref?.feeAmount || 0) || 0,
     _xrefPendingPay: pendingPay,
+    _xrefCreatedAt: xref?.createdAt || '',
     _queueKey: dedupeKey
   });
 }
@@ -39617,13 +39631,16 @@ function _renderDocQueueImpl() {
     return String(a.bmhId || a._queueKey || '').localeCompare(String(b.bmhId || b._queueKey || ''));
   });
 
+  const visibleQueuePts = filteredPts.filter(function (p) {
+    return patientActiveQueueMatchesToday(p, todayKeyLocal) || patientDoneQueueMatchesToday(p, todayKeyLocal);
+  });
   // Active list keeps all waiting patients visible; dilated patients also remain in dedicated dilated queue.
-  const active  = filteredPts.filter(function (p) { return !isPatientMarkedSeen(p); });
-  const dilated = filteredPts.filter(function (p) { return p.dilated && !isPatientMarkedSeen(p); });
+  const active  = visibleQueuePts.filter(function (p) { return patientActiveQueueMatchesToday(p, todayKeyLocal); });
+  const dilated = visibleQueuePts.filter(function (p) { return p.dilated && patientActiveQueueMatchesToday(p, todayKeyLocal); });
   const done    = filteredPts.filter(function (p) {
     return patientDoneQueueMatchesToday(p, todayKeyLocal);
   });
-  const serialMap = new Map(filteredPts.map(function (p, idx) { return [p._queueKey || p.bmhId, idx + 1]; }));
+  const serialMap = new Map(visibleQueuePts.map(function (p, idx) { return [p._queueKey || p.bmhId, idx + 1]; }));
   const xrefs   = (window.XREF_LOG||[]).filter(x => crossRefQueueDateMatchesToday(x) && (!effectiveQueueDept || x.fromDept===effectiveQueueDept || x.toDept===effectiveQueueDept));
   const ipdPts  = (window.IPD_PATIENTS||[]).filter(p => {
     const ipdDept = normalizeDeptKeyForQueue(p.dept || p.department || '');
