@@ -17668,6 +17668,12 @@ function printOBGCard() {
   const withNoteBlank = function (main, note) {
     return joinBits([main, note], ' - ');
   };
+  const formatWeightKg = function (value) {
+    const raw = clean(value);
+    if (!raw) return '';
+    if (/\bkg\b/i.test(raw)) return raw;
+    return /^\d+(\.\d+)?$/.test(raw) ? raw + ' Kg' : raw;
+  };
   const bpFromVitals = joinBits([text('obg-vitals-bp-sys'), text('obg-vitals-bp-dia')], '/');
   const ptName = pt.name || text('obg-pt-nm', '-');
   const salutation = pt.salutation || pt.title || pt.prefix || text('pt-salutation') || text('patient-salutation') || '';
@@ -17688,9 +17694,10 @@ function printOBGCard() {
   const complaint = text('obg-main-complaint');
   const systemic = text('obg-systemic');
   const heightCm = text('obg-vitals-height');
-  const weightKg = text('obg-weight') || text('obg-vitals-weight');
+  const weightRaw = text('obg-weight') || text('obg-vitals-weight');
+  const weightKg = formatWeightKg(weightRaw);
   const heightM = Number(heightCm || 0) / 100;
-  const bmi = heightM && Number(weightKg || 0) ? (Number(weightKg) / (heightM * heightM)).toFixed(1) : '';
+  const bmi = heightM && Number(weightRaw || 0) ? (Number(weightRaw) / (heightM * heightM)).toFixed(1) : '';
   const complications = [...document.querySelectorAll('.obg-obs-complication:checked')].map(function (x) { return x.value; });
 
   stashCurrentObgPregnancyEntry();
@@ -17744,7 +17751,7 @@ function printOBGCard() {
       return {
         date: v.visitDate || v.date,
         ga: v.ga || v['obg-obs-ga-date'] || '',
-        weight: v.weight || v['obg-vitals-weight'] || '',
+        weight: formatWeightKg(v.weight || v['obg-vitals-weight'] || ''),
         bp: v.bp || joinBits([v['obg-vitals-bp-sys'], v['obg-vitals-bp-dia']], '/'),
         fundalHeight: v.fundalHeight || '',
         presentation: v.presentation || v['obg-vitals-fetal-presentation'] || '',
@@ -17853,12 +17860,12 @@ function printOBGCard() {
   .anc-page:last-child{page-break-after:auto}
   .front{display:block}
   .front-body{display:grid;grid-template-columns:1.78fr .92fr;gap:5mm;align-items:start}
-  .back{display:grid;grid-template-rows:auto auto auto;gap:2mm;padding:3mm}
+  .back{display:grid;grid-template-rows:auto auto auto;gap:.8mm;padding:3mm}
   .back .brand-row{grid-template-columns:48mm 1fr 24mm;gap:3mm;padding-bottom:1mm;margin-bottom:1mm}
   .back .logo{height:11mm;max-width:48mm}
   .back .bmh-logo{height:10mm;max-width:24mm}
-  .back .brand-title{font-size:11px;letter-spacing:.35px}
-  .back .brand-sub{font-size:6.8px;margin-top:.4mm}
+  .back .brand-title{font-size:13px;letter-spacing:.35px}
+  .back .brand-sub{font-size:8px;margin-top:.4mm}
   .brand-row{display:grid;grid-template-columns:62mm 1fr 32mm;align-items:center;gap:4mm;border-bottom:1.4px solid #2d3442;padding-bottom:2mm;margin-bottom:2mm}
   .logo{height:18mm;max-width:58mm;object-fit:contain}
   .bmh-logo{height:16mm;max-width:30mm;object-fit:contain;justify-self:end}
@@ -17873,18 +17880,19 @@ function printOBGCard() {
   .record-box{border:1.5px solid #1f2f4a;background:#fff}
   .record-title{background:#eaf1fb;color:#183760;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.35px;text-align:center;padding:1.5mm;border-bottom:1px solid #1f2f4a}
   .record-body{padding:2mm}
-  .field-line{display:grid;grid-template-columns:31mm 1fr;min-height:5.5mm;border-bottom:1px solid #d7deea;align-items:center;font-size:8.3px}
+  .field-line{display:grid;grid-template-columns:29mm minmax(0,1fr);min-height:5.5mm;border-bottom:1px solid #d7deea;align-items:center;font-size:8.3px}
   .field-line span{font-weight:800;color:#3e4c61;text-transform:uppercase}
-  .field-line b{font-size:11px;color:#101c2f;line-height:1.22;overflow-wrap:anywhere}
+  .field-line b{font-size:12px;color:#101c2f;line-height:1.22;overflow-wrap:anywhere;font-weight:900}
+  .right-panel .field-line b{white-space:nowrap;overflow:hidden;text-overflow:clip;overflow-wrap:normal}
   .field-two{display:grid;grid-template-columns:1fr 1fr;gap:2mm}
   .section-title{background:#e9edf3;color:#111827;text-align:center;text-transform:uppercase;font-size:8.5px;font-weight:900;letter-spacing:.35px;padding:1.2mm;border:1px solid #2d3442}
-  .back .section-title{font-size:7.4px;padding:.65mm;line-height:1}
+  .back .section-title{font-size:9px;padding:.85mm;line-height:1.05}
   .soft-title,.green-title{background:#f2f3f5;color:#111827;border-color:#2d3442}
   table{width:100%;border-collapse:collapse;table-layout:fixed}
   th{background:#edf0f4;border:1px solid #2d3442;color:#17233a;font-size:7.3px;font-weight:900;text-transform:uppercase;line-height:1.1;padding:1.25mm .8mm;text-align:center}
   td{border:1px solid #2d3442;font-size:9.2px;line-height:1.22;padding:1.25mm 1mm;vertical-align:top;height:8.5mm;word-break:normal;overflow-wrap:anywhere}
-  .anc-grid th{font-size:7px}
-  .anc-grid td{height:13.5mm;font-size:9.6px;line-height:1.24}
+  .anc-grid th{font-size:8px}
+  .anc-grid td{height:14.5mm;font-size:11px;line-height:1.24;font-weight:900}
   .identity-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.5mm}
   .tiny{font-size:7px;color:#596579}
   .note-strip{border:1px solid #8d96a5;background:#fafafa;padding:1.8mm;font-size:8.2px;line-height:1.25;margin-top:2mm}
@@ -17894,13 +17902,13 @@ function printOBGCard() {
   .lab-line b{font-weight:800;color:#121b2a;font-size:9.2px;line-height:1.18;overflow-wrap:anywhere}
   .footer{position:absolute;left:5mm;right:5mm;bottom:3mm;display:flex;justify-content:space-between;font-size:7.2px;color:#536174}
   .compact td{height:7.5mm}
-  .back th{font-size:6.4px;padding:.75mm .55mm;line-height:1}
-  .back td{font-size:8.2px;padding:.75mm .65mm;height:6.6mm;line-height:1.12}
-  .back .compact td{height:6mm}
-  .back .labs{gap:2.2mm}
-  .back .lab-line{grid-template-columns:24mm 1fr;gap:1mm;min-height:5mm;font-size:7.4px}
-  .back .lab-line span{font-size:7.2px}
-  .back .lab-line b{font-size:8.2px}
+  .back th{font-size:7.4px;padding:.85mm .65mm;line-height:1.08}
+  .back td{font-size:9.2px;padding:.85mm .75mm;height:7mm;line-height:1.18}
+  .back .compact td{height:6.5mm}
+  .back .labs{gap:1mm}
+  .back .lab-line{grid-template-columns:25mm 1fr;gap:1mm;min-height:5.7mm;font-size:8.4px}
+  .back .lab-line span{font-size:8px}
+  .back .lab-line b{font-size:9.2px}
   .back .footer{bottom:1.5mm;font-size:6.4px}
   .right-panel{display:grid;gap:2.5mm}
   .exam-box .record-body{padding:1.4mm 2mm}
@@ -17926,7 +17934,7 @@ function printOBGCard() {
     <div class="front-body">
     <div>
       <div class="identity-grid" style="margin-bottom:2mm">
-        ${labelledLine('Pre pregnancy wt', text('obg-vitals-weight') || weightKg)}
+        ${labelledLine('Pre pregnancy wt', formatWeightKg(text('obg-vitals-weight')) || weightKg)}
         ${labelledLine('Tetanus toxoid', vaccineSummary)}
       </div>
       <table class="anc-grid">
@@ -17960,7 +17968,7 @@ function printOBGCard() {
       <div class="record-box exam-box">
         <div class="record-title">Examination</div>
         <div class="record-body">
-          <div class="field-two">${clinicalLine('Ht', heightCm ? `${heightCm} cm` : '')}${clinicalLine('Wt', weightKg ? `${weightKg} kg` : '')}</div>
+          <div class="field-two">${clinicalLine('Ht', heightCm ? `${heightCm} cm` : '')}${clinicalLine('Wt', weightKg)}</div>
           <div class="field-two">${clinicalLine('BMI', bmi)}${clinicalLine('BP', text('obg-bp') || bpFromVitals)}</div>
           <div class="field-two">${clinicalLine('Pulse', text('obg-vitals-pulse'))}${clinicalLine('Oedema', document.getElementById('obg-redflag-swelling')?.checked ? 'Yes' : '')}</div>
           <div class="field-two">${clinicalLine('Pallor', /anemia/i.test(joinBits([risk, complications.join(' ')])) ? 'Yes' : '')}${clinicalLine('Thyroid', /thyroid/i.test(joinBits([risk, systemic, complications.join(' ')])) ? 'Yes' : '')}</div>
