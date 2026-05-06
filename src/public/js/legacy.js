@@ -33444,22 +33444,9 @@ function applyRealtimePatientRecord(record, key) {
 function startPatientsRealtimeUpdates() {
   if (window._bmhPatientsRealtimeStarted || !window.FBDB) return;
   window._bmhPatientsRealtimeStarted = true;
-  const known = new Set((window._BMH_ALL_PATIENTS_CACHE || PATIENTS || []).map(function (p) {
-    return String(p?.bmhId || '').trim();
-  }).filter(Boolean));
   const ref = window.FBDB.ref('patients');
-  ref.on('child_added', function (snap) {
-    const val = snap.val();
-    const id = String(val?.bmhId || snap.key || '').trim();
-    if (!id || known.has(id)) return;
-    known.add(id);
-    applyRealtimePatientRecord(val, snap.key);
-  });
   ref.on('child_changed', function (snap) {
-    const val = snap.val();
-    const id = String(val?.bmhId || snap.key || '').trim();
-    if (id) known.add(id);
-    applyRealtimePatientRecord(val, snap.key);
+    applyRealtimePatientRecord(snap.val(), snap.key);
   });
 }
 function schedulePatientsRefreshLoop() {
