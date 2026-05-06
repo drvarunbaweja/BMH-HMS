@@ -10068,6 +10068,22 @@ function getQueueDisplayAdvanceBalance(p) {
   return Math.max(0, Number(p.advance) || 0);
 }
 
+function patientHasNoFeeConsultation(p) {
+  if (!p || !p.bmhId) return false;
+  if (p.consultationNoFee === true || String(p.consultationFeeType || '').toLowerCase() === 'no-fee') return true;
+  return (TRANSACTIONS || []).some(function (txn) {
+    if (!txn || txn.bmhId !== p.bmhId) return false;
+    return txn.noFee === true || /\b(no fee|free|waiv)/i.test(String(txn.service || txn.for || txn.desc || txn.mode || ''));
+  });
+}
+
+function queueNoFeeConsultationBadge(compact) {
+  const style = compact
+    ? 'background:#eef2f7;color:#334155;border:1px dashed #94a3b8;border-radius:10px;padding:1px 6px;font-size:9px;font-weight:800'
+    : 'font-size:10px;color:#475569;font-weight:800';
+  return '<span style="' + style + '">No fee consultation</span>';
+}
+
 function bmhDeleteTransactionEntry(txnId) {
   if (!CURRENT_USER?.isAdmin) { showToast('Only admin can delete saved payments', 'w'); return; }
   const txn = (TRANSACTIONS || []).find(function (t) { return t.id === txnId; });
@@ -22599,10 +22615,19 @@ function applyReceptionFeeChoice() {
   const select = document.getElementById('rc-fee-select');
   const feeEl = document.getElementById('rc-fee');
   if (!select || !feeEl) return;
+  if (document.getElementById('rc-no-fee')?.checked) return;
   const amount = Math.max(0, Number(select.value || 0));
   feeEl.value = String(amount);
 }
 window.applyReceptionFeeChoice = applyReceptionFeeChoice;
+
+function getReceptionFeeChoiceMeta() {
+  const select = document.getElementById('rc-fee-select');
+  if (!select || select.style.display === 'none' || !shouldShowReceptionOphthoChdFeeChoice()) return null;
+  const amount = Math.max(0, Number(select.value || 0));
+  if (amount === 300) return { type: 'general', label: 'General Registration', amount: amount };
+  return { type: 'specialist', label: 'Specialist Registration', amount: amount };
+}
 
 function updateReceptionFeeChoiceUi(standardAmount) {
   const select = document.getElementById('rc-fee-select');
@@ -22615,11 +22640,11 @@ function updateReceptionFeeChoiceUi(standardAmount) {
     feeEl.style.display = '';
     return;
   }
-  const standard = Math.max(0, Number(standardAmount || 0));
+  const standard = Math.max(0, Number(standardAmount || 0)) || 500;
   const current = Number(feeEl.value || 0);
   select.innerHTML = [
-    '<option value="' + standard + '">Regular consultation - ₹' + standard.toLocaleString('en-IN') + '</option>',
-    '<option value="300">Special consultation - ₹300</option>'
+    '<option value="300">General Registration - ₹300</option>',
+    '<option value="' + standard + '">Specialist Registration - ₹' + standard.toLocaleString('en-IN') + '</option>'
   ].join('');
   select.value = current === 300 ? '300' : String(standard);
   select.style.display = '';
@@ -22867,10 +22892,16 @@ async function registerPatient() {
 
   syncBmhSequenceFloor(uid);
 
-  let fee = parseFloat(document.getElementById('rc-fee')?.value || getReceptionConsultationRate(centre) || 0) || 0;
+  const feeInputRaw = String(document.getElementById('rc-fee')?.value ?? '').trim();
+  let fee = feeInputRaw === '' ? (getReceptionConsultationRate(centre) || 0) : (parseFloat(feeInputRaw) || 0);
   if(noFee) fee = 0;
+  const feeChoice = noFee ? { type: 'no-fee', label: 'No Fee Consultation', amount: 0 } : getReceptionFeeChoiceMeta();
   const payMode = document.getElementById('rc-pay-mode')?.value||'Cash';
   const purpose = normalizeReceptionFieldValue('rc-purpose', document.getElementById('rc-purpose')?.value||'New Consultation');
+  const consultationDescBase = feeChoice && feeChoice.type !== 'no-fee'
+    ? feeChoice.label + (purpose ? ' - ' + purpose : '')
+    : purpose;
+  const consultationDesc = consultationDescBase + (noFee ? ' (no fee)' : '');
   const refType = document.getElementById('rc-ref-type')?.value || '';
   const refName = normalizeReceptionFieldValue('rc-ref-name', document.getElementById('rc-ref-name')?.value?.trim() || '');
   const refMobile = document.getElementById('rc-ref-mobile')?.value?.trim() || '';
@@ -22879,6 +22910,9 @@ async function registerPatient() {
   const claimAmountInput = Math.max(0, Number(document.getElementById('rc-claim-amt')?.value || 0));
   patient.checkinAt = isPreReg ? null : Date.now();
   patient.purpose = purpose;
+  patient.consultationFee = fee;
+  patient.consultationFeeType = feeChoice?.type || '';
+  patient.consultationFeeLabel = feeChoice?.label || '';
   patient.refType = refType;
   patient.refName = refName;
   patient.refMobile = refMobile;
@@ -22925,31 +22959,50 @@ async function registerPatient() {
     dueReceivedNow = confirm(`${name} has a pending due of ₹${previousDue.toLocaleString('en-IN')}.\n\nDue received now?`);
   }
 
-  if(isInsurance) {
+  if(noFee) {
+    const txnId = 'TXN'+Date.now();
+    addBmhPatientCharge(uid, { id: 'chg-' + txnId, cat: inferChargeCategoryFromService(consultationDesc), desc: consultationDesc, qty: 1, rate: 0, amount: 0, source: 'reception', ref: txnId, ts: new Date().toISOString(), noFee: true });
+    const txn = {
+      id:txnId, patient:name, bmhId:uid, service: consultationDesc, amount:0,
+      mode:'No Fee', collected:true, dept,
+      time:new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
+      date:new Date().toISOString(), centre, createdBy:CURRENT_USER?.name||'Reception',
+      noFee: true,
+      consultationFeeType: 'no-fee',
+      consultationFeeLabel: 'No Fee Consultation'
+    };
+    TRANSACTIONS.push(txn);
+    saveTransactionToFirebase&&saveTransactionToFirebase(txn);
+    patient.balance = bmhSyncPatientRunningBalance(uid);
+    fbUpdate&&fbUpdate('patients/'+uid,{balance:patient.balance});
+    showToast(`✅ No fee consultation registered for ${name}`,'s');
+  } else if(isInsurance) {
     const claimId = 'TPA'+Date.now();
     const claimAmount = Math.max(claimAmountInput, Number(fee || 0));
-    const claim = {id:claimId, patient:name, bmhId:uid, for:purpose, amount:claimAmount, approvedAmount:claimAmount, claimedAmount:claimAmount, status:'pending', mode:payMode, ins:insName||payMode, policy:policyNo, dept, centre, date:new Date().toISOString(), from:'Reception'};
+    const claim = {id:claimId, patient:name, bmhId:uid, for:consultationDesc, amount:claimAmount, approvedAmount:claimAmount, claimedAmount:claimAmount, status:'pending', mode:payMode, ins:insName||payMode, policy:policyNo, dept, centre, date:new Date().toISOString(), from:'Reception'};
     PAY_REQUESTS.push(claim);
     fbSet&&fbSet('payRequests/'+claimId, claim);
-    addBmhPatientCharge(uid, { id: 'chg-' + claimId, cat: inferChargeCategoryFromService(purpose), desc: purpose, qty: 1, rate: fee, amount: fee, source: 'reception', ref: claimId, ts: claim.date });
+    addBmhPatientCharge(uid, { id: 'chg-' + claimId, cat: inferChargeCategoryFromService(consultationDesc), desc: consultationDesc, qty: 1, rate: fee, amount: fee, source: 'reception', ref: claimId, ts: claim.date });
     patient.ins = insName||payMode;
     patient.policy = policyNo || patient.policy || '';
     patient.claimedAmount = claimAmount;
     patient.balance = Math.max(Number(patient.balance || 0), Number(fee || 0));
     showToast(`🏦 TPA/Insurance patient — claim pending ₹${fee.toLocaleString('en-IN')}`,'i');
   } else if(isCreditDue) {
-    addBmhPatientCharge(uid, { id: 'chg-credit-' + Date.now(), cat: inferChargeCategoryFromService(purpose), desc: purpose, qty: 1, rate: fee, amount: fee, source: 'reception', ts: new Date().toISOString() });
+    addBmhPatientCharge(uid, { id: 'chg-credit-' + Date.now(), cat: inferChargeCategoryFromService(consultationDesc), desc: consultationDesc, qty: 1, rate: fee, amount: fee, source: 'reception', ts: new Date().toISOString() });
     patient.balance = (patient.balance||0) + fee;
     showToast(`📋 ₹${fee} noted as credit/due for ${name}`,'i');
-  } else if(fee > 0 || noFee) {
+  } else if(fee > 0) {
     const txnId = 'TXN'+Date.now();
-    addBmhPatientCharge(uid, { id: 'chg-' + txnId, cat: inferChargeCategoryFromService(purpose), desc: purpose + (noFee?' (no fee)':''), qty: 1, rate: fee, amount: fee, source: 'reception', ref: txnId, ts: new Date().toISOString() });
+    addBmhPatientCharge(uid, { id: 'chg-' + txnId, cat: inferChargeCategoryFromService(consultationDesc), desc: consultationDesc, qty: 1, rate: fee, amount: fee, source: 'reception', ref: txnId, ts: new Date().toISOString() });
     const txn = {
-      id:txnId, patient:name, bmhId:uid, service: purpose + (noFee?' (no fee)':''), amount:fee,
+      id:txnId, patient:name, bmhId:uid, service: consultationDesc, amount:fee,
       mode:payMode, collected:true, dept,
       time:new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
       date:new Date().toISOString(), centre, createdBy:CURRENT_USER?.name||'Reception',
-      noFee: !!noFee
+      noFee: false,
+      consultationFeeType: feeChoice?.type || '',
+      consultationFeeLabel: feeChoice?.label || ''
     };
     TRANSACTIONS.push(txn);
     saveTransactionToFirebase&&saveTransactionToFirebase(txn);
@@ -22973,6 +23026,7 @@ async function registerPatient() {
   fbUpdate&&fbUpdate('patients/'+uid,{
     checkinAt:patient.checkinAt,purpose,visitCount:patient.visitCount,ins:patient.ins||'', policy: patient.policy || '',
     advance:patient.advance, advancePurpose:patient.advancePurpose, consultationNoFee:patient.consultationNoFee,
+    consultationFee: patient.consultationFee, consultationFeeType: patient.consultationFeeType || '', consultationFeeLabel: patient.consultationFeeLabel || '',
     refType: patient.refType || '', refName: patient.refName || '', refMobile: patient.refMobile || '', referredBy: patient.referredBy || '',
     queueRemoved: false, queueRemovedAt: null, queueRemovedBy: '', queueDate: patient.queueDate || queueDateToday, visitDate: patient.visitDate || queueDateToday
   });
@@ -22986,6 +23040,9 @@ async function registerPatient() {
       advance: patient.advance,
       advancePurpose: patient.advancePurpose,
       consultationNoFee: patient.consultationNoFee,
+      consultationFee: patient.consultationFee,
+      consultationFeeType: patient.consultationFeeType || '',
+      consultationFeeLabel: patient.consultationFeeLabel || '',
       refType: patient.refType || '',
       refName: patient.refName || '',
       refMobile: patient.refMobile || '',
@@ -38777,8 +38834,11 @@ function buildQCard(p, sno) {
   const advanceBalance = getQueueDisplayAdvanceBalance(p);
   const pendingPRIds = pendingPRs.map(r=>r.id);
   const surgeryDue = runningDue > 0 && patientHasSurgeryDue(p.bmhId);
+  const noFeeConsult = patientHasNoFeeConsultation(p);
   const chargeHtml = runningDue>0
     ? `<span onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;gap:3px;background:rgba(255,149,0,.15);color:#8a4200;border:1px solid rgba(255,149,0,.4);border-radius:10px;padding:1px 6px;font-size:9px;font-weight:800;animation:pulse 2s infinite">⚠️ ${surgeryDue ? 'Surgery due' : 'Due'} ₹${runningDue.toLocaleString('en-IN')}${pendingAmt>0?`<button title="Delete all pending charges for this patient" onclick="event.stopPropagation();deletePatientPendingCharges('${p.bmhId}')" style="background:none;border:none;cursor:pointer;padding:0 0 0 2px;font-size:10px;color:#c0392b;line-height:1">🗑</button>`:''}</span>`
+    : noFeeConsult
+    ? queueNoFeeConsultationBadge(true)
     : paidPRs.length
     ? `<span style="background:var(--green-lt);color:#1a8c3c;border:1px solid var(--green);border-radius:10px;padding:1px 6px;font-size:9px;font-weight:800">✓ Paid</span>`
     : advanceBalance>0 ? `<span style="background:var(--blue-lt);color:var(--blue);border:1px solid rgba(0,122,255,.3);border-radius:10px;padding:1px 6px;font-size:9px;font-weight:800">💙 Adv ₹${advanceBalance.toLocaleString('en-IN')}</span>` : '';
@@ -38878,10 +38938,13 @@ function buildQTableRow(p, sno, opts) {
   const advanceBalance = getQueueDisplayAdvanceBalance(p);
   const advLbl = (advanceBalance > 0) ? `<span style="font-size:9px;color:var(--blue);font-weight:800">Adv ₹${advanceBalance.toLocaleString('en-IN')}</span>` : '';
   const surgeryDue = runningDue > 0 && patientHasSurgeryDue(p.bmhId);
+  const noFeeConsult = patientHasNoFeeConsultation(p);
   const chargeHint = p._xrefEntry
     ? getCrossRefQueueChargeHint(p)
     : runningDue>0
     ? `<span style="font-size:10px;color:#8a4200;font-weight:800">${surgeryDue ? 'Surgery due' : 'Due'} ₹${runningDue.toLocaleString('en-IN')}</span>${advLbl ? ' · ' + advLbl : ''}`
+    : noFeeConsult
+    ? `${queueNoFeeConsultationBadge(false)}${advLbl ? ' · ' + advLbl : ''}`
     : paidPRs.length || runningDue === 0
     ? `<span style="font-size:10px;color:#1a8c3c">Paid</span>${advLbl ? ' · ' + advLbl : ''}`
     : (advLbl || '');
