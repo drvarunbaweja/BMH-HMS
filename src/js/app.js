@@ -71,7 +71,7 @@ function patientCentreKey(c) {
 function patientQueueDateMatches(p, targetDate) {
   if (!p || p.queueRemoved) return false;
   
-  const stamps = [p.checkinAt, p.queueDate, p.visitDate, p.appointmentDate, p.createdAt, p.registeredAt].filter(Boolean);
+  const stamps = [p.checkinAt, p.queueDate, p.visitDate].filter(Boolean);
   if (!stamps.length) return false;
   
   return stamps.some(function(raw) {

@@ -30576,7 +30576,7 @@ function patientQueueDateMatchesToday(p) {
     return c && c.bmhId === p.bmhId && String(c.status || '').toLowerCase() === 'completed'
       && localDateKey(c.date || c.surgeryDate || c.otDate || c.updatedAt || c.createdAt) === todayKeyLocal;
   });
-  const stamps = [p.checkinAt, p.queueDate, p.visitDate, p.appointmentDate, p.createdAt, p.registeredAt].filter(Boolean);
+  const stamps = [p.checkinAt, p.queueDate, p.visitDate].filter(Boolean);
   if (!stamps.length) {
     return !!otDoneToday;
   }
@@ -30591,11 +30591,10 @@ function patientQueueDateMatchesToday(p) {
   return !!(stampHit || otDoneToday);
 }
 function getTodayQueueBasePatients() {
-  const todayKeyLocal = localDateKey(new Date());
   return dedupeQueueEntriesByKey(PATIENTS.filter(function (p) {
     if (!p || p.queueRemoved || String(p.status || '').toLowerCase() === 'removed') return false;
     if (!centreMatch(p)) return false;
-    if (!patientQueueDateMatchesToday(p) && !(p.checkinAt && localDateKey(p.checkinAt) === todayKeyLocal)) return false;
+    if (!patientQueueDateMatchesToday(p)) return false;
     return true;
   }));
 }
@@ -38282,7 +38281,7 @@ function getReceptionBasePts() {
     if (!todayBaseIds.has(String(p.bmhId || '').trim())) return;
     const xrefs = getActiveCrossRefsForPatient(p).filter(function(xr) {
       // Only include active (not yet fully seen) cross-refs
-      return !xr.seenAt;
+      return !xr.seenAt && crossRefQueueDateMatchesToday(xr);
     });
     if (!xrefs.length) return;
 
@@ -38824,7 +38823,7 @@ function buildQTableRow(p, sno, opts) {
   // Badge showing active cross-refers OUT from this patient's row (originating dept view)
   const deptShort = {ophtho:'Eye',obg:'OBG',psych:'Psych',skin:'Skin'};
   const activeCrossRefsOut = !p._xrefEntry && typeof getActiveCrossRefsForPatient === 'function'
-    ? getActiveCrossRefsForPatient(p).filter(function(r) { return !r.seenAt; })
+    ? getActiveCrossRefsForPatient(p).filter(function(r) { return !r.seenAt && crossRefQueueDateMatchesToday(r); })
     : [];
   const xrefOutBadge = activeCrossRefsOut.length
     ? `<span style="font-size:9px;padding:1px 5px;margin-left:4px;background:#e0f7fa;color:#00796b;border-radius:4px;font-weight:800;vertical-align:middle">↔ ${activeCrossRefsOut.map(function(r){return deptShort[r.toDept]||r.toDept||r.toDoctor||'?';}).join(', ')}</span>`
@@ -39382,6 +39381,12 @@ function getActiveCrossRefsForPatient(p) {
   else if (p?.xrefTo) refs.push({ id: 'legacy-xref', toDept: p.xrefTo, toDoctor: p.xrefDoctor, paid: !!p.xrefPaid, active: true });
   return refs.filter(function (r) { return r && r.toDept && r.active !== false; });
 }
+function crossRefQueueDateMatchesToday(xref) {
+  const todayKeyLocal = localDateKey(new Date());
+  return [xref?.createdAt, xref?.date].filter(Boolean).some(function (raw) {
+    return localDateKey(raw) === todayKeyLocal || String(raw || '').slice(0, 10) === todayKeyLocal;
+  });
+}
 function buildCrossRefQueuePatient(p, xref, fallbackDept) {
   const toKey = normalizeDeptKeyForQueue(xref?.toDept || fallbackDept || '');
   const xrefSeen = !!xref?.seenAt;
@@ -39426,7 +39431,7 @@ function augmentQueueBasePatientsWithCrossRefs(basePts, targetDeptKey) {
     });
     if (!xrefs.length) return;
     const include = xrefs.some(function (xr) {
-      return !xr.seenAt || localDateKey(xr.seenAt) === localDateKey(new Date());
+      return crossRefQueueDateMatchesToday(xr);
     }) || patientQueueDateMatchesToday(p);
     if (!include) return;
     seen.add(p.bmhId);
@@ -39514,6 +39519,7 @@ function _renderDocQueueImpl() {
           }
         }
         getActiveCrossRefsForPatient(p).forEach(function (xref) {
+          if (!crossRefQueueDateMatchesToday(xref)) return;
           const toKey = normalizeDeptKeyForQueue(xref.toDept || '');
           if (toKey !== adminDeptFilter) return;
           const row = buildCrossRefQueuePatient(p, xref, adminDeptFilter);
@@ -39532,6 +39538,7 @@ function _renderDocQueueImpl() {
         deptPts.push(Object.assign({}, p, { _queueKey: p.bmhId }));
       }
       getActiveCrossRefsForPatient(p).forEach(function (xref) {
+        if (!crossRefQueueDateMatchesToday(xref)) return;
         const toKey = normalizeDeptKeyForQueue(xref.toDept || '');
         if (toKey !== userDept) return;
         const dedupeKey = String(p.bmhId || '') + '::' + String(toKey || '');
@@ -39575,7 +39582,7 @@ function _renderDocQueueImpl() {
     return patientDoneQueueMatchesToday(p, todayKeyLocal);
   });
   const serialMap = new Map(filteredPts.map(function (p, idx) { return [p._queueKey || p.bmhId, idx + 1]; }));
-  const xrefs   = (window.XREF_LOG||[]).filter(x => !effectiveQueueDept || x.fromDept===effectiveQueueDept || x.toDept===effectiveQueueDept);
+  const xrefs   = (window.XREF_LOG||[]).filter(x => crossRefQueueDateMatchesToday(x) && (!effectiveQueueDept || x.fromDept===effectiveQueueDept || x.toDept===effectiveQueueDept));
   const ipdPts  = (window.IPD_PATIENTS||[]).filter(p => {
     const ipdDept = normalizeDeptKeyForQueue(p.dept || p.department || '');
     return (p.status || 'admitted') !== 'discharged' && centreMatch(p) && (!effectiveQueueDept || ipdDept === effectiveQueueDept || CURRENT_USER?.isAdmin);
