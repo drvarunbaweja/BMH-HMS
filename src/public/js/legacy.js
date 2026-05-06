@@ -2279,10 +2279,15 @@ function getLatestSavedVisitForDept(bmhId, dept) {
   }).sort(function (a, b) {
     return String(b.date || b.createdAt || '').localeCompare(String(a.date || a.createdAt || ''));
   });
+  const deptVisit = localPt?.lastVisitByDept && localPt.lastVisitByDept[dept] ? localPt.lastVisitByDept[dept] : null;
+  if (deptVisit) visits.push(deptVisit);
   if (localPt?.lastVisit && localPt.lastDeptVisit === dept) {
     const lv = localPt.lastVisit;
     if (!visits.length || String(lv.date || '').localeCompare(String(visits[0]?.date || '')) >= 0) return lv;
   }
+  visits.sort(function (a, b) {
+    return String(b.date || b.createdAt || '').localeCompare(String(a.date || a.createdAt || ''));
+  });
   return visits[0] || null;
 }
 function visitHasPrescriptionRx(visit) {
@@ -2294,6 +2299,8 @@ function getLatestSavedPrescriptionVisitForDept(bmhId, dept) {
   const rows = Object.values(getCachedPatientVisits(bmhId) || {}).filter(function (v) {
     return v && v.dept === dept && visitHasPrescriptionRx(v);
   });
+  const deptVisit = localPt?.lastVisitByDept && localPt.lastVisitByDept[dept] ? localPt.lastVisitByDept[dept] : null;
+  if (visitHasPrescriptionRx(deptVisit)) rows.push(deptVisit);
   if (localPt?.lastVisit && localPt.lastDeptVisit === dept && visitHasPrescriptionRx(localPt.lastVisit)) {
     rows.push(localPt.lastVisit);
   }
@@ -3798,7 +3805,8 @@ function openPatient(bmhId, opts) {
     return raw ? localDateKey(raw) : '';
   };
   const targetDept = normalizeDeptKeyForQueue(opts.deptOverride || p.dept || '') || p.dept;
-  const lastVisitRef = opts.deptOverride ? getLatestSavedVisitForDept(bmhId, targetDept) : p.lastVisit;
+  const explicitVisit = opts.visitKey ? (getCachedPatientVisits(bmhId) || {})[opts.visitKey] : null;
+  const lastVisitRef = explicitVisit || getLatestSavedVisitForDept(bmhId, targetDept) || (p.lastDeptVisit === targetDept ? p.lastVisit : null);
   const allowTodayRestore = !opts.freshStart;
   const lastVisitIsToday = allowTodayRestore && visitDateKey(lastVisitRef) === localDateKey(new Date());
   window._suspendVisitAutosave = true;
@@ -3964,7 +3972,8 @@ function openPatient(bmhId, opts) {
     // Always reload from Firebase for ophtho so CC rows, NV and refraction are never lost.
     // For cross-ref freshStart, skip loading today's visit (blank form for new consultation).
     if (!opts.freshStart) {
-      if(targetDept === 'ophtho') loadTodayVisitIntoForm(p.bmhId);
+      if(opts.visitKey) loadVisitKeyIntoForm(p.bmhId, targetDept, opts.visitKey);
+      else if(targetDept === 'ophtho') loadTodayVisitIntoForm(p.bmhId);
       else if(targetDept === 'obg') loadTodayDeptVisitIntoForm(p.bmhId, 'obg');
       else if(targetDept === 'psych') loadTodayDeptVisitIntoForm(p.bmhId, 'psych');
       else if(targetDept === 'skin') loadTodayDeptVisitIntoForm(p.bmhId, 'skin');
@@ -4160,7 +4169,7 @@ function openPatientForDept(bmhId, dept, xrefId) {
     visitKey: xref?.lastVisitKey || ''
   } : null;
   window._currentXrefId = freshStart ? (xrefId || null) : null;
-  openPatient(bmhId, { deptOverride: dept, freshStart: freshStart });
+  openPatient(bmhId, { deptOverride: dept, freshStart: freshStart, visitKey: xref?.lastVisitKey || '' });
 }
 function getCrossRefQueueChargeHint(p) {
   if (!p || !p._xrefEntry) return '';
@@ -4350,6 +4359,27 @@ function loadTodayDeptVisitIntoForm(bmhId, dept) {
     if (dept === 'obg') { populateObgForm(v); showToast("Today's OBG visit restored ✓", 'i'); }
     else if (dept === 'psych') { populatePsychForm(v); showToast("Today's psychiatry visit restored ✓", 'i'); }
     else if (dept === 'skin') { populateSkinForm(v); showToast("Today's skin visit restored ✓", 'i'); }
+  });
+}
+
+function loadVisitKeyIntoForm(bmhId, dept, visitKey) {
+  if (!bmhId || !dept || !visitKey) return;
+  const populate = function (v) {
+    if (!v || (window.CURRENT_PATIENT?.bmhId || '') !== bmhId) return;
+    if (dept === 'ophtho') populateOphthoForm(v);
+    else if (dept === 'obg') populateObgForm(v);
+    else if (dept === 'psych') populatePsychForm(v);
+    else if (dept === 'skin') populateSkinForm(v);
+  };
+  const cached = (getCachedPatientVisits(bmhId) || {})[visitKey];
+  if (cached) populate(cached);
+  if (typeof fbOnce !== 'function') return;
+  fbOnce('visits/' + bmhId + '/' + visitKey, function (v) {
+    if (!v) return;
+    const cachedVisits = getCachedPatientVisits(bmhId);
+    cachedVisits[visitKey] = v;
+    cachePatientVisits(bmhId, cachedVisits);
+    populate(v);
   });
 }
 
@@ -34234,13 +34264,17 @@ function getDischargePrintData(sel) {
   const linkedFuTemplate = specialty === 'ophtho' ? getOtFollowupTemplateEntry(lastOtCase) : null;
   const ipdStay = (window.IPD_PATIENTS || []).slice().reverse().find(x => x.bmhId === ptObj.bmhId) || null;
   const deptForRx = specialty === 'obg' ? 'obg' : 'ophtho';
-  const markedPrescriptionVisit = (typeof getCachedPatientVisits === 'function' ? Object.values(getCachedPatientVisits(ptId) || {}) : [])
-    .filter(function (v) { return v && v.dept === deptForRx && v.postSurgeryRx && Array.isArray(v.rx) && v.rx.length; })
-    .sort(function (a, b) { return String(b.date || '').localeCompare(String(a.date || '')); })[0] || null;
+  const markedPrescriptionRows = (typeof getCachedPatientVisits === 'function' ? Object.values(getCachedPatientVisits(ptId) || {}) : [])
+    .filter(function (v) { return v && v.dept === deptForRx && v.postSurgeryRx && Array.isArray(v.rx) && v.rx.length; });
+  const deptLastVisit = ptObj.lastVisitByDept && ptObj.lastVisitByDept[deptForRx] ? ptObj.lastVisitByDept[deptForRx] : null;
+  if (deptLastVisit && deptLastVisit.postSurgeryRx && Array.isArray(deptLastVisit.rx) && deptLastVisit.rx.length) markedPrescriptionRows.push(deptLastVisit);
+  if (ptObj.lastVisit?.dept === deptForRx && ptObj.lastVisit?.postSurgeryRx && Array.isArray(ptObj.lastVisit.rx) && ptObj.lastVisit.rx.length) markedPrescriptionRows.push(ptObj.lastVisit);
+  const markedPrescriptionVisit = markedPrescriptionRows
+    .sort(function (a, b) { return String(b.rxPrintedAt || b.date || '').localeCompare(String(a.rxPrintedAt || a.date || '')); })[0] || null;
   const livePostSurgeryRx = specialty === 'obg'
     ? !!document.getElementById('obg-post-surgery-rx')?.checked
     : !!document.getElementById('rx-post-surgery')?.checked;
-  const savedPostSurgeryRx = !!(markedPrescriptionVisit || (ptObj.lastVisit?.dept === deptForRx && ptObj.lastVisit?.postSurgeryRx));
+  const savedPostSurgeryRx = !!markedPrescriptionVisit;
   const lastRxData = (livePostSurgeryRx && RX_DRUGS && RX_DRUGS.length)
     ? JSON.parse(JSON.stringify(RX_DRUGS))
     : (markedPrescriptionVisit && Array.isArray(markedPrescriptionVisit.rx) && markedPrescriptionVisit.rx.length)
@@ -34876,7 +34910,7 @@ function renderDischargeBuilder() {
   if (linkedFuTemplate?.meta?.notes) {
     activeInstructions = String(linkedFuTemplate.meta.notes || '').split(/\n+/).map(function (s) { return s.trim(); }).filter(Boolean);
   }
-  const ophSnap = (sel === 'ophtho' && data.lastOtCase && data.lastOtCase.ophDischargeSnapshot) ? data.lastOtCase.ophDischargeSnapshot : null;
+  const ophSnap = (sel === 'ophtho' && data.lastOtCase && data.lastOtCase.ophDischargeSnapshot && !data.postSurgeryRx) ? data.lastOtCase.ophDischargeSnapshot : null;
   if (ophSnap && Array.isArray(ophSnap.instructions) && ophSnap.instructions.length) {
     activeInstructions = ophSnap.instructions;
   }
@@ -40027,7 +40061,9 @@ function saveVisit(dept, opts) {
     return;
   }
   if(typeof fbSet !== 'function') { showToast('Save not available (offline)', 'w'); return; }
-  const patientPatch = { lastVisit: visit, lastVisitKey: visitKey, lastVisitDate: visit.date, lastDeptVisit: dept };
+  const lastVisitByDept = Object.assign({}, localPt?.lastVisitByDept || {});
+  lastVisitByDept[dept] = visit;
+  const patientPatch = { lastVisit: visit, lastVisitKey: visitKey, lastVisitDate: visit.date, lastDeptVisit: dept, lastVisitByDept: lastVisitByDept };
   if (visit.dx) patientPatch.dx = visit.dx;
   const prevDxMap = Object.assign({}, localPt?.prevDxByDept || {});
   const existingPrev = prevDxMap[dept] || {};
@@ -40050,12 +40086,16 @@ function saveVisit(dept, opts) {
   if (visit.slChips) visit.slChips = sanitizeSlChipsMap(visit.slChips);
   const visitForCloud = sanitizeFirebaseValue(visit);
   if (visitForCloud.slChips) visitForCloud.slChips = sanitizeSlChipsMap(visitForCloud.slChips);
-  const patientPatchForCloud = Object.assign({}, patientPatch, { lastVisit: visitForCloud });
+  const patientPatchForCloud = Object.assign({}, patientPatch, {
+    lastVisit: visitForCloud,
+    lastVisitByDept: sanitizeFirebaseValue(lastVisitByDept)
+  });
   if(localPt) {
     localPt.lastVisit = JSON.parse(JSON.stringify(visit));
     localPt.lastVisitKey = visitKey;
     localPt.lastVisitDate = visit.date;
     localPt.lastDeptVisit = dept;
+    localPt.lastVisitByDept = lastVisitByDept;
     if (visit.dx) localPt.dx = visit.dx;
     localPt.prevDxByDept = prevDxMap;
     cachedVisits[visitKey] = JSON.parse(JSON.stringify(visit));
