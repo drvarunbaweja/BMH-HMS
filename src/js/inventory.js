@@ -6,6 +6,41 @@ const INVENTORY_COLLECTION = 'inventory'
 const PURCHASES_COLLECTION = 'inventory_purchases'
 const USAGE_COLLECTION = 'inventory_usage'
 
+function getUsageTime(row) {
+  const raw = row?.ts || row?.date || row?.createdAt || row?.updatedAt || ''
+  if (raw && typeof raw.toMillis === 'function') return raw.toMillis()
+  if (raw && typeof raw.seconds === 'number') return raw.seconds * 1000
+  const parsed = Date.parse(raw)
+  return Number.isNaN(parsed) ? 0 : parsed
+}
+
+function inventoryUsageKey(row) {
+  if (row?.id) return 'id:' + String(row.id)
+  return [
+    String(row?.bmhId || '').trim().toLowerCase(),
+    String(row?.itemName || row?.desc || row?.name || '').trim().toLowerCase(),
+    Math.abs(Number(row?.qty || 0)),
+    String(row?.barcode || row?.ref || '').trim().toLowerCase(),
+    String(row?.procedureRef || row?.groupId || '').trim().toLowerCase(),
+    String(row?.ts || row?.date || '').slice(0, 10)
+  ].join('|')
+}
+
+function mergeInventoryUsageRows(localRows, firebaseRows) {
+  const byKey = new Map()
+  const add = (row) => {
+    if (!row) return
+    const key = inventoryUsageKey(row)
+    const existing = byKey.get(key)
+    byKey.set(key, existing ? { ...existing, ...row } : row)
+  }
+
+  ;(localRows || []).forEach(add)
+  ;(firebaseRows || []).forEach(add)
+
+  return Array.from(byKey.values()).sort((a, b) => getUsageTime(b) - getUsageTime(a))
+}
+
 // Save inventory stock to Firestore
 export async function saveInventoryToFirebase(inventoryData) {
   try {
@@ -15,8 +50,9 @@ export async function saveInventoryToFirebase(inventoryData) {
     }
     
     const docRef = doc(db, INVENTORY_COLLECTION, inventoryData.barcode)
+    const { id, _localAddedAt, ...cleanInventoryData } = inventoryData
     const dataToSave = {
-      ...inventoryData,
+      ...cleanInventoryData,
       updatedAt: serverTimestamp()
     }
     
@@ -125,7 +161,14 @@ export async function saveUsageToFirebase(usageData) {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     }
-    
+
+    if (usageData?.id) {
+      const docRef = doc(db, USAGE_COLLECTION, String(usageData.id))
+      await setDoc(docRef, dataToSave, { merge: true })
+      console.log('Usage saved to Firebase:', usageData.id)
+      return usageData.id
+    }
+
     const docRef = await addDoc(collection(db, USAGE_COLLECTION), dataToSave)
     console.log('Usage saved to Firebase:', docRef.id)
     return docRef.id
@@ -194,8 +237,9 @@ export async function syncInventoryWithFirebase() {
     }
     
     if (window.BMH_INVENTORY_USAGE) {
+      const mergedUsage = mergeInventoryUsageRows(window.BMH_INVENTORY_USAGE, firebaseUsage)
       window.BMH_INVENTORY_USAGE.length = 0
-      firebaseUsage.forEach(usage => {
+      mergedUsage.forEach(usage => {
         window.BMH_INVENTORY_USAGE.push(usage)
       })
     }
@@ -272,8 +316,9 @@ export function initializeInventoryFirebaseSync() {
   // Watch usage changes
   watchUsage((usage) => {
     if (window.BMH_INVENTORY_USAGE) {
+      const mergedUsage = mergeInventoryUsageRows(window.BMH_INVENTORY_USAGE, usage)
       window.BMH_INVENTORY_USAGE.length = 0
-      usage.forEach(u => {
+      mergedUsage.forEach(u => {
         window.BMH_INVENTORY_USAGE.push(u)
       })
       if (typeof saveBmhFinancials === 'function') {
