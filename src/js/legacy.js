@@ -22743,6 +22743,38 @@ function ensureDailyReceptionReset() {
   } catch(e) { /* private mode */ }
 }
 
+function refreshQueuesForCalendarDayBoundary(force) {
+  const today = localDateKey(new Date());
+  if (!force && window._bmhQueueCalendarDay === today) return;
+  window._bmhQueueCalendarDay = today;
+  ensureDailyReceptionReset && ensureDailyReceptionReset();
+  renderDocQueue && renderDocQueue();
+  renderReceptionPage && renderReceptionPage();
+  renderDashboard && renderDashboard();
+}
+
+function scheduleQueueCalendarDayRefresh() {
+  if (window._bmhQueueDayRefreshStarted) return;
+  window._bmhQueueDayRefreshStarted = true;
+  window._bmhQueueCalendarDay = localDateKey(new Date());
+  const scheduleNext = function () {
+    if (window._bmhQueueDayRefreshTimer) clearTimeout(window._bmhQueueDayRefreshTimer);
+    const now = new Date();
+    const next = new Date(now);
+    next.setHours(24, 0, 2, 0);
+    const delay = Math.max(1000, next.getTime() - now.getTime());
+    window._bmhQueueDayRefreshTimer = setTimeout(function () {
+      refreshQueuesForCalendarDayBoundary(true);
+      scheduleNext();
+    }, delay);
+  };
+  scheduleNext();
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') refreshQueuesForCalendarDayBoundary(false);
+  });
+  window.addEventListener('focus', function () { refreshQueuesForCalendarDayBoundary(false); });
+}
+
 /** Update demographics for an existing patient (same BMSH ID shown in form) — no new token / fee. */
 function updateExistingPatientFromReceptionForm(bmhId) {
   const uid = String(bmhId || '').trim();
@@ -33498,12 +33530,34 @@ function applyRealtimePatientRecord(record, key) {
   rebuildPatientsArrayFromGlobalCache();
   renderActivePageAfterRealtimeUpdate();
 }
+function removeRealtimePatientRecord(key) {
+  const id = String(key || '').trim();
+  if (!id) return;
+  const cache = Array.isArray(window._BMH_ALL_PATIENTS_CACHE) ? window._BMH_ALL_PATIENTS_CACHE : [];
+  window._BMH_ALL_PATIENTS_CACHE = cache.filter(function (p) { return p && String(p.bmhId || '') !== id; });
+  rebuildPatientsArrayFromGlobalCache();
+  renderActivePageAfterRealtimeUpdate();
+}
 function startPatientsRealtimeUpdates() {
   if (window._bmhPatientsRealtimeStarted || !window.FBDB) return;
   window._bmhPatientsRealtimeStarted = true;
   const ref = window.FBDB.ref('patients');
-  ref.on('child_changed', function (snap) {
+  const knownPatientIds = new Set((window._BMH_ALL_PATIENTS_CACHE || []).map(function (p) { return String(p?.bmhId || '').trim(); }).filter(Boolean));
+  ref.on('child_added', function (snap) {
+    const key = String(snap.key || '').trim();
+    if (knownPatientIds.has(key)) return;
+    knownPatientIds.add(key);
     applyRealtimePatientRecord(snap.val(), snap.key);
+  });
+  ref.on('child_changed', function (snap) {
+    const key = String(snap.key || '').trim();
+    if (key) knownPatientIds.add(key);
+    applyRealtimePatientRecord(snap.val(), snap.key);
+  });
+  ref.on('child_removed', function (snap) {
+    const key = String(snap.key || '').trim();
+    if (key) knownPatientIds.delete(key);
+    removeRealtimePatientRecord(snap.key);
   });
 }
 function schedulePatientsRefreshLoop() {
@@ -33525,6 +33579,7 @@ window.refreshPatientsFromFirebase = refreshPatientsFromFirebase;
 function loadPatientsFromFirebase() {
   if(window._bmhRtdbPatientsListening) return;
   window._bmhRtdbPatientsListening = true;
+  scheduleQueueCalendarDayRefresh && scheduleQueueCalendarDayRefresh();
   refreshPatientsFromFirebase().then(function () { startPatientsRealtimeUpdates(); });
   schedulePatientsRefreshLoop();
 }
