@@ -22747,7 +22747,6 @@ function refreshQueuesForCalendarDayBoundary(force) {
   const today = localDateKey(new Date());
   if (!force && window._bmhQueueCalendarDay === today) return;
   window._bmhQueueCalendarDay = today;
-  ensureDailyReceptionReset && ensureDailyReceptionReset();
   renderDocQueue && renderDocQueue();
   renderReceptionPage && renderReceptionPage();
   renderDashboard && renderDashboard();
@@ -33528,7 +33527,7 @@ function applyRealtimePatientRecord(record, key) {
   else cache.unshift(row);
   window._BMH_ALL_PATIENTS_CACHE = cache;
   rebuildPatientsArrayFromGlobalCache();
-  renderActivePageAfterRealtimeUpdate();
+  _debouncedRenderDash();
 }
 function removeRealtimePatientRecord(key) {
   const id = String(key || '').trim();
@@ -33536,19 +33535,13 @@ function removeRealtimePatientRecord(key) {
   const cache = Array.isArray(window._BMH_ALL_PATIENTS_CACHE) ? window._BMH_ALL_PATIENTS_CACHE : [];
   window._BMH_ALL_PATIENTS_CACHE = cache.filter(function (p) { return p && String(p.bmhId || '') !== id; });
   rebuildPatientsArrayFromGlobalCache();
-  renderActivePageAfterRealtimeUpdate();
+  _debouncedRenderDash();
 }
 function startPatientsRealtimeUpdates() {
   if (window._bmhPatientsRealtimeStarted || !window.FBDB) return;
   window._bmhPatientsRealtimeStarted = true;
   const ref = window.FBDB.ref('patients');
   const knownPatientIds = new Set((window._BMH_ALL_PATIENTS_CACHE || []).map(function (p) { return String(p?.bmhId || '').trim(); }).filter(Boolean));
-  ref.on('child_added', function (snap) {
-    const key = String(snap.key || '').trim();
-    if (knownPatientIds.has(key)) return;
-    knownPatientIds.add(key);
-    applyRealtimePatientRecord(snap.val(), snap.key);
-  });
   ref.on('child_changed', function (snap) {
     const key = String(snap.key || '').trim();
     if (key) knownPatientIds.add(key);
