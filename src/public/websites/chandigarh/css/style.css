@@ -104,6 +104,18 @@ body.mobile-open {
   background: var(--primary-light);
 }
 
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 img {
   max-width: 100%;
   height: auto;
@@ -496,6 +508,8 @@ h1, h2, h3, h4, h5, h6 {
   transform: translateX(100%);
   transition: transform 0.4s cubic-bezier(0.4,0,0.2,1);
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   box-shadow: var(--shadow-xl);
 }
 
@@ -566,6 +580,7 @@ h1, h2, h3, h4, h5, h6 {
    ============================================================ */
 .hero-section {
   height: 100vh;
+  height: 100dvh; /* iOS Safari fix: avoids toolbar overlap */
   min-height: 700px;
   position: relative;
   overflow: hidden;
@@ -575,6 +590,7 @@ h1, h2, h3, h4, h5, h6 {
   width: 100%;
   height: 100%;
   position: relative;
+  touch-action: pan-y; /* allow vertical scroll; JS handles horizontal swipe */
 }
 
 .hero-slide {
@@ -1371,6 +1387,7 @@ h1, h2, h3, h4, h5, h6 {
 .testimonials-track-wrapper {
   overflow: hidden;
   position: relative;
+  touch-action: pan-y;
 }
 
 .testimonials-track {
@@ -1973,7 +1990,10 @@ h1, h2, h3, h4, h5, h6 {
   transform: translateY(20px) scale(0.97);
   transition: transform 0.35s cubic-bezier(0.4,0,0.2,1);
   max-height: 90vh;
+  max-height: 90dvh;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 .modal-overlay.open .appt-modal {

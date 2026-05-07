@@ -23760,8 +23760,9 @@ function parseIolSummary(iol) {
 }
 function normalizeOTCaseRecord(c) {
   const src = c || {};
-  const pt = (typeof PATIENTS !== 'undefined' && PATIENTS.find && src.bmhId)
-    ? (PATIENTS.find(function (p) { return p.bmhId === src.bmhId; }) || {})
+  const bmhId = src.bmhId || src.bmshId || src.bmshID || src.patientId || src.patient_id || src.uid || src.uhid || '';
+  const pt = (typeof PATIENTS !== 'undefined' && PATIENTS.find && bmhId)
+    ? (PATIENTS.find(function (p) { return p.bmhId === bmhId; }) || {})
     : {};
   const initials = src.initials || (src.patient || pt.name || '?').split(' ').map(function (n) { return n[0] || ''; }).join('').substring(0, 2).toUpperCase();
   const site = src.site || src.eye || src.operatingEye || src.opEye || src.surgEye || 'N/A';
@@ -23771,6 +23772,7 @@ function normalizeOTCaseRecord(c) {
   let status = src.status || 'pending';
   if (status === 'scheduled') status = 'pending';
   return Object.assign({}, src, {
+    bmhId: bmhId,
     patient: src.patient || src.name || pt.name || 'Pending',
     age: src.age || pt.age || '—',
     sex: src.sex || pt.sex || '—',
@@ -40386,13 +40388,76 @@ function loadPastVisits(bmhId, dept) {
     const sideHint = String(visit.procDone.notes || '').match(/\b(RE|LE|BE|OD|OS|OU|Right|Left|Both)\b/i);
     return visit.procDone.procedure + (sideHint ? (' (' + sideHint[0].toUpperCase() + ')') : '');
   };
+  const ensureLocalOTCasesForHistory = function () {
+    if (typeof loadOTCasesFromLocalStorage !== 'function') return false;
+    const localRows = loadOTCasesFromLocalStorage();
+    if (!localRows.length) return false;
+    let changed = false;
+    localRows.forEach(function (row) {
+      const normalized = normalizeOTCaseRecord(row);
+      if (!normalized.id) return;
+      const idx = (OT_CASES || []).findIndex(function (c) { return c && c.id === normalized.id; });
+      if (idx >= 0) {
+        const existing = normalizeOTCaseRecord(OT_CASES[idx]);
+        if (getOTCaseLastTouchedAt(normalized) > getOTCaseLastTouchedAt(existing)) {
+          OT_CASES[idx] = normalized;
+          changed = true;
+        }
+      } else {
+        OT_CASES.push(normalized);
+        changed = true;
+      }
+    });
+    return changed;
+  };
+  const refreshOTCasesForHistory = function (done) {
+    ensureLocalOTCasesForHistory();
+    if (typeof fbOnce !== 'function') {
+      done && done(false);
+      return;
+    }
+    fbOnce('otCases').then(function (data) {
+      let changed = false;
+      if (data) Object.values(data).forEach(function (row) {
+        const normalized = normalizeOTCaseRecord(row);
+        if (!normalized.id) return;
+        const idx = (OT_CASES || []).findIndex(function (c) { return c && c.id === normalized.id; });
+        if (idx >= 0) {
+          const existing = normalizeOTCaseRecord(OT_CASES[idx]);
+          if (getOTCaseLastTouchedAt(normalized) >= getOTCaseLastTouchedAt(existing)) {
+            OT_CASES[idx] = normalized;
+            changed = true;
+          }
+        } else {
+          OT_CASES.push(normalized);
+          changed = true;
+        }
+      });
+      if (changed && typeof saveOTCasesToLocalStorage === 'function') saveOTCasesToLocalStorage();
+      done && done(changed);
+    }).catch(function () {
+      done && done(false);
+    });
+  };
+  const getOphthoOTCasesForPatient = function () {
+    ensureLocalOTCasesForHistory();
+    const pt = window.CURRENT_PATIENT || (PATIENTS || []).find(function (p) { return p.bmhId === bmhId; }) || {};
+    const nameKey = String(pt.name || '').trim().toLowerCase();
+    const mobileKey = String(pt.mob || pt.mobile || '').replace(/\D/g, '');
+    return (OT_CASES || []).map(normalizeOTCaseRecord).filter(function (c) {
+      if (c.caseKind === 'obg') return false;
+      if (String(c.bmhId || '').trim() === String(bmhId || '').trim()) return true;
+      if (pt.otCaseId && c.id === pt.otCaseId) return true;
+      if (nameKey && String(c.patient || c.name || '').trim().toLowerCase() === nameKey) return true;
+      const cMobile = String(c.mobile || c.mob || c.phone || '').replace(/\D/g, '');
+      return !!(mobileKey && cMobile && mobileKey === cMobile);
+    }).sort(function (a,b) {
+      return String(getOTCaseDateKey(b) || b.date || b.createdAt || '').localeCompare(String(getOTCaseDateKey(a) || a.date || a.createdAt || ''));
+    });
+  };
   const renderVisits = (visitsObj) => {
     const visits = Object.entries(visitsObj || {}).map(([id, v]) => ({ id, ...(v||{}) }))
       .sort((a,b) => String(b.date || b.createdAt || '').localeCompare(String(a.date || a.createdAt || '')));
-    if(!visits.length) {
-      container.innerHTML = `<div style="text-align:center;padding:30px;color:var(--g2);font-size:12px"><div style="font-size:28px;margin-bottom:8px">📋</div>No past visits saved yet</div>`;
-      return;
-    }
     if (dept === 'ophtho') {
       const chargeLines = ((window.BMH_PATIENT_CHARGES && window.BMH_PATIENT_CHARGES[bmhId]) || []).filter(function (row) {
         const cat = String(row.cat || '').toLowerCase();
@@ -40401,9 +40466,11 @@ function loadPastVisits(bmhId, dept) {
         if (ref.startsWith('pr') || ref.startsWith('pr-') || String(row.source || '').toLowerCase() === 'doctor') return false;
         return cat === 'diagnostic' || cat === 'surgery' || /oct|hvf|fundus|biomet|yag|capsulotomy|laser|topograph|specular|procedure|surgery|ivt|injection|pmics|phaco|trab|iol/.test(text);
       });
-      const surgeries = (OT_CASES || []).map(normalizeOTCaseRecord).filter(function (c) { return c.bmhId === bmhId; }).sort(function (a,b) {
-        return String(b.date || '').localeCompare(String(a.date || ''));
-      }).slice(0, 10);
+      const surgeries = getOphthoOTCasesForPatient().slice(0, 10);
+      if (!visits.length && !chargeLines.length && !surgeries.length) {
+        container.innerHTML = `<div style="text-align:center;padding:30px;color:var(--g2);font-size:12px"><div style="font-size:28px;margin-bottom:8px">📋</div>No past visits saved yet</div>`;
+        return;
+      }
       const recentVisits = visits.slice(0, 6);
       const metrics = [
         { label: 'VA', get: function (v) {
@@ -40435,7 +40502,15 @@ function loadPastVisits(bmhId, dept) {
         { label: 'Consumables used', get: function (v) { return summarizeProcedureDoneConsumables(v) || '—'; } },
         { label: 'Prescription', get: function (v) { return Array.isArray(v.rx) && v.rx.length ? v.rx.map(function (d) { return rxDrugTradeName(d) || d.trade || d.name || 'Drug'; }).join(', ') : '—'; } }
       ];
-      const rightHistory = recentVisits.map(function (v) {
+      const historyByDate = {};
+      const pushHistoryItem = function (dateKey, displayDate, item) {
+        const cleanItem = String(item || '').trim();
+        if (!cleanItem) return;
+        const key = dateKey || displayDate || '—';
+        historyByDate[key] = historyByDate[key] || { date: displayDate || formatDateIN(dateKey) || '—', dateKey: dateKey || displayDate || '', items: [] };
+        if (!historyByDate[key].items.includes(cleanItem)) historyByDate[key].items.push(cleanItem);
+      };
+      recentVisits.forEach(function (v) {
         const vDateKey = fmtVisitDate(v.date || v.createdAt || v.dateLabel);
         const doneItems = chargeLines.filter(function (row) {
           return fmtVisitDate(row.ts || row.date) === vDateKey;
@@ -40446,11 +40521,26 @@ function loadPastVisits(bmhId, dept) {
         const procDone = summarizeProcedureDoneLine(v);
         const consumables = summarizeProcedureDoneConsumables(v);
         const combinedDone = Array.from(new Set(doneItems.concat(savedProc).concat(procDone ? [procDone] : []).concat(consumables ? ['Consumables: ' + consumables] : []))).filter(Boolean);
-        return { date: v.dateLabel || new Date(v.date || Date.now()).toLocaleDateString('en-IN'), items: combinedDone };
-      }).filter(function (x) { return x.items.length; });
+        combinedDone.forEach(function (item) {
+          pushHistoryItem(v.date || v.createdAt || v.dateLabel || vDateKey, v.dateLabel || new Date(v.date || Date.now()).toLocaleDateString('en-IN'), item);
+        });
+      });
+      chargeLines.forEach(function (row) {
+        const dateKey = row.ts || row.date || row.createdAt || '';
+        pushHistoryItem(dateKey, fmtVisitDate(dateKey), expandProcedureLabelForPrint(row.desc || row.name || row.service || row.for || '—'));
+      });
+      surgeries.forEach(function (c) {
+        const dateKey = getOTCaseDateKey(c) || c.date || c.createdAt || '';
+        const procedure = expandProcedureLabelForPrint(c.procedure || c.procedureMain || 'Surgery');
+        const details = [(c.site || c.eye || '').replace(/right/ig,'RE').replace(/left/ig,'LE').replace(/both/ig,'BE'), c.iolType || '', c.iolPower || ''].filter(Boolean).join(' · ');
+        pushHistoryItem(dateKey, formatDateIN(dateKey || c.date), 'OT: ' + procedure + (details ? ' (' + details + ')' : ''));
+      });
+      const rightHistory = Object.values(historyByDate).sort(function (a, b) {
+        return String(b.dateKey || b.date || '').localeCompare(String(a.dateKey || a.date || ''));
+      });
       container.innerHTML = `<div style="display:grid;grid-template-columns:1.35fr .85fr;gap:10px">
         <div style="overflow:auto">
-          <table style="width:100%;border-collapse:collapse;font-size:10.5px;table-layout:fixed">
+          ${recentVisits.length ? `<table style="width:100%;border-collapse:collapse;font-size:10.5px;table-layout:fixed">
             <thead>
               <tr>
                 <th style="text-align:left;padding:6px;border:1px solid var(--g5);width:130px">Metric</th>
@@ -40469,7 +40559,7 @@ function loadPastVisits(bmhId, dept) {
                 </tr>`;
               }).join('')}
             </tbody>
-          </table>
+          </table>` : '<div style="border:1px dashed var(--g4);border-radius:10px;background:var(--g6);padding:18px;text-align:center;color:var(--g1);font-size:12px">No saved eye examination visits yet. OT surgery and diagnostic history is shown on the right.</div>'}
         </div>
         <div style="border:1px solid var(--g5);border-radius:10px;background:#fff;padding:10px;align-self:start">
           <div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;letter-spacing:.45px;margin-bottom:8px">Surgery History</div>
@@ -40529,7 +40619,21 @@ function loadPastVisits(bmhId, dept) {
     }).join('');
   };
   if(typeof fbOnce === 'function') {
-    fbOnce(`visits/${bmhId}`).then(renderVisits).catch(() => renderVisits({}));
+    fbOnce(`visits/${bmhId}`).then(function (visitData) {
+      renderVisits(visitData);
+      if (dept === 'ophtho') {
+        refreshOTCasesForHistory(function (changed) {
+          if (changed) renderVisits(visitData);
+        });
+      }
+    }).catch(function () {
+      renderVisits({});
+      if (dept === 'ophtho') {
+        refreshOTCasesForHistory(function (changed) {
+          if (changed) renderVisits({});
+        });
+      }
+    });
   } else {
     renderVisits({});
   }
