@@ -10004,15 +10004,30 @@ function bmhRecordAdvanceAdjustment(bmhId, amount, reason, meta) {
   };
   TRANSACTIONS.push(txn);
   saveTransactionToFirebase && saveTransactionToFirebase(txn);
+  bmhSyncPatientAdvanceBalance(bmhId, {
+    adjustmentAmount: adjAmt,
+    purposeAppend: reason || 'Advance used'
+  });
   return txn;
 }
 function bmhSyncPatientAdvanceBalance(bmhId, opts) {
   if (!bmhId) return 0;
   const pt = PATIENTS.find(function (x) { return x.bmhId === bmhId; });
-  let nextAdvance = bmhComputeAdvanceBalanceForPatient(bmhId);
-  if (!pt) return nextAdvance;
+  if (!pt) return bmhComputeAdvanceBalanceForPatient(bmhId);
   const currentAdvance = Math.max(0, Number(pt.advance) || 0);
-  if (!opts?.allowIncrease && nextAdvance > currentAdvance) nextAdvance = currentAdvance;
+  const deltaAmount = Math.max(0, Number(opts?.deltaAmount || 0));
+  const adjustmentAmount = Math.max(0, Number(opts?.adjustmentAmount || 0));
+  let nextAdvance = currentAdvance;
+
+  if (deltaAmount > 0) {
+    nextAdvance = currentAdvance + deltaAmount;
+  } else if (adjustmentAmount > 0) {
+    nextAdvance = Math.max(0, currentAdvance - adjustmentAmount);
+  } else if (opts?.recomputeFromTransactions || currentAdvance <= 0) {
+    const computed = bmhComputeAdvanceBalanceForPatient(bmhId);
+    nextAdvance = opts?.allowIncrease ? Math.max(currentAdvance, computed) : computed;
+  }
+
   const patch = {};
   if (Math.abs(currentAdvance - nextAdvance) > 0.009) {
     pt.advance = nextAdvance;
@@ -10283,7 +10298,7 @@ function bmhPostPatientAdvanceFromBilling(opts) {
   const bmhId = txn.bmhId;
   TRANSACTIONS.push(txn);
   saveTransactionToFirebase && saveTransactionToFirebase(txn);
-  bmhSyncPatientAdvanceBalance(bmhId, { allowIncrease: true, purposeAppend: String(txn.service || '').replace(/^Advance\s+—\s*/,'') });
+  bmhSyncPatientAdvanceBalance(bmhId, { deltaAmount: txn.amount, allowIncrease: true, purposeAppend: String(txn.service || '').replace(/^Advance\s+—\s*/,'') });
   saveBmhFinancials();
   bmhRenderBillingAdvanceRows(true);
   bmhSelectBillPatient(bmhId);
@@ -23051,7 +23066,7 @@ async function registerPatient() {
     };
     TRANSACTIONS.push(txna);
     saveTransactionToFirebase&&saveTransactionToFirebase(txna);
-    bmhSyncPatientAdvanceBalance(uid, { allowIncrease: true, purposeAppend: advPurpose || 'Advance on account' });
+    bmhSyncPatientAdvanceBalance(uid, { deltaAmount: advAmt, allowIncrease: true, purposeAppend: advPurpose || 'Advance on account' });
   }
 
   fbUpdate&&fbUpdate('patients/'+uid,{
@@ -23253,7 +23268,7 @@ function scheduleSurgery() {
     };
     TRANSACTIONS.push(txn);
     saveTransactionToFirebase && saveTransactionToFirebase(txn);
-    bmhSyncPatientAdvanceBalance(ptId, { allowIncrease: true, purposeAppend: 'Surgery Advance — ' + sType });
+    bmhSyncPatientAdvanceBalance(ptId, { deltaAmount: advAmt, allowIncrease: true, purposeAppend: 'Surgery Advance — ' + sType });
     // Also store advance details on the OT case itself
     otCase.advancePaid = advAmt;
     fbUpdate && fbUpdate('otCases/'+otCase.id, {advancePaid:advAmt});
@@ -33544,6 +33559,12 @@ function startPatientsRealtimeUpdates() {
   window._bmhPatientsRealtimeStarted = true;
   const ref = window.FBDB.ref('patients');
   const knownPatientIds = new Set((window._BMH_ALL_PATIENTS_CACHE || []).map(function (p) { return String(p?.bmhId || '').trim(); }).filter(Boolean));
+  ref.limitToLast(100).on('child_added', function (snap) {
+    const key = String(snap.key || '').trim();
+    if (!key || knownPatientIds.has(key)) return;
+    knownPatientIds.add(key);
+    applyRealtimePatientRecord(snap.val(), snap.key);
+  });
   ref.on('child_changed', function (snap) {
     const key = String(snap.key || '').trim();
     if (key) knownPatientIds.add(key);
@@ -33696,6 +33717,58 @@ function listenAppointments() {
 // ── TRANSACTIONS / COLLECTIONS ───────────────────────────────
 function saveTodayTransactionsToLocal() {
   try { localStorage.setItem('bmh_transactions_' + todayKey(), JSON.stringify(TRANSACTIONS || [])); } catch (e) { /* noop */ }
+}
+function applyRealtimeTransactionRecord(txn, key) {
+  if (!txn || typeof txn !== 'object') return;
+  const id = String(txn.id || key || '').trim();
+  if (!id) return;
+  const centre = normalizeAppointmentCentreValue((CURRENT_USER?.centre || 'CHD'));
+  if (!CURRENT_USER?.isAdmin && normalizeAppointmentCentreValue(txn.centre || 'CHD') !== centre) return;
+  const next = Object.assign({}, txn, { id: id });
+  const idx = TRANSACTIONS.findIndex(function (row) { return String(row?.id || '') === id; });
+  if (idx >= 0) TRANSACTIONS[idx] = next;
+  else TRANSACTIONS.push(next);
+  saveTodayTransactionsToLocal();
+  if (next.bmhId && typeof bmhSyncPatientAdvanceBalance === 'function') bmhSyncPatientAdvanceBalance(next.bmhId, { localOnly: true });
+  renderCollectionDashboard && renderCollectionDashboard();
+  if (getActivePageId && getActivePageId() === 'pg-reception') renderReceptionPage && renderReceptionPage();
+}
+function removeRealtimeTransactionRecord(key) {
+  const id = String(key || '').trim();
+  if (!id) return;
+  const idx = TRANSACTIONS.findIndex(function (row) { return String(row?.id || '') === id; });
+  if (idx > -1) {
+    const bmhId = TRANSACTIONS[idx]?.bmhId || '';
+    TRANSACTIONS.splice(idx, 1);
+    saveTodayTransactionsToLocal();
+    if (bmhId && typeof bmhSyncPatientAdvanceBalance === 'function') bmhSyncPatientAdvanceBalance(bmhId, { localOnly: true });
+    renderCollectionDashboard && renderCollectionDashboard();
+    if (getActivePageId && getActivePageId() === 'pg-reception') renderReceptionPage && renderReceptionPage();
+  }
+}
+function startTodayTransactionsRealtimeUpdates(dateKey) {
+  if (!window.FBDB) return;
+  const day = dateKey || todayKey();
+  if (window._bmhTodayTransactionsRealtimeKey === day) return;
+  window._bmhTodayTransactionsRealtimeKey = day;
+  const ref = window.FBDB.ref('transactions/' + day);
+  const knownTxnIds = new Set((TRANSACTIONS || []).map(function (t) { return String(t?.id || '').trim(); }).filter(Boolean));
+  ref.on('child_added', function (snap) {
+    const key = String(snap.key || '').trim();
+    if (!key || knownTxnIds.has(key)) return;
+    knownTxnIds.add(key);
+    applyRealtimeTransactionRecord(snap.val(), snap.key);
+  });
+  ref.on('child_changed', function (snap) {
+    const key = String(snap.key || '').trim();
+    if (key) knownTxnIds.add(key);
+    applyRealtimeTransactionRecord(snap.val(), snap.key);
+  });
+  ref.on('child_removed', function (snap) {
+    const key = String(snap.key || '').trim();
+    if (key) knownTxnIds.delete(key);
+    removeRealtimeTransactionRecord(snap.key);
+  });
 }
 function saveTransactionToFirebase(txn) {
   const key = txn.id || fbKey();
@@ -34155,6 +34228,7 @@ function loadTodayTransactions() {
     saveTodayTransactionsToLocal();
     bmhRunEndOfDayEegPurge && bmhRunEndOfDayEegPurge();
     renderCollectionDashboard && renderCollectionDashboard();
+    startTodayTransactionsRealtimeUpdates(today);
   });
 }
 
