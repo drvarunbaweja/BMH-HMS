@@ -4842,3 +4842,205 @@ details.procedure-card summary::-webkit-details-marker {
     grid-template-rows: 170px auto;
   }
 }
+
+/* Specialty hero imagery and interactive procedure panels */
+.page-hero .hero-split,
+.page-hero .container.hero-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(280px, .95fr);
+  gap: 38px;
+  align-items: center;
+}
+
+.hero-copy {
+  position: relative;
+  z-index: 2;
+}
+
+.hero-photo {
+  position: relative;
+  min-height: 330px;
+  border-radius: 8px;
+  overflow: hidden;
+  background-size: cover;
+  background-position: center;
+  box-shadow: 0 26px 70px rgba(0, 0, 0, .24);
+  border: 1px solid rgba(255, 255, 255, .18);
+  isolation: isolate;
+}
+
+.hero-photo::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,.2), rgba(255,255,255,0) 38%, rgba(10,31,68,.28));
+  z-index: 1;
+}
+
+.hero-photo::after {
+  content: attr(data-caption);
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 18px;
+  z-index: 2;
+  padding: 12px 14px;
+  border-radius: 8px;
+  color: #fff;
+  background: rgba(10, 31, 68, .64);
+  backdrop-filter: blur(10px);
+  font-size: .86rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.hero-photo--eye {
+  background:
+    radial-gradient(circle at 50% 50%, #020617 0 6%, #075985 7% 13%, #0ea5e9 14% 26%, #67e8f9 27% 36%, #eff6ff 37% 43%, transparent 44%),
+    radial-gradient(ellipse at 50% 50%, rgba(255,255,255,.95) 0 36%, rgba(219,234,254,.92) 37% 47%, rgba(14,116,144,.62) 48% 52%, transparent 53%),
+    linear-gradient(135deg, #e0f2fe, #fdf2f8 52%, #ecfeff);
+}
+
+.hero-photo--eye::before {
+  background:
+    linear-gradient(8deg, transparent 39%, rgba(15,23,42,.16) 40% 43%, transparent 44%),
+    radial-gradient(circle at 38% 35%, rgba(255,255,255,.72) 0 4%, transparent 5%),
+    linear-gradient(135deg, rgba(255,255,255,.24), rgba(255,255,255,0));
+}
+
+.hero-photo--obg { background-image: url("../images/hero/obgyn-mother-newborn.jpg"); }
+.hero-photo--psych { background-image: url("../images/hero/psychiatry-free-mind.jpg"); }
+.hero-photo--skin { background-image: url("../images/hero/aesthetics-glow.jpg"); }
+.hero-photo--cataract { background-image: url("../images/procedures/cataract-family.jpg"); }
+.hero-photo--lasik { background-image: url("../images/hero/lasik-laser.jpg"); }
+.hero-photo--migs { background-image: url("../images/hero/migs-devices.jpg"); }
+
+.service-card[data-scroll-target],
+.services-grid .service-card {
+  cursor: pointer;
+}
+
+.procedure-anchor-panel {
+  scroll-margin-top: 118px;
+}
+
+.care-room-visual {
+  position: relative;
+  min-height: 180px;
+  overflow: hidden;
+  background: linear-gradient(135deg, #f8fafc, #eef2ff);
+}
+
+.care-room-visual::before,
+.care-room-visual::after {
+  content: "";
+  position: absolute;
+  border-radius: 999px 999px 24px 24px;
+}
+
+.care-room-visual::before {
+  width: 90px;
+  height: 118px;
+  left: 34px;
+  bottom: 18px;
+  background: linear-gradient(#f8fafc 0 52%, #fff 53%), radial-gradient(circle at 50% 22%, #f2c7a4 0 18px, transparent 19px);
+  box-shadow: inset 0 0 0 1px rgba(15,23,42,.08), 0 12px 32px rgba(15,23,42,.1);
+}
+
+.care-room-visual::after {
+  width: 106px;
+  height: 98px;
+  right: 34px;
+  bottom: 22px;
+  background: linear-gradient(#fed7aa 0 42%, #fef3c7 43%);
+  box-shadow: 0 -38px 0 -20px #f2c7a4, 0 12px 28px rgba(15,23,42,.08);
+}
+
+.care-room-visual--psych {
+  background: linear-gradient(135deg, #ecfeff, #fdf2f8);
+}
+
+.care-room-visual--skin {
+  background: linear-gradient(135deg, #fff7ed, #fdf2f8);
+}
+
+.care-room-visual--obg {
+  background: linear-gradient(135deg, #fff7ed, #f8fafc);
+}
+
+.iol-simulation {
+  margin: 18px 0 18px;
+  border: 1px solid rgba(10,31,68,.1);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.iol-scene {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  min-height: 128px;
+}
+
+.iol-view {
+  position: relative;
+  display: grid;
+  place-items: end center;
+  padding: 12px 8px;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(14,165,233,.26) 0 45%, rgba(34,197,94,.18) 46% 100%),
+    linear-gradient(90deg, #e0f2fe, #fefce8);
+}
+
+.iol-view::before {
+  content: "";
+  position: absolute;
+  inset: 16px 20px 38px;
+  background:
+    linear-gradient(90deg, transparent 0 18%, #0f172a 19% 22%, transparent 23% 55%, #0f172a 56% 59%, transparent 60%),
+    linear-gradient(180deg, transparent 0 55%, #22c55e 56% 60%, transparent 61%),
+    radial-gradient(circle at 68% 26%, #facc15 0 8%, transparent 9%);
+  filter: blur(var(--blur, 0));
+  transform: scale(var(--scale, 1));
+}
+
+.iol-view span {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  padding: 6px 7px;
+  border-radius: 6px;
+  color: #0f172a;
+  background: rgba(255,255,255,.82);
+  font-size: .68rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.iol-simulation--mono .iol-view--intermediate,
+.iol-simulation--mono .iol-view--near,
+.iol-simulation--edof .iol-view--near {
+  --blur: 5px;
+}
+
+.iol-simulation--mono .iol-view--near {
+  --blur: 7px;
+  --scale: 1.05;
+}
+
+.iol-simulation--trifocal .iol-view {
+  --blur: 0;
+}
+
+@media (max-width: 920px) {
+  .page-hero .hero-split,
+  .page-hero .container.hero-split {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+
+  .hero-photo {
+    min-height: 260px;
+  }
+}

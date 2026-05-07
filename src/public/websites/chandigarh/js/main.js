@@ -193,7 +193,13 @@ const initNavigation = () => {
       toggle.setAttribute('aria-expanded', String(isOpen));
     });
 
-    item.addEventListener('mouseleave', closeDropdown);
+    let closeTimer;
+    item.addEventListener('mouseenter', () => {
+      window.clearTimeout(closeTimer);
+    });
+    item.addEventListener('mouseleave', () => {
+      closeTimer = window.setTimeout(closeDropdown, 220);
+    });
     menu.addEventListener('click', closeDropdown);
   });
 
@@ -1080,8 +1086,8 @@ const initMobileStickyCta = () => {
   if (!window.location.pathname.includes('/websites/chandigarh')) return;
   if ($('.mobile-sticky-cta')) return;
 
-  const phone = '+918146622802';
-  const whatsapp = '918146622802';
+  const phone = '+916280048805';
+  const whatsapp = '916280048805';
   const bar = document.createElement('nav');
   bar.className = 'mobile-sticky-cta';
   bar.setAttribute('aria-label', 'Quick patient actions');
@@ -1270,7 +1276,27 @@ const initMobileDropdowns = () => {
 };
 
 /* ============================================================
-   25. ANNOUNCEMENT BANNER DISMISS
+   25. PROCEDURE CARD SCROLL
+   ============================================================ */
+const initProcedureCardScroll = () => {
+  $$('.services-grid .service-card').forEach(card => {
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('a, button, summary, details')) return;
+
+      const explicitTarget = card.getAttribute('data-scroll-target');
+      const target = explicitTarget
+        ? document.querySelector(explicitTarget)
+        : document.querySelector('.visual-education, .procedure-anchor-panel');
+
+      if (!target) return;
+
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+};
+
+/* ============================================================
+   26. ANNOUNCEMENT BANNER DISMISS
    ============================================================ */
 const initAnnouncementBanner = () => {
   const banner = $('.announcement-banner');
@@ -1326,6 +1352,7 @@ const init = () => {
   initScrollSpy();
   initVideoModal();
   initMobileDropdowns();
+  initProcedureCardScroll();
   initAnnouncementBanner();
 };
 
