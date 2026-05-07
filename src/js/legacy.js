@@ -33543,7 +33543,8 @@ function startPatientsRealtimeUpdates() {
   window._bmhPatientsRealtimeStarted = true;
   const ref = window.FBDB.ref('patients');
   const knownPatientIds = new Set((window._BMH_ALL_PATIENTS_CACHE || []).map(function (p) { return String(p?.bmhId || '').trim(); }).filter(Boolean));
-  ref.on('child_added', function (snap) {
+  const recentAddRef = ref.orderByChild('lastUpdated').startAt(new Date(Date.now() - 2 * 60 * 1000).toISOString());
+  recentAddRef.on('child_added', function (snap) {
     const key = String(snap.key || '').trim();
     if (knownPatientIds.has(key)) return;
     knownPatientIds.add(key);
