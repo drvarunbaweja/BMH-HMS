@@ -2578,6 +2578,199 @@ select.form-control {
   }
 }
 
+/* Compact page headers and richer medical visuals */
+body .page-hero {
+  padding-top: 44px !important;
+  padding-bottom: 50px !important;
+}
+
+body .section {
+  padding-top: 62px;
+  padding-bottom: 62px;
+}
+
+.doctor-photo-lg img,
+.doctor-photo img,
+.doctor-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.doctor-photo-lg,
+.doctor-photo,
+.doctor-avatar {
+  overflow: hidden;
+}
+
+.visual-photo {
+  background: #e0f2fe;
+  background-size: cover;
+  background-position: center;
+}
+
+.visual-photo--family {
+  background-image: linear-gradient(180deg, rgba(10,31,68,0), rgba(10,31,68,.18)), url("../images/procedures/cataract-family.jpg");
+}
+
+.visual-photo--lasik {
+  background-image: linear-gradient(180deg, rgba(10,31,68,0), rgba(10,31,68,.16)), url("../images/hero/lasik-laser.jpg");
+}
+
+.visual-photo--migs {
+  background-image: linear-gradient(180deg, rgba(10,31,68,0), rgba(10,31,68,.16)), url("../images/hero/migs-devices.jpg");
+}
+
+.visual-photo--obg {
+  background-image: linear-gradient(180deg, rgba(10,31,68,0), rgba(10,31,68,.12)), url("../images/hero/obgyn-mother-newborn.jpg");
+}
+
+.visual-photo--psychiatry {
+  background-image: linear-gradient(180deg, rgba(10,31,68,0), rgba(10,31,68,.12)), url("../images/hero/psychiatry-free-mind.jpg");
+}
+
+.visual-photo--aesthetics {
+  background-image: linear-gradient(180deg, rgba(10,31,68,0), rgba(10,31,68,.12)), url("../images/hero/aesthetics-glow.jpg");
+}
+
+.vision-compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 22px;
+}
+
+.vision-panel {
+  overflow: hidden;
+  border-radius: 8px;
+  border: 1px solid rgba(10,31,68,.08);
+  background: #fff;
+  box-shadow: 0 16px 38px rgba(10,31,68,.08);
+}
+
+.vision-scene {
+  position: relative;
+  min-height: 240px;
+  background: url("../images/procedures/cataract-family.jpg") center / cover no-repeat;
+}
+
+.vision-scene--blurred {
+  filter: blur(3px) saturate(.72) contrast(.82);
+}
+
+.vision-scene--blurred::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle, rgba(255,255,255,.52), rgba(148,163,184,.44) 46%, rgba(15,23,42,.2));
+}
+
+.vision-caption {
+  padding: 20px;
+}
+
+.vision-caption h3,
+.iol-card h3,
+.procedure-card h3 {
+  margin: 0 0 8px;
+  color: var(--primary);
+}
+
+.vision-caption p,
+.iol-card p,
+.procedure-card p {
+  margin: 0;
+  color: #64748b;
+  line-height: 1.7;
+}
+
+.iol-grid,
+.procedure-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 22px;
+}
+
+.iol-card,
+.procedure-card {
+  overflow: hidden;
+  border-radius: 8px;
+  border: 1px solid rgba(10,31,68,.08);
+  background: #fff;
+  box-shadow: 0 16px 38px rgba(10,31,68,.08);
+}
+
+.iol-visual,
+.procedure-visual {
+  min-height: 170px;
+  position: relative;
+}
+
+.iol-visual::before,
+.iol-visual::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+}
+
+.iol-visual::before {
+  inset: 38px 72px;
+  background: radial-gradient(circle, rgba(255,255,255,.9), rgba(125,211,252,.28));
+  border: 2px solid rgba(2,132,199,.28);
+  box-shadow: inset 0 0 28px rgba(2,132,199,.18);
+}
+
+.iol-visual--mono::after {
+  left: 50%;
+  top: 24px;
+  width: 2px;
+  height: 118px;
+  background: #0284c7;
+  box-shadow: -32px 0 0 #93c5fd, 32px 0 0 #93c5fd;
+  transform: translateX(-50%);
+}
+
+.iol-visual--multi::after {
+  inset: 54px 88px;
+  border: 2px solid #0284c7;
+  box-shadow: 0 0 0 12px rgba(14,165,233,.12), 0 0 0 26px rgba(14,165,233,.08);
+}
+
+.iol-visual--toric::after {
+  left: 50%;
+  top: 34px;
+  width: 88px;
+  height: 88px;
+  border: 2px dashed #0284c7;
+  transform: translateX(-50%) rotate(28deg);
+}
+
+.iol-card-body,
+.procedure-card-body {
+  padding: 22px;
+}
+
+details.procedure-card summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+details.procedure-card summary::-webkit-details-marker {
+  display: none;
+}
+
+.procedure-card[open] {
+  border-color: rgba(14,165,233,.32);
+}
+
+@media (max-width: 920px) {
+  .vision-compare,
+  .iol-grid,
+  .procedure-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .footer-bottom a:hover {
   color: rgba(255,255,255,0.7);
 }
