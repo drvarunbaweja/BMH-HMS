@@ -1,5 +1,5 @@
 import { db } from './firebase.js'
-import { collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc, query, where, orderBy, onSnapshot, serverTimestamp } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, query, where, orderBy, onSnapshot, serverTimestamp } from 'firebase/firestore'
 
 // Inventory Collections
 const INVENTORY_COLLECTION = 'inventory'
@@ -41,6 +41,19 @@ function mergeInventoryUsageRows(localRows, firebaseRows) {
   return Array.from(byKey.values()).sort((a, b) => getUsageTime(b) - getUsageTime(a))
 }
 
+function isRecentlyDeletedInventoryBarcode(barcode) {
+  if (typeof window === 'undefined') return false
+  const key = String(barcode || '').trim()
+  if (!key) return false
+  const deletedAt = Number(window._bmhInventoryDeletedAt?.[key] || 0)
+  if (!deletedAt) return false
+  if (Date.now() - deletedAt > 120000) {
+    delete window._bmhInventoryDeletedAt[key]
+    return false
+  }
+  return true
+}
+
 // Save inventory stock to Firestore
 export async function saveInventoryToFirebase(inventoryData) {
   try {
@@ -61,6 +74,20 @@ export async function saveInventoryToFirebase(inventoryData) {
     return inventoryData.barcode
   } catch (error) {
     console.error('Error saving inventory to Firebase:', error)
+    throw error
+  }
+}
+
+export async function deleteInventoryFromFirebase(barcode) {
+  try {
+    const key = String(barcode || '').trim()
+    if (!key) return false
+
+    await deleteDoc(doc(db, INVENTORY_COLLECTION, key))
+    console.log('Inventory deleted from Firebase:', key)
+    return true
+  } catch (error) {
+    console.error('Error deleting inventory from Firebase:', error)
     throw error
   }
 }
@@ -225,6 +252,7 @@ export async function syncInventoryWithFirebase() {
     if (window.INVENTORY) {
       window.INVENTORY.length = 0
       firebaseInventory.forEach(item => {
+        if (isRecentlyDeletedInventoryBarcode(item.barcode)) return
         window.INVENTORY.push(item)
       })
     }
@@ -271,6 +299,7 @@ export function initializeInventoryFirebaseSync() {
       // Update existing items in-place from Firebase (preserves array references)
       inventory.forEach(fbItem => {
         if (!fbItem.barcode) return
+        if (isRecentlyDeletedInventoryBarcode(fbItem.barcode)) return
         const existing = window.INVENTORY.find(x => x.barcode === fbItem.barcode)
         if (existing) {
           Object.assign(existing, fbItem)
@@ -283,6 +312,10 @@ export function initializeInventoryFirebaseSync() {
       // Remove items Firebase no longer has, but keep optimistic adds < 60 s old
       for (let i = window.INVENTORY.length - 1; i >= 0; i--) {
         const item = window.INVENTORY[i]
+        if (isRecentlyDeletedInventoryBarcode(item.barcode)) {
+          window.INVENTORY.splice(i, 1)
+          continue
+        }
         if (!item.barcode || firebaseBarSet.has(item.barcode)) continue
         if (now - (item._localAddedAt || 0) < 60000) continue // keep until Firebase confirms
         window.INVENTORY.splice(i, 1)
@@ -336,6 +369,7 @@ export function initializeInventoryFirebaseSync() {
 // Expose functions to window for legacy.js access
 if (typeof window !== 'undefined') {
   window.saveInventoryToFirebase = saveInventoryToFirebase
+  window.deleteInventoryFromFirebase = deleteInventoryFromFirebase
   window.savePurchaseToFirebase = savePurchaseToFirebase
   window.saveUsageToFirebase = saveUsageToFirebase
   window.loadInventoryFromFirebase = loadInventoryFromFirebase

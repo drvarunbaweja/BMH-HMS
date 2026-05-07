@@ -15881,9 +15881,11 @@ function adminClearAllInventoryStock() {
   if (typeof isAdminUser !== 'function' || !isAdminUser()) { showToast('Only admin can clear inventory', 'w'); return; }
   if (!bmhRequireInventoryDeletePin()) return;
   if (!confirm('Delete ALL current inventory rows? Barcode map will reset. This cannot be undone.')) return;
+  const rowsToDelete = INVENTORY.slice();
   INVENTORY.length = 0;
   if (typeof BCMAP === 'object' && BCMAP) { Object.keys(BCMAP).forEach(function (k) { delete BCMAP[k]; }); }
   saveInventoryStockToStorage();
+  bmhDeleteInventoryRowsFromCloud(rowsToDelete);
   renderStockList();
   renderInventoryPurchaseLog();
   renderInventoryStoreStock();
@@ -15892,6 +15894,27 @@ function adminClearAllInventoryStock() {
   showToast('Inventory cleared', 's');
 }
 window.adminClearAllInventoryStock = adminClearAllInventoryStock;
+function bmhInventoryFirebaseKey(barcode) {
+  return String(barcode || '').replace(/[.#$/\[\]]/g, '_');
+}
+function bmhDeleteInventoryRowsFromCloud(rows) {
+  const list = (Array.isArray(rows) ? rows : []).filter(function (row) { return row && row.barcode; });
+  if (!list.length) return;
+  window._bmhInventoryDeletedAt = window._bmhInventoryDeletedAt || {};
+  list.forEach(function (row) {
+    const barcode = String(row.barcode || '').trim();
+    if (!barcode) return;
+    window._bmhInventoryDeletedAt[barcode] = Date.now();
+    try {
+      if (window.FBDB) window.FBDB.ref('inventory/' + bmhInventoryFirebaseKey(barcode)).remove().catch(function (err) { console.warn('RTDB inventory delete failed', err); });
+    } catch (e) { console.warn('RTDB inventory delete failed', e); }
+    try {
+      if (typeof window.deleteInventoryFromFirebase === 'function') {
+        window.deleteInventoryFromFirebase(barcode).catch(function (err) { console.warn('Firestore inventory delete failed', err); });
+      }
+    } catch (e) { console.warn('Firestore inventory delete failed', e); }
+  });
+}
 function addInventoryVendorPrompt() {
   const name = normalizeInventoryTextValue(prompt('Vendor name') || '');
   if (!name) return;
@@ -15944,6 +15967,7 @@ function deleteInventoryStockRow(barcode) {
   INVENTORY.splice(idx, 1);
   delete BCMAP[barcode];
   saveInventoryStockToStorage();
+  bmhDeleteInventoryRowsFromCloud([item]);
   renderStockList();
   renderInventoryStoreStock();
   renderInventoryPoAlerts();
@@ -15965,6 +15989,7 @@ function deleteInventoryIolGroup(company, brand, power, store) {
   window.INVENTORY = INVENTORY.filter(function (i) { return !matches.includes(i); });
   matches.forEach(function (i) { if (i.barcode) delete BCMAP[i.barcode]; });
   saveInventoryStockToStorage();
+  bmhDeleteInventoryRowsFromCloud(matches);
   renderStockList();
   renderInventoryStoreStock();
   renderInventoryPoAlerts();
@@ -16799,7 +16824,6 @@ function applyLoadedChargesRows(rows) {
   Object.keys(CENTRE_CHARGES.RPR || {}).forEach(function (key) { delete CENTRE_CHARGES.RPR[key]; });
   Object.assign(CENTRE_CHARGES.CHD, nextCentreCharges.CHD);
   Object.assign(CENTRE_CHARGES.RPR, nextCentreCharges.RPR);
-  ensureCriticalChargesLoaded();
   return CHARGES_DATA.length > 0;
 }
 function loadChargesFromLocalStorage() {
@@ -16817,7 +16841,6 @@ function loadChargesFromLocalStorage() {
       if (d && d.CHD) Object.assign(CENTRE_CHARGES.CHD, d.CHD);
       if (d && d.RPR) Object.assign(CENTRE_CHARGES.RPR, d.RPR);
     }
-    ensureCriticalChargesLoaded();
   } catch (e) { /* noop */ }
 }
 function saveChargesToFirebase(){
@@ -16897,7 +16920,6 @@ function loadChargesFromFirebase(){
     const d=snap.val(); if(!d) return;
     if(d.CHD) Object.assign(CENTRE_CHARGES.CHD, d.CHD);
     if(d.RPR) Object.assign(CENTRE_CHARGES.RPR, d.RPR);
-    ensureCriticalChargesLoaded();
     saveCentreChargesMapsToLocalStorage();
     renderCentresCharges && renderCentresCharges();
     syncReceptionConsultationFee && syncReceptionConsultationFee();
