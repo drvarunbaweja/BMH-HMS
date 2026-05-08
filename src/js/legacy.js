@@ -22832,6 +22832,7 @@ function refreshQueuesForCalendarDayBoundary(force) {
   const today = localDateKey(new Date());
   if (!force && window._bmhQueueCalendarDay === today) return;
   window._bmhQueueCalendarDay = today;
+  startTodayQueuePatientsRealtimeUpdates && startTodayQueuePatientsRealtimeUpdates(true);
   renderDocQueue && renderDocQueue();
   renderReceptionPage && renderReceptionPage();
   renderDashboard && renderDashboard();
@@ -33648,6 +33649,35 @@ function startPatientsRealtimeUpdates() {
     removeRealtimePatientRecord(snap.key);
   });
 }
+function stopTodayQueuePatientsRealtimeUpdates() {
+  const live = window._bmhTodayQueuePatientsRealtime;
+  if (!live || !live.ref || !live.callbacks) return;
+  try {
+    live.ref.off('child_added', live.callbacks.added);
+    live.ref.off('child_changed', live.callbacks.changed);
+  } catch (e) {}
+  window._bmhTodayQueuePatientsRealtime = null;
+  window._bmhTodayQueuePatientsRealtimeDay = '';
+}
+function startTodayQueuePatientsRealtimeUpdates(force) {
+  if (!window.FBDB) return;
+  const today = localDateKey(new Date());
+  if (!force && window._bmhTodayQueuePatientsRealtimeDay === today && window._bmhTodayQueuePatientsRealtime) return;
+  stopTodayQueuePatientsRealtimeUpdates();
+  const ref = window.FBDB.ref('patients').orderByChild('queueDate').equalTo(today);
+  const callbacks = {
+    added: function (snap) {
+      applyRealtimePatientRecord(snap.val(), snap.key);
+    },
+    changed: function (snap) {
+      applyRealtimePatientRecord(snap.val(), snap.key);
+    }
+  };
+  window._bmhTodayQueuePatientsRealtime = { ref: ref, callbacks: callbacks };
+  window._bmhTodayQueuePatientsRealtimeDay = today;
+  ref.on('child_added', callbacks.added);
+  ref.on('child_changed', callbacks.changed);
+}
 function schedulePatientsRefreshLoop() {
   if (window._bmhPatientsRefreshLoopStarted) return;
   window._bmhPatientsRefreshLoopStarted = true;
@@ -33668,7 +33698,10 @@ function loadPatientsFromFirebase() {
   if(window._bmhRtdbPatientsListening) return;
   window._bmhRtdbPatientsListening = true;
   scheduleQueueCalendarDayRefresh && scheduleQueueCalendarDayRefresh();
-  refreshPatientsFromFirebase().then(function () { startPatientsRealtimeUpdates(); });
+  refreshPatientsFromFirebase().then(function () {
+    startPatientsRealtimeUpdates();
+    startTodayQueuePatientsRealtimeUpdates();
+  });
   schedulePatientsRefreshLoop();
 }
 
