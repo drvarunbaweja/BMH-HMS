@@ -4455,6 +4455,7 @@ function populateOphthoForm(v) {
   setSel('nv-os-final', v.nvOSFinal);
   setV('nv-od-final-manual', v.nvODFinal);
   setV('nv-os-final-manual', v.nvOSFinal);
+  setV('ipd-val', v.ipdVal || v.ipd);
   syncUcvaToRefraction('od');
   syncUcvaToRefraction('os');
 
@@ -31672,6 +31673,7 @@ window.printUnifiedRx = function(deptId) {
   const subjOSva = document.getElementById('subj-os-va')?.value || window.CURRENT_PATIENT?.lastVisit?.subjOSva || '';
   const nvOD  = document.getElementById('nv-od-final')?.value || document.getElementById('ucva-od-near')?.value || window.CURRENT_PATIENT?.lastVisit?.nvODFinal || '';
   const nvOS  = document.getElementById('nv-os-final')?.value || document.getElementById('ucva-os-near')?.value || window.CURRENT_PATIENT?.lastVisit?.nvOSFinal || '';
+  const ipdVal = document.getElementById('ipd-val')?.value || window.CURRENT_PATIENT?.lastVisit?.ipdVal || window.CURRENT_PATIENT?.lastVisit?.ipd || '';
   const obgAncOn = deptId === 'obg' ? !!document.getElementById('obg-track-anc')?.checked : false;
   const obgVitalsSummary = deptId === 'obg' ? [
     ['Wt', document.getElementById('obg-vitals-weight')?.value || window.CURRENT_PATIENT?.lastVisit?.['obg-vitals-weight'] || '—'],
@@ -31936,6 +31938,9 @@ window.printUnifiedRx = function(deptId) {
   const showIOP = incIOP && deptId==='oe' && (iopGatOD||iopGatOS||iopNctOD||iopNctOS);
   const showCorrectedIOP = showIOP && (iopCorrOD || iopCorrOS);
   const showEyeVitals = showVA || showIOP;
+  const showNearVaColumn = [nvOD, nvOS].some(hasMeaningfulText);
+  const showNearAddColumn = [addOD, addOS].some(hasMeaningfulText);
+  const showIpdLine = showGL && hasMeaningfulText(ipdVal);
   const typographyCss = buildDoctorRxTypographyCss(getDoctorProfileTypographyForCentre(doctorProfile, cpt.centre || CURRENT_USER?.centre || getEffectiveCentre?.() || 'CHD'));
 
   const rxEmptyNote = forceDeptRxSections && (!drugs || !drugs.length)
@@ -32202,6 +32207,7 @@ tr:nth-child(even) td{background:#fafafa}
 .watermark{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-30deg);font-size:80px;font-weight:900;color:rgba(0,0,0,.03);font-family:'Playfair Display','Georgia',serif;white-space:nowrap;pointer-events:none;z-index:0}
 /* OE plain instruction row */
 .oe-plain-row td{font-size:10px;font-style:italic;color:#444;background:#f8f8f8}
+.oe-ipd-line{font-size:8.8px;font-weight:800;color:#111;margin:-1px 0 4px;text-align:right;letter-spacing:.2px}
 /* Full design variants */
 .design-dx.classic{padding:6px 10px;border:1px solid #d9e0ea;border-left:4px solid #c89a2b;border-radius:10px;background:#fffdf8;font-size:8.8px;font-weight:700;line-height:1.28;color:#111;page-break-inside:avoid;break-inside:avoid}
 .design-dx-lines{display:block;margin-left:50%;text-align:left}
@@ -32385,10 +32391,10 @@ ${showEyeVitals ? `
 <div class="oe-eye-block">
 <div class="sec-divider"><span class="sec-label">${showVA && showIOP ? 'Visual Acuity / IOP' : showIOP ? 'IOP' : 'Visual Acuity'}</span></div>
 <table class="oe-eye-table">
-  <thead><tr><th>Eye</th>${showVA?'<th>UCDVA</th>':''}${showIOP?'<th>IOP (GAT)</th>':''}${showIOP&&(iopNctOD||iopNctOS)?'<th>IOP (NCT)</th>':''}${showCorrectedIOP?'<th>Corrected IOP</th>':''}${showVA?'<th>DVA</th><th>NVA</th>':''}</tr></thead>
+  <thead><tr><th>Eye</th>${showVA?'<th>UCDVA</th>':''}${showIOP?'<th>IOP (GAT)</th>':''}${showIOP&&(iopNctOD||iopNctOS)?'<th>IOP (NCT)</th>':''}${showCorrectedIOP?'<th>Corrected IOP</th>':''}${showVA?'<th>DVA</th>':''}${showNearVaColumn?'<th>NVA</th>':''}</tr></thead>
   <tbody>
-    <tr><td><b>OD (Right)</b></td>${showVA?`<td>${vaOD||'—'}</td>`:''}${showIOP?`<td class="${parseFloat(iopGatOD)>21?'flag-h':'flag-n'}">${iopGatOD?iopGatOD+' mmHg':'—'}</td>`:''}${showIOP&&(iopNctOD||iopNctOS)?`<td class="${parseFloat(iopNctOD)>21?'flag-h':'flag-n'}">${iopNctOD?iopNctOD+' mmHg':'—'}</td>`:''}${showCorrectedIOP?`<td class="${parseFloat(iopCorrOD)>21?'flag-h':'flag-n'}">${iopCorrOD||'—'}</td>`:''}${showVA?`<td>${subjODva||'—'}</td><td>${nvOD||'—'}</td>`:''}</tr>
-    <tr><td><b>OS (Left)</b></td>${showVA?`<td>${vaOS||'—'}</td>`:''}${showIOP?`<td class="${parseFloat(iopGatOS)>21?'flag-h':'flag-n'}">${iopGatOS?iopGatOS+' mmHg':'—'}</td>`:''}${showIOP&&(iopNctOD||iopNctOS)?`<td class="${parseFloat(iopNctOS)>21?'flag-h':'flag-n'}">${iopNctOS?iopNctOS+' mmHg':'—'}</td>`:''}${showCorrectedIOP?`<td class="${parseFloat(iopCorrOS)>21?'flag-h':'flag-n'}">${iopCorrOS||'—'}</td>`:''}${showVA?`<td>${subjOSva||'—'}</td><td>${nvOS||'—'}</td>`:''}</tr>
+    <tr><td><b>OD (Right)</b></td>${showVA?`<td>${vaOD||'—'}</td>`:''}${showIOP?`<td class="${parseFloat(iopGatOD)>21?'flag-h':'flag-n'}">${iopGatOD?iopGatOD+' mmHg':'—'}</td>`:''}${showIOP&&(iopNctOD||iopNctOS)?`<td class="${parseFloat(iopNctOD)>21?'flag-h':'flag-n'}">${iopNctOD?iopNctOD+' mmHg':'—'}</td>`:''}${showCorrectedIOP?`<td class="${parseFloat(iopCorrOD)>21?'flag-h':'flag-n'}">${iopCorrOD||'—'}</td>`:''}${showVA?`<td>${subjODva||'—'}</td>`:''}${showNearVaColumn?`<td>${nvOD||'—'}</td>`:''}</tr>
+    <tr><td><b>OS (Left)</b></td>${showVA?`<td>${vaOS||'—'}</td>`:''}${showIOP?`<td class="${parseFloat(iopGatOS)>21?'flag-h':'flag-n'}">${iopGatOS?iopGatOS+' mmHg':'—'}</td>`:''}${showIOP&&(iopNctOD||iopNctOS)?`<td class="${parseFloat(iopNctOS)>21?'flag-h':'flag-n'}">${iopNctOS?iopNctOS+' mmHg':'—'}</td>`:''}${showCorrectedIOP?`<td class="${parseFloat(iopCorrOS)>21?'flag-h':'flag-n'}">${iopCorrOS||'—'}</td>`:''}${showVA?`<td>${subjOSva||'—'}</td>`:''}${showNearVaColumn?`<td>${nvOS||'—'}</td>`:''}</tr>
   </tbody>
 </table>
 </div>` : ''}
@@ -32397,12 +32403,13 @@ ${showGL ? `
 <div class="oe-eye-block">
 <div class="sec-divider"><span class="sec-label">Glass Prescription</span></div>
 <table class="oe-eye-table">
-  <thead><tr><th>Eye</th><th>SPH</th><th>CYL</th><th>AXIS</th><th>ADD</th><th>DVA</th><th>NVA</th></tr></thead>
+  <thead><tr><th>Eye</th><th>SPH</th><th>CYL</th><th>AXIS</th>${showNearAddColumn?'<th>ADD</th>':''}<th>DVA</th>${showNearVaColumn?'<th>NVA</th>':''}</tr></thead>
   <tbody>
-    <tr><td><b>OD (Right)</b></td><td>${rfODSph||'0'}</td><td>${rfODCyl||'0'}</td><td>${rfODAx||'0°'}</td><td>${addOD||'—'}</td><td>${subjODva||vaOD||'—'}</td><td>${nvOD||'—'}</td></tr>
-    <tr><td><b>OS (Left)</b></td><td>${rfOSSph||'0'}</td><td>${rfOSCyl||'0'}</td><td>${rfOSAx||'0°'}</td><td>${addOS||'—'}</td><td>${subjOSva||vaOS||'—'}</td><td>${nvOS||'—'}</td></tr>
+    <tr><td><b>OD (Right)</b></td><td>${rfODSph||'0'}</td><td>${rfODCyl||'0'}</td><td>${rfODAx||'0°'}</td>${showNearAddColumn?`<td>${addOD||'—'}</td>`:''}<td>${subjODva||vaOD||'—'}</td>${showNearVaColumn?`<td>${nvOD||'—'}</td>`:''}</tr>
+    <tr><td><b>OS (Left)</b></td><td>${rfOSSph||'0'}</td><td>${rfOSCyl||'0'}</td><td>${rfOSAx||'0°'}</td>${showNearAddColumn?`<td>${addOS||'—'}</td>`:''}<td>${subjOSva||vaOS||'—'}</td>${showNearVaColumn?`<td>${nvOS||'—'}</td>`:''}</tr>
   </tbody>
 </table>
+${showIpdLine ? `<div class="oe-ipd-line">IPD - ${escapeHtmlConsent(ipdVal)}</div>` : ''}
 </div>` : ''}
 
 ${incPos && deptId==='oe' ? `
@@ -36980,9 +36987,8 @@ body{font-family:${fonts.body}}
 .pt-date{font-family:${fonts.body};font-size:${t.dateSize}px;font-weight:${t.headingWeight};font-style:${headingStyle};text-decoration:${headingDecoration}}
 .sec-label,.design-dx-title,.design-side-title,.design-taper-title,.design-med-tag,.section-pill,.rx-heading-accent{font-family:${fonts.heading};font-size:${t.headingSize}px;font-weight:${t.headingWeight};font-style:${headingStyle};text-decoration:${headingDecoration}}
 .rx-item-name,.design-med-name{font-family:${fonts.heading};font-size:${t.medicineSize}px}
-.diag-text,.design-dx-body{font-family:${fonts.body};font-size:${diagnosisSize}px!important}
+.diag-text,.design-dx-body,.design-dx-lines{font-family:${fonts.body};font-size:${diagnosisSize}px!important}
 .rx-item-instr,.design-med-instr{font-size:${instructionSize}px!important;line-height:1.58!important}
-.design-side-body,.advice-block{font-size:${instructionSize}px!important;line-height:1.65!important}
 .proc-item{font-size:${procedureSize}px!important;line-height:1.45!important}
 .oe-eye-block .sec-label{font-size:calc(${t.headingSize}px * ${t.eyeBlockScale})}
 .oe-eye-table{font-size:calc(9.6px * ${t.eyeBlockScale})}
@@ -37145,9 +37151,9 @@ function renderDrCredentials() {
         <div class="form-group" style="margin:0"><label class="fl">Patient Name Size (<span id="dr-typo-${key}-patientNameSize-value">${typography.patientNameSize}</span>px)</label><input type="range" min="14" max="28" step="1" value="${typography.patientNameSize}" oninput="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','patientNameSize',this.value,'number')"></div>
         <div class="form-group" style="margin:0"><label class="fl">Date Size (<span id="dr-typo-${key}-dateSize-value">${typography.dateSize}</span>px)</label><input type="range" min="8" max="18" step="0.5" value="${typography.dateSize}" oninput="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','dateSize',this.value,'number')"></div>
         <div class="form-group" style="margin:0"><label class="fl">Heading Size (<span id="dr-typo-${key}-headingSize-value">${typography.headingSize}</span>px)</label><input type="range" min="8" max="18" step="0.5" value="${typography.headingSize}" oninput="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','headingSize',this.value,'number')"></div>
-        <div class="form-group" style="margin:0"><label class="fl">Diagnosis Size (<span id="dr-typo-${key}-diagnosisSize-value">${typography.diagnosisSize}</span>px)</label><input type="range" min="8" max="18" step="0.5" value="${typography.diagnosisSize}" oninput="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','diagnosisSize',this.value,'number')"></div>
+        <div class="form-group" style="margin:0"><label class="fl">Diagnosis Text Size (<span id="dr-typo-${key}-diagnosisSize-value">${typography.diagnosisSize}</span>px)</label><input type="range" min="8" max="18" step="0.5" value="${typography.diagnosisSize}" oninput="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','diagnosisSize',this.value,'number')"></div>
         <div class="form-group" style="margin:0"><label class="fl">Medicine Size (<span id="dr-typo-${key}-medicineSize-value">${typography.medicineSize}</span>px)</label><input type="range" min="11" max="22" step="0.5" value="${typography.medicineSize}" oninput="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','medicineSize',this.value,'number')"></div>
-        <div class="form-group" style="margin:0"><label class="fl">Plain Instruction Size (<span id="dr-typo-${key}-instructionSize-value">${typography.instructionSize}</span>px)</label><input type="range" min="9" max="18" step="0.5" value="${typography.instructionSize}" oninput="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','instructionSize',this.value,'number')"></div>
+        <div class="form-group" style="margin:0"><label class="fl">Medicine Plain Line Size (<span id="dr-typo-${key}-instructionSize-value">${typography.instructionSize}</span>px)</label><input type="range" min="9" max="18" step="0.5" value="${typography.instructionSize}" oninput="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','instructionSize',this.value,'number')"></div>
         ${isEyeDoctor ? `<div class="form-group" style="margin:0"><label class="fl">Eye VA / Refraction / IOP Block (<span id="dr-typo-${key}-eyeBlockScale-value">${Number(typography.eyeBlockScale || 1).toFixed(2)}</span>x)</label><input type="range" min="0.8" max="1.4" step="0.05" value="${typography.eyeBlockScale || 1}" oninput="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','eyeBlockScale',this.value,'number')"></div>` : ''}
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">
@@ -40322,6 +40328,8 @@ function saveVisit(dept, opts) {
     visit.rfOSAdd  = document.getElementById('rf-os-add')?.value || '';
     visit.nvODFinal = document.getElementById('nv-od-final')?.value || document.getElementById('nv-od-final-manual')?.value || '';
     visit.nvOSFinal = document.getElementById('nv-os-final')?.value || document.getElementById('nv-os-final-manual')?.value || '';
+    visit.ipdVal = document.getElementById('ipd-val')?.value || '';
+    visit.ipd = visit.ipdVal;
     visit.fundODdisc = document.getElementById('fund-od-disc')?.value || '';
     visit.fundODcd   = document.getElementById('fund-od-cd')?.value   || '';
     visit.fundODmac  = document.getElementById('fund-od-mac')?.value  || '';
