@@ -10675,6 +10675,7 @@ window.printUnifiedRx = function(deptId) {
   // ── Doctor info ──
   const doctorName    = CURRENT_USER?.name || 'Dr. Varun Baweja';
   const doctorProfile = (typeof DOCTOR_PROFILES!=='undefined' && DOCTOR_PROFILES[doctorName]) || {};
+  const rxTypography  = getDoctorRxTypography(doctorProfile);
   const doctorDegrees = doctorProfile.degrees || CURRENT_USER?.degrees || 'MBBS,DO,DNB,Ex Cons Cambridgeshire(UK)';
   const doctorSpec    = {oe:'Ophthalmologist',obg:'Obstetrician & Gynaecologist',psych:'Psychiatrist',skin:'Dermatologist'}[deptId]||'Specialist';
   const doctorReg     = doctorProfile.reg || '';
@@ -10708,6 +10709,9 @@ body{font-family:'Lato',Georgia,serif;font-size:11.5px;color:#1a1a1a;background:
 .lbl-row{display:flex;gap:0;margin-bottom:6px;align-items:baseline}
 .lbl{font-size:11px;font-weight:700;text-transform:uppercase;min-width:120px;letter-spacing:.8px;color:#1A3C6E}
 .lbl-val{font-size:12px;color:#222}
+.dx-print-block{margin:6px 0 8px}
+.dx-print-lines{margin-left:50%;font-size:${rxTypography.diagnosisSize}px;font-weight:700;line-height:1.4;color:#222}
+.dx-print-lines div{margin-bottom:2px}
 .sec-title{font-family:'Playfair Display','Georgia',serif;font-size:13px;font-weight:700;color:#1A3C6E;margin:14px 0 7px;border-bottom:1.5px solid #1A3C6E;padding-bottom:3px;letter-spacing:.3px}
 table{width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:10px}
 th{background:#1A3C6E;color:#fff;border:1px solid #1A3C6E;padding:6px 9px;font-weight:700;text-align:center;font-size:10.5px;letter-spacing:.5px;text-transform:uppercase}
@@ -10716,7 +10720,7 @@ td.left{text-align:left}
 tr:nth-child(even) td{background:#f8f9fc}
 .rx-name{font-weight:700;font-size:13px;color:#1A3C6E;letter-spacing:.2px}
 .rx-gen{font-size:10.5px;color:#666;font-style:italic;margin-top:1px}
-.rx-instr{font-size:11px;color:#222;margin-top:6px;padding:6px 10px;background:#f0f4ff;border-left:3px solid #1A3C6E;border-radius:0 4px 4px 0;line-height:1.9}
+.rx-instr{font-size:${rxTypography.instructionSize}px;color:#222;margin-top:6px;padding:7px 10px;background:#f0f4ff;border-left:3px solid #1A3C6E;border-radius:0 4px 4px 0;line-height:1.75}
 .proc-item{padding:5px 0;font-size:15px;font-weight:800;border-bottom:1px solid #eee;display:flex;align-items:center;gap:8px}
 .fu-box{background:linear-gradient(135deg,#EBF3FF,#daeeff);border-radius:6px;padding:9px 16px;margin:10px 0;font-size:13px;font-weight:700;color:#1A3C6E;display:inline-block;border:1.5px solid rgba(26,60,110,.2)}
 .sig-row{display:flex;justify-content:space-between;align-items:flex-end;margin-top:28px;padding-top:12px;border-top:1px solid #eee}
@@ -10743,7 +10747,7 @@ ${lhImgSrc ? `<img src="${lhImgSrc}" class="lh-img" alt="Baweja Multispeciality 
 ${ptMob ? `<div class="phone-line">&#9990; ${ptMob} &nbsp;&nbsp;|&nbsp;&nbsp; BMSH ID: ${ptId}</div>` : `<div class="phone-line">BMSH ID: ${ptId}</div>`}
 
 ${cc ? `<div class="lbl-row" style="margin-top:8px"><span class="lbl">Complaints:</span><span class="lbl-val">${cc}${ccDur?' ('+ccDur+')':''}</span></div>` : ''}
-${dxList.length ? `<div class="lbl-row"><span class="lbl">Diagnosis:</span><span class="lbl-val">${dxList.join('; ')}</span></div>` : ''}
+${dxList.length ? `<div class="dx-print-block"><div class="dx-print-lines">${dxList.map(d=>`<div>${d}</div>`).join('')}</div></div>` : ''}
 
 ${showVA ? `
 <div class="sec-title">Visual Acuity Test:</div>
@@ -12728,29 +12732,60 @@ function processCsvData(csvText) {
 }
 
 // ── DOCTOR CREDENTIALS ────────────────────────────
+function getDoctorRxTypography(dr) {
+  const raw = (dr && dr.rxTypography) || {};
+  const num = (key, fallback, min, max) => {
+    const n = Number(raw[key]);
+    if(!Number.isFinite(n)) return fallback;
+    return Math.min(max, Math.max(min, n));
+  };
+  return {
+    diagnosisSize: num('diagnosisSize', 11.5, 8, 18),
+    instructionSize: num('instructionSize', 12, 9, 18)
+  };
+}
+function updateDoctorRxTypography(name, field, value) {
+  if(!DOCTOR_PROFILES[name]) return;
+  const next = Object.assign({}, DOCTOR_PROFILES[name].rxTypography || {});
+  next[field] = Number(value);
+  DOCTOR_PROFILES[name].rxTypography = next;
+  const key = name.replace(/\s/g,'_');
+  const label = document.getElementById('dr-rx-typo-' + key + '-' + field + '-value');
+  if(label) label.textContent = String(next[field]);
+}
+window.updateDoctorRxTypography = updateDoctorRxTypography;
+
 function renderDrCredentials() {
   const el = document.getElementById('dr-credentials-list'); if(!el) return;
-  el.innerHTML = Object.entries(DOCTOR_PROFILES||{}).map(([name,dr])=>`
+  el.innerHTML = Object.entries(DOCTOR_PROFILES||{}).map(([name,dr])=>{
+    const key = name.replace(/\s/g,'_');
+    const typography = getDoctorRxTypography(dr);
+    return `
     <div style="border:1.5px solid var(--g4);border-radius:var(--r);padding:12px;margin-bottom:8px">
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;align-items:center">
         <div class="form-group" style="margin:0"><label class="fl">Name</label><input type="text" value="${name}" style="font-size:12px" readonly></div>
-        <div class="form-group" style="margin:0"><label class="fl">Degrees</label><input type="text" id="dr-deg-${name.replace(/\s/g,'_')}" value="${dr.degrees||''}" placeholder="MBBS, MS, DNB…" style="font-size:12px"></div>
-        <div class="form-group" style="margin:0"><label class="fl">Reg No.</label><input type="text" id="dr-reg-${name.replace(/\s/g,'_')}" value="${dr.reg||''}" placeholder="PMC-XXXXX" style="font-size:12px"></div>
-        <div class="form-group" style="margin:0"><label class="fl">Specialty</label><input type="text" id="dr-spec-${name.replace(/\s/g,'_')}" value="${dr.dept||''}" placeholder="Ophthalmology…" style="font-size:12px"></div>
+        <div class="form-group" style="margin:0"><label class="fl">Degrees</label><input type="text" id="dr-deg-${key}" value="${dr.degrees||''}" placeholder="MBBS, MS, DNB…" style="font-size:12px"></div>
+        <div class="form-group" style="margin:0"><label class="fl">Reg No.</label><input type="text" id="dr-reg-${key}" value="${dr.reg||''}" placeholder="PMC-XXXXX" style="font-size:12px"></div>
+        <div class="form-group" style="margin:0"><label class="fl">Specialty</label><input type="text" id="dr-spec-${key}" value="${dr.dept||''}" placeholder="Ophthalmology…" style="font-size:12px"></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
         <div class="form-group" style="margin:0"><label class="fl">Signature (upload)</label>
           <input type="file" accept="image/*" onchange="uploadDrSignature('${name}',this)" style="font-size:11px">
         </div>
         <div class="form-group" style="margin:0"><label class="fl">Centre</label>
-          <select id="dr-centre-${name.replace(/\s/g,'_')}" style="font-size:12px">
+          <select id="dr-centre-${key}" style="font-size:12px">
             <option ${dr.centre==='CHD'?'selected':''}>CHD</option>
             <option ${dr.centre==='RPR'?'selected':''}>RPR</option>
             <option ${dr.centre==='CHD & RPR'?'selected':''}>CHD & RPR</option>
           </select>
         </div>
       </div>
-    </div>`).join('');
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--g5)">
+        <div class="form-group" style="margin:0"><label class="fl">Diagnosis Font (<span id="dr-rx-typo-${key}-diagnosisSize-value">${typography.diagnosisSize}</span>px)</label><input type="range" min="8" max="18" step="0.5" value="${typography.diagnosisSize}" oninput="updateDoctorRxTypography('${name.replace(/'/g, "\\'")}','diagnosisSize',this.value)"></div>
+        <div class="form-group" style="margin:0"><label class="fl">Plain Instruction Font (<span id="dr-rx-typo-${key}-instructionSize-value">${typography.instructionSize}</span>px)</label><input type="range" min="9" max="18" step="0.5" value="${typography.instructionSize}" oninput="updateDoctorRxTypography('${name.replace(/'/g, "\\'")}','instructionSize',this.value)"></div>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function saveDoctorCredentials() {
@@ -12765,6 +12800,7 @@ function saveDoctorCredentials() {
       if(reg !== undefined)  DOCTOR_PROFILES[name].reg     = reg;
       if(spec !== undefined) DOCTOR_PROFILES[name].dept    = spec;
       if(ctr !== undefined)  DOCTOR_PROFILES[name].centre  = ctr;
+      DOCTOR_PROFILES[name].rxTypography = Object.assign({}, DOCTOR_PROFILES[name].rxTypography || {}, getDoctorRxTypography(DOCTOR_PROFILES[name]));
     }
   });
   // Save entire DOCTOR_PROFILES to Firebase for persistence
