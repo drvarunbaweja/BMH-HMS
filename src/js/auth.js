@@ -71,7 +71,13 @@ export function watchAuthState(onLogin, onLogout) {
       onLogin(CURRENT_USER)
     } else {
       CURRENT_USER = null
-      window.CURRENT_USER = null
+      // Only clear window.CURRENT_USER if there is no active legacy session.
+      // Legacy session is indicated by sessionStorage.bmh_active_session (set by legacy.js).
+      // If that session exists, window.CURRENT_USER was already set synchronously from
+      // sessionStorage before this callback fired, and we must not overwrite it.
+      if (!sessionStorage.getItem('bmh_active_session')) {
+        window.CURRENT_USER = null
+      }
       onLogout()
     }
   })

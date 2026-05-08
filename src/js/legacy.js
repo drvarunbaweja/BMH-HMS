@@ -107,6 +107,23 @@ const USER_DB = {
 });
 let CURRENT_USER = null; // set on login
 
+// Pre-populate window.CURRENT_USER synchronously from sessionStorage so that
+// Firebase's onAuthStateChanged(null) guard in app.js sees it immediately,
+// even before DOMContentLoaded fires. Full session activation still happens in DOMContentLoaded.
+(function() {
+  try {
+    const raw = sessionStorage.getItem('bmh_active_session');
+    if (raw) {
+      const session = JSON.parse(raw);
+      const uname = session && session.u ? String(session.u).toLowerCase() : '';
+      const profile = uname ? USER_DB?.[uname] : null;
+      if (profile && profile.disabled !== true) {
+        window.CURRENT_USER = Object.assign({}, profile, { username: uname });
+      }
+    }
+  } catch (_) {}
+})();
+
 /** Firebase Auth (app.js) sets window.CURRENT_USER; legacy login sets this var — keep in sync. */
 window.syncLegacyCurrentUserFromFirebase = function () {
   const u = window.CURRENT_USER;
@@ -2945,7 +2962,7 @@ function nav(id, el, opts) {
   // Page-specific init
   if(pageKey==='dashboard')            deferPageWork(function(){ renderDashboard && renderDashboard(); });
   else if(pageKey==='doctor-queue')    deferPageWork(function(){ renderDocQueue && renderDocQueue(); });
-  else if(pageKey==='appointments')    deferPageWork(function(){ const d=document.getElementById('apt-date-inp'); if(d)d.value=new Date().toISOString().split('T')[0]; renderAptDay && renderAptDay(); });
+  else if(pageKey==='appointments')    deferPageWork(function(){ const d=document.getElementById('apt-date-inp'); if(d)d.value=new Date().toISOString().split('T')[0]; renderAptDay && renderAptDay(); renderFollowupRegister && renderFollowupRegister(); });
   else if(pageKey==='print-templates') deferPageWork(function(){ renderPrintTemplates && renderPrintTemplates(); });
   else if(pageKey==='consents')        deferPageWork(function(){ renderConsent && renderConsent(); updateConsentPatientHeader(); refreshConsentLibrary && refreshConsentLibrary(); });
   else if(pageKey==='ophtho')          deferPageWork(function(){ initQR && initQR(); renderRxDrugs && renderRxDrugs(); buildRefractionDropdowns && buildRefractionDropdowns(); renderOphthoPayList && renderOphthoPayList(); typeof initDiagnosisRowsIfEmpty==='function'&&initDiagnosisRowsIfEmpty(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); typeof wrapOphAdviceChipsWithDelete==='function'&&wrapOphAdviceChipsWithDelete(); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); }, 120); });
@@ -4843,6 +4860,26 @@ function openBookApt(slot) {
       PATIENTS.map(p=>`<option value="${p.name} — ${p.bmhId}"${cur&&cur.bmhId===p.bmhId?' selected':''}>${p.name} — ${p.bmhId}</option>`).join('');
   }
   // Set centre to current user's centre
+  const centreEl = document.getElementById('book-centre');
+  if(centreEl && window.CURRENT_USER?.centre) {
+    centreEl.value = window.CURRENT_USER.centre === 'RPR' ? 'Ropar' : 'Chandigarh';
+  }
+  openM('m-book-apt');
+}
+function openBookAptForPatient(bmhId, date) {
+  // Pre-fill the book-appointment modal for a specific patient and date
+  const dateEl = document.getElementById('book-date');
+  if(dateEl) dateEl.value = date || new Date().toISOString().split('T')[0];
+  // Also set the apt-date-inp so the day view refreshes to that date
+  const aptDateEl = document.getElementById('apt-date-inp');
+  if(aptDateEl && date) aptDateEl.value = date;
+  const timeEl = document.getElementById('book-time');
+  if(timeEl) timeEl.value = '9:00 AM';
+  const sel = document.getElementById('book-patient');
+  if(sel && PATIENTS && PATIENTS.length) {
+    sel.innerHTML = '<option value="">— Select Patient —</option>' +
+      PATIENTS.map(p=>`<option value="${p.name} — ${p.bmhId}"${p.bmhId===bmhId?' selected':''}>${p.name} — ${p.bmhId}</option>`).join('');
+  }
   const centreEl = document.getElementById('book-centre');
   if(centreEl && window.CURRENT_USER?.centre) {
     centreEl.value = window.CURRENT_USER.centre === 'RPR' ? 'Ropar' : 'Chandigarh';
@@ -28922,7 +28959,11 @@ function addCustomLabTest() {
 function renderAptDay() {
   const date = document.getElementById('apt-date-inp')?.value || new Date().toISOString().split('T')[0];
   const drFilter = document.getElementById('apt-dr-filter')?.value || '';
-  const centreFilter = normalizeAppointmentCentreValue(window.CURRENT_USER?.centre || getEffectiveCentre() || 'CHD');
+  const centreSelVal = document.getElementById('apt-centre-filter')?.value || '';
+  const userCentre = normalizeAppointmentCentreValue(window.CURRENT_USER?.centre || getEffectiveCentre() || 'CHD');
+  const showAllCentres = centreSelVal === 'ALL';
+  const centreFilter = showAllCentres ? null : (centreSelVal ? normalizeAppointmentCentreValue(centreSelVal) : userCentre);
+
   const timeSortVal = (slot) => {
     const s = normalizeAptTimeLabel(slot);
     const m = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
@@ -28931,7 +28972,8 @@ function renderAptDay() {
     if(String(m[3]).toUpperCase() === 'PM') h += 12;
     return h * 60 + Number(m[2]);
   };
-  const dayApts = APPOINTMENTS.filter(a => a.date === date && (!drFilter || a.doctor === drFilter) && normalizeAppointmentCentreValue(a.centre || 'CHD') === centreFilter)
+  const aptMatchesCentre = (a) => showAllCentres || normalizeAppointmentCentreValue(a.centre || 'CHD') === centreFilter;
+  const dayApts = APPOINTMENTS.filter(a => a.date === date && (!drFilter || a.doctor === drFilter) && aptMatchesCentre(a))
     .slice()
     .sort((a,b) => timeSortVal(a.time || a.scheduledTime) - timeSortVal(b.time || b.scheduledTime));
   const slotsEl = document.getElementById('apt-day-slots');
@@ -28969,7 +29011,8 @@ function renderAptDay() {
   </div>`).join('') : '<div style="padding:14px;text-align:center;color:var(--g1);font-size:12px">No appointments on this date</div>';
 
   const upcomingEl = document.getElementById('apt-upcoming-list');
-  if(upcomingEl) upcomingEl.innerHTML = APPOINTMENTS.filter(a => normalizeAppointmentCentreValue(a.centre || 'CHD') === centreFilter).slice().sort((a,b)=>{
+  const allCentreApts = APPOINTMENTS.filter(aptMatchesCentre);
+  if(upcomingEl) upcomingEl.innerHTML = allCentreApts.slice().sort((a,b)=>{
     const ad = new Date(`${a.date || '1970-01-01'}T00:00:00`).getTime() + (timeSortVal(a.time || a.scheduledTime) * 60000);
     const bd = new Date(`${b.date || '1970-01-01'}T00:00:00`).getTime() + (timeSortVal(b.time || b.scheduledTime) * 60000);
     return ad - bd;
@@ -28978,7 +29021,117 @@ function renderAptDay() {
     <div style="flex:1"><div style="font-weight:800">${a.patient}</div><div style="font-size:10.5px;color:var(--g1)">${a.purpose||a.type} · ${a.date}</div></div>
     <span class="badge bd-blue">${normalizeAptTimeLabel(a.time)}</span>
   </div>`).join('');
-  const ct = document.getElementById('apt-upcoming-ct'); if(ct) ct.textContent = APPOINTMENTS.filter(a => normalizeAppointmentCentreValue(a.centre || 'CHD') === centreFilter).length;
+  const ct = document.getElementById('apt-upcoming-ct'); if(ct) ct.textContent = allCentreApts.length;
+}
+
+function renderFollowupRegister() {
+  const el = document.getElementById('apt-followup-register');
+  if(!el) return;
+
+  const centreSelVal = document.getElementById('fur-centre-filter')?.value || '';
+  const statusFilter = document.getElementById('fur-status-filter')?.value || 'upcoming';
+  const userCentre = normalizeAppointmentCentreValue(window.CURRENT_USER?.centre || getEffectiveCentre() || 'CHD');
+  const showAllCentres = centreSelVal === 'ALL';
+  const centreFilter = showAllCentres ? null : (centreSelVal ? normalizeAppointmentCentreValue(centreSelVal) : userCentre);
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const DEPT_LABELS = { oe: 'Ophtho', ophtho: 'Ophtho', obg: 'OBG', psych: 'Psych', skin: 'Skin', general: 'General' };
+
+  // Collect all follow-up entries from PATIENTS array, de-duped by bmhId+dept+date
+  const seen = new Set();
+  const entries = [];
+
+  (window.PATIENTS || []).forEach(function(p) {
+    const ptCentre = normalizeAppointmentCentreValue(p.centre || 'CHD');
+    if(!showAllCentres && centreFilter && ptCentre !== centreFilter) return;
+
+    function addEntry(visit, deptKey) {
+      if(!visit || typeof visit !== 'object') return;
+      const fuDate = String(visit.rxFuDate || visit.followupDate || visit.nextReview || '').trim().slice(0,10);
+      if(!fuDate || fuDate.length < 10) return;
+      const dept = deptKey || visit.dept || visit.department || '';
+      const key = (p.bmhId || '') + '|' + dept + '|' + fuDate;
+      if(seen.has(key)) return;
+      seen.add(key);
+      entries.push({
+        name: p.name || p.patientName || '',
+        bmhId: p.bmhId || '',
+        mob: p.mob || p.mobile || '',
+        dept: dept,
+        doctor: visit.doctor || visit.consultedBy || '',
+        date: fuDate,
+        centre: ptCentre,
+        booked: !!(window.APPOINTMENTS || []).find(function(a){ return a.bmhId === p.bmhId && a.date === fuDate && a.status !== 'cancelled'; })
+      });
+    }
+
+    // From lastVisit
+    addEntry(p.lastVisit, p.lastDeptVisit || (p.lastVisit && p.lastVisit.dept) || '');
+
+    // From each dept in lastVisitByDept
+    if(p.lastVisitByDept && typeof p.lastVisitByDept === 'object') {
+      Object.keys(p.lastVisitByDept).forEach(function(dk) {
+        addEntry(p.lastVisitByDept[dk], dk);
+      });
+    }
+  });
+
+  // Apply status filter
+  const filtered = entries.filter(function(e) {
+    if(statusFilter === 'overdue') return e.date < todayStr;
+    if(statusFilter === 'upcoming') return e.date >= todayStr;
+    return true; // 'all'
+  }).sort(function(a,b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+
+  if(!filtered.length) {
+    el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--g1);font-size:13px">No follow-ups found for the selected filter</div>';
+    return;
+  }
+
+  const rows = filtered.map(function(e) {
+    let statusBadge, statusColor;
+    if(e.date < todayStr) {
+      statusBadge = 'OVERDUE'; statusColor = '#c0392b';
+    } else if(e.date === todayStr) {
+      statusBadge = 'TODAY'; statusColor = '#d68910';
+    } else {
+      statusBadge = 'UPCOMING'; statusColor = '#27ae60';
+    }
+    const deptLabel = DEPT_LABELS[e.dept] || e.dept || '—';
+    const centreLabel = e.centre === 'RPR' ? 'Ropar' : 'Chandigarh';
+    const bookBtnHtml = e.booked
+      ? `<span style="font-size:10px;color:#27ae60;font-weight:700">✓ Booked</span>`
+      : `<button class="btn btn-xs btn-outline" onclick="openBookAptForPatient('${e.bmhId}','${e.date}')">+ Book Slot</button>`;
+    return `<tr>
+      <td style="font-weight:700;font-size:12.5px">${escapeHtmlConsent(e.name)}</td>
+      <td style="font-size:11.5px;color:var(--bmh-blue)">${e.bmhId}</td>
+      <td style="font-size:11.5px">${e.mob || '—'}</td>
+      <td style="font-size:11.5px">${deptLabel}</td>
+      <td style="font-size:11.5px">${escapeHtmlConsent(e.doctor||'—')}</td>
+      <td style="font-size:12px;font-weight:700">${e.date}</td>
+      <td style="font-size:11.5px">${centreLabel}</td>
+      <td><span style="font-size:10px;font-weight:800;color:#fff;background:${statusColor};padding:2px 7px;border-radius:8px">${statusBadge}</span></td>
+      <td>${bookBtnHtml}</td>
+    </tr>`;
+  }).join('');
+
+  el.innerHTML = `<div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="background:var(--g6);text-align:left">
+        <th style="padding:8px 10px">Patient</th>
+        <th style="padding:8px 10px">BMH ID</th>
+        <th style="padding:8px 10px">Phone</th>
+        <th style="padding:8px 10px">Dept</th>
+        <th style="padding:8px 10px">Doctor</th>
+        <th style="padding:8px 10px">Follow-up Date</th>
+        <th style="padding:8px 10px">Centre</th>
+        <th style="padding:8px 10px">Status</th>
+        <th style="padding:8px 10px">Action</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>
+  <div style="padding:8px 10px;font-size:11px;color:var(--g1)">${filtered.length} follow-up record${filtered.length===1?'':'s'}</div>`;
 }
 
 function saveProcTyped(val) {
@@ -40499,6 +40652,8 @@ function saveVisit(dept, opts) {
     });
     visit.advice = document.getElementById('rx-advice-text')?.value || '';
     visit.extraAdvice = '';
+    visit.rxFuDate = getDeptFollowUpDateInput('oe')?.value || '';
+    visit.followupDate = visit.rxFuDate || '';
     visit.procDone = getProcedureDoneStateForDept('ophtho');
     saveDeptPlanDraft('ophtho');
   } else if(dept === 'obg') {
@@ -40734,6 +40889,39 @@ function saveVisit(dept, opts) {
     .then(() => {
       try { if (dept === 'ophtho' && !opts.autosave) populateOphthoForm(visit); } catch (e) { console.warn('post-save populateOphthoForm failed', e); }
       if (!opts.silent) showToast(`✅ ${ptName} — visit saved (${visit.dateLabel})`, 's');
+      // Auto-create follow-up appointment from prescription follow-up date
+      try {
+        const fuD = visit.rxFuDate || visit.followupDate || '';
+        if (fuD && !opts.autosave) {
+          const alreadyBooked = APPOINTMENTS.find(function (a) {
+            return a.bmhId === bmhId && a.date === fuD && a.status !== 'cancelled';
+          });
+          if (!alreadyBooked) {
+            // Use the actual current wall-clock time rounded to nearest 10 min as the follow-up slot
+            const fuTimeSlot = (function() {
+              const t = roundToNearestTenMinuteSlot(new Date());
+              return String(t.hh).padStart(2,'0') + ':' + String(t.mm).padStart(2,'0');
+            })();
+            const fuApt = {
+              id: 'A' + Date.now() + Math.floor(Math.random() * 1000),
+              patient: ptName,
+              bmhId: bmhId,
+              mob: localPt?.mob || '',
+              date: fuD,
+              time: fuTimeSlot,
+              doctor: visit.doctor || CURRENT_USER?.name || '',
+              dept: dept,
+              purpose: 'Follow-up',
+              status: 'booked',
+              centre: normalizeAppointmentCentreValue(visit.centre || CURRENT_USER?.centre || 'CHD'),
+              source: 'prescription'
+            };
+            APPOINTMENTS.push(fuApt);
+            if (typeof saveAppointmentToFirebase === 'function') saveAppointmentToFirebase(fuApt);
+            if (typeof renderFollowupRegister === 'function') renderFollowupRegister();
+          }
+        }
+      } catch (fuErr) { console.warn('auto follow-up booking failed', fuErr); }
       try { if(dept === 'obg') updateObgObstetricHistoryTab(!!visit.obstetricHistoryEnabled); } catch (e) { console.warn('post-save updateObgObstetricHistoryTab failed', e); }
       try { if(typeof loadPastVisits === 'function') loadPastVisits(bmhId, dept); } catch (e) { console.warn('post-save loadPastVisits failed', e); }
       try { renderCurrentPatientInvestigationUploads && renderCurrentPatientInvestigationUploads(Array.isArray(visit.investigations) ? visit.investigations : []); } catch (e) { console.warn('post-save renderCurrentPatientInvestigationUploads failed', e); }
