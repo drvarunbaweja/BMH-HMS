@@ -2826,7 +2826,14 @@ function parseAppRouteFromLocationHash() {
 const _ROUTE_RESTORE_PAGES = new Set(['dashboard', 'doctor-queue', 'ophtho', 'obg', 'psych', 'skin', 'reception', 'billing', 'payments', 'lab', 'appointments', 'print-templates', 'consents', 'discharge', 'inventory', 'tpa', 'ipd', 'reports', 'settings', 'ot', 'centres', 'brochures']);
 /** After login, restore last URL route if valid; otherwise call fallback (usually role home). */
 function tryScheduleRouteRestoreFromHash(fallback) {
-  const state = parseAppRouteFromLocationHash();
+  let state = parseAppRouteFromLocationHash();
+  // If hash is empty, fall back to the last page persisted in localStorage
+  if (!state || !state.page || !_ROUTE_RESTORE_PAGES.has(state.page)) {
+    try {
+      const lp = localStorage.getItem('bmh_last_page');
+      if (lp && _ROUTE_RESTORE_PAGES.has(lp)) state = { page: lp, tab: '', patientId: '' };
+    } catch (_) {}
+  }
   if (!state || !state.page || !_ROUTE_RESTORE_PAGES.has(state.page)) {
     if (typeof fallback === 'function') fallback();
     return;
@@ -2856,6 +2863,8 @@ function pushAppNavState(replace) {
     const state = getCurrentAppNavState();
     const hash = '#/' + state.page + (state.tab ? ('/' + state.tab) : '') + (state.patientId ? ('/' + state.patientId) : '');
     (replace ? history.replaceState : history.pushState).call(history, state, '', hash);
+    // Persist last page so refresh can restore it even after a full session rebuild
+    try { localStorage.setItem('bmh_last_page', state.page); } catch (_) {}
   } catch (e) {}
 }
 function restoreAppNavState(state) {
@@ -38020,6 +38029,7 @@ function logoutUser() {
   CURRENT_USER = null;
   window.CURRENT_USER = null;
   try { sessionStorage.removeItem('bmh_active_session'); } catch (e) {}
+  try { localStorage.removeItem('bmh_last_page'); } catch (e) {}
   // Clear form data
   RX_DRUGS && (RX_DRUGS.length = 0);
   // Show login gate

@@ -1144,8 +1144,10 @@ watchAuthState(
   },
 
   // ── On logout ─────────────────────────────────────────────────────────────
+  // Guard: if legacy.js already restored a session (DOMContentLoaded fires before
+  // onAuthStateChanged resolves), window.CURRENT_USER will be set — don't clobber it.
   () => {
     stopListeners()
-    showLoginGate()
+    if (!window.CURRENT_USER) showLoginGate()
   }
 )
