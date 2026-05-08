@@ -4884,15 +4884,13 @@ details.procedure-card summary::-webkit-details-marker {
 
 .hero-tagline {
   font-family: 'Playfair Display', Georgia, serif;
-  font-size: 1.05rem;
+  font-size: clamp(1.5rem, 3vw, 2.4rem);
   font-style: italic;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.92);
-  line-height: 1.55;
-  margin-bottom: 18px;
-  letter-spacing: 0.01em;
-  border-left: 3px solid rgba(232, 184, 75, 0.75);
-  padding-left: 12px;
+  font-weight: 700;
+  color: var(--accent-light);
+  line-height: 1.2;
+  margin-bottom: 22px;
+  letter-spacing: -0.01em;
 }
 
 .hero-photo--eye {

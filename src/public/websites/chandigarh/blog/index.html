@@ -56,14 +56,13 @@
     .post-meta-bar span { display: flex; align-items: center; gap: 5px; }
     .blog-hero-subtitle { color: rgba(255,255,255,0.75); font-family: 'Inter', sans-serif; font-size: 1.1rem; margin-top: 12px; line-height: 1.7; }
     .blog-grid-section { padding: 80px 0 100px; background: var(--light-bg); }
-    .blog-card-thumb-bg.glaucoma { background: linear-gradient(135deg, #0D1B2A 0%, #0D6B5E 100%); }
-    .blog-card-thumb-bg.lasik { background: linear-gradient(135deg, #0A1F44 0%, #0E7490 100%); }
-    .blog-card-thumb-bg.cataract { background: linear-gradient(135deg, #1A0A2E 0%, #3D0D7A 100%); }
-    .blog-card-thumb-bg.delivery { background: linear-gradient(135deg, #0D2B5E 0%, #0E4F7A 100%); }
-    .blog-card-thumb-bg.mental { background: linear-gradient(135deg, #1A0A00 0%, #5C2A00 100%); }
-    .blog-card-thumb-bg.skin { background: linear-gradient(135deg, #0A2E1A 0%, #0D5C3E 100%); }
-    .blog-thumb-icon-wrap { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
-    .blog-thumb-icon-wrap svg { width: 64px; height: 64px; stroke: rgba(255,255,255,0.25); }
+    .blog-card-thumb-bg.cataract { background: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.92) 0% 9%, rgba(220,215,240,0.72) 10% 21%, rgba(170,185,205,0.5) 22% 31%, rgba(80,110,150,0.3) 32% 42%, transparent 43%), linear-gradient(135deg, #1A0A2E 0%, #0d1520 100%); }
+    .blog-card-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .glaucoma-vignette {
+      position: absolute; inset: 0; z-index: 2;
+      background: radial-gradient(ellipse at center, transparent 22%, rgba(0,0,0,0.45) 52%, rgba(0,0,0,0.92) 80%, #000 100%);
+      pointer-events: none;
+    }
   </style>
 </head>
 <body>
@@ -104,88 +103,64 @@
   </div>
 
   <!-- Header -->
-  <header class="site-header" id="siteHeader">
-    <nav class="main-nav">
-      <a href="../index.html" class="nav-logo-text" style="text-decoration:none;">
-        <span class="nav-logo-title">Baweja Multispeciality</span>
-        <span class="nav-logo-sub">Hospital · Chandigarh</span>
+  <header class="site-header" id="site-header">
+    <div class="container header-inner">
+      <a href="../index.html" class="site-logo">
+        <span class="logo-mark">BMH</span>
+        <span class="logo-text">
+          <span class="logo-name">Baweja Multispeciality Hospital</span>
+          <span class="logo-tagline">Chandigarh · Est. 2022</span>
+        </span>
       </a>
-
-      <div class="nav-center" id="navCenter">
-        <a href="../index.html" class="nav-link">Home</a>
-        <a href="../about.html" class="nav-link">About</a>
-        <div class="nav-dropdown">
-          <a href="#" class="nav-link" style="display:flex;align-items:center;gap:4px;">
-            Specialities
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
-          </a>
-          <div class="nav-dropdown-menu">
-            <a href="../services/ophthalmology.html" class="dropdown-item">
-              <div class="item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg></div>
-              <span>Ophthalmology &amp; Eye Care</span>
-            </a>
-            <a href="../services/gynaecology.html" class="dropdown-item">
-              <div class="item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"></path></svg></div>
-              <span>Obstetrics &amp; Gynaecology</span>
-            </a>
-            <a href="../services/neuropsychiatry.html" class="dropdown-item">
-              <div class="item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2v-4M9 21H5a2 2 0 01-2-2v-4m0 0h18"></path></svg></div>
-              <span>Psychiatry &amp; Mental Health</span>
-            </a>
-            <a href="../services/skin-aesthetics.html" class="dropdown-item">
-              <div class="item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg></div>
-              <span>Skin &amp; Aesthetics</span>
-            </a>
-            <div class="dropdown-divider"></div>
-            <a href="../services/cataract-surgery.html" class="dropdown-item">
-              <div class="item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></div>
-              <span>Robotic Cataract Surgery</span>
-            </a>
-          </div>
-        </div>
-        <a href="../doctors.html" class="nav-link">Doctors</a>
-        <a href="index.html" class="nav-link active">Blog</a>
-        <a href="../empanelment.html" class="nav-link">Payments</a>
-
+      <nav class="primary-nav">
+        <ul class="nav-list">
+          <li><a href="../index.html" class="nav-link">Home</a></li>
+          <li><a href="../about.html" class="nav-link">About Us</a></li>
+          <li class="nav-item-dropdown">
+            <button class="nav-link nav-dropdown-toggle" aria-haspopup="true" aria-expanded="false">Specialities <svg class="dropdown-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6,9 12,15 18,9"/></svg></button>
+            <ul class="nav-dropdown">
+              <li><a href="../services/ophthalmology.html" class="dropdown-item">Eye Care</a></li>
+              <li><a href="../services/lasik.html" class="dropdown-item">LASIK Surgery</a></li>
+              <li><a href="../services/cataract-surgery.html" class="dropdown-item">Robotic Cataract</a></li>
+              <li><a href="../services/glaucoma-migs.html" class="dropdown-item">MIGS Glaucoma</a></li>
+              <li><a href="../services/gynaecology.html" class="dropdown-item">Gynaecology</a></li>
+              <li><a href="../services/neuropsychiatry.html" class="dropdown-item">Neuropsychiatry</a></li>
+              <li><a href="../services/skin-aesthetics.html" class="dropdown-item">Skin &amp; Aesthetics</a></li>
+            </ul>
+          </li>
+          <li><a href="../doctors.html" class="nav-link">Doctors</a></li>
+          <li><a href="index.html" class="nav-link active">Blog</a></li>
+          <li><a href="../empanelment.html" class="nav-link">Payments</a></li>
+        </ul>
+      </nav>
+      <div class="header-actions">
+        <a href="tel:+916280048805" class="header-phone">+91-6280048805</a>
+        <button class="btn btn-primary btn-sm open-modal" data-modal="appt-modal">Book Appointment</button>
       </div>
-
-      <div class="nav-actions">
-        <a href="tel:+916280048805" class="nav-phone">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81a19.79 19.79 0 01-3.07-8.67A2 2 0 012 1h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.91 8.36a16 16 0 006.73 6.73l1.72-1.34a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"></path></svg>
-          +91-6280048805
-        </a>
-        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('apptModal').classList.add('open')">Book Appointment</button>
-        <button class="hamburger" id="hamburger" aria-label="Toggle menu">
-          <span></span><span></span><span></span>
-        </button>
-      </div>
+      <button class="hamburger" aria-label="Toggle menu" aria-expanded="false" aria-controls="mobile-menu">
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+      </button>
+    </div>
+    <nav class="mobile-menu" id="mobile-menu" aria-hidden="true">
+      <ul class="mobile-nav-list">
+        <li><a href="../index.html" class="mobile-nav-link">Home</a></li>
+        <li><a href="../about.html" class="mobile-nav-link">About Us</a></li>
+        <li><a href="../services/ophthalmology.html" class="mobile-nav-link">Eye Care</a></li>
+        <li><a href="../services/lasik.html" class="mobile-nav-link">LASIK Surgery</a></li>
+        <li><a href="../services/cataract-surgery.html" class="mobile-nav-link">Robotic Cataract</a></li>
+        <li><a href="../services/glaucoma-migs.html" class="mobile-nav-link">MIGS Glaucoma</a></li>
+        <li><a href="../services/gynaecology.html" class="mobile-nav-link">Gynaecology</a></li>
+        <li><a href="../services/neuropsychiatry.html" class="mobile-nav-link">Neuropsychiatry</a></li>
+        <li><a href="../services/skin-aesthetics.html" class="mobile-nav-link">Skin &amp; Aesthetics</a></li>
+        <li><a href="../doctors.html" class="mobile-nav-link">Doctors</a></li>
+        <li><a href="index.html" class="mobile-nav-link active">Blog</a></li>
+        <li><a href="../empanelment.html" class="mobile-nav-link">Payments</a></li>
+        <li class="mobile-nav-cta"><button class="btn btn-primary btn-lg open-modal" data-modal="appt-modal">Book Appointment</button></li>
+      </ul>
     </nav>
   </header>
-
-  <!-- Mobile Nav -->
-  <div class="mobile-nav-overlay" id="mobileOverlay"></div>
-  <div class="mobile-nav-menu" id="mobileNav">
-    <a href="../index.html" class="mobile-nav-link">Home</a>
-    <a href="../about.html" class="mobile-nav-link">About</a>
-    <a href="#" class="mobile-nav-link">Specialities</a>
-    <div class="mobile-nav-sub">
-      <a href="../services/ophthalmology.html">Ophthalmology</a>
-      <a href="../services/lasik.html">LASIK Surgery</a>
-      <a href="../services/cataract-surgery.html">Robotic Cataract</a>
-      <a href="../services/glaucoma-migs.html">MIGS Glaucoma</a>
-      <a href="../services/gynaecology.html">Gynaecology</a>
-      <a href="../services/neuropsychiatry.html">Neuropsychiatry</a>
-      <a href="../services/skin-aesthetics.html">Skin &amp; Aesthetics</a>
-    </div>
-    <a href="../doctors.html" class="mobile-nav-link">Doctors</a>
-    <a href="index.html" class="mobile-nav-link">Blog</a>
-    <a href="../empanelment.html" class="mobile-nav-link">Payments</a>
-
-    <div class="mobile-nav-actions">
-      <a href="tel:+916280048805" class="btn btn-outline-primary btn-lg" style="justify-content:center;">Call: +91-6280048805</a>
-      <button class="btn btn-secondary btn-lg" style="justify-content:center;" onclick="document.getElementById('apptModal').classList.add('open')">Book Appointment</button>
-    </div>
-  </div>
 
   <!-- Page Hero -->
   <section class="page-hero">
@@ -211,10 +186,9 @@
         <!-- Card 1: MIGS Glaucoma -->
         <article class="blog-card reveal">
           <div class="blog-card-thumb">
-            <div class="blog-card-thumb-bg glaucoma">
-              <div class="blog-thumb-icon-wrap">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-              </div>
+            <div class="blog-card-thumb-bg">
+              <img src="../images/hero/migs-devices.jpg" alt="MIGS glaucoma microsurgery implants" loading="lazy" class="blog-card-img">
+              <div class="glaucoma-vignette"></div>
             </div>
             <span class="blog-category-tag">Glaucoma</span>
           </div>
@@ -241,10 +215,8 @@
         <!-- Card 2: LASIK vs CLEAR vs SMILE -->
         <article class="blog-card reveal delay-1">
           <div class="blog-card-thumb">
-            <div class="blog-card-thumb-bg lasik">
-              <div class="blog-thumb-icon-wrap">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"></circle><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path></svg>
-              </div>
+            <div class="blog-card-thumb-bg">
+              <img src="../images/hero/lasik-laser.jpg" alt="LASIK laser vision correction procedure" loading="lazy" class="blog-card-img">
             </div>
             <span class="blog-category-tag">Eye Care</span>
           </div>
@@ -272,9 +244,6 @@
         <article class="blog-card reveal delay-2">
           <div class="blog-card-thumb">
             <div class="blog-card-thumb-bg cataract">
-              <div class="blog-thumb-icon-wrap">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-              </div>
             </div>
             <span class="blog-category-tag">Cataract</span>
           </div>
@@ -301,10 +270,8 @@
         <!-- Card 4: Painless Delivery -->
         <article class="blog-card reveal">
           <div class="blog-card-thumb">
-            <div class="blog-card-thumb-bg delivery">
-              <div class="blog-thumb-icon-wrap">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"></path></svg>
-              </div>
+            <div class="blog-card-thumb-bg">
+              <img src="../images/hero/obgyn-mother-newborn.jpg" alt="Happy mother with newborn baby after painless delivery" loading="lazy" class="blog-card-img">
             </div>
             <span class="blog-category-tag">Women's Health</span>
           </div>
@@ -331,10 +298,8 @@
         <!-- Card 5: Psychiatrist -->
         <article class="blog-card reveal delay-1">
           <div class="blog-card-thumb">
-            <div class="blog-card-thumb-bg mental">
-              <div class="blog-thumb-icon-wrap">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2v-4M9 21H5a2 2 0 01-2-2v-4m0 0h18"></path></svg>
-              </div>
+            <div class="blog-card-thumb-bg">
+              <img src="../images/hero/psychiatry-free-mind.jpg" alt="Happy patient with positive mental health outlook" loading="lazy" class="blog-card-img">
             </div>
             <span class="blog-category-tag">Mental Health</span>
           </div>
@@ -361,10 +326,8 @@
         <!-- Card 6: Laser Skin -->
         <article class="blog-card reveal delay-2">
           <div class="blog-card-thumb">
-            <div class="blog-card-thumb-bg skin">
-              <div class="blog-thumb-icon-wrap">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-              </div>
+            <div class="blog-card-thumb-bg">
+              <img src="../images/hero/aesthetics-glow.jpg" alt="Aesthetic laser skin treatment procedure" loading="lazy" class="blog-card-img">
             </div>
             <span class="blog-category-tag">Skin &amp; Aesthetics</span>
           </div>
@@ -402,7 +365,7 @@
         <h2 class="cta-title">Have a Health Question?<br>Talk to Our Specialists</h2>
         <p class="cta-subtitle">Our team of expert doctors at BMH Chandigarh is here to guide you — from routine check-ups to complex procedures.</p>
         <div class="cta-actions">
-          <button class="btn btn-accent btn-lg" onclick="document.getElementById('apptModal').classList.add('open')">
+          <button class="btn btn-accent btn-lg" onclick="document.getElementById('appt-modal').classList.add('open')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
             Book Appointment
           </button>
@@ -494,9 +457,9 @@
   </div>
 
   <!-- Appointment Modal -->
-  <div class="modal-overlay" id="apptModal">
+  <div class="modal-overlay" id="appt-modal">
     <div class="appt-modal">
-      <button class="modal-close" onclick="document.getElementById('apptModal').classList.remove('open')" aria-label="Close">
+      <button class="modal-close" onclick="document.getElementById('appt-modal').classList.remove('open')" aria-label="Close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
       </button>
       <p class="modal-eyebrow">BMH Chandigarh</p>
@@ -551,21 +514,6 @@
       e.preventDefault();
       this.style.display = 'none';
       document.getElementById('modalSuccess').classList.add('show');
-    });
-    document.getElementById('hamburger').addEventListener('click', function(){
-      this.classList.toggle('open');
-      document.getElementById('mobileNav').classList.toggle('open');
-      document.getElementById('mobileOverlay').classList.toggle('open');
-      document.body.classList.toggle('mobile-open');
-    });
-    document.getElementById('mobileOverlay').addEventListener('click', function(){
-      document.getElementById('hamburger').classList.remove('open');
-      document.getElementById('mobileNav').classList.remove('open');
-      this.classList.remove('open');
-      document.body.classList.remove('mobile-open');
-    });
-    window.addEventListener('scroll', function(){
-      document.getElementById('siteHeader').classList.toggle('scrolled', window.scrollY > 40);
     });
   </script>
 </body>

@@ -21265,6 +21265,7 @@ const ICD10_DB = [
 ];
 
 const OT_CASES = [];
+window.OT_CASES = OT_CASES;
 function saveOTCasesToLocalStorage() {
   try {
     const next = JSON.stringify((OT_CASES || []).map(normalizeOTCaseRecord));
@@ -21354,6 +21355,43 @@ function syncPendingOTCasesToFirebase(remoteRows) {
   return Promise.allSettled(pending.map(function (row) {
     return persistOTCaseToCloud(row);
   }));
+}
+function mergeOTCaseRowsIntoMemory(rows) {
+  let changed = false;
+  (rows || []).forEach(function (row) {
+    const normalized = normalizeOTCaseRecord(row);
+    if (!normalized.id) return;
+    const idx = OT_CASES.findIndex(function (c) { return c && c.id === normalized.id; });
+    if (idx >= 0) {
+      const existing = normalizeOTCaseRecord(OT_CASES[idx]);
+      if (getOTCaseLastTouchedAt(normalized) >= getOTCaseLastTouchedAt(existing)) {
+        OT_CASES[idx] = normalized;
+        changed = true;
+      }
+    } else {
+      OT_CASES.push(normalized);
+      changed = true;
+    }
+  });
+  if (changed) saveOTCasesToLocalStorage();
+  return changed;
+}
+function refreshOTCasesOnceForReports() {
+  if (window._bmhOTCasesRefreshInFlight) return window._bmhOTCasesRefreshInFlight;
+  const localRows = loadOTCasesFromLocalStorage();
+  if (localRows.length) mergeOTCaseRowsIntoMemory(localRows);
+  if (typeof fbOnce !== 'function') return Promise.resolve(false);
+  window._bmhOTCasesRefreshInFlight = fbOnce('otCases').then(function (data) {
+    const changed = mergeOTCaseRowsIntoMemory(data ? Object.values(data) : []);
+    window._bmhOTCasesLastReportRefreshAt = Date.now();
+    return changed;
+  }).catch(function (e) {
+    console.warn('OT report refresh failed:', e);
+    return false;
+  }).finally(function () {
+    window._bmhOTCasesRefreshInFlight = null;
+  });
+  return window._bmhOTCasesRefreshInFlight;
 }
 
 let activeOTCase = null;
@@ -26928,6 +26966,19 @@ function searchReportPatients(val) {
 function generateSurgeryReport() {
   const proc=document.getElementById('rep-surg-name')?.value||'';
   const el=document.getElementById('rep-surgery-result'); if(!el) return;
+  const sourceFilter = document.getElementById('rep-surg-source')?.value || 'advised';
+  const needsOTRows = sourceFilter === 'ot' || sourceFilter === 'all';
+  const lastRefresh = Number(window._bmhOTCasesLastReportRefreshAt || 0);
+  if (needsOTRows && !window._bmhGeneratingSurgeryReportAfterOTRefresh && (!OT_CASES.length || Date.now() - lastRefresh > 30000) && typeof refreshOTCasesOnceForReports === 'function') {
+    window._bmhGeneratingSurgeryReportAfterOTRefresh = true;
+    el.innerHTML = '<div class="card"><div style="padding:18px;color:var(--g1);font-size:12px">Loading OT list from database...</div></div>';
+    refreshOTCasesOnceForReports().then(function () {
+      window._bmhGeneratingSurgeryReportAfterOTRefresh = false;
+      generateSurgeryReport();
+    });
+    return;
+  }
+  window._bmhGeneratingSurgeryReportAfterOTRefresh = false;
   const filtered = getProcedureReportRows();
   const esc = function(v){ return String(v || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
   el.innerHTML=`<div class="card">
@@ -34132,14 +34183,14 @@ function loadOTCasesFromFirebase() {
       mergedById[row.id] = normalizeOTCaseRecord(row);
     });
     if (data) Object.values(data).forEach(function (c) {
-      if (!c?.id) return;
       const normalizedRemote = normalizeOTCaseRecord(c);
-      const existingLocal = mergedById[c.id];
+      if (!normalizedRemote.id) return;
+      const existingLocal = mergedById[normalizedRemote.id];
       if (!existingLocal) {
-        mergedById[c.id] = normalizedRemote;
+        mergedById[normalizedRemote.id] = normalizedRemote;
         return;
       }
-      mergedById[c.id] = getOTCaseLastTouchedAt(existingLocal) >= getOTCaseLastTouchedAt(normalizedRemote)
+      mergedById[normalizedRemote.id] = getOTCaseLastTouchedAt(existingLocal) >= getOTCaseLastTouchedAt(normalizedRemote)
         ? existingLocal
         : normalizedRemote;
     });
@@ -40657,7 +40708,9 @@ function loadPastVisits(bmhId, dept) {
     const nameKey = String(pt.name || '').trim().toLowerCase();
     const mobileKey = String(pt.mob || pt.mobile || '').replace(/\D/g, '');
     return (OT_CASES || []).map(normalizeOTCaseRecord).filter(function (c) {
-      if (c.caseKind === 'obg') return false;
+      const caseKind = normalizeDeptKeyForQueue(c.caseKind || c.dept || '');
+      const procedureText = String(c.procedure || c.procedureMain || c.surgery || '').toLowerCase();
+      if (caseKind === 'obg' && !/cataract|pmics|phaco|iol|lasik|glaucoma|trab|ivt|intravitreal|retina|yag|capsulotomy|iridotomy|eye|ophth/i.test(procedureText)) return false;
       if (String(c.bmhId || '').trim() === String(bmhId || '').trim()) return true;
       if (pt.otCaseId && c.id === pt.otCaseId) return true;
       if (nameKey && String(c.patient || c.name || '').trim().toLowerCase() === nameKey) return true;
@@ -40776,8 +40829,9 @@ function loadPastVisits(bmhId, dept) {
         <div style="border:1px solid var(--g5);border-radius:10px;background:#fff;padding:10px;align-self:start">
           <div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;letter-spacing:.45px;margin-bottom:8px">Surgery History</div>
           ${surgeries.length ? surgeries.map(function (c) {
+            const caseDate = getOTCaseDateKey(c) || c.date || c.scheduledDate || c.otDate || c.surgeryDate || c.createdAt || '';
             return `<div style="padding:7px 0;border-bottom:1px solid var(--g5);font-size:10.5px;line-height:1.45">
-              <div style="font-weight:800;color:var(--bmh-blue)">${formatDateIN(c.date)}</div>
+              <div style="font-weight:800;color:var(--bmh-blue)">${formatDateIN(caseDate)}</div>
               <div>${expandProcedureLabelForPrint(c.procedure || c.procedureMain || '—')}</div>
               <div style="color:var(--g1)">${[(c.site || c.eye || '—').replace(/right/ig,'RE').replace(/left/ig,'LE').replace(/both/ig,'BE'), c.iolType || '', c.iolPower || ''].filter(Boolean).join(' · ')}</div>
             </div>`;
