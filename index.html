@@ -14086,7 +14086,7 @@ function registerPatient() {
   if(!isInsurance && !isCreditDue && !isPreReg && fee>0) {
     setTimeout(()=>{
       if(confirm(`✅ ${name} registered — Token #${token}\nFee: ₹${fee.toLocaleString('en-IN')} (${payMode})\n\nPrint receipt?`)) {
-        printPaymentReceipt({id:'TXN'+Date.now(),patient:name,bmhId:uid,for:purpose,service:purpose,amount:fee,mode:payMode,bmhId:uid});
+        printPaymentReceipt({id:'TXN'+Date.now(),patient:name,bmhId:uid,for:purpose,service:purpose,amount:fee,mode:payMode,bmhId:uid,centre:centre});
       }
     },200);
   }

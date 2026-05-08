@@ -22774,7 +22774,8 @@ function getReceptionFeeChoiceMeta() {
   return { type: 'specialist', label: 'Specialist Registration', amount: amount };
 }
 
-function updateReceptionFeeChoiceUi(standardAmount) {
+function updateReceptionFeeChoiceUi(standardAmount, opts) {
+  const options = Object.assign({ preserveSelection: false }, opts || {});
   const select = document.getElementById('rc-fee-select');
   const feeEl = document.getElementById('rc-fee');
   if (!select || !feeEl) return;
@@ -22787,11 +22788,14 @@ function updateReceptionFeeChoiceUi(standardAmount) {
   }
   const standard = Math.max(0, Number(standardAmount || 0)) || 500;
   const current = Number(feeEl.value || 0);
+  const previousChoice = options.preserveSelection ? String(select.value || '') : '';
   select.innerHTML = [
     '<option value="300">General Registration - ₹300</option>',
     '<option value="' + standard + '">Specialist Registration - ₹' + standard.toLocaleString('en-IN') + '</option>'
   ].join('');
-  select.value = current === 300 ? '300' : String(standard);
+  select.value = previousChoice && Array.from(select.options).some(function (opt) { return opt.value === previousChoice; })
+    ? previousChoice
+    : (current === 300 ? '300' : String(standard));
   select.style.display = '';
   feeEl.style.display = 'none';
   applyReceptionFeeChoice();
@@ -22842,8 +22846,10 @@ function syncReceptionCentreAndFee() {
 
   feeEl.disabled = false;
   const amount = getReceptionConsultationRate(centre);
-  feeEl.value = String(amount);
-  updateReceptionFeeChoiceUi(amount);
+  const feeSelect = document.getElementById('rc-fee-select');
+  const preserveChoice = shouldShowReceptionOphthoChdFeeChoice() && !!(feeSelect && feeSelect.style.display !== 'none' && feeSelect.value);
+  if (!preserveChoice) feeEl.value = String(amount);
+  updateReceptionFeeChoiceUi(amount, { preserveSelection: preserveChoice });
 }
 window.syncReceptionConsultationFee = syncReceptionCentreAndFee;
 
@@ -23255,7 +23261,7 @@ async function registerPatient() {
   if(!isInsurance && !isCreditDue && !isPreReg && fee>0) {
     setTimeout(()=>{
       if(confirm(`✅ ${name} registered — Token #${token}\nFee: ₹${fee.toLocaleString('en-IN')} (${payMode})\n\nPrint receipt?`)) {
-        printPaymentReceipt({id:'TXN'+Date.now(),patient:name,bmhId:uid,for:purpose,service:purpose,amount:fee,mode:payMode,bmhId:uid});
+        printPaymentReceipt({id:'TXN'+Date.now(),patient:name,bmhId:uid,for:consultationDesc,service:consultationDesc,amount:fee,mode:payMode,bmhId:uid,centre:centre});
       }
     },200);
   }
@@ -32077,7 +32083,7 @@ window.printUnifiedRx = function(deptId) {
   const renderDiagnosisByDesign = function () {
     if (!dxList.length) return '';
     if (rxDesign === 'current' || rxDesign === 'option_a' || rxDesign === 'option_b') return '';
-    const joined = dxList.map(function (line) { return '<div>' + escapeHtmlConsent(line) + '</div>'; }).join('');
+    const joined = '<div class="design-dx-lines">' + dxList.map(function (line) { return '<div>' + escapeHtmlConsent(line) + '</div>'; }).join('') + '</div>';
     if (rxDesign === 'signature_classic') return `<div class="design-dx classic">${joined}</div>`;
     if (rxDesign === 'clinical_blocks') return `<div class="design-dx blocks"><div class="design-dx-title">Clinical Diagnosis</div><div class="design-dx-body">${joined}</div></div>`;
     if (rxDesign === 'ribbon_timeline') return `<div class="design-dx ribbon"><div class="design-dx-title">Diagnosis</div><div class="design-dx-body">${joined}</div></div>`;
@@ -32125,8 +32131,8 @@ body > *:not(.lh-img){filter:grayscale(1)}
 /* Diagnosis */
 .diag-rule-top{border-top:1.5px solid #111;margin-bottom:3px}
 .diag-rule-bot{border-top:1.5px solid #111;margin-top:3px}
-.diag-text{font-size:8.6px;font-weight:700;text-align:left;color:#111;padding:1px 0 1px 14px;line-height:1.25}
-.diag-line{display:block;margin:0 0 1px}
+.diag-text{font-size:11.2px;font-weight:700;text-align:left;color:#111;padding:2px 0 2px 50%;line-height:1.35}
+.diag-line{display:block;margin:0 0 2px;break-inside:avoid}
 /* Post-surgery flag */
 .postsurg-flag{font-size:10px;font-weight:800;color:#222;border:1.5px solid #555;display:inline-block;padding:2px 10px;border-radius:3px;margin-bottom:4px;letter-spacing:.3px}
 /* Complaint / plain text block */
@@ -32164,7 +32170,7 @@ tr:nth-child(even) td{background:#fafafa}
 .rx-item-details{display:flex;flex-wrap:wrap;gap:0 12px;margin:2px 0 2px 18px;align-items:center}
 .rx-detail-item{display:flex;align-items:center;gap:4px;font-size:9.5px;color:#111}
 .rx-detail-dot{width:3px;height:3px;border-radius:50%;background:#111;flex-shrink:0}
-.rx-item-instr{font-size:9.6px;color:#222;font-style:normal;line-height:1.32;padding-left:8px;border-left:2px solid #ccc;margin:3px 0 0 18px;font-weight:600}
+.rx-item-instr{font-size:12px;color:#222;font-style:normal;line-height:1.58;padding-left:8px;border-left:2px solid #ccc;margin:5px 0 0 18px;font-weight:600}
 /* Taper card */
 .taper-card{margin:3px 0 4px;border:1px solid #d5dbe2;border-radius:10px;overflow:hidden;font-size:9px;background:#fbfbfb;page-break-inside:avoid;break-inside:avoid}
 .taper-card-hdr{background:#f2f4f6;color:#333;padding:5px 10px;font-size:8.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;border-bottom:1px solid #d5dbe2}
@@ -32182,7 +32188,7 @@ tr:nth-child(even) td{background:#fafafa}
 .inv-wrap{display:flex;flex-wrap:wrap;gap:4px 6px;margin-top:2px}
 .inv-chip{display:inline-flex;align-items:center;padding:3px 8px;background:#f0f0f0;border:1px solid #ccc;border-radius:3px;font-size:9px;font-weight:700;color:#222;line-height:1.2}
 /* Instructions */
-.advice-block{font-size:11.2px;color:#222;padding:5px 9px;border-left:2px solid #bbb;line-height:1.45;margin-bottom:3px;font-style:normal;font-weight:600;page-break-inside:avoid;break-inside:avoid}
+.advice-block{font-size:12px;color:#222;padding:6px 10px;border-left:2px solid #bbb;line-height:1.65;margin-bottom:4px;font-style:normal;font-weight:600;page-break-inside:avoid;break-inside:avoid}
 /* Follow-up */
 .fu-box{background:#f7f8f9;border-radius:999px;padding:4px 10px;margin:3px 0;font-size:9.7px;font-weight:700;color:#222;display:inline-block;border:1px solid #cfd5dc}
 /* Signature row */
@@ -32198,6 +32204,7 @@ tr:nth-child(even) td{background:#fafafa}
 .oe-plain-row td{font-size:10px;font-style:italic;color:#444;background:#f8f8f8}
 /* Full design variants */
 .design-dx.classic{padding:6px 10px;border:1px solid #d9e0ea;border-left:4px solid #c89a2b;border-radius:10px;background:#fffdf8;font-size:8.8px;font-weight:700;line-height:1.28;color:#111;page-break-inside:avoid;break-inside:avoid}
+.design-dx-lines{display:block;margin-left:50%;text-align:left}
 .design-dx.blocks,.design-dx.ribbon,.design-dx.compact{border:1px solid #d9e5ef;border-radius:16px;background:#fff;padding:12px 14px}
 .design-dx-title{font-size:10px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;color:#667085;margin-bottom:6px}
 .design-dx.blocks .design-dx-body{font-size:8.8px;font-weight:800;line-height:1.28;color:#111}
@@ -36900,7 +36907,9 @@ const DEFAULT_RX_TYPOGRAPHY = {
   patientNameSize: 17,
   dateSize: 9.5,
   headingSize: 8.5,
+  diagnosisSize: 11.2,
   medicineSize: 14,
+  instructionSize: 12,
   eyeBlockScale: 1,
   headingWeight: 700,
   headingItalic: false,
@@ -36930,7 +36939,9 @@ function normalizeDoctorRxTypography(raw) {
   next.patientNameSize = clampRxTypographyNumber(next.patientNameSize, DEFAULT_RX_TYPOGRAPHY.patientNameSize, 14, 28);
   next.dateSize = clampRxTypographyNumber(next.dateSize, DEFAULT_RX_TYPOGRAPHY.dateSize, 8, 18);
   next.headingSize = clampRxTypographyNumber(next.headingSize, DEFAULT_RX_TYPOGRAPHY.headingSize, 8, 18);
+  next.diagnosisSize = clampRxTypographyNumber(next.diagnosisSize, DEFAULT_RX_TYPOGRAPHY.diagnosisSize, 8, 18);
   next.medicineSize = clampRxTypographyNumber(next.medicineSize, DEFAULT_RX_TYPOGRAPHY.medicineSize, 11, 22);
+  next.instructionSize = clampRxTypographyNumber(next.instructionSize, DEFAULT_RX_TYPOGRAPHY.instructionSize, 9, 18);
   next.eyeBlockScale = clampRxTypographyNumber(next.eyeBlockScale, DEFAULT_RX_TYPOGRAPHY.eyeBlockScale, 0.8, 1.4);
   next.headingWeight = clampRxTypographyNumber(next.headingWeight, DEFAULT_RX_TYPOGRAPHY.headingWeight, 400, 900);
   next.headingItalic = !!next.headingItalic;
@@ -36960,7 +36971,8 @@ function buildDoctorRxTypographyCss(typography) {
   const headingDecoration = t.headingUnderline ? 'underline' : 'none';
   const headingStyle = t.headingItalic ? 'italic' : 'normal';
   const medicineSize = Number(t.medicineSize || DEFAULT_RX_TYPOGRAPHY.medicineSize);
-  const instructionSize = Math.max(9.2, Math.min(11, medicineSize * 0.68)).toFixed(1);
+  const diagnosisSize = Number(t.diagnosisSize || DEFAULT_RX_TYPOGRAPHY.diagnosisSize).toFixed(1);
+  const instructionSize = Number(t.instructionSize || DEFAULT_RX_TYPOGRAPHY.instructionSize).toFixed(1);
   const procedureSize = Math.max(11.2, Math.min(18, medicineSize * 0.84)).toFixed(1);
   return `
 body{font-family:${fonts.body}}
@@ -36968,9 +36980,9 @@ body{font-family:${fonts.body}}
 .pt-date{font-family:${fonts.body};font-size:${t.dateSize}px;font-weight:${t.headingWeight};font-style:${headingStyle};text-decoration:${headingDecoration}}
 .sec-label,.design-dx-title,.design-side-title,.design-taper-title,.design-med-tag,.section-pill,.rx-heading-accent{font-family:${fonts.heading};font-size:${t.headingSize}px;font-weight:${t.headingWeight};font-style:${headingStyle};text-decoration:${headingDecoration}}
 .rx-item-name,.design-med-name{font-family:${fonts.heading};font-size:${t.medicineSize}px}
-.diag-text,.design-dx-body{font-family:${fonts.body};font-size:8.8px!important}
-.rx-item-instr,.design-med-instr{font-size:${instructionSize}px!important;line-height:1.34!important}
-.design-side-body,.advice-block{font-size:${instructionSize}px!important;line-height:1.42!important}
+.diag-text,.design-dx-body{font-family:${fonts.body};font-size:${diagnosisSize}px!important}
+.rx-item-instr,.design-med-instr{font-size:${instructionSize}px!important;line-height:1.58!important}
+.design-side-body,.advice-block{font-size:${instructionSize}px!important;line-height:1.65!important}
 .proc-item{font-size:${procedureSize}px!important;line-height:1.45!important}
 .oe-eye-block .sec-label{font-size:calc(${t.headingSize}px * ${t.eyeBlockScale})}
 .oe-eye-table{font-size:calc(9.6px * ${t.eyeBlockScale})}
@@ -37133,7 +37145,9 @@ function renderDrCredentials() {
         <div class="form-group" style="margin:0"><label class="fl">Patient Name Size (<span id="dr-typo-${key}-patientNameSize-value">${typography.patientNameSize}</span>px)</label><input type="range" min="14" max="28" step="1" value="${typography.patientNameSize}" oninput="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','patientNameSize',this.value,'number')"></div>
         <div class="form-group" style="margin:0"><label class="fl">Date Size (<span id="dr-typo-${key}-dateSize-value">${typography.dateSize}</span>px)</label><input type="range" min="8" max="18" step="0.5" value="${typography.dateSize}" oninput="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','dateSize',this.value,'number')"></div>
         <div class="form-group" style="margin:0"><label class="fl">Heading Size (<span id="dr-typo-${key}-headingSize-value">${typography.headingSize}</span>px)</label><input type="range" min="8" max="18" step="0.5" value="${typography.headingSize}" oninput="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','headingSize',this.value,'number')"></div>
+        <div class="form-group" style="margin:0"><label class="fl">Diagnosis Size (<span id="dr-typo-${key}-diagnosisSize-value">${typography.diagnosisSize}</span>px)</label><input type="range" min="8" max="18" step="0.5" value="${typography.diagnosisSize}" oninput="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','diagnosisSize',this.value,'number')"></div>
         <div class="form-group" style="margin:0"><label class="fl">Medicine Size (<span id="dr-typo-${key}-medicineSize-value">${typography.medicineSize}</span>px)</label><input type="range" min="11" max="22" step="0.5" value="${typography.medicineSize}" oninput="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','medicineSize',this.value,'number')"></div>
+        <div class="form-group" style="margin:0"><label class="fl">Plain Instruction Size (<span id="dr-typo-${key}-instructionSize-value">${typography.instructionSize}</span>px)</label><input type="range" min="9" max="18" step="0.5" value="${typography.instructionSize}" oninput="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','instructionSize',this.value,'number')"></div>
         ${isEyeDoctor ? `<div class="form-group" style="margin:0"><label class="fl">Eye VA / Refraction / IOP Block (<span id="dr-typo-${key}-eyeBlockScale-value">${Number(typography.eyeBlockScale || 1).toFixed(2)}</span>x)</label><input type="range" min="0.8" max="1.4" step="0.05" value="${typography.eyeBlockScale || 1}" oninput="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','eyeBlockScale',this.value,'number')"></div>` : ''}
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">
