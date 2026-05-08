@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Patient Brochures — BMH Chandigarh</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Inter',Arial,sans-serif;background:#f0f4f8;padding:24px;color:#1a1a2e}
+  h1{font-size:22px;font-weight:900;margin-bottom:4px}
+  .subtitle{font-size:13px;color:#555;margin-bottom:24px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+  .card{background:#fff;border-radius:10px;box-shadow:0 2px 12px rgba(0,0,0,.08);overflow:hidden;transition:box-shadow .2s}
+  .card:hover{box-shadow:0 4px 24px rgba(0,0,0,.13)}
+  .card-hdr{padding:14px 16px;color:#fff;font-weight:800;font-size:14px}
+  .card-body{padding:14px 16px}
+  .card-body p{font-size:12px;color:#444;margin-bottom:12px;line-height:1.5}
+  .btn-row{display:flex;gap:8px;flex-wrap:wrap}
+  a.btn{display:inline-block;padding:7px 14px;border-radius:6px;font-size:12px;font-weight:700;text-decoration:none;transition:opacity .2s}
+  a.btn:hover{opacity:.85}
+  .btn-en{background:#0b3d6e;color:#fff}
+  .btn-pa{background:#f0b429;color:#1a1a2e}
+  .tag{display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;margin-bottom:8px}
+</style>
+</head>
+<body>
+<h1>BMH Patient Information Brochures</h1>
+<p class="subtitle">A4-format printable brochures with real clinical images — open in browser and print to PDF</p>
+<div class="grid">
+
+  <div class="card">
+    <div class="card-hdr" style="background:linear-gradient(135deg,#0b3d6e,#1565a8)">
+      👁 Hydrus Microstent — Glaucoma Surgery
+    </div>
+    <div class="card-body">
+      <span class="tag" style="background:#e8f0fb;color:#0b3d6e">MIGS · Glaucoma</span>
+      <p>HORIZON trial data, glaucoma investigations (VF, OCT RNFL, Pachymetry), treatment comparison table, day-of-surgery guide, post-op instructions.</p>
+      <div class="btn-row">
+        <a href="hydrus-en.html" class="btn btn-en" target="_blank">English</a>
+        <a href="hydrus-pa.html" class="btn btn-pa" target="_blank">ਪੰਜਾਬੀ</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-hdr" style="background:linear-gradient(135deg,#2d5016,#4a8520)">
+      👁 Cataract Surgery &amp; IOL Choices
+    </div>
+    <div class="card-body">
+      <span class="tag" style="background:#e8f8ee;color:#2d5016">PMICS · Cataract · IOL</span>
+      <p>Phacoemulsification procedure, pre-op investigations, full IOL comparison table (Monofocal → Trifocal), post-op care, follow-up schedule.</p>
+      <div class="btn-row">
+        <a href="cataract-en.html" class="btn btn-en" target="_blank">English</a>
+        <a href="cataract-pa.html" class="btn btn-pa" target="_blank">ਪੰਜਾਬੀ</a>
+      </div>
+    </div>
+  </div>
+
+</div>
+<p style="margin-top:24px;font-size:11px;color:#888">To print: open any brochure → Ctrl+P (or ⌘+P) → Save as PDF → A4 paper size</p>
+</body>
+</html>
