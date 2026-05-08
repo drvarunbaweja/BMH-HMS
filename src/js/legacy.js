@@ -26814,6 +26814,91 @@ function procedureReportStatusBadge(status) {
   return 'bd-orange';
 }
 
+function parseObgEddToIso(value) {
+  const raw = String(value || '').trim();
+  if (!raw || raw === '—') return '';
+  return parseDisplayDateToIso(raw);
+}
+function getObgAncVisitCandidates(pt) {
+  const rows = [];
+  const add = function (visit, source) {
+    if (!visit || typeof visit !== 'object') return;
+    const dept = normalizeDeptKeyForQueue(visit.dept || pt.lastDeptVisit || pt.dept || '');
+    const anc = visit.workflowAnc === true || visit.obstetricHistoryEnabled === true || visit['obg-track-anc'] === true;
+    if (!anc && dept !== 'obg') return;
+    if (!anc) return;
+    rows.push(Object.assign({ _source: source || '' }, visit));
+  };
+  add(pt.lastVisitByDept && pt.lastVisitByDept.obg, 'lastVisitByDept');
+  add(pt.lastVisit, 'lastVisit');
+  Object.values(getCachedPatientVisits(pt.bmhId) || {}).forEach(function (visit) { add(visit, 'cache'); });
+  return rows;
+}
+function getExpectedDeliveryRows() {
+  const fromVal = document.getElementById('rep-surg-from')?.value || '';
+  const toVal = document.getElementById('rep-surg-to')?.value || '';
+  const centreFilter = document.getElementById('rep-centre')?.value || '';
+  const rows = [];
+  const seen = new Set();
+  (PATIENTS || []).forEach(function (pt) {
+    if (!pt || !pt.bmhId || seen.has(pt.bmhId)) return;
+    if (centreFilter && normalizeAppointmentCentreValue(pt.centre || 'CHD') !== centreFilter) return;
+    const visits = getObgAncVisitCandidates(pt)
+      .map(function (visit) {
+        const eddRaw = visit['obg-obs-edd-usg'] || visit['obg-obs-edd-date'] || visit.edd || '';
+        const eddIso = parseObgEddToIso(eddRaw);
+        return { visit: visit, eddIso: eddIso, eddRaw: eddRaw };
+      })
+      .filter(function (row) { return !!row.eddIso; })
+      .sort(function (a, b) {
+        return String(b.visit.date || b.visit.visitDate || b.visit.createdAt || '').localeCompare(String(a.visit.date || a.visit.visitDate || a.visit.createdAt || ''));
+      });
+    if (!visits.length) return;
+    const picked = visits[0];
+    if (fromVal && picked.eddIso < fromVal) return;
+    if (toVal && picked.eddIso > toVal) return;
+    const v = picked.visit;
+    const eddTime = Date.parse(picked.eddIso + 'T12:00:00');
+    const todayTime = Date.parse(localDateKey(new Date()) + 'T12:00:00');
+    const daysLeft = Number.isFinite(eddTime) && Number.isFinite(todayTime)
+      ? Math.round((eddTime - todayTime) / 86400000)
+      : null;
+    seen.add(pt.bmhId);
+    rows.push({
+      patient: pt.name || '—',
+      bmhId: pt.bmhId,
+      mobile: pt.mob || pt.mobile || '',
+      ageSex: [pt.age || '—', pt.sex || '—'].join('/'),
+      eddIso: picked.eddIso,
+      edd: formatDateIN(picked.eddIso),
+      lmp: v.lmp || v['obg-obs-lmp'] || '',
+      gravida: v.gravida || ['G' + (v.g || '0'), 'P' + (v.p || '0'), 'A' + (v.a || '0'), 'L' + (v.l || '0')].join(''),
+      ga: v.ga || '',
+      risk: v.riskTag || v['obg-risk'] || '',
+      visitDate: v.date || v.visitDate || v.createdAt || '',
+      doctor: v.doctor || pt.assignedDoctor || pt.doctor || '',
+      centre: pt.centre || '',
+      notes: v.ancNotes || v.notes || '',
+      daysLeft: daysLeft
+    });
+  });
+  return rows.sort(function (a, b) {
+    return String(a.eddIso || '').localeCompare(String(b.eddIso || '')) || String(a.patient || '').localeCompare(String(b.patient || ''));
+  });
+}
+function buildExpectedDeliveryReportHtml(rows, title) {
+  const esc = function(v){ return String(v || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;padding:10mm;color:#111}table{width:100%;border-collapse:collapse}th,td{border:1px solid #d7dce5;padding:6px 7px;font-size:11px;vertical-align:top}th{background:#eef3fb;color:#1A3C6E;font-weight:900}.muted{color:#666;font-size:10px}@page{size:A4 portrait;margin:8mm}</style></head><body>'
+    + '<div style="font-size:18px;font-weight:900;color:#1A3C6E;margin-bottom:10px">' + esc(title || 'Deliveries Expected') + '</div>'
+    + (rows.length ? '<table><thead><tr><th>#</th><th>EDD</th><th>Patient</th><th>BMSH ID</th><th>Phone</th><th>Age/Sex</th><th>GPAL</th><th>Risk</th><th>Last Visit</th><th>Doctor</th><th>Centre</th><th>Due In</th></tr></thead><tbody>'
+    + rows.map(function (row, i) {
+      const due = row.daysLeft == null ? '—' : (row.daysLeft < 0 ? (Math.abs(row.daysLeft) + 'd overdue') : (row.daysLeft + 'd'));
+      return '<tr><td>' + (i + 1) + '</td><td style="font-weight:900;color:#1A3C6E">' + esc(row.edd) + '</td><td style="font-weight:800">' + esc(row.patient) + (row.notes ? '<div class="muted" style="margin-top:4px">' + esc(row.notes) + '</div>' : '') + '</td><td style="font-family:monospace">' + esc(row.bmhId) + '</td><td>' + esc(row.mobile || '—') + '</td><td>' + esc(row.ageSex || '—') + '</td><td>' + esc(row.gravida || '—') + '</td><td>' + esc(row.risk || 'Low risk') + '</td><td>' + esc(row.visitDate ? formatDateIN(row.visitDate) : '—') + '</td><td>' + esc(row.doctor || '—') + '</td><td>' + esc(row.centre || '—') + '</td><td>' + esc(due) + '</td></tr>';
+    }).join('')
+    + '</tbody></table>' : '<div style="padding:20px;text-align:center;color:#666">No ANC patients with EDD found for the current filter.</div>')
+    + '</body></html>';
+}
+
 function buildProcedureReportHtml(rows, title) {
   const esc = function(v){ return String(v || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
   return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;padding:10mm;color:#111}table{width:100%;border-collapse:collapse}th,td{border:1px solid #d7dce5;padding:6px 7px;font-size:11px;vertical-align:top}th{background:#eef3fb;color:#1A3C6E;font-weight:900} .muted{color:#666;font-size:10px} @page{size:A4 portrait;margin:8mm}</style></head><body>'
@@ -26967,6 +27052,20 @@ function generateSurgeryReport() {
   const proc=document.getElementById('rep-surg-name')?.value||'';
   const el=document.getElementById('rep-surgery-result'); if(!el) return;
   const sourceFilter = document.getElementById('rep-surg-source')?.value || 'advised';
+  if (sourceFilter === 'deliveries') {
+    const rows = getExpectedDeliveryRows();
+    const esc = function(v){ return String(v || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
+    el.innerHTML = `<div class="card">
+      <div class="card-hd"><div><div class="card-title">🤰 Deliveries Expected — ${rows.length} patients</div><div class="card-sub">ANC cases sorted chronologically by EDD</div></div><button class="btn btn-gold btn-xs" onclick="printSurgeryReportCurrent()">🖨️ Print</button></div>
+      ${rows.length ? `<table><thead><tr><th>#</th><th>EDD</th><th>Patient</th><th>BMSH ID</th><th>Phone</th><th>Age/Sex</th><th>GPAL</th><th>Risk</th><th>Last Visit</th><th>Doctor</th><th>Due In</th></tr></thead><tbody>
+      ${rows.map(function (row, i) {
+        const due = row.daysLeft == null ? '—' : (row.daysLeft < 0 ? (Math.abs(row.daysLeft) + 'd overdue') : (row.daysLeft + 'd'));
+        return `<tr><td>${i + 1}</td><td style="font-weight:900;color:var(--bmh-blue)">${esc(row.edd)}</td><td style="font-weight:800">${esc(row.patient)}${row.notes ? `<div style="font-size:10px;color:var(--g1);margin-top:3px">${esc(row.notes)}</div>` : ''}</td><td style="font-family:var(--mono);font-size:10px">${esc(row.bmhId)}</td><td>${esc(row.mobile || '—')}</td><td>${esc(row.ageSex || '—')}</td><td>${esc(row.gravida || '—')}</td><td>${esc(row.risk || 'Low risk')}</td><td>${esc(row.visitDate ? formatDateIN(row.visitDate) : '—')}</td><td>${esc(row.doctor || '—')}</td><td>${esc(due)}</td></tr>`;
+      }).join('')}
+      </tbody></table>` : '<div style="padding:20px;text-align:center;color:var(--g1)">No ANC patients with EDD found for the current filter.</div>'}
+    </div>`;
+    return;
+  }
   const needsOTRows = sourceFilter === 'ot' || sourceFilter === 'all';
   const lastRefresh = Number(window._bmhOTCasesLastReportRefreshAt || 0);
   if (needsOTRows && !window._bmhGeneratingSurgeryReportAfterOTRefresh && (!OT_CASES.length || Date.now() - lastRefresh > 30000) && typeof refreshOTCasesOnceForReports === 'function') {
@@ -26990,19 +27089,25 @@ function generateSurgeryReport() {
 }
 
 function openSurgeryReportWindow() {
-  const rows = getProcedureReportRows();
   const proc = document.getElementById('rep-surg-name')?.value || 'Procedure Report';
+  const sourceFilter = document.getElementById('rep-surg-source')?.value || 'advised';
+  const rows = sourceFilter === 'deliveries' ? getExpectedDeliveryRows() : getProcedureReportRows();
   const w = window.open('', '_blank', 'width=1200,height=800');
   if (!w) { showToast('Popup blocked — allow popups to open report window', 'w'); return; }
-  w.document.write(buildProcedureReportHtml(rows, proc || 'Procedure Report'));
+  w.document.write(sourceFilter === 'deliveries'
+    ? buildExpectedDeliveryReportHtml(rows, 'Deliveries Expected')
+    : buildProcedureReportHtml(rows, proc || 'Procedure Report'));
   w.document.close();
 }
 
 function printSurgeryReportCurrent() {
-  const rows = getProcedureReportRows();
   const proc = document.getElementById('rep-surg-name')?.value || 'Procedure Report';
-  safePrint(buildProcedureReportHtml(rows, proc || 'Procedure Report'));
-  showToast('Procedure report ready to print ✓', 's');
+  const sourceFilter = document.getElementById('rep-surg-source')?.value || 'advised';
+  const rows = sourceFilter === 'deliveries' ? getExpectedDeliveryRows() : getProcedureReportRows();
+  safePrint(sourceFilter === 'deliveries'
+    ? buildExpectedDeliveryReportHtml(rows, 'Deliveries Expected')
+    : buildProcedureReportHtml(rows, proc || 'Procedure Report'));
+  showToast(sourceFilter === 'deliveries' ? 'Expected deliveries report ready to print ✓' : 'Procedure report ready to print ✓', 's');
 }
 
 function generateInvestigationReport() {
