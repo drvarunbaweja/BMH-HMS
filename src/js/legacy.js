@@ -26674,10 +26674,15 @@ function getProcedureReportCompletionMatch(row, otRows) {
     return procedureReportNamesMatch(c.procedure || '', row.proc || '');
   });
   if (otMatch) {
+    const otDone = otMatch.status === 'done' || otMatch.status === 'completed';
+    const otStatus = otDone ? 'done'
+      : otMatch.status === 'in-progress' ? 'in-progress'
+      : otMatch.status === 'postponed' ? 'postponed'
+      : 'scheduled';
     return {
-      status: otMatch.status === 'completed' ? 'done' : 'scheduled',
-      date: otMatch.date || otMatch.scheduledDate || otMatch.scheduledTime || row.date || '',
-      otProcedure: otMatch.status === 'completed' ? (otMatch.procedure || '') : '',
+      status: otStatus,
+      date: getOTCaseDateKey(otMatch) || otMatch.date || otMatch.scheduledDate || otMatch.scheduledTime || row.date || '',
+      otProcedure: otDone ? (otMatch.procedure || '') : '',
       otId: otMatch.id || ''
     };
   }
@@ -26729,12 +26734,14 @@ function getProcedureReportRows() {
       proc: normalizedProc,
       date: row.date || visitDate || row.createdAt || ''
     }, otRows);
+    const advDate = row.date || visitDate || row.createdAt || '';
     advised.push({
       key,
       patient: row.patient || pt.name || '—',
       bmhId: row.bmhId,
       proc: normalizedProc,
-      date: completion.date || row.date || visitDate || row.createdAt || '',
+      date: completion.date || advDate,
+      advisedDate: advDate,
       doctor: row.doctor || pt.assignedDoctor || pt.doctor || '',
       status: completion.status || 'advised',
       otProcedure: completion.otProcedure || '',
@@ -26861,7 +26868,7 @@ function getObgAncVisitCandidates(pt) {
   const add = function (visit, source) {
     if (!visit || typeof visit !== 'object') return;
     const dept = normalizeDeptKeyForQueue(visit.dept || pt.lastDeptVisit || pt.dept || '');
-    const anc = visit.workflowAnc === true || visit.obstetricHistoryEnabled === true || visit['obg-track-anc'] === true;
+    const anc = visit.workflowAnc !== false || !!visit.obstetricHistoryEnabled || !!visit['obg-track-anc'];
     if (dept !== 'obg' || !anc) return;
     rows.push(Object.assign({ _source: source || '' }, visit));
   };
@@ -26939,12 +26946,14 @@ function buildProcedureReportHtml(rows, title) {
   const esc = function(v){ return String(v || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
   return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;padding:10mm;color:#111}table{width:100%;border-collapse:collapse}th,td{border:1px solid #d7dce5;padding:6px 7px;font-size:11px;vertical-align:top}th{background:#eef3fb;color:#1A3C6E;font-weight:900} .muted{color:#666;font-size:10px} @page{size:A4 portrait;margin:8mm}</style></head><body>'
     + '<div style="font-size:18px;font-weight:900;color:#1A3C6E;margin-bottom:10px">' + esc(title) + '</div>'
-    + (rows.length ? '<table><thead><tr><th>#</th><th>Patient</th><th>Phone</th><th>Age/Sex</th><th>BMSH ID</th><th>Procedure</th><th>Date</th><th>Doctor</th><th>Centre</th><th>Status</th><th>Counsellor Follow-up</th></tr></thead><tbody>'
+    + (rows.length ? '<table><thead><tr><th>#</th><th>Patient</th><th>Phone</th><th>Age/Sex</th><th>BMSH ID</th><th>Procedure</th><th>Advised On</th><th>Surgery Date</th><th>Doctor</th><th>Centre</th><th>Status</th><th>Counsellor Follow-up</th></tr></thead><tbody>'
     + rows.map(function (p, i) {
         const follow = window.PROC_COUNSELLOR_LOG[p.key] || {};
         const remark = [follow.status, follow.remark, follow.nextDate].filter(Boolean).join(' · ');
         const advice = p.advice ? ('<div class="muted" style="margin-top:4px;line-height:1.35"><b>Advice:</b> ' + esc(p.advice) + '</div>') : '';
-        return '<tr><td>' + (i + 1) + '</td><td style="font-weight:800">' + esc(p.patient) + advice + '</td><td>' + esc(p.mobile || '—') + '</td><td>' + esc(p.ageSex || '—') + '</td><td style="font-family:monospace">' + esc(p.bmhId) + '</td><td>' + esc(p.proc) + '</td><td>' + esc(p.date) + '</td><td>' + esc(p.doctor) + '</td><td>' + esc(p.centre || '—') + '</td><td>' + esc(procedureReportStatusLabel(p.status)) + '</td><td>' + (remark ? esc(remark) : '<span class="muted">No follow-up saved</span>') + '</td></tr>';
+        const isDone = p.status === 'done' || p.status === 'completed';
+        const surgDate = isDone ? esc(p.date || '—') : '—';
+        return '<tr><td>' + (i + 1) + '</td><td style="font-weight:800">' + esc(p.patient) + advice + '</td><td>' + esc(p.mobile || '—') + '</td><td>' + esc(p.ageSex || '—') + '</td><td style="font-family:monospace">' + esc(p.bmhId) + '</td><td>' + esc(p.proc) + '</td><td>' + esc(p.advisedDate || p.date || '—') + '</td><td style="font-weight:' + (isDone ? '900' : '400') + ';color:' + (isDone ? '#1a7c3a' : '#666') + '">' + surgDate + '</td><td>' + esc(p.doctor) + '</td><td>' + esc(p.centre || '—') + '</td><td>' + esc(procedureReportStatusLabel(p.status)) + '</td><td>' + (remark ? esc(remark) : '<span class="muted">No follow-up saved</span>') + '</td></tr>';
       }).join('')
     + '</tbody></table>' : '<div style="padding:20px;text-align:center;color:#666">No procedure records found for the current filter.</div>')
     + '</body></html>';
@@ -27104,7 +27113,7 @@ function generateSurgeryReport() {
   }
   const needsOTRows = sourceFilter === 'ot' || sourceFilter === 'all';
   const lastRefresh = Number(window._bmhOTCasesLastReportRefreshAt || 0);
-  if (needsOTRows && !window._bmhGeneratingSurgeryReportAfterOTRefresh && (!OT_CASES.length || Date.now() - lastRefresh > 30000) && typeof refreshOTCasesOnceForReports === 'function') {
+  if (needsOTRows && !window._bmhGeneratingSurgeryReportAfterOTRefresh && (!OT_CASES.length || sourceFilter === 'ot' || Date.now() - lastRefresh > 5000) && typeof refreshOTCasesOnceForReports === 'function') {
     window._bmhGeneratingSurgeryReportAfterOTRefresh = true;
     el.innerHTML = '<div class="card"><div style="padding:18px;color:var(--g1);font-size:12px">Loading OT list from database...</div></div>';
     refreshOTCasesOnceForReports().then(function () {
@@ -27118,8 +27127,8 @@ function generateSurgeryReport() {
   const esc = function(v){ return String(v || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
   el.innerHTML=`<div class="card">
     <div class="card-hd"><div><div class="card-title">⚕️ ${proc||'All Procedures'} — ${filtered.length} patients</div></div><button class="btn btn-gold btn-xs" onclick="printSurgeryReportCurrent()">🖨️ Print</button></div>
-    ${filtered.length?`<table><thead><tr><th>#</th><th>Patient</th><th>Phone</th><th>Age/Sex</th><th>BMSH ID</th><th>Procedure Advised</th><th>OT — Done As</th><th>Relevant Date</th><th>Doctor</th><th>Centre</th><th>Status</th><th>Counsellor</th></tr></thead>
-    <tbody>${filtered.map((p,i)=>{ const follow=window.PROC_COUNSELLOR_LOG[p.key]||{}; const statusLabel=procedureReportStatusLabel(p.status); const badgeClass=procedureReportStatusBadge(p.status); const otDoneCell = p.otProcedure ? `<div style="font-size:11px;font-weight:800;color:var(--green)">${String(p.source||'')==='ot'?'OT:':'✅'} ${esc(p.otProcedure)}</div>` : (p.status==='scheduled'?`<span style="font-size:10px;color:var(--blue)">Scheduled</span>`:'<span style="font-size:10px;color:var(--g1)">—</span>'); return `<tr><td>${i+1}</td><td style="font-weight:800">${esc(p.patient)}${p.referredBy?`<div style="font-size:10px;color:var(--g1);margin-top:2px">Ref: ${esc(p.referredBy)}</div>`:''}${p.advice?`<div style="font-size:10px;color:var(--g1);margin-top:4px;line-height:1.35"><b>Advice:</b> ${esc(p.advice)}</div>`:''}</td><td>${esc(p.mobile||'—')}</td><td>${esc(p.ageSex||'—')}</td><td style="font-family:var(--mono);font-size:10px">${esc(p.bmhId)}</td><td>${esc(p.proc)}</td><td>${otDoneCell}</td><td>${esc(p.date||'—')}</td><td>${esc(p.doctor)}</td><td>${esc(p.centre||'—')}</td><td><span class="badge ${badgeClass}">${esc(statusLabel)}</span></td><td><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="btn btn-xs btn-outline" onclick="openCounsellorFollowup('${p.key}')">📞 Follow-up</button>${follow.status?`<span style="font-size:10px;color:var(--g1)">${esc(follow.status)}${follow.nextDate?` · ${esc(follow.nextDate)}`:''}</span>`:''}</div></td></tr>`; }).join('')}
+    ${filtered.length?`<table><thead><tr><th>#</th><th>Patient</th><th>Phone</th><th>Age/Sex</th><th>BMSH ID</th><th>Procedure Advised</th><th>OT — Done As</th><th>Advised On</th><th>Surgery Date</th><th>Doctor</th><th>Centre</th><th>Status</th><th>Counsellor</th></tr></thead>
+    <tbody>${filtered.map((p,i)=>{ const follow=window.PROC_COUNSELLOR_LOG[p.key]||{}; const statusLabel=procedureReportStatusLabel(p.status); const badgeClass=procedureReportStatusBadge(p.status); const isDone = p.status==='done'||p.status==='completed'; const otDoneCell = p.otProcedure ? `<div style="font-size:11px;font-weight:800;color:var(--green)">${String(p.source||'')==='ot'?'OT:':'✅'} ${esc(p.otProcedure)}</div>` : (p.status==='scheduled'||p.status==='in-progress'?`<span style="font-size:10px;color:var(--blue)">${p.status==='in-progress'?'In Progress':'Scheduled'}</span>`:'<span style="font-size:10px;color:var(--g1)">—</span>'); const surgDateCell = isDone ? `<span style="font-weight:800;color:var(--green)">${esc(p.date||'—')}</span>` : (p.status==='scheduled'||p.status==='in-progress' ? `<span style="color:var(--blue);font-size:11px">${esc(p.date||'—')}</span>` : '<span style="color:var(--g1);font-size:11px">—</span>'); return `<tr><td>${i+1}</td><td style="font-weight:800">${esc(p.patient)}${p.referredBy?`<div style="font-size:10px;color:var(--g1);margin-top:2px">Ref: ${esc(p.referredBy)}</div>`:''}${p.advice?`<div style="font-size:10px;color:var(--g1);margin-top:4px;line-height:1.35"><b>Advice:</b> ${esc(p.advice)}</div>`:''}</td><td>${esc(p.mobile||'—')}</td><td>${esc(p.ageSex||'—')}</td><td style="font-family:var(--mono);font-size:10px">${esc(p.bmhId)}</td><td>${esc(p.proc)}</td><td>${otDoneCell}</td><td style="font-size:11px">${esc(p.advisedDate||p.date||'—')}</td><td>${surgDateCell}</td><td>${esc(p.doctor)}</td><td>${esc(p.centre||'—')}</td><td><span class="badge ${badgeClass}">${esc(statusLabel)}</span></td><td><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="btn btn-xs btn-outline" onclick="openCounsellorFollowup('${p.key}')">📞 Follow-up</button>${follow.status?`<span style="font-size:10px;color:var(--g1)">${esc(follow.status)}${follow.nextDate?` · ${esc(follow.nextDate)}`:''}</span>`:''}</div></td></tr>`; }).join('')}
     </tbody></table>`:'<div style="padding:20px;text-align:center;color:var(--g1)">No records found</div>'}
   </div>`;
 }
