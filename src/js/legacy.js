@@ -22775,6 +22775,14 @@ function getReceptionFeeChoiceMeta() {
   return { type: 'specialist', label: 'Specialist Registration', amount: amount };
 }
 
+function getReceptionSelectedConsultationFeeAmount(centre) {
+  if (document.getElementById('rc-no-fee')?.checked) return 0;
+  const choice = getReceptionFeeChoiceMeta();
+  if (choice && Number.isFinite(Number(choice.amount))) return Math.max(0, Number(choice.amount || 0));
+  const feeInputRaw = String(document.getElementById('rc-fee')?.value ?? '').trim();
+  return feeInputRaw === '' ? (getReceptionConsultationRate(centre) || 0) : (parseFloat(feeInputRaw) || 0);
+}
+
 function updateReceptionFeeChoiceUi(standardAmount, opts) {
   const options = Object.assign({ preserveSelection: false }, opts || {});
   const select = document.getElementById('rc-fee-select');
@@ -23076,10 +23084,10 @@ async function registerPatient() {
 
   syncBmhSequenceFloor(uid);
 
-  const feeInputRaw = String(document.getElementById('rc-fee')?.value ?? '').trim();
-  let fee = feeInputRaw === '' ? (getReceptionConsultationRate(centre) || 0) : (parseFloat(feeInputRaw) || 0);
-  if(noFee) fee = 0;
+  applyReceptionFeeChoice && applyReceptionFeeChoice();
   const feeChoice = noFee ? { type: 'no-fee', label: 'No Fee Consultation', amount: 0 } : getReceptionFeeChoiceMeta();
+  let fee = getReceptionSelectedConsultationFeeAmount(centre);
+  if(noFee) fee = 0;
   const payMode = document.getElementById('rc-pay-mode')?.value||'Cash';
   const purpose = normalizeReceptionFieldValue('rc-purpose', document.getElementById('rc-purpose')?.value||'New Consultation');
   const consultationDescBase = feeChoice && feeChoice.type !== 'no-fee'
