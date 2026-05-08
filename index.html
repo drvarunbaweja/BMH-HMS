@@ -3623,7 +3623,7 @@ ${['Cataract Surgery','IVT Injection','LASIK','Glaucoma Surgery','Anaesthesia','
         </div>
         <div class="form-group"><label class="fl">Date Range From</label><input type="date" id="rep-surg-from"></div>
         <div class="form-group"><label class="fl">Date Range To</label><input type="date" id="rep-surg-to"></div>
-        <div class="form-group"><label class="fl">Status</label><select id="rep-surg-status"><option value="">All</option><option value="advised">Advised — Not Done</option><option value="scheduled">Scheduled</option><option value="done">Completed</option></select></div>
+        <div class="form-group"><label class="fl">Status</label><select id="rep-surg-status"><option value="">All</option><option value="advised">Advised — Not Done</option><option value="scheduled">Scheduled</option><option value="pending">OT Pending</option><option value="in-progress">OT In Progress</option><option value="done">Completed</option><option value="postponed">Postponed</option></select></div>
       </div>
       <button class="btn btn-gold btn-sm" style="margin-top:8px" onclick="generateSurgeryReport()">📋 Generate List</button>
     </div>
@@ -9188,16 +9188,138 @@ function searchReportPatients(val) {
   `<div style="padding:20px;text-align:center;color:var(--g1)">No patients found for "${val}"</div>`;
 }
 
+function bmhReportEsc(v){ return String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function bmhReportDateKey(v) {
+  if(!v) return '';
+  const d = new Date(v);
+  if(!isNaN(d.getTime())) return d.toISOString().slice(0,10);
+  return String(v).slice(0,10);
+}
+function bmhReportParseEdd(v) {
+  const raw = String(v || '').trim();
+  if(!raw || raw === '—') return '';
+  if(/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const d = new Date(raw);
+  return isNaN(d.getTime()) ? '' : d.toISOString().slice(0,10);
+}
+function bmhReportFmtDate(v) {
+  const key = bmhReportDateKey(v);
+  if(!key) return '—';
+  const d = new Date(key + 'T12:00:00');
+  return isNaN(d.getTime()) ? key : d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+}
+function bmhReportNormalizeOTCase(c) {
+  const pt = PATIENTS.find(p => p.bmhId === (c?.bmhId || c?.bmshId || c?.patientId)) || {};
+  return {
+    id: c?.id || '',
+    bmhId: c?.bmhId || c?.bmshId || c?.patientId || pt.bmhId || '',
+    patient: c?.patient || c?.name || pt.name || '—',
+    proc: c?.procedure || c?.procedureMain || c?.surgery || c?.operation || 'Procedure',
+    date: bmhReportDateKey(c?.date || c?.otDate || c?.surgeryDate || c?.scheduledDate || c?.createdAt || c?.updatedAt),
+    doctor: c?.surgeon || c?.doctor || pt.doctor || pt.assignedDoctor || '',
+    status: String(c?.status || 'pending').toLowerCase(),
+    mobile: c?.mobile || pt.mob || '',
+    ageSex: [c?.age || pt.age || '—', c?.sex || pt.sex || '—'].join('/'),
+    centre: c?.centre || pt.centre || 'CHD'
+  };
+}
+function bmhReportRefreshOTCases() {
+  if(window._bmhReportOTRefresh) return window._bmhReportOTRefresh;
+  if(!window.fbOnce) return Promise.resolve(false);
+  window._bmhReportOTRefresh = fbOnce('otCases').then(data => {
+    if(data) Object.values(data).forEach(c => {
+      if(c && c.id && !OT_CASES.find(x => x.id === c.id)) OT_CASES.push(c);
+    });
+    window._bmhReportOTLastRefresh = Date.now();
+    return true;
+  }).catch(e => { console.warn('OT report refresh failed', e); return false; })
+    .finally(() => { window._bmhReportOTRefresh = null; });
+  return window._bmhReportOTRefresh;
+}
+function bmhReportBuildDeliveryRows() {
+  const fromVal = document.getElementById('rep-surg-from')?.value || '';
+  const toVal = document.getElementById('rep-surg-to')?.value || '';
+  const centreFilter = document.getElementById('rep-centre')?.value || '';
+  const visitCache = window._bmhReportVisitsByPatient || {};
+  const rows = [];
+  PATIENTS.forEach(pt => {
+    if(!pt || pt.dept !== 'obg') return;
+    if(centreFilter && (pt.centre || 'CHD') !== centreFilter) return;
+    const visits = Object.values(visitCache[pt.bmhId] || {}).concat([pt.lastVisit, pt.lastVisitByDept?.obg]).filter(Boolean);
+    const ancVisits = visits.filter(v => v && v.dept === 'obg' && (v.workflowAnc === true || v.obstetricHistoryEnabled === true || v['obg-track-anc'] === true));
+    const eddRows = ancVisits.map(v => {
+      const eddIso = bmhReportParseEdd(v['obg-obs-edd-usg'] || v['obg-obs-edd-date'] || v.edd || '');
+      return { visit:v, eddIso };
+    }).filter(x => x.eddIso).sort((a,b) => String(b.visit.date || b.visit.createdAt || '').localeCompare(String(a.visit.date || a.visit.createdAt || '')));
+    if(!eddRows.length) return;
+    const picked = eddRows[0];
+    if(fromVal && picked.eddIso < fromVal) return;
+    if(toVal && picked.eddIso > toVal) return;
+    const v = picked.visit;
+    rows.push({
+      patient: pt.name || '—',
+      bmhId: pt.bmhId || '',
+      eddIso: picked.eddIso,
+      edd: bmhReportFmtDate(picked.eddIso),
+      doctor: v.doctor || pt.assignedDoctor || pt.doctor || '',
+      mobile: pt.mob || pt.mobile || '',
+      ageSex: [pt.age || '—', pt.sex || '—'].join('/'),
+      gravida: v.gravida || ['G'+(v.g||'0'),'P'+(v.p||'0'),'A'+(v.a||'0'),'L'+(v.l||'0')].join(''),
+      visitDate: v.date || v.createdAt || ''
+    });
+  });
+  return rows.sort((a,b) => String(a.eddIso).localeCompare(String(b.eddIso)) || String(a.patient).localeCompare(String(b.patient)));
+}
 function generateSurgeryReport() {
-  const proc=document.getElementById('rep-surg-name')?.value||'';
+  const proc=(document.getElementById('rep-surg-name')?.value||'').trim();
   const el=document.getElementById('rep-surgery-result'); if(!el) return;
-  // Include both OT cases and PROCEDURE_ADVISED_LOG
-  const allAdvised = [...PROCEDURE_ADVISED_LOG, ...OT_CASES.map(c=>({proc:c.procedure,bmhId:c.bmhId,patient:c.patient,date:c.date,doctor:c.surgeon,status:c.status}))];
-  const filtered = proc ? allAdvised.filter(a=>a.proc.toLowerCase().includes(proc.toLowerCase())) : allAdvised;
+  const source = document.getElementById('rep-surg-source')?.value || 'advised';
+  const statusFilter = document.getElementById('rep-surg-status')?.value || '';
+  const fromVal = document.getElementById('rep-surg-from')?.value || '';
+  const toVal = document.getElementById('rep-surg-to')?.value || '';
+  const centreFilter = document.getElementById('rep-centre')?.value || '';
+  if(source === 'deliveries') {
+    if(!window._bmhReportVisitsLoaded && window.fbOnce && !window._bmhReportVisitsLoading) {
+      window._bmhReportVisitsLoading = true;
+      el.innerHTML = '<div class="card"><div style="padding:18px;color:var(--g1);font-size:12px">Loading saved OBG ANC visits...</div></div>';
+      fbOnce('visits').then(data => { window._bmhReportVisitsByPatient = data || {}; window._bmhReportVisitsLoaded = true; })
+        .catch(e => console.warn('Delivery report visit load failed', e))
+        .finally(() => { window._bmhReportVisitsLoading = false; generateSurgeryReport(); });
+      return;
+    }
+    const rows = bmhReportBuildDeliveryRows();
+    el.innerHTML=`<div class="card">
+      <div class="card-hd"><div><div class="card-title">🤰 Deliveries Expected — ${rows.length} patients</div><div class="card-sub">OBG ANC cases sorted by EDD</div></div><button class="btn btn-gold btn-xs" onclick="window.print()">🖨️ Print</button></div>
+      ${rows.length?`<table><thead><tr><th>#</th><th>EDD</th><th>Patient</th><th>BMSH ID</th><th>Doctor</th><th>Phone</th><th>Age/Sex</th><th>GPAL</th><th>Last Visit</th></tr></thead>
+      <tbody>${rows.map((p,i)=>`<tr><td>${i+1}</td><td style="font-weight:900;color:var(--bmh-blue)">${bmhReportEsc(p.edd)}</td><td style="font-weight:800">${bmhReportEsc(p.patient)}</td><td style="font-family:var(--mono);font-size:10px">${bmhReportEsc(p.bmhId)}</td><td>${bmhReportEsc(p.doctor||'—')}</td><td>${bmhReportEsc(p.mobile||'—')}</td><td>${bmhReportEsc(p.ageSex||'—')}</td><td>${bmhReportEsc(p.gravida||'—')}</td><td>${bmhReportEsc(bmhReportFmtDate(p.visitDate))}</td></tr>`).join('')}
+      </tbody></table>`:'<div style="padding:20px;text-align:center;color:var(--g1)">No OBG ANC patients with EDD found for the current filter.</div>'}
+    </div>`;
+    return;
+  }
+  if((source === 'ot' || source === 'all') && (!OT_CASES.length || Date.now() - Number(window._bmhReportOTLastRefresh || 0) > 30000)) {
+    el.innerHTML = '<div class="card"><div style="padding:18px;color:var(--g1);font-size:12px">Loading OT cases from database...</div></div>';
+    bmhReportRefreshOTCases().then(() => generateSurgeryReport());
+    return;
+  }
+  const advisedRows = PROCEDURE_ADVISED_LOG.map(a => ({...a, source:'advised', date:bmhReportDateKey(a.date || a.createdAt), status:a.status || 'advised'}));
+  const otRows = OT_CASES.map(bmhReportNormalizeOTCase).map(a => ({...a, source:'ot'}));
+  const allAdvised = source === 'ot' ? otRows : source === 'all' ? advisedRows.concat(otRows) : advisedRows;
+  const filtered = allAdvised.filter(a => {
+    if(proc && !String(a.proc || '').toLowerCase().includes(proc.toLowerCase())) return false;
+    if(centreFilter && (a.centre || 'CHD') !== centreFilter) return false;
+    if(fromVal && a.date && a.date < fromVal) return false;
+    if(toVal && a.date && a.date > toVal) return false;
+    if(statusFilter) {
+      const st = String(a.status || '').toLowerCase();
+      if(statusFilter === 'done') return st === 'done' || st === 'completed';
+      if(st !== statusFilter) return false;
+    }
+    return true;
+  });
   el.innerHTML=`<div class="card">
     <div class="card-hd"><div><div class="card-title">⚕️ ${proc||'All Procedures'} — ${filtered.length} patients</div></div><button class="btn btn-gold btn-xs" onclick="window.print()">🖨️ Print</button></div>
-    ${filtered.length?`<table><thead><tr><th>#</th><th>Patient</th><th>BMSH ID</th><th>Procedure</th><th>Date Advised</th><th>Doctor</th><th>Status</th></tr></thead>
-    <tbody>${filtered.map((p,i)=>`<tr><td>${i+1}</td><td style="font-weight:800">${p.patient}</td><td style="font-family:var(--mono);font-size:10px">${p.bmhId}</td><td>${p.proc}</td><td>${p.date||'—'}</td><td>${p.doctor}</td><td><span class="badge ${p.status==='completed'?'bd-green':p.status==='in-progress'?'bd-blue':'bd-orange'}">${p.status||'Advised'}</span></td></tr>`).join('')}
+    ${filtered.length?`<table><thead><tr><th>#</th><th>Patient</th><th>BMSH ID</th><th>Procedure</th><th>Date</th><th>Doctor</th><th>Status</th></tr></thead>
+    <tbody>${filtered.map((p,i)=>`<tr><td>${i+1}</td><td style="font-weight:800">${bmhReportEsc(p.patient)}</td><td style="font-family:var(--mono);font-size:10px">${bmhReportEsc(p.bmhId)}</td><td>${bmhReportEsc(p.proc)}</td><td>${bmhReportEsc(bmhReportFmtDate(p.date))}</td><td>${bmhReportEsc(p.doctor||'—')}</td><td><span class="badge ${p.status==='completed'||p.status==='done'?'bd-green':p.status==='in-progress'?'bd-blue':'bd-orange'}">${bmhReportEsc(p.status||'Advised')}</span></td></tr>`).join('')}
     </tbody></table>`:'<div style="padding:20px;text-align:center;color:var(--g1)">No records found</div>'}
   </div>`;
 }
@@ -14110,7 +14232,10 @@ function saveVisit(dept) {
     visit.rx = JSON.parse(JSON.stringify(RX_DRUGS || []));
 
   } else if(dept === 'obg') {
-    visit.edd       = document.getElementById('obg-edd')?.value || '';
+    const ancEl = document.getElementById('obg-track-anc');
+    visit.edd       = document.getElementById('obg-edd-inp')?.value || document.getElementById('obg-edd')?.textContent || '';
+    visit.workflowAnc = ancEl ? !!ancEl.checked : true;
+    visit.obstetricHistoryEnabled = !!visit.workflowAnc;
     visit.gravida   = document.getElementById('obg-gravida')?.value || '';
     visit.bp        = document.getElementById('obg-bp')?.value  || '';
     visit.weight    = document.getElementById('obg-weight')?.value || '';

@@ -26755,12 +26755,13 @@ function getProcedureReportRows() {
     const rowCentre = c.centre || pt.centre || '';
     const normalizedProc = expandProcedureLabelForPrint(c.procedure || c.procedureMain || c.proc || '');
     const rawStatus = String(c.status || 'pending').toLowerCase();
+    const otDate = getOTCaseDateKey(c) || c.date || c.otDate || c.surgeryDate || c.scheduledDate || c.createdAt || '';
     return {
       key: 'ot-' + (c.id || idx),
       patient: c.patient || pt.name || '—',
       bmhId: c.bmhId || pt.bmhId || '',
       proc: normalizedProc,
-      date: c.date || c.scheduledDate || c.scheduledTime || c.createdAt || '',
+      date: otDate,
       doctor: c.surgeon || c.doctor || pt.assignedDoctor || pt.doctor || '',
       status: rawStatus === 'inprogress' ? 'in-progress' : rawStatus,
       otProcedure: normalizedProc,
@@ -26825,8 +26826,7 @@ function getObgAncVisitCandidates(pt) {
     if (!visit || typeof visit !== 'object') return;
     const dept = normalizeDeptKeyForQueue(visit.dept || pt.lastDeptVisit || pt.dept || '');
     const anc = visit.workflowAnc === true || visit.obstetricHistoryEnabled === true || visit['obg-track-anc'] === true;
-    if (!anc && dept !== 'obg') return;
-    if (!anc) return;
+    if (dept !== 'obg' || !anc) return;
     rows.push(Object.assign({ _source: source || '' }, visit));
   };
   add(pt.lastVisitByDept && pt.lastVisitByDept.obg, 'lastVisitByDept');
