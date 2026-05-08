@@ -22762,17 +22762,33 @@ function applyReceptionFeeChoice() {
   const feeEl = document.getElementById('rc-fee');
   if (!select || !feeEl) return;
   if (document.getElementById('rc-no-fee')?.checked) return;
-  const amount = Math.max(0, Number(select.value || 0));
+  const choice = getReceptionFeeChoiceMeta();
+  const amount = Math.max(0, Number((choice && choice.amount) || select.value || 0));
   feeEl.value = String(amount);
 }
 window.applyReceptionFeeChoice = applyReceptionFeeChoice;
 
 function getReceptionFeeChoiceMeta() {
   const select = document.getElementById('rc-fee-select');
-  if (!select || select.style.display === 'none' || !shouldShowReceptionOphthoChdFeeChoice()) return null;
+  if (!select || !shouldShowReceptionOphthoChdFeeChoice()) return null;
+  const selectedOption = select.options && select.selectedIndex >= 0 ? select.options[select.selectedIndex] : null;
+  const selectedText = String(selectedOption?.textContent || '').trim();
   const amount = Math.max(0, Number(select.value || 0));
-  if (amount === 300) return { type: 'general', label: 'General Registration', amount: amount };
+  if (amount === 300 || /general\s+registration/i.test(selectedText)) return { type: 'general', label: 'General Registration', amount: 300 };
   return { type: 'specialist', label: 'Specialist Registration', amount: amount };
+}
+
+function restoreReceptionFeeChoiceMeta(choice) {
+  if (!choice || document.getElementById('rc-no-fee')?.checked) return;
+  const select = document.getElementById('rc-fee-select');
+  const feeEl = document.getElementById('rc-fee');
+  if (select) {
+    const target = String(choice.amount || 0);
+    if (Array.from(select.options || []).some(function (opt) { return String(opt.value) === target; })) {
+      select.value = target;
+    }
+  }
+  if (feeEl && Number.isFinite(Number(choice.amount))) feeEl.value = String(Math.max(0, Number(choice.amount || 0)));
 }
 
 function getReceptionSelectedConsultationFeeAmount(centre) {
@@ -22997,6 +23013,7 @@ async function registerPatient() {
   const centre = document.getElementById('rc-centre')?.value || CURRENT_USER?.centre || 'CHD';
   const addr= normalizeReceptionFieldValue('rc-addr', document.getElementById('rc-addr')?.value || '');
   const noFee = document.getElementById('rc-no-fee')?.checked;
+  const initialFeeChoice = noFee ? null : getReceptionFeeChoiceMeta();
   const advAmt = parseFloat(document.getElementById('rc-advance-amt')?.value)||0;
   const advPurpose = normalizeReceptionFieldValue('rc-advance-purpose', document.getElementById('rc-advance-purpose')?.value||'');
 
@@ -23050,7 +23067,9 @@ async function registerPatient() {
   const colors = ['#1A3C6E','#0B7B8C','#FF2D55','#AF52DE','#34C759','#FF9500','#5856D6','#FF3B30'];
   const color = existingPt?.color || colors[Math.floor(Math.random()*colors.length)];
 
+  const lockedFeeChoice = noFee ? null : (initialFeeChoice || getReceptionFeeChoiceMeta());
   setReceptionPurposeDefaultForVisit(isExistingRegistration);
+  restoreReceptionFeeChoiceMeta(lockedFeeChoice);
   const purposeVal = normalizeReceptionFieldValue('rc-purpose', document.getElementById('rc-purpose')?.value||'New Consultation');
   const isPreReg = purposeVal==='Need to Check In' || purposeVal==='Not Checked In';
   const email = emailEarly;
@@ -23084,9 +23103,11 @@ async function registerPatient() {
 
   syncBmhSequenceFloor(uid);
 
+  restoreReceptionFeeChoiceMeta(lockedFeeChoice);
   applyReceptionFeeChoice && applyReceptionFeeChoice();
-  const feeChoice = noFee ? { type: 'no-fee', label: 'No Fee Consultation', amount: 0 } : getReceptionFeeChoiceMeta();
+  const feeChoice = noFee ? { type: 'no-fee', label: 'No Fee Consultation', amount: 0 } : (lockedFeeChoice || getReceptionFeeChoiceMeta());
   let fee = getReceptionSelectedConsultationFeeAmount(centre);
+  if (feeChoice && Number.isFinite(Number(feeChoice.amount))) fee = Math.max(0, Number(feeChoice.amount || 0));
   if(noFee) fee = 0;
   const payMode = document.getElementById('rc-pay-mode')?.value||'Cash';
   const purpose = normalizeReceptionFieldValue('rc-purpose', document.getElementById('rc-purpose')?.value||'New Consultation');
