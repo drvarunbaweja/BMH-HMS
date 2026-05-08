@@ -2750,10 +2750,13 @@ function rebuildDxListFromValues(listId, values) {
     inp.type = 'text';
     inp.className = 'dx-inp';
     const isObgList = listId === 'obg-dx-list';
+    const isSkinList = String(listId || '').indexOf('skin') >= 0;
     inp.placeholder = isObgList ? 'ICD-10 code or diagnosis — type to search' : 'ICD-10 search or type free-text diagnosis…';
     if (isObgList) inp.setAttribute('data-dx-dept', 'obg');
+    else if (isSkinList) inp.setAttribute('data-dx-dept', 'skin');
     inp.setAttribute('oninput', 'filterDx(this)');
     inp.setAttribute('onfocus', 'showDxDropdown(this);wireDxInputFocus(this)');
+    inp.setAttribute('onkeydown', "if(event.key==='Enter'){event.preventDefault();selectDxFreeText()}");
     inp.style.cssText = 'flex:1;font-size:12px';
     inp.autocomplete = 'off';
     inp.value = text || '';
@@ -7490,7 +7493,7 @@ function renderSkinRail() {
 }
 function populateSkinForm(visit) {
   const data = visit || window.CURRENT_PATIENT?.lastVisit || {};
-  ['skin-chief','skin-duration','skin-site','skin-fit','skin-primary-dx','skin-secondary-dx','skin-routine','skin-medical','skin-hormonal','skin-lesion','skin-secondary-change','skin-distribution','skin-configuration','skin-hair','skin-nail','skin-dermoscopy','skin-cosm-acne-grade','skin-cosm-sensitivity','skin-cosm-pih','skin-cosm-isotret','skin-cosm-tan','skin-cosm-preg']
+  ['skin-chief','skin-duration','skin-site','skin-fit','skin-primary-dx','skin-routine','skin-medical','skin-hormonal','skin-lesion','skin-secondary-change','skin-distribution','skin-configuration','skin-hair','skin-nail','skin-dermoscopy','skin-cosm-acne-grade','skin-cosm-sensitivity','skin-cosm-pih','skin-cosm-isotret','skin-cosm-tan','skin-cosm-preg']
     .forEach(id => {
       const el = document.getElementById(id);
       if(!el || data[id] == null) return;
@@ -7516,6 +7519,18 @@ function populateSkinForm(visit) {
   if (data.rxFuDate) {
     const el = document.querySelector('#pg-skin #skin-rx #rx-fu-date');
     if (el) el.value = data.rxFuDate;
+  }
+  if (Array.isArray(data.skinHxDxList) && data.skinHxDxList.length) {
+    const primary = document.getElementById('skin-primary-dx');
+    if (primary) primary.value = data.skinHxDxList[0] || primary.value || '';
+    const hxList = document.getElementById('skin-hx-dx-list');
+    if (hxList) Array.from(hxList.children).slice(1).forEach(function (row) { row.remove(); });
+    data.skinHxDxList.slice(1).forEach(function (line) {
+      addDxRow('skin-hx-dx-list');
+      const rows = hxList ? hxList.querySelectorAll('.dx-inp') : [];
+      const inp = rows[rows.length - 1];
+      if (inp) inp.value = line;
+    });
   }
   if (Array.isArray(data.skinDxList)) rebuildDxListFromValues('skin-dx-list', data.skinDxList);
   restoreProcedureDoneState('skin', data.procDone || null);
@@ -10004,15 +10019,30 @@ function bmhRecordAdvanceAdjustment(bmhId, amount, reason, meta) {
   };
   TRANSACTIONS.push(txn);
   saveTransactionToFirebase && saveTransactionToFirebase(txn);
+  bmhSyncPatientAdvanceBalance(bmhId, {
+    adjustmentAmount: adjAmt,
+    purposeAppend: reason || 'Advance used'
+  });
   return txn;
 }
 function bmhSyncPatientAdvanceBalance(bmhId, opts) {
   if (!bmhId) return 0;
   const pt = PATIENTS.find(function (x) { return x.bmhId === bmhId; });
-  let nextAdvance = bmhComputeAdvanceBalanceForPatient(bmhId);
-  if (!pt) return nextAdvance;
+  if (!pt) return bmhComputeAdvanceBalanceForPatient(bmhId);
   const currentAdvance = Math.max(0, Number(pt.advance) || 0);
-  if (!opts?.allowIncrease && nextAdvance > currentAdvance) nextAdvance = currentAdvance;
+  const deltaAmount = Math.max(0, Number(opts?.deltaAmount || 0));
+  const adjustmentAmount = Math.max(0, Number(opts?.adjustmentAmount || 0));
+  let nextAdvance = currentAdvance;
+
+  if (deltaAmount > 0) {
+    nextAdvance = currentAdvance + deltaAmount;
+  } else if (adjustmentAmount > 0) {
+    nextAdvance = Math.max(0, currentAdvance - adjustmentAmount);
+  } else if (opts?.recomputeFromTransactions || currentAdvance <= 0) {
+    const computed = bmhComputeAdvanceBalanceForPatient(bmhId);
+    nextAdvance = opts?.allowIncrease ? Math.max(currentAdvance, computed) : computed;
+  }
+
   const patch = {};
   if (Math.abs(currentAdvance - nextAdvance) > 0.009) {
     pt.advance = nextAdvance;
@@ -10283,7 +10313,7 @@ function bmhPostPatientAdvanceFromBilling(opts) {
   const bmhId = txn.bmhId;
   TRANSACTIONS.push(txn);
   saveTransactionToFirebase && saveTransactionToFirebase(txn);
-  bmhSyncPatientAdvanceBalance(bmhId, { allowIncrease: true, purposeAppend: String(txn.service || '').replace(/^Advance\s+—\s*/,'') });
+  bmhSyncPatientAdvanceBalance(bmhId, { deltaAmount: txn.amount, allowIncrease: true, purposeAppend: String(txn.service || '').replace(/^Advance\s+—\s*/,'') });
   saveBmhFinancials();
   bmhRenderBillingAdvanceRows(true);
   bmhSelectBillPatient(bmhId);
@@ -15866,9 +15896,11 @@ function adminClearAllInventoryStock() {
   if (typeof isAdminUser !== 'function' || !isAdminUser()) { showToast('Only admin can clear inventory', 'w'); return; }
   if (!bmhRequireInventoryDeletePin()) return;
   if (!confirm('Delete ALL current inventory rows? Barcode map will reset. This cannot be undone.')) return;
+  const rowsToDelete = INVENTORY.slice();
   INVENTORY.length = 0;
   if (typeof BCMAP === 'object' && BCMAP) { Object.keys(BCMAP).forEach(function (k) { delete BCMAP[k]; }); }
   saveInventoryStockToStorage();
+  bmhDeleteInventoryRowsFromCloud(rowsToDelete);
   renderStockList();
   renderInventoryPurchaseLog();
   renderInventoryStoreStock();
@@ -15877,6 +15909,27 @@ function adminClearAllInventoryStock() {
   showToast('Inventory cleared', 's');
 }
 window.adminClearAllInventoryStock = adminClearAllInventoryStock;
+function bmhInventoryFirebaseKey(barcode) {
+  return String(barcode || '').replace(/[.#$/\[\]]/g, '_');
+}
+function bmhDeleteInventoryRowsFromCloud(rows) {
+  const list = (Array.isArray(rows) ? rows : []).filter(function (row) { return row && row.barcode; });
+  if (!list.length) return;
+  window._bmhInventoryDeletedAt = window._bmhInventoryDeletedAt || {};
+  list.forEach(function (row) {
+    const barcode = String(row.barcode || '').trim();
+    if (!barcode) return;
+    window._bmhInventoryDeletedAt[barcode] = Date.now();
+    try {
+      if (window.FBDB) window.FBDB.ref('inventory/' + bmhInventoryFirebaseKey(barcode)).remove().catch(function (err) { console.warn('RTDB inventory delete failed', err); });
+    } catch (e) { console.warn('RTDB inventory delete failed', e); }
+    try {
+      if (typeof window.deleteInventoryFromFirebase === 'function') {
+        window.deleteInventoryFromFirebase(barcode).catch(function (err) { console.warn('Firestore inventory delete failed', err); });
+      }
+    } catch (e) { console.warn('Firestore inventory delete failed', e); }
+  });
+}
 function addInventoryVendorPrompt() {
   const name = normalizeInventoryTextValue(prompt('Vendor name') || '');
   if (!name) return;
@@ -15929,6 +15982,7 @@ function deleteInventoryStockRow(barcode) {
   INVENTORY.splice(idx, 1);
   delete BCMAP[barcode];
   saveInventoryStockToStorage();
+  bmhDeleteInventoryRowsFromCloud([item]);
   renderStockList();
   renderInventoryStoreStock();
   renderInventoryPoAlerts();
@@ -15950,6 +16004,7 @@ function deleteInventoryIolGroup(company, brand, power, store) {
   window.INVENTORY = INVENTORY.filter(function (i) { return !matches.includes(i); });
   matches.forEach(function (i) { if (i.barcode) delete BCMAP[i.barcode]; });
   saveInventoryStockToStorage();
+  bmhDeleteInventoryRowsFromCloud(matches);
   renderStockList();
   renderInventoryStoreStock();
   renderInventoryPoAlerts();
@@ -16784,7 +16839,6 @@ function applyLoadedChargesRows(rows) {
   Object.keys(CENTRE_CHARGES.RPR || {}).forEach(function (key) { delete CENTRE_CHARGES.RPR[key]; });
   Object.assign(CENTRE_CHARGES.CHD, nextCentreCharges.CHD);
   Object.assign(CENTRE_CHARGES.RPR, nextCentreCharges.RPR);
-  ensureCriticalChargesLoaded();
   return CHARGES_DATA.length > 0;
 }
 function loadChargesFromLocalStorage() {
@@ -16802,7 +16856,6 @@ function loadChargesFromLocalStorage() {
       if (d && d.CHD) Object.assign(CENTRE_CHARGES.CHD, d.CHD);
       if (d && d.RPR) Object.assign(CENTRE_CHARGES.RPR, d.RPR);
     }
-    ensureCriticalChargesLoaded();
   } catch (e) { /* noop */ }
 }
 function saveChargesToFirebase(){
@@ -16882,7 +16935,6 @@ function loadChargesFromFirebase(){
     const d=snap.val(); if(!d) return;
     if(d.CHD) Object.assign(CENTRE_CHARGES.CHD, d.CHD);
     if(d.RPR) Object.assign(CENTRE_CHARGES.RPR, d.RPR);
-    ensureCriticalChargesLoaded();
     saveCentreChargesMapsToLocalStorage();
     renderCentresCharges && renderCentresCharges();
     syncReceptionConsultationFee && syncReceptionConsultationFee();
@@ -21155,6 +21207,39 @@ const ICD10_DB = [
   // SKIN
   {code:'L70.0',desc:'Acne vulgaris',full:'L70.0 — Acne Vulgaris'},
   {code:'L81.1',desc:'Chloasma / Melasma',full:'L81.1 — Melasma'},
+  {code:'L70.1',desc:'Acne conglobata',full:'L70.1 — Acne conglobata'},
+  {code:'L70.8',desc:'Other acne',full:'L70.8 — Other acne'},
+  {code:'L70.9',desc:'Acne, unspecified',full:'L70.9 — Acne, unspecified'},
+  {code:'L71.9',desc:'Rosacea, unspecified',full:'L71.9 — Rosacea'},
+  {code:'L72.0',desc:'Epidermal cyst',full:'L72.0 — Epidermal cyst'},
+  {code:'L73.2',desc:'Hidradenitis suppurativa',full:'L73.2 — Hidradenitis suppurativa'},
+  {code:'L63.9',desc:'Alopecia areata, unspecified',full:'L63.9 — Alopecia areata'},
+  {code:'L64.9',desc:'Androgenic alopecia, unspecified',full:'L64.9 — Androgenic alopecia'},
+  {code:'L65.0',desc:'Telogen effluvium',full:'L65.0 — Telogen effluvium'},
+  {code:'L65.9',desc:'Nonscarring hair loss, unspecified',full:'L65.9 — Hair loss, unspecified'},
+  {code:'L20.9',desc:'Atopic dermatitis, unspecified',full:'L20.9 — Atopic dermatitis'},
+  {code:'L21.9',desc:'Seborrhoeic dermatitis, unspecified',full:'L21.9 — Seborrhoeic dermatitis'},
+  {code:'L23.9',desc:'Allergic contact dermatitis, unspecified cause',full:'L23.9 — Allergic contact dermatitis'},
+  {code:'L24.9',desc:'Irritant contact dermatitis, unspecified cause',full:'L24.9 — Irritant contact dermatitis'},
+  {code:'L30.9',desc:'Dermatitis, unspecified',full:'L30.9 — Dermatitis, unspecified'},
+  {code:'L40.9',desc:'Psoriasis, unspecified',full:'L40.9 — Psoriasis'},
+  {code:'L50.9',desc:'Urticaria, unspecified',full:'L50.9 — Urticaria'},
+  {code:'L57.0',desc:'Actinic keratosis',full:'L57.0 — Actinic keratosis'},
+  {code:'L60.0',desc:'Ingrowing nail',full:'L60.0 — Ingrowing nail'},
+  {code:'L60.3',desc:'Nail dystrophy',full:'L60.3 — Nail dystrophy'},
+  {code:'L81.0',desc:'Postinflammatory hyperpigmentation',full:'L81.0 — Postinflammatory hyperpigmentation'},
+  {code:'L81.4',desc:'Other melanin hyperpigmentation',full:'L81.4 — Lentigines / hyperpigmentation'},
+  {code:'L90.5',desc:'Scar conditions and fibrosis of skin',full:'L90.5 — Scar conditions / acne scars'},
+  {code:'L91.0',desc:'Hypertrophic scar',full:'L91.0 — Hypertrophic scar / keloid'},
+  {code:'B07.9',desc:'Viral wart, unspecified',full:'B07.9 — Viral wart'},
+  {code:'B35.0',desc:'Tinea barbae and tinea capitis',full:'B35.0 — Tinea capitis'},
+  {code:'B35.1',desc:'Tinea unguium',full:'B35.1 — Onychomycosis / tinea unguium'},
+  {code:'B35.4',desc:'Tinea corporis',full:'B35.4 — Tinea corporis'},
+  {code:'B35.6',desc:'Tinea cruris',full:'B35.6 — Tinea cruris'},
+  {code:'B36.0',desc:'Pityriasis versicolor',full:'B36.0 — Pityriasis versicolor'},
+  {code:'L01.0',desc:'Impetigo',full:'L01.0 — Impetigo'},
+  {code:'L02.9',desc:'Cutaneous abscess, furuncle and carbuncle, unspecified',full:'L02.9 — Skin abscess / furuncle / carbuncle'},
+  {code:'L03.9',desc:'Cellulitis, unspecified',full:'L03.9 — Cellulitis'},
 ];
 
 const OT_CASES = [];
@@ -21324,7 +21409,7 @@ window.addEventListener('DOMContentLoaded', function() {
     .forEach(id => document.getElementById(id)?.addEventListener('change', renderPsychRail));
   ['psych-chief','psych-trigger','psych-family','psych-personal','psych-pastpsych','psych-medical','psych-substance','psych-child-parent','psych-speech-tone','psych-subjective-mood']
     .forEach(id => document.getElementById(id)?.addEventListener('input', renderPsychRail));
-  ['skin-chief','skin-duration','skin-site','skin-fit','skin-primary-dx','skin-secondary-dx','skin-routine','skin-medical','skin-hormonal','skin-lesion','skin-secondary-change','skin-distribution','skin-configuration','skin-hair','skin-nail','skin-dermoscopy','skin-cosm-acne-grade','skin-cosm-sensitivity','skin-cosm-pih','skin-cosm-isotret','skin-cosm-tan','skin-cosm-preg']
+  ['skin-chief','skin-duration','skin-site','skin-fit','skin-primary-dx','skin-routine','skin-medical','skin-hormonal','skin-lesion','skin-secondary-change','skin-distribution','skin-configuration','skin-hair','skin-nail','skin-dermoscopy','skin-cosm-acne-grade','skin-cosm-sensitivity','skin-cosm-pih','skin-cosm-isotret','skin-cosm-tan','skin-cosm-preg']
     .forEach(id => {
       document.getElementById(id)?.addEventListener('change', renderSkinRail);
       document.getElementById(id)?.addEventListener('input', renderSkinRail);
@@ -23051,7 +23136,7 @@ async function registerPatient() {
     };
     TRANSACTIONS.push(txna);
     saveTransactionToFirebase&&saveTransactionToFirebase(txna);
-    bmhSyncPatientAdvanceBalance(uid, { allowIncrease: true, purposeAppend: advPurpose || 'Advance on account' });
+    bmhSyncPatientAdvanceBalance(uid, { deltaAmount: advAmt, allowIncrease: true, purposeAppend: advPurpose || 'Advance on account' });
   }
 
   fbUpdate&&fbUpdate('patients/'+uid,{
@@ -23253,7 +23338,7 @@ function scheduleSurgery() {
     };
     TRANSACTIONS.push(txn);
     saveTransactionToFirebase && saveTransactionToFirebase(txn);
-    bmhSyncPatientAdvanceBalance(ptId, { allowIncrease: true, purposeAppend: 'Surgery Advance — ' + sType });
+    bmhSyncPatientAdvanceBalance(ptId, { deltaAmount: advAmt, allowIncrease: true, purposeAppend: 'Surgery Advance — ' + sType });
     // Also store advance details on the OT case itself
     otCase.advancePaid = advAmt;
     fbUpdate && fbUpdate('otCases/'+otCase.id, {advancePaid:advAmt});
@@ -26115,19 +26200,21 @@ function selectDxFreeText() {
   const v = activeInput.value.trim();
   if (!v) { hideDxDropdown(); return; }
   activeInput.value = v;
-  rememberManualDiagnosis(v, String(activeInput?.dataset?.dxDept || '').toLowerCase() === 'obg' ? 'obg' : activeClinicDeptKey());
+  rememberManualDiagnosis(v, String(activeInput?.dataset?.dxDept || '').toLowerCase() || activeClinicDeptKey());
   activeInput.style.background='var(--green-lt)';
   activeInput.style.borderColor='var(--green)';
   hideDxDropdown();
 }
-function addDxRow() {
+function addDxRow(listId) {
   const ap = document.querySelector('.page.active');
-  const list = ap ? ap.querySelector('[id$="-dx-list"]') : null;
+  const list = listId ? document.getElementById(listId) : (ap ? ap.querySelector('[id$="-dx-list"]') : null);
   if(!list) return;
   const isObg = list.id === 'obg-dx-list';
+  const dept = list.id.indexOf('skin') >= 0 ? 'skin' : (isObg ? 'obg' : activeClinicDeptKey());
+  const isSkinHistory = list.id === 'skin-hx-dx-list';
   const d = document.createElement('div');
   d.style.cssText='display:flex;gap:6px;align-items:center;margin-top:5px';
-  d.innerHTML=`<input type="text" class="dx-inp" ${isObg ? 'data-dx-dept="obg"' : ''} placeholder="${isObg ? 'ICD-10 code or diagnosis — type to search' : 'ICD-10 search or type free-text diagnosis…'}" oninput="filterDx(this)" onfocus="showDxDropdown(this);wireDxInputFocus(this)" style="flex:1" autocomplete="off">
+  d.innerHTML=`<input type="text" class="dx-inp" data-dx-dept="${dept}" placeholder="${isObg ? 'ICD-10 code or diagnosis — type to search' : 'ICD-10 search or type free-text diagnosis…'}" oninput="filterDx(this)" onfocus="showDxDropdown(this);wireDxInputFocus(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();selectDxFreeText()}" style="flex:1${isSkinHistory ? ';font-size:12px' : ''}" autocomplete="off">
     <button type="button" class="btn btn-xs btn-gray" onclick="this.closest('div').remove()">✕</button>`;
   list.appendChild(d);
   const inp = d.querySelector('.dx-inp');
@@ -33544,6 +33631,12 @@ function startPatientsRealtimeUpdates() {
   window._bmhPatientsRealtimeStarted = true;
   const ref = window.FBDB.ref('patients');
   const knownPatientIds = new Set((window._BMH_ALL_PATIENTS_CACHE || []).map(function (p) { return String(p?.bmhId || '').trim(); }).filter(Boolean));
+  ref.limitToLast(100).on('child_added', function (snap) {
+    const key = String(snap.key || '').trim();
+    if (!key || knownPatientIds.has(key)) return;
+    knownPatientIds.add(key);
+    applyRealtimePatientRecord(snap.val(), snap.key);
+  });
   ref.on('child_changed', function (snap) {
     const key = String(snap.key || '').trim();
     if (key) knownPatientIds.add(key);
@@ -33696,6 +33789,58 @@ function listenAppointments() {
 // ── TRANSACTIONS / COLLECTIONS ───────────────────────────────
 function saveTodayTransactionsToLocal() {
   try { localStorage.setItem('bmh_transactions_' + todayKey(), JSON.stringify(TRANSACTIONS || [])); } catch (e) { /* noop */ }
+}
+function applyRealtimeTransactionRecord(txn, key) {
+  if (!txn || typeof txn !== 'object') return;
+  const id = String(txn.id || key || '').trim();
+  if (!id) return;
+  const centre = normalizeAppointmentCentreValue((CURRENT_USER?.centre || 'CHD'));
+  if (!CURRENT_USER?.isAdmin && normalizeAppointmentCentreValue(txn.centre || 'CHD') !== centre) return;
+  const next = Object.assign({}, txn, { id: id });
+  const idx = TRANSACTIONS.findIndex(function (row) { return String(row?.id || '') === id; });
+  if (idx >= 0) TRANSACTIONS[idx] = next;
+  else TRANSACTIONS.push(next);
+  saveTodayTransactionsToLocal();
+  if (next.bmhId && typeof bmhSyncPatientAdvanceBalance === 'function') bmhSyncPatientAdvanceBalance(next.bmhId, { localOnly: true });
+  renderCollectionDashboard && renderCollectionDashboard();
+  if (getActivePageId && getActivePageId() === 'pg-reception') renderReceptionPage && renderReceptionPage();
+}
+function removeRealtimeTransactionRecord(key) {
+  const id = String(key || '').trim();
+  if (!id) return;
+  const idx = TRANSACTIONS.findIndex(function (row) { return String(row?.id || '') === id; });
+  if (idx > -1) {
+    const bmhId = TRANSACTIONS[idx]?.bmhId || '';
+    TRANSACTIONS.splice(idx, 1);
+    saveTodayTransactionsToLocal();
+    if (bmhId && typeof bmhSyncPatientAdvanceBalance === 'function') bmhSyncPatientAdvanceBalance(bmhId, { localOnly: true });
+    renderCollectionDashboard && renderCollectionDashboard();
+    if (getActivePageId && getActivePageId() === 'pg-reception') renderReceptionPage && renderReceptionPage();
+  }
+}
+function startTodayTransactionsRealtimeUpdates(dateKey) {
+  if (!window.FBDB) return;
+  const day = dateKey || todayKey();
+  if (window._bmhTodayTransactionsRealtimeKey === day) return;
+  window._bmhTodayTransactionsRealtimeKey = day;
+  const ref = window.FBDB.ref('transactions/' + day);
+  const knownTxnIds = new Set((TRANSACTIONS || []).map(function (t) { return String(t?.id || '').trim(); }).filter(Boolean));
+  ref.on('child_added', function (snap) {
+    const key = String(snap.key || '').trim();
+    if (!key || knownTxnIds.has(key)) return;
+    knownTxnIds.add(key);
+    applyRealtimeTransactionRecord(snap.val(), snap.key);
+  });
+  ref.on('child_changed', function (snap) {
+    const key = String(snap.key || '').trim();
+    if (key) knownTxnIds.add(key);
+    applyRealtimeTransactionRecord(snap.val(), snap.key);
+  });
+  ref.on('child_removed', function (snap) {
+    const key = String(snap.key || '').trim();
+    if (key) knownTxnIds.delete(key);
+    removeRealtimeTransactionRecord(snap.key);
+  });
 }
 function saveTransactionToFirebase(txn) {
   const key = txn.id || fbKey();
@@ -34155,6 +34300,7 @@ function loadTodayTransactions() {
     saveTodayTransactionsToLocal();
     bmhRunEndOfDayEegPurge && bmhRunEndOfDayEegPurge();
     renderCollectionDashboard && renderCollectionDashboard();
+    startTodayTransactionsRealtimeUpdates(today);
   });
 }
 
@@ -40148,7 +40294,7 @@ function saveVisit(dept, opts) {
     visit.rx = JSON.parse(JSON.stringify(RX_DRUGS || []));
     visit.procDone = getProcedureDoneStateForDept('psych');
   } else if(dept === 'skin') {
-    ['skin-chief','skin-duration','skin-site','skin-fit','skin-primary-dx','skin-secondary-dx','skin-routine','skin-medical','skin-hormonal','skin-lesion','skin-secondary-change','skin-distribution','skin-configuration','skin-hair','skin-nail','skin-dermoscopy','skin-cosm-acne-grade','skin-cosm-sensitivity','skin-cosm-pih','skin-cosm-isotret','skin-cosm-tan','skin-cosm-preg']
+    ['skin-chief','skin-duration','skin-site','skin-fit','skin-primary-dx','skin-routine','skin-medical','skin-hormonal','skin-lesion','skin-secondary-change','skin-distribution','skin-configuration','skin-hair','skin-nail','skin-dermoscopy','skin-cosm-acne-grade','skin-cosm-sensitivity','skin-cosm-pih','skin-cosm-isotret','skin-cosm-tan','skin-cosm-preg']
       .forEach(id => { visit[id] = document.getElementById(id)?.value || ''; });
     ['skin-cosm-melasma','skin-cosm-acne','skin-cosm-scar','skin-cosm-ageing','skin-cosm-sensitive','skin-cosm-hair']
       .forEach(id => { visit[id] = !!document.getElementById(id)?.checked; });
@@ -40161,9 +40307,10 @@ function saveVisit(dept, opts) {
     visit.skinInvestigations = skinGuidance.investigations;
     visit.skinPlan = skinGuidance.management;
     visit.skinProcedural = skinGuidance.procedures;
+    visit.skinHxDxList = [...document.querySelectorAll('#skin-hx-dx-list .dx-inp')].map(function (e) { return e.value.trim(); }).filter(Boolean);
     visit.skinDxList = [...document.querySelectorAll('#skin-dx-list .dx-inp')].map(function (e) { return e.value.trim(); }).filter(Boolean);
-    visit.skinDxList.forEach(function (line) { rememberManualDiagnosis(line, 'skin'); });
-    const skinSelDx = [document.getElementById('skin-primary-dx')?.value || '', document.getElementById('skin-secondary-dx')?.value || ''].filter(function (x) { return x && x !== 'None'; });
+    visit.skinHxDxList.concat(visit.skinDxList).forEach(function (line) { rememberManualDiagnosis(line, 'skin'); });
+    const skinSelDx = visit.skinHxDxList.slice();
     const skinDxLine = visit.skinDxList.length ? visit.skinDxList.join(' · ') : '';
     visit.dx = [skinDxLine, skinSelDx.join(' · ')].filter(Boolean).join(' · ');
     visit.skinAdvice = document.getElementById('skin-advice')?.value || '';
