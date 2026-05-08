@@ -9806,6 +9806,28 @@ function addBmhPatientCharge(bmhId, row) {
   saveBmhFinancials();
   bmhSyncPatientRunningBalance(bmhId);
 }
+function buildPaidReceptionChargeRow(txnId, desc, fee) {
+  const amount = Math.max(0, Number(fee) || 0);
+  return {
+    id: 'chg-' + txnId,
+    cat: inferChargeCategoryFromService(desc),
+    desc: desc,
+    qty: 1,
+    rate: amount,
+    amount: amount,
+    paidAmount: amount,
+    source: 'reception',
+    ref: txnId,
+    ts: new Date().toISOString(),
+    paymentAllocations: amount > 0 ? [{
+      txnId: txnId,
+      amount: amount,
+      date: new Date().toISOString(),
+      mode: document.getElementById('rc-pay-mode')?.value || 'Cash',
+      by: CURRENT_USER?.name || 'Reception'
+    }] : []
+  };
+}
 function syncPayRequestToPatientCharges(pr) {
   if (!pr || !pr.bmhId) return;
   const arr = window.BMH_PATIENT_CHARGES[pr.bmhId] || [];
@@ -23111,7 +23133,6 @@ async function registerPatient() {
     showToast(`📋 ₹${fee} noted as credit/due for ${name}`,'i');
   } else if(fee > 0) {
     const txnId = 'TXN'+Date.now();
-    addBmhPatientCharge(uid, { id: 'chg-' + txnId, cat: inferChargeCategoryFromService(consultationDesc), desc: consultationDesc, qty: 1, rate: fee, amount: fee, source: 'reception', ref: txnId, ts: new Date().toISOString() });
     const txn = {
       id:txnId, patient:name, bmhId:uid, service: consultationDesc, amount:fee,
       mode:payMode, collected:true, dept,
@@ -23121,6 +23142,7 @@ async function registerPatient() {
       consultationFeeType: feeChoice?.type || '',
       consultationFeeLabel: feeChoice?.label || ''
     };
+    addBmhPatientCharge(uid, buildPaidReceptionChargeRow(txnId, consultationDesc, fee));
     TRANSACTIONS.push(txn);
     saveTransactionToFirebase&&saveTransactionToFirebase(txn);
     patient.balance = bmhSyncPatientRunningBalance(uid);
@@ -23141,7 +23163,8 @@ async function registerPatient() {
   }
 
   fbUpdate&&fbUpdate('patients/'+uid,{
-    checkinAt:patient.checkinAt,purpose,visitCount:patient.visitCount,ins:patient.ins||'', policy: patient.policy || '',
+    status: patient.status, seen: patient.seen, dilated: patient.dilated, dept: patient.dept, centre: patient.centre,
+    balance: patient.balance, checkinAt:patient.checkinAt,purpose,visitCount:patient.visitCount,ins:patient.ins||'', policy: patient.policy || '',
     advance:patient.advance, advancePurpose:patient.advancePurpose, consultationNoFee:patient.consultationNoFee,
     consultationFee: patient.consultationFee, consultationFeeType: patient.consultationFeeType || '', consultationFeeLabel: patient.consultationFeeLabel || '',
     refType: patient.refType || '', refName: patient.refName || '', refMobile: patient.refMobile || '', referredBy: patient.referredBy || '',
@@ -23149,7 +23172,16 @@ async function registerPatient() {
   });
   if (typeof window.patchPatientFirestore === 'function') {
     window.patchPatientFirestore(uid, {
+      status: patient.status,
+      seen: patient.seen,
+      dilated: patient.dilated,
+      dept: patient.dept,
+      centre: patient.centre,
+      balance: patient.balance,
       checkinAt: patient.checkinAt,
+      queueDate: patient.queueDate || queueDateToday,
+      visitDate: patient.visitDate || queueDateToday,
+      queueRemoved: false,
       purpose,
       visitCount: patient.visitCount,
       ins: patient.ins || '',
