@@ -29855,6 +29855,41 @@ function handleProcedureDoneToggle(dept, checked) {
   if (window.CURRENT_PATIENT?.bmhId) saveVisit(dept, { silent: true });
 }
 window.handleProcedureDoneToggle = handleProcedureDoneToggle;
+function confirmProcedureDoneModal() {
+  const dept = document.getElementById('proc-done-dept')?.value || activeClinicDeptKey();
+  const bmhId = window.CURRENT_PATIENT?.bmhId || '';
+  if (!dept || !bmhId) { showToast('Open a patient first', 'w'); return; }
+  const state = getProcedureDraftFromModal();
+  if (!state.procedure) { showToast('Select the performed procedure first', 'w'); return; }
+  const pt = window.CURRENT_PATIENT || PATIENTS.find(function (p) { return p.bmhId === bmhId; }) || {};
+  const esc = function (v) { return String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
+  const deptLabels = { ophtho: 'Ophthalmology', obg: 'OBG', psych: 'Neuropsychiatry', skin: 'Skin & Aesthetics' };
+  const items = (state.items || []).filter(function (r) { return r.name; });
+  const stockHtml = items.length
+    ? '<table style="width:100%;border-collapse:collapse;margin-top:8px"><thead><tr><th style="text-align:left;padding:6px 8px;background:#eef3fb;border:1px solid #d7dce5;font-size:11px">Stock Item</th><th style="padding:6px 8px;background:#eef3fb;border:1px solid #d7dce5;font-size:11px">Qty</th><th style="padding:6px 8px;background:#eef3fb;border:1px solid #d7dce5;font-size:11px">Bill?</th></tr></thead><tbody>'
+      + items.map(function (row) {
+          const invItem = findInventoryItemForProcedureRow(row);
+          const available = invItem ? Number(invItem.stock || 0) : null;
+          const stockNote = available !== null ? ' <span style="font-size:10px;color:' + (available < row.qty ? '#c0392b' : '#27ae60') + '">(' + available + ' in stock)</span>' : '';
+          return '<tr><td style="padding:6px 8px;border:1px solid #d7dce5">' + esc(row.name) + stockNote + '</td><td style="padding:6px 8px;border:1px solid #d7dce5;text-align:center;font-weight:900">' + Number(row.qty || 1) + '</td><td style="padding:6px 8px;border:1px solid #d7dce5;text-align:center">' + (row.billPatient ? '<span style="color:#27ae60;font-weight:800">Yes</span>' : '<span style="color:#888">No</span>') + '</td></tr>';
+        }).join('')
+      + '</tbody></table>'
+    : '<div style="padding:8px 10px;border:1px dashed #d7dce5;border-radius:8px;color:#888;font-size:12px;margin-top:8px">No stock items — procedure only.</div>';
+  document.getElementById('proc-done-confirm-body').innerHTML = ''
+    + '<div style="background:#eef3fb;border-radius:10px;padding:11px 14px;margin-bottom:10px">'
+    +   '<div style="font-size:12px;color:#666;margin-bottom:2px">' + esc(deptLabels[dept] || dept) + ' · ' + esc(pt.name || bmhId) + ' <span style="font-family:monospace">' + esc(bmhId) + '</span></div>'
+    +   '<div style="font-size:15px;font-weight:900;color:#1A3C6E">' + esc(state.procedure) + (state.amount ? ' <span style="color:#0e7490">₹' + Number(state.amount).toLocaleString('en-IN') + '</span>' : '') + '</div>'
+    +   (state.notes ? '<div style="font-size:11px;color:#555;margin-top:3px">' + esc(state.notes) + '</div>' : '')
+    + '</div>'
+    + '<div style="font-size:11px;font-weight:900;text-transform:uppercase;color:#666;letter-spacing:.4px;margin-bottom:4px">Stock to be deducted</div>'
+    + stockHtml
+    + (items.length ? '<div style="font-size:11px;color:#888;margin-top:8px">Items marked <b>Bill patient</b> will be added to the patient\'s billing. All items will be deducted from inventory stock.</div>' : '');
+  setProcedureDoneStateForDept(dept, state);
+  closeM('m-procedure-done');
+  openM('m-procedure-done-confirm');
+}
+window.confirmProcedureDoneModal = confirmProcedureDoneModal;
+
 function saveProcedureDoneModal() {
   const dept = document.getElementById('proc-done-dept')?.value || activeClinicDeptKey();
   const bmhId = window.CURRENT_PATIENT?.bmhId || '';
@@ -29910,12 +29945,13 @@ function saveProcedureDoneModal() {
     return row;
   });
   setProcedureDoneStateForDept(dept, state);
+  closeM('m-procedure-done-confirm');
   closeM('m-procedure-done');
   saveVisit(dept, { silent: true });
   renderInventoryUsageLog && renderInventoryUsageLog();
   renderInventoryTodayEntries && renderInventoryTodayEntries();
   renderStockList && renderStockList();
-  showToast('Procedure done details saved' + (usedCount ? ' · ' + usedCount + ' stock movement' + (usedCount === 1 ? '' : 's') : '') + ' ✓', 's');
+  showToast('Procedure done saved' + (usedCount ? ' · ' + usedCount + ' stock movement' + (usedCount === 1 ? '' : 's') + ' recorded' : '') + ' ✓', 's');
 }
 window.saveProcedureDoneModal = saveProcedureDoneModal;
 function restoreProcedureDoneState(dept, data) {

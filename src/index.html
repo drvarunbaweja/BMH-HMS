@@ -5287,8 +5287,23 @@
   <div id="proc-done-usage-list"></div>
   <div style="display:flex;justify-content:flex-end;gap:8px">
     <button class="btn btn-outline" type="button" onclick="closeM('m-procedure-done')">Close</button>
-    <button class="btn btn-gold" type="button" onclick="saveProcedureDoneModal()">Save Procedure</button>
+    <button class="btn btn-gold" type="button" onclick="confirmProcedureDoneModal()">Review &amp; Save →</button>
   </div>
+</div>
+</div>
+</div>
+
+<!-- Procedure Done — Confirmation Modal -->
+<div class="modal-ov" id="m-procedure-done-confirm">
+<div class="modal">
+<div class="modal-hd">
+  <div class="modal-title">✅ Confirm Procedure &amp; Stock Usage</div>
+  <button class="modal-close" onclick="closeM('m-procedure-done-confirm')">✕</button>
+</div>
+<div id="proc-done-confirm-body" style="font-size:13px;line-height:1.7"></div>
+<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+  <button class="btn btn-outline" type="button" onclick="closeM('m-procedure-done-confirm');openM('m-procedure-done')">← Go Back</button>
+  <button class="btn btn-gold" type="button" onclick="saveProcedureDoneModal()">Confirm &amp; Deduct Stock</button>
 </div>
 </div>
 </div>
