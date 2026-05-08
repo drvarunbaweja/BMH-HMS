@@ -2016,7 +2016,7 @@ ${['Cataract Surgery','IVT Injection','LASIK','Glaucoma Surgery','Anaesthesia','
           <div class="form-group"><label class="fl">Email</label><input type="email" id="rc-email" placeholder="email@example.com"></div>
           <div id="rc-phone-match" style="grid-column:1/-1"></div>
           <div class="form-group full"><label class="fl">Address</label><input type="text" id="rc-addr" placeholder="Full address"></div>
-          <div class="form-group"><label class="fl">Department</label><select id="rc-dept" onchange="updateRcDr();updatePurposeOptions()"><option value="ophtho">Ophthalmology</option><option value="obg">OBG</option><option value="psych">Neuropsychiatry</option><option value="skin">Skin &amp; Cosmetology</option></select></div>
+          <div class="form-group"><label class="fl">Department</label><select id="rc-dept" onchange="updateRcDr();updatePurposeOptions();syncReceptionFeeChoice()"><option value="ophtho">Ophthalmology</option><option value="obg">OBG</option><option value="psych">Neuropsychiatry</option><option value="skin">Skin &amp; Cosmetology</option></select></div>
                     <!-- REFERRED BY - New Patient -->
           <div style="background:var(--blue-lt);border:1.5px solid rgba(0,122,255,.2);border-radius:var(--rsm);padding:9px 12px;margin-bottom:8px">
             <div style="font-size:10px;font-weight:800;color:var(--blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Referred By</div>
@@ -2038,12 +2038,12 @@ ${['Cataract Surgery','IVT Injection','LASIK','Glaucoma Surgery','Anaesthesia','
 <div class="form-group"><label class="fl">Doctor</label><select id="rc-dr"></select></div>
           <div class="form-group">
             <label class="fl" style="display:flex;align-items:center;justify-content:space-between">Purpose <button onclick="openM('m-add-purpose')" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></label>
-            <select id="rc-purpose" onchange="checkSurgeryPurpose()">
+            <select id="rc-purpose" onchange="checkSurgeryPurpose();syncReceptionFeeChoice()">
               <option>New Consultation</option><option>Follow-up</option><option>Post-op (Day 1)</option><option>Post-op (1 Week)</option><option>Post-op (1 Month)</option><option>Post-op (3 Months)</option><option>Emergency</option><option>ANC Visit</option><option>Surgery</option><option>Procedure / Injection</option><option>Investigation Only</option>
             </select>
           </div>
-          <div class="form-group"><label class="fl">Centre</label><select id="rc-centre"><option value="CHD">Chandigarh</option><option value="RPR">Ropar</option></select></div>
-          <div class="form-group"><label class="fl">Consultation Fee ₹</label><input type="number" id="rc-fee" value="200"></div>
+          <div class="form-group"><label class="fl">Centre</label><select id="rc-centre" onchange="syncReceptionFeeChoice()"><option value="CHD">Chandigarh</option><option value="RPR">Ropar</option></select></div>
+          <div class="form-group"><label class="fl">Consultation Fee ₹</label><select id="rc-fee-select" onchange="applyReceptionFeeChoice()" style="display:none;margin-bottom:4px"><option value="300" data-label="General Registration">General Registration - ₹300</option><option value="500" data-label="Specialist Consultation">Specialist Consultation - ₹500</option></select><input type="number" id="rc-fee" value="200"></div>
           <div class="form-group">
             <label class="fl">Payment Mode</label>
             <select id="rc-pay-mode" onchange="toggleInsField()">
@@ -7948,6 +7948,7 @@ function checkSurgeryPurpose() {
   const feeEl = document.getElementById('rc-fee');
   if(feeEl && purpose==='Not Checked In' && feeEl.value==='200') feeEl.value='0';
   else if(feeEl && purpose!=='Not Checked In' && feeEl.value==='0') feeEl.value='200';
+  syncReceptionFeeChoice && syncReceptionFeeChoice();
 }
 function lookupByBMHID(val) {
   const el = document.getElementById('rc-bmhid-result'); if(!el) return;
@@ -11032,6 +11033,61 @@ function updatePurposeOptions() {
     }
   });
   checkSurgeryPurpose && checkSurgeryPurpose();
+  syncReceptionFeeChoice && syncReceptionFeeChoice();
+}
+
+function shouldShowReceptionFeeChoice() {
+  const centre = document.getElementById('rc-centre')?.value || CURRENT_USER?.centre || 'CHD';
+  const dept = document.getElementById('rc-dept')?.value || 'ophtho';
+  const purpose = document.getElementById('rc-purpose')?.value || 'New Consultation';
+  return centre === 'CHD' && dept === 'ophtho' && purpose !== 'Not Checked In' && purpose !== 'Need to Check In';
+}
+function applyReceptionFeeChoice() {
+  const select = document.getElementById('rc-fee-select');
+  const feeEl = document.getElementById('rc-fee');
+  if(!select || !feeEl || select.style.display === 'none') return;
+  feeEl.value = String(Math.max(0, Number(select.value || 0)));
+}
+function getReceptionFeeChoiceMeta() {
+  const select = document.getElementById('rc-fee-select');
+  if(!select || select.style.display === 'none' || !shouldShowReceptionFeeChoice()) return null;
+  const opt = select.options[select.selectedIndex];
+  return {
+    type: Number(select.value || 0) === 300 ? 'general' : 'specialist',
+    label: opt?.dataset?.label || opt?.textContent?.replace(/\s*-\s*₹.*/, '') || 'Consultation',
+    amount: Math.max(0, Number(select.value || 0))
+  };
+}
+function syncReceptionFeeChoice() {
+  const select = document.getElementById('rc-fee-select');
+  const feeEl = document.getElementById('rc-fee');
+  if(!select || !feeEl) return;
+  const show = shouldShowReceptionFeeChoice();
+  if(!show) {
+    select.style.display = 'none';
+    feeEl.style.display = '';
+    return;
+  }
+  const previous = String(select.value || '');
+  select.innerHTML = '<option value="300" data-label="General Registration">General Registration - ₹300</option><option value="500" data-label="Specialist Consultation">Specialist Consultation - ₹500</option>';
+  select.value = previous === '300' ? '300' : '500';
+  select.style.display = '';
+  feeEl.style.display = 'none';
+  applyReceptionFeeChoice();
+}
+
+if(typeof window.addBmhPatientCharge !== 'function') {
+  window.addBmhPatientCharge = function(bmhId, row) {
+    if(!bmhId || !row) return;
+    const charge = Object.assign({ id:'chg-' + Date.now(), qty:1, source:'reception', ts:new Date().toISOString() }, row);
+    const pt = PATIENTS.find(p => p.bmhId === bmhId);
+    if(pt) {
+      pt.charges = Array.isArray(pt.charges) ? pt.charges : [];
+      const idx = pt.charges.findIndex(c => c.id === charge.id);
+      if(idx >= 0) pt.charges[idx] = charge; else pt.charges.push(charge);
+    }
+    fbSet && fbSet('patientCharges/' + bmhId + '/' + charge.id, charge);
+  };
 }
 
 // ═══════════════════════════════════════
@@ -14073,12 +14129,18 @@ function registerPatient() {
   if(!isNaN(_usedNum)) fbSet && fbSet('settings/lastPatientNum', _usedNum);
 
   // Record consultation fee as transaction
-  const fee = parseFloat(document.getElementById('rc-fee')?.value||200)||200;
+  applyReceptionFeeChoice && applyReceptionFeeChoice();
+  const feeChoice = getReceptionFeeChoiceMeta ? getReceptionFeeChoiceMeta() : null;
+  const fee = feeChoice ? feeChoice.amount : (parseFloat(document.getElementById('rc-fee')?.value||200)||200);
   const payMode = document.getElementById('rc-pay-mode')?.value||'Cash';
   const purpose = document.getElementById('rc-purpose')?.value||'New Consultation';
+  const consultationDesc = feeChoice ? (feeChoice.label + (purpose ? ' - ' + purpose : '')) : purpose;
   const insName = document.getElementById('rc-ins-name')?.value||'';
   patient.checkinAt = Date.now();
   patient.purpose = purpose;
+  patient.consultationFee = fee;
+  patient.consultationFeeType = feeChoice?.type || '';
+  patient.consultationFeeLabel = feeChoice?.label || '';
   // Add visit count
   const prevVisits = PATIENTS.filter(p=>p.mob===patient.mob&&p.bmhId!==patient.bmhId).length;
   patient.visitCount = prevVisits + 1;
@@ -14089,28 +14151,41 @@ function registerPatient() {
   if(isInsurance) {
     // Create TPA pending claim
     const claimId = 'TPA'+Date.now();
-    const claim = {id:claimId, patient:name, bmhId:uid, for:purpose, amount:fee, status:'pending', mode:payMode, ins:insName||payMode, dept, centre, date:new Date().toISOString(), from:'Reception'};
+    const claim = {id:claimId, patient:name, bmhId:uid, for:consultationDesc, amount:fee, status:'pending', mode:payMode, ins:insName||payMode, dept, centre, date:new Date().toISOString(), from:'Reception', consultationFeeType:patient.consultationFeeType, consultationFeeLabel:patient.consultationFeeLabel};
     PAY_REQUESTS.push(claim);
     fbSet&&fbSet('payRequests/'+claimId, claim);
+    addBmhPatientCharge && addBmhPatientCharge(uid, {
+      id:'chg-'+claimId, cat:'consultation', desc:consultationDesc, qty:1, rate:fee, amount:fee,
+      source:'reception', ref:claimId, ts:claim.date, consultationFeeType:patient.consultationFeeType, consultationFeeLabel:patient.consultationFeeLabel
+    });
     patient.ins = insName||payMode;
     showToast(`🏦 TPA/Insurance patient — claim pending ₹${fee.toLocaleString('en-IN')}`,'i');
   } else if(isCreditDue) {
     patient.balance = (patient.balance||0) + fee;
+    addBmhPatientCharge && addBmhPatientCharge(uid, {
+      id:'chg-credit-'+Date.now(), cat:'consultation', desc:consultationDesc, qty:1, rate:fee, amount:fee,
+      source:'reception', ts:new Date().toISOString(), consultationFeeType:patient.consultationFeeType, consultationFeeLabel:patient.consultationFeeLabel
+    });
     showToast(`📋 ₹${fee} noted as credit/due for ${name}`,'i');
   } else {
     // Record as collected transaction
     const txnId = 'TXN'+Date.now();
     const txn = {
-      id:txnId, patient:name, bmhId:uid, service:purpose, amount:fee,
+      id:txnId, patient:name, bmhId:uid, service:consultationDesc, amount:fee,
       mode:payMode, collected:true, dept,
       time:new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
-      date:new Date().toISOString(), centre, createdBy:CURRENT_USER?.name||'Reception'
+      date:new Date().toISOString(), centre, createdBy:CURRENT_USER?.name||'Reception',
+      consultationFeeType:patient.consultationFeeType, consultationFeeLabel:patient.consultationFeeLabel
     };
     TRANSACTIONS.push(txn);
     saveTransactionToFirebase&&saveTransactionToFirebase(txn);
+    addBmhPatientCharge && addBmhPatientCharge(uid, {
+      id:'chg-'+txnId, cat:'consultation', desc:consultationDesc, qty:1, rate:fee, amount:fee,
+      source:'reception', ref:txnId, ts:txn.date, consultationFeeType:patient.consultationFeeType, consultationFeeLabel:patient.consultationFeeLabel
+    });
   }
   // Update patient record with checkin time, purpose, visitCount
-  fbUpdate&&fbUpdate('patients/'+uid,{checkinAt:patient.checkinAt,purpose,visitCount:patient.visitCount,ins:patient.ins||''});
+  fbUpdate&&fbUpdate('patients/'+uid,{checkinAt:patient.checkinAt,purpose,visitCount:patient.visitCount,ins:patient.ins||'',consultationFee:fee,consultationFeeType:patient.consultationFeeType,consultationFeeLabel:patient.consultationFeeLabel});
 
   // Token number — simple serial based on today's queue
   const todayPts = PATIENTS.filter(p=> p.createdAt && p.createdAt.startsWith(new Date().toISOString().slice(0,10)));
@@ -14122,7 +14197,7 @@ function registerPatient() {
   if(!isInsurance && !isCreditDue && !isPreReg && fee>0) {
     setTimeout(()=>{
       if(confirm(`✅ ${name} registered — Token #${token}\nFee: ₹${fee.toLocaleString('en-IN')} (${payMode})\n\nPrint receipt?`)) {
-        printPaymentReceipt({id:'TXN'+Date.now(),patient:name,bmhId:uid,for:purpose,service:purpose,amount:fee,mode:payMode,bmhId:uid,centre:centre});
+        printPaymentReceipt({id:'TXN'+Date.now(),patient:name,bmhId:uid,for:consultationDesc,service:consultationDesc,amount:fee,mode:payMode,centre:centre});
       }
     },200);
   }
@@ -14158,6 +14233,8 @@ function resetRegistrationForm() {
   updateRcDr && updateRcDr();
   updatePurposeOptions && updatePurposeOptions();
   configureReceptionCentreSelect && configureReceptionCentreSelect();
+  const feeSelect=document.getElementById('rc-fee-select'); if(feeSelect) feeSelect.value='500';
+  syncReceptionFeeChoice && syncReceptionFeeChoice();
   // Generate new BMSH ID
   genRcUID && genRcUID();
 }
