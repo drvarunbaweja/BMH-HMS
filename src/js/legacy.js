@@ -2750,10 +2750,13 @@ function rebuildDxListFromValues(listId, values) {
     inp.type = 'text';
     inp.className = 'dx-inp';
     const isObgList = listId === 'obg-dx-list';
+    const isSkinList = String(listId || '').indexOf('skin') >= 0;
     inp.placeholder = isObgList ? 'ICD-10 code or diagnosis — type to search' : 'ICD-10 search or type free-text diagnosis…';
     if (isObgList) inp.setAttribute('data-dx-dept', 'obg');
+    else if (isSkinList) inp.setAttribute('data-dx-dept', 'skin');
     inp.setAttribute('oninput', 'filterDx(this)');
     inp.setAttribute('onfocus', 'showDxDropdown(this);wireDxInputFocus(this)');
+    inp.setAttribute('onkeydown', "if(event.key==='Enter'){event.preventDefault();selectDxFreeText()}");
     inp.style.cssText = 'flex:1;font-size:12px';
     inp.autocomplete = 'off';
     inp.value = text || '';
@@ -7490,7 +7493,7 @@ function renderSkinRail() {
 }
 function populateSkinForm(visit) {
   const data = visit || window.CURRENT_PATIENT?.lastVisit || {};
-  ['skin-chief','skin-duration','skin-site','skin-fit','skin-primary-dx','skin-secondary-dx','skin-routine','skin-medical','skin-hormonal','skin-lesion','skin-secondary-change','skin-distribution','skin-configuration','skin-hair','skin-nail','skin-dermoscopy','skin-cosm-acne-grade','skin-cosm-sensitivity','skin-cosm-pih','skin-cosm-isotret','skin-cosm-tan','skin-cosm-preg']
+  ['skin-chief','skin-duration','skin-site','skin-fit','skin-primary-dx','skin-routine','skin-medical','skin-hormonal','skin-lesion','skin-secondary-change','skin-distribution','skin-configuration','skin-hair','skin-nail','skin-dermoscopy','skin-cosm-acne-grade','skin-cosm-sensitivity','skin-cosm-pih','skin-cosm-isotret','skin-cosm-tan','skin-cosm-preg']
     .forEach(id => {
       const el = document.getElementById(id);
       if(!el || data[id] == null) return;
@@ -7516,6 +7519,18 @@ function populateSkinForm(visit) {
   if (data.rxFuDate) {
     const el = document.querySelector('#pg-skin #skin-rx #rx-fu-date');
     if (el) el.value = data.rxFuDate;
+  }
+  if (Array.isArray(data.skinHxDxList) && data.skinHxDxList.length) {
+    const primary = document.getElementById('skin-primary-dx');
+    if (primary) primary.value = data.skinHxDxList[0] || primary.value || '';
+    const hxList = document.getElementById('skin-hx-dx-list');
+    if (hxList) Array.from(hxList.children).slice(1).forEach(function (row) { row.remove(); });
+    data.skinHxDxList.slice(1).forEach(function (line) {
+      addDxRow('skin-hx-dx-list');
+      const rows = hxList ? hxList.querySelectorAll('.dx-inp') : [];
+      const inp = rows[rows.length - 1];
+      if (inp) inp.value = line;
+    });
   }
   if (Array.isArray(data.skinDxList)) rebuildDxListFromValues('skin-dx-list', data.skinDxList);
   restoreProcedureDoneState('skin', data.procDone || null);
@@ -21192,6 +21207,39 @@ const ICD10_DB = [
   // SKIN
   {code:'L70.0',desc:'Acne vulgaris',full:'L70.0 — Acne Vulgaris'},
   {code:'L81.1',desc:'Chloasma / Melasma',full:'L81.1 — Melasma'},
+  {code:'L70.1',desc:'Acne conglobata',full:'L70.1 — Acne conglobata'},
+  {code:'L70.8',desc:'Other acne',full:'L70.8 — Other acne'},
+  {code:'L70.9',desc:'Acne, unspecified',full:'L70.9 — Acne, unspecified'},
+  {code:'L71.9',desc:'Rosacea, unspecified',full:'L71.9 — Rosacea'},
+  {code:'L72.0',desc:'Epidermal cyst',full:'L72.0 — Epidermal cyst'},
+  {code:'L73.2',desc:'Hidradenitis suppurativa',full:'L73.2 — Hidradenitis suppurativa'},
+  {code:'L63.9',desc:'Alopecia areata, unspecified',full:'L63.9 — Alopecia areata'},
+  {code:'L64.9',desc:'Androgenic alopecia, unspecified',full:'L64.9 — Androgenic alopecia'},
+  {code:'L65.0',desc:'Telogen effluvium',full:'L65.0 — Telogen effluvium'},
+  {code:'L65.9',desc:'Nonscarring hair loss, unspecified',full:'L65.9 — Hair loss, unspecified'},
+  {code:'L20.9',desc:'Atopic dermatitis, unspecified',full:'L20.9 — Atopic dermatitis'},
+  {code:'L21.9',desc:'Seborrhoeic dermatitis, unspecified',full:'L21.9 — Seborrhoeic dermatitis'},
+  {code:'L23.9',desc:'Allergic contact dermatitis, unspecified cause',full:'L23.9 — Allergic contact dermatitis'},
+  {code:'L24.9',desc:'Irritant contact dermatitis, unspecified cause',full:'L24.9 — Irritant contact dermatitis'},
+  {code:'L30.9',desc:'Dermatitis, unspecified',full:'L30.9 — Dermatitis, unspecified'},
+  {code:'L40.9',desc:'Psoriasis, unspecified',full:'L40.9 — Psoriasis'},
+  {code:'L50.9',desc:'Urticaria, unspecified',full:'L50.9 — Urticaria'},
+  {code:'L57.0',desc:'Actinic keratosis',full:'L57.0 — Actinic keratosis'},
+  {code:'L60.0',desc:'Ingrowing nail',full:'L60.0 — Ingrowing nail'},
+  {code:'L60.3',desc:'Nail dystrophy',full:'L60.3 — Nail dystrophy'},
+  {code:'L81.0',desc:'Postinflammatory hyperpigmentation',full:'L81.0 — Postinflammatory hyperpigmentation'},
+  {code:'L81.4',desc:'Other melanin hyperpigmentation',full:'L81.4 — Lentigines / hyperpigmentation'},
+  {code:'L90.5',desc:'Scar conditions and fibrosis of skin',full:'L90.5 — Scar conditions / acne scars'},
+  {code:'L91.0',desc:'Hypertrophic scar',full:'L91.0 — Hypertrophic scar / keloid'},
+  {code:'B07.9',desc:'Viral wart, unspecified',full:'B07.9 — Viral wart'},
+  {code:'B35.0',desc:'Tinea barbae and tinea capitis',full:'B35.0 — Tinea capitis'},
+  {code:'B35.1',desc:'Tinea unguium',full:'B35.1 — Onychomycosis / tinea unguium'},
+  {code:'B35.4',desc:'Tinea corporis',full:'B35.4 — Tinea corporis'},
+  {code:'B35.6',desc:'Tinea cruris',full:'B35.6 — Tinea cruris'},
+  {code:'B36.0',desc:'Pityriasis versicolor',full:'B36.0 — Pityriasis versicolor'},
+  {code:'L01.0',desc:'Impetigo',full:'L01.0 — Impetigo'},
+  {code:'L02.9',desc:'Cutaneous abscess, furuncle and carbuncle, unspecified',full:'L02.9 — Skin abscess / furuncle / carbuncle'},
+  {code:'L03.9',desc:'Cellulitis, unspecified',full:'L03.9 — Cellulitis'},
 ];
 
 const OT_CASES = [];
@@ -21361,7 +21409,7 @@ window.addEventListener('DOMContentLoaded', function() {
     .forEach(id => document.getElementById(id)?.addEventListener('change', renderPsychRail));
   ['psych-chief','psych-trigger','psych-family','psych-personal','psych-pastpsych','psych-medical','psych-substance','psych-child-parent','psych-speech-tone','psych-subjective-mood']
     .forEach(id => document.getElementById(id)?.addEventListener('input', renderPsychRail));
-  ['skin-chief','skin-duration','skin-site','skin-fit','skin-primary-dx','skin-secondary-dx','skin-routine','skin-medical','skin-hormonal','skin-lesion','skin-secondary-change','skin-distribution','skin-configuration','skin-hair','skin-nail','skin-dermoscopy','skin-cosm-acne-grade','skin-cosm-sensitivity','skin-cosm-pih','skin-cosm-isotret','skin-cosm-tan','skin-cosm-preg']
+  ['skin-chief','skin-duration','skin-site','skin-fit','skin-primary-dx','skin-routine','skin-medical','skin-hormonal','skin-lesion','skin-secondary-change','skin-distribution','skin-configuration','skin-hair','skin-nail','skin-dermoscopy','skin-cosm-acne-grade','skin-cosm-sensitivity','skin-cosm-pih','skin-cosm-isotret','skin-cosm-tan','skin-cosm-preg']
     .forEach(id => {
       document.getElementById(id)?.addEventListener('change', renderSkinRail);
       document.getElementById(id)?.addEventListener('input', renderSkinRail);
@@ -26152,19 +26200,21 @@ function selectDxFreeText() {
   const v = activeInput.value.trim();
   if (!v) { hideDxDropdown(); return; }
   activeInput.value = v;
-  rememberManualDiagnosis(v, String(activeInput?.dataset?.dxDept || '').toLowerCase() === 'obg' ? 'obg' : activeClinicDeptKey());
+  rememberManualDiagnosis(v, String(activeInput?.dataset?.dxDept || '').toLowerCase() || activeClinicDeptKey());
   activeInput.style.background='var(--green-lt)';
   activeInput.style.borderColor='var(--green)';
   hideDxDropdown();
 }
-function addDxRow() {
+function addDxRow(listId) {
   const ap = document.querySelector('.page.active');
-  const list = ap ? ap.querySelector('[id$="-dx-list"]') : null;
+  const list = listId ? document.getElementById(listId) : (ap ? ap.querySelector('[id$="-dx-list"]') : null);
   if(!list) return;
   const isObg = list.id === 'obg-dx-list';
+  const dept = list.id.indexOf('skin') >= 0 ? 'skin' : (isObg ? 'obg' : activeClinicDeptKey());
+  const isSkinHistory = list.id === 'skin-hx-dx-list';
   const d = document.createElement('div');
   d.style.cssText='display:flex;gap:6px;align-items:center;margin-top:5px';
-  d.innerHTML=`<input type="text" class="dx-inp" ${isObg ? 'data-dx-dept="obg"' : ''} placeholder="${isObg ? 'ICD-10 code or diagnosis — type to search' : 'ICD-10 search or type free-text diagnosis…'}" oninput="filterDx(this)" onfocus="showDxDropdown(this);wireDxInputFocus(this)" style="flex:1" autocomplete="off">
+  d.innerHTML=`<input type="text" class="dx-inp" data-dx-dept="${dept}" placeholder="${isObg ? 'ICD-10 code or diagnosis — type to search' : 'ICD-10 search or type free-text diagnosis…'}" oninput="filterDx(this)" onfocus="showDxDropdown(this);wireDxInputFocus(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();selectDxFreeText()}" style="flex:1${isSkinHistory ? ';font-size:12px' : ''}" autocomplete="off">
     <button type="button" class="btn btn-xs btn-gray" onclick="this.closest('div').remove()">✕</button>`;
   list.appendChild(d);
   const inp = d.querySelector('.dx-inp');
@@ -40244,7 +40294,7 @@ function saveVisit(dept, opts) {
     visit.rx = JSON.parse(JSON.stringify(RX_DRUGS || []));
     visit.procDone = getProcedureDoneStateForDept('psych');
   } else if(dept === 'skin') {
-    ['skin-chief','skin-duration','skin-site','skin-fit','skin-primary-dx','skin-secondary-dx','skin-routine','skin-medical','skin-hormonal','skin-lesion','skin-secondary-change','skin-distribution','skin-configuration','skin-hair','skin-nail','skin-dermoscopy','skin-cosm-acne-grade','skin-cosm-sensitivity','skin-cosm-pih','skin-cosm-isotret','skin-cosm-tan','skin-cosm-preg']
+    ['skin-chief','skin-duration','skin-site','skin-fit','skin-primary-dx','skin-routine','skin-medical','skin-hormonal','skin-lesion','skin-secondary-change','skin-distribution','skin-configuration','skin-hair','skin-nail','skin-dermoscopy','skin-cosm-acne-grade','skin-cosm-sensitivity','skin-cosm-pih','skin-cosm-isotret','skin-cosm-tan','skin-cosm-preg']
       .forEach(id => { visit[id] = document.getElementById(id)?.value || ''; });
     ['skin-cosm-melasma','skin-cosm-acne','skin-cosm-scar','skin-cosm-ageing','skin-cosm-sensitive','skin-cosm-hair']
       .forEach(id => { visit[id] = !!document.getElementById(id)?.checked; });
@@ -40257,9 +40307,10 @@ function saveVisit(dept, opts) {
     visit.skinInvestigations = skinGuidance.investigations;
     visit.skinPlan = skinGuidance.management;
     visit.skinProcedural = skinGuidance.procedures;
+    visit.skinHxDxList = [...document.querySelectorAll('#skin-hx-dx-list .dx-inp')].map(function (e) { return e.value.trim(); }).filter(Boolean);
     visit.skinDxList = [...document.querySelectorAll('#skin-dx-list .dx-inp')].map(function (e) { return e.value.trim(); }).filter(Boolean);
-    visit.skinDxList.forEach(function (line) { rememberManualDiagnosis(line, 'skin'); });
-    const skinSelDx = [document.getElementById('skin-primary-dx')?.value || '', document.getElementById('skin-secondary-dx')?.value || ''].filter(function (x) { return x && x !== 'None'; });
+    visit.skinHxDxList.concat(visit.skinDxList).forEach(function (line) { rememberManualDiagnosis(line, 'skin'); });
+    const skinSelDx = visit.skinHxDxList.slice();
     const skinDxLine = visit.skinDxList.length ? visit.skinDxList.join(' · ') : '';
     visit.dx = [skinDxLine, skinSelDx.join(' · ')].filter(Boolean).join(' · ');
     visit.skinAdvice = document.getElementById('skin-advice')?.value || '';

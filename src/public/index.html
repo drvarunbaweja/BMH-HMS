@@ -3222,8 +3222,17 @@
           <div class="form-group"><label class="fl">Duration</label><input type="text" id="skin-duration" value="2 years"></div>
           <div class="form-group"><label class="fl">Site Affected</label><select id="skin-site"><option selected>Face</option><option>Neck</option><option>Body</option><option>Scalp</option><option>Multiple Sites</option></select></div>
           <div class="form-group"><label class="fl">Skin Type (Fitzpatrick)</label><select id="skin-fit"><option>I — Very fair</option><option>II — Fair</option><option>III — Medium</option><option selected>IV — Olive/Brown</option><option>V — Dark brown</option><option>VI — Very dark</option></select></div>
-          <div class="form-group"><label class="fl">Primary Diagnosis</label><select id="skin-primary-dx"><option selected>L81.1 — Chloasma / Melasma</option><option>L70.0 — Acne Vulgaris</option><option>L90.5 — Acne Scars</option><option>L63.9 — Alopecia Areata</option><option>L40 — Psoriasis</option><option>L20 — Atopic Dermatitis</option><option>L30.9 — Dermatitis NOS</option><option>B35.1 — Tinea Corporis</option><option>L57.0 — Actinic Keratosis</option></select></div>
-          <div class="form-group"><label class="fl">Secondary Diagnosis</label><select id="skin-secondary-dx"><option>None</option><option>L70.0 — Acne</option><option>L81.4 — PIH</option><option>L21 — Seborrhoeic Dermatitis</option></select></div>
+          <div class="form-group full"><label class="fl">Diagnosis (ICD-10)</label>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
+              <span style="font-size:10.5px;color:var(--g1);font-weight:700">Primary diagnosis can be selected from ICD-10 search or typed as a new diagnosis</span>
+              <button type="button" class="btn btn-xs btn-outline" onclick="addDxRow('skin-hx-dx-list')">+ Add Diagnosis</button>
+            </div>
+            <div id="skin-hx-dx-list">
+              <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">
+                <input type="text" id="skin-primary-dx" class="dx-inp" data-dx-dept="skin" data-dx-role="primary" placeholder="Type diagnosis or ICD-10 code…" value="L81.1 — Chloasma / Melasma" oninput="filterDx(this)" onfocus="showDxDropdown(this);wireDxInputFocus(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();selectDxFreeText()}" style="flex:1;font-size:12px" autocomplete="off">
+              </div>
+            </div>
+          </div>
           <div class="form-group full"><label class="fl">Current Skin Care Routine</label><textarea id="skin-routine">Using fairness cream (brand unknown), sunscreen not regular. No prescribed medications.</textarea></div>
           <div class="form-group full"><label class="fl">Medical History / Allergies</label><textarea id="skin-medical">No DM. Hormonal — PCOD diagnosed 2 years ago (on metformin). No known drug allergy.</textarea></div>
           <div class="form-group"><label class="fl">Hormonal Status</label><select id="skin-hormonal"><option>Pre-menopausal</option><option selected>PCOD</option><option>Post-menopausal</option><option>On OCP</option><option>Pregnant</option></select></div>

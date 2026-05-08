@@ -2766,8 +2766,17 @@ ${['Cataract Surgery','IVT Injection','LASIK','Glaucoma Surgery','Anaesthesia','
           <div class="form-group"><label class="fl">Duration</label><input type="text" value="2 years"></div>
           <div class="form-group"><label class="fl">Site Affected</label><select><option selected>Face</option><option>Neck</option><option>Body</option><option>Scalp</option><option>Multiple Sites</option></select></div>
           <div class="form-group"><label class="fl">Skin Type (Fitzpatrick)</label><select><option>I — Very fair</option><option>II — Fair</option><option>III — Medium</option><option selected>IV — Olive/Brown</option><option>V — Dark brown</option><option>VI — Very dark</option></select></div>
-          <div class="form-group"><label class="fl">Primary Diagnosis</label><select><option selected>L81.1 — Chloasma / Melasma</option><option>L70.0 — Acne Vulgaris</option><option>L90.5 — Acne Scars</option><option>L63.9 — Alopecia Areata</option><option>L40 — Psoriasis</option><option>L20 — Atopic Dermatitis</option><option>L30.9 — Dermatitis NOS</option><option>B35.1 — Tinea Corporis</option><option>L57.0 — Actinic Keratosis</option></select></div>
-          <div class="form-group"><label class="fl">Secondary Diagnosis</label><select><option>None</option><option>L70.0 — Acne</option><option>L81.4 — PIH</option><option>L21 — Seborrhoeic Dermatitis</option></select></div>
+          <div class="form-group full"><label class="fl">Diagnosis (ICD-10)</label>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
+              <span style="font-size:10.5px;color:var(--g1);font-weight:700">Primary diagnosis can be selected from ICD-10 search or typed as a new diagnosis</span>
+              <button type="button" class="btn btn-xs btn-outline" onclick="addDxRow('skin-hx-dx-list')">+ Add Diagnosis</button>
+            </div>
+            <div id="skin-hx-dx-list">
+              <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">
+                <input type="text" id="skin-primary-dx" class="dx-inp" data-dx-dept="skin" data-dx-role="primary" placeholder="Type diagnosis or ICD-10 code…" value="L81.1 — Chloasma / Melasma" oninput="filterDx(this)" onfocus="showDxDropdown(this);if(typeof wireDxInputFocus==='function')wireDxInputFocus(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();if(typeof selectDxFreeText==='function')selectDxFreeText()}" style="flex:1;font-size:12px" autocomplete="off">
+              </div>
+            </div>
+          </div>
           <div class="form-group full"><label class="fl">Current Skin Care Routine</label><textarea>Using fairness cream (brand unknown), sunscreen not regular. No prescribed medications.</textarea></div>
           <div class="form-group full"><label class="fl">Medical History / Allergies</label><textarea>No DM. Hormonal — PCOD diagnosed 2 years ago (on metformin). No known drug allergy.</textarea></div>
           <div class="form-group"><label class="fl">Hormonal Status</label><select><option>Pre-menopausal</option><option selected>PCOD</option><option>Post-menopausal</option><option>On OCP</option><option>Pregnant</option></select></div>
@@ -4448,6 +4457,7 @@ ${['Cataract Surgery','IVT Injection','LASIK','Glaucoma Surgery','Anaesthesia','
 </div>
 </div>
 
+<div id="dx-dropdown" style="display:none;z-index:100000;background:#fff;border:2px solid var(--blue);border-radius:var(--rsm);max-height:280px;overflow-y:auto;box-shadow:var(--sh-md)"></div>
 <div class="toast" id="toast"><span id="t-ic">✅</span><span id="t-msg"></span></div>
 
 <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script data-cfasync="false">
@@ -7644,6 +7654,31 @@ const ICD10_DB = [
   // SKIN
   {code:'L70.0',desc:'Acne vulgaris',full:'L70.0 — Acne Vulgaris'},
   {code:'L81.1',desc:'Chloasma / Melasma',full:'L81.1 — Melasma'},
+  {code:'L70.1',desc:'Acne conglobata',full:'L70.1 — Acne conglobata'},
+  {code:'L70.9',desc:'Acne, unspecified',full:'L70.9 — Acne, unspecified'},
+  {code:'L71.9',desc:'Rosacea, unspecified',full:'L71.9 — Rosacea'},
+  {code:'L63.9',desc:'Alopecia areata, unspecified',full:'L63.9 — Alopecia areata'},
+  {code:'L64.9',desc:'Androgenic alopecia, unspecified',full:'L64.9 — Androgenic alopecia'},
+  {code:'L65.0',desc:'Telogen effluvium',full:'L65.0 — Telogen effluvium'},
+  {code:'L20.9',desc:'Atopic dermatitis',full:'L20.9 — Atopic dermatitis'},
+  {code:'L21.9',desc:'Seborrhoeic dermatitis',full:'L21.9 — Seborrhoeic dermatitis'},
+  {code:'L23.9',desc:'Allergic contact dermatitis',full:'L23.9 — Allergic contact dermatitis'},
+  {code:'L30.9',desc:'Dermatitis, unspecified',full:'L30.9 — Dermatitis, unspecified'},
+  {code:'L40.9',desc:'Psoriasis',full:'L40.9 — Psoriasis'},
+  {code:'L50.9',desc:'Urticaria',full:'L50.9 — Urticaria'},
+  {code:'L57.0',desc:'Actinic keratosis',full:'L57.0 — Actinic keratosis'},
+  {code:'L60.0',desc:'Ingrowing nail',full:'L60.0 — Ingrowing nail'},
+  {code:'L81.0',desc:'Postinflammatory hyperpigmentation',full:'L81.0 — Postinflammatory hyperpigmentation'},
+  {code:'L81.4',desc:'Lentigines / hyperpigmentation',full:'L81.4 — Lentigines / hyperpigmentation'},
+  {code:'L90.5',desc:'Scar conditions / acne scars',full:'L90.5 — Scar conditions / acne scars'},
+  {code:'L91.0',desc:'Hypertrophic scar / keloid',full:'L91.0 — Hypertrophic scar / keloid'},
+  {code:'B07.9',desc:'Viral wart',full:'B07.9 — Viral wart'},
+  {code:'B35.1',desc:'Onychomycosis / tinea unguium',full:'B35.1 — Onychomycosis / tinea unguium'},
+  {code:'B35.4',desc:'Tinea corporis',full:'B35.4 — Tinea corporis'},
+  {code:'B35.6',desc:'Tinea cruris',full:'B35.6 — Tinea cruris'},
+  {code:'B36.0',desc:'Pityriasis versicolor',full:'B36.0 — Pityriasis versicolor'},
+  {code:'L01.0',desc:'Impetigo',full:'L01.0 — Impetigo'},
+  {code:'L03.9',desc:'Cellulitis',full:'L03.9 — Cellulitis'},
 ];
 
 const OT_CASES = [];
@@ -9004,13 +9039,25 @@ function selectDx(fullText, event) {
   hideDxDropdown();
   if(event) event.stopPropagation();
 }
-function addDxRow() {
-  const list = document.getElementById('dx-list'); if(!list) return;
+function selectDxFreeText() {
+  const activeInput = document.querySelector('.dx-inp:focus') || document.querySelector('.dx-inp');
+  if(activeInput) {
+    activeInput.style.background='var(--green-lt)';
+    activeInput.style.borderColor='var(--green)';
+  }
+  hideDxDropdown();
+}
+function addDxRow(listId) {
+  const ap = document.querySelector('.page.active');
+  const list = listId ? document.getElementById(listId) : (ap ? ap.querySelector('[id$="-dx-list"]') : document.getElementById('dx-list'));
+  if(!list) return;
+  const dept = list.id.indexOf('skin') >= 0 ? 'skin' : '';
   const d = document.createElement('div');
   d.style='display:flex;gap:6px;align-items:center;margin-top:5px';
-  d.innerHTML=`<input type="text" class="dx-inp" placeholder="Type diagnosis to search…" oninput="filterDx(this)" onfocus="showDxDropdown(this)" style="flex:1" autocomplete="off">
+  d.innerHTML=`<input type="text" class="dx-inp" ${dept ? `data-dx-dept="${dept}"` : ''} placeholder="ICD-10 search or type free-text diagnosis…" oninput="filterDx(this)" onfocus="showDxDropdown(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();selectDxFreeText()}" style="flex:1" autocomplete="off">
     <button class="btn btn-xs btn-gray" onclick="this.closest('div').remove()">✕</button>`;
   list.appendChild(d);
+  d.querySelector('.dx-inp')?.focus();
 }
 document.addEventListener('click', function(e) { if(!e.target.classList.contains('dx-inp')) hideDxDropdown(); });
 
