@@ -33471,8 +33471,8 @@ const DEPT_COLORS = {
   skin:{label:'💆 Skin',bg:'var(--green-lt)',border:'var(--green)',text:'var(--green)'},
 };
 function txnIsoDate(txn) {
-  const d = String(txn?.date || txn?.createdAt || '');
-  return d.includes('T') ? d.split('T')[0] : d.slice(0, 10);
+  const d = txn?.date || txn?.createdAt || txn?.updatedAt || txn?.ts || '';
+  return localDateKey(d) || String(d || '').slice(0, 10);
 }
 function isCollectedTxn(txn) {
   if (!txn || txn.isRefund === true || txn.collected === false) return false;
@@ -34773,10 +34773,16 @@ function loadTodayTransactions() {
       }
     }
   } catch (e) { /* noop */ }
-  fbOnce(`transactions/${todayKey()}`, data => {
+  const utcToday = new Date().toISOString().split('T')[0];
+  const transactionDays = Array.from(new Set([today, utcToday].filter(Boolean)));
+  Promise.all(transactionDays.map(function (day) {
+    return fbOnce('transactions/' + day).catch(function () { return {}; });
+  })).then(function (snapshots) {
     const merged = {};
     (TRANSACTIONS || []).forEach(function (t) { if (t?.id) merged[t.id] = t; });
-    Object.values(data || {}).forEach(function (t) { if (t?.id) merged[t.id] = t; });
+    snapshots.forEach(function (data) {
+      Object.values(data || {}).forEach(function (t) { if (t?.id) merged[t.id] = t; });
+    });
     TRANSACTIONS.length = 0;
     Object.values(merged).forEach(function (t) {
       if (CURRENT_USER?.isAdmin || normalizeAppointmentCentreValue(t.centre || 'CHD') === centre) TRANSACTIONS.push(t);
@@ -36367,7 +36373,7 @@ function fbOnce(path, cb) {
   return p;
 }
 function fbKey()              { return window.FBDB ? window.FBDB.ref().push().key : 'local-' + Date.now(); }
-function todayKey()           { return new Date().toISOString().split('T')[0]; }
+function todayKey()           { return localDateKey(new Date()); }
 // ═══════════════════════════════════════════════════════════
 // V35 ADDITIONS
 // ═══════════════════════════════════════════════════════════
