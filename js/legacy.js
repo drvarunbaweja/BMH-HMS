@@ -11045,9 +11045,12 @@ function bmhGetCollectionTransactionsForDate(centreOrCentres, dateKey) {
     if (!(fee > 0)) return;
     const purposeText = String(p.purpose || p.consultationFeeLabel || '').toLowerCase();
     if (!/new|follow|post[\s-]*op|review|opd|consult|registration/.test(purposeText)) return;
-    if (Number(p.balance || 0) > 0 && Number(p.balance || 0) >= fee) return;
+    const consultationMode = String(p.consultationPaymentMode || p.paymentMode || 'Cash');
+    if (/credit|due|insurance|tpa|pmjay|echs|cghs|cashless/i.test(consultationMode)) return;
     const matchingRow = rows.find(function (t) {
-      return String(t.bmhId || '') === String(p.bmhId || '') && Math.abs(getNetTransactionAmount(t) - fee) < 0.5;
+      if (String(t.bmhId || '') !== String(p.bmhId || '')) return false;
+      if (Math.abs(getNetTransactionAmount(t) - fee) >= 0.5) return false;
+      return getTransactionPrimaryChargeCategory(t) === 'consultation';
     });
     if (matchingRow) {
       const cats = Array.isArray(matchingRow.billCats) ? matchingRow.billCats.slice() : (matchingRow.billCats && typeof matchingRow.billCats === 'object' ? Object.values(matchingRow.billCats) : []);
@@ -11065,7 +11068,7 @@ function bmhGetCollectionTransactionsForDate(centreOrCentres, dateKey) {
       bmhId: p.bmhId,
       service: (p.consultationFeeLabel ? p.consultationFeeLabel + ' - ' : '') + (p.purpose || 'Consultation'),
       amount: fee,
-      mode: p.consultationPaymentMode || p.paymentMode || 'Cash',
+      mode: consultationMode || 'Cash',
       collected: true,
       dept: p.dept || 'ophtho',
       centre: p.centre || 'CHD',
