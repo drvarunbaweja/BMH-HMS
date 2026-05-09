@@ -9793,6 +9793,56 @@ function inferChargeCategoryFromSettingsCharge(serviceText) {
   });
   return categoryMatch ? needleCategory : '';
 }
+function isConsultationPurposeText(value) {
+  const text = String(value || '').toLowerCase();
+  if (/diagnostic|investigation|procedure\s*only|lab|surgery|operation|injection|advance|deposit/.test(text)) return false;
+  return /consult|follow|post\s*-?\s*op|opd|review|registration|new consultation|anc visit|emergency/.test(text);
+}
+function settingsChargeAmountForCentre(row, centre) {
+  if (!row) return 0;
+  const code = normalizeAppointmentCentreValue(centre || 'CHD');
+  return Math.max(0, Number(code === 'RPR' ? row.rpr : row.chd) || 0);
+}
+function settingsChargeDeptMatches(row, dept) {
+  const key = normalizeDeptKeyForQueue(dept || '');
+  if (!key) return true;
+  const text = normalizeChargeLookupText([row?.cat, row?.name, row?.parent, row?.dept, row?.department].filter(Boolean).join(' '));
+  if (!text) return true;
+  if (key === 'ophtho') return /eye|oph|opd|consult|registration/.test(text);
+  if (key === 'obg') return /obg|gyn|anc|obs|consult|registration/.test(text);
+  if (key === 'psych') return /psych|psychiatry|neuro|consult|registration/.test(text);
+  if (key === 'skin') return /skin|dermat|cosmet|consult|registration/.test(text);
+  return true;
+}
+function resolveConsultationChargeAmountForVisit(visit) {
+  if (!visit || visit.consultationNoFee === true || String(visit.consultationFeeType || '').toLowerCase() === 'no-fee') return 0;
+  const direct = Math.max(0, Number(visit.consultationFee || visit.fee || 0));
+  if (direct > 0) return direct;
+  const purposeText = [visit.consultationFeeLabel, visit.purpose, visit.service, visit.for, visit.desc].filter(Boolean).join(' ');
+  if (!isConsultationPurposeText(purposeText || 'Consultation')) return 0;
+  const centre = normalizeAppointmentCentreValue(visit.centre || getEffectiveCentre?.() || CURRENT_USER?.centre || 'CHD');
+  const dept = normalizeDeptKeyForQueue(visit.dept || visit.department || 'ophtho');
+  const wantsFollow = /follow|post\s*-?\s*op|review/i.test(purposeText);
+  const rows = (Array.isArray(CHARGES_DATA) ? CHARGES_DATA : []).filter(function (row) {
+    if (!row) return false;
+    const cat = mapSettingsChargeKindToCollectionCategory(row);
+    if (cat && cat !== 'consultation') return false;
+    const text = normalizeChargeLookupText([row.name, row.parent, row.cat, row.kind, row.category, row.chargeCategory, row.collectionCategory].filter(Boolean).join(' '));
+    return /consult|opd|registration|follow|post\s*op|review|anc/.test(text) && settingsChargeDeptMatches(row, dept) && settingsChargeAmountForCentre(row, centre) > 0;
+  });
+  const preferred = rows.find(function (row) {
+    const text = normalizeChargeLookupText([row.name, row.parent].filter(Boolean).join(' '));
+    return wantsFollow ? /follow|post\s*op|review/.test(text) : !/follow|post\s*op|review/.test(text);
+  }) || rows[0];
+  const fromSettings = settingsChargeAmountForCentre(preferred, centre);
+  if (fromSettings > 0) return fromSettings;
+  const fallbackNames = wantsFollow ? ['Follow-up Consultation', 'Follow-up', 'Consultation'] : ['New Consultation', 'Consultation — Eye', 'Consultation'];
+  for (let i = 0; i < fallbackNames.length; i += 1) {
+    const amount = Math.max(0, Number(getChargeForProcedure?.(fallbackNames[i], centre) || 0));
+    if (amount > 0) return amount;
+  }
+  return 0;
+}
 function bmhIsEEGCharge(row) {
   const hay = [row?.desc, row?.name, row?.service, row?.for].filter(Boolean).join(' ').toLowerCase();
   return /\beeg\b/.test(hay);
@@ -9929,7 +9979,7 @@ function bmhEnsureEEGConcessionLine(bmhId, baseRow) {
 }
 function getNetTransactionAmount(txn) {
   const amt = Number(txn?.amount) || 0;
-  if (amt <= 0) return 0;
+  if (amt <= 0) return Math.max(0, Number(txn?._recoveredConsultationAmount || 0));
   return amt;
 }
 function isConsultationTransaction(txn) {
@@ -11077,15 +11127,13 @@ function bmhGetCollectionTransactionsForDate(centreOrCentres, dateKey) {
     if (!p || !p.bmhId || !centreAllowed(p)) return;
     const visitDate = localDateKey(p.checkinAt || p.queueDate || p.visitDate || p.updatedAt || p.createdAt);
     if (visitDate !== dateKey) return;
-    const fee = Math.max(0, Number(p.consultationFee || 0));
+    if (!isConsultationPurposeText([p.purpose, p.consultationFeeLabel].filter(Boolean).join(' '))) return;
+    const fee = resolveConsultationChargeAmountForVisit(p);
     if (!(fee > 0)) return;
-    const purposeText = String(p.purpose || p.consultationFeeLabel || '').toLowerCase();
-    if (!/new|follow|post[\s-]*op|review|opd|consult|registration/.test(purposeText)) return;
     const consultationMode = String(p.consultationPaymentMode || p.paymentMode || 'Cash');
     if (/credit|due|insurance|tpa|pmjay|echs|cghs|cashless/i.test(consultationMode)) return;
     const matchingRow = rows.find(function (t) {
       if (String(t.bmhId || '') !== String(p.bmhId || '')) return false;
-      if (Math.abs(getNetTransactionAmount(t) - fee) >= 0.5) return false;
       return getTransactionPrimaryChargeCategory(t) === 'consultation';
     });
     if (matchingRow) {
@@ -11096,6 +11144,7 @@ function bmhGetCollectionTransactionsForDate(centreOrCentres, dateKey) {
       }
       if (!matchingRow.consultationFeeLabel && p.consultationFeeLabel) matchingRow.consultationFeeLabel = p.consultationFeeLabel;
       if (!matchingRow.consultationFeeType && p.consultationFeeType) matchingRow.consultationFeeType = p.consultationFeeType;
+      if (!(getNetTransactionAmount(matchingRow) > 0) && fee > 0) matchingRow._recoveredConsultationAmount = fee;
       return;
     }
     rows.push({
@@ -11130,6 +11179,25 @@ function bmhGetCollectionTransactionsForDate(centreOrCentres, dateKey) {
     if (synthetic) rows.push(synthetic);
   });
   return rows;
+}
+function bmhGetCollectionTransactionsForRange(centreOrCentres, fromKey, toKey) {
+  const start = localDateKey(fromKey || todayKey());
+  const end = localDateKey(toKey || start);
+  if (!start || !end) return [];
+  const out = {};
+  let cursor = new Date(start + 'T00:00:00+05:30');
+  const endDate = new Date(end + 'T00:00:00+05:30');
+  let guard = 0;
+  while (!Number.isNaN(cursor.getTime()) && cursor <= endDate && guard < 370) {
+    const key = localDateKey(cursor);
+    bmhGetCollectionTransactionsForDate(centreOrCentres, key).forEach(function (txn) {
+      const id = String(txn.id || txn.bmhId || txn.patient || '') + '|' + key;
+      out[id] = txn;
+    });
+    cursor.setDate(cursor.getDate() + 1);
+    guard += 1;
+  }
+  return Object.values(out);
 }
 function bmhHandleBillPrintingChoice(bill, choice) {
   const printChoice = choice || 'none';
@@ -16972,7 +17040,7 @@ function renderCentresView() {
       }));
       const deptConsultTxns = txns.filter(function (t) {
         return normalizeDeptKeyForQueue(t.dept || '') === dept.key
-          && inferChargeCategoryFromService(t.service || t.for || t.desc || '') === 'consultation';
+          && transactionHasChargeCategory(t, 'consultation');
       });
       return sum + getConsultationCounter(deptPatients, consultPatients, deptConsultTxns);
     }, 0);
@@ -23479,6 +23547,9 @@ async function registerPatient() {
     ? feeChoice.label + (purpose ? ' - ' + purpose : '')
     : purpose;
   const consultationDesc = consultationDescBase + (noFee ? ' (no fee)' : '');
+  if (!noFee && !(fee > 0) && isConsultationPurposeText(consultationDesc)) {
+    fee = resolveConsultationChargeAmountForVisit({ centre: centre, dept: dept, purpose: purpose, consultationFeeLabel: feeChoice?.label || '' });
+  }
   const refType = document.getElementById('rc-ref-type')?.value || '';
   const refName = normalizeReceptionFieldValue('rc-ref-name', document.getElementById('rc-ref-name')?.value?.trim() || '');
   const refMobile = document.getElementById('rc-ref-mobile')?.value?.trim() || '';
@@ -27387,10 +27458,8 @@ function generateDailyReport() {
   const dateFilteredPts = allPts.filter(inRange);
 
   // Compute totals from TRANSACTIONS array
-  const txInRange = TRANSACTIONS.filter(tx=>{
-    const d=localDateKey(tx.date || tx.createdAt || tx.updatedAt || tx.ts)||today;
-    if (d < rangeFrom || d > rangeTo) return false;
-    if (!allowAllCentres && normalizeAppointmentCentreValue(tx.centre || selectedCentre) !== selectedCentre) return false;
+  const reportCentres = allowAllCentres ? ['RPR', 'CHD'] : selectedCentre;
+  const txInRange = bmhGetCollectionTransactionsForRange(reportCentres, rangeFrom, rangeTo).filter(tx=>{
     if (deptFilter && String(tx.dept || '') !== deptFilter) return false;
     return isCollectionDashboardTxn(tx);
   });
@@ -27544,7 +27613,10 @@ function generateFinancialReport() {
   const fromVal = document.getElementById('rep-fin-from')?.value || todayKey();
   const toVal   = document.getElementById('rep-fin-to')?.value   || todayKey();
   const repFinCentre = document.getElementById('rep-centre')?.value || '';
-  const txAll = TRANSACTIONS.filter(t=>{const d=localDateKey(t.date || t.createdAt || t.updatedAt || t.ts); if(d<fromVal||d>toVal) return false; if(repFinCentre && normalizeAppointmentCentreValue(t.centre||'CHD')!==repFinCentre) return false; return isCollectionDashboardTxn(t);});
+  const txAll = bmhGetCollectionTransactionsForRange(repFinCentre || ['RPR', 'CHD'], fromVal, toVal).filter(function (t) {
+    if (repFinCentre && normalizeAppointmentCentreValue(t.centre || 'CHD') !== repFinCentre) return false;
+    return isCollectionDashboardTxn(t);
+  });
   const deptLabel = function (dept) {
     const d = String(dept || '').toLowerCase();
     if (d === 'ophtho') return 'Eye';
