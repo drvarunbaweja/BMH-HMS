@@ -10881,18 +10881,25 @@ function bmhPayRequestToSyntheticCollectionTxn(pr) {
 }
 function bmhGetCollectionTransactionsForDate(centreOrCentres, dateKey) {
   const centres = Array.isArray(centreOrCentres) ? centreOrCentres : [centreOrCentres || getEffectiveCentre()];
-  const wanted = new Set(centres.map(function (c) { return normalizeAppointmentCentreValue(c || 'CHD'); }));
+  const showAllCentres = centres.some(function (c) {
+    const raw = String(c || '').trim().toLowerCase();
+    return !raw || raw === 'both' || raw === 'all';
+  });
+  const wanted = showAllCentres ? null : new Set(centres.map(function (c) { return normalizeAppointmentCentreValue(c || 'CHD'); }));
+  const centreAllowed = function (row) {
+    return !wanted || wanted.has(normalizeAppointmentCentreValue(row?.centre || 'CHD'));
+  };
   const rows = (TRANSACTIONS || []).filter(function (t) {
-    return wanted.has(normalizeAppointmentCentreValue(t.centre || 'CHD')) && txnIsoDate(t) === dateKey && isCollectedTxn(t);
+    return centreAllowed(t) && txnIsoDate(t) === dateKey && isCollectedTxn(t);
   });
   (bmhGetSavedBillsForHistory() || []).forEach(function (bill) {
-    if (!wanted.has(normalizeAppointmentCentreValue(bill.centre || 'CHD'))) return;
+    if (!centreAllowed(bill)) return;
     if (localDateKey(bill.createdAt || bill.date) !== dateKey) return;
     const synthetic = bmhBillToSyntheticCollectionTxn(bill);
     if (synthetic) rows.push(synthetic);
   });
   (PAY_REQUESTS || []).forEach(function (pr) {
-    if (!wanted.has(normalizeAppointmentCentreValue(pr.centre || 'CHD'))) return;
+    if (!centreAllowed(pr)) return;
     if (localDateKey(pr.updatedAt || pr.date) !== dateKey) return;
     const synthetic = bmhPayRequestToSyntheticCollectionTxn(pr);
     if (synthetic) rows.push(synthetic);
