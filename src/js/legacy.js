@@ -9863,9 +9863,26 @@ function getNetTransactionAmount(txn) {
   if (amt <= 0) return 0;
   return amt;
 }
+function isConsultationTransaction(txn) {
+  if (!txn) return false;
+  const billCats = Array.isArray(txn.billCats) ? txn.billCats : (txn.billCats && typeof txn.billCats === 'object' ? Object.values(txn.billCats) : []);
+  if (billCats.map(function (c) { return String(c || '').toLowerCase(); }).includes('consultation')) return true;
+  if (txn.noFee === true || String(txn.consultationFeeType || '').trim() || String(txn.consultationFeeLabel || '').trim()) return true;
+  const text = [
+    txn.service, txn.for, txn.desc, txn.purpose, txn.type, txn.source,
+    txn.consultationFeeType, txn.consultationFeeLabel
+  ].filter(Boolean).join(' ').toLowerCase();
+  if (/\b(new|follow[\s-]*up|post[\s-]*op|review|opd|out\s*patient|consult(?:ation)?|registration|no\s*fee|free\s*consult|waiv)/i.test(text)) return true;
+  return String(inferChargeCategoryFromService(txn.service || txn.for || txn.desc || '') || '').toLowerCase() === 'consultation';
+}
+function isCollectionDashboardTxn(txn) {
+  if (!txn || txn.isRefund === true || txn.collected === false) return false;
+  return getNetTransactionAmount(txn) > 0 || isConsultationTransaction(txn);
+}
 function transactionHasChargeCategory(txn, category) {
   const want = String(category || '').toLowerCase().trim();
   if (!txn || !want) return false;
+  if (want === 'consultation' && isConsultationTransaction(txn)) return true;
   const billCats = Array.isArray(txn.billCats) ? txn.billCats.map(function (c) { return String(c || '').toLowerCase(); }) : (txn.billCats && typeof txn.billCats === 'object' ? Object.values(txn.billCats).map(function (c) { return String(c || '').toLowerCase(); }) : []);
   if (billCats.includes(want)) return true;
   if (Array.isArray(txn.chargeAllocations) && txn.chargeAllocations.length && txn.bmhId) {
@@ -10960,7 +10977,7 @@ function bmhGetCollectionTransactionsForDate(centreOrCentres, dateKey) {
     return !wanted || wanted.has(normalizeAppointmentCentreValue(row?.centre || 'CHD'));
   };
   const rows = (TRANSACTIONS || []).filter(function (t) {
-    return centreAllowed(t) && txnIsoDate(t) === dateKey && isCollectedTxn(t);
+    return centreAllowed(t) && txnIsoDate(t) === dateKey && isCollectionDashboardTxn(t);
   });
   (bmhGetSavedBillsForHistory() || []).forEach(function (bill) {
     if (!centreAllowed(bill)) return;
@@ -27117,11 +27134,11 @@ function generateDailyReport() {
 
   // Compute totals from TRANSACTIONS array
   const txInRange = TRANSACTIONS.filter(tx=>{
-    const d=(tx.date||'').split('T')[0]||today;
+    const d=localDateKey(tx.date || tx.createdAt || tx.updatedAt || tx.ts)||today;
     if (d < rangeFrom || d > rangeTo) return false;
     if (!allowAllCentres && normalizeAppointmentCentreValue(tx.centre || selectedCentre) !== selectedCentre) return false;
     if (deptFilter && String(tx.dept || '') !== deptFilter) return false;
-    return true;
+    return isCollectionDashboardTxn(tx);
   });
   const totalCollection = txInRange.reduce((s,t)=>s+getNetTransactionAmount(t),0);
   const pendingPay = PAY_REQUESTS.filter(function (pr) {
@@ -27143,9 +27160,10 @@ function generateDailyReport() {
   const deptRows = depts.map(([key,name,icon])=>{
     const pts = dateFilteredPts.filter(p=>p.dept===key);
     const deptTx = txInRange.filter(t=>t.dept===key);
-    const consult = deptTx.filter(t=>normalizePaymentMode(t.mode)!=='Insurance/TPA').reduce((s,t)=>s+getNetTransactionAmount(t),0);
+    const consult = deptTx.filter(t=>transactionHasChargeCategory(t, 'consultation') && normalizePaymentMode(t.mode)!=='Insurance/TPA').reduce((s,t)=>s+getNetTransactionAmount(t),0);
+    const inv = deptTx.filter(t=>transactionHasChargeCategory(t, 'diagnostic') && normalizePaymentMode(t.mode)!=='Insurance/TPA').reduce((s,t)=>s+getNetTransactionAmount(t),0);
     const ins = deptTx.filter(t=>normalizePaymentMode(t.mode)==='Insurance/TPA').reduce((s,t)=>s+getNetTransactionAmount(t),0);
-    return `<tr><td>${icon} ${name}</td><td>${pts.length}</td><td>₹${consult.toLocaleString('en-IN')}</td><td>₹0</td><td>₹${ins.toLocaleString('en-IN')}</td><td style="font-weight:900">₹${(consult+ins).toLocaleString('en-IN')}</td></tr>`;
+    return `<tr><td>${icon} ${name}</td><td>${pts.length}</td><td>₹${consult.toLocaleString('en-IN')}</td><td>₹${inv.toLocaleString('en-IN')}</td><td>₹${ins.toLocaleString('en-IN')}</td><td style="font-weight:900">₹${(consult+inv+ins).toLocaleString('en-IN')}</td></tr>`;
   }).join('');
   const totalPts = depts.reduce((s,[k])=>s+dateFilteredPts.filter(p=>p.dept===k).length,0);
 
@@ -27272,7 +27290,7 @@ function generateFinancialReport() {
   const fromVal = document.getElementById('rep-fin-from')?.value || todayKey();
   const toVal   = document.getElementById('rep-fin-to')?.value   || todayKey();
   const repFinCentre = document.getElementById('rep-centre')?.value || '';
-  const txAll = TRANSACTIONS.filter(t=>{const d=(t.date||'').split('T')[0]; if(d<fromVal||d>toVal) return false; if(repFinCentre && normalizeAppointmentCentreValue(t.centre||'CHD')!==repFinCentre) return false; return true;});
+  const txAll = TRANSACTIONS.filter(t=>{const d=localDateKey(t.date || t.createdAt || t.updatedAt || t.ts); if(d<fromVal||d>toVal) return false; if(repFinCentre && normalizeAppointmentCentreValue(t.centre||'CHD')!==repFinCentre) return false; return isCollectionDashboardTxn(t);});
   const deptLabel = function (dept) {
     const d = String(dept || '').toLowerCase();
     if (d === 'ophtho') return 'Eye';
@@ -27340,7 +27358,7 @@ function generateFinancialReport() {
       ${deptRows ? `<table><thead><tr><th>Department</th><th>Patients / Txns</th><th>Total ₹</th><th>Payment modes</th></tr></thead><tbody>${deptRows}</tbody></table>` : '<div style="font-size:12px;color:var(--g1)">No department-wise financial data for this date range.</div>'}
     </div>
     ${txAll.length?`<table><thead><tr><th>Patient</th><th>Mode</th><th>Amount ₹</th><th>Dept</th><th>Date</th></tr></thead>
-    <tbody>${txAll.slice(0,80).map(t=>{ const mode=normalizePaymentMode(t.mode); return `<tr><td style="font-weight:700">${t.patient||'—'}</td><td><span class="badge ${mode==='Cash'?'bd-blue':mode==='Insurance/TPA'?'bd-orange':'bd-green'}">${mode}</span></td><td style="font-weight:900">₹${parseFloat(t.amount||0).toLocaleString('en-IN')}</td><td>${t.dept||'—'}</td><td>${(t.date||'').split('T')[0]}</td></tr>`; }).join('')}
+    <tbody>${txAll.slice(0,80).map(t=>{ const mode=normalizePaymentMode(t.mode); return `<tr><td style="font-weight:700">${t.patient||'—'}</td><td><span class="badge ${mode==='Cash'?'bd-blue':mode==='Insurance/TPA'?'bd-orange':'bd-green'}">${mode}</span></td><td style="font-weight:900">₹${parseFloat(t.amount||0).toLocaleString('en-IN')}</td><td>${t.dept||'—'}</td><td>${localDateKey(t.date || t.createdAt || t.updatedAt || t.ts) || ''}</td></tr>`; }).join('')}
     </tbody></table>`:'<div style="padding:20px;text-align:center;color:var(--g1);font-size:12.5px">No transactions recorded for this period.<br><span style="font-size:11px">Payments collected at reception will appear here.</span></div>'}
   </div>`;
 }
@@ -33560,7 +33578,7 @@ function renderCollectionDashboard() {
   const allTxn = bmhGetCollectionTransactionsForDate(getEffectiveCentre(), todayKeyLocal).filter(function (t) {
     return !isInsuranceLikeMode(t.mode || t.ins || '');
   });
-  const collected = allTxn.filter(isCollectedTxn);
+  const collected = allTxn.filter(isCollectionDashboardTxn);
 
   // Update summary cards
   const total = getConcessionAdjustedCollectionTotal(collected);
@@ -38583,7 +38601,7 @@ function renderDashboard() {
   const todaySeen = todaysVisiblePatients.filter(function (p) { return isPatientMarkedSeen(p); }).length;
   const waiting = todaysVisiblePatients.filter(function (p) { return !isPatientMarkedSeen(p) && !p.queueRemoved; }).length;
   const txnDay = txnIsoDate;
-  const txnOk = isCollectedTxn;
+  const txnOk = isCollectionDashboardTxn;
   const todayCollection = TRANSACTIONS.filter(t => txnDay(t) === today && txnOk(t)).reduce((s, t) => s + getNetTransactionAmount(t), 0);
   const selectedTxn = TRANSACTIONS.filter(t => txnDay(t) === selectedDate && txnOk(t));
 
