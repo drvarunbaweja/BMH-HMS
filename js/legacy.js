@@ -107,6 +107,23 @@ const USER_DB = {
 });
 let CURRENT_USER = null; // set on login
 
+// Pre-populate window.CURRENT_USER synchronously from sessionStorage so that
+// Firebase's onAuthStateChanged(null) guard in app.js sees it immediately,
+// even before DOMContentLoaded fires. Full session activation still happens in DOMContentLoaded.
+(function() {
+  try {
+    const raw = sessionStorage.getItem('bmh_active_session');
+    if (raw) {
+      const session = JSON.parse(raw);
+      const uname = session && session.u ? String(session.u).toLowerCase() : '';
+      const profile = uname ? USER_DB?.[uname] : null;
+      if (profile && profile.disabled !== true) {
+        window.CURRENT_USER = Object.assign({}, profile, { username: uname });
+      }
+    }
+  } catch (_) {}
+})();
+
 /** Firebase Auth (app.js) sets window.CURRENT_USER; legacy login sets this var — keep in sync. */
 window.syncLegacyCurrentUserFromFirebase = function () {
   const u = window.CURRENT_USER;
@@ -2826,7 +2843,14 @@ function parseAppRouteFromLocationHash() {
 const _ROUTE_RESTORE_PAGES = new Set(['dashboard', 'doctor-queue', 'ophtho', 'obg', 'psych', 'skin', 'reception', 'billing', 'payments', 'lab', 'appointments', 'print-templates', 'consents', 'discharge', 'inventory', 'tpa', 'ipd', 'reports', 'settings', 'ot', 'centres', 'brochures']);
 /** After login, restore last URL route if valid; otherwise call fallback (usually role home). */
 function tryScheduleRouteRestoreFromHash(fallback) {
-  const state = parseAppRouteFromLocationHash();
+  let state = parseAppRouteFromLocationHash();
+  // If hash is empty, fall back to the last page persisted in localStorage
+  if (!state || !state.page || !_ROUTE_RESTORE_PAGES.has(state.page)) {
+    try {
+      const lp = localStorage.getItem('bmh_last_page');
+      if (lp && _ROUTE_RESTORE_PAGES.has(lp)) state = { page: lp, tab: '', patientId: '' };
+    } catch (_) {}
+  }
   if (!state || !state.page || !_ROUTE_RESTORE_PAGES.has(state.page)) {
     if (typeof fallback === 'function') fallback();
     return;
@@ -2856,6 +2880,8 @@ function pushAppNavState(replace) {
     const state = getCurrentAppNavState();
     const hash = '#/' + state.page + (state.tab ? ('/' + state.tab) : '') + (state.patientId ? ('/' + state.patientId) : '');
     (replace ? history.replaceState : history.pushState).call(history, state, '', hash);
+    // Persist last page so refresh can restore it even after a full session rebuild
+    try { localStorage.setItem('bmh_last_page', state.page); } catch (_) {}
   } catch (e) {}
 }
 function restoreAppNavState(state) {
@@ -2936,7 +2962,7 @@ function nav(id, el, opts) {
   // Page-specific init
   if(pageKey==='dashboard')            deferPageWork(function(){ renderDashboard && renderDashboard(); });
   else if(pageKey==='doctor-queue')    deferPageWork(function(){ renderDocQueue && renderDocQueue(); });
-  else if(pageKey==='appointments')    deferPageWork(function(){ const d=document.getElementById('apt-date-inp'); if(d)d.value=todayKey(); renderAptDay && renderAptDay(); });
+  else if(pageKey==='appointments')    deferPageWork(function(){ const d=document.getElementById('apt-date-inp'); if(d)d.value=todayKey(); renderAptDay && renderAptDay(); renderFollowupRegister && renderFollowupRegister(); });
   else if(pageKey==='print-templates') deferPageWork(function(){ renderPrintTemplates && renderPrintTemplates(); });
   else if(pageKey==='consents')        deferPageWork(function(){ renderConsent && renderConsent(); updateConsentPatientHeader(); refreshConsentLibrary && refreshConsentLibrary(); });
   else if(pageKey==='ophtho')          deferPageWork(function(){ initQR && initQR(); renderRxDrugs && renderRxDrugs(); buildRefractionDropdowns && buildRefractionDropdowns(); renderOphthoPayList && renderOphthoPayList(); typeof initDiagnosisRowsIfEmpty==='function'&&initDiagnosisRowsIfEmpty(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); typeof wrapOphAdviceChipsWithDelete==='function'&&wrapOphAdviceChipsWithDelete(); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); }, 120); });
@@ -4834,6 +4860,26 @@ function openBookApt(slot) {
       PATIENTS.map(p=>`<option value="${p.name} — ${p.bmhId}"${cur&&cur.bmhId===p.bmhId?' selected':''}>${p.name} — ${p.bmhId}</option>`).join('');
   }
   // Set centre to current user's centre
+  const centreEl = document.getElementById('book-centre');
+  if(centreEl && window.CURRENT_USER?.centre) {
+    centreEl.value = window.CURRENT_USER.centre === 'RPR' ? 'Ropar' : 'Chandigarh';
+  }
+  openM('m-book-apt');
+}
+function openBookAptForPatient(bmhId, date) {
+  // Pre-fill the book-appointment modal for a specific patient and date
+  const dateEl = document.getElementById('book-date');
+  if(dateEl) dateEl.value = date || todayKey();
+  // Also set the apt-date-inp so the day view refreshes to that date
+  const aptDateEl = document.getElementById('apt-date-inp');
+  if(aptDateEl && date) aptDateEl.value = date;
+  const timeEl = document.getElementById('book-time');
+  if(timeEl) timeEl.value = '9:00 AM';
+  const sel = document.getElementById('book-patient');
+  if(sel && PATIENTS && PATIENTS.length) {
+    sel.innerHTML = '<option value="">— Select Patient —</option>' +
+      PATIENTS.map(p=>`<option value="${p.name} — ${p.bmhId}"${p.bmhId===bmhId?' selected':''}>${p.name} — ${p.bmhId}</option>`).join('');
+  }
   const centreEl = document.getElementById('book-centre');
   if(centreEl && window.CURRENT_USER?.centre) {
     centreEl.value = window.CURRENT_USER.centre === 'RPR' ? 'Ropar' : 'Chandigarh';
@@ -9871,6 +9917,28 @@ function addBmhPatientCharge(bmhId, row) {
   saveBmhFinancials();
   bmhSyncPatientRunningBalance(bmhId);
 }
+function buildPaidReceptionChargeRow(txnId, desc, fee) {
+  const amount = Math.max(0, Number(fee) || 0);
+  return {
+    id: 'chg-' + txnId,
+    cat: inferChargeCategoryFromService(desc),
+    desc: desc,
+    qty: 1,
+    rate: amount,
+    amount: amount,
+    paidAmount: amount,
+    source: 'reception',
+    ref: txnId,
+    ts: new Date().toISOString(),
+    paymentAllocations: amount > 0 ? [{
+      txnId: txnId,
+      amount: amount,
+      date: new Date().toISOString(),
+      mode: document.getElementById('rc-pay-mode')?.value || 'Cash',
+      by: CURRENT_USER?.name || 'Reception'
+    }] : []
+  };
+}
 function syncPayRequestToPatientCharges(pr) {
   if (!pr || !pr.bmhId) return;
   const arr = window.BMH_PATIENT_CHARGES[pr.bmhId] || [];
@@ -9974,8 +10042,9 @@ function bmhTotalReceivedForCategories(bmhId, categories) {
   return (TRANSACTIONS || [])
     .filter(function (t) {
       if (t.bmhId !== bmhId || t.collected === false) return false;
-      if (Array.isArray(t.billCats) && t.billCats.length) {
-        return t.billCats.map(function (c) { return String(c || '').toLowerCase(); }).some(function (c) { return cats.includes(c); });
+      const _bc1 = Array.isArray(t.billCats) ? t.billCats : (t.billCats && typeof t.billCats === 'object' ? Object.values(t.billCats) : []);
+      if (_bc1.length) {
+        return _bc1.map(function (c) { return String(c || '').toLowerCase(); }).some(function (c) { return cats.includes(c); });
       }
       if (String(t.type || '').toLowerCase() === 'billing-payment' || String(t.source || '').toLowerCase() === 'billing') return true;
       const inferred = String(inferChargeCategoryFromService(t.service || t.for || t.desc || '') || 'other').toLowerCase();
@@ -9986,8 +10055,9 @@ function bmhTotalReceivedForCategories(bmhId, categories) {
 function bmhTransactionMatchesBillContext(t, ctx) {
   if (!t || t.collected === false) return false;
   const activeCats = Array.isArray(ctx?.activeCats) ? ctx.activeCats.map(function (c) { return String(c || '').toLowerCase(); }) : [];
-  if (Array.isArray(t.billCats) && t.billCats.length) {
-    const txnCats = t.billCats.map(function (c) { return String(c || '').toLowerCase(); });
+  const _bc2 = Array.isArray(t.billCats) ? t.billCats : (t.billCats && typeof t.billCats === 'object' ? Object.values(t.billCats) : []);
+  if (_bc2.length) {
+    const txnCats = _bc2.map(function (c) { return String(c || '').toLowerCase(); });
     return !activeCats.length || txnCats.some(function (c) { return activeCats.includes(c); });
   }
   if (String(t.type || '').toLowerCase() === 'billing-payment' || String(t.source || '').toLowerCase() === 'billing') return true;
@@ -16915,7 +16985,7 @@ function choosePreferredChargesRows(localRows, remoteRows, localTs, remoteTs) {
   const lts = Number(localTs || 0);
   const rts = Number(remoteTs || 0);
   if (lts && rts && lts !== rts) return lts > rts ? localList : remoteList;
-  return scoreChargesRows(localList) > scoreChargesRows(remoteList) ? localList : remoteList;
+  return scoreChargesRows(localList) >= scoreChargesRows(remoteList) ? localList : remoteList;
 }
 const LEGACY_PMICS_CHARGE_HEADING = 'Pinhole Microincision Cataract Surgery + IOL Implantation';
 const PMICS_MAIN_CHARGE_HEADING = 'Pinhole Microincision Cataract Surgery';
@@ -16981,11 +17051,14 @@ function saveChargesToFirebase(){
     showToast('Saved locally ✓ Cloud sync queued', 's');
     return Promise.resolve({ queued: true });
   }
-  return Promise.all([
-    window.FBDB.ref('centreCharges').set(CENTRE_CHARGES),
-    window.FBDB.ref('chargesSchedule').set(CHARGES_DATA),
-    window.FBDB.ref('chargesScheduleMeta').set({ updatedAt: savedAt })
-  ]).then(function(res){
+  // Atomic multi-path update: chargesSchedule and chargesScheduleMeta land on the server
+  // together so live-sync listeners on other tabs/devices never read a new meta timestamp
+  // paired with stale schedule data — which was the root cause of charges reverting.
+  return window.FBDB.ref('/').update({
+    centreCharges: CENTRE_CHARGES,
+    chargesSchedule: CHARGES_DATA,
+    chargesScheduleMeta: { updatedAt: savedAt }
+  }).then(function(res){
     window._bmhLastRemoteChargesUpdatedAt = savedAt;
     try { populateOTProcedureMainSelect && populateOTProcedureMainSelect(); } catch (e) {}
     try { renderOTProcedureSubheading && renderOTProcedureSubheading(document.getElementById('ot-add-proc-main')?.value || ''); } catch (e) {}
@@ -17004,7 +17077,10 @@ function applyChargesFromCloudSnapshot(rows, remoteTs) {
   if (!applied) return false;
   window._bmhChargesCloudLoaded = true;
   window._bmhLastRemoteChargesUpdatedAt = Number(remoteTs || Date.now()) || Date.now();
-  saveChargesToLocalStorage({ updatedAt: window._bmhLastRemoteChargesUpdatedAt });
+  // Never downgrade the local timestamp: if local data was chosen because localTs > remoteTs,
+  // saving with remoteTs would let a stale remote snapshot win next time.
+  const _prevLocalTs = Number(localStorage.getItem('bmh_charges_schedule_updated_at') || 0) || 0;
+  saveChargesToLocalStorage({ updatedAt: Math.max(window._bmhLastRemoteChargesUpdatedAt, _prevLocalTs) });
   renderChargesList && renderChargesList();
   renderCentresCharges && renderCentresCharges();
   syncReceptionConsultationFee && syncReceptionConsultationFee();
@@ -17482,8 +17558,8 @@ function confirmIPDAdmit() {
 // BROCHURES
 // ═══════════════════════════════════════
 const BROCHURES = [
-  {id:'phaco',title:'Cataract Surgery (PMICS (Pinhole Micro Incision Cataract Surgery) + IOL)',icon:'👁️',color:'#1A3C6E',tagline:'Restore your vision with the latest micro-incision cataract surgery',steps:['Detailed pre-operative assessment & biometry','Micro-incision PMICS — Pinhole Micro Incision Cataract Surgery (no stitch surgery)','Premium foldable IOL implantation','Same-day discharge in most cases','Rapid visual recovery'],risks:'Rare risks include infection, raised eye pressure, or posterior capsule rupture (all manageable). Success rate >99%.', followup:'Review at 1 day, 1 week, 1 month, and 3 months post-surgery.',faqs:['Will I need glasses after surgery? Premium IOLs can reduce dependence on glasses.','Is the surgery painful? No — performed under topical (eye drop) anaesthesia.','How long does recovery take? Most patients see well within 24–48 hours.']},
-  {id:'glaucoma',title:'Glaucoma Surgery (Trabeculectomy)',icon:'👁️',color:'#0B7B8C',tagline:'Preserve your vision from the silent thief of sight',steps:['IOP measurement & optic nerve evaluation','Trabeculectomy or minimally invasive glaucoma surgery (MIGS)','Anti-scarring agents used (Mitomycin C)','Post-op IOP monitoring & bleb management','Long-term IOP control achieved'],risks:'Risk of hypotony, infection, bleb failure. Requires strict post-op follow-up.',followup:'Review at 1 day, 1 week, 2 weeks, 1 month, 3 months.',faqs:['Can glaucoma be cured? Surgery controls IOP but does not restore lost vision.','Will I need drops after surgery? Possibly fewer drops or none after successful surgery.']},
+  {id:'phaco',title:'Cataract Surgery (PMICS (Pinhole Micro Incision Cataract Surgery) + IOL)',icon:'👁️',color:'#1A3C6E',tagline:'Restore your vision with the latest micro-incision cataract surgery',steps:['Detailed pre-operative assessment & biometry','Micro-incision PMICS — Pinhole Micro Incision Cataract Surgery (no stitch surgery)','Premium foldable IOL implantation','Same-day discharge in most cases','Rapid visual recovery'],risks:'Rare risks include infection, raised eye pressure, or posterior capsule rupture (all manageable). Success rate >99%.', followup:'Review at 1 day, 1 week, 1 month, and 3 months post-surgery.',faqs:['Will I need glasses after surgery? Premium IOLs can reduce dependence on glasses.','Is the surgery painful? No — performed under topical (eye drop) anaesthesia.','How long does recovery take? Most patients see well within 24–48 hours.'],brochureUrlEn:'designs/brochures/cataract-en.html',brochureUrlPa:'designs/brochures/cataract-pa.html'},
+  {id:'glaucoma',title:'Glaucoma Surgery (Trabeculectomy / Hydrus Microstent)',icon:'👁️',color:'#0B7B8C',tagline:'Preserve your vision from the silent thief of sight',steps:['IOP measurement & optic nerve evaluation','Trabeculectomy or minimally invasive glaucoma surgery (MIGS)','Hydrus Microstent — 8 mm scaffold, HORIZON trial: 77% IOP reduction','Anti-scarring agents used (Mitomycin C) where needed','Post-op IOP monitoring & long-term IOP control achieved'],risks:'Risk of hypotony, infection, bleb failure (trabeculectomy). MIGS/Hydrus has lower complication profile. Requires strict post-op follow-up.',followup:'Review at 1 day, 1 week, 2 weeks, 1 month, 3 months.',faqs:['Can glaucoma be cured? Surgery controls IOP but does not restore lost vision.','Will I need drops after surgery? Possibly fewer drops or none after successful surgery.','Why Hydrus over trabeculectomy? No external bleb, faster recovery, 66% medication-free at 5 years.'],brochureUrlEn:'designs/brochures/hydrus-en.html',brochureUrlPa:'designs/brochures/hydrus-pa.html'},
   {id:'ivt',title:'Intravitreal Injection (Anti-VEGF)',icon:'💉',color:'#5856D6',tagline:'Protecting your retina with targeted therapy',steps:['Retinal evaluation with OCT and fluorescein angiography','Informed consent and pre-injection checklist','Eye prepared with antiseptic drops — local anaesthetic applied','Injection given in sterile OT conditions (30 seconds)','Post-injection IOP check and monitoring'],risks:'Rare risks: infection (endophthalmitis <0.05%), retinal detachment, raised IOP.',followup:'Next injection as per protocol (monthly loading, then PRN).',faqs:['How many injections will I need? Typically 3 loading doses, then as needed.','Is it painful? Mild pressure sensation only — anaesthetic drops are given.']},
   {id:'lasik',title:'LASIK Laser Eye Surgery',icon:'✨',color:'#D4A017',tagline:'See the world clearly — without glasses or contact lenses',steps:['Detailed topography, pachymetry, and eligibility assessment','Corneal flap creation (microkeratome / femtosecond laser)','Excimer laser reshaping of cornea','Flap repositioned — no sutures needed','Vision stabilises over 1–4 weeks'],risks:'Dry eyes, halos, glare (temporary). Regression possible in high powers. Flap complications rare.',followup:'Review at 1 day, 1 week, 1 month, 3 months, 1 year.',faqs:['Am I eligible for LASIK? Requires stable refraction, adequate corneal thickness.','Is LASIK permanent? Results are long-lasting; reading glasses still needed after 40.']},
   {id:'lscs',title:'Caesarean Section (LSCS)',icon:'🤰',color:'#FF2D55',tagline:'Safe delivery for mother and baby at Baweja Hospital',steps:['Pre-operative workup — blood tests, ECG, anaesthesia review','Spinal / epidural anaesthesia administered','Lower uterine segment incision — baby delivered','Uterus and abdomen closed in layers','Skin closure — absorbable sutures, waterproof dressing'],risks:'Bleeding, infection, adjacent organ injury, thromboembolism (all managed with precautions). Scar in subsequent pregnancies.',followup:'Review at 48 hours, 7 days, 6 weeks post-delivery.',faqs:['Can I have a normal delivery after LSCS? Possible in selected cases (VBAC).','When can I eat after LSCS? Liquids after 6 hours, soft diet after 12 hours.']},
@@ -17523,7 +17599,9 @@ function renderBrochures() {
         </div>
         <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--g5);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
           <div style="font-size:11px;color:var(--g1)"><strong>Patient:</strong> Test Patient A · BMSH-000001 · <strong>Surgeon:</strong> Dr. Varun Baweja, MS (Ophth)</div>
-          <div style="display:flex;gap:7px">
+          <div style="display:flex;gap:7px;flex-wrap:wrap">
+            ${b.brochureUrlEn ? `<a href="${b.brochureUrlEn}" target="_blank" class="btn btn-outline btn-sm" style="text-decoration:none">📄 Full Brochure EN</a>` : ''}
+            ${b.brochureUrlPa ? `<a href="${b.brochureUrlPa}" target="_blank" class="btn btn-outline btn-sm" style="text-decoration:none">📄 ਪੰਜਾਬੀ</a>` : ''}
             <button class="btn btn-gold btn-sm" onclick="printBrochure('${b.id}')">🖨️ Print</button>
             <button class="wa-btn btn-sm" onclick="showToast('Brochure sent via WhatsApp ✓','s')">📱 WhatsApp</button>
           </div>
@@ -21356,6 +21434,7 @@ const ICD10_DB = [
 ];
 
 const OT_CASES = [];
+window.OT_CASES = OT_CASES;
 function saveOTCasesToLocalStorage() {
   try {
     const next = JSON.stringify((OT_CASES || []).map(normalizeOTCaseRecord));
@@ -21445,6 +21524,43 @@ function syncPendingOTCasesToFirebase(remoteRows) {
   return Promise.allSettled(pending.map(function (row) {
     return persistOTCaseToCloud(row);
   }));
+}
+function mergeOTCaseRowsIntoMemory(rows) {
+  let changed = false;
+  (rows || []).forEach(function (row) {
+    const normalized = normalizeOTCaseRecord(row);
+    if (!normalized.id) return;
+    const idx = OT_CASES.findIndex(function (c) { return c && c.id === normalized.id; });
+    if (idx >= 0) {
+      const existing = normalizeOTCaseRecord(OT_CASES[idx]);
+      if (getOTCaseLastTouchedAt(normalized) >= getOTCaseLastTouchedAt(existing)) {
+        OT_CASES[idx] = normalized;
+        changed = true;
+      }
+    } else {
+      OT_CASES.push(normalized);
+      changed = true;
+    }
+  });
+  if (changed) saveOTCasesToLocalStorage();
+  return changed;
+}
+function refreshOTCasesOnceForReports() {
+  if (window._bmhOTCasesRefreshInFlight) return window._bmhOTCasesRefreshInFlight;
+  const localRows = loadOTCasesFromLocalStorage();
+  if (localRows.length) mergeOTCaseRowsIntoMemory(localRows);
+  if (typeof fbOnce !== 'function') return Promise.resolve(false);
+  window._bmhOTCasesRefreshInFlight = fbOnce('otCases').then(function (data) {
+    const changed = mergeOTCaseRowsIntoMemory(data ? Object.values(data) : []);
+    window._bmhOTCasesLastReportRefreshAt = Date.now();
+    return changed;
+  }).catch(function (e) {
+    console.warn('OT report refresh failed:', e);
+    return false;
+  }).finally(function () {
+    window._bmhOTCasesRefreshInFlight = null;
+  });
+  return window._bmhOTCasesRefreshInFlight;
 }
 
 let activeOTCase = null;
@@ -22851,7 +22967,8 @@ function getReceptionSelectedConsultationFeeAmount(centre) {
   return feeInputRaw === '' ? (getReceptionConsultationRate(centre) || 0) : (parseFloat(feeInputRaw) || 0);
 }
 
-function updateReceptionFeeChoiceUi(standardAmount) {
+function updateReceptionFeeChoiceUi(standardAmount, opts) {
+  const options = Object.assign({ preserveSelection: false }, opts || {});
   const select = document.getElementById('rc-fee-select');
   const feeEl = document.getElementById('rc-fee');
   if (!select || !feeEl) return;
@@ -22864,11 +22981,14 @@ function updateReceptionFeeChoiceUi(standardAmount) {
   }
   const standard = Math.max(0, Number(standardAmount || 0)) || 500;
   const current = Number(feeEl.value || 0);
+  const previousChoice = options.preserveSelection ? String(select.value || '') : '';
   select.innerHTML = [
     '<option value="300">General Registration - ₹300</option>',
     '<option value="' + standard + '">Specialist Registration - ₹' + standard.toLocaleString('en-IN') + '</option>'
   ].join('');
-  select.value = current === 300 ? '300' : String(standard);
+  select.value = previousChoice && Array.from(select.options).some(function (opt) { return opt.value === previousChoice; })
+    ? previousChoice
+    : (current === 300 ? '300' : String(standard));
   select.style.display = '';
   feeEl.style.display = 'none';
   applyReceptionFeeChoice();
@@ -22919,8 +23039,10 @@ function syncReceptionCentreAndFee() {
 
   feeEl.disabled = false;
   const amount = getReceptionConsultationRate(centre);
-  feeEl.value = String(amount);
-  updateReceptionFeeChoiceUi(amount);
+  const feeSelect = document.getElementById('rc-fee-select');
+  const preserveChoice = shouldShowReceptionOphthoChdFeeChoice() && !!(feeSelect && feeSelect.style.display !== 'none' && feeSelect.value);
+  if (!preserveChoice) feeEl.value = String(amount);
+  updateReceptionFeeChoiceUi(amount, { preserveSelection: preserveChoice });
 }
 window.syncReceptionConsultationFee = syncReceptionCentreAndFee;
 
@@ -22969,6 +23091,7 @@ function refreshQueuesForCalendarDayBoundary(force) {
   const today = localDateKey(new Date());
   if (!force && window._bmhQueueCalendarDay === today) return;
   window._bmhQueueCalendarDay = today;
+  startTodayQueuePatientsRealtimeUpdates && startTodayQueuePatientsRealtimeUpdates(true);
   renderDocQueue && renderDocQueue();
   renderReceptionPage && renderReceptionPage();
   renderDashboard && renderDashboard();
@@ -23255,7 +23378,6 @@ async function registerPatient() {
     showToast(`📋 ₹${fee} noted as credit/due for ${name}`,'i');
   } else if(fee > 0) {
     const txnId = 'TXN'+Date.now();
-    addBmhPatientCharge(uid, { id: 'chg-' + txnId, cat: inferChargeCategoryFromService(consultationDesc), desc: consultationDesc, qty: 1, rate: fee, amount: fee, source: 'reception', ref: txnId, ts: new Date().toISOString() });
     const txn = {
       id:txnId, patient:name, bmhId:uid, service: consultationDesc, amount:fee,
       mode:payMode, collected:true, dept,
@@ -23267,6 +23389,7 @@ async function registerPatient() {
       consultationFeeLabel: feeChoice?.label || '',
       billCats: ['consultation']
     };
+    addBmhPatientCharge(uid, buildPaidReceptionChargeRow(txnId, consultationDesc, fee));
     TRANSACTIONS.push(txn);
     saveTransactionToFirebase&&saveTransactionToFirebase(txn);
     patient.balance = bmhSyncPatientRunningBalance(uid);
@@ -23287,7 +23410,8 @@ async function registerPatient() {
   }
 
   fbUpdate&&fbUpdate('patients/'+uid,{
-    checkinAt:patient.checkinAt,purpose,visitCount:patient.visitCount,ins:patient.ins||'', policy: patient.policy || '',
+    status: patient.status, seen: patient.seen, dilated: patient.dilated, dept: patient.dept, centre: patient.centre,
+    balance: patient.balance, checkinAt:patient.checkinAt,purpose,visitCount:patient.visitCount,ins:patient.ins||'', policy: patient.policy || '',
     advance:patient.advance, advancePurpose:patient.advancePurpose, consultationNoFee:patient.consultationNoFee,
     consultationFee: patient.consultationFee, consultationFeeType: patient.consultationFeeType || '', consultationFeeLabel: patient.consultationFeeLabel || '',
     refType: patient.refType || '', refName: patient.refName || '', refMobile: patient.refMobile || '', referredBy: patient.referredBy || '',
@@ -23295,7 +23419,16 @@ async function registerPatient() {
   });
   if (typeof window.patchPatientFirestore === 'function') {
     window.patchPatientFirestore(uid, {
+      status: patient.status,
+      seen: patient.seen,
+      dilated: patient.dilated,
+      dept: patient.dept,
+      centre: patient.centre,
+      balance: patient.balance,
       checkinAt: patient.checkinAt,
+      queueDate: patient.queueDate || queueDateToday,
+      visitDate: patient.visitDate || queueDateToday,
+      queueRemoved: false,
       purpose,
       visitCount: patient.visitCount,
       ins: patient.ins || '',
@@ -23331,7 +23464,7 @@ async function registerPatient() {
   if(!isInsurance && !isCreditDue && !isPreReg && fee>0) {
     setTimeout(()=>{
       if(confirm(`✅ ${name} registered — Token #${token}\nFee: ₹${fee.toLocaleString('en-IN')} (${payMode})\n\nPrint receipt?`)) {
-        printPaymentReceipt({id:'TXN'+Date.now(),patient:name,bmhId:uid,for:purpose,service:purpose,amount:fee,mode:payMode,bmhId:uid});
+        printPaymentReceipt({id:'TXN'+Date.now(),patient:name,bmhId:uid,for:consultationDesc,service:consultationDesc,amount:fee,mode:payMode,bmhId:uid,centre:centre});
       }
     },200);
   }
@@ -26714,10 +26847,15 @@ function getProcedureReportCompletionMatch(row, otRows) {
     return procedureReportNamesMatch(c.procedure || '', row.proc || '');
   });
   if (otMatch) {
+    const otDone = otMatch.status === 'done' || otMatch.status === 'completed';
+    const otStatus = otDone ? 'done'
+      : otMatch.status === 'in-progress' ? 'in-progress'
+      : otMatch.status === 'postponed' ? 'postponed'
+      : 'scheduled';
     return {
-      status: otMatch.status === 'completed' ? 'done' : 'scheduled',
-      date: otMatch.date || otMatch.scheduledDate || otMatch.scheduledTime || row.date || '',
-      otProcedure: otMatch.status === 'completed' ? (otMatch.procedure || '') : '',
+      status: otStatus,
+      date: getOTCaseDateKey(otMatch) || otMatch.date || otMatch.scheduledDate || otMatch.scheduledTime || row.date || '',
+      otProcedure: otDone ? (otMatch.procedure || '') : '',
       otId: otMatch.id || ''
     };
   }
@@ -26769,12 +26907,14 @@ function getProcedureReportRows() {
       proc: normalizedProc,
       date: row.date || visitDate || row.createdAt || ''
     }, otRows);
+    const advDate = row.date || visitDate || row.createdAt || '';
     advised.push({
       key,
       patient: row.patient || pt.name || '—',
       bmhId: row.bmhId,
       proc: normalizedProc,
-      date: completion.date || row.date || visitDate || row.createdAt || '',
+      date: completion.date || advDate,
+      advisedDate: advDate,
       doctor: row.doctor || pt.assignedDoctor || pt.doctor || '',
       status: completion.status || 'advised',
       otProcedure: completion.otProcedure || '',
@@ -26831,12 +26971,13 @@ function getProcedureReportRows() {
     const rowCentre = c.centre || pt.centre || '';
     const normalizedProc = expandProcedureLabelForPrint(c.procedure || c.procedureMain || c.proc || '');
     const rawStatus = String(c.status || 'pending').toLowerCase();
+    const otDate = getOTCaseDateKey(c) || c.date || c.otDate || c.surgeryDate || c.scheduledDate || c.createdAt || '';
     return {
       key: 'ot-' + (c.id || idx),
       patient: c.patient || pt.name || '—',
       bmhId: c.bmhId || pt.bmhId || '',
       proc: normalizedProc,
-      date: c.date || c.scheduledDate || c.scheduledTime || c.createdAt || '',
+      date: otDate,
       doctor: c.surgeon || c.doctor || pt.assignedDoctor || pt.doctor || '',
       status: rawStatus === 'inprogress' ? 'in-progress' : rawStatus,
       otProcedure: normalizedProc,
@@ -26890,16 +27031,102 @@ function procedureReportStatusBadge(status) {
   return 'bd-orange';
 }
 
+function parseObgEddToIso(value) {
+  const raw = String(value || '').trim();
+  if (!raw || raw === '—') return '';
+  return parseDisplayDateToIso(raw);
+}
+function getObgAncVisitCandidates(pt) {
+  const rows = [];
+  const add = function (visit, source) {
+    if (!visit || typeof visit !== 'object') return;
+    const dept = normalizeDeptKeyForQueue(visit.dept || pt.lastDeptVisit || pt.dept || '');
+    const anc = visit.workflowAnc !== false || !!visit.obstetricHistoryEnabled || !!visit['obg-track-anc'];
+    if (dept !== 'obg' || !anc) return;
+    rows.push(Object.assign({ _source: source || '' }, visit));
+  };
+  add(pt.lastVisitByDept && pt.lastVisitByDept.obg, 'lastVisitByDept');
+  add(pt.lastVisit, 'lastVisit');
+  Object.values(getCachedPatientVisits(pt.bmhId) || {}).forEach(function (visit) { add(visit, 'cache'); });
+  return rows;
+}
+function getExpectedDeliveryRows() {
+  const fromVal = document.getElementById('rep-surg-from')?.value || '';
+  const toVal = document.getElementById('rep-surg-to')?.value || '';
+  const centreFilter = document.getElementById('rep-centre')?.value || '';
+  const rows = [];
+  const seen = new Set();
+  (PATIENTS || []).forEach(function (pt) {
+    if (!pt || !pt.bmhId || seen.has(pt.bmhId)) return;
+    if (centreFilter && normalizeAppointmentCentreValue(pt.centre || 'CHD') !== centreFilter) return;
+    const visits = getObgAncVisitCandidates(pt)
+      .map(function (visit) {
+        const eddRaw = visit['obg-obs-edd-usg'] || visit['obg-obs-edd-date'] || visit.edd || '';
+        const eddIso = parseObgEddToIso(eddRaw);
+        return { visit: visit, eddIso: eddIso, eddRaw: eddRaw };
+      })
+      .filter(function (row) { return !!row.eddIso; })
+      .sort(function (a, b) {
+        return String(b.visit.date || b.visit.visitDate || b.visit.createdAt || '').localeCompare(String(a.visit.date || a.visit.visitDate || a.visit.createdAt || ''));
+      });
+    if (!visits.length) return;
+    const picked = visits[0];
+    if (fromVal && picked.eddIso < fromVal) return;
+    if (toVal && picked.eddIso > toVal) return;
+    const v = picked.visit;
+    const eddTime = Date.parse(picked.eddIso + 'T12:00:00');
+    const todayTime = Date.parse(localDateKey(new Date()) + 'T12:00:00');
+    const daysLeft = Number.isFinite(eddTime) && Number.isFinite(todayTime)
+      ? Math.round((eddTime - todayTime) / 86400000)
+      : null;
+    seen.add(pt.bmhId);
+    rows.push({
+      patient: pt.name || '—',
+      bmhId: pt.bmhId,
+      mobile: pt.mob || pt.mobile || '',
+      ageSex: [pt.age || '—', pt.sex || '—'].join('/'),
+      eddIso: picked.eddIso,
+      edd: formatDateIN(picked.eddIso),
+      lmp: v.lmp || v['obg-obs-lmp'] || '',
+      gravida: v.gravida || ['G' + (v.g || '0'), 'P' + (v.p || '0'), 'A' + (v.a || '0'), 'L' + (v.l || '0')].join(''),
+      ga: v.ga || '',
+      risk: v.riskTag || v['obg-risk'] || '',
+      visitDate: v.date || v.visitDate || v.createdAt || '',
+      doctor: v.doctor || pt.assignedDoctor || pt.doctor || '',
+      centre: pt.centre || '',
+      notes: v.ancNotes || v.notes || '',
+      daysLeft: daysLeft
+    });
+  });
+  return rows.sort(function (a, b) {
+    return String(a.eddIso || '').localeCompare(String(b.eddIso || '')) || String(a.patient || '').localeCompare(String(b.patient || ''));
+  });
+}
+function buildExpectedDeliveryReportHtml(rows, title) {
+  const esc = function(v){ return String(v || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;padding:10mm;color:#111}table{width:100%;border-collapse:collapse}th,td{border:1px solid #d7dce5;padding:6px 7px;font-size:11px;vertical-align:top}th{background:#eef3fb;color:#1A3C6E;font-weight:900}.muted{color:#666;font-size:10px}@page{size:A4 portrait;margin:8mm}</style></head><body>'
+    + '<div style="font-size:18px;font-weight:900;color:#1A3C6E;margin-bottom:10px">' + esc(title || 'Deliveries Expected') + '</div>'
+    + (rows.length ? '<table><thead><tr><th>#</th><th>EDD</th><th>Patient</th><th>BMSH ID</th><th>Phone</th><th>Age/Sex</th><th>GPAL</th><th>Risk</th><th>Last Visit</th><th>Doctor</th><th>Centre</th><th>Due In</th></tr></thead><tbody>'
+    + rows.map(function (row, i) {
+      const due = row.daysLeft == null ? '—' : (row.daysLeft < 0 ? (Math.abs(row.daysLeft) + 'd overdue') : (row.daysLeft + 'd'));
+      return '<tr><td>' + (i + 1) + '</td><td style="font-weight:900;color:#1A3C6E">' + esc(row.edd) + '</td><td style="font-weight:800">' + esc(row.patient) + (row.notes ? '<div class="muted" style="margin-top:4px">' + esc(row.notes) + '</div>' : '') + '</td><td style="font-family:monospace">' + esc(row.bmhId) + '</td><td>' + esc(row.mobile || '—') + '</td><td>' + esc(row.ageSex || '—') + '</td><td>' + esc(row.gravida || '—') + '</td><td>' + esc(row.risk || 'Low risk') + '</td><td>' + esc(row.visitDate ? formatDateIN(row.visitDate) : '—') + '</td><td>' + esc(row.doctor || '—') + '</td><td>' + esc(row.centre || '—') + '</td><td>' + esc(due) + '</td></tr>';
+    }).join('')
+    + '</tbody></table>' : '<div style="padding:20px;text-align:center;color:#666">No ANC patients with EDD found for the current filter.</div>')
+    + '</body></html>';
+}
+
 function buildProcedureReportHtml(rows, title) {
   const esc = function(v){ return String(v || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
   return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;padding:10mm;color:#111}table{width:100%;border-collapse:collapse}th,td{border:1px solid #d7dce5;padding:6px 7px;font-size:11px;vertical-align:top}th{background:#eef3fb;color:#1A3C6E;font-weight:900} .muted{color:#666;font-size:10px} @page{size:A4 portrait;margin:8mm}</style></head><body>'
     + '<div style="font-size:18px;font-weight:900;color:#1A3C6E;margin-bottom:10px">' + esc(title) + '</div>'
-    + (rows.length ? '<table><thead><tr><th>#</th><th>Patient</th><th>Phone</th><th>Age/Sex</th><th>BMSH ID</th><th>Procedure</th><th>Date</th><th>Doctor</th><th>Centre</th><th>Status</th><th>Counsellor Follow-up</th></tr></thead><tbody>'
+    + (rows.length ? '<table><thead><tr><th>#</th><th>Patient</th><th>Phone</th><th>Age/Sex</th><th>BMSH ID</th><th>Procedure</th><th>Advised On</th><th>Surgery Date</th><th>Doctor</th><th>Centre</th><th>Status</th><th>Counsellor Follow-up</th></tr></thead><tbody>'
     + rows.map(function (p, i) {
         const follow = window.PROC_COUNSELLOR_LOG[p.key] || {};
         const remark = [follow.status, follow.remark, follow.nextDate].filter(Boolean).join(' · ');
         const advice = p.advice ? ('<div class="muted" style="margin-top:4px;line-height:1.35"><b>Advice:</b> ' + esc(p.advice) + '</div>') : '';
-        return '<tr><td>' + (i + 1) + '</td><td style="font-weight:800">' + esc(p.patient) + advice + '</td><td>' + esc(p.mobile || '—') + '</td><td>' + esc(p.ageSex || '—') + '</td><td style="font-family:monospace">' + esc(p.bmhId) + '</td><td>' + esc(p.proc) + '</td><td>' + esc(p.date) + '</td><td>' + esc(p.doctor) + '</td><td>' + esc(p.centre || '—') + '</td><td>' + esc(procedureReportStatusLabel(p.status)) + '</td><td>' + (remark ? esc(remark) : '<span class="muted">No follow-up saved</span>') + '</td></tr>';
+        const isDone = p.status === 'done' || p.status === 'completed';
+        const surgDate = isDone ? esc(p.date || '—') : '—';
+        return '<tr><td>' + (i + 1) + '</td><td style="font-weight:800">' + esc(p.patient) + advice + '</td><td>' + esc(p.mobile || '—') + '</td><td>' + esc(p.ageSex || '—') + '</td><td style="font-family:monospace">' + esc(p.bmhId) + '</td><td>' + esc(p.proc) + '</td><td>' + esc(p.advisedDate || p.date || '—') + '</td><td style="font-weight:' + (isDone ? '900' : '400') + ';color:' + (isDone ? '#1a7c3a' : '#666') + '">' + surgDate + '</td><td>' + esc(p.doctor) + '</td><td>' + esc(p.centre || '—') + '</td><td>' + esc(procedureReportStatusLabel(p.status)) + '</td><td>' + (remark ? esc(remark) : '<span class="muted">No follow-up saved</span>') + '</td></tr>';
       }).join('')
     + '</tbody></table>' : '<div style="padding:20px;text-align:center;color:#666">No procedure records found for the current filter.</div>')
     + '</body></html>';
@@ -27043,30 +27270,63 @@ function searchReportPatients(val) {
 function generateSurgeryReport() {
   const proc=document.getElementById('rep-surg-name')?.value||'';
   const el=document.getElementById('rep-surgery-result'); if(!el) return;
+  const sourceFilter = document.getElementById('rep-surg-source')?.value || 'advised';
+  if (sourceFilter === 'deliveries') {
+    const rows = getExpectedDeliveryRows();
+    const esc = function(v){ return String(v || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
+    el.innerHTML = `<div class="card">
+      <div class="card-hd"><div><div class="card-title">🤰 Deliveries Expected — ${rows.length} patients</div><div class="card-sub">ANC cases sorted chronologically by EDD</div></div><button class="btn btn-gold btn-xs" onclick="printSurgeryReportCurrent()">🖨️ Print</button></div>
+      ${rows.length ? `<table><thead><tr><th>#</th><th>EDD</th><th>Patient</th><th>BMSH ID</th><th>Phone</th><th>Age/Sex</th><th>GPAL</th><th>Risk</th><th>Last Visit</th><th>Doctor</th><th>Due In</th></tr></thead><tbody>
+      ${rows.map(function (row, i) {
+        const due = row.daysLeft == null ? '—' : (row.daysLeft < 0 ? (Math.abs(row.daysLeft) + 'd overdue') : (row.daysLeft + 'd'));
+        return `<tr><td>${i + 1}</td><td style="font-weight:900;color:var(--bmh-blue)">${esc(row.edd)}</td><td style="font-weight:800">${esc(row.patient)}${row.notes ? `<div style="font-size:10px;color:var(--g1);margin-top:3px">${esc(row.notes)}</div>` : ''}</td><td style="font-family:var(--mono);font-size:10px">${esc(row.bmhId)}</td><td>${esc(row.mobile || '—')}</td><td>${esc(row.ageSex || '—')}</td><td>${esc(row.gravida || '—')}</td><td>${esc(row.risk || 'Low risk')}</td><td>${esc(row.visitDate ? formatDateIN(row.visitDate) : '—')}</td><td>${esc(row.doctor || '—')}</td><td>${esc(due)}</td></tr>`;
+      }).join('')}
+      </tbody></table>` : '<div style="padding:20px;text-align:center;color:var(--g1)">No ANC patients with EDD found for the current filter.</div>'}
+    </div>`;
+    return;
+  }
+  const needsOTRows = sourceFilter === 'ot' || sourceFilter === 'all';
+  const lastRefresh = Number(window._bmhOTCasesLastReportRefreshAt || 0);
+  if (needsOTRows && !window._bmhGeneratingSurgeryReportAfterOTRefresh && (!OT_CASES.length || sourceFilter === 'ot' || Date.now() - lastRefresh > 5000) && typeof refreshOTCasesOnceForReports === 'function') {
+    window._bmhGeneratingSurgeryReportAfterOTRefresh = true;
+    el.innerHTML = '<div class="card"><div style="padding:18px;color:var(--g1);font-size:12px">Loading OT list from database...</div></div>';
+    refreshOTCasesOnceForReports().then(function () {
+      window._bmhGeneratingSurgeryReportAfterOTRefresh = false;
+      generateSurgeryReport();
+    });
+    return;
+  }
+  window._bmhGeneratingSurgeryReportAfterOTRefresh = false;
   const filtered = getProcedureReportRows();
   const esc = function(v){ return String(v || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
   el.innerHTML=`<div class="card">
     <div class="card-hd"><div><div class="card-title">⚕️ ${proc||'All Procedures'} — ${filtered.length} patients</div></div><button class="btn btn-gold btn-xs" onclick="printSurgeryReportCurrent()">🖨️ Print</button></div>
-    ${filtered.length?`<table><thead><tr><th>#</th><th>Patient</th><th>Phone</th><th>Age/Sex</th><th>BMSH ID</th><th>Procedure Advised</th><th>OT — Done As</th><th>Relevant Date</th><th>Doctor</th><th>Centre</th><th>Status</th><th>Counsellor</th></tr></thead>
-    <tbody>${filtered.map((p,i)=>{ const follow=window.PROC_COUNSELLOR_LOG[p.key]||{}; const statusLabel=procedureReportStatusLabel(p.status); const badgeClass=procedureReportStatusBadge(p.status); const otDoneCell = p.otProcedure ? `<div style="font-size:11px;font-weight:800;color:var(--green)">${String(p.source||'')==='ot'?'OT:':'✅'} ${esc(p.otProcedure)}</div>` : (p.status==='scheduled'?`<span style="font-size:10px;color:var(--blue)">Scheduled</span>`:'<span style="font-size:10px;color:var(--g1)">—</span>'); return `<tr><td>${i+1}</td><td style="font-weight:800">${esc(p.patient)}${p.referredBy?`<div style="font-size:10px;color:var(--g1);margin-top:2px">Ref: ${esc(p.referredBy)}</div>`:''}${p.advice?`<div style="font-size:10px;color:var(--g1);margin-top:4px;line-height:1.35"><b>Advice:</b> ${esc(p.advice)}</div>`:''}</td><td>${esc(p.mobile||'—')}</td><td>${esc(p.ageSex||'—')}</td><td style="font-family:var(--mono);font-size:10px">${esc(p.bmhId)}</td><td>${esc(p.proc)}</td><td>${otDoneCell}</td><td>${esc(p.date||'—')}</td><td>${esc(p.doctor)}</td><td>${esc(p.centre||'—')}</td><td><span class="badge ${badgeClass}">${esc(statusLabel)}</span></td><td><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="btn btn-xs btn-outline" onclick="openCounsellorFollowup('${p.key}')">📞 Follow-up</button>${follow.status?`<span style="font-size:10px;color:var(--g1)">${esc(follow.status)}${follow.nextDate?` · ${esc(follow.nextDate)}`:''}</span>`:''}</div></td></tr>`; }).join('')}
+    ${filtered.length?`<table><thead><tr><th>#</th><th>Patient</th><th>Phone</th><th>Age/Sex</th><th>BMSH ID</th><th>Procedure Advised</th><th>OT — Done As</th><th>Advised On</th><th>Surgery Date</th><th>Doctor</th><th>Centre</th><th>Status</th><th>Counsellor</th></tr></thead>
+    <tbody>${filtered.map((p,i)=>{ const follow=window.PROC_COUNSELLOR_LOG[p.key]||{}; const statusLabel=procedureReportStatusLabel(p.status); const badgeClass=procedureReportStatusBadge(p.status); const isDone = p.status==='done'||p.status==='completed'; const otDoneCell = p.otProcedure ? `<div style="font-size:11px;font-weight:800;color:var(--green)">${String(p.source||'')==='ot'?'OT:':'✅'} ${esc(p.otProcedure)}</div>` : (p.status==='scheduled'||p.status==='in-progress'?`<span style="font-size:10px;color:var(--blue)">${p.status==='in-progress'?'In Progress':'Scheduled'}</span>`:'<span style="font-size:10px;color:var(--g1)">—</span>'); const surgDateCell = isDone ? `<span style="font-weight:800;color:var(--green)">${esc(p.date||'—')}</span>` : (p.status==='scheduled'||p.status==='in-progress' ? `<span style="color:var(--blue);font-size:11px">${esc(p.date||'—')}</span>` : '<span style="color:var(--g1);font-size:11px">—</span>'); return `<tr><td>${i+1}</td><td style="font-weight:800">${esc(p.patient)}${p.referredBy?`<div style="font-size:10px;color:var(--g1);margin-top:2px">Ref: ${esc(p.referredBy)}</div>`:''}${p.advice?`<div style="font-size:10px;color:var(--g1);margin-top:4px;line-height:1.35"><b>Advice:</b> ${esc(p.advice)}</div>`:''}</td><td>${esc(p.mobile||'—')}</td><td>${esc(p.ageSex||'—')}</td><td style="font-family:var(--mono);font-size:10px">${esc(p.bmhId)}</td><td>${esc(p.proc)}</td><td>${otDoneCell}</td><td style="font-size:11px">${esc(p.advisedDate||p.date||'—')}</td><td>${surgDateCell}</td><td>${esc(p.doctor)}</td><td>${esc(p.centre||'—')}</td><td><span class="badge ${badgeClass}">${esc(statusLabel)}</span></td><td><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="btn btn-xs btn-outline" onclick="openCounsellorFollowup('${p.key}')">📞 Follow-up</button>${follow.status?`<span style="font-size:10px;color:var(--g1)">${esc(follow.status)}${follow.nextDate?` · ${esc(follow.nextDate)}`:''}</span>`:''}</div></td></tr>`; }).join('')}
     </tbody></table>`:'<div style="padding:20px;text-align:center;color:var(--g1)">No records found</div>'}
   </div>`;
 }
 
 function openSurgeryReportWindow() {
-  const rows = getProcedureReportRows();
   const proc = document.getElementById('rep-surg-name')?.value || 'Procedure Report';
+  const sourceFilter = document.getElementById('rep-surg-source')?.value || 'advised';
+  const rows = sourceFilter === 'deliveries' ? getExpectedDeliveryRows() : getProcedureReportRows();
   const w = window.open('', '_blank', 'width=1200,height=800');
   if (!w) { showToast('Popup blocked — allow popups to open report window', 'w'); return; }
-  w.document.write(buildProcedureReportHtml(rows, proc || 'Procedure Report'));
+  w.document.write(sourceFilter === 'deliveries'
+    ? buildExpectedDeliveryReportHtml(rows, 'Deliveries Expected')
+    : buildProcedureReportHtml(rows, proc || 'Procedure Report'));
   w.document.close();
 }
 
 function printSurgeryReportCurrent() {
-  const rows = getProcedureReportRows();
   const proc = document.getElementById('rep-surg-name')?.value || 'Procedure Report';
-  safePrint(buildProcedureReportHtml(rows, proc || 'Procedure Report'));
-  showToast('Procedure report ready to print ✓', 's');
+  const sourceFilter = document.getElementById('rep-surg-source')?.value || 'advised';
+  const rows = sourceFilter === 'deliveries' ? getExpectedDeliveryRows() : getProcedureReportRows();
+  safePrint(sourceFilter === 'deliveries'
+    ? buildExpectedDeliveryReportHtml(rows, 'Deliveries Expected')
+    : buildProcedureReportHtml(rows, proc || 'Procedure Report'));
+  showToast(sourceFilter === 'deliveries' ? 'Expected deliveries report ready to print ✓' : 'Procedure report ready to print ✓', 's');
 }
 
 function generateInvestigationReport() {
@@ -28825,7 +29085,11 @@ function addCustomLabTest() {
 function renderAptDay() {
   const date = document.getElementById('apt-date-inp')?.value || todayKey();
   const drFilter = document.getElementById('apt-dr-filter')?.value || '';
-  const centreFilter = normalizeAppointmentCentreValue(window.CURRENT_USER?.centre || getEffectiveCentre() || 'CHD');
+  const centreSelVal = document.getElementById('apt-centre-filter')?.value || '';
+  const userCentre = normalizeAppointmentCentreValue(window.CURRENT_USER?.centre || getEffectiveCentre() || 'CHD');
+  const showAllCentres = centreSelVal === 'ALL';
+  const centreFilter = showAllCentres ? null : (centreSelVal ? normalizeAppointmentCentreValue(centreSelVal) : userCentre);
+
   const timeSortVal = (slot) => {
     const s = normalizeAptTimeLabel(slot);
     const m = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
@@ -28834,7 +29098,8 @@ function renderAptDay() {
     if(String(m[3]).toUpperCase() === 'PM') h += 12;
     return h * 60 + Number(m[2]);
   };
-  const dayApts = APPOINTMENTS.filter(a => a.date === date && (!drFilter || a.doctor === drFilter) && normalizeAppointmentCentreValue(a.centre || 'CHD') === centreFilter)
+  const aptMatchesCentre = (a) => showAllCentres || normalizeAppointmentCentreValue(a.centre || 'CHD') === centreFilter;
+  const dayApts = APPOINTMENTS.filter(a => a.date === date && (!drFilter || a.doctor === drFilter) && aptMatchesCentre(a))
     .slice()
     .sort((a,b) => timeSortVal(a.time || a.scheduledTime) - timeSortVal(b.time || b.scheduledTime));
   const slotsEl = document.getElementById('apt-day-slots');
@@ -28872,7 +29137,8 @@ function renderAptDay() {
   </div>`).join('') : '<div style="padding:14px;text-align:center;color:var(--g1);font-size:12px">No appointments on this date</div>';
 
   const upcomingEl = document.getElementById('apt-upcoming-list');
-  if(upcomingEl) upcomingEl.innerHTML = APPOINTMENTS.filter(a => normalizeAppointmentCentreValue(a.centre || 'CHD') === centreFilter).slice().sort((a,b)=>{
+  const allCentreApts = APPOINTMENTS.filter(aptMatchesCentre);
+  if(upcomingEl) upcomingEl.innerHTML = allCentreApts.slice().sort((a,b)=>{
     const ad = new Date(`${a.date || '1970-01-01'}T00:00:00`).getTime() + (timeSortVal(a.time || a.scheduledTime) * 60000);
     const bd = new Date(`${b.date || '1970-01-01'}T00:00:00`).getTime() + (timeSortVal(b.time || b.scheduledTime) * 60000);
     return ad - bd;
@@ -28881,7 +29147,117 @@ function renderAptDay() {
     <div style="flex:1"><div style="font-weight:800">${a.patient}</div><div style="font-size:10.5px;color:var(--g1)">${a.purpose||a.type} · ${a.date}</div></div>
     <span class="badge bd-blue">${normalizeAptTimeLabel(a.time)}</span>
   </div>`).join('');
-  const ct = document.getElementById('apt-upcoming-ct'); if(ct) ct.textContent = APPOINTMENTS.filter(a => normalizeAppointmentCentreValue(a.centre || 'CHD') === centreFilter).length;
+  const ct = document.getElementById('apt-upcoming-ct'); if(ct) ct.textContent = allCentreApts.length;
+}
+
+function renderFollowupRegister() {
+  const el = document.getElementById('apt-followup-register');
+  if(!el) return;
+
+  const centreSelVal = document.getElementById('fur-centre-filter')?.value || '';
+  const statusFilter = document.getElementById('fur-status-filter')?.value || 'upcoming';
+  const userCentre = normalizeAppointmentCentreValue(window.CURRENT_USER?.centre || getEffectiveCentre() || 'CHD');
+  const showAllCentres = centreSelVal === 'ALL';
+  const centreFilter = showAllCentres ? null : (centreSelVal ? normalizeAppointmentCentreValue(centreSelVal) : userCentre);
+
+  const todayStr = todayKey();
+  const DEPT_LABELS = { oe: 'Ophtho', ophtho: 'Ophtho', obg: 'OBG', psych: 'Psych', skin: 'Skin', general: 'General' };
+
+  // Collect all follow-up entries from PATIENTS array, de-duped by bmhId+dept+date
+  const seen = new Set();
+  const entries = [];
+
+  (window.PATIENTS || []).forEach(function(p) {
+    const ptCentre = normalizeAppointmentCentreValue(p.centre || 'CHD');
+    if(!showAllCentres && centreFilter && ptCentre !== centreFilter) return;
+
+    function addEntry(visit, deptKey) {
+      if(!visit || typeof visit !== 'object') return;
+      const fuDate = String(visit.rxFuDate || visit.followupDate || visit.nextReview || '').trim().slice(0,10);
+      if(!fuDate || fuDate.length < 10) return;
+      const dept = deptKey || visit.dept || visit.department || '';
+      const key = (p.bmhId || '') + '|' + dept + '|' + fuDate;
+      if(seen.has(key)) return;
+      seen.add(key);
+      entries.push({
+        name: p.name || p.patientName || '',
+        bmhId: p.bmhId || '',
+        mob: p.mob || p.mobile || '',
+        dept: dept,
+        doctor: visit.doctor || visit.consultedBy || '',
+        date: fuDate,
+        centre: ptCentre,
+        booked: !!(window.APPOINTMENTS || []).find(function(a){ return a.bmhId === p.bmhId && a.date === fuDate && a.status !== 'cancelled'; })
+      });
+    }
+
+    // From lastVisit
+    addEntry(p.lastVisit, p.lastDeptVisit || (p.lastVisit && p.lastVisit.dept) || '');
+
+    // From each dept in lastVisitByDept
+    if(p.lastVisitByDept && typeof p.lastVisitByDept === 'object') {
+      Object.keys(p.lastVisitByDept).forEach(function(dk) {
+        addEntry(p.lastVisitByDept[dk], dk);
+      });
+    }
+  });
+
+  // Apply status filter
+  const filtered = entries.filter(function(e) {
+    if(statusFilter === 'overdue') return e.date < todayStr;
+    if(statusFilter === 'upcoming') return e.date >= todayStr;
+    return true; // 'all'
+  }).sort(function(a,b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+
+  if(!filtered.length) {
+    el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--g1);font-size:13px">No follow-ups found for the selected filter</div>';
+    return;
+  }
+
+  const rows = filtered.map(function(e) {
+    let statusBadge, statusColor;
+    if(e.date < todayStr) {
+      statusBadge = 'OVERDUE'; statusColor = '#c0392b';
+    } else if(e.date === todayStr) {
+      statusBadge = 'TODAY'; statusColor = '#d68910';
+    } else {
+      statusBadge = 'UPCOMING'; statusColor = '#27ae60';
+    }
+    const deptLabel = DEPT_LABELS[e.dept] || e.dept || '—';
+    const centreLabel = e.centre === 'RPR' ? 'Ropar' : 'Chandigarh';
+    const bookBtnHtml = e.booked
+      ? `<span style="font-size:10px;color:#27ae60;font-weight:700">✓ Booked</span>`
+      : `<button class="btn btn-xs btn-outline" onclick="openBookAptForPatient('${e.bmhId}','${e.date}')">+ Book Slot</button>`;
+    return `<tr>
+      <td style="font-weight:700;font-size:12.5px">${escapeHtmlConsent(e.name)}</td>
+      <td style="font-size:11.5px;color:var(--bmh-blue)">${e.bmhId}</td>
+      <td style="font-size:11.5px">${e.mob || '—'}</td>
+      <td style="font-size:11.5px">${deptLabel}</td>
+      <td style="font-size:11.5px">${escapeHtmlConsent(e.doctor||'—')}</td>
+      <td style="font-size:12px;font-weight:700">${e.date}</td>
+      <td style="font-size:11.5px">${centreLabel}</td>
+      <td><span style="font-size:10px;font-weight:800;color:#fff;background:${statusColor};padding:2px 7px;border-radius:8px">${statusBadge}</span></td>
+      <td>${bookBtnHtml}</td>
+    </tr>`;
+  }).join('');
+
+  el.innerHTML = `<div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="background:var(--g6);text-align:left">
+        <th style="padding:8px 10px">Patient</th>
+        <th style="padding:8px 10px">BMH ID</th>
+        <th style="padding:8px 10px">Phone</th>
+        <th style="padding:8px 10px">Dept</th>
+        <th style="padding:8px 10px">Doctor</th>
+        <th style="padding:8px 10px">Follow-up Date</th>
+        <th style="padding:8px 10px">Centre</th>
+        <th style="padding:8px 10px">Status</th>
+        <th style="padding:8px 10px">Action</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>
+  <div style="padding:8px 10px;font-size:11px;color:var(--g1)">${filtered.length} follow-up record${filtered.length===1?'':'s'}</div>`;
 }
 
 function saveProcTyped(val) {
@@ -29505,9 +29881,21 @@ function bmhProcedureStockMatchesDept(item, dept) {
   return bmhProcedureDeptStoreHints(dept).some(function (hint) { return hay.includes(hint); });
 }
 function bmhProcedureStockRows(dept) {
-  return bmhSortInventoryUseMatches((INVENTORY || []).filter(function (item) {
+  const all = bmhSortInventoryUseMatches((INVENTORY || []).filter(function (item) {
     return Number(item.stock || 0) > 0;
   }));
+  if (!dept) return all;
+  // Dept-matched items first, then remaining
+  const hints = bmhProcedureDeptStoreHints(dept);
+  const deptRows = all.filter(function (item) {
+    const hay = [item.store, item.cat, item.name, item.dept].filter(Boolean).join(' ').toLowerCase();
+    return hints.some(function (h) { return hay.includes(h); });
+  });
+  const otherRows = all.filter(function (item) {
+    const hay = [item.store, item.cat, item.name, item.dept].filter(Boolean).join(' ').toLowerCase();
+    return !hints.some(function (h) { return hay.includes(h); });
+  });
+  return deptRows.concat(otherRows);
 }
 function bmhProcedureStockRowsForStore(dept, store) {
   const rows = bmhProcedureStockRows(dept);
@@ -29564,115 +29952,170 @@ function addAnotherProcedureDonePrompt() {
 window.addAnotherProcedureDonePrompt = addAnotherProcedureDonePrompt;
 function fillProcedureDoneDatalists(dept) {
   const chargeList = document.getElementById('proc-done-charge-list');
-  const stockList = document.getElementById('proc-done-stock-list');
   if (chargeList) {
     chargeList.innerHTML = getProcedureDoneChargeRows(dept).map(function (row) {
       const label = (row.parent ? row.parent + ' — ' : '') + row.name;
       return '<option value="' + String(label).replace(/"/g, '&quot;') + '"></option>';
     }).join('');
   }
-  if (stockList) {
-    stockList.innerHTML = bmhProcedureStockRows(dept).map(function (item) {
-      const label = bmhInventoryUseItemLabel(item);
-      return '<option value="' + String(label).replace(/"/g, '&quot;') + '"></option>';
-    }).join('');
-  }
 }
-function renderProcedureStockBrowser(dept, view, value) {
-  const host = document.getElementById('proc-done-stock-browser');
+function renderProcedureDeptStoreChips(dept) {
+  const host = document.getElementById('proc-done-store-chips');
   if (!host) return;
   const rows = bmhProcedureStockRows(dept);
-  if (!rows.length) {
-    host.innerHTML = '<div style="padding:10px;border:1px dashed var(--g4);border-radius:8px;background:var(--g6);font-size:11px;color:var(--g1);margin-bottom:8px">No department-specific stock currently available.</div>';
+  const hints = bmhProcedureDeptStoreHints(dept);
+  // Collect dept-specific stores first, then others
+  const deptStores = [];
+  const otherStores = [];
+  Array.from(new Set(rows.map(function (i) { return i.store || ''; }))).filter(Boolean).sort().forEach(function (store) {
+    const hay = store.toLowerCase();
+    if (hints.some(function (h) { return hay.includes(h); })) {
+      deptStores.push(store);
+    } else {
+      otherStores.push(store);
+    }
+  });
+  if (!deptStores.length && !otherStores.length) {
+    host.innerHTML = '<span style="font-size:11px;color:var(--g1)">No stock in inventory</span>';
     return;
   }
-  const btn = function (label, onclick, tone) {
-    return '<button type="button" onclick="' + onclick + '" style="border:1px solid var(--g4);background:#fff;color:' + (tone || 'var(--bmh-blue)') + ';border-radius:8px;padding:7px 9px;font-size:11px;font-weight:900;cursor:pointer;text-align:left">' + escapeHtmlConsent(label) + '</button>';
+  const chip = function (store, active) {
+    const storeRows = rows.filter(function (i) { return (i.store || '') === store; });
+    const total = storeRows.reduce(function (s, i) { return s + Number(i.stock || 0); }, 0);
+    const isIolStore = storeRows.some(function (i) { return bmhProcedureStockCategory(i) === 'IOL'; });
+    const col = isIolStore ? '#8a5a00' : (active ? '#fff' : 'var(--bmh-blue)');
+    const bg = active ? 'var(--bmh-blue)' : (isIolStore ? '#fff8ee' : '#fff');
+    const border = isIolStore ? '1px solid #c9a040' : '1px solid var(--g4)';
+    return '<button type="button" onclick="filterProcedureStockByStore(\'' + encodeURIComponent(store) + '\')"'
+      + ' style="border:' + border + ';background:' + bg + ';color:' + col + ';border-radius:20px;padding:5px 11px;font-size:11px;font-weight:800;cursor:pointer;white-space:nowrap">'
+      + escapeHtmlConsent(store) + ' <span style="font-weight:500;font-size:10px">(' + total + ')</span></button>';
   };
-  const navButton = view ? '<button type="button" class="btn btn-xs btn-gray" onclick="renderProcedureStockBrowser(\'' + dept + '\')">Stores</button>' : '';
-  let html = '<div style="border:1px solid var(--g4);border-radius:10px;background:var(--g6);padding:9px;margin-bottom:8px">';
-  html += '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:7px"><div style="font-size:11px;font-weight:900;color:var(--g1);text-transform:uppercase">Pick stock by store / location</div>' + navButton + '</div>';
-  if (!view) {
-    const stores = Array.from(new Set(rows.map(function (i) { return i.store || 'No store'; }))).sort();
-    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:7px">' + stores.map(function (store) {
-      const total = rows.filter(function (i) { return String(i.store || 'No store') === store; }).reduce(function (s, i) { return s + Number(i.stock || 0); }, 0);
-      return btn(store + ' · ' + total, 'renderProcedureStockBrowser(\'' + dept + '\',\'store\',\'' + encodeURIComponent(store) + '\')');
-    }).join('') + '</div>';
-  } else if (view === 'store') {
-    const store = decodeURIComponent(value || '');
-    const storeRows = bmhProcedureStockRowsForStore(dept, store === 'No store' ? '' : store);
-    const cats = Array.from(new Set(storeRows.map(bmhProcedureStockCategory))).sort();
-    html += '<div style="font-size:11px;font-weight:900;color:var(--bmh-blue);margin-bottom:7px">' + escapeHtmlConsent(store) + '</div>';
-    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:7px">' + cats.map(function (cat) {
-      const total = storeRows.filter(function (i) { return bmhProcedureStockCategory(i) === cat; }).reduce(function (s, i) { return s + Number(i.stock || 0); }, 0);
-      return btn(cat + ' · ' + total, 'renderProcedureStockBrowser(\'' + dept + '\',\'cat\',\'' + encodeURIComponent(store) + '||' + encodeURIComponent(cat) + '\')', cat === 'IOL' ? '#8a5a00' : 'var(--bmh-blue)');
-    }).join('') + '</div>';
-  } else if (view === 'cat') {
-    const parts = String(value || '').split('||');
-    const store = decodeURIComponent(parts[0] || '');
-    const cat = decodeURIComponent(parts[1] || parts[0] || '');
-    const catRows = bmhProcedureStockRowsForStore(dept, store === 'No store' ? '' : store).filter(function (i) { return bmhProcedureStockCategory(i) === cat; });
-    if (cat === 'IOL') {
-      const brands = Array.from(new Set(catRows.map(function (i) { return _iolBrandLabel(i); }).filter(Boolean))).sort();
-      html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:7px">' + brands.map(function (brand) {
-        const total = catRows.filter(function (i) { return _iolBrandLabel(i) === brand; }).reduce(function (s, i) { return s + Number(i.stock || 0); }, 0);
-        return btn(brand + ' · ' + total, 'renderProcedureStockBrowser(\'' + dept + '\',\'iol\',\'' + encodeURIComponent(store) + '||' + encodeURIComponent(brand) + '\')', '#8a5a00');
-      }).join('') + '</div>';
-    } else {
-      const names = Array.from(new Set(catRows.map(function (i) { return i.name || 'Stock item'; }))).sort();
-      html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:7px">' + names.map(function (name) {
-        const total = catRows.filter(function (i) { return String(i.name || '') === name; }).reduce(function (s, i) { return s + Number(i.stock || 0); }, 0);
-        return btn(name + ' · ' + total, 'selectProcedureStockName(\'' + dept + '\',\'' + encodeURIComponent(name) + '\',\'' + encodeURIComponent(store) + '\')');
-      }).join('') + '</div>';
-    }
-  } else if (view === 'iol') {
-    const parts = String(value || '').split('||');
-    const store = decodeURIComponent(parts[0] || '');
-    const brand = decodeURIComponent(parts[1] || '');
-    const brandRows = bmhProcedureStockRowsForStore(dept, store === 'No store' ? '' : store).filter(function (i) { return bmhProcedureStockCategory(i) === 'IOL' && _iolBrandLabel(i) === brand; });
-    const powers = Array.from(new Set(brandRows.map(function (i) { return String(i.power || extractIolPower(i.name || '') || 'No power'); }))).sort(function (a, b) { return parseFloat(a) - parseFloat(b); });
-    html += '<div style="font-size:11px;font-weight:900;color:#8a5a00;margin-bottom:7px">' + escapeHtmlConsent(brand) + ' powers in stock</div>';
-    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:7px">' + powers.map(function (power) {
-      const powerRows = brandRows.filter(function (i) { return String(i.power || extractIolPower(i.name || '') || 'No power') === power; });
-      const total = powerRows.reduce(function (s, i) { return s + Number(i.stock || 0); }, 0);
-      return btn(power + ' · ' + total, 'selectProcedureStockIolPower(\'' + dept + '\',\'' + encodeURIComponent(brand) + '\',\'' + encodeURIComponent(power) + '\',\'' + encodeURIComponent(store) + '\')', '#8a5a00');
-    }).join('') + '</div>';
+  let html = deptStores.map(function (s) { return chip(s, true); }).join('');
+  if (otherStores.length) {
+    html += '<span style="font-size:10px;color:var(--g2);align-self:center">|</span>';
+    html += otherStores.map(function (s) { return chip(s, false); }).join('');
   }
-  host.innerHTML = html + '</div>';
+  host.innerHTML = html;
 }
-window.renderProcedureStockBrowser = renderProcedureStockBrowser;
+window.renderProcedureDeptStoreChips = renderProcedureDeptStoreChips;
+function filterProcedureStockByStore(encodedStore) {
+  const store = decodeURIComponent(encodedStore || '');
+  const searchEl = document.getElementById('proc-done-stock-search');
+  const dept = document.getElementById('proc-done-dept')?.value || '';
+  if (searchEl) searchEl.value = store;
+  renderProcedureStockSearch(dept, store);
+}
+window.filterProcedureStockByStore = filterProcedureStockByStore;
+function renderProcedureStockSearch(dept, query) {
+  const host = document.getElementById('proc-done-stock-results');
+  if (!host) return;
+  const q = String(query || '').trim().toLowerCase();
+  if (!q || q.length < 1) {
+    // Show dept items grouped by store when no query
+    const allRows = bmhProcedureStockRows(dept).slice(0, 40);
+    if (!allRows.length) {
+      host.innerHTML = '<div style="padding:8px 10px;font-size:11px;color:var(--g1)">No stock available.</div>';
+      return;
+    }
+    host.innerHTML = allRows.map(function (item) {
+      return _procStockResultRow(item, dept);
+    }).join('');
+    return;
+  }
+  const tokens = q.split(/\s+/).filter(Boolean);
+  const matches = bmhProcedureStockRows(dept).filter(function (item) {
+    const hay = bmhInventoryItemSearchHaystack(item);
+    return tokens.every(function (t) { return hay.includes(t); });
+  }).slice(0, 30);
+  if (!matches.length) {
+    host.innerHTML = '<div style="padding:8px 10px;font-size:11px;color:var(--g1)">No matching items found.</div>';
+    return;
+  }
+  host.innerHTML = matches.map(function (item) {
+    return _procStockResultRow(item, dept);
+  }).join('');
+}
+window.renderProcedureStockSearch = renderProcedureStockSearch;
+function _procStockResultRow(item, dept) {
+  const key = encodeURIComponent(bmhInventoryItemKey(item));
+  const cat = bmhProcedureStockCategory(item);
+  const isIol = cat === 'IOL';
+  const stock = Number(item.stock || 0);
+  const stockColor = stock <= 2 ? '#c0392b' : stock <= 5 ? '#d97706' : '#27ae60';
+  const detail = [item.store ? bmhFormatStoreLabel(item.store) : '', item.exp ? 'Exp ' + item.exp : '', item.batchNo ? 'Batch ' + item.batchNo : '', item.barcode ? 'BC ' + item.barcode : ''].filter(Boolean).join(' · ');
+  return '<div onclick="addProcedureStockByKey(\'' + key + '\')" style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;border-bottom:1px solid var(--g5);cursor:pointer;background:#fff" onmouseover="this.style.background=\'var(--blue-lt)\'" onmouseout="this.style.background=\'#fff\'">'
+    + '<div style="min-width:0"><div style="font-size:12px;font-weight:700;color:' + (isIol ? '#8a5a00' : 'var(--tx)') + '">' + escapeHtmlConsent(item.name || 'Stock item') + '</div>'
+    + '<div style="font-size:10px;color:var(--g1);margin-top:1px">' + escapeHtmlConsent(detail) + '</div></div>'
+    + '<div style="text-align:right;white-space:nowrap;margin-left:10px"><div style="font-size:11px;font-weight:900;color:' + stockColor + '">' + stock + ' left</div>'
+    + '<div style="font-size:10px;color:var(--g2)">' + escapeHtmlConsent(cat) + '</div></div>'
+    + '</div>';
+}
+function addProcedureStockByKey(encodedKey) {
+  const key = decodeURIComponent(encodedKey || '');
+  const item = bmhFindInventoryItemByKey(key);
+  if (!item) { showToast('Stock item not found', 'w'); return; }
+  addProcedureStockItemToDraft(item, 1);
+  // Clear search after adding
+  const searchEl = document.getElementById('proc-done-stock-search');
+  const resultsEl = document.getElementById('proc-done-stock-results');
+  if (searchEl) searchEl.value = '';
+  if (resultsEl) resultsEl.innerHTML = '';
+  showToast(escapeHtmlConsent(item.name || 'Item') + ' added', 's');
+}
+window.addProcedureStockByKey = addProcedureStockByKey;
+function procDoneSearchKeydown(event) {
+  if (event.key === 'Escape') {
+    const resultsEl = document.getElementById('proc-done-stock-results');
+    if (resultsEl) resultsEl.innerHTML = '';
+    event.target.value = '';
+  }
+}
+window.procDoneSearchKeydown = procDoneSearchKeydown;
 function renderProcedureUsageRows(items) {
   const host = document.getElementById('proc-done-usage-list');
   if (!host) return;
   const rows = Array.isArray(items) ? items : [];
-  host.innerHTML = rows.length ? rows.map(function (row, idx) {
-    return `<div style="display:grid;grid-template-columns:minmax(0,1.7fr) 90px 120px 95px 28px;gap:8px;align-items:end;padding:8px;border:1px solid var(--g5);border-radius:8px;background:#fff;margin-bottom:7px">
-      <div class="form-group" style="margin:0"><label class="fl">Stock item</label><input type="hidden" class="proc-stock-key" value="${escapeHtmlConsent(row.key || '')}"><input type="text" class="proc-stock-name" list="proc-done-stock-list" value="${escapeHtmlConsent(row.name || '')}" placeholder="Type stock item / barcode"><div style="font-size:9px;color:var(--g1);margin-top:2px">${escapeHtmlConsent(row.detail || '')}</div></div>
-      <div class="form-group" style="margin:0"><label class="fl">Qty</label><input type="number" class="proc-stock-qty" min="1" value="${Math.max(1, Number(row.qty || 1))}"></div>
-      <label style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:var(--g1);padding-bottom:8px"><input type="checkbox" class="proc-stock-bill"${row.billPatient ? ' checked' : ''}> Bill patient</label>
-      <div style="font-size:10px;color:var(--g1);padding-bottom:8px">Applied: ${Number(row.appliedQty || 0)}</div>
-      <button class="btn btn-xs btn-gray" type="button" onclick="removeProcedureUsageRow(${idx})">✕</button>
-    </div>`;
-  }).join('') : '<div style="padding:10px;border:1px dashed var(--g4);border-radius:8px;color:var(--g1);font-size:11px;background:var(--g6)">No consumables added yet.</div>';
+  if (!rows.length) {
+    host.innerHTML = '<div style="padding:10px;border:1px dashed var(--g4);border-radius:8px;color:var(--g1);font-size:11px;background:var(--g6);text-align:center">No consumables added yet — search above to add items</div>';
+    return;
+  }
+  host.innerHTML = '<div style="border:1px solid var(--g4);border-radius:10px;background:#fff;overflow:hidden;margin-top:2px">'
+    + '<div style="padding:7px 12px;background:var(--g6);font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px">Items to deduct from stock</div>'
+    + rows.map(function (row, idx) {
+      return `<div data-proc-idx="${idx}" style="display:grid;grid-template-columns:minmax(0,1fr) 80px 110px 28px;gap:8px;align-items:center;padding:8px 12px;border-top:1px solid var(--g5)">
+        <div><input type="hidden" class="proc-stock-key" value="${escapeHtmlConsent(row.key || '')}"><div style="font-size:12px;font-weight:700;color:var(--tx)">${escapeHtmlConsent(row.name || 'Stock item')}</div><div style="font-size:10px;color:var(--g1);margin-top:1px">${escapeHtmlConsent(row.detail || '')}</div></div>
+        <div class="form-group" style="margin:0"><label class="fl" style="font-size:10px">Qty</label><input type="number" class="proc-stock-qty" min="1" value="${Math.max(1, Number(row.qty || 1))}" style="font-size:12px;font-weight:900;text-align:center"></div>
+        <label style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:var(--g1);cursor:pointer"><input type="checkbox" class="proc-stock-bill"${row.billPatient ? ' checked' : ''}> Bill patient</label>
+        <button class="btn btn-xs btn-gray" type="button" onclick="removeProcedureUsageRow(${idx})" style="padding:4px 7px">✕</button>
+      </div>`;
+    }).join('')
+    + '</div>';
 }
 function getProcedureDraftFromModal() {
   const dept = document.getElementById('proc-done-dept')?.value || '';
-  const items = Array.from(document.querySelectorAll('#proc-done-usage-list > div')).map(function (row, idx) {
-    const prev = (window.BMH_PROC_DONE_STATE && window.BMH_PROC_DONE_STATE[dept] && window.BMH_PROC_DONE_STATE[dept].items && window.BMH_PROC_DONE_STATE[dept].items[idx]) || {};
-    return {
-      name: row.querySelector('.proc-stock-name')?.value?.trim() || '',
-      key: row.querySelector('.proc-stock-key')?.value?.trim() || prev.key || '',
-      detail: prev.detail || '',
-      qty: Math.max(1, Number(row.querySelector('.proc-stock-qty')?.value || '1')),
-      billPatient: !!row.querySelector('.proc-stock-bill')?.checked,
-      appliedQty: Number(prev.appliedQty || 0)
-    };
-  }).filter(function (row) { return row.name; });
+  const savedState = (window.BMH_PROC_DONE_STATE && window.BMH_PROC_DONE_STATE[dept]) || {};
+  // Find the wrapping div inside proc-done-usage-list (skip the "header" summary row)
+  const rowEls = Array.from(document.querySelectorAll('#proc-done-usage-list [data-proc-idx]'));
+  const items = rowEls.length
+    ? rowEls.map(function (rowEl) {
+        const idx = Number(rowEl.dataset.procIdx);
+        const prev = (savedState.items && savedState.items[idx]) || {};
+        return {
+          name: prev.name || rowEl.querySelector('.proc-stock-key')?.value?.trim() || '',
+          key: rowEl.querySelector('.proc-stock-key')?.value?.trim() || prev.key || '',
+          detail: prev.detail || '',
+          qty: Math.max(1, Number(rowEl.querySelector('.proc-stock-qty')?.value || '1')),
+          billPatient: !!rowEl.querySelector('.proc-stock-bill')?.checked,
+          appliedQty: Number(prev.appliedQty || 0)
+        };
+      }).filter(function (row) { return row.name || row.key; })
+    // Fallback: use saved state items when modal DOM is unavailable
+    : (savedState.items || []).slice();
   return {
     enabled: true,
-    procedure: document.getElementById('proc-done-name')?.value?.trim() || '',
-    amount: Number(document.getElementById('proc-done-amount')?.value || 0) || 0,
-    notes: document.getElementById('proc-done-notes')?.value?.trim() || '',
+    procedure: document.getElementById('proc-done-name')?.value?.trim() || savedState.procedure || '',
+    amount: Number(document.getElementById('proc-done-amount')?.value || 0) || savedState.amount || 0,
+    notes: document.getElementById('proc-done-notes')?.value?.trim() || savedState.notes || '',
     items: items
   };
 }
@@ -29755,8 +30198,13 @@ function openProcedureDoneModalForDept(dept) {
   const nameEl = document.getElementById('proc-done-name'); if (nameEl) nameEl.value = state.procedure || '';
   const amtEl = document.getElementById('proc-done-amount'); if (amtEl) amtEl.value = state.amount || '';
   const notesEl = document.getElementById('proc-done-notes'); if (notesEl) notesEl.value = state.notes || '';
+  // Clear search field from any previous use
+  const searchEl = document.getElementById('proc-done-stock-search');
+  const resultsEl = document.getElementById('proc-done-stock-results');
+  if (searchEl) searchEl.value = '';
+  if (resultsEl) resultsEl.innerHTML = '';
   renderProcedureDoneOtMatch(otMatch);
-  renderProcedureStockBrowser(dept);
+  renderProcedureDeptStoreChips(dept);
   renderProcedureUsageRows(state.items || []);
   openM('m-procedure-done');
 }
@@ -29769,12 +30217,50 @@ function handleProcedureDoneToggle(dept, checked) {
   if (window.CURRENT_PATIENT?.bmhId) saveVisit(dept, { silent: true });
 }
 window.handleProcedureDoneToggle = handleProcedureDoneToggle;
-function saveProcedureDoneModal() {
+function confirmProcedureDoneModal() {
   const dept = document.getElementById('proc-done-dept')?.value || activeClinicDeptKey();
   const bmhId = window.CURRENT_PATIENT?.bmhId || '';
   if (!dept || !bmhId) { showToast('Open a patient first', 'w'); return; }
   const state = getProcedureDraftFromModal();
   if (!state.procedure) { showToast('Select the performed procedure first', 'w'); return; }
+  const pt = window.CURRENT_PATIENT || PATIENTS.find(function (p) { return p.bmhId === bmhId; }) || {};
+  const esc = function (v) { return String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
+  const deptLabels = { ophtho: 'Ophthalmology', obg: 'OBG', psych: 'Neuropsychiatry', skin: 'Skin & Aesthetics' };
+  const items = (state.items || []).filter(function (r) { return r.name; });
+  const stockHtml = items.length
+    ? '<table style="width:100%;border-collapse:collapse;margin-top:8px"><thead><tr><th style="text-align:left;padding:6px 8px;background:#eef3fb;border:1px solid #d7dce5;font-size:11px">Stock Item</th><th style="padding:6px 8px;background:#eef3fb;border:1px solid #d7dce5;font-size:11px">Qty</th><th style="padding:6px 8px;background:#eef3fb;border:1px solid #d7dce5;font-size:11px">Bill?</th></tr></thead><tbody>'
+      + items.map(function (row) {
+          const invItem = findInventoryItemForProcedureRow(row);
+          const available = invItem ? Number(invItem.stock || 0) : null;
+          const stockNote = available !== null ? ' <span style="font-size:10px;color:' + (available < row.qty ? '#c0392b' : '#27ae60') + '">(' + available + ' in stock)</span>' : '';
+          return '<tr><td style="padding:6px 8px;border:1px solid #d7dce5">' + esc(row.name) + stockNote + '</td><td style="padding:6px 8px;border:1px solid #d7dce5;text-align:center;font-weight:900">' + Number(row.qty || 1) + '</td><td style="padding:6px 8px;border:1px solid #d7dce5;text-align:center">' + (row.billPatient ? '<span style="color:#27ae60;font-weight:800">Yes</span>' : '<span style="color:#888">No</span>') + '</td></tr>';
+        }).join('')
+      + '</tbody></table>'
+    : '<div style="padding:8px 10px;border:1px dashed #d7dce5;border-radius:8px;color:#888;font-size:12px;margin-top:8px">No stock items — procedure only.</div>';
+  document.getElementById('proc-done-confirm-body').innerHTML = ''
+    + '<div style="background:#eef3fb;border-radius:10px;padding:11px 14px;margin-bottom:10px">'
+    +   '<div style="font-size:12px;color:#666;margin-bottom:2px">' + esc(deptLabels[dept] || dept) + ' · ' + esc(pt.name || bmhId) + ' <span style="font-family:monospace">' + esc(bmhId) + '</span></div>'
+    +   '<div style="font-size:15px;font-weight:900;color:#1A3C6E">' + esc(state.procedure) + (state.amount ? ' <span style="color:#0e7490">₹' + Number(state.amount).toLocaleString('en-IN') + '</span>' : '') + '</div>'
+    +   (state.notes ? '<div style="font-size:11px;color:#555;margin-top:3px">' + esc(state.notes) + '</div>' : '')
+    + '</div>'
+    + '<div style="font-size:11px;font-weight:900;text-transform:uppercase;color:#666;letter-spacing:.4px;margin-bottom:4px">Stock to be deducted</div>'
+    + stockHtml
+    + (items.length ? '<div style="font-size:11px;color:#888;margin-top:8px">Items marked <b>Bill patient</b> will be added to the patient\'s billing. All items will be deducted from inventory stock.</div>' : '');
+  setProcedureDoneStateForDept(dept, state);
+  closeM('m-procedure-done');
+  openM('m-procedure-done-confirm');
+}
+window.confirmProcedureDoneModal = confirmProcedureDoneModal;
+
+function saveProcedureDoneModal() {
+  const dept = document.getElementById('proc-done-dept')?.value || activeClinicDeptKey();
+  const bmhId = window.CURRENT_PATIENT?.bmhId || '';
+  if (!dept || !bmhId) { showToast('Open a patient first', 'w'); return; }
+  // Use the state saved during confirm step — the main modal is now closed,
+  // so reading its DOM would be unreliable. The confirm step already captured
+  // any edits via getProcedureDraftFromModal() and saved them to state.
+  const state = getProcedureDoneStateForDept(dept);
+  if (!state || !state.procedure) { showToast('Select the performed procedure first', 'w'); return; }
   const groupId = 'PCDU' + Date.now();
   const chargeRows = getProcedureDoneChargeRows(dept);
   const matchedRow = chargeRows.find(function (row) {
@@ -29824,12 +30310,13 @@ function saveProcedureDoneModal() {
     return row;
   });
   setProcedureDoneStateForDept(dept, state);
+  closeM('m-procedure-done-confirm');
   closeM('m-procedure-done');
   saveVisit(dept, { silent: true });
   renderInventoryUsageLog && renderInventoryUsageLog();
   renderInventoryTodayEntries && renderInventoryTodayEntries();
   renderStockList && renderStockList();
-  showToast('Procedure done details saved' + (usedCount ? ' · ' + usedCount + ' stock movement' + (usedCount === 1 ? '' : 's') : '') + ' ✓', 's');
+  showToast('Procedure done saved' + (usedCount ? ' · ' + usedCount + ' stock movement' + (usedCount === 1 ? '' : 's') + ' recorded' : '') + ' ✓', 's');
 }
 window.saveProcedureDoneModal = saveProcedureDoneModal;
 function restoreProcedureDoneState(dept, data) {
@@ -32053,7 +32540,7 @@ window.printUnifiedRx = function(deptId) {
   const renderDiagnosisByDesign = function () {
     if (!dxList.length) return '';
     if (rxDesign === 'current' || rxDesign === 'option_a' || rxDesign === 'option_b') return '';
-    const joined = dxList.map(function (line) { return '<div>' + escapeHtmlConsent(line) + '</div>'; }).join('');
+    const joined = '<div class="design-dx-lines">' + dxList.map(function (line) { return '<div>' + escapeHtmlConsent(line) + '</div>'; }).join('') + '</div>';
     if (rxDesign === 'signature_classic') return `<div class="design-dx classic">${joined}</div>`;
     if (rxDesign === 'clinical_blocks') return `<div class="design-dx blocks"><div class="design-dx-title">Clinical Diagnosis</div><div class="design-dx-body">${joined}</div></div>`;
     if (rxDesign === 'ribbon_timeline') return `<div class="design-dx ribbon"><div class="design-dx-title">Diagnosis</div><div class="design-dx-body">${joined}</div></div>`;
@@ -32101,8 +32588,8 @@ body > *:not(.lh-img){filter:grayscale(1)}
 /* Diagnosis */
 .diag-rule-top{border-top:1.5px solid #111;margin-bottom:3px}
 .diag-rule-bot{border-top:1.5px solid #111;margin-top:3px}
-.diag-text{font-size:8.6px;font-weight:700;text-align:left;color:#111;padding:1px 0 1px 14px;line-height:1.25}
-.diag-line{display:block;margin:0 0 1px}
+.diag-text{font-size:11.2px;font-weight:700;text-align:left;color:#111;padding:2px 0 2px 50%;line-height:1.35}
+.diag-line{display:block;margin:0 0 2px;break-inside:avoid}
 /* Post-surgery flag */
 .postsurg-flag{font-size:10px;font-weight:800;color:#222;border:1.5px solid #555;display:inline-block;padding:2px 10px;border-radius:3px;margin-bottom:4px;letter-spacing:.3px}
 /* Complaint / plain text block */
@@ -32140,7 +32627,7 @@ tr:nth-child(even) td{background:#fafafa}
 .rx-item-details{display:flex;flex-wrap:wrap;gap:0 12px;margin:2px 0 2px 18px;align-items:center}
 .rx-detail-item{display:flex;align-items:center;gap:4px;font-size:9.5px;color:#111}
 .rx-detail-dot{width:3px;height:3px;border-radius:50%;background:#111;flex-shrink:0}
-.rx-item-instr{font-size:9.6px;color:#222;font-style:normal;line-height:1.32;padding-left:8px;border-left:2px solid #ccc;margin:3px 0 0 18px;font-weight:600}
+.rx-item-instr{font-size:12px;color:#222;font-style:normal;line-height:1.58;padding-left:8px;border-left:2px solid #ccc;margin:5px 0 0 18px;font-weight:600}
 /* Taper card */
 .taper-card{margin:3px 0 4px;border:1px solid #d5dbe2;border-radius:10px;overflow:hidden;font-size:9px;background:#fbfbfb;page-break-inside:avoid;break-inside:avoid}
 .taper-card-hdr{background:#f2f4f6;color:#333;padding:5px 10px;font-size:8.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;border-bottom:1px solid #d5dbe2}
@@ -32158,7 +32645,7 @@ tr:nth-child(even) td{background:#fafafa}
 .inv-wrap{display:flex;flex-wrap:wrap;gap:4px 6px;margin-top:2px}
 .inv-chip{display:inline-flex;align-items:center;padding:3px 8px;background:#f0f0f0;border:1px solid #ccc;border-radius:3px;font-size:9px;font-weight:700;color:#222;line-height:1.2}
 /* Instructions */
-.advice-block{font-size:11.2px;color:#222;padding:5px 9px;border-left:2px solid #bbb;line-height:1.45;margin-bottom:3px;font-style:normal;font-weight:600;page-break-inside:avoid;break-inside:avoid}
+.advice-block{font-size:12px;color:#222;padding:6px 10px;border-left:2px solid #bbb;line-height:1.65;margin-bottom:4px;font-style:normal;font-weight:600;page-break-inside:avoid;break-inside:avoid}
 /* Follow-up */
 .fu-box{background:#f7f8f9;border-radius:999px;padding:4px 10px;margin:3px 0;font-size:9.7px;font-weight:700;color:#222;display:inline-block;border:1px solid #cfd5dc}
 /* Signature row */
@@ -32175,6 +32662,7 @@ tr:nth-child(even) td{background:#fafafa}
 .oe-ipd-line{font-size:8.8px;font-weight:800;color:#111;margin:-1px 0 4px;text-align:right;letter-spacing:.2px}
 /* Full design variants */
 .design-dx.classic{padding:6px 10px;border:1px solid #d9e0ea;border-left:4px solid #c89a2b;border-radius:10px;background:#fffdf8;font-size:8.8px;font-weight:700;line-height:1.28;color:#111;page-break-inside:avoid;break-inside:avoid}
+.design-dx-lines{display:block;margin-left:50%;text-align:left}
 .design-dx.blocks,.design-dx.ribbon,.design-dx.compact{border:1px solid #d9e5ef;border-radius:16px;background:#fff;padding:12px 14px}
 .design-dx-title{font-size:10px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;color:#667085;margin-bottom:6px}
 .design-dx.blocks .design-dx-body{font-size:8.8px;font-weight:800;line-height:1.28;color:#111}
@@ -33729,6 +34217,35 @@ function startPatientsRealtimeUpdates() {
     removeRealtimePatientRecord(snap.key);
   });
 }
+function stopTodayQueuePatientsRealtimeUpdates() {
+  const live = window._bmhTodayQueuePatientsRealtime;
+  if (!live || !live.ref || !live.callbacks) return;
+  try {
+    live.ref.off('child_added', live.callbacks.added);
+    live.ref.off('child_changed', live.callbacks.changed);
+  } catch (e) {}
+  window._bmhTodayQueuePatientsRealtime = null;
+  window._bmhTodayQueuePatientsRealtimeDay = '';
+}
+function startTodayQueuePatientsRealtimeUpdates(force) {
+  if (!window.FBDB) return;
+  const today = localDateKey(new Date());
+  if (!force && window._bmhTodayQueuePatientsRealtimeDay === today && window._bmhTodayQueuePatientsRealtime) return;
+  stopTodayQueuePatientsRealtimeUpdates();
+  const ref = window.FBDB.ref('patients').orderByChild('queueDate').equalTo(today);
+  const callbacks = {
+    added: function (snap) {
+      applyRealtimePatientRecord(snap.val(), snap.key);
+    },
+    changed: function (snap) {
+      applyRealtimePatientRecord(snap.val(), snap.key);
+    }
+  };
+  window._bmhTodayQueuePatientsRealtime = { ref: ref, callbacks: callbacks };
+  window._bmhTodayQueuePatientsRealtimeDay = today;
+  ref.on('child_added', callbacks.added);
+  ref.on('child_changed', callbacks.changed);
+}
 function schedulePatientsRefreshLoop() {
   if (window._bmhPatientsRefreshLoopStarted) return;
   window._bmhPatientsRefreshLoopStarted = true;
@@ -33749,7 +34266,10 @@ function loadPatientsFromFirebase() {
   if(window._bmhRtdbPatientsListening) return;
   window._bmhRtdbPatientsListening = true;
   scheduleQueueCalendarDayRefresh && scheduleQueueCalendarDayRefresh();
-  refreshPatientsFromFirebase().then(function () { startPatientsRealtimeUpdates(); });
+  refreshPatientsFromFirebase().then(function () {
+    startPatientsRealtimeUpdates();
+    startTodayQueuePatientsRealtimeUpdates();
+  });
   schedulePatientsRefreshLoop();
 }
 
@@ -33879,10 +34399,17 @@ function applyRealtimeTransactionRecord(txn, key) {
   if (!CURRENT_USER?.isAdmin && normalizeAppointmentCentreValue(txn.centre || 'CHD') !== centre) return;
   const next = Object.assign({}, txn, { id: id });
   const idx = TRANSACTIONS.findIndex(function (row) { return String(row?.id || '') === id; });
+  const isNewFromRemote = idx < 0;
   if (idx >= 0) TRANSACTIONS[idx] = next;
   else TRANSACTIONS.push(next);
   saveTodayTransactionsToLocal();
-  if (next.bmhId && typeof bmhSyncPatientAdvanceBalance === 'function') bmhSyncPatientAdvanceBalance(next.bmhId, { localOnly: true });
+  // Only sync advance balance for transactions genuinely new to this device.
+  // Firebase RTDB fires child_added synchronously (optimistic local echo) when fbSet() is called,
+  // so for locally-created transactions the advance was already handled by the caller — recomputing
+  // here would double-count (0 + delta gets set, then caller adds delta again = 2x).
+  if (isNewFromRemote && next.bmhId && typeof bmhSyncPatientAdvanceBalance === 'function') {
+    bmhSyncPatientAdvanceBalance(next.bmhId, { localOnly: true });
+  }
   renderCollectionDashboard && renderCollectionDashboard();
   if (getActivePageId && getActivePageId() === 'pg-reception') renderReceptionPage && renderReceptionPage();
 }
@@ -34148,14 +34675,14 @@ function loadOTCasesFromFirebase() {
       mergedById[row.id] = normalizeOTCaseRecord(row);
     });
     if (data) Object.values(data).forEach(function (c) {
-      if (!c?.id) return;
       const normalizedRemote = normalizeOTCaseRecord(c);
-      const existingLocal = mergedById[c.id];
+      if (!normalizedRemote.id) return;
+      const existingLocal = mergedById[normalizedRemote.id];
       if (!existingLocal) {
-        mergedById[c.id] = normalizedRemote;
+        mergedById[normalizedRemote.id] = normalizedRemote;
         return;
       }
-      mergedById[c.id] = getOTCaseLastTouchedAt(existingLocal) >= getOTCaseLastTouchedAt(normalizedRemote)
+      mergedById[normalizedRemote.id] = getOTCaseLastTouchedAt(existingLocal) >= getOTCaseLastTouchedAt(normalizedRemote)
         ? existingLocal
         : normalizedRemote;
     });
@@ -37796,6 +38323,7 @@ function logoutUser() {
   CURRENT_USER = null;
   window.CURRENT_USER = null;
   try { sessionStorage.removeItem('bmh_active_session'); } catch (e) {}
+  try { localStorage.removeItem('bmh_last_page'); } catch (e) {}
   // Clear form data
   RX_DRUGS && (RX_DRUGS.length = 0);
   // Show login gate
@@ -40265,6 +40793,8 @@ function saveVisit(dept, opts) {
     });
     visit.advice = document.getElementById('rx-advice-text')?.value || '';
     visit.extraAdvice = '';
+    visit.rxFuDate = getDeptFollowUpDateInput('oe')?.value || '';
+    visit.followupDate = visit.rxFuDate || '';
     visit.procDone = getProcedureDoneStateForDept('ophtho');
     saveDeptPlanDraft('ophtho');
   } else if(dept === 'obg') {
@@ -40500,6 +41030,39 @@ function saveVisit(dept, opts) {
     .then(() => {
       try { if (dept === 'ophtho' && !opts.autosave) populateOphthoForm(visit); } catch (e) { console.warn('post-save populateOphthoForm failed', e); }
       if (!opts.silent) showToast(`✅ ${ptName} — visit saved (${visit.dateLabel})`, 's');
+      // Auto-create follow-up appointment from prescription follow-up date
+      try {
+        const fuD = visit.rxFuDate || visit.followupDate || '';
+        if (fuD && !opts.autosave) {
+          const alreadyBooked = APPOINTMENTS.find(function (a) {
+            return a.bmhId === bmhId && a.date === fuD && a.status !== 'cancelled';
+          });
+          if (!alreadyBooked) {
+            // Use the actual current wall-clock time rounded to nearest 10 min as the follow-up slot
+            const fuTimeSlot = (function() {
+              const t = roundToNearestTenMinuteSlot(new Date());
+              return String(t.hh).padStart(2,'0') + ':' + String(t.mm).padStart(2,'0');
+            })();
+            const fuApt = {
+              id: 'A' + Date.now() + Math.floor(Math.random() * 1000),
+              patient: ptName,
+              bmhId: bmhId,
+              mob: localPt?.mob || '',
+              date: fuD,
+              time: fuTimeSlot,
+              doctor: visit.doctor || CURRENT_USER?.name || '',
+              dept: dept,
+              purpose: 'Follow-up',
+              status: 'booked',
+              centre: normalizeAppointmentCentreValue(visit.centre || CURRENT_USER?.centre || 'CHD'),
+              source: 'prescription'
+            };
+            APPOINTMENTS.push(fuApt);
+            if (typeof saveAppointmentToFirebase === 'function') saveAppointmentToFirebase(fuApt);
+            if (typeof renderFollowupRegister === 'function') renderFollowupRegister();
+          }
+        }
+      } catch (fuErr) { console.warn('auto follow-up booking failed', fuErr); }
       try { if(dept === 'obg') updateObgObstetricHistoryTab(!!visit.obstetricHistoryEnabled); } catch (e) { console.warn('post-save updateObgObstetricHistoryTab failed', e); }
       try { if(typeof loadPastVisits === 'function') loadPastVisits(bmhId, dept); } catch (e) { console.warn('post-save loadPastVisits failed', e); }
       try { renderCurrentPatientInvestigationUploads && renderCurrentPatientInvestigationUploads(Array.isArray(visit.investigations) ? visit.investigations : []); } catch (e) { console.warn('post-save renderCurrentPatientInvestigationUploads failed', e); }
@@ -40687,7 +41250,9 @@ function loadPastVisits(bmhId, dept) {
     const nameKey = String(pt.name || '').trim().toLowerCase();
     const mobileKey = String(pt.mob || pt.mobile || '').replace(/\D/g, '');
     return (OT_CASES || []).map(normalizeOTCaseRecord).filter(function (c) {
-      if (c.caseKind === 'obg') return false;
+      const caseKind = normalizeDeptKeyForQueue(c.caseKind || c.dept || '');
+      const procedureText = String(c.procedure || c.procedureMain || c.surgery || '').toLowerCase();
+      if (caseKind === 'obg' && !/cataract|pmics|phaco|iol|lasik|glaucoma|trab|ivt|intravitreal|retina|yag|capsulotomy|iridotomy|eye|ophth/i.test(procedureText)) return false;
       if (String(c.bmhId || '').trim() === String(bmhId || '').trim()) return true;
       if (pt.otCaseId && c.id === pt.otCaseId) return true;
       if (nameKey && String(c.patient || c.name || '').trim().toLowerCase() === nameKey) return true;
@@ -40806,8 +41371,9 @@ function loadPastVisits(bmhId, dept) {
         <div style="border:1px solid var(--g5);border-radius:10px;background:#fff;padding:10px;align-self:start">
           <div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;letter-spacing:.45px;margin-bottom:8px">Surgery History</div>
           ${surgeries.length ? surgeries.map(function (c) {
+            const caseDate = getOTCaseDateKey(c) || c.date || c.scheduledDate || c.otDate || c.surgeryDate || c.createdAt || '';
             return `<div style="padding:7px 0;border-bottom:1px solid var(--g5);font-size:10.5px;line-height:1.45">
-              <div style="font-weight:800;color:var(--bmh-blue)">${formatDateIN(c.date)}</div>
+              <div style="font-weight:800;color:var(--bmh-blue)">${formatDateIN(caseDate)}</div>
               <div>${expandProcedureLabelForPrint(c.procedure || c.procedureMain || '—')}</div>
               <div style="color:var(--g1)">${[(c.site || c.eye || '—').replace(/right/ig,'RE').replace(/left/ig,'LE').replace(/both/ig,'BE'), c.iolType || '', c.iolPower || ''].filter(Boolean).join(' · ')}</div>
             </div>`;
