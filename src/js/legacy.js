@@ -7813,8 +7813,21 @@ function ensureIpdAdmissionFromOTCase(otCase, patient) {
   pt.ipdAdmitted = true;
   pt.status = 'ipd';
   pt.dept = dept;
+  keepPatientInQueueAfterOT(otCase.bmhId, dept, otCase.id);
   fbSet && fbSet('ipdPatients/' + entry.id, entry).catch(function (e) { console.warn('OT→IPD save error:', e); });
-  fbUpdate && fbUpdate('patients/' + otCase.bmhId, { ipdAdmitted:true, status:'ipd', dept }).catch(function () {});
+  fbUpdate && fbUpdate('patients/' + otCase.bmhId, {
+    ipdAdmitted:true,
+    status:'ipd',
+    dept,
+    queueRemoved:false,
+    queueRemovedAt:null,
+    queueRemovedBy:'',
+    queueDate: pt.queueDate || localDateKey(new Date()),
+    visitDate: pt.visitDate || localDateKey(new Date()),
+    checkinAt: pt.checkinAt || Date.now(),
+    otCaseId: otCase.id,
+    updatedAt: new Date().toISOString()
+  }).catch(function () {});
   return entry;
 }
 function autoDischargeCurrentIpdPatientFromSurgery() {
@@ -17404,6 +17417,49 @@ function openOTFromQueue(bmhId) {
   }, 120);
   showToast(existing ? 'Loaded existing OT case for editing ✓' : 'OT case form opened for this patient ✓', 's');
 }
+function keepPatientInQueueAfterOT(bmhId, deptOverride, otCaseId) {
+  const id = String(bmhId || '').trim();
+  if (!id) return;
+  const p = PATIENTS.find(function (x) { return String(x.bmhId || '').trim() === id; });
+  if (!p) return;
+  const nowIso = new Date().toISOString();
+  const today = localDateKey(new Date());
+  const wasSeen = isPatientMarkedSeen(p);
+  p.queueRemoved = false;
+  p.queueRemovedAt = null;
+  p.queueRemovedBy = '';
+  p.queueDate = p.queueDate || today;
+  p.visitDate = p.visitDate || today;
+  p.checkinAt = p.checkinAt || Date.now();
+  p.updatedAt = nowIso;
+  if (deptOverride && normalizeDeptKeyForQueue(deptOverride)) p.dept = normalizeDeptKeyForQueue(deptOverride);
+  if (otCaseId) p.otCaseId = otCaseId;
+  if (!wasSeen) {
+    p.seen = false;
+    p.seenAt = null;
+    if (String(p.status || '').toLowerCase() !== 'ipd') p.status = 'waiting';
+  }
+  const patch = {
+    queueRemoved: false,
+    queueRemovedAt: null,
+    queueRemovedBy: '',
+    queueDate: p.queueDate,
+    visitDate: p.visitDate,
+    checkinAt: p.checkinAt,
+    updatedAt: nowIso
+  };
+  if (deptOverride && normalizeDeptKeyForQueue(deptOverride)) patch.dept = normalizeDeptKeyForQueue(deptOverride);
+  if (otCaseId) patch.otCaseId = otCaseId;
+  if (!wasSeen) {
+    patch.seen = false;
+    patch.seenAt = null;
+    if (String(p.status || '').toLowerCase() !== 'ipd') patch.status = 'waiting';
+  }
+  fbUpdate && fbUpdate('patients/' + id, patch).catch(function (e) { console.warn('OT queue preserve failed:', e); });
+  renderDocQueue && renderDocQueue();
+  renderReceptionPage && renderReceptionPage();
+  renderDashboard && renderDashboard();
+}
 
 function deleteOTCase(id) {
   const idx = OT_CASES.findIndex(function (c) { return c.id === id; });
@@ -23579,6 +23635,7 @@ function createOTCaseFromReceptionPanel(ptId, patientNameTrim) {
   };
   const normalized = normalizeOTCaseRecord(otCase);
   OT_CASES.push(normalized);
+  keepPatientInQueueAfterOT(normalized.bmhId, normalized.caseKind === 'obg' ? 'obg' : 'ophtho', normalized.id);
   saveOTCasesToLocalStorage();
   fbSet('otCases/' + caseId, normalized);
   return normalized;
@@ -25607,6 +25664,7 @@ function addOTCase() {
   } else {
     OT_CASES.push(normalized);
   }
+  keepPatientInQueueAfterOT(normalized.bmhId, normalized.caseKind === 'obg' ? 'obg' : 'ophtho', normalized.id);
   saveOTCasesToLocalStorage();
   const otListDate = document.getElementById('ot-date-inp');
   if (otListDate && normalized.date) otListDate.value = getOTCaseDateKey(normalized) || normalized.date;
@@ -33715,9 +33773,14 @@ function getConcessionAdjustedCollectionTotal(transactions) {
   }, 0);
 }
 
+// For admin/canSeeAllCentres: charges tab always shows all centres so no paid consultation is hidden
+// by the active centre button (which defaults to RPR).
+function getCollectionViewCentre() {
+  return (CURRENT_USER?.isAdmin || CURRENT_USER?.canSeeAllCentres) ? 'both' : getEffectiveCentre();
+}
 function renderCollectionDashboard() {
   const todayKeyLocal = todayKey();
-  const allTxn = bmhGetCollectionTransactionsForDate(getEffectiveCentre(), todayKeyLocal).filter(function (t) {
+  const allTxn = bmhGetCollectionTransactionsForDate(getCollectionViewCentre(), todayKeyLocal).filter(function (t) {
     return !isInsuranceLikeMode(t.mode || t.ins || '');
   });
   const collected = allTxn.filter(isCollectionDashboardTxn);
@@ -33832,7 +33895,7 @@ function renderCollectionDashboard() {
 
 function openRcCollectionDetailModal(dept, catKey) {
   const todayKeyLocal = todayKey();
-  const collected = bmhGetCollectionTransactionsForDate(getEffectiveCentre(), todayKeyLocal).filter(function (t) { return normalizeDeptKeyForQueue(t.dept || '') === dept; });
+  const collected = bmhGetCollectionTransactionsForDate(getCollectionViewCentre(), todayKeyLocal).filter(function (t) { return normalizeDeptKeyForQueue(t.dept || '') === dept; });
   let list = [];
   if (catKey === 'other') {
     list = collected.filter(function (t) {
@@ -33918,7 +33981,7 @@ function toggleDeptDetail(id) {
 function printDayCollection() {
   const today = new Date().toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'});
   const todayKeyLocal = localDateKey(new Date());
-  const collected = bmhGetCollectionTransactionsForDate(getEffectiveCentre(), todayKeyLocal);
+  const collected = bmhGetCollectionTransactionsForDate(getCollectionViewCentre(), todayKeyLocal);
   const total = collected.reduce((s,t)=>s+getNetTransactionAmount(t),0);
   const fmt = n=>'₹'+n.toLocaleString('en-IN');
   const lhSrc = window.LH_SRC||'';
@@ -33962,7 +34025,7 @@ ${lhSrc?`<img src="${lhSrc}" style="width:100%;height:auto;margin-bottom:12px">`
 function printDayCollectionByDept() {
   const todayLabel = new Date().toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'});
   const todayKeyLocal = localDateKey(new Date());
-  const txns = bmhGetCollectionTransactionsForDate(getEffectiveCentre(), todayKeyLocal);
+  const txns = bmhGetCollectionTransactionsForDate(getCollectionViewCentre(), todayKeyLocal);
   const depts = ['ophtho','obg','psych','skin'];
   const fmt = function (n) { return '₹' + Number(n || 0).toLocaleString('en-IN'); };
   const isConsultPurpose = function (purpose) {
@@ -34032,7 +34095,7 @@ function printDayCollectionByDept() {
 function printRcCollectionDetail(dept, catKey) {
   const todayLabel = new Date().toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'});
   const todayKeyLocal = localDateKey(new Date());
-  const txns = bmhGetCollectionTransactionsForDate(getEffectiveCentre(), todayKeyLocal).filter(function (t) {
+  const txns = bmhGetCollectionTransactionsForDate(getCollectionViewCentre(), todayKeyLocal).filter(function (t) {
     return normalizeDeptKeyForQueue(t.dept || '') === normalizeDeptKeyForQueue(dept || '');
   });
   const rows = (catKey === 'all' ? txns : txns.filter(function (t) {
