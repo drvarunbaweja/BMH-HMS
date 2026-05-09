@@ -1803,7 +1803,7 @@ function getDeptClinicalDateValue(dept) {
   if (/^\d{4}-\d{2}-\d{2}$/.test(lastVisitDate)) return lastVisitDate;
   if (lastVisitDate) {
     const parsed = new Date(lastVisitDate);
-    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+    if (!Number.isNaN(parsed.getTime())) return localDateKey(parsed);
   }
   return '';
 }
@@ -1819,10 +1819,10 @@ function getCurrentClinicalDateLabel(dept) {
 function ensureDeptVisitDateDefault(dept) {
   const id = getDeptVisitDateInputId(dept);
   const el = id ? document.getElementById(id) : null;
-  if (el && !el.value) el.value = new Date().toISOString().slice(0, 10);
+  if (el && !el.value) el.value = todayKey();
   if ((normalizeDeptKeyForQueue(dept || '') || '') === 'obg') {
     const top = document.getElementById('obg-visit-date-top');
-    if (top && !top.value) top.value = el?.value || new Date().toISOString().slice(0, 10);
+    if (top && !top.value) top.value = el?.value || todayKey();
   }
 }
 function getCertificateTemplateCategoryList() {
@@ -1912,7 +1912,7 @@ function getSelectedCertificateTemplate(dept) {
   return all.find(function (tpl) { return String(tpl.id || '') === wanted; }) || all[0] || null;
 }
 function initializeCertificateDateFields(dept) {
-  const visitRaw = getDeptClinicalDateValue(dept) || new Date().toISOString().slice(0, 10);
+  const visitRaw = getDeptClinicalDateValue(dept) || todayKey();
   const certDateEl = document.getElementById('cert-certificate-date');
   const leaveFromEl = document.getElementById('cert-leave-from');
   const leaveToEl = document.getElementById('cert-leave-to');
@@ -1922,7 +1922,7 @@ function initializeCertificateDateFields(dept) {
     const base = new Date(visitRaw + 'T12:00:00');
     if (!Number.isNaN(base.getTime())) {
       base.setDate(base.getDate() + 2);
-      leaveToEl.value = base.toISOString().slice(0, 10);
+      leaveToEl.value = localDateKey(base);
     }
   }
 }
@@ -1938,7 +1938,7 @@ function buildCertificateContext(dept) {
     : ([...document.querySelectorAll('#skin-dx-list .dx-inp')].map(function (e) { return e.value.trim(); }).filter(Boolean).join(' · ') || pt.lastVisit?.dx || '');
   const procedure = expandProcedureLabelForPrint((Array.isArray(pt.lastVisit?.procedures) ? pt.lastVisit.procedures[0] : '') || pt.lastVisit?.procedure || pt.lastVisit?.procedures || '');
   const selectedDiagnosis = getCertificateSelectedDiagnosis() || autoDiagnosis || 'the diagnosed condition';
-  const visitDate = getDeptClinicalDateValue(dept) || String(pt.lastVisit?.visitDate || pt.lastVisit?.date || '').slice(0, 10) || new Date().toISOString().slice(0, 10);
+  const visitDate = getDeptClinicalDateValue(dept) || String(pt.lastVisit?.visitDate || pt.lastVisit?.date || '').slice(0, 10) || todayKey();
   const certificateDate = String(document.getElementById('cert-certificate-date')?.value || visitDate).trim() || visitDate;
   const leaveFrom = String(document.getElementById('cert-leave-from')?.value || visitDate).trim() || visitDate;
   const leaveTo = String(document.getElementById('cert-leave-to')?.value || leaveFrom).trim() || leaveFrom;
@@ -2936,7 +2936,7 @@ function nav(id, el, opts) {
   // Page-specific init
   if(pageKey==='dashboard')            deferPageWork(function(){ renderDashboard && renderDashboard(); });
   else if(pageKey==='doctor-queue')    deferPageWork(function(){ renderDocQueue && renderDocQueue(); });
-  else if(pageKey==='appointments')    deferPageWork(function(){ const d=document.getElementById('apt-date-inp'); if(d)d.value=new Date().toISOString().split('T')[0]; renderAptDay && renderAptDay(); });
+  else if(pageKey==='appointments')    deferPageWork(function(){ const d=document.getElementById('apt-date-inp'); if(d)d.value=todayKey(); renderAptDay && renderAptDay(); });
   else if(pageKey==='print-templates') deferPageWork(function(){ renderPrintTemplates && renderPrintTemplates(); });
   else if(pageKey==='consents')        deferPageWork(function(){ renderConsent && renderConsent(); updateConsentPatientHeader(); refreshConsentLibrary && refreshConsentLibrary(); });
   else if(pageKey==='ophtho')          deferPageWork(function(){ initQR && initQR(); renderRxDrugs && renderRxDrugs(); buildRefractionDropdowns && buildRefractionDropdowns(); renderOphthoPayList && renderOphthoPayList(); typeof initDiagnosisRowsIfEmpty==='function'&&initDiagnosisRowsIfEmpty(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); typeof wrapOphAdviceChipsWithDelete==='function'&&wrapOphAdviceChipsWithDelete(); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); }, 120); });
@@ -3400,9 +3400,9 @@ function aptCard(a) {
 }
 
 function renderAppointments() {
-  document.getElementById('apt-date-inp').value = new Date().toISOString().split('T')[0];
+  document.getElementById('apt-date-inp').value = todayKey();
   renderAptDay();
-  const tl = document.getElementById('apt-today-list'); if (tl) tl.innerHTML = APPOINTMENTS.filter(a=>a.date===new Date().toISOString().split('T')[0] && normalizeAppointmentCentreValue(a.centre || 'CHD') === normalizeAppointmentCentreValue(window.CURRENT_USER?.centre || getEffectiveCentre() || 'CHD')).map(aptCard).join('') || '<div style="padding:12px;text-align:center;color:var(--g1);font-size:12px">No appointments today</div>';
+  const tl = document.getElementById('apt-today-list'); if (tl) tl.innerHTML = APPOINTMENTS.filter(a=>a.date===todayKey() && normalizeAppointmentCentreValue(a.centre || 'CHD') === normalizeAppointmentCentreValue(window.CURRENT_USER?.centre || getEffectiveCentre() || 'CHD')).map(aptCard).join('') || '<div style="padding:12px;text-align:center;color:var(--g1);font-size:12px">No appointments today</div>';
   const ul = document.getElementById('apt-upcoming'); if (ul) ul.innerHTML = APPOINTMENTS.slice(0,4).map(a=>`<div style="display:flex;align-items:center;gap:9px;padding:8px;border-bottom:1px solid var(--g5);font-size:12px;cursor:pointer"><span style="font-size:14px">📅</span><div style="flex:1"><div style="font-weight:800">${a.patient}</div><div style="font-size:10.5px;color:var(--g1)">${a.purpose} · ${a.date}</div></div><span class="badge bd-blue">${a.time}</span></div>`).join('');
 }
 
@@ -6498,7 +6498,7 @@ function syncObgAssessmentToHistory() {
     if(!Number.isNaN(lmp.getTime())) {
       const edd = new Date(lmp);
       edd.setDate(edd.getDate() + 280);
-      if(dstEddDate) dstEddDate.value = edd.toISOString().split('T')[0];
+      if(dstEddDate) dstEddDate.value = localDateKey(edd);
       const diffDays = Math.max(0, Math.floor((new Date() - lmp)/(1000*60*60*24)));
       const weeks = Math.floor(diffDays / 7);
       const days = diffDays % 7;
@@ -6962,14 +6962,14 @@ function updateObgComputedFields() {
     else if(calc.weeks < 22) base.setDate(base.getDate() + 21);
     else if(calc.weeks < 32) base.setDate(base.getDate() + 28);
     else base.setDate(base.getDate() + 7);
-    const v = base.toISOString().split('T')[0];
+    const v = localDateKey(base);
     const usg = document.getElementById('obg-usg-due'); if(usg) usg.value = v;
     const usg2 = document.getElementById('obg-usg-due-inline'); if(usg2) usg2.value = v;
   }
   if(!obgVal('obg-tt-due') && calc.weeks) {
     const d = new Date();
     d.setDate(d.getDate() + (calc.weeks < 20 ? 14 : 28));
-    const v = d.toISOString().split('T')[0];
+    const v = localDateKey(d);
     const tt = document.getElementById('obg-tt-due'); if(tt) tt.value = v;
     const tt2 = document.getElementById('obg-tt-due-inline'); if(tt2) tt2.value = v;
   }
@@ -6996,7 +6996,7 @@ function populateObgPatientFromCurrent() {
 }
 function obgAdviceDraftKey() {
   const bmhId = (window.CURRENT_PATIENT?.bmhId || document.getElementById('obg-pt-uid')?.textContent || '').trim();
-  const day = new Date().toISOString().slice(0, 10);
+  const day = todayKey();
   return bmhId ? ('bmh_obg_advice_draft_' + bmhId + '_' + day) : '';
 }
 function saveObgAdviceDraft() {
@@ -7122,7 +7122,7 @@ function populateObgForm(visit) {
   restoreProcedureDoneState('obg', data.procDone || null);
 }
 function addANCVisit(){
-  const today = new Date().toISOString().split('T')[0];
+  const today = todayKey();
   const visitDate = document.getElementById('obg-visit-date'); if(visitDate && !visitDate.value) visitDate.value = today;
   const nextReview = document.getElementById('obg-next-review'); if(nextReview && !nextReview.value) nextReview.value = today;
   ptab(document.querySelector('.ptab[onclick*="obg-anc"]'), 'obg-anc');
@@ -8167,7 +8167,7 @@ function saveProgressNote() {
   const note = document.getElementById('pn-text')?.value;
   const nurse = document.getElementById('pn-nurse')?.value||'Staff Nurse';
   const doctor = document.getElementById('pn-doctor')?.value||'Dr. Varun Baweja';
-  const date = document.getElementById('pn-date')?.value || new Date().toISOString().slice(0,10);
+  const date = document.getElementById('pn-date')?.value || todayKey();
   const time = document.getElementById('pn-time')?.value || new Date().toTimeString().slice(0,5);
   const medicine = document.getElementById('pn-med')?.value || '';
   const dose = document.getElementById('pn-dose')?.value || '';
@@ -10174,7 +10174,7 @@ function bmhCatLabel(cat) {
   return m[cat] || cat || 'Other';
 }
 function bmhGetTodayBillPatients() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayKey();
   const isToday = (p) => {
     if (p.createdAt && String(p.createdAt).startsWith(today)) return true;
     if (p.checkinAt && new Date(p.checkinAt).toISOString().startsWith(today)) return true;
@@ -10195,7 +10195,7 @@ function bmhGetBillPatientsForView() {
     return PATIENTS.filter(function (p) { return p.bmhId === cp.bmhId; });
   }
   const scope = document.getElementById('bmh-bill-patient-scope')?.value || (window._bmhBillFocusPatient ? 'focus' : 'date');
-  const dateFilter = document.getElementById('bmh-bill-date-filter')?.value || new Date().toISOString().slice(0, 10);
+  const dateFilter = document.getElementById('bmh-bill-date-filter')?.value || todayKey();
   const search = (document.getElementById('bmh-bill-patient-search')?.value || '').trim().toLowerCase();
   let pts = [];
 
@@ -10219,7 +10219,7 @@ function bmhGetBillPatientsForView() {
     pts = PATIENTS.filter(function (p) {
       if (!centreMatch(p)) return false;
       const raw = p.checkinAt || p.createdAt || '';
-      const dstr = typeof raw === 'string' ? raw.slice(0, 10) : (raw ? new Date(raw).toISOString().slice(0, 10) : '');
+      const dstr = localDateKey(raw);
       if (!dstr) return false;
       if (from && dstr < from) return false;
       if (to && dstr > to) return false;
@@ -10363,7 +10363,7 @@ function bmhBillingTabSwitch(el, mode) {
   if (window._bmhBillingTab === 'search') {
     // Pre-fill today's date on first open
     const histDate = document.getElementById('bmh-bill-history-date');
-    if (histDate && !histDate.value) histDate.value = new Date().toISOString().slice(0, 10);
+    if (histDate && !histDate.value) histDate.value = todayKey();
     bmhSearchBillHistory(document.getElementById('bmh-bill-history-search')?.value || '');
   }
 }
@@ -11170,7 +11170,7 @@ function bmhSearchBillHistory(q) {
   }
   // Default view (no query, no date): show today's bills; if none, show last 50 overall
   if (!sq && !dateFilter) {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayKey();
     const todayBills = bills.filter(function (b) { return String(b.date || '').startsWith(today); });
     bills = todayBills.length ? todayBills : bills.slice(0, 50);
   } else {
@@ -12168,7 +12168,7 @@ window.bmhDeleteOfficeBill = bmhDeleteOfficeBill;
 function bmhRenderOfficeBillsDueBanner() {
   const el = document.getElementById('inv-bill-due-banner');
   if (!el) return;
-  const todayKey = new Date().toISOString().slice(0, 10);
+  const currentDayKey = todayKey();
   const parseDay = function (s) {
     if (!s) return null;
     const d = new Date(String(s).slice(0, 10) + 'T12:00:00');
@@ -12176,7 +12176,7 @@ function bmhRenderOfficeBillsDueBanner() {
   };
   const daysUntil = function (d) {
     if (!d) return null;
-    return Math.floor((d.getTime() - new Date(todayKey + 'T12:00:00').getTime()) / 86400000);
+    return Math.floor((d.getTime() - new Date(currentDayKey + 'T12:00:00').getTime()) / 86400000);
   };
   const pushLine = function (arr, urgent, sort, text) {
     arr.push({ urgent: urgent, sort: sort, text: text });
@@ -12324,7 +12324,7 @@ function bmhAddVendorBill() {
   const vendor = document.getElementById('inv-vend-name')?.value?.trim() || document.getElementById('bmh-vend-name')?.value?.trim();
   const inv = document.getElementById('inv-vend-inv')?.value?.trim() || document.getElementById('bmh-vend-inv')?.value?.trim();
   const amt = parseFloat(document.getElementById('inv-vend-amt')?.value || document.getElementById('bmh-vend-amt')?.value || '0');
-  const due = document.getElementById('inv-vend-due')?.value || document.getElementById('bmh-vend-due')?.value || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const due = document.getElementById('inv-vend-due')?.value || document.getElementById('bmh-vend-due')?.value || localDateKey(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000));
   const f = document.getElementById('inv-vend-file')?.files?.[0] || document.getElementById('bmh-vend-file')?.files?.[0];
   if (!vendor || !(amt > 0)) { showToast('Vendor and amount required', 'w'); return; }
   bmhCompressFileToData(f, function (billFile) {
@@ -12384,7 +12384,7 @@ function bmhAddExpense() {
   const vendor = document.getElementById('inv-exp-vendor')?.value?.trim() || '';
   const mode = document.getElementById('inv-exp-mode')?.value || 'Cash';
   const ref = document.getElementById('inv-exp-ref')?.value?.trim() || '';
-  const billDate = document.getElementById('inv-exp-date')?.value || new Date().toISOString().slice(0, 10);
+  const billDate = document.getElementById('inv-exp-date')?.value || todayKey();
   const dueDate = document.getElementById('inv-exp-due-date')?.value || '';
   const f = document.getElementById('inv-exp-file')?.files?.[0] || null;
   if (!desc || !(amt > 0)) { showToast('Description and amount required', 'w'); return; }
@@ -12475,7 +12475,7 @@ function exportAllPatientDataCsv() {
     const csv = rows.map(r => r.map(x => '"' + String(x == null ? '' : x).replace(/"/g, '""') + '"').join(',')).join('\n');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
-    a.download = `bmh-all-patients-${new Date().toISOString().slice(0,10)}.csv`;
+    a.download = `bmh-all-patients-${todayKey()}.csv`;
     a.click();
     showToast(`Exported ${Math.max(0, rows.length - 1)} patients to CSV`, 's');
   };
@@ -13384,7 +13384,7 @@ function inventoryRememberBillMeta(vendor, dept, billFile) {
     dept: String(dept || ''),
     billFile: billFile || null,
     billDate: bmhNowISO(),
-    dateKey: new Date().toISOString().slice(0, 10)
+    dateKey: todayKey()
   };
   window._inventoryCurrentBillMeta = meta;
   return meta;
@@ -13775,7 +13775,7 @@ function bmhMaybeRegisterVendorBillFromParsedImport(parsed, asset, mode) {
   }
   if (!vendor) return;
   const inv = String(parsed.invoiceNo || '').trim();
-  const dayKey = new Date().toISOString().slice(0, 10);
+  const dayKey = todayKey();
   const fileName = String(asset?.name || '');
   const dup = (window.BMH_VENDOR_BILLS || []).some(function (v) {
     if (String(v.vendor || '').trim() !== vendor) return false;
@@ -13790,7 +13790,7 @@ function bmhMaybeRegisterVendorBillFromParsedImport(parsed, asset, mode) {
     vendor: vendor,
     invoiceNo: inv || ('OCR ' + id.slice(-6)),
     amount: amt,
-    dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+    dueDate: localDateKey(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)),
     status: 'pending',
     uploadedName: fileName,
     billFile: billFile,
@@ -14584,10 +14584,10 @@ function renderBillingPage() {
   if (tabHist) { tabHist.style.display = window._bmhBillingTab === 'search'  ? '' : 'none'; tabHist.classList.toggle('active', window._bmhBillingTab === 'search'); }
 
   const dateEl = document.getElementById('bmh-bill-date-filter');
-  if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().slice(0, 10);
+  if (dateEl && !dateEl.value) dateEl.value = todayKey();
   const fromEl = document.getElementById('bmh-bill-date-from');
   const toEl = document.getElementById('bmh-bill-date-to');
-  const todayD = new Date().toISOString().slice(0, 10);
+  const todayD = todayKey();
   if (fromEl && !fromEl.value) fromEl.value = todayD;
   if (toEl && !toEl.value) toEl.value = todayD;
   const scopeEl = document.getElementById('bmh-bill-patient-scope');
@@ -17194,7 +17194,7 @@ function openIPDChart(id) {
 function openOTFromQueue(bmhId) {
   const p = PATIENTS.find(function (x) { return x.bmhId === bmhId; });
   if (!p) { showToast('Patient not found for OT', 'w'); return; }
-  const today = new Date().toISOString().split('T')[0];
+  const today = todayKey();
   const existing = OT_CASES.find(function (c) {
     const oc = normalizeOTCaseRecord(c);
     return oc.bmhId === bmhId && oc.date === today && (oc.status === 'pending' || oc.status === 'in-progress');
@@ -18830,7 +18830,7 @@ function getDeptProcedureContainerId(dept) {
 function getDeptPlanDraftKey(dept, bmhId) {
   const ptId = String(bmhId || window.CURRENT_PATIENT?.bmhId || '').trim();
   if (!ptId) return '';
-  const day = typeof localDateKey === 'function' ? localDateKey(new Date()) : new Date().toISOString().slice(0, 10);
+  const day = typeof localDateKey === 'function' ? localDateKey(new Date()) : todayKey();
   return 'bmh_dept_plan_draft_' + String(dept || 'ophtho') + '_' + ptId + '_' + day;
 }
 function saveDeptPlanDraft(dept) {
@@ -20962,7 +20962,7 @@ function addDrugToLibraryFromModal() {
   renderSettingsDrugs();
   rebuildDrugGenericDatalist();
   if (window.RX_QUICK_ADD_TO_PRESCRIPTION) {
-    const today = new Date().toISOString().split('T')[0];
+    const today = todayKey();
     RX_DRUGS.push({
       trade, brand: trade, generic, name: generic,
       drugType: type || 'Tablet',
@@ -21384,9 +21384,9 @@ window.addEventListener('DOMContentLoaded', function() {
   } catch (e) {}
   try { populateSelectors && populateSelectors(); } catch(e) {}
   const aptInp = document.getElementById('apt-date-inp');
-  if(aptInp) aptInp.value = new Date().toISOString().split('T')[0];
+  if(aptInp) aptInp.value = todayKey();
   const pnDate = document.getElementById('pn-date');
-  if(pnDate) pnDate.value = new Date().toISOString().split('T')[0];
+  if(pnDate) pnDate.value = todayKey();
   const pnTime = document.getElementById('pn-time');
   if(pnTime) pnTime.value = new Date().toTimeString().slice(0,5);
   // Restore saved credentials
@@ -21475,7 +21475,7 @@ function addRxDrugFromModal() {
   const dur = normalizeRxDurationLabel(document.getElementById('new-rx-dur')?.value||'1 week');
   const inst = document.getElementById('new-rx-inst')?.value||'';
   if(!trade&&!generic){showToast('Enter drug name','w');return;}
-  const today = new Date().toISOString().split('T')[0];
+  const today = todayKey();
   RX_DRUGS.push({
     trade, brand: trade, generic, name: generic,
     drugType: type,
@@ -21591,7 +21591,7 @@ function applyRxTemplate(tplId) {
     const gen = d.generic || d.trade;
     if(!trade || RX_DRUGS.find(r=>r.brand===trade || (gen && r.name===gen))) return;
     const eyeArr = normalizeEyeLabelForRx(d.eye);
-    const today = new Date().toISOString().split('T')[0];
+    const today = todayKey();
     RX_DRUGS.push({
       trade, brand: trade, generic: gen, name: gen,
       drugType: d.type || 'Eye Drop',
@@ -21961,7 +21961,7 @@ function bookFollowupApt(date, n, unit, deptKey) {
   const apt = {
     id:'APT-'+Date.now(), patient:ptName, bmhId:ptId,
     mob:PATIENTS.find(p=>p.bmhId===ptId)?.mob||'',
-    date:date.toISOString().split('T')[0], time:normalizeAptTimeLabel(getNearestAppointmentSlot(date.toISOString().split('T')[0])),
+    date:localDateKey(date), time:normalizeAptTimeLabel(getNearestAppointmentSlot(localDateKey(date))),
     doctor:CURRENT_USER?.name||'Dr. Varun Baweja',
     dept:CURRENT_USER?.dept||dept||'Ophthalmology', centre:CURRENT_USER?.centre||'CHD',
     purpose:'Follow-up ('+n+' '+unitLabel+(n>1?'s':'')+' review)',
@@ -23291,7 +23291,7 @@ function createOTCaseFromReceptionPanel(ptId, patientNameTrim) {
   const surgeon = document.getElementById('surg-surgeon')?.value || CURRENT_USER?.name || 'Dr. Varun Baweja';
   const eye = document.getElementById('surg-eye')?.value || 'N/A';
   const fee = parseFloat(document.getElementById('surg-fee')?.value) || 38000;
-  const sDate = document.getElementById('surg-date')?.value || new Date().toISOString().split('T')[0];
+  const sDate = document.getElementById('surg-date')?.value || todayKey();
   const sTime = document.getElementById('surg-time')?.value || '09:00';
   const anaes = document.getElementById('surg-anaes')?.value || 'Topical (Drops)';
   const caseId = 'OT' + Date.now();
@@ -23327,7 +23327,7 @@ function createOTCaseFromReceptionPanel(ptId, patientNameTrim) {
 function maybeScheduleSameDaySurgeryOTFromRegistration(patient) {
   const panel = document.getElementById('rc-surgery-panel');
   if(!panel || panel.style.display === 'none') return;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayKey();
   const sDate = (document.getElementById('surg-date')?.value || '').trim() || today;
   if(sDate !== today) return;
   const sType = (document.getElementById('surg-type')?.value || '').trim();
@@ -24203,7 +24203,7 @@ function saveTPAReceipt(prId) {
   const policyNo = (document.getElementById('tpa-policy-no')?.value || '').trim();
   const claimedAmount = Math.max(0, Number(document.getElementById('tpa-claimed-amt')?.value || pr.cashlessApprovedAmount || pr.claimedAmount || 0));
   const amt = Number(document.getElementById('tpa-received-amt')?.value || 0);
-  const date = document.getElementById('tpa-received-date')?.value || new Date().toISOString().slice(0, 10);
+  const date = document.getElementById('tpa-received-date')?.value || todayKey();
   const utr = document.getElementById('tpa-received-utr')?.value || '';
   const patientDue = Math.max(0, Number(document.getElementById('tpa-patient-due')?.value || 0));
   const notes = document.getElementById('tpa-received-note')?.value || '';
@@ -24565,7 +24565,7 @@ function bmhRecordInventoryPurchase(item, qty, billFile) {
   if (Number(item.mrp || 0) > 0) rememberInventoryMrp(item.name, item.mrp);
   const totalCost = qty * cost;
   const purchaseTs = bmhNowISO();
-  const dueDate = billMode === 'on-use' ? '' : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const dueDate = billMode === 'on-use' ? '' : localDateKey(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000));
   const purchase = {
     id:'PO' + Date.now() + Math.random().toString(36).slice(2, 5),
     itemName:item.name,
@@ -24584,8 +24584,8 @@ function bmhRecordInventoryPurchase(item, qty, billFile) {
     dueDate,
     ts:purchaseTs,
     billFile: billFile || null,
-    billDateKey: new Date().toISOString().slice(0, 10),
-    billGroup: [normalizeInventoryTextValue(vendor), invoiceNo || 'NOINV', dept || 'general', new Date().toISOString().slice(0, 10)].join('::')
+    billDateKey: todayKey(),
+    billGroup: [normalizeInventoryTextValue(vendor), invoiceNo || 'NOINV', dept || 'general', todayKey()].join('::')
   };
   normalizeInventoryRecord(purchase);
   window.BMH_PURCHASES.push(purchase);
@@ -25142,7 +25142,7 @@ function scheduleDefaultSurgeryFollowups(otCase) {
   const made = [];
   dayOffsets.forEach(function (cfg) {
     const dt = new Date(baseDate.getTime() + cfg.days * 24 * 60 * 60 * 1000);
-    const iso = dt.toISOString().split('T')[0];
+    const iso = localDateKey(dt);
     const existing = (APPOINTMENTS || []).find(function (a) {
       return a.bmhId === c.bmhId && a.date === iso && a.type === 'post-op' && /post-op/i.test(String(a.purpose || ''));
     });
@@ -25243,7 +25243,7 @@ function addOTCase() {
   const proc = document.getElementById('ot-add-proc')?.value||'';
   const surgeon = document.getElementById('ot-add-surgeon')?.value||'';
   const anaes = document.getElementById('ot-add-anaes')?.value||'';
-  const date = document.getElementById('ot-add-date')?.value||new Date().toISOString().split('T')[0];
+  const date = document.getElementById('ot-add-date')?.value||todayKey();
   const time = document.getElementById('ot-add-time')?.value||'09:00';
   const room = document.getElementById('ot-add-room')?.value||'Eye OT';
   const dx = document.getElementById('ot-add-dx')?.value||'';
@@ -25565,7 +25565,7 @@ function prefillOTCase(bmhId) {
 
 function resetOTAddCaseForm() {
   window._savingOTCase = false;
-  const today = new Date().toISOString().split('T')[0];
+  const today = todayKey();
   const setV = function (id, value) {
     const el = document.getElementById(id);
     if (!el) return;
@@ -25653,7 +25653,7 @@ function openOTAddModal(opts) {
     ptSel.innerHTML = `<option value="">— Use BMSH ID lookup above —</option>`;
   }
   // Set today's date as default
-  const dateEl=document.getElementById('ot-add-date'); if(dateEl&&!dateEl.value) dateEl.value=new Date().toISOString().split('T')[0];
+  const dateEl=document.getElementById('ot-add-date'); if(dateEl&&!dateEl.value) dateEl.value=todayKey();
   const titleEl = document.getElementById('ot-add-modal-title');
   const saveBtn = document.getElementById('ot-add-save-btn');
   const editIdEl = document.getElementById('ot-add-case-id');
@@ -26343,7 +26343,7 @@ function addDaysToIsoDate(iso, days) {
   const d = new Date(iso + 'T12:00:00');
   if (Number.isNaN(d.getTime())) return iso;
   d.setDate(d.getDate() + days);
-  return d.toISOString().split('T')[0];
+  return localDateKey(d);
 }
 function durationLabelToDays(label) {
   const s = String(label || '').trim().toLowerCase();
@@ -26396,7 +26396,7 @@ function toggleRefractivePanel() {
 }
 function computeRxEndAndTaperDates(d) {
   if (!d) return;
-  if (!d.dateFrom) d.dateFrom = new Date().toISOString().split('T')[0];
+  if (!d.dateFrom) d.dateFrom = todayKey();
   const n = durationLabelToDays(d.dur);
   const half = String(d.dur || '').includes('½') || String(d.dur || '').toLowerCase().includes('half');
   if (n <= 1 && half) {
@@ -26422,7 +26422,7 @@ function computeRxEndAndTaperDates(d) {
 }
 function ensureRxDrugPrintDates(d) {
   if (!d) return;
-  if (!d.dateFrom) d.dateFrom = new Date().toISOString().split('T')[0];
+  if (!d.dateFrom) d.dateFrom = todayKey();
   if (!d.dateTo) {
     const n = durationLabelToDays(d.dur);
     const half = String(d.dur || '').includes('½') || String(d.dur || '').toLowerCase().includes('half');
@@ -26472,7 +26472,7 @@ function suggestNextTaperSegment(freq, mainDur) {
 function addTaperRow(idx, taperDur, taperIdx) {
   const orig = RX_DRUGS[idx];
   if (!orig) return;
-  if (!orig.dateFrom) orig.dateFrom = new Date().toISOString().split('T')[0];
+  if (!orig.dateFrom) orig.dateFrom = todayKey();
   const rows = ensureRxTaperRows(orig);
   computeRxEndAndTaperDates(orig);
   const source = (typeof taperIdx === 'number' && rows[taperIdx]) ? rows[taperIdx] : orig;
@@ -26823,7 +26823,7 @@ function generateDailyReport() {
   const fromVal = document.getElementById('rep-from')?.value;
   const toVal   = document.getElementById('rep-to')?.value;
   const deptFilter = document.getElementById('rep-dept')?.value || '';
-  const today = new Date().toISOString().split('T')[0];
+  const today = todayKey();
   const rangeFrom = fromVal || today;
   const rangeTo   = toVal   || today;
   const todayLabel = new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
@@ -26965,8 +26965,8 @@ function generateInvestigationReport() {
 
 function generateFinancialReport() {
   const el=document.getElementById('rep-financial-result'); if(!el) return;
-  const fromVal = document.getElementById('rep-fin-from')?.value || new Date().toISOString().split('T')[0];
-  const toVal   = document.getElementById('rep-fin-to')?.value   || new Date().toISOString().split('T')[0];
+  const fromVal = document.getElementById('rep-fin-from')?.value || todayKey();
+  const toVal   = document.getElementById('rep-fin-to')?.value   || todayKey();
   const repFinCentre = document.getElementById('rep-centre')?.value || '';
   const txAll = TRANSACTIONS.filter(t=>{const d=(t.date||'').split('T')[0]; if(d<fromVal||d>toVal) return false; if(repFinCentre && normalizeAppointmentCentreValue(t.centre||'CHD')!==repFinCentre) return false; return true;});
   const deptLabel = function (dept) {
@@ -28705,7 +28705,7 @@ function addCustomLabTest() {
 
 // ─── APPOINTMENTS FIX ─────────────────
 function renderAptDay() {
-  const date = document.getElementById('apt-date-inp')?.value || new Date().toISOString().split('T')[0];
+  const date = document.getElementById('apt-date-inp')?.value || todayKey();
   const drFilter = document.getElementById('apt-dr-filter')?.value || '';
   const centreFilter = normalizeAppointmentCentreValue(window.CURRENT_USER?.centre || getEffectiveCentre() || 'CHD');
   const timeSortVal = (slot) => {
@@ -28780,7 +28780,7 @@ setTimeout(() => {
   populateReceptionSurgeryPackSelect();
   refreshOTNotesTemplateSelect();
   if(document.getElementById('apt-date-inp')) {
-    document.getElementById('apt-date-inp').value = new Date().toISOString().split('T')[0];
+    document.getElementById('apt-date-inp').value = todayKey();
     renderAptDay();
   }
   ['oe','obg','psych','skin'].forEach(d => {
@@ -28958,7 +28958,7 @@ function addRxFromQuick() {
     dur = normalizeRxDurationLabel(drug.dur || '1 week');
   }
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = todayKey();
   RX_DRUGS.push({
     trade, brand: trade, generic, name: generic,
     drugType: drugType || 'Tablet',
@@ -29006,7 +29006,7 @@ function renderRxDrugs() {
     : 'minmax(220px,2.75fr) minmax(120px,1.1fr) minmax(170px,1.4fr) minmax(120px,1.05fr) minmax(126px,1fr) minmax(126px,1fr) 92px';
 
   RX_DRUGS.forEach((d,i)=>{
-    if (!d.dateFrom) d.dateFrom = new Date().toISOString().split('T')[0];
+    if (!d.dateFrom) d.dateFrom = todayKey();
     if (!d.drugType && d.type) d.drugType = d.type;
     if (!d.trade && d.brand) d.trade = d.brand;
     if (!d.brand && d.trade) d.brand = d.trade;
@@ -30805,12 +30805,25 @@ function dedupeQueueEntriesByKey(rows) {
   return Array.from(map.values());
 }
 function localDateKey(value) {
+  if (value === null || value === undefined || value === '') return '';
+  const raw = String(value || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
   const d = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(d.getTime())) return '';
-  const dd = String(d.getDate()).padStart(2, '0');
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const yyyy = d.getFullYear();
-  return yyyy + '-' + mm + '-' + dd;
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).formatToParts(d).reduce(function (acc, part) {
+      acc[part.type] = part.value;
+      return acc;
+    }, {});
+    if (parts.year && parts.month && parts.day) return parts.year + '-' + parts.month + '-' + parts.day;
+  } catch (e) {}
+  const india = new Date(d.getTime() + (330 * 60 * 1000));
+  return india.getUTCFullYear() + '-' + String(india.getUTCMonth() + 1).padStart(2, '0') + '-' + String(india.getUTCDate()).padStart(2, '0');
 }
 /** Shared filter: patient appears in today's doctor queue and reception queue (same date logic). */
 function patientQueueDateMatchesToday(p) {
@@ -34325,7 +34338,7 @@ function loadTodayTransactions() {
       }
     }
   } catch (e) { /* noop */ }
-  const utcToday = new Date().toISOString().split('T')[0];
+  const utcToday = new Date().toISOString().split('T')[0]; // Compatibility read for older UTC-keyed transaction buckets.
   const transactionDays = Array.from(new Set([today, utcToday].filter(Boolean)));
   Promise.all(transactionDays.map(function (day) {
     return fbOnce('transactions/' + day).catch(function () { return {}; });
@@ -34671,11 +34684,11 @@ function getIsoDateOnly(value) {
   if (/^\d{4}-\d{2}-\d{2}$/.test(String(value))) return String(value);
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return '';
-  return d.toISOString().split('T')[0];
+  return localDateKey(d);
 }
 function formatDischargeDateInput(value) {
   const iso = getIsoDateOnly(value);
-  return iso || new Date().toISOString().split('T')[0];
+  return iso || todayKey();
 }
 function deriveDischargeToDate(fromDate, durationLabel) {
   const from = formatDischargeDateInput(fromDate);
@@ -34808,7 +34821,7 @@ function persistOphDischargeSnapshotToOtCase() {
   const snap = collectDischargeCardSnapshotFromDom();
   const ptId = document.getElementById('dc-pt-id')?.textContent?.trim();
   if (!ptId || ptId === '—') return;
-  const today = new Date().toISOString().split('T')[0];
+  const today = todayKey();
   let rawCase = OT_CASES.find(function (c) {
     const oc = normalizeOTCaseRecord(c);
     return oc.bmhId === ptId && String(oc.date || '').slice(0, 10) === today && (oc.status === 'pending' || oc.status === 'in-progress');
@@ -37587,7 +37600,7 @@ function printConsentTemplate(id) {
 
 // ── APPOINTMENTS PRINT ────────────────────────────
 function printAppointments(dateFilter) {
-  const date = dateFilter || document.getElementById('apt-date-inp')?.value || new Date().toISOString().split('T')[0];
+  const date = dateFilter || document.getElementById('apt-date-inp')?.value || todayKey();
   const apts = APPOINTMENTS.filter(a=>a.date===date);
   const formatted = new Date(date).toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
   const lhSrc = window.LH_SRC||'';
@@ -38149,7 +38162,7 @@ function renderDashboard() {
     }, 600);
     return;
   }
-  const today = new Date().toISOString().split('T')[0];
+  const today = todayKey();
   const adminDateEl = document.getElementById('db-admin-date');
   if (adminDateEl && !adminDateEl.value) adminDateEl.value = today;
   const selectedDate = adminDateEl?.value || today;
@@ -38302,7 +38315,7 @@ function renderDashboard() {
     if (dueAlertEl) {
       const end = new Date(selectedDate + 'T00:00:00');
       end.setDate(end.getDate() + 7);
-      const endKey = end.toISOString().slice(0, 10);
+      const endKey = localDateKey(end);
       const dueItems = [];
       (window.BMH_VENDOR_BILLS || []).forEach(function (v) {
         const due = String(v.dueDate || '').slice(0, 10);
@@ -38345,7 +38358,7 @@ function renderDashboard() {
         const days = Array.from({ length: 7 }).map(function (_, idx) {
           const d = new Date();
           d.setDate(d.getDate() - (6 - idx));
-          const ds = d.toISOString().slice(0, 10);
+          const ds = localDateKey(d);
           const total = TRANSACTIONS.filter(function (t) { return txnDay(t) === ds && txnOk(t) && centreMatch(t); }).reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
           return { label: d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }), value: total };
         });
@@ -38355,7 +38368,7 @@ function renderDashboard() {
           const weekDates = Array.from({ length: 7 }).map(function (__unused, wd) {
             const d = new Date(end);
             d.setDate(end.getDate() - wd);
-            return d.toISOString().slice(0, 10);
+            return localDateKey(d);
           });
           const total = TRANSACTIONS.filter(function (t) { return weekDates.includes(txnDay(t)) && txnOk(t) && centreMatch(t); }).reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
           return { label: 'W' + (idx + 1), value: total };
@@ -38378,7 +38391,7 @@ function renderDashboard() {
         const days = Array.from({ length: 7 }).map(function (_, idx) {
           const d = new Date();
           d.setDate(d.getDate() - (6 - idx));
-          const ds = d.toISOString().slice(0, 10);
+          const ds = localDateKey(d);
           const total = (window.OT_CASES || OT_CASES || []).filter(function (c) {
             return centreMatch(c) && [c.date, c.otDate, c.createdAt, c.surgeryDate].some(function (v) { return String(v || '').slice(0, 10) === ds; });
           }).length;
@@ -38446,7 +38459,7 @@ function renderDashboard() {
       const dayTotal = (daysAgo) => {
         const d = new Date();
         d.setDate(d.getDate() - daysAgo);
-        const ds = d.toISOString().slice(0, 10);
+        const ds = localDateKey(d);
         return TRANSACTIONS.filter(t => txnDay(t) === ds && txnOk(t)).reduce((s, t) => s + getNetTransactionAmount(t), 0);
       };
       let mx = 1;
@@ -38881,7 +38894,7 @@ function renderOTList() {
   }
 
   const dateInp = document.getElementById('ot-date-inp');
-  if (dateInp && !dateInp.value) dateInp.value = new Date().toISOString().slice(0,10);
+  if (dateInp && !dateInp.value) dateInp.value = todayKey();
   const dateFilter = dateInp?.value || '';
   const surgeonFilter = document.getElementById('ot-surgeon-sel')?.value || '';
   OT_CASES.forEach(function (c, idx) { OT_CASES[idx] = normalizeOTCaseRecord(c); });
@@ -38917,7 +38930,7 @@ function renderOTList() {
 }
 function getVisibleOTCases() {
   const dateInp = document.getElementById('ot-date-inp');
-  const dateFilter = dateInp?.value || new Date().toISOString().slice(0,10);
+  const dateFilter = dateInp?.value || todayKey();
   const surgeonFilter = document.getElementById('ot-surgeon-sel')?.value || '';
   return OT_CASES.map(normalizeOTCaseRecord)
     .filter(c => centreMatch(c))
@@ -38927,7 +38940,7 @@ function getVisibleOTCases() {
 function printOTCompactList() {
   const cases = getVisibleOTCases();
   if (!cases.length) { showToast('No OT cases to print', 'w'); return; }
-  const dateText = formatDateIN(document.getElementById('ot-date-inp')?.value || new Date().toISOString().slice(0,10));
+  const dateText = formatDateIN(document.getElementById('ot-date-inp')?.value || todayKey());
   const rows = cases.map(function (c, i) {
     return '<tr>'
       + '<td style="border:1px solid #d7dce5;padding:5px 6px;font-size:10px">' + (i + 1) + '</td>'
@@ -40039,7 +40052,7 @@ function saveVisit(dept, opts) {
   ensureDeptVisitDateDefault(dept);
   const now = getCurrentClinicalDateForDept(dept);
   const localPt = window.CURRENT_PATIENT || PATIENTS.find(p => p.bmhId === bmhId);
-  const todayKey = now.toISOString().split('T')[0];
+  const todayKey = localDateKey(now);
   const cachedVisits = getCachedPatientVisits(bmhId);
   // For cross-ref visits, always generate a new key so the cross-dept consultation
   // doesn't overwrite an existing same-dept visit from earlier today.
