@@ -23230,7 +23230,8 @@ async function registerPatient() {
       date:new Date().toISOString(), centre, createdBy:CURRENT_USER?.name||'Reception',
       noFee: true,
       consultationFeeType: 'no-fee',
-      consultationFeeLabel: 'No Fee Consultation'
+      consultationFeeLabel: 'No Fee Consultation',
+      billCats: ['consultation']
     };
     TRANSACTIONS.push(txn);
     saveTransactionToFirebase&&saveTransactionToFirebase(txn);
@@ -23262,7 +23263,8 @@ async function registerPatient() {
       date:new Date().toISOString(), centre, createdBy:CURRENT_USER?.name||'Reception',
       noFee: false,
       consultationFeeType: feeChoice?.type || '',
-      consultationFeeLabel: feeChoice?.label || ''
+      consultationFeeLabel: feeChoice?.label || '',
+      billCats: ['consultation']
     };
     addBmhPatientCharge(uid, buildPaidReceptionChargeRow(txnId, consultationDesc, fee));
     TRANSACTIONS.push(txn);
@@ -34271,10 +34273,17 @@ function applyRealtimeTransactionRecord(txn, key) {
   if (!CURRENT_USER?.isAdmin && normalizeAppointmentCentreValue(txn.centre || 'CHD') !== centre) return;
   const next = Object.assign({}, txn, { id: id });
   const idx = TRANSACTIONS.findIndex(function (row) { return String(row?.id || '') === id; });
+  const isNewFromRemote = idx < 0;
   if (idx >= 0) TRANSACTIONS[idx] = next;
   else TRANSACTIONS.push(next);
   saveTodayTransactionsToLocal();
-  if (next.bmhId && typeof bmhSyncPatientAdvanceBalance === 'function') bmhSyncPatientAdvanceBalance(next.bmhId, { localOnly: true });
+  // Only sync advance balance for transactions genuinely new to this device.
+  // Firebase RTDB fires child_added synchronously (optimistic local echo) when fbSet() is called,
+  // so for locally-created transactions the advance was already handled by the caller — recomputing
+  // here would double-count (0 + delta gets set, then caller adds delta again = 2x).
+  if (isNewFromRemote && next.bmhId && typeof bmhSyncPatientAdvanceBalance === 'function') {
+    bmhSyncPatientAdvanceBalance(next.bmhId, { localOnly: true });
+  }
   renderCollectionDashboard && renderCollectionDashboard();
   if (getActivePageId && getActivePageId() === 'pg-reception') renderReceptionPage && renderReceptionPage();
 }
