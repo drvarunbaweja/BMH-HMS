@@ -9929,22 +9929,29 @@ function isCollectionDashboardTxn(txn) {
   if (!txn || txn.isRefund === true || txn.collected === false) return false;
   return getNetTransactionAmount(txn) > 0 || isConsultationTransaction(txn);
 }
+function getTransactionPrimaryChargeCategory(txn) {
+  if (!txn) return 'other';
+  const billCats = Array.isArray(txn.billCats) ? txn.billCats.map(function (c) { return String(c || '').toLowerCase(); }) : (txn.billCats && typeof txn.billCats === 'object' ? Object.values(txn.billCats).map(function (c) { return String(c || '').toLowerCase(); }) : []);
+  const serviceCat = String(inferChargeCategoryFromService(txn.service || txn.for || txn.desc || '') || '').toLowerCase();
+  if (serviceCat === 'surgery' || billCats.includes('surgery')) return 'surgery';
+  if (serviceCat === 'diagnostic' || billCats.includes('diagnostic')) return 'diagnostic';
+  if (Array.isArray(txn.chargeAllocations) && txn.chargeAllocations.length && txn.bmhId) {
+    const lines = window.BMH_PATIENT_CHARGES[txn.bmhId] || [];
+    const cats = txn.chargeAllocations.map(function (alloc) {
+      const line = lines.find(function (row) { return String(row?.id || '') === String(alloc?.lineId || ''); });
+      return line ? String(line.cat || inferChargeCategoryFromService(line.desc || line.name || '') || 'other').toLowerCase() : '';
+    }).filter(Boolean);
+    if (cats.includes('surgery')) return 'surgery';
+    if (cats.includes('diagnostic')) return 'diagnostic';
+    if (cats.includes('consultation')) return 'consultation';
+  }
+  if (billCats.includes('consultation') || isConsultationTransaction(txn)) return 'consultation';
+  return serviceCat || 'other';
+}
 function transactionHasChargeCategory(txn, category) {
   const want = String(category || '').toLowerCase().trim();
   if (!txn || !want) return false;
-  if (want === 'consultation' && isConsultationTransaction(txn)) return true;
-  const billCats = Array.isArray(txn.billCats) ? txn.billCats.map(function (c) { return String(c || '').toLowerCase(); }) : (txn.billCats && typeof txn.billCats === 'object' ? Object.values(txn.billCats).map(function (c) { return String(c || '').toLowerCase(); }) : []);
-  if (billCats.includes(want)) return true;
-  if (Array.isArray(txn.chargeAllocations) && txn.chargeAllocations.length && txn.bmhId) {
-    const lines = window.BMH_PATIENT_CHARGES[txn.bmhId] || [];
-    const allocationMatch = txn.chargeAllocations.some(function (alloc) {
-      const line = lines.find(function (row) { return String(row?.id || '') === String(alloc?.lineId || ''); });
-      const cat = String(line?.cat || inferChargeCategoryFromService(line?.desc || line?.name || '') || 'other').toLowerCase();
-      return cat === want;
-    });
-    if (allocationMatch) return true;
-  }
-  return String(inferChargeCategoryFromService(txn.service || txn.for || txn.desc || '') || 'other').toLowerCase() === want;
+  return getTransactionPrimaryChargeCategory(txn) === want;
 }
 function addBmhPatientCharge(bmhId, row) {
   if (!bmhId) return;
@@ -33851,10 +33858,8 @@ function getConcessionAdjustedCollectionTotal(transactions) {
   }, 0);
 }
 
-// For admin/canSeeAllCentres: charges tab always shows all centres so no paid consultation is hidden
-// by the active centre button (which defaults to RPR).
 function getCollectionViewCentre() {
-  return (CURRENT_USER?.isAdmin || CURRENT_USER?.canSeeAllCentres) ? 'both' : getEffectiveCentre();
+  return normalizeAppointmentCentreValue(getEffectiveCentre() || CURRENT_USER?.centre || 'CHD');
 }
 function renderCollectionDashboard() {
   const todayKeyLocal = todayKey();
