@@ -9457,6 +9457,21 @@ function bmhCompressFileToData(file, cb) {
   });
   reader.readAsDataURL(file);
 }
+function bmhBillFileData(file) {
+  if (!file) return '';
+  return file.data || file.dataUrl || file.url || file.base64 || '';
+}
+function bmhBillFileType(file) {
+  const data = bmhBillFileData(file);
+  const type = String(file?.type || '').trim();
+  if (type) return type;
+  if (/^data:([^;,]+)/i.test(data)) return data.match(/^data:([^;,]+)/i)[1];
+  const name = String(file?.name || '').toLowerCase();
+  if (name.endsWith('.pdf')) return 'application/pdf';
+  if (name.endsWith('.png')) return 'image/png';
+  if (name.endsWith('.jpg') || name.endsWith('.jpeg')) return 'image/jpeg';
+  return '';
+}
 function bmhDefaultInventoryDeptForPatient(bmhId) {
   const pt = PATIENTS.find(x => x.bmhId === bmhId);
   if (!pt) return 'general';
@@ -12090,6 +12105,19 @@ function bmhPrintFilteredOfficeBills() {
   safePrint(html);
 }
 window.bmhPrintFilteredOfficeBills = bmhPrintFilteredOfficeBills;
+function bmhVendorBillGroups(rows) {
+  const groups = {};
+  (rows || []).forEach(function (v) {
+    const key = normalizeInventoryCompareText(v.vendor || 'Unknown Vendor') || 'unknown vendor';
+    if (!groups[key]) groups[key] = { vendor: v.vendor || 'Unknown Vendor', rows: [], total: 0, outstanding: 0 };
+    groups[key].rows.push(v);
+    groups[key].total += Number(v.amount || 0);
+    groups[key].outstanding += bmhVendorBillOutstanding(v);
+  });
+  return Object.values(groups).sort(function (a, b) {
+    return b.outstanding - a.outstanding || String(a.vendor).localeCompare(String(b.vendor));
+  });
+}
 function bmhRenderVendorTables() {
   bmhRenderInvVendorHomeStrip();
   const vendorFilterEl = document.getElementById('inv-vendor-filter');
@@ -12110,19 +12138,31 @@ function bmhRenderVendorTables() {
   const displayRows = selectedBill && !filteredRows.some(function (r) { return r.id === selectedBill.id; }) ? [selectedBill].concat(filteredRows) : filteredRows;
   const totalDue = filteredRows.reduce(function (s, v) { return s + bmhVendorBillOutstanding(v); }, 0);
   [document.getElementById('bmh-vendor-table'), document.getElementById('inv-vendor-table')].filter(Boolean).forEach(function (el) {
-    el.innerHTML = displayRows.length ? `<table class="rc-queue-table" style="width:100%"><thead><tr><th style="width:36px"></th><th>Vendor / invoice</th><th>₹</th><th>Status</th><th>File</th><th></th></tr></thead><tbody>${displayRows.map(function (v) {
-      const out = bmhVendorBillOutstanding(v);
-      const status = bmhVendorStatusLabel(v);
-      const badge = status === 'paid' ? 'bd-green' : status === 'partial' ? 'bd-orange' : 'bd-orange';
-      const selBg = v.id === window._bmhVendorBillSel ? 'background:var(--blue-lt);' : '';
-      return `<tr style="cursor:pointer;${selBg}" onclick="bmhSelectVendorBill('${v.id}')">
-        <td onclick="event.stopPropagation()">${out > 0 ? `<input type="checkbox" class="inv-vendor-bill-check" value="${escapeHtmlConsent(v.id)}" onclick="event.stopPropagation()">` : ''}</td>
-        <td><div style="font-weight:800">${escapeHtmlConsent(v.vendor || '')}</div><div style="font-family:var(--mono);font-size:10px;color:var(--bmh-teal)">${escapeHtmlConsent(v.invoiceNo || '—')}</div><div style="font-size:10px;color:var(--g1)">${escapeHtmlConsent(v.store || '')}${v.billMode === 'on-use' ? ' · on use' : ''}</div></td>
-        <td>₹${Number(v.amount || 0).toLocaleString('en-IN')}<div style="font-size:10px;color:${out > 0 ? '#b55a00' : 'var(--g1)'}">Due ₹${out.toLocaleString('en-IN')}</div></td>
-        <td><span class="badge ${badge}">${status}</span><div style="font-size:10px;color:var(--g1);margin-top:2px">${escapeHtmlConsent(v.dueDate || (v.billMode === 'on-use' ? 'On use' : '—'))}</div></td>
-        <td style="font-size:10px" onclick="event.stopPropagation()">${v.billFile?.name || v.uploadedName ? `<a href="#" onclick="event.preventDefault();openInventoryBill('${v.id}')">${escapeHtmlConsent(v.billFile?.name || v.uploadedName)}</a>` : '—'}</td>
-        <td onclick="event.stopPropagation">${out > 0 ? `<button type="button" class="btn btn-xs btn-gold" onclick="bmhMarkVendorPaid('${v.id}')">Pay</button>` : '—'} <button type="button" class="btn btn-xs btn-outline" onclick="bmhEditVendorBill('${v.id}')">Edit</button>${isAdminUser() ? ` <button type="button" class="btn btn-xs btn-gray" onclick="bmhDeleteVendorBill('${v.id}')">Del</button>` : ''}</td>
+    const groupedRows = bmhVendorBillGroups(displayRows);
+    el.innerHTML = displayRows.length ? `<table class="rc-queue-table" style="width:100%"><thead><tr><th style="width:36px"></th><th>Vendor / invoice</th><th>₹</th><th>Status</th><th>File</th><th></th></tr></thead><tbody>${groupedRows.map(function (group) {
+      const header = `<tr style="background:var(--blue-lt);cursor:pointer" onclick="bmhFilterVendorFromSummary('${String(group.vendor).replace(/'/g, "\\'")}')">
+        <td></td>
+        <td colspan="5"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+          <div><strong>${escapeHtmlConsent(group.vendor)}</strong><div style="font-size:10px;color:var(--g1)">Bills ${group.rows.length} · Total ₹${group.total.toLocaleString('en-IN')}</div></div>
+          <div style="font-weight:900;color:${group.outstanding > 0 ? '#b55a00' : '#1a8c3c'}">Outstanding ₹${group.outstanding.toLocaleString('en-IN')}</div>
+        </div></td>
       </tr>`;
+      const branches = group.rows.map(function (v) {
+        const out = bmhVendorBillOutstanding(v);
+        const status = bmhVendorStatusLabel(v);
+        const badge = status === 'paid' ? 'bd-green' : status === 'partial' ? 'bd-orange' : 'bd-orange';
+        const selBg = v.id === window._bmhVendorBillSel ? 'background:var(--blue-lt);' : '';
+        const idArg = String(v.id || '').replace(/'/g, "\\'");
+        return `<tr style="cursor:pointer;${selBg}" onclick="bmhSelectVendorBill('${idArg}')">
+          <td onclick="event.stopPropagation()">${out > 0 ? `<input type="checkbox" class="inv-vendor-bill-check" value="${escapeHtmlConsent(v.id)}" onclick="event.stopPropagation()">` : ''}</td>
+          <td style="padding-left:22px"><div style="font-family:var(--mono);font-size:10px;color:var(--bmh-teal);font-weight:900">${escapeHtmlConsent(v.invoiceNo || 'No invoice')}</div><div style="font-size:10px;color:var(--g1)">${escapeHtmlConsent(v.store || '')}${v.billMode === 'on-use' ? ' · on use' : ''} · ${escapeHtmlConsent(String(v.billDateKey || v.createdAt || '').slice(0, 10) || 'No date')}</div></td>
+          <td>₹${Number(v.amount || 0).toLocaleString('en-IN')}<div style="font-size:10px;color:${out > 0 ? '#b55a00' : 'var(--g1)'}">Due ₹${out.toLocaleString('en-IN')}</div></td>
+          <td><span class="badge ${badge}">${status}</span><div style="font-size:10px;color:var(--g1);margin-top:2px">${escapeHtmlConsent(v.dueDate || (v.billMode === 'on-use' ? 'On use' : '—'))}</div></td>
+          <td style="font-size:10px" onclick="event.stopPropagation()">${v.billFile?.name || v.uploadedName ? `<a href="#" onclick="event.preventDefault();openInventoryBill('${idArg}')">${escapeHtmlConsent(v.billFile?.name || v.uploadedName)}</a>` : '—'}</td>
+          <td onclick="event.stopPropagation()">${out > 0 ? `<button type="button" class="btn btn-xs btn-gold" onclick="bmhMarkVendorPaid('${idArg}')">Pay</button>` : '—'} <button type="button" class="btn btn-xs btn-outline" onclick="bmhEditVendorBill('${idArg}')">Edit</button>${isAdminUser() ? ` <button type="button" class="btn btn-xs btn-gray" onclick="bmhDeleteVendorBill('${idArg}')">Del</button>` : ''}</td>
+        </tr>`;
+      }).join('');
+      return header + branches;
     }).join('')}</tbody></table><div style="margin-top:8px;font-size:12px;font-weight:900;color:var(--bmh-blue)">Filtered total due ₹${totalDue.toLocaleString('en-IN')}</div>` : '<div style="color:var(--g1);font-size:12px">No vendor bills.</div>';
   });
   const mini = document.getElementById('inv-vendor-mini');
@@ -12180,7 +12220,7 @@ function bmhRenderVendorTables() {
             <div style="font-weight:900;color:${out>0?'#b55a00':'#1a8c3c'}">₹${Number(v.amount || 0).toLocaleString('en-IN')}</div>
             <div style="margin-top:4px"><span class="badge ${status === 'paid' ? 'bd-green' : 'bd-orange'}">${status}</span></div>
             <div style="font-size:10px;color:${out>0?'#b55a00':'#1a8c3c'};margin-top:4px">Due ₹${out.toLocaleString('en-IN')}</div>
-            <div style="margin-top:6px;display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap">${out > 0 ? `<button type="button" class="btn btn-xs btn-gold" onclick="bmhMarkVendorPaid('${v.id}')">Pay bill</button>` : ''}<button type="button" class="btn btn-xs btn-outline" onclick="bmhEditVendorBill('${v.id}')">Edit</button><button type="button" class="btn btn-xs btn-outline" onclick="bmhPayVendorOutstanding('${String(v.vendor || '').replace(/'/g, "\\'")}')">Part pay vendor</button></div>
+            <div style="margin-top:6px;display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap">${out > 0 ? `<button type="button" class="btn btn-xs btn-gold" onclick="bmhMarkVendorPaid('${v.id}')">Pay bill</button>` : ''}<button type="button" class="btn btn-xs btn-outline" onclick="openInventoryBill('${v.id}')">Open bill</button><button type="button" class="btn btn-xs btn-outline" onclick="bmhEditVendorBill('${v.id}')">Edit</button><button type="button" class="btn btn-xs btn-outline" onclick="bmhPayVendorOutstanding('${String(v.vendor || '').replace(/'/g, "\\'")}')">Part pay vendor</button>${isAdminUser() ? `<button type="button" class="btn btn-xs btn-gray" onclick="bmhDeleteVendorBill('${v.id}')">Delete bill</button>` : ''}</div>
           </div>
         </div>
         <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
@@ -12445,6 +12485,15 @@ function bmhSyncVendorSearchFromSelect() {
   const sel = document.getElementById('inv-vendor-filter');
   const inp = document.getElementById('inv-vendor-search');
   if (sel && inp) inp.value = sel.value || '';
+  bmhSyncVendorBillEntryVendor(sel?.value || inp?.value || '');
+}
+function bmhSyncVendorBillEntryVendor(value) {
+  const vendor = String(value || '').trim();
+  if (!vendor) return;
+  ['inv-vend-name', 'bmh-vend-name', 'inv-in-vendor', 'inv-iol-vendor'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) el.value = vendor;
+  });
 }
 function bmhFilterVendorFromSummary(vendor) {
   window._bmhVendorBillSel = '';
@@ -12452,9 +12501,11 @@ function bmhFilterVendorFromSummary(vendor) {
   const inp = document.getElementById('inv-vendor-search');
   if (sel) sel.value = vendor || '';
   if (inp) inp.value = vendor || '';
+  bmhSyncVendorBillEntryVendor(vendor || '');
   bmhRenderVendorTables();
 }
 window.bmhSyncVendorSearchFromSelect = bmhSyncVendorSearchFromSelect;
+window.bmhSyncVendorBillEntryVendor = bmhSyncVendorBillEntryVendor;
 window.bmhFilterVendorFromSummary = bmhFilterVendorFromSummary;
 function bmhSelectedVendorBillIds() {
   return Array.from(document.querySelectorAll('.inv-vendor-bill-check:checked')).map(function (el) {
@@ -12527,7 +12578,10 @@ function bmhEditVendorBill(id) {
 }
 window.bmhEditVendorBill = bmhEditVendorBill;
 function bmhAddVendorBill() {
-  const vendor = document.getElementById('inv-vend-name')?.value?.trim() || document.getElementById('bmh-vend-name')?.value?.trim();
+  const vendor = document.getElementById('inv-vend-name')?.value?.trim()
+    || document.getElementById('bmh-vend-name')?.value?.trim()
+    || document.getElementById('inv-vendor-filter')?.value?.trim()
+    || document.getElementById('inv-vendor-search')?.value?.trim();
   const inv = document.getElementById('inv-vend-inv')?.value?.trim() || document.getElementById('bmh-vend-inv')?.value?.trim();
   const amt = parseFloat(document.getElementById('inv-vend-amt')?.value || document.getElementById('bmh-vend-amt')?.value || '0');
   const due = document.getElementById('inv-vend-due')?.value || document.getElementById('bmh-vend-due')?.value || localDateKey(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000));
@@ -13124,14 +13178,20 @@ function openInventoryBill(id) {
   const vendorBill = (window.BMH_VENDOR_BILLS || []).find(function (r) { return r.id === id; });
   const officeBill = (window.BMH_OFFICE_BILLS || []).find(function (r) { return r.id === id; });
   const file = purchase?.billFile || vendorBill?.billFile || officeBill?.billFile || null;
-  if (!file?.data) { showToast('Bill scan not available', 'w'); return; }
+  const data = bmhBillFileData(file);
+  const type = bmhBillFileType(file);
+  if (!data) { showToast('Bill scan not available', 'w'); return; }
   const w = window.open('', '_blank');
   if (!w) { showToast('Allow popups to open bill scan', 'w'); return; }
-  if (/pdf/i.test(file.type || '')) w.location.href = file.data;
-  else {
-    w.document.write(`<!DOCTYPE html><html><body style="margin:0;background:#111;display:flex;align-items:center;justify-content:center"><img src="${file.data}" alt="${escapeHtmlConsent(file.name || 'Bill')}" style="max-width:100vw;max-height:100vh"></body></html>`);
+  const title = escapeHtmlConsent(file?.name || vendorBill?.invoiceNo || purchase?.invoiceNo || officeBill?.label || 'Bill');
+  const download = file?.name ? `<a href="${data}" download="${escapeHtmlConsent(file.name)}" style="color:#fff;text-decoration:none;font-size:12px;font-weight:800">Download</a>` : '';
+  if (/pdf/i.test(type) || /^data:application\/pdf/i.test(data)) {
+    w.document.write(`<!DOCTYPE html><html><head><title>${title}</title></head><body style="margin:0;background:#111;height:100vh;display:flex;flex-direction:column"><div style="height:38px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;color:#fff;font-family:Arial;background:#1A3C6E"><strong style="font-size:12px">${title}</strong>${download}</div><iframe src="${data}" title="${title}" style="border:0;width:100%;flex:1;background:#fff"></iframe></body></html>`);
     w.document.close();
+    return;
   }
+  w.document.write(`<!DOCTYPE html><html><head><title>${title}</title></head><body style="margin:0;background:#111;min-height:100vh;display:flex;flex-direction:column"><div style="height:38px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;color:#fff;font-family:Arial;background:#1A3C6E"><strong style="font-size:12px">${title}</strong>${download}</div><div style="flex:1;display:flex;align-items:center;justify-content:center;overflow:auto"><img src="${data}" alt="${title}" style="max-width:100vw;max-height:calc(100vh - 38px);object-fit:contain"></div></body></html>`);
+  w.document.close();
 }
 window.openInventoryBill = openInventoryBill;
 function saveInventoryIndent() {
