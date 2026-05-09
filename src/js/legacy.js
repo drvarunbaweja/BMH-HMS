@@ -9682,12 +9682,47 @@ function bindInventoryUseItemSearch() {
 }
 function inferChargeCategoryFromService(forStr) {
   const s = (forStr || '').toLowerCase();
+  const fromSettings = inferChargeCategoryFromSettingsCharge(forStr);
+  if (fromSettings) return fromSettings;
   // Investigations & imaging first (avoid mis-tagging e.g. IOL Master / biometry as surgery)
   if (/oct|hvf|fundus|biomet|visual field|cbc|hb|thyroid|lipid|lab|investigation|diagnostic|erg|vep|\beeg\b|topograph|specular|pachymetry|gonioscopy|perimetry|b-?scan|ultrasound.*\beye\b|ffa|icg|angiograph|schirmer|tbut|dry\s*eye|corneal topography|aberrometry|i\.?\s*o\.?\s*l\.?\s*master|iol\s*master|lenstar|pentacam|specular microscopy/.test(s)) return 'diagnostic';
   // Surgery / OT / procedures (broad; includes IOL/lens implants used in cataract surgery)
   if (/\b(surgery|surgical|surgeon|cataract|phaco|phacoemulsification|sics|trab|trabeculectomy|lasik|prk|smile|vitrectomy|retina\s*surgery|glaucoma\s*surgery|keratoplasty|corneal\s*graft|pterygium|squint|strabismus|oculoplastic|dacryocystorhinostomy|dacryo|dcr|buckling|scleral\s*buckle|intravitreal|ivt|anti\s*-?\s*vegf|ot\b|o\.?\s*t\.?|theatre|theater|operating|operation\b|minor\s*ot|major\s*ot|ot\s*charges|theatre\s*charges|ot\s*time|anaesthesia.*surgery|capsulorhexis|iol\s*implant|iol\s*insertion|iol\s*charges|iol\s*package|iol\s*power|pmics|suture\s*removal|surgery\s*pack|pack\s*rate|surgery\s*charges|procedure\s*charges|operative|peribulbar|retrobulbar|sub-?tenon|foldable\s*lens|indian\s*lens|indian\s*foldable|foreign\s*lens|hydrophilic|hydrophobic|acrylic\s*lens|toric\s*lens|multifocal\s*lens|monofocal\s*lens|intraocular\s*lens|lens\s*implant|lens\s*package|lens\s*charges|viscoelastic|trypan\s*blue|oph.*pack|cataract.*pack|eye\s*drops.*surgery|surgical.*kit|diathermy|endothelial\s*keratoplasty|dsek|dmek|dalk|hema|c3r|cross.?link)/.test(s)) return 'surgery';
   if (/consult|follow|review|opd|out\s*patient|first\s*visit|registration|consultation|post\s*-?\s*op/.test(s)) return 'consultation';
   return 'other';
+}
+function normalizeChargeLookupText(value) {
+  return String(value || '').toLowerCase().replace(/[-–—]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+function mapSettingsChargeKindToCollectionCategory(row) {
+  if (!row) return '';
+  const kind = normalizeChargeLookupText(row.kind || '');
+  const cat = normalizeChargeLookupText(row.cat || '');
+  const name = normalizeChargeLookupText(row.name || '');
+  const blob = [kind, cat, name, normalizeChargeLookupText(row.parent || '')].join(' ');
+  if (/consult|opd|registration|follow/.test(blob)) return 'consultation';
+  if (/diagnostic|investigation|lab|test|scan|oct|fundus|hvf|field|biomet|topograph|specular|pachymetry|blood|urine|ecg|eeg/.test(blob)) return 'diagnostic';
+  if (/surgery|procedure|sx|ot|operation|laser|injection|delivery|lscs|mtp|iol|implant/.test(blob)) return 'surgery';
+  return '';
+}
+function inferChargeCategoryFromSettingsCharge(serviceText) {
+  const needle = normalizeChargeLookupText(serviceText);
+  let rows = [];
+  try { rows = Array.isArray(CHARGES_DATA) ? CHARGES_DATA.filter(Boolean) : []; } catch (e) { rows = []; }
+  if (!needle || !rows.length) return '';
+  const exact = rows.find(function (row) {
+    const name = normalizeChargeLookupText(row.name || '');
+    return name && needle === name;
+  });
+  const parentExact = rows.find(function (row) {
+    const parent = normalizeChargeLookupText(row.parent || '');
+    return parent && needle === parent;
+  });
+  const contains = rows.find(function (row) {
+    const name = normalizeChargeLookupText(row.name || '');
+    return name && (needle.includes(name) || name.includes(needle));
+  });
+  return mapSettingsChargeKindToCollectionCategory(exact || parentExact || contains);
 }
 function bmhIsEEGCharge(row) {
   const hay = [row?.desc, row?.name, row?.service, row?.for].filter(Boolean).join(' ').toLowerCase();
@@ -33547,9 +33582,6 @@ function renderCollectionDashboard() {
   const deptEl = document.getElementById('rc-dept-collection');
   if(deptEl) {
     const depts = ['ophtho','obg','psych','skin'];
-    const isConsultationPurpose = function (purpose) {
-      return /consult|follow|post\s*-?\s*op|opd|review|registration|new consultation/.test(String(purpose || '').toLowerCase());
-    };
     deptEl.innerHTML = depts.map(dept => {
       const dTxn = collected.filter(t=>normalizeDeptKeyForQueue(t.dept || '') === dept);
       const dTotal = dTxn.reduce((s,t)=>s+getNetTransactionAmount(t),0);
@@ -33560,25 +33592,7 @@ function renderCollectionDashboard() {
           return transactionHasChargeCategory(t, want);
         }).reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
       };
-      const todayConsultationPatients = Array.from(new Map((PATIENTS || []).filter(function (p) {
-        if (!p || !centreMatch(p)) return false;
-        if (normalizeDeptKeyForQueue(p.dept || '') !== dept) return false;
-        if (!isConsultationPurpose(p.purpose || '')) return false;
-        return localDateKey(p.checkinAt || p.createdAt || p.queueDate || p.visitDate || p.updatedAt) === todayKeyLocal;
-      }).map(function (p) { return [p.bmhId || p.id || p.name, p]; })).values());
-      const pendingConsultRequests = (PAY_REQUESTS || []).filter(function (r) {
-        if (!r || String(r.status || '').toLowerCase() === 'paid') return false;
-        if (!centreMatch(r)) return false;
-        if (normalizeDeptKeyForQueue(r.dept || '') !== dept) return false;
-        if (localDateKey(r.updatedAt || r.date || r.createdAt) !== todayKeyLocal) return false;
-        return inferChargeCategoryFromService(r.for || r.service || r.desc || '') === 'consultation';
-      });
-      const paidConsultIds = new Set(dTxn.filter(function (t) {
-        return transactionHasChargeCategory(t, 'consultation') && getNetTransactionAmount(t) > 0;
-      }).map(function (t) { return t.bmhId || t.patient || ''; }).filter(Boolean));
-      const unpaidConsultIds = new Set(pendingConsultRequests.map(function (r) { return r.bmhId || r.patient || ''; }).filter(Boolean));
-      const noFeeConsultCount = todayConsultationPatients.filter(function (p) { return !!p.consultationNoFee; }).length;
-      const hasDeptActivity = dTxn.length || pendingConsultRequests.length || todayConsultationPatients.length;
+      const hasDeptActivity = dTxn.length;
       if(!hasDeptActivity) return '';
       const opdD = sumCat('consultation');
       const invD = sumCat('diagnostic');
@@ -33600,7 +33614,6 @@ function renderCollectionDashboard() {
               <span style="cursor:pointer" onclick="event.stopPropagation();openRcCollectionDetailModal('${dept}','sx')">Sx/Proc <strong style="color:#6b21a8">${fmt(sxD)}</strong></span>
               ${otherD > 0 ? `<span style="opacity:.35">·</span><span style="cursor:pointer" onclick="event.stopPropagation();openRcCollectionDetailModal('${dept}','other')">Other <strong>${fmt(otherD)}</strong></span>` : ''}
             </div>
-            <div style="font-size:10.5px;color:var(--g1);margin-top:3px">OPD: paid ${paidConsultIds.size} · unpaid ${unpaidConsultIds.size} · no fee ${noFeeConsultCount}</div>
             ${!chk ? '<div style="font-size:9px;color:var(--orange);margin-top:4px">Note: category split may not match total if service text is unclear.</div>' : ''}
             <div style="font-size:10.5px;color:var(--g1);margin-top:2px">${dTxn.length} transaction${dTxn.length>1?'s':''} today</div>
             <div style="margin-top:6px"><button type="button" class="btn btn-xs btn-outline" onclick="event.stopPropagation();printRcCollectionDetail('${dept}','all')">🖨️ Print Dept</button></div>
@@ -33627,11 +33640,6 @@ function renderCollectionDashboard() {
   // All transactions
   const allEl = document.getElementById('rc-all-txn');
   if(allEl) {
-    const pendingToday = (PAY_REQUESTS || []).filter(function (r) {
-      if (!r || String(r.status || '').toLowerCase() === 'paid') return false;
-      if (!centreMatch(r)) return false;
-      return localDateKey(r.updatedAt || r.date || r.createdAt) === todayKeyLocal;
-    });
     const paidHtml = collected.length ? collected.slice().reverse().map(t=>`
       <div style="display:flex;align-items:center;gap:9px;padding:8px 12px;background:${t.collected!==false?'#fff':'var(--orange-lt)'};border-radius:var(--rsm);border:1px solid ${t.collected!==false?'var(--g5)':'rgba(255,149,0,.3)'}">
         <div style="font-size:16px">${DEPT_COLORS[normalizeDeptKeyForQueue(t.dept || '')]?.label?.split(' ')[0]||'🏥'}</div>
@@ -33645,23 +33653,7 @@ function renderCollectionDashboard() {
         ${receptionQueueRestoreButtonHtml(t.bmhId, { label: '↩', title: "Restore this patient to today's queue", style: 'background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1px solid var(--bmh-blue);border-radius:5px;padding:2px 6px;font-size:11px;cursor:pointer;flex-shrink:0' })}
         <button title="Delete this transaction" onclick="deleteTransaction('${t.id}')" style="background:var(--red-lt);color:var(--red);border:1px solid rgba(255,59,48,.3);border-radius:5px;padding:2px 6px;font-size:11px;cursor:pointer;flex-shrink:0">🗑️</button>
       </div>`).join('') : '<div style="padding:10px;color:var(--g1);font-size:12px">No paid transactions today.</div>';
-    const unpaidHtml = pendingToday.length ? pendingToday.slice().reverse().map(function (r) {
-      const dept = normalizeDeptKeyForQueue(r.dept || '');
-      return `
-      <div style="display:flex;align-items:center;gap:9px;padding:8px 12px;background:var(--orange-lt);border-radius:var(--rsm);border:1px solid rgba(255,149,0,.3)">
-        <div style="font-size:16px">${DEPT_COLORS[dept]?.label?.split(' ')[0]||'🏥'}</div>
-        <div style="flex:1">
-          <div style="font-size:12.5px;font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap">${r.patient||'—'} <span style="font-family:monospace;font-size:10px;color:var(--bmh-teal)">${r.bmhId||''}</span></div>
-          <div style="font-size:11px;color:var(--g1)">${r.for||r.service||'—'}</div>
-        </div>
-        <span class="badge bd-orange" style="font-size:9.5px">⏳ Pending</span>
-        <div style="font-weight:900;color:var(--orange);font-size:13px">₹${Number(r.amount||0).toLocaleString('en-IN')}</div>
-      </div>`;
-    }).join('') : '<div style="padding:10px;color:var(--g1);font-size:12px">No unpaid requests today.</div>';
-    allEl.innerHTML = '<div style="font-size:11px;font-weight:900;color:#166534;text-transform:uppercase;margin-bottom:6px">Paid patients</div>'
-      + paidHtml
-      + '<div style="font-size:11px;font-weight:900;color:#8a4200;text-transform:uppercase;margin:10px 0 6px">Unpaid patients</div>'
-      + unpaidHtml;
+    allEl.innerHTML = '<div style="font-size:11px;font-weight:900;color:#166534;text-transform:uppercase;margin-bottom:6px">Collected payments</div>' + paidHtml;
   }
 }
 
@@ -33681,21 +33673,6 @@ function openRcCollectionDetailModal(dept, catKey) {
     });
   }
   const fmt = function (n) { return '₹' + n.toLocaleString('en-IN'); };
-  const isConsultationPurpose = function (purpose) {
-    const p = String(purpose || '').toLowerCase();
-    return /consult|follow|post\s*-?\s*op|opd|review|registration|new consultation/.test(p);
-  };
-  const todayConsultationPatients = Array.from(new Map((PATIENTS || []).filter(function (p) {
-    if (!p || !centreMatch(p)) return false;
-    const primaryDeptMatch = normalizeDeptKeyForQueue(p.dept || '') === normalizeDeptKeyForQueue(dept || '');
-    const crossRefMatch = (Array.isArray(p.crossRefs) ? p.crossRefs : []).some(function (r) {
-      return r && String(normalizeDeptKeyForQueue(r.toDept || r.dept || '')).toLowerCase() === String(dept || '').toLowerCase()
-        && localDateKey(r.createdAt || r.date || r.updatedAt || r.seenAt) === todayKeyLocal;
-    });
-    if (!primaryDeptMatch && !crossRefMatch) return false;
-    if (!isConsultationPurpose(p.purpose || '')) return false;
-    return crossRefMatch || localDateKey(p.checkinAt || p.createdAt || p.queueDate || p.visitDate || p.updatedAt) === todayKeyLocal;
-  }).map(function (p) { return [p.bmhId || p.id || p.name, p]; })).values());
   const dc = DEPT_COLORS[dept];
   const title = (dc?.label || dept) + ' — ' + ({ opd: 'OPD / consultations', inv: 'Investigations & diagnostics', sx: 'Procedures & surgery', other: 'Other' }[catKey] || catKey);
   const bodyEl = document.getElementById('m-rc-collection-detail-body');
@@ -33705,16 +33682,6 @@ function openRcCollectionDetailModal(dept, catKey) {
   const paidTotal = list.reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
   const paidPatients = new Set(list.map(function (t) { return t.bmhId || ''; }).filter(Boolean)).size;
   const wantCat = catKey === 'opd' ? 'consultation' : catKey === 'inv' ? 'diagnostic' : catKey === 'sx' ? 'surgery' : null;
-  let unpaid = [];
-  if (wantCat) {
-    unpaid = (PAY_REQUESTS || []).filter(function (r) {
-      if (String(r.status || '').toLowerCase() === 'paid') return false;
-      if (String(r.dept || '').toLowerCase() !== String(dept || '').toLowerCase()) return false;
-      return inferChargeCategoryFromService(r.for || '') === wantCat;
-    });
-  }
-  const unpaidTotal = unpaid.reduce(function (s, r) { return s + (Number(r.amount) || 0); }, 0);
-  const unpaidPatients = new Set(unpaid.map(function (r) { return r.bmhId || ''; }).filter(Boolean)).size;
   const paidRows = list.map(function (t) {
     const rowStyle = 'display:flex;align-items:center;gap:7px;padding:7px 8px;border-bottom:1px solid var(--g5);font-size:12px';
     const attrs = t.bmhId
@@ -33725,21 +33692,6 @@ function openRcCollectionDetailModal(dept, catKey) {
       + '<span class="badge bd-gray" style="font-size:9px">' + escapeHtmlConsent(t.mode || '—') + '</span>'
       + '<div style="font-weight:900;color:#1a8c3c">' + fmt(getNetTransactionAmount(t)) + '</div>'
       + receptionQueueRestoreButtonHtml(t.bmhId, { label: '↩', title: 'Restore this patient to today\'s queue', style: 'background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1px solid var(--bmh-blue);border-radius:5px;padding:2px 6px;font-size:10px;cursor:pointer;flex-shrink:0' })
-      + '</div>';
-  }).join('');
-  const unpaidRows = unpaid.map(function (r) {
-    return '<div style="display:flex;align-items:center;gap:7px;padding:7px 8px;border-bottom:1px solid var(--g5);font-size:12px">'
-      + '<div style="flex:1"><div style="font-weight:800">' + escapeHtmlConsent(r.patient || '') + '</div><div style="font-size:10.5px;color:var(--g1)">' + escapeHtmlConsent(r.for || '—') + '</div></div>'
-      + '<span class="badge bd-orange" style="font-size:9px">Pending</span>'
-      + '<div style="font-weight:900;color:#b45309">' + fmt(Number(r.amount) || 0) + '</div>'
-      + receptionQueueRestoreButtonHtml(r.bmhId, { label: '↩', title: 'Restore this patient to today\'s queue', style: 'background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1px solid var(--bmh-blue);border-radius:5px;padding:2px 6px;font-size:10px;cursor:pointer;flex-shrink:0' })
-      + '<select id="pay-mode-' + String(r.id).replace(/"/g, '&quot;') + '" style="height:28px;border:1px solid var(--g4);border-radius:6px;padding:0 6px;font-size:10.5px;background:#fff">'
-      + '<option value="Cash"' + (isInsuranceLikeMode(r.mode || r.ins || '') ? '' : ' selected') + '>Cash</option>'
-      + '<option value="UPI"' + (String(r.mode || '').toLowerCase() === 'upi' ? ' selected' : '') + '>UPI</option>'
-      + '<option value="Credit Card"' + (String(r.mode || '').toLowerCase() === 'credit card' ? ' selected' : '') + '>Credit Card</option>'
-      + '<option value="Insurance/TPA"' + (isInsuranceLikeMode(r.mode || r.ins || '') ? ' selected' : '') + '>Insurance/TPA</option>'
-      + '</select>'
-      + '<button type="button" class="btn btn-xs" style="background:var(--green);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:10.5px;font-weight:800;cursor:pointer" onclick="collectPayment(\'' + String(r.id).replace(/'/g, "\\'") + '\',\'' + String(r.id).replace(/'/g, "\\'") + '\')">Collect</button>'
       + '</div>';
   }).join('');
   const groupedByService = {};
@@ -33761,24 +33713,11 @@ function openRcCollectionDetailModal(dept, catKey) {
       : ' style="' + rowStyle + '"';
     return '<div' + attrs + '><div><strong>' + escapeHtmlConsent(label) + '</strong> · ' + g.count + ' patient(s)</div><div style="font-weight:800">' + fmt(g.amount) + '</div></div>';
   }).join('');
-  const consultPaidIds = new Set(list.filter(function (t) { return getNetTransactionAmount(t) > 0; }).map(function (t) { return t.bmhId || ''; }).filter(Boolean));
-  const totalConsultPts = new Set(todayConsultationPatients.map(function (p) { return p.bmhId; })).size;
-  const paidConsult = consultPaidIds.size;
-  // Only count patients explicitly marked as no-fee, not just those without a transaction
-  const noFeeConsult = todayConsultationPatients.filter(function (p) { return !!p.consultationNoFee; }).length;
   let html = '';
   if (wantCat) {
-    const rightLabel = catKey === 'opd' ? 'No fee consultations' : 'Unpaid (pending requests)';
-    const rightCount = catKey === 'opd' ? noFeeConsult : unpaidPatients;
-    const rightAmt = catKey === 'opd' ? '' : (' · <strong style="color:#b45309">' + fmt(unpaidTotal) + '</strong>');
-    const leftPatients = catKey === 'opd' ? paidConsult : paidPatients;
-    const titleText = catKey === 'opd' ? 'Today — paid vs no-fee consultations' : 'Today — paid vs unpaid';
-    html += '<div style="background:linear-gradient(180deg,#fff7ed,#fff);border:1px solid #f59e0b;border-radius:10px;padding:10px 12px;margin-bottom:12px">'
-      + '<div style="font-size:11px;font-weight:900;color:#8a4200;text-transform:uppercase;margin-bottom:6px">' + titleText + '</div>'
-      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12px">'
-      + '<div><span style="color:var(--g1)">Paid (collected)</span><br><strong>' + leftPatients + '</strong> patient(s) · <strong style="color:#1a8c3c">' + fmt(paidTotal) + '</strong></div>'
-      + '<div><span style="color:var(--g1)">' + rightLabel + '</span><br><strong>' + rightCount + '</strong> patient(s)' + rightAmt + '</div>'
-      + '</div></div>';
+    html += '<div style="background:linear-gradient(180deg,#f0fdf4,#fff);border:1px solid #86efac;border-radius:10px;padding:10px 12px;margin-bottom:12px">'
+      + '<div style="font-size:11px;font-weight:900;color:#166534;text-transform:uppercase;margin-bottom:6px">Collected today</div>'
+      + '<div style="font-size:12px"><strong>' + paidPatients + '</strong> patient(s) · <strong style="color:#1a8c3c">' + fmt(paidTotal) + '</strong></div></div>';
     html += '<details open style="margin-bottom:8px;border:1px solid var(--g5);border-radius:8px;padding:8px 10px;background:#fff">'
       + '<summary style="cursor:pointer;font-weight:800;font-size:12px">Service / purpose summary</summary>'
       + '<div style="margin-top:6px">' + (groupedRows || '<div style="padding:10px;color:var(--g1);font-size:12px">No grouped items in this category.</div>') + '</div></details>';
@@ -33787,9 +33726,6 @@ function openRcCollectionDetailModal(dept, catKey) {
     html += '<details open style="margin-bottom:8px;border:1px solid var(--g5);border-radius:8px;padding:8px 10px;background:#fff">'
       + '<summary style="cursor:pointer;font-weight:800;font-size:12px">Collected transactions (' + list.length + ')</summary>'
       + '<div style="margin-top:6px">' + (paidRows || '<div style="padding:10px;color:var(--g1);font-size:12px">No collected items in this category today.</div>') + '</div></details>';
-    html += '<details style="margin-bottom:8px;border:1px solid var(--g5);border-radius:8px;padding:8px 10px;background:#fff">'
-      + '<summary style="cursor:pointer;font-weight:800;font-size:12px">Pending payment requests (' + unpaid.length + ')</summary>'
-      + '<div style="margin-top:6px">' + (unpaidRows || '<div style="padding:10px;color:var(--g1);font-size:12px">No pending requests in this category.</div>') + '</div></details>';
   } else {
     html += list.length ? paidRows : '<div style="padding:14px;color:var(--g1);font-size:12px">No transactions in this category for today.</div>';
   }
