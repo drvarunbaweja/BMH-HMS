@@ -9733,15 +9733,36 @@ function inferChargeCategoryFromService(forStr) {
 function normalizeChargeLookupText(value) {
   return String(value || '').toLowerCase().replace(/[-–—]/g, ' ').replace(/\s+/g, ' ').trim();
 }
+function normalizeChargeCollectionCategoryValue(value) {
+  const s = normalizeChargeLookupText(value);
+  if (!s) return '';
+  if (/consult|opd|registration|follow|post\s*op|review/.test(s)) return 'consultation';
+  if (/diagnostic|investigation|investigations|lab|test|scan|oct|fundus|hvf|field|biomet|topograph|specular|pachymetry|blood|urine|ecg|eeg/.test(s)) return 'diagnostic';
+  if (/surgery|surgeries|procedure|procedures|\bsx\b|\bot\b|operation|laser|injection|delivery|lscs|mtp|iol|implant/.test(s)) return 'surgery';
+  return '';
+}
 function mapSettingsChargeKindToCollectionCategory(row) {
   if (!row) return '';
-  const kind = normalizeChargeLookupText(row.kind || '');
-  const cat = normalizeChargeLookupText(row.cat || '');
+  const explicitFields = [
+    row.collectionCategory,
+    row.chargeCategory,
+    row.category,
+    row.cat
+  ];
+  for (let i = 0; i < explicitFields.length; i += 1) {
+    const explicit = normalizeChargeCollectionCategoryValue(explicitFields[i]);
+    if (explicit) return explicit;
+  }
   const name = normalizeChargeLookupText(row.name || '');
-  const blob = [kind, cat, name, normalizeChargeLookupText(row.parent || '')].join(' ');
+  const blob = [name, normalizeChargeLookupText(row.parent || '')].join(' ');
   if (/consult|opd|registration|follow/.test(blob)) return 'consultation';
   if (/diagnostic|investigation|lab|test|scan|oct|fundus|hvf|field|biomet|topograph|specular|pachymetry|blood|urine|ecg|eeg/.test(blob)) return 'diagnostic';
   if (/surgery|procedure|sx|ot|operation|laser|injection|delivery|lscs|mtp|iol|implant/.test(blob)) return 'surgery';
+  const genericFields = [row.kind, row.type, row.group];
+  for (let i = 0; i < genericFields.length; i += 1) {
+    const generic = normalizeChargeCollectionCategoryValue(genericFields[i]);
+    if (generic) return generic;
+  }
   return '';
 }
 function inferChargeCategoryFromSettingsCharge(serviceText) {
@@ -9761,7 +9782,16 @@ function inferChargeCategoryFromSettingsCharge(serviceText) {
     const name = normalizeChargeLookupText(row.name || '');
     return name && (needle.includes(name) || name.includes(needle));
   });
-  return mapSettingsChargeKindToCollectionCategory(exact || parentExact || contains);
+  const direct = mapSettingsChargeKindToCollectionCategory(exact || parentExact || contains);
+  if (direct) return direct;
+  const needleCategory = normalizeChargeCollectionCategoryValue(needle);
+  if (!needleCategory) return '';
+  const categoryMatch = rows.find(function (row) {
+    if (mapSettingsChargeKindToCollectionCategory(row) !== needleCategory) return false;
+    const rowText = normalizeChargeLookupText([row.name, row.parent, row.cat, row.kind, row.category, row.chargeCategory, row.collectionCategory].filter(Boolean).join(' '));
+    return rowText && rowText.split(' ').some(function (part) { return part.length > 3 && needle.includes(part); });
+  });
+  return categoryMatch ? needleCategory : '';
 }
 function bmhIsEEGCharge(row) {
   const hay = [row?.desc, row?.name, row?.service, row?.for].filter(Boolean).join(' ').toLowerCase();
@@ -9931,21 +9961,26 @@ function isCollectionDashboardTxn(txn) {
 }
 function getTransactionPrimaryChargeCategory(txn) {
   if (!txn) return 'other';
-  const billCats = Array.isArray(txn.billCats) ? txn.billCats.map(function (c) { return String(c || '').toLowerCase(); }) : (txn.billCats && typeof txn.billCats === 'object' ? Object.values(txn.billCats).map(function (c) { return String(c || '').toLowerCase(); }) : []);
+  const billCats = Array.isArray(txn.billCats)
+    ? txn.billCats.map(function (c) { return normalizeChargeCollectionCategoryValue(c) || String(c || '').toLowerCase(); })
+    : (txn.billCats && typeof txn.billCats === 'object' ? Object.values(txn.billCats).map(function (c) { return normalizeChargeCollectionCategoryValue(c) || String(c || '').toLowerCase(); }) : []);
   const serviceCat = String(inferChargeCategoryFromService(txn.service || txn.for || txn.desc || '') || '').toLowerCase();
-  if (serviceCat === 'surgery' || billCats.includes('surgery')) return 'surgery';
-  if (serviceCat === 'diagnostic' || billCats.includes('diagnostic')) return 'diagnostic';
+  if (billCats.includes('surgery')) return 'surgery';
+  if (billCats.includes('diagnostic')) return 'diagnostic';
+  if (billCats.includes('consultation')) return 'consultation';
+  if (serviceCat === 'surgery') return 'surgery';
+  if (serviceCat === 'diagnostic') return 'diagnostic';
   if (Array.isArray(txn.chargeAllocations) && txn.chargeAllocations.length && txn.bmhId) {
     const lines = window.BMH_PATIENT_CHARGES[txn.bmhId] || [];
     const cats = txn.chargeAllocations.map(function (alloc) {
       const line = lines.find(function (row) { return String(row?.id || '') === String(alloc?.lineId || ''); });
-      return line ? String(line.cat || inferChargeCategoryFromService(line.desc || line.name || '') || 'other').toLowerCase() : '';
+      return line ? String(normalizeChargeCollectionCategoryValue(line.cat) || inferChargeCategoryFromService(line.desc || line.name || '') || 'other').toLowerCase() : '';
     }).filter(Boolean);
     if (cats.includes('surgery')) return 'surgery';
     if (cats.includes('diagnostic')) return 'diagnostic';
     if (cats.includes('consultation')) return 'consultation';
   }
-  if (billCats.includes('consultation') || isConsultationTransaction(txn)) return 'consultation';
+  if (isConsultationTransaction(txn)) return 'consultation';
   return serviceCat || 'other';
 }
 function transactionHasChargeCategory(txn, category) {
@@ -9963,11 +9998,11 @@ function addBmhPatientCharge(bmhId, row) {
   saveBmhFinancials();
   bmhSyncPatientRunningBalance(bmhId);
 }
-function buildPaidReceptionChargeRow(txnId, desc, fee) {
+function buildPaidReceptionChargeRow(txnId, desc, fee, category) {
   const amount = Math.max(0, Number(fee) || 0);
   return {
     id: 'chg-' + txnId,
-    cat: inferChargeCategoryFromService(desc),
+    cat: category || inferChargeCategoryFromService(desc),
     desc: desc,
     qty: 1,
     rate: amount,
@@ -10045,9 +10080,9 @@ function bmhAllocatePaymentToChargeLines(bmhId, amount, opts) {
     const lineIdSet = new Set(opts.lineIds.map(String));
     targetLines = targetLines.filter(function (line) { return lineIdSet.has(String(line.id || '')); });
   } else if (Array.isArray(opts?.categories) && opts.categories.length) {
-    const catSet = new Set(opts.categories.map(function (c) { return String(c || '').toLowerCase(); }));
+    const catSet = new Set(opts.categories.map(function (c) { return normalizeChargeCollectionCategoryValue(c) || String(c || '').toLowerCase(); }));
     targetLines = targetLines.filter(function (line) {
-      const cat = String(line.cat || inferChargeCategoryFromService(line.desc || line.name || '') || 'other').toLowerCase();
+      const cat = String(normalizeChargeCollectionCategoryValue(line.cat) || inferChargeCategoryFromService(line.desc || line.name || '') || 'other').toLowerCase();
       return catSet.has(cat);
     });
   }
@@ -10079,18 +10114,18 @@ function bmhTotalReceivedForPatient(bmhId) {
 }
 function bmhGetChargeCategoriesForPatient(bmhId) {
   return Array.from(new Set((window.BMH_PATIENT_CHARGES[bmhId] || []).map(function (line) {
-    return String(line.cat || inferChargeCategoryFromService(line.desc || line.name || '') || 'other').toLowerCase();
+    return String(normalizeChargeCollectionCategoryValue(line.cat) || inferChargeCategoryFromService(line.desc || line.name || '') || 'other').toLowerCase();
   }).filter(Boolean)));
 }
 function bmhTotalReceivedForCategories(bmhId, categories) {
-  const cats = Array.isArray(categories) ? categories.map(function (c) { return String(c || '').toLowerCase(); }).filter(Boolean) : [];
+  const cats = Array.isArray(categories) ? categories.map(function (c) { return normalizeChargeCollectionCategoryValue(c) || String(c || '').toLowerCase(); }).filter(Boolean) : [];
   if (!cats.length) return bmhTotalReceivedForPatient(bmhId);
   return (TRANSACTIONS || [])
     .filter(function (t) {
       if (t.bmhId !== bmhId || t.collected === false) return false;
       const _bc1 = Array.isArray(t.billCats) ? t.billCats : (t.billCats && typeof t.billCats === 'object' ? Object.values(t.billCats) : []);
       if (_bc1.length) {
-        return _bc1.map(function (c) { return String(c || '').toLowerCase(); }).some(function (c) { return cats.includes(c); });
+        return _bc1.map(function (c) { return normalizeChargeCollectionCategoryValue(c) || String(c || '').toLowerCase(); }).some(function (c) { return cats.includes(c); });
       }
       if (String(t.type || '').toLowerCase() === 'billing-payment' || String(t.source || '').toLowerCase() === 'billing') return true;
       const inferred = String(inferChargeCategoryFromService(t.service || t.for || t.desc || '') || 'other').toLowerCase();
@@ -10100,10 +10135,10 @@ function bmhTotalReceivedForCategories(bmhId, categories) {
 }
 function bmhTransactionMatchesBillContext(t, ctx) {
   if (!t || t.collected === false) return false;
-  const activeCats = Array.isArray(ctx?.activeCats) ? ctx.activeCats.map(function (c) { return String(c || '').toLowerCase(); }) : [];
+  const activeCats = Array.isArray(ctx?.activeCats) ? ctx.activeCats.map(function (c) { return normalizeChargeCollectionCategoryValue(c) || String(c || '').toLowerCase(); }) : [];
   const _bc2 = Array.isArray(t.billCats) ? t.billCats : (t.billCats && typeof t.billCats === 'object' ? Object.values(t.billCats) : []);
   if (_bc2.length) {
-    const txnCats = _bc2.map(function (c) { return String(c || '').toLowerCase(); });
+    const txnCats = _bc2.map(function (c) { return normalizeChargeCollectionCategoryValue(c) || String(c || '').toLowerCase(); });
     return !activeCats.length || txnCats.some(function (c) { return activeCats.includes(c); });
   }
   if (String(t.type || '').toLowerCase() === 'billing-payment' || String(t.source || '').toLowerCase() === 'billing') return true;
@@ -10115,7 +10150,7 @@ function bmhGetEffectiveBillContext(bmhId) {
   const lines = (window.BMH_PATIENT_CHARGES[bmhId] || []).slice();
   const categories = function (rows) {
     return Array.from(new Set((rows || []).map(function (line) {
-      return String(line.cat || inferChargeCategoryFromService(line.desc || line.name || '') || 'other').toLowerCase();
+      return String(normalizeChargeCollectionCategoryValue(line.cat) || inferChargeCategoryFromService(line.desc || line.name || '') || 'other').toLowerCase();
     }).filter(Boolean)));
   };
   const billableLines = lines.filter(function (line) {
@@ -10125,7 +10160,7 @@ function bmhGetEffectiveBillContext(bmhId) {
     return line && !line.isConcession && (Number(line.amount) || 0) > 0 && bmhGetChargeLineOutstanding(line) <= 0;
   });
   const settledConsultationTotal = settledLines.filter(function (line) {
-    return String(line.cat || '').toLowerCase() === 'consultation'
+    return normalizeChargeCollectionCategoryValue(line.cat) === 'consultation'
       || inferChargeCategoryFromService(line.desc || line.name || '') === 'consultation';
   }).reduce(function (s, line) { return s + (Number(line.amount) || 0); }, 0);
   const effectiveLines = billableLines;
@@ -10906,7 +10941,7 @@ function bmhCreateBillingCollectionTransactions(savedBill, billData, pt) {
   if (!(totalReceived > 0)) return [];
   const primaryLabel = bmhGetPrimaryBillLineLabel(bmhId, billData?.items || savedBill?.items || []);
   const billCats = Array.from(new Set((billData?.items || savedBill?.items || []).map(function (row) {
-    return String(row?.cat || inferChargeCategoryFromService(row?.desc || row?.name || primaryLabel) || 'other').toLowerCase();
+    return String(normalizeChargeCollectionCategoryValue(row?.cat) || inferChargeCategoryFromService(row?.desc || row?.name || primaryLabel) || 'other').toLowerCase();
   })));
   const baseId = 'TXN' + Date.now();
   const createdAt = new Date().toISOString();
@@ -10978,7 +11013,7 @@ function bmhBillToSyntheticCollectionTxn(bill) {
     billId: billId,
     billNo: bill.billNo || '',
     billCats: Array.from(new Set((bill.items || []).map(function (row) {
-      return String(row?.cat || inferChargeCategoryFromService(row?.desc || row?.name || label) || 'other').toLowerCase();
+      return String(normalizeChargeCollectionCategoryValue(row?.cat) || inferChargeCategoryFromService(row?.desc || row?.name || label) || 'other').toLowerCase();
     })))
   };
 }
@@ -11021,7 +11056,8 @@ function bmhPayRequestToSyntheticCollectionTxn(pr) {
     createdAt: pr.updatedAt || pr.date || '',
     collected: true,
     source: 'pay-request',
-    type: 'pay-request-payment'
+    type: 'pay-request-payment',
+    billCats: [normalizeChargeCollectionCategoryValue(pr.cat || pr.category || pr.kind) || inferChargeCategoryFromService(pr.for || pr.service || pr.desc || '') || 'other']
   };
 }
 function bmhGetCollectionTransactionsForDate(centreOrCentres, dateKey) {
@@ -12906,7 +12942,7 @@ function bmhRecordPatientPayment() {
     createdBy: CURRENT_USER?.name || 'Billing',
     source: 'billing',
     type: 'billing-payment',
-    billCats: (billCtx.activeCats || []).slice(),
+    billCats: (billCtx.activeCats || []).map(function (cat) { return normalizeChargeCollectionCategoryValue(cat) || String(cat || '').toLowerCase(); }),
     cashlessApprovedAmount: cashlessApr > 0 ? cashlessApr : undefined,
     hospitalBillTotal: cashlessApr > 0 ? netBill : undefined
   };
@@ -12926,7 +12962,7 @@ function bmhRecordPatientPayment() {
     date: txn.date,
     mode: mode,
     by: txn.createdBy,
-    categories: (billCtx.activeCats || []).slice()
+    categories: (billCtx.activeCats || []).map(function (cat) { return normalizeChargeCollectionCategoryValue(cat) || String(cat || '').toLowerCase(); })
   });
   if (amt > 0) {
     TRANSACTIONS.push(txn);
@@ -17100,6 +17136,11 @@ function applyLoadedChargesRows(rows) {
     const nextRow = {
       cat: row.cat || '',
       kind: row.kind || row.cat || 'procedure',
+      category: row.category || row.chargeCategory || row.collectionCategory || '',
+      chargeCategory: row.chargeCategory || row.category || row.collectionCategory || '',
+      collectionCategory: row.collectionCategory || row.chargeCategory || row.category || '',
+      type: row.type || '',
+      group: row.group || '',
       parent: row.parent || '',
       name: row.name || '',
       chd: Number(row.chd || 0),
@@ -23498,7 +23539,7 @@ async function registerPatient() {
 
   if(noFee) {
     const txnId = 'TXN'+Date.now();
-    addBmhPatientCharge(uid, { id: 'chg-' + txnId, cat: inferChargeCategoryFromService(consultationDesc), desc: consultationDesc, qty: 1, rate: 0, amount: 0, source: 'reception', ref: txnId, ts: new Date().toISOString(), noFee: true });
+    addBmhPatientCharge(uid, { id: 'chg-' + txnId, cat: 'consultation', desc: consultationDesc, qty: 1, rate: 0, amount: 0, source: 'reception', ref: txnId, ts: new Date().toISOString(), noFee: true });
     const txn = {
       id:txnId, patient:name, bmhId:uid, service: consultationDesc, amount:0,
       mode:'No Fee', collected:true, dept,
@@ -23521,14 +23562,14 @@ async function registerPatient() {
     const claim = {id:claimId, patient:name, bmhId:uid, for:consultationDesc, amount:claimAmount, approvedAmount:claimAmount, claimedAmount:claimAmount, status:'pending', mode:payMode, ins:insName||payMode, policy:policyNo, dept, centre, date:new Date().toISOString(), from:'Reception'};
     PAY_REQUESTS.push(claim);
     fbSet&&fbSet('payRequests/'+claimId, claim);
-    addBmhPatientCharge(uid, { id: 'chg-' + claimId, cat: inferChargeCategoryFromService(consultationDesc), desc: consultationDesc, qty: 1, rate: fee, amount: fee, source: 'reception', ref: claimId, ts: claim.date });
+    addBmhPatientCharge(uid, { id: 'chg-' + claimId, cat: 'consultation', desc: consultationDesc, qty: 1, rate: fee, amount: fee, source: 'reception', ref: claimId, ts: claim.date });
     patient.ins = insName||payMode;
     patient.policy = policyNo || patient.policy || '';
     patient.claimedAmount = claimAmount;
     patient.balance = Math.max(Number(patient.balance || 0), Number(fee || 0));
     showToast(`🏦 TPA/Insurance patient — claim pending ₹${fee.toLocaleString('en-IN')}`,'i');
   } else if(isCreditDue) {
-    addBmhPatientCharge(uid, { id: 'chg-credit-' + Date.now(), cat: inferChargeCategoryFromService(consultationDesc), desc: consultationDesc, qty: 1, rate: fee, amount: fee, source: 'reception', ts: new Date().toISOString() });
+    addBmhPatientCharge(uid, { id: 'chg-credit-' + Date.now(), cat: 'consultation', desc: consultationDesc, qty: 1, rate: fee, amount: fee, source: 'reception', ts: new Date().toISOString() });
     patient.balance = (patient.balance||0) + fee;
     showToast(`📋 ₹${fee} noted as credit/due for ${name}`,'i');
   } else if(fee > 0) {
@@ -23544,7 +23585,7 @@ async function registerPatient() {
       consultationFeeLabel: feeChoice?.label || '',
       billCats: ['consultation']
     };
-    addBmhPatientCharge(uid, buildPaidReceptionChargeRow(txnId, consultationDesc, fee));
+    addBmhPatientCharge(uid, buildPaidReceptionChargeRow(txnId, consultationDesc, fee, 'consultation'));
     TRANSACTIONS.push(txn);
     saveTransactionToFirebase&&saveTransactionToFirebase(txn);
     patient.balance = bmhSyncPatientRunningBalance(uid);
@@ -40176,8 +40217,14 @@ function checkInPatient(bmhId) {
       mode:'Cash', collected:true, dept:p.dept,
       time:new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
       date:new Date().toISOString(), centre:p.centre||'CHD',
-      createdBy:CURRENT_USER?.name||'Reception'
+      createdBy:CURRENT_USER?.name||'Reception',
+      source: 'reception',
+      noFee: false,
+      consultationFeeType: p.consultationFeeType || '',
+      consultationFeeLabel: p.consultationFeeLabel || 'Consultation',
+      billCats: ['consultation']
     };
+    addBmhPatientCharge(bmhId, buildPaidReceptionChargeRow(txnId, p.purpose || 'Consultation', fee, 'consultation'));
     TRANSACTIONS.push(txn);
     saveTransactionToFirebase&&saveTransactionToFirebase(txn);
   }
