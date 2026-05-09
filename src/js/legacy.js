@@ -8283,8 +8283,19 @@ function applyBmhFinancialsSnapshot(snapshot, opts) {
   (Array.isArray(data.ledger) ? data.ledger : []).forEach(function (row) { window.BMH_LEDGER.push(row); });
   window.BMH_PURCHASES.length = 0;
   (Array.isArray(data.purchases) ? data.purchases : []).forEach(function (row) { window.BMH_PURCHASES.push(row); });
+  // Merge instead of replace: keep any local entries not yet in the remote snapshot.
+  // A full replace here causes "disappearing" usage entries when another tab writes
+  // financials before the Firestore save of the new entry has propagated back.
+  const _remoteUsage = Array.isArray(data.inventoryUsage) ? data.inventoryUsage : [];
+  const _localUsage = (window.BMH_INVENTORY_USAGE || []).slice();
+  const _usageKeyFn = function (r) {
+    return r.id ? 'id:' + String(r.id)
+      : [String(r.bmhId || ''), String(r.itemName || r.desc || r.name || ''), Math.abs(Number(r.qty || 0)), String(r.barcode || r.ref || ''), String(r.ts || r.date || '').slice(0, 16)].join('|');
+  };
+  const _remoteUsageKeys = new Set(_remoteUsage.map(_usageKeyFn));
   window.BMH_INVENTORY_USAGE.length = 0;
-  (Array.isArray(data.inventoryUsage) ? data.inventoryUsage : []).forEach(function (row) { window.BMH_INVENTORY_USAGE.push(row); });
+  _remoteUsage.forEach(function (r) { window.BMH_INVENTORY_USAGE.push(r); });
+  _localUsage.forEach(function (r) { if (!_remoteUsageKeys.has(_usageKeyFn(r))) window.BMH_INVENTORY_USAGE.push(r); });
   window.BMH_INVENTORY_INDENTS.length = 0;
   (Array.isArray(data.inventoryIndents) ? data.inventoryIndents : []).forEach(function (row) { window.BMH_INVENTORY_INDENTS.push(row); });
   window.BMH_INVENTORY_TRANSFERS.length = 0;
@@ -30055,12 +30066,12 @@ function addProcedureStockByKey(encodedKey) {
   const item = bmhFindInventoryItemByKey(key);
   if (!item) { showToast('Stock item not found', 'w'); return; }
   addProcedureStockItemToDraft(item, 1);
-  // Clear search after adding
+  // Re-run the current search so the user can keep adding from the same store/query
+  const dept = document.getElementById('proc-done-dept')?.value || '';
   const searchEl = document.getElementById('proc-done-stock-search');
-  const resultsEl = document.getElementById('proc-done-stock-results');
-  if (searchEl) searchEl.value = '';
-  if (resultsEl) resultsEl.innerHTML = '';
-  showToast(escapeHtmlConsent(item.name || 'Item') + ' added', 's');
+  const currentQuery = searchEl?.value || '';
+  renderProcedureStockSearch(dept, currentQuery);
+  showToast(escapeHtmlConsent(item.name || 'Item') + ' added ✓', 's');
 }
 window.addProcedureStockByKey = addProcedureStockByKey;
 function procDoneSearchKeydown(event) {
