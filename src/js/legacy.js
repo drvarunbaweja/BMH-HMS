@@ -10951,18 +10951,25 @@ function bmhPayRequestToSyntheticCollectionTxn(pr) {
 }
 function bmhGetCollectionTransactionsForDate(centreOrCentres, dateKey) {
   const centres = Array.isArray(centreOrCentres) ? centreOrCentres : [centreOrCentres || getEffectiveCentre()];
-  const wanted = new Set(centres.map(function (c) { return normalizeAppointmentCentreValue(c || 'CHD'); }));
+  const showAllCentres = centres.some(function (c) {
+    const raw = String(c || '').trim().toLowerCase();
+    return !raw || raw === 'both' || raw === 'all';
+  });
+  const wanted = showAllCentres ? null : new Set(centres.map(function (c) { return normalizeAppointmentCentreValue(c || 'CHD'); }));
+  const centreAllowed = function (row) {
+    return !wanted || wanted.has(normalizeAppointmentCentreValue(row?.centre || 'CHD'));
+  };
   const rows = (TRANSACTIONS || []).filter(function (t) {
-    return wanted.has(normalizeAppointmentCentreValue(t.centre || 'CHD')) && txnIsoDate(t) === dateKey && isCollectedTxn(t);
+    return centreAllowed(t) && txnIsoDate(t) === dateKey && isCollectedTxn(t);
   });
   (bmhGetSavedBillsForHistory() || []).forEach(function (bill) {
-    if (!wanted.has(normalizeAppointmentCentreValue(bill.centre || 'CHD'))) return;
+    if (!centreAllowed(bill)) return;
     if (localDateKey(bill.createdAt || bill.date) !== dateKey) return;
     const synthetic = bmhBillToSyntheticCollectionTxn(bill);
     if (synthetic) rows.push(synthetic);
   });
   (PAY_REQUESTS || []).forEach(function (pr) {
-    if (!wanted.has(normalizeAppointmentCentreValue(pr.centre || 'CHD'))) return;
+    if (!centreAllowed(pr)) return;
     if (localDateKey(pr.updatedAt || pr.date) !== dateKey) return;
     const synthetic = bmhPayRequestToSyntheticCollectionTxn(pr);
     if (synthetic) rows.push(synthetic);
@@ -16908,7 +16915,7 @@ function choosePreferredChargesRows(localRows, remoteRows, localTs, remoteTs) {
   const lts = Number(localTs || 0);
   const rts = Number(remoteTs || 0);
   if (lts && rts && lts !== rts) return lts > rts ? localList : remoteList;
-  return scoreChargesRows(localList) > scoreChargesRows(remoteList) ? localList : remoteList;
+  return scoreChargesRows(localList) >= scoreChargesRows(remoteList) ? localList : remoteList;
 }
 const LEGACY_PMICS_CHARGE_HEADING = 'Pinhole Microincision Cataract Surgery + IOL Implantation';
 const PMICS_MAIN_CHARGE_HEADING = 'Pinhole Microincision Cataract Surgery';
@@ -16974,11 +16981,14 @@ function saveChargesToFirebase(){
     showToast('Saved locally ✓ Cloud sync queued', 's');
     return Promise.resolve({ queued: true });
   }
-  return Promise.all([
-    window.FBDB.ref('centreCharges').set(CENTRE_CHARGES),
-    window.FBDB.ref('chargesSchedule').set(CHARGES_DATA),
-    window.FBDB.ref('chargesScheduleMeta').set({ updatedAt: savedAt })
-  ]).then(function(res){
+  // Atomic multi-path update: chargesSchedule and chargesScheduleMeta land on the server
+  // together so live-sync listeners on other tabs/devices never read a new meta timestamp
+  // paired with stale schedule data — which was the root cause of charges reverting.
+  return window.FBDB.ref('/').update({
+    centreCharges: CENTRE_CHARGES,
+    chargesSchedule: CHARGES_DATA,
+    chargesScheduleMeta: { updatedAt: savedAt }
+  }).then(function(res){
     window._bmhLastRemoteChargesUpdatedAt = savedAt;
     try { populateOTProcedureMainSelect && populateOTProcedureMainSelect(); } catch (e) {}
     try { renderOTProcedureSubheading && renderOTProcedureSubheading(document.getElementById('ot-add-proc-main')?.value || ''); } catch (e) {}
@@ -16997,7 +17007,10 @@ function applyChargesFromCloudSnapshot(rows, remoteTs) {
   if (!applied) return false;
   window._bmhChargesCloudLoaded = true;
   window._bmhLastRemoteChargesUpdatedAt = Number(remoteTs || Date.now()) || Date.now();
-  saveChargesToLocalStorage({ updatedAt: window._bmhLastRemoteChargesUpdatedAt });
+  // Never downgrade the local timestamp: if local data was chosen because localTs > remoteTs,
+  // saving with remoteTs would let a stale remote snapshot win next time.
+  const _prevLocalTs = Number(localStorage.getItem('bmh_charges_schedule_updated_at') || 0) || 0;
+  saveChargesToLocalStorage({ updatedAt: Math.max(window._bmhLastRemoteChargesUpdatedAt, _prevLocalTs) });
   renderChargesList && renderChargesList();
   renderCentresCharges && renderCentresCharges();
   syncReceptionConsultationFee && syncReceptionConsultationFee();
