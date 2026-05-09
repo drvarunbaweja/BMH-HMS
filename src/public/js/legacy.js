@@ -9827,6 +9827,17 @@ function isConsultationTransaction(txn) {
     txn.consultationFeeType, txn.consultationFeeLabel
   ].filter(Boolean).join(' ').toLowerCase();
   if (/\b(new|follow[\s-]*up|post[\s-]*op|review|opd|out\s*patient|consult(?:ation)?|registration|no\s*fee|free\s*consult|waiv)/i.test(text)) return true;
+  if (String(txn.source || '').toLowerCase() === 'reception' && /cash|upi|card|bank|split|online/i.test(String(txn.mode || ''))) {
+    if (!/oct|fundus|hvf|scan|surgery|procedure|advance|deposit|laser|injection/i.test(text)) return true;
+  }
+  const pt = txn.bmhId ? (PATIENTS || []).find(function (p) { return String(p?.bmhId || '') === String(txn.bmhId || ''); }) : null;
+  if (pt) {
+    const purpose = String(pt.purpose || '').toLowerCase();
+    const isConsultPurpose = /new|follow|post[\s-]*op|review|opd|consult|registration/.test(purpose);
+    const fee = Math.max(0, Number(pt.consultationFee || 0));
+    const amount = Math.max(0, Number(txn.amount || 0));
+    if (isConsultPurpose && (pt.consultationNoFee === true || Math.abs(fee - amount) < 0.5)) return true;
+  }
   return String(inferChargeCategoryFromService(txn.service || txn.for || txn.desc || '') || '').toLowerCase() === 'consultation';
 }
 function isCollectionDashboardTxn(txn) {
@@ -9841,11 +9852,12 @@ function transactionHasChargeCategory(txn, category) {
   if (billCats.includes(want)) return true;
   if (Array.isArray(txn.chargeAllocations) && txn.chargeAllocations.length && txn.bmhId) {
     const lines = window.BMH_PATIENT_CHARGES[txn.bmhId] || [];
-    return txn.chargeAllocations.some(function (alloc) {
+    const allocationMatch = txn.chargeAllocations.some(function (alloc) {
       const line = lines.find(function (row) { return String(row?.id || '') === String(alloc?.lineId || ''); });
       const cat = String(line?.cat || inferChargeCategoryFromService(line?.desc || line?.name || '') || 'other').toLowerCase();
       return cat === want;
     });
+    if (allocationMatch) return true;
   }
   return String(inferChargeCategoryFromService(txn.service || txn.for || txn.desc || '') || 'other').toLowerCase() === want;
 }
@@ -10908,6 +10920,47 @@ function bmhGetCollectionTransactionsForDate(centreOrCentres, dateKey) {
   };
   const rows = (TRANSACTIONS || []).filter(function (t) {
     return centreAllowed(t) && txnIsoDate(t) === dateKey && isCollectionDashboardTxn(t);
+  });
+  (PATIENTS || []).forEach(function (p) {
+    if (!p || !p.bmhId || !centreAllowed(p)) return;
+    const visitDate = localDateKey(p.checkinAt || p.queueDate || p.visitDate || p.updatedAt || p.createdAt);
+    if (visitDate !== dateKey) return;
+    const fee = Math.max(0, Number(p.consultationFee || 0));
+    if (!(fee > 0)) return;
+    const purposeText = String(p.purpose || p.consultationFeeLabel || '').toLowerCase();
+    if (!/new|follow|post[\s-]*op|review|opd|consult|registration/.test(purposeText)) return;
+    if (Number(p.balance || 0) > 0 && Number(p.balance || 0) >= fee) return;
+    const matchingRow = rows.find(function (t) {
+      return String(t.bmhId || '') === String(p.bmhId || '') && Math.abs(getNetTransactionAmount(t) - fee) < 0.5;
+    });
+    if (matchingRow) {
+      const cats = Array.isArray(matchingRow.billCats) ? matchingRow.billCats.slice() : (matchingRow.billCats && typeof matchingRow.billCats === 'object' ? Object.values(matchingRow.billCats) : []);
+      if (!cats.map(function (c) { return String(c || '').toLowerCase(); }).includes('consultation')) {
+        cats.push('consultation');
+        matchingRow.billCats = cats;
+      }
+      if (!matchingRow.consultationFeeLabel && p.consultationFeeLabel) matchingRow.consultationFeeLabel = p.consultationFeeLabel;
+      if (!matchingRow.consultationFeeType && p.consultationFeeType) matchingRow.consultationFeeType = p.consultationFeeType;
+      return;
+    }
+    rows.push({
+      id: 'SYNOPD-' + dateKey + '-' + p.bmhId,
+      patient: p.name || p.patient || '',
+      bmhId: p.bmhId,
+      service: (p.consultationFeeLabel ? p.consultationFeeLabel + ' - ' : '') + (p.purpose || 'Consultation'),
+      amount: fee,
+      mode: p.consultationPaymentMode || p.paymentMode || 'Cash',
+      collected: true,
+      dept: p.dept || 'ophtho',
+      centre: p.centre || 'CHD',
+      date: p.checkinAt || p.updatedAt || p.createdAt || new Date().toISOString(),
+      time: p.checkinAt ? new Date(p.checkinAt).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' }) : '',
+      source: 'reception',
+      type: 'consultation-synthetic',
+      consultationFeeType: p.consultationFeeType || '',
+      consultationFeeLabel: p.consultationFeeLabel || '',
+      billCats: ['consultation']
+    });
   });
   (bmhGetSavedBillsForHistory() || []).forEach(function (bill) {
     if (!centreAllowed(bill)) return;
@@ -23118,6 +23171,7 @@ async function registerPatient() {
   patient.consultationFee = fee;
   patient.consultationFeeType = feeChoice?.type || '';
   patient.consultationFeeLabel = feeChoice?.label || '';
+  patient.consultationPaymentMode = noFee ? 'No Fee' : payMode;
   patient.refType = refType;
   patient.refName = refName;
   patient.refMobile = refMobile;
@@ -23172,9 +23226,11 @@ async function registerPatient() {
       mode:'No Fee', collected:true, dept,
       time:new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
       date:new Date().toISOString(), centre, createdBy:CURRENT_USER?.name||'Reception',
+      source: 'reception',
       noFee: true,
       consultationFeeType: 'no-fee',
-      consultationFeeLabel: 'No Fee Consultation'
+      consultationFeeLabel: 'No Fee Consultation',
+      billCats: ['consultation']
     };
     TRANSACTIONS.push(txn);
     saveTransactionToFirebase&&saveTransactionToFirebase(txn);
@@ -23205,9 +23261,11 @@ async function registerPatient() {
       mode:payMode, collected:true, dept,
       time:new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
       date:new Date().toISOString(), centre, createdBy:CURRENT_USER?.name||'Reception',
+      source: 'reception',
       noFee: false,
       consultationFeeType: feeChoice?.type || '',
-      consultationFeeLabel: feeChoice?.label || ''
+      consultationFeeLabel: feeChoice?.label || '',
+      billCats: ['consultation']
     };
     TRANSACTIONS.push(txn);
     saveTransactionToFirebase&&saveTransactionToFirebase(txn);
