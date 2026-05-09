@@ -5336,12 +5336,22 @@
       <input type="text" id="proc-done-notes" placeholder="Procedure note / side / details">
     </div>
   </div>
-  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
-    <div style="font-size:11px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px">Consumables / stock used</div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-xs btn-outline" type="button" onclick="addAnotherProcedureDonePrompt()">+ Add procedure</button><button class="btn btn-xs btn-outline" type="button" onclick="addProcedureUsageRow()">+ Add stock used</button></div>
+  <!-- Stock search section -->
+  <div style="border:1px solid var(--g4);border-radius:10px;background:var(--g6);padding:10px 12px">
+    <div style="font-size:11px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Add consumables / stock used</div>
+    <!-- Dept store chips -->
+    <div id="proc-done-store-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
+    <!-- Search bar -->
+    <div style="position:relative">
+      <input type="text" id="proc-done-stock-search" placeholder="Search stock by name, barcode or batch…" autocomplete="off"
+        style="width:100%;padding:8px 38px 8px 10px;border:1px solid var(--g4);border-radius:8px;font-size:12px;background:#fff"
+        oninput="renderProcedureStockSearch(document.getElementById('proc-done-dept').value, this.value)"
+        onkeydown="procDoneSearchKeydown(event)">
+      <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:14px;color:var(--g2);pointer-events:none">🔍</span>
+    </div>
+    <div id="proc-done-stock-results" style="margin-top:4px;max-height:180px;overflow-y:auto"></div>
   </div>
-  <datalist id="proc-done-stock-list"></datalist>
-  <div id="proc-done-stock-browser"></div>
+  <!-- Added consumables list -->
   <div id="proc-done-usage-list"></div>
   <div style="display:flex;justify-content:flex-end;gap:8px">
     <button class="btn btn-outline" type="button" onclick="closeM('m-procedure-done')">Close</button>

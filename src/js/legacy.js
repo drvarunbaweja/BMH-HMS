@@ -29881,9 +29881,21 @@ function bmhProcedureStockMatchesDept(item, dept) {
   return bmhProcedureDeptStoreHints(dept).some(function (hint) { return hay.includes(hint); });
 }
 function bmhProcedureStockRows(dept) {
-  return bmhSortInventoryUseMatches((INVENTORY || []).filter(function (item) {
+  const all = bmhSortInventoryUseMatches((INVENTORY || []).filter(function (item) {
     return Number(item.stock || 0) > 0;
   }));
+  if (!dept) return all;
+  // Dept-matched items first, then remaining
+  const hints = bmhProcedureDeptStoreHints(dept);
+  const deptRows = all.filter(function (item) {
+    const hay = [item.store, item.cat, item.name, item.dept].filter(Boolean).join(' ').toLowerCase();
+    return hints.some(function (h) { return hay.includes(h); });
+  });
+  const otherRows = all.filter(function (item) {
+    const hay = [item.store, item.cat, item.name, item.dept].filter(Boolean).join(' ').toLowerCase();
+    return !hints.some(function (h) { return hay.includes(h); });
+  });
+  return deptRows.concat(otherRows);
 }
 function bmhProcedureStockRowsForStore(dept, store) {
   const rows = bmhProcedureStockRows(dept);
@@ -29940,115 +29952,170 @@ function addAnotherProcedureDonePrompt() {
 window.addAnotherProcedureDonePrompt = addAnotherProcedureDonePrompt;
 function fillProcedureDoneDatalists(dept) {
   const chargeList = document.getElementById('proc-done-charge-list');
-  const stockList = document.getElementById('proc-done-stock-list');
   if (chargeList) {
     chargeList.innerHTML = getProcedureDoneChargeRows(dept).map(function (row) {
       const label = (row.parent ? row.parent + ' — ' : '') + row.name;
       return '<option value="' + String(label).replace(/"/g, '&quot;') + '"></option>';
     }).join('');
   }
-  if (stockList) {
-    stockList.innerHTML = bmhProcedureStockRows(dept).map(function (item) {
-      const label = bmhInventoryUseItemLabel(item);
-      return '<option value="' + String(label).replace(/"/g, '&quot;') + '"></option>';
-    }).join('');
-  }
 }
-function renderProcedureStockBrowser(dept, view, value) {
-  const host = document.getElementById('proc-done-stock-browser');
+function renderProcedureDeptStoreChips(dept) {
+  const host = document.getElementById('proc-done-store-chips');
   if (!host) return;
   const rows = bmhProcedureStockRows(dept);
-  if (!rows.length) {
-    host.innerHTML = '<div style="padding:10px;border:1px dashed var(--g4);border-radius:8px;background:var(--g6);font-size:11px;color:var(--g1);margin-bottom:8px">No department-specific stock currently available.</div>';
+  const hints = bmhProcedureDeptStoreHints(dept);
+  // Collect dept-specific stores first, then others
+  const deptStores = [];
+  const otherStores = [];
+  Array.from(new Set(rows.map(function (i) { return i.store || ''; }))).filter(Boolean).sort().forEach(function (store) {
+    const hay = store.toLowerCase();
+    if (hints.some(function (h) { return hay.includes(h); })) {
+      deptStores.push(store);
+    } else {
+      otherStores.push(store);
+    }
+  });
+  if (!deptStores.length && !otherStores.length) {
+    host.innerHTML = '<span style="font-size:11px;color:var(--g1)">No stock in inventory</span>';
     return;
   }
-  const btn = function (label, onclick, tone) {
-    return '<button type="button" onclick="' + onclick + '" style="border:1px solid var(--g4);background:#fff;color:' + (tone || 'var(--bmh-blue)') + ';border-radius:8px;padding:7px 9px;font-size:11px;font-weight:900;cursor:pointer;text-align:left">' + escapeHtmlConsent(label) + '</button>';
+  const chip = function (store, active) {
+    const storeRows = rows.filter(function (i) { return (i.store || '') === store; });
+    const total = storeRows.reduce(function (s, i) { return s + Number(i.stock || 0); }, 0);
+    const isIolStore = storeRows.some(function (i) { return bmhProcedureStockCategory(i) === 'IOL'; });
+    const col = isIolStore ? '#8a5a00' : (active ? '#fff' : 'var(--bmh-blue)');
+    const bg = active ? 'var(--bmh-blue)' : (isIolStore ? '#fff8ee' : '#fff');
+    const border = isIolStore ? '1px solid #c9a040' : '1px solid var(--g4)';
+    return '<button type="button" onclick="filterProcedureStockByStore(\'' + encodeURIComponent(store) + '\')"'
+      + ' style="border:' + border + ';background:' + bg + ';color:' + col + ';border-radius:20px;padding:5px 11px;font-size:11px;font-weight:800;cursor:pointer;white-space:nowrap">'
+      + escapeHtmlConsent(store) + ' <span style="font-weight:500;font-size:10px">(' + total + ')</span></button>';
   };
-  const navButton = view ? '<button type="button" class="btn btn-xs btn-gray" onclick="renderProcedureStockBrowser(\'' + dept + '\')">Stores</button>' : '';
-  let html = '<div style="border:1px solid var(--g4);border-radius:10px;background:var(--g6);padding:9px;margin-bottom:8px">';
-  html += '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:7px"><div style="font-size:11px;font-weight:900;color:var(--g1);text-transform:uppercase">Pick stock by store / location</div>' + navButton + '</div>';
-  if (!view) {
-    const stores = Array.from(new Set(rows.map(function (i) { return i.store || 'No store'; }))).sort();
-    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:7px">' + stores.map(function (store) {
-      const total = rows.filter(function (i) { return String(i.store || 'No store') === store; }).reduce(function (s, i) { return s + Number(i.stock || 0); }, 0);
-      return btn(store + ' · ' + total, 'renderProcedureStockBrowser(\'' + dept + '\',\'store\',\'' + encodeURIComponent(store) + '\')');
-    }).join('') + '</div>';
-  } else if (view === 'store') {
-    const store = decodeURIComponent(value || '');
-    const storeRows = bmhProcedureStockRowsForStore(dept, store === 'No store' ? '' : store);
-    const cats = Array.from(new Set(storeRows.map(bmhProcedureStockCategory))).sort();
-    html += '<div style="font-size:11px;font-weight:900;color:var(--bmh-blue);margin-bottom:7px">' + escapeHtmlConsent(store) + '</div>';
-    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:7px">' + cats.map(function (cat) {
-      const total = storeRows.filter(function (i) { return bmhProcedureStockCategory(i) === cat; }).reduce(function (s, i) { return s + Number(i.stock || 0); }, 0);
-      return btn(cat + ' · ' + total, 'renderProcedureStockBrowser(\'' + dept + '\',\'cat\',\'' + encodeURIComponent(store) + '||' + encodeURIComponent(cat) + '\')', cat === 'IOL' ? '#8a5a00' : 'var(--bmh-blue)');
-    }).join('') + '</div>';
-  } else if (view === 'cat') {
-    const parts = String(value || '').split('||');
-    const store = decodeURIComponent(parts[0] || '');
-    const cat = decodeURIComponent(parts[1] || parts[0] || '');
-    const catRows = bmhProcedureStockRowsForStore(dept, store === 'No store' ? '' : store).filter(function (i) { return bmhProcedureStockCategory(i) === cat; });
-    if (cat === 'IOL') {
-      const brands = Array.from(new Set(catRows.map(function (i) { return _iolBrandLabel(i); }).filter(Boolean))).sort();
-      html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:7px">' + brands.map(function (brand) {
-        const total = catRows.filter(function (i) { return _iolBrandLabel(i) === brand; }).reduce(function (s, i) { return s + Number(i.stock || 0); }, 0);
-        return btn(brand + ' · ' + total, 'renderProcedureStockBrowser(\'' + dept + '\',\'iol\',\'' + encodeURIComponent(store) + '||' + encodeURIComponent(brand) + '\')', '#8a5a00');
-      }).join('') + '</div>';
-    } else {
-      const names = Array.from(new Set(catRows.map(function (i) { return i.name || 'Stock item'; }))).sort();
-      html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:7px">' + names.map(function (name) {
-        const total = catRows.filter(function (i) { return String(i.name || '') === name; }).reduce(function (s, i) { return s + Number(i.stock || 0); }, 0);
-        return btn(name + ' · ' + total, 'selectProcedureStockName(\'' + dept + '\',\'' + encodeURIComponent(name) + '\',\'' + encodeURIComponent(store) + '\')');
-      }).join('') + '</div>';
-    }
-  } else if (view === 'iol') {
-    const parts = String(value || '').split('||');
-    const store = decodeURIComponent(parts[0] || '');
-    const brand = decodeURIComponent(parts[1] || '');
-    const brandRows = bmhProcedureStockRowsForStore(dept, store === 'No store' ? '' : store).filter(function (i) { return bmhProcedureStockCategory(i) === 'IOL' && _iolBrandLabel(i) === brand; });
-    const powers = Array.from(new Set(brandRows.map(function (i) { return String(i.power || extractIolPower(i.name || '') || 'No power'); }))).sort(function (a, b) { return parseFloat(a) - parseFloat(b); });
-    html += '<div style="font-size:11px;font-weight:900;color:#8a5a00;margin-bottom:7px">' + escapeHtmlConsent(brand) + ' powers in stock</div>';
-    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:7px">' + powers.map(function (power) {
-      const powerRows = brandRows.filter(function (i) { return String(i.power || extractIolPower(i.name || '') || 'No power') === power; });
-      const total = powerRows.reduce(function (s, i) { return s + Number(i.stock || 0); }, 0);
-      return btn(power + ' · ' + total, 'selectProcedureStockIolPower(\'' + dept + '\',\'' + encodeURIComponent(brand) + '\',\'' + encodeURIComponent(power) + '\',\'' + encodeURIComponent(store) + '\')', '#8a5a00');
-    }).join('') + '</div>';
+  let html = deptStores.map(function (s) { return chip(s, true); }).join('');
+  if (otherStores.length) {
+    html += '<span style="font-size:10px;color:var(--g2);align-self:center">|</span>';
+    html += otherStores.map(function (s) { return chip(s, false); }).join('');
   }
-  host.innerHTML = html + '</div>';
+  host.innerHTML = html;
 }
-window.renderProcedureStockBrowser = renderProcedureStockBrowser;
+window.renderProcedureDeptStoreChips = renderProcedureDeptStoreChips;
+function filterProcedureStockByStore(encodedStore) {
+  const store = decodeURIComponent(encodedStore || '');
+  const searchEl = document.getElementById('proc-done-stock-search');
+  const dept = document.getElementById('proc-done-dept')?.value || '';
+  if (searchEl) searchEl.value = store;
+  renderProcedureStockSearch(dept, store);
+}
+window.filterProcedureStockByStore = filterProcedureStockByStore;
+function renderProcedureStockSearch(dept, query) {
+  const host = document.getElementById('proc-done-stock-results');
+  if (!host) return;
+  const q = String(query || '').trim().toLowerCase();
+  if (!q || q.length < 1) {
+    // Show dept items grouped by store when no query
+    const allRows = bmhProcedureStockRows(dept).slice(0, 40);
+    if (!allRows.length) {
+      host.innerHTML = '<div style="padding:8px 10px;font-size:11px;color:var(--g1)">No stock available.</div>';
+      return;
+    }
+    host.innerHTML = allRows.map(function (item) {
+      return _procStockResultRow(item, dept);
+    }).join('');
+    return;
+  }
+  const tokens = q.split(/\s+/).filter(Boolean);
+  const matches = bmhProcedureStockRows(dept).filter(function (item) {
+    const hay = bmhInventoryItemSearchHaystack(item);
+    return tokens.every(function (t) { return hay.includes(t); });
+  }).slice(0, 30);
+  if (!matches.length) {
+    host.innerHTML = '<div style="padding:8px 10px;font-size:11px;color:var(--g1)">No matching items found.</div>';
+    return;
+  }
+  host.innerHTML = matches.map(function (item) {
+    return _procStockResultRow(item, dept);
+  }).join('');
+}
+window.renderProcedureStockSearch = renderProcedureStockSearch;
+function _procStockResultRow(item, dept) {
+  const key = encodeURIComponent(bmhInventoryItemKey(item));
+  const cat = bmhProcedureStockCategory(item);
+  const isIol = cat === 'IOL';
+  const stock = Number(item.stock || 0);
+  const stockColor = stock <= 2 ? '#c0392b' : stock <= 5 ? '#d97706' : '#27ae60';
+  const detail = [item.store ? bmhFormatStoreLabel(item.store) : '', item.exp ? 'Exp ' + item.exp : '', item.batchNo ? 'Batch ' + item.batchNo : '', item.barcode ? 'BC ' + item.barcode : ''].filter(Boolean).join(' · ');
+  return '<div onclick="addProcedureStockByKey(\'' + key + '\')" style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;border-bottom:1px solid var(--g5);cursor:pointer;background:#fff" onmouseover="this.style.background=\'var(--blue-lt)\'" onmouseout="this.style.background=\'#fff\'">'
+    + '<div style="min-width:0"><div style="font-size:12px;font-weight:700;color:' + (isIol ? '#8a5a00' : 'var(--tx)') + '">' + escapeHtmlConsent(item.name || 'Stock item') + '</div>'
+    + '<div style="font-size:10px;color:var(--g1);margin-top:1px">' + escapeHtmlConsent(detail) + '</div></div>'
+    + '<div style="text-align:right;white-space:nowrap;margin-left:10px"><div style="font-size:11px;font-weight:900;color:' + stockColor + '">' + stock + ' left</div>'
+    + '<div style="font-size:10px;color:var(--g2)">' + escapeHtmlConsent(cat) + '</div></div>'
+    + '</div>';
+}
+function addProcedureStockByKey(encodedKey) {
+  const key = decodeURIComponent(encodedKey || '');
+  const item = bmhFindInventoryItemByKey(key);
+  if (!item) { showToast('Stock item not found', 'w'); return; }
+  addProcedureStockItemToDraft(item, 1);
+  // Clear search after adding
+  const searchEl = document.getElementById('proc-done-stock-search');
+  const resultsEl = document.getElementById('proc-done-stock-results');
+  if (searchEl) searchEl.value = '';
+  if (resultsEl) resultsEl.innerHTML = '';
+  showToast(escapeHtmlConsent(item.name || 'Item') + ' added', 's');
+}
+window.addProcedureStockByKey = addProcedureStockByKey;
+function procDoneSearchKeydown(event) {
+  if (event.key === 'Escape') {
+    const resultsEl = document.getElementById('proc-done-stock-results');
+    if (resultsEl) resultsEl.innerHTML = '';
+    event.target.value = '';
+  }
+}
+window.procDoneSearchKeydown = procDoneSearchKeydown;
 function renderProcedureUsageRows(items) {
   const host = document.getElementById('proc-done-usage-list');
   if (!host) return;
   const rows = Array.isArray(items) ? items : [];
-  host.innerHTML = rows.length ? rows.map(function (row, idx) {
-    return `<div style="display:grid;grid-template-columns:minmax(0,1.7fr) 90px 120px 95px 28px;gap:8px;align-items:end;padding:8px;border:1px solid var(--g5);border-radius:8px;background:#fff;margin-bottom:7px">
-      <div class="form-group" style="margin:0"><label class="fl">Stock item</label><input type="hidden" class="proc-stock-key" value="${escapeHtmlConsent(row.key || '')}"><input type="text" class="proc-stock-name" list="proc-done-stock-list" value="${escapeHtmlConsent(row.name || '')}" placeholder="Type stock item / barcode"><div style="font-size:9px;color:var(--g1);margin-top:2px">${escapeHtmlConsent(row.detail || '')}</div></div>
-      <div class="form-group" style="margin:0"><label class="fl">Qty</label><input type="number" class="proc-stock-qty" min="1" value="${Math.max(1, Number(row.qty || 1))}"></div>
-      <label style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:var(--g1);padding-bottom:8px"><input type="checkbox" class="proc-stock-bill"${row.billPatient ? ' checked' : ''}> Bill patient</label>
-      <div style="font-size:10px;color:var(--g1);padding-bottom:8px">Applied: ${Number(row.appliedQty || 0)}</div>
-      <button class="btn btn-xs btn-gray" type="button" onclick="removeProcedureUsageRow(${idx})">✕</button>
-    </div>`;
-  }).join('') : '<div style="padding:10px;border:1px dashed var(--g4);border-radius:8px;color:var(--g1);font-size:11px;background:var(--g6)">No consumables added yet.</div>';
+  if (!rows.length) {
+    host.innerHTML = '<div style="padding:10px;border:1px dashed var(--g4);border-radius:8px;color:var(--g1);font-size:11px;background:var(--g6);text-align:center">No consumables added yet — search above to add items</div>';
+    return;
+  }
+  host.innerHTML = '<div style="border:1px solid var(--g4);border-radius:10px;background:#fff;overflow:hidden;margin-top:2px">'
+    + '<div style="padding:7px 12px;background:var(--g6);font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px">Items to deduct from stock</div>'
+    + rows.map(function (row, idx) {
+      return `<div data-proc-idx="${idx}" style="display:grid;grid-template-columns:minmax(0,1fr) 80px 110px 28px;gap:8px;align-items:center;padding:8px 12px;border-top:1px solid var(--g5)">
+        <div><input type="hidden" class="proc-stock-key" value="${escapeHtmlConsent(row.key || '')}"><div style="font-size:12px;font-weight:700;color:var(--tx)">${escapeHtmlConsent(row.name || 'Stock item')}</div><div style="font-size:10px;color:var(--g1);margin-top:1px">${escapeHtmlConsent(row.detail || '')}</div></div>
+        <div class="form-group" style="margin:0"><label class="fl" style="font-size:10px">Qty</label><input type="number" class="proc-stock-qty" min="1" value="${Math.max(1, Number(row.qty || 1))}" style="font-size:12px;font-weight:900;text-align:center"></div>
+        <label style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:var(--g1);cursor:pointer"><input type="checkbox" class="proc-stock-bill"${row.billPatient ? ' checked' : ''}> Bill patient</label>
+        <button class="btn btn-xs btn-gray" type="button" onclick="removeProcedureUsageRow(${idx})" style="padding:4px 7px">✕</button>
+      </div>`;
+    }).join('')
+    + '</div>';
 }
 function getProcedureDraftFromModal() {
   const dept = document.getElementById('proc-done-dept')?.value || '';
-  const items = Array.from(document.querySelectorAll('#proc-done-usage-list > div')).map(function (row, idx) {
-    const prev = (window.BMH_PROC_DONE_STATE && window.BMH_PROC_DONE_STATE[dept] && window.BMH_PROC_DONE_STATE[dept].items && window.BMH_PROC_DONE_STATE[dept].items[idx]) || {};
-    return {
-      name: row.querySelector('.proc-stock-name')?.value?.trim() || '',
-      key: row.querySelector('.proc-stock-key')?.value?.trim() || prev.key || '',
-      detail: prev.detail || '',
-      qty: Math.max(1, Number(row.querySelector('.proc-stock-qty')?.value || '1')),
-      billPatient: !!row.querySelector('.proc-stock-bill')?.checked,
-      appliedQty: Number(prev.appliedQty || 0)
-    };
-  }).filter(function (row) { return row.name; });
+  const savedState = (window.BMH_PROC_DONE_STATE && window.BMH_PROC_DONE_STATE[dept]) || {};
+  // Find the wrapping div inside proc-done-usage-list (skip the "header" summary row)
+  const rowEls = Array.from(document.querySelectorAll('#proc-done-usage-list [data-proc-idx]'));
+  const items = rowEls.length
+    ? rowEls.map(function (rowEl) {
+        const idx = Number(rowEl.dataset.procIdx);
+        const prev = (savedState.items && savedState.items[idx]) || {};
+        return {
+          name: prev.name || rowEl.querySelector('.proc-stock-key')?.value?.trim() || '',
+          key: rowEl.querySelector('.proc-stock-key')?.value?.trim() || prev.key || '',
+          detail: prev.detail || '',
+          qty: Math.max(1, Number(rowEl.querySelector('.proc-stock-qty')?.value || '1')),
+          billPatient: !!rowEl.querySelector('.proc-stock-bill')?.checked,
+          appliedQty: Number(prev.appliedQty || 0)
+        };
+      }).filter(function (row) { return row.name || row.key; })
+    // Fallback: use saved state items when modal DOM is unavailable
+    : (savedState.items || []).slice();
   return {
     enabled: true,
-    procedure: document.getElementById('proc-done-name')?.value?.trim() || '',
-    amount: Number(document.getElementById('proc-done-amount')?.value || 0) || 0,
-    notes: document.getElementById('proc-done-notes')?.value?.trim() || '',
+    procedure: document.getElementById('proc-done-name')?.value?.trim() || savedState.procedure || '',
+    amount: Number(document.getElementById('proc-done-amount')?.value || 0) || savedState.amount || 0,
+    notes: document.getElementById('proc-done-notes')?.value?.trim() || savedState.notes || '',
     items: items
   };
 }
@@ -30131,8 +30198,13 @@ function openProcedureDoneModalForDept(dept) {
   const nameEl = document.getElementById('proc-done-name'); if (nameEl) nameEl.value = state.procedure || '';
   const amtEl = document.getElementById('proc-done-amount'); if (amtEl) amtEl.value = state.amount || '';
   const notesEl = document.getElementById('proc-done-notes'); if (notesEl) notesEl.value = state.notes || '';
+  // Clear search field from any previous use
+  const searchEl = document.getElementById('proc-done-stock-search');
+  const resultsEl = document.getElementById('proc-done-stock-results');
+  if (searchEl) searchEl.value = '';
+  if (resultsEl) resultsEl.innerHTML = '';
   renderProcedureDoneOtMatch(otMatch);
-  renderProcedureStockBrowser(dept);
+  renderProcedureDeptStoreChips(dept);
   renderProcedureUsageRows(state.items || []);
   openM('m-procedure-done');
 }
@@ -30184,8 +30256,11 @@ function saveProcedureDoneModal() {
   const dept = document.getElementById('proc-done-dept')?.value || activeClinicDeptKey();
   const bmhId = window.CURRENT_PATIENT?.bmhId || '';
   if (!dept || !bmhId) { showToast('Open a patient first', 'w'); return; }
-  const state = getProcedureDraftFromModal();
-  if (!state.procedure) { showToast('Select the performed procedure first', 'w'); return; }
+  // Use the state saved during confirm step — the main modal is now closed,
+  // so reading its DOM would be unreliable. The confirm step already captured
+  // any edits via getProcedureDraftFromModal() and saved them to state.
+  const state = getProcedureDoneStateForDept(dept);
+  if (!state || !state.procedure) { showToast('Select the performed procedure first', 'w'); return; }
   const groupId = 'PCDU' + Date.now();
   const chargeRows = getProcedureDoneChargeRows(dept);
   const matchedRow = chargeRows.find(function (row) {
