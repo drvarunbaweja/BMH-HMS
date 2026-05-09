@@ -22777,8 +22777,20 @@ function prefillExistingPatient(bmhId) {
     prefillBadge.style.display = 'inline-flex';
   }
   const forceNew = document.getElementById('rc-force-new-bmsh'); if (forceNew) forceNew.checked = false;
-  const advEl = document.getElementById('rc-advance-amt'); if(advEl) advEl.value = p.advance!=null?p.advance:'';
-  const adpEl = document.getElementById('rc-advance-purpose'); if(adpEl) adpEl.value = p.advancePurpose||'';
+  const existingAdvance = Math.max(0, Number(p.advance || 0));
+  const advEl = document.getElementById('rc-advance-amt');
+  if(advEl) {
+    advEl.value = '0';
+    advEl.dataset.existingAdvance = String(existingAdvance || 0);
+    advEl.placeholder = existingAdvance > 0 ? ('Existing advance ₹' + existingAdvance.toLocaleString('en-IN') + ' - enter only new advance') : '0';
+    advEl.title = existingAdvance > 0 ? ('Existing advance balance: ₹' + existingAdvance.toLocaleString('en-IN') + '. This field is only for new advance collected today.') : '';
+  }
+  const adpEl = document.getElementById('rc-advance-purpose');
+  if(adpEl) {
+    adpEl.value = '';
+    adpEl.dataset.existingAdvancePurpose = p.advancePurpose || '';
+    adpEl.placeholder = existingAdvance > 0 ? (p.advancePurpose ? 'Existing: ' + p.advancePurpose + ' - note only for new advance' : 'Note only for new advance collected today') : 'e.g. Against surgery package, IOL...';
+  }
   const nfEl = document.getElementById('rc-no-fee'); if(nfEl) { nfEl.checked = false; toggleRcNoFee(false); }
   setReceptionPurposeDefaultForVisit(true);
   // Clear search/match areas
@@ -22787,7 +22799,7 @@ function prefillExistingPatient(bmhId) {
   // Switch to New Patient tab if on Queue tab
   const newTab = document.querySelector('#pg-reception .ptab');
   if(newTab && !newTab.classList.contains('active')) { ptab(newTab,'rc-new'); }
-  showToast(`✏️ ${name || p.bmhId} prefilled — update details if needed and register ✓`,'s');
+  showToast(`✏️ ${name || p.bmhId} prefilled${existingAdvance > 0 ? ' — existing advance ₹' + existingAdvance.toLocaleString('en-IN') : ''} — update details if needed and register ✓`,'s');
 }
 function calcRcAge() {
   const dob = document.getElementById('rc-dob')?.value;
@@ -23309,8 +23321,8 @@ async function registerPatient() {
   const addr= normalizeReceptionFieldValue('rc-addr', document.getElementById('rc-addr')?.value || '');
   const noFee = document.getElementById('rc-no-fee')?.checked;
   const initialFeeChoice = noFee ? null : getReceptionFeeChoiceMeta();
-  const advAmt = parseFloat(document.getElementById('rc-advance-amt')?.value)||0;
-  const advPurpose = normalizeReceptionFieldValue('rc-advance-purpose', document.getElementById('rc-advance-purpose')?.value||'');
+  let advAmt = parseFloat(document.getElementById('rc-advance-amt')?.value)||0;
+  let advPurpose = normalizeReceptionFieldValue('rc-advance-purpose', document.getElementById('rc-advance-purpose')?.value||'');
 
   if(!fn) { showToast('Please enter patient first name','w'); return; }
 
@@ -23356,6 +23368,12 @@ async function registerPatient() {
   if (uidEl) uidEl.textContent = uid;
   if (isExistingRegistration && String(uidDisplayed || '').trim() && String(uidDisplayed).trim() !== String(uid)) {
     showToast('Matched existing patient — keeping ' + uid + ' (one BMSH ID per person) ✓', 'i');
+  }
+  const existingAdvanceAtStart = Math.max(0, Number(existingPt?.advance || 0));
+  const existingAdvancePurposeAtStart = normalizeReceptionFieldValue('rc-advance-purpose-existing', existingPt?.advancePurpose || '');
+  if (isExistingRegistration && existingAdvanceAtStart > 0 && Math.abs(advAmt - existingAdvanceAtStart) < 0.5 && (!advPurpose || advPurpose === existingAdvancePurposeAtStart)) {
+    advAmt = 0;
+    advPurpose = '';
   }
 
   const initials = computePatientInitials(name);
