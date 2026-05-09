@@ -9685,7 +9685,7 @@ function inferChargeCategoryFromService(forStr) {
   // Investigations & imaging first (avoid mis-tagging e.g. IOL Master / biometry as surgery)
   if (/oct|hvf|fundus|biomet|visual field|cbc|hb|thyroid|lipid|lab|investigation|diagnostic|erg|vep|\beeg\b|topograph|specular|pachymetry|gonioscopy|perimetry|b-?scan|ultrasound.*\beye\b|ffa|icg|angiograph|schirmer|tbut|dry\s*eye|corneal topography|aberrometry|i\.?\s*o\.?\s*l\.?\s*master|iol\s*master|lenstar|pentacam|specular microscopy/.test(s)) return 'diagnostic';
   // Surgery / OT / procedures (broad; includes IOL/lens implants used in cataract surgery)
-  if (/\b(surgery|surgical|surgeon|cataract|phaco|phacoemulsification|sics|trab|trabeculectomy|lasik|prk|smile|vitrectomy|retina\s*surgery|glaucoma\s*surgery|keratoplasty|corneal\s*graft|pterygium|squint|strabismus|oculoplastic|dacryocystorhinostomy|dacryo|dcr|buckling|scleral\s*buckle|intravitreal|ivt|anti\s*-?\s*vegf|ot\b|o\.?\s*t\.?|theatre|theater|operating|operation\b|minor\s*ot|major\s*ot|ot\s*charges|theatre\s*charges|ot\s*time|anaesthesia.*surgery|capsulorhexis|iol\s*implant|iol\s*insertion|iol\s*charges|iol\s*package|iol\s*power|pmics|suture\s*removal|post\.?\s*op|postop|surgery\s*pack|pack\s*rate|surgery\s*charges|procedure\s*charges|operative|peribulbar|retrobulbar|sub-?tenon|foldable\s*lens|indian\s*lens|indian\s*foldable|foreign\s*lens|hydrophilic|hydrophobic|acrylic\s*lens|toric\s*lens|multifocal\s*lens|monofocal\s*lens|intraocular\s*lens|lens\s*implant|lens\s*package|lens\s*charges|viscoelastic|trypan\s*blue|oph.*pack|cataract.*pack|eye\s*drops.*surgery|surgical.*kit|diathermy|endothelial\s*keratoplasty|dsek|dmek|dalk|hema|c3r|cross.?link)/.test(s)) return 'surgery';
+  if (/\b(surgery|surgical|surgeon|cataract|phaco|phacoemulsification|sics|trab|trabeculectomy|lasik|prk|smile|vitrectomy|retina\s*surgery|glaucoma\s*surgery|keratoplasty|corneal\s*graft|pterygium|squint|strabismus|oculoplastic|dacryocystorhinostomy|dacryo|dcr|buckling|scleral\s*buckle|intravitreal|ivt|anti\s*-?\s*vegf|ot\b|o\.?\s*t\.?|theatre|theater|operating|operation\b|minor\s*ot|major\s*ot|ot\s*charges|theatre\s*charges|ot\s*time|anaesthesia.*surgery|capsulorhexis|iol\s*implant|iol\s*insertion|iol\s*charges|iol\s*package|iol\s*power|pmics|suture\s*removal|surgery\s*pack|pack\s*rate|surgery\s*charges|procedure\s*charges|operative|peribulbar|retrobulbar|sub-?tenon|foldable\s*lens|indian\s*lens|indian\s*foldable|foreign\s*lens|hydrophilic|hydrophobic|acrylic\s*lens|toric\s*lens|multifocal\s*lens|monofocal\s*lens|intraocular\s*lens|lens\s*implant|lens\s*package|lens\s*charges|viscoelastic|trypan\s*blue|oph.*pack|cataract.*pack|eye\s*drops.*surgery|surgical.*kit|diathermy|endothelial\s*keratoplasty|dsek|dmek|dalk|hema|c3r|cross.?link)/.test(s)) return 'surgery';
   if (/consult|follow|review|opd|out\s*patient|first\s*visit|registration|consultation|post\s*-?\s*op/.test(s)) return 'consultation';
   return 'other';
 }
@@ -9831,7 +9831,7 @@ function getNetTransactionAmount(txn) {
 function transactionHasChargeCategory(txn, category) {
   const want = String(category || '').toLowerCase().trim();
   if (!txn || !want) return false;
-  const billCats = Array.isArray(txn.billCats) ? txn.billCats.map(function (c) { return String(c || '').toLowerCase(); }) : [];
+  const billCats = Array.isArray(txn.billCats) ? txn.billCats.map(function (c) { return String(c || '').toLowerCase(); }) : (txn.billCats && typeof txn.billCats === 'object' ? Object.values(txn.billCats).map(function (c) { return String(c || '').toLowerCase(); }) : []);
   if (billCats.includes(want)) return true;
   if (Array.isArray(txn.chargeAllocations) && txn.chargeAllocations.length && txn.bmhId) {
     const lines = window.BMH_PATIENT_CHARGES[txn.bmhId] || [];
@@ -9978,8 +9978,9 @@ function bmhTotalReceivedForCategories(bmhId, categories) {
   return (TRANSACTIONS || [])
     .filter(function (t) {
       if (t.bmhId !== bmhId || t.collected === false) return false;
-      if (Array.isArray(t.billCats) && t.billCats.length) {
-        return t.billCats.map(function (c) { return String(c || '').toLowerCase(); }).some(function (c) { return cats.includes(c); });
+      const _bc1 = Array.isArray(t.billCats) ? t.billCats : (t.billCats && typeof t.billCats === 'object' ? Object.values(t.billCats) : []);
+      if (_bc1.length) {
+        return _bc1.map(function (c) { return String(c || '').toLowerCase(); }).some(function (c) { return cats.includes(c); });
       }
       if (String(t.type || '').toLowerCase() === 'billing-payment' || String(t.source || '').toLowerCase() === 'billing') return true;
       const inferred = String(inferChargeCategoryFromService(t.service || t.for || t.desc || '') || 'other').toLowerCase();
@@ -9990,8 +9991,9 @@ function bmhTotalReceivedForCategories(bmhId, categories) {
 function bmhTransactionMatchesBillContext(t, ctx) {
   if (!t || t.collected === false) return false;
   const activeCats = Array.isArray(ctx?.activeCats) ? ctx.activeCats.map(function (c) { return String(c || '').toLowerCase(); }) : [];
-  if (Array.isArray(t.billCats) && t.billCats.length) {
-    const txnCats = t.billCats.map(function (c) { return String(c || '').toLowerCase(); });
+  const _bc2 = Array.isArray(t.billCats) ? t.billCats : (t.billCats && typeof t.billCats === 'object' ? Object.values(t.billCats) : []);
+  if (_bc2.length) {
+    const txnCats = _bc2.map(function (c) { return String(c || '').toLowerCase(); });
     return !activeCats.length || txnCats.some(function (c) { return activeCats.includes(c); });
   }
   if (String(t.type || '').toLowerCase() === 'billing-payment' || String(t.source || '').toLowerCase() === 'billing') return true;
