@@ -33508,16 +33508,11 @@ function getConcessionAdjustedCollectionTotal(transactions) {
 }
 
 function renderCollectionDashboard() {
-  const today = new Date();
-  const todayKeyLocal = [
-    today.getFullYear(),
-    String(today.getMonth() + 1).padStart(2, '0'),
-    String(today.getDate()).padStart(2, '0')
-  ].join('-');
+  const todayKeyLocal = todayKey();
   const allTxn = bmhGetCollectionTransactionsForDate(getEffectiveCentre(), todayKeyLocal).filter(function (t) {
     return !isInsuranceLikeMode(t.mode || t.ins || '');
   });
-  const collected = allTxn.filter(t=>t.collected);
+  const collected = allTxn.filter(isCollectedTxn);
 
   // Update summary cards
   const total = getConcessionAdjustedCollectionTotal(collected);
@@ -33552,17 +33547,39 @@ function renderCollectionDashboard() {
   const deptEl = document.getElementById('rc-dept-collection');
   if(deptEl) {
     const depts = ['ophtho','obg','psych','skin'];
+    const isConsultationPurpose = function (purpose) {
+      return /consult|follow|post\s*-?\s*op|opd|review|registration|new consultation/.test(String(purpose || '').toLowerCase());
+    };
     deptEl.innerHTML = depts.map(dept => {
-      const dTxn = collected.filter(t=>t.dept===dept);
+      const dTxn = collected.filter(t=>normalizeDeptKeyForQueue(t.dept || '') === dept);
       const dTotal = dTxn.reduce((s,t)=>s+getNetTransactionAmount(t),0);
       const dc = DEPT_COLORS[dept];
       const did = 'dept-txn-'+dept;
-      if(!dTxn.length) return '';
       const sumCat = function (want) {
         return dTxn.filter(function (t) {
           return transactionHasChargeCategory(t, want);
         }).reduce(function (s, t) { return s + getNetTransactionAmount(t); }, 0);
       };
+      const todayConsultationPatients = Array.from(new Map((PATIENTS || []).filter(function (p) {
+        if (!p || !centreMatch(p)) return false;
+        if (normalizeDeptKeyForQueue(p.dept || '') !== dept) return false;
+        if (!isConsultationPurpose(p.purpose || '')) return false;
+        return localDateKey(p.checkinAt || p.createdAt || p.queueDate || p.visitDate || p.updatedAt) === todayKeyLocal;
+      }).map(function (p) { return [p.bmhId || p.id || p.name, p]; })).values());
+      const pendingConsultRequests = (PAY_REQUESTS || []).filter(function (r) {
+        if (!r || String(r.status || '').toLowerCase() === 'paid') return false;
+        if (!centreMatch(r)) return false;
+        if (normalizeDeptKeyForQueue(r.dept || '') !== dept) return false;
+        if (localDateKey(r.updatedAt || r.date || r.createdAt) !== todayKeyLocal) return false;
+        return inferChargeCategoryFromService(r.for || r.service || r.desc || '') === 'consultation';
+      });
+      const paidConsultIds = new Set(dTxn.filter(function (t) {
+        return transactionHasChargeCategory(t, 'consultation') && getNetTransactionAmount(t) > 0;
+      }).map(function (t) { return t.bmhId || t.patient || ''; }).filter(Boolean));
+      const unpaidConsultIds = new Set(pendingConsultRequests.map(function (r) { return r.bmhId || r.patient || ''; }).filter(Boolean));
+      const noFeeConsultCount = todayConsultationPatients.filter(function (p) { return !!p.consultationNoFee; }).length;
+      const hasDeptActivity = dTxn.length || pendingConsultRequests.length || todayConsultationPatients.length;
+      if(!hasDeptActivity) return '';
       const opdD = sumCat('consultation');
       const invD = sumCat('diagnostic');
       const sxD = sumCat('surgery');
@@ -33583,6 +33600,7 @@ function renderCollectionDashboard() {
               <span style="cursor:pointer" onclick="event.stopPropagation();openRcCollectionDetailModal('${dept}','sx')">Sx/Proc <strong style="color:#6b21a8">${fmt(sxD)}</strong></span>
               ${otherD > 0 ? `<span style="opacity:.35">·</span><span style="cursor:pointer" onclick="event.stopPropagation();openRcCollectionDetailModal('${dept}','other')">Other <strong>${fmt(otherD)}</strong></span>` : ''}
             </div>
+            <div style="font-size:10.5px;color:var(--g1);margin-top:3px">OPD: paid ${paidConsultIds.size} · unpaid ${unpaidConsultIds.size} · no fee ${noFeeConsultCount}</div>
             ${!chk ? '<div style="font-size:9px;color:var(--orange);margin-top:4px">Note: category split may not match total if service text is unclear.</div>' : ''}
             <div style="font-size:10.5px;color:var(--g1);margin-top:2px">${dTxn.length} transaction${dTxn.length>1?'s':''} today</div>
             <div style="margin-top:6px"><button type="button" class="btn btn-xs btn-outline" onclick="event.stopPropagation();printRcCollectionDetail('${dept}','all')">🖨️ Print Dept</button></div>
@@ -33615,15 +33633,15 @@ function renderCollectionDashboard() {
       return localDateKey(r.updatedAt || r.date || r.createdAt) === todayKeyLocal;
     });
     const paidHtml = collected.length ? collected.slice().reverse().map(t=>`
-      <div style="display:flex;align-items:center;gap:9px;padding:8px 12px;background:${t.collected?'#fff':'var(--orange-lt)'};border-radius:var(--rsm);border:1px solid ${t.collected?'var(--g5)':'rgba(255,149,0,.3)'}">
-        <div style="font-size:16px">${DEPT_COLORS[t.dept]?.label?.split(' ')[0]||'🏥'}</div>
+      <div style="display:flex;align-items:center;gap:9px;padding:8px 12px;background:${t.collected!==false?'#fff':'var(--orange-lt)'};border-radius:var(--rsm);border:1px solid ${t.collected!==false?'var(--g5)':'rgba(255,149,0,.3)'}">
+        <div style="font-size:16px">${DEPT_COLORS[normalizeDeptKeyForQueue(t.dept || '')]?.label?.split(' ')[0]||'🏥'}</div>
         <div style="flex:1">
           <div style="font-size:12.5px;font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap">${t.patient}${t.type==='advance' ? '<span class="badge" style="font-size:8px;background:var(--blue-lt);color:var(--blue)">Advance</span>' : ''} <span style="font-family:monospace;font-size:10px;color:var(--bmh-teal)">${t.bmhId||''}</span></div>
           <div style="font-size:11px;color:var(--g1)">${t.service||'—'} · ${t.time||'—'}</div>
         </div>
         <span class="badge bd-gray" style="font-size:9.5px">${t.mode||'—'}</span>
-        <div style="font-weight:900;color:${t.collected?'#1a8c3c':'var(--orange)'};font-size:13px">₹${t.amount.toLocaleString('en-IN')}</div>
-        <span class="badge ${t.collected?'bd-green':'bd-orange'}" style="font-size:9.5px">${t.collected?'✅':'⏳'}</span>
+        <div style="font-weight:900;color:${t.collected!==false?'#1a8c3c':'var(--orange)'};font-size:13px">₹${t.amount.toLocaleString('en-IN')}</div>
+        <span class="badge ${t.collected!==false?'bd-green':'bd-orange'}" style="font-size:9.5px">${t.collected!==false?'✅':'⏳'}</span>
         ${receptionQueueRestoreButtonHtml(t.bmhId, { label: '↩', title: "Restore this patient to today's queue", style: 'background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1px solid var(--bmh-blue);border-radius:5px;padding:2px 6px;font-size:11px;cursor:pointer;flex-shrink:0' })}
         <button title="Delete this transaction" onclick="deleteTransaction('${t.id}')" style="background:var(--red-lt);color:var(--red);border:1px solid rgba(255,59,48,.3);border-radius:5px;padding:2px 6px;font-size:11px;cursor:pointer;flex-shrink:0">🗑️</button>
       </div>`).join('') : '<div style="padding:10px;color:var(--g1);font-size:12px">No paid transactions today.</div>';
@@ -33648,13 +33666,8 @@ function renderCollectionDashboard() {
 }
 
 function openRcCollectionDetailModal(dept, catKey) {
-  const today = new Date();
-  const todayKeyLocal = [
-    today.getFullYear(),
-    String(today.getMonth() + 1).padStart(2, '0'),
-    String(today.getDate()).padStart(2, '0')
-  ].join('-');
-  const collected = bmhGetCollectionTransactionsForDate(getEffectiveCentre(), todayKeyLocal).filter(function (t) { return t.dept === dept; });
+  const todayKeyLocal = todayKey();
+  const collected = bmhGetCollectionTransactionsForDate(getEffectiveCentre(), todayKeyLocal).filter(function (t) { return normalizeDeptKeyForQueue(t.dept || '') === dept; });
   let list = [];
   if (catKey === 'other') {
     list = collected.filter(function (t) {
@@ -33674,7 +33687,7 @@ function openRcCollectionDetailModal(dept, catKey) {
   };
   const todayConsultationPatients = Array.from(new Map((PATIENTS || []).filter(function (p) {
     if (!p || !centreMatch(p)) return false;
-    const primaryDeptMatch = String(p.dept || '').toLowerCase() === String(dept || '').toLowerCase();
+    const primaryDeptMatch = normalizeDeptKeyForQueue(p.dept || '') === normalizeDeptKeyForQueue(dept || '');
     const crossRefMatch = (Array.isArray(p.crossRefs) ? p.crossRefs : []).some(function (r) {
       return r && String(normalizeDeptKeyForQueue(r.toDept || r.dept || '')).toLowerCase() === String(dept || '').toLowerCase()
         && localDateKey(r.createdAt || r.date || r.updatedAt || r.seenAt) === todayKeyLocal;
@@ -33854,7 +33867,7 @@ function printDayCollectionByDept() {
     return '<div style="font-size:11px;margin-top:3px">' + escapeHtmlConsent(name) + ' — ' + arr.length + ' × ' + rateText + ' = <strong>' + fmt(total) + '</strong></div>';
   };
   const deptBlocks = depts.map(function (dept) {
-    const arr = txns.filter(function (t) { return String(t.dept || '').toLowerCase() === dept; });
+    const arr = txns.filter(function (t) { return normalizeDeptKeyForQueue(t.dept || '') === dept; });
     if (!arr.length) return '';
     const consult = arr.filter(function (t) { return transactionHasChargeCategory(t, 'consultation'); });
     const inv = arr.filter(function (t) { return transactionHasChargeCategory(t, 'diagnostic'); });
@@ -33864,7 +33877,7 @@ function printDayCollectionByDept() {
       return c !== 'consultation' && c !== 'diagnostic' && c !== 'surgery';
     });
     const consultPts = new Set((PATIENTS || []).filter(function (p) {
-      return centreMatch(p) && String(p.dept || '').toLowerCase() === dept
+      return centreMatch(p) && normalizeDeptKeyForQueue(p.dept || '') === dept
         && isConsultPurpose(p.purpose || '')
         && localDateKey(p.checkinAt || p.createdAt || p.queueDate || p.visitDate || p.updatedAt) === todayKeyLocal;
     }).map(function (p) { return p.bmhId; }));
@@ -33911,7 +33924,7 @@ function printRcCollectionDetail(dept, catKey) {
   const todayLabel = new Date().toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'});
   const todayKeyLocal = localDateKey(new Date());
   const txns = bmhGetCollectionTransactionsForDate(getEffectiveCentre(), todayKeyLocal).filter(function (t) {
-    return String(t.dept || '').toLowerCase() === String(dept || '').toLowerCase();
+    return normalizeDeptKeyForQueue(t.dept || '') === normalizeDeptKeyForQueue(dept || '');
   });
   const rows = (catKey === 'all' ? txns : txns.filter(function (t) {
     const c = transactionHasChargeCategory(t, 'consultation') ? 'consultation' : transactionHasChargeCategory(t, 'diagnostic') ? 'diagnostic' : transactionHasChargeCategory(t, 'surgery') ? 'surgery' : inferChargeCategoryFromService(t.service || t.for || t.desc || '');
@@ -39061,7 +39074,7 @@ function renderAdminDashboardDetail(selectedDate, selectedTxn, overduePts, surge
   if (detail.type === 'dept') {
     const dept = detail.value || '';
     titleEl.textContent = dept.toUpperCase() + ' collections on ' + formatDateIN(selectedDate);
-    const rows = selectedTxn.filter(function (t) { return String(t.dept || '').toLowerCase() === dept; });
+    const rows = selectedTxn.filter(function (t) { return normalizeDeptKeyForQueue(t.dept || '') === dept; });
     listEl.innerHTML = rows.length ? rows.map(function (t) {
       return rowHtml((t.patient || 'Patient') + ' · ' + (t.bmhId || '—'), [normalizeDashboardPaymentMode(t.mode), t.service || '—', t.time || '—'].join(' · '), fmt(getNetTransactionAmount(t)));
     }).join('') : '<div style="padding:14px;color:var(--g1);font-size:12px">No transactions for this department.</div>';
