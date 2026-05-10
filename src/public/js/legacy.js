@@ -8322,6 +8322,25 @@ function applyBmhFinancialsSnapshot(snapshot, opts) {
   try { localStorage.setItem('bmh_financials_updated_at', String(Number(data.updatedAt) || Date.now())); } catch (e) { /* noop */ }
   if (opts && opts.persistLocal) saveBmhFinancials({ localOnly: true });
 }
+// Merge vendor bills from a remote snapshot into local without a full apply.
+// Used when the timestamp guard would otherwise skip the remote entirely.
+// Returns true if any new bills were added.
+function _bmhMergeRemoteVendorBills(remoteArr) {
+  var arr = Array.isArray(remoteArr) ? remoteArr : [];
+  if (!arr.length || !window.BMH_VENDOR_BILLS) return false;
+  var added = false;
+  arr.forEach(function (v) {
+    if (!v || !v.id) return;
+    var exists = window.BMH_VENDOR_BILLS.some(function (x) { return x.id === v.id; });
+    if (!exists) { window.BMH_VENDOR_BILLS.push(v); added = true; }
+  });
+  if (added) {
+    try { localStorage.setItem('bmh_vendor_bills', JSON.stringify(window.BMH_VENDOR_BILLS)); } catch (e) { /* noop */ }
+    typeof bmhRenderVendorTables === 'function' && bmhRenderVendorTables();
+    typeof renderBillingPageIfActive === 'function' && renderBillingPageIfActive();
+  }
+  return added;
+}
 function queueBmhFinancialsRemoteSync() {
   if (!window.FBDB || window._bmhFinancialsHydrating) return;
   if (window._bmhFinancialsRemoteSyncTimer) clearTimeout(window._bmhFinancialsRemoteSyncTimer);
@@ -8339,7 +8358,10 @@ function startBmhFinancialsFirebaseSync() {
     if (!remote || typeof remote !== 'object') return;
     const remoteTs = Number(remote.updatedAt || 0);
     const localTs = Number(localStorage.getItem('bmh_financials_updated_at') || 0);
-    if (remoteTs && remoteTs < localTs) return;
+    if (remoteTs && remoteTs < localTs) {
+      _bmhMergeRemoteVendorBills(remote.vendorBills);
+      return;
+    }
     window._bmhFinancialsHydrating = true;
     applyBmhFinancialsSnapshot(remote, { persistLocal: true });
     window._bmhFinancialsHydrating = false;
@@ -8387,6 +8409,7 @@ function loadBmhFinancials() {
         applyBmhFinancialsSnapshot(remote, { persistLocal: true });
         window._bmhFinancialsHydrating = false;
       } else if (localTs || Object.keys(window.BMH_PATIENT_CHARGES || {}).length || (window.BMH_PURCHASES || []).length || (window.BMH_INVENTORY_USAGE || []).length) {
+        if (remote) _bmhMergeRemoteVendorBills(remote.vendorBills);
         queueBmhFinancialsRemoteSync();
       }
     }).catch(function (err) {
