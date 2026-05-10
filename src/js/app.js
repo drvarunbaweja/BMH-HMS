@@ -843,7 +843,7 @@ import { sendPasswordResetEmail } from 'firebase/auth'
 import { watchAppointments }    from './appointments.js'
 import { watchTransactions,
          watchPayRequests }     from './billing.js'
-import { watchBills, saveBill, incrementBillPrintCount, voidBill, deleteBill } from './bills.js'
+import { watchBills, saveBill, incrementBillPrintCount, voidBill, deleteBill, fetchBillsByDate } from './bills.js'
 import { watchLeads }           from './leads.js'
 import { todayKey }             from './utils.js'
 import { initializeInventoryFirebaseSync, syncInventoryWithFirebase } from './inventory.js'
@@ -880,6 +880,7 @@ window.bmhSaveBillToCloud        = saveBill
 window.bmhIncrementBillPrintCount = incrementBillPrintCount
 window.bmhVoidBillInCloud         = voidBill
 window.bmhDeleteBillInCloud       = deleteBill
+window.fetchBillsByDate           = fetchBillsByDate
 
 /** Admin: send Firebase password-reset email (works for accounts that sign in with that email). */
 window.sendUserPasswordResetEmail = async function (email) {

@@ -8263,7 +8263,7 @@ function printIPDSummary(id) { showToast('IPD Summary printing ✓','s'); setTim
 function bmhFinancialsSnapshot() {
   return {
     patientCharges: window.BMH_PATIENT_CHARGES || {},
-    vendorBills: window.BMH_VENDOR_BILLS || [],
+    vendorBills: (window.BMH_VENDOR_BILLS || []).map(function (v) { var o = Object.assign({}, v); delete o.billFile; return o; }),
     officeBills: window.BMH_OFFICE_BILLS || [],
     savedBills: window.BMH_SAVED_BILLS || [],
     officeBillCategories: window.BMH_OFFICE_BILL_CATEGORIES || [],
@@ -11495,7 +11495,7 @@ async function bmhDeleteSavedBillRecord(billId) {
 window.bmhDeleteSavedBillRecord = bmhDeleteSavedBillRecord;
 
 // ── Bill history search (searches Firestore BILLS array) ──────────────────────
-function bmhSearchBillHistory(q) {
+function bmhSearchBillHistory(q, _skipRemote) {
   const resultEl = document.getElementById('bmh-bill-history-results');
   if (!resultEl) return;
   const dateFilter = document.getElementById('bmh-bill-history-date')?.value || '';
@@ -11524,6 +11524,18 @@ function bmhSearchBillHistory(q) {
   }
 
   if (!bills.length) {
+    if (dateFilter && !_skipRemote && window.fetchBillsByDate) {
+      const centre = (window.CURRENT_USER && window.CURRENT_USER.centre) || document.getElementById('rc-centre')?.value || 'CHD';
+      resultEl.innerHTML = '<div style="text-align:center;color:var(--g1);padding:24px;font-size:13px">Searching older records...</div>';
+      window.fetchBillsByDate(centre, dateFilter, dateFilter).then(function (remoteBills) {
+        if (remoteBills && remoteBills.length && window.BILLS) {
+          const existingIds = new Set(window.BILLS.map(function (b) { return b.id; }));
+          remoteBills.forEach(function (b) { if (!existingIds.has(b.id)) window.BILLS.push(b); });
+        }
+        bmhSearchBillHistory(q, true);
+      }).catch(function () { bmhSearchBillHistory(q, true); });
+      return;
+    }
     const msg = !window.BILLS || window.BILLS.length === 0
       ? 'No saved bills yet — use Save or Save & Print on the New Bill tab to create them'
       : 'No bills found for this search';
@@ -12716,6 +12728,9 @@ function bmhAddVendorBill() {
     const nid = 'VB' + Date.now();
     window.BMH_VENDOR_BILLS.push({ id: nid, vendor, invoiceNo: inv, amount: amt, dueDate: due, status: 'pending', uploadedName: f ? f.name : '', billFile: billFile || null, createdAt: new Date().toISOString() });
     window._bmhVendorBillSel = nid;
+    if (billFile && billFile.data && window.FBDB) {
+      window.FBDB.ref('vendorBillFiles/' + nid).set({ name: billFile.name || '', type: billFile.type || '', data: billFile.data }).catch(function (e) { console.warn('vendorBillFiles save error:', e); });
+    }
     saveBmhFinancials();
     bmhRenderVendorTables();
     showToast('Vendor bill recorded ✓', 's');
@@ -13298,13 +13313,24 @@ function bmhGeneratePurchaseOrderDraft(silent) {
   if (el) el.innerHTML = '<pre style="white-space:pre-wrap;font-size:11px;margin:0">' + window._bmhPO_DRAFT.replace(/</g, '&lt;') + '</pre>';
   if (!low.length && !silent) showToast('No low-stock items — PO is empty', 'i');
 }
-function openInventoryBill(id) {
+function openInventoryBill(id, _rtdbTried) {
   const purchase = (window.BMH_PURCHASES || []).find(function (r) { return r.id === id; });
   const vendorBill = (window.BMH_VENDOR_BILLS || []).find(function (r) { return r.id === id; });
   const officeBill = (window.BMH_OFFICE_BILLS || []).find(function (r) { return r.id === id; });
   const file = purchase?.billFile || vendorBill?.billFile || officeBill?.billFile || null;
   const data = bmhBillFileData(file);
   const type = bmhBillFileType(file);
+  if (!data && !_rtdbTried && window.FBDB) {
+    window.FBDB.ref('vendorBillFiles/' + id).once('value').then(function (snap) {
+      const fbFile = snap.val();
+      if (fbFile && fbFile.data) {
+        if (vendorBill) vendorBill.billFile = fbFile;
+        if (purchase) purchase.billFile = fbFile;
+      }
+      openInventoryBill(id, true);
+    }).catch(function () { showToast('Bill scan not available', 'w'); });
+    return;
+  }
   if (!data) { showToast('Bill scan not available', 'w'); return; }
   const w = window.open('', '_blank');
   if (!w) { showToast('Allow popups to open bill scan', 'w'); return; }
