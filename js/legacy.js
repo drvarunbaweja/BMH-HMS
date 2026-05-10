@@ -8283,8 +8283,12 @@ function applyBmhFinancialsSnapshot(snapshot, opts) {
   const patientCharges = data.patientCharges && typeof data.patientCharges === 'object' ? data.patientCharges : {};
   Object.keys(window.BMH_PATIENT_CHARGES || {}).forEach(function (key) { delete window.BMH_PATIENT_CHARGES[key]; });
   Object.assign(window.BMH_PATIENT_CHARGES, patientCharges);
+  const _remoteVendorBills = Array.isArray(data.vendorBills) ? data.vendorBills : [];
+  const _localVendorBills = (window.BMH_VENDOR_BILLS || []).slice();
+  const _remoteVendorIds = new Set(_remoteVendorBills.map(function (v) { return String(v.id || ''); }).filter(Boolean));
   window.BMH_VENDOR_BILLS.length = 0;
-  (Array.isArray(data.vendorBills) ? data.vendorBills : []).forEach(function (row) { window.BMH_VENDOR_BILLS.push(row); });
+  _remoteVendorBills.forEach(function (v) { window.BMH_VENDOR_BILLS.push(v); });
+  _localVendorBills.forEach(function (v) { if (v.id && !_remoteVendorIds.has(String(v.id))) window.BMH_VENDOR_BILLS.push(v); });
   window.BMH_OFFICE_BILLS.length = 0;
   (Array.isArray(data.officeBills) ? data.officeBills : []).forEach(function (row) { window.BMH_OFFICE_BILLS.push(row); });
   window.BMH_SAVED_BILLS.length = 0;
@@ -10601,15 +10605,22 @@ function bmhPostPatientAdvanceFromBilling(opts) {
 }
 window.bmhPostPatientAdvanceFromBilling = bmhPostPatientAdvanceFromBilling;
 function bmhBillingTabSwitch(el, mode) {
-  window._bmhBillingTab = mode === 'search' ? 'search' : 'current';
+  window._bmhBillingTab = mode === 'search' ? 'search' : mode === 'vendors' ? 'vendors' : 'current';
   document.querySelectorAll('#pg-billing > .ptabs .ptab').forEach(function (t) { t.classList.remove('active'); });
   if (el) el.classList.add('active');
 
-  // Show/hide the two tab-content divs
-  const tabNew  = document.getElementById('bmh-bill-tab-patients');
-  const tabHist = document.getElementById('bmh-bill-tab-history');
-  if (tabNew)  { tabNew.style.display  = window._bmhBillingTab === 'current' ? '' : 'none'; tabNew.classList.toggle('active', window._bmhBillingTab === 'current'); }
-  if (tabHist) { tabHist.style.display = window._bmhBillingTab === 'search'  ? '' : 'none'; tabHist.classList.toggle('active', window._bmhBillingTab === 'search'); }
+  // Show/hide tab-content divs
+  const tabNew    = document.getElementById('bmh-bill-tab-patients');
+  const tabHist   = document.getElementById('bmh-bill-tab-history');
+  const tabVendor = document.getElementById('inv-vendor');
+  if (tabNew)    { tabNew.style.display    = window._bmhBillingTab === 'current'  ? '' : 'none'; tabNew.classList.toggle('active',    window._bmhBillingTab === 'current'); }
+  if (tabHist)   { tabHist.style.display   = window._bmhBillingTab === 'search'   ? '' : 'none'; tabHist.classList.toggle('active',   window._bmhBillingTab === 'search'); }
+  if (tabVendor) { tabVendor.style.display = window._bmhBillingTab === 'vendors'  ? '' : 'none'; tabVendor.classList.toggle('active', window._bmhBillingTab === 'vendors'); }
+
+  if (window._bmhBillingTab === 'vendors') {
+    bmhOnVendorTabOpen();
+    return;
+  }
 
   // Legacy search toolbar (shown inside history tab)
   const toolbar = document.getElementById('bmh-bill-search-toolbar');
@@ -16129,14 +16140,8 @@ function deleteInventoryItemsPrompt(barcodes) {
     }
     // Remove from barcode map
     if (BCMAP && BCMAP[bc]) delete BCMAP[bc];
-    // Remove from Firebase
-    if (window.FBDB) {
-      window.FBDB.ref('inventory/' + String(bc).replace(/[.#$/\[\]]/g, '_')).remove().catch(function () {});
-    }
-    // Remove from Firebase (inventory.js path)
-    if (typeof window.saveInventoryToFirebase === 'undefined' && window.FBDB) {
-      window.FBDB.ref('inventory/' + String(bc).replace(/[.#$/\[\]]/g, '_')).remove().catch(function () {});
-    }
+    // Remove from RTDB + Firestore and set the recently-deleted guard
+    bmhDeleteInventoryRowsFromCloud([{ barcode: bc }]);
   });
   saveInventoryStockToStorage && saveInventoryStockToStorage();
   saveBmhFinancials && saveBmhFinancials();
