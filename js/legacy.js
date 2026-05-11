@@ -4800,14 +4800,9 @@ function bookFollowup() {
   const ptMob  = PATIENTS.find(p=>p.bmhId===ptId)?.mob || '';
   const doc    = CURRENT_USER?.name || 'Doctor';
   const deptLabel = CURRENT_USER?.dept || dept || 'Ophthalmology';
-  const nearestSlot = getNearestAppointmentSlot(d, new Date());
+  const nearestSlot = normalizeAptTimeLabel(getNextAvailableApptSlot(d, doc));
 
   // Add to APPOINTMENTS array
-  // Double-booking check
-  const conflict = APPOINTMENTS.find(a=>a.date===d && a.doctor===doc && a.status!=='cancelled');
-  if(conflict){
-    showToast('⚠️ '+doc+' already has an appointment on '+formatted+'. Booking saved but please verify slot.','w');
-  }
   const apt = {
     id: 'A'+Date.now(),
     patient: ptName,
@@ -4907,19 +4902,53 @@ function roundToNearestTenMinuteSlot(baseDate) {
   const d = new Date(baseDate || Date.now());
   if (!Number.isFinite(d.getTime())) return { hh: 9, mm: 0 };
   let hh = d.getHours();
-  let mm = d.getMinutes();
-  mm = Math.floor(mm / 10) * 10;
+  let mm = Math.round(d.getMinutes() / 10) * 10;
   if (mm >= 60) { hh += 1; mm = 0; }
   return { hh: hh, mm: mm };
 }
 function getNearestAppointmentSlot(dateStr, baseDate) {
   if (!dateStr) return '9:00 AM';
-  const todayKeyLocal = localDateKey(new Date());
   const rounded = roundToNearestTenMinuteSlot(baseDate || new Date());
-  if (dateStr !== todayStr) {
-    return normalizeAptTimeLabel(String(rounded.hh).padStart(2, '0') + ':' + String(rounded.mm).padStart(2, '0'));
-  }
   return normalizeAptTimeLabel(String(rounded.hh).padStart(2, '0') + ':' + String(rounded.mm).padStart(2, '0'));
+}
+// Returns HH:MM (24h) — the nearest 10-min slot for a doctor on a date with no conflict
+function getNextAvailableApptSlot(date, doctor) {
+  const t = roundToNearestTenMinuteSlot(new Date());
+  let hh = t.hh, mm = t.mm;
+  const apts = window.APPOINTMENTS || APPOINTMENTS || [];
+  for (let i = 0; i < 48; i++) {
+    const slot = String(hh).padStart(2,'0') + ':' + String(mm).padStart(2,'0');
+    const taken = apts.find(function(a) {
+      if (a.status === 'cancelled') return false;
+      if (a.date !== date) return false;
+      if (doctor && a.doctor !== doctor) return false;
+      const aTime = String(a.time || '').trim();
+      return aTime === slot || aTime === normalizeAptTimeLabel(slot);
+    });
+    if (!taken) return slot;
+    mm += 10;
+    if (mm >= 60) { hh += 1; mm = 0; }
+    if (hh >= 22) break;
+  }
+  return String(t.hh).padStart(2,'0') + ':' + String(t.mm).padStart(2,'0');
+}
+// Returns HH:MM — next 30-min surgery slot on a date, starting at 11:30
+function getNextOTCaseSlot(date) {
+  const SLOT_MIN = 30, START_MIN = 11 * 60 + 30;
+  const cases = (window.OT_CASES || OT_CASES || []).filter(function(c) {
+    return getOTCaseDateKey(c) === date && c.status !== 'cancelled';
+  });
+  if (!cases.length) return '11:30';
+  let latestMin = START_MIN - SLOT_MIN;
+  cases.forEach(function(c) {
+    const m = String(c.scheduledTime || '').match(/^(\d{1,2}):(\d{2})$/);
+    if (m) {
+      const t = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+      if (t > latestMin) latestMin = t;
+    }
+  });
+  const next = latestMin + SLOT_MIN;
+  return String(Math.floor(next / 60)).padStart(2,'0') + ':' + String(next % 60).padStart(2,'0');
 }
 function bookApt() {
   const dateEl   = document.getElementById('book-date');
@@ -26181,7 +26210,7 @@ function resetOTAddCaseForm() {
   setSelect('ot-add-surgeon', '');
   setV('ot-add-anaes', '');
   setV('ot-add-date', today);
-  setV('ot-add-time', '09:00');
+  setV('ot-add-time', '11:30');
   setSelect('ot-add-room', 'Eye OT');
   setSelect('ot-add-priority', 'elective');
   setSelect('ot-add-iol-model', '');
@@ -26227,6 +26256,20 @@ function openOTAddModal(opts) {
   }
   // Set today's date as default
   const dateEl=document.getElementById('ot-add-date'); if(dateEl&&!dateEl.value) dateEl.value=todayKey();
+  // For new cases: auto-set time to next available surgery slot (start 11:30, advance 30 min per case)
+  if (!opts.caseId) {
+    const otDate = document.getElementById('ot-add-date')?.value || todayKey();
+    const timeEl = document.getElementById('ot-add-time');
+    if (timeEl) timeEl.value = getNextOTCaseSlot(otDate);
+    // Recalculate slot when date changes
+    if (dateEl && !dateEl.dataset.otSlotBound) {
+      dateEl.dataset.otSlotBound = '1';
+      dateEl.addEventListener('change', function () {
+        const editId = document.getElementById('ot-add-case-id')?.value;
+        if (!editId && timeEl) timeEl.value = getNextOTCaseSlot(dateEl.value || todayKey());
+      });
+    }
+  }
   const titleEl = document.getElementById('ot-add-modal-title');
   const saveBtn = document.getElementById('ot-add-save-btn');
   const editIdEl = document.getElementById('ot-add-case-id');
@@ -41371,11 +41414,8 @@ function saveVisit(dept, opts) {
             return a.bmhId === bmhId && a.date === fuD && a.status !== 'cancelled';
           });
           if (!alreadyBooked) {
-            // Use the actual current wall-clock time rounded to nearest 10 min as the follow-up slot
-            const fuTimeSlot = (function() {
-              const t = roundToNearestTenMinuteSlot(new Date());
-              return String(t.hh).padStart(2,'0') + ':' + String(t.mm).padStart(2,'0');
-            })();
+            const fuDoctor = visit.doctor || CURRENT_USER?.name || '';
+            const fuTimeSlot = getNextAvailableApptSlot(fuD, fuDoctor);
             const fuApt = {
               id: 'A' + Date.now() + Math.floor(Math.random() * 1000),
               patient: ptName,
@@ -41383,7 +41423,7 @@ function saveVisit(dept, opts) {
               mob: localPt?.mob || '',
               date: fuD,
               time: fuTimeSlot,
-              doctor: visit.doctor || CURRENT_USER?.name || '',
+              doctor: fuDoctor,
               dept: dept,
               purpose: 'Follow-up',
               status: 'booked',
