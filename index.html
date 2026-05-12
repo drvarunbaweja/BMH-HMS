@@ -249,6 +249,88 @@
       gap:6px;
       margin-bottom:7px;
     }
+    .plan-section-tabs {
+      display:flex;
+      gap:7px;
+      flex-wrap:wrap;
+      margin-bottom:10px;
+    }
+    .plan-section-tab {
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:7px 11px;
+      border-radius:999px;
+      border:1px solid rgba(26,60,110,.16);
+      background:#fff;
+      color:#284768;
+      font-size:11px;
+      font-weight:800;
+      cursor:pointer;
+      transition:all .18s ease;
+    }
+    .plan-section-tab:hover,
+    .plan-section-tab.active {
+      background:var(--blue-lt);
+      color:var(--bmh-blue);
+      border-color:rgba(26,60,110,.28);
+      box-shadow:0 6px 14px rgba(19,50,94,.12);
+    }
+    .smart-suggestion-box {
+      margin-bottom:8px;
+      padding:9px 10px;
+      border-radius:10px;
+      background:linear-gradient(180deg,#f7fbff 0%, #eef6ff 100%);
+      border:1px solid rgba(26,60,110,.14);
+    }
+    .smart-suggestion-head {
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:8px;
+      margin-bottom:7px;
+    }
+    .smart-suggestion-title {
+      font-size:10px;
+      font-weight:900;
+      color:var(--bmh-blue);
+      text-transform:uppercase;
+      letter-spacing:.5px;
+    }
+    .smart-suggestion-sub {
+      font-size:10px;
+      color:var(--g1);
+    }
+    .smart-suggestion-grid {
+      display:flex;
+      flex-wrap:wrap;
+      gap:6px;
+    }
+    .smart-suggestion-chip {
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      max-width:100%;
+      padding:7px 10px;
+      border-radius:999px;
+      border:1px solid rgba(26,60,110,.15);
+      background:#fff;
+      color:#16385f;
+      font-size:11px;
+      font-weight:700;
+      line-height:1.3;
+      cursor:pointer;
+      transition:all .18s ease;
+    }
+    .smart-suggestion-chip:hover {
+      background:var(--blue-lt);
+      border-color:rgba(26,60,110,.28);
+    }
+    .smart-suggestion-empty {
+      font-size:10.5px;
+      color:var(--g1);
+      padding:4px 2px 1px;
+    }
     #m-inv-bill-review.inventory-review-docked {
       pointer-events:none;
       align-items:flex-start;
@@ -352,6 +434,8 @@
       .dept-diag-grid,
       .diag-prev-wrap,
       .oe-plan-grid { grid-template-columns:1fr; }
+      .plan-section-tabs { gap:6px; }
+      .plan-section-tab { width:100%; justify-content:center; }
       .dq-head-grid { grid-template-columns:1fr; }
       .dq-inline-tools .visit-name,
       .dq-inline-tools .visit-id { width:100%; }
@@ -1548,7 +1632,12 @@
       <div class="tab-content" id="oe-plan">
         <div class="oe-plan-grid">
         <div class="plan-stack">
-        <div class="plan-panel">
+        <div class="plan-section-tabs" data-plan-tabs="oe-plan">
+          <button type="button" class="plan-section-tab active" onclick="focusPlanSection('oe-plan-diagnosis', this)">Diagnosis</button>
+          <button type="button" class="plan-section-tab" onclick="focusPlanSection('oe-plan-instructions', this)">Instructions</button>
+          <button type="button" class="plan-section-tab" onclick="focusPlanSection('oe-plan-procedures', this)">Procedure Advised</button>
+        </div>
+        <div class="plan-panel" id="oe-plan-diagnosis">
           <div class="diag-prev-wrap">
             <div>
               <div class="plan-panel-head">
@@ -1572,7 +1661,7 @@
             </div>
           </div>
         </div>
-        <div class="plan-panel" style="background:#fffbeb;border-color:rgba(212,160,23,.4)">
+        <div class="plan-panel" id="oe-plan-instructions" style="background:#fffbeb;border-color:rgba(212,160,23,.4)">
           <div class="plan-panel-head">
             <div class="plan-panel-title" style="color:#8a4200">Instructions</div>
             <div style="display:flex;gap:5px">
@@ -1580,6 +1669,7 @@
               <button class="btn btn-xs" style="background:var(--orange-lt);color:#8a4200;border:1px solid rgba(212,160,23,.5)" onclick="openLoadAdviceTemplate()">📂 Load Template</button>
             </div>
           </div>
+          <div id="oe-advice-suggestions" class="smart-suggestion-box"></div>
           <div id="oe-advice-library" class="quick-library-grid"></div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
             <input type="text" id="oph-advice-quick-input" list="oph-advice-quick-list" placeholder="Type instruction and press Enter…" style="flex:1;min-width:220px;font-size:11px;padding:6px 8px;border-radius:var(--rsm);border:1.5px solid var(--g4)" onchange="commitDeptAdviceQuickEntry('ophtho', this)" onkeydown="handleDeptQuickEntryKey(event,'advice','ophtho',this)">
@@ -1588,7 +1678,7 @@
           </div>
           <textarea id="rx-advice-text" placeholder="Type instructions to patient or load from template…" oninput="ingestCustomAdviceLinesFromTextarea(this)" onblur="ingestCustomAdviceLinesFromTextarea(this)" style="width:100%;min-height:48px;font-size:12px;border:1.5px solid rgba(212,160,23,.4);border-radius:6px;padding:6px 8px;background:#fff;font-family:var(--font);resize:vertical"></textarea>
         </div>
-        <div class="plan-panel">
+        <div class="plan-panel" id="oe-plan-procedures">
           <div class="plan-panel-head">
             <div class="plan-panel-title">Surgery / Procedure Advised</div>
             <div style="display:flex;gap:5px">
@@ -1601,6 +1691,7 @@
               <button class="btn btn-xs btn-orange" onclick="addProcAdvised()">+ Custom</button>
             </div>
           </div>
+          <div id="oe-proc-suggestions" class="smart-suggestion-box"></div>
           <div id="oe-proc-library" class="quick-library-grid"></div>
           <div id="rx-proc-advised" style="min-height:32px">
             <div style="font-size:11px;color:var(--g1);padding:5px 8px;font-style:italic;background:var(--g6);border-radius:6px">No procedure advised yet</div>
@@ -2282,6 +2373,7 @@
         <div class="ptab" onclick="ptab(this,'obg-vitals')">Vitals</div>
         <div class="ptab active" onclick="ptab(this,'obg-basic')">Assessment</div>
         <div class="ptab" onclick="ptab(this,'obg-anc')">Visits & Follow-up</div>
+        <div class="ptab" onclick="ptab(this,'obg-past')">Past Visits</div>
         <div class="ptab" onclick="ptab(this,'obg-investigations')">Investigations</div>
         <div class="ptab" onclick="ptab(this,'obg-uploads')">Uploads</div>
         <div class="ptab" onclick="ptab(this,'obg-rx')">Prescription</div>
@@ -2573,11 +2665,15 @@
               <div class="form-group"><label class="fl">TT Due</label><input type="date" id="obg-tt-due-inline" onchange="document.getElementById('obg-tt-due').value=this.value;updateObgComputedFields()"></div>
               <div class="form-group"><label class="fl">Follow-up Plan</label><select id="obg-followup-plan"><option>Routine review</option><option>Review in 1 week</option><option>High-risk surveillance</option><option>Admit if symptoms</option><option>Refer to labour room</option></select></div>
             </div>
-            <div id="anc-visit-list">
-              <div id="past-visits-obg" style="text-align:center;padding:30px;color:var(--g2);font-size:12px">
-                <div style="font-size:28px;margin-bottom:8px">📋</div>
-                Select a patient to view their saved OBG visits
-              </div>
+            <div id="anc-visit-list" style="background:var(--g6);border-radius:12px;padding:16px;border:1px solid var(--g5);color:var(--g1);font-size:12px">
+              Save the current review here. Full prior visit history, prescription details, diagnosis, ANC notes, infertility notes, and procedures are available in the new `Past Visits` tab.
+            </div>
+          </div>
+
+          <div class="tab-content" id="obg-past">
+            <div id="past-visits-obg" style="text-align:center;padding:30px;color:var(--g2);font-size:12px">
+              <div style="font-size:28px;margin-bottom:8px">📋</div>
+              Select a patient to view their saved OBG visits
             </div>
           </div>
 
@@ -2640,7 +2736,7 @@
           </div>
         </div>
         <!-- Diagnosis -->
-        <div class="plan-panel" style="margin-bottom:10px">
+        <div class="plan-panel" id="obg-rx-diagnosis" style="margin-bottom:10px">
           <div class="diag-prev-wrap" style="align-items:flex-start">
             <div style="flex:1;min-width:0;max-width:min(56%,420px)">
               <div class="plan-panel-head"><div class="plan-panel-title" style="font-size:12px">This visit — diagnosis</div><button class="btn btn-xs btn-outline" onclick="addDxRow()">+ Add</button></div>
@@ -2656,6 +2752,46 @@
               <div id="obg-prev-dx-list" style="max-height:200px;overflow-y:auto;font-size:11px"></div>
             </div>
           </div>
+        </div>
+        <div class="plan-section-tabs" data-plan-tabs="obg-rx">
+          <button type="button" class="plan-section-tab active" onclick="focusPlanSection('obg-rx-diagnosis', this)">Diagnosis</button>
+          <button type="button" class="plan-section-tab" onclick="focusPlanSection('obg-rx-procedures', this)">Procedure Advised</button>
+          <button type="button" class="plan-section-tab" onclick="focusPlanSection('obg-rx-instructions', this)">Instructions</button>
+        </div>
+        <!-- Procedures -->
+        <div class="plan-panel" id="obg-rx-procedures" style="margin-bottom:10px">
+          <div class="plan-panel-head">
+            <div class="plan-panel-title">Surgery / Procedure Advised</div>
+            <div style="display:flex;gap:5px;flex-wrap:wrap">
+              <input type="text" id="obg-proc-quick-input" list="obg-proc-quick-list" placeholder="Type procedure and press Enter…" style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:220px;border:1.5px solid var(--orange)" onchange="commitDeptProcedureQuickEntry('obg', this)" onkeydown="handleDeptQuickEntryKey(event,'procedure','obg',this)">
+              <datalist id="obg-proc-quick-list"></datalist>
+              <select id="obg-proc-add-dropdown" style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:190px;border:1.5px solid var(--orange)" onchange="addProcFromDropdownDept(this)">
+                <option value="">— Select procedure —</option>
+                <option value="__custom__|0">+ Add new procedure…</option>
+              </select>
+            </div>
+          </div>
+          <div id="obg-proc-suggestions" class="smart-suggestion-box"></div>
+          <div id="obg-proc-library" class="quick-library-grid"></div>
+          <div id="rx-proc-advised-obg" style="min-height:28px">
+            <div class="proc-placeholder" style="font-size:11px;color:var(--g1);padding:5px 8px;font-style:italic;background:var(--g6);border-radius:6px">No procedure advised yet</div>
+          </div>
+        </div>
+        <div class="plan-panel" id="obg-rx-instructions" style="background:#fffbeb;border-color:rgba(212,160,23,.4);margin-bottom:10px">
+          <div class="plan-panel-head"><div class="plan-panel-title" style="color:#8a4200;font-size:12px">Instructions</div></div>
+          <div id="obg-advice-suggestions" class="smart-suggestion-box"></div>
+          <div id="obg-advice-library" class="quick-library-grid"></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+            <input type="text" id="obg-advice-quick-input" list="obg-advice-quick-list" placeholder="Type instruction and press Enter…" style="flex:1;min-width:220px;font-size:11px;padding:6px 8px;border-radius:var(--rsm);border:1.5px solid var(--g4)" onchange="commitDeptAdviceQuickEntry('obg', this)" onkeydown="handleDeptQuickEntryKey(event,'advice','obg',this)">
+            <datalist id="obg-advice-quick-list"></datalist>
+            <select id="obg-advice-quick" style="flex:1;min-width:180px;font-size:11px;padding:6px 8px;border-radius:var(--rsm);border:1.5px solid var(--g4)">
+              <option value="">— Add advice from list —</option>
+            </select>
+            <button type="button" class="btn btn-xs btn-blue" onclick="appendObgAdviceFromQuick()">+ Add</button>
+          </div>
+          <div id="obg-advice-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;min-height:28px"></div>
+          <textarea placeholder="Advice to patient…" style="width:100%;min-height:36px;margin-bottom:6px;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px;display:none" id="obg-advice" aria-hidden="true"></textarea>
+          <textarea placeholder="Additional advice…" style="width:100%;min-height:32px;margin-bottom:0;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px;display:none" id="obg-extra-advice" aria-hidden="true"></textarea>
         </div>
         <div style="background:var(--g6);border-radius:var(--rsm);padding:8px 11px;margin-bottom:10px;border:1.5px solid var(--g4)">
           <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px">🖨️ Include in Printout (OBG)</div>
@@ -2688,24 +2824,6 @@
           </select>
           <button class="btn btn-gold btn-sm" onclick="openSaveRxTemplate()">📋 Save as Template</button>
         </div>
-        <!-- Procedures -->
-        <div class="plan-panel" style="margin-bottom:10px">
-          <div class="plan-panel-head">
-            <div class="plan-panel-title">Surgery / Procedure Advised</div>
-            <div style="display:flex;gap:5px;flex-wrap:wrap">
-              <input type="text" id="obg-proc-quick-input" list="obg-proc-quick-list" placeholder="Type procedure and press Enter…" style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:220px;border:1.5px solid var(--orange)" onchange="commitDeptProcedureQuickEntry('obg', this)" onkeydown="handleDeptQuickEntryKey(event,'procedure','obg',this)">
-              <datalist id="obg-proc-quick-list"></datalist>
-              <select id="obg-proc-add-dropdown" style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:190px;border:1.5px solid var(--orange)" onchange="addProcFromDropdownDept(this)">
-                <option value="">— Select procedure —</option>
-                <option value="__custom__|0">+ Add new procedure…</option>
-              </select>
-            </div>
-          </div>
-          <div id="obg-proc-library" class="quick-library-grid"></div>
-          <div id="rx-proc-advised-obg" style="min-height:28px">
-            <div class="proc-placeholder" style="font-size:11px;color:var(--g1);padding:5px 8px;font-style:italic;background:var(--g6);border-radius:6px">No procedure advised yet</div>
-          </div>
-        </div>
         <!-- Follow-up -->
         <div style="background:var(--g6);border-radius:var(--rsm);padding:7px 9px;margin-bottom:8px">
           <div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:5px">Next Appointment</div>
@@ -2719,21 +2837,6 @@
             <button class="btn btn-blue btn-sm" onclick="bookFollowup()">📅 Book</button>
             <button class="btn btn-gold btn-sm" onclick="printUnifiedRx('obg')">🖨️ Print Prescription</button>
           </div>
-        </div>
-        <div class="plan-panel" style="background:#fffbeb;border-color:rgba(212,160,23,.4);margin-bottom:10px">
-          <div class="plan-panel-head"><div class="plan-panel-title" style="color:#8a4200;font-size:12px">Instructions</div></div>
-          <div id="obg-advice-library" class="quick-library-grid"></div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
-            <input type="text" id="obg-advice-quick-input" list="obg-advice-quick-list" placeholder="Type instruction and press Enter…" style="flex:1;min-width:220px;font-size:11px;padding:6px 8px;border-radius:var(--rsm);border:1.5px solid var(--g4)" onchange="commitDeptAdviceQuickEntry('obg', this)" onkeydown="handleDeptQuickEntryKey(event,'advice','obg',this)">
-            <datalist id="obg-advice-quick-list"></datalist>
-            <select id="obg-advice-quick" style="flex:1;min-width:180px;font-size:11px;padding:6px 8px;border-radius:var(--rsm);border:1.5px solid var(--g4)">
-              <option value="">— Add advice from list —</option>
-            </select>
-            <button type="button" class="btn btn-xs btn-blue" onclick="appendObgAdviceFromQuick()">+ Add</button>
-          </div>
-          <div id="obg-advice-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;min-height:28px"></div>
-          <textarea placeholder="Advice to patient…" style="width:100%;min-height:36px;margin-bottom:6px;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px;display:none" id="obg-advice" aria-hidden="true"></textarea>
-          <textarea placeholder="Additional advice…" style="width:100%;min-height:32px;margin-bottom:0;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px;display:none" id="obg-extra-advice" aria-hidden="true"></textarea>
         </div>
         <div style="display:flex;gap:7px;flex-wrap:wrap">
           <button class="btn btn-gold" style="flex:1;justify-content:center" onclick="printUnifiedRx('obg')">🖨️ Print Prescription</button>
@@ -3371,6 +3474,27 @@
             </div>
           </div>
         </div>
+        <!-- Drug quick search -->
+        <div style="position:relative;margin-bottom:6px">
+          <div style="display:flex;align-items:center;gap:6px;background:var(--blue-lt);border:2px solid var(--blue);border-radius:var(--rsm);padding:7px 10px">
+            <span style="font-size:14px">💊</span>
+            <input type="text" id="rx-quick-search" placeholder="Type drug name to add (e.g. Tretinoin, Doxycycline, Hydroquinone)…"
+              oninput="rxQuickSearchDebounced(this.value)" autocomplete="off"
+              style="flex:1;border:none;background:transparent;outline:none;font-size:13px;font-family:var(--font);font-weight:600">
+            <button class="btn btn-blue btn-xs" onclick="openDrugLibraryAddFromQuick()">+ Add</button>
+          </div>
+          <div id="rx-quick-dropdown" style="display:none;position:absolute;z-index:200;background:#fff;border:2px solid var(--blue);border-top:none;border-radius:0 0 var(--rsm) var(--rsm);width:100%;max-height:220px;overflow-y:auto;box-shadow:var(--sh-md)"></div>
+        </div>
+        <div id="rx-drugs" style="border:1.5px solid var(--g4);border-top:none;border-radius:0 0 8px 8px;margin-bottom:8px;min-height:44px;min-width:0;max-width:100%;box-sizing:border-box"></div>
+        <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px">
+          <button class="btn btn-outline btn-sm" onclick="openAddRxDrugModal()">+ Full Drug Form</button>
+          <select style="font-size:11px;padding:6px 8px;border-radius:8px;border:1.5px solid var(--g4)" onchange="setRxLang(this.value)">
+            <option value="en">English</option>
+            <option value="hi">Hindi</option>
+            <option value="pa">Punjabi</option>
+          </select>
+          <button class="btn btn-gold btn-sm" onclick="openSaveRxTemplate()">📋 Save as Template</button>
+        </div>
         <div class="plan-panel" style="background:#fffbeb;border-color:rgba(212,160,23,.4);margin-bottom:10px">
           <div class="plan-panel-head"><div class="plan-panel-title" style="color:#8a4200">Instructions</div></div>
           <div id="skin-advice-library" class="quick-library-grid"></div>
@@ -3396,27 +3520,6 @@
           </div>
           <div id="skin-inv-list-send" class="inv-mode-pane" data-dept="skin" data-mode="send"><div style="font-size:11.5px;color:var(--g1);padding:5px 8px">None ordered</div></div>
           <div id="skin-inv-list-advise" class="inv-mode-pane" data-dept="skin" data-mode="advise" style="display:none"><div style="font-size:11.5px;color:var(--g1);padding:5px 8px">None ordered</div></div>
-        </div>
-        <!-- Drug quick search -->
-        <div style="position:relative;margin-bottom:6px">
-          <div style="display:flex;align-items:center;gap:6px;background:var(--blue-lt);border:2px solid var(--blue);border-radius:var(--rsm);padding:7px 10px">
-            <span style="font-size:14px">💊</span>
-            <input type="text" id="rx-quick-search" placeholder="Type drug name to add (e.g. Tretinoin, Doxycycline, Hydroquinone)…"
-              oninput="rxQuickSearchDebounced(this.value)" autocomplete="off"
-              style="flex:1;border:none;background:transparent;outline:none;font-size:13px;font-family:var(--font);font-weight:600">
-            <button class="btn btn-blue btn-xs" onclick="openDrugLibraryAddFromQuick()">+ Add</button>
-          </div>
-          <div id="rx-quick-dropdown" style="display:none;position:absolute;z-index:200;background:#fff;border:2px solid var(--blue);border-top:none;border-radius:0 0 var(--rsm) var(--rsm);width:100%;max-height:220px;overflow-y:auto;box-shadow:var(--sh-md)"></div>
-        </div>
-        <div id="rx-drugs" style="border:1.5px solid var(--g4);border-top:none;border-radius:0 0 8px 8px;margin-bottom:8px;min-height:44px;min-width:0;max-width:100%;box-sizing:border-box"></div>
-        <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px">
-          <button class="btn btn-outline btn-sm" onclick="openAddRxDrugModal()">+ Full Drug Form</button>
-          <select style="font-size:11px;padding:6px 8px;border-radius:8px;border:1.5px solid var(--g4)" onchange="setRxLang(this.value)">
-            <option value="en">English</option>
-            <option value="hi">Hindi</option>
-            <option value="pa">Punjabi</option>
-          </select>
-          <button class="btn btn-gold btn-sm" onclick="openSaveRxTemplate()">📋 Save as Template</button>
         </div>
         <!-- Procedures -->
         <div class="plan-panel" style="margin-bottom:10px">

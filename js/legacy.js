@@ -3079,8 +3079,8 @@ function nav(id, el, opts) {
   else if(pageKey==='appointments')    deferPageWork(function(){ const d=document.getElementById('apt-date-inp'); if(d)d.value=todayKey(); renderAptDay && renderAptDay(); renderFollowupRegister && renderFollowupRegister(); });
   else if(pageKey==='print-templates') deferPageWork(function(){ renderPrintTemplates && renderPrintTemplates(); });
   else if(pageKey==='consents')        deferPageWork(function(){ renderConsent && renderConsent(); updateConsentPatientHeader(); refreshConsentLibrary && refreshConsentLibrary(); });
-  else if(pageKey==='ophtho')          deferPageWork(function(){ initQR && initQR(); renderRxDrugs && renderRxDrugs(); buildRefractionDropdowns && buildRefractionDropdowns(); renderOphthoPayList && renderOphthoPayList(); typeof initDiagnosisRowsIfEmpty==='function'&&initDiagnosisRowsIfEmpty(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); typeof wrapOphAdviceChipsWithDelete==='function'&&wrapOphAdviceChipsWithDelete(); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); }, 120); });
-  else if(pageKey==='obg')             deferPageWork(function(){ renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); initObgSelects && initObgSelects(); toggleObgWorkflow && toggleObgWorkflow(); populateObgPatientFromCurrent && populateObgPatientFromCurrent(); updateObgComputedFields && updateObgComputedFields(); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); }, 120); });
+  else if(pageKey==='ophtho')          deferPageWork(function(){ initQR && initQR(); renderRxDrugs && renderRxDrugs(); buildRefractionDropdowns && buildRefractionDropdowns(); renderOphthoPayList && renderOphthoPayList(); typeof initDiagnosisRowsIfEmpty==='function'&&initDiagnosisRowsIfEmpty(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); typeof wrapOphAdviceChipsWithDelete==='function'&&wrapOphAdviceChipsWithDelete(); renderDeptSmartSuggestions && renderDeptSmartSuggestions('ophtho'); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); renderDeptSmartSuggestions&&renderDeptSmartSuggestions('ophtho'); }, 120); });
+  else if(pageKey==='obg')             deferPageWork(function(){ renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); initObgSelects && initObgSelects(); toggleObgWorkflow && toggleObgWorkflow(); populateObgPatientFromCurrent && populateObgPatientFromCurrent(); updateObgComputedFields && updateObgComputedFields(); renderDeptSmartSuggestions && renderDeptSmartSuggestions('obg'); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); renderDeptSmartSuggestions&&renderDeptSmartSuggestions('obg'); }, 120); });
   else if(pageKey==='psych')           deferPageWork(function(){ renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); togglePsychTracks && togglePsychTracks(); renderPsychRail && renderPsychRail(); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); }, 120); });
   else if(pageKey==='skin')            deferPageWork(function(){ renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); renderSkinRail && renderSkinRail(); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); }, 120); });
   else if(pageKey==='reception')       deferPageWork(function(){ renderReceptionPage && renderReceptionPage(); setTimeout(()=>{renderCollectionDashboard&&renderCollectionDashboard();loadCustomPurposes&&loadCustomPurposes();},100); });
@@ -4707,6 +4707,7 @@ function populateOphthoForm(v) {
   setV('rx-extra-advice-text', '');
   restoreProcedureDoneState('ophtho', v.procDone || null);
   refreshPreviousDiagnosisPanel('ophtho', v);
+  renderDeptSmartSuggestions && renderDeptSmartSuggestions('ophtho');
 
   // Chief complaints — restore rows
   const fallbackCcRows = Array.isArray(v.ccRows) && v.ccRows.length
@@ -7235,8 +7236,9 @@ function populateObgForm(visit) {
     syncObgAssessmentToHistory();
     updateObgComputedFields();
     renderObgPreviousDxPanel(window.CURRENT_PATIENT || {});
-    renderObgAdviceChipsFromTextarea();
-    return;
+  renderObgAdviceChipsFromTextarea();
+  renderDeptSmartSuggestions && renderDeptSmartSuggestions('obg');
+  return;
   }
   const mappings = {
     'obg-lmp':'lmp','obg-blood-grp':'bloodGroup','obg-risk':'riskTag','obg-main-complaint':'mainComplaint','obg-systemic':'systemicDisease',
@@ -7307,6 +7309,7 @@ function populateObgForm(visit) {
     }
   }
   restoreProcedureDoneState('obg', data.procDone || null);
+  renderDeptSmartSuggestions && renderDeptSmartSuggestions('obg');
 }
 function addANCVisit(){
   const today = todayKey();
@@ -7723,6 +7726,7 @@ function populateSkinForm(visit) {
   if (Array.isArray(data.skinDxList)) rebuildDxListFromValues('skin-dx-list', data.skinDxList);
   restoreProcedureDoneState('skin', data.procDone || null);
   refreshPreviousDiagnosisPanel('skin', data);
+  renderDeptSmartSuggestions && renderDeptSmartSuggestions('skin');
 }
 function selectProc(el,name){
   document.querySelectorAll('.procedure-card').forEach(c=>c.classList.remove('selected'));
@@ -16334,6 +16338,14 @@ window._inventoryStockBrowserSelection = window._inventoryStockBrowserSelection 
 function bmhInventoryStockBrowserKey(dept, store) {
   return [String(dept || ''), String(store || '')].join('||');
 }
+function bmhInventoryStockStoreSelectionKey(dept) {
+  return 'store::' + String(dept || '');
+}
+function bmhSelectInventoryStockStore(dept, store) {
+  window._inventoryStockBrowserSelection[bmhInventoryStockStoreSelectionKey(dept)] = String(store || '');
+  renderStockList && renderStockList();
+}
+window.bmhSelectInventoryStockStore = bmhSelectInventoryStockStore;
 function bmhSelectInventoryStockCategory(dept, store, cat) {
   const key = bmhInventoryStockBrowserKey(dept, store);
   window._inventoryStockBrowserSelection[key] = String(cat || '');
@@ -16422,7 +16434,16 @@ function _renderStockListNow() {
     const deptTotal = Number(deptMap[dk].total || 0);
     const stores = deptMap[dk].stores || {};
     const storeKeys = Object.keys(stores).sort();
-    const deptBody = storeKeys.map(function (store, si) {
+    const activeStore = (window._inventoryStockBrowserSelection || {})[bmhInventoryStockStoreSelectionKey(dk)] || '';
+    const storeTabs = storeKeys.map(function (store) {
+      const bucket = stores[store] || { total: 0 };
+      const active = store === activeStore;
+      return `<button type="button" class="btn btn-sm ${active ? 'btn-blue' : 'btn-outline'}" style="white-space:nowrap;flex:0 0 auto" onclick="bmhSelectInventoryStockStore(${bmhInventoryJsString(dk)},${bmhInventoryJsString(store)})">${escapeHtmlConsent(store)} (${Number(bucket.total || 0)})</button>`;
+    }).join('');
+    let storeDetailHtml = '<div style="font-size:11px;color:var(--g1);padding:10px 0">Select a store to view its categories and stock items.</div>';
+    if (activeStore && stores[activeStore]) {
+      const store = activeStore;
+      const si = storeKeys.indexOf(store);
       const storeBucket = stores[store] || { categories: {}, total: 0 };
       const categoryKeys = Object.keys(storeBucket.categories || {}).sort(function (a, b) {
         if (String(a).toLowerCase() === 'iol') return -1;
@@ -16430,76 +16451,69 @@ function _renderStockListNow() {
         return String(a).localeCompare(String(b));
       });
       const selectionKey = bmhInventoryStockBrowserKey(dk, store);
-      const selectedCategory = (window._inventoryStockBrowserSelection || {})[selectionKey] || categoryKeys[0] || '';
-      const activeCategory = storeBucket.categories[selectedCategory] ? selectedCategory : (categoryKeys[0] || '');
-      if (activeCategory) window._inventoryStockBrowserSelection[selectionKey] = activeCategory;
-      const categoryBucket = storeBucket.categories[activeCategory] || { label: activeCategory, iols: {}, normals: {}, total: 0 };
-      const iolRows = Object.values(categoryBucket.iols || {}).sort(function (a, b) {
-        return String(a.brandLabel || '').localeCompare(String(b.brandLabel || ''));
-      });
-      const normalRows = Object.values(categoryBucket.normals || {}).sort(function (a, b) {
-        return String(a.name || '').localeCompare(String(b.name || ''));
-      });
+      const selectedCategory = (window._inventoryStockBrowserSelection || {})[selectionKey] || '';
+      const activeCategory = storeBucket.categories[selectedCategory] ? selectedCategory : '';
       const tabsHtml = categoryKeys.map(function (cat) {
         const bucket = storeBucket.categories[cat] || { total: 0, label: cat };
         const active = cat === activeCategory;
         return `<button type="button" class="btn btn-sm ${active ? 'btn-blue' : 'btn-outline'}" style="white-space:nowrap;flex:0 0 auto" onclick="bmhSelectInventoryStockCategory(${bmhInventoryJsString(dk)},${bmhInventoryJsString(store)},${bmhInventoryJsString(cat)})">${escapeHtmlConsent(bucket.label || cat)} (${Number(bucket.total || 0)})</button>`;
       }).join('');
-      const iolHtml = iolRows.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin-top:10px">
-        ${iolRows.map(function (brand, bi) {
-          const groupId = 'stk-iol-store-' + di + '-' + si + '-' + bi;
-          const totalQty = Number(brand.total || 0);
-          const powerSummary = Object.keys(brand.powers || {}).sort(function (a, b) { return parseFloat(a) - parseFloat(b); }).map(function (power) {
-            return power + ' x' + Number(brand.powers[power].qty || 0);
-          }).join(', ');
-          window._inventoryStockGroups[groupId] = {
-            kind: 'iol',
-            title: [bmhDeptLabel(dk), store, categoryBucket.label, brand.brandLabel].filter(Boolean).join(' · '),
-            rows: brand.rows || []
-          };
-          return `<div style="border:1px solid #e8c96a;border-radius:8px;background:#fff9e6;padding:9px 10px">
-            <div onclick="openInventoryStockGroup('${groupId}')" style="cursor:pointer">
-              <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
-                <div style="min-width:0">
-                  <div style="font-size:12px;font-weight:900;color:#7a3a00">${escapeHtmlConsent(brand.brandLabel || 'IOL')}</div>
-                  <div style="font-size:10px;color:#8a4200;margin-top:3px">${escapeHtmlConsent(brand.company || '')}</div>
-                  <div style="font-size:10px;color:var(--g1);margin-top:4px;line-height:1.45">${escapeHtmlConsent(powerSummary || 'No powers recorded')}</div>
+      let categoryDetailHtml = '<div style="font-size:11px;color:var(--g1);padding:10px 0">Select a category to view the item tabs.</div>';
+      if (activeCategory && storeBucket.categories[activeCategory]) {
+        const categoryBucket = storeBucket.categories[activeCategory] || { label: activeCategory, iols: {}, normals: {}, total: 0 };
+        const iolRows = Object.values(categoryBucket.iols || {}).sort(function (a, b) {
+          return String(a.brandLabel || '').localeCompare(String(b.brandLabel || ''));
+        });
+        const normalRows = Object.values(categoryBucket.normals || {}).sort(function (a, b) {
+          return String(a.name || '').localeCompare(String(b.name || ''));
+        });
+        if (String(activeCategory || '').toLowerCase() === 'iol') {
+          categoryDetailHtml = iolRows.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin-top:10px">
+            ${iolRows.map(function (brand, bi) {
+              const groupId = 'stk-iol-store-' + di + '-' + si + '-' + bi;
+              const totalQty = Number(brand.total || 0);
+              const powerSummary = Object.keys(brand.powers || {}).sort(function (a, b) { return parseFloat(a) - parseFloat(b); }).map(function (power) {
+                return power + ' x' + Number(brand.powers[power].qty || 0);
+              }).join(', ');
+              window._inventoryStockGroups[groupId] = {
+                kind: 'iol',
+                title: [bmhDeptLabel(dk), store, categoryBucket.label, brand.brandLabel].filter(Boolean).join(' · '),
+                rows: brand.rows || []
+              };
+              return `<div style="border:1px solid #e8c96a;border-radius:8px;background:#fff9e6;padding:9px 10px">
+                <div onclick="openInventoryStockGroup('${groupId}')" style="cursor:pointer">
+                  <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
+                    <div style="min-width:0">
+                      <div style="font-size:12px;font-weight:900;color:#7a3a00">${escapeHtmlConsent(brand.brandLabel || 'IOL')}</div>
+                      <div style="font-size:10px;color:#8a4200;margin-top:3px">${escapeHtmlConsent(brand.company || '')}</div>
+                      <div style="font-size:10px;color:var(--g1);margin-top:4px;line-height:1.45">${escapeHtmlConsent(powerSummary || 'No powers recorded')}</div>
+                    </div>
+                    <div style="text-align:right;font-size:12px;font-weight:900;color:#1a6e35">${totalQty}</div>
+                  </div>
                 </div>
-                <div style="text-align:right;font-size:12px;font-weight:900;color:#1a6e35">${totalQty}</div>
-              </div>
+                <div style="display:flex;justify-content:flex-end;margin-top:8px">
+                  <button type="button" class="btn btn-xs btn-outline" onclick="event.stopPropagation();moveInventoryStockGroup('${groupId}')">Move whole block</button>
+                </div>
+              </div>`;
+            }).join('')}
+          </div>` : '<div style="font-size:11px;color:var(--g1);padding:10px 0">No IOL items in this store category.</div>';
+        } else {
+          categoryDetailHtml = normalRows.length ? `<div style="margin-top:10px">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;overflow:hidden;max-width:100%">
+              ${normalRows.map(function (row, ri) {
+                const groupId = 'stk-normal-store-' + di + '-' + si + '-' + ri;
+                window._inventoryStockGroups[groupId] = {
+                  kind: 'normal',
+                  title: [bmhDeptLabel(dk), store, row.cat, row.name].filter(Boolean).join(' · '),
+                  rows: row.rows || []
+                };
+                return `<button type="button" class="btn btn-sm btn-outline" style="max-width:100%;text-align:left;white-space:normal;line-height:1.3" onclick="openInventoryStockGroup('${groupId}')">${escapeHtmlConsent(row.name || '')} (${Number(row.stock || 0)})</button>`;
+              }).join('')}
             </div>
-            <div style="display:flex;justify-content:flex-end;margin-top:8px">
-              <button type="button" class="btn btn-xs btn-outline" onclick="event.stopPropagation();moveInventoryStockGroup('${groupId}')">Move whole block</button>
-            </div>
-          </div>`;
-        }).join('')}
-      </div>` : '';
-      const normalHtml = normalRows.length ? `<div style="margin-top:10px;display:grid;grid-template-columns:1fr;gap:6px">
-        ${normalRows.map(function (row, ri) {
-          const groupId = 'stk-normal-store-' + di + '-' + si + '-' + ri;
-          const metaText = (row.rows || []).slice(0, 4).map(function (item) {
-            return [item.exp ? 'Exp ' + item.exp : '', item.batchNo ? 'Batch ' + item.batchNo : '', item.serialNo ? 'Serial ' + item.serialNo : ''].filter(Boolean).join(' · ');
-          }).filter(Boolean).join(', ');
-          window._inventoryStockGroups[groupId] = {
-            kind: 'normal',
-            title: [bmhDeptLabel(dk), store, row.cat, row.name].filter(Boolean).join(' · '),
-            rows: row.rows || []
-          };
-          return `<details style="border:1px solid var(--g5);border-radius:8px;background:#fff">
-            <summary style="cursor:pointer;list-style:none;display:grid;grid-template-columns:minmax(0,1fr) 60px;gap:8px;align-items:center;padding:8px 10px">
-              <div style="min-width:0">
-                <div style="font-size:11px;font-weight:800;color:var(--tx)">${escapeHtmlConsent(row.name || '')}</div>
-                <div style="font-size:10px;color:var(--g1);margin-top:2px">${escapeHtmlConsent(metaText || 'Click to view stock rows')}</div>
-              </div>
-              <div style="text-align:right;font-size:12px;font-weight:900;color:${row.stock <= 2 ? '#c0392b' : row.stock <= 5 ? '#d35400' : '#1a6e35'}">${Number(row.stock || 0)}</div>
-            </summary>
-            <div style="padding:0 10px 10px">
-              <button type="button" class="btn btn-xs btn-outline" onclick="openInventoryStockGroup('${groupId}')">Open details</button>
-            </div>
-          </details>`;
-        }).join('')}
-      </div>` : '<div style="font-size:11px;color:var(--g1);margin-top:10px">No items in this category.</div>';
-      return `<div style="border:1px solid var(--g4);border-radius:10px;background:#fff;padding:10px 12px;margin-bottom:10px">
+          </div>` : '<div style="font-size:11px;color:var(--g1);padding:10px 0">No items in this category.</div>';
+        }
+      }
+      storeDetailHtml = `<div style="border:1px solid var(--g4);border-radius:10px;background:#fff;padding:10px 12px;margin-top:10px">
         <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
           <div style="display:flex;align-items:center;gap:8px;min-width:0">
             <div style="font-size:12px;font-weight:900;color:var(--bmh-blue)">${escapeHtmlConsent(store)}</div>
@@ -16508,10 +16522,14 @@ function _renderStockListNow() {
           <div style="font-size:11px;font-weight:900;color:var(--g1)">${Number(storeBucket.total || 0)} units</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;overflow:hidden;padding-bottom:4px;max-width:100%">${tabsHtml}</div>
-        <div style="margin-top:8px;font-size:10px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.45px">${escapeHtmlConsent(categoryBucket.label || activeCategory)} · ${Number(categoryBucket.total || 0)} units</div>
-        ${String(activeCategory || '').toLowerCase() === 'iol' ? iolHtml : normalHtml}
+        ${activeCategory ? `<div style="margin-top:8px;font-size:10px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.45px">${escapeHtmlConsent(activeCategory)} · ${Number((storeBucket.categories[activeCategory] || {}).total || 0)} units</div>` : ''}
+        ${categoryDetailHtml}
       </div>`;
-    }).join('');
+    }
+    const deptBody = `<div style="padding-bottom:10px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;overflow:hidden;max-width:100%">${storeTabs}</div>
+      ${storeDetailHtml}
+    </div>`;
     return `<details ${di === 0 ? 'open' : ''} style="border:1px solid var(--g4);border-radius:12px;background:linear-gradient(180deg,#f8fbff,#fff);padding:0 12px;margin-bottom:12px">
       <summary style="cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:10px;align-items:center;padding:12px 0">
         <div style="display:flex;align-items:center;gap:8px;min-width:0">
@@ -19683,6 +19701,183 @@ function getDeptProcedureQuickListId(dept) {
 function getDeptProcedureContainerId(dept) {
   return { ophtho: 'rx-proc-advised', obg: 'rx-proc-advised-obg', psych: 'rx-proc-advised-psych', skin: 'rx-proc-advised-skin' }[dept] || 'rx-proc-advised';
 }
+function dedupePlanSuggestionItems(items) {
+  const seen = new Set();
+  return (items || []).map(function (item) {
+    return String(item || '').trim();
+  }).filter(function (item) {
+    const key = item.toLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+function ophthoSuggestionEyeSuffix(rawEye) {
+  const eye = String(rawEye || '').trim().toUpperCase();
+  if (eye === 'OD' || eye === 'RE' || /RIGHT/.test(eye)) return ' right eye';
+  if (eye === 'OS' || eye === 'LE' || /LEFT/.test(eye)) return ' left eye';
+  if (eye === 'OU' || eye === 'BE' || /BOTH/.test(eye)) return ' both eyes';
+  return '';
+}
+function collectDeptSmartSuggestionData(dept) {
+  if (dept === 'ophtho') {
+    const dxRows = typeof getOphthoDiagnosisRows === 'function' ? getOphthoDiagnosisRows() : [];
+    const extra = String(document.getElementById('rx-diagnosis-text')?.value || '').trim();
+    const complaints = Array.from(document.querySelectorAll('#pg-ophtho .cc-inp')).map(function (el) {
+      return String(el.value || '').trim();
+    }).filter(Boolean);
+    return {
+      rows: dxRows,
+      sourceText: dxRows.map(function (row) { return row && row.text; }).concat(extra ? [extra] : []).concat(complaints).filter(Boolean).join(' | '),
+      complaints: complaints
+    };
+  }
+  if (dept === 'obg') {
+    const diagnosisInputs = Array.from(document.querySelectorAll('#obg-dx-list .dx-inp')).map(function (el) {
+      return String(el.value || '').trim();
+    }).filter(Boolean);
+    const complaint = String(document.getElementById('obg-main-complaint')?.value || '').trim();
+    const impression = String(document.getElementById('obg-clinical-impression')?.value || '').trim();
+    return {
+      diagnoses: diagnosisInputs,
+      complaint: complaint,
+      impression: impression,
+      sourceText: diagnosisInputs.concat([complaint, impression]).filter(Boolean).join(' | ')
+    };
+  }
+  if (dept === 'skin') {
+    const diagnosisInputs = Array.from(document.querySelectorAll('#skin-dx-list .dx-inp, #skin-hx-dx-list .dx-inp')).map(function (el) {
+      return String(el.value || '').trim();
+    }).filter(Boolean);
+    const primary = String(document.getElementById('skin-primary-dx')?.value || '').trim();
+    const chief = String(document.getElementById('skin-chief')?.value || '').trim();
+    return {
+      diagnoses: diagnosisInputs,
+      primary: primary,
+      chief: chief,
+      sourceText: diagnosisInputs.concat([primary, chief]).filter(Boolean).join(' | ')
+    };
+  }
+  return { sourceText: '' };
+}
+function buildDeptSmartSuggestions(dept) {
+  const advice = [];
+  const procedure = [];
+  const data = collectDeptSmartSuggestionData(dept);
+  const source = String(data.sourceText || '').toLowerCase();
+  if (dept === 'ophtho') {
+    (data.rows || []).forEach(function (row) {
+      const dxText = String(row?.text || '').toLowerCase();
+      const eyeSuffix = ophthoSuggestionEyeSuffix(row?.eye);
+      if (!dxText) return;
+      if (/presbyopia/.test(dxText)) advice.push('Advised glasses for near work only');
+      if (/cataract/.test(dxText)) {
+        advice.push('Review with biometry and routine pre-operative investigations');
+        procedure.push('Advised pinhole microincision cataract surgery' + eyeSuffix);
+      }
+      if (/dry eye|sicca/.test(dxText)) advice.push('Use lubricating drops regularly');
+      if (/allergic|vernal|conjunctivitis/.test(dxText)) advice.push('Do not rub the eyes');
+      if (/blepharitis|meibomian/.test(dxText)) advice.push('Warm compresses and lid hygiene regularly');
+      if (/glaucoma|ocular hypertension/.test(dxText)) advice.push('Continue anti-glaucoma medication regularly and review with IOP chart');
+      if (/diabetic/.test(dxText)) advice.push('Strict blood sugar and BP control');
+      if (/posterior capsule opacification|\bpco\b/.test(dxText)) procedure.push('YAG laser capsulotomy' + eyeSuffix);
+      if (/pterygium/.test(dxText)) procedure.push('Pterygium excision' + eyeSuffix);
+    });
+    const complaintSource = String((data.complaints || []).join(' | ') || '').toLowerCase();
+    if (/decreased vision|blur/.test(complaintSource) && !/cataract/.test(source)) {
+      advice.push('Review with reports on next visit');
+    }
+  } else if (dept === 'obg') {
+    const guidance = typeof computeObgGuidance === 'function' ? computeObgGuidance() : { management: [], procedures: [] };
+    advice.push.apply(advice, guidance.management || []);
+    procedure.push.apply(procedure, guidance.procedures || []);
+    if (/anc|pregnan|gestation/.test(source) || document.getElementById('obg-track-anc')?.checked) {
+      advice.push('Continue iron, folic acid, calcium, hydration, and scheduled ANC follow-up');
+    }
+    if (/decreased fetal movement/.test(source) || document.getElementById('obg-redflag-decreasedfm')?.checked) {
+      advice.push('Daily fetal movement count and same-day review if movements reduce again');
+    }
+    if (/pre.?eclampsia|hypertens|pih/.test(source) || document.getElementById('obg-hr-pih')?.checked) {
+      advice.push('Monitor BP and report headache, blurring, pain, bleeding, or reduced fetal movements urgently');
+    }
+    if (/infertility|pcos|ovulat|male factor|tubal/.test(source) || document.getElementById('obg-track-infertility')?.checked) {
+      advice.push('Timed intercourse, weight optimisation, folic acid, and couple-based infertility workup');
+    }
+    if (/previous lscs|previous caes|caesarean/.test(source) || document.getElementById('obg-hr-prevlscs')?.checked) {
+      procedure.push('Delivery planning: TOLAC vs elective repeat LSCS');
+    }
+    if (/tubal|endometriosis/.test(source) || document.getElementById('obg-inf-tubal')?.checked || document.getElementById('obg-inf-endo')?.checked) {
+      procedure.push('Diagnostic laparoscopy / hysteroscopy discussion');
+    }
+  } else if (dept === 'skin') {
+    const guidance = typeof computeSkinGuidance === 'function' ? computeSkinGuidance() : { management: [], procedures: [] };
+    advice.push.apply(advice, guidance.management || []);
+    procedure.push.apply(procedure, guidance.procedures || []);
+    if (/acne/.test(source)) advice.push('Do not pick lesions and use sunscreen regularly');
+    if (/melasma|pigment/.test(source)) advice.push('Strict photoprotection with daily broad-spectrum sunscreen');
+  }
+  return {
+    advice: dedupePlanSuggestionItems(advice).slice(0, 6),
+    procedure: dedupePlanSuggestionItems(procedure).slice(0, 6)
+  };
+}
+function renderSmartSuggestionBlock(hostId, dept, kind, items) {
+  const host = document.getElementById(hostId);
+  if (!host) return;
+  const title = kind === 'procedure' ? 'AI Procedure Suggestions' : 'AI Instruction Suggestions';
+  const subtitle = items.length ? 'Based on the current diagnosis and department context' : 'Suggestions will appear when diagnosis details are entered';
+  if (!items.length) {
+    host.innerHTML = '<div class="smart-suggestion-head"><div class="smart-suggestion-title">' + title + '</div><div class="smart-suggestion-sub">' + subtitle + '</div></div><div class="smart-suggestion-empty">No suggestions yet.</div>';
+    return;
+  }
+  host.innerHTML = '<div class="smart-suggestion-head"><div class="smart-suggestion-title">' + title + '</div><div class="smart-suggestion-sub">' + subtitle + '</div></div><div class="smart-suggestion-grid">' + items.map(function (item) {
+    const safe = escapeHtmlConsent(item);
+    const jsText = String(item).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    return '<button type="button" class="smart-suggestion-chip" onclick="applySmartDeptSuggestion(\'' + dept + '\',\'' + kind + '\',\'' + jsText + '\')">+ ' + safe + '</button>';
+  }).join('') + '</div>';
+}
+function renderDeptSmartSuggestions(dept) {
+  const suggestions = buildDeptSmartSuggestions(dept);
+  if (dept === 'ophtho') {
+    renderSmartSuggestionBlock('oe-advice-suggestions', dept, 'advice', suggestions.advice);
+    renderSmartSuggestionBlock('oe-proc-suggestions', dept, 'procedure', suggestions.procedure);
+  } else if (dept === 'obg') {
+    renderSmartSuggestionBlock('obg-advice-suggestions', dept, 'advice', suggestions.advice);
+    renderSmartSuggestionBlock('obg-proc-suggestions', dept, 'procedure', suggestions.procedure);
+  }
+}
+window.applySmartDeptSuggestion = function applySmartDeptSuggestion(dept, kind, text) {
+  const value = String(text || '').trim();
+  if (!value) return;
+  if (kind === 'procedure') {
+    const container = document.getElementById(getDeptProcedureContainerId(dept));
+    addProcItemToContainer(container, value, 0, { quiet: true });
+    saveDeptPlanDraft(dept);
+  } else {
+    saveDeptTemplateOption('advice', dept, value);
+    renderDeptAdviceLibrary(dept);
+    appendAdviceTemplateToTextarea(dept, value);
+  }
+};
+function scheduleDeptSmartSuggestionRefresh(dept) {
+  window._deptSmartSuggestionTimers = window._deptSmartSuggestionTimers || {};
+  clearTimeout(window._deptSmartSuggestionTimers[dept]);
+  window._deptSmartSuggestionTimers[dept] = setTimeout(function () {
+    renderDeptSmartSuggestions(dept);
+  }, 120);
+}
+function bindDeptSmartSuggestionListeners() {
+  if (window._deptSmartSuggestionListenersBound) return;
+  window._deptSmartSuggestionListenersBound = true;
+  var handle = function (evt) {
+    const target = evt && evt.target;
+    if (!target || !target.closest) return;
+    if (target.closest('#pg-ophtho')) scheduleDeptSmartSuggestionRefresh('ophtho');
+    if (target.closest('#pg-obg')) scheduleDeptSmartSuggestionRefresh('obg');
+  };
+  document.addEventListener('input', handle, true);
+  document.addEventListener('change', handle, true);
+}
 function getDeptPlanDraftKey(dept, bmhId) {
   const ptId = String(bmhId || window.CURRENT_PATIENT?.bmhId || '').trim();
   if (!ptId) return '';
@@ -19700,6 +19895,19 @@ function saveDeptPlanDraft(dept) {
   };
   try { localStorage.setItem(key, JSON.stringify(payload)); } catch (e) {}
 }
+window.focusPlanSection = function focusPlanSection(id, btn) {
+  const target = document.getElementById(id);
+  if (!target) return;
+  if (btn && btn.closest) {
+    const wrap = btn.closest('[data-plan-tabs]');
+    if (wrap) wrap.querySelectorAll('.plan-section-tab').forEach(function (tab) { tab.classList.toggle('active', tab === btn); });
+  }
+  try {
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (e) {
+    target.scrollIntoView();
+  }
+};
 function restoreDeptPlanDraft(dept, bmhId) {
   const key = getDeptPlanDraftKey(dept, bmhId);
   if (!key) return;
@@ -20001,6 +20209,7 @@ function refreshDeptAdviceAndProcedureUi() {
     renderDeptAdviceLibrary(dept);
     renderDeptProcedureLibrary(dept);
     renderDeptProcedureSelect(dept);
+    renderDeptSmartSuggestions(dept);
   });
 }
 function saveCustomRxOptionValue(kind, raw) {
@@ -42358,6 +42567,9 @@ function renderOphthoRecap() {
 
 window.addEventListener('DOMContentLoaded', function() {
   preloadUserSettings && preloadUserSettings();
+  bindDeptSmartSuggestionListeners && bindDeptSmartSuggestionListeners();
+  renderDeptSmartSuggestions && renderDeptSmartSuggestions('ophtho');
+  renderDeptSmartSuggestions && renderDeptSmartSuggestions('obg');
   // Load saved creds
   try {
     const saved = localStorage.getItem('bmh_creds');
