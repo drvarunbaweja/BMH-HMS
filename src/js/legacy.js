@@ -957,44 +957,153 @@ function loadInventoryDeptRows() {
 function saveInventoryDeptRows(rows) {
   try { localStorage.setItem('bmh_inventory_depts', JSON.stringify(rows || [])); } catch (e) { /* noop */ }
 }
-function bmhLoadPersistedStoreLocations() {
+function bmhInventorySettingsPayload(rows, updatedAt) {
+  return {
+    rows: Array.isArray(rows) ? rows.slice() : [],
+    updatedAt: Number(updatedAt || Date.now()) || Date.now()
+  };
+}
+function bmhReadTimestampedInventorySetting(localKey, fallbackKey) {
+  let local = null;
   try {
-    const raw = JSON.parse(localStorage.getItem('bmh_store_locations') || 'null');
-    if (Array.isArray(raw) && raw.length) {
-      window.BMH_STORE_LOCATIONS = raw.map(function (s) { return String(s || '').trim(); }).filter(Boolean);
-    }
+    local = JSON.parse(localStorage.getItem(localKey) || 'null');
   } catch (e) { /* noop */ }
+  if (local && typeof local === 'object' && Array.isArray(local.rows)) return local;
+  if (fallbackKey) {
+    try {
+      const legacy = JSON.parse(localStorage.getItem(fallbackKey) || 'null');
+      if (Array.isArray(legacy)) return bmhInventorySettingsPayload(legacy, localStorage.getItem(fallbackKey + '_updated_at') || Date.now());
+    } catch (e) { /* noop */ }
+  }
+  return null;
+}
+function loadInventoryDeletedRows() {
+  if (window._bmhInventoryDeletedRows) return window._bmhInventoryDeletedRows;
+  let map = {};
+  try {
+    const raw = JSON.parse(localStorage.getItem('bmh_inventory_deleted_rows') || 'null');
+    if (raw && typeof raw === 'object') map = raw;
+  } catch (e) { /* noop */ }
+  window._bmhInventoryDeletedRows = map;
+  return window._bmhInventoryDeletedRows;
+}
+function saveInventoryDeletedRows() {
+  try { localStorage.setItem('bmh_inventory_deleted_rows', JSON.stringify(window._bmhInventoryDeletedRows || {})); } catch (e) { /* noop */ }
+}
+function bmhInventoryRowUpdatedAt(row) {
+  const stamp = row && (row.updatedAt || row.ts || row.createdAt || row.date || row._updatedAt);
+  const parsed = Date.parse(stamp || '');
+  return parsed || Number(stamp || 0) || 0;
+}
+function upsertInventoryDeletedRow(barcode, updatedAt) {
+  const key = String(barcode || '').trim();
+  if (!key) return;
+  const map = loadInventoryDeletedRows();
+  const nextTs = Number(updatedAt || Date.now()) || Date.now();
+  if (Number(map[key] || 0) <= nextTs) map[key] = nextTs;
+  saveInventoryDeletedRows();
+}
+function bmhApplyInventoryMergedRow(row) {
+  if (!row || !row.barcode) return;
+  const key = String(row.barcode || '');
+  const deletedTs = Number(loadInventoryDeletedRows()[key] || 0);
+  const rowTs = bmhInventoryRowUpdatedAt(row);
+  if (row._deleted && rowTs) upsertInventoryDeletedRow(key, rowTs);
+  if (deletedTs && deletedTs >= rowTs) {
+    const idx = INVENTORY.findIndex(function (item) { return String(item.barcode || '') === key; });
+    if (idx > -1) INVENTORY.splice(idx, 1);
+    if (BCMAP && BCMAP[key]) delete BCMAP[key];
+    return;
+  }
+  const copy = Object.assign({}, row, { _deleted: false });
+  normalizeInventoryRecord(copy);
+  const existing = INVENTORY.find(function (item) { return String(item.barcode || '') === key; });
+  if (existing) Object.assign(existing, copy);
+  else INVENTORY.push(copy);
+  BCMAP[key] = existing || copy;
+  if (copy.name) BCMAP[String(copy.name).toLowerCase().substring(0, 15)] = existing || copy;
+}
+function markInventoryItemDeleted(item, opts) {
+  if (!item || !item.barcode) return Promise.resolve();
+  const ts = opts?.updatedAt || new Date().toISOString();
+  upsertInventoryDeletedRow(item.barcode, Date.parse(ts) || Date.now());
+  const idx = INVENTORY.findIndex(function (row) { return String(row.barcode || '') === String(item.barcode || ''); });
+  if (idx > -1) INVENTORY.splice(idx, 1);
+  if (BCMAP && BCMAP[item.barcode]) delete BCMAP[item.barcode];
+  saveInventoryStockToStorage && saveInventoryStockToStorage();
+  if (!window.FBDB) return Promise.resolve();
+  return window.FBDB.ref('inventory/' + String(item.barcode).replace(/[.#$/\[\]]/g, '_')).set({
+    barcode: item.barcode,
+    name: item.name || '',
+    _deleted: true,
+    updatedAt: ts
+  }).catch(function () {});
+}
+function bmhLoadPersistedStoreLocations() {
+  const local = bmhReadTimestampedInventorySetting('bmh_store_locations_meta', 'bmh_store_locations');
+  if (local && local.rows.length) {
+    window.BMH_STORE_LOCATIONS = local.rows.map(function (s) { return String(s || '').trim(); }).filter(Boolean);
+    window._bmhStoreLocationsUpdatedAt = Number(local.updatedAt || 0) || 0;
+  }
   if (window._bmhStoreLocationsCloudLoaded || !window.FBDB) return;
   window._bmhStoreLocationsCloudLoaded = true;
   window.FBDB.ref('settings/inventory/storeLocations').once('value').then(function (snap) {
     const raw = snap.val();
-    if (!Array.isArray(raw) || !raw.length) return;
-    window.BMH_STORE_LOCATIONS = raw.map(function (s) { return String(s || '').trim(); }).filter(Boolean);
-    try { localStorage.setItem('bmh_store_locations', JSON.stringify(window.BMH_STORE_LOCATIONS)); } catch (e) { /* noop */ }
+    const payload = Array.isArray(raw) ? bmhInventorySettingsPayload(raw) : (raw && typeof raw === 'object' && Array.isArray(raw.rows) ? raw : null);
+    if (!payload || !payload.rows.length) return;
+    const remoteTs = Number(payload.updatedAt || 0) || 0;
+    const localTs = Number(window._bmhStoreLocationsUpdatedAt || 0) || 0;
+    if (remoteTs < localTs) {
+      saveInventoryStoreLocations();
+      return;
+    }
+    window.BMH_STORE_LOCATIONS = payload.rows.map(function (s) { return String(s || '').trim(); }).filter(Boolean);
+    window._bmhStoreLocationsUpdatedAt = remoteTs || Date.now();
+    try {
+      localStorage.setItem('bmh_store_locations', JSON.stringify(window.BMH_STORE_LOCATIONS));
+      localStorage.setItem('bmh_store_locations_meta', JSON.stringify(bmhInventorySettingsPayload(window.BMH_STORE_LOCATIONS, window._bmhStoreLocationsUpdatedAt)));
+    } catch (e) { /* noop */ }
     if (typeof bmhPopulateInventorySelectors === 'function') bmhPopulateInventorySelectors();
   }).catch(function () {});
 }
 function saveInventoryStoreLocations() {
-  try { localStorage.setItem('bmh_store_locations', JSON.stringify((window.BMH_STORE_LOCATIONS || []).slice())); } catch (e) { /* noop */ }
+  const payload = bmhInventorySettingsPayload(window.BMH_STORE_LOCATIONS || []);
+  window._bmhStoreLocationsUpdatedAt = payload.updatedAt;
+  try {
+    localStorage.setItem('bmh_store_locations', JSON.stringify(payload.rows));
+    localStorage.setItem('bmh_store_locations_meta', JSON.stringify(payload));
+  } catch (e) { /* noop */ }
   if (window.FBDB) {
-    window.FBDB.ref('settings/inventory/storeLocations').set((window.BMH_STORE_LOCATIONS || []).slice()).catch(function () {});
+    window.FBDB.ref('settings/inventory/storeLocations').set(payload).catch(function () {});
   }
 }
 function loadInventoryHiddenStoreLocations() {
   if (window._bmhInventoryHiddenStoreLocations) return window._bmhInventoryHiddenStoreLocations;
   let list = [];
-  try {
-    const raw = JSON.parse(localStorage.getItem('bmh_store_locations_hidden') || 'null');
-    if (Array.isArray(raw)) list = raw;
-  } catch (e) { /* noop */ }
+  const local = bmhReadTimestampedInventorySetting('bmh_store_locations_hidden_meta', 'bmh_store_locations_hidden');
+  if (local && Array.isArray(local.rows)) {
+    list = local.rows;
+    window._bmhInventoryHiddenStoreLocationsUpdatedAt = Number(local.updatedAt || 0) || 0;
+  }
   window._bmhInventoryHiddenStoreLocations = list.map(function (s) { return normalizeInventoryTextValue(s); }).filter(Boolean);
   if (!window._bmhInventoryHiddenStoreLocationsCloudLoaded && window.FBDB) {
     window._bmhInventoryHiddenStoreLocationsCloudLoaded = true;
     window.FBDB.ref('settings/inventory/storeLocationsHidden').once('value').then(function (snap) {
       const raw = snap.val();
-      if (!Array.isArray(raw)) return;
-      window._bmhInventoryHiddenStoreLocations = raw.map(function (s) { return normalizeInventoryTextValue(s); }).filter(Boolean);
-      try { localStorage.setItem('bmh_store_locations_hidden', JSON.stringify(window._bmhInventoryHiddenStoreLocations)); } catch (e) {}
+      const payload = Array.isArray(raw) ? bmhInventorySettingsPayload(raw) : (raw && typeof raw === 'object' && Array.isArray(raw.rows) ? raw : null);
+      if (!payload) return;
+      const remoteTs = Number(payload.updatedAt || 0) || 0;
+      const localTs = Number(window._bmhInventoryHiddenStoreLocationsUpdatedAt || 0) || 0;
+      if (remoteTs < localTs) {
+        saveInventoryHiddenStoreLocations();
+        return;
+      }
+      window._bmhInventoryHiddenStoreLocations = payload.rows.map(function (s) { return normalizeInventoryTextValue(s); }).filter(Boolean);
+      window._bmhInventoryHiddenStoreLocationsUpdatedAt = remoteTs || Date.now();
+      try {
+        localStorage.setItem('bmh_store_locations_hidden', JSON.stringify(window._bmhInventoryHiddenStoreLocations));
+        localStorage.setItem('bmh_store_locations_hidden_meta', JSON.stringify(bmhInventorySettingsPayload(window._bmhInventoryHiddenStoreLocations, window._bmhInventoryHiddenStoreLocationsUpdatedAt)));
+      } catch (e) {}
       if (typeof bmhPopulateInventorySelectors === 'function') bmhPopulateInventorySelectors();
     }).catch(function () {});
   }
@@ -1003,9 +1112,14 @@ function loadInventoryHiddenStoreLocations() {
 function saveInventoryHiddenStoreLocations() {
   const rows = (window._bmhInventoryHiddenStoreLocations || []).map(function (s) { return normalizeInventoryTextValue(s); }).filter(Boolean);
   window._bmhInventoryHiddenStoreLocations = Array.from(new Set(rows));
-  try { localStorage.setItem('bmh_store_locations_hidden', JSON.stringify(window._bmhInventoryHiddenStoreLocations)); } catch (e) { /* noop */ }
+  const payload = bmhInventorySettingsPayload(window._bmhInventoryHiddenStoreLocations || []);
+  window._bmhInventoryHiddenStoreLocationsUpdatedAt = payload.updatedAt;
+  try {
+    localStorage.setItem('bmh_store_locations_hidden', JSON.stringify(payload.rows));
+    localStorage.setItem('bmh_store_locations_hidden_meta', JSON.stringify(payload));
+  } catch (e) { /* noop */ }
   if (window.FBDB) {
-    window.FBDB.ref('settings/inventory/storeLocationsHidden').set(window._bmhInventoryHiddenStoreLocations).catch(function () {});
+    window.FBDB.ref('settings/inventory/storeLocationsHidden').set(payload).catch(function () {});
   }
 }
 function bmhBillingAdvanceReasonOptions() {
@@ -8485,22 +8599,14 @@ function loadInventoryStockFromStorage() {
     const arr = primary ? JSON.parse(primary) : readInventoryRowsFromLocalSnapshots();
     if (!Array.isArray(arr)) return;
     arr.forEach(row => {
-      const it = INVENTORY.find(x => x.barcode === row.barcode);
-      if (it) {
-        Object.assign(it, row);
-      } else if (row && row.barcode) {
-        const copy = Object.assign({}, row);
-        normalizeInventoryRecord(copy);
-        INVENTORY.push(copy);
-        BCMAP[copy.barcode] = copy;
-        if (copy.name) BCMAP[String(copy.name).toLowerCase().substring(0, 15)] = copy;
-      }
+      if (!row || !row.barcode) return;
+      bmhApplyInventoryMergedRow(row);
     });
   } catch (e) { /* noop */ }
 }
 function saveInventoryStockToStorage() {
   try {
-    const next = JSON.stringify(INVENTORY.map(i => ({ barcode: i.barcode, stock: i.stock, name: i.name, cat: i.cat, mrp: i.mrp, exp: i.exp, dept: i.dept, vendor: i.vendor, company: i.company, invoiceNo: i.invoiceNo, cost: i.cost, qr: i.qr, store: i.store, min: i.min, billMode: i.billMode, vendorBillingMode: i.vendorBillingMode, serialNo: i.serialNo, batchNo: i.batchNo, power: i.power, iolCompany: i.iolCompany, iolBrand: i.iolBrand, iolModel: i.iolModel, genericName: i.genericName } )));
+    const next = JSON.stringify(INVENTORY.map(i => ({ barcode: i.barcode, stock: i.stock, name: i.name, cat: i.cat, mrp: i.mrp, exp: i.exp, dept: i.dept, vendor: i.vendor, company: i.company, invoiceNo: i.invoiceNo, cost: i.cost, qr: i.qr, store: i.store, min: i.min, billMode: i.billMode, vendorBillingMode: i.vendorBillingMode, serialNo: i.serialNo, batchNo: i.batchNo, power: i.power, iolCompany: i.iolCompany, iolBrand: i.iolBrand, iolModel: i.iolModel, genericName: i.genericName, updatedAt: i.updatedAt || new Date().toISOString() } )));
     const prev = localStorage.getItem('bmh_inventory_stock');
     if (prev && prev !== next) localStorage.setItem('bmh_inventory_stock_archive', prev);
     localStorage.setItem('bmh_inventory_stock', next);
@@ -15958,6 +16064,8 @@ window.renderStockList = renderStockList;
 // Extract the best brand label for an IOL item.
 // Priority: iolBrand field → name stripped of power → iolCompany → vendor
 function _iolBrandLabel(i) {
+  const sourceText = [i?.iolBrand, i?.iolModel, i?.name, i?.company, i?.iolCompany].filter(Boolean).join(' ');
+  if (/\bpc\s*60\s*ad\b/i.test(sourceText)) return 'PC 60 AD';
   const b = String(i.iolBrand || '').trim();
   if (b) return b;
   // Strip power notation and trailing numbers from item name
@@ -15965,6 +16073,7 @@ function _iolBrandLabel(i) {
     .replace(/[+-]?\d+(?:\.\d+)?\s*D\b.*/i, '')
     .replace(/\s+\d+$/, '')
     .trim();
+  if (/\bpc\s*60\s*ad\b/i.test(stripped)) return 'PC 60 AD';
   if (stripped && stripped.length >= 3 && !/^IOL$/i.test(stripped)) return stripped;
   return String(i.iolCompany || i.vendor || 'IOL').trim();
 }
@@ -16198,10 +16307,8 @@ function deleteInventoryItemsPrompt(barcodes) {
   if (!confirm('Delete ' + label + ' from inventory? This cannot be undone.')) return;
   barcodes.forEach(function (bc) {
     if (!bc) return;
-    // Remove from in-memory array
-    const idx = INVENTORY.findIndex(function (x) { return String(x.barcode || '') === String(bc); });
-    if (idx > -1) {
-      const removed = INVENTORY[idx];
+    const removed = INVENTORY.find(function (x) { return String(x.barcode || '') === String(bc); });
+    if (removed) {
       window.BMH_INVENTORY_REMOVALS.push({
         id: 'IRM' + Date.now() + Math.random().toString(36).slice(2, 5),
         itemName: removed.name || 'Stock item',
@@ -16214,12 +16321,8 @@ function deleteInventoryItemsPrompt(barcodes) {
         user: CURRENT_USER?.name || 'Inventory',
         ts: bmhNowISO()
       });
-      INVENTORY.splice(idx, 1);
     }
-    // Remove from barcode map
-    if (BCMAP && BCMAP[bc]) delete BCMAP[bc];
-    // Remove from RTDB + Firestore and set the recently-deleted guard
-    bmhDeleteInventoryRowsFromCloud([{ barcode: bc }]);
+    bmhDeleteInventoryRowsFromCloud([removed || { barcode: bc }]);
   });
   saveInventoryStockToStorage && saveInventoryStockToStorage();
   saveBmhFinancials && saveBmhFinancials();
@@ -16364,7 +16467,7 @@ function adminClearAllInventoryStock() {
   INVENTORY.length = 0;
   if (typeof BCMAP === 'object' && BCMAP) { Object.keys(BCMAP).forEach(function (k) { delete BCMAP[k]; }); }
   saveInventoryStockToStorage();
-  bmhDeleteInventoryRowsFromCloud(rowsToDelete);
+  rowsToDelete.forEach(function (row) { markInventoryItemDeleted(row, { updatedAt: bmhNowISO() }); });
   renderStockList();
   renderInventoryPurchaseLog();
   renderInventoryStoreStock();
@@ -16379,19 +16482,8 @@ function bmhInventoryFirebaseKey(barcode) {
 function bmhDeleteInventoryRowsFromCloud(rows) {
   const list = (Array.isArray(rows) ? rows : []).filter(function (row) { return row && row.barcode; });
   if (!list.length) return;
-  window._bmhInventoryDeletedAt = window._bmhInventoryDeletedAt || {};
   list.forEach(function (row) {
-    const barcode = String(row.barcode || '').trim();
-    if (!barcode) return;
-    window._bmhInventoryDeletedAt[barcode] = Date.now();
-    try {
-      if (window.FBDB) window.FBDB.ref('inventory/' + bmhInventoryFirebaseKey(barcode)).remove().catch(function (err) { console.warn('RTDB inventory delete failed', err); });
-    } catch (e) { console.warn('RTDB inventory delete failed', e); }
-    try {
-      if (typeof window.deleteInventoryFromFirebase === 'function') {
-        window.deleteInventoryFromFirebase(barcode).catch(function (err) { console.warn('Firestore inventory delete failed', err); });
-      }
-    } catch (e) { console.warn('Firestore inventory delete failed', e); }
+    markInventoryItemDeleted(row, { updatedAt: bmhNowISO() });
   });
 }
 function addInventoryVendorPrompt() {
@@ -16443,10 +16535,8 @@ function deleteInventoryStockRow(barcode) {
   if (idx < 0) return;
   const item = INVENTORY[idx];
   if (!confirm('Delete stock row for ' + (item.name || item.barcode || 'item') + '?')) return;
-  INVENTORY.splice(idx, 1);
-  delete BCMAP[barcode];
+  markInventoryItemDeleted(item, { updatedAt: bmhNowISO() });
   saveInventoryStockToStorage();
-  bmhDeleteInventoryRowsFromCloud([item]);
   renderStockList();
   renderInventoryStoreStock();
   renderInventoryPoAlerts();
@@ -16465,10 +16555,8 @@ function deleteInventoryIolGroup(company, brand, power, store) {
   });
   if (!matches.length) return;
   if (!confirm('Delete ' + matches.length + ' IOL stock entr' + (matches.length === 1 ? 'y' : 'ies') + ' for ' + [company, brand, power].filter(Boolean).join(' ') + '?')) return;
-  window.INVENTORY = INVENTORY.filter(function (i) { return !matches.includes(i); });
-  matches.forEach(function (i) { if (i.barcode) delete BCMAP[i.barcode]; });
+  matches.forEach(function (item) { markInventoryItemDeleted(item, { updatedAt: bmhNowISO() }); });
   saveInventoryStockToStorage();
-  bmhDeleteInventoryRowsFromCloud(matches);
   renderStockList();
   renderInventoryStoreStock();
   renderInventoryPoAlerts();
@@ -16892,19 +16980,38 @@ function renderInventoryStoreStock() {
     const text = (String(item.name || '') + ' ' + String(item.cat || '')).toLowerCase();
     return /\biol\b|intraocular lens|acrysof|tecnis|panoptix|toric|trifocal/.test(text) ? sum + (Number(item.stock) || 0) : sum;
   }, 0);
-  const grouped = {};
-  INVENTORY.forEach(function (item) {
-    const key = item.store || 'Unassigned store';
-    grouped[key] = grouped[key] || [];
-    grouped[key].push(item);
+  const deptGrouped = {};
+  (INVENTORY || []).forEach(function (item) {
+    const dept = String(item.dept || 'general');
+    const store = String(item.store || 'Unassigned store');
+    if (!deptGrouped[dept]) deptGrouped[dept] = {};
+    if (!deptGrouped[dept][store]) deptGrouped[dept][store] = [];
+    deptGrouped[dept][store].push(item);
   });
-  const keys = Object.keys(grouped).sort();
-  const storesHtml = keys.length ? keys.map(function (store) {
-    const rows = grouped[store];
-    const total = rows.reduce(function (s, r) { return s + (Number(r.stock) || 0); }, 0);
+  const deptKeys = Object.keys(deptGrouped).sort(function (a, b) { return bmhDeptLabel(a).localeCompare(bmhDeptLabel(b)); });
+  const storesHtml = deptKeys.length ? deptKeys.map(function (dept) {
+    const stores = deptGrouped[dept] || {};
+    const storeKeys = Object.keys(stores).sort();
+    const deptTotal = storeKeys.reduce(function (sum, store) {
+      return sum + (stores[store] || []).reduce(function (inner, row) { return inner + (Number(row.stock) || 0); }, 0);
+    }, 0);
     return `<div style="padding:10px 0;border-bottom:1px solid var(--g5)">
-      <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:6px"><strong>${escapeHtmlConsent(store)}</strong><span style="font-size:11px;color:var(--bmh-blue);font-weight:900">${total} units</span></div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap">${rows.slice(0,8).map(function (r) { return `<span class="badge ${Number(r.stock||0) <= Number(r.min||0) ? 'bd-orange' : 'bd-green'}">${escapeHtmlConsent(r.name)} · ${Number(r.stock||0)}</span>`; }).join('')}${rows.length > 8 ? `<span class="badge bd-blue">+${rows.length - 8} more</span>` : ''}</div>
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:8px"><strong>${escapeHtmlConsent(bmhDeptLabel(dept))}</strong><span style="font-size:11px;color:var(--bmh-blue);font-weight:900">${deptTotal} units</span></div>
+      ${storeKeys.map(function (store) {
+        const rows = (stores[store] || []).slice().sort(function (a, b) {
+          return String(a.cat || '').localeCompare(String(b.cat || '')) || String(a.name || '').localeCompare(String(b.name || ''));
+        });
+        const total = rows.reduce(function (s, r) { return s + (Number(r.stock) || 0); }, 0);
+        return `<div style="margin:0 0 8px 14px;padding-left:10px;border-left:2px solid var(--g5)">
+          <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:6px"><span style="font-weight:800">${escapeHtmlConsent(store)}</span><span style="font-size:10px;color:var(--g1);font-weight:900">${total} units</span></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">${rows.map(function (r) {
+            const label = String(r.cat || '').toLowerCase() === 'iol'
+              ? (_iolBrandLabel(r) + (r.power ? ' ' + r.power : ''))
+              : String(r.name || '');
+            return `<span class="badge ${Number(r.stock||0) <= Number(r.min||0) ? 'bd-orange' : 'bd-green'}">${escapeHtmlConsent(label)} · ${Number(r.stock||0)}</span>`;
+          }).join('')}</div>
+        </div>`;
+      }).join('')}
     </div>`;
   }).join('') : '<div style="padding:12px;color:var(--g1);font-size:12px">No stock assigned to stores yet.</div>';
   el.innerHTML = `<div style="padding:8px 0 10px;border-bottom:1px solid var(--g5);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center"><strong>Total IOL stock</strong><span class="badge bd-blue" style="font-size:11px">${iolTotal} units</span></div>` + storesHtml;
@@ -35318,6 +35425,7 @@ function savePrescriptionToFirebase(bmhId, rxData) {
 function saveInventoryItemToFirebase(item) {
   normalizeInventoryRecord(item);
   if (!item || !item.barcode || !window.FBDB) return Promise.resolve();
+  item.updatedAt = new Date().toISOString();
   return window.FBDB.ref('inventory/' + String(item.barcode).replace(/[.#$/\[\]]/g, '_')).set(item);
 }
 window.saveInventoryToFirebase = saveInventoryItemToFirebase;
@@ -35329,27 +35437,46 @@ function loadInventoryFromFirebase() {
     const remoteRows = (data && typeof data === 'object') ? Object.values(data) : [];
     const localRows = readInventoryRowsFromLocalSnapshots();
     const mergedByBarcode = {};
+    const deletedRows = loadInventoryDeletedRows();
     localRows.forEach(function (item) {
       if (!item || !item.barcode) return;
       mergedByBarcode[String(item.barcode)] = Object.assign({}, item);
     });
     remoteRows.forEach(function (item) {
       if (!item || !item.barcode) return;
-      mergedByBarcode[String(item.barcode)] = Object.assign({}, mergedByBarcode[String(item.barcode)] || {}, item);
+      const key = String(item.barcode);
+      const existing = mergedByBarcode[key];
+      const existingTs = bmhInventoryRowUpdatedAt(existing);
+      const nextTs = bmhInventoryRowUpdatedAt(item);
+      mergedByBarcode[key] = (!existing || nextTs >= existingTs) ? Object.assign({}, existing || {}, item) : Object.assign({}, item, existing);
     });
     Object.values(mergedByBarcode).forEach(function (item) {
       if (!item || !item.barcode) return;
-      normalizeInventoryRecord(item);
-      const existing = INVENTORY.find(function (row) { return String(row.barcode || '') === String(item.barcode || ''); });
-      if (existing) Object.assign(existing, item);
-      else INVENTORY.push(item);
-      BCMAP[item.barcode] = existing || item;
-      if (item.name) BCMAP[String(item.name).toLowerCase().substring(0, 15)] = existing || item;
+      const key = String(item.barcode || '');
+      const deletedTs = Number(deletedRows[key] || 0);
+      const itemTs = bmhInventoryRowUpdatedAt(item);
+      if (item._deleted && itemTs) upsertInventoryDeletedRow(key, itemTs);
+      if (deletedTs && deletedTs >= itemTs) return;
+      bmhApplyInventoryMergedRow(item);
     });
     saveInventoryStockToStorage();
-    if (localRows.length > remoteRows.length) {
-      Object.values(mergedByBarcode).forEach(function (item) { saveInventoryItemToFirebase(item).catch(function () {}); });
-    }
+    Object.keys(deletedRows || {}).forEach(function (barcode) {
+      const remote = mergedByBarcode[String(barcode)];
+      const deletedTs = Number(deletedRows[barcode] || 0);
+      if (!remote || bmhInventoryRowUpdatedAt(remote) < deletedTs) {
+        window.FBDB.ref('inventory/' + String(barcode).replace(/[.#$/\[\]]/g, '_')).set({
+          barcode: barcode,
+          _deleted: true,
+          updatedAt: new Date(deletedTs).toISOString()
+        }).catch(function () {});
+      }
+    });
+    Object.values(mergedByBarcode).forEach(function (item) {
+      if (!item || !item.barcode || item._deleted) return;
+      const deletedTs = Number(deletedRows[String(item.barcode)] || 0);
+      if (deletedTs && deletedTs >= bmhInventoryRowUpdatedAt(item)) return;
+      saveInventoryItemToFirebase(item).catch(function () {});
+    });
     renderInventoryImportDatalists();
     renderStockList();
     renderInventoryStoreStock();

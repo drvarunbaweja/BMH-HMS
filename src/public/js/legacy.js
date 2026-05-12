@@ -957,44 +957,153 @@ function loadInventoryDeptRows() {
 function saveInventoryDeptRows(rows) {
   try { localStorage.setItem('bmh_inventory_depts', JSON.stringify(rows || [])); } catch (e) { /* noop */ }
 }
-function bmhLoadPersistedStoreLocations() {
+function bmhInventorySettingsPayload(rows, updatedAt) {
+  return {
+    rows: Array.isArray(rows) ? rows.slice() : [],
+    updatedAt: Number(updatedAt || Date.now()) || Date.now()
+  };
+}
+function bmhReadTimestampedInventorySetting(localKey, fallbackKey) {
+  let local = null;
   try {
-    const raw = JSON.parse(localStorage.getItem('bmh_store_locations') || 'null');
-    if (Array.isArray(raw) && raw.length) {
-      window.BMH_STORE_LOCATIONS = raw.map(function (s) { return String(s || '').trim(); }).filter(Boolean);
-    }
+    local = JSON.parse(localStorage.getItem(localKey) || 'null');
   } catch (e) { /* noop */ }
+  if (local && typeof local === 'object' && Array.isArray(local.rows)) return local;
+  if (fallbackKey) {
+    try {
+      const legacy = JSON.parse(localStorage.getItem(fallbackKey) || 'null');
+      if (Array.isArray(legacy)) return bmhInventorySettingsPayload(legacy, localStorage.getItem(fallbackKey + '_updated_at') || Date.now());
+    } catch (e) { /* noop */ }
+  }
+  return null;
+}
+function loadInventoryDeletedRows() {
+  if (window._bmhInventoryDeletedRows) return window._bmhInventoryDeletedRows;
+  let map = {};
+  try {
+    const raw = JSON.parse(localStorage.getItem('bmh_inventory_deleted_rows') || 'null');
+    if (raw && typeof raw === 'object') map = raw;
+  } catch (e) { /* noop */ }
+  window._bmhInventoryDeletedRows = map;
+  return window._bmhInventoryDeletedRows;
+}
+function saveInventoryDeletedRows() {
+  try { localStorage.setItem('bmh_inventory_deleted_rows', JSON.stringify(window._bmhInventoryDeletedRows || {})); } catch (e) { /* noop */ }
+}
+function bmhInventoryRowUpdatedAt(row) {
+  const stamp = row && (row.updatedAt || row.ts || row.createdAt || row.date || row._updatedAt);
+  const parsed = Date.parse(stamp || '');
+  return parsed || Number(stamp || 0) || 0;
+}
+function upsertInventoryDeletedRow(barcode, updatedAt) {
+  const key = String(barcode || '').trim();
+  if (!key) return;
+  const map = loadInventoryDeletedRows();
+  const nextTs = Number(updatedAt || Date.now()) || Date.now();
+  if (Number(map[key] || 0) <= nextTs) map[key] = nextTs;
+  saveInventoryDeletedRows();
+}
+function bmhApplyInventoryMergedRow(row) {
+  if (!row || !row.barcode) return;
+  const key = String(row.barcode || '');
+  const deletedTs = Number(loadInventoryDeletedRows()[key] || 0);
+  const rowTs = bmhInventoryRowUpdatedAt(row);
+  if (row._deleted && rowTs) upsertInventoryDeletedRow(key, rowTs);
+  if (deletedTs && deletedTs >= rowTs) {
+    const idx = INVENTORY.findIndex(function (item) { return String(item.barcode || '') === key; });
+    if (idx > -1) INVENTORY.splice(idx, 1);
+    if (BCMAP && BCMAP[key]) delete BCMAP[key];
+    return;
+  }
+  const copy = Object.assign({}, row, { _deleted: false });
+  normalizeInventoryRecord(copy);
+  const existing = INVENTORY.find(function (item) { return String(item.barcode || '') === key; });
+  if (existing) Object.assign(existing, copy);
+  else INVENTORY.push(copy);
+  BCMAP[key] = existing || copy;
+  if (copy.name) BCMAP[String(copy.name).toLowerCase().substring(0, 15)] = existing || copy;
+}
+function markInventoryItemDeleted(item, opts) {
+  if (!item || !item.barcode) return Promise.resolve();
+  const ts = opts?.updatedAt || new Date().toISOString();
+  upsertInventoryDeletedRow(item.barcode, Date.parse(ts) || Date.now());
+  const idx = INVENTORY.findIndex(function (row) { return String(row.barcode || '') === String(item.barcode || ''); });
+  if (idx > -1) INVENTORY.splice(idx, 1);
+  if (BCMAP && BCMAP[item.barcode]) delete BCMAP[item.barcode];
+  saveInventoryStockToStorage && saveInventoryStockToStorage();
+  if (!window.FBDB) return Promise.resolve();
+  return window.FBDB.ref('inventory/' + String(item.barcode).replace(/[.#$/\[\]]/g, '_')).set({
+    barcode: item.barcode,
+    name: item.name || '',
+    _deleted: true,
+    updatedAt: ts
+  }).catch(function () {});
+}
+function bmhLoadPersistedStoreLocations() {
+  const local = bmhReadTimestampedInventorySetting('bmh_store_locations_meta', 'bmh_store_locations');
+  if (local && local.rows.length) {
+    window.BMH_STORE_LOCATIONS = local.rows.map(function (s) { return String(s || '').trim(); }).filter(Boolean);
+    window._bmhStoreLocationsUpdatedAt = Number(local.updatedAt || 0) || 0;
+  }
   if (window._bmhStoreLocationsCloudLoaded || !window.FBDB) return;
   window._bmhStoreLocationsCloudLoaded = true;
   window.FBDB.ref('settings/inventory/storeLocations').once('value').then(function (snap) {
     const raw = snap.val();
-    if (!Array.isArray(raw) || !raw.length) return;
-    window.BMH_STORE_LOCATIONS = raw.map(function (s) { return String(s || '').trim(); }).filter(Boolean);
-    try { localStorage.setItem('bmh_store_locations', JSON.stringify(window.BMH_STORE_LOCATIONS)); } catch (e) { /* noop */ }
+    const payload = Array.isArray(raw) ? bmhInventorySettingsPayload(raw) : (raw && typeof raw === 'object' && Array.isArray(raw.rows) ? raw : null);
+    if (!payload || !payload.rows.length) return;
+    const remoteTs = Number(payload.updatedAt || 0) || 0;
+    const localTs = Number(window._bmhStoreLocationsUpdatedAt || 0) || 0;
+    if (remoteTs < localTs) {
+      saveInventoryStoreLocations();
+      return;
+    }
+    window.BMH_STORE_LOCATIONS = payload.rows.map(function (s) { return String(s || '').trim(); }).filter(Boolean);
+    window._bmhStoreLocationsUpdatedAt = remoteTs || Date.now();
+    try {
+      localStorage.setItem('bmh_store_locations', JSON.stringify(window.BMH_STORE_LOCATIONS));
+      localStorage.setItem('bmh_store_locations_meta', JSON.stringify(bmhInventorySettingsPayload(window.BMH_STORE_LOCATIONS, window._bmhStoreLocationsUpdatedAt)));
+    } catch (e) { /* noop */ }
     if (typeof bmhPopulateInventorySelectors === 'function') bmhPopulateInventorySelectors();
   }).catch(function () {});
 }
 function saveInventoryStoreLocations() {
-  try { localStorage.setItem('bmh_store_locations', JSON.stringify((window.BMH_STORE_LOCATIONS || []).slice())); } catch (e) { /* noop */ }
+  const payload = bmhInventorySettingsPayload(window.BMH_STORE_LOCATIONS || []);
+  window._bmhStoreLocationsUpdatedAt = payload.updatedAt;
+  try {
+    localStorage.setItem('bmh_store_locations', JSON.stringify(payload.rows));
+    localStorage.setItem('bmh_store_locations_meta', JSON.stringify(payload));
+  } catch (e) { /* noop */ }
   if (window.FBDB) {
-    window.FBDB.ref('settings/inventory/storeLocations').set((window.BMH_STORE_LOCATIONS || []).slice()).catch(function () {});
+    window.FBDB.ref('settings/inventory/storeLocations').set(payload).catch(function () {});
   }
 }
 function loadInventoryHiddenStoreLocations() {
   if (window._bmhInventoryHiddenStoreLocations) return window._bmhInventoryHiddenStoreLocations;
   let list = [];
-  try {
-    const raw = JSON.parse(localStorage.getItem('bmh_store_locations_hidden') || 'null');
-    if (Array.isArray(raw)) list = raw;
-  } catch (e) { /* noop */ }
+  const local = bmhReadTimestampedInventorySetting('bmh_store_locations_hidden_meta', 'bmh_store_locations_hidden');
+  if (local && Array.isArray(local.rows)) {
+    list = local.rows;
+    window._bmhInventoryHiddenStoreLocationsUpdatedAt = Number(local.updatedAt || 0) || 0;
+  }
   window._bmhInventoryHiddenStoreLocations = list.map(function (s) { return normalizeInventoryTextValue(s); }).filter(Boolean);
   if (!window._bmhInventoryHiddenStoreLocationsCloudLoaded && window.FBDB) {
     window._bmhInventoryHiddenStoreLocationsCloudLoaded = true;
     window.FBDB.ref('settings/inventory/storeLocationsHidden').once('value').then(function (snap) {
       const raw = snap.val();
-      if (!Array.isArray(raw)) return;
-      window._bmhInventoryHiddenStoreLocations = raw.map(function (s) { return normalizeInventoryTextValue(s); }).filter(Boolean);
-      try { localStorage.setItem('bmh_store_locations_hidden', JSON.stringify(window._bmhInventoryHiddenStoreLocations)); } catch (e) {}
+      const payload = Array.isArray(raw) ? bmhInventorySettingsPayload(raw) : (raw && typeof raw === 'object' && Array.isArray(raw.rows) ? raw : null);
+      if (!payload) return;
+      const remoteTs = Number(payload.updatedAt || 0) || 0;
+      const localTs = Number(window._bmhInventoryHiddenStoreLocationsUpdatedAt || 0) || 0;
+      if (remoteTs < localTs) {
+        saveInventoryHiddenStoreLocations();
+        return;
+      }
+      window._bmhInventoryHiddenStoreLocations = payload.rows.map(function (s) { return normalizeInventoryTextValue(s); }).filter(Boolean);
+      window._bmhInventoryHiddenStoreLocationsUpdatedAt = remoteTs || Date.now();
+      try {
+        localStorage.setItem('bmh_store_locations_hidden', JSON.stringify(window._bmhInventoryHiddenStoreLocations));
+        localStorage.setItem('bmh_store_locations_hidden_meta', JSON.stringify(bmhInventorySettingsPayload(window._bmhInventoryHiddenStoreLocations, window._bmhInventoryHiddenStoreLocationsUpdatedAt)));
+      } catch (e) {}
       if (typeof bmhPopulateInventorySelectors === 'function') bmhPopulateInventorySelectors();
     }).catch(function () {});
   }
@@ -1003,9 +1112,14 @@ function loadInventoryHiddenStoreLocations() {
 function saveInventoryHiddenStoreLocations() {
   const rows = (window._bmhInventoryHiddenStoreLocations || []).map(function (s) { return normalizeInventoryTextValue(s); }).filter(Boolean);
   window._bmhInventoryHiddenStoreLocations = Array.from(new Set(rows));
-  try { localStorage.setItem('bmh_store_locations_hidden', JSON.stringify(window._bmhInventoryHiddenStoreLocations)); } catch (e) { /* noop */ }
+  const payload = bmhInventorySettingsPayload(window._bmhInventoryHiddenStoreLocations || []);
+  window._bmhInventoryHiddenStoreLocationsUpdatedAt = payload.updatedAt;
+  try {
+    localStorage.setItem('bmh_store_locations_hidden', JSON.stringify(payload.rows));
+    localStorage.setItem('bmh_store_locations_hidden_meta', JSON.stringify(payload));
+  } catch (e) { /* noop */ }
   if (window.FBDB) {
-    window.FBDB.ref('settings/inventory/storeLocationsHidden').set(window._bmhInventoryHiddenStoreLocations).catch(function () {});
+    window.FBDB.ref('settings/inventory/storeLocationsHidden').set(payload).catch(function () {});
   }
 }
 function bmhBillingAdvanceReasonOptions() {
@@ -4856,10 +4970,8 @@ function openBookApt(slot) {
   }
   // Set centre to current user's centre
   const centreEl = document.getElementById('book-centre');
-  syncAppointmentDoctorFilters();
-  if(centreEl) {
-    const resolvedCentre = resolveAppointmentCentreValue(window.CURRENT_PATIENT?.centre || '', window.CURRENT_USER?.centre || '');
-    centreEl.value = resolvedCentre === 'RPR' ? 'Ropar' : 'Chandigarh';
+  if(centreEl && window.CURRENT_USER?.centre) {
+    centreEl.value = window.CURRENT_USER.centre === 'RPR' ? 'Ropar' : 'Chandigarh';
   }
   openM('m-book-apt');
 }
@@ -4878,11 +4990,8 @@ function openBookAptForPatient(bmhId, date) {
       PATIENTS.map(p=>`<option value="${p.name} — ${p.bmhId}"${p.bmhId===bmhId?' selected':''}>${p.name} — ${p.bmhId}</option>`).join('');
   }
   const centreEl = document.getElementById('book-centre');
-  syncAppointmentDoctorFilters();
-  if(centreEl) {
-    const pt = (PATIENTS || []).find(function (p) { return p && p.bmhId === bmhId; }) || {};
-    const resolvedCentre = resolveAppointmentCentreValue(pt.centre || '', window.CURRENT_USER?.centre || '');
-    centreEl.value = resolvedCentre === 'RPR' ? 'Ropar' : 'Chandigarh';
+  if(centreEl && window.CURRENT_USER?.centre) {
+    centreEl.value = window.CURRENT_USER.centre === 'RPR' ? 'Ropar' : 'Chandigarh';
   }
   openM('m-book-apt');
 }
@@ -4901,96 +5010,7 @@ function normalizeAppointmentCentreValue(value) {
   if (!v) return 'CHD';
   if (v === 'rpr' || v.includes('ropar') || v.includes('rupnagar')) return 'RPR';
   if (v === 'chd' || v.includes('chandigarh')) return 'CHD';
-  if (v === 'both' || v === 'all' || v.includes('both centre')) return 'BOTH';
   return String(value || '').toUpperCase();
-}
-function appointmentCentreLabel(value) {
-  const centre = normalizeAppointmentCentreValue(value);
-  if (centre === 'RPR') return 'Ropar';
-  if (centre === 'CHD') return 'Chandigarh';
-  if (centre === 'BOTH') return 'Both Centres';
-  return centre || 'Chandigarh';
-}
-function resolveAppointmentCentreValue(preferred, fallback) {
-  const direct = normalizeAppointmentCentreValue(preferred || '');
-  if (direct && direct !== 'BOTH') return direct;
-  const fb = normalizeAppointmentCentreValue(fallback || '');
-  if (fb && fb !== 'BOTH') return fb;
-  const effective = normalizeAppointmentCentreValue((typeof getEffectiveCentre === 'function' ? getEffectiveCentre() : '') || '');
-  if (effective && effective !== 'BOTH') return effective;
-  const userCentre = normalizeAppointmentCentreValue(CURRENT_USER?.centre || '');
-  if (userCentre && userCentre !== 'BOTH') return userCentre;
-  return 'CHD';
-}
-function getAppointmentDoctors() {
-  const seeded = ['Dr. Varun Baweja', 'Dr. Geeta Baweja', 'Dr. Namrata Baweja', 'Dr. Tarun Baweja', 'Dr. Pooja Baweja'];
-  const fromApts = (APPOINTMENTS || []).map(function (a) { return String(a?.doctor || '').trim(); }).filter(Boolean);
-  const fromProfiles = (Array.isArray(DOCTOR_PROFILES) ? DOCTOR_PROFILES : []).map(function (d) { return String(d?.name || '').trim(); }).filter(Boolean);
-  return Array.from(new Set(seeded.concat(fromApts).concat(fromProfiles))).filter(Boolean).sort(function (a, b) {
-    return String(a).localeCompare(String(b));
-  });
-}
-function syncAppointmentDoctorFilters() {
-  const selects = ['apt-dr-filter', 'book-dr'].map(function (id) { return document.getElementById(id); }).filter(Boolean);
-  if (!selects.length) return;
-  const doctors = getAppointmentDoctors();
-  selects.forEach(function (sel) {
-    const prev = sel.value;
-    const isFilter = sel.id === 'apt-dr-filter';
-    sel.innerHTML = (isFilter ? '<option value="">All Doctors</option>' : '') + doctors.map(function (name) {
-      return '<option value="' + String(name).replace(/"/g, '&quot;') + '">' + String(name).replace(/</g, '&lt;') + '</option>';
-    }).join('');
-    if ([].slice.call(sel.options).some(function (opt) { return opt.value === prev; })) sel.value = prev;
-  });
-}
-function syncPrescriptionFollowupAppointment(visit, patient, opts) {
-  const options = Object.assign({ autosave: false }, opts || {});
-  const fuD = String(visit?.rxFuDate || visit?.followupDate || visit?.nextReview || '').trim().slice(0, 10);
-  if (!fuD || options.autosave) return;
-  const bmhId = String(patient?.bmhId || '').trim();
-  if (!bmhId) return;
-  const dept = String(visit?.dept || patient?.dept || '').trim() || 'ophtho';
-  const doctor = String(visit?.doctor || CURRENT_USER?.name || '').trim();
-  const centre = resolveAppointmentCentreValue(visit?.centre || patient?.centre || '', patient?.centre || '');
-  const name = patient?.name || patient?.patientName || 'Patient';
-  const mob = patient?.mob || patient?.mobile || '';
-  const samePrescriptionApt = APPOINTMENTS.find(function (a) {
-    return a && a.bmhId === bmhId && a.dept === dept && a.source === 'prescription' && a.status !== 'cancelled';
-  });
-  const sameDateApt = APPOINTMENTS.find(function (a) {
-    return a && a.bmhId === bmhId && a.dept === dept && a.date === fuD && a.status !== 'cancelled';
-  });
-  const target = sameDateApt || samePrescriptionApt;
-  if (target) {
-    target.patient = name;
-    target.mob = mob;
-    target.date = fuD;
-    target.time = target.time || getNextAvailableApptSlot(fuD, doctor);
-    target.doctor = doctor;
-    target.dept = dept;
-    target.purpose = 'Follow-up';
-    target.status = target.status || 'booked';
-    target.centre = centre;
-    target.source = 'prescription';
-    if (typeof saveAppointmentToFirebase === 'function') saveAppointmentToFirebase(target);
-    return;
-  }
-  const fuApt = {
-    id: 'A' + Date.now() + Math.floor(Math.random() * 1000),
-    patient: name,
-    bmhId: bmhId,
-    mob: mob,
-    date: fuD,
-    time: getNextAvailableApptSlot(fuD, doctor),
-    doctor: doctor,
-    dept: dept,
-    purpose: 'Follow-up',
-    status: 'booked',
-    centre: centre,
-    source: 'prescription'
-  };
-  APPOINTMENTS.push(fuApt);
-  if (typeof saveAppointmentToFirebase === 'function') saveAppointmentToFirebase(fuApt);
 }
 function roundToNearestTenMinuteSlot(baseDate) {
   const d = new Date(baseDate || Date.now());
@@ -5072,13 +5092,12 @@ function bookApt() {
       'Dr. Tarun Baweja':'psych','Dr. Pooja Baweja':'skin'
     })[doctor] || 'ophtho',
     purpose: purposeEl?.value || 'Consultation',
-    centre: resolveAppointmentCentreValue(centreEl?.value || '', window.CURRENT_USER?.centre || ''),
+    centre: normalizeAppointmentCentreValue(centreEl?.value || window.CURRENT_USER?.centre || 'CHD'),
     notes: notesEl?.value || '',
     status: 'booked',
     createdBy: window.CURRENT_USER?.username || 'reception'
   };
   APPOINTMENTS.push(apt);
-  syncAppointmentDoctorFilters();
   if(typeof saveAppointmentToFirebase==='function') saveAppointmentToFirebase(apt);
   showToast('📅 Appointment booked — '+patient+' at '+time+' ✓','s');
   closeM('m-book-apt');
@@ -6618,8 +6637,6 @@ function renderOphthoPayList() {
   el.innerHTML = myPay.length ? myPay.map(payCardHtml).join('') : `<div style="font-size:12px;color:var(--g1);padding:8px 0;text-align:center">No pending charges</div>`;
 }
 setInterval(function () {
-  const activeId = typeof getActivePageId === 'function' ? getActivePageId() : '';
-  if (activeId && activeId !== 'pg-ophtho' && activeId !== 'pg-doctor-queue') return;
   PATIENTS.forEach(function (p) {
     if (!p || typeof p.bmhId !== 'string') return;
     const el = document.getElementById('dt-' + p.bmhId.replace(/-/g, ''));
@@ -8582,63 +8599,19 @@ function loadInventoryStockFromStorage() {
     const arr = primary ? JSON.parse(primary) : readInventoryRowsFromLocalSnapshots();
     if (!Array.isArray(arr)) return;
     arr.forEach(row => {
-      const it = INVENTORY.find(x => x.barcode === row.barcode);
-      if (it) {
-        Object.assign(it, row);
-      } else if (row && row.barcode) {
-        const copy = Object.assign({}, row);
-        normalizeInventoryRecord(copy);
-        INVENTORY.push(copy);
-        BCMAP[copy.barcode] = copy;
-        if (copy.name) BCMAP[String(copy.name).toLowerCase().substring(0, 15)] = copy;
-      }
+      if (!row || !row.barcode) return;
+      bmhApplyInventoryMergedRow(row);
     });
   } catch (e) { /* noop */ }
 }
-function getInventoryDeletedMapFromStorage() {
+function saveInventoryStockToStorage() {
   try {
-    return JSON.parse(localStorage.getItem('bmh_inventory_deleted_map') || '{}') || {};
-  } catch (e) {
-    return {};
-  }
-}
-function saveInventoryDeletedMapToStorage(map) {
-  try { localStorage.setItem('bmh_inventory_deleted_map', JSON.stringify(map || {})); } catch (e) { /* noop */ }
-}
-function getInventoryRecordUpdatedAt(item) {
-  const raw = item?.updatedAt || item?.createdAt || '';
-  const parsed = Date.parse(raw);
-  if (!Number.isNaN(parsed)) return parsed;
-  const numeric = Number(raw || 0);
-  return Number.isFinite(numeric) ? numeric : 0;
-}
-function markInventoryRowsDeleted(rows, deletedAt) {
-  const stamp = Number(deletedAt || Date.now()) || Date.now();
-  const map = getInventoryDeletedMapFromStorage();
-  (Array.isArray(rows) ? rows : []).forEach(function (row) {
-    const barcode = String(row?.barcode || '').trim();
-    if (!barcode) return;
-    map[barcode] = stamp;
-  });
-  saveInventoryDeletedMapToStorage(map);
-}
-function clearInventoryDeletedMark(barcode) {
-  const key = String(barcode || '').trim();
-  if (!key) return;
-  const map = getInventoryDeletedMapFromStorage();
-  if (!(key in map)) return;
-  delete map[key];
-  saveInventoryDeletedMapToStorage(map);
-}
-function saveInventoryStockToStorage(opts) {
-  const savedAt = Number(opts?.updatedAt || Date.now()) || Date.now();
-  try {
-    const next = JSON.stringify(INVENTORY.map(i => ({ barcode: i.barcode, stock: i.stock, name: i.name, cat: i.cat, mrp: i.mrp, exp: i.exp, dept: i.dept, vendor: i.vendor, company: i.company, invoiceNo: i.invoiceNo, cost: i.cost, qr: i.qr, store: i.store, min: i.min, billMode: i.billMode, vendorBillingMode: i.vendorBillingMode, serialNo: i.serialNo, batchNo: i.batchNo, power: i.power, iolCompany: i.iolCompany, iolBrand: i.iolBrand, iolModel: i.iolModel, genericName: i.genericName, createdAt: i.createdAt || '', updatedAt: i.updatedAt || '' } )));
+    const next = JSON.stringify(INVENTORY.map(i => ({ barcode: i.barcode, stock: i.stock, name: i.name, cat: i.cat, mrp: i.mrp, exp: i.exp, dept: i.dept, vendor: i.vendor, company: i.company, invoiceNo: i.invoiceNo, cost: i.cost, qr: i.qr, store: i.store, min: i.min, billMode: i.billMode, vendorBillingMode: i.vendorBillingMode, serialNo: i.serialNo, batchNo: i.batchNo, power: i.power, iolCompany: i.iolCompany, iolBrand: i.iolBrand, iolModel: i.iolModel, genericName: i.genericName, updatedAt: i.updatedAt || new Date().toISOString() } )));
     const prev = localStorage.getItem('bmh_inventory_stock');
     if (prev && prev !== next) localStorage.setItem('bmh_inventory_stock_archive', prev);
     localStorage.setItem('bmh_inventory_stock', next);
     localStorage.setItem('bmh_inventory_stock_backup', next);
-    localStorage.setItem('bmh_inventory_stock_updated_at', String(savedAt));
+    localStorage.setItem('bmh_inventory_stock_updated_at', String(Date.now()));
   } catch (e) { /* noop */ }
 }
 function normalizeIolPowerValue(power) {
@@ -16091,6 +16064,8 @@ window.renderStockList = renderStockList;
 // Extract the best brand label for an IOL item.
 // Priority: iolBrand field → name stripped of power → iolCompany → vendor
 function _iolBrandLabel(i) {
+  const sourceText = [i?.iolBrand, i?.iolModel, i?.name, i?.company, i?.iolCompany].filter(Boolean).join(' ');
+  if (/\bpc\s*60\s*ad\b/i.test(sourceText)) return 'PC 60 AD';
   const b = String(i.iolBrand || '').trim();
   if (b) return b;
   // Strip power notation and trailing numbers from item name
@@ -16098,6 +16073,7 @@ function _iolBrandLabel(i) {
     .replace(/[+-]?\d+(?:\.\d+)?\s*D\b.*/i, '')
     .replace(/\s+\d+$/, '')
     .trim();
+  if (/\bpc\s*60\s*ad\b/i.test(stripped)) return 'PC 60 AD';
   if (stripped && stripped.length >= 3 && !/^IOL$/i.test(stripped)) return stripped;
   return String(i.iolCompany || i.vendor || 'IOL').trim();
 }
@@ -16331,10 +16307,8 @@ function deleteInventoryItemsPrompt(barcodes) {
   if (!confirm('Delete ' + label + ' from inventory? This cannot be undone.')) return;
   barcodes.forEach(function (bc) {
     if (!bc) return;
-    // Remove from in-memory array
-    const idx = INVENTORY.findIndex(function (x) { return String(x.barcode || '') === String(bc); });
-    if (idx > -1) {
-      const removed = INVENTORY[idx];
+    const removed = INVENTORY.find(function (x) { return String(x.barcode || '') === String(bc); });
+    if (removed) {
       window.BMH_INVENTORY_REMOVALS.push({
         id: 'IRM' + Date.now() + Math.random().toString(36).slice(2, 5),
         itemName: removed.name || 'Stock item',
@@ -16347,12 +16321,8 @@ function deleteInventoryItemsPrompt(barcodes) {
         user: CURRENT_USER?.name || 'Inventory',
         ts: bmhNowISO()
       });
-      INVENTORY.splice(idx, 1);
     }
-    // Remove from barcode map
-    if (BCMAP && BCMAP[bc]) delete BCMAP[bc];
-    // Remove from RTDB + Firestore and set the recently-deleted guard
-    bmhDeleteInventoryRowsFromCloud([{ barcode: bc }]);
+    bmhDeleteInventoryRowsFromCloud([removed || { barcode: bc }]);
   });
   saveInventoryStockToStorage && saveInventoryStockToStorage();
   saveBmhFinancials && saveBmhFinancials();
@@ -16497,7 +16467,7 @@ function adminClearAllInventoryStock() {
   INVENTORY.length = 0;
   if (typeof BCMAP === 'object' && BCMAP) { Object.keys(BCMAP).forEach(function (k) { delete BCMAP[k]; }); }
   saveInventoryStockToStorage();
-  bmhDeleteInventoryRowsFromCloud(rowsToDelete);
+  rowsToDelete.forEach(function (row) { markInventoryItemDeleted(row, { updatedAt: bmhNowISO() }); });
   renderStockList();
   renderInventoryPurchaseLog();
   renderInventoryStoreStock();
@@ -16509,28 +16479,11 @@ window.adminClearAllInventoryStock = adminClearAllInventoryStock;
 function bmhInventoryFirebaseKey(barcode) {
   return String(barcode || '').replace(/[.#$/\[\]]/g, '_');
 }
-function bmhDeleteInventoryRowsFromCloud(rows, deletedAt) {
+function bmhDeleteInventoryRowsFromCloud(rows) {
   const list = (Array.isArray(rows) ? rows : []).filter(function (row) { return row && row.barcode; });
   if (!list.length) return;
-  window._bmhInventoryDeletedAt = window._bmhInventoryDeletedAt || {};
-  const stamp = Number(deletedAt || Date.now()) || Date.now();
-  markInventoryRowsDeleted(list, stamp);
   list.forEach(function (row) {
-    const barcode = String(row.barcode || '').trim();
-    if (!barcode) return;
-    window._bmhInventoryDeletedAt[barcode] = stamp;
-    try {
-      if (window.FBDB) window.FBDB.ref('/').update({
-        ['inventory/' + bmhInventoryFirebaseKey(barcode)]: null,
-        ['inventoryDeleted/' + bmhInventoryFirebaseKey(barcode)]: stamp,
-        ['inventoryMeta/updatedAt']: stamp
-      }).catch(function (err) { console.warn('RTDB inventory delete failed', err); });
-    } catch (e) { console.warn('RTDB inventory delete failed', e); }
-    try {
-      if (typeof window.deleteInventoryFromFirebase === 'function') {
-        window.deleteInventoryFromFirebase(barcode).catch(function (err) { console.warn('Firestore inventory delete failed', err); });
-      }
-    } catch (e) { console.warn('Firestore inventory delete failed', e); }
+    markInventoryItemDeleted(row, { updatedAt: bmhNowISO() });
   });
 }
 function addInventoryVendorPrompt() {
@@ -16582,11 +16535,8 @@ function deleteInventoryStockRow(barcode) {
   if (idx < 0) return;
   const item = INVENTORY[idx];
   if (!confirm('Delete stock row for ' + (item.name || item.barcode || 'item') + '?')) return;
-  item.updatedAt = new Date().toISOString();
-  INVENTORY.splice(idx, 1);
-  delete BCMAP[barcode];
-  saveInventoryStockToStorage({ updatedAt: Date.now() });
-  bmhDeleteInventoryRowsFromCloud([item]);
+  markInventoryItemDeleted(item, { updatedAt: bmhNowISO() });
+  saveInventoryStockToStorage();
   renderStockList();
   renderInventoryStoreStock();
   renderInventoryPoAlerts();
@@ -16605,10 +16555,8 @@ function deleteInventoryIolGroup(company, brand, power, store) {
   });
   if (!matches.length) return;
   if (!confirm('Delete ' + matches.length + ' IOL stock entr' + (matches.length === 1 ? 'y' : 'ies') + ' for ' + [company, brand, power].filter(Boolean).join(' ') + '?')) return;
-  window.INVENTORY = INVENTORY.filter(function (i) { return !matches.includes(i); });
-  matches.forEach(function (i) { if (i.barcode) delete BCMAP[i.barcode]; });
-  saveInventoryStockToStorage({ updatedAt: Date.now() });
-  bmhDeleteInventoryRowsFromCloud(matches);
+  matches.forEach(function (item) { markInventoryItemDeleted(item, { updatedAt: bmhNowISO() }); });
+  saveInventoryStockToStorage();
   renderStockList();
   renderInventoryStoreStock();
   renderInventoryPoAlerts();
@@ -17032,19 +16980,38 @@ function renderInventoryStoreStock() {
     const text = (String(item.name || '') + ' ' + String(item.cat || '')).toLowerCase();
     return /\biol\b|intraocular lens|acrysof|tecnis|panoptix|toric|trifocal/.test(text) ? sum + (Number(item.stock) || 0) : sum;
   }, 0);
-  const grouped = {};
-  INVENTORY.forEach(function (item) {
-    const key = item.store || 'Unassigned store';
-    grouped[key] = grouped[key] || [];
-    grouped[key].push(item);
+  const deptGrouped = {};
+  (INVENTORY || []).forEach(function (item) {
+    const dept = String(item.dept || 'general');
+    const store = String(item.store || 'Unassigned store');
+    if (!deptGrouped[dept]) deptGrouped[dept] = {};
+    if (!deptGrouped[dept][store]) deptGrouped[dept][store] = [];
+    deptGrouped[dept][store].push(item);
   });
-  const keys = Object.keys(grouped).sort();
-  const storesHtml = keys.length ? keys.map(function (store) {
-    const rows = grouped[store];
-    const total = rows.reduce(function (s, r) { return s + (Number(r.stock) || 0); }, 0);
+  const deptKeys = Object.keys(deptGrouped).sort(function (a, b) { return bmhDeptLabel(a).localeCompare(bmhDeptLabel(b)); });
+  const storesHtml = deptKeys.length ? deptKeys.map(function (dept) {
+    const stores = deptGrouped[dept] || {};
+    const storeKeys = Object.keys(stores).sort();
+    const deptTotal = storeKeys.reduce(function (sum, store) {
+      return sum + (stores[store] || []).reduce(function (inner, row) { return inner + (Number(row.stock) || 0); }, 0);
+    }, 0);
     return `<div style="padding:10px 0;border-bottom:1px solid var(--g5)">
-      <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:6px"><strong>${escapeHtmlConsent(store)}</strong><span style="font-size:11px;color:var(--bmh-blue);font-weight:900">${total} units</span></div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap">${rows.slice(0,8).map(function (r) { return `<span class="badge ${Number(r.stock||0) <= Number(r.min||0) ? 'bd-orange' : 'bd-green'}">${escapeHtmlConsent(r.name)} · ${Number(r.stock||0)}</span>`; }).join('')}${rows.length > 8 ? `<span class="badge bd-blue">+${rows.length - 8} more</span>` : ''}</div>
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:8px"><strong>${escapeHtmlConsent(bmhDeptLabel(dept))}</strong><span style="font-size:11px;color:var(--bmh-blue);font-weight:900">${deptTotal} units</span></div>
+      ${storeKeys.map(function (store) {
+        const rows = (stores[store] || []).slice().sort(function (a, b) {
+          return String(a.cat || '').localeCompare(String(b.cat || '')) || String(a.name || '').localeCompare(String(b.name || ''));
+        });
+        const total = rows.reduce(function (s, r) { return s + (Number(r.stock) || 0); }, 0);
+        return `<div style="margin:0 0 8px 14px;padding-left:10px;border-left:2px solid var(--g5)">
+          <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:6px"><span style="font-weight:800">${escapeHtmlConsent(store)}</span><span style="font-size:10px;color:var(--g1);font-weight:900">${total} units</span></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">${rows.map(function (r) {
+            const label = String(r.cat || '').toLowerCase() === 'iol'
+              ? (_iolBrandLabel(r) + (r.power ? ' ' + r.power : ''))
+              : String(r.name || '');
+            return `<span class="badge ${Number(r.stock||0) <= Number(r.min||0) ? 'bd-orange' : 'bd-green'}">${escapeHtmlConsent(label)} · ${Number(r.stock||0)}</span>`;
+          }).join('')}</div>
+        </div>`;
+      }).join('')}
     </div>`;
   }).join('') : '<div style="padding:12px;color:var(--g1);font-size:12px">No stock assigned to stores yet.</div>';
   el.innerHTML = `<div style="padding:8px 0 10px;border-bottom:1px solid var(--g5);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center"><strong>Total IOL stock</strong><span class="badge bd-blue" style="font-size:11px">${iolTotal} units</span></div>` + storesHtml;
@@ -17408,13 +17375,6 @@ function choosePreferredChargesRows(localRows, remoteRows, localTs, remoteTs) {
   if (lts && rts && lts !== rts) return lts > rts ? localList : remoteList;
   return scoreChargesRows(localList) >= scoreChargesRows(remoteList) ? localList : remoteList;
 }
-function chargesRowsEqual(a, b) {
-  try {
-    return JSON.stringify(normalizeChargesRows(a)) === JSON.stringify(normalizeChargesRows(b));
-  } catch (e) {
-    return false;
-  }
-}
 const LEGACY_PMICS_CHARGE_HEADING = 'Pinhole Microincision Cataract Surgery + IOL Implantation';
 const PMICS_MAIN_CHARGE_HEADING = 'Pinhole Microincision Cataract Surgery';
 function migrateLegacyPmicsChargeParents() {
@@ -17568,15 +17528,8 @@ function loadChargesFromFirebase(){
     const snap = pairs[0];
     const metaSnap = pairs[1];
     const remoteTs = Number(metaSnap && metaSnap.val && metaSnap.val()?.updatedAt || 0) || 0;
-    const localRows = window._bmhLastLocalChargesRows || [];
-    const remoteRows = normalizeChargesRows(snap.val());
-    const localTs = Number(window._bmhLastLocalChargesUpdatedAt || localStorage.getItem('bmh_charges_schedule_updated_at') || 0) || 0;
-    const arr = choosePreferredChargesRows(localRows, remoteRows, localTs, remoteTs);
-    const preferLocal = !!localTs && (!remoteTs || localTs > remoteTs || (localTs === remoteTs && chargesRowsEqual(arr, localRows) && !chargesRowsEqual(localRows, remoteRows)));
+    const arr = choosePreferredChargesRows(window._bmhLastLocalChargesRows, snap.val(), window._bmhLastLocalChargesUpdatedAt, remoteTs);
     applyChargesFromCloudSnapshot(arr, remoteTs);
-    if (preferLocal && !chargesRowsEqual(localRows, remoteRows)) {
-      saveChargesToFirebase().catch(function () {});
-    }
     if (window._bmhPendingChargesSync) {
       window._bmhPendingChargesSync = false;
       saveChargesToFirebase().catch(function () {});
@@ -17949,7 +17902,7 @@ function removePatientFromQueue(bmhId) {
   const p = PATIENTS.find(function (x) { return x.bmhId === bmhId; });
   if (!p) { showToast('Patient not found in queue', 'w'); return; }
   const label = 'Queue patient — ' + (p.name || bmhId) + ' · ' + bmhId;
-  if (canCurrentUserDirectlyDeleteOperationalEntry(p.centre)) {
+  if (CURRENT_USER?.isAdmin) {
     if (!confirm('Remove ' + (p.name || 'this patient') + ' from today\'s queue?')) return;
     p.status = 'removed';
     p.queueRemoved = true;
@@ -17974,13 +17927,6 @@ function removePatientFromQueue(bmhId) {
   } else {
     requestDeletion('queuePatient', bmhId, label);
   }
-}
-function canCurrentUserDirectlyDeleteOperationalEntry(recordCentre) {
-  if (CURRENT_USER?.isAdmin) return true;
-  if (CURRENT_USER?.role !== 'Reception') return false;
-  const userCentre = patientCentreKey(getEffectiveCentre() || CURRENT_USER?.centre || recordCentre || '');
-  const targetCentre = patientCentreKey(recordCentre || userCentre || '');
-  return !targetCentre || !userCentre || targetCentre === userCentre;
 }
 
 // ── Confirm IPD Admission ──────────────────────────
@@ -20660,11 +20606,11 @@ function parseTemplateLines(raw, dept) {
   if (!lines.length) return [];
   return lines.map(function (line) {
     if (String(dept || '').indexOf('dc-') === 0) return { trade: line, generic: '', eye: '', freq: '', dur: '' };
-    if (dept === 'ot') return { trade: line, generic: '', eye: '', freq: '', dur: '', rawText: line };
     const parts = line.split(/[—–-]/).map(function (s) { return s.trim(); });
     const trade = parts[0] || 'Item';
     const freq = parts[1] || 'Twice daily (BD)';
     const dur = parts[2] || '1 Week';
+    if (dept === 'ot') return { trade, generic: '', eye: '', freq, dur };
     const lib = DRUG_LIBRARY.find(function (x) { return x.trade === trade || x.generic === trade; });
     const drugType = lib ? lib.type : '';
     const isEye = /drop|eye|ophth|moxiflox|vigamox|pred|tears/i.test(trade + ' ' + (drugType || ''));
@@ -20677,14 +20623,9 @@ function parseTemplateLines(raw, dept) {
     };
   });
 }
-function getOtTemplateLineText(row) {
-  if (!row) return '';
-  return String(row.rawText || row.trade || row.name || row.generic || '').trim();
-}
 function serializeTemplateRows(rows, dept) {
   return (rows || []).map(function (row) {
     if (String(dept || '').indexOf('dc-') === 0) return row.trade || row.name || row.generic || '';
-    if (dept === 'ot') return getOtTemplateLineText(row);
     const name = dept === 'ot'
       ? (row.trade || row.name || row.generic || '')
       : (rxDrugTradeName(row) || row.trade || row.name || row.generic || '');
@@ -20753,9 +20694,6 @@ function renderSetRxTplList() {
       }
       if (deptKey === 'ot-followup') {
         return escapeRxTemplateHtml(row.trade || row.name || row.generic || formatOtFollowupLabel(row.days || 0) || 'Follow-up');
-      }
-      if (deptKey === 'ot') {
-        return escapeRxTemplateHtml(getOtTemplateLineText(row) || 'OT note');
       }
       const nm = rxDrugTradeName(row) || row.trade || row.name || row.generic || 'Item';
       return escapeRxTemplateHtml(nm + (row.freq ? ' · ' + row.freq : '') + (row.dur ? ' · ' + row.dur : ''));
@@ -23176,22 +23114,12 @@ function calcRcAge() {
   const dob = document.getElementById('rc-dob')?.value;
   const ageEl = document.getElementById('rc-age');
   if(!dob || !ageEl) return;
-  if (isFutureDobValue(dob)) {
-    ageEl.value = '';
-    showToast('DOB cannot be in the future', 'w');
-    return;
-  }
   const birth = new Date(dob);
   const now = new Date();
   let years = now.getFullYear() - birth.getFullYear();
   const m = now.getMonth() - birth.getMonth();
   if(m < 0 || (m === 0 && now.getDate() < birth.getDate())) years--;
   ageEl.value = years + ' Years';
-}
-function isFutureDobValue(dob) {
-  const value = String(dob || '').trim();
-  if (!value) return false;
-  return value > localDateKey(new Date());
 }
 function isPrimaryBmhSequenceNumber(num) {
   return Number.isFinite(num) && /^4\d+$/.test(String(Math.trunc(num)));
@@ -23660,7 +23588,6 @@ function updateExistingPatientFromReceptionForm(bmhId) {
   const email = document.getElementById('rc-email')?.value?.trim() || '';
   const rel = normalizeReceptionFieldValue('rc-rel', document.getElementById('rc-rel')?.value || '');
   if (!fn) { showToast('Please enter patient first name', 'w'); return; }
-  if (isFutureDobValue(dob)) { showToast('DOB cannot be in the future', 'w'); return; }
   const name = toTitleCaseName((fn + ' ' + ln).trim());
   p.name = name;
   p.initials = computePatientInitials(name);
@@ -23707,7 +23634,6 @@ async function registerPatient() {
   let advPurpose = normalizeReceptionFieldValue('rc-advance-purpose', document.getElementById('rc-advance-purpose')?.value||'');
 
   if(!fn) { showToast('Please enter patient first name','w'); return; }
-  if (isFutureDobValue(dob)) { showToast('DOB cannot be in the future', 'w'); return; }
 
   const name = toTitleCaseName((fn + ' ' + ln).trim());
   const emailEarly = document.getElementById('rc-email')?.value?.trim() || '';
@@ -26774,13 +26700,20 @@ function applyOTNotesTemplate(key) {
   if (!key || !RX_TEMPLATES_DATA[key]) return;
   const rows = RX_TEMPLATES_DATA[key] || [];
   const notesText = rows.map(function (row) {
-    return getOtTemplateLineText(row);
+    const bits = [];
+    const name = rxDrugTradeName(row) || row.trade || row.name || row.generic || '';
+    if (name) bits.push(name);
+    if (row.freq) bits.push(row.freq);
+    if (row.dur) bits.push(row.dur);
+    return bits.join(' — ');
   }).filter(Boolean).join('\n');
+  const noteArea = document.getElementById('ot-notes');
   const findings = document.getElementById('ot-findings');
   const narrative = document.getElementById('ot-narrative');
   const meta = RX_TEMPLATES_META[key] || {};
   if (findings && !findings.value.trim()) findings.value = meta.notes || '';
   if (narrative && !narrative.value.trim()) narrative.value = notesText;
+  if (noteArea && !noteArea.value.trim()) noteArea.value = notesText;
   if (document.getElementById('ot-procedure') && !document.getElementById('ot-procedure').value.trim() && meta.surgery) document.getElementById('ot-procedure').value = meta.surgery;
   const followupKey = findMatchingOtFollowupTemplateKey(key, document.getElementById('ot-procedure')?.value || meta.surgery || '');
   const followupSel = document.getElementById('ot-followup-template');
@@ -29624,7 +29557,6 @@ function addCustomLabTest() {
 
 // ─── APPOINTMENTS FIX ─────────────────
 function renderAptDay() {
-  syncAppointmentDoctorFilters();
   const date = document.getElementById('apt-date-inp')?.value || todayKey();
   const drFilter = document.getElementById('apt-dr-filter')?.value || '';
   const centreSelVal = document.getElementById('apt-centre-filter')?.value || '';
@@ -29660,7 +29592,7 @@ function renderAptDay() {
       <div style="font-size:11.5px;font-weight:900;color:var(--bmh-blue);min-width:48px">${t}</div>
       <div style="flex:1"><div style="font-size:13px;font-weight:800">${booked.patient}</div>
       <div style="font-size:10.5px;color:var(--tx3)">${booked.doctor} · ${booked.purpose||booked.type||''}</div></div>
-      <span class="badge bd-blue" style="font-size:9.5px">${appointmentCentreLabel(booked.centre||'CHD')}</span>
+      <span class="badge bd-blue" style="font-size:9.5px">${booked.centre||'CHD'}</span>
       <button class="btn btn-xs btn-gray" onclick="event.stopPropagation();showToast('Appointment cancelled ✓','i')">Cancel</button>
     </div>`;
     return `<div class="apt-slot free" onclick="openBookApt('${t}')">
@@ -29766,7 +29698,7 @@ function renderFollowupRegister() {
       statusBadge = 'UPCOMING'; statusColor = '#27ae60';
     }
     const deptLabel = DEPT_LABELS[e.dept] || e.dept || '—';
-    const centreLabel = appointmentCentreLabel(e.centre);
+    const centreLabel = e.centre === 'RPR' ? 'Ropar' : 'Chandigarh';
     const bookBtnHtml = e.booked
       ? `<span style="font-size:10px;color:#27ae60;font-weight:700">✓ Booked</span>`
       : `<button class="btn btn-xs btn-outline" onclick="openBookAptForPatient('${e.bmhId}','${e.date}')">+ Book Slot</button>`;
@@ -31422,7 +31354,6 @@ function normalizeInventoryRecord(item) {
   ['name','cat','dept','vendor','store','iolBrand','iolCompany','iolModel','brand','company','model','itemName','category'].forEach(function (key) {
     if (item[key]) item[key] = normalizeInventoryTextValue(item[key]);
   });
-  if (!item.updatedAt) item.updatedAt = new Date().toISOString();
   return item;
 }
 function normalizeReceptionFieldValue(id, value) {
@@ -31946,31 +31877,11 @@ function dedupeQueueEntriesByKey(rows) {
       map.set(key, row);
       return;
     }
-    const existingScore = getQueueEntryPreferenceScore(existing);
-    const nextScore = getQueueEntryPreferenceScore(row);
-    if (nextScore > existingScore) {
-      map.set(key, row);
-      return;
-    }
-    if (nextScore < existingScore) return;
     const existingStamp = Date.parse(existing.updatedAt || existing.createdAt || existing.queueDate || '') || Number(existing.checkinAt || 0) || 0;
     const nextStamp = Date.parse(row.updatedAt || row.createdAt || row.queueDate || '') || Number(row.checkinAt || 0) || 0;
     if (nextStamp >= existingStamp) map.set(key, row);
   });
   return Array.from(map.values());
-}
-function getQueueEntryPreferenceScore(p) {
-  if (!p) return -1;
-  const todayKeyLocal = localDateKey(new Date());
-  let score = 0;
-  if (patientActiveQueueMatchesToday(p, todayKeyLocal)) score += 1000;
-  else if (patientDoneQueueMatchesToday(p, todayKeyLocal)) score += 700;
-  else if (patientQueueDateMatchesToday(p)) score += 300;
-  if (!p.queueRemoved && String(p.status || '').toLowerCase() !== 'removed') score += 120;
-  if (!!p.checkinAt) score += 80;
-  if (!isPatientMarkedSeen(p)) score += 40;
-  if (String(p.status || '').toLowerCase() === 'waiting') score += 20;
-  return score;
 }
 function localDateKey(value) {
   if (value === null || value === undefined || value === '') return '';
@@ -34644,31 +34555,17 @@ function savePatientToFirebase(patient) {
     || CURRENT_USER?.centre
     || 'CHD';
   const centre = patientCentreKey(centreRaw);
-  const nowIso = new Date().toISOString();
-  const localExisting = (PATIENTS || []).find(function (p) { return p && p.bmhId === patient.bmhId; }) || null;
-  const loadExisting = typeof fbOnce === 'function'
-    ? fbOnce(`patients/${patient.bmhId}`).catch(function () { return null; })
-    : Promise.resolve(null);
-  return Promise.resolve(loadExisting).then(function (remoteExisting) {
-    const existing = remoteExisting && typeof remoteExisting === 'object'
-      ? Object.assign({}, localExisting || {}, remoteExisting)
-      : (localExisting ? Object.assign({}, localExisting) : null);
-    const payloadBase = {
-      ...(existing || {}),
-      ...patient,
-      centre,
-      lastUpdated: nowIso,
-      updatedBy: CURRENT_USER?.name || 'System'
-    };
-    const payload = sanitizeFirebaseValue(mergePatientQueueState(payloadBase, patient, existing));
-    const rt = typeof fbUpdate === 'function'
-      ? fbUpdate(`patients/${patient.bmhId}`, payload)
-      : fbSet(`patients/${patient.bmhId}`, payload);
-    const fs = typeof window.upsertPatientFirestore === 'function'
-      ? window.upsertPatientFirestore(payload).catch(function (err) { console.warn('Firestore patient sync:', err); })
-      : Promise.resolve();
-    return Promise.all([rt, fs]);
-  }).then(() => showToast('Patient saved to database ✓', 's'))
+  const payload = {
+    ...patient,
+    centre,
+    lastUpdated: new Date().toISOString(),
+    updatedBy: CURRENT_USER?.name || 'System'
+  };
+  const rt = fbSet(`patients/${patient.bmhId}`, payload);
+  const fs = typeof window.upsertPatientFirestore === 'function'
+    ? window.upsertPatientFirestore(payload).catch(err => { console.warn('Firestore patient sync:', err); })
+    : Promise.resolve();
+  return Promise.all([rt, fs]).then(() => showToast('Patient saved to database ✓', 's'))
     .catch(e => showToast('Save failed: ' + e.message, 'w'));
 }
 
@@ -34761,10 +34658,7 @@ function applyRealtimePatientRecord(record, key) {
   if (!row.bmhId) return;
   const cache = Array.isArray(window._BMH_ALL_PATIENTS_CACHE) ? window._BMH_ALL_PATIENTS_CACHE : [];
   const idx = cache.findIndex(function (p) { return p && p.bmhId === row.bmhId; });
-  if (idx >= 0) {
-    const existing = cache[idx];
-    cache[idx] = normalizePatientRecord(mergePatientQueueState(Object.assign({}, existing || {}, row), row, existing));
-  }
+  if (idx >= 0) cache[idx] = row;
   else cache.unshift(row);
   window._BMH_ALL_PATIENTS_CACHE = cache;
   rebuildPatientsArrayFromGlobalCache();
@@ -34952,8 +34846,7 @@ function runOneTimePendingDuesCleanup() {
 // ── APPOINTMENTS ─────────────────────────────────────────────
 function saveAppointmentToFirebase(apt) {
   const key = apt.id || fbKey();
-  const normalizedCentre = resolveAppointmentCentreValue(apt?.centre || '', apt?.centre || '');
-  fbSet(`appointments/${key}`, { ...apt, id: key, centre: normalizedCentre });
+  fbSet(`appointments/${key}`, { ...apt, id: key });
 }
 
 function listenAppointments() {
@@ -34963,10 +34856,8 @@ function listenAppointments() {
   fbOn('appointments', data => {
     APPOINTMENTS.length = 0;
     Object.values(data || {}).forEach(function (a) {
-      const normalized = Object.assign({}, a, { centre: resolveAppointmentCentreValue(a?.centre || '', a?.centre || '') });
-      if (!centre || normalizeAppointmentCentreValue(normalized.centre || 'CHD') === centre) APPOINTMENTS.push(normalized);
+      if (!centre || normalizeAppointmentCentreValue(a.centre || 'CHD') === centre) APPOINTMENTS.push(a);
     });
-    syncAppointmentDoctorFilters();
     const activeId = getActivePageId();
     if (activeId === 'pg-appointments') renderAptDay && renderAptDay();
     else if (activeId === 'pg-dashboard') renderDashboard && renderDashboard();
@@ -35535,99 +35426,61 @@ function saveInventoryItemToFirebase(item) {
   normalizeInventoryRecord(item);
   if (!item || !item.barcode || !window.FBDB) return Promise.resolve();
   item.updatedAt = new Date().toISOString();
-  clearInventoryDeletedMark(item.barcode);
-  const key = String(item.barcode).replace(/[.#$/\[\]]/g, '_');
-  return window.FBDB.ref('/').update({
-    ['inventory/' + key]: item,
-    ['inventoryDeleted/' + key]: null,
-    ['inventoryMeta/updatedAt']: Date.now()
-  });
+  return window.FBDB.ref('inventory/' + String(item.barcode).replace(/[.#$/\[\]]/g, '_')).set(item);
 }
 window.saveInventoryToFirebase = saveInventoryItemToFirebase;
 
 function loadInventoryFromFirebase() {
   if (!window.FBDB) return Promise.resolve();
-  return Promise.all([
-    window.FBDB.ref('inventory').once('value'),
-    window.FBDB.ref('inventoryDeleted').once('value'),
-    window.FBDB.ref('inventoryMeta').once('value')
-  ]).then(function (snaps) {
-    const data = snaps[0].val();
-    const deletedData = snaps[1].val() || {};
-    const metaData = snaps[2].val() || {};
+  return window.FBDB.ref('inventory').once('value').then(function (snap) {
+    const data = snap.val();
     const remoteRows = (data && typeof data === 'object') ? Object.values(data) : [];
     const localRows = readInventoryRowsFromLocalSnapshots();
-    const localDeleted = getInventoryDeletedMapFromStorage();
-    const remoteDeleted = {};
-    Object.keys(deletedData || {}).forEach(function (key) {
-      const stamp = Number(deletedData[key] && deletedData[key].deletedAt || deletedData[key] || 0) || 0;
-      if (stamp) remoteDeleted[key] = stamp;
-    });
-    const remoteTs = Number(metaData.updatedAt || 0) || 0;
-    const localTs = Number(localStorage.getItem('bmh_inventory_stock_updated_at') || 0) || 0;
-    const localByBarcode = {};
-    const remoteByBarcode = {};
+    const mergedByBarcode = {};
+    const deletedRows = loadInventoryDeletedRows();
     localRows.forEach(function (item) {
       if (!item || !item.barcode) return;
-      localByBarcode[String(item.barcode)] = Object.assign({}, item);
+      mergedByBarcode[String(item.barcode)] = Object.assign({}, item);
     });
     remoteRows.forEach(function (item) {
       if (!item || !item.barcode) return;
-      remoteByBarcode[String(item.barcode)] = Object.assign({}, item);
+      const key = String(item.barcode);
+      const existing = mergedByBarcode[key];
+      const existingTs = bmhInventoryRowUpdatedAt(existing);
+      const nextTs = bmhInventoryRowUpdatedAt(item);
+      mergedByBarcode[key] = (!existing || nextTs >= existingTs) ? Object.assign({}, existing || {}, item) : Object.assign({}, item, existing);
     });
-    const allBarcodes = Array.from(new Set(Object.keys(localByBarcode).concat(Object.keys(remoteByBarcode)).concat(Object.keys(localDeleted)).concat(Object.keys(remoteDeleted))));
-    const mergedByBarcode = {};
-    allBarcodes.forEach(function (barcode) {
-      const localItem = localByBarcode[barcode];
-      const remoteItem = remoteByBarcode[barcode];
-      const localDeletedAt = Number(localDeleted[barcode] || 0) || 0;
-      const remoteDeletedAt = Number(remoteDeleted[bmhInventoryFirebaseKey(barcode)] || remoteDeleted[barcode] || 0) || 0;
-      const deletedAt = Math.max(localDeletedAt, remoteDeletedAt);
-      const localStamp = getInventoryRecordUpdatedAt(localItem);
-      const remoteStamp = getInventoryRecordUpdatedAt(remoteItem);
-      const latestItemStamp = Math.max(localStamp, remoteStamp);
-      if (deletedAt && deletedAt >= latestItemStamp) return;
-      const chosen = localStamp >= remoteStamp ? (localItem || remoteItem) : (remoteItem || localItem);
-      if (chosen) mergedByBarcode[barcode] = Object.assign({}, chosen);
-    });
-    INVENTORY.length = 0;
-    Object.keys(BCMAP || {}).forEach(function (key) { delete BCMAP[key]; });
     Object.values(mergedByBarcode).forEach(function (item) {
       if (!item || !item.barcode) return;
-      normalizeInventoryRecord(item);
-      INVENTORY.push(item);
-      BCMAP[item.barcode] = item;
-      if (item.name) BCMAP[String(item.name).toLowerCase().substring(0, 15)] = item;
+      const key = String(item.barcode || '');
+      const deletedTs = Number(deletedRows[key] || 0);
+      const itemTs = bmhInventoryRowUpdatedAt(item);
+      if (item._deleted && itemTs) upsertInventoryDeletedRow(key, itemTs);
+      if (deletedTs && deletedTs >= itemTs) return;
+      bmhApplyInventoryMergedRow(item);
     });
-    saveInventoryStockToStorage({ updatedAt: Math.max(localTs, remoteTs) });
-    saveInventoryDeletedMapToStorage(Object.keys(localDeleted).reduce(function (acc, barcode) {
-      const stamp = Number(localDeleted[barcode] || 0) || 0;
-      if (stamp) acc[barcode] = stamp;
-      return acc;
-    }, {}));
-    if (localTs > remoteTs) {
-      Object.values(localByBarcode).forEach(function (item) {
-        const barcode = String(item?.barcode || '').trim();
-        if (!barcode) return;
-        const localStamp = getInventoryRecordUpdatedAt(item);
-        const remoteStamp = getInventoryRecordUpdatedAt(remoteByBarcode[barcode]);
-        const deleteStamp = Number(localDeleted[barcode] || 0) || 0;
-        if (deleteStamp && deleteStamp >= localStamp) return;
-        if (localStamp >= remoteStamp) saveInventoryItemToFirebase(item).catch(function () {});
-      });
-      Object.keys(localDeleted).forEach(function (barcode) {
-        const deleteStamp = Number(localDeleted[barcode] || 0) || 0;
-        const remoteStamp = getInventoryRecordUpdatedAt(remoteByBarcode[barcode]);
-        if (!deleteStamp || deleteStamp < remoteStamp) return;
-        bmhDeleteInventoryRowsFromCloud([{ barcode: barcode }], deleteStamp);
-      });
-    }
+    saveInventoryStockToStorage();
+    Object.keys(deletedRows || {}).forEach(function (barcode) {
+      const remote = mergedByBarcode[String(barcode)];
+      const deletedTs = Number(deletedRows[barcode] || 0);
+      if (!remote || bmhInventoryRowUpdatedAt(remote) < deletedTs) {
+        window.FBDB.ref('inventory/' + String(barcode).replace(/[.#$/\[\]]/g, '_')).set({
+          barcode: barcode,
+          _deleted: true,
+          updatedAt: new Date(deletedTs).toISOString()
+        }).catch(function () {});
+      }
+    });
+    Object.values(mergedByBarcode).forEach(function (item) {
+      if (!item || !item.barcode || item._deleted) return;
+      const deletedTs = Number(deletedRows[String(item.barcode)] || 0);
+      if (deletedTs && deletedTs >= bmhInventoryRowUpdatedAt(item)) return;
+      saveInventoryItemToFirebase(item).catch(function () {});
+    });
     renderInventoryImportDatalists();
-    if (getActivePageId && getActivePageId() === 'pg-inventory') {
-      renderStockList();
-      renderInventoryStoreStock();
-      renderInventoryPoAlerts();
-    }
+    renderStockList();
+    renderInventoryStoreStock();
+    renderInventoryPoAlerts();
   }).catch(function (err) {
     console.warn('Inventory Firebase load failed', err);
   });
@@ -35926,14 +35779,6 @@ function buildDischargePrintSection(sel) {
   const headerSrc = resolvePrintHeaderSrc();
   const today = formatDateIN(new Date());
   const fmt = function (v) { return formatDateIN(v); };
-  const snapshotFollowups = data.lastOtCase?.ophDischargeSnapshot?.followups;
-  const dischargeFollowups = Array.isArray(snapshotFollowups) && snapshotFollowups.length
-    ? snapshotFollowups.slice()
-    : (data.followups || []).map(function (f, idx) {
-        if (typeof f === 'string') return f;
-        const dateText = f?.date ? formatDateIN(f.date) : (f?.dateLabel || '');
-        return (f?.label || ('Follow-up ' + (idx + 1))) + (dateText ? ': ' + dateText : '') + (f?.time ? ' · ' + f.time : '');
-      });
   const meds = flattenDischargeRxRows(data.lastRxData && data.lastRxData.length ? data.lastRxData : []).map(function (d, i) {
     const trade = rxDrugTradeName(d) || d.name || d.brand || 'Medicine';
     const generic = rxDrugGenericName(d);
@@ -35947,12 +35792,10 @@ function buildDischargePrintSection(sel) {
       + '<td style="padding:6px 8px;border:1px solid #cfd5de;font-size:11px">' + esc(times) + '</td>'
       + '</tr>';
   }).join('');
-  const followupRows = dischargeFollowups.map(function (f, idx) {
-    const raw = String(f || '').trim();
-    const parts = raw.split(':');
-    const labelText = parts.length > 1 ? (String(parts[0] || '').trim() || ('Follow-up ' + (idx + 1))) : ('Follow-up ' + (idx + 1));
-    const dateText = parts.length > 1 ? (parts.slice(1).join(':').trim() || '—') : (raw || '—');
-    const timeText = '';
+  const followupRows = (data.followups || []).map(function (f, idx) {
+    const dateText = f?.date ? formatDateIN(f.date) : (f?.dateLabel || '—');
+    const timeText = f?.time || '';
+    const labelText = f?.label || ('Follow-up ' + (idx + 1));
     return '<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 10px;border:1px solid #d7dce5;border-radius:8px;margin-top:6px;font-size:11px"><strong>' + esc(labelText) + '</strong><span>' + esc(dateText + (timeText ? ' · ' + timeText : '')) + '</span></div>';
   }).join('');
   const summary = 'This is to certify that ' + data.ptNm + ' visited our hospital on ' + fmt(data.visitDate) + '. On examination, it was found that the patient had '
@@ -40151,34 +39994,21 @@ function getVisibleOTCases() {
     .filter(c => !dateFilter || (c.date || c.scheduledDate || '') === dateFilter)
     .filter(c => !surgeonFilter || surgeonFilter === 'All Surgeons' || c.surgeon === surgeonFilter);
 }
-function otCaseIsPmics(c) {
-  const text = String(c?.procedure || c?.procedureMain || '').toLowerCase();
-  return /pmics|pinhole\s*micro\s*incision\s*cataract\s*surgery|pinhole\s*microincision\s*cataract\s*surgery/.test(text);
-}
-function formatOtCaseProcedureWithEye(c) {
-  const procedure = String(c?.procedure || c?.procedureMain || '—').trim() || '—';
-  const eye = String(c?.site || c?.eye || '').trim();
-  if (!eye) return procedure;
-  if (new RegExp('\\b' + eye.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(procedure)) return procedure;
-  return procedure + ' (' + eye + ')';
-}
 function printOTCompactList() {
   const cases = getVisibleOTCases();
   if (!cases.length) { showToast('No OT cases to print', 'w'); return; }
   const dateText = formatDateIN(document.getElementById('ot-date-inp')?.value || todayKey());
-  const showPmicsIolColumns = cases.some(otCaseIsPmics);
   const rows = cases.map(function (c, i) {
-    const isPmics = otCaseIsPmics(c);
     return '<tr>'
       + '<td style="border:1px solid #d7dce5;padding:5px 6px;font-size:10px">' + (i + 1) + '</td>'
       + '<td style="border:1px solid #d7dce5;padding:5px 6px;font-size:10px;font-weight:700">' + escapeHtmlConsent(c.patient || '—') + '</td>'
       + '<td style="border:1px solid #d7dce5;padding:5px 6px;font-size:10px">' + escapeHtmlConsent(String(c.age || '—') + ' / ' + String(c.sex || '—')) + '</td>'
-      + '<td style="border:1px solid #d7dce5;padding:5px 6px;font-size:10px;font-weight:900;color:#1A3C6E">' + escapeHtmlConsent(formatOtCaseProcedureWithEye(c)) + '</td>'
-      + (showPmicsIolColumns ? '<td style="border:1px solid #d7dce5;padding:5px 6px;font-size:10px;font-weight:900;color:#8a4200">' + escapeHtmlConsent(isPmics ? (c.iolType || c.iol || '—') : '—') + '</td>' : '')
-      + (showPmicsIolColumns ? '<td style="border:1px solid #d7dce5;padding:5px 6px;font-size:10px;font-weight:900;color:#0B7B8C">' + escapeHtmlConsent(isPmics ? (c.iolPower || '—') : '—') + '</td>' : '')
+      + '<td style="border:1px solid #d7dce5;padding:5px 6px;font-size:10px;font-weight:900;color:#1A3C6E">' + escapeHtmlConsent(c.site || '—') + '</td>'
+      + '<td style="border:1px solid #d7dce5;padding:5px 6px;font-size:10px;font-weight:900;color:#8a4200">' + escapeHtmlConsent(c.iolType || c.iol || '—') + '</td>'
+      + '<td style="border:1px solid #d7dce5;padding:5px 6px;font-size:10px;font-weight:900;color:#0B7B8C">' + escapeHtmlConsent(c.iolPower || '—') + '</td>'
       + '</tr>';
   }).join('');
-  const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;padding:10mm;color:#111}table{width:100%;border-collapse:collapse}th{background:#eef3fb;color:#1A3C6E;font-size:10px;font-weight:900;padding:6px;border:1px solid #d7dce5;text-transform:uppercase}td{vertical-align:top}@page{size:A4 portrait;margin:8mm}</style></head><body><div style="font-size:16px;font-weight:900;color:#1A3C6E;margin-bottom:8px">OT List</div><div style="font-size:11px;margin-bottom:10px">Date: ' + escapeHtmlConsent(dateText) + '</div><table><thead><tr><th>#</th><th>Patient</th><th>Age / Sex</th><th>Procedure</th>' + (showPmicsIolColumns ? '<th>IOL</th><th>Power</th>' : '') + '</tr></thead><tbody>' + rows + '</tbody></table></body></html>';
+  const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;padding:10mm;color:#111}table{width:100%;border-collapse:collapse}th{background:#eef3fb;color:#1A3C6E;font-size:10px;font-weight:900;padding:6px;border:1px solid #d7dce5;text-transform:uppercase}td{vertical-align:top}@page{size:A4 portrait;margin:8mm}</style></head><body><div style="font-size:16px;font-weight:900;color:#1A3C6E;margin-bottom:8px">OT List</div><div style="font-size:11px;margin-bottom:10px">Date: ' + escapeHtmlConsent(dateText) + '</div><table><thead><tr><th>#</th><th>Patient</th><th>Age / Sex</th><th>Eye</th><th>IOL</th><th>Power</th></tr></thead><tbody>' + rows + '</tbody></table></body></html>';
   safePrint(html);
   showToast('OT list ready to print ✓', 's');
 }
@@ -40242,50 +40072,6 @@ function queueRawStamp(value) {
 }
 function queueStampIsDateOnly(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(value || '').trim());
-}
-const PATIENT_QUEUE_STATE_FIELDS = [
-  'status',
-  'preRegistered',
-  'seen',
-  'seenAt',
-  'checkinAt',
-  'queueDate',
-  'visitDate',
-  'queueRemoved',
-  'queueRemovedAt',
-  'queueRemovedBy',
-  'dilated',
-  'dilatedTime'
-];
-function getPatientQueueStateStamp(p) {
-  if (!p || typeof p !== 'object') return 0;
-  return Math.max(
-    queueRawStamp(p.updatedAt),
-    queueRawStamp(p.lastUpdated),
-    queueRawStamp(p.seenAt),
-    queueRawStamp(p.queueRemovedAt),
-    queueRawStamp(p.checkinAt),
-    queueRawStamp(p.createdAt),
-    queueRawStamp(p.registeredAt)
-  );
-}
-function choosePreferredQueueState(a, b) {
-  const aScore = getQueueEntryPreferenceScore(a);
-  const bScore = getQueueEntryPreferenceScore(b);
-  if (aScore !== bScore) return aScore > bScore ? a : b;
-  const aStamp = getPatientQueueStateStamp(a);
-  const bStamp = getPatientQueueStateStamp(b);
-  if (aStamp !== bStamp) return aStamp >= bStamp ? a : b;
-  return a || b || null;
-}
-function mergePatientQueueState(basePatient, incomingPatient, existingPatient) {
-  const merged = Object.assign({}, basePatient || {});
-  const preferred = choosePreferredQueueState(incomingPatient, existingPatient);
-  if (!preferred) return merged;
-  PATIENT_QUEUE_STATE_FIELDS.forEach(function (field) {
-    if (preferred[field] !== undefined) merged[field] = preferred[field];
-  });
-  return merged;
 }
 function patientQueueCandidateStamps(p, now) {
   const todayKeyLocal = localDateKey(Number.isFinite(now) ? new Date(now) : new Date());
@@ -40753,14 +40539,11 @@ function deletePayRequest(prId) {
   if(!pr) { showToast('Charge not found','w'); return; }
   const label = `₹${pr.amount?.toLocaleString('en-IN')||'?'} charge — ${pr.patient||'?'} (${pr.for||'—'})`;
   const isInvestigationRequest = !!pr.linkedInvestigationOrderId || /oct|hvf|biometry|fundus|topography|specular|scan|cbc|blood|test|profile|urine|ecg|investigation/i.test(String(pr.for || pr.service || pr.desc || ''));
-  if(canCurrentUserDirectlyDeleteOperationalEntry(pr.centre)) {
+  if(CURRENT_USER?.isAdmin) {
     if(!confirm(`Delete this charge request?\n${label}\nThis cannot be undone.`)) return;
     const idx = PAY_REQUESTS.findIndex(r=>r.id===prId);
     if(idx>-1) { PAY_REQUESTS.splice(idx,1); try { if(window.firebase&&firebase.database) firebase.database().ref('payRequests/'+prId).remove(); } catch(e){} }
-    if (pr.linkedInvestigationOrderId) {
-      try { cancelInvestigationReceptionRequest(pr.linkedInvestigationOrderId); } catch (e) {}
-    }
-    fbPush&&fbPush('auditLog',{user:CURRENT_USER.name,role:CURRENT_USER?.role || (CURRENT_USER?.isAdmin ? 'Admin' : 'Reception'),action:'DELETE_CHARGE',item:label,timestamp:new Date().toISOString()});
+    fbPush&&fbPush('auditLog',{user:CURRENT_USER.name,role:'Admin',action:'DELETE_CHARGE',item:label,timestamp:new Date().toISOString()});
     showToast(`🗑️ Charge deleted: ${label}`,'i');
     renderReceptionPage&&renderReceptionPage(); renderDeptSummary&&renderDeptSummary();
   } else {
@@ -40786,18 +40569,10 @@ function deletePatientPendingCharges(bmhId) {
   if(!pending.length) return;
   const pt = PATIENTS.find(x=>x.bmhId===bmhId);
   const label = `All ${pending.length} pending charge(s) for ${pt?.name||bmhId} — total ₹${pending.reduce((s,r)=>s+r.amount,0).toLocaleString('en-IN')}`;
-  const deleteCentre = pt?.centre || pending[0]?.centre || '';
-  if(canCurrentUserDirectlyDeleteOperationalEntry(deleteCentre)) {
+  if(CURRENT_USER?.isAdmin) {
     if(!confirm(`Delete ${pending.length} pending charge(s) for this patient?\n${label}\nThis cannot be undone.`)) return;
-    pending.forEach(pr=>{
-      const idx=PAY_REQUESTS.indexOf(pr);
-      if(idx>-1) PAY_REQUESTS.splice(idx,1);
-      try { if(window.firebase&&firebase.database) firebase.database().ref('payRequests/'+pr.id).remove(); } catch(e){}
-      if (pr.linkedInvestigationOrderId) {
-        try { cancelInvestigationReceptionRequest(pr.linkedInvestigationOrderId); } catch (e) {}
-      }
-    });
-    fbPush&&fbPush('auditLog',{user:CURRENT_USER.name,role:CURRENT_USER?.role || (CURRENT_USER?.isAdmin ? 'Admin' : 'Reception'),action:'DELETE_PT_CHARGES',item:label,timestamp:new Date().toISOString()});
+    pending.forEach(pr=>{ const idx=PAY_REQUESTS.indexOf(pr); if(idx>-1) PAY_REQUESTS.splice(idx,1); try { if(window.firebase&&firebase.database) firebase.database().ref('payRequests/'+pr.id).remove(); } catch(e){} });
+    fbPush&&fbPush('auditLog',{user:CURRENT_USER.name,role:'Admin',action:'DELETE_PT_CHARGES',item:label,timestamp:new Date().toISOString()});
     showToast(`🗑️ Deleted ${pending.length} charge(s)`,'i');
     renderReceptionPage&&renderReceptionPage(); renderDeptSummary&&renderDeptSummary();
   } else {
@@ -40885,13 +40660,11 @@ function saveUpdatedPatientDetails() {
   const advanceAmt = Math.max(0, parseFloat(document.getElementById('upd-advance-amt')?.value || p.advance || 0) || 0);
   const advancePurpose = normalizeReceptionFieldValue('upd-advance-purpose', document.getElementById('upd-advance-purpose')?.value?.trim()||'');
   const nowIso = new Date().toISOString();
-  const updatedDob = document.getElementById('upd-dob')?.value||p.dob||'';
-  if (isFutureDobValue(updatedDob)) { showToast('DOB cannot be in the future', 'w'); return; }
   const updates = {
     name: toTitleCaseName((fn+' '+ln).trim()),
     age: document.getElementById('upd-age')?.value?.trim()||p.age||'',
     sex: document.getElementById('upd-sex')?.value||p.sex||'Male',
-    dob: updatedDob,
+    dob: document.getElementById('upd-dob')?.value||p.dob||'',
     mobile: document.getElementById('upd-mob')?.value?.trim()||p.mobile||p.mob||'',
     mob: document.getElementById('upd-mob')?.value?.trim()||p.mob||p.mobile||'',
     mob2: document.getElementById('upd-mob2')?.value?.trim()||'',
@@ -41760,10 +41533,35 @@ function saveVisit(dept, opts) {
     .then(() => {
       try { if (dept === 'ophtho' && !opts.autosave) populateOphthoForm(visit); } catch (e) { console.warn('post-save populateOphthoForm failed', e); }
       if (!opts.silent) showToast(`✅ ${ptName} — visit saved (${visit.dateLabel})`, 's');
-      // Auto-create/update follow-up appointment from prescription follow-up date
+      // Auto-create follow-up appointment from prescription follow-up date
       try {
-        syncPrescriptionFollowupAppointment(Object.assign({}, visit, { dept: dept }), Object.assign({}, localPt || {}, { bmhId: bmhId, name: ptName }), { autosave: opts.autosave });
-        if (typeof renderFollowupRegister === 'function') renderFollowupRegister();
+        const fuD = visit.rxFuDate || visit.followupDate || '';
+        if (fuD && !opts.autosave) {
+          const alreadyBooked = APPOINTMENTS.find(function (a) {
+            return a.bmhId === bmhId && a.date === fuD && a.status !== 'cancelled';
+          });
+          if (!alreadyBooked) {
+            const fuDoctor = visit.doctor || CURRENT_USER?.name || '';
+            const fuTimeSlot = getNextAvailableApptSlot(fuD, fuDoctor);
+            const fuApt = {
+              id: 'A' + Date.now() + Math.floor(Math.random() * 1000),
+              patient: ptName,
+              bmhId: bmhId,
+              mob: localPt?.mob || '',
+              date: fuD,
+              time: fuTimeSlot,
+              doctor: fuDoctor,
+              dept: dept,
+              purpose: 'Follow-up',
+              status: 'booked',
+              centre: normalizeAppointmentCentreValue(visit.centre || CURRENT_USER?.centre || 'CHD'),
+              source: 'prescription'
+            };
+            APPOINTMENTS.push(fuApt);
+            if (typeof saveAppointmentToFirebase === 'function') saveAppointmentToFirebase(fuApt);
+            if (typeof renderFollowupRegister === 'function') renderFollowupRegister();
+          }
+        }
       } catch (fuErr) { console.warn('auto follow-up booking failed', fuErr); }
       try { if(dept === 'obg') updateObgObstetricHistoryTab(!!visit.obstetricHistoryEnabled); } catch (e) { console.warn('post-save updateObgObstetricHistoryTab failed', e); }
       try { if(typeof loadPastVisits === 'function') loadPastVisits(bmhId, dept); } catch (e) { console.warn('post-save loadPastVisits failed', e); }
