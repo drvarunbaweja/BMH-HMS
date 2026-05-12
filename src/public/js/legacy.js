@@ -4856,8 +4856,10 @@ function openBookApt(slot) {
   }
   // Set centre to current user's centre
   const centreEl = document.getElementById('book-centre');
-  if(centreEl && window.CURRENT_USER?.centre) {
-    centreEl.value = window.CURRENT_USER.centre === 'RPR' ? 'Ropar' : 'Chandigarh';
+  syncAppointmentDoctorFilters();
+  if(centreEl) {
+    const resolvedCentre = resolveAppointmentCentreValue(window.CURRENT_PATIENT?.centre || '', window.CURRENT_USER?.centre || '');
+    centreEl.value = resolvedCentre === 'RPR' ? 'Ropar' : 'Chandigarh';
   }
   openM('m-book-apt');
 }
@@ -4876,8 +4878,11 @@ function openBookAptForPatient(bmhId, date) {
       PATIENTS.map(p=>`<option value="${p.name} — ${p.bmhId}"${p.bmhId===bmhId?' selected':''}>${p.name} — ${p.bmhId}</option>`).join('');
   }
   const centreEl = document.getElementById('book-centre');
-  if(centreEl && window.CURRENT_USER?.centre) {
-    centreEl.value = window.CURRENT_USER.centre === 'RPR' ? 'Ropar' : 'Chandigarh';
+  syncAppointmentDoctorFilters();
+  if(centreEl) {
+    const pt = (PATIENTS || []).find(function (p) { return p && p.bmhId === bmhId; }) || {};
+    const resolvedCentre = resolveAppointmentCentreValue(pt.centre || '', window.CURRENT_USER?.centre || '');
+    centreEl.value = resolvedCentre === 'RPR' ? 'Ropar' : 'Chandigarh';
   }
   openM('m-book-apt');
 }
@@ -4896,7 +4901,96 @@ function normalizeAppointmentCentreValue(value) {
   if (!v) return 'CHD';
   if (v === 'rpr' || v.includes('ropar') || v.includes('rupnagar')) return 'RPR';
   if (v === 'chd' || v.includes('chandigarh')) return 'CHD';
+  if (v === 'both' || v === 'all' || v.includes('both centre')) return 'BOTH';
   return String(value || '').toUpperCase();
+}
+function appointmentCentreLabel(value) {
+  const centre = normalizeAppointmentCentreValue(value);
+  if (centre === 'RPR') return 'Ropar';
+  if (centre === 'CHD') return 'Chandigarh';
+  if (centre === 'BOTH') return 'Both Centres';
+  return centre || 'Chandigarh';
+}
+function resolveAppointmentCentreValue(preferred, fallback) {
+  const direct = normalizeAppointmentCentreValue(preferred || '');
+  if (direct && direct !== 'BOTH') return direct;
+  const fb = normalizeAppointmentCentreValue(fallback || '');
+  if (fb && fb !== 'BOTH') return fb;
+  const effective = normalizeAppointmentCentreValue((typeof getEffectiveCentre === 'function' ? getEffectiveCentre() : '') || '');
+  if (effective && effective !== 'BOTH') return effective;
+  const userCentre = normalizeAppointmentCentreValue(CURRENT_USER?.centre || '');
+  if (userCentre && userCentre !== 'BOTH') return userCentre;
+  return 'CHD';
+}
+function getAppointmentDoctors() {
+  const seeded = ['Dr. Varun Baweja', 'Dr. Geeta Baweja', 'Dr. Namrata Baweja', 'Dr. Tarun Baweja', 'Dr. Pooja Baweja'];
+  const fromApts = (APPOINTMENTS || []).map(function (a) { return String(a?.doctor || '').trim(); }).filter(Boolean);
+  const fromProfiles = (Array.isArray(DOCTOR_PROFILES) ? DOCTOR_PROFILES : []).map(function (d) { return String(d?.name || '').trim(); }).filter(Boolean);
+  return Array.from(new Set(seeded.concat(fromApts).concat(fromProfiles))).filter(Boolean).sort(function (a, b) {
+    return String(a).localeCompare(String(b));
+  });
+}
+function syncAppointmentDoctorFilters() {
+  const selects = ['apt-dr-filter', 'book-dr'].map(function (id) { return document.getElementById(id); }).filter(Boolean);
+  if (!selects.length) return;
+  const doctors = getAppointmentDoctors();
+  selects.forEach(function (sel) {
+    const prev = sel.value;
+    const isFilter = sel.id === 'apt-dr-filter';
+    sel.innerHTML = (isFilter ? '<option value="">All Doctors</option>' : '') + doctors.map(function (name) {
+      return '<option value="' + String(name).replace(/"/g, '&quot;') + '">' + String(name).replace(/</g, '&lt;') + '</option>';
+    }).join('');
+    if ([].slice.call(sel.options).some(function (opt) { return opt.value === prev; })) sel.value = prev;
+  });
+}
+function syncPrescriptionFollowupAppointment(visit, patient, opts) {
+  const options = Object.assign({ autosave: false }, opts || {});
+  const fuD = String(visit?.rxFuDate || visit?.followupDate || visit?.nextReview || '').trim().slice(0, 10);
+  if (!fuD || options.autosave) return;
+  const bmhId = String(patient?.bmhId || '').trim();
+  if (!bmhId) return;
+  const dept = String(visit?.dept || patient?.dept || '').trim() || 'ophtho';
+  const doctor = String(visit?.doctor || CURRENT_USER?.name || '').trim();
+  const centre = resolveAppointmentCentreValue(visit?.centre || patient?.centre || '', patient?.centre || '');
+  const name = patient?.name || patient?.patientName || 'Patient';
+  const mob = patient?.mob || patient?.mobile || '';
+  const samePrescriptionApt = APPOINTMENTS.find(function (a) {
+    return a && a.bmhId === bmhId && a.dept === dept && a.source === 'prescription' && a.status !== 'cancelled';
+  });
+  const sameDateApt = APPOINTMENTS.find(function (a) {
+    return a && a.bmhId === bmhId && a.dept === dept && a.date === fuD && a.status !== 'cancelled';
+  });
+  const target = sameDateApt || samePrescriptionApt;
+  if (target) {
+    target.patient = name;
+    target.mob = mob;
+    target.date = fuD;
+    target.time = target.time || getNextAvailableApptSlot(fuD, doctor);
+    target.doctor = doctor;
+    target.dept = dept;
+    target.purpose = 'Follow-up';
+    target.status = target.status || 'booked';
+    target.centre = centre;
+    target.source = 'prescription';
+    if (typeof saveAppointmentToFirebase === 'function') saveAppointmentToFirebase(target);
+    return;
+  }
+  const fuApt = {
+    id: 'A' + Date.now() + Math.floor(Math.random() * 1000),
+    patient: name,
+    bmhId: bmhId,
+    mob: mob,
+    date: fuD,
+    time: getNextAvailableApptSlot(fuD, doctor),
+    doctor: doctor,
+    dept: dept,
+    purpose: 'Follow-up',
+    status: 'booked',
+    centre: centre,
+    source: 'prescription'
+  };
+  APPOINTMENTS.push(fuApt);
+  if (typeof saveAppointmentToFirebase === 'function') saveAppointmentToFirebase(fuApt);
 }
 function roundToNearestTenMinuteSlot(baseDate) {
   const d = new Date(baseDate || Date.now());
@@ -4978,12 +5072,13 @@ function bookApt() {
       'Dr. Tarun Baweja':'psych','Dr. Pooja Baweja':'skin'
     })[doctor] || 'ophtho',
     purpose: purposeEl?.value || 'Consultation',
-    centre: normalizeAppointmentCentreValue(centreEl?.value || window.CURRENT_USER?.centre || 'CHD'),
+    centre: resolveAppointmentCentreValue(centreEl?.value || '', window.CURRENT_USER?.centre || ''),
     notes: notesEl?.value || '',
     status: 'booked',
     createdBy: window.CURRENT_USER?.username || 'reception'
   };
   APPOINTMENTS.push(apt);
+  syncAppointmentDoctorFilters();
   if(typeof saveAppointmentToFirebase==='function') saveAppointmentToFirebase(apt);
   showToast('📅 Appointment booked — '+patient+' at '+time+' ✓','s');
   closeM('m-book-apt');
@@ -6523,6 +6618,8 @@ function renderOphthoPayList() {
   el.innerHTML = myPay.length ? myPay.map(payCardHtml).join('') : `<div style="font-size:12px;color:var(--g1);padding:8px 0;text-align:center">No pending charges</div>`;
 }
 setInterval(function () {
+  const activeId = typeof getActivePageId === 'function' ? getActivePageId() : '';
+  if (activeId && activeId !== 'pg-ophtho' && activeId !== 'pg-doctor-queue') return;
   PATIENTS.forEach(function (p) {
     if (!p || typeof p.bmhId !== 'string') return;
     const el = document.getElementById('dt-' + p.bmhId.replace(/-/g, ''));
@@ -8498,14 +8595,50 @@ function loadInventoryStockFromStorage() {
     });
   } catch (e) { /* noop */ }
 }
-function saveInventoryStockToStorage() {
+function getInventoryDeletedMapFromStorage() {
   try {
-    const next = JSON.stringify(INVENTORY.map(i => ({ barcode: i.barcode, stock: i.stock, name: i.name, cat: i.cat, mrp: i.mrp, exp: i.exp, dept: i.dept, vendor: i.vendor, company: i.company, invoiceNo: i.invoiceNo, cost: i.cost, qr: i.qr, store: i.store, min: i.min, billMode: i.billMode, vendorBillingMode: i.vendorBillingMode, serialNo: i.serialNo, batchNo: i.batchNo, power: i.power, iolCompany: i.iolCompany, iolBrand: i.iolBrand, iolModel: i.iolModel, genericName: i.genericName } )));
+    return JSON.parse(localStorage.getItem('bmh_inventory_deleted_map') || '{}') || {};
+  } catch (e) {
+    return {};
+  }
+}
+function saveInventoryDeletedMapToStorage(map) {
+  try { localStorage.setItem('bmh_inventory_deleted_map', JSON.stringify(map || {})); } catch (e) { /* noop */ }
+}
+function getInventoryRecordUpdatedAt(item) {
+  const raw = item?.updatedAt || item?.createdAt || '';
+  const parsed = Date.parse(raw);
+  if (!Number.isNaN(parsed)) return parsed;
+  const numeric = Number(raw || 0);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+function markInventoryRowsDeleted(rows, deletedAt) {
+  const stamp = Number(deletedAt || Date.now()) || Date.now();
+  const map = getInventoryDeletedMapFromStorage();
+  (Array.isArray(rows) ? rows : []).forEach(function (row) {
+    const barcode = String(row?.barcode || '').trim();
+    if (!barcode) return;
+    map[barcode] = stamp;
+  });
+  saveInventoryDeletedMapToStorage(map);
+}
+function clearInventoryDeletedMark(barcode) {
+  const key = String(barcode || '').trim();
+  if (!key) return;
+  const map = getInventoryDeletedMapFromStorage();
+  if (!(key in map)) return;
+  delete map[key];
+  saveInventoryDeletedMapToStorage(map);
+}
+function saveInventoryStockToStorage(opts) {
+  const savedAt = Number(opts?.updatedAt || Date.now()) || Date.now();
+  try {
+    const next = JSON.stringify(INVENTORY.map(i => ({ barcode: i.barcode, stock: i.stock, name: i.name, cat: i.cat, mrp: i.mrp, exp: i.exp, dept: i.dept, vendor: i.vendor, company: i.company, invoiceNo: i.invoiceNo, cost: i.cost, qr: i.qr, store: i.store, min: i.min, billMode: i.billMode, vendorBillingMode: i.vendorBillingMode, serialNo: i.serialNo, batchNo: i.batchNo, power: i.power, iolCompany: i.iolCompany, iolBrand: i.iolBrand, iolModel: i.iolModel, genericName: i.genericName, createdAt: i.createdAt || '', updatedAt: i.updatedAt || '' } )));
     const prev = localStorage.getItem('bmh_inventory_stock');
     if (prev && prev !== next) localStorage.setItem('bmh_inventory_stock_archive', prev);
     localStorage.setItem('bmh_inventory_stock', next);
     localStorage.setItem('bmh_inventory_stock_backup', next);
-    localStorage.setItem('bmh_inventory_stock_updated_at', String(Date.now()));
+    localStorage.setItem('bmh_inventory_stock_updated_at', String(savedAt));
   } catch (e) { /* noop */ }
 }
 function normalizeIolPowerValue(power) {
@@ -16376,16 +16509,22 @@ window.adminClearAllInventoryStock = adminClearAllInventoryStock;
 function bmhInventoryFirebaseKey(barcode) {
   return String(barcode || '').replace(/[.#$/\[\]]/g, '_');
 }
-function bmhDeleteInventoryRowsFromCloud(rows) {
+function bmhDeleteInventoryRowsFromCloud(rows, deletedAt) {
   const list = (Array.isArray(rows) ? rows : []).filter(function (row) { return row && row.barcode; });
   if (!list.length) return;
   window._bmhInventoryDeletedAt = window._bmhInventoryDeletedAt || {};
+  const stamp = Number(deletedAt || Date.now()) || Date.now();
+  markInventoryRowsDeleted(list, stamp);
   list.forEach(function (row) {
     const barcode = String(row.barcode || '').trim();
     if (!barcode) return;
-    window._bmhInventoryDeletedAt[barcode] = Date.now();
+    window._bmhInventoryDeletedAt[barcode] = stamp;
     try {
-      if (window.FBDB) window.FBDB.ref('inventory/' + bmhInventoryFirebaseKey(barcode)).remove().catch(function (err) { console.warn('RTDB inventory delete failed', err); });
+      if (window.FBDB) window.FBDB.ref('/').update({
+        ['inventory/' + bmhInventoryFirebaseKey(barcode)]: null,
+        ['inventoryDeleted/' + bmhInventoryFirebaseKey(barcode)]: stamp,
+        ['inventoryMeta/updatedAt']: stamp
+      }).catch(function (err) { console.warn('RTDB inventory delete failed', err); });
     } catch (e) { console.warn('RTDB inventory delete failed', e); }
     try {
       if (typeof window.deleteInventoryFromFirebase === 'function') {
@@ -16443,9 +16582,10 @@ function deleteInventoryStockRow(barcode) {
   if (idx < 0) return;
   const item = INVENTORY[idx];
   if (!confirm('Delete stock row for ' + (item.name || item.barcode || 'item') + '?')) return;
+  item.updatedAt = new Date().toISOString();
   INVENTORY.splice(idx, 1);
   delete BCMAP[barcode];
-  saveInventoryStockToStorage();
+  saveInventoryStockToStorage({ updatedAt: Date.now() });
   bmhDeleteInventoryRowsFromCloud([item]);
   renderStockList();
   renderInventoryStoreStock();
@@ -16467,7 +16607,7 @@ function deleteInventoryIolGroup(company, brand, power, store) {
   if (!confirm('Delete ' + matches.length + ' IOL stock entr' + (matches.length === 1 ? 'y' : 'ies') + ' for ' + [company, brand, power].filter(Boolean).join(' ') + '?')) return;
   window.INVENTORY = INVENTORY.filter(function (i) { return !matches.includes(i); });
   matches.forEach(function (i) { if (i.barcode) delete BCMAP[i.barcode]; });
-  saveInventoryStockToStorage();
+  saveInventoryStockToStorage({ updatedAt: Date.now() });
   bmhDeleteInventoryRowsFromCloud(matches);
   renderStockList();
   renderInventoryStoreStock();
@@ -17268,6 +17408,13 @@ function choosePreferredChargesRows(localRows, remoteRows, localTs, remoteTs) {
   if (lts && rts && lts !== rts) return lts > rts ? localList : remoteList;
   return scoreChargesRows(localList) >= scoreChargesRows(remoteList) ? localList : remoteList;
 }
+function chargesRowsEqual(a, b) {
+  try {
+    return JSON.stringify(normalizeChargesRows(a)) === JSON.stringify(normalizeChargesRows(b));
+  } catch (e) {
+    return false;
+  }
+}
 const LEGACY_PMICS_CHARGE_HEADING = 'Pinhole Microincision Cataract Surgery + IOL Implantation';
 const PMICS_MAIN_CHARGE_HEADING = 'Pinhole Microincision Cataract Surgery';
 function migrateLegacyPmicsChargeParents() {
@@ -17421,8 +17568,15 @@ function loadChargesFromFirebase(){
     const snap = pairs[0];
     const metaSnap = pairs[1];
     const remoteTs = Number(metaSnap && metaSnap.val && metaSnap.val()?.updatedAt || 0) || 0;
-    const arr = choosePreferredChargesRows(window._bmhLastLocalChargesRows, snap.val(), window._bmhLastLocalChargesUpdatedAt, remoteTs);
+    const localRows = window._bmhLastLocalChargesRows || [];
+    const remoteRows = normalizeChargesRows(snap.val());
+    const localTs = Number(window._bmhLastLocalChargesUpdatedAt || localStorage.getItem('bmh_charges_schedule_updated_at') || 0) || 0;
+    const arr = choosePreferredChargesRows(localRows, remoteRows, localTs, remoteTs);
+    const preferLocal = !!localTs && (!remoteTs || localTs > remoteTs || (localTs === remoteTs && chargesRowsEqual(arr, localRows) && !chargesRowsEqual(localRows, remoteRows)));
     applyChargesFromCloudSnapshot(arr, remoteTs);
+    if (preferLocal && !chargesRowsEqual(localRows, remoteRows)) {
+      saveChargesToFirebase().catch(function () {});
+    }
     if (window._bmhPendingChargesSync) {
       window._bmhPendingChargesSync = false;
       saveChargesToFirebase().catch(function () {});
@@ -17795,7 +17949,7 @@ function removePatientFromQueue(bmhId) {
   const p = PATIENTS.find(function (x) { return x.bmhId === bmhId; });
   if (!p) { showToast('Patient not found in queue', 'w'); return; }
   const label = 'Queue patient — ' + (p.name || bmhId) + ' · ' + bmhId;
-  if (CURRENT_USER?.isAdmin) {
+  if (canCurrentUserDirectlyDeleteOperationalEntry(p.centre)) {
     if (!confirm('Remove ' + (p.name || 'this patient') + ' from today\'s queue?')) return;
     p.status = 'removed';
     p.queueRemoved = true;
@@ -17820,6 +17974,13 @@ function removePatientFromQueue(bmhId) {
   } else {
     requestDeletion('queuePatient', bmhId, label);
   }
+}
+function canCurrentUserDirectlyDeleteOperationalEntry(recordCentre) {
+  if (CURRENT_USER?.isAdmin) return true;
+  if (CURRENT_USER?.role !== 'Reception') return false;
+  const userCentre = patientCentreKey(getEffectiveCentre() || CURRENT_USER?.centre || recordCentre || '');
+  const targetCentre = patientCentreKey(recordCentre || userCentre || '');
+  return !targetCentre || !userCentre || targetCentre === userCentre;
 }
 
 // ── Confirm IPD Admission ──────────────────────────
@@ -23015,12 +23176,22 @@ function calcRcAge() {
   const dob = document.getElementById('rc-dob')?.value;
   const ageEl = document.getElementById('rc-age');
   if(!dob || !ageEl) return;
+  if (isFutureDobValue(dob)) {
+    ageEl.value = '';
+    showToast('DOB cannot be in the future', 'w');
+    return;
+  }
   const birth = new Date(dob);
   const now = new Date();
   let years = now.getFullYear() - birth.getFullYear();
   const m = now.getMonth() - birth.getMonth();
   if(m < 0 || (m === 0 && now.getDate() < birth.getDate())) years--;
   ageEl.value = years + ' Years';
+}
+function isFutureDobValue(dob) {
+  const value = String(dob || '').trim();
+  if (!value) return false;
+  return value > localDateKey(new Date());
 }
 function isPrimaryBmhSequenceNumber(num) {
   return Number.isFinite(num) && /^4\d+$/.test(String(Math.trunc(num)));
@@ -23489,6 +23660,7 @@ function updateExistingPatientFromReceptionForm(bmhId) {
   const email = document.getElementById('rc-email')?.value?.trim() || '';
   const rel = normalizeReceptionFieldValue('rc-rel', document.getElementById('rc-rel')?.value || '');
   if (!fn) { showToast('Please enter patient first name', 'w'); return; }
+  if (isFutureDobValue(dob)) { showToast('DOB cannot be in the future', 'w'); return; }
   const name = toTitleCaseName((fn + ' ' + ln).trim());
   p.name = name;
   p.initials = computePatientInitials(name);
@@ -23535,6 +23707,7 @@ async function registerPatient() {
   let advPurpose = normalizeReceptionFieldValue('rc-advance-purpose', document.getElementById('rc-advance-purpose')?.value||'');
 
   if(!fn) { showToast('Please enter patient first name','w'); return; }
+  if (isFutureDobValue(dob)) { showToast('DOB cannot be in the future', 'w'); return; }
 
   const name = toTitleCaseName((fn + ' ' + ln).trim());
   const emailEarly = document.getElementById('rc-email')?.value?.trim() || '';
@@ -29451,6 +29624,7 @@ function addCustomLabTest() {
 
 // ─── APPOINTMENTS FIX ─────────────────
 function renderAptDay() {
+  syncAppointmentDoctorFilters();
   const date = document.getElementById('apt-date-inp')?.value || todayKey();
   const drFilter = document.getElementById('apt-dr-filter')?.value || '';
   const centreSelVal = document.getElementById('apt-centre-filter')?.value || '';
@@ -29486,7 +29660,7 @@ function renderAptDay() {
       <div style="font-size:11.5px;font-weight:900;color:var(--bmh-blue);min-width:48px">${t}</div>
       <div style="flex:1"><div style="font-size:13px;font-weight:800">${booked.patient}</div>
       <div style="font-size:10.5px;color:var(--tx3)">${booked.doctor} · ${booked.purpose||booked.type||''}</div></div>
-      <span class="badge bd-blue" style="font-size:9.5px">${booked.centre||'CHD'}</span>
+      <span class="badge bd-blue" style="font-size:9.5px">${appointmentCentreLabel(booked.centre||'CHD')}</span>
       <button class="btn btn-xs btn-gray" onclick="event.stopPropagation();showToast('Appointment cancelled ✓','i')">Cancel</button>
     </div>`;
     return `<div class="apt-slot free" onclick="openBookApt('${t}')">
@@ -29592,7 +29766,7 @@ function renderFollowupRegister() {
       statusBadge = 'UPCOMING'; statusColor = '#27ae60';
     }
     const deptLabel = DEPT_LABELS[e.dept] || e.dept || '—';
-    const centreLabel = e.centre === 'RPR' ? 'Ropar' : 'Chandigarh';
+    const centreLabel = appointmentCentreLabel(e.centre);
     const bookBtnHtml = e.booked
       ? `<span style="font-size:10px;color:#27ae60;font-weight:700">✓ Booked</span>`
       : `<button class="btn btn-xs btn-outline" onclick="openBookAptForPatient('${e.bmhId}','${e.date}')">+ Book Slot</button>`;
@@ -31248,6 +31422,7 @@ function normalizeInventoryRecord(item) {
   ['name','cat','dept','vendor','store','iolBrand','iolCompany','iolModel','brand','company','model','itemName','category'].forEach(function (key) {
     if (item[key]) item[key] = normalizeInventoryTextValue(item[key]);
   });
+  if (!item.updatedAt) item.updatedAt = new Date().toISOString();
   return item;
 }
 function normalizeReceptionFieldValue(id, value) {
@@ -31771,11 +31946,31 @@ function dedupeQueueEntriesByKey(rows) {
       map.set(key, row);
       return;
     }
+    const existingScore = getQueueEntryPreferenceScore(existing);
+    const nextScore = getQueueEntryPreferenceScore(row);
+    if (nextScore > existingScore) {
+      map.set(key, row);
+      return;
+    }
+    if (nextScore < existingScore) return;
     const existingStamp = Date.parse(existing.updatedAt || existing.createdAt || existing.queueDate || '') || Number(existing.checkinAt || 0) || 0;
     const nextStamp = Date.parse(row.updatedAt || row.createdAt || row.queueDate || '') || Number(row.checkinAt || 0) || 0;
     if (nextStamp >= existingStamp) map.set(key, row);
   });
   return Array.from(map.values());
+}
+function getQueueEntryPreferenceScore(p) {
+  if (!p) return -1;
+  const todayKeyLocal = localDateKey(new Date());
+  let score = 0;
+  if (patientActiveQueueMatchesToday(p, todayKeyLocal)) score += 1000;
+  else if (patientDoneQueueMatchesToday(p, todayKeyLocal)) score += 700;
+  else if (patientQueueDateMatchesToday(p)) score += 300;
+  if (!p.queueRemoved && String(p.status || '').toLowerCase() !== 'removed') score += 120;
+  if (!!p.checkinAt) score += 80;
+  if (!isPatientMarkedSeen(p)) score += 40;
+  if (String(p.status || '').toLowerCase() === 'waiting') score += 20;
+  return score;
 }
 function localDateKey(value) {
   if (value === null || value === undefined || value === '') return '';
@@ -34449,17 +34644,31 @@ function savePatientToFirebase(patient) {
     || CURRENT_USER?.centre
     || 'CHD';
   const centre = patientCentreKey(centreRaw);
-  const payload = {
-    ...patient,
-    centre,
-    lastUpdated: new Date().toISOString(),
-    updatedBy: CURRENT_USER?.name || 'System'
-  };
-  const rt = fbSet(`patients/${patient.bmhId}`, payload);
-  const fs = typeof window.upsertPatientFirestore === 'function'
-    ? window.upsertPatientFirestore(payload).catch(err => { console.warn('Firestore patient sync:', err); })
-    : Promise.resolve();
-  return Promise.all([rt, fs]).then(() => showToast('Patient saved to database ✓', 's'))
+  const nowIso = new Date().toISOString();
+  const localExisting = (PATIENTS || []).find(function (p) { return p && p.bmhId === patient.bmhId; }) || null;
+  const loadExisting = typeof fbOnce === 'function'
+    ? fbOnce(`patients/${patient.bmhId}`).catch(function () { return null; })
+    : Promise.resolve(null);
+  return Promise.resolve(loadExisting).then(function (remoteExisting) {
+    const existing = remoteExisting && typeof remoteExisting === 'object'
+      ? Object.assign({}, localExisting || {}, remoteExisting)
+      : (localExisting ? Object.assign({}, localExisting) : null);
+    const payloadBase = {
+      ...(existing || {}),
+      ...patient,
+      centre,
+      lastUpdated: nowIso,
+      updatedBy: CURRENT_USER?.name || 'System'
+    };
+    const payload = sanitizeFirebaseValue(mergePatientQueueState(payloadBase, patient, existing));
+    const rt = typeof fbUpdate === 'function'
+      ? fbUpdate(`patients/${patient.bmhId}`, payload)
+      : fbSet(`patients/${patient.bmhId}`, payload);
+    const fs = typeof window.upsertPatientFirestore === 'function'
+      ? window.upsertPatientFirestore(payload).catch(function (err) { console.warn('Firestore patient sync:', err); })
+      : Promise.resolve();
+    return Promise.all([rt, fs]);
+  }).then(() => showToast('Patient saved to database ✓', 's'))
     .catch(e => showToast('Save failed: ' + e.message, 'w'));
 }
 
@@ -34552,7 +34761,10 @@ function applyRealtimePatientRecord(record, key) {
   if (!row.bmhId) return;
   const cache = Array.isArray(window._BMH_ALL_PATIENTS_CACHE) ? window._BMH_ALL_PATIENTS_CACHE : [];
   const idx = cache.findIndex(function (p) { return p && p.bmhId === row.bmhId; });
-  if (idx >= 0) cache[idx] = row;
+  if (idx >= 0) {
+    const existing = cache[idx];
+    cache[idx] = normalizePatientRecord(mergePatientQueueState(Object.assign({}, existing || {}, row), row, existing));
+  }
   else cache.unshift(row);
   window._BMH_ALL_PATIENTS_CACHE = cache;
   rebuildPatientsArrayFromGlobalCache();
@@ -34740,7 +34952,8 @@ function runOneTimePendingDuesCleanup() {
 // ── APPOINTMENTS ─────────────────────────────────────────────
 function saveAppointmentToFirebase(apt) {
   const key = apt.id || fbKey();
-  fbSet(`appointments/${key}`, { ...apt, id: key });
+  const normalizedCentre = resolveAppointmentCentreValue(apt?.centre || '', apt?.centre || '');
+  fbSet(`appointments/${key}`, { ...apt, id: key, centre: normalizedCentre });
 }
 
 function listenAppointments() {
@@ -34750,8 +34963,10 @@ function listenAppointments() {
   fbOn('appointments', data => {
     APPOINTMENTS.length = 0;
     Object.values(data || {}).forEach(function (a) {
-      if (!centre || normalizeAppointmentCentreValue(a.centre || 'CHD') === centre) APPOINTMENTS.push(a);
+      const normalized = Object.assign({}, a, { centre: resolveAppointmentCentreValue(a?.centre || '', a?.centre || '') });
+      if (!centre || normalizeAppointmentCentreValue(normalized.centre || 'CHD') === centre) APPOINTMENTS.push(normalized);
     });
+    syncAppointmentDoctorFilters();
     const activeId = getActivePageId();
     if (activeId === 'pg-appointments') renderAptDay && renderAptDay();
     else if (activeId === 'pg-dashboard') renderDashboard && renderDashboard();
@@ -35319,42 +35534,100 @@ function savePrescriptionToFirebase(bmhId, rxData) {
 function saveInventoryItemToFirebase(item) {
   normalizeInventoryRecord(item);
   if (!item || !item.barcode || !window.FBDB) return Promise.resolve();
-  return window.FBDB.ref('inventory/' + String(item.barcode).replace(/[.#$/\[\]]/g, '_')).set(item);
+  item.updatedAt = new Date().toISOString();
+  clearInventoryDeletedMark(item.barcode);
+  const key = String(item.barcode).replace(/[.#$/\[\]]/g, '_');
+  return window.FBDB.ref('/').update({
+    ['inventory/' + key]: item,
+    ['inventoryDeleted/' + key]: null,
+    ['inventoryMeta/updatedAt']: Date.now()
+  });
 }
 window.saveInventoryToFirebase = saveInventoryItemToFirebase;
 
 function loadInventoryFromFirebase() {
   if (!window.FBDB) return Promise.resolve();
-  return window.FBDB.ref('inventory').once('value').then(function (snap) {
-    const data = snap.val();
+  return Promise.all([
+    window.FBDB.ref('inventory').once('value'),
+    window.FBDB.ref('inventoryDeleted').once('value'),
+    window.FBDB.ref('inventoryMeta').once('value')
+  ]).then(function (snaps) {
+    const data = snaps[0].val();
+    const deletedData = snaps[1].val() || {};
+    const metaData = snaps[2].val() || {};
     const remoteRows = (data && typeof data === 'object') ? Object.values(data) : [];
     const localRows = readInventoryRowsFromLocalSnapshots();
-    const mergedByBarcode = {};
+    const localDeleted = getInventoryDeletedMapFromStorage();
+    const remoteDeleted = {};
+    Object.keys(deletedData || {}).forEach(function (key) {
+      const stamp = Number(deletedData[key] && deletedData[key].deletedAt || deletedData[key] || 0) || 0;
+      if (stamp) remoteDeleted[key] = stamp;
+    });
+    const remoteTs = Number(metaData.updatedAt || 0) || 0;
+    const localTs = Number(localStorage.getItem('bmh_inventory_stock_updated_at') || 0) || 0;
+    const localByBarcode = {};
+    const remoteByBarcode = {};
     localRows.forEach(function (item) {
       if (!item || !item.barcode) return;
-      mergedByBarcode[String(item.barcode)] = Object.assign({}, item);
+      localByBarcode[String(item.barcode)] = Object.assign({}, item);
     });
     remoteRows.forEach(function (item) {
       if (!item || !item.barcode) return;
-      mergedByBarcode[String(item.barcode)] = Object.assign({}, mergedByBarcode[String(item.barcode)] || {}, item);
+      remoteByBarcode[String(item.barcode)] = Object.assign({}, item);
     });
+    const allBarcodes = Array.from(new Set(Object.keys(localByBarcode).concat(Object.keys(remoteByBarcode)).concat(Object.keys(localDeleted)).concat(Object.keys(remoteDeleted))));
+    const mergedByBarcode = {};
+    allBarcodes.forEach(function (barcode) {
+      const localItem = localByBarcode[barcode];
+      const remoteItem = remoteByBarcode[barcode];
+      const localDeletedAt = Number(localDeleted[barcode] || 0) || 0;
+      const remoteDeletedAt = Number(remoteDeleted[bmhInventoryFirebaseKey(barcode)] || remoteDeleted[barcode] || 0) || 0;
+      const deletedAt = Math.max(localDeletedAt, remoteDeletedAt);
+      const localStamp = getInventoryRecordUpdatedAt(localItem);
+      const remoteStamp = getInventoryRecordUpdatedAt(remoteItem);
+      const latestItemStamp = Math.max(localStamp, remoteStamp);
+      if (deletedAt && deletedAt >= latestItemStamp) return;
+      const chosen = localStamp >= remoteStamp ? (localItem || remoteItem) : (remoteItem || localItem);
+      if (chosen) mergedByBarcode[barcode] = Object.assign({}, chosen);
+    });
+    INVENTORY.length = 0;
+    Object.keys(BCMAP || {}).forEach(function (key) { delete BCMAP[key]; });
     Object.values(mergedByBarcode).forEach(function (item) {
       if (!item || !item.barcode) return;
       normalizeInventoryRecord(item);
-      const existing = INVENTORY.find(function (row) { return String(row.barcode || '') === String(item.barcode || ''); });
-      if (existing) Object.assign(existing, item);
-      else INVENTORY.push(item);
-      BCMAP[item.barcode] = existing || item;
-      if (item.name) BCMAP[String(item.name).toLowerCase().substring(0, 15)] = existing || item;
+      INVENTORY.push(item);
+      BCMAP[item.barcode] = item;
+      if (item.name) BCMAP[String(item.name).toLowerCase().substring(0, 15)] = item;
     });
-    saveInventoryStockToStorage();
-    if (localRows.length > remoteRows.length) {
-      Object.values(mergedByBarcode).forEach(function (item) { saveInventoryItemToFirebase(item).catch(function () {}); });
+    saveInventoryStockToStorage({ updatedAt: Math.max(localTs, remoteTs) });
+    saveInventoryDeletedMapToStorage(Object.keys(localDeleted).reduce(function (acc, barcode) {
+      const stamp = Number(localDeleted[barcode] || 0) || 0;
+      if (stamp) acc[barcode] = stamp;
+      return acc;
+    }, {}));
+    if (localTs > remoteTs) {
+      Object.values(localByBarcode).forEach(function (item) {
+        const barcode = String(item?.barcode || '').trim();
+        if (!barcode) return;
+        const localStamp = getInventoryRecordUpdatedAt(item);
+        const remoteStamp = getInventoryRecordUpdatedAt(remoteByBarcode[barcode]);
+        const deleteStamp = Number(localDeleted[barcode] || 0) || 0;
+        if (deleteStamp && deleteStamp >= localStamp) return;
+        if (localStamp >= remoteStamp) saveInventoryItemToFirebase(item).catch(function () {});
+      });
+      Object.keys(localDeleted).forEach(function (barcode) {
+        const deleteStamp = Number(localDeleted[barcode] || 0) || 0;
+        const remoteStamp = getInventoryRecordUpdatedAt(remoteByBarcode[barcode]);
+        if (!deleteStamp || deleteStamp < remoteStamp) return;
+        bmhDeleteInventoryRowsFromCloud([{ barcode: barcode }], deleteStamp);
+      });
     }
     renderInventoryImportDatalists();
-    renderStockList();
-    renderInventoryStoreStock();
-    renderInventoryPoAlerts();
+    if (getActivePageId && getActivePageId() === 'pg-inventory') {
+      renderStockList();
+      renderInventoryStoreStock();
+      renderInventoryPoAlerts();
+    }
   }).catch(function (err) {
     console.warn('Inventory Firebase load failed', err);
   });
@@ -39970,6 +40243,50 @@ function queueRawStamp(value) {
 function queueStampIsDateOnly(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(value || '').trim());
 }
+const PATIENT_QUEUE_STATE_FIELDS = [
+  'status',
+  'preRegistered',
+  'seen',
+  'seenAt',
+  'checkinAt',
+  'queueDate',
+  'visitDate',
+  'queueRemoved',
+  'queueRemovedAt',
+  'queueRemovedBy',
+  'dilated',
+  'dilatedTime'
+];
+function getPatientQueueStateStamp(p) {
+  if (!p || typeof p !== 'object') return 0;
+  return Math.max(
+    queueRawStamp(p.updatedAt),
+    queueRawStamp(p.lastUpdated),
+    queueRawStamp(p.seenAt),
+    queueRawStamp(p.queueRemovedAt),
+    queueRawStamp(p.checkinAt),
+    queueRawStamp(p.createdAt),
+    queueRawStamp(p.registeredAt)
+  );
+}
+function choosePreferredQueueState(a, b) {
+  const aScore = getQueueEntryPreferenceScore(a);
+  const bScore = getQueueEntryPreferenceScore(b);
+  if (aScore !== bScore) return aScore > bScore ? a : b;
+  const aStamp = getPatientQueueStateStamp(a);
+  const bStamp = getPatientQueueStateStamp(b);
+  if (aStamp !== bStamp) return aStamp >= bStamp ? a : b;
+  return a || b || null;
+}
+function mergePatientQueueState(basePatient, incomingPatient, existingPatient) {
+  const merged = Object.assign({}, basePatient || {});
+  const preferred = choosePreferredQueueState(incomingPatient, existingPatient);
+  if (!preferred) return merged;
+  PATIENT_QUEUE_STATE_FIELDS.forEach(function (field) {
+    if (preferred[field] !== undefined) merged[field] = preferred[field];
+  });
+  return merged;
+}
 function patientQueueCandidateStamps(p, now) {
   const todayKeyLocal = localDateKey(Number.isFinite(now) ? new Date(now) : new Date());
   return [
@@ -40436,11 +40753,14 @@ function deletePayRequest(prId) {
   if(!pr) { showToast('Charge not found','w'); return; }
   const label = `₹${pr.amount?.toLocaleString('en-IN')||'?'} charge — ${pr.patient||'?'} (${pr.for||'—'})`;
   const isInvestigationRequest = !!pr.linkedInvestigationOrderId || /oct|hvf|biometry|fundus|topography|specular|scan|cbc|blood|test|profile|urine|ecg|investigation/i.test(String(pr.for || pr.service || pr.desc || ''));
-  if(CURRENT_USER?.isAdmin) {
+  if(canCurrentUserDirectlyDeleteOperationalEntry(pr.centre)) {
     if(!confirm(`Delete this charge request?\n${label}\nThis cannot be undone.`)) return;
     const idx = PAY_REQUESTS.findIndex(r=>r.id===prId);
     if(idx>-1) { PAY_REQUESTS.splice(idx,1); try { if(window.firebase&&firebase.database) firebase.database().ref('payRequests/'+prId).remove(); } catch(e){} }
-    fbPush&&fbPush('auditLog',{user:CURRENT_USER.name,role:'Admin',action:'DELETE_CHARGE',item:label,timestamp:new Date().toISOString()});
+    if (pr.linkedInvestigationOrderId) {
+      try { cancelInvestigationReceptionRequest(pr.linkedInvestigationOrderId); } catch (e) {}
+    }
+    fbPush&&fbPush('auditLog',{user:CURRENT_USER.name,role:CURRENT_USER?.role || (CURRENT_USER?.isAdmin ? 'Admin' : 'Reception'),action:'DELETE_CHARGE',item:label,timestamp:new Date().toISOString()});
     showToast(`🗑️ Charge deleted: ${label}`,'i');
     renderReceptionPage&&renderReceptionPage(); renderDeptSummary&&renderDeptSummary();
   } else {
@@ -40466,10 +40786,18 @@ function deletePatientPendingCharges(bmhId) {
   if(!pending.length) return;
   const pt = PATIENTS.find(x=>x.bmhId===bmhId);
   const label = `All ${pending.length} pending charge(s) for ${pt?.name||bmhId} — total ₹${pending.reduce((s,r)=>s+r.amount,0).toLocaleString('en-IN')}`;
-  if(CURRENT_USER?.isAdmin) {
+  const deleteCentre = pt?.centre || pending[0]?.centre || '';
+  if(canCurrentUserDirectlyDeleteOperationalEntry(deleteCentre)) {
     if(!confirm(`Delete ${pending.length} pending charge(s) for this patient?\n${label}\nThis cannot be undone.`)) return;
-    pending.forEach(pr=>{ const idx=PAY_REQUESTS.indexOf(pr); if(idx>-1) PAY_REQUESTS.splice(idx,1); try { if(window.firebase&&firebase.database) firebase.database().ref('payRequests/'+pr.id).remove(); } catch(e){} });
-    fbPush&&fbPush('auditLog',{user:CURRENT_USER.name,role:'Admin',action:'DELETE_PT_CHARGES',item:label,timestamp:new Date().toISOString()});
+    pending.forEach(pr=>{
+      const idx=PAY_REQUESTS.indexOf(pr);
+      if(idx>-1) PAY_REQUESTS.splice(idx,1);
+      try { if(window.firebase&&firebase.database) firebase.database().ref('payRequests/'+pr.id).remove(); } catch(e){}
+      if (pr.linkedInvestigationOrderId) {
+        try { cancelInvestigationReceptionRequest(pr.linkedInvestigationOrderId); } catch (e) {}
+      }
+    });
+    fbPush&&fbPush('auditLog',{user:CURRENT_USER.name,role:CURRENT_USER?.role || (CURRENT_USER?.isAdmin ? 'Admin' : 'Reception'),action:'DELETE_PT_CHARGES',item:label,timestamp:new Date().toISOString()});
     showToast(`🗑️ Deleted ${pending.length} charge(s)`,'i');
     renderReceptionPage&&renderReceptionPage(); renderDeptSummary&&renderDeptSummary();
   } else {
@@ -40557,11 +40885,13 @@ function saveUpdatedPatientDetails() {
   const advanceAmt = Math.max(0, parseFloat(document.getElementById('upd-advance-amt')?.value || p.advance || 0) || 0);
   const advancePurpose = normalizeReceptionFieldValue('upd-advance-purpose', document.getElementById('upd-advance-purpose')?.value?.trim()||'');
   const nowIso = new Date().toISOString();
+  const updatedDob = document.getElementById('upd-dob')?.value||p.dob||'';
+  if (isFutureDobValue(updatedDob)) { showToast('DOB cannot be in the future', 'w'); return; }
   const updates = {
     name: toTitleCaseName((fn+' '+ln).trim()),
     age: document.getElementById('upd-age')?.value?.trim()||p.age||'',
     sex: document.getElementById('upd-sex')?.value||p.sex||'Male',
-    dob: document.getElementById('upd-dob')?.value||p.dob||'',
+    dob: updatedDob,
     mobile: document.getElementById('upd-mob')?.value?.trim()||p.mobile||p.mob||'',
     mob: document.getElementById('upd-mob')?.value?.trim()||p.mob||p.mobile||'',
     mob2: document.getElementById('upd-mob2')?.value?.trim()||'',
@@ -41430,35 +41760,10 @@ function saveVisit(dept, opts) {
     .then(() => {
       try { if (dept === 'ophtho' && !opts.autosave) populateOphthoForm(visit); } catch (e) { console.warn('post-save populateOphthoForm failed', e); }
       if (!opts.silent) showToast(`✅ ${ptName} — visit saved (${visit.dateLabel})`, 's');
-      // Auto-create follow-up appointment from prescription follow-up date
+      // Auto-create/update follow-up appointment from prescription follow-up date
       try {
-        const fuD = visit.rxFuDate || visit.followupDate || '';
-        if (fuD && !opts.autosave) {
-          const alreadyBooked = APPOINTMENTS.find(function (a) {
-            return a.bmhId === bmhId && a.date === fuD && a.status !== 'cancelled';
-          });
-          if (!alreadyBooked) {
-            const fuDoctor = visit.doctor || CURRENT_USER?.name || '';
-            const fuTimeSlot = getNextAvailableApptSlot(fuD, fuDoctor);
-            const fuApt = {
-              id: 'A' + Date.now() + Math.floor(Math.random() * 1000),
-              patient: ptName,
-              bmhId: bmhId,
-              mob: localPt?.mob || '',
-              date: fuD,
-              time: fuTimeSlot,
-              doctor: fuDoctor,
-              dept: dept,
-              purpose: 'Follow-up',
-              status: 'booked',
-              centre: normalizeAppointmentCentreValue(visit.centre || CURRENT_USER?.centre || 'CHD'),
-              source: 'prescription'
-            };
-            APPOINTMENTS.push(fuApt);
-            if (typeof saveAppointmentToFirebase === 'function') saveAppointmentToFirebase(fuApt);
-            if (typeof renderFollowupRegister === 'function') renderFollowupRegister();
-          }
-        }
+        syncPrescriptionFollowupAppointment(Object.assign({}, visit, { dept: dept }), Object.assign({}, localPt || {}, { bmhId: bmhId, name: ptName }), { autosave: opts.autosave });
+        if (typeof renderFollowupRegister === 'function') renderFollowupRegister();
       } catch (fuErr) { console.warn('auto follow-up booking failed', fuErr); }
       try { if(dept === 'obg') updateObgObstetricHistoryTab(!!visit.obstetricHistoryEnabled); } catch (e) { console.warn('post-save updateObgObstetricHistoryTab failed', e); }
       try { if(typeof loadPastVisits === 'function') loadPastVisits(bmhId, dept); } catch (e) { console.warn('post-save loadPastVisits failed', e); }
