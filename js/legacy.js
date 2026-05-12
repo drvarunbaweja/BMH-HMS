@@ -20499,11 +20499,11 @@ function parseTemplateLines(raw, dept) {
   if (!lines.length) return [];
   return lines.map(function (line) {
     if (String(dept || '').indexOf('dc-') === 0) return { trade: line, generic: '', eye: '', freq: '', dur: '' };
+    if (dept === 'ot') return { trade: line, generic: '', eye: '', freq: '', dur: '', rawText: line };
     const parts = line.split(/[—–-]/).map(function (s) { return s.trim(); });
     const trade = parts[0] || 'Item';
     const freq = parts[1] || 'Twice daily (BD)';
     const dur = parts[2] || '1 Week';
-    if (dept === 'ot') return { trade, generic: '', eye: '', freq, dur };
     const lib = DRUG_LIBRARY.find(function (x) { return x.trade === trade || x.generic === trade; });
     const drugType = lib ? lib.type : '';
     const isEye = /drop|eye|ophth|moxiflox|vigamox|pred|tears/i.test(trade + ' ' + (drugType || ''));
@@ -20516,9 +20516,14 @@ function parseTemplateLines(raw, dept) {
     };
   });
 }
+function getOtTemplateLineText(row) {
+  if (!row) return '';
+  return String(row.rawText || row.trade || row.name || row.generic || '').trim();
+}
 function serializeTemplateRows(rows, dept) {
   return (rows || []).map(function (row) {
     if (String(dept || '').indexOf('dc-') === 0) return row.trade || row.name || row.generic || '';
+    if (dept === 'ot') return getOtTemplateLineText(row);
     const name = dept === 'ot'
       ? (row.trade || row.name || row.generic || '')
       : (rxDrugTradeName(row) || row.trade || row.name || row.generic || '');
@@ -20587,6 +20592,9 @@ function renderSetRxTplList() {
       }
       if (deptKey === 'ot-followup') {
         return escapeRxTemplateHtml(row.trade || row.name || row.generic || formatOtFollowupLabel(row.days || 0) || 'Follow-up');
+      }
+      if (deptKey === 'ot') {
+        return escapeRxTemplateHtml(getOtTemplateLineText(row) || 'OT note');
       }
       const nm = rxDrugTradeName(row) || row.trade || row.name || row.generic || 'Item';
       return escapeRxTemplateHtml(nm + (row.freq ? ' · ' + row.freq : '') + (row.dur ? ' · ' + row.dur : ''));
@@ -26593,20 +26601,13 @@ function applyOTNotesTemplate(key) {
   if (!key || !RX_TEMPLATES_DATA[key]) return;
   const rows = RX_TEMPLATES_DATA[key] || [];
   const notesText = rows.map(function (row) {
-    const bits = [];
-    const name = rxDrugTradeName(row) || row.trade || row.name || row.generic || '';
-    if (name) bits.push(name);
-    if (row.freq) bits.push(row.freq);
-    if (row.dur) bits.push(row.dur);
-    return bits.join(' — ');
+    return getOtTemplateLineText(row);
   }).filter(Boolean).join('\n');
-  const noteArea = document.getElementById('ot-notes');
   const findings = document.getElementById('ot-findings');
   const narrative = document.getElementById('ot-narrative');
   const meta = RX_TEMPLATES_META[key] || {};
   if (findings && !findings.value.trim()) findings.value = meta.notes || '';
   if (narrative && !narrative.value.trim()) narrative.value = notesText;
-  if (noteArea && !noteArea.value.trim()) noteArea.value = notesText;
   if (document.getElementById('ot-procedure') && !document.getElementById('ot-procedure').value.trim() && meta.surgery) document.getElementById('ot-procedure').value = meta.surgery;
   const followupKey = findMatchingOtFollowupTemplateKey(key, document.getElementById('ot-procedure')?.value || meta.surgery || '');
   const followupSel = document.getElementById('ot-followup-template');
@@ -35652,6 +35653,14 @@ function buildDischargePrintSection(sel) {
   const headerSrc = resolvePrintHeaderSrc();
   const today = formatDateIN(new Date());
   const fmt = function (v) { return formatDateIN(v); };
+  const snapshotFollowups = data.lastOtCase?.ophDischargeSnapshot?.followups;
+  const dischargeFollowups = Array.isArray(snapshotFollowups) && snapshotFollowups.length
+    ? snapshotFollowups.slice()
+    : (data.followups || []).map(function (f, idx) {
+        if (typeof f === 'string') return f;
+        const dateText = f?.date ? formatDateIN(f.date) : (f?.dateLabel || '');
+        return (f?.label || ('Follow-up ' + (idx + 1))) + (dateText ? ': ' + dateText : '') + (f?.time ? ' · ' + f.time : '');
+      });
   const meds = flattenDischargeRxRows(data.lastRxData && data.lastRxData.length ? data.lastRxData : []).map(function (d, i) {
     const trade = rxDrugTradeName(d) || d.name || d.brand || 'Medicine';
     const generic = rxDrugGenericName(d);
@@ -35665,10 +35674,12 @@ function buildDischargePrintSection(sel) {
       + '<td style="padding:6px 8px;border:1px solid #cfd5de;font-size:11px">' + esc(times) + '</td>'
       + '</tr>';
   }).join('');
-  const followupRows = (data.followups || []).map(function (f, idx) {
-    const dateText = f?.date ? formatDateIN(f.date) : (f?.dateLabel || '—');
-    const timeText = f?.time || '';
-    const labelText = f?.label || ('Follow-up ' + (idx + 1));
+  const followupRows = dischargeFollowups.map(function (f, idx) {
+    const raw = String(f || '').trim();
+    const parts = raw.split(':');
+    const labelText = parts.length > 1 ? (String(parts[0] || '').trim() || ('Follow-up ' + (idx + 1))) : ('Follow-up ' + (idx + 1));
+    const dateText = parts.length > 1 ? (parts.slice(1).join(':').trim() || '—') : (raw || '—');
+    const timeText = '';
     return '<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 10px;border:1px solid #d7dce5;border-radius:8px;margin-top:6px;font-size:11px"><strong>' + esc(labelText) + '</strong><span>' + esc(dateText + (timeText ? ' · ' + timeText : '')) + '</span></div>';
   }).join('');
   const summary = 'This is to certify that ' + data.ptNm + ' visited our hospital on ' + fmt(data.visitDate) + '. On examination, it was found that the patient had '
@@ -39867,21 +39878,34 @@ function getVisibleOTCases() {
     .filter(c => !dateFilter || (c.date || c.scheduledDate || '') === dateFilter)
     .filter(c => !surgeonFilter || surgeonFilter === 'All Surgeons' || c.surgeon === surgeonFilter);
 }
+function otCaseIsPmics(c) {
+  const text = String(c?.procedure || c?.procedureMain || '').toLowerCase();
+  return /pmics|pinhole\s*micro\s*incision\s*cataract\s*surgery|pinhole\s*microincision\s*cataract\s*surgery/.test(text);
+}
+function formatOtCaseProcedureWithEye(c) {
+  const procedure = String(c?.procedure || c?.procedureMain || '—').trim() || '—';
+  const eye = String(c?.site || c?.eye || '').trim();
+  if (!eye) return procedure;
+  if (new RegExp('\\b' + eye.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(procedure)) return procedure;
+  return procedure + ' (' + eye + ')';
+}
 function printOTCompactList() {
   const cases = getVisibleOTCases();
   if (!cases.length) { showToast('No OT cases to print', 'w'); return; }
   const dateText = formatDateIN(document.getElementById('ot-date-inp')?.value || todayKey());
+  const showPmicsIolColumns = cases.some(otCaseIsPmics);
   const rows = cases.map(function (c, i) {
+    const isPmics = otCaseIsPmics(c);
     return '<tr>'
       + '<td style="border:1px solid #d7dce5;padding:5px 6px;font-size:10px">' + (i + 1) + '</td>'
       + '<td style="border:1px solid #d7dce5;padding:5px 6px;font-size:10px;font-weight:700">' + escapeHtmlConsent(c.patient || '—') + '</td>'
       + '<td style="border:1px solid #d7dce5;padding:5px 6px;font-size:10px">' + escapeHtmlConsent(String(c.age || '—') + ' / ' + String(c.sex || '—')) + '</td>'
-      + '<td style="border:1px solid #d7dce5;padding:5px 6px;font-size:10px;font-weight:900;color:#1A3C6E">' + escapeHtmlConsent(c.site || '—') + '</td>'
-      + '<td style="border:1px solid #d7dce5;padding:5px 6px;font-size:10px;font-weight:900;color:#8a4200">' + escapeHtmlConsent(c.iolType || c.iol || '—') + '</td>'
-      + '<td style="border:1px solid #d7dce5;padding:5px 6px;font-size:10px;font-weight:900;color:#0B7B8C">' + escapeHtmlConsent(c.iolPower || '—') + '</td>'
+      + '<td style="border:1px solid #d7dce5;padding:5px 6px;font-size:10px;font-weight:900;color:#1A3C6E">' + escapeHtmlConsent(formatOtCaseProcedureWithEye(c)) + '</td>'
+      + (showPmicsIolColumns ? '<td style="border:1px solid #d7dce5;padding:5px 6px;font-size:10px;font-weight:900;color:#8a4200">' + escapeHtmlConsent(isPmics ? (c.iolType || c.iol || '—') : '—') + '</td>' : '')
+      + (showPmicsIolColumns ? '<td style="border:1px solid #d7dce5;padding:5px 6px;font-size:10px;font-weight:900;color:#0B7B8C">' + escapeHtmlConsent(isPmics ? (c.iolPower || '—') : '—') + '</td>' : '')
       + '</tr>';
   }).join('');
-  const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;padding:10mm;color:#111}table{width:100%;border-collapse:collapse}th{background:#eef3fb;color:#1A3C6E;font-size:10px;font-weight:900;padding:6px;border:1px solid #d7dce5;text-transform:uppercase}td{vertical-align:top}@page{size:A4 portrait;margin:8mm}</style></head><body><div style="font-size:16px;font-weight:900;color:#1A3C6E;margin-bottom:8px">OT List</div><div style="font-size:11px;margin-bottom:10px">Date: ' + escapeHtmlConsent(dateText) + '</div><table><thead><tr><th>#</th><th>Patient</th><th>Age / Sex</th><th>Eye</th><th>IOL</th><th>Power</th></tr></thead><tbody>' + rows + '</tbody></table></body></html>';
+  const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;padding:10mm;color:#111}table{width:100%;border-collapse:collapse}th{background:#eef3fb;color:#1A3C6E;font-size:10px;font-weight:900;padding:6px;border:1px solid #d7dce5;text-transform:uppercase}td{vertical-align:top}@page{size:A4 portrait;margin:8mm}</style></head><body><div style="font-size:16px;font-weight:900;color:#1A3C6E;margin-bottom:8px">OT List</div><div style="font-size:11px;margin-bottom:10px">Date: ' + escapeHtmlConsent(dateText) + '</div><table><thead><tr><th>#</th><th>Patient</th><th>Age / Sex</th><th>Procedure</th>' + (showPmicsIolColumns ? '<th>IOL</th><th>Power</th>' : '') + '</tr></thead><tbody>' + rows + '</tbody></table></body></html>';
   safePrint(html);
   showToast('OT list ready to print ✓', 's');
 }
