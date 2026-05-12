@@ -15596,6 +15596,9 @@ function deleteInventoryStorePrompt() {
   showToast('Store removed from list ✓', 's');
 }
 window.deleteInventoryStorePrompt = deleteInventoryStorePrompt;
+function bmhTrimInventoryHeadingValue(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ');
+}
 function bmhSyncInventoryRowsToCloud(rows) {
   (Array.isArray(rows) ? rows : []).forEach(function (row) {
     if (!row || !row.barcode) return;
@@ -15621,7 +15624,7 @@ function moveInventoryRowsToStore(barcodes) {
     return (idx + 1) + '. ' + store;
   }).join('\n');
   const targetRaw = prompt(promptLabel, current) || '';
-  const target = normalizeInventoryTextValue(targetRaw);
+  const target = bmhTrimInventoryHeadingValue(targetRaw);
   if (!target) return;
   const matchedStore = stores.find(function (store) {
     return normalizeInventoryCompareText(store) === normalizeInventoryCompareText(target);
@@ -15631,8 +15634,71 @@ function moveInventoryRowsToStore(barcodes) {
     return;
   }
   const ts = bmhNowISO();
+  if (rows.length === 1) {
+    const source = rows[0];
+    const available = Math.max(0, Number(source.stock || 0));
+    if (!(available > 0)) { showToast('No stock available to move', 'w'); return; }
+    const qtyInput = prompt('Enter quantity to move from "' + (source.store || 'Unassigned store') + '" to "' + matchedStore + '"\nAvailable: ' + available, String(available));
+    if (qtyInput == null) return;
+    const qty = Math.max(0, Number(qtyInput || 0));
+    if (!(qty > 0)) { showToast('Enter a valid quantity', 'w'); return; }
+    if (qty > available) { showToast('Cannot move more than available stock', 'w'); return; }
+    if (qty < available) {
+      const finder = function (row) {
+        return row
+          && String(row.store || '') === matchedStore
+          && normalizeInventoryCompareText(row.name || '') === normalizeInventoryCompareText(source.name || '')
+          && normalizeInventoryCompareText(row.cat || '') === normalizeInventoryCompareText(source.cat || '')
+          && normalizeInventoryCompareText(row.company || row.iolCompany || '') === normalizeInventoryCompareText(source.company || source.iolCompany || '')
+          && normalizeInventoryCompareText(row.vendor || '') === normalizeInventoryCompareText(source.vendor || '')
+          && normalizeInventoryCompareText(row.exp || '') === normalizeInventoryCompareText(source.exp || '')
+          && normalizeInventoryCompareText(row.batchNo || '') === normalizeInventoryCompareText(source.batchNo || '')
+          && normalizeInventoryCompareText(row.serialNo || '') === normalizeInventoryCompareText(source.serialNo || '')
+          && normalizeInventoryCompareText(row.power || '') === normalizeInventoryCompareText(source.power || '');
+      };
+      let targetRow = (INVENTORY || []).find(finder);
+      source.stock = Math.max(0, available - qty);
+      source.updatedAt = ts;
+      if (!targetRow) {
+        targetRow = Object.assign({}, source, {
+          barcode: String(source.barcode || 'INV') + '-MV-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+          stock: qty,
+          store: matchedStore,
+          updatedAt: ts
+        });
+        normalizeInventoryRecord(targetRow);
+        INVENTORY.push(targetRow);
+        if (targetRow.barcode) BCMAP[targetRow.barcode] = targetRow;
+        if (targetRow.name) BCMAP[String(targetRow.name).toLowerCase().substring(0, 15)] = targetRow;
+      } else {
+        targetRow.stock = Math.max(0, Number(targetRow.stock || 0)) + qty;
+        targetRow.updatedAt = ts;
+      }
+      window.BMH_INVENTORY_TRANSFERS.push({
+        id: 'TRM' + Date.now() + Math.random().toString(36).slice(2, 5),
+        itemName: source.name || source.iolBrand || 'Inventory item',
+        barcode: source.barcode,
+        fromStore: current,
+        toStore: matchedStore,
+        qty: qty,
+        ts: ts,
+        user: CURRENT_USER?.name || 'Inventory',
+        kind: 'partial-move'
+      });
+      saveInventoryStockToStorage();
+      saveBmhFinancials && saveBmhFinancials();
+      bmhSyncInventoryRowsToCloud([source, targetRow]);
+      renderStockList && renderStockList();
+      renderInventoryTransfers && renderInventoryTransfers();
+      renderInventoryTodayEntries && renderInventoryTodayEntries({ preserveVisibility: true });
+      renderInventoryStoreStock && renderInventoryStoreStock();
+      renderInventoryPoAlerts && renderInventoryPoAlerts();
+      showToast('Partial stock moved ✓', 's');
+      return;
+    }
+  }
   rows.forEach(function (row) {
-    const oldStore = normalizeInventoryTextValue(row.store || 'Unassigned store');
+    const oldStore = bmhTrimInventoryHeadingValue(row.store || 'Unassigned store');
     row.store = matchedStore;
     row.updatedAt = ts;
     window.BMH_INVENTORY_TRANSFERS.push({
@@ -15681,7 +15747,7 @@ function renameInventoryDeptPrompt(deptKey) {
     });
   }
   if (!current) return;
-  const nextLabel = normalizeInventoryTextValue(prompt('Edit department heading', current.label || '') || '');
+  const nextLabel = bmhTrimInventoryHeadingValue(prompt('Edit department heading', current.label || '') || '');
   if (!nextLabel || nextLabel === current.label) return;
   current.label = nextLabel;
   saveInventoryDeptRows(rows);
@@ -15694,15 +15760,15 @@ window.renameInventoryDeptPrompt = renameInventoryDeptPrompt;
 function renameInventoryCategoryPrompt(catName) {
   if (!(CURRENT_USER?.isAdmin || (typeof isAdminUser === 'function' && isAdminUser()))) { showToast('Only admin can rename categories', 'w'); return; }
   const categories = (window.BMH_INVENTORY_CATEGORIES || []).slice();
-  let current = normalizeInventoryTextValue(catName || '');
+  let current = bmhTrimInventoryHeadingValue(catName || '');
   if (!current) {
-    current = normalizeInventoryTextValue(prompt('Enter category to rename:\n' + categories.join('\n'), categories[0] || '') || '');
+    current = bmhTrimInventoryHeadingValue(prompt('Enter category to rename:\n' + categories.join('\n'), categories[0] || '') || '');
   }
   if (!current) return;
   const matched = categories.find(function (cat) {
     return normalizeInventoryCompareText(cat) === normalizeInventoryCompareText(current);
   }) || current;
-  const nextName = normalizeInventoryTextValue(prompt('Edit category heading', matched) || '');
+  const nextName = bmhTrimInventoryHeadingValue(prompt('Edit category heading', matched) || '');
   if (!nextName || normalizeInventoryCompareText(nextName) === normalizeInventoryCompareText(matched)) return;
   window.BMH_INVENTORY_CATEGORIES = categories.map(function (cat) {
     return normalizeInventoryCompareText(cat) === normalizeInventoryCompareText(matched) ? nextName : cat;
@@ -15737,15 +15803,15 @@ window.renameInventoryCategoryPrompt = renameInventoryCategoryPrompt;
 function renameInventoryStoreNamePrompt(storeName) {
   if (!(CURRENT_USER?.isAdmin || (typeof isAdminUser === 'function' && isAdminUser()))) { showToast('Only admin can rename stores', 'w'); return; }
   const stores = (window.BMH_STORE_LOCATIONS || []).slice();
-  let current = normalizeInventoryTextValue(storeName || '');
+  let current = bmhTrimInventoryHeadingValue(storeName || '');
   if (!current) {
-    current = normalizeInventoryTextValue(prompt('Enter store to rename:\n' + stores.join('\n'), stores[0] || '') || '');
+    current = bmhTrimInventoryHeadingValue(prompt('Enter store to rename:\n' + stores.join('\n'), stores[0] || '') || '');
   }
   if (!current) return;
   const matched = stores.find(function (store) {
     return normalizeInventoryCompareText(store) === normalizeInventoryCompareText(current);
   }) || current;
-  const nextName = normalizeInventoryTextValue(prompt('Edit store heading', matched) || '');
+  const nextName = bmhTrimInventoryHeadingValue(prompt('Edit store heading', matched) || '');
   if (!nextName || normalizeInventoryCompareText(nextName) === normalizeInventoryCompareText(matched)) return;
   window.BMH_STORE_LOCATIONS = stores.map(function (store) {
     return normalizeInventoryCompareText(store) === normalizeInventoryCompareText(matched) ? nextName : store;
@@ -16264,6 +16330,16 @@ function _iolBrandLabel(i) {
   if (stripped && stripped.length >= 3 && !/^IOL$/i.test(stripped)) return stripped;
   return String(i.iolCompany || i.vendor || 'IOL').trim();
 }
+window._inventoryStockBrowserSelection = window._inventoryStockBrowserSelection || {};
+function bmhInventoryStockBrowserKey(dept, store) {
+  return [String(dept || ''), String(store || '')].join('||');
+}
+function bmhSelectInventoryStockCategory(dept, store, cat) {
+  const key = bmhInventoryStockBrowserKey(dept, store);
+  window._inventoryStockBrowserSelection[key] = String(cat || '');
+  renderStockList && renderStockList();
+}
+window.bmhSelectInventoryStockCategory = bmhSelectInventoryStockCategory;
 
 function _renderStockListNow() {
   window._stockListDirty = false;
@@ -16300,16 +16376,18 @@ function _renderStockListNow() {
     <button type="button" class="btn btn-outline btn-sm" onclick="renameInventoryStoreNamePrompt(document.getElementById('inv-stock-store-filter')?.value === 'all' ? '' : document.getElementById('inv-stock-store-filter')?.value || '')">Edit store heading</button>
   </div>` : '';
 
-  // ── Build dept -> category -> grouped stock ───────────────────────────────
+  // ── Build dept -> store -> category tabs -> grouped stock ─────────────────
   const deptMap = {};
   rows.forEach(function (i) {
     const dk = String(i.dept || 'general');
-    const cat = String(i.cat || 'General').trim() || 'General';
     const sk = String(i.store || 'Unassigned store');
-    if (!deptMap[dk]) deptMap[dk] = { categories: {}, total: 0 };
-    if (!deptMap[dk].categories[cat]) deptMap[dk].categories[cat] = { label: cat, total: 0, iols: {}, normals: {} };
-    const bucket = deptMap[dk].categories[cat];
+    const cat = String(i.cat || 'General').trim() || 'General';
+    if (!deptMap[dk]) deptMap[dk] = { stores: {}, total: 0 };
+    if (!deptMap[dk].stores[sk]) deptMap[dk].stores[sk] = { categories: {}, total: 0 };
+    if (!deptMap[dk].stores[sk].categories[cat]) deptMap[dk].stores[sk].categories[cat] = { label: cat, total: 0, iols: {}, normals: {} };
+    const bucket = deptMap[dk].stores[sk].categories[cat];
     deptMap[dk].total += Math.max(0, Number(i.stock) || 0);
+    deptMap[dk].stores[sk].total += Math.max(0, Number(i.stock) || 0);
     bucket.total += Math.max(0, Number(i.stock) || 0);
     const isIol = String(i.cat || '').toLowerCase() === 'iol';
     if (isIol) {
@@ -16341,84 +16419,98 @@ function _renderStockListNow() {
 
   const deptKeys = Object.keys(deptMap).sort(function (a, b) { return bmhDeptLabel(a).localeCompare(bmhDeptLabel(b)); });
   const html = deptKeys.map(function (dk, di) {
-    const categories = deptMap[dk].categories || {};
     const deptTotal = Number(deptMap[dk].total || 0);
-    const categoryKeys = Object.keys(categories).sort(function (a, b) {
-      if (String(a).toLowerCase() === 'iol') return -1;
-      if (String(b).toLowerCase() === 'iol') return 1;
-      return String(a).localeCompare(String(b));
-    });
-    const deptBody = categoryKeys.map(function (cat, ci) {
-      const categoryBucket = categories[cat] || { iols: {}, normals: {}, total: 0 };
+    const stores = deptMap[dk].stores || {};
+    const storeKeys = Object.keys(stores).sort();
+    const deptBody = storeKeys.map(function (store, si) {
+      const storeBucket = stores[store] || { categories: {}, total: 0 };
+      const categoryKeys = Object.keys(storeBucket.categories || {}).sort(function (a, b) {
+        if (String(a).toLowerCase() === 'iol') return -1;
+        if (String(b).toLowerCase() === 'iol') return 1;
+        return String(a).localeCompare(String(b));
+      });
+      const selectionKey = bmhInventoryStockBrowserKey(dk, store);
+      const selectedCategory = (window._inventoryStockBrowserSelection || {})[selectionKey] || categoryKeys[0] || '';
+      const activeCategory = storeBucket.categories[selectedCategory] ? selectedCategory : (categoryKeys[0] || '');
+      if (activeCategory) window._inventoryStockBrowserSelection[selectionKey] = activeCategory;
+      const categoryBucket = storeBucket.categories[activeCategory] || { label: activeCategory, iols: {}, normals: {}, total: 0 };
       const iolRows = Object.values(categoryBucket.iols || {}).sort(function (a, b) {
         return String(a.brandLabel || '').localeCompare(String(b.brandLabel || ''));
       });
       const normalRows = Object.values(categoryBucket.normals || {}).sort(function (a, b) {
         return String(a.name || '').localeCompare(String(b.name || ''));
       });
-      const categoryTotal = Number(categoryBucket.total || 0);
-      const iolHtml = iolRows.length ? `<div style="margin-bottom:10px">
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px">
+      const tabsHtml = categoryKeys.map(function (cat) {
+        const bucket = storeBucket.categories[cat] || { total: 0, label: cat };
+        const active = cat === activeCategory;
+        return `<button type="button" class="btn btn-sm ${active ? 'btn-blue' : 'btn-outline'}" style="white-space:nowrap;flex:0 0 auto" onclick="bmhSelectInventoryStockCategory(${bmhInventoryJsString(dk)},${bmhInventoryJsString(store)},${bmhInventoryJsString(cat)})">${escapeHtmlConsent(bucket.label || cat)} (${Number(bucket.total || 0)})</button>`;
+      }).join('');
+      const iolHtml = iolRows.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin-top:10px">
         ${iolRows.map(function (brand, bi) {
-          const groupId = 'stk-iol-dept-' + di + '-' + ci + '-' + bi;
+          const groupId = 'stk-iol-store-' + di + '-' + si + '-' + bi;
           const totalQty = Number(brand.total || 0);
           const powerSummary = Object.keys(brand.powers || {}).sort(function (a, b) { return parseFloat(a) - parseFloat(b); }).map(function (power) {
             return power + ' x' + Number(brand.powers[power].qty || 0);
           }).join(', ');
-          const storeSummary = Object.keys(brand.stores || {}).sort().map(function (store) {
-            return store + ' ' + Number(brand.stores[store] || 0);
-          }).join(', ');
           window._inventoryStockGroups[groupId] = {
             kind: 'iol',
-            title: [bmhDeptLabel(dk), categoryBucket.label, brand.brandLabel].filter(Boolean).join(' · '),
+            title: [bmhDeptLabel(dk), store, categoryBucket.label, brand.brandLabel].filter(Boolean).join(' · '),
             rows: brand.rows || []
           };
-          return `<div onclick="openInventoryStockGroup('${groupId}')" style="cursor:pointer;border:1px solid #e8c96a;border-radius:8px;background:#fff9e6;padding:9px 10px;margin-bottom:6px">
-            <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
-              <div style="min-width:0">
-                <div style="font-size:12px;font-weight:900;color:#7a3a00">${escapeHtmlConsent(brand.brandLabel || 'IOL')}</div>
-                <div style="font-size:10px;color:#8a4200;margin-top:3px">${escapeHtmlConsent(brand.company || '')}</div>
-                <div style="font-size:10px;color:var(--g1);margin-top:4px;line-height:1.45">${escapeHtmlConsent(powerSummary || 'No powers recorded')}</div>
-                <div style="font-size:10px;color:var(--g1);margin-top:4px;line-height:1.45">${escapeHtmlConsent(storeSummary || '')}</div>
+          return `<div style="border:1px solid #e8c96a;border-radius:8px;background:#fff9e6;padding:9px 10px">
+            <div onclick="openInventoryStockGroup('${groupId}')" style="cursor:pointer">
+              <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
+                <div style="min-width:0">
+                  <div style="font-size:12px;font-weight:900;color:#7a3a00">${escapeHtmlConsent(brand.brandLabel || 'IOL')}</div>
+                  <div style="font-size:10px;color:#8a4200;margin-top:3px">${escapeHtmlConsent(brand.company || '')}</div>
+                  <div style="font-size:10px;color:var(--g1);margin-top:4px;line-height:1.45">${escapeHtmlConsent(powerSummary || 'No powers recorded')}</div>
+                </div>
+                <div style="text-align:right;font-size:12px;font-weight:900;color:#1a6e35">${totalQty}</div>
               </div>
-              <div style="text-align:right;font-size:12px;font-weight:900;color:#1a6e35">${totalQty}</div>
+            </div>
+            <div style="display:flex;justify-content:flex-end;margin-top:8px">
+              <button type="button" class="btn btn-xs btn-outline" onclick="event.stopPropagation();moveInventoryStockGroup('${groupId}')">Move whole block</button>
             </div>
           </div>`;
         }).join('')}
       </div>` : '';
-      const catGroups = {};
-      normalRows.forEach(function (row) {
-        catGroups.items = catGroups.items || [];
-        catGroups.items.push(row);
-      });
-      const normalHtml = (catGroups.items || []).map(function (row, ri) {
-            const groupId = 'stk-normal-dept-' + di + '-' + ci + '-' + ri;
-            const storeSummary = Object.keys(row.stores || {}).sort().map(function (store) {
-              return store + ' ' + Number(row.stores[store] || 0);
-            }).join(', ');
-            window._inventoryStockGroups[groupId] = {
-              kind: 'normal',
-              title: [bmhDeptLabel(dk), row.cat, row.name].filter(Boolean).join(' · '),
-              rows: row.rows || []
-            };
-            return `<div onclick="openInventoryStockGroup('${groupId}')" style="cursor:pointer;display:grid;grid-template-columns:minmax(0,1fr) 52px;gap:8px;padding:7px 8px;border:1px solid var(--g5);border-radius:8px;background:#fff;margin-bottom:5px">
+      const normalHtml = normalRows.length ? `<div style="margin-top:10px;display:grid;grid-template-columns:1fr;gap:6px">
+        ${normalRows.map(function (row, ri) {
+          const groupId = 'stk-normal-store-' + di + '-' + si + '-' + ri;
+          const metaText = (row.rows || []).slice(0, 4).map(function (item) {
+            return [item.exp ? 'Exp ' + item.exp : '', item.batchNo ? 'Batch ' + item.batchNo : '', item.serialNo ? 'Serial ' + item.serialNo : ''].filter(Boolean).join(' · ');
+          }).filter(Boolean).join(', ');
+          window._inventoryStockGroups[groupId] = {
+            kind: 'normal',
+            title: [bmhDeptLabel(dk), store, row.cat, row.name].filter(Boolean).join(' · '),
+            rows: row.rows || []
+          };
+          return `<details style="border:1px solid var(--g5);border-radius:8px;background:#fff">
+            <summary style="cursor:pointer;list-style:none;display:grid;grid-template-columns:minmax(0,1fr) 60px;gap:8px;align-items:center;padding:8px 10px">
               <div style="min-width:0">
                 <div style="font-size:11px;font-weight:800;color:var(--tx)">${escapeHtmlConsent(row.name || '')}</div>
-                <div style="font-size:10px;color:var(--g1);margin-top:2px">${escapeHtmlConsent(storeSummary || '')}</div>
+                <div style="font-size:10px;color:var(--g1);margin-top:2px">${escapeHtmlConsent(metaText || 'Click to view stock rows')}</div>
               </div>
               <div style="text-align:right;font-size:12px;font-weight:900;color:${row.stock <= 2 ? '#c0392b' : row.stock <= 5 ? '#d35400' : '#1a6e35'}">${Number(row.stock || 0)}</div>
-            </div>`;
-          }).join('');
-      return `<details ${ci === 0 ? 'open' : ''} style="border:1px solid var(--g4);border-radius:10px;background:#fff;padding:0 12px;margin-bottom:10px">
-        <summary style="cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:10px;align-items:center;padding:12px 0">
+            </summary>
+            <div style="padding:0 10px 10px">
+              <button type="button" class="btn btn-xs btn-outline" onclick="openInventoryStockGroup('${groupId}')">Open details</button>
+            </div>
+          </details>`;
+        }).join('')}
+      </div>` : '<div style="font-size:11px;color:var(--g1);margin-top:10px">No items in this category.</div>';
+      return `<div style="border:1px solid var(--g4);border-radius:10px;background:#fff;padding:10px 12px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
           <div style="display:flex;align-items:center;gap:8px;min-width:0">
-            <span style="font-size:12px;font-weight:900;color:var(--bmh-blue)">${escapeHtmlConsent(categoryBucket.label || cat)}</span>
-            ${canManageHeadings ? `<button type="button" class="btn btn-xs btn-outline" onclick="event.preventDefault();event.stopPropagation();renameInventoryCategoryPrompt(${bmhInventoryJsString(categoryBucket.label || cat)})">Edit</button>` : ''}
+            <div style="font-size:12px;font-weight:900;color:var(--bmh-blue)">${escapeHtmlConsent(store)}</div>
+            ${canManageHeadings ? `<button type="button" class="btn btn-xs btn-outline" onclick="renameInventoryStoreNamePrompt(${bmhInventoryJsString(store)})">Edit</button>` : ''}
           </div>
-          <div style="font-size:11px;font-weight:900;color:var(--g1)">${categoryTotal} units</div>
-        </summary>
-        <div style="padding-bottom:10px">${iolHtml}${normalHtml || '<div style="font-size:11px;color:var(--g1)">No items in this category.</div>'}</div>
-      </details>`;
+          <div style="font-size:11px;font-weight:900;color:var(--g1)">${Number(storeBucket.total || 0)} units</div>
+        </div>
+        <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;flex-wrap:nowrap">${tabsHtml}</div>
+        <div style="margin-top:8px;font-size:10px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.45px">${escapeHtmlConsent(categoryBucket.label || activeCategory)} · ${Number(categoryBucket.total || 0)} units</div>
+        ${String(activeCategory || '').toLowerCase() === 'iol' ? iolHtml : normalHtml}
+      </div>`;
     }).join('');
     return `<details ${di === 0 ? 'open' : ''} style="border:1px solid var(--g4);border-radius:12px;background:linear-gradient(180deg,#f8fbff,#fff);padding:0 12px;margin-bottom:12px">
       <summary style="cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:10px;align-items:center;padding:12px 0">
@@ -31484,6 +31576,7 @@ function loadObgRecapQuestionMap() {
 function normalizeInventoryTextValue(value) {
   const raw = String(value || '').trim().replace(/\s+/g, ' ');
   if (!raw) return '';
+  if (/[A-Z]{2,}/.test(raw)) return raw;
   if (!/[a-z]/.test(raw) && /[A-Z]/.test(raw)) return raw;
   return toDisplayTitleCase(raw);
 }
