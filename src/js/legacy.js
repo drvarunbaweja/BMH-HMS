@@ -5893,10 +5893,6 @@ th{background:#eee;font-weight:900;text-align:center;font-size:8.8px}
       <thead><tr style="background:#eaeaea"><th style="border:1px solid #aaa;padding:2px;text-align:left;font-size:7.7px">C</th><th style="border:1px solid #aaa;padding:2px;font-size:7.7px">?</th><th style="border:1px solid #aaa;padding:2px;text-align:left;font-size:7.7px">Dur</th><th style="border:1px solid #aaa;padding:2px;text-align:left;font-size:7.7px">Rx</th></tr></thead>
       <tbody>${phxRowsHtml}</tbody>
     </table>
-    <div style="font-size:8.9px;line-height:1.34;margin-top:4px;color:#222">
-      <b>Past ocular</b> OD ${escHtml(pohOD)}${pohOdTxt ? ' — ' + escHtml(pohOdTxt) : ''} · OS ${escHtml(pohOS)}${pohOsTxt ? ' — ' + escHtml(pohOsTxt) : ''}<br/>
-      <b>Allergy</b> ${escHtml(drugAl)}${drugAlSpec ? ' (' + escHtml(drugAlSpec) + ')' : ''} · <b>Family</b> ${escHtml(famHx || '—')} · <b>Other</b> ${escHtml(othHx || '—')}
-    </div>
   </div>
   <div style="border:1px solid #b8c8dc;border-radius:4px;padding:8px 10px;background:#f2f6fc;font-size:10.4px;line-height:1.5;display:flex;flex-direction:column;min-height:100%">
     <div style="font-size:10.7px;font-weight:900;color:#1A3C6E;text-transform:uppercase;margin-bottom:6px;letter-spacing:.2px;border-bottom:1px solid rgba(26,60,110,.2);padding-bottom:4px">Chief complaints &amp; spectacle history</div>
@@ -5904,6 +5900,8 @@ th{background:#eee;font-weight:900;text-align:center;font-size:8.8px}
     <div><b>Spectacles:</b> ${escHtml(hxSpec)}</div>
     <div><b>Last spectacle change:</b> ${escHtml(hxLastSpec)}</div>
     <div><b>Ocular meds (history):</b> ${escHtml(hxOcularMeds)}</div>
+    <div><b>Past ocular:</b> OD ${escHtml(pohOD)}${pohOdTxt ? ' — ' + escHtml(pohOdTxt) : ''} · OS ${escHtml(pohOS)}${pohOsTxt ? ' — ' + escHtml(pohOsTxt) : ''}</div>
+    <div><b>Allergy:</b> ${escHtml(drugAl)}${drugAlSpec ? ' (' + escHtml(drugAlSpec) + ')' : ''} · <b>Family</b> ${escHtml(famHx || '—')} · <b>Other</b> ${escHtml(othHx || '—')}</div>
   </div>
 </div>
 
@@ -16106,195 +16104,133 @@ function _renderStockListNow() {
     return;
   }
 
-  // ── Build dept → { iols: {brandKey→{brandLabel,company,powers}}, normals: {nameKey→{name,cat,stock}} } ──
+  // ── Build dept -> store -> grouped stock ──────────────────────────────────
   const deptMap = {};
   rows.forEach(function (i) {
     const dk = String(i.dept || 'general');
-    if (!deptMap[dk]) deptMap[dk] = { iols: {}, normals: {} };
+    const sk = String(i.store || 'Unassigned store');
+    if (!deptMap[dk]) deptMap[dk] = { stores: {} };
+    if (!deptMap[dk].stores[sk]) deptMap[dk].stores[sk] = { iols: {}, normals: {} };
+    const bucket = deptMap[dk].stores[sk];
     const isIol = String(i.cat || '').toLowerCase() === 'iol';
     if (isIol) {
       const brandLabel = _iolBrandLabel(i);
       const company    = String(i.iolCompany || '').trim();
       const bk         = normalizeInventoryCompareText(brandLabel);
-      if (!deptMap[dk].iols[bk]) {
-        deptMap[dk].iols[bk] = { brandLabel: brandLabel, company: company, powers: {} };
+      if (!bucket.iols[bk]) {
+        bucket.iols[bk] = { brandLabel: brandLabel, company: company, powers: {}, rows: [] };
       }
       const power = String(i.power || extractIolPower(i.name || '') || '?');
-      if (!deptMap[dk].iols[bk].powers[power]) deptMap[dk].iols[bk].powers[power] = { qty: 0, barcodes: [], rows: [] };
-      deptMap[dk].iols[bk].powers[power].qty += Math.max(0, Number(i.stock) || 0);
-      deptMap[dk].iols[bk].powers[power].rows.push(i);
-      if (i.barcode) deptMap[dk].iols[bk].powers[power].barcodes.push(i.barcode);
+      if (!bucket.iols[bk].powers[power]) bucket.iols[bk].powers[power] = { qty: 0, barcodes: [], rows: [] };
+      bucket.iols[bk].rows.push(i);
+      bucket.iols[bk].powers[power].qty += Math.max(0, Number(i.stock) || 0);
+      bucket.iols[bk].powers[power].rows.push(i);
+      if (i.barcode) bucket.iols[bk].powers[power].barcodes.push(i.barcode);
     } else {
       const cat  = String(i.cat  || 'General').trim();
       const name = String(i.name || '?').trim();
       const nk   = normalizeInventoryCompareText(name);
-      if (!deptMap[dk].normals[nk]) deptMap[dk].normals[nk] = { name: name, cat: cat, stock: 0, barcodes: [], rows: [] };
-      deptMap[dk].normals[nk].stock += Math.max(0, Number(i.stock) || 0);
-      deptMap[dk].normals[nk].rows.push(i);
-      if (i.barcode) deptMap[dk].normals[nk].barcodes.push(i.barcode);
+      if (!bucket.normals[nk]) bucket.normals[nk] = { name: name, cat: cat, stock: 0, barcodes: [], rows: [] };
+      bucket.normals[nk].stock += Math.max(0, Number(i.stock) || 0);
+      bucket.normals[nk].rows.push(i);
+      if (i.barcode) bucket.normals[nk].barcodes.push(i.barcode);
     }
   });
 
   const deptKeys = Object.keys(deptMap).sort(function (a, b) { return bmhDeptLabel(a).localeCompare(bmhDeptLabel(b)); });
-  const trs = [];
-
-  deptKeys.forEach(function (dk, di) {
-    const d        = deptMap[dk];
-    const deptId   = 'sld' + di;
-    const iolBKeys = Object.keys(d.iols).sort();
-    const normKeys = Object.keys(d.normals);
-
-    const iolTotal  = iolBKeys.reduce(function (s, bk) {
-      return s + Object.values(d.iols[bk].powers).reduce(function (ps, v) { return ps + (v.qty || 0); }, 0);
+  const html = deptKeys.map(function (dk, di) {
+    const stores = deptMap[dk].stores || {};
+    const storeKeys = Object.keys(stores).sort();
+    const deptTotal = storeKeys.reduce(function (sum, store) {
+      const s = stores[store] || { iols: {}, normals: {} };
+      const iolQty = Object.values(s.iols || {}).reduce(function (inner, brand) {
+        return inner + Object.values(brand.powers || {}).reduce(function (powerSum, powerRow) { return powerSum + Number(powerRow.qty || 0); }, 0);
+      }, 0);
+      const normalQty = Object.values(s.normals || {}).reduce(function (inner, row) { return inner + Number(row.stock || 0); }, 0);
+      return sum + iolQty + normalQty;
     }, 0);
-    const normTotal = normKeys.reduce(function (s, nk) { return s + d.normals[nk].stock; }, 0);
-
-    // ── Dept header ──
-    const badges = [
-      iolTotal  ? '<span style="background:rgba(255,255,255,.22);border-radius:4px;padding:1px 7px;font-size:10px;margin-left:5px">IOL&nbsp;' + iolTotal  + '</span>' : '',
-      normTotal ? '<span style="background:rgba(255,255,255,.22);border-radius:4px;padding:1px 7px;font-size:10px;margin-left:4px">Other&nbsp;' + normTotal + '</span>' : ''
-    ].join('');
-    trs.push(
-      '<tr onclick="slToggle(\'' + deptId + '\')" style="cursor:pointer;background:var(--bmh-blue);color:#fff;user-select:none">' +
-        '<td style="padding:8px 10px;font-size:11px;font-weight:900;letter-spacing:.6px;text-transform:uppercase;width:100%">' +
-          '<span id="c-' + deptId + '" style="display:inline-block;width:14px;font-size:9px">▶</span> ' +
-          escapeHtmlConsent(bmhDeptLabel(dk)) + badges +
-        '</td>' +
-        '<td style="padding:8px 10px;font-size:12px;font-weight:900;text-align:right;white-space:nowrap">' + (iolTotal + normTotal) + '</td>' +
-      '</tr>'
-    );
-
-    // ── IOL brand mini-card grid (all brands visible at a glance when dept is open) ──
-    if (iolBKeys.length) {
-      // Build the card HTML for every brand; cards are always shown when dept open
-      const cardHtml = iolBKeys.map(function (bk, bi) {
-        const b       = d.iols[bk];
-        const brandId = deptId + 'b' + bi;
-        const bTotal  = Object.values(b.powers).reduce(function (s, v) { return s + (v.qty || 0); }, 0);
-        const pCount  = Object.keys(b.powers).length;
-        const bTone   = bTotal <= 2 ? '#c0392b' : bTotal <= 5 ? '#d35400' : '#1a6e35';
-        return (
-          '<div onclick="slToggleBrand(\'' + brandId + '\',\'' + deptId + '\')" ' +
-          'style="border:1.5px solid #e8c96a;border-radius:9px;padding:9px 8px 7px;text-align:center;cursor:pointer;background:#fff9e6;min-width:90px;flex:1 1 90px;user-select:none">' +
-            '<div style="font-size:11px;font-weight:900;color:#7a3a00;line-height:1.2;margin-bottom:2px">' + escapeHtmlConsent(b.brandLabel) + '</div>' +
-            (b.company ? '<div style="font-size:9px;color:#b57a00;margin-bottom:5px">' + escapeHtmlConsent(b.company) + '</div>' : '<div style="margin-bottom:5px"></div>') +
-            '<div id="c-' + brandId + '" style="font-size:20px;font-weight:900;color:' + bTone + ';line-height:1">' + bTotal + '</div>' +
-            '<div style="font-size:9px;color:#b57a00;margin-top:2px">' + pCount + ' power' + (pCount !== 1 ? 's' : '') + ' ▼</div>' +
-          '</div>'
-        );
-      }).join('');
-
-      // Single row containing the flex card grid — visible when dept open
-      trs.push(
-        '<tr data-parent="' + deptId + '" style="display:none;background:#fffbec">' +
-          '<td colspan="2" style="padding:8px 10px 6px">' +
-            '<div style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">💊 IOLs</div>' +
-            '<div style="display:flex;flex-wrap:wrap;gap:8px">' + cardHtml + '</div>' +
-          '</td>' +
-        '</tr>'
-      );
-
-      // Power detail rows for each brand — hidden until brand card clicked
-      // Tagged with data-dept so slToggle(dept) can clean them up on close
-      iolBKeys.forEach(function (bk, bi) {
-        const b       = d.iols[bk];
-        const brandId = deptId + 'b' + bi;
-        const powers  = Object.keys(b.powers).sort(function (a, b2) { return parseFloat(a) - parseFloat(b2); });
-
-        // Header row for the expanded brand (with move-store button)
-        const allBrandBarcodesJson = JSON.stringify(
-          Object.values(b.powers).reduce(function (acc, p) { return acc.concat(p.barcodes || []); }, [])
-        ).replace(/"/g, '&quot;');
-        trs.push(
-          '<tr data-parent="' + brandId + '" data-dept="' + deptId + '" style="display:none;background:#fff3cc">' +
-            '<td colspan="2" style="padding:4px 14px 3px;font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;letter-spacing:.4px;display:flex;align-items:center;justify-content:space-between">' +
-              '<span>' + escapeHtmlConsent(b.brandLabel) + (b.company ? ' · ' + escapeHtmlConsent(b.company) : '') + '</span>' +
-              '<button onclick="moveInventoryBrandPrompt(' + allBrandBarcodesJson + ')" title="Move entire brand to another store/dept" style="font-size:10px;font-weight:700;padding:2px 8px;background:#1A3C6E;color:#fff;border:none;border-radius:5px;cursor:pointer;text-transform:none;letter-spacing:0">↔ Move</button>' +
-            '</td>' +
-          '</tr>'
-        );
-        powers.forEach(function (power) {
-          const pData = b.powers[power];
-          const qty   = pData.qty || 0;
-          const qTone = qty <= 1 ? '#c0392b' : qty <= 3 ? '#d35400' : '#1a6e35';
-          const barcodeJson = JSON.stringify(pData.barcodes || []).replace(/'/g, '&#39;');
-          const groupId = 'stk-iol-' + di + '-' + bi + '-' + String(power).replace(/[^a-z0-9]+/gi, '-');
+    const storeHtml = storeKeys.map(function (store, si) {
+      const storeBucket = stores[store] || { iols: {}, normals: {} };
+      const iolRows = Object.values(storeBucket.iols || {}).sort(function (a, b) {
+        return String(a.brandLabel || '').localeCompare(String(b.brandLabel || ''));
+      });
+      const normalRows = Object.values(storeBucket.normals || {}).sort(function (a, b) {
+        return String(a.cat || '').localeCompare(String(b.cat || '')) || String(a.name || '').localeCompare(String(b.name || ''));
+      });
+      const storeTotal = iolRows.reduce(function (sum, brand) {
+        return sum + Object.values(brand.powers || {}).reduce(function (inner, powerRow) { return inner + Number(powerRow.qty || 0); }, 0);
+      }, 0) + normalRows.reduce(function (sum, row) { return sum + Number(row.stock || 0); }, 0);
+      const iolHtml = iolRows.length ? `<div style="margin-bottom:10px">
+        <div style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;letter-spacing:.45px;margin-bottom:6px">IOL Catalogue</div>
+        ${iolRows.map(function (brand, bi) {
+          const groupId = 'stk-iol-store-' + di + '-' + si + '-' + bi;
+          const totalQty = Object.values(brand.powers || {}).reduce(function (sum, powerRow) { return sum + Number(powerRow.qty || 0); }, 0);
+          const powerSummary = Object.keys(brand.powers || {}).sort(function (a, b) { return parseFloat(a) - parseFloat(b); }).map(function (power) {
+            return power + ' x' + Number(brand.powers[power].qty || 0);
+          }).join(', ');
           window._inventoryStockGroups[groupId] = {
             kind: 'iol',
-            title: [bmhDeptLabel(dk), b.brandLabel, power].filter(Boolean).join(' · '),
-            rows: pData.rows || []
+            title: [bmhDeptLabel(dk), store, brand.brandLabel].filter(Boolean).join(' · '),
+            rows: brand.rows || []
           };
-          trs.push(
-            '<tr data-parent="' + brandId + '" data-dept="' + deptId + '" onclick="openInventoryStockGroup(\'' + groupId + '\')" style="display:none;background:#fffef5;cursor:pointer">' +
-              '<td style="padding:4px 14px 4px 26px;font-size:11px;color:#222;font-family:var(--mono);text-decoration:underline;text-underline-offset:2px">' + escapeHtmlConsent(power) + '</td>' +
-              '<td style="padding:4px 14px;text-align:right;font-size:12px;font-weight:900;color:' + qTone + ';white-space:nowrap">' + qty +
-                '<button onclick="event.stopPropagation();deleteInventoryItemsPrompt(' + barcodeJson.replace(/"/g, '&quot;') + ')" title="Delete all ' + qty + ' units of this power" style="margin-left:8px;background:none;border:none;color:var(--red);cursor:pointer;font-size:11px;padding:0 2px;vertical-align:middle">🗑</button>' +
-              '</td>' +
-            '</tr>'
-          );
-        });
-      });
-    }
-
-    // ── Non-IOL items grouped by category (collapsible) ──
-    if (normKeys.length) {
+          return `<div onclick="openInventoryStockGroup('${groupId}')" style="cursor:pointer;border:1px solid #e8c96a;border-radius:8px;background:#fff9e6;padding:9px 10px;margin-bottom:6px">
+            <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
+              <div style="min-width:0">
+                <div style="font-size:12px;font-weight:900;color:#7a3a00">${escapeHtmlConsent(brand.brandLabel || 'IOL')}</div>
+                <div style="font-size:10px;color:#8a4200;margin-top:3px">${escapeHtmlConsent(brand.company || '')}</div>
+                <div style="font-size:10px;color:var(--g1);margin-top:4px;line-height:1.45">${escapeHtmlConsent(powerSummary || 'No powers recorded')}</div>
+              </div>
+              <div style="text-align:right;font-size:12px;font-weight:900;color:#1a6e35">${totalQty}</div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>` : '';
       const catGroups = {};
-      normKeys.forEach(function (nk) {
-        const n = d.normals[nk];
-        const c = n.cat || 'General';
-        if (!catGroups[c]) catGroups[c] = [];
-        catGroups[c].push(n);
+      normalRows.forEach(function (row) {
+        const key = String(row.cat || 'General');
+        if (!catGroups[key]) catGroups[key] = [];
+        catGroups[key].push(row);
       });
+      const normalHtml = Object.keys(catGroups).sort().map(function (cat, ci) {
+        return `<div style="margin-bottom:8px">
+          <div style="font-size:10px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.45px;margin-bottom:5px">${escapeHtmlConsent(cat)}</div>
+          ${catGroups[cat].map(function (row, ri) {
+            const groupId = 'stk-normal-store-' + di + '-' + si + '-' + ci + '-' + ri;
+            window._inventoryStockGroups[groupId] = {
+              kind: 'normal',
+              title: [bmhDeptLabel(dk), store, row.cat, row.name].filter(Boolean).join(' · '),
+              rows: row.rows || []
+            };
+            return `<div onclick="openInventoryStockGroup('${groupId}')" style="cursor:pointer;display:grid;grid-template-columns:minmax(0,1fr) 52px;gap:8px;padding:7px 8px;border:1px solid var(--g5);border-radius:8px;background:#fff;margin-bottom:5px">
+              <div style="min-width:0">
+                <div style="font-size:11px;font-weight:800;color:var(--tx)">${escapeHtmlConsent(row.name || '')}</div>
+                <div style="font-size:10px;color:var(--g1);margin-top:2px">${escapeHtmlConsent((row.rows || []).slice(0, 3).map(function (item) {
+                  return [item.exp ? 'Exp ' + item.exp : '', item.batchNo ? 'Batch ' + item.batchNo : ''].filter(Boolean).join(' · ');
+                }).filter(Boolean).join(', '))}</div>
+              </div>
+              <div style="text-align:right;font-size:12px;font-weight:900;color:${row.stock <= 2 ? '#c0392b' : row.stock <= 5 ? '#d35400' : '#1a6e35'}">${Number(row.stock || 0)}</div>
+            </div>`;
+          }).join('')}
+        </div>`;
+      }).join('');
+      return `<div style="border:1px solid var(--g4);border-radius:10px;background:#fff;padding:10px 12px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:8px">
+          <div style="font-size:12px;font-weight:900;color:var(--bmh-blue)">${escapeHtmlConsent(store)}</div>
+          <div style="font-size:11px;font-weight:900;color:var(--g1)">${storeTotal} units</div>
+        </div>
+        ${iolHtml}${normalHtml || '<div style="font-size:11px;color:var(--g1)">No items in this store.</div>'}
+      </div>`;
+    }).join('');
+    return `<div style="border:1px solid var(--g4);border-radius:12px;background:linear-gradient(180deg,#f8fbff,#fff);padding:12px 12px 2px;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:10px">
+        <div style="font-size:13px;font-weight:900;color:var(--bmh-blue)">${escapeHtmlConsent(bmhDeptLabel(dk))}</div>
+        <div style="font-size:12px;font-weight:900;color:var(--bmh-blue)">${deptTotal} units</div>
+      </div>
+      ${storeHtml}
+    </div>`;
+  }).join('');
 
-      Object.keys(catGroups).sort().forEach(function (cat, ci) {
-        const catId    = deptId + 'c' + ci;
-        const items    = catGroups[cat];
-        const catTotal = items.reduce(function (s, n) { return s + n.stock; }, 0);
-        const cTone    = catTotal <= 5 ? '#c0392b' : catTotal <= 20 ? '#d35400' : '#1a6e35';
-
-        const catAllBarcodesJson = JSON.stringify(
-          items.reduce(function (acc, n) { return acc.concat(n.barcodes || []); }, [])
-        ).replace(/"/g, '&quot;');
-        trs.push(
-          '<tr data-parent="' + deptId + '" data-id="' + catId + '" style="display:none;background:#f4f7fb;border-left:3px solid var(--g4)">' +
-            '<td style="padding:7px 10px 7px 14px;font-size:11px;font-weight:700;color:var(--bmh-blue);cursor:pointer" onclick="slToggle(\'' + catId + '\')">' +
-              '<span id="c-' + catId + '" style="display:inline-block;width:14px;font-size:9px;color:var(--g2)">▶</span> ' +
-              escapeHtmlConsent(cat) +
-              '<span style="margin-left:8px;font-size:10px;color:var(--g2);font-weight:400">' + items.length + ' item' + (items.length !== 1 ? 's' : '') + '</span>' +
-            '</td>' +
-            '<td style="padding:7px 10px;text-align:right;font-size:13px;font-weight:900;color:' + cTone + ';white-space:nowrap">' + catTotal +
-              '<button onclick="moveInventoryBrandPrompt(' + catAllBarcodesJson + ')" title="Move all items in this category" style="margin-left:7px;font-size:10px;font-weight:700;padding:1px 6px;background:#1A3C6E;color:#fff;border:none;border-radius:4px;cursor:pointer;vertical-align:middle">↔</button>' +
-            '</td>' +
-          '</tr>'
-        );
-
-        items.slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).forEach(function (n) {
-          const qTone = n.stock <= 2 ? '#c0392b' : n.stock <= 5 ? '#d35400' : 'var(--g1)';
-          const barcodeJson = JSON.stringify(n.barcodes || []).replace(/"/g, '&quot;');
-          const groupId = 'stk-normal-' + di + '-' + ci + '-' + normalizeInventoryCompareText(n.name || '').replace(/[^a-z0-9]+/g, '-');
-          window._inventoryStockGroups[groupId] = {
-            kind: 'normal',
-            title: [bmhDeptLabel(dk), n.cat, n.name].filter(Boolean).join(' · '),
-            rows: n.rows || []
-          };
-          trs.push(
-            '<tr data-parent="' + catId + '" data-dept="' + deptId + '" onclick="openInventoryStockGroup(\'' + groupId + '\')" style="display:none;background:#fafcff;cursor:pointer">' +
-              '<td style="padding:5px 10px 5px 36px;font-size:11px;font-weight:600;color:#1a1a1a;text-decoration:underline;text-underline-offset:2px">' + escapeHtmlConsent(n.name) + '</td>' +
-              '<td style="padding:5px 10px;text-align:right;font-size:12px;font-weight:700;color:' + qTone + ';white-space:nowrap">' + n.stock +
-                '<button onclick="event.stopPropagation();deleteInventoryItemsPrompt(' + barcodeJson + ')" title="Delete this stock item" style="margin-left:8px;background:none;border:none;color:var(--red);cursor:pointer;font-size:11px;padding:0 2px;vertical-align:middle">🗑</button>' +
-              '</td>' +
-            '</tr>'
-          );
-        });
-      });
-    }
-
-    trs.push('<tr><td colspan="2" style="height:4px;background:var(--g5)"></td></tr>');
-  });
-
-  el.innerHTML =
-    '<table id="inv-stock-table" style="width:100%;border-collapse:collapse;font-size:12px;border:1px solid var(--g4);border-radius:10px;overflow:hidden">' +
-    trs.join('') + '</table>';
+  el.innerHTML = html;
 }
 window._renderStockListNow = _renderStockListNow;
 
