@@ -15596,6 +15596,192 @@ function deleteInventoryStorePrompt() {
   showToast('Store removed from list ✓', 's');
 }
 window.deleteInventoryStorePrompt = deleteInventoryStorePrompt;
+function bmhSyncInventoryRowsToCloud(rows) {
+  (Array.isArray(rows) ? rows : []).forEach(function (row) {
+    if (!row || !row.barcode) return;
+    row.updatedAt = bmhNowISO();
+    normalizeInventoryRecord(row);
+    if (typeof window.saveInventoryToFirebase === 'function') {
+      window.saveInventoryToFirebase(row).catch(function (err) { console.error('Inventory cloud save error:', err); });
+    }
+  });
+}
+function moveInventoryRowsToStore(barcodes) {
+  const rows = Array.from(new Set((Array.isArray(barcodes) ? barcodes : []).map(function (barcode) {
+    return String(barcode || '').trim();
+  }).filter(Boolean))).map(function (barcode) {
+    return bmhFindInventoryStockItem(barcode);
+  }).filter(Boolean);
+  if (!rows.length) { showToast('No stock rows found to move', 'w'); return; }
+  const fromStores = Array.from(new Set(rows.map(function (row) { return normalizeInventoryTextValue(row.store || 'Unassigned store'); }).filter(Boolean)));
+  const stores = (window.BMH_STORE_LOCATIONS || []).slice();
+  if (!stores.length) { showToast('Add a store location first', 'w'); return; }
+  const current = fromStores[0] || '';
+  const promptLabel = 'Move selected stock to which store?\n' + stores.map(function (store, idx) {
+    return (idx + 1) + '. ' + store;
+  }).join('\n');
+  const targetRaw = prompt(promptLabel, current) || '';
+  const target = normalizeInventoryTextValue(targetRaw);
+  if (!target) return;
+  const matchedStore = stores.find(function (store) {
+    return normalizeInventoryCompareText(store) === normalizeInventoryCompareText(target);
+  }) || target;
+  if (fromStores.length === 1 && normalizeInventoryCompareText(current) === normalizeInventoryCompareText(matchedStore)) {
+    showToast('Selected rows are already in that store', 'w');
+    return;
+  }
+  const ts = bmhNowISO();
+  rows.forEach(function (row) {
+    const oldStore = normalizeInventoryTextValue(row.store || 'Unassigned store');
+    row.store = matchedStore;
+    row.updatedAt = ts;
+    window.BMH_INVENTORY_TRANSFERS.push({
+      id: 'TRM' + Date.now() + Math.random().toString(36).slice(2, 5),
+      itemName: row.name || row.iolBrand || 'Inventory item',
+      barcode: row.barcode,
+      fromStore: oldStore,
+      toStore: matchedStore,
+      qty: Math.max(0, Number(row.stock || 0)),
+      ts: ts,
+      user: CURRENT_USER?.name || 'Inventory',
+      kind: 'move'
+    });
+  });
+  saveInventoryStockToStorage();
+  saveBmhFinancials && saveBmhFinancials();
+  bmhSyncInventoryRowsToCloud(rows);
+  renderStockList && renderStockList();
+  renderInventoryTransfers && renderInventoryTransfers();
+  renderInventoryTodayEntries && renderInventoryTodayEntries({ preserveVisibility: true });
+  renderInventoryStoreStock && renderInventoryStoreStock();
+  renderInventoryPoAlerts && renderInventoryPoAlerts();
+  showToast('Store updated for selected stock ✓', 's');
+}
+window.moveInventoryRowsToStore = moveInventoryRowsToStore;
+function moveInventoryStockRow(barcode) {
+  moveInventoryRowsToStore([barcode]);
+}
+window.moveInventoryStockRow = moveInventoryStockRow;
+function moveInventoryStockGroup(groupId) {
+  const group = (window._inventoryStockGroups || {})[groupId];
+  if (!group) { showToast('Stock group not found', 'w'); return; }
+  moveInventoryRowsToStore((group.rows || []).map(function (row) { return row.barcode; }));
+}
+window.moveInventoryStockGroup = moveInventoryStockGroup;
+function renameInventoryDeptPrompt(deptKey) {
+  if (!(CURRENT_USER?.isAdmin || (typeof isAdminUser === 'function' && isAdminUser()))) { showToast('Only admin can rename departments', 'w'); return; }
+  const rows = loadInventoryDeptRows().slice();
+  let current = rows.find(function (row) { return String(row.value || '') === String(deptKey || ''); });
+  if (!current) {
+    const chosen = prompt('Enter department code to rename:\n' + rows.map(function (row, idx) {
+      return (idx + 1) + '. ' + row.label + ' [' + row.value + ']';
+    }).join('\n'), String(deptKey || rows[0]?.value || '')) || '';
+    current = rows.find(function (row) {
+      return String(row.value || '') === String(chosen || '').trim().toLowerCase();
+    });
+  }
+  if (!current) return;
+  const nextLabel = normalizeInventoryTextValue(prompt('Edit department heading', current.label || '') || '');
+  if (!nextLabel || nextLabel === current.label) return;
+  current.label = nextLabel;
+  saveInventoryDeptRows(rows);
+  bmhPopulateInventoryDeptSelects();
+  renderStockList && renderStockList();
+  renderInventoryStoreStock && renderInventoryStoreStock();
+  showToast('Department heading updated ✓', 's');
+}
+window.renameInventoryDeptPrompt = renameInventoryDeptPrompt;
+function renameInventoryCategoryPrompt(catName) {
+  if (!(CURRENT_USER?.isAdmin || (typeof isAdminUser === 'function' && isAdminUser()))) { showToast('Only admin can rename categories', 'w'); return; }
+  const categories = (window.BMH_INVENTORY_CATEGORIES || []).slice();
+  let current = normalizeInventoryTextValue(catName || '');
+  if (!current) {
+    current = normalizeInventoryTextValue(prompt('Enter category to rename:\n' + categories.join('\n'), categories[0] || '') || '');
+  }
+  if (!current) return;
+  const matched = categories.find(function (cat) {
+    return normalizeInventoryCompareText(cat) === normalizeInventoryCompareText(current);
+  }) || current;
+  const nextName = normalizeInventoryTextValue(prompt('Edit category heading', matched) || '');
+  if (!nextName || normalizeInventoryCompareText(nextName) === normalizeInventoryCompareText(matched)) return;
+  window.BMH_INVENTORY_CATEGORIES = categories.map(function (cat) {
+    return normalizeInventoryCompareText(cat) === normalizeInventoryCompareText(matched) ? nextName : cat;
+  });
+  try { localStorage.setItem('bmh_inventory_categories', JSON.stringify(window.BMH_INVENTORY_CATEGORIES)); } catch (e) {}
+  const touchedRows = [];
+  (INVENTORY || []).forEach(function (row) {
+    if (normalizeInventoryCompareText(row.cat || '') !== normalizeInventoryCompareText(matched)) return;
+    row.cat = nextName;
+    touchedRows.push(row);
+  });
+  (window.BMH_PURCHASES || []).forEach(function (row) {
+    if (normalizeInventoryCompareText(row.category || row.cat || '') !== normalizeInventoryCompareText(matched)) return;
+    row.category = nextName;
+    row.cat = nextName;
+  });
+  (window.BMH_INVENTORY_USAGE || []).forEach(function (row) {
+    if (normalizeInventoryCompareText(row.category || row.cat || '') !== normalizeInventoryCompareText(matched)) return;
+    row.category = nextName;
+    row.cat = nextName;
+  });
+  saveInventoryStockToStorage();
+  saveBmhFinancials && saveBmhFinancials();
+  bmhSyncInventoryRowsToCloud(touchedRows);
+  bmhPopulateInventorySelectors();
+  renderStockList && renderStockList();
+  renderInventoryStoreStock && renderInventoryStoreStock();
+  renderInventoryUsageLog && renderInventoryUsageLog();
+  showToast('Category heading updated ✓', 's');
+}
+window.renameInventoryCategoryPrompt = renameInventoryCategoryPrompt;
+function renameInventoryStoreNamePrompt(storeName) {
+  if (!(CURRENT_USER?.isAdmin || (typeof isAdminUser === 'function' && isAdminUser()))) { showToast('Only admin can rename stores', 'w'); return; }
+  const stores = (window.BMH_STORE_LOCATIONS || []).slice();
+  let current = normalizeInventoryTextValue(storeName || '');
+  if (!current) {
+    current = normalizeInventoryTextValue(prompt('Enter store to rename:\n' + stores.join('\n'), stores[0] || '') || '');
+  }
+  if (!current) return;
+  const matched = stores.find(function (store) {
+    return normalizeInventoryCompareText(store) === normalizeInventoryCompareText(current);
+  }) || current;
+  const nextName = normalizeInventoryTextValue(prompt('Edit store heading', matched) || '');
+  if (!nextName || normalizeInventoryCompareText(nextName) === normalizeInventoryCompareText(matched)) return;
+  window.BMH_STORE_LOCATIONS = stores.map(function (store) {
+    return normalizeInventoryCompareText(store) === normalizeInventoryCompareText(matched) ? nextName : store;
+  });
+  window._bmhInventoryHiddenStoreLocations = (loadInventoryHiddenStoreLocations() || []).map(function (store) {
+    return normalizeInventoryCompareText(store) === normalizeInventoryCompareText(matched) ? nextName : store;
+  });
+  saveInventoryHiddenStoreLocations();
+  saveInventoryStoreLocations();
+  const touchedRows = [];
+  (INVENTORY || []).forEach(function (row) {
+    if (normalizeInventoryCompareText(row.store || '') !== normalizeInventoryCompareText(matched)) return;
+    row.store = nextName;
+    touchedRows.push(row);
+  });
+  (window.BMH_PURCHASES || []).forEach(function (row) {
+    if (normalizeInventoryCompareText(row.store || '') === normalizeInventoryCompareText(matched)) row.store = nextName;
+  });
+  (window.BMH_INVENTORY_USAGE || []).forEach(function (row) {
+    if (normalizeInventoryCompareText(row.store || '') === normalizeInventoryCompareText(matched)) row.store = nextName;
+  });
+  (window.BMH_INVENTORY_TRANSFERS || []).forEach(function (row) {
+    if (normalizeInventoryCompareText(row.fromStore || '') === normalizeInventoryCompareText(matched)) row.fromStore = nextName;
+    if (normalizeInventoryCompareText(row.toStore || '') === normalizeInventoryCompareText(matched)) row.toStore = nextName;
+  });
+  saveInventoryStockToStorage();
+  saveBmhFinancials && saveBmhFinancials();
+  bmhSyncInventoryRowsToCloud(touchedRows);
+  bmhPopulateInventorySelectors();
+  renderStockList && renderStockList();
+  renderInventoryStoreStock && renderInventoryStoreStock();
+  renderInventoryTransfers && renderInventoryTransfers();
+  renderInventoryUsageLog && renderInventoryUsageLog();
+  showToast('Store heading updated ✓', 's');
+}
+window.renameInventoryStoreNamePrompt = renameInventoryStoreNamePrompt;
 function addInventoryBarcodePrompt() {
   const barcode = prompt('Barcode to add to list');
   if (!barcode) return;
@@ -15898,6 +16084,7 @@ function openInventoryStockEdit(barcode) {
       <div style="margin-top:10px;font-size:10px;color:var(--g1);font-family:var(--mono)">Barcode: ${escapeHtmlConsent(item.barcode || '—')}</div>
       <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:14px">
         <button type="button" class="btn btn-outline btn-sm" onclick="openInventoryStockGroup(window._inventoryLastStockGroupId || '')">Back</button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="moveInventoryStockRow(${bmhInventoryJsString(item.barcode || '')})">Move store</button>
         <button type="button" class="btn btn-blue btn-sm" onclick="saveInventoryStockEdit(${bmhInventoryJsString(item.barcode || '')})">Save / Update</button>
       </div>
     </div>`;
@@ -16008,6 +16195,7 @@ function openInventoryStockGroup(groupId) {
           <div style="text-align:right">
             <div style="font-size:16px;font-weight:900;color:var(--green)">₹${Number(sample.mrp || 0).toLocaleString('en-IN')}</div>
             <div style="font-size:10px;color:var(--g1)">Cost ₹${Number(sample.cost || 0).toLocaleString('en-IN')}</div>
+            <button type="button" class="btn btn-xs btn-outline" style="margin-top:6px" onclick="moveInventoryRowsToStore([${(row.items || []).map(function (item) { return bmhInventoryJsString(item.barcode || ''); }).join(',')}])">Move</button>
             ${CURRENT_USER?.isAdmin ? `<button type="button" class="btn btn-xs btn-gray" style="margin-top:6px" onclick="deleteInventoryIolGroup('${String(sample.iolCompany || sample.vendor || '').replace(/'/g, "\\'")}','${String(sample.iolBrand || '').replace(/'/g, "\\'")}','${String(row.power || '').replace(/'/g, "\\'")}','${String(row.store || '').replace(/'/g, "\\'")}')">Delete</button>` : ''}
           </div>
         </div>
@@ -16026,6 +16214,7 @@ function openInventoryStockGroup(groupId) {
             <div style="font-size:16px;font-weight:900;color:var(--green)">${Number(row.stock || 0)}</div>
             <div style="font-size:10px;color:var(--g1)">MRP ₹${Number(row.mrp || 0).toLocaleString('en-IN')} · Cost ₹${Number(row.cost || 0).toLocaleString('en-IN')}</div>
             <button type="button" class="btn btn-xs btn-blue" style="margin-top:6px" onclick="openInventoryStockEdit(${bmhInventoryJsString(row.barcode || '')})">Edit</button>
+            <button type="button" class="btn btn-xs btn-outline" style="margin-top:6px" onclick="moveInventoryStockRow(${bmhInventoryJsString(row.barcode || '')})">Move</button>
             ${typeof isAdminUser === 'function' && isAdminUser() ? `<button type="button" class="btn btn-xs btn-gray" style="margin-top:6px" onclick="deleteInventoryStockRow('${String(row.barcode || '').replace(/'/g, "\\'")}')">Delete</button>` : ''}
           </div>
         </div>
@@ -16104,73 +16293,84 @@ function _renderStockListNow() {
     return;
   }
 
-  // ── Build dept -> store -> grouped stock ──────────────────────────────────
+  const canManageHeadings = !!(CURRENT_USER?.isAdmin || (typeof isAdminUser === 'function' && isAdminUser()));
+  const headingTools = canManageHeadings ? `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+    <button type="button" class="btn btn-outline btn-sm" onclick="renameInventoryDeptPrompt(document.getElementById('inv-in-dept')?.value || '')">Edit department heading</button>
+    <button type="button" class="btn btn-outline btn-sm" onclick="renameInventoryCategoryPrompt(document.getElementById('inv-stock-cat-filter')?.value === 'all' ? '' : document.getElementById('inv-stock-cat-filter')?.value || '')">Edit category heading</button>
+    <button type="button" class="btn btn-outline btn-sm" onclick="renameInventoryStoreNamePrompt(document.getElementById('inv-stock-store-filter')?.value === 'all' ? '' : document.getElementById('inv-stock-store-filter')?.value || '')">Edit store heading</button>
+  </div>` : '';
+
+  // ── Build dept -> category -> grouped stock ───────────────────────────────
   const deptMap = {};
   rows.forEach(function (i) {
     const dk = String(i.dept || 'general');
+    const cat = String(i.cat || 'General').trim() || 'General';
     const sk = String(i.store || 'Unassigned store');
-    if (!deptMap[dk]) deptMap[dk] = { stores: {} };
-    if (!deptMap[dk].stores[sk]) deptMap[dk].stores[sk] = { iols: {}, normals: {} };
-    const bucket = deptMap[dk].stores[sk];
+    if (!deptMap[dk]) deptMap[dk] = { categories: {}, total: 0 };
+    if (!deptMap[dk].categories[cat]) deptMap[dk].categories[cat] = { label: cat, total: 0, iols: {}, normals: {} };
+    const bucket = deptMap[dk].categories[cat];
+    deptMap[dk].total += Math.max(0, Number(i.stock) || 0);
+    bucket.total += Math.max(0, Number(i.stock) || 0);
     const isIol = String(i.cat || '').toLowerCase() === 'iol';
     if (isIol) {
       const brandLabel = _iolBrandLabel(i);
-      const company    = String(i.iolCompany || '').trim();
+      const company = String(i.iolCompany || i.company || '').trim();
       const bk         = normalizeInventoryCompareText(brandLabel);
       if (!bucket.iols[bk]) {
-        bucket.iols[bk] = { brandLabel: brandLabel, company: company, powers: {}, rows: [] };
+        bucket.iols[bk] = { brandLabel: brandLabel, company: company, powers: {}, rows: [], total: 0, stores: {} };
       }
       const power = String(i.power || extractIolPower(i.name || '') || '?');
-      if (!bucket.iols[bk].powers[power]) bucket.iols[bk].powers[power] = { qty: 0, barcodes: [], rows: [] };
+      if (!bucket.iols[bk].powers[power]) bucket.iols[bk].powers[power] = { qty: 0, barcodes: [], rows: [], stores: {} };
       bucket.iols[bk].rows.push(i);
+      bucket.iols[bk].total += Math.max(0, Number(i.stock) || 0);
+      bucket.iols[bk].stores[sk] = (bucket.iols[bk].stores[sk] || 0) + Math.max(0, Number(i.stock) || 0);
       bucket.iols[bk].powers[power].qty += Math.max(0, Number(i.stock) || 0);
       bucket.iols[bk].powers[power].rows.push(i);
+      bucket.iols[bk].powers[power].stores[sk] = (bucket.iols[bk].powers[power].stores[sk] || 0) + Math.max(0, Number(i.stock) || 0);
       if (i.barcode) bucket.iols[bk].powers[power].barcodes.push(i.barcode);
     } else {
-      const cat  = String(i.cat  || 'General').trim();
       const name = String(i.name || '?').trim();
       const nk   = normalizeInventoryCompareText(name);
-      if (!bucket.normals[nk]) bucket.normals[nk] = { name: name, cat: cat, stock: 0, barcodes: [], rows: [] };
+      if (!bucket.normals[nk]) bucket.normals[nk] = { name: name, cat: cat, stock: 0, barcodes: [], rows: [], stores: {} };
       bucket.normals[nk].stock += Math.max(0, Number(i.stock) || 0);
       bucket.normals[nk].rows.push(i);
+      bucket.normals[nk].stores[sk] = (bucket.normals[nk].stores[sk] || 0) + Math.max(0, Number(i.stock) || 0);
       if (i.barcode) bucket.normals[nk].barcodes.push(i.barcode);
     }
   });
 
   const deptKeys = Object.keys(deptMap).sort(function (a, b) { return bmhDeptLabel(a).localeCompare(bmhDeptLabel(b)); });
   const html = deptKeys.map(function (dk, di) {
-    const stores = deptMap[dk].stores || {};
-    const storeKeys = Object.keys(stores).sort();
-    const deptTotal = storeKeys.reduce(function (sum, store) {
-      const s = stores[store] || { iols: {}, normals: {} };
-      const iolQty = Object.values(s.iols || {}).reduce(function (inner, brand) {
-        return inner + Object.values(brand.powers || {}).reduce(function (powerSum, powerRow) { return powerSum + Number(powerRow.qty || 0); }, 0);
-      }, 0);
-      const normalQty = Object.values(s.normals || {}).reduce(function (inner, row) { return inner + Number(row.stock || 0); }, 0);
-      return sum + iolQty + normalQty;
-    }, 0);
-    const storeHtml = storeKeys.map(function (store, si) {
-      const storeBucket = stores[store] || { iols: {}, normals: {} };
-      const iolRows = Object.values(storeBucket.iols || {}).sort(function (a, b) {
+    const categories = deptMap[dk].categories || {};
+    const deptTotal = Number(deptMap[dk].total || 0);
+    const categoryKeys = Object.keys(categories).sort(function (a, b) {
+      if (String(a).toLowerCase() === 'iol') return -1;
+      if (String(b).toLowerCase() === 'iol') return 1;
+      return String(a).localeCompare(String(b));
+    });
+    const deptBody = categoryKeys.map(function (cat, ci) {
+      const categoryBucket = categories[cat] || { iols: {}, normals: {}, total: 0 };
+      const iolRows = Object.values(categoryBucket.iols || {}).sort(function (a, b) {
         return String(a.brandLabel || '').localeCompare(String(b.brandLabel || ''));
       });
-      const normalRows = Object.values(storeBucket.normals || {}).sort(function (a, b) {
-        return String(a.cat || '').localeCompare(String(b.cat || '')) || String(a.name || '').localeCompare(String(b.name || ''));
+      const normalRows = Object.values(categoryBucket.normals || {}).sort(function (a, b) {
+        return String(a.name || '').localeCompare(String(b.name || ''));
       });
-      const storeTotal = iolRows.reduce(function (sum, brand) {
-        return sum + Object.values(brand.powers || {}).reduce(function (inner, powerRow) { return inner + Number(powerRow.qty || 0); }, 0);
-      }, 0) + normalRows.reduce(function (sum, row) { return sum + Number(row.stock || 0); }, 0);
+      const categoryTotal = Number(categoryBucket.total || 0);
       const iolHtml = iolRows.length ? `<div style="margin-bottom:10px">
-        <div style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;letter-spacing:.45px;margin-bottom:6px">IOL Catalogue</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px">
         ${iolRows.map(function (brand, bi) {
-          const groupId = 'stk-iol-store-' + di + '-' + si + '-' + bi;
-          const totalQty = Object.values(brand.powers || {}).reduce(function (sum, powerRow) { return sum + Number(powerRow.qty || 0); }, 0);
+          const groupId = 'stk-iol-dept-' + di + '-' + ci + '-' + bi;
+          const totalQty = Number(brand.total || 0);
           const powerSummary = Object.keys(brand.powers || {}).sort(function (a, b) { return parseFloat(a) - parseFloat(b); }).map(function (power) {
             return power + ' x' + Number(brand.powers[power].qty || 0);
           }).join(', ');
+          const storeSummary = Object.keys(brand.stores || {}).sort().map(function (store) {
+            return store + ' ' + Number(brand.stores[store] || 0);
+          }).join(', ');
           window._inventoryStockGroups[groupId] = {
             kind: 'iol',
-            title: [bmhDeptLabel(dk), store, brand.brandLabel].filter(Boolean).join(' · '),
+            title: [bmhDeptLabel(dk), categoryBucket.label, brand.brandLabel].filter(Boolean).join(' · '),
             rows: brand.rows || []
           };
           return `<div onclick="openInventoryStockGroup('${groupId}')" style="cursor:pointer;border:1px solid #e8c96a;border-radius:8px;background:#fff9e6;padding:9px 10px;margin-bottom:6px">
@@ -16179,6 +16379,7 @@ function _renderStockListNow() {
                 <div style="font-size:12px;font-weight:900;color:#7a3a00">${escapeHtmlConsent(brand.brandLabel || 'IOL')}</div>
                 <div style="font-size:10px;color:#8a4200;margin-top:3px">${escapeHtmlConsent(brand.company || '')}</div>
                 <div style="font-size:10px;color:var(--g1);margin-top:4px;line-height:1.45">${escapeHtmlConsent(powerSummary || 'No powers recorded')}</div>
+                <div style="font-size:10px;color:var(--g1);margin-top:4px;line-height:1.45">${escapeHtmlConsent(storeSummary || '')}</div>
               </div>
               <div style="text-align:right;font-size:12px;font-weight:900;color:#1a6e35">${totalQty}</div>
             </div>
@@ -16187,50 +16388,51 @@ function _renderStockListNow() {
       </div>` : '';
       const catGroups = {};
       normalRows.forEach(function (row) {
-        const key = String(row.cat || 'General');
-        if (!catGroups[key]) catGroups[key] = [];
-        catGroups[key].push(row);
+        catGroups.items = catGroups.items || [];
+        catGroups.items.push(row);
       });
-      const normalHtml = Object.keys(catGroups).sort().map(function (cat, ci) {
-        return `<div style="margin-bottom:8px">
-          <div style="font-size:10px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.45px;margin-bottom:5px">${escapeHtmlConsent(cat)}</div>
-          ${catGroups[cat].map(function (row, ri) {
-            const groupId = 'stk-normal-store-' + di + '-' + si + '-' + ci + '-' + ri;
+      const normalHtml = (catGroups.items || []).map(function (row, ri) {
+            const groupId = 'stk-normal-dept-' + di + '-' + ci + '-' + ri;
+            const storeSummary = Object.keys(row.stores || {}).sort().map(function (store) {
+              return store + ' ' + Number(row.stores[store] || 0);
+            }).join(', ');
             window._inventoryStockGroups[groupId] = {
               kind: 'normal',
-              title: [bmhDeptLabel(dk), store, row.cat, row.name].filter(Boolean).join(' · '),
+              title: [bmhDeptLabel(dk), row.cat, row.name].filter(Boolean).join(' · '),
               rows: row.rows || []
             };
             return `<div onclick="openInventoryStockGroup('${groupId}')" style="cursor:pointer;display:grid;grid-template-columns:minmax(0,1fr) 52px;gap:8px;padding:7px 8px;border:1px solid var(--g5);border-radius:8px;background:#fff;margin-bottom:5px">
               <div style="min-width:0">
                 <div style="font-size:11px;font-weight:800;color:var(--tx)">${escapeHtmlConsent(row.name || '')}</div>
-                <div style="font-size:10px;color:var(--g1);margin-top:2px">${escapeHtmlConsent((row.rows || []).slice(0, 3).map(function (item) {
-                  return [item.exp ? 'Exp ' + item.exp : '', item.batchNo ? 'Batch ' + item.batchNo : ''].filter(Boolean).join(' · ');
-                }).filter(Boolean).join(', '))}</div>
+                <div style="font-size:10px;color:var(--g1);margin-top:2px">${escapeHtmlConsent(storeSummary || '')}</div>
               </div>
               <div style="text-align:right;font-size:12px;font-weight:900;color:${row.stock <= 2 ? '#c0392b' : row.stock <= 5 ? '#d35400' : '#1a6e35'}">${Number(row.stock || 0)}</div>
             </div>`;
-          }).join('')}
-        </div>`;
-      }).join('');
-      return `<div style="border:1px solid var(--g4);border-radius:10px;background:#fff;padding:10px 12px;margin-bottom:10px">
-        <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:8px">
-          <div style="font-size:12px;font-weight:900;color:var(--bmh-blue)">${escapeHtmlConsent(store)}</div>
-          <div style="font-size:11px;font-weight:900;color:var(--g1)">${storeTotal} units</div>
-        </div>
-        ${iolHtml}${normalHtml || '<div style="font-size:11px;color:var(--g1)">No items in this store.</div>'}
-      </div>`;
+          }).join('');
+      return `<details ${ci === 0 ? 'open' : ''} style="border:1px solid var(--g4);border-radius:10px;background:#fff;padding:0 12px;margin-bottom:10px">
+        <summary style="cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:10px;align-items:center;padding:12px 0">
+          <div style="display:flex;align-items:center;gap:8px;min-width:0">
+            <span style="font-size:12px;font-weight:900;color:var(--bmh-blue)">${escapeHtmlConsent(categoryBucket.label || cat)}</span>
+            ${canManageHeadings ? `<button type="button" class="btn btn-xs btn-outline" onclick="event.preventDefault();event.stopPropagation();renameInventoryCategoryPrompt(${bmhInventoryJsString(categoryBucket.label || cat)})">Edit</button>` : ''}
+          </div>
+          <div style="font-size:11px;font-weight:900;color:var(--g1)">${categoryTotal} units</div>
+        </summary>
+        <div style="padding-bottom:10px">${iolHtml}${normalHtml || '<div style="font-size:11px;color:var(--g1)">No items in this category.</div>'}</div>
+      </details>`;
     }).join('');
-    return `<div style="border:1px solid var(--g4);border-radius:12px;background:linear-gradient(180deg,#f8fbff,#fff);padding:12px 12px 2px;margin-bottom:12px">
-      <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:10px">
-        <div style="font-size:13px;font-weight:900;color:var(--bmh-blue)">${escapeHtmlConsent(bmhDeptLabel(dk))}</div>
+    return `<details ${di === 0 ? 'open' : ''} style="border:1px solid var(--g4);border-radius:12px;background:linear-gradient(180deg,#f8fbff,#fff);padding:0 12px;margin-bottom:12px">
+      <summary style="cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:10px;align-items:center;padding:12px 0">
+        <div style="display:flex;align-items:center;gap:8px;min-width:0">
+          <span style="font-size:13px;font-weight:900;color:var(--bmh-blue)">${escapeHtmlConsent(bmhDeptLabel(dk))}</span>
+          ${canManageHeadings ? `<button type="button" class="btn btn-xs btn-outline" onclick="event.preventDefault();event.stopPropagation();renameInventoryDeptPrompt(${bmhInventoryJsString(dk)})">Edit</button>` : ''}
+        </div>
         <div style="font-size:12px;font-weight:900;color:var(--bmh-blue)">${deptTotal} units</div>
-      </div>
-      ${storeHtml}
-    </div>`;
+      </summary>
+      <div style="padding-bottom:10px">${deptBody}</div>
+    </details>`;
   }).join('');
 
-  el.innerHTML = html;
+  el.innerHTML = headingTools + html;
 }
 window._renderStockListNow = _renderStockListNow;
 
