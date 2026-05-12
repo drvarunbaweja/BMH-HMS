@@ -16507,7 +16507,7 @@ function _renderStockListNow() {
           </div>
           <div style="font-size:11px;font-weight:900;color:var(--g1)">${Number(storeBucket.total || 0)} units</div>
         </div>
-        <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;flex-wrap:nowrap">${tabsHtml}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;overflow:hidden;padding-bottom:4px;max-width:100%">${tabsHtml}</div>
         <div style="margin-top:8px;font-size:10px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.45px">${escapeHtmlConsent(categoryBucket.label || activeCategory)} · ${Number(categoryBucket.total || 0)} units</div>
         ${String(activeCategory || '').toLowerCase() === 'iol' ? iolHtml : normalHtml}
       </div>`;
