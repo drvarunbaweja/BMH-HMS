@@ -19828,14 +19828,7 @@ function renderSmartSuggestionBlock(hostId, dept, kind, items) {
   }).join('') + '</div>';
 }
 function renderDeptSmartSuggestions(dept) {
-  const suggestions = buildDeptSmartSuggestions(dept);
-  if (dept === 'ophtho') {
-    renderSmartSuggestionBlock('oe-advice-suggestions', dept, 'advice', suggestions.advice);
-    renderSmartSuggestionBlock('oe-proc-suggestions', dept, 'procedure', suggestions.procedure);
-  } else if (dept === 'obg') {
-    renderSmartSuggestionBlock('obg-advice-suggestions', dept, 'advice', suggestions.advice);
-    renderSmartSuggestionBlock('obg-proc-suggestions', dept, 'procedure', suggestions.procedure);
-  }
+  return;
 }
 window.applySmartDeptSuggestion = function applySmartDeptSuggestion(dept, kind, text) {
   const value = String(text || '').trim();
@@ -19851,28 +19844,10 @@ window.applySmartDeptSuggestion = function applySmartDeptSuggestion(dept, kind, 
   }
 };
 function scheduleDeptSmartSuggestionRefresh(dept) {
-  window._deptSmartSuggestionTimers = window._deptSmartSuggestionTimers || {};
-  clearTimeout(window._deptSmartSuggestionTimers[dept]);
-  window._deptSmartSuggestionTimers[dept] = setTimeout(function () {
-    renderDeptSmartSuggestions(dept);
-  }, 120);
+  return;
 }
 function bindDeptSmartSuggestionListeners() {
-  if (window._deptSmartSuggestionListenersBound) return;
-  window._deptSmartSuggestionListenersBound = true;
-  var shouldRefreshForTarget = function (target) {
-    if (!target || !target.matches) return '';
-    if (target.matches('#rx-diagnosis-text, #pg-ophtho .cc-inp, #pg-ophtho #rx-diagnosis-rows input, #pg-ophtho #rx-diagnosis-rows textarea')) return 'ophtho';
-    if (target.matches('#obg-main-complaint, #obg-clinical-impression, #pg-obg #obg-dx-list .dx-inp, #pg-obg input[type=\"checkbox\"], #pg-obg select')) return 'obg';
-    return '';
-  };
-  var handle = function (evt) {
-    const target = evt && evt.target;
-    const dept = shouldRefreshForTarget(target);
-    if (dept) scheduleDeptSmartSuggestionRefresh(dept);
-  };
-  document.addEventListener('input', handle, true);
-  document.addEventListener('change', handle, true);
+  return;
 }
 function getDeptPlanDraftKey(dept, bmhId) {
   const ptId = String(bmhId || window.CURRENT_PATIENT?.bmhId || '').trim();
@@ -35043,11 +35018,14 @@ function _debouncedRenderDash() {
 }
 function applyPatientsPayload(data) {
   const all = data ? Object.values(data) : [];
-  const chunkSize = 250;
+  const chunkSize = 60;
   const normalized = [];
   let idx = 0;
   if (window._bmhPatientsApplyTimer) {
     clearTimeout(window._bmhPatientsApplyTimer);
+    if (typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') {
+      window.cancelAnimationFrame(window._bmhPatientsApplyTimer);
+    }
     window._bmhPatientsApplyTimer = null;
   }
   window._bmhPatientsHydrating = true;
@@ -35055,18 +35033,23 @@ function applyPatientsPayload(data) {
     window._BMH_ALL_PATIENTS_CACHE = normalized;
     rebuildPatientsArrayFromGlobalCache();
     window._bmhPatientsHydrating = false;
-    if(!_fbPatientsLoaded) {
-      _fbPatientsLoaded = true;
-      showToast('Connected to database ✓','s');
-    }
+    if(!_fbPatientsLoaded) _fbPatientsLoaded = true;
     genRcUID && genRcUID();
+    if (window._renderReceptionAfterHydration) {
+      window._renderReceptionAfterHydration = false;
+      renderReceptionPage && renderReceptionPage();
+    }
     _debouncedRenderDash();
   };
   const pump = function () {
     const end = Math.min(idx + chunkSize, all.length);
     for (; idx < end; idx += 1) normalized.push(normalizePatientRecord(all[idx]));
     if (idx < all.length) {
-      window._bmhPatientsApplyTimer = setTimeout(pump, 0);
+      if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+        window._bmhPatientsApplyTimer = window.requestAnimationFrame(function () { setTimeout(pump, 0); });
+      } else {
+        window._bmhPatientsApplyTimer = setTimeout(pump, 8);
+      }
     } else {
       finish();
     }
@@ -40215,8 +40198,27 @@ function computeReceptionQueuePts() {
 // ── renderReceptionPage — live computed ──────────
 let _renderReceptionPageTimer;
 function renderReceptionPage() {
+  if (window._bmhPatientsHydrating) {
+    window._renderReceptionAfterHydration = true;
+    return;
+  }
   clearTimeout(_renderReceptionPageTimer);
-  _renderReceptionPageTimer = setTimeout(_renderReceptionPageImpl, 100);
+  _renderReceptionPageTimer = setTimeout(function () {
+    if (window._renderReceptionPageBusy) {
+      window._renderReceptionPageQueued = true;
+      return;
+    }
+    window._renderReceptionPageBusy = true;
+    try {
+      _renderReceptionPageImpl();
+    } finally {
+      window._renderReceptionPageBusy = false;
+      if (window._renderReceptionPageQueued) {
+        window._renderReceptionPageQueued = false;
+        renderReceptionPage();
+      }
+    }
+  }, 60);
 }
 function _renderReceptionPageImpl() {
   ensureDailyReceptionReset && ensureDailyReceptionReset();
