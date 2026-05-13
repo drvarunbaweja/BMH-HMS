@@ -6314,7 +6314,7 @@ function setCentre(c, btn) {
   syncReceptionConsultationFee && syncReceptionConsultationFee();
   window._bmhTodayTransactionsLoadedKey = '';
   rebuildPatientsArrayFromGlobalCache && rebuildPatientsArrayFromGlobalCache();
-  refreshPatientsFromFirebase && refreshPatientsFromFirebase();
+  refreshTodayQueuePatientsFromFirebase && refreshTodayQueuePatientsFromFirebase();
   listenPayRequests && listenPayRequests({ force: true });
   listenAppointments && listenAppointments({ force: true });
   loadTodayTransactions && loadTodayTransactions();
@@ -6329,7 +6329,7 @@ function renderPaymentsPage() {
   const centre = getEffectiveCentre();
   const todayKey = localDateKey(new Date());
   const reqs = (PAY_REQUESTS || []).filter(function (r) {
-    return (r.centre || 'CHD') === centre && !isInsuranceLikeMode(r.mode || r.ins || '');
+    return rowMatchesCentre(r, centre, { allowUncentredToday: true, dateKey: todayKey }) && !isInsuranceLikeMode(r.mode || r.ins || '');
   });
   const todayReqs = reqs.filter(function (r) {
     const stamp = r.date || r.createdAt || r.updatedAt || '';
@@ -6338,7 +6338,7 @@ function renderPaymentsPage() {
   const pending = todayReqs.filter(function (r) { return r.status === 'pending'; });
   const collected = todayReqs.filter(function (r) { return r.status === 'paid'; });
   const txns = (TRANSACTIONS || []).filter(function (t) {
-    return (t.centre || 'CHD') === centre && txnIsoDate(t) === todayKey && !isInsuranceLikeMode(t.mode || t.ins || '');
+    return rowMatchesCentre(t, centre, { allowUncentredToday: true, dateKey: todayKey }) && txnIsoDate(t) === todayKey && !isInsuranceLikeMode(t.mode || t.ins || '');
   });
   const modeTotals = {};
   txns.forEach(function (t) {
@@ -11322,7 +11322,7 @@ function bmhPayRequestToSyntheticCollectionTxn(pr) {
     dept: pr.dept || pt.dept || 'ophtho',
     time: new Date(pr.updatedAt || pr.date || Date.now()).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
     date: pr.updatedAt || pr.date || new Date().toISOString(),
-    centre: pr.centre || pt.centre || 'CHD',
+    centre: pr.centre || pt.centre || getEffectiveCentre?.() || CURRENT_USER?.centre || 'CHD',
     createdAt: pr.updatedAt || pr.date || '',
     collected: true,
     source: 'pay-request',
@@ -11338,7 +11338,10 @@ function bmhGetCollectionTransactionsForDate(centreOrCentres, dateKey) {
   });
   const wanted = showAllCentres ? null : new Set(centres.map(function (c) { return normalizeAppointmentCentreValue(c || 'CHD'); }));
   const centreAllowed = function (row) {
-    return !wanted || wanted.has(normalizeAppointmentCentreValue(row?.centre || 'CHD'));
+    if (!wanted) return true;
+    return Array.from(wanted).some(function (centre) {
+      return rowMatchesCentre(row, centre, { allowUncentredToday: true, dateKey: dateKey });
+    });
   };
   const rows = (TRANSACTIONS || []).filter(function (t) {
     return centreAllowed(t) && txnIsoDate(t) === dateKey && isCollectionDashboardTxn(t);
@@ -11376,7 +11379,7 @@ function bmhGetCollectionTransactionsForDate(centreOrCentres, dateKey) {
       mode: consultationMode || 'Cash',
       collected: true,
       dept: p.dept || 'ophtho',
-      centre: p.centre || 'CHD',
+      centre: p.centre || getEffectiveCentre?.() || CURRENT_USER?.centre || 'CHD',
       date: p.checkinAt || p.updatedAt || p.createdAt || new Date().toISOString(),
       time: p.checkinAt ? new Date(p.checkinAt).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' }) : '',
       source: 'reception',
@@ -31667,6 +31670,26 @@ function centreMatch(item) {
 function patientCentreKey(value) {
   return normalizeAppointmentCentreValue(value) === 'RPR' ? 'RPR' : 'CHD';
 }
+function explicitPatientCentreKey(value) {
+  const raw = String(value == null ? '' : value).trim();
+  if (!raw) return '';
+  return patientCentreKey(raw);
+}
+function rowDateMatchesKey(row, dateKey) {
+  const target = dateKey || localDateKey(new Date());
+  return [row?.date, row?.createdAt, row?.updatedAt, row?.checkinAt, row?.queueDate, row?.visitDate].filter(Boolean).some(function (raw) {
+    return localDateKey(raw) === target || String(raw || '').slice(0, 10) === target;
+  });
+}
+function rowMatchesCentre(row, centre, opts) {
+  const wanted = patientCentreKey(centre || getEffectiveCentre?.() || 'CHD');
+  const explicit = explicitPatientCentreKey(row?.centre);
+  if (explicit) return explicit === wanted;
+  // Legacy rows without a centre used to be treated as Chandigarh forever.
+  // Keep same-day working rows visible, but do not let old uncentred history
+  // weigh down the Chandigarh live UI.
+  return !!(opts?.allowUncentredToday && wanted === 'CHD' && rowDateMatchesKey(row, opts.dateKey || todayKey()));
+}
 /**
  * Which centre's rows should live in PATIENTS[] for centre-locked users.
  * Admin / BOTH users use the currently selected centre instead of mirroring
@@ -35204,6 +35227,32 @@ function refreshPatientsFromFirebase() {
     }
   });
 }
+function refreshTodayQueuePatientsFromFirebase() {
+  const scope = effectivePatientListCentreScope();
+  if (!window.FBDB) return Promise.resolve();
+  const today = localDateKey(new Date());
+  const token = Date.now() + Math.random();
+  window._bmhPatientsRefreshToken = token;
+  window._bmhPatientsHydrating = true;
+  return window.FBDB.ref('patients').orderByChild('queueDate').equalTo(today).once('value').then(function (snap) {
+    if (window._bmhPatientsRefreshToken !== token) return;
+    const data = snap && typeof snap.val === 'function' ? snap.val() : {};
+    const scoped = {};
+    Object.keys(data || {}).forEach(function (key) {
+      const row = data[key];
+      if (!scope || rowMatchesCentre(row, scope, { allowUncentredToday: true, dateKey: today })) scoped[key] = row;
+    });
+    applyPatientsPayload(scoped);
+  }).catch(function (e) {
+    console.warn('today patients refresh failed', e);
+    window._bmhPatientsHydrating = false;
+  }).finally(function () {
+    if (window._bmhPatientsRefreshToken === token) {
+      window._bmhPatientsLastRefreshAt = Date.now();
+    }
+  });
+}
+window.refreshTodayQueuePatientsFromFirebase = refreshTodayQueuePatientsFromFirebase;
 function isRealtimePatientRecordRelevant(record) {
   const scope = effectivePatientListCentreScope();
   if (!scope) return true;
@@ -35341,7 +35390,7 @@ function schedulePatientsRefreshLoop() {
     if (document.visibilityState === 'hidden') return;
     const last = Number(window._bmhPatientsLastRefreshAt || 0);
     if (Date.now() - last < 120000) return;
-    refreshPatientsFromFirebase();
+    refreshTodayQueuePatientsFromFirebase();
   };
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState === 'visible') maybeRefresh();
@@ -35356,7 +35405,7 @@ function loadPatientsFromFirebase() {
   window._bmhRtdbPatientsListening = true;
   window._bmhRtdbPatientsScope = scope;
   scheduleQueueCalendarDayRefresh && scheduleQueueCalendarDayRefresh();
-  refreshPatientsFromFirebase().then(function () {
+  refreshTodayQueuePatientsFromFirebase().then(function () {
     startPatientsRealtimeUpdates();
     startTodayQueuePatientsRealtimeUpdates(true);
   });
@@ -35378,7 +35427,7 @@ function getDisplayTpaClaims() {
   const centre = CURRENT_USER?.isAdmin ? null : (CURRENT_USER?.centre || 'CHD');
   const liveClaims = (PAY_REQUESTS || []).filter(function (r) {
     if (!isInsuranceLikeMode(r.mode || r.ins || '')) return false;
-    if (centre && String(r.centre || 'CHD') !== String(centre)) return false;
+    if (centre && !rowMatchesCentre(r, centre, { allowUncentredToday: true })) return false;
     return true;
   }).map(function (r) {
     return Object.assign({ _synthetic: false }, r);
@@ -35387,7 +35436,7 @@ function getDisplayTpaClaims() {
   const synthetic = (PATIENTS || []).filter(function (p) {
     if (!p || !p.bmhId) return false;
     if (byBmhId.has(String(p.bmhId))) return false;
-    if (centre && String(p.centre || 'CHD') !== String(centre)) return false;
+    if (centre && !rowMatchesCentre(p, centre, { allowUncentredToday: true })) return false;
     const ins = String(p.ins || p.refType || '').trim();
     if (!isInsuranceLikeMode(ins)) return false;
     return true;
@@ -35428,11 +35477,11 @@ function listenPayRequests(opts) {
   if (existing && existing.ref && existing.cb) {
     try { existing.ref.off('value', existing.cb); } catch (e) {}
   }
-  const ref = window.FBDB.ref('payRequests').orderByChild('centre').equalTo(centre);
+  const ref = window.FBDB.ref('payRequests').orderByChild('status').equalTo('pending');
   const cb = data => {
     PAY_REQUESTS.length = 0;
     Object.values((data && typeof data.val === 'function') ? (data.val() || {}) : (data || {})).forEach(r => {
-      if(normalizeAppointmentCentreValue(r.centre || 'CHD') === centre) PAY_REQUESTS.push(r);
+      if(r.status === 'pending' && rowMatchesCentre(r, centre, { allowUncentredToday: true })) PAY_REQUESTS.push(r);
     });
     if (!window._bmhPendingDuesCleanupRan) {
       window._bmhPendingDuesCleanupRan = true;
@@ -35490,7 +35539,7 @@ function listenAppointments(opts) {
   const cb = data => {
     APPOINTMENTS.length = 0;
     Object.values((data && typeof data.val === 'function') ? (data.val() || {}) : (data || {})).forEach(function (a) {
-      if (normalizeAppointmentCentreValue(a.centre || 'CHD') === centre) APPOINTMENTS.push(a);
+      if (rowMatchesCentre(a, centre, { allowUncentredToday: true, dateKey: a.date || todayKey() })) APPOINTMENTS.push(a);
     });
     const activeId = getActivePageId();
     if (activeId === 'pg-appointments') renderAptDay && renderAptDay();
@@ -35509,7 +35558,7 @@ function applyRealtimeTransactionRecord(txn, key) {
   const id = String(txn.id || key || '').trim();
   if (!id) return;
   const centre = getLiveDataCentreScope ? getLiveDataCentreScope() : normalizeAppointmentCentreValue((CURRENT_USER?.centre || 'CHD'));
-  if (normalizeAppointmentCentreValue(txn.centre || 'CHD') !== centre) return;
+  if (!rowMatchesCentre(txn, centre, { allowUncentredToday: true })) return;
   const next = Object.assign({}, txn, { id: id });
   const idx = TRANSACTIONS.findIndex(function (row) { return String(row?.id || '') === id; });
   const isNewFromRemote = idx < 0;
@@ -36019,7 +36068,7 @@ function loadTodayTransactions() {
       if (Array.isArray(localRows)) {
         TRANSACTIONS.length = 0;
         localRows.forEach(function (t) {
-          if (normalizeAppointmentCentreValue(t.centre || 'CHD') === centre) TRANSACTIONS.push(t);
+          if (rowMatchesCentre(t, centre, { allowUncentredToday: true, dateKey: today })) TRANSACTIONS.push(t);
         });
         bmhRunEndOfDayEegPurge && bmhRunEndOfDayEegPurge();
         renderCollectionDashboard && renderCollectionDashboard();
@@ -36038,7 +36087,7 @@ function loadTodayTransactions() {
     });
     TRANSACTIONS.length = 0;
     Object.values(merged).forEach(function (t) {
-      if (normalizeAppointmentCentreValue(t.centre || 'CHD') === centre) TRANSACTIONS.push(t);
+      if (rowMatchesCentre(t, centre, { allowUncentredToday: true, dateKey: today })) TRANSACTIONS.push(t);
     });
     saveTodayTransactionsToLocal();
     bmhRunEndOfDayEegPurge && bmhRunEndOfDayEegPurge();
@@ -40510,7 +40559,7 @@ function _renderReceptionPageImpl() {
   }
 
   const prEl = document.getElementById('rc-pay-list');
-  const visiblePayRequests = PAY_REQUESTS.filter(r => (r.centre || 'CHD') === getEffectiveCentre());
+  const visiblePayRequests = PAY_REQUESTS.filter(r => rowMatchesCentre(r, getEffectiveCentre(), { allowUncentredToday: true }));
   if(prEl) {
     if(!visiblePayRequests.length) {
       prEl.innerHTML = '<div style="padding:16px;text-align:center;color:var(--g1);font-size:12px">No payment requests</div>';
@@ -40574,7 +40623,7 @@ function renderRcDeptDues() {
     {k:'psych',l:'Psych',icon:'🧠',color:'var(--orange)'},
     {k:'skin',l:'Skin',icon:'💆',color:'var(--purple)'},
   ];
-  const pending = PAY_REQUESTS.filter(r=>r.status==='pending' && (r.centre || 'CHD') === getEffectiveCentre());
+  const pending = PAY_REQUESTS.filter(r=>r.status==='pending' && rowMatchesCentre(r, getEffectiveCentre(), { allowUncentredToday: true }));
   const hasDues = pending.length > 0;
   if(!hasDues) { el.innerHTML='<div style="font-size:11px;color:var(--g1);padding:8px;text-align:center">No pending dues</div>'; return; }
   el.innerHTML = depts.map(d=>{
