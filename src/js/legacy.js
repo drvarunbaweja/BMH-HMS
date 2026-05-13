@@ -35077,25 +35077,74 @@ function refreshPatientsFromFirebase() {
     window._bmhPatientsLastRefreshAt = Date.now();
   });
 }
+function isRealtimePatientRecordRelevant(record) {
+  const scope = effectivePatientListCentreScope();
+  if (!scope) return true;
+  return patientCentreKey(record?.centre) === scope;
+}
+function flushRealtimePatientUpdates() {
+  window._bmhRealtimePatientFlushTimer = null;
+  const upserts = window._bmhRealtimePatientPendingUpserts || {};
+  const deletes = window._bmhRealtimePatientPendingDeletes || {};
+  window._bmhRealtimePatientPendingUpserts = {};
+  window._bmhRealtimePatientPendingDeletes = {};
+  const cache = Array.isArray(window._BMH_ALL_PATIENTS_CACHE) ? window._BMH_ALL_PATIENTS_CACHE.slice() : [];
+  const indexById = new Map();
+  cache.forEach(function (p, idx) {
+    const id = String(p?.bmhId || '').trim();
+    if (id) indexById.set(id, idx);
+  });
+  Object.keys(deletes).forEach(function (id) {
+    if (!indexById.has(id)) return;
+    const idx = indexById.get(id);
+    cache[idx] = null;
+    indexById.delete(id);
+  });
+  Object.keys(upserts).forEach(function (id) {
+    const row = upserts[id];
+    if (!row) return;
+    if (indexById.has(id)) cache[indexById.get(id)] = row;
+    else {
+      indexById.set(id, cache.length);
+      cache.push(row);
+    }
+  });
+  window._BMH_ALL_PATIENTS_CACHE = cache.filter(Boolean);
+  rebuildPatientsArrayFromGlobalCache();
+  _debouncedRenderDash();
+}
+function scheduleRealtimePatientFlush() {
+  if (window._bmhRealtimePatientFlushTimer) return;
+  if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+    window._bmhRealtimePatientFlushTimer = window.requestAnimationFrame(function () {
+      setTimeout(flushRealtimePatientUpdates, 0);
+    });
+  } else {
+    window._bmhRealtimePatientFlushTimer = setTimeout(flushRealtimePatientUpdates, 50);
+  }
+}
 function applyRealtimePatientRecord(record, key) {
   if (!record || typeof record !== 'object') return;
   const row = normalizePatientRecord(Object.assign({}, record, { bmhId: record.bmhId || key }));
   if (!row.bmhId) return;
-  const cache = Array.isArray(window._BMH_ALL_PATIENTS_CACHE) ? window._BMH_ALL_PATIENTS_CACHE : [];
-  const idx = cache.findIndex(function (p) { return p && p.bmhId === row.bmhId; });
-  if (idx >= 0) cache[idx] = row;
-  else cache.unshift(row);
-  window._BMH_ALL_PATIENTS_CACHE = cache;
-  rebuildPatientsArrayFromGlobalCache();
-  _debouncedRenderDash();
+  if (!isRealtimePatientRecordRelevant(row)) {
+    removeRealtimePatientRecord(row.bmhId);
+    return;
+  }
+  window._bmhRealtimePatientPendingUpserts = window._bmhRealtimePatientPendingUpserts || {};
+  window._bmhRealtimePatientPendingDeletes = window._bmhRealtimePatientPendingDeletes || {};
+  delete window._bmhRealtimePatientPendingDeletes[row.bmhId];
+  window._bmhRealtimePatientPendingUpserts[row.bmhId] = row;
+  scheduleRealtimePatientFlush();
 }
 function removeRealtimePatientRecord(key) {
   const id = String(key || '').trim();
   if (!id) return;
-  const cache = Array.isArray(window._BMH_ALL_PATIENTS_CACHE) ? window._BMH_ALL_PATIENTS_CACHE : [];
-  window._BMH_ALL_PATIENTS_CACHE = cache.filter(function (p) { return p && String(p.bmhId || '') !== id; });
-  rebuildPatientsArrayFromGlobalCache();
-  _debouncedRenderDash();
+  window._bmhRealtimePatientPendingUpserts = window._bmhRealtimePatientPendingUpserts || {};
+  window._bmhRealtimePatientPendingDeletes = window._bmhRealtimePatientPendingDeletes || {};
+  delete window._bmhRealtimePatientPendingUpserts[id];
+  window._bmhRealtimePatientPendingDeletes[id] = true;
+  scheduleRealtimePatientFlush();
 }
 function startPatientsRealtimeUpdates() {
   if (window._bmhPatientsRealtimeStarted || !window.FBDB) return;
@@ -35133,15 +35182,23 @@ function stopTodayQueuePatientsRealtimeUpdates() {
 function startTodayQueuePatientsRealtimeUpdates(force) {
   if (!window.FBDB) return;
   const today = localDateKey(new Date());
+  const scope = effectivePatientListCentreScope();
   if (!force && window._bmhTodayQueuePatientsRealtimeDay === today && window._bmhTodayQueuePatientsRealtime) return;
   stopTodayQueuePatientsRealtimeUpdates();
   const ref = window.FBDB.ref('patients').orderByChild('queueDate').equalTo(today);
   const callbacks = {
     added: function (snap) {
-      applyRealtimePatientRecord(snap.val(), snap.key);
+      const row = snap.val();
+      if (scope && patientCentreKey(row?.centre) !== scope) return;
+      applyRealtimePatientRecord(row, snap.key);
     },
     changed: function (snap) {
-      applyRealtimePatientRecord(snap.val(), snap.key);
+      const row = snap.val();
+      if (scope && patientCentreKey(row?.centre) !== scope) {
+        removeRealtimePatientRecord(snap.key);
+        return;
+      }
+      applyRealtimePatientRecord(row, snap.key);
     }
   };
   window._bmhTodayQueuePatientsRealtime = { ref: ref, callbacks: callbacks };
