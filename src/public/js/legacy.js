@@ -35063,7 +35063,12 @@ function applyPatientsPayload(data) {
 function refreshPatientsFromFirebase() {
   if (window._bmhPatientsRefreshInFlight || !window.FBDB) return Promise.resolve();
   window._bmhPatientsRefreshInFlight = true;
-  return fbOnce('patients').then(function (data) {
+  const scope = effectivePatientListCentreScope();
+  const query = scope
+    ? window.FBDB.ref('patients').orderByChild('centre').equalTo(scope)
+    : window.FBDB.ref('patients');
+  return query.once('value').then(function (snap) {
+    const data = snap && typeof snap.val === 'function' ? snap.val() : {};
     applyPatientsPayload(data);
   }).catch(function (e) {
     console.warn('patients refresh failed', e);
@@ -35094,6 +35099,7 @@ function removeRealtimePatientRecord(key) {
 }
 function startPatientsRealtimeUpdates() {
   if (window._bmhPatientsRealtimeStarted || !window.FBDB) return;
+  if (effectivePatientListCentreScope()) return;
   window._bmhPatientsRealtimeStarted = true;
   const ref = window.FBDB.ref('patients');
   const knownPatientIds = new Set((window._BMH_ALL_PATIENTS_CACHE || []).map(function (p) { return String(p?.bmhId || '').trim(); }).filter(Boolean));
