@@ -34643,6 +34643,25 @@ function getCollectionViewCentre() {
   return normalizeAppointmentCentreValue(getEffectiveCentre() || CURRENT_USER?.centre || 'CHD');
 }
 function renderCollectionDashboard() {
+  clearTimeout(window._renderCollectionDashboardTimer);
+  window._renderCollectionDashboardTimer = setTimeout(function () {
+    if (window._renderCollectionDashboardBusy) {
+      window._renderCollectionDashboardQueued = true;
+      return;
+    }
+    window._renderCollectionDashboardBusy = true;
+    try {
+      _renderCollectionDashboardImpl();
+    } finally {
+      window._renderCollectionDashboardBusy = false;
+      if (window._renderCollectionDashboardQueued) {
+        window._renderCollectionDashboardQueued = false;
+        renderCollectionDashboard();
+      }
+    }
+  }, 80);
+}
+function _renderCollectionDashboardImpl() {
   const todayKeyLocal = todayKey();
   const allTxn = bmhGetCollectionTransactionsForDate(getCollectionViewCentre(), todayKeyLocal).filter(function (t) {
     return !isInsuranceLikeMode(t.mode || t.ins || '');
@@ -35082,7 +35101,10 @@ function applyPatientsPayload(data) {
     window._BMH_ALL_PATIENTS_CACHE = normalized;
     rebuildPatientsArrayFromGlobalCache();
     window._bmhPatientsHydrating = false;
-    if(!_fbPatientsLoaded) _fbPatientsLoaded = true;
+    if(!_fbPatientsLoaded) {
+      _fbPatientsLoaded = true;
+      showToast('Connected to database ✓','s');
+    }
     genRcUID && genRcUID();
     if (window._renderReceptionAfterHydration) {
       window._renderReceptionAfterHydration = false;
@@ -39744,6 +39766,25 @@ function selectExistingPatient(bmhId) {
 
 // ── renderDashboard — admin (finance/stock) vs clinical (doctors) ────
 function renderDashboard() {
+  clearTimeout(window._renderDashboardTimer);
+  window._renderDashboardTimer = setTimeout(function () {
+    if (window._renderDashboardBusy) {
+      window._renderDashboardQueued = true;
+      return;
+    }
+    window._renderDashboardBusy = true;
+    try {
+      _renderDashboardImpl();
+    } finally {
+      window._renderDashboardBusy = false;
+      if (window._renderDashboardQueued) {
+        window._renderDashboardQueued = false;
+        renderDashboard();
+      }
+    }
+  }, 80);
+}
+function _renderDashboardImpl() {
   try { updateInstallAppUi && updateInstallAppUi(); } catch (e) {}
   if (window._bmhPatientsHydrating || window._bmhFinancialsHydrating) {
     if (window._dashHydrationRetryTimer) clearTimeout(window._dashHydrationRetryTimer);
