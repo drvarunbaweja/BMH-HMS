@@ -17616,8 +17616,8 @@ function scoreChargesRows(rows) {
 function choosePreferredChargesRows(localRows, remoteRows, localTs, remoteTs) {
   const localList = normalizeChargesRows(localRows);
   const remoteList = normalizeChargesRows(remoteRows);
-  if (!remoteList.length) return localList;
-  if (!localList.length) return remoteList;
+  if (remoteList.length) return remoteList;
+  if (localList.length) return localList;
   const lts = Number(localTs || 0);
   const rts = Number(remoteTs || 0);
   if (lts && rts && lts !== rts) return lts > rts ? localList : remoteList;
@@ -17718,10 +17718,7 @@ function applyChargesFromCloudSnapshot(rows, remoteTs) {
   if (!applied) return false;
   window._bmhChargesCloudLoaded = true;
   window._bmhLastRemoteChargesUpdatedAt = Number(remoteTs || Date.now()) || Date.now();
-  // Never downgrade the local timestamp: if local data was chosen because localTs > remoteTs,
-  // saving with remoteTs would let a stale remote snapshot win next time.
-  const _prevLocalTs = Number(localStorage.getItem('bmh_charges_schedule_updated_at') || 0) || 0;
-  saveChargesToLocalStorage({ updatedAt: Math.max(window._bmhLastRemoteChargesUpdatedAt, _prevLocalTs) });
+  saveChargesToLocalStorage({ updatedAt: window._bmhLastRemoteChargesUpdatedAt });
   renderChargesList && renderChargesList();
   renderCentresCharges && renderCentresCharges();
   syncReceptionConsultationFee && syncReceptionConsultationFee();
@@ -17729,11 +17726,6 @@ function applyChargesFromCloudSnapshot(rows, remoteTs) {
   try { renderOTProcedureSubheading && renderOTProcedureSubheading(document.getElementById('ot-add-proc-main')?.value || ''); } catch (e) {}
   try { refreshRxTemplateSurgeryDatalist && refreshRxTemplateSurgeryDatalist(); } catch (e) {}
   try { refreshOTFollowupTemplateSelect && refreshOTFollowupTemplateSelect(); } catch (e) {}
-  if (JSON.stringify(normalizeChargesRows(CHARGES_DATA)) !== JSON.stringify(incomingRows)) {
-    setTimeout(function () {
-      if (window.FBDB) saveChargesToFirebase().catch(function () {});
-    }, 50);
-  }
   return true;
 }
 function startChargesLiveSync() {
@@ -17741,8 +17733,7 @@ function startChargesLiveSync() {
   _chargesLiveWatchStarted = true;
   window.FBDB.ref('chargesScheduleMeta').on('value', function (metaSnap) {
     const remoteTs = Number((metaSnap.val() && metaSnap.val().updatedAt) || 0);
-    const localTs = Number(localStorage.getItem('bmh_charges_schedule_updated_at') || 0);
-    if (!remoteTs || remoteTs <= localTs || remoteTs <= Number(window._bmhLastRemoteChargesUpdatedAt || 0)) return;
+    if (!remoteTs || remoteTs <= Number(window._bmhLastRemoteChargesUpdatedAt || 0)) return;
     Promise.all([
       window.FBDB.ref('chargesSchedule').once('value'),
       window.FBDB.ref('centreCharges').once('value')
@@ -19869,11 +19860,16 @@ function scheduleDeptSmartSuggestionRefresh(dept) {
 function bindDeptSmartSuggestionListeners() {
   if (window._deptSmartSuggestionListenersBound) return;
   window._deptSmartSuggestionListenersBound = true;
+  var shouldRefreshForTarget = function (target) {
+    if (!target || !target.matches) return '';
+    if (target.matches('#rx-diagnosis-text, #pg-ophtho .cc-inp, #pg-ophtho #rx-diagnosis-rows input, #pg-ophtho #rx-diagnosis-rows textarea')) return 'ophtho';
+    if (target.matches('#obg-main-complaint, #obg-clinical-impression, #pg-obg #obg-dx-list .dx-inp, #pg-obg input[type=\"checkbox\"], #pg-obg select')) return 'obg';
+    return '';
+  };
   var handle = function (evt) {
     const target = evt && evt.target;
-    if (!target || !target.closest) return;
-    if (target.closest('#pg-ophtho')) scheduleDeptSmartSuggestionRefresh('ophtho');
-    if (target.closest('#pg-obg')) scheduleDeptSmartSuggestionRefresh('obg');
+    const dept = shouldRefreshForTarget(target);
+    if (dept) scheduleDeptSmartSuggestionRefresh(dept);
   };
   document.addEventListener('input', handle, true);
   document.addEventListener('change', handle, true);
@@ -31550,6 +31546,7 @@ function activateUserSession(user, profile, opts) {
 
   setTimeout(function() {
     try {
+      if (typeof loadChargesFromFirebase === 'function') loadChargesFromFirebase();
       if (typeof loadPatientsFromFirebase === 'function')  loadPatientsFromFirebase();
       deferBootstrap(function() {
         if (typeof loadBmhFinancials === 'function') loadBmhFinancials();
