@@ -6312,7 +6312,12 @@ function setCentre(c, btn) {
   try { localStorage.setItem('bmh_admin_centre_pref', c); } catch (e) {}
   showToast('Switched to '+(c==='CHD'?'Chandigarh':'Ropar')+' Centre','i');
   syncReceptionConsultationFee && syncReceptionConsultationFee();
+  window._bmhTodayTransactionsLoadedKey = '';
   rebuildPatientsArrayFromGlobalCache && rebuildPatientsArrayFromGlobalCache();
+  refreshPatientsFromFirebase && refreshPatientsFromFirebase();
+  listenPayRequests && listenPayRequests({ force: true });
+  listenAppointments && listenAppointments({ force: true });
+  loadTodayTransactions && loadTodayTransactions();
   // Refresh all views after centre switch
   renderReceptionPage && renderReceptionPage();
   renderDocQueue && renderDocQueue();
@@ -31664,14 +31669,17 @@ function patientCentreKey(value) {
 }
 /**
  * Which centre's rows should live in PATIENTS[] for centre-locked users.
- * Returns null for admin / BOTH / canSeeAll — keep full Firebase mirror (doctor queue is all-centre; billing uses centreMatch).
+ * Admin / BOTH users use the currently selected centre instead of mirroring
+ * the full two-centre patient tree into normal working pages.
  */
 function effectivePatientListCentreScope() {
   const cu = typeof CURRENT_USER !== 'undefined' ? CURRENT_USER : window.CURRENT_USER;
   if (!cu) return null;
-  if (cu.canSeeAllCentres || cu.isAdmin || /^admin$/i.test(String(cu.role || '')) || cu.centre === 'BOTH') return null;
   const locked = typeof getUserCentre === 'function' ? getUserCentre() : null;
   if (locked) return patientCentreKey(locked);
+  if (cu.canSeeAllCentres || cu.isAdmin || /^admin$/i.test(String(cu.role || '')) || cu.centre === 'BOTH') {
+    return patientCentreKey(typeof getEffectiveCentre === 'function' ? getEffectiveCentre() : 'CHD');
+  }
   return patientCentreKey(cu.centre || (typeof getEffectiveCentre === 'function' ? getEffectiveCentre() : 'CHD'));
 }
 function rebuildPatientsArrayFromGlobalCache() {
@@ -35173,20 +35181,27 @@ function applyPatientsPayload(data) {
   pump();
 }
 function refreshPatientsFromFirebase() {
-  if (window._bmhPatientsRefreshInFlight || !window.FBDB) return Promise.resolve();
-  window._bmhPatientsRefreshInFlight = true;
   const scope = effectivePatientListCentreScope();
+  if (!window.FBDB) return Promise.resolve();
+  if (window._bmhPatientsRefreshInFlight && window._bmhPatientsRefreshScope === scope) return Promise.resolve();
+  const token = Date.now() + Math.random();
+  window._bmhPatientsRefreshInFlight = true;
+  window._bmhPatientsRefreshScope = scope;
+  window._bmhPatientsRefreshToken = token;
   const query = scope
     ? window.FBDB.ref('patients').orderByChild('centre').equalTo(scope)
     : window.FBDB.ref('patients');
   return query.once('value').then(function (snap) {
+    if (window._bmhPatientsRefreshToken !== token) return;
     const data = snap && typeof snap.val === 'function' ? snap.val() : {};
     applyPatientsPayload(data);
   }).catch(function (e) {
     console.warn('patients refresh failed', e);
   }).finally(function () {
-    window._bmhPatientsRefreshInFlight = false;
-    window._bmhPatientsLastRefreshAt = Date.now();
+    if (window._bmhPatientsRefreshToken === token) {
+      window._bmhPatientsRefreshInFlight = false;
+      window._bmhPatientsLastRefreshAt = Date.now();
+    }
   });
 }
 function isRealtimePatientRecordRelevant(record) {
@@ -35336,12 +35351,14 @@ function schedulePatientsRefreshLoop() {
 window.refreshPatientsFromFirebase = refreshPatientsFromFirebase;
 
 function loadPatientsFromFirebase() {
-  if(window._bmhRtdbPatientsListening) return;
+  const scope = effectivePatientListCentreScope();
+  if(window._bmhRtdbPatientsListening && window._bmhRtdbPatientsScope === scope) return;
   window._bmhRtdbPatientsListening = true;
+  window._bmhRtdbPatientsScope = scope;
   scheduleQueueCalendarDayRefresh && scheduleQueueCalendarDayRefresh();
   refreshPatientsFromFirebase().then(function () {
     startPatientsRealtimeUpdates();
-    startTodayQueuePatientsRealtimeUpdates();
+    startTodayQueuePatientsRealtimeUpdates(true);
   });
   schedulePatientsRefreshLoop();
 }
@@ -35398,16 +35415,29 @@ function getDisplayTpaClaims() {
   return liveClaims.concat(synthetic).sort(function (a, b) { return new Date(b.date || 0) - new Date(a.date || 0); });
 }
 
-function listenPayRequests() {
-  if (window._bmhPayRequestsListening) return;
-  window._bmhPayRequestsListening = true;
-  const centre = CURRENT_USER?.isAdmin ? null : (CURRENT_USER?.centre || 'CHD');
-  fbOn('payRequests', data => {
+function getLiveDataCentreScope() {
+  const locked = typeof getUserCentre === 'function' ? getUserCentre() : null;
+  return patientCentreKey(locked || (typeof getEffectiveCentre === 'function' ? getEffectiveCentre() : (CURRENT_USER?.centre || 'CHD')));
+}
+function listenPayRequests(opts) {
+  opts = opts || {};
+  if (!window.FBDB) return;
+  const centre = getLiveDataCentreScope();
+  const existing = window._bmhPayRequestsListener;
+  if (existing && existing.centre === centre && !opts.force) return;
+  if (existing && existing.ref && existing.cb) {
+    try { existing.ref.off('value', existing.cb); } catch (e) {}
+  }
+  const ref = window.FBDB.ref('payRequests').orderByChild('centre').equalTo(centre);
+  const cb = data => {
     PAY_REQUESTS.length = 0;
-    Object.values(data || {}).forEach(r => {
-      if(!centre || r.centre === centre || CURRENT_USER?.isAdmin) PAY_REQUESTS.push(r);
+    Object.values((data && typeof data.val === 'function') ? (data.val() || {}) : (data || {})).forEach(r => {
+      if(normalizeAppointmentCentreValue(r.centre || 'CHD') === centre) PAY_REQUESTS.push(r);
     });
-    runOneTimePendingDuesCleanup && runOneTimePendingDuesCleanup();
+    if (!window._bmhPendingDuesCleanupRan) {
+      window._bmhPendingDuesCleanupRan = true;
+      runOneTimePendingDuesCleanup && runOneTimePendingDuesCleanup();
+    }
     bmhRunEndOfDayEegPurge && bmhRunEndOfDayEegPurge();
     // Update badge
     const nb = document.getElementById('nb-pay');
@@ -35415,7 +35445,9 @@ function listenPayRequests() {
     const activeId = getActivePageId();
     if (activeId === 'pg-reception') renderReceptionPage && renderReceptionPage();
     else if (activeId === 'pg-dashboard') renderDashboard && renderDashboard();
-  });
+  };
+  window._bmhPayRequestsListener = { ref, cb, centre };
+  ref.on('value', cb);
 }
 function runOneTimePendingDuesCleanup() {
   const cleanupKey = 'bmh_pending_dues_cleanup_20260409';
@@ -35445,19 +35477,27 @@ function saveAppointmentToFirebase(apt) {
   fbSet(`appointments/${key}`, { ...apt, id: key });
 }
 
-function listenAppointments() {
-  if (window._bmhAppointmentsListening) return;
-  window._bmhAppointmentsListening = true;
-  const centre = CURRENT_USER?.isAdmin ? null : normalizeAppointmentCentreValue(CURRENT_USER?.centre || 'CHD');
-  fbOn('appointments', data => {
+function listenAppointments(opts) {
+  opts = opts || {};
+  if (!window.FBDB) return;
+  const centre = getLiveDataCentreScope();
+  const existing = window._bmhAppointmentsListener;
+  if (existing && existing.centre === centre && !opts.force) return;
+  if (existing && existing.ref && existing.cb) {
+    try { existing.ref.off('value', existing.cb); } catch (e) {}
+  }
+  const ref = window.FBDB.ref('appointments').orderByChild('centre').equalTo(centre);
+  const cb = data => {
     APPOINTMENTS.length = 0;
-    Object.values(data || {}).forEach(function (a) {
-      if (!centre || normalizeAppointmentCentreValue(a.centre || 'CHD') === centre) APPOINTMENTS.push(a);
+    Object.values((data && typeof data.val === 'function') ? (data.val() || {}) : (data || {})).forEach(function (a) {
+      if (normalizeAppointmentCentreValue(a.centre || 'CHD') === centre) APPOINTMENTS.push(a);
     });
     const activeId = getActivePageId();
     if (activeId === 'pg-appointments') renderAptDay && renderAptDay();
     else if (activeId === 'pg-dashboard') renderDashboard && renderDashboard();
-  });
+  };
+  window._bmhAppointmentsListener = { ref, cb, centre };
+  ref.on('value', cb);
 }
 
 // ── TRANSACTIONS / COLLECTIONS ───────────────────────────────
@@ -35468,8 +35508,8 @@ function applyRealtimeTransactionRecord(txn, key) {
   if (!txn || typeof txn !== 'object') return;
   const id = String(txn.id || key || '').trim();
   if (!id) return;
-  const centre = normalizeAppointmentCentreValue((CURRENT_USER?.centre || 'CHD'));
-  if (!CURRENT_USER?.isAdmin && normalizeAppointmentCentreValue(txn.centre || 'CHD') !== centre) return;
+  const centre = getLiveDataCentreScope ? getLiveDataCentreScope() : normalizeAppointmentCentreValue((CURRENT_USER?.centre || 'CHD'));
+  if (normalizeAppointmentCentreValue(txn.centre || 'CHD') !== centre) return;
   const next = Object.assign({}, txn, { id: id });
   const idx = TRANSACTIONS.findIndex(function (row) { return String(row?.id || '') === id; });
   const isNewFromRemote = idx < 0;
@@ -35502,26 +35542,42 @@ function removeRealtimeTransactionRecord(key) {
 function startTodayTransactionsRealtimeUpdates(dateKey) {
   if (!window.FBDB) return;
   const day = dateKey || todayKey();
-  if (window._bmhTodayTransactionsRealtimeKey === day) return;
-  window._bmhTodayTransactionsRealtimeKey = day;
+  const centre = getLiveDataCentreScope ? getLiveDataCentreScope() : normalizeAppointmentCentreValue((CURRENT_USER?.centre || 'CHD'));
+  const listenerKey = day + '|' + centre;
+  if (window._bmhTodayTransactionsRealtimeKey === listenerKey) return;
+  if (window._bmhTodayTransactionsRealtimeRef && window._bmhTodayTransactionsRealtimeCallbacks) {
+    try {
+      window._bmhTodayTransactionsRealtimeRef.off('child_added', window._bmhTodayTransactionsRealtimeCallbacks.added);
+      window._bmhTodayTransactionsRealtimeRef.off('child_changed', window._bmhTodayTransactionsRealtimeCallbacks.changed);
+      window._bmhTodayTransactionsRealtimeRef.off('child_removed', window._bmhTodayTransactionsRealtimeCallbacks.removed);
+    } catch (e) {}
+  }
+  window._bmhTodayTransactionsRealtimeKey = listenerKey;
   const ref = window.FBDB.ref('transactions/' + day);
   const knownTxnIds = new Set((TRANSACTIONS || []).map(function (t) { return String(t?.id || '').trim(); }).filter(Boolean));
-  ref.on('child_added', function (snap) {
+  const callbacks = {
+    added: function (snap) {
     const key = String(snap.key || '').trim();
     if (!key || knownTxnIds.has(key)) return;
     knownTxnIds.add(key);
     applyRealtimeTransactionRecord(snap.val(), snap.key);
-  });
-  ref.on('child_changed', function (snap) {
+    },
+    changed: function (snap) {
     const key = String(snap.key || '').trim();
     if (key) knownTxnIds.add(key);
     applyRealtimeTransactionRecord(snap.val(), snap.key);
-  });
-  ref.on('child_removed', function (snap) {
+    },
+    removed: function (snap) {
     const key = String(snap.key || '').trim();
     if (key) knownTxnIds.delete(key);
     removeRealtimeTransactionRecord(snap.key);
-  });
+    }
+  };
+  window._bmhTodayTransactionsRealtimeRef = ref;
+  window._bmhTodayTransactionsRealtimeCallbacks = callbacks;
+  ref.on('child_added', callbacks.added);
+  ref.on('child_changed', callbacks.changed);
+  ref.on('child_removed', callbacks.removed);
 }
 function saveTransactionToFirebase(txn) {
   const key = txn.id || fbKey();
@@ -35952,8 +36008,8 @@ function rejectDeleteRequest(reqId) {
 
 function loadTodayTransactions() {
   const today = todayKey();
-  const centre = normalizeAppointmentCentreValue((CURRENT_USER?.centre || 'CHD'));
-  const cacheKey = today + '|' + (CURRENT_USER?.isAdmin ? 'ALL' : centre);
+  const centre = getLiveDataCentreScope ? getLiveDataCentreScope() : normalizeAppointmentCentreValue((CURRENT_USER?.centre || 'CHD'));
+  const cacheKey = today + '|' + centre;
   if (window._bmhTodayTransactionsLoadedKey === cacheKey) return;
   window._bmhTodayTransactionsLoadedKey = cacheKey;
   try {
@@ -35963,7 +36019,7 @@ function loadTodayTransactions() {
       if (Array.isArray(localRows)) {
         TRANSACTIONS.length = 0;
         localRows.forEach(function (t) {
-          if (CURRENT_USER?.isAdmin || normalizeAppointmentCentreValue(t.centre || 'CHD') === centre) TRANSACTIONS.push(t);
+          if (normalizeAppointmentCentreValue(t.centre || 'CHD') === centre) TRANSACTIONS.push(t);
         });
         bmhRunEndOfDayEegPurge && bmhRunEndOfDayEegPurge();
         renderCollectionDashboard && renderCollectionDashboard();
@@ -35982,7 +36038,7 @@ function loadTodayTransactions() {
     });
     TRANSACTIONS.length = 0;
     Object.values(merged).forEach(function (t) {
-      if (CURRENT_USER?.isAdmin || normalizeAppointmentCentreValue(t.centre || 'CHD') === centre) TRANSACTIONS.push(t);
+      if (normalizeAppointmentCentreValue(t.centre || 'CHD') === centre) TRANSACTIONS.push(t);
     });
     saveTodayTransactionsToLocal();
     bmhRunEndOfDayEegPurge && bmhRunEndOfDayEegPurge();
