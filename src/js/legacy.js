@@ -10510,9 +10510,43 @@ function bmhSyncPatientRunningBalance(bmhId) {
   fbUpdate && fbUpdate('patients/' + bmhId, { balance: due });
   return due;
 }
+// ── Queue render-cycle lookup cache ─────────────────────────────────────────
+// Built once at the start of _renderReceptionPageImpl (and _renderDashboardImpl
+// for the charges loop), cleared immediately after. Turns O(queue × arrays)
+// per-render scans into a single O(arrays) build + O(1) per-row lookups.
+let _bmhQueueRenderCache = null;
+function _buildQueueRenderCache() {
+  const payByBmhId = new Map();
+  (PAY_REQUESTS || []).forEach(function (r) {
+    if (!r || !r.bmhId) return;
+    if (!payByBmhId.has(r.bmhId)) payByBmhId.set(r.bmhId, []);
+    payByBmhId.get(r.bmhId).push(r);
+  });
+  const txnByBmhId = new Map();
+  (TRANSACTIONS || []).forEach(function (txn) {
+    if (!txn || !txn.bmhId) return;
+    if (!txnByBmhId.has(txn.bmhId)) txnByBmhId.set(txn.bmhId, []);
+    txnByBmhId.get(txn.bmhId).push(txn);
+  });
+  // Pre-compute advance balance so getQueueDisplayAdvanceBalance never calls
+  // bmhSyncPatientAdvanceBalance (which also scans PATIENTS and can write to Firebase).
+  const advanceByBmhId = new Map();
+  txnByBmhId.forEach(function (txns, bmhId) {
+    const received = txns.filter(bmhIsAdvanceTransaction)
+      .reduce(function (s, t) { return s + Math.max(0, Number(t.amount) || 0); }, 0);
+    const adjusted = txns.filter(bmhIsAdvanceAdjustmentTransaction)
+      .reduce(function (s, t) { return s + Math.max(0, Number(t.amount) || 0); }, 0);
+    advanceByBmhId.set(bmhId, Math.max(0, received - adjusted));
+  });
+  _bmhQueueRenderCache = { payByBmhId, txnByBmhId, advanceByBmhId };
+}
+
 function getQueueDisplayDueState(bmhId) {
-  const pendingPRs = (PAY_REQUESTS || []).filter(function (r) { return r.bmhId === bmhId && r.status === 'pending'; });
-  const paidPRs = (PAY_REQUESTS || []).filter(function (r) { return r.bmhId === bmhId && r.status === 'paid'; });
+  const allPay = _bmhQueueRenderCache
+    ? (_bmhQueueRenderCache.payByBmhId.get(bmhId) || [])
+    : (PAY_REQUESTS || []).filter(function (r) { return r.bmhId === bmhId; });
+  const pendingPRs = allPay.filter(function (r) { return r.status === 'pending'; });
+  const paidPRs   = allPay.filter(function (r) { return r.status === 'paid'; });
   const pendingAmt = pendingPRs.reduce(function (s, r) { return s + (Number(r.amount) || 0); }, 0);
   const computedDue = typeof bmhComputeBalanceDue === 'function' ? Number(bmhComputeBalanceDue(bmhId) || 0) : 0;
   const due = pendingAmt > 0 ? Math.max(pendingAmt, computedDue) : 0;
@@ -10520,6 +10554,10 @@ function getQueueDisplayDueState(bmhId) {
 }
 function getQueueDisplayAdvanceBalance(p) {
   if (!p || !p.bmhId) return 0;
+  if (_bmhQueueRenderCache) {
+    if (!_bmhQueueRenderCache.txnByBmhId.has(p.bmhId)) return Math.max(0, Number(p.advance) || 0);
+    return _bmhQueueRenderCache.advanceByBmhId.get(p.bmhId) ?? Math.max(0, Number(p.advance) || 0);
+  }
   const hasPatientTransactions = Array.isArray(TRANSACTIONS) && TRANSACTIONS.some(function (txn) { return txn && txn.bmhId === p.bmhId; });
   if (!hasPatientTransactions) return Math.max(0, Number(p.advance) || 0);
   if (typeof bmhSyncPatientAdvanceBalance === 'function') {
@@ -10534,8 +10572,11 @@ function getQueueDisplayAdvanceBalance(p) {
 function patientHasNoFeeConsultation(p) {
   if (!p || !p.bmhId) return false;
   if (p.consultationNoFee === true || String(p.consultationFeeType || '').toLowerCase() === 'no-fee') return true;
-  return (TRANSACTIONS || []).some(function (txn) {
-    if (!txn || txn.bmhId !== p.bmhId) return false;
+  const txns = _bmhQueueRenderCache
+    ? (_bmhQueueRenderCache.txnByBmhId.get(p.bmhId) || [])
+    : (TRANSACTIONS || []).filter(function (txn) { return txn && txn.bmhId === p.bmhId; });
+  return txns.some(function (txn) {
+    if (!txn) return false;
     return txn.noFee === true || /\b(no fee|free|waiv)/i.test(String(txn.service || txn.for || txn.desc || txn.mode || ''));
   });
 }
@@ -39839,8 +39880,9 @@ function _renderDashboardImpl() {
       return centreMatch(c) && (dateMatch(c.date) || dateMatch(c.otDate) || dateMatch(c.createdAt) || dateMatch(c.surgeryDate));
     });
     const chargeByDept = {};
+    const _patientByBmhId = new Map((PATIENTS || []).map(function (p) { return [p.bmhId, p]; }));
     Object.keys(window.BMH_PATIENT_CHARGES || {}).forEach(function (bid) {
-      const patient = PATIENTS.find(function (p) { return p.bmhId === bid; });
+      const patient = _patientByBmhId.get(bid);
       if (patient && !centreMatch(patient)) return;
       (window.BMH_PATIENT_CHARGES[bid] || []).forEach(function (line) {
         const ts = String(line.ts || line.date || '');
@@ -40141,7 +40183,10 @@ function normalizeDashboardPaymentMode(mode) {
 }
 function patientHasSurgeryDue(bmhId) {
   const lines = (window.BMH_PATIENT_CHARGES && window.BMH_PATIENT_CHARGES[bmhId]) || [];
-  const pendingPRs = (PAY_REQUESTS || []).filter(function (r) { return r.bmhId === bmhId && r.status === 'pending'; });
+  const allPay = _bmhQueueRenderCache
+    ? (_bmhQueueRenderCache.payByBmhId.get(bmhId) || [])
+    : (PAY_REQUESTS || []).filter(function (r) { return r.bmhId === bmhId; });
+  const pendingPRs = allPay.filter(function (r) { return r.status === 'pending'; });
   return lines.some(function (l) {
     const text = [l.cat, l.kind, l.parent, l.name, l.desc].join(' ').toLowerCase();
     return /surgery|procedure|lscs|pmics|phaco|delivery|labour room|mtp|laser|iol/.test(text);
@@ -40399,7 +40444,12 @@ function _renderReceptionPageImpl() {
     if(!pts.length) {
       list.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--g1);font-size:13px">No patients in this view</td></tr>';
     } else {
-      list.innerHTML = pts.map((p,i)=>buildQTableRow(p,i+1,{receptionQueue:true})).join('');
+      _buildQueueRenderCache();
+      try {
+        list.innerHTML = pts.map((p,i)=>buildQTableRow(p,i+1,{receptionQueue:true})).join('');
+      } finally {
+        _bmhQueueRenderCache = null;
+      }
     }
   }
 
