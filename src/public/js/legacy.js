@@ -6638,6 +6638,9 @@ function renderOphthoPayList() {
 setInterval(function () {
   PATIENTS.forEach(function (p) {
     if (!p || typeof p.bmhId !== 'string') return;
+    // Skip non-dilated patients before touching the DOM — avoids O(n) getElementById
+    // calls on every tick for large datasets (notably CHD)
+    if (!p.dilated || !p.dilatedTime || p.dept !== 'ophtho') return;
     const el = document.getElementById('dt-' + p.bmhId.replace(/-/g, ''));
     if (!el) return;
     const m = getPatientActiveDilationMinutes(p);
@@ -32225,6 +32228,11 @@ async function repairDuplicatePatientsForIdentity(input) {
 async function repairDuplicatePatientsByIdentity() {
   if (window._bmhDuplicateRepairRunning) return;
   window._bmhDuplicateRepairRunning = true;
+  // Suppress per-write realtime flushes during repair — each Firebase write would
+  // otherwise trigger a full PATIENTS rebuild + render, causing a render storm on
+  // large datasets (notably CHD). One flush is done manually in finally instead.
+  window._bmhSuppressRealtimeFlush = true;
+  let repairs = 0;
   try {
     const source = Array.isArray(window._BMH_ALL_PATIENTS_CACHE) && window._BMH_ALL_PATIENTS_CACHE.length
       ? window._BMH_ALL_PATIENTS_CACHE
@@ -32240,7 +32248,6 @@ async function repairDuplicatePatientsByIdentity() {
         groups.get(groupKey).push(p);
       });
     });
-    let repairs = 0;
     for (const patients of groups.values()) {
       const unique = Array.from(new Map((patients || []).map(function (p) {
         return [String(p?.bmhId || ''), p];
@@ -32261,6 +32268,12 @@ async function repairDuplicatePatientsByIdentity() {
     console.warn('duplicate patient repair failed', e);
   } finally {
     window._bmhDuplicateRepairRunning = false;
+    window._bmhSuppressRealtimeFlush = false;
+    // Single deferred rebuild + render after all merges are done
+    if (repairs > 0) {
+      rebuildPatientsArrayFromGlobalCache && rebuildPatientsArrayFromGlobalCache();
+      _debouncedRenderDash && _debouncedRenderDash();
+    }
   }
 }
 window.repairDuplicatePatientsByIdentity = repairDuplicatePatientsByIdentity;
@@ -32292,6 +32305,42 @@ function dedupeQueueEntriesByKey(rows) {
     const existingStamp = Date.parse(existing.updatedAt || existing.createdAt || existing.queueDate || '') || Number(existing.checkinAt || 0) || 0;
     const nextStamp = Date.parse(row.updatedAt || row.createdAt || row.queueDate || '') || Number(row.checkinAt || 0) || 0;
     if (nextStamp >= existingStamp) map.set(key, row);
+  });
+  return Array.from(map.values());
+}
+function getQueueRowDeptKey(row) {
+  return normalizeDeptKeyForQueue(row?.dept || row?.department || '');
+}
+function getQueueRowFreshness(row) {
+  return Date.parse(row?._xrefCreatedAt || row?.updatedAt || row?.createdAt || row?.queueDate || '') || Number(row?.checkinAt || 0) || 0;
+}
+function dedupeQueueRowsByPatientDept(rows) {
+  const map = new Map();
+  (rows || []).forEach(function (row) {
+    if (!row) return;
+    const bmhId = String(row.bmhId || '').trim();
+    const deptKey = getQueueRowDeptKey(row);
+    const fallbackKey = String(row._queueKey || '').trim();
+    const key = (bmhId && deptKey) ? (bmhId + '::dept::' + deptKey) : fallbackKey;
+    if (!key) return;
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, row);
+      return;
+    }
+    const existingDirect = !existing._xrefEntry;
+    const nextDirect = !row._xrefEntry;
+    if (existingDirect !== nextDirect) {
+      map.set(key, existingDirect ? existing : row);
+      return;
+    }
+    const existingActive = !isPatientMarkedSeen(existing);
+    const nextActive = !isPatientMarkedSeen(row);
+    if (existingActive !== nextActive) {
+      map.set(key, nextActive ? row : existing);
+      return;
+    }
+    if (getQueueRowFreshness(row) >= getQueueRowFreshness(existing)) map.set(key, row);
   });
   return Array.from(map.values());
 }
@@ -35115,6 +35164,7 @@ function flushRealtimePatientUpdates() {
 }
 function scheduleRealtimePatientFlush() {
   if (window._bmhRealtimePatientFlushTimer) return;
+  if (window._bmhSuppressRealtimeFlush) return;
   if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
     window._bmhRealtimePatientFlushTimer = window.requestAnimationFrame(function () {
       setTimeout(flushRealtimePatientUpdates, 0);
@@ -40238,11 +40288,11 @@ function getReceptionBasePts() {
   // Filter base patients by dept
   if (df !== 'all') basePts = basePts.filter(function(p) { return p.dept === df; });
 
-  return dedupeQueueEntriesByKey(basePts.concat(xrefEntries));
+  return dedupeQueueRowsByPatientDept(dedupeQueueEntriesByKey(basePts.concat(xrefEntries)));
 }
 
 function computeReceptionQueuePts() {
-  let pts = dedupeQueueEntriesByKey(getReceptionBasePts());
+  let pts = dedupeQueueRowsByPatientDept(dedupeQueueEntriesByKey(getReceptionBasePts()));
   const todayKeyLocal = localDateKey(new Date());
   const sub = window._rcQueueSubtab || 'waiting';
   if(sub === 'seen') pts = pts.filter(p=>patientDoneQueueMatchesToday(p, todayKeyLocal));
@@ -41515,7 +41565,7 @@ function _renderDocQueueImpl() {
       return !userDept || ptDept === userDept || (!ptDept && userDept === 'ophtho');
     });
   })();
-  const filteredPts = (searchQ ? myPts.filter(function (p) {
+  const filteredPts = dedupeQueueRowsByPatientDept(searchQ ? myPts.filter(function (p) {
     const hay = [
       p.name,
       p.bmhId,
