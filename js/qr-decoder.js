@@ -11,8 +11,8 @@ window.BMH_QR_DECODE = function (imageData) {
 };
 
 (function installReceptionTargetedPatientLookup() {
-  if (window.__bmhReceptionTargetedPatientLookupV3) return;
-  window.__bmhReceptionTargetedPatientLookupV3 = true;
+  if (window.__bmhReceptionTargetedPatientLookupV4) return;
+  window.__bmhReceptionTargetedPatientLookupV4 = true;
 
   const SEQ_DAY_KEY = 'bmh_patient_sequence_boot_day';
   const SEQ_LOCAL_KEY = 'bmh_last_patient_num';
@@ -226,25 +226,27 @@ window.BMH_QR_DECODE = function (imageData) {
     if (!window.FBDB) return [];
     const text = String(raw || '').trim().toUpperCase().replace(/\s+/g, '');
     const digits = text.replace(/\D/g, '');
-    if (digits.length < 4) return [];
+    if (digits.length < 5) return [];
     const found = new Map();
-    const exact = bmhId(text) || (digits.length <= 6 ? bmhFromNum(Number(digits)) : '');
-    if (exact) {
+    const exact = bmhId(text) || (digits.length >= 6 ? bmhFromNum(Number(digits.slice(0, 6))) : '');
+    if (exact && digits.length >= 6) {
       const p = await fetchById(exact);
       if (p && !isMerged(p)) found.set(p.bmhId, p);
     }
-    const prefix = text.startsWith('BMSH') ? text.replace(/BMSH[-\s]*/i, BMSH_PREFIX) : BMSH_PREFIX + digits;
-    if (/^BMSH-\d{4,9}$/.test(prefix)) {
-      try {
-        const snap = await window.FBDB.ref('patients').orderByKey().startAt(prefix).endAt(prefix + '\uf8ff').limitToFirst(12).once('value');
-        const data = snap && snap.val ? (snap.val() || {}) : {};
-        Object.keys(data).forEach(k => {
-          const p = upsertLocalPatient(data[k], k);
-          if (p && p.bmhId && !isMerged(p)) found.set(p.bmhId, p);
-        });
-      } catch (_) {}
+    if (digits.length === 5) {
+      const prefix = text.startsWith('BMSH') ? text.replace(/BMSH[-\s]*/i, BMSH_PREFIX) : BMSH_PREFIX + digits;
+      if (/^BMSH-\d{5}$/.test(prefix)) {
+        try {
+          const snap = await window.FBDB.ref('patients').orderByKey().startAt(prefix).endAt(prefix + '\uf8ff').limitToFirst(9).once('value');
+          const data = snap && snap.val ? (snap.val() || {}) : {};
+          Object.keys(data).forEach(k => {
+            const p = upsertLocalPatient(data[k], k);
+            if (p && p.bmhId && !isMerged(p)) found.set(p.bmhId, p);
+          });
+        } catch (_) {}
+      }
     }
-    await Promise.all(Array.from(found.values()).slice(0, 6).map(p => fetchHistory(p.bmhId)));
+    await Promise.all(Array.from(found.values()).slice(0, 9).map(p => fetchHistory(p.bmhId)));
     return Array.from(found.values());
   }
 
@@ -266,21 +268,30 @@ window.BMH_QR_DECODE = function (imageData) {
     if (!window.FBDB || !phoneKey(raw)) return [];
     const key = phoneKey(raw);
     const found = new Map();
+    const useExact = key.length >= 10;
     try {
-      const idx = await window.FBDB.ref('phoneIndex/' + key).once('value');
-      const indexed = await fetchPatientsByIds(idsFromIndexValue(idx && idx.val ? idx.val() : null));
+      const idxRef = useExact
+        ? window.FBDB.ref('phoneIndex/' + key)
+        : window.FBDB.ref('phoneIndex').orderByKey().startAt(key).endAt(key + '\uf8ff').limitToFirst(12);
+      const idx = await idxRef.once('value');
+      const val = idx && idx.val ? idx.val() : null;
+      const ids = useExact ? idsFromIndexValue(val) : Object.keys(val || {}).flatMap(k => idsFromIndexValue(val[k]));
+      const indexed = await fetchPatientsByIds(ids);
       indexed.forEach(p => { if (p && p.bmhId && !isMerged(p)) found.set(p.bmhId, p); });
     } catch (_) {}
-    await Promise.all(['mob', 'mobile', 'mob2', 'altMobile'].map(field => Promise.all(phoneVariants(raw).map(value =>
-      window.FBDB.ref('patients').orderByChild(field).equalTo(value).limitToFirst(12).once('value').then(snap => {
+    await Promise.all(['mob', 'mobile', 'mob2', 'altMobile'].map(field => Promise.all(phoneVariants(raw).map(value => {
+      const q = useExact
+        ? window.FBDB.ref('patients').orderByChild(field).equalTo(value).limitToFirst(12)
+        : window.FBDB.ref('patients').orderByChild(field).startAt(value).endAt(value + '\uf8ff').limitToFirst(12);
+      return q.once('value').then(snap => {
         const data = snap && snap.val ? (snap.val() || {}) : {};
         Object.keys(data).forEach(k => {
           const p = upsertLocalPatient(data[k], k);
           if (p && p.bmhId && !isMerged(p)) found.set(p.bmhId, p);
         });
-      }).catch(() => {})
-    ))));
-    await Promise.all(Array.from(found.values()).slice(0, 8).map(p => fetchHistory(p.bmhId)));
+      }).catch(() => {});
+    }))));
+    await Promise.all(Array.from(found.values()).slice(0, 12).map(p => fetchHistory(p.bmhId)));
     return Array.from(found.values());
   }
 
@@ -288,7 +299,7 @@ window.BMH_QR_DECODE = function (imageData) {
     const text = String(raw || '').trim();
     const digits = text.replace(/\D/g, '');
     const isBmh = reason === 'bmhid' || /BMSH/i.test(text);
-    if (isBmh && digits.length < 4) return;
+    if (isBmh && digits.length < 5) return;
     if (!isBmh && digits.length < 5) return;
     const key = reason + ':' + text;
     if (key === lastLookupKey) return;
@@ -330,8 +341,8 @@ window.BMH_QR_DECODE = function (imageData) {
   }
 
   function wrap() {
-    if (window.__bmhReceptionTargetedPatientLookupWrappedV3 || typeof window.registerPatient !== 'function') return;
-    window.__bmhReceptionTargetedPatientLookupWrappedV3 = true;
+    if (window.__bmhReceptionTargetedPatientLookupWrappedV4 || typeof window.registerPatient !== 'function') return;
+    window.__bmhReceptionTargetedPatientLookupWrappedV4 = true;
     const oldId = window.lookupByBMHID;
     if (typeof oldId === 'function') window.lookupByBMHID = function (v) { const r = oldId.apply(this, arguments); schedule(v, 'bmhid', () => oldId.call(window, v)); return r; };
     const oldPhone = window.lookupByPhone;
