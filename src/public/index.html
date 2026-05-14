@@ -5646,7 +5646,7 @@
     <div class="form-group"><label class="fl">Dose / Route</label><input type="text" id="pn-dose" placeholder="e.g. 1 g IV, 1 drop OU"></div>
   </div>
   <div class="form-group"><label class="fl">Doctor Orders Followed</label><input type="text" id="pn-orders" placeholder="e.g. Continue hourly vitals, observe bleeding, keep NBM"></div>
-  <div class="form-group"><label class="fl">Staff Nurse</label><input type="text" id="pn-nurse" placeholder="Name of nurse performing examination"></div>
+  <div class="form-group"><label class="fl">Staff Nurse</label><div style="display:flex;gap:6px"><select id="pn-nurse" style="flex:1"></select><button type="button" class="btn btn-xs btn-outline" onclick="addIPDNurseName()">Add</button><button type="button" class="btn btn-xs btn-gray" onclick="deleteSelectedIPDNurseName()">Delete</button></div></div>
   <div class="form-group"><label class="fl">Doctor</label><select id="pn-doctor"><option>Dr. Varun Baweja</option><option>Dr. Geeta Baweja</option><option>Dr. Namrata Baweja</option></select></div>
   <button class="btn btn-gold" onclick="saveProgressNote()">💾 Save Note</button>
 </div></div></div>
@@ -6380,7 +6380,7 @@
 <div id="dx-dropdown" style="display:none;z-index:100000;background:#fff;border:2px solid var(--blue);border-radius:var(--rsm);max-height:280px;overflow-y:auto;box-shadow:var(--sh-md)"></div>
 
 <!-- ═══ MAIN APP SCRIPT (legacy — being migrated to modules) ═══ -->
-<script defer src="%BASE_URL%js/legacy.js?v=20260514-history-ipd-ot-restore"></script>
+<script defer src="%BASE_URL%js/legacy.js?v=20260514-ipd-workflow-filter-discharge"></script>
 
 <!-- ═══ QR DECODER BRIDGE ═══ -->
 <script type="module" src="./js/qr-decoder.js"></script>
