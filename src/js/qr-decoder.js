@@ -11,22 +11,45 @@ window.BMH_QR_DECODE = function (imageData) {
 };
 
 (function installReceptionTargetedPatientLookup() {
-  if (window.__bmhReceptionTargetedPatientLookupV2) return;
-  window.__bmhReceptionTargetedPatientLookupV2 = true;
+  if (window.__bmhReceptionTargetedPatientLookupV3) return;
+  window.__bmhReceptionTargetedPatientLookupV3 = true;
+
+  const SEQ_DAY_KEY = 'bmh_patient_sequence_boot_day';
+  const SEQ_LOCAL_KEY = 'bmh_last_patient_num';
+  const BMSH_PREFIX = 'BMSH-';
 
   const bmhNum = v => { const m = String(v || '').trim().match(/^BMSH-(\d{1,9})$/i); return m ? parseInt(m[1], 10) : 0; };
-  const bmhId = v => { const s = String(v || '').trim().toUpperCase().replace(/\s+/g, '').replace(/BMSH[-\s]*/i, 'BMSH-'); return /^BMSH-\d{3,9}$/.test(s) ? s : ''; };
+  const bmhId = v => { const s = String(v || '').trim().toUpperCase().replace(/\s+/g, '').replace(/BMSH[-\s]*/i, BMSH_PREFIX); return /^BMSH-\d{3,9}$/.test(s) ? s : ''; };
+  const bmhFromNum = n => BMSH_PREFIX + String(Number(n || 0)).padStart(6, '0');
   const phoneKey = v => { const d = String(v || '').replace(/\D/g, ''); return d.length < 5 ? '' : (d.length >= 10 ? d.slice(-10) : d); };
   const isMerged = p => !!(p && (p.mergedInto || p.inactive || String(p.status || '').toLowerCase() === 'merged'));
-  const phoneKeys = p => Array.from(new Set([p?.mob, p?.mobile, p?.mob2, p?.altMobile].map(phoneKey).filter(Boolean)));
+  const todayKey = () => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + day;
+  };
+
+  let sequenceFloor = Number(localStorage.getItem(SEQ_LOCAL_KEY) || 0) || 0;
+  let sequenceReady = false;
+  let sequencePromise = null;
+  let lookupTimer = null;
+  let lastLookupKey = '';
+
+  function setStatus(text) {
+    const el = document.getElementById('rc-uid');
+    if (el) el.textContent = text;
+  }
 
   function applySequenceFloor(num) {
     const n = Number(num || 0);
     if (!Number.isFinite(n) || n <= 0) return;
-    window._nextPatientNum = Math.max(Number(window._nextPatientNum || 0), n + 1);
-    try { localStorage.setItem('bmh_last_patient_num', String(n)); } catch (_) {}
+    sequenceFloor = Math.max(sequenceFloor, n);
+    window._nextPatientNum = Math.max(Number(window._nextPatientNum || 0), sequenceFloor + 1);
+    try { localStorage.setItem(SEQ_LOCAL_KEY, String(sequenceFloor)); } catch (_) {}
     const el = document.getElementById('rc-uid');
-    if (el) el.textContent = 'BMSH-' + String(window._nextPatientNum).padStart(6, '0');
+    if (el && (!bmhId(el.textContent) || bmhNum(el.textContent) <= sequenceFloor)) el.textContent = bmhFromNum(sequenceFloor + 1);
   }
 
   function normalizePatient(row, key) {
@@ -51,6 +74,12 @@ window.BMH_QR_DECODE = function (imageData) {
     return p;
   }
 
+  function hasLocalPatient(id) {
+    const key = bmhId(id);
+    if (!key) return false;
+    return [window.PATIENTS, window._BMH_ALL_PATIENTS_CACHE].some(list => Array.isArray(list) && list.some(p => String(p?.bmhId || '').trim().toUpperCase() === key));
+  }
+
   function valuesByDate(data) {
     return Object.keys(data || {}).map(k => {
       const row = data[k];
@@ -62,7 +91,7 @@ window.BMH_QR_DECODE = function (imageData) {
     const key = bmhId(id);
     if (!key || !h) return;
     [window.PATIENTS, window._BMH_ALL_PATIENTS_CACHE].filter(Array.isArray).forEach(list => {
-      const i = list.findIndex(p => String(p?.bmhId || '').trim() === key);
+      const i = list.findIndex(p => String(p?.bmhId || '').trim().toUpperCase() === key);
       if (i < 0) return;
       list[i] = Object.assign({}, list[i], {
         visits: h.visits || list[i].visits || [],
@@ -101,21 +130,81 @@ window.BMH_QR_DECODE = function (imageData) {
     }
   }
 
-  async function refreshSequenceFloor() {
+  function collectSequenceNums(data, nums) {
+    Object.keys(data || {}).forEach(k => {
+      const row = data[k] || {};
+      const n = Math.max(bmhNum(k), bmhNum(row.bmhId));
+      if (n > 0) nums.push(n);
+    });
+  }
+
+  async function repairSequenceFromLatestKeys() {
     if (!window.FBDB) return 0;
     const nums = [];
-    try { const s = await window.FBDB.ref('settings/lastPatientNum').once('value'); const n = Number(s && s.val ? s.val() : 0); if (n > 0) nums.push(n); } catch (_) {}
     try {
-      const snap = await window.FBDB.ref('patients').orderByKey().limitToLast(80).once('value');
-      const data = snap && snap.val ? (snap.val() || {}) : {};
-      Object.keys(data).forEach(k => { const n = Math.max(bmhNum(k), bmhNum(data[k]?.bmhId)); if (n > 0) nums.push(n); });
+      const snap = await window.FBDB.ref('patients').orderByKey().limitToLast(40).once('value');
+      collectSequenceNums(snap && snap.val ? (snap.val() || {}) : {}, nums);
     } catch (_) {}
     const max = Math.max(0, ...nums);
-    if (max > 0) applySequenceFloor(max);
+    if (max > 0) {
+      applySequenceFloor(max);
+      try {
+        await window.FBDB.ref('settings/lastPatientNum').transaction(cur => Math.max(Number(cur || 0), max));
+      } catch (_) {}
+    }
     return max;
   }
 
-  function variants(v) {
+  async function initialiseSequence(opts = {}) {
+    if (!window.FBDB) return 0;
+    if (sequencePromise && !opts.force) return sequencePromise;
+    sequencePromise = (async function () {
+      const nums = [];
+      try {
+        const s = await window.FBDB.ref('settings/lastPatientNum').once('value');
+        const n = Number(s && s.val ? s.val() : 0);
+        if (n > 0) nums.push(n);
+      } catch (_) {}
+      const day = todayKey();
+      let repaired = 0;
+      try {
+        if (opts.forceDailyRepair || localStorage.getItem(SEQ_DAY_KEY) !== day) {
+          repaired = await repairSequenceFromLatestKeys();
+          localStorage.setItem(SEQ_DAY_KEY, day);
+        }
+      } catch (_) {}
+      const max = Math.max(repaired, sequenceFloor, ...nums);
+      if (max > 0) applySequenceFloor(max);
+      sequenceReady = max > 0;
+      return max;
+    })().finally(() => { sequencePromise = null; });
+    return sequencePromise;
+  }
+
+  async function reserveNextPatientId() {
+    if (!window.FBDB) return '';
+    await initialiseSequence();
+    try {
+      const res = await window.FBDB.ref('settings/lastPatientNum').transaction(cur => {
+        const current = Math.max(Number(cur || 0), sequenceFloor || 0);
+        return current + 1;
+      });
+      const n = Number(res && res.snapshot && res.snapshot.val ? res.snapshot.val() : 0);
+      if (!n) throw new Error('No patient counter value returned');
+      sequenceReady = true;
+      sequenceFloor = n;
+      window._nextPatientNum = n + 1;
+      try { localStorage.setItem(SEQ_LOCAL_KEY, String(n)); } catch (_) {}
+      const id = bmhFromNum(n);
+      setStatus(id);
+      return id;
+    } catch (e) {
+      console.warn('BMSH counter reservation failed', e);
+      return '';
+    }
+  }
+
+  function phoneVariants(v) {
     const raw = String(v || '').trim();
     const d = raw.replace(/\D/g, '');
     const l = d.length >= 10 ? d.slice(-10) : d;
@@ -133,10 +222,56 @@ window.BMH_QR_DECODE = function (imageData) {
     } catch (e) { console.warn('Reception BMSH lookup failed', e); return null; }
   }
 
+  async function fetchByIdPrefix(raw) {
+    if (!window.FBDB) return [];
+    const text = String(raw || '').trim().toUpperCase().replace(/\s+/g, '');
+    const digits = text.replace(/\D/g, '');
+    if (digits.length < 4) return [];
+    const found = new Map();
+    const exact = bmhId(text) || (digits.length <= 6 ? bmhFromNum(Number(digits)) : '');
+    if (exact) {
+      const p = await fetchById(exact);
+      if (p && !isMerged(p)) found.set(p.bmhId, p);
+    }
+    const prefix = text.startsWith('BMSH') ? text.replace(/BMSH[-\s]*/i, BMSH_PREFIX) : BMSH_PREFIX + digits;
+    if (/^BMSH-\d{4,9}$/.test(prefix)) {
+      try {
+        const snap = await window.FBDB.ref('patients').orderByKey().startAt(prefix).endAt(prefix + '\uf8ff').limitToFirst(12).once('value');
+        const data = snap && snap.val ? (snap.val() || {}) : {};
+        Object.keys(data).forEach(k => {
+          const p = upsertLocalPatient(data[k], k);
+          if (p && p.bmhId && !isMerged(p)) found.set(p.bmhId, p);
+        });
+      } catch (_) {}
+    }
+    await Promise.all(Array.from(found.values()).slice(0, 6).map(p => fetchHistory(p.bmhId)));
+    return Array.from(found.values());
+  }
+
+  async function fetchPatientsByIds(ids) {
+    const keys = Array.from(new Set((ids || []).map(bmhId).filter(Boolean))).slice(0, 12);
+    const rows = await Promise.all(keys.map(id => fetchById(id).catch(() => null)));
+    return rows.filter(Boolean);
+  }
+
+  function idsFromIndexValue(value) {
+    if (!value) return [];
+    if (typeof value === 'string') return [value];
+    if (Array.isArray(value)) return value;
+    if (typeof value === 'object') return Object.keys(value).map(k => value[k] === true ? k : value[k]).filter(Boolean);
+    return [];
+  }
+
   async function fetchByPhone(raw) {
     if (!window.FBDB || !phoneKey(raw)) return [];
+    const key = phoneKey(raw);
     const found = new Map();
-    await Promise.all(['mob', 'mobile', 'mob2', 'altMobile'].map(field => Promise.all(variants(raw).map(value =>
+    try {
+      const idx = await window.FBDB.ref('phoneIndex/' + key).once('value');
+      const indexed = await fetchPatientsByIds(idsFromIndexValue(idx && idx.val ? idx.val() : null));
+      indexed.forEach(p => { if (p && p.bmhId && !isMerged(p)) found.set(p.bmhId, p); });
+    } catch (_) {}
+    await Promise.all(['mob', 'mobile', 'mob2', 'altMobile'].map(field => Promise.all(phoneVariants(raw).map(value =>
       window.FBDB.ref('patients').orderByChild(field).equalTo(value).limitToFirst(12).once('value').then(snap => {
         const data = snap && snap.val ? (snap.val() || {}) : {};
         Object.keys(data).forEach(k => {
@@ -149,26 +284,27 @@ window.BMH_QR_DECODE = function (imageData) {
     return Array.from(found.values());
   }
 
-  let timer = null, lastKey = '';
   function schedule(raw, reason, done) {
     const text = String(raw || '').trim();
     const digits = text.replace(/\D/g, '');
-    if (text.length < 3 && digits.length < 5) return;
+    const isBmh = reason === 'bmhid' || /BMSH/i.test(text);
+    if (isBmh && digits.length < 4) return;
+    if (!isBmh && digits.length < 5) return;
     const key = reason + ':' + text;
-    if (key === lastKey) return;
-    clearTimeout(timer);
-    timer = setTimeout(async () => {
-      lastKey = key;
+    if (key === lastLookupKey) return;
+    clearTimeout(lookupTimer);
+    lookupTimer = setTimeout(async () => {
+      lastLookupKey = key;
       const before = Array.isArray(window.PATIENTS) ? window.PATIENTS.length : 0;
-      if (/^BMSH[-\s]*\d{3,9}$/i.test(text)) await fetchById(text);
-      if (digits.length >= 5) await fetchByPhone(text);
+      if (isBmh) await fetchByIdPrefix(text);
+      if (!isBmh && digits.length >= 5) await fetchByPhone(text);
       const after = Array.isArray(window.PATIENTS) ? window.PATIENTS.length : 0;
       if (after !== before && typeof done === 'function') done();
-    }, 280);
+    }, 320);
   }
 
   async function ensureBeforeRegister() {
-    await refreshSequenceFloor();
+    await initialiseSequence();
     const uid = (document.getElementById('rc-uid')?.textContent || '').trim();
     const mob = (document.getElementById('rc-mob-inp')?.value || document.getElementById('rc-mob')?.value || '').trim();
     const mob2 = (document.getElementById('rc-mob2')?.value || '').trim();
@@ -179,9 +315,23 @@ window.BMH_QR_DECODE = function (imageData) {
     if (jobs.length) await Promise.all(jobs);
   }
 
+  async function prepareIdForRegister(forceNew) {
+    const floor = await initialiseSequence({ force: true });
+    if (!floor) {
+      window.showToast?.('Could not verify the BMSH counter. Registration stopped to prevent duplicate IDs.', 'e');
+      return '';
+    }
+    if (!forceNew) await ensureBeforeRegister();
+    const current = bmhId(document.getElementById('rc-uid')?.textContent || '');
+    if (!forceNew && current && hasLocalPatient(current)) return current;
+    const reserved = await reserveNextPatientId();
+    if (!reserved) window.showToast?.('Could not reserve the next BMSH number. Registration stopped to prevent duplicate IDs.', 'e');
+    return reserved;
+  }
+
   function wrap() {
-    if (window.__bmhReceptionTargetedPatientLookupWrappedV2 || typeof window.registerPatient !== 'function') return;
-    window.__bmhReceptionTargetedPatientLookupWrappedV2 = true;
+    if (window.__bmhReceptionTargetedPatientLookupWrappedV3 || typeof window.registerPatient !== 'function') return;
+    window.__bmhReceptionTargetedPatientLookupWrappedV3 = true;
     const oldId = window.lookupByBMHID;
     if (typeof oldId === 'function') window.lookupByBMHID = function (v) { const r = oldId.apply(this, arguments); schedule(v, 'bmhid', () => oldId.call(window, v)); return r; };
     const oldPhone = window.lookupByPhone;
@@ -189,14 +339,22 @@ window.BMH_QR_DECODE = function (imageData) {
     const oldSearch = window.searchPatientByPhone;
     if (typeof oldSearch === 'function') window.searchPatientByPhone = function (v) { const r = oldSearch.apply(this, arguments); schedule(v, 'phone-dropdown', () => oldSearch.call(window, v)); return r; };
     const oldGen = window.genRcUID;
-    if (typeof oldGen === 'function') window.genRcUID = function () { const id = oldGen.apply(this, arguments); refreshSequenceFloor(); return id; };
+    if (typeof oldGen === 'function') window.genRcUID = function () {
+      const current = bmhId(document.getElementById('rc-uid')?.textContent || '');
+      if (current && sequenceReady) return current;
+      if (!sequenceReady) setStatus('Checking BMSH...');
+      initialiseSequence().then(max => { if (!max) oldGen.apply(window, arguments); });
+      return current || '';
+    };
     const oldReg = window.registerPatient;
     window.registerPatient = async function () {
       const forceNew = !!document.getElementById('rc-force-new-bmsh')?.checked;
-      if (!forceNew) await ensureBeforeRegister(); else await refreshSequenceFloor();
+      const id = await prepareIdForRegister(forceNew);
+      if (!id) return;
       return oldReg.apply(this, arguments);
     };
-    refreshSequenceFloor();
+    if (!sequenceReady) setStatus('Checking BMSH...');
+    initialiseSequence({ forceDailyRepair: true });
   }
 
   wrap();
