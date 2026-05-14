@@ -636,6 +636,7 @@ const syncAppointmentToHms = async (form, formData) => {
   const service = formData.service || formData.dept || 'Consultation';
   const centre = normaliseWebsiteCentre(form.dataset.centre, 'CHD');
   const createdAt = new Date().toISOString();
+  const utm = new URLSearchParams(window.location.search);
   const payload = {
     id: `WEB-${centre}-${Date.now()}`,
     patient: formData.name || 'Website patient',
@@ -652,7 +653,8 @@ const syncAppointmentToHms = async (form, formData) => {
     centre,
     notes: formData.message || '',
     status: 'website-request',
-    source: form.dataset.leadSource || 'website',
+    source: utm.get('utm_source') || form.dataset.leadSource || 'website',
+    appointmentMode: formData.mode || formData.appointmentMode || 'In person',
     page: window.location.href,
     createdAt,
     bookedAt: createdAt,
