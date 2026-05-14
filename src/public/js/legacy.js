@@ -16595,9 +16595,14 @@ function _iolBrandLabel(i) {
   return String(i.iolCompany || i.vendor || 'IOL').trim();
 }
 window._inventoryStockBrowserSelection = window._inventoryStockBrowserSelection || {};
+window._inventoryStockOpenDepartments = window._inventoryStockOpenDepartments || {};
 function bmhInventoryStockBrowserKey(dept, store) {
   return [String(dept || ''), String(store || '')].join('||');
 }
+function bmhToggleInventoryStockDepartment(dept, isOpen) {
+  window._inventoryStockOpenDepartments[String(dept || '')] = !!isOpen;
+}
+window.bmhToggleInventoryStockDepartment = bmhToggleInventoryStockDepartment;
 function bmhInventoryStockStoreSelectionKey(dept) {
   return 'store::' + String(dept || '');
 }
@@ -16612,6 +16617,79 @@ function bmhSelectInventoryStockCategory(dept, store, cat) {
   renderStockList && renderStockList();
 }
 window.bmhSelectInventoryStockCategory = bmhSelectInventoryStockCategory;
+function printInventoryCurrentStockReport() {
+  const catFilter = bmhInventoryFilterValue('inv-stock-cat-filter');
+  const storeFilter = bmhInventoryFilterValue('inv-stock-store-filter');
+  const rows = (INVENTORY || []).filter(function (i) {
+    return (catFilter === 'all' || String(i.cat || '') === catFilter)
+      && (storeFilter === 'all' || String(i.store || '') === storeFilter)
+      && !/^(MFX-001|PDN-002|CMC-003|TIM-004|IOL-021|IOL-023|OTP-001|BEV-001|MAN-001|RL-001)$/.test(String(i.barcode || ''));
+  });
+  if (!rows.length) { showToast('No stock items to print', 'w'); return; }
+  const grouped = {};
+  rows.forEach(function (row) {
+    const dept = String(row.dept || 'general');
+    const store = String(row.store || 'Unassigned store');
+    const cat = String(row.cat || 'General').trim() || 'General';
+    const itemName = String(row.cat || '').toLowerCase() === 'iol'
+      ? [_iolBrandLabel(row), row.power || extractIolPower(row.name || '')].filter(Boolean).join(' ')
+      : String(row.name || 'Unnamed item');
+    if (!grouped[dept]) grouped[dept] = {};
+    if (!grouped[dept][store]) grouped[dept][store] = {};
+    if (!grouped[dept][store][cat]) grouped[dept][store][cat] = {};
+    if (!grouped[dept][store][cat][itemName]) grouped[dept][store][cat][itemName] = 0;
+    grouped[dept][store][cat][itemName] += Math.max(0, Number(row.stock || 0));
+  });
+  const deptHtml = Object.keys(grouped).sort(function (a, b) { return bmhDeptLabel(a).localeCompare(bmhDeptLabel(b)); }).map(function (dept) {
+    const stores = grouped[dept] || {};
+    return `<section class="inv-print-dept">
+      <h2>${escapeHtmlConsent(bmhDeptLabel(dept))}</h2>
+      ${Object.keys(stores).sort().map(function (store) {
+        const cats = stores[store] || {};
+        return `<div class="inv-print-store">
+          <h3>${escapeHtmlConsent(store)}</h3>
+          ${Object.keys(cats).sort(function (a, b) {
+            if (String(a).toLowerCase() === 'iol') return -1;
+            if (String(b).toLowerCase() === 'iol') return 1;
+            return String(a).localeCompare(String(b));
+          }).map(function (cat) {
+            const items = cats[cat] || {};
+            return `<div class="inv-print-cat">
+              <h4>${escapeHtmlConsent(cat)}</h4>
+              <ul>${Object.keys(items).sort().map(function (name) {
+                return `<li><span>${escapeHtmlConsent(name)}</span><strong>${Number(items[name] || 0)}</strong></li>`;
+              }).join('')}</ul>
+            </div>`;
+          }).join('')}
+        </div>`;
+      }).join('')}
+    </section>`;
+  }).join('');
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Inventory Stock Report</title><style>
+    @page { size: A4; margin: 10mm; }
+    body { font-family: Arial, sans-serif; color:#111; font-size:11px; margin:0; }
+    h1 { margin:0 0 10px; font-size:18px; }
+    .sub { margin:0 0 12px; font-size:10px; color:#555; }
+    .cols { column-count:2; column-gap:14mm; }
+    .inv-print-dept, .inv-print-store, .inv-print-cat { break-inside: avoid; margin:0 0 10px; }
+    h2 { font-size:13px; margin:0 0 6px; padding-bottom:2px; border-bottom:1px solid #bbb; }
+    h3 { font-size:11px; margin:0 0 4px; color:#1A3C6E; }
+    h4 { font-size:10px; margin:6px 0 3px; text-transform:uppercase; color:#555; }
+    ul { list-style:none; padding:0; margin:0; }
+    li { display:flex; justify-content:space-between; gap:8px; padding:2px 0; border-bottom:1px dotted #ddd; }
+    li strong { font-size:11px; }
+  </style></head><body>
+    <h1>Inventory Stock Report</h1>
+    <div class="sub">Printed on ${escapeHtmlConsent(formatDateIN(new Date()))}${catFilter !== 'all' ? ' · Category: ' + escapeHtmlConsent(catFilter) : ''}${storeFilter !== 'all' ? ' · Store: ' + escapeHtmlConsent(storeFilter) : ''}</div>
+    <div class="cols">${deptHtml}</div>
+    <script>window.onload=function(){window.print()}<\/script>
+  </body></html>`;
+  const win = window.open('', '_blank');
+  if (!win) { showToast('Allow popups to print inventory', 'w'); return; }
+  win.document.write(html);
+  win.document.close();
+}
+window.printInventoryCurrentStockReport = printInventoryCurrentStockReport;
 
 function _renderStockListNow() {
   window._stockListDirty = false;
@@ -16790,7 +16868,10 @@ function _renderStockListNow() {
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;overflow:hidden;max-width:100%">${storeTabs}</div>
       ${storeDetailHtml}
     </div>`;
-    return `<details ${di === 0 ? 'open' : ''} style="border:1px solid var(--g4);border-radius:12px;background:linear-gradient(180deg,#f8fbff,#fff);padding:0 12px;margin-bottom:12px">
+    const deptOpen = Object.prototype.hasOwnProperty.call(window._inventoryStockOpenDepartments || {}, dk)
+      ? !!window._inventoryStockOpenDepartments[dk]
+      : di === 0;
+    return `<details ${deptOpen ? 'open' : ''} ontoggle="bmhToggleInventoryStockDepartment(${bmhInventoryJsString(dk)}, this.open)" style="border:1px solid var(--g4);border-radius:12px;background:linear-gradient(180deg,#f8fbff,#fff);padding:0 12px;margin-bottom:12px">
       <summary style="cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:10px;align-items:center;padding:12px 0">
         <div style="display:flex;align-items:center;gap:8px;min-width:0">
           <span style="font-size:13px;font-weight:900;color:var(--bmh-blue)">${escapeHtmlConsent(bmhDeptLabel(dk))}</span>
