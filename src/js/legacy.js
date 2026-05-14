@@ -30607,17 +30607,17 @@ function appointmentListRow(a, opts) {
   const source = escapeHtmlConsent(getAppointmentSourceLabel(a));
   const mode = escapeHtmlConsent(getAppointmentMode(a));
   const dateLine = options.showDate && date ? ' · ' + formatDateDDMMYYYY(date) : '';
-  return '<div class="apt-slot booked" style="font-size:12px;display:grid;grid-template-columns:72px minmax(150px,1.3fr) 105px 105px minmax(130px,1.1fr) minmax(120px,1fr) 74px 110px 90px 86px;gap:8px;align-items:center">'
+  return '<div class="apt-slot booked" style="font-size:12px;display:grid;grid-template-columns:64px minmax(0,1.45fr) 82px 92px minmax(0,1fr) minmax(0,.95fr) 56px 88px 72px 72px;gap:6px;align-items:center;max-width:100%;overflow:hidden">'
     + '<div style="font-size:12px;font-weight:900;color:var(--bmh-blue)">' + time + '</div>'
-    + '<div><div style="font-size:13px;font-weight:900">' + patient + '</div><div style="font-size:10.5px;color:var(--g1)">' + bmhId + dateLine + '</div></div>'
-    + '<div style="font-family:monospace;font-size:10.5px;color:var(--tx3)">' + bmhId + '</div>'
-    + '<div style="font-family:monospace;font-size:10.5px;color:var(--tx3)">' + escapeHtmlConsent(phone) + '</div>'
-    + '<div style="font-size:11px;color:var(--tx)">' + purpose + '</div>'
-    + '<div style="font-size:11px;color:var(--tx3)">' + doctor + '</div>'
+    + '<div style="min-width:0"><div style="font-size:13px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + patient + '</div><div style="font-size:10.5px;color:var(--g1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + bmhId + dateLine + '</div></div>'
+    + '<div style="font-family:monospace;font-size:10.5px;color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + bmhId + '</div>'
+    + '<div style="font-family:monospace;font-size:10.5px;color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escapeHtmlConsent(phone) + '</div>'
+    + '<div style="font-size:11px;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + purpose + '</div>'
+    + '<div style="font-size:11px;color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + doctor + '</div>'
     + '<span class="badge bd-blue" style="font-size:9.5px;text-align:center">' + centre + '</span>'
-    + '<div style="font-size:10.5px;font-weight:800;color:var(--tx3)">' + source + '</div>'
-    + '<div style="font-size:10.5px;color:var(--tx3)">' + mode + '</div>'
-    + '<div style="display:flex;gap:4px"><button class="btn btn-xs btn-outline" onclick="event.stopPropagation();openEditAppointment(\'' + key + '\')">Change</button><button class="btn btn-xs btn-gray" onclick="event.stopPropagation();deleteAppointment(\'' + key + '\')">Delete</button></div>'
+    + '<div style="font-size:10.5px;font-weight:800;color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + source + '</div>'
+    + '<div style="font-size:10.5px;color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + mode + '</div>'
+    + '<div style="display:flex;flex-direction:column;gap:3px;min-width:0"><button class="btn btn-xs btn-outline" style="font-size:9px;padding:2px 4px;min-height:0" onclick="event.stopPropagation();openEditAppointment(\'' + key + '\')">Change</button><button class="btn btn-xs btn-gray" style="font-size:9px;padding:2px 4px;min-height:0" onclick="event.stopPropagation();deleteAppointment(\'' + key + '\')">Delete</button></div>'
     + '</div>';
 }
 function findAppointmentByKey(key) {
@@ -30693,26 +30693,20 @@ function renderAptDay() {
   const slotsEl = document.getElementById('apt-day-slots');
   if(!slotsEl) return;
 
-  slotsEl.innerHTML = dayApts.length
+  let listHtml = dayApts.length
     ? dayApts.map(function (a) { return appointmentListRow(a); }).join('')
     : '<div style="padding:18px;text-align:center;color:var(--g1);font-size:12px;background:var(--g6);border-radius:8px">No active appointments for this date. Use + Book to manually select any slot from 10:00 AM onward.</div>';
 
-  // Update today and upcoming lists
-  const todayEl = document.getElementById('apt-today-list');
-  const todayApts = activeAppointments.filter(function (a) { return getAppointmentDate(a) === today; }).sort((a,b)=>appointmentSortValue(a)-appointmentSortValue(b));
-  if(todayEl) todayEl.innerHTML = todayApts.length ? todayApts.slice(0, 8).map(function (a) { return appointmentListRow(a); }).join('') : '<div style="padding:14px;text-align:center;color:var(--g1);font-size:12px">No active appointments today</div>';
-
-  const upcomingEl = document.getElementById('apt-upcoming-list');
   const upcomingApts = activeAppointments.filter(function (a) { return getAppointmentDate(a) > today; }).sort((a,b)=>appointmentSortValue(a)-appointmentSortValue(b));
-  if(upcomingEl) {
-    if (upcomingApts.length) {
-      const groups = new Map();
-      upcomingApts.forEach(function (a) {
-        const d = getAppointmentDate(a) || 'Requested date';
-        if (!groups.has(d)) groups.set(d, []);
-        groups.get(d).push(a);
-      });
-      upcomingEl.innerHTML = Array.from(groups.entries()).slice(0, 3).map(function (entry) {
+  if (date === today && upcomingApts.length) {
+    const groups = new Map();
+    upcomingApts.forEach(function (a) {
+      const d = getAppointmentDate(a) || 'Requested date';
+      if (!groups.has(d)) groups.set(d, []);
+      groups.get(d).push(a);
+    });
+    listHtml += '<div style="font-size:11px;font-weight:900;color:var(--g1);padding:10px 2px 3px;text-transform:uppercase;letter-spacing:.4px">Upcoming appointments</div>'
+      + Array.from(groups.entries()).slice(0, 3).map(function (entry) {
         const d = entry[0];
         const rows = entry[1].slice(0, 12).map(function (a) { return appointmentListRow(a); }).join('');
         return '<div style="display:flex;flex-direction:column;gap:5px">'
@@ -30720,10 +30714,8 @@ function renderAptDay() {
           + rows
           + '</div>';
       }).join('');
-    } else {
-      upcomingEl.innerHTML = '<div style="padding:14px;text-align:center;color:var(--g1);font-size:12px">No active upcoming appointments</div>';
-    }
   }
+  slotsEl.innerHTML = listHtml;
   const ct = document.getElementById('apt-upcoming-ct'); if(ct) ct.textContent = upcomingApts.length;
 }
 
