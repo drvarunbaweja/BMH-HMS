@@ -5420,11 +5420,20 @@
 <div class="fg fg1" style="gap:10px">
   <input type="hidden" id="proc-done-dept">
   <div id="proc-done-ot-match" style="display:none;border:1px solid var(--g4);border-radius:10px;background:var(--blue-lt);padding:9px 10px;font-size:12px;color:var(--bmh-blue)"></div>
-  <div style="display:grid;grid-template-columns:1.4fr 120px 1fr;gap:8px;align-items:end">
+  <div style="display:grid;grid-template-columns:1.25fr 170px 120px 1fr;gap:8px;align-items:end">
     <div class="form-group" style="margin:0">
       <label class="fl">Procedure performed</label>
       <input type="text" id="proc-done-name" list="proc-done-charge-list" placeholder="Type procedure from charges list">
       <datalist id="proc-done-charge-list"></datalist>
+    </div>
+    <div class="form-group" style="margin:0">
+      <label class="fl">Eye / Side</label>
+      <select id="proc-done-eye">
+        <option value="">Not specified</option>
+        <option value="Right Eye (OD)">Right Eye (OD)</option>
+        <option value="Left Eye (OS)">Left Eye (OS)</option>
+        <option value="Both Eyes (OU)">Both Eyes (OU)</option>
+      </select>
     </div>
     <div class="form-group" style="margin:0">
       <label class="fl">Amount ₹</label>

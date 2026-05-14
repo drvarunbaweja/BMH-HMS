@@ -31138,6 +31138,30 @@ function bmhProcedureStockCategory(item) {
   if (/glove|syringe|cannula|drape|blade|consum/i.test(cat + ' ' + item?.name)) return 'Consumable';
   return cat || 'Other stock';
 }
+function bmhIsCataractProcedureText(text) {
+  return /(cataract|pmics|phaco|pinhole microincision|iol implantation)/i.test(String(text || ''));
+}
+function getProcedureDoneSelectedProcedureText() {
+  return String(document.getElementById('proc-done-name')?.value || '').trim();
+}
+function shouldHideIolFromProcedureStock(dept, procedureText) {
+  return dept === 'ophtho' && bmhIsCataractProcedureText(procedureText || getProcedureDoneSelectedProcedureText());
+}
+function getProcedureDoneDisplayLabel(state) {
+  if (!state || !state.procedure) return '';
+  const eye = String(state.eye || '').trim();
+  const suffix = eye ? ' (' + eye + ')' : '';
+  const dateText = state.doneAt ? formatDateIN(state.doneAt) : '';
+  return state.procedure + suffix + ' - Done' + (dateText ? ' - ' + dateText : '');
+}
+function normalizeProcedureDoneEyeValue(raw) {
+  const text = String(raw || '').trim().toLowerCase();
+  if (!text) return '';
+  if (/right|od|re/.test(text)) return 'Right Eye (OD)';
+  if (/left|os|le/.test(text)) return 'Left Eye (OS)';
+  if (/both|ou|be/.test(text)) return 'Both Eyes (OU)';
+  return '';
+}
 function bmhProcedureStockBatchLabel(item) {
   return [item?.exp ? 'Exp ' + item.exp : 'No expiry', item?.batchNo ? 'Batch ' + item.batchNo : '', item?.store ? bmhFormatStoreLabel(item.store) : '', 'Stock ' + Number(item?.stock || 0)].filter(Boolean).join(' · ');
 }
@@ -31234,10 +31258,13 @@ window.filterProcedureStockByStore = filterProcedureStockByStore;
 function renderProcedureStockSearch(dept, query) {
   const host = document.getElementById('proc-done-stock-results');
   if (!host) return;
+  const hideIol = shouldHideIolFromProcedureStock(dept);
   const q = String(query || '').trim().toLowerCase();
   if (!q || q.length < 1) {
     // Show dept items grouped by store when no query
-    const allRows = bmhProcedureStockRows(dept).slice(0, 40);
+    const allRows = bmhProcedureStockRows(dept).filter(function (item) {
+      return !(hideIol && bmhProcedureStockCategory(item) === 'IOL');
+    }).slice(0, 40);
     if (!allRows.length) {
       host.innerHTML = '<div style="padding:8px 10px;font-size:11px;color:var(--g1)">No stock available.</div>';
       return;
@@ -31249,6 +31276,7 @@ function renderProcedureStockSearch(dept, query) {
   }
   const tokens = q.split(/\s+/).filter(Boolean);
   const matches = bmhProcedureStockRows(dept).filter(function (item) {
+    if (hideIol && bmhProcedureStockCategory(item) === 'IOL') return false;
     const hay = bmhInventoryItemSearchHaystack(item);
     return tokens.every(function (t) { return hay.includes(t); });
   }).slice(0, 30);
@@ -31279,9 +31307,13 @@ function addProcedureStockByKey(encodedKey) {
   const key = decodeURIComponent(encodedKey || '');
   const item = bmhFindInventoryItemByKey(key);
   if (!item) { showToast('Stock item not found', 'w'); return; }
+  const dept = document.getElementById('proc-done-dept')?.value || '';
+  if (shouldHideIolFromProcedureStock(dept) && bmhProcedureStockCategory(item) === 'IOL') {
+    showToast('For cataract surgery, IOL should be taken only from the OT module', 'w');
+    return;
+  }
   addProcedureStockItemToDraft(item, 1);
   // Re-run the current search so the user can keep adding from the same store/query
-  const dept = document.getElementById('proc-done-dept')?.value || '';
   const searchEl = document.getElementById('proc-done-stock-search');
   const currentQuery = searchEl?.value || '';
   renderProcedureStockSearch(dept, currentQuery);
@@ -31339,8 +31371,10 @@ function getProcedureDraftFromModal() {
   return {
     enabled: true,
     procedure: document.getElementById('proc-done-name')?.value?.trim() || savedState.procedure || '',
+    eye: document.getElementById('proc-done-eye')?.value || savedState.eye || '',
     amount: Number(document.getElementById('proc-done-amount')?.value || 0) || savedState.amount || 0,
     notes: document.getElementById('proc-done-notes')?.value?.trim() || savedState.notes || '',
+    doneAt: savedState.doneAt || '',
     items: items
   };
 }
@@ -31418,9 +31452,22 @@ function openProcedureDoneModalForDept(dept) {
   const state = getProcedureDoneStateForDept(dept) || { enabled:true, procedure:'', amount:0, notes:'', items:[] };
   const otMatch = findProcedureDoneOTCase(dept);
   if (!state.procedure && otMatch?.procedure) state.procedure = otMatch.procedure;
+  if (!state.eye && otMatch) state.eye = normalizeProcedureDoneEyeValue(otMatch.site || otMatch.eye || '');
   if (!state.notes && otMatch) state.notes = [otMatch.site || otMatch.eye, otMatch.iol && otMatch.iol !== 'N/A' ? otMatch.iol : ''].filter(Boolean).join(' · ');
   const hidden = document.getElementById('proc-done-dept'); if (hidden) hidden.value = dept;
-  const nameEl = document.getElementById('proc-done-name'); if (nameEl) nameEl.value = state.procedure || '';
+  const nameEl = document.getElementById('proc-done-name');
+  if (nameEl) {
+    nameEl.value = state.procedure || '';
+    nameEl.oninput = function () {
+      const searchEl = document.getElementById('proc-done-stock-search');
+      renderProcedureStockSearch(dept, searchEl?.value || '');
+    };
+  }
+  const eyeEl = document.getElementById('proc-done-eye');
+  if (eyeEl) {
+    eyeEl.value = state.eye || '';
+    eyeEl.closest('.form-group').style.display = dept === 'ophtho' ? '' : 'none';
+  }
   const amtEl = document.getElementById('proc-done-amount'); if (amtEl) amtEl.value = state.amount || '';
   const notesEl = document.getElementById('proc-done-notes'); if (notesEl) notesEl.value = state.notes || '';
   // Clear search field from any previous use
@@ -31486,6 +31533,7 @@ function saveProcedureDoneModal() {
   // any edits via getProcedureDraftFromModal() and saved them to state.
   const state = getProcedureDoneStateForDept(dept);
   if (!state || !state.procedure) { showToast('Select the performed procedure first', 'w'); return; }
+  state.doneAt = state.doneAt || new Date().toISOString();
   const groupId = 'PCDU' + Date.now();
   const chargeRows = getProcedureDoneChargeRows(dept);
   const matchedRow = chargeRows.find(function (row) {
@@ -33657,6 +33705,8 @@ window.printUnifiedRx = function(deptId) {
   const advice  = (deptId === 'oe'
     ? [document.getElementById('rx-advice-text')?.value || ''].filter(Boolean).join('\n')
     : [document.getElementById(deptId+'-advice')?.value || '', document.getElementById(deptId+'-extra-advice')?.value || ''].filter(Boolean).join('\n')) || '';
+  const procDoneState = saveDept ? getProcedureDoneStateForDept(saveDept) : null;
+  const procDonePrintLine = getProcedureDoneDisplayLabel(procDoneState);
   const adviceHtml = String(advice || '').trim()
     ? escapeHtmlConsent(String(advice).trim()).replace(/\n/g, '<br>')
     : '';
@@ -33677,6 +33727,7 @@ window.printUnifiedRx = function(deptId) {
       psychExtraAdvice: deptId === 'psych' ? document.getElementById('psych-extra-advice')?.value || '' : '',
       skinAdvice: deptId === 'skin' ? document.getElementById('skin-advice')?.value || '' : '',
       skinExtraAdvice: deptId === 'skin' ? document.getElementById('skin-extra-advice')?.value || '' : '',
+      procDone: procDoneState ? JSON.parse(JSON.stringify(procDoneState)) : null,
       procedures: deptId === 'oe' ? procs.slice() : [],
       obgProcAdvised: deptId === 'obg' ? procs.slice() : [],
       psychProcAdvised: deptId === 'psych' ? procs.slice() : [],
@@ -34323,6 +34374,10 @@ ${!incRxFinal || !drugs.length ? rxEmptyNote : ''}
 ${!psychPrescriptionPrintOnly && incPrcFinal && procs.length ? `
 <div class="sec-divider"><span class="sec-label">Procedure / Surgery Advised</span></div>
 ${procs.map(p=>`<div class="proc-item">&#9890; ${expandProcedureLabelForPrint(p)}</div>`).join('')}` : ''}
+
+${procDonePrintLine ? `
+<div class="sec-divider"><span class="sec-label">Procedure Done</span></div>
+<div class="proc-item">&#10003; ${escapeHtmlConsent(procDonePrintLine)}</div>` : ''}
 
 ${!psychPrescriptionPrintOnly && incInvFinal && patientInvestigationPrintRows.length ? `
 <div class="sec-divider"><span class="sec-label">Investigations Ordered</span></div>
@@ -42812,7 +42867,9 @@ function loadPastVisits(bmhId, dept) {
       visit?.psychExtraAdvice,
       visit?.skinAdvice,
       visit?.skinExtraAdvice
-    ].filter(Boolean).join('<br>');
+    ].filter(Boolean).map(function (line) {
+      return /^advised[:\s-]/i.test(String(line || '').trim()) ? String(line).trim() : ('Advised: ' + String(line).trim());
+    }).join('<br>');
   };
   const summarizeVisitProcedures = function (visit) {
     const rows = []
@@ -42820,7 +42877,9 @@ function loadPastVisits(bmhId, dept) {
       .concat(Array.isArray(visit?.obgProcAdvised) ? visit.obgProcAdvised : [])
       .concat(Array.isArray(visit?.psychProcAdvised) ? visit.psychProcAdvised : [])
       .concat(Array.isArray(visit?.skinProcAdvised) ? visit.skinProcAdvised : []);
-    return Array.from(new Set(rows.filter(Boolean))).join(', ');
+    return Array.from(new Set(rows.filter(Boolean))).map(function (row) {
+      return expandProcedureLabelForPrint(row) + ' (Advised)';
+    }).join(', ');
   };
   const summarizeProcedureDoneConsumables = function (visit) {
     const items = Array.isArray(visit?.procDone?.items) ? visit.procDone.items : [];
@@ -42833,8 +42892,7 @@ function loadPastVisits(bmhId, dept) {
   };
   const summarizeProcedureDoneLine = function (visit) {
     if (!visit?.procDone?.procedure) return '';
-    const sideHint = String(visit.procDone.notes || '').match(/\b(RE|LE|BE|OD|OS|OU|Right|Left|Both)\b/i);
-    return visit.procDone.procedure + (sideHint ? (' (' + sideHint[0].toUpperCase() + ')') : '');
+    return getProcedureDoneDisplayLabel(visit.procDone);
   };
   const ensureLocalOTCasesForHistory = function () {
     if (typeof loadOTCasesFromLocalStorage !== 'function') return false;
@@ -42965,9 +43023,11 @@ function loadPastVisits(bmhId, dept) {
         const doneItems = chargeLines.filter(function (row) {
           return fmtVisitDate(row.ts || row.date) === vDateKey;
         }).map(function (row) {
-          return expandProcedureLabelForPrint(row.desc || row.name || row.service || row.for || '—');
+          return expandProcedureLabelForPrint(row.desc || row.name || row.service || row.for || '—') + ' (Done)';
         });
-        const savedProc = Array.isArray(v.procedures) ? v.procedures.map(expandProcedureLabelForPrint).filter(Boolean) : [];
+        const savedProc = Array.isArray(v.procedures) ? v.procedures.map(function (proc) {
+          return expandProcedureLabelForPrint(proc) + ' (Advised)';
+        }).filter(Boolean) : [];
         const procDone = summarizeProcedureDoneLine(v);
         const consumables = summarizeProcedureDoneConsumables(v);
         const combinedDone = Array.from(new Set(doneItems.concat(savedProc).concat(procDone ? [procDone] : []).concat(consumables ? ['Consumables: ' + consumables] : []))).filter(Boolean);
@@ -42977,7 +43037,7 @@ function loadPastVisits(bmhId, dept) {
       });
       chargeLines.forEach(function (row) {
         const dateKey = row.ts || row.date || row.createdAt || '';
-        pushHistoryItem(dateKey, fmtVisitDate(dateKey), expandProcedureLabelForPrint(row.desc || row.name || row.service || row.for || '—'));
+        pushHistoryItem(dateKey, fmtVisitDate(dateKey), expandProcedureLabelForPrint(row.desc || row.name || row.service || row.for || '—') + ' (Done)');
       });
       surgeries.forEach(function (c) {
         const dateKey = getOTCaseDateKey(c) || c.date || c.createdAt || '';
