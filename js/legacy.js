@@ -6419,6 +6419,11 @@ function ptab(el, cId, opts) {
 function openM(id){
   const m=document.getElementById(id);
   if(m)m.classList.add('open');
+  if(id==='m-ipd-note') {
+    refreshIPDNurseSelects && refreshIPDNurseSelects();
+    const d = document.getElementById('pn-date'); if (d && !d.value) d.value = todayKey();
+    const t = document.getElementById('pn-time'); if (t && !t.value) t.value = new Date().toTimeString().slice(0,5);
+  }
   if(id==='m-print-tpl')loadTplDocs();
   if(id==='m-consents')renderConsentModal();
   if(id==='m-new-tpl') {
@@ -8025,6 +8030,7 @@ function dischargeIPDPatientById(id, opts) {
   const idx = list.findIndex(function (p) { return p.id === id; });
   if (idx < 0) return false;
   const ipd = list[idx];
+  if (!opts.skipConfirm && !confirm('Discharge ' + (ipd.name || 'this patient') + ' from IPD?')) return false;
   const bmhId = ipd.bmhId;
   ipd.status = 'discharged';
   ipd.dischargedAt = new Date().toISOString();
@@ -8046,6 +8052,56 @@ function dischargeActiveIPDPatient() {
   if (!activeIPDPatient?.id) return;
   dischargeIPDPatientById(activeIPDPatient.id);
 }
+const DEFAULT_IPD_NURSES = ['Babita','Gurpreet','Seema','Naman','Manpreet','Harjinder','Sukhwinder','Dilpreet','Kanta','Simran','Mandeep','Ravi','Ruchika'];
+function getIPDNurseNames() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('bmh_ipd_nurse_names') || '[]');
+    return Array.from(new Set(DEFAULT_IPD_NURSES.concat(Array.isArray(saved) ? saved : []).map(function (n) { return String(n || '').trim(); }).filter(Boolean)));
+  } catch (e) {
+    return DEFAULT_IPD_NURSES.slice();
+  }
+}
+function saveIPDNurseNames(names) {
+  try { localStorage.setItem('bmh_ipd_nurse_names', JSON.stringify(Array.from(new Set((names || []).map(function (n) { return String(n || '').trim(); }).filter(Boolean))))); } catch (e) {}
+}
+function nurseOptionsHtml(selected) {
+  const sel = String(selected || '').trim();
+  return getIPDNurseNames().map(function (name) {
+    return '<option value="' + escapeHtmlConsent(name) + '"' + (name === sel ? ' selected' : '') + '>' + escapeHtmlConsent(name) + '</option>';
+  }).join('');
+}
+function refreshIPDNurseSelects(selected) {
+  ['pn-nurse','ipdm-nurse-select'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el && el.tagName === 'SELECT') {
+      const current = selected || el.value || '';
+      el.innerHTML = nurseOptionsHtml(current);
+      if (current) el.value = current;
+    }
+  });
+}
+function addIPDNurseName() {
+  const name = prompt('Add nurse name');
+  const clean = String(name || '').trim();
+  if (!clean) return;
+  const names = getIPDNurseNames();
+  if (!names.includes(clean)) names.push(clean);
+  saveIPDNurseNames(names);
+  refreshIPDNurseSelects(clean);
+  showToast('Nurse name added ✓', 's');
+}
+function deleteSelectedIPDNurseName() {
+  const sel = document.getElementById('pn-nurse') || document.getElementById('ipdm-nurse-select');
+  const name = String(sel?.value || '').trim();
+  if (!name) return;
+  if (!confirm('Remove ' + name + ' from nurse list?')) return;
+  const names = getIPDNurseNames().filter(function (n) { return n !== name; });
+  saveIPDNurseNames(names);
+  refreshIPDNurseSelects(names[0] || '');
+  showToast('Nurse name removed ✓', 's');
+}
+window.addIPDNurseName = addIPDNurseName;
+window.deleteSelectedIPDNurseName = deleteSelectedIPDNurseName;
 function otCaseNeedsObgFlow(procText, patientId) {
   const proc = String(procText || '').toLowerCase();
   const pt = patientId ? PATIENTS.find(function (p) { return p.bmhId === patientId; }) : null;
@@ -8202,6 +8258,18 @@ function renderIPDMonitoringSheet(id) {
     </div>`;
   }).join('');
   const showLabour = normalizeDeptKeyForQueue(p.dept || '') === 'obg';
+  const pendingInstructions = ipdPendingInstructions(p);
+  const instructionPanel = pendingInstructions.length ? `
+    <div style="background:var(--orange-lt);border:1.5px solid rgba(255,149,0,.35);border-radius:12px;padding:12px;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:900;color:#8a4200;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Pending Doctor Instructions</div>
+      ${pendingInstructions.map(function (row) {
+        return '<div style="background:#fff;border:1px solid rgba(255,149,0,.22);border-radius:10px;padding:10px;margin-bottom:8px">'
+          + '<div style="font-size:12px;font-weight:900;color:var(--tx)">' + escapeHtmlConsent([row.medicine, row.dose].filter(Boolean).join(' - ') || 'Instruction') + '</div>'
+          + (row.note ? '<div style="font-size:11px;color:var(--g1);margin-top:4px;line-height:1.45">' + escapeHtmlConsent(row.note) + '</div>' : '')
+          + "<div style=\"display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;font-size:10px;color:var(--g1)\"><span>By " + escapeHtmlConsent(row.createdBy || 'Doctor') + "</span><button class=\"btn btn-xs btn-green\" onclick=\"completeIPDInstruction('" + row.id + "')\">Done</button></div>"
+          + '</div>';
+      }).join('')}
+    </div>` : '';
   const labourPanel = showLabour ? `
     <div style="margin-top:14px;background:#fff4f8;border:1px solid rgba(192,0,78,.18);border-radius:12px;padding:12px">
       <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:900;color:#c0004e;margin-bottom:10px"><input type="checkbox" id="ipdm-in-labour" ${p.inLabour ? 'checked' : ''} onchange="document.getElementById('ipdm-labour-block').style.display=this.checked?'grid':'none'"> Patient in labour</label>
@@ -8215,6 +8283,12 @@ function renderIPDMonitoringSheet(id) {
       </div>
     </div>` : '';
   host.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;background:#fff;border:1px solid var(--g5);border-radius:12px;padding:10px">
+      <div class="form-group" style="margin:0;flex:1"><label class="fl">Nursing Staff</label><select id="ipdm-nurse-select">${nurseOptionsHtml('')}</select></div>
+      <button class="btn btn-outline btn-sm" onclick="addIPDNurseName()">Add</button>
+      <button class="btn btn-gray btn-sm" onclick="deleteSelectedIPDNurseName()">Delete</button>
+    </div>
+    ${instructionPanel}
     <div data-ipdm-head="1" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px">
       <div style="background:#eef3fb;border-radius:10px;padding:10px"><div style="font-size:9px;font-weight:900;color:var(--g1);text-transform:uppercase">Patient</div><div style="font-size:13px;font-weight:900;color:#1A3C6E">${p.name}</div></div>
       <div style="background:#eefcf6;border-radius:10px;padding:10px"><div style="font-size:9px;font-weight:900;color:var(--g1);text-transform:uppercase">Procedure / surgery</div><div style="font-size:13px;font-weight:900;color:#1a8c3c">${otCase.procedure || p.surgery || p.type || '—'}</div></div>
@@ -8260,6 +8334,7 @@ function toggleIPDMonitorCheck(idx, checked) {
 
 function saveIPDMonitorVitals() {
   if (!activeIPDPatient) return;
+  const nurse = document.getElementById('ipdm-nurse-select')?.value || CURRENT_USER?.name || 'Nursing Staff';
   const vitals = {
     bp: document.getElementById('ipdm-bp')?.value || '',
     pulse: document.getElementById('ipdm-pulse')?.value || '',
@@ -8270,12 +8345,12 @@ function saveIPDMonitorVitals() {
   };
   activeIPDPatient.vitals = Object.assign({}, activeIPDPatient.vitals || {}, vitals);
   if (!Array.isArray(activeIPDPatient.vitalSigns)) activeIPDPatient.vitalSigns = [];
-  activeIPDPatient.vitalSigns.unshift(Object.assign({ recordedAt: new Date().toISOString(), by: CURRENT_USER?.name || 'Staff' }, vitals));
+  activeIPDPatient.vitalSigns.unshift(Object.assign({ recordedAt: new Date().toISOString(), by: nurse }, vitals));
   const nextDue = (activeIPDPatient.monitoringPlan || []).find(function (slot) { return slot.status !== 'done'; });
   if (nextDue) {
     nextDue.status = 'done';
     nextDue.recordedAt = new Date().toISOString();
-    nextDue.by = CURRENT_USER?.name || 'Staff';
+    nextDue.by = nurse;
   }
   fbUpdate && fbUpdate('ipdPatients/' + activeIPDPatient.id, { vitals: activeIPDPatient.vitals, vitalSigns: activeIPDPatient.vitalSigns, monitoringPlan: activeIPDPatient.monitoringPlan }).catch(()=>{});
   openIPDPatient(activeIPDPatient.id);
@@ -8286,6 +8361,7 @@ function saveIPDMonitorVitals() {
 
 function saveIPDMonitoringSheet() {
   if (!activeIPDPatient) return;
+  const nurse = document.getElementById('ipdm-nurse-select')?.value || CURRENT_USER?.name || 'Nursing Staff';
   const isObg = normalizeDeptKeyForQueue(activeIPDPatient.dept || '') === 'obg';
   if (isObg) {
     activeIPDPatient.inLabour = !!document.getElementById('ipdm-in-labour')?.checked;
@@ -8304,20 +8380,121 @@ function saveIPDMonitoringSheet() {
     labourLiquor: activeIPDPatient.labourLiquor || '',
     labourCervix: activeIPDPatient.labourCervix || '',
     labourBleeding: activeIPDPatient.labourBleeding || '',
-    labourMedicine: activeIPDPatient.labourMedicine || ''
+    labourMedicine: activeIPDPatient.labourMedicine || '',
+    lastNursingStaff: nurse,
+    lastNursingCheckAt: new Date().toISOString()
   }).catch(()=>{});
   openIPDPatient(activeIPDPatient.id);
   renderIPDMonitoringSheet(activeIPDPatient.id);
   showToast('Monitoring sheet saved ✓', 's');
 }
 
+function ipdPendingInstructions(p) {
+  return (Array.isArray(p?.ipdInstructions) ? p.ipdInstructions : []).filter(function (row) {
+    return row && row.status !== 'done';
+  });
+}
+function openIPDRolePrompt(id) {
+  const p = (window.IPD_PATIENTS || IPD_PATIENTS || []).find(function (x) { return x.id === id; });
+  if (!p) return;
+  let modal = document.getElementById('m-ipd-role');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'm-ipd-role';
+    modal.className = 'modal-ov';
+    document.body.appendChild(modal);
+  }
+  modal.innerHTML = `<div class="modal" style="max-width:420px"><div class="modal-hd"><div class="modal-title">Open IPD Workflow</div><button class="modal-close" onclick="closeM('m-ipd-role')">✕</button></div>
+    <div style="padding:14px"><div style="font-size:14px;font-weight:900;margin-bottom:4px">${escapeHtmlConsent(p.name || 'Patient')}</div>
+    <div style="font-size:11px;color:var(--g1);margin-bottom:14px">${escapeHtmlConsent([p.bmhId, bmhDeptLabel(p.dept), p.ward || p.room || ''].filter(Boolean).join(' · '))}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+    <button class="btn btn-gold" onclick="closeM('m-ipd-role');openIPDDoctorWorkflow('${id}')">Doctor</button>
+    <button class="btn btn-outline" onclick="closeM('m-ipd-role');openIPDNursingWorkflow('${id}')">Nursing Staff</button>
+    </div></div></div>`;
+  openM('m-ipd-role');
+}
+window.openIPDRolePrompt = openIPDRolePrompt;
+function openIPDDoctorWorkflow(id) {
+  openIPDPatient(id);
+  openIPDDoctorInstructionModal(id);
+}
+function openIPDNursingWorkflow(id) {
+  openIPDPatient(id);
+  renderIPDMonitoringSheet(id);
+  openM('m-ipd-monitor');
+}
+window.openIPDDoctorWorkflow = openIPDDoctorWorkflow;
+window.openIPDNursingWorkflow = openIPDNursingWorkflow;
+function openIPDDoctorInstructionModal(id) {
+  const p = (window.IPD_PATIENTS || IPD_PATIENTS || []).find(function (x) { return x.id === id; });
+  if (!p) return;
+  let modal = document.getElementById('m-ipd-doctor');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'm-ipd-doctor';
+    modal.className = 'modal-ov';
+    document.body.appendChild(modal);
+  }
+  modal.innerHTML = `<div class="modal"><div class="modal-hd"><div class="modal-title">Doctor Instructions</div><button class="modal-close" onclick="closeM('m-ipd-doctor')">✕</button></div>
+    <div class="fg fg1" style="gap:9px"><div style="font-size:13px;font-weight:900;color:var(--bmh-blue)">${escapeHtmlConsent(p.name || 'Patient')}</div>
+    <div class="fg"><div class="form-group"><label class="fl">Medicine / Injection</label><input type="text" id="ipd-doc-med" placeholder="e.g. Inj Ceftriaxone"></div>
+    <div class="form-group"><label class="fl">Dose / Route</label><input type="text" id="ipd-doc-dose" placeholder="e.g. 1 g IV BD"></div></div>
+    <div class="form-group"><label class="fl">Instruction / Special Reason</label><textarea id="ipd-doc-note" style="min-height:90px" placeholder="e.g. Check BP after 30 min, dilate RE at 4 PM, inform if bleeding/pain/fever"></textarea></div>
+    <button class="btn btn-gold" onclick="saveIPDDoctorInstruction('${id}')">Save Instruction</button></div></div>`;
+  openM('m-ipd-doctor');
+}
+window.openIPDDoctorInstructionModal = openIPDDoctorInstructionModal;
+function saveIPDDoctorInstruction(id) {
+  const p = (window.IPD_PATIENTS || IPD_PATIENTS || []).find(function (x) { return x.id === id; });
+  if (!p) return;
+  const medicine = document.getElementById('ipd-doc-med')?.value?.trim() || '';
+  const dose = document.getElementById('ipd-doc-dose')?.value?.trim() || '';
+  const note = document.getElementById('ipd-doc-note')?.value?.trim() || '';
+  if (!medicine && !note) { showToast('Enter a medicine or instruction', 'w'); return; }
+  if (!Array.isArray(p.ipdInstructions)) p.ipdInstructions = [];
+  p.ipdInstructions.unshift({
+    id: 'IPDI' + Date.now(),
+    medicine: medicine,
+    dose: dose,
+    note: note,
+    status: 'pending',
+    createdAt: new Date().toISOString(),
+    createdBy: CURRENT_USER?.name || 'Doctor'
+  });
+  fbUpdate && fbUpdate('ipdPatients/' + p.id, { ipdInstructions: p.ipdInstructions }).catch(function () {});
+  closeM('m-ipd-doctor');
+  openIPDPatient(p.id);
+  renderIPD && renderIPD();
+  showToast('Doctor instruction added for nursing staff ✓', 's');
+}
+window.saveIPDDoctorInstruction = saveIPDDoctorInstruction;
+function completeIPDInstruction(instructionId) {
+  if (!activeIPDPatient || !Array.isArray(activeIPDPatient.ipdInstructions)) return;
+  const row = activeIPDPatient.ipdInstructions.find(function (x) { return String(x.id || '') === String(instructionId || ''); });
+  if (!row) return;
+  const nurse = document.getElementById('ipdm-nurse-select')?.value || document.getElementById('pn-nurse')?.value || CURRENT_USER?.name || 'Nursing Staff';
+  row.status = 'done';
+  row.doneAt = new Date().toISOString();
+  row.doneBy = nurse;
+  if (!Array.isArray(activeIPDPatient.notes)) activeIPDPatient.notes = [];
+  activeIPDPatient.notes.unshift({
+    date: new Date().toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}),
+    time: new Date().toTimeString().slice(0,5),
+    note: 'Doctor instruction completed: ' + [row.medicine, row.dose, row.note].filter(Boolean).join(' - '),
+    nurse: nurse,
+    doctor: row.createdBy || '',
+    recordedAt: new Date().toISOString()
+  });
+  fbUpdate && fbUpdate('ipdPatients/' + activeIPDPatient.id, { ipdInstructions: activeIPDPatient.ipdInstructions, notes: activeIPDPatient.notes }).catch(function () {});
+  renderIPDMonitoringSheet(activeIPDPatient.id);
+  openIPDPatient(activeIPDPatient.id);
+  renderIPD && renderIPD();
+  showToast('Instruction marked done by ' + nurse + ' ✓', 's');
+}
+window.completeIPDInstruction = completeIPDInstruction;
+
 function openIPDWorkflow(id) {
-  nav && nav('ipd', null);
-  setTimeout(function () {
-    openIPDPatient(id);
-    renderIPDMonitoringSheet(id);
-    openM('m-ipd-monitor');
-  }, 120);
+  openIPDRolePrompt(id);
 }
 
 function openIPDPatient(id) {
@@ -8330,6 +8507,7 @@ function openIPDPatient(id) {
   const nb = p.isNewborn && p.babyNotes;
   const lastVitals = (p.vitalSigns || [])[0] || p.vitals || {};
   const alerts = ipdEvaluateAlerts(p);
+  const pendingInstructions = ipdPendingInstructions(p);
   el.innerHTML = `
     <div class="card-hd">
       <div>
@@ -8353,6 +8531,10 @@ function openIPDPatient(id) {
       <div style="font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.5px;color:${alerts.some(a=>a.tone!=='var(--green)') ? 'var(--red)' : '#1a8c3c'};margin-bottom:6px">Live ward alerts</div>
       ${alerts.map(a=>`<div style="font-size:12px;color:${a.tone};font-weight:${a.tone==='var(--green)' ? '700' : '900'};margin-bottom:4px">${a.text}</div>`).join('')}
     </div>
+    ${pendingInstructions.length ? `<div style="background:var(--orange-lt);border:1.5px solid rgba(255,149,0,.32);border-radius:10px;padding:10px;margin-bottom:12px;animation:pulse 1.6s infinite">
+      <div style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Pending Doctor Instructions</div>
+      ${pendingInstructions.map(function (row) { return `<div style="font-size:12px;font-weight:800;color:var(--tx);margin-bottom:5px">${escapeHtmlConsent([row.medicine,row.dose,row.note].filter(Boolean).join(' - '))}<div style="font-size:10px;color:var(--g1);font-weight:700">By ${escapeHtmlConsent(row.createdBy || 'Doctor')}</div></div>`; }).join('')}
+    </div>` : ''}
     ${nb?`<div style="background:linear-gradient(135deg,#fce4ff,#ede4ff);border-radius:var(--r);padding:13px;border-left:5px solid var(--purple);margin-bottom:12px">
       <div style="font-size:13px;font-weight:900;color:var(--purple);margin-bottom:8px">👶 NEWBORN SPECIAL NOTES</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11.5px">
@@ -16413,9 +16595,14 @@ function _iolBrandLabel(i) {
   return String(i.iolCompany || i.vendor || 'IOL').trim();
 }
 window._inventoryStockBrowserSelection = window._inventoryStockBrowserSelection || {};
+window._inventoryStockOpenDepartments = window._inventoryStockOpenDepartments || {};
 function bmhInventoryStockBrowserKey(dept, store) {
   return [String(dept || ''), String(store || '')].join('||');
 }
+function bmhToggleInventoryStockDepartment(dept, isOpen) {
+  window._inventoryStockOpenDepartments[String(dept || '')] = !!isOpen;
+}
+window.bmhToggleInventoryStockDepartment = bmhToggleInventoryStockDepartment;
 function bmhInventoryStockStoreSelectionKey(dept) {
   return 'store::' + String(dept || '');
 }
@@ -16430,6 +16617,79 @@ function bmhSelectInventoryStockCategory(dept, store, cat) {
   renderStockList && renderStockList();
 }
 window.bmhSelectInventoryStockCategory = bmhSelectInventoryStockCategory;
+function printInventoryCurrentStockReport() {
+  const catFilter = bmhInventoryFilterValue('inv-stock-cat-filter');
+  const storeFilter = bmhInventoryFilterValue('inv-stock-store-filter');
+  const rows = (INVENTORY || []).filter(function (i) {
+    return (catFilter === 'all' || String(i.cat || '') === catFilter)
+      && (storeFilter === 'all' || String(i.store || '') === storeFilter)
+      && !/^(MFX-001|PDN-002|CMC-003|TIM-004|IOL-021|IOL-023|OTP-001|BEV-001|MAN-001|RL-001)$/.test(String(i.barcode || ''));
+  });
+  if (!rows.length) { showToast('No stock items to print', 'w'); return; }
+  const grouped = {};
+  rows.forEach(function (row) {
+    const dept = String(row.dept || 'general');
+    const store = String(row.store || 'Unassigned store');
+    const cat = String(row.cat || 'General').trim() || 'General';
+    const itemName = String(row.cat || '').toLowerCase() === 'iol'
+      ? [_iolBrandLabel(row), row.power || extractIolPower(row.name || '')].filter(Boolean).join(' ')
+      : String(row.name || 'Unnamed item');
+    if (!grouped[dept]) grouped[dept] = {};
+    if (!grouped[dept][store]) grouped[dept][store] = {};
+    if (!grouped[dept][store][cat]) grouped[dept][store][cat] = {};
+    if (!grouped[dept][store][cat][itemName]) grouped[dept][store][cat][itemName] = 0;
+    grouped[dept][store][cat][itemName] += Math.max(0, Number(row.stock || 0));
+  });
+  const deptHtml = Object.keys(grouped).sort(function (a, b) { return bmhDeptLabel(a).localeCompare(bmhDeptLabel(b)); }).map(function (dept) {
+    const stores = grouped[dept] || {};
+    return `<section class="inv-print-dept">
+      <h2>${escapeHtmlConsent(bmhDeptLabel(dept))}</h2>
+      ${Object.keys(stores).sort().map(function (store) {
+        const cats = stores[store] || {};
+        return `<div class="inv-print-store">
+          <h3>${escapeHtmlConsent(store)}</h3>
+          ${Object.keys(cats).sort(function (a, b) {
+            if (String(a).toLowerCase() === 'iol') return -1;
+            if (String(b).toLowerCase() === 'iol') return 1;
+            return String(a).localeCompare(String(b));
+          }).map(function (cat) {
+            const items = cats[cat] || {};
+            return `<div class="inv-print-cat">
+              <h4>${escapeHtmlConsent(cat)}</h4>
+              <ul>${Object.keys(items).sort().map(function (name) {
+                return `<li><span>${escapeHtmlConsent(name)}</span><strong>${Number(items[name] || 0)}</strong></li>`;
+              }).join('')}</ul>
+            </div>`;
+          }).join('')}
+        </div>`;
+      }).join('')}
+    </section>`;
+  }).join('');
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Inventory Stock Report</title><style>
+    @page { size: A4; margin: 10mm; }
+    body { font-family: Arial, sans-serif; color:#111; font-size:11px; margin:0; }
+    h1 { margin:0 0 10px; font-size:18px; }
+    .sub { margin:0 0 12px; font-size:10px; color:#555; }
+    .cols { column-count:2; column-gap:14mm; }
+    .inv-print-dept, .inv-print-store, .inv-print-cat { break-inside: avoid; margin:0 0 10px; }
+    h2 { font-size:13px; margin:0 0 6px; padding-bottom:2px; border-bottom:1px solid #bbb; }
+    h3 { font-size:11px; margin:0 0 4px; color:#1A3C6E; }
+    h4 { font-size:10px; margin:6px 0 3px; text-transform:uppercase; color:#555; }
+    ul { list-style:none; padding:0; margin:0; }
+    li { display:flex; justify-content:space-between; gap:8px; padding:2px 0; border-bottom:1px dotted #ddd; }
+    li strong { font-size:11px; }
+  </style></head><body>
+    <h1>Inventory Stock Report</h1>
+    <div class="sub">Printed on ${escapeHtmlConsent(formatDateIN(new Date()))}${catFilter !== 'all' ? ' · Category: ' + escapeHtmlConsent(catFilter) : ''}${storeFilter !== 'all' ? ' · Store: ' + escapeHtmlConsent(storeFilter) : ''}</div>
+    <div class="cols">${deptHtml}</div>
+    <script>window.onload=function(){window.print()}<\/script>
+  </body></html>`;
+  const win = window.open('', '_blank');
+  if (!win) { showToast('Allow popups to print inventory', 'w'); return; }
+  win.document.write(html);
+  win.document.close();
+}
+window.printInventoryCurrentStockReport = printInventoryCurrentStockReport;
 
 function _renderStockListNow() {
   window._stockListDirty = false;
@@ -16608,7 +16868,10 @@ function _renderStockListNow() {
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;overflow:hidden;max-width:100%">${storeTabs}</div>
       ${storeDetailHtml}
     </div>`;
-    return `<details ${di === 0 ? 'open' : ''} style="border:1px solid var(--g4);border-radius:12px;background:linear-gradient(180deg,#f8fbff,#fff);padding:0 12px;margin-bottom:12px">
+    const deptOpen = Object.prototype.hasOwnProperty.call(window._inventoryStockOpenDepartments || {}, dk)
+      ? !!window._inventoryStockOpenDepartments[dk]
+      : di === 0;
+    return `<details ${deptOpen ? 'open' : ''} ontoggle="bmhToggleInventoryStockDepartment(${bmhInventoryJsString(dk)}, this.open)" style="border:1px solid var(--g4);border-radius:12px;background:linear-gradient(180deg,#f8fbff,#fff);padding:0 12px;margin-bottom:12px">
       <summary style="cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:10px;align-items:center;padding:12px 0">
         <div style="display:flex;align-items:center;gap:8px;min-width:0">
           <span style="font-size:13px;font-weight:900;color:var(--bmh-blue)">${escapeHtmlConsent(bmhDeptLabel(dk))}</span>
@@ -40755,30 +41018,58 @@ function renderIPD() {
   }
   reconcileIpdAdmissionsFromOTCases && reconcileIpdAdmissionsFromOTCases();
   const detailEl = document.getElementById('ipd-detail');
+  const deptFilter = window._ipdDeptFilter || 'all';
   const visibleIPD = IPD_PATIENTS.filter(p => {
     if(!p.centre) p.centre = getEffectiveCentre() || CURRENT_USER?.centre || 'CHD';
-    return (p.status || 'admitted') !== 'discharged' && centreMatch(p);
+    const status = String(p.status || 'admitted').toLowerCase();
+    if (status === 'discharged' || p.dischargedAt || p.dischargeDate) return false;
+    if (!centreMatch(p)) return false;
+    if (deptFilter !== 'all' && normalizeDeptKeyForQueue(p.dept || '') !== deptFilter) return false;
+    return true;
   });
   const el = document.getElementById('ipd-list'); if(!el) return;
+  const depts = [
+    { k:'all', label:'All' },
+    { k:'ophtho', label:'Eye' },
+    { k:'obg', label:'OBG' },
+    { k:'psych', label:'Psych' },
+    { k:'skin', label:'Skin' },
+    { k:'general', label:'General' }
+  ];
+  const filterHtml = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">'
+    + depts.map(function (d) {
+      const count = IPD_PATIENTS.filter(function (p) {
+        const status = String(p?.status || 'admitted').toLowerCase();
+        if (!p || status === 'discharged' || p.dischargedAt || p.dischargeDate || !centreMatch(p)) return false;
+        return d.k === 'all' || normalizeDeptKeyForQueue(p.dept || '') === d.k;
+      }).length;
+      return "<button class=\"btn btn-xs " + (deptFilter === d.k ? 'btn-gold' : 'btn-outline') + "\" onclick=\"window._ipdDeptFilter='" + d.k + "';renderIPD()\">" + d.label + ' <span style="font-family:var(--mono);font-size:9px">' + count + '</span></button>';
+    }).join('')
+    + '</div>';
   if(!visibleIPD.length) {
     activeIPDPatient = null;
-    el.innerHTML = '<div style="padding:30px;text-align:center;color:var(--g1)"><div style="font-size:36px;margin-bottom:8px">🛏️</div><div style="font-size:13px;font-weight:700">No patients admitted</div><div style="font-size:11px;margin-top:4px">Use the + Admit button to add a patient</div></div>';
+    el.innerHTML = filterHtml + '<div style="padding:30px;text-align:center;color:var(--g1)"><div style="font-size:36px;margin-bottom:8px">🛏️</div><div style="font-size:13px;font-weight:700">No patients admitted</div><div style="font-size:11px;margin-top:4px">Use the + Admit button to add a patient</div></div>';
     if (detailEl) {
       detailEl.innerHTML = '<div style="padding:22px;color:var(--g1);font-size:12px">Select an admitted patient to view monitoring, doctor notes, medicines, and nursing documentation.</div>';
     }
     return;
   }
-  el.innerHTML = visibleIPD.map(p => `
-    <div onclick="openIPDWorkflow('${p.id}')"
+  el.innerHTML = filterHtml + visibleIPD.map(p => {
+    const pending = ipdPendingInstructions(p);
+    return `
+    <div onclick="openIPDRolePrompt('${p.id}')"
       style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:var(--r);cursor:pointer;margin-bottom:6px;border:1.5px solid ${p.status==='critical'?'var(--red)':'var(--g4)'};background:${p.status==='critical'?'var(--red-lt)':'#fff'}"
       onmouseover="this.style.background='var(--g6)'" onmouseout="this.style.background='${p.status==='critical'?'var(--red-lt)':'#fff'}'">
       <div style="width:38px;height:38px;border-radius:50%;background:#1A3C6E;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px;flex-shrink:0">${p.initials||p.name[0]||'?'}</div>
       <div style="flex:1;min-width:0">
         <div style="font-weight:800;font-size:13px">${p.name}</div>
         <div style="font-size:10.5px;color:var(--g1)">${p.ward||'—'} · ${p.dx||p.diagnosis||'—'} · ${bmhDeptLabel(p.dept)}</div>
+        ${pending.length ? '<div style="margin-top:4px;font-size:10px;font-weight:900;color:#8a4200;animation:pulse 1.4s infinite">Pending doctor instruction: ' + pending.length + '</div>' : ''}
       </div>
       <span class="badge ${ipdEvaluateAlerts(p).some(a=>a.tone==='var(--red)') ? 'bd-red' : p.status==='stable'?'bd-green':'bd-gray'}">${ipdEvaluateAlerts(p).some(a=>a.tone==='var(--red)') ? 'alert' : (p.status||'admitted')}</span>
-    </div>`).join('');
+      <button class="btn btn-xs btn-red" onclick="event.stopPropagation();dischargeIPDPatientById('${p.id}')">Discharge</button>
+    </div>`;
+  }).join('');
   if (activeIPDPatient && visibleIPD.some(p => p.id === activeIPDPatient.id)) {
     openIPDPatient(activeIPDPatient.id);
   } else {
