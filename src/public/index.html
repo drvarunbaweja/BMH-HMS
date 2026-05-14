@@ -1818,7 +1818,7 @@
 
 </div><!-- /pg-ophtho -->
 <div class="page" id="pg-appointments">
-<div class="g32">
+<div class="g32" style="grid-template-columns:1fr">
   <div class="card">
     <div class="card-hd">
       <div><div class="card-title">&#128197; Appointment Book</div><div class="card-sub"><span class="live-dot"></span>Booked appointments &middot; All departments</div></div>
@@ -1839,21 +1839,11 @@
         <button class="btn btn-gold btn-sm" onclick="openBookApt()">+ Book</button>
       </div>
     </div>
-    <div style="display:grid;grid-template-columns:72px 1.2fr 105px 105px 1.1fr 1fr 74px;gap:8px;padding:5px 10px;background:var(--bmh-blue);border-radius:7px;margin-bottom:8px;font-size:9.5px;font-weight:800;color:#fff;text-transform:uppercase;letter-spacing:.5px">
-      <div>Time</div><div>Patient</div><div>BMSH ID</div><div>Phone</div><div>Purpose</div><div>Doctor</div><div style="text-align:center">Centre</div>
+    <div style="display:grid;grid-template-columns:72px minmax(150px,1.3fr) 105px 105px minmax(130px,1.1fr) minmax(120px,1fr) 74px 110px 90px 86px;gap:8px;padding:5px 10px;background:var(--bmh-blue);border-radius:7px;margin-bottom:8px;font-size:9.5px;font-weight:800;color:#fff;text-transform:uppercase;letter-spacing:.5px">
+      <div>Time</div><div>Patient</div><div>BMSH ID</div><div>Phone</div><div>Purpose</div><div>Doctor</div><div style="text-align:center">Centre</div><div>Source</div><div>Mode</div><div>Actions</div>
     </div>
     <div id="apt-day-slots" style="display:flex;flex-direction:column;gap:5px;min-height:200px">
       <div style="padding:20px;text-align:center;color:var(--g1);font-size:12px">Loading appointments…</div>
-    </div>
-  </div>
-  <div class="col">
-    <div class="card">
-      <div class="card-hd"><div class="card-title">Upcoming</div><span class="badge bd-blue" id="apt-upcoming-ct">0</span></div>
-      <div id="apt-upcoming-list" style="display:flex;flex-direction:column;gap:5px"></div>
-    </div>
-    <div class="card">
-      <div class="card-hd"><div class="card-title">Today</div></div>
-      <div id="apt-today-list" style="display:flex;flex-direction:column;gap:5px"></div>
     </div>
   </div>
 </div>
@@ -5552,11 +5542,29 @@
   <div class="form-group"><label class="fl">Time Slot</label><select id="book-time"><option>10:00 AM</option><option>10:10 AM</option><option>10:20 AM</option><option>10:30 AM</option><option>10:40 AM</option><option>10:50 AM</option><option>11:00 AM</option><option>11:10 AM</option><option>11:20 AM</option><option>11:30 AM</option><option>11:40 AM</option><option>11:50 AM</option><option>12:00 PM</option><option>12:10 PM</option><option>12:20 PM</option><option>12:30 PM</option><option>12:40 PM</option><option>12:50 PM</option><option>1:00 PM</option><option>1:10 PM</option><option>1:20 PM</option><option>1:30 PM</option><option>1:40 PM</option><option>1:50 PM</option><option>2:00 PM</option><option>2:10 PM</option><option>2:20 PM</option><option>2:30 PM</option><option>2:40 PM</option><option>2:50 PM</option><option>3:00 PM</option><option>3:10 PM</option><option>3:20 PM</option><option>3:30 PM</option><option>3:40 PM</option><option>3:50 PM</option><option>4:00 PM</option><option>4:10 PM</option><option>4:20 PM</option><option>4:30 PM</option><option>4:40 PM</option><option>4:50 PM</option><option>5:00 PM</option></select></div>
   <div class="form-group"><label class="fl">Purpose</label><select id="book-purpose"><option>Post-operative (Day 1)</option><option>Post-operative (1 Week)</option><option>Post-operative (1 Month)</option><option>Follow-up</option><option>New Consultation</option><option>Investigations</option></select></div>
   <div class="form-group"><label class="fl">Centre</label><select id="book-centre"><option>Chandigarh</option><option>Ropar</option></select></div>
+  <div class="form-group"><label class="fl">Mode</label><select id="book-mode"><option>In person</option><option>Zoom</option><option>Phone call</option></select></div>
   <div class="form-group"><label class="fl">Notes</label><input type="text" id="book-notes" placeholder="e.g. Post Phaco review, bring glasses"></div>
   <div id="book-conflict-msg" style="display:none;padding:8px 12px;background:var(--orange-lt);border-radius:8px;font-size:12px;font-weight:700;color:#b55a00;border-left:3px solid var(--orange)"></div>
   <div style="display:flex;gap:8px">
     <button class="btn btn-gold" style="flex:1" onclick="bookApt()">✅ Confirm Appointment</button>
     <button class="btn btn-gray" onclick="closeM('m-book-apt')">Cancel</button>
+  </div>
+</div>
+</div>
+</div>
+
+<!-- Change Appointment -->
+<div class="modal-ov" id="m-edit-apt">
+<div class="modal">
+<div class="modal-hd"><div class="modal-title">📅 Change Appointment</div><button class="modal-close" onclick="closeM('m-edit-apt')">✕</button></div>
+<div class="fg fg1" style="gap:9px">
+  <input type="hidden" id="edit-apt-id">
+  <div class="form-group"><label class="fl">Patient</label><input type="text" id="edit-apt-patient" readonly style="background:var(--g6);font-weight:800"></div>
+  <div class="form-group"><label class="fl">Date</label><input type="date" id="edit-apt-date"></div>
+  <div class="form-group"><label class="fl">Time Slot</label><select id="edit-apt-time"></select></div>
+  <div style="display:flex;gap:8px">
+    <button class="btn btn-gold" style="flex:1" onclick="saveAppointmentChange()">Save</button>
+    <button class="btn btn-gray" onclick="closeM('m-edit-apt')">Cancel</button>
   </div>
 </div>
 </div>
