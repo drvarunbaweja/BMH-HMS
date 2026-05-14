@@ -32728,8 +32728,9 @@ async function mergeDuplicatePatientRecord(canonicalId, duplicateId) {
   const targetId = String(canonicalId || '').trim();
   const dupId = String(duplicateId || '').trim();
   if (!targetId || !dupId || targetId === dupId) return null;
-  const canonical = PATIENTS.find(function (p) { return String(p?.bmhId || '') === targetId; });
-  const duplicate = PATIENTS.find(function (p) { return String(p?.bmhId || '') === dupId; });
+  const source = getAllKnownPatientRecords();
+  const canonical = source.find(function (p) { return String(p?.bmhId || '') === targetId; });
+  const duplicate = source.find(function (p) { return String(p?.bmhId || '') === dupId; });
   if (!canonical || !duplicate) return null;
   if (duplicate.mergedInto === targetId) return canonical;
 
@@ -32743,6 +32744,11 @@ async function mergeDuplicatePatientRecord(canonicalId, duplicateId) {
   if (!merged.advancePurpose && duplicate.advancePurpose) merged.advancePurpose = duplicate.advancePurpose;
   merged.visitCount = Math.max(Number(merged.visitCount || 0), Number(duplicate.visitCount || 0), 1);
   merged.prevDxByDept = Object.assign({}, duplicate.prevDxByDept || {}, merged.prevDxByDept || {});
+  merged.mergedBmhIds = Array.from(new Set([].concat(merged.mergedBmhIds || [], duplicate.mergedBmhIds || [], dupId).map(function (x) {
+    return String(x || '').trim();
+  }).filter(Boolean)));
+  merged.investigationOrders = [].concat(duplicate.investigationOrders || [], merged.investigationOrders || []).filter(Boolean);
+  merged.crossRefs = Object.assign({}, duplicate.crossRefs || {}, merged.crossRefs || {});
   (function mergeObgLedger() {
     const map = new Map();
     [].concat(merged.obgDxLedger || [], duplicate.obgDxLedger || []).forEach(function (x) {
