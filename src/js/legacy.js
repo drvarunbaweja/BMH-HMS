@@ -5047,25 +5047,25 @@ function refreshAppointmentTimeOptions(selectedValue) {
 window.refreshAppointmentTimeOptions = refreshAppointmentTimeOptions;
 // Returns HH:MM (24h) — the nearest 10-min slot for a doctor on a date with no conflict
 function getNextAvailableApptSlot(date, doctor) {
-  const t = roundToNearestTenMinuteSlot(new Date());
-  if (t.hh < 10) { t.hh = 10; t.mm = 0; }
-  let hh = t.hh, mm = t.mm;
+  return getNextAvailableApptSlotFrom(date, doctor, getNearestAppointmentSlot(date));
+}
+function getNextAvailableApptSlotFrom(date, doctor, preferredSlot, centre) {
+  let startMins = appointmentTimeSortVal(preferredSlot || getNearestAppointmentSlot(date));
+  if (!Number.isFinite(startMins) || startMins < 10 * 60) startMins = 10 * 60;
   const apts = window.APPOINTMENTS || APPOINTMENTS || [];
-  for (let i = 0; i < 48; i++) {
-    const slot = String(hh).padStart(2,'0') + ':' + String(mm).padStart(2,'0');
+  const wantedCentre = centre ? normalizeAppointmentCentreValue(centre) : '';
+  for (let mins = startMins; mins <= 17 * 60; mins += 10) {
+    const slot = String(Math.floor(mins / 60)).padStart(2,'0') + ':' + String(mins % 60).padStart(2,'0');
     const taken = apts.find(function(a) {
-      if (a.status === 'cancelled') return false;
-      if (a.date !== date) return false;
-      if (doctor && a.doctor !== doctor) return false;
-      const aTime = String(a.time || '').trim();
-      return aTime === slot || aTime === normalizeAptTimeLabel(slot);
+      if (!isActiveAppointment(a)) return false;
+      if (getAppointmentDate(a) !== date) return false;
+      if (doctor && getAppointmentDoctor(a) !== doctor) return false;
+      if (wantedCentre && getAppointmentCentre(a) !== wantedCentre) return false;
+      return normalizeAptTimeLabel(getAppointmentTime(a)) === normalizeAptTimeLabel(slot);
     });
-    if (!taken) return slot;
-    mm += 10;
-    if (mm >= 60) { hh += 1; mm = 0; }
-    if (hh >= 22) break;
+    if (!taken) return normalizeAptTimeLabel(slot);
   }
-  return String(t.hh).padStart(2,'0') + ':' + String(t.mm).padStart(2,'0');
+  return normalizeAptTimeLabel(preferredSlot || '10:00 AM');
 }
 // Returns HH:MM — next 30-min surgery slot on a date, starting at 11:30
 function getNextOTCaseSlot(date) {
@@ -5094,17 +5094,13 @@ function bookApt() {
   const centreEl = document.getElementById('book-centre');
   const notesEl  = document.getElementById('book-notes');
   const date   = dateEl?.value;
-  const time   = normalizeAptTimeLabel(timeEl?.value || timeEl?.querySelector?.('[selected]')?.textContent || '10:00 AM');
+  const requestedTime = normalizeAptTimeLabel(timeEl?.value || timeEl?.querySelector?.('[selected]')?.textContent || '10:00 AM');
   const doctor = drEl?.value || '';
   if(!date){ showToast('Please select a date','w'); return; }
-  // Double-booking check: same doctor, same date, same time
-  const conflict = APPOINTMENTS.find(a=>getAppointmentDate(a)===date && getAppointmentDoctor(a)===doctor && normalizeAptTimeLabel(getAppointmentTime(a))===time && isActiveAppointment(a));
-  if(conflict){
-    showToast('⚠️ '+doctor+' already has an appointment at '+time+' on this date. Choose a different slot.','w');
-    return;
-  }
   const patient = ptEl?.value || 'New Patient';
   const idMatch = String(patient || '').match(/BMSH-\d+/i);
+  const centre = normalizeAppointmentCentreValue(centreEl?.value || window.CURRENT_USER?.centre || 'CHD');
+  const time = getNextAvailableApptSlotFrom(date, doctor, requestedTime, centre);
   const apt = {
     id: 'A'+Date.now(),
     patient: String(patient).replace(/\s+—\s+BMSH-\d+.*/i, '').trim() || patient,
@@ -5115,14 +5111,14 @@ function bookApt() {
       'Dr. Tarun Baweja':'psych','Dr. Pooja Baweja':'skin'
     })[doctor] || 'ophtho',
     purpose: purposeEl?.value || 'Consultation',
-    centre: normalizeAppointmentCentreValue(centreEl?.value || window.CURRENT_USER?.centre || 'CHD'),
+    centre: centre,
     notes: notesEl?.value || '',
     status: 'booked',
     createdBy: window.CURRENT_USER?.username || 'reception'
   };
   APPOINTMENTS.push(apt);
   if(typeof saveAppointmentToFirebase==='function') saveAppointmentToFirebase(apt);
-  showToast('📅 Appointment booked — '+patient+' at '+time+' ✓','s');
+  showToast('📅 Appointment booked — '+patient+' at '+time+(time!==requestedTime?' (next available slot)':'')+' ✓','s');
   closeM('m-book-apt');
   renderAptDay && renderAptDay();
 }
@@ -23483,12 +23479,13 @@ function bookFollowupApt(date, n, unit, deptKey) {
   const apt = {
     id:'APT-'+Date.now(), patient:ptName, bmhId:ptId,
     mob:PATIENTS.find(p=>p.bmhId===ptId)?.mob||'',
-    date:localDateKey(date), time:normalizeAptTimeLabel(getNearestAppointmentSlot(localDateKey(date))),
+    date:localDateKey(date),
     doctor:CURRENT_USER?.name||'Dr. Varun Baweja',
     dept:CURRENT_USER?.dept||dept||'Ophthalmology', centre:CURRENT_USER?.centre||'CHD',
     purpose:'Follow-up ('+n+' '+unitLabel+(n>1?'s':'')+' review)',
     status:'booked', bookedAt:new Date().toISOString()
   };
+  apt.time = getNextAvailableApptSlotFrom(apt.date, apt.doctor, getNearestAppointmentSlot(apt.date), apt.centre);
   APPOINTMENTS.push(apt);
   if(window.FBDB) fbSet('appointments/'+apt.id, apt);
   renderAptDay && renderAptDay();
@@ -26791,7 +26788,6 @@ function scheduleDefaultSurgeryFollowups(otCase) {
   ];
   const baseDate = new Date(c.date + 'T09:00:00');
   const baseMins = computePostOpFollowupBaseTimeMinutes(c);
-  const time = normalizeAptTimeLabel(minutesToTime24(baseMins));
   const made = [];
   dayOffsets.forEach(function (cfg) {
     const dt = new Date(baseDate.getTime() + cfg.days * 24 * 60 * 60 * 1000);
@@ -26810,7 +26806,8 @@ function scheduleDefaultSurgeryFollowups(otCase) {
       centre: c.centre || CURRENT_USER?.centre || 'CHD',
       status: 'booked'
     };
-    apt.time = time;
+    const preferredTime = normalizeAptTimeLabel(minutesToTime24(baseMins));
+    apt.time = getNextAvailableApptSlotFrom(iso, apt.doctor, preferredTime, apt.centre);
     apt.purpose = cfg.label + ' — ' + (c.procedure || 'Surgery');
     apt.dateFormatted = formatFollowupDisplayDate(iso);
     if (!existing) APPOINTMENTS.push(apt);
@@ -30513,6 +30510,14 @@ function getAppointmentPatientName(a) {
 function getAppointmentBmhId(a) {
   return String(a?.bmhId || a?.patientId || '').trim();
 }
+function getAppointmentPhone(a) {
+  const direct = String(a?.mob || a?.mobile || a?.phone || a?.leadPhone || '').replace(/\D/g, '');
+  if (direct) return direct;
+  const bmhId = getAppointmentBmhId(a);
+  if (!bmhId) return '';
+  const p = getAllKnownPatientRecords().find(function (row) { return String(row?.bmhId || '') === bmhId; });
+  return String(p?.mob || p?.mobile || p?.phone || '').replace(/\D/g, '');
+}
 function getAppointmentPurpose(a) {
   return String(a?.purpose || a?.service || a?.dept || a?.type || 'Consultation').trim();
 }
@@ -30564,14 +30569,16 @@ function appointmentListRow(a, opts) {
   const date = getAppointmentDate(a);
   const centre = getAppointmentCentre(a);
   const bmhId = getAppointmentBmhId(a) || '—';
+  const phone = getAppointmentPhone(a) || '—';
   const patient = escapeHtmlConsent(getAppointmentPatientName(a));
   const purpose = escapeHtmlConsent(getAppointmentPurpose(a));
   const doctor = escapeHtmlConsent(getAppointmentDoctor(a) || 'To assign');
   const dateLine = options.showDate && date ? ' · ' + formatDateDDMMYYYY(date) : '';
-  return '<div class="apt-slot booked" style="font-size:12px;display:grid;grid-template-columns:72px 1.2fr 95px 1.1fr 1fr 74px;gap:8px;align-items:center">'
+  return '<div class="apt-slot booked" style="font-size:12px;display:grid;grid-template-columns:72px 1.2fr 105px 105px 1.1fr 1fr 74px;gap:8px;align-items:center">'
     + '<div style="font-size:12px;font-weight:900;color:var(--bmh-blue)">' + time + '</div>'
     + '<div><div style="font-size:13px;font-weight:900">' + patient + '</div><div style="font-size:10.5px;color:var(--g1)">' + bmhId + dateLine + '</div></div>'
     + '<div style="font-family:monospace;font-size:10.5px;color:var(--tx3)">' + bmhId + '</div>'
+    + '<div style="font-family:monospace;font-size:10.5px;color:var(--tx3)">' + escapeHtmlConsent(phone) + '</div>'
     + '<div style="font-size:11px;color:var(--tx)">' + purpose + '</div>'
     + '<div style="font-size:11px;color:var(--tx3)">' + doctor + '</div>'
     + '<span class="badge bd-blue" style="font-size:9.5px;text-align:center">' + centre + '</span>'
@@ -43033,7 +43040,8 @@ function saveVisit(dept, opts) {
           });
           if (!alreadyBooked) {
             const fuDoctor = visit.doctor || CURRENT_USER?.name || '';
-            const fuTimeSlot = getNextAvailableApptSlot(fuD, fuDoctor);
+            const fuCentre = normalizeAppointmentCentreValue(visit.centre || CURRENT_USER?.centre || 'CHD');
+            const fuTimeSlot = getNextAvailableApptSlotFrom(fuD, fuDoctor, getNearestAppointmentSlot(fuD), fuCentre);
             const fuApt = {
               id: 'A' + Date.now() + Math.floor(Math.random() * 1000),
               patient: ptName,
@@ -43045,7 +43053,7 @@ function saveVisit(dept, opts) {
               dept: dept,
               purpose: 'Follow-up',
               status: 'booked',
-              centre: normalizeAppointmentCentreValue(visit.centre || CURRENT_USER?.centre || 'CHD'),
+              centre: fuCentre,
               source: 'prescription'
             };
             APPOINTMENTS.push(fuApt);
