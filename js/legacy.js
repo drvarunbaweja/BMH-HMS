@@ -30607,16 +30607,16 @@ function appointmentListRow(a, opts) {
   const source = escapeHtmlConsent(getAppointmentSourceLabel(a));
   const mode = escapeHtmlConsent(getAppointmentMode(a));
   const dateLine = options.showDate && date ? ' · ' + formatDateDDMMYYYY(date) : '';
-  return '<div class="apt-slot booked" style="font-size:12px;display:grid;grid-template-columns:64px minmax(0,1.45fr) 82px 92px minmax(0,1fr) minmax(0,.95fr) 56px 88px 72px 72px;gap:6px;align-items:center;max-width:100%;overflow:hidden">'
-    + '<div style="font-size:12px;font-weight:900;color:var(--bmh-blue)">' + time + '</div>'
-    + '<div style="min-width:0"><div style="font-size:13px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + patient + '</div><div style="font-size:10.5px;color:var(--g1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + bmhId + dateLine + '</div></div>'
+  return '<div class="apt-slot booked" style="font-size:12px;display:grid;grid-template-columns:64px minmax(0,1.45fr) 82px 92px minmax(0,1fr) minmax(0,.95fr) 56px 88px 72px 72px;gap:6px;align-items:start;max-width:100%;overflow:hidden">'
+    + '<div style="font-size:12px;font-weight:900;color:var(--bmh-blue);padding-top:2px">' + time + '</div>'
+    + '<div style="min-width:0"><div style="font-size:13px;font-weight:900;line-height:1.25;overflow-wrap:anywhere">' + patient + '</div><div style="font-size:10.5px;color:var(--g1);line-height:1.2;overflow-wrap:anywhere">' + bmhId + dateLine + '</div></div>'
     + '<div style="font-family:monospace;font-size:10.5px;color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + bmhId + '</div>'
     + '<div style="font-family:monospace;font-size:10.5px;color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escapeHtmlConsent(phone) + '</div>'
-    + '<div style="font-size:11px;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + purpose + '</div>'
-    + '<div style="font-size:11px;color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + doctor + '</div>'
-    + '<span class="badge bd-blue" style="font-size:9.5px;text-align:center">' + centre + '</span>'
-    + '<div style="font-size:10.5px;font-weight:800;color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + source + '</div>'
-    + '<div style="font-size:10.5px;color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + mode + '</div>'
+    + '<div style="font-size:11px;color:var(--tx);line-height:1.25;overflow-wrap:anywhere">' + purpose + '</div>'
+    + '<div style="font-size:11px;color:var(--tx3);line-height:1.25;overflow-wrap:anywhere">' + doctor + '</div>'
+    + '<span class="badge bd-blue" style="font-size:9.5px;text-align:center;align-self:start">' + centre + '</span>'
+    + '<div style="font-size:10.5px;font-weight:800;color:var(--tx3);line-height:1.25;overflow-wrap:anywhere">' + source + '</div>'
+    + '<div style="font-size:10.5px;color:var(--tx3);line-height:1.25;overflow-wrap:anywhere">' + mode + '</div>'
     + '<div style="display:flex;flex-direction:column;gap:3px;min-width:0"><button class="btn btn-xs btn-outline" style="font-size:9px;padding:2px 4px;min-height:0" onclick="event.stopPropagation();openEditAppointment(\'' + key + '\')">Change</button><button class="btn btn-xs btn-gray" style="font-size:9px;padding:2px 4px;min-height:0" onclick="event.stopPropagation();deleteAppointment(\'' + key + '\')">Delete</button></div>'
     + '</div>';
 }
