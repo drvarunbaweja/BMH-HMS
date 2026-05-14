@@ -9861,7 +9861,7 @@ function bmhDefaultInventoryDeptForPatient(bmhId) {
 function bmhFindInventoryUsePatients(query) {
   const q = String(query || '').trim().toLowerCase();
   if (!q) return [];
-  return (PATIENTS || []).filter(function (p) {
+  return getAllKnownPatientRecords().filter(function (p) {
     return String(p.bmhId || '').toLowerCase().includes(q)
       || String(p.mob || p.mobile || p.phone || '').replace(/\D/g, '').includes(q.replace(/\D/g, ''))
       || String(p.mob2 || '').replace(/\D/g, '').includes(q.replace(/\D/g, ''));
@@ -23631,13 +23631,29 @@ function checkSurgeryPurpose() {
 function normalizeReceptionPhoneDigits(value) {
   return String(value || '').replace(/\D/g, '');
 }
+function getAllKnownPatientRecords() {
+  const cache = Array.isArray(window._BMH_ALL_PATIENTS_CACHE) ? window._BMH_ALL_PATIENTS_CACHE : [];
+  return cache.length ? cache : (window.PATIENTS || []);
+}
+function updatePatientCountStatus() {
+  const el = document.getElementById('import-status-count');
+  if (!el) return;
+  const visible = (window.PATIENTS || []).length;
+  const all = getAllKnownPatientRecords().length;
+  if (all && all !== visible) {
+    el.textContent = visible.toLocaleString('en-IN') + ' loaded for this centre | ' + all.toLocaleString('en-IN') + ' available for lookup';
+    return;
+  }
+  el.textContent = visible.toLocaleString('en-IN') + ' patients loaded';
+}
 function getReceptionLookupPool() {
-  return (PATIENTS || []).filter(function (p) { return p && !isMergedPatientRecord(p); });
+  return getAllKnownPatientRecords().filter(function (p) { return p && !isMergedPatientRecord(p); });
 }
 function buildReceptionPatientLookupIndex() {
   const byBmh = new Map();
   const phoneTokens = new Map();
-  getReceptionLookupPool().forEach(function (p) {
+  const pool = getReceptionLookupPool();
+  pool.forEach(function (p) {
     const bmh = String(p.bmhId || '').trim().toUpperCase();
     if (bmh && !byBmh.has(bmh)) byBmh.set(bmh, p);
     [p.mob, p.mobile, p.mob2, p.altMobile].forEach(function (rawPhone) {
@@ -23652,12 +23668,13 @@ function buildReceptionPatientLookupIndex() {
       });
     });
   });
-  window._bmhReceptionPatientLookupIndex = { sourceLength: (PATIENTS || []).length, byBmh: byBmh, phoneTokens: phoneTokens };
+  window._bmhReceptionPatientLookupIndex = { sourceVersion: window._bmhPatientsCacheVersion || 0, sourceLength: pool.length, byBmh: byBmh, phoneTokens: phoneTokens };
   return window._bmhReceptionPatientLookupIndex;
 }
 function getReceptionPatientLookupIndex() {
   const idx = window._bmhReceptionPatientLookupIndex;
-  if (!idx || idx.sourceLength !== (PATIENTS || []).length) return buildReceptionPatientLookupIndex();
+  const poolLength = getReceptionLookupPool().length;
+  if (!idx || idx.sourceVersion !== (window._bmhPatientsCacheVersion || 0) || idx.sourceLength !== poolLength) return buildReceptionPatientLookupIndex();
   return idx;
 }
 function findReceptionPatientByBmh(value) {
@@ -24033,7 +24050,7 @@ function isPrimaryBmhSequenceNumber(num) {
 function getKnownHighestBmhNumber() {
   let maxPrimary = 0;
   let maxFallback = 0;
-  (window.PATIENTS || []).forEach(function (p) {
+  getAllKnownPatientRecords().forEach(function (p) {
     const m = String(p?.bmhId || '').trim().match(/^BMSH-(\d{1,9})$/i);
     if (!m) return;
     const n = parseInt(m[1], 10);
@@ -24059,7 +24076,7 @@ function isBmhIdAllocatedToAnotherPatient(bmhId, exceptBmhId) {
   const target = String(bmhId || '').trim();
   const except = String(exceptBmhId || '').trim();
   if (!target) return false;
-  return (window.PATIENTS || []).some(function (p) {
+  return getAllKnownPatientRecords().some(function (p) {
     const existingId = String(p?.bmhId || '').trim();
     if (!existingId || existingId !== target) return false;
     if (except && existingId === except) return false;
@@ -32201,15 +32218,17 @@ function rebuildPatientsArrayFromGlobalCache() {
   const cache = window._BMH_ALL_PATIENTS_CACHE;
   if (!Array.isArray(cache)) return;
   const want = effectivePatientListCentreScope();
+  const dateKey = todayKey();
   PATIENTS.length = 0;
   if (want == null) {
     cache.forEach(function (p) { PATIENTS.push(p); });
   } else {
     cache.forEach(function (p) {
-      if (patientCentreKey(p.centre) === want) PATIENTS.push(p);
+      if (rowMatchesCentre(p, want, { allowUncentredToday: true, dateKey: dateKey })) PATIENTS.push(p);
     });
   }
   buildReceptionPatientLookupIndex();
+  updatePatientCountStatus();
 }
 window.rebuildPatientsArrayFromGlobalCache = rebuildPatientsArrayFromGlobalCache;
 function formatDateDDMMYYYY(value) {
@@ -32594,12 +32613,13 @@ function findCanonicalExistingPatientByIdentity(input, opts) {
 function resolveActivePatientByBmhId(rawId) {
   const id = String(rawId || '').trim();
   if (!id || !/^BMSH-/i.test(id)) return null;
-  const direct = (PATIENTS || []).find(function (x) {
+  const source = getAllKnownPatientRecords();
+  const direct = source.find(function (x) {
     return String(x.bmhId || '').toLowerCase() === id.toLowerCase();
   });
   if (!direct) return null;
   if (direct.mergedInto) {
-    const canon = (PATIENTS || []).find(function (x) { return String(x.bmhId) === String(direct.mergedInto); });
+    const canon = source.find(function (x) { return String(x.bmhId) === String(direct.mergedInto); });
     if (canon && !isMergedPatientRecord(canon)) return canon;
     return null;
   }
@@ -32609,14 +32629,15 @@ function resolveActivePatientByBmhId(rawId) {
 function resolveExistingPatientForRegistration(rawId) {
   const id = String(rawId || '').trim();
   if (!id) return null;
+  const source = getAllKnownPatientRecords();
   const canonical = resolveActivePatientByBmhId(id);
   if (canonical) return canonical;
-  const direct = (PATIENTS || []).find(function (x) {
+  const direct = source.find(function (x) {
     return String(x?.bmhId || '').trim().toLowerCase() === id.toLowerCase();
   });
   if (!direct) return null;
   if (direct.mergedInto) {
-    const canon = (PATIENTS || []).find(function (x) {
+    const canon = source.find(function (x) {
       return String(x?.bmhId || '').trim().toLowerCase() === String(direct.mergedInto || '').trim().toLowerCase();
     });
     if (canon && !isMergedPatientRecord(canon)) return canon;
@@ -35756,6 +35777,7 @@ function applyPatientsPayload(data, opts) {
   window._bmhPatientsHydrating = true;
   const finish = function () {
     window._BMH_ALL_PATIENTS_CACHE = normalized;
+    window._bmhPatientsCacheVersion = (window._bmhPatientsCacheVersion || 0) + 1;
     rebuildPatientsArrayFromGlobalCache();
     window._bmhPatientsHydrating = false;
     if(!_fbPatientsLoaded) {
@@ -35801,16 +35823,14 @@ function applyPatientsPayload(data, opts) {
   pump();
 }
 function refreshPatientsFromFirebase() {
-  const scope = effectivePatientListCentreScope();
+  const scope = 'ALL';
   if (!window.FBDB) return Promise.resolve();
   if (window._bmhPatientsRefreshInFlight && window._bmhPatientsRefreshScope === scope) return Promise.resolve();
   const token = Date.now() + Math.random();
   window._bmhPatientsRefreshInFlight = true;
   window._bmhPatientsRefreshScope = scope;
   window._bmhPatientsRefreshToken = token;
-  const query = scope
-    ? window.FBDB.ref('patients').orderByChild('centre').equalTo(scope)
-    : window.FBDB.ref('patients');
+  const query = window.FBDB.ref('patients');
   return query.once('value').then(function (snap) {
     if (window._bmhPatientsRefreshToken !== token) return;
     const data = snap && typeof snap.val === 'function' ? snap.val() : {};
@@ -39041,8 +39061,7 @@ function processCsvData(csvText) {
   if(bar) bar.style.width='100%';
   if(txt) txt.textContent = `✅ Done! ${added} new patients added (${newPts.length-added} already existed)`;
   
-  const statusEl = document.getElementById('import-status-count');
-  if(statusEl) statusEl.textContent = PATIENTS.length.toLocaleString('en-IN') + ' patients in database';
+  updatePatientCountStatus();
 
   // Push to Firebase in batches
   if(window.FBDB) {
@@ -40027,8 +40046,7 @@ function renderSettingsPage() {
   renderConsentLibrary && renderConsentLibrary('all');
   renderStructuredConsentList && renderStructuredConsentList();
   loadCustomConsentsForSettings && loadCustomConsentsForSettings();
-  const sc = document.getElementById('import-status-count');
-  if(sc) sc.textContent = PATIENTS.length.toLocaleString('en-IN') + ' patients in database';
+  updatePatientCountStatus();
   const role = String(CURRENT_USER?.role || '');
   const isReception = role === 'Reception';
   const settingsPage = document.getElementById('pg-settings');
@@ -40419,8 +40437,7 @@ window.nav = function(id, el) {
       renderSettingsDrugs && renderSettingsDrugs();
       renderAdminUsersList && renderAdminUsersList();
       if(canCurrentUserApproveDeletionRequests && canCurrentUserApproveDeletionRequests()) { loadDeletionRequests&&loadDeletionRequests(); }
-      const sc = document.getElementById('import-status-count');
-      if(sc) sc.textContent = PATIENTS.length.toLocaleString('en-IN')+' patients in database';
+      updatePatientCountStatus();
     }, 80);
   }
 };
