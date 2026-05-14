@@ -6314,7 +6314,7 @@ function setCentre(c, btn) {
   syncReceptionConsultationFee && syncReceptionConsultationFee();
   window._bmhTodayTransactionsLoadedKey = '';
   rebuildPatientsArrayFromGlobalCache && rebuildPatientsArrayFromGlobalCache();
-  refreshTodayQueuePatientsFromFirebase && refreshTodayQueuePatientsFromFirebase();
+  refreshPatientsFromFirebase && refreshPatientsFromFirebase();
   listenPayRequests && listenPayRequests({ force: true });
   listenAppointments && listenAppointments({ force: true });
   loadTodayTransactions && loadTodayTransactions();
@@ -7983,6 +7983,32 @@ function ensureIpdAdmissionFromOTCase(otCase, patient) {
   }).catch(function () {});
   return entry;
 }
+function reconcileIpdAdmissionsFromOTCases() {
+  const otRows = (window.OT_CASES || OT_CASES || []).map(normalizeOTCaseRecord);
+  if (!otRows.length) return 0;
+  const ipdRows = window.IPD_PATIENTS || IPD_PATIENTS || [];
+  const activeKeys = new Set();
+  ipdRows.forEach(function (row) {
+    if (!row || (row.status || 'admitted') === 'discharged') return;
+    if (row.otCaseId) activeKeys.add('ot:' + row.otCaseId);
+    if (row.bmhId) activeKeys.add('bmh:' + row.bmhId);
+  });
+  let added = 0;
+  otRows.forEach(function (otCase) {
+    if (!otCase || !otCase.bmhId || !otCase.admitToIpd) return;
+    if (!centreMatch(otCase)) return;
+    if (activeKeys.has('ot:' + otCase.id) || activeKeys.has('bmh:' + otCase.bmhId)) return;
+    const pt = PATIENTS.find(function (p) { return p.bmhId === otCase.bmhId; }) || null;
+    const entry = ensureIpdAdmissionFromOTCase(otCase, pt);
+    if (entry) {
+      activeKeys.add('ot:' + otCase.id);
+      activeKeys.add('bmh:' + otCase.bmhId);
+      added += 1;
+    }
+  });
+  return added;
+}
+window.reconcileIpdAdmissionsFromOTCases = reconcileIpdAdmissionsFromOTCases;
 function autoDischargeCurrentIpdPatientFromSurgery() {
   const bmhId = document.getElementById('dc-pt-id')?.textContent?.trim() || activeOTCase?.bmhId || window.CURRENT_PATIENT?.bmhId;
   const list = window.IPD_PATIENTS || IPD_PATIENTS || [];
@@ -32297,6 +32323,55 @@ async function repairDuplicatePatientsForIdentity(input) {
   }
   return canonical;
 }
+async function repairTodayDuplicatePatientsByIdentity(dateKey) {
+  if (window._bmhTodayDuplicateRepairRunning) return;
+  window._bmhTodayDuplicateRepairRunning = true;
+  window._bmhSuppressRealtimeFlush = true;
+  const targetDate = dateKey || todayKey();
+  let repairs = 0;
+  try {
+    const source = Array.isArray(window._BMH_ALL_PATIENTS_CACHE) && window._BMH_ALL_PATIENTS_CACHE.length
+      ? window._BMH_ALL_PATIENTS_CACHE
+      : PATIENTS;
+    const groups = new Map();
+    (source || []).forEach(function (p) {
+      if (!p || isMergedPatientRecord(p)) return;
+      const nameKey = patientNameIdentityKey(p.name || p.patient);
+      if (!nameKey) return;
+      getPatientPhoneKeys(p).forEach(function (phoneKey) {
+        const groupKey = nameKey + '|' + phoneKey;
+        if (!groups.has(groupKey)) groups.set(groupKey, []);
+        groups.get(groupKey).push(p);
+      });
+    });
+    for (const patients of groups.values()) {
+      const unique = Array.from(new Map((patients || []).map(function (p) {
+        return [String(p?.bmhId || ''), p];
+      })).values());
+      if (unique.length < 2) continue;
+      const sorted = sortPatientsByCanonicalIdentity(unique);
+      const canonical = sorted.find(function (p) { return !rowDateMatchesKey(p, targetDate); }) || sorted[0];
+      const canonicalAge = patientApproxAgeYears(canonical);
+      for (let i = 0; i < sorted.length; i += 1) {
+        const candidate = sorted[i];
+        if (!candidate || String(candidate.bmhId || '') === String(canonical.bmhId || '')) continue;
+        if (!rowDateMatchesKey(candidate, targetDate)) continue;
+        if (!agesCloseEnough(canonicalAge, patientApproxAgeYears(candidate), 2)) continue;
+        await mergeDuplicatePatientRecord(canonical.bmhId, candidate.bmhId);
+        repairs += 1;
+      }
+    }
+    if (repairs) showToast("Today's duplicate patient IDs merged into previous BMSH IDs ✓", 's');
+  } finally {
+    window._bmhTodayDuplicateRepairRunning = false;
+    window._bmhSuppressRealtimeFlush = false;
+    if (repairs > 0) {
+      rebuildPatientsArrayFromGlobalCache && rebuildPatientsArrayFromGlobalCache();
+      _debouncedRenderDash && _debouncedRenderDash();
+    }
+  }
+}
+window.repairTodayDuplicatePatientsByIdentity = repairTodayDuplicatePatientsByIdentity;
 async function repairDuplicatePatientsByIdentity() {
   if (window._bmhDuplicateRepairRunning) return;
   window._bmhDuplicateRepairRunning = true;
@@ -32437,14 +32512,29 @@ function localDateKey(value) {
   const india = new Date(d.getTime() + (330 * 60 * 1000));
   return india.getUTCFullYear() + '-' + String(india.getUTCMonth() + 1).padStart(2, '0') + '-' + String(india.getUTCDate()).padStart(2, '0');
 }
+function getTodayCompletedOtPatientSet(todayKeyLocal) {
+  const day = todayKeyLocal || localDateKey(new Date());
+  const rows = window.OT_CASES || OT_CASES || [];
+  const version = day + ':' + rows.length + ':' + rows.map(function (c) {
+    return String(c?.id || '') + ':' + String(c?.status || '') + ':' + String(c?.updatedAt || c?.lastUpdated || c?.date || c?.createdAt || '');
+  }).join('|');
+  if (window._bmhTodayCompletedOtCache && window._bmhTodayCompletedOtCache.version === version) {
+    return window._bmhTodayCompletedOtCache.ids;
+  }
+  const ids = new Set();
+  rows.forEach(function (c) {
+    if (!c || !c.bmhId) return;
+    if (String(c.status || '').toLowerCase() !== 'completed') return;
+    if (localDateKey(c.date || c.surgeryDate || c.otDate || c.updatedAt || c.createdAt) === day) ids.add(String(c.bmhId || ''));
+  });
+  window._bmhTodayCompletedOtCache = { version: version, ids: ids };
+  return ids;
+}
 /** Shared filter: patient appears in today's doctor queue and reception queue (same date logic). */
 function patientQueueDateMatchesToday(p) {
   if (!p || p.queueRemoved) return false;
   const todayKeyLocal = localDateKey(new Date());
-  const otDoneToday = (window.OT_CASES || OT_CASES || []).some(function (c) {
-    return c && c.bmhId === p.bmhId && String(c.status || '').toLowerCase() === 'completed'
-      && localDateKey(c.date || c.surgeryDate || c.otDate || c.updatedAt || c.createdAt) === todayKeyLocal;
-  });
+  const otDoneToday = getTodayCompletedOtPatientSet(todayKeyLocal).has(String(p.bmhId || ''));
   const stamps = [p.checkinAt, p.queueDate, p.visitDate].filter(Boolean);
   if (!stamps.length) {
     return !!otDoneToday;
@@ -35156,7 +35246,8 @@ function _debouncedRenderDash() {
     renderActivePageAfterRealtimeUpdate();
   }, 300);
 }
-function applyPatientsPayload(data) {
+function applyPatientsPayload(data, opts) {
+  const options = opts || {};
   const all = data ? Object.values(data) : [];
   const chunkSize = 60;
   const normalized = [];
@@ -35178,6 +35269,18 @@ function applyPatientsPayload(data) {
       showToast('Connected to database ✓','s');
     }
     genRcUID && genRcUID();
+    if (options.fullHistory && typeof repairTodayDuplicatePatientsByIdentity === 'function') {
+      const repairDate = todayKey();
+      const repairKey = repairDate + ':' + (effectivePatientListCentreScope() || 'ALL');
+      if (window._bmhTodayDuplicateRepairDoneForDate !== repairKey) {
+        window._bmhTodayDuplicateRepairDoneForDate = repairKey;
+        setTimeout(function () {
+          repairTodayDuplicatePatientsByIdentity(repairDate).catch(function (e) {
+            console.warn('today duplicate patient repair failed', e);
+          });
+        }, 800);
+      }
+    }
     if (window._renderReceptionAfterHydration) {
       window._renderReceptionAfterHydration = false;
       renderReceptionPage && renderReceptionPage();
@@ -35217,7 +35320,7 @@ function refreshPatientsFromFirebase() {
   return query.once('value').then(function (snap) {
     if (window._bmhPatientsRefreshToken !== token) return;
     const data = snap && typeof snap.val === 'function' ? snap.val() : {};
-    applyPatientsPayload(data);
+    applyPatientsPayload(data, { fullHistory: true });
   }).catch(function (e) {
     console.warn('patients refresh failed', e);
   }).finally(function () {
@@ -35390,7 +35493,7 @@ function schedulePatientsRefreshLoop() {
     if (document.visibilityState === 'hidden') return;
     const last = Number(window._bmhPatientsLastRefreshAt || 0);
     if (Date.now() - last < 120000) return;
-    refreshTodayQueuePatientsFromFirebase();
+    refreshPatientsFromFirebase();
   };
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState === 'visible') maybeRefresh();
@@ -35405,7 +35508,7 @@ function loadPatientsFromFirebase() {
   window._bmhRtdbPatientsListening = true;
   window._bmhRtdbPatientsScope = scope;
   scheduleQueueCalendarDayRefresh && scheduleQueueCalendarDayRefresh();
-  refreshTodayQueuePatientsFromFirebase().then(function () {
+  refreshPatientsFromFirebase().then(function () {
     startPatientsRealtimeUpdates();
     startTodayQueuePatientsRealtimeUpdates(true);
   });
@@ -40650,6 +40753,7 @@ function renderIPD() {
   if(window.IPD_PATIENTS && window.IPD_PATIENTS !== IPD_PATIENTS) {
     IPD_PATIENTS.length=0; window.IPD_PATIENTS.forEach(p=>IPD_PATIENTS.push(p));
   }
+  reconcileIpdAdmissionsFromOTCases && reconcileIpdAdmissionsFromOTCases();
   const detailEl = document.getElementById('ipd-detail');
   const visibleIPD = IPD_PATIENTS.filter(p => {
     if(!p.centre) p.centre = getEffectiveCentre() || CURRENT_USER?.centre || 'CHD';
