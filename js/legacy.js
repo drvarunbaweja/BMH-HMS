@@ -32190,10 +32190,18 @@ function rowDateMatchesKey(row, dateKey) {
     return localDateKey(raw) === target || String(raw || '').slice(0, 10) === target;
   });
 }
+function isPatientWorkingListStatus(row) {
+  const status = String(row?.status || '').trim().toLowerCase();
+  if (row?.inactive || row?.mergedInto || status === 'inactive' || status === 'merged' || status === 'removed') return false;
+  return true;
+}
 function rowMatchesCentre(row, centre, opts) {
   const wanted = patientCentreKey(centre || getEffectiveCentre?.() || 'CHD');
   const explicit = explicitPatientCentreKey(row?.centre);
-  if (explicit) return explicit === wanted;
+  if (explicit) {
+    if (explicit !== wanted) return false;
+    return isPatientWorkingListStatus(row) || rowDateMatchesKey(row, opts?.dateKey || todayKey());
+  }
   // Legacy rows without a centre used to be treated as Chandigarh forever.
   // Keep same-day working rows visible, but do not let old uncentred history
   // weigh down the Chandigarh live UI.
