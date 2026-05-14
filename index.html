@@ -1663,33 +1663,31 @@
         <div class="plan-panel" id="oe-plan-instructions" style="background:#fffbeb;border-color:rgba(212,160,23,.4)">
           <div class="plan-panel-head">
             <div class="plan-panel-title" style="color:#8a4200">Instructions</div>
-            <div style="display:flex;gap:5px">
-              <button class="btn btn-xs btn-outline" onclick="openSaveAdviceTemplate()">💾 Save as Template</button>
-              <button class="btn btn-xs" style="background:var(--orange-lt);color:#8a4200;border:1px solid rgba(212,160,23,.5)" onclick="openLoadAdviceTemplate()">📂 Load Template</button>
-            </div>
           </div>
-          <div id="oe-advice-library" class="quick-library-grid"></div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
-            <input type="text" id="oph-advice-quick-input" list="oph-advice-quick-list" placeholder="Type instruction and press Enter…" style="flex:1;min-width:220px;font-size:11px;padding:6px 8px;border-radius:var(--rsm);border:1.5px solid var(--g4)" onchange="commitDeptAdviceQuickEntry('ophtho', this)" onkeydown="handleDeptQuickEntryKey(event,'advice','ophtho',this)">
+            <input type="text" id="oph-advice-quick-input" list="oph-advice-quick-list" placeholder="Add new instruction..." style="flex:1;min-width:220px;font-size:11px;padding:6px 8px;border-radius:var(--rsm);border:1.5px solid var(--g4)" onchange="commitDeptAdviceQuickEntry('ophtho', this)" onkeydown="handleDeptQuickEntryKey(event,'advice','ophtho',this)">
             <datalist id="oph-advice-quick-list"></datalist>
             <button type="button" class="btn btn-xs btn-blue" onclick="commitDeptAdviceQuickEntry('ophtho', document.getElementById('oph-advice-quick-input'))">+ Add</button>
+            <button type="button" class="btn btn-xs btn-outline" onclick="openDeptPlanPicker('ophtho','advice')">Select Instruction</button>
           </div>
+          <div id="oe-advice-library" class="quick-library-grid" style="display:none" aria-hidden="true"></div>
           <textarea id="rx-advice-text" placeholder="Type instructions to patient or load from template…" oninput="ingestCustomAdviceLinesFromTextarea(this)" onblur="ingestCustomAdviceLinesFromTextarea(this)" style="width:100%;min-height:48px;font-size:12px;border:1.5px solid rgba(212,160,23,.4);border-radius:6px;padding:6px 8px;background:#fff;font-family:var(--font);resize:vertical"></textarea>
         </div>
         <div class="plan-panel" id="oe-plan-procedures">
           <div class="plan-panel-head">
             <div class="plan-panel-title">Surgery / Procedure Advised</div>
-            <div style="display:flex;gap:5px">
-              <input type="text" id="oph-proc-quick-input" list="oph-proc-quick-list" placeholder="Type procedure and press Enter…" style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:220px;border:1.5px solid var(--orange)" onchange="commitDeptProcedureQuickEntry('ophtho', this)" onkeydown="handleDeptQuickEntryKey(event,'procedure','ophtho',this)">
-              <datalist id="oph-proc-quick-list"></datalist>
-              <select id="proc-add-dropdown" style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:180px" onchange="addProcFromDropdown(this)">
-                <option value="">— Select from list —</option>
-                <option value="__custom__">+ Add New Procedure…</option>
-              </select>
-              <button class="btn btn-xs btn-orange" onclick="addProcAdvised()">+ Custom</button>
-            </div>
           </div>
-          <div id="oe-proc-library" class="quick-library-grid"></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+            <input type="text" id="oph-proc-quick-input" list="oph-proc-quick-list" placeholder="Add new procedure..." style="flex:1;min-width:220px;font-size:11px;padding:6px 8px;border-radius:6px;border:1.5px solid var(--orange)" onchange="commitDeptProcedureQuickEntry('ophtho', this)" onkeydown="handleDeptQuickEntryKey(event,'procedure','ophtho',this)">
+            <datalist id="oph-proc-quick-list"></datalist>
+            <button type="button" class="btn btn-xs btn-orange" onclick="commitDeptProcedureQuickEntry('ophtho', document.getElementById('oph-proc-quick-input'))">+ Add</button>
+            <button type="button" class="btn btn-xs btn-outline" onclick="openDeptPlanPicker('ophtho','procedure')">Select Procedure</button>
+            <select id="proc-add-dropdown" style="display:none" onchange="addProcFromDropdown(this)">
+              <option value="">— Select from list —</option>
+              <option value="__custom__">+ Add New Procedure…</option>
+            </select>
+          </div>
+          <div id="oe-proc-library" class="quick-library-grid" style="display:none" aria-hidden="true"></div>
           <div id="rx-proc-advised" style="min-height:32px">
             <div style="font-size:11px;color:var(--g1);padding:5px 8px;font-style:italic;background:var(--g6);border-radius:6px">No procedure advised yet</div>
           </div>
@@ -2758,33 +2756,36 @@
         <div class="plan-panel" id="obg-rx-procedures" style="margin-bottom:10px">
           <div class="plan-panel-head">
             <div class="plan-panel-title">Surgery / Procedure Advised</div>
-            <div style="display:flex;gap:5px;flex-wrap:wrap">
-              <input type="text" id="obg-proc-quick-input" list="obg-proc-quick-list" placeholder="Type procedure and press Enter…" style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:220px;border:1.5px solid var(--orange)" onchange="commitDeptProcedureQuickEntry('obg', this)" onkeydown="handleDeptQuickEntryKey(event,'procedure','obg',this)">
-              <datalist id="obg-proc-quick-list"></datalist>
-              <select id="obg-proc-add-dropdown" style="font-size:11px;padding:3px 6px;border-radius:6px;min-width:190px;border:1.5px solid var(--orange)" onchange="addProcFromDropdownDept(this)">
-                <option value="">— Select procedure —</option>
-                <option value="__custom__|0">+ Add new procedure…</option>
-              </select>
-            </div>
           </div>
-          <div id="obg-proc-library" class="quick-library-grid"></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+            <input type="text" id="obg-proc-quick-input" list="obg-proc-quick-list" placeholder="Add new procedure..." style="flex:1;min-width:220px;font-size:11px;padding:6px 8px;border-radius:6px;border:1.5px solid var(--orange)" onchange="commitDeptProcedureQuickEntry('obg', this)" onkeydown="handleDeptQuickEntryKey(event,'procedure','obg',this)">
+            <datalist id="obg-proc-quick-list"></datalist>
+            <button type="button" class="btn btn-xs btn-orange" onclick="commitDeptProcedureQuickEntry('obg', document.getElementById('obg-proc-quick-input'))">+ Add</button>
+            <button type="button" class="btn btn-xs btn-outline" onclick="openDeptPlanPicker('obg','procedure')">Select Procedure</button>
+            <select id="obg-proc-add-dropdown" style="display:none" onchange="addProcFromDropdownDept(this)">
+              <option value="">— Select procedure —</option>
+              <option value="__custom__|0">+ Add new procedure…</option>
+            </select>
+          </div>
+          <div id="obg-proc-library" class="quick-library-grid" style="display:none" aria-hidden="true"></div>
           <div id="rx-proc-advised-obg" style="min-height:28px">
             <div class="proc-placeholder" style="font-size:11px;color:var(--g1);padding:5px 8px;font-style:italic;background:var(--g6);border-radius:6px">No procedure advised yet</div>
           </div>
         </div>
         <div class="plan-panel" id="obg-rx-instructions" style="background:#fffbeb;border-color:rgba(212,160,23,.4);margin-bottom:10px">
           <div class="plan-panel-head"><div class="plan-panel-title" style="color:#8a4200;font-size:12px">Instructions</div></div>
-          <div id="obg-advice-library" class="quick-library-grid"></div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
-            <input type="text" id="obg-advice-quick-input" list="obg-advice-quick-list" placeholder="Type instruction and press Enter…" style="flex:1;min-width:220px;font-size:11px;padding:6px 8px;border-radius:var(--rsm);border:1.5px solid var(--g4)" onchange="commitDeptAdviceQuickEntry('obg', this)" onkeydown="handleDeptQuickEntryKey(event,'advice','obg',this)">
+            <input type="text" id="obg-advice-quick-input" list="obg-advice-quick-list" placeholder="Add new instruction..." style="flex:1;min-width:220px;font-size:11px;padding:6px 8px;border-radius:var(--rsm);border:1.5px solid var(--g4)" onchange="commitDeptAdviceQuickEntry('obg', this)" onkeydown="handleDeptQuickEntryKey(event,'advice','obg',this)">
             <datalist id="obg-advice-quick-list"></datalist>
-            <select id="obg-advice-quick" style="flex:1;min-width:180px;font-size:11px;padding:6px 8px;border-radius:var(--rsm);border:1.5px solid var(--g4)">
+            <button type="button" class="btn btn-xs btn-blue" onclick="commitDeptAdviceQuickEntry('obg', document.getElementById('obg-advice-quick-input'))">+ Add</button>
+            <button type="button" class="btn btn-xs btn-outline" onclick="openDeptPlanPicker('obg','advice')">Select Instruction</button>
+            <select id="obg-advice-quick" style="display:none">
               <option value="">— Add advice from list —</option>
             </select>
-            <button type="button" class="btn btn-xs btn-blue" onclick="appendObgAdviceFromQuick()">+ Add</button>
           </div>
-          <div id="obg-advice-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;min-height:28px"></div>
-          <textarea placeholder="Advice to patient…" style="width:100%;min-height:36px;margin-bottom:6px;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px;display:none" id="obg-advice" aria-hidden="true"></textarea>
+          <div id="obg-advice-library" class="quick-library-grid" style="display:none" aria-hidden="true"></div>
+          <div id="obg-advice-chips" style="display:none" aria-hidden="true"></div>
+          <textarea placeholder="Advice to patient…" style="width:100%;min-height:48px;margin-bottom:6px;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px;background:#fff;font-family:var(--font);resize:vertical" id="obg-advice"></textarea>
           <textarea placeholder="Additional advice…" style="width:100%;min-height:32px;margin-bottom:0;font-size:12px;border-radius:var(--rsm);border:1.5px solid var(--g4);padding:7px;display:none" id="obg-extra-advice" aria-hidden="true"></textarea>
         </div>
         <div style="background:var(--g6);border-radius:var(--rsm);padding:8px 11px;margin-bottom:10px;border:1.5px solid var(--g4)">
@@ -6019,6 +6020,16 @@
 <div class="fg fg1" style="gap:10px">
   <div style="font-size:11px;color:var(--g1)">Select a template to fill the prescription immediately.</div>
   <div id="rx-template-picker-list"></div>
+</div>
+</div>
+</div>
+
+<div class="modal-ov" id="m-dept-plan-picker">
+<div class="modal modal-lg">
+<div class="modal-hd"><div class="modal-title" id="dept-plan-picker-title">Select Saved Item</div><button class="modal-close" onclick="closeM('m-dept-plan-picker')">✕</button></div>
+<div class="fg fg1" style="gap:10px">
+  <div id="dept-plan-picker-subtitle" style="font-size:11px;color:var(--g1)">Select a saved item to add it immediately.</div>
+  <div id="dept-plan-picker-list"></div>
 </div>
 </div>
 </div>

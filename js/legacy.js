@@ -20033,6 +20033,50 @@ function getDeptProcedureQuickListId(dept) {
 function getDeptProcedureContainerId(dept) {
   return { ophtho: 'rx-proc-advised', obg: 'rx-proc-advised-obg', psych: 'rx-proc-advised-psych', skin: 'rx-proc-advised-skin' }[dept] || 'rx-proc-advised';
 }
+function ensureDeptPlanTemplateSeeds(dept, kind) {
+  const bucket = getDoctorCustomRxOptionsForDept(dept);
+  let changed = false;
+  if (kind === 'advice') {
+    const seededAdvice = dept === 'ophtho'
+      ? [
+          'Use eye drops exactly as advised',
+          'Do not rub the eyes',
+          'Wear dark glasses outdoors',
+          'Keep eyes clean and avoid dust',
+          'Come urgently if pain, redness, or sudden drop in vision',
+          'Review with reports on next visit',
+          'Use lubricating drops regularly',
+          'Strict blood sugar and BP control'
+        ]
+      : dept === 'obg'
+        ? [
+            'Maintain healthy weight',
+            'Exercise regularly',
+            'Take balanced high-protein diet',
+            'Avoid high sugar and junk food',
+            'Take prescribed supplements regularly',
+            'Adequate hydration and sleep',
+            'Avoid smoking and alcohol',
+            'Follow-up on scheduled date'
+          ]
+        : [];
+    if (seededAdvice.length && (!Array.isArray(bucket.advice) || !bucket.advice.length)) {
+      bucket.advice = seededAdvice.slice();
+      changed = true;
+    }
+  } else if (kind === 'procedure' && dept === 'ophtho' && (!Array.isArray(bucket.procedure) || !bucket.procedure.length)) {
+    bucket.procedure = [
+      'Cataract Surgery Evaluation',
+      'YAG Laser Capsulotomy',
+      'Intravitreal Injection',
+      'Pterygium Excision',
+      'DCR / Syringing Advice',
+      'Retinal Laser'
+    ];
+    changed = true;
+  }
+  if (changed) saveDoctorCustomRxOptions();
+}
 function dedupePlanSuggestionItems(items) {
   const seen = new Set();
   return (items || []).map(function (item) {
@@ -20320,50 +20364,23 @@ window.appendObgAdviceFromQuick = function () {
 };
 function renderDeptAdviceLibrary(dept) {
   const host = document.getElementById(getDeptAdviceLibraryHostId(dept));
-  if (!host) return;
-  const bucket = getDoctorCustomRxOptionsForDept(dept);
-  const seededOphthoAdvice = [
-    'Use eye drops exactly as advised',
-    'Do not rub the eyes',
-    'Wear dark glasses outdoors',
-    'Keep eyes clean and avoid dust',
-    'Come urgently if pain, redness, or sudden drop in vision',
-    'Review with reports on next visit',
-    'Use lubricating drops regularly',
-    'Strict blood sugar and BP control'
-  ];
-  const seededObgAdvice = [
-    'Maintain healthy weight',
-    'Exercise regularly',
-    'Take balanced high-protein diet',
-    'Avoid high sugar and junk food',
-    'Take prescribed supplements regularly',
-    'Adequate hydration and sleep',
-    'Avoid smoking and alcohol',
-    'Follow-up on scheduled date'
-  ];
-  if (dept === 'ophtho' && (!Array.isArray(bucket.advice) || !bucket.advice.length)) {
-    bucket.advice = seededOphthoAdvice.slice();
-    saveDoctorCustomRxOptions();
-  } else if (dept === 'obg' && (!Array.isArray(bucket.advice) || !bucket.advice.length)) {
-    bucket.advice = seededObgAdvice.slice();
-    saveDoctorCustomRxOptions();
-  }
+  ensureDeptPlanTemplateSeeds(dept, 'advice');
   const items = getMergedDeptTemplateOptions('advice', dept);
   if (!items.length) {
-    host.innerHTML = '<div style="font-size:10.5px;color:var(--g1);padding:6px 8px;border:1px dashed var(--g4);border-radius:8px;background:var(--g6)">Saved instructions will appear here like templates.</div>';
+    if (host) host.innerHTML = '<div style="font-size:10.5px;color:var(--g1);padding:6px 8px;border:1px dashed var(--g4);border-radius:8px;background:var(--g6)">Saved instructions will appear here like templates.</div>';
     updateDeptAdviceDropdown(dept, []);
     return;
   }
-  // Enhanced block display with better styling
-  host.innerHTML = items.map(function (item) {
-    const safeItem = String(item).replace(/"/g, '&quot;');
-    const jsItem = String(item).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-    return '<div class="advice-block-item" style="display:grid;grid-template-columns:minmax(0,1fr) 26px;gap:6px;align-items:start;background:#fff;border:1px solid var(--g5);border-radius:8px;padding:8px 10px;margin-bottom:6px;transition:all .2s">'
-      + '<button type="button" class="btn btn-xs btn-outline" style="justify-content:flex-start;text-align:left;white-space:normal;line-height:1.4;padding:6px 10px;font-size:12px" title="' + safeItem + '" onclick="appendAdviceTemplateToTextarea(\'' + dept + '\',\'' + jsItem + '\')">📋 ' + escapeHtmlConsent(item) + '</button>'
-      + '<button type="button" class="btn btn-xs btn-gray" title="Delete" style="padding:4px 8px" onclick="removeDeptAdviceTemplate(\'' + dept + '\',\'' + jsItem + '\')">✕</button>'
-      + '</div>';
-  }).join('');
+  if (host) {
+    host.innerHTML = items.map(function (item) {
+      const safeItem = String(item).replace(/"/g, '&quot;');
+      const jsItem = String(item).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      return '<div class="advice-block-item" style="display:grid;grid-template-columns:minmax(0,1fr) 26px;gap:6px;align-items:start;background:#fff;border:1px solid var(--g5);border-radius:8px;padding:8px 10px;margin-bottom:6px;transition:all .2s">'
+        + '<button type="button" class="btn btn-xs btn-outline" style="justify-content:flex-start;text-align:left;white-space:normal;line-height:1.4;padding:6px 10px;font-size:12px" title="' + safeItem + '" onclick="appendAdviceTemplateToTextarea(\'' + dept + '\',\'' + jsItem + '\')">📋 ' + escapeHtmlConsent(item) + '</button>'
+        + '<button type="button" class="btn btn-xs btn-gray" title="Delete" style="padding:4px 8px" onclick="removeDeptAdviceTemplate(\'' + dept + '\',\'' + jsItem + '\')">✕</button>'
+        + '</div>';
+    }).join('');
+  }
   
   // Update dropdown immediately for all departments
   updateDeptAdviceDropdown(dept, items);
@@ -20438,31 +20455,21 @@ function syncDeptAdviceLibraryFromTextarea(dept) {
 }
 function renderDeptProcedureLibrary(dept) {
   const host = document.getElementById(getDeptProcedureLibraryHostId(dept));
-  if (!host) return;
-  const bucket = getDoctorCustomRxOptionsForDept(dept);
-  if (dept === 'ophtho' && (!Array.isArray(bucket.procedure) || !bucket.procedure.length)) {
-    bucket.procedure = [
-      'Cataract Surgery Evaluation',
-      'YAG Laser Capsulotomy',
-      'Intravitreal Injection',
-      'Pterygium Excision',
-      'DCR / Syringing Advice',
-      'Retinal Laser'
-    ];
-    saveDoctorCustomRxOptions();
-  }
+  ensureDeptPlanTemplateSeeds(dept, 'procedure');
   const items = getMergedDeptTemplateOptions('procedure', dept);
   if (!items.length) {
-    host.innerHTML = '<div style="font-size:10.5px;color:var(--g1);padding:6px 8px;border:1px dashed var(--g4);border-radius:8px;background:var(--g6)">Saved procedures for this department will appear here.</div>';
+    if (host) host.innerHTML = '<div style="font-size:10.5px;color:var(--g1);padding:6px 8px;border:1px dashed var(--g4);border-radius:8px;background:var(--g6)">Saved procedures for this department will appear here.</div>';
     return;
   }
-  host.innerHTML = items.map(function (item) {
-    const jsItem = String(item).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-    return '<div style="display:grid;grid-template-columns:minmax(0,1fr) 26px;gap:6px;align-items:start;background:#fff;border:1px solid var(--g5);border-radius:8px;padding:7px 8px">'
-      + '<button type="button" class="btn btn-xs btn-outline" style="justify-content:flex-start;text-align:left;white-space:normal;line-height:1.35;padding:6px 8px" onclick="addDeptSavedProcedure(\'' + dept + '\',\'' + jsItem + '\')">⚕️ ' + escapeHtmlConsent(item) + '</button>'
-      + '<button type="button" class="btn btn-xs btn-gray" title="Delete" onclick="removeDeptProcedureTemplate(\'' + dept + '\',\'' + jsItem + '\')">✕</button>'
-      + '</div>';
-  }).join('');
+  if (host) {
+    host.innerHTML = items.map(function (item) {
+      const jsItem = String(item).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      return '<div style="display:grid;grid-template-columns:minmax(0,1fr) 26px;gap:6px;align-items:start;background:#fff;border:1px solid var(--g5);border-radius:8px;padding:7px 8px">'
+        + '<button type="button" class="btn btn-xs btn-outline" style="justify-content:flex-start;text-align:left;white-space:normal;line-height:1.35;padding:6px 8px" onclick="addDeptSavedProcedure(\'' + dept + '\',\'' + jsItem + '\')">⚕️ ' + escapeHtmlConsent(item) + '</button>'
+        + '<button type="button" class="btn btn-xs btn-gray" title="Delete" onclick="removeDeptProcedureTemplate(\'' + dept + '\',\'' + jsItem + '\')">✕</button>'
+        + '</div>';
+    }).join('');
+  }
 }
 window.addDeptSavedProcedure = function addDeptSavedProcedure(dept, item) {
   const container = document.getElementById(getDeptProcedureContainerId(dept));
@@ -21064,6 +21071,84 @@ function applyRxTemplateFromPicker(tplId) {
   applyRxTemplate(tplId);
   closeM('m-rx-template-picker');
 }
+function getDeptPlanPickerLabels(dept, kind) {
+  const deptLabel = dept === 'obg' ? 'OBG' : dept === 'ophtho' ? 'Eye' : dept === 'skin' ? 'Skin' : dept === 'psych' ? 'Neuropsychiatry' : 'Department';
+  if (kind === 'procedure') {
+    return {
+      title: deptLabel + ' Procedures Advised',
+      subtitle: 'Select a saved procedure or surgery to add it immediately.'
+    };
+  }
+  return {
+    title: deptLabel + ' Instructions',
+    subtitle: 'Select a saved instruction to add it immediately.'
+  };
+}
+window.openDeptPlanPicker = function openDeptPlanPicker(dept, kind) {
+  ensureDeptPlanTemplateSeeds(dept, kind);
+  const host = document.getElementById('dept-plan-picker-list');
+  const title = document.getElementById('dept-plan-picker-title');
+  const subtitle = document.getElementById('dept-plan-picker-subtitle');
+  if (!host) return;
+  const labels = getDeptPlanPickerLabels(dept, kind);
+  if (title) title.textContent = labels.title;
+  if (subtitle) subtitle.textContent = labels.subtitle;
+  const items = getMergedDeptTemplateOptions(kind, dept);
+  if (!items.length) {
+    host.innerHTML = '<div style="font-size:12px;color:var(--g1)">No saved ' + (kind === 'procedure' ? 'procedures' : 'instructions') + ' yet.</div>';
+    openM('m-dept-plan-picker');
+    return;
+  }
+  host.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">'
+    + items.map(function (item) {
+        const safeText = escapeHtmlConsent(item);
+        const safeTitle = String(item).replace(/"/g, '&quot;');
+        const jsItem = String(item).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        return '<div style="position:relative;border:1px solid var(--g4);border-radius:10px;background:#fff;box-shadow:0 2px 6px rgba(15,23,42,.04)">'
+          + '<div style="position:absolute;top:8px;right:8px;display:flex;gap:4px;z-index:2">'
+          + '<button type="button" class="btn btn-xs btn-outline" style="padding:3px 7px" onclick="event.stopPropagation(); editDeptPlanPickerItem(\'' + dept + '\',\'' + kind + '\',\'' + jsItem + '\'); return false;">Edit</button>'
+          + '<button type="button" class="btn btn-xs btn-gray" style="padding:3px 7px" onclick="event.stopPropagation(); deleteDeptPlanPickerItem(\'' + dept + '\',\'' + kind + '\',\'' + jsItem + '\'); return false;">Delete</button>'
+          + '</div>'
+          + '<button type="button" class="btn btn-outline" style="display:block;width:100%;text-align:left;padding:38px 12px 12px;border:none;background:transparent;min-height:100px" title="' + safeTitle + '" onclick="applyDeptPlanPickerItem(\'' + dept + '\',\'' + kind + '\',\'' + jsItem + '\')">'
+          + '<div style="font-size:12px;font-weight:800;color:var(--bmh-blue);line-height:1.45;white-space:normal">' + safeText + '</div>'
+          + '</button>'
+          + '</div>';
+      }).join('')
+    + '</div>';
+  openM('m-dept-plan-picker');
+};
+window.applyDeptPlanPickerItem = function applyDeptPlanPickerItem(dept, kind, item) {
+  const value = normalizeDeptTemplateLabel(item);
+  if (!value) return;
+  if (kind === 'procedure') addDeptSavedProcedure(dept, value);
+  else appendAdviceTemplateToTextarea(dept, value);
+  closeM('m-dept-plan-picker');
+};
+window.editDeptPlanPickerItem = function editDeptPlanPickerItem(dept, kind, item) {
+  const current = normalizeDeptTemplateLabel(item);
+  if (!current) return;
+  const nextRaw = window.prompt(kind === 'procedure' ? 'Edit procedure' : 'Edit instruction', current);
+  const next = normalizeDeptTemplateLabel(nextRaw);
+  if (!next || next.toLowerCase() === current.toLowerCase()) return;
+  deleteDeptTemplateOption(kind, dept, current);
+  saveDeptTemplateOption(kind, dept, next);
+  renderDeptAdviceLibrary(dept);
+  renderDeptProcedureLibrary(dept);
+  renderDeptProcedureSelect(dept);
+  if (document.getElementById('m-dept-plan-picker')?.classList.contains('show')) window.openDeptPlanPicker(dept, kind);
+  showToast((kind === 'procedure' ? 'Procedure' : 'Instruction') + ' updated ✓', 's');
+};
+window.deleteDeptPlanPickerItem = function deleteDeptPlanPickerItem(dept, kind, item) {
+  const value = normalizeDeptTemplateLabel(item);
+  if (!value) return;
+  if (!window.confirm('Delete "' + value + '" from saved ' + (kind === 'procedure' ? 'procedures' : 'instructions') + '?')) return;
+  deleteDeptTemplateOption(kind, dept, value);
+  renderDeptAdviceLibrary(dept);
+  renderDeptProcedureLibrary(dept);
+  renderDeptProcedureSelect(dept);
+  if (document.getElementById('m-dept-plan-picker')?.classList.contains('show')) window.openDeptPlanPicker(dept, kind);
+  showToast((kind === 'procedure' ? 'Procedure' : 'Instruction') + ' deleted', 'i');
+};
 function getSurgeryTemplateSuggestions() {
   const mains = getOtProcedureMainHeadings();
   const allProcedureNames = (CHARGES_DATA || [])
