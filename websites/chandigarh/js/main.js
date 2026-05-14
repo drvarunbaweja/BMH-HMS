@@ -615,6 +615,56 @@ const initFAQ = () => {
 /* ============================================================
    08. APPOINTMENT MODAL
    ============================================================ */
+const HMS_APPOINTMENTS_URL = 'https://bmh-hms-default-rtdb.asia-southeast1.firebasedatabase.app/appointments.json';
+
+const normaliseWebsiteCentre = (value, fallback = 'CHD') => {
+  const v = String(value || '').toLowerCase();
+  if (v.includes('ropar') || v.includes('rupnagar') || v === 'rpr') return 'RPR';
+  if (v.includes('chandigarh') || v === 'chd') return 'CHD';
+  return fallback;
+};
+
+const doctorForService = (service = '') => {
+  const s = String(service).toLowerCase();
+  if (s.includes('gyna') || s.includes('fertility') || s.includes('obg')) return 'Dr. Geeta Baweja';
+  if (s.includes('neuro') || s.includes('psych') || s.includes('addiction')) return 'Dr. Tarun Baweja';
+  if (s.includes('skin') || s.includes('aesthetic')) return 'Dr. Pooja Baweja';
+  return 'Dr. Varun Baweja';
+};
+
+const syncAppointmentToHms = async (form, formData) => {
+  const service = formData.service || formData.dept || 'Consultation';
+  const centre = normaliseWebsiteCentre(form.dataset.centre, 'CHD');
+  const createdAt = new Date().toISOString();
+  const payload = {
+    id: `WEB-${centre}-${Date.now()}`,
+    patient: formData.name || 'Website patient',
+    patientName: formData.name || 'Website patient',
+    name: formData.name || '',
+    phone: formData.phone || formData.mobile || '',
+    mob: formData.phone || formData.mobile || '',
+    bmhId: '',
+    date: formData.date || '',
+    time: '',
+    doctor: doctorForService(service),
+    purpose: service,
+    service,
+    centre,
+    notes: formData.message || '',
+    status: 'website-request',
+    source: form.dataset.leadSource || 'website',
+    page: window.location.href,
+    createdAt,
+    bookedAt: createdAt,
+    fromWebsite: true
+  };
+  await fetch(HMS_APPOINTMENTS_URL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+};
+
 const initModal = () => {
   const overlay = $('.modal-overlay');
   if (!overlay) return;
@@ -661,7 +711,7 @@ const initModal = () => {
   });
 
   // Form submission: GitHub Pages trial capture.
-  form?.addEventListener('submit', (e) => {
+  form?.addEventListener('submit', async (e) => {
     e.preventDefault();
 
     if (!form.checkValidity()) {
@@ -693,11 +743,12 @@ const initModal = () => {
     });
 
     try {
+      await syncAppointmentToHms(form, data);
       const leads = JSON.parse(localStorage.getItem('bmh_chandigarh_trial_leads') || '[]');
       leads.push(lead);
       localStorage.setItem('bmh_chandigarh_trial_leads', JSON.stringify(leads));
     } catch (err) {
-      console.warn('Unable to store trial lead locally', err);
+      console.warn('Unable to sync appointment request to HMS/local trial storage', err);
     }
 
     setTimeout(() => {

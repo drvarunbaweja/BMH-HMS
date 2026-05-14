@@ -609,6 +609,48 @@ const initFAQ = () => {
 /* ============================================================
    08. APPOINTMENT MODAL
    ============================================================ */
+const HMS_APPOINTMENTS_URL = 'https://bmh-hms-default-rtdb.asia-southeast1.firebasedatabase.app/appointments.json';
+
+const doctorForService = (service = '') => {
+  const s = String(service).toLowerCase();
+  if (s.includes('gyna') || s.includes('fertility') || s.includes('obg')) return 'Dr. Geeta Baweja';
+  if (s.includes('neuro') || s.includes('psych') || s.includes('addiction')) return 'Dr. Tarun Baweja';
+  if (s.includes('skin') || s.includes('aesthetic')) return 'Dr. Pooja Baweja';
+  return 'Dr. Varun Baweja';
+};
+
+const syncAppointmentToHms = async (form, formData) => {
+  const service = formData.service || formData.dept || 'Consultation';
+  const createdAt = new Date().toISOString();
+  const payload = {
+    id: `WEB-RPR-${Date.now()}`,
+    patient: formData.name || 'Website patient',
+    patientName: formData.name || 'Website patient',
+    name: formData.name || '',
+    phone: formData.phone || formData.mobile || '',
+    mob: formData.phone || formData.mobile || '',
+    bmhId: '',
+    date: formData.date || '',
+    time: '',
+    doctor: doctorForService(service),
+    purpose: service,
+    service,
+    centre: 'RPR',
+    notes: formData.message || '',
+    status: 'website-request',
+    source: form.dataset.leadSource || 'website',
+    page: window.location.href,
+    createdAt,
+    bookedAt: createdAt,
+    fromWebsite: true
+  };
+  await fetch(HMS_APPOINTMENTS_URL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+};
+
 const initModal = () => {
   const overlay = $('.modal-overlay');
   if (!overlay) return;
@@ -653,7 +695,7 @@ const initModal = () => {
   });
 
   // Form submission
-  form?.addEventListener('submit', (e) => {
+  form?.addEventListener('submit', async (e) => {
     e.preventDefault();
 
     const submitBtn = form.querySelector('[type="submit"]');
@@ -662,7 +704,13 @@ const initModal = () => {
       submitBtn.textContent = 'Sending…';
     }
 
-    // Simulate async submission
+    const data = Object.fromEntries(new FormData(form).entries());
+    try {
+      await syncAppointmentToHms(form, data);
+    } catch (err) {
+      console.warn('Unable to sync appointment request to HMS', err);
+    }
+
     setTimeout(() => {
       form.style.display = 'none';
       if (successDiv) {
