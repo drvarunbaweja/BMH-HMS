@@ -18762,7 +18762,7 @@ function printOphthoSheet() {
     <div class="field-row"><span class="lbl">Name</span><span class="val" style="font-weight:700">${p.name}</span></div>
     <div class="field-row"><span class="lbl">S/o, D/o, W/o</span><span class="val">${p.rel||''}</span></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px;margin-bottom:2px">
-      <div class="field-row"><span class="lbl">DOB</span><span class="val">${p.dob||''}</span></div>
+      <div class="field-row"><span class="lbl">DOB</span><span class="val">${p.dob ? formatDateIN(p.dob) : ''}</span></div>
       <div class="field-row"><span class="lbl">Age/Sex</span><span class="val">${p.age||''}/${p.sex||''}</span></div>
     </div>
     <div class="field-row"><span class="lbl">Address</span><span class="val">${p.addr||''}</span></div>
@@ -21099,18 +21099,18 @@ window.openDeptPlanPicker = function openDeptPlanPicker(dept, kind) {
     openM('m-dept-plan-picker');
     return;
   }
-  host.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">'
+  host.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:7px">'
     + items.map(function (item) {
         const safeText = escapeHtmlConsent(item);
         const safeTitle = String(item).replace(/"/g, '&quot;');
         const jsItem = String(item).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-        return '<div style="position:relative;border:1px solid var(--g4);border-radius:10px;background:#fff;box-shadow:0 2px 6px rgba(15,23,42,.04)">'
-          + '<div style="position:absolute;top:8px;right:8px;display:flex;gap:4px;z-index:2">'
-          + '<button type="button" class="btn btn-xs btn-outline" style="padding:3px 7px" onclick="event.stopPropagation(); editDeptPlanPickerItem(\'' + dept + '\',\'' + kind + '\',\'' + jsItem + '\'); return false;">Edit</button>'
-          + '<button type="button" class="btn btn-xs btn-gray" style="padding:3px 7px" onclick="event.stopPropagation(); deleteDeptPlanPickerItem(\'' + dept + '\',\'' + kind + '\',\'' + jsItem + '\'); return false;">Delete</button>'
+        return '<div style="position:relative;border:1px solid var(--g4);border-radius:8px;background:#fff;box-shadow:0 1px 4px rgba(15,23,42,.04)">'
+          + '<div style="position:absolute;top:6px;right:6px;display:flex;gap:3px;z-index:2">'
+          + '<button type="button" class="btn btn-xs btn-outline" style="padding:2px 6px;font-size:10px;line-height:1.1" onclick="event.stopPropagation(); editDeptPlanPickerItem(\'' + dept + '\',\'' + kind + '\',\'' + jsItem + '\'); return false;">Edit</button>'
+          + '<button type="button" class="btn btn-xs btn-gray" style="padding:2px 6px;font-size:10px;line-height:1.1" onclick="event.stopPropagation(); deleteDeptPlanPickerItem(\'' + dept + '\',\'' + kind + '\',\'' + jsItem + '\'); return false;">Delete</button>'
           + '</div>'
-          + '<button type="button" class="btn btn-outline" style="display:block;width:100%;text-align:left;padding:38px 12px 12px;border:none;background:transparent;min-height:100px" title="' + safeTitle + '" onclick="applyDeptPlanPickerItem(\'' + dept + '\',\'' + kind + '\',\'' + jsItem + '\')">'
-          + '<div style="font-size:12px;font-weight:800;color:var(--bmh-blue);line-height:1.45;white-space:normal">' + safeText + '</div>'
+          + '<button type="button" class="btn btn-outline" style="display:block;width:100%;text-align:left;padding:30px 9px 9px;border:none;background:transparent;min-height:74px" title="' + safeTitle + '" onclick="applyDeptPlanPickerItem(\'' + dept + '\',\'' + kind + '\',\'' + jsItem + '\')">'
+          + '<div style="font-size:11px;font-weight:800;color:var(--bmh-blue);line-height:1.3;white-space:normal">' + safeText + '</div>'
           + '</button>'
           + '</div>';
       }).join('')
@@ -23628,69 +23628,157 @@ function checkSurgeryPurpose() {
   if(preHint) preHint.style.display = (purpose==='Not Checked In')?'flex':'none';
   syncReceptionConsultationFee && syncReceptionConsultationFee();
 }
+function normalizeReceptionPhoneDigits(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+function getReceptionLookupPool() {
+  return (PATIENTS || []).filter(function (p) { return p && !isMergedPatientRecord(p); });
+}
+function buildReceptionPatientLookupIndex() {
+  const byBmh = new Map();
+  const phoneTokens = new Map();
+  getReceptionLookupPool().forEach(function (p) {
+    const bmh = String(p.bmhId || '').trim().toUpperCase();
+    if (bmh && !byBmh.has(bmh)) byBmh.set(bmh, p);
+    [p.mob, p.mobile, p.mob2, p.altMobile].forEach(function (rawPhone) {
+      const digits = normalizeReceptionPhoneDigits(rawPhone);
+      if (digits.length < 7) return;
+      [7, 8, 9, 10].forEach(function (len) {
+        const token = digits.slice(-len);
+        if (token.length !== len) return;
+        if (!phoneTokens.has(token)) phoneTokens.set(token, []);
+        const arr = phoneTokens.get(token);
+        if (!arr.some(function (row) { return row && row.bmhId === p.bmhId; })) arr.push(p);
+      });
+    });
+  });
+  window._bmhReceptionPatientLookupIndex = { sourceLength: (PATIENTS || []).length, byBmh: byBmh, phoneTokens: phoneTokens };
+  return window._bmhReceptionPatientLookupIndex;
+}
+function getReceptionPatientLookupIndex() {
+  const idx = window._bmhReceptionPatientLookupIndex;
+  if (!idx || idx.sourceLength !== (PATIENTS || []).length) return buildReceptionPatientLookupIndex();
+  return idx;
+}
+function findReceptionPatientByBmh(value) {
+  const raw = String(value || '').trim().toUpperCase();
+  if (!raw) return null;
+  const clean = raw.startsWith('BMSH-') ? raw : ('BMSH-' + raw.replace(/^BMSH[-\s]*/i, ''));
+  const idx = getReceptionPatientLookupIndex();
+  const direct = idx.byBmh.get(clean) || idx.byBmh.get(raw);
+  if (direct) return direct;
+  const digits = raw.replace(/\D/g, '');
+  if (!digits) return null;
+  return getReceptionLookupPool().find(function (p) {
+    return String(p.bmhId || '').toUpperCase().includes(digits);
+  }) || null;
+}
+function findReceptionPatientsByPhone(value) {
+  const digits = normalizeReceptionPhoneDigits(value);
+  if (digits.length < 7) return [];
+  const idx = getReceptionPatientLookupIndex();
+  const tail = digits.slice(-Math.min(10, Math.max(7, digits.length)));
+  const exact = idx.phoneTokens.get(tail) || [];
+  if (exact.length || digits.length >= 10) return exact.slice(0, 20);
+  return getReceptionLookupPool().filter(function (p) {
+    return [p.mob, p.mobile, p.mob2, p.altMobile].some(function (raw) {
+      const n = normalizeReceptionPhoneDigits(raw);
+      return n && n.includes(digits);
+    });
+  }).slice(0, 20);
+}
+function receptionPatientResultHtml(p, opts) {
+  const options = opts || {};
+  const safeId = String(p?.bmhId || '').replace(/'/g, "\\'");
+  const title = options.title || 'Existing patient found';
+  const compact = !!options.compact;
+  return `<div style="background:${options.bg || 'var(--green-lt)'};border-radius:8px;padding:${compact ? '8px 10px' : '10px'};margin-bottom:6px;border-left:3px solid ${options.border || 'var(--green)'}">
+    <div style="display:flex;align-items:center;gap:8px">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:11px;font-weight:800;color:${options.titleColor || '#1a8c3c'};margin-bottom:2px">${title}</div>
+        <div style="font-size:${compact ? '12.5px' : '13px'};font-weight:900">${p.name || p.patient || 'Patient'} <span style="font-size:10.5px;color:var(--g1);font-weight:500">(${p.age || '?'}Y / ${p.sex || '?'})</span></div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--bmh-teal)">${p.bmhId || '—'} · ${p.mob || p.mobile || '—'} · Visits: ${p.visitCount || 1}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">
+        <button class="btn btn-xs btn-gold" onclick="prefillExistingPatient('${safeId}')">✏️ Prefill${compact ? '' : ' &amp; Register'}</button>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-xs btn-outline" onclick="openPatient('${safeId}')">👁️</button>
+          <button class="btn btn-xs btn-outline" onclick="toggleReceptionVisitSummary('${safeId}', this)">Visits</button>
+        </div>
+      </div>
+    </div>
+    <div id="rc-visit-summary-${safeId}" style="display:none;margin-top:8px"></div>
+  </div>`;
+}
+function summarizeReceptionVisitRow(v) {
+  const date = formatDateIN(v.date || v.createdAt || v.dateLabel || '');
+  const dept = bmhDeptLabel(v.dept || v.department || '');
+  const dx = Array.isArray(v.diagnoses) ? v.diagnoses.map(formatDxLineForPrint).filter(Boolean).slice(0, 2).join(', ') : (v.diagnosisText || v.dx || v.mainComplaint || v.chiefComplaint || '');
+  const rx = Array.isArray(v.rx) && v.rx.length ? v.rx.slice(0, 3).map(function (d) { return rxDrugTradeName(d) || d.trade || d.name || 'Drug'; }).join(', ') : '';
+  const advice = v.advice || v.extraAdvice || v.obgAdvice || v.psychAdvice || v.skinAdvice || '';
+  return `<div style="padding:7px 0;border-bottom:1px solid var(--g5);font-size:10.5px;line-height:1.45">
+    <div style="font-weight:900;color:var(--bmh-blue)">${date || '—'} ${dept ? '· ' + dept : ''}</div>
+    ${dx ? `<div><strong>Dx:</strong> ${escapeHtmlConsent(dx)}</div>` : ''}
+    ${rx ? `<div><strong>Rx:</strong> ${escapeHtmlConsent(rx)}</div>` : ''}
+    ${advice ? `<div style="color:var(--g1)">${escapeHtmlConsent(String(advice).slice(0, 150))}</div>` : ''}
+  </div>`;
+}
+function toggleReceptionVisitSummary(bmhId, btn) {
+  const box = document.getElementById('rc-visit-summary-' + String(bmhId || '').replace(/'/g, "\\'"));
+  if (!box) return;
+  if (box.style.display !== 'none') {
+    box.style.display = 'none';
+    return;
+  }
+  box.style.display = 'block';
+  if (box.dataset.loaded === '1') return;
+  box.innerHTML = '<div style="font-size:10.5px;color:var(--g1);padding:8px;background:#fff;border-radius:8px;border:1px solid var(--g5)">Loading past visits…</div>';
+  fbOnce('visits/' + bmhId).then(function (data) {
+    const rows = Object.entries(data || {}).map(function (entry) {
+      return Object.assign({ id: entry[0] }, entry[1] || {});
+    }).sort(function (a, b) {
+      return String(b.date || b.createdAt || '').localeCompare(String(a.date || a.createdAt || ''));
+    }).slice(0, 5);
+    box.dataset.loaded = '1';
+    box.innerHTML = rows.length
+      ? '<div style="background:#fff;border:1px solid var(--g5);border-radius:8px;padding:8px"><div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;margin-bottom:4px">Recent visits</div>' + rows.map(summarizeReceptionVisitRow).join('') + '</div>'
+      : '<div style="font-size:10.5px;color:var(--g1);padding:8px;background:#fff;border-radius:8px;border:1px solid var(--g5)">No saved past visits found.</div>';
+  }).catch(function () {
+    box.innerHTML = '<div style="font-size:10.5px;color:var(--red);padding:8px;background:var(--red-lt);border-radius:8px">Could not load past visits.</div>';
+  });
+}
+window.toggleReceptionVisitSummary = toggleReceptionVisitSummary;
 function lookupByBMHID(val) {
   const el = document.getElementById('rc-bmhid-result'); if(!el) return;
   if(!val || val.length < 3) { el.innerHTML=''; return; }
   const v = val.trim().toUpperCase();
   const vLow = val.trim().toLowerCase();
   const digits = String(val || '').replace(/\D/g, '');
-  const byPhoneMatch = function (p) {
-    const nums = [p?.mob, p?.mobile, p?.mob2, p?.altMobile].map(function (x) { return String(x || '').replace(/\D/g, ''); }).filter(Boolean);
-    return digits.length >= 6 && nums.some(function (n) { return n.includes(digits); });
-  };
   // Search by BMSH ID, phone, or name
-  const activePatients = (PATIENTS || []).filter(function (p) { return !isMergedPatientRecord(p); });
+  const activePatients = getReceptionLookupPool();
   const mergedById = (PATIENTS || []).find(function (p) {
     return String(p?.bmhId || '').toUpperCase() === v && p?.mergedInto;
   });
   const byId = (mergedById && activePatients.find(function (p) { return String(p?.bmhId || '') === String(mergedById.mergedInto || ''); }))
-    || activePatients.find(p => String(p.bmhId || '').toUpperCase() === v || String(p.bmhId || '').toUpperCase().includes(v.replace('BMSH-','')));
-  const phoneMatches = activePatients.filter(byPhoneMatch);
+    || findReceptionPatientByBmh(v);
+  const phoneMatches = digits.length >= 7 ? findReceptionPatientsByPhone(digits) : [];
   const byPhone = phoneMatches.length === 1 ? phoneMatches[0] : null;
   const byName = val.length >= 3 ? activePatients.filter(p => p.name?.toLowerCase().includes(vLow)) : [];
   const single = byId || byPhone;
   if(single) {
-    el.innerHTML = `<div style="background:var(--green-lt);border-radius:8px;padding:10px;border-left:3px solid var(--green)">
-      <div style="display:flex;align-items:center;gap:8px">
-        <div style="flex:1">
-          <div style="font-size:11px;font-weight:800;color:#1a8c3c;margin-bottom:2px">✅ Found — existing patient</div>
-          <div style="font-size:13px;font-weight:900">${single.name} <span style="font-size:10.5px;color:var(--g1);font-weight:500">(${single.age || '—'}Y / ${single.sex || '—'})</span></div>
-          <div style="font-family:var(--mono);font-size:10px;color:var(--bmh-teal)">${single.bmhId} · ${single.mob||'—'} · Visits: ${single.visitCount||1}</div>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:4px">
-          <button class="btn btn-xs btn-gold" onclick="prefillExistingPatient('${single.bmhId}')">✏️ Prefill &amp; Register</button>
-          <button class="btn btn-xs btn-outline" onclick="openPatient('${single.bmhId}')">👁️ View Record</button>
-        </div>
-      </div>
-    </div>`;
+    el.innerHTML = receptionPatientResultHtml(single, { title: '✅ Found — existing patient' });
   } else if(phoneMatches.length > 1) {
     const hits = phoneMatches.slice(0, 8);
     el.innerHTML = `<div style="background:#fff;border:1.5px solid var(--orange);border-radius:8px;overflow:hidden">
       <div style="padding:5px 10px;background:var(--orange-lt);font-size:10px;font-weight:800;color:var(--orange);text-transform:uppercase">Same phone — ${phoneMatches.length} patients (pick one or register new)</div>
-      ${hits.map(p=>`<div style="display:flex;align-items:center;gap:9px;padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--g5)" onmouseover="this.style.background='var(--g6)'" onmouseout="this.style.background=''">
-        <div style="width:30px;height:30px;border-radius:50%;background:${p.color||'#1A3C6E'};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:11px;flex-shrink:0">${p.initials||p.name[0]||'?'}</div>
-        <div style="flex:1;min-width:0">
-          <div style="font-weight:800;font-size:12.5px">${p.name}</div>
-          <div style="font-size:10px;color:var(--g1);font-family:var(--mono)">${p.bmhId} · ${p.age||'?'}Y/${(p.sex||'?')[0]} · ${p.mob||'—'}</div>
-        </div>
-        <button class="btn btn-xs btn-gold" onclick="prefillExistingPatient('${p.bmhId}')">✏️ Prefill</button>
-        <button class="btn btn-xs btn-outline" onclick="openPatient('${p.bmhId}')">👁️</button>
-      </div>`).join('')}
+      ${hits.map(p=>receptionPatientResultHtml(p, { title: 'Same phone match', compact: true, bg: '#fff', border: 'var(--orange)', titleColor: 'var(--orange)' })).join('')}
     </div>`;
   } else if(byName.length) {
     // Show name search results (up to 5)
     const hits = byName.slice(0,5);
     el.innerHTML = `<div style="background:#fff;border:1.5px solid var(--blue);border-radius:8px;overflow:hidden">
       <div style="padding:5px 10px;background:var(--blue-lt);font-size:10px;font-weight:800;color:var(--blue);text-transform:uppercase">Found ${byName.length} patient${byName.length>1?'s':''} matching "${val}"</div>
-      ${hits.map(p=>`<div style="display:flex;align-items:center;gap:9px;padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--g5)" onmouseover="this.style.background='var(--g6)'" onmouseout="this.style.background=''">
-        <div style="width:30px;height:30px;border-radius:50%;background:${p.color||'#1A3C6E'};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:11px;flex-shrink:0">${p.initials||p.name[0]||'?'}</div>
-        <div style="flex:1;min-width:0">
-          <div style="font-weight:800;font-size:12.5px">${p.name}</div>
-          <div style="font-size:10px;color:var(--g1);font-family:var(--mono)">${p.bmhId} · ${p.age||'?'}Y/${(p.sex||'?')[0]} · ${p.mob||'—'}</div>
-        </div>
-        <button class="btn btn-xs btn-gold" onclick="prefillExistingPatient('${p.bmhId}')">✏️ Prefill</button>
-        <button class="btn btn-xs btn-outline" onclick="openPatient('${p.bmhId}')">👁️</button>
-      </div>`).join('')}
+      ${hits.map(p=>receptionPatientResultHtml(p, { title: 'Name match', compact: true, bg: '#fff', border: 'var(--blue)', titleColor: 'var(--blue)' })).join('')}
     </div>`;
   } else {
     el.innerHTML = val.length >= 4 ? `<div style="font-size:11px;color:var(--g1);padding:5px 8px;background:var(--g6);border-radius:6px">🆕 No existing patient found — proceed with new registration below</div>` : '';
@@ -23874,28 +23962,10 @@ function lookupByPhone(val) {
   const matchEl = document.getElementById('rc-phone-match'); if(!matchEl) return;
   if(val.length < 7) { matchEl.innerHTML=''; return; }
   const dig = val.replace(/\s/g,'').replace(/\D/g,'');
-  const tail = dig.slice(-10) || dig.slice(-7);
   // Find all matches (multiple patients with similar phone)
-  const matches = PATIENTS.filter(function (p) {
-    if (!p || isMergedPatientRecord(p)) return false;
-    const nums = [p.mob, p.mobile, p.mob2, p.altMobile].map(function (x) { return String(x || '').replace(/\D/g, ''); }).filter(Boolean);
-    return nums.some(function (n) { return tail.length >= 7 && n.includes(tail); });
-  });
+  const matches = findReceptionPatientsByPhone(dig);
   if(matches.length) {
-    matchEl.innerHTML = matches.map(match=>`
-      <div style="background:var(--green-lt);border-radius:8px;padding:10px;margin-bottom:6px;border-left:3px solid var(--green)">
-        <div style="display:flex;align-items:center;gap:8px">
-          <div style="flex:1">
-            <div style="font-size:11px;font-weight:800;color:#1a8c3c;margin-bottom:2px">✅ Existing patient found</div>
-            <div style="font-size:12.5px;font-weight:900">${match.name} <span style="font-size:10.5px;color:var(--g1);font-weight:500">(${match.age||'?'}Y / ${match.sex||'?'})</span></div>
-            <div style="font-family:var(--mono);font-size:10px;color:var(--bmh-teal)">${match.bmhId} · Visits: ${match.visitCount||1}</div>
-          </div>
-          <div style="display:flex;flex-direction:column;gap:4px">
-            <button class="btn btn-xs btn-gold" onclick="prefillExistingPatient('${match.bmhId}')">✏️ Prefill &amp; Register</button>
-            <button class="btn btn-xs btn-outline" onclick="openPatient('${match.bmhId}')">👁️ View Record</button>
-          </div>
-        </div>
-      </div>`).join('');
+    matchEl.innerHTML = matches.map(match=>receptionPatientResultHtml(match, { title: '✅ Existing patient found' })).join('');
   } else { matchEl.innerHTML=''; }
 }
 function prefillExistingPatient(bmhId) {
@@ -23910,7 +23980,7 @@ function prefillExistingPatient(bmhId) {
   const mob2 = document.getElementById('rc-mob2'); if(mob2) mob2.value = p.mob2||'';
   const email = document.getElementById('rc-email'); if(email) email.value = p.email||'';
   const addr = document.getElementById('rc-addr'); if(addr) addr.value = p.addr||'';
-  const dob = document.getElementById('rc-dob'); if(dob) { dob.value = p.dob||''; calcRcAge && calcRcAge(); }
+  const dob = document.getElementById('rc-dob'); if(dob) { dob.value = p.dob ? formatDateDDMMYYYY(p.dob) : ''; calcRcAge && calcRcAge(); }
   const sex = document.getElementById('rc-sex'); if(sex && p.sex) sex.value = p.sex;
   const age = document.getElementById('rc-age'); if(age) age.value = p.age||'';
   const dept = document.getElementById('rc-dept'); if(dept && p.dept) { dept.value = p.dept; updateRcDr&&updateRcDr(); updatePurposeOptions&&updatePurposeOptions(); }
@@ -23947,10 +24017,10 @@ function prefillExistingPatient(bmhId) {
   showToast(`✏️ ${name || p.bmhId} prefilled${existingAdvance > 0 ? ' — existing advance ₹' + existingAdvance.toLocaleString('en-IN') : ''} — update details if needed and register ✓`,'s');
 }
 function calcRcAge() {
-  const dob = document.getElementById('rc-dob')?.value;
+  const dob = parseDobDisplayDateToIso(document.getElementById('rc-dob')?.value || '');
   const ageEl = document.getElementById('rc-age');
   if(!dob || !ageEl) return;
-  const birth = new Date(dob);
+  const birth = new Date(dob + 'T12:00:00');
   const now = new Date();
   let years = now.getFullYear() - birth.getFullYear();
   const m = now.getMonth() - birth.getMonth();
@@ -24413,7 +24483,7 @@ function updateExistingPatientFromReceptionForm(bmhId) {
   const fn = normalizeReceptionFieldValue('rc-fn', document.getElementById('rc-fn')?.value || '');
   const ln = normalizeReceptionFieldValue('rc-ln', document.getElementById('rc-ln')?.value || '');
   const mob = (document.getElementById('rc-mob-inp')?.value || document.getElementById('rc-mob')?.value || '').trim();
-  const dob = document.getElementById('rc-dob')?.value || '';
+  const dob = parseDobDisplayDateToIso(document.getElementById('rc-dob')?.value || '');
   const age = document.getElementById('rc-age')?.value || '';
   const sex = document.getElementById('rc-sex')?.value || 'Male';
   const dept = document.getElementById('rc-dept')?.value || 'ophtho';
@@ -24457,7 +24527,7 @@ async function registerPatient() {
   const ln  = normalizeReceptionFieldValue('rc-ln', document.getElementById('rc-ln')?.value  || '');
   const mob = (document.getElementById('rc-mob-inp')?.value || document.getElementById('rc-mob')?.value || '').trim();
   const mob2  = document.getElementById('rc-mob2')?.value?.trim() || '';
-  const dob = document.getElementById('rc-dob')?.value || '';
+  const dob = parseDobDisplayDateToIso(document.getElementById('rc-dob')?.value || '');
   const age = document.getElementById('rc-age')?.value || '';
   const sex = document.getElementById('rc-sex')?.value || 'Male';
   const dept= document.getElementById('rc-dept')?.value || 'ophtho';
@@ -32139,6 +32209,7 @@ function rebuildPatientsArrayFromGlobalCache() {
       if (patientCentreKey(p.centre) === want) PATIENTS.push(p);
     });
   }
+  buildReceptionPatientLookupIndex();
 }
 window.rebuildPatientsArrayFromGlobalCache = rebuildPatientsArrayFromGlobalCache;
 function formatDateDDMMYYYY(value) {
@@ -32178,6 +32249,26 @@ function parseDisplayDateToIso(value) {
   if (Number.isNaN(d.getTime())) return raw;
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
+function parseDobDisplayDateToIso(value) {
+  const raw = String(value || '').trim();
+  if (!raw || raw === '—') return '';
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (iso) return iso[1] + '-' + iso[2] + '-' + iso[3];
+  const dmy = raw.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2}|\d{4})$/);
+  if (dmy) {
+    const dd = String(dmy[1]).padStart(2, '0');
+    const mm = String(dmy[2]).padStart(2, '0');
+    let yyyy = dmy[3];
+    if (yyyy.length === 2) {
+      const yy = parseInt(yyyy, 10);
+      const currentYY = Number(String(new Date().getFullYear()).slice(-2));
+      yyyy = String((yy > currentYY ? 1900 : 2000) + yy);
+    }
+    return yyyy + '-' + mm + '-' + dd;
+  }
+  return parseDisplayDateToIso(raw);
+}
+window.parseDobDisplayDateToIso = parseDobDisplayDateToIso;
 function toTitleCaseName(value) {
   return String(value || '')
     .trim()
@@ -35652,7 +35743,7 @@ function _debouncedRenderDash() {
 function applyPatientsPayload(data, opts) {
   const options = opts || {};
   const all = data ? Object.values(data) : [];
-  const chunkSize = 60;
+  const chunkSize = 800;
   const normalized = [];
   let idx = 0;
   if (window._bmhPatientsApplyTimer) {
@@ -40469,9 +40560,9 @@ function _renderDashboardImpl() {
   if (adm) adm.style.display = isAdminDash ? 'block' : 'none';
   if (cln) cln.style.display = isAdminDash ? 'none' : 'block';
   const tbd = document.getElementById('tb-date2');
-  if (tbd) tbd.textContent = new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  if (tbd) tbd.textContent = formatDateIN(new Date());
   const subEl = document.getElementById('dash-subtitle');
-  if (subEl) subEl.textContent = (isAdminDash ? 'Admin · overdue & stock · ' : 'Clinical · ') + (document.getElementById('tb-cp')?.textContent || '') + ' · ' + new Date().toLocaleDateString('en-IN');
+  if (subEl) subEl.textContent = (isAdminDash ? 'Admin · overdue & stock · ' : 'Clinical · ') + (document.getElementById('tb-cp')?.textContent || '') + ' · ' + formatDateIN(new Date());
 
   setEl('db-opd', String(todaySeen + waiting));
   setEl('db-collection', '₹' + todayCollection.toLocaleString('en-IN'));
@@ -40483,17 +40574,19 @@ function _renderDashboardImpl() {
       const raw = String(iso);
       return raw.slice(0, 10) === selectedDate;
     };
-    const displayPts = PATIENTS.filter(function (p) { return centreMatch(p); });
-    const opdCount = displayPts.filter(function (p) {
-      return patientQueueDateMatchesToday(p) && (!selectedDate || localDateKey(p.seenAt || p.checkinAt || p.createdAt || p.updatedAt) === selectedDate);
-    }).length;
+    const displayPts = PATIENTS.filter(function (p) {
+      if (!p || !centreMatch(p)) return false;
+      if (selectedDate === today) return patientQueueDateMatchesToday(p);
+      return [p.seenAt, p.checkinAt, p.createdAt, p.updatedAt, p.queueDate, p.visitDate].some(dateMatch);
+    });
+    const opdCount = displayPts.length;
     const surgeryCases = (window.OT_CASES || OT_CASES || []).filter(function (c) {
       return centreMatch(c) && (dateMatch(c.date) || dateMatch(c.otDate) || dateMatch(c.createdAt) || dateMatch(c.surgeryDate));
     });
     const chargeByDept = {};
-    const _patientByBmhId = new Map((PATIENTS || []).map(function (p) { return [p.bmhId, p]; }));
+    const _patientByBmhId = getReceptionPatientLookupIndex().byBmh;
     Object.keys(window.BMH_PATIENT_CHARGES || {}).forEach(function (bid) {
-      const patient = _patientByBmhId.get(bid);
+      const patient = _patientByBmhId.get(String(bid || '').toUpperCase());
       if (patient && !centreMatch(patient)) return;
       (window.BMH_PATIENT_CHARGES[bid] || []).forEach(function (line) {
         const ts = String(line.ts || line.date || '');
@@ -40522,9 +40615,7 @@ function _renderDashboardImpl() {
       ];
       const deptOpdCount = function (key) {
         return displayPts.filter(function (p) {
-          return String(p.dept || '').toLowerCase() === key
-            && patientQueueDateMatchesToday(p)
-            && (!selectedDate || localDateKey(p.seenAt || p.checkinAt || p.createdAt || p.updatedAt) === selectedDate);
+          return String(p.dept || '').toLowerCase() === key;
         }).length;
       };
       const deptSurgeryCount = function (key) {
