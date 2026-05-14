@@ -4961,7 +4961,7 @@ function bookFollowup() {
 function openBookApt(slot) {
   document.getElementById('book-date').value = document.getElementById('apt-date-inp')?.value || '';
   const timeEl = document.getElementById('book-time');
-  if (timeEl) timeEl.value = normalizeAptTimeLabel(slot || getNearestAppointmentSlot(document.getElementById('book-date')?.value));
+  if (timeEl) refreshAppointmentTimeOptions(slot || getNearestAppointmentSlot(document.getElementById('book-date')?.value));
   // Populate patient dropdown with live PATIENTS
   const sel = document.getElementById('book-patient');
   if(sel && PATIENTS && PATIENTS.length) {
@@ -4984,7 +4984,7 @@ function openBookAptForPatient(bmhId, date) {
   const aptDateEl = document.getElementById('apt-date-inp');
   if(aptDateEl && date) aptDateEl.value = date;
   const timeEl = document.getElementById('book-time');
-  if(timeEl) timeEl.value = '9:00 AM';
+  if(timeEl) refreshAppointmentTimeOptions('10:00 AM');
   const sel = document.getElementById('book-patient');
   if(sel && PATIENTS && PATIENTS.length) {
     sel.innerHTML = '<option value="">— Select Patient —</option>' +
@@ -5022,13 +5022,33 @@ function roundToNearestTenMinuteSlot(baseDate) {
   return { hh: hh, mm: mm };
 }
 function getNearestAppointmentSlot(dateStr, baseDate) {
-  if (!dateStr) return '9:00 AM';
+  if (!dateStr) return '10:00 AM';
   const rounded = roundToNearestTenMinuteSlot(baseDate || new Date());
+  if (rounded.hh < 10) return '10:00 AM';
   return normalizeAptTimeLabel(String(rounded.hh).padStart(2, '0') + ':' + String(rounded.mm).padStart(2, '0'));
 }
+function getAppointmentSlotOptions() {
+  const slots = [];
+  for (let mins = 10 * 60; mins <= 17 * 60; mins += 10) {
+    const hh = Math.floor(mins / 60);
+    const mm = mins % 60;
+    slots.push(normalizeAptTimeLabel(String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0')));
+  }
+  return slots;
+}
+function refreshAppointmentTimeOptions(selectedValue) {
+  const el = document.getElementById('book-time');
+  if (!el) return;
+  const selected = normalizeAptTimeLabel(selectedValue || el.value || '10:00 AM');
+  el.innerHTML = getAppointmentSlotOptions().map(function (slot) {
+    return '<option' + (slot === selected ? ' selected' : '') + '>' + slot + '</option>';
+  }).join('');
+}
+window.refreshAppointmentTimeOptions = refreshAppointmentTimeOptions;
 // Returns HH:MM (24h) — the nearest 10-min slot for a doctor on a date with no conflict
 function getNextAvailableApptSlot(date, doctor) {
   const t = roundToNearestTenMinuteSlot(new Date());
+  if (t.hh < 10) { t.hh = 10; t.mm = 0; }
   let hh = t.hh, mm = t.mm;
   const apts = window.APPOINTMENTS || APPOINTMENTS || [];
   for (let i = 0; i < 48; i++) {
@@ -5074,19 +5094,21 @@ function bookApt() {
   const centreEl = document.getElementById('book-centre');
   const notesEl  = document.getElementById('book-notes');
   const date   = dateEl?.value;
-  const time   = timeEl?.value || timeEl?.querySelector?.('[selected]')?.textContent || '9:00 AM';
+  const time   = normalizeAptTimeLabel(timeEl?.value || timeEl?.querySelector?.('[selected]')?.textContent || '10:00 AM');
   const doctor = drEl?.value || '';
   if(!date){ showToast('Please select a date','w'); return; }
   // Double-booking check: same doctor, same date, same time
-  const conflict = APPOINTMENTS.find(a=>a.date===date && a.doctor===doctor && a.time===time && a.status!=='cancelled');
+  const conflict = APPOINTMENTS.find(a=>getAppointmentDate(a)===date && getAppointmentDoctor(a)===doctor && normalizeAptTimeLabel(getAppointmentTime(a))===time && isActiveAppointment(a));
   if(conflict){
     showToast('⚠️ '+doctor+' already has an appointment at '+time+' on this date. Choose a different slot.','w');
     return;
   }
   const patient = ptEl?.value || 'New Patient';
+  const idMatch = String(patient || '').match(/BMSH-\d+/i);
   const apt = {
     id: 'A'+Date.now(),
-    patient, bmhId: '—',
+    patient: String(patient).replace(/\s+—\s+BMSH-\d+.*/i, '').trim() || patient,
+    bmhId: idMatch ? idMatch[0].toUpperCase() : '—',
     date, time, doctor,
     dept: ({
       'Dr. Varun Baweja':'ophtho','Dr. Geeta Baweja':'obg','Dr. Namrata Baweja':'obg',
@@ -30479,6 +30501,82 @@ function addCustomLabTest() {
 }
 
 // ─── APPOINTMENTS FIX ─────────────────
+function getAppointmentDate(a) {
+  return String(a?.date || a?.apptDate || a?.appointmentDate || a?.preferredDate || '').slice(0, 10);
+}
+function getAppointmentTime(a) {
+  return a?.time || a?.apptTime || a?.scheduledTime || a?.preferredTime || '';
+}
+function getAppointmentPatientName(a) {
+  return String(a?.patient || a?.patientName || a?.name || a?.leadName || 'Website request').trim();
+}
+function getAppointmentBmhId(a) {
+  return String(a?.bmhId || a?.patientId || '').trim();
+}
+function getAppointmentPurpose(a) {
+  return String(a?.purpose || a?.service || a?.dept || a?.type || 'Consultation').trim();
+}
+function getAppointmentDoctor(a) {
+  return String(a?.doctor || a?.doctorName || a?.doctorId || '').trim();
+}
+function getAppointmentCentre(a) {
+  return normalizeAppointmentCentreValue(a?.centre || a?.location || 'CHD');
+}
+function isActiveAppointment(a) {
+  const status = String(a?.status || 'booked').trim().toLowerCase();
+  return !['cancelled', 'canceled', 'completed', 'done', 'seen', 'removed', 'deleted', 'no-show', 'noshow'].includes(status);
+}
+function appointmentSortValue(a) {
+  const date = getAppointmentDate(a) || '9999-12-31';
+  return new Date(date + 'T00:00:00').getTime() + appointmentTimeSortVal(getAppointmentTime(a)) * 60000;
+}
+function appointmentTimeSortVal(slot) {
+  const s = normalizeAptTimeLabel(slot || '10:00 AM');
+  const m = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if(!m) return 10 * 60;
+  let h = Number(m[1]) % 12;
+  if(String(m[3]).toUpperCase() === 'PM') h += 12;
+  return h * 60 + Number(m[2]);
+}
+function dedupeAppointments(list) {
+  const map = new Map();
+  (list || []).forEach(function (a) {
+    if (!a) return;
+    const key = [
+      getAppointmentDate(a),
+      normalizeAptTimeLabel(getAppointmentTime(a) || 'Requested'),
+      getAppointmentPatientName(a).toLowerCase(),
+      getAppointmentBmhId(a).toLowerCase(),
+      getAppointmentPurpose(a).toLowerCase(),
+      getAppointmentDoctor(a).toLowerCase(),
+      getAppointmentCentre(a)
+    ].join('|');
+    const existing = map.get(key);
+    if (!existing || Date.parse(a.createdAt || a.bookedAt || a.updatedAt || '') >= Date.parse(existing.createdAt || existing.bookedAt || existing.updatedAt || '')) {
+      map.set(key, a);
+    }
+  });
+  return Array.from(map.values());
+}
+function appointmentListRow(a, opts) {
+  const options = opts || {};
+  const time = getAppointmentTime(a) ? normalizeAptTimeLabel(getAppointmentTime(a)) : 'Requested';
+  const date = getAppointmentDate(a);
+  const centre = getAppointmentCentre(a);
+  const bmhId = getAppointmentBmhId(a) || '—';
+  const patient = escapeHtmlConsent(getAppointmentPatientName(a));
+  const purpose = escapeHtmlConsent(getAppointmentPurpose(a));
+  const doctor = escapeHtmlConsent(getAppointmentDoctor(a) || 'To assign');
+  const dateLine = options.showDate && date ? ' · ' + formatDateDDMMYYYY(date) : '';
+  return '<div class="apt-slot booked" style="font-size:12px;display:grid;grid-template-columns:72px 1.2fr 95px 1.1fr 1fr 74px;gap:8px;align-items:center">'
+    + '<div style="font-size:12px;font-weight:900;color:var(--bmh-blue)">' + time + '</div>'
+    + '<div><div style="font-size:13px;font-weight:900">' + patient + '</div><div style="font-size:10.5px;color:var(--g1)">' + bmhId + dateLine + '</div></div>'
+    + '<div style="font-family:monospace;font-size:10.5px;color:var(--tx3)">' + bmhId + '</div>'
+    + '<div style="font-size:11px;color:var(--tx)">' + purpose + '</div>'
+    + '<div style="font-size:11px;color:var(--tx3)">' + doctor + '</div>'
+    + '<span class="badge bd-blue" style="font-size:9.5px;text-align:center">' + centre + '</span>'
+    + '</div>';
+}
 function renderAptDay() {
   const date = document.getElementById('apt-date-inp')?.value || todayKey();
   const drFilter = document.getElementById('apt-dr-filter')?.value || '';
@@ -30487,64 +30585,33 @@ function renderAptDay() {
   const showAllCentres = centreSelVal === 'ALL';
   const centreFilter = showAllCentres ? null : (centreSelVal ? normalizeAppointmentCentreValue(centreSelVal) : userCentre);
 
-  const timeSortVal = (slot) => {
-    const s = normalizeAptTimeLabel(slot);
-    const m = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-    if(!m) return 0;
-    let h = Number(m[1]) % 12;
-    if(String(m[3]).toUpperCase() === 'PM') h += 12;
-    return h * 60 + Number(m[2]);
-  };
-  const aptMatchesCentre = (a) => showAllCentres || normalizeAppointmentCentreValue(a.centre || 'CHD') === centreFilter;
-  const dayApts = APPOINTMENTS.filter(a => a.date === date && (!drFilter || a.doctor === drFilter) && aptMatchesCentre(a))
+  const aptMatchesCentre = (a) => showAllCentres || getAppointmentCentre(a) === centreFilter;
+  const today = todayKey();
+  const activeAppointments = dedupeAppointments(APPOINTMENTS).filter(function (a) {
+    const aptDate = getAppointmentDate(a);
+    return isActiveAppointment(a) && aptMatchesCentre(a) && (!aptDate || aptDate >= today) && (!drFilter || getAppointmentDoctor(a) === drFilter);
+  });
+  const dayApts = activeAppointments.filter(a => getAppointmentDate(a) === date)
     .slice()
-    .sort((a,b) => timeSortVal(a.time || a.scheduledTime) - timeSortVal(b.time || b.scheduledTime));
+    .sort((a,b) => appointmentTimeSortVal(getAppointmentTime(a)) - appointmentTimeSortVal(getAppointmentTime(b)));
   const slotsEl = document.getElementById('apt-day-slots');
   if(!slotsEl) return;
 
-  const TIMES = [];
-  for (let mins = 8 * 60 + 30; mins <= 17 * 60; mins += 10) {
-    if (mins > 12 * 60 && mins < 14 * 60) continue;
-    const hh = Math.floor(mins / 60);
-    const mm = mins % 60;
-    TIMES.push(String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0'));
-  }
-  slotsEl.innerHTML = TIMES.map(t => {
-    const booked = dayApts.find(a => normalizeAptTimeLabel(a.time || a.scheduledTime) === normalizeAptTimeLabel(t));
-    if(booked) return `<div class="apt-slot booked" onclick="showToast('${booked.patient} — ${booked.purpose}','i')">
-      <div style="font-size:11.5px;font-weight:900;color:var(--bmh-blue);min-width:48px">${t}</div>
-      <div style="flex:1"><div style="font-size:13px;font-weight:800">${booked.patient}</div>
-      <div style="font-size:10.5px;color:var(--tx3)">${booked.doctor} · ${booked.purpose||booked.type||''}</div></div>
-      <span class="badge bd-blue" style="font-size:9.5px">${booked.centre||'CHD'}</span>
-      <button class="btn btn-xs btn-gray" onclick="event.stopPropagation();showToast('Appointment cancelled ✓','i')">Cancel</button>
-    </div>`;
-    return `<div class="apt-slot free" onclick="openBookApt('${t}')">
-      <div style="font-size:11.5px;font-weight:700;color:var(--g1);min-width:48px">${t}</div>
-      <div style="font-size:12px;color:var(--g1)">— Available —</div>
-      <button class="btn btn-xs btn-outline" onclick="openBookApt('${t}')">+ Book</button>
-    </div>`;
-  }).join('');
+  slotsEl.innerHTML = dayApts.length
+    ? dayApts.map(function (a) { return appointmentListRow(a); }).join('')
+    : '<div style="padding:18px;text-align:center;color:var(--g1);font-size:12px;background:var(--g6);border-radius:8px">No active appointments for this date. Use + Book to manually select any slot from 10:00 AM onward.</div>';
 
   // Update today and upcoming lists
   const todayEl = document.getElementById('apt-today-list');
-  if(todayEl) todayEl.innerHTML = dayApts.length ? dayApts.map(a=>`<div class="apt-slot booked" style="font-size:12px">
-    <div style="font-size:16px">${a.type==='surgery'?'⚕️':a.type==='post-op'?'👁️':a.type==='anc'?'🤰':'🩺'}</div>
-    <div style="flex:1"><div style="font-weight:800">${a.patient}</div><div style="font-size:10.5px;color:var(--g1)">${a.doctor} · ${a.purpose||a.type}</div></div>
-      <div style="font-size:12px;font-weight:900;color:var(--bmh-blue)">${normalizeAptTimeLabel(a.time)}</div>
-  </div>`).join('') : '<div style="padding:14px;text-align:center;color:var(--g1);font-size:12px">No appointments on this date</div>';
+  const todayApts = activeAppointments.filter(function (a) { return getAppointmentDate(a) === today; }).sort((a,b)=>appointmentSortValue(a)-appointmentSortValue(b));
+  if(todayEl) todayEl.innerHTML = todayApts.length ? todayApts.slice(0, 8).map(function (a) { return appointmentListRow(a); }).join('') : '<div style="padding:14px;text-align:center;color:var(--g1);font-size:12px">No active appointments today</div>';
 
   const upcomingEl = document.getElementById('apt-upcoming-list');
-  const allCentreApts = APPOINTMENTS.filter(aptMatchesCentre);
-  if(upcomingEl) upcomingEl.innerHTML = allCentreApts.slice().sort((a,b)=>{
-    const ad = new Date(`${a.date || '1970-01-01'}T00:00:00`).getTime() + (timeSortVal(a.time || a.scheduledTime) * 60000);
-    const bd = new Date(`${b.date || '1970-01-01'}T00:00:00`).getTime() + (timeSortVal(b.time || b.scheduledTime) * 60000);
-    return ad - bd;
-  }).slice(0,5).map(a=>`<div style="display:flex;align-items:center;gap:9px;padding:8px;border-bottom:1px solid var(--g5);font-size:12px;cursor:pointer">
-    <div style="font-size:16px">${a.type==='surgery'?'⚕️':a.type==='anc'?'🤰':'🩺'}</div>
-    <div style="flex:1"><div style="font-weight:800">${a.patient}</div><div style="font-size:10.5px;color:var(--g1)">${a.purpose||a.type} · ${a.date}</div></div>
-    <span class="badge bd-blue">${normalizeAptTimeLabel(a.time)}</span>
-  </div>`).join('');
-  const ct = document.getElementById('apt-upcoming-ct'); if(ct) ct.textContent = allCentreApts.length;
+  const upcomingApts = activeAppointments.slice().sort((a,b)=>appointmentSortValue(a)-appointmentSortValue(b));
+  if(upcomingEl) upcomingEl.innerHTML = upcomingApts.length
+    ? upcomingApts.slice(0, 20).map(function (a) { return appointmentListRow(a, { showDate: true }); }).join('')
+    : '<div style="padding:14px;text-align:center;color:var(--g1);font-size:12px">No active upcoming appointments</div>';
+  const ct = document.getElementById('apt-upcoming-ct'); if(ct) ct.textContent = upcomingApts.length;
 }
 
 function renderFollowupRegister() {
@@ -36154,7 +36221,16 @@ function runOneTimePendingDuesCleanup() {
 // ── APPOINTMENTS ─────────────────────────────────────────────
 function saveAppointmentToFirebase(apt) {
   const key = apt.id || fbKey();
-  fbSet(`appointments/${key}`, { ...apt, id: key });
+  const date = getAppointmentDate(apt);
+  const time = getAppointmentTime(apt);
+  fbSet(`appointments/${key}`, {
+    ...apt,
+    id: key,
+    date,
+    time: time ? normalizeAptTimeLabel(time) : '',
+    centre: getAppointmentCentre(apt),
+    status: apt.status || 'booked'
+  });
 }
 
 function listenAppointments(opts) {
@@ -36166,11 +36242,11 @@ function listenAppointments(opts) {
   if (existing && existing.ref && existing.cb) {
     try { existing.ref.off('value', existing.cb); } catch (e) {}
   }
-  const ref = window.FBDB.ref('appointments').orderByChild('centre').equalTo(centre);
+  const ref = window.FBDB.ref('appointments');
   const cb = data => {
     APPOINTMENTS.length = 0;
     Object.values((data && typeof data.val === 'function') ? (data.val() || {}) : (data || {})).forEach(function (a) {
-      if (rowMatchesCentre(a, centre, { allowUncentredToday: true, dateKey: a.date || todayKey() })) APPOINTMENTS.push(a);
+      APPOINTMENTS.push(a);
     });
     const activeId = getActivePageId();
     if (activeId === 'pg-appointments') renderAptDay && renderAptDay();
@@ -39988,7 +40064,17 @@ function printConsentTemplate(id) {
 // ── APPOINTMENTS PRINT ────────────────────────────
 function printAppointments(dateFilter) {
   const date = dateFilter || document.getElementById('apt-date-inp')?.value || todayKey();
-  const apts = APPOINTMENTS.filter(a=>a.date===date);
+  const drFilter = document.getElementById('apt-dr-filter')?.value || '';
+  const centreSelVal = document.getElementById('apt-centre-filter')?.value || '';
+  const userCentre = normalizeAppointmentCentreValue(window.CURRENT_USER?.centre || getEffectiveCentre() || 'CHD');
+  const showAllCentres = centreSelVal === 'ALL';
+  const centreFilter = showAllCentres ? null : (centreSelVal ? normalizeAppointmentCentreValue(centreSelVal) : userCentre);
+  const apts = dedupeAppointments(APPOINTMENTS).filter(function (a) {
+    return getAppointmentDate(a) === date
+      && isActiveAppointment(a)
+      && (!drFilter || getAppointmentDoctor(a) === drFilter)
+      && (showAllCentres || getAppointmentCentre(a) === centreFilter);
+  }).sort(function (a, b) { return appointmentTimeSortVal(getAppointmentTime(a)) - appointmentTimeSortVal(getAppointmentTime(b)); });
   const formatted = new Date(date).toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
   const lhSrc = window.LH_SRC||'';
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
@@ -40009,12 +40095,12 @@ ${apts.length ? `<table>
   <thead><tr><th>#</th><th>Time</th><th>Patient</th><th>Phone</th><th>BMSH ID</th><th>Doctor</th><th>Purpose</th><th>Status</th></tr></thead>
   <tbody>${apts.map((a,i)=>`<tr>
     <td>${i+1}</td>
-    <td style="font-weight:700">${a.time||'—'}</td>
-    <td style="font-weight:700">${a.patient}</td>
-    <td style="font-family:monospace">${a.mob||PATIENTS.find(p=>p.bmhId===a.bmhId)?.mob||'—'}</td>
-    <td style="font-family:monospace;font-size:10.5px">${a.bmhId||'—'}</td>
-    <td>${a.doctor||'—'}</td>
-    <td>${a.purpose||'—'}</td>
+    <td style="font-weight:700">${getAppointmentTime(a) ? normalizeAptTimeLabel(getAppointmentTime(a)) : 'Requested'}</td>
+    <td style="font-weight:700">${getAppointmentPatientName(a)}</td>
+    <td style="font-family:monospace">${a.mob||a.phone||PATIENTS.find(p=>p.bmhId===getAppointmentBmhId(a))?.mob||'—'}</td>
+    <td style="font-family:monospace;font-size:10.5px">${getAppointmentBmhId(a)||'—'}</td>
+    <td>${getAppointmentDoctor(a)||'—'}</td>
+    <td>${getAppointmentPurpose(a)||'—'}</td>
     <td style="color:${a.status==='booked'?'#1a8c3c':'#FF9500'};font-weight:700">${a.status||'—'}</td>
   </tr>`).join('')}</tbody>
 </table>` : '<div style="padding:30px;text-align:center;color:#888">No appointments for this date</div>'}
