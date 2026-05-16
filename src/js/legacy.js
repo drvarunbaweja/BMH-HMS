@@ -4890,7 +4890,9 @@ function sendQuickCharge(name, amount, bmhIdOverride) {
   renderReceptionPage&&renderReceptionPage();
   renderDashboard&&renderDashboard();
   renderBillingPageIfActive && renderBillingPageIfActive();
-  const nb = document.getElementById('nb-pay'); if(nb) nb.textContent = PAY_REQUESTS.filter(r=>r.status==='pending').length;
+  const nb = document.getElementById('nb-pay'); if(nb) nb.textContent = PAY_REQUESTS.filter(function (r) {
+    return r.status === 'pending' && isTodayReceptionPayRequest(r, { centre: getEffectiveCentre() });
+  }).length;
   const bucket = getDoctorCustomRxOptionsForDept(dept);
   bucket.sendRecent = bucket.sendRecent || {};
   const key = String(name || '').trim().toLowerCase();
@@ -6359,12 +6361,9 @@ function renderPaymentsPage() {
   const centre = getEffectiveCentre();
   const todayKey = localDateKey(new Date());
   const reqs = (PAY_REQUESTS || []).filter(function (r) {
-    return rowMatchesCentre(r, centre, { allowUncentredToday: true, dateKey: todayKey }) && !isInsuranceLikeMode(r.mode || r.ins || '');
+    return isTodayReceptionPayRequest(r, { centre: centre, today: todayKey }) && !isInsuranceLikeMode(r.mode || r.ins || '');
   });
-  const todayReqs = reqs.filter(function (r) {
-    const stamp = r.date || r.createdAt || r.updatedAt || '';
-    return !stamp || localDateKey(stamp) === todayKey || String(stamp).slice(0, 10) === todayKey;
-  });
+  const todayReqs = reqs;
   const pending = todayReqs.filter(function (r) { return r.status === 'pending'; });
   const collected = todayReqs.filter(function (r) { return r.status === 'paid'; });
   const txns = (TRANSACTIONS || []).filter(function (t) {
@@ -13630,12 +13629,14 @@ function bmhAddPatientToDoctorQueue(bmhId, opts) {
 window.bmhAddPatientToDoctorQueue = bmhAddPatientToDoctorQueue;
 function bmhEnsurePatientInTodayDeptQueue(bmhId, opts) {
   const id = String(bmhId || '').trim();
+  const o = opts || {};
   if (!id) return false;
   const p = PATIENTS.find(function (x) { return x.bmhId === id; });
   if (!p) return false;
   const status = String(p.status || '').toLowerCase();
   if (status === 'removed' || status === 'ipd' || status === 'discharged') return false;
-  const targetDept = normalizeDeptKeyForQueue(opts?.dept || p.dept || p.department || '');
+  if (p.queueRemoved && !o.allowRestoreRemoved) return false;
+  const targetDept = normalizeDeptKeyForQueue(o.dept || p.dept || p.department || '');
   const currentDept = normalizeDeptKeyForQueue(p.dept || p.department || '');
   const inTodayQueue = patientQueueDateMatchesToday(p);
   if (!p.queueRemoved && inTodayQueue && (!targetDept || !currentDept || currentDept === targetDept)) return false;
@@ -13657,7 +13658,7 @@ function bmhEnsurePatientInTodayDeptQueue(bmhId, opts) {
   try {
     fbUpdate && fbUpdate('patients/' + id, patch).catch(function () {});
   } catch (e) {}
-  if (!opts || !opts.silentToast) {
+  if (!o.silentToast) {
     showToast((p.name || 'Patient') + ' added to today\'s department queue ✓', 's');
   }
   renderDocQueue && renderDocQueue();
@@ -15903,26 +15904,76 @@ function bmhSyncInventoryRowsToCloud(rows) {
     }
   });
 }
-function moveInventoryRowsToStore(barcodes) {
-  const rows = Array.from(new Set((Array.isArray(barcodes) ? barcodes : []).map(function (barcode) {
+function bmhGetInventoryRowsForMove(barcodes) {
+  return Array.from(new Set((Array.isArray(barcodes) ? barcodes : []).map(function (barcode) {
     return String(barcode || '').trim();
   }).filter(Boolean))).map(function (barcode) {
     return bmhFindInventoryStockItem(barcode);
   }).filter(Boolean);
+}
+function openInventoryMoveModal(barcodes) {
+  const rows = bmhGetInventoryRowsForMove(barcodes);
+  if (!rows.length) { showToast('No stock rows found to move', 'w'); return; }
+  const stores = (window.BMH_STORE_LOCATIONS || []).slice().filter(Boolean);
+  if (!stores.length) { showToast('Add a store location first', 'w'); return; }
+  const fromStores = Array.from(new Set(rows.map(function (row) {
+    return normalizeInventoryTextValue(row.store || 'Unassigned store');
+  }).filter(Boolean)));
+  const current = fromStores[0] || stores[0] || '';
+  window._inventoryMoveDialogState = {
+    barcodes: rows.map(function (row) { return row.barcode; }).filter(Boolean),
+    fromStores: fromStores,
+    currentStore: current,
+    stores: stores
+  };
+  const summaryEl = document.getElementById('inv-move-summary');
+  const fromEl = document.getElementById('inv-move-from');
+  const storeEl = document.getElementById('inv-move-store');
+  const qtyWrap = document.getElementById('inv-move-qty-wrap');
+  const qtyEl = document.getElementById('inv-move-qty');
+  const hintEl = document.getElementById('inv-move-qty-hint');
+  if (summaryEl) {
+    summaryEl.textContent = rows.length === 1
+      ? (rows[0].name || rows[0].iolBrand || 'Inventory item')
+      : rows.length + ' stock rows selected';
+  }
+  if (fromEl) {
+    fromEl.textContent = fromStores.length
+      ? fromStores.join(', ')
+      : 'Unassigned store';
+  }
+  if (storeEl) {
+    storeEl.innerHTML = stores.map(function (store) {
+      return '<option value="' + escapeHtmlConsent(store) + '">' + escapeHtmlConsent(store) + '</option>';
+    }).join('');
+    const selectedStore = stores.find(function (store) {
+      return normalizeInventoryCompareText(store) === normalizeInventoryCompareText(current);
+    }) || stores[0] || '';
+    storeEl.value = selectedStore;
+  }
+  if (qtyWrap && qtyEl && hintEl) {
+    if (rows.length === 1) {
+      const available = Math.max(0, Number(rows[0].stock || 0));
+      qtyWrap.style.display = '';
+      qtyEl.min = '1';
+      qtyEl.max = String(available);
+      qtyEl.step = '1';
+      qtyEl.value = String(available);
+      hintEl.textContent = 'Available: ' + available;
+    } else {
+      qtyWrap.style.display = 'none';
+      qtyEl.value = '';
+      qtyEl.removeAttribute('max');
+      hintEl.textContent = '';
+    }
+  }
+  openM('m-inv-move-store');
+}
+window.openInventoryMoveModal = openInventoryMoveModal;
+function applyInventoryRowsStoreMove(rows, matchedStore, requestedQty) {
   if (!rows.length) { showToast('No stock rows found to move', 'w'); return; }
   const fromStores = Array.from(new Set(rows.map(function (row) { return normalizeInventoryTextValue(row.store || 'Unassigned store'); }).filter(Boolean)));
-  const stores = (window.BMH_STORE_LOCATIONS || []).slice();
-  if (!stores.length) { showToast('Add a store location first', 'w'); return; }
   const current = fromStores[0] || '';
-  const promptLabel = 'Move selected stock to which store?\n' + stores.map(function (store, idx) {
-    return (idx + 1) + '. ' + store;
-  }).join('\n');
-  const targetRaw = prompt(promptLabel, current) || '';
-  const target = bmhTrimInventoryHeadingValue(targetRaw);
-  if (!target) return;
-  const matchedStore = stores.find(function (store) {
-    return normalizeInventoryCompareText(store) === normalizeInventoryCompareText(target);
-  }) || target;
   if (fromStores.length === 1 && normalizeInventoryCompareText(current) === normalizeInventoryCompareText(matchedStore)) {
     showToast('Selected rows are already in that store', 'w');
     return;
@@ -15932,9 +15983,7 @@ function moveInventoryRowsToStore(barcodes) {
     const source = rows[0];
     const available = Math.max(0, Number(source.stock || 0));
     if (!(available > 0)) { showToast('No stock available to move', 'w'); return; }
-    const qtyInput = prompt('Enter quantity to move from "' + (source.store || 'Unassigned store') + '" to "' + matchedStore + '"\nAvailable: ' + available, String(available));
-    if (qtyInput == null) return;
-    const qty = Math.max(0, Number(qtyInput || 0));
+    const qty = Math.max(0, Number(requestedQty || 0));
     if (!(qty > 0)) { showToast('Enter a valid quantity', 'w'); return; }
     if (qty > available) { showToast('Cannot move more than available stock', 'w'); return; }
     if (qty < available) {
@@ -16016,6 +16065,27 @@ function moveInventoryRowsToStore(barcodes) {
   renderInventoryStoreStock && renderInventoryStoreStock();
   renderInventoryPoAlerts && renderInventoryPoAlerts();
   showToast('Store updated for selected stock ✓', 's');
+}
+function confirmInventoryMoveModal() {
+  const state = window._inventoryMoveDialogState || {};
+  const rows = bmhGetInventoryRowsForMove(state.barcodes || []);
+  if (!rows.length) { showToast('No stock rows found to move', 'w'); return; }
+  const storeEl = document.getElementById('inv-move-store');
+  const qtyEl = document.getElementById('inv-move-qty');
+  const stores = (state.stores || window.BMH_STORE_LOCATIONS || []).slice().filter(Boolean);
+  const selected = String(storeEl?.value || '').trim();
+  if (!selected) { showToast('Select a store', 'w'); return; }
+  const matchedStore = stores.find(function (store) {
+    return normalizeInventoryCompareText(store) === normalizeInventoryCompareText(selected);
+  });
+  if (!matchedStore) { showToast('Select a saved store from the list', 'w'); return; }
+  const qty = rows.length === 1 ? Math.max(0, Number(qtyEl?.value || 0)) : null;
+  closeM('m-inv-move-store');
+  applyInventoryRowsStoreMove(rows, matchedStore, qty);
+}
+window.confirmInventoryMoveModal = confirmInventoryMoveModal;
+function moveInventoryRowsToStore(barcodes) {
+  openInventoryMoveModal(barcodes);
 }
 window.moveInventoryRowsToStore = moveInventoryRowsToStore;
 function moveInventoryStockRow(barcode) {
@@ -24177,6 +24247,29 @@ function patientNeedsReceptionQueueRestore(patient, deptOverride) {
   if (targetDept && currentDept && targetDept !== currentDept) return true;
   return false;
 }
+function findPatientForPayRequest(pr) {
+  const id = String(pr?.bmhId || '').trim();
+  if (!id) return null;
+  return (PATIENTS || []).find(function (p) { return String(p?.bmhId || '').trim() === id; }) || null;
+}
+function payRequestDateMatchesToday(pr, todayKeyLocal) {
+  const day = todayKeyLocal || localDateKey(new Date());
+  const stamp = pr?.date || pr?.createdAt || pr?.updatedAt || '';
+  if (!stamp) return false;
+  return localDateKey(stamp) === day || String(stamp || '').slice(0, 10) === day;
+}
+function isTodayReceptionPayRequest(pr, opts) {
+  const o = opts || {};
+  if (!pr) return false;
+  const centre = o.centre || getEffectiveCentre();
+  if (!rowMatchesCentre(pr, centre, { allowUncentredToday: true })) return false;
+  const day = o.today || localDateKey(new Date());
+  if (payRequestDateMatchesToday(pr, day)) return true;
+  const patient = findPatientForPayRequest(pr);
+  if (!patient) return false;
+  if (patient.queueRemoved || String(patient.status || '').toLowerCase() === 'removed') return false;
+  return patientQueueDateMatchesToday(patient);
+}
 function receptionQueueRestoreButtonHtml(bmhId, opts) {
   const id = String(bmhId || '').trim();
   if (!id) return '';
@@ -25148,10 +25241,7 @@ function renderDeptSummary() {
   const selectedDept = window._rcDeptSummaryFilterDept || '';
   const onlyPending = !!window._rcDeptSummaryPendingOnly;
   const todayPRs = PAY_REQUESTS.filter(function (r) {
-    if ((r.centre || 'CHD') !== centre) return false;
-    const stamp = r.date || r.createdAt || r.updatedAt || '';
-    if (!stamp) return true;
-    return localDateKey(stamp) === today || String(stamp).slice(0, 10) === today;
+    return isTodayReceptionPayRequest(r, { centre: centre, today: today });
   });
   const depts = [
     {k:'ophtho',l:'Ophthalmology',icon:'👁️',color:'var(--blue)'},
@@ -25199,12 +25289,12 @@ function renderDeptSummary() {
               <div style="font-size:10.5px;color:var(--g1)">${r.for||'—'} · ${r.from||'Doctor'}</div>
             </div>
             <div style="font-weight:900;font-size:13px;color:${r.status==='paid'?'#1a8c3c':'var(--orange)'}">₹${r.amount.toLocaleString('en-IN')}</div>
-            ${r.status==='pending'?`<select id="pay-mode-${r.id}" style="height:28px;border:1px solid var(--g4);border-radius:6px;padding:0 6px;font-size:10.5px;background:#fff">
+            ${r.status==='pending'?`<select id="pay-mode-${String(r.id || '').replace(/[^a-z0-9]/gi,'')}" style="height:28px;border:1px solid var(--g4);border-radius:6px;padding:0 6px;font-size:10.5px;background:#fff">
               <option value="Cash"${isInsuranceLikeMode(r.mode || r.ins || '') ? '' : ' selected'}>Cash</option>
               <option value="UPI"${String(r.mode || '').toLowerCase()==='upi' ? ' selected' : ''}>UPI</option>
               <option value="Credit Card"${String(r.mode || '').toLowerCase()==='credit card' ? ' selected' : ''}>Credit Card</option>
               <option value="Insurance/TPA"${isInsuranceLikeMode(r.mode || r.ins || '') ? ' selected' : ''}>Insurance/TPA</option>
-            </select><button class="btn btn-xs" style="background:var(--green);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:10.5px;font-weight:800;cursor:pointer" onclick="collectPayment('${r.id}','${r.id}')">Collect</button>`:`<span style="font-size:10px;background:var(--green-lt);color:#1a8c3c;padding:2px 8px;border-radius:10px;font-weight:700">✓ Paid</span>`}
+            </select><button class="btn btn-xs" style="background:var(--green);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:10.5px;font-weight:800;cursor:pointer" onclick="collectPayment('${r.id}','${String(r.id || '').replace(/[^a-z0-9]/gi,'')}')">Collect</button>`:`<span style="font-size:10px;background:var(--green-lt);color:#1a8c3c;padding:2px 8px;border-radius:10px;font-weight:700">✓ Paid</span>`}
             ${canDeleteDue ? `<button class="btn btn-xs btn-gray" onclick="deletePayRequest('${r.id}')" title="Delete due">✕</button>` : ''}
             <button class="btn btn-xs btn-outline" onclick="openXRefModal('${r.bmhId}')" title="Cross-refer">↔️</button>
             <button class="btn btn-xs" style="background:rgba(175,82,222,.1);color:var(--purple);border:1.5px solid var(--purple);border-radius:6px;padding:3px 6px;font-size:10px;cursor:pointer" onclick="openIPDFromQueue('${r.bmhId}')" title="IPD">🛏️</button>
@@ -25223,7 +25313,7 @@ function updateReceptionDeptSummaryTabBadge() {
   if (!tab) return;
   const centre = getEffectiveCentre();
   const pending = (PAY_REQUESTS || []).filter(function (r) {
-    return r.status === 'pending' && (r.centre || 'CHD') === centre;
+    return r.status === 'pending' && isTodayReceptionPayRequest(r, { centre: centre });
   });
   let badge = tab.querySelector('.rc-dept-summary-badge');
   if (!pending.length) {
@@ -35971,18 +36061,9 @@ function applyPatientsPayload(data, opts) {
       showToast('Connected to database ✓','s');
     }
     genRcUID && genRcUID();
-    if (options.fullHistory && typeof repairTodayDuplicatePatientsByIdentity === 'function') {
-      const repairDate = todayKey();
-      const repairKey = repairDate + ':' + (effectivePatientListCentreScope() || 'ALL');
-      if (window._bmhTodayDuplicateRepairDoneForDate !== repairKey) {
-        window._bmhTodayDuplicateRepairDoneForDate = repairKey;
-        setTimeout(function () {
-          repairTodayDuplicatePatientsByIdentity(repairDate).catch(function (e) {
-            console.warn('today duplicate patient repair failed', e);
-          });
-        }, 800);
-      }
-    }
+    // Do not auto-merge duplicate patients during passive refresh. The merge routine
+    // can intentionally copy today's queue state onto an older BMSH ID; doing that
+    // in the background makes old seen patients appear in the live queue.
     if (window._renderReceptionAfterHydration) {
       window._renderReceptionAfterHydration = false;
       renderReceptionPage && renderReceptionPage();
@@ -36293,7 +36374,9 @@ function listenPayRequests(opts) {
     bmhRunEndOfDayEegPurge && bmhRunEndOfDayEegPurge();
     // Update badge
     const nb = document.getElementById('nb-pay');
-    if(nb) nb.textContent = PAY_REQUESTS.filter(r=>r.status==='pending').length;
+    if(nb) nb.textContent = PAY_REQUESTS.filter(function (r) {
+      return r.status === 'pending' && isTodayReceptionPayRequest(r, { centre: centre });
+    }).length;
     const activeId = getActivePageId();
     if (activeId === 'pg-reception') renderReceptionPage && renderReceptionPage();
     else if (activeId === 'pg-dashboard') renderDashboard && renderDashboard();
@@ -41076,7 +41159,9 @@ function _renderDashboardImpl() {
       html += '</div>';
       chart.innerHTML = html;
     }
-    const payHtml = PAY_REQUESTS.filter(r => r.status === 'pending').slice(0, 8).map(pr => `<div style="font-size:12px;padding:7px;border-bottom:1px solid var(--g5)"><strong>${pr.patient}</strong> · ₹${(pr.amount || 0).toLocaleString('en-IN')}<div style="font-size:10px;color:var(--g1)">${pr.for || ''}</div></div>`).join('') || '<div style="color:var(--g1);font-size:12px;padding:8px">No pending payment requests</div>';
+    const payHtml = PAY_REQUESTS.filter(function (r) {
+      return r.status === 'pending' && isTodayReceptionPayRequest(r, { centre: getEffectiveCentre(), today: today });
+    }).slice(0, 8).map(pr => `<div style="font-size:12px;padding:7px;border-bottom:1px solid var(--g5)"><strong>${pr.patient}</strong> · ₹${(pr.amount || 0).toLocaleString('en-IN')}<div style="font-size:10px;color:var(--g1)">${pr.for || ''}</div></div>`).join('') || '<div style="color:var(--g1);font-size:12px;padding:8px">No pending payment requests</div>';
     const dp = document.getElementById('dash-pay'); if (dp) dp.innerHTML = payHtml;
     const dpc = document.getElementById('dash-pay-clinical'); if (dpc) dpc.innerHTML = payHtml;
 
@@ -41382,7 +41467,9 @@ function _renderReceptionPageImpl() {
   }
 
   const prEl = document.getElementById('rc-pay-list');
-  const visiblePayRequests = PAY_REQUESTS.filter(r => rowMatchesCentre(r, getEffectiveCentre(), { allowUncentredToday: true }));
+  const visiblePayRequests = PAY_REQUESTS.filter(function (r) {
+    return isTodayReceptionPayRequest(r, { centre: getEffectiveCentre() });
+  });
   if(prEl) {
     if(!visiblePayRequests.length) {
       prEl.innerHTML = '<div style="padding:16px;text-align:center;color:var(--g1);font-size:12px">No payment requests</div>';
@@ -41446,7 +41533,9 @@ function renderRcDeptDues() {
     {k:'psych',l:'Psych',icon:'🧠',color:'var(--orange)'},
     {k:'skin',l:'Skin',icon:'💆',color:'var(--purple)'},
   ];
-  const pending = PAY_REQUESTS.filter(r=>r.status==='pending' && rowMatchesCentre(r, getEffectiveCentre(), { allowUncentredToday: true }));
+  const pending = PAY_REQUESTS.filter(function (r) {
+    return r.status === 'pending' && isTodayReceptionPayRequest(r, { centre: getEffectiveCentre() });
+  });
   const hasDues = pending.length > 0;
   if(!hasDues) { el.innerHTML='<div style="font-size:11px;color:var(--g1);padding:8px;text-align:center">No pending dues</div>'; return; }
   el.innerHTML = depts.map(d=>{
@@ -42028,7 +42117,7 @@ window.markCrossRefSeen = markCrossRefSeen;
 function restorePatientToDoctorQueue(bmhId) {
   const p = PATIENTS.find(function (x) { return x.bmhId === bmhId; });
   if (!p) { showToast('Patient not found', 'w'); return; }
-  const restored = bmhEnsurePatientInTodayDeptQueue(bmhId, { dept: p.dept || p.department || '', silentToast: true });
+  const restored = bmhEnsurePatientInTodayDeptQueue(bmhId, { dept: p.dept || p.department || '', silentToast: true, allowRestoreRemoved: true });
   if (!restored && !patientNeedsReceptionQueueRestore(p, p.dept || p.department || '')) {
     showToast('Patient is already present in today\'s queue', 'i');
     return;
