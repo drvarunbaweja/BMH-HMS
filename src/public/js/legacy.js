@@ -6449,9 +6449,14 @@ function openM(id){
   const m=document.getElementById(id);
   if(m)m.classList.add('open');
   if(id==='m-ipd-note') {
+    if (m) m.style.zIndex = '1200';
     refreshIPDNurseSelects && refreshIPDNurseSelects();
+    renderProgressNoteMedicineRows && renderProgressNoteMedicineRows();
     const d = document.getElementById('pn-date'); if (d && !d.value) d.value = todayKey();
     const t = document.getElementById('pn-time'); if (t && !t.value) t.value = new Date().toTimeString().slice(0,5);
+    const nurseSel = document.getElementById('pn-nurse');
+    if (nurseSel && window._ipdAuthenticatedNurse) nurseSel.value = window._ipdAuthenticatedNurse;
+    setIPDNursingEntryEnabled && setIPDNursingEntryEnabled(!!isIPDNurseAuthenticated(nurseSel?.value || ''));
   }
   if(id==='m-print-tpl')loadTplDocs();
   if(id==='m-consents')renderConsentModal();
@@ -8095,7 +8100,7 @@ function saveIPDNurseNames(names) {
 }
 function nurseOptionsHtml(selected) {
   const sel = String(selected || '').trim();
-  return getIPDNurseNames().map(function (name) {
+  return '<option value="">Select nursing staff</option>' + getIPDNurseNames().map(function (name) {
     return '<option value="' + escapeHtmlConsent(name) + '"' + (name === sel ? ' selected' : '') + '>' + escapeHtmlConsent(name) + '</option>';
   }).join('');
 }
@@ -8128,6 +8133,96 @@ function deleteSelectedIPDNurseName() {
   saveIPDNurseNames(names);
   refreshIPDNurseSelects(names[0] || '');
   showToast('Nurse name removed ✓', 's');
+}
+function ipdNursePinKey(name) {
+  return 'bmh_ipd_nurse_pin_' + String(name || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_');
+}
+function isIPDNurseAuthenticated(name) {
+  const clean = String(name || '').trim();
+  return !!clean && window._ipdAuthenticatedNurse === clean;
+}
+function setIPDNursingEntryEnabled(enabled) {
+  ['m-ipd-monitor','m-ipd-note'].forEach(function (modalId) {
+    const modal = document.getElementById(modalId);
+    if (!modal) return;
+    modal.querySelectorAll('input,textarea,select,button').forEach(function (el) {
+      if (el.id === 'ipdm-nurse-select' || el.id === 'pn-nurse' || /addIPDNurseName|deleteSelectedIPDNurseName|closeM/.test(el.getAttribute('onclick') || '')) return;
+      if (el.closest('.modal-hd')) return;
+      el.disabled = !enabled;
+      el.style.opacity = enabled ? '' : '0.62';
+    });
+  });
+}
+function validateIPDNursePin(name) {
+  const clean = String(name || '').trim();
+  if (!clean) {
+    window._ipdAuthenticatedNurse = '';
+    setIPDNursingEntryEnabled(false);
+    return false;
+  }
+  const key = ipdNursePinKey(clean);
+  let saved = '';
+  try { saved = localStorage.getItem(key) || ''; } catch (e) {}
+  if (!saved) {
+    const pin1 = prompt('Create 4 digit PIN for ' + clean);
+    if (pin1 == null) return false;
+    if (!/^\d{4}$/.test(String(pin1 || ''))) { showToast('PIN must be exactly 4 digits', 'w'); return false; }
+    const pin2 = prompt('Re-enter PIN for ' + clean);
+    if (String(pin1) !== String(pin2)) { showToast('PIN did not match', 'w'); return false; }
+    try { localStorage.setItem(key, String(pin1)); } catch (e) {}
+    window._ipdAuthenticatedNurse = clean;
+    setIPDNursingEntryEnabled(true);
+    showToast('PIN created for ' + clean + ' ✓', 's');
+    return true;
+  }
+  const entered = prompt('Enter 4 digit PIN for ' + clean);
+  if (String(entered || '') !== String(saved)) {
+    window._ipdAuthenticatedNurse = '';
+    setIPDNursingEntryEnabled(false);
+    showToast('Incorrect PIN', 'w');
+    return false;
+  }
+  window._ipdAuthenticatedNurse = clean;
+  setIPDNursingEntryEnabled(true);
+  showToast('Nursing staff verified ✓', 's');
+  return true;
+}
+function onIPDNurseSelected(el) {
+  const name = String(el?.value || '').trim();
+  if (!validateIPDNursePin(name) && el) el.value = '';
+  const otherId = el?.id === 'pn-nurse' ? 'ipdm-nurse-select' : 'pn-nurse';
+  const other = document.getElementById(otherId);
+  if (other && name && window._ipdAuthenticatedNurse === name) other.value = name;
+}
+function requireIPDNurseAuth(selectId) {
+  const sel = document.getElementById(selectId) || document.getElementById('ipdm-nurse-select') || document.getElementById('pn-nurse');
+  const name = String(sel?.value || '').trim();
+  if (!name) { showToast('Select nursing staff first', 'w'); return ''; }
+  if (!isIPDNurseAuthenticated(name) && !validateIPDNursePin(name)) return '';
+  return name;
+}
+function ipdMonitoringLabel(key) {
+  return ({'1h':'Hourly','2h':'Every 2 hours','4h':'Every 4 hours','6h':'Every 6 hours'})[key] || 'Every 6 hours';
+}
+function setIPDMonitoringFrequency(id, key) {
+  const p = (window.IPD_PATIENTS || IPD_PATIENTS || []).find(function (x) { return x.id === id; });
+  if (!p) return;
+  p.monitoringKey = key || '6h';
+  p.monitoringLabel = ipdMonitoringLabel(p.monitoringKey);
+  p.monitoringPlan = ipdMonitoringSlots(p.monitoringKey, new Date().toISOString());
+  fbUpdate && fbUpdate('ipdPatients/' + p.id, { monitoringKey:p.monitoringKey, monitoringLabel:p.monitoringLabel, monitoringPlan:p.monitoringPlan }).catch(function(){});
+  openIPDPatient(p.id);
+  renderIPD && renderIPD();
+  showToast('Monitoring changed to ' + p.monitoringLabel, 's');
+}
+function adjustIPDMonitoringFrequency(id, delta) {
+  const order = ['1h','2h','4h','6h'];
+  const p = (window.IPD_PATIENTS || IPD_PATIENTS || []).find(function (x) { return x.id === id; });
+  if (!p) return;
+  const current = p.monitoringKey || '6h';
+  const idx = Math.max(0, order.indexOf(current));
+  const next = order[Math.max(0, Math.min(order.length - 1, idx + delta))] || current;
+  setIPDMonitoringFrequency(id, next);
 }
 window.addIPDNurseName = addIPDNurseName;
 window.deleteSelectedIPDNurseName = deleteSelectedIPDNurseName;
@@ -8242,6 +8337,29 @@ function renderIPDAlerts(p) {
   const alerts = ipdEvaluateAlerts(p);
   el.innerHTML = alerts.map(a => `<div style="padding:9px 10px;border-radius:8px;margin-bottom:7px;background:${a.tone === 'var(--green)' ? 'var(--green-lt)' : a.tone === 'var(--orange)' ? 'var(--orange-lt)' : 'var(--red-lt)'};color:${a.tone};font-weight:${a.tone === 'var(--green)' ? '700' : '900'}">${a.text}</div>`).join('');
 }
+function ipdVitalsListHtml(p) {
+  const rows = Array.isArray(p?.vitalSigns) ? p.vitalSigns.slice(0, 12) : [];
+  if (!rows.length) return '<div style="background:var(--g6);border-radius:10px;padding:12px;color:var(--g1);font-size:12px">No vitals recorded by nursing staff yet.</div>';
+  return rows.map(function (v) {
+    const when = v.recordedAt ? new Date(v.recordedAt).toLocaleString('en-IN') : [v.date, v.time].filter(Boolean).join(' · ');
+    const parts = [
+      v.bp ? 'BP ' + v.bp : '',
+      v.pulse ? 'Pulse ' + v.pulse : '',
+      v.temp ? 'Temp ' + v.temp : '',
+      v.spo2 ? 'SpO2 ' + v.spo2 : '',
+      v.rr ? 'RR ' + v.rr : '',
+      v.pain ? 'Pain ' + v.pain : '',
+      v.weight ? 'Wt ' + v.weight : ''
+    ].filter(Boolean);
+    return '<div style="background:var(--g6);border-left:3px solid var(--bmh-teal);border-radius:9px;padding:10px;margin-bottom:7px">'
+      + '<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:5px">'
+      + '<div style="font-size:11px;font-weight:900;color:var(--bmh-blue)">' + escapeHtmlConsent(when || 'Time not recorded') + '</div>'
+      + '<div style="font-size:10px;font-weight:800;color:var(--g1)">' + escapeHtmlConsent(v.by || v.nurse || 'Nursing staff') + '</div>'
+      + '</div>'
+      + '<div style="font-size:12px;line-height:1.55;color:var(--tx3);font-weight:700">' + escapeHtmlConsent(parts.join(' · ') || 'Vitals entered') + '</div>'
+      + '</div>';
+  }).join('');
+}
 function ipdChartSummary(p) {
   const chart = p.chartRows || [];
   if (!chart.length) return '<div style="color:var(--g1);font-size:12px">No structured chart items yet.</div>';
@@ -8313,7 +8431,7 @@ function renderIPDMonitoringSheet(id) {
     </div>` : '';
   host.innerHTML = `
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;background:#fff;border:1px solid var(--g5);border-radius:12px;padding:10px">
-      <div class="form-group" style="margin:0;flex:1"><label class="fl">Nursing Staff</label><select id="ipdm-nurse-select">${nurseOptionsHtml('')}</select></div>
+      <div class="form-group" style="margin:0;flex:1"><label class="fl">Nursing Staff</label><select id="ipdm-nurse-select" onchange="onIPDNurseSelected(this)">${nurseOptionsHtml(window._ipdAuthenticatedNurse || '')}</select></div>
       <button class="btn btn-outline btn-sm" onclick="addIPDNurseName()">Add</button>
       <button class="btn btn-gray btn-sm" onclick="deleteSelectedIPDNurseName()">Delete</button>
     </div>
@@ -8348,6 +8466,7 @@ function renderIPDMonitoringSheet(id) {
         <button class="btn btn-gray btn-sm" onclick="closeM('m-ipd-monitor')">Close</button>
       </div>
     </div>`;
+  setIPDNursingEntryEnabled(!!isIPDNurseAuthenticated(document.getElementById('ipdm-nurse-select')?.value || ''));
 }
 
 function updateIPDMonitorRow(idx, value) {
@@ -8363,7 +8482,8 @@ function toggleIPDMonitorCheck(idx, checked) {
 
 function saveIPDMonitorVitals() {
   if (!activeIPDPatient) return;
-  const nurse = document.getElementById('ipdm-nurse-select')?.value || CURRENT_USER?.name || 'Nursing Staff';
+  const nurse = requireIPDNurseAuth('ipdm-nurse-select');
+  if (!nurse) return;
   const vitals = {
     bp: document.getElementById('ipdm-bp')?.value || '',
     pulse: document.getElementById('ipdm-pulse')?.value || '',
@@ -8390,7 +8510,8 @@ function saveIPDMonitorVitals() {
 
 function saveIPDMonitoringSheet() {
   if (!activeIPDPatient) return;
-  const nurse = document.getElementById('ipdm-nurse-select')?.value || CURRENT_USER?.name || 'Nursing Staff';
+  const nurse = requireIPDNurseAuth('ipdm-nurse-select');
+  if (!nurse) return;
   const isObg = normalizeDeptKeyForQueue(activeIPDPatient.dept || '') === 'obg';
   if (isObg) {
     activeIPDPatient.inLabour = !!document.getElementById('ipdm-in-labour')?.checked;
@@ -8449,6 +8570,7 @@ function openIPDDoctorWorkflow(id) {
 }
 function openIPDNursingWorkflow(id) {
   openIPDPatient(id);
+  window._ipdAuthenticatedNurse = '';
   renderIPDMonitoringSheet(id);
   openM('m-ipd-monitor');
 }
@@ -8501,7 +8623,10 @@ function completeIPDInstruction(instructionId) {
   if (!activeIPDPatient || !Array.isArray(activeIPDPatient.ipdInstructions)) return;
   const row = activeIPDPatient.ipdInstructions.find(function (x) { return String(x.id || '') === String(instructionId || ''); });
   if (!row) return;
-  const nurse = document.getElementById('ipdm-nurse-select')?.value || document.getElementById('pn-nurse')?.value || CURRENT_USER?.name || 'Nursing Staff';
+  const nurse = document.getElementById('ipdm-nurse-select')?.value
+    ? requireIPDNurseAuth('ipdm-nurse-select')
+    : requireIPDNurseAuth('pn-nurse');
+  if (!nurse) return;
   row.status = 'done';
   row.doneAt = new Date().toISOString();
   row.doneBy = nurse;
@@ -8576,16 +8701,19 @@ function openIPDPatient(id) {
       </div>
     </div>`:''}
     <div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Vitals</div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:14px">
-      ${[['BP','bp','mmHg',lastVitals.bp,'ok'],['Pulse','pulse','bpm',lastVitals.pulse,parseInt(lastVitals.pulse)>100?'warn':'ok'],['Temp','temp','°C',lastVitals.temp,parseFloat(lastVitals.temp)>37.5?'warn':'ok'],['SpO2','spo2','%',lastVitals.spo2,parseInt(lastVitals.spo2)<95?'high':'ok'],['RR','rr','brpm',lastVitals.rr,'ok'],['Weight','weight','',lastVitals.weight || p.weight || '—','ok']].map(([l,k,u,v,cls])=>`<div style="background:var(--g6);border-radius:8px;padding:9px;text-align:center"><div style="font-size:9px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px">${l}</div><div style="font-size:17px;font-weight:900;margin-top:3px;color:${cls==='warn'?'var(--orange)':cls==='high'?'var(--red)':'#1a8c3c'}">${v||'—'}</div><div style="font-size:9px;color:var(--g1)">${u}</div></div>`).join('')}
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+    <div style="margin-bottom:14px">${ipdVitalsListHtml(p)}</div>
+    <div style="display:grid;grid-template-columns:1fr;gap:12px;margin-bottom:14px">
       <div style="background:var(--g6);border-radius:10px;padding:12px">
-        <div style="font-size:10px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Structured chart</div>
-        ${ipdChartSummary(p)}
-      </div>
-      <div style="background:var(--g6);border-radius:10px;padding:12px">
-        <div style="font-size:10px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Monitoring schedule</div>
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px">
+          <div style="font-size:10px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px">Monitoring schedule</div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <button class="btn btn-xs btn-outline" title="Increase monitoring frequency" onclick="adjustIPDMonitoringFrequency('${p.id}',-1)">−</button>
+            <select onchange="setIPDMonitoringFrequency('${p.id}',this.value)" style="border:1px solid var(--g4);border-radius:8px;padding:5px 7px;font-size:11px;background:#fff">
+              ${['1h','2h','4h','6h'].map(function (key) { return '<option value="' + key + '"' + ((p.monitoringKey || '6h') === key ? ' selected' : '') + '>' + ipdMonitoringLabel(key) + '</option>'; }).join('')}
+            </select>
+            <button class="btn btn-xs btn-outline" title="Decrease monitoring frequency" onclick="adjustIPDMonitoringFrequency('${p.id}',1)">＋</button>
+          </div>
+        </div>
         ${(p.monitoringPlan || []).slice(0, 8).map(slot => `<div style="display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--g5);font-size:12px"><span>${new Date(slot.dueAt).toLocaleString('en-IN')}</span><strong style="color:${slot.status==='done' ? '#1a8c3c' : new Date(slot.dueAt).getTime() < Date.now() ? 'var(--red)' : 'var(--orange)'}">${slot.status === 'done' ? 'Recorded' : new Date(slot.dueAt).getTime() < Date.now() ? 'Overdue' : 'Due'}</strong></div>`).join('') || '<div style="color:var(--g1);font-size:12px">No schedule set.</div>'}
       </div>
     </div>
@@ -8597,7 +8725,7 @@ function openIPDPatient(id) {
       ${(p.notes || []).map(n=>`<div style="background:var(--g6);border-radius:var(--rsm);padding:12px;margin-bottom:8px;border-left:3px solid var(--blue)">
         <div style="font-size:11px;font-weight:900;color:var(--bmh-blue);margin-bottom:4px">${n.date} · ${n.time}</div>
         ${n.vitals ? `<div style="font-size:10px;color:var(--g1);margin-bottom:6px">BP ${n.vitals.bp||'—'} · Pulse ${n.vitals.pulse||'—'} · Temp ${n.vitals.temp||'—'} · SpO2 ${n.vitals.spo2||'—'} · RR ${n.vitals.rr||'—'} · Pain ${n.vitals.pain||'—'}</div>` : ''}
-        ${n.medicine || n.dose ? `<div style="font-size:10px;color:#1a8c3c;margin-bottom:4px"><strong>Medicine / Injection:</strong> ${n.medicine||'—'} ${n.dose?`(${n.dose})`:''}</div>` : ''}
+        ${Array.isArray(n.medicines) && n.medicines.length ? `<div style="font-size:10px;color:#1a8c3c;margin-bottom:4px"><strong>Medicines / Injections:</strong> ${n.medicines.map(function(m){ return escapeHtmlConsent([m.medicine,m.dose].filter(Boolean).join(' - ')); }).join('; ')}</div>` : (n.medicine || n.dose ? `<div style="font-size:10px;color:#1a8c3c;margin-bottom:4px"><strong>Medicine / Injection:</strong> ${n.medicine||'—'} ${n.dose?`(${n.dose})`:''}</div>` : '')}
         ${n.orders ? `<div style="font-size:10px;color:#8a4200;margin-bottom:4px"><strong>Doctor orders:</strong> ${n.orders}</div>` : ''}
         <div style="font-size:12px;color:var(--tx3);line-height:1.7">${n.note}</div>
         <div style="font-size:10px;color:var(--g1);margin-top:6px">👩‍⚕️ ${n.nurse} · 👨‍⚕️ ${n.doctor}</div>
@@ -8605,21 +8733,55 @@ function openIPDPatient(id) {
     </div>
     <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:12px">
       <button class="btn btn-outline btn-sm" onclick="printIPDSummary('${p.id}')">🖨️ Print Summary</button>
+      <button class="btn btn-outline btn-sm" onclick="printIPDPatientNotes('${p.id}')">View / Print Patient Notes</button>
         <button class="btn btn-gold btn-sm" onclick="dischargeActiveIPDPatient()">🏠 Discharge</button>
       <button class="btn btn-gray btn-sm" onclick="openIPDWorkflow('${p.id}')">📋 Open Monitoring Sheet</button>
     </div>`;
   renderIPDAlerts(p);
 }
 
+function renderProgressNoteMedicineRows() {
+  const host = document.getElementById('pn-meds-list');
+  if (!host) return;
+  if (!host.children.length) addProgressNoteMedicineRow();
+}
+function addProgressNoteMedicineRow(prefill) {
+  const host = document.getElementById('pn-meds-list');
+  if (!host) return;
+  const idx = host.children.length + 1;
+  const row = document.createElement('div');
+  row.className = 'pn-med-row';
+  row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px';
+  row.innerHTML = '<div class="form-group" style="margin:0"><label class="fl">Medicine / Injection / Tablet ' + idx + '</label><input type="text" class="pn-med-name" placeholder="e.g. Inj Ceftriaxone" value="' + escapeHtmlConsent(prefill?.medicine || '') + '"></div>'
+    + '<div class="form-group" style="margin:0"><label class="fl">Dose / Route</label><input type="text" class="pn-med-dose" placeholder="e.g. 1 g IV BD" value="' + escapeHtmlConsent(prefill?.dose || '') + '"></div>'
+    + '<button type="button" class="btn btn-xs btn-gray" onclick="removeProgressNoteMedicineRow(this)">Remove</button>';
+  host.appendChild(row);
+  setIPDNursingEntryEnabled && setIPDNursingEntryEnabled(!!isIPDNurseAuthenticated(document.getElementById('pn-nurse')?.value || ''));
+}
+function removeProgressNoteMedicineRow(btn) {
+  const host = document.getElementById('pn-meds-list');
+  const row = btn?.closest('.pn-med-row');
+  if (row && host && host.children.length > 1) row.remove();
+}
+function readProgressNoteMedicines() {
+  return Array.from(document.querySelectorAll('#pn-meds-list .pn-med-row')).map(function (row) {
+    return {
+      medicine: row.querySelector('.pn-med-name')?.value?.trim() || '',
+      dose: row.querySelector('.pn-med-dose')?.value?.trim() || ''
+    };
+  }).filter(function (row) { return row.medicine || row.dose; });
+}
 function saveProgressNote() {
   if (!activeIPDPatient) return;
   const note = document.getElementById('pn-text')?.value;
-  const nurse = document.getElementById('pn-nurse')?.value||'Staff Nurse';
+  const nurse = requireIPDNurseAuth('pn-nurse');
+  if (!nurse) return;
   const doctor = document.getElementById('pn-doctor')?.value||'Dr. Varun Baweja';
   const date = document.getElementById('pn-date')?.value || todayKey();
   const time = document.getElementById('pn-time')?.value || new Date().toTimeString().slice(0,5);
-  const medicine = document.getElementById('pn-med')?.value || '';
-  const dose = document.getElementById('pn-dose')?.value || '';
+  const medicines = readProgressNoteMedicines();
+  const medicine = medicines.map(function (m) { return m.medicine; }).filter(Boolean).join('; ');
+  const dose = medicines.map(function (m) { return m.dose; }).filter(Boolean).join('; ');
   const orders = document.getElementById('pn-orders')?.value || '';
   const vitals = {
     bp: document.getElementById('pn-bp')?.value || '',
@@ -8629,10 +8791,10 @@ function saveProgressNote() {
     rr: document.getElementById('pn-rr')?.value || '',
     pain: document.getElementById('pn-pain')?.value || ''
   };
-  if (!note) { showToast('Please enter a note','w'); return; }
+  if (!note && !orders && !medicines.length && !Object.values(vitals).some(Boolean)) { showToast('Please enter vitals, a note, medicine, or order','w'); return; }
   if (!Array.isArray(activeIPDPatient.notes)) activeIPDPatient.notes = [];
   if (!Array.isArray(activeIPDPatient.vitalSigns)) activeIPDPatient.vitalSigns = [];
-  activeIPDPatient.notes.unshift({date:new Date(date).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}),time,note,nurse,doctor,medicine,dose,orders,vitals,recordedAt:new Date(date + 'T' + time).toISOString()});
+  activeIPDPatient.notes.unshift({date:new Date(date).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}),time,note:note || 'Vitals / medicine entry recorded.',nurse,doctor,medicine,dose,medicines,orders,vitals,recordedAt:new Date(date + 'T' + time).toISOString()});
   if (Object.values(vitals).some(Boolean)) activeIPDPatient.vitalSigns.unshift(Object.assign({ recordedAt:new Date(date + 'T' + time).toISOString(), by:nurse }, vitals));
   const nextDue = (activeIPDPatient.monitoringPlan || []).find(slot => slot.status !== 'done');
   if (nextDue) {
@@ -8646,6 +8808,70 @@ function saveProgressNote() {
 }
 
 function printIPDSummary(id) { showToast('IPD Summary printing ✓','s'); setTimeout(()=>window.print(),300); }
+function ipdPostOpDayLabel(p, isoOrDate) {
+  const base = new Date(p?.admittedAt || p?.surgeryAt || Date.now());
+  const dt = new Date(isoOrDate || Date.now());
+  base.setHours(0,0,0,0);
+  dt.setHours(0,0,0,0);
+  const day = Math.max(1, Math.floor((dt.getTime() - base.getTime()) / 86400000) + 1);
+  const ord = day === 1 ? 'First' : day === 2 ? 'Second' : day === 3 ? 'Third' : day + 'th';
+  return ord + ' post op day';
+}
+function printIPDPatientNotes(id) {
+  const p = (window.IPD_PATIENTS || IPD_PATIENTS || []).find(function (x) { return x.id === id; });
+  if (!p) return;
+  const notes = (Array.isArray(p.notes) ? p.notes : []).slice().sort(function (a, b) {
+    return new Date(a.recordedAt || (a.date + ' ' + a.time)).getTime() - new Date(b.recordedAt || (b.date + ' ' + b.time)).getTime();
+  });
+  const instructions = Array.isArray(p.ipdInstructions) ? p.ipdInstructions : [];
+  const dateKey = function (row) {
+    const d = new Date(row.recordedAt || row.createdAt || Date.now());
+    return isNaN(d.getTime()) ? (row.date || 'Undated') : d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+  };
+  const groups = {};
+  notes.forEach(function (n) {
+    const key = dateKey(n);
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(n);
+  });
+  if (!Object.keys(groups).length) groups['No date'] = [];
+  const medicineLine = function (n) {
+    if (Array.isArray(n.medicines) && n.medicines.length) {
+      return n.medicines.map(function (m) { return [m.medicine, m.dose].filter(Boolean).join(' - '); }).filter(Boolean).join('; ');
+    }
+    return [n.medicine, n.dose].filter(Boolean).join(' - ');
+  };
+  const columns = Object.keys(groups).map(function (key) {
+    const first = groups[key][0] || {};
+    const dayLabel = ipdPostOpDayLabel(p, first.recordedAt || Date.now());
+    const rows = groups[key].length ? groups[key].map(function (n) {
+      const meds = medicineLine(n);
+      const vitals = n.vitals && Object.values(n.vitals).some(Boolean)
+        ? ['BP ' + (n.vitals.bp || '-'), 'Pulse ' + (n.vitals.pulse || '-'), 'Temp ' + (n.vitals.temp || '-'), 'SpO2 ' + (n.vitals.spo2 || '-'), 'RR ' + (n.vitals.rr || '-'), 'Pain ' + (n.vitals.pain || '-')].join(' | ')
+        : '';
+      return '<div class="note-block">'
+        + '<div class="note-time">' + escapeHtmlConsent(n.time || '') + ' · Nursing staff notes · ' + escapeHtmlConsent(n.nurse || 'Staff Nurse') + '</div>'
+        + (vitals ? '<div class="muted"><b>Vitals:</b> ' + escapeHtmlConsent(vitals) + '</div>' : '')
+        + '<div>' + escapeHtmlConsent(n.note || '') + '</div>'
+        + (meds ? '<div class="green"><b>Medicines / tablets / injections given:</b> ' + escapeHtmlConsent(meds) + '</div>' : '')
+        + (n.orders ? '<div class="amber"><b>Instructions / doctor orders followed:</b> ' + escapeHtmlConsent(n.orders) + '</div>' : '')
+        + (n.doctor ? '<div class="muted"><b>Doctor:</b> ' + escapeHtmlConsent(n.doctor) + '</div>' : '')
+        + '</div>';
+    }).join('') : '<div class="muted">No nursing notes recorded for this date.</div>';
+    return '<section class="day-col"><h2>' + escapeHtmlConsent(dayLabel) + '</h2><div class="date">' + escapeHtmlConsent(key) + '</div>' + rows + '</section>';
+  }).join('');
+  const instructionRows = instructions.length ? instructions.map(function (row) {
+    return '<tr><td>' + escapeHtmlConsent(row.createdAt ? new Date(row.createdAt).toLocaleString('en-IN') : '') + '</td><td>' + escapeHtmlConsent([row.medicine,row.dose].filter(Boolean).join(' - ') || 'Instruction') + '</td><td>' + escapeHtmlConsent(row.note || '') + '</td><td>' + escapeHtmlConsent(row.status === 'done' ? ('Done by ' + (row.doneBy || '') + (row.doneAt ? ' at ' + new Date(row.doneAt).toLocaleString('en-IN') : '')) : 'Pending') + '</td></tr>';
+  }).join('') : '<tr><td colspan="4">No doctor instructions recorded.</td></tr>';
+  const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>'
+    + '@page{size:A4 portrait;margin:10mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;margin:0;font-size:10.5px;line-height:1.45}.head{border-bottom:2px solid #1A3C6E;padding-bottom:7px;margin-bottom:8px}h1{font-size:17px;margin:0;color:#1A3C6E}.meta{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-top:7px}.meta div{border:1px solid #d7dce5;padding:5px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:start}.day-col{border:1px solid #d7dce5;padding:7px;break-inside:avoid}h2{font-size:13px;margin:0;color:#1A3C6E;text-transform:capitalize}.date{font-size:10px;font-weight:700;color:#666;margin:2px 0 7px}.note-block{border-top:1px solid #e4e7ec;padding-top:6px;margin-top:6px;break-inside:avoid}.note-time{font-size:10px;font-weight:800;color:#0B7B8C;margin-bottom:3px}.muted{color:#555;margin-top:3px}.green{color:#126b31;margin-top:3px}.amber{color:#8a4200;margin-top:3px}table{width:100%;border-collapse:collapse;margin-top:9px}th,td{border:1px solid #d7dce5;padding:4px 5px;vertical-align:top}th{background:#eef3fb;color:#1A3C6E;text-align:left;font-size:9px;text-transform:uppercase}</style></head><body>'
+    + '<div class="head"><h1>IPD Patient Notes</h1><div class="meta"><div><b>Patient</b><br>' + escapeHtmlConsent(p.name || '') + '</div><div><b>ID</b><br>' + escapeHtmlConsent(p.bmhId || p.id || '') + '</div><div><b>Ward</b><br>' + escapeHtmlConsent(p.ward || p.room || '') + '</div><div><b>Doctor</b><br>' + escapeHtmlConsent(p.doctor || '') + '</div></div></div>'
+    + '<div class="grid">' + columns + '</div>'
+    + '<h2 style="margin-top:10px">Doctor / Nursing Instructions</h2><table><thead><tr><th>Time</th><th>Medicine / Tablet</th><th>Instruction</th><th>Status</th></tr></thead><tbody>' + instructionRows + '</tbody></table>'
+    + '</body></html>';
+  safePrint(html);
+  showToast('Patient notes ready to print ✓', 's');
+}
 
 // ═══════════════════════════════════════
 // BMH FINANCIALS — billing, vendors, ledger, inventory sync
