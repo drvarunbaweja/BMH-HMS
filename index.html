@@ -5478,6 +5478,34 @@
 </div>
 </div>
 
+<div class="modal-ov" id="m-inv-move-store">
+<div class="modal">
+<div class="modal-hd">
+  <div class="modal-title">Move Inventory Stock</div>
+  <button class="modal-close" onclick="closeM('m-inv-move-store')">✕</button>
+</div>
+<div class="fg fg1" style="gap:10px">
+  <div style="padding:10px 12px;border:1px solid var(--g4);border-radius:10px;background:var(--g6)">
+    <div style="font-size:12px;font-weight:900;color:var(--bmh-blue)" id="inv-move-summary">Inventory item</div>
+    <div style="font-size:11px;color:var(--g1);margin-top:4px">From: <span id="inv-move-from">Unassigned store</span></div>
+  </div>
+  <div class="form-group" style="margin:0">
+    <label class="fl">Move to store</label>
+    <select id="inv-move-store"></select>
+  </div>
+  <div class="form-group" style="margin:0" id="inv-move-qty-wrap">
+    <label class="fl">Quantity to move</label>
+    <input type="number" id="inv-move-qty" min="1" step="1">
+    <div id="inv-move-qty-hint" style="font-size:11px;color:var(--g1);margin-top:4px"></div>
+  </div>
+  <div style="display:flex;justify-content:flex-end;gap:8px">
+    <button class="btn btn-outline" type="button" onclick="closeM('m-inv-move-store')">Cancel</button>
+    <button class="btn btn-gold" type="button" onclick="confirmInventoryMoveModal()">Move Stock</button>
+  </div>
+</div>
+</div>
+</div>
+
 <!-- Consents Modal from Patient Screen -->
 <div class="modal-ov" id="m-consents">
 <div class="modal modal-lg">
