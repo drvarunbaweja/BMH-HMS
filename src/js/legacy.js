@@ -6367,7 +6367,7 @@ function renderPaymentsPage() {
   const pending = todayReqs.filter(function (r) { return r.status === 'pending'; });
   const collected = todayReqs.filter(function (r) { return r.status === 'paid'; });
   const txns = (TRANSACTIONS || []).filter(function (t) {
-    return rowMatchesCentre(t, centre, { allowUncentredToday: true, dateKey: todayKey }) && txnIsoDate(t) === todayKey && !isInsuranceLikeMode(t.mode || t.ins || '');
+    return rowMatchesCentre(t, centre, { allowUncentredToday: true, dateKey: todayKey, requireDate: true }) && txnIsoDate(t) === todayKey && !isInsuranceLikeMode(t.mode || t.ins || '');
   });
   const modeTotals = {};
   txns.forEach(function (t) {
@@ -13607,6 +13607,7 @@ function bmhAddPatientToDoctorQueue(bmhId, opts) {
     seen: false,
     queueRemoved: false,
     checkinAt: Date.now(),
+    queueAddedAt: nowIso,
     visitDate: today,
     queueDate: today,
     purpose: p.purpose || 'Billing / charges',
@@ -13649,6 +13650,7 @@ function bmhEnsurePatientInTodayDeptQueue(bmhId, opts) {
     queueRemovedAt: null,
     queueRemovedBy: '',
     checkinAt: Date.now(),
+    queueAddedAt: nowIso,
     queueDate: today,
     visitDate: today,
     updatedAt: nowIso
@@ -18480,6 +18482,7 @@ function keepPatientInQueueAfterOT(bmhId, deptOverride, otCaseId) {
   p.queueDate = p.queueDate || today;
   p.visitDate = p.visitDate || today;
   p.checkinAt = p.checkinAt || Date.now();
+  p.queueAddedAt = p.queueAddedAt || nowIso;
   p.updatedAt = nowIso;
   if (deptOverride && normalizeDeptKeyForQueue(deptOverride)) p.dept = normalizeDeptKeyForQueue(deptOverride);
   if (otCaseId) p.otCaseId = otCaseId;
@@ -18495,6 +18498,7 @@ function keepPatientInQueueAfterOT(bmhId, deptOverride, otCaseId) {
     queueDate: p.queueDate,
     visitDate: p.visitDate,
     checkinAt: p.checkinAt,
+    queueAddedAt: p.queueAddedAt,
     updatedAt: nowIso
   };
   if (deptOverride && normalizeDeptKeyForQueue(deptOverride)) patch.dept = normalizeDeptKeyForQueue(deptOverride);
@@ -24759,6 +24763,7 @@ async function registerPatient() {
     queueRemoved: false,
     queueRemovedAt: null,
     queueRemovedBy: '',
+    queueAddedAt: isPreReg ? '' : currentIso,
     queueDate: queueDateToday,
     visitDate: queueDateToday,
     preRegistered: isPreReg,
@@ -24920,7 +24925,7 @@ async function registerPatient() {
     advance:patient.advance, advancePurpose:patient.advancePurpose, consultationNoFee:patient.consultationNoFee,
     consultationFee: patient.consultationFee, consultationFeeType: patient.consultationFeeType || '', consultationFeeLabel: patient.consultationFeeLabel || '',
     refType: patient.refType || '', refName: patient.refName || '', refMobile: patient.refMobile || '', referredBy: patient.referredBy || '',
-    queueRemoved: false, queueRemovedAt: null, queueRemovedBy: '', queueDate: patient.queueDate || queueDateToday, visitDate: patient.visitDate || queueDateToday
+    queueRemoved: false, queueRemovedAt: null, queueRemovedBy: '', queueAddedAt: patient.queueAddedAt || '', queueDate: patient.queueDate || queueDateToday, visitDate: patient.visitDate || queueDateToday
   });
   if (typeof window.patchPatientFirestore === 'function') {
     window.patchPatientFirestore(uid, {
@@ -24931,6 +24936,7 @@ async function registerPatient() {
       centre: patient.centre,
       balance: patient.balance,
       checkinAt: patient.checkinAt,
+      queueAddedAt: patient.queueAddedAt || '',
       queueDate: patient.queueDate || queueDateToday,
       visitDate: patient.visitDate || queueDateToday,
       queueRemoved: false,
@@ -32458,16 +32464,19 @@ function isPatientWorkingListStatus(row) {
   return true;
 }
 function rowMatchesCentre(row, centre, opts) {
+  const options = opts || {};
   const wanted = patientCentreKey(centre || getEffectiveCentre?.() || 'CHD');
   const explicit = explicitPatientCentreKey(row?.centre);
+  const dateMatches = rowDateMatchesKey(row, options.dateKey || todayKey());
   if (explicit) {
     if (explicit !== wanted) return false;
-    return isPatientWorkingListStatus(row) || rowDateMatchesKey(row, opts?.dateKey || todayKey());
+    if (options.requireDate) return dateMatches;
+    return isPatientWorkingListStatus(row) || dateMatches;
   }
   // Legacy rows without a centre used to be treated as Chandigarh forever.
   // Keep same-day working rows visible, but do not let old uncentred history
   // weigh down the Chandigarh live UI.
-  return !!(opts?.allowUncentredToday && wanted === 'CHD' && rowDateMatchesKey(row, opts.dateKey || todayKey()));
+  return !!(options.allowUncentredToday && wanted === 'CHD' && dateMatches);
 }
 /**
  * Which centre's rows should live in PATIENTS[] for centre-locked users.
@@ -33309,29 +33318,36 @@ function getTodayCompletedOtPatientSet(todayKeyLocal) {
   rows.forEach(function (c) {
     if (!c || !c.bmhId) return;
     if (String(c.status || '').toLowerCase() !== 'completed') return;
-    if (localDateKey(c.date || c.surgeryDate || c.otDate || c.updatedAt || c.createdAt) === day) ids.add(String(c.bmhId || ''));
+    if (localDateKey(c.date || c.surgeryDate || c.otDate) === day) ids.add(String(c.bmhId || ''));
   });
   window._bmhTodayCompletedOtCache = { version: version, ids: ids };
   return ids;
+}
+function patientHasTodayExplicitQueueStamp(p, todayKeyLocal) {
+  const day = todayKeyLocal || localDateKey(new Date());
+  if (!p) return false;
+  return [p.queueAddedAt, p.enqueuedAt, p.checkedInAt].filter(Boolean).some(function (raw) {
+    return localDateKey(raw) === day || String(raw || '').slice(0, 10) === day;
+  });
+}
+function patientHasLegacySameDayCreationQueue(p, todayKeyLocal) {
+  const day = todayKeyLocal || localDateKey(new Date());
+  if (!p) return false;
+  const createdToday = [p.createdAt, p.registeredAt, p.date].filter(Boolean).some(function (raw) {
+    return localDateKey(raw) === day || String(raw || '').slice(0, 10) === day;
+  });
+  if (!createdToday) return false;
+  return [p.checkinAt, p.queueDate, p.visitDate].filter(Boolean).some(function (raw) {
+    return localDateKey(raw) === day || String(raw || '').slice(0, 10) === day;
+  });
 }
 /** Shared filter: patient appears in today's doctor queue and reception queue (same date logic). */
 function patientQueueDateMatchesToday(p) {
   if (!p || p.queueRemoved) return false;
   const todayKeyLocal = localDateKey(new Date());
   const otDoneToday = getTodayCompletedOtPatientSet(todayKeyLocal).has(String(p.bmhId || ''));
-  const stamps = [p.checkinAt, p.queueDate, p.visitDate].filter(Boolean);
-  if (!stamps.length) {
-    return !!otDoneToday;
-  }
-  const stampHit = stamps.some(function (raw) {
-    const s = String(raw || '');
-    if (!s) return false;
-    if (/^\d+$/.test(s)) {
-      try { return localDateKey(new Date(Number(s))) === todayKeyLocal; } catch (e) { return false; }
-    }
-    return localDateKey(s) === todayKeyLocal || s.slice(0, 10) === todayKeyLocal;
-  });
-  return !!(stampHit || otDoneToday);
+  if (patientHasTodayExplicitQueueStamp(p, todayKeyLocal) || patientHasLegacySameDayCreationQueue(p, todayKeyLocal)) return true;
+  return !!otDoneToday;
 }
 function getTodayQueueBasePatients() {
   return dedupeQueueEntriesByKey(PATIENTS.filter(function (p) {
@@ -33345,16 +33361,14 @@ function getTodayQueueBasePatients() {
 function patientDoneQueueMatchesToday(p, todayKeyLocal) {
   if (!isPatientMarkedSeen(p)) return false;
   if (p._xrefEntry) return p.seenAt && localDateKey(p.seenAt) === todayKeyLocal;
+  if (!patientQueueDateMatchesToday(p)) return false;
   if (p.seenAt) return localDateKey(p.seenAt) === todayKeyLocal;
-  return p.checkinAt && localDateKey(p.checkinAt) === todayKeyLocal;
+  return patientHasTodayExplicitQueueStamp(p, todayKeyLocal) || patientHasLegacySameDayCreationQueue(p, todayKeyLocal);
 }
 function patientActiveQueueMatchesToday(p, todayKeyLocal) {
   if (!p || isPatientMarkedSeen(p)) return false;
   if (p._xrefEntry) return crossRefQueueDateMatchesToday({ createdAt: p._xrefCreatedAt || p.queueDate || p.visitDate });
-  if (p.checkinAt) return localDateKey(p.checkinAt) === todayKeyLocal;
-  return [p.queueDate, p.visitDate].filter(Boolean).some(function (raw) {
-    return localDateKey(raw) === todayKeyLocal || String(raw || '').slice(0, 10) === todayKeyLocal;
-  });
+  return patientQueueDateMatchesToday(p);
 }
 function getPatientActiveDilationMinutes(p, nowTs) {
   if (!p || p.dept !== 'ophtho') return null;
@@ -36365,7 +36379,7 @@ function listenPayRequests(opts) {
   const cb = data => {
     PAY_REQUESTS.length = 0;
     Object.values((data && typeof data.val === 'function') ? (data.val() || {}) : (data || {})).forEach(r => {
-      if(r.status === 'pending' && rowMatchesCentre(r, centre, { allowUncentredToday: true })) PAY_REQUESTS.push(r);
+      if(r.status === 'pending' && isTodayReceptionPayRequest(r, { centre: centre })) PAY_REQUESTS.push(r);
     });
     if (!window._bmhPendingDuesCleanupRan) {
       window._bmhPendingDuesCleanupRan = true;
@@ -36455,7 +36469,7 @@ function applyRealtimeTransactionRecord(txn, key) {
   const id = String(txn.id || key || '').trim();
   if (!id) return;
   const centre = getLiveDataCentreScope ? getLiveDataCentreScope() : normalizeAppointmentCentreValue((CURRENT_USER?.centre || 'CHD'));
-  if (!rowMatchesCentre(txn, centre, { allowUncentredToday: true })) return;
+  if (!rowMatchesCentre(txn, centre, { allowUncentredToday: true, dateKey: todayKey(), requireDate: true })) return;
   const next = Object.assign({}, txn, { id: id });
   const idx = TRANSACTIONS.findIndex(function (row) { return String(row?.id || '') === id; });
   const isNewFromRemote = idx < 0;
@@ -36965,7 +36979,7 @@ function loadTodayTransactions() {
       if (Array.isArray(localRows)) {
         TRANSACTIONS.length = 0;
         localRows.forEach(function (t) {
-          if (rowMatchesCentre(t, centre, { allowUncentredToday: true, dateKey: today })) TRANSACTIONS.push(t);
+          if (rowMatchesCentre(t, centre, { allowUncentredToday: true, dateKey: today, requireDate: true })) TRANSACTIONS.push(t);
         });
         bmhRunEndOfDayEegPurge && bmhRunEndOfDayEegPurge();
         renderCollectionDashboard && renderCollectionDashboard();
@@ -36984,7 +36998,7 @@ function loadTodayTransactions() {
     });
     TRANSACTIONS.length = 0;
     Object.values(merged).forEach(function (t) {
-      if (rowMatchesCentre(t, centre, { allowUncentredToday: true, dateKey: today })) TRANSACTIONS.push(t);
+      if (rowMatchesCentre(t, centre, { allowUncentredToday: true, dateKey: today, requireDate: true })) TRANSACTIONS.push(t);
     });
     saveTodayTransactionsToLocal();
     bmhRunEndOfDayEegPurge && bmhRunEndOfDayEegPurge();
@@ -40797,12 +40811,14 @@ function selectExistingPatient(bmhId) {
   p.queueDate = today;
   p.visitDate = today;
   p.queueRemoved = false;
+  p.queueAddedAt = nowIso;
   p.updatedAt = nowIso;
   fbUpdate && fbUpdate('patients/' + bmhId, {
     status: 'waiting',
     seen: false,
     seenAt: null,
     checkinAt: p.checkinAt,
+    queueAddedAt: nowIso,
     queueDate: today,
     visitDate: today,
     queueRemoved: false,
@@ -42138,13 +42154,15 @@ function restorePatientToActiveQueue(bmhId) {
   p.seenAt = null;
   p.updatedAt = nowIso;
   if (!p.checkinAt) p.checkinAt = Date.now();
+  p.queueAddedAt = nowIso;
   fbUpdate && fbUpdate('patients/' + bmhId, {
     queueRemoved: false,
     seen: false,
     status: 'waiting',
     seenAt: null,
     updatedAt: nowIso,
-    checkinAt: p.checkinAt
+    checkinAt: p.checkinAt,
+    queueAddedAt: nowIso
   }).catch(function () {});
   showToast('Patient moved back to active queue ✓', 's');
   renderDocQueue && renderDocQueue();
@@ -42215,8 +42233,8 @@ function checkInPatient(bmhId) {
   }
   const nowIso = new Date().toISOString();
   const today = localDateKey(new Date());
-  p.status='waiting'; p.preRegistered=false; p.seen=false; p.seenAt=null; p.checkinAt=Date.now(); p.queueDate=today; p.visitDate=today; p.queueRemoved=false; p.updatedAt=nowIso;
-  fbUpdate&&fbUpdate('patients/'+bmhId,{status:'waiting',preRegistered:false,seen:false,seenAt:null,checkinAt:p.checkinAt,queueDate:today,visitDate:today,queueRemoved:false,updatedAt:nowIso});
+  p.status='waiting'; p.preRegistered=false; p.seen=false; p.seenAt=null; p.checkinAt=Date.now(); p.queueDate=today; p.visitDate=today; p.queueRemoved=false; p.queueAddedAt=nowIso; p.updatedAt=nowIso;
+  fbUpdate&&fbUpdate('patients/'+bmhId,{status:'waiting',preRegistered:false,seen:false,seenAt:null,checkinAt:p.checkinAt,queueAddedAt:nowIso,queueDate:today,visitDate:today,queueRemoved:false,updatedAt:nowIso});
   showToast(`✅ ${p.name} checked in — Token issued`,'s');
   renderDocQueue && renderDocQueue();
   renderReceptionPage && renderReceptionPage();
