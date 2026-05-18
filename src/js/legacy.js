@@ -11593,6 +11593,7 @@ function bmhGetCollectionTransactionsForDate(centreOrCentres, dateKey) {
   });
   (PATIENTS || []).forEach(function (p) {
     if (!p || !p.bmhId || !centreAllowed(p)) return;
+    if (patientShouldWaitForLinkedOtQueueCheck(p, dateKey)) return;
     if (patientHasNonTodayLinkedOtCase(p, dateKey) && !patientQueueSourceAllowsFreshVisit(p)) return;
     const visitDateRaw = bmhPatientCollectionVisitDateRaw(p);
     const visitDate = localDateKey(visitDateRaw);
@@ -33356,6 +33357,17 @@ function patientQueueSourceAllowsFreshVisit(p) {
   const source = String(p?.queueSource || '').toLowerCase();
   return source === 'reception' || source === 'manual' || source === 'doctor-restore' || source === 'billing';
 }
+function patientShouldWaitForLinkedOtQueueCheck(p, todayKeyLocal) {
+  if (!p || !p.otCaseId || patientQueueSourceAllowsFreshVisit(p)) return false;
+  const day = todayKeyLocal || localDateKey(new Date());
+  const otRows = window.OT_CASES || OT_CASES || [];
+  const otCase = otRows.find(function (c) {
+    return c && String(c.id || '') === String(p.otCaseId || '');
+  });
+  if (!otCase) return true;
+  const otDate = getOTCaseDateKey(otCase);
+  return !otDate || otDate !== day || String(p.queueSource || '').toLowerCase() === 'ot';
+}
 function patientHasTodayExplicitQueueStamp(p, todayKeyLocal) {
   const day = todayKeyLocal || localDateKey(new Date());
   if (!p) return false;
@@ -33378,6 +33390,7 @@ function patientHasLegacySameDayCreationQueue(p, todayKeyLocal) {
 function patientQueueDateMatchesToday(p) {
   if (!p || p.queueRemoved) return false;
   const todayKeyLocal = localDateKey(new Date());
+  if (patientShouldWaitForLinkedOtQueueCheck(p, todayKeyLocal)) return false;
   if (patientHasNonTodayLinkedOtCase(p, todayKeyLocal)) {
     if (!patientQueueSourceAllowsFreshVisit(p) || String(p.queueSource || '').toLowerCase() === 'ot') return false;
   }
