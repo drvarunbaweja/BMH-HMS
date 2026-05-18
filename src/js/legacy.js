@@ -24789,6 +24789,7 @@ async function registerPatient() {
     queueDate: queueDateToday,
     visitDate: queueDateToday,
     queueSource: isPreReg ? '' : 'reception',
+    otCaseId: isPreReg ? (existingPt?.otCaseId || '') : '',
 	    preRegistered: isPreReg,
 	    ipdAdmitted: false,
 	    createdAt: existingPt?.createdAt || currentIso,
@@ -24949,7 +24950,7 @@ async function registerPatient() {
     advance:patient.advance, advancePurpose:patient.advancePurpose, consultationNoFee:patient.consultationNoFee,
     consultationFee: patient.consultationFee, consultationFeeType: patient.consultationFeeType || '', consultationFeeLabel: patient.consultationFeeLabel || '',
     refType: patient.refType || '', refName: patient.refName || '', refMobile: patient.refMobile || '', referredBy: patient.referredBy || '',
-    queueRemoved: false, queueRemovedAt: null, queueRemovedBy: '', queueAddedAt: patient.queueAddedAt || '', queueDate: patient.queueDate || queueDateToday, visitDate: patient.visitDate || queueDateToday, queueSource: patient.queueSource || (isPreReg ? '' : 'reception')
+    queueRemoved: false, queueRemovedAt: null, queueRemovedBy: '', queueAddedAt: patient.queueAddedAt || '', queueDate: patient.queueDate || queueDateToday, visitDate: patient.visitDate || queueDateToday, queueSource: patient.queueSource || (isPreReg ? '' : 'reception'), otCaseId: patient.otCaseId || null
   });
   if (typeof window.patchPatientFirestore === 'function') {
     window.patchPatientFirestore(uid, {
@@ -24966,6 +24967,7 @@ async function registerPatient() {
       visitDate: patient.visitDate || queueDateToday,
       queueRemoved: false,
       queueSource: patient.queueSource || (isPreReg ? '' : 'reception'),
+      otCaseId: patient.otCaseId || null,
       purpose,
       visitCount: patient.visitCount,
       ins: patient.ins || '',
@@ -33363,8 +33365,30 @@ function patientQueueSourceAllowsFreshVisit(p) {
   const source = String(p?.queueSource || '').toLowerCase();
   return source === 'reception' || source === 'manual' || source === 'doctor-restore' || source === 'billing';
 }
+function patientHasTodayReceptionVisitEvidence(p, todayKeyLocal) {
+  if (!p || !p.bmhId) return false;
+  if (patientQueueSourceAllowsFreshVisit(p)) return true;
+  const day = todayKeyLocal || localDateKey(new Date());
+  const id = String(p.bmhId || '');
+  const chargeRows = (window.BMH_PATIENT_CHARGES && window.BMH_PATIENT_CHARGES[id]) || [];
+  if (Array.isArray(chargeRows) && chargeRows.some(function (row) {
+    if (!row) return false;
+    if (!/reception/i.test(String(row.source || row.from || ''))) return false;
+    return localDateKey(row.ts || row.date || row.createdAt || row.updatedAt) === day;
+  })) return true;
+  if ((TRANSACTIONS || []).some(function (txn) {
+    if (!txn || String(txn.bmhId || '') !== id) return false;
+    if (!/reception/i.test(String(txn.source || txn.createdBy || ''))) return false;
+    return localDateKey(txn.date || txn.createdAt || txn.ts) === day;
+  })) return true;
+  return (PAY_REQUESTS || []).some(function (pr) {
+    if (!pr || String(pr.bmhId || '') !== id) return false;
+    if (!/reception/i.test(String(pr.from || pr.source || pr.createdBy || ''))) return false;
+    return localDateKey(pr.date || pr.createdAt || pr.updatedAt) === day;
+  });
+}
 function patientShouldWaitForLinkedOtQueueCheck(p, todayKeyLocal) {
-  if (!p || !p.otCaseId || patientQueueSourceAllowsFreshVisit(p)) return false;
+  if (!p || !p.otCaseId || patientHasTodayReceptionVisitEvidence(p, todayKeyLocal)) return false;
   const day = todayKeyLocal || localDateKey(new Date());
   const otRows = window.OT_CASES || OT_CASES || [];
   const otCase = otRows.find(function (c) {
@@ -33398,7 +33422,7 @@ function patientQueueDateMatchesToday(p) {
   const todayKeyLocal = localDateKey(new Date());
   if (patientShouldWaitForLinkedOtQueueCheck(p, todayKeyLocal)) return false;
   if (patientHasNonTodayLinkedOtCase(p, todayKeyLocal)) {
-    if (!patientQueueSourceAllowsFreshVisit(p) || String(p.queueSource || '').toLowerCase() === 'ot') return false;
+    if (!patientHasTodayReceptionVisitEvidence(p, todayKeyLocal) || String(p.queueSource || '').toLowerCase() === 'ot') return false;
   }
   if (patientHasTodayExplicitQueueStamp(p, todayKeyLocal) || patientHasLegacySameDayCreationQueue(p, todayKeyLocal)) return true;
   return false;
