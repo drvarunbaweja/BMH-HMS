@@ -24783,6 +24783,7 @@ async function registerPatient() {
     queueAddedAt: isPreReg ? '' : currentIso,
     queueDate: queueDateToday,
     visitDate: queueDateToday,
+    queueSource: isPreReg ? '' : 'reception',
     preRegistered: isPreReg,
     createdAt: existingPt?.createdAt || currentIso,
     updatedAt: currentIso,
@@ -24942,7 +24943,7 @@ async function registerPatient() {
     advance:patient.advance, advancePurpose:patient.advancePurpose, consultationNoFee:patient.consultationNoFee,
     consultationFee: patient.consultationFee, consultationFeeType: patient.consultationFeeType || '', consultationFeeLabel: patient.consultationFeeLabel || '',
     refType: patient.refType || '', refName: patient.refName || '', refMobile: patient.refMobile || '', referredBy: patient.referredBy || '',
-    queueRemoved: false, queueRemovedAt: null, queueRemovedBy: '', queueAddedAt: patient.queueAddedAt || '', queueDate: patient.queueDate || queueDateToday, visitDate: patient.visitDate || queueDateToday
+    queueRemoved: false, queueRemovedAt: null, queueRemovedBy: '', queueAddedAt: patient.queueAddedAt || '', queueDate: patient.queueDate || queueDateToday, visitDate: patient.visitDate || queueDateToday, queueSource: patient.queueSource || (isPreReg ? '' : 'reception')
   });
   if (typeof window.patchPatientFirestore === 'function') {
     window.patchPatientFirestore(uid, {
@@ -24957,6 +24958,7 @@ async function registerPatient() {
       queueDate: patient.queueDate || queueDateToday,
       visitDate: patient.visitDate || queueDateToday,
       queueRemoved: false,
+      queueSource: patient.queueSource || (isPreReg ? '' : 'reception'),
       purpose,
       visitCount: patient.visitCount,
       ins: patient.ins || '',
@@ -33377,8 +33379,7 @@ function patientQueueDateMatchesToday(p) {
   if (!p || p.queueRemoved) return false;
   const todayKeyLocal = localDateKey(new Date());
   if (patientHasNonTodayLinkedOtCase(p, todayKeyLocal)) {
-    const status = String(p.status || '').toLowerCase();
-    if (!patientQueueSourceAllowsFreshVisit(p) || String(p.queueSource || '').toLowerCase() === 'ot' || status === 'ipd' || p.ipdAdmitted === true) return false;
+    if (!patientQueueSourceAllowsFreshVisit(p) || String(p.queueSource || '').toLowerCase() === 'ot') return false;
   }
   if (patientHasTodayExplicitQueueStamp(p, todayKeyLocal) || patientHasLegacySameDayCreationQueue(p, todayKeyLocal)) return true;
   return false;
