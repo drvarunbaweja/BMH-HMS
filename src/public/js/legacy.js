@@ -4403,7 +4403,7 @@ function addReceptionPatientCharges(bmhId, printAfter) {
     });
     if (existing) { skipped += 1; return; }
     addBmhPatientCharge(bmhId, { id: 'rcx' + Date.now() + Math.random().toString(36).slice(2, 5), cat: inferChargeCategoryFromService(desc), desc: desc, qty: 1, rate: amt, amount: amt, source: 'reception-extra', ts: new Date().toISOString() });
-    queued = bmhEnsurePatientInTodayDeptQueue ? (bmhEnsurePatientInTodayDeptQueue(bmhId, { silentToast: true }) || queued) : queued;
+	    queued = bmhEnsurePatientInTodayDeptQueue ? (bmhEnsurePatientInTodayDeptQueue(bmhId, { silentToast: true, queueSource: 'reception' }) || queued) : queued;
     added += 1;
   });
   renderReceptionPage && renderReceptionPage();
@@ -7791,7 +7791,7 @@ function quickBillItem(name, price) {
   const bmhId = document.getElementById('bill-pt-sel')?.value || document.getElementById('bmh-bill-pt-select')?.value || PATIENTS[0]?.bmhId;
   if (bmhId) {
     addBmhPatientCharge(bmhId, { id: 'qb' + Date.now(), cat: 'other', desc: name, qty: 1, rate: price, amount: price, source: 'reception', ts: new Date().toISOString() });
-    bmhEnsurePatientInTodayDeptQueue && bmhEnsurePatientInTodayDeptQueue(bmhId, { silentToast: true });
+    bmhEnsurePatientInTodayDeptQueue && bmhEnsurePatientInTodayDeptQueue(bmhId, { silentToast: true, queueSource: 'reception' });
     renderBillingPage && renderBillingPage();
   }
   openM('m-rec-bill');
@@ -13647,7 +13647,10 @@ function bmhEnsurePatientInTodayDeptQueue(bmhId, opts) {
   const p = PATIENTS.find(function (x) { return x.bmhId === id; });
   if (!p) return false;
   const status = String(p.status || '').toLowerCase();
-  if (status === 'removed' || status === 'ipd' || status === 'discharged') return false;
+  const freshQueueSource = o.queueSource || 'reception';
+  const allowFreshVisitFromClosedState = patientQueueSourceAllowsFreshVisit({ queueSource: freshQueueSource });
+  if (status === 'removed' || status === 'discharged') return false;
+  if (status === 'ipd' && !allowFreshVisitFromClosedState) return false;
   if (p.queueRemoved && !o.allowRestoreRemoved) return false;
   const targetDept = normalizeDeptKeyForQueue(o.dept || p.dept || p.department || '');
   const currentDept = normalizeDeptKeyForQueue(p.dept || p.department || '');
@@ -13665,7 +13668,8 @@ function bmhEnsurePatientInTodayDeptQueue(bmhId, opts) {
     queueAddedAt: nowIso,
     queueDate: today,
     visitDate: today,
-    queueSource: o.queueSource || 'reception',
+    queueSource: freshQueueSource,
+    ipdAdmitted: false,
     updatedAt: nowIso
   };
   if (targetDept) patch.dept = targetDept;
@@ -24785,8 +24789,9 @@ async function registerPatient() {
     queueDate: queueDateToday,
     visitDate: queueDateToday,
     queueSource: isPreReg ? '' : 'reception',
-    preRegistered: isPreReg,
-    createdAt: existingPt?.createdAt || currentIso,
+	    preRegistered: isPreReg,
+	    ipdAdmitted: false,
+	    createdAt: existingPt?.createdAt || currentIso,
     updatedAt: currentIso,
     createdBy: existingPt?.createdBy || CURRENT_USER?.name || 'Reception'
   });
@@ -24939,7 +24944,7 @@ async function registerPatient() {
   }
 
   fbUpdate&&fbUpdate('patients/'+uid,{
-    status: patient.status, seen: patient.seen, dilated: patient.dilated, dept: patient.dept, centre: patient.centre,
+	    status: patient.status, seen: patient.seen, dilated: patient.dilated, dept: patient.dept, centre: patient.centre, ipdAdmitted: false,
     balance: patient.balance, checkinAt:patient.checkinAt,purpose,visitCount:patient.visitCount,ins:patient.ins||'', policy: patient.policy || '',
     advance:patient.advance, advancePurpose:patient.advancePurpose, consultationNoFee:patient.consultationNoFee,
     consultationFee: patient.consultationFee, consultationFeeType: patient.consultationFeeType || '', consultationFeeLabel: patient.consultationFeeLabel || '',
@@ -24948,9 +24953,10 @@ async function registerPatient() {
   });
   if (typeof window.patchPatientFirestore === 'function') {
     window.patchPatientFirestore(uid, {
-      status: patient.status,
-      seen: patient.seen,
-      dilated: patient.dilated,
+	      status: patient.status,
+	      seen: patient.seen,
+	      dilated: patient.dilated,
+	      ipdAdmitted: false,
       dept: patient.dept,
       centre: patient.centre,
       balance: patient.balance,
@@ -24989,7 +24995,7 @@ async function registerPatient() {
 
   maybeScheduleSameDaySurgeryOTFromRegistration(patient);
   if (!isPreReg) {
-    bmhEnsurePatientInTodayDeptQueue(uid, { dept: dept, silentToast: true });
+	    bmhEnsurePatientInTodayDeptQueue(uid, { dept: dept, silentToast: true, queueSource: 'reception' });
   }
 
   if(!isInsurance && !isCreditDue && !isPreReg && fee>0) {
@@ -26112,7 +26118,7 @@ function generateAndPrintReceipt() {
         addedCharge = true;
       }
     });
-    if (addedCharge) bmhEnsurePatientInTodayDeptQueue && bmhEnsurePatientInTodayDeptQueue(bmhId, { silentToast: true });
+    if (addedCharge) bmhEnsurePatientInTodayDeptQueue && bmhEnsurePatientInTodayDeptQueue(bmhId, { silentToast: true, queueSource: 'reception' });
   }
   showToast('Receipt generated ✓', 's');
   closeM('m-rec-bill');
