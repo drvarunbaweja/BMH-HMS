@@ -11593,6 +11593,7 @@ function bmhGetCollectionTransactionsForDate(centreOrCentres, dateKey) {
   });
   (PATIENTS || []).forEach(function (p) {
     if (!p || !p.bmhId || !centreAllowed(p)) return;
+    if (patientHasNonTodayLinkedOtCase(p, dateKey) && !patientQueueSourceAllowsFreshVisit(p)) return;
     const visitDateRaw = bmhPatientCollectionVisitDateRaw(p);
     const visitDate = localDateKey(visitDateRaw);
     if (visitDate !== dateKey) return;
@@ -13619,6 +13620,7 @@ function bmhAddPatientToDoctorQueue(bmhId, opts) {
     queueAddedAt: nowIso,
     visitDate: today,
     queueDate: today,
+    queueSource: 'billing',
     purpose: p.purpose || 'Billing / charges',
     updatedAt: nowIso
   };
@@ -13662,6 +13664,7 @@ function bmhEnsurePatientInTodayDeptQueue(bmhId, opts) {
     queueAddedAt: nowIso,
     queueDate: today,
     visitDate: today,
+    queueSource: o.queueSource || 'reception',
     updatedAt: nowIso
   };
   if (targetDept) patch.dept = targetDept;
@@ -33347,6 +33350,10 @@ function patientHasNonTodayLinkedOtCase(p, todayKeyLocal) {
   const otDate = getOTCaseDateKey(otCase);
   return !!otDate && otDate !== day;
 }
+function patientQueueSourceAllowsFreshVisit(p) {
+  const source = String(p?.queueSource || '').toLowerCase();
+  return source === 'reception' || source === 'manual' || source === 'doctor-restore' || source === 'billing';
+}
 function patientHasTodayExplicitQueueStamp(p, todayKeyLocal) {
   const day = todayKeyLocal || localDateKey(new Date());
   if (!p) return false;
@@ -33371,7 +33378,7 @@ function patientQueueDateMatchesToday(p) {
   const todayKeyLocal = localDateKey(new Date());
   if (patientHasNonTodayLinkedOtCase(p, todayKeyLocal)) {
     const status = String(p.status || '').toLowerCase();
-    if (String(p.queueSource || '').toLowerCase() === 'ot' || status === 'ipd' || p.ipdAdmitted === true) return false;
+    if (!patientQueueSourceAllowsFreshVisit(p) || String(p.queueSource || '').toLowerCase() === 'ot' || status === 'ipd' || p.ipdAdmitted === true) return false;
   }
   if (patientHasTodayExplicitQueueStamp(p, todayKeyLocal) || patientHasLegacySameDayCreationQueue(p, todayKeyLocal)) return true;
   return false;
@@ -36618,7 +36625,49 @@ async function bmhDeleteSyntheticCollectionTxn(txnId) {
     return true;
   }
 
-  showToast('This recovered OPD collection is not a saved transaction. Refreshing collection.', 'w');
+  if (row.type === 'consultation-synthetic' || String(row.id || '').startsWith('SYNOPD-')) {
+    const p = (PATIENTS || []).find(function (entry) { return String(entry?.bmhId || '') === String(row.bmhId || ''); });
+    if (!p) {
+      showToast('Linked patient not found; refreshing collection', 'w');
+      renderCollectionDashboard && renderCollectionDashboard();
+      return true;
+    }
+    if (!confirm(`Delete this recovered OPD collection?\n${label}\n\nNo saved transaction exists for this row. This will clear the queue/visit stamp that is generating it.`)) return true;
+    const nowIso = new Date().toISOString();
+    const patch = {
+      queueRemoved: true,
+      queueRemovedAt: nowIso,
+      queueRemovedBy: CURRENT_USER?.name || 'Reception',
+      queueAddedAt: null,
+      enqueuedAt: null,
+      checkedInAt: null,
+      checkinAt: null,
+      queueDate: null,
+      visitDate: null,
+      queueSource: null,
+      updatedAt: nowIso
+    };
+    Object.assign(p, {
+      queueRemoved: true,
+      queueRemovedAt: nowIso,
+      queueRemovedBy: CURRENT_USER?.name || 'Reception',
+      queueAddedAt: '',
+      enqueuedAt: '',
+      checkedInAt: '',
+      checkinAt: '',
+      queueDate: '',
+      visitDate: '',
+      queueSource: '',
+      updatedAt: nowIso
+    });
+    try { if (window.firebase && firebase.database) firebase.database().ref('patients/' + p.bmhId).update(patch); } catch (e) {}
+    fbPush&&fbPush('auditLog',{user:CURRENT_USER?.name||'Staff',role:CURRENT_USER?.role||'Staff',action:'DELETE_SYNTHETIC_OPD_COLLECTION',item:label,timestamp:new Date().toISOString()});
+    showToast(`Deleted recovered OPD collection: ${label}`, 'i');
+    renderCollectionDashboard&&renderCollectionDashboard(); renderReceptionPage&&renderReceptionPage(); renderDocQueue&&renderDocQueue();
+    return true;
+  }
+
+  showToast('This recovered collection is not a saved transaction. Refreshing collection.', 'w');
   renderCollectionDashboard && renderCollectionDashboard();
   return true;
 }
@@ -40892,6 +40941,7 @@ function selectExistingPatient(bmhId) {
   p.visitDate = today;
   p.queueRemoved = false;
   p.queueAddedAt = nowIso;
+  p.queueSource = 'reception';
   p.updatedAt = nowIso;
   fbUpdate && fbUpdate('patients/' + bmhId, {
     status: 'waiting',
@@ -40902,6 +40952,7 @@ function selectExistingPatient(bmhId) {
     queueDate: today,
     visitDate: today,
     queueRemoved: false,
+    queueSource: 'reception',
     updatedAt: nowIso
   }).catch(function () {});
   // Show in queue
@@ -42235,6 +42286,7 @@ function restorePatientToActiveQueue(bmhId) {
   p.updatedAt = nowIso;
   if (!p.checkinAt) p.checkinAt = Date.now();
   p.queueAddedAt = nowIso;
+  p.queueSource = 'manual';
   fbUpdate && fbUpdate('patients/' + bmhId, {
     queueRemoved: false,
     seen: false,
@@ -42242,7 +42294,8 @@ function restorePatientToActiveQueue(bmhId) {
     seenAt: null,
     updatedAt: nowIso,
     checkinAt: p.checkinAt,
-    queueAddedAt: nowIso
+    queueAddedAt: nowIso,
+    queueSource: 'manual'
   }).catch(function () {});
   showToast('Patient moved back to active queue ✓', 's');
   renderDocQueue && renderDocQueue();
@@ -42313,8 +42366,8 @@ function checkInPatient(bmhId) {
   }
   const nowIso = new Date().toISOString();
   const today = localDateKey(new Date());
-  p.status='waiting'; p.preRegistered=false; p.seen=false; p.seenAt=null; p.checkinAt=Date.now(); p.queueDate=today; p.visitDate=today; p.queueRemoved=false; p.queueAddedAt=nowIso; p.updatedAt=nowIso;
-  fbUpdate&&fbUpdate('patients/'+bmhId,{status:'waiting',preRegistered:false,seen:false,seenAt:null,checkinAt:p.checkinAt,queueAddedAt:nowIso,queueDate:today,visitDate:today,queueRemoved:false,updatedAt:nowIso});
+  p.status='waiting'; p.preRegistered=false; p.seen=false; p.seenAt=null; p.checkinAt=Date.now(); p.queueDate=today; p.visitDate=today; p.queueRemoved=false; p.queueAddedAt=nowIso; p.queueSource='reception'; p.updatedAt=nowIso;
+  fbUpdate&&fbUpdate('patients/'+bmhId,{status:'waiting',preRegistered:false,seen:false,seenAt:null,checkinAt:p.checkinAt,queueAddedAt:nowIso,queueDate:today,visitDate:today,queueRemoved:false,queueSource:'reception',updatedAt:nowIso});
   showToast(`✅ ${p.name} checked in — Token issued`,'s');
   renderDocQueue && renderDocQueue();
   renderReceptionPage && renderReceptionPage();

@@ -36625,7 +36625,49 @@ async function bmhDeleteSyntheticCollectionTxn(txnId) {
     return true;
   }
 
-  showToast('This recovered OPD collection is not a saved transaction. Refreshing collection.', 'w');
+  if (row.type === 'consultation-synthetic' || String(row.id || '').startsWith('SYNOPD-')) {
+    const p = (PATIENTS || []).find(function (entry) { return String(entry?.bmhId || '') === String(row.bmhId || ''); });
+    if (!p) {
+      showToast('Linked patient not found; refreshing collection', 'w');
+      renderCollectionDashboard && renderCollectionDashboard();
+      return true;
+    }
+    if (!confirm(`Delete this recovered OPD collection?\n${label}\n\nNo saved transaction exists for this row. This will clear the queue/visit stamp that is generating it.`)) return true;
+    const nowIso = new Date().toISOString();
+    const patch = {
+      queueRemoved: true,
+      queueRemovedAt: nowIso,
+      queueRemovedBy: CURRENT_USER?.name || 'Reception',
+      queueAddedAt: null,
+      enqueuedAt: null,
+      checkedInAt: null,
+      checkinAt: null,
+      queueDate: null,
+      visitDate: null,
+      queueSource: null,
+      updatedAt: nowIso
+    };
+    Object.assign(p, {
+      queueRemoved: true,
+      queueRemovedAt: nowIso,
+      queueRemovedBy: CURRENT_USER?.name || 'Reception',
+      queueAddedAt: '',
+      enqueuedAt: '',
+      checkedInAt: '',
+      checkinAt: '',
+      queueDate: '',
+      visitDate: '',
+      queueSource: '',
+      updatedAt: nowIso
+    });
+    try { if (window.firebase && firebase.database) firebase.database().ref('patients/' + p.bmhId).update(patch); } catch (e) {}
+    fbPush&&fbPush('auditLog',{user:CURRENT_USER?.name||'Staff',role:CURRENT_USER?.role||'Staff',action:'DELETE_SYNTHETIC_OPD_COLLECTION',item:label,timestamp:new Date().toISOString()});
+    showToast(`Deleted recovered OPD collection: ${label}`, 'i');
+    renderCollectionDashboard&&renderCollectionDashboard(); renderReceptionPage&&renderReceptionPage(); renderDocQueue&&renderDocQueue();
+    return true;
+  }
+
+  showToast('This recovered collection is not a saved transaction. Refreshing collection.', 'w');
   renderCollectionDashboard && renderCollectionDashboard();
   return true;
 }
