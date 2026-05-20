@@ -18608,31 +18608,131 @@ function removePatientFromQueue(bmhId) {
   const p = PATIENTS.find(function (x) { return x.bmhId === bmhId; });
   if (!p) { showToast('Patient not found in queue', 'w'); return; }
   const label = 'Queue patient — ' + (p.name || bmhId) + ' · ' + bmhId;
-  if (CURRENT_USER?.isAdmin) {
-    if (!confirm('Remove ' + (p.name || 'this patient') + ' from today\'s queue?')) return;
-    p.status = 'removed';
-    p.queueRemoved = true;
-    p.queueRemovedAt = Date.now();
-    p.queueRemovedBy = CURRENT_USER?.name || 'System';
-    p.preRegistered = false;
-    p.dilated = false;
-    p.seen = false;
-    fbUpdate && fbUpdate('patients/' + bmhId, {
-      status: 'removed',
-      queueRemoved: true,
-      queueRemovedAt: p.queueRemovedAt,
-      queueRemovedBy: p.queueRemovedBy,
-      preRegistered: false,
-      dilated: false,
-      seen: false
-    }).catch(function (e) { console.warn('Queue remove error:', e); });
-    renderDocQueue && renderDocQueue();
-    renderReceptionPage && renderReceptionPage();
-    renderDashboard && renderDashboard();
-    showToast('Removed from queue ✓', 's');
+  if (canCurrentUserDeleteQueueDirectly()) {
+    if (!confirm('Remove ' + (p.name || 'this patient') + ' from today\'s queue?\n\nAny matching reception OPD/consultation entry for today will also be removed from charges/collection.')) return;
+    bmhRemovePatientFromTodayQueueAndCharges(bmhId, { by: CURRENT_USER?.name || 'Reception' });
   } else {
     requestDeletion('queuePatient', bmhId, label);
   }
+}
+
+function canCurrentUserDeleteQueueDirectly() {
+  const role = String(CURRENT_USER?.role || '').toLowerCase();
+  return !!CURRENT_USER?.isAdmin || role === 'reception';
+}
+
+function bmhIsTodayReceptionConsultationTxn(txn, bmhId, dateKey) {
+  if (!txn || String(txn.bmhId || '') !== String(bmhId || '')) return false;
+  if (localDateKey(txn.date || txn.createdAt || txn.ts) !== dateKey) return false;
+  const sourceText = String(txn.source || txn.createdBy || '').toLowerCase();
+  if (sourceText && !sourceText.includes('reception')) return false;
+  return getTransactionPrimaryChargeCategory(txn) === 'consultation'
+    || transactionHasChargeCategory(txn, 'consultation')
+    || isConsultationPurposeText([txn.service, txn.for, txn.desc, txn.consultationFeeLabel].filter(Boolean).join(' '));
+}
+
+function bmhIsTodayReceptionConsultationRequest(pr, bmhId, dateKey) {
+  if (!pr || String(pr.bmhId || '') !== String(bmhId || '')) return false;
+  if (localDateKey(pr.date || pr.createdAt || pr.updatedAt) !== dateKey) return false;
+  const sourceText = String(pr.from || pr.source || pr.createdBy || '').toLowerCase();
+  if (sourceText && !sourceText.includes('reception')) return false;
+  return isConsultationChargeEntry(pr) || isConsultationPurposeText([pr.for, pr.service, pr.desc].filter(Boolean).join(' '));
+}
+
+function bmhRemoveTodayReceptionOpdChargeRows(bmhId, dateKey) {
+  const rows = window.BMH_PATIENT_CHARGES && window.BMH_PATIENT_CHARGES[bmhId];
+  if (!Array.isArray(rows) || !rows.length) return 0;
+  let removed = 0;
+  for (let i = rows.length - 1; i >= 0; i -= 1) {
+    const row = rows[i] || {};
+    if (localDateKey(row.ts || row.date || row.createdAt || row.updatedAt) !== dateKey) continue;
+    const sourceText = String(row.source || row.from || '').toLowerCase();
+    if (sourceText && !sourceText.includes('reception')) continue;
+    const isConsult = String(row.cat || '').toLowerCase() === 'consultation'
+      || isConsultationPurposeText([row.desc, row.name, row.service].filter(Boolean).join(' '));
+    if (!isConsult) continue;
+    rows.splice(i, 1);
+    removed += 1;
+  }
+  return removed;
+}
+
+function bmhRemovePatientFromTodayQueueAndCharges(bmhId, opts) {
+  const id = String(bmhId || '').trim();
+  const p = PATIENTS.find(function (x) { return String(x.bmhId || '') === id; });
+  if (!id || !p) { showToast('Patient not found in queue', 'w'); return false; }
+  const dateKey = todayKey();
+  const nowIso = new Date().toISOString();
+  const by = opts?.by || CURRENT_USER?.name || 'Reception';
+  const label = (p.name || id) + ' · ' + id;
+
+  const removedTxns = [];
+  for (let i = TRANSACTIONS.length - 1; i >= 0; i -= 1) {
+    const txn = TRANSACTIONS[i];
+    if (!bmhIsTodayReceptionConsultationTxn(txn, id, dateKey)) continue;
+    removedTxns.push(txn);
+    TRANSACTIONS.splice(i, 1);
+    try { if (window.firebase && firebase.database) firebase.database().ref('transactions/' + dateKey + '/' + txn.id).remove(); } catch (e) {}
+  }
+
+  const removedRequests = [];
+  for (let i = PAY_REQUESTS.length - 1; i >= 0; i -= 1) {
+    const pr = PAY_REQUESTS[i];
+    if (!bmhIsTodayReceptionConsultationRequest(pr, id, dateKey)) continue;
+    removedRequests.push(pr);
+    PAY_REQUESTS.splice(i, 1);
+    try { if (window.firebase && firebase.database) firebase.database().ref('payRequests/' + pr.id).remove(); } catch (e) {}
+  }
+
+  const removedChargeRows = bmhRemoveTodayReceptionOpdChargeRows(id, dateKey);
+  Object.assign(p, {
+    status: 'removed',
+    queueRemoved: true,
+    queueRemovedAt: nowIso,
+    queueRemovedBy: by,
+    preRegistered: false,
+    dilated: false,
+    seen: false,
+    queueAddedAt: '',
+    enqueuedAt: '',
+    checkedInAt: '',
+    checkinAt: '',
+    queueDate: '',
+    visitDate: '',
+    queueSource: '',
+    updatedAt: nowIso
+  });
+  try {
+    fbUpdate && fbUpdate('patients/' + id, {
+      status: 'removed',
+      queueRemoved: true,
+      queueRemovedAt: nowIso,
+      queueRemovedBy: by,
+      preRegistered: false,
+      dilated: false,
+      seen: false,
+      queueAddedAt: null,
+      enqueuedAt: null,
+      checkedInAt: null,
+      checkinAt: null,
+      queueDate: null,
+      visitDate: null,
+      queueSource: null,
+      updatedAt: nowIso
+    }).catch(function (e) { console.warn('Queue remove error:', e); });
+  } catch (e) {}
+  try { saveTodayTransactionsToLocal && saveTodayTransactionsToLocal(); } catch (e) {}
+  try { saveBmhFinancials && saveBmhFinancials(); } catch (e) {}
+  if (typeof bmhSyncPatientRunningBalance === 'function') bmhSyncPatientRunningBalance(id);
+  fbPush&&fbPush('auditLog',{user:CURRENT_USER?.name||'Staff',role:CURRENT_USER?.role||'Staff',action:'DELETE_QUEUE_AND_RECEPTION_OPD',item:label,details:{transactions:removedTxns.length,payRequests:removedRequests.length,chargeRows:removedChargeRows},timestamp:nowIso});
+  renderDocQueue && renderDocQueue();
+  renderReceptionPage && renderReceptionPage();
+  renderCollectionDashboard && renderCollectionDashboard();
+  renderChargesList && renderChargesList();
+  renderDeptSummary && renderDeptSummary();
+  renderDashboard && renderDashboard();
+  showToast('Removed from queue and reception charges ✓', 's');
+  return true;
 }
 
 // ── Confirm IPD Admission ──────────────────────────
@@ -37086,19 +37186,9 @@ function approveDeleteRequest(reqId) {
     const idx = OT_CASES.findIndex(c => c.id === req.itemId);
     if(idx>-1) OT_CASES.splice(idx,1);
     try{ if(window.firebase&&firebase.database) firebase.database().ref('otCases/'+req.itemId).remove(); }catch(e){}
-  } else if(req.type==='queuePatient') {
-    const p = PATIENTS.find(x => x.bmhId === req.itemId);
-    if (p) {
-      p.status = 'removed';
-      p.queueRemoved = true;
-      p.queueRemovedAt = Date.now();
-      p.queueRemovedBy = CURRENT_USER?.name || 'Admin';
-      p.preRegistered = false;
-      p.dilated = false;
-      p.seen = false;
-    }
-    try{ if(window.firebase&&firebase.database) firebase.database().ref('patients/'+req.itemId).update({status:'removed',queueRemoved:true,queueRemovedAt:Date.now(),queueRemovedBy:CURRENT_USER?.name||'Admin',preRegistered:false,dilated:false,seen:false}); }catch(e){}
-  } else if(req.type==='surgeryPack') {
+	  } else if(req.type==='queuePatient') {
+	    bmhRemovePatientFromTodayQueueAndCharges(req.itemId, { by: CURRENT_USER?.name || 'Admin' });
+	  } else if(req.type==='surgeryPack') {
     if (String(req.itemId).startsWith('custom-')) {
       const next = loadCustomSurgeryPacks().filter(function (p) { return p.id !== req.itemId; });
       saveCustomSurgeryPacks(next);
