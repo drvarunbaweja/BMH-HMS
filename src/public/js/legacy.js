@@ -6449,9 +6449,14 @@ function openM(id){
   const m=document.getElementById(id);
   if(m)m.classList.add('open');
   if(id==='m-ipd-note') {
+    if (m) m.style.zIndex = '1200';
     refreshIPDNurseSelects && refreshIPDNurseSelects();
+    renderProgressNoteMedicineRows && renderProgressNoteMedicineRows();
     const d = document.getElementById('pn-date'); if (d && !d.value) d.value = todayKey();
     const t = document.getElementById('pn-time'); if (t && !t.value) t.value = new Date().toTimeString().slice(0,5);
+    const nurseSel = document.getElementById('pn-nurse');
+    if (nurseSel && window._ipdAuthenticatedNurse) nurseSel.value = window._ipdAuthenticatedNurse;
+    setIPDNursingEntryEnabled && setIPDNursingEntryEnabled(!!isIPDNurseAuthenticated(nurseSel?.value || ''));
   }
   if(id==='m-print-tpl')loadTplDocs();
   if(id==='m-consents')renderConsentModal();
@@ -8099,7 +8104,7 @@ function saveIPDNurseNames(names) {
 }
 function nurseOptionsHtml(selected) {
   const sel = String(selected || '').trim();
-  return getIPDNurseNames().map(function (name) {
+  return '<option value="">Select nursing staff</option>' + getIPDNurseNames().map(function (name) {
     return '<option value="' + escapeHtmlConsent(name) + '"' + (name === sel ? ' selected' : '') + '>' + escapeHtmlConsent(name) + '</option>';
   }).join('');
 }
@@ -8121,6 +8126,7 @@ function addIPDNurseName() {
   if (!names.includes(clean)) names.push(clean);
   saveIPDNurseNames(names);
   refreshIPDNurseSelects(clean);
+  populateIPDNursePinResetSelect && populateIPDNursePinResetSelect();
   showToast('Nurse name added ✓', 's');
 }
 function deleteSelectedIPDNurseName() {
@@ -8131,7 +8137,95 @@ function deleteSelectedIPDNurseName() {
   const names = getIPDNurseNames().filter(function (n) { return n !== name; });
   saveIPDNurseNames(names);
   refreshIPDNurseSelects(names[0] || '');
+  populateIPDNursePinResetSelect && populateIPDNursePinResetSelect();
   showToast('Nurse name removed ✓', 's');
+}
+function ipdNursePinKey(name) {
+  return 'bmh_ipd_nurse_pin_' + String(name || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_');
+}
+function isIPDNurseAuthenticated(name) {
+  const clean = String(name || '').trim();
+  return !!clean && window._ipdAuthenticatedNurse === clean;
+}
+function setIPDNursingEntryEnabled(enabled) {
+  ['m-ipd-monitor','m-ipd-note'].forEach(function (modalId) {
+    const modal = document.getElementById(modalId);
+    if (!modal) return;
+    modal.querySelectorAll('input,textarea,select,button').forEach(function (el) {
+      const click = el.getAttribute('onclick') || '';
+      if (el.id === 'ipdm-nurse-select' || el.id === 'pn-nurse' || /addIPDNurseName|deleteSelectedIPDNurseName|closeM/.test(click)) return;
+      if (el.closest('.modal-hd')) return;
+      el.disabled = !enabled;
+      el.style.opacity = enabled ? '' : '0.58';
+    });
+  });
+}
+function validateIPDNursePin(name) {
+  const clean = String(name || '').trim();
+  if (!clean) {
+    window._ipdAuthenticatedNurse = '';
+    setIPDNursingEntryEnabled(false);
+    return false;
+  }
+  const key = ipdNursePinKey(clean);
+  let saved = '';
+  try { saved = localStorage.getItem(key) || ''; } catch (e) {}
+  if (!saved) {
+    const pin1 = prompt('Create 4 digit PIN for ' + clean);
+    if (pin1 == null) return false;
+    if (!/^\d{4}$/.test(String(pin1 || ''))) { showToast('PIN must be exactly 4 digits', 'w'); return false; }
+    const pin2 = prompt('Re-enter PIN for ' + clean);
+    if (String(pin1) !== String(pin2)) { showToast('PIN did not match', 'w'); return false; }
+    try { localStorage.setItem(key, String(pin1)); } catch (e) {}
+    window._ipdAuthenticatedNurse = clean;
+    setIPDNursingEntryEnabled(true);
+    showToast('PIN created for ' + clean + ' ✓', 's');
+    return true;
+  }
+  const entered = prompt('Enter 4 digit PIN for ' + clean);
+  if (String(entered || '') !== String(saved)) {
+    window._ipdAuthenticatedNurse = '';
+    setIPDNursingEntryEnabled(false);
+    showToast('Incorrect PIN', 'w');
+    return false;
+  }
+  window._ipdAuthenticatedNurse = clean;
+  setIPDNursingEntryEnabled(true);
+  showToast('Nursing staff verified ✓', 's');
+  return true;
+}
+function onIPDNurseSelected(el) {
+  const name = String(el?.value || '').trim();
+  if (!validateIPDNursePin(name) && el) el.value = '';
+  const otherId = el?.id === 'pn-nurse' ? 'ipdm-nurse-select' : 'pn-nurse';
+  const other = document.getElementById(otherId);
+  if (other && name && window._ipdAuthenticatedNurse === name) other.value = name;
+}
+function requireIPDNurseAuth(selectId) {
+  const sel = document.getElementById(selectId) || document.getElementById('ipdm-nurse-select') || document.getElementById('pn-nurse');
+  const name = String(sel?.value || '').trim();
+  if (!name) { showToast('Select nursing staff first', 'w'); return ''; }
+  if (!isIPDNurseAuthenticated(name) && !validateIPDNursePin(name)) return '';
+  return name;
+}
+function populateIPDNursePinResetSelect() {
+  const el = document.getElementById('admin-nurse-pin-select');
+  if (!el) return;
+  const current = el.value || '';
+  el.innerHTML = '<option value="">Select nursing staff</option>' + getIPDNurseNames().map(function (name) {
+    return '<option value="' + escapeHtmlConsent(name) + '"' + (name === current ? ' selected' : '') + '>' + escapeHtmlConsent(name) + '</option>';
+  }).join('');
+}
+function resetIPDNursePin() {
+  if (!CURRENT_USER?.isAdmin) { showToast('Admin access required', 'w'); return; }
+  const name = String(document.getElementById('admin-nurse-pin-select')?.value || '').trim();
+  if (!name) { showToast('Select nursing staff', 'w'); return; }
+  if (!confirm('Reset PIN for ' + name + '? The nurse will create a new 4 digit PIN on next selection.')) return;
+  try { localStorage.removeItem(ipdNursePinKey(name)); } catch (e) {}
+  if (window._ipdAuthenticatedNurse === name) window._ipdAuthenticatedNurse = '';
+  setIPDNursingEntryEnabled(false);
+  fbPush && fbPush('auditLog', { user:CURRENT_USER?.name || 'Admin', role:'Admin', action:'RESET_IPD_NURSE_PIN', item:name, timestamp:new Date().toISOString() }).catch(function(){});
+  showToast('PIN reset for ' + name + ' ✓', 's');
 }
 window.addIPDNurseName = addIPDNurseName;
 window.deleteSelectedIPDNurseName = deleteSelectedIPDNurseName;
@@ -8317,7 +8411,7 @@ function renderIPDMonitoringSheet(id) {
     </div>` : '';
   host.innerHTML = `
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;background:#fff;border:1px solid var(--g5);border-radius:12px;padding:10px">
-      <div class="form-group" style="margin:0;flex:1"><label class="fl">Nursing Staff</label><select id="ipdm-nurse-select">${nurseOptionsHtml('')}</select></div>
+      <div class="form-group" style="margin:0;flex:1"><label class="fl">Nursing Staff</label><select id="ipdm-nurse-select" onchange="onIPDNurseSelected(this)">${nurseOptionsHtml('')}</select></div>
       <button class="btn btn-outline btn-sm" onclick="addIPDNurseName()">Add</button>
       <button class="btn btn-gray btn-sm" onclick="deleteSelectedIPDNurseName()">Delete</button>
     </div>
@@ -8352,6 +8446,7 @@ function renderIPDMonitoringSheet(id) {
         <button class="btn btn-gray btn-sm" onclick="closeM('m-ipd-monitor')">Close</button>
       </div>
     </div>`;
+  setIPDNursingEntryEnabled(false);
 }
 
 function updateIPDMonitorRow(idx, value) {
@@ -8367,7 +8462,8 @@ function toggleIPDMonitorCheck(idx, checked) {
 
 function saveIPDMonitorVitals() {
   if (!activeIPDPatient) return;
-  const nurse = document.getElementById('ipdm-nurse-select')?.value || CURRENT_USER?.name || 'Nursing Staff';
+  const nurse = requireIPDNurseAuth('ipdm-nurse-select');
+  if (!nurse) return;
   const vitals = {
     bp: document.getElementById('ipdm-bp')?.value || '',
     pulse: document.getElementById('ipdm-pulse')?.value || '',
@@ -8394,7 +8490,8 @@ function saveIPDMonitorVitals() {
 
 function saveIPDMonitoringSheet() {
   if (!activeIPDPatient) return;
-  const nurse = document.getElementById('ipdm-nurse-select')?.value || CURRENT_USER?.name || 'Nursing Staff';
+  const nurse = requireIPDNurseAuth('ipdm-nurse-select');
+  if (!nurse) return;
   const isObg = normalizeDeptKeyForQueue(activeIPDPatient.dept || '') === 'obg';
   if (isObg) {
     activeIPDPatient.inLabour = !!document.getElementById('ipdm-in-labour')?.checked;
@@ -8453,6 +8550,7 @@ function openIPDDoctorWorkflow(id) {
 }
 function openIPDNursingWorkflow(id) {
   openIPDPatient(id);
+  window._ipdAuthenticatedNurse = '';
   renderIPDMonitoringSheet(id);
   openM('m-ipd-monitor');
 }
@@ -8505,7 +8603,10 @@ function completeIPDInstruction(instructionId) {
   if (!activeIPDPatient || !Array.isArray(activeIPDPatient.ipdInstructions)) return;
   const row = activeIPDPatient.ipdInstructions.find(function (x) { return String(x.id || '') === String(instructionId || ''); });
   if (!row) return;
-  const nurse = document.getElementById('ipdm-nurse-select')?.value || document.getElementById('pn-nurse')?.value || CURRENT_USER?.name || 'Nursing Staff';
+  const nurse = document.getElementById('ipdm-nurse-select')?.value
+    ? requireIPDNurseAuth('ipdm-nurse-select')
+    : requireIPDNurseAuth('pn-nurse');
+  if (!nurse) return;
   row.status = 'done';
   row.doneAt = new Date().toISOString();
   row.doneBy = nurse;
@@ -8615,15 +8716,55 @@ function openIPDPatient(id) {
   renderIPDAlerts(p);
 }
 
+function renderProgressNoteMedicineRows() {
+  const host = document.getElementById('pn-meds-list');
+  if (!host) return;
+  if (!host.children.length) addProgressNoteMedicineRow();
+}
+function addProgressNoteMedicineRow(prefill) {
+  const host = document.getElementById('pn-meds-list');
+  if (!host) return;
+  const idx = host.children.length + 1;
+  const row = document.createElement('div');
+  row.className = 'pn-med-row';
+  row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px';
+  row.innerHTML = '<div class="form-group" style="margin:0"><label class="fl">Medicine / Injection / Tablet ' + idx + '</label><input type="text" class="pn-med-name" placeholder="e.g. Inj Ceftriaxone" value="' + escapeHtmlConsent(prefill?.medicine || '') + '"></div>'
+    + '<div class="form-group" style="margin:0"><label class="fl">Dose / Route</label><input type="text" class="pn-med-dose" placeholder="e.g. 1 g IV BD" value="' + escapeHtmlConsent(prefill?.dose || '') + '"></div>'
+    + '<button type="button" class="btn btn-xs btn-gray" onclick="removeProgressNoteMedicineRow(this)">Remove</button>';
+  host.appendChild(row);
+  setIPDNursingEntryEnabled && setIPDNursingEntryEnabled(!!isIPDNurseAuthenticated(document.getElementById('pn-nurse')?.value || ''));
+}
+function removeProgressNoteMedicineRow(btn) {
+  const host = document.getElementById('pn-meds-list');
+  const row = btn?.closest('.pn-med-row');
+  if (row && host && host.children.length > 1) row.remove();
+}
+function readProgressNoteMedicines() {
+  const rows = Array.from(document.querySelectorAll('#pn-meds-list .pn-med-row'));
+  if (!rows.length) {
+    return [{
+      medicine: document.getElementById('pn-med')?.value?.trim() || '',
+      dose: document.getElementById('pn-dose')?.value?.trim() || ''
+    }].filter(function (row) { return row.medicine || row.dose; });
+  }
+  return rows.map(function (row) {
+    return {
+      medicine: row.querySelector('.pn-med-name')?.value?.trim() || '',
+      dose: row.querySelector('.pn-med-dose')?.value?.trim() || ''
+    };
+  }).filter(function (row) { return row.medicine || row.dose; });
+}
 function saveProgressNote() {
   if (!activeIPDPatient) return;
   const note = document.getElementById('pn-text')?.value;
-  const nurse = document.getElementById('pn-nurse')?.value||'Staff Nurse';
+  const nurse = requireIPDNurseAuth('pn-nurse');
+  if (!nurse) return;
   const doctor = document.getElementById('pn-doctor')?.value||'Dr. Varun Baweja';
   const date = document.getElementById('pn-date')?.value || todayKey();
   const time = document.getElementById('pn-time')?.value || new Date().toTimeString().slice(0,5);
-  const medicine = document.getElementById('pn-med')?.value || '';
-  const dose = document.getElementById('pn-dose')?.value || '';
+  const medicines = readProgressNoteMedicines();
+  const medicine = medicines.map(function (m) { return m.medicine; }).filter(Boolean).join('; ');
+  const dose = medicines.map(function (m) { return m.dose; }).filter(Boolean).join('; ');
   const orders = document.getElementById('pn-orders')?.value || '';
   const vitals = {
     bp: document.getElementById('pn-bp')?.value || '',
@@ -8633,10 +8774,10 @@ function saveProgressNote() {
     rr: document.getElementById('pn-rr')?.value || '',
     pain: document.getElementById('pn-pain')?.value || ''
   };
-  if (!note) { showToast('Please enter a note','w'); return; }
+  if (!note && !orders && !medicines.length && !Object.values(vitals).some(Boolean)) { showToast('Please enter vitals, a note, medicine, or order','w'); return; }
   if (!Array.isArray(activeIPDPatient.notes)) activeIPDPatient.notes = [];
   if (!Array.isArray(activeIPDPatient.vitalSigns)) activeIPDPatient.vitalSigns = [];
-  activeIPDPatient.notes.unshift({date:new Date(date).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}),time,note,nurse,doctor,medicine,dose,orders,vitals,recordedAt:new Date(date + 'T' + time).toISOString()});
+  activeIPDPatient.notes.unshift({date:new Date(date).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}),time,note:note || 'Vitals / medicine entry recorded.',nurse,doctor,medicine,dose,medicines,orders,vitals,recordedAt:new Date(date + 'T' + time).toISOString()});
   if (Object.values(vitals).some(Boolean)) activeIPDPatient.vitalSigns.unshift(Object.assign({ recordedAt:new Date(date + 'T' + time).toISOString(), by:nurse }, vitals));
   const nextDue = (activeIPDPatient.monitoringPlan || []).find(slot => slot.status !== 'done');
   if (nextDue) {
@@ -40751,11 +40892,18 @@ function changeMyPassword() {
 // ── Render Admin Users List ────────────────────────────────────
 function renderAdminUsersList() {
   const card = document.getElementById('admin-logins-card');
+  const nursePinCard = document.getElementById('admin-nurse-pin-card');
   const el   = document.getElementById('admin-users-list');
   if(!el) return;
   // Only admins see this
-  if(!CURRENT_USER?.isAdmin) { if(card) card.style.display='none'; return; }
+  if(!CURRENT_USER?.isAdmin) {
+    if(card) card.style.display='none';
+    if(nursePinCard) nursePinCard.style.display='none';
+    return;
+  }
   if(card) card.style.display='block';
+  if(nursePinCard) nursePinCard.style.display='block';
+  populateIPDNursePinResetSelect && populateIPDNursePinResetSelect();
 
   const roleColors = {
     Admin:'bd-red', Doctor:'bd-blue', Reception:'bd-teal',
