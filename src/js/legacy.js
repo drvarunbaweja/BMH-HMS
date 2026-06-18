@@ -43966,6 +43966,41 @@ function loadPastVisits(bmhId, dept) {
       container.innerHTML = `<div style="text-align:center;padding:30px;color:var(--g2);font-size:12px"><div style="font-size:28px;margin-bottom:8px">📋</div>No past visits saved yet</div>`;
       return;
     }
+    if (dept === 'skin') {
+      const skinVisits = visits.slice(0, 6);
+      const skinRows = [
+        { label: 'History', get: function (v) { return summarizeVisitHistory(v, 'skin') || '—'; } },
+        { label: 'Diagnosis', get: function (v) { return (v['skin-primary-dx'] || v.dx || '').trim() || '—'; } },
+        { label: 'Prescription', get: function (v) { return summarizeVisitPrescription(v) || '—'; } },
+        { label: 'Procedures Advised', get: function (v) { return summarizeVisitProcedures(v) || '—'; } },
+        { label: 'Procedure Done', get: function (v) { return summarizeProcedureDoneLine(v) || '—'; } },
+        { label: 'Follow-up Date', get: function (v) { return summarizeVisitFollowup(v, 'skin') || '—'; } },
+        { label: 'Instructions', get: function (v) { return summarizeVisitAdvice(v) || '—'; } }
+      ];
+      container.innerHTML = `<div style="overflow:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:10.5px;table-layout:fixed;background:#fff;border:1px solid var(--g5);border-radius:10px;overflow:hidden">
+          <thead>
+            <tr>
+              <th style="text-align:left;padding:8px;border:1px solid var(--g5);width:150px;background:var(--g6)">Field</th>
+              ${skinVisits.map(function (v) {
+                return `<th style="text-align:left;padding:8px;border:1px solid var(--g5);min-width:150px;background:#f7fbff;color:var(--bmh-blue)">${v.dateLabel || new Date(v.date || Date.now()).toLocaleDateString('en-IN')}</th>`;
+              }).join('')}
+            </tr>
+          </thead>
+          <tbody>
+            ${skinRows.map(function (row) {
+              return `<tr>
+                <td style="padding:8px;border:1px solid var(--g5);vertical-align:top;font-weight:800;background:var(--g6)">${row.label}</td>
+                ${skinVisits.map(function (v) {
+                  return `<td style="padding:8px;border:1px solid var(--g5);vertical-align:top;line-height:1.45">${row.get(v)}</td>`;
+                }).join('')}
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>`;
+      return;
+    }
     container.innerHTML = visits.map(v => {
       const invs = Array.isArray(v.investigations) ? v.investigations : [];
       const cc = Array.isArray(v.ccRows) ? v.ccRows.map(r => r.text).filter(Boolean).join(', ') : (v.chiefComplaints || v.chiefComplaint || '');
