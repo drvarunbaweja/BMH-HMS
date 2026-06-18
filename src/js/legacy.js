@@ -2771,6 +2771,24 @@ function restoreRxFromVisitData(data) {
   }
   renderRxDrugs && renderRxDrugs();
 }
+function resetCurrentRxDatesToToday() {
+  if (typeof RX_DRUGS === 'undefined' || !Array.isArray(RX_DRUGS)) return;
+  const today = todayKey();
+  RX_DRUGS.forEach(function (drug) {
+    if (!drug || typeof drug !== 'object') return;
+    drug.dateFrom = today;
+    drug.dateTo = '';
+    if (Array.isArray(drug.taperRows)) {
+      drug.taperRows.forEach(function (step) {
+        if (!step || typeof step !== 'object') return;
+        step.dateFrom = '';
+        step.dateTo = '';
+      });
+    }
+    computeRxEndAndTaperDates(drug);
+  });
+  renderRxDrugs && renderRxDrugs();
+}
 
 function buildPatientHeaderHoverText(p) {
   if (!p) return '';
@@ -23341,7 +23359,7 @@ function applyRxTemplate(tplId) {
   renderRxDrugs();
   showToast('Template applied ✓','s');
 }
-function applyLastRx() {
+function applyLastRx(useTodayDates) {
   const dept = activeClinicDeptKey();
   const bmhId = window.CURRENT_PATIENT?.bmhId;
   if (!bmhId) { showToast('Open a patient first', 'w'); return; }
@@ -23392,6 +23410,11 @@ function applyLastRx() {
       if (adviceEl) adviceEl.value = visit.skinAdvice || visit.advice || '';
       const extraAdviceEl = document.getElementById('skin-extra-advice');
       if (extraAdviceEl) extraAdviceEl.value = visit.skinExtraAdvice || visit.extraAdvice || '';
+    }
+    if (useTodayDates) {
+      resetCurrentRxDatesToToday();
+      showToast('Last prescription applied with today\'s dates ✓','s');
+      return;
     }
     showToast('Last printed prescription applied ✓','s');
   };
@@ -43579,6 +43602,25 @@ function saveVisit(dept, opts) {
 function loadPastVisits(bmhId, dept) {
   const container = document.getElementById(dept === 'ophtho' ? 'past-visits-ophtho' : `past-visits-${dept}`);
   if(!container) return;
+  const visitMatchesDept = function (visit, deptKey) {
+    if (!visit || typeof visit !== 'object') return false;
+    const normalizedDept = normalizeDeptKeyForQueue(visit.dept || visit.department || '');
+    if (normalizedDept) return normalizedDept === deptKey;
+    if (deptKey === 'skin') return !!(
+      visit['skin-chief'] || visit['skin-primary-dx'] || visit.skinDxList || visit.skinHxDxList
+      || visit.skinAdvice || visit.skinExtraAdvice || visit.skinPresumptive || visit.skinPlan
+      || visit.skinProcedural || visit.skinProcAdvised
+    );
+    if (deptKey === 'psych') return !!(
+      visit['psych-chief'] || visit['psych-diagnosis'] || visit.psychAdvice
+      || visit.psychExtraAdvice || visit.psychProcAdvised
+    );
+    if (deptKey === 'obg') return !!(
+      visit.gravida || visit.ga || visit.edd || visit.obgAdvice
+      || visit.obgExtraAdvice || visit.obgProcAdvised || visit.presumptiveDx
+    );
+    return true;
+  };
   const fmtVisitDate = function (raw) {
     const t = Date.parse(raw || '');
     if (!Number.isNaN(t)) return new Date(t).toLocaleDateString('en-IN');
@@ -43648,6 +43690,11 @@ function loadPastVisits(bmhId, dept) {
     ].filter(Boolean).map(function (line) {
       return /^advised[:\s-]/i.test(String(line || '').trim()) ? String(line).trim() : ('Advised: ' + String(line).trim());
     }).join('<br>');
+  };
+  const summarizeVisitFollowup = function (visit, deptKey) {
+    const raw = visit?.rxFuDate || (deptKey === 'obg' ? visit?.nextReview : '') || visit?.followupDate || visit?.followUpDate || '';
+    if (!raw) return '';
+    return fmtVisitDate(raw);
   };
   const summarizeVisitProcedures = function (visit) {
     const rows = []
@@ -43743,6 +43790,7 @@ function loadPastVisits(bmhId, dept) {
   };
   const renderVisits = (visitsObj) => {
     const visits = Object.entries(visitsObj || {}).map(([id, v]) => ({ id, ...(v||{}) }))
+      .filter(function (visit) { return dept === 'ophtho' ? true : visitMatchesDept(visit, dept); })
       .sort((a,b) => String(b.date || b.createdAt || '').localeCompare(String(a.date || a.createdAt || '')));
     if (dept === 'ophtho') {
       const chargeLines = ((window.BMH_PATIENT_CHARGES && window.BMH_PATIENT_CHARGES[bmhId]) || []).filter(function (row) {
@@ -43870,6 +43918,10 @@ function loadPastVisits(bmhId, dept) {
       </div>`;
       return;
     }
+    if (!visits.length) {
+      container.innerHTML = `<div style="text-align:center;padding:30px;color:var(--g2);font-size:12px"><div style="font-size:28px;margin-bottom:8px">📋</div>No past visits saved yet</div>`;
+      return;
+    }
     container.innerHTML = visits.map(v => {
       const invs = Array.isArray(v.investigations) ? v.investigations : [];
       const cc = Array.isArray(v.ccRows) ? v.ccRows.map(r => r.text).filter(Boolean).join(', ') : (v.chiefComplaints || v.chiefComplaint || '');
@@ -43878,6 +43930,7 @@ function loadPastVisits(bmhId, dept) {
       const historySummary = summarizeVisitHistory(v, dept);
       const rxSummary = summarizeVisitPrescription(v);
       const adviceSummary = summarizeVisitAdvice(v);
+      const followupSummary = summarizeVisitFollowup(v, dept);
       const procSummary = summarizeVisitProcedures(v);
       const procDoneLine = summarizeProcedureDoneLine(v);
       const consumablesSummary = summarizeProcedureDoneConsumables(v);
@@ -43898,10 +43951,11 @@ function loadPastVisits(bmhId, dept) {
         ${cc ? `<div style="font-size:11px;margin-bottom:5px"><strong>Chief complaints:</strong> ${cc}</div>` : ''}
         ${historySummary ? `<div style="font-size:11px;margin-bottom:5px"><strong>History:</strong> ${historySummary}</div>` : ''}
         ${dx ? `<div style="font-size:11px;margin-bottom:5px"><strong>Diagnosis:</strong> ${dx}</div>` : ''}
+        ${followupSummary ? `<div style="font-size:11px;margin-bottom:5px"><strong>Follow-up date:</strong> ${followupSummary}</div>` : ''}
         ${procSummary ? `<div style="font-size:11px;margin-bottom:5px"><strong>Procedures:</strong> ${procSummary}</div>` : ''}
         ${procDoneLine ? `<div style="font-size:11px;margin-bottom:5px"><strong>Procedure done:</strong> ${procDoneLine}</div>` : ''}
         ${consumablesSummary ? `<div style="font-size:11px;margin-bottom:5px"><strong>Consumables used:</strong> ${consumablesSummary}</div>` : ''}
-        ${rxSummary ? `<div style="font-size:11px;margin-bottom:5px"><strong>Prescription:</strong><div style="margin-top:4px;line-height:1.45">${rxSummary}</div></div>` : ''}
+        ${rxSummary ? `<div style="font-size:11px;margin-bottom:5px"><strong>Treatment / Prescription:</strong><div style="margin-top:4px;line-height:1.45">${rxSummary}</div></div>` : ''}
         ${adviceSummary ? `<div style="font-size:11px;margin-bottom:5px"><strong>Instructions:</strong><div style="margin-top:4px;line-height:1.45">${adviceSummary}</div></div>` : ''}
         ${invs.length ? `<div style="margin-top:8px"><div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase;margin-bottom:5px">Investigations</div>${invs.map(inv => `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;background:var(--g6);border-radius:8px;margin-bottom:5px"><div><div style="font-size:11px;font-weight:700">${inv.name}</div><div style="font-size:10px;color:var(--g1)">${Math.round((inv.sizKB||0))} KB · ${new Date(inv.date||Date.now()).toLocaleDateString('en-IN')}</div></div><button class="btn btn-xs btn-outline" onclick="viewStoredInvestigation('${bmhId}','${inv.key}')">Open</button></div>`).join('')}</div>` : ''}
       </div>`;

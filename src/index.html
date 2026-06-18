@@ -1716,6 +1716,7 @@
       <div class="tab-content" id="oe-rx">
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;background:var(--g6);padding:8px 10px;border-radius:var(--rsm)">
           <button class="btn btn-xs btn-blue" onclick="applyLastRx()">📋 Apply Last Rx</button>
+          <button class="btn btn-xs btn-outline" onclick="applyLastRx(true)">📅 Last Rx today</button>
           <select id="rx-tpl-sel" style="display:none" onchange="applyRxTemplate(this.value)">
             <option value="">— Apply Template —</option>
             <option value="post-phaco">Post Phaco Day 1</option>
@@ -2702,6 +2703,7 @@
       <div class="tab-content" id="obg-rx"><div id="obg-rx-send-bar"></div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;background:var(--g6);padding:7px;border-radius:var(--rsm)">
           <button class="btn btn-xs btn-blue" onclick="applyLastRx()">📋 Last Rx</button>
+          <button class="btn btn-xs btn-outline" onclick="applyLastRx(true)">📅 Last Rx today</button>
           <select style="display:none" onchange="applyRxTemplate(this.value)">
             <option value="">— Template —</option>
           </select>
@@ -3197,6 +3199,7 @@
       <div class="tab-content" id="psych-rx">
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;background:var(--g6);padding:7px;border-radius:var(--rsm)">
           <button class="btn btn-xs btn-blue" onclick="applyLastRx()">📋 Last Rx</button>
+          <button class="btn btn-xs btn-outline" onclick="applyLastRx(true)">📅 Last Rx today</button>
           <select style="display:none" onchange="applyRxTemplate(this.value)">
             <option value="">— Template —</option>
           </select>
@@ -3356,6 +3359,13 @@
         </div>
       </div>
 
+      <!-- SKIN PAST VISITS -->
+      <div class="tab-content" id="skin-past">
+        <div id="past-visits-skin" style="text-align:center;padding:28px;color:var(--g2);font-size:12px">
+          <div style="font-size:24px;margin-bottom:6px">📋</div>Select a patient to view past visits
+        </div>
+      </div>
+
       <!-- SKIN EXAMINATION -->
       <div class="tab-content" id="skin-exam">
         <div class="g2" style="margin-bottom:12px">
@@ -3422,6 +3432,7 @@
       <div class="tab-content" id="skin-rx"><div id="skin-rx-send-bar"></div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;background:var(--g6);padding:7px;border-radius:var(--rsm)">
           <button class="btn btn-xs btn-blue" onclick="applyLastRx()">📋 Last Rx</button>
+          <button class="btn btn-xs btn-outline" onclick="applyLastRx(true)">📅 Last Rx today</button>
           <select style="display:none" onchange="applyRxTemplate(this.value)">
             <option value="">— Template —</option>
           </select>
