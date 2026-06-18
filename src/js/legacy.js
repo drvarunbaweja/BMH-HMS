@@ -34491,7 +34491,7 @@ window.printUnifiedRx = function(deptId) {
   const cpt = window.CURRENT_PATIENT || {};
   const rxPrintMode = getDoctorPrescriptionPrintMode(doctorProfile);
   const rxDesign = getDoctorPrescriptionDesign(doctorProfile, cpt.centre || CURRENT_USER?.centre || getEffectiveCentre?.() || 'CHD');
-  const doctorSpec    = {oe:'Ophthalmologist',obg:'Obstetrician & Gynaecologist',psych:'Neuropsychiatrist',skin:'Dermatologist'}[deptId]||'Specialist';
+  const doctorSpec    = String(doctorProfile.dept || '').trim() || ({oe:'Ophthalmologist',obg:'Obstetrician & Gynaecologist',psych:'Neuropsychiatrist',skin:'Skin & Cosmetology'}[deptId]||'Specialist');
   const doctorReg     = String(doctorProfile.reg || '').trim();
   const doctorPhone   = '6280048805';
 
@@ -34944,12 +34944,12 @@ ${(!psychPrescriptionPrintOnly && ((incCC && cc) || (deptId==='obg' && obgIncCom
   skinChief
 )}</div>` : ''}
 
-${(!psychPrescriptionPrintOnly && dxList.length && rxDesign === 'current') ? `
+${(!psychPrescriptionPrintOnly && deptId!=='skin' && dxList.length && rxDesign === 'current') ? `
 <div class="sec-divider"><span class="sec-label">Diagnosis</span></div>
 <div class="diag-rule-top"></div>
 <div class="diag-text">${dxList.map(function (d) { return '<span class="diag-line">' + escapeHtmlConsent(d) + '</span>'; }).join('')}</div>
 <div class="diag-rule-bot"></div>` : ''}
-${(!psychPrescriptionPrintOnly && rxDesign !== 'current') ? designedDiagnosis : ''}
+${(!psychPrescriptionPrintOnly && deptId!=='skin' && rxDesign !== 'current') ? designedDiagnosis : ''}
 
 ${deptId==='obg' && obgIncObsHistory && obgPrescriptionPregnancySummary.historyLines.length ? `
 <div class="obg-print-box">
@@ -34980,15 +34980,6 @@ ${deptId==='psych' && !psychPrescriptionPrintOnly && psychMseRows.length ? `
   ${psychMseRows.map(function (row) {
     return `<div class="dept-card-row"><div class="dept-card-key">${escapeHtmlConsent(row.key)}</div><div class="dept-card-val">${escapeHtmlConsent(row.value)}</div></div>`;
   }).join('')}
-</div>` : ''}
-
-${deptId==='skin' && (skinChief||skinPrimaryDx||skinDermoscopy) ? `
-<div class="sec-divider"><span class="sec-label">Skin Examination</span></div>
-<div class="dept-card">
-  <div class="dept-card-hdr">SKIN EXAMINATION</div>
-  ${skinChief ? `<div class="dept-card-row"><div class="dept-card-key">Chief Complaint</div><div class="dept-card-val">${escapeHtmlConsent(skinChief)}</div></div>` : ''}
-  ${skinPrimaryDx ? `<div class="dept-card-row"><div class="dept-card-key">Primary Diagnosis</div><div class="dept-card-val">${escapeHtmlConsent(skinPrimaryDx)}</div></div>` : ''}
-  ${skinDermoscopy ? `<div class="dept-card-row"><div class="dept-card-key">Dermoscopy</div><div class="dept-card-val">${escapeHtmlConsent(skinDermoscopy)}</div></div>` : ''}
 </div>` : ''}
 
 ${showEyeVitals ? `
