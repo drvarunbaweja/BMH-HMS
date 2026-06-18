@@ -7548,7 +7548,22 @@ function computePsychGuidance() {
     therapy: Array.from(new Set(therapy)).slice(0, 4)
   };
 }
-function renderPsychRail() {
+const _bmhDeptRailRenderTimers = window._bmhDeptRailRenderTimers || (window._bmhDeptRailRenderTimers = {});
+function scheduleDeptRailRender(key, runner, opts) {
+  const options = opts || {};
+  const delay = Number.isFinite(options.delay) ? options.delay : 140;
+  if (_bmhDeptRailRenderTimers[key]) clearTimeout(_bmhDeptRailRenderTimers[key]);
+  if (options.immediate) {
+    _bmhDeptRailRenderTimers[key] = null;
+    runner();
+    return;
+  }
+  _bmhDeptRailRenderTimers[key] = setTimeout(function () {
+    _bmhDeptRailRenderTimers[key] = null;
+    runner();
+  }, delay);
+}
+function _renderPsychRailNow() {
   const el = document.getElementById('psych-summary-content');
   if(!el) return;
   togglePsychTracks();
@@ -7602,6 +7617,9 @@ function renderPsychRail() {
       <summary style="font-size:11px;font-weight:800;color:var(--bmh-blue);cursor:pointer">Payments / requests pending</summary>
       <div style="margin-top:8px">${dueHtml}</div>
     </details>`; });
+}
+function renderPsychRail(opts) {
+  scheduleDeptRailRender('psych', _renderPsychRailNow, opts);
 }
 function populatePsychForm(visit) {
   const data = visit || window.CURRENT_PATIENT?.lastVisit || {};
@@ -7696,7 +7714,7 @@ function computeSkinGuidance() {
     procedures: Array.from(new Set(procedures)).slice(0, 5)
   };
 }
-function renderSkinRail() {
+function _renderSkinRailNow() {
   const el = document.getElementById('skin-summary-rail');
   if(!el) return;
   const pt = window.CURRENT_PATIENT || {};
@@ -7741,6 +7759,9 @@ function renderSkinRail() {
       </details>
     </div>
   </div>`; });
+}
+function renderSkinRail(opts) {
+  scheduleDeptRailRender('skin', _renderSkinRailNow, opts);
 }
 function populateSkinForm(visit) {
   const data = visit || window.CURRENT_PATIENT?.lastVisit || {};
@@ -7918,9 +7939,14 @@ function cachePatientVisits(bmhId, visitsObj) {
 function getCachedPatientVisits(bmhId) {
   return (window.PATIENT_VISIT_CACHE && window.PATIENT_VISIT_CACHE[bmhId]) || {};
 }
-function loadPatientVisitsForRail(bmhId, dept, onReady) {
+const _bmhRailVisitFetchMeta = window._bmhRailVisitFetchMeta || (window._bmhRailVisitFetchMeta = {});
+function loadPatientVisitsForRail(bmhId, dept, onReady, opts) {
+  const options = opts || {};
+  const staleMs = Number.isFinite(options.staleMs) ? options.staleMs : 60000;
   const cached = getCachedPatientVisits(bmhId);
   const hasCached = cached && Object.keys(cached).length;
+  const metaKey = String(bmhId || '') + '::' + String(dept || 'all');
+  const meta = _bmhRailVisitFetchMeta[metaKey] || (_bmhRailVisitFetchMeta[metaKey] = { fetchedAt: 0, promise: null });
   const deliver = function(obj) {
     const all = cachePatientVisits(bmhId, obj);
     const visits = Object.values(all || {})
@@ -7929,7 +7955,19 @@ function loadPatientVisitsForRail(bmhId, dept, onReady) {
     onReady(visits, all);
   };
   if(hasCached) deliver(cached);
-  if(typeof fbOnce === 'function' && bmhId) fbOnce(`visits/${bmhId}`).then(deliver).catch(() => { if(!hasCached) deliver({}); });
+  if(typeof fbOnce === 'function' && bmhId) {
+    if (!options.force && hasCached && meta.fetchedAt && (Date.now() - meta.fetchedAt) < staleMs) return;
+    if (meta.promise) return;
+    meta.promise = fbOnce(`visits/${bmhId}`).then(function (data) {
+      meta.fetchedAt = Date.now();
+      deliver(data);
+    }).catch(function () {
+      if(!hasCached) deliver({});
+    }).finally(function () {
+      meta.promise = null;
+    });
+    return;
+  }
   else if(!hasCached) deliver({});
 }
 function buildVisitSummaryCards(visits, dept) {
@@ -31293,7 +31331,22 @@ function addRxFromQuick() {
 document.addEventListener('click',e=>{if(!e.target.closest('#rx-quick-search')&&!e.target.closest('#rx-quick-dropdown')){document.querySelectorAll('#rx-quick-dropdown').forEach(dd=>{dd.style.display='none';});}});
 
 // ─── RENDER RX DRUGS (Trade — Generic — route — dates — taper) ─────────────
-function renderRxDrugs() {
+let _rxRenderTimer = null;
+function renderRxDrugs(opts) {
+  const immediate = opts === true || (opts && opts.immediate);
+  if (immediate) {
+    if (_rxRenderTimer) clearTimeout(_rxRenderTimer);
+    _rxRenderTimer = null;
+    _renderRxDrugsNow();
+    return;
+  }
+  if (_rxRenderTimer) return;
+  _rxRenderTimer = setTimeout(function () {
+    _rxRenderTimer = null;
+    _renderRxDrugsNow();
+  }, 16);
+}
+function _renderRxDrugsNow() {
   const activePage = document.querySelector('.page.active') || document.querySelector('.page');
   const el = activePage ? activePage.querySelector('#rx-drugs') : document.getElementById('rx-drugs');
   if(!el) return;
@@ -43981,7 +44034,7 @@ function loadPastVisits(bmhId, dept) {
     renderVisits({});
   }
 }
-function renderOphthoRecap() {
+function _renderOphthoRecapNow() {
   const el = document.getElementById('ophtho-recap-panel');
   if(!el) return;
   const pt = window.CURRENT_PATIENT || PATIENTS.find(p => p.bmhId === (document.getElementById('ophtho-pt-uid')?.textContent || '').trim());
@@ -44156,8 +44209,12 @@ function renderOphthoRecap() {
       </div>
     </div>`;
   };
-  if(typeof fbOnce === 'function') fbOnce(`visits/${pt.bmhId}`).then(renderWithVisits).catch(()=>renderWithVisits({}));
-  else renderWithVisits({});
+  loadPatientVisitsForRail(pt.bmhId, 'ophtho', function (_visits, allVisits) {
+    renderWithVisits(allVisits || {});
+  }, { staleMs: 60000 });
+}
+function renderOphthoRecap(opts) {
+  scheduleDeptRailRender('ophtho', _renderOphthoRecapNow, opts);
 }
 
 window.addEventListener('DOMContentLoaded', function() {
