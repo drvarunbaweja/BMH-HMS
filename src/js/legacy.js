@@ -33465,6 +33465,12 @@ function patientNameIdentityKey(value) {
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
 }
+function getPatientIdentitySignature(record) {
+  const nameKey = patientNameIdentityKey(record?.name || record?.patient || '');
+  const phoneKeys = getPatientPhoneKeys(record);
+  if (!nameKey || !phoneKeys.length) return '';
+  return nameKey + '|' + phoneKeys.sort().join(',');
+}
 function isMergedPatientRecord(p) {
   if (!p || typeof p !== 'object') return false;
   if (p.mergedInto || p.inactive) return true;
@@ -33622,6 +33628,129 @@ function findSamePersonForRegistration(opts) {
   if (strict.length) return sortPatientsByCanonicalIdentity(strict)[0];
   return null;
 }
+function normalizeDuplicateFinancialText(value) {
+  return String(value || '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+function isDuplicateIdentityConsultationChargeRow(row) {
+  if (!row) return false;
+  const cat = String(row.cat || inferChargeCategoryFromService(row.desc || row.name || '') || '').toLowerCase();
+  const src = String(row.source || row.from || '').toLowerCase();
+  const text = [row.desc, row.name, row.parent].filter(Boolean).join(' ');
+  return cat === 'consultation' || (src === 'reception' && isConsultationPurposeText(text));
+}
+function duplicateIdentityChargeSignature(row) {
+  if (!isDuplicateIdentityConsultationChargeRow(row)) return '';
+  return [
+    localDateKey(row.ts || row.date || row.createdAt || row.updatedAt),
+    normalizeDuplicateFinancialText(row.desc || row.name || ''),
+    Math.max(0, Number(row.amount != null ? row.amount : ((Number(row.qty) || 1) * (Number(row.rate) || 0))) || 0),
+    String(row.source || row.from || '').toLowerCase()
+  ].join('|');
+}
+function isDuplicateIdentityConsultationPayRequest(row) {
+  if (!row) return false;
+  const text = [row.for, row.service, row.desc].filter(Boolean).join(' ');
+  return isConsultationChargeEntry(row) || (/reception/i.test(String(row.from || row.source || row.createdBy || '')) && isConsultationPurposeText(text));
+}
+function duplicateIdentityPayRequestSignature(row) {
+  if (!isDuplicateIdentityConsultationPayRequest(row)) return '';
+  return [
+    localDateKey(row.date || row.createdAt || row.updatedAt),
+    normalizeDuplicateFinancialText(row.for || row.service || row.desc || ''),
+    Math.max(0, Number(row.amount || 0)),
+    String(row.mode || '').toLowerCase()
+  ].join('|');
+}
+function duplicateIdentityTransactionSignature(row) {
+  if (!row || !isConsultationTransaction(row)) return '';
+  return [
+    localDateKey(row.date || row.createdAt || row.ts),
+    normalizeDuplicateFinancialText(row.service || row.for || row.desc || ''),
+    Math.max(0, Number(row.amount || 0)),
+    String(row.mode || '').toLowerCase(),
+    String(row.source || row.createdBy || '').toLowerCase()
+  ].join('|');
+}
+function dedupeDuplicateIdentityChargeRows(rows) {
+  const out = [];
+  const seen = new Set();
+  (rows || []).forEach(function (row) {
+    const sig = duplicateIdentityChargeSignature(row);
+    if (sig) {
+      if (seen.has(sig)) return;
+      seen.add(sig);
+    }
+    out.push(row);
+  });
+  return out;
+}
+function mergeDuplicatePatientFinancials(canonical, duplicate) {
+  const targetId = String(canonical?.bmhId || '').trim();
+  const dupId = String(duplicate?.bmhId || '').trim();
+  if (!targetId || !dupId || targetId === dupId) return { removedPayRequests: [], removedTransactions: [], touchedPayRequests: [], touchedTransactions: [] };
+  const removedPayRequests = [];
+  const removedTransactions = [];
+  const touchedPayRequests = [];
+  const touchedTransactions = [];
+  const existingCharges = (window.BMH_PATIENT_CHARGES[targetId] || []).slice();
+  const duplicateCharges = (window.BMH_PATIENT_CHARGES[dupId] || []).map(function (row) {
+    return Object.assign({}, row);
+  });
+  window.BMH_PATIENT_CHARGES[targetId] = dedupeDuplicateIdentityChargeRows(existingCharges.concat(duplicateCharges));
+  delete window.BMH_PATIENT_CHARGES[dupId];
+
+  const payReqBySig = new Map();
+  (PAY_REQUESTS || []).forEach(function (pr) {
+    if (!pr || String(pr.bmhId || '') !== targetId) return;
+    const sig = duplicateIdentityPayRequestSignature(pr);
+    if (sig && !payReqBySig.has(sig)) payReqBySig.set(sig, pr);
+  });
+  for (let i = (PAY_REQUESTS || []).length - 1; i >= 0; i -= 1) {
+    const pr = PAY_REQUESTS[i];
+    if (!pr || String(pr.bmhId || '') !== dupId) continue;
+    const sig = duplicateIdentityPayRequestSignature(pr);
+    const existing = sig ? payReqBySig.get(sig) : null;
+    if (existing) {
+      removedPayRequests.push(pr);
+      PAY_REQUESTS.splice(i, 1);
+      continue;
+    }
+    pr.bmhId = targetId;
+    pr.patient = canonical?.name || pr.patient || duplicate?.name || '';
+    touchedPayRequests.push(pr);
+    if (sig && !payReqBySig.has(sig)) payReqBySig.set(sig, pr);
+  }
+
+  const txnBySig = new Map();
+  (TRANSACTIONS || []).forEach(function (txn) {
+    if (!txn || String(txn.bmhId || '') !== targetId) return;
+    const sig = duplicateIdentityTransactionSignature(txn);
+    if (sig && !txnBySig.has(sig)) txnBySig.set(sig, txn);
+  });
+  for (let i = (TRANSACTIONS || []).length - 1; i >= 0; i -= 1) {
+    const txn = TRANSACTIONS[i];
+    if (!txn || String(txn.bmhId || '') !== dupId) continue;
+    const sig = duplicateIdentityTransactionSignature(txn);
+    const existing = sig ? txnBySig.get(sig) : null;
+    if (existing) {
+      removedTransactions.push(txn);
+      TRANSACTIONS.splice(i, 1);
+      continue;
+    }
+    txn.bmhId = targetId;
+    txn.patient = canonical?.name || txn.patient || duplicate?.name || '';
+    touchedTransactions.push(txn);
+    if (sig && !txnBySig.has(sig)) txnBySig.set(sig, txn);
+  }
+  saveBmhFinancials && saveBmhFinancials();
+  bmhSyncPatientRunningBalance && bmhSyncPatientRunningBalance(targetId);
+  return {
+    removedPayRequests: removedPayRequests,
+    removedTransactions: removedTransactions,
+    touchedPayRequests: touchedPayRequests,
+    touchedTransactions: touchedTransactions
+  };
+}
 function pickNewerRecordByDate(a, b) {
   const aTime = Date.parse(a?.date || a?.createdAt || a?.updatedAt || '') || 0;
   const bTime = Date.parse(b?.date || b?.createdAt || b?.updatedAt || '') || 0;
@@ -33651,7 +33780,19 @@ async function mergeDuplicatePatientRecord(canonicalId, duplicateId) {
     return String(x || '').trim();
   }).filter(Boolean)));
   merged.investigationOrders = [].concat(duplicate.investigationOrders || [], merged.investigationOrders || []).filter(Boolean);
-  merged.crossRefs = Object.assign({}, duplicate.crossRefs || {}, merged.crossRefs || {});
+  (function mergeCrossRefs() {
+    const combined = []
+      .concat(Array.isArray(duplicate.crossRefs) ? duplicate.crossRefs : [])
+      .concat(Array.isArray(merged.crossRefs) ? merged.crossRefs : []);
+    const map = new Map();
+    combined.forEach(function (row) {
+      if (!row) return;
+      const key = String(row.id || [row.toDept, row.toDoctor, row.createdAt].join('|'));
+      if (!key || map.has(key)) return;
+      map.set(key, Object.assign({}, row));
+    });
+    merged.crossRefs = Array.from(map.values());
+  })();
   (function mergeObgLedger() {
     const map = new Map();
     [].concat(merged.obgDxLedger || [], duplicate.obgDxLedger || []).forEach(function (x) {
@@ -33715,6 +33856,7 @@ async function mergeDuplicatePatientRecord(canonicalId, duplicateId) {
   };
 
   applyLocalMerge();
+  const financialMerge = mergeDuplicatePatientFinancials(merged, duplicate);
   const writes = [
     fbSet('patients/' + targetId, sanitizeFirebaseValue(merged)),
     fbUpdate('patients/' + dupId, duplicatePatch).catch(function () {})
@@ -33728,6 +33870,20 @@ async function mergeDuplicatePatientRecord(canonicalId, duplicateId) {
   await Promise.all(writes);
   await copyBucket('visits');
   await copyBucket('prescriptions');
+  await Promise.all((financialMerge.touchedPayRequests || []).map(function (pr) {
+    return fbUpdate('payRequests/' + pr.id, sanitizeFirebaseValue({ bmhId: pr.bmhId, patient: pr.patient })).catch(function () {});
+  }));
+  await Promise.all((financialMerge.removedPayRequests || []).map(function (pr) {
+    return fbRemove('payRequests/' + pr.id).catch(function () {});
+  }));
+  await Promise.all((financialMerge.touchedTransactions || []).map(function (txn) {
+    const dateKey = localDateKey(txn.date || txn.createdAt || txn.ts || new Date().toISOString()) || todayKey();
+    return fbSet('transactions/' + dateKey + '/' + txn.id, sanitizeFirebaseValue(txn)).catch(function () {});
+  }));
+  await Promise.all((financialMerge.removedTransactions || []).map(function (txn) {
+    const dateKey = localDateKey(txn.date || txn.createdAt || txn.ts || new Date().toISOString()) || todayKey();
+    return fbRemove('transactions/' + dateKey + '/' + txn.id).catch(function () {});
+  }));
   rebuildPatientsArrayFromGlobalCache && rebuildPatientsArrayFromGlobalCache();
   return merged;
 }
@@ -33885,23 +34041,32 @@ function dedupeQueueRowsByPatientDept(rows) {
     const bmhId = String(row.bmhId || '').trim();
     const deptKey = getQueueRowDeptKey(row);
     const fallbackKey = String(row._queueKey || '').trim();
-    const key = (bmhId && deptKey) ? (bmhId + '::dept::' + deptKey) : fallbackKey;
+    const identityKey = getPatientIdentitySignature(row);
+    const key = deptKey
+      ? ((identityKey || bmhId) ? ((identityKey || bmhId) + '::dept::' + deptKey) : fallbackKey)
+      : fallbackKey;
     if (!key) return;
     const existing = map.get(key);
     if (!existing) {
       map.set(key, row);
       return;
     }
-    const existingDirect = !existing._xrefEntry;
-    const nextDirect = !row._xrefEntry;
-    if (existingDirect !== nextDirect) {
-      map.set(key, existingDirect ? existing : row);
-      return;
-    }
     const existingActive = !isPatientMarkedSeen(existing);
     const nextActive = !isPatientMarkedSeen(row);
     if (existingActive !== nextActive) {
       map.set(key, nextActive ? row : existing);
+      return;
+    }
+    const existingXref = !!existing._xrefEntry;
+    const nextXref = !!row._xrefEntry;
+    if (existingXref !== nextXref) {
+      map.set(key, nextXref ? row : existing);
+      return;
+    }
+    const existingIdNum = extractBmhNumericId(existing?.bmhId);
+    const nextIdNum = extractBmhNumericId(row?.bmhId);
+    if (existingIdNum !== nextIdNum) {
+      map.set(key, nextIdNum < existingIdNum ? row : existing);
       return;
     }
     if (getQueueRowFreshness(row) >= getQueueRowFreshness(existing)) map.set(key, row);
