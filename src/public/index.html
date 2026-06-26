@@ -1553,7 +1553,10 @@
             <input type="checkbox" id="refr-enable" onchange="toggleRefractivePanel()">
             Enable refractive suitability assessment
           </label>
-          <div style="font-size:10px;color:var(--g1)">Keep this off to show only upload and investigation tools.</div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <button type="button" class="btn btn-blue btn-sm" onclick="printRefractiveSuitabilityAssessment()">🖨️ Print Refractive Assessment</button>
+            <div style="font-size:10px;color:var(--g1)">Keep this off to show only upload and investigation tools.</div>
+          </div>
         </div>
         <div id="refr-panel" style="display:none;background:linear-gradient(135deg,#eef7ff,#f8fbff);border:1.5px solid rgba(26,60,110,.18);border-radius:12px;padding:12px;margin-bottom:14px">
           <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:9px">
@@ -1768,6 +1771,7 @@
             <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-cc" checked> Chief Complaints</label>
             <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-va" checked> Visual Acuity</label>
             <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-iop"> IOP</label>
+            <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-cv"> Colour Vision</label>
             <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-refr" checked> Refraction</label>
             <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-posfind" checked> Positive Findings</label>
             <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-diag" checked> Diagrams</label>
