@@ -1556,7 +1556,10 @@
             <input type="checkbox" id="refr-enable" onchange="toggleRefractivePanel()">
             Enable refractive suitability assessment
           </label>
-          <div style="font-size:10px;color:var(--g1)">Keep this off to show only upload and investigation tools.</div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <button type="button" class="btn btn-blue btn-sm" onclick="printRefractiveSuitabilityAssessment()">🖨️ Print Refractive Assessment</button>
+            <div style="font-size:10px;color:var(--g1)">Keep this off to show only upload and investigation tools.</div>
+          </div>
         </div>
         <div id="refr-panel" style="display:none;background:linear-gradient(135deg,#eef7ff,#f8fbff);border:1.5px solid rgba(26,60,110,.18);border-radius:12px;padding:12px;margin-bottom:14px">
           <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:9px">
@@ -1771,6 +1774,7 @@
             <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-cc" checked> Chief Complaints</label>
             <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-va" checked> Visual Acuity</label>
             <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-iop"> IOP</label>
+            <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-cv"> Colour Vision</label>
             <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-refr" checked> Refraction</label>
             <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-posfind" checked> Positive Findings</label>
             <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;user-select:none"><input type="checkbox" id="oe-inc-diag" checked> Diagrams</label>
@@ -3762,7 +3766,7 @@
           <div class="inventory-scroll-x"><div class="inventory-wide-grid" style="display:grid;grid-template-columns:1.35fr 1fr 1fr 90px 95px 95px 105px 105px;gap:8px">
             <div class="form-group" style="margin:0"><label class="fl" style="display:flex;align-items:center;justify-content:space-between;gap:6px">Trade Name <span style="display:flex;gap:4px"><button type="button" onclick="addInventoryBarcodePrompt()" title="Add trade name to list" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;font-weight:900">+</button><button type="button" onclick="removeInventoryBarcodePrompt()" title="Remove trade name from list" style="background:var(--g3);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;font-weight:900">−</button></span></label><input type="text" id="bc-in" list="inv-barcode-datalist" placeholder="Enter trade name…"></div>
             <div class="form-group" style="margin:0"><label class="fl" style="display:flex;align-items:center;justify-content:space-between;gap:6px">Company <span style="display:flex;gap:4px"><button type="button" onclick="addInventoryCompanyPrompt()" title="Add company" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;font-weight:900">+</button><button type="button" onclick="removeInventoryCompanyPrompt()" title="Remove company" style="background:var(--g3);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;font-weight:900">−</button></span></label><input type="text" id="inv-in-company" list="inv-company-datalist" placeholder="Manufacturer / company"></div>
-            <div class="form-group" style="margin:0"><label class="fl" style="display:flex;align-items:center;justify-content:space-between;gap:6px">Store / location <span style="display:flex;gap:4px"><button type="button" onclick="addInventoryStorePrompt()" title="Add store" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;font-weight:900">+</button><button type="button" onclick="deleteInventoryStorePrompt()" title="Remove store from list" style="background:var(--g3);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;font-weight:900">−</button></span></label><select id="inv-in-store"></select></div>
+            <div class="form-group" style="margin:0"><label class="fl" style="display:flex;align-items:center;justify-content:space-between;gap:6px">Store / location <span style="display:flex;gap:4px"><button type="button" onclick="addInventoryStorePrompt()" title="Add store" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;font-weight:900">+</button><button type="button" onclick="deleteInventoryStorePrompt()" title="Remove store from list" style="background:var(--g3);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;font-weight:900">−</button><button type="button" onclick="mergeInventoryDuplicateStoresPrompt()" title="Merge duplicate stores" style="background:var(--gold);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:10px;cursor:pointer;font-weight:900">⇄</button></span></label><select id="inv-in-store"></select></div>
             <div class="form-group" style="margin:0"><label class="fl">Qty</label><input type="number" id="inv-in-qty" min="1" value="1"></div>
             <div class="form-group" style="margin:0"><label class="fl">Cost ₹</label><input type="number" id="inv-in-cost" min="0" value="0"></div>
             <div class="form-group" style="margin:0"><label class="fl">MRP ₹</label><input type="number" id="inv-in-mrp" min="0" value="0"></div>
@@ -3919,6 +3923,7 @@
             <div class="form-group" style="margin:0"><label class="fl">Item / barcode</label><input type="text" id="inv-tr-item" placeholder="Type item name or barcode"></div>
             <div class="form-group" style="margin:0"><label class="fl">Qty</label><input type="number" id="inv-tr-qty" min="1" value="1"></div>
             <button class="btn btn-blue btn-sm" onclick="saveInventoryTransfer()">Transfer</button>
+            <button class="btn btn-outline btn-sm" onclick="saveInventoryTransferAndPrint()">Transfer &amp; Print</button>
           </div>
         </div>
         <div style="background:#fff7ec;border-radius:10px;padding:12px;margin-bottom:12px;border:1px solid rgba(255,149,0,.18)">
@@ -5524,6 +5529,7 @@
   </div>
   <div style="display:flex;justify-content:flex-end;gap:8px">
     <button class="btn btn-outline" type="button" onclick="closeM('m-inv-move-store')">Cancel</button>
+    <button class="btn btn-outline" type="button" onclick="confirmInventoryMoveAndPrintModal()">Move &amp; Print</button>
     <button class="btn btn-gold" type="button" onclick="confirmInventoryMoveModal()">Move Stock</button>
   </div>
 </div>

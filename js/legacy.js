@@ -4025,7 +4025,7 @@ function openPatient(bmhId, opts) {
     const el = document.getElementById(id);
     if (el) el.checked = true;
   });
-  ['oe-inc-iop', 'oe-inc-inv'].forEach(function (id) {
+  ['oe-inc-iop', 'oe-inc-inv', 'oe-inc-cv'].forEach(function (id) {
     const el = document.getElementById(id);
     if (el) el.checked = false;
   });
@@ -4577,6 +4577,18 @@ function populateOphthoForm(v) {
   setSel('va-os-ph', v.phOS);
   setSel('ucva-od-dist', v.vaOD);    setSel('ucva-os-dist', v.vaOS);
   setSel('ucva-od-near', v.vaODNear); setSel('ucva-os-near', v.vaOSNear);
+  setV('cv-od-plates', v.cvODPlates || '');
+  setV('cv-os-plates', v.cvOSPlates || '');
+  const cvBlindOd = document.getElementById('cv-blind-od');
+  const cvBlindOs = document.getElementById('cv-blind-os');
+  if (cvBlindOd) cvBlindOd.checked = !!v.cvBlindOD;
+  if (cvBlindOs) cvBlindOs.checked = !!v.cvBlindOS;
+  if (typeof toggleCVBlindness === 'function') {
+    toggleCVBlindness('od', !!v.cvBlindOD);
+    toggleCVBlindness('os', !!v.cvBlindOS);
+  }
+  setSel('cv-od-type', v.cvTypeOD || '');
+  setSel('cv-os-type', v.cvTypeOS || '');
 
   // IOP
   setV('iop-gat-od', v.iopGatOD); setV('iop-gat-os', v.iopGatOS);
@@ -5127,15 +5139,16 @@ function bookApt() {
   const requestedTime = normalizeAptTimeLabel(timeEl?.value || timeEl?.querySelector?.('[selected]')?.textContent || '10:00 AM');
   const doctor = drEl?.value || '';
   if(!date){ showToast('Please select a date','w'); return; }
+  const normalizedDate = adjustAppointmentDateForSunday(date);
   const patient = ptEl?.value || 'New Patient';
   const idMatch = String(patient || '').match(/BMSH-\d+/i);
   const centre = normalizeAppointmentCentreValue(centreEl?.value || window.CURRENT_USER?.centre || 'CHD');
-  const time = getNextAvailableApptSlotFrom(date, doctor, requestedTime, centre);
+  const time = getNextAvailableApptSlotFrom(normalizedDate.date, doctor, requestedTime, centre);
   const apt = {
     id: 'A'+Date.now(),
     patient: String(patient).replace(/\s+—\s+BMSH-\d+.*/i, '').trim() || patient,
     bmhId: idMatch ? idMatch[0].toUpperCase() : '—',
-    date, time, doctor,
+    date: normalizedDate.date, time, doctor,
     dept: ({
       'Dr. Varun Baweja':'ophtho','Dr. Geeta Baweja':'obg','Dr. Namrata Baweja':'obg',
       'Dr. Tarun Baweja':'psych','Dr. Pooja Baweja':'skin'
@@ -5150,7 +5163,7 @@ function bookApt() {
   };
   APPOINTMENTS.push(apt);
   if(typeof saveAppointmentToFirebase==='function') saveAppointmentToFirebase(apt);
-  showToast('📅 Appointment booked — '+patient+' at '+time+(time!==requestedTime?' (next available slot)':'')+' ✓','s');
+  showToast('📅 Appointment booked — '+patient+' on '+normalizedDate.dateObj.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})+' at '+time+(time!==requestedTime?' (next available slot)':'')+(normalizedDate.shifted?' (moved from Sunday)':'')+' ✓','s');
   closeM('m-book-apt');
   renderAptDay && renderAptDay();
 }
@@ -14029,6 +14042,7 @@ function saveInventoryIndent() {
 }
 window.saveInventoryIndent = saveInventoryIndent;
 function saveInventoryTransfer() {
+  const printAfter = !!arguments[0]?.printAfter;
   const fromStore = document.getElementById('inv-tr-from')?.value || '';
   const toStore = document.getElementById('inv-tr-to')?.value || '';
   const raw = document.getElementById('inv-tr-item')?.value?.trim() || '';
@@ -14047,7 +14061,8 @@ function saveInventoryTransfer() {
     }
   }
   target.stock = (Number(target.stock) || 0) + qty;
-  window.BMH_INVENTORY_TRANSFERS.push({ id: 'TR' + Date.now(), itemName: item.name, barcode: item.barcode, fromStore, toStore, qty, ts: bmhNowISO(), user: CURRENT_USER?.name || 'Inventory' });
+  const transferRow = { id: 'TR' + Date.now(), itemName: item.name, barcode: item.barcode, fromStore, toStore, qty, ts: bmhNowISO(), user: CURRENT_USER?.name || 'Inventory' };
+  window.BMH_INVENTORY_TRANSFERS.push(transferRow);
   saveInventoryStockToStorage();
   saveBmhFinancials();
   renderStockList();
@@ -14055,9 +14070,14 @@ function saveInventoryTransfer() {
   renderInventoryTodayEntries && renderInventoryTodayEntries({ preserveVisibility: true });
   renderInventoryStoreStock();
   renderInventoryPoAlerts();
-  showToast('Stock transferred ✓', 's');
+  if (printAfter) printInventoryTransferSlip([transferRow], { fromStores: [fromStore], toStore: toStore });
+  showToast(printAfter ? 'Stock transferred and print opened ✓' : 'Stock transferred ✓', 's');
 }
 window.saveInventoryTransfer = saveInventoryTransfer;
+function saveInventoryTransferAndPrint() {
+  saveInventoryTransfer({ printAfter: true });
+}
+window.saveInventoryTransferAndPrint = saveInventoryTransferAndPrint;
 function bmhApplyVendorReturn(item, qty, vendorOverride) {
   const vendor = String(vendorOverride || item.vendor || '').trim();
   const reduction = Math.max(0, (Number(item.cost) || 0) * Math.max(1, Number(qty) || 1));
@@ -16107,8 +16127,155 @@ function deleteInventoryStorePrompt() {
   showToast('Store removed from list ✓', 's');
 }
 window.deleteInventoryStorePrompt = deleteInventoryStorePrompt;
+function mergeInventoryDuplicateStoresPrompt() {
+  if (!(CURRENT_USER?.isAdmin || (typeof isAdminUser === 'function' && isAdminUser()))) { showToast('Only admin can merge stores', 'w'); return; }
+  const grouped = {};
+  bmhCollectInventoryStoreNames().forEach(function (name) {
+    const key = normalizeInventoryCompareText(name);
+    if (!key) return;
+    if (!grouped[key]) grouped[key] = [];
+    if (!grouped[key].some(function (item) { return item === name; })) grouped[key].push(name);
+  });
+  const duplicates = Object.keys(grouped).map(function (key) {
+    return bmhUniqueInventoryStoreNames(grouped[key]);
+  }).filter(function (names) {
+    return names.length > 1;
+  }).sort(function (a, b) {
+    return a[0].localeCompare(b[0]);
+  });
+  if (!duplicates.length) { showToast('No duplicate stores found', 'w'); return; }
+  const choice = (prompt('Select duplicate stores to merge:\n' + duplicates.map(function (names, idx) {
+    return (idx + 1) + '. ' + names.join('  |  ');
+  }).join('\n'), '1') || '').trim();
+  if (!choice) return;
+  const picked = /^\d+$/.test(choice)
+    ? duplicates[Math.max(0, Number(choice) - 1)]
+    : duplicates.find(function (names) {
+        return names.some(function (name) {
+          return normalizeInventoryCompareText(name) === normalizeInventoryCompareText(choice);
+        });
+      });
+  if (!picked || !picked.length) { showToast('Duplicate store group not found', 'w'); return; }
+  const preferred = bmhPreferredInventoryStoreHeading(picked);
+  const nextName = bmhTrimInventoryHeadingValue(prompt('Merge these store names into one heading:\n' + picked.join('\n'), preferred) || '');
+  if (!nextName) return;
+  if (!confirm('Merge ' + picked.join(', ') + ' into "' + nextName + '"?')) return;
+  const result = bmhApplyInventoryStoreHeadingChange(picked, nextName);
+  if (!result.changed) { showToast('Store names already matched', 'w'); return; }
+  showToast('Duplicate stores merged ✓', 's');
+}
+window.mergeInventoryDuplicateStoresPrompt = mergeInventoryDuplicateStoresPrompt;
 function bmhTrimInventoryHeadingValue(value) {
   return String(value || '').trim().replace(/\s+/g, ' ');
+}
+function bmhUniqueInventoryStoreNames(list) {
+  const seen = Object.create(null);
+  return (Array.isArray(list) ? list : []).map(function (name) {
+    return bmhTrimInventoryHeadingValue(name);
+  }).filter(Boolean).filter(function (name) {
+    const key = normalizeInventoryCompareText(name);
+    if (!key || seen[key]) return false;
+    seen[key] = true;
+    return true;
+  });
+}
+function bmhInventoryStoreHeadingScore(name) {
+  return String(name || '').trim().split(/\s+/).filter(Boolean).reduce(function (sum, token) {
+    if (/^[A-Z0-9/-]{2,}$/.test(token)) return sum + 4;
+    if (/^[A-Z]/.test(token)) return sum + 2;
+    if (/^[a-z]/.test(token)) return sum + 1;
+    return sum;
+  }, 0);
+}
+function bmhPreferredInventoryStoreHeading(names) {
+  return bmhUniqueInventoryStoreNames(names).sort(function (a, b) {
+    const scoreDiff = bmhInventoryStoreHeadingScore(b) - bmhInventoryStoreHeadingScore(a);
+    if (scoreDiff) return scoreDiff;
+    const lengthDiff = String(b || '').length - String(a || '').length;
+    if (lengthDiff) return lengthDiff;
+    return String(a || '').localeCompare(String(b || ''));
+  })[0] || '';
+}
+function bmhCollectInventoryStoreNames() {
+  const names = [];
+  const push = function (value) {
+    const text = bmhTrimInventoryHeadingValue(value);
+    if (text) names.push(text);
+  };
+  (window.BMH_STORE_LOCATIONS || []).forEach(push);
+  (loadInventoryHiddenStoreLocations() || []).forEach(push);
+  (INVENTORY || []).forEach(function (row) { push(row?.store); });
+  (window.BMH_PURCHASES || []).forEach(function (row) { push(row?.store); });
+  (window.BMH_INVENTORY_USAGE || []).forEach(function (row) { push(row?.store); });
+  (window.BMH_INVENTORY_TRANSFERS || []).forEach(function (row) {
+    push(row?.fromStore);
+    push(row?.toStore);
+  });
+  return names;
+}
+function bmhApplyInventoryStoreHeadingChange(sourceNames, nextName) {
+  const storeKeys = Array.from(new Set((Array.isArray(sourceNames) ? sourceNames : []).map(function (name) {
+    return normalizeInventoryCompareText(name);
+  }).filter(Boolean)));
+  const canonical = bmhTrimInventoryHeadingValue(nextName);
+  if (!storeKeys.length || !canonical) return { changed: false, touchedRows: [] };
+  let changed = false;
+  const touchedRows = [];
+  const matchStore = function (value) {
+    return storeKeys.includes(normalizeInventoryCompareText(value));
+  };
+  const priorStores = JSON.stringify(window.BMH_STORE_LOCATIONS || []);
+  const priorHidden = JSON.stringify(loadInventoryHiddenStoreLocations() || []);
+  window.BMH_STORE_LOCATIONS = bmhUniqueInventoryStoreNames((window.BMH_STORE_LOCATIONS || []).map(function (store) {
+    return matchStore(store) ? canonical : store;
+  }).concat([canonical]));
+  window._bmhInventoryHiddenStoreLocations = bmhUniqueInventoryStoreNames((loadInventoryHiddenStoreLocations() || []).map(function (store) {
+    return matchStore(store) ? canonical : store;
+  }));
+  if (JSON.stringify(window.BMH_STORE_LOCATIONS || []) !== priorStores) changed = true;
+  if (JSON.stringify(window._bmhInventoryHiddenStoreLocations || []) !== priorHidden) changed = true;
+  saveInventoryHiddenStoreLocations();
+  saveInventoryStoreLocations();
+  (INVENTORY || []).forEach(function (row) {
+    if (!matchStore(row.store || '')) return;
+    if (row.store !== canonical) changed = true;
+    row.store = canonical;
+    touchedRows.push(row);
+  });
+  (window.BMH_PURCHASES || []).forEach(function (row) {
+    if (!matchStore(row.store || '')) return;
+    if (row.store !== canonical) changed = true;
+    row.store = canonical;
+  });
+  (window.BMH_INVENTORY_USAGE || []).forEach(function (row) {
+    if (!matchStore(row.store || '')) return;
+    if (row.store !== canonical) changed = true;
+    row.store = canonical;
+  });
+  (window.BMH_INVENTORY_TRANSFERS || []).forEach(function (row) {
+    if (matchStore(row.fromStore || '')) {
+      if (row.fromStore !== canonical) changed = true;
+      row.fromStore = canonical;
+    }
+    if (matchStore(row.toStore || '')) {
+      if (row.toStore !== canonical) changed = true;
+      row.toStore = canonical;
+    }
+  });
+  ['inv-in-store', 'inv-stock-store-filter', 'inv-tr-from', 'inv-tr-to', 'inv-indent-store', 'inv-indent-source', 'inv-ret-store'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el && matchStore(el.value || '')) el.value = canonical;
+  });
+  saveInventoryStockToStorage();
+  saveBmhFinancials && saveBmhFinancials();
+  bmhSyncInventoryRowsToCloud(touchedRows);
+  bmhPopulateInventorySelectors();
+  renderStockList && renderStockList();
+  renderInventoryStoreStock && renderInventoryStoreStock();
+  renderInventoryTransfers && renderInventoryTransfers();
+  renderInventoryUsageLog && renderInventoryUsageLog();
+  renderInventoryTodayEntries && renderInventoryTodayEntries({ preserveVisibility: true });
+  return { changed: changed, touchedRows: touchedRows, canonical: canonical };
 }
 function bmhSyncInventoryRowsToCloud(rows) {
   (Array.isArray(rows) ? rows : []).forEach(function (row) {
@@ -16187,21 +16354,22 @@ function openInventoryMoveModal(barcodes) {
 }
 window.openInventoryMoveModal = openInventoryMoveModal;
 function applyInventoryRowsStoreMove(rows, matchedStore, requestedQty) {
-  if (!rows.length) { showToast('No stock rows found to move', 'w'); return; }
+  if (!rows.length) { showToast('No stock rows found to move', 'w'); return { ok: false, transferRows: [] }; }
   const fromStores = Array.from(new Set(rows.map(function (row) { return normalizeInventoryTextValue(row.store || 'Unassigned store'); }).filter(Boolean)));
   const current = fromStores[0] || '';
   if (fromStores.length === 1 && normalizeInventoryCompareText(current) === normalizeInventoryCompareText(matchedStore)) {
     showToast('Selected rows are already in that store', 'w');
-    return;
+    return { ok: false, transferRows: [] };
   }
   const ts = bmhNowISO();
+  const transferRows = [];
   if (rows.length === 1) {
     const source = rows[0];
     const available = Math.max(0, Number(source.stock || 0));
-    if (!(available > 0)) { showToast('No stock available to move', 'w'); return; }
+    if (!(available > 0)) { showToast('No stock available to move', 'w'); return { ok: false, transferRows: [] }; }
     const qty = Math.max(0, Number(requestedQty || 0));
-    if (!(qty > 0)) { showToast('Enter a valid quantity', 'w'); return; }
-    if (qty > available) { showToast('Cannot move more than available stock', 'w'); return; }
+    if (!(qty > 0)) { showToast('Enter a valid quantity', 'w'); return { ok: false, transferRows: [] }; }
+    if (qty > available) { showToast('Cannot move more than available stock', 'w'); return { ok: false, transferRows: [] }; }
     if (qty < available) {
       const finder = function (row) {
         return row
@@ -16233,7 +16401,7 @@ function applyInventoryRowsStoreMove(rows, matchedStore, requestedQty) {
         targetRow.stock = Math.max(0, Number(targetRow.stock || 0)) + qty;
         targetRow.updatedAt = ts;
       }
-      window.BMH_INVENTORY_TRANSFERS.push({
+      const transferRow = {
         id: 'TRM' + Date.now() + Math.random().toString(36).slice(2, 5),
         itemName: source.name || source.iolBrand || 'Inventory item',
         barcode: source.barcode,
@@ -16243,7 +16411,9 @@ function applyInventoryRowsStoreMove(rows, matchedStore, requestedQty) {
         ts: ts,
         user: CURRENT_USER?.name || 'Inventory',
         kind: 'partial-move'
-      });
+      };
+      window.BMH_INVENTORY_TRANSFERS.push(transferRow);
+      transferRows.push(transferRow);
       saveInventoryStockToStorage();
       saveBmhFinancials && saveBmhFinancials();
       bmhSyncInventoryRowsToCloud([source, targetRow]);
@@ -16253,14 +16423,14 @@ function applyInventoryRowsStoreMove(rows, matchedStore, requestedQty) {
       renderInventoryStoreStock && renderInventoryStoreStock();
       renderInventoryPoAlerts && renderInventoryPoAlerts();
       showToast('Partial stock moved ✓', 's');
-      return;
+      return { ok: true, transferRows: transferRows, fromStores: fromStores, toStore: matchedStore };
     }
   }
   rows.forEach(function (row) {
     const oldStore = bmhTrimInventoryHeadingValue(row.store || 'Unassigned store');
     row.store = matchedStore;
     row.updatedAt = ts;
-    window.BMH_INVENTORY_TRANSFERS.push({
+    const transferRow = {
       id: 'TRM' + Date.now() + Math.random().toString(36).slice(2, 5),
       itemName: row.name || row.iolBrand || 'Inventory item',
       barcode: row.barcode,
@@ -16270,7 +16440,9 @@ function applyInventoryRowsStoreMove(rows, matchedStore, requestedQty) {
       ts: ts,
       user: CURRENT_USER?.name || 'Inventory',
       kind: 'move'
-    });
+    };
+    window.BMH_INVENTORY_TRANSFERS.push(transferRow);
+    transferRows.push(transferRow);
   });
   saveInventoryStockToStorage();
   saveBmhFinancials && saveBmhFinancials();
@@ -16281,8 +16453,9 @@ function applyInventoryRowsStoreMove(rows, matchedStore, requestedQty) {
   renderInventoryStoreStock && renderInventoryStoreStock();
   renderInventoryPoAlerts && renderInventoryPoAlerts();
   showToast('Store updated for selected stock ✓', 's');
+  return { ok: true, transferRows: transferRows, fromStores: fromStores, toStore: matchedStore };
 }
-function confirmInventoryMoveModal() {
+function confirmInventoryMoveModal(printAfter) {
   const state = window._inventoryMoveDialogState || {};
   const rows = bmhGetInventoryRowsForMove(state.barcodes || []);
   if (!rows.length) { showToast('No stock rows found to move', 'w'); return; }
@@ -16297,9 +16470,11 @@ function confirmInventoryMoveModal() {
   if (!matchedStore) { showToast('Select a saved store from the list', 'w'); return; }
   const qty = rows.length === 1 ? Math.max(0, Number(qtyEl?.value || 0)) : null;
   closeM('m-inv-move-store');
-  applyInventoryRowsStoreMove(rows, matchedStore, qty);
+  const result = applyInventoryRowsStoreMove(rows, matchedStore, qty);
+  if (printAfter && result?.ok) printInventoryTransferSlip(result.transferRows, { fromStores: result.fromStores, toStore: result.toStore });
 }
-window.confirmInventoryMoveModal = confirmInventoryMoveModal;
+window.confirmInventoryMoveModal = function () { confirmInventoryMoveModal(false); };
+window.confirmInventoryMoveAndPrintModal = function () { confirmInventoryMoveModal(true); };
 function moveInventoryRowsToStore(barcodes) {
   openInventoryMoveModal(barcodes);
 }
@@ -16392,39 +16567,9 @@ function renameInventoryStoreNamePrompt(storeName) {
     return normalizeInventoryCompareText(store) === normalizeInventoryCompareText(current);
   }) || current;
   const nextName = bmhTrimInventoryHeadingValue(prompt('Edit store heading', matched) || '');
-  if (!nextName || normalizeInventoryCompareText(nextName) === normalizeInventoryCompareText(matched)) return;
-  window.BMH_STORE_LOCATIONS = stores.map(function (store) {
-    return normalizeInventoryCompareText(store) === normalizeInventoryCompareText(matched) ? nextName : store;
-  });
-  window._bmhInventoryHiddenStoreLocations = (loadInventoryHiddenStoreLocations() || []).map(function (store) {
-    return normalizeInventoryCompareText(store) === normalizeInventoryCompareText(matched) ? nextName : store;
-  });
-  saveInventoryHiddenStoreLocations();
-  saveInventoryStoreLocations();
-  const touchedRows = [];
-  (INVENTORY || []).forEach(function (row) {
-    if (normalizeInventoryCompareText(row.store || '') !== normalizeInventoryCompareText(matched)) return;
-    row.store = nextName;
-    touchedRows.push(row);
-  });
-  (window.BMH_PURCHASES || []).forEach(function (row) {
-    if (normalizeInventoryCompareText(row.store || '') === normalizeInventoryCompareText(matched)) row.store = nextName;
-  });
-  (window.BMH_INVENTORY_USAGE || []).forEach(function (row) {
-    if (normalizeInventoryCompareText(row.store || '') === normalizeInventoryCompareText(matched)) row.store = nextName;
-  });
-  (window.BMH_INVENTORY_TRANSFERS || []).forEach(function (row) {
-    if (normalizeInventoryCompareText(row.fromStore || '') === normalizeInventoryCompareText(matched)) row.fromStore = nextName;
-    if (normalizeInventoryCompareText(row.toStore || '') === normalizeInventoryCompareText(matched)) row.toStore = nextName;
-  });
-  saveInventoryStockToStorage();
-  saveBmhFinancials && saveBmhFinancials();
-  bmhSyncInventoryRowsToCloud(touchedRows);
-  bmhPopulateInventorySelectors();
-  renderStockList && renderStockList();
-  renderInventoryStoreStock && renderInventoryStoreStock();
-  renderInventoryTransfers && renderInventoryTransfers();
-  renderInventoryUsageLog && renderInventoryUsageLog();
+  if (!nextName) return;
+  const result = bmhApplyInventoryStoreHeadingChange([matched], nextName);
+  if (!result.changed) { showToast('Store heading already matches', 'w'); return; }
   showToast('Store heading updated ✓', 's');
 }
 window.renameInventoryStoreNamePrompt = renameInventoryStoreNamePrompt;
@@ -16933,6 +17078,82 @@ function bmhSelectInventoryStockCategory(dept, store, cat) {
   renderStockList && renderStockList();
 }
 window.bmhSelectInventoryStockCategory = bmhSelectInventoryStockCategory;
+function printInventoryTransferSlip(rows, meta) {
+  const transferRows = (Array.isArray(rows) ? rows : []).filter(Boolean);
+  if (!transferRows.length) { showToast('No transfer rows to print', 'w'); return; }
+  const info = meta || {};
+  const totalQty = transferRows.reduce(function (sum, row) {
+    return sum + Math.max(0, Number(row.qty || 0));
+  }, 0);
+  const fromStores = Array.from(new Set(transferRows.map(function (row) {
+    return bmhTrimInventoryHeadingValue(row.fromStore || '');
+  }).filter(Boolean)));
+  const toStores = Array.from(new Set(transferRows.map(function (row) {
+    return bmhTrimInventoryHeadingValue(row.toStore || '');
+  }).filter(Boolean)));
+  const printedAt = new Date();
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Inventory Transfer Slip</title><style>
+    @page { size:A4; margin:12mm; }
+    body { font-family:Arial,sans-serif; color:#111; margin:0; font-size:12px; }
+    .hd { display:flex; align-items:center; justify-content:space-between; gap:12px; border-bottom:2px solid #1a3c6e; padding-bottom:10px; margin-bottom:14px; }
+    .brand { display:flex; align-items:center; gap:12px; min-width:0; }
+    .brand img { width:62px; height:62px; object-fit:contain; }
+    .title { font-size:20px; font-weight:900; color:#1a3c6e; }
+    .sub { font-size:11px; color:#555; margin-top:3px; }
+    .meta { display:grid; grid-template-columns:1fr 1fr; gap:8px 14px; margin-bottom:14px; }
+    .meta-card { border:1px solid #d7dfef; border-radius:10px; padding:10px 12px; background:#f8fbff; }
+    .meta-card b { display:block; font-size:10px; color:#5b6b86; text-transform:uppercase; letter-spacing:.45px; margin-bottom:4px; }
+    table { width:100%; border-collapse:collapse; }
+    th, td { border:1px solid #ccd5e4; padding:7px 8px; font-size:11px; vertical-align:top; }
+    th { background:#eef4ff; color:#1a3c6e; text-align:left; }
+    .num { text-align:right; white-space:nowrap; font-weight:900; }
+    .foot { display:flex; justify-content:space-between; gap:12px; margin-top:18px; font-size:11px; color:#555; }
+  </style></head><body>
+    <div class="hd">
+      <div class="brand">
+        <img src="https://bawejahospital.com/img/logo.png" alt="BMH" onerror="this.style.display='none'">
+        <div>
+          <div class="title">Inventory Transfer Slip</div>
+          <div class="sub">Baweja Hospital and Maternity Home</div>
+        </div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:11px;color:#555">Printed on</div>
+        <div style="font-size:12px;font-weight:900">${escapeHtmlConsent(formatDateIN(printedAt))}</div>
+        <div style="font-size:11px;color:#555">${escapeHtmlConsent(printedAt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }))}</div>
+      </div>
+    </div>
+    <div class="meta">
+      <div class="meta-card"><b>From Store</b>${escapeHtmlConsent(fromStores.join(', ') || info.fromStores?.join(', ') || 'Not recorded')}</div>
+      <div class="meta-card"><b>To Store</b>${escapeHtmlConsent(toStores.join(', ') || info.toStore || 'Not recorded')}</div>
+      <div class="meta-card"><b>Moved By</b>${escapeHtmlConsent(transferRows[0]?.user || CURRENT_USER?.name || 'Inventory')}</div>
+      <div class="meta-card"><b>Total Quantity</b>${totalQty}</div>
+    </div>
+    <table>
+      <thead><tr><th style="width:38px">#</th><th>Item</th><th style="width:140px">Barcode</th><th style="width:78px">Qty</th><th style="width:150px">Time</th></tr></thead>
+      <tbody>${transferRows.map(function (row, idx) {
+        const ts = row.ts ? new Date(row.ts) : null;
+        return '<tr>'
+          + '<td>' + (idx + 1) + '</td>'
+          + '<td>' + escapeHtmlConsent(row.itemName || 'Inventory item') + '</td>'
+          + '<td>' + escapeHtmlConsent(row.barcode || '') + '</td>'
+          + '<td class="num">' + Number(row.qty || 0) + '</td>'
+          + '<td>' + escapeHtmlConsent(ts ? (formatDateIN(ts) + ' ' + ts.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })) : '') + '</td>'
+          + '</tr>';
+      }).join('')}</tbody>
+    </table>
+    <div class="foot">
+      <div>Source to destination stock movement acknowledgement.</div>
+      <div>Signature: ____________________</div>
+    </div>
+    <script>window.onload=function(){window.print()}<\/script>
+  </body></html>`;
+  const win = window.open('', '_blank', 'width=980,height=760');
+  if (!win) { showToast('Allow popups to print transfer slip', 'w'); return; }
+  win.document.write(html);
+  win.document.close();
+}
+window.printInventoryTransferSlip = printInventoryTransferSlip;
 function printInventoryCurrentStockReport() {
   const catFilter = bmhInventoryFilterValue('inv-stock-cat-filter');
   const storeFilter = bmhInventoryFilterValue('inv-stock-store-filter');
@@ -23862,6 +24083,8 @@ function setFollowupDays(n, unit) {
   if(u==='d'||u==='day') d.setDate(d.getDate()+n);
   else if(u==='w'||u==='week') d.setDate(d.getDate()+n*7);
   else if(u==='m'||u==='month') d.setMonth(d.getMonth()+n);
+  const normalized = adjustAppointmentDateForSunday(d);
+  d.setTime(normalized.dateObj.getTime());
   const v = localDateKey(d);
   const dept = activeClinicDeptKey();
   const fuInput = getDeptFollowUpDateInput(dept === 'ophtho' ? 'oe' : dept);
@@ -23879,6 +24102,14 @@ function setFollowupDays(n, unit) {
   }
 }
 
+function adjustAppointmentDateForSunday(dateLike) {
+  const dt = dateLike instanceof Date ? new Date(dateLike.getTime()) : new Date(String(dateLike) + 'T09:00:00');
+  if (Number.isNaN(dt.getTime())) return { date: '', shifted: false, dateObj: new Date('') };
+  const wasSunday = dt.getDay() === 0;
+  if (wasSunday) dt.setDate(dt.getDate() + 1);
+  return { date: localDateKey(dt), shifted: wasSunday, dateObj: dt };
+}
+
 function bookFollowupApt(date, n, unit, deptKey) {
   const dept = deptKey || activeClinicDeptKey();
   const ptIdMap = { ophtho:'ophtho-pt-uid', obg:'obg-pt-uid', psych:'psych-pt-uid', skin:'skin-pt-uid' };
@@ -23886,10 +24117,11 @@ function bookFollowupApt(date, n, unit, deptKey) {
   const ptId   = document.getElementById(ptIdMap[dept])?.textContent?.trim() || window.CURRENT_PATIENT?.bmhId || '';
   const ptName = document.getElementById(ptNameMap[dept])?.textContent?.trim() || window.CURRENT_PATIENT?.name || 'Patient';
   const unitLabel = unit==='D'?'day':unit==='W'?'week':'month';
+  const normalized = adjustAppointmentDateForSunday(date);
   const apt = {
     id:'APT-'+Date.now(), patient:ptName, bmhId:ptId,
     mob:PATIENTS.find(p=>p.bmhId===ptId)?.mob||'',
-    date:localDateKey(date),
+    date:normalized.date,
     doctor:CURRENT_USER?.name||'Dr. Varun Baweja',
     dept:CURRENT_USER?.dept||dept||'Ophthalmology', centre:CURRENT_USER?.centre||'CHD',
     purpose:'Follow-up ('+n+' '+unitLabel+(n>1?'s':'')+' review)',
@@ -23900,7 +24132,7 @@ function bookFollowupApt(date, n, unit, deptKey) {
   APPOINTMENTS.push(apt);
   if(window.FBDB) fbSet('appointments/'+apt.id, apt);
   renderAptDay && renderAptDay();
-  showToast('📅 Follow-up booked: '+ptName+' on '+date.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}),'s');
+  showToast('📅 Follow-up booked: '+ptName+' on '+normalized.dateObj.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})+(normalized.shifted?' (moved from Sunday)':''),'s');
 }
 function filterPastVisits(type) { showToast(`Showing ${type==='all'?'all visits':type+' only'} ✓`,'i'); }
 
@@ -28498,6 +28730,194 @@ function toggleRefractivePanel() {
   if (!panel) return;
   panel.style.display = box?.checked ? '' : 'none';
   renderOphthoRecap && renderOphthoRecap();
+}
+function getOphthoColourVisionData(sourceVisit) {
+  const visit = sourceVisit || window.CURRENT_PATIENT?.lastVisit || {};
+  const platesOD = String(document.getElementById('cv-od-plates')?.value || visit.cvODPlates || '').trim();
+  const platesOS = String(document.getElementById('cv-os-plates')?.value || visit.cvOSPlates || '').trim();
+  const blindOD = !!(document.getElementById('cv-blind-od')?.checked || visit.cvBlindOD);
+  const blindOS = !!(document.getElementById('cv-blind-os')?.checked || visit.cvBlindOS);
+  const typeOD = String(document.getElementById('cv-od-type')?.value || visit.cvTypeOD || '').trim();
+  const typeOS = String(document.getElementById('cv-os-type')?.value || visit.cvTypeOS || '').trim();
+  const fmtEye = function (plates, blind, type) {
+    if (!plates && !blind && !type) return '—';
+    const parts = [];
+    if (plates) parts.push(plates + '/17');
+    parts.push(blind ? 'Colour Blind' : 'Normal');
+    if (blind && type) parts.push(type);
+    return parts.join(' · ');
+  };
+  return {
+    od: fmtEye(platesOD, blindOD, typeOD),
+    os: fmtEye(platesOS, blindOS, typeOS),
+    hasAny: !!(platesOD || platesOS || blindOD || blindOS || typeOD || typeOS)
+  };
+}
+function getOphthoRefractiveAssessmentData() {
+  const pt = window.CURRENT_PATIENT || PATIENTS.find(function (p) {
+    return p.bmhId === String(document.getElementById('ophtho-pt-uid')?.textContent || '').trim();
+  }) || {};
+  const visit = pt.lastVisit || {};
+  const readValue = function (id, fallback) {
+    const el = document.getElementById(id);
+    const raw = el && 'value' in el ? el.value : '';
+    if (raw !== null && raw !== undefined && String(raw).trim() !== '') return String(raw).trim();
+    return String(fallback == null ? '' : fallback).trim();
+  };
+  const numValue = function (id, fallback) {
+    const raw = readValue(id, fallback);
+    const val = Number(raw);
+    return Number.isFinite(val) ? val : null;
+  };
+  const seFor = function (sphId, cylId, sphFallback, cylFallback) {
+    const sph = numValue(sphId, sphFallback);
+    const cyl = numValue(cylId, cylFallback) || 0;
+    if (!Number.isFinite(sph)) return null;
+    return sph + (cyl / 2);
+  };
+  const formatSigned = function (val, digits, suffix) {
+    if (!Number.isFinite(val)) return '—';
+    const txt = Math.abs(val).toFixed(typeof digits === 'number' ? digits : 2);
+    return (val > 0 ? '+' : val < 0 ? '-' : '') + txt + (suffix || '');
+  };
+  const formatMicron = function (val) {
+    return Number.isFinite(val) ? Math.round(val) + ' um' : '—';
+  };
+  const age = numValue('refr-age', pt.age);
+  const stable = readValue('refr-stable', visit['refr-stable']) || '—';
+  const topo = readValue('refr-topo', visit['refr-topo']) || '—';
+  const dry = readValue('refr-dryeye', visit['refr-dryeye']) || '—';
+  const occupation = readValue('refr-occupation', visit['refr-occupation']) || '—';
+  const preg = readValue('refr-preg', visit['refr-preg']) || '—';
+  const autoimmune = readValue('refr-autoimmune', visit['refr-autoimmune']) || '—';
+  const kc = readValue('refr-kc', visit['refr-kc']) || '—';
+  const allergy = readValue('refr-allergy', visit['refr-allergy']) || '—';
+  const flap = numValue('refr-flap', visit['refr-flap'] || 110) || 110;
+  const pachyOd = numValue('refr-od-pachy', visit['refr-od-pachy']) ?? numValue('pachy-od', visit.pachyOD);
+  const pachyOs = numValue('refr-os-pachy', visit['refr-os-pachy']) ?? numValue('pachy-os', visit.pachyOS);
+  const sphOd = numValue('subj-od-sph', visit.subjODsph);
+  const cylOd = numValue('subj-od-cyl', visit.subjODcyl) || 0;
+  const sphOs = numValue('subj-os-sph', visit.subjOSsph);
+  const cylOs = numValue('subj-os-cyl', visit.subjOScyl) || 0;
+  const seOd = seFor('subj-od-sph', 'subj-od-cyl', visit.subjODsph, visit.subjODcyl);
+  const seOs = seFor('subj-os-sph', 'subj-os-cyl', visit.subjOSsph, visit.subjOScyl);
+  const ablationFor = function (se) { return Number.isFinite(se) ? Math.max(0, Math.round(Math.abs(se) * 14)) : null; };
+  const procedureRows = [
+    { name: 'FemtoLASIK', thickness: flap },
+    { name: 'SMILE Pro', thickness: flap },
+    { name: 'PRK', thickness: 0 }
+  ].map(function (proc) {
+    const ablationOd = ablationFor(seOd);
+    const ablationOs = ablationFor(seOs);
+    const rsbOd = Number.isFinite(pachyOd) && Number.isFinite(ablationOd) ? Math.round(pachyOd - proc.thickness - ablationOd) : null;
+    const rsbOs = Number.isFinite(pachyOs) && Number.isFinite(ablationOs) ? Math.round(pachyOs - proc.thickness - ablationOs) : null;
+    let status = 'Suitable if correlated clinically';
+    let note = 'Correlate with tomography, tear film, and clinical examination.';
+    if (age != null && age < 18) { status = 'Defer'; note = 'Age below usual threshold.'; }
+    else if (/Abnormal/.test(topo) || /Known KC|ectasia/.test(kc)) { status = 'Avoid'; note = 'Ectasia or keratoconus risk is unfavorable.'; }
+    else if (/Yes/.test(preg) || /Yes/.test(autoimmune)) { status = 'Defer'; note = 'Wait until systemic status is suitable and refraction stable.'; }
+    else if (/No \/ changing/.test(stable)) { status = 'Defer'; note = 'Refraction should be stable for at least 1 year.'; }
+    else if (/Severe/.test(dry) || /Active VKC/.test(allergy)) { status = 'Treat surface first'; note = 'Ocular surface or allergy treatment needed first.'; }
+    else if ((Number.isFinite(rsbOd) && rsbOd < 300) || (Number.isFinite(rsbOs) && rsbOs < 300)) {
+      status = proc.name === 'PRK' ? 'Borderline' : 'Avoid';
+      note = proc.name === 'PRK' ? 'Surface ablation may still be safer than flap-based options.' : 'Estimated residual stromal bed is low.';
+    } else if (proc.name === 'SMILE Pro' && (/Moderate/.test(dry) || /Contact sports/.test(occupation))) {
+      status = 'Preferred';
+      note = 'Often favored when flap avoidance is useful.';
+    } else if (proc.name === 'PRK' && ((Number.isFinite(rsbOd) && rsbOd < 320) || (Number.isFinite(rsbOs) && rsbOs < 320))) {
+      status = 'Preferred';
+      note = 'Surface ablation may be safer in borderline stromal reserve.';
+    }
+    return {
+      name: proc.name,
+      thicknessLabel: proc.thickness ? proc.thickness + ' um' : 'No flap',
+      ablationOd: formatMicron(ablationOd),
+      ablationOs: formatMicron(ablationOs),
+      rsbOd: formatMicron(rsbOd),
+      rsbOs: formatMicron(rsbOs),
+      status: status,
+      note: note
+    };
+  });
+  return {
+    patient: {
+      name: pt.name || 'Patient',
+      bmhId: pt.bmhId || '—',
+      ageSex: ((pt.age || age || '—') + 'Y / ' + (pt.sex || '—')),
+      doctor: CURRENT_USER?.name || visit.doctor || 'Dr. Varun Baweja',
+      date: formatDateIN(new Date())
+    },
+    refraction: {
+      sphOd: formatSigned(sphOd, 2, ' D'),
+      cylOd: formatSigned(cylOd, 2, ' D'),
+      seOd: formatSigned(seOd, 2, ' D'),
+      sphOs: formatSigned(sphOs, 2, ' D'),
+      cylOs: formatSigned(cylOs, 2, ' D'),
+      seOs: formatSigned(seOs, 2, ' D')
+    },
+    pachy: { od: formatMicron(pachyOd), os: formatMicron(pachyOs) },
+    factors: [
+      ['Age', age != null ? String(age) : '—'],
+      ['Refraction stable', stable],
+      ['Topography / tomography', topo],
+      ['Dry eye status', dry],
+      ['Occupation / visual priority', occupation],
+      ['Pregnancy / lactation', preg],
+      ['Autoimmune disease', autoimmune],
+      ['Keratoconus / family history', kc],
+      ['Allergy / eye rubbing', allergy],
+      ['Selected flap / cap thickness', flap ? flap + ' um' : '—']
+    ],
+    procedures: procedureRows
+  };
+}
+function printRefractiveSuitabilityAssessment() {
+  try { if (typeof saveVisit === 'function') saveVisit('ophtho', { silent: true, autosave: true }); } catch (e) { console.warn('refractive assessment pre-print save failed', e); }
+  const data = getOphthoRefractiveAssessmentData();
+  const logoSrc = window.LH_SRC || '';
+  const logoHtml = logoSrc
+    ? '<img src="' + logoSrc + '" alt="Baweja Multispeciality Hospital" style="height:58px;width:auto;object-fit:contain">'
+    : '<div style="font-size:18px;font-weight:900;color:#1A3C6E;line-height:1.1">BAWEJA<br><span style="font-size:10px;letter-spacing:1px;color:#555">MULTISPECIALITY HOSPITAL</span></div>';
+  const factorRows = data.factors.map(function (row) {
+    return '<tr><td style="border:1px solid #cfd7e6;padding:7px 8px;font-weight:800;background:#f8fbff;width:34%">' + escapeHtmlConsent(row[0]) + '</td><td style="border:1px solid #cfd7e6;padding:7px 8px">' + escapeHtmlConsent(row[1]) + '</td></tr>';
+  }).join('');
+  const procedureRows = data.procedures.map(function (row) {
+    return '<tr>'
+      + '<td style="border:1px solid #cfd7e6;padding:7px 8px;font-weight:900">' + escapeHtmlConsent(row.name) + '</td>'
+      + '<td style="border:1px solid #cfd7e6;padding:7px 8px;text-align:center">' + escapeHtmlConsent(row.thicknessLabel) + '</td>'
+      + '<td style="border:1px solid #cfd7e6;padding:7px 8px;text-align:center">' + escapeHtmlConsent(row.ablationOd) + '</td>'
+      + '<td style="border:1px solid #cfd7e6;padding:7px 8px;text-align:center">' + escapeHtmlConsent(row.rsbOd) + '</td>'
+      + '<td style="border:1px solid #cfd7e6;padding:7px 8px;text-align:center">' + escapeHtmlConsent(row.ablationOs) + '</td>'
+      + '<td style="border:1px solid #cfd7e6;padding:7px 8px;text-align:center">' + escapeHtmlConsent(row.rsbOs) + '</td>'
+      + '<td style="border:1px solid #cfd7e6;padding:7px 8px;font-weight:800">' + escapeHtmlConsent(row.status) + '</td>'
+      + '<td style="border:1px solid #cfd7e6;padding:7px 8px">' + escapeHtmlConsent(row.note) + '</td>'
+      + '</tr>';
+  }).join('');
+  const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Refractive Suitability Assessment</title><style>'
+    + '@page{size:A4;margin:12mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#1f2937;font-size:12px;line-height:1.45}'
+    + '.hdr{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px}.title{font-size:20px;font-weight:900;color:#1A3C6E}.sub{font-size:11px;color:#667085;margin-top:3px}'
+    + '.meta{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}.meta-card{border:1px solid #d8e1ef;border-radius:10px;padding:8px 10px;background:#fbfdff}'
+    + '.meta-k{font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.06em;color:#667085}.meta-v{font-size:12px;font-weight:800;color:#111827;margin-top:3px}'
+    + '.section{margin-top:12px}.section-title{font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:.08em;color:#1A3C6E;margin-bottom:6px}'
+    + 'table{width:100%;border-collapse:collapse}th{background:#1A3C6E;color:#fff;border:1px solid #16345c;padding:8px 7px;font-size:10px;text-transform:uppercase;letter-spacing:.05em}'
+    + '.note{margin-top:10px;padding:9px 10px;border:1px solid #ead8a0;background:#fff8e8;border-radius:10px;font-size:11px;color:#7a4b00}'
+    + '</style></head><body>'
+    + '<div class="hdr"><div>' + logoHtml + '</div><div style="text-align:right"><div class="title">Refractive Suitability Assessment</div><div class="sub">SMILE Pro · FemtoLASIK · PRK planning sheet</div><div class="sub">' + escapeHtmlConsent(data.patient.date) + '</div></div></div>'
+    + '<div class="meta">'
+    + '<div class="meta-card"><div class="meta-k">Patient</div><div class="meta-v">' + escapeHtmlConsent(data.patient.name) + '</div></div>'
+    + '<div class="meta-card"><div class="meta-k">BMSH ID</div><div class="meta-v">' + escapeHtmlConsent(data.patient.bmhId) + '</div></div>'
+    + '<div class="meta-card"><div class="meta-k">Age / Sex</div><div class="meta-v">' + escapeHtmlConsent(data.patient.ageSex) + '</div></div>'
+    + '<div class="meta-card"><div class="meta-k">Consultant</div><div class="meta-v">' + escapeHtmlConsent(data.patient.doctor) + '</div></div>'
+    + '</div>'
+    + '<div class="section"><div class="section-title">Refraction Summary</div><table><thead><tr><th>Eye</th><th>Sphere</th><th>Cylinder</th><th>Spherical Equivalent</th><th>Pachymetry</th></tr></thead><tbody>'
+    + '<tr><td style="border:1px solid #cfd7e6;padding:8px;font-weight:900">OD</td><td style="border:1px solid #cfd7e6;padding:8px;text-align:center">' + escapeHtmlConsent(data.refraction.sphOd) + '</td><td style="border:1px solid #cfd7e6;padding:8px;text-align:center">' + escapeHtmlConsent(data.refraction.cylOd) + '</td><td style="border:1px solid #cfd7e6;padding:8px;text-align:center">' + escapeHtmlConsent(data.refraction.seOd) + '</td><td style="border:1px solid #cfd7e6;padding:8px;text-align:center">' + escapeHtmlConsent(data.pachy.od) + '</td></tr>'
+    + '<tr><td style="border:1px solid #cfd7e6;padding:8px;font-weight:900">OS</td><td style="border:1px solid #cfd7e6;padding:8px;text-align:center">' + escapeHtmlConsent(data.refraction.sphOs) + '</td><td style="border:1px solid #cfd7e6;padding:8px;text-align:center">' + escapeHtmlConsent(data.refraction.cylOs) + '</td><td style="border:1px solid #cfd7e6;padding:8px;text-align:center">' + escapeHtmlConsent(data.refraction.seOs) + '</td><td style="border:1px solid #cfd7e6;padding:8px;text-align:center">' + escapeHtmlConsent(data.pachy.os) + '</td></tr>'
+    + '</tbody></table></div>'
+    + '<div class="section"><div class="section-title">Assessment Factors</div><table>' + factorRows + '</table></div>'
+    + '<div class="section"><div class="section-title">Procedure Comparison</div><table><thead><tr><th>Procedure</th><th>Flap / Cap</th><th>OD Ablation</th><th>OD Residual Bed</th><th>OS Ablation</th><th>OS Residual Bed</th><th>Status</th><th>Comment</th></tr></thead><tbody>' + procedureRows + '</tbody></table></div>'
+    + '<div class="note"><b>Note:</b> This sheet is a calculation and counselling aid and should be correlated with tomography, tear film assessment, dilated fundus exam, and clinical judgment.</div>'
+    + '</body></html>';
+  safePrint(html);
 }
 function computeRxEndAndTaperDates(d) {
   if (!d) return;
@@ -34282,6 +34702,7 @@ window.printUnifiedRx = function(deptId) {
   const isOe = deptId === 'oe';
   const incIOP  = document.getElementById(deptId+'-inc-iop')?.checked ?? true;
   const incVA   = document.getElementById(deptId+'-inc-va')?.checked  ?? true;
+  const incCV   = document.getElementById(deptId+'-inc-cv')?.checked  ?? false;
   const incGL   = document.getElementById(deptId+'-inc-gl')?.checked  ?? false;
   const incInv  = document.getElementById(deptId+'-inc-inv')?.checked ?? true;
   const incPrc  = document.getElementById(deptId+'-inc-proc')?.checked ?? true;
@@ -34416,6 +34837,7 @@ window.printUnifiedRx = function(deptId) {
   const nvOD  = document.getElementById('nv-od-final')?.value || document.getElementById('ucva-od-near')?.value || window.CURRENT_PATIENT?.lastVisit?.nvODFinal || '';
   const nvOS  = document.getElementById('nv-os-final')?.value || document.getElementById('ucva-os-near')?.value || window.CURRENT_PATIENT?.lastVisit?.nvOSFinal || '';
   const ipdVal = document.getElementById('ipd-val')?.value || window.CURRENT_PATIENT?.lastVisit?.ipdVal || window.CURRENT_PATIENT?.lastVisit?.ipd || '';
+  const colorVision = deptId === 'oe' ? getOphthoColourVisionData(latestDeptVisit || window.CURRENT_PATIENT?.lastVisit || {}) : null;
   const obgAncOn = deptId === 'obg' ? !!document.getElementById('obg-track-anc')?.checked : false;
   const obgVitalsSummary = deptId === 'obg' ? [
     ['Wt', document.getElementById('obg-vitals-weight')?.value || window.CURRENT_PATIENT?.lastVisit?.['obg-vitals-weight'] || '—'],
@@ -34682,6 +35104,7 @@ window.printUnifiedRx = function(deptId) {
   const showGL = incGL && deptId==='oe' && hasMeaningfulRefraction();
   const showIOP = incIOP && deptId==='oe' && (iopGatOD||iopGatOS||iopNctOD||iopNctOS);
   const showCorrectedIOP = showIOP && (iopCorrOD || iopCorrOS);
+  const showCV = !!(deptId === 'oe' && incCV && colorVision && colorVision.hasAny);
   const showEyeVitals = showVA || showIOP;
   const showNearVaColumn = [nvOD, nvOS].some(hasMeaningfulText);
   const showNearAddColumn = [addOD, addOS].some(hasMeaningfulText);
@@ -35131,6 +35554,18 @@ ${showEyeVitals ? `
   <tbody>
     <tr><td><b>OD (Right)</b></td>${showVA?`<td>${vaOD||'—'}</td>`:''}${showIOP?`<td class="${parseFloat(iopGatOD)>21?'flag-h':'flag-n'}">${iopGatOD?iopGatOD+' mmHg':'—'}</td>`:''}${showIOP&&(iopNctOD||iopNctOS)?`<td class="${parseFloat(iopNctOD)>21?'flag-h':'flag-n'}">${iopNctOD?iopNctOD+' mmHg':'—'}</td>`:''}${showCorrectedIOP?`<td class="${parseFloat(iopCorrOD)>21?'flag-h':'flag-n'}">${iopCorrOD||'—'}</td>`:''}${showVA?`<td>${subjODva||'—'}</td>`:''}${showNearVaColumn?`<td>${nvOD||'—'}</td>`:''}</tr>
     <tr><td><b>OS (Left)</b></td>${showVA?`<td>${vaOS||'—'}</td>`:''}${showIOP?`<td class="${parseFloat(iopGatOS)>21?'flag-h':'flag-n'}">${iopGatOS?iopGatOS+' mmHg':'—'}</td>`:''}${showIOP&&(iopNctOD||iopNctOS)?`<td class="${parseFloat(iopNctOS)>21?'flag-h':'flag-n'}">${iopNctOS?iopNctOS+' mmHg':'—'}</td>`:''}${showCorrectedIOP?`<td class="${parseFloat(iopCorrOS)>21?'flag-h':'flag-n'}">${iopCorrOS||'—'}</td>`:''}${showVA?`<td>${subjOSva||'—'}</td>`:''}${showNearVaColumn?`<td>${nvOS||'—'}</td>`:''}</tr>
+  </tbody>
+</table>
+</div>` : ''}
+
+${showCV ? `
+<div class="oe-eye-block">
+<div class="sec-divider"><span class="sec-label">Colour Vision</span></div>
+<table class="oe-eye-table">
+  <thead><tr><th>Eye</th><th>Result</th></tr></thead>
+  <tbody>
+    <tr><td><b>OD (Right)</b></td><td>${escapeHtmlConsent(colorVision.od)}</td></tr>
+    <tr><td><b>OS (Left)</b></td><td>${escapeHtmlConsent(colorVision.os)}</td></tr>
   </tbody>
 </table>
 </div>` : ''}
@@ -36809,8 +37244,10 @@ function runOneTimePendingDuesCleanup() {
 // ── APPOINTMENTS ─────────────────────────────────────────────
 function saveAppointmentToFirebase(apt) {
   const key = apt.id || fbKey();
-  const date = getAppointmentDate(apt);
+  const normalizedDate = adjustAppointmentDateForSunday(getAppointmentDate(apt));
+  const date = normalizedDate.date;
   const time = getAppointmentTime(apt);
+  apt.date = date;
   fbSet(`appointments/${key}`, {
     ...apt,
     id: key,
@@ -43360,6 +43797,12 @@ function saveVisit(dept, opts) {
     visit.vaOS   = document.getElementById('ucva-os-dist')?.value || '';
     visit.vaODNear = document.getElementById('ucva-od-near')?.value || '';
     visit.vaOSNear = document.getElementById('ucva-os-near')?.value || '';
+    visit.cvODPlates = document.getElementById('cv-od-plates')?.value || '';
+    visit.cvOSPlates = document.getElementById('cv-os-plates')?.value || '';
+    visit.cvBlindOD = !!document.getElementById('cv-blind-od')?.checked;
+    visit.cvBlindOS = !!document.getElementById('cv-blind-os')?.checked;
+    visit.cvTypeOD = document.getElementById('cv-od-type')?.value || '';
+    visit.cvTypeOS = document.getElementById('cv-os-type')?.value || '';
     visit.iopGatOD = document.getElementById('iop-gat-od')?.value || '';
     visit.iopGatOS = document.getElementById('iop-gat-os')?.value || '';
     visit.iopNctOD = document.getElementById('iop-nct-od')?.value || '';
@@ -43724,7 +44167,9 @@ function saveVisit(dept, opts) {
       if (!opts.silent) showToast(`✅ ${ptName} — visit saved (${visit.dateLabel})`, 's');
       // Auto-create follow-up appointment from prescription follow-up date
       try {
-        const fuD = visit.rxFuDate || visit.followupDate || '';
+        const rawFuD = visit.rxFuDate || visit.followupDate || '';
+        const normalizedFu = adjustAppointmentDateForSunday(rawFuD);
+        const fuD = normalizedFu.date;
         if (fuD && !opts.autosave) {
           const alreadyBooked = APPOINTMENTS.find(function (a) {
             return a.bmhId === bmhId && a.date === fuD && a.status !== 'cancelled';
@@ -43752,6 +44197,7 @@ function saveVisit(dept, opts) {
             if (typeof saveAppointmentToFirebase === 'function') saveAppointmentToFirebase(fuApt);
             if (typeof renderFollowupRegister === 'function') renderFollowupRegister();
           }
+          if (normalizedFu.shifted && !opts.silent) showToast('Follow-up appointment moved from Sunday to Monday ✓', 'i');
         }
       } catch (fuErr) { console.warn('auto follow-up booking failed', fuErr); }
       try { if(dept === 'obg') updateObgObstetricHistoryTab(!!visit.obstetricHistoryEnabled); } catch (e) { console.warn('post-save updateObgObstetricHistoryTab failed', e); }
