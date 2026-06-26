@@ -14042,6 +14042,7 @@ function saveInventoryIndent() {
 }
 window.saveInventoryIndent = saveInventoryIndent;
 function saveInventoryTransfer() {
+  const printAfter = !!arguments[0]?.printAfter;
   const fromStore = document.getElementById('inv-tr-from')?.value || '';
   const toStore = document.getElementById('inv-tr-to')?.value || '';
   const raw = document.getElementById('inv-tr-item')?.value?.trim() || '';
@@ -14060,7 +14061,8 @@ function saveInventoryTransfer() {
     }
   }
   target.stock = (Number(target.stock) || 0) + qty;
-  window.BMH_INVENTORY_TRANSFERS.push({ id: 'TR' + Date.now(), itemName: item.name, barcode: item.barcode, fromStore, toStore, qty, ts: bmhNowISO(), user: CURRENT_USER?.name || 'Inventory' });
+  const transferRow = { id: 'TR' + Date.now(), itemName: item.name, barcode: item.barcode, fromStore, toStore, qty, ts: bmhNowISO(), user: CURRENT_USER?.name || 'Inventory' };
+  window.BMH_INVENTORY_TRANSFERS.push(transferRow);
   saveInventoryStockToStorage();
   saveBmhFinancials();
   renderStockList();
@@ -14068,9 +14070,14 @@ function saveInventoryTransfer() {
   renderInventoryTodayEntries && renderInventoryTodayEntries({ preserveVisibility: true });
   renderInventoryStoreStock();
   renderInventoryPoAlerts();
-  showToast('Stock transferred ✓', 's');
+  if (printAfter) printInventoryTransferSlip([transferRow], { fromStores: [fromStore], toStore: toStore });
+  showToast(printAfter ? 'Stock transferred and print opened ✓' : 'Stock transferred ✓', 's');
 }
 window.saveInventoryTransfer = saveInventoryTransfer;
+function saveInventoryTransferAndPrint() {
+  saveInventoryTransfer({ printAfter: true });
+}
+window.saveInventoryTransferAndPrint = saveInventoryTransferAndPrint;
 function bmhApplyVendorReturn(item, qty, vendorOverride) {
   const vendor = String(vendorOverride || item.vendor || '').trim();
   const reduction = Math.max(0, (Number(item.cost) || 0) * Math.max(1, Number(qty) || 1));
@@ -16120,8 +16127,155 @@ function deleteInventoryStorePrompt() {
   showToast('Store removed from list ✓', 's');
 }
 window.deleteInventoryStorePrompt = deleteInventoryStorePrompt;
+function mergeInventoryDuplicateStoresPrompt() {
+  if (!(CURRENT_USER?.isAdmin || (typeof isAdminUser === 'function' && isAdminUser()))) { showToast('Only admin can merge stores', 'w'); return; }
+  const grouped = {};
+  bmhCollectInventoryStoreNames().forEach(function (name) {
+    const key = normalizeInventoryCompareText(name);
+    if (!key) return;
+    if (!grouped[key]) grouped[key] = [];
+    if (!grouped[key].some(function (item) { return item === name; })) grouped[key].push(name);
+  });
+  const duplicates = Object.keys(grouped).map(function (key) {
+    return bmhUniqueInventoryStoreNames(grouped[key]);
+  }).filter(function (names) {
+    return names.length > 1;
+  }).sort(function (a, b) {
+    return a[0].localeCompare(b[0]);
+  });
+  if (!duplicates.length) { showToast('No duplicate stores found', 'w'); return; }
+  const choice = (prompt('Select duplicate stores to merge:\n' + duplicates.map(function (names, idx) {
+    return (idx + 1) + '. ' + names.join('  |  ');
+  }).join('\n'), '1') || '').trim();
+  if (!choice) return;
+  const picked = /^\d+$/.test(choice)
+    ? duplicates[Math.max(0, Number(choice) - 1)]
+    : duplicates.find(function (names) {
+        return names.some(function (name) {
+          return normalizeInventoryCompareText(name) === normalizeInventoryCompareText(choice);
+        });
+      });
+  if (!picked || !picked.length) { showToast('Duplicate store group not found', 'w'); return; }
+  const preferred = bmhPreferredInventoryStoreHeading(picked);
+  const nextName = bmhTrimInventoryHeadingValue(prompt('Merge these store names into one heading:\n' + picked.join('\n'), preferred) || '');
+  if (!nextName) return;
+  if (!confirm('Merge ' + picked.join(', ') + ' into "' + nextName + '"?')) return;
+  const result = bmhApplyInventoryStoreHeadingChange(picked, nextName);
+  if (!result.changed) { showToast('Store names already matched', 'w'); return; }
+  showToast('Duplicate stores merged ✓', 's');
+}
+window.mergeInventoryDuplicateStoresPrompt = mergeInventoryDuplicateStoresPrompt;
 function bmhTrimInventoryHeadingValue(value) {
   return String(value || '').trim().replace(/\s+/g, ' ');
+}
+function bmhUniqueInventoryStoreNames(list) {
+  const seen = Object.create(null);
+  return (Array.isArray(list) ? list : []).map(function (name) {
+    return bmhTrimInventoryHeadingValue(name);
+  }).filter(Boolean).filter(function (name) {
+    const key = normalizeInventoryCompareText(name);
+    if (!key || seen[key]) return false;
+    seen[key] = true;
+    return true;
+  });
+}
+function bmhInventoryStoreHeadingScore(name) {
+  return String(name || '').trim().split(/\s+/).filter(Boolean).reduce(function (sum, token) {
+    if (/^[A-Z0-9/-]{2,}$/.test(token)) return sum + 4;
+    if (/^[A-Z]/.test(token)) return sum + 2;
+    if (/^[a-z]/.test(token)) return sum + 1;
+    return sum;
+  }, 0);
+}
+function bmhPreferredInventoryStoreHeading(names) {
+  return bmhUniqueInventoryStoreNames(names).sort(function (a, b) {
+    const scoreDiff = bmhInventoryStoreHeadingScore(b) - bmhInventoryStoreHeadingScore(a);
+    if (scoreDiff) return scoreDiff;
+    const lengthDiff = String(b || '').length - String(a || '').length;
+    if (lengthDiff) return lengthDiff;
+    return String(a || '').localeCompare(String(b || ''));
+  })[0] || '';
+}
+function bmhCollectInventoryStoreNames() {
+  const names = [];
+  const push = function (value) {
+    const text = bmhTrimInventoryHeadingValue(value);
+    if (text) names.push(text);
+  };
+  (window.BMH_STORE_LOCATIONS || []).forEach(push);
+  (loadInventoryHiddenStoreLocations() || []).forEach(push);
+  (INVENTORY || []).forEach(function (row) { push(row?.store); });
+  (window.BMH_PURCHASES || []).forEach(function (row) { push(row?.store); });
+  (window.BMH_INVENTORY_USAGE || []).forEach(function (row) { push(row?.store); });
+  (window.BMH_INVENTORY_TRANSFERS || []).forEach(function (row) {
+    push(row?.fromStore);
+    push(row?.toStore);
+  });
+  return names;
+}
+function bmhApplyInventoryStoreHeadingChange(sourceNames, nextName) {
+  const storeKeys = Array.from(new Set((Array.isArray(sourceNames) ? sourceNames : []).map(function (name) {
+    return normalizeInventoryCompareText(name);
+  }).filter(Boolean)));
+  const canonical = bmhTrimInventoryHeadingValue(nextName);
+  if (!storeKeys.length || !canonical) return { changed: false, touchedRows: [] };
+  let changed = false;
+  const touchedRows = [];
+  const matchStore = function (value) {
+    return storeKeys.includes(normalizeInventoryCompareText(value));
+  };
+  const priorStores = JSON.stringify(window.BMH_STORE_LOCATIONS || []);
+  const priorHidden = JSON.stringify(loadInventoryHiddenStoreLocations() || []);
+  window.BMH_STORE_LOCATIONS = bmhUniqueInventoryStoreNames((window.BMH_STORE_LOCATIONS || []).map(function (store) {
+    return matchStore(store) ? canonical : store;
+  }).concat([canonical]));
+  window._bmhInventoryHiddenStoreLocations = bmhUniqueInventoryStoreNames((loadInventoryHiddenStoreLocations() || []).map(function (store) {
+    return matchStore(store) ? canonical : store;
+  }));
+  if (JSON.stringify(window.BMH_STORE_LOCATIONS || []) !== priorStores) changed = true;
+  if (JSON.stringify(window._bmhInventoryHiddenStoreLocations || []) !== priorHidden) changed = true;
+  saveInventoryHiddenStoreLocations();
+  saveInventoryStoreLocations();
+  (INVENTORY || []).forEach(function (row) {
+    if (!matchStore(row.store || '')) return;
+    if (row.store !== canonical) changed = true;
+    row.store = canonical;
+    touchedRows.push(row);
+  });
+  (window.BMH_PURCHASES || []).forEach(function (row) {
+    if (!matchStore(row.store || '')) return;
+    if (row.store !== canonical) changed = true;
+    row.store = canonical;
+  });
+  (window.BMH_INVENTORY_USAGE || []).forEach(function (row) {
+    if (!matchStore(row.store || '')) return;
+    if (row.store !== canonical) changed = true;
+    row.store = canonical;
+  });
+  (window.BMH_INVENTORY_TRANSFERS || []).forEach(function (row) {
+    if (matchStore(row.fromStore || '')) {
+      if (row.fromStore !== canonical) changed = true;
+      row.fromStore = canonical;
+    }
+    if (matchStore(row.toStore || '')) {
+      if (row.toStore !== canonical) changed = true;
+      row.toStore = canonical;
+    }
+  });
+  ['inv-in-store', 'inv-stock-store-filter', 'inv-tr-from', 'inv-tr-to', 'inv-indent-store', 'inv-indent-source', 'inv-ret-store'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el && matchStore(el.value || '')) el.value = canonical;
+  });
+  saveInventoryStockToStorage();
+  saveBmhFinancials && saveBmhFinancials();
+  bmhSyncInventoryRowsToCloud(touchedRows);
+  bmhPopulateInventorySelectors();
+  renderStockList && renderStockList();
+  renderInventoryStoreStock && renderInventoryStoreStock();
+  renderInventoryTransfers && renderInventoryTransfers();
+  renderInventoryUsageLog && renderInventoryUsageLog();
+  renderInventoryTodayEntries && renderInventoryTodayEntries({ preserveVisibility: true });
+  return { changed: changed, touchedRows: touchedRows, canonical: canonical };
 }
 function bmhSyncInventoryRowsToCloud(rows) {
   (Array.isArray(rows) ? rows : []).forEach(function (row) {
@@ -16200,21 +16354,22 @@ function openInventoryMoveModal(barcodes) {
 }
 window.openInventoryMoveModal = openInventoryMoveModal;
 function applyInventoryRowsStoreMove(rows, matchedStore, requestedQty) {
-  if (!rows.length) { showToast('No stock rows found to move', 'w'); return; }
+  if (!rows.length) { showToast('No stock rows found to move', 'w'); return { ok: false, transferRows: [] }; }
   const fromStores = Array.from(new Set(rows.map(function (row) { return normalizeInventoryTextValue(row.store || 'Unassigned store'); }).filter(Boolean)));
   const current = fromStores[0] || '';
   if (fromStores.length === 1 && normalizeInventoryCompareText(current) === normalizeInventoryCompareText(matchedStore)) {
     showToast('Selected rows are already in that store', 'w');
-    return;
+    return { ok: false, transferRows: [] };
   }
   const ts = bmhNowISO();
+  const transferRows = [];
   if (rows.length === 1) {
     const source = rows[0];
     const available = Math.max(0, Number(source.stock || 0));
-    if (!(available > 0)) { showToast('No stock available to move', 'w'); return; }
+    if (!(available > 0)) { showToast('No stock available to move', 'w'); return { ok: false, transferRows: [] }; }
     const qty = Math.max(0, Number(requestedQty || 0));
-    if (!(qty > 0)) { showToast('Enter a valid quantity', 'w'); return; }
-    if (qty > available) { showToast('Cannot move more than available stock', 'w'); return; }
+    if (!(qty > 0)) { showToast('Enter a valid quantity', 'w'); return { ok: false, transferRows: [] }; }
+    if (qty > available) { showToast('Cannot move more than available stock', 'w'); return { ok: false, transferRows: [] }; }
     if (qty < available) {
       const finder = function (row) {
         return row
@@ -16246,7 +16401,7 @@ function applyInventoryRowsStoreMove(rows, matchedStore, requestedQty) {
         targetRow.stock = Math.max(0, Number(targetRow.stock || 0)) + qty;
         targetRow.updatedAt = ts;
       }
-      window.BMH_INVENTORY_TRANSFERS.push({
+      const transferRow = {
         id: 'TRM' + Date.now() + Math.random().toString(36).slice(2, 5),
         itemName: source.name || source.iolBrand || 'Inventory item',
         barcode: source.barcode,
@@ -16256,7 +16411,9 @@ function applyInventoryRowsStoreMove(rows, matchedStore, requestedQty) {
         ts: ts,
         user: CURRENT_USER?.name || 'Inventory',
         kind: 'partial-move'
-      });
+      };
+      window.BMH_INVENTORY_TRANSFERS.push(transferRow);
+      transferRows.push(transferRow);
       saveInventoryStockToStorage();
       saveBmhFinancials && saveBmhFinancials();
       bmhSyncInventoryRowsToCloud([source, targetRow]);
@@ -16266,14 +16423,14 @@ function applyInventoryRowsStoreMove(rows, matchedStore, requestedQty) {
       renderInventoryStoreStock && renderInventoryStoreStock();
       renderInventoryPoAlerts && renderInventoryPoAlerts();
       showToast('Partial stock moved ✓', 's');
-      return;
+      return { ok: true, transferRows: transferRows, fromStores: fromStores, toStore: matchedStore };
     }
   }
   rows.forEach(function (row) {
     const oldStore = bmhTrimInventoryHeadingValue(row.store || 'Unassigned store');
     row.store = matchedStore;
     row.updatedAt = ts;
-    window.BMH_INVENTORY_TRANSFERS.push({
+    const transferRow = {
       id: 'TRM' + Date.now() + Math.random().toString(36).slice(2, 5),
       itemName: row.name || row.iolBrand || 'Inventory item',
       barcode: row.barcode,
@@ -16283,7 +16440,9 @@ function applyInventoryRowsStoreMove(rows, matchedStore, requestedQty) {
       ts: ts,
       user: CURRENT_USER?.name || 'Inventory',
       kind: 'move'
-    });
+    };
+    window.BMH_INVENTORY_TRANSFERS.push(transferRow);
+    transferRows.push(transferRow);
   });
   saveInventoryStockToStorage();
   saveBmhFinancials && saveBmhFinancials();
@@ -16294,8 +16453,9 @@ function applyInventoryRowsStoreMove(rows, matchedStore, requestedQty) {
   renderInventoryStoreStock && renderInventoryStoreStock();
   renderInventoryPoAlerts && renderInventoryPoAlerts();
   showToast('Store updated for selected stock ✓', 's');
+  return { ok: true, transferRows: transferRows, fromStores: fromStores, toStore: matchedStore };
 }
-function confirmInventoryMoveModal() {
+function confirmInventoryMoveModal(printAfter) {
   const state = window._inventoryMoveDialogState || {};
   const rows = bmhGetInventoryRowsForMove(state.barcodes || []);
   if (!rows.length) { showToast('No stock rows found to move', 'w'); return; }
@@ -16310,9 +16470,11 @@ function confirmInventoryMoveModal() {
   if (!matchedStore) { showToast('Select a saved store from the list', 'w'); return; }
   const qty = rows.length === 1 ? Math.max(0, Number(qtyEl?.value || 0)) : null;
   closeM('m-inv-move-store');
-  applyInventoryRowsStoreMove(rows, matchedStore, qty);
+  const result = applyInventoryRowsStoreMove(rows, matchedStore, qty);
+  if (printAfter && result?.ok) printInventoryTransferSlip(result.transferRows, { fromStores: result.fromStores, toStore: result.toStore });
 }
-window.confirmInventoryMoveModal = confirmInventoryMoveModal;
+window.confirmInventoryMoveModal = function () { confirmInventoryMoveModal(false); };
+window.confirmInventoryMoveAndPrintModal = function () { confirmInventoryMoveModal(true); };
 function moveInventoryRowsToStore(barcodes) {
   openInventoryMoveModal(barcodes);
 }
@@ -16405,39 +16567,9 @@ function renameInventoryStoreNamePrompt(storeName) {
     return normalizeInventoryCompareText(store) === normalizeInventoryCompareText(current);
   }) || current;
   const nextName = bmhTrimInventoryHeadingValue(prompt('Edit store heading', matched) || '');
-  if (!nextName || normalizeInventoryCompareText(nextName) === normalizeInventoryCompareText(matched)) return;
-  window.BMH_STORE_LOCATIONS = stores.map(function (store) {
-    return normalizeInventoryCompareText(store) === normalizeInventoryCompareText(matched) ? nextName : store;
-  });
-  window._bmhInventoryHiddenStoreLocations = (loadInventoryHiddenStoreLocations() || []).map(function (store) {
-    return normalizeInventoryCompareText(store) === normalizeInventoryCompareText(matched) ? nextName : store;
-  });
-  saveInventoryHiddenStoreLocations();
-  saveInventoryStoreLocations();
-  const touchedRows = [];
-  (INVENTORY || []).forEach(function (row) {
-    if (normalizeInventoryCompareText(row.store || '') !== normalizeInventoryCompareText(matched)) return;
-    row.store = nextName;
-    touchedRows.push(row);
-  });
-  (window.BMH_PURCHASES || []).forEach(function (row) {
-    if (normalizeInventoryCompareText(row.store || '') === normalizeInventoryCompareText(matched)) row.store = nextName;
-  });
-  (window.BMH_INVENTORY_USAGE || []).forEach(function (row) {
-    if (normalizeInventoryCompareText(row.store || '') === normalizeInventoryCompareText(matched)) row.store = nextName;
-  });
-  (window.BMH_INVENTORY_TRANSFERS || []).forEach(function (row) {
-    if (normalizeInventoryCompareText(row.fromStore || '') === normalizeInventoryCompareText(matched)) row.fromStore = nextName;
-    if (normalizeInventoryCompareText(row.toStore || '') === normalizeInventoryCompareText(matched)) row.toStore = nextName;
-  });
-  saveInventoryStockToStorage();
-  saveBmhFinancials && saveBmhFinancials();
-  bmhSyncInventoryRowsToCloud(touchedRows);
-  bmhPopulateInventorySelectors();
-  renderStockList && renderStockList();
-  renderInventoryStoreStock && renderInventoryStoreStock();
-  renderInventoryTransfers && renderInventoryTransfers();
-  renderInventoryUsageLog && renderInventoryUsageLog();
+  if (!nextName) return;
+  const result = bmhApplyInventoryStoreHeadingChange([matched], nextName);
+  if (!result.changed) { showToast('Store heading already matches', 'w'); return; }
   showToast('Store heading updated ✓', 's');
 }
 window.renameInventoryStoreNamePrompt = renameInventoryStoreNamePrompt;
@@ -16946,6 +17078,82 @@ function bmhSelectInventoryStockCategory(dept, store, cat) {
   renderStockList && renderStockList();
 }
 window.bmhSelectInventoryStockCategory = bmhSelectInventoryStockCategory;
+function printInventoryTransferSlip(rows, meta) {
+  const transferRows = (Array.isArray(rows) ? rows : []).filter(Boolean);
+  if (!transferRows.length) { showToast('No transfer rows to print', 'w'); return; }
+  const info = meta || {};
+  const totalQty = transferRows.reduce(function (sum, row) {
+    return sum + Math.max(0, Number(row.qty || 0));
+  }, 0);
+  const fromStores = Array.from(new Set(transferRows.map(function (row) {
+    return bmhTrimInventoryHeadingValue(row.fromStore || '');
+  }).filter(Boolean)));
+  const toStores = Array.from(new Set(transferRows.map(function (row) {
+    return bmhTrimInventoryHeadingValue(row.toStore || '');
+  }).filter(Boolean)));
+  const printedAt = new Date();
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Inventory Transfer Slip</title><style>
+    @page { size:A4; margin:12mm; }
+    body { font-family:Arial,sans-serif; color:#111; margin:0; font-size:12px; }
+    .hd { display:flex; align-items:center; justify-content:space-between; gap:12px; border-bottom:2px solid #1a3c6e; padding-bottom:10px; margin-bottom:14px; }
+    .brand { display:flex; align-items:center; gap:12px; min-width:0; }
+    .brand img { width:62px; height:62px; object-fit:contain; }
+    .title { font-size:20px; font-weight:900; color:#1a3c6e; }
+    .sub { font-size:11px; color:#555; margin-top:3px; }
+    .meta { display:grid; grid-template-columns:1fr 1fr; gap:8px 14px; margin-bottom:14px; }
+    .meta-card { border:1px solid #d7dfef; border-radius:10px; padding:10px 12px; background:#f8fbff; }
+    .meta-card b { display:block; font-size:10px; color:#5b6b86; text-transform:uppercase; letter-spacing:.45px; margin-bottom:4px; }
+    table { width:100%; border-collapse:collapse; }
+    th, td { border:1px solid #ccd5e4; padding:7px 8px; font-size:11px; vertical-align:top; }
+    th { background:#eef4ff; color:#1a3c6e; text-align:left; }
+    .num { text-align:right; white-space:nowrap; font-weight:900; }
+    .foot { display:flex; justify-content:space-between; gap:12px; margin-top:18px; font-size:11px; color:#555; }
+  </style></head><body>
+    <div class="hd">
+      <div class="brand">
+        <img src="https://bawejahospital.com/img/logo.png" alt="BMH" onerror="this.style.display='none'">
+        <div>
+          <div class="title">Inventory Transfer Slip</div>
+          <div class="sub">Baweja Hospital and Maternity Home</div>
+        </div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:11px;color:#555">Printed on</div>
+        <div style="font-size:12px;font-weight:900">${escapeHtmlConsent(formatDateIN(printedAt))}</div>
+        <div style="font-size:11px;color:#555">${escapeHtmlConsent(printedAt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }))}</div>
+      </div>
+    </div>
+    <div class="meta">
+      <div class="meta-card"><b>From Store</b>${escapeHtmlConsent(fromStores.join(', ') || info.fromStores?.join(', ') || 'Not recorded')}</div>
+      <div class="meta-card"><b>To Store</b>${escapeHtmlConsent(toStores.join(', ') || info.toStore || 'Not recorded')}</div>
+      <div class="meta-card"><b>Moved By</b>${escapeHtmlConsent(transferRows[0]?.user || CURRENT_USER?.name || 'Inventory')}</div>
+      <div class="meta-card"><b>Total Quantity</b>${totalQty}</div>
+    </div>
+    <table>
+      <thead><tr><th style="width:38px">#</th><th>Item</th><th style="width:140px">Barcode</th><th style="width:78px">Qty</th><th style="width:150px">Time</th></tr></thead>
+      <tbody>${transferRows.map(function (row, idx) {
+        const ts = row.ts ? new Date(row.ts) : null;
+        return '<tr>'
+          + '<td>' + (idx + 1) + '</td>'
+          + '<td>' + escapeHtmlConsent(row.itemName || 'Inventory item') + '</td>'
+          + '<td>' + escapeHtmlConsent(row.barcode || '') + '</td>'
+          + '<td class="num">' + Number(row.qty || 0) + '</td>'
+          + '<td>' + escapeHtmlConsent(ts ? (formatDateIN(ts) + ' ' + ts.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })) : '') + '</td>'
+          + '</tr>';
+      }).join('')}</tbody>
+    </table>
+    <div class="foot">
+      <div>Source to destination stock movement acknowledgement.</div>
+      <div>Signature: ____________________</div>
+    </div>
+    <script>window.onload=function(){window.print()}<\/script>
+  </body></html>`;
+  const win = window.open('', '_blank', 'width=980,height=760');
+  if (!win) { showToast('Allow popups to print transfer slip', 'w'); return; }
+  win.document.write(html);
+  win.document.close();
+}
+window.printInventoryTransferSlip = printInventoryTransferSlip;
 function printInventoryCurrentStockReport() {
   const catFilter = bmhInventoryFilterValue('inv-stock-cat-filter');
   const storeFilter = bmhInventoryFilterValue('inv-stock-store-filter');
