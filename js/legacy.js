@@ -9309,37 +9309,264 @@ function bmhInventoryLowItemsGrouped(items) {
   });
 }
 function bmhBuildGroupedPurchaseOrderDraft(low) {
-  const groups = bmhInventoryLowItemsGrouped(low);
+  const rows = bmhInventorySelectedPurchaseRows(low);
+  const groups = bmhInventoryLowItemsGrouped(rows);
   let itemCounter = 0;
   return 'PURCHASE ORDER — Baweja Multispeciality Hospital\nDate: ' + new Date().toLocaleString('en-IN') + '\n\nPlease supply:\n\n' + groups.map(function (deptGroup) {
     return deptGroup.deptLabel + '\n' + deptGroup.headings.map(function (headingGroup) {
       return '  ' + headingGroup.heading + '\n' + headingGroup.items.map(function (item) {
         itemCounter += 1;
-        return '    ' + itemCounter + '. ' + item.name + ' — ' + bmhFormatStoreLabel(item.store) + ' — vendor ' + (item.vendor || 'TBD') + ' — barcode ' + item.barcode + ' — order qty suggestion: ' + bmhLowStockSuggestedQty(item) + ' (current ' + Number(item.stock || 0) + ', min ' + Number(item.min || 0) + ')';
+        return '    ' + itemCounter + '. ' + item.name + ' — ' + bmhFormatStoreLabel(item.store) + ' — vendor ' + (item.vendor || 'TBD') + ' — barcode ' + item.barcode + ' — order qty ' + Math.max(1, Number(item.orderQty || 0)) + ' (current ' + Number(item.stock || 0) + ', min ' + Number(item.min || 0) + ')';
       }).join('\n');
     }).join('\n\n');
   }).join('\n\n') + '\n\nAuthorised by: _______________\n';
 }
+function bmhInventoryLowItemKey(item) {
+  return [
+    String(item?.dept || 'general').trim(),
+    String(item?.store || '').trim(),
+    String(item?.cat || '').trim(),
+    String(item?.barcode || '').trim(),
+    String(item?.name || '').trim(),
+    String(item?.power || '').trim()
+  ].join('||');
+}
+function bmhPoSafeToken(value) {
+  return encodeURIComponent(String(value || ''));
+}
+function bmhPoTokenValue(value) {
+  return decodeURIComponent(String(value || ''));
+}
+function bmhPoCheckboxId(itemKey) {
+  return 'po-check-' + bmhPoSafeToken(itemKey);
+}
+function bmhInventoryPurchaseOrderSelections() {
+  if (!window._bmhPO_SELECTIONS || typeof window._bmhPO_SELECTIONS !== 'object') window._bmhPO_SELECTIONS = {};
+  return window._bmhPO_SELECTIONS;
+}
+function bmhIsIolInventoryItem(item) {
+  const text = (String(item?.cat || '') + ' ' + String(item?.name || '')).toLowerCase();
+  return /\biol\b|intraocular lens|acrysof|tecnis|panoptix|toric|trifocal/.test(text);
+}
+function bmhInventoryLowItemsDetailedGrouped(items) {
+  return bmhInventoryLowItemsGrouped(items).map(function (deptGroup) {
+    return {
+      deptKey: deptGroup.deptKey,
+      deptLabel: deptGroup.deptLabel,
+      headings: (deptGroup.headings || []).map(function (headingGroup) {
+        const headingItems = Array.isArray(headingGroup.items) ? headingGroup.items.slice() : [];
+        const subgroups = [];
+        const isIolHeading = String(headingGroup.heading || '').toLowerCase() === 'iol' || headingItems.some(bmhIsIolInventoryItem);
+        if (isIolHeading) {
+          const brandGroups = {};
+          headingItems.forEach(function (item) {
+            const brandKey = String(_iolBrandLabel(item) || item.name || 'IOL').trim() || 'IOL';
+            if (!brandGroups[brandKey]) brandGroups[brandKey] = [];
+            brandGroups[brandKey].push(item);
+          });
+          subgroups.push({
+            key: '__all__',
+            label: 'All low stock items',
+            items: headingItems.slice()
+          });
+          Object.keys(brandGroups).sort(function (a, b) { return a.localeCompare(b); }).forEach(function (brandKey) {
+            subgroups.push({
+              key: brandKey,
+              label: brandKey,
+              items: brandGroups[brandKey].slice().sort(function (a, b) {
+                return String(a?.power || a?.name || '').localeCompare(String(b?.power || b?.name || ''));
+              })
+            });
+          });
+        } else {
+          subgroups.push({
+            key: '__all__',
+            label: 'All low stock items',
+            items: headingItems.slice()
+          });
+        }
+        return {
+          heading: headingGroup.heading,
+          items: headingItems,
+          subgroups: subgroups
+        };
+      })
+    };
+  });
+}
+function bmhInventorySelectedPurchaseRows(low) {
+  const rows = Array.isArray(low) ? low : bmhInventoryLowItems();
+  const selections = bmhInventoryPurchaseOrderSelections();
+  const selected = [];
+  let hasExplicitSelection = false;
+  rows.forEach(function (item) {
+    const qty = Math.max(0, Number(selections[bmhInventoryLowItemKey(item)] || 0));
+    if (qty > 0) {
+      hasExplicitSelection = true;
+      selected.push(Object.assign({}, item, { orderQty: qty }));
+    }
+  });
+  if (hasExplicitSelection) return selected;
+  return rows.map(function (item) {
+    return Object.assign({}, item, { orderQty: bmhLowStockSuggestedQty(item) });
+  });
+}
+function bmhPurchaseOrderSelectionTotals(low) {
+  const rows = bmhInventorySelectedPurchaseRows(low);
+  return rows.reduce(function (acc, item) {
+    acc.items += 1;
+    acc.qty += Math.max(0, Number(item.orderQty || 0));
+    return acc;
+  }, { items: 0, qty: 0, explicit: Object.keys(bmhInventoryPurchaseOrderSelections()).length > 0 });
+}
+function bmhSetPurchaseOrderItemQty(itemKey, qty) {
+  itemKey = bmhPoTokenValue(itemKey);
+  const selections = bmhInventoryPurchaseOrderSelections();
+  const cleanQty = Math.max(0, parseInt(qty, 10) || 0);
+  if (cleanQty > 0) selections[itemKey] = cleanQty;
+  else delete selections[itemKey];
+  bmhGeneratePurchaseOrderDraft(true);
+  renderInventoryPoAlerts();
+}
+window.bmhSetPurchaseOrderItemQty = bmhSetPurchaseOrderItemQty;
+function bmhTogglePurchaseOrderItem(itemKey) {
+  itemKey = bmhPoTokenValue(itemKey);
+  const low = bmhInventoryLowItems();
+  const item = low.find(function (row) { return bmhInventoryLowItemKey(row) === itemKey; });
+  if (!item) return;
+  const checkbox = document.getElementById(bmhPoCheckboxId(itemKey));
+  if (!checkbox) return;
+  if (!checkbox.checked) {
+    bmhSetPurchaseOrderItemQty(itemKey, 0);
+    return;
+  }
+  const existing = Math.max(1, Number(bmhInventoryPurchaseOrderSelections()[itemKey] || bmhLowStockSuggestedQty(item)));
+  const reply = window.prompt('Enter quantity to order for ' + (item.name || 'item'), String(existing));
+  if (reply == null) {
+    checkbox.checked = false;
+    return;
+  }
+  const qty = Math.max(0, parseInt(reply, 10) || 0);
+  if (!(qty > 0)) {
+    checkbox.checked = false;
+    showToast('Enter a quantity greater than 0', 'w');
+    return;
+  }
+  bmhSetPurchaseOrderItemQty(itemKey, qty);
+}
+window.bmhTogglePurchaseOrderItem = bmhTogglePurchaseOrderItem;
+function bmhSelectPurchaseOrderGroup(deptKey, heading, subgroupKey) {
+  deptKey = bmhPoTokenValue(deptKey);
+  heading = bmhPoTokenValue(heading);
+  subgroupKey = bmhPoTokenValue(subgroupKey);
+  const selections = bmhInventoryPurchaseOrderSelections();
+  bmhInventoryLowItemsDetailedGrouped(bmhInventoryLowItems()).forEach(function (deptGroup) {
+    if (deptGroup.deptKey !== deptKey) return;
+    (deptGroup.headings || []).forEach(function (headingGroup) {
+      if (String(headingGroup.heading || '') !== String(heading || '')) return;
+      const subgroup = (headingGroup.subgroups || []).find(function (row) { return String(row.key || '') === String(subgroupKey || '__all__'); });
+      (subgroup?.items || []).forEach(function (item) {
+        selections[bmhInventoryLowItemKey(item)] = bmhLowStockSuggestedQty(item);
+      });
+    });
+  });
+  bmhGeneratePurchaseOrderDraft(true);
+  renderInventoryPoAlerts();
+}
+window.bmhSelectPurchaseOrderGroup = bmhSelectPurchaseOrderGroup;
+function bmhClearPurchaseOrderSelections() {
+  window._bmhPO_SELECTIONS = {};
+  bmhGeneratePurchaseOrderDraft(true);
+  renderInventoryPoAlerts();
+}
+window.bmhClearPurchaseOrderSelections = bmhClearPurchaseOrderSelections;
 function bmhRenderGroupedLowStockHtml(low) {
-  return bmhInventoryLowItemsGrouped(low).map(function (deptGroup) {
-    return `<div style="padding:10px 0 2px;border-bottom:1px solid var(--g5)">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px">
+  const selections = bmhInventoryPurchaseOrderSelections();
+  const totals = bmhPurchaseOrderSelectionTotals(low);
+  return `<div style="padding:10px 0 14px;border-bottom:1px solid var(--g5);display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
+    <div>
+      <div style="font-size:13px;font-weight:900;color:var(--bmh-blue)">Purchase order shortlist</div>
+      <div style="font-size:11px;color:var(--g1);margin-top:3px">${totals.explicit ? ('Selected ' + totals.items + ' item(s) · Total order qty ' + totals.qty) : ('No manual selection yet · printing will use suggested qty for all ' + Number(low.length || 0) + ' low-stock item(s)')}</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <span class="badge bd-orange">${Number(low.length || 0)} low item(s)</span>
+      <button type="button" class="btn btn-xs btn-gray" onclick="bmhClearPurchaseOrderSelections()">Clear selections</button>
+    </div>
+  </div>` + bmhInventoryLowItemsDetailedGrouped(low).map(function (deptGroup) {
+    const deptCount = (deptGroup.headings || []).reduce(function (acc, heading) { return acc + (heading.items || []).length; }, 0);
+    return `<details style="padding:10px 0 2px;border-bottom:1px solid var(--g5)" open>
+      <summary style="display:flex;justify-content:space-between;align-items:center;gap:10px;cursor:pointer;list-style:none">
         <strong style="font-size:13px;color:var(--bmh-blue)">${escapeHtmlConsent(deptGroup.deptLabel)}</strong>
-        <span class="badge bd-orange">${deptGroup.headings.reduce(function (acc, heading) { return acc + heading.items.length; }, 0)} low item(s)</span>
-      </div>
-      ${deptGroup.headings.map(function (headingGroup) {
-        return `<div style="margin:0 0 10px 0;padding-left:10px;border-left:3px solid var(--g5)">
-          <div style="font-size:11px;font-weight:800;color:var(--g2);text-transform:uppercase;letter-spacing:.03em;margin-bottom:5px">${escapeHtmlConsent(headingGroup.heading)}</div>
-          ${headingGroup.items.map(function (i) {
-            const suggested = bmhLowStockSuggestedQty(i);
-            return `<div style="padding:8px 0;border-bottom:1px dashed var(--g5);font-size:12px;animation:pulse 1.8s infinite">
-              <div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><strong>${escapeHtmlConsent(i.name)}</strong><span style="color:#b55a00;font-weight:900">${Number(i.stock||0)} / min ${Number(i.min||0)}</span></div>
-              <div style="font-size:10px;color:var(--g1);margin-top:4px">${escapeHtmlConsent(i.vendor || 'No vendor')} · ${bmhFormatStoreLabel(i.store)} · Suggested PO qty ${suggested}</div>
-            </div>`;
-          }).join('')}
-        </div>`;
+        <span class="badge bd-orange">${deptCount} low item(s)</span>
+      </summary>
+      <div style="margin-top:10px">
+      ${(deptGroup.headings || []).map(function (headingGroup) {
+        const headingCount = (headingGroup.items || []).length;
+        const deptToken = bmhPoSafeToken(deptGroup.deptKey || '');
+        const headingToken = bmhPoSafeToken(headingGroup.heading || '');
+        return `<details style="margin:0 0 10px 0;padding-left:10px;border-left:3px solid var(--g5)" ${headingCount <= 5 ? 'open' : ''}>
+          <summary style="display:flex;justify-content:space-between;gap:10px;align-items:center;cursor:pointer;list-style:none">
+            <span style="font-size:11px;font-weight:800;color:var(--g2);text-transform:uppercase;letter-spacing:.03em">${escapeHtmlConsent(headingGroup.heading)}</span>
+            <span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <span class="badge bd-orange">${headingCount}</span>
+              <button type="button" class="btn btn-xs btn-outline" onclick="event.stopPropagation();bmhSelectPurchaseOrderGroup('${deptToken}','${headingToken}','__all__')">Select all suggested</button>
+            </span>
+          </summary>
+          <div style="margin-top:8px">
+            ${(headingGroup.subgroups || []).map(function (subgroup) {
+              const isSingleBlock = String(subgroup.key || '') === '__all__' && (headingGroup.subgroups || []).length === 1;
+              if (isSingleBlock) {
+                return subgroup.items.map(function (i) {
+                  const itemKey = bmhInventoryLowItemKey(i);
+                  const itemToken = bmhPoSafeToken(itemKey);
+                  const selectedQty = Math.max(0, Number(selections[itemKey] || 0));
+                  const suggested = bmhLowStockSuggestedQty(i);
+                  return `<label style="display:block;padding:8px 0;border-bottom:1px dashed var(--g5);font-size:12px">
+                    <div style="display:grid;grid-template-columns:22px minmax(0,1fr) 74px;gap:10px;align-items:start">
+                      <input id="${bmhPoCheckboxId(itemKey)}" type="checkbox" ${selectedQty > 0 ? 'checked' : ''} onchange="bmhTogglePurchaseOrderItem('${itemToken}')">
+                      <div>
+                        <div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><strong>${escapeHtmlConsent(i.name)}</strong><span style="color:#b55a00;font-weight:900">${Number(i.stock||0)} / min ${Number(i.min||0)}</span></div>
+                        <div style="font-size:10px;color:var(--g1);margin-top:4px">${escapeHtmlConsent(i.vendor || 'No vendor')} · ${bmhFormatStoreLabel(i.store)} · Suggested PO qty ${suggested}</div>
+                      </div>
+                      <input type="number" min="1" value="${selectedQty > 0 ? selectedQty : suggested}" ${selectedQty > 0 ? '' : 'disabled'} onchange="bmhSetPurchaseOrderItemQty('${itemToken}', this.value)" style="width:70px;text-align:center;font-weight:900">
+                    </div>
+                  </label>`;
+                }).join('');
+              }
+              const subgroupToken = bmhPoSafeToken(subgroup.key || '');
+              return `<details style="margin:0 0 8px 0;border:1px solid var(--g5);border-radius:10px;background:#fffaf2" ${String(subgroup.key || '') === '__all__' ? '' : ''}>
+                <summary style="display:flex;justify-content:space-between;gap:10px;align-items:center;padding:8px 10px;cursor:pointer;list-style:none">
+                  <strong style="font-size:12px;color:#8a4200">${escapeHtmlConsent(subgroup.label)}</strong>
+                  <span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span class="badge bd-orange">${(subgroup.items || []).length}</span>
+                    <button type="button" class="btn btn-xs btn-outline" onclick="event.stopPropagation();bmhSelectPurchaseOrderGroup('${deptToken}','${headingToken}','${subgroupToken}')">Select all</button>
+                  </span>
+                </summary>
+                <div style="padding:0 10px 8px">
+                  ${(subgroup.items || []).map(function (i) {
+                    const itemKey = bmhInventoryLowItemKey(i);
+                    const itemToken = bmhPoSafeToken(itemKey);
+                    const selectedQty = Math.max(0, Number(selections[itemKey] || 0));
+                    const suggested = bmhLowStockSuggestedQty(i);
+                    return `<label style="display:block;padding:8px 0;border-bottom:1px dashed var(--g5);font-size:12px">
+                      <div style="display:grid;grid-template-columns:22px minmax(0,1fr) 74px;gap:10px;align-items:start">
+                        <input id="${bmhPoCheckboxId(itemKey)}" type="checkbox" ${selectedQty > 0 ? 'checked' : ''} onchange="bmhTogglePurchaseOrderItem('${itemToken}')">
+                        <div>
+                          <div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><strong>${escapeHtmlConsent(i.name)}</strong><span style="color:#b55a00;font-weight:900">${Number(i.stock||0)} / min ${Number(i.min||0)}</span></div>
+                          <div style="font-size:10px;color:var(--g1);margin-top:4px">${escapeHtmlConsent(i.vendor || 'No vendor')} · ${bmhFormatStoreLabel(i.store)} · Suggested PO qty ${suggested}</div>
+                        </div>
+                        <input type="number" min="1" value="${selectedQty > 0 ? selectedQty : suggested}" ${selectedQty > 0 ? '' : 'disabled'} onchange="bmhSetPurchaseOrderItemQty('${itemToken}', this.value)" style="width:70px;text-align:center;font-weight:900">
+                      </div>
+                    </label>`;
+                  }).join('')}
+                </div>
+              </details>`;
+            }).join('')}
+          </div>
+        </details>`;
       }).join('')}
-    </div>`;
+      </div>
+    </details>`;
   }).join('');
 }
 function bmhInventoryFilterValue(id) {
@@ -27603,6 +27830,7 @@ function openObgOtCompletionPopup(caseId) {
 function closeObgOtCompletionPopup() {
   const modal = document.getElementById('obg-ot-complete-modal');
   if (modal) modal.style.display = 'none';
+  clearPendingDischargeObgPopupContext && clearPendingDischargeObgPopupContext();
 }
 function saveObgOtCompletionOutcome(caseId) {
   const idx = (OT_CASES || []).findIndex(function (row) { return row && row.id === caseId; });
@@ -27629,7 +27857,16 @@ function saveObgOtCompletionOutcome(caseId) {
   OT_CASES[idx].obgDeliveryOutcome = outcome;
   saveOTCasesToLocalStorage && saveOTCasesToLocalStorage();
   fbUpdate && fbUpdate('otCases/' + caseId, { obgDeliveryOutcome: outcome }).catch(function (e) { console.warn('OBG outcome save error:', e); });
+  const refreshDischarge = String(window._bmhDischargePendingObgCaseId || '') === String(caseId || '');
+  const pendingPatientId = String(window._bmhDischargePendingObgPatientId || '');
   closeObgOtCompletionPopup();
+  if (refreshDischarge) {
+    if (pendingPatientId) setDischargeSelectedPatientId(pendingPatientId);
+    const specialtySel = document.getElementById('dc-specialty-sel');
+    if (specialtySel) specialtySel.value = 'obg';
+    renderDischargeSelectedPatientBanner && renderDischargeSelectedPatientBanner();
+    renderDischargeBuilder && renderDischargeBuilder();
+  }
   showToast('Delivery / LSCS completion details saved ✓', 's');
 }
 
@@ -38662,6 +38899,46 @@ function fetchDischargeCardsForPatient(bmhId) {
     return localRows;
   });
 }
+function rememberDischargeActionRecords(bmhId, records) {
+  const key = String(bmhId || '').trim();
+  if (!key) return [];
+  window._bmhDischargeActionRecordsByPatient = window._bmhDischargeActionRecordsByPatient || {};
+  window._bmhDischargeActionRecordsByPatient[key] = mergeDischargeCardRecords(records || []);
+  return window._bmhDischargeActionRecordsByPatient[key];
+}
+function findDischargeCardRecordInMemory(bmhId, recordId) {
+  const key = String(bmhId || '').trim();
+  const recId = String(recordId || '').trim();
+  if (!key || !recId) return null;
+  const cacheRecord = getCachedDischargeCardsForPatient(key).find(function (row) { return String(row.id || '') === recId; });
+  if (cacheRecord) return cacheRecord;
+  const actionRows = (window._bmhDischargeActionRecordsByPatient && window._bmhDischargeActionRecordsByPatient[key]) || [];
+  return mergeDischargeCardRecords(actionRows).find(function (row) { return String(row.id || '') === recId; }) || null;
+}
+function clearPendingDischargeObgPopupContext() {
+  window._bmhDischargePendingObgCaseId = '';
+  window._bmhDischargePendingObgPatientId = '';
+}
+function maybeOpenObgPopupForDischargeFlow(bmhId, preferredCaseId) {
+  const key = String(bmhId || '').trim();
+  if (!key) return false;
+  const preferred = preferredCaseId
+    ? OT_CASES.slice().reverse().map(normalizeOTCaseRecord).find(function (c) { return c.id === preferredCaseId; }) || null
+    : null;
+  const data = getDischargePrintData('obg');
+  const otCase = preferred || data.lastOtCase || null;
+  if (!otCase || otCase.bmhId !== key || otCase.caseKind !== 'obg') {
+    clearPendingDischargeObgPopupContext();
+    return false;
+  }
+  const specialtySel = document.getElementById('dc-specialty-sel');
+  if (specialtySel) specialtySel.value = 'obg';
+  renderDischargeBuilder && renderDischargeBuilder();
+  window._bmhDischargePendingObgCaseId = otCase.id || '';
+  window._bmhDischargePendingObgPatientId = key;
+  setTimeout(function () { openObgOtCompletionPopup(otCase.id); }, 120);
+  return true;
+}
 function buildDischargeCardSummaryLabel(record) {
   const rec = normalizeDischargeCardRecord(record) || {};
   const proc = rec.snapshot?.procedure || rec.summaryLabel || rec.specialty || 'Discharge Card';
@@ -38745,6 +39022,7 @@ function openDischargePatientActionsForCurrent() {
 function renderDischargePatientActionsModal(bmhId, records, loading) {
   const pt = PATIENTS.find(function (p) { return p.bmhId === bmhId; }) || {};
   const otCase = OT_CASES.slice().reverse().map(normalizeOTCaseRecord).find(function (c) { return c.bmhId === bmhId; }) || null;
+  const safeRecords = rememberDischargeActionRecords(bmhId, records || []);
   let modal = document.getElementById('m-discharge-patient-actions');
   if (!modal) {
     modal = document.createElement('div');
@@ -38758,14 +39036,15 @@ function renderDischargePatientActionsModal(bmhId, records, loading) {
     + '</div>';
   const rowsHtml = loading
     ? '<div style="padding:14px 12px;font-size:12px;color:var(--g1)">Loading saved discharge cards…</div>'
-    : (records.length
-      ? records.map(function (record) {
+    : (safeRecords.length
+      ? safeRecords.map(function (record) {
           return '<div style="border:1px solid var(--g5);border-radius:10px;padding:10px 11px;background:#fff;margin-bottom:8px">'
             + '<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div><div style="font-size:12px;font-weight:900;color:var(--tx)">' + escapeHtmlConsent(buildDischargeCardSummaryLabel(record)) + '</div>'
             + '<div style="font-size:10.5px;color:var(--g1);margin-top:2px">' + escapeHtmlConsent((record.specialty || 'ophtho').toUpperCase()) + (record.printedAt ? ' · Printed ' + escapeHtmlConsent(formatDateIN(record.printedAt)) : ' · Updated ' + escapeHtmlConsent(formatDateIN(record.updatedAt || record.createdAt))) + '</div></div>'
             + '<div style="display:flex;gap:6px;flex-wrap:wrap">'
             + '<button class="btn btn-xs btn-outline" onclick="openSavedDischargeCardRecord(\'' + String(record.bmhId).replace(/'/g, "\\'") + '\',\'' + String(record.id).replace(/'/g, "\\'") + '\')">Edit</button>'
             + '<button class="btn btn-xs btn-gold" onclick="printSavedDischargeCardRecord(\'' + String(record.bmhId).replace(/'/g, "\\'") + '\',\'' + String(record.id).replace(/'/g, "\\'") + '\')">Print</button>'
+            + '<button class="btn btn-xs btn-red" onclick="deleteSavedDischargeCardRecord(\'' + String(record.bmhId).replace(/'/g, "\\'") + '\',\'' + String(record.id).replace(/'/g, "\\'") + '\')">Delete</button>'
             + '</div></div></div>';
         }).join('')
       : '<div style="padding:12px;font-size:12px;color:var(--g1);background:var(--g6);border-radius:10px">No saved discharge card found yet for this patient.</div>');
@@ -38783,38 +39062,85 @@ function openDischargePatientActions(bmhId) {
     renderDischargePatientActionsModal(key, records, false);
   });
 }
-function startNewDischargeCardForPatient(bmhId) {
+function startNewDischargeCardForPatient(bmhId, opts) {
+  opts = opts || {};
   const key = String(bmhId || '').trim();
   if (!key) return;
   setDischargeSelectedPatientId(key);
   clearDischargeSelectedRecord();
+  clearPendingDischargeObgPopupContext();
   renderDischargeSelectedPatientBanner();
   renderDischargeBuilder && renderDischargeBuilder();
   closeM('m-discharge-patient-actions');
+  if (!opts.suppressObgPopup) maybeOpenObgPopupForDischargeFlow(key);
   showToast('New discharge card opened for patient ✓', 's');
 }
 function startDischargeCardFromLatestOt(bmhId) {
-  startNewDischargeCardForPatient(bmhId);
-  const otCase = OT_CASES.slice().reverse().map(normalizeOTCaseRecord).find(function (c) { return c.bmhId === bmhId; }) || null;
+  const key = String(bmhId || '').trim();
+  if (!key) return;
+  startNewDischargeCardForPatient(key, { suppressObgPopup: true });
+  const otCase = OT_CASES.slice().reverse().map(normalizeOTCaseRecord).find(function (c) { return c.bmhId === key; }) || null;
   const sel = otCase?.caseKind === 'obg' ? 'obg' : 'ophtho';
   const specialtySel = document.getElementById('dc-specialty-sel');
   if (specialtySel) specialtySel.value = sel;
   renderDischargeBuilder && renderDischargeBuilder();
+  if (sel === 'obg') maybeOpenObgPopupForDischargeFlow(key, otCase?.id || '');
 }
-function openSavedDischargeCardRecord(bmhId, recordId) {
-  const record = getCachedDischargeCardsForPatient(bmhId).find(function (row) { return row.id === recordId; });
-  if (!record) { showToast('Saved discharge card not found', 'w'); return; }
-  setDischargeSelectedPatientId(bmhId);
-  setDischargeSelectedRecord(record);
-  const specialtySel = document.getElementById('dc-specialty-sel');
-  if (specialtySel) specialtySel.value = record.specialty || 'ophtho';
-  renderDischargeSelectedPatientBanner();
-  renderDischargeBuilder && renderDischargeBuilder();
-  closeM('m-discharge-patient-actions');
+function openSavedDischargeCardRecord(bmhId, recordId, opts) {
+  opts = opts || {};
+  const key = String(bmhId || '').trim();
+  const recId = String(recordId || '').trim();
+  const applyRecord = function (record) {
+    if (!record) { showToast('Saved discharge card not found', 'w'); return; }
+    setDischargeSelectedPatientId(key);
+    setDischargeSelectedRecord(record);
+    clearPendingDischargeObgPopupContext();
+    const specialtySel = document.getElementById('dc-specialty-sel');
+    if (specialtySel) specialtySel.value = record.specialty || 'ophtho';
+    renderDischargeSelectedPatientBanner();
+    renderDischargeBuilder && renderDischargeBuilder();
+    closeM('m-discharge-patient-actions');
+    if (opts.printAfterOpen) setTimeout(function () { printDischarge(); }, 180);
+  };
+  const immediate = findDischargeCardRecordInMemory(key, recId);
+  if (immediate) {
+    applyRecord(immediate);
+    return;
+  }
+  fetchDischargeCardsForPatient(key).then(function (records) {
+    rememberDischargeActionRecords(key, records || []);
+    applyRecord(findDischargeCardRecordInMemory(key, recId));
+  }).catch(function () {
+    applyRecord(findDischargeCardRecordInMemory(key, recId));
+  });
 }
 function printSavedDischargeCardRecord(bmhId, recordId) {
-  openSavedDischargeCardRecord(bmhId, recordId);
-  setTimeout(function () { printDischarge(); }, 180);
+  openSavedDischargeCardRecord(bmhId, recordId, { printAfterOpen: true });
+}
+function deleteSavedDischargeCardRecord(bmhId, recordId) {
+  const key = String(bmhId || '').trim();
+  const recId = String(recordId || '').trim();
+  if (!key || !recId) return;
+  const record = findDischargeCardRecordInMemory(key, recId);
+  const label = record ? buildDischargeCardSummaryLabel(record) : 'this discharge card';
+  if (!window.confirm('Delete ' + label + '? This will remove it from saved discharge cards.')) return;
+  const next = getCachedDischargeCardsForPatient(key).filter(function (row) { return String(row.id || '') !== recId; });
+  setCachedDischargeCardsForPatient(key, next);
+  rememberDischargeActionRecords(key, next);
+  const selected = getDischargeSelectedRecord();
+  if (selected && String(selected.id || '') === recId) {
+    clearDischargeSelectedRecord();
+    clearPendingDischargeObgPopupContext();
+    renderDischargeSelectedPatientBanner();
+    renderDischargeBuilder && renderDischargeBuilder();
+  }
+  renderDischargePatientActionsModal(key, next, false);
+  fbRemove('dischargeCards/' + key + '/' + recId).then(function () {
+    showToast('Saved discharge card deleted ✓', 's');
+  }).catch(function (e) {
+    console.warn('Discharge card delete failed:', e);
+    showToast('Deleted locally, but cloud delete failed', 'w');
+  });
 }
 function collectDischargeCardRecordFromDom(opts) {
   opts = opts || {};
