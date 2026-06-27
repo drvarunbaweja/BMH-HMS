@@ -1,10 +1,14 @@
-import { db } from './firebase.js'
+import { auth, db } from './firebase.js'
 import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, query, where, orderBy, onSnapshot, serverTimestamp } from 'firebase/firestore'
 
 // Inventory Collections
 const INVENTORY_COLLECTION = 'inventory'
 const PURCHASES_COLLECTION = 'inventory_purchases'
 const USAGE_COLLECTION = 'inventory_usage'
+
+function hasFirestoreInventorySession() {
+  return !!auth.currentUser
+}
 
 function getUsageTime(row) {
   const raw = row?.ts || row?.date || row?.createdAt || row?.updatedAt || ''
@@ -57,6 +61,7 @@ function isRecentlyDeletedInventoryBarcode(barcode) {
 // Save inventory stock to Firestore
 export async function saveInventoryToFirebase(inventoryData) {
   try {
+    if (!hasFirestoreInventorySession()) return null
     if (!inventoryData.barcode) {
       console.error('Cannot save inventory without barcode')
       return null
@@ -80,6 +85,7 @@ export async function saveInventoryToFirebase(inventoryData) {
 
 export async function deleteInventoryFromFirebase(barcode) {
   try {
+    if (!hasFirestoreInventorySession()) return false
     const key = String(barcode || '').trim()
     if (!key) return false
 
@@ -95,6 +101,7 @@ export async function deleteInventoryFromFirebase(barcode) {
 // Load inventory stock from Firestore
 export async function loadInventoryFromFirebase() {
   try {
+    if (!hasFirestoreInventorySession()) return []
     const q = query(collection(db, INVENTORY_COLLECTION), orderBy('updatedAt', 'desc'))
     const snapshot = await getDocs(q)
     
@@ -113,6 +120,7 @@ export async function loadInventoryFromFirebase() {
 
 // Watch inventory changes in real-time
 export function watchInventory(callback) {
+  if (!hasFirestoreInventorySession()) return function noop() {}
   const q = query(collection(db, INVENTORY_COLLECTION), orderBy('updatedAt', 'desc'))
   
   return onSnapshot(q, (snapshot) => {
@@ -130,6 +138,7 @@ export function watchInventory(callback) {
 // Save purchase record to Firestore
 export async function savePurchaseToFirebase(purchaseData) {
   try {
+    if (!hasFirestoreInventorySession()) return null
     const dataToSave = {
       ...purchaseData,
       createdAt: serverTimestamp(),
@@ -148,6 +157,7 @@ export async function savePurchaseToFirebase(purchaseData) {
 // Load purchases from Firestore
 export async function loadPurchasesFromFirebase() {
   try {
+    if (!hasFirestoreInventorySession()) return []
     const q = query(collection(db, PURCHASES_COLLECTION), orderBy('createdAt', 'desc'))
     const snapshot = await getDocs(q)
     
@@ -166,6 +176,7 @@ export async function loadPurchasesFromFirebase() {
 
 // Watch purchases changes in real-time
 export function watchPurchases(callback) {
+  if (!hasFirestoreInventorySession()) return function noop() {}
   const q = query(collection(db, PURCHASES_COLLECTION), orderBy('createdAt', 'desc'))
   
   return onSnapshot(q, (snapshot) => {
@@ -183,6 +194,7 @@ export function watchPurchases(callback) {
 // Save usage record to Firestore
 export async function saveUsageToFirebase(usageData) {
   try {
+    if (!hasFirestoreInventorySession()) return usageData?.id || null
     const dataToSave = {
       ...usageData,
       createdAt: serverTimestamp(),
@@ -208,6 +220,7 @@ export async function saveUsageToFirebase(usageData) {
 // Load usage from Firestore
 export async function loadUsageFromFirebase() {
   try {
+    if (!hasFirestoreInventorySession()) return []
     const q = query(collection(db, USAGE_COLLECTION), orderBy('createdAt', 'desc'))
     const snapshot = await getDocs(q)
     
@@ -226,6 +239,7 @@ export async function loadUsageFromFirebase() {
 
 // Watch usage changes in real-time
 export function watchUsage(callback) {
+  if (!hasFirestoreInventorySession()) return function noop() {}
   const q = query(collection(db, USAGE_COLLECTION), orderBy('createdAt', 'desc'))
   
   return onSnapshot(q, (snapshot) => {
@@ -243,6 +257,7 @@ export function watchUsage(callback) {
 // Sync local inventory with Firebase
 export async function syncInventoryWithFirebase() {
   try {
+    if (!hasFirestoreInventorySession()) return false
     // Load from Firebase
     const firebaseInventory = await loadInventoryFromFirebase()
     const firebasePurchases = await loadPurchasesFromFirebase()
@@ -290,6 +305,7 @@ export async function syncInventoryWithFirebase() {
 
 // Initialize inventory Firebase sync
 export function initializeInventoryFirebaseSync() {
+  if (!hasFirestoreInventorySession()) return false
   // Watch inventory changes — merge instead of replace to avoid flickering optimistic adds
   watchInventory((inventory) => {
     if (window.INVENTORY) {
@@ -364,6 +380,7 @@ export function initializeInventoryFirebaseSync() {
   })
   
   console.log('Inventory Firebase sync initialized')
+  return true
 }
 
 // Expose functions to window for legacy.js access
