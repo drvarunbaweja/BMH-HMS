@@ -1978,7 +1978,30 @@
     <button class="wa-btn" onclick="showToast('Discharge card sent via WhatsApp ✓','s')">📱 WhatsApp</button>
     <button class="btn btn-outline btn-sm" onclick="showToast('Auto-booking follow-up appointment ✓','s')">📅 Auto-Book Follow-up</button>
     <button class="btn btn-outline btn-sm" onclick="loadDischargeFromLastVisit()">📂 Load from Last Visit</button>
+    <button class="btn btn-outline btn-sm" onclick="saveCurrentDischargeCard()">💾 Save Card</button>
+    <button class="btn btn-outline btn-sm" onclick="openDischargePatientActionsForCurrent()">🗂 Saved Cards</button>
     <span style="font-size:11px;color:var(--g1);font-weight:700;margin-left:auto">All fields editable — click any text</span>
+  </div>
+
+  <div class="no-print" style="display:grid;grid-template-columns:minmax(260px,420px) 1fr;gap:10px;margin-bottom:14px;align-items:start">
+    <div style="background:#fff;border:1.5px solid var(--g4);border-radius:12px;padding:10px 12px">
+      <div style="font-size:10px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.45px;margin-bottom:6px">Search Patient By BMSH ID</div>
+      <div style="display:flex;align-items:center;gap:8px;border:1px solid var(--g4);border-radius:10px;padding:8px 10px;background:var(--g6)">
+        <span style="font-size:13px">🔍</span>
+        <input type="text" id="dc-patient-search" placeholder="Enter BMSH ID or patient name..." oninput="searchDischargePatients(this.value)" style="border:none;background:transparent;outline:none;font-size:12px;font-family:var(--font);width:100%;padding:0">
+      </div>
+      <div id="dc-patient-search-results" style="display:none;margin-top:8px;max-height:220px;overflow:auto"></div>
+    </div>
+    <div id="dc-selected-patient-banner" style="display:flex;align-items:center;justify-content:space-between;gap:10px;background:linear-gradient(135deg,#fffaf0 0%,#ffffff 100%);border:1.5px solid #ead9ad;border-radius:12px;padding:11px 14px">
+      <div>
+        <div style="font-size:10px;font-weight:900;color:#8a4200;text-transform:uppercase;letter-spacing:.45px">Discharge Card Patient</div>
+        <div id="dc-selected-patient-text" style="font-size:12px;font-weight:800;color:var(--tx);margin-top:3px">No patient selected — use BMSH ID search above.</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-xs btn-outline" onclick="openDischargePatientActionsForCurrent()">Open Actions</button>
+        <button class="btn btn-xs btn-gray" onclick="clearDischargePatientSelection()">Clear</button>
+      </div>
+    </div>
   </div>
 
   <div class="discharge-card" id="discharge-card">
