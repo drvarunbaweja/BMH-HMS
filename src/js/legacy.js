@@ -22542,8 +22542,7 @@ function getDrugLibraryIdentityKey(row) {
   if (!row || typeof row !== 'object') return '';
   return [
     String(row.trade || row.brand || row.name || '').trim().toLowerCase(),
-    String(row.generic || row.name || row.trade || '').trim().toLowerCase(),
-    String(row.dept || 'All').trim().toLowerCase()
+    String(row.generic || row.name || row.trade || '').trim().toLowerCase()
   ].join('|');
 }
 function getDrugTemplateIdentityKey(row) {
