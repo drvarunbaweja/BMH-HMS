@@ -5838,10 +5838,11 @@
   <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">Type / Form <button type="button" onclick="addCustomRxOption('type')" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></label><select id="md-edit-type"></select></div>
   <div class="form-group"><label class="fl">Trade Name</label><input type="text" id="md-edit-trade"></div>
   <div class="form-group"><label class="fl">Generic Name</label><input type="text" id="md-edit-generic"></div>
+  <div class="form-group"><label class="fl">Company</label><input type="text" id="md-edit-company"></div>
   <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">Default Frequency <button type="button" onclick="addCustomRxOption('freq')" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></label><select id="md-edit-freq"></select></div>
   <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">Default Duration <button type="button" onclick="addCustomRxOption('dur')" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></label><select id="md-edit-dur"></select></div>
   <div class="form-group"><label class="fl">Department</label><select id="md-edit-dept"><option>All</option><option>Ophthalmology</option><option>OBG</option><option>Neuropsychiatry</option><option>Skin</option></select></div>
-  <div style="display:flex;gap:8px"><button class="btn btn-gold" style="flex:1" onclick="saveEditDrugLibrary()">💾 Save changes</button><button class="btn btn-gray" onclick="closeM('m-edit-drug')">Cancel</button></div>
+  <div style="display:flex;gap:8px"><button class="btn btn-gold" style="flex:1" onclick="saveEditDrugLibrary()">💾 Save changes</button><button class="btn btn-red" onclick="deleteEditDrugLibrary()">🗑 Delete</button><button class="btn btn-gray" onclick="closeM('m-edit-drug')">Cancel</button></div>
 </div></div></div>
 
 <!-- ORDER INVESTIGATIONS MODAL -->
