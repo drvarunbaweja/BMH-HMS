@@ -1,0 +1,60 @@
+[debug] [2026-06-27T07:09:01.745Z] ----------------------------------------------------------------------
+[debug] [2026-06-27T07:09:01.755Z] Command:       /usr/local/bin/node /Users/varunbaweja/.npm/_npx/7750544ccf494d8b/node_modules/.bin/firebase deploy --only database
+[debug] [2026-06-27T07:09:01.756Z] CLI Version:   15.22.3
+[debug] [2026-06-27T07:09:01.756Z] Platform:      darwin
+[debug] [2026-06-27T07:09:01.756Z] Node Version:  v24.14.1
+[debug] [2026-06-27T07:09:01.756Z] Detected Agent: codex_cli
+[debug] [2026-06-27T07:09:01.756Z] Time:          Sat Jun 27 2026 12:39:01 GMT+0530 (India Standard Time)
+[debug] [2026-06-27T07:09:01.757Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-06-27T07:09:01.760Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[debug] [2026-06-27T07:09:07.038Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-06-27T07:09:07.040Z] > authorizing via signed-in user (drvarunbaweja@gmail.com)
+[debug] [2026-06-27T07:09:07.041Z] [iam] checking project bmh-hms for permissions ["firebase.projects.get","firebasedatabase.instances.update"]
+[debug] [2026-06-27T07:09:07.045Z] Checked if tokens are valid: false, expires at: 1777403877171
+[debug] [2026-06-27T07:09:07.046Z] Checked if tokens are valid: false, expires at: 1777403877171
+[debug] [2026-06-27T07:09:07.047Z] > refreshing access token with scopes: []
+[debug] [2026-06-27T07:09:07.054Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-06-27T07:09:07.055Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-06-27T07:09:07.954Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-06-27T07:09:07.955Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-06-27T07:09:08.010Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/bmh-hms:testIamPermissions [none]
+[debug] [2026-06-27T07:09:08.010Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/bmh-hms:testIamPermissions  x-goog-user-project=bmh-hms
+[debug] [2026-06-27T07:09:08.011Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/bmh-hms:testIamPermissions {"permissions":["firebase.projects.get","firebasedatabase.instances.update"]}
+[debug] [2026-06-27T07:09:08.180Z] <<< [apiv2][status] GET https://firebase-public.firebaseio.com/cli.json 200
+[debug] [2026-06-27T07:09:08.181Z] <<< [apiv2][body] GET https://firebase-public.firebaseio.com/cli.json {"cloudBuildErrorAfter":1594252800000,"cloudBuildWarnAfter":1590019200000,"defaultNode10After":1594252800000,"minVersion":"3.0.5","node8DeploysDisabledAfter":1613390400000,"node8RuntimeDisabledAfter":1615809600000,"node8WarnAfter":1600128000000}
+[debug] [2026-06-27T07:09:10.404Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/bmh-hms:testIamPermissions 200
+[debug] [2026-06-27T07:09:10.404Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/bmh-hms:testIamPermissions {"permissions":["firebase.projects.get","firebasedatabase.instances.update"]}
+[debug] [2026-06-27T07:09:10.406Z] Checked if tokens are valid: true, expires at: 1782547746955
+[debug] [2026-06-27T07:09:10.407Z] Checked if tokens are valid: true, expires at: 1782547746955
+[debug] [2026-06-27T07:09:10.407Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/bmh-hms [none]
+[debug] [2026-06-27T07:09:11.989Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/bmh-hms 200
+[debug] [2026-06-27T07:09:11.990Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/bmh-hms {"projectId":"bmh-hms","projectNumber":"675093131811","displayName":"bmh-hms","name":"projects/bmh-hms","resources":{"hostingSite":"bmh-hms","realtimeDatabaseInstance":"bmh-hms-default-rtdb"},"state":"ACTIVE","etag":"1_2d4e264a-6179-4c8b-acac-2bc53c5a6afb"}
+[info] 
+[info] === Deploying to 'bmh-hms'...
+[info] 
+[info] i  deploying database 
+[info] i  database: checking rules syntax... 
+[debug] [2026-06-27T07:09:12.011Z] Checked if tokens are valid: true, expires at: 1782547746955
+[debug] [2026-06-27T07:09:12.012Z] Checked if tokens are valid: true, expires at: 1782547746955
+[debug] [2026-06-27T07:09:12.013Z] >>> [apiv2][query] GET https://firebasedatabase.googleapis.com/v1beta/projects/bmh-hms/locations/-/instances/bmh-hms-default-rtdb [none]
+[debug] [2026-06-27T07:09:14.674Z] <<< [apiv2][status] GET https://firebasedatabase.googleapis.com/v1beta/projects/bmh-hms/locations/-/instances/bmh-hms-default-rtdb 200
+[debug] [2026-06-27T07:09:14.675Z] <<< [apiv2][body] GET https://firebasedatabase.googleapis.com/v1beta/projects/bmh-hms/locations/-/instances/bmh-hms-default-rtdb {"name":"projects/675093131811/locations/asia-southeast1/instances/bmh-hms-default-rtdb","project":"projects/675093131811","databaseUrl":"https://bmh-hms-default-rtdb.asia-southeast1.firebasedatabase.app","type":"DEFAULT_DATABASE","state":"ACTIVE"}
+[debug] [2026-06-27T07:09:14.680Z] Checked if tokens are valid: true, expires at: 1782547746955
+[debug] [2026-06-27T07:09:14.680Z] Checked if tokens are valid: true, expires at: 1782547746955
+[debug] [2026-06-27T07:09:14.680Z] >>> [apiv2][query] PUT https://bmh-hms-default-rtdb.asia-southeast1.firebasedatabase.app/.settings/rules.json dryRun=true
+[debug] [2026-06-27T07:09:14.681Z] >>> [apiv2][body] PUT https://bmh-hms-default-rtdb.asia-southeast1.firebasedatabase.app/.settings/rules.json "{\n  \"rules\": {\n    \".read\": true,\n    \".write\": true,\n    \"patients\": {\n      \".indexOn\": [\n        \"createdAt\",\n        \"registeredAt\",\n        \"updatedAt\",\n        \"checkinAt\",\n        \"queueDate\"\n      ]\n    },\n    \"payRequests\": {\n      \".indexOn\": [\n        \"status\"\n      ]\n    }\n  }\n}\n"
+[debug] [2026-06-27T07:09:15.714Z] <<< [apiv2][status] PUT https://bmh-hms-default-rtdb.asia-southeast1.firebasedatabase.app/.settings/rules.json 200
+[debug] [2026-06-27T07:09:15.715Z] <<< [apiv2][body] PUT https://bmh-hms-default-rtdb.asia-southeast1.firebasedatabase.app/.settings/rules.json {"status":"ok"}
+[info] ✔  database: rules syntax for database bmh-hms-default-rtdb is valid 
+[info] i  database: releasing rules... 
+[debug] [2026-06-27T07:09:15.722Z] Checked if tokens are valid: true, expires at: 1782547746955
+[debug] [2026-06-27T07:09:15.723Z] Checked if tokens are valid: true, expires at: 1782547746955
+[debug] [2026-06-27T07:09:15.723Z] >>> [apiv2][query] GET https://firebasedatabase.googleapis.com/v1beta/projects/bmh-hms/locations/-/instances/bmh-hms-default-rtdb [none]
+[debug] [2026-06-27T07:09:16.343Z] <<< [apiv2][status] GET https://firebasedatabase.googleapis.com/v1beta/projects/bmh-hms/locations/-/instances/bmh-hms-default-rtdb 200
+[debug] [2026-06-27T07:09:16.344Z] <<< [apiv2][body] GET https://firebasedatabase.googleapis.com/v1beta/projects/bmh-hms/locations/-/instances/bmh-hms-default-rtdb {"name":"projects/675093131811/locations/asia-southeast1/instances/bmh-hms-default-rtdb","project":"projects/675093131811","databaseUrl":"https://bmh-hms-default-rtdb.asia-southeast1.firebasedatabase.app","type":"DEFAULT_DATABASE","state":"ACTIVE"}
+[debug] [2026-06-27T07:09:16.345Z] Checked if tokens are valid: true, expires at: 1782547746955
+[debug] [2026-06-27T07:09:16.345Z] Checked if tokens are valid: true, expires at: 1782547746955
+[debug] [2026-06-27T07:09:16.345Z] >>> [apiv2][query] PUT https://bmh-hms-default-rtdb.asia-southeast1.firebasedatabase.app/.settings/rules.json 
+[debug] [2026-06-27T07:09:16.348Z] >>> [apiv2][body] PUT https://bmh-hms-default-rtdb.asia-southeast1.firebasedatabase.app/.settings/rules.json "{\n  \"rules\": {\n    \".read\": true,\n    \".write\": true,\n    \"patients\": {\n      \".indexOn\": [\n        \"createdAt\",\n        \"registeredAt\",\n        \"updatedAt\",\n        \"checkinAt\",\n        \"queueDate\"\n      ]\n    },\n    \"payRequests\": {\n      \".indexOn\": [\n        \"status\"\n      ]\n    }\n  }\n}\n"
+[debug] [2026-06-27T07:09:17.256Z] <<< [apiv2][status] PUT https://bmh-hms-default-rtdb.asia-southeast1.firebasedatabase.app/.settings/rules.json 200
