@@ -22476,6 +22476,7 @@ function mergeDrugLibraryRows(primaryRows) {
 function saveDrugLibraryToStorage() {
   invalidateDrugSearchPoolCache && invalidateDrugSearchPoolCache();
   persistDrugLibraryLocalSnapshots(DRUG_LIBRARY);
+  watchDeletedDrugLibraryKeysFromFirebase && watchDeletedDrugLibraryKeysFromFirebase();
   watchDrugLibraryFromFirebase && watchDrugLibraryFromFirebase();
   if (window.FBDB) {
     const ts = Date.now();
@@ -22559,10 +22560,26 @@ function readDeletedDrugLibraryKeys() {
     return [];
   }
 }
-function saveDeletedDrugLibraryKeys(keys) {
+function mergeDeletedDrugLibraryKeys(localKeys, remoteKeys) {
+  return Array.from(new Set(
+    (Array.isArray(localKeys) ? localKeys : [])
+      .concat(Array.isArray(remoteKeys) ? remoteKeys : [])
+      .map(function (key) { return String(key || '').trim(); })
+      .filter(Boolean)
+  ));
+}
+function saveDeletedDrugLibraryKeys(keys, opts) {
+  opts = opts || {};
+  const unique = Array.from(new Set((Array.isArray(keys) ? keys : []).map(function (key) {
+    return String(key || '').trim();
+  }).filter(Boolean)));
   try {
-    localStorage.setItem('bmh_deleted_drug_library_keys', JSON.stringify(Array.from(new Set((Array.isArray(keys) ? keys : []).filter(Boolean)))));
+    localStorage.setItem('bmh_deleted_drug_library_keys', JSON.stringify(unique));
   } catch (e) {}
+  window._bmhDeletedDrugLibraryKeys = unique.slice();
+  if (!opts.skipRemote && window.FBDB) {
+    window.FBDB.ref('drugLibraryDeletedKeys').set(unique).catch(function () {});
+  }
 }
 function clearDeletedDrugLibraryKey(row) {
   const key = getDrugLibraryIdentityKey(row);
@@ -22576,8 +22593,8 @@ function markDeletedDrugLibraryKey(row) {
   if (keys.indexOf(key) === -1) keys.push(key);
   saveDeletedDrugLibraryKeys(keys);
 }
-function filterDeletedDrugLibraryRows(rows) {
-  const deletedKeys = readDeletedDrugLibraryKeys();
+function filterDeletedDrugLibraryRows(rows, deletedKeys) {
+  deletedKeys = Array.isArray(deletedKeys) ? deletedKeys : readDeletedDrugLibraryKeys();
   if (!deletedKeys.length) return Array.isArray(rows) ? rows : [];
   return (Array.isArray(rows) ? rows : []).filter(function (row) {
     return deletedKeys.indexOf(getDrugLibraryIdentityKey(row)) === -1;
@@ -22791,8 +22808,9 @@ function repairDrugLibraryFromAllSources() {
   const mem = (typeof DRUG_LIBRARY !== 'undefined' && DRUG_LIBRARY.length) ? DRUG_LIBRARY.slice() : [];
   const runMerge = function (remoteVal) {
     const remoteArr = normalizeDrugLibrarySnapshot(remoteVal);
+    const deletedKeys = readDeletedDrugLibraryKeys();
     DRUG_LIBRARY.length = 0;
-    mergeDrugLibraryRows(rescue.concat(remoteArr).concat(mem)).forEach(function (x) { DRUG_LIBRARY.push(x); });
+    filterDeletedDrugLibraryRows(mergeDrugLibraryRows(rescue.concat(remoteArr).concat(mem)), deletedKeys).forEach(function (x) { DRUG_LIBRARY.push(x); });
     persistDrugLibraryLocalSnapshots(DRUG_LIBRARY);
     renderSettingsDrugs && renderSettingsDrugs();
     rebuildDrugGenericDatalist();
@@ -22820,6 +22838,7 @@ function loadDrugLibraryFromStorage(opts) {
   const forceRemote = !!opts.forceRemote;
   const localOnly = !!opts.localOnly;
   const needsRemoteHydration = !!window.FBDB && !window._bmhDrugLibraryHydratedFromFirebase;
+  watchDeletedDrugLibraryKeysFromFirebase && watchDeletedDrugLibraryKeysFromFirebase();
   watchDrugLibraryFromFirebase && watchDrugLibraryFromFirebase();
   if (window._bmhDrugLibraryLoadedOnce && !forceRemote && !needsRemoteHydration) return;
   if (window._bmhDrugLibraryLoadInFlight && (forceRemote || needsRemoteHydration)) return;
@@ -22831,10 +22850,13 @@ function loadDrugLibraryFromStorage(opts) {
     const currentArr = Array.isArray(DRUG_LIBRARY) ? DRUG_LIBRARY.slice() : [];
     const localTs = Number(localStorage.getItem('bmh_drug_library_updated_at') || 0) || 0;
     const remoteTs = Number(window._bmhDrugLibraryRemoteUpdatedAt || 0) || 0;
+    const deletedKeys = mergeDeletedDrugLibraryKeys(readDeletedDrugLibraryKeys(), window._bmhRemoteDeletedDrugLibraryKeys || []);
+    saveDeletedDrugLibraryKeys(deletedKeys, { skipRemote: true });
     DRUG_LIBRARY.length = 0;
-    let merged = choosePreferredDrugLibraryRows(localArr, remoteArr, currentArr, localTs, remoteTs);
+    let merged = filterDeletedDrugLibraryRows(choosePreferredDrugLibraryRows(localArr, remoteArr, currentArr, localTs, remoteTs), deletedKeys);
     const recovered = getRecoveredDrugLibraryRows(localArr, remoteArr, currentArr);
-    if (recovered.rows.length > merged.length) merged = recovered.rows;
+    const recoveredRows = filterDeletedDrugLibraryRows(recovered.rows, deletedKeys);
+    if (recoveredRows.length > merged.length) merged = recoveredRows;
     // Strip any leading '?' characters that got saved from CSV imports
     let qStripped = false;
     merged.forEach(function (x) {
@@ -22866,7 +22888,7 @@ function loadDrugLibraryFromStorage(opts) {
   if (!DRUG_LIBRARY.length) {
     const localImmediate = readDrugLibraryRowsFromAllLocalSources();
     if (localImmediate.length) {
-      const seedMerged = mergeDrugLibraryRows(localImmediate);
+      const seedMerged = filterDeletedDrugLibraryRows(mergeDrugLibraryRows(localImmediate));
       seedMerged.forEach(function (x) { DRUG_LIBRARY.push(x); });
       invalidateDrugSearchPoolCache && invalidateDrugSearchPoolCache();
     }
@@ -22888,16 +22910,21 @@ function loadDrugLibraryFromStorage(opts) {
   window._bmhDrugLibraryLoadInFlight = true;
   Promise.all([
     window.FBDB.ref('drugLibrary').once('value'),
-    window.FBDB.ref('drugLibraryMeta').once('value')
+    window.FBDB.ref('drugLibraryMeta').once('value'),
+    window.FBDB.ref('drugLibraryDeletedKeys').once('value')
   ]).then(function (pairs) {
     const snap = pairs[0];
     const metaSnap = pairs[1];
+    const deletedSnap = pairs[2];
     window._bmhDrugLibraryHydratedFromFirebase = true;
     const remoteArr = normalizeDrugLibrarySnapshot(snap.val());
     const localArr = readDrugLibraryFromLocalStorage();
     const rescuedArr = readDrugLibraryRowsFromAllLocalSources();
+    window._bmhRemoteDeletedDrugLibraryKeys = Array.isArray(deletedSnap && deletedSnap.val && deletedSnap.val()) ? deletedSnap.val().filter(Boolean) : [];
     window._bmhDrugLibraryRemoteUpdatedAt = Number(metaSnap && metaSnap.val && metaSnap.val()?.updatedAt || 0) || 0;
-    const mergedLibrarySize = mergeDrugLibraryRows(localArr.concat(remoteArr).concat(rescuedArr)).length;
+    const deletedKeys = mergeDeletedDrugLibraryKeys(readDeletedDrugLibraryKeys(), window._bmhRemoteDeletedDrugLibraryKeys);
+    saveDeletedDrugLibraryKeys(deletedKeys, { skipRemote: true });
+    const mergedLibrarySize = filterDeletedDrugLibraryRows(mergeDrugLibraryRows(localArr.concat(remoteArr).concat(rescuedArr)), deletedKeys).length;
     // Detect ?-prefixed drugs that survived in Firebase from old CSV imports
     const hasQPrefixedDrugs = remoteArr.some(function (row) {
       return /^\?/.test(String(row.trade || row.brand || row.name || '')) ||
@@ -22923,9 +22950,11 @@ function watchDrugLibraryFromFirebase() {
   window._bmhDrugLibraryWatchActive = true;
   window.FBDB.ref('drugLibrary').on('value', function (snap) {
     const remoteArr = normalizeDrugLibrarySnapshot(snap.val());
-    if (!remoteArr.length) return;
+    const deletedKeys = mergeDeletedDrugLibraryKeys(readDeletedDrugLibraryKeys(), window._bmhRemoteDeletedDrugLibraryKeys || []);
+    saveDeletedDrugLibraryKeys(deletedKeys, { skipRemote: true });
+    if (!remoteArr.length && !(Array.isArray(DRUG_LIBRARY) && DRUG_LIBRARY.length)) return;
     const localArr = Array.isArray(DRUG_LIBRARY) ? DRUG_LIBRARY.slice() : [];
-    const merged = mergeDrugLibraryRows(localArr.concat(remoteArr));
+    const merged = filterDeletedDrugLibraryRows(mergeDrugLibraryRows(localArr.concat(remoteArr)), deletedKeys);
     const prevHash = localArr.map(function (d) { return (d._id || d.trade) + ':' + (d._updatedAt || 0); }).sort().join(',');
     const nextHash = merged.map(function (d) { return (d._id || d.trade) + ':' + (d._updatedAt || 0); }).sort().join(',');
     if (prevHash === nextHash) return;
@@ -22949,6 +22978,26 @@ function watchDrugLibraryFromFirebase() {
   });
 }
 window.watchDrugLibraryFromFirebase = watchDrugLibraryFromFirebase;
+function watchDeletedDrugLibraryKeysFromFirebase() {
+  if (!window.FBDB || window._bmhDeletedDrugLibraryKeysWatchActive) return;
+  window._bmhDeletedDrugLibraryKeysWatchActive = true;
+  window.FBDB.ref('drugLibraryDeletedKeys').on('value', function (snap) {
+    const remoteKeys = Array.isArray(snap && snap.val && snap.val()) ? snap.val().filter(Boolean) : [];
+    window._bmhRemoteDeletedDrugLibraryKeys = remoteKeys.slice();
+    const mergedKeys = mergeDeletedDrugLibraryKeys(readDeletedDrugLibraryKeys(), remoteKeys);
+    saveDeletedDrugLibraryKeys(mergedKeys, { skipRemote: true });
+    const filtered = filterDeletedDrugLibraryRows(Array.isArray(DRUG_LIBRARY) ? DRUG_LIBRARY.slice() : [], mergedKeys);
+    if (filtered.length === (Array.isArray(DRUG_LIBRARY) ? DRUG_LIBRARY.length : 0)) return;
+    DRUG_LIBRARY.length = 0;
+    filtered.forEach(function (row) { DRUG_LIBRARY.push(row); });
+    invalidateDrugSearchPoolCache && invalidateDrugSearchPoolCache();
+    persistDrugLibraryLocalSnapshots(DRUG_LIBRARY);
+    renderSettingsDrugs && renderSettingsDrugs();
+    rebuildDrugGenericDatalist && rebuildDrugGenericDatalist();
+    renderRxDrugs && renderRxDrugs();
+  });
+}
+window.watchDeletedDrugLibraryKeysFromFirebase = watchDeletedDrugLibraryKeysFromFirebase;
 
 function normalizeDrugTypeFromCsv(s) {
   const t = String(s || '').toLowerCase().trim();
