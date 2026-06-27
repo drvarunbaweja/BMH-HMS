@@ -6057,8 +6057,11 @@ function previewCaseSheet() { printCaseSheet({ preview: true }); }
 function printPsychSheet() { if(typeof window.printUnifiedRx === 'function') { window.printUnifiedRx('psych'); } else { showToast('Psychiatry summary printing ✓','s'); setTimeout(()=>window.print(),300); } }
 function printSkinSheet() { if(typeof window.printUnifiedRx === 'function') { window.printUnifiedRx('skin'); } else { showToast('Skin summary printing ✓','s'); setTimeout(()=>window.print(),300); } }
 function printDischarge() {
-  renderDischargeBuilder();
-  if ((document.getElementById('dc-specialty-sel')?.value || 'ophtho') === 'ophtho') persistOphDischargeSnapshotToOtCase();
+  const existingPtId = String(document.getElementById('dc-pt-id')?.textContent || '').trim();
+  if (!existingPtId || existingPtId === '—') renderDischargeBuilder();
+  const dischargeSel = document.getElementById('dc-specialty-sel')?.value || 'ophtho';
+  persistDischargeSnapshotToOtCase(dischargeSel);
+  saveCurrentDischargeCard({ markPrinted: true, silent: true });
   const html = buildDischargeCardPrintHtml();
   if (!html) { showToast('Select a patient first', 'w'); return; }
   safePrint(html);
@@ -38413,12 +38416,332 @@ const DISCHARGE_TEMPLATES = {
   },
 };
 
+function getDischargeSelectedPatientId() {
+  return String(window._bmhDischargeSelectedPatientId || '').trim();
+}
+function setDischargeSelectedPatientId(bmhId) {
+  window._bmhDischargeSelectedPatientId = String(bmhId || '').trim();
+}
+function getDischargeSelectedRecord() {
+  const record = window._bmhDischargeSelectedRecord;
+  return record && typeof record === 'object' ? record : null;
+}
+function setDischargeSelectedRecord(record) {
+  window._bmhDischargeSelectedRecord = record ? JSON.parse(JSON.stringify(record)) : null;
+  window._bmhDischargeSelectedRecordId = record?.id || '';
+}
+function clearDischargeSelectedRecord() {
+  window._bmhDischargeSelectedRecord = null;
+  window._bmhDischargeSelectedRecordId = '';
+}
+function readDischargeCardsCache() {
+  try {
+    const raw = localStorage.getItem('bmh_discharge_cards_cache');
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (e) {
+    return {};
+  }
+}
+function writeDischargeCardsCache(cache) {
+  try {
+    localStorage.setItem('bmh_discharge_cards_cache', JSON.stringify(cache || {}));
+  } catch (e) {}
+}
+function normalizeDischargeCardRecord(record) {
+  if (!record || typeof record !== 'object') return null;
+  const snapshot = record.snapshot && typeof record.snapshot === 'object' ? record.snapshot : {};
+  return {
+    id: String(record.id || ('DC' + Date.now())),
+    bmhId: String(record.bmhId || '').trim(),
+    patientName: String(record.patientName || '').trim(),
+    specialty: String(record.specialty || 'ophtho').trim() || 'ophtho',
+    createdAt: String(record.createdAt || record.updatedAt || new Date().toISOString()),
+    updatedAt: String(record.updatedAt || record.createdAt || new Date().toISOString()),
+    printedAt: String(record.printedAt || ''),
+    source: String(record.source || 'discharge-module'),
+    otCaseId: String(record.otCaseId || ''),
+    summaryLabel: String(record.summaryLabel || ''),
+    snapshot: {
+      surgeon: String(snapshot.surgeon || ''),
+      procedure: String(snapshot.procedure || ''),
+      otEye: String(snapshot.otEye || ''),
+      iolSummary: String(snapshot.iolSummary || ''),
+      dischargeDate: String(snapshot.dischargeDate || ''),
+      docSig: String(snapshot.docSig || ''),
+      summaryHtml: String(snapshot.summaryHtml || ''),
+      instructions: Array.isArray(snapshot.instructions) ? snapshot.instructions.slice() : [],
+      followups: Array.isArray(snapshot.followups) ? snapshot.followups.slice() : [],
+      medicines: Array.isArray(snapshot.medicines) ? snapshot.medicines.slice() : [],
+      colorPrint: !!snapshot.colorPrint
+    }
+  };
+}
+function mergeDischargeCardRecords(rows) {
+  const byId = {};
+  (Array.isArray(rows) ? rows : []).forEach(function (row) {
+    const normalized = normalizeDischargeCardRecord(row);
+    if (!normalized || !normalized.bmhId) return;
+    const prev = byId[normalized.id];
+    if (!prev || String(prev.updatedAt || '') <= String(normalized.updatedAt || '')) byId[normalized.id] = normalized;
+  });
+  return Object.keys(byId).map(function (key) { return byId[key]; }).sort(function (a, b) {
+    return String(b.updatedAt || '').localeCompare(String(a.updatedAt || ''));
+  });
+}
+function getCachedDischargeCardsForPatient(bmhId) {
+  const cache = readDischargeCardsCache();
+  return mergeDischargeCardRecords(cache[String(bmhId || '').trim()] || []);
+}
+function setCachedDischargeCardsForPatient(bmhId, records) {
+  const key = String(bmhId || '').trim();
+  if (!key) return [];
+  const cache = readDischargeCardsCache();
+  cache[key] = mergeDischargeCardRecords(records);
+  writeDischargeCardsCache(cache);
+  return cache[key];
+}
+function cacheDischargeCardRecord(record) {
+  const normalized = normalizeDischargeCardRecord(record);
+  if (!normalized || !normalized.bmhId) return null;
+  const next = mergeDischargeCardRecords(getCachedDischargeCardsForPatient(normalized.bmhId).concat([normalized]));
+  setCachedDischargeCardsForPatient(normalized.bmhId, next);
+  return normalized;
+}
+function fetchDischargeCardsForPatient(bmhId) {
+  const key = String(bmhId || '').trim();
+  const localRows = getCachedDischargeCardsForPatient(key);
+  if (!key || !window.FBDB) return Promise.resolve(localRows);
+  return window.FBDB.ref('dischargeCards/' + key).once('value').then(function (snap) {
+    const remoteVal = snap && snap.val ? snap.val() : null;
+    const remoteRows = remoteVal && typeof remoteVal === 'object'
+      ? Object.keys(remoteVal).map(function (id) { return Object.assign({ id: id }, remoteVal[id] || {}); })
+      : [];
+    return setCachedDischargeCardsForPatient(key, localRows.concat(remoteRows));
+  }).catch(function () {
+    return localRows;
+  });
+}
+function buildDischargeCardSummaryLabel(record) {
+  const rec = normalizeDischargeCardRecord(record) || {};
+  const proc = rec.snapshot?.procedure || rec.summaryLabel || rec.specialty || 'Discharge Card';
+  const when = rec.printedAt || rec.updatedAt || rec.createdAt || '';
+  const whenText = when ? formatDateIN(when) : 'Not dated';
+  return proc + ' · ' + whenText;
+}
+function renderDischargeSelectedPatientBanner() {
+  const el = document.getElementById('dc-selected-patient-text');
+  if (!el) return;
+  const selectedId = getDischargeSelectedPatientId();
+  const pt = PATIENTS.find(function (p) { return p.bmhId === selectedId; }) || null;
+  const record = getDischargeSelectedRecord();
+  if (pt) {
+    const recordText = record ? (' · Editing saved card: ' + buildDischargeCardSummaryLabel(record)) : '';
+    el.textContent = pt.name + ' · ' + pt.bmhId + recordText;
+  } else if (window.CURRENT_PATIENT?.bmhId) {
+    el.textContent = 'Using current patient: ' + (window.CURRENT_PATIENT.name || 'Patient') + ' · ' + window.CURRENT_PATIENT.bmhId;
+  } else {
+    el.textContent = 'No patient selected — use BMSH ID search above.';
+  }
+}
+function clearDischargePatientSelection() {
+  setDischargeSelectedPatientId('');
+  clearDischargeSelectedRecord();
+  const inp = document.getElementById('dc-patient-search');
+  if (inp) inp.value = '';
+  const results = document.getElementById('dc-patient-search-results');
+  if (results) { results.innerHTML = ''; results.style.display = 'none'; }
+  renderDischargeSelectedPatientBanner();
+  renderDischargeBuilder && renderDischargeBuilder();
+}
+function searchDischargePatients(raw) {
+  const q = String(raw || '').trim().toLowerCase();
+  const box = document.getElementById('dc-patient-search-results');
+  if (!box) return;
+  if (!q) {
+    box.innerHTML = '';
+    box.style.display = 'none';
+    return;
+  }
+  const rows = (PATIENTS || []).filter(function (p) {
+    const name = String(p?.name || '').toLowerCase();
+    const bmhId = String(p?.bmhId || '').toLowerCase();
+    const mob = String(p?.mob || '').toLowerCase();
+    return bmhId.includes(q) || name.includes(q) || mob.includes(q);
+  }).slice(0, 12);
+  if (!rows.length) {
+    box.style.display = 'block';
+    box.innerHTML = '<div style="padding:9px 10px;font-size:11px;color:var(--g1);background:var(--g6);border-radius:8px">No patient found for this BMSH ID / name.</div>';
+    return;
+  }
+  box.style.display = 'block';
+  box.innerHTML = rows.map(function (p) {
+    return '<button type="button" onclick="selectDischargePatient(\'' + String(p.bmhId).replace(/'/g, "\\'") + '\')"'
+      + ' style="width:100%;text-align:left;border:1px solid var(--g5);background:#fff;border-radius:10px;padding:9px 10px;margin-bottom:6px;cursor:pointer">'
+      + '<div style="font-size:12px;font-weight:900;color:var(--tx)">' + escapeHtmlConsent(p.name || 'Patient') + '</div>'
+      + '<div style="font-size:10.5px;color:var(--g1);margin-top:2px">' + escapeHtmlConsent(p.bmhId || '—') + (p.mob ? ' · ' + escapeHtmlConsent(p.mob) : '') + '</div>'
+      + '</button>';
+  }).join('');
+}
+function selectDischargePatient(bmhId) {
+  const key = String(bmhId || '').trim();
+  if (!key) return;
+  setDischargeSelectedPatientId(key);
+  clearDischargeSelectedRecord();
+  const pt = PATIENTS.find(function (p) { return p.bmhId === key; });
+  const inp = document.getElementById('dc-patient-search');
+  if (inp && pt) inp.value = pt.bmhId;
+  const results = document.getElementById('dc-patient-search-results');
+  if (results) { results.style.display = 'none'; }
+  renderDischargeSelectedPatientBanner();
+  renderDischargeBuilder && renderDischargeBuilder();
+  openDischargePatientActions(key);
+}
+function openDischargePatientActionsForCurrent() {
+  const bmhId = getDischargeSelectedPatientId() || window.CURRENT_PATIENT?.bmhId || document.getElementById('dc-pt-id')?.textContent?.trim() || '';
+  if (!bmhId || bmhId === '—') { showToast('Search and select a patient first', 'w'); return; }
+  openDischargePatientActions(bmhId);
+}
+function renderDischargePatientActionsModal(bmhId, records, loading) {
+  const pt = PATIENTS.find(function (p) { return p.bmhId === bmhId; }) || {};
+  const otCase = OT_CASES.slice().reverse().map(normalizeOTCaseRecord).find(function (c) { return c.bmhId === bmhId; }) || null;
+  let modal = document.getElementById('m-discharge-patient-actions');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.className = 'modal-ov';
+    modal.id = 'm-discharge-patient-actions';
+    document.body.appendChild(modal);
+  }
+  const actionButtons = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">'
+    + '<button class="btn btn-gold" onclick="startNewDischargeCardForPatient(\'' + String(bmhId).replace(/'/g, "\\'") + '\')">+ New Discharge Card</button>'
+    + '<button class="btn btn-outline" onclick="startDischargeCardFromLatestOt(\'' + String(bmhId).replace(/'/g, "\\'") + '\')">Use Latest OT Data</button>'
+    + '</div>';
+  const rowsHtml = loading
+    ? '<div style="padding:14px 12px;font-size:12px;color:var(--g1)">Loading saved discharge cards…</div>'
+    : (records.length
+      ? records.map(function (record) {
+          return '<div style="border:1px solid var(--g5);border-radius:10px;padding:10px 11px;background:#fff;margin-bottom:8px">'
+            + '<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div><div style="font-size:12px;font-weight:900;color:var(--tx)">' + escapeHtmlConsent(buildDischargeCardSummaryLabel(record)) + '</div>'
+            + '<div style="font-size:10.5px;color:var(--g1);margin-top:2px">' + escapeHtmlConsent((record.specialty || 'ophtho').toUpperCase()) + (record.printedAt ? ' · Printed ' + escapeHtmlConsent(formatDateIN(record.printedAt)) : ' · Updated ' + escapeHtmlConsent(formatDateIN(record.updatedAt || record.createdAt))) + '</div></div>'
+            + '<div style="display:flex;gap:6px;flex-wrap:wrap">'
+            + '<button class="btn btn-xs btn-outline" onclick="openSavedDischargeCardRecord(\'' + String(record.bmhId).replace(/'/g, "\\'") + '\',\'' + String(record.id).replace(/'/g, "\\'") + '\')">Edit</button>'
+            + '<button class="btn btn-xs btn-gold" onclick="printSavedDischargeCardRecord(\'' + String(record.bmhId).replace(/'/g, "\\'") + '\',\'' + String(record.id).replace(/'/g, "\\'") + '\')">Print</button>'
+            + '</div></div></div>';
+        }).join('')
+      : '<div style="padding:12px;font-size:12px;color:var(--g1);background:var(--g6);border-radius:10px">No saved discharge card found yet for this patient.</div>');
+  modal.innerHTML = '<div class="modal modal-lg"><div class="modal-hd"><div class="modal-title">🏠 Discharge Card Actions</div><button class="modal-close" onclick="closeM(\'m-discharge-patient-actions\')">✕</button></div>'
+    + '<div style="padding:6px 2px 0"><div style="font-size:14px;font-weight:900;color:var(--tx)">' + escapeHtmlConsent(pt.name || 'Patient') + '</div>'
+    + '<div style="font-size:11px;color:var(--g1);margin-top:3px">' + escapeHtmlConsent(bmhId) + (pt.mob ? ' · ' + escapeHtmlConsent(pt.mob) : '') + (otCase?.procedure ? ' · Latest OT: ' + escapeHtmlConsent(otCase.procedure) : '') + '</div></div>'
+    + '<div style="margin-top:12px">' + actionButtons + '<div style="font-size:10px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.45px;margin-bottom:6px">Saved Discharge Cards</div>' + rowsHtml + '</div></div>';
+  modal.classList.add('open');
+}
+function openDischargePatientActions(bmhId) {
+  const key = String(bmhId || '').trim();
+  if (!key) return;
+  renderDischargePatientActionsModal(key, getCachedDischargeCardsForPatient(key), true);
+  fetchDischargeCardsForPatient(key).then(function (records) {
+    renderDischargePatientActionsModal(key, records, false);
+  });
+}
+function startNewDischargeCardForPatient(bmhId) {
+  const key = String(bmhId || '').trim();
+  if (!key) return;
+  setDischargeSelectedPatientId(key);
+  clearDischargeSelectedRecord();
+  renderDischargeSelectedPatientBanner();
+  renderDischargeBuilder && renderDischargeBuilder();
+  closeM('m-discharge-patient-actions');
+  showToast('New discharge card opened for patient ✓', 's');
+}
+function startDischargeCardFromLatestOt(bmhId) {
+  startNewDischargeCardForPatient(bmhId);
+  const otCase = OT_CASES.slice().reverse().map(normalizeOTCaseRecord).find(function (c) { return c.bmhId === bmhId; }) || null;
+  const sel = otCase?.caseKind === 'obg' ? 'obg' : 'ophtho';
+  const specialtySel = document.getElementById('dc-specialty-sel');
+  if (specialtySel) specialtySel.value = sel;
+  renderDischargeBuilder && renderDischargeBuilder();
+}
+function openSavedDischargeCardRecord(bmhId, recordId) {
+  const record = getCachedDischargeCardsForPatient(bmhId).find(function (row) { return row.id === recordId; });
+  if (!record) { showToast('Saved discharge card not found', 'w'); return; }
+  setDischargeSelectedPatientId(bmhId);
+  setDischargeSelectedRecord(record);
+  const specialtySel = document.getElementById('dc-specialty-sel');
+  if (specialtySel) specialtySel.value = record.specialty || 'ophtho';
+  renderDischargeSelectedPatientBanner();
+  renderDischargeBuilder && renderDischargeBuilder();
+  closeM('m-discharge-patient-actions');
+}
+function printSavedDischargeCardRecord(bmhId, recordId) {
+  openSavedDischargeCardRecord(bmhId, recordId);
+  setTimeout(function () { printDischarge(); }, 180);
+}
+function collectDischargeCardRecordFromDom(opts) {
+  opts = opts || {};
+  const data = getDischargePrintData(document.getElementById('dc-specialty-sel')?.value || '');
+  if (!data.ptId || data.ptId === '—') return null;
+  const existing = getDischargeSelectedRecord();
+  const nowIso = new Date().toISOString();
+  const snap = collectDischargeCardSnapshotFromDom();
+  return normalizeDischargeCardRecord({
+    id: existing?.id || ('DC' + Date.now() + Math.random().toString(36).slice(2, 5)),
+    bmhId: data.ptId,
+    patientName: data.ptNm,
+    specialty: data.sel || document.getElementById('dc-specialty-sel')?.value || 'ophtho',
+    createdAt: existing?.createdAt || nowIso,
+    updatedAt: nowIso,
+    printedAt: opts.markPrinted ? nowIso : (existing?.printedAt || ''),
+    source: data.lastOtCase?.id ? 'ot-linked' : 'discharge-module',
+    otCaseId: data.lastOtCase?.id || existing?.otCaseId || '',
+    summaryLabel: document.getElementById('dc-procedure')?.textContent?.trim() || data.procedureName || '',
+    snapshot: Object.assign({}, snap, {
+      surgeon: document.getElementById('dc-surgeon')?.textContent?.trim() || '',
+      procedure: document.getElementById('dc-procedure')?.textContent?.trim() || '',
+      otEye: document.getElementById('dc-ot-eye')?.textContent?.trim() || '',
+      iolSummary: document.getElementById('dc-iol-summary')?.textContent?.trim() || '',
+      dischargeDate: document.getElementById('dc-discharge-date')?.textContent?.trim() || '',
+      docSig: document.getElementById('dc-doc-sig')?.textContent?.trim() || '',
+      summaryHtml: document.getElementById('dc-summary-text')?.innerHTML || '',
+      colorPrint: !!document.getElementById('dc-color-print')?.checked
+    })
+  });
+}
+function saveCurrentDischargeCard(opts) {
+  opts = opts || {};
+  const record = collectDischargeCardRecordFromDom(opts);
+  if (!record) {
+    if (!opts.silent) showToast('Select a patient first', 'w');
+    return null;
+  }
+  cacheDischargeCardRecord(record);
+  setDischargeSelectedPatientId(record.bmhId);
+  setDischargeSelectedRecord(record);
+  renderDischargeSelectedPatientBanner();
+  if (window.FBDB) {
+    fbSet('dischargeCards/' + record.bmhId + '/' + record.id, record).catch(function () {});
+  }
+  if (!opts.silent) showToast('Discharge card saved ✓', 's');
+  return record;
+}
+function persistDischargeSnapshotToOtCase(specialty) {
+  const snap = collectDischargeCardSnapshotFromDom();
+  const data = getDischargePrintData(specialty || document.getElementById('dc-specialty-sel')?.value || '');
+  const rawCase = data.lastOtCase;
+  if (!rawCase || !rawCase.id) return;
+  const idx = OT_CASES.findIndex(function (c) { return c.id === rawCase.id; });
+  if (idx < 0) return;
+  const field = (specialty || data.sel) === 'obg' ? 'obgDischargeSnapshot' : 'ophDischargeSnapshot';
+  OT_CASES[idx][field] = snap;
+  fbUpdate && fbUpdate('otCases/' + rawCase.id, { [field]: snap }).catch(function () {});
+}
 function getDischargePrintData(sel) {
-  const ptObj = window.CURRENT_PATIENT || PATIENTS.find(function (p) {
-    const ids = ['ophtho-pt-uid', 'obg-pt-uid', 'psych-pt-uid', 'skin-pt-uid'];
-    const id = ids.map(function (i) { return document.getElementById(i)?.textContent?.trim(); }).find(function (v) { return v && v !== '—'; });
-    return id && p.bmhId === id;
-  }) || {};
+  const selectedPatientId = getDischargeSelectedPatientId();
+  const ptObj = (selectedPatientId ? PATIENTS.find(function (p) { return p.bmhId === selectedPatientId; }) : null)
+    || window.CURRENT_PATIENT || PATIENTS.find(function (p) {
+      const ids = ['ophtho-pt-uid', 'obg-pt-uid', 'psych-pt-uid', 'skin-pt-uid'];
+      const id = ids.map(function (i) { return document.getElementById(i)?.textContent?.trim(); }).find(function (v) { return v && v !== '—'; });
+      return id && p.bmhId === id;
+    }) || {};
   const ptId = ptObj.bmhId || '—';
   const ptNm = ptObj.name || document.getElementById('ophtho-pt-nm')?.textContent || document.getElementById('obg-pt-nm')?.textContent || '— Select Patient —';
   const inferSpecialty = function () {
@@ -38668,24 +38991,7 @@ function collectDischargeCardSnapshotFromDom() {
   return { capturedAt: new Date().toISOString(), instructions: instr, followups: fus, medicines: medicines };
 }
 function persistOphDischargeSnapshotToOtCase() {
-  const snap = collectDischargeCardSnapshotFromDom();
-  const ptId = document.getElementById('dc-pt-id')?.textContent?.trim();
-  if (!ptId || ptId === '—') return;
-  const today = todayKey();
-  let rawCase = OT_CASES.find(function (c) {
-    const oc = normalizeOTCaseRecord(c);
-    return oc.bmhId === ptId && String(oc.date || '').slice(0, 10) === today && (oc.status === 'pending' || oc.status === 'in-progress');
-  });
-  if (!rawCase) {
-    rawCase = OT_CASES.slice().reverse().map(normalizeOTCaseRecord).find(function (c) {
-      return c.bmhId === ptId && (c.caseKind === 'ophtho' || !c.caseKind || c.caseKind !== 'obg');
-    });
-  }
-  if (!rawCase || !rawCase.id) return;
-  const idx = OT_CASES.findIndex(function (c) { return c.id === rawCase.id; });
-  if (idx < 0) return;
-  OT_CASES[idx].ophDischargeSnapshot = snap;
-  fbUpdate && fbUpdate('otCases/' + rawCase.id, { ophDischargeSnapshot: snap }).catch(function () {});
+  persistDischargeSnapshotToOtCase('ophtho');
 }
 function followupLineToDateOnly(line) {
   const s = String(line || '').trim();
@@ -39083,6 +39389,7 @@ function renderDischargeBuilder() {
   const ctrl = document.getElementById('dc-specialty-ctrl');
   if(!ctrl) return;
   const specialtySel = document.getElementById('dc-specialty-sel');
+  renderDischargeSelectedPatientBanner();
   const resolved = getDischargePrintData(specialtySel?.value || '').sel || specialtySel?.value || 'ophtho';
   if (specialtySel && specialtySel.value !== resolved) specialtySel.value = resolved;
   const sel = resolved;
@@ -39091,15 +39398,22 @@ function renderDischargeBuilder() {
   const ptId = data.ptId;
   const ptNm = data.ptNm;
   const tmpl = data.tmpl;
+  const selectedRecord = (function () {
+    const record = getDischargeSelectedRecord();
+    return record && record.bmhId === ptId && (record.specialty || sel) === sel ? record : null;
+  })();
   const dischargeTemplateInstructions = getDischargeInstructionTemplateRows(sel);
   const linkedFuTemplate = sel === 'ophtho' ? data.linkedFuTemplate : null;
   let activeInstructions = dischargeTemplateInstructions.length ? dischargeTemplateInstructions : tmpl.instructions;
   if (linkedFuTemplate?.meta?.notes) {
     activeInstructions = String(linkedFuTemplate.meta.notes || '').split(/\n+/).map(function (s) { return s.trim(); }).filter(Boolean);
   }
-  const ophSnap = (sel === 'ophtho' && data.lastOtCase && data.lastOtCase.ophDischargeSnapshot && !data.postSurgeryRx) ? data.lastOtCase.ophDischargeSnapshot : null;
-  if (ophSnap && Array.isArray(ophSnap.instructions) && ophSnap.instructions.length) {
-    activeInstructions = ophSnap.instructions;
+  const otSnap = sel === 'ophtho'
+    ? ((data.lastOtCase && data.lastOtCase.ophDischargeSnapshot && !data.postSurgeryRx) ? data.lastOtCase.ophDischargeSnapshot : null)
+    : ((sel === 'obg' && data.lastOtCase && data.lastOtCase.obgDischargeSnapshot) ? data.lastOtCase.obgDischargeSnapshot : null);
+  const activeSnap = selectedRecord?.snapshot || otSnap || null;
+  if (activeSnap && Array.isArray(activeSnap.instructions) && activeSnap.instructions.length) {
+    activeInstructions = activeSnap.instructions;
   }
 
   document.getElementById('dc-pt-name').textContent = ptNm;
@@ -39110,32 +39424,31 @@ function renderDischargeBuilder() {
   document.getElementById('dc-date').textContent    = formatDateDDMMYY(new Date());
   const procDxEl = document.getElementById('dc-procedure');
   if (procDxEl) {
-    const procDx = [data.lastOtCase?.dx || data.diagnosis || '', data.lastOtCase?.procedure || data.procedureName || ''].filter(Boolean).join(' · ');
+    const procDx = activeSnap?.procedure || [data.lastOtCase?.dx || data.diagnosis || '', data.lastOtCase?.procedure || data.procedureName || ''].filter(Boolean).join(' · ');
     procDxEl.textContent = procDx || '—';
   }
-  // Set discharge date to today if blank
   const ddEl = document.getElementById('dc-discharge-date');
-  if(ddEl) ddEl.textContent = formatDateDDMMYY(data.dischargeDate);
+  if(ddEl) ddEl.textContent = activeSnap?.dischargeDate || formatDateDDMMYY(data.dischargeDate);
   const otDoctor = data.lastOtCase?.surgeon || data.lastOtCase?.doctor || '';
   const surgeonEl = document.getElementById('dc-surgeon');
   if(surgeonEl) {
-    surgeonEl.textContent = otDoctor || ptObj.doctor || window.CURRENT_USER?.name || 'Dr. Varun Baweja';
+    surgeonEl.textContent = activeSnap?.surgeon || otDoctor || ptObj.doctor || window.CURRENT_USER?.name || 'Dr. Varun Baweja';
   }
   const docSigEl = document.getElementById('dc-doc-sig');
   if(docSigEl) {
     const dName = otDoctor || ptObj.doctor || window.CURRENT_USER?.name || 'Dr. Varun Baweja';
     const deptSig = {ophtho:'MS (Ophth)', obg:'MS (OBG)', psych:'MD (Neuropsychiatry)', skin:'MD (Dermatology)'}[sel] || 'MS';
-    docSigEl.textContent = dName + ' · ' + deptSig;
+    docSigEl.textContent = activeSnap?.docSig || (dName + ' · ' + deptSig);
   }
   const otEyeEl = document.getElementById('dc-ot-eye');
   if (otEyeEl) {
     const bits = [data.lastOtCase?.date ? formatDateDDMMYY(data.lastOtCase.date) : '', data.lastOtCase?.site || data.lastOtCase?.eye || ptObj.eye || ''].filter(Boolean);
-    otEyeEl.textContent = bits.join(' · ') || '—';
+    otEyeEl.textContent = activeSnap?.otEye || bits.join(' · ') || '—';
   }
   const iolEl = document.getElementById('dc-iol-summary');
   if (iolEl) {
     const iclSummary = buildOtIclSummary(data.lastOtCase?.iclConfig || {});
-    iolEl.textContent = iclSummary || [data.lastOtCase?.iolType, data.lastOtCase?.iolPower].filter(Boolean).join(' / ') || '—';
+    iolEl.textContent = activeSnap?.iolSummary || iclSummary || [data.lastOtCase?.iolType, data.lastOtCase?.iolPower].filter(Boolean).join(' / ') || '—';
   }
 
   // Instructions
@@ -39158,8 +39471,8 @@ function renderDischargeBuilder() {
   const medEl = document.getElementById('dc-medicine-list');
   if(medEl) {
     let meds;
-    if (sel === 'ophtho' && ophSnap && Array.isArray(ophSnap.medicines) && ophSnap.medicines.length) {
-      meds = ophSnap.medicines.map(function (m, i) { return renderDcMedRow(m, i, tmpl.color, data.dischargeDate); });
+    if (activeSnap && Array.isArray(activeSnap.medicines) && activeSnap.medicines.length) {
+      meds = activeSnap.medicines.map(function (m, i) { return renderDcMedRow(m, i, tmpl.color, data.dischargeDate); });
     } else if(data.lastRxData && data.lastRxData.length) {
       meds = flattenDischargeRxRows(data.lastRxData).map((d,i)=>renderDcMedRow({
         name: (rxDrugTradeName(d) || d.name || d.brand || '') + ((rxDrugGenericName(d) && rxDrugGenericName(d)!==rxDrugTradeName(d)) ? ' ('+rxDrugGenericName(d)+')' : ''),
@@ -39187,8 +39500,8 @@ function renderDischargeBuilder() {
       });
     };
     const fuDateVal = document.getElementById('rx-fu-date')?.value;
-    let followupList = (ophSnap && Array.isArray(ophSnap.followups) && ophSnap.followups.length)
-      ? ophSnap.followups.slice()
+    let followupList = (activeSnap && Array.isArray(activeSnap.followups) && activeSnap.followups.length)
+      ? activeSnap.followups.slice()
       : (data.followups && data.followups.length)
       ? data.followups.slice().sort(function (a, b) {
           return new Date(a?.date || 0).getTime() - new Date(b?.date || 0).getTime();
@@ -39201,7 +39514,7 @@ function renderDischargeBuilder() {
             return row.label + (row.dateLabel ? ': ' + row.dateLabel : '');
           })
         : [...tmpl.followup]);
-    if(fuDateVal && !(data.followups && data.followups.length) && !(ophSnap && ophSnap.followups && ophSnap.followups.length)) {
+    if(fuDateVal && !(data.followups && data.followups.length) && !(activeSnap && activeSnap.followups && activeSnap.followups.length)) {
       const fuFormatted = formatDateIN(fuDateVal);
       followupList = ['Review: ' + fuFormatted, ...followupList.slice(1)];
     }
@@ -39241,14 +39554,18 @@ function renderDischargeBuilder() {
     const surgeonName = otDoctor || ptObj.doctor || window.CURRENT_USER?.name || 'Dr. Varun Baweja';
     const surgeonProfile = typeof findDoctorProfileByRxName === 'function' ? findDoctorProfileByRxName(String(surgeonName).split('·')[0].trim()) : null;
     const surgeonDegrees = surgeonProfile?.degrees || CURRENT_USER?.degrees || '';
-    sumEl.innerHTML = `
-      <div contenteditable="true" spellcheck="false" style="outline:none">
-        This is to certify that <strong>${ptNm}</strong>${relationText ? ', ' + relationText : ''}${addrText ? ', resident of <strong>' + addrText + '</strong>' : ''}, visited our hospital on <strong>${vDate}</strong>. On examination, it was found that the patient had <strong>${data.findings}</strong> with diagnosis of <strong>${data.diagnosis}</strong>.<br><br>
-        The patient was advised <strong>${data.procedureName}</strong>, which was subsequently performed on <strong>${oDate}</strong>. The operative and post-operative periods were uneventful.<br><br>
-        The patient was admitted to the inpatient ward on <strong>${aDate}</strong> and discharged on <strong>${dDate}</strong>. The patient is advised to continue the prescribed medications and remain on bed rest for <strong>2 weeks</strong>.<br><br>
-        The patient is fit to join his/her duties from <strong>${fitDate}</strong>.<br><br>
-        <strong>${surgeonName}${surgeonDegrees ? ' · ' + surgeonDegrees : ''}</strong>
-      </div>`;
+    if (activeSnap?.summaryHtml) {
+      sumEl.innerHTML = activeSnap.summaryHtml;
+    } else {
+      sumEl.innerHTML = `
+        <div contenteditable="true" spellcheck="false" style="outline:none">
+          This is to certify that <strong>${ptNm}</strong>${relationText ? ', ' + relationText : ''}${addrText ? ', resident of <strong>' + addrText + '</strong>' : ''}, visited our hospital on <strong>${vDate}</strong>. On examination, it was found that the patient had <strong>${data.findings}</strong> with diagnosis of <strong>${data.diagnosis}</strong>.<br><br>
+          The patient was advised <strong>${data.procedureName}</strong>, which was subsequently performed on <strong>${oDate}</strong>. The operative and post-operative periods were uneventful.<br><br>
+          The patient was admitted to the inpatient ward on <strong>${aDate}</strong> and discharged on <strong>${dDate}</strong>. The patient is advised to continue the prescribed medications and remain on bed rest for <strong>2 weeks</strong>.<br><br>
+          The patient is fit to join his/her duties from <strong>${fitDate}</strong>.<br><br>
+          <strong>${surgeonName}${surgeonDegrees ? ' · ' + surgeonDegrees : ''}</strong>
+        </div>`;
+    }
   }
 }
 
