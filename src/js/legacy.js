@@ -27210,6 +27210,7 @@ function openOTCase(id) {
   OT_CASES[idx] = normalizeOTCaseRecord(OT_CASES[idx]);
   const c = OT_CASES[idx];
   activeOTCase = c;
+  syncWHOChecklistUI(c);
 
   const timerCase = document.getElementById('ot-timer-case');
   if(timerCase) timerCase.textContent = `${c.patient} · ${c.id}`;
@@ -27555,6 +27556,14 @@ function setWHOChecked(el, checked) {
   el.style.borderColor = checked ? 'var(--green)' : 'var(--g4)';
   el.textContent = checked ? '✓' : '';
   el.style.color = checked ? '#fff' : '';
+}
+function syncWHOChecklistUI(otCase) {
+  const c = normalizeOTCaseRecord(otCase || {});
+  [['signin', !!c.signIn], ['timeout', !!c.timeOut], ['signout', !!c.signOut]].forEach(function ([phase, done]) {
+    const tab = document.getElementById('who-' + phase);
+    if (!tab) return;
+    tab.querySelectorAll('.who-cb').forEach(function (el) { setWHOChecked(el, done); });
+  });
 }
 function toggleWHO(el) {
   const checked = el.getAttribute('data-checked') !== '1';
