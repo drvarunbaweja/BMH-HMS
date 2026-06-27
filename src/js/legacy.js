@@ -18400,6 +18400,20 @@ function normalizeChargesRows(raw) {
   }
   return [];
 }
+function rebuildCentreChargesFromRows(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  const nextCentreCharges = { CHD: {}, RPR: {} };
+  list.forEach(function (row) {
+    if (!row || !row.name) return;
+    nextCentreCharges.CHD[row.name] = Number(row.chd || 0);
+    nextCentreCharges.RPR[row.name] = Number(row.rpr || 0);
+  });
+  Object.keys(CENTRE_CHARGES.CHD || {}).forEach(function (key) { delete CENTRE_CHARGES.CHD[key]; });
+  Object.keys(CENTRE_CHARGES.RPR || {}).forEach(function (key) { delete CENTRE_CHARGES.RPR[key]; });
+  Object.assign(CENTRE_CHARGES.CHD, nextCentreCharges.CHD);
+  Object.assign(CENTRE_CHARGES.RPR, nextCentreCharges.RPR);
+  return nextCentreCharges;
+}
 function scoreChargesRows(rows) {
   const list = Array.isArray(rows) ? rows : [];
   const parents = new Set();
@@ -18435,7 +18449,6 @@ function migrateLegacyPmicsChargeParents() {
 function applyLoadedChargesRows(rows) {
   if (!Array.isArray(rows) || !rows.length) return false;
   CHARGES_DATA.length = 0;
-  const nextCentreCharges = { CHD: {}, RPR: {} };
   rows.forEach(function (row) {
     if (!row || typeof row !== 'object') return;
     const nextRow = {
@@ -18452,16 +18465,9 @@ function applyLoadedChargesRows(rows) {
       rpr: Number(row.rpr || 0)
     };
     CHARGES_DATA.push(nextRow);
-    if (nextRow.name) {
-      nextCentreCharges.CHD[nextRow.name] = nextRow.chd;
-      nextCentreCharges.RPR[nextRow.name] = nextRow.rpr;
-    }
   });
   migrateLegacyPmicsChargeParents();
-  Object.keys(CENTRE_CHARGES.CHD || {}).forEach(function (key) { delete CENTRE_CHARGES.CHD[key]; });
-  Object.keys(CENTRE_CHARGES.RPR || {}).forEach(function (key) { delete CENTRE_CHARGES.RPR[key]; });
-  Object.assign(CENTRE_CHARGES.CHD, nextCentreCharges.CHD);
-  Object.assign(CENTRE_CHARGES.RPR, nextCentreCharges.RPR);
+  rebuildCentreChargesFromRows(CHARGES_DATA);
   return CHARGES_DATA.length > 0;
 }
 function loadChargesFromLocalStorage() {
@@ -18483,6 +18489,7 @@ function loadChargesFromLocalStorage() {
 }
 function saveChargesToFirebase(){
   const savedAt = Date.now();
+  rebuildCentreChargesFromRows(CHARGES_DATA);
   saveChargesToLocalStorage({ updatedAt: savedAt });
   if(!window.FBDB) { showToast('Saved locally ✓', 's'); return Promise.resolve(); }
   if (!window._bmhChargesCloudLoaded) {
@@ -18495,7 +18502,6 @@ function saveChargesToFirebase(){
   // together so live-sync listeners on other tabs/devices never read a new meta timestamp
   // paired with stale schedule data — which was the root cause of charges reverting.
   return window.FBDB.ref('/').update({
-    centreCharges: CENTRE_CHARGES,
     chargesSchedule: CHARGES_DATA,
     chargesScheduleMeta: { updatedAt: savedAt }
   }).then(function(res){
@@ -18533,14 +18539,8 @@ function startChargesLiveSync() {
   window.FBDB.ref('chargesScheduleMeta').on('value', function (metaSnap) {
     const remoteTs = Number((metaSnap.val() && metaSnap.val().updatedAt) || 0);
     if (!remoteTs || remoteTs <= Number(window._bmhLastRemoteChargesUpdatedAt || 0)) return;
-    Promise.all([
-      window.FBDB.ref('chargesSchedule').once('value'),
-      window.FBDB.ref('centreCharges').once('value')
-    ]).then(function (pairs) {
-      const scheduleVal = pairs[0].val();
-      const centreVal = pairs[1].val();
-      if (centreVal && centreVal.CHD) Object.assign(CENTRE_CHARGES.CHD, centreVal.CHD);
-      if (centreVal && centreVal.RPR) Object.assign(CENTRE_CHARGES.RPR, centreVal.RPR);
+    window.FBDB.ref('chargesSchedule').once('value').then(function (snap) {
+      const scheduleVal = snap.val();
       if (applyChargesFromCloudSnapshot(scheduleVal, remoteTs)) showToast('Latest charges synced from cloud ✓', 's');
     }).catch(function () {});
   });
@@ -18551,14 +18551,6 @@ function loadChargesFromFirebase(){
   renderCentresCharges && renderCentresCharges();
   syncReceptionConsultationFee && syncReceptionConsultationFee();
   if(!window.FBDB) return;
-  window.FBDB.ref('centreCharges').once('value').then(snap=>{
-    const d=snap.val(); if(!d) return;
-    if(d.CHD) Object.assign(CENTRE_CHARGES.CHD, d.CHD);
-    if(d.RPR) Object.assign(CENTRE_CHARGES.RPR, d.RPR);
-    saveCentreChargesMapsToLocalStorage();
-    renderCentresCharges && renderCentresCharges();
-    syncReceptionConsultationFee && syncReceptionConsultationFee();
-  }).catch(()=>{});
   Promise.all([
     window.FBDB.ref('chargesSchedule').once('value'),
     window.FBDB.ref('chargesScheduleMeta').once('value')
@@ -36517,10 +36509,7 @@ function saveChargeFromModal() {
 
 function saveCharges() {
   // Sync back to CENTRE_CHARGES (used by send row)
-  CHARGES_DATA.forEach(c => {
-    CENTRE_CHARGES.CHD[c.name] = c.chd;
-    CENTRE_CHARGES.RPR[c.name] = c.rpr;
-  });
+  rebuildCentreChargesFromRows(CHARGES_DATA);
   showToast('Saving charges to database…', 'i');
   saveChargesToFirebase().then(function () {
     renderAllDeptSendBars && renderAllDeptSendBars();
