@@ -44446,6 +44446,48 @@ function saveVisit(dept, opts) {
   }
 }
 
+function summarizeVisitHistory(visit, deptKey) {
+  if (!visit || typeof visit !== 'object') return '';
+  if (deptKey === 'ophtho') {
+    return [
+      visit.chiefComplaints,
+      getOphthoPositiveSystemicHistoryLines(visit, visit.date || visit.createdAt || new Date()).join(', '),
+      summarizeOphthoPastOcularHistory(visit),
+      visit.familyHx ? ('Family: ' + visit.familyHx) : '',
+      visit.hxOcularMeds ? ('Ocular meds: ' + visit.hxOcularMeds) : ''
+    ].filter(Boolean).join(' · ');
+  }
+  if (deptKey === 'obg') {
+    return [
+      visit.mainComplaint,
+      visit.systemicDisease,
+      visit.gravida,
+      visit.ga ? ('GA ' + visit.ga) : '',
+      visit.lmp ? ('LMP ' + visit.lmp) : ''
+    ].filter(Boolean).join(' · ');
+  }
+  if (deptKey === 'psych') {
+    return [
+      visit.chiefComplaint || visit['psych-chief'],
+      visit['psych-duration'],
+      visit['psych-family'],
+      visit['psych-personal'],
+      visit['psych-pastpsych'],
+      visit['psych-medical']
+    ].filter(Boolean).join(' · ');
+  }
+  if (deptKey === 'skin') {
+    return [
+      visit.chiefComplaint || visit['skin-chief'],
+      visit['skin-duration'],
+      visit['skin-site'],
+      visit['skin-medical'],
+      visit['skin-hormonal']
+    ].filter(Boolean).join(' · ');
+  }
+  return '';
+}
+
 function loadPastVisits(bmhId, dept) {
   const container = document.getElementById(dept === 'ophtho' ? 'past-visits-ophtho' : `past-visits-${dept}`);
   if(!container) return;
@@ -44472,47 +44514,6 @@ function loadPastVisits(bmhId, dept) {
     const t = Date.parse(raw || '');
     if (!Number.isNaN(t)) return new Date(t).toLocaleDateString('en-IN');
     return String(raw || '');
-  };
-  const summarizeVisitHistory = function (visit, deptKey) {
-    if (!visit || typeof visit !== 'object') return '';
-    if (deptKey === 'ophtho') {
-      return [
-        visit.chiefComplaints,
-        getOphthoPositiveSystemicHistoryLines(visit, visit.date || visit.createdAt || new Date()).join(', '),
-        summarizeOphthoPastOcularHistory(visit),
-        visit.familyHx ? ('Family: ' + visit.familyHx) : '',
-        visit.hxOcularMeds ? ('Ocular meds: ' + visit.hxOcularMeds) : ''
-      ].filter(Boolean).join(' · ');
-    }
-    if (deptKey === 'obg') {
-      return [
-        visit.mainComplaint,
-        visit.systemicDisease,
-        visit.gravida,
-        visit.ga ? ('GA ' + visit.ga) : '',
-        visit.lmp ? ('LMP ' + visit.lmp) : ''
-      ].filter(Boolean).join(' · ');
-    }
-    if (deptKey === 'psych') {
-      return [
-        visit.chiefComplaint || visit['psych-chief'],
-        visit['psych-duration'],
-        visit['psych-family'],
-        visit['psych-personal'],
-        visit['psych-pastpsych'],
-        visit['psych-medical']
-      ].filter(Boolean).join(' · ');
-    }
-    if (deptKey === 'skin') {
-      return [
-        visit.chiefComplaint || visit['skin-chief'],
-        visit['skin-duration'],
-        visit['skin-site'],
-        visit['skin-medical'],
-        visit['skin-hormonal']
-      ].filter(Boolean).join(' · ');
-    }
-    return '';
   };
   const summarizeVisitPrescription = function (visit) {
     const rxRows = Array.isArray(visit?.rx) ? visit.rx : [];
