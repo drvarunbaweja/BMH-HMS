@@ -22621,6 +22621,108 @@ function normalizeDrugDeptKey(value) {
 function normalizeDrugSearchText(value) {
   return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
 }
+function getDrugLibraryIdentityKey(row) {
+  if (!row || typeof row !== 'object') return '';
+  return [
+    String(row.trade || row.brand || row.name || '').trim().toLowerCase(),
+    String(row.generic || row.name || row.trade || '').trim().toLowerCase(),
+    String(row.dept || 'All').trim().toLowerCase()
+  ].join('|');
+}
+function getDrugTemplateIdentityKey(row) {
+  if (!row || typeof row !== 'object') return '';
+  return [
+    String(row.trade || row.brand || row.name || '').trim().toLowerCase(),
+    String(row.generic || row.name || row.trade || '').trim().toLowerCase(),
+    String(row.type || row.drugType || '').trim().toLowerCase()
+  ].join('|');
+}
+function readDeletedDrugLibraryKeys() {
+  try {
+    const raw = localStorage.getItem('bmh_deleted_drug_library_keys');
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+  } catch (e) {
+    return [];
+  }
+}
+function saveDeletedDrugLibraryKeys(keys) {
+  try {
+    localStorage.setItem('bmh_deleted_drug_library_keys', JSON.stringify(Array.from(new Set((Array.isArray(keys) ? keys : []).filter(Boolean)))));
+  } catch (e) {}
+}
+function clearDeletedDrugLibraryKey(row) {
+  const key = getDrugLibraryIdentityKey(row);
+  if (!key) return;
+  saveDeletedDrugLibraryKeys(readDeletedDrugLibraryKeys().filter(function (x) { return x !== key; }));
+}
+function markDeletedDrugLibraryKey(row) {
+  const key = getDrugLibraryIdentityKey(row);
+  if (!key) return;
+  const keys = readDeletedDrugLibraryKeys();
+  if (keys.indexOf(key) === -1) keys.push(key);
+  saveDeletedDrugLibraryKeys(keys);
+}
+function filterDeletedDrugLibraryRows(rows) {
+  const deletedKeys = readDeletedDrugLibraryKeys();
+  if (!deletedKeys.length) return Array.isArray(rows) ? rows : [];
+  return (Array.isArray(rows) ? rows : []).filter(function (row) {
+    return deletedKeys.indexOf(getDrugLibraryIdentityKey(row)) === -1;
+  });
+}
+function updateDrugRowsInRxTemplates(sourceRow, nextRow) {
+  if (!sourceRow || !nextRow || typeof RX_TEMPLATES_DATA === 'undefined') return false;
+  const sourceKey = getDrugTemplateIdentityKey(sourceRow);
+  if (!sourceKey) return false;
+  let changed = false;
+  Object.keys(RX_TEMPLATES_DATA || {}).forEach(function (tplKey) {
+    const rows = Array.isArray(RX_TEMPLATES_DATA[tplKey]) ? RX_TEMPLATES_DATA[tplKey] : [];
+    RX_TEMPLATES_DATA[tplKey] = rows.map(function (row) {
+      if (getDrugTemplateIdentityKey(row) !== sourceKey) return row;
+      changed = true;
+      return Object.assign({}, row, {
+        trade: nextRow.trade || row.trade || '',
+        generic: nextRow.generic || row.generic || '',
+        type: nextRow.type || row.type || 'Tablet',
+        freq: nextRow.freq || row.freq || '',
+        dur: nextRow.dur || row.dur || ''
+      });
+    });
+  });
+  return changed;
+}
+function removeDrugRowsFromRxTemplates(sourceRow) {
+  if (!sourceRow || typeof RX_TEMPLATES_DATA === 'undefined') return false;
+  const sourceKey = getDrugTemplateIdentityKey(sourceRow);
+  if (!sourceKey) return false;
+  let changed = false;
+  Object.keys(RX_TEMPLATES_DATA || {}).forEach(function (tplKey) {
+    const rows = Array.isArray(RX_TEMPLATES_DATA[tplKey]) ? RX_TEMPLATES_DATA[tplKey] : [];
+    const filtered = rows.filter(function (row) { return getDrugTemplateIdentityKey(row) !== sourceKey; });
+    if (filtered.length !== rows.length) changed = true;
+    RX_TEMPLATES_DATA[tplKey] = filtered;
+  });
+  return changed;
+}
+function updateDrugRowsInActivePrescription(sourceRow, nextRow) {
+  if (!sourceRow || !nextRow || !Array.isArray(RX_DRUGS)) return false;
+  const sourceKey = getDrugTemplateIdentityKey(sourceRow);
+  if (!sourceKey) return false;
+  let changed = false;
+  RX_DRUGS.forEach(function (row) {
+    if (getDrugTemplateIdentityKey(row) !== sourceKey) return;
+    row.trade = nextRow.trade || row.trade || '';
+    row.brand = row.trade;
+    row.generic = nextRow.generic || row.generic || '';
+    row.name = row.generic || row.trade || '';
+    row.drugType = nextRow.type || row.drugType || row.type || 'Tablet';
+    row.type = nextRow.type || row.type || row.drugType || 'Tablet';
+    row.freq = nextRow.freq || row.freq || '';
+    row.dur = nextRow.dur || row.dur || '';
+    changed = true;
+  });
+  return changed;
+}
 
 function syncDrugDeptDefaults() {
   const dept = getCurrentDrugDeptLabel();
@@ -23063,6 +23165,7 @@ function addDrugToLibraryFromModal() {
   const dur = document.getElementById('md-add-dur')?.value;
   const dept = document.getElementById('md-add-dept')?.value;
   if (!trade || !generic) { showToast('Enter trade and generic name', 'w'); return; }
+  clearDeletedDrugLibraryKey({ trade, generic, dept });
   DRUG_LIBRARY.push(normalizeDrugLibraryRow({ type, trade, generic, freq, dur, dept, _updatedAt: Date.now() }));
   saveDrugLibraryToStorage();
   renderSettingsDrugs();
@@ -23112,6 +23215,7 @@ function openEditDrugLibrary(i) {
   document.getElementById('md-edit-type').value = d.type || 'Tablet';
   document.getElementById('md-edit-trade').value = d.trade || '';
   document.getElementById('md-edit-generic').value = d.generic || '';
+  document.getElementById('md-edit-company').value = d.company || '';
   document.getElementById('md-edit-freq').value = d.freq || 'Twice daily (BD)';
   document.getElementById('md-edit-dur').value = d.dur || '1 Week';
   document.getElementById('md-edit-dept').value = d.dept || 'All';
@@ -23120,19 +23224,39 @@ function openEditDrugLibrary(i) {
 function saveEditDrugLibrary() {
   const i = parseInt(document.getElementById('md-edit-idx')?.value, 10);
   if (Number.isNaN(i) || !DRUG_LIBRARY[i]) return;
-  DRUG_LIBRARY[i].type = document.getElementById('md-edit-type')?.value;
-  DRUG_LIBRARY[i].trade = document.getElementById('md-edit-trade')?.value?.trim();
-  DRUG_LIBRARY[i].generic = document.getElementById('md-edit-generic')?.value?.trim();
-  DRUG_LIBRARY[i].freq = document.getElementById('md-edit-freq')?.value;
-  DRUG_LIBRARY[i].dur = document.getElementById('md-edit-dur')?.value;
-  DRUG_LIBRARY[i].dept = document.getElementById('md-edit-dept')?.value;
-  DRUG_LIBRARY[i]._updatedAt = Date.now();
-  normalizeDrugLibraryRow(DRUG_LIBRARY[i]);
+  const originalRow = Object.assign({}, DRUG_LIBRARY[i]);
+  const nextRow = normalizeDrugLibraryRow({
+    _id: originalRow._id,
+    type: document.getElementById('md-edit-type')?.value,
+    trade: document.getElementById('md-edit-trade')?.value?.trim(),
+    generic: document.getElementById('md-edit-generic')?.value?.trim(),
+    company: document.getElementById('md-edit-company')?.value?.trim() || '',
+    freq: document.getElementById('md-edit-freq')?.value,
+    dur: document.getElementById('md-edit-dur')?.value,
+    dept: document.getElementById('md-edit-dept')?.value,
+    _updatedAt: Date.now()
+  });
+  if (!nextRow.trade || !nextRow.generic) { showToast('Enter trade and generic name', 'w'); return; }
+  markDeletedDrugLibraryKey(originalRow);
+  clearDeletedDrugLibraryKey(nextRow);
+  DRUG_LIBRARY[i] = nextRow;
+  const templatesChanged = updateDrugRowsInRxTemplates(originalRow, nextRow);
+  const activeRxChanged = updateDrugRowsInActivePrescription(originalRow, nextRow);
   saveDrugLibraryToStorage();
+  if (templatesChanged) saveRxTemplatesToStorage();
   renderSettingsDrugs();
   rebuildDrugGenericDatalist();
+  if (typeof refreshRxTemplateSelects === 'function') refreshRxTemplateSelects();
+  if (typeof renderSetRxTplList === 'function') renderSetRxTplList();
+  if (activeRxChanged && typeof renderRxDrugs === 'function') renderRxDrugs();
   closeM('m-edit-drug');
   showToast('Drug library updated ✓', 's');
+}
+function deleteEditDrugLibrary() {
+  const i = parseInt(document.getElementById('md-edit-idx')?.value, 10);
+  if (Number.isNaN(i) || !DRUG_LIBRARY[i]) return;
+  removeDrugLib(i);
+  closeM('m-edit-drug');
 }
 
 function addDrugToLibrary() {
@@ -23143,6 +23267,7 @@ function addDrugToLibrary() {
   const dur = document.getElementById('new-drug-dur')?.value;
   const dept = document.getElementById('new-drug-dept')?.value;
   if(!trade||!generic){showToast('Please enter trade and generic name','w');return;}
+  clearDeletedDrugLibraryKey({ trade, generic, dept });
   DRUG_LIBRARY.push(normalizeDrugLibraryRow({type,trade,generic,freq,dur,dept,_updatedAt:Date.now()}));
   saveDrugLibraryToStorage();
   renderSettingsDrugs();
@@ -23151,11 +23276,27 @@ function addDrugToLibrary() {
   syncDrugDeptDefaults();
 }
 function removeDrugLib(i){
-  const name = DRUG_LIBRARY[i]?.trade || 'Drug';
+  const row = DRUG_LIBRARY[i];
+  if (!row) return;
+  const name = row.trade || 'Drug';
+  markDeletedDrugLibraryKey(row);
   DRUG_LIBRARY.splice(i,1);
+  const templatesChanged = removeDrugRowsFromRxTemplates(row);
   invalidateDrugSearchPoolCache && invalidateDrugSearchPoolCache();
   saveDrugLibraryToStorage();
+  if (templatesChanged) saveRxTemplatesToStorage();
   renderSettingsDrugs();
+  if (typeof refreshRxTemplateSelects === 'function') refreshRxTemplateSelects();
+  if (typeof renderSetRxTplList === 'function') renderSetRxTplList();
+  if (Array.isArray(RX_DRUGS)) {
+    const sourceKey = getDrugTemplateIdentityKey(row);
+    const nextRows = RX_DRUGS.filter(function (drug) { return getDrugTemplateIdentityKey(drug) !== sourceKey; });
+    if (nextRows.length !== RX_DRUGS.length) {
+      RX_DRUGS.length = 0;
+      nextRows.forEach(function (drug) { RX_DRUGS.push(drug); });
+      renderRxDrugs && renderRxDrugs();
+    }
+  }
   showToast('"' + name + '" removed from library ✓', 's');
 }
 function filterDrugs(v) {
@@ -39899,7 +40040,7 @@ function getDrugLibrarySearchPool() {
     console.warn('Drug library quick search pool rebuild failed', e);
     merged = Array.isArray(live) ? live : [];
   }
-  _drugSearchPoolCache = Array.isArray(merged) ? merged : [];
+  _drugSearchPoolCache = filterDeletedDrugLibraryRows(Array.isArray(merged) ? merged : []);
   promoteMergedDrugLibraryIntoLive(_drugSearchPoolCache, { persist: false });
   return _drugSearchPoolCache;
 }
