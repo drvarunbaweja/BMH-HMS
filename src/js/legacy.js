@@ -9130,6 +9130,74 @@ function bmhInventoryCategoryOptions() {
 function bmhInventoryLowItems() {
   return (INVENTORY || []).filter(function (i) { return Number(i.stock || 0) <= Number(i.min || 0); });
 }
+function bmhLowStockSuggestedQty(item) {
+  return Math.max((Number(item?.min) || 1) * 2 - (Number(item?.stock) || 0), Number(item?.min) || 1);
+}
+function bmhInventoryLowItemsGrouped(items) {
+  const deptOrder = loadInventoryDeptRows().map(function (row, idx) {
+    return { key: String(row.value || ''), idx: idx };
+  }).reduce(function (acc, row) {
+    acc[row.key] = row.idx;
+    return acc;
+  }, {});
+  const grouped = {};
+  (Array.isArray(items) ? items : []).forEach(function (item) {
+    const dept = String(item?.dept || 'general').trim() || 'general';
+    const heading = String(item?.cat || 'Miscellaneous').trim() || 'Miscellaneous';
+    if (!grouped[dept]) grouped[dept] = {};
+    if (!grouped[dept][heading]) grouped[dept][heading] = [];
+    grouped[dept][heading].push(item);
+  });
+  const deptKeys = Object.keys(grouped).sort(function (a, b) {
+    const ai = Object.prototype.hasOwnProperty.call(deptOrder, a) ? deptOrder[a] : Number.MAX_SAFE_INTEGER;
+    const bi = Object.prototype.hasOwnProperty.call(deptOrder, b) ? deptOrder[b] : Number.MAX_SAFE_INTEGER;
+    if (ai !== bi) return ai - bi;
+    return bmhDeptLabel(a).localeCompare(bmhDeptLabel(b));
+  });
+  return deptKeys.map(function (deptKey) {
+    const headings = Object.keys(grouped[deptKey]).sort(function (a, b) { return a.localeCompare(b); }).map(function (heading) {
+      const rows = grouped[deptKey][heading].slice().sort(function (a, b) {
+        return String(a?.name || '').localeCompare(String(b?.name || ''));
+      });
+      return { heading: heading, items: rows };
+    });
+    return { deptKey: deptKey, deptLabel: bmhDeptLabel(deptKey), headings: headings };
+  });
+}
+function bmhBuildGroupedPurchaseOrderDraft(low) {
+  const groups = bmhInventoryLowItemsGrouped(low);
+  let itemCounter = 0;
+  return 'PURCHASE ORDER — Baweja Multispeciality Hospital\nDate: ' + new Date().toLocaleString('en-IN') + '\n\nPlease supply:\n\n' + groups.map(function (deptGroup) {
+    return deptGroup.deptLabel + '\n' + deptGroup.headings.map(function (headingGroup) {
+      return '  ' + headingGroup.heading + '\n' + headingGroup.items.map(function (item) {
+        itemCounter += 1;
+        return '    ' + itemCounter + '. ' + item.name + ' — ' + bmhFormatStoreLabel(item.store) + ' — vendor ' + (item.vendor || 'TBD') + ' — barcode ' + item.barcode + ' — order qty suggestion: ' + bmhLowStockSuggestedQty(item) + ' (current ' + Number(item.stock || 0) + ', min ' + Number(item.min || 0) + ')';
+      }).join('\n');
+    }).join('\n\n');
+  }).join('\n\n') + '\n\nAuthorised by: _______________\n';
+}
+function bmhRenderGroupedLowStockHtml(low) {
+  return bmhInventoryLowItemsGrouped(low).map(function (deptGroup) {
+    return `<div style="padding:10px 0 2px;border-bottom:1px solid var(--g5)">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px">
+        <strong style="font-size:13px;color:var(--bmh-blue)">${escapeHtmlConsent(deptGroup.deptLabel)}</strong>
+        <span class="badge bd-orange">${deptGroup.headings.reduce(function (acc, heading) { return acc + heading.items.length; }, 0)} low item(s)</span>
+      </div>
+      ${deptGroup.headings.map(function (headingGroup) {
+        return `<div style="margin:0 0 10px 0;padding-left:10px;border-left:3px solid var(--g5)">
+          <div style="font-size:11px;font-weight:800;color:var(--g2);text-transform:uppercase;letter-spacing:.03em;margin-bottom:5px">${escapeHtmlConsent(headingGroup.heading)}</div>
+          ${headingGroup.items.map(function (i) {
+            const suggested = bmhLowStockSuggestedQty(i);
+            return `<div style="padding:8px 0;border-bottom:1px dashed var(--g5);font-size:12px;animation:pulse 1.8s infinite">
+              <div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><strong>${escapeHtmlConsent(i.name)}</strong><span style="color:#b55a00;font-weight:900">${Number(i.stock||0)} / min ${Number(i.min||0)}</span></div>
+              <div style="font-size:10px;color:var(--g1);margin-top:4px">${escapeHtmlConsent(i.vendor || 'No vendor')} · ${bmhFormatStoreLabel(i.store)} · Suggested PO qty ${suggested}</div>
+            </div>`;
+          }).join('')}
+        </div>`;
+      }).join('')}
+    </div>`;
+  }).join('');
+}
 function bmhInventoryFilterValue(id) {
   return String(document.getElementById(id)?.value || 'all').trim();
 }
@@ -13847,7 +13915,7 @@ function bmhUseInventoryItemForPatient(bmhId, item, opts) {
 }
 function bmhGeneratePurchaseOrderDraft(silent) {
   const low = bmhInventoryLowItems();
-  window._bmhPO_DRAFT = 'PURCHASE ORDER — Baweja Multispeciality Hospital\nDate: ' + new Date().toLocaleString('en-IN') + '\n\nPlease supply:\n\n' + low.map((i, n) => `${n + 1}. ${i.name} — ${bmhFormatStoreLabel(i.store)} — vendor ${i.vendor || 'TBD'} — barcode ${i.barcode} — order qty suggestion: ${Math.max((Number(i.min) || 1) * 2 - (Number(i.stock) || 0), Number(i.min) || 1)} (current ${i.stock}, min ${i.min})`).join('\n') + '\n\nAuthorised by: _______________\n';
+  window._bmhPO_DRAFT = bmhBuildGroupedPurchaseOrderDraft(low);
   const el = document.getElementById('dash-admin-po-preview');
   if (el) el.innerHTML = '<pre style="white-space:pre-wrap;font-size:11px;margin:0">' + window._bmhPO_DRAFT.replace(/</g, '&lt;') + '</pre>';
   if (!low.length && !silent) showToast('No low-stock items — PO is empty', 'i');
@@ -18007,13 +18075,7 @@ function renderInventoryPoAlerts() {
   if (!low.length) {
     el.innerHTML = '<div style="padding:12px;color:var(--g1);font-size:12px">All items are above minimum stock.</div>';
   } else {
-    el.innerHTML = low.map(function (i) {
-      const suggested = Math.max((Number(i.min) || 1) * 2 - (Number(i.stock) || 0), Number(i.min) || 1);
-      return `<div style="padding:10px 0;border-bottom:1px solid var(--g5);font-size:12px;animation:pulse 1.8s infinite">
-        <div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><strong>${escapeHtmlConsent(i.name)}</strong><span style="color:#b55a00;font-weight:900">${Number(i.stock||0)} / min ${Number(i.min||0)}</span></div>
-        <div style="font-size:10px;color:var(--g1);margin-top:4px">${escapeHtmlConsent(i.vendor || 'No vendor')} · ${bmhFormatStoreLabel(i.store)} · Suggested PO qty ${suggested}</div>
-      </div>`;
-    }).join('');
+    el.innerHTML = bmhRenderGroupedLowStockHtml(low);
   }
   const badge = document.getElementById('nb-inv');
   if (badge) {
