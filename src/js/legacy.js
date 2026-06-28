@@ -19057,6 +19057,10 @@ function keepPatientInQueueAfterOT(bmhId, deptOverride, otCaseId) {
   const otCaseDate = otCase ? getOTCaseDateKey(otCase) : '';
   if (!otCaseDate || otCaseDate !== today) return;
   const wasSeen = isPatientMarkedSeen(p);
+  const existingQueueSource = String(p.queueSource || '').toLowerCase();
+  const preservedQueueSource = patientQueueSourceAllowsFreshVisit({ queueSource: existingQueueSource })
+    ? existingQueueSource
+    : 'ot';
   p.queueRemoved = false;
   p.queueRemovedAt = null;
   p.queueRemovedBy = '';
@@ -19067,7 +19071,7 @@ function keepPatientInQueueAfterOT(bmhId, deptOverride, otCaseId) {
   p.updatedAt = nowIso;
   if (deptOverride && normalizeDeptKeyForQueue(deptOverride)) p.dept = normalizeDeptKeyForQueue(deptOverride);
   if (otCaseId) p.otCaseId = otCaseId;
-  p.queueSource = 'ot';
+  p.queueSource = preservedQueueSource;
   if (!wasSeen) {
     p.seen = false;
     p.seenAt = null;
@@ -19085,7 +19089,7 @@ function keepPatientInQueueAfterOT(bmhId, deptOverride, otCaseId) {
   };
   if (deptOverride && normalizeDeptKeyForQueue(deptOverride)) patch.dept = normalizeDeptKeyForQueue(deptOverride);
   if (otCaseId) patch.otCaseId = otCaseId;
-  patch.queueSource = 'ot';
+  patch.queueSource = preservedQueueSource;
   if (!wasSeen) {
     patch.seen = false;
     patch.seenAt = null;
