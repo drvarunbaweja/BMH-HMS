@@ -1787,7 +1787,7 @@
         </div>
         <div style="display:flex;gap:7px;flex-wrap:wrap">
           <button class="btn btn-gold" style="flex:1;justify-content:center" onclick="printRx()">🖨️ Print Prescription</button>
-          <button class="wa-btn" onclick="showToast('Sent via WhatsApp ✓','s')">📱</button>
+          <button class="wa-btn" onclick="printAndSendPrescriptionWhatsApp('oe')" title="Print and send prescription to WhatsApp">📱</button>
           <button class="btn btn-gray btn-sm" onclick="showToast('SMS sent ✓','s')">📨</button>
         </div>
       </div>
@@ -2854,7 +2854,7 @@
         </div>
         <div style="display:flex;gap:7px;flex-wrap:wrap">
           <button class="btn btn-gold" style="flex:1;justify-content:center" onclick="printUnifiedRx('obg')">🖨️ Print Prescription</button>
-          <button class="wa-btn" onclick="showToast('Sent via WhatsApp ✓','s')">📱</button>
+          <button class="wa-btn" onclick="printAndSendPrescriptionWhatsApp('obg')" title="Print and send prescription to WhatsApp">📱</button>
           <button class="btn btn-gray btn-sm" onclick="showToast('SMS sent ✓','s')">📨</button>
         </div></div>
 
@@ -3294,7 +3294,7 @@
         </div>
         <div style="display:flex;gap:7px;flex-wrap:wrap">
           <button class="btn btn-gold" style="flex:1;justify-content:center" onclick="printUnifiedRx('psych')">🖨️ Print Prescription</button>
-          <button class="wa-btn" onclick="showToast('Sent via WhatsApp ✓','s')">📱</button>
+          <button class="wa-btn" onclick="printAndSendPrescriptionWhatsApp('psych')" title="Print and send prescription to WhatsApp">📱</button>
           <button class="btn btn-gray btn-sm" onclick="showToast('SMS sent ✓','s')">📨</button>
         </div></div>
 
@@ -3577,7 +3577,7 @@
         </div>
         <div style="display:flex;gap:7px;flex-wrap:wrap">
           <button class="btn btn-gold" style="flex:1;justify-content:center" onclick="printUnifiedRx('skin')">🖨️ Print Prescription</button>
-          <button class="wa-btn" onclick="showToast('Sent via WhatsApp ✓','s')">📱</button>
+          <button class="wa-btn" onclick="printAndSendPrescriptionWhatsApp('skin')" title="Print and send prescription to WhatsApp">📱</button>
           <button class="btn btn-gray btn-sm" onclick="showToast('SMS sent ✓','s')">📨</button>
         </div></div>
 
@@ -4445,19 +4445,40 @@
 <div class="g2">
   <div class="card"><div class="card-hd"><div class="card-title">⚙️ Hospital Details</div></div>
     <div class="fg fg1" style="gap:9px">
-      <div class="form-group"><label class="fl">Hospital Name</label><input type="text" value="Baweja Multispeciality Hospital"></div>
-      <div class="form-group"><label class="fl">Short Code</label><input type="text" value="BMSH" style="font-family:var(--mono);font-weight:800"></div>
-      <div class="form-group"><label class="fl">Chandigarh Address</label><input type="text" value="SCO #100, Near Delhi Public School, Sector 40C, Chandigarh 160036"></div>
-      <div class="form-group"><label class="fl">Ropar Address</label><input type="text" value="1571/39, Opp. Civil Hospital, Preet Colony, Rupnagar, Punjab 140001"></div>
-      <div class="form-group"><label class="fl">Phone</label><input type="text" value="+91-81466 22802"></div>
-      <div class="form-group"><label class="fl">Email</label><input type="email" value="info&#64;bawejahospital.com"></div>
-      <div class="form-group"><label class="fl">GST Number</label><input type="text" value="03AABCB1234Z1Z5"></div>
-      <div class="form-group"><label class="fl">ECHS Empanelled</label><select><option>Yes</option><option>No</option></select></div>
-      <div class="form-group"><label class="fl">PMJAY Empanelled</label><select><option>Yes</option><option>No</option></select></div>
+      <div class="form-group"><label class="fl">Hospital Name</label><input type="text" id="hospital-name" value="Baweja Multispeciality Hospital"></div>
+      <div class="form-group"><label class="fl">Short Code</label><input type="text" id="hospital-short-code" value="BMSH" style="font-family:var(--mono);font-weight:800"></div>
+      <div class="form-group"><label class="fl">Chandigarh Address</label><input type="text" id="hospital-address-chd" value="SCO #100, Near Delhi Public School, Sector 40C, Chandigarh 160036"></div>
+      <div class="form-group"><label class="fl">Ropar Address</label><input type="text" id="hospital-address-rpr" value="1571/39, Opp. Civil Hospital, Preet Colony, Rupnagar, Punjab 140001"></div>
+      <div class="form-group"><label class="fl">Phone</label><input type="text" id="hospital-phone" value="+91-81466 22802"></div>
+      <div class="form-group"><label class="fl">Email</label><input type="email" id="hospital-email" value="info&#64;bawejahospital.com"></div>
+      <div class="form-group"><label class="fl">GST Number</label><input type="text" id="hospital-gst" value="03AABCB1234Z1Z5"></div>
+      <div class="form-group"><label class="fl">ECHS Empanelled</label><select id="hospital-echs"><option>Yes</option><option>No</option></select></div>
+      <div class="form-group"><label class="fl">PMJAY Empanelled</label><select id="hospital-pmjay"><option>Yes</option><option>No</option></select></div>
       <button class="btn btn-gold" onclick="saveHospitalSettings()">💾 Save Settings</button>
     </div>
   </div>
   <div class="col">
+    <div class="card"><div class="card-hd"><div class="card-title">WhatsApp Cloud API</div></div>
+      <div style="font-size:11px;color:var(--g1);margin-bottom:10px">Disabled by default. When enabled, only registration, follow-up reminders, and the manual prescription WhatsApp button use the API.</div>
+      <div class="fg fg1" style="gap:8px">
+        <div class="form-group"><label class="fl">Enable integration</label><select id="wa-enabled"><option>Yes</option><option selected>No</option></select></div>
+        <div class="form-group"><label class="fl">Graph API version</label><input type="text" id="wa-api-version" value="v23.0"></div>
+        <div class="form-group"><label class="fl">Phone number ID</label><input type="text" id="wa-phone-number-id" placeholder="Meta phone_number_id"></div>
+        <div class="form-group"><label class="fl">Permanent access token</label><input type="password" id="wa-token" placeholder="Meta permanent token"></div>
+        <div class="form-group"><label class="fl">Template language</label><input type="text" id="wa-template-language" value="en"></div>
+        <div class="form-group"><label class="fl">Help contact number</label><input type="text" id="wa-contact-phone" value="+91-81466 22802"></div>
+        <div class="form-group"><label class="fl">Registration template</label><input type="text" id="wa-registration-template" value="patient_registration_confirmation"></div>
+        <div class="form-group"><label class="fl">Auto-send registration</label><select id="wa-auto-registration"><option selected>Yes</option><option>No</option></select></div>
+        <div class="form-group"><label class="fl">Appointment template</label><input type="text" id="wa-appointment-template" value="appointment_reminder"></div>
+        <div class="form-group"><label class="fl">Auto-send follow-up reminders</label><select id="wa-auto-followup"><option selected>Yes</option><option>No</option></select></div>
+        <div class="form-group"><label class="fl">Prescription template</label><input type="text" id="wa-prescription-template" value="prescription_summary"></div>
+        <div style="font-size:10px;color:var(--g1)">Template variables should match:
+          Registration = patient, hospital, BMSH ID, date, department, contact.
+          Appointment = patient, hospital, doctor, date, time, location, contact.
+          Prescription = patient, hospital, department, doctor, visit date, medicine summary, follow-up, contact.
+        </div>
+      </div>
+    </div>
     <div class="card"><div class="card-hd"><div class="card-title">Prescription print — header &amp; footer</div></div>
       <div style="font-size:11px;color:var(--g1);margin-bottom:10px">Images are embedded in printed prescriptions (and surgery packs). Manage doctor degrees and signatures under the <strong>Doctors</strong> tab.</div>
       <div class="form-group"><label class="fl">Header image (letterhead top)</label>
