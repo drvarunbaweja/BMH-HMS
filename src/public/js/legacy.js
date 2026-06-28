@@ -25996,6 +25996,9 @@ async function registerPatient() {
   const token = todayPts.length;
 
   showToast(`✅ ${name} registered — Token #${token}`, 's');
+  setTimeout(function () {
+    sendPatientRegistrationWhatsApp(patient, { silent: true, auto: true });
+  }, 0);
   if (isExistingRegistration || prevVisits > 0) {
     repairDuplicatePatientsForIdentity({ name, mob, mob2 }).catch(function (e) {
       console.warn('duplicate patient merge after registration failed', e);
@@ -31945,7 +31948,7 @@ function appointmentListRow(a, opts) {
   const source = escapeHtmlConsent(getAppointmentSourceLabel(a));
   const mode = escapeHtmlConsent(getAppointmentMode(a));
   const dateLine = options.showDate && date ? ' · ' + formatDateDDMMYYYY(date) : '';
-  return '<div class="apt-slot booked" style="font-size:12px;display:grid;grid-template-columns:64px minmax(0,1.45fr) 82px 92px minmax(0,1fr) minmax(0,.95fr) 56px 88px 72px 72px;gap:6px;align-items:start;max-width:100%;overflow:hidden">'
+  return '<div class="apt-slot booked" style="font-size:12px;display:grid;grid-template-columns:64px minmax(0,1.45fr) 82px 92px minmax(0,1fr) minmax(0,.95fr) 56px 88px 72px 104px;gap:6px;align-items:start;max-width:100%;overflow:hidden">'
     + '<div style="font-size:12px;font-weight:900;color:var(--bmh-blue);padding-top:2px">' + time + '</div>'
     + '<div style="min-width:0"><div style="font-size:13px;font-weight:900;line-height:1.25;overflow-wrap:anywhere">' + patient + '</div><div style="font-size:10.5px;color:var(--g1);line-height:1.2;overflow-wrap:anywhere">' + bmhId + dateLine + '</div></div>'
     + '<div style="font-family:monospace;font-size:10.5px;color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + bmhId + '</div>'
@@ -31955,7 +31958,7 @@ function appointmentListRow(a, opts) {
     + '<span class="badge bd-blue" style="font-size:9.5px;text-align:center;align-self:start">' + centre + '</span>'
     + '<div style="font-size:10.5px;font-weight:800;color:var(--tx3);line-height:1.25;overflow-wrap:anywhere">' + source + '</div>'
     + '<div style="font-size:10.5px;color:var(--tx3);line-height:1.25;overflow-wrap:anywhere">' + mode + '</div>'
-    + '<div style="display:flex;flex-direction:column;gap:3px;min-width:0"><button class="btn btn-xs btn-outline" style="font-size:9px;padding:2px 4px;min-height:0" onclick="event.stopPropagation();openEditAppointment(\'' + key + '\')">Change</button><button class="btn btn-xs btn-gray" style="font-size:9px;padding:2px 4px;min-height:0" onclick="event.stopPropagation();deleteAppointment(\'' + key + '\')">Delete</button></div>'
+    + '<div style="display:flex;flex-direction:column;gap:3px;min-width:0"><button class="btn btn-xs btn-outline" style="font-size:9px;padding:2px 4px;min-height:0" onclick="event.stopPropagation();sendAppointmentReminderByKey(\'' + key + '\')">WhatsApp</button><button class="btn btn-xs btn-outline" style="font-size:9px;padding:2px 4px;min-height:0" onclick="event.stopPropagation();openEditAppointment(\'' + key + '\')">Change</button><button class="btn btn-xs btn-gray" style="font-size:9px;padding:2px 4px;min-height:0" onclick="event.stopPropagation();deleteAppointment(\'' + key + '\')">Delete</button></div>'
     + '</div>';
 }
 function findAppointmentByKey(key) {
@@ -31975,6 +31978,11 @@ function openEditAppointment(key) {
   if (dateEl) dateEl.value = getAppointmentDate(apt) || todayKey();
   fillAppointmentTimeSelect(timeEl, getAppointmentTime(apt) || '10:00 AM');
   openM('m-edit-apt');
+}
+function sendAppointmentReminderByKey(key) {
+  const apt = findAppointmentByKey(key);
+  if (!apt) { showToast('Appointment not found', 'w'); return; }
+  sendAppointmentReminderWhatsApp(apt, { silent: false, auto: false });
 }
 function saveAppointmentChange() {
   const key = String(document.getElementById('edit-apt-id')?.value || '').trim();
@@ -32009,6 +32017,7 @@ function deleteAppointment(key) {
   showToast('Appointment deleted ✓', 's');
 }
 window.openEditAppointment = openEditAppointment;
+window.sendAppointmentReminderByKey = sendAppointmentReminderByKey;
 window.saveAppointmentChange = saveAppointmentChange;
 window.deleteAppointment = deleteAppointment;
 function renderAptDay() {
@@ -36475,6 +36484,219 @@ function loadHospitalSettingsFromFirebase() {
   });
 }
 window.loadHospitalSettingsFromFirebase = loadHospitalSettingsFromFirebase;
+
+const BMH_WHATSAPP_CLOUD_LOCKED = true;
+
+function getHospitalSettingValue(id, fallback) {
+  const el = document.getElementById(id);
+  if (!el) return fallback == null ? '' : fallback;
+  return el.value == null ? (fallback == null ? '' : fallback) : el.value;
+}
+function getWhatsAppCloudConfig() {
+  return {
+    locked: BMH_WHATSAPP_CLOUD_LOCKED,
+    enabled: String(getHospitalSettingValue('wa-enabled', 'No')).toLowerCase() === 'yes',
+    apiVersion: String(getHospitalSettingValue('wa-api-version', 'v23.0') || 'v23.0').trim(),
+    phoneNumberId: String(getHospitalSettingValue('wa-phone-number-id', '') || '').trim(),
+    token: String(getHospitalSettingValue('wa-token', '') || '').trim(),
+    language: String(getHospitalSettingValue('wa-template-language', 'en') || 'en').trim() || 'en',
+    helpPhone: String(getHospitalSettingValue('wa-contact-phone', getHospitalSettingValue('hospital-phone', '+91-81466 22802')) || '').trim(),
+    hospitalName: String(getHospitalSettingValue('hospital-name', 'Baweja Multispeciality Hospital') || 'Baweja Multispeciality Hospital').trim(),
+    registrationTemplate: String(getHospitalSettingValue('wa-registration-template', 'patient_registration_confirmation') || 'patient_registration_confirmation').trim(),
+    appointmentTemplate: String(getHospitalSettingValue('wa-appointment-template', 'appointment_reminder') || 'appointment_reminder').trim(),
+    prescriptionTemplate: String(getHospitalSettingValue('wa-prescription-template', 'prescription_summary') || 'prescription_summary').trim(),
+    autoRegistration: String(getHospitalSettingValue('wa-auto-registration', 'Yes')).toLowerCase() === 'yes',
+    autoFollowup: String(getHospitalSettingValue('wa-auto-followup', 'Yes')).toLowerCase() === 'yes'
+  };
+}
+function normalizeWhatsAppPhone(raw) {
+  const digits = String(raw || '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.length === 10) return '91' + digits;
+  if (digits.length === 11 && digits.charAt(0) === '0') return '91' + digits.slice(1);
+  if (digits.length === 12 && digits.indexOf('91') === 0) return digits;
+  return digits;
+}
+function getDeptLabelForWhatsApp(dept) {
+  const map = { oe: 'Ophthalmology', ophtho: 'Ophthalmology', obg: 'OBG', psych: 'Neuropsychiatry', skin: 'Skin & Cosmetology' };
+  return map[String(dept || '').toLowerCase()] || toDisplayTitleCase(String(dept || 'General'));
+}
+function getCentreLabelForWhatsApp(centre) {
+  return normalizeAppointmentCentreValue(centre || 'CHD') === 'RPR' ? 'Ropar' : 'Chandigarh';
+}
+function buildWhatsAppTemplateParameters(values) {
+  return (values || []).map(function (value) {
+    return {
+      type: 'text',
+      text: String(value == null ? '' : value).replace(/\s+/g, ' ').trim().slice(0, 1024) || '-'
+    };
+  });
+}
+function logWhatsAppMessage(entry) {
+  if (typeof fbPush !== 'function') return;
+  const payload = typeof sanitizeFirebaseValue === 'function' ? sanitizeFirebaseValue(entry) : entry;
+  try { fbPush('whatsappMessages', payload); } catch (e) {}
+}
+async function sendWhatsAppTemplateMessage(templateName, toPhone, params, meta) {
+  const cfg = getWhatsAppCloudConfig();
+  if (cfg.locked) throw new Error('WhatsApp integration is locked');
+  if (!cfg.enabled) throw new Error('WhatsApp integration is disabled');
+  if (!cfg.phoneNumberId || !cfg.token) throw new Error('WhatsApp settings are incomplete');
+  const to = normalizeWhatsAppPhone(toPhone);
+  if (!to) throw new Error('Patient mobile number is missing');
+  const res = await fetch('https://graph.facebook.com/' + cfg.apiVersion + '/' + cfg.phoneNumberId + '/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer ' + cfg.token
+    },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      to: to,
+      type: 'template',
+      template: {
+        name: templateName,
+        language: { code: cfg.language },
+        components: [{ type: 'body', parameters: buildWhatsAppTemplateParameters(params) }]
+      }
+    })
+  });
+  const data = await res.json().catch(function () { return {}; });
+  logWhatsAppMessage({
+    createdAt: new Date().toISOString(),
+    template: templateName,
+    to: to,
+    ok: !!res.ok,
+    response: data,
+    meta: meta || {}
+  });
+  if (!res.ok) throw new Error(data?.error?.message || 'WhatsApp API request failed');
+  return data;
+}
+function maybeShowWhatsAppError(err, silent) {
+  console.warn('whatsapp send failed', err);
+  if (!silent) showToast('WhatsApp send failed: ' + String(err?.message || err || 'Unknown error'), 'w');
+}
+function sendPatientRegistrationWhatsApp(patient, opts) {
+  const options = opts || {};
+  const cfg = getWhatsAppCloudConfig();
+  if (cfg.locked || !cfg.enabled || !cfg.autoRegistration && options.auto !== false) return Promise.resolve(false);
+  const pt = patient || {};
+  const visitDate = formatDateIN(pt.createdAt || pt.updatedAt || new Date());
+  const params = [
+    pt.name || 'Patient',
+    cfg.hospitalName,
+    pt.bmhId || '',
+    visitDate,
+    getDeptLabelForWhatsApp(pt.dept),
+    cfg.helpPhone
+  ];
+  return sendWhatsAppTemplateMessage(cfg.registrationTemplate, pt.mob || pt.mobile || '', params, {
+    kind: 'registration',
+    bmhId: pt.bmhId || ''
+  }).then(function () {
+    if (!options.silent) showToast('Registration WhatsApp sent ✓', 's');
+    return true;
+  }).catch(function (err) {
+    maybeShowWhatsAppError(err, options.silent);
+    return false;
+  });
+}
+function sendAppointmentReminderWhatsApp(appointment, opts) {
+  const options = opts || {};
+  const cfg = getWhatsAppCloudConfig();
+  if (cfg.locked || !cfg.enabled || (!cfg.autoFollowup && options.auto)) return Promise.resolve(false);
+  const apt = appointment || {};
+  const params = [
+    getAppointmentPatientName(apt) || apt.patient || 'Patient',
+    cfg.hospitalName,
+    getAppointmentDoctor(apt) || apt.doctor || 'Doctor',
+    formatDateDDMMYYYY(getAppointmentDate(apt) || apt.date || todayKey()),
+    normalizeAptTimeLabel(getAppointmentTime(apt) || apt.time || '10:00 AM'),
+    getCentreLabelForWhatsApp(getAppointmentCentre(apt) || apt.centre || 'CHD'),
+    cfg.helpPhone
+  ];
+  return sendWhatsAppTemplateMessage(cfg.appointmentTemplate, getAppointmentPhone(apt) || apt.mob || '', params, {
+    kind: 'appointment',
+    bmhId: getAppointmentBmhId(apt) || apt.bmhId || '',
+    appointmentId: getAppointmentKey(apt) || apt.id || ''
+  }).then(function () {
+    if (!options.silent) showToast('Appointment WhatsApp sent ✓', 's');
+    return true;
+  }).catch(function (err) {
+    maybeShowWhatsAppError(err, options.silent);
+    return false;
+  });
+}
+function buildPrescriptionSummaryForWhatsApp(rows) {
+  const meds = (Array.isArray(rows) ? rows : []).map(function (row) {
+    return rxDrugTradeName(row) || row?.trade || row?.name || row?.generic || '';
+  }).filter(Boolean);
+  if (!meds.length) return 'As advised by doctor';
+  if (meds.length <= 3) return meds.join(', ');
+  return meds.slice(0, 3).join(', ') + ' +' + (meds.length - 3) + ' more';
+}
+function buildPrescriptionWhatsAppContext(deptId) {
+  const pt = window.CURRENT_PATIENT || {};
+  const map = { oe: 'ophtho', ophtho: 'ophtho', obg: 'obg', psych: 'psych', skin: 'skin' };
+  const dept = map[deptId] || deptId || pt.lastDeptVisit || pt.lastVisit?.dept || 'ophtho';
+  const bmhId = pt.bmhId || '';
+  const visit = (bmhId && typeof getLatestSavedPrescriptionVisitForDept === 'function' ? getLatestSavedPrescriptionVisitForDept(bmhId, dept) : null)
+    || (bmhId && typeof getLatestSavedVisitForDept === 'function' ? getLatestSavedVisitForDept(bmhId, dept) : null)
+    || pt.lastVisit
+    || {};
+  return {
+    patient: pt,
+    dept: dept,
+    visit: visit,
+    followup: visit.rxFuDate || visit.followupDate || '',
+    summary: buildPrescriptionSummaryForWhatsApp(visit.rx || [])
+  };
+}
+function sendCurrentPrescriptionToWhatsApp(deptId, opts) {
+  const options = opts || {};
+  const cfg = getWhatsAppCloudConfig();
+  if (cfg.locked || !cfg.enabled) return Promise.resolve(false);
+  const ctx = buildPrescriptionWhatsAppContext(deptId);
+  if (!ctx.patient?.bmhId) {
+    if (!options.silent) showToast('Open a patient before sending prescription', 'w');
+    return Promise.resolve(false);
+  }
+  const params = [
+    ctx.patient.name || 'Patient',
+    cfg.hospitalName,
+    getDeptLabelForWhatsApp(ctx.dept),
+    ctx.visit.doctor || CURRENT_USER?.name || 'Doctor',
+    formatDateIN(ctx.visit.date || ctx.visit.updatedAt || new Date()),
+    ctx.summary,
+    ctx.followup ? formatDateDDMMYYYY(ctx.followup) : 'As advised',
+    cfg.helpPhone
+  ];
+  return sendWhatsAppTemplateMessage(cfg.prescriptionTemplate, ctx.patient.mob || ctx.patient.mobile || '', params, {
+    kind: 'prescription',
+    bmhId: ctx.patient.bmhId || '',
+    dept: ctx.dept
+  }).then(function () {
+    if (!options.silent) showToast('Prescription WhatsApp sent ✓', 's');
+    return true;
+  }).catch(function (err) {
+    maybeShowWhatsAppError(err, options.silent);
+    return false;
+  });
+}
+function printAndSendPrescriptionWhatsApp(deptId) {
+  if (BMH_WHATSAPP_CLOUD_LOCKED) {
+    showToast('WhatsApp integration is kept inactive for now', 'i');
+    return;
+  }
+  if (deptId === 'oe' || deptId === 'ophtho') printRx();
+  else if (typeof window.printUnifiedRx === 'function') window.printUnifiedRx(deptId);
+  setTimeout(function () {
+    sendCurrentPrescriptionToWhatsApp(deptId, { silent: false });
+  }, 120);
+}
+window.printAndSendPrescriptionWhatsApp = printAndSendPrescriptionWhatsApp;
+window.sendCurrentPrescriptionToWhatsApp = sendCurrentPrescriptionToWhatsApp;
 
 // Login disabled for testing
 
@@ -45253,6 +45475,9 @@ function saveVisit(dept, opts) {
             APPOINTMENTS.push(fuApt);
             if (typeof saveAppointmentToFirebase === 'function') saveAppointmentToFirebase(fuApt);
             if (typeof renderFollowupRegister === 'function') renderFollowupRegister();
+            setTimeout(function () {
+              sendAppointmentReminderWhatsApp(fuApt, { silent: true, auto: true });
+            }, 0);
           }
           if (normalizedFu.shifted && !opts.silent) showToast('Follow-up appointment moved from Sunday to Monday ✓', 'i');
         }
