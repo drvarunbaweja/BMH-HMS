@@ -14182,44 +14182,182 @@ function openInventoryBill(id, _rtdbTried) {
   w.document.close();
 }
 window.openInventoryBill = openInventoryBill;
-function saveInventoryIndent() {
+window._bmhInventoryIndentDraft = window._bmhInventoryIndentDraft || [];
+window._bmhInventoryTransferDraft = window._bmhInventoryTransferDraft || [];
+function bmhInventoryDraftId(prefix) {
+  return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+function bmhReadInventoryIndentLine() {
   const requestStore = document.getElementById('inv-indent-store')?.value || '';
   const sourceStore = document.getElementById('inv-indent-source')?.value || '';
   const item = document.getElementById('inv-indent-item')?.value?.trim() || '';
   const qty = Math.max(1, Number(document.getElementById('inv-indent-qty')?.value || '1'));
   const urgency = document.getElementById('inv-indent-urgency')?.value || 'routine';
   const notes = document.getElementById('inv-indent-notes')?.value?.trim() || '';
-  if (!requestStore || !sourceStore || !item) { showToast('Fill store, source, and item', 'w'); return; }
-  window.BMH_INVENTORY_INDENTS.push({ id: 'IND' + Date.now(), requestStore, sourceStore, item, qty, urgency, notes, status: 'open', requestedBy: CURRENT_USER?.name || 'Staff', createdAt: bmhNowISO() });
-  saveBmhFinancials();
-  renderInventoryIndents();
-  showToast('Indent submitted ✓', 's');
-  ['inv-indent-item','inv-indent-notes'].forEach(function (id) { const el = document.getElementById(id); if (el) el.value = ''; });
+  return { requestStore, sourceStore, item, qty, urgency, notes };
+}
+function bmhClearInventoryIndentInputs(keepNotes) {
+  const itemEl = document.getElementById('inv-indent-item'); if (itemEl) itemEl.value = '';
+  if (!keepNotes) { const notesEl = document.getElementById('inv-indent-notes'); if (notesEl) notesEl.value = ''; }
   const qtyEl = document.getElementById('inv-indent-qty'); if (qtyEl) qtyEl.value = '1';
 }
+function renderInventoryIndentDraft() {
+  const el = document.getElementById('inv-indent-draft-list');
+  if (!el) return;
+  const rows = window._bmhInventoryIndentDraft || [];
+  el.innerHTML = rows.length ? `<div style="margin-top:10px;border:1px solid var(--g4);border-radius:8px;background:#fff;overflow:hidden">
+    ${rows.map(function (line, idx) {
+      return `<div style="display:grid;grid-template-columns:32px 1fr 70px 86px;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--g5);font-size:12px">
+        <div style="font-weight:900;color:var(--bmh-blue)">${idx + 1}</div>
+        <div><strong>${escapeHtmlConsent(line.item || '')}</strong><div style="font-size:10px;color:var(--g1);margin-top:2px">${escapeHtmlConsent(line.requestStore || '')} ← ${escapeHtmlConsent(line.sourceStore || '')} · ${escapeHtmlConsent(line.urgency || 'routine')}</div></div>
+        <div style="font-weight:900;text-align:right">Qty ${Number(line.qty || 0)}</div>
+        <button type="button" class="btn btn-xs btn-outline" onclick="removeInventoryIndentDraftLine('${line.id}')">Remove</button>
+      </div>`;
+    }).join('')}
+  </div>` : '';
+}
+window.renderInventoryIndentDraft = renderInventoryIndentDraft;
+function addInventoryIndentLine() {
+  const line = bmhReadInventoryIndentLine();
+  if (!line.requestStore || !line.sourceStore || !line.item) { showToast('Fill store, source, and item', 'w'); return; }
+  line.id = bmhInventoryDraftId('INDL');
+  window._bmhInventoryIndentDraft.push(line);
+  renderInventoryIndentDraft();
+  bmhClearInventoryIndentInputs(true);
+  showToast('Indent line added ✓', 's');
+}
+window.addInventoryIndentLine = addInventoryIndentLine;
+function removeInventoryIndentDraftLine(id) {
+  window._bmhInventoryIndentDraft = (window._bmhInventoryIndentDraft || []).filter(function (line) { return line.id !== id; });
+  renderInventoryIndentDraft();
+}
+window.removeInventoryIndentDraftLine = removeInventoryIndentDraftLine;
+function saveInventoryIndent() {
+  const draft = (window._bmhInventoryIndentDraft || []).slice();
+  if (!draft.length) {
+    const line = bmhReadInventoryIndentLine();
+    if (!line.requestStore || !line.sourceStore || !line.item) { showToast('Fill store, source, and item', 'w'); return; }
+    draft.push(line);
+  }
+  const batchId = 'INDB' + Date.now();
+  const ts = bmhNowISO();
+  draft.forEach(function (line, idx) {
+    window.BMH_INVENTORY_INDENTS.push({
+      id: batchId + '-' + idx,
+      batchId,
+      requestStore: line.requestStore,
+      sourceStore: line.sourceStore,
+      item: line.item,
+      qty: Math.max(1, Number(line.qty || 1)),
+      urgency: line.urgency || 'routine',
+      notes: line.notes || '',
+      status: 'open',
+      requestedBy: CURRENT_USER?.name || 'Staff',
+      createdAt: ts
+    });
+  });
+  saveBmhFinancials();
+  renderInventoryIndents();
+  window._bmhInventoryIndentDraft = [];
+  renderInventoryIndentDraft();
+  bmhClearInventoryIndentInputs(false);
+  showToast(draft.length + ' indent line' + (draft.length === 1 ? '' : 's') + ' submitted ✓', 's');
+}
 window.saveInventoryIndent = saveInventoryIndent;
-function saveInventoryTransfer() {
-  const printAfter = !!arguments[0]?.printAfter;
+function bmhReadInventoryTransferLine() {
   const fromStore = document.getElementById('inv-tr-from')?.value || '';
   const toStore = document.getElementById('inv-tr-to')?.value || '';
   const raw = document.getElementById('inv-tr-item')?.value?.trim() || '';
   const qty = Math.max(1, Number(document.getElementById('inv-tr-qty')?.value || '1'));
-  if (!fromStore || !toStore || !raw) { showToast('Fill from, to and item', 'w'); return; }
-  if (fromStore === toStore) { showToast('Choose different stores', 'w'); return; }
-  const item = INVENTORY.find(function (x) { return (String(x.barcode || '').toLowerCase() === raw.toLowerCase() || String(x.name || '').toLowerCase() === raw.toLowerCase()) && String(x.store || '') === fromStore; });
-  if (!item) { showToast('Inventory item not found in selected store', 'w'); return; }
-  if ((Number(item.stock) || 0) < qty) { showToast('Not enough stock to transfer', 'w'); return; }
-  item.stock = Math.max(0, (Number(item.stock) || 0) - qty);
-  let target = INVENTORY.find(function (x) { return x.barcode === item.barcode && String(x.store || '') === toStore; });
-  if (!target) { target = Object.assign({}, item, { stock: 0, store: toStore }); INVENTORY.push(target); 
-    // Save to Firebase
-    if (typeof window.saveInventoryToFirebase === 'function') {
-      window.saveInventoryToFirebase(target).catch(err => console.error('Firebase save error:', err));
-    }
+  return { fromStore, toStore, raw, qty };
+}
+function bmhFindInventoryTransferItem(line) {
+  const raw = String(line.raw || '').toLowerCase();
+  return INVENTORY.find(function (x) {
+    return (String(x.barcode || '').toLowerCase() === raw || String(x.name || '').toLowerCase() === raw) && String(x.store || '') === line.fromStore;
+  });
+}
+function bmhClearInventoryTransferInputs() {
+  const itemEl = document.getElementById('inv-tr-item'); if (itemEl) itemEl.value = '';
+  const qtyEl = document.getElementById('inv-tr-qty'); if (qtyEl) qtyEl.value = '1';
+}
+function renderInventoryTransferDraft() {
+  const el = document.getElementById('inv-transfer-draft-list');
+  if (!el) return;
+  const rows = window._bmhInventoryTransferDraft || [];
+  el.innerHTML = rows.length ? `<div style="margin-top:10px;border:1px solid var(--g4);border-radius:8px;background:#fff;overflow:hidden">
+    ${rows.map(function (line, idx) {
+      return `<div style="display:grid;grid-template-columns:32px 1fr 70px 86px;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--g5);font-size:12px">
+        <div style="font-weight:900;color:var(--bmh-blue)">${idx + 1}</div>
+        <div><strong>${escapeHtmlConsent(line.raw || '')}</strong><div style="font-size:10px;color:var(--g1);margin-top:2px">${escapeHtmlConsent(line.fromStore || '')} → ${escapeHtmlConsent(line.toStore || '')}</div></div>
+        <div style="font-weight:900;text-align:right">Qty ${Number(line.qty || 0)}</div>
+        <button type="button" class="btn btn-xs btn-outline" onclick="removeInventoryTransferDraftLine('${line.id}')">Remove</button>
+      </div>`;
+    }).join('')}
+  </div>` : '';
+}
+window.renderInventoryTransferDraft = renderInventoryTransferDraft;
+function addInventoryTransferLine() {
+  const line = bmhReadInventoryTransferLine();
+  if (!line.fromStore || !line.toStore || !line.raw) { showToast('Fill from, to and item', 'w'); return; }
+  if (line.fromStore === line.toStore) { showToast('Choose different stores', 'w'); return; }
+  line.id = bmhInventoryDraftId('TRL');
+  window._bmhInventoryTransferDraft.push(line);
+  renderInventoryTransferDraft();
+  bmhClearInventoryTransferInputs();
+  showToast('Transfer line added ✓', 's');
+}
+window.addInventoryTransferLine = addInventoryTransferLine;
+function removeInventoryTransferDraftLine(id) {
+  window._bmhInventoryTransferDraft = (window._bmhInventoryTransferDraft || []).filter(function (line) { return line.id !== id; });
+  renderInventoryTransferDraft();
+}
+window.removeInventoryTransferDraftLine = removeInventoryTransferDraftLine;
+function saveInventoryTransfer(opts) {
+  opts = opts || {};
+  const draft = (window._bmhInventoryTransferDraft || []).slice();
+  if (!draft.length) {
+    const line = bmhReadInventoryTransferLine();
+    if (!line.fromStore || !line.toStore || !line.raw) { showToast('Fill from, to and item', 'w'); return false; }
+    draft.push(line);
   }
-  target.stock = (Number(target.stock) || 0) + qty;
-  const transferRow = { id: 'TR' + Date.now(), itemName: item.name, barcode: item.barcode, fromStore, toStore, qty, ts: bmhNowISO(), user: CURRENT_USER?.name || 'Inventory' };
-  window.BMH_INVENTORY_TRANSFERS.push(transferRow);
+  const plannedByItem = new Map();
+  const resolved = [];
+  for (const line of draft) {
+    if (line.fromStore === line.toStore) { showToast('Choose different stores for ' + line.raw, 'w'); return false; }
+    const item = bmhFindInventoryTransferItem(line);
+    if (!item) { showToast('Inventory item not found in selected store: ' + line.raw, 'w'); return false; }
+    const key = String(item.barcode || item.name || '') + '||' + String(line.fromStore || '');
+    const planned = Number(plannedByItem.get(key) || 0) + Math.max(1, Number(line.qty || 1));
+    if ((Number(item.stock) || 0) < planned) { showToast('Not enough stock to transfer: ' + (item.name || line.raw), 'w'); return false; }
+    plannedByItem.set(key, planned);
+    resolved.push({ line, item });
+  }
+  const batchId = 'TRB' + Date.now();
+  const ts = bmhNowISO();
+  const changed = [];
+  const transferRows = [];
+  resolved.forEach(function (entry, idx) {
+    const line = entry.line;
+    const item = entry.item;
+    const qty = Math.max(1, Number(line.qty || 1));
+    item.stock = Math.max(0, (Number(item.stock) || 0) - qty);
+    let target = INVENTORY.find(function (x) { return x.barcode === item.barcode && String(x.store || '') === line.toStore; });
+    if (!target) {
+      target = Object.assign({}, item, { stock: 0, store: line.toStore });
+      INVENTORY.push(target);
+    }
+    target.stock = (Number(target.stock) || 0) + qty;
+    changed.push(item, target);
+    const transferRow = { id: batchId + '-' + idx, batchId, itemName: item.name, barcode: item.barcode, fromStore: line.fromStore, toStore: line.toStore, qty, ts, user: CURRENT_USER?.name || 'Inventory' };
+    window.BMH_INVENTORY_TRANSFERS.push(transferRow);
+    transferRows.push(transferRow);
+  });
+  if (typeof window.saveInventoryToFirebase === 'function') {
+    changed.forEach(function (row) {
+      window.saveInventoryToFirebase(row).catch(err => console.error('Firebase save error:', err));
+    });
+  }
   saveInventoryStockToStorage();
   saveBmhFinancials();
   renderStockList();
@@ -14227,8 +14365,12 @@ function saveInventoryTransfer() {
   renderInventoryTodayEntries && renderInventoryTodayEntries({ preserveVisibility: true });
   renderInventoryStoreStock();
   renderInventoryPoAlerts();
-  if (printAfter) printInventoryTransferSlip([transferRow], { fromStores: [fromStore], toStore: toStore });
-  showToast(printAfter ? 'Stock transferred and print opened ✓' : 'Stock transferred ✓', 's');
+  window._bmhInventoryTransferDraft = [];
+  renderInventoryTransferDraft();
+  bmhClearInventoryTransferInputs();
+  if (opts.printAfter) printInventoryTransferSlip(transferRows, { fromStores: Array.from(new Set(transferRows.map(function (row) { return row.fromStore; }))), toStore: Array.from(new Set(transferRows.map(function (row) { return row.toStore; }))).join(', ') });
+  showToast(opts.printAfter ? 'Stock transferred and print opened ✓' : (transferRows.length + ' stock line' + (transferRows.length === 1 ? '' : 's') + ' transferred ✓'), 's');
+  return true;
 }
 window.saveInventoryTransfer = saveInventoryTransfer;
 function saveInventoryTransferAndPrint() {
