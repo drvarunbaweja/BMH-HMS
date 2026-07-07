@@ -46266,6 +46266,97 @@ function renderOphthoRecap(opts) {
   scheduleDeptRailRender('ophtho', _renderOphthoRecapNow, opts);
 }
 
+// Lightweight performance diagnostics only: no data, save, or UI behavior changes.
+(function initBmhPerformanceDiagnostics() {
+  if (window._bmhPerfDiagnosticsInstalled) return;
+  window._bmhPerfDiagnosticsInstalled = true;
+  window.BMH_PERF_DIAGNOSTICS = window.BMH_PERF_DIAGNOSTICS !== false;
+  window.BMH_PERF_LOG = window.BMH_PERF_LOG || [];
+  const slowMs = Number(window.BMH_PERF_SLOW_MS || 120);
+  const now = function () {
+    return (window.performance && typeof window.performance.now === 'function') ? window.performance.now() : Date.now();
+  };
+  const describeArgs = function (name, args) {
+    try {
+      if (name === 'nav') return String(args[0] || '');
+      if (name === 'saveVisit') return String(args[0] || '');
+      if (name === 'printUnifiedRx') return String(args[0] || '');
+      if (name === 'loadPastVisits') return [args[0] || '', args[1] || ''].filter(Boolean).join(' ');
+      if (name === 'openPatient') return String(args[0] || '');
+      return '';
+    } catch (e) {
+      return '';
+    }
+  };
+  const record = function (name, start, args, err) {
+    if (!window.BMH_PERF_DIAGNOSTICS) return;
+    const ms = Math.round((now() - start) * 10) / 10;
+    const entry = {
+      name: name,
+      ms: ms,
+      detail: describeArgs(name, args || []),
+      at: new Date().toISOString(),
+      error: err ? String(err && (err.message || err)) : ''
+    };
+    window.BMH_PERF_LOG.push(entry);
+    if (window.BMH_PERF_LOG.length > 250) window.BMH_PERF_LOG.splice(0, window.BMH_PERF_LOG.length - 250);
+    if (ms >= slowMs || err) {
+      try {
+        console.info('[BMH PERF]', name + (entry.detail ? ' ' + entry.detail : ''), ms + 'ms' + (entry.error ? ' error: ' + entry.error : ''));
+      } catch (e) {}
+    }
+  };
+  const wrap = function (name) {
+    const original = window[name];
+    if (typeof original !== 'function' || original._bmhPerfWrapped) return;
+    const wrapped = function () {
+      const args = arguments;
+      const start = now();
+      try {
+        const result = original.apply(this, args);
+        if (result && typeof result.then === 'function') {
+          result.then(function () { record(name, start, args); }, function (err) { record(name, start, args, err); });
+        } else {
+          record(name, start, args);
+        }
+        return result;
+      } catch (err) {
+        record(name, start, args, err);
+        throw err;
+      }
+    };
+    wrapped._bmhPerfWrapped = true;
+    wrapped._bmhPerfOriginal = original;
+    window[name] = wrapped;
+  };
+  [
+    'nav',
+    'openPatient',
+    'renderDocQueue',
+    '_renderDocQueueImpl',
+    'renderActivePageAfterRealtimeUpdate',
+    'renderDashboard',
+    'renderReceptionPage',
+    'renderBillingPage',
+    'initInventory',
+    'renderStockList',
+    'saveVisit',
+    'loadPastVisits',
+    'printUnifiedRx',
+    'safePrint',
+    'refreshPatientsFromFirebase',
+    'refreshTodayQueuePatientsFromFirebase',
+    'applyPatientsPayload',
+    'flushRealtimePatientUpdates',
+    'saveBmhFinancials'
+  ].forEach(wrap);
+  window.bmhPerfReport = function () {
+    const rows = (window.BMH_PERF_LOG || []).slice().sort(function (a, b) { return b.ms - a.ms; });
+    try { console.table(rows.slice(0, 40)); } catch (e) { console.log(rows.slice(0, 40)); }
+    return rows;
+  };
+})();
+
 window.addEventListener('DOMContentLoaded', function() {
   preloadUserSettings && preloadUserSettings();
   bindDeptSmartSuggestionListeners && bindDeptSmartSuggestionListeners();
