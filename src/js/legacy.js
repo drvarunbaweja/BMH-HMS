@@ -11086,13 +11086,16 @@ function bmhSyncPatientAdvanceBalance(bmhId, opts) {
   const currentAdvance = Math.max(0, Number(pt.advance) || 0);
   const deltaAmount = Math.max(0, Number(opts?.deltaAmount || 0));
   const adjustmentAmount = Math.max(0, Number(opts?.adjustmentAmount || 0));
+  const hasAdvanceLedger = Array.isArray(TRANSACTIONS) && TRANSACTIONS.some(function (txn) {
+    return txn && txn.bmhId === bmhId && (bmhIsAdvanceTransaction(txn) || bmhIsAdvanceAdjustmentTransaction(txn));
+  });
   let nextAdvance = currentAdvance;
 
   if (deltaAmount > 0) {
     nextAdvance = currentAdvance + deltaAmount;
   } else if (adjustmentAmount > 0) {
     nextAdvance = Math.max(0, currentAdvance - adjustmentAmount);
-  } else if (opts?.recomputeFromTransactions || currentAdvance <= 0) {
+  } else if (opts?.recomputeFromTransactions || hasAdvanceLedger || currentAdvance <= 0) {
     const computed = bmhComputeAdvanceBalanceForPatient(bmhId);
     nextAdvance = opts?.allowIncrease ? Math.max(currentAdvance, computed) : computed;
   }
@@ -11157,7 +11160,7 @@ function _buildQueueRenderCache() {
       .reduce(function (s, t) { return s + Math.max(0, Number(t.amount) || 0); }, 0);
     const adjusted = txns.filter(bmhIsAdvanceAdjustmentTransaction)
       .reduce(function (s, t) { return s + Math.max(0, Number(t.amount) || 0); }, 0);
-    advanceByBmhId.set(bmhId, Math.max(0, received - adjusted));
+    if (received > 0 || adjusted > 0) advanceByBmhId.set(bmhId, Math.max(0, received - adjusted));
   });
   _bmhQueueRenderCache = { payByBmhId, txnByBmhId, advanceByBmhId };
 }
@@ -11202,11 +11205,113 @@ function patientHasNoFeeConsultation(p) {
   });
 }
 
-function queueNoFeeConsultationBadge(compact) {
+function queueNoFeeConsultationPayerLabel(p) {
+  if (!p || !p.bmhId) return '';
+  const pieces = [
+    p.ins,
+    p.insurance,
+    p.tpaCompany,
+    p.cashlessCompany,
+    p.consultationPaymentMode,
+    p.paymentMode,
+    p.policy
+  ];
+  const payRows = _bmhQueueRenderCache
+    ? (_bmhQueueRenderCache.payByBmhId.get(p.bmhId) || [])
+    : (PAY_REQUESTS || []).filter(function (r) { return r && r.bmhId === p.bmhId; });
+  payRows.forEach(function (r) { pieces.push(r.mode, r.ins, r.tpaCompany, r.policy, r.for, r.service); });
+  const text = pieces.filter(Boolean).join(' ').trim();
+  if (!text || /^no\s*fee$/i.test(text)) return '';
+  if (/echs/i.test(text)) return 'ECHS';
+  if (/cghs/i.test(text)) return 'CGHS';
+  if (/pmjay|ayushman/i.test(text)) return 'PMJAY';
+  if (/cashless/i.test(text)) return 'Cashless';
+  if (/tpa/i.test(text)) return 'TPA';
+  if (/insurance/i.test(text)) return 'Insurance';
+  const raw = String(p.ins || p.consultationPaymentMode || p.paymentMode || '').trim();
+  if (!raw || /^no\s*fee$/i.test(raw)) return '';
+  return raw.slice(0, 24);
+}
+
+function queueNoFeeConsultationBadge(compact, p) {
   const style = compact
     ? 'background:#eef2f7;color:#334155;border:1px dashed #94a3b8;border-radius:10px;padding:1px 6px;font-size:9px;font-weight:800'
     : 'font-size:10px;color:#475569;font-weight:800';
-  return '<span style="' + style + '">No fee consultation</span>';
+  const payer = queueNoFeeConsultationPayerLabel(p);
+  return '<span style="' + style + '">No fee consultation' + (payer ? ' (' + escapeHtmlConsent(payer) + ')' : '') + '</span>';
+}
+
+function queuePaymentLabelForEntry(entry) {
+  if (!entry) return 'Payment';
+  const cat = typeof getTransactionPrimaryChargeCategory === 'function' ? getTransactionPrimaryChargeCategory(entry) : '';
+  if (cat) return bmhCatLabel(cat);
+  const text = entry.service || entry.for || entry.desc || entry.mode || '';
+  return bmhCatLabel(inferChargeCategoryFromService(text) || 'other');
+}
+
+function getQueuePaymentEntries(bmhId) {
+  if (!bmhId) return [];
+  const txns = (_bmhQueueRenderCache ? (_bmhQueueRenderCache.txnByBmhId.get(bmhId) || []) : (TRANSACTIONS || []).filter(function (t) { return t && t.bmhId === bmhId; }))
+    .filter(function (t) {
+      return t && !bmhIsAdvanceAdjustmentTransaction(t) && Math.max(0, Number(getNetTransactionAmount(t) || t.amount || 0)) > 0;
+    })
+    .map(function (t) {
+      return {
+        key: 'txn-' + String(t.id || t.date || Math.random()),
+        label: queuePaymentLabelForEntry(t),
+        desc: t.service || t.for || t.desc || '',
+        amount: Math.max(0, Number(getNetTransactionAmount(t) || t.amount || 0)),
+        mode: t.mode || t.paymentMode || '',
+        date: t.date || t.time || t.createdAt || '',
+        source: 'Payment'
+      };
+    });
+  const seenRefs = new Set(txns.map(function (t) { return String(t.key).replace(/^txn-/, ''); }));
+  const paidReqs = (_bmhQueueRenderCache ? (_bmhQueueRenderCache.payByBmhId.get(bmhId) || []) : (PAY_REQUESTS || []).filter(function (r) { return r && r.bmhId === bmhId; }))
+    .filter(function (r) { return r && String(r.status || '').toLowerCase() === 'paid' && !seenRefs.has(String(r.id || '')); })
+    .map(function (r) {
+      return {
+        key: 'pr-' + String(r.id || r.date || Math.random()),
+        label: queuePaymentLabelForEntry(r),
+        desc: r.for || r.service || r.desc || '',
+        amount: Math.max(0, Number(r.amount || r.paidAmount || 0)),
+        mode: r.mode || r.paymentMode || '',
+        date: r.paidAt || r.updatedAt || r.date || '',
+        source: 'Paid request'
+      };
+    });
+  return txns.concat(paidReqs).sort(function (a, b) {
+    return queueRawStamp(b.date) - queueRawStamp(a.date);
+  });
+}
+
+function showQueuePaymentDetails(bmhId) {
+  const patient = (PATIENTS || []).find(function (p) { return p && p.bmhId === bmhId; }) || {};
+  const entries = getQueuePaymentEntries(bmhId);
+  let modal = document.getElementById('m-queue-payments');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.className = 'modal-ov';
+    modal.id = 'm-queue-payments';
+    document.body.appendChild(modal);
+  }
+  const total = entries.reduce(function (s, e) { return s + Number(e.amount || 0); }, 0);
+  const rows = entries.length ? entries.map(function (e) {
+    const when = e.date ? new Date(e.date).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
+    return '<div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:9px 0;border-bottom:1px solid var(--g5)">'
+      + '<div><div style="font-weight:900;font-size:13px">' + escapeHtmlConsent(e.label || 'Payment') + '</div>'
+      + '<div style="font-size:11px;color:var(--g1);margin-top:2px">' + escapeHtmlConsent(e.desc || e.source || '') + '</div>'
+      + '<div style="font-size:10.5px;color:var(--g2);margin-top:2px">' + escapeHtmlConsent([e.mode, when].filter(Boolean).join(' · ')) + '</div></div>'
+      + '<div style="font-size:14px;font-weight:900;color:#1a8c3c;white-space:nowrap">₹' + Number(e.amount || 0).toLocaleString('en-IN') + '</div>'
+      + '</div>';
+  }).join('') : '<div style="padding:18px;text-align:center;color:var(--g1);font-size:12px">No paid payment rows found for this patient.</div>';
+  modal.innerHTML = '<div class="modal" style="max-width:560px;max-height:88vh;overflow:auto">'
+    + '<div class="modal-hd"><div class="modal-title">Payments — ' + escapeHtmlConsent(patient.name || bmhId) + '</div><button type="button" class="modal-close" onclick="closeM(\'m-queue-payments\')">✕</button></div>'
+    + '<div style="padding:12px 14px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:8px">'
+    + '<div style="font-family:var(--mono);font-size:11px;color:var(--bmh-teal);font-weight:800">' + escapeHtmlConsent(bmhId || '') + '</div>'
+    + '<div style="font-size:13px;font-weight:900;color:#1a8c3c">Total ₹' + total.toLocaleString('en-IN') + '</div></div>'
+    + rows + '</div></div>';
+  modal.classList.add('open');
 }
 
 function bmhDeleteTransactionEntry(txnId) {
@@ -44056,9 +44161,9 @@ function buildQCard(p, sno) {
   const chargeHtml = runningDue>0
     ? `<span onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;gap:3px;background:rgba(255,149,0,.15);color:#8a4200;border:1px solid rgba(255,149,0,.4);border-radius:10px;padding:1px 6px;font-size:9px;font-weight:800;animation:pulse 2s infinite">⚠️ ${surgeryDue ? 'Surgery due' : 'Due'} ₹${runningDue.toLocaleString('en-IN')}${pendingAmt>0?`<button title="Delete all pending charges for this patient" onclick="event.stopPropagation();deletePatientPendingCharges('${p.bmhId}')" style="background:none;border:none;cursor:pointer;padding:0 0 0 2px;font-size:10px;color:#c0392b;line-height:1">🗑</button>`:''}</span>`
     : noFeeConsult
-    ? queueNoFeeConsultationBadge(true)
+    ? queueNoFeeConsultationBadge(true, p)
     : paidPRs.length
-    ? `<span style="background:var(--green-lt);color:#1a8c3c;border:1px solid var(--green);border-radius:10px;padding:1px 6px;font-size:9px;font-weight:800">✓ Paid</span>`
+    ? `<span title="Show payments" onclick="event.stopPropagation();showQueuePaymentDetails('${String(p.bmhId).replace(/'/g, "\\'")}')" style="background:var(--green-lt);color:#1a8c3c;border:1px solid var(--green);border-radius:10px;padding:1px 6px;font-size:9px;font-weight:800;cursor:pointer">✓ Paid</span>`
     : advanceBalance>0 ? `<span style="background:var(--blue-lt);color:var(--blue);border:1px solid rgba(0,122,255,.3);border-radius:10px;padding:1px 6px;font-size:9px;font-weight:800">💙 Adv ₹${advanceBalance.toLocaleString('en-IN')}</span>` : '';
   const statusBadge = p.preRegistered
     ? `<span style="background:#e2e8f0;color:#334155;border-radius:10px;padding:1px 7px;font-size:9px;font-weight:800;border:1px dashed #94a3b8">⏳ Need to Check In</span>`
@@ -44162,9 +44267,9 @@ function buildQTableRow(p, sno, opts) {
     : runningDue>0
     ? `<span style="font-size:10px;color:#8a4200;font-weight:800">${surgeryDue ? 'Surgery due' : 'Due'} ₹${runningDue.toLocaleString('en-IN')}</span>${advLbl ? ' · ' + advLbl : ''}`
     : noFeeConsult
-    ? `${queueNoFeeConsultationBadge(false)}${advLbl ? ' · ' + advLbl : ''}`
+    ? `${queueNoFeeConsultationBadge(false, p)}${advLbl ? ' · ' + advLbl : ''}`
     : paidPRs.length || runningDue === 0
-    ? `<span style="font-size:10px;color:#1a8c3c">Paid</span>${advLbl ? ' · ' + advLbl : ''}`
+    ? `<span title="Show payments" onclick="event.stopPropagation();showQueuePaymentDetails('${String(p.bmhId).replace(/'/g, "\\'")}')" style="font-size:10px;color:#1a8c3c;font-weight:800;cursor:pointer">Paid</span>${advLbl ? ' · ' + advLbl : ''}`
     : (advLbl || '');
   const seenRow = isPatientMarkedSeen(p);
   const statusTxt = isPreRegRow ? 'Need check in' : seenRow ? 'Seen' : p.dilated ? 'Dilated' : p._xrefPendingPay ? 'Awaiting pay' : 'Waiting';
@@ -44959,14 +45064,19 @@ function _renderDocQueueImpl() {
 
   const emptyRow = label => `<tr><td colspan="10" style="text-align:center;padding:24px;color:var(--g2);font-size:12.5px">No ${label} patients</td></tr>`;
 
-  const ae = document.getElementById('dq-active-list');
-  if(ae) ae.innerHTML = active.length ? active.map((p)=>buildQTableRow(p, serialMap.get(p._queueKey || p.bmhId) || '')).join('') : emptyRow('active');
+  _buildQueueRenderCache();
+  try {
+    const ae = document.getElementById('dq-active-list');
+    if(ae) ae.innerHTML = active.length ? active.map((p)=>buildQTableRow(p, serialMap.get(p._queueKey || p.bmhId) || '')).join('') : emptyRow('active');
 
-  const de = document.getElementById('dq-dil-list');
-  if(de) de.innerHTML = dilated.length ? dilated.map((p)=>buildQTableRow(p, serialMap.get(p._queueKey || p.bmhId) || '')).join('') : emptyRow('dilated');
+    const de = document.getElementById('dq-dil-list');
+    if(de) de.innerHTML = dilated.length ? dilated.map((p)=>buildQTableRow(p, serialMap.get(p._queueKey || p.bmhId) || '')).join('') : emptyRow('dilated');
 
-  const dne = document.getElementById('dq-done-list');
-  if(dne) dne.innerHTML = done.length ? done.map((p)=>buildQTableRow(p, serialMap.get(p._queueKey || p.bmhId) || '')).join('') : emptyRow('done');
+    const dne = document.getElementById('dq-done-list');
+    if(dne) dne.innerHTML = done.length ? done.map((p)=>buildQTableRow(p, serialMap.get(p._queueKey || p.bmhId) || '')).join('') : emptyRow('done');
+  } finally {
+    _bmhQueueRenderCache = null;
+  }
 
   // Dilated tab visibility — only show for ophtho
   const dilTab = document.getElementById('dq-tab-dil');
