@@ -2921,6 +2921,7 @@ function rebuildDxListFromValues(listId, values) {
   });
 }
 
+const BMH_DISABLE_DEPARTMENT_RAILS = true;
 function updateDepartmentRailVisibility(pageKey, activeTabId) {
   const activePageKey = pageKey || document.querySelector('.page.active')?.id?.replace(/^pg-/, '') || '';
   const activeTab = activeTabId || document.querySelector(`#pg-${activePageKey} .tab-content.active`)?.id || '';
@@ -2934,6 +2935,17 @@ function updateDepartmentRailVisibility(pageKey, activeTabId) {
     obg: { id: 'obg-layout', withRail: 'minmax(0,1fr) 300px' },
     psych: { id: 'psych-layout', withRail: 'minmax(0,1fr) 320px' }
   };
+  if (BMH_DISABLE_DEPARTMENT_RAILS) {
+    Object.values(railMap).forEach(function (id) {
+      const rail = document.getElementById(id);
+      if (rail) rail.style.display = 'none';
+    });
+    Object.values(layoutMap).forEach(function (cfg) {
+      const layout = document.getElementById(cfg.id);
+      if (layout) layout.style.gridTemplateColumns = 'minmax(0,1fr)';
+    });
+    return;
+  }
   Object.entries(railMap).forEach(([dept, id]) => {
     const rail = document.getElementById(id);
     if (!rail) return;
@@ -3099,8 +3111,8 @@ function nav(id, el, opts) {
   else if(pageKey==='consents')        deferPageWork(function(){ renderConsent && renderConsent(); updateConsentPatientHeader(); refreshConsentLibrary && refreshConsentLibrary(); });
   else if(pageKey==='ophtho')          deferPageWork(function(){ initQR && initQR(); renderRxDrugs && renderRxDrugs(); buildRefractionDropdowns && buildRefractionDropdowns(); renderOphthoPayList && renderOphthoPayList(); typeof initDiagnosisRowsIfEmpty==='function'&&initDiagnosisRowsIfEmpty(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); typeof wrapOphAdviceChipsWithDelete==='function'&&wrapOphAdviceChipsWithDelete(); renderDeptSmartSuggestions && renderDeptSmartSuggestions('ophtho'); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); renderDeptSmartSuggestions&&renderDeptSmartSuggestions('ophtho'); }, 120); });
   else if(pageKey==='obg')             deferPageWork(function(){ renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); initObgSelects && initObgSelects(); toggleObgWorkflow && toggleObgWorkflow(); populateObgPatientFromCurrent && populateObgPatientFromCurrent(); updateObgComputedFields && updateObgComputedFields(); renderDeptSmartSuggestions && renderDeptSmartSuggestions('obg'); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); renderDeptSmartSuggestions&&renderDeptSmartSuggestions('obg'); }, 120); });
-  else if(pageKey==='psych')           deferPageWork(function(){ renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); togglePsychTracks && togglePsychTracks(); renderPsychRail && renderPsychRail(); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); }, 120); });
-  else if(pageKey==='skin')            deferPageWork(function(){ renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); renderSkinRail && renderSkinRail(); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); }, 120); });
+  else if(pageKey==='psych')           deferPageWork(function(){ renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); togglePsychTracks && togglePsychTracks(); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); }, 120); });
+  else if(pageKey==='skin')            deferPageWork(function(){ renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); }, 120); });
   else if(pageKey==='reception')       deferPageWork(function(){ renderReceptionPage && renderReceptionPage(); setTimeout(()=>{renderCollectionDashboard&&renderCollectionDashboard();loadCustomPurposes&&loadCustomPurposes();},100); });
   else if(pageKey==='lab')             deferPageWork(function(){ initLab && initLab(); renderLabOrders && renderLabOrders(); });
   else if(pageKey==='ipd')             deferPageWork(function(){ loadIPDPatientsFromFirebase && loadIPDPatientsFromFirebase(); renderIPD && renderIPD(); });
@@ -3115,10 +3127,6 @@ function nav(id, el, opts) {
   else if(pageKey==='settings')        deferPageWork(function(){ renderSettingsPage && renderSettingsPage(); setTimeout(()=>{ renderConsentLibrary&&renderConsentLibrary('all'); loadChargesFromFirebase&&loadChargesFromFirebase(); loadDoctorProfilesFromFirebase&&loadDoctorProfilesFromFirebase(); loadDeletionRequests&&loadDeletionRequests(); },100); });
   else if(pageKey==='discharge')       deferPageWork(function(){ renderDischargeBuilder && renderDischargeBuilder(); });
   if(['obg','psych','skin'].includes(pageKey)) clearSharedPrescriptionEditor();
-  if(pageKey==='ophtho') renderOphthoRecap && renderOphthoRecap();
-  if(pageKey==='obg') renderObgSummaryRail && renderObgSummaryRail();
-  if(pageKey==='psych') renderPsychRail && renderPsychRail();
-  if(pageKey==='skin') renderSkinRail && renderSkinRail();
   if (pageKey === 'ophtho' || pageKey === 'obg' || pageKey === 'psych' || pageKey === 'skin') {
     deferPageWork(function () { renderSendBarsForActiveDept(pageKey); });
   }
@@ -4140,9 +4148,6 @@ function openPatient(bmhId, opts) {
       else if(targetDept === 'skin') loadTodayDeptVisitIntoForm(p.bmhId, 'skin');
     }
     renderCurrentPatientInvestigationUploads && renderCurrentPatientInvestigationUploads();
-    renderOphthoRecap && renderOphthoRecap();
-    if(targetDept === 'psych') renderPsychRail && renderPsychRail();
-    if(targetDept === 'skin') renderSkinRail && renderSkinRail();
     setTimeout(function () {
       const draftDept = normalizeDeptKeyForQueue(targetDept) || targetDept;
       if (['ophtho', 'obg', 'psych', 'skin'].includes(draftDept) && (window.CURRENT_PATIENT?.bmhId || '') === p.bmhId) {
@@ -7133,6 +7138,7 @@ function renderObgInvestigationSummary() {
   renderDeptInvestigationPanels();
 }
 function renderObgSummaryRail() {
+  if (BMH_DISABLE_DEPARTMENT_RAILS) return;
   const el = document.getElementById('obg-summary-content');
   if(!el) return;
   const pt = window.CURRENT_PATIENT || {};
@@ -7635,6 +7641,7 @@ function _renderPsychRailNow() {
     </details>`; });
 }
 function renderPsychRail(opts) {
+  if (BMH_DISABLE_DEPARTMENT_RAILS) return;
   scheduleDeptRailRender('psych', _renderPsychRailNow, opts);
 }
 function populatePsychForm(visit) {
@@ -7777,6 +7784,7 @@ function _renderSkinRailNow() {
   </div>`; });
 }
 function renderSkinRail(opts) {
+  if (BMH_DISABLE_DEPARTMENT_RAILS) return;
   scheduleDeptRailRender('skin', _renderSkinRailNow, opts);
 }
 function populateSkinForm(visit) {
@@ -36372,10 +36380,7 @@ ${fuFormatted && isListDesign ? `<div style="margin:5px 0"><span class="fu-box">
 ${!isListDesign ? designedAdviceFollow : ''}
 
 <div class="sig-row">
-  <div class="qr-side">
-    <img src="https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(ptIdRaw)}&color=222222&bgcolor=ffffff&margin=2" alt="Patient QR" style="width:65px;height:65px;border:1px solid #ccc;border-radius:3px;display:block">
-    <div class="qr-lbl">BMSH ID: ${ptId}</div>
-  </div>
+  <div></div>
   <div class="dr-side" style="text-align:right">
     <div style="height:36px"></div>
     <div class="dr-name">${doctorName}</div>
@@ -45483,10 +45488,6 @@ function saveVisit(dept, opts) {
       try { if(dept === 'obg') updateObgObstetricHistoryTab(!!visit.obstetricHistoryEnabled); } catch (e) { console.warn('post-save updateObgObstetricHistoryTab failed', e); }
       try { if(typeof loadPastVisits === 'function') loadPastVisits(bmhId, dept); } catch (e) { console.warn('post-save loadPastVisits failed', e); }
       try { renderCurrentPatientInvestigationUploads && renderCurrentPatientInvestigationUploads(Array.isArray(visit.investigations) ? visit.investigations : []); } catch (e) { console.warn('post-save renderCurrentPatientInvestigationUploads failed', e); }
-      try { renderOphthoRecap && renderOphthoRecap(); } catch (e) { console.warn('post-save renderOphthoRecap failed', e); }
-      try { renderObgSummaryRail && renderObgSummaryRail(); } catch (e) { console.warn('post-save renderObgSummaryRail failed', e); }
-      try { renderPsychRail && renderPsychRail(); } catch (e) { console.warn('post-save renderPsychRail failed', e); }
-      try { renderSkinRail && renderSkinRail(); } catch (e) { console.warn('post-save renderSkinRail failed', e); }
       try { refreshPreviousDiagnosisPanel(dept, visit); } catch (e) { console.warn('post-save refreshPreviousDiagnosisPanel failed', e); }
       if (activeXrefId && !opts.autosave) {
         try {
@@ -46115,6 +46116,7 @@ function _renderOphthoRecapNow() {
   }, { staleMs: 60000 });
 }
 function renderOphthoRecap(opts) {
+  if (BMH_DISABLE_DEPARTMENT_RAILS) return;
   scheduleDeptRailRender('ophtho', _renderOphthoRecapNow, opts);
 }
 
@@ -46123,7 +46125,33 @@ function renderOphthoRecap(opts) {
   if (window._bmhPerfDiagnosticsInstalled) return;
   window._bmhPerfDiagnosticsInstalled = true;
   window.BMH_PERF_DIAGNOSTICS = window.BMH_PERF_DIAGNOSTICS !== false;
-  window.BMH_PERF_LOG = window.BMH_PERF_LOG || [];
+  const perfDateKey = function () {
+    try { return localDateKey(new Date()); } catch (e) { return new Date().toISOString().slice(0, 10); }
+  };
+  const storageKey = function () { return 'bmh_perf_log_' + perfDateKey(); };
+  const summaryKey = function () { return 'bmh_perf_summary_' + perfDateKey(); };
+  const getPerfClientId = function () {
+    try {
+      let id = localStorage.getItem('bmh_perf_client_id') || '';
+      if (!id) {
+        id = 'perf-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+        localStorage.setItem('bmh_perf_client_id', id);
+      }
+      return id;
+    } catch (e) {
+      return 'perf-session';
+    }
+  };
+  const loadJson = function (key, fallback) {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch (e) {
+      return fallback;
+    }
+  };
+  window.BMH_PERF_LOG = window.BMH_PERF_LOG || loadJson(storageKey(), []);
+  window.BMH_PERF_SUMMARY = window.BMH_PERF_SUMMARY || loadJson(summaryKey(), {});
   const slowMs = Number(window.BMH_PERF_SLOW_MS || 120);
   const now = function () {
     return (window.performance && typeof window.performance.now === 'function') ? window.performance.now() : Date.now();
@@ -46133,12 +46161,45 @@ function renderOphthoRecap(opts) {
       if (name === 'nav') return String(args[0] || '');
       if (name === 'saveVisit') return String(args[0] || '');
       if (name === 'printUnifiedRx') return String(args[0] || '');
-      if (name === 'loadPastVisits') return [args[0] || '', args[1] || ''].filter(Boolean).join(' ');
-      if (name === 'openPatient') return String(args[0] || '');
+      if (name === 'loadPastVisits') return String(args[1] || '');
+      if (name === 'openPatient') return 'patient';
       return '';
     } catch (e) {
       return '';
     }
+  };
+  const persistPerfLog = function () {
+    try { localStorage.setItem(storageKey(), JSON.stringify(window.BMH_PERF_LOG || [])); } catch (e) {}
+    try { localStorage.setItem(summaryKey(), JSON.stringify(window.BMH_PERF_SUMMARY || {})); } catch (e) {}
+  };
+  const schedulePerfUpload = function () {
+    if (window._bmhPerfUploadTimer) return;
+    window._bmhPerfUploadTimer = setTimeout(function () {
+      window._bmhPerfUploadTimer = null;
+      if (!window.FBDB) return;
+      try {
+        const payload = {
+          date: perfDateKey(),
+          clientId: getPerfClientId(),
+          centre: CURRENT_USER?.centre || '',
+          role: CURRENT_USER?.role || '',
+          updatedAt: new Date().toISOString(),
+          summary: window.BMH_PERF_SUMMARY || {}
+        };
+        window.FBDB.ref('perfDiagnostics/' + payload.date + '/' + payload.clientId).set(payload).catch(function () {});
+      } catch (e) {}
+    }, 30000);
+  };
+  const updateSummary = function (entry) {
+    const key = [entry.name || '', entry.detail || ''].filter(Boolean).join(' ');
+    const row = window.BMH_PERF_SUMMARY[key] || { name: entry.name, detail: entry.detail || '', count: 0, totalMs: 0, maxMs: 0, slowCount: 0, lastAt: '' };
+    row.count += 1;
+    row.totalMs = Math.round((Number(row.totalMs || 0) + Number(entry.ms || 0)) * 10) / 10;
+    row.maxMs = Math.max(Number(row.maxMs || 0), Number(entry.ms || 0));
+    row.avgMs = Math.round((row.totalMs / row.count) * 10) / 10;
+    if (Number(entry.ms || 0) >= slowMs) row.slowCount += 1;
+    row.lastAt = entry.at;
+    window.BMH_PERF_SUMMARY[key] = row;
   };
   const record = function (name, start, args, err) {
     if (!window.BMH_PERF_DIAGNOSTICS) return;
@@ -46152,6 +46213,9 @@ function renderOphthoRecap(opts) {
     };
     window.BMH_PERF_LOG.push(entry);
     if (window.BMH_PERF_LOG.length > 250) window.BMH_PERF_LOG.splice(0, window.BMH_PERF_LOG.length - 250);
+    updateSummary(entry);
+    persistPerfLog();
+    schedulePerfUpload();
     if (ms >= slowMs || err) {
       try {
         console.info('[BMH PERF]', name + (entry.detail ? ' ' + entry.detail : ''), ms + 'ms' + (entry.error ? ' error: ' + entry.error : ''));
@@ -46203,9 +46267,38 @@ function renderOphthoRecap(opts) {
     'saveBmhFinancials'
   ].forEach(wrap);
   window.bmhPerfReport = function () {
-    const rows = (window.BMH_PERF_LOG || []).slice().sort(function (a, b) { return b.ms - a.ms; });
+    const rows = Object.values(window.BMH_PERF_SUMMARY || {}).sort(function (a, b) { return Number(b.maxMs || 0) - Number(a.maxMs || 0); });
     try { console.table(rows.slice(0, 40)); } catch (e) { console.log(rows.slice(0, 40)); }
     return rows;
+  };
+  window.bmhPerfRecent = function () {
+    const rows = (window.BMH_PERF_LOG || []).slice().sort(function (a, b) { return Number(b.ms || 0) - Number(a.ms || 0); });
+    try { console.table(rows.slice(0, 40)); } catch (e) { console.log(rows.slice(0, 40)); }
+    return rows;
+  };
+  window.bmhLoadPerfReport = function (dateKey) {
+    const d = dateKey || perfDateKey();
+    if (!window.FBDB) return Promise.resolve([]);
+    return window.FBDB.ref('perfDiagnostics/' + d).once('value').then(function (snap) {
+      const data = snap.val() || {};
+      const merged = {};
+      Object.values(data).forEach(function (client) {
+        Object.values(client?.summary || {}).forEach(function (row) {
+          const key = [row.name || '', row.detail || ''].filter(Boolean).join(' ');
+          const target = merged[key] || { name: row.name || '', detail: row.detail || '', count: 0, totalMs: 0, maxMs: 0, slowCount: 0, lastAt: '' };
+          target.count += Number(row.count || 0);
+          target.totalMs += Number(row.totalMs || 0);
+          target.maxMs = Math.max(target.maxMs, Number(row.maxMs || 0));
+          target.slowCount += Number(row.slowCount || 0);
+          target.lastAt = String(row.lastAt || target.lastAt || '');
+          target.avgMs = target.count ? Math.round((target.totalMs / target.count) * 10) / 10 : 0;
+          merged[key] = target;
+        });
+      });
+      const rows = Object.values(merged).sort(function (a, b) { return Number(b.maxMs || 0) - Number(a.maxMs || 0); });
+      try { console.table(rows.slice(0, 60)); } catch (e) { console.log(rows.slice(0, 60)); }
+      return rows;
+    });
   };
 })();
 
