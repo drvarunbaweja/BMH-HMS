@@ -37867,7 +37867,7 @@ function _debouncedRenderDash() {
   if(_renderDashTimer) clearTimeout(_renderDashTimer);
   _renderDashTimer = setTimeout(() => {
     renderActivePageAfterRealtimeUpdate();
-  }, 300);
+  }, 450);
 }
 function applyPatientsPayload(data, opts) {
   const options = opts || {};
@@ -37924,24 +37924,29 @@ function applyPatientsPayload(data, opts) {
 function refreshPatientsFromFirebase() {
   const scope = 'ALL';
   if (!window.FBDB) return Promise.resolve();
-  if (window._bmhPatientsRefreshInFlight && window._bmhPatientsRefreshScope === scope) return Promise.resolve();
+  if (window._bmhPatientsRefreshInFlight && window._bmhPatientsRefreshScope === scope) {
+    return window._bmhPatientsRefreshPromise || Promise.resolve();
+  }
   const token = Date.now() + Math.random();
   window._bmhPatientsRefreshInFlight = true;
   window._bmhPatientsRefreshScope = scope;
   window._bmhPatientsRefreshToken = token;
   const query = window.FBDB.ref('patients');
-  return query.once('value').then(function (snap) {
+  const refreshPromise = query.once('value').then(function (snap) {
     if (window._bmhPatientsRefreshToken !== token) return;
     const data = snap && typeof snap.val === 'function' ? snap.val() : {};
     applyPatientsPayload(data, { fullHistory: true });
   }).catch(function (e) {
     console.warn('patients refresh failed', e);
   }).finally(function () {
-    if (window._bmhPatientsRefreshToken === token) {
+    if (window._bmhPatientsRefreshPromise === refreshPromise) {
       window._bmhPatientsRefreshInFlight = false;
       window._bmhPatientsLastRefreshAt = Date.now();
+      window._bmhPatientsRefreshPromise = null;
     }
   });
+  window._bmhPatientsRefreshPromise = refreshPromise;
+  return window._bmhPatientsRefreshPromise;
 }
 function refreshTodayQueuePatientsFromFirebase() {
   const scope = effectivePatientListCentreScope();
@@ -38008,13 +38013,7 @@ function flushRealtimePatientUpdates() {
 function scheduleRealtimePatientFlush() {
   if (window._bmhRealtimePatientFlushTimer) return;
   if (window._bmhSuppressRealtimeFlush) return;
-  if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
-    window._bmhRealtimePatientFlushTimer = window.requestAnimationFrame(function () {
-      setTimeout(flushRealtimePatientUpdates, 0);
-    });
-  } else {
-    window._bmhRealtimePatientFlushTimer = setTimeout(flushRealtimePatientUpdates, 50);
-  }
+  window._bmhRealtimePatientFlushTimer = setTimeout(flushRealtimePatientUpdates, 250);
 }
 function applyRealtimePatientRecord(record, key) {
   if (!record || typeof record !== 'object') return;
@@ -45069,16 +45068,42 @@ function _renderDocQueueImpl() {
   });
 
   const emptyRow = label => `<tr><td colspan="10" style="text-align:center;padding:24px;color:var(--g2);font-size:12.5px">No ${label} patients</td></tr>`;
+  const queueSignature = [
+    effectiveQueueDept || '',
+    adminDeptFilter || '',
+    searchQ || '',
+    active.map(function (p) { return [p._queueKey || p.bmhId || '', p.status || '', p.seenAt || '', p.queueTime || '', p.updatedAt || '', p.dilated ? 1 : 0].join(':'); }).join('|'),
+    dilated.map(function (p) { return [p._queueKey || p.bmhId || '', p.status || '', p.seenAt || '', p.queueTime || '', p.updatedAt || ''].join(':'); }).join('|'),
+    done.map(function (p) { return [p._queueKey || p.bmhId || '', p.status || '', p.seenAt || '', p.queueTime || '', p.updatedAt || ''].join(':'); }).join('|'),
+    xrefs.map(function (x) { return [x.id || '', x.ptName || '', x.toDoctor || '', x.reason || '', x.time || '', x.paid ? 1 : 0].join(':'); }).join('|'),
+    ipdPts.map(function (p) { return [p.id || p.bmhId || '', p.status || '', p.ward || '', p.doctor || ''].join(':'); }).join('|')
+  ].join('~');
+  const activeEl = document.getElementById('dq-active-list');
+  const dilatedEl = document.getElementById('dq-dil-list');
+  const doneEl = document.getElementById('dq-done-list');
+  const xrefEl = document.getElementById('dq-xref-log');
+  const ipdEl = document.getElementById('dq-ipd-list');
+  if (
+    window._bmhLastDocQueueSignature === queueSignature &&
+    activeEl?.innerHTML &&
+    dilatedEl?.innerHTML &&
+    doneEl?.innerHTML &&
+    (!xrefEl || xrefEl.innerHTML) &&
+    (!ipdEl || ipdEl.innerHTML)
+  ) {
+    return;
+  }
+  window._bmhLastDocQueueSignature = queueSignature;
 
   _buildQueueRenderCache();
   try {
-    const ae = document.getElementById('dq-active-list');
+    const ae = activeEl;
     if(ae) ae.innerHTML = active.length ? active.map((p)=>buildQTableRow(p, serialMap.get(p._queueKey || p.bmhId) || '')).join('') : emptyRow('active');
 
-    const de = document.getElementById('dq-dil-list');
+    const de = dilatedEl;
     if(de) de.innerHTML = dilated.length ? dilated.map((p)=>buildQTableRow(p, serialMap.get(p._queueKey || p.bmhId) || '')).join('') : emptyRow('dilated');
 
-    const dne = document.getElementById('dq-done-list');
+    const dne = doneEl;
     if(dne) dne.innerHTML = done.length ? done.map((p)=>buildQTableRow(p, serialMap.get(p._queueKey || p.bmhId) || '')).join('') : emptyRow('done');
   } finally {
     _bmhQueueRenderCache = null;
@@ -45089,7 +45114,7 @@ function _renderDocQueueImpl() {
   if(dilTab) dilTab.style.display = (effectiveQueueDept==='ophtho'||adminDeptFilter==='all'||CURRENT_USER?.isAdmin) ? '' : 'none';
 
   // Cross-refer log
-  const xe = document.getElementById('dq-xref-log');
+  const xe = xrefEl;
   if(xe) xe.innerHTML = xrefs.length ? xrefs.map(x => `
     <div style="display:flex;align-items:center;gap:9px;padding:9px 11px;background:${x.fee?'var(--orange-lt)':'var(--green-lt)'};border-radius:var(--rsm);margin-bottom:6px;border-left:3px solid ${x.fee?'var(--orange)':'var(--green)'}">
       <div style="flex:1">
@@ -45102,7 +45127,7 @@ function _renderDocQueueImpl() {
     </div>`).join('') : '<div style="padding:20px;text-align:center;color:var(--g2);font-size:12px">No cross-referrals today</div>';
 
   // IPD list in queue
-  const ie = document.getElementById('dq-ipd-list');
+  const ie = ipdEl;
   if(ie) ie.innerHTML = ipdPts.length ? ipdPts.map(ip => `
     <div style="display:flex;align-items:center;gap:9px;padding:10px 12px;background:var(--purple-lt);border-radius:var(--rsm);margin-bottom:6px;border-left:3px solid var(--purple)">
       <div style="width:32px;height:32px;border-radius:50%;background:${ip.color||'var(--purple)'};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:11px;flex-shrink:0">${ip.initials||ip.name[0]||'?'}</div>
