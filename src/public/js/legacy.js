@@ -26090,12 +26090,17 @@ async function registerPatient() {
   const insName = normalizeReceptionFieldValue('rc-ins-name', document.getElementById('rc-ins-name')?.value||'');
   const policyNo = (document.getElementById('rc-policy')?.value || '').trim();
   const claimAmountInput = Math.max(0, Number(document.getElementById('rc-claim-amt')?.value || 0));
+  const isInsurance = payMode.includes('Insurance')||payMode.includes('PMJAY')||payMode.includes('ECHS')||payMode.includes('TPA')||payMode.includes('CGHS');
   patient.checkinAt = isPreReg ? null : Date.now();
   patient.purpose = purpose;
   patient.consultationFee = fee;
   patient.consultationFeeType = feeChoice?.type || '';
   patient.consultationFeeLabel = feeChoice?.label || '';
-  patient.consultationPaymentMode = noFee ? 'No Fee' : payMode;
+  patient.consultationPaymentMode = noFee ? (isInsurance ? payMode : 'No Fee') : payMode;
+  if (noFee && isInsurance) {
+    patient.ins = insName || payMode;
+    patient.policy = policyNo || patient.policy || '';
+  }
   patient.refType = refType;
   patient.refName = refName;
   patient.refMobile = refMobile;
@@ -26128,7 +26133,6 @@ async function registerPatient() {
     });
   }
 
-  const isInsurance = payMode.includes('Insurance')||payMode.includes('PMJAY')||payMode.includes('ECHS')||payMode.includes('TPA')||payMode.includes('CGHS');
   const isCreditDue = payMode === 'Credit / Due';
   const previousDue = isExistingRegistration
     ? Math.max(
@@ -26147,13 +26151,15 @@ async function registerPatient() {
     addBmhPatientCharge(uid, { id: 'chg-' + txnId, cat: 'consultation', desc: consultationDesc, qty: 1, rate: 0, amount: 0, source: 'reception', ref: txnId, ts: new Date().toISOString(), noFee: true });
     const txn = {
       id:txnId, patient:name, bmhId:uid, service: consultationDesc, amount:0,
-      mode:'No Fee', collected:true, dept,
+      mode:isInsurance ? payMode : 'No Fee', collected:true, dept,
       time:new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
       date:new Date().toISOString(), centre, createdBy:CURRENT_USER?.name||'Reception',
       source: 'reception',
       noFee: true,
       consultationFeeType: 'no-fee',
       consultationFeeLabel: 'No Fee Consultation',
+      ins: isInsurance ? (insName || payMode) : '',
+      policy: isInsurance ? (policyNo || '') : '',
       billCats: ['consultation']
     };
     TRANSACTIONS.push(txn);
