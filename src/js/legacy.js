@@ -38101,16 +38101,25 @@ function startTodayQueuePatientsRealtimeUpdates(force) {
 function schedulePatientsRefreshLoop() {
   if (window._bmhPatientsRefreshLoopStarted) return;
   window._bmhPatientsRefreshLoopStarted = true;
+  const autoRefreshMs = 30 * 60 * 1000;
+  const wakeRefreshDelayMs = 15000;
+  const scheduleWakeRefresh = function () {
+    if (window._bmhPatientsWakeRefreshTimer) clearTimeout(window._bmhPatientsWakeRefreshTimer);
+    window._bmhPatientsWakeRefreshTimer = setTimeout(function () {
+      window._bmhPatientsWakeRefreshTimer = null;
+      maybeRefresh();
+    }, wakeRefreshDelayMs);
+  };
   const maybeRefresh = function () {
     if (document.visibilityState === 'hidden') return;
     const last = Number(window._bmhPatientsLastRefreshAt || 0);
-    if (Date.now() - last < 120000) return;
+    if (Date.now() - last < autoRefreshMs) return;
     refreshPatientsFromFirebase();
   };
   document.addEventListener('visibilitychange', function () {
-    if (document.visibilityState === 'visible') maybeRefresh();
+    if (document.visibilityState === 'visible') scheduleWakeRefresh();
   });
-  window.addEventListener('focus', function () { maybeRefresh(); });
+  window.addEventListener('focus', function () { scheduleWakeRefresh(); });
 }
 window.refreshPatientsFromFirebase = refreshPatientsFromFirebase;
 
