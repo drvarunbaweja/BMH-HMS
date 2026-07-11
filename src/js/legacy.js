@@ -37981,39 +37981,55 @@ function isRealtimePatientRecordRelevant(record) {
 }
 function flushRealtimePatientUpdates() {
   window._bmhRealtimePatientFlushTimer = null;
+  if (window._bmhRealtimePatientFlushRunning) {
+    scheduleRealtimePatientFlush();
+    return;
+  }
   const upserts = window._bmhRealtimePatientPendingUpserts || {};
   const deletes = window._bmhRealtimePatientPendingDeletes || {};
+  if (!Object.keys(upserts).length && !Object.keys(deletes).length) return;
+  window._bmhRealtimePatientFlushRunning = true;
   window._bmhRealtimePatientPendingUpserts = {};
   window._bmhRealtimePatientPendingDeletes = {};
-  const cache = Array.isArray(window._BMH_ALL_PATIENTS_CACHE) ? window._BMH_ALL_PATIENTS_CACHE.slice() : [];
-  const indexById = new Map();
-  cache.forEach(function (p, idx) {
-    const id = String(p?.bmhId || '').trim();
-    if (id) indexById.set(id, idx);
-  });
-  Object.keys(deletes).forEach(function (id) {
-    if (!indexById.has(id)) return;
-    const idx = indexById.get(id);
-    cache[idx] = null;
-    indexById.delete(id);
-  });
-  Object.keys(upserts).forEach(function (id) {
-    const row = upserts[id];
-    if (!row) return;
-    if (indexById.has(id)) cache[indexById.get(id)] = row;
-    else {
-      indexById.set(id, cache.length);
-      cache.push(row);
+  try {
+    const cache = Array.isArray(window._BMH_ALL_PATIENTS_CACHE) ? window._BMH_ALL_PATIENTS_CACHE.slice() : [];
+    const indexById = new Map();
+    cache.forEach(function (p, idx) {
+      const id = String(p?.bmhId || '').trim();
+      if (id) indexById.set(id, idx);
+    });
+    Object.keys(deletes).forEach(function (id) {
+      if (!indexById.has(id)) return;
+      const idx = indexById.get(id);
+      cache[idx] = null;
+      indexById.delete(id);
+    });
+    Object.keys(upserts).forEach(function (id) {
+      const row = upserts[id];
+      if (!row) return;
+      if (indexById.has(id)) cache[indexById.get(id)] = row;
+      else {
+        indexById.set(id, cache.length);
+        cache.push(row);
+      }
+    });
+    window._BMH_ALL_PATIENTS_CACHE = cache.filter(Boolean);
+    rebuildPatientsArrayFromGlobalCache();
+    _debouncedRenderDash();
+  } finally {
+    window._bmhRealtimePatientFlushRunning = false;
+    if (
+      Object.keys(window._bmhRealtimePatientPendingUpserts || {}).length ||
+      Object.keys(window._bmhRealtimePatientPendingDeletes || {}).length
+    ) {
+      scheduleRealtimePatientFlush();
     }
-  });
-  window._BMH_ALL_PATIENTS_CACHE = cache.filter(Boolean);
-  rebuildPatientsArrayFromGlobalCache();
-  _debouncedRenderDash();
+  }
 }
 function scheduleRealtimePatientFlush() {
   if (window._bmhRealtimePatientFlushTimer) return;
   if (window._bmhSuppressRealtimeFlush) return;
-  window._bmhRealtimePatientFlushTimer = setTimeout(flushRealtimePatientUpdates, 250);
+  window._bmhRealtimePatientFlushTimer = setTimeout(flushRealtimePatientUpdates, 1500);
 }
 function applyRealtimePatientRecord(record, key) {
   if (!record || typeof record !== 'object') return;
