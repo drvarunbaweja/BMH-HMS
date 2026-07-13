@@ -30418,8 +30418,152 @@ const RANZCO_CATARACT_AUDIT_COLUMNS = [
   'Postoperative unaided VA','Postoperative best-corrected VA','Postoperative sphere cylinder and axis','Postoperative spherical equivalent',
   'Postoperative complications','Notes'
 ];
+const RANZCO_CATARACT_AUDIT_NOTE = 'This Cataract Audit Tool was developed by: Kahawita SK, Goggin M. - Cataract surgery audit at an Australian urban teaching hospital. Clinical and Experimental Ophthalmology 2015; 43: 514-522.';
+const GEMETRIC_CLINICAL_DATA_GROUP_ROW = ['', '', 'Pre-op data', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'Intra-op data', '', '', '', '', '', '', 'Post-op data', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''];
+const GEMETRIC_CLINICAL_DATA_COLUMNS = [
+  '', 'Sl. No.', 'Patient ID no.', 'Eye (OS/OD)', 'Surgical procedure', 'Pre-surgery uncorrected DVA',
+  'Pre-surgery best corrected DVA', 'Pre-surgery best distance corrected IVA (@ 66 cm)', 'Pre-surgery best distance corrected NVA (@ 40 cm)',
+  'Pre-surgery refraction sphere', 'Pre-surgery refraction cylinder', 'Pre-surgery refraction axis (deg)',
+  'Pre-surgery keratometry readings - k1 (dioptre)', 'Pre-surgery keratometry readings - k1 axis (deg)',
+  'Pre-surgery keratometry readings - k2 (dioptre)', 'Pre-surgery keratometry readings - k2 axis (deg)',
+  'Surgical plan - IOL formula used', 'pre-existing ocular and/or systemic co-morbidity', 'Surgery date',
+  'Surgery - IOL Used', 'Surgery - target refraction', 'Surgery - non-Toric target refraction sphere',
+  'Surgery - Toric target refraction sphere', 'Surgery - Toric target refraction cylinder', 'Surgery - complications',
+  'Follow up Date (minimum 2 months post 2nd eye implant)', 'No. of days post-op',
+  'Monocular uncorrected distance VA (UDVA)', 'Binocular uncorrected distance VA (UDVA)',
+  'Monocular uncorrected intermediate VA (UIVA) @ 66 cm', 'Binocular uncorrected intermediate VA (UIVA) @ 66 cm',
+  'Monocular uncorrected near VA (UNVA) @ 40 cm', 'Binocular uncorrected near VA (UNVA) @ 40 cm',
+  'Monocular uncorrected near VA (UNVA) @ 33 cm', 'Binocular uncorrected near VA (UNVA) @ 33 cm',
+  'Manifest subjective refraction sphere', 'Manifest subjective refraction cylinder', 'Manifest subjective refraction axis (deg)',
+  'Follow up - Spherical Equivalent Calculation', 'Monocular distance corrected VA (DCVA)', 'Binocular distance corrected VA (DCVA)',
+  'Monocular distance corrected intermediate VA (DCIVA) @ 66cm', 'Binocular distance corrected intermediate VA (DCIVA) @ 66cm',
+  'Monocular distance corrected near VA (DCNVA) @ 40 cm', 'Binocular distance corrected near VA (DCNVA) @ 40 cm',
+  'Monocular distance corrected near VA (DCNVA) @ 33 cm', 'Binocular distance corrected near VA (DCNVA) @ 33 cm',
+  'Toric IOL Axis', 'Post Op Complication', 'How satisfied are you with your vision after surgery?',
+  'Patient Satisfaction - Distance', 'Patient Satisfaction - Intermediate', 'Patient Satisfaction - Reading',
+  'Is outcome of the surgery in line with the objectives you discussed with your surgeon?',
+  'Would you have this surgery again, or recommended it to a friend or family member?', 'Additional Comments',
+  'Halos Frequency', 'How severe is the Halos? (only if the frequency answer is not "none")',
+  'How bothersome is the Halos? (only if the frequency answer is not "none")', 'Glare Frequency',
+  'How severe is the Glare? (only if the frequency answer is not "none")',
+  'How bothersome is the Glare? (only if the frequency answer is not "none")', 'Starburst Frequency',
+  'How severe is the starburst? (only if the frequency answer is not "none")',
+  'How bothersome is the starburst? (only if the frequency answer is not "none")', 'Remarks', '', ''
+];
+const GEMETRIC_CLINICAL_DATA_UNIT_ROW = [
+  '', '', '', '', '', 'LogMAR', 'meter', 'LogMAR', 'LogMAR', 'dioptre', 'dioptre (- cylinder)', '', '', '', '', '', '', '', '', '', 'diopter',
+  'diopter', 'diopter', 'dioptre (- cylinder)', '', '', '', 'LogMAR', 'LogMAR', 'LogMAR', 'LogMAR', 'LogMAR', 'LogMAR', 'LogMAR', 'LogMAR',
+  'diopter', 'dioptre (- cylinder)', 'degree', 'dioptre', 'LogMAR', 'LogMAR', 'LogMAR', 'LogMAR', 'LogMAR', 'LogMAR', 'LogMAR', 'LogMAR',
+  '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''
+];
 function auditEsc(v) {
   return String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function auditXml(v) {
+  return String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
+}
+function auditDownloadBlob(blob, filename) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+}
+function auditCrc32(bytes) {
+  if (!window._bmhCrc32Table) {
+    window._bmhCrc32Table = Array.from({ length: 256 }, function (_, n) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+      return c >>> 0;
+    });
+  }
+  let c = 0xffffffff;
+  for (let i = 0; i < bytes.length; i++) c = window._bmhCrc32Table[(c ^ bytes[i]) & 255] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+function auditStrBytes(str) {
+  return new TextEncoder().encode(String(str || ''));
+}
+function auditU16(n) {
+  return [n & 255, (n >>> 8) & 255];
+}
+function auditU32(n) {
+  return [n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255];
+}
+function auditMakeZip(files) {
+  const localParts = [];
+  const centralParts = [];
+  let offset = 0;
+  files.forEach(function (file) {
+    const name = auditStrBytes(file.name);
+    const data = auditStrBytes(file.content);
+    const crc = auditCrc32(data);
+    const local = new Uint8Array([].concat(
+      auditU32(0x04034b50), auditU16(20), auditU16(0), auditU16(0), auditU16(0), auditU16(0),
+      auditU32(crc), auditU32(data.length), auditU32(data.length), auditU16(name.length), auditU16(0)
+    ));
+    localParts.push(local, name, data);
+    const central = new Uint8Array([].concat(
+      auditU32(0x02014b50), auditU16(20), auditU16(20), auditU16(0), auditU16(0), auditU16(0), auditU16(0),
+      auditU32(crc), auditU32(data.length), auditU32(data.length), auditU16(name.length), auditU16(0), auditU16(0),
+      auditU16(0), auditU16(0), auditU32(0), auditU32(offset)
+    ));
+    centralParts.push(central, name);
+    offset += local.length + name.length + data.length;
+  });
+  const centralSize = centralParts.reduce(function (sum, part) { return sum + part.length; }, 0);
+  const end = new Uint8Array([].concat(
+    auditU32(0x06054b50), auditU16(0), auditU16(0), auditU16(files.length), auditU16(files.length),
+    auditU32(centralSize), auditU32(offset), auditU16(0)
+  ));
+  return new Blob(localParts.concat(centralParts, [end]), { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+}
+function auditCellRef(col, row) {
+  let n = col + 1, s = '';
+  while (n > 0) {
+    const m = (n - 1) % 26;
+    s = String.fromCharCode(65 + m) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s + row;
+}
+function auditWorksheetXml(rows) {
+  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+    + rows.map(function (row, rIdx) {
+      const rn = rIdx + 1;
+      return '<row r="' + rn + '">' + row.map(function (val, cIdx) {
+        const text = auditXml(val);
+        return '<c r="' + auditCellRef(cIdx, rn) + '" t="inlineStr"><is><t>' + text + '</t></is></c>';
+      }).join('') + '</row>';
+    }).join('') + '</sheetData></worksheet>';
+}
+function auditWorkbookXlsx(filename, sheets) {
+  const safeSheets = sheets.map(function (sheet, idx) {
+    return { name: String(sheet.name || ('Sheet' + (idx + 1))).replace(/[\\/*?:[\]]/g, ' ').slice(0, 31) || ('Sheet' + (idx + 1)), rows: sheet.rows || [] };
+  });
+  const contentTypes = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+    + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+    + '<Default Extension="xml" ContentType="application/xml"/>'
+    + '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+    + safeSheets.map(function (_, i) { return '<Override PartName="/xl/worksheets/sheet' + (i + 1) + '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'; }).join('')
+    + '</Types>';
+  const rels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>';
+  const workbook = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>'
+    + safeSheets.map(function (sheet, i) { return '<sheet name="' + auditXml(sheet.name) + '" sheetId="' + (i + 1) + '" r:id="rId' + (i + 1) + '"/>'; }).join('')
+    + '</sheets></workbook>';
+  const workbookRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    + safeSheets.map(function (_, i) { return '<Relationship Id="rId' + (i + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet' + (i + 1) + '.xml"/>'; }).join('')
+    + '</Relationships>';
+  const files = [
+    { name: '[Content_Types].xml', content: contentTypes },
+    { name: '_rels/.rels', content: rels },
+    { name: 'xl/workbook.xml', content: workbook },
+    { name: 'xl/_rels/workbook.xml.rels', content: workbookRels }
+  ].concat(safeSheets.map(function (sheet, i) {
+    return { name: 'xl/worksheets/sheet' + (i + 1) + '.xml', content: auditWorksheetXml(sheet.rows) };
+  }));
+  auditDownloadBlob(auditMakeZip(files), filename);
 }
 function auditKeyDate(v) {
   try { return localDateKey(v || ''); } catch (e) { return String(v || '').slice(0, 10); }
@@ -30467,6 +30611,22 @@ function auditVisit(pt, dept, afterDate) {
   }
   return rows[0] || {};
 }
+function auditVisitBefore(pt, dept, beforeDate) {
+  const before = auditKeyDate(beforeDate || '');
+  const rows = auditVisits(pt, dept).filter(function (v) {
+    const d = auditKeyDate(v.date || v.createdAt || v.updatedAt || '');
+    return !before || !d || d <= before;
+  });
+  return rows[0] || {};
+}
+function auditVisitAfter(pt, dept, afterDate) {
+  const after = auditKeyDate(afterDate || '');
+  const rows = auditVisits(pt, dept).filter(function (v) {
+    const d = auditKeyDate(v.date || v.createdAt || v.updatedAt || '');
+    return !after || !d || d >= after;
+  });
+  return rows[0] || {};
+}
 function auditOtCases() {
   const filters = getAuditFilters();
   return (window.OT_CASES || OT_CASES || []).map(normalizeOTCaseRecord).filter(function (c) {
@@ -30481,12 +30641,37 @@ function auditEye(c) {
   if (/left|\ble\b|\bos\b/.test(raw)) return 'Left';
   return raw || '';
 }
+function auditEyeAbbr(eye) {
+  return eye === 'Left' ? 'OS' : eye === 'Right' ? 'OD' : '';
+}
+function auditOtherEye(eye) {
+  return eye === 'Left' ? 'Right' : eye === 'Right' ? 'Left' : '';
+}
 function auditInitials(name) {
   return String(name || '').split(/\s+/).filter(Boolean).map(function (x) { return (x[0] || '').toUpperCase() + '.'; }).join('');
 }
-function auditRef(v, eye) {
+function auditEyeVisitPrefix(eye) {
   const e = eye === 'Left' ? 'OS' : 'OD';
-  return [v['subj' + e + 'sph'] || v['rf' + e + 'sph'] || '', v['subj' + e + 'cyl'] || v['rf' + e + 'cyl'] || '', v['subj' + e + 'ax'] || v['rf' + e + 'ax'] || ''].filter(Boolean).join(' / ');
+  return e;
+}
+function auditRefParts(v, eye) {
+  const e = auditEyeVisitPrefix(eye);
+  return {
+    sph: v['subj' + e + 'sph'] || v['rf' + e + 'sph'] || '',
+    cyl: v['subj' + e + 'cyl'] || v['rf' + e + 'cyl'] || '',
+    ax: v['subj' + e + 'ax'] || v['rf' + e + 'ax'] || ''
+  };
+}
+function auditRef(v, eye) {
+  const r = auditRefParts(v, eye);
+  return [r.sph, r.cyl, r.ax ? ('x ' + r.ax) : ''].filter(Boolean).join(' / ');
+}
+function auditSphericalEquivalent(v, eye) {
+  const r = auditRefParts(v, eye);
+  const sph = Number(r.sph);
+  const cyl = Number(r.cyl);
+  if (!Number.isFinite(sph)) return '';
+  return String(Math.round((sph + ((Number.isFinite(cyl) ? cyl : 0) / 2)) * 100) / 100);
 }
 function auditK(v, eye) {
   const left = eye === 'Left';
@@ -30506,8 +30691,63 @@ function auditVaBucket(value) {
   if (/6\/60|CF|HM|PL|NPL|1\./i.test(raw)) return '<6/60';
   return raw;
 }
+function auditVaRaw(v, eye, kind) {
+  const left = eye === 'Left';
+  if (kind === 'bcva') return left ? (v.bcvaOS || v.subjOSva || '') : (v.bcvaOD || v.subjODva || '');
+  if (kind === 'near') return left ? (v.vaOSNear || v.nvOSFinal || '') : (v.vaODNear || v.nvODFinal || '');
+  return left ? (v.ucvaOS || v.vaOS || '') : (v.ucvaOD || v.vaOD || '');
+}
 function isAuditCataract(c) {
-  return /cataract|phaco|pmics|iol|flacs|msics|sics|ecce|icce/i.test(String(c?.procedure || c?.procedureMain || c?.surgery || ''));
+  const hay = [c?.procedure, c?.procedureMain, c?.surgery, c?.dx, c?.diagnosis].join(' ');
+  return /cataract|phaco|pmics|pinhole\s*micro|flacs|msics|sics|ecce|icce/i.test(hay);
+}
+function auditPatientCataractCases(bmhId) {
+  return auditOtCases().filter(function (c) { return c.bmhId === bmhId && isAuditCataract(c); }).sort(function (a, b) {
+    return String(getOTCaseDateKey(a) || '').localeCompare(String(getOTCaseDateKey(b) || ''));
+  });
+}
+function auditHasOtherEyePseudophakia(pt, eye, opDate) {
+  const other = auditOtherEye(eye);
+  const otherAbbr = auditEyeAbbr(other);
+  const hay = auditVisits(pt, 'ophtho').filter(function (v) {
+    const d = auditKeyDate(v.date || v.createdAt || '');
+    return !opDate || !d || d <= auditKeyDate(opDate);
+  }).map(function (v) {
+    return [
+      v.dx, v.diagnosisText, v.positiveFindings,
+      Array.isArray(v.diagnoses) ? v.diagnoses.map(function (x) { return x?.text || x?.diagnosis || ''; }).join(' ') : '',
+      v.pohOdText, v.pohOsText, v.pohOdType, v.pohOsType
+    ].join(' ');
+  }).join(' ').toLowerCase();
+  if (!/pseudophak|pciol|iol\s*in\s*situ|z96\.1/.test(hay)) return false;
+  if (otherAbbr === 'OD' && /\b(os|left|le)\b.*(pseudophak|pciol|iol\s*in\s*situ)/i.test(hay)) return false;
+  if (otherAbbr === 'OS' && /\b(od|right|re)\b.*(pseudophak|pciol|iol\s*in\s*situ)/i.test(hay)) return false;
+  return true;
+}
+function auditEyeOrdinal(c, pt, eye, opDate) {
+  const cases = auditPatientCataractCases(c.bmhId || pt.bmhId || '');
+  const thisDate = auditKeyDate(opDate || getOTCaseDateKey(c) || '');
+  const priorOther = cases.some(function (row) {
+    if (row.id && c.id && row.id === c.id) return false;
+    const rowDate = auditKeyDate(getOTCaseDateKey(row) || '');
+    if (thisDate && rowDate && rowDate > thisDate) return false;
+    return auditEye(row) === auditOtherEye(eye);
+  });
+  const sequenceIndex = cases.findIndex(function (row) { return (row.id && c.id && row.id === c.id) || (row.bmhId === c.bmhId && getOTCaseDateKey(row) === getOTCaseDateKey(c) && auditEye(row) === eye); });
+  if (priorOther || sequenceIndex > 0 || auditHasOtherEyePseudophakia(pt, eye, opDate)) return '2nd';
+  return '1st';
+}
+function auditIolName(c) {
+  return [c.iolType, c.iol, c.implant].filter(function (v) { return v && v !== '—' && v !== 'N/A'; })[0] || '';
+}
+function auditIsGemetricCase(c) {
+  return /gemetric/i.test([c.iolType, c.iol, c.implant, c.notes].join(' '));
+}
+function auditDateDiffDays(from, to) {
+  const a = new Date(auditKeyDate(from || ''));
+  const b = new Date(auditKeyDate(to || ''));
+  if (isNaN(a.getTime()) || isNaN(b.getTime())) return '';
+  return String(Math.max(0, Math.round((b.getTime() - a.getTime()) / 86400000)));
 }
 function getCataractAuditRows() {
   const seen = {};
@@ -30517,15 +30757,15 @@ function getCataractAuditRows() {
     const pt = auditPatient(c);
     const eye = auditEye(c);
     const opDate = getOTCaseDateKey(c) || c.date || c.otDate || c.surgeryDate || '';
-    const pre = auditVisit(pt, 'ophtho') || {};
-    const post = auditVisit(pt, 'ophtho', opDate) || {};
+    const pre = auditVisitBefore(pt, 'ophtho', opDate) || {};
+    const post = auditVisitAfter(pt, 'ophtho', opDate) || {};
     const left = eye === 'Left';
     const key = (c.bmhId || '') + '::' + eye;
     seen[key] = (seen[key] || 0) + 1;
     return {
       'Operation date': opDate ? formatDateIN(opDate) : '',
       'Side R/L': eye,
-      '1st or 2nd eye': seen[key] > 1 ? '2nd' : '1st',
+      '1st or 2nd eye': auditEyeOrdinal(c, pt, eye, opDate),
       'Surgeon': c.surgeon || c.doctor || '',
       'File number': c.bmhId || pt.bmhId || '',
       'Patient initials': auditInitials(c.patient || pt.name || ''),
@@ -30533,24 +30773,152 @@ function getCataractAuditRows() {
       'Preoperative unaided VA': auditVaBucket(left ? (pre.ucvaOS || pre.vaOS) : (pre.ucvaOD || pre.vaOD)),
       'Preoperative best-corrected VA': auditVaBucket(left ? (pre.bcvaOS || pre.subjOSva) : (pre.bcvaOD || pre.subjODva)),
       'Preoperative sphere cylinder and axis': auditRef(pre, eye),
-      'Preoperative spherical equivalent': pre.sphericalEquivalent || pre.preopSphericalEquivalent || '',
+      'Preoperative spherical equivalent': pre.sphericalEquivalent || pre.preopSphericalEquivalent || auditSphericalEquivalent(pre, eye),
       'Axial length': c.axialLength || c.biometry?.axialLength || pre.axialLength || pre.biometryAxialLength || '',
       'Axial length difference between the two eyes': c.axialLengthDiff || pre.axialLengthDiff || '',
       'Preoperative keratometry and axes': auditK(pre, eye),
       'Intraoperative complications': c.complications || c.intraopComplications || c.operativeComplications || 'None',
       'Pre-existing eye conditions': pre.preExistingEyeConditions || pre.dx || pre.diagnosisText || 'None',
-      'Type of IOL': c.iolType || c.iol || c.implant || '',
+      'Type of IOL': auditIolName(c),
       'Spherical lens power': c.iolPower || c.lensPower || '',
       'Whether sutures were used': c.sutures || c.sutureStatus || 'Sutureless',
       'Type of anaesthetic': c.anaes || c.anaesthesia || '',
       'Postoperative unaided VA': auditVaBucket(left ? (post.postOpUcvaOS || post.ucvaOS || '') : (post.postOpUcvaOD || post.ucvaOD || '')),
       'Postoperative best-corrected VA': auditVaBucket(left ? (post.postOpBcvaOS || post.bcvaOS || '') : (post.postOpBcvaOD || post.bcvaOD || '')),
       'Postoperative sphere cylinder and axis': auditRef(post, eye),
-      'Postoperative spherical equivalent': post.postOpSphericalEquivalent || post.sphericalEquivalent || '',
+      'Postoperative spherical equivalent': post.postOpSphericalEquivalent || post.sphericalEquivalent || auditSphericalEquivalent(post, eye),
       'Postoperative complications': post.postOpComplications || c.postOpComplications || '',
       'Notes': c.notes || c.operativeNotes || ''
     };
   });
+}
+function getEditableAuditRows(containerId, columns, fallbackRows) {
+  const box = document.getElementById(containerId);
+  const trs = box ? Array.from(box.querySelectorAll('tbody tr')) : [];
+  if (!trs.length) return fallbackRows || [];
+  return trs.map(function (tr) {
+    const inputs = Array.from(tr.querySelectorAll('input,textarea,select'));
+    const row = {};
+    columns.forEach(function (col, idx) { row[col] = inputs[idx]?.value || ''; });
+    return row;
+  });
+}
+function exportCataractRanzcoXlsx() {
+  const computed = getCataractAuditRows();
+  const rows = getEditableAuditRows('audit-cataract-result', RANZCO_CATARACT_AUDIT_COLUMNS, computed);
+  if (!rows.length) { showToast('No cataract OT cases found for this audit period', 'w'); return; }
+  const sheetRows = [
+    [RANZCO_CATARACT_AUDIT_NOTE].concat(Array(RANZCO_CATARACT_AUDIT_COLUMNS.length - 1).fill('')),
+    RANZCO_CATARACT_AUDIT_COLUMNS
+  ].concat(rows.map(function (row) {
+    return RANZCO_CATARACT_AUDIT_COLUMNS.map(function (col) { return row[col] == null ? '' : row[col]; });
+  }));
+  auditWorkbookXlsx('BMH-RANZCO-cataract-audit-' + todayKey() + '.xlsx', [{ name: 'Data entries', rows: sheetRows }]);
+  showToast('RANZCO cataract audit .xlsx exported ✓', 's');
+}
+function buildGemetricClinicalDataRows() {
+  let serial = 0;
+  return auditOtCases().filter(function (c) { return isAuditCataract(c) && auditIsGemetricCase(c); }).sort(function (a, b) {
+    return String(getOTCaseDateKey(a) || '').localeCompare(String(getOTCaseDateKey(b) || ''));
+  }).map(function (c) {
+    const pt = auditPatient(c);
+    const eye = auditEye(c);
+    const eyeAbbr = auditEyeAbbr(eye);
+    const opDate = getOTCaseDateKey(c) || c.date || c.otDate || c.surgeryDate || '';
+    const pre = auditVisitBefore(pt, 'ophtho', opDate) || {};
+    const post = auditVisitAfter(pt, 'ophtho', opDate) || {};
+    const preRef = auditRefParts(pre, eye);
+    const postRef = auditRefParts(post, eye);
+    const left = eye === 'Left';
+    const k1 = left ? (pre.keratOsK1 || pre.keratometry?.os?.k1 || '') : (pre.keratOdK1 || pre.keratometry?.od?.k1 || '');
+    const k2 = left ? (pre.keratOsK2 || pre.keratometry?.os?.k2 || '') : (pre.keratOdK2 || pre.keratometry?.od?.k2 || '');
+    const kAxis = left ? (pre.keratOsAxis || pre.keratometry?.os?.axis || '') : (pre.keratOdAxis || pre.keratometry?.od?.axis || '');
+    const bio = pre.biometryCalc || {};
+    const bioEye = bio[left ? 'os' : 'od'] || {};
+    const iol = auditIolName(c);
+    const isToric = /toric|gt|gpt/i.test(iol);
+    const postDate = auditKeyDate(post.date || post.createdAt || post.updatedAt || '');
+    serial += 1;
+    return [
+      '',
+      serial,
+      c.bmhId || pt.bmhId || '',
+      [eyeAbbr, auditEyeOrdinal(c, pt, eye, opDate)].filter(Boolean).join(' '),
+      'Cataract',
+      auditVaRaw(pre, eye, 'ucva'),
+      auditVaRaw(pre, eye, 'bcva'),
+      '',
+      auditVaRaw(pre, eye, 'near'),
+      preRef.sph || '',
+      preRef.cyl || '',
+      preRef.ax || '',
+      k1 || bioEye.k1 || '',
+      kAxis || bioEye.axis || '',
+      k2 || bioEye.k2 || '',
+      '',
+      bio.formula || c.iolFormula || '',
+      pre.preExistingEyeConditions || pre.dx || pre.diagnosisText || '',
+      opDate ? formatDateIN(opDate) : '',
+      iol,
+      bioEye.target || c.targetRefraction || '',
+      isToric ? '' : (bioEye.target || c.targetRefraction || ''),
+      isToric ? (bioEye.target || c.targetRefraction || '') : '',
+      isToric ? (c.toricCylinder || c.toricCyl || '') : '',
+      c.complications || c.intraopComplications || '',
+      postDate ? formatDateIN(postDate) : '',
+      auditDateDiffDays(opDate, postDate),
+      auditVaRaw(post, eye, 'ucva'),
+      '',
+      '',
+      '',
+      auditVaRaw(post, eye, 'near'),
+      '',
+      '',
+      '',
+      postRef.sph || '',
+      postRef.cyl || '',
+      postRef.ax || '',
+      post.postOpSphericalEquivalent || post.sphericalEquivalent || auditSphericalEquivalent(post, eye),
+      auditVaRaw(post, eye, 'bcva'),
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      c.toricAxis || c.axis || bio.toricNote || '',
+      post.postOpComplications || c.postOpComplications || '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      post.gemetricAdditionalComments || '',
+      post.halosFrequency || '',
+      post.halosSeverity || '',
+      post.halosBothersome || '',
+      post.glareFrequency || '',
+      post.glareSeverity || '',
+      post.glareBothersome || '',
+      post.starburstFrequency || '',
+      post.starburstSeverity || '',
+      post.starburstBothersome || '',
+      [c.notes || c.operativeNotes || '', post.notes || post.advice || ''].filter(Boolean).join(' | '),
+      '',
+      ''
+    ];
+  });
+}
+function exportGemetricClinicalDataXlsx() {
+  const rows = buildGemetricClinicalDataRows();
+  if (!rows.length) { showToast('No Gemetric cataract IOL cases found for this audit period', 'w'); return; }
+  auditWorkbookXlsx('BMH-Gemetric-clinical-data-' + todayKey() + '.xlsx', [{
+    name: 'Soft copy',
+    rows: [GEMETRIC_CLINICAL_DATA_GROUP_ROW, GEMETRIC_CLINICAL_DATA_COLUMNS, GEMETRIC_CLINICAL_DATA_UNIT_ROW].concat(rows)
+  }]);
+  showToast('Gemetric clinical data .xlsx exported ✓', 's');
 }
 function auditTable(columns, rows, empty) {
   if (!rows.length) return '<div style="padding:22px;text-align:center;color:var(--g1);font-size:12px">' + auditEsc(empty || 'No matching audit rows found.') + '</div>';
