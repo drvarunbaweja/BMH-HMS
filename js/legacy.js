@@ -2984,7 +2984,7 @@ function parseAppRouteFromLocationHash() {
     return null;
   }
 }
-const _ROUTE_RESTORE_PAGES = new Set(['dashboard', 'doctor-queue', 'ophtho', 'obg', 'psych', 'skin', 'reception', 'billing', 'payments', 'lab', 'appointments', 'print-templates', 'consents', 'discharge', 'inventory', 'tpa', 'ipd', 'reports', 'settings', 'ot', 'centres', 'brochures']);
+const _ROUTE_RESTORE_PAGES = new Set(['dashboard', 'doctor-queue', 'ophtho', 'obg', 'psych', 'skin', 'reception', 'billing', 'payments', 'lab', 'appointments', 'print-templates', 'consents', 'discharge', 'inventory', 'tpa', 'ipd', 'reports', 'audits', 'settings', 'ot', 'centres', 'brochures']);
 /** After login, restore last URL route if valid; otherwise call fallback (usually role home). */
 function tryScheduleRouteRestoreFromHash(fallback) {
   let state = parseAppRouteFromLocationHash();
@@ -3072,7 +3072,7 @@ function nav(id, el, opts) {
     discharge:'Discharge Card',lab:'Lab Module',reception:'Reception',billing:'Billing',
     payments:'Payments',obg:'OBG Clinic',psych:'Neuropsychiatry',skin:'Skin & Cosmetology',
     inventory:'Inventory',tpa:'TPA / Cashless',centres:'Two-Centre View',settings:'Settings',
-    ipd:'IPD Ward',brochures:'Surgery Brochures',ot:'OT Module',reports:'Reports'};
+    ipd:'IPD Ward',brochures:'Surgery Brochures',ot:'OT Module',reports:'Reports',audits:'Audits'};
   const ptEl = document.getElementById('ptitle');
   if(ptEl) ptEl.textContent = titles[pageKey] || pageKey;
   // Highlight nav item
@@ -3121,7 +3121,8 @@ function nav(id, el, opts) {
   else if(pageKey==='billing')         deferPageWork(function(){ renderBillingPage && renderBillingPage(); });
   else if(pageKey==='tpa')             deferPageWork(function(){ renderTpaPage && renderTpaPage(); });
   else if(pageKey==='payments')        deferPageWork(function(){ renderPaymentsPage && renderPaymentsPage(); });
-  else if(pageKey==='reports')         deferPageWork(function(){ if (typeof renderReports === 'function') renderReports(); });
+	  else if(pageKey==='reports')         deferPageWork(function(){ if (typeof renderReports === 'function') renderReports(); });
+	  else if(pageKey==='audits')          deferPageWork(function(){ if (typeof renderAuditsPage === 'function') renderAuditsPage(); });
   else if(pageKey==='brochures')       deferPageWork(function(){ renderBrochures && renderBrochures(); });
   else if(pageKey==='centres')         deferPageWork(function(){ renderCentresView && renderCentresView(); });
   else if(pageKey==='settings')        deferPageWork(function(){ renderSettingsPage && renderSettingsPage(); setTimeout(()=>{ renderConsentLibrary&&renderConsentLibrary('all'); loadChargesFromFirebase&&loadChargesFromFirebase(); loadDoctorProfilesFromFirebase&&loadDoctorProfilesFromFirebase(); loadDeletionRequests&&loadDeletionRequests(); },100); });
@@ -4573,14 +4574,20 @@ function populateOphthoForm(v) {
     setSel(id, val);
   }
 
-  // Visual Acuity
-  setSel('va-od-uc', v.ucvaOD || v.vaOD);
-  setSel('va-os-uc', v.ucvaOS || v.vaOS);
-  setSel('va-od-bc', v.bcvaOD);
-  setSel('va-os-bc', v.bcvaOS);
-  setSel('va-od-ph', v.phOD);
-  setSel('va-os-ph', v.phOS);
-  setSel('ucva-od-dist', v.vaOD);    setSel('ucva-os-dist', v.vaOS);
+	  // Visual Acuity
+	  setSel('va-od-uc', v.ucvaOD || v.vaOD);
+	  setSel('va-os-uc', v.ucvaOS || v.vaOS);
+	  setSel('va-od-bc', v.bcvaOD);
+	  setSel('va-os-bc', v.bcvaOS);
+	  setSel('va-od-ph', v.phOD);
+	  setSel('va-os-ph', v.phOS);
+	  setV('kerat-od-k1', v.keratOdK1 || v.keratometry?.od?.k1 || v.k1OD || '');
+	  setV('kerat-od-k2', v.keratOdK2 || v.keratometry?.od?.k2 || v.k2OD || '');
+	  setV('kerat-od-axis', v.keratOdAxis || v.keratometry?.od?.axis || v.kAxisOD || '');
+	  setV('kerat-os-k1', v.keratOsK1 || v.keratometry?.os?.k1 || v.k1OS || '');
+	  setV('kerat-os-k2', v.keratOsK2 || v.keratometry?.os?.k2 || v.k2OS || '');
+	  setV('kerat-os-axis', v.keratOsAxis || v.keratometry?.os?.axis || v.kAxisOS || '');
+	  setSel('ucva-od-dist', v.vaOD);    setSel('ucva-os-dist', v.vaOS);
   setSel('ucva-od-near', v.vaODNear); setSel('ucva-os-near', v.vaOSNear);
   setV('cv-od-plates', v.cvODPlates || '');
   setV('cv-os-plates', v.cvOSPlates || '');
@@ -6296,6 +6303,7 @@ function buildSidebarForRole(role, dept, name) {
     payments: `<div class="ni" onclick="nav('payments',this)"><div class="ni-ic">💰</div>Payments</div>`,
     tpa: `<div class="ni" onclick="nav('tpa',this)"><div class="ni-ic">🏦</div>TPA / Cashless</div>`,
     reports: `<div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>`,
+    audits: `<div class="ni" onclick="nav('audits',this)"><div class="ni-ic">📋</div>Audits</div>`,
     settings: `<div class="ni" onclick="nav('settings',this)"><div class="ni-ic">⚙️</div>Settings</div>`
   };
   const appendApprovedModules = function () {
@@ -6325,6 +6333,7 @@ function buildSidebarForRole(role, dept, name) {
       ${allowNav('billing', `<div class="ni" onclick="nav('billing',this)"><div class="ni-ic">💳</div>My Payments<span class="nbadge pulse" id="nb-pay"></span></div>`)}
       <div class="ngrp">Other</div>
       ${allowNav('reports', `<div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>`)}
+      ${allowNav('audits', `<div class="ni" onclick="nav('audits',this)"><div class="ni-ic">📋</div>Audits</div>`)}
       ${allowNav('settings', `<div class="ni" onclick="nav('settings',this)"><div class="ni-ic">⚙️</div>Settings</div>`)}`;
   } else if(role==='Optometrist') {
     nav_el.innerHTML = `
@@ -6334,6 +6343,7 @@ function buildSidebarForRole(role, dept, name) {
       ${allowNav('appointments', `<div class="ni" onclick="nav('appointments',this)"><div class="ni-ic">📅</div>Appointments</div>`)}
       <div class="ngrp">Other</div>
       ${allowNav('reports', `<div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>`)}
+      ${allowNav('audits', `<div class="ni" onclick="nav('audits',this)"><div class="ni-ic">📋</div>Audits</div>`)}
       ${allowNav('settings', `<div class="ni" onclick="nav('settings',this)"><div class="ni-ic">⚙️</div>Settings</div>`)}`;
   } else if(role==='Reception') {
     nav_el.innerHTML = `
@@ -6348,6 +6358,7 @@ function buildSidebarForRole(role, dept, name) {
       ${allowNav('tpa', `<div class="ni" onclick="nav('tpa',this)"><div class="ni-ic">🏦</div>TPA / Cashless</div>`)}
       <div class="ngrp">Reports</div>
       ${allowNav('reports', `<div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>`)}
+      ${allowNav('audits', `<div class="ni" onclick="nav('audits',this)"><div class="ni-ic">📋</div>Audits</div>`)}
       <div class="ngrp">Settings</div>
       ${allowNav('settings', `<div class="ni" onclick="nav('settings',this)"><div class="ni-ic">⚙️</div>Operational Settings</div>`)}`;
   } else if(role==='Lab') {
@@ -45426,8 +45437,18 @@ function saveVisit(dept, opts) {
     visit.bcvaOD = document.getElementById('va-od-bc')?.value || '';
     visit.bcvaOS = document.getElementById('va-os-bc')?.value || '';
     visit.phOD   = document.getElementById('va-od-ph')?.value || '';
-    visit.phOS   = document.getElementById('va-os-ph')?.value || '';
-    visit.vaOD   = document.getElementById('ucva-od-dist')?.value || '';
+	    visit.phOS   = document.getElementById('va-os-ph')?.value || '';
+	    visit.keratOdK1 = document.getElementById('kerat-od-k1')?.value || '';
+	    visit.keratOdK2 = document.getElementById('kerat-od-k2')?.value || '';
+	    visit.keratOdAxis = document.getElementById('kerat-od-axis')?.value || '';
+	    visit.keratOsK1 = document.getElementById('kerat-os-k1')?.value || '';
+	    visit.keratOsK2 = document.getElementById('kerat-os-k2')?.value || '';
+	    visit.keratOsAxis = document.getElementById('kerat-os-axis')?.value || '';
+	    visit.keratometry = {
+	      od: { k1: visit.keratOdK1, k2: visit.keratOdK2, axis: visit.keratOdAxis },
+	      os: { k1: visit.keratOsK1, k2: visit.keratOsK2, axis: visit.keratOsAxis }
+	    };
+	    visit.vaOD   = document.getElementById('ucva-od-dist')?.value || '';
     visit.vaOS   = document.getElementById('ucva-os-dist')?.value || '';
     visit.vaODNear = document.getElementById('ucva-od-near')?.value || '';
     visit.vaOSNear = document.getElementById('ucva-os-near')?.value || '';
