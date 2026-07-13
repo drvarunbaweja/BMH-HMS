@@ -1574,6 +1574,62 @@
 
       <!-- BIOMETRY / INVESTIGATIONS TAB — file upload -->
       <div class="tab-content" id="oe-biometry">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:10px;padding:10px 12px;background:#fff9e8;border:1px solid rgba(196,154,54,.35);border-radius:10px">
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800;color:var(--bmh-blue);cursor:pointer">
+            <input type="checkbox" id="bio-calc-enable" onchange="toggleBiometryCalcPanel()">
+            Enable biometry / IOL calculation
+          </label>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <button type="button" class="btn btn-blue btn-sm" onclick="printBiometryIolCalculation()">🖨️ Print IOL Calculation</button>
+            <button type="button" class="btn btn-outline btn-sm" onclick="loadBiometryIolConstants()">Load IOLs</button>
+            <button type="button" class="btn btn-gold btn-sm" onclick="saveBiometryIolConstants()">Save IOLs</button>
+          </div>
+        </div>
+        <div id="bio-calc-panel" style="display:none;background:#fff;border:1.5px solid rgba(26,60,110,.18);border-radius:12px;padding:12px;margin-bottom:14px">
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+            <div><div style="font-size:12px;font-weight:900;color:var(--bmh-blue)">Biometry / IOL Calculation</div><div style="font-size:10px;color:var(--g1)">Keratometry syncs with VA / IOP / Refraction both ways</div></div>
+            <button type="button" class="btn btn-xs btn-outline" onclick="syncBiometryFromEyeExam()">Pull VA/K values</button>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+            <div style="background:#f8fbff;border:1px solid var(--g4);border-radius:10px;padding:10px">
+              <div style="font-size:11px;font-weight:900;color:var(--blue);margin-bottom:8px">Right Eye / RE</div>
+              <div class="fg3">
+                <div class="form-group"><label class="fl">AL</label><input type="number" step="0.01" id="bio-od-al" placeholder="23.54"></div>
+                <div class="form-group"><label class="fl">ACD</label><input type="number" step="0.01" id="bio-od-acd" placeholder="3.10"></div>
+                <div class="form-group"><label class="fl">LT</label><input type="number" step="0.01" id="bio-od-lt" placeholder="4.42"></div>
+                <div class="form-group"><label class="fl">K1</label><input type="number" step="0.01" id="bio-od-k1" oninput="syncBiometryKToKeratometry('od')" placeholder="43.25"></div>
+                <div class="form-group"><label class="fl">K2</label><input type="number" step="0.01" id="bio-od-k2" oninput="syncBiometryKToKeratometry('od')" placeholder="44.00"></div>
+                <div class="form-group"><label class="fl">Axis</label><input type="number" step="1" id="bio-od-axis" oninput="syncBiometryKToKeratometry('od')" placeholder="90"></div>
+              </div>
+            </div>
+            <div style="background:#f8fff9;border:1px solid var(--g4);border-radius:10px;padding:10px">
+              <div style="font-size:11px;font-weight:900;color:#1a8c3c;margin-bottom:8px">Left Eye / LE</div>
+              <div class="fg3">
+                <div class="form-group"><label class="fl">AL</label><input type="number" step="0.01" id="bio-os-al" placeholder="23.71"></div>
+                <div class="form-group"><label class="fl">ACD</label><input type="number" step="0.01" id="bio-os-acd" placeholder="3.05"></div>
+                <div class="form-group"><label class="fl">LT</label><input type="number" step="0.01" id="bio-os-lt" placeholder="4.38"></div>
+                <div class="form-group"><label class="fl">K1</label><input type="number" step="0.01" id="bio-os-k1" oninput="syncBiometryKToKeratometry('os')" placeholder="42.75"></div>
+                <div class="form-group"><label class="fl">K2</label><input type="number" step="0.01" id="bio-os-k2" oninput="syncBiometryKToKeratometry('os')" placeholder="43.50"></div>
+                <div class="form-group"><label class="fl">Axis</label><input type="number" step="1" id="bio-os-axis" oninput="syncBiometryKToKeratometry('os')" placeholder="85"></div>
+              </div>
+            </div>
+          </div>
+          <div class="fg3" style="margin-bottom:12px">
+            <div class="form-group"><label class="fl">Formula</label><select id="bio-formula"><option>Barrett / SRK-T</option><option>SRK/T</option><option>Haigis</option><option>Hoffer Q</option><option>Holladay</option></select></div>
+            <div class="form-group"><label class="fl">Target RE</label><input type="number" step="0.01" id="bio-od-target" value="-0.25"></div>
+            <div class="form-group"><label class="fl">Target LE</label><input type="number" step="0.01" id="bio-os-target" value="-0.25"></div>
+            <div class="form-group"><label class="fl">SIA</label><input type="number" step="0.01" id="bio-sia" value="0.20"></div>
+            <div class="form-group"><label class="fl">Incision axis</label><input type="number" step="1" id="bio-incision-axis" value="180"></div>
+            <div class="form-group"><label class="fl">Toric axis note</label><input type="text" id="bio-toric-note" placeholder="RE 92°, LE 86°"></div>
+          </div>
+          <div style="overflow:auto;border:1px solid var(--g4);border-radius:10px;background:#fff">
+            <table style="min-width:1120px;font-size:11px">
+              <thead><tr><th>IOL</th><th>Company</th><th>Type</th><th>Power range</th><th>Step</th><th>Optical A</th><th>Immersion A</th><th>Contact A</th><th>Haigis</th><th>Hoffer Q</th><th>Holladay SF</th><th>Barrett LF/DF</th><th>Use RE</th><th>Use LE</th></tr></thead>
+              <tbody id="bio-iol-rows"></tbody>
+            </table>
+          </div>
+          <div style="font-size:10px;color:var(--g1);margin-top:8px">Planning aid only. Final IOL selection and toric placement remain surgeon confirmed.</div>
+        </div>
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:10px;padding:10px 12px;background:#f6f9ff;border:1px solid rgba(26,60,110,.14);border-radius:10px">
           <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800;color:var(--bmh-blue);cursor:pointer">
             <input type="checkbox" id="refr-enable" onchange="toggleRefractivePanel()">

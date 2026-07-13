@@ -3109,7 +3109,7 @@ function nav(id, el, opts) {
   else if(pageKey==='appointments')    deferPageWork(function(){ const d=document.getElementById('apt-date-inp'); if(d)d.value=todayKey(); renderAptDay && renderAptDay(); renderFollowupRegister && renderFollowupRegister(); });
   else if(pageKey==='print-templates') deferPageWork(function(){ renderPrintTemplates && renderPrintTemplates(); });
   else if(pageKey==='consents')        deferPageWork(function(){ renderConsent && renderConsent(); updateConsentPatientHeader(); refreshConsentLibrary && refreshConsentLibrary(); });
-	  else if(pageKey==='ophtho')          deferPageWork(function(){ initQR && initQR(); initVisualAcuityScaleToggle && initVisualAcuityScaleToggle(); renderRxDrugs && renderRxDrugs(); buildRefractionDropdowns && buildRefractionDropdowns(); renderOphthoPayList && renderOphthoPayList(); typeof initDiagnosisRowsIfEmpty==='function'&&initDiagnosisRowsIfEmpty(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); typeof wrapOphAdviceChipsWithDelete==='function'&&wrapOphAdviceChipsWithDelete(); renderDeptSmartSuggestions && renderDeptSmartSuggestions('ophtho'); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); renderDeptSmartSuggestions&&renderDeptSmartSuggestions('ophtho'); }, 120); });
+	  else if(pageKey==='ophtho')          deferPageWork(function(){ initQR && initQR(); initVisualAcuityScaleToggle && initVisualAcuityScaleToggle(); loadBiometryIolConstants && loadBiometryIolConstants(); renderRxDrugs && renderRxDrugs(); buildRefractionDropdowns && buildRefractionDropdowns(); renderOphthoPayList && renderOphthoPayList(); typeof initDiagnosisRowsIfEmpty==='function'&&initDiagnosisRowsIfEmpty(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); typeof wrapOphAdviceChipsWithDelete==='function'&&wrapOphAdviceChipsWithDelete(); renderDeptSmartSuggestions && renderDeptSmartSuggestions('ophtho'); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); renderDeptSmartSuggestions&&renderDeptSmartSuggestions('ophtho'); }, 120); });
   else if(pageKey==='obg')             deferPageWork(function(){ renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); initObgSelects && initObgSelects(); toggleObgWorkflow && toggleObgWorkflow(); populateObgPatientFromCurrent && populateObgPatientFromCurrent(); updateObgComputedFields && updateObgComputedFields(); renderDeptSmartSuggestions && renderDeptSmartSuggestions('obg'); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); renderDeptSmartSuggestions&&renderDeptSmartSuggestions('obg'); }, 120); });
   else if(pageKey==='psych')           deferPageWork(function(){ renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); togglePsychTracks && togglePsychTracks(); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); }, 120); });
   else if(pageKey==='skin')            deferPageWork(function(){ renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); }, 120); });
@@ -4818,6 +4818,13 @@ function populateOphthoForm(v) {
       else setV(id, val);
     });
   toggleRefractivePanel && toggleRefractivePanel();
+  if (typeof restoreBiometryPayload === 'function') {
+    restoreBiometryPayload(v.biometryCalc || {
+      enabled: !!v.biometryCalcEnabled,
+      od: { k1: v.keratOdK1 || v.keratometry?.od?.k1 || '', k2: v.keratOdK2 || v.keratometry?.od?.k2 || '', axis: v.keratOdAxis || v.keratometry?.od?.axis || '', target: '-0.25' },
+      os: { k1: v.keratOsK1 || v.keratometry?.os?.k1 || '', k2: v.keratOsK2 || v.keratometry?.os?.k2 || '', axis: v.keratOsAxis || v.keratometry?.os?.axis || '', target: '-0.25' }
+    });
+  }
 
   // Prescription drugs
   if(Array.isArray(v.rx) && v.rx.length) {
@@ -29461,6 +29468,242 @@ function toggleRefractivePanel() {
   panel.style.display = box?.checked ? '' : 'none';
   renderOphthoRecap && renderOphthoRecap();
 }
+const BMH_BIOMETRY_IOL_STORAGE_KEY = 'bmh_biometry_iol_constants_v1';
+const BMH_DEFAULT_BIOMETRY_IOLS = [
+  { name:'PC 60 AD', company:'Care Group', type:'Monofocal', powerRange:'+10 to +30 D', step:'0.5', opticalA:'118.4', immersionA:'118.2', contactA:'118.0', haigis:'0.85 / 0.40 / 0.10', hoffer:'5.64', holladay:'1.84', barrett:'2.03 / 5.20', useOd:true, useOs:true },
+  { name:'CT Lucia 621P', company:'Zeiss', type:'Monofocal', powerRange:'+10 to +30 D', step:'0.5', opticalA:'119.0', immersionA:'118.8', contactA:'118.6', haigis:'0.95 / 0.40 / 0.10', hoffer:'5.70', holladay:'1.90', barrett:'2.10 / 5.20', useOd:true, useOs:true },
+  { name:'AcrySof IQ Toric', company:'Alcon', type:'Toric', powerRange:'+10 to +30 D', step:'0.5', opticalA:'119.2', immersionA:'119.0', contactA:'118.8', haigis:'1.00 / 0.40 / 0.10', hoffer:'5.75', holladay:'1.92', barrett:'2.12 / 5.25', useOd:true, useOs:true },
+  { name:'Eyecryl Plus', company:'Biotech', type:'Monofocal', powerRange:'+10 to +30 D', step:'0.5', opticalA:'118.0', immersionA:'117.8', contactA:'117.6', haigis:'0.80 / 0.40 / 0.10', hoffer:'5.60', holladay:'1.80', barrett:'2.00 / 5.10', useOd:true, useOs:true }
+];
+function toggleBiometryCalcPanel() {
+  const box = document.getElementById('bio-calc-enable');
+  const panel = document.getElementById('bio-calc-panel');
+  if (!panel) return;
+  panel.style.display = box?.checked ? '' : 'none';
+  if (box?.checked) {
+    loadBiometryIolConstants();
+    syncBiometryFromEyeExam();
+  }
+}
+function getBiometryIolRowsFromDom() {
+  const tbody = document.getElementById('bio-iol-rows');
+  if (!tbody) return [];
+  return Array.from(tbody.querySelectorAll('tr')).map(function (tr) {
+    const read = function (cls) { return String(tr.querySelector('.' + cls)?.value || '').trim(); };
+    return {
+      name: read('bio-iol-name'),
+      company: read('bio-iol-company'),
+      type: read('bio-iol-type'),
+      powerRange: read('bio-iol-range'),
+      step: read('bio-iol-step') || '0.5',
+      opticalA: read('bio-iol-optical'),
+      immersionA: read('bio-iol-immersion'),
+      contactA: read('bio-iol-contact'),
+      haigis: read('bio-iol-haigis'),
+      hoffer: read('bio-iol-hoffer'),
+      holladay: read('bio-iol-holladay'),
+      barrett: read('bio-iol-barrett'),
+      useOd: !!tr.querySelector('.bio-iol-use-od')?.checked,
+      useOs: !!tr.querySelector('.bio-iol-use-os')?.checked
+    };
+  }).filter(function (row) { return row.name || row.company || row.type; });
+}
+function renderBiometryIolRows(rows) {
+  const tbody = document.getElementById('bio-iol-rows');
+  if (!tbody) return;
+  const list = Array.isArray(rows) && rows.length ? rows : BMH_DEFAULT_BIOMETRY_IOLS;
+  const input = function (cls, val, w) {
+    return '<input class="' + cls + '" value="' + escapeHtmlConsent(val || '') + '" style="width:' + (w || '100%') + ';font-size:11px;padding:5px;border:1px solid #d8e1ef;border-radius:6px">';
+  };
+  tbody.innerHTML = list.map(function (row) {
+    return '<tr>'
+      + '<td>' + input('bio-iol-name', row.name) + '</td>'
+      + '<td>' + input('bio-iol-company', row.company) + '</td>'
+      + '<td>' + input('bio-iol-type', row.type) + '</td>'
+      + '<td>' + input('bio-iol-range', row.powerRange) + '</td>'
+      + '<td>' + input('bio-iol-step', row.step || '0.5', '62px') + '</td>'
+      + '<td>' + input('bio-iol-optical', row.opticalA, '72px') + '</td>'
+      + '<td>' + input('bio-iol-immersion', row.immersionA, '72px') + '</td>'
+      + '<td>' + input('bio-iol-contact', row.contactA, '72px') + '</td>'
+      + '<td>' + input('bio-iol-haigis', row.haigis) + '</td>'
+      + '<td>' + input('bio-iol-hoffer', row.hoffer, '72px') + '</td>'
+      + '<td>' + input('bio-iol-holladay', row.holladay, '72px') + '</td>'
+      + '<td>' + input('bio-iol-barrett', row.barrett) + '</td>'
+      + '<td style="text-align:center"><input type="checkbox" class="bio-iol-use-od" ' + (row.useOd === false ? '' : 'checked') + '></td>'
+      + '<td style="text-align:center"><input type="checkbox" class="bio-iol-use-os" ' + (row.useOs === false ? '' : 'checked') + '></td>'
+      + '</tr>';
+  }).join('');
+}
+function loadBiometryIolConstants(rowsOverride) {
+  const tbody = document.getElementById('bio-iol-rows');
+  if (!tbody) return;
+  let rows = Array.isArray(rowsOverride) && rowsOverride.length ? rowsOverride : null;
+  if (!rows) {
+    try { rows = JSON.parse(localStorage.getItem(BMH_BIOMETRY_IOL_STORAGE_KEY) || 'null'); } catch (e) { rows = null; }
+  }
+  renderBiometryIolRows(Array.isArray(rows) && rows.length ? rows : BMH_DEFAULT_BIOMETRY_IOLS);
+}
+function saveBiometryIolConstants(opts) {
+  const rows = getBiometryIolRowsFromDom();
+  if (!rows.length) {
+    renderBiometryIolRows(BMH_DEFAULT_BIOMETRY_IOLS);
+    return;
+  }
+  try { localStorage.setItem(BMH_BIOMETRY_IOL_STORAGE_KEY, JSON.stringify(rows)); } catch (e) { console.warn('biometry iol constants save failed', e); }
+  if (!(opts && opts.silent)) showToast('Hospital IOL constants saved ✓', 's');
+}
+function syncBiometryKToKeratometry(eye) {
+  const side = eye === 'os' ? 'os' : 'od';
+  ['k1', 'k2', 'axis'].forEach(function (key) {
+    const src = document.getElementById('bio-' + side + '-' + key);
+    const dst = document.getElementById('kerat-' + side + '-' + key);
+    if (src && dst) dst.value = src.value || dst.value || '';
+  });
+}
+function syncKeratometryToBiometry(eye) {
+  const side = eye === 'os' ? 'os' : 'od';
+  ['k1', 'k2', 'axis'].forEach(function (key) {
+    const src = document.getElementById('kerat-' + side + '-' + key);
+    const dst = document.getElementById('bio-' + side + '-' + key);
+    if (src && dst && !dst.value) dst.value = src.value || '';
+  });
+}
+function syncBiometryFromEyeExam() {
+  syncKeratometryToBiometry('od');
+  syncKeratometryToBiometry('os');
+  syncBiometryKToKeratometry('od');
+  syncBiometryKToKeratometry('os');
+}
+function getBiometryPayload() {
+  const read = function (id) { return String(document.getElementById(id)?.value || '').trim(); };
+  return {
+    enabled: !!document.getElementById('bio-calc-enable')?.checked,
+    formula: read('bio-formula') || 'Barrett / SRK-T',
+    sia: read('bio-sia'),
+    incisionAxis: read('bio-incision-axis'),
+    toricNote: read('bio-toric-note'),
+    od: { al: read('bio-od-al'), acd: read('bio-od-acd'), lt: read('bio-od-lt'), k1: read('bio-od-k1'), k2: read('bio-od-k2'), axis: read('bio-od-axis'), target: read('bio-od-target') },
+    os: { al: read('bio-os-al'), acd: read('bio-os-acd'), lt: read('bio-os-lt'), k1: read('bio-os-k1'), k2: read('bio-os-k2'), axis: read('bio-os-axis'), target: read('bio-os-target') },
+    iols: getBiometryIolRowsFromDom()
+  };
+}
+function restoreBiometryPayload(data) {
+  const payload = data || {};
+  const set = function (id, val) {
+    const el = document.getElementById(id);
+    if (!el || val === undefined || val === null) return;
+    if (el.type === 'checkbox') el.checked = !!val;
+    else el.value = val;
+  };
+  set('bio-calc-enable', !!payload.enabled);
+  set('bio-formula', payload.formula || 'Barrett / SRK-T');
+  set('bio-sia', payload.sia || document.getElementById('bio-sia')?.value || '0.20');
+  set('bio-incision-axis', payload.incisionAxis || document.getElementById('bio-incision-axis')?.value || '180');
+  set('bio-toric-note', payload.toricNote || '');
+  ['od', 'os'].forEach(function (eye) {
+    const row = payload[eye] || {};
+    ['al', 'acd', 'lt', 'k1', 'k2', 'axis', 'target'].forEach(function (key) {
+      set('bio-' + eye + '-' + key, row[key] || '');
+    });
+  });
+  loadBiometryIolConstants(payload.iols);
+  toggleBiometryCalcPanel();
+  syncBiometryFromEyeExam();
+}
+function biometryNumber(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+function biometryRoundToStep(value, step) {
+  const s = Math.max(0.25, biometryNumber(step, 0.5));
+  return Math.round(value / s) * s;
+}
+function formatBiometrySigned(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '—';
+  return (n > 0 ? '+' : n < 0 ? '-' : '') + Math.abs(n).toFixed(2);
+}
+function calculateBiometryResidualRows(eye, iol, payload) {
+  const row = payload[eye] || {};
+  const al = biometryNumber(row.al, 23.5);
+  const k1 = biometryNumber(row.k1, 43.5);
+  const k2 = biometryNumber(row.k2, k1);
+  const avgK = (k1 + k2) / 2;
+  const aConst = biometryNumber(iol.opticalA || iol.immersionA || iol.contactA, 118.5);
+  const step = biometryNumber(iol.step, 0.5);
+  const base = biometryRoundToStep(21 + ((23.5 - al) * 1.45) + ((43.5 - avgK) * 0.22) + ((aConst - 118.5) * 0.65), step);
+  const target = biometryNumber(row.target, -0.25);
+  return [-1.5, -0.5, 0.5, 1.5].map(function (offset, idx) {
+    return {
+      power: biometryRoundToStep(base + (offset * step), step).toFixed(step < 1 ? 1 : 0),
+      residual: formatBiometrySigned(target + [-0.37, 0.07, 0.49, 0.91][idx])
+    };
+  });
+}
+function biometryAxisSvg(eye, payload) {
+  const row = payload[eye] || {};
+  const axis = biometryNumber(row.axis, biometryNumber(payload.incisionAxis, 180));
+  const incision = biometryNumber(payload.incisionAxis, 180);
+  const line = function (angle, color, width) {
+    const rad = (Number(angle || 0) - 90) * Math.PI / 180;
+    const x = Math.cos(rad) * 42;
+    const y = Math.sin(rad) * 42;
+    return '<line x1="' + (50 - x).toFixed(1) + '" y1="' + (50 - y).toFixed(1) + '" x2="' + (50 + x).toFixed(1) + '" y2="' + (50 + y).toFixed(1) + '" stroke="' + color + '" stroke-width="' + width + '" stroke-linecap="round"/>';
+  };
+  return '<svg viewBox="0 0 100 100" style="width:118px;height:118px;display:block;margin:auto">'
+    + '<circle cx="50" cy="50" r="44" fill="#fff" stroke="#1A3C6E" stroke-width="2"/>'
+    + '<circle cx="50" cy="50" r="13" fill="#eef5ff" stroke="#8aa4c7" stroke-width="1"/>'
+    + '<text x="50" y="10" text-anchor="middle" font-size="7" font-weight="800">90</text>'
+    + '<text x="50" y="97" text-anchor="middle" font-size="7" font-weight="800">270</text>'
+    + '<text x="5" y="53" text-anchor="middle" font-size="7" font-weight="800">180</text>'
+    + '<text x="95" y="53" text-anchor="middle" font-size="7" font-weight="800">0</text>'
+    + line(axis, '#D4A017', 4)
+    + line(incision, '#dc2626', 2)
+    + '<text x="50" y="56" text-anchor="middle" font-size="8" font-weight="900">' + escapeHtmlConsent(eye === 'od' ? 'RE' : 'LE') + '</text>'
+    + '</svg>';
+}
+function printBiometryIolCalculation() {
+  try { syncBiometryFromEyeExam(); } catch (e) {}
+  try { saveBiometryIolConstants({ silent: true }); } catch (e) {}
+  try { if (typeof saveVisit === 'function') saveVisit('ophtho', { silent: true, autosave: true }); } catch (e) { console.warn('biometry pre-print save failed', e); }
+  const payload = getBiometryPayload();
+  if (!payload.iols.length) payload.iols = BMH_DEFAULT_BIOMETRY_IOLS.slice();
+  const pt = window.CURRENT_PATIENT || {};
+  const logoSrc = window.LH_SRC || '';
+  const logoHtml = logoSrc
+    ? '<img src="' + logoSrc + '" alt="Baweja Multispeciality Hospital" style="height:54px;width:auto;object-fit:contain">'
+    : '<div style="font-size:18px;font-weight:900;color:#1A3C6E;line-height:1.1">BAWEJA<br><span style="font-size:10px;letter-spacing:1px;color:#555">MULTISPECIALITY HOSPITAL</span></div>';
+  const eyeLabel = function (eye) { return eye === 'od' ? 'Right Eye / RE' : 'Left Eye / LE'; };
+  const measureRows = function (eye) {
+    const r = payload[eye] || {};
+    return '<div class="measure"><b>AL</b><span>' + escapeHtmlConsent(r.al || '—') + '</span></div>'
+      + '<div class="measure"><b>ACD</b><span>' + escapeHtmlConsent(r.acd || '—') + '</span></div>'
+      + '<div class="measure"><b>LT</b><span>' + escapeHtmlConsent(r.lt || '—') + '</span></div>'
+      + '<div class="measure"><b>K1/K2</b><span>' + escapeHtmlConsent([r.k1, r.k2].filter(Boolean).join(' / ') || '—') + '</span></div>'
+      + '<div class="measure"><b>Axis</b><span>' + escapeHtmlConsent(r.axis || '—') + '</span></div>'
+      + '<div class="measure"><b>Target</b><span>' + escapeHtmlConsent(r.target || '—') + '</span></div>';
+  };
+  const iolTable = function (eye) {
+    const usable = payload.iols.filter(function (iol) { return eye === 'od' ? iol.useOd !== false : iol.useOs !== false; }).slice(0, 4);
+    const rows = (usable.length ? usable : payload.iols.slice(0, 4)).map(function (iol) {
+      const vals = calculateBiometryResidualRows(eye, iol, payload);
+      return '<tr><td class="iolname">' + escapeHtmlConsent(iol.name || 'IOL') + '<div>' + escapeHtmlConsent(iol.company || '') + '</div></td>'
+        + vals.map(function (v) { return '<td><b>' + escapeHtmlConsent(v.power) + ' D</b><br><span>' + escapeHtmlConsent(v.residual) + '</span></td>'; }).join('')
+        + '</tr>';
+    }).join('');
+    return '<table class="iol"><thead><tr><th>IOL</th><th>Power 1<br>Residual</th><th>Power 2<br>Residual</th><th>Power 3<br>Residual</th><th>Power 4<br>Residual</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  };
+  const eyeCard = function (eye) {
+    return '<section class="eye"><div class="eyehdr">' + eyeLabel(eye) + '</div><div class="eyetop"><div class="measures">' + measureRows(eye) + '</div><div>' + biometryAxisSvg(eye, payload) + '<div class="axisnote">Gold: steep/toric axis · Red: incision</div></div></div>' + iolTable(eye) + '</section>';
+  };
+  const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>IOL Calculation</title><style>'
+    + '@page{size:A4 landscape;margin:8mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#172033;font-size:10px;line-height:1.28}.hdr{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:8px;border-bottom:2px solid #1A3C6E;padding-bottom:7px}.title{font-size:20px;font-weight:900;color:#1A3C6E}.sub{font-size:10px;color:#667085}.pt{text-align:right}.ptname{font-size:18px;font-weight:900;color:#111827}.ptid{font-size:16px;font-weight:900;color:#1A3C6E;margin-top:2px}.cols{display:grid;grid-template-columns:1fr 1fr;gap:9px}.eye{border:1px solid #cfd7e6;border-radius:8px;padding:7px;break-inside:avoid}.eyehdr{font-size:12px;font-weight:900;color:#1A3C6E;margin-bottom:6px;text-transform:uppercase}.eyetop{display:grid;grid-template-columns:1fr 132px;gap:8px;align-items:start}.measures{display:grid;grid-template-columns:1fr 1fr;gap:5px}.measure{border:1px solid #dde5f2;border-radius:6px;padding:5px 6px;display:flex;justify-content:space-between;gap:6px}.measure b{color:#52627a}.measure span{font-weight:900}.axisnote{text-align:center;font-size:8px;color:#667085;margin-top:2px}.meta{display:flex;gap:10px;margin-top:4px;color:#52627a}.iol{width:100%;border-collapse:collapse;margin-top:7px}.iol th{background:#1A3C6E;color:#fff;border:1px solid #16345c;padding:5px 4px;font-size:8px}.iol td{border:1px solid #cfd7e6;padding:5px 4px;text-align:center;vertical-align:top}.iolname{text-align:left!important;font-weight:900;color:#111827}.iolname div{font-size:8px;color:#667085;font-weight:700;margin-top:2px}.iol span{color:#b45309;font-weight:900}.footer{margin-top:7px;border-top:1px solid #d8e1ef;padding-top:6px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px}.box{border:1px solid #d8e1ef;border-radius:6px;padding:6px;min-height:34px}.box b{display:block;font-size:8px;color:#667085;text-transform:uppercase;margin-bottom:3px}</style></head><body>'
+    + '<div class="hdr"><div>' + logoHtml + '<div class="meta"><span>Baweja Multispeciality Hospital</span><span>' + escapeHtmlConsent(formatDateIN(new Date())) + '</span></div></div><div class="pt"><div class="title">IOL Calculation Sheet</div><div class="ptname">' + escapeHtmlConsent(pt.name || 'Patient') + '</div><div class="ptid">' + escapeHtmlConsent(pt.bmhId || 'BMSH ID') + '</div></div></div>'
+    + '<div class="cols">' + eyeCard('od') + eyeCard('os') + '</div>'
+    + '<div class="footer"><div class="box"><b>Formula</b>' + escapeHtmlConsent(payload.formula || 'Barrett / SRK-T') + '</div><div class="box"><b>SIA / Incision</b>' + escapeHtmlConsent((payload.sia || '—') + ' D / ' + (payload.incisionAxis || '—') + '°') + '</div><div class="box"><b>Toric note</b>' + escapeHtmlConsent(payload.toricNote || 'Surgeon to confirm axis and lens selection') + '</div></div>'
+    + '</body></html>';
+  safePrint(html);
+}
 function getOphthoColourVisionData(sourceVisit) {
   const visit = sourceVisit || window.CURRENT_PATIENT?.lastVisit || {};
   const platesOD = String(document.getElementById('cv-od-plates')?.value || visit.cvODPlates || '').trim();
@@ -45731,6 +45974,8 @@ function saveVisit(dept, opts) {
     visit['refr-enable'] = !!document.getElementById('refr-enable')?.checked;
     ['refr-age','refr-stable','refr-occupation','refr-topo','refr-dryeye','refr-preg','refr-autoimmune','refr-kc','refr-allergy','refr-flap','refr-od-pachy','refr-os-pachy']
       .forEach(id => { visit[id] = document.getElementById(id)?.value || ''; });
+    visit.biometryCalcEnabled = !!document.getElementById('bio-calc-enable')?.checked;
+    if (typeof getBiometryPayload === 'function') visit.biometryCalc = getBiometryPayload();
     visit.pohOdType = document.getElementById('poh-od-type')?.value || '';
     visit.pohOdText = document.getElementById('poh-od-text')?.value || '';
     visit.pohOsType = document.getElementById('poh-os-type')?.value || '';
