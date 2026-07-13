@@ -2984,7 +2984,7 @@ function parseAppRouteFromLocationHash() {
     return null;
   }
 }
-const _ROUTE_RESTORE_PAGES = new Set(['dashboard', 'doctor-queue', 'ophtho', 'obg', 'psych', 'skin', 'reception', 'billing', 'payments', 'lab', 'appointments', 'print-templates', 'consents', 'discharge', 'inventory', 'tpa', 'ipd', 'reports', 'audits', 'settings', 'ot', 'centres', 'brochures']);
+const _ROUTE_RESTORE_PAGES = new Set(['dashboard', 'doctor-queue', 'ophtho', 'obg', 'psych', 'skin', 'reception', 'billing', 'payments', 'lab', 'appointments', 'print-templates', 'consents', 'discharge', 'inventory', 'tpa', 'ipd', 'reports', 'settings', 'ot', 'centres', 'brochures']);
 /** After login, restore last URL route if valid; otherwise call fallback (usually role home). */
 function tryScheduleRouteRestoreFromHash(fallback) {
   let state = parseAppRouteFromLocationHash();
@@ -3072,7 +3072,7 @@ function nav(id, el, opts) {
     discharge:'Discharge Card',lab:'Lab Module',reception:'Reception',billing:'Billing',
     payments:'Payments',obg:'OBG Clinic',psych:'Neuropsychiatry',skin:'Skin & Cosmetology',
     inventory:'Inventory',tpa:'TPA / Cashless',centres:'Two-Centre View',settings:'Settings',
-    ipd:'IPD Ward',brochures:'Surgery Brochures',ot:'OT Module',reports:'Reports',audits:'Audits'};
+    ipd:'IPD Ward',brochures:'Surgery Brochures',ot:'OT Module',reports:'Reports'};
   const ptEl = document.getElementById('ptitle');
   if(ptEl) ptEl.textContent = titles[pageKey] || pageKey;
   // Highlight nav item
@@ -3109,7 +3109,7 @@ function nav(id, el, opts) {
   else if(pageKey==='appointments')    deferPageWork(function(){ const d=document.getElementById('apt-date-inp'); if(d)d.value=todayKey(); renderAptDay && renderAptDay(); renderFollowupRegister && renderFollowupRegister(); });
   else if(pageKey==='print-templates') deferPageWork(function(){ renderPrintTemplates && renderPrintTemplates(); });
   else if(pageKey==='consents')        deferPageWork(function(){ renderConsent && renderConsent(); updateConsentPatientHeader(); refreshConsentLibrary && refreshConsentLibrary(); });
-  else if(pageKey==='ophtho')          deferPageWork(function(){ initQR && initQR(); renderRxDrugs && renderRxDrugs(); buildRefractionDropdowns && buildRefractionDropdowns(); renderOphthoPayList && renderOphthoPayList(); typeof initDiagnosisRowsIfEmpty==='function'&&initDiagnosisRowsIfEmpty(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); typeof wrapOphAdviceChipsWithDelete==='function'&&wrapOphAdviceChipsWithDelete(); renderDeptSmartSuggestions && renderDeptSmartSuggestions('ophtho'); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); renderDeptSmartSuggestions&&renderDeptSmartSuggestions('ophtho'); }, 120); });
+	  else if(pageKey==='ophtho')          deferPageWork(function(){ initQR && initQR(); initVisualAcuityScaleToggle && initVisualAcuityScaleToggle(); renderRxDrugs && renderRxDrugs(); buildRefractionDropdowns && buildRefractionDropdowns(); renderOphthoPayList && renderOphthoPayList(); typeof initDiagnosisRowsIfEmpty==='function'&&initDiagnosisRowsIfEmpty(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); typeof wrapOphAdviceChipsWithDelete==='function'&&wrapOphAdviceChipsWithDelete(); renderDeptSmartSuggestions && renderDeptSmartSuggestions('ophtho'); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); renderDeptSmartSuggestions&&renderDeptSmartSuggestions('ophtho'); }, 120); });
   else if(pageKey==='obg')             deferPageWork(function(){ renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); initObgSelects && initObgSelects(); toggleObgWorkflow && toggleObgWorkflow(); populateObgPatientFromCurrent && populateObgPatientFromCurrent(); updateObgComputedFields && updateObgComputedFields(); renderDeptSmartSuggestions && renderDeptSmartSuggestions('obg'); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); renderDeptSmartSuggestions&&renderDeptSmartSuggestions('obg'); }, 120); });
   else if(pageKey==='psych')           deferPageWork(function(){ renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); togglePsychTracks && togglePsychTracks(); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); }, 120); });
   else if(pageKey==='skin')            deferPageWork(function(){ renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); }, 120); });
@@ -3122,7 +3122,6 @@ function nav(id, el, opts) {
   else if(pageKey==='tpa')             deferPageWork(function(){ renderTpaPage && renderTpaPage(); });
   else if(pageKey==='payments')        deferPageWork(function(){ renderPaymentsPage && renderPaymentsPage(); });
 	  else if(pageKey==='reports')         deferPageWork(function(){ if (typeof renderReports === 'function') renderReports(); });
-	  else if(pageKey==='audits')          deferPageWork(function(){ if (typeof renderAuditsPage === 'function') renderAuditsPage(); });
   else if(pageKey==='brochures')       deferPageWork(function(){ renderBrochures && renderBrochures(); });
   else if(pageKey==='centres')         deferPageWork(function(){ renderCentresView && renderCentresView(); });
   else if(pageKey==='settings')        deferPageWork(function(){ renderSettingsPage && renderSettingsPage(); setTimeout(()=>{ renderConsentLibrary&&renderConsentLibrary('all'); loadChargesFromFirebase&&loadChargesFromFirebase(); loadDoctorProfilesFromFirebase&&loadDoctorProfilesFromFirebase(); loadDeletionRequests&&loadDeletionRequests(); },100); });
@@ -3931,6 +3930,66 @@ function syncUcvaToRefraction(eye) {
   }
   dst.value = val;
 }
+const BMH_VA_SNELLEN_OPTIONS = ['', '6/6', '6/6p', '6/9', '6/9p', '6/12', '6/12p', '6/18', '6/18p', '6/24', '6/24p', '6/36', '6/36p', '6/60', '6/60p', '5/60', '4/60', '3/60', '2/60', '1/60', 'CF', 'HM', 'PL', 'NPL'];
+const BMH_VA_LOGMAR_OPTIONS = ['', '-0.10', '0.00', '0.10', '0.18', '0.20', '0.30', '0.40', '0.48', '0.50', '0.60', '0.70', '0.78', '0.90', '1.00', '1.10', '1.18', '1.30', '1.48', '1.78', 'CF', 'HM', 'PL', 'NPL'];
+const BMH_VA_SNELLEN_TO_LOGMAR = {
+  '6/5': '-0.10', '6/6': '0.00', '6/6p': '0.00', '6/7.5': '0.10', '6/9': '0.18', '6/9p': '0.18',
+  '6/12': '0.30', '6/12p': '0.30', '6/15': '0.40', '6/18': '0.48', '6/18p': '0.48',
+  '6/24': '0.60', '6/24p': '0.60', '6/30': '0.70', '6/36': '0.78', '6/36p': '0.78',
+  '6/48': '0.90', '6/60': '1.00', '6/60p': '1.00', '5/60': '1.08', '4/60': '1.18',
+  '3/60': '1.30', '2/60': '1.48', '1/60': '1.78'
+};
+const BMH_VA_LOGMAR_TO_SNELLEN = Object.keys(BMH_VA_SNELLEN_TO_LOGMAR).reduce(function (acc, key) {
+  const value = BMH_VA_SNELLEN_TO_LOGMAR[key];
+  if (!acc[value] || !/p$/.test(key)) acc[value] = key;
+  return acc;
+}, {});
+function inferVisualAcuityScaleFromValue(value) {
+  const raw = String(value || '').trim();
+  return /^-?\d+(?:\.\d+)?$/.test(raw) ? 'logmar' : 'snellen';
+}
+function convertVisualAcuityValue(value, fromScale, toScale) {
+  const raw = String(value || '').trim();
+  if (!raw || fromScale === toScale) return raw;
+  if (/^(CF|HM|PL|NPL|NI)$/i.test(raw)) return raw.toUpperCase();
+  if (toScale === 'logmar') return BMH_VA_SNELLEN_TO_LOGMAR[raw] || raw;
+  return BMH_VA_LOGMAR_TO_SNELLEN[raw] || raw;
+}
+function rebuildVisualAcuitySelect(id, options, value) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const current = value !== undefined ? String(value || '') : String(el.value || '');
+  const list = options.slice();
+  if (id.includes('-ph') && !list.includes('NI')) list.push('NI');
+  if (current && !list.includes(current)) list.push(current);
+  el.innerHTML = list.map(function (opt) {
+    const label = opt || '—';
+    return '<option value="' + escapeHtmlConsent(opt) + '">' + escapeHtmlConsent(label) + '</option>';
+  }).join('');
+  el.value = current;
+}
+function setVisualAcuityScale(scale, opts) {
+  const next = scale === 'logmar' ? 'logmar' : 'snellen';
+  const prev = window.BMH_VA_SCALE || 'snellen';
+  const options = next === 'logmar' ? BMH_VA_LOGMAR_OPTIONS : BMH_VA_SNELLEN_OPTIONS;
+  const convert = !(opts && opts.preserveValues === true);
+  ['va-od-uc','va-od-bc','va-od-ph','va-os-uc','va-os-bc','va-os-ph'].forEach(function (id) {
+    const el = document.getElementById(id);
+    const val = el ? el.value : '';
+    rebuildVisualAcuitySelect(id, options, convert ? convertVisualAcuityValue(val, prev, next) : val);
+  });
+  window.BMH_VA_SCALE = next;
+  const sn = document.getElementById('va-scale-snellen');
+  const lm = document.getElementById('va-scale-logmar');
+  if (sn) sn.style.cssText = 'border-radius:999px;padding:4px 12px;' + (next === 'snellen' ? 'background:var(--bmh-blue);color:#fff' : '');
+  if (lm) lm.style.cssText = 'border-radius:999px;padding:4px 12px;' + (next === 'logmar' ? 'background:var(--bmh-blue);color:#fff' : '');
+  if (sn) sn.className = next === 'snellen' ? 'btn btn-xs' : 'btn btn-xs btn-outline';
+  if (lm) lm.className = next === 'logmar' ? 'btn btn-xs' : 'btn btn-xs btn-outline';
+}
+function initVisualAcuityScaleToggle() {
+  if (!document.getElementById('va-od-uc')) return;
+  setVisualAcuityScale(window.BMH_VA_SCALE || 'snellen', { preserveValues: true });
+}
 function getOphthoCprSaveCheckbox() {
   return document.getElementById('cpr-save') || document.getElementById('oe-cpr-save');
 }
@@ -4575,6 +4634,7 @@ function populateOphthoForm(v) {
   }
 
 	  // Visual Acuity
+	  if (typeof setVisualAcuityScale === 'function') setVisualAcuityScale(v.vaScale || inferVisualAcuityScaleFromValue(v.ucvaOD || v.ucvaOS || v.bcvaOD || v.bcvaOS || v.phOD || v.phOS), { preserveValues: true });
 	  setSel('va-od-uc', v.ucvaOD || v.vaOD);
 	  setSel('va-os-uc', v.ucvaOS || v.vaOS);
 	  setSel('va-od-bc', v.bcvaOD);
@@ -6303,7 +6363,6 @@ function buildSidebarForRole(role, dept, name) {
     payments: `<div class="ni" onclick="nav('payments',this)"><div class="ni-ic">💰</div>Payments</div>`,
     tpa: `<div class="ni" onclick="nav('tpa',this)"><div class="ni-ic">🏦</div>TPA / Cashless</div>`,
     reports: `<div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>`,
-    audits: `<div class="ni" onclick="nav('audits',this)"><div class="ni-ic">📋</div>Audits</div>`,
     settings: `<div class="ni" onclick="nav('settings',this)"><div class="ni-ic">⚙️</div>Settings</div>`
   };
   const appendApprovedModules = function () {
@@ -6333,7 +6392,6 @@ function buildSidebarForRole(role, dept, name) {
       ${allowNav('billing', `<div class="ni" onclick="nav('billing',this)"><div class="ni-ic">💳</div>My Payments<span class="nbadge pulse" id="nb-pay"></span></div>`)}
       <div class="ngrp">Other</div>
       ${allowNav('reports', `<div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>`)}
-      ${allowNav('audits', `<div class="ni" onclick="nav('audits',this)"><div class="ni-ic">📋</div>Audits</div>`)}
       ${allowNav('settings', `<div class="ni" onclick="nav('settings',this)"><div class="ni-ic">⚙️</div>Settings</div>`)}`;
   } else if(role==='Optometrist') {
     nav_el.innerHTML = `
@@ -6343,7 +6401,6 @@ function buildSidebarForRole(role, dept, name) {
       ${allowNav('appointments', `<div class="ni" onclick="nav('appointments',this)"><div class="ni-ic">📅</div>Appointments</div>`)}
       <div class="ngrp">Other</div>
       ${allowNav('reports', `<div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>`)}
-      ${allowNav('audits', `<div class="ni" onclick="nav('audits',this)"><div class="ni-ic">📋</div>Audits</div>`)}
       ${allowNav('settings', `<div class="ni" onclick="nav('settings',this)"><div class="ni-ic">⚙️</div>Settings</div>`)}`;
   } else if(role==='Reception') {
     nav_el.innerHTML = `
@@ -6358,7 +6415,6 @@ function buildSidebarForRole(role, dept, name) {
       ${allowNav('tpa', `<div class="ni" onclick="nav('tpa',this)"><div class="ni-ic">🏦</div>TPA / Cashless</div>`)}
       <div class="ngrp">Reports</div>
       ${allowNav('reports', `<div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>`)}
-      ${allowNav('audits', `<div class="ni" onclick="nav('audits',this)"><div class="ni-ic">📋</div>Audits</div>`)}
       <div class="ngrp">Settings</div>
       ${allowNav('settings', `<div class="ni" onclick="nav('settings',this)"><div class="ni-ic">⚙️</div>Operational Settings</div>`)}`;
   } else if(role==='Lab') {
@@ -45283,8 +45339,9 @@ function saveVisit(dept, opts) {
     }
     return candidates[0] || null;
   })();
-  if(dept === 'ophtho') {
-    visit.ucvaOD = document.getElementById('va-od-uc')?.value || document.getElementById('ucva-od-dist')?.value || '';
+	  if(dept === 'ophtho') {
+	    visit.vaScale = window.BMH_VA_SCALE || inferVisualAcuityScaleFromValue(document.getElementById('va-od-uc')?.value || document.getElementById('va-os-uc')?.value || '') || 'snellen';
+	    visit.ucvaOD = document.getElementById('va-od-uc')?.value || document.getElementById('ucva-od-dist')?.value || '';
     visit.ucvaOS = document.getElementById('va-os-uc')?.value || document.getElementById('ucva-os-dist')?.value || '';
     visit.bcvaOD = document.getElementById('va-od-bc')?.value || '';
     visit.bcvaOS = document.getElementById('va-os-bc')?.value || '';

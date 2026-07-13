@@ -553,7 +553,6 @@
     <div class="ni" onclick="nav('brochures',this)"><div class="ni-ic">📄</div>Surgery Brochures</div>
     <div class="ngrp">Analytics</div>
     <div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>
-    <div class="ni" onclick="nav('audits',this)"><div class="ni-ic">📋</div>Audits</div>
     <div class="ngrp">Finance</div>
     <div class="ni" onclick="nav('billing',this)"><div class="ni-ic">💰</div>Billing</div>
     <div class="ni" onclick="nav('tpa',this)"><div class="ni-ic">🏦</div>TPA / Cashless</div>
@@ -1145,7 +1144,13 @@
       <!-- MERGED VA / IOP / REFRACTION TAB -->
       <div class="tab-content" id="oe-va-iop-ref">
         <!-- VA SECTION -->
-        <div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;display:flex;align-items:center;gap:6px"><span>👁️</span> Visual Acuity</div>
+        <div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;display:flex;align-items:center;gap:8px;justify-content:space-between;flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:6px"><span>👁️</span> Visual Acuity</div>
+          <div style="display:flex;align-items:center;gap:4px;background:var(--g6);border:1px solid var(--g4);border-radius:999px;padding:2px">
+            <button type="button" id="va-scale-snellen" class="btn btn-xs" style="border-radius:999px;background:var(--bmh-blue);color:#fff;padding:4px 12px" onclick="setVisualAcuityScale('snellen')">Snellen</button>
+            <button type="button" id="va-scale-logmar" class="btn btn-xs btn-outline" style="border-radius:999px;padding:4px 12px" onclick="setVisualAcuityScale('logmar')">LogMAR</button>
+          </div>
+        </div>
         <div class="g2" style="margin-bottom:12px">
           <div style="background:var(--blue-lt);border-radius:var(--rsm);padding:11px">
             <div style="font-size:10px;font-weight:800;color:var(--blue);margin-bottom:8px;text-transform:uppercase">Right Eye (OD)</div>
@@ -4849,35 +4854,7 @@
 </div>
 
 
-<!-- ════════════════════ AUDITS ════════════════════ -->
 </div><!-- /pg-ipd -->
-<div class="page" id="pg-audits">
-  <div style="display:flex;align-items:center;gap:10px;padding:8px 14px 6px;background:var(--g6);border-bottom:1px solid var(--g5);flex-wrap:wrap">
-    <span style="font-size:11px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px">Audit Period</span>
-    <input type="date" id="audit-from" style="font-size:12px;border-radius:8px;padding:3px 10px;border:1px solid var(--g4)">
-    <input type="date" id="audit-to" style="font-size:12px;border-radius:8px;padding:3px 10px;border:1px solid var(--g4)">
-    <select id="audit-centre" style="font-size:12px;border-radius:8px;padding:3px 10px;border:1px solid var(--g4)">
-      <option value="">Both Centres</option>
-      <option value="CHD">Chandigarh</option>
-      <option value="RPR">Ropar</option>
-    </select>
-    <button class="btn btn-sm btn-gold" type="button" onclick="renderAuditsPage()">Refresh</button>
-    <button class="btn btn-sm btn-outline" type="button" onclick="printAuditCurrent()">Print</button>
-  </div>
-  <div class="ptabs">
-    <div class="ptab active" onclick="ptab(this,'audit-cataract');renderAuditTab('cataract')">Cataract Surgery</div>
-    <div class="ptab" onclick="ptab(this,'audit-lens');renderAuditTab('lens')">IOL / Lens Audit</div>
-    <div class="ptab" onclick="ptab(this,'audit-other-surgery');renderAuditTab('other')">Other Surgeries</div>
-    <div class="ptab" onclick="ptab(this,'audit-opd');renderAuditTab('opd')">OPD Timings</div>
-    <div class="ptab" onclick="ptab(this,'audit-nabh');renderAuditTab('nabh')">NABH Indicators</div>
-  </div>
-  <div class="tab-content active" id="audit-cataract"><div id="audit-cataract-result"></div></div>
-  <div class="tab-content" id="audit-lens"><div id="audit-lens-result"></div></div>
-  <div class="tab-content" id="audit-other-surgery"><div id="audit-other-surgery-result"></div></div>
-  <div class="tab-content" id="audit-opd"><div id="audit-opd-result"></div></div>
-  <div class="tab-content" id="audit-nabh"><div id="audit-nabh-result"></div></div>
-</div>
-
 <!-- ════════════════════ REPORTS ════════════════════ -->
 <div class="page" id="pg-reports">
   <div style="display:flex;align-items:center;gap:10px;padding:8px 14px 6px;background:var(--g6);border-bottom:1px solid var(--g5);flex-wrap:wrap">
