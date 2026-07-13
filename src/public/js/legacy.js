@@ -6484,6 +6484,8 @@ function ptab(el, cId, opts) {
   if (pageKey === 'inventory' && cId === 'inv-stock') renderInventoryTodayEntries && renderInventoryTodayEntries();
   if (!opts.silentHistory && !window._appHistoryRestoring) pushAppNavState(false);
 }
+
+window.ptab = ptab;
 function openM(id){
   const m=document.getElementById(id);
   if(m)m.classList.add('open');
@@ -32552,12 +32554,22 @@ function scheduleActiveClinicRxAutosave() {
   if (!bmhId || bmhId === '—') return;
   clearTimeout(_rxAutosaveTimers[dept]);
   _rxAutosaveTimers[dept] = setTimeout(function () {
+    if (isRxQuickDropdownOpen && isRxQuickDropdownOpen()) {
+      scheduleActiveClinicRxAutosave();
+      return;
+    }
     saveVisit(dept, { silent: true, autosave: true });
-  }, 1400);
+  }, isRxQuickDropdownOpen && isRxQuickDropdownOpen() ? 5000 : 1400);
 }
 
 // ─── RX QUICK SEARCH ─────────────
 let rxQuickSelectedDrug = null;
+function isRxQuickDropdownOpen() {
+  const activeTab = document.querySelector('.page.active .tab-content.active');
+  const dd = activeTab ? activeTab.querySelector('[id="rx-quick-dropdown"]') : document.getElementById('rx-quick-dropdown');
+  const inp = getActiveRxQuickSearchInput && getActiveRxQuickSearchInput();
+  return !!(dd && dd.style.display !== 'none' && String(inp?.value || '').trim());
+}
 const RX_COMMON_EXTRA = [
   {type:'Eye Drop',trade:'Vigamox',generic:'Moxifloxacin 0.5%',freq:'Four times (QID)',dur:'1 Week'},
   {type:'Eye Drop',trade:'Pred Forte',generic:'Prednisolone Acetate 1%',freq:'Four times (QID)',dur:'4 Weeks'},
@@ -41407,7 +41419,7 @@ function rxQuickSearch(val) {
   targetDd.innerHTML = rxQuickPickList.map((item, i) => {
     if (item.kind === 'settings') {
       const d = item.d;
-      return `<div onclick="selectRxQuickPick(${i})" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--g5)" onmouseover="this.style.background='var(--blue-lt)'" onmouseout="this.style.background=''">
+      return `<div onmousedown="event.preventDefault();selectRxQuickPick(${i})" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--g5)" onmouseover="this.style.background='var(--blue-lt)'" onmouseout="this.style.background=''">
         <div style="font-size:10px;font-weight:800;color:var(--green);text-transform:uppercase">Settings</div>
         <div style="font-size:13px;font-weight:900;color:#1A3C6E">${d.trade}</div>
         <div style="font-size:10.5px;color:var(--g1);font-style:italic">${d.generic ? '('+d.generic+')' : ''}</div>
@@ -45019,9 +45031,35 @@ function issueRefundAtReception() {
 
 // ── renderDocQueue — dept-filtered + sub-lists ───
 let _renderDocQueueTimer;
-function renderDocQueue() {
-  clearTimeout(_renderDocQueueTimer);
-  _renderDocQueueTimer = setTimeout(_renderDocQueueImpl, 160);
+let _renderDocQueueLastAt = 0;
+function isDoctorQueuePageVisible() {
+  const page = document.getElementById('pg-doctor-queue');
+  return !!(page && page.classList.contains('active'));
+}
+function renderDocQueue(opts) {
+  opts = opts || {};
+  if (!isDoctorQueuePageVisible() && !opts.force) {
+    window._bmhDocQueueRenderDirty = true;
+    if (_renderDocQueueTimer) {
+      clearTimeout(_renderDocQueueTimer);
+      _renderDocQueueTimer = null;
+    }
+    return;
+  }
+  if (_renderDocQueueTimer && !opts.immediate) return;
+  const now = Date.now();
+  const minGap = opts.immediate ? 0 : (window._bmhDocQueueRenderDirty ? 160 : 2200);
+  const wait = opts.immediate ? 0 : Math.max(160, minGap - (now - _renderDocQueueLastAt));
+  window._bmhDocQueueRenderDirty = false;
+  _renderDocQueueTimer = setTimeout(function () {
+    _renderDocQueueTimer = null;
+    if (!isDoctorQueuePageVisible() && !opts.force) {
+      window._bmhDocQueueRenderDirty = true;
+      return;
+    }
+    _renderDocQueueLastAt = Date.now();
+    _renderDocQueueImpl();
+  }, wait);
 }
 function getActiveCrossRefsForPatient(p) {
   const refs = [];
@@ -46473,6 +46511,7 @@ function renderOphthoRecap(opts) {
   const describeArgs = function (name, args) {
     try {
       if (name === 'nav') return String(args[0] || '');
+      if (name === 'ptab') return String(args[1] || '');
       if (name === 'saveVisit') return String(args[0] || '');
       if (name === 'printUnifiedRx') return String(args[0] || '');
       if (name === 'loadPastVisits') return String(args[1] || '');
@@ -46561,6 +46600,7 @@ function renderOphthoRecap(opts) {
   };
   [
     'nav',
+    'ptab',
     'openPatient',
     'renderDocQueue',
     '_renderDocQueueImpl',
