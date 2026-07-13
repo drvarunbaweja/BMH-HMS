@@ -553,6 +553,7 @@
     <div class="ni" onclick="nav('brochures',this)"><div class="ni-ic">📄</div>Surgery Brochures</div>
     <div class="ngrp">Analytics</div>
     <div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>
+    <div class="ni" onclick="nav('audits',this)"><div class="ni-ic">📋</div>Audits</div>
     <div class="ngrp">Finance</div>
     <div class="ni" onclick="nav('billing',this)"><div class="ni-ic">💰</div>Billing</div>
     <div class="ni" onclick="nav('tpa',this)"><div class="ni-ic">🏦</div>TPA / Cashless</div>
@@ -4855,6 +4856,32 @@
 
 
 </div><!-- /pg-ipd -->
+<div class="page" id="pg-audits">
+  <div style="display:flex;align-items:center;gap:10px;padding:8px 14px 6px;background:var(--g6);border-bottom:1px solid var(--g5);flex-wrap:wrap">
+    <span style="font-size:11px;font-weight:800;color:var(--g1);text-transform:uppercase;letter-spacing:.4px">Audit Period</span>
+    <input type="date" id="audit-from" style="font-size:12px;border-radius:8px;padding:3px 10px;border:1px solid var(--g4)">
+    <input type="date" id="audit-to" style="font-size:12px;border-radius:8px;padding:3px 10px;border:1px solid var(--g4)">
+    <select id="audit-centre" style="font-size:12px;border-radius:8px;padding:3px 10px;border:1px solid var(--g4)">
+      <option value="">Both Centres</option>
+      <option value="CHD">Chandigarh</option>
+      <option value="RPR">Ropar</option>
+    </select>
+    <button class="btn btn-sm btn-gold" type="button" onclick="renderAuditsPage()">Refresh</button>
+    <button class="btn btn-sm btn-outline" type="button" onclick="printAuditCurrent()">Print</button>
+  </div>
+  <div class="ptabs">
+    <div class="ptab active" onclick="ptab(this,'audit-cataract');renderAuditTab('cataract')">Cataract RANZCO</div>
+    <div class="ptab" onclick="ptab(this,'audit-lens');renderAuditTab('lens')">IOL / Lens</div>
+    <div class="ptab" onclick="ptab(this,'audit-surgery');renderAuditTab('surgery')">Other Surgery</div>
+    <div class="ptab" onclick="ptab(this,'audit-opd');renderAuditTab('opd')">OPD Timings</div>
+    <div class="ptab" onclick="ptab(this,'audit-nabh');renderAuditTab('nabh')">NABH Indicators</div>
+  </div>
+  <div class="tab-content active" id="audit-cataract"><div id="audit-cataract-result"></div></div>
+  <div class="tab-content" id="audit-lens"><div id="audit-lens-result"></div></div>
+  <div class="tab-content" id="audit-surgery"><div id="audit-surgery-result"></div></div>
+  <div class="tab-content" id="audit-opd"><div id="audit-opd-result"></div></div>
+  <div class="tab-content" id="audit-nabh"><div id="audit-nabh-result"></div></div>
+</div>
 <!-- ════════════════════ REPORTS ════════════════════ -->
 <div class="page" id="pg-reports">
   <div style="display:flex;align-items:center;gap:10px;padding:8px 14px 6px;background:var(--g6);border-bottom:1px solid var(--g5);flex-wrap:wrap">

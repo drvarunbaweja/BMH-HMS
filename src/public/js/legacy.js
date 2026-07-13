@@ -2984,7 +2984,7 @@ function parseAppRouteFromLocationHash() {
     return null;
   }
 }
-const _ROUTE_RESTORE_PAGES = new Set(['dashboard', 'doctor-queue', 'ophtho', 'obg', 'psych', 'skin', 'reception', 'billing', 'payments', 'lab', 'appointments', 'print-templates', 'consents', 'discharge', 'inventory', 'tpa', 'ipd', 'reports', 'settings', 'ot', 'centres', 'brochures']);
+const _ROUTE_RESTORE_PAGES = new Set(['dashboard', 'doctor-queue', 'ophtho', 'obg', 'psych', 'skin', 'reception', 'billing', 'payments', 'lab', 'appointments', 'print-templates', 'consents', 'discharge', 'inventory', 'tpa', 'ipd', 'reports', 'audits', 'settings', 'ot', 'centres', 'brochures']);
 /** After login, restore last URL route if valid; otherwise call fallback (usually role home). */
 function tryScheduleRouteRestoreFromHash(fallback) {
   let state = parseAppRouteFromLocationHash();
@@ -3072,7 +3072,7 @@ function nav(id, el, opts) {
     discharge:'Discharge Card',lab:'Lab Module',reception:'Reception',billing:'Billing',
     payments:'Payments',obg:'OBG Clinic',psych:'Neuropsychiatry',skin:'Skin & Cosmetology',
     inventory:'Inventory',tpa:'TPA / Cashless',centres:'Two-Centre View',settings:'Settings',
-    ipd:'IPD Ward',brochures:'Surgery Brochures',ot:'OT Module',reports:'Reports'};
+    ipd:'IPD Ward',brochures:'Surgery Brochures',ot:'OT Module',reports:'Reports',audits:'Audits'};
   const ptEl = document.getElementById('ptitle');
   if(ptEl) ptEl.textContent = titles[pageKey] || pageKey;
   // Highlight nav item
@@ -3122,6 +3122,7 @@ function nav(id, el, opts) {
   else if(pageKey==='tpa')             deferPageWork(function(){ renderTpaPage && renderTpaPage(); });
   else if(pageKey==='payments')        deferPageWork(function(){ renderPaymentsPage && renderPaymentsPage(); });
 	  else if(pageKey==='reports')         deferPageWork(function(){ if (typeof renderReports === 'function') renderReports(); });
+	  else if(pageKey==='audits')          deferPageWork(function(){ if (typeof renderAuditsPage === 'function') renderAuditsPage(); });
   else if(pageKey==='brochures')       deferPageWork(function(){ renderBrochures && renderBrochures(); });
   else if(pageKey==='centres')         deferPageWork(function(){ renderCentresView && renderCentresView(); });
   else if(pageKey==='settings')        deferPageWork(function(){ renderSettingsPage && renderSettingsPage(); setTimeout(()=>{ renderConsentLibrary&&renderConsentLibrary('all'); loadChargesFromFirebase&&loadChargesFromFirebase(); loadDoctorProfilesFromFirebase&&loadDoctorProfilesFromFirebase(); loadDeletionRequests&&loadDeletionRequests(); },100); });
@@ -3932,6 +3933,8 @@ function syncUcvaToRefraction(eye) {
 }
 const BMH_VA_SNELLEN_OPTIONS = ['', '6/6', '6/6p', '6/9', '6/9p', '6/12', '6/12p', '6/18', '6/18p', '6/24', '6/24p', '6/36', '6/36p', '6/60', '6/60p', '5/60', '4/60', '3/60', '2/60', '1/60', 'CF', 'HM', 'PL', 'NPL'];
 const BMH_VA_LOGMAR_OPTIONS = ['', '-0.10', '0.00', '0.10', '0.18', '0.20', '0.30', '0.40', '0.48', '0.50', '0.60', '0.70', '0.78', '0.90', '1.00', '1.10', '1.18', '1.30', '1.48', '1.78', 'CF', 'HM', 'PL', 'NPL'];
+const BMH_VA_NEAR_SNELLEN_OPTIONS = ['', 'N5', 'N6', 'N8', 'N10', 'N12', 'N18', 'N24', 'N36', 'n6/n8'];
+const BMH_VA_NEAR_LOGMAR_OPTIONS = ['', '0.00', '0.10', '0.20', '0.30', '0.40', '0.60', '0.80', '1.00'];
 const BMH_VA_SNELLEN_TO_LOGMAR = {
   '6/5': '-0.10', '6/6': '0.00', '6/6p': '0.00', '6/7.5': '0.10', '6/9': '0.18', '6/9p': '0.18',
   '6/12': '0.30', '6/12p': '0.30', '6/15': '0.40', '6/18': '0.48', '6/18p': '0.48',
@@ -3942,6 +3945,11 @@ const BMH_VA_SNELLEN_TO_LOGMAR = {
 const BMH_VA_LOGMAR_TO_SNELLEN = Object.keys(BMH_VA_SNELLEN_TO_LOGMAR).reduce(function (acc, key) {
   const value = BMH_VA_SNELLEN_TO_LOGMAR[key];
   if (!acc[value] || !/p$/.test(key)) acc[value] = key;
+  return acc;
+}, {});
+const BMH_VA_NEAR_TO_LOGMAR = { N5: '0.00', N6: '0.10', N8: '0.20', N10: '0.30', N12: '0.40', N18: '0.60', N24: '0.80', N36: '1.00', 'n6/n8': '0.15' };
+const BMH_VA_LOGMAR_TO_NEAR = Object.keys(BMH_VA_NEAR_TO_LOGMAR).reduce(function (acc, key) {
+  acc[BMH_VA_NEAR_TO_LOGMAR[key]] = key;
   return acc;
 }, {});
 function inferVisualAcuityScaleFromValue(value) {
@@ -3955,12 +3963,18 @@ function convertVisualAcuityValue(value, fromScale, toScale) {
   if (toScale === 'logmar') return BMH_VA_SNELLEN_TO_LOGMAR[raw] || raw;
   return BMH_VA_LOGMAR_TO_SNELLEN[raw] || raw;
 }
+function convertNearAcuityValue(value, fromScale, toScale) {
+  const raw = String(value || '').trim();
+  if (!raw || fromScale === toScale) return raw;
+  if (toScale === 'logmar') return BMH_VA_NEAR_TO_LOGMAR[raw] || raw;
+  return BMH_VA_LOGMAR_TO_NEAR[raw] || raw;
+}
 function rebuildVisualAcuitySelect(id, options, value) {
   const el = document.getElementById(id);
   if (!el) return;
   const current = value !== undefined ? String(value || '') : String(el.value || '');
   const list = options.slice();
-  if (id.includes('-ph') && !list.includes('NI')) list.push('NI');
+  if ((id.includes('-ph') || /^subj-/.test(id)) && !list.includes('NI')) list.push('NI');
   if (current && !list.includes(current)) list.push(current);
   el.innerHTML = list.map(function (opt) {
     const label = opt || '—';
@@ -3968,15 +3982,39 @@ function rebuildVisualAcuitySelect(id, options, value) {
   }).join('');
   el.value = current;
 }
+function updateNearVisionDatalist(scale) {
+  const dl = document.getElementById('dl-nv');
+  if (!dl) return;
+  const options = scale === 'logmar' ? BMH_VA_NEAR_LOGMAR_OPTIONS : BMH_VA_NEAR_SNELLEN_OPTIONS;
+  dl.innerHTML = options.filter(Boolean).map(function (opt) {
+    return '<option value="' + escapeHtmlConsent(opt) + '"></option>';
+  }).join('');
+}
+function updateNearVisionInput(id, fromScale, toScale, convert) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (convert && el.value) el.value = convertNearAcuityValue(el.value, fromScale, toScale);
+  el.placeholder = toScale === 'logmar' ? '0.10' : (id.includes('-os-') ? 'N8' : 'N6');
+}
 function setVisualAcuityScale(scale, opts) {
   const next = scale === 'logmar' ? 'logmar' : 'snellen';
   const prev = window.BMH_VA_SCALE || 'snellen';
   const options = next === 'logmar' ? BMH_VA_LOGMAR_OPTIONS : BMH_VA_SNELLEN_OPTIONS;
+  const nearOptions = next === 'logmar' ? BMH_VA_NEAR_LOGMAR_OPTIONS : BMH_VA_NEAR_SNELLEN_OPTIONS;
   const convert = !(opts && opts.preserveValues === true);
-  ['va-od-uc','va-od-bc','va-od-ph','va-os-uc','va-os-bc','va-os-ph'].forEach(function (id) {
+  ['va-od-uc','va-od-bc','va-od-ph','va-os-uc','va-os-bc','va-os-ph','ucva-od-dist','ucva-os-dist','subj-od-va','subj-os-va'].forEach(function (id) {
     const el = document.getElementById(id);
     const val = el ? el.value : '';
     rebuildVisualAcuitySelect(id, options, convert ? convertVisualAcuityValue(val, prev, next) : val);
+  });
+  ['ucva-od-near','ucva-os-near'].forEach(function (id) {
+    const el = document.getElementById(id);
+    const val = el ? el.value : '';
+    rebuildVisualAcuitySelect(id, nearOptions, convert ? convertNearAcuityValue(val, prev, next) : val);
+  });
+  updateNearVisionDatalist(next);
+  ['nv-od-final','nv-os-final','nv-od-final-manual','nv-os-final-manual'].forEach(function (id) {
+    updateNearVisionInput(id, prev, next, convert);
   });
   window.BMH_VA_SCALE = next;
   const sn = document.getElementById('va-scale-snellen');
@@ -6363,6 +6401,7 @@ function buildSidebarForRole(role, dept, name) {
     payments: `<div class="ni" onclick="nav('payments',this)"><div class="ni-ic">💰</div>Payments</div>`,
     tpa: `<div class="ni" onclick="nav('tpa',this)"><div class="ni-ic">🏦</div>TPA / Cashless</div>`,
     reports: `<div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>`,
+    audits: `<div class="ni" onclick="nav('audits',this)"><div class="ni-ic">📋</div>Audits</div>`,
     settings: `<div class="ni" onclick="nav('settings',this)"><div class="ni-ic">⚙️</div>Settings</div>`
   };
   const appendApprovedModules = function () {
@@ -6392,6 +6431,7 @@ function buildSidebarForRole(role, dept, name) {
       ${allowNav('billing', `<div class="ni" onclick="nav('billing',this)"><div class="ni-ic">💳</div>My Payments<span class="nbadge pulse" id="nb-pay"></span></div>`)}
       <div class="ngrp">Other</div>
       ${allowNav('reports', `<div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>`)}
+      ${allowNav('audits', `<div class="ni" onclick="nav('audits',this)"><div class="ni-ic">📋</div>Audits</div>`)}
       ${allowNav('settings', `<div class="ni" onclick="nav('settings',this)"><div class="ni-ic">⚙️</div>Settings</div>`)}`;
   } else if(role==='Optometrist') {
     nav_el.innerHTML = `
@@ -6401,6 +6441,7 @@ function buildSidebarForRole(role, dept, name) {
       ${allowNav('appointments', `<div class="ni" onclick="nav('appointments',this)"><div class="ni-ic">📅</div>Appointments</div>`)}
       <div class="ngrp">Other</div>
       ${allowNav('reports', `<div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>`)}
+      ${allowNav('audits', `<div class="ni" onclick="nav('audits',this)"><div class="ni-ic">📋</div>Audits</div>`)}
       ${allowNav('settings', `<div class="ni" onclick="nav('settings',this)"><div class="ni-ic">⚙️</div>Settings</div>`)}`;
   } else if(role==='Reception') {
     nav_el.innerHTML = `
@@ -6415,6 +6456,7 @@ function buildSidebarForRole(role, dept, name) {
       ${allowNav('tpa', `<div class="ni" onclick="nav('tpa',this)"><div class="ni-ic">🏦</div>TPA / Cashless</div>`)}
       <div class="ngrp">Reports</div>
       ${allowNav('reports', `<div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>`)}
+      ${allowNav('audits', `<div class="ni" onclick="nav('audits',this)"><div class="ni-ic">📋</div>Audits</div>`)}
       <div class="ngrp">Settings</div>
       ${allowNav('settings', `<div class="ni" onclick="nav('settings',this)"><div class="ni-ic">⚙️</div>Operational Settings</div>`)}`;
   } else if(role==='Lab') {
@@ -30263,6 +30305,233 @@ function saveCounsellorFollowup() {
   closeM('m-counsellor-followup');
   generateSurgeryReport();
   showToast('Counsellor follow-up saved ✓', 's');
+}
+
+// ─── ANALYTICS AUDITS ─────────────────
+const RANZCO_CATARACT_AUDIT_COLUMNS = [
+  'Operation date','Side R/L','1st or 2nd eye','Surgeon','File number','Patient initials','Type of cataract surgery',
+  'Preoperative unaided VA','Preoperative best-corrected VA','Preoperative sphere cylinder and axis','Preoperative spherical equivalent',
+  'Axial length','Axial length difference between the two eyes','Preoperative keratometry and axes','Intraoperative complications',
+  'Pre-existing eye conditions','Type of IOL','Spherical lens power','Whether sutures were used','Type of anaesthetic',
+  'Postoperative unaided VA','Postoperative best-corrected VA','Postoperative sphere cylinder and axis','Postoperative spherical equivalent',
+  'Postoperative complications','Notes'
+];
+function auditEsc(v) {
+  return String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function auditKeyDate(v) {
+  try { return localDateKey(v || ''); } catch (e) { return String(v || '').slice(0, 10); }
+}
+function getAuditFilters() {
+  return {
+    from: document.getElementById('audit-from')?.value || '',
+    to: document.getElementById('audit-to')?.value || '',
+    centre: document.getElementById('audit-centre')?.value || ''
+  };
+}
+function auditDateOk(value, filters) {
+  const d = auditKeyDate(value);
+  if (!d) return true;
+  if (filters.from && d < filters.from) return false;
+  if (filters.to && d > filters.to) return false;
+  return true;
+}
+function auditCentreOk(value, filters) {
+  if (!filters.centre) return true;
+  return normalizeAppointmentCentreValue(value || 'CHD') === filters.centre;
+}
+function auditPatient(c) {
+  const id = c?.bmhId || c?.patientId || '';
+  return (PATIENTS || []).find(function (p) { return p && p.bmhId === id; }) || {};
+}
+function auditVisits(pt, dept) {
+  const arr = [];
+  const add = function (v) { if (v && typeof v === 'object') arr.push(v); };
+  add(pt?.lastVisitByDept && pt.lastVisitByDept[dept]);
+  add(pt?.lastVisit);
+  Object.values(getCachedPatientVisits(pt?.bmhId || '') || {}).forEach(add);
+  return arr.filter(function (v, i, all) {
+    const key = v.id || v.date || v.createdAt || JSON.stringify(v).slice(0, 80);
+    return all.findIndex(function (x) { return (x.id || x.date || x.createdAt || JSON.stringify(x).slice(0, 80)) === key; }) === i;
+  }).filter(function (v) {
+    return !dept || normalizeDeptKeyForQueue(v.dept || pt?.lastDeptVisit || pt?.dept || '') === dept;
+  }).sort(function (a, b) { return String(b.date || b.createdAt || '').localeCompare(String(a.date || a.createdAt || '')); });
+}
+function auditVisit(pt, dept, afterDate) {
+  const rows = auditVisits(pt, dept);
+  if (afterDate) {
+    const after = auditKeyDate(afterDate);
+    return rows.find(function (v) { return auditKeyDate(v.date || v.createdAt || '') >= after; }) || rows[0] || {};
+  }
+  return rows[0] || {};
+}
+function auditOtCases() {
+  const filters = getAuditFilters();
+  return (window.OT_CASES || OT_CASES || []).map(normalizeOTCaseRecord).filter(function (c) {
+    const pt = auditPatient(c);
+    const d = getOTCaseDateKey(c) || c.date || c.otDate || c.surgeryDate || c.createdAt || '';
+    return auditDateOk(d, filters) && auditCentreOk(c.centre || pt.centre || '', filters);
+  });
+}
+function auditEye(c) {
+  const raw = String(c?.eye || c?.site || c?.operatingEye || '').toLowerCase();
+  if (/right|\bre\b|\bod\b/.test(raw)) return 'Right';
+  if (/left|\ble\b|\bos\b/.test(raw)) return 'Left';
+  return raw || '';
+}
+function auditInitials(name) {
+  return String(name || '').split(/\s+/).filter(Boolean).map(function (x) { return (x[0] || '').toUpperCase() + '.'; }).join('');
+}
+function auditRef(v, eye) {
+  const e = eye === 'Left' ? 'OS' : 'OD';
+  return [v['subj' + e + 'sph'] || v['rf' + e + 'sph'] || '', v['subj' + e + 'cyl'] || v['rf' + e + 'cyl'] || '', v['subj' + e + 'ax'] || v['rf' + e + 'ax'] || ''].filter(Boolean).join(' / ');
+}
+function auditK(v, eye) {
+  const left = eye === 'Left';
+  const k1 = left ? (v.keratOsK1 || v.keratometry?.os?.k1) : (v.keratOdK1 || v.keratometry?.od?.k1);
+  const k2 = left ? (v.keratOsK2 || v.keratometry?.os?.k2) : (v.keratOdK2 || v.keratometry?.od?.k2);
+  const ax = left ? (v.keratOsAxis || v.keratometry?.os?.axis) : (v.keratOdAxis || v.keratometry?.od?.axis);
+  return [k1, k2, ax ? ('axis ' + ax) : ''].filter(Boolean).join(' / ');
+}
+function auditVaBucket(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (/6\/6|0\.00/.test(raw)) return '6/6 or better';
+  if (/6\/9|0\.18|0\.20/.test(raw)) return '6/9 or better';
+  if (/6\/12|0\.30/.test(raw)) return '6/12 or better';
+  if (/6\/18|0\.48|0\.50/.test(raw)) return '<6/12 to 6/18';
+  if (/6\/(24|36)|0\.[6-9]/.test(raw)) return '<6/18 to 6/60';
+  if (/6\/60|CF|HM|PL|NPL|1\./i.test(raw)) return '<6/60';
+  return raw;
+}
+function isAuditCataract(c) {
+  return /cataract|phaco|pmics|iol|flacs|msics|sics|ecce|icce/i.test(String(c?.procedure || c?.procedureMain || c?.surgery || ''));
+}
+function getCataractAuditRows() {
+  const seen = {};
+  return auditOtCases().filter(isAuditCataract).sort(function (a, b) {
+    return String(getOTCaseDateKey(a) || '').localeCompare(String(getOTCaseDateKey(b) || ''));
+  }).map(function (c) {
+    const pt = auditPatient(c);
+    const eye = auditEye(c);
+    const opDate = getOTCaseDateKey(c) || c.date || c.otDate || c.surgeryDate || '';
+    const pre = auditVisit(pt, 'ophtho') || {};
+    const post = auditVisit(pt, 'ophtho', opDate) || {};
+    const left = eye === 'Left';
+    const key = (c.bmhId || '') + '::' + eye;
+    seen[key] = (seen[key] || 0) + 1;
+    return {
+      'Operation date': opDate ? formatDateIN(opDate) : '',
+      'Side R/L': eye,
+      '1st or 2nd eye': seen[key] > 1 ? '2nd' : '1st',
+      'Surgeon': c.surgeon || c.doctor || '',
+      'File number': c.bmhId || pt.bmhId || '',
+      'Patient initials': auditInitials(c.patient || pt.name || ''),
+      'Type of cataract surgery': c.procedure || c.procedureMain || 'Phaco temporal corneal incision',
+      'Preoperative unaided VA': auditVaBucket(left ? (pre.ucvaOS || pre.vaOS) : (pre.ucvaOD || pre.vaOD)),
+      'Preoperative best-corrected VA': auditVaBucket(left ? (pre.bcvaOS || pre.subjOSva) : (pre.bcvaOD || pre.subjODva)),
+      'Preoperative sphere cylinder and axis': auditRef(pre, eye),
+      'Preoperative spherical equivalent': pre.sphericalEquivalent || pre.preopSphericalEquivalent || '',
+      'Axial length': c.axialLength || c.biometry?.axialLength || pre.axialLength || pre.biometryAxialLength || '',
+      'Axial length difference between the two eyes': c.axialLengthDiff || pre.axialLengthDiff || '',
+      'Preoperative keratometry and axes': auditK(pre, eye),
+      'Intraoperative complications': c.complications || c.intraopComplications || c.operativeComplications || 'None',
+      'Pre-existing eye conditions': pre.preExistingEyeConditions || pre.dx || pre.diagnosisText || 'None',
+      'Type of IOL': c.iolType || c.iol || c.implant || '',
+      'Spherical lens power': c.iolPower || c.lensPower || '',
+      'Whether sutures were used': c.sutures || c.sutureStatus || 'Sutureless',
+      'Type of anaesthetic': c.anaes || c.anaesthesia || '',
+      'Postoperative unaided VA': auditVaBucket(left ? (post.postOpUcvaOS || post.ucvaOS || '') : (post.postOpUcvaOD || post.ucvaOD || '')),
+      'Postoperative best-corrected VA': auditVaBucket(left ? (post.postOpBcvaOS || post.bcvaOS || '') : (post.postOpBcvaOD || post.bcvaOD || '')),
+      'Postoperative sphere cylinder and axis': auditRef(post, eye),
+      'Postoperative spherical equivalent': post.postOpSphericalEquivalent || post.sphericalEquivalent || '',
+      'Postoperative complications': post.postOpComplications || c.postOpComplications || '',
+      'Notes': c.notes || c.operativeNotes || ''
+    };
+  });
+}
+function auditTable(columns, rows, empty) {
+  if (!rows.length) return '<div style="padding:22px;text-align:center;color:var(--g1);font-size:12px">' + auditEsc(empty || 'No matching audit rows found.') + '</div>';
+  return '<div style="overflow:auto;border:1px solid var(--g4);border-radius:10px;background:#fff"><table style="min-width:' + Math.max(900, columns.length * 145) + 'px"><thead><tr>'
+    + columns.map(function (c) { return '<th>' + auditEsc(c) + '</th>'; }).join('')
+    + '</tr></thead><tbody>' + rows.map(function (row) {
+      return '<tr>' + columns.map(function (c) {
+        return '<td><input value="' + auditEsc(row[c] == null ? '' : row[c]) + '" style="min-width:125px;border:1px solid var(--g4);border-radius:6px;padding:4px 6px;font-size:11px"></td>';
+      }).join('') + '</tr>';
+    }).join('') + '</tbody></table></div>';
+}
+function auditCards(rows) {
+  const comp = rows.filter(function (r) { return String(r['Intraoperative complications'] || '').trim() && !/^none$/i.test(String(r['Intraoperative complications'] || '').trim()); }).length;
+  const toric = rows.filter(function (r) { return /toric/i.test(String(r['Type of IOL'] || '')); }).length;
+  const missingK = rows.filter(function (r) { return !String(r['Preoperative keratometry and axes'] || '').trim(); }).length;
+  return '<div style="display:grid;grid-template-columns:repeat(4,minmax(120px,1fr));gap:10px;margin-bottom:12px">' + [['Cases', rows.length], ['Intra-op complications', comp], ['Toric IOLs', toric], ['Missing K values', missingK]].map(function (x) {
+    return '<div style="background:var(--g6);border:1px solid var(--g4);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;font-weight:800;color:var(--g1);text-transform:uppercase">' + auditEsc(x[0]) + '</div><div style="font-size:22px;font-weight:900;color:var(--bmh-blue)">' + auditEsc(x[1]) + '</div></div>';
+  }).join('') + '</div>';
+}
+function renderCataractAudit() {
+  const el = document.getElementById('audit-cataract-result'); if (!el) return;
+  const rows = getCataractAuditRows();
+  el.innerHTML = '<div class="card"><div class="card-hd"><div><div class="card-title">Cataract audit - RANZCO template</div><div class="card-sub">Uses the supplied RANZCO workbook headings only; rows are auto-filled from OT and visit data, then editable.</div></div></div>' + auditCards(rows) + auditTable(RANZCO_CATARACT_AUDIT_COLUMNS, rows) + '</div>';
+}
+function renderLensAudit() {
+  const rows = getCataractAuditRows();
+  const grouped = {};
+  rows.forEach(function (r) {
+    const key = [r['Type of IOL'] || 'Not recorded', r['Spherical lens power'] || 'Power not recorded'].join(' | ');
+    grouped[key] = grouped[key] || {'IOL / Lens': r['Type of IOL'] || 'Not recorded', Power: r['Spherical lens power'] || '', Cases: 0, Complications: 0, 'Post-op VA notes': '', 'Editable remarks': ''};
+    grouped[key].Cases += 1;
+    if (String(r['Intraoperative complications'] || '').trim() && !/^none$/i.test(String(r['Intraoperative complications'] || '').trim())) grouped[key].Complications += 1;
+  });
+  const el = document.getElementById('audit-lens-result'); if (el) el.innerHTML = '<div class="card"><div class="card-hd"><div><div class="card-title">IOL / lens-specific audit</div><div class="card-sub">Grouped by lens and power from cataract OT records.</div></div></div>' + auditTable(['IOL / Lens','Power','Cases','Complications','Post-op VA notes','Editable remarks'], Object.values(grouped), 'No cataract lens rows found.') + '</div>';
+}
+function renderSurgeryAudit() {
+  const rows = auditOtCases().filter(function (c) { return /trab|glaucoma|anti.?vegf|intravitreal|ivt|injection|retina|yag|laser/i.test(String(c.procedure || c.procedureMain || '')); }).map(function (c) {
+    const pt = auditPatient(c), visit = auditVisit(pt, 'ophtho', getOTCaseDateKey(c)), proc = String(c.procedure || c.procedureMain || '');
+    return {'Date': getOTCaseDateKey(c) ? formatDateIN(getOTCaseDateKey(c)) : '', 'Patient / file': [c.patient || pt.name || '', c.bmhId || pt.bmhId || ''].filter(Boolean).join(' - '), 'Procedure': proc, 'Eye': auditEye(c), 'Audit group': /trab/i.test(proc) ? 'Trabeculectomy / glaucoma surgery' : /vegf|intravitreal|ivt|injection/i.test(proc) ? 'Anti-VEGF / intravitreal injection' : 'Other ophthalmic procedure', 'Pre-op indicator': /trab/i.test(proc) ? ('IOP ' + (visit.iopGatOD || visit.iopGatOS || '')) : (visit.ucvaOD || visit.ucvaOS || ''), 'Outcome indicator': '', 'Complications': c.complications || c.postOpComplications || 'None', 'Editable remarks': c.notes || ''};
+  });
+  const el = document.getElementById('audit-surgery-result'); if (el) el.innerHTML = '<div class="card"><div class="card-hd"><div><div class="card-title">Other surgery audits</div><div class="card-sub">Trabeculectomy/glaucoma and anti-VEGF/intravitreal audits with editable outcome indicators.</div></div></div>' + auditTable(['Date','Patient / file','Procedure','Eye','Audit group','Pre-op indicator','Outcome indicator','Complications','Editable remarks'], rows) + '</div>';
+}
+function renderOpdTimingAudit() {
+  const filters = getAuditFilters();
+  const rows = (PATIENTS || []).filter(function (p) { return auditDateOk(p.checkinAt || p.createdAt || p.registeredAt || p.queueDate || p.date || '', filters) && auditCentreOk(p.centre || '', filters); }).map(function (p) {
+    return {'Date': formatDateIN(auditKeyDate(p.checkinAt || p.createdAt || p.registeredAt || p.queueDate || p.date || '')), 'Patient / file': [p.name || '', p.bmhId || ''].filter(Boolean).join(' - '), 'Department': p.dept || p.department || '', 'Registration time': String(p.checkinAt || p.createdAt || p.registeredAt || '').slice(11, 16), 'Doctor seen time': String(p.seenAt || p.completedAt || p.lastVisitDate || '').slice(11, 16), 'Waiting time': '', 'Delay reason / remarks': ''};
+  });
+  const el = document.getElementById('audit-opd-result'); if (el) el.innerHTML = '<div class="card"><div class="card-hd"><div><div class="card-title">OPD timing audit</div><div class="card-sub">Auto-lists OPD rows where timestamps exist; waiting time remains editable.</div></div></div>' + auditTable(['Date','Patient / file','Department','Registration time','Doctor seen time','Waiting time','Delay reason / remarks'], rows) + '</div>';
+}
+function renderNabhAudit() {
+  const filters = getAuditFilters(), cat = getCataractAuditRows(), allSx = auditOtCases();
+  const opd = (PATIENTS || []).filter(function (p) { return auditDateOk(p.checkinAt || p.createdAt || p.registeredAt || p.queueDate || p.date || '', filters) && auditCentreOk(p.centre || '', filters); }).length;
+  const comp = cat.filter(function (r) { return String(r['Intraoperative complications'] || '').trim() && !/^none$/i.test(String(r['Intraoperative complications'] || '').trim()); }).length;
+  const rows = [
+    {Indicator:'Total OPD registrations', Numerator:opd, Denominator:'', 'Rate / value':opd, 'Action / remarks':''},
+    {Indicator:'Total surgeries / procedures', Numerator:allSx.length, Denominator:'', 'Rate / value':allSx.length, 'Action / remarks':''},
+    {Indicator:'Cataract intraoperative complication rate', Numerator:comp, Denominator:cat.length, 'Rate / value':cat.length ? ((comp / cat.length * 100).toFixed(1) + '%') : '', 'Action / remarks':''},
+    {Indicator:'Medication error / adverse drug event', Numerator:'', Denominator:'', 'Rate / value':'', 'Action / remarks':''},
+    {Indicator:'Patient fall / incident', Numerator:'', Denominator:'', 'Rate / value':'', 'Action / remarks':''},
+    {Indicator:'Infection / endophthalmitis review', Numerator:'', Denominator:'', 'Rate / value':'', 'Action / remarks':''},
+    {Indicator:'Patient complaint / feedback closure', Numerator:'', Denominator:'', 'Rate / value':'', 'Action / remarks':''}
+  ];
+  const el = document.getElementById('audit-nabh-result'); if (el) el.innerHTML = '<div class="card"><div class="card-hd"><div><div class="card-title">NABH quality indicators</div><div class="card-sub">Available counts are auto-filled; safety/quality entries are editable.</div></div></div>' + auditTable(['Indicator','Numerator','Denominator','Rate / value','Action / remarks'], rows) + '</div>';
+}
+function renderAuditTab(kind) {
+  if (kind === 'lens') return renderLensAudit();
+  if (kind === 'surgery') return renderSurgeryAudit();
+  if (kind === 'opd') return renderOpdTimingAudit();
+  if (kind === 'nabh') return renderNabhAudit();
+  return renderCataractAudit();
+}
+function renderAuditsPage() {
+  const from = document.getElementById('audit-from'), to = document.getElementById('audit-to');
+  if (from && !from.value) from.value = localDateKey(new Date(new Date().getFullYear(), 0, 1));
+  if (to && !to.value) to.value = todayKey();
+  renderAuditTab((document.querySelector('#pg-audits .tab-content.active')?.id || 'audit-cataract').replace('audit-', ''));
+}
+function printAuditCurrent() {
+  const active = document.querySelector('#pg-audits .tab-content.active');
+  if (!active) { showToast('Open an audit tab first', 'w'); return; }
+  const title = document.querySelector('#pg-audits .ptab.active')?.textContent?.trim() || 'Audit';
+  const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>' + auditEsc(title) + '</title><style>body{font-family:Arial,sans-serif;font-size:10px;color:#111}table{border-collapse:collapse;width:100%}th,td{border:1px solid #999;padding:4px;vertical-align:top}input{border:0;width:100%;font:inherit}.card-hd,.card-sub,button{display:none}@page{size:A4 landscape;margin:10mm}</style></head><body><h2>' + auditEsc(title) + '</h2>' + active.innerHTML + '</body></html>';
+  if (typeof safePrint === 'function') safePrint(html); else { const w = window.open('', '_blank'); if (w) { w.document.write(html); w.document.close(); w.print(); } }
 }
 
 // ─── REPORTS ─────────────────
