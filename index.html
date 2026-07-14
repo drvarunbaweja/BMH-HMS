@@ -1177,7 +1177,10 @@
           <div style="background:#fff;border:1px solid var(--g4);border-radius:var(--rsm);padding:10px">
             <div style="font-size:10px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:8px">
               <span>Keratometry</span>
-              <button type="button" class="btn btn-xs btn-outline" onclick="openPreopKeratometryPopup()">Pre-op K</button>
+              <span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+                <button type="button" class="btn btn-xs btn-outline" onclick="openPreopKeratometryPopup()">Pre-op K</button>
+                <button type="button" class="btn btn-xs btn-outline" onclick="openCurrentPatientAuditRowEditor()">Audit row</button>
+              </span>
             </div>
             <div style="display:grid;grid-template-columns:58px repeat(3,minmax(0,1fr));gap:6px;align-items:center">
               <div></div>
