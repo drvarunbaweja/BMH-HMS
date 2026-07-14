@@ -5543,15 +5543,14 @@ function collectDeptDiagnosesForPrint(deptId) {
   if (deptId === 'oe') {
     const pack = collectOphthoDiagnosesForPrint();
     if (!(pack.lines || []).length) {
-      const prev = getPreviousDiagnosisEntryForDept(window.CURRENT_PATIENT || {}, 'ophtho');
-      if (prev?.status !== 'resolved' && prev?.text) pack.lines = [prev.text];
+      pack.lines = getDeptDxLedger(window.CURRENT_PATIENT || {}, 'ophtho').filter(function (x) { return !x.resolved; }).map(function (x) { return x.text; });
     }
     return pack;
   }
   if (deptId === 'obg') {
     const listEl = document.getElementById('obg-dx-list');
     const lines = listEl ? [...listEl.querySelectorAll('.dx-inp')].map(function (e) { return e.value.trim(); }).filter(Boolean) : [];
-    const carried = getObgDxLedger(window.CURRENT_PATIENT || {}).filter(function (x) { return !x.resolved; }).map(function (x) { return x.text; });
+    const carried = getDeptDxLedger(window.CURRENT_PATIENT || {}, 'obg').filter(function (x) { return !x.resolved; }).map(function (x) { return x.text; });
     const seen = new Set();
     const merged = [];
     [].concat(carried, lines).forEach(function (t) {
@@ -5561,15 +5560,13 @@ function collectDeptDiagnosesForPrint(deptId) {
       merged.push(String(t).trim());
     });
     if (merged.length) return { lines: merged, notes: '' };
-    const prev = getPreviousDiagnosisEntryForDept(window.CURRENT_PATIENT || {}, 'obg');
-    return { lines: prev?.status !== 'resolved' && prev?.text ? [prev.text] : [], notes: '' };
+    return { lines: carried, notes: '' };
   }
   const listEl = document.getElementById(deptId + '-dx-list');
   const lines = listEl ? [...listEl.querySelectorAll('.dx-inp')].map(e => e.value.trim()).filter(Boolean) : [];
   if (lines.length) return { lines, notes: '' };
   const deptMap = { obg: 'obg', psych: 'psych', skin: 'skin' };
-  const prev = getPreviousDiagnosisEntryForDept(window.CURRENT_PATIENT || {}, deptMap[deptId] || deptId);
-  return { lines: prev?.status !== 'resolved' && prev?.text ? [prev.text] : [], notes: '' };
+  return { lines: getDeptDxLedger(window.CURRENT_PATIENT || {}, deptMap[deptId] || deptId).filter(function (x) { return !x.resolved; }).map(function (x) { return x.text; }), notes: '' };
 }
 
 function getVisitDiagnosisTextForDept(visit, dept) {
@@ -5588,6 +5585,31 @@ function getVisitDiagnosisTextForDept(visit, dept) {
     return (Array.isArray(v.skinDxList) ? v.skinDxList.filter(Boolean).join(' · ') : '') || String(v.dx || '').trim();
   }
   return String(v.dx || v.diagnosisText || '').trim();
+}
+function splitDiagnosisTextLines(text) {
+  return String(text || '').split(/\s*(?:·|;|\n)\s*/).map(function (line) {
+    return String(line || '').trim();
+  }).filter(Boolean);
+}
+function getVisitDiagnosisLinesForDept(visit, dept) {
+  const v = visit || {};
+  if (dept === 'ophtho') {
+    const rows = Array.isArray(v.diagnoses) ? v.diagnoses.map(formatDxLineForPrint).filter(Boolean) : [];
+    return rows.length ? rows : splitDiagnosisTextLines(v.diagnosisText || v.dx || '');
+  }
+  if (dept === 'obg') {
+    const rows = Array.isArray(v.obgDiagnoses) ? v.obgDiagnoses.filter(Boolean) : [];
+    return rows.length ? rows : splitDiagnosisTextLines(v.dx || '');
+  }
+  if (dept === 'psych') {
+    const rows = Array.isArray(v.psychDxList) ? v.psychDxList.filter(Boolean) : [];
+    return rows.length ? rows : splitDiagnosisTextLines(v.dx || '');
+  }
+  if (dept === 'skin') {
+    const rows = Array.isArray(v.skinDxList) ? v.skinDxList.filter(Boolean) : [];
+    return rows.length ? rows : splitDiagnosisTextLines(v.dx || '');
+  }
+  return splitDiagnosisTextLines(v.dx || v.diagnosisText || '');
 }
 function getPreviousDiagnosisEntryForDept(pt, dept) {
   const key = normalizeQueueDeptForUser(dept || '');
@@ -5609,6 +5631,63 @@ function getPreviousDiagnosisEntryForDept(pt, dept) {
     fromDate: latest.date || latest.createdAt || '',
     updatedAt: latest.date || latest.createdAt || ''
   };
+}
+function getDeptDxLedger(pt, dept) {
+  const key = normalizeQueueDeptForUser(dept || '');
+  const p = pt || {};
+  const map = p.prevDxLedgerByDept || {};
+  const direct = Array.isArray(map[key]) ? map[key] : [];
+  if (direct.length) {
+    return direct.map(function (x) {
+      return {
+        id: x.id || ('dx_' + Math.random().toString(36).slice(2, 11)),
+        text: String(x.text || '').trim(),
+        resolved: !!x.resolved,
+        updatedAt: x.updatedAt || ''
+      };
+    }).filter(function (x) { return x.text; });
+  }
+  if (key === 'obg') return getObgDxLedger(p);
+  const legacy = getPreviousDiagnosisEntryForDept(p, key);
+  return splitDiagnosisTextLines(legacy.text || '').map(function (line, i) {
+    return {
+      id: 'mig_' + key + '_' + i,
+      text: line,
+      resolved: legacy.status === 'resolved',
+      updatedAt: legacy.updatedAt || ''
+    };
+  });
+}
+function buildNextDeptDxLedger(pt, dept, visit) {
+  const key = normalizeQueueDeptForUser(dept || '');
+  const previous = getDeptDxLedger(pt, key);
+  const prevByText = new Map();
+  previous.forEach(function (row) {
+    const k = String(row.text || '').trim().toLowerCase();
+    if (k) prevByText.set(k, row);
+  });
+  const lines = getVisitDiagnosisLinesForDept(visit, key);
+  const seen = new Set();
+  const out = [];
+  lines.forEach(function (text) {
+    const clean = String(text || '').trim();
+    const k = clean.toLowerCase();
+    if (!k || seen.has(k)) return;
+    seen.add(k);
+    const existing = prevByText.get(k);
+    out.push({
+      id: existing?.id || ('dx_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9)),
+      text: clean,
+      resolved: !!existing?.resolved,
+      updatedAt: visit?.date || new Date().toISOString()
+    });
+  });
+  previous.forEach(function (row) {
+    const k = String(row.text || '').trim().toLowerCase();
+    if (!k || seen.has(k) || row.resolved) return;
+    out.push(Object.assign({}, row));
+  });
+  return out;
 }
 function getObgDxLedger(pt) {
   const p = pt || {};
@@ -5641,7 +5720,7 @@ function buildNextObgDxLedger(pt, visit, prevLedger) {
 }
 function renderObgPreviousDxPanel(pt) {
   const patient = pt || window.CURRENT_PATIENT || {};
-  const ledger = getObgDxLedger(patient).filter(function (x) { return !x.resolved; });
+  const ledger = getDeptDxLedger(patient, 'obg').filter(function (x) { return !x.resolved; });
   const el = document.getElementById('obg-prev-dx-list');
   if (!el) return;
   if (!ledger.length) {
@@ -5653,8 +5732,8 @@ function renderObgPreviousDxPanel(pt) {
     const safe = escapeHtmlConsent(item.text || '');
     return '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;padding:6px 8px;background:var(--g6);border-radius:8px;border:1px solid var(--g5)">'
       + '<div style="flex:1;font-size:11px;line-height:1.35">' + safe + '</div>'
-      + '<select style="font-size:10px;padding:4px 6px;border-radius:6px;max-width:100px" onchange="handleObgLedgerStatusChange(\'' + id + '\', this.value)">'
-      + '<option value="active">Ongoing</option><option value="resolved">Resolved</option></select></div>';
+      + '<select style="font-size:10px;padding:4px 6px;border-radius:6px;max-width:110px" onchange="handlePreviousDiagnosisItemStatusChange(\'obg\',\'' + id + '\', this.value)">'
+      + '<option value="active" selected>Carry forward</option><option value="resolved">Resolved</option></select></div>';
   }).join('');
 }
 window.handleObgLedgerStatusChange = function (id, value) {
@@ -5672,6 +5751,51 @@ window.handleObgLedgerStatusChange = function (id, value) {
   renderObgPreviousDxPanel(pt);
   showToast(value === 'resolved' ? 'Previous diagnosis marked resolved ✓' : 'Diagnosis kept ongoing ✓', 's');
 };
+function renderGenericPreviousDiagnosisPanel(dept, visit) {
+  const key = normalizeQueueDeptForUser(dept || '');
+  const ids = previousDiagnosisUiIdsForDept(key);
+  const textEl = document.getElementById(ids.text);
+  const statusEl = document.getElementById(ids.status);
+  if (!textEl) return;
+  if (statusEl) statusEl.style.display = 'none';
+  const pt = window.CURRENT_PATIENT || {};
+  const rows = getDeptDxLedger(pt, key).filter(function (row) {
+    const t = String(row.text || '').trim();
+    return t && !row.resolved;
+  });
+  if (!rows.length) {
+    textEl.innerHTML = '<div style="font-size:11px;color:var(--g1)">No previous active diagnosis</div>';
+    return;
+  }
+  textEl.innerHTML = rows.map(function (row) {
+    const id = String(row.id || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    return '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;padding:6px 8px;background:var(--g6);border-radius:8px;border:1px solid var(--g5)">'
+      + '<div style="flex:1;font-size:11px;line-height:1.35">' + escapeHtmlConsent(row.text || '') + '</div>'
+      + '<select style="font-size:10px;padding:4px 6px;border-radius:6px;max-width:110px" onchange="handlePreviousDiagnosisItemStatusChange(\'' + key + '\',\'' + id + '\', this.value)">'
+      + '<option value="active" selected>Carry forward</option><option value="resolved">Resolved</option></select></div>';
+  }).join('');
+}
+window.handlePreviousDiagnosisItemStatusChange = function (dept, id, value) {
+  const key = normalizeQueueDeptForUser(dept || '');
+  const pt = window.CURRENT_PATIENT || {};
+  if (!pt || !pt.bmhId) return;
+  const next = getDeptDxLedger(pt, key).map(function (row) {
+    if (String(row.id) !== String(id)) return row;
+    return Object.assign({}, row, { resolved: value === 'resolved', updatedAt: new Date().toISOString() });
+  });
+  const map = Object.assign({}, pt.prevDxLedgerByDept || {});
+  map[key] = next;
+  pt.prevDxLedgerByDept = map;
+  if (key === 'obg') pt.obgDxLedger = next;
+  const patch = { prevDxLedgerByDept: map };
+  if (key === 'obg') patch.obgDxLedger = next;
+  fbUpdate && fbUpdate('patients/' + pt.bmhId, sanitizeFirebaseValue(patch)).catch(function (e) {
+    console.warn('previous diagnosis item update failed', e);
+  });
+  if (typeof window.patchPatientFirestore === 'function') window.patchPatientFirestore(pt.bmhId, sanitizeFirebaseValue(patch)).catch(function () {});
+  refreshPreviousDiagnosisPanel(key, pt.lastVisit || null);
+  showToast(value === 'resolved' ? 'Diagnosis marked resolved ✓' : 'Diagnosis kept for carry forward ✓', 's');
+};
 function previousDiagnosisUiIdsForDept(dept) {
   const map = {
     ophtho: { text: 'oe-prev-dx-text', status: 'oe-prev-dx-status' },
@@ -5687,23 +5811,7 @@ function refreshPreviousDiagnosisPanel(dept, visit) {
     renderObgPreviousDxPanel(window.CURRENT_PATIENT || {});
     return;
   }
-  const ids = previousDiagnosisUiIdsForDept(dept);
-  const textEl = document.getElementById(ids.text);
-  const statusEl = document.getElementById(ids.status);
-  if (!textEl || !statusEl) return;
-  const pt = window.CURRENT_PATIENT || {};
-  const entry = getPreviousDiagnosisEntryForDept(pt, dept);
-  const currentText = String(getVisitDiagnosisTextForDept(visit || pt.lastVisit || {}, dept) || '').trim();
-  const prevText = String(entry?.text || '').trim();
-  if (!prevText || entry?.status === 'resolved' || (currentText && currentText === prevText)) {
-    textEl.textContent = 'No previous active diagnosis';
-    statusEl.value = Array.from(statusEl.options || []).some(function (opt) { return opt.value === 'active'; }) ? 'active' : 'carry';
-    statusEl.disabled = true;
-    return;
-  }
-  textEl.textContent = prevText;
-  statusEl.disabled = false;
-  statusEl.value = entry?.status === 'resolved' ? 'resolved' : (Array.from(statusEl.options || []).some(function (opt) { return opt.value === 'active'; }) ? 'active' : 'carry');
+  renderGenericPreviousDiagnosisPanel(key, visit);
 }
 window.handlePreviousDiagnosisStatusChange = function (dept, value) {
   const key = normalizeQueueDeptForUser(dept || '');
@@ -47249,8 +47357,12 @@ function saveVisit(dept, opts) {
     prevDxMap[dept] = Object.assign({}, existingPrev, { updatedAt: visit.date });
   }
   patientPatch.prevDxByDept = prevDxMap;
+  const prevDxLedgerByDept = Object.assign({}, localPt?.prevDxLedgerByDept || {});
+  const nextDeptDxLedger = buildNextDeptDxLedger(localPt, dept, visit);
+  if (nextDeptDxLedger.length) prevDxLedgerByDept[dept] = nextDeptDxLedger;
+  patientPatch.prevDxLedgerByDept = prevDxLedgerByDept;
   if (dept === 'obg') {
-    const nLedger = buildNextObgDxLedger(localPt, visit, getObgDxLedger(localPt));
+    const nLedger = nextDeptDxLedger.length ? nextDeptDxLedger : buildNextObgDxLedger(localPt, visit, getObgDxLedger(localPt));
     patientPatch.obgDxLedger = nLedger;
     if (localPt) localPt.obgDxLedger = nLedger;
   }
@@ -47270,6 +47382,7 @@ function saveVisit(dept, opts) {
     if (visit.dx) localPt.dx = visit.dx;
     if (dept === 'ophtho' && visit.preopKeratometry) localPt.preopKeratometry = visit.preopKeratometry;
     localPt.prevDxByDept = prevDxMap;
+    localPt.prevDxLedgerByDept = prevDxLedgerByDept;
     cachedVisits[visitKey] = JSON.parse(JSON.stringify(visit));
     cachePatientVisits(bmhId, cachedVisits);
   }
