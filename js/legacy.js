@@ -36518,6 +36518,11 @@ function isPatientMarkedSeen(p) {
   const st = String(p.status || '').toLowerCase();
   return st === 'seen' || st === 'done';
 }
+function isQueueRowMarkedSeen(p) {
+  if (!p) return false;
+  if (p._xrefEntry) return !!p.seenAt;
+  return isPatientMarkedSeen(p);
+}
 function dedupeQueueEntriesByKey(rows) {
   const map = new Map();
   (rows || []).forEach(function (row) {
@@ -36549,7 +36554,9 @@ function dedupeQueueRowsByPatientDept(rows) {
     const deptKey = getQueueRowDeptKey(row);
     const fallbackKey = String(row._queueKey || '').trim();
     const identityKey = getPatientIdentitySignature(row);
-    const key = deptKey
+    const key = row._xrefEntry && fallbackKey
+      ? fallbackKey
+      : deptKey
       ? ((identityKey || bmhId) ? ((identityKey || bmhId) + '::dept::' + deptKey) : fallbackKey)
       : fallbackKey;
     if (!key) return;
@@ -36558,8 +36565,8 @@ function dedupeQueueRowsByPatientDept(rows) {
       map.set(key, row);
       return;
     }
-    const existingActive = !isPatientMarkedSeen(existing);
-    const nextActive = !isPatientMarkedSeen(row);
+    const existingActive = !isQueueRowMarkedSeen(existing);
+    const nextActive = !isQueueRowMarkedSeen(row);
     if (existingActive !== nextActive) {
       map.set(key, nextActive ? row : existing);
       return;
@@ -36705,21 +36712,21 @@ function getTodayQueueBasePatients() {
 }
 /** Seen / done row belongs in “Done today” (same serial as active list). */
 function patientDoneQueueMatchesToday(p, todayKeyLocal) {
-  if (!isPatientMarkedSeen(p)) return false;
+  if (!isQueueRowMarkedSeen(p)) return false;
   if (p._xrefEntry) return p.seenAt && localDateKey(p.seenAt) === todayKeyLocal;
   if (!patientQueueDateMatchesToday(p)) return false;
   if (p.seenAt) return localDateKey(p.seenAt) === todayKeyLocal;
   return patientHasTodayExplicitQueueStamp(p, todayKeyLocal) || patientHasLegacySameDayCreationQueue(p, todayKeyLocal);
 }
 function patientActiveQueueMatchesToday(p, todayKeyLocal) {
-  if (!p || isPatientMarkedSeen(p)) return false;
+  if (!p || isQueueRowMarkedSeen(p)) return false;
   if (p._xrefEntry) return crossRefQueueDateMatchesToday({ createdAt: p._xrefCreatedAt || p.queueDate || p.visitDate });
   return patientQueueDateMatchesToday(p);
 }
 function getPatientActiveDilationMinutes(p, nowTs) {
   if (!p || p.dept !== 'ophtho') return null;
   if (!p.dilated || !p.dilatedTime) return null;
-  if (isPatientMarkedSeen(p)) return null;
+  if (isQueueRowMarkedSeen(p)) return null;
   if (!patientQueueDateMatchesToday(p)) return null;
   const stamp = Number(p.dilatedTime);
   if (!Number.isFinite(stamp)) return null;
@@ -36762,14 +36769,14 @@ function filterPatientsForUser() {
   // Update queue badge counts for centre
   const localPts = PATIENTS.filter(p => (p.centre||'CHD') === myCentre);
   const nb = document.getElementById('nb-dq');
-  if(nb) nb.textContent = localPts.filter(p=>!isPatientMarkedSeen(p)).length;
+  if(nb) nb.textContent = localPts.filter(p=>!isQueueRowMarkedSeen(p)).length;
   // For doctor: filter to own dept too
   if(CURRENT_USER.role === 'Doctor') {
     const deptMap = {Ophthalmology:'ophtho',OBG:'obg',Neuropsychiatry:'psych','Skin':'skin','Skin & Cosmetology':'skin'};
     const myDept = deptMap[CURRENT_USER.dept] || 'ophtho';
     const myPts = PATIENTS.filter(p => (p.centre||'CHD')===myCentre && p.dept===myDept);
     const nb2 = document.getElementById('nb-dq');
-    if(nb2) nb2.textContent = myPts.filter(p=>!isPatientMarkedSeen(p)).length;
+    if(nb2) nb2.textContent = myPts.filter(p=>!isQueueRowMarkedSeen(p)).length;
   }
 }
 
@@ -44950,8 +44957,8 @@ function _renderDashboardImpl() {
   const todaysVisiblePatients = PATIENTS.filter(function (p) {
     return centreMatch(p) && patientQueueDateMatchesToday(p);
   });
-  const todaySeen = todaysVisiblePatients.filter(function (p) { return isPatientMarkedSeen(p); }).length;
-  const waiting = todaysVisiblePatients.filter(function (p) { return !isPatientMarkedSeen(p) && !p.queueRemoved; }).length;
+  const todaySeen = todaysVisiblePatients.filter(function (p) { return isQueueRowMarkedSeen(p); }).length;
+  const waiting = todaysVisiblePatients.filter(function (p) { return !isQueueRowMarkedSeen(p) && !p.queueRemoved; }).length;
   const txnDay = txnIsoDate;
   const txnOk = isCollectionDashboardTxn;
   const todayCollection = TRANSACTIONS.filter(t => txnDay(t) === today && txnOk(t)).reduce((s, t) => s + getNetTransactionAmount(t), 0);
@@ -45186,7 +45193,7 @@ function _renderDashboardImpl() {
     const todayPts = PATIENTS.filter(function (p) {
       return centreMatch(p) && normalizeDeptKeyForQueue(p.dept || '') === currentDeptKey && patientQueueDateMatchesToday(p);
     });
-    const checkedIn = todayPts.filter(function (p) { return !isPatientMarkedSeen(p); }).length;
+    const checkedIn = todayPts.filter(function (p) { return !isQueueRowMarkedSeen(p); }).length;
     const newPts = todayPts.filter(function (p) { return localDateKey(p.createdAt || p.registeredAt || p.checkinAt) === today; }).length;
     const oldPts = Math.max(0, todayPts.length - newPts);
     let diagToday = 0;
@@ -45542,7 +45549,7 @@ function _renderReceptionPageImpl() {
       const depts = [{k:'all',l:'All',icon:'🏥'},{k:'ophtho',l:'Eye',icon:'👁️'},{k:'obg',l:'OBG',icon:'🤰'},{k:'psych',l:'Psych',icon:'🧠'},{k:'skin',l:'Skin',icon:'💆'}];
       summaryEl.innerHTML = depts.map(d=>{
         const cnt = d.k==='all' ? basePts.length : basePts.filter(p=>p.dept===d.k).length;
-        const waiting = d.k==='all' ? basePts.filter(p=>!isPatientMarkedSeen(p)).length : basePts.filter(p=>p.dept===d.k&&!isPatientMarkedSeen(p)).length;
+        const waiting = d.k==='all' ? basePts.filter(p=>!isQueueRowMarkedSeen(p)).length : basePts.filter(p=>p.dept===d.k&&!isQueueRowMarkedSeen(p)).length;
         return `<button onclick="filterRcByDept('${d.k}')" style="flex:1;min-width:60px;background:#fff;border:1.5px solid var(--g4);border-radius:8px;padding:6px 8px;cursor:pointer;text-align:center">
           <div style="font-size:13px">${d.icon}</div>
           <div style="font-size:11px;font-weight:800">${cnt}</div>
@@ -45945,7 +45952,7 @@ function buildQCard(p, sno) {
     : advanceBalance>0 ? `<span style="background:var(--blue-lt);color:var(--blue);border:1px solid rgba(0,122,255,.3);border-radius:10px;padding:1px 6px;font-size:9px;font-weight:800">💙 Adv ₹${advanceBalance.toLocaleString('en-IN')}</span>` : '';
   const statusBadge = p.preRegistered
     ? `<span style="background:#e2e8f0;color:#334155;border-radius:10px;padding:1px 7px;font-size:9px;font-weight:800;border:1px dashed #94a3b8">⏳ Need to Check In</span>`
-    : p.seen
+    : isQueueRowMarkedSeen(p)
     ? `<span style="background:var(--green-lt);color:#1a8c3c;border-radius:10px;padding:1px 7px;font-size:9px;font-weight:800">Seen</span>`
     : p.dilated
     ? `<span style="background:var(--blue-lt);color:var(--blue);border-radius:10px;padding:1px 7px;font-size:9px;font-weight:800">💧Dilated</span>`
@@ -45984,8 +45991,8 @@ function buildQCard(p, sno) {
       <div style="display:flex;gap:3px" onclick="event.stopPropagation()">
         ${p.preRegistered
           ? `<button title="Check In & Collect Fee" style="background:var(--green);color:#fff;border:none;border-radius:5px;padding:2px 8px;font-size:9px;font-weight:800;cursor:pointer;line-height:1.6;animation:pulse 2s infinite" onclick="markSeen('${String(p.bmhId).replace(/'/g, "\\'")}')">✓ Check In</button>`
-          : `${!isPatientMarkedSeen(p)?`<button title="Mark Seen" style="background:var(--green);color:#fff;border:none;border-radius:5px;padding:2px 6px;font-size:9px;font-weight:800;cursor:pointer;line-height:1.4" onclick="markSeen('${p.bmhId}')">✓</button>`:`<button title="Move to Active" style="background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1.5px solid var(--bmh-blue);border-radius:5px;padding:2px 6px;font-size:9px;font-weight:800;cursor:pointer;line-height:1.4" onclick="restorePatientToActiveQueue('${p.bmhId}')">↩ Active</button>`}
-        ${isOphtho&&!p.dilated&&!isPatientMarkedSeen(p)?`<button title="Dilate" style="background:var(--blue-lt);color:var(--blue);border:1.5px solid var(--blue);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="markDilated('${p.bmhId}','${p.name.replace(/'/g,"\\'")}')">💧</button>`:''}
+          : `${!isQueueRowMarkedSeen(p)?`<button title="Mark Seen" style="background:var(--green);color:#fff;border:none;border-radius:5px;padding:2px 6px;font-size:9px;font-weight:800;cursor:pointer;line-height:1.4" onclick="markSeen('${p.bmhId}')">✓</button>`:`<button title="Move to Active" style="background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1.5px solid var(--bmh-blue);border-radius:5px;padding:2px 6px;font-size:9px;font-weight:800;cursor:pointer;line-height:1.4" onclick="restorePatientToActiveQueue('${p.bmhId}')">↩ Active</button>`}
+        ${isOphtho&&!p.dilated&&!isQueueRowMarkedSeen(p)?`<button title="Dilate" style="background:var(--blue-lt);color:var(--blue);border:1.5px solid var(--blue);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="markDilated('${p.bmhId}','${p.name.replace(/'/g,"\\'")}')">💧</button>`:''}
         <button title="Cross-Refer" style="background:rgba(11,123,140,.1);color:var(--teal);border:1.5px solid var(--teal);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="openXRefModal('${p.bmhId}')">↔️</button>
         <button title="IPD" style="background:rgba(175,82,222,.1);color:var(--purple);border:1.5px solid var(--purple);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="openIPDFromQueue('${p.bmhId}')">🛏️</button>
         <button title="Add to OT" style="background:rgba(255,149,0,.1);color:var(--orange);border:1.5px solid var(--orange);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="openOTFromQueue('${p.bmhId}')">🔬</button>
@@ -46049,7 +46056,7 @@ function buildQTableRow(p, sno, opts) {
     : noFeeConsult
     ? `${queueNoFeeConsultationBadge(false, p)}${advLbl ? ' · ' + advLbl : ''}`
     : (advLbl || '');
-  const seenRow = isPatientMarkedSeen(p);
+  const seenRow = isQueueRowMarkedSeen(p);
   const statusTxt = isPreRegRow ? 'Need check in' : seenRow ? 'Seen' : p.dilated ? 'Dilated' : p._xrefPendingPay ? 'Awaiting pay' : 'Waiting';
   const statusBg = isPreRegRow ? '#f0f0f0' : seenRow ? 'var(--green-lt)' : p.dilated ? 'var(--blue-lt)' : p._xrefPendingPay ? '#fff3e0' : 'var(--orange-lt)';
   const nmEsc = (p.name||'').replace(/'/g,"\\'");
