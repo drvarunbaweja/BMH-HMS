@@ -4340,7 +4340,7 @@ function openReceptionPatient(bmhId) {
   const prs = (PAY_REQUESTS || []).filter(r => r.bmhId === bmhId);
   const pend = prs.filter(r => r.status === 'pending');
   const pendAmt = pend.reduce((s, r) => s + (Number(r.amount) || 0), 0);
-  const adv = Number(p.advance) || 0;
+  const adv = getQueueDisplayAdvanceBalance(p);
   const bal = Number(p.balance) || 0;
   const showRestoreQueueBtn = patientNeedsReceptionQueueRestore(p);
   const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
@@ -11673,17 +11673,15 @@ function getQueueDisplayAdvanceBalance(p) {
   if (!p || !p.bmhId) return 0;
   if (_bmhQueueRenderCache) {
     if (!_bmhQueueRenderCache.txnByBmhId.has(p.bmhId)) return Math.max(0, Number(p.advance) || 0);
-    return _bmhQueueRenderCache.advanceByBmhId.get(p.bmhId) ?? Math.max(0, Number(p.advance) || 0);
+    if (_bmhQueueRenderCache.advanceByBmhId.has(p.bmhId)) return Math.max(0, Number(_bmhQueueRenderCache.advanceByBmhId.get(p.bmhId)) || 0);
+    return 0;
   }
   const hasPatientTransactions = Array.isArray(TRANSACTIONS) && TRANSACTIONS.some(function (txn) { return txn && txn.bmhId === p.bmhId; });
   if (!hasPatientTransactions) return Math.max(0, Number(p.advance) || 0);
-  if (typeof bmhSyncPatientAdvanceBalance === 'function') {
-    return Math.max(0, Number(bmhSyncPatientAdvanceBalance(p.bmhId)) || 0);
-  }
   if (typeof bmhComputeAdvanceBalanceForPatient === 'function') {
     return Math.max(0, Number(bmhComputeAdvanceBalanceForPatient(p.bmhId)) || 0);
   }
-  return Math.max(0, Number(p.advance) || 0);
+  return 0;
 }
 
 function patientHasNoFeeConsultation(p) {
@@ -11756,7 +11754,9 @@ function getQueuePaymentEntries(bmhId) {
         amount: Math.max(0, Number(getNetTransactionAmount(t) || t.amount || 0)),
         mode: t.mode || t.paymentMode || '',
         date: t.date || t.time || t.createdAt || '',
-        source: 'Payment'
+        source: 'Payment',
+        type: t.type || t.category || '',
+        isAdvance: bmhIsAdvanceTransaction(t)
       };
     });
   const seenRefs = new Set(txns.map(function (t) { return String(t.key).replace(/^txn-/, ''); }));
@@ -11770,7 +11770,8 @@ function getQueuePaymentEntries(bmhId) {
         amount: Math.max(0, Number(r.amount || r.paidAmount || 0)),
         mode: r.mode || r.paymentMode || '',
         date: r.paidAt || r.updatedAt || r.date || '',
-        source: 'Paid request'
+        source: 'Paid request',
+        type: r.type || r.category || ''
       };
     });
   return txns.concat(paidReqs).sort(function (a, b) {
@@ -11778,9 +11779,23 @@ function getQueuePaymentEntries(bmhId) {
   });
 }
 
+function bmhQueueLooksLikeAdvanceOnlyPayment(entry) {
+  if (!entry) return false;
+  if (entry.isAdvance === true) return true;
+  const text = [entry.label, entry.desc, entry.source, entry.mode, entry.type].filter(Boolean).join(' ');
+  if (!/\b(advance|deposit)\b/i.test(text)) return false;
+  return !/\b(surgery|procedure|investigation|lab|scan|oct|fundus|hvf|laser|injection|ot|operation|implant|iol|consumable|bill|final)\b/i.test(text);
+}
+
+function getQueuePaidServiceEntries(bmhId) {
+  return getQueuePaymentEntries(bmhId).filter(function (entry) {
+    return entry && Math.max(0, Number(entry.amount || 0)) > 0 && !bmhQueueLooksLikeAdvanceOnlyPayment(entry);
+  });
+}
+
 function showQueuePaymentDetails(bmhId) {
   const patient = (PATIENTS || []).find(function (p) { return p && p.bmhId === bmhId; }) || {};
-  const entries = getQueuePaymentEntries(bmhId);
+  const entries = getQueuePaidServiceEntries(bmhId);
   let modal = document.getElementById('m-queue-payments');
   if (!modal) {
     modal = document.createElement('div');
@@ -45916,17 +45931,17 @@ function buildQCard(p, sno) {
   const pendingPRs = queueDueState.pendingPRs;
   const pendingAmt = queueDueState.pendingAmt;
   const runningDue = queueDueState.due;
-  const paidPRs = queueDueState.paidPRs;
   const advanceBalance = getQueueDisplayAdvanceBalance(p);
+  const paidServiceEntries = getQueuePaidServiceEntries(p.bmhId);
   const pendingPRIds = pendingPRs.map(r=>r.id);
   const surgeryDue = runningDue > 0 && patientHasSurgeryDue(p.bmhId);
   const noFeeConsult = patientHasNoFeeConsultation(p);
   const chargeHtml = runningDue>0
     ? `<span onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;gap:3px;background:rgba(255,149,0,.15);color:#8a4200;border:1px solid rgba(255,149,0,.4);border-radius:10px;padding:1px 6px;font-size:9px;font-weight:800;animation:pulse 2s infinite">⚠️ ${surgeryDue ? 'Surgery due' : 'Due'} ₹${runningDue.toLocaleString('en-IN')}${pendingAmt>0?`<button title="Delete all pending charges for this patient" onclick="event.stopPropagation();deletePatientPendingCharges('${p.bmhId}')" style="background:none;border:none;cursor:pointer;padding:0 0 0 2px;font-size:10px;color:#c0392b;line-height:1">🗑</button>`:''}</span>`
+    : paidServiceEntries.length
+    ? `<span title="Show payments" onclick="event.stopPropagation();showQueuePaymentDetails('${String(p.bmhId).replace(/'/g, "\\'")}')" style="background:var(--green-lt);color:#1a8c3c;border:1px solid var(--green);border-radius:10px;padding:1px 6px;font-size:9px;font-weight:800;cursor:pointer">✓ Paid</span>`
     : noFeeConsult
     ? queueNoFeeConsultationBadge(true, p)
-    : paidPRs.length
-    ? `<span title="Show payments" onclick="event.stopPropagation();showQueuePaymentDetails('${String(p.bmhId).replace(/'/g, "\\'")}')" style="background:var(--green-lt);color:#1a8c3c;border:1px solid var(--green);border-radius:10px;padding:1px 6px;font-size:9px;font-weight:800;cursor:pointer">✓ Paid</span>`
     : advanceBalance>0 ? `<span style="background:var(--blue-lt);color:var(--blue);border:1px solid rgba(0,122,255,.3);border-radius:10px;padding:1px 6px;font-size:9px;font-weight:800">💙 Adv ₹${advanceBalance.toLocaleString('en-IN')}</span>` : '';
   const statusBadge = p.preRegistered
     ? `<span style="background:#e2e8f0;color:#334155;border-radius:10px;padding:1px 7px;font-size:9px;font-weight:800;border:1px dashed #94a3b8">⏳ Need to Check In</span>`
@@ -46020,8 +46035,8 @@ function buildQTableRow(p, sno, opts) {
   const pendingPRs = queueDueState.pendingPRs;
   const pendingAmt = queueDueState.pendingAmt;
   const runningDue = queueDueState.due;
-  const paidPRs = queueDueState.paidPRs;
   const advanceBalance = getQueueDisplayAdvanceBalance(p);
+  const paidServiceEntries = getQueuePaidServiceEntries(p.bmhId);
   const advLbl = (advanceBalance > 0) ? `<span style="font-size:9px;color:var(--blue);font-weight:800">Adv ₹${advanceBalance.toLocaleString('en-IN')}</span>` : '';
   const surgeryDue = runningDue > 0 && patientHasSurgeryDue(p.bmhId);
   const noFeeConsult = patientHasNoFeeConsultation(p);
@@ -46029,10 +46044,10 @@ function buildQTableRow(p, sno, opts) {
     ? getCrossRefQueueChargeHint(p)
     : runningDue>0
     ? `<span style="font-size:10px;color:#8a4200;font-weight:800">${surgeryDue ? 'Surgery due' : 'Due'} ₹${runningDue.toLocaleString('en-IN')}</span>${advLbl ? ' · ' + advLbl : ''}`
+    : paidServiceEntries.length
+    ? `<span title="Show payments" onclick="event.stopPropagation();showQueuePaymentDetails('${String(p.bmhId).replace(/'/g, "\\'")}')" style="font-size:10px;color:#1a8c3c;font-weight:800;cursor:pointer">Paid</span>${advLbl ? ' · ' + advLbl : ''}`
     : noFeeConsult
     ? `${queueNoFeeConsultationBadge(false, p)}${advLbl ? ' · ' + advLbl : ''}`
-    : paidPRs.length || runningDue === 0
-    ? `<span title="Show payments" onclick="event.stopPropagation();showQueuePaymentDetails('${String(p.bmhId).replace(/'/g, "\\'")}')" style="font-size:10px;color:#1a8c3c;font-weight:800;cursor:pointer">Paid</span>${advLbl ? ' · ' + advLbl : ''}`
     : (advLbl || '');
   const seenRow = isPatientMarkedSeen(p);
   const statusTxt = isPreRegRow ? 'Need check in' : seenRow ? 'Seen' : p.dilated ? 'Dilated' : p._xrefPendingPay ? 'Awaiting pay' : 'Waiting';
