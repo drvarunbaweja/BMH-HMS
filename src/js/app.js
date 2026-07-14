@@ -839,7 +839,7 @@ if (document.readyState === 'loading') {
 import { auth, watchConnectionStatus } from './firebase.js'
 import { loginUser as firebaseLoginUser, logoutUser, watchAuthState } from './auth.js'
 import { watchPatients, upsertPatientFirestore, updatePatient } from './patients.js'
-import { sendPasswordResetEmail, signInWithEmailAndPassword } from 'firebase/auth'
+import { sendPasswordResetEmail } from 'firebase/auth'
 import { watchAppointments }    from './appointments.js'
 import { watchTransactions,
          watchPayRequests }     from './billing.js'
@@ -849,28 +849,6 @@ import { todayKey }             from './utils.js'
 import { initializeInventoryFirebaseSync, syncInventoryWithFirebase } from './inventory.js'
 
 const SAVED_LOGIN_KEY = 'bmh_saved_login_v1'
-
-// ── Shadow Firebase Auth bridge (security phase 1) ────────────────────────────
-// Lets the legacy username/password login ALSO establish a Firebase Auth
-// session, so database rules can require `auth != null` without changing how
-// staff sign in. Never touches window.CURRENT_USER — the legacy session stays
-// in charge of roles/centre.
-window.bmhAuthBridge = {
-  async signInShadow(email, password) {
-    try {
-      if (auth.currentUser && (auth.currentUser.email || '').toLowerCase() === String(email || '').toLowerCase()) return true
-      window._bmhShadowAuthPending = true
-      await signInWithEmailAndPassword(auth, email, password)
-      console.info('[BMH] Shadow Firebase Auth session established for', email)
-      return true
-    } catch (e) {
-      window._bmhShadowAuthPending = false
-      console.warn('[BMH] Shadow Firebase sign-in failed (' + (e?.code || e) + ') — app continues on legacy session')
-      return false
-    }
-  },
-  currentUser: () => auth.currentUser,
-}
 const USE_FIRESTORE_REALTIME_AFTER_LOGIN = false
 
 function loadSavedLogin() {
@@ -1045,14 +1023,6 @@ window.logoutUser = async function () {
 watchAuthState(
   // ── On login ──────────────────────────────────────────────────────────────
   user => {
-    // Shadow-mode guard: when the legacy session drives the app, the Firebase
-    // sign-in exists only to authenticate database access — don't re-boot the
-    // UI or overwrite the legacy CURRENT_USER (whose role/centre are correct).
-    if (window._bmhShadowAuthPending || (sessionStorage.getItem('bmh_active_session') && window.CURRENT_USER)) {
-      window._bmhShadowAuthPending = false
-      console.info('[BMH] Firebase Auth active in shadow mode — legacy session unchanged')
-      return
-    }
     showShell(user)
 
     // Set window.CURRENT_USER so legacy.js can read it for centre filtering.
