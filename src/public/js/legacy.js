@@ -31267,6 +31267,235 @@ function auditIolName(c) {
 function auditIsGemetricCase(c) {
   return /gemetric/i.test([c.iolType, c.iol, c.implant, c.notes, c.procedure, c.procedureMain].join(' '));
 }
+function auditCaseOverrideKey(c, eye) {
+  return String(c?.id || [c?.bmhId || '', getOTCaseDateKey(c) || c?.date || '', eye || auditEye(c), c?.procedure || c?.procedureMain || ''].join('::')).replace(/[.#$/\[\]]/g, '_');
+}
+function getPatientAuditOverrides(pt) {
+  return (pt && pt.auditOverrides && typeof pt.auditOverrides === 'object') ? pt.auditOverrides : {};
+}
+function getAuditOverride(pt, kind, key) {
+  const store = getPatientAuditOverrides(pt);
+  return (store[kind] && store[kind][key]) || null;
+}
+function setAuditOverride(pt, kind, key, value) {
+  if (!pt?.bmhId || !key) return;
+  const store = Object.assign({}, getPatientAuditOverrides(pt));
+  store[kind] = Object.assign({}, store[kind] || {});
+  store[kind][key] = value;
+  store.updatedAt = new Date().toISOString();
+  pt.auditOverrides = store;
+  if (window.CURRENT_PATIENT && window.CURRENT_PATIENT.bmhId === pt.bmhId) window.CURRENT_PATIENT.auditOverrides = store;
+  fbUpdate && fbUpdate('patients/' + pt.bmhId, { auditOverrides: sanitizeFirebaseValue(store), updatedAt: store.updatedAt }).catch(function () {});
+}
+function applyCataractAuditOverride(row, pt, c, eye) {
+  const key = auditCaseOverrideKey(c, eye);
+  const override = getAuditOverride(pt, 'cataract', key);
+  return override && typeof override === 'object' ? Object.assign({}, row, override) : row;
+}
+function parseAuditTriplet(text) {
+  const raw = String(text || '');
+  const nums = raw.match(/[+-]?\d+(?:\.\d+)?/g) || [];
+  return { one: nums[0] || '', two: nums[1] || '', three: nums[2] || '' };
+}
+function gemetricSharedValuesFromCataractOverride(override) {
+  if (!override || typeof override !== 'object') return {};
+  const refPre = parseAuditTriplet(override['Preoperative sphere cylinder and axis']);
+  const refPost = parseAuditTriplet(override['Postoperative sphere cylinder and axis']);
+  const kPre = parseAuditTriplet(override['Preoperative keratometry and axes']);
+  return {
+    'Patient ID no.': override['File number'] || '',
+    'Pre-surgery uncorrected DVA': override['Preoperative unaided VA'] || '',
+    'Pre-surgery best corrected DVA': override['Preoperative best-corrected VA'] || '',
+    'Pre-surgery refraction sphere': refPre.one,
+    'Pre-surgery refraction cylinder': refPre.two,
+    'Pre-surgery refraction axis (deg)': refPre.three,
+    'Pre-surgery keratometry readings - k1 (dioptre)': kPre.one,
+    'Pre-surgery keratometry readings - k1 axis (deg)': kPre.three,
+    'Pre-surgery keratometry readings - k2 (dioptre)': kPre.two,
+    'Surgery date': override['Operation date'] || '',
+    'Surgery - IOL Used': override['Type of IOL'] || '',
+    'Surgery - complications': override['Intraoperative complications'] || '',
+    'Monocular uncorrected distance VA (UDVA)': override['Postoperative unaided VA'] || '',
+    'Manifest subjective refraction sphere': refPost.one,
+    'Manifest subjective refraction cylinder': refPost.two,
+    'Manifest subjective refraction axis (deg)': refPost.three,
+    'Follow up - Spherical Equivalent Calculation': override['Postoperative spherical equivalent'] || '',
+    'Monocular distance corrected VA (DCVA)': override['Postoperative best-corrected VA'] || '',
+    'Post Op Complication': override['Postoperative complications'] || '',
+    'Remarks': override['Notes'] || ''
+  };
+}
+function applyGemetricAuditOverride(row, pt, c, eye) {
+  const key = auditCaseOverrideKey(c, eye);
+  const next = row.slice();
+  const cataractOverride = getAuditOverride(pt, 'cataract', key);
+  const shared = gemetricSharedValuesFromCataractOverride(cataractOverride);
+  GEMETRIC_CLINICAL_DATA_COLUMNS.forEach(function (col, idx) {
+    if (col && shared[col] && !next[idx]) next[idx] = shared[col];
+  });
+  const override = getAuditOverride(pt, 'gemetric', key);
+  if (Array.isArray(override)) {
+    override.forEach(function (val, idx) { if (val !== undefined && val !== null) next[idx] = val; });
+  }
+  return next;
+}
+function getCurrentPatientCataractAuditCase() {
+  const pt = getCurrentOphthoPatientForPreopK();
+  if (!pt?.bmhId) return null;
+  const rows = (window.OT_CASES || OT_CASES || []).map(normalizeOTCaseRecord).filter(function (c) {
+    return c.bmhId === pt.bmhId && isAuditCataract(c);
+  }).sort(function (a, b) {
+    return String(getOTCaseDateKey(b) || b.date || b.createdAt || '').localeCompare(String(getOTCaseDateKey(a) || a.date || a.createdAt || ''));
+  });
+  return rows[0] ? { pt: pt, otCase: rows[0], eye: auditEye(rows[0]) } : null;
+}
+function buildCataractAuditRowForCase(c, pt) {
+  const eye = auditEye(c);
+  const opDate = getOTCaseDateKey(c) || c.date || c.otDate || c.surgeryDate || '';
+  const pre = auditVisitBefore(pt, 'ophtho', opDate) || {};
+  const post = auditVisitAfterWindow(pt, 'ophtho', opDate, 14, 28) || {};
+  const left = eye === 'Left';
+  const preK = auditK(pre, eye) || auditManualPreopK(pt, eye);
+  const row = {
+    'Operation date': opDate ? formatDateIN(opDate) : '',
+    'Side R/L': eye,
+    '1st or 2nd eye': auditEyeOrdinal(c, pt, eye, opDate),
+    'Surgeon': c.surgeon || c.doctor || '',
+    'File number': c.bmhId || pt.bmhId || '',
+    'Patient initials': auditInitials(c.patient || pt.name || ''),
+    'Type of cataract surgery': c.procedure || c.procedureMain || 'Phaco temporal corneal incision',
+    'Preoperative unaided VA': auditVaBucket(left ? (pre.ucvaOS || pre.vaOS) : (pre.ucvaOD || pre.vaOD)),
+    'Preoperative best-corrected VA': auditVaBucket(auditVaRaw(pre, eye, 'bcva')),
+    'Preoperative sphere cylinder and axis': auditRef(pre, eye),
+    'Preoperative spherical equivalent': pre.sphericalEquivalent || pre.preopSphericalEquivalent || auditSphericalEquivalent(pre, eye),
+    'Axial length': c.axialLength || c.biometry?.axialLength || pre.axialLength || pre.biometryAxialLength || '',
+    'Axial length difference between the two eyes': c.axialLengthDiff || pre.axialLengthDiff || '',
+    'Preoperative keratometry and axes': preK,
+    'Intraoperative complications': c.complications || c.intraopComplications || c.operativeComplications || 'None',
+    'Pre-existing eye conditions': pre.preExistingEyeConditions || pre.dx || pre.diagnosisText || 'None',
+    'Type of IOL': auditIolName(c),
+    'Spherical lens power': c.iolPower || c.lensPower || '',
+    'Whether sutures were used': c.sutures || c.sutureStatus || 'Sutureless',
+    'Type of anaesthetic': c.anaes || c.anaesthesia || '',
+    'Postoperative unaided VA': auditVaBucket(left ? (post.postOpUcvaOS || post.ucvaOS || '') : (post.postOpUcvaOD || post.ucvaOD || '')),
+    'Postoperative best-corrected VA': auditVaBucket(auditVaRaw(post, eye, 'bcva')),
+    'Postoperative sphere cylinder and axis': auditRef(post, eye),
+    'Postoperative spherical equivalent': post.postOpSphericalEquivalent || post.sphericalEquivalent || auditSphericalEquivalent(post, eye),
+    'Postoperative complications': post.postOpComplications || c.postOpComplications || '',
+    'Notes': c.notes || c.operativeNotes || ''
+  };
+  return applyCataractAuditOverride(row, pt, c, eye);
+}
+function buildGemetricAuditArrayForCase(c, pt, serial) {
+  const eye = auditEye(c);
+  const eyeAbbr = auditEyeAbbr(eye);
+  const opDate = getOTCaseDateKey(c) || c.date || c.otDate || c.surgeryDate || '';
+  const pre = auditVisitBefore(pt, 'ophtho', opDate) || {};
+  const post = auditVisitAfterWindow(pt, 'ophtho', opDate, 14, 28) || {};
+  const preRef = auditRefParts(pre, eye);
+  const postRef = auditRefParts(post, eye);
+  const left = eye === 'Left';
+  const k1 = left ? (pre.keratOsK1 || pre.keratometry?.os?.k1 || '') : (pre.keratOdK1 || pre.keratometry?.od?.k1 || '');
+  const k2 = left ? (pre.keratOsK2 || pre.keratometry?.os?.k2 || '') : (pre.keratOdK2 || pre.keratometry?.od?.k2 || '');
+  const kAxis = left ? (pre.keratOsAxis || pre.keratometry?.os?.axis || '') : (pre.keratOdAxis || pre.keratometry?.od?.axis || '');
+  const bio = pre.biometryCalc || {};
+  const bioEye = bio[left ? 'os' : 'od'] || {};
+  const iol = auditIolName(c);
+  const isToric = /toric|gt|gpt/i.test(iol);
+  const postDate = auditKeyDate(post.date || post.createdAt || post.updatedAt || '');
+  const row = ['', serial || 1, c.bmhId || pt.bmhId || '', [eyeAbbr, auditEyeOrdinal(c, pt, eye, opDate)].filter(Boolean).join(' '), 'Cataract',
+    auditVaRaw(pre, eye, 'ucva'), auditVaRaw(pre, eye, 'bcva'), '', auditVaRaw(pre, eye, 'near'),
+    preRef.sph || '', preRef.cyl || '', preRef.ax || '',
+    k1 || bioEye.k1 || auditManualPreopKPart(pt, eye, 'k1') || '', kAxis || bioEye.axis || auditManualPreopKPart(pt, eye, 'axis') || '', k2 || bioEye.k2 || auditManualPreopKPart(pt, eye, 'k2') || '',
+    '', bio.formula || c.iolFormula || '', pre.preExistingEyeConditions || pre.dx || pre.diagnosisText || '', opDate ? formatDateIN(opDate) : '', iol,
+    bioEye.target || c.targetRefraction || '', isToric ? '' : (bioEye.target || c.targetRefraction || ''), isToric ? (bioEye.target || c.targetRefraction || '') : '', isToric ? (c.toricCylinder || c.toricCyl || '') : '', c.complications || c.intraopComplications || '',
+    postDate ? formatDateIN(postDate) : '', auditDateDiffDays(opDate, postDate), auditVaRaw(post, eye, 'ucva'), '', '', '', auditVaRaw(post, eye, 'near'), '', '', '',
+    postRef.sph || '', postRef.cyl || '', postRef.ax || '', post.postOpSphericalEquivalent || post.sphericalEquivalent || auditSphericalEquivalent(post, eye), auditVaRaw(post, eye, 'bcva'),
+    '', '', '', '', '', '', '', c.toricAxis || c.axis || bio.toricNote || '', post.postOpComplications || c.postOpComplications || '', '', '', '', '', '', '',
+    post.gemetricAdditionalComments || '', post.halosFrequency || '', post.halosSeverity || '', post.halosBothersome || '', post.glareFrequency || '', post.glareSeverity || '', post.glareBothersome || '', post.starburstFrequency || '', post.starburstSeverity || '', post.starburstBothersome || '', [c.notes || c.operativeNotes || '', post.notes || post.advice || ''].filter(Boolean).join(' | '), '', ''];
+  return applyGemetricAuditOverride(row, pt, c, eye);
+}
+function openCurrentPatientAuditRowEditor(kind) {
+  const ctx = getCurrentPatientCataractAuditCase();
+  if (!ctx) { showToast('No cataract OT record found for this patient', 'w'); return; }
+  if (!kind && auditIsGemetricCase(ctx.otCase)) {
+    openAuditTemplateChoice(ctx);
+    return;
+  }
+  openAuditRowEditorForCase(ctx, kind || 'cataract');
+}
+function openAuditTemplateChoice(ctx) {
+  let modal = document.getElementById('m-audit-row-editor');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'm-audit-row-editor';
+    modal.className = 'modal-ov';
+    document.body.appendChild(modal);
+  }
+  const key = auditCaseOverrideKey(ctx.otCase, ctx.eye);
+  modal.innerHTML = '<div class="modal" style="max-width:520px"><div class="modal-hd"><div class="modal-title">Choose audit template</div><button class="modal-close" onclick="closeM(\'m-audit-row-editor\')">✕</button></div>'
+    + '<div style="font-size:12px;color:var(--g1);line-height:1.45;margin-bottom:12px">' + auditEsc(ctx.pt.name || 'Patient') + ' has a Gemetric cataract implant recorded. Open the standard RANZCO cataract row or the Gemetric clinical data row.</div>'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">'
+    + '<button class="btn btn-outline" onclick="openAuditRowEditorForCaseByKey(\'' + auditEsc(key) + '\',\'cataract\')">Cataract RANZCO row</button>'
+    + '<button class="btn btn-gold" onclick="openAuditRowEditorForCaseByKey(\'' + auditEsc(key) + '\',\'gemetric\')">Gemetric row</button>'
+    + '</div></div>';
+  window._bmhAuditEditorContext = ctx;
+  modal.classList.add('open');
+}
+function openAuditRowEditorForCaseByKey(key, kind) {
+  const ctx = window._bmhAuditEditorContext || getCurrentPatientCataractAuditCase();
+  if (!ctx || auditCaseOverrideKey(ctx.otCase, ctx.eye) !== key) { showToast('Audit row context not found', 'w'); return; }
+  openAuditRowEditorForCase(ctx, kind);
+}
+function openAuditRowEditorForCase(ctx, kind) {
+  const pt = ctx.pt, c = ctx.otCase, eye = ctx.eye;
+  const isGemetric = kind === 'gemetric';
+  const columns = isGemetric ? GEMETRIC_CLINICAL_DATA_COLUMNS : RANZCO_CATARACT_AUDIT_COLUMNS;
+  const values = isGemetric ? buildGemetricAuditArrayForCase(c, pt, 1) : buildCataractAuditRowForCase(c, pt);
+  const key = auditCaseOverrideKey(c, eye);
+  let modal = document.getElementById('m-audit-row-editor');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'm-audit-row-editor';
+    modal.className = 'modal-ov';
+    document.body.appendChild(modal);
+  }
+  const fields = columns.map(function (col, idx) {
+    const label = col || ('Column ' + (idx + 1));
+    const val = isGemetric ? (values[idx] || '') : (values[col] || '');
+    return '<div class="form-group" style="margin:0"><label class="fl">' + auditEsc(label) + '</label><input data-audit-col="' + auditEsc(col) + '" data-audit-idx="' + idx + '" value="' + auditEsc(val) + '" style="font-size:11px"></div>';
+  }).join('');
+  modal.innerHTML = '<div class="modal modal-lg" style="max-width:min(1040px,96vw)"><div class="modal-hd"><div><div class="modal-title">' + (isGemetric ? 'Gemetric clinical data row' : 'RANZCO cataract audit row') + '</div>'
+    + '<div style="font-size:10.5px;color:var(--g1);margin-top:2px">' + auditEsc([pt.name || 'Patient', pt.bmhId || '', c.procedure || '', eye || ''].filter(Boolean).join(' · ')) + '</div></div><button class="modal-close" onclick="closeM(\'m-audit-row-editor\')">✕</button></div>'
+    + '<div style="font-size:11px;color:var(--g1);margin-bottom:10px">Edit missing or corrected audit values here. These entries are saved for future audit fetch/export and do not rewrite the original OT note.</div>'
+    + '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;max-height:62vh;overflow:auto;padding-right:4px">' + fields + '</div>'
+    + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px"><button class="btn btn-outline" onclick="closeM(\'m-audit-row-editor\')">Cancel</button><button class="btn btn-gold" onclick="saveCurrentPatientAuditRowOverride(\'' + auditEsc(kind) + '\',\'' + auditEsc(key) + '\')">Save audit row</button></div></div>';
+  window._bmhAuditEditorContext = ctx;
+  modal.classList.add('open');
+}
+function saveCurrentPatientAuditRowOverride(kind, key) {
+  const ctx = window._bmhAuditEditorContext || getCurrentPatientCataractAuditCase();
+  if (!ctx?.pt?.bmhId) { showToast('Audit row patient not found', 'w'); return; }
+  const modal = document.getElementById('m-audit-row-editor');
+  const inputs = modal ? Array.from(modal.querySelectorAll('[data-audit-idx]')) : [];
+  if (!inputs.length) return;
+  if (kind === 'gemetric') {
+    const row = GEMETRIC_CLINICAL_DATA_COLUMNS.map(function () { return ''; });
+    inputs.forEach(function (input) { row[Number(input.dataset.auditIdx || 0)] = input.value || ''; });
+    setAuditOverride(ctx.pt, 'gemetric', key, row);
+  } else {
+    const row = {};
+    inputs.forEach(function (input) {
+      const col = input.dataset.auditCol || '';
+      if (col) row[col] = input.value || '';
+    });
+    setAuditOverride(ctx.pt, 'cataract', key, row);
+  }
+  closeM('m-audit-row-editor');
+  const activeAuditId = document.querySelector('#pg-audits .tab-content.active')?.id || '';
+  if (activeAuditId && activeAuditId !== 'audit-home') renderAuditTab && renderAuditTab(activeAuditId.replace('audit-', ''));
+  showToast('Audit row saved for future exports ✓', 's');
+}
 function auditDateDiffDays(from, to) {
   const a = new Date(auditKeyDate(from || ''));
   const b = new Date(auditKeyDate(to || ''));
@@ -31280,41 +31509,9 @@ function getCataractAuditRows() {
   }).map(function (c) {
     const pt = auditPatient(c);
     const eye = auditEye(c);
-    const opDate = getOTCaseDateKey(c) || c.date || c.otDate || c.surgeryDate || '';
-    const pre = auditVisitBefore(pt, 'ophtho', opDate) || {};
-    const post = auditVisitAfterWindow(pt, 'ophtho', opDate, 14, 28) || {};
-    const left = eye === 'Left';
-    const preK = auditK(pre, eye) || auditManualPreopK(pt, eye);
     const key = (c.bmhId || '') + '::' + eye;
     seen[key] = (seen[key] || 0) + 1;
-    return {
-      'Operation date': opDate ? formatDateIN(opDate) : '',
-      'Side R/L': eye,
-      '1st or 2nd eye': auditEyeOrdinal(c, pt, eye, opDate),
-      'Surgeon': c.surgeon || c.doctor || '',
-      'File number': c.bmhId || pt.bmhId || '',
-      'Patient initials': auditInitials(c.patient || pt.name || ''),
-      'Type of cataract surgery': c.procedure || c.procedureMain || 'Phaco temporal corneal incision',
-      'Preoperative unaided VA': auditVaBucket(left ? (pre.ucvaOS || pre.vaOS) : (pre.ucvaOD || pre.vaOD)),
-      'Preoperative best-corrected VA': auditVaBucket(auditVaRaw(pre, eye, 'bcva')),
-      'Preoperative sphere cylinder and axis': auditRef(pre, eye),
-      'Preoperative spherical equivalent': pre.sphericalEquivalent || pre.preopSphericalEquivalent || auditSphericalEquivalent(pre, eye),
-      'Axial length': c.axialLength || c.biometry?.axialLength || pre.axialLength || pre.biometryAxialLength || '',
-      'Axial length difference between the two eyes': c.axialLengthDiff || pre.axialLengthDiff || '',
-      'Preoperative keratometry and axes': preK,
-      'Intraoperative complications': c.complications || c.intraopComplications || c.operativeComplications || 'None',
-      'Pre-existing eye conditions': pre.preExistingEyeConditions || pre.dx || pre.diagnosisText || 'None',
-      'Type of IOL': auditIolName(c),
-      'Spherical lens power': c.iolPower || c.lensPower || '',
-      'Whether sutures were used': c.sutures || c.sutureStatus || 'Sutureless',
-      'Type of anaesthetic': c.anaes || c.anaesthesia || '',
-      'Postoperative unaided VA': auditVaBucket(left ? (post.postOpUcvaOS || post.ucvaOS || '') : (post.postOpUcvaOD || post.ucvaOD || '')),
-      'Postoperative best-corrected VA': auditVaBucket(auditVaRaw(post, eye, 'bcva')),
-      'Postoperative sphere cylinder and axis': auditRef(post, eye),
-      'Postoperative spherical equivalent': post.postOpSphericalEquivalent || post.sphericalEquivalent || auditSphericalEquivalent(post, eye),
-      'Postoperative complications': post.postOpComplications || c.postOpComplications || '',
-      'Notes': c.notes || c.operativeNotes || ''
-    };
+    return buildCataractAuditRowForCase(c, pt);
   });
 }
 function getEditableAuditRows(containerId, columns, fallbackRows) {
@@ -31352,93 +31549,8 @@ function buildGemetricClinicalDataRows() {
     return String(getOTCaseDateKey(a) || '').localeCompare(String(getOTCaseDateKey(b) || ''));
   }).map(function (c) {
     const pt = auditPatient(c);
-    const eye = auditEye(c);
-    const eyeAbbr = auditEyeAbbr(eye);
-    const opDate = getOTCaseDateKey(c) || c.date || c.otDate || c.surgeryDate || '';
-    const pre = auditVisitBefore(pt, 'ophtho', opDate) || {};
-    const post = auditVisitAfterWindow(pt, 'ophtho', opDate, 14, 28) || {};
-    const preRef = auditRefParts(pre, eye);
-    const postRef = auditRefParts(post, eye);
-    const left = eye === 'Left';
-    const k1 = left ? (pre.keratOsK1 || pre.keratometry?.os?.k1 || '') : (pre.keratOdK1 || pre.keratometry?.od?.k1 || '');
-    const k2 = left ? (pre.keratOsK2 || pre.keratometry?.os?.k2 || '') : (pre.keratOdK2 || pre.keratometry?.od?.k2 || '');
-    const kAxis = left ? (pre.keratOsAxis || pre.keratometry?.os?.axis || '') : (pre.keratOdAxis || pre.keratometry?.od?.axis || '');
-    const bio = pre.biometryCalc || {};
-    const bioEye = bio[left ? 'os' : 'od'] || {};
-    const iol = auditIolName(c);
-    const isToric = /toric|gt|gpt/i.test(iol);
-    const postDate = auditKeyDate(post.date || post.createdAt || post.updatedAt || '');
     serial += 1;
-    return [
-      '',
-      serial,
-      c.bmhId || pt.bmhId || '',
-      [eyeAbbr, auditEyeOrdinal(c, pt, eye, opDate)].filter(Boolean).join(' '),
-      'Cataract',
-      auditVaRaw(pre, eye, 'ucva'),
-      auditVaRaw(pre, eye, 'bcva'),
-      '',
-      auditVaRaw(pre, eye, 'near'),
-      preRef.sph || '',
-      preRef.cyl || '',
-      preRef.ax || '',
-      k1 || bioEye.k1 || auditManualPreopKPart(pt, eye, 'k1') || '',
-      kAxis || bioEye.axis || auditManualPreopKPart(pt, eye, 'axis') || '',
-      k2 || bioEye.k2 || auditManualPreopKPart(pt, eye, 'k2') || '',
-      '',
-      bio.formula || c.iolFormula || '',
-      pre.preExistingEyeConditions || pre.dx || pre.diagnosisText || '',
-      opDate ? formatDateIN(opDate) : '',
-      iol,
-      bioEye.target || c.targetRefraction || '',
-      isToric ? '' : (bioEye.target || c.targetRefraction || ''),
-      isToric ? (bioEye.target || c.targetRefraction || '') : '',
-      isToric ? (c.toricCylinder || c.toricCyl || '') : '',
-      c.complications || c.intraopComplications || '',
-      postDate ? formatDateIN(postDate) : '',
-      auditDateDiffDays(opDate, postDate),
-      auditVaRaw(post, eye, 'ucva'),
-      '',
-      '',
-      '',
-      auditVaRaw(post, eye, 'near'),
-      '',
-      '',
-      '',
-      postRef.sph || '',
-      postRef.cyl || '',
-      postRef.ax || '',
-      post.postOpSphericalEquivalent || post.sphericalEquivalent || auditSphericalEquivalent(post, eye),
-      auditVaRaw(post, eye, 'bcva'),
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      c.toricAxis || c.axis || bio.toricNote || '',
-      post.postOpComplications || c.postOpComplications || '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      post.gemetricAdditionalComments || '',
-      post.halosFrequency || '',
-      post.halosSeverity || '',
-      post.halosBothersome || '',
-      post.glareFrequency || '',
-      post.glareSeverity || '',
-      post.glareBothersome || '',
-      post.starburstFrequency || '',
-      post.starburstSeverity || '',
-      post.starburstBothersome || '',
-      [c.notes || c.operativeNotes || '', post.notes || post.advice || ''].filter(Boolean).join(' | '),
-      '',
-      ''
-    ];
+    return buildGemetricAuditArrayForCase(c, pt, serial);
   });
 }
 function exportGemetricClinicalDataXlsx() {
