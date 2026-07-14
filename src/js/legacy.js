@@ -35505,6 +35505,42 @@ function rebuildPatientsArrayFromGlobalCache() {
   updatePatientCountStatus();
 }
 window.rebuildPatientsArrayFromGlobalCache = rebuildPatientsArrayFromGlobalCache;
+function applyRealtimePatientDeltaToVisiblePatients(upserts, deletes) {
+  if (!Array.isArray(PATIENTS)) return;
+  const want = effectivePatientListCentreScope();
+  const dateKey = todayKey();
+  const indexById = new Map();
+  const refreshIndex = function () {
+    indexById.clear();
+    PATIENTS.forEach(function (p, idx) {
+      const id = String(p?.bmhId || '').trim();
+      if (id) indexById.set(id, idx);
+    });
+  };
+  refreshIndex();
+  Object.keys(deletes || {}).forEach(function (id) {
+    if (!indexById.has(id)) return;
+    PATIENTS.splice(indexById.get(id), 1);
+    refreshIndex();
+  });
+  Object.keys(upserts || {}).forEach(function (id) {
+    const row = upserts[id];
+    if (!row) return;
+    const shouldShow = want == null || rowMatchesCentre(row, want, { allowUncentredToday: true, dateKey: dateKey });
+    const existingIdx = indexById.has(id) ? indexById.get(id) : -1;
+    if (!shouldShow) {
+      if (existingIdx >= 0) {
+        PATIENTS.splice(existingIdx, 1);
+        refreshIndex();
+      }
+      return;
+    }
+    if (existingIdx >= 0) PATIENTS[existingIdx] = row;
+    else PATIENTS.push(row);
+  });
+  buildReceptionPatientLookupIndex();
+  updatePatientCountStatus();
+}
 function formatDateDDMMYYYY(value) {
   if (!value) return '—';
   const d = String(value).includes('T') ? new Date(value) : new Date(String(value) + 'T12:00:00');
@@ -39448,10 +39484,44 @@ function savePatientToFirebase(patient) {
 
 let _fbPatientsLoaded = false;
 let _renderDashTimer = null;
+let _renderDashPendingOptions = null;
 function getActivePageId() {
   return document.querySelector('.page.active')?.id || '';
 }
-function renderActivePageAfterRealtimeUpdate() {
+function getActiveDoctorQueueDeptKeyForRealtime() {
+  const deptMap = {
+    Ophthalmology:'ophtho', OBG:'obg', Neuropsychiatry:'psych',
+    Psychiatry:'psych', Skin:'skin', Cosmetology:'skin', Dermatology:'skin',
+    'Skin & Cosmetology':'skin', Lab:'lab', Reception:'reception'
+  };
+  const adminFilter = (CURRENT_USER?.isAdmin || CURRENT_USER?.role === 'Reception') && typeof getSelectedQueueDeptForAdmin === 'function'
+    ? getSelectedQueueDeptForAdmin()
+    : 'all';
+  if (adminFilter && adminFilter !== 'all') return normalizeDeptKeyForQueue(adminFilter);
+  if (CURRENT_USER?.isAdmin || CURRENT_USER?.role === 'Reception' || CURRENT_USER?.canSeeAllCentres) return 'all';
+  const rawDept = String(CURRENT_USER?.dept || '').trim();
+  const mapped = deptMap[rawDept]
+    || deptMap[Object.keys(deptMap).find(function (k) { return k.toLowerCase() === rawDept.toLowerCase(); }) || ''];
+  return normalizeDeptKeyForQueue(mapped || normalizeQueueDeptForUser(rawDept) || rawDept || '');
+}
+function patientRecordTouchesQueueDept(record, deptKey) {
+  if (!record || !deptKey || deptKey === 'all') return true;
+  const directDept = normalizeDeptKeyForQueue(record.dept || record.department || '');
+  if (directDept === deptKey) return true;
+  return getActiveCrossRefsForPatient(record).some(function (xref) {
+    return normalizeDeptKeyForQueue(xref?.toDept || '') === deptKey;
+  });
+}
+function realtimePatientBatchTouchesActiveDoctorQueue(summary) {
+  if (!summary || !Array.isArray(summary.rows) || !summary.rows.length) return true;
+  const deptKey = getActiveDoctorQueueDeptKeyForRealtime();
+  if (!deptKey || deptKey === 'all') return true;
+  return summary.rows.some(function (row) {
+    return patientRecordTouchesQueueDept(row, deptKey);
+  });
+}
+function renderActivePageAfterRealtimeUpdate(opts) {
+  const options = opts || {};
   const activeId = getActivePageId();
   if (activeId === 'pg-dashboard') {
     renderDashboard && renderDashboard();
@@ -39463,6 +39533,7 @@ function renderActivePageAfterRealtimeUpdate() {
     return;
   }
   if (activeId === 'pg-doctor-queue') {
+    if (options.realtimePatients && !realtimePatientBatchTouchesActiveDoctorQueue(options.realtimePatients)) return;
     renderDocQueue && renderDocQueue();
     return;
   }
@@ -39476,9 +39547,13 @@ function renderActivePageAfterRealtimeUpdate() {
   }
 }
 function _debouncedRenderDash() {
+  const opts = arguments.length ? arguments[0] : null;
+  _renderDashPendingOptions = opts || null;
   if(_renderDashTimer) clearTimeout(_renderDashTimer);
   _renderDashTimer = setTimeout(() => {
-    renderActivePageAfterRealtimeUpdate();
+    const pendingOpts = _renderDashPendingOptions;
+    _renderDashPendingOptions = null;
+    renderActivePageAfterRealtimeUpdate(pendingOpts);
   }, 450);
 }
 function applyPatientsPayload(data, opts) {
@@ -39610,15 +39685,18 @@ function flushRealtimePatientUpdates() {
       const id = String(p?.bmhId || '').trim();
       if (id) indexById.set(id, idx);
     });
+    const changedRows = [];
     Object.keys(deletes).forEach(function (id) {
       if (!indexById.has(id)) return;
       const idx = indexById.get(id);
+      if (cache[idx]) changedRows.push(cache[idx]);
       cache[idx] = null;
       indexById.delete(id);
     });
     Object.keys(upserts).forEach(function (id) {
       const row = upserts[id];
       if (!row) return;
+      changedRows.push(row);
       if (indexById.has(id)) cache[indexById.get(id)] = row;
       else {
         indexById.set(id, cache.length);
@@ -39626,8 +39704,9 @@ function flushRealtimePatientUpdates() {
       }
     });
     window._BMH_ALL_PATIENTS_CACHE = cache.filter(Boolean);
-    rebuildPatientsArrayFromGlobalCache();
-    _debouncedRenderDash();
+    window._bmhPatientsCacheVersion = (window._bmhPatientsCacheVersion || 0) + 1;
+    applyRealtimePatientDeltaToVisiblePatients(upserts, deletes);
+    _debouncedRenderDash({ realtimePatients: { rows: changedRows } });
   } finally {
     window._bmhRealtimePatientFlushRunning = false;
     if (
@@ -39641,7 +39720,7 @@ function flushRealtimePatientUpdates() {
 function scheduleRealtimePatientFlush() {
   if (window._bmhRealtimePatientFlushTimer) return;
   if (window._bmhSuppressRealtimeFlush) return;
-  window._bmhRealtimePatientFlushTimer = setTimeout(flushRealtimePatientUpdates, 1500);
+  window._bmhRealtimePatientFlushTimer = setTimeout(flushRealtimePatientUpdates, 2500);
 }
 function applyRealtimePatientRecord(record, key) {
   if (!record || typeof record !== 'object') return;
