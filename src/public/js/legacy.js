@@ -2015,6 +2015,27 @@ function getCurrentClinicalDateForDept(dept) {
 function getCurrentClinicalDateLabel(dept) {
   return formatDateDDMMYYYY(getCurrentClinicalDateForDept(dept));
 }
+function getDeptPrintDateValue(dept) {
+  return getDeptClinicalDateValue(dept) || todayKey();
+}
+function getDeptPrintDateForDept(dept) {
+  const raw = getDeptPrintDateValue(dept);
+  const parsed = raw ? new Date(raw + 'T12:00:00') : new Date();
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+}
+function getDeptPrintDateLabel(dept) {
+  return getDeptPrintDateForDept(dept).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+function getActiveOTPrintDateValue(otCase) {
+  const c = otCase || window.activeOTCase || null;
+  const fromCase = c && typeof getOTCaseDateKey === 'function' ? getOTCaseDateKey(c) : '';
+  if (fromCase) return fromCase;
+  const addDate = String(document.getElementById('ot-add-date')?.value || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(addDate)) return addDate;
+  const listDate = String(document.getElementById('ot-date-inp')?.value || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(listDate)) return listDate;
+  return todayKey();
+}
 function ensureDeptVisitDateDefault(dept) {
   const id = getDeptVisitDateInputId(dept);
   const el = id ? document.getElementById(id) : null;
@@ -2295,11 +2316,13 @@ function collectConsentPrintContext(deptOverride) {
   }
   const pt = (typeof PATIENTS !== 'undefined' && PATIENTS.find) ? PATIENTS.find(function (p) { return p.bmhId === ptId; }) || {} : {};
   if (pt.name) ptNm = pt.name;
-  const today = getCurrentClinicalDateForDept(activeDept).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
   const otList = (typeof OT_CASES !== 'undefined' && OT_CASES.length)
     ? OT_CASES.filter(function (c) { return c.bmhId === ptId; }).sort(function (a, b) { return (b.scheduledTime || b.date || '').localeCompare(a.scheduledTime || a.date || ''); })
     : [];
   const ot = forcedOt || otList[0] || null;
+  const today = (ot || window._CONSENT_PRINT_OT_ID)
+    ? formatDateDDMMYYYY(getActiveOTPrintDateValue(ot))
+    : getDeptPrintDateLabel(activeDept);
   const procedure = ot ? String(ot.procedure || 'Procedure').trim() : '';
   const eye = ot ? String(ot.site || ot.eye || 'Eye').trim() : '';
   const procLine = ot ? [procedure, eye, 'OT ' + String(ot.scheduledTime || ot.date || '')].filter(Boolean).join(' · ') : '';
@@ -2328,7 +2351,7 @@ function buildAdmissionSlipPage(ctx) {
   const procedure = String((ot && (ot.procedure || ot.surgery)) || ctx?.procedure || '________________').trim();
   const relation = pt.relativeName || pt.guardianName || pt.guardian || pt.fatherName || pt.husbandName || pt.spouseName || '________________';
   const admitArea = (ot && (ot.room || ot.admitArea)) || 'Ward / Private Room / Labour Room';
-  const admissionDate = ot && ot.date ? fmtSlipDate(ot.date) : fmtSlipDate(new Date());
+  const admissionDate = fmtSlipDate(ot ? getActiveOTPrintDateValue(ot) : getDeptPrintDateValue(activeClinicDeptKey()));
   const admissionTime = ot && ot.scheduledTime ? String(ot.scheduledTime) : '________________';
   const reason = [diagnosis, procedure].filter(function (x) { return x && x !== '________________'; }).join(' · ') || '________________';
   const logo = resolvePrintLogoSrc();
@@ -3687,7 +3710,7 @@ function _getConsentPatientHeaderUpload() {
     if (v && v !== '—' && v.startsWith('BMSH-')) { ptId = v; ptNm = document.getElementById(ptNms[i])?.textContent || ptNm; break; }
   }
   const pt = (typeof PATIENTS !== 'undefined' && PATIENTS.find) ? PATIENTS.find(function (p) { return p.bmhId === ptId; }) || {} : {};
-  const today = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  const today = getDeptPrintDateForDept(activeClinicDeptKey()).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   return { name: ptNm, id: ptId, age: pt.age || '—', sex: pt.sex || '—', mob: pt.mob || '', date: today, doctor: window.CURRENT_USER?.name || '—' };
 }
 function buildConsentHTML(data, lang, pt) {
@@ -3781,7 +3804,7 @@ function renderConsentModal() {
   }
   const pt = (typeof PATIENTS !== 'undefined' && PATIENTS.find) ? PATIENTS.find(function (p) { return p.bmhId === ptId; }) || {} : {};
   if (pt && pt.name && (!ptNm || ptNm === '—')) ptNm = pt.name;
-  const today = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  const today = formatDateDDMMYYYY((activeOTCase && activeOTCase.bmhId === ptId) ? getActiveOTPrintDateValue(activeOTCase) : getDeptPrintDateValue(activeClinicDeptKey()));
   const nb = document.getElementById('cmb-name'); if (nb) nb.textContent = ptNm;
   const ib = document.getElementById('cmb-id'); if (ib) ib.textContent = ptId;
   const ab = document.getElementById('cmb-age'); if (ab) ab.textContent = pt.age || '—';
@@ -4417,7 +4440,7 @@ function buildReceptionConsentContext(bmhId) {
   const p = PATIENTS.find(function (x) { return x && x.bmhId === bmhId; }) || {};
   const draft = getReceptionConsentDraftValues();
   const ctx = collectConsentPrintContext();
-  const today = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+  const today = getDeptPrintDateLabel(normalizeDeptKeyForQueue(p.dept || p.department || '') || activeClinicDeptKey());
   ctx.ptId = p.bmhId || bmhId || ctx.ptId || '—';
   ctx.ptNm = p.name || ctx.ptNm || '—';
   ctx.ptAge = p.age || ctx.ptAge || '';
@@ -5868,8 +5891,8 @@ function buildOphthoCaseSheetHtml() {
   const currentPt = window.CURRENT_PATIENT || PATIENTS.find(p => p.bmhId === document.getElementById('ophtho-pt-uid')?.textContent?.trim()) || {};
   const ptName   = currentPt.name || document.getElementById('ophtho-pt-nm')?.textContent?.trim() || 'Patient';
   const ptId     = currentPt.bmhId || document.getElementById('ophtho-pt-uid')?.textContent?.trim() || '';
-  const today    = new Date().toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'});
-  const printDate = new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'2-digit',year:'numeric'});
+  const today    = getDeptPrintDateLabel('ophtho');
+  const printDate = formatDateDDMMYYYY(getDeptPrintDateValue('ophtho'));
   const drName   = window.CURRENT_USER?.name || 'Dr. Varun Baweja';
   const centre   = window.CURRENT_USER?.centre || 'CHD';
 
@@ -6545,7 +6568,7 @@ function generatePrintHTML(type) {
 
 
 function updateNPDr() { const d=document.getElementById('np-dept')?.value; const s=document.getElementById('np-dr'); if(s) s.innerHTML=(DOCTORS[d]||['Dr. Varun Baweja']).map(x=>`<option>${x}</option>`).join(''); }
-function calcNPAge() { const d=document.getElementById('np-dob')?.value; const el=document.getElementById('np-age'); if(!d||!el) return; const today=new Date(),bd=new Date(d); let age=today.getFullYear()-bd.getFullYear(); if(today.getMonth()<bd.getMonth()||(today.getMonth()===bd.getMonth()&&today.getDate()<bd.getDate())) age--; el.value=age+' years'; }
+function calcNPAge() { const d=validateReceptionDobField('np-dob'); const el=document.getElementById('np-age'); if(!d||!el) return; const today=new Date(),bd=new Date(d); let age=today.getFullYear()-bd.getFullYear(); if(today.getMonth()<bd.getMonth()||(today.getMonth()===bd.getMonth()&&today.getDate()<bd.getDate())) age--; el.value=age+' years'; }
 function regPt() { const fn=document.getElementById('np-fn')?.value||'New'; const ln=document.getElementById('np-ln')?.value||'Patient'; showToast('🆔 '+fn+' '+ln+' registered — '+document.getElementById('m-uid').textContent+' ✓','s'); closeM('m-np'); }
 function doLogin(name, dept, role, centre) {
   document.getElementById('sbnm').textContent=name;
@@ -20492,7 +20515,7 @@ function printEyeExaminationCaseSheetA4() {
 // ANC CARD PRINT
 function printOBGCard() {
   const pt = window.CURRENT_PATIENT || {};
-  const today = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  const today = getDeptPrintDateForDept('obg').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   const text = function (id, fallback) {
     const el = document.getElementById(id);
     if (!el) return fallback || '';
@@ -25795,7 +25818,7 @@ function prefillExistingPatient(bmhId) {
   showToast(`✏️ ${name || p.bmhId} prefilled${existingAdvance > 0 ? ' — existing advance ₹' + existingAdvance.toLocaleString('en-IN') : ''} — update details if needed and register ✓`,'s');
 }
 function calcRcAge() {
-  const dob = parseDobDisplayDateToIso(document.getElementById('rc-dob')?.value || '');
+  const dob = normalizeDobIsoForSave(document.getElementById('rc-dob')?.value || '', { toast: false });
   const ageEl = document.getElementById('rc-age');
   if(!dob || !ageEl) return;
   const birth = new Date(dob + 'T12:00:00');
@@ -26284,7 +26307,8 @@ function updateExistingPatientFromReceptionForm(bmhId) {
   const fn = normalizeReceptionFieldValue('rc-fn', document.getElementById('rc-fn')?.value || '');
   const ln = normalizeReceptionFieldValue('rc-ln', document.getElementById('rc-ln')?.value || '');
   const mob = (document.getElementById('rc-mob-inp')?.value || document.getElementById('rc-mob')?.value || '').trim();
-  const dob = parseDobDisplayDateToIso(document.getElementById('rc-dob')?.value || '');
+  const dob = normalizeDobIsoForSave(document.getElementById('rc-dob')?.value || '');
+  if (document.getElementById('rc-dob')?.value && !dob) return;
   const age = document.getElementById('rc-age')?.value || '';
   const sex = document.getElementById('rc-sex')?.value || 'Male';
   const dept = document.getElementById('rc-dept')?.value || 'ophtho';
@@ -26328,7 +26352,8 @@ async function registerPatient() {
   const ln  = normalizeReceptionFieldValue('rc-ln', document.getElementById('rc-ln')?.value  || '');
   const mob = (document.getElementById('rc-mob-inp')?.value || document.getElementById('rc-mob')?.value || '').trim();
   const mob2  = document.getElementById('rc-mob2')?.value?.trim() || '';
-  const dob = parseDobDisplayDateToIso(document.getElementById('rc-dob')?.value || '');
+  const dob = normalizeDobIsoForSave(document.getElementById('rc-dob')?.value || '');
+  if (document.getElementById('rc-dob')?.value && !dob) return;
   const age = document.getElementById('rc-age')?.value || '';
   const sex = document.getElementById('rc-sex')?.value || 'Male';
   const dept= document.getElementById('rc-dept')?.value || 'ophtho';
@@ -28692,7 +28717,7 @@ function addOTCase() {
   const proc = document.getElementById('ot-add-proc')?.value||'';
   const surgeon = document.getElementById('ot-add-surgeon')?.value||'';
   const anaes = document.getElementById('ot-add-anaes')?.value||'';
-  const date = document.getElementById('ot-add-date')?.value||todayKey();
+  const date = document.getElementById('ot-add-date')?.value || document.getElementById('ot-date-inp')?.value || todayKey();
   const time = document.getElementById('ot-add-time')?.value||'09:00';
   const room = document.getElementById('ot-add-room')?.value||'Eye OT';
   const dx = document.getElementById('ot-add-dx')?.value||'';
@@ -29015,7 +29040,7 @@ function prefillOTCase(bmhId) {
 
 function resetOTAddCaseForm() {
   window._savingOTCase = false;
-  const today = todayKey();
+  const today = document.getElementById('ot-date-inp')?.value || todayKey();
   const setV = function (id, value) {
     const el = document.getElementById(id);
     if (!el) return;
@@ -29103,7 +29128,7 @@ function openOTAddModal(opts) {
     ptSel.innerHTML = `<option value="">— Use BMSH ID lookup above —</option>`;
   }
   // Set today's date as default
-  const dateEl=document.getElementById('ot-add-date'); if(dateEl&&!dateEl.value) dateEl.value=todayKey();
+  const dateEl=document.getElementById('ot-add-date'); if(dateEl&&!dateEl.value) dateEl.value=document.getElementById('ot-date-inp')?.value || todayKey();
   // For new cases: auto-set time to next available surgery slot (start 11:30, advance 30 min per case)
   if (!opts.caseId) {
     const otDate = document.getElementById('ot-add-date')?.value || todayKey();
@@ -35734,6 +35759,30 @@ function parseDobDisplayDateToIso(value) {
   return parseDisplayDateToIso(raw);
 }
 window.parseDobDisplayDateToIso = parseDobDisplayDateToIso;
+function isFutureDateIso(value) {
+  const iso = String(value || '').trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(iso) && iso > todayKey();
+}
+function normalizeDobIsoForSave(value, opts) {
+  const iso = parseDobDisplayDateToIso(value);
+  if (isFutureDateIso(iso)) {
+    if (!opts || opts.toast !== false) showToast('Date of birth cannot be in the future', 'w');
+    return '';
+  }
+  return iso;
+}
+function validateReceptionDobField(id) {
+  const el = document.getElementById(id || 'rc-dob');
+  if (!el) return '';
+  const iso = normalizeDobIsoForSave(el.value);
+  if (!iso && el.value) {
+    el.value = '';
+    return '';
+  }
+  if (iso) el.value = el.type === 'date' ? iso : formatDateDDMMYYYY(iso);
+  return iso;
+}
+window.validateReceptionDobField = validateReceptionDobField;
 function toTitleCaseName(value) {
   return String(value || '')
     .trim()
@@ -37258,10 +37307,12 @@ window.printUnifiedRx = function(deptId) {
   if (saveDept && typeof restoreCurrentPatientRxForDeptIfEmpty === 'function') {
     restoreCurrentPatientRxForDeptIfEmpty(saveDept);
   }
-  if (saveDept) {
+  const printDateValue = saveDept ? getDeptPrintDateValue(saveDept) : todayKey();
+  const printDateIsToday = !printDateValue || printDateValue === todayKey();
+  if (saveDept && printDateIsToday) {
     try { saveVisit(saveDept, { silent: true, autosave: true }); } catch (e) { console.warn('rx pre-print save failed', e); }
   }
-  const today = formatDateIN(new Date());
+  const today = formatDateIN(printDateValue || new Date());
   const rxDateOe = document.getElementById('rx-date');
   if (rxDateOe) rxDateOe.textContent = today;
   ['obg','psych','skin'].forEach(d=>{const e=document.getElementById(d+'-rx-date');if(e)e.textContent=today;});
@@ -41454,11 +41505,12 @@ function getDischargePrintData(sel) {
       : (RX_DRUGS && RX_DRUGS.length)
         ? JSON.parse(JSON.stringify(RX_DRUGS))
         : (Array.isArray(ptObj.lastVisit?.rx) && ptObj.lastVisit.rx.length ? JSON.parse(JSON.stringify(ptObj.lastVisit.rx)) : []);
-  const visitDate = ptObj.lastVisit?.date || ptObj.createdAt || new Date().toISOString();
-  const opDate = lastOtCase?.date || lastOtCase?.scheduledDate || ipdStay?.admittedAt || visitDate;
+  const fallbackPrintDate = lastOtCase ? getActiveOTPrintDateValue(lastOtCase) : getDeptPrintDateValue(deptForRx);
+  const visitDate = ptObj.lastVisit?.date || ptObj.createdAt || fallbackPrintDate || new Date().toISOString();
+  const opDate = (lastOtCase && getActiveOTPrintDateValue(lastOtCase)) || lastOtCase?.date || lastOtCase?.scheduledDate || ipdStay?.admittedAt || visitDate;
   const dischargeDate = specialty === 'obg'
-    ? (lastOtCase?.dischargeDate || lastOtCase?.completedAt || new Date().toISOString())
-    : (ipdStay?.dischargedAt || new Date().toISOString());
+    ? (lastOtCase?.dischargeDate || (lastOtCase && getActiveOTPrintDateValue(lastOtCase)) || lastOtCase?.completedAt || fallbackPrintDate || new Date().toISOString())
+    : (ipdStay?.dischargedAt || (lastOtCase && getActiveOTPrintDateValue(lastOtCase)) || fallbackPrintDate || new Date().toISOString());
   const findings = [ptObj.lastVisit?.positiveFindings, ptObj.positiveFindings, ptObj.lastVisit?.chiefComplaints].filter(Boolean).join('; ') || 'clinical findings noted in the case sheet';
   const diagnosis = lastOtCase?.dx || ptObj.lastVisit?.dx || ptObj.dx || ptObj.lastVisit?.clinicalImpression || tmpl.procedure || 'the diagnosed condition';
   const procedureName = lastOtCase?.procedure || ptObj.lastVisit?.procedure || ptObj.surgery || ptObj.surgeryAdvised || tmpl.procedure || 'the planned procedure';
@@ -41554,7 +41606,7 @@ function buildDischargePrintSection(sel) {
   if (!data.ptId || data.ptId === '—') return '';
   const esc = escapeHtmlConsent;
   const headerSrc = resolvePrintHeaderSrc();
-  const today = formatDateIN(new Date());
+  const today = formatDateIN(data.dischargeDate || data.opDate || getDeptPrintDateValue(data.sel === 'obg' ? 'obg' : 'ophtho'));
   const fmt = function (v) { return formatDateIN(v); };
   const meds = flattenDischargeRxRows(data.lastRxData && data.lastRxData.length ? data.lastRxData : []).map(function (d, i) {
     const trade = rxDrugTradeName(d) || d.name || d.brand || 'Medicine';
@@ -41740,7 +41792,7 @@ function buildOphthoDischargeA4LayoutPrintHtml(snap, data, colorPrint) {
   const fuCenter = buildOphFollowupVerticalPrintHtml(fus);
   return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>@page{size:A4 landscape;margin:4mm}body{font-family:Arial,sans-serif;color:#111;margin:0;padding:0;font-size:10.5px}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>'
     + '<div style="border:1px solid #aaa;border-radius:8px;overflow:hidden;max-height:200mm">'
-    + buildDischargePrintHeaderHtml(ptId, formatDateIN(new Date()), colorPrint)
+    + buildDischargePrintHeaderHtml(ptId, formatDateIN(data.dischargeDate || data.opDate || getDeptPrintDateValue(data.sel === 'obg' ? 'obg' : 'ophtho')), colorPrint)
     + '<div style="display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,0.42fr) minmax(0,1fr);gap:10px;align-items:stretch;padding:9px 11px;border-bottom:1px solid #ddd;min-height:0;max-height:92mm">'
     + '<div style="border:1px solid #e0e0e0;border-radius:8px;padding:10px 12px;font-size:11.4px;background:#fff">'
     + '<div style="font-size:9px;font-weight:900;color:' + blue + ';border-bottom:2px solid ' + gold + ';margin-bottom:8px;padding-bottom:4px;text-transform:uppercase;letter-spacing:.35px">Patient &amp; surgery</div>'
@@ -41749,7 +41801,7 @@ function buildOphthoDischargeA4LayoutPrintHtml(snap, data, colorPrint) {
     + '<div><span style="font-size:8px;color:#666;text-transform:uppercase">Age / Sex</span><br>' + esc((ptObj.age || '—') + ' / ' + (ptObj.sex || '—')) + '</div>'
     + '<div><span style="font-size:8px;color:#666;text-transform:uppercase">Mobile</span><br>' + esc(ptObj.mob || '—') + '</div>'
     + '<div style="grid-column:1/-1"><span style="font-size:8px;color:#666;text-transform:uppercase">Procedure / Dx</span><br>' + esc([ot.dx || data.diagnosis || '', ot.procedure || data.procedureName || ''].filter(Boolean).join(' · ') || '—') + '</div>'
-    + '<div><span style="font-size:8px;color:#666;text-transform:uppercase">OT / Eye</span><br>' + esc([ot.date ? formatDateIN(ot.date) : '', ot.site || ot.eye || ''].filter(Boolean).join(' · ') || '—') + '</div>'
+    + '<div><span style="font-size:8px;color:#666;text-transform:uppercase">OT / Eye</span><br>' + esc([data.opDate ? formatDateIN(data.opDate) : '', ot.site || ot.eye || ''].filter(Boolean).join(' · ') || '—') + '</div>'
     + '<div><span style="font-size:8px;color:#666;text-transform:uppercase">IOL</span><br>' + esc([ot.iolType, ot.iolPower].filter(Boolean).join(' / ') || '—') + '</div>'
     + '<div style="grid-column:1/-1"><span style="font-size:8px;color:#666;text-transform:uppercase">Surgeon</span><br>' + esc(ot.surgeon || ptObj.doctor || CURRENT_USER?.name || '—') + '</div>'
     + '</div></div>'
@@ -42081,7 +42133,7 @@ function renderDischargeBuilder() {
   document.getElementById('dc-pt-age').textContent  = ptObj.age || '—';
   document.getElementById('dc-pt-sex').textContent  = ptObj.sex || '—';
   document.getElementById('dc-pt-mob').textContent  = ptObj.mob || '—';
-  document.getElementById('dc-date').textContent    = formatDateDDMMYY(new Date());
+  document.getElementById('dc-date').textContent    = formatDateDDMMYY(data.dischargeDate || data.opDate || getDeptPrintDateValue(sel === 'obg' ? 'obg' : 'ophtho'));
   const procDxEl = document.getElementById('dc-procedure');
   if (procDxEl) {
     const procDx = activeSnap?.procedure || [data.lastOtCase?.dx || data.diagnosis || '', data.lastOtCase?.procedure || data.procedureName || ''].filter(Boolean).join(' · ');
@@ -42468,7 +42520,7 @@ function _getConsentPatientHeader() {
   const ptNm = document.getElementById('ophtho-pt-nm')?.textContent || document.getElementById('obg-pt-nm')?.textContent || '—';
   const ptId = document.getElementById('ophtho-pt-uid')?.textContent?.trim() || '—';
   const ptObj = PATIENTS.find(p=>p.bmhId===ptId) || window.CURRENT_PATIENT || {};
-  const today = new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+  const today = getDeptPrintDateForDept(activeClinicDeptKey()).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
   return {
     name:    ptNm,
     id:      ptId,
@@ -42617,7 +42669,7 @@ function updateConsentPatientHeader() {
   const ptId  = document.getElementById('ophtho-pt-uid')?.textContent?.trim() || '—';
   const ptObj = PATIENTS.find(p=>p.bmhId===ptId) || {};
   const ptNm  = ptObj.name || document.getElementById('ophtho-pt-nm')?.textContent || '— Select a patient first —';
-  const today = new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+  const today = getDeptPrintDateForDept(activeClinicDeptKey()).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
   const set = (id, val) => { const e=document.getElementById(id); if(e) e.textContent=val; };
   set('cph-name',   ptNm);
   set('cph-id',     ptId);
@@ -46536,12 +46588,14 @@ function saveUpdatedPatientDetails() {
   const consultationFee = Math.max(0, parseFloat(document.getElementById('upd-fee')?.value || p.consultationFee || 0) || 0);
   const advanceAmt = Math.max(0, parseFloat(document.getElementById('upd-advance-amt')?.value || p.advance || 0) || 0);
   const advancePurpose = normalizeReceptionFieldValue('upd-advance-purpose', document.getElementById('upd-advance-purpose')?.value?.trim()||'');
+  const updatedDob = normalizeDobIsoForSave(document.getElementById('upd-dob')?.value || p.dob || '');
+  if (document.getElementById('upd-dob')?.value && !updatedDob) return;
   const nowIso = new Date().toISOString();
   const updates = {
     name: toTitleCaseName((fn+' '+ln).trim()),
     age: document.getElementById('upd-age')?.value?.trim()||p.age||'',
     sex: document.getElementById('upd-sex')?.value||p.sex||'Male',
-    dob: document.getElementById('upd-dob')?.value||p.dob||'',
+    dob: updatedDob || p.dob || '',
     mobile: document.getElementById('upd-mob')?.value?.trim()||p.mobile||p.mob||'',
     mob: document.getElementById('upd-mob')?.value?.trim()||p.mob||p.mobile||'',
     mob2: document.getElementById('upd-mob2')?.value?.trim()||'',
@@ -48352,7 +48406,32 @@ function renderOphthoRecap(opts) {
   };
 })();
 
+function bmhBindWholeDateInputs(root) {
+  const scope = root && root.querySelectorAll ? root : document;
+  const inputs = [];
+  if (scope.matches && scope.matches('input[type="date"]')) inputs.push(scope);
+  scope.querySelectorAll('input[type="date"]').forEach(function (el) { inputs.push(el); });
+  inputs.forEach(function (el) {
+    if (el.dataset.bmhWholeDateBound === '1') return;
+    el.dataset.bmhWholeDateBound = '1';
+    if (['np-dob', 'upd-dob'].includes(el.id)) {
+      el.max = todayKey();
+      el.addEventListener('change', function () { validateReceptionDobField(el.id); });
+    }
+    el.addEventListener('pointerdown', function () {
+      try {
+        el.focus();
+        if (typeof el.showPicker === 'function') setTimeout(function () { try { el.showPicker(); } catch (e) {} }, 0);
+      } catch (e) {}
+    });
+  });
+}
+
 window.addEventListener('DOMContentLoaded', function() {
+  bmhBindWholeDateInputs && bmhBindWholeDateInputs(document);
+  document.addEventListener('focusin', function (ev) {
+    if (ev.target && ev.target.matches && ev.target.matches('input[type="date"]')) bmhBindWholeDateInputs(ev.target);
+  });
   preloadUserSettings && preloadUserSettings();
   bindDeptSmartSuggestionListeners && bindDeptSmartSuggestionListeners();
   renderDeptSmartSuggestions && renderDeptSmartSuggestions('ophtho');

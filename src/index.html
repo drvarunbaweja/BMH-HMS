@@ -2203,7 +2203,7 @@
           <div class="form-group"><label class="fl">First Name</label><input type="text" id="rc-fn" placeholder="First name"></div>
           <div class="form-group"><label class="fl">Last Name</label><input type="text" id="rc-ln" placeholder="Last name"></div>
           <div class="form-group"><label class="fl">S/o · D/o · W/o</label><input type="text" id="rc-rel" placeholder="Father / Spouse name"></div>
-          <div class="form-group"><label class="fl">DOB</label><input type="text" id="rc-dob" inputmode="numeric" placeholder="dd/mm/yyyy" onchange="this.value=formatDateDDMMYYYY(parseDobDisplayDateToIso(this.value));calcRcAge()"></div>
+          <div class="form-group"><label class="fl">DOB</label><input type="text" id="rc-dob" inputmode="numeric" placeholder="dd/mm/yyyy" onchange="validateReceptionDobField('rc-dob');calcRcAge()"></div>
           <div class="form-group"><label class="fl">Age</label><input type="text" id="rc-age" placeholder="Years" style="background:var(--green-lt);color:#1a8c3c;font-weight:800"></div>
           <div class="form-group"><label class="fl">Sex</label><select id="rc-sex"><option>Male</option><option>Female</option><option>Other</option></select></div>
           <div class="form-group"><label class="fl">Mobile (Primary)</label><input type="tel" id="rc-mob-inp" placeholder="+91 XXXXX XXXXX" oninput="lookupByPhone(this.value);searchPatientByPhone(this.value)"></div>
