@@ -1,20 +1,23 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// BMH HMS — Firebase Auth User Setup (idempotent — safe to re-run)
+// BMH HMS — Firebase Auth User Setup Script
 //
-// Usage:  node scripts/setup-firebase-auth.mjs
+// Run ONCE with:  node scripts/setup-firebase-auth.mjs
 //
-// Creates/updates a Firebase Auth user for every staff login, with custom
-// claims { role, centre, dept, name }. Passwords are read from
-// scripts/staff-passwords.local.json (GITIGNORED — never commit it), keyed by
-// email, so each account keeps its CURRENT password and staff notice nothing.
+// PREREQUISITES:
+//   1. Install Firebase Admin SDK:  npm install firebase-admin
+//   2. Download a service account key from:
+//      Firebase Console → Project Settings → Service Accounts → Generate new private key
+//   3. Save it as:  scripts/serviceAccountKey.json
+//      (this file is in .gitignore — never commit it)
 //
-// Prerequisites:
-//   1. npm install firebase-admin        (already in devDependencies if listed)
-//   2. scripts/serviceAccountKey.json    (Console → Project Settings → Service Accounts)
-//   3. scripts/staff-passwords.local.json
+// What it does:
+//   Creates Firebase Auth users for every staff member.
+//   Sets custom claims: { role, centre, dept, name }
+//   Passwords can be changed by each user after first login.
 // ─────────────────────────────────────────────────────────────────────────────
+
 import { createRequire } from 'module'
-import { readFileSync, existsSync } from 'fs'
+import { readFileSync }  from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 
@@ -23,57 +26,86 @@ const admin   = require('firebase-admin')
 
 const __dir = dirname(fileURLToPath(import.meta.url))
 const serviceAccount = JSON.parse(readFileSync(join(__dir, 'serviceAccountKey.json'), 'utf8'))
-admin.initializeApp({ credential: admin.credential.cert(serviceAccount) })
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+})
+
 const auth = admin.auth()
 
-const pwFile = join(__dir, 'staff-passwords.local.json')
-const passwords = existsSync(pwFile) ? JSON.parse(readFileSync(pwFile, 'utf8')) : {}
-if (!Object.keys(passwords).length) {
-  console.warn('⚠ scripts/staff-passwords.local.json missing/empty — all accounts get ChangeMe@123')
-}
-
-// One entry per staff login used in the app (mirrors legacy USER_DB + BMH_LOGIN_EMAIL_MAP)
+// ── Staff roster ─────────────────────────────────────────────────────────────
+// Format: { email, password (temp), displayName, role, centre, dept }
+// Staff MUST change their password on first login.
 const STAFF = [
-  { email: 'drvarun@bawejahospital.com',       name: 'Dr. Varun Baweja',   role: 'admin',       centre: 'BOTH', dept: 'ophtho' },
-  { email: 'drbaweja@bawejahospital.com',      name: 'Dr. Baweja',         role: 'admin',       centre: 'BOTH', dept: '' },
-  { email: 'drvarun.chd@bawejahospital.com',   name: 'Dr. Varun Baweja',   role: 'doctor',      centre: 'CHD',  dept: 'ophtho' },
-  { email: 'drvarun.rpr@bawejahospital.com',   name: 'Dr. Varun Baweja',   role: 'doctor',      centre: 'RPR',  dept: 'ophtho' },
-  { email: 'drtarun.chd@bawejahospital.com',   name: 'Dr. Tarun Baweja',   role: 'doctor',      centre: 'CHD',  dept: 'psych' },
-  { email: 'drtarun.rpr@bawejahospital.com',   name: 'Dr. Tarun Baweja',   role: 'doctor',      centre: 'RPR',  dept: 'psych' },
-  { email: 'drgeeta@bawejahospital.com',       name: 'Dr. Geeta Baweja',   role: 'doctor',      centre: 'CHD',  dept: 'obg' },
-  { email: 'drnamrata.chd@bawejahospital.com', name: 'Dr. Namrata Baweja', role: 'doctor',      centre: 'CHD',  dept: 'obg' },
-  { email: 'drnamrata.rpr@bawejahospital.com', name: 'Dr. Namrata Baweja', role: 'doctor',      centre: 'RPR',  dept: 'obg' },
-  { email: 'drpooja.chd@bawejahospital.com',   name: 'Dr. Pooja Baweja',   role: 'doctor',      centre: 'CHD',  dept: 'skin' },
-  { email: 'drpooja.rpr@bawejahospital.com',   name: 'Dr. Pooja Baweja',   role: 'doctor',      centre: 'RPR',  dept: 'skin' },
-  { email: 'reception.chd@bawejahospital.com', name: 'Reception CHD',      role: 'reception',   centre: 'CHD',  dept: 'reception' },
-  { email: 'reception.rpr@bawejahospital.com', name: 'Reception Ropar',    role: 'reception',   centre: 'RPR',  dept: 'reception' },
-  { email: 'lab.chd@bawejahospital.com',       name: 'Lab Tech CHD',       role: 'lab',         centre: 'CHD',  dept: 'lab' },
-  { email: 'lab.rpr@bawejahospital.com',       name: 'Lab Tech Ropar',     role: 'lab',         centre: 'RPR',  dept: 'lab' },
-  { email: 'tpa.chd@bawejahospital.com',       name: 'TPA Executive CHD',  role: 'tpa',         centre: 'CHD',  dept: 'tpa' },
-  { email: 'tpa.rpr@bawejahospital.com',       name: 'TPA Executive RPR',  role: 'tpa',         centre: 'RPR',  dept: 'tpa' },
-  { email: 'inventory.chd@bawejahospital.com', name: 'Inventory CHD',      role: 'inventory',   centre: 'CHD',  dept: 'inventory' },
-  { email: 'inventory.rpr@bawejahospital.com', name: 'Inventory RPR',      role: 'inventory',   centre: 'RPR',  dept: 'inventory' },
-  { email: 'optometrist@bawejahospital.com',   name: 'Optometrist RPR',    role: 'optometrist', centre: 'RPR',  dept: 'ophtho' },
-  { email: 'opto.rpr@bawejahospital.com',      name: 'Optometrist RPR',    role: 'optometrist', centre: 'RPR',  dept: 'ophtho' },
+  // ── Admins ──────────────────────────────────────────────────────────────
+  { email: 'drvarun@bawejahospital.com',    password: 'ChangeMe@123', displayName: 'Dr. Varun Baweja',    role: 'admin',       centre: 'BOTH', dept: 'ophtho'    },
+  { email: 'drbaweja@bawejahospital.com',   password: 'ChangeMe@123', displayName: 'Dr. Baweja',          role: 'admin',       centre: 'BOTH', dept: ''          },
+
+  // ── Doctors ─────────────────────────────────────────────────────────────
+  { email: 'drgeeta@bawejahospital.com',    password: 'ChangeMe@123', displayName: 'Dr. Geeta Baweja',    role: 'doctor',      centre: 'CHD',  dept: 'obg'       },
+  { email: 'drnamrata@bawejahospital.com',  password: 'ChangeMe@123', displayName: 'Dr. Namrata Baweja',  role: 'doctor',      centre: 'RPR',  dept: 'obg'       },
+  { email: 'drtarun@bawejahospital.com',    password: 'ChangeMe@123', displayName: 'Dr. Tarun Baweja',    role: 'doctor',      centre: 'BOTH', dept: 'psych'     },
+  { email: 'drpooja@bawejahospital.com',    password: 'ChangeMe@123', displayName: 'Dr. Pooja Baweja',    role: 'doctor',      centre: 'BOTH', dept: 'skin'      },
+
+  // ── Reception ────────────────────────────────────────────────────────────
+  { email: 'reception.chd@bawejahospital.com', password: 'ChangeMe@123', displayName: 'Reception CHD',   role: 'reception',   centre: 'CHD',  dept: 'reception' },
+  { email: 'reception.rpr@bawejahospital.com', password: 'ChangeMe@123', displayName: 'Reception Ropar', role: 'reception',   centre: 'RPR',  dept: 'reception' },
+
+  // ── Lab ──────────────────────────────────────────────────────────────────
+  { email: 'lab.chd@bawejahospital.com',    password: 'ChangeMe@123', displayName: 'Lab Tech CHD',        role: 'lab',         centre: 'CHD',  dept: 'lab'       },
+  { email: 'lab.rpr@bawejahospital.com',    password: 'ChangeMe@123', displayName: 'Lab Tech Ropar',      role: 'lab',         centre: 'RPR',  dept: 'lab'       },
+
+  // ── TPA ──────────────────────────────────────────────────────────────────
+  { email: 'tpa@bawejahospital.com',        password: 'ChangeMe@123', displayName: 'TPA Executive',       role: 'tpa',         centre: 'CHD',  dept: 'tpa'       },
+
+  // ── Optometrist ──────────────────────────────────────────────────────────
+  { email: 'optometrist@bawejahospital.com',password: 'ChangeMe@123', displayName: 'Optometrist',         role: 'optometrist', centre: 'CHD',  dept: 'ophtho'    },
+
+  // ── Inventory ────────────────────────────────────────────────────────────
+  { email: 'inventory@bawejahospital.com',  password: 'ChangeMe@123', displayName: 'Inventory Manager',   role: 'inventory',   centre: 'CHD',  dept: 'inventory' },
 ]
 
-for (const s of STAFF) {
-  const password = passwords[s.email] || 'ChangeMe@123'
-  const claims = { role: s.role, centre: s.centre, dept: s.dept, name: s.name }
-  try {
-    const existing = await auth.getUserByEmail(s.email).catch(() => null)
-    let user
-    if (existing) {
-      user = await auth.updateUser(existing.uid, { password, displayName: s.name, disabled: false })
-      console.log(`↻ updated  ${s.email}`)
-    } else {
-      user = await auth.createUser({ email: s.email, password, displayName: s.name, emailVerified: true })
-      console.log(`✚ created  ${s.email}`)
+async function setupUsers() {
+  console.log('\n══════════════════════════════════════════════')
+  console.log('  BMH HMS — Firebase Auth User Setup')
+  console.log('══════════════════════════════════════════════\n')
+
+  for (const staff of STAFF) {
+    const { email, password, displayName, role, centre, dept } = staff
+
+    try {
+      // Try to create the user
+      let user
+      try {
+        user = await auth.createUser({ email, password, displayName })
+        console.log(`  ✓ Created: ${email}`)
+      } catch (err) {
+        if (err.code === 'auth/email-already-exists') {
+          user = await auth.getUserByEmail(email)
+          console.log(`  ~ Exists:  ${email} (updating claims)`)
+        } else {
+          throw err
+        }
+      }
+
+      // Set custom claims (role, centre, dept for Firestore security rules)
+      await auth.setCustomUserClaims(user.uid, { role, centre, dept, name: displayName })
+
+    } catch (err) {
+      console.error(`  ✗ Failed:  ${email} — ${err.message}`)
     }
-    await auth.setCustomUserClaims(user.uid, claims)
-  } catch (e) {
-    console.error(`✗ FAILED   ${s.email}: ${e.message}`)
   }
+
+  console.log('\n══════════════════════════════════════════════')
+  console.log('  Done. All users have temporary password: ChangeMe@123')
+  console.log('  Share individual emails + temp password with each staff member.')
+  console.log('  They can reset their password from the profile settings.')
+  console.log('══════════════════════════════════════════════\n')
+
+  process.exit(0)
 }
-console.log('\nDone. Staff sign in exactly as before — the app now also gets a Firebase Auth session.')
-process.exit(0)
+
+setupUsers().catch(err => {
+  console.error('Setup failed:', err)
+  process.exit(1)
+})
