@@ -30131,8 +30131,9 @@ function getProcedureReportRows() {
   const statusFilter = document.getElementById('rep-surg-status')?.value || '';
   const sourceFilter = document.getElementById('rep-surg-source')?.value || 'advised';
   const centreFilter = document.getElementById('rep-centre')?.value || '';
+  const deptFilter = normalizeDeptKeyForQueue(document.getElementById('rep-surg-dept')?.value || '');
   const dateOk = function(v) {
-    const d = String(v || '').split('T')[0];
+    const d = auditKeyDate(v || '');
     if (!d) return true;
     if (fromVal && d < fromVal) return false;
     if (toVal && d > toVal) return false;
@@ -30144,6 +30145,8 @@ function getProcedureReportRows() {
   const pushRow = function (row, idx, pt, deptKey, visitDate) {
     const rowCentre = row.centre || pt.centre || '';
     if (centreFilter && normalizeAppointmentCentreValue(rowCentre || 'CHD') !== centreFilter) return;
+    const rowDept = normalizeDeptKeyForQueue(row.dept || deptKey || pt.dept || '');
+    if (deptFilter && rowDept !== deptFilter) return;
     const key = row.id || ('adv-' + idx + '-' + row.bmhId + '-' + row.proc);
     const normalizedProc = expandProcedureLabelForPrint(row.proc);
     if (!normalizedProc) return;
@@ -30172,7 +30175,10 @@ function getProcedureReportRows() {
       centre: rowCentre,
       referredBy: row.referredBy || pt.referredBy || '',
       advice: row.advice || pt.lastVisit?.advice || '',
-      dept: row.dept || deptKey || normalizeDeptKeyForQueue(pt.dept || '')
+      dept: rowDept,
+      eye: row.eye || '',
+      iol: row.iol || '',
+      iolPower: row.iolPower || ''
     });
   };
   PROCEDURE_ADVISED_LOG.forEach(function (row, idx) {
@@ -30220,6 +30226,7 @@ function getProcedureReportRows() {
     const normalizedProc = expandProcedureLabelForPrint(c.procedure || c.procedureMain || c.proc || '');
     const rawStatus = String(c.status || 'pending').toLowerCase();
     const otDate = getOTCaseDateKey(c) || c.date || c.otDate || c.surgeryDate || c.scheduledDate || c.createdAt || '';
+    const rowDept = c.caseKind === 'obg' ? 'obg' : normalizeDeptKeyForQueue(c.dept || c.department || 'ophtho');
     return {
       key: 'ot-' + (c.id || idx),
       patient: c.patient || pt.name || '—',
@@ -30235,11 +30242,15 @@ function getProcedureReportRows() {
       ageSex: c.ageSex || [c.age || pt.age || '—', c.sex || pt.sex || '—'].join('/'),
       centre: rowCentre,
       referredBy: c.referredBy || pt.referredBy || '',
-      advice: c.notes || c.remarks || '',
-      dept: c.dept || normalizeDeptKeyForQueue(pt.dept || '')
+      advice: '',
+      dept: rowDept,
+      eye: auditEye(c) || c.eye || c.site || '',
+      iol: auditIolName(c),
+      iolPower: c.iolPower || c.lensPower || extractIolPower(c.iol || c.iolType || '')
     };
   }).filter(function (row) {
     if (centreFilter && normalizeAppointmentCentreValue(row.centre || 'CHD') !== centreFilter) return false;
+    if (deptFilter && row.dept !== deptFilter) return false;
     if (!row.proc) return false;
     return true;
   });
@@ -30249,7 +30260,7 @@ function getProcedureReportRows() {
       ? advised.concat(otReportRows)
       : advised;
   return combinedRows.filter(function (row) {
-    if (proc && !String(row.proc || '').toLowerCase().includes(proc)) return false;
+    if (proc && ![row.proc, row.iol, row.iolPower, row.patient, row.bmhId, row.eye].join(' ').toLowerCase().includes(proc)) return false;
     if (statusFilter) {
       const status = String(row.status || '').toLowerCase();
       if (statusFilter === 'done') {
@@ -30367,14 +30378,13 @@ function buildProcedureReportHtml(rows, title) {
   const esc = function(v){ return String(v || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
   return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;padding:10mm;color:#111}table{width:100%;border-collapse:collapse}th,td{border:1px solid #d7dce5;padding:6px 7px;font-size:11px;vertical-align:top}th{background:#eef3fb;color:#1A3C6E;font-weight:900} .muted{color:#666;font-size:10px} @page{size:A4 portrait;margin:8mm}</style></head><body>'
     + '<div style="font-size:18px;font-weight:900;color:#1A3C6E;margin-bottom:10px">' + esc(title) + '</div>'
-    + (rows.length ? '<table><thead><tr><th>#</th><th>Patient</th><th>Phone</th><th>Age/Sex</th><th>BMSH ID</th><th>Procedure</th><th>Advised On</th><th>Surgery Date</th><th>Doctor</th><th>Centre</th><th>Status</th><th>Counsellor Follow-up</th></tr></thead><tbody>'
+    + (rows.length ? '<table><thead><tr><th>#</th><th>Patient</th><th>Phone</th><th>Age/Sex</th><th>BMSH ID</th><th>Department</th><th>Procedure</th><th>Eye</th><th>IOL Implanted</th><th>IOL Power</th><th>Advised On</th><th>Surgery Date</th><th>Doctor</th><th>Centre</th><th>Status</th><th>Counsellor Follow-up</th></tr></thead><tbody>'
     + rows.map(function (p, i) {
         const follow = window.PROC_COUNSELLOR_LOG[p.key] || {};
         const remark = [follow.status, follow.remark, follow.nextDate].filter(Boolean).join(' · ');
-        const advice = p.advice ? ('<div class="muted" style="margin-top:4px;line-height:1.35"><b>Advice:</b> ' + esc(p.advice) + '</div>') : '';
         const isDone = p.status === 'done' || p.status === 'completed';
         const surgDate = isDone ? esc(p.date || '—') : '—';
-        return '<tr><td>' + (i + 1) + '</td><td style="font-weight:800">' + esc(p.patient) + advice + '</td><td>' + esc(p.mobile || '—') + '</td><td>' + esc(p.ageSex || '—') + '</td><td style="font-family:monospace">' + esc(p.bmhId) + '</td><td>' + esc(p.proc) + '</td><td>' + esc(p.advisedDate || p.date || '—') + '</td><td style="font-weight:' + (isDone ? '900' : '400') + ';color:' + (isDone ? '#1a7c3a' : '#666') + '">' + surgDate + '</td><td>' + esc(p.doctor) + '</td><td>' + esc(p.centre || '—') + '</td><td>' + esc(procedureReportStatusLabel(p.status)) + '</td><td>' + (remark ? esc(remark) : '<span class="muted">No follow-up saved</span>') + '</td></tr>';
+        return '<tr><td>' + (i + 1) + '</td><td style="font-weight:800">' + esc(p.patient) + '</td><td>' + esc(p.mobile || '—') + '</td><td>' + esc(p.ageSex || '—') + '</td><td style="font-family:monospace">' + esc(p.bmhId) + '</td><td>' + esc(p.dept || '—') + '</td><td>' + esc(p.proc) + '</td><td>' + esc(p.eye || '—') + '</td><td>' + esc(p.iol || '—') + '</td><td>' + esc(p.iolPower || '—') + '</td><td>' + esc(p.advisedDate || p.date || '—') + '</td><td style="font-weight:' + (isDone ? '900' : '400') + ';color:' + (isDone ? '#1a7c3a' : '#666') + '">' + surgDate + '</td><td>' + esc(p.doctor) + '</td><td>' + esc(p.centre || '—') + '</td><td>' + esc(procedureReportStatusLabel(p.status)) + '</td><td>' + (remark ? esc(remark) : '<span class="muted">No follow-up saved</span>') + '</td></tr>';
       }).join('')
     + '</tbody></table>' : '<div style="padding:20px;text-align:center;color:#666">No procedure records found for the current filter.</div>')
     + '</body></html>';
@@ -30566,7 +30576,21 @@ function auditWorkbookXlsx(filename, sheets) {
   auditDownloadBlob(auditMakeZip(files), filename);
 }
 function auditKeyDate(v) {
-  try { return localDateKey(v || ''); } catch (e) { return String(v || '').slice(0, 10); }
+  const raw = String(v || '').trim();
+  if (!raw) return '';
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+  const dmy = raw.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})$/);
+  if (dmy) {
+    const yr = dmy[3].length === 2 ? ('20' + dmy[3]) : dmy[3];
+    return yr + '-' + String(dmy[2]).padStart(2, '0') + '-' + String(dmy[1]).padStart(2, '0');
+  }
+  const mon = raw.match(/^(\d{1,2})\s+([A-Za-z]{3,})\s+(\d{4})$/);
+  if (mon) {
+    const months = { jan:'01', january:'01', feb:'02', february:'02', mar:'03', march:'03', apr:'04', april:'04', may:'05', jun:'06', june:'06', jul:'07', july:'07', aug:'08', august:'08', sep:'09', sept:'09', september:'09', oct:'10', october:'10', nov:'11', november:'11', dec:'12', december:'12' };
+    const mm = months[String(mon[2] || '').toLowerCase()];
+    if (mm) return mon[3] + '-' + mm + '-' + String(mon[1]).padStart(2, '0');
+  }
+  try { return localDateKey(raw); } catch (e) { return raw.slice(0, 10); }
 }
 function getAuditFilters() {
   return {
@@ -30698,8 +30722,11 @@ function auditVaRaw(v, eye, kind) {
   return left ? (v.ucvaOS || v.vaOS || '') : (v.ucvaOD || v.vaOD || '');
 }
 function isAuditCataract(c) {
-  const hay = [c?.procedure, c?.procedureMain, c?.surgery, c?.dx, c?.diagnosis].join(' ');
-  return /cataract|phaco|pmics|pinhole\s*micro|flacs|msics|sics|ecce|icce/i.test(hay);
+  const hay = [c?.procedure, c?.procedureMain, c?.surgery, c?.dx, c?.diagnosis, c?.iolType, c?.iol, c?.implant].join(' ');
+  if (/cataract|phaco|pmics|pinhole\s*micro|micro\s*incision|microincision|flacs|msics|sics|ecce|icce/i.test(hay)) return true;
+  if (/gemetric/i.test(hay)) return true;
+  if (/\b(iol|pciol)\b/i.test(hay) && !/icl|phakic|intravitreal|anti.?vegf|\bivt\b|trab|glaucoma|pterygium|yag|laser|capsulotomy/i.test(hay)) return true;
+  return false;
 }
 function auditPatientCataractCases(bmhId) {
   return auditOtCases().filter(function (c) { return c.bmhId === bmhId && isAuditCataract(c); }).sort(function (a, b) {
@@ -30741,7 +30768,7 @@ function auditIolName(c) {
   return [c.iolType, c.iol, c.implant].filter(function (v) { return v && v !== '—' && v !== 'N/A'; })[0] || '';
 }
 function auditIsGemetricCase(c) {
-  return /gemetric/i.test([c.iolType, c.iol, c.implant, c.notes].join(' '));
+  return /gemetric/i.test([c.iolType, c.iol, c.implant, c.notes, c.procedure, c.procedureMain].join(' '));
 }
 function auditDateDiffDays(from, to) {
   const a = new Date(auditKeyDate(from || ''));
@@ -30992,8 +31019,23 @@ function renderAuditTab(kind) {
 }
 function renderAuditsPage() {
   const from = document.getElementById('audit-from'), to = document.getElementById('audit-to');
-  if (from && !from.value) from.value = localDateKey(new Date(new Date().getFullYear(), 0, 1));
   if (to && !to.value) to.value = todayKey();
+  const activeId = document.querySelector('#pg-audits .tab-content.active')?.id || 'audit-cataract';
+  const activeResult = document.querySelector('#' + activeId + ' > div');
+  const lastRefresh = Number(window._bmhOTCasesLastReportRefreshAt || 0);
+  if (!window._bmhRenderingAuditsAfterOTRefresh && typeof refreshOTCasesOnceForReports === 'function' && (!OT_CASES.length || Date.now() - lastRefresh > 5000)) {
+    window._bmhRenderingAuditsAfterOTRefresh = true;
+    if (activeResult) activeResult.innerHTML = '<div class="card"><div style="padding:18px;color:var(--g1);font-size:12px">Loading OT list from database...</div></div>';
+    refreshOTCasesOnceForReports().then(function () {
+      window._bmhRenderingAuditsAfterOTRefresh = false;
+      renderAuditsPage();
+    }).catch(function () {
+      window._bmhRenderingAuditsAfterOTRefresh = false;
+      renderAuditTab(activeId.replace('audit-', ''));
+    });
+    return;
+  }
+  window._bmhRenderingAuditsAfterOTRefresh = false;
   renderAuditTab((document.querySelector('#pg-audits .tab-content.active')?.id || 'audit-cataract').replace('audit-', ''));
 }
 function printAuditCurrent() {
@@ -31142,8 +31184,8 @@ function generateSurgeryReport() {
   const esc = function(v){ return String(v || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
   el.innerHTML=`<div class="card">
     <div class="card-hd"><div><div class="card-title">⚕️ ${proc||'All Procedures'} — ${filtered.length} patients</div></div><button class="btn btn-gold btn-xs" onclick="printSurgeryReportCurrent()">🖨️ Print</button></div>
-    ${filtered.length?`<table><thead><tr><th>#</th><th>Patient</th><th>Phone</th><th>Age/Sex</th><th>BMSH ID</th><th>Procedure Advised</th><th>OT — Done As</th><th>Advised On</th><th>Surgery Date</th><th>Doctor</th><th>Centre</th><th>Status</th><th>Counsellor</th></tr></thead>
-    <tbody>${filtered.map((p,i)=>{ const follow=window.PROC_COUNSELLOR_LOG[p.key]||{}; const statusLabel=procedureReportStatusLabel(p.status); const badgeClass=procedureReportStatusBadge(p.status); const isDone = p.status==='done'||p.status==='completed'; const otDoneCell = p.otProcedure ? `<div style="font-size:11px;font-weight:800;color:var(--green)">${String(p.source||'')==='ot'?'OT:':'✅'} ${esc(p.otProcedure)}</div>` : (p.status==='scheduled'||p.status==='in-progress'?`<span style="font-size:10px;color:var(--blue)">${p.status==='in-progress'?'In Progress':'Scheduled'}</span>`:'<span style="font-size:10px;color:var(--g1)">—</span>'); const surgDateCell = isDone ? `<span style="font-weight:800;color:var(--green)">${esc(p.date||'—')}</span>` : (p.status==='scheduled'||p.status==='in-progress' ? `<span style="color:var(--blue);font-size:11px">${esc(p.date||'—')}</span>` : '<span style="color:var(--g1);font-size:11px">—</span>'); return `<tr><td>${i+1}</td><td style="font-weight:800">${esc(p.patient)}${p.referredBy?`<div style="font-size:10px;color:var(--g1);margin-top:2px">Ref: ${esc(p.referredBy)}</div>`:''}${p.advice?`<div style="font-size:10px;color:var(--g1);margin-top:4px;line-height:1.35"><b>Advice:</b> ${esc(p.advice)}</div>`:''}</td><td>${esc(p.mobile||'—')}</td><td>${esc(p.ageSex||'—')}</td><td style="font-family:var(--mono);font-size:10px">${esc(p.bmhId)}</td><td>${esc(p.proc)}</td><td>${otDoneCell}</td><td style="font-size:11px">${esc(p.advisedDate||p.date||'—')}</td><td>${surgDateCell}</td><td>${esc(p.doctor)}</td><td>${esc(p.centre||'—')}</td><td><span class="badge ${badgeClass}">${esc(statusLabel)}</span></td><td><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="btn btn-xs btn-outline" onclick="openCounsellorFollowup('${p.key}')">📞 Follow-up</button>${follow.status?`<span style="font-size:10px;color:var(--g1)">${esc(follow.status)}${follow.nextDate?` · ${esc(follow.nextDate)}`:''}</span>`:''}</div></td></tr>`; }).join('')}
+    ${filtered.length?`<table><thead><tr><th>#</th><th>Patient</th><th>Phone</th><th>Age/Sex</th><th>BMSH ID</th><th>Department</th><th>Procedure</th><th>Eye</th><th>IOL Implanted</th><th>IOL Power</th><th>Surgery Date</th><th>Doctor</th><th>Centre</th><th>Status</th><th>Counsellor</th></tr></thead>
+    <tbody>${filtered.map((p,i)=>{ const follow=window.PROC_COUNSELLOR_LOG[p.key]||{}; const statusLabel=procedureReportStatusLabel(p.status); const badgeClass=procedureReportStatusBadge(p.status); const isDone = p.status==='done'||p.status==='completed'; const surgDateCell = isDone || p.source === 'ot' || p.status==='scheduled'||p.status==='in-progress' ? `<span style="font-weight:${isDone?'800':'600'};color:${isDone?'var(--green)':'var(--blue)'}">${esc(p.date||'—')}</span>` : '<span style="color:var(--g1);font-size:11px">—</span>'; return `<tr><td>${i+1}</td><td style="font-weight:800">${esc(p.patient)}${p.referredBy?`<div style="font-size:10px;color:var(--g1);margin-top:2px">Ref: ${esc(p.referredBy)}</div>`:''}</td><td>${esc(p.mobile||'—')}</td><td>${esc(p.ageSex||'—')}</td><td style="font-family:var(--mono);font-size:10px">${esc(p.bmhId)}</td><td>${esc(p.dept||'—')}</td><td>${esc(p.proc)}</td><td>${esc(p.eye||'—')}</td><td>${esc(p.iol||'—')}</td><td>${esc(p.iolPower||'—')}</td><td>${surgDateCell}</td><td>${esc(p.doctor)}</td><td>${esc(p.centre||'—')}</td><td><span class="badge ${badgeClass}">${esc(statusLabel)}</span></td><td><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="btn btn-xs btn-outline" onclick="openCounsellorFollowup('${p.key}')">📞 Follow-up</button>${follow.status?`<span style="font-size:10px;color:var(--g1)">${esc(follow.status)}${follow.nextDate?` · ${esc(follow.nextDate)}`:''}</span>`:''}</div></td></tr>`; }).join('')}
     </tbody></table>`:'<div style="padding:20px;text-align:center;color:var(--g1)">No records found</div>'}
   </div>`;
 }
