@@ -4850,8 +4850,8 @@ function populateOphthoForm(v) {
   renderOphthoRecap && renderOphthoRecap();
 
   // Advice text
-  setV('rx-advice-text', [v.advice || '', v.extraAdvice || ''].filter(Boolean).join('\n'));
-  setV('rx-extra-advice-text', '');
+  setV('rx-advice-text', v.advice || '');
+  setV('rx-extra-advice-text', v.extraAdvice || '');
   restoreProcedureDoneState('ophtho', v.procDone || null);
   refreshPreviousDiagnosisPanel('ophtho', v);
   renderDeptSmartSuggestions && renderDeptSmartSuggestions('ophtho');
@@ -36939,7 +36939,7 @@ window.printUnifiedRx = function(deptId) {
   let fuDate = getDeptFollowUpDateInput(deptId)?.value || '';
   const fuFormatted = fuDate ? formatDateIN(fuDate) : '';
   const advice  = (deptId === 'oe'
-    ? [document.getElementById('rx-advice-text')?.value || ''].filter(Boolean).join('\n')
+    ? [document.getElementById('rx-advice-text')?.value || '', document.getElementById('rx-extra-advice-text')?.value || ''].filter(Boolean).join('\n')
     : [document.getElementById(deptId+'-advice')?.value || '', document.getElementById(deptId+'-extra-advice')?.value || ''].filter(Boolean).join('\n')) || '';
   const procDoneState = saveDept ? getProcedureDoneStateForDept(saveDept) : null;
   const procDonePrintLine = getProcedureDoneDisplayLabel(procDoneState);
@@ -36955,8 +36955,8 @@ window.printUnifiedRx = function(deptId) {
     const printedSnapshot = {
       dept: saveDept,
       rx: JSON.parse(JSON.stringify(drugs)),
-      advice: deptId === 'oe' ? advice : '',
-      extraAdvice: '',
+      advice: deptId === 'oe' ? document.getElementById('rx-advice-text')?.value || '' : '',
+      extraAdvice: deptId === 'oe' ? document.getElementById('rx-extra-advice-text')?.value || '' : '',
       obgAdvice: deptId === 'obg' ? document.getElementById('obg-advice')?.value || '' : '',
       obgExtraAdvice: deptId === 'obg' ? document.getElementById('obg-extra-advice')?.value || '' : '',
       psychAdvice: deptId === 'psych' ? document.getElementById('psych-advice')?.value || '' : '',
@@ -46563,7 +46563,7 @@ function saveVisit(dept, opts) {
       };
     });
     visit.advice = document.getElementById('rx-advice-text')?.value || '';
-    visit.extraAdvice = '';
+    visit.extraAdvice = document.getElementById('rx-extra-advice-text')?.value || '';
     visit.rxFuDate = getDeptFollowUpDateInput('oe')?.value || '';
     visit.followupDate = visit.rxFuDate || '';
     visit.procDone = getProcedureDoneStateForDept('ophtho');
