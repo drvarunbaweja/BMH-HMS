@@ -1175,7 +1175,10 @@
         </div>
         <div style="display:grid;grid-template-columns:minmax(0,2fr) minmax(220px,.9fr);gap:10px;margin-bottom:14px;align-items:stretch">
           <div style="background:#fff;border:1px solid var(--g4);border-radius:var(--rsm);padding:10px">
-            <div style="font-size:10px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Keratometry</div>
+            <div style="font-size:10px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:8px">
+              <span>Keratometry</span>
+              <button type="button" class="btn btn-xs btn-outline" onclick="openPreopKeratometryPopup()">Pre-op K</button>
+            </div>
             <div style="display:grid;grid-template-columns:58px repeat(3,minmax(0,1fr));gap:6px;align-items:center">
               <div></div>
               <div style="font-size:9px;color:var(--g1);font-weight:800;text-align:center">K1</div>
@@ -4932,13 +4935,14 @@
     <button class="btn btn-sm btn-outline" type="button" onclick="exportGemetricClinicalDataXlsx()">Export Gemetric .xlsx</button>
   </div>
   <div class="ptabs">
-    <div class="ptab active" onclick="ptab(this,'audit-cataract');renderAuditTab('cataract')">Cataract RANZCO</div>
+    <div class="ptab" onclick="ptab(this,'audit-cataract');renderAuditTab('cataract')">Cataract RANZCO</div>
     <div class="ptab" onclick="ptab(this,'audit-lens');renderAuditTab('lens')">IOL / Lens</div>
     <div class="ptab" onclick="ptab(this,'audit-surgery');renderAuditTab('surgery')">Other Surgery</div>
     <div class="ptab" onclick="ptab(this,'audit-opd');renderAuditTab('opd')">OPD Timings</div>
     <div class="ptab" onclick="ptab(this,'audit-nabh');renderAuditTab('nabh')">NABH Indicators</div>
   </div>
-  <div class="tab-content active" id="audit-cataract"><div id="audit-cataract-result"></div></div>
+  <div class="tab-content active" id="audit-home"><div class="card"><div style="padding:18px;color:var(--g1);font-size:12px">Select an audit tab to load the report. RANZCO cataract audit is generated only when its tab is opened.</div></div></div>
+  <div class="tab-content" id="audit-cataract"><div id="audit-cataract-result"></div></div>
   <div class="tab-content" id="audit-lens"><div id="audit-lens-result"></div></div>
   <div class="tab-content" id="audit-surgery"><div id="audit-surgery-result"></div></div>
   <div class="tab-content" id="audit-opd"><div id="audit-opd-result"></div></div>

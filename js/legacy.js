@@ -4753,6 +4753,7 @@ function populateOphthoForm(v) {
 	  setV('kerat-os-k1', v.keratOsK1 || v.keratometry?.os?.k1 || v.k1OS || '');
 	  setV('kerat-os-k2', v.keratOsK2 || v.keratometry?.os?.k2 || v.k2OS || '');
 	  setV('kerat-os-axis', v.keratOsAxis || v.keratometry?.os?.axis || v.kAxisOS || '');
+  window._bmhPreopKeratometryDraft = v.preopKeratometry || window.CURRENT_PATIENT?.preopKeratometry || null;
 	  setSel('ucva-od-dist', v.vaOD);    setSel('ucva-os-dist', v.vaOS);
   setSel('ucva-od-near', v.vaODNear); setSel('ucva-os-near', v.vaOSNear);
   setV('cv-od-plates', v.cvODPlates || '');
@@ -6674,14 +6675,9 @@ function openM(id){
   const m=document.getElementById(id);
   if(m)m.classList.add('open');
   if(id==='m-ipd-note') {
-    if (m) m.style.zIndex = '1200';
     refreshIPDNurseSelects && refreshIPDNurseSelects();
-    renderProgressNoteMedicineRows && renderProgressNoteMedicineRows();
     const d = document.getElementById('pn-date'); if (d && !d.value) d.value = todayKey();
     const t = document.getElementById('pn-time'); if (t && !t.value) t.value = new Date().toTimeString().slice(0,5);
-    const nurseSel = document.getElementById('pn-nurse');
-    if (nurseSel && window._ipdAuthenticatedNurse) nurseSel.value = window._ipdAuthenticatedNurse;
-    setIPDNursingEntryEnabled && setIPDNursingEntryEnabled(!!isIPDNurseAuthenticated(nurseSel?.value || ''));
   }
   if(id==='m-print-tpl')loadTplDocs();
   if(id==='m-consents')renderConsentModal();
@@ -29946,6 +29942,72 @@ function syncBiometryFromEyeExam() {
   syncBiometryKToKeratometry('od');
   syncBiometryKToKeratometry('os');
 }
+function getCurrentOphthoPatientForPreopK() {
+  const id = String(document.getElementById('ophtho-pt-uid')?.textContent || window.CURRENT_PATIENT?.bmhId || '').trim();
+  if (!id || id === '—') return null;
+  return (PATIENTS || []).find(function (p) { return p.bmhId === id; }) || window.CURRENT_PATIENT || null;
+}
+function normalizePreopKeratometryPayload(raw) {
+  const src = raw || {};
+  return {
+    od: {
+      k1: String(src.od?.k1 || src.OD?.k1 || '').trim(),
+      k2: String(src.od?.k2 || src.OD?.k2 || '').trim(),
+      axis: String(src.od?.axis || src.OD?.axis || '').trim()
+    },
+    os: {
+      k1: String(src.os?.k1 || src.OS?.k1 || '').trim(),
+      k2: String(src.os?.k2 || src.OS?.k2 || '').trim(),
+      axis: String(src.os?.axis || src.OS?.axis || '').trim()
+    },
+    source: String(src.source || 'manual').trim() || 'manual',
+    updatedAt: src.updatedAt || ''
+  };
+}
+function getActivePreopKeratometryPayload() {
+  const pt = getCurrentOphthoPatientForPreopK();
+  return normalizePreopKeratometryPayload(window._bmhPreopKeratometryDraft || pt?.preopKeratometry || pt?.lastVisit?.preopKeratometry || {});
+}
+function openPreopKeratometryPopup() {
+  const pt = getCurrentOphthoPatientForPreopK();
+  if (!pt) { showToast('Open an ophthalmology patient first', 'w'); return; }
+  const payload = getActivePreopKeratometryPayload();
+  let modal = document.getElementById('m-preop-keratometry');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'm-preop-keratometry';
+    modal.className = 'modal-ov';
+    document.body.appendChild(modal);
+  }
+  const field = function (id, val, ph) {
+    return '<input id="' + id + '" type="number" step="0.01" value="' + escapeHtmlConsent(val || '') + '" placeholder="' + escapeHtmlConsent(ph || '') + '" style="text-align:center;font-size:12px;font-weight:800;padding:6px 4px;border:1px solid var(--g4);border-radius:7px">';
+  };
+  modal.innerHTML = '<div class="modal" style="max-width:520px"><div class="modal-hd"><div class="modal-title">Pre-operative Keratometry</div><button class="modal-close" onclick="closeM(\'m-preop-keratometry\')">✕</button></div>'
+    + '<div style="font-size:11px;color:var(--g1);margin-bottom:10px">For post-operative patients whose old K values were not recorded in this software. These values are used only for audits and do not overwrite today’s keratometry.</div>'
+    + '<div style="display:grid;grid-template-columns:58px repeat(3,minmax(0,1fr));gap:7px;align-items:center">'
+    + '<div></div><div style="font-size:9px;color:var(--g1);font-weight:800;text-align:center">K1</div><div style="font-size:9px;color:var(--g1);font-weight:800;text-align:center">K2</div><div style="font-size:9px;color:var(--g1);font-weight:800;text-align:center">Axis</div>'
+    + '<div style="font-size:10px;font-weight:900;color:var(--blue)">RE / OD</div>' + field('preop-k-od-k1', payload.od.k1, 'D') + field('preop-k-od-k2', payload.od.k2, 'D') + field('preop-k-od-axis', payload.od.axis, '°')
+    + '<div style="font-size:10px;font-weight:900;color:#1a8c3c">LE / OS</div>' + field('preop-k-os-k1', payload.os.k1, 'D') + field('preop-k-os-k2', payload.os.k2, 'D') + field('preop-k-os-axis', payload.os.axis, '°')
+    + '</div><div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px"><button class="btn btn-outline" onclick="closeM(\'m-preop-keratometry\')">Cancel</button><button class="btn btn-gold" onclick="savePreopKeratometryPopup()">Save Pre-op K</button></div></div>';
+  modal.classList.add('open');
+}
+function savePreopKeratometryPopup() {
+  const pt = getCurrentOphthoPatientForPreopK();
+  if (!pt?.bmhId) { showToast('Patient not found', 'w'); return; }
+  const val = function (id) { return String(document.getElementById(id)?.value || '').trim(); };
+  const payload = normalizePreopKeratometryPayload({
+    od: { k1: val('preop-k-od-k1'), k2: val('preop-k-od-k2'), axis: val('preop-k-od-axis') },
+    os: { k1: val('preop-k-os-k1'), k2: val('preop-k-os-k2'), axis: val('preop-k-os-axis') },
+    source: 'manual',
+    updatedAt: new Date().toISOString()
+  });
+  window._bmhPreopKeratometryDraft = payload;
+  pt.preopKeratometry = payload;
+  if (window.CURRENT_PATIENT && window.CURRENT_PATIENT.bmhId === pt.bmhId) window.CURRENT_PATIENT.preopKeratometry = payload;
+  fbUpdate && fbUpdate('patients/' + pt.bmhId, { preopKeratometry: sanitizeFirebaseValue(payload), updatedAt: payload.updatedAt }).catch(function () {});
+  closeM('m-preop-keratometry');
+  showToast('Pre-op K values saved for audit ✓', 's');
+}
 function getBiometryPayload() {
   const read = function (id) { return String(document.getElementById(id)?.value || '').trim(); };
   return {
@@ -31037,6 +31099,29 @@ function auditVisitAfter(pt, dept, afterDate) {
   });
   return rows[0] || {};
 }
+function auditVisitAfterWindow(pt, dept, afterDate, minDays, maxDays) {
+  const after = auditKeyDate(afterDate || '');
+  if (!after) return auditVisitAfter(pt, dept, afterDate);
+  const afterTime = Date.parse(after + 'T12:00:00');
+  const rows = auditVisits(pt, dept).filter(function (v) {
+    const d = auditKeyDate(v.date || v.createdAt || v.updatedAt || '');
+    if (!d || d <= after) return false;
+    return true;
+  }).map(function (v) {
+    const d = auditKeyDate(v.date || v.createdAt || v.updatedAt || '');
+    const days = Number.isFinite(afterTime) && d ? Math.round((Date.parse(d + 'T12:00:00') - afterTime) / 86400000) : null;
+    return { visit: v, days: days };
+  });
+  const inWindow = rows.filter(function (row) {
+    return Number.isFinite(row.days) && row.days >= minDays && row.days <= maxDays;
+  }).sort(function (a, b) { return a.days - b.days; });
+  if (inWindow.length) return inWindow[0].visit;
+  return rows.sort(function (a, b) {
+    const ad = Number.isFinite(a.days) ? a.days : 999999;
+    const bd = Number.isFinite(b.days) ? b.days : 999999;
+    return ad - bd;
+  })[0]?.visit || {};
+}
 function auditOtCases() {
   const filters = getAuditFilters();
   return (window.OT_CASES || OT_CASES || []).map(normalizeOTCaseRecord).filter(function (c) {
@@ -31089,6 +31174,32 @@ function auditK(v, eye) {
   const k2 = left ? (v.keratOsK2 || v.keratometry?.os?.k2) : (v.keratOdK2 || v.keratometry?.od?.k2);
   const ax = left ? (v.keratOsAxis || v.keratometry?.os?.axis) : (v.keratOdAxis || v.keratometry?.od?.axis);
   return [k1, k2, ax ? ('axis ' + ax) : ''].filter(Boolean).join(' / ');
+}
+function auditManualPreopK(pt, eye) {
+  const side = eye === 'Left' ? 'os' : 'od';
+  const candidates = [];
+  if (pt?.preopKeratometry) candidates.push(pt.preopKeratometry);
+  auditVisits(pt, 'ophtho').forEach(function (v) {
+    if (v?.preopKeratometry) candidates.push(v.preopKeratometry);
+  });
+  for (let i = 0; i < candidates.length; i += 1) {
+    const payload = normalizePreopKeratometryPayload(candidates[i]);
+    const row = payload[side] || {};
+    if (row.k1 || row.k2 || row.axis) return [row.k1, row.k2, row.axis ? ('axis ' + row.axis) : ''].filter(Boolean).join(' / ');
+  }
+  return '';
+}
+function auditManualPreopKPart(pt, eye, key) {
+  const side = eye === 'Left' ? 'os' : 'od';
+  const candidates = [];
+  if (pt?.preopKeratometry) candidates.push(pt.preopKeratometry);
+  auditVisits(pt, 'ophtho').forEach(function (v) { if (v?.preopKeratometry) candidates.push(v.preopKeratometry); });
+  for (let i = 0; i < candidates.length; i += 1) {
+    const payload = normalizePreopKeratometryPayload(candidates[i]);
+    const val = payload[side]?.[key] || '';
+    if (val) return val;
+  }
+  return '';
 }
 function auditVaBucket(value) {
   const raw = String(value || '').trim();
@@ -31171,8 +31282,9 @@ function getCataractAuditRows() {
     const eye = auditEye(c);
     const opDate = getOTCaseDateKey(c) || c.date || c.otDate || c.surgeryDate || '';
     const pre = auditVisitBefore(pt, 'ophtho', opDate) || {};
-    const post = auditVisitAfter(pt, 'ophtho', opDate) || {};
+    const post = auditVisitAfterWindow(pt, 'ophtho', opDate, 14, 28) || {};
     const left = eye === 'Left';
+    const preK = auditK(pre, eye) || auditManualPreopK(pt, eye);
     const key = (c.bmhId || '') + '::' + eye;
     seen[key] = (seen[key] || 0) + 1;
     return {
@@ -31184,12 +31296,12 @@ function getCataractAuditRows() {
       'Patient initials': auditInitials(c.patient || pt.name || ''),
       'Type of cataract surgery': c.procedure || c.procedureMain || 'Phaco temporal corneal incision',
       'Preoperative unaided VA': auditVaBucket(left ? (pre.ucvaOS || pre.vaOS) : (pre.ucvaOD || pre.vaOD)),
-      'Preoperative best-corrected VA': auditVaBucket(left ? (pre.bcvaOS || pre.subjOSva) : (pre.bcvaOD || pre.subjODva)),
+      'Preoperative best-corrected VA': auditVaBucket(auditVaRaw(pre, eye, 'bcva')),
       'Preoperative sphere cylinder and axis': auditRef(pre, eye),
       'Preoperative spherical equivalent': pre.sphericalEquivalent || pre.preopSphericalEquivalent || auditSphericalEquivalent(pre, eye),
       'Axial length': c.axialLength || c.biometry?.axialLength || pre.axialLength || pre.biometryAxialLength || '',
       'Axial length difference between the two eyes': c.axialLengthDiff || pre.axialLengthDiff || '',
-      'Preoperative keratometry and axes': auditK(pre, eye),
+      'Preoperative keratometry and axes': preK,
       'Intraoperative complications': c.complications || c.intraopComplications || c.operativeComplications || 'None',
       'Pre-existing eye conditions': pre.preExistingEyeConditions || pre.dx || pre.diagnosisText || 'None',
       'Type of IOL': auditIolName(c),
@@ -31197,7 +31309,7 @@ function getCataractAuditRows() {
       'Whether sutures were used': c.sutures || c.sutureStatus || 'Sutureless',
       'Type of anaesthetic': c.anaes || c.anaesthesia || '',
       'Postoperative unaided VA': auditVaBucket(left ? (post.postOpUcvaOS || post.ucvaOS || '') : (post.postOpUcvaOD || post.ucvaOD || '')),
-      'Postoperative best-corrected VA': auditVaBucket(left ? (post.postOpBcvaOS || post.bcvaOS || '') : (post.postOpBcvaOD || post.bcvaOD || '')),
+      'Postoperative best-corrected VA': auditVaBucket(auditVaRaw(post, eye, 'bcva')),
       'Postoperative sphere cylinder and axis': auditRef(post, eye),
       'Postoperative spherical equivalent': post.postOpSphericalEquivalent || post.sphericalEquivalent || auditSphericalEquivalent(post, eye),
       'Postoperative complications': post.postOpComplications || c.postOpComplications || '',
@@ -31217,6 +31329,11 @@ function getEditableAuditRows(containerId, columns, fallbackRows) {
   });
 }
 function exportCataractRanzcoXlsx() {
+  const activeId = document.querySelector('#pg-audits .tab-content.active')?.id || '';
+  if (activeId !== 'audit-cataract') {
+    showToast('Open the Cataract RANZCO audit tab before exporting', 'w');
+    return;
+  }
   const computed = getCataractAuditRows();
   const rows = getEditableAuditRows('audit-cataract-result', RANZCO_CATARACT_AUDIT_COLUMNS, computed);
   if (!rows.length) { showToast('No cataract OT cases found for this audit period', 'w'); return; }
@@ -31239,7 +31356,7 @@ function buildGemetricClinicalDataRows() {
     const eyeAbbr = auditEyeAbbr(eye);
     const opDate = getOTCaseDateKey(c) || c.date || c.otDate || c.surgeryDate || '';
     const pre = auditVisitBefore(pt, 'ophtho', opDate) || {};
-    const post = auditVisitAfter(pt, 'ophtho', opDate) || {};
+    const post = auditVisitAfterWindow(pt, 'ophtho', opDate, 14, 28) || {};
     const preRef = auditRefParts(pre, eye);
     const postRef = auditRefParts(post, eye);
     const left = eye === 'Left';
@@ -31265,9 +31382,9 @@ function buildGemetricClinicalDataRows() {
       preRef.sph || '',
       preRef.cyl || '',
       preRef.ax || '',
-      k1 || bioEye.k1 || '',
-      kAxis || bioEye.axis || '',
-      k2 || bioEye.k2 || '',
+      k1 || bioEye.k1 || auditManualPreopKPart(pt, eye, 'k1') || '',
+      kAxis || bioEye.axis || auditManualPreopKPart(pt, eye, 'axis') || '',
+      k2 || bioEye.k2 || auditManualPreopKPart(pt, eye, 'k2') || '',
       '',
       bio.formula || c.iolFormula || '',
       pre.preExistingEyeConditions || pre.dx || pre.diagnosisText || '',
@@ -31406,7 +31523,8 @@ function renderAuditTab(kind) {
 function renderAuditsPage() {
   const from = document.getElementById('audit-from'), to = document.getElementById('audit-to');
   if (to && !to.value) to.value = todayKey();
-  const activeId = document.querySelector('#pg-audits .tab-content.active')?.id || 'audit-cataract';
+  const activeId = document.querySelector('#pg-audits .tab-content.active')?.id || 'audit-home';
+  if (activeId === 'audit-home') return;
   const activeResult = document.querySelector('#' + activeId + ' > div');
   const lastRefresh = Number(window._bmhOTCasesLastReportRefreshAt || 0);
   if (!window._bmhRenderingAuditsAfterOTRefresh && typeof refreshOTCasesOnceForReports === 'function' && (!OT_CASES.length || Date.now() - lastRefresh > 5000)) {
@@ -31422,7 +31540,8 @@ function renderAuditsPage() {
     return;
   }
   window._bmhRenderingAuditsAfterOTRefresh = false;
-  renderAuditTab((document.querySelector('#pg-audits .tab-content.active')?.id || 'audit-cataract').replace('audit-', ''));
+  const currentId = document.querySelector('#pg-audits .tab-content.active')?.id || 'audit-home';
+  if (currentId !== 'audit-home') renderAuditTab(currentId.replace('audit-', ''));
 }
 function printAuditCurrent() {
   const active = document.querySelector('#pg-audits .tab-content.active');
@@ -46672,6 +46791,8 @@ function saveVisit(dept, opts) {
 	      od: { k1: visit.keratOdK1, k2: visit.keratOdK2, axis: visit.keratOdAxis },
 	      os: { k1: visit.keratOsK1, k2: visit.keratOsK2, axis: visit.keratOsAxis }
 	    };
+    const preopK = getActivePreopKeratometryPayload();
+    if (preopK.od.k1 || preopK.od.k2 || preopK.od.axis || preopK.os.k1 || preopK.os.k2 || preopK.os.axis) visit.preopKeratometry = preopK;
 	    visit.vaOD   = document.getElementById('ucva-od-dist')?.value || '';
     visit.vaOS   = document.getElementById('ucva-os-dist')?.value || '';
     visit.vaODNear = document.getElementById('ucva-od-near')?.value || '';
@@ -47001,6 +47122,7 @@ function saveVisit(dept, opts) {
   const lastVisitByDept = Object.assign({}, localPt?.lastVisitByDept || {});
   lastVisitByDept[dept] = visit;
   const patientPatch = { lastVisit: visit, lastVisitKey: visitKey, lastVisitDate: visit.date, lastDeptVisit: dept, lastVisitByDept: lastVisitByDept };
+  if (dept === 'ophtho' && visit.preopKeratometry) patientPatch.preopKeratometry = visit.preopKeratometry;
   if (visit.dx) patientPatch.dx = visit.dx;
   const prevDxMap = Object.assign({}, localPt?.prevDxByDept || {});
   const existingPrev = prevDxMap[dept] || {};
@@ -47034,6 +47156,7 @@ function saveVisit(dept, opts) {
     localPt.lastDeptVisit = dept;
     localPt.lastVisitByDept = lastVisitByDept;
     if (visit.dx) localPt.dx = visit.dx;
+    if (dept === 'ophtho' && visit.preopKeratometry) localPt.preopKeratometry = visit.preopKeratometry;
     localPt.prevDxByDept = prevDxMap;
     cachedVisits[visitKey] = JSON.parse(JSON.stringify(visit));
     cachePatientVisits(bmhId, cachedVisits);
