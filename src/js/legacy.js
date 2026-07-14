@@ -4062,7 +4062,7 @@ function summarizeOphthoCprHistory(visit) {
 // ═══════════════════════════════════════
 // INTERACTIONS
 // ═══════════════════════════════════════
-function openPatient(bmhId, opts) {
+function _openPatientCore(bmhId, opts) {
   opts = opts || {};
   const p = PATIENTS.find(x => x.bmhId === bmhId);
   if(!p) return;
@@ -6606,9 +6606,14 @@ function openM(id){
   const m=document.getElementById(id);
   if(m)m.classList.add('open');
   if(id==='m-ipd-note') {
+    if (m) m.style.zIndex = '1200';
     refreshIPDNurseSelects && refreshIPDNurseSelects();
+    renderProgressNoteMedicineRows && renderProgressNoteMedicineRows();
     const d = document.getElementById('pn-date'); if (d && !d.value) d.value = todayKey();
     const t = document.getElementById('pn-time'); if (t && !t.value) t.value = new Date().toTimeString().slice(0,5);
+    const nurseSel = document.getElementById('pn-nurse');
+    if (nurseSel && window._ipdAuthenticatedNurse) nurseSel.value = window._ipdAuthenticatedNurse;
+    setIPDNursingEntryEnabled && setIPDNursingEntryEnabled(!!isIPDNurseAuthenticated(nurseSel?.value || ''));
   }
   if(id==='m-print-tpl')loadTplDocs();
   if(id==='m-consents')renderConsentModal();
@@ -8297,7 +8302,7 @@ function saveIPDNurseNames(names) {
 }
 function nurseOptionsHtml(selected) {
   const sel = String(selected || '').trim();
-  return getIPDNurseNames().map(function (name) {
+  return '<option value="">Select nursing staff</option>' + getIPDNurseNames().map(function (name) {
     return '<option value="' + escapeHtmlConsent(name) + '"' + (name === sel ? ' selected' : '') + '>' + escapeHtmlConsent(name) + '</option>';
   }).join('');
 }
@@ -8319,6 +8324,7 @@ function addIPDNurseName() {
   if (!names.includes(clean)) names.push(clean);
   saveIPDNurseNames(names);
   refreshIPDNurseSelects(clean);
+  populateIPDNursePinResetSelect && populateIPDNursePinResetSelect();
   showToast('Nurse name added ✓', 's');
 }
 function deleteSelectedIPDNurseName() {
@@ -8329,7 +8335,95 @@ function deleteSelectedIPDNurseName() {
   const names = getIPDNurseNames().filter(function (n) { return n !== name; });
   saveIPDNurseNames(names);
   refreshIPDNurseSelects(names[0] || '');
+  populateIPDNursePinResetSelect && populateIPDNursePinResetSelect();
   showToast('Nurse name removed ✓', 's');
+}
+function ipdNursePinKey(name) {
+  return 'bmh_ipd_nurse_pin_' + String(name || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_');
+}
+function isIPDNurseAuthenticated(name) {
+  const clean = String(name || '').trim();
+  return !!clean && window._ipdAuthenticatedNurse === clean;
+}
+function setIPDNursingEntryEnabled(enabled) {
+  ['m-ipd-monitor','m-ipd-note'].forEach(function (modalId) {
+    const modal = document.getElementById(modalId);
+    if (!modal) return;
+    modal.querySelectorAll('input,textarea,select,button').forEach(function (el) {
+      const click = el.getAttribute('onclick') || '';
+      if (el.id === 'ipdm-nurse-select' || el.id === 'pn-nurse' || /addIPDNurseName|deleteSelectedIPDNurseName|closeM/.test(click)) return;
+      if (el.closest('.modal-hd')) return;
+      el.disabled = !enabled;
+      el.style.opacity = enabled ? '' : '0.58';
+    });
+  });
+}
+function validateIPDNursePin(name) {
+  const clean = String(name || '').trim();
+  if (!clean) {
+    window._ipdAuthenticatedNurse = '';
+    setIPDNursingEntryEnabled(false);
+    return false;
+  }
+  const key = ipdNursePinKey(clean);
+  let saved = '';
+  try { saved = localStorage.getItem(key) || ''; } catch (e) {}
+  if (!saved) {
+    const pin1 = prompt('Create 4 digit PIN for ' + clean);
+    if (pin1 == null) return false;
+    if (!/^\d{4}$/.test(String(pin1 || ''))) { showToast('PIN must be exactly 4 digits', 'w'); return false; }
+    const pin2 = prompt('Re-enter PIN for ' + clean);
+    if (String(pin1) !== String(pin2)) { showToast('PIN did not match', 'w'); return false; }
+    try { localStorage.setItem(key, String(pin1)); } catch (e) {}
+    window._ipdAuthenticatedNurse = clean;
+    setIPDNursingEntryEnabled(true);
+    showToast('PIN created for ' + clean + ' ✓', 's');
+    return true;
+  }
+  const entered = prompt('Enter 4 digit PIN for ' + clean);
+  if (String(entered || '') !== String(saved)) {
+    window._ipdAuthenticatedNurse = '';
+    setIPDNursingEntryEnabled(false);
+    showToast('Incorrect PIN', 'w');
+    return false;
+  }
+  window._ipdAuthenticatedNurse = clean;
+  setIPDNursingEntryEnabled(true);
+  showToast('Nursing staff verified ✓', 's');
+  return true;
+}
+function onIPDNurseSelected(el) {
+  const name = String(el?.value || '').trim();
+  if (!validateIPDNursePin(name) && el) el.value = '';
+  const otherId = el?.id === 'pn-nurse' ? 'ipdm-nurse-select' : 'pn-nurse';
+  const other = document.getElementById(otherId);
+  if (other && name && window._ipdAuthenticatedNurse === name) other.value = name;
+}
+function requireIPDNurseAuth(selectId) {
+  const sel = document.getElementById(selectId) || document.getElementById('ipdm-nurse-select') || document.getElementById('pn-nurse');
+  const name = String(sel?.value || '').trim();
+  if (!name) { showToast('Select nursing staff first', 'w'); return ''; }
+  if (!isIPDNurseAuthenticated(name) && !validateIPDNursePin(name)) return '';
+  return name;
+}
+function populateIPDNursePinResetSelect() {
+  const el = document.getElementById('admin-nurse-pin-select');
+  if (!el) return;
+  const current = el.value || '';
+  el.innerHTML = '<option value="">Select nursing staff</option>' + getIPDNurseNames().map(function (name) {
+    return '<option value="' + escapeHtmlConsent(name) + '"' + (name === current ? ' selected' : '') + '>' + escapeHtmlConsent(name) + '</option>';
+  }).join('');
+}
+function resetIPDNursePin() {
+  if (!CURRENT_USER?.isAdmin) { showToast('Admin access required', 'w'); return; }
+  const name = String(document.getElementById('admin-nurse-pin-select')?.value || '').trim();
+  if (!name) { showToast('Select nursing staff', 'w'); return; }
+  if (!confirm('Reset PIN for ' + name + '? The nurse will create a new 4 digit PIN on next selection.')) return;
+  try { localStorage.removeItem(ipdNursePinKey(name)); } catch (e) {}
+  if (window._ipdAuthenticatedNurse === name) window._ipdAuthenticatedNurse = '';
+  setIPDNursingEntryEnabled(false);
+  fbPush && fbPush('auditLog', { user:CURRENT_USER?.name || 'Admin', role:'Admin', action:'RESET_IPD_NURSE_PIN', item:name, timestamp:new Date().toISOString() }).catch(function(){});
+  showToast('PIN reset for ' + name + ' ✓', 's');
 }
 window.addIPDNurseName = addIPDNurseName;
 window.deleteSelectedIPDNurseName = deleteSelectedIPDNurseName;
@@ -8515,7 +8609,7 @@ function renderIPDMonitoringSheet(id) {
     </div>` : '';
   host.innerHTML = `
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;background:#fff;border:1px solid var(--g5);border-radius:12px;padding:10px">
-      <div class="form-group" style="margin:0;flex:1"><label class="fl">Nursing Staff</label><select id="ipdm-nurse-select">${nurseOptionsHtml('')}</select></div>
+      <div class="form-group" style="margin:0;flex:1"><label class="fl">Nursing Staff</label><select id="ipdm-nurse-select" onchange="onIPDNurseSelected(this)">${nurseOptionsHtml('')}</select></div>
       <button class="btn btn-outline btn-sm" onclick="addIPDNurseName()">Add</button>
       <button class="btn btn-gray btn-sm" onclick="deleteSelectedIPDNurseName()">Delete</button>
     </div>
@@ -8550,6 +8644,7 @@ function renderIPDMonitoringSheet(id) {
         <button class="btn btn-gray btn-sm" onclick="closeM('m-ipd-monitor')">Close</button>
       </div>
     </div>`;
+  setIPDNursingEntryEnabled(false);
 }
 
 function updateIPDMonitorRow(idx, value) {
@@ -8565,7 +8660,8 @@ function toggleIPDMonitorCheck(idx, checked) {
 
 function saveIPDMonitorVitals() {
   if (!activeIPDPatient) return;
-  const nurse = document.getElementById('ipdm-nurse-select')?.value || CURRENT_USER?.name || 'Nursing Staff';
+  const nurse = requireIPDNurseAuth('ipdm-nurse-select');
+  if (!nurse) return;
   const vitals = {
     bp: document.getElementById('ipdm-bp')?.value || '',
     pulse: document.getElementById('ipdm-pulse')?.value || '',
@@ -8592,7 +8688,8 @@ function saveIPDMonitorVitals() {
 
 function saveIPDMonitoringSheet() {
   if (!activeIPDPatient) return;
-  const nurse = document.getElementById('ipdm-nurse-select')?.value || CURRENT_USER?.name || 'Nursing Staff';
+  const nurse = requireIPDNurseAuth('ipdm-nurse-select');
+  if (!nurse) return;
   const isObg = normalizeDeptKeyForQueue(activeIPDPatient.dept || '') === 'obg';
   if (isObg) {
     activeIPDPatient.inLabour = !!document.getElementById('ipdm-in-labour')?.checked;
@@ -8651,6 +8748,7 @@ function openIPDDoctorWorkflow(id) {
 }
 function openIPDNursingWorkflow(id) {
   openIPDPatient(id);
+  window._ipdAuthenticatedNurse = '';
   renderIPDMonitoringSheet(id);
   openM('m-ipd-monitor');
 }
@@ -8703,7 +8801,10 @@ function completeIPDInstruction(instructionId) {
   if (!activeIPDPatient || !Array.isArray(activeIPDPatient.ipdInstructions)) return;
   const row = activeIPDPatient.ipdInstructions.find(function (x) { return String(x.id || '') === String(instructionId || ''); });
   if (!row) return;
-  const nurse = document.getElementById('ipdm-nurse-select')?.value || document.getElementById('pn-nurse')?.value || CURRENT_USER?.name || 'Nursing Staff';
+  const nurse = document.getElementById('ipdm-nurse-select')?.value
+    ? requireIPDNurseAuth('ipdm-nurse-select')
+    : requireIPDNurseAuth('pn-nurse');
+  if (!nurse) return;
   row.status = 'done';
   row.doneAt = new Date().toISOString();
   row.doneBy = nurse;
@@ -8813,15 +8914,55 @@ function openIPDPatient(id) {
   renderIPDAlerts(p);
 }
 
+function renderProgressNoteMedicineRows() {
+  const host = document.getElementById('pn-meds-list');
+  if (!host) return;
+  if (!host.children.length) addProgressNoteMedicineRow();
+}
+function addProgressNoteMedicineRow(prefill) {
+  const host = document.getElementById('pn-meds-list');
+  if (!host) return;
+  const idx = host.children.length + 1;
+  const row = document.createElement('div');
+  row.className = 'pn-med-row';
+  row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px';
+  row.innerHTML = '<div class="form-group" style="margin:0"><label class="fl">Medicine / Injection / Tablet ' + idx + '</label><input type="text" class="pn-med-name" placeholder="e.g. Inj Ceftriaxone" value="' + escapeHtmlConsent(prefill?.medicine || '') + '"></div>'
+    + '<div class="form-group" style="margin:0"><label class="fl">Dose / Route</label><input type="text" class="pn-med-dose" placeholder="e.g. 1 g IV BD" value="' + escapeHtmlConsent(prefill?.dose || '') + '"></div>'
+    + '<button type="button" class="btn btn-xs btn-gray" onclick="removeProgressNoteMedicineRow(this)">Remove</button>';
+  host.appendChild(row);
+  setIPDNursingEntryEnabled && setIPDNursingEntryEnabled(!!isIPDNurseAuthenticated(document.getElementById('pn-nurse')?.value || ''));
+}
+function removeProgressNoteMedicineRow(btn) {
+  const host = document.getElementById('pn-meds-list');
+  const row = btn?.closest('.pn-med-row');
+  if (row && host && host.children.length > 1) row.remove();
+}
+function readProgressNoteMedicines() {
+  const rows = Array.from(document.querySelectorAll('#pn-meds-list .pn-med-row'));
+  if (!rows.length) {
+    return [{
+      medicine: document.getElementById('pn-med')?.value?.trim() || '',
+      dose: document.getElementById('pn-dose')?.value?.trim() || ''
+    }].filter(function (row) { return row.medicine || row.dose; });
+  }
+  return rows.map(function (row) {
+    return {
+      medicine: row.querySelector('.pn-med-name')?.value?.trim() || '',
+      dose: row.querySelector('.pn-med-dose')?.value?.trim() || ''
+    };
+  }).filter(function (row) { return row.medicine || row.dose; });
+}
 function saveProgressNote() {
   if (!activeIPDPatient) return;
   const note = document.getElementById('pn-text')?.value;
-  const nurse = document.getElementById('pn-nurse')?.value||'Staff Nurse';
+  const nurse = requireIPDNurseAuth('pn-nurse');
+  if (!nurse) return;
   const doctor = document.getElementById('pn-doctor')?.value||'Dr. Varun Baweja';
   const date = document.getElementById('pn-date')?.value || todayKey();
   const time = document.getElementById('pn-time')?.value || new Date().toTimeString().slice(0,5);
-  const medicine = document.getElementById('pn-med')?.value || '';
-  const dose = document.getElementById('pn-dose')?.value || '';
+  const medicines = readProgressNoteMedicines();
+  const medicine = medicines.map(function (m) { return m.medicine; }).filter(Boolean).join('; ');
+  const dose = medicines.map(function (m) { return m.dose; }).filter(Boolean).join('; ');
   const orders = document.getElementById('pn-orders')?.value || '';
   const vitals = {
     bp: document.getElementById('pn-bp')?.value || '',
@@ -8831,10 +8972,10 @@ function saveProgressNote() {
     rr: document.getElementById('pn-rr')?.value || '',
     pain: document.getElementById('pn-pain')?.value || ''
   };
-  if (!note) { showToast('Please enter a note','w'); return; }
+  if (!note && !orders && !medicines.length && !Object.values(vitals).some(Boolean)) { showToast('Please enter vitals, a note, medicine, or order','w'); return; }
   if (!Array.isArray(activeIPDPatient.notes)) activeIPDPatient.notes = [];
   if (!Array.isArray(activeIPDPatient.vitalSigns)) activeIPDPatient.vitalSigns = [];
-  activeIPDPatient.notes.unshift({date:new Date(date).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}),time,note,nurse,doctor,medicine,dose,orders,vitals,recordedAt:new Date(date + 'T' + time).toISOString()});
+  activeIPDPatient.notes.unshift({date:new Date(date).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}),time,note:note || 'Vitals / medicine entry recorded.',nurse,doctor,medicine,dose,medicines,orders,vitals,recordedAt:new Date(date + 'T' + time).toISOString()});
   if (Object.values(vitals).some(Boolean)) activeIPDPatient.vitalSigns.unshift(Object.assign({ recordedAt:new Date(date + 'T' + time).toISOString(), by:nurse }, vitals));
   const nextDue = (activeIPDPatient.monitoringPlan || []).find(slot => slot.status !== 'done');
   if (nextDue) {
@@ -23575,9 +23716,14 @@ function watchDrugLibraryFromFirebase() {
       const activeInput = getActiveRxQuickSearchInput && getActiveRxQuickSearchInput();
       if (activeInput && String(activeInput.value || '').trim().length >= 1) rxQuickSearch(String(activeInput.value || ''));
     } catch (e) {}
-    // Push back to Firebase when local had drugs not in remote
-    const remoteHash = remoteArr.map(function (d) { return (d._id || d.trade) + ':' + (d._updatedAt || 0); }).sort().join(',');
-    if (nextHash !== remoteHash) {
+    // Push back ONLY when local has strictly newer edits than the newest
+    // remote entry (e.g. edits made while offline). The previous
+    // hash-difference trigger re-uploaded the whole library from every
+    // machine and let stale local copies overwrite the shared database.
+    const bmhDrugTs = function (d) { return Number(d && d._updatedAt || 0); };
+    const remoteNewest = remoteArr.reduce(function (m, d) { return Math.max(m, bmhDrugTs(d)); }, 0);
+    const localHasNewer = merged.some(function (d) { return bmhDrugTs(d) > remoteNewest; });
+    if (localHasNewer) {
       window.FBDB.ref('drugLibrary').set(DRUG_LIBRARY).catch(function () {});
       window.FBDB.ref('drugLibraryMeta').set({ updatedAt: Date.now() }).catch(function () {});
     }
@@ -25356,7 +25502,7 @@ function lookupByPhone(val) {
     matchEl.innerHTML = matches.map(match=>receptionPatientResultHtml(match, { title: '✅ Existing patient found' })).join('');
   } else { matchEl.innerHTML=''; }
 }
-function prefillExistingPatient(bmhId) {
+function _prefillExistingPatientCore(bmhId) {
   const p = (typeof resolveExistingPatientForRegistration === 'function' ? resolveExistingPatientForRegistration(bmhId) : null)
     || PATIENTS.find(function (x) { return String(x?.bmhId || '') === String(bmhId || ''); });
   if(!p) { showToast('Patient not found for prefill', 'w'); return; }
@@ -25568,7 +25714,7 @@ function genRcUID() {
       if (getKnownHighestBmhNumber() > 0 && !isPrimaryBmhSequenceNumber(num)) return;
       // RTDB value must be close to the local max — ignore if it's wildly higher (corruption)
       const serverMax = getKnownHighestBmhNumber();
-      if (num > serverMax + 10000) {
+      if (_fbPatientsLoaded && num > serverMax + 10000) {
         // Server counter is corrupted — repair it to match the true local max
         if (window.FBDB) {
           window.FBDB.ref('settings/lastPatientNum').set(serverMax).catch(function(){});
@@ -34699,6 +34845,7 @@ function activateUserSession(user, profile, opts) {
 
   setTimeout(function() {
     try {
+      try { bmhShadowFirebaseSignIn(user); } catch (authErr) { console.warn('Shadow auth error:', authErr); }
       if (typeof loadChargesFromFirebase === 'function') loadChargesFromFirebase();
       if (typeof loadPatientsFromFirebase === 'function')  loadPatientsFromFirebase();
       deferBootstrap(function() {
@@ -35490,6 +35637,13 @@ async function mergeDuplicatePatientRecord(canonicalId, duplicateId) {
   const duplicate = source.find(function (p) { return String(p?.bmhId || '') === dupId; });
   if (!canonical || !duplicate) return null;
   if (duplicate.mergedInto === targetId) return canonical;
+  // Safety: never merge from slim search-index stubs — always full records.
+  if (canonical._lite) await ensureFullPatientRecord(targetId);
+  if (duplicate._lite) await ensureFullPatientRecord(dupId);
+  if (canonical._lite || duplicate._lite) {
+    console.warn('merge skipped — full records unavailable for', targetId, dupId);
+    return null;
+  }
 
   const nowIso = new Date().toISOString();
   const merged = Object.assign({}, canonical);
@@ -38773,6 +38927,23 @@ setTimeout(renderCollectionDashboard, 500);
 // ── PATIENTS ─────────────────────────────────────────────────
 function savePatientToFirebase(patient) {
   if(!patient || !patient.bmhId) return;
+  if (patient._lite && !patient._liteRetried) {
+    // Slim search-index stub — fetch the full record first so a full-object
+    // set() can never wipe server-side fields.
+    return ensureFullPatientRecord(patient.bmhId).then(function () {
+      patient._liteRetried = true;
+      const r = savePatientToFirebase(patient);
+      delete patient._liteRetried;
+      return r;
+    });
+  }
+  if (patient._lite) {
+    delete patient._lite;
+    delete patient._liteRetried;
+    console.warn('savePatientToFirebase: full record unavailable — safe partial update for', patient.bmhId);
+    return fbUpdate('patients/' + patient.bmhId, Object.assign({}, patient));
+  }
+  delete patient._liteRetried;
   normalizePatientRecord(patient);
   const centreRaw = patient.centre
     || (typeof getEffectiveCentre === 'function' ? getEffectiveCentre() : '')
@@ -38843,11 +39014,29 @@ function applyPatientsPayload(data, opts) {
   }
   window._bmhPatientsHydrating = true;
   const finish = function () {
-    window._BMH_ALL_PATIENTS_CACHE = normalized;
+    if (options.merge && Array.isArray(window._BMH_ALL_PATIENTS_CACHE) && window._BMH_ALL_PATIENTS_CACHE.length) {
+      // Merge mode (fast boot): upsert into the existing cache instead of
+      // replacing it, so slim index rows and other full rows are preserved.
+      const byId = new Map();
+      window._BMH_ALL_PATIENTS_CACHE.forEach(function (row) {
+        const id = String(row?.bmhId || '').trim();
+        if (id) byId.set(id, row);
+      });
+      normalized.forEach(function (row) {
+        const id = String(row?.bmhId || '').trim();
+        if (!id) return;
+        const existing = byId.get(id);
+        if (existing) { Object.assign(existing, row); delete existing._lite; }
+        else byId.set(id, row);
+      });
+      window._BMH_ALL_PATIENTS_CACHE = Array.from(byId.values());
+    } else {
+      window._BMH_ALL_PATIENTS_CACHE = normalized;
+    }
     window._bmhPatientsCacheVersion = (window._bmhPatientsCacheVersion || 0) + 1;
     rebuildPatientsArrayFromGlobalCache();
     window._bmhPatientsHydrating = false;
-    if(!_fbPatientsLoaded) {
+    if(!_fbPatientsLoaded && !options.silent) {
       _fbPatientsLoaded = true;
       showToast('Connected to database ✓','s');
     }
@@ -38895,6 +39084,7 @@ function refreshPatientsFromFirebase() {
     if (window._bmhPatientsRefreshToken !== token) return;
     const data = snap && typeof snap.val === 'function' ? snap.val() : {};
     applyPatientsPayload(data, { fullHistory: true });
+    window._bmhFullPatientsLoaded = true;
   }).catch(function (e) {
     console.warn('patients refresh failed', e);
   }).finally(function () {
@@ -38922,7 +39112,7 @@ function refreshTodayQueuePatientsFromFirebase() {
       const row = data[key];
       if (!scope || rowMatchesCentre(row, scope, { allowUncentredToday: true, dateKey: today })) scoped[key] = row;
     });
-    applyPatientsPayload(scoped);
+    applyPatientsPayload(scoped, bmhFastBootEnabled() ? { merge: true, silent: true } : {});
   }).catch(function (e) {
     console.warn('today patients refresh failed', e);
     window._bmhPatientsHydrating = false;
@@ -39098,18 +39288,427 @@ function schedulePatientsRefreshLoop() {
 }
 window.refreshPatientsFromFirebase = refreshPatientsFromFirebase;
 
+// ═══════════════════════════════════════════════════════════════════════════
+// FAST PATIENT BOOT (perf phase 1) — today-queue first + slim search index.
+// Kill-switch (no redeploy needed):
+//   • per machine:  localStorage.setItem('bmh_fast_boot','off')  + reload
+//   • all machines: set appConfig/fastBoot = false in Firebase RTDB
+// With the switch off, the classic full `patients` download path runs
+// exactly as before this change.
+// ═══════════════════════════════════════════════════════════════════════════
+function bmhFastBootEnabled() {
+  try {
+    const ls = localStorage.getItem('bmh_fast_boot');
+    if (ls === 'off' || ls === '0' || ls === 'false') return false;
+  } catch (e) {}
+  if (window._bmhFastBootRemoteDisabled) return false;
+  return true;
+}
+function watchFastBootRemoteFlag() {
+  if (!window.FBDB || window._bmhFastBootFlagWatched) return;
+  window._bmhFastBootFlagWatched = true;
+  window.FBDB.ref('appConfig/fastBoot').on('value', function (snap) {
+    const v = snap && typeof snap.val === 'function' ? snap.val() : null;
+    const disabled = (v === false || v === 'off' || v === 0);
+    const was = !!window._bmhFastBootRemoteDisabled;
+    window._bmhFastBootRemoteDisabled = disabled;
+    if (disabled && !was && !window._bmhFullPatientsLoaded) {
+      console.warn('[BMH] fastBoot kill-switch OFF — reverting to classic full patient load');
+      refreshPatientsFromFirebase().then(function () { startPatientsRealtimeUpdates(); });
+      schedulePatientsRefreshLoop();
+    }
+  });
+}
+// ── Slim index row ⇄ patient record mapping ─────────────────────────────────
+function bmhLiteRowFromIndex(id, e) {
+  const row = {
+    bmhId: id, _lite: true,
+    name: e.n || '', mob: e.m || '', mob2: e.m2 || '',
+    age: e.a || '', sex: e.s || '', dept: e.d || '', centre: e.c || '',
+    doctor: e.dr || '', assignedDoctor: e.dr || '',
+    visitCount: Number(e.vc || 1),
+    queueDate: e.qd || '', visitDate: e.vd || '', status: e.st || '',
+    createdAt: e.ca || '', dob: e.db || '', rel: e.r || '',
+    updatedAt: e.u ? new Date(Number(e.u)).toISOString() : ''
+  };
+  if (e.mg) row.mergedInto = String(e.mg);
+  if (e.ia) row.inactive = true;
+  return row;
+}
+function bmhIndexEntryFromPatient(p) {
+  const e = {
+    n: p.name || p.patient || '', m: p.mob || p.mobile || '', m2: p.mob2 || p.altMobile || '',
+    a: p.age || '', s: p.sex || '', d: p.dept || '', c: p.centre || '',
+    dr: p.doctor || p.assignedDoctor || '', vc: Number(p.visitCount || 1),
+    qd: p.queueDate || '', vd: p.visitDate || '', st: p.status || '',
+    ca: p.createdAt || p.registeredAt || '', db: p.dob || '', r: p.rel || '',
+    u: Date.now()
+  };
+  if (p.mergedInto) e.mg = String(p.mergedInto);
+  if (p.inactive) e.ia = true;
+  return e;
+}
+const BMH_PATIENT_INDEX_FIELD_MAP = {
+  name: 'n', patient: 'n', mob: 'm', mobile: 'm', mob2: 'm2', altMobile: 'm2',
+  age: 'a', sex: 's', dept: 'd', centre: 'c', doctor: 'dr', assignedDoctor: 'dr',
+  visitCount: 'vc', queueDate: 'qd', visitDate: 'vd', status: 'st',
+  createdAt: 'ca', dob: 'db', rel: 'r', mergedInto: 'mg', inactive: 'ia'
+};
+function bmhSafeIndexKey(id) { return String(id || '').replace(/[.#$/\[\]]/g, '_'); }
+// Mirrors every patients/{id} write into the slim search index (fire-and-forget).
+function bmhMirrorPatientIndexWrite(path, data, mode) {
+  try {
+    if (!window.FBDB) return;
+    const parts = String(path || '').split('/').filter(Boolean);
+    if (parts[0] !== 'patients' || parts.length < 2) return;
+    const id = bmhSafeIndexKey(parts[1]);
+    if (!id) return;
+    if (parts.length > 2) {
+      window.FBDB.ref('patientsIndex/' + id + '/u').set(Date.now()).catch(function () {});
+      return;
+    }
+    if (data === null && mode === 'set') {
+      window.FBDB.ref('patientsIndex/' + id).remove().catch(function () {});
+      return;
+    }
+    if (!data || typeof data !== 'object') return;
+    if (mode === 'set') {
+      window.FBDB.ref('patientsIndex/' + id).set(bmhIndexEntryFromPatient(Object.assign({ bmhId: id }, data))).catch(function () {});
+      return;
+    }
+    const patch = {};
+    Object.keys(data).forEach(function (k) {
+      const ik = BMH_PATIENT_INDEX_FIELD_MAP[k];
+      if (!ik) return;
+      patch[ik] = (data[k] === undefined || data[k] === null) ? '' : data[k];
+    });
+    patch.u = Date.now();
+    window.FBDB.ref('patientsIndex/' + id).update(patch).catch(function () {});
+  } catch (e) { /* mirror must never break the primary write */ }
+}
+// ── Fetch the full server record for a slim row (mutates row in place so all
+//    existing references — CURRENT_PATIENT, queue rows — stay valid). ────────
+function ensureFullPatientRecord(bmhId) {
+  const id = String(bmhId || '').trim();
+  if (!id) return Promise.resolve(null);
+  const cache = window._BMH_ALL_PATIENTS_CACHE || [];
+  let row = null;
+  for (let i = 0; i < cache.length; i += 1) {
+    const r = cache[i];
+    if (r && String(r.bmhId || '').trim() === id) { row = r; break; }
+  }
+  if (!row) {
+    const pl = PATIENTS || [];
+    for (let j = 0; j < pl.length; j += 1) {
+      const q = pl[j];
+      if (q && String(q.bmhId || '').trim() === id) { row = q; break; }
+    }
+  }
+  if (row && !row._lite) return Promise.resolve(row);
+  if (!window.FBDB) return Promise.resolve(row);
+  return window.FBDB.ref('patients/' + id).once('value').then(function (snap) {
+    const val = snap && typeof snap.val === 'function' ? snap.val() : null;
+    if (!val || typeof val !== 'object') return row;
+    const full = normalizePatientRecord(Object.assign({}, val, { bmhId: val.bmhId || id }));
+    if (row) {
+      Object.keys(row).forEach(function (k) { if (!(k in full)) delete row[k]; });
+      Object.assign(row, full);
+      delete row._lite;
+      return row;
+    }
+    cache.push(full);
+    rebuildPatientsArrayFromGlobalCache();
+    return full;
+  }).catch(function (e) {
+    console.warn('ensureFullPatientRecord failed for', id, e);
+    return row;
+  });
+}
+window.ensureFullPatientRecord = ensureFullPatientRecord;
+// ── Apply the slim index payload: full rows win, everything else is lite ────
+function applyPatientsIndexPayload(data) {
+  const keys = Object.keys(data || {});
+  if (!keys.length) return;
+  const fullById = new Map();
+  (window._BMH_ALL_PATIENTS_CACHE || []).forEach(function (row) {
+    const id = String(row?.bmhId || '').trim();
+    if (id && !row._lite) fullById.set(id, row);
+  });
+  const merged = [];
+  const chunk = 2500;
+  let i = 0;
+  window._bmhPatientsHydrating = true;
+  const pump = function () {
+    const end = Math.min(i + chunk, keys.length);
+    for (; i < end; i += 1) {
+      const id = keys[i];
+      const full = fullById.get(id);
+      if (full) { merged.push(full); fullById.delete(id); }
+      else merged.push(normalizePatientRecord(bmhLiteRowFromIndex(id, data[id] || {})));
+    }
+    if (i < keys.length) { setTimeout(pump, 0); return; }
+    fullById.forEach(function (row) { merged.push(row); });
+    window._BMH_ALL_PATIENTS_CACHE = merged;
+    window._bmhPatientsCacheVersion = (window._bmhPatientsCacheVersion || 0) + 1;
+    window._bmhPatientsIndexLoaded = true;
+    rebuildPatientsArrayFromGlobalCache();
+    window._bmhPatientsHydrating = false;
+    if (!_fbPatientsLoaded) { _fbPatientsLoaded = true; showToast('Connected to database ✓', 's'); }
+    genRcUID && genRcUID();
+    if (window._renderReceptionAfterHydration) {
+      window._renderReceptionAfterHydration = false;
+      renderReceptionPage && renderReceptionPage();
+    }
+    _debouncedRenderDash();
+  };
+  pump();
+}
+function refreshPatientsIndexFromFirebase() {
+  if (!window.FBDB) return Promise.resolve();
+  return window.FBDB.ref('patientsIndex').once('value').then(function (snap) {
+    const data = snap && typeof snap.val === 'function' ? snap.val() : null;
+    if (data && Object.keys(data).length) applyPatientsIndexPayload(data);
+    window._bmhPatientsIndexLastRefreshAt = Date.now();
+  }).catch(function (e) { console.warn('patientsIndex refresh failed', e); });
+}
+function bmhScheduleLitePatientsRebuild() {
+  if (window._bmhLiteRebuildTimer) return;
+  window._bmhLiteRebuildTimer = setTimeout(function () {
+    window._bmhLiteRebuildTimer = null;
+    rebuildPatientsArrayFromGlobalCache();
+    _debouncedRenderDash();
+  }, 1200);
+}
+function bmhRefetchPatientIfStale(row, entry) {
+  try {
+    const localTs = Date.parse(row.updatedAt || row.lastUpdated || '') || 0;
+    const remoteTs = Number(entry.u || 0);
+    if (remoteTs && remoteTs > localTs + 5000) {
+      row._lite = true; // force refetch
+      ensureFullPatientRecord(row.bmhId).then(function () { bmhScheduleLitePatientsRebuild(); });
+    }
+  } catch (e) {}
+}
+function startPatientsIndexRealtime() {
+  if (window._bmhPatientsIndexRealtimeStarted || !window.FBDB) return;
+  window._bmhPatientsIndexRealtimeStarted = true;
+  const q = window.FBDB.ref('patientsIndex').orderByChild('u').startAt(Date.now());
+  const apply = function (snap) {
+    try {
+      const id = String(snap.key || '').trim();
+      if (!id) return;
+      const entry = (typeof snap.val === 'function' ? snap.val() : null) || {};
+      const cache = window._BMH_ALL_PATIENTS_CACHE || [];
+      let row = null;
+      for (let i = 0; i < cache.length; i += 1) {
+        const r = cache[i];
+        if (r && String(r.bmhId || '').trim() === id) { row = r; break; }
+      }
+      if (row && !row._lite) { bmhRefetchPatientIfStale(row, entry); return; }
+      const lite = normalizePatientRecord(bmhLiteRowFromIndex(id, entry));
+      if (row) Object.assign(row, lite);
+      else cache.push(lite);
+      bmhScheduleLitePatientsRebuild();
+    } catch (e) {}
+  };
+  q.on('child_added', apply);
+  q.on('child_changed', apply);
+}
+function schedulePatientsIndexRefreshLoop() {
+  if (window._bmhPatientsIndexLoopStarted) return;
+  window._bmhPatientsIndexLoopStarted = true;
+  const everyMs = 30 * 60 * 1000;
+  const maybe = function () {
+    if (document.visibilityState === 'hidden') return;
+    const last = Number(window._bmhPatientsIndexLastRefreshAt || 0);
+    if (Date.now() - last < everyMs) return;
+    refreshPatientsIndexFromFirebase();
+    refreshTodayQueuePatientsFromFirebase();
+  };
+  setInterval(maybe, 5 * 60 * 1000);
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') setTimeout(maybe, 12000);
+  });
+  window.addEventListener('focus', function () { setTimeout(maybe, 12000); });
+}
+// One-time index build from a full in-memory cache (admin machines only).
+function maybeBuildPatientsIndexFromCache() {
+  try {
+    if (!window.FBDB || window._bmhIndexBuildStarted) return;
+    const u = window.CURRENT_USER || (typeof CURRENT_USER !== 'undefined' ? CURRENT_USER : null);
+    if (!u || !u.isAdmin) return;
+    const cache = window._BMH_ALL_PATIENTS_CACHE || [];
+    if (cache.length < 50) return;
+    window._bmhIndexBuildStarted = true;
+    window.FBDB.ref('patientsIndex').once('value').then(function (snap) {
+      const existing = (typeof snap.val === 'function' ? snap.val() : null) || {};
+      if (Object.keys(existing).length >= cache.length * 0.9) return;
+      console.info('[BMH] Building patientsIndex (' + cache.length + ' patients)…');
+      const batches = [];
+      let updates = {};
+      let count = 0;
+      cache.forEach(function (p) {
+        const id = bmhSafeIndexKey(String(p?.bmhId || '').trim());
+        if (!id || p._lite) return;
+        updates[id] = bmhIndexEntryFromPatient(p);
+        count += 1;
+        if (count % 500 === 0) { batches.push(updates); updates = {}; }
+      });
+      if (Object.keys(updates).length) batches.push(updates);
+      let bi = 0;
+      const next = function () {
+        if (bi >= batches.length) {
+          console.info('[BMH] patientsIndex built:', count, 'entries');
+          showToast('Patient search index built ✓ (' + count + ' patients)', 's');
+          return;
+        }
+        window.FBDB.ref('patientsIndex').update(batches[bi]).then(function () {
+          bi += 1;
+          setTimeout(next, 250);
+        }).catch(function (e) { console.warn('patientsIndex build batch failed', e); });
+      };
+      next();
+    });
+  } catch (e) { console.warn('maybeBuildPatientsIndexFromCache error', e); }
+}
+window.maybeBuildPatientsIndexFromCache = maybeBuildPatientsIndexFromCache;
+// ── Wrappers: guarantee a FULL record before opening / prefilling / queueing ─
+function openPatient(bmhId, opts) {
+  const cached = (PATIENTS || []).find(function (x) { return String(x?.bmhId || '') === String(bmhId || ''); });
+  if (cached && !cached._lite) return _openPatientCore(bmhId, opts);
+  ensureFullPatientRecord(bmhId).then(function (row) {
+    if (row) _openPatientCore(bmhId, opts);
+    else showToast('Could not load patient record — check connection', 'w');
+  });
+}
+window.openPatient = openPatient;
+function prefillExistingPatient(bmhId) {
+  let target = bmhId;
+  try {
+    const r = typeof resolveExistingPatientForRegistration === 'function' ? resolveExistingPatientForRegistration(bmhId) : null;
+    if (r && r.bmhId) target = r.bmhId;
+  } catch (e) {}
+  const source = (typeof getAllKnownPatientRecords === 'function' ? getAllKnownPatientRecords() : (PATIENTS || []));
+  const cached = source.find(function (x) { return String(x?.bmhId || '') === String(target || ''); });
+  if (cached && !cached._lite) return _prefillExistingPatientCore(bmhId);
+  ensureFullPatientRecord(target).then(function () { _prefillExistingPatientCore(bmhId); });
+}
+window.prefillExistingPatient = prefillExistingPatient;
+function selectExistingPatient(bmhId) {
+  const cached = (PATIENTS || []).find(function (x) { return String(x?.bmhId || '') === String(bmhId || ''); });
+  if (cached && !cached._lite) return _selectExistingPatientCore(bmhId);
+  ensureFullPatientRecord(bmhId).then(function (row) {
+    if (row) _selectExistingPatientCore(bmhId);
+    else showToast('Could not load patient — check connection', 'w');
+  });
+}
+window.selectExistingPatient = selectExistingPatient;
+// ── Shadow Firebase Auth sign-in (so DB rules can require auth != null) ─────
+const BMH_LOGIN_EMAIL_MAP = {
+  'drvarun': 'drvarun@bawejahospital.com',
+  'drbaweja': 'drbaweja@bawejahospital.com',
+  'drvarun_chd': 'drvarun.chd@bawejahospital.com',
+  'drvarun_rpr': 'drvarun.rpr@bawejahospital.com',
+  'drtarun': 'drtarun.rpr@bawejahospital.com',
+  'drtarun_chd': 'drtarun.chd@bawejahospital.com',
+  'drgeeta': 'drgeeta@bawejahospital.com',
+  'drnamrata': 'drnamrata.rpr@bawejahospital.com',
+  'drnamrata_chd': 'drnamrata.chd@bawejahospital.com',
+  'drpooja': 'drpooja.rpr@bawejahospital.com',
+  'drpooja_chd': 'drpooja.chd@bawejahospital.com',
+  'rec_chd': 'reception.chd@bawejahospital.com',
+  'rec_rpr': 'reception.rpr@bawejahospital.com',
+  'lab_chd': 'lab.chd@bawejahospital.com',
+  'lab_rpr': 'lab.rpr@bawejahospital.com',
+  'tpa_chd': 'tpa.chd@bawejahospital.com',
+  'tpa_rpr': 'tpa.rpr@bawejahospital.com',
+  'inv_chd': 'inventory.chd@bawejahospital.com',
+  'inv_rpr': 'inventory.rpr@bawejahospital.com',
+  'optometrist': 'optometrist@bawejahospital.com',
+  'opto_rpr': 'opto.rpr@bawejahospital.com'
+};
+function bmhEmailForLoginUser(uname) {
+  const u = String(uname || '').trim().toLowerCase();
+  if (!u) return '';
+  if (u.indexOf('@') !== -1) return u;
+  if (BMH_LOGIN_EMAIL_MAP[u]) return BMH_LOGIN_EMAIL_MAP[u];
+  return u.replace(/[_,]/g, '.') + '@bawejahospital.com';
+}
+function bmhReportAuthStatus(username, email) {
+  try {
+    if (!window.FBDB) return;
+    const key = String(username || 'unknown').toLowerCase().replace(/[^a-z0-9]+/g, '_');
+    window.FBDB.ref('authMigration/status/' + key).set({
+      email: email || '',
+      at: new Date().toISOString(),
+      ua: String(navigator.userAgent || '').slice(0, 120)
+    }).catch(function () {});
+  } catch (e) {}
+}
+function bmhShadowFirebaseSignIn(username) {
+  try {
+    if (!window.bmhAuthBridge) return;
+    const existing = window.bmhAuthBridge.currentUser && window.bmhAuthBridge.currentUser();
+    if (existing) { bmhReportAuthStatus(username, existing.email || ''); return; }
+    let pw = '';
+    const el = document.getElementById('lg-pass');
+    if (el && el.value) pw = el.value;
+    if (!pw) { try { const c = JSON.parse(localStorage.getItem('bmh_creds') || 'null'); if (c && c.p) pw = c.p; } catch (e) {} }
+    if (!pw) { try { const s = JSON.parse(localStorage.getItem('bmh_saved_login_v1') || 'null'); if (s && s.password) pw = s.password; } catch (e) {} }
+    if (!pw) return;
+    const email = bmhEmailForLoginUser(username);
+    if (!email) return;
+    window.bmhAuthBridge.signInShadow(email, pw).then(function (ok) {
+      if (ok) bmhReportAuthStatus(username, email);
+    });
+  } catch (e) { /* shadow auth must never block login */ }
+}
+window.bmhShadowFirebaseSignIn = bmhShadowFirebaseSignIn;
+
 function loadPatientsFromFirebase() {
   const scope = effectivePatientListCentreScope();
   if(window._bmhRtdbPatientsListening && window._bmhRtdbPatientsScope === scope) return;
   window._bmhRtdbPatientsListening = true;
   window._bmhRtdbPatientsScope = scope;
   scheduleQueueCalendarDayRefresh && scheduleQueueCalendarDayRefresh();
-  refreshPatientsFromFirebase().then(function () {
-    startPatientsRealtimeUpdates();
+  watchFastBootRemoteFlag();
+  if (!bmhFastBootEnabled()) {
+    // ── CLASSIC PATH (pre-phase-1 behaviour, kept verbatim as the failsafe) ──
+    refreshPatientsFromFirebase().then(function () {
+      maybeBuildPatientsIndexFromCache();
+      startPatientsRealtimeUpdates();
+      startTodayQueuePatientsRealtimeUpdates(true);
+    });
+    schedulePatientsRefreshLoop();
+    return;
+  }
+  // ── FAST PATH: today's queue first (usable in ~1s), slim index for search ──
+  refreshTodayQueuePatientsFromFirebase().then(function () {
     startTodayQueuePatientsRealtimeUpdates(true);
   });
-  schedulePatientsRefreshLoop();
+  if (!window.FBDB) return;
+  window.FBDB.ref('patientsIndex').limitToFirst(1).once('value').then(function (probe) {
+    const hasIndex = probe && typeof probe.exists === 'function' && probe.exists();
+    if (!hasIndex) {
+      console.warn('[BMH] patientsIndex missing — falling back to classic full patient load');
+      refreshPatientsFromFirebase().then(function () {
+        maybeBuildPatientsIndexFromCache();
+        startPatientsRealtimeUpdates();
+      });
+      schedulePatientsRefreshLoop();
+      return;
+    }
+    refreshPatientsIndexFromFirebase().then(function () {
+      startPatientsIndexRealtime();
+      schedulePatientsIndexRefreshLoop();
+    });
+  }).catch(function (e) {
+    console.warn('[BMH] patientsIndex probe failed — classic load', e);
+    refreshPatientsFromFirebase().then(function () { startPatientsRealtimeUpdates(); });
+    schedulePatientsRefreshLoop();
+  });
 }
+
 
 // ── PAY REQUESTS (real-time sync) ────────────────────────────
 function savePayRequestToFirebase(pr) {
@@ -39429,7 +40028,7 @@ async function bmhDeleteSyntheticCollectionTxn(txnId) {
       queueSource: '',
       updatedAt: nowIso
     });
-    try { if (window.firebase && firebase.database) firebase.database().ref('patients/' + p.bmhId).update(patch); } catch (e) {}
+    try { fbUpdate('patients/' + p.bmhId, patch); } catch (e) {}
     fbPush&&fbPush('auditLog',{user:CURRENT_USER?.name||'Staff',role:CURRENT_USER?.role||'Staff',action:'DELETE_SYNTHETIC_OPD_COLLECTION',item:label,timestamp:new Date().toISOString()});
     showToast(`Deleted recovered OPD collection: ${label}`, 'i');
     renderCollectionDashboard&&renderCollectionDashboard(); renderReceptionPage&&renderReceptionPage(); renderDocQueue&&renderDocQueue();
@@ -39942,9 +40541,11 @@ function loadInventoryFromFirebase() {
       if (!item || !item.barcode) return;
       mergedByBarcode[String(item.barcode)] = Object.assign({}, item);
     });
+    const remoteTsByKey = {};
     remoteRows.forEach(function (item) {
       if (!item || !item.barcode) return;
       const key = String(item.barcode);
+      remoteTsByKey[key] = bmhInventoryRowUpdatedAt(item);
       const existing = mergedByBarcode[key];
       const existingTs = bmhInventoryRowUpdatedAt(existing);
       const nextTs = bmhInventoryRowUpdatedAt(item);
@@ -39973,8 +40574,15 @@ function loadInventoryFromFirebase() {
     });
     Object.values(mergedByBarcode).forEach(function (item) {
       if (!item || !item.barcode || item._deleted) return;
-      const deletedTs = Number(deletedRows[String(item.barcode)] || 0);
-      if (deletedTs && deletedTs >= bmhInventoryRowUpdatedAt(item)) return;
+      const key = String(item.barcode);
+      const deletedTs = Number(deletedRows[key] || 0);
+      const localTs = bmhInventoryRowUpdatedAt(item);
+      if (deletedTs && deletedTs >= localTs) return;
+      // Write-storm fix: only push rows the server doesn't already have in
+      // this (or newer) state. Previously EVERY row was re-written on every
+      // load, flooding Firebase and every other machine's listeners.
+      const remoteTs = remoteTsByKey[key];
+      if (remoteTs !== undefined && localTs <= remoteTs) return;
       saveInventoryItemToFirebase(item).catch(function () {});
     });
     renderInventoryImportDatalists();
@@ -41884,9 +42492,9 @@ function deleteCustomConsent(id) {
 
 
 // ── Safe Firebase helpers ────────────────────────────────────
-function fbSet(path, data)    { return window.FBDB ? window.FBDB.ref(path).set(data)    : Promise.resolve(); }
+function fbSet(path, data)    { const p = window.FBDB ? window.FBDB.ref(path).set(data)    : Promise.resolve(); bmhMirrorPatientIndexWrite(path, data, 'set');    return p; }
 function fbPush(path, data)   { return window.FBDB ? window.FBDB.ref(path).push(data)   : Promise.resolve(); }
-function fbUpdate(path, data) { return window.FBDB ? window.FBDB.ref(path).update(data) : Promise.resolve(); }
+function fbUpdate(path, data) { const p = window.FBDB ? window.FBDB.ref(path).update(data) : Promise.resolve(); bmhMirrorPatientIndexWrite(path, data, 'update'); return p; }
 function fbRemove(path)       { return window.FBDB ? window.FBDB.ref(path).remove()     : Promise.resolve(); }
 function fbOn(path, cb)       { if (window.FBDB) window.FBDB.ref(path).on('value', function(s){ cb(s.val()); }); }
 function fbOnce(path, cb) {
@@ -43779,11 +44387,18 @@ function changeMyPassword() {
 // ── Render Admin Users List ────────────────────────────────────
 function renderAdminUsersList() {
   const card = document.getElementById('admin-logins-card');
+  const nursePinCard = document.getElementById('admin-nurse-pin-card');
   const el   = document.getElementById('admin-users-list');
   if(!el) return;
   // Only admins see this
-  if(!CURRENT_USER?.isAdmin) { if(card) card.style.display='none'; return; }
+  if(!CURRENT_USER?.isAdmin) {
+    if(card) card.style.display='none';
+    if(nursePinCard) nursePinCard.style.display='none';
+    return;
+  }
   if(card) card.style.display='block';
+  if(nursePinCard) nursePinCard.style.display='block';
+  populateIPDNursePinResetSelect && populateIPDNursePinResetSelect();
 
   const roleColors = {
     Admin:'bd-red', Doctor:'bd-blue', Reception:'bd-teal',
@@ -44086,7 +44701,7 @@ function searchPatientByPhone(val) {
     </div>`).join('');
 }
 
-function selectExistingPatient(bmhId) {
+function _selectExistingPatientCore(bmhId) {
   const p = PATIENTS.find(x => x.bmhId === bmhId);
   if(!p) return;
   // Close dropdown
@@ -44526,7 +45141,7 @@ function clearAdminPatientDue(bmhId) {
   if (due <= 0) { showToast('No due found for this patient', 'i'); return; }
   if (!confirm('Clear the due for ' + (patient.name || bmhId) + '?\n₹' + due.toLocaleString('en-IN') + '\nThis is an admin correction action.')) return;
   patient.balance = 0;
-  try { if (window.firebase && firebase.database) firebase.database().ref('patients/' + bmhId + '/balance').set(0); } catch (e) {}
+  try { fbSet('patients/' + bmhId + '/balance', 0); } catch (e) {}
   (PAY_REQUESTS || []).filter(function (r) { return r.bmhId === bmhId && r.status === 'pending'; }).forEach(function (pr) {
     pr.status = 'cancelled';
     try { if (window.firebase && firebase.database) firebase.database().ref('payRequests/' + pr.id).update({ status: 'cancelled', clearedBy: CURRENT_USER?.name || 'Admin', clearedAt: new Date().toISOString() }); } catch (e) {}
