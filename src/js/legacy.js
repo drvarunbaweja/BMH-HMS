@@ -201,11 +201,22 @@ function getIolCatalogNormalizedRows() {
       name: name,
       type: type || 'IOL',
       mfr: mfr,
+      company: normalizeInventoryTextValue(row?.company || row?.mfr || row?.manufacturer || ''),
       price: Number(row?.price || 0) || 0,
       barcode: barcode,
       batchNo: normalizeInventoryTextValue(row?.batchNo || ''),
       serialNo: normalizeInventoryTextValue(row?.serialNo || ''),
-      power: power
+      power: power,
+      powerRange: normalizeInventoryTextValue(row?.powerRange || ''),
+      step: normalizeInventoryTextValue(row?.step || '0.5'),
+      opticalA: normalizeInventoryTextValue(row?.opticalA || row?.aConstant || ''),
+      immersionA: normalizeInventoryTextValue(row?.immersionA || ''),
+      contactA: normalizeInventoryTextValue(row?.contactA || ''),
+      lensThickness: normalizeInventoryTextValue(row?.lensThickness || row?.lt || ''),
+      haigis: normalizeInventoryTextValue(row?.haigis || ''),
+      hoffer: normalizeInventoryTextValue(row?.hoffer || ''),
+      holladay: normalizeInventoryTextValue(row?.holladay || row?.holladaySf || ''),
+      barrett: normalizeInventoryTextValue(row?.barrett || row?.barrettLfDf || '')
     };
   }).filter(Boolean);
 }
@@ -264,33 +275,90 @@ function deleteIolCatalogRow(i) {
 }
 function editIolCatalogRow(i) {
   if (i < 0 || i >= IOL_CATALOG.length) return;
-  const row = IOL_CATALOG[i];
-  const name = prompt('Edit IOL name:', row.name);
-  if (name === null) return;
-  const type = prompt('Edit type (e.g., Monofocal, Toric):', row.type || 'Monofocal');
-  if (type === null) return;
-  const mfr = prompt('Edit manufacturer:', row.mfr || '');
-  if (mfr === null) return;
-  const price = prompt('Edit MRP:', row.price || '0');
-  if (price === null) return;
-  const barcode = prompt('Edit barcode:', row.barcode || '');
-  if (barcode === null) return;
-  const batch = prompt('Edit batch number:', row.batchNo || '');
-  if (batch === null) return;
-  const serial = prompt('Edit serial number:', row.serialNo || '');
-  if (serial === null) return;
-  IOL_CATALOG[i] = {
-    name: name || row.name,
-    type: type || row.type || 'Monofocal',
-    mfr: mfr || row.mfr || '',
-    price: parseInt(price, 10) || row.price || 0,
-    barcode: barcode || row.barcode || '',
-    batchNo: batch || row.batchNo || '',
-    serialNo: serial || row.serialNo || '',
-    power: extractIolPower(name || row.name) || row.power || ''
+  openIolCatalogEditor(i);
+}
+function openIolCatalogEditor(i) {
+  if (i < 0 || i >= IOL_CATALOG.length) return;
+  const row = IOL_CATALOG[i] || {};
+  const esc = escapeHtmlConsent;
+  let modal = document.getElementById('iol-catalog-edit-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'iol-catalog-edit-modal';
+    document.body.appendChild(modal);
+  }
+  const field = function (id, label, val, ph) {
+    return '<div class="form-group" style="margin:0"><label class="fl">' + esc(label) + '</label><input id="iol-edit-' + id + '" value="' + esc(val || '') + '" placeholder="' + esc(ph || '') + '" style="font-size:12px"></div>';
   };
+  modal.style.cssText = 'position:fixed;inset:0;z-index:10070;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;padding:18px';
+  modal.innerHTML = '<div style="width:min(780px,96vw);max-height:90vh;overflow:auto;background:#fff;border-radius:12px;box-shadow:0 22px 70px rgba(0,0,0,.28);border:1px solid var(--g4)">'
+    + '<div style="display:flex;justify-content:space-between;gap:12px;align-items:center;padding:14px 16px;border-bottom:1px solid var(--g5);background:#f8fbff">'
+    + '<div><div style="font-size:15px;font-weight:900;color:var(--bmh-blue)">Edit IOL Catalogue</div><div style="font-size:11px;color:var(--g1);margin-top:2px">Calculation fields are optional and will auto-fill the biometry sheet when available.</div></div>'
+    + '<button type="button" class="btn btn-xs btn-outline" onclick="closeIolCatalogEditor()">Close</button></div>'
+    + '<div style="padding:14px 16px;display:grid;gap:12px">'
+    + '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px">'
+    + field('name', 'Trade name', row.name, 'e.g. Gemetric Plus')
+    + field('mfr', 'Company name', row.mfr || row.company, 'Company')
+    + field('type', 'Type', row.type || 'Monofocal', 'Monofocal / Toric / EDOF')
+    + field('price', 'MRP', row.price || '', 'Optional')
+    + field('barcode', 'Barcode / SKU', row.barcode || '', 'Optional')
+    + field('batch', 'Batch no.', row.batchNo || '', 'Optional')
+    + field('serial', 'Serial no.', row.serialNo || '', 'Optional')
+    + field('power', 'Default power', row.power || '', 'Optional')
+    + field('range', 'Power range', row.powerRange || '', '+10 to +30 D')
+    + '</div>'
+    + '<div style="border:1px solid var(--g4);border-radius:10px;padding:12px;background:#fff">'
+    + '<div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;margin-bottom:9px">IOL calculation constants (optional)</div>'
+    + '<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px">'
+    + field('step', 'Power step', row.step || '0.5', '0.5')
+    + field('optical', 'A constant / Optical A', row.opticalA || row.aConstant || '', '118.5')
+    + field('immersion', 'Immersion A', row.immersionA || '', 'Optional')
+    + field('contact', 'Contact A', row.contactA || '', 'Optional')
+    + field('lt', 'LT', row.lensThickness || row.lt || '', 'Optional')
+    + field('haigis', 'Haigis', row.haigis || '', 'a0 / a1 / a2')
+    + field('hoffer', 'Hoffer Q', row.hoffer || '', 'Optional')
+    + field('holladay', 'Holladay SF', row.holladay || row.holladaySf || '', 'Optional')
+    + field('barrett', 'Barrett LF/DF', row.barrett || row.barrettLfDf || '', 'Optional')
+    + '</div></div></div>'
+    + '<div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid var(--g5);background:var(--g6)">'
+    + '<button type="button" class="btn btn-outline" onclick="closeIolCatalogEditor()">Cancel</button>'
+    + '<button type="button" class="btn btn-gold" onclick="saveIolCatalogEditor(' + i + ')">Save IOL</button>'
+    + '</div></div>';
+}
+function closeIolCatalogEditor() {
+  const modal = document.getElementById('iol-catalog-edit-modal');
+  if (modal) modal.style.display = 'none';
+}
+function saveIolCatalogEditor(i) {
+  if (i < 0 || i >= IOL_CATALOG.length) return;
+  const row = IOL_CATALOG[i] || {};
+  const val = function (id) { return String(document.getElementById('iol-edit-' + id)?.value || '').trim(); };
+  const name = val('name') || row.name;
+  IOL_CATALOG[i] = Object.assign({}, row, {
+    name: name,
+    type: val('type') || row.type || 'Monofocal',
+    mfr: val('mfr') || row.mfr || '',
+    company: val('mfr') || row.company || row.mfr || '',
+    price: parseInt(val('price') || row.price || '0', 10) || 0,
+    barcode: val('barcode') || row.barcode || '',
+    batchNo: val('batch') || row.batchNo || '',
+    serialNo: val('serial') || row.serialNo || '',
+    power: normalizeIolPowerValue(val('power')) || extractIolPower(name) || row.power || '',
+    powerRange: val('range') || row.powerRange || '',
+    step: val('step') || row.step || '0.5',
+    opticalA: val('optical') || row.opticalA || row.aConstant || '',
+    immersionA: val('immersion') || row.immersionA || '',
+    contactA: val('contact') || row.contactA || '',
+    lensThickness: val('lt') || row.lensThickness || row.lt || '',
+    haigis: val('haigis') || row.haigis || '',
+    hoffer: val('hoffer') || row.hoffer || '',
+    holladay: val('holladay') || row.holladay || row.holladaySf || '',
+    barrett: val('barrett') || row.barrett || row.barrettLfDf || ''
+  });
   saveIolCatalogToStorage();
   renderIolCatalogList();
+  loadBiometryIolConstants && loadBiometryIolConstants();
+  closeIolCatalogEditor();
   showToast('IOL updated ✓', 's');
 }
 function addIolFromModal() {
@@ -29472,10 +29540,14 @@ function toggleRefractivePanel() {
 }
 const BMH_BIOMETRY_IOL_STORAGE_KEY = 'bmh_biometry_iol_constants_v1';
 const BMH_DEFAULT_BIOMETRY_IOLS = [
-  { name:'PC 60 AD', company:'Care Group', type:'Monofocal', powerRange:'+10 to +30 D', step:'0.5', opticalA:'118.4', immersionA:'118.2', contactA:'118.0', haigis:'0.85 / 0.40 / 0.10', hoffer:'5.64', holladay:'1.84', barrett:'2.03 / 5.20', useOd:true, useOs:true },
-  { name:'CT Lucia 621P', company:'Zeiss', type:'Monofocal', powerRange:'+10 to +30 D', step:'0.5', opticalA:'119.0', immersionA:'118.8', contactA:'118.6', haigis:'0.95 / 0.40 / 0.10', hoffer:'5.70', holladay:'1.90', barrett:'2.10 / 5.20', useOd:true, useOs:true },
-  { name:'AcrySof IQ Toric', company:'Alcon', type:'Toric', powerRange:'+10 to +30 D', step:'0.5', opticalA:'119.2', immersionA:'119.0', contactA:'118.8', haigis:'1.00 / 0.40 / 0.10', hoffer:'5.75', holladay:'1.92', barrett:'2.12 / 5.25', useOd:true, useOs:true },
-  { name:'Eyecryl Plus', company:'Biotech', type:'Monofocal', powerRange:'+10 to +30 D', step:'0.5', opticalA:'118.0', immersionA:'117.8', contactA:'117.6', haigis:'0.80 / 0.40 / 0.10', hoffer:'5.60', holladay:'1.80', barrett:'2.00 / 5.10', useOd:true, useOs:true }
+  { name:'PC 60 AD', company:'Care Group', type:'Monofocal', powerRange:'+10 to +30 D', step:'0.5', opticalA:'118.4', immersionA:'118.2', contactA:'118.0', lensThickness:'', haigis:'0.85 / 0.40 / 0.10', hoffer:'5.64', holladay:'1.84', barrett:'2.03 / 5.20', useOd:true, useOs:true },
+  { name:'CT Lucia 621P', company:'Zeiss', type:'Monofocal', powerRange:'+10 to +30 D', step:'0.5', opticalA:'119.0', immersionA:'118.8', contactA:'118.6', lensThickness:'', haigis:'0.95 / 0.40 / 0.10', hoffer:'5.70', holladay:'1.90', barrett:'2.10 / 5.20', useOd:true, useOs:true },
+  { name:'AcrySof IQ Toric', company:'Alcon', type:'Toric', powerRange:'+10 to +30 D', step:'0.5', opticalA:'119.2', immersionA:'119.0', contactA:'118.8', lensThickness:'', haigis:'1.00 / 0.40 / 0.10', hoffer:'5.75', holladay:'1.92', barrett:'2.12 / 5.25', useOd:true, useOs:true },
+  { name:'Eyecryl Plus', company:'Biotech', type:'Monofocal', powerRange:'+10 to +30 D', step:'0.5', opticalA:'118.0', immersionA:'117.8', contactA:'117.6', lensThickness:'', haigis:'0.80 / 0.40 / 0.10', hoffer:'5.60', holladay:'1.80', barrett:'2.00 / 5.10', useOd:true, useOs:true },
+  { name:'Gemetric', company:'', type:'EDOF', powerRange:'+10 to +30 D', step:'0.5', opticalA:'', immersionA:'', contactA:'', lensThickness:'', haigis:'', hoffer:'', holladay:'', barrett:'', useOd:true, useOs:true },
+  { name:'Gemetric Plus', company:'', type:'EDOF', powerRange:'+10 to +30 D', step:'0.5', opticalA:'', immersionA:'', contactA:'', lensThickness:'', haigis:'', hoffer:'', holladay:'', barrett:'', useOd:true, useOs:true },
+  { name:'Gemetric Toric', company:'', type:'Toric', powerRange:'+10 to +30 D', step:'0.5', opticalA:'', immersionA:'', contactA:'', lensThickness:'', haigis:'', hoffer:'', holladay:'', barrett:'', useOd:true, useOs:true },
+  { name:'Gemetric Plus Toric', company:'', type:'Toric', powerRange:'+10 to +30 D', step:'0.5', opticalA:'', immersionA:'', contactA:'', lensThickness:'', haigis:'', hoffer:'', holladay:'', barrett:'', useOd:true, useOs:true }
 ];
 function toggleBiometryCalcPanel() {
   const box = document.getElementById('bio-calc-enable');
@@ -29501,6 +29573,7 @@ function getBiometryIolRowsFromDom() {
       opticalA: read('bio-iol-optical'),
       immersionA: read('bio-iol-immersion'),
       contactA: read('bio-iol-contact'),
+      lensThickness: read('bio-iol-lt'),
       haigis: read('bio-iol-haigis'),
       hoffer: read('bio-iol-hoffer'),
       holladay: read('bio-iol-holladay'),
@@ -29510,16 +29583,111 @@ function getBiometryIolRowsFromDom() {
     };
   }).filter(function (row) { return row.name || row.company || row.type; });
 }
+function biometryCatalogRowToIol(row) {
+  return {
+    name: row?.name || '',
+    company: row?.company || row?.mfr || '',
+    type: row?.type || 'IOL',
+    powerRange: row?.powerRange || '+10 to +30 D',
+    step: row?.step || '0.5',
+    opticalA: row?.opticalA || row?.aConstant || '',
+    immersionA: row?.immersionA || '',
+    contactA: row?.contactA || '',
+    lensThickness: row?.lensThickness || row?.lt || '',
+    haigis: row?.haigis || '',
+    hoffer: row?.hoffer || '',
+    holladay: row?.holladay || row?.holladaySf || '',
+    barrett: row?.barrett || row?.barrettLfDf || '',
+    useOd: row?.useOd === false ? false : true,
+    useOs: row?.useOs === false ? false : true
+  };
+}
+function getBiometryIolCatalogOptions() {
+  const merged = [];
+  const seen = new Set();
+  const add = function (row) {
+    const mapped = biometryCatalogRowToIol(row);
+    const key = normalizeInventoryCompareText(mapped.name || '');
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    merged.push(mapped);
+  };
+  (typeof getIolCatalogNormalizedRows === 'function' ? getIolCatalogNormalizedRows() : []).forEach(add);
+  BMH_DEFAULT_BIOMETRY_IOLS.forEach(add);
+  return merged;
+}
+function mergeBiometryIolRows(savedRows) {
+  const map = new Map();
+  getBiometryIolCatalogOptions().forEach(function (row) {
+    map.set(normalizeInventoryCompareText(row.name || ''), row);
+  });
+  (Array.isArray(savedRows) ? savedRows : []).forEach(function (row) {
+    const mapped = biometryCatalogRowToIol(row);
+    const key = normalizeInventoryCompareText(mapped.name || '');
+    if (!key) return;
+    const base = map.get(key) || {};
+    map.set(key, Object.assign({}, base, mapped, {
+      useOd: row.useOd === false ? false : true,
+      useOs: row.useOs === false ? false : true
+    }));
+  });
+  return Array.from(map.values());
+}
+function findBiometryIolOptionByName(name) {
+  const key = normalizeInventoryCompareText(name || '');
+  if (!key) return null;
+  return getBiometryIolCatalogOptions().find(function (row) {
+    return normalizeInventoryCompareText(row.name || '') === key;
+  }) || null;
+}
+function populateBiometryIolRowFromCatalog(sel) {
+  const tr = sel?.closest('tr');
+  if (!tr) return;
+  const row = findBiometryIolOptionByName(sel.value);
+  if (!row) return;
+  const set = function (cls, val) {
+    const el = tr.querySelector('.' + cls);
+    if (el) el.value = val || '';
+  };
+  set('bio-iol-company', row.company);
+  set('bio-iol-type', row.type);
+  set('bio-iol-range', row.powerRange);
+  set('bio-iol-step', row.step || '0.5');
+  set('bio-iol-optical', row.opticalA);
+  set('bio-iol-immersion', row.immersionA);
+  set('bio-iol-contact', row.contactA);
+  set('bio-iol-lt', row.lensThickness);
+  set('bio-iol-haigis', row.haigis);
+  set('bio-iol-hoffer', row.hoffer);
+  set('bio-iol-holladay', row.holladay);
+  set('bio-iol-barrett', row.barrett);
+}
 function renderBiometryIolRows(rows) {
   const tbody = document.getElementById('bio-iol-rows');
   if (!tbody) return;
-  const list = Array.isArray(rows) && rows.length ? rows : BMH_DEFAULT_BIOMETRY_IOLS;
+  const list = Array.isArray(rows) && rows.length ? rows : mergeBiometryIolRows();
+  const options = getBiometryIolCatalogOptions();
   const input = function (cls, val, w) {
     return '<input class="' + cls + '" value="' + escapeHtmlConsent(val || '') + '" style="width:' + (w || '100%') + ';font-size:11px;padding:5px;border:1px solid #d8e1ef;border-radius:6px">';
   };
+  const select = function (row) {
+    const current = row?.name || '';
+    const seen = new Set();
+    const opts = options.slice();
+    if (current && !findBiometryIolOptionByName(current)) opts.unshift({ name: current });
+    return '<select class="bio-iol-name" onchange="populateBiometryIolRowFromCatalog(this)" style="width:100%;font-size:11px;padding:5px;border:1px solid #d8e1ef;border-radius:6px;background:#fff">'
+      + opts.map(function (opt) {
+        const name = opt.name || '';
+        const key = normalizeInventoryCompareText(name);
+        if (!key || seen.has(key)) return '';
+        seen.add(key);
+        return '<option value="' + escapeHtmlConsent(name) + '" ' + (normalizeInventoryCompareText(name) === normalizeInventoryCompareText(current) ? 'selected' : '') + '>' + escapeHtmlConsent(name) + '</option>';
+      }).join('')
+      + '</select>';
+  };
   tbody.innerHTML = list.map(function (row) {
     return '<tr>'
-      + '<td>' + input('bio-iol-name', row.name) + '</td>'
+      + '<td>' + select(row) + '</td>'
       + '<td>' + input('bio-iol-company', row.company) + '</td>'
       + '<td>' + input('bio-iol-type', row.type) + '</td>'
       + '<td>' + input('bio-iol-range', row.powerRange) + '</td>'
@@ -29527,6 +29695,7 @@ function renderBiometryIolRows(rows) {
       + '<td>' + input('bio-iol-optical', row.opticalA, '72px') + '</td>'
       + '<td>' + input('bio-iol-immersion', row.immersionA, '72px') + '</td>'
       + '<td>' + input('bio-iol-contact', row.contactA, '72px') + '</td>'
+      + '<td>' + input('bio-iol-lt', row.lensThickness, '62px') + '</td>'
       + '<td>' + input('bio-iol-haigis', row.haigis) + '</td>'
       + '<td>' + input('bio-iol-hoffer', row.hoffer, '72px') + '</td>'
       + '<td>' + input('bio-iol-holladay', row.holladay, '72px') + '</td>'
@@ -29543,12 +29712,12 @@ function loadBiometryIolConstants(rowsOverride) {
   if (!rows) {
     try { rows = JSON.parse(localStorage.getItem(BMH_BIOMETRY_IOL_STORAGE_KEY) || 'null'); } catch (e) { rows = null; }
   }
-  renderBiometryIolRows(Array.isArray(rows) && rows.length ? rows : BMH_DEFAULT_BIOMETRY_IOLS);
+  renderBiometryIolRows(mergeBiometryIolRows(rows));
 }
 function saveBiometryIolConstants(opts) {
   const rows = getBiometryIolRowsFromDom();
   if (!rows.length) {
-    renderBiometryIolRows(BMH_DEFAULT_BIOMETRY_IOLS);
+    renderBiometryIolRows(mergeBiometryIolRows());
     return;
   }
   try { localStorage.setItem(BMH_BIOMETRY_IOL_STORAGE_KEY, JSON.stringify(rows)); } catch (e) { console.warn('biometry iol constants save failed', e); }
@@ -29664,6 +29833,18 @@ function biometryAxisSvg(eye, payload) {
     + '<text x="50" y="56" text-anchor="middle" font-size="8" font-weight="900">' + escapeHtmlConsent(eye === 'od' ? 'RE' : 'LE') + '</text>'
     + '</svg>';
 }
+function getBiometryCornealSuggestion(eye, payload) {
+  const row = payload[eye] || {};
+  const k1 = Number(row.k1);
+  const k2 = Number(row.k2);
+  if (!Number.isFinite(k1) || !Number.isFinite(k2)) return '';
+  const diff = Math.abs(k2 - k1);
+  const axis = String(row.axis || payload.incisionAxis || '').trim();
+  const axisText = axis ? ' around ' + axis + '°' : '';
+  if (diff > 1) return 'K difference ' + diff.toFixed(2) + ' D: consider toric IOL; confirm steep axis' + axisText + '.';
+  if (diff >= 0.5 && diff <= 0.75) return 'K difference ' + diff.toFixed(2) + ' D: consider mid-peripheral corneal relaxing incision' + axisText + '.';
+  return '';
+}
 function printBiometryIolCalculation() {
   try { syncBiometryFromEyeExam(); } catch (e) {}
   try { saveBiometryIolConstants({ silent: true }); } catch (e) {}
@@ -29686,20 +29867,22 @@ function printBiometryIolCalculation() {
       + '<div class="measure"><b>Target</b><span>' + escapeHtmlConsent(r.target || '—') + '</span></div>';
   };
   const iolTable = function (eye) {
-    const usable = payload.iols.filter(function (iol) { return eye === 'od' ? iol.useOd !== false : iol.useOs !== false; }).slice(0, 4);
-    const rows = (usable.length ? usable : payload.iols.slice(0, 4)).map(function (iol) {
+    const usable = payload.iols.filter(function (iol) { return eye === 'od' ? iol.useOd !== false : iol.useOs !== false; }).slice(0, 8);
+    const rows = (usable.length ? usable : payload.iols.slice(0, 8)).map(function (iol) {
       const vals = calculateBiometryResidualRows(eye, iol, payload);
-      return '<tr><td class="iolname">' + escapeHtmlConsent(iol.name || 'IOL') + '<div>' + escapeHtmlConsent(iol.company || '') + '</div></td>'
+      const meta = [iol.company, iol.type, iol.lensThickness ? 'LT ' + iol.lensThickness : ''].filter(Boolean).join(' · ');
+      return '<tr><td class="iolname">' + escapeHtmlConsent(iol.name || 'IOL') + '<div>' + escapeHtmlConsent(meta) + '</div></td>'
         + vals.map(function (v) { return '<td><b>' + escapeHtmlConsent(v.power) + ' D</b><br><span>' + escapeHtmlConsent(v.residual) + '</span></td>'; }).join('')
         + '</tr>';
     }).join('');
     return '<table class="iol"><thead><tr><th>IOL</th><th>Power 1<br>Residual</th><th>Power 2<br>Residual</th><th>Power 3<br>Residual</th><th>Power 4<br>Residual</th></tr></thead><tbody>' + rows + '</tbody></table>';
   };
   const eyeCard = function (eye) {
-    return '<section class="eye"><div class="eyehdr">' + eyeLabel(eye) + '</div><div class="eyetop"><div class="measures">' + measureRows(eye) + '</div><div>' + biometryAxisSvg(eye, payload) + '<div class="axisnote">Gold: steep/toric axis · Red: incision</div></div></div>' + iolTable(eye) + '</section>';
+    const suggestion = getBiometryCornealSuggestion(eye, payload);
+    return '<section class="eye"><div class="eyehdr">' + eyeLabel(eye) + '</div><div class="eyetop"><div class="measures">' + measureRows(eye) + '</div><div>' + biometryAxisSvg(eye, payload) + '<div class="axisnote">Gold: steep/toric axis · Red: incision</div></div></div>' + (suggestion ? '<div class="suggestion">' + escapeHtmlConsent(suggestion) + '</div>' : '') + iolTable(eye) + '</section>';
   };
   const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>IOL Calculation</title><style>'
-    + '@page{size:A4 landscape;margin:8mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#172033;font-size:10px;line-height:1.28}.hdr{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:8px;border-bottom:2px solid #1A3C6E;padding-bottom:7px}.title{font-size:20px;font-weight:900;color:#1A3C6E}.sub{font-size:10px;color:#667085}.pt{text-align:right}.ptname{font-size:18px;font-weight:900;color:#111827}.ptid{font-size:16px;font-weight:900;color:#1A3C6E;margin-top:2px}.cols{display:grid;grid-template-columns:1fr 1fr;gap:9px}.eye{border:1px solid #cfd7e6;border-radius:8px;padding:7px;break-inside:avoid}.eyehdr{font-size:12px;font-weight:900;color:#1A3C6E;margin-bottom:6px;text-transform:uppercase}.eyetop{display:grid;grid-template-columns:1fr 132px;gap:8px;align-items:start}.measures{display:grid;grid-template-columns:1fr 1fr;gap:5px}.measure{border:1px solid #dde5f2;border-radius:6px;padding:5px 6px;display:flex;justify-content:space-between;gap:6px}.measure b{color:#52627a}.measure span{font-weight:900}.axisnote{text-align:center;font-size:8px;color:#667085;margin-top:2px}.meta{display:flex;gap:10px;margin-top:4px;color:#52627a}.iol{width:100%;border-collapse:collapse;margin-top:7px}.iol th{background:#1A3C6E;color:#fff;border:1px solid #16345c;padding:5px 4px;font-size:8px}.iol td{border:1px solid #cfd7e6;padding:5px 4px;text-align:center;vertical-align:top}.iolname{text-align:left!important;font-weight:900;color:#111827}.iolname div{font-size:8px;color:#667085;font-weight:700;margin-top:2px}.iol span{color:#b45309;font-weight:900}.footer{margin-top:7px;border-top:1px solid #d8e1ef;padding-top:6px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px}.box{border:1px solid #d8e1ef;border-radius:6px;padding:6px;min-height:34px}.box b{display:block;font-size:8px;color:#667085;text-transform:uppercase;margin-bottom:3px}</style></head><body>'
+    + '@page{size:A4 landscape;margin:8mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#172033;font-size:9.5px;line-height:1.22}.hdr{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:8px;border-bottom:2px solid #1A3C6E;padding-bottom:7px}.title{font-size:20px;font-weight:900;color:#1A3C6E}.sub{font-size:10px;color:#667085}.pt{text-align:right}.ptname{font-size:18px;font-weight:900;color:#111827}.ptid{font-size:16px;font-weight:900;color:#1A3C6E;margin-top:2px}.cols{display:grid;grid-template-columns:1fr 1fr;gap:9px}.eye{border:1px solid #cfd7e6;border-radius:8px;padding:7px;break-inside:avoid}.eyehdr{font-size:12px;font-weight:900;color:#1A3C6E;margin-bottom:6px;text-transform:uppercase}.eyetop{display:grid;grid-template-columns:1fr 132px;gap:8px;align-items:start}.measures{display:grid;grid-template-columns:1fr 1fr;gap:5px}.measure{border:1px solid #dde5f2;border-radius:6px;padding:4px 6px;display:flex;justify-content:space-between;gap:6px}.measure b{color:#52627a}.measure span{font-weight:900}.axisnote{text-align:center;font-size:8px;color:#667085;margin-top:2px}.suggestion{margin-top:5px;border:1px solid #f5c56d;background:#fff8e7;color:#8a4b00;border-radius:6px;padding:4px 6px;font-weight:800}.meta{display:flex;gap:10px;margin-top:4px;color:#52627a}.iol{width:100%;border-collapse:collapse;margin-top:6px}.iol th{background:#1A3C6E;color:#fff;border:1px solid #16345c;padding:4px 3px;font-size:7.5px}.iol td{border:1px solid #cfd7e6;padding:4px 3px;text-align:center;vertical-align:top}.iolname{text-align:left!important;font-weight:900;color:#111827}.iolname div{font-size:7.5px;color:#667085;font-weight:700;margin-top:2px}.iol span{color:#b45309;font-weight:900}.footer{margin-top:7px;border-top:1px solid #d8e1ef;padding-top:6px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px}.box{border:1px solid #d8e1ef;border-radius:6px;padding:6px;min-height:34px}.box b{display:block;font-size:8px;color:#667085;text-transform:uppercase;margin-bottom:3px}</style></head><body>'
     + '<div class="hdr"><div>' + logoHtml + '<div class="meta"><span>Baweja Multispeciality Hospital</span><span>' + escapeHtmlConsent(formatDateIN(new Date())) + '</span></div></div><div class="pt"><div class="title">IOL Calculation Sheet</div><div class="ptname">' + escapeHtmlConsent(pt.name || 'Patient') + '</div><div class="ptid">' + escapeHtmlConsent(pt.bmhId || 'BMSH ID') + '</div></div></div>'
     + '<div class="cols">' + eyeCard('od') + eyeCard('os') + '</div>'
     + '<div class="footer"><div class="box"><b>Formula</b>' + escapeHtmlConsent(payload.formula || 'Barrett / SRK-T') + '</div><div class="box"><b>SIA / Incision</b>' + escapeHtmlConsent((payload.sia || '—') + ' D / ' + (payload.incisionAxis || '—') + '°') + '</div><div class="box"><b>Toric note</b>' + escapeHtmlConsent(payload.toricNote || 'Surgeon to confirm axis and lens selection') + '</div></div>'
