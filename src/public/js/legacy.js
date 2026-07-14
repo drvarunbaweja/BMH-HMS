@@ -8300,13 +8300,14 @@ function reconcileIpdAdmissionsFromOTCases() {
   const ipdRows = window.IPD_PATIENTS || IPD_PATIENTS || [];
   const activeKeys = new Set();
   ipdRows.forEach(function (row) {
-    if (!row || (row.status || 'admitted') === 'discharged') return;
+    if (!isActiveIpdAdmission(row)) return;
     if (row.otCaseId) activeKeys.add('ot:' + row.otCaseId);
     if (row.bmhId) activeKeys.add('bmh:' + row.bmhId);
   });
   let added = 0;
   otRows.forEach(function (otCase) {
     if (!otCase || !otCase.bmhId || !otCase.admitToIpd) return;
+    if (otCase.ipdStatus === 'discharged' || otCase.ipdDischargedAt || otCase.dischargePrintedAt) return;
     if (!centreMatch(otCase)) return;
     if (activeKeys.has('ot:' + otCase.id) || activeKeys.has('bmh:' + otCase.bmhId)) return;
     const pt = PATIENTS.find(function (p) { return p.bmhId === otCase.bmhId; }) || null;
@@ -8320,15 +8321,76 @@ function reconcileIpdAdmissionsFromOTCases() {
   return added;
 }
 window.reconcileIpdAdmissionsFromOTCases = reconcileIpdAdmissionsFromOTCases;
+function isActiveIpdAdmission(row) {
+  if (!row) return false;
+  const status = String(row.status || 'admitted').toLowerCase();
+  return !(status === 'discharged' || row.dischargedAt || row.dischargeDate);
+}
+function markLinkedOtCaseIpdDischarged(otCaseId, bmhId, atIso, by) {
+  const rows = window.OT_CASES || OT_CASES || [];
+  let changed = false;
+  rows.forEach(function (row) {
+    if (!row) return;
+    const sameCase = otCaseId && row.id === otCaseId;
+    const samePatientActiveIpd = !otCaseId && bmhId && row.bmhId === bmhId && row.admitToIpd && !row.ipdDischargedAt;
+    if (!sameCase && !samePatientActiveIpd) return;
+    row.ipdStatus = 'discharged';
+    row.ipdDischargedAt = atIso;
+    row.ipdDischargedBy = by;
+    row.dischargePrintedAt = row.dischargePrintedAt || atIso;
+    row.admitToIpd = false;
+    row.lastTouchedAt = atIso;
+    changed = true;
+    fbUpdate && fbUpdate('otCases/' + row.id, {
+      ipdStatus: 'discharged',
+      ipdDischargedAt: atIso,
+      ipdDischargedBy: by,
+      dischargePrintedAt: row.dischargePrintedAt,
+      admitToIpd: false,
+      lastTouchedAt: atIso
+    }).catch(function () {});
+  });
+  if (changed) {
+    saveOTCasesToLocalStorage && saveOTCasesToLocalStorage();
+    renderOTListSafe && renderOTListSafe();
+  }
+}
+function markPatientIpdDischarged(bmhId, atIso, by) {
+  const key = String(bmhId || '').trim();
+  if (!key) return;
+  const pt = PATIENTS.find(function (p) { return p.bmhId === key; });
+  if (pt) {
+    pt.ipdAdmitted = false;
+    pt.ipdDischargedAt = atIso;
+    pt.ipdDischargedBy = by;
+    if (String(pt.status || '').toLowerCase() === 'ipd') pt.status = 'seen';
+  }
+  const patch = {
+    ipdAdmitted: false,
+    ipdDischargedAt: atIso,
+    ipdDischargedBy: by,
+    updatedAt: atIso
+  };
+  if (pt && String(pt.status || '').toLowerCase() === 'seen') patch.status = 'seen';
+  fbUpdate && fbUpdate('patients/' + key, patch).catch(function () {});
+}
 function autoDischargeCurrentIpdPatientFromSurgery() {
   const bmhId = document.getElementById('dc-pt-id')?.textContent?.trim() || activeOTCase?.bmhId || window.CURRENT_PATIENT?.bmhId;
   const list = window.IPD_PATIENTS || IPD_PATIENTS || [];
-  if (!bmhId || !list.length) return;
+  if (!bmhId) return;
   const match = list.find(function (p) {
-    return p.bmhId === bmhId || (activeOTCase?.id && p.otCaseId === activeOTCase.id);
+    return isActiveIpdAdmission(p) && (p.bmhId === bmhId || (activeOTCase?.id && p.otCaseId === activeOTCase.id));
   });
-  if (!match) return;
-  dischargeIPDPatientById(match.id);
+  if (match) {
+    dischargeIPDPatientById(match.id, { skipConfirm: true, silentToast: true });
+    return;
+  }
+  const atIso = new Date().toISOString();
+  const by = CURRENT_USER?.name || 'System';
+  markPatientIpdDischarged(bmhId, atIso, by);
+  markLinkedOtCaseIpdDischarged(activeOTCase?.id || '', bmhId, atIso, by);
+  renderIPD && renderIPD();
+  renderDocQueue && renderDocQueue();
 }
 function dischargeIPDPatientById(id, opts) {
   opts = opts || {};
@@ -8338,17 +8400,15 @@ function dischargeIPDPatientById(id, opts) {
   const ipd = list[idx];
   if (!opts.skipConfirm && !confirm('Discharge ' + (ipd.name || 'this patient') + ' from IPD?')) return false;
   const bmhId = ipd.bmhId;
+  const atIso = new Date().toISOString();
+  const by = CURRENT_USER?.name || 'System';
   ipd.status = 'discharged';
-  ipd.dischargedAt = new Date().toISOString();
-  ipd.dischargedBy = CURRENT_USER?.name || 'System';
+  ipd.dischargedAt = atIso;
+  ipd.dischargedBy = by;
   fbUpdate && fbUpdate('ipdPatients/' + ipd.id, { status:'discharged', dischargedAt:ipd.dischargedAt, dischargedBy:ipd.dischargedBy }).catch(function(){});
   list.splice(idx, 1);
-  const pt = PATIENTS.find(function (p) { return p.bmhId === bmhId; });
-  if (pt) {
-    pt.ipdAdmitted = false;
-    pt.status = 'seen';
-    fbUpdate && fbUpdate('patients/' + bmhId, { ipdAdmitted:false, status:'seen' }).catch(function(){});
-  }
+  markPatientIpdDischarged(bmhId, atIso, by);
+  markLinkedOtCaseIpdDischarged(ipd.otCaseId || activeOTCase?.id || '', bmhId, atIso, by);
   renderIPD && renderIPD();
   renderDocQueue && renderDocQueue();
   if (!opts.silentToast) showToast('Patient discharged from IPD ✓', 's');
@@ -46449,7 +46509,7 @@ function _renderDocQueueImpl() {
   const xrefs   = (window.XREF_LOG||[]).filter(x => crossRefQueueDateMatchesToday(x) && (!effectiveQueueDept || x.fromDept===effectiveQueueDept || x.toDept===effectiveQueueDept));
   const ipdPts  = (window.IPD_PATIENTS||[]).filter(p => {
     const ipdDept = normalizeDeptKeyForQueue(p.dept || p.department || '');
-    return (p.status || 'admitted') !== 'discharged' && centreMatch(p) && (!effectiveQueueDept || ipdDept === effectiveQueueDept || CURRENT_USER?.isAdmin);
+    return isActiveIpdAdmission(p) && centreMatch(p) && (!effectiveQueueDept || ipdDept === effectiveQueueDept || CURRENT_USER?.isAdmin);
   });
 
   const emptyRow = label => `<tr><td colspan="10" style="text-align:center;padding:24px;color:var(--g2);font-size:12.5px">No ${label} patients</td></tr>`;
