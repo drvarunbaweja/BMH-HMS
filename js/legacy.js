@@ -7432,6 +7432,8 @@ function populateObgForm(visit) {
   window.OBG_COMPLAINT_DETAILS = Array.isArray(data?.mainComplaintDetails) ? JSON.parse(JSON.stringify(data.mainComplaintDetails)) : [];
   renderObgComplaintDetails();
   if(!data || typeof data !== 'object') {
+    const ancChk = document.getElementById('obg-track-anc');
+    if (ancChk) ancChk.checked = false;
     restoreProcedureDoneState('obg', null);
     initObgPregnancyStateFromVisit({});
     toggleObgWorkflow();
@@ -7469,7 +7471,7 @@ function populateObgForm(visit) {
     const el = document.getElementById(id);
     if (el && data[id] != null) el.value = data[id];
   });
-  const ancChk = document.getElementById('obg-track-anc'); if(ancChk) ancChk.checked = data.workflowAnc !== false;
+  const ancChk = document.getElementById('obg-track-anc'); if(ancChk) ancChk.checked = !!data.workflowAnc;
   const gynChk = document.getElementById('obg-track-gynae'); if(gynChk) gynChk.checked = data.workflowGynae !== false;
   const infChk = document.getElementById('obg-track-infertility'); if(infChk) infChk.checked = !!data.workflowInfertility;
   ['obg-anc-booking','obg-anc-warning','obg-anc-highrisk','obg-anc-fetal','obg-gyn-aub','obg-gyn-discharge','obg-gyn-pain','obg-gyn-menopause','obg-inf-ovulatory','obg-inf-tubal','obg-inf-endo','obg-inf-male','obg-redflag-bleeding','obg-redflag-leak','obg-redflag-headache','obg-redflag-pain','obg-redflag-fever','obg-redflag-decreasedfm','obg-redflag-swelling','obg-redflag-convulsions','obg-hr-prevlscs','obg-hr-gdm','obg-hr-pih','obg-hr-iugr','obg-hr-multiple','obg-hr-rhneg','obg-hr-placenta','obg-hr-anemia','obg-fetal-growthlag','obg-fetal-malpresentation','obg-fetal-lowliquor','obg-fetal-postdates','obg-aub-clots','obg-aub-intermenstrual','obg-aub-postcoital','obg-aub-anemia','obg-vag-pruritus','obg-vag-foul','obg-vag-dyspareunia','obg-vag-pidrisk','obg-pain-cyclical','obg-pain-severe','obg-pain-bowel','obg-pain-infertility','obg-inf-coital','obg-inf-pastpid','obg-inf-priorsurgery','obg-inf-galactorrhoea','obg-inf-hirsutism','obg-inf-maleabn','obg-inf-lowreserve','obg-inf-rpl']
@@ -30441,7 +30443,7 @@ function getObgAncVisitCandidates(pt) {
   const add = function (visit, source) {
     if (!visit || typeof visit !== 'object') return;
     const dept = normalizeDeptKeyForQueue(visit.dept || pt.lastDeptVisit || pt.dept || '');
-    const anc = visit.workflowAnc !== false || !!visit.obstetricHistoryEnabled || !!visit['obg-track-anc'];
+    const anc = !!visit.workflowAnc || !!visit.obstetricHistoryEnabled || !!visit['obg-track-anc'];
     if (dept !== 'obg' || !anc) return;
     rows.push(Object.assign({ _source: source || '' }, visit));
   };
