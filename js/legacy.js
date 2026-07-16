@@ -39284,9 +39284,8 @@ setTimeout(() => {
 document.addEventListener('bmh:patientsUpdated', () => {
   try {
     if (typeof genRcUID === 'function') genRcUID();
-    renderReceptionPage && renderReceptionPage();
-    renderDocQueue && renderDocQueue();
-    renderDashboard && renderDashboard();
+    if (typeof scheduleBackgroundPatientUiRefresh === 'function') scheduleBackgroundPatientUiRefresh();
+    else if (typeof _debouncedRenderDash === 'function') _debouncedRenderDash();
   } catch (e) { console.warn('bmh:patientsUpdated', e); }
 });
 
@@ -39832,6 +39831,23 @@ function renderActivePageAfterRealtimeUpdate(opts) {
   if (activeId === 'pg-ot') {
     renderOTListSafe && renderOTListSafe();
     return;
+  }
+}
+function scheduleBackgroundPatientUiRefresh(opts) {
+  const options = opts || {};
+  const run = function () {
+    try {
+      if (typeof genRcUID === 'function') genRcUID();
+      if (typeof _debouncedRenderDash === 'function') _debouncedRenderDash(options);
+      else renderActivePageAfterRealtimeUpdate(options);
+    } catch (e) {
+      console.warn('background patient UI refresh failed', e);
+    }
+  };
+  if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+    window.requestIdleCallback(run, { timeout: 900 });
+  } else {
+    setTimeout(run, 80);
   }
 }
 function _debouncedRenderDash() {
@@ -46372,11 +46388,31 @@ function markSeen(bmhId) {
     return;
   }
   const nowIso = new Date().toISOString();
-  if(p) { p.seen=true; p.status='seen'; p.dilated=false; p.dilatedTime=null; p.seenAt = nowIso; }
-  fbUpdate && fbUpdate('patients/'+bmhId,{seen:true,status:'seen',dilated:false,dilatedTime:null,seenAt:nowIso}).catch(()=>{});
-  renderDocQueue && renderDocQueue();
-  renderReceptionPage && renderReceptionPage();
-  renderDashboard && renderDashboard();
+  const previous = p ? {
+    seen: p.seen,
+    status: p.status,
+    dilated: p.dilated,
+    dilatedTime: p.dilatedTime,
+    seenAt: p.seenAt,
+    updatedAt: p.updatedAt
+  } : null;
+  if(p) {
+    p.seen = true;
+    p.status = 'seen';
+    p.dilated = false;
+    p.dilatedTime = null;
+    p.seenAt = nowIso;
+    p.updatedAt = nowIso;
+  }
+  const patch = { seen:true, status:'seen', dilated:false, dilatedTime:null, seenAt:nowIso, updatedAt:nowIso };
+  scheduleBackgroundPatientUiRefresh({ realtimePatients: { rows: p ? [p] : [] } });
+  const write = fbUpdate ? fbUpdate('patients/'+bmhId, patch) : Promise.resolve();
+  Promise.resolve(write).catch(function (err) {
+    if (p && previous) Object.assign(p, previous);
+    scheduleBackgroundPatientUiRefresh({ realtimePatients: { rows: p ? [p] : [] } });
+    showToast('Seen update failed. Please retry.', 'w');
+    console.warn('mark seen failed', err);
+  });
 }
 function reassignReceptionPatientDept(bmhId, currentDept) {
   const p = PATIENTS.find(function (x) { return x.bmhId === bmhId; });
