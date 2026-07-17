@@ -347,6 +347,30 @@
       font-size: .84em;
       font-weight: 900;
     }
+    .consult-banner {
+      margin-top: 22px;
+      padding: 15px 18px;
+      border-radius: 14px;
+      background: linear-gradient(90deg, var(--blue), var(--teal));
+      color: #fff;
+      font-size: clamp(20px, 2vw, 32px);
+      line-height: 1.12;
+      font-weight: 950;
+      box-shadow: 0 18px 44px rgba(18,59,109,.18);
+    }
+    .consult-banner .pa {
+      display: block;
+      margin-top: 5px;
+      color: rgba(255,255,255,.9);
+      font-size: .74em;
+      font-weight: 900;
+    }
+    .source-note {
+      margin-top: 9px;
+      color: var(--muted);
+      font-size: clamp(12px, 1vw, 16px);
+      font-weight: 850;
+    }
     .slide-visual {
       border-radius: 22px;
       overflow: hidden;
@@ -605,6 +629,8 @@
       .slide-title { font-size: clamp(34px, 5vw, 64px); }
       .slide-pa { font-size: clamp(21px, 2.6vw, 36px); margin-top: 10px; }
       .slide-body { margin-top: 16px; gap: 8px; font-size: clamp(18px, 2vw, 27px); }
+      .consult-banner { margin-top: 14px; padding: 11px 13px; font-size: clamp(16px, 1.7vw, 24px); border-radius: 11px; }
+      .source-note { font-size: clamp(10px, .9vw, 13px); }
       .cred-list { margin-top: 14px; gap: 7px; }
       .cred-chip { padding: 7px 9px; font-size: clamp(13px, 1.25vw, 18px); }
       .doctor-card-band { left: 14px; right: 14px; bottom: 14px; padding: 11px 13px; }
@@ -636,6 +662,8 @@
       .slide-title { font-size: clamp(28px, 4.3vw, 52px); }
       .slide-pa { font-size: clamp(18px, 2.2vw, 30px); }
       .slide-body { font-size: clamp(15px, 1.7vw, 22px); }
+      .consult-banner { margin-top: 10px; padding: 9px 11px; font-size: clamp(14px, 1.45vw, 20px); }
+      .source-note { margin-top: 5px; }
       .motion-scene { min-height: 300px; }
       footer { font-size: 11px; }
     }
@@ -866,13 +894,30 @@
         return slides[slideIndex++];
       }
       function doctorSlide(name, title, credentials, pa, img, department) {
-        return { kind: 'doctor', name: name, title: title, credentials: credentials, pa: pa, img: img, department: department || '' };
+        var dept = department || '';
+        return { kind: 'doctor', name: name, title: title, credentials: credentials, pa: pa, img: img, department: dept, source: sourceForDepartment(dept) };
       }
       function infoSlide(title, pa, points, img, department) {
-        return { kind: 'info', title: title, pa: pa, points: points, img: img, department: department || '' };
+        var dept = department || '';
+        return { kind: 'info', title: title, pa: pa, points: points, img: img, department: dept, source: sourceForDepartment(dept) };
       }
       function motionSlide(title, pa, theme) {
-        return { kind: 'motion', title: title, pa: pa, theme: theme, department: 'Ophthalmology' };
+        return { kind: 'motion', title: title, pa: pa, theme: theme, department: 'Ophthalmology', source: sourceForDepartment('Ophthalmology') };
+      }
+      function sourceForDepartment(department) {
+        var d = String(department || '').toLowerCase();
+        if (d.indexOf('ophthalm') >= 0) return 'Patient education adapted from AAO, FDA and CDC eye-health guidance.';
+        if (d.indexOf('gyn') >= 0 || d.indexOf('obst') >= 0) return 'Patient education adapted from CDC maternal-health guidance.';
+        if (d.indexOf('psych') >= 0 || d.indexOf('neuro') >= 0) return 'Patient education adapted from NIMH mental-health guidance.';
+        if (d.indexOf('skin') >= 0 || d.indexOf('cosmet') >= 0) return 'Patient education adapted from AAD skin-care guidance.';
+        if (d.indexOf('dental') >= 0) return 'Patient education adapted from ADA dental-care guidance.';
+        return 'Patient education adapted from public health guidance.';
+      }
+      function consultBanner(slide) {
+        var dept = String(slide && slide.department || 'Specialist').trim() || 'Specialist';
+        var pa = 'ਆਪਣੀ ਜਾਂਚ ਅਤੇ ਇਲਾਜ ਲਈ ਬਾਵੇਜਾ ਹਸਪਤਾਲ ਵਿੱਚ ਸਲਾਹ ਕਰੋ।';
+        return '<div class="consult-banner">Consult our ' + safeText(dept) + ' doctors at Baweja Hospital.<span class="pa">' + safeText(pa) + '</span></div>' +
+          '<div class="source-note">' + safeText(slide && slide.source || '') + '</div>';
       }
 
       function todayKey() {
@@ -965,7 +1010,8 @@
             '<h1 class="slide-title">' + safeText(slide.name) + '</h1>' +
             '<div class="slide-pa">' + safeText(slide.pa) + '</div>' +
             '<div class="slide-body"><div>' + safeText(slide.title) + '</div><div class="pa">ਤੁਹਾਡੀ ਸਿਹਤ, ਸਾਡੀ ਜ਼ਿੰਮੇਵਾਰੀ।</div></div>' +
-            '<div class="cred-list">' + String(slide.credentials || '').split('·').map(function (x) { return '<span class="cred-chip">' + safeText(x.trim()) + '</span>'; }).join('') + '</div></div>' +
+            '<div class="cred-list">' + String(slide.credentials || '').split('·').map(function (x) { return '<span class="cred-chip">' + safeText(x.trim()) + '</span>'; }).join('') + '</div>' +
+            consultBanner(slide) + '</div>' +
             '<div class="slide-visual doctor-visual"><img src="' + slide.img + '" alt="' + safeText(slide.name) + '">' +
             '<div class="doctor-card-band"><strong>' + safeText(slide.name) + '</strong><span>' + safeText(slide.title) + ' · ' + safeText(slide.credentials) + '</span></div></div>' +
           '</div>';
@@ -977,7 +1023,8 @@
             '<div class="slide-copy"><div class="eyebrow">' + deptLabel + 'Animated Patient Education / ਐਨੀਮੇਟਡ ਜਾਣਕਾਰੀ</div>' +
             '<h1 class="slide-title">' + safeText(slide.title) + '</h1>' +
             '<div class="slide-pa">' + safeText(slide.pa) + '</div>' +
-            '<div class="slide-body"><div>Short hospital education video-style display.</div><div class="pa">ਮਰੀਜ਼ਾਂ ਅਤੇ ਪਰਿਵਾਰ ਲਈ ਛੋਟੀ ਜਾਣਕਾਰੀ।</div></div></div>' +
+            '<div class="slide-body"><div>Short hospital education video-style display.</div><div class="pa">ਮਰੀਜ਼ਾਂ ਅਤੇ ਪਰਿਵਾਰ ਲਈ ਛੋਟੀ ਜਾਣਕਾਰੀ।</div></div>' +
+            consultBanner(slide) + '</div>' +
             '<div class="slide-visual"><div class="motion-scene"><div class="orbit"></div><div class="lens"></div><div class="laser"></div><div class="spark s1"></div><div class="spark s2"></div><div class="spark s3"></div><div class="motion-title">' + safeText(slide.title) + '<div class="motion-sub">' + safeText(slide.pa) + '</div></div></div></div>' +
           '</div>';
           return;
@@ -987,7 +1034,8 @@
           '<div class="slide-copy"><div class="eyebrow">' + deptLabel + 'Hospital Information / ਹਸਪਤਾਲ ਜਾਣਕਾਰੀ</div>' +
           '<h1 class="slide-title">' + safeText(slide.title) + '</h1>' +
           '<div class="slide-pa">' + safeText(slide.pa) + '</div>' +
-          '<div class="slide-body">' + slide.points.map(function (p) { return '<div>' + safeText(p[0]) + '<div class="pa">' + safeText(p[1]) + '</div></div>'; }).join('') + '</div></div>' +
+          '<div class="slide-body">' + slide.points.map(function (p) { return '<div>' + safeText(p[0]) + '<div class="pa">' + safeText(p[1]) + '</div></div>'; }).join('') + '</div>' +
+          consultBanner(slide) + '</div>' +
           '<div class="slide-visual"><img src="' + slide.img + '" alt="' + safeText(slide.title) + '"></div>' +
         '</div>';
       }
