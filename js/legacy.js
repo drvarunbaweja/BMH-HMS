@@ -37411,7 +37411,9 @@ window.printUnifiedRx = function(deptId) {
   const printDateValue = saveDept ? getDeptPrintDateValue(saveDept) : todayKey();
   const printDateIsToday = !printDateValue || printDateValue === todayKey();
   if (saveDept && printDateIsToday) {
-    try { saveVisit(saveDept, { silent: true, autosave: true }); } catch (e) { console.warn('rx pre-print save failed', e); }
+    setTimeout(function () {
+      try { saveVisit(saveDept, { silent: true, autosave: true }); } catch (e) { console.warn('rx pre-print save failed', e); }
+    }, 0);
   }
   const today = formatDateIN(printDateValue || new Date());
   const rxDateOe = document.getElementById('rx-date');
@@ -47658,13 +47660,6 @@ function saveVisit(dept, opts) {
     patientPatch.obgDxLedger = nLedger;
     if (localPt) localPt.obgDxLedger = nLedger;
   }
-  if (visit.slChips) visit.slChips = sanitizeSlChipsMap(visit.slChips);
-  const visitForCloud = sanitizeFirebaseValue(visit);
-  if (visitForCloud.slChips) visitForCloud.slChips = sanitizeSlChipsMap(visitForCloud.slChips);
-  const patientPatchForCloud = Object.assign({}, patientPatch, {
-    lastVisit: visitForCloud,
-    lastVisitByDept: sanitizeFirebaseValue(lastVisitByDept)
-  });
   if(localPt) {
     localPt.lastVisit = JSON.parse(JSON.stringify(visit));
     localPt.lastVisitKey = visitKey;
@@ -47678,14 +47673,22 @@ function saveVisit(dept, opts) {
     cachedVisits[visitKey] = JSON.parse(JSON.stringify(visit));
     cachePatientVisits(bmhId, cachedVisits);
   }
-  Promise.all([
-    fbSet(`visits/${bmhId}/${visitKey}`, visitForCloud),
-    fbSet(`patients/${bmhId}/lastVisit`, visitForCloud),
-    typeof fbUpdate === 'function' ? fbUpdate('patients/' + bmhId, patientPatchForCloud).catch(()=>{}) : Promise.resolve()
-  ])
-    .then(() => {
+  if (!opts.silent) showToast(`✅ ${ptName} — visit saved (${visit.dateLabel})`, 's');
+  const persistVisit = function () {
+    if (visit.slChips) visit.slChips = sanitizeSlChipsMap(visit.slChips);
+    const visitForCloud = sanitizeFirebaseValue(visit);
+    if (visitForCloud.slChips) visitForCloud.slChips = sanitizeSlChipsMap(visitForCloud.slChips);
+    const patientPatchForCloud = Object.assign({}, patientPatch, {
+      lastVisit: visitForCloud,
+      lastVisitByDept: sanitizeFirebaseValue(lastVisitByDept)
+    });
+    Promise.all([
+      fbSet(`visits/${bmhId}/${visitKey}`, visitForCloud),
+      fbSet(`patients/${bmhId}/lastVisit`, visitForCloud),
+      typeof fbUpdate === 'function' ? fbUpdate('patients/' + bmhId, patientPatchForCloud).catch(()=>{}) : Promise.resolve()
+    ])
+      .then(() => {
       try { if (dept === 'ophtho' && !opts.autosave) populateOphthoForm(visit); } catch (e) { console.warn('post-save populateOphthoForm failed', e); }
-      if (!opts.silent) showToast(`✅ ${ptName} — visit saved (${visit.dateLabel})`, 's');
       // Auto-create follow-up appointment from prescription follow-up date
       try {
         const rawFuD = visit.rxFuDate || visit.followupDate || '';
@@ -47746,11 +47749,13 @@ function saveVisit(dept, opts) {
         }
       }
       document.dispatchEvent(new CustomEvent('bmh:patientsUpdated'));
-    })
-    .catch(e => {
+      })
+      .catch(e => {
       if (!opts.silent) showToast('Save failed: ' + e.message, 'w');
       else console.warn('autosave failed', e);
-    });
+      });
+  };
+  setTimeout(persistVisit, 0);
   } catch (e) {
     console.error('saveVisit error', e);
     if (!opts.silent) showToast('Save failed: ' + e.message, 'w');
