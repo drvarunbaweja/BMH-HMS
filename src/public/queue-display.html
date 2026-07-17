@@ -86,6 +86,7 @@
     main {
       position: relative;
       overflow: hidden;
+      min-height: 0;
     }
     .panel {
       position: absolute;
@@ -106,6 +107,7 @@
       display: grid;
       grid-template-rows: auto 1fr;
       gap: 22px;
+      min-height: 0;
     }
     .dept-head {
       display: flex;
@@ -152,10 +154,11 @@
     }
     .queue-list {
       display: grid;
-      grid-auto-rows: minmax(96px, auto);
-      align-content: start;
+      grid-template-rows: repeat(8, minmax(0, 1fr));
+      align-content: stretch;
       gap: 14px;
       overflow: hidden;
+      min-height: 0;
     }
     .patient-row {
       display: grid;
@@ -169,6 +172,7 @@
       border-radius: 14px;
       box-shadow: 0 13px 32px rgba(18,59,109,.08);
       min-width: 0;
+      min-height: 0;
     }
     .patient-row.current {
       border-left-color: var(--gold);
@@ -252,6 +256,7 @@
       gap: 36px;
       align-items: stretch;
       position: relative;
+      min-height: 0;
     }
     .slide.full {
       grid-template-columns: 1fr;
@@ -564,6 +569,76 @@
       .patient-tag { justify-self: start; }
       header { flex-wrap: wrap; }
     }
+    @media (max-height: 860px) {
+      .screen { grid-template-rows: 70px 1fr 36px; }
+      header { padding: 10px 24px; gap: 18px; }
+      .brand img { width: 48px; height: 48px; }
+      .brand-title { font-size: 20px; }
+      .brand-sub { font-size: 13px; }
+      .clock-time { font-size: 24px; }
+      .clock-date { font-size: 12px; }
+      .panel { padding: 18px 24px 16px; }
+      .queue-layout { gap: 12px; }
+      .dept-title { font-size: clamp(34px, 5.4vw, 72px); }
+      .dept-pa { font-size: clamp(20px, 2.4vw, 34px); margin-top: 4px; }
+      .queue-status { font-size: 14px; gap: 4px; }
+      .queue-list { gap: 8px; }
+      .patient-row {
+        grid-template-columns: minmax(170px, 260px) minmax(0, 1fr) minmax(100px, 140px);
+        gap: 12px;
+        padding: 10px 16px;
+        border-left-width: 7px;
+        border-radius: 11px;
+      }
+      .patient-row.plain {
+        grid-template-columns: minmax(0, 1fr) minmax(100px, 140px);
+        padding-left: 22px;
+      }
+      .call-label { font-size: clamp(20px, 2.4vw, 32px); }
+      .call-label small { font-size: clamp(14px, 1.6vw, 21px); margin-top: 2px; }
+      .patient-name { font-size: clamp(24px, 3.4vw, 46px); }
+      .patient-meta { margin-top: 4px; font-size: clamp(13px, 1.35vw, 18px); }
+      .patient-tag { padding: 7px 9px; font-size: clamp(12px, 1.25vw, 16px); border-radius: 8px; }
+      .slide { gap: 22px; grid-template-columns: minmax(0, 1fr) minmax(280px, .82fr); }
+      .slide-logo { width: 72px; height: 72px; border-radius: 12px; }
+      .eyebrow { font-size: clamp(13px, 1.1vw, 18px); margin-bottom: 10px; }
+      .slide-title { font-size: clamp(34px, 5vw, 64px); }
+      .slide-pa { font-size: clamp(21px, 2.6vw, 36px); margin-top: 10px; }
+      .slide-body { margin-top: 16px; gap: 8px; font-size: clamp(18px, 2vw, 27px); }
+      .cred-list { margin-top: 14px; gap: 7px; }
+      .cred-chip { padding: 7px 9px; font-size: clamp(13px, 1.25vw, 18px); }
+      .doctor-card-band { left: 14px; right: 14px; bottom: 14px; padding: 11px 13px; }
+      .motion-scene { min-height: 360px; }
+      .orbit { width: 260px; height: 260px; top: 44px; }
+      .lens { width: 160px; height: 160px; top: 92px; }
+      .laser { top: 178px; }
+      .motion-title { left: 24px; right: 24px; bottom: 24px; font-size: clamp(28px, 3.8vw, 54px); }
+      .motion-sub { font-size: clamp(17px, 1.9vw, 26px); }
+      footer { padding: 7px 24px; font-size: 12px; }
+      .progress { width: 180px; }
+    }
+    @media (max-height: 680px) {
+      .screen { grid-template-rows: 58px 1fr 30px; }
+      header { padding: 7px 18px; }
+      .brand img { width: 40px; height: 40px; }
+      .brand-title { font-size: 17px; }
+      .brand-sub { display: none; }
+      .clock-time { font-size: 20px; }
+      .clock-date { display: none; }
+      .panel { padding: 12px 18px 10px; }
+      .dept-title { font-size: clamp(28px, 4.6vw, 56px); }
+      .dept-pa { font-size: clamp(16px, 2vw, 26px); }
+      .queue-list { gap: 6px; }
+      .patient-row { padding: 7px 12px; }
+      .patient-name { font-size: clamp(20px, 3vw, 38px); }
+      .patient-meta { font-size: clamp(11px, 1.15vw, 15px); }
+      .slide { gap: 16px; }
+      .slide-title { font-size: clamp(28px, 4.3vw, 52px); }
+      .slide-pa { font-size: clamp(18px, 2.2vw, 30px); }
+      .slide-body { font-size: clamp(15px, 1.7vw, 22px); }
+      .motion-scene { min-height: 300px; }
+      footer { font-size: 11px; }
+    }
   </style>
 </head>
 <body>
@@ -653,57 +728,151 @@
       document.getElementById('dept-pa').textContent = deptMap[activeDept].pa;
 
       var logoSrc = './websites/chandigarh/images/brand/bmh.jpg';
-      var slides = [
-        doctorSlide('Dr Varun Baweja', 'Ophthalmic & Refractive Surgeon', 'MBBS · MS (Ophth) · MRCPS (Glasgow) · UK NHS Cambridgeshire · MIGS training', 'ਅੱਖਾਂ ਦੇ ਮਾਹਿਰ', './websites/chandigarh/images/doctors/professional/dr-varun-baweja.jpg'),
+      var slides = shuffleSlides([
+        doctorSlide('Dr Varun Baweja', 'Ophthalmic & Refractive Surgeon', 'MBBS · MS (Ophth) · MRCPS (Glasgow) · UK NHS Cambridgeshire · MIGS training', 'ਅੱਖਾਂ ਦੇ ਮਾਹਿਰ', './websites/chandigarh/images/doctors/professional/dr-varun-baweja.jpg', 'Ophthalmology'),
         infoSlide('Do’s & Don’ts After Cataract Surgery', 'ਮੋਤੀਆਬਿੰਦ ਸਰਜਰੀ ਤੋਂ ਬਾਅਦ ਧਿਆਨ', [
           ['Use drops exactly as advised.', 'ਦਵਾਈਆਂ ਡਾਕਟਰ ਦੀ ਸਲਾਹ ਮੁਤਾਬਕ ਪਾਓ।'],
           ['Do not rub the operated eye.', 'ਓਪਰੇਸ਼ਨ ਵਾਲੀ ਅੱਖ ਨੂੰ ਨਾ ਰਗੜੋ।'],
           ['Use protective glasses and come for follow-up.', 'ਚਸ਼ਮਾ ਪਾਓ ਅਤੇ ਫਾਲੋ-ਅਪ ਲਈ ਜ਼ਰੂਰ ਆਓ।']
-        ], './websites/chandigarh/images/procedures/cataract-family.jpg'),
+        ], './websites/chandigarh/images/procedures/cataract-family.jpg', 'Ophthalmology'),
         motionSlide('Cataract Surgery: Clear Vision Journey', 'ਮੋਤੀਆਬਿੰਦ ਸਰਜਰੀ: ਸਾਫ਼ ਨਜ਼ਰ ਵੱਲ ਕਦਮ', 'cataract'),
-        doctorSlide('Dr Tarun Baweja', 'Senior Consultant Psychiatrist', 'MBBS · MD (Psychiatry) · Neuropsychiatry · De-addiction · EEG diagnostics', 'ਮਨੋਰੋਗ ਅਤੇ ਨਸ਼ਾ ਛੁਡਾਊ ਸੇਵਾਵਾਂ', './websites/chandigarh/images/doctors/professional/dr-tarun-baweja.jpg'),
+        infoSlide('Cataract Myth: Surgery should wait until fully mature', 'ਭਰਮ: ਮੋਤੀਆਬਿੰਦ ਪੱਕਣ ਤੱਕ ਉਡੀਕ ਕਰੋ', [
+          ['Reality: Timing depends on vision, daily needs and eye health.', 'ਸੱਚਾਈ: ਸਮਾਂ ਨਜ਼ਰ, ਰੋਜ਼ਾਨਾ ਕੰਮ ਅਤੇ ਅੱਖ ਦੀ ਸਿਹਤ ਤੇ ਨਿਰਭਰ ਕਰਦਾ ਹੈ।'],
+          ['Modern cataract surgery is planned after complete evaluation.', 'ਆਧੁਨਿਕ ਸਰਜਰੀ ਪੂਰੀ ਜਾਂਚ ਤੋਂ ਬਾਅਦ ਯੋਜਨਾ ਨਾਲ ਹੁੰਦੀ ਹੈ।']
+        ], './websites/chandigarh/images/procedures/cataract-family.jpg', 'Ophthalmology'),
+        infoSlide('After Eye Laser or Injection', 'ਅੱਖ ਦੇ ਲੇਜ਼ਰ ਜਾਂ ਇੰਜੈਕਸ਼ਨ ਤੋਂ ਬਾਅਦ', [
+          ['Mild irritation can happen, but pain or sudden drop in vision needs urgent review.', 'ਹਲਕੀ ਚੁਭਣ ਹੋ ਸਕਦੀ ਹੈ, ਪਰ ਦਰਦ ਜਾਂ ਨਜ਼ਰ ਘਟਣ ਤੇ ਤੁਰੰਤ ਜਾਂਚ ਕਰਵਾਓ।'],
+          ['Use prescribed drops and avoid rubbing the eye.', 'ਦਵਾਈਆਂ ਸਲਾਹ ਅਨੁਸਾਰ ਪਾਓ ਅਤੇ ਅੱਖ ਨਾ ਰਗੜੋ।']
+        ], './websites/chandigarh/images/hero/migs-devices.jpg', 'Ophthalmology'),
+        infoSlide('Diabetic Eye Check', 'ਸ਼ੂਗਰ ਵਾਲੇ ਮਰੀਜ਼ਾਂ ਲਈ ਅੱਖਾਂ ਦੀ ਜਾਂਚ', [
+          ['Diabetes can affect the retina before vision becomes blurred.', 'ਨਜ਼ਰ ਧੁੰਦਲੀ ਹੋਣ ਤੋਂ ਪਹਿਲਾਂ ਵੀ ਸ਼ੂਗਰ ਰੈਟੀਨਾ ਨੂੰ ਪ੍ਰਭਾਵਿਤ ਕਰ ਸਕਦੀ ਹੈ।'],
+          ['Regular retina check helps protect sight.', 'ਨਿਯਮਿਤ ਰੈਟੀਨਾ ਜਾਂਚ ਨਜ਼ਰ ਬਚਾਉਣ ਵਿੱਚ ਮਦਦ ਕਰਦੀ ਹੈ।']
+        ], './websites/chandigarh/images/hero/migs-devices.jpg', 'Ophthalmology'),
+        infoSlide('Eye Emergency Warning Signs', 'ਅੱਖਾਂ ਦੇ ਐਮਰਜੈਂਸੀ ਸੰਕੇਤ', [
+          ['Sudden vision loss, flashes, injury, severe pain or redness need urgent care.', 'ਅਚਾਨਕ ਨਜ਼ਰ ਘਟਣਾ, ਚਮਕ, ਚੋਟ, ਤੇਜ਼ ਦਰਦ ਜਾਂ ਲਾਲੀ ਤੇ ਤੁਰੰਤ ਜਾਂਚ ਕਰਵਾਓ।'],
+          ['Do not self-medicate with steroid drops.', 'ਸਟੇਰੋਇਡ ਬੂੰਦਾਂ ਆਪਣੇ ਆਪ ਨਾ ਵਰਤੋ।']
+        ], './websites/chandigarh/images/hero/lasik-laser.jpg', 'Ophthalmology'),
+        doctorSlide('Dr Tarun Baweja', 'Senior Consultant Psychiatrist', 'MBBS · MD (Psychiatry) · Neuropsychiatry · De-addiction · EEG diagnostics', 'ਮਨੋਰੋਗ ਅਤੇ ਨਸ਼ਾ ਛੁਡਾਊ ਸੇਵਾਵਾਂ', './websites/chandigarh/images/doctors/professional/dr-tarun-baweja.jpg', 'Neuropsychiatry'),
         infoSlide('Depression: Myths & Realities', 'ਡਿਪ੍ਰੈਸ਼ਨ: ਭਰਮ ਅਤੇ ਸੱਚਾਈ', [
           ['Depression is treatable.', 'ਡਿਪ੍ਰੈਸ਼ਨ ਦਾ ਇਲਾਜ ਸੰਭਵ ਹੈ।'],
           ['It is not weakness or laziness.', 'ਇਹ ਕਮਜ਼ੋਰੀ ਜਾਂ ਆਲਸ ਨਹੀਂ ਹੈ।'],
           ['Seek help early for better recovery.', 'ਜਲਦੀ ਮਦਦ ਲੈਣ ਨਾਲ ਸੁਧਾਰ ਵਧੀਆ ਹੁੰਦਾ ਹੈ।']
-        ], './websites/chandigarh/images/hero/psychiatry-free-mind.jpg'),
+        ], './websites/chandigarh/images/hero/psychiatry-free-mind.jpg', 'Neuropsychiatry'),
+        infoSlide('Anxiety and Panic', 'ਘਬਰਾਹਟ ਅਤੇ ਪੈਨਿਕ', [
+          ['Fast heartbeat and breathlessness can feel frightening but treatment helps.', 'ਤੇਜ਼ ਧੜਕਨ ਅਤੇ ਸਾਹ ਘੁੱਟਣਾ ਡਰਾਉਣਾ ਲੱਗ ਸਕਦਾ ਹੈ, ਪਰ ਇਲਾਜ ਨਾਲ ਸੁਧਾਰ ਹੁੰਦਾ ਹੈ।'],
+          ['Early consultation prevents repeated emergency visits.', 'ਜਲਦੀ ਸਲਾਹ ਨਾਲ ਵਾਰ ਵਾਰ ਐਮਰਜੈਂਸੀ ਜਾਣ ਤੋਂ ਬਚਿਆ ਜਾ ਸਕਦਾ ਹੈ।']
+        ], './websites/chandigarh/images/hero/psychiatry-free-mind.jpg', 'Neuropsychiatry'),
+        infoSlide('Sleep Hygiene', 'ਚੰਗੀ ਨੀਂਦ ਲਈ ਆਦਤਾਂ', [
+          ['Keep a regular sleep time and reduce screens before bed.', 'ਸੌਣ ਦਾ ਸਮਾਂ ਨਿਯਮਿਤ ਰੱਖੋ ਅਤੇ ਸੌਣ ਤੋਂ ਪਹਿਲਾਂ ਸਕ੍ਰੀਨ ਘਟਾਓ।'],
+          ['Avoid alcohol or sedatives without medical advice.', 'ਡਾਕਟਰੀ ਸਲਾਹ ਤੋਂ ਬਿਨਾਂ ਸ਼ਰਾਬ ਜਾਂ ਨੀਂਦ ਦੀ ਦਵਾਈ ਨਾ ਲਵੋ।']
+        ], './websites/chandigarh/images/hero/psychiatry-free-mind.jpg', 'Neuropsychiatry'),
+        infoSlide('De-addiction Care', 'ਨਸ਼ਾ ਛੁਡਾਊ ਇਲਾਜ', [
+          ['Addiction is a medical condition, not a moral failure.', 'ਨਸ਼ਾ ਇੱਕ ਮੈਡੀਕਲ ਸਮੱਸਿਆ ਹੈ, ਨੈਤਿਕ ਕਮਜ਼ੋਰੀ ਨਹੀਂ।'],
+          ['Confidential treatment and family support improve recovery.', 'ਗੁਪਤ ਇਲਾਜ ਅਤੇ ਪਰਿਵਾਰ ਦਾ ਸਹਿਯੋਗ ਸੁਧਾਰ ਵਿੱਚ ਮਦਦ ਕਰਦਾ ਹੈ।']
+        ], './websites/chandigarh/images/hero/psychiatry-free-mind.jpg', 'Neuropsychiatry'),
         motionSlide('ICL: Freedom from High Power Glasses', 'ਆਈ.ਸੀ.ਐਲ. ਨਾਲ ਵੱਧ ਨੰਬਰ ਵਾਲੇ ਚਸ਼ਮੇ ਤੋਂ ਰਾਹਤ', 'icl'),
-        doctorSlide('Dr Namrata Baweja', 'Gynaecologist & Fertility Specialist', 'MBBS · MS (OB/GYN) · Fellowship IVF · High-risk pregnancy · Painless delivery', 'ਮਹਿਲਾ ਰੋਗ ਅਤੇ ਗਰਭ ਅਵਸਥਾ ਦੇਖਭਾਲ', './websites/chandigarh/images/doctors/professional/dr-namrata-baweja.jpg'),
+        doctorSlide('Dr Namrata Baweja', 'Gynaecologist & Fertility Specialist', 'MBBS · MS (OB/GYN) · Fellowship IVF · High-risk pregnancy · Painless delivery', 'ਮਹਿਲਾ ਰੋਗ ਅਤੇ ਗਰਭ ਅਵਸਥਾ ਦੇਖਭਾਲ', './websites/chandigarh/images/doctors/professional/dr-namrata-baweja.jpg', 'Obstetrics & Gynaecology'),
         infoSlide('Pregnancy Warning Signs', 'ਗਰਭ ਅਵਸਥਾ ਦੇ ਖਤਰੇ ਦੇ ਸੰਕੇਤ', [
           ['Bleeding, severe headache, swelling or reduced baby movements need urgent review.', 'ਖੂਨ ਆਉਣਾ, ਤੇਜ਼ ਸਿਰ ਦਰਦ, ਸੂਜਨ ਜਾਂ ਬੱਚੇ ਦੀ ਘੱਟ ਹਰਕਤ ਤੇ ਤੁਰੰਤ ਜਾਂਚ ਕਰਵਾਓ।'],
           ['Regular ANC visits keep mother and baby safer.', 'ਨਿਯਮਿਤ ANC ਜਾਂਚ ਮਾਂ ਅਤੇ ਬੱਚੇ ਲਈ ਸੁਰੱਖਿਅਤ ਹੈ।']
-        ], './websites/chandigarh/images/hero/obgyn-mother-newborn.jpg'),
-        doctorSlide('Dr Pooja Baweja', 'Aesthetic Physician', 'MBBS · MD · FAM · Skin · Cosmetology · Advanced laser procedures', 'ਚਮੜੀ ਅਤੇ ਸੁੰਦਰਤਾ ਇਲਾਜ', './websites/chandigarh/images/doctors/professional/dr-pooja-baweja.jpg'),
+        ], './websites/chandigarh/images/hero/obgyn-mother-newborn.jpg', 'Obstetrics & Gynaecology'),
+        infoSlide('Antenatal Visit Checklist', 'ANC ਜਾਂਚ ਵਿੱਚ ਕੀ ਯਾਦ ਰੱਖਣਾ ਹੈ', [
+          ['Bring previous scans, reports and medicine list.', 'ਪਿਛਲੇ ਸਕੈਨ, ਰਿਪੋਰਟਾਂ ਅਤੇ ਦਵਾਈਆਂ ਦੀ ਲਿਸਟ ਨਾਲ ਲਿਆਓ।'],
+          ['Ask about supplements, warning signs and next visit date.', 'ਸਪਲੀਮੈਂਟ, ਖਤਰੇ ਦੇ ਸੰਕੇਤ ਅਤੇ ਅਗਲੀ ਤਰੀਕ ਬਾਰੇ ਪੁੱਛੋ।']
+        ], './websites/chandigarh/images/hero/obgyn-mother-newborn.jpg', 'Obstetrics & Gynaecology'),
+        infoSlide('High-risk Pregnancy Care', 'ਹਾਈ-ਰਿਸਕ ਗਰਭ ਅਵਸਥਾ ਦੀ ਦੇਖਭਾਲ', [
+          ['Blood pressure, diabetes, twins or previous complications need closer follow-up.', 'ਬੀ.ਪੀ., ਸ਼ੂਗਰ, ਜੁੜਵਾ ਬੱਚੇ ਜਾਂ ਪਿਛਲੀ ਸਮੱਸਿਆ ਵਿੱਚ ਵਧੇਰੇ ਨਿਗਰਾਨੀ ਜ਼ਰੂਰੀ ਹੈ।'],
+          ['Planned care improves safety for mother and baby.', 'ਯੋਜਨਾਬੱਧ ਦੇਖਭਾਲ ਮਾਂ ਅਤੇ ਬੱਚੇ ਦੀ ਸੁਰੱਖਿਆ ਵਧਾਉਂਦੀ ਹੈ।']
+        ], './websites/chandigarh/images/hero/obgyn-mother-newborn.jpg', 'Obstetrics & Gynaecology'),
+        infoSlide('Menstrual Health', 'ਮਹਾਵਾਰੀ ਸਿਹਤ', [
+          ['Heavy bleeding, severe pain or irregular cycles should be evaluated.', 'ਜ਼ਿਆਦਾ ਖੂਨ, ਤੇਜ਼ ਦਰਦ ਜਾਂ ਅਨਿਯਮਿਤ ਮਹਾਵਾਰੀ ਦੀ ਜਾਂਚ ਕਰਵਾਓ।'],
+          ['Do not ignore symptoms that affect daily life.', 'ਰੋਜ਼ਾਨਾ ਜੀਵਨ ਨੂੰ ਪ੍ਰਭਾਵਿਤ ਕਰਨ ਵਾਲੇ ਲੱਛਣਾਂ ਨੂੰ ਅਣਡਿੱਠਾ ਨਾ ਕਰੋ।']
+        ], './websites/chandigarh/images/hero/obgyn-mother-newborn.jpg', 'Obstetrics & Gynaecology'),
+        doctorSlide('Dr Pooja Baweja', 'Aesthetic Physician', 'MBBS · MD · FAM · Skin · Cosmetology · Advanced laser procedures', 'ਚਮੜੀ ਅਤੇ ਸੁੰਦਰਤਾ ਇਲਾਜ', './websites/chandigarh/images/doctors/professional/dr-pooja-baweja.jpg', 'Skin & Cosmetology'),
         infoSlide('Skin Procedure Care', 'ਚਮੜੀ ਦੇ ਇਲਾਜ ਤੋਂ ਬਾਅਦ ਸਾਵਧਾਨੀਆਂ', [
           ['Use sunscreen and moisturiser as advised.', 'ਸਨਸਕ੍ਰੀਨ ਅਤੇ ਮਾਇਸਚਰਾਈਜ਼ਰ ਸਲਾਹ ਅਨੁਸਾਰ ਵਰਤੋ।'],
           ['Avoid picking or scratching treated areas.', 'ਇਲਾਜ ਵਾਲੀ ਥਾਂ ਨੂੰ ਨਾ ਖੁਰਚੋ।']
-        ], './websites/chandigarh/images/hero/aesthetics-glow.jpg'),
-        doctorSlide('Dr Geeta Baweja', 'Consultant Gynaecologist', 'MBBS · DGO · Senior Specialist · Women’s health since 1984', 'ਸੀਨੀਅਰ ਗਾਇਨੇਕੋਲੋਜਿਸਟ', './websites/chandigarh/images/doctors/professional/dr-geeta-baweja.jpg'),
-        doctorSlide('Dr Harwinder Baweja', 'Director · Consultant Dental Surgeon', 'BDS · MDS (Oral Surgery) · Senior clinical leadership', 'ਡਾਇਰੈਕਟਰ ਅਤੇ ਡੈਂਟਲ ਸਰਜਨ', './websites/chandigarh/images/doctors/professional/dr-harwinder-baweja.jpg'),
+        ], './websites/chandigarh/images/hero/aesthetics-glow.jpg', 'Skin & Cosmetology'),
+        infoSlide('Acne Myths', 'ਮੁਹਾਸਿਆਂ ਬਾਰੇ ਭਰਮ', [
+          ['Acne is not caused by poor hygiene alone.', 'ਮੁਹਾਸੇ ਸਿਰਫ਼ ਸਫਾਈ ਦੀ ਕਮੀ ਨਾਲ ਨਹੀਂ ਹੁੰਦੇ।'],
+          ['Picking acne can cause marks and scars.', 'ਮੁਹਾਸੇ ਖੁਰਚਣ ਨਾਲ ਦਾਗ ਅਤੇ ਨਿਸ਼ਾਨ ਪੈ ਸਕਦੇ ਹਨ।']
+        ], './websites/chandigarh/images/hero/aesthetics-glow.jpg', 'Skin & Cosmetology'),
+        infoSlide('Laser Hair Reduction', 'ਲੇਜ਼ਰ ਹੇਅਰ ਰਿਡਕਸ਼ਨ', [
+          ['Multiple sessions are usually needed for best results.', 'ਵਧੀਆ ਨਤੀਜੇ ਲਈ ਆਮ ਤੌਰ ਤੇ ਕਈ ਸੈਸ਼ਨ ਲੱਗਦੇ ਹਨ।'],
+          ['Avoid tanning and follow pre-procedure advice.', 'ਟੈਨਿੰਗ ਤੋਂ ਬਚੋ ਅਤੇ ਪ੍ਰੋਸੀਜਰ ਤੋਂ ਪਹਿਲਾਂ ਦੀ ਸਲਾਹ ਮੰਨੋ।']
+        ], './websites/chandigarh/images/hero/aesthetics-glow.jpg', 'Skin & Cosmetology'),
+        infoSlide('Pigmentation Care', 'ਪਿਗਮੈਂਟੇਸ਼ਨ ਦੀ ਦੇਖਭਾਲ', [
+          ['Daily sunscreen is a treatment, not just cosmetic care.', 'ਰੋਜ਼ਾਨਾ ਸਨਸਕ੍ਰੀਨ ਇਲਾਜ ਦਾ ਹਿੱਸਾ ਹੈ, ਸਿਰਫ਼ ਕਾਸਮੈਟਿਕ ਨਹੀਂ।'],
+          ['Results take time and need regular follow-up.', 'ਨਤੀਜੇ ਸਮਾਂ ਲੈਂਦੇ ਹਨ ਅਤੇ ਨਿਯਮਿਤ ਫਾਲੋ-ਅਪ ਚਾਹੀਦਾ ਹੈ।']
+        ], './websites/chandigarh/images/hero/aesthetics-glow.jpg', 'Skin & Cosmetology'),
+        doctorSlide('Dr Geeta Baweja', 'Consultant Gynaecologist', 'MBBS · DGO · Senior Specialist · Women’s health since 1984', 'ਸੀਨੀਅਰ ਗਾਇਨੇਕੋਲੋਜਿਸਟ', './websites/chandigarh/images/doctors/professional/dr-geeta-baweja.jpg', 'Obstetrics & Gynaecology'),
+        doctorSlide('Dr Harwinder Baweja', 'Director · Consultant Dental Surgeon', 'BDS · MDS (Oral Surgery) · Senior clinical leadership', 'ਡਾਇਰੈਕਟਰ ਅਤੇ ਡੈਂਟਲ ਸਰਜਨ', './websites/chandigarh/images/doctors/professional/dr-harwinder-baweja.jpg', 'Dental'),
+        infoSlide('Dental Pain and Swelling', 'ਦੰਦ ਦਰਦ ਅਤੇ ਸੋਜ', [
+          ['Pain, swelling or fever from a tooth needs timely dental review.', 'ਦੰਦ ਕਾਰਨ ਦਰਦ, ਸੋਜ ਜਾਂ ਬੁਖਾਰ ਹੋਵੇ ਤਾਂ ਸਮੇਂ ਤੇ ਡੈਂਟਲ ਜਾਂਚ ਕਰਵਾਓ।'],
+          ['Antibiotics alone may not solve the dental source.', 'ਸਿਰਫ਼ ਐਂਟੀਬਾਇਓਟਿਕ ਨਾਲ ਦੰਦ ਦੀ ਜੜ੍ਹ ਸਮੱਸਿਆ ਹਮੇਸ਼ਾ ਨਹੀਂ ਹੱਲ ਹੁੰਦੀ।']
+        ], './websites/chandigarh/images/brand/baweja-1.png', 'Dental'),
+        infoSlide('Oral Surgery After-care', 'ਓਰਲ ਸਰਜਰੀ ਤੋਂ ਬਾਅਦ ਸਾਵਧਾਨੀਆਂ', [
+          ['Bite on gauze as advised and avoid spitting repeatedly.', 'ਸਲਾਹ ਅਨੁਸਾਰ ਗਾਜ਼ ਦਬਾਓ ਅਤੇ ਵਾਰ ਵਾਰ ਥੁੱਕਣ ਤੋਂ ਬਚੋ।'],
+          ['Soft diet and medicines help healing.', 'ਨਰਮ ਖੁਰਾਕ ਅਤੇ ਦਵਾਈਆਂ ਠੀਕ ਹੋਣ ਵਿੱਚ ਮਦਦ ਕਰਦੀਆਂ ਹਨ।']
+        ], './websites/chandigarh/images/brand/baweja-1.png', 'Dental'),
+        infoSlide('Dental Myth: Cleaning weakens teeth', 'ਭਰਮ: ਸਕੇਲਿੰਗ ਨਾਲ ਦੰਦ ਕਮਜ਼ੋਰ ਹੁੰਦੇ ਹਨ', [
+          ['Reality: Professional cleaning removes deposits and protects gums.', 'ਸੱਚਾਈ: ਸਕੇਲਿੰਗ ਜਮਾਵ ਹਟਾ ਕੇ ਮਸੂੜਿਆਂ ਦੀ ਰੱਖਿਆ ਕਰਦੀ ਹੈ।'],
+          ['Bleeding gums should be checked early.', 'ਮਸੂੜਿਆਂ ਤੋਂ ਖੂਨ ਆਵੇ ਤਾਂ ਜਲਦੀ ਜਾਂਚ ਕਰਵਾਓ।']
+        ], './websites/chandigarh/images/brand/baweja-1.png', 'Dental'),
         motionSlide('LASIK / SMILE Pro: Laser Vision Correction', 'ਲੇਜ਼ਰ ਨਾਲ ਚਸ਼ਮੇ ਤੋਂ ਰਾਹਤ', 'lasik'),
         infoSlide('Glaucoma: The Silent Sight Stealer', 'ਗਲੂਕੋਮਾ: ਨਜ਼ਰ ਦਾ ਚੁੱਪ ਚਾਪ ਨੁਕਸਾਨ', [
           ['Regular eye pressure and optic nerve checks matter.', 'ਅੱਖਾਂ ਦਾ ਪ੍ਰੈਸ਼ਰ ਅਤੇ ਨਰਵ ਦੀ ਜਾਂਚ ਜ਼ਰੂਰੀ ਹੈ।'],
           ['Drops must be used daily even when vision feels normal.', 'ਨਜ਼ਰ ਠੀਕ ਲੱਗੇ ਤਾਂ ਵੀ ਦਵਾਈ ਰੋਜ਼ ਪਾਓ।']
-        ], './websites/chandigarh/images/hero/migs-devices.jpg'),
+        ], './websites/chandigarh/images/hero/migs-devices.jpg', 'Ophthalmology'),
         infoSlide('Myth: LASIK is painful', 'ਭਰਮ: ਲੇਜ਼ਰ ਇਲਾਜ ਦਰਦਨਾਕ ਹੁੰਦਾ ਹੈ', [
           ['Reality: Laser vision correction is usually quick and comfortable with numbing drops.', 'ਸੱਚਾਈ: ਸੁੰਨ ਕਰਨ ਵਾਲੀਆਂ ਬੂੰਦਾਂ ਨਾਲ ਲੇਜ਼ਰ ਇਲਾਜ ਆਮ ਤੌਰ ਤੇ ਜਲਦੀ ਅਤੇ ਆਰਾਮਦਾਇਕ ਹੁੰਦਾ ਹੈ।'],
           ['Suitability depends on cornea, power stability and eye health.', 'ਯੋਗਤਾ ਕੋਰਨੀਆ, ਨੰਬਰ ਦੀ ਸਥਿਰਤਾ ਅਤੇ ਅੱਖ ਦੀ ਸਿਹਤ ਤੇ ਨਿਰਭਰ ਕਰਦੀ ਹੈ।']
-        ], './websites/chandigarh/images/hero/lasik-laser.jpg'),
+        ], './websites/chandigarh/images/hero/lasik-laser.jpg', 'Ophthalmology'),
         infoSlide('Before Any Procedure', 'ਕਿਸੇ ਵੀ ਪ੍ਰੋਸੀਜਰ ਤੋਂ ਪਹਿਲਾਂ', [
           ['Tell the doctor about allergies, medicines and previous surgeries.', 'ਐਲਰਜੀ, ਦਵਾਈਆਂ ਅਤੇ ਪਿਛਲੇ ਓਪਰੇਸ਼ਨ ਬਾਰੇ ਡਾਕਟਰ ਨੂੰ ਦੱਸੋ।'],
           ['Bring old reports and prescriptions.', 'ਪੁਰਾਣੀਆਂ ਰਿਪੋਰਟਾਂ ਅਤੇ ਪ੍ਰਿਸਕ੍ਰਿਪਸ਼ਨ ਨਾਲ ਲਿਆਓ।'],
           ['Ask questions until you are comfortable.', 'ਜਦ ਤੱਕ ਤੁਸੀਂ ਨਿਸ਼ਚਿੰਤ ਨਾ ਹੋਵੋ, ਸਵਾਲ ਪੁੱਛੋ।']
-        ], './websites/chandigarh/images/brand/baweja-1.png')
-      ];
+        ], './websites/chandigarh/images/brand/baweja-1.png', 'General'),
+        infoSlide('Safe Hospital Visit', 'ਸੁਰੱਖਿਅਤ ਹਸਪਤਾਲ ਮੁਲਾਕਾਤ', [
+          ['Keep your reports together and share all current medicines.', 'ਆਪਣੀਆਂ ਰਿਪੋਰਟਾਂ ਇਕੱਠੀਆਂ ਰੱਖੋ ਅਤੇ ਸਾਰੀਆਂ ਮੌਜੂਦਾ ਦਵਾਈਆਂ ਦੱਸੋ।'],
+          ['Inform staff if you feel dizzy, breathless or unwell.', 'ਚੱਕਰ, ਸਾਹ ਘੁੱਟਣਾ ਜਾਂ ਤਬੀਅਤ ਖਰਾਬ ਲੱਗੇ ਤਾਂ ਸਟਾਫ਼ ਨੂੰ ਦੱਸੋ।']
+        ], './websites/chandigarh/images/hero/bmh-chandigarh-banner.webp', 'General'),
+        infoSlide('Medicine Safety', 'ਦਵਾਈਆਂ ਦੀ ਸੁਰੱਖਿਆ', [
+          ['Do not stop long-term medicines unless your doctor advises.', 'ਡਾਕਟਰ ਦੀ ਸਲਾਹ ਤੋਂ ਬਿਨਾਂ ਲੰਬੇ ਸਮੇਂ ਦੀਆਂ ਦਵਾਈਆਂ ਬੰਦ ਨਾ ਕਰੋ।'],
+          ['Bring old prescriptions to every visit.', 'ਹਰ ਵਿਜ਼ਿਟ ਤੇ ਪੁਰਾਣੀਆਂ ਪ੍ਰਿਸਕ੍ਰਿਪਸ਼ਨ ਨਾਲ ਲਿਆਓ।']
+        ], './websites/chandigarh/images/brand/bmh.jpg', 'General'),
+        infoSlide('Reports and Follow-up', 'ਰਿਪੋਰਟਾਂ ਅਤੇ ਫਾਲੋ-ਅਪ', [
+          ['Follow-up visits help doctors confirm that recovery is on track.', 'ਫਾਲੋ-ਅਪ ਨਾਲ ਡਾਕਟਰ ਰਿਕਵਰੀ ਠੀਕ ਚੱਲ ਰਹੀ ਹੈ ਜਾਂ ਨਹੀਂ ਦੇਖਦੇ ਹਨ।'],
+          ['Keep discharge cards, lab reports and scans safely.', 'ਡਿਸਚਾਰਜ ਕਾਰਡ, ਲੈਬ ਰਿਪੋਰਟਾਂ ਅਤੇ ਸਕੈਨ ਸੰਭਾਲ ਕੇ ਰੱਖੋ।']
+        ], './websites/chandigarh/images/hero/bmh-chandigarh-banner.webp', 'General')
+      ]);
 
-      function doctorSlide(name, title, credentials, pa, img) {
-        return { kind: 'doctor', name: name, title: title, credentials: credentials, pa: pa, img: img };
+      function shuffleSlides(list) {
+        var copy = list.slice();
+        for (var i = copy.length - 1; i > 0; i--) {
+          var j = Math.floor(Math.random() * (i + 1));
+          var tmp = copy[i];
+          copy[i] = copy[j];
+          copy[j] = tmp;
+        }
+        return copy;
       }
-      function infoSlide(title, pa, points, img) {
-        return { kind: 'info', title: title, pa: pa, points: points, img: img };
+      function nextSlide() {
+        if (!slides.length) return null;
+        if (slideIndex >= slides.length) {
+          slides = shuffleSlides(slides);
+          slideIndex = 0;
+        }
+        return slides[slideIndex++];
+      }
+      function doctorSlide(name, title, credentials, pa, img, department) {
+        return { kind: 'doctor', name: name, title: title, credentials: credentials, pa: pa, img: img, department: department || '' };
+      }
+      function infoSlide(title, pa, points, img, department) {
+        return { kind: 'info', title: title, pa: pa, points: points, img: img, department: department || '' };
       }
       function motionSlide(title, pa, theme) {
-        return { kind: 'motion', title: title, pa: pa, theme: theme };
+        return { kind: 'motion', title: title, pa: pa, theme: theme, department: 'Ophthalmology' };
       }
 
       function todayKey() {
@@ -787,10 +956,12 @@
       }
       function renderSlide(slide) {
         var panel = document.getElementById('media-panel');
+        if (!slide) return;
+        var deptLabel = slide.department ? safeText(slide.department) + ' / ' : '';
         if (slide.kind === 'doctor') {
           panel.innerHTML = '<div class="slide">' +
             '<img class="slide-logo" src="' + logoSrc + '" alt="BMH">' +
-            '<div class="slide-copy"><div class="eyebrow">Doctor Profile / ਡਾਕਟਰ ਪ੍ਰੋਫਾਈਲ</div>' +
+            '<div class="slide-copy"><div class="eyebrow">' + deptLabel + 'Doctor Profile / ਡਾਕਟਰ ਪ੍ਰੋਫਾਈਲ</div>' +
             '<h1 class="slide-title">' + safeText(slide.name) + '</h1>' +
             '<div class="slide-pa">' + safeText(slide.pa) + '</div>' +
             '<div class="slide-body"><div>' + safeText(slide.title) + '</div><div class="pa">ਤੁਹਾਡੀ ਸਿਹਤ, ਸਾਡੀ ਜ਼ਿੰਮੇਵਾਰੀ।</div></div>' +
@@ -803,7 +974,7 @@
         if (slide.kind === 'motion') {
           panel.innerHTML = '<div class="slide">' +
             '<img class="slide-logo" src="' + logoSrc + '" alt="BMH">' +
-            '<div class="slide-copy"><div class="eyebrow">Animated Patient Education / ਐਨੀਮੇਟਡ ਜਾਣਕਾਰੀ</div>' +
+            '<div class="slide-copy"><div class="eyebrow">' + deptLabel + 'Animated Patient Education / ਐਨੀਮੇਟਡ ਜਾਣਕਾਰੀ</div>' +
             '<h1 class="slide-title">' + safeText(slide.title) + '</h1>' +
             '<div class="slide-pa">' + safeText(slide.pa) + '</div>' +
             '<div class="slide-body"><div>Short hospital education video-style display.</div><div class="pa">ਮਰੀਜ਼ਾਂ ਅਤੇ ਪਰਿਵਾਰ ਲਈ ਛੋਟੀ ਜਾਣਕਾਰੀ।</div></div></div>' +
@@ -813,7 +984,7 @@
         }
         panel.innerHTML = '<div class="slide">' +
           '<img class="slide-logo" src="' + logoSrc + '" alt="BMH">' +
-          '<div class="slide-copy"><div class="eyebrow">Hospital Information / ਹਸਪਤਾਲ ਜਾਣਕਾਰੀ</div>' +
+          '<div class="slide-copy"><div class="eyebrow">' + deptLabel + 'Hospital Information / ਹਸਪਤਾਲ ਜਾਣਕਾਰੀ</div>' +
           '<h1 class="slide-title">' + safeText(slide.title) + '</h1>' +
           '<div class="slide-pa">' + safeText(slide.pa) + '</div>' +
           '<div class="slide-body">' + slide.points.map(function (p) { return '<div>' + safeText(p[0]) + '<div class="pa">' + safeText(p[1]) + '</div></div>'; }).join('') + '</div></div>' +
@@ -828,8 +999,7 @@
         document.getElementById('media-panel').classList.toggle('active', mode === 'media');
         if (mode === 'queue') renderQueue();
         else {
-          renderSlide(slides[slideIndex % slides.length]);
-          slideIndex += 1;
+          renderSlide(nextSlide());
         }
       }
       function tick() {
