@@ -432,6 +432,33 @@
       object-fit: cover;
       display: block;
     }
+    .actual-topic-image {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+      background:
+        radial-gradient(circle at 28% 18%, rgba(14,123,140,.1), transparent 30%),
+        linear-gradient(135deg, #f7fbff 0%, #eef7fb 100%);
+    }
+    .actual-topic-image.image-cover {
+      object-fit: cover;
+    }
+    .image-source-note {
+      position: absolute;
+      left: 14px;
+      bottom: 12px;
+      z-index: 6;
+      max-width: calc(100% - 28px);
+      color: #24445e;
+      font-size: clamp(10px, .86vw, 13px);
+      line-height: 1.15;
+      font-weight: 850;
+      background: rgba(255,255,255,.86);
+      border-radius: 8px;
+      padding: 5px 8px;
+      box-shadow: 0 10px 24px rgba(18,59,109,.13);
+    }
     .topic-visual {
       width: 100%;
       height: 100%;
@@ -836,15 +863,18 @@
       box-shadow: 0 0 20px rgba(212,160,23,.65);
     }
     .doctor-visual {
-      background: linear-gradient(160deg, #eaf4ff, #fff);
+      background:
+        radial-gradient(circle at 52% 18%, rgba(255,255,255,.92), transparent 36%),
+        linear-gradient(160deg, #eaf4ff, #fff);
       border: 0;
       border-radius: 0;
       box-shadow: none;
       margin: -28px -36px -26px 0;
     }
     .doctor-visual img {
-      object-fit: cover;
+      object-fit: contain;
       object-position: center top;
+      background: transparent;
     }
     .doctor-card-band {
       position: absolute;
@@ -1081,6 +1111,7 @@
       .slide-body { margin-top: 16px; gap: 8px; font-size: clamp(18px, 2vw, 27px); }
       .consult-banner { margin-top: 14px; padding: 11px 13px; font-size: clamp(16px, 1.7vw, 24px); border-radius: 11px; }
       .source-note { font-size: clamp(10px, .9vw, 13px); }
+      .image-source-note { font-size: clamp(9px, .8vw, 12px); }
       .myth-grid { margin-top: 15px; gap: 10px; }
       .myth-cell { padding: 12px; border-radius: 11px; }
       .myth-cell h2 { font-size: clamp(20px, 2vw, 31px); }
@@ -1119,6 +1150,7 @@
       .slide-body { font-size: clamp(15px, 1.7vw, 22px); }
       .consult-banner { margin-top: 10px; padding: 9px 11px; font-size: clamp(14px, 1.45vw, 20px); }
       .source-note { left: 12px; bottom: 6px; }
+      .image-source-note { left: 10px; bottom: 8px; }
       .doctor-visual { margin: -12px -18px -10px 0; }
       .myth-grid { gap: 8px; }
       .myth-cell { padding: 9px; }
@@ -1425,27 +1457,111 @@
         if (text.indexOf('laser hair') >= 0 || text.indexOf('pigmentation') >= 0 || text.indexOf('peel') >= 0 || text.indexOf('skin') >= 0) return 'skin';
         return 'cataract';
       }
+      function commonsFile(name) {
+        return 'https://commons.wikimedia.org/wiki/Special:FilePath/' + encodeURIComponent(name);
+      }
+      var realImageMap = {
+        retina: {
+          src: commonsFile('Fundus photo showing focal laser surgery for diabetic retinopathy EDA10.JPG'),
+          source: 'Image: NEI/NIH via Wikimedia Commons, Public Domain',
+          fit: 'contain'
+        },
+        prp: {
+          src: commonsFile('Fundus photo showing scatter laser surgery for diabetic retinopathy EDA09.JPG'),
+          source: 'Image: NEI/NIH via Wikimedia Commons, Public Domain',
+          fit: 'contain'
+        },
+        injection: {
+          src: commonsFile('Intravitreal treatment.jpg'),
+          source: 'Image: Wikimedia Commons, intravitreal injection photograph',
+          fit: 'cover'
+        },
+        'glaucoma-tests': {
+          src: commonsFile('Glaucomatous field defects.png'),
+          source: 'Image: Wikimedia Commons',
+          fit: 'contain'
+        },
+        'glaucoma-field': {
+          src: commonsFile('Eye disease simulation, glaucoma.jpg'),
+          source: 'Image: NIH via Wikimedia Commons, Public Domain',
+          fit: 'contain'
+        },
+        migs: {
+          src: './websites/chandigarh/images/hero/migs-devices.jpg',
+          source: 'Image: Baweja Hospital website, MIGS device photograph',
+          fit: 'contain'
+        },
+        cataract: {
+          src: commonsFile('Steps of cataract surgery.png'),
+          source: 'Image: Wikimedia Commons',
+          fit: 'contain'
+        },
+        drops: {
+          src: commonsFile('Instilling eye medication.jpg'),
+          source: 'Image: Wikimedia Commons',
+          fit: 'cover'
+        },
+        icl: {
+          src: commonsFile('Visian Implantable Collamer Lens.jpg'),
+          source: 'Image: Wikimedia Commons',
+          fit: 'contain'
+        },
+        lasik: {
+          src: commonsFile('Hindsight is 20-20, Warfighter Refractive Eye Surgery Center has a vision of the future 141210-A-FJ979-001.jpg'),
+          source: 'Image: U.S. Army via Wikimedia Commons, Public Domain',
+          fit: 'cover'
+        },
+        pregnancy: {
+          src: commonsFile('Ultrasound examination of woman.JPG'),
+          source: 'Image: Wikimedia Commons',
+          fit: 'cover'
+        },
+        uterus: {
+          src: commonsFile('Diagram showing the uterus Wellcome L0034904.jpg'),
+          source: 'Image: Wellcome Collection via Wikimedia Commons, CC BY 4.0',
+          fit: 'contain'
+        },
+        sleep: {
+          src: commonsFile('Depiction of a person suffering from Insomnia (sleeplessness) (cropped).png'),
+          source: 'Image: Wikimedia Commons, CC BY-SA 4.0',
+          fit: 'contain'
+        },
+        deaddiction: {
+          src: commonsFile('Alcohol y Tabaco.jpg'),
+          source: 'Image: Wikimedia Commons',
+          fit: 'cover'
+        },
+        mind: {
+          src: commonsFile('Depressed sitting.jpg'),
+          source: 'Image: Pixabay via Wikimedia Commons, CC0',
+          fit: 'cover'
+        },
+        acne: {
+          src: commonsFile('Acne vulgaris 2.jpg'),
+          source: 'Image: Wikimedia Commons',
+          fit: 'cover'
+        },
+        hair: {
+          src: commonsFile('Hair Fall Due To Alopecia.jpg'),
+          source: 'Image: Wikimedia Commons',
+          fit: 'cover'
+        },
+        skin: {
+          src: commonsFile('0502 Melasma.jpg'),
+          source: 'Image: Wikimedia Commons',
+          fit: 'cover'
+        }
+      };
+      function imageVisual(item, altText) {
+        var className = 'actual-topic-image' + (item && item.fit === 'cover' ? ' image-cover' : '');
+        var src = item && item.src || realImageMap.cataract.src;
+        var source = item && item.source || 'Image: Wikimedia Commons';
+        return '<img class="' + className + '" src="' + safeText(src) + '" alt="' + safeText(altText || '') + '" loading="lazy" referrerpolicy="no-referrer">' +
+          '<div class="image-source-note">' + safeText(source) + '</div>';
+      }
       function topicVisual(slide) {
         var key = visualKey(slide);
-        var label = safeText(slide && slide.title || '');
-        if (key === 'retina') return '<div class="topic-visual"><div class="fundus"><span class="spot s1"></span><span class="spot s2"></span><span class="spot s3"></span><span class="spot s4"></span></div><div class="label">' + label + '</div></div>';
-        if (key === 'prp') return '<div class="topic-visual"><div class="fundus"><div class="laser-grid"></div></div><div class="label">PRP laser spots on diabetic retina</div></div>';
-        if (key === 'injection') return '<div class="topic-visual"><div class="eye-cut"><div class="clear-lens"></div><div class="procedure-arrow" style="transform:rotate(-35deg);left:58%;top:62px"></div></div><div class="label">Retina injection pathway</div></div>';
-        if (key === 'glaucoma-tests') return '<div class="topic-visual"><div class="test-stack"><div class="test-card oct">OCT</div><div class="test-card hvf">HVF</div></div><div class="label">OCT nerve scan + visual field testing</div></div>';
-        if (key === 'glaucoma-field') return '<div class="topic-visual"><div class="glaucoma-view">Tunnel-like field loss</div><div class="label">Glaucoma can narrow side vision silently</div></div>';
-        if (key === 'migs') return '<div class="topic-visual"><div class="migs-device"></div><div class="label">MIGS micro-stent pathway</div></div>';
-        if (key === 'cataract') return '<div class="topic-visual"><div class="eye-cut"><div class="cloudy-lens"></div><div class="procedure-arrow"></div><div class="clear-lens"></div></div><div class="label">Cloudy lens replaced with clear IOL</div></div>';
-        if (key === 'drops') return '<div class="topic-visual drop-visual"><div class="eye-cut"></div><div class="label">Correct eye drop instillation</div></div>';
-        if (key === 'icl') return '<div class="topic-visual icl-visual"><div class="eye-cut"><div class="clear-lens"></div></div><div class="label">ICL placed inside the eye, behind the iris</div></div>';
-        if (key === 'lasik') return '<div class="topic-visual"><div class="laser-cornea"></div><div class="label">Laser reshapes the cornea</div></div>';
-        if (key === 'pregnancy') return '<div class="topic-visual pregnancy"><div class="uterus"></div><div class="label">' + label + '</div></div>';
-        if (key === 'uterus') return '<div class="topic-visual"><div class="uterus"></div><div class="label">' + label + '</div></div>';
-        if (key === 'sleep') return '<div class="topic-visual"><div class="person-scene sleep"></div><div class="label">Sleep routine and mental health</div></div>';
-        if (key === 'deaddiction') return '<div class="topic-visual"><div class="addiction-cross"></div><span class="substance s1">Alcohol</span><span class="substance s2">Tobacco</span><span class="substance s3">Pills</span><span class="substance s4">Drugs</span><div class="label">De-addiction is medical care</div></div>';
-        if (key === 'mind') return '<div class="topic-visual"><div class="person-scene"></div><div class="label">' + label + '</div></div>';
-        if (key === 'acne') return '<div class="topic-visual"><div class="face"><span class="pimple p1"></span><span class="pimple p2"></span><span class="pimple p3"></span></div><div class="label">Acne needs the right skin plan</div></div>';
-        if (key === 'hair') return '<div class="topic-visual"><div class="hair-roots"><span></span><span></span><span></span><span></span><span></span><span></span></div><div class="label">PRP and hair-root stimulation</div></div>';
-        return '<div class="topic-visual"><div class="face"></div><div class="label">' + label + '</div></div>';
+        return imageVisual(realImageMap[key] || realImageMap.cataract, slide && slide.title || '');
       }
 
       function todayKey() {
