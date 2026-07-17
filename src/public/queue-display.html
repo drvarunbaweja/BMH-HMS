@@ -326,6 +326,13 @@
       letter-spacing: 0;
       margin: 0;
     }
+    .slide-title sup,
+    .slide-body sup {
+      font-size: .42em;
+      vertical-align: super;
+      color: var(--gold);
+      margin-left: 3px;
+    }
     .slide-pa {
       font-size: clamp(30px, 3.2vw, 52px);
       line-height: 1.12;
@@ -366,10 +373,16 @@
       font-weight: 900;
     }
     .source-note {
-      margin-top: 9px;
+      position: absolute;
+      left: 18px;
+      bottom: 10px;
+      z-index: 5;
       color: var(--muted);
       font-size: clamp(12px, 1vw, 16px);
       font-weight: 850;
+      background: rgba(255,255,255,.84);
+      border-radius: 8px;
+      padding: 4px 7px;
     }
     .slide-visual {
       border-radius: 22px;
@@ -382,6 +395,9 @@
       place-items: center;
       position: relative;
     }
+    .slide-visual.video-visual {
+      background: #071f3d;
+    }
     .slide-visual img,
     .slide-visual video {
       width: 100%;
@@ -391,6 +407,10 @@
     }
     .doctor-visual {
       background: linear-gradient(160deg, #eaf4ff, #fff);
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+      margin: -28px -36px -26px 0;
     }
     .doctor-visual img {
       object-fit: cover;
@@ -634,6 +654,7 @@
       .cred-list { margin-top: 14px; gap: 7px; }
       .cred-chip { padding: 7px 9px; font-size: clamp(13px, 1.25vw, 18px); }
       .doctor-card-band { left: 14px; right: 14px; bottom: 14px; padding: 11px 13px; }
+      .doctor-visual { margin: -18px -24px -16px 0; }
       .motion-scene { min-height: 360px; }
       .orbit { width: 260px; height: 260px; top: 44px; }
       .lens { width: 160px; height: 160px; top: 92px; }
@@ -663,7 +684,8 @@
       .slide-pa { font-size: clamp(18px, 2.2vw, 30px); }
       .slide-body { font-size: clamp(15px, 1.7vw, 22px); }
       .consult-banner { margin-top: 10px; padding: 9px 11px; font-size: clamp(14px, 1.45vw, 20px); }
-      .source-note { margin-top: 5px; }
+      .source-note { left: 12px; bottom: 6px; }
+      .doctor-visual { margin: -12px -18px -10px 0; }
       .motion-scene { min-height: 300px; }
       footer { font-size: 11px; }
     }
@@ -728,7 +750,7 @@
       var qs = new URLSearchParams(location.search);
       var deptParam = (qs.get('dept') || qs.get('department') || 'ophtho').toLowerCase();
       var centreParam = (qs.get('centre') || qs.get('center') || '').toUpperCase();
-      var queueMs = Math.max(10000, Number(qs.get('queueMs') || 22000));
+      var queueMs = Math.max(6000, Number(qs.get('queueMs') || 11000));
       var mediaMs = Math.max(10000, Number(qs.get('mediaMs') || 18000));
       var rows = [];
       var slideIndex = 0;
@@ -763,6 +785,7 @@
           ['Do not rub the operated eye.', 'ਓਪਰੇਸ਼ਨ ਵਾਲੀ ਅੱਖ ਨੂੰ ਨਾ ਰਗੜੋ।'],
           ['Use protective glasses and come for follow-up.', 'ਚਸ਼ਮਾ ਪਾਓ ਅਤੇ ਫਾਲੋ-ਅਪ ਲਈ ਜ਼ਰੂਰ ਆਓ।']
         ], './websites/chandigarh/images/procedures/cataract-family.jpg', 'Ophthalmology'),
+        videoSlide('Cataract Surgery: Surgical View', 'ਮੋਤੀਆਬਿੰਦ ਸਰਜਰੀ: ਸਰਜੀਕਲ ਦ੍ਰਿਸ਼', 'https://commons.wikimedia.org/wiki/Special:FilePath/New-side-view-imaging-technique-for-observing-posterior-chamber-structures-during-cataract-surgery-1471-2415-13-47-S1.ogv', 'Wikimedia Commons / BMC Ophthalmology', 'Ophthalmology'),
         motionSlide('Cataract Surgery: Clear Vision Journey', 'ਮੋਤੀਆਬਿੰਦ ਸਰਜਰੀ: ਸਾਫ਼ ਨਜ਼ਰ ਵੱਲ ਕਦਮ', 'cataract'),
         infoSlide('Cataract Myth: Surgery should wait until fully mature', 'ਭਰਮ: ਮੋਤੀਆਬਿੰਦ ਪੱਕਣ ਤੱਕ ਉਡੀਕ ਕਰੋ', [
           ['Reality: Timing depends on vision, daily needs and eye health.', 'ਸੱਚਾਈ: ਸਮਾਂ ਨਜ਼ਰ, ਰੋਜ਼ਾਨਾ ਕੰਮ ਅਤੇ ਅੱਖ ਦੀ ਸਿਹਤ ਤੇ ਨਿਰਭਰ ਕਰਦਾ ਹੈ।'],
@@ -847,7 +870,13 @@
           ['Reality: Professional cleaning removes deposits and protects gums.', 'ਸੱਚਾਈ: ਸਕੇਲਿੰਗ ਜਮਾਵ ਹਟਾ ਕੇ ਮਸੂੜਿਆਂ ਦੀ ਰੱਖਿਆ ਕਰਦੀ ਹੈ।'],
           ['Bleeding gums should be checked early.', 'ਮਸੂੜਿਆਂ ਤੋਂ ਖੂਨ ਆਵੇ ਤਾਂ ਜਲਦੀ ਜਾਂਚ ਕਰਵਾਓ।']
         ], './websites/chandigarh/images/brand/baweja-1.png', 'Dental'),
+        videoSlide('LASIK: Flap Creation Animation', 'ਲੈਸਿਕ: ਫਲੈਪ ਬਣਾਉਣ ਦੀ ਐਨੀਮੇਸ਼ਨ', 'https://commons.wikimedia.org/wiki/Special:FilePath/Lasik%20Microtomo.ogv', 'Wikimedia Commons', 'Ophthalmology'),
         motionSlide('LASIK / SMILE Pro: Laser Vision Correction', 'ਲੇਜ਼ਰ ਨਾਲ ਚਸ਼ਮੇ ਤੋਂ ਰਾਹਤ', 'lasik'),
+        infoSlide('Correct Method to Put Eye Drops', 'ਅੱਖਾਂ ਦੀਆਂ ਬੂੰਦਾਂ ਪਾਉਣ ਦਾ ਸਹੀ ਤਰੀਕਾ', [
+          ['Wash your hands before using eye drops.', 'ਬੂੰਦਾਂ ਪਾਉਣ ਤੋਂ ਪਹਿਲਾਂ ਹੱਥ ਧੋਵੋ।'],
+          ['Pull the lower eyelid down to make a small pocket.', 'ਹੇਠਲੀ ਪਲਕ ਨੂੰ ਹੌਲੀ ਥੱਲੇ ਖਿੱਚ ਕੇ ਛੋਟੀ ਜੇਬ ਬਣਾਓ।'],
+          ['Close the eye and press near the inner corner for 1 minute.', 'ਅੱਖ ਬੰਦ ਕਰਕੇ ਅੰਦਰਲੇ ਕੋਨੇ ਕੋਲ 1 ਮਿੰਟ ਹੌਲੀ ਦਬਾਓ।']
+        ], './websites/chandigarh/images/brand/bmh.jpg', 'Ophthalmology'),
         infoSlide('Glaucoma: The Silent Sight Stealer', 'ਗਲੂਕੋਮਾ: ਨਜ਼ਰ ਦਾ ਚੁੱਪ ਚਾਪ ਨੁਕਸਾਨ', [
           ['Regular eye pressure and optic nerve checks matter.', 'ਅੱਖਾਂ ਦਾ ਪ੍ਰੈਸ਼ਰ ਅਤੇ ਨਰਵ ਦੀ ਜਾਂਚ ਜ਼ਰੂਰੀ ਹੈ।'],
           ['Drops must be used daily even when vision feels normal.', 'ਨਜ਼ਰ ਠੀਕ ਲੱਗੇ ਤਾਂ ਵੀ ਦਵਾਈ ਰੋਜ਼ ਪਾਓ।']
@@ -904,20 +933,27 @@
       function motionSlide(title, pa, theme) {
         return { kind: 'motion', title: title, pa: pa, theme: theme, department: 'Ophthalmology', source: sourceForDepartment('Ophthalmology') };
       }
+      function videoSlide(title, pa, src, source, department) {
+        var dept = department || '';
+        return { kind: 'video', title: title, pa: pa, src: src, source: source || sourceForDepartment(dept), department: dept };
+      }
       function sourceForDepartment(department) {
         var d = String(department || '').toLowerCase();
-        if (d.indexOf('ophthalm') >= 0) return 'Patient education adapted from AAO, FDA and CDC eye-health guidance.';
-        if (d.indexOf('gyn') >= 0 || d.indexOf('obst') >= 0) return 'Patient education adapted from CDC maternal-health guidance.';
-        if (d.indexOf('psych') >= 0 || d.indexOf('neuro') >= 0) return 'Patient education adapted from NIMH mental-health guidance.';
-        if (d.indexOf('skin') >= 0 || d.indexOf('cosmet') >= 0) return 'Patient education adapted from AAD skin-care guidance.';
-        if (d.indexOf('dental') >= 0) return 'Patient education adapted from ADA dental-care guidance.';
-        return 'Patient education adapted from public health guidance.';
+        if (d.indexOf('ophthalm') >= 0) return 'AAO / FDA / CDC / NEI';
+        if (d.indexOf('gyn') >= 0 || d.indexOf('obst') >= 0) return 'CDC';
+        if (d.indexOf('psych') >= 0 || d.indexOf('neuro') >= 0) return 'NIMH';
+        if (d.indexOf('skin') >= 0 || d.indexOf('cosmet') >= 0) return 'AAD';
+        if (d.indexOf('dental') >= 0) return 'ADA';
+        return 'Public health guidance';
       }
       function consultBanner(slide) {
         var dept = String(slide && slide.department || 'Specialist').trim() || 'Specialist';
         var pa = 'ਆਪਣੀ ਜਾਂਚ ਅਤੇ ਇਲਾਜ ਲਈ ਬਾਵੇਜਾ ਹਸਪਤਾਲ ਵਿੱਚ ਸਲਾਹ ਕਰੋ।';
         return '<div class="consult-banner">Consult our ' + safeText(dept) + ' doctors at Baweja Hospital.<span class="pa">' + safeText(pa) + '</span></div>' +
           '<div class="source-note">' + safeText(slide && slide.source || '') + '</div>';
+      }
+      function sourceMarked(text) {
+        return safeText(text) + '<sup>*</sup>';
       }
 
       function todayKey() {
@@ -1013,7 +1049,19 @@
             '<div class="cred-list">' + String(slide.credentials || '').split('·').map(function (x) { return '<span class="cred-chip">' + safeText(x.trim()) + '</span>'; }).join('') + '</div>' +
             consultBanner(slide) + '</div>' +
             '<div class="slide-visual doctor-visual"><img src="' + slide.img + '" alt="' + safeText(slide.name) + '">' +
-            '<div class="doctor-card-band"><strong>' + safeText(slide.name) + '</strong><span>' + safeText(slide.title) + ' · ' + safeText(slide.credentials) + '</span></div></div>' +
+            '</div>' +
+          '</div>';
+          return;
+        }
+        if (slide.kind === 'video') {
+          panel.innerHTML = '<div class="slide">' +
+            '<img class="slide-logo" src="' + logoSrc + '" alt="BMH">' +
+            '<div class="slide-copy"><div class="eyebrow">' + deptLabel + 'Educational Video / ਸਿੱਖਿਆ ਵੀਡੀਓ</div>' +
+            '<h1 class="slide-title">' + sourceMarked(slide.title) + '</h1>' +
+            '<div class="slide-pa">' + safeText(slide.pa) + '</div>' +
+            '<div class="slide-body"><div>Free educational video source shown with attribution.</div><div class="pa">ਸਰੋਤ ਦਾ ਜ਼ਿਕਰ ਹੇਠਾਂ ਦਿੱਤਾ ਗਿਆ ਹੈ।</div></div>' +
+            consultBanner(slide) + '</div>' +
+            '<div class="slide-visual video-visual"><video src="' + safeText(slide.src) + '" autoplay muted loop playsinline controls></video></div>' +
           '</div>';
           return;
         }
@@ -1021,9 +1069,9 @@
           panel.innerHTML = '<div class="slide">' +
             '<img class="slide-logo" src="' + logoSrc + '" alt="BMH">' +
             '<div class="slide-copy"><div class="eyebrow">' + deptLabel + 'Animated Patient Education / ਐਨੀਮੇਟਡ ਜਾਣਕਾਰੀ</div>' +
-            '<h1 class="slide-title">' + safeText(slide.title) + '</h1>' +
+            '<h1 class="slide-title">' + sourceMarked(slide.title) + '</h1>' +
             '<div class="slide-pa">' + safeText(slide.pa) + '</div>' +
-            '<div class="slide-body"><div>Short hospital education video-style display.</div><div class="pa">ਮਰੀਜ਼ਾਂ ਅਤੇ ਪਰਿਵਾਰ ਲਈ ਛੋਟੀ ਜਾਣਕਾਰੀ।</div></div>' +
+            '<div class="slide-body"><div>' + sourceMarked('Short hospital education video-style display.') + '</div><div class="pa">ਮਰੀਜ਼ਾਂ ਅਤੇ ਪਰਿਵਾਰ ਲਈ ਛੋਟੀ ਜਾਣਕਾਰੀ।</div></div>' +
             consultBanner(slide) + '</div>' +
             '<div class="slide-visual"><div class="motion-scene"><div class="orbit"></div><div class="lens"></div><div class="laser"></div><div class="spark s1"></div><div class="spark s2"></div><div class="spark s3"></div><div class="motion-title">' + safeText(slide.title) + '<div class="motion-sub">' + safeText(slide.pa) + '</div></div></div></div>' +
           '</div>';
@@ -1032,9 +1080,9 @@
         panel.innerHTML = '<div class="slide">' +
           '<img class="slide-logo" src="' + logoSrc + '" alt="BMH">' +
           '<div class="slide-copy"><div class="eyebrow">' + deptLabel + 'Hospital Information / ਹਸਪਤਾਲ ਜਾਣਕਾਰੀ</div>' +
-          '<h1 class="slide-title">' + safeText(slide.title) + '</h1>' +
+          '<h1 class="slide-title">' + sourceMarked(slide.title) + '</h1>' +
           '<div class="slide-pa">' + safeText(slide.pa) + '</div>' +
-          '<div class="slide-body">' + slide.points.map(function (p) { return '<div>' + safeText(p[0]) + '<div class="pa">' + safeText(p[1]) + '</div></div>'; }).join('') + '</div>' +
+          '<div class="slide-body">' + slide.points.map(function (p) { return '<div>' + sourceMarked(p[0]) + '<div class="pa">' + safeText(p[1]) + '</div></div>'; }).join('') + '</div>' +
           consultBanner(slide) + '</div>' +
           '<div class="slide-visual"><img src="' + slide.img + '" alt="' + safeText(slide.title) + '"></div>' +
         '</div>';
