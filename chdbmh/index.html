@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en-IN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CHD BMH Queue</title>
+  <meta http-equiv="refresh" content="0; url=../queue-display.html?centre=CHD">
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      font-family: Arial, sans-serif;
+      background: #f5f8fb;
+      color: #123b6d;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <h1>Opening Chandigarh Queue...</h1>
+  <script>
+    (function () {
+      var params = new URLSearchParams(location.search);
+      params.set('centre', 'CHD');
+      var target = new URL('../queue-display.html', location.href);
+      target.search = params.toString();
+      location.replace(target.toString());
+    })();
+  </script>
+</body>
+</html>
