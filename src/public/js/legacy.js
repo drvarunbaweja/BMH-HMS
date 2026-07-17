@@ -4984,10 +4984,28 @@ function toggleSeen(id) {
 }
 function markDilated(id, name) {
   const p = PATIENTS.find(x=>x.bmhId===id); if (!p) return;
-  p.dilated = true; p.dilatedTime = Date.now();
-  fbUpdate && fbUpdate('patients/'+id,{dilated:true,dilatedTime:p.dilatedTime}).catch(()=>{});
+  p.dilated = true; p.dilatedTime = Date.now(); p.updatedAt = new Date().toISOString();
+  fbUpdate && fbUpdate('patients/'+id,{dilated:true,dilatedTime:p.dilatedTime,updatedAt:p.updatedAt}).catch(()=>{});
   showToast((name||p.name)+' 💧 Dilation recorded — timer started ✓','s');
   renderDocQueue && renderDocQueue();
+}
+function unmarkDilated(id) {
+  const p = PATIENTS.find(x=>x.bmhId===id); if (!p) return;
+  p.dilated = false; p.dilatedTime = null; p.updatedAt = new Date().toISOString();
+  fbUpdate && fbUpdate('patients/'+id,{dilated:false,dilatedTime:null,updatedAt:p.updatedAt}).catch(()=>{});
+  showToast((p.name || 'Patient') + ' dilation reverted ✓','s');
+  renderDocQueue && renderDocQueue();
+}
+function setQueueVisitPurpose(bmhId, purpose) {
+  const p = PATIENTS.find(x=>x.bmhId===bmhId); if (!p) return;
+  const val = String(purpose || '').trim() || 'Consultation';
+  p.purpose = val;
+  p.surgeryToday = /^surgery today$/i.test(val);
+  p.updatedAt = new Date().toISOString();
+  fbUpdate && fbUpdate('patients/'+bmhId,{purpose:p.purpose,surgeryToday:p.surgeryToday,updatedAt:p.updatedAt}).catch(()=>{});
+  showToast((p.name || 'Patient') + ' marked as ' + val + ' ✓','s');
+  renderDocQueue && renderDocQueue();
+  renderReceptionPage && renderReceptionPage();
 }
 function markCurrentPatientDilated() {
   const p = window.CURRENT_PATIENT || PATIENTS.find(x=>x.bmhId === (document.getElementById('ophtho-pt-uid')?.textContent || '').trim());
@@ -46172,6 +46190,7 @@ function buildQCard(p, sno) {
   const deptLabel = {ophtho:'Eye',obg:'OBG',psych:'Psych',skin:'Skin',lab:'Lab'}[p.dept]||p.dept||'—';
   const deptColor = {ophtho:'var(--blue)',obg:'#c0004e',psych:'var(--orange)',skin:'var(--purple)',lab:'var(--teal)'}[p.dept]||'var(--g2)';
   const isOphtho = p.dept==='ophtho';
+  const isSurgeryToday = !!p.surgeryToday || /^surgery today$/i.test(String(p.purpose || ''));
   const now = Date.now();
   // Waiting time
   const waitMin = getPatientQueueWaitMinutes(p, now);
@@ -46213,8 +46232,8 @@ function buildQCard(p, sno) {
 
   const cardClick = p.preRegistered ? '' : `openPatient('${p.bmhId}')`;
   const cardCursor = p.preRegistered ? 'default' : 'pointer';
-  const cardBg = p.preRegistered ? '#f8f8f8' : '#fff';
-  const cardBorder = p.preRegistered ? '1px dashed #ccc' : '1px solid var(--g5)';
+  const cardBg = p.preRegistered ? '#f8f8f8' : (isSurgeryToday ? '#fff3e0' : '#fff');
+  const cardBorder = p.preRegistered ? '1px dashed #ccc' : (isSurgeryToday ? '2px solid var(--orange)' : '1px solid var(--g5)');
   return `<div class="q-card compact ${p.status}" onclick="${cardClick}" style="cursor:${cardCursor};padding:6px 9px;margin-bottom:4px;border-radius:8px;border:${cardBorder};background:${cardBg};display:flex;align-items:center;gap:7px;opacity:${p.preRegistered?'.75':'1'}"
     onmouseover="this.style.background='var(--g6)'" onmouseout="this.style.background='${cardBg}'">
     ${sno!==undefined?`<div style="font-size:12px;font-weight:900;color:var(--g2);width:20px;text-align:center;flex-shrink:0">${sno}</div>`:''}
@@ -46224,6 +46243,7 @@ function buildQCard(p, sno) {
         <span style="font-weight:800;font-size:14px;white-space:nowrap">${p.name}</span>
         <span style="font-size:9px;padding:1px 5px;border-radius:8px;background:${deptColor}22;color:${deptColor};font-weight:800;border:1px solid ${deptColor}44">${deptLabel}</span>
         ${isNew?'<span style="font-size:9px;padding:1px 5px;border-radius:8px;background:#e8f5e9;color:#1a8c3c;font-weight:800;border:1px solid #a5d6a7">NEW</span>':'<span style="font-size:9px;padding:1px 5px;border-radius:8px;background:#e3f2fd;color:var(--blue);font-weight:800;border:1px solid #bbdefb">V'+visitNo+'</span>'}
+        ${isSurgeryToday?'<span style="font-size:9px;padding:1px 6px;border-radius:8px;background:var(--orange);color:#fff;font-weight:900">SURGERY TODAY</span>':''}
         ${labReadyBadge}
         ${chargeHtml}
       </div>
@@ -46231,7 +46251,7 @@ function buildQCard(p, sno) {
         <span style="font-size:11px;color:var(--g1);font-family:var(--mono)">${p.bmhId}</span>
         <span style="font-size:11px;color:var(--g1)">${p.age||'?'}Y/${(p.sex||'?')[0]}</span>
         ${(p.assignedDoctor || p.doctor)?`<span style="font-size:11px;color:var(--teal);font-weight:700">🩺${(p.assignedDoctor || p.doctor).replace('Dr. ','Dr.')}</span>`:''}
-        ${p.purpose?`<span style="font-size:11px;color:var(--g1)">${p.purpose}</span>`:''}
+        ${p.purpose?`<span style="font-size:11px;color:${isSurgeryToday?'#8a4200':'var(--g1)'};font-weight:${isSurgeryToday?'900':'400'}">${p.purpose}</span>`:''}
         ${!p.preRegistered?`<span style="font-size:11px;color:var(--g2)">⏱${waitStr}</span>`:''}
         ${dilStr?`<span style="font-size:11px;color:var(--blue);${dilLongWait?'animation:pulse 1.35s infinite;font-weight:900;':''}">${dilStr}</span>`:''}
       </div>
@@ -46243,6 +46263,8 @@ function buildQCard(p, sno) {
           ? `<button title="Check In & Collect Fee" style="background:var(--green);color:#fff;border:none;border-radius:5px;padding:2px 8px;font-size:9px;font-weight:800;cursor:pointer;line-height:1.6;animation:pulse 2s infinite" onclick="markSeen('${String(p.bmhId).replace(/'/g, "\\'")}')">✓ Check In</button>`
           : `${!isQueueRowMarkedSeen(p)?`<button title="Mark Seen" style="background:var(--green);color:#fff;border:none;border-radius:5px;padding:2px 6px;font-size:9px;font-weight:800;cursor:pointer;line-height:1.4" onclick="markSeen('${p.bmhId}')">✓</button>`:`<button title="Move to Active" style="background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1.5px solid var(--bmh-blue);border-radius:5px;padding:2px 6px;font-size:9px;font-weight:800;cursor:pointer;line-height:1.4" onclick="restorePatientToActiveQueue('${p.bmhId}')">↩ Active</button>`}
         ${isOphtho&&!p.dilated&&!isQueueRowMarkedSeen(p)?`<button title="Dilate" style="background:var(--blue-lt);color:var(--blue);border:1.5px solid var(--blue);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="markDilated('${p.bmhId}','${p.name.replace(/'/g,"\\'")}')">💧</button>`:''}
+        ${isOphtho&&p.dilated&&!isQueueRowMarkedSeen(p)?`<button title="Undo dilation" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="unmarkDilated('${p.bmhId}')">Undo 💧</button>`:''}
+        ${isOphtho&&!isQueueRowMarkedSeen(p)?`<button title="${isSurgeryToday?'Revert to Consultation':'Mark Surgery Today'}" style="background:${isSurgeryToday?'#fff':'var(--orange-lt)'};color:#8a4200;border:1.5px solid var(--orange);border-radius:5px;padding:2px 5px;font-size:9px;font-weight:800;cursor:pointer" onclick="setQueueVisitPurpose('${p.bmhId}','${isSurgeryToday?'Consultation':'Surgery Today'}')">${isSurgeryToday?'Consult':'Sx Today'}</button>`:''}
         <button title="Cross-Refer" style="background:rgba(11,123,140,.1);color:var(--teal);border:1.5px solid var(--teal);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="openXRefModal('${p.bmhId}')">↔️</button>
         <button title="IPD" style="background:rgba(175,82,222,.1);color:var(--purple);border:1.5px solid var(--purple);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="openIPDFromQueue('${p.bmhId}')">🛏️</button>
         <button title="Add to OT" style="background:rgba(255,149,0,.1);color:var(--orange);border:1.5px solid var(--orange);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="openOTFromQueue('${p.bmhId}')">🔬</button>
@@ -46282,6 +46304,7 @@ function buildQTableRow(p, sno, opts) {
   const deptLabel = {ophtho:'Eye',obg:'OBG',psych:'Psych',skin:'Skin',lab:'Lab'}[p.dept]||p.dept||'—';
   const deptColor = {ophtho:'var(--blue)',obg:'#c0004e',psych:'var(--orange)',skin:'var(--purple)',lab:'var(--teal)'}[p.dept]||'var(--g2)';
   const isOphtho = p.dept==='ophtho';
+  const isSurgeryToday = !!p.surgeryToday || /^surgery today$/i.test(String(p.purpose || ''));
   const now = Date.now();
   const waitMin = getPatientQueueWaitMinutes(p, now);
   const waitStr = formatQueueWaitMinutes(waitMin);
@@ -46336,6 +46359,14 @@ function buildQTableRow(p, sno, opts) {
   const labHover = getUnreadLabResultsTitle(p);
   const labTooltip = buildUnreadLabResultsTooltipHtml(p);
   const labReadyBadge = patientHasUnreadLabResults(p) ? `<span title="${escapeHtmlConsent(labHover || 'Results ready')}" onmouseenter="const tip=this.querySelector('.lab-ready-tip');if(tip)tip.style.display='block'" onmouseleave="const tip=this.querySelector('.lab-ready-tip');if(tip)tip.style.display='none'" style="position:relative;display:inline-flex;align-items:center;gap:4px;padding:1px 6px;border-radius:999px;background:#eafaf1;color:#166534;border:1px solid rgba(22,101,52,.25);font-size:9px;font-weight:900;animation:pulse 1.2s infinite">🧪 Results Ready${labTooltip.replace('<span style="display:none;', '<span class="lab-ready-tip" style="display:none;')}</span>` : '';
+  const surgeryTodayBadge = isSurgeryToday ? '<span style="font-size:9px;padding:1px 6px;margin-left:4px;background:var(--orange);color:#fff;border-radius:6px;font-weight:900;vertical-align:middle">SURGERY TODAY</span>' : '';
+  const purposeCell = isOphtho && !isPreRegRow
+    ? `<select title="Purpose of visit" onclick="event.stopPropagation()" onchange="event.stopPropagation();setQueueVisitPurpose('${String(p.bmhId).replace(/'/g, "\\'")}', this.value)" style="max-width:132px;background:${isSurgeryToday?'#fff3e0':'#fff'};border:1.5px solid ${isSurgeryToday?'var(--orange)':'var(--g4)'};border-radius:6px;padding:3px 6px;font-size:10px;font-weight:800;color:${isSurgeryToday?'#8a4200':'var(--tx)'};cursor:pointer">
+        <option value="Consultation"${/^consultation$/i.test(String(p.purpose || '')) || !String(p.purpose || '').trim() ? ' selected' : ''}>Consultation</option>
+        <option value="Follow-up"${/follow/i.test(String(p.purpose || '')) ? ' selected' : ''}>Follow-up</option>
+        <option value="Surgery Today"${isSurgeryToday ? ' selected' : ''}>Surgery Today</option>
+      </select>`
+    : (p.purpose || '—');
   const restoreSeenAction = seenRow
     ? (p._xrefId
       ? `restoreCrossRefToActive('${String(p.bmhId).replace(/'/g, "\\'")}','${xrefIdEsc}')`
@@ -46350,17 +46381,17 @@ function buildQTableRow(p, sno, opts) {
   const rowClass = `${vuln ? 'row-vulnerable' : ''}${isPreRegRow ? ' q-row-precheckin' : ''}`.trim();
   const rowStyle = isPreRegRow
     ? 'cursor:default;background:#f8fafc;color:#64748b;opacity:.76;'
-    : `cursor:pointer;${dilLongWait?'animation:pulse 1.45s infinite;':''}`;
+    : `cursor:pointer;${isSurgeryToday?'background:#fff3e0;box-shadow:inset 4px 0 0 var(--orange);':''}${dilLongWait?'animation:pulse 1.45s infinite;':''}`;
   const actionCellStyle = isPreRegRow ? 'opacity:1;color:initial' : '';
   return `<tr class="${rowClass}" onclick="${onRow}" style="${rowStyle}">
     <td style="font-weight:900;color:var(--g2);font-size:12.5px">${sno}</td>
     <td><div style="display:flex;align-items:center;gap:6px"><span style="width:28px;height:28px;border-radius:50%;background:${p.color||'#1A3C6E'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:900;font-size:10px;flex-shrink:0">${p.initials||p.name[0]||'?'}</span>
-      <div><div style="font-weight:800;font-size:15px;line-height:1.05;display:flex;align-items:center;flex-wrap:nowrap;gap:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name || ''}${vulnBadge}${labReadyBadge}${xrefOutBadge}${xrefInBadge}</div>
+      <div><div style="font-weight:800;font-size:15px;line-height:1.05;display:flex;align-items:center;flex-wrap:nowrap;gap:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name || ''}${vulnBadge}${surgeryTodayBadge}${labReadyBadge}${xrefOutBadge}${xrefInBadge}</div>
       <div style="font-size:11px;color:var(--g1)">${p.age||'?'}Y · ${(p.sex||'?')[0]} · ${p.mob||'—'}</div>${chargeHint?`<div style="margin-top:2px">${chargeHint}</div>`:''}</div></div></td>
     <td style="font-family:var(--mono);font-size:12px;color:var(--bmh-teal);font-weight:800;white-space:nowrap">${p.bmhId}</td>
     <td><span style="font-size:10px;padding:2px 6px;border-radius:6px;background:${deptColor}22;color:${deptColor};font-weight:800;cursor:pointer" title="Click to change department" onclick="event.stopPropagation();reassignReceptionPatientDept('${String(p.bmhId).replace(/'/g, "\\'")}','${String(p.dept || '').replace(/'/g, "\\'")}')">${deptLabel}</span></td>
     <td style="font-size:11px;max-width:108px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.doctor||''}">${docShort}</td>
-    <td style="font-size:11px;color:var(--g1);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.purpose||''}">${p.purpose||'—'}</td>
+    <td style="font-size:11px;color:var(--g1);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.purpose||''}">${purposeCell}</td>
     <td style="font-size:11px">${dilationCellHtml(p)}</td>
     <td style="font-size:11px;color:var(--g2)">${isPreRegRow?'—':waitStr}</td>
     <td><span style="font-size:10px;padding:2px 6px;border-radius:6px;background:${statusBg};font-weight:800;${dilLongWait?'box-shadow:0 0 0 1px rgba(88,86,214,.18);':''}">${statusTxt}</span></td>
@@ -46369,6 +46400,8 @@ function buildQTableRow(p, sno, opts) {
         ? `<button type="button" title="Check In" style="background:var(--green);color:#fff;border:none;border-radius:5px;padding:3px 8px;font-size:9px;font-weight:800;cursor:pointer" onclick="markSeen('${String(p.bmhId).replace(/'/g, "\\'")}')">✓ Check in</button>`
         : `${!seenRow?`<button type="button" title="Seen" style="background:var(--green);color:#fff;border:none;border-radius:5px;padding:3px 6px;font-size:9px;font-weight:800;cursor:pointer" onclick="${markSeenClick}">✓</button>`:doneActionHtml}
       ${isOphtho&&!p.dilated&&!seenRow?`<button type="button" title="Dilate" style="background:var(--blue-lt);color:var(--blue);border:1.5px solid var(--blue);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="markDilated('${p.bmhId}','${nmEsc}')">💧</button>`:''}
+      ${isOphtho&&p.dilated&&!seenRow?`<button type="button" title="Undo dilation" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="unmarkDilated('${p.bmhId}')">Undo 💧</button>`:''}
+      ${isOphtho&&!seenRow?`<button type="button" title="${isSurgeryToday?'Revert to Consultation':'Mark Surgery Today'}" style="background:${isSurgeryToday?'#fff':'var(--orange-lt)'};color:#8a4200;border:1.5px solid var(--orange);border-radius:5px;padding:2px 5px;font-size:9px;font-weight:800;cursor:pointer" onclick="setQueueVisitPurpose('${p.bmhId}','${isSurgeryToday?'Consultation':'Surgery Today'}')">${isSurgeryToday?'Consult':'Sx Today'}</button>`:''}
       ${receptionQueue ? `<button type="button" title="Restore to doctor queue" style="background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1.5px solid var(--bmh-blue);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="event.stopPropagation();restorePatientToDoctorQueue('${p.bmhId}')">↩</button>` : ''}
       <button type="button" title="Cross-ref" style="background:rgba(11,123,140,.1);color:var(--teal);border:1.5px solid var(--teal);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="openXRefModal('${p.bmhId}')">↔️</button>
       <button type="button" title="IPD" style="background:rgba(175,82,222,.1);color:var(--purple);border:1.5px solid var(--purple);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="openIPDFromQueue('${p.bmhId}')">🛏️</button>
@@ -47150,9 +47183,9 @@ function _renderDocQueueImpl() {
     effectiveQueueDept || '',
     adminDeptFilter || '',
     searchQ || '',
-    active.map(function (p) { return [p._queueKey || p.bmhId || '', p.status || '', p.seenAt || '', p.queueTime || '', p.updatedAt || '', p.dilated ? 1 : 0].join(':'); }).join('|'),
-    dilated.map(function (p) { return [p._queueKey || p.bmhId || '', p.status || '', p.seenAt || '', p.queueTime || '', p.updatedAt || ''].join(':'); }).join('|'),
-    done.map(function (p) { return [p._queueKey || p.bmhId || '', p.status || '', p.seenAt || '', p.queueTime || '', p.updatedAt || ''].join(':'); }).join('|'),
+    active.map(function (p) { return [p._queueKey || p.bmhId || '', p.status || '', p.seenAt || '', p.queueTime || '', p.updatedAt || '', p.dilated ? 1 : 0, p.surgeryToday ? 1 : 0, p.purpose || ''].join(':'); }).join('|'),
+    dilated.map(function (p) { return [p._queueKey || p.bmhId || '', p.status || '', p.seenAt || '', p.queueTime || '', p.updatedAt || '', p.surgeryToday ? 1 : 0, p.purpose || ''].join(':'); }).join('|'),
+    done.map(function (p) { return [p._queueKey || p.bmhId || '', p.status || '', p.seenAt || '', p.queueTime || '', p.updatedAt || '', p.surgeryToday ? 1 : 0, p.purpose || ''].join(':'); }).join('|'),
     xrefs.map(function (x) { return [x.id || '', x.ptName || '', x.toDoctor || '', x.reason || '', x.time || '', x.paid ? 1 : 0].join(':'); }).join('|'),
     ipdPts.map(function (p) { return [p.id || p.bmhId || '', p.status || '', p.ward || '', p.doctor || ''].join(':'); }).join('|')
   ].join('~');
