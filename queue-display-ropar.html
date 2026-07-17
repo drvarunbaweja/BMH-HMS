@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en-IN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BMH Ropar Queue Display</title>
+  <meta http-equiv="refresh" content="0; url=./queue-display.html?centre=RPR">
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      font-family: "Segoe UI", Arial, sans-serif;
+      background: #f5f8fb;
+      color: #123b6d;
+      text-align: center;
+    }
+    .card {
+      padding: 32px;
+      max-width: 560px;
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: 32px;
+      line-height: 1.1;
+    }
+    p {
+      margin: 0;
+      color: #5b6b80;
+      font-size: 18px;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Opening Ropar Queue</h1>
+    <p>Loading the live BMH queue display...</p>
+  </div>
+  <script>
+    (function () {
+      var params = new URLSearchParams(location.search);
+      params.set('centre', 'RPR');
+      var target = new URL('./queue-display.html', location.href);
+      target.search = params.toString();
+      location.replace(target.toString());
+    })();
+  </script>
+</body>
+</html>

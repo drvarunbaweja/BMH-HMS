@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="en-IN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BMH Queue Display</title>
+  <style>
+    :root {
+      --blue: #123b6d;
+      --blue2: #0b5f8a;
+      --gold: #d4a017;
+      --teal: #0b7b8c;
+      --green: #0f8a5f;
+      --orange: #e17a00;
+      --red: #b42318;
+      --ink: #11233b;
+      --muted: #5b6b80;
+      --line: rgba(18, 59, 109, .16);
+      --soft: #eef6ff;
+      --paper: #ffffff;
+      --shadow: 0 28px 70px rgba(8, 28, 54, .18);
+      font-family: "Nunito", "Segoe UI", Arial, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        linear-gradient(120deg, rgba(18,59,109,.08), rgba(11,123,140,.05)),
+        #f5f8fb;
+      color: var(--ink);
+      overflow: hidden;
+    }
+    .screen {
+      width: 100vw;
+      height: 100vh;
+      display: grid;
+      grid-template-rows: 88px 1fr 48px;
+      background: linear-gradient(180deg, #f9fcff 0%, #eef5fb 100%);
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 26px;
+      padding: 18px 36px;
+      background: #fff;
+      border-bottom: 1px solid var(--line);
+      box-shadow: 0 12px 34px rgba(18, 59, 109, .08);
+      z-index: 2;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      min-width: 0;
+    }
+    .brand img {
+      width: 58px;
+      height: 58px;
+      object-fit: contain;
+      border-radius: 8px;
+      background: #fff;
+    }
+    .brand-title {
+      font-size: 24px;
+      font-weight: 950;
+      color: var(--blue);
+      line-height: 1.05;
+      white-space: nowrap;
+    }
+    .brand-sub {
+      font-size: 15px;
+      font-weight: 850;
+      color: var(--teal);
+      margin-top: 3px;
+      white-space: nowrap;
+    }
+    .clock {
+      text-align: right;
+      font-weight: 900;
+      color: var(--blue);
+    }
+    .clock-time { font-size: 30px; line-height: 1; }
+    .clock-date { font-size: 14px; color: var(--muted); margin-top: 5px; }
+    main {
+      position: relative;
+      overflow: hidden;
+    }
+    .panel {
+      position: absolute;
+      inset: 0;
+      display: none;
+      padding: 28px 36px 26px;
+    }
+    .panel.active {
+      display: block;
+      animation: fadeIn .5s ease both;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .queue-layout {
+      height: 100%;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 22px;
+    }
+    .dept-head {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 24px;
+    }
+    .dept-title {
+      font-size: clamp(54px, 7vw, 112px);
+      line-height: .92;
+      letter-spacing: 0;
+      color: var(--blue);
+      font-weight: 950;
+      text-transform: uppercase;
+    }
+    .dept-pa {
+      font-size: clamp(28px, 3.2vw, 48px);
+      color: var(--teal);
+      font-weight: 950;
+      margin-top: 8px;
+    }
+    .queue-status {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 8px;
+      font-size: 18px;
+      font-weight: 900;
+      color: var(--muted);
+    }
+    .live-dot {
+      display: inline-flex;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #a0aaba;
+      margin-right: 9px;
+      box-shadow: 0 0 0 6px rgba(160,170,186,.16);
+      vertical-align: -1px;
+    }
+    .live-dot.on {
+      background: var(--green);
+      box-shadow: 0 0 0 6px rgba(15,138,95,.16);
+    }
+    .queue-list {
+      display: grid;
+      grid-auto-rows: minmax(96px, auto);
+      align-content: start;
+      gap: 14px;
+      overflow: hidden;
+    }
+    .patient-row {
+      display: grid;
+      grid-template-columns: minmax(220px, 330px) minmax(0, 1fr) minmax(120px, 180px);
+      align-items: center;
+      gap: 18px;
+      padding: 18px 24px;
+      background: var(--paper);
+      border: 1.5px solid var(--line);
+      border-left: 9px solid var(--blue2);
+      border-radius: 14px;
+      box-shadow: 0 13px 32px rgba(18,59,109,.08);
+      min-width: 0;
+    }
+    .patient-row.current {
+      border-left-color: var(--gold);
+      background: linear-gradient(90deg, #fff6df 0%, #fff 38%);
+    }
+    .patient-row.surgery {
+      border-left-color: var(--orange);
+      background: linear-gradient(90deg, #fff1dc 0%, #fff 42%);
+    }
+    .patient-row.plain {
+      grid-template-columns: minmax(0, 1fr) minmax(120px, 180px);
+      padding-left: 34px;
+    }
+    .call-label {
+      font-size: clamp(28px, 3vw, 44px);
+      font-weight: 950;
+      color: var(--blue);
+      line-height: 1.05;
+    }
+    .call-label small {
+      display: block;
+      margin-top: 5px;
+      font-size: clamp(18px, 2vw, 28px);
+      color: var(--teal);
+      font-weight: 950;
+    }
+    .patient-name {
+      font-size: clamp(34px, 4.5vw, 66px);
+      font-weight: 950;
+      line-height: .98;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      letter-spacing: 0;
+    }
+    .patient-meta {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: clamp(18px, 1.7vw, 26px);
+      font-weight: 850;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .patient-tag {
+      justify-self: end;
+      padding: 10px 14px;
+      border-radius: 10px;
+      background: #e9f5ff;
+      color: var(--blue);
+      font-size: clamp(16px, 1.5vw, 22px);
+      font-weight: 950;
+      text-align: center;
+      white-space: nowrap;
+    }
+    .patient-row.current .patient-tag {
+      background: #fff0c7;
+      color: #8a5c00;
+    }
+    .patient-row.surgery .patient-tag {
+      background: #ffe6c7;
+      color: #914300;
+    }
+    .empty-queue {
+      height: 100%;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      background: #fff;
+      border: 1.5px dashed var(--line);
+      border-radius: 20px;
+      color: var(--muted);
+      font-weight: 900;
+      font-size: clamp(28px, 3.2vw, 48px);
+      padding: 32px;
+    }
+    .slide {
+      height: 100%;
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(320px, .95fr);
+      gap: 36px;
+      align-items: stretch;
+      position: relative;
+    }
+    .slide.full {
+      grid-template-columns: 1fr;
+    }
+    .slide-copy {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-width: 0;
+      animation: flyInLeft .8s cubic-bezier(.2,.8,.2,1) both;
+    }
+    .slide-visual {
+      animation: flyInRight .8s cubic-bezier(.2,.8,.2,1) both;
+    }
+    @keyframes flyInLeft {
+      from { opacity: 0; transform: translateX(-80px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes flyInRight {
+      from { opacity: 0; transform: translateX(80px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    .slide-logo {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 98px;
+      height: 98px;
+      border-radius: 16px;
+      object-fit: contain;
+      background: rgba(255,255,255,.92);
+      border: 1px solid var(--line);
+      padding: 8px;
+      box-shadow: 0 18px 40px rgba(18,59,109,.12);
+      z-index: 3;
+    }
+    .cred-list {
+      margin-top: 24px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      animation: flyInRight .9s cubic-bezier(.2,.8,.2,1) .12s both;
+    }
+    .cred-chip {
+      padding: 9px 13px;
+      border-radius: 10px;
+      background: #fff;
+      border: 1.5px solid var(--line);
+      color: var(--blue);
+      font-size: clamp(18px, 1.55vw, 25px);
+      font-weight: 950;
+      box-shadow: 0 10px 26px rgba(18,59,109,.08);
+    }
+    .eyebrow {
+      font-size: clamp(18px, 1.5vw, 24px);
+      font-weight: 950;
+      color: var(--teal);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      margin-bottom: 16px;
+    }
+    .slide-title {
+      font-size: clamp(50px, 6vw, 96px);
+      line-height: .94;
+      font-weight: 950;
+      color: var(--blue);
+      letter-spacing: 0;
+      margin: 0;
+    }
+    .slide-pa {
+      font-size: clamp(30px, 3.2vw, 52px);
+      line-height: 1.12;
+      color: var(--teal);
+      font-weight: 950;
+      margin-top: 18px;
+    }
+    .slide-body {
+      margin-top: 28px;
+      display: grid;
+      gap: 13px;
+      font-size: clamp(24px, 2.3vw, 36px);
+      line-height: 1.18;
+      font-weight: 850;
+      color: var(--ink);
+    }
+    .slide-body .pa {
+      color: #315a76;
+      font-size: .84em;
+      font-weight: 900;
+    }
+    .slide-visual {
+      border-radius: 22px;
+      overflow: hidden;
+      background: #fff;
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      min-height: 0;
+      display: grid;
+      place-items: center;
+      position: relative;
+    }
+    .slide-visual img,
+    .slide-visual video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .doctor-visual {
+      background: linear-gradient(160deg, #eaf4ff, #fff);
+    }
+    .doctor-visual img {
+      object-fit: cover;
+      object-position: center top;
+    }
+    .doctor-card-band {
+      position: absolute;
+      left: 22px;
+      right: 22px;
+      bottom: 22px;
+      padding: 16px 18px;
+      border-radius: 14px;
+      background: rgba(255,255,255,.92);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 15px 45px rgba(18,59,109,.14);
+    }
+    .doctor-card-band strong {
+      display: block;
+      font-size: clamp(24px, 2.4vw, 38px);
+      color: var(--blue);
+      font-weight: 950;
+    }
+    .doctor-card-band span {
+      display: block;
+      margin-top: 4px;
+      font-size: clamp(16px, 1.4vw, 22px);
+      color: var(--teal);
+      font-weight: 900;
+    }
+    .video-fallback {
+      width: 100%;
+      height: 100%;
+      display: grid;
+      place-items: center;
+      padding: 32px;
+      text-align: center;
+      background:
+        radial-gradient(circle at 30% 24%, rgba(212,160,23,.24), transparent 28%),
+        linear-gradient(135deg, #0f3764, #0b7b8c);
+      color: #fff;
+    }
+    .video-play {
+      width: 110px;
+      height: 110px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: rgba(255,255,255,.18);
+      border: 3px solid rgba(255,255,255,.55);
+      margin: 0 auto 24px;
+      font-size: 46px;
+      padding-left: 7px;
+    }
+    .video-fallback h3 {
+      margin: 0;
+      font-size: clamp(42px, 5vw, 78px);
+      line-height: .96;
+    }
+    .video-fallback p {
+      margin: 18px 0 0;
+      font-size: clamp(22px, 2.2vw, 34px);
+      font-weight: 850;
+      color: rgba(255,255,255,.9);
+    }
+    .motion-scene {
+      width: 100%;
+      height: 100%;
+      min-height: 520px;
+      position: relative;
+      overflow: hidden;
+      background: linear-gradient(135deg, #0f3764 0%, #0b7b8c 100%);
+      color: #fff;
+    }
+    .motion-title {
+      position: absolute;
+      left: 36px;
+      right: 36px;
+      bottom: 36px;
+      z-index: 4;
+      font-size: clamp(36px, 4.3vw, 72px);
+      line-height: .98;
+      font-weight: 950;
+      text-shadow: 0 12px 30px rgba(0,0,0,.35);
+    }
+    .motion-sub {
+      margin-top: 12px;
+      font-size: clamp(22px, 2.2vw, 34px);
+      color: rgba(255,255,255,.9);
+      font-weight: 900;
+    }
+    .orbit {
+      position: absolute;
+      width: 380px;
+      height: 380px;
+      border: 4px solid rgba(255,255,255,.22);
+      border-radius: 50%;
+      top: 70px;
+      left: 50%;
+      transform: translateX(-50%);
+      animation: rotateOrbit 8s linear infinite;
+    }
+    .orbit:before,
+    .orbit:after {
+      content: "";
+      position: absolute;
+      width: 62px;
+      height: 62px;
+      border-radius: 50%;
+      background: var(--gold);
+      box-shadow: 0 0 40px rgba(212,160,23,.65);
+    }
+    .orbit:before { top: -31px; left: 150px; }
+    .orbit:after { bottom: 15px; right: 20px; background: #fff; }
+    .lens {
+      position: absolute;
+      width: 230px;
+      height: 230px;
+      border-radius: 50%;
+      top: 145px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: radial-gradient(circle at 35% 30%, rgba(255,255,255,.92), rgba(180,234,255,.42) 42%, rgba(255,255,255,.18) 70%);
+      border: 2px solid rgba(255,255,255,.65);
+      box-shadow: inset 0 0 42px rgba(255,255,255,.38), 0 30px 80px rgba(0,0,0,.22);
+      animation: pulseLens 2.5s ease-in-out infinite;
+    }
+    .laser {
+      position: absolute;
+      height: 7px;
+      width: 58%;
+      top: 250px;
+      left: -60%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, transparent, #fff, var(--gold));
+      box-shadow: 0 0 28px rgba(212,160,23,.85);
+      animation: sweepLaser 2.8s ease-in-out infinite;
+    }
+    .spark {
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 0 24px #fff;
+      animation: floatSpark 4s ease-in-out infinite;
+    }
+    .spark.s1 { top: 24%; left: 18%; animation-delay: .2s; }
+    .spark.s2 { top: 18%; right: 19%; animation-delay: .8s; }
+    .spark.s3 { top: 46%; right: 26%; animation-delay: 1.4s; }
+    @keyframes rotateOrbit {
+      from { transform: translateX(-50%) rotate(0deg); }
+      to { transform: translateX(-50%) rotate(360deg); }
+    }
+    @keyframes pulseLens {
+      0%, 100% { transform: translateX(-50%) scale(1); }
+      50% { transform: translateX(-50%) scale(1.07); }
+    }
+    @keyframes sweepLaser {
+      0% { left: -60%; opacity: 0; }
+      25% { opacity: 1; }
+      70% { left: 62%; opacity: 1; }
+      100% { left: 105%; opacity: 0; }
+    }
+    @keyframes floatSpark {
+      0%,100% { transform: translateY(0) scale(.8); opacity: .45; }
+      50% { transform: translateY(-28px) scale(1.3); opacity: 1; }
+    }
+    footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 10px 34px;
+      background: var(--blue);
+      color: #fff;
+      font-size: 15px;
+      font-weight: 850;
+    }
+    .progress {
+      height: 5px;
+      width: 240px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.25);
+      overflow: hidden;
+    }
+    .progress span {
+      display: block;
+      height: 100%;
+      width: 0;
+      background: var(--gold);
+      transition: width .25s linear;
+    }
+    @media (max-width: 900px) {
+      body { overflow: auto; }
+      .screen { min-height: 100vh; height: auto; grid-template-rows: auto 1fr auto; }
+      main { min-height: 720px; }
+      .slide { grid-template-columns: 1fr; }
+      .slide-visual { min-height: 300px; }
+      .patient-row { grid-template-columns: 1fr; }
+      .patient-tag { justify-self: start; }
+      header { flex-wrap: wrap; }
+    }
+  </style>
+</head>
+<body>
+  <div class="screen">
+    <header>
+      <div class="brand">
+        <img src="./websites/chandigarh/images/brand/bmh.jpg" alt="Baweja Multispeciality Hospital">
+        <div>
+          <div class="brand-title">Baweja Multispeciality Hospital</div>
+          <div class="brand-sub">ਬਾਵੇਜਾ ਮਲਟੀਸਪੈਸ਼ਲਿਟੀ ਹਸਪਤਾਲ</div>
+        </div>
+      </div>
+      <div class="clock">
+        <div class="clock-time" id="clock-time">--:--</div>
+        <div class="clock-date" id="clock-date">Connecting...</div>
+      </div>
+    </header>
+
+    <main>
+      <section class="panel active" id="queue-panel">
+        <div class="queue-layout">
+          <div class="dept-head">
+            <div>
+              <div class="dept-title" id="dept-title">Ophthalmology</div>
+              <div class="dept-pa" id="dept-pa">ਅੱਖਾਂ ਦਾ ਵਿਭਾਗ</div>
+            </div>
+            <div class="queue-status">
+              <div><span class="live-dot" id="live-dot"></span><span id="live-text">Connecting</span></div>
+              <div id="queue-updated">Waiting for queue...</div>
+            </div>
+          </div>
+          <div class="queue-list" id="queue-list">
+            <div class="empty-queue">Queue loading...<br><span style="font-size:.72em;color:var(--teal)">ਕਤਾਰ ਲੋਡ ਹੋ ਰਹੀ ਹੈ...</span></div>
+          </div>
+        </div>
+      </section>
+      <section class="panel" id="media-panel"></section>
+    </main>
+
+    <footer>
+      <div>Please stay seated. Your name will appear when it is your turn. / ਕਿਰਪਾ ਕਰਕੇ ਬੈਠੇ ਰਹੋ। ਤੁਹਾਡੀ ਵਾਰੀ ਆਉਣ 'ਤੇ ਨਾਮ ਦਿਖਾਇਆ ਜਾਵੇਗਾ।</div>
+      <div class="progress" aria-hidden="true"><span id="progress-bar"></span></div>
+    </footer>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
+  <script>
+    (function () {
+      var cfg = {
+        apiKey: 'AIzaSyDl8RD0l5yy3YjWJWXhdKetDPnFSa37IVQ',
+        authDomain: 'bmh-hms.firebaseapp.com',
+        databaseURL: 'https://bmh-hms-default-rtdb.asia-southeast1.firebasedatabase.app',
+        projectId: 'bmh-hms',
+        storageBucket: 'bmh-hms.firebasestorage.app',
+        messagingSenderId: '675093131811',
+        appId: '1:675093131811:web:669ea0eafd0a27bc73f796'
+      };
+      var qs = new URLSearchParams(location.search);
+      var deptParam = (qs.get('dept') || qs.get('department') || 'ophtho').toLowerCase();
+      var centreParam = (qs.get('centre') || qs.get('center') || '').toUpperCase();
+      var queueMs = Math.max(10000, Number(qs.get('queueMs') || 22000));
+      var mediaMs = Math.max(10000, Number(qs.get('mediaMs') || 18000));
+      var rows = [];
+      var slideIndex = 0;
+      var activeMode = 'queue';
+      var modeStartedAt = Date.now();
+      var modeDuration = queueMs;
+      var timer = null;
+
+      var deptMap = {
+        ophtho: { title: 'Ophthalmology', pa: 'ਅੱਖਾਂ ਦਾ ਵਿਭਾਗ', aliases: ['ophtho', 'ophthalmology', 'eye'] },
+        obg: { title: 'Obstetrics & Gynaecology', pa: 'ਮਹਿਲਾ ਰੋਗ ਵਿਭਾਗ', aliases: ['obg', 'gynae', 'gynaecology', 'obstetrics'] },
+        psych: { title: 'Neuropsychiatry', pa: 'ਮਨੋਰੋਗ ਵਿਭਾਗ', aliases: ['psych', 'psychiatry', 'neuropsychiatry'] },
+        skin: { title: 'Skin & Cosmetology', pa: 'ਚਮੜੀ ਅਤੇ ਕਾਸਮੈਟੋਲੋਜੀ', aliases: ['skin', 'dermatology', 'cosmetology'] }
+      };
+      function normDept(v) {
+        var d = String(v || '').toLowerCase();
+        if (d.indexOf('ophthalm') >= 0 || d === 'eye') return 'ophtho';
+        if (d.indexOf('gyn') >= 0 || d.indexOf('obst') >= 0) return 'obg';
+        if (d.indexOf('psych') >= 0) return 'psych';
+        if (d.indexOf('skin') >= 0 || d.indexOf('derma') >= 0 || d.indexOf('cosmet') >= 0) return 'skin';
+        return d || 'ophtho';
+      }
+      var activeDept = deptMap[normDept(deptParam)] ? normDept(deptParam) : 'ophtho';
+      document.getElementById('dept-title').textContent = deptMap[activeDept].title;
+      document.getElementById('dept-pa').textContent = deptMap[activeDept].pa;
+
+      var logoSrc = './websites/chandigarh/images/brand/bmh.jpg';
+      var slides = [
+        doctorSlide('Dr Varun Baweja', 'Ophthalmic & Refractive Surgeon', 'MBBS · MS (Ophth) · MRCPS (Glasgow) · UK NHS Cambridgeshire · MIGS training', 'ਅੱਖਾਂ ਦੇ ਮਾਹਿਰ', './websites/chandigarh/images/doctors/professional/dr-varun-baweja.jpg'),
+        infoSlide('Do’s & Don’ts After Cataract Surgery', 'ਮੋਤੀਆਬਿੰਦ ਸਰਜਰੀ ਤੋਂ ਬਾਅਦ ਧਿਆਨ', [
+          ['Use drops exactly as advised.', 'ਦਵਾਈਆਂ ਡਾਕਟਰ ਦੀ ਸਲਾਹ ਮੁਤਾਬਕ ਪਾਓ।'],
+          ['Do not rub the operated eye.', 'ਓਪਰੇਸ਼ਨ ਵਾਲੀ ਅੱਖ ਨੂੰ ਨਾ ਰਗੜੋ।'],
+          ['Use protective glasses and come for follow-up.', 'ਚਸ਼ਮਾ ਪਾਓ ਅਤੇ ਫਾਲੋ-ਅਪ ਲਈ ਜ਼ਰੂਰ ਆਓ।']
+        ], './websites/chandigarh/images/procedures/cataract-family.jpg'),
+        motionSlide('Cataract Surgery: Clear Vision Journey', 'ਮੋਤੀਆਬਿੰਦ ਸਰਜਰੀ: ਸਾਫ਼ ਨਜ਼ਰ ਵੱਲ ਕਦਮ', 'cataract'),
+        doctorSlide('Dr Tarun Baweja', 'Senior Consultant Psychiatrist', 'MBBS · MD (Psychiatry) · Neuropsychiatry · De-addiction · EEG diagnostics', 'ਮਨੋਰੋਗ ਅਤੇ ਨਸ਼ਾ ਛੁਡਾਊ ਸੇਵਾਵਾਂ', './websites/chandigarh/images/doctors/professional/dr-tarun-baweja.jpg'),
+        infoSlide('Depression: Myths & Realities', 'ਡਿਪ੍ਰੈਸ਼ਨ: ਭਰਮ ਅਤੇ ਸੱਚਾਈ', [
+          ['Depression is treatable.', 'ਡਿਪ੍ਰੈਸ਼ਨ ਦਾ ਇਲਾਜ ਸੰਭਵ ਹੈ।'],
+          ['It is not weakness or laziness.', 'ਇਹ ਕਮਜ਼ੋਰੀ ਜਾਂ ਆਲਸ ਨਹੀਂ ਹੈ।'],
+          ['Seek help early for better recovery.', 'ਜਲਦੀ ਮਦਦ ਲੈਣ ਨਾਲ ਸੁਧਾਰ ਵਧੀਆ ਹੁੰਦਾ ਹੈ।']
+        ], './websites/chandigarh/images/hero/psychiatry-free-mind.jpg'),
+        motionSlide('ICL: Freedom from High Power Glasses', 'ਆਈ.ਸੀ.ਐਲ. ਨਾਲ ਵੱਧ ਨੰਬਰ ਵਾਲੇ ਚਸ਼ਮੇ ਤੋਂ ਰਾਹਤ', 'icl'),
+        doctorSlide('Dr Namrata Baweja', 'Gynaecologist & Fertility Specialist', 'MBBS · MS (OB/GYN) · Fellowship IVF · High-risk pregnancy · Painless delivery', 'ਮਹਿਲਾ ਰੋਗ ਅਤੇ ਗਰਭ ਅਵਸਥਾ ਦੇਖਭਾਲ', './websites/chandigarh/images/doctors/professional/dr-namrata-baweja.jpg'),
+        infoSlide('Pregnancy Warning Signs', 'ਗਰਭ ਅਵਸਥਾ ਦੇ ਖਤਰੇ ਦੇ ਸੰਕੇਤ', [
+          ['Bleeding, severe headache, swelling or reduced baby movements need urgent review.', 'ਖੂਨ ਆਉਣਾ, ਤੇਜ਼ ਸਿਰ ਦਰਦ, ਸੂਜਨ ਜਾਂ ਬੱਚੇ ਦੀ ਘੱਟ ਹਰਕਤ ਤੇ ਤੁਰੰਤ ਜਾਂਚ ਕਰਵਾਓ।'],
+          ['Regular ANC visits keep mother and baby safer.', 'ਨਿਯਮਿਤ ANC ਜਾਂਚ ਮਾਂ ਅਤੇ ਬੱਚੇ ਲਈ ਸੁਰੱਖਿਅਤ ਹੈ।']
+        ], './websites/chandigarh/images/hero/obgyn-mother-newborn.jpg'),
+        doctorSlide('Dr Pooja Baweja', 'Aesthetic Physician', 'MBBS · MD · FAM · Skin · Cosmetology · Advanced laser procedures', 'ਚਮੜੀ ਅਤੇ ਸੁੰਦਰਤਾ ਇਲਾਜ', './websites/chandigarh/images/doctors/professional/dr-pooja-baweja.jpg'),
+        infoSlide('Skin Procedure Care', 'ਚਮੜੀ ਦੇ ਇਲਾਜ ਤੋਂ ਬਾਅਦ ਸਾਵਧਾਨੀਆਂ', [
+          ['Use sunscreen and moisturiser as advised.', 'ਸਨਸਕ੍ਰੀਨ ਅਤੇ ਮਾਇਸਚਰਾਈਜ਼ਰ ਸਲਾਹ ਅਨੁਸਾਰ ਵਰਤੋ।'],
+          ['Avoid picking or scratching treated areas.', 'ਇਲਾਜ ਵਾਲੀ ਥਾਂ ਨੂੰ ਨਾ ਖੁਰਚੋ।']
+        ], './websites/chandigarh/images/hero/aesthetics-glow.jpg'),
+        doctorSlide('Dr Geeta Baweja', 'Consultant Gynaecologist', 'MBBS · DGO · Senior Specialist · Women’s health since 1984', 'ਸੀਨੀਅਰ ਗਾਇਨੇਕੋਲੋਜਿਸਟ', './websites/chandigarh/images/doctors/professional/dr-geeta-baweja.jpg'),
+        doctorSlide('Dr Harwinder Baweja', 'Director · Consultant Dental Surgeon', 'BDS · MDS (Oral Surgery) · Senior clinical leadership', 'ਡਾਇਰੈਕਟਰ ਅਤੇ ਡੈਂਟਲ ਸਰਜਨ', './websites/chandigarh/images/doctors/professional/dr-harwinder-baweja.jpg'),
+        motionSlide('LASIK / SMILE Pro: Laser Vision Correction', 'ਲੇਜ਼ਰ ਨਾਲ ਚਸ਼ਮੇ ਤੋਂ ਰਾਹਤ', 'lasik'),
+        infoSlide('Glaucoma: The Silent Sight Stealer', 'ਗਲੂਕੋਮਾ: ਨਜ਼ਰ ਦਾ ਚੁੱਪ ਚਾਪ ਨੁਕਸਾਨ', [
+          ['Regular eye pressure and optic nerve checks matter.', 'ਅੱਖਾਂ ਦਾ ਪ੍ਰੈਸ਼ਰ ਅਤੇ ਨਰਵ ਦੀ ਜਾਂਚ ਜ਼ਰੂਰੀ ਹੈ।'],
+          ['Drops must be used daily even when vision feels normal.', 'ਨਜ਼ਰ ਠੀਕ ਲੱਗੇ ਤਾਂ ਵੀ ਦਵਾਈ ਰੋਜ਼ ਪਾਓ।']
+        ], './websites/chandigarh/images/hero/migs-devices.jpg'),
+        infoSlide('Myth: LASIK is painful', 'ਭਰਮ: ਲੇਜ਼ਰ ਇਲਾਜ ਦਰਦਨਾਕ ਹੁੰਦਾ ਹੈ', [
+          ['Reality: Laser vision correction is usually quick and comfortable with numbing drops.', 'ਸੱਚਾਈ: ਸੁੰਨ ਕਰਨ ਵਾਲੀਆਂ ਬੂੰਦਾਂ ਨਾਲ ਲੇਜ਼ਰ ਇਲਾਜ ਆਮ ਤੌਰ ਤੇ ਜਲਦੀ ਅਤੇ ਆਰਾਮਦਾਇਕ ਹੁੰਦਾ ਹੈ।'],
+          ['Suitability depends on cornea, power stability and eye health.', 'ਯੋਗਤਾ ਕੋਰਨੀਆ, ਨੰਬਰ ਦੀ ਸਥਿਰਤਾ ਅਤੇ ਅੱਖ ਦੀ ਸਿਹਤ ਤੇ ਨਿਰਭਰ ਕਰਦੀ ਹੈ।']
+        ], './websites/chandigarh/images/hero/lasik-laser.jpg'),
+        infoSlide('Before Any Procedure', 'ਕਿਸੇ ਵੀ ਪ੍ਰੋਸੀਜਰ ਤੋਂ ਪਹਿਲਾਂ', [
+          ['Tell the doctor about allergies, medicines and previous surgeries.', 'ਐਲਰਜੀ, ਦਵਾਈਆਂ ਅਤੇ ਪਿਛਲੇ ਓਪਰੇਸ਼ਨ ਬਾਰੇ ਡਾਕਟਰ ਨੂੰ ਦੱਸੋ।'],
+          ['Bring old reports and prescriptions.', 'ਪੁਰਾਣੀਆਂ ਰਿਪੋਰਟਾਂ ਅਤੇ ਪ੍ਰਿਸਕ੍ਰਿਪਸ਼ਨ ਨਾਲ ਲਿਆਓ।'],
+          ['Ask questions until you are comfortable.', 'ਜਦ ਤੱਕ ਤੁਸੀਂ ਨਿਸ਼ਚਿੰਤ ਨਾ ਹੋਵੋ, ਸਵਾਲ ਪੁੱਛੋ।']
+        ], './websites/chandigarh/images/brand/baweja-1.png')
+      ];
+
+      function doctorSlide(name, title, credentials, pa, img) {
+        return { kind: 'doctor', name: name, title: title, credentials: credentials, pa: pa, img: img };
+      }
+      function infoSlide(title, pa, points, img) {
+        return { kind: 'info', title: title, pa: pa, points: points, img: img };
+      }
+      function motionSlide(title, pa, theme) {
+        return { kind: 'motion', title: title, pa: pa, theme: theme };
+      }
+
+      function todayKey() {
+        var parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' })
+          .formatToParts(new Date()).reduce(function (acc, p) { acc[p.type] = p.value; return acc; }, {});
+        return parts.year + '-' + parts.month + '-' + parts.day;
+      }
+      function localDateKey(value) {
+        if (!value) return '';
+        var raw = String(value).trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+        var d = new Date(value);
+        if (isNaN(d.getTime())) return '';
+        var parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' })
+          .formatToParts(d).reduce(function (acc, p) { acc[p.type] = p.value; return acc; }, {});
+        return parts.year + '-' + parts.month + '-' + parts.day;
+      }
+      function rowCentre(row) {
+        return String(row && row.centre || '').trim().toUpperCase();
+      }
+      function rowMatchesCentre(row) {
+        if (!centreParam || centreParam === 'BOTH' || centreParam === 'ALL') return true;
+        var c = rowCentre(row);
+        return !c || c === centreParam;
+      }
+      function isTodayRow(row) {
+        var day = todayKey();
+        return [row.queueDate, row.visitDate, row.queueAddedAt, row.checkinAt, row.createdAt, row.date].some(function (v) {
+          return localDateKey(v) === day || String(v || '').slice(0, 10) === day;
+        });
+      }
+      function isActiveRow(row) {
+        if (!row || row.queueRemoved || row.inactive || row.mergedInto) return false;
+        var status = String(row.status || '').toLowerCase();
+        if (['seen', 'done', 'removed', 'merged', 'inactive'].indexOf(status) >= 0 || row.seen || row.seenAt) return false;
+        return isTodayRow(row) && rowMatchesCentre(row) && normDept(row.dept || row.department) === activeDept;
+      }
+      function queueStamp(row) {
+        var candidates = [row.checkinAt, row.queueAddedAt, row.createdAt, row.queueDate, row.visitDate, row.date];
+        for (var i = 0; i < candidates.length; i++) {
+          var raw = candidates[i];
+          if (!raw) continue;
+          if (typeof raw === 'number') return raw;
+          var t = Date.parse(raw);
+          if (!isNaN(t)) return t;
+        }
+        return Date.now();
+      }
+      function displayName(row) {
+        return String(row.name || row.patient || 'Patient').trim();
+      }
+      function safeText(value) {
+        return String(value == null ? '' : value).replace(/[&<>"']/g, function (ch) {
+          return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch];
+        });
+      }
+      function initials(row) {
+        return displayName(row).split(/\s+/).filter(Boolean).slice(0, 2).map(function (x) { return x[0]; }).join('').toUpperCase() || 'PT';
+      }
+      function renderQueue() {
+        var el = document.getElementById('queue-list');
+        var active = rows.filter(isActiveRow).sort(function (a, b) { return queueStamp(a) - queueStamp(b); });
+        document.getElementById('queue-updated').textContent = active.length ? (active.length + ' waiting / ਉਡੀਕ ਵਿੱਚ') : 'No active patients / ਕੋਈ ਮਰੀਜ਼ ਉਡੀਕ ਵਿੱਚ ਨਹੀਂ';
+        if (!active.length) {
+          el.innerHTML = '<div class="empty-queue">Please wait for your turn.<br><span style="font-size:.72em;color:var(--teal)">ਕਿਰਪਾ ਕਰਕੇ ਆਪਣੀ ਵਾਰੀ ਦੀ ਉਡੀਕ ਕਰੋ।</span></div>';
+          return;
+        }
+        el.innerHTML = active.slice(0, 8).map(function (row, idx) {
+          var current = idx === 0;
+          var surgery = !!row.surgeryToday || /^surgery today$/i.test(String(row.purpose || ''));
+          var label = current ? 'Active Consultation' : (idx === 1 ? 'Next in Line' : '');
+          var labelPa = current ? 'ਚੱਲ ਰਹੀ ਕਨਸਲਟੇਸ਼ਨ' : (idx === 1 ? 'ਅਗਲੀ ਵਾਰੀ' : '');
+          var tag = surgery ? 'Surgery Today' : (row.dilated ? 'Dilated' : (row.purpose || 'Waiting'));
+          return '<div class="patient-row ' + (current ? 'current ' : '') + (surgery ? 'surgery ' : '') + (idx > 1 ? 'plain' : '') + '">' +
+            (idx <= 1 ? '<div class="call-label">' + label + '<small>' + labelPa + '</small></div>' : '') +
+            '<div style="min-width:0"><div class="patient-name">' + safeText(displayName(row)) + '</div>' +
+            '<div class="patient-meta">' + safeText([initials(row), row.doctor || row.assignedDoctor || '', row.purpose || ''].filter(Boolean).join(' · ')) + '</div></div>' +
+            '<div class="patient-tag">' + safeText(tag) + '</div>' +
+          '</div>';
+        }).join('');
+      }
+      function renderSlide(slide) {
+        var panel = document.getElementById('media-panel');
+        if (slide.kind === 'doctor') {
+          panel.innerHTML = '<div class="slide">' +
+            '<img class="slide-logo" src="' + logoSrc + '" alt="BMH">' +
+            '<div class="slide-copy"><div class="eyebrow">Doctor Profile / ਡਾਕਟਰ ਪ੍ਰੋਫਾਈਲ</div>' +
+            '<h1 class="slide-title">' + safeText(slide.name) + '</h1>' +
+            '<div class="slide-pa">' + safeText(slide.pa) + '</div>' +
+            '<div class="slide-body"><div>' + safeText(slide.title) + '</div><div class="pa">ਤੁਹਾਡੀ ਸਿਹਤ, ਸਾਡੀ ਜ਼ਿੰਮੇਵਾਰੀ।</div></div>' +
+            '<div class="cred-list">' + String(slide.credentials || '').split('·').map(function (x) { return '<span class="cred-chip">' + safeText(x.trim()) + '</span>'; }).join('') + '</div></div>' +
+            '<div class="slide-visual doctor-visual"><img src="' + slide.img + '" alt="' + safeText(slide.name) + '">' +
+            '<div class="doctor-card-band"><strong>' + safeText(slide.name) + '</strong><span>' + safeText(slide.title) + ' · ' + safeText(slide.credentials) + '</span></div></div>' +
+          '</div>';
+          return;
+        }
+        if (slide.kind === 'motion') {
+          panel.innerHTML = '<div class="slide">' +
+            '<img class="slide-logo" src="' + logoSrc + '" alt="BMH">' +
+            '<div class="slide-copy"><div class="eyebrow">Animated Patient Education / ਐਨੀਮੇਟਡ ਜਾਣਕਾਰੀ</div>' +
+            '<h1 class="slide-title">' + safeText(slide.title) + '</h1>' +
+            '<div class="slide-pa">' + safeText(slide.pa) + '</div>' +
+            '<div class="slide-body"><div>Short hospital education video-style display.</div><div class="pa">ਮਰੀਜ਼ਾਂ ਅਤੇ ਪਰਿਵਾਰ ਲਈ ਛੋਟੀ ਜਾਣਕਾਰੀ।</div></div></div>' +
+            '<div class="slide-visual"><div class="motion-scene"><div class="orbit"></div><div class="lens"></div><div class="laser"></div><div class="spark s1"></div><div class="spark s2"></div><div class="spark s3"></div><div class="motion-title">' + safeText(slide.title) + '<div class="motion-sub">' + safeText(slide.pa) + '</div></div></div></div>' +
+          '</div>';
+          return;
+        }
+        panel.innerHTML = '<div class="slide">' +
+          '<img class="slide-logo" src="' + logoSrc + '" alt="BMH">' +
+          '<div class="slide-copy"><div class="eyebrow">Hospital Information / ਹਸਪਤਾਲ ਜਾਣਕਾਰੀ</div>' +
+          '<h1 class="slide-title">' + safeText(slide.title) + '</h1>' +
+          '<div class="slide-pa">' + safeText(slide.pa) + '</div>' +
+          '<div class="slide-body">' + slide.points.map(function (p) { return '<div>' + safeText(p[0]) + '<div class="pa">' + safeText(p[1]) + '</div></div>'; }).join('') + '</div></div>' +
+          '<div class="slide-visual"><img src="' + slide.img + '" alt="' + safeText(slide.title) + '"></div>' +
+        '</div>';
+      }
+      function setPanel(mode) {
+        activeMode = mode;
+        modeStartedAt = Date.now();
+        modeDuration = mode === 'queue' ? queueMs : mediaMs;
+        document.getElementById('queue-panel').classList.toggle('active', mode === 'queue');
+        document.getElementById('media-panel').classList.toggle('active', mode === 'media');
+        if (mode === 'queue') renderQueue();
+        else {
+          renderSlide(slides[slideIndex % slides.length]);
+          slideIndex += 1;
+        }
+      }
+      function tick() {
+        var now = new Date();
+        document.getElementById('clock-time').textContent = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+        document.getElementById('clock-date').textContent = now.toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' });
+        var pct = Math.min(100, Math.max(0, ((Date.now() - modeStartedAt) / modeDuration) * 100));
+        document.getElementById('progress-bar').style.width = pct + '%';
+        if (Date.now() - modeStartedAt >= modeDuration) setPanel(activeMode === 'queue' ? 'media' : 'queue');
+      }
+      function startRotation() {
+        if (timer) clearInterval(timer);
+        setPanel('queue');
+        timer = setInterval(tick, 500);
+        tick();
+      }
+      function connect() {
+        try {
+          firebase.initializeApp(cfg);
+          var db = firebase.database();
+          db.ref('.info/connected').on('value', function (snap) {
+            var on = !!snap.val();
+            document.getElementById('live-dot').classList.toggle('on', on);
+            document.getElementById('live-text').textContent = on ? 'Live Queue' : 'Offline';
+          });
+          db.ref('patients').orderByChild('queueDate').equalTo(todayKey()).on('value', function (snap) {
+            var val = snap.val() || {};
+            rows = Object.keys(val).map(function (key) {
+              var row = val[key] || {};
+              row.bmhId = row.bmhId || key;
+              return row;
+            });
+            renderQueue();
+          }, function (err) {
+            document.getElementById('live-text').textContent = 'Queue unavailable';
+            document.getElementById('queue-list').innerHTML = '<div class="empty-queue">Queue unavailable.<br><span style="font-size:.72em;color:var(--teal)">' + safeText(err && err.message || 'Please check network') + '</span></div>';
+          });
+        } catch (e) {
+          document.getElementById('live-text').textContent = 'Connection failed';
+          document.getElementById('queue-list').innerHTML = '<div class="empty-queue">Connection failed.<br><span style="font-size:.72em;color:var(--teal)">' + safeText(e.message || e) + '</span></div>';
+        }
+      }
+
+      startRotation();
+      connect();
+    })();
+  </script>
+</body>
+</html>
