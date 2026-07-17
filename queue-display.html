@@ -425,15 +425,415 @@
       place-items: center;
       position: relative;
     }
-    .slide-visual.video-visual {
-      background: #071f3d;
-    }
     .slide-visual img,
     .slide-visual video {
       width: 100%;
       height: 100%;
       object-fit: cover;
       display: block;
+    }
+    .topic-visual {
+      width: 100%;
+      height: 100%;
+      min-height: 440px;
+      position: relative;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 20% 18%, rgba(212,160,23,.18), transparent 24%),
+        linear-gradient(135deg, #eaf6ff 0%, #ffffff 48%, #dff4f7 100%);
+    }
+    .topic-visual .label {
+      position: absolute;
+      left: 24px;
+      right: 24px;
+      bottom: 24px;
+      padding: 14px 16px;
+      border-radius: 14px;
+      background: rgba(255,255,255,.9);
+      color: var(--blue);
+      font-size: clamp(24px, 2.4vw, 38px);
+      line-height: 1.05;
+      font-weight: 950;
+      box-shadow: 0 18px 48px rgba(18,59,109,.14);
+    }
+    .fundus {
+      position: absolute;
+      width: min(62%, 460px);
+      aspect-ratio: 1;
+      border-radius: 50%;
+      left: 50%;
+      top: 45%;
+      transform: translate(-50%, -50%);
+      background:
+        radial-gradient(circle at 54% 50%, #f6d766 0 5%, transparent 5.5%),
+        radial-gradient(circle at 50% 50%, #d45a38 0 8%, transparent 8.5%),
+        radial-gradient(circle at 50% 50%, #b92927 0 58%, #7a1718 72%, #340b12 100%);
+      box-shadow: inset 0 0 70px rgba(0,0,0,.32), 0 30px 80px rgba(18,59,109,.18);
+    }
+    .fundus:before {
+      content: "";
+      position: absolute;
+      inset: 21%;
+      border-radius: 50%;
+      background:
+        linear-gradient(35deg, transparent 0 45%, rgba(120,0,0,.58) 46% 49%, transparent 50%),
+        linear-gradient(110deg, transparent 0 48%, rgba(120,0,0,.45) 49% 51%, transparent 52%),
+        linear-gradient(160deg, transparent 0 45%, rgba(120,0,0,.5) 46% 49%, transparent 50%);
+    }
+    .fundus .spot {
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #f6df70;
+      box-shadow: 0 0 0 4px rgba(246,223,112,.18);
+    }
+    .spot.s1 { top: 30%; left: 34%; }
+    .spot.s2 { top: 52%; left: 64%; }
+    .spot.s3 { top: 62%; left: 42%; }
+    .spot.s4 { top: 38%; left: 72%; }
+    .laser-grid {
+      position: absolute;
+      inset: 13%;
+      border-radius: 50%;
+      background-image: radial-gradient(circle, rgba(255,228,89,.92) 0 4px, transparent 5px);
+      background-size: 44px 44px;
+      opacity: .82;
+      mask-image: radial-gradient(circle, transparent 0 24%, #000 25% 88%, transparent 90%);
+    }
+    .eye-cut {
+      position: absolute;
+      width: min(74%, 520px);
+      height: 260px;
+      left: 50%;
+      top: 43%;
+      transform: translate(-50%, -50%);
+      border-radius: 50% / 42%;
+      background: linear-gradient(180deg, #f9fdff, #cdeff7);
+      border: 7px solid #123b6d;
+      box-shadow: 0 28px 70px rgba(18,59,109,.18);
+    }
+    .eye-cut:before {
+      content: "";
+      position: absolute;
+      width: 150px;
+      height: 150px;
+      border-radius: 50%;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      background: radial-gradient(circle, #c8f2ff 0 36%, #0b5f8a 37% 47%, #061d36 48% 55%, transparent 56%);
+    }
+    .cloudy-lens, .clear-lens {
+      position: absolute;
+      width: 86px;
+      height: 154px;
+      border-radius: 50%;
+      top: 52px;
+      background: rgba(255,255,255,.72);
+      border: 3px solid rgba(18,59,109,.35);
+    }
+    .cloudy-lens { left: 32%; box-shadow: inset 0 0 28px rgba(212,160,23,.75); }
+    .clear-lens { right: 24%; box-shadow: inset 0 0 22px rgba(11,123,140,.28); }
+    .procedure-arrow {
+      position: absolute;
+      left: 48%;
+      top: 118px;
+      width: 82px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--gold);
+    }
+    .procedure-arrow:after {
+      content: "";
+      position: absolute;
+      right: -2px;
+      top: -8px;
+      border-left: 20px solid var(--gold);
+      border-top: 12px solid transparent;
+      border-bottom: 12px solid transparent;
+    }
+    .glaucoma-view {
+      position: absolute;
+      inset: 10%;
+      border-radius: 22px;
+      background:
+        radial-gradient(circle at center, rgba(255,255,255,1) 0 26%, rgba(255,255,255,.7) 38%, rgba(20,43,72,.88) 62%, #061d36 100%),
+        url("./websites/chandigarh/images/brand/bmh.jpg");
+      display: grid;
+      place-items: center;
+      color: #fff;
+      font-weight: 950;
+      font-size: clamp(26px, 2.4vw, 42px);
+      text-shadow: 0 6px 24px rgba(0,0,0,.45);
+    }
+    .test-stack {
+      position: absolute;
+      inset: 10%;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+    .test-card {
+      border-radius: 18px;
+      background: #fff;
+      border: 2px solid rgba(18,59,109,.16);
+      box-shadow: 0 18px 44px rgba(18,59,109,.12);
+      display: grid;
+      place-items: center;
+      color: var(--blue);
+      font-size: clamp(24px, 2.1vw, 36px);
+      font-weight: 950;
+      position: relative;
+      overflow: hidden;
+    }
+    .test-card.oct:before {
+      content: "";
+      position: absolute;
+      left: 12%;
+      right: 12%;
+      top: 50%;
+      height: 70px;
+      transform: translateY(-50%);
+      background: linear-gradient(180deg, #ffda6a, #d45a38 45%, #4f9bd7 46%, #123b6d);
+      border-radius: 50% 50% 20% 20%;
+      opacity: .75;
+    }
+    .test-card.hvf:before {
+      content: "";
+      position: absolute;
+      inset: 18%;
+      border-radius: 50%;
+      background-image: radial-gradient(circle, #123b6d 0 4px, transparent 5px);
+      background-size: 26px 26px;
+      opacity: .35;
+    }
+    .migs-device {
+      position: absolute;
+      width: min(80%, 560px);
+      height: 300px;
+      left: 50%;
+      top: 44%;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      border: 8px solid #123b6d;
+      background: radial-gradient(circle at 50% 52%, #c7f2ff 0 20%, #fff 21% 100%);
+    }
+    .migs-device:before {
+      content: "";
+      position: absolute;
+      width: 180px;
+      height: 22px;
+      right: 70px;
+      bottom: 72px;
+      transform: rotate(-18deg);
+      background: linear-gradient(90deg, #d4a017, #fff4b8);
+      border-radius: 999px;
+      box-shadow: 0 0 24px rgba(212,160,23,.55);
+    }
+    .laser-cornea {
+      position: absolute;
+      inset: 12%;
+      border-radius: 22px;
+      background: linear-gradient(180deg, #fff, #e2f6ff);
+    }
+    .laser-cornea:before {
+      content: "";
+      position: absolute;
+      left: 12%;
+      right: 12%;
+      top: 46%;
+      height: 82px;
+      border-radius: 0 0 50% 50%;
+      border-bottom: 10px solid #0b7b8c;
+      background: rgba(200,242,255,.7);
+    }
+    .laser-cornea:after {
+      content: "";
+      position: absolute;
+      width: 72%;
+      height: 8px;
+      top: 27%;
+      left: 14%;
+      background: linear-gradient(90deg, transparent, #d4a017, transparent);
+      box-shadow: 0 0 24px #d4a017;
+      transform: rotate(-12deg);
+    }
+    .icl-visual .clear-lens {
+      left: 50%;
+      top: 54px;
+      transform: translateX(-50%);
+      width: 110px;
+      height: 176px;
+      background: rgba(180,234,255,.52);
+    }
+    .drop-visual .eye-cut:after {
+      content: "";
+      position: absolute;
+      width: 34px;
+      height: 50px;
+      left: 50%;
+      top: -62px;
+      transform: translateX(-50%);
+      border-radius: 50% 50% 50% 0;
+      background: #0b7b8c;
+      rotate: -45deg;
+      box-shadow: 0 16px 0 rgba(11,123,140,.35);
+    }
+    .uterus {
+      position: absolute;
+      width: min(58%, 420px);
+      height: 360px;
+      left: 50%;
+      top: 42%;
+      transform: translate(-50%, -50%);
+    }
+    .uterus:before {
+      content: "";
+      position: absolute;
+      width: 190px;
+      height: 210px;
+      left: 50%;
+      top: 70px;
+      transform: translateX(-50%);
+      border-radius: 48% 48% 42% 42%;
+      background: linear-gradient(180deg, #ffb2bd, #e85d75);
+      box-shadow: inset 0 -18px 35px rgba(117,28,52,.18);
+    }
+    .uterus:after {
+      content: "";
+      position: absolute;
+      left: 36px;
+      right: 36px;
+      top: 48px;
+      height: 105px;
+      border-top: 24px solid #e85d75;
+      border-radius: 50% 50% 0 0;
+    }
+    .pregnancy .uterus:before {
+      border-radius: 50%;
+      width: 230px;
+      height: 230px;
+      background: radial-gradient(circle at 48% 48%, #fff3d6 0 22%, #ffb2bd 23% 100%);
+    }
+    .person-scene {
+      position: absolute;
+      inset: 10%;
+      border-radius: 24px;
+      background: linear-gradient(135deg, #0f3764, #0b7b8c);
+      overflow: hidden;
+    }
+    .person-scene:before {
+      content: "";
+      position: absolute;
+      width: 210px;
+      height: 70px;
+      left: 28%;
+      top: 45%;
+      border-radius: 999px;
+      background: #fff;
+      box-shadow: 135px 18px 0 -6px rgba(255,255,255,.86), -58px 32px 0 -12px rgba(255,255,255,.5);
+    }
+    .person-scene.sleep:after {
+      content: "Z z z";
+      position: absolute;
+      right: 18%;
+      top: 20%;
+      color: #fff;
+      font-size: clamp(42px, 5vw, 86px);
+      font-weight: 950;
+    }
+    .addiction-cross {
+      position: absolute;
+      width: 150px;
+      height: 150px;
+      left: 50%;
+      top: 38%;
+      transform: translate(-50%, -50%);
+    }
+    .addiction-cross:before,
+    .addiction-cross:after {
+      content: "";
+      position: absolute;
+      background: #b42318;
+      border-radius: 18px;
+      box-shadow: 0 18px 42px rgba(180,35,24,.24);
+    }
+    .addiction-cross:before { width: 52px; height: 150px; left: 49px; }
+    .addiction-cross:after { height: 52px; width: 150px; top: 49px; }
+    .substance {
+      position: absolute;
+      padding: 9px 12px;
+      border-radius: 999px;
+      background: #fff;
+      color: var(--blue);
+      font-weight: 950;
+      box-shadow: 0 12px 30px rgba(18,59,109,.14);
+    }
+    .substance.s1 { left: 12%; top: 24%; }
+    .substance.s2 { right: 13%; top: 28%; }
+    .substance.s3 { left: 16%; bottom: 28%; }
+    .substance.s4 { right: 18%; bottom: 24%; }
+    .face {
+      position: absolute;
+      width: min(60%, 420px);
+      aspect-ratio: .82;
+      left: 50%;
+      top: 45%;
+      transform: translate(-50%, -50%);
+      border-radius: 48% 48% 44% 44%;
+      background: linear-gradient(180deg, #f7c3a8, #e89b7d);
+      box-shadow: inset 0 -26px 55px rgba(117,57,43,.14), 0 30px 80px rgba(18,59,109,.16);
+    }
+    .face:before {
+      content: "";
+      position: absolute;
+      left: 29%;
+      right: 29%;
+      top: 38%;
+      height: 9px;
+      border-radius: 999px;
+      box-shadow: -58px 0 0 #123b6d, 58px 0 0 #123b6d, 0 92px 0 -2px rgba(80,30,30,.55);
+    }
+    .face .pimple {
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #c7293f;
+      box-shadow: 0 0 0 5px rgba(199,41,63,.12);
+    }
+    .pimple.p1 { left: 28%; top: 30%; }
+    .pimple.p2 { right: 26%; top: 42%; }
+    .pimple.p3 { left: 46%; top: 58%; }
+    .hair-roots {
+      position: absolute;
+      inset: 12%;
+      border-radius: 22px;
+      background: linear-gradient(180deg, #f4cfb8, #fff);
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 14px;
+      padding: 80px 46px;
+    }
+    .hair-roots span {
+      display: block;
+      border-radius: 999px;
+      background: linear-gradient(180deg, #1a1a1a, #5c3520);
+      min-height: 160px;
+      position: relative;
+    }
+    .hair-roots span:before {
+      content: "";
+      position: absolute;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      left: 50%;
+      top: -34px;
+      transform: translateX(-50%);
+      background: #d4a017;
+      box-shadow: 0 0 20px rgba(212,160,23,.65);
     }
     .doctor-visual {
       background: linear-gradient(160deg, #eaf4ff, #fff);
@@ -823,7 +1223,6 @@
           ['Do not rub the operated eye.', 'ਓਪਰੇਸ਼ਨ ਵਾਲੀ ਅੱਖ ਨੂੰ ਨਾ ਰਗੜੋ।'],
           ['Use protective glasses and come for follow-up.', 'ਚਸ਼ਮਾ ਪਾਓ ਅਤੇ ਫਾਲੋ-ਅਪ ਲਈ ਜ਼ਰੂਰ ਆਓ।']
         ], './websites/chandigarh/images/procedures/cataract-family.jpg', 'Ophthalmology'),
-        videoSlide('Cataract Surgery: Surgical View', 'ਮੋਤੀਆਬਿੰਦ ਸਰਜਰੀ: ਸਰਜੀਕਲ ਦ੍ਰਿਸ਼', 'https://commons.wikimedia.org/wiki/Special:FilePath/New-side-view-imaging-technique-for-observing-posterior-chamber-structures-during-cataract-surgery-1471-2415-13-47-S1.ogv', 'Wikimedia Commons / BMC Ophthalmology', 'Ophthalmology'),
         motionSlide('Cataract Surgery: Clear Vision Journey', 'ਮੋਤੀਆਬਿੰਦ ਸਰਜਰੀ: ਸਾਫ਼ ਨਜ਼ਰ ਵੱਲ ਕਦਮ', 'cataract'),
         mythSlide('Cataract Myth vs Truth', 'ਮੋਤੀਆਬਿੰਦ: ਭਰਮ ਅਤੇ ਸੱਚਾਈ', 'Surgery should wait until the cataract is fully mature.', 'Timing depends on vision, daily needs and eye health; modern cataract surgery is planned after full evaluation.', './websites/chandigarh/images/procedures/cataract-family.jpg', 'Ophthalmology'),
         infoSlide('After Eye Laser or Injection', 'ਅੱਖ ਦੇ ਲੇਜ਼ਰ ਜਾਂ ਇੰਜੈਕਸ਼ਨ ਤੋਂ ਬਾਅਦ', [
@@ -889,7 +1288,7 @@
           ['Early treatment helps prevent harm and relapses.', 'ਜਲਦੀ ਇਲਾਜ ਨਾਲ ਨੁਕਸਾਨ ਅਤੇ ਦੁਬਾਰਾ ਐਪੀਸੋਡ ਘਟ ਸਕਦੇ ਹਨ।']
         ], './websites/chandigarh/images/hero/psychiatry-free-mind.jpg', 'Neuropsychiatry'),
         motionSlide('ICL: Freedom from High Power Glasses', 'ਆਈ.ਸੀ.ਐਲ. ਨਾਲ ਵੱਧ ਨੰਬਰ ਵਾਲੇ ਚਸ਼ਮੇ ਤੋਂ ਰਾਹਤ', 'icl'),
-        doctorSlide('Dr Namrata Baweja', 'Gynaecologist & Fertility Specialist', 'MBBS · MS (OB/GYN) · Fellowship IVF · UK-trained · High-risk pregnancy · Painless delivery · Laparoscopic gynaecology', 'ਮਹਿਲਾ ਰੋਗ ਅਤੇ ਗਰਭ ਅਵਸਥਾ ਦੇਖਭਾਲ', './websites/chandigarh/images/doctors/professional/dr-namrata-baweja.jpg', 'Obstetrics & Gynaecology'),
+        doctorSlide('Dr Namrata Baweja', 'Gynaecologist & Fertility Specialist', 'MBBS · DNB (OB/GYN) · GMC 32 Chandigarh · Fellowship in MIS (AIIMS) · Consultant in MSI Reproductive Services Manchester · High-risk pregnancy · Painless delivery', 'ਮਹਿਲਾ ਰੋਗ ਅਤੇ ਗਰਭ ਅਵਸਥਾ ਦੇਖਭਾਲ', './websites/chandigarh/images/doctors/professional/dr-namrata-baweja.jpg', 'Obstetrics & Gynaecology'),
         infoSlide('Pregnancy Warning Signs', 'ਗਰਭ ਅਵਸਥਾ ਦੇ ਖਤਰੇ ਦੇ ਸੰਕੇਤ', [
           ['Bleeding, severe headache, swelling or reduced baby movements need urgent review.', 'ਖੂਨ ਆਉਣਾ, ਤੇਜ਼ ਸਿਰ ਦਰਦ, ਸੂਜਨ ਜਾਂ ਬੱਚੇ ਦੀ ਘੱਟ ਹਰਕਤ ਤੇ ਤੁਰੰਤ ਜਾਂਚ ਕਰਵਾਓ।'],
           ['Regular ANC visits keep mother and baby safer.', 'ਨਿਯਮਿਤ ANC ਜਾਂਚ ਮਾਂ ਅਤੇ ਬੱਚੇ ਲਈ ਸੁਰੱਖਿਅਤ ਹੈ।']
@@ -937,7 +1336,6 @@
           ['PRP may be considered after diagnosis and counselling.', 'ਜਾਂਚ ਅਤੇ ਸਲਾਹ ਤੋਂ ਬਾਅਦ PRP ਬਾਰੇ ਵਿਚਾਰ ਕੀਤਾ ਜਾ ਸਕਦਾ ਹੈ।']
         ], './websites/chandigarh/images/hero/aesthetics-glow.jpg', 'Skin & Cosmetology'),
         doctorSlide('Dr Geeta Baweja', 'Consultant Gynaecologist', 'MBBS · Senior Specialist · Women’s health since 1984 · Ropar women’s health legacy · Foundational Baweja Hospital clinician', 'ਸੀਨੀਅਰ ਗਾਇਨੇਕੋਲੋਜਿਸਟ', './websites/chandigarh/images/doctors/professional/dr-geeta-baweja.jpg', 'Obstetrics & Gynaecology'),
-        videoSlide('LASIK: Flap Creation Animation', 'ਲੈਸਿਕ: ਫਲੈਪ ਬਣਾਉਣ ਦੀ ਐਨੀਮੇਸ਼ਨ', 'https://commons.wikimedia.org/wiki/Special:FilePath/Lasik%20Microtomo.ogv', 'Wikimedia Commons', 'Ophthalmology'),
         motionSlide('LASIK / SMILE Pro: Laser Vision Correction', 'ਲੇਜ਼ਰ ਨਾਲ ਚਸ਼ਮੇ ਤੋਂ ਰਾਹਤ', 'lasik'),
         infoSlide('Correct Method to Put Eye Drops', 'ਅੱਖਾਂ ਦੀਆਂ ਬੂੰਦਾਂ ਪਾਉਣ ਦਾ ਸਹੀ ਤਰੀਕਾ', [
           ['Wash your hands before using eye drops.', 'ਬੂੰਦਾਂ ਪਾਉਣ ਤੋਂ ਪਹਿਲਾਂ ਹੱਥ ਧੋਵੋ।'],
@@ -980,10 +1378,6 @@
       function motionSlide(title, pa, theme) {
         return { kind: 'motion', title: title, pa: pa, theme: theme, department: 'Ophthalmology', source: sourceForDepartment('Ophthalmology') };
       }
-      function videoSlide(title, pa, src, source, department) {
-        var dept = department || '';
-        return { kind: 'video', title: title, pa: pa, src: src, source: source || sourceForDepartment(dept), department: dept };
-      }
       function mythSlide(title, pa, myth, truth, img, department, source) {
         var dept = department || '';
         return { kind: 'myth', title: title, pa: pa, myth: myth, truth: truth, img: img, department: dept, source: source || sourceForDepartment(dept) };
@@ -1008,6 +1402,50 @@
       }
       function sourceMarked(text) {
         return safeText(text) + '<sup>*</sup>';
+      }
+      function visualKey(slide) {
+        var text = String((slide && slide.title || '') + ' ' + (slide && slide.pa || '')).toLowerCase();
+        if (text.indexOf('retinopathy') >= 0 || text.indexOf('diabetic eye') >= 0 || text.indexOf('diabetic') >= 0) return 'retina';
+        if (text.indexOf('anti-vegf') >= 0 || text.indexOf('injection') >= 0) return 'injection';
+        if (text.indexOf('photocoagulation') >= 0 || text.indexOf('prp laser') >= 0) return 'prp';
+        if (text.indexOf('glaucoma testing') >= 0 || text.indexOf('oct') >= 0 || text.indexOf('visual field') >= 0) return 'glaucoma-tests';
+        if (text.indexOf('silent sight') >= 0 || text.indexOf('glaucoma') >= 0 && text.indexOf('migs') < 0) return 'glaucoma-field';
+        if (text.indexOf('migs') >= 0) return 'migs';
+        if (text.indexOf('cataract') >= 0 || text.indexOf('ਮੋਤੀਆ') >= 0) return 'cataract';
+        if (text.indexOf('drop') >= 0 || text.indexOf('ਬੂੰਦ') >= 0) return 'drops';
+        if (text.indexOf('icl') >= 0) return 'icl';
+        if (text.indexOf('lasik') >= 0 || text.indexOf('smile') >= 0) return 'lasik';
+        if (text.indexOf('pregnancy') >= 0 || text.indexOf('antenatal') >= 0 || text.indexOf('anc') >= 0 || text.indexOf('delivery') >= 0) return 'pregnancy';
+        if (text.indexOf('menstrual') >= 0 || text.indexOf('pcos') >= 0 || text.indexOf('hormonal') >= 0) return 'uterus';
+        if (text.indexOf('sleep') >= 0) return 'sleep';
+        if (text.indexOf('addiction') >= 0 || text.indexOf('de-addiction') >= 0 || text.indexOf('ਨਸ਼ਾ') >= 0) return 'deaddiction';
+        if (text.indexOf('anxiety') >= 0 || text.indexOf('panic') >= 0 || text.indexOf('ocd') >= 0 || text.indexOf('bipolar') >= 0 || text.indexOf('depression') >= 0) return 'mind';
+        if (text.indexOf('acne') >= 0 || text.indexOf('ਮੁਹਾਸ') >= 0) return 'acne';
+        if (text.indexOf('hair') >= 0 || text.indexOf('prp') >= 0) return 'hair';
+        if (text.indexOf('laser hair') >= 0 || text.indexOf('pigmentation') >= 0 || text.indexOf('peel') >= 0 || text.indexOf('skin') >= 0) return 'skin';
+        return 'cataract';
+      }
+      function topicVisual(slide) {
+        var key = visualKey(slide);
+        var label = safeText(slide && slide.title || '');
+        if (key === 'retina') return '<div class="topic-visual"><div class="fundus"><span class="spot s1"></span><span class="spot s2"></span><span class="spot s3"></span><span class="spot s4"></span></div><div class="label">' + label + '</div></div>';
+        if (key === 'prp') return '<div class="topic-visual"><div class="fundus"><div class="laser-grid"></div></div><div class="label">PRP laser spots on diabetic retina</div></div>';
+        if (key === 'injection') return '<div class="topic-visual"><div class="eye-cut"><div class="clear-lens"></div><div class="procedure-arrow" style="transform:rotate(-35deg);left:58%;top:62px"></div></div><div class="label">Retina injection pathway</div></div>';
+        if (key === 'glaucoma-tests') return '<div class="topic-visual"><div class="test-stack"><div class="test-card oct">OCT</div><div class="test-card hvf">HVF</div></div><div class="label">OCT nerve scan + visual field testing</div></div>';
+        if (key === 'glaucoma-field') return '<div class="topic-visual"><div class="glaucoma-view">Tunnel-like field loss</div><div class="label">Glaucoma can narrow side vision silently</div></div>';
+        if (key === 'migs') return '<div class="topic-visual"><div class="migs-device"></div><div class="label">MIGS micro-stent pathway</div></div>';
+        if (key === 'cataract') return '<div class="topic-visual"><div class="eye-cut"><div class="cloudy-lens"></div><div class="procedure-arrow"></div><div class="clear-lens"></div></div><div class="label">Cloudy lens replaced with clear IOL</div></div>';
+        if (key === 'drops') return '<div class="topic-visual drop-visual"><div class="eye-cut"></div><div class="label">Correct eye drop instillation</div></div>';
+        if (key === 'icl') return '<div class="topic-visual icl-visual"><div class="eye-cut"><div class="clear-lens"></div></div><div class="label">ICL placed inside the eye, behind the iris</div></div>';
+        if (key === 'lasik') return '<div class="topic-visual"><div class="laser-cornea"></div><div class="label">Laser reshapes the cornea</div></div>';
+        if (key === 'pregnancy') return '<div class="topic-visual pregnancy"><div class="uterus"></div><div class="label">' + label + '</div></div>';
+        if (key === 'uterus') return '<div class="topic-visual"><div class="uterus"></div><div class="label">' + label + '</div></div>';
+        if (key === 'sleep') return '<div class="topic-visual"><div class="person-scene sleep"></div><div class="label">Sleep routine and mental health</div></div>';
+        if (key === 'deaddiction') return '<div class="topic-visual"><div class="addiction-cross"></div><span class="substance s1">Alcohol</span><span class="substance s2">Tobacco</span><span class="substance s3">Pills</span><span class="substance s4">Drugs</span><div class="label">De-addiction is medical care</div></div>';
+        if (key === 'mind') return '<div class="topic-visual"><div class="person-scene"></div><div class="label">' + label + '</div></div>';
+        if (key === 'acne') return '<div class="topic-visual"><div class="face"><span class="pimple p1"></span><span class="pimple p2"></span><span class="pimple p3"></span></div><div class="label">Acne needs the right skin plan</div></div>';
+        if (key === 'hair') return '<div class="topic-visual"><div class="hair-roots"><span></span><span></span><span></span><span></span><span></span><span></span></div><div class="label">PRP and hair-root stimulation</div></div>';
+        return '<div class="topic-visual"><div class="face"></div><div class="label">' + label + '</div></div>';
       }
 
       function todayKey() {
@@ -1107,18 +1545,6 @@
           '</div>';
           return;
         }
-        if (slide.kind === 'video') {
-          panel.innerHTML = '<div class="slide">' +
-            '<img class="slide-logo" src="' + logoSrc + '" alt="BMH">' +
-            '<div class="slide-copy"><div class="eyebrow">' + deptLabel + 'Educational Video / ਸਿੱਖਿਆ ਵੀਡੀਓ</div>' +
-            '<h1 class="slide-title">' + sourceMarked(slide.title) + '</h1>' +
-            '<div class="slide-pa">' + safeText(slide.pa) + '</div>' +
-            '<div class="slide-body"><div>Free educational video source shown with attribution.</div><div class="pa">ਸਰੋਤ ਦਾ ਜ਼ਿਕਰ ਹੇਠਾਂ ਦਿੱਤਾ ਗਿਆ ਹੈ।</div></div>' +
-            consultBanner(slide) + '</div>' +
-            '<div class="slide-visual video-visual"><video src="' + safeText(slide.src) + '" autoplay muted loop playsinline controls></video></div>' +
-          '</div>';
-          return;
-        }
         if (slide.kind === 'myth') {
           panel.innerHTML = '<div class="slide">' +
             '<img class="slide-logo" src="' + logoSrc + '" alt="BMH">' +
@@ -1128,7 +1554,7 @@
             '<div class="myth-grid"><div class="myth-cell"><h2>Myth</h2><p>' + sourceMarked(slide.myth) + '</p></div>' +
             '<div class="myth-cell truth"><h2>Truth</h2><p>' + sourceMarked(slide.truth) + '</p></div></div>' +
             consultBanner(slide) + '</div>' +
-            '<div class="slide-visual"><img src="' + slide.img + '" alt="' + safeText(slide.title) + '"></div>' +
+            '<div class="slide-visual">' + topicVisual(slide) + '</div>' +
           '</div>';
           return;
         }
@@ -1151,7 +1577,7 @@
           '<div class="slide-pa">' + safeText(slide.pa) + '</div>' +
           '<div class="slide-body">' + slide.points.map(function (p) { return '<div>' + sourceMarked(p[0]) + '<div class="pa">' + safeText(p[1]) + '</div></div>'; }).join('') + '</div>' +
           consultBanner(slide) + '</div>' +
-          '<div class="slide-visual"><img src="' + slide.img + '" alt="' + safeText(slide.title) + '"></div>' +
+          '<div class="slide-visual">' + topicVisual(slide) + '</div>' +
         '</div>';
       }
       function setPanel(mode) {
