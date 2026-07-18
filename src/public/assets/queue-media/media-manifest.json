@@ -1,0 +1,50 @@
+{
+  "queuePages": {
+    "main": "src/public/queue-display.html",
+    "chandigarh": "src/public/queue-display-chandigarh.html",
+    "ropar": "src/public/queue-display-ropar.html",
+    "shortcutChandigarh": "src/public/chdbmh/index.html",
+    "shortcutRopar": "src/public/rprbmh/index.html"
+  },
+  "mediaRoot": "src/public/assets/queue-media",
+  "shared": {
+    "hospitalLogo": "hospital-logo.jpg"
+  },
+  "doctors": {
+    "drVarunBaweja": "doctors/dr-varun-baweja.jpg",
+    "drTarunBaweja": "doctors/dr-tarun-baweja.jpg",
+    "drNamrataBaweja": "doctors/dr-namrata-baweja.jpg",
+    "drPoojaBaweja": "doctors/dr-pooja-baweja.jpg",
+    "drGeetaBaweja": "doctors/dr-geeta-baweja.jpg",
+    "drHarwinderBaweja": "doctors/dr-harwinder-baweja.jpg"
+  },
+  "departments": {
+    "ophthalmology": {
+      "cataract": "eye/cataract.jpg",
+      "glaucoma": "eye/glaucoma.jpg",
+      "icl": "eye/icl.jpg",
+      "injection": "eye/injection.jpg",
+      "lasik": "eye/lasik.jpg",
+      "migs": "eye/migs.jpg",
+      "prpLaser": "eye/prp-laser.jpg",
+      "retina": "eye/retina.jpg"
+    },
+    "obg": {
+      "pregnancy": "obg/pregnancy.jpg",
+      "menstrualHealth": "obg/menstrual-health.jpg",
+      "pcos": "obg/pcos.jpg"
+    },
+    "neuropsychiatry": {
+      "depression": "psych/depression.jpg",
+      "mentalHealth": "psych/mental-health.jpg",
+      "sleep": "psych/sleep.jpg",
+      "deaddiction": "psych/deaddiction.jpg"
+    },
+    "skinCosmetology": {
+      "acne": "skin/acne.jpg",
+      "aesthetics": "skin/aesthetics.jpg",
+      "hair": "skin/hair.jpg",
+      "pigmentation": "skin/pigmentation.jpg"
+    }
+  }
+}
