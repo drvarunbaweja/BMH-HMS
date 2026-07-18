@@ -26417,7 +26417,7 @@ function scheduleQueueCalendarDayRefresh() {
 }
 
 /** Update demographics for an existing patient (same BMSH ID shown in form) — no new token / fee. */
-function updateExistingPatientFromReceptionForm(bmhId) {
+async function updateExistingPatientFromReceptionForm(bmhId) {
   const uid = String(bmhId || '').trim();
   if (!uid) { showToast('Load a patient first (prefill or search)', 'w'); return; }
   const p = (typeof resolveExistingPatientForRegistration === 'function' ? resolveExistingPatientForRegistration(uid) : null)
@@ -26439,11 +26439,13 @@ function updateExistingPatientFromReceptionForm(bmhId) {
   const rel = normalizeReceptionFieldValue('rc-rel', document.getElementById('rc-rel')?.value || '');
   if (!fn) { showToast('Please enter patient first name', 'w'); return; }
   const name = toTitleCaseName((fn + ' ' + ln).trim());
+  const previousPhoneKeys = getPatientPhoneKeys(p);
   p.name = name;
   p.initials = computePatientInitials(name);
   p.age = age;
   p.sex = sex;
   p.mob = mob;
+  p.mobile = mob;
   p.mob2 = mob2;
   p.email = email;
   p.dob = dob;
@@ -26456,8 +26458,17 @@ function updateExistingPatientFromReceptionForm(bmhId) {
   normalizePatientRecord(p);
   savePatientToFirebase(p);
   fbUpdate && fbUpdate('patients/' + uid, {
-    name: p.name, age: p.age, sex: p.sex, mob: p.mob, mob2: p.mob2, email: p.email, dob: p.dob, addr: p.addr, rel: p.rel, dept: p.dept, doctor: p.doctor, assignedDoctor: p.assignedDoctor, centre: p.centre, initials: p.initials
+    name: p.name, age: p.age, sex: p.sex, mob: p.mob, mobile: p.mobile, mob2: p.mob2, email: p.email, dob: p.dob, addr: p.addr, rel: p.rel, dept: p.dept, doctor: p.doctor, assignedDoctor: p.assignedDoctor, centre: p.centre, initials: p.initials
   }).catch(function () {});
+  await maybeMergeTodayNoPhoneDuplicateAfterReceptionUpdate(p, {
+    name: p.name,
+    mob: p.mob,
+    mobile: p.mobile,
+    mob2: p.mob2,
+    age: p.age,
+    dob: p.dob,
+    __previousPhoneKeys: previousPhoneKeys
+  });
   showToast('Patient details updated ✓', 's');
   renderDocQueue && renderDocQueue();
   renderReceptionPage && renderReceptionPage();
@@ -36338,6 +36349,69 @@ function findSamePersonForRegistration(opts) {
   });
   if (strict.length) return sortPatientsByCanonicalIdentity(strict)[0];
   return null;
+}
+function getPatientMergeCandidateDateLabel(p) {
+  return localDateKey(p?.queueDate || p?.visitDate || p?.queueAddedAt || p?.checkinAt || p?.createdAt || p?.date || p?.updatedAt || '');
+}
+function findTodayNoPhoneSameNameDuplicateForReceptionUpdate(targetPatient, updatedFields) {
+  if (!targetPatient) return [];
+  const targetId = String(targetPatient.bmhId || '').trim();
+  const nextName = updatedFields?.name || targetPatient.name || targetPatient.patient || '';
+  const nameKey = patientNameIdentityKey(nextName);
+  const newPhoneKeys = getPatientPhoneKeys(Object.assign({}, targetPatient, updatedFields || {}));
+  if (!targetId || !nameKey || !newPhoneKeys.length) return [];
+  const previousPhoneKeys = Array.isArray(updatedFields?.__previousPhoneKeys) ? updatedFields.__previousPhoneKeys : getPatientPhoneKeys(targetPatient);
+  const phoneChanged = !previousPhoneKeys.length || newPhoneKeys.some(function (phoneKey) { return !previousPhoneKeys.includes(phoneKey); });
+  if (!phoneChanged) return [];
+  const today = localDateKey(new Date());
+  const targetNum = extractBmhNumericId(targetId);
+  const targetAge = patientApproxAgeYears(Object.assign({}, targetPatient, updatedFields || {}));
+  const source = getAllKnownPatientRecords();
+  return sortPatientsByCanonicalIdentity((source || []).filter(function (p) {
+    if (!p || isMergedPatientRecord(p)) return false;
+    const bid = String(p.bmhId || '').trim();
+    if (!bid || bid === targetId) return false;
+    if (extractBmhNumericId(bid) <= targetNum) return false;
+    if (patientNameIdentityKey(p.name || p.patient) !== nameKey) return false;
+    if (getPatientPhoneKeys(p).length) return false;
+    if (!rowDateMatchesKey(p, today) && getPatientMergeCandidateDateLabel(p) !== today) return false;
+    return agesCloseEnough(targetAge, patientApproxAgeYears(p), 2);
+  }));
+}
+async function maybeMergeTodayNoPhoneDuplicateAfterReceptionUpdate(targetPatient, updatedFields) {
+  const candidates = findTodayNoPhoneSameNameDuplicateForReceptionUpdate(targetPatient, updatedFields);
+  if (!candidates.length) return false;
+  const targetId = String(targetPatient?.bmhId || '').trim();
+  const name = updatedFields?.name || targetPatient?.name || 'this patient';
+  const phone = updatedFields?.mob || updatedFields?.mobile || '';
+  const listText = candidates.map(function (p) {
+    return (p.name || 'Patient') + ' — ' + p.bmhId + ' (' + (p.dept || p.department || 'today') + ')';
+  }).join('\n');
+  const ok = confirm(
+    'A same-name patient was registered today without a mobile number:\n\n' +
+    listText +
+    '\n\nKeep older BMSH ID ' + targetId + ' for ' + name + (phone ? ' (' + phone + ')' : '') + ' and merge today\'s new entry into it?\n\n' +
+    'OK = merge and move today\'s queue/visit data to the older BMSH ID.\nCancel = keep both entries separate.'
+  );
+  if (!ok) return false;
+  window._bmhSuppressRealtimeFlush = true;
+  try {
+    for (const candidate of candidates) {
+      await mergeDuplicatePatientRecord(targetId, candidate.bmhId);
+    }
+    showToast('Duplicate new BMSH ID merged into older patient record ✓', 's');
+    return true;
+  } catch (e) {
+    console.warn('same-name no-phone patient merge failed', e);
+    showToast('Could not merge duplicate patient automatically', 'w');
+    return false;
+  } finally {
+    window._bmhSuppressRealtimeFlush = false;
+    rebuildPatientsArrayFromGlobalCache && rebuildPatientsArrayFromGlobalCache();
+    renderDocQueue && renderDocQueue();
+    renderReceptionPage && renderReceptionPage();
+    renderDashboard && renderDashboard();
+  }
 }
 function normalizeDuplicateFinancialText(value) {
   return String(value || '').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -46736,7 +46810,7 @@ function openEditPatientModal(bmhId) {
   openM('m-update-details');
 }
 
-function saveUpdatedPatientDetails() {
+async function saveUpdatedPatientDetails() {
   const bid = window._editingBmhId;
   if(!bid) { showToast('No patient selected','w'); return; }
   let p = PATIENTS.find(x=>x.bmhId===bid) || (window.CURRENT_PATIENT && window.CURRENT_PATIENT.bmhId === bid ? window.CURRENT_PATIENT : null) || null;
@@ -46763,6 +46837,7 @@ function saveUpdatedPatientDetails() {
   const updatedDob = normalizeDobIsoForSave(document.getElementById('upd-dob')?.value || p.dob || '');
   if (document.getElementById('upd-dob')?.value && !updatedDob) return;
   const nowIso = new Date().toISOString();
+  const previousPhoneKeys = getPatientPhoneKeys(p);
   const updates = {
     name: toTitleCaseName((fn+' '+ln).trim()),
     age: document.getElementById('upd-age')?.value?.trim()||p.age||'',
@@ -46874,6 +46949,7 @@ function saveUpdatedPatientDetails() {
     console.warn('patient update error', e);
     showToast('Save failed while updating patient details', 'e');
   }
+  await maybeMergeTodayNoPhoneDuplicateAfterReceptionUpdate(p, Object.assign({}, updates, { __previousPhoneKeys: previousPhoneKeys }));
   if (refName) {
     try { logReferral('Doctor', refName, '', { name: updates.name, bmhId: bid, dept: p.dept || '', purpose: p.purpose || '', centre: p.centre || CURRENT_USER?.centre || '' }); } catch (e) {}
     const refId = 'REF' + Date.now();
