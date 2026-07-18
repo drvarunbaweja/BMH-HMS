@@ -45818,6 +45818,7 @@ function getReceptionBasePts() {
         doctor: xref.toDoctor || p.doctor,
         seen: false,
         status: pendingPay ? 'waiting' : 'waiting',
+        seenAt: '',
         purpose: (xref.reason ? xref.reason + ' — ' : '') + (p.purpose || ''),
         _xrefEntry: true,
         _xrefId: String(xref.id || ''),
@@ -46304,7 +46305,8 @@ function buildQCard(p, sno) {
   const labTooltip = buildUnreadLabResultsTooltipHtml(p);
   const labReadyBadge = patientHasUnreadLabResults(p) ? `<span title="${escapeHtmlConsent(labHover || 'Results ready')}" onmouseenter="const tip=this.querySelector('.lab-ready-tip');if(tip)tip.style.display='block'" onmouseleave="const tip=this.querySelector('.lab-ready-tip');if(tip)tip.style.display='none'" style="position:relative;display:inline-flex;align-items:center;gap:4px;padding:1px 6px;border-radius:999px;background:#eafaf1;color:#166534;border:1px solid rgba(22,101,52,.25);font-size:9px;font-weight:900;animation:pulse 1.2s infinite">🧪 Results Ready${labTooltip.replace('<span style="display:none;', '<span class="lab-ready-tip" style="display:none;')}</span>` : '';
 
-  const cardClick = p.preRegistered ? '' : `openPatient('${p.bmhId}')`;
+  const xrefIdEsc = String(p._xrefId || '').replace(/'/g, "\\'");
+  const cardClick = p.preRegistered ? '' : (p._xrefEntry ? `openPatientForDept('${p.bmhId}','${p.dept}','${xrefIdEsc}')` : `openPatient('${p.bmhId}')`);
   const cardCursor = p.preRegistered ? 'default' : 'pointer';
   const cardBg = p.preRegistered ? '#f8f8f8' : (isSurgeryToday ? '#fff3e0' : '#fff');
   const cardBorder = p.preRegistered ? '1px dashed #ccc' : (isSurgeryToday ? '2px solid var(--orange)' : '1px solid var(--g5)');
@@ -46335,7 +46337,7 @@ function buildQCard(p, sno) {
       <div style="display:flex;gap:3px" onclick="event.stopPropagation()">
         ${p.preRegistered
           ? `<button title="Check In & Collect Fee" style="background:var(--green);color:#fff;border:none;border-radius:5px;padding:2px 8px;font-size:9px;font-weight:800;cursor:pointer;line-height:1.6;animation:pulse 2s infinite" onclick="markSeen('${String(p.bmhId).replace(/'/g, "\\'")}')">✓ Check In</button>`
-          : `${!isQueueRowMarkedSeen(p)?`<button title="Mark Seen" style="background:var(--green);color:#fff;border:none;border-radius:5px;padding:2px 6px;font-size:9px;font-weight:800;cursor:pointer;line-height:1.4" onclick="markSeen('${p.bmhId}')">✓</button>`:`<button title="Move to Active" style="background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1.5px solid var(--bmh-blue);border-radius:5px;padding:2px 6px;font-size:9px;font-weight:800;cursor:pointer;line-height:1.4" onclick="restorePatientToActiveQueue('${p.bmhId}')">↩ Active</button>`}
+          : `${!isQueueRowMarkedSeen(p)?`<button title="Mark Seen" style="background:var(--green);color:#fff;border:none;border-radius:5px;padding:2px 6px;font-size:9px;font-weight:800;cursor:pointer;line-height:1.4" onclick="${p._xrefId ? `markCrossRefSeen('${String(p.bmhId).replace(/'/g, "\\'")}','${xrefIdEsc}')` : `markSeen('${p.bmhId}')`}">✓</button>`:`<button title="Move to Active" style="background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1.5px solid var(--bmh-blue);border-radius:5px;padding:2px 6px;font-size:9px;font-weight:800;cursor:pointer;line-height:1.4" onclick="${p._xrefId ? `restoreCrossRefToActive('${String(p.bmhId).replace(/'/g, "\\'")}','${xrefIdEsc}')` : `restorePatientToActiveQueue('${p.bmhId}')`}">↩ Active</button>`}
         ${isOphtho&&!p.dilated&&!isQueueRowMarkedSeen(p)?`<button title="Dilate" style="background:var(--blue-lt);color:var(--blue);border:1.5px solid var(--blue);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="markDilated('${p.bmhId}','${p.name.replace(/'/g,"\\'")}')">💧</button>`:''}
         ${isOphtho&&p.dilated&&!isQueueRowMarkedSeen(p)?`<button title="Undo dilation" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="unmarkDilated('${p.bmhId}')">Undo 💧</button>`:''}
         ${isOphtho&&!isQueueRowMarkedSeen(p)?`<button title="${isSurgeryToday?'Revert to Consultation':'Mark Surgery Today'}" style="background:${isSurgeryToday?'#fff':'var(--orange-lt)'};color:#8a4200;border:1.5px solid var(--orange);border-radius:5px;padding:2px 5px;font-size:9px;font-weight:800;cursor:pointer" onclick="setQueueVisitPurpose('${p.bmhId}','${isSurgeryToday?'Consultation':'Surgery Today'}')">${isSurgeryToday?'Consult':'Sx Today'}</button>`:''}
