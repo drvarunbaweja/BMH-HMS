@@ -6924,6 +6924,7 @@ function ptab(el, cId, opts) {
   updateDepartmentRailVisibility(pageKey, cId);
   if (pageKey === 'inventory' && cId === 'inv-use') renderInventoryUsageLog && renderInventoryUsageLog();
   if (pageKey === 'inventory' && cId === 'inv-stock') renderInventoryTodayEntries && renderInventoryTodayEntries();
+  if (/-uploads$/.test(String(cId || '')) || cId === 'oe-biometry') renderCurrentPatientInvestigationUploads && renderCurrentPatientInvestigationUploads();
   if (!opts.silentHistory && !window._appHistoryRestoring) pushAppNavState(false);
 }
 
@@ -32683,16 +32684,20 @@ function isLabReportUpload(entry) {
   return !looksLikeOphthoImagingUpload(entry);
 }
 function renderCurrentPatientInvestigationUploads(entries) {
-  const list = document.getElementById('bio-uploads-list');
-  if(!list) return;
+  const lists = Array.from(document.querySelectorAll('.dept-uploads-list, #bio-uploads-list')).filter(Boolean);
+  if(!lists.length) return;
   const bucket = currentPatientVisitInvestigationBucket();
   const items = Array.isArray(entries) ? entries : (bucket?.list || []);
   if(!items.length) {
-    list.innerHTML = '<div style="padding:12px;border:1px dashed var(--g4);border-radius:10px;color:var(--g1);font-size:11px;background:#fff">No investigation files saved yet for this patient.</div>';
+    lists.forEach(function (list) {
+      list.innerHTML = '<div style="padding:12px;border:1px dashed var(--g4);border-radius:10px;color:var(--g1);font-size:11px;background:#fff">No investigation files saved yet for this patient.</div>';
+    });
     return;
   }
-  list.innerHTML = '';
-  items.slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))).forEach(entry => addBioUploadCard(entry, list));
+  lists.forEach(function (list) {
+    list.innerHTML = '';
+    items.slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))).forEach(entry => addBioUploadCard(entry, list));
+  });
 }
 
 function handleInvestigationUpload(input) {
@@ -32767,7 +32772,7 @@ function handleInvestigationUpload(input) {
   input.value = '';
 }
 function addBioUploadCard(entry, list) {
-  if(!list) list = document.getElementById('bio-uploads-list');
+  if(!list) list = document.querySelector('.dept-uploads-list, #bio-uploads-list');
   if(!list) return;
   const d = document.createElement('div');
   d.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--g4);border-radius:8px;margin-bottom:6px;background:#fff';
@@ -39889,6 +39894,34 @@ let _renderDashPendingOptions = null;
 function getActivePageId() {
   return document.querySelector('.page.active')?.id || '';
 }
+function bmhSafePerfPatchesEnabled() {
+  try {
+    return window.BMH_SAFE_PERF_PATCHES !== false && localStorage.getItem('bmh_disable_safe_perf_patches') !== '1';
+  } catch (e) {
+    return window.BMH_SAFE_PERF_PATCHES !== false;
+  }
+}
+window.bmhDisableSafePerfPatches = function () {
+  window.BMH_SAFE_PERF_PATCHES = false;
+  try { localStorage.setItem('bmh_disable_safe_perf_patches', '1'); } catch (e) {}
+  showToast && showToast('Safe performance patches disabled. Reload to fully restore old behavior.', 'w');
+};
+window.bmhEnableSafePerfPatches = function () {
+  window.BMH_SAFE_PERF_PATCHES = true;
+  try { localStorage.removeItem('bmh_disable_safe_perf_patches'); } catch (e) {}
+  showToast && showToast('Safe performance patches enabled ✓', 's');
+};
+function rebuildPatientCacheIndex(cache) {
+  const source = Array.isArray(cache) ? cache : (Array.isArray(window._BMH_ALL_PATIENTS_CACHE) ? window._BMH_ALL_PATIENTS_CACHE : []);
+  const map = new Map();
+  source.forEach(function (p, idx) {
+    const id = String(p?.bmhId || '').trim();
+    if (id) map.set(id, idx);
+  });
+  window._BMH_ALL_PATIENTS_INDEX_BY_ID = map;
+  window._BMH_ALL_PATIENTS_INDEX_SOURCE = source;
+  return map;
+}
 function getActiveDoctorQueueDeptKeyForRealtime() {
   const deptMap = {
     Ophthalmology:'ophtho', OBG:'obg', Neuropsychiatry:'psych',
@@ -39935,7 +39968,7 @@ function renderActivePageAfterRealtimeUpdate(opts) {
   }
   if (activeId === 'pg-doctor-queue') {
     if (options.realtimePatients && !realtimePatientBatchTouchesActiveDoctorQueue(options.realtimePatients)) return;
-    renderDocQueue && renderDocQueue();
+    scheduleDoctorQueueRealtimeRender(options);
     return;
   }
   if (activeId === 'pg-ipd') {
@@ -39946,6 +39979,30 @@ function renderActivePageAfterRealtimeUpdate(opts) {
     renderOTListSafe && renderOTListSafe();
     return;
   }
+}
+function scheduleDoctorQueueRealtimeRender(options) {
+  if (!bmhSafePerfPatchesEnabled()) {
+    renderDocQueue && renderDocQueue();
+    return;
+  }
+  const minGap = Number(window.BMH_DOCTOR_QUEUE_RENDER_MIN_MS || 1800);
+  const elapsed = Date.now() - Number(window._bmhDoctorQueueLastRenderAt || 0);
+  if (elapsed >= minGap && !window._bmhDoctorQueueRenderTimer) {
+    window._bmhDoctorQueueLastRenderAt = Date.now();
+    renderDocQueue && renderDocQueue();
+    return;
+  }
+  window._bmhDoctorQueuePendingRenderOptions = options || {};
+  if (window._bmhDoctorQueueRenderTimer) return;
+  window._bmhDoctorQueueRenderTimer = setTimeout(function () {
+    window._bmhDoctorQueueRenderTimer = null;
+    const pending = window._bmhDoctorQueuePendingRenderOptions || {};
+    window._bmhDoctorQueuePendingRenderOptions = null;
+    if (getActivePageId() !== 'pg-doctor-queue') return;
+    if (pending.realtimePatients && !realtimePatientBatchTouchesActiveDoctorQueue(pending.realtimePatients)) return;
+    window._bmhDoctorQueueLastRenderAt = Date.now();
+    renderDocQueue && renderDocQueue();
+  }, Math.max(250, minGap - elapsed));
 }
 function scheduleBackgroundPatientUiRefresh(opts) {
   const options = opts || {};
@@ -39990,6 +40047,7 @@ function applyPatientsPayload(data, opts) {
   window._bmhPatientsHydrating = true;
   const finish = function () {
     window._BMH_ALL_PATIENTS_CACHE = normalized;
+    rebuildPatientCacheIndex(normalized);
     window._bmhPatientsCacheVersion = (window._bmhPatientsCacheVersion || 0) + 1;
     rebuildPatientsArrayFromGlobalCache();
     window._bmhPatientsHydrating = false;
@@ -40097,19 +40155,19 @@ function flushRealtimePatientUpdates() {
   window._bmhRealtimePatientPendingUpserts = {};
   window._bmhRealtimePatientPendingDeletes = {};
   try {
-    const cache = Array.isArray(window._BMH_ALL_PATIENTS_CACHE) ? window._BMH_ALL_PATIENTS_CACHE.slice() : [];
-    const indexById = new Map();
-    cache.forEach(function (p, idx) {
-      const id = String(p?.bmhId || '').trim();
-      if (id) indexById.set(id, idx);
-    });
+    let cache = Array.isArray(window._BMH_ALL_PATIENTS_CACHE) ? window._BMH_ALL_PATIENTS_CACHE : [];
+    let indexById = window._BMH_ALL_PATIENTS_INDEX_BY_ID instanceof Map && window._BMH_ALL_PATIENTS_INDEX_SOURCE === cache
+      ? window._BMH_ALL_PATIENTS_INDEX_BY_ID
+      : rebuildPatientCacheIndex(cache);
     const changedRows = [];
+    let needsCompact = false;
     Object.keys(deletes).forEach(function (id) {
       if (!indexById.has(id)) return;
       const idx = indexById.get(id);
       if (cache[idx]) changedRows.push(cache[idx]);
       cache[idx] = null;
       indexById.delete(id);
+      needsCompact = true;
     });
     Object.keys(upserts).forEach(function (id) {
       const row = upserts[id];
@@ -40121,7 +40179,15 @@ function flushRealtimePatientUpdates() {
         cache.push(row);
       }
     });
-    window._BMH_ALL_PATIENTS_CACHE = cache.filter(Boolean);
+    if (needsCompact) {
+      cache = cache.filter(Boolean);
+      window._BMH_ALL_PATIENTS_CACHE = cache;
+      rebuildPatientCacheIndex(cache);
+    } else {
+      window._BMH_ALL_PATIENTS_CACHE = cache;
+      window._BMH_ALL_PATIENTS_INDEX_BY_ID = indexById;
+      window._BMH_ALL_PATIENTS_INDEX_SOURCE = cache;
+    }
     window._bmhPatientsCacheVersion = (window._bmhPatientsCacheVersion || 0) + 1;
     applyRealtimePatientDeltaToVisiblePatients(upserts, deletes);
     _debouncedRenderDash({ realtimePatients: { rows: changedRows } });
@@ -48008,6 +48074,10 @@ function saveVisit(dept, opts) {
     visit.skinProcAdvised = [...document.querySelectorAll('#rx-proc-advised-skin [data-proc]')].map(function (e) { return e.dataset.proc; }).filter(Boolean);
     visit.rx = JSON.parse(JSON.stringify(RX_DRUGS || []));
     visit.procDone = getProcedureDoneStateForDept('skin');
+  }
+  if (!Array.isArray(visit.investigations)) {
+    const preservedUploads = Array.isArray(localPt?.lastVisit?.investigations) ? localPt.lastVisit.investigations : [];
+    if (preservedUploads.length) visit.investigations = JSON.parse(JSON.stringify(preservedUploads));
   }
   if (Array.isArray(visit.rx) && visit.rx.length) {
     rememberRxLibraryFromRows(dept, visit.rx);

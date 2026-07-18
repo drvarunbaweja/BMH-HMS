@@ -1718,7 +1718,7 @@
           <div id="inv-order-list" style="margin-top:8px"></div>
         </div>
         <!-- Uploaded files grid -->
-        <div id="bio-uploads-list" style="display:flex;flex-direction:column;gap:0;margin-bottom:10px"></div>
+        <div id="bio-uploads-list" class="dept-uploads-list" data-dept="ophtho" style="display:flex;flex-direction:column;gap:0;margin-bottom:10px"></div>
         <div id="bio-files-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px"></div>
       </div>
 
@@ -2817,7 +2817,7 @@
             </label>
           </div>
         </div>
-        <div id="bio-uploads-list"></div>
+        <div id="obg-uploads-list" class="dept-uploads-list" data-dept="obg"></div>
       </div>
 
       <!-- OBG RX -->
@@ -3081,6 +3081,7 @@
         <div class="ptab" onclick="ptab(this,'psych-scales')">Rating Scales</div>
         <div class="ptab" onclick="ptab(this,'psych-plan')">Plan / Instructions</div>
         <div class="ptab" onclick="ptab(this,'psych-rx')">Prescription</div>
+        <div class="ptab" onclick="ptab(this,'psych-uploads')">Uploads</div>
         <div class="ptab" onclick="ptab(this,'psych-notes')">Progress Notes</div>
       </div>
       </div>
@@ -3395,6 +3396,21 @@
           <div style="font-size:24px;margin-bottom:6px">📋</div>Select a patient to view past visits
         </div>
       </div>
+      <div class="tab-content" id="psych-uploads">
+        <div style="background:var(--g6);border-radius:var(--rsm);padding:12px;margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
+            <div>
+              <div style="font-size:12px;font-weight:900;color:var(--bmh-blue)">Test Photos & Diagnostic Reports</div>
+              <div style="font-size:11px;color:var(--g1);margin-top:2px">Upload EEG, reports, photographs or PDFs and keep them saved against this patient.</div>
+            </div>
+            <label class="btn btn-gold btn-sm" style="cursor:pointer">
+              ⬆️ Upload Files
+              <input type="file" accept="image/*,.pdf" multiple style="display:none" onchange="handleInvestigationUpload(this)">
+            </label>
+          </div>
+        </div>
+        <div id="psych-uploads-list" class="dept-uploads-list" data-dept="psych"></div>
+      </div>
       <div class="tab-content" id="psych-notes">
         <div id="past-visits-psych-notes" style="text-align:center;padding:28px;color:var(--g2);font-size:12px">
           <div style="font-size:24px;margin-bottom:6px">📋</div>Select a patient to view notes
@@ -3451,6 +3467,7 @@
         <div class="ptab" onclick="ptab(this,'skin-exam')">Skin Examination</div>
         <div class="ptab" onclick="ptab(this,'skin-procedures')">Procedures</div>
         <div class="ptab" onclick="ptab(this,'skin-rx')">Prescription</div>
+        <div class="ptab" onclick="ptab(this,'skin-uploads')">Uploads</div>
         <div class="ptab" onclick="ptab(this,'skin-cosmetology')">Cosmetology</div>
       </div>
       </div>
@@ -3671,6 +3688,22 @@
           <button class="wa-btn" onclick="printAndSendPrescriptionWhatsApp('skin')" title="Print and send prescription to WhatsApp">📱</button>
           <button class="btn btn-gray btn-sm" onclick="showToast('SMS sent ✓','s')">📨</button>
         </div></div>
+
+      <div class="tab-content" id="skin-uploads">
+        <div style="background:var(--g6);border-radius:var(--rsm);padding:12px;margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
+            <div>
+              <div style="font-size:12px;font-weight:900;color:var(--bmh-blue)">Clinical Photos & Diagnostic Reports</div>
+              <div style="font-size:11px;color:var(--g1);margin-top:2px">Upload skin photographs, dermoscopy images, reports or PDFs and keep them saved against this patient.</div>
+            </div>
+            <label class="btn btn-gold btn-sm" style="cursor:pointer">
+              ⬆️ Upload Files
+              <input type="file" accept="image/*,.pdf" multiple style="display:none" onchange="handleInvestigationUpload(this)">
+            </label>
+          </div>
+        </div>
+        <div id="skin-uploads-list" class="dept-uploads-list" data-dept="skin"></div>
+      </div>
 
       <!-- COSMETOLOGY -->
       <div class="tab-content" id="skin-cosmetology">
