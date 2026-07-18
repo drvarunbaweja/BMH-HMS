@@ -12705,6 +12705,33 @@ function bmhPatientCollectionVisitDateRaw(p) {
   if (!p) return '';
   return p.queueAddedAt || p.enqueuedAt || p.checkedInAt || p.checkinAt || p.queueDate || p.visitDate || p.registeredAt || p.date || p.createdAt || '';
 }
+function bmhPatientHasCrossRefOnDate(p, dateKey) {
+  if (!p || !Array.isArray(p.crossRefs)) return false;
+  const day = localDateKey(dateKey || todayKey());
+  return p.crossRefs.some(function (xr) {
+    if (!xr) return false;
+    return [xr.createdAt, xr.date, xr.updatedAt, xr.seenAt].some(function (raw) {
+      return localDateKey(raw) === day || String(raw || '').slice(0, 10) === day;
+    });
+  });
+}
+function bmhIsCrossRefCollectionTxn(txn) {
+  if (!txn) return false;
+  const text = [txn.service, txn.for, txn.desc, txn.type, txn.source].filter(Boolean).join(' ').toLowerCase();
+  return txn.xref === true || String(txn.xrefId || txn.crossRefId || '').trim() || /cross[\s-]*ref|cross[\s-]*refer|referr?ed to/.test(text);
+}
+function bmhIsRealSameDayConsultationCollection(txn, patient, dateKey, fee) {
+  if (!txn || !patient || !isCollectedTxn(txn)) return false;
+  if (String(txn.bmhId || '') !== String(patient.bmhId || '')) return false;
+  if (txnIsoDate(txn) !== dateKey) return false;
+  if (String(txn.type || '').toLowerCase() === 'consultation-synthetic') return false;
+  if (bmhIsCrossRefCollectionTxn(txn)) return false;
+  if (getTransactionPrimaryChargeCategory(txn) === 'consultation') return true;
+  const text = [txn.service, txn.for, txn.desc, txn.purpose, txn.consultationFeeLabel].filter(Boolean).join(' ');
+  if (isConsultationPurposeText(text)) return true;
+  const amount = Math.max(0, Number(txn.amount || 0));
+  return fee > 0 && Math.abs(amount - fee) < 0.5 && !/advance|deposit|surgery|procedure|investigation|scan|injection/i.test(text);
+}
 function bmhGetCollectionTransactionsForDate(centreOrCentres, dateKey) {
   const centres = Array.isArray(centreOrCentres) ? centreOrCentres : [centreOrCentres || getEffectiveCentre()];
   const showAllCentres = centres.some(function (c) {
@@ -12734,8 +12761,7 @@ function bmhGetCollectionTransactionsForDate(centreOrCentres, dateKey) {
     const consultationMode = String(p.consultationPaymentMode || p.paymentMode || 'Cash');
     if (/credit|due|insurance|tpa|pmjay|echs|cghs|cashless/i.test(consultationMode)) return;
     const matchingRow = rows.find(function (t) {
-      if (String(t.bmhId || '') !== String(p.bmhId || '')) return false;
-      return getTransactionPrimaryChargeCategory(t) === 'consultation';
+      return bmhIsRealSameDayConsultationCollection(t, p, dateKey, fee);
     });
     if (matchingRow) {
       const cats = Array.isArray(matchingRow.billCats) ? matchingRow.billCats.slice() : (matchingRow.billCats && typeof matchingRow.billCats === 'object' ? Object.values(matchingRow.billCats) : []);
@@ -12748,6 +12774,7 @@ function bmhGetCollectionTransactionsForDate(centreOrCentres, dateKey) {
       if (!(getNetTransactionAmount(matchingRow) > 0) && fee > 0) matchingRow._recoveredConsultationAmount = fee;
       return;
     }
+    if (bmhPatientHasCrossRefOnDate(p, dateKey)) return;
     rows.push({
       id: 'SYNOPD-' + dateKey + '-' + p.bmhId,
       patient: p.name || p.patient || '',
