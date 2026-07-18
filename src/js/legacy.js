@@ -17,11 +17,11 @@ const USER_DB = {
   // ── DOCTORS — CHD logins ────────────────────────────────
   'drtarun_chd':  { pw:'BMH@PsychCHD25', name:'Dr. Tarun Baweja',   role:'Doctor', dept:'Neuropsychiatry', centre:'CHD', degrees:'MD (Psychiatry), DPM',             canSeeAllCentres:false, isAdmin:false },
   'drgeeta':      { pw:'BMH@OBG125',     name:'Dr. Geeta Baweja',   role:'Doctor', dept:'OBG',             centre:'CHD', degrees:'MS (OBG), FICOG',                   canSeeAllCentres:false, isAdmin:false },
-  'drnamrata_chd':{ pw:'BMH@OBGNameCHD', name:'Dr. Namrata Baweja', role:'Doctor', dept:'OBG',             centre:'CHD', degrees:'MS (OBG), Fellowship Fertility',    canSeeAllCentres:false, isAdmin:false },
+  'drnamrata_chd':{ pw:'BMH@OBGNameCHD', name:'Dr. Namrata Baweja', role:'Doctor', dept:'OBG',             centre:'CHD', degrees:'MS (OBG), Fellowship Fertility',    canSeeAllCentres:false, isAdmin:false, access:{ modules:['appointments','ipd','ot','discharge','reports','audits'], settings:[] } },
   'drpooja_chd':  { pw:'BMH@SkinCHD25',  name:'Dr. Pooja Baweja',   role:'Doctor', dept:'Skin',            centre:'CHD', degrees:'MD (Dermatology), FRGUHS',          canSeeAllCentres:false, isAdmin:false },
   // ── DOCTORS — RPR logins (earlier logins reassigned to Ropar) ──
   'drtarun':   { pw:'BMH@Psych25',  name:'Dr. Tarun Baweja',   role:'Doctor', dept:'Neuropsychiatry', centre:'RPR', degrees:'MD (Psychiatry), DPM',             canSeeAllCentres:false, isAdmin:false },
-  'drnamrata': { pw:'BMH@OBG225',   name:'Dr. Namrata Baweja', role:'Doctor', dept:'OBG',             centre:'RPR', degrees:'MS (OBG), Fellowship Fertility',    canSeeAllCentres:false, isAdmin:false },
+  'drnamrata': { pw:'BMH@OBG225',   name:'Dr. Namrata Baweja', role:'Doctor', dept:'OBG',             centre:'RPR', degrees:'MS (OBG), Fellowship Fertility',    canSeeAllCentres:false, isAdmin:false, access:{ modules:['appointments','ipd','ot','discharge','reports','audits'], settings:[] } },
   'drpooja':   { pw:'BMH@Skin25',   name:'Dr. Pooja Baweja',   role:'Doctor', dept:'Skin',            centre:'RPR', degrees:'MD (Dermatology), FRGUHS',          canSeeAllCentres:false, isAdmin:false },
   // ── RECEPTION ────────────────────────────────────────────
   'rec_chd':   { pw:'BMHRec@CHD25', name:'Reception CHD',      role:'Reception', dept:'Reception',          centre:'CHD',  degrees:'',                                                      canSeeAllCentres:false, isAdmin:false },
@@ -50,8 +50,8 @@ const USER_DB = {
   ['drtarun.chd@bawejahospital.com', { pw:'ChangeMe@123', name:'Dr. Tarun Baweja', role:'Doctor', dept:'Neuropsychiatry', centre:'CHD', degrees:'MD (Psychiatry), DPM', canSeeAllCentres:false, isAdmin:false }],
   ['drtarun.rpr@bawejahospital.com', { pw:'ChangeMe@123', name:'Dr. Tarun Baweja', role:'Doctor', dept:'Neuropsychiatry', centre:'RPR', degrees:'MD (Psychiatry), DPM', canSeeAllCentres:false, isAdmin:false }],
   ['drgeeta@bawejahospital.com', { pw:'ChangeMe@123', name:'Dr. Geeta Baweja', role:'Doctor', dept:'OBG', centre:'CHD', degrees:'MS (OBG), FICOG', canSeeAllCentres:false, isAdmin:false }],
-  ['drnamrata.chd@bawejahospital.com', { pw:'ChangeMe@123', name:'Dr. Namrata Baweja', role:'Doctor', dept:'OBG', centre:'CHD', degrees:'MS (OBG), Fellowship Fertility', canSeeAllCentres:false, isAdmin:false }],
-  ['drnamrata.rpr@bawejahospital.com', { pw:'ChangeMe@123', name:'Dr. Namrata Baweja', role:'Doctor', dept:'OBG', centre:'RPR', degrees:'MS (OBG), Fellowship Fertility', canSeeAllCentres:false, isAdmin:false }],
+  ['drnamrata.chd@bawejahospital.com', { pw:'ChangeMe@123', name:'Dr. Namrata Baweja', role:'Doctor', dept:'OBG', centre:'CHD', degrees:'MS (OBG), Fellowship Fertility', canSeeAllCentres:false, isAdmin:false, access:{ modules:['appointments','ipd','ot','discharge','reports','audits'], settings:[] } }],
+  ['drnamrata.rpr@bawejahospital.com', { pw:'ChangeMe@123', name:'Dr. Namrata Baweja', role:'Doctor', dept:'OBG', centre:'RPR', degrees:'MS (OBG), Fellowship Fertility', canSeeAllCentres:false, isAdmin:false, access:{ modules:['appointments','ipd','ot','discharge','reports','audits'], settings:[] } }],
   ['drpooja.chd@bawejahospital.com', { pw:'ChangeMe@123', name:'Dr. Pooja Baweja', role:'Doctor', dept:'Skin', centre:'CHD', degrees:'MD (Dermatology), FRGUHS', canSeeAllCentres:false, isAdmin:false }],
   ['drpooja.rpr@bawejahospital.com', { pw:'ChangeMe@123', name:'Dr. Pooja Baweja', role:'Doctor', dept:'Skin', centre:'RPR', degrees:'MD (Dermatology), FRGUHS', canSeeAllCentres:false, isAdmin:false }],
   ['reception.chd@bawejahospital.com', { pw:'ChangeMe@123', name:'Reception CHD', role:'Reception', dept:'Reception', centre:'CHD', degrees:'', canSeeAllCentres:false, isAdmin:false }],
@@ -6723,11 +6723,16 @@ function buildSidebarForRole(role, dept, name) {
     inventory: `<div class="ni" onclick="nav('inventory',this)"><div class="ni-ic">📦</div>Inventory<span class="nbadge" id="nb-inv"></span></div>`,
     ipd: `<div class="ni" onclick="nav('ipd',this)"><div class="ni-ic">🛏️</div>IPD Patients<span class="nbadge" id="nb-ipd"></span></div>`,
     ot: `<div class="ni" onclick="nav('ot',this)"><div class="ni-ic">🔬</div>OT Module</div>`,
+    'print-templates': `<div class="ni" onclick="nav('print-templates',this)"><div class="ni-ic">🖨️</div>Print Templates</div>`,
+    consents: `<div class="ni" onclick="nav('consents',this)"><div class="ni-ic">📋</div>Consents</div>`,
+    discharge: `<div class="ni" onclick="nav('discharge',this)"><div class="ni-ic">🏠</div>Discharge Card</div>`,
+    brochures: `<div class="ni" onclick="nav('brochures',this)"><div class="ni-ic">📄</div>Surgery Brochures</div>`,
     billing: `<div class="ni" onclick="nav('billing',this)"><div class="ni-ic">💳</div>Billing<span class="nbadge pulse" id="nb-pay"></span></div>`,
     payments: `<div class="ni" onclick="nav('payments',this)"><div class="ni-ic">💰</div>Payments</div>`,
     tpa: `<div class="ni" onclick="nav('tpa',this)"><div class="ni-ic">🏦</div>TPA / Cashless</div>`,
     reports: `<div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>`,
     audits: `<div class="ni" onclick="nav('audits',this)"><div class="ni-ic">📋</div>Audits</div>`,
+    centres: `<div class="ni" onclick="nav('centres',this)"><div class="ni-ic">🏥</div>Two-Centre View</div>`,
     settings: `<div class="ni" onclick="nav('settings',this)"><div class="ni-ic">⚙️</div>Settings</div>`
   };
   const appendApprovedModules = function () {
@@ -9188,6 +9193,8 @@ function openIPDPatient(id) {
     </div>
     <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:12px">
       <button class="btn btn-outline btn-sm" onclick="printIPDSummary('${p.id}')">🖨️ Print Summary</button>
+      <button class="btn btn-outline btn-sm" onclick="openIpdDischargeDetails('${p.id}')">Discharge Details</button>
+      <button class="btn btn-outline btn-sm" onclick="openIpdDischargeRx('${p.id}')">Rx at Discharge</button>
         <button class="btn btn-gold btn-sm" onclick="dischargeActiveIPDPatient()">🏠 Discharge</button>
       <button class="btn btn-gray btn-sm" onclick="openIPDWorkflow('${p.id}')">📋 Open Monitoring Sheet</button>
     </div>`;
@@ -28428,10 +28435,63 @@ function isObgDeliveryOtCase(otCase) {
   const hay = [c.procedure, c.obgCaseType, c.procedureMain, c.procedureSub, c.dx].join(' ').toLowerCase();
   return /lscs|caesar|caesarean|cesarean|normal delivery|assisted delivery|delivery|labour/.test(hay);
 }
-function obgCompletionOutcomeDefaults(otCase) {
+function obgDefaultBirthVaccinations(dateValue) {
+  const dt = getIsoDateOnly(dateValue || new Date()) || todayKey();
+  return [
+    { name: 'BCG', date: dt },
+    { name: 'OPV-0', date: dt },
+    { name: 'Hepatitis B birth dose', date: dt },
+    { name: 'Vitamin K', date: dt }
+  ];
+}
+function obgNormalizeVaccinations(rows, fallbackDate) {
+  const fallback = getIsoDateOnly(fallbackDate || new Date()) || todayKey();
+  return (Array.isArray(rows) ? rows : []).map(function (row) {
+    return {
+      name: String(row?.name || row?.vaccine || '').trim(),
+      date: getIsoDateOnly(row?.date || row?.givenDate || '') || ''
+    };
+  }).filter(function (row) { return row.name || row.date; }).map(function (row) {
+    if (row.name && !row.date) row.date = fallback;
+    return row;
+  });
+}
+function obgVaccinationRowsHtml(rows) {
+  const esc = escapeHtmlConsent;
+  const safeRows = obgNormalizeVaccinations(rows);
+  return (safeRows.length ? safeRows : obgDefaultBirthVaccinations()).map(function (row) {
+    return '<div class="obg-vacc-row" style="display:grid;grid-template-columns:minmax(180px,1fr) 150px auto;gap:8px;align-items:center;margin-bottom:7px">'
+      + '<input class="obg-vacc-name" type="text" value="' + esc(row.name || '') + '" placeholder="Vaccination" style="width:100%;font-size:12px">'
+      + '<input class="obg-vacc-date" type="date" value="' + esc(row.date || '') + '" style="width:100%;font-size:12px">'
+      + '<button class="btn btn-xs btn-red" type="button" onclick="this.closest(\'.obg-vacc-row\').remove()">Delete</button>'
+      + '</div>';
+  }).join('');
+}
+function addObgVaccinationRow(name, dateValue) {
+  const list = document.getElementById('obg-out-vaccination-list');
+  if (!list) return;
+  const wrap = document.createElement('div');
+  wrap.innerHTML = obgVaccinationRowsHtml([{ name: name || '', date: dateValue || todayKey() }]);
+  list.appendChild(wrap.firstElementChild);
+}
+function readObgVaccinationRows() {
+  return Array.from(document.querySelectorAll('#obg-out-vaccination-list .obg-vacc-row')).map(function (row) {
+    return {
+      name: String(row.querySelector('.obg-vacc-name')?.value || '').trim(),
+      date: row.querySelector('.obg-vacc-date')?.value || ''
+    };
+  }).filter(function (row) { return row.name || row.date; });
+}
+function obgPatientDischargeDetails(bmhId) {
+  const pt = (PATIENTS || []).find(function (p) { return p && p.bmhId === bmhId; }) || null;
+  return pt && pt.obgDischargeDetails && typeof pt.obgDischargeDetails === 'object' ? pt.obgDischargeDetails : {};
+}
+function obgCompletionOutcomeDefaults(otCase, bmhId) {
   const c = normalizeOTCaseRecord(otCase || {});
-  const saved = c.obgDeliveryOutcome || {};
-  const lab = collectObgDischargeInvestigationTable(PATIENTS.find(function (p) { return p.bmhId === c.bmhId; }) || {}, saved);
+  const patientId = bmhId || c.bmhId || '';
+  const patientSaved = obgPatientDischargeDetails(patientId);
+  const saved = Object.assign({}, c.obgDeliveryOutcome || {}, patientSaved || {});
+  const lab = collectObgDischargeInvestigationTable(PATIENTS.find(function (p) { return p.bmhId === patientId; }) || {}, saved);
   return Object.assign({
     babyDob: getIsoDateOnly(c.date || new Date()),
     babyTime: c.timings?.procEnd || c.scheduledTime || '',
@@ -28442,7 +28502,8 @@ function obgCompletionOutcomeDefaults(otCase) {
     postOpPeriod: 'Uneventful',
     diet: 'Orally allowed',
     investigations: lab,
-    investigationsManual: ''
+    investigationsManual: '',
+    vaccinations: obgDefaultBirthVaccinations(c.date || new Date())
   }, saved || {});
 }
 function obgInvestigationInputRow(key, label, data) {
@@ -28451,10 +28512,14 @@ function obgInvestigationInputRow(key, label, data) {
   return '<tr><td style="border:1px solid var(--g4);padding:7px 8px;font-size:12px;font-weight:900">' + esc(label) + '</td>'
     + '<td style="border:1px solid var(--g4);padding:5px"><input id="obg-out-inv-' + key + '" type="text" value="' + esc(value) + '" style="width:100%;font-size:12px;font-weight:800"></td></tr>';
 }
-function openObgOtCompletionPopup(caseId) {
+function openObgOtCompletionPopup(caseId, opts) {
+  opts = opts || {};
   const c = (OT_CASES || []).find(function (row) { return row && row.id === caseId; });
-  if (!c || !isObgDeliveryOtCase(c)) return;
-  const data = obgCompletionOutcomeDefaults(c);
+  const bmhId = opts.bmhId || c?.bmhId || window._bmhDischargePendingObgPatientId || '';
+  const pt = (PATIENTS || []).find(function (p) { return p && p.bmhId === bmhId; }) || {};
+  if (c && !isObgDeliveryOtCase(c)) return;
+  if (!c && !bmhId) return;
+  const data = obgCompletionOutcomeDefaults(c || {}, bmhId);
   const esc = escapeHtmlConsent;
   let modal = document.getElementById('obg-ot-complete-modal');
   if (!modal) {
@@ -28466,7 +28531,7 @@ function openObgOtCompletionPopup(caseId) {
   modal.innerHTML = `
     <div style="width:min(860px,96vw);max-height:92vh;overflow:auto;background:#fff;border-radius:12px;box-shadow:0 22px 70px rgba(0,0,0,.28);border:1px solid var(--g4)">
       <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;padding:14px 16px;border-bottom:1px solid var(--g5);background:#fff7fa">
-        <div><div style="font-size:15px;font-weight:900;color:#8d1036">Delivery / LSCS Completion Details</div><div style="font-size:11px;color:var(--g1);margin-top:2px">${esc(c.patient || '')} · ${esc(c.bmhId || '')}</div></div>
+        <div><div style="font-size:15px;font-weight:900;color:#8d1036">Delivery / LSCS Discharge Details</div><div style="font-size:11px;color:var(--g1);margin-top:2px">${esc(c?.patient || pt.name || '')} · ${esc(bmhId || '')}</div></div>
         <button class="btn btn-xs btn-outline" onclick="closeObgOtCompletionPopup()">Close</button>
       </div>
       <div style="padding:14px 16px;display:grid;gap:12px">
@@ -28501,10 +28566,21 @@ function openObgOtCompletionPopup(caseId) {
             </tbody>
           </table>
         </div>
+        <div style="border:1px solid var(--g4);border-radius:10px;padding:12px;background:#fff">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:9px">
+            <div style="font-size:11px;font-weight:900;color:#8d1036;text-transform:uppercase">Birth Vaccinations</div>
+            <button class="btn btn-xs btn-outline" type="button" onclick="addObgVaccinationRow()">+ Add Vaccination</button>
+          </div>
+          <div style="display:grid;grid-template-columns:minmax(180px,1fr) 150px auto;gap:8px;font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;margin-bottom:5px">
+            <div>Vaccination</div><div>Date</div><div></div>
+          </div>
+          <div id="obg-out-vaccination-list">${obgVaccinationRowsHtml(data.vaccinations || [])}</div>
+        </div>
       </div>
       <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid var(--g5);background:var(--g6)">
         <button class="btn btn-outline" onclick="closeObgOtCompletionPopup()">Cancel</button>
-        <button class="btn btn-gold" onclick="saveObgOtCompletionOutcome('${String(caseId).replace(/'/g, "\\'")}')">Save Details</button>
+        <button class="btn btn-outline" onclick="saveObgOtCompletionOutcome('${String(caseId || '').replace(/'/g, "\\'")}',{printAfterSave:true})">Save & Print</button>
+        <button class="btn btn-gold" onclick="saveObgOtCompletionOutcome('${String(caseId || '').replace(/'/g, "\\'")}')">Save Details</button>
       </div>
     </div>`;
 }
@@ -28513,9 +28589,11 @@ function closeObgOtCompletionPopup() {
   if (modal) modal.style.display = 'none';
   clearPendingDischargeObgPopupContext && clearPendingDischargeObgPopupContext();
 }
-function saveObgOtCompletionOutcome(caseId) {
+function saveObgOtCompletionOutcome(caseId, opts) {
+  opts = opts || {};
   const idx = (OT_CASES || []).findIndex(function (row) { return row && row.id === caseId; });
-  if (idx < 0) return;
+  const patientId = (idx >= 0 ? OT_CASES[idx].bmhId : '') || window._bmhDischargePendingObgPatientId || '';
+  if (idx < 0 && !patientId) return;
   const outcome = {
     babyDob: document.getElementById('obg-out-baby-dob')?.value || '',
     babyTime: document.getElementById('obg-out-baby-time')?.value || '',
@@ -28532,12 +28610,20 @@ function saveObgOtCompletionOutcome(caseId) {
       hbsag: document.getElementById('obg-out-inv-hbsag')?.value || '',
       vdrl: document.getElementById('obg-out-inv-vdrl')?.value || ''
     },
+    vaccinations: readObgVaccinationRows(),
     updatedAt: new Date().toISOString(),
     updatedBy: CURRENT_USER?.name || 'System'
   };
-  OT_CASES[idx].obgDeliveryOutcome = outcome;
-  saveOTCasesToLocalStorage && saveOTCasesToLocalStorage();
-  fbUpdate && fbUpdate('otCases/' + caseId, { obgDeliveryOutcome: outcome }).catch(function (e) { console.warn('OBG outcome save error:', e); });
+  if (idx >= 0) {
+    OT_CASES[idx].obgDeliveryOutcome = outcome;
+    saveOTCasesToLocalStorage && saveOTCasesToLocalStorage();
+    fbUpdate && fbUpdate('otCases/' + caseId, { obgDeliveryOutcome: outcome }).catch(function (e) { console.warn('OBG outcome save error:', e); });
+  }
+  const patientIdx = (PATIENTS || []).findIndex(function (p) { return p && p.bmhId === patientId; });
+  if (patientIdx >= 0) {
+    PATIENTS[patientIdx].obgDischargeDetails = outcome;
+    fbUpdate && fbUpdate('patients/' + patientId, { obgDischargeDetails: outcome }).catch(function (e) { console.warn('Patient OBG discharge details save error:', e); });
+  }
   const refreshDischarge = String(window._bmhDischargePendingObgCaseId || '') === String(caseId || '');
   const pendingPatientId = String(window._bmhDischargePendingObgPatientId || '');
   closeObgOtCompletionPopup();
@@ -28548,6 +28634,7 @@ function saveObgOtCompletionOutcome(caseId) {
     renderDischargeSelectedPatientBanner && renderDischargeSelectedPatientBanner();
     renderDischargeBuilder && renderDischargeBuilder();
   }
+  if (opts.printAfterSave) setTimeout(function () { printDischarge && printDischarge(); }, 180);
   showToast('Delivery / LSCS completion details saved ✓', 's');
 }
 
@@ -28569,7 +28656,6 @@ function updateOTStatus(id, status) {
     }
     if (consumeResult?.updates) extraUpdates = Object.assign(extraUpdates, consumeResult.updates);
     scheduleDefaultSurgeryFollowups(c);
-    if (isObgDeliveryOtCase(c)) setTimeout(function () { openObgOtCompletionPopup(id); }, 120);
   }
   fbUpdate('otCases/' + id, Object.assign({ status: c.status, lastUpdated: c.lastUpdated }, extraUpdates)).catch(e => console.warn('OT status save error:', e));
   saveOTCasesToLocalStorage && saveOTCasesToLocalStorage();
@@ -41286,6 +41372,97 @@ function maybeOpenObgPopupForDischargeFlow(bmhId, preferredCaseId) {
   setTimeout(function () { openObgOtCompletionPopup(otCase.id); }, 120);
   return true;
 }
+function openObgDischargeDetailsForPatient(bmhId, preferredCaseId) {
+  const key = String(bmhId || '').trim();
+  if (!key) { showToast('Select a patient first', 'w'); return false; }
+  setDischargeSelectedPatientId(key);
+  clearDischargeSelectedRecord();
+  const specialtySel = document.getElementById('dc-specialty-sel');
+  if (specialtySel) specialtySel.value = 'obg';
+  renderDischargeSelectedPatientBanner && renderDischargeSelectedPatientBanner();
+  renderDischargeBuilder && renderDischargeBuilder();
+  const preferred = preferredCaseId
+    ? OT_CASES.slice().reverse().map(normalizeOTCaseRecord).find(function (c) { return c.id === preferredCaseId; }) || null
+    : null;
+  const otCase = preferred || OT_CASES.slice().reverse().map(normalizeOTCaseRecord).find(function (c) {
+    return c.bmhId === key && c.caseKind === 'obg';
+  }) || null;
+  window._bmhDischargePendingObgCaseId = otCase?.id || '';
+  window._bmhDischargePendingObgPatientId = key;
+  openObgOtCompletionPopup(otCase?.id || '', { bmhId: key });
+  return true;
+}
+function openIpdDischargeDetails(ipdId) {
+  const p = (window.IPD_PATIENTS || IPD_PATIENTS || []).find(function (row) { return row && row.id === ipdId; });
+  if (!p) return;
+  openObgDischargeDetailsForPatient(p.bmhId || '', p.otCaseId || '');
+}
+function dischargeRxRowsHtml(rows) {
+  const safe = Array.isArray(rows) && rows.length ? rows : [{ name: '', freq: '3x/day', duration: '5 days', note: '' }];
+  return safe.map(function (row) {
+    return '<div class="ipd-dc-rx-row" style="display:grid;grid-template-columns:minmax(180px,1fr) 130px 120px auto;gap:8px;align-items:center;margin-bottom:7px">'
+      + '<input class="ipd-dc-rx-name" type="text" value="' + escapeHtmlConsent(row.name || row.brand || '') + '" placeholder="Medicine" style="font-size:12px;width:100%">'
+      + '<select class="ipd-dc-rx-freq" style="font-size:12px;width:100%">' + getDischargeFreqOptionsHtml(row.freq || '') + '</select>'
+      + '<select class="ipd-dc-rx-duration" style="font-size:12px;width:100%">' + getDischargeDurOptionsHtml(row.duration || row.dur || '') + '</select>'
+      + '<button class="btn btn-xs btn-red" type="button" onclick="this.closest(\'.ipd-dc-rx-row\').remove()">Delete</button>'
+      + '<input class="ipd-dc-rx-note" type="text" value="' + escapeHtmlConsent(row.note || '') + '" placeholder="Note / local instruction" style="grid-column:1/-1;font-size:12px;width:100%">'
+      + '</div>';
+  }).join('');
+}
+function addIpdDischargeRxRow() {
+  const list = document.getElementById('ipd-dc-rx-list');
+  if (!list) return;
+  const wrap = document.createElement('div');
+  wrap.innerHTML = dischargeRxRowsHtml([{ name: '', freq: '3x/day', duration: '5 days', note: '' }]);
+  list.appendChild(wrap.firstElementChild);
+}
+function readIpdDischargeRxRows() {
+  return Array.from(document.querySelectorAll('#ipd-dc-rx-list .ipd-dc-rx-row')).map(function (row) {
+    return {
+      name: String(row.querySelector('.ipd-dc-rx-name')?.value || '').trim(),
+      freq: row.querySelector('.ipd-dc-rx-freq')?.value || '',
+      duration: row.querySelector('.ipd-dc-rx-duration')?.value || '',
+      dur: row.querySelector('.ipd-dc-rx-duration')?.value || '',
+      note: String(row.querySelector('.ipd-dc-rx-note')?.value || '').trim(),
+      local: String(row.querySelector('.ipd-dc-rx-note')?.value || '').trim()
+    };
+  }).filter(function (row) { return row.name || row.note; });
+}
+function openIpdDischargeRx(ipdId) {
+  const p = (window.IPD_PATIENTS || IPD_PATIENTS || []).find(function (row) { return row && row.id === ipdId; });
+  if (!p) return;
+  const pt = (PATIENTS || []).find(function (row) { return row && row.bmhId === p.bmhId; }) || {};
+  window._bmhIpdDischargeRxPatientId = p.bmhId || '';
+  setDischargeSelectedPatientId(p.bmhId || '');
+  let modal = document.getElementById('m-ipd-discharge-rx');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'm-ipd-discharge-rx';
+    modal.className = 'modal-ov';
+    document.body.appendChild(modal);
+  }
+  modal.innerHTML = '<div class="modal modal-lg"><div class="modal-hd"><div class="modal-title">Rx at Discharge</div><button class="modal-close" onclick="closeM(\'m-ipd-discharge-rx\')">×</button></div>'
+    + '<div style="font-size:13px;font-weight:900;color:var(--bmh-blue);margin-bottom:4px">' + escapeHtmlConsent(pt.name || p.name || 'Patient') + '</div>'
+    + '<div style="font-size:11px;color:var(--g1);margin-bottom:12px">' + escapeHtmlConsent(p.bmhId || '') + '</div>'
+    + '<div style="display:grid;grid-template-columns:minmax(180px,1fr) 130px 120px auto;gap:8px;font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase;margin-bottom:5px"><div>Medicine</div><div>Frequency</div><div>Duration</div><div></div></div>'
+    + '<div id="ipd-dc-rx-list">' + dischargeRxRowsHtml(pt.dischargeRx || []) + '</div>'
+    + '<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:12px"><button class="btn btn-outline" onclick="addIpdDischargeRxRow()">+ Add Medicine</button><button class="btn btn-outline" onclick="saveIpdDischargeRx({printAfterSave:true})">Save & Print</button><button class="btn btn-gold" onclick="saveIpdDischargeRx()">Save Rx</button></div></div>';
+  openM('m-ipd-discharge-rx');
+}
+function saveIpdDischargeRx(opts) {
+  opts = opts || {};
+  const bmhId = String(window._bmhIpdDischargeRxPatientId || '').trim();
+  const rows = readIpdDischargeRxRows();
+  const idx = (PATIENTS || []).findIndex(function (p) { return p && p.bmhId === bmhId; });
+  if (idx >= 0) {
+    PATIENTS[idx].dischargeRx = rows;
+    fbUpdate && fbUpdate('patients/' + bmhId, { dischargeRx: rows, dischargeRxUpdatedAt: new Date().toISOString(), dischargeRxUpdatedBy: CURRENT_USER?.name || 'System' }).catch(function (e) { console.warn('Discharge Rx save error:', e); });
+  }
+  closeM('m-ipd-discharge-rx');
+  renderDischargeBuilder && renderDischargeBuilder();
+  if (opts.printAfterSave) setTimeout(function () { printDischarge && printDischarge(); }, 180);
+  showToast('Rx at discharge saved ✓', 's');
+}
 function buildDischargeCardSummaryLabel(record) {
   const rec = normalizeDischargeCardRecord(record) || {};
   const proc = rec.snapshot?.procedure || rec.summaryLabel || rec.specialty || 'Discharge Card';
@@ -41380,6 +41557,7 @@ function renderDischargePatientActionsModal(bmhId, records, loading) {
   const actionButtons = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">'
     + '<button class="btn btn-gold" onclick="startNewDischargeCardForPatient(\'' + String(bmhId).replace(/'/g, "\\'") + '\')">+ New Discharge Card</button>'
     + '<button class="btn btn-outline" onclick="startDischargeCardFromLatestOt(\'' + String(bmhId).replace(/'/g, "\\'") + '\')">Use Latest OT Data</button>'
+    + ((normalizeDeptKeyForQueue(pt.dept || '') === 'obg' || otCase?.caseKind === 'obg') ? '<button class="btn btn-outline" onclick="openObgDischargeDetailsForPatient(\'' + String(bmhId).replace(/'/g, "\\'") + '\')">Discharge Details</button>' : '')
     + '</div>';
   const rowsHtml = loading
     ? '<div style="padding:14px 12px;font-size:12px;color:var(--g1)">Loading saved discharge cards…</div>'
@@ -41447,6 +41625,9 @@ function openSavedDischargeCardRecord(bmhId, recordId, opts) {
     renderDischargeSelectedPatientBanner();
     renderDischargeBuilder && renderDischargeBuilder();
     closeM('m-discharge-patient-actions');
+    if (!opts.printAfterOpen && (record.specialty || '') === 'obg') {
+      setTimeout(function () { openObgDischargeDetailsForPatient(key, record.otCaseId || ''); }, 140);
+    }
     if (opts.printAfterOpen) setTimeout(function () { printDischarge(); }, 180);
   };
   const immediate = findDischargeCardRecordInMemory(key, recId);
@@ -41598,7 +41779,7 @@ function getDischargePrintData(sel) {
     ? !!document.getElementById('obg-post-surgery-rx')?.checked
     : !!document.getElementById('rx-post-surgery')?.checked;
   const savedPostSurgeryRx = !!markedPrescriptionVisit;
-  const lastRxData = (livePostSurgeryRx && RX_DRUGS && RX_DRUGS.length)
+  let lastRxData = (livePostSurgeryRx && RX_DRUGS && RX_DRUGS.length)
     ? JSON.parse(JSON.stringify(RX_DRUGS))
     : (markedPrescriptionVisit && Array.isArray(markedPrescriptionVisit.rx) && markedPrescriptionVisit.rx.length)
       ? JSON.parse(JSON.stringify(markedPrescriptionVisit.rx))
@@ -41606,7 +41787,10 @@ function getDischargePrintData(sel) {
         ? JSON.parse(JSON.stringify(ptObj.lastVisit.rx))
       : (RX_DRUGS && RX_DRUGS.length)
         ? JSON.parse(JSON.stringify(RX_DRUGS))
-        : (Array.isArray(ptObj.lastVisit?.rx) && ptObj.lastVisit.rx.length ? JSON.parse(JSON.stringify(ptObj.lastVisit.rx)) : []);
+      : (Array.isArray(ptObj.lastVisit?.rx) && ptObj.lastVisit.rx.length ? JSON.parse(JSON.stringify(ptObj.lastVisit.rx)) : []);
+  if (Array.isArray(ptObj.dischargeRx) && ptObj.dischargeRx.length) {
+    lastRxData = JSON.parse(JSON.stringify(ptObj.dischargeRx));
+  }
   const fallbackPrintDate = lastOtCase ? getActiveOTPrintDateValue(lastOtCase) : getDeptPrintDateValue(deptForRx);
   const visitDate = ptObj.lastVisit?.date || ptObj.createdAt || fallbackPrintDate || new Date().toISOString();
   const opDate = (lastOtCase && getActiveOTPrintDateValue(lastOtCase)) || lastOtCase?.date || lastOtCase?.scheduledDate || ipdStay?.admittedAt || visitDate;
@@ -41987,7 +42171,7 @@ function buildObgBabyOutcomePrintTable(ctx) {
 function getObgDischargeContext(data) {
   const visit = data?.ptObj?.lastVisit || {};
   const ot = data?.lastOtCase || {};
-  const outcome = ot.obgDeliveryOutcome || {};
+  const outcome = Object.assign({}, ot.obgDeliveryOutcome || {}, data?.ptObj?.obgDischargeDetails || {});
   const joinBits = function (values) {
     return values.map(function (value) { return String(value || '').trim(); }).filter(Boolean).join(' · ');
   };
@@ -42047,6 +42231,7 @@ function getObgDischargeContext(data) {
     mother: ot.obgMother || joinBits(motherBits) || '—',
     postOpPeriod: outcome.postOpPeriod || 'Uneventful',
     diet: outcome.diet || 'Orally allowed',
+    vaccinations: obgNormalizeVaccinations(outcome.vaccinations || [], babyDob),
     investigationTable: investigationTable,
     investigationsSource: hasInvestigationValue ? 'hospital/manual' : 'manual-entry',
     summaryBullets: [
@@ -42092,6 +42277,9 @@ function buildObgDischargeA4LayoutPrintHtml(snap, data, colorPrint) {
   const summaryBulletHtml = (ctx.summaryBullets || []).map(function (line) {
     return '<div style="display:flex;gap:5px;margin-bottom:3px"><span>•</span><span>' + esc(line) + '</span></div>';
   }).join('');
+  const vaccinationRows = obgNormalizeVaccinations(ctx.vaccinations || [], ctx.deliveryDate).map(function (row, idx) {
+    return '<tr><td style="border:1px solid #dfd6db;padding:4px 6px;font-size:9px">' + (idx + 1) + '</td><td style="border:1px solid #dfd6db;padding:4px 6px;font-size:9px;font-weight:800">' + esc(row.name || 'Vaccination') + '</td><td style="border:1px solid #dfd6db;padding:4px 6px;font-size:9px">' + esc(row.date ? formatDateIN(row.date) : '—') + '</td></tr>';
+  }).join('');
   const rightPanelExtra = isDeliveryCase
     ? '<div style="font-size:9.5px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.4px;margin:7px 0 4px">Baby Outcome</div>' + buildObgBabyOutcomePrintTable(ctx)
     : '';
@@ -42122,6 +42310,7 @@ function buildObgDischargeA4LayoutPrintHtml(snap, data, colorPrint) {
     + row('Diet', ctx.diet)
     + '</div>'
     + '<div style="display:grid;grid-template-columns:1.08fr .92fr;gap:7px;margin-top:7px"><div style="border:1px solid #e6dbe0;border-radius:10px;padding:7px 9px;background:#fff"><div style="font-size:9.5px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Discharge Summary</div><div style="font-size:10.1px;line-height:1.38;color:#1d1d1d">' + summaryBulletHtml + '</div></div><div style="border:1px solid #efe3d0;border-radius:10px;padding:7px 9px;background:#fffaf3"><div style="font-size:9.5px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Investigations</div>' + buildObgInvestigationPrintTable(ctx.investigationTable) + rightPanelExtra + '</div></div>'
+    + (vaccinationRows ? '<div style="margin-top:7px;border:1px solid #e6dbe0;border-radius:10px;overflow:hidden"><div style="padding:5px 9px;background:#f9f2f4;font-size:9.5px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.4px">Birth Vaccinations</div><table style="width:100%;border-collapse:collapse"><thead><tr style="background:#fcf8f9"><th style="border:1px solid #dfd6db;padding:4px 6px;font-size:8.5px">#</th><th style="border:1px solid #dfd6db;padding:4px 6px;font-size:8.5px">Vaccination</th><th style="border:1px solid #dfd6db;padding:4px 6px;font-size:8.5px">Date</th></tr></thead><tbody>' + vaccinationRows + '</tbody></table></div>' : '')
     + (medRows ? '<div style="margin-top:7px;border:1px solid #e6dbe0;border-radius:10px;overflow:hidden"><div style="padding:5px 9px;background:#f9f2f4;font-size:9.5px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.4px">Medicines</div><table style="width:100%;border-collapse:collapse"><thead><tr style="background:#fcf8f9"><th style="border:1px solid #dfd6db;padding:4px 6px;font-size:8.5px">#</th><th style="border:1px solid #dfd6db;padding:4px 6px;font-size:8.5px">Medicine</th><th style="border:1px solid #dfd6db;padding:4px 6px;font-size:8.5px">Timing / Frequency</th><th style="border:1px solid #dfd6db;padding:4px 6px;font-size:8.5px">Duration</th></tr></thead><tbody>' + medRows + '</tbody></table></div>' : '')
     + (instructionRows ? '<div style="margin-top:7px;border:1px solid #efe3d0;border-radius:10px;padding:7px 9px;background:#fffaf3"><div style="font-size:9.5px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Discharge Advice</div><div style="font-size:9.7px;line-height:1.35;color:#5a4630">' + instructionRows + '</div></div>' : '')
     + (followupRows ? '<div style="margin-top:7px"><div style="font-size:9.5px;font-weight:900;color:' + blue + ';text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px">Follow-up</div>' + followupRows + '</div>' : '')
@@ -45945,6 +46134,8 @@ function renderIPD() {
         ${pending.length ? '<div style="margin-top:4px;font-size:10px;font-weight:900;color:#8a4200;animation:pulse 1.4s infinite">Pending doctor instruction: ' + pending.length + '</div>' : ''}
       </div>
       <span class="badge ${ipdEvaluateAlerts(p).some(a=>a.tone==='var(--red)') ? 'bd-red' : p.status==='stable'?'bd-green':'bd-gray'}">${ipdEvaluateAlerts(p).some(a=>a.tone==='var(--red)') ? 'alert' : (p.status||'admitted')}</span>
+      <button class="btn btn-xs btn-outline" onclick="event.stopPropagation();openIpdDischargeDetails('${p.id}')">Discharge Details</button>
+      <button class="btn btn-xs btn-outline" onclick="event.stopPropagation();openIpdDischargeRx('${p.id}')">Rx at Discharge</button>
       <button class="btn btn-xs btn-red" onclick="event.stopPropagation();dischargeIPDPatientById('${p.id}')">Discharge</button>
     </div>`;
   }).join('');
