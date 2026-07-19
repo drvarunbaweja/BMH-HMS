@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en-IN">
+<head>
+  <meta charset="UTF-8">
+  <title>BMH Reception Queue</title>
+  <meta http-equiv="refresh" content="0; url=./queue-v2.html?dept=reception">
+  <style>body{margin:0;height:100vh;display:grid;place-items:center;background:#08111e;font-family:'Segoe UI',Arial,sans-serif;color:#e0f4ff;text-align:center}</style>
+</head>
+<body>
+  <div>
+    <div style="font-size:28px;font-weight:800">Opening Reception Display</div>
+    <div style="font-size:18px;color:rgba(224,244,255,.5);margin-top:8px">ਸਾਰੇ ਵਿਭਾਗ — ਰਿਸੈਪਸ਼ਨ</div>
+  </div>
+  <script>
+    (function () {
+      var p = new URLSearchParams(location.search);
+      p.set('dept', 'reception');
+      location.replace('./queue-v2.html?' + p.toString());
+    })();
+  </script>
+</body>
+</html>
