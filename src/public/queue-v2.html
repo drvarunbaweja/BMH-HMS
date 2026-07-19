@@ -567,10 +567,6 @@ html, body {
 .ticker-inner { white-space:nowrap; font-size:15px; font-weight:800;
   color:var(--ink); animation:tick 44s linear infinite }
 @keyframes tick { from{transform:translateX(60vw)} to{transform:translateX(-100%)} }
-.ftr-prog { height:3px; width:120px; background:var(--soft);
-  border-radius:2px; overflow:hidden; flex-shrink:0 }
-.ftr-prog-bar { height:100%; background:var(--blue);
-  border-radius:2px; transition:none }
 
 /* "Please stay seated" — lives inside the queue panel, above the footer */
 .q-seated-msg {
@@ -666,7 +662,6 @@ html, body {
         ਲੇਜ਼ਰ ਵਾਲ ਹਟਾਉਣਾ &nbsp;·&nbsp; ਹਾਈਡ੍ਰਾਫੇਸ਼ੀਅਲ
       </div>
     </div>
-    <div class="ftr-prog"><div class="ftr-prog-bar" id="prog-bar"></div></div>
   </footer>
 
 </div>
@@ -1402,13 +1397,6 @@ function setMode(mode) {
   } else {
     showNextSlide();
   }
-  /* Reset progress bar */
-  var bar = document.getElementById('prog-bar');
-  bar.style.transition = 'none';
-  bar.style.width = '0%';
-  void bar.offsetWidth;
-  bar.style.transition = 'width ' + modeDur + 'ms linear';
-  bar.style.width = '100%';
 }
 
 function rotateTick() {
