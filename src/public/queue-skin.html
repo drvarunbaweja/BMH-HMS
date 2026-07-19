@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en-IN">
+<head>
+  <meta charset="UTF-8">
+  <title>BMH Skin Queue</title>
+  <meta http-equiv="refresh" content="0; url=./queue-v2.html?dept=skin">
+  <style>body{margin:0;height:100vh;display:grid;place-items:center;background:#1e1200;font-family:'Segoe UI',Arial,sans-serif;color:#d4a843;text-align:center}</style>
+</head>
+<body>
+  <div>
+    <div style="font-size:28px;font-weight:800">Opening Skin &amp; Cosmetology Queue</div>
+    <div style="font-size:18px;color:rgba(212,168,67,.6);margin-top:8px">ਚਮੜੀ ਅਤੇ ਕਾਸਮੈਟੋਲੋਜੀ</div>
+  </div>
+  <script>
+    (function () {
+      var p = new URLSearchParams(location.search);
+      p.set('dept', 'skin');
+      location.replace('./queue-v2.html?' + p.toString());
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,1343 @@
+<!DOCTYPE html>
+<html lang="en-IN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BMH Queue Display</title>
+<style>
+/* ── Tokens ── */
+:root {
+  --blue:  #123b6d;
+  --blue2: #0b5f8a;
+  --teal:  #0b7b8c;
+  --ink:   #11233b;
+  --muted: #5b6b80;
+  --line:  rgba(18,59,109,.15);
+  --soft:  #eef6ff;
+  --paper: #ffffff;
+  --ok:    #0e8a5f;
+  --next:  #0b5f8a;
+  /* dept accents */
+  --eye:  #0b5f8a;
+  --obg:  #9c1850;
+  --psy:  #5a1e96;
+  --skn:  #8a5e0b;
+}
+
+/* ── Reset ── */
+*, *::before, *::after { box-sizing:border-box; margin:0; padding:0 }
+html, body {
+  width:100%; height:100%; overflow:hidden;
+  font-family:'Segoe UI','SF Pro Display',system-ui,sans-serif;
+  background:linear-gradient(160deg,#f8fbff 0%,#eef5fb 100%);
+  color:var(--ink);
+}
+
+/* ── Shell grid: header + main + footer ── */
+#shell {
+  display:grid; width:100vw; height:100vh;
+  grid-template-rows:80px 1fr 44px;
+  grid-template-columns:1fr;
+}
+
+/* ════════ HEADER ════════ */
+#hdr {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:0 28px; gap:16px;
+  background:var(--paper);
+  border-bottom:1.5px solid var(--line);
+  box-shadow:0 4px 20px rgba(18,59,109,.08);
+  z-index:10;
+}
+.hdr-logos { display:flex; align-items:center; gap:14px; flex:0 0 auto }
+.hdr-logos img { height:48px; object-fit:contain }
+.hdr-logos .logo-flame { height:56px; mix-blend-mode:multiply }
+.logo-bmh { height:46px; object-fit:contain; mix-blend-mode:multiply; flex:0 0 auto }
+.hdr-name {
+  font-size:20px; font-weight:900; color:var(--blue); line-height:1.1;
+  white-space:nowrap; text-align:center; flex:1;
+}
+.hdr-name span {
+  display:block; font-size:13px; font-weight:600;
+  color:var(--teal); letter-spacing:.3px; margin-top:1px;
+}
+.hdr-right { display:flex; align-items:center; gap:20px; flex:0 0 auto }
+#live-status { display:flex; align-items:center; gap:6px;
+  font-size:12px; font-weight:700; letter-spacing:.5px;
+  color:var(--muted); text-transform:uppercase }
+#live-dot { width:8px; height:8px; border-radius:50%;
+  background:#ccc; transition:background .3s }
+#live-dot.on { background:#00c878; box-shadow:0 0 6px rgba(0,200,120,.4) }
+#hdr-clock { text-align:right }
+.clock-time { font-size:28px; font-weight:900; color:var(--blue);
+  line-height:1; font-variant-numeric:tabular-nums }
+.clock-date { font-size:12px; color:var(--muted); margin-top:2px }
+
+/* ════════ MAIN ════════ */
+#main { position:relative; overflow:hidden }
+
+/* Both panels fill the main area, only one visible at a time */
+.panel {
+  position:absolute; inset:0;
+  opacity:0; pointer-events:none;
+  transition:opacity .5s;
+}
+.panel.active { opacity:1; pointer-events:auto }
+
+/* ════════ QUEUE PANEL ════════ */
+#queue-panel {
+  display:grid;
+  grid-template-rows:auto 1fr;
+  padding:24px 36px 18px;
+  gap:18px;
+}
+.q-head {
+  display:flex; align-items:flex-end;
+  justify-content:space-between; gap:20px;
+}
+.q-dept-name {
+  font-size:clamp(40px,5.5vw,80px);
+  font-weight:900; color:var(--blue); line-height:1;
+  letter-spacing:-1px; text-wrap:balance;
+}
+.q-dept-pa {
+  font-size:clamp(20px,2.5vw,36px);
+  font-weight:700; color:var(--teal); margin-top:4px;
+}
+#queue-count {
+  font-size:14px; font-weight:700; color:var(--muted);
+  white-space:nowrap; align-self:flex-end; padding-bottom:6px;
+}
+.q-list { display:flex; flex-direction:column; gap:10px; overflow:hidden }
+
+/* Patient row */
+.pt-row {
+  display:flex; align-items:center; gap:16px;
+  padding:14px 18px; border-radius:14px;
+  background:var(--paper);
+  border:1.5px solid var(--line);
+  box-shadow:0 2px 8px rgba(18,59,109,.06);
+  transition:.3s;
+}
+.pt-row.pt-active {
+  background:linear-gradient(135deg,#e8faf3,#d0f5e8);
+  border-color:rgba(14,138,95,.35);
+  box-shadow:0 4px 16px rgba(14,138,95,.12);
+}
+.pt-row.pt-next {
+  background:linear-gradient(135deg,#e8f3fc,#d0e8f8);
+  border-color:rgba(11,95,138,.3);
+}
+
+/* Token number */
+.pt-token {
+  font-size:38px; font-weight:900; min-width:60px; text-align:center;
+  color:var(--blue); line-height:1; font-variant-numeric:tabular-nums;
+  flex-shrink:0;
+}
+.pt-row.pt-active .pt-token { color:var(--ok) }
+.pt-row.pt-next   .pt-token { color:var(--next) }
+
+/* Name & status label */
+.pt-body { flex:1; min-width:0 }
+.pt-label {
+  font-size:11px; font-weight:800; letter-spacing:2px;
+  text-transform:uppercase; margin-bottom:3px;
+}
+.pt-row.pt-active .pt-label { color:var(--ok) }
+.pt-row.pt-next   .pt-label { color:var(--next) }
+.pt-name {
+  font-size:clamp(18px,2.2vw,26px); font-weight:800;
+  color:var(--ink); white-space:nowrap;
+  overflow:hidden; text-overflow:ellipsis;
+}
+.pt-name .next-prefix {
+  color:var(--next); font-weight:900; margin-right:6px;
+}
+.pt-time {
+  font-size:13px; color:var(--muted); margin-top:2px;
+  font-variant-numeric:tabular-nums;
+}
+
+/* Badge */
+.pt-badge {
+  font-size:11px; font-weight:800; padding:5px 12px;
+  border-radius:20px; flex-shrink:0; letter-spacing:.5px;
+  white-space:nowrap; text-transform:uppercase;
+}
+.badge-active {
+  background:rgba(14,138,95,.12); color:var(--ok);
+  border:1.5px solid rgba(14,138,95,.35);
+}
+.badge-next {
+  background:rgba(11,95,138,.1); color:var(--next);
+  border:1.5px solid rgba(11,95,138,.28);
+}
+.badge-waiting {
+  background:var(--soft); color:var(--blue);
+  border:1.5px solid var(--line);
+}
+
+/* Active consultation pulse */
+@keyframes consult-pulse {
+  0%,100% { box-shadow:0 4px 16px rgba(14,138,95,.12) }
+  50%      { box-shadow:0 4px 24px rgba(14,138,95,.28), 0 0 0 4px rgba(14,138,95,.08) }
+}
+.pt-row.pt-active { animation:consult-pulse 2.4s ease-in-out infinite }
+
+/* Empty state */
+.q-empty {
+  display:flex; align-items:center; justify-content:center;
+  height:100%; flex-direction:column; gap:10px;
+  color:var(--muted);
+}
+.q-empty p   { font-size:24px; font-weight:700 }
+.q-empty span { font-size:18px }
+
+/* ════════ MEDIA/SLIDE PANEL ════════ */
+#media-panel { background:var(--ink) }
+
+/* Slide containers */
+.sl {
+  position:absolute; inset:0;
+  opacity:0; transition:opacity .55s;
+  display:flex; flex-direction:column; overflow:hidden;
+}
+.sl.on  { opacity:1; z-index:2 }
+.sl.out { opacity:0; z-index:1 }
+
+/* ── Slide tints ── */
+.tint-eye  { background:linear-gradient(160deg,#020d1e,#061a35) }
+.tint-obg  { background:linear-gradient(160deg,#1e0210,#380620) }
+.tint-psy  { background:linear-gradient(160deg,#0e0220,#1e0640) }
+.tint-skn  { background:linear-gradient(160deg,#1e1200,#321e00) }
+
+/* Slide header */
+.sl-bar { padding:16px 28px 12px; flex-shrink:0 }
+.sl-tag {
+  display:inline-block; font-size:10px; font-weight:800;
+  letter-spacing:2.5px; text-transform:uppercase;
+  padding:3px 10px; border-radius:16px; margin-bottom:7px;
+}
+.sl-tag.eye  { background:rgba(0,180,255,.15); color:#00b4ff; border:1px solid rgba(0,180,255,.3) }
+.sl-tag.obg  { background:rgba(255,111,168,.12); color:#ff6fa8; border:1px solid rgba(255,111,168,.28) }
+.sl-tag.psy  { background:rgba(180,122,255,.12); color:#b47aff; border:1px solid rgba(180,122,255,.28) }
+.sl-tag.skn  { background:rgba(212,168,67,.12); color:#d4a843; border:1px solid rgba(212,168,67,.28) }
+.sl-title { font-size:clamp(22px,2.8vw,30px); font-weight:800;
+  color:#fff; line-height:1.15 }
+.sl-title-pa { font-size:clamp(16px,2vw,22px); color:rgba(255,255,255,.6);
+  margin-top:4px }
+
+/* INFO */
+.sl-info .sl-body { flex:1; padding:12px 28px 16px;
+  display:flex; flex-direction:column; gap:12px; overflow:hidden }
+.info-pt { display:flex; gap:12px; align-items:flex-start;
+  padding:12px 14px; background:rgba(255,255,255,.05);
+  border-radius:10px; border-left:3px solid rgba(255,255,255,.15) }
+.info-icon { font-size:20px; flex-shrink:0; margin-top:2px }
+.info-en { font-size:clamp(16px,1.9vw,20px); color:#f0f8ff; line-height:1.35 }
+.info-pa { font-size:clamp(13px,1.5vw,17px); color:rgba(180,220,255,.6);
+  margin-top:3px; line-height:1.4 }
+
+/* MYTH */
+.sl-myth .sl-body { flex:1; padding:12px 28px 16px;
+  display:grid; grid-template-rows:1fr 1fr; gap:14px }
+.myth-box { border-radius:14px; padding:18px 20px;
+  display:flex; flex-direction:column; gap:6px }
+.myth-box.m { background:rgba(255,60,80,.09); border:1.5px solid rgba(255,60,80,.35) }
+.myth-box.t { background:rgba(0,210,130,.07); border:1.5px solid rgba(0,210,130,.3) }
+.myth-lbl { font-size:11px; font-weight:800; letter-spacing:2px;
+  text-transform:uppercase; margin-bottom:2px }
+.myth-box.m .myth-lbl { color:#ff5060 }
+.myth-box.t .myth-lbl { color:#00c878 }
+.myth-en { font-size:clamp(16px,1.9vw,20px); color:#f0f8ff; line-height:1.4 }
+.myth-pa { font-size:clamp(13px,1.5vw,16px); color:rgba(180,220,255,.6);
+  margin-top:3px; line-height:1.4 }
+
+/* STEPS */
+.sl-steps .sl-body { flex:1; padding:8px 28px 14px;
+  display:flex; flex-direction:column; gap:9px; overflow:hidden }
+.step-row { display:flex; gap:14px; align-items:flex-start;
+  padding:9px 12px; background:rgba(255,255,255,.04); border-radius:10px }
+.step-n { font-size:28px; font-weight:900; min-width:38px;
+  text-align:center; flex-shrink:0; line-height:1 }
+.step-en { font-size:clamp(14px,1.7vw,18px); color:#f0f8ff; line-height:1.3 }
+.step-pa { font-size:clamp(12px,1.4vw,15px); color:rgba(180,220,255,.6);
+  margin-top:2px; line-height:1.35 }
+
+/* D&D */
+.sl-dd .sl-body { flex:1; padding:10px 20px 14px;
+  display:grid; grid-template-columns:1fr 1fr; gap:12px }
+.dd-col { border-radius:13px; padding:14px 16px;
+  display:flex; flex-direction:column; gap:9px }
+.dd-col.do   { background:rgba(0,210,130,.06); border:1.5px solid rgba(0,210,130,.25) }
+.dd-col.dont { background:rgba(255,60,80,.06);  border:1.5px solid rgba(255,60,80,.25) }
+.dd-head { font-size:12px; font-weight:800; letter-spacing:1.5px;
+  text-transform:uppercase; margin-bottom:3px }
+.dd-col.do   .dd-head { color:#00c878 }
+.dd-col.dont .dd-head { color:#ff5060 }
+.dd-row { display:flex; gap:8px; align-items:flex-start }
+.dd-icon { font-size:14px; flex-shrink:0; margin-top:1px }
+.dd-en { font-size:clamp(13px,1.6vw,16px); color:#f0f8ff; line-height:1.3 }
+.dd-pa { font-size:clamp(11px,1.3vw,14px); color:rgba(180,220,255,.55);
+  margin-top:2px; line-height:1.3 }
+
+/* SERVICES */
+.sl-svc .sl-body { flex:1; padding:10px 24px 16px;
+  display:flex; flex-direction:column }
+.svc-grid { display:grid; grid-template-columns:repeat(3,1fr);
+  gap:10px; flex:1 }
+.svc-item { background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1);
+  border-radius:11px; display:flex; align-items:center; justify-content:center;
+  padding:8px 12px; text-align:center;
+  font-size:clamp(13px,1.6vw,17px); font-weight:600; color:#f0f8ff; line-height:1.25 }
+
+/* DOCTOR — light, photo-forward profile card */
+.sl-doc { flex-direction:row !important; background:linear-gradient(135deg,#f8fbff,#eef5fb) }
+.doc-bg-eye      { background:linear-gradient(135deg,#e8f5ff,#f9fcff) }
+.doc-bg-obg      { background:linear-gradient(135deg,#fdedf3,#fdf7f9) }
+.doc-bg-psy      { background:linear-gradient(135deg,#f2eafc,#faf7fd) }
+.doc-bg-skn      { background:linear-gradient(135deg,#fbf1de,#fdf9f1) }
+.doc-bg-general  { background:linear-gradient(135deg,#eef6ff,#f8fbff) }
+
+.doc-img {
+  width:50%; flex-shrink:0; display:flex;
+  align-items:center; justify-content:center; padding:34px;
+}
+.doc-img img {
+  max-width:100%; max-height:100%; width:auto; height:auto;
+  object-fit:contain; border-radius:22px;
+  box-shadow:0 22px 54px rgba(18,59,109,.22);
+  background:#fff;
+}
+.doc-noimg { width:100%; height:100%; display:flex; align-items:center;
+  justify-content:center; font-size:120px }
+
+.doc-body {
+  flex:1; padding:38px 42px 34px;
+  display:flex; flex-direction:column; justify-content:center; gap:8px;
+  min-width:0;
+}
+.doc-kyd {
+  display:inline-flex; align-items:center; gap:8px; align-self:flex-start;
+  background:var(--blue); color:#fff; padding:7px 18px; border-radius:999px;
+  margin-bottom:14px; box-shadow:0 6px 18px rgba(18,59,109,.28);
+}
+.doc-kyd-en { font-size:14px; font-weight:900; letter-spacing:1.5px; text-transform:uppercase }
+.doc-kyd-pa { font-size:13px; font-weight:700; color:rgba(255,255,255,.8) }
+.doc-eyebrow { font-size:12px; font-weight:800; letter-spacing:2.5px;
+  text-transform:uppercase; color:var(--muted); margin-bottom:2px }
+.doc-name { font-size:clamp(30px,3.8vw,44px); font-weight:900; color:var(--ink); line-height:1.08 }
+.doc-title { font-size:clamp(18px,2.3vw,26px); font-weight:800; margin-top:5px }
+.doc-title-pa { font-size:clamp(15px,1.8vw,21px); color:var(--muted); margin-top:3px; margin-bottom:6px }
+
+.doc-cred-list {
+  display:flex; flex-wrap:wrap;
+  gap:8px 9px; margin-top:12px; align-content:start;
+}
+.doc-cred-item {
+  display:inline-flex; align-items:center; gap:7px;
+  background:rgba(255,255,255,.78); border-radius:999px;
+  padding:7px 15px 7px 12px; border:1.5px solid; min-width:0;
+  font-size:clamp(11.5px,1.15vw,14px); font-weight:700; color:var(--ink);
+  line-height:1.25; box-shadow:0 2px 8px rgba(18,59,109,.06);
+  max-width:100%;
+}
+.doc-cred-icon { font-size:14px; flex-shrink:0; line-height:1.2 }
+
+/* PHOTO-CARD — light, image-forward info/myth template */
+.sl-photo { flex-direction:row !important; background:linear-gradient(135deg,#f8fbff,#eef5fb) }
+.pc-img {
+  width:46%; flex-shrink:0; position:relative; overflow:hidden;
+  display:flex; align-items:center; justify-content:center; padding:0;
+}
+.pc-img img {
+  width:100%; height:100%; object-fit:cover;
+}
+.pc-attribution {
+  position:absolute; left:14px; bottom:14px; z-index:2;
+  font-size:11px; font-weight:600; color:#fff; text-decoration:none;
+  background:rgba(10,20,35,.55); padding:5px 11px; border-radius:8px;
+  backdrop-filter:blur(2px); line-height:1.3;
+}
+.pc-body {
+  flex:1; padding:34px 40px; min-width:0;
+  display:flex; flex-direction:column; justify-content:center; gap:10px;
+}
+.pc-bullets { display:flex; flex-direction:column; gap:10px; margin-top:10px }
+.pc-bullet {
+  display:flex; align-items:flex-start; gap:12px;
+  background:rgba(255,255,255,.75); border-radius:13px;
+  padding:12px 16px; border-left:4px solid;
+  box-shadow:0 2px 10px rgba(18,59,109,.06);
+}
+.pc-bullet-icon { font-size:19px; flex-shrink:0; margin-top:1px }
+.pc-bullet-en { font-size:clamp(14px,1.6vw,19px); font-weight:700; color:var(--ink); line-height:1.32 }
+.pc-bullet-pa { font-size:clamp(12px,1.3vw,15px); color:var(--muted); margin-top:3px; line-height:1.35 }
+.pc-eyebrow { font-size:12px; font-weight:800; letter-spacing:2.5px;
+  text-transform:uppercase; margin-bottom:2px }
+.pc-title { font-size:clamp(26px,3.2vw,38px); font-weight:900; color:var(--ink); line-height:1.12 }
+.pc-title-pa { font-size:clamp(15px,1.7vw,20px); color:var(--muted); margin-top:4px }
+
+/* PHOTO-CARD content variants: myth/truth, numbered steps, do's & don'ts */
+.pc-myth-wrap { display:flex; flex-direction:column; gap:11px; margin-top:12px }
+.pc-myth-box { border-radius:14px; padding:14px 17px; display:flex; flex-direction:column; gap:4px }
+.pc-myth-box.m { background:rgba(224,51,74,.07); border:1.5px solid rgba(224,51,74,.28) }
+.pc-myth-box.t { background:rgba(14,138,95,.07); border:1.5px solid rgba(14,138,95,.28) }
+.pc-myth-lbl { font-size:11px; font-weight:800; letter-spacing:2px; text-transform:uppercase }
+.pc-myth-box.m .pc-myth-lbl { color:#e0334a }
+.pc-myth-box.t .pc-myth-lbl { color:#0e8a5f }
+.pc-myth-en { font-size:clamp(14px,1.6vw,18px); font-weight:700; color:var(--ink); line-height:1.35 }
+.pc-myth-pa { font-size:clamp(12px,1.3vw,15px); color:var(--muted); margin-top:3px; line-height:1.35 }
+
+.pc-steps { display:flex; flex-direction:column; gap:8px; margin-top:10px }
+.pc-step-row { display:flex; align-items:flex-start; gap:12px;
+  background:rgba(255,255,255,.72); border-radius:11px; padding:9px 14px;
+  box-shadow:0 2px 8px rgba(18,59,109,.06) }
+.pc-step-n { font-size:20px; font-weight:900; min-width:30px; text-align:center;
+  flex-shrink:0; line-height:1.3 }
+.pc-step-en { font-size:clamp(13px,1.4vw,16px); font-weight:700; color:var(--ink); line-height:1.3 }
+.pc-step-pa { font-size:clamp(11px,1.2vw,13.5px); color:var(--muted); margin-top:2px; line-height:1.3 }
+
+.pc-dd { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px }
+.pc-dd-col { display:flex; flex-direction:column; gap:7px }
+.pc-dd-head { font-size:11px; font-weight:800; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:2px }
+.pc-dd-col.do .pc-dd-head { color:#0e8a5f }
+.pc-dd-col.dont .pc-dd-head { color:#e0334a }
+.pc-dd-row { display:flex; align-items:flex-start; gap:7px;
+  background:rgba(255,255,255,.72); border-radius:10px; padding:8px 11px;
+  box-shadow:0 2px 6px rgba(18,59,109,.05) }
+.pc-dd-icon { font-size:12px; flex-shrink:0; margin-top:2px; font-weight:900 }
+.pc-dd-en { font-size:clamp(11.5px,1.2vw,14px); font-weight:700; color:var(--ink); line-height:1.28 }
+.pc-dd-pa { font-size:clamp(10px,1.05vw,12px); color:var(--muted); margin-top:1px; line-height:1.25 }
+
+/* POSTER */
+.sl-poster {
+  align-items:center; justify-content:center; text-align:center; padding:36px;
+}
+.poster-pre { font-size:12px; font-weight:800; letter-spacing:3.5px;
+  text-transform:uppercase; color:rgba(255,255,255,.55); margin-bottom:22px }
+.poster-dept { font-size:clamp(40px,6vw,60px); font-weight:900; line-height:1;
+  letter-spacing:-1px; margin-bottom:8px }
+.poster-dept-pa { font-size:clamp(26px,3.5vw,38px); font-weight:600;
+  color:rgba(255,255,255,.72); margin-bottom:20px }
+.poster-bar { width:72px; height:3.5px; border-radius:2px; margin:0 auto 18px }
+.poster-tag { font-size:clamp(14px,1.7vw,19px); color:rgba(255,255,255,.55); line-height:1.7 }
+.poster-eye  { background:linear-gradient(135deg,#001e3c,#003d7a) }
+.poster-obg  { background:linear-gradient(135deg,#3d0024,#9c1850) }
+.poster-psy  { background:linear-gradient(135deg,#1a0040,#52009c) }
+.poster-skn  { background:linear-gradient(135deg,#2d1c00,#7a4d00) }
+
+/* MOTION */
+.sl-motion { align-items:center; justify-content:flex-end; padding-bottom:36px }
+.motion-stage { position:absolute; inset:0; display:flex;
+  align-items:center; justify-content:center; overflow:hidden }
+.motion-cap { text-align:center; position:relative; z-index:5 }
+.motion-cap-en { font-size:clamp(22px,3vw,30px); font-weight:800; color:#fff;
+  text-shadow:0 2px 14px rgba(0,0,0,.7) }
+.motion-cap-pa { font-size:clamp(16px,2vw,22px); color:rgba(255,255,255,.6); margin-top:5px }
+
+/* Motion scenes CSS animations */
+.sc-cat { width:300px; height:300px; position:relative;
+  display:flex; align-items:center; justify-content:center }
+.cat-ring { position:absolute; border-radius:50%;
+  border:1px dashed rgba(0,180,255,.2) }
+.cat-ring1 { width:260px; height:260px; animation:cat-spin 20s linear infinite }
+.cat-ring2 { width:190px; height:190px; animation:cat-spin 14s linear infinite reverse }
+@keyframes cat-spin { to { transform:rotate(360deg) } }
+.cat-eye { width:220px; height:110px; border:2.5px solid rgba(0,180,255,.55);
+  border-radius:50%; position:absolute }
+.cat-iris { width:84px; height:84px; border-radius:50%;
+  background:radial-gradient(circle at 38% 38%,#2255cc,#0a1a55);
+  position:absolute; border:2px solid rgba(0,180,255,.5) }
+.cat-pupil { width:34px; height:34px; border-radius:50%;
+  background:#000; position:absolute }
+.cat-cloud { width:76px; height:76px; border-radius:50%;
+  background:rgba(255,255,255,.22); position:absolute; filter:blur(5px);
+  animation:cloud-fade 4s ease-in-out infinite }
+@keyframes cloud-fade { 0%,35%{opacity:.9;filter:blur(5px)} 60%,100%{opacity:0;filter:blur(0)} }
+.cat-iol { width:70px; height:70px; border-radius:50%;
+  background:radial-gradient(circle,rgba(0,220,255,.3),rgba(0,100,220,.15));
+  border:2px solid rgba(0,220,255,.75); position:absolute;
+  animation:iol-show 4s ease-in-out infinite; box-shadow:0 0 20px rgba(0,210,255,.3) }
+@keyframes iol-show { 0%,35%{opacity:0} 60%,100%{opacity:1} }
+.cat-dot { width:5px; height:5px; border-radius:50%;
+  background:#00b4ff; position:absolute; top:0; left:50%;
+  animation:cat-orbit 3.5s linear infinite; transform-origin:0 130px }
+@keyframes cat-orbit { to { transform:rotate(360deg) translateY(-130px) } }
+
+.sc-las { width:340px; height:240px; position:relative;
+  display:flex; align-items:center; justify-content:center }
+.las-cornea { width:160px; height:88px; border:2px solid rgba(0,180,255,.55);
+  border-radius:50%; position:relative; overflow:visible;
+  background:radial-gradient(ellipse,rgba(0,150,255,.08),transparent 70%) }
+.las-flap { position:absolute; top:0; left:50%; transform:translateX(-50%);
+  width:80px; height:44px; border-radius:50% 50% 0 0;
+  border:1px dashed rgba(0,180,255,.4); background:rgba(0,180,255,.05);
+  transform-origin:bottom center; animation:flap 3.5s ease-in-out infinite }
+@keyframes flap {
+  0%,25%{transform:translateX(-50%) perspective(200px) rotateX(0)}
+  45%,75%{transform:translateX(-50%) perspective(200px) rotateX(-44deg)}
+  95%,100%{transform:translateX(-50%) perspective(200px) rotateX(0)}
+}
+.las-beam { position:absolute; top:-68px; left:50%; width:2px; height:82px;
+  background:linear-gradient(to bottom,transparent,rgba(255,40,40,.9),transparent);
+  transform-origin:bottom center; filter:blur(1px);
+  animation:beam-sw 3.5s ease-in-out infinite; transform:translateX(-50%) }
+@keyframes beam-sw {
+  0%,25%{opacity:0;transform:translateX(-50%) rotate(-22deg)}
+  40%{opacity:1;transform:translateX(-50%) rotate(0)}
+  65%{opacity:1;transform:translateX(-50%) rotate(22deg)}
+  80%,100%{opacity:0;transform:translateX(-50%) rotate(22deg)}
+}
+.las-dot { position:absolute; top:-70px; left:50%; width:7px; height:7px;
+  border-radius:50%; background:rgba(255,60,60,.9); transform:translateX(-50%);
+  animation:beam-sw 3.5s ease-in-out infinite;
+  box-shadow:0 0 14px rgba(255,60,60,.7) }
+
+.sc-icl { width:300px; height:260px; display:flex;
+  align-items:center; justify-content:center; position:relative }
+.icl-outer { width:220px; height:108px; border:2.5px solid rgba(0,180,255,.55);
+  border-radius:50%; position:absolute }
+.icl-iris { width:82px; height:82px; border-radius:50%;
+  background:radial-gradient(circle,#22348a,#0a1255);
+  position:absolute; border:2px solid rgba(0,180,255,.5) }
+.icl-pupil { width:32px; height:32px; border-radius:50%;
+  background:#000; position:absolute }
+.icl-lens { width:100px; height:19px; border-radius:50%;
+  background:linear-gradient(to bottom,rgba(0,220,255,.45),rgba(0,150,255,.18));
+  border:1.5px solid rgba(0,220,255,.85); position:absolute;
+  box-shadow:0 0 18px rgba(0,210,255,.4);
+  animation:icl-in 3.8s ease-in-out infinite }
+@keyframes icl-in {
+  0%{transform:translate(68px,-10px) rotate(8deg);opacity:0}
+  40%{transform:translate(0,0) rotate(0);opacity:1}
+  75%,100%{transform:translate(0,0) rotate(0);opacity:1}
+}
+
+.sc-prg { width:280px; height:280px; display:flex;
+  align-items:center; justify-content:center; position:relative }
+.prg-ring { position:absolute; width:40px; height:40px; border-radius:50%;
+  border:2px solid rgba(255,111,168,.38); animation:prg-ring 2.8s ease-out infinite }
+.prg-ring2 { animation-delay:1.4s }
+@keyframes prg-ring { 0%{transform:scale(1);opacity:.7} 100%{transform:scale(4.5);opacity:0} }
+.prg-body { width:190px; height:224px;
+  border-radius:50% 50% 50% 50% / 60% 60% 40% 40%;
+  background:rgba(255,111,168,.06); border:2px solid rgba(255,111,168,.4);
+  display:flex; align-items:center; justify-content:center;
+  animation:prg-breathe 3s ease-in-out infinite }
+@keyframes prg-breathe { 0%,100%{transform:scale(1)} 50%{transform:scale(1.04)} }
+.prg-baby { font-size:58px; animation:prg-float 3s ease-in-out infinite }
+@keyframes prg-float { 0%,100%{transform:translateY(0) rotate(-4deg)} 50%{transform:translateY(-7px) rotate(4deg)} }
+
+.sc-mnd { width:300px; height:260px; display:flex;
+  align-items:center; justify-content:center; position:relative }
+.mnd-ring { position:absolute; width:170px; height:170px; border-radius:50%;
+  border:1px solid rgba(180,122,255,.14); animation:mnd-exp 3s linear infinite }
+.mnd-ring2 { animation-delay:1.5s }
+@keyframes mnd-exp { 0%{transform:scale(.6);opacity:.6} 100%{transform:scale(1.5);opacity:0} }
+.mnd-brain { font-size:96px; animation:mnd-pulse 2.2s ease-in-out infinite }
+@keyframes mnd-pulse {
+  0%,100%{filter:drop-shadow(0 0 6px rgba(180,122,255,.4))}
+  50%{filter:drop-shadow(0 0 20px rgba(180,122,255,.85))}
+}
+.mnd-spark { position:absolute; width:5px; height:5px; border-radius:50%;
+  background:#b47aff; animation:spk 2s ease-out infinite }
+.mnd-spark:nth-child(3){top:33%;left:36%;animation-delay:0s}
+.mnd-spark:nth-child(4){top:26%;left:54%;animation-delay:.55s}
+.mnd-spark:nth-child(5){top:40%;left:63%;animation-delay:1.1s}
+.mnd-spark:nth-child(6){top:20%;left:46%;animation-delay:1.65s}
+@keyframes spk { 0%{opacity:1;transform:scale(1)} 100%{opacity:0;transform:scale(0) translate(28px,-36px)} }
+
+/* Every direct child of a slot fills it completely */
+.sl > div {
+  position:absolute; inset:0; display:flex;
+  flex-direction:column; overflow:hidden;
+}
+
+/* Slide mount animation */
+@keyframes fadeUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+.sl.on .sl-bar,.sl.on .sl-body,.sl.on .doc-body { animation:fadeUp .5s ease both }
+.sl.on .sl-body { animation-delay:.08s }
+
+/* ════════ FOOTER ════════ */
+#ftr {
+  display:flex; align-items:center; gap:14px;
+  background:var(--paper); border-top:1px solid var(--line);
+  padding:0 20px; min-width:0; overflow:hidden;
+}
+.ftr-msg { font-size:13px; color:var(--muted); white-space:nowrap }
+.ftr-ticker { flex:1; overflow:hidden; height:100%;
+  display:flex; align-items:center }
+.ticker-inner { white-space:nowrap; font-size:13px; color:var(--muted);
+  animation:tick 44s linear infinite }
+@keyframes tick { from{transform:translateX(60vw)} to{transform:translateX(-100%)} }
+.ftr-prog { height:3px; width:120px; background:var(--soft);
+  border-radius:2px; overflow:hidden; flex-shrink:0 }
+.ftr-prog-bar { height:100%; background:var(--blue);
+  border-radius:2px; transition:none }
+
+@media (prefers-reduced-motion:reduce) {
+  .sl { transition:none }
+  .sl.on { opacity:1 }
+  .cat-ring,.cat-ring1,.cat-ring2,.cat-cloud,.cat-iol,.cat-dot,
+  .las-beam,.las-dot,.las-flap,.prg-ring,.prg-body,.prg-baby,
+  .mnd-ring,.mnd-brain,.mnd-spark,.icl-lens,.ticker-inner { animation:none }
+}
+</style>
+</head>
+<body>
+<div id="shell">
+
+  <!-- ═══ HEADER ═══ -->
+  <header id="hdr">
+    <div class="hdr-logos">
+      <img class="logo-flame" src="./websites/chandigarh/images/brand/baweja-1.png"
+           alt="Baweja"
+           onerror="this.style.display='none'">
+    </div>
+    <div class="hdr-name">
+      Baweja Multispeciality Hospital
+      <span id="hdr-subtitle">NAABH Certified · Chandigarh &amp; Ropar</span>
+    </div>
+    <div class="hdr-right">
+      <div id="live-status">
+        <div id="live-dot"></div>
+        <span id="live-text">Connecting</span>
+      </div>
+      <div id="hdr-clock">
+        <div class="clock-time" id="clock-time">--:-- --</div>
+        <div class="clock-date" id="clock-date"></div>
+      </div>
+      <img class="logo-bmh" src="./assets/queue-media/hospital-logo.jpg"
+           alt="BMH"
+           onerror="this.style.display='none'">
+    </div>
+  </header>
+
+  <!-- ═══ MAIN ═══ -->
+  <main id="main">
+
+    <!-- Queue panel -->
+    <div id="queue-panel" class="panel active">
+      <div class="q-head">
+        <div>
+          <div class="q-dept-name" id="q-dept-name">Ophthalmology</div>
+          <div class="q-dept-pa"   id="q-dept-pa">ਅੱਖਾਂ ਦਾ ਵਿਭਾਗ</div>
+        </div>
+        <div id="queue-count"></div>
+      </div>
+      <div class="q-list" id="q-list">
+        <div class="q-empty">
+          <p>Connecting to live queue…</p>
+          <span>ਕਤਾਰ ਨਾਲ ਜੁੜ ਰਿਹਾ ਹੈ…</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Slide panel (slides cycle here) -->
+    <div id="media-panel" class="panel">
+      <div id="sl-a" class="sl on"></div>
+      <div id="sl-b" class="sl"></div>
+    </div>
+
+  </main>
+
+  <!-- ═══ FOOTER ═══ -->
+  <footer id="ftr">
+    <div class="ftr-msg">Please stay seated — your name will appear when it is your turn &nbsp;·&nbsp; ਕਿਰਪਾ ਕਰਕੇ ਬੈਠੇ ਰਹੋ, ਵਾਰੀ ਆਉਣ ਤੇ ਨਾਮ ਦਿਖਾਇਆ ਜਾਵੇਗਾ</div>
+    <div class="ftr-ticker">
+      <div class="ticker-inner">
+        Robotic AI Cataract Surgery &nbsp;·&nbsp; Blade-Free LASIK &amp; SMILE Pro &nbsp;·&nbsp;
+        MIGS Glaucoma Surgery &nbsp;·&nbsp; ICL Implantable Lens &nbsp;·&nbsp;
+        Painless Delivery &nbsp;·&nbsp; IUI &amp; IVF Infertility &nbsp;·&nbsp;
+        Neuropsychiatry &amp; De-Addiction OPD &nbsp;·&nbsp; Advanced EEG &nbsp;·&nbsp;
+        Laser Hair Reduction &nbsp;·&nbsp; Hydrafacial &amp; Skin Rejuvenation &nbsp;·&nbsp;
+        PRP Hair Therapy &nbsp;·&nbsp;
+        ਰੋਬੋਟਿਕ ਮੋਤੀਆਬਿੰਦ ਸਰਜਰੀ &nbsp;·&nbsp; ਬਲੇਡ-ਰਹਿਤ LASIK &nbsp;·&nbsp;
+        ਦਰਦ ਰਹਿਤ ਜਣੇਪਾ &nbsp;·&nbsp; ਨਸ਼ਾ ਛੁਡਾਊ ਕੇਂਦਰ &nbsp;·&nbsp;
+        ਲੇਜ਼ਰ ਵਾਲ ਹਟਾਉਣਾ &nbsp;·&nbsp; ਹਾਈਡ੍ਰਾਫੇਸ਼ੀਅਲ
+      </div>
+    </div>
+    <div class="ftr-prog"><div class="ftr-prog-bar" id="prog-bar"></div></div>
+  </footer>
+
+</div>
+
+<!-- Firebase v8 compat (same as existing queue-display.html) -->
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
+<!-- Shared slide library — must load before main script -->
+<script src="./assets/queue-slides.js"></script>
+
+<script>
+(function () {
+'use strict';
+
+/* ── URL params ──────────────────────────────────── */
+var qs        = new URLSearchParams(location.search);
+var deptParam = (qs.get('dept') || qs.get('department') || 'ophtho').toLowerCase();
+var CENTRE    = (qs.get('centre') || qs.get('center') || '').toUpperCase();
+var QUEUE_MS  = Math.max(3000, Number(qs.get('queueMs')  || 5000));
+var MEDIA_MS  = Math.max(6000, Number(qs.get('mediaMs') || 9000));
+var IS_RECEPTION = deptParam === 'reception';
+
+/* dept= accepts a single key or a comma/plus-separated combo, e.g.
+   "ophtho,obg" — one TV showing both departments' queues + slides. */
+function resolveDeptToken(tok) {
+  var d = String(tok || '').toLowerCase().trim();
+  if (d === 'ophtho' || d === 'eye' || d.indexOf('ophthalm') >= 0) return 'ophtho';
+  if (d === 'obg' || d.indexOf('gyn') >= 0 || d.indexOf('obst') >= 0) return 'obg';
+  if (d === 'psych' || d.indexOf('psych') >= 0 || d.indexOf('neuro') >= 0) return 'psych';
+  if (d === 'skin' || d.indexOf('derma') >= 0 || d.indexOf('cosmet') >= 0) return 'skin';
+  return null;
+}
+var DEPT_CYCLE = IS_RECEPTION
+  ? ['ophtho','obg','psych','skin']
+  : deptParam.split(/[,+]/).map(resolveDeptToken).filter(Boolean);
+if (!DEPT_CYCLE.length) DEPT_CYCLE = ['ophtho'];
+var IS_MULTI = DEPT_CYCLE.length > 1;
+
+/* ── Dept config ─────────────────────────────────── */
+var DEPT_MAP = {
+  ophtho: {
+    title:'Ophthalmology',    pa:'ਅੱਖਾਂ ਦਾ ਵਿਭਾਗ',
+    slideKey:'Ophthalmology', cls:'eye', colour:'#0b5f8a',
+    fbKey:['ophtho','ophthalmology','eye']
+  },
+  obg: {
+    title:'Obstetrics & Gynaecology', pa:'ਪ੍ਰਸੂਤੀ ਅਤੇ ਗਾਇਨੀਕੋਲੋਜੀ',
+    slideKey:'Obstetrics & Gynaecology', cls:'obg', colour:'#9c1850',
+    fbKey:['obg','gynae','gynaecology','obstetrics']
+  },
+  psych: {
+    title:'Neuropsychiatry', pa:'ਨਿਊਰੋਸਾਈਕਿਆਟ੍ਰੀ',
+    slideKey:'Neuropsychiatry', cls:'psy', colour:'#5a1e96',
+    fbKey:['psych','psychiatry','neuropsychiatry']
+  },
+  skin: {
+    title:'Skin & Cosmetology', pa:'ਚਮੜੀ ਅਤੇ ਕਾਸਮੈਟੋਲੋਜੀ',
+    slideKey:'Skin & Cosmetology', cls:'skn', colour:'#8a5e0b',
+    fbKey:['skin','dermatology','cosmetology']
+  }
+};
+
+/* Normalise a dept string from Firebase to one of our keys */
+function normDept(v) {
+  var d = String(v || '').toLowerCase().trim();
+  if (!d) return null;
+  if (d.indexOf('ophthalm') >= 0 || d === 'eye') return 'ophtho';
+  if (d.indexOf('gyn') >= 0 || d.indexOf('obst') >= 0 || d === 'obg') return 'obg';
+  if (d.indexOf('psych') >= 0 || d.indexOf('neuro') >= 0) return 'psych';
+  if (d.indexOf('skin') >= 0 || d.indexOf('derma') >= 0 || d.indexOf('cosmet') >= 0) return 'skin';
+  return d;
+}
+
+var cycleIdx   = 0;
+function activeDept() {
+  return IS_MULTI ? DEPT_CYCLE[cycleIdx] : DEPT_CYCLE[0];
+}
+function activeCfg() { return DEPT_MAP[activeDept()] || DEPT_MAP.ophtho; }
+
+/* Set subtitle for Chandigarh/Ropar */
+if (CENTRE) {
+  document.getElementById('hdr-subtitle').textContent =
+    CENTRE === 'CHD' ? 'Chandigarh · NAABH Certified' :
+    CENTRE === 'RPR' ? 'Ropar · Baweja Hospital' : 'NAABH Certified';
+}
+
+/* Update queue panel header to match active dept */
+function updateDeptHeader() {
+  var cfg = activeCfg();
+  document.getElementById('q-dept-name').textContent = cfg.title;
+  document.getElementById('q-dept-pa').textContent   = cfg.pa;
+}
+updateDeptHeader();
+
+/* ── Clock ───────────────────────────────────────── */
+function tickClock() {
+  var n = new Date();
+  var h = n.getHours(), m = n.getMinutes(), s = n.getSeconds();
+  var ap = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  document.getElementById('clock-time').textContent =
+    pad2(h) + ':' + pad2(m) + ':' + pad2(s) + ' ' + ap;
+  document.getElementById('clock-date').textContent =
+    n.toLocaleDateString('en-IN', { weekday:'long', day:'2-digit',
+      month:'short', year:'numeric' });
+}
+function pad2(n) { return n < 10 ? '0' + n : String(n) }
+setInterval(tickClock, 1000);
+tickClock();
+
+/* ── Firebase ────────────────────────────────────── */
+var FB_CFG = {
+  apiKey:'AIzaSyDl8RD0l5yy3YjWJWXhdKetDPnFSa37IVQ',
+  authDomain:'bmh-hms.firebaseapp.com',
+  databaseURL:'https://bmh-hms-default-rtdb.asia-southeast1.firebasedatabase.app',
+  projectId:'bmh-hms',
+  storageBucket:'bmh-hms.firebasestorage.app',
+  messagingSenderId:'675093131811',
+  appId:'1:675093131811:web:669ea0eafd0a27bc73f796'
+};
+
+/* Patient rows from Firebase */
+var allRows = [];
+
+/* Today's date in IST */
+function todayKey() {
+  var parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone:'Asia/Kolkata',
+    year:'numeric', month:'2-digit', day:'2-digit'
+  }).formatToParts(new Date()).reduce(function(a,p){ a[p.type]=p.value; return a; }, {});
+  return parts.year + '-' + parts.month + '-' + parts.day;
+}
+function localDateKey(v) {
+  if (!v) return '';
+  var raw = String(v).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  var d = new Date(v);
+  if (isNaN(d.getTime())) return '';
+  var parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone:'Asia/Kolkata',
+    year:'numeric', month:'2-digit', day:'2-digit'
+  }).formatToParts(d).reduce(function(a,p){ a[p.type]=p.value; return a; }, {});
+  return parts.year + '-' + parts.month + '-' + parts.day;
+}
+
+function isTodayRow(row) {
+  var today = todayKey();
+  return [row.queueDate, row.visitDate, row.queueAddedAt, row.checkinAt,
+          row.createdAt, row.date].some(function(v) {
+    return localDateKey(v) === today || String(v || '').slice(0,10) === today;
+  });
+}
+function rowMatchesCentre(row) {
+  if (!CENTRE || CENTRE === 'BOTH' || CENTRE === 'ALL') return true;
+  var c = String(row.centre || '').trim().toUpperCase();
+  return !c || c === CENTRE;
+}
+function isActiveRow(row) {
+  if (!row || row.queueRemoved || row.inactive || row.mergedInto) return false;
+  var st = String(row.status || '').toLowerCase();
+  if (['seen','done','removed','merged','inactive'].indexOf(st) >= 0 ||
+      row.seen || row.seenAt) return false;
+  if (!isTodayRow(row) || !rowMatchesCentre(row)) return false;
+  var rd = normDept(row.dept || row.department);
+  return rd === activeDept();
+}
+function queueStamp(row) {
+  var cands = [row.checkinAt, row.queueAddedAt, row.createdAt,
+               row.queueDate, row.visitDate, row.date];
+  for (var i = 0; i < cands.length; i++) {
+    var raw = cands[i];
+    if (!raw) continue;
+    if (typeof raw === 'number') return raw;
+    var t = Date.parse(raw);
+    if (!isNaN(t)) return t;
+  }
+  return 0;
+}
+function displayName(row) {
+  return String(row.name || row.patient || 'Patient').trim();
+}
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ── Queue rendering ─────────────────────────────── */
+function renderQueue() {
+  updateDeptHeader();
+  var active = allRows.filter(isActiveRow)
+    .sort(function(a,b){ return queueStamp(a) - queueStamp(b) })
+    .slice(0, 8);
+
+  var el = document.getElementById('q-list');
+  var cnt = document.getElementById('queue-count');
+
+  if (!active.length) {
+    cnt.textContent = '';
+    el.innerHTML = '<div class="q-empty">'
+      + '<p>No patients in queue right now</p>'
+      + '<span>ਇਸ ਸਮੇਂ ਕੋਈ ਮਰੀਜ਼ ਕਤਾਰ ਵਿੱਚ ਨਹੀਂ ਹੈ</span>'
+      + '</div>';
+    return;
+  }
+
+  cnt.textContent = active.length + ' patient' + (active.length > 1 ? 's' : '') + ' waiting';
+
+  el.innerHTML = active.map(function(row, idx) {
+    var isActive = idx === 0;
+    var isNext   = idx === 1;
+    var tokenNum = row.tokenNumber || row.token || row.queueNumber || (idx + 1);
+    var timeStr  = '';
+    var stamp    = queueStamp(row);
+    if (stamp) {
+      timeStr = new Date(stamp).toLocaleTimeString('en-IN',
+        { hour:'2-digit', minute:'2-digit', hour12:true });
+    }
+
+    var rowCls = isActive ? 'pt-row pt-active' : isNext ? 'pt-row pt-next' : 'pt-row';
+    var label  = isActive
+      ? '<div class="pt-label">● Active Consultation &nbsp;·&nbsp; ਚੱਲ ਰਹੀ ਕਨਸਲਟੇਸ਼ਨ</div>'
+      : isNext
+      ? '<div class="pt-label">↑ Next &nbsp;·&nbsp; ਅਗਲੀ ਵਾਰੀ</div>'
+      : '';
+    var badgeCls  = isActive ? 'pt-badge badge-active' : isNext ? 'pt-badge badge-next' : 'pt-badge badge-waiting';
+    var badgeTxt  = isActive ? 'In Consultation' : isNext ? 'NEXT' : 'Waiting';
+
+    var nameLine = isNext
+      ? '<span class="next-prefix">NEXT —</span>' + esc(displayName(row))
+      : esc(displayName(row));
+
+    return '<div class="' + rowCls + '">'
+      + '<div class="pt-token">' + esc(tokenNum) + '</div>'
+      + '<div class="pt-body">'
+      + label
+      + '<div class="pt-name">' + nameLine + '</div>'
+      + (timeStr ? '<div class="pt-time">' + esc(timeStr) + '</div>' : '')
+      + '</div>'
+      + '<span class="' + badgeCls + '">' + badgeTxt + '</span>'
+      + '</div>';
+  }).join('');
+}
+
+/* ── Firebase connection ─────────────────────────── */
+function connectFirebase() {
+  try {
+    if (!firebase.apps.length) firebase.initializeApp(FB_CFG);
+    var db = firebase.database();
+
+    /* Connection status indicator */
+    db.ref('.info/connected').on('value', function(snap) {
+      var on = !!snap.val();
+      document.getElementById('live-dot').classList.toggle('on', on);
+      document.getElementById('live-text').textContent = on ? 'Live Queue' : 'Offline';
+    });
+
+    /* Main patient listener — same query as existing queue-display.html */
+    db.ref('patients').orderByChild('queueDate').equalTo(todayKey())
+      .on('value', function(snap) {
+        var val = snap.val() || {};
+        allRows = Object.keys(val).map(function(k) {
+          var r = val[k] || {};
+          r._key = k;
+          return r;
+        });
+        renderQueue();
+      }, function(err) {
+        document.getElementById('live-text').textContent = 'Queue unavailable';
+        document.getElementById('q-list').innerHTML =
+          '<div class="q-empty"><p>Queue unavailable</p>'
+          + '<span>' + esc(err && err.message || 'Check network connection') + '</span></div>';
+      });
+
+  } catch(e) {
+    document.getElementById('live-text').textContent = 'Connection error';
+  }
+}
+
+/* ── Dept header cycling (reception + any multi-dept combo link) ── */
+if (IS_MULTI) {
+  setInterval(function() {
+    cycleIdx = (cycleIdx + 1) % DEPT_CYCLE.length;
+    renderQueue();
+  }, QUEUE_MS * 4);
+}
+
+/* ── Slide system ────────────────────────────────── */
+var slides   = [];
+var slideIdx = 0;
+var slotA    = true;
+
+function deptCls(dept) {
+  var m = {
+    'Ophthalmology':'eye',
+    'Obstetrics & Gynaecology':'obg',
+    'Neuropsychiatry':'psy',
+    'Skin & Cosmetology':'skn'
+  };
+  return m[dept] || 'eye';
+}
+function slideColour(dept) {
+  var m = {'eye':'#00b4ff','obg':'#ff6fa8','psy':'#b47aff','skn':'#d4a843'};
+  return m[deptCls(dept)] || '#00b4ff';
+}
+var STEP_CLR = ['#00b4ff','#00c878','#ffd044','#ff6fa8','#b47aff','#ff8c44'];
+
+function renderSlide(s) {
+  switch (s.kind) {
+    case 'poster':   return rPoster(s);
+    case 'doctor':   return rDoctor(s);
+    case 'info':     return rInfo(s);
+    case 'myth':     return rMyth(s);
+    case 'steps':    return rSteps(s);
+    case 'dd':       return rDD(s);
+    case 'services': return rSvc(s);
+    case 'motion':   return rMotion(s);
+    case 'photo':    return rPhotoInfo(s);
+    default: return '<div class="sl tint-eye"></div>';
+  }
+}
+
+function tagHtml(dept) {
+  var c = deptCls(dept);
+  return '<span class="sl-tag ' + c + '">' + esc(dept) + '</span>';
+}
+
+function rPoster(s) {
+  var c = deptCls(s.department);
+  var col = slideColour(s.department);
+  return '<div class="sl-poster poster-' + c + '">'
+    + '<div class="poster-pre">Baweja Multispeciality Hospital</div>'
+    + '<div class="poster-dept" style="color:' + col + '">' + esc(s.title) + '</div>'
+    + '<div class="poster-dept-pa">' + esc(s.pa) + '</div>'
+    + '<div class="poster-bar" style="background:' + col + '"></div>'
+    + '<div class="poster-tag">' + esc(s.tagline) + '</div>'
+    + '</div>';
+}
+
+function credIcon(text) {
+  var t = text.toLowerCase();
+  if (/(years|yrs|surgeries|deliveries)/.test(t)) return '⭐';
+  if (/(first in india|pioneer|first to|recognition|govt)/.test(t)) return '🏆';
+  if (/(uk|england|london|birmingham|cambridge|glasgow)/.test(t)) return '🌍';
+  if (/(ex consultant|ex |consultant,|hospital|clinic|director)/.test(t)) return '🏥';
+  if (/(mbbs|md\b|ms\b|dnb|fam|orthodontics|post-graduation)/.test(t)) return '🎓';
+  return '🏅';
+}
+
+function rDoctor(s) {
+  var c = deptCls(s.department);
+  var col = slideColour(s.department);
+  var imgHtml = s.img
+    ? '<img src="' + esc(s.img) + '" alt="' + esc(s.name)
+      + '" onerror="this.parentNode.innerHTML=\'<div class=doc-noimg>👨‍⚕️</div>\'">'
+    : '<div class="doc-noimg">👨‍⚕️</div>';
+  var creds = String(s.credentials || '').split(/\s*·\s*/).filter(Boolean);
+  var credHtml = creds.map(function(item) {
+    return '<div class="doc-cred-item" style="border-color:' + col + '55">'
+      + '<span class="doc-cred-icon">' + credIcon(item) + '</span>'
+      + '<span>' + esc(item) + '</span></div>';
+  }).join('');
+  return '<div class="sl-doc doc-bg-' + c + '">'
+    + '<div class="doc-img">' + imgHtml + '</div>'
+    + '<div class="doc-body">'
+    + '<div class="doc-kyd"><span class="doc-kyd-en">Know Your Doctor</span>'
+    + '<span class="doc-kyd-pa">· ਆਪਣੇ ਡਾਕਟਰ ਨੂੰ ਜਾਣੋ</span></div>'
+    + '<div class="doc-eyebrow" style="color:' + col + '">' + esc(s.department) + '</div>'
+    + '<div class="doc-name">' + esc(s.name) + '</div>'
+    + '<div class="doc-title" style="color:' + col + '">' + esc(s.title) + '</div>'
+    + '<div class="doc-title-pa">' + esc(s.pa) + '</div>'
+    + '<div class="doc-cred-list">' + credHtml + '</div>'
+    + '</div></div>';
+}
+
+function rPhotoInfo(s) {
+  var c = deptCls(s.department);
+  var col = slideColour(s.department);
+  var bulletHtml = (s.bullets || []).map(function(b) {
+    var en = Array.isArray(b) ? b[0] : b;
+    var pa = Array.isArray(b) ? b[1] : '';
+    var icon = (Array.isArray(b) && b[2]) ? b[2] : '●';
+    return '<div class="pc-bullet" style="border-color:' + col + '">'
+      + '<span class="pc-bullet-icon">' + icon + '</span>'
+      + '<div><div class="pc-bullet-en">' + esc(en) + '</div>'
+      + (pa ? '<div class="pc-bullet-pa">' + esc(pa) + '</div>' : '')
+      + '</div></div>';
+  }).join('');
+  return '<div class="sl-photo doc-bg-' + c + '">'
+    + pcImgHtml(s)
+    + '<div class="pc-body">' + pcHeaderHtml(s, col)
+    + '<div class="pc-bullets">' + bulletHtml + '</div>'
+    + '</div></div>';
+}
+
+function pcImgHtml(s) {
+  var attrHtml = s.attribution
+    ? '<a class="pc-attribution" href="' + esc(s.attribution.url) + '" target="_blank" rel="noopener">'
+      + esc(s.attribution.text) + '</a>'
+    : '';
+  var img = s.imgKey || s.img;
+  return '<div class="pc-img">'
+    + (img ? '<img src="' + esc(img) + '" alt="' + esc(s.title) + '">' : '')
+    + attrHtml + '</div>';
+}
+
+function pcHeaderHtml(s, col) {
+  return '<div class="pc-eyebrow" style="color:' + col + '">' + esc(s.department) + '</div>'
+    + '<div class="pc-title">' + esc(s.title) + '</div>'
+    + (s.pa ? '<div class="pc-title-pa">' + esc(s.pa) + '</div>' : '');
+}
+
+function rInfo(s) {
+  var c = deptCls(s.department);
+  var col = slideColour(s.department);
+  var pts = (s.points || []).map(function(p) {
+    var en = Array.isArray(p) ? p[0] : p;
+    var pa = Array.isArray(p) ? p[1] : '';
+    return '<div class="pc-bullet" style="border-color:' + col + '">'
+      + '<span class="pc-bullet-icon">◆</span>'
+      + '<div><div class="pc-bullet-en">' + esc(en) + '</div>'
+      + (pa ? '<div class="pc-bullet-pa">' + esc(pa) + '</div>' : '')
+      + '</div></div>';
+  }).join('');
+  return '<div class="sl-photo doc-bg-' + c + '">'
+    + pcImgHtml(s)
+    + '<div class="pc-body">' + pcHeaderHtml(s, col)
+    + '<div class="pc-bullets">' + pts + '</div>'
+    + '</div></div>';
+}
+
+function rMyth(s) {
+  var c = deptCls(s.department);
+  var col = slideColour(s.department);
+  var mythEn  = Array.isArray(s.myth)  ? s.myth[0]  : s.myth;
+  var mythPa  = Array.isArray(s.myth)  ? s.myth[1]  : '';
+  var truthEn = Array.isArray(s.truth) ? s.truth[0] : s.truth;
+  var truthPa = Array.isArray(s.truth) ? s.truth[1] : '';
+  return '<div class="sl-photo doc-bg-' + c + '">'
+    + pcImgHtml(s)
+    + '<div class="pc-body">' + pcHeaderHtml(s, col)
+    + '<div class="pc-myth-wrap">'
+    + '<div class="pc-myth-box m"><div class="pc-myth-lbl">✗ MYTH</div>'
+    + '<div class="pc-myth-en">' + esc(mythEn) + '</div>'
+    + (mythPa ? '<div class="pc-myth-pa">' + esc(mythPa) + '</div>' : '')
+    + '</div>'
+    + '<div class="pc-myth-box t"><div class="pc-myth-lbl">✓ TRUTH</div>'
+    + '<div class="pc-myth-en">' + esc(truthEn) + '</div>'
+    + (truthPa ? '<div class="pc-myth-pa">' + esc(truthPa) + '</div>' : '')
+    + '</div></div>'
+    + '</div></div>';
+}
+
+function rSteps(s) {
+  var c = deptCls(s.department);
+  var col = slideColour(s.department);
+  var items = (s.steps || []).map(function(st, i) {
+    var en = Array.isArray(st) ? st[0] : st;
+    var pa = Array.isArray(st) ? st[1] : '';
+    return '<div class="pc-step-row">'
+      + '<div class="pc-step-n" style="color:' + STEP_CLR[i % STEP_CLR.length] + '">'
+      + pad2(i+1) + '</div>'
+      + '<div><div class="pc-step-en">' + esc(en) + '</div>'
+      + (pa ? '<div class="pc-step-pa">' + esc(pa) + '</div>' : '')
+      + '</div></div>';
+  }).join('');
+  return '<div class="sl-photo doc-bg-' + c + '">'
+    + pcImgHtml(s)
+    + '<div class="pc-body">' + pcHeaderHtml(s, col)
+    + '<div class="pc-steps">' + items + '</div>'
+    + '</div></div>';
+}
+
+function rDD(s) {
+  var c = deptCls(s.department);
+  var col = slideColour(s.department);
+  function col2(items, isDo) {
+    return (items || []).map(function(item) {
+      var en = Array.isArray(item) ? item[0] : item;
+      var pa = Array.isArray(item) ? item[1] : '';
+      return '<div class="pc-dd-row">'
+        + '<div class="pc-dd-icon" style="color:' + (isDo ? '#0e8a5f' : '#e0334a') + '">'
+        + (isDo ? '✓' : '✗') + '</div>'
+        + '<div><div class="pc-dd-en">' + esc(en) + '</div>'
+        + (pa ? '<div class="pc-dd-pa">' + esc(pa) + '</div>' : '')
+        + '</div></div>';
+    }).join('');
+  }
+  return '<div class="sl-photo doc-bg-' + c + '">'
+    + pcImgHtml(s)
+    + '<div class="pc-body">' + pcHeaderHtml(s, col)
+    + '<div class="pc-dd">'
+    + '<div class="pc-dd-col do"><div class="pc-dd-head">✓ Do\'s</div>' + col2(s.dos, true) + '</div>'
+    + '<div class="pc-dd-col dont"><div class="pc-dd-head">✗ Don\'ts</div>' + col2(s.donts, false) + '</div>'
+    + '</div></div></div>';
+}
+
+function rSvc(s) {
+  var c = deptCls(s.department);
+  var col = slideColour(s.department);
+  var items = (s.items || []).map(function(item) {
+    return '<div class="svc-item" style="border-color:' + col + '33">' + esc(item) + '</div>';
+  }).join('');
+  return '<div class="sl-svc tint-' + c + '">'
+    + '<div class="sl-bar">' + tagHtml(s.department)
+    + '<div class="sl-title">' + esc(s.title) + '</div>'
+    + (s.pa ? '<div class="sl-title-pa">' + esc(s.pa) + '</div>' : '')
+    + '</div>'
+    + '<div class="sl-body"><div class="svc-grid">' + items + '</div></div>'
+    + '</div>';
+}
+
+function rMotion(s) {
+  var c = deptCls(s.department);
+  return '<div class="sl-motion tint-' + c + '">'
+    + '<div class="motion-stage">' + motionScene(s.theme) + '</div>'
+    + '<div class="motion-cap">'
+    + '<div class="motion-cap-en">' + esc(s.title) + '</div>'
+    + (s.pa ? '<div class="motion-cap-pa">' + esc(s.pa) + '</div>' : '')
+    + '</div></div>';
+}
+
+function motionScene(theme) {
+  switch (theme) {
+    case 'cataract':
+      return '<div class="sc-cat">'
+        + '<div class="cat-ring cat-ring1"></div>'
+        + '<div class="cat-ring cat-ring2"></div>'
+        + '<div class="cat-eye"></div>'
+        + '<div class="cat-iris"><div class="cat-pupil"></div>'
+        + '<div class="cat-cloud"></div><div class="cat-iol"></div></div>'
+        + '<div class="cat-dot"></div></div>';
+    case 'lasik':
+      return '<div class="sc-las">'
+        + '<div class="las-cornea"><div class="las-flap"></div></div>'
+        + '<div class="las-beam"></div><div class="las-dot"></div></div>';
+    case 'icl':
+      return '<div class="sc-icl">'
+        + '<div class="icl-outer"></div>'
+        + '<div class="icl-iris"><div class="icl-pupil"></div></div>'
+        + '<div class="icl-lens"></div></div>';
+    case 'pregnancy':
+      return '<div class="sc-prg">'
+        + '<div class="prg-ring"></div><div class="prg-ring prg-ring2"></div>'
+        + '<div class="prg-body"><div class="prg-baby">👶</div></div></div>';
+    case 'mind':
+      return '<div class="sc-mnd">'
+        + '<div class="mnd-ring"></div><div class="mnd-ring mnd-ring2"></div>'
+        + '<div class="mnd-brain">🧠</div>'
+        + '<div class="mnd-spark"></div><div class="mnd-spark"></div>'
+        + '<div class="mnd-spark"></div><div class="mnd-spark"></div></div>';
+    default:
+      return '<div class="sc-cat">'
+        + '<div class="cat-eye"></div>'
+        + '<div class="cat-iris"><div class="cat-pupil"></div></div></div>';
+  }
+}
+
+function shuffle(arr) {
+  var a = arr.slice();
+  for (var i = a.length - 1; i > 0; i--) {
+    var j = 0 | Math.random() * (i + 1);
+    var t = a[i]; a[i] = a[j]; a[j] = t;
+  }
+  return a;
+}
+
+/* Doctor follow-up: after a department's content slide, the next slide
+   is always that department's "Know Your Doctor" card. OBG alternates
+   between its two doctors so both get airtime. */
+var DEPT_DOCTORS = {
+  'Ophthalmology': ['Dr Varun Baweja'],
+  'Obstetrics & Gynaecology': ['Dr Namrata Baweja', 'Dr Geeta Baweja'],
+  'Neuropsychiatry': ['Dr Tarun Baweja'],
+  'Skin & Cosmetology': ['Dr Pooja Baweja']
+};
+var TRIGGERED_DOCTOR_NAMES = Object.keys(DEPT_DOCTORS).reduce(function(acc, k) {
+  return acc.concat(DEPT_DOCTORS[k]);
+}, []);
+var obgToggle = 0;
+var pendingDoctorSlide = null;
+
+function pickDoctorFor(dept) {
+  var names = DEPT_DOCTORS[dept];
+  if (!names) return null;
+  var name;
+  if (names.length > 1) {
+    name = names[obgToggle % names.length];
+    obgToggle++;
+  } else {
+    name = names[0];
+  }
+  return window.BMH_SLIDES.find(function(s) { return s.kind === 'doctor' && s.name === name; });
+}
+
+function initSlides() {
+  if (!window.BMH_SLIDES || !window.BMH_SLIDES.length) {
+    /* Queue-slides.js not loaded — retry in 1 second */
+    setTimeout(initSlides, 1000);
+    return;
+  }
+  /* Every TV shows the same full media deck, randomly — only the queue
+     panel is scoped to a department. Doctor slides are excluded here
+     since they're injected right after their own department's slide. */
+  slides = shuffle(window.BMH_SLIDES.filter(function(s) {
+    return !(s.kind === 'doctor' && TRIGGERED_DOCTOR_NAMES.indexOf(s.name) >= 0);
+  }));
+  if (!slides.length) slides = shuffle(window.BMH_SLIDES);
+  slideIdx = 0;
+  /* Don't auto-start slides here — the rotation loop handles it */
+}
+
+function showNextSlide() {
+  var s;
+  if (pendingDoctorSlide) {
+    s = pendingDoctorSlide;
+    pendingDoctorSlide = null;
+  } else {
+    if (!slides.length) return;
+    s = slides[slideIdx];
+    slideIdx = (slideIdx + 1) % slides.length;
+    if (slideIdx === 0) slides = shuffle(slides);
+    if (s.kind !== 'doctor') {
+      var doc = pickDoctorFor(s.department);
+      if (doc) pendingDoctorSlide = doc;
+    }
+  }
+
+  var incoming = document.getElementById(slotA ? 'sl-a' : 'sl-b');
+  var outgoing  = document.getElementById(slotA ? 'sl-b' : 'sl-a');
+  slotA = !slotA;
+
+  incoming.innerHTML   = renderSlide(s);
+  incoming.className   = 'sl';
+  void incoming.offsetWidth;
+  incoming.className   = 'sl on';
+  outgoing.className   = 'sl out';
+  setTimeout(function() { outgoing.className = 'sl'; }, 800);
+}
+
+/* ── Queue ↔ Slide rotation ──────────────────────── */
+var activeMode = 'queue';
+var modeStart  = Date.now();
+var modeDur    = QUEUE_MS;
+
+function setMode(mode) {
+  activeMode = mode;
+  modeStart  = Date.now();
+  modeDur    = mode === 'queue' ? QUEUE_MS : MEDIA_MS;
+  document.getElementById('queue-panel').classList.toggle('active', mode === 'queue');
+  document.getElementById('media-panel').classList.toggle('active', mode === 'media');
+  if (mode === 'queue') {
+    renderQueue();
+  } else {
+    showNextSlide();
+  }
+  /* Reset progress bar */
+  var bar = document.getElementById('prog-bar');
+  bar.style.transition = 'none';
+  bar.style.width = '0%';
+  void bar.offsetWidth;
+  bar.style.transition = 'width ' + modeDur + 'ms linear';
+  bar.style.width = '100%';
+}
+
+function rotateTick() {
+  if (Date.now() - modeStart >= modeDur) {
+    setMode(activeMode === 'queue' ? 'media' : 'queue');
+  }
+}
+
+/* ── Boot ────────────────────────────────────────── */
+initSlides();
+connectFirebase();
+setMode('queue');
+setInterval(rotateTick, 500);
+
+})();
+</script>
+</body>
+</html>

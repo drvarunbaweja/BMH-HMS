@@ -58,7 +58,15 @@
       "WebFetch(domain:bmhchandigarh.com)",
       "WebFetch(domain:www.practo.com)",
       "Bash(python3 -c ' *)",
-      "Bash(git -C /Users/varunbaweja/GitHub/BMH-HMS log --oneline -5)"
+      "Bash(git -C /Users/varunbaweja/GitHub/BMH-HMS log --oneline -5)",
+      "WebFetch(domain:commons.wikimedia.org)",
+      "Bash(curl -sL \"https://upload.wikimedia.org/wikipedia/commons/c/cb/Fundus_retinopathy_EDA03.JPG\" -o /Users/varunbaweja/GitHub/BMH-HMS/src/public/assets/queue-media/eye/sourced/diabetic-retinopathy-nei.jpg)",
+      "Bash(curl -sL \"https://upload.wikimedia.org/wikipedia/commons/3/3f/Fundus_photo_showing_scatter_laser_surgery_for_diabetic_retinopathy_EDA09.JPG\" -o /Users/varunbaweja/GitHub/BMH-HMS/src/public/assets/queue-media/eye/sourced/prp-laser-nei.jpg)",
+      "Bash(file /Users/varunbaweja/GitHub/BMH-HMS/src/public/assets/queue-media/eye/sourced/*.jpg)",
+      "WebFetch(domain:www.pexels.com)",
+      "Bash(curl -sL \"https://images.pexels.com/photos/3958565/pexels-photo-3958565.jpeg?cs=srgb&dl=pexels-polina-zimmerman-3958565.jpg&fm=jpg\" -o /Users/varunbaweja/GitHub/BMH-HMS/src/public/assets/queue-media/obg/sourced/menstrual-pain-pexels.jpg)",
+      "Read(//private/tmp/claude-501/**)",
+      "Read(//private/tmp/**)"
     ]
   }
 }
