@@ -206,11 +206,6 @@ html, body {
 .sl.on  { opacity:1; z-index:2 }
 .sl.out { opacity:0; z-index:1 }
 
-/* ── Slide tints ── */
-.tint-eye  { background:linear-gradient(160deg,#020d1e,#061a35) }
-.tint-obg  { background:linear-gradient(160deg,#1e0210,#380620) }
-.tint-psy  { background:linear-gradient(160deg,#0e0220,#1e0640) }
-.tint-skn  { background:linear-gradient(160deg,#1e1200,#321e00) }
 
 /* Slide header */
 .sl-bar { padding:16px 28px 12px; flex-shrink:0 }
@@ -224,73 +219,41 @@ html, body {
 .sl-tag.psy  { background:rgba(180,122,255,.12); color:#b47aff; border:1px solid rgba(180,122,255,.28) }
 .sl-tag.skn  { background:rgba(212,168,67,.12); color:#d4a843; border:1px solid rgba(212,168,67,.28) }
 .sl-title { font-size:clamp(22px,2.8vw,30px); font-weight:800;
-  color:#fff; line-height:1.15 }
-.sl-title-pa { font-size:clamp(16px,2vw,22px); color:rgba(255,255,255,.6);
+  color:var(--ink); line-height:1.15 }
+.sl-title-pa { font-size:clamp(16px,2vw,22px); color:var(--muted);
   margin-top:4px }
 
-/* INFO */
-.sl-info .sl-body { flex:1; padding:12px 28px 16px;
-  display:flex; flex-direction:column; gap:12px; overflow:hidden }
-.info-pt { display:flex; gap:12px; align-items:flex-start;
-  padding:12px 14px; background:rgba(255,255,255,.05);
-  border-radius:10px; border-left:3px solid rgba(255,255,255,.15) }
-.info-icon { font-size:20px; flex-shrink:0; margin-top:2px }
-.info-en { font-size:clamp(16px,1.9vw,20px); color:#f0f8ff; line-height:1.35 }
-.info-pa { font-size:clamp(13px,1.5vw,17px); color:rgba(180,220,255,.6);
-  margin-top:3px; line-height:1.4 }
-
-/* MYTH */
-.sl-myth .sl-body { flex:1; padding:12px 28px 16px;
-  display:grid; grid-template-rows:1fr 1fr; gap:14px }
-.myth-box { border-radius:14px; padding:18px 20px;
-  display:flex; flex-direction:column; gap:6px }
-.myth-box.m { background:rgba(255,60,80,.09); border:1.5px solid rgba(255,60,80,.35) }
-.myth-box.t { background:rgba(0,210,130,.07); border:1.5px solid rgba(0,210,130,.3) }
-.myth-lbl { font-size:11px; font-weight:800; letter-spacing:2px;
-  text-transform:uppercase; margin-bottom:2px }
-.myth-box.m .myth-lbl { color:#ff5060 }
-.myth-box.t .myth-lbl { color:#00c878 }
-.myth-en { font-size:clamp(16px,1.9vw,20px); color:#f0f8ff; line-height:1.4 }
-.myth-pa { font-size:clamp(13px,1.5vw,16px); color:rgba(180,220,255,.6);
-  margin-top:3px; line-height:1.4 }
-
-/* STEPS */
-.sl-steps .sl-body { flex:1; padding:8px 28px 14px;
-  display:flex; flex-direction:column; gap:9px; overflow:hidden }
-.step-row { display:flex; gap:14px; align-items:flex-start;
-  padding:9px 12px; background:rgba(255,255,255,.04); border-radius:10px }
-.step-n { font-size:28px; font-weight:900; min-width:38px;
-  text-align:center; flex-shrink:0; line-height:1 }
-.step-en { font-size:clamp(14px,1.7vw,18px); color:#f0f8ff; line-height:1.3 }
-.step-pa { font-size:clamp(12px,1.4vw,15px); color:rgba(180,220,255,.6);
-  margin-top:2px; line-height:1.35 }
-
-/* D&D */
-.sl-dd .sl-body { flex:1; padding:10px 20px 14px;
-  display:grid; grid-template-columns:1fr 1fr; gap:12px }
-.dd-col { border-radius:13px; padding:14px 16px;
-  display:flex; flex-direction:column; gap:9px }
-.dd-col.do   { background:rgba(0,210,130,.06); border:1.5px solid rgba(0,210,130,.25) }
-.dd-col.dont { background:rgba(255,60,80,.06);  border:1.5px solid rgba(255,60,80,.25) }
-.dd-head { font-size:12px; font-weight:800; letter-spacing:1.5px;
-  text-transform:uppercase; margin-bottom:3px }
-.dd-col.do   .dd-head { color:#00c878 }
-.dd-col.dont .dd-head { color:#ff5060 }
-.dd-row { display:flex; gap:8px; align-items:flex-start }
-.dd-icon { font-size:14px; flex-shrink:0; margin-top:1px }
-.dd-en { font-size:clamp(13px,1.6vw,16px); color:#f0f8ff; line-height:1.3 }
-.dd-pa { font-size:clamp(11px,1.3vw,14px); color:rgba(180,220,255,.55);
-  margin-top:2px; line-height:1.3 }
-
-/* SERVICES */
-.sl-svc .sl-body { flex:1; padding:10px 24px 16px;
+/* SERVICES — light card grid */
+.sl-svc .sl-bar { padding:20px 40px 4px }
+.sl-svc .sl-body { flex:1; padding:8px 40px 18px;
   display:flex; flex-direction:column }
 .svc-grid { display:grid; grid-template-columns:repeat(3,1fr);
-  gap:10px; flex:1 }
-.svc-item { background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1);
-  border-radius:11px; display:flex; align-items:center; justify-content:center;
-  padding:8px 12px; text-align:center;
-  font-size:clamp(13px,1.6vw,17px); font-weight:600; color:#f0f8ff; line-height:1.25 }
+  gap:11px; flex:1 }
+.svc-item { background:rgba(255,255,255,.75); border:1.5px solid;
+  border-radius:12px; display:flex; align-items:center; justify-content:center;
+  padding:10px 14px; text-align:center; box-shadow:0 2px 8px rgba(18,59,109,.06);
+  font-size:clamp(13px,1.5vw,16px); font-weight:700; color:var(--ink); line-height:1.28 }
+
+/* MULTI-COLUMN SERVICES (all departments in one slide) */
+.svc-multi-grid { display:grid; grid-template-columns:repeat(4,1fr);
+  gap:14px; flex:1; min-height:0 }
+.svc-col { display:flex; flex-direction:column; gap:5px; min-height:0 }
+.svc-col-head { font-size:clamp(12px,1.4vw,16px); font-weight:900;
+  padding:6px 4px; border-radius:9px; text-align:center;
+  color:#fff; letter-spacing:.3px }
+.svc-col-list { display:flex; flex-direction:column; gap:4px; overflow:hidden }
+.svc-col-item { background:rgba(255,255,255,.75); border-left:3px solid;
+  border-radius:7px; padding:4.5px 9px; font-size:clamp(9.5px,.98vw,11.5px);
+  font-weight:600; color:var(--ink); line-height:1.2;
+  box-shadow:0 1px 5px rgba(18,59,109,.05) }
+
+/* TPA / EMPANELMENT GRID */
+.tpa-grid { display:grid; grid-template-columns:repeat(4,1fr);
+  gap:9px; flex:1; align-content:start }
+.tpa-item { background:rgba(255,255,255,.78); border:1.5px solid rgba(18,59,109,.12);
+  border-radius:10px; padding:10px 8px; text-align:center;
+  font-size:clamp(11px,1.15vw,14px); font-weight:700; color:var(--ink);
+  box-shadow:0 2px 7px rgba(18,59,109,.05); line-height:1.25 }
 
 /* DOCTOR — light, photo-forward profile card */
 .sl-doc { flex-direction:row !important; background:linear-gradient(135deg,#f8fbff,#eef5fb) }
@@ -411,31 +374,32 @@ html, body {
 .pc-dd-en { font-size:clamp(11.5px,1.2vw,14px); font-weight:700; color:var(--ink); line-height:1.28 }
 .pc-dd-pa { font-size:clamp(10px,1.05vw,12px); color:var(--muted); margin-top:1px; line-height:1.25 }
 
-/* POSTER */
+/* POSTER — light, bold brand-colour title card */
 .sl-poster {
   align-items:center; justify-content:center; text-align:center; padding:36px;
 }
 .poster-pre { font-size:12px; font-weight:800; letter-spacing:3.5px;
-  text-transform:uppercase; color:rgba(255,255,255,.55); margin-bottom:22px }
+  text-transform:uppercase; color:var(--muted); margin-bottom:22px }
 .poster-dept { font-size:clamp(40px,6vw,60px); font-weight:900; line-height:1;
   letter-spacing:-1px; margin-bottom:8px }
 .poster-dept-pa { font-size:clamp(26px,3.5vw,38px); font-weight:600;
-  color:rgba(255,255,255,.72); margin-bottom:20px }
+  color:var(--muted); margin-bottom:20px }
 .poster-bar { width:72px; height:3.5px; border-radius:2px; margin:0 auto 18px }
-.poster-tag { font-size:clamp(14px,1.7vw,19px); color:rgba(255,255,255,.55); line-height:1.7 }
-.poster-eye  { background:linear-gradient(135deg,#001e3c,#003d7a) }
-.poster-obg  { background:linear-gradient(135deg,#3d0024,#9c1850) }
-.poster-psy  { background:linear-gradient(135deg,#1a0040,#52009c) }
-.poster-skn  { background:linear-gradient(135deg,#2d1c00,#7a4d00) }
+.poster-tag { font-size:clamp(14px,1.7vw,19px); color:var(--muted); line-height:1.7 }
 
 /* MOTION */
 .sl-motion { align-items:center; justify-content:flex-end; padding-bottom:36px }
-.motion-stage { position:absolute; inset:0; display:flex;
-  align-items:center; justify-content:center; overflow:hidden }
+.motion-stage { position:absolute; top:0; left:0; right:0; bottom:118px;
+  display:flex; align-items:center; justify-content:center; overflow:hidden }
+.motion-stage::before {
+  content:''; position:absolute; width:min(56vh,380px); height:min(56vh,380px);
+  border-radius:50%; background:radial-gradient(circle at 35% 30%,#0e2f52,#03080f);
+  box-shadow:0 30px 70px rgba(18,59,109,.28);
+}
 .motion-cap { text-align:center; position:relative; z-index:5 }
-.motion-cap-en { font-size:clamp(22px,3vw,30px); font-weight:800; color:#fff;
-  text-shadow:0 2px 14px rgba(0,0,0,.7) }
-.motion-cap-pa { font-size:clamp(16px,2vw,22px); color:rgba(255,255,255,.6); margin-top:5px }
+.motion-cap-en { font-size:clamp(22px,3vw,30px); font-weight:800; color:var(--ink);
+  text-shadow:none }
+.motion-cap-pa { font-size:clamp(16px,2vw,22px); color:var(--muted); margin-top:5px }
 
 /* Motion scenes CSS animations */
 .sc-cat { width:300px; height:300px; position:relative;
@@ -978,7 +942,9 @@ function renderSlide(s) {
     case 'services': return rSvc(s);
     case 'motion':   return rMotion(s);
     case 'photo':    return rPhotoInfo(s);
-    default: return '<div class="sl tint-eye"></div>';
+    case 'services4': return rSvcAll(s);
+    case 'tpa':      return rTpa(s);
+    default: return '<div class="sl doc-bg-eye"></div>';
   }
 }
 
@@ -990,7 +956,7 @@ function tagHtml(dept) {
 function rPoster(s) {
   var c = deptCls(s.department);
   var col = slideColour(s.department);
-  return '<div class="sl-poster poster-' + c + '">'
+  return '<div class="sl-poster doc-bg-' + c + '">'
     + '<div class="poster-pre">Baweja Multispeciality Hospital</div>'
     + '<div class="poster-dept" style="color:' + col + '">' + esc(s.title) + '</div>'
     + '<div class="poster-dept-pa">' + esc(s.pa) + '</div>'
@@ -1163,7 +1129,7 @@ function rSvc(s) {
   var items = (s.items || []).map(function(item) {
     return '<div class="svc-item" style="border-color:' + col + '33">' + esc(item) + '</div>';
   }).join('');
-  return '<div class="sl-svc tint-' + c + '">'
+  return '<div class="sl-svc doc-bg-' + c + '">'
     + '<div class="sl-bar">' + tagHtml(s.department)
     + '<div class="sl-title">' + esc(s.title) + '</div>'
     + (s.pa ? '<div class="sl-title-pa">' + esc(s.pa) + '</div>' : '')
@@ -1172,9 +1138,43 @@ function rSvc(s) {
     + '</div>';
 }
 
+function rSvcAll(s) {
+  var cols = (s.columns || []).map(function(col) {
+    var items = (col.items || []).map(function(item) {
+      return '<div class="svc-col-item" style="border-color:' + col.colour + '">' + esc(item) + '</div>';
+    }).join('');
+    return '<div class="svc-col">'
+      + '<div class="svc-col-head" style="background:' + col.colour + '">'
+      + esc(col.name) + '<div style="font-size:.7em;font-weight:600;opacity:.85;margin-top:2px">'
+      + esc(col.pa) + '</div></div>'
+      + '<div class="svc-col-list">' + items + '</div>'
+      + '</div>';
+  }).join('');
+  return '<div class="sl-svc doc-bg-general">'
+    + '<div class="sl-bar">'
+    + '<div class="sl-title">' + esc(s.title) + '</div>'
+    + (s.pa ? '<div class="sl-title-pa">' + esc(s.pa) + '</div>' : '')
+    + '</div>'
+    + '<div class="sl-body"><div class="svc-multi-grid">' + cols + '</div></div>'
+    + '</div>';
+}
+
+function rTpa(s) {
+  var items = (s.items || []).map(function(item) {
+    return '<div class="tpa-item">' + esc(item) + '</div>';
+  }).join('');
+  return '<div class="sl-svc doc-bg-general">'
+    + '<div class="sl-bar">'
+    + '<div class="sl-title">' + esc(s.title) + '</div>'
+    + (s.pa ? '<div class="sl-title-pa">' + esc(s.pa) + '</div>' : '')
+    + '</div>'
+    + '<div class="sl-body"><div class="tpa-grid">' + items + '</div></div>'
+    + '</div>';
+}
+
 function rMotion(s) {
   var c = deptCls(s.department);
-  return '<div class="sl-motion tint-' + c + '">'
+  return '<div class="sl-motion doc-bg-' + c + '">'
     + '<div class="motion-stage">' + motionScene(s.theme) + '</div>'
     + '<div class="motion-cap">'
     + '<div class="motion-cap-en">' + esc(s.title) + '</div>'
