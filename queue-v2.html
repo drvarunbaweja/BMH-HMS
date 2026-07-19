@@ -51,8 +51,34 @@ html, body {
 }
 .hdr-logos { display:flex; align-items:center; gap:14px; flex:0 0 auto }
 .hdr-logos img { height:48px; object-fit:contain }
-.hdr-logos .logo-flame { height:56px; mix-blend-mode:multiply }
-.logo-bmh { height:46px; object-fit:contain; mix-blend-mode:multiply; flex:0 0 auto }
+.hdr-logos .logo-flame { height:56px; mix-blend-mode:multiply; position:relative; z-index:1 }
+
+/* Flame flicker — a soft warm glow overlaid exactly where the flame
+   graphic sits (above the J), animated since the logo itself is a
+   static raster image and can't be re-cut into moving parts. */
+.logo-flame-wrap { position:relative; display:inline-flex; height:56px }
+.flame-glow {
+  position:absolute; left:41%; top:2%; width:22%; height:56%;
+  background:radial-gradient(ellipse at 50% 65%,
+    rgba(255,150,40,.95), rgba(255,70,20,.55) 55%, transparent 78%);
+  filter:blur(2.5px); mix-blend-mode:multiply;
+  border-radius:50%; pointer-events:none; z-index:2;
+  animation:flameFlicker 1.6s ease-in-out infinite;
+  transform-origin:50% 85%;
+}
+@keyframes flameFlicker {
+  0%,100% { opacity:.5;  transform:scale(1,1)     translateY(0) }
+  22%     { opacity:.85; transform:scale(1.1,.92)  translateY(-1.5px) }
+  48%     { opacity:.6;  transform:scale(.92,1.08) translateY(1px) }
+  70%     { opacity:.9;  transform:scale(1.06,.95) translateY(-1px) }
+  85%     { opacity:.68; transform:scale(.97,1.04) translateY(.5px) }
+}
+
+/* BMH — spins gently on its own axis */
+.logo-bmh-wrap { perspective:400px; display:inline-flex; height:46px; flex:0 0 auto }
+.logo-bmh { height:46px; object-fit:contain; mix-blend-mode:multiply;
+  animation:bmhSpin 7s linear infinite; backface-visibility:visible }
+@keyframes bmhSpin { from { transform:rotateY(0deg) } to { transform:rotateY(360deg) } }
 .hdr-name {
   font-size:20px; font-weight:900; color:var(--blue); line-height:1.1;
   white-space:nowrap; text-align:center; flex:1;
@@ -87,9 +113,9 @@ html, body {
 /* ════════ QUEUE PANEL ════════ */
 #queue-panel {
   display:grid;
-  grid-template-rows:auto 1fr;
-  padding:24px 36px 18px;
-  gap:18px;
+  grid-template-rows:auto 1fr auto;
+  padding:24px 36px 14px;
+  gap:10px;
 }
 .q-head {
   display:flex; align-items:flex-end;
@@ -225,7 +251,7 @@ html, body {
 
 /* SERVICES — light card grid */
 .sl-svc .sl-bar { padding:20px 40px 4px }
-.sl-svc .sl-body { flex:1; padding:8px 40px 18px;
+.sl-svc .sl-body { flex:1; padding:8px 40px 18px; min-height:0; overflow:hidden;
   display:flex; flex-direction:column }
 .svc-grid { display:grid; grid-template-columns:repeat(3,1fr);
   gap:11px; flex:1 }
@@ -279,7 +305,10 @@ html, body {
 .doc-body {
   flex:1; padding:38px 42px 34px;
   display:flex; flex-direction:column; justify-content:center; gap:8px;
-  min-width:0;
+  min-width:0; min-height:0; overflow:hidden;
+}
+@media (max-height:760px) {
+  .doc-body { justify-content:flex-start; padding-top:24px }
 }
 .doc-kyd {
   display:inline-flex; align-items:center; gap:8px; align-self:flex-start;
@@ -324,14 +353,17 @@ html, body {
   backdrop-filter:blur(2px); line-height:1.3;
 }
 .pc-body {
-  flex:1; padding:34px 40px; min-width:0;
+  flex:1; padding:34px 40px; min-width:0; min-height:0; overflow:hidden;
   display:flex; flex-direction:column; justify-content:center; gap:10px;
 }
-.pc-bullets { display:flex; flex-direction:column; gap:10px; margin-top:10px }
+@media (max-height:760px) {
+  .pc-body { justify-content:flex-start; padding-top:20px }
+}
+.pc-bullets { display:flex; flex-direction:column; gap:8px; margin-top:8px }
 .pc-bullet {
   display:flex; align-items:flex-start; gap:12px;
   background:rgba(255,255,255,.75); border-radius:13px;
-  padding:12px 16px; border-left:4px solid;
+  padding:9px 16px; border-left:4px solid;
   box-shadow:0 2px 10px rgba(18,59,109,.06);
 }
 .pc-bullet-icon { font-size:19px; flex-shrink:0; margin-top:1px }
@@ -524,29 +556,35 @@ html, body {
 .sl.on .sl-bar,.sl.on .sl-body,.sl.on .doc-body { animation:fadeUp .5s ease both }
 .sl.on .sl-body { animation-delay:.08s }
 
-/* ════════ FOOTER ════════ */
+/* ════════ FOOTER — full-width bold ticker ════════ */
 #ftr {
   display:flex; align-items:center; gap:14px;
   background:var(--paper); border-top:1px solid var(--line);
   padding:0 20px; min-width:0; overflow:hidden;
 }
-.ftr-msg { font-size:13px; color:var(--muted); white-space:nowrap }
 .ftr-ticker { flex:1; overflow:hidden; height:100%;
   display:flex; align-items:center }
-.ticker-inner { white-space:nowrap; font-size:13px; color:var(--muted);
-  animation:tick 44s linear infinite }
+.ticker-inner { white-space:nowrap; font-size:15px; font-weight:800;
+  color:var(--ink); animation:tick 44s linear infinite }
 @keyframes tick { from{transform:translateX(60vw)} to{transform:translateX(-100%)} }
 .ftr-prog { height:3px; width:120px; background:var(--soft);
   border-radius:2px; overflow:hidden; flex-shrink:0 }
 .ftr-prog-bar { height:100%; background:var(--blue);
   border-radius:2px; transition:none }
 
+/* "Please stay seated" — lives inside the queue panel, above the footer */
+.q-seated-msg {
+  text-align:center; font-size:13px; font-weight:600; color:var(--muted);
+  padding-top:10px; flex-shrink:0;
+}
+
 @media (prefers-reduced-motion:reduce) {
   .sl { transition:none }
   .sl.on { opacity:1 }
   .cat-ring,.cat-ring1,.cat-ring2,.cat-cloud,.cat-iol,.cat-dot,
   .las-beam,.las-dot,.las-flap,.prg-ring,.prg-body,.prg-baby,
-  .mnd-ring,.mnd-brain,.mnd-spark,.icl-lens,.ticker-inner { animation:none }
+  .mnd-ring,.mnd-brain,.mnd-spark,.icl-lens,.ticker-inner,
+  .flame-glow,.logo-bmh { animation:none }
 }
 </style>
 </head>
@@ -556,9 +594,12 @@ html, body {
   <!-- ═══ HEADER ═══ -->
   <header id="hdr">
     <div class="hdr-logos">
-      <img class="logo-flame" src="./websites/chandigarh/images/brand/baweja-1.png"
-           alt="Baweja"
-           onerror="this.style.display='none'">
+      <div class="logo-flame-wrap">
+        <img class="logo-flame" src="./websites/chandigarh/images/brand/baweja-1.png"
+             alt="Baweja"
+             onerror="this.style.display='none'">
+        <span class="flame-glow" aria-hidden="true"></span>
+      </div>
     </div>
     <div class="hdr-name">
       Baweja Multispeciality Hospital
@@ -573,9 +614,11 @@ html, body {
         <div class="clock-time" id="clock-time">--:-- --</div>
         <div class="clock-date" id="clock-date"></div>
       </div>
-      <img class="logo-bmh" src="./assets/queue-media/hospital-logo.jpg"
-           alt="BMH"
-           onerror="this.style.display='none'">
+      <div class="logo-bmh-wrap">
+        <img class="logo-bmh" src="./assets/queue-media/hospital-logo.jpg"
+             alt="BMH"
+             onerror="this.style.display='none'">
+      </div>
     </div>
   </header>
 
@@ -597,6 +640,7 @@ html, body {
           <span>ਕਤਾਰ ਨਾਲ ਜੁੜ ਰਿਹਾ ਹੈ…</span>
         </div>
       </div>
+      <div class="q-seated-msg">Please stay seated — your name will appear when it is your turn &nbsp;·&nbsp; ਕਿਰਪਾ ਕਰਕੇ ਬੈਠੇ ਰਹੋ, ਵਾਰੀ ਆਉਣ ਤੇ ਨਾਮ ਦਿਖਾਇਆ ਜਾਵੇਗਾ</div>
     </div>
 
     <!-- Slide panel (slides cycle here) -->
@@ -609,7 +653,6 @@ html, body {
 
   <!-- ═══ FOOTER ═══ -->
   <footer id="ftr">
-    <div class="ftr-msg">Please stay seated — your name will appear when it is your turn &nbsp;·&nbsp; ਕਿਰਪਾ ਕਰਕੇ ਬੈਠੇ ਰਹੋ, ਵਾਰੀ ਆਉਣ ਤੇ ਨਾਮ ਦਿਖਾਇਆ ਜਾਵੇਗਾ</div>
     <div class="ftr-ticker">
       <div class="ticker-inner">
         Robotic AI Cataract Surgery &nbsp;·&nbsp; Blade-Free LASIK &amp; SMILE Pro &nbsp;·&nbsp;
@@ -1272,6 +1315,49 @@ function initSlides() {
   /* Don't auto-start slides here — the rotation loop handles it */
 }
 
+/* ── Auto-loaded slides ──────────────────────────────
+   Drop an image into assets/queue-media/<dept>/auto/ on GitHub and it
+   shows up here automatically — no code changes needed. Uses the public,
+   unauthenticated GitHub Contents API (works for any public repo). */
+var GH_OWNER = 'drvarunbaweja';
+var GH_REPO  = 'BMH-HMS';
+var AUTO_FOLDERS = { ophtho:'eye', obg:'obg', psych:'psych', skin:'skin' };
+var AUTO_IMG_EXT = /\.(jpe?g|png|webp)$/i;
+
+function titleFromFilename(name) {
+  var base = name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return base.replace(/\w\S*/g, function(w) {
+    return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+  });
+}
+
+function loadAutoSlides() {
+  Object.keys(AUTO_FOLDERS).forEach(function(deptKey) {
+    var folder = AUTO_FOLDERS[deptKey];
+    var cfg = DEPT_MAP[deptKey];
+    var apiUrl = 'https://api.github.com/repos/' + GH_OWNER + '/' + GH_REPO
+      + '/contents/src/public/assets/queue-media/' + folder + '/auto';
+    fetch(apiUrl).then(function(res) {
+      return res.ok ? res.json() : [];
+    }).then(function(files) {
+      if (!Array.isArray(files)) return;
+      var added = false;
+      files.forEach(function(f) {
+        if (f.type !== 'file' || !AUTO_IMG_EXT.test(f.name)) return;
+        var path = './assets/queue-media/' + folder + '/auto/' + f.name;
+        var already = window.BMH_SLIDES.some(function(s) { return (s.img || s.imgKey) === path; });
+        if (already) return;
+        window.BMH_SLIDES.push({
+          kind:'photo', title:titleFromFilename(f.name), pa:'', bullets:[],
+          img:path, department:cfg.slideKey
+        });
+        added = true;
+      });
+      if (added) initSlides();
+    }).catch(function() { /* offline or rate-limited — silently skip, curated slides still play */ });
+  });
+}
+
 function showNextSlide() {
   var s;
   if (pendingDoctorSlide) {
@@ -1327,15 +1413,22 @@ function setMode(mode) {
 
 function rotateTick() {
   if (Date.now() - modeStart >= modeDur) {
-    setMode(activeMode === 'queue' ? 'media' : 'queue');
+    /* A "Know Your Doctor" card queued right behind the slide that
+       triggered it must play immediately — don't let the queue panel
+       cut in between the topic slide and its doctor card. */
+    var next = activeMode === 'queue' ? 'media'
+      : (pendingDoctorSlide ? 'media' : 'queue');
+    setMode(next);
   }
 }
 
 /* ── Boot ────────────────────────────────────────── */
 initSlides();
+loadAutoSlides();
 connectFirebase();
 setMode('queue');
 setInterval(rotateTick, 500);
+setInterval(loadAutoSlides, 2 * 60 * 60 * 1000); /* re-check for new uploads every 2 hours */
 
 })();
 </script>
