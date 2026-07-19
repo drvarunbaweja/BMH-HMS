@@ -42,6 +42,14 @@
     return { kind:'photo', title:title, pa:pa, bullets:bullets,
              img:img, department:dept, attribution:attribution };
   }
+  function svc4(title, pa, columns) {
+    return { kind:'services4', title:title, pa:pa, columns:columns,
+             department:'General' };
+  }
+  function tpa(title, pa, items) {
+    return { kind:'tpa', title:title, pa:pa, items:items,
+             department:'General' };
+  }
 
   /* ════════════════════════════════════════════════════════════
      SLIDES
@@ -125,14 +133,6 @@
         './assets/queue-media/eye/sourced/prp-laser-nei.jpg',
         'Ophthalmology',
         { text:'National Eye Institute, NIH', url:'https://commons.wikimedia.org/wiki/File:Fundus_photo_showing_scatter_laser_surgery_for_diabetic_retinopathy_EDA09.JPG' }),
-
-    svc('Our Eye Care Services',
-        'ਸਾਡੀਆਂ ਅੱਖਾਂ ਦੀ ਦੇਖਭਾਲ ਸੇਵਾਵਾਂ',
-        ['Robotic AI Cataract Surgery','Blade-Free LASIK','SMILE Pro Laser',
-         'ICL Implantable Lens','MIGS for Glaucoma','Retina Surgery',
-         'Anti-VEGF Injections','PRP Laser','Corneal Procedures',
-         'Paediatric Eye Care','Complete Diagnostics','Low Vision Aids'],
-        'Ophthalmology'),
 
     steps('How to Use Eye Drops Correctly',
           'ਅੱਖਾਂ ਦੀਆਂ ਬੂੰਦਾਂ ਸਹੀ ਤਰੀਕੇ ਨਾਲ ਕਿਵੇਂ ਪਾਈਏ',
@@ -239,7 +239,8 @@
            'ਲੈਂਸ ਕੋਰਨੀਆ ਟਿਸ਼ੂ ਹਟਾਏ ਬਿਨਾਂ ਆਇਰਿਸ ਦੇ ਪਿੱਛੇ ਬੈਠਦਾ ਹੈ।'],
           ['Full assessment: retina, cornea, eye pressure and anterior chamber depth required.',
            'ਪੂਰੀ ਜਾਂਚ ਜ਼ਰੂਰੀ: ਰੈਟੀਨਾ, ਕੋਰਨੀਆ, ਪ੍ਰੈਸ਼ਰ ਅਤੇ ਐਂਟੀਰੀਅਰ ਚੈਂਬਰ ਡੈਪਥ।']],
-         './websites/ropar/images/migs-devices.jpg', 'Ophthalmology'),
+         './assets/queue-media/eye/sourced/icl-microsurgery.jpg', 'Ophthalmology',
+         { text:'Photo: Fernando Capetillo / Pexels', url:'https://www.pexels.com/photo/33857824/' }),
 
     info('Eye Emergency Warning Signs',
          'ਅੱਖਾਂ ਦੇ ਐਮਰਜੈਂਸੀ ਸੰਕੇਤ',
@@ -262,8 +263,21 @@
     motion('Cataract Surgery — Clear Vision Journey',
            'ਮੋਤੀਆਬਿੰਦ ਸਰਜਰੀ: ਸਾਫ਼ ਨਜ਼ਰ ਵੱਲ ਕਦਮ', 'cataract', 'Ophthalmology'),
 
-    motion('Blade-Free LASIK / SMILE Pro',
-           'ਬਲੇਡ-ਰਹਿਤ ਲੇਜ਼ਰ ਨਜ਼ਰ ਸੁਧਾਰ', 'lasik', 'Ophthalmology'),
+    photo('Blade-Free LASIK / SMILE Pro',
+        'ਬਲੇਡ-ਰਹਿਤ ਲੇਜ਼ਰ ਨਜ਼ਰ ਸੁਧਾਰ',
+        [
+          ['No blade, no flap — a bladeless laser reshapes the cornea precisely.',
+           'ਕੋਈ ਬਲੇਡ ਨਹੀਂ — ਲੇਜ਼ਰ ਸਹੀ ਢੰਗ ਨਾਲ ਕੋਰਨੀਆ ਦੀ ਸ਼ਕਲ ਬਦਲਦਾ ਹੈ।', '🔬'],
+          ['SMILE Pro treats each eye in as little as 8–10 seconds of laser time.',
+           'SMILE Pro ਹਰ ਅੱਖ ਦਾ ਇਲਾਜ ਸਿਰਫ਼ 8–10 ਸਕਿੰਟਾਂ ਵਿੱਚ ਕਰਦਾ ਹੈ।', '⚡'],
+          ['Minimal discomfort — most patients return to work within a day.',
+           'ਘੱਟੋ-ਘੱਟ ਤਕਲੀਫ਼ — ਜ਼ਿਆਦਾਤਰ ਮਰੀਜ਼ ਇੱਕ ਦਿਨ ਵਿੱਚ ਕੰਮ ਤੇ ਵਾਪਸ ਜਾ ਸਕਦੇ ਹਨ।', '💼'],
+          ['Full corneal and retina work-up decides who is the right candidate.',
+           'ਪੂਰੀ ਕੋਰਨੀਆ ਅਤੇ ਰੈਟੀਨਾ ਜਾਂਚ ਹੀ ਦੱਸਦੀ ਹੈ ਕਿ ਇਹ ਕਿਸ ਲਈ ਸਹੀ ਹੈ।', '📋']
+        ],
+        './assets/queue-media/eye/sourced/smile-pro-surgery.jpg',
+        'Ophthalmology',
+        { text:'Photo: cottonbro studio / Pexels', url:'https://www.pexels.com/photo/7584491/' }),
 
     motion('ICL — Freedom from High-Power Glasses',
            'ICL ਨਾਲ ਉੱਚ ਨੰਬਰ ਚਸ਼ਮੇ ਤੋਂ ਮੁਕਤੀ', 'icl', 'Ophthalmology'),
@@ -274,15 +288,6 @@
            'Robotic AI Cataract · MIGS Glaucoma · Blade-Free LASIK · ICL · Retina Surgery'),
 
     /* ─── OBSTETRICS & GYNAECOLOGY ──────────────────────────── */
-    svc("Our Women's Health Services",
-        'ਸਾਡੀਆਂ ਮਹਿਲਾ ਸਿਹਤ ਸੇਵਾਵਾਂ',
-        ['Painless Deliveries','High-Risk Pregnancy','Caesarean Section',
-         'IUI & IVF Infertility','PCOS / PCOD Management','Diagnostic Laparoscopy',
-         'Hysterectomy (All Types)','Diagnostic Hysteroscopy',
-         'Newborn & NICU Care','Phototherapy for Jaundice',
-         'Ante-Natal Care (ANC)','Post-Natal Support'],
-        'Obstetrics & Gynaecology'),
-
     photo('Painful Periods? You Don’t Have to Just Live With It',
         'ਦਰਦਨਾਕ ਮਾਹਵਾਰੀ? ਇਸ ਨਾਲ ਜਿਊਣਾ ਜ਼ਰੂਰੀ ਨਹੀਂ',
         [
@@ -391,14 +396,6 @@
            'Painless Delivery · IUI & IVF · PCOS · Laparoscopy · High-Risk Pregnancy'),
 
     /* ─── NEUROPSYCHIATRY ───────────────────────────────────── */
-    svc('Our Mental Health Services',
-        'ਸਾਡੀਆਂ ਮਾਨਸਿਕ ਸਿਹਤ ਸੇਵਾਵਾਂ',
-        ['Depression & Anxiety','Mania Treatment','Personality Disorders',
-         'De-Addiction OPD','Advanced EEG Assessment','Biofeedback Therapy',
-         'Epilepsy & Seizures','Child Behaviour Care','OCD Therapy',
-         'Bipolar Disorder','Psychological Counselling','Family Support Program'],
-        'Neuropsychiatry'),
-
     myth('Depression Myth vs Truth',
          'ਡਿਪ੍ਰੈਸ਼ਨ: ਭਰਮ ਅਤੇ ਸੱਚਾਈ',
          'Depression is weakness or laziness — just cheer up and move on.',
@@ -503,15 +500,6 @@
            'Depression · Anxiety · De-Addiction · Epilepsy · EEG · Biofeedback'),
 
     /* ─── SKIN & COSMETOLOGY ────────────────────────────────── */
-    svc('Our Skin & Cosmetology Services',
-        'ਸਾਡੀਆਂ ਚਮੜੀ ਅਤੇ ਕਾਸਮੈਟੋਲੋਜੀ ਸੇਵਾਵਾਂ',
-        ['Hydrafacial & Rejuvenation','Acne & Scar Treatment',
-         'CO₂ Laser Mole Removal','Laser Hair Reduction',
-         'Skin Rejuvenation Peels','Fat Freezing (Cryolipolysis)',
-         'Nd:YAG Tattoo Removal','SHR / IPL / Diode Lasers',
-         'PRP Hair Therapy','Pigmentation Treatment',
-         'Anti-Ageing Treatments','FDA-Approved Technologies'],
-        'Skin & Cosmetology'),
 
     steps('Laser Hair Reduction — Before & After Care',
           'ਲੇਜ਼ਰ ਹੇਅਰ ਰਿਡਕਸ਼ਨ — ਪਹਿਲਾਂ ਅਤੇ ਬਾਅਦ ਦੀ ਦੇਖਭਾਲ',
@@ -611,6 +599,44 @@
          'NAABH Certified Hospital','First Robotic AI Eye Surgery in Region',
          'UK-Trained Specialists','Bilingual Care — English & Punjabi'],
         'General'),
+
+    svc4('Our Services',
+        'ਸਾਡੀਆਂ ਸੇਵਾਵਾਂ',
+        [
+          { name:'Ophthalmology', pa:'ਅੱਖਾਂ ਦਾ ਵਿਭਾਗ', colour:'#0b5f8a',
+            items:['Robotic AI Cataract Surgery','Blade-Free LASIK','SMILE Pro Laser',
+                   'ICL Implantable Lens','MIGS for Glaucoma','Retina Surgery',
+                   'Anti-VEGF Injections','PRP Laser','Corneal Procedures',
+                   'Paediatric Eye Care','Complete Diagnostics','Low Vision Aids'] },
+          { name:'Obstetrics & Gynaecology', pa:'ਪ੍ਰਸੂਤੀ ਅਤੇ ਗਾਇਨੀਕੋਲੋਜੀ', colour:'#9c1850',
+            items:['Painless Deliveries','High-Risk Pregnancy','Caesarean Section',
+                   'IUI & IVF Infertility','PCOS / PCOD Management','Diagnostic Laparoscopy',
+                   'Hysterectomy (All Types)','Diagnostic Hysteroscopy',
+                   'Newborn & NICU Care','Phototherapy for Jaundice',
+                   'Ante-Natal Care (ANC)','Post-Natal Support'] },
+          { name:'Neuropsychiatry', pa:'ਨਿਊਰੋਸਾਈਕਿਆਟ੍ਰੀ', colour:'#5a1e96',
+            items:['Depression & Anxiety','Mania Treatment','Personality Disorders',
+                   'De-Addiction OPD','Advanced EEG Assessment','Biofeedback Therapy',
+                   'Epilepsy & Seizures','Child Behaviour Care','OCD Therapy',
+                   'Bipolar Disorder','Psychological Counselling','Family Support Program'] },
+          { name:'Skin & Cosmetology', pa:'ਚਮੜੀ ਅਤੇ ਕਾਸਮੈਟੋਲੋਜੀ', colour:'#8a5e0b',
+            items:['Hydrafacial & Rejuvenation','Acne & Scar Treatment',
+                   'CO₂ Laser Mole Removal','Laser Hair Reduction',
+                   'Skin Rejuvenation Peels','Fat Freezing (Cryolipolysis)',
+                   'Nd:YAG Tattoo Removal','SHR / IPL / Diode Lasers',
+                   'PRP Hair Therapy','Pigmentation Treatment',
+                   'Anti-Ageing Treatments','FDA-Approved Technologies'] }
+        ]),
+
+    tpa('Cashless TPA & Insurance Empanelments',
+        'ਕੈਸ਼ਲੈੱਸ TPA ਅਤੇ ਬੀਮਾ ਸੂਚੀ',
+        ['Bajaj Allianz','Vipul','HDFC Ergo','IFFCO Tokio','MD India','Emeditek',
+         'ICICI Lombard','Paramount','Reliance General','UHPC','FHPL',
+         'Future Generali','Spurthi Meditech','Religare','Safeway','Happy Insurance',
+         'TATA AIG','Star Health','ECHS','DHS','Medsave','Mediassist',
+         'Heritage Health','Care Health Insurance','Vidal Health','Go Digit',
+         'Health India Insurance','National Insurance','SBI General','Kotak Mahindra',
+         'Oriental Insurance','East West Assist']),
 
   ]; /* end BMH_SLIDES */
 
