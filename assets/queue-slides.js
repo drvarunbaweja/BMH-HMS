@@ -347,6 +347,22 @@
          './assets/queue-media/obg/sourced/mother-newborn-hospital.jpg', 'Obstetrics & Gynaecology',
          { text:'Photo: Brian Wangenheim / Pexels', url:'https://www.pexels.com/photo/35308514/' }),
 
+    photo('Medical Termination of Pregnancy — Painless & Compassionate Care',
+        'ਗਰਭ ਸਮਾਪਤੀ — ਦਰਦ ਰਹਿਤ ਅਤੇ ਹਮਦਰਦੀ ਭਰੀ ਦੇਖਭਾਲ',
+        [
+          ['Whatever led you here, this decision is yours — made with care, never judgment.',
+           'ਤੁਸੀਂ ਇੱਥੇ ਕਿਉਂ ਆਏ ਹੋ, ਇਹ ਫੈਸਲਾ ਤੁਹਾਡਾ ਹੈ — ਦੇਖਭਾਲ ਨਾਲ, ਬਿਨਾਂ ਕਿਸੇ ਨਿਰਣੇ ਦੇ।', '💙'],
+          ['The decision may be hard, but with modern methods the procedure itself can be safe and virtually painless.',
+           'ਫੈਸਲਾ ਔਖਾ ਹੋ ਸਕਦਾ ਹੈ, ਪਰ ਆਧੁਨਿਕ ਤਰੀਕਿਆਂ ਨਾਲ ਪ੍ਰਕਿਰਿਆ ਸੁਰੱਖਿਅਤ ਅਤੇ ਲਗਭਗ ਦਰਦ ਰਹਿਤ ਹੋ ਸਕਦੀ ਹੈ।', '🩺'],
+          ['Completely confidential — your privacy is respected at every single step.',
+           'ਪੂਰੀ ਤਰ੍ਹਾਂ ਗੁਪਤ — ਹਰ ਕਦਮ ਤੇ ਤੁਹਾਡੀ ਪ੍ਰਾਈਵੇਸੀ ਦਾ ਸਤਿਕਾਰ ਕੀਤਾ ਜਾਂਦਾ ਹੈ।', '🔒'],
+          ['Safe, legal and performed by experienced specialists who are here to support you.',
+           'ਸੁਰੱਖਿਅਤ, ਕਾਨੂੰਨੀ, ਅਤੇ ਤਜਰਬੇਕਾਰ ਮਾਹਿਰਾਂ ਦੁਆਰਾ — ਜੋ ਤੁਹਾਡੇ ਨਾਲ ਹਨ।', '🤝']
+        ],
+        './assets/queue-media/obg/sourced/compassionate-care-hands.jpg',
+        'Obstetrics & Gynaecology',
+        { text:'Photo: Karola G / Pexels', url:'https://www.pexels.com/photo/5206923/' }),
+
     info('PCOS & Hormonal Health',
          'PCOS ਅਤੇ ਹਾਰਮੋਨਲ ਸਿਹਤ',
          [['PCOS causes irregular periods, acne, weight changes and excess hair in young women.',
