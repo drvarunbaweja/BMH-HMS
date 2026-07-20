@@ -17,11 +17,11 @@ const USER_DB = {
   // ── DOCTORS — CHD logins ────────────────────────────────
   'drtarun_chd':  { pw:'BMH@PsychCHD25', name:'Dr. Tarun Baweja',   role:'Doctor', dept:'Neuropsychiatry', centre:'CHD', degrees:'MD (Psychiatry), DPM',             canSeeAllCentres:false, isAdmin:false },
   'drgeeta':      { pw:'BMH@OBG125',     name:'Dr. Geeta Baweja',   role:'Doctor', dept:'OBG',             centre:'CHD', degrees:'MS (OBG), FICOG',                   canSeeAllCentres:false, isAdmin:false },
-  'drnamrata_chd':{ pw:'BMH@OBGNameCHD', name:'Dr. Namrata Baweja', role:'Doctor', dept:'OBG',             centre:'CHD', degrees:'MS (OBG), Fellowship Fertility',    canSeeAllCentres:false, isAdmin:false, access:{ modules:['appointments','ipd','ot','discharge','reports','audits'], settings:[] } },
+  'drnamrata_chd':{ pw:'BMH@OBGNameCHD', name:'Dr. Namrata Baweja', role:'Doctor', dept:'OBG',             centre:'CHD', degrees:'MS (OBG), Fellowship Fertility',    canSeeAllCentres:false, isAdmin:false, access:{ modules:['appointments','ipd','ot','discharge','reports','audits','attendance'], settings:[] } },
   'drpooja_chd':  { pw:'BMH@SkinCHD25',  name:'Dr. Pooja Baweja',   role:'Doctor', dept:'Skin',            centre:'CHD', degrees:'MD (Dermatology), FRGUHS',          canSeeAllCentres:false, isAdmin:false },
   // ── DOCTORS — RPR logins (earlier logins reassigned to Ropar) ──
   'drtarun':   { pw:'BMH@Psych25',  name:'Dr. Tarun Baweja',   role:'Doctor', dept:'Neuropsychiatry', centre:'RPR', degrees:'MD (Psychiatry), DPM',             canSeeAllCentres:false, isAdmin:false },
-  'drnamrata': { pw:'BMH@OBG225',   name:'Dr. Namrata Baweja', role:'Doctor', dept:'OBG',             centre:'RPR', degrees:'MS (OBG), Fellowship Fertility',    canSeeAllCentres:false, isAdmin:false, access:{ modules:['appointments','ipd','ot','discharge','reports','audits'], settings:[] } },
+  'drnamrata': { pw:'BMH@OBG225',   name:'Dr. Namrata Baweja', role:'Doctor', dept:'OBG',             centre:'RPR', degrees:'MS (OBG), Fellowship Fertility',    canSeeAllCentres:false, isAdmin:false, access:{ modules:['appointments','ipd','ot','discharge','reports','audits','attendance'], settings:[] } },
   'drpooja':   { pw:'BMH@Skin25',   name:'Dr. Pooja Baweja',   role:'Doctor', dept:'Skin',            centre:'RPR', degrees:'MD (Dermatology), FRGUHS',          canSeeAllCentres:false, isAdmin:false },
   // ── RECEPTION ────────────────────────────────────────────
   'rec_chd':   { pw:'BMHRec@CHD25', name:'Reception CHD',      role:'Reception', dept:'Reception',          centre:'CHD',  degrees:'',                                                      canSeeAllCentres:false, isAdmin:false },
@@ -50,8 +50,8 @@ const USER_DB = {
   ['drtarun.chd@bawejahospital.com', { pw:'ChangeMe@123', name:'Dr. Tarun Baweja', role:'Doctor', dept:'Neuropsychiatry', centre:'CHD', degrees:'MD (Psychiatry), DPM', canSeeAllCentres:false, isAdmin:false }],
   ['drtarun.rpr@bawejahospital.com', { pw:'ChangeMe@123', name:'Dr. Tarun Baweja', role:'Doctor', dept:'Neuropsychiatry', centre:'RPR', degrees:'MD (Psychiatry), DPM', canSeeAllCentres:false, isAdmin:false }],
   ['drgeeta@bawejahospital.com', { pw:'ChangeMe@123', name:'Dr. Geeta Baweja', role:'Doctor', dept:'OBG', centre:'CHD', degrees:'MS (OBG), FICOG', canSeeAllCentres:false, isAdmin:false }],
-  ['drnamrata.chd@bawejahospital.com', { pw:'ChangeMe@123', name:'Dr. Namrata Baweja', role:'Doctor', dept:'OBG', centre:'CHD', degrees:'MS (OBG), Fellowship Fertility', canSeeAllCentres:false, isAdmin:false, access:{ modules:['appointments','ipd','ot','discharge','reports','audits'], settings:[] } }],
-  ['drnamrata.rpr@bawejahospital.com', { pw:'ChangeMe@123', name:'Dr. Namrata Baweja', role:'Doctor', dept:'OBG', centre:'RPR', degrees:'MS (OBG), Fellowship Fertility', canSeeAllCentres:false, isAdmin:false, access:{ modules:['appointments','ipd','ot','discharge','reports','audits'], settings:[] } }],
+  ['drnamrata.chd@bawejahospital.com', { pw:'ChangeMe@123', name:'Dr. Namrata Baweja', role:'Doctor', dept:'OBG', centre:'CHD', degrees:'MS (OBG), Fellowship Fertility', canSeeAllCentres:false, isAdmin:false, access:{ modules:['appointments','ipd','ot','discharge','reports','audits','attendance'], settings:[] } }],
+  ['drnamrata.rpr@bawejahospital.com', { pw:'ChangeMe@123', name:'Dr. Namrata Baweja', role:'Doctor', dept:'OBG', centre:'RPR', degrees:'MS (OBG), Fellowship Fertility', canSeeAllCentres:false, isAdmin:false, access:{ modules:['appointments','ipd','ot','discharge','reports','audits','attendance'], settings:[] } }],
   ['drpooja.chd@bawejahospital.com', { pw:'ChangeMe@123', name:'Dr. Pooja Baweja', role:'Doctor', dept:'Skin', centre:'CHD', degrees:'MD (Dermatology), FRGUHS', canSeeAllCentres:false, isAdmin:false }],
   ['drpooja.rpr@bawejahospital.com', { pw:'ChangeMe@123', name:'Dr. Pooja Baweja', role:'Doctor', dept:'Skin', centre:'RPR', degrees:'MD (Dermatology), FRGUHS', canSeeAllCentres:false, isAdmin:false }],
   ['reception.chd@bawejahospital.com', { pw:'ChangeMe@123', name:'Reception CHD', role:'Reception', dept:'Reception', centre:'CHD', degrees:'', canSeeAllCentres:false, isAdmin:false }],
@@ -3162,7 +3162,7 @@ function nav(id, el, opts) {
     appointments:'Appointment Book','print-templates':'Print Templates',consents:'Consent Forms',
     discharge:'Discharge Card',lab:'Lab Module',reception:'Reception',billing:'Billing',
     payments:'Payments',obg:'OBG Clinic',psych:'Neuropsychiatry',skin:'Skin & Cosmetology',
-    inventory:'Inventory',tpa:'TPA / Cashless',centres:'Two-Centre View',settings:'Settings',
+    inventory:'Inventory',tpa:'TPA / Cashless',centres:'Two-Centre View',settings:'Settings',attendance:'Attendance',
     ipd:'IPD Ward',brochures:'Surgery Brochures',ot:'OT Module',reports:'Reports',audits:'Audits'};
   const ptEl = document.getElementById('ptitle');
   if(ptEl) ptEl.textContent = titles[pageKey] || pageKey;
@@ -3212,6 +3212,7 @@ function nav(id, el, opts) {
   else if(pageKey==='billing')         deferPageWork(function(){ renderBillingPage && renderBillingPage(); });
   else if(pageKey==='tpa')             deferPageWork(function(){ renderTpaPage && renderTpaPage(); });
   else if(pageKey==='payments')        deferPageWork(function(){ renderPaymentsPage && renderPaymentsPage(); });
+  else if(pageKey==='attendance')      deferPageWork(function(){ renderAttendancePage && renderAttendancePage(); });
 	  else if(pageKey==='reports')         deferPageWork(function(){ if (typeof renderReports === 'function') renderReports(); });
 	  else if(pageKey==='audits')          deferPageWork(function(){ if (typeof renderAuditsPage === 'function') renderAuditsPage(); });
   else if(pageKey==='brochures')       deferPageWork(function(){ renderBrochures && renderBrochures(); });
@@ -6734,6 +6735,7 @@ function buildSidebarForRole(role, dept, name) {
     tpa: `<div class="ni" onclick="nav('tpa',this)"><div class="ni-ic">🏦</div>TPA / Cashless</div>`,
     reports: `<div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>`,
     audits: `<div class="ni" onclick="nav('audits',this)"><div class="ni-ic">📋</div>Audits</div>`,
+    attendance: `<div class="ni" onclick="nav('attendance',this)"><div class="ni-ic">🕒</div>Attendance</div>`,
     centres: `<div class="ni" onclick="nav('centres',this)"><div class="ni-ic">🏥</div>Two-Centre View</div>`,
     settings: `<div class="ni" onclick="nav('settings',this)"><div class="ni-ic">⚙️</div>Settings</div>`
   };
@@ -6765,6 +6767,7 @@ function buildSidebarForRole(role, dept, name) {
       <div class="ngrp">Other</div>
       ${allowNav('reports', `<div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>`)}
       ${allowNav('audits', `<div class="ni" onclick="nav('audits',this)"><div class="ni-ic">📋</div>Audits</div>`)}
+      ${allowNav('attendance', `<div class="ni" onclick="nav('attendance',this)"><div class="ni-ic">🕒</div>Attendance</div>`)}
       ${allowNav('settings', `<div class="ni" onclick="nav('settings',this)"><div class="ni-ic">⚙️</div>Settings</div>`)}`;
   } else if(role==='Optometrist') {
     nav_el.innerHTML = `
@@ -6775,6 +6778,7 @@ function buildSidebarForRole(role, dept, name) {
       <div class="ngrp">Other</div>
       ${allowNav('reports', `<div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>`)}
       ${allowNav('audits', `<div class="ni" onclick="nav('audits',this)"><div class="ni-ic">📋</div>Audits</div>`)}
+      ${allowNav('attendance', `<div class="ni" onclick="nav('attendance',this)"><div class="ni-ic">🕒</div>Attendance</div>`)}
       ${allowNav('settings', `<div class="ni" onclick="nav('settings',this)"><div class="ni-ic">⚙️</div>Settings</div>`)}`;
   } else if(role==='Reception') {
     nav_el.innerHTML = `
@@ -6790,25 +6794,29 @@ function buildSidebarForRole(role, dept, name) {
       <div class="ngrp">Reports</div>
       ${allowNav('reports', `<div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>`)}
       ${allowNav('audits', `<div class="ni" onclick="nav('audits',this)"><div class="ni-ic">📋</div>Audits</div>`)}
+      ${allowNav('attendance', `<div class="ni" onclick="nav('attendance',this)"><div class="ni-ic">🕒</div>Attendance</div>`)}
       <div class="ngrp">Settings</div>
       ${allowNav('settings', `<div class="ni" onclick="nav('settings',this)"><div class="ni-ic">⚙️</div>Operational Settings</div>`)}`;
   } else if(role==='Lab') {
     nav_el.innerHTML = `
       <div class="ngrp">Lab</div>
       <div class="ni active" onclick="nav('lab',this)"><div class="ni-ic">🧪</div>Lab Module</div>
-      <div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>`;
+      <div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>
+      <div class="ni" onclick="nav('attendance',this)"><div class="ni-ic">🕒</div>Attendance</div>`;
   } else if(role==='Inventory') {
     nav_el.innerHTML = `
       <div class="ngrp">Inventory</div>
       <div class="ni active" onclick="nav('inventory',this)"><div class="ni-ic">📦</div>Inventory<span class="nbadge" id="nb-inv"></span></div>
       <div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>
+      <div class="ni" onclick="nav('attendance',this)"><div class="ni-ic">🕒</div>Attendance</div>
       <div class="ni" onclick="nav('settings',this)"><div class="ni-ic">⚙️</div>Settings</div>`;
   } else if(role==='TPA') {
     nav_el.innerHTML = `
       <div class="ngrp">Insurance / TPA</div>
       <div class="ni active" onclick="nav('tpa',this)"><div class="ni-ic">🏦</div>TPA / Cashless</div>
       <div class="ni" onclick="nav('billing',this)"><div class="ni-ic">💳</div>Billing</div>
-      <div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>`;
+      <div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>
+      <div class="ni" onclick="nav('attendance',this)"><div class="ni-ic">🕒</div>Attendance</div>`;
   }
   // Admin role keeps the full default sidebar — no change needed
   appendApprovedModules();
@@ -44999,6 +45007,391 @@ function renderSettingsPage() {
     }
   }
 }
+
+// ── Staff attendance with optional hospital geofence ─────────────────────────
+var BMH_ATTENDANCE_GEOFENCE = null;
+var BMH_ATTENDANCE_CACHE = null;
+var BMH_ATTENDANCE_CACHE_AT = 0;
+function attendanceSafeKey(value) {
+  return String(value || 'staff').trim().toLowerCase().replace(/[.#$/\[\]\s@]+/g, '_') || 'staff';
+}
+function attendanceUserKey() {
+  return attendanceSafeKey(CURRENT_USER?.username || CURRENT_USER?.name || 'staff');
+}
+function defaultAttendanceGeofence() {
+  return {
+    CHD: { label: 'Chandigarh', lat: '', lng: '', radius: 200 },
+    RPR: { label: 'Ropar', lat: '', lng: '', radius: 200 }
+  };
+}
+function normalizeAttendanceGeofence(raw) {
+  const base = defaultAttendanceGeofence();
+  ['CHD','RPR'].forEach(function (centre) {
+    const src = raw && raw[centre] ? raw[centre] : {};
+    base[centre] = Object.assign({}, base[centre], src);
+    base[centre].lat = src.lat == null ? '' : String(src.lat);
+    base[centre].lng = src.lng == null ? '' : String(src.lng);
+    base[centre].radius = Math.max(25, Number(src.radius || base[centre].radius || 200));
+  });
+  return base;
+}
+function loadAttendanceGeofenceConfig() {
+  if (BMH_ATTENDANCE_GEOFENCE) return Promise.resolve(BMH_ATTENDANCE_GEOFENCE);
+  try {
+    const local = JSON.parse(localStorage.getItem('bmh_attendance_geofence') || 'null');
+    if (local) BMH_ATTENDANCE_GEOFENCE = normalizeAttendanceGeofence(local);
+  } catch (e) {}
+  if (!window.FBDB) {
+    BMH_ATTENDANCE_GEOFENCE = normalizeAttendanceGeofence(BMH_ATTENDANCE_GEOFENCE);
+    return Promise.resolve(BMH_ATTENDANCE_GEOFENCE);
+  }
+  return window.FBDB.ref('settings/attendanceGeofence').once('value').then(function (snap) {
+    BMH_ATTENDANCE_GEOFENCE = normalizeAttendanceGeofence(snap.val() || BMH_ATTENDANCE_GEOFENCE || {});
+    try { localStorage.setItem('bmh_attendance_geofence', JSON.stringify(BMH_ATTENDANCE_GEOFENCE)); } catch (e) {}
+    return BMH_ATTENDANCE_GEOFENCE;
+  }).catch(function () {
+    BMH_ATTENDANCE_GEOFENCE = normalizeAttendanceGeofence(BMH_ATTENDANCE_GEOFENCE);
+    return BMH_ATTENDANCE_GEOFENCE;
+  });
+}
+function saveAttendanceGeofenceConfig() {
+  if (!CURRENT_USER?.isAdmin) { showToast('Admin access required to change geofence', 'w'); return; }
+  const next = defaultAttendanceGeofence();
+  ['CHD','RPR'].forEach(function (centre) {
+    next[centre].lat = document.getElementById('att-geo-' + centre.toLowerCase() + '-lat')?.value || '';
+    next[centre].lng = document.getElementById('att-geo-' + centre.toLowerCase() + '-lng')?.value || '';
+    next[centre].radius = Number(document.getElementById('att-geo-' + centre.toLowerCase() + '-radius')?.value || 200);
+  });
+  BMH_ATTENDANCE_GEOFENCE = normalizeAttendanceGeofence(next);
+  try { localStorage.setItem('bmh_attendance_geofence', JSON.stringify(BMH_ATTENDANCE_GEOFENCE)); } catch (e) {}
+  fbSet('settings/attendanceGeofence', BMH_ATTENDANCE_GEOFENCE).then(function () {
+    showToast('Attendance geofence saved ✓', 's');
+    renderAttendancePage();
+  }).catch(function (e) {
+    console.warn('Attendance geofence save error:', e);
+    showToast('Saved locally; cloud sync failed', 'w');
+    renderAttendancePage();
+  });
+}
+function attendanceDistanceMeters(a, b) {
+  const R = 6371000;
+  const toRad = function (n) { return Number(n) * Math.PI / 180; };
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const h = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+    + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  return 2 * R * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+}
+function requestAttendancePosition() {
+  return new Promise(function (resolve, reject) {
+    if (!navigator.geolocation) { reject(new Error('Browser location is not available')); return; }
+    navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });
+  });
+}
+function evaluateAttendanceLocation(pos, centre, config) {
+  const c = patientCentreKey(centre || getEffectiveCentre?.() || CURRENT_USER?.centre || 'CHD');
+  const fence = config && config[c] ? config[c] : null;
+  const loc = pos && pos.coords ? {
+    lat: Number(pos.coords.latitude),
+    lng: Number(pos.coords.longitude),
+    accuracy: Math.round(Number(pos.coords.accuracy || 0))
+  } : null;
+  if (!loc) return { status: 'no-location', centre: c, location: null, ok: false, message: 'Location not available' };
+  if (!fence || !fence.lat || !fence.lng) {
+    return { status: 'not-configured', centre: c, location: loc, ok: true, message: 'Geofence not configured' };
+  }
+  const distance = Math.round(attendanceDistanceMeters({ lat: Number(fence.lat), lng: Number(fence.lng) }, loc));
+  const radius = Number(fence.radius || 200);
+  return {
+    status: distance <= radius ? 'inside' : 'outside',
+    centre: c,
+    location: loc,
+    distance,
+    radius,
+    ok: distance <= radius,
+    message: distance <= radius ? 'Within hospital premises' : ('Outside hospital geofence by ' + Math.max(0, distance - radius) + ' m')
+  };
+}
+function attendanceEventLabel(kind) {
+  return ({ in: 'Punch In', lunchOut: 'Lunch Out', lunchIn: 'Lunch In', out: 'Punch Out' })[kind] || 'Punch';
+}
+function attendanceEventOrder(kind) {
+  return ({ in: 1, lunchOut: 2, lunchIn: 3, out: 4 })[kind] || 9;
+}
+function formatAttendanceTime(value) {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+}
+function formatAttendanceDate(value) {
+  return formatDateIN ? formatDateIN(value) : String(value || '');
+}
+function attendanceMinutesBetween(a, b) {
+  if (!a || !b) return 0;
+  const da = new Date(a), db = new Date(b);
+  if (Number.isNaN(da.getTime()) || Number.isNaN(db.getTime())) return 0;
+  return Math.max(0, Math.round((db - da) / 60000));
+}
+function attendanceDurationText(mins) {
+  if (!mins) return '—';
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return (h ? h + 'h ' : '') + m + 'm';
+}
+function getTodayAttendancePath() {
+  return 'staffAttendance/' + todayKey() + '/' + attendanceUserKey();
+}
+function getMyTodayAttendance() {
+  const key = todayKey() + ':' + attendanceUserKey();
+  try {
+    const raw = localStorage.getItem('bmh_attendance_' + key);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+function setMyTodayAttendanceLocal(row) {
+  try { localStorage.setItem('bmh_attendance_' + todayKey() + ':' + attendanceUserKey(), JSON.stringify(row)); } catch (e) {}
+}
+function fetchTodayAttendance() {
+  if (!CURRENT_USER) return Promise.resolve(null);
+  if (!window.FBDB) return Promise.resolve(getMyTodayAttendance());
+  return window.FBDB.ref(getTodayAttendancePath()).once('value').then(function (snap) {
+    const row = snap.val() || getMyTodayAttendance();
+    if (row) setMyTodayAttendanceLocal(row);
+    return row;
+  }).catch(function () { return getMyTodayAttendance(); });
+}
+async function markStaffAttendance(kind) {
+  if (!CURRENT_USER) { showToast('Please login first', 'w'); return; }
+  if (!['in','lunchOut','lunchIn','out'].includes(kind)) { showToast('Unknown attendance action', 'w'); return; }
+  showToast('Checking location for ' + attendanceEventLabel(kind) + '…', 'i');
+  let config, pos, geo;
+  try {
+    config = await loadAttendanceGeofenceConfig();
+    pos = await requestAttendancePosition();
+    geo = evaluateAttendanceLocation(pos, CURRENT_USER.centre || getEffectiveCentre?.(), config);
+  } catch (e) {
+    showToast('Location permission is required for attendance', 'w');
+    return;
+  }
+  if (geo && geo.status === 'outside') {
+    showToast(geo.message + '. Attendance not saved.', 'w');
+    return;
+  }
+  const now = new Date().toISOString();
+  const existing = await fetchTodayAttendance() || {};
+  const centre = patientCentreKey(CURRENT_USER.centre || getEffectiveCentre?.() || 'CHD');
+  const event = {
+    type: kind,
+    label: attendanceEventLabel(kind),
+    at: now,
+    centre,
+    geoStatus: geo.status,
+    geoMessage: geo.message,
+    location: geo.location,
+    distance: geo.distance || null,
+    radius: geo.radius || null,
+    browser: navigator.userAgent || '',
+    savedBy: CURRENT_USER.name || CURRENT_USER.username || 'Staff'
+  };
+  const row = Object.assign({}, existing, {
+    date: todayKey(),
+    userKey: attendanceUserKey(),
+    username: CURRENT_USER.username || '',
+    employeeName: CURRENT_USER.name || CURRENT_USER.username || '',
+    role: CURRENT_USER.role || '',
+    dept: CURRENT_USER.dept || '',
+    centre,
+    updatedAt: now,
+    events: Object.assign({}, existing.events || {}, { [kind]: event })
+  });
+  setMyTodayAttendanceLocal(row);
+  const path = getTodayAttendancePath();
+  fbSet(path, row).then(function () {
+    BMH_ATTENDANCE_CACHE = null;
+    showToast(attendanceEventLabel(kind) + ' saved ✓' + (geo.status === 'not-configured' ? ' (geofence pending)' : ''), geo.status === 'not-configured' ? 'w' : 's');
+    renderAttendancePage();
+  }).catch(function (e) {
+    console.warn('Attendance save error:', e);
+    showToast('Saved on this device; cloud sync failed', 'w');
+    renderAttendancePage();
+  });
+}
+function renderAttendanceGeofenceAdmin(config) {
+  if (!CURRENT_USER?.isAdmin) return '';
+  const c = normalizeAttendanceGeofence(config || {});
+  return '<div class="card" style="margin-top:14px">'
+    + '<div class="card-hd"><div><div class="card-title">Admin Geofence</div><div class="card-sub">Set hospital coordinates once for location-verified attendance</div></div><button class="btn btn-gold btn-xs" onclick="saveAttendanceGeofenceConfig()">Save geofence</button></div>'
+    + '<div class="fg">'
+    + ['CHD','RPR'].map(function (centre) {
+      const row = c[centre] || {};
+      return '<div class="form-group"><label class="fl">' + centre + ' Latitude</label><input id="att-geo-' + centre.toLowerCase() + '-lat" value="' + escapeHtmlConsent(row.lat || '') + '" placeholder="e.g. 30.7"></div>'
+        + '<div class="form-group"><label class="fl">' + centre + ' Longitude</label><input id="att-geo-' + centre.toLowerCase() + '-lng" value="' + escapeHtmlConsent(row.lng || '') + '" placeholder="e.g. 76.7"></div>'
+        + '<div class="form-group"><label class="fl">' + centre + ' Radius metres</label><input type="number" id="att-geo-' + centre.toLowerCase() + '-radius" value="' + escapeHtmlConsent(row.radius || 200) + '" min="25" step="25"></div>';
+    }).join('')
+    + '</div></div>';
+}
+function renderAttendanceRowCard(row) {
+  row = row || {};
+  const ev = row.events || {};
+  const lunch = attendanceMinutesBetween(ev.lunchOut?.at, ev.lunchIn?.at);
+  const gross = attendanceMinutesBetween(ev.in?.at, ev.out?.at);
+  const net = gross ? Math.max(0, gross - lunch) : 0;
+  const cells = ['in','lunchOut','lunchIn','out'].map(function (kind) {
+    const item = ev[kind];
+    const status = item?.geoStatus || '';
+    const badge = status === 'inside' ? 'bd-green' : (status === 'outside' ? 'bd-red' : 'bd-orange');
+    return '<div style="background:var(--g6);border:1px solid var(--g5);border-radius:10px;padding:10px">'
+      + '<div style="font-size:10px;font-weight:900;color:var(--g1);text-transform:uppercase">' + attendanceEventLabel(kind) + '</div>'
+      + '<div style="font-size:18px;font-weight:900;color:var(--tx);margin-top:3px">' + formatAttendanceTime(item?.at) + '</div>'
+      + (item ? '<span class="badge ' + badge + '" style="margin-top:6px">' + escapeHtmlConsent(item.geoMessage || status || 'Saved') + '</span>' : '')
+      + '</div>';
+  }).join('');
+  return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px">' + cells + '</div>'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'
+    + '<span class="badge bd-blue">Lunch: ' + attendanceDurationText(lunch) + '</span>'
+    + '<span class="badge bd-green">Total: ' + attendanceDurationText(net || gross) + '</span>'
+    + '</div>';
+}
+function renderAttendancePage() {
+  const card = document.getElementById('att-today-card');
+  const sub = document.getElementById('att-status-sub');
+  const recent = document.getElementById('att-my-recent');
+  if (!card && !recent) return;
+  if (sub) sub.textContent = CURRENT_USER ? ((CURRENT_USER.name || CURRENT_USER.username || 'Staff') + ' · ' + (CURRENT_USER.centre || '')) : 'Not logged in';
+  Promise.all([fetchTodayAttendance(), loadAttendanceGeofenceConfig()]).then(function ([row, config]) {
+    if (card) card.innerHTML = renderAttendanceRowCard(row || {});
+    if (recent) recent.innerHTML = renderMyRecentAttendanceLocal();
+    const page = document.getElementById('pg-attendance');
+    const old = document.getElementById('att-geofence-admin-card');
+    if (old) old.remove();
+    if (page && CURRENT_USER?.isAdmin) {
+      const wrap = document.createElement('div');
+      wrap.id = 'att-geofence-admin-card';
+      wrap.innerHTML = renderAttendanceGeofenceAdmin(config);
+      page.appendChild(wrap);
+    }
+  });
+}
+function renderMyRecentAttendanceLocal() {
+  const rows = [];
+  const prefix = 'bmh_attendance_';
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k || !k.startsWith(prefix) || !k.endsWith(':' + attendanceUserKey())) continue;
+      const row = JSON.parse(localStorage.getItem(k) || 'null');
+      if (row) rows.push(row);
+    }
+  } catch (e) {}
+  rows.sort(function (a, b) { return String(b.date || '').localeCompare(String(a.date || '')); });
+  if (!rows.length) return '<div style="padding:18px;text-align:center;color:var(--g1);font-size:12px">No attendance saved on this device yet.</div>';
+  return rows.slice(0, 7).map(function (row) {
+    const ev = row.events || {};
+    return '<div style="display:grid;grid-template-columns:90px repeat(4,1fr);gap:6px;align-items:center;padding:8px;border-bottom:1px solid var(--g5);font-size:11.5px">'
+      + '<strong>' + formatAttendanceDate(row.date) + '</strong>'
+      + '<span>In: ' + formatAttendanceTime(ev.in?.at) + '</span>'
+      + '<span>Lunch Out: ' + formatAttendanceTime(ev.lunchOut?.at) + '</span>'
+      + '<span>Lunch In: ' + formatAttendanceTime(ev.lunchIn?.at) + '</span>'
+      + '<span>Out: ' + formatAttendanceTime(ev.out?.at) + '</span>'
+      + '</div>';
+  }).join('');
+}
+function fetchAttendanceRowsForReport() {
+  const now = Date.now();
+  if (BMH_ATTENDANCE_CACHE && now - BMH_ATTENDANCE_CACHE_AT < 60000) return Promise.resolve(BMH_ATTENDANCE_CACHE.slice());
+  if (!window.FBDB) {
+    const mine = getMyTodayAttendance();
+    return Promise.resolve(mine ? [mine] : []);
+  }
+  return window.FBDB.ref('staffAttendance').once('value').then(function (snap) {
+    const val = snap.val() || {};
+    const rows = [];
+    Object.keys(val).forEach(function (date) {
+      Object.keys(val[date] || {}).forEach(function (userKey) {
+        const row = val[date][userKey];
+        if (row) rows.push(Object.assign({ date: date, userKey: userKey }, row));
+      });
+    });
+    BMH_ATTENDANCE_CACHE = rows;
+    BMH_ATTENDANCE_CACHE_AT = Date.now();
+    return rows.slice();
+  }).catch(function (e) {
+    console.warn('Attendance report load error:', e);
+    return [];
+  });
+}
+function getFilteredAttendanceReportRows(rows) {
+  const from = document.getElementById('att-rep-from')?.value || todayKey();
+  const to = document.getElementById('att-rep-to')?.value || from;
+  const centre = document.getElementById('att-rep-centre')?.value || '';
+  const q = String(document.getElementById('att-rep-user')?.value || '').trim().toLowerCase();
+  return (rows || []).filter(function (row) {
+    const d = String(row.date || '');
+    if (from && d < from) return false;
+    if (to && d > to) return false;
+    if (centre && patientCentreKey(row.centre) !== centre) return false;
+    if (q && !String([row.employeeName, row.username, row.role, row.dept].join(' ')).toLowerCase().includes(q)) return false;
+    return true;
+  }).sort(function (a, b) {
+    return String(a.date || '').localeCompare(String(b.date || '')) || String(a.employeeName || '').localeCompare(String(b.employeeName || ''));
+  });
+}
+function attendanceReportTableHtml(rows) {
+  if (!rows.length) return '<div style="padding:22px;text-align:center;color:var(--g1);font-size:12.5px">No attendance records found for this filter.</div>';
+  const body = rows.map(function (row) {
+    const ev = row.events || {};
+    const lunch = attendanceMinutesBetween(ev.lunchOut?.at, ev.lunchIn?.at);
+    const gross = attendanceMinutesBetween(ev.in?.at, ev.out?.at);
+    const net = gross ? Math.max(0, gross - lunch) : 0;
+    const locStatus = ['in','lunchOut','lunchIn','out'].map(function (k) { return ev[k]?.geoStatus || ''; }).filter(Boolean).join(', ') || '—';
+    return '<tr>'
+      + '<td>' + escapeHtmlConsent(formatAttendanceDate(row.date)) + '</td>'
+      + '<td>' + escapeHtmlConsent(row.employeeName || row.username || '—') + '</td>'
+      + '<td>' + escapeHtmlConsent(row.role || '') + '</td>'
+      + '<td>' + escapeHtmlConsent(row.dept || '') + '</td>'
+      + '<td>' + escapeHtmlConsent(row.centre || '') + '</td>'
+      + '<td>' + formatAttendanceTime(ev.in?.at) + '</td>'
+      + '<td>' + formatAttendanceTime(ev.lunchOut?.at) + '</td>'
+      + '<td>' + formatAttendanceTime(ev.lunchIn?.at) + '</td>'
+      + '<td>' + formatAttendanceTime(ev.out?.at) + '</td>'
+      + '<td>' + attendanceDurationText(lunch) + '</td>'
+      + '<td><strong>' + attendanceDurationText(net || gross) + '</strong></td>'
+      + '<td>' + escapeHtmlConsent(locStatus) + '</td>'
+      + '</tr>';
+  }).join('');
+  return '<div style="overflow:auto"><table class="tbl"><thead><tr><th>Date</th><th>Employee</th><th>Role</th><th>Dept</th><th>Centre</th><th>In</th><th>Lunch Out</th><th>Lunch In</th><th>Out</th><th>Lunch</th><th>Total</th><th>Geo</th></tr></thead><tbody>' + body + '</tbody></table></div>';
+}
+function renderAttendanceReport() {
+  const from = document.getElementById('att-rep-from');
+  const to = document.getElementById('att-rep-to');
+  if (from && !from.value) from.value = todayKey();
+  if (to && !to.value) to.value = from?.value || todayKey();
+  const el = document.getElementById('att-report-result');
+  if (el) el.innerHTML = '<div style="padding:18px;text-align:center;color:var(--g1)">Loading attendance…</div>';
+  fetchAttendanceRowsForReport().then(function (rows) {
+    const filtered = getFilteredAttendanceReportRows(rows);
+    if (el) el.innerHTML = attendanceReportTableHtml(filtered);
+  });
+}
+function printAttendanceReport() {
+  fetchAttendanceRowsForReport().then(function (rows) {
+    const filtered = getFilteredAttendanceReportRows(rows);
+    const html = '<!doctype html><html><head><meta charset="utf-8"><title>Attendance Report</title><style>body{font-family:Arial,sans-serif;padding:18px;color:#111}h1{font-size:18px;margin:0 0 10px}table{width:100%;border-collapse:collapse;font-size:10px}th{background:#1A3C6E;color:#fff;text-align:left;padding:6px}td{border:1px solid #ddd;padding:5px}tr:nth-child(even){background:#f8fafc}</style></head><body><h1>Baweja Hospital - Staff Attendance</h1>' + attendanceReportTableHtml(filtered) + '</body></html>';
+    const w = window.open('', '_blank');
+    if (!w) { showToast('Popup blocked', 'w'); return; }
+    w.document.write(html);
+    w.document.close();
+    setTimeout(function () { w.print(); }, 300);
+  });
+}
+window.markStaffAttendance = markStaffAttendance;
+window.renderAttendancePage = renderAttendancePage;
+window.renderAttendanceReport = renderAttendanceReport;
+window.printAttendanceReport = printAttendanceReport;
+window.saveAttendanceGeofenceConfig = saveAttendanceGeofenceConfig;
 
 // ═══════════════════════════════════════════════════
 // V38 FUNCTIONS — clean production mode
