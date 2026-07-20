@@ -557,6 +557,7 @@
     <div class="ngrp">Analytics</div>
     <div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>
     <div class="ni" onclick="nav('audits',this)"><div class="ni-ic">📋</div>Audits</div>
+    <div class="ni" onclick="nav('attendance',this)"><div class="ni-ic">🕒</div>Attendance</div>
     <div class="ngrp">Finance</div>
     <div class="ni" onclick="nav('billing',this)"><div class="ni-ic">💰</div>Billing</div>
     <div class="ni" onclick="nav('tpa',this)"><div class="ni-ic">🏦</div>TPA / Cashless</div>
@@ -5006,6 +5007,7 @@
     <div class="ptab" onclick="ptab(this,'rep-investigation')">🧪 Investigations Advised</div>
     <div class="ptab" onclick="ptab(this,'rep-financial')">💰 Financial</div>
     <div class="ptab" onclick="ptab(this,'rep-referrals')">👨‍⚕️ Referrals</div>
+    <div class="ptab" onclick="ptab(this,'rep-attendance');renderAttendanceReport()">🕒 Attendance</div>
     <div class="ptab" onclick="ptab(this,'rep-dues');generatePendingDuesReport()">💸 Pending Dues</div>
   </div>
 
@@ -5128,6 +5130,23 @@
     <div id="rep-dues-result" style="margin-top:6px"></div>
   </div>
 
+  <div class="tab-content" id="rep-attendance">
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-hd"><div><div class="card-title">🕒 Staff Attendance Report</div><div class="card-sub">Punch in, lunch break, punch out and location verification for staff logins</div></div></div>
+      <div class="fg">
+        <div class="form-group"><label class="fl">Date From</label><input type="date" id="att-rep-from"></div>
+        <div class="form-group"><label class="fl">Date To</label><input type="date" id="att-rep-to"></div>
+        <div class="form-group"><label class="fl">Centre</label><select id="att-rep-centre"><option value="">Both Centres</option><option value="CHD">Chandigarh</option><option value="RPR">Ropar</option></select></div>
+        <div class="form-group"><label class="fl">Employee</label><input type="text" id="att-rep-user" placeholder="All employees"></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+        <button class="btn btn-gold btn-sm" type="button" onclick="renderAttendanceReport()">📊 Generate</button>
+        <button class="btn btn-outline btn-sm" type="button" onclick="printAttendanceReport()">🖨️ Print</button>
+      </div>
+    </div>
+    <div id="att-report-result"></div>
+  </div>
+
   <div class="tab-content" id="rep-referrals">
     <div class="card" style="margin-bottom:14px">
       <div class="card-hd"><div><div class="card-title">👨‍⚕️ Referral Report</div><div class="card-sub">Track who referred the patient and the surgery value generated from those referrals</div></div></div>
@@ -5151,6 +5170,29 @@
       </div>
     </div>
     <div id="rep-referral-result"></div>
+  </div>
+</div>
+
+<div class="page" id="pg-attendance">
+  <div class="card-hd" style="margin-bottom:14px">
+    <div><div class="card-title">🕒 Staff Attendance</div><div class="card-sub">Punch attendance from your own login. Location is checked before saving.</div></div>
+  </div>
+  <div class="g2">
+    <div class="card">
+      <div class="card-hd"><div><div class="card-title">Today</div><div class="card-sub" id="att-status-sub">Loading attendance status…</div></div><button class="btn btn-outline btn-xs" onclick="renderAttendancePage()">Refresh</button></div>
+      <div id="att-today-card" style="margin-bottom:12px"></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">
+        <button class="btn btn-green" type="button" onclick="markStaffAttendance('in')">Punch In</button>
+        <button class="btn btn-outline" type="button" onclick="markStaffAttendance('lunchOut')">Lunch Out</button>
+        <button class="btn btn-outline" type="button" onclick="markStaffAttendance('lunchIn')">Lunch In</button>
+        <button class="btn btn-red" type="button" onclick="markStaffAttendance('out')">Punch Out</button>
+      </div>
+      <div style="font-size:11px;color:var(--g1);line-height:1.5;margin-top:10px">The browser may ask for location permission. Attendance is saved only after permission is granted or marked for admin review if the location cannot be verified.</div>
+    </div>
+    <div class="card">
+      <div class="card-hd"><div><div class="card-title">My Recent Attendance</div><div class="card-sub">Last few saved punches from this login</div></div></div>
+      <div id="att-my-recent"></div>
+    </div>
   </div>
 </div>
 
@@ -6514,6 +6556,7 @@
       <label><input type="checkbox" value="tpa"> TPA</label>
       <label><input type="checkbox" value="reports"> Reports</label>
       <label><input type="checkbox" value="audits"> Audits</label>
+      <label><input type="checkbox" value="attendance"> Attendance</label>
       <label><input type="checkbox" value="centres"> Two-Centre View</label>
       <label><input type="checkbox" value="settings"> Settings</label>
       <label><input type="checkbox" value="inventory"> Inventory</label>
@@ -6593,6 +6636,7 @@
       <label><input type="checkbox" value="tpa"> TPA</label>
       <label><input type="checkbox" value="reports"> Reports</label>
       <label><input type="checkbox" value="audits"> Audits</label>
+      <label><input type="checkbox" value="attendance"> Attendance</label>
       <label><input type="checkbox" value="centres"> Two-Centre View</label>
       <label><input type="checkbox" value="settings"> Settings</label>
       <label><input type="checkbox" value="inventory"> Inventory</label>
