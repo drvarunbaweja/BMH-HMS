@@ -44,6 +44,29 @@ const USER_DB = {
   'drvarun_chd':{ pw:'BMH@VarunCHD25',name:'Dr. Varun Baweja',  role:'Doctor',      dept:'Ophthalmology',    centre:'CHD',  degrees:'MS (Ophthalmology), DNB',                                   canSeeAllCentres:false, isAdmin:false },
   'drvarun_rpr':{ pw:'BMH@VarunRPR25',name:'Dr. Varun Baweja',  role:'Doctor',      dept:'Ophthalmology',    centre:'RPR',  degrees:'MS (Ophthalmology), DNB',                                   canSeeAllCentres:false, isAdmin:false },
 };
+const STAFF_ATTENDANCE_ACCESS = { modules:['attendance'], settings:[] };
+[
+  ['rpr_fiza', 'Fiza', 'RPR'], ['rpr_simran', 'Simran', 'RPR'], ['rpr_namanjot', 'Namanjot', 'RPR'],
+  ['rpr_ankita', 'Ankita', 'RPR'], ['rpr_ravi', 'Ravi', 'RPR'], ['rpr_babita', 'Babita', 'RPR'],
+  ['rpr_sukhwinder', 'Sukhwinder', 'RPR'], ['rpr_gurpreet_kaur', 'Gurpreet Kaur', 'RPR'],
+  ['rpr_ruchika', 'Ruchika', 'RPR'], ['rpr_gurpreet_skin', 'Gurpreet Skin', 'RPR'],
+  ['rpr_manpreet', 'Manpreet', 'RPR'], ['rpr_dilpreet', 'Dilpreet', 'RPR'],
+  ['rpr_harjinder', 'Harjinder', 'RPR'], ['rpr_seema', 'Seema', 'RPR'],
+  ['rpr_gurpreet_singh', 'Gurpreet Singh', 'RPR'],
+  ['chd_pooja', 'Pooja', 'CHD'], ['chd_monica', 'Monica', 'CHD'], ['chd_mansi', 'Mansi', 'CHD'],
+  ['chd_santosh', 'Santosh', 'CHD']
+].forEach(function (entry) {
+  const uname = entry[0];
+  if (!USER_DB[uname]) {
+    USER_DB[uname] = {
+      pw: '12345', defaultPw: '12345', mustChangePassword: true,
+      name: entry[1], role: 'Staff', dept: 'Staff', centre: entry[2],
+      degrees: '', canSeeAllCentres: false, isAdmin: false,
+      access: Object.assign({}, STAFF_ATTENDANCE_ACCESS),
+      disabled: false
+    };
+  }
+});
 [
   ['drvarun@bawejahospital.com', { pw:'ChangeMe@123', name:'Dr. Varun Baweja', role:'Admin', dept:'Ophthalmology', centre:'BOTH', degrees:'MS (Ophthalmology), DNB, Ex Cons Cambridgeshire (UK)', canSeeAllCentres:true, isAdmin:true }],
   ['drbaweja@bawejahospital.com', { pw:'ChangeMe@123', name:'Dr. Baweja', role:'Admin', dept:'Ophthalmology', centre:'BOTH', degrees:'', canSeeAllCentres:true, isAdmin:true }],
@@ -6817,6 +6840,10 @@ function buildSidebarForRole(role, dept, name) {
       <div class="ni" onclick="nav('billing',this)"><div class="ni-ic">💳</div>Billing</div>
       <div class="ni" onclick="nav('reports',this)"><div class="ni-ic">📊</div>Reports</div>
       <div class="ni" onclick="nav('attendance',this)"><div class="ni-ic">🕒</div>Attendance</div>`;
+  } else if(role==='Staff') {
+    nav_el.innerHTML = `
+      <div class="ngrp">Staff</div>
+      <div class="ni active" onclick="nav('attendance',this)"><div class="ni-ic">🕒</div>Attendance</div>`;
   }
   // Admin role keeps the full default sidebar — no change needed
   appendApprovedModules();
@@ -35656,13 +35683,14 @@ function activateUserSession(user, profile, opts) {
 
   if (typeof buildSidebarForRole === 'function') buildSidebarForRole(profile.role, profile.dept, profile.name);
 
-  var pageMap = { Admin:'dashboard', Doctor:'doctor-queue', Reception:'reception', Lab:'lab', TPA:'tpa', Inventory:'inventory', Optometrist:'doctor-queue' };
+  var pageMap = { Admin:'dashboard', Doctor:'doctor-queue', Reception:'reception', Lab:'lab', TPA:'tpa', Inventory:'inventory', Optometrist:'doctor-queue', Staff:'attendance' };
   var firstPage = pageMap[profile.role] || 'dashboard';
   if (typeof tryScheduleRouteRestoreFromHash === 'function') {
     tryScheduleRouteRestoreFromHash(function () { if (typeof nav === 'function') nav(firstPage, null); });
   } else if (typeof nav === 'function') {
     nav(firstPage, null);
   }
+  if (typeof promptFirstLoginPasswordChange === 'function') promptFirstLoginPasswordChange();
 
   setTimeout(function() {
     try {
@@ -35702,8 +35730,7 @@ function activateUserSession(user, profile, opts) {
             if(!USER_DB[uname] && data.name && data.role) {
               USER_DB[uname] = { pw: data.pw||'', name: data.name, role: data.role||'Reception', dept: data.dept||'', centre: data.centre||'CHD', degrees: data.degrees||'', canSeeAllCentres: !!data.canSeeAllCentres, isAdmin: !!data.isAdmin, disabled: !!data.disabled };
             } else if(USER_DB[uname]) {
-              if(data.pw) USER_DB[uname].pw = data.pw;
-              if(data.disabled !== undefined) USER_DB[uname].disabled = data.disabled;
+              USER_DB[uname] = Object.assign({}, USER_DB[uname], data);
             }
           });
         }).catch(function(e){ console.warn('userSettings load error:', e); });
@@ -45020,8 +45047,8 @@ function attendanceUserKey() {
 }
 function defaultAttendanceGeofence() {
   return {
-    CHD: { label: 'Chandigarh', lat: '', lng: '', radius: 200 },
-    RPR: { label: 'Ropar', lat: '', lng: '', radius: 200 }
+    CHD: { label: 'Chandigarh', lat: '30.7360699', lng: '76.7333007', radius: 250 },
+    RPR: { label: 'Ropar', lat: '30.9646009', lng: '76.5257099', radius: 200 }
   };
 }
 function normalizeAttendanceGeofence(raw) {
@@ -45029,8 +45056,8 @@ function normalizeAttendanceGeofence(raw) {
   ['CHD','RPR'].forEach(function (centre) {
     const src = raw && raw[centre] ? raw[centre] : {};
     base[centre] = Object.assign({}, base[centre], src);
-    base[centre].lat = src.lat == null ? '' : String(src.lat);
-    base[centre].lng = src.lng == null ? '' : String(src.lng);
+    base[centre].lat = src.lat == null || src.lat === '' ? base[centre].lat : String(src.lat);
+    base[centre].lng = src.lng == null || src.lng === '' ? base[centre].lng : String(src.lng);
     base[centre].radius = Math.max(25, Number(src.radius || base[centre].radius || 200));
   });
   return base;
@@ -45264,15 +45291,8 @@ function renderAttendancePage() {
   Promise.all([fetchTodayAttendance(), loadAttendanceGeofenceConfig()]).then(function ([row, config]) {
     if (card) card.innerHTML = renderAttendanceRowCard(row || {});
     if (recent) recent.innerHTML = renderMyRecentAttendanceLocal();
-    const page = document.getElementById('pg-attendance');
     const old = document.getElementById('att-geofence-admin-card');
     if (old) old.remove();
-    if (page && CURRENT_USER?.isAdmin) {
-      const wrap = document.createElement('div');
-      wrap.id = 'att-geofence-admin-card';
-      wrap.innerHTML = renderAttendanceGeofenceAdmin(config);
-      page.appendChild(wrap);
-    }
   });
 }
 function renderMyRecentAttendanceLocal() {
@@ -45470,13 +45490,17 @@ function changeMyPassword() {
   const conf   = document.getElementById('cpw-confirm')?.value || '';
   const uname  = CURRENT_USER.username;
   if(!cur || !nw || !conf) { showToast('Please fill all password fields','w'); return; }
-  if(USER_DB[uname]?.pw !== cur) { showToast('❌ Current password is incorrect','w'); return; }
+  if(!isAcceptedLoginPassword(uname, USER_DB[uname], cur)) { showToast('❌ Current password is incorrect','w'); return; }
   if(nw.length < 6) { showToast('New password must be at least 6 characters','w'); return; }
   if(nw !== conf) { showToast('New passwords do not match','w'); return; }
   USER_DB[uname].pw = nw;
+  USER_DB[uname].mustChangePassword = false;
+  USER_DB[uname].defaultPw = '';
   CURRENT_USER.pw = nw;
+  CURRENT_USER.mustChangePassword = false;
+  CURRENT_USER.defaultPw = '';
   // Persist to Firebase
-  fbUpdate(userSettingsPath(uname), { pw: nw, pwChangedAt: new Date().toISOString(), pwChangedBy: CURRENT_USER.name })
+  fbUpdate(userSettingsPath(uname), { pw: nw, defaultPw: '', mustChangePassword: false, pwChangedAt: new Date().toISOString(), pwChangedBy: CURRENT_USER.name })
     .catch(e => console.warn('Password save error:', e));
   document.getElementById('cpw-current').value = '';
   document.getElementById('cpw-new').value = '';
@@ -45487,6 +45511,36 @@ function changeMyPassword() {
     if(saved && saved.u === uname) localStorage.setItem('bmh_creds', JSON.stringify({u: uname, p: nw}));
   } catch(e) {}
   showToast('✅ Password changed successfully','s');
+}
+
+function promptFirstLoginPasswordChange() {
+  if (!CURRENT_USER || !CURRENT_USER.mustChangePassword) return;
+  const uname = CURRENT_USER.username;
+  if (!USER_DB[uname]) return;
+  setTimeout(function () {
+    if (!confirm('Please change your initial attendance password now?')) {
+      showToast('You can change your password later from Settings if access is enabled.', 'i');
+      return;
+    }
+    const next = prompt('Enter new password (minimum 6 characters):');
+    if (!next) { showToast('Password not changed', 'w'); return; }
+    if (next.length < 6) { showToast('New password must be at least 6 characters', 'w'); return; }
+    const again = prompt('Re-enter new password:');
+    if (next !== again) { showToast('Passwords do not match', 'w'); return; }
+    USER_DB[uname].pw = next;
+    USER_DB[uname].defaultPw = '';
+    USER_DB[uname].mustChangePassword = false;
+    CURRENT_USER.pw = next;
+    CURRENT_USER.defaultPw = '';
+    CURRENT_USER.mustChangePassword = false;
+    fbUpdate(userSettingsPath(uname), { pw: next, defaultPw: '', mustChangePassword: false, pwChangedAt: new Date().toISOString(), pwChangedBy: CURRENT_USER.name || uname })
+      .catch(function (e) { console.warn('First login password save error:', e); });
+    try {
+      const saved = JSON.parse(localStorage.getItem('bmh_creds') || 'null');
+      if (saved && saved.u === uname) localStorage.setItem('bmh_creds', JSON.stringify({ u: uname, p: next }));
+    } catch (e) {}
+    showToast('Password changed successfully ✓', 's');
+  }, 700);
 }
 
 // ── Render Admin Users List ────────────────────────────────────
@@ -45500,7 +45554,7 @@ function renderAdminUsersList() {
 
   const roleColors = {
     Admin:'bd-red', Doctor:'bd-blue', Reception:'bd-teal',
-    Lab:'bd-purple', Optometrist:'bd-indigo', Inventory:'bd-orange', TPA:'bd-gold'
+    Lab:'bd-purple', Optometrist:'bd-indigo', Inventory:'bd-orange', TPA:'bd-gold', Staff:'bd-green'
   };
 
   const rows = Object.entries(USER_DB).map(([uname, u]) => {
