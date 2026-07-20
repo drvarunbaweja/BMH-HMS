@@ -45,7 +45,7 @@ const USER_DB = {
   'drvarun_rpr':{ pw:'BMH@VarunRPR25',name:'Dr. Varun Baweja',  role:'Doctor',      dept:'Ophthalmology',    centre:'RPR',  degrees:'MS (Ophthalmology), DNB',                                   canSeeAllCentres:false, isAdmin:false },
 };
 const STAFF_ATTENDANCE_ACCESS = { modules:['attendance'], settings:[] };
-[
+const STAFF_ATTENDANCE_LOGIN_SEEDS = [
   ['rpr_fiza', 'Fiza', 'RPR'], ['rpr_simran', 'Simran', 'RPR'], ['rpr_namanjot', 'Namanjot', 'RPR'],
   ['rpr_ankita', 'Ankita', 'RPR'], ['rpr_ravi', 'Ravi', 'RPR'], ['rpr_babita', 'Babita', 'RPR'],
   ['rpr_sukhwinder', 'Sukhwinder', 'RPR'], ['rpr_gurpreet_kaur', 'Gurpreet Kaur', 'RPR'],
@@ -55,7 +55,8 @@ const STAFF_ATTENDANCE_ACCESS = { modules:['attendance'], settings:[] };
   ['rpr_gurpreet_singh', 'Gurpreet Singh', 'RPR'],
   ['chd_pooja', 'Pooja', 'CHD'], ['chd_monica', 'Monica', 'CHD'], ['chd_mansi', 'Mansi', 'CHD'],
   ['chd_santosh', 'Santosh', 'CHD']
-].forEach(function (entry) {
+];
+STAFF_ATTENDANCE_LOGIN_SEEDS.forEach(function (entry) {
   const uname = entry[0];
   if (!USER_DB[uname]) {
     USER_DB[uname] = {
@@ -67,6 +68,24 @@ const STAFF_ATTENDANCE_ACCESS = { modules:['attendance'], settings:[] };
     };
   }
 });
+function ensureUserModuleAccess(profile, modules) {
+  if (!profile) return profile;
+  const next = Object.assign({}, profile);
+  const access = Object.assign({}, next.access || {});
+  const current = Array.isArray(access.modules) ? access.modules.slice() : [];
+  (modules || []).forEach(function (m) { if (current.indexOf(m) === -1) current.push(m); });
+  access.modules = current;
+  if (!Array.isArray(access.settings)) access.settings = [];
+  next.access = access;
+  return next;
+}
+function applyLoginCompatibilityDefaults(uname) {
+  const key = String(uname || '').toLowerCase();
+  if (!USER_DB[key]) return;
+  if (/^drnamrata(?:$|[._@])/.test(key)) USER_DB[key] = ensureUserModuleAccess(USER_DB[key], ['appointments','ipd','ot','discharge','reports','audits','attendance']);
+  const staffSeed = STAFF_ATTENDANCE_LOGIN_SEEDS.find(function (entry) { return entry[0] === key; });
+  if (staffSeed) USER_DB[key] = Object.assign({}, USER_DB[key], { role:'Staff', dept:'Staff', centre:staffSeed[2], access:Object.assign({}, STAFF_ATTENDANCE_ACCESS), defaultPw:USER_DB[key].defaultPw || '12345', mustChangePassword: USER_DB[key].mustChangePassword !== false });
+}
 [
   ['drvarun@bawejahospital.com', { pw:'ChangeMe@123', name:'Dr. Varun Baweja', role:'Admin', dept:'Ophthalmology', centre:'BOTH', degrees:'MS (Ophthalmology), DNB, Ex Cons Cambridgeshire (UK)', canSeeAllCentres:true, isAdmin:true }],
   ['drbaweja@bawejahospital.com', { pw:'ChangeMe@123', name:'Dr. Baweja', role:'Admin', dept:'Ophthalmology', centre:'BOTH', degrees:'', canSeeAllCentres:true, isAdmin:true }],
@@ -107,6 +126,18 @@ const STAFF_ATTENDANCE_ACCESS = { modules:['attendance'], settings:[] };
 ].forEach(function (pair) {
   if (!USER_DB[pair[0]] && USER_DB[pair[1]]) USER_DB[pair[0]] = Object.assign({}, USER_DB[pair[1]]);
 });
+[
+  ['fiza','rpr_fiza'], ['simran','rpr_simran'], ['namanjot','rpr_namanjot'], ['ankita','rpr_ankita'],
+  ['ravi','rpr_ravi'], ['babita','rpr_babita'], ['sukhwinder','rpr_sukhwinder'],
+  ['gurpreetkaur','rpr_gurpreet_kaur'], ['gurpreet_kaur','rpr_gurpreet_kaur'],
+  ['ruchika','rpr_ruchika'], ['gurpreetskin','rpr_gurpreet_skin'], ['gurpreet_skin','rpr_gurpreet_skin'],
+  ['manpreet','rpr_manpreet'], ['dilpreet','rpr_dilpreet'], ['harjinder','rpr_harjinder'],
+  ['seema','rpr_seema'], ['gurpreetsingh','rpr_gurpreet_singh'], ['gurpreet_singh','rpr_gurpreet_singh'],
+  ['pooja','chd_pooja'], ['monica','chd_monica'], ['mansi','chd_mansi'], ['santosh','chd_santosh']
+].forEach(function (pair) {
+  if (!USER_DB[pair[0]] && USER_DB[pair[1]]) USER_DB[pair[0]] = Object.assign({}, USER_DB[pair[1]]);
+});
+Object.keys(USER_DB).forEach(applyLoginCompatibilityDefaults);
 [
   'drvarun','drbaweja','drtarun','drtarun_chd','drnamrata','drnamrata_chd','drpooja','drpooja_chd',
   'drgeeta','rec_chd','rec_rpr','reception.chd','reception.rpr','lab_chd','lab_rpr','lab.chd','lab.rpr',
@@ -35577,6 +35608,7 @@ function loginUser() {
           }
           matchedUser = found.username;
           USER_DB[matchedUser] = Object.assign({}, USER_DB[matchedUser] || {}, found.profile);
+          applyLoginCompatibilityDefaults && applyLoginCompatibilityDefaults(matchedUser);
           if (!isAcceptedLoginPassword(matchedUser, USER_DB[matchedUser], pass)) {
             showLoginErr('Incorrect username or password');
             var pi2 = document.getElementById('lg-pass');
@@ -35732,6 +35764,7 @@ function activateUserSession(user, profile, opts) {
             } else if(USER_DB[uname]) {
               USER_DB[uname] = Object.assign({}, USER_DB[uname], data);
             }
+            applyLoginCompatibilityDefaults && applyLoginCompatibilityDefaults(uname);
           });
         }).catch(function(e){ console.warn('userSettings load error:', e); });
       }, 1600);
@@ -35750,6 +35783,7 @@ function preloadUserSettings() {
     if(!settings) return;
     Object.entries(settings).forEach(function([uname, data]) {
       USER_DB[uname] = Object.assign({}, USER_DB[uname] || {}, data);
+      applyLoginCompatibilityDefaults && applyLoginCompatibilityDefaults(uname);
     });
     if (CURRENT_USER?.isAdmin) renderAdminUsersList && renderAdminUsersList();
   }).catch(function(e){ console.warn('user preload error:', e); });
