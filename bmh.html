@@ -123,6 +123,22 @@ body { display:flex; flex-direction:column; min-height:100vh; padding:clamp(16px
      so the remote works immediately without an extra press. */
   var first = document.querySelector('.lnc-btn');
   if (first) first.focus();
+
+  /* Fullscreen only works in response to a real user action (a click
+     or OK-button press) — browsers block it if triggered any other
+     way. Selecting a department is exactly that action, so ask for
+     fullscreen right here, then let the link navigate as normal. Most
+     browsers carry the fullscreen state through to the next page. */
+  function requestFS() {
+    var el = document.documentElement;
+    var fn = el.requestFullscreen || el.webkitRequestFullscreen
+      || el.mozRequestFullScreen || el.msRequestFullscreen;
+    if (fn) { try { fn.call(el); } catch (e) {} }
+  }
+  var links = document.querySelectorAll('.lnc-btn');
+  for (var i = 0; i < links.length; i++) {
+    links[i].addEventListener('click', requestFS);
+  }
 })();
 </script>
 
