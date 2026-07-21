@@ -34,10 +34,12 @@ html, body {
 }
 
 /* ── Shell grid: header + main + footer ── */
+/* Flexbox, not CSS Grid — some older Android TV browsers implement
+   Grid poorly or not at all, which was silently doubling the layout
+   width on real devices. Flexbox has much broader legacy support. */
 #shell {
-  display:grid; width:100vw; height:100vh;
-  grid-template-rows:80px 1fr 44px;
-  grid-template-columns:1fr;
+  display:flex; flex-direction:column;
+  width:100vw; height:100vh; overflow:hidden;
 }
 
 /* ════════ HEADER ════════ */
@@ -48,6 +50,7 @@ html, body {
   border-bottom:1.5px solid var(--line);
   box-shadow:0 4px 20px rgba(18,59,109,.08);
   z-index:10;
+  flex:0 0 80px; height:80px; width:100%; min-width:0;
 }
 .hdr-logos { display:flex; align-items:center; gap:14px; flex:0 0 auto }
 .hdr-logos img { height:48px; object-fit:contain }
@@ -100,7 +103,7 @@ html, body {
 .clock-date { font-size:12px; color:var(--muted); margin-top:2px }
 
 /* ════════ MAIN ════════ */
-#main { position:relative; overflow:hidden }
+#main { position:relative; overflow:hidden; flex:1 1 auto; min-height:0; width:100%; min-width:0 }
 
 /* Both panels fill the main area, only one visible at a time */
 .panel {
@@ -561,6 +564,7 @@ html, body {
   display:flex; align-items:center; gap:14px;
   background:var(--paper); border-top:1px solid var(--line);
   padding:0 20px; min-width:0; overflow:hidden;
+  flex:0 0 44px; height:44px; width:100%;
 }
 .ftr-ticker { flex:1; overflow:hidden; height:100%;
   display:flex; align-items:center }
@@ -1327,30 +1331,38 @@ function titleFromFilename(name) {
 }
 
 function loadAutoSlides() {
-  Object.keys(AUTO_FOLDERS).forEach(function(deptKey) {
-    var folder = AUTO_FOLDERS[deptKey];
-    var cfg = DEPT_MAP[deptKey];
-    var apiUrl = 'https://api.github.com/repos/' + GH_OWNER + '/' + GH_REPO
-      + '/contents/src/public/assets/queue-media/' + folder + '/auto';
-    fetch(apiUrl).then(function(res) {
-      return res.ok ? res.json() : [];
-    }).then(function(files) {
-      if (!Array.isArray(files)) return;
-      var added = false;
-      files.forEach(function(f) {
-        if (f.type !== 'file' || !AUTO_IMG_EXT.test(f.name)) return;
-        var path = './assets/queue-media/' + folder + '/auto/' + f.name;
-        var already = window.BMH_SLIDES.some(function(s) { return (s.img || s.imgKey) === path; });
-        if (already) return;
-        window.BMH_SLIDES.push({
-          kind:'photo', title:titleFromFilename(f.name), pa:'', bullets:[],
-          img:path, department:cfg.slideKey
+  /* This is a nice-to-have enhancement layered on top of the curated
+     deck. Some older Android TV browsers don't implement fetch() at
+     all — calling it would throw synchronously and, left unguarded,
+     that used to abort the rest of boot() before the queue/slide
+     rotation even started. Never let this function risk that again. */
+  if (typeof fetch !== 'function') return;
+  try {
+    Object.keys(AUTO_FOLDERS).forEach(function(deptKey) {
+      var folder = AUTO_FOLDERS[deptKey];
+      var cfg = DEPT_MAP[deptKey];
+      var apiUrl = 'https://api.github.com/repos/' + GH_OWNER + '/' + GH_REPO
+        + '/contents/src/public/assets/queue-media/' + folder + '/auto';
+      fetch(apiUrl).then(function(res) {
+        return res.ok ? res.json() : [];
+      }).then(function(files) {
+        if (!Array.isArray(files)) return;
+        var added = false;
+        files.forEach(function(f) {
+          if (f.type !== 'file' || !AUTO_IMG_EXT.test(f.name)) return;
+          var path = './assets/queue-media/' + folder + '/auto/' + f.name;
+          var already = window.BMH_SLIDES.some(function(s) { return (s.img || s.imgKey) === path; });
+          if (already) return;
+          window.BMH_SLIDES.push({
+            kind:'photo', title:titleFromFilename(f.name), pa:'', bullets:[],
+            img:path, department:cfg.slideKey
+          });
+          added = true;
         });
-        added = true;
-      });
-      if (added) initSlides();
-    }).catch(function() { /* offline or rate-limited — silently skip, curated slides still play */ });
-  });
+        if (added) initSlides();
+      }).catch(function() { /* offline or rate-limited — silently skip, curated slides still play */ });
+    });
+  } catch (e) { /* never let this take down the display */ }
 }
 
 function showNextSlide() {
@@ -1410,13 +1422,19 @@ function rotateTick() {
   }
 }
 
-/* ── Boot ────────────────────────────────────────── */
+/* ── Boot ────────────────────────────────────────────
+   Core display logic first, unconditionally. Anything "nice to have"
+   (auto-loaded slides) runs afterwards and is fully self-guarded so it
+   can never prevent the queue or slide rotation from starting. ── */
 initSlides();
-loadAutoSlides();
 connectFirebase();
 setMode('queue');
 setInterval(rotateTick, 500);
-setInterval(loadAutoSlides, 2 * 60 * 60 * 1000); /* re-check for new uploads every 2 hours */
+
+try { loadAutoSlides(); } catch (e) { /* core display already running regardless */ }
+setInterval(function() {
+  try { loadAutoSlides(); } catch (e) {}
+}, 2 * 60 * 60 * 1000); /* re-check for new uploads every 2 hours */
 
 })();
 </script>
