@@ -3,6 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <title>BMH Queue Display</title>
   <style>
     :root {
@@ -1063,6 +1065,44 @@
       background: var(--gold);
       transition: width .25s linear;
     }
+    .fullscreen-tools {
+      position: fixed;
+      right: 18px;
+      bottom: 62px;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: rgba(255,255,255,.94);
+      border: 1px solid rgba(18,59,109,.18);
+      box-shadow: 0 16px 42px rgba(8,28,54,.16);
+      color: var(--blue);
+      font-size: 13px;
+      font-weight: 900;
+      backdrop-filter: blur(10px);
+    }
+    .fullscreen-tools button {
+      border: 0;
+      border-radius: 10px;
+      padding: 9px 12px;
+      background: var(--blue);
+      color: #fff;
+      font: inherit;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .fullscreen-tools small {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 850;
+    }
+    body.bmh-display-fullscreen .fullscreen-tools {
+      display: none;
+    }
     @media (max-width: 900px) {
       body { overflow: auto; }
       .screen { min-height: 100vh; height: auto; grid-template-rows: auto 1fr auto; }
@@ -1158,10 +1198,20 @@
       .myth-cell p { font-size: clamp(13px, 1.35vw, 19px); }
       .motion-scene { min-height: 300px; }
       footer { font-size: 11px; }
+      .fullscreen-tools {
+        right: 10px;
+        bottom: 42px;
+        max-width: calc(100vw - 20px);
+        font-size: 11px;
+      }
     }
   </style>
 </head>
 <body>
+  <div class="fullscreen-tools" id="fullscreen-tools">
+    <div>TV display mode<small>Click once to hide the browser bar</small></div>
+    <button type="button" id="fullscreen-btn">Full Screen</button>
+  </div>
   <div class="screen">
     <header>
       <div class="brand">
@@ -1228,6 +1278,7 @@
       var modeStartedAt = Date.now();
       var modeDuration = queueMs;
       var timer = null;
+      var fullscreenBtn = document.getElementById('fullscreen-btn');
 
       var deptMap = {
         ophtho: { title: 'Ophthalmology', pa: 'ਅੱਖਾਂ ਦਾ ਵਿਭਾਗ', aliases: ['ophtho', 'ophthalmology', 'eye'] },
@@ -1243,6 +1294,38 @@
         if (d.indexOf('skin') >= 0 || d.indexOf('derma') >= 0 || d.indexOf('cosmet') >= 0) return 'skin';
         return d || 'ophtho';
       }
+      function isFullscreenDisplay() {
+        var displayModeFullscreen = false;
+        try {
+          displayModeFullscreen = window.matchMedia && window.matchMedia('(display-mode: fullscreen)').matches;
+        } catch (e) {}
+        var nearScreenSize = false;
+        try {
+          nearScreenSize = window.screen
+            && Math.abs(window.innerHeight - window.screen.height) <= 8
+            && Math.abs(window.innerWidth - window.screen.width) <= 8;
+        } catch (e) {}
+        return !!(document.fullscreenElement || document.webkitFullscreenElement || displayModeFullscreen || nearScreenSize);
+      }
+      function updateFullscreenUi() {
+        document.body.classList.toggle('bmh-display-fullscreen', isFullscreenDisplay());
+      }
+      function requestDisplayFullscreen() {
+        var el = document.documentElement;
+        var fn = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+        if (fn) {
+          Promise.resolve(fn.call(el)).catch(function () {
+            updateFullscreenUi();
+          });
+        }
+        updateFullscreenUi();
+      }
+      if (fullscreenBtn) fullscreenBtn.addEventListener('click', requestDisplayFullscreen);
+      ['fullscreenchange', 'webkitfullscreenchange', 'resize', 'orientationchange'].forEach(function (eventName) {
+        document.addEventListener(eventName, updateFullscreenUi);
+        window.addEventListener(eventName, updateFullscreenUi);
+      });
+      updateFullscreenUi();
       var activeDept = deptMap[normDept(deptParam)] ? normDept(deptParam) : 'ophtho';
       document.getElementById('dept-title').textContent = deptMap[activeDept].title;
       document.getElementById('dept-pa').textContent = deptMap[activeDept].pa;
