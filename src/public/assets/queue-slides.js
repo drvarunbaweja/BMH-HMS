@@ -242,6 +242,22 @@
          './assets/queue-media/eye/sourced/icl-microsurgery.jpg', 'Ophthalmology',
          { text:'Photo: Fernando Capetillo / Pexels', url:'https://www.pexels.com/photo/33857824/' }),
 
+    photo('Choosing the Right IOL — Monofocal, Multifocal, EDOF & Trifocal',
+        'ਸਹੀ IOL ਦੀ ਚੋਣ — ਮੋਨੋਫੋਕਲ, ਮਲਟੀਫੋਕਲ, EDOF ਅਤੇ ਟ੍ਰਾਈਫੋਕਲ',
+        [
+          ['Monofocal — sharp vision at one distance, usually far; reading glasses still needed up close.',
+           'ਮੋਨੋਫੋਕਲ — ਇੱਕ ਦੂਰੀ ਤੇ ਸਾਫ਼ ਨਜ਼ਰ, ਆਮ ਤੌਰ ਤੇ ਦੂਰ ਦੀ; ਨੇੜੇ ਲਈ ਐਨਕ ਦੀ ਲੋੜ ਰਹਿੰਦੀ ਹੈ।', '👓'],
+          ['Multifocal — clear near and distance vision together, much less dependence on glasses.',
+           'ਮਲਟੀਫੋਕਲ — ਨੇੜੇ ਅਤੇ ਦੂਰ ਦੋਵੇਂ ਸਾਫ਼ ਨਜ਼ਰ, ਐਨਕਾਂ ਦੀ ਲੋੜ ਬਹੁਤ ਘੱਟ।', '🔍'],
+          ['EDOF (Extended Depth of Focus) — one smooth, continuous range of vision with fewer night halos.',
+           'EDOF — ਦ੍ਰਿਸ਼ਟੀ ਦੀ ਲਗਾਤਾਰ ਰੇਂਜ, ਰਾਤ ਨੂੰ ਚਮਕ ਦੀ ਸਮੱਸਿਆ ਘੱਟ।', '🌗'],
+          ['Trifocal — near, intermediate and distance vision in one lens for the most all-round glasses freedom.',
+           'ਟ੍ਰਾਈਫੋਕਲ — ਨੇੜੇ, ਵਿਚਕਾਰਲੀ ਅਤੇ ਦੂਰ ਨਜ਼ਰ ਇੱਕੋ ਲੈਂਸ ਵਿੱਚ, ਸਭ ਤੋਂ ਵਧੀਆ ਐਨਕ-ਮੁਕਤ ਅਨੁਭਵ।', '🎯']
+        ],
+        './assets/queue-media/eye/sourced/iol-lens-wikimedia.jpg',
+        'Ophthalmology',
+        { text:'Frank C. Müller / Wikimedia', url:'https://commons.wikimedia.org/wiki/File:Hinterkammerlinse_02_(fcm).jpg' }),
+
     info('Eye Emergency Warning Signs',
          'ਅੱਖਾਂ ਦੇ ਐਮਰਜੈਂਸੀ ਸੰਕੇਤ',
          [['Sudden vision loss, new floaters, or flashing lights — seek urgent care immediately.',

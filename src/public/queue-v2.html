@@ -603,7 +603,7 @@ html, body {
     </div>
     <div class="hdr-name">
       Baweja Multispeciality Hospital
-      <span id="hdr-subtitle">NAABH Certified · Chandigarh &amp; Ropar</span>
+      <span id="hdr-subtitle">Chandigarh &amp; Ropar</span>
     </div>
     <div class="hdr-right">
       <div id="live-status">
@@ -748,8 +748,8 @@ function activeCfg() { return DEPT_MAP[activeDept()] || DEPT_MAP.ophtho; }
 /* Set subtitle for Chandigarh/Ropar */
 if (CENTRE) {
   document.getElementById('hdr-subtitle').textContent =
-    CENTRE === 'CHD' ? 'Chandigarh · NAABH Certified' :
-    CENTRE === 'RPR' ? 'Ropar · Baweja Hospital' : 'NAABH Certified';
+    CENTRE === 'CHD' ? 'Chandigarh' :
+    CENTRE === 'RPR' ? 'Ropar · Baweja Hospital' : 'Chandigarh & Ropar';
 }
 
 /* Update queue panel header to match active dept */
