@@ -64,6 +64,7 @@ STAFF_ATTENDANCE_LOGIN_SEEDS.forEach(function (entry) {
       name: entry[1], role: 'Staff', dept: 'Staff', centre: entry[2],
       degrees: '', canSeeAllCentres: false, isAdmin: false,
       access: Object.assign({}, STAFF_ATTENDANCE_ACCESS),
+      attendanceEnabled: true,
       disabled: false
     };
   }
@@ -84,7 +85,7 @@ function applyLoginCompatibilityDefaults(uname) {
   if (!USER_DB[key]) return;
   if (/^drnamrata(?:$|[._@])/.test(key)) USER_DB[key] = ensureUserModuleAccess(USER_DB[key], ['appointments','ipd','ot','discharge','reports','audits','attendance']);
   const staffSeed = STAFF_ATTENDANCE_LOGIN_SEEDS.find(function (entry) { return entry[0] === key; });
-  if (staffSeed) USER_DB[key] = Object.assign({}, USER_DB[key], { role:'Staff', dept:'Staff', centre:staffSeed[2], access:Object.assign({}, STAFF_ATTENDANCE_ACCESS), defaultPw:USER_DB[key].defaultPw || '12345', mustChangePassword: USER_DB[key].mustChangePassword !== false });
+  if (staffSeed) USER_DB[key] = Object.assign({}, USER_DB[key], { role:'Staff', dept:'Staff', centre:staffSeed[2], access:Object.assign({}, STAFF_ATTENDANCE_ACCESS), attendanceEnabled:true, defaultPw:USER_DB[key].defaultPw || '12345', mustChangePassword: USER_DB[key].mustChangePassword !== false });
 }
 [
   ['drvarun@bawejahospital.com', { pw:'ChangeMe@123', name:'Dr. Varun Baweja', role:'Admin', dept:'Ophthalmology', centre:'BOTH', degrees:'MS (Ophthalmology), DNB, Ex Cons Cambridgeshire (UK)', canSeeAllCentres:true, isAdmin:true }],
@@ -45443,14 +45444,18 @@ function bmhRequireAttendanceAdminPin() {
   return true;
 }
 function attendanceStaffEmployees() {
+  const seedKeys = new Set((STAFF_ATTENDANCE_LOGIN_SEEDS || []).map(function (entry) { return String(entry[0] || '').toLowerCase(); }));
+  const seenKeys = new Set();
   const rows = Object.keys(USER_DB || {}).map(function (username) {
     const user = USER_DB[username] || {};
-    const modules = user.access && Array.isArray(user.access.modules) ? user.access.modules : [];
-    const role = String(user.role || '').toLowerCase();
-    const include = !user.disabled && !user.isAdmin && (role === 'staff' || modules.includes('attendance') || ['reception','lab','inventory','tpa','optometrist'].includes(role));
+    const uname = String(username || '').toLowerCase();
+    const userKey = attendanceSafeKey(username || user.name || '');
+    const include = !user.disabled && !user.isAdmin && (seedKeys.has(uname) || user.attendanceEnabled === true || user.markAttendance === true || user.access?.markAttendance === true);
     if (!include) return null;
+    if (!userKey || seenKeys.has(userKey)) return null;
+    seenKeys.add(userKey);
     return {
-      userKey: attendanceSafeKey(username || user.name || ''),
+      userKey: userKey,
       username: username,
       employeeName: user.name || username,
       role: user.role || '',
@@ -45874,6 +45879,7 @@ function openAddUserModal() {
   const nuRole = document.getElementById('nu-role'); if (nuRole) nuRole.value = 'Reception';
   const nuCentre = document.getElementById('nu-centre'); if (nuCentre) nuCentre.value = 'CHD';
   const nuAdmin = document.getElementById('nu-is-admin'); if (nuAdmin) nuAdmin.checked = false;
+  const nuMarkAttendance = document.getElementById('nu-mark-attendance'); if (nuMarkAttendance) nuMarkAttendance.checked = false;
   ['nu-access-modules','nu-access-settings'].forEach(function(id){
     document.querySelectorAll('#'+id+' input[type=checkbox]').forEach(function(cb){ cb.checked = false; });
   });
@@ -45882,11 +45888,14 @@ function openAddUserModal() {
 function collectAccessSelections(prefix) {
   return {
     modules: Array.from(document.querySelectorAll('#' + prefix + '-access-modules input[type=checkbox]:checked')).map(function (cb) { return cb.value; }),
-    settings: Array.from(document.querySelectorAll('#' + prefix + '-access-settings input[type=checkbox]:checked')).map(function (cb) { return cb.value; })
+    settings: Array.from(document.querySelectorAll('#' + prefix + '-access-settings input[type=checkbox]:checked')).map(function (cb) { return cb.value; }),
+    markAttendance: !!document.getElementById(prefix + '-mark-attendance')?.checked
   };
 }
 function applyAccessSelections(prefix, access) {
   const acc = access || {};
+  const markAttendanceEl = document.getElementById(prefix + '-mark-attendance');
+  if (markAttendanceEl) markAttendanceEl.checked = !!(acc.markAttendance || (prefix === 'eu' && USER_DB[document.getElementById('eu-username')?.value || '']?.attendanceEnabled));
   ['modules','settings'].forEach(function(kind) {
     const values = Array.isArray(acc[kind]) ? acc[kind] : [];
     document.querySelectorAll('#' + prefix + '-access-' + kind + ' input[type=checkbox]').forEach(function (cb) {
@@ -45935,6 +45944,7 @@ function saveNewUser() {
     canSeeAllCentres: (centre==='BOTH' || grantAdmin),
     isAdmin: grantAdmin,
     access,
+    attendanceEnabled: !!access.markAttendance,
     disabled: false,
     createdAt: new Date().toISOString(),
     createdBy: CURRENT_USER.name
@@ -45988,11 +45998,12 @@ function saveEditUser() {
   USER_DB[uname].centre = centre;
   USER_DB[uname].dept   = dept;
   USER_DB[uname].access = access;
+  USER_DB[uname].attendanceEnabled = !!access.markAttendance;
   USER_DB[uname].canSeeAllCentres = (centre==='BOTH'||grantAdmin);
   USER_DB[uname].isAdmin = grantAdmin;
   if(newpw) USER_DB[uname].pw = newpw;
 
-  const updateData = { name, role, centre, dept, access, canSeeAllCentres: USER_DB[uname].canSeeAllCentres, isAdmin: USER_DB[uname].isAdmin, updatedBy: CURRENT_USER.name, updatedAt: new Date().toISOString() };
+  const updateData = { name, role, centre, dept, access, attendanceEnabled: USER_DB[uname].attendanceEnabled, canSeeAllCentres: USER_DB[uname].canSeeAllCentres, isAdmin: USER_DB[uname].isAdmin, updatedBy: CURRENT_USER.name, updatedAt: new Date().toISOString() };
   if(newpw) updateData.pw = newpw;
   fbUpdate(userSettingsPath(uname), updateData).catch(e => console.warn('Edit user error:', e));
 
