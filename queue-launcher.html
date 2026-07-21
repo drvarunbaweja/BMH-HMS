@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en-IN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BMH Queue Display — Select TV</title>
+<style>
+:root {
+  --blue:  #123b6d;
+  --teal:  #0b7b8c;
+  --ink:   #11233b;
+  --muted: #5b6b80;
+  --line:  rgba(18,59,109,.15);
+  --paper: #ffffff;
+}
+* { box-sizing:border-box; margin:0; padding:0 }
+html, body {
+  width:100%; height:100%; overflow:hidden;
+  font-family:'Segoe UI', Arial, sans-serif;
+  background:linear-gradient(160deg, #eef6ff, #f8fbff);
+  color:var(--ink);
+}
+body { display:flex; flex-direction:column; height:100vh; padding:36px 56px; }
+
+/* Header */
+.lnc-hdr { display:flex; align-items:center; justify-content:center; gap:24px; flex:0 0 auto; margin-bottom:28px }
+.lnc-hdr img { height:64px; object-fit:contain; mix-blend-mode:multiply }
+.lnc-title { text-align:center; flex:0 0 auto; margin-bottom:8px }
+.lnc-title h1 { font-size:clamp(28px,3.4vw,42px); font-weight:900; color:var(--blue); letter-spacing:-.5px }
+.lnc-title p  { font-size:clamp(15px,1.6vw,20px); color:var(--teal); font-weight:700; margin-top:4px }
+
+/* Centre columns */
+.lnc-body {
+  flex:1; display:grid; grid-template-columns:1fr 1fr; gap:40px;
+  min-height:0; padding-top:8px;
+}
+.lnc-col {
+  display:flex; flex-direction:column; justify-content:center; gap:22px;
+  background:rgba(255,255,255,.65); border:1.5px solid var(--line);
+  border-radius:22px; padding:28px 30px; min-height:0;
+  box-shadow:0 10px 34px rgba(18,59,109,.08);
+}
+.lnc-col-head { font-size:clamp(22px,2.6vw,32px); font-weight:900; color:var(--blue);
+  text-align:center; margin-bottom:6px; letter-spacing:-.3px }
+.lnc-col-head span { display:block; font-size:.5em; font-weight:700; color:var(--teal); margin-top:2px }
+
+.lnc-btn {
+  display:flex; align-items:center; justify-content:center; gap:12px;
+  background:var(--paper); border:2px solid var(--line); border-radius:16px;
+  padding:34px 22px; font-size:clamp(19px,2.1vw,27px); font-weight:800;
+  color:var(--ink); text-decoration:none; text-align:center;
+  transition:transform .15s, box-shadow .15s, border-color .15s, background .15s;
+  line-height:1.3;
+}
+.lnc-btn .lnc-btn-pa { display:block; font-size:.6em; font-weight:600; color:var(--muted); margin-top:3px }
+.lnc-btn:focus, .lnc-btn:hover {
+  outline:none; border-color:var(--blue); background:#eaf3ff;
+  transform:scale(1.035);
+  box-shadow:0 0 0 5px rgba(18,59,109,.18), 0 14px 30px rgba(18,59,109,.18);
+}
+.lnc-btn.reception { border-color:rgba(18,59,109,.35) }
+.lnc-btn.eyeobg     { border-left:6px solid #0b5f8a }
+.lnc-btn.psychskin  { border-left:6px solid #5a1e96 }
+.lnc-btn.psych      { border-left:6px solid #5a1e96 }
+.lnc-btn.skin       { border-left:6px solid #8a5e0b }
+
+.lnc-ftr { flex:0 0 auto; text-align:center; margin-top:24px;
+  font-size:13px; color:var(--muted) }
+</style>
+</head>
+<body>
+
+  <div class="lnc-title">
+    <h1>Baweja Multispeciality Hospital</h1>
+    <p>Select this TV's Centre &amp; Department &nbsp;·&nbsp; ਇਸ TV ਦਾ ਕੇਂਦਰ ਅਤੇ ਵਿਭਾਗ ਚੁਣੋ</p>
+  </div>
+
+  <div class="lnc-body">
+
+    <div class="lnc-col">
+      <div class="lnc-col-head">Chandigarh<span>ਚੰਡੀਗੜ੍ਹ</span></div>
+      <a class="lnc-btn reception" href="./queue-reception.html?centre=CHD">
+        <div>Reception — All Departments<span class="lnc-btn-pa">ਰਿਸੈਪਸ਼ਨ — ਸਾਰੇ ਵਿਭਾਗ</span></div>
+      </a>
+      <a class="lnc-btn eyeobg" href="./queue-eye-obg.html?centre=CHD">
+        <div>Eye &amp; OBG<span class="lnc-btn-pa">ਅੱਖਾਂ ਅਤੇ ਪ੍ਰਸੂਤੀ ਵਿਭਾਗ</span></div>
+      </a>
+      <a class="lnc-btn psychskin" href="./queue-psych-skin.html?centre=CHD">
+        <div>Psychiatry &amp; Skin<span class="lnc-btn-pa">ਮਾਨਸਿਕ ਸਿਹਤ ਅਤੇ ਚਮੜੀ ਵਿਭਾਗ</span></div>
+      </a>
+    </div>
+
+    <div class="lnc-col">
+      <div class="lnc-col-head">Ropar<span>ਰੋਪੜ</span></div>
+      <a class="lnc-btn reception" href="./queue-reception.html?centre=RPR">
+        <div>Reception — All Departments<span class="lnc-btn-pa">ਰਿਸੈਪਸ਼ਨ — ਸਾਰੇ ਵਿਭਾਗ</span></div>
+      </a>
+      <a class="lnc-btn eyeobg" href="./queue-eye-obg.html?centre=RPR">
+        <div>Eye &amp; OBG<span class="lnc-btn-pa">ਅੱਖਾਂ ਅਤੇ ਪ੍ਰਸੂਤੀ ਵਿਭਾਗ</span></div>
+      </a>
+      <a class="lnc-btn psych" href="./queue-psych.html?centre=RPR">
+        <div>Psychiatry<span class="lnc-btn-pa">ਮਾਨਸਿਕ ਸਿਹਤ ਵਿਭਾਗ</span></div>
+      </a>
+      <a class="lnc-btn skin" href="./queue-skin.html?centre=RPR">
+        <div>Skin &amp; Cosmetology<span class="lnc-btn-pa">ਚਮੜੀ ਵਿਭਾਗ</span></div>
+      </a>
+    </div>
+
+  </div>
+
+  <div class="lnc-ftr">Use the TV remote's arrow keys to move between buttons, then press OK / Enter to select.</div>
+
+<script>
+(function () {
+  /* Android TV browsers already provide D-pad spatial navigation
+     between focusable links out of the box — no custom key handling
+     needed (and safer not to guess at it, since Chandigarh and Ropar
+     have different numbers of buttons). Just focus the first button
+     so the remote works immediately without an extra press. */
+  var first = document.querySelector('.lnc-btn');
+  if (first) first.focus();
+})();
+</script>
+
+</body>
+</html>
