@@ -5137,6 +5137,9 @@
         <div class="form-group"><label class="fl">Employee</label><input type="text" id="att-rep-user" placeholder="All employees"></div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+        <button class="btn btn-outline btn-sm" type="button" onclick="setAttendanceReportPeriod('day')">Today</button>
+        <button class="btn btn-outline btn-sm" type="button" onclick="setAttendanceReportPeriod('week')">This Week</button>
+        <button class="btn btn-outline btn-sm" type="button" onclick="setAttendanceReportPeriod('month')">This Month</button>
         <button class="btn btn-gold btn-sm" type="button" onclick="renderAttendanceReport()">📊 Generate</button>
         <button class="btn btn-outline btn-sm" type="button" onclick="printAttendanceReport()">🖨️ Print</button>
       </div>
