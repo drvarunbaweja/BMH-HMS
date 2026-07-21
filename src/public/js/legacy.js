@@ -45341,27 +45341,66 @@ function attendanceDurationText(mins) {
   const m = mins % 60;
   return (h ? h + 'h ' : '') + m + 'm';
 }
-function getTodayAttendancePath() {
-  return 'staffAttendance/' + todayKey() + '/' + attendanceUserKey();
+function attendanceDateOffsetKey(base, offsetDays) {
+  const d = base instanceof Date ? new Date(base.getTime()) : new Date(base || new Date());
+  if (Number.isNaN(d.getTime())) return todayKey();
+  d.setDate(d.getDate() + Number(offsetDays || 0));
+  return localDateKey(d);
 }
-function getMyTodayAttendance() {
-  const key = todayKey() + ':' + attendanceUserKey();
+function getAttendancePathForDate(dateKey, userKey) {
+  return 'staffAttendance/' + (dateKey || todayKey()) + '/' + (userKey || attendanceUserKey());
+}
+function getTodayAttendancePath() {
+  return getAttendancePathForDate(todayKey(), attendanceUserKey());
+}
+function getLocalAttendanceForDate(dateKey, userKey) {
+  const key = (dateKey || todayKey()) + ':' + (userKey || attendanceUserKey());
   try {
     const raw = localStorage.getItem('bmh_attendance_' + key);
     return raw ? JSON.parse(raw) : null;
   } catch (e) { return null; }
 }
+function getMyTodayAttendance() {
+  return getLocalAttendanceForDate(todayKey(), attendanceUserKey());
+}
+function setAttendanceLocalForDate(dateKey, row, userKey) {
+  try { localStorage.setItem('bmh_attendance_' + (dateKey || todayKey()) + ':' + (userKey || attendanceUserKey()), JSON.stringify(row)); } catch (e) {}
+}
 function setMyTodayAttendanceLocal(row) {
-  try { localStorage.setItem('bmh_attendance_' + todayKey() + ':' + attendanceUserKey(), JSON.stringify(row)); } catch (e) {}
+  setAttendanceLocalForDate(todayKey(), row, attendanceUserKey());
+}
+function fetchAttendanceForDate(dateKey, userKey) {
+  if (!CURRENT_USER) return Promise.resolve(null);
+  const dk = dateKey || todayKey();
+  const uk = userKey || attendanceUserKey();
+  if (!window.FBDB) return Promise.resolve(getLocalAttendanceForDate(dk, uk));
+  return window.FBDB.ref(getAttendancePathForDate(dk, uk)).once('value').then(function (snap) {
+    const row = snap.val() || getLocalAttendanceForDate(dk, uk);
+    if (row) setAttendanceLocalForDate(dk, row, uk);
+    return row;
+  }).catch(function () { return getLocalAttendanceForDate(dk, uk); });
 }
 function fetchTodayAttendance() {
-  if (!CURRENT_USER) return Promise.resolve(null);
-  if (!window.FBDB) return Promise.resolve(getMyTodayAttendance());
-  return window.FBDB.ref(getTodayAttendancePath()).once('value').then(function (snap) {
-    const row = snap.val() || getMyTodayAttendance();
-    if (row) setMyTodayAttendanceLocal(row);
-    return row;
-  }).catch(function () { return getMyTodayAttendance(); });
+  return fetchAttendanceForDate(todayKey(), attendanceUserKey());
+}
+function fetchAttendanceDisplayRow() {
+  return Promise.all([
+    fetchTodayAttendance(),
+    fetchAttendanceForDate(attendanceDateOffsetKey(new Date(), -1), attendanceUserKey())
+  ]).then(function ([todayRow, prevRow]) {
+    const prevEv = prevRow?.events || {};
+    const prevOutToday = prevEv.out?.at && localDateKey(prevEv.out.at) === todayKey();
+    if (prevRow?.nightDuty && prevEv.in && (!prevEv.out || prevOutToday) && !(todayRow?.events?.in)) return prevRow;
+    return todayRow;
+  });
+}
+function findOpenNightDutyAttendance(referenceDate) {
+  const previousKey = attendanceDateOffsetKey(referenceDate || new Date(), -1);
+  return fetchAttendanceForDate(previousKey, attendanceUserKey()).then(function (row) {
+    const ev = row?.events || {};
+    if (row && row.nightDuty === true && ev.in && !ev.out) return { dateKey: previousKey, row: row };
+    return null;
+  });
 }
 async function markStaffAttendance(kind) {
   if (!CURRENT_USER) { showToast('Please login first', 'w'); return; }
@@ -45380,8 +45419,23 @@ async function markStaffAttendance(kind) {
     showToast(geo.message + '. Attendance not saved.', 'w');
     return;
   }
-  const now = new Date().toISOString();
-  const existing = await fetchTodayAttendance() || {};
+  const nowDate = new Date();
+  const now = nowDate.toISOString();
+  const today = todayKey();
+  let targetDate = today;
+  let existing = null;
+  if (kind !== 'in') {
+    const openNight = await findOpenNightDutyAttendance(nowDate);
+    if (openNight) {
+      targetDate = openNight.dateKey;
+      existing = openNight.row || {};
+    }
+  }
+  if (!existing) existing = await fetchAttendanceForDate(targetDate, attendanceUserKey()) || {};
+  const isEveningPunchIn = kind === 'in' && nowDate.getHours() >= 17;
+  const nightDuty = kind === 'in'
+    ? (isEveningPunchIn && confirm('Are you on night duty for this punch in?'))
+    : !!existing.nightDuty;
   const centre = patientCentreKey(CURRENT_USER.centre || getEffectiveCentre?.() || 'CHD');
   const event = {
     type: kind,
@@ -45397,21 +45451,24 @@ async function markStaffAttendance(kind) {
     savedBy: CURRENT_USER.name || CURRENT_USER.username || 'Staff'
   };
   const row = Object.assign({}, existing, {
-    date: todayKey(),
+    date: targetDate,
     userKey: attendanceUserKey(),
     username: CURRENT_USER.username || '',
     employeeName: CURRENT_USER.name || CURRENT_USER.username || '',
     role: CURRENT_USER.role || '',
     dept: CURRENT_USER.dept || '',
     centre,
+    nightDuty: !!nightDuty,
+    nightDutyStartDate: nightDuty ? targetDate : '',
     updatedAt: now,
     events: Object.assign({}, existing.events || {}, { [kind]: event })
   });
-  setMyTodayAttendanceLocal(row);
-  const path = getTodayAttendancePath();
+  setAttendanceLocalForDate(targetDate, row, attendanceUserKey());
+  const path = getAttendancePathForDate(targetDate, attendanceUserKey());
   fbSet(path, row).then(function () {
     BMH_ATTENDANCE_CACHE = null;
-    showToast(attendanceEventLabel(kind) + ' saved ✓' + (geo.status === 'not-configured' ? ' (geofence pending)' : ''), geo.status === 'not-configured' ? 'w' : 's');
+    const nightText = row.nightDuty ? ' · Night duty' : '';
+    showToast(attendanceEventLabel(kind) + ' saved ✓' + nightText + (geo.status === 'not-configured' ? ' (geofence pending)' : ''), geo.status === 'not-configured' ? 'w' : 's');
     renderAttendancePage();
   }).catch(function (e) {
     console.warn('Attendance save error:', e);
@@ -45461,7 +45518,7 @@ function renderAttendancePage() {
   const recent = document.getElementById('att-my-recent');
   if (!card && !recent) return;
   if (sub) sub.textContent = CURRENT_USER ? ((CURRENT_USER.name || CURRENT_USER.username || 'Staff') + ' · ' + (CURRENT_USER.centre || '')) : 'Not logged in';
-  Promise.all([fetchTodayAttendance(), loadAttendanceGeofenceConfig()]).then(function ([row, config]) {
+  Promise.all([fetchAttendanceDisplayRow(), loadAttendanceGeofenceConfig()]).then(function ([row, config]) {
     if (card) card.innerHTML = renderAttendanceRowCard(row || {});
     if (recent) recent.innerHTML = renderMyRecentAttendanceLocal();
     const old = document.getElementById('att-geofence-admin-card');
@@ -45582,7 +45639,8 @@ function bmhRequireAttendanceAdminPin() {
 function attendanceStaffEmployees() {
   const seedKeys = new Set((STAFF_ATTENDANCE_LOGIN_SEEDS || []).map(function (entry) { return String(entry[0] || '').toLowerCase(); }));
   const seenKeys = new Set();
-  const rows = Object.keys(USER_DB || {}).map(function (username) {
+  const seenIdentity = new Set();
+  const candidates = Object.keys(USER_DB || {}).map(function (username) {
     const user = USER_DB[username] || {};
     const uname = String(username || '').toLowerCase();
     const userKey = attendanceSafeKey(username || user.name || '');
@@ -45590,15 +45648,27 @@ function attendanceStaffEmployees() {
     if (!include) return null;
     if (!userKey || seenKeys.has(userKey)) return null;
     seenKeys.add(userKey);
+    const seedLogin = seedKeys.has(uname);
     return {
       userKey: userKey,
       username: username,
       employeeName: user.name || username,
       role: user.role || '',
       dept: user.dept || '',
-      centre: patientCentreKey(user.centre || '')
+      centre: patientCentreKey(user.centre || ''),
+      _seedLogin: seedLogin
     };
-  }).filter(Boolean);
+  }).filter(Boolean).sort(function (a, b) {
+    if (!!a._seedLogin !== !!b._seedLogin) return a._seedLogin ? -1 : 1;
+    return String(a.centre || '').localeCompare(String(b.centre || '')) || String(a.employeeName || '').localeCompare(String(b.employeeName || ''));
+  });
+  const rows = [];
+  candidates.forEach(function (emp) {
+    const identity = attendanceSafeKey((emp.employeeName || emp.username || '') + '__' + (emp.centre || ''));
+    if (seenIdentity.has(identity)) return;
+    seenIdentity.add(identity);
+    rows.push(emp);
+  });
   rows.sort(function (a, b) {
     return String(a.centre || '').localeCompare(String(b.centre || '')) || String(a.employeeName || '').localeCompare(String(b.employeeName || ''));
   });
@@ -45627,17 +45697,23 @@ function attendanceRowsWithEmployees(rawRows, settings) {
   const q = String(document.getElementById('att-rep-user')?.value || '').trim().toLowerCase();
   const dateKeys = attendanceDateRangeKeys(from, to);
   const rawMap = new Map();
+  const rawIdentityMap = new Map();
   (rawRows || []).forEach(function (row) {
     if (!row) return;
-    rawMap.set(String(row.date || '') + '::' + String(row.userKey || attendanceSafeKey(row.username || row.employeeName || '')), row);
+    const date = String(row.date || '');
+    const rowKey = String(row.userKey || attendanceSafeKey(row.username || row.employeeName || ''));
+    rawMap.set(date + '::' + rowKey, row);
+    const identity = attendanceSafeKey((row.employeeName || row.username || '') + '__' + patientCentreKey(row.centre || ''));
+    if (identity) rawIdentityMap.set(date + '::' + identity, row);
   });
   return attendanceStaffEmployees().filter(function (emp) {
     if (centre && patientCentreKey(emp.centre) !== centre) return false;
     if (q && !String([emp.employeeName, emp.username, emp.role, emp.dept].join(' ')).toLowerCase().includes(q)) return false;
     return true;
   }).flatMap(function (emp) {
+    const empIdentity = attendanceSafeKey((emp.employeeName || emp.username || '') + '__' + (emp.centre || ''));
     return dateKeys.map(function (date) {
-      const found = rawMap.get(date + '::' + emp.userKey);
+      const found = rawMap.get(date + '::' + emp.userKey) || rawIdentityMap.get(date + '::' + empIdentity);
       return Object.assign({}, emp, found || {}, { date: date, userKey: emp.userKey, _staffSettings: settings?.[emp.userKey] || {} });
     });
   }).sort(function (a, b) {
