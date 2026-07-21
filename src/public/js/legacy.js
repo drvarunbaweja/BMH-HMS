@@ -4758,6 +4758,19 @@ function loadTodayVisitIntoForm(bmhId) {
 function loadTodayDeptVisitIntoForm(bmhId, dept) {
   if (!bmhId || bmhId === '—' || !dept) return;
   const todayKeyLocal = localDateKey(new Date());
+  const cachedVisits = getCachedPatientVisits(bmhId);
+  const cachedToday = Object.values(cachedVisits || {})
+    .filter(function (v) {
+      return v && v.dept === dept && localDateKey(v.date || v.createdAt || v.updatedAt || v.savedAt) === todayKeyLocal;
+    })
+    .sort(function (a, b) { return String(b.date || b.createdAt || '').localeCompare(String(a.date || a.createdAt || '')); });
+  if (cachedToday.length && (dept !== 'ophtho' || bmhFastPsychSaveEnabled())) {
+    const cached = cachedToday[0];
+    if (dept === 'obg') populateObgForm(cached);
+    else if (dept === 'psych') populatePsychForm(cached);
+    else if (dept === 'skin') populateSkinForm(cached);
+    if (dept === 'psych' && bmhFastPsychSaveEnabled()) return;
+  }
   if (typeof fbOnce !== 'function') return;
   fbOnce('visits/' + bmhId, function (data) {
     if ((window.CURRENT_PATIENT?.bmhId || '') !== bmhId) return;
@@ -4769,6 +4782,9 @@ function loadTodayDeptVisitIntoForm(bmhId, dept) {
       .sort(function (a, b) { return String(b.date || b.createdAt || '').localeCompare(String(a.date || a.createdAt || '')); });
     if (!todayVisits.length) return;
     const v = todayVisits[0];
+    const nextCache = getCachedPatientVisits(bmhId);
+    nextCache[v.id || ('V' + Date.now())] = v;
+    cachePatientVisits(bmhId, nextCache);
     if (dept === 'obg') { populateObgForm(v); showToast("Today's OBG visit restored ✓", 'i'); }
     else if (dept === 'psych') { populatePsychForm(v); showToast("Today's psychiatry visit restored ✓", 'i'); }
     else if (dept === 'skin') { populateSkinForm(v); showToast("Today's skin visit restored ✓", 'i'); }
@@ -8470,7 +8486,9 @@ function ipdDeptTemplate(deptKey, context) {
 window.PATIENT_VISIT_CACHE = window.PATIENT_VISIT_CACHE || {};
 function cachePatientVisits(bmhId, visitsObj) {
   if(!bmhId) return {};
-  const safe = visitsObj && typeof visitsObj === 'object' ? JSON.parse(JSON.stringify(visitsObj)) : {};
+  const safe = visitsObj && typeof visitsObj === 'object'
+    ? (bmhFastPsychSaveEnabled() ? visitsObj : JSON.parse(JSON.stringify(visitsObj)))
+    : {};
   window.PATIENT_VISIT_CACHE[bmhId] = safe;
   return safe;
 }
@@ -37736,7 +37754,7 @@ window.printUnifiedRx = function(deptId) {
   if (saveDept && printDateIsToday) {
     setTimeout(function () {
       try { saveVisit(saveDept, { silent: true, autosave: true }); } catch (e) { console.warn('rx pre-print save failed', e); }
-    }, 0);
+    }, saveDept === 'psych' && bmhFastPsychSaveEnabled() ? 900 : 0);
   }
   const today = formatDateIN(printDateValue || new Date());
   const rxDateOe = document.getElementById('rx-date');
@@ -40107,6 +40125,38 @@ function bmhSafePerfPatchesEnabled() {
     return window.BMH_SAFE_PERF_PATCHES !== false;
   }
 }
+function bmhScopedPatientBootstrapEnabled() {
+  try {
+    return bmhSafePerfPatchesEnabled() && localStorage.getItem('bmh_disable_scoped_patient_bootstrap') !== '1';
+  } catch (e) {
+    return bmhSafePerfPatchesEnabled();
+  }
+}
+function bmhFastPsychSaveEnabled() {
+  try {
+    return bmhSafePerfPatchesEnabled() && localStorage.getItem('bmh_disable_fast_psych_save') !== '1';
+  } catch (e) {
+    return bmhSafePerfPatchesEnabled();
+  }
+}
+function bmhDeferNonCriticalWork(fn, delayMs) {
+  const run = function () {
+    try { fn && fn(); } catch (e) { console.warn('Deferred BMH work failed', e); }
+  };
+  const delay = Math.max(0, Number(delayMs || 0));
+  if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+    setTimeout(function () { window.requestIdleCallback(run, { timeout: 1800 }); }, delay);
+  } else {
+    setTimeout(run, delay || 0);
+  }
+}
+function shouldUseScopedPatientBootstrap() {
+  if (!bmhScopedPatientBootstrapEnabled() || !CURRENT_USER) return false;
+  if (CURRENT_USER.isAdmin || CURRENT_USER.canSeeAllCentres || CURRENT_USER.centre === 'BOTH') return false;
+  const role = String(CURRENT_USER.role || '').trim().toLowerCase();
+  if (role === 'reception' || role === 'admin') return false;
+  return true;
+}
 window.bmhDisableSafePerfPatches = function () {
   window.BMH_SAFE_PERF_PATCHES = false;
   try { localStorage.setItem('bmh_disable_safe_perf_patches', '1'); } catch (e) {}
@@ -40293,6 +40343,7 @@ function applyPatientsPayload(data, opts) {
 function refreshPatientsFromFirebase() {
   const scope = 'ALL';
   if (!window.FBDB) return Promise.resolve();
+  if (shouldUseScopedPatientBootstrap()) return refreshTodayQueuePatientsFromFirebase();
   if (window._bmhPatientsRefreshInFlight && window._bmhPatientsRefreshScope === scope) {
     return window._bmhPatientsRefreshPromise || Promise.resolve();
   }
@@ -40526,8 +40577,11 @@ function loadPatientsFromFirebase() {
   window._bmhRtdbPatientsListening = true;
   window._bmhRtdbPatientsScope = scope;
   scheduleQueueCalendarDayRefresh && scheduleQueueCalendarDayRefresh();
-  refreshPatientsFromFirebase().then(function () {
-    startPatientsRealtimeUpdates();
+  const bootstrap = shouldUseScopedPatientBootstrap()
+    ? refreshTodayQueuePatientsFromFirebase()
+    : refreshPatientsFromFirebase();
+  bootstrap.then(function () {
+    if (!shouldUseScopedPatientBootstrap()) startPatientsRealtimeUpdates();
     startTodayQueuePatientsRealtimeUpdates(true);
   });
   schedulePatientsRefreshLoop();
@@ -49389,10 +49443,14 @@ function saveVisit(dept, opts) {
           if (normalizedFu.shifted && !opts.silent) showToast('Follow-up appointment moved from Sunday to Monday ✓', 'i');
         }
       } catch (fuErr) { console.warn('auto follow-up booking failed', fuErr); }
-      try { if(dept === 'obg') updateObgObstetricHistoryTab(!!visit.obstetricHistoryEnabled); } catch (e) { console.warn('post-save updateObgObstetricHistoryTab failed', e); }
-      try { if(typeof loadPastVisits === 'function') loadPastVisits(bmhId, dept); } catch (e) { console.warn('post-save loadPastVisits failed', e); }
-      try { renderCurrentPatientInvestigationUploads && renderCurrentPatientInvestigationUploads(Array.isArray(visit.investigations) ? visit.investigations : []); } catch (e) { console.warn('post-save renderCurrentPatientInvestigationUploads failed', e); }
-      try { refreshPreviousDiagnosisPanel(dept, visit); } catch (e) { console.warn('post-save refreshPreviousDiagnosisPanel failed', e); }
+      const postSaveUiWork = function () {
+        try { if(dept === 'obg') updateObgObstetricHistoryTab(!!visit.obstetricHistoryEnabled); } catch (e) { console.warn('post-save updateObgObstetricHistoryTab failed', e); }
+        try { if(typeof loadPastVisits === 'function') loadPastVisits(bmhId, dept); } catch (e) { console.warn('post-save loadPastVisits failed', e); }
+        try { renderCurrentPatientInvestigationUploads && renderCurrentPatientInvestigationUploads(Array.isArray(visit.investigations) ? visit.investigations : []); } catch (e) { console.warn('post-save renderCurrentPatientInvestigationUploads failed', e); }
+        try { refreshPreviousDiagnosisPanel(dept, visit); } catch (e) { console.warn('post-save refreshPreviousDiagnosisPanel failed', e); }
+      };
+      if (dept === 'psych' && bmhFastPsychSaveEnabled()) bmhDeferNonCriticalWork(postSaveUiWork, opts.autosave ? 2200 : 1200);
+      else postSaveUiWork();
       if (activeXrefId && !opts.autosave) {
         try {
           const nowSeen = new Date().toISOString();
@@ -49410,7 +49468,11 @@ function saveVisit(dept, opts) {
           console.warn('cross-ref seen update failed', xrefSaveErr);
         }
       }
-      document.dispatchEvent(new CustomEvent('bmh:patientsUpdated'));
+      const notifyPatientsUpdated = function () {
+        document.dispatchEvent(new CustomEvent('bmh:patientsUpdated'));
+      };
+      if (dept === 'psych' && bmhFastPsychSaveEnabled()) bmhDeferNonCriticalWork(notifyPatientsUpdated, opts.autosave ? 2400 : 1400);
+      else notifyPatientsUpdated();
       })
       .catch(e => {
       if (!opts.silent) showToast('Save failed: ' + e.message, 'w');
