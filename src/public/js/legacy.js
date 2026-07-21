@@ -45212,11 +45212,16 @@ var BMH_ATTENDANCE_CACHE = null;
 var BMH_ATTENDANCE_CACHE_AT = 0;
 var BMH_ATTENDANCE_STAFF_SETTINGS_CACHE = null;
 var BMH_ATTENDANCE_STAFF_SETTINGS_AT = 0;
+var BMH_ATTENDANCE_KIOSK_STAFF_CACHE = null;
+var BMH_ATTENDANCE_KIOSK_STAFF_AT = 0;
 function attendanceSafeKey(value) {
   return String(value || 'staff').trim().toLowerCase().replace(/[.#$/\[\]\s@]+/g, '_') || 'staff';
 }
 function attendanceUserKey() {
   return attendanceSafeKey(CURRENT_USER?.username || CURRENT_USER?.name || 'staff');
+}
+function attendanceKioskStaffKey(name, centre) {
+  return 'kiosk_' + attendanceSafeKey((centre || 'CHD') + '_' + (name || 'staff'));
 }
 function defaultAttendanceGeofence() {
   return {
@@ -45402,6 +45407,217 @@ function findOpenNightDutyAttendance(referenceDate) {
     return null;
   });
 }
+function findOpenNightDutyAttendanceForUser(userKey, referenceDate) {
+  const previousKey = attendanceDateOffsetKey(referenceDate || new Date(), -1);
+  return fetchAttendanceForDate(previousKey, userKey).then(function (row) {
+    const ev = row?.events || {};
+    if (row && row.nightDuty === true && ev.in && !ev.out) return { dateKey: previousKey, row: row };
+    return null;
+  });
+}
+function isAttendanceKioskAllowed() {
+  if (!CURRENT_USER) return false;
+  if (CURRENT_USER.isAdmin) return true;
+  const role = String(CURRENT_USER.role || CURRENT_USER.dept || CURRENT_USER.username || '').toLowerCase();
+  return /reception|front|admin/.test(role) || CURRENT_USER.access?.attendance === true || CURRENT_USER.access?.markAttendance === true;
+}
+function normalizeAttendanceKioskStaff(raw) {
+  return Object.keys(raw || {}).map(function (key) {
+    const row = raw[key] || {};
+    const name = String(row.employeeName || row.name || '').trim();
+    if (!name) return null;
+    return {
+      userKey: row.userKey || key,
+      employeeName: name,
+      username: '',
+      role: row.role || 'Housekeeping',
+      dept: row.dept || row.department || 'Housekeeping',
+      centre: patientCentreKey(row.centre || 'CHD'),
+      pin: String(row.pin || ''),
+      active: row.active !== false,
+      kioskStaff: true
+    };
+  }).filter(Boolean).sort(function (a, b) {
+    return String(a.centre || '').localeCompare(String(b.centre || '')) || String(a.employeeName || '').localeCompare(String(b.employeeName || ''));
+  });
+}
+function fetchAttendanceKioskStaff(force) {
+  const now = Date.now();
+  if (!force && BMH_ATTENDANCE_KIOSK_STAFF_CACHE && now - BMH_ATTENDANCE_KIOSK_STAFF_AT < 60000) {
+    return Promise.resolve(BMH_ATTENDANCE_KIOSK_STAFF_CACHE.slice());
+  }
+  let local = {};
+  try { local = JSON.parse(localStorage.getItem('bmh_attendance_kiosk_staff') || '{}') || {}; } catch (e) {}
+  if (!window.FBDB) {
+    BMH_ATTENDANCE_KIOSK_STAFF_CACHE = normalizeAttendanceKioskStaff(local);
+    BMH_ATTENDANCE_KIOSK_STAFF_AT = Date.now();
+    return Promise.resolve(BMH_ATTENDANCE_KIOSK_STAFF_CACHE.slice());
+  }
+  return window.FBDB.ref('settings/attendanceKioskStaff').once('value').then(function (snap) {
+    const val = snap.val() || local || {};
+    try { localStorage.setItem('bmh_attendance_kiosk_staff', JSON.stringify(val)); } catch (e) {}
+    BMH_ATTENDANCE_KIOSK_STAFF_CACHE = normalizeAttendanceKioskStaff(val);
+    BMH_ATTENDANCE_KIOSK_STAFF_AT = Date.now();
+    return BMH_ATTENDANCE_KIOSK_STAFF_CACHE.slice();
+  }).catch(function () {
+    BMH_ATTENDANCE_KIOSK_STAFF_CACHE = normalizeAttendanceKioskStaff(local);
+    BMH_ATTENDANCE_KIOSK_STAFF_AT = Date.now();
+    return BMH_ATTENDANCE_KIOSK_STAFF_CACHE.slice();
+  });
+}
+function selectedAttendanceKioskStaff() {
+  const key = document.getElementById('att-kiosk-staff-select')?.value || '';
+  return (BMH_ATTENDANCE_KIOSK_STAFF_CACHE || []).find(function (row) { return row.userKey === key; }) || null;
+}
+function verifyAttendanceKioskPin(staff) {
+  if (!staff) return false;
+  if (!staff.pin) return true;
+  const pin = prompt('Enter staff code for ' + staff.employeeName);
+  if (String(pin || '') !== String(staff.pin)) {
+    showToast('Incorrect staff code', 'w');
+    return false;
+  }
+  return true;
+}
+function saveAttendanceKioskStaff() {
+  if (!isAttendanceKioskAllowed()) { showToast('Reception or admin login required', 'w'); return; }
+  const name = String(document.getElementById('att-kiosk-name')?.value || '').trim();
+  if (!name) { showToast('Enter staff name', 'w'); return; }
+  const centre = patientCentreKey(document.getElementById('att-kiosk-centre')?.value || CURRENT_USER?.centre || 'CHD');
+  const userKey = attendanceKioskStaffKey(name, centre);
+  const row = {
+    userKey: userKey,
+    employeeName: name,
+    role: document.getElementById('att-kiosk-role')?.value || 'Housekeeping',
+    dept: 'Housekeeping',
+    centre: centre,
+    pin: String(document.getElementById('att-kiosk-pin')?.value || '').trim(),
+    active: true,
+    kioskStaff: true,
+    updatedAt: new Date().toISOString(),
+    updatedBy: CURRENT_USER?.name || CURRENT_USER?.username || 'Reception'
+  };
+  const path = 'settings/attendanceKioskStaff/' + userKey;
+  fbSet(path, row).then(function () {
+    BMH_ATTENDANCE_KIOSK_STAFF_CACHE = null;
+    showToast('Kiosk staff saved ✓', 's');
+    ['att-kiosk-name','att-kiosk-pin'].forEach(function (id) { const el = document.getElementById(id); if (el) el.value = ''; });
+    renderAttendanceKioskCard();
+    renderAttendanceReport && renderAttendanceReport();
+  }).catch(function (e) {
+    console.warn('Kiosk staff save failed', e);
+    showToast('Could not save kiosk staff', 'w');
+  });
+}
+async function markKioskAttendance(kind, forceNightDuty) {
+  if (!isAttendanceKioskAllowed()) { showToast('Reception or admin login required', 'w'); return; }
+  if (!['in','lunchOut','lunchIn','out'].includes(kind)) { showToast('Unknown attendance action', 'w'); return; }
+  const staff = selectedAttendanceKioskStaff();
+  if (!staff) { showToast('Select staff first', 'w'); return; }
+  if (!verifyAttendanceKioskPin(staff)) return;
+  showToast('Checking hospital location for ' + staff.employeeName + '…', 'i');
+  let config, pos, geo;
+  try {
+    config = await loadAttendanceGeofenceConfig();
+    pos = await requestAttendancePosition();
+    geo = evaluateAttendanceLocation(pos, staff.centre || CURRENT_USER?.centre || getEffectiveCentre?.(), config);
+  } catch (e) {
+    showToast('Location permission is required for attendance', 'w');
+    return;
+  }
+  if (geo && geo.status === 'outside') {
+    showToast(geo.message + '. Attendance not saved.', 'w');
+    return;
+  }
+  const nowDate = new Date();
+  const now = nowDate.toISOString();
+  let targetDate = todayKey();
+  let existing = null;
+  if (kind !== 'in') {
+    const openNight = await findOpenNightDutyAttendanceForUser(staff.userKey, nowDate);
+    if (openNight) {
+      targetDate = openNight.dateKey;
+      existing = openNight.row || {};
+    }
+  }
+  if (!existing) existing = await fetchAttendanceForDate(targetDate, staff.userKey) || {};
+  const nightDuty = kind === 'in' ? !!forceNightDuty : !!existing.nightDuty;
+  const event = {
+    type: kind,
+    label: attendanceEventLabel(kind),
+    at: now,
+    centre: staff.centre,
+    geoStatus: geo.status,
+    geoMessage: geo.message,
+    location: geo.location,
+    distance: geo.distance || null,
+    radius: geo.radius || null,
+    browser: navigator.userAgent || '',
+    savedBy: CURRENT_USER?.name || CURRENT_USER?.username || 'Reception',
+    kioskStaff: true
+  };
+  const row = Object.assign({}, existing, {
+    date: targetDate,
+    userKey: staff.userKey,
+    username: '',
+    employeeName: staff.employeeName,
+    role: staff.role || 'Housekeeping',
+    dept: staff.dept || 'Housekeeping',
+    centre: staff.centre,
+    nightDuty: !!nightDuty,
+    nightDutyStartDate: nightDuty ? targetDate : '',
+    kioskStaff: true,
+    markedViaKiosk: true,
+    markedBy: CURRENT_USER?.name || CURRENT_USER?.username || 'Reception',
+    updatedAt: now,
+    events: Object.assign({}, existing.events || {}, { [kind]: event })
+  });
+  setAttendanceLocalForDate(targetDate, row, staff.userKey);
+  fbSet(getAttendancePathForDate(targetDate, staff.userKey), row).then(function () {
+    BMH_ATTENDANCE_CACHE = null;
+    showToast(attendanceEventLabel(kind) + ' saved for ' + staff.employeeName + ' ✓' + (row.nightDuty ? ' · Night duty' : ''), 's');
+    renderAttendanceKioskCard();
+    renderAttendanceReport && renderAttendanceReport();
+  }).catch(function (e) {
+    console.warn('Kiosk attendance save error:', e);
+    showToast('Saved on this device; cloud sync failed', 'w');
+    renderAttendanceKioskCard();
+  });
+}
+function renderAttendanceKioskCard() {
+  const el = document.getElementById('att-kiosk-card');
+  if (!el) return;
+  if (!isAttendanceKioskAllowed()) {
+    el.innerHTML = '';
+    return;
+  }
+  el.innerHTML = '<div class="card"><div class="card-hd"><div><div class="card-title">Reception Attendance Kiosk</div><div class="card-sub">For housekeeping or staff without phones. Uses this device location.</div></div><button class="btn btn-outline btn-xs" onclick="renderAttendanceKioskCard()">Refresh</button></div><div style="padding:16px;text-align:center;color:var(--g1)">Loading kiosk staff…</div></div>';
+  fetchAttendanceKioskStaff().then(function (rows) {
+    const active = rows.filter(function (row) { return row.active !== false; });
+    const options = '<option value="">Select employee</option>' + active.map(function (row) {
+      return '<option value="' + escapeHtmlConsent(row.userKey) + '">' + escapeHtmlConsent(row.employeeName + ' · ' + row.centre) + '</option>';
+    }).join('');
+    el.innerHTML = '<div class="card">'
+      + '<div class="card-hd"><div><div class="card-title">Reception Attendance Kiosk</div><div class="card-sub">Mark day or night duty for staff who do not have phones.</div></div><button class="btn btn-outline btn-xs" onclick="renderAttendanceKioskCard()">Refresh</button></div>'
+      + '<div class="fg">'
+      + '<div class="form-group"><label class="fl">Staff Name</label><input id="att-kiosk-name" placeholder="Housekeeping staff name"></div>'
+      + '<div class="form-group"><label class="fl">Centre</label><select id="att-kiosk-centre"><option value="CHD">Chandigarh</option><option value="RPR">Ropar</option></select></div>'
+      + '<div class="form-group"><label class="fl">Role</label><input id="att-kiosk-role" value="Housekeeping" placeholder="Role"></div>'
+      + '<div class="form-group"><label class="fl">Optional Staff Code</label><input id="att-kiosk-pin" inputmode="numeric" placeholder="Optional PIN/code"></div>'
+      + '</div><div style="display:flex;justify-content:flex-end;margin-bottom:12px"><button class="btn btn-gold btn-sm" type="button" onclick="saveAttendanceKioskStaff()">Add / Update Staff</button></div>'
+      + '<div class="fg fg1" style="border-top:1px solid var(--g5);padding-top:12px">'
+      + '<div class="form-group"><label class="fl">Mark Attendance For</label><select id="att-kiosk-staff-select">' + options + '</select></div>'
+      + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px">'
+      + '<button class="btn btn-green" type="button" onclick="markKioskAttendance(\'in\', false)">Day Duty In</button>'
+      + '<button class="btn btn-gold" type="button" onclick="markKioskAttendance(\'in\', true)">Night Duty In</button>'
+      + '<button class="btn btn-outline" type="button" onclick="markKioskAttendance(\'lunchOut\', false)">Lunch Out</button>'
+      + '<button class="btn btn-outline" type="button" onclick="markKioskAttendance(\'lunchIn\', false)">Lunch In</button>'
+      + '<button class="btn btn-red" type="button" onclick="markKioskAttendance(\'out\', false)">Punch Out</button>'
+      + '</div></div>'
+      + '<div style="font-size:11px;color:var(--g1);line-height:1.5;margin-top:10px">Night duty out/lunch punches are attached to the previous evening punch-in until punch out is saved.</div>'
+      + '</div>';
+  });
+}
 async function markStaffAttendance(kind) {
   if (!CURRENT_USER) { showToast('Please login first', 'w'); return; }
   if (!['in','lunchOut','lunchIn','out'].includes(kind)) { showToast('Unknown attendance action', 'w'); return; }
@@ -45523,6 +45739,7 @@ function renderAttendancePage() {
     if (recent) recent.innerHTML = renderMyRecentAttendanceLocal();
     const old = document.getElementById('att-geofence-admin-card');
     if (old) old.remove();
+    renderAttendanceKioskCard();
   });
 }
 function renderMyRecentAttendanceLocal() {
@@ -45636,7 +45853,7 @@ function bmhRequireAttendanceAdminPin() {
   showToast('Attendance admin PIN accepted for 15 minutes', 's');
   return true;
 }
-function attendanceStaffEmployees() {
+function attendanceStaffEmployees(kioskStaff) {
   const seedKeys = new Set((STAFF_ATTENDANCE_LOGIN_SEEDS || []).map(function (entry) { return String(entry[0] || '').toLowerCase(); }));
   const seenKeys = new Set();
   const seenIdentity = new Set();
@@ -45669,6 +45886,14 @@ function attendanceStaffEmployees() {
     seenIdentity.add(identity);
     rows.push(emp);
   });
+  normalizeAttendanceKioskStaff(kioskStaff || BMH_ATTENDANCE_KIOSK_STAFF_CACHE || []).forEach(function (emp) {
+    if (emp.active === false) return;
+    const identity = attendanceSafeKey((emp.employeeName || '') + '__' + (emp.centre || ''));
+    if (seenKeys.has(emp.userKey) || seenIdentity.has(identity)) return;
+    seenKeys.add(emp.userKey);
+    seenIdentity.add(identity);
+    rows.push(emp);
+  });
   rows.sort(function (a, b) {
     return String(a.centre || '').localeCompare(String(b.centre || '')) || String(a.employeeName || '').localeCompare(String(b.employeeName || ''));
   });
@@ -45690,7 +45915,7 @@ function fetchAttendanceStaffSettings() {
     return Object.assign({}, settings);
   }).catch(function () { return local; });
 }
-function attendanceRowsWithEmployees(rawRows, settings) {
+function attendanceRowsWithEmployees(rawRows, settings, kioskStaff) {
   const from = document.getElementById('att-rep-from')?.value || todayKey();
   const to = document.getElementById('att-rep-to')?.value || from;
   const centre = document.getElementById('att-rep-centre')?.value || '';
@@ -45706,7 +45931,7 @@ function attendanceRowsWithEmployees(rawRows, settings) {
     const identity = attendanceSafeKey((row.employeeName || row.username || '') + '__' + patientCentreKey(row.centre || ''));
     if (identity) rawIdentityMap.set(date + '::' + identity, row);
   });
-  return attendanceStaffEmployees().filter(function (emp) {
+  return attendanceStaffEmployees(kioskStaff).filter(function (emp) {
     if (centre && patientCentreKey(emp.centre) !== centre) return false;
     if (q && !String([emp.employeeName, emp.username, emp.role, emp.dept].join(' ')).toLowerCase().includes(q)) return false;
     return true;
@@ -45741,7 +45966,7 @@ function attendanceStatusSelect(row) {
 }
 function saveAttendanceAdminStatus(date, userKey, status) {
   if (!bmhRequireAttendanceAdminPin()) { renderAttendanceReport(); return; }
-  const emp = attendanceStaffEmployees().find(function (x) { return x.userKey === userKey; }) || {};
+  const emp = attendanceStaffEmployees(BMH_ATTENDANCE_KIOSK_STAFF_CACHE || []).find(function (x) { return x.userKey === userKey; }) || {};
   const path = 'staffAttendance/' + date + '/' + userKey;
   const payload = {
     date: date,
@@ -45768,8 +45993,8 @@ function saveAttendanceAdminStatus(date, userKey, status) {
 }
 function openAttendanceStaffDetails(userKey) {
   if (!bmhRequireAttendanceAdminPin()) return;
-  fetchAttendanceStaffSettings().then(function (settings) {
-    const emp = attendanceStaffEmployees().find(function (x) { return x.userKey === userKey; }) || {};
+  Promise.all([fetchAttendanceStaffSettings(), fetchAttendanceKioskStaff()]).then(function ([settings, kioskStaff]) {
+    const emp = attendanceStaffEmployees(kioskStaff).find(function (x) { return x.userKey === userKey; }) || {};
     const row = settings[userKey] || {};
     const old = document.getElementById('attendance-staff-details-pop');
     if (old) old.remove();
@@ -45844,8 +46069,8 @@ function renderAttendanceReport() {
   if (to && !to.value) to.value = from?.value || todayKey();
   const el = document.getElementById('att-report-result');
   if (el) el.innerHTML = '<div style="padding:18px;text-align:center;color:var(--g1)">Loading attendance…</div>';
-  Promise.all([fetchAttendanceRowsForReport(), fetchAttendanceStaffSettings()]).then(function ([rows, settings]) {
-    const filtered = attendanceRowsWithEmployees(getFilteredAttendanceReportRows(rows), settings);
+  Promise.all([fetchAttendanceRowsForReport(), fetchAttendanceStaffSettings(), fetchAttendanceKioskStaff()]).then(function ([rows, settings, kioskStaff]) {
+    const filtered = attendanceRowsWithEmployees(getFilteredAttendanceReportRows(rows), settings, kioskStaff);
     if (el) el.innerHTML = attendanceReportTableHtml(filtered);
   });
 }
@@ -45879,8 +46104,8 @@ function attendanceReportPrintHtml(rows) {
   return '<!doctype html><html><head><meta charset="utf-8"><title>Attendance Report</title><style>@page{size:A4 landscape;margin:8mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;font-size:10px}h1{font-size:17px;margin:0 0 4px;color:#1A3C6E}.sub{font-size:11px;margin-bottom:10px;color:#555}table{width:100%;border-collapse:collapse}th{background:#1A3C6E;color:#fff;text-align:left;padding:5px;font-size:9px}td{border:1px solid #ddd;padding:4px;vertical-align:top}tr:nth-child(even){background:#f8fafc}</style></head><body><h1>Baweja Hospital - Staff Attendance Summary</h1><div class="sub">Period: ' + escapeHtmlConsent(formatAttendanceDate(from)) + ' to ' + escapeHtmlConsent(formatAttendanceDate(to)) + '</div><table><thead><tr><th>Employee</th><th>Centre</th><th>Role</th><th>Dept</th><th>Present Days</th><th>Leaves</th><th>Pay Without Leave</th><th>Absent</th><th>Total Hours</th></tr></thead><tbody>' + body + '</tbody></table></body></html>';
 }
 function printAttendanceReport() {
-  Promise.all([fetchAttendanceRowsForReport(), fetchAttendanceStaffSettings()]).then(function ([rows, settings]) {
-    const filtered = attendanceRowsWithEmployees(getFilteredAttendanceReportRows(rows), settings);
+  Promise.all([fetchAttendanceRowsForReport(), fetchAttendanceStaffSettings(), fetchAttendanceKioskStaff()]).then(function ([rows, settings, kioskStaff]) {
+    const filtered = attendanceRowsWithEmployees(getFilteredAttendanceReportRows(rows), settings, kioskStaff);
     const html = attendanceReportPrintHtml(filtered);
     const w = window.open('', '_blank');
     if (!w) { showToast('Popup blocked', 'w'); return; }
@@ -45890,6 +46115,9 @@ function printAttendanceReport() {
   });
 }
 window.markStaffAttendance = markStaffAttendance;
+window.markKioskAttendance = markKioskAttendance;
+window.saveAttendanceKioskStaff = saveAttendanceKioskStaff;
+window.renderAttendanceKioskCard = renderAttendanceKioskCard;
 window.renderAttendancePage = renderAttendancePage;
 window.renderAttendanceReport = renderAttendanceReport;
 window.printAttendanceReport = printAttendanceReport;
