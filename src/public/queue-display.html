@@ -1103,6 +1103,154 @@
     body.bmh-display-fullscreen .fullscreen-tools {
       display: none;
     }
+    .tv-diagnostic {
+      position: fixed;
+      left: 10px;
+      bottom: 10px;
+      z-index: 30;
+      display: none;
+      padding: 5px 8px;
+      border-radius: 8px;
+      background: rgba(0,0,0,.64);
+      color: #fff;
+      font: 700 10px/1.2 Arial, sans-serif;
+      letter-spacing: 0;
+      pointer-events: none;
+    }
+    body.tv-compat {
+      width: 100%;
+      height: 100%;
+      min-height: 100vh;
+      min-height: 100dvh;
+      overflow: hidden;
+      background: #eef5fb;
+    }
+    body.tv-compat .screen {
+      width: 100%;
+      height: 100vh;
+      height: 100dvh;
+      min-height: 100vh;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+    }
+    body.tv-compat header {
+      flex: 0 0 74px;
+      padding: 10px 24px;
+      min-height: 0;
+    }
+    body.tv-compat main {
+      flex: 1 1 auto;
+      height: auto;
+      min-height: 0;
+      overflow: hidden;
+    }
+    body.tv-compat footer {
+      flex: 0 0 36px;
+      padding: 7px 24px;
+      font-size: 12px;
+    }
+    body.tv-compat .panel {
+      padding: 16px 24px 14px;
+      overflow: hidden;
+      animation: none !important;
+    }
+    body.tv-compat .queue-layout {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      height: 100%;
+    }
+    body.tv-compat .dept-head {
+      flex: 0 0 auto;
+      align-items: flex-end;
+    }
+    body.tv-compat .dept-title {
+      font-size: min(7.2vw, 72px);
+    }
+    body.tv-compat .dept-pa {
+      font-size: min(3.4vw, 34px);
+    }
+    body.tv-compat .queue-list {
+      flex: 1 1 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-height: 0;
+    }
+    body.tv-compat .patient-row {
+      flex: 1 1 0;
+      min-height: 0;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 10px 16px;
+      border-radius: 10px;
+    }
+    body.tv-compat .patient-row.plain {
+      padding-left: 22px;
+    }
+    body.tv-compat .call-label {
+      flex: 0 0 240px;
+      font-size: min(3vw, 34px);
+    }
+    body.tv-compat .patient-row.plain .call-label {
+      display: none;
+    }
+    body.tv-compat .patient-name {
+      font-size: min(4.2vw, 48px);
+    }
+    body.tv-compat .patient-meta {
+      font-size: min(1.7vw, 19px);
+    }
+    body.tv-compat .patient-tag {
+      margin-left: auto;
+      font-size: min(1.5vw, 17px);
+      padding: 7px 9px;
+    }
+    body.tv-compat .slide {
+      height: 100%;
+      display: flex;
+      gap: 24px;
+      align-items: stretch;
+    }
+    body.tv-compat .slide-copy {
+      flex: 1 1 52%;
+      animation: none !important;
+    }
+    body.tv-compat .slide-visual {
+      flex: 1 1 48%;
+      min-height: 0;
+      animation: none !important;
+      border-radius: 16px;
+    }
+    body.tv-compat .slide-title {
+      font-size: min(5vw, 64px);
+    }
+    body.tv-compat .slide-pa {
+      font-size: min(2.8vw, 34px);
+      margin-top: 10px;
+    }
+    body.tv-compat .slide-body {
+      font-size: min(2vw, 25px);
+      margin-top: 14px;
+      gap: 8px;
+    }
+    body.tv-compat .consult-banner {
+      font-size: min(1.7vw, 22px);
+      margin-top: 12px;
+      padding: 10px 12px;
+    }
+    body.tv-compat .motion-scene,
+    body.tv-compat .topic-visual {
+      min-height: 100%;
+    }
+    body.tv-compat .fullscreen-tools {
+      bottom: 48px;
+    }
+    body.tv-compat .tv-diagnostic {
+      display: block;
+    }
     @media (max-width: 900px) {
       body { overflow: auto; }
       .screen { min-height: 100vh; height: auto; grid-template-rows: auto 1fr auto; }
@@ -1212,6 +1360,7 @@
     <div>TV display mode<small>Click once to hide the browser bar</small></div>
     <button type="button" id="fullscreen-btn">Full Screen</button>
   </div>
+  <div class="tv-diagnostic" id="tv-diagnostic">TV compat</div>
   <div class="screen">
     <header>
       <div class="brand">
@@ -1272,6 +1421,7 @@
       var centreParam = (qs.get('centre') || qs.get('center') || '').toUpperCase();
       var queueMs = Math.max(4000, Number(qs.get('queueMs') || 5000));
       var mediaMs = Math.max(7000, Number(qs.get('mediaMs') || 10000));
+      var tvCompat = /^(1|true|yes)$/i.test(qs.get('tvCompat') || '');
       var rows = [];
       var slideIndex = 0;
       var activeMode = 'queue';
@@ -1279,6 +1429,7 @@
       var modeDuration = queueMs;
       var timer = null;
       var fullscreenBtn = document.getElementById('fullscreen-btn');
+      if (tvCompat) document.body.classList.add('tv-compat');
 
       var deptMap = {
         ophtho: { title: 'Ophthalmology', pa: 'ਅੱਖਾਂ ਦਾ ਵਿਭਾਗ', aliases: ['ophtho', 'ophthalmology', 'eye'] },
@@ -1309,6 +1460,7 @@
       }
       function updateFullscreenUi() {
         document.body.classList.toggle('bmh-display-fullscreen', isFullscreenDisplay());
+        updateTvDiagnostic();
       }
       function requestDisplayFullscreen() {
         var el = document.documentElement;
@@ -1326,6 +1478,16 @@
         window.addEventListener(eventName, updateFullscreenUi);
       });
       updateFullscreenUi();
+      function updateTvDiagnostic() {
+        if (!tvCompat) return;
+        var el = document.getElementById('tv-diagnostic');
+        if (!el) return;
+        var fs = isFullscreenDisplay() ? 'FS' : 'window';
+        el.textContent = 'TV compat · viewport ' + window.innerWidth + 'x' + window.innerHeight
+          + ' · screen ' + (window.screen?.width || '?') + 'x' + (window.screen?.height || '?')
+          + ' · ' + fs;
+      }
+      setInterval(updateTvDiagnostic, 1500);
       var activeDept = deptMap[normDept(deptParam)] ? normDept(deptParam) : 'ophtho';
       document.getElementById('dept-title').textContent = deptMap[activeDept].title;
       document.getElementById('dept-pa').textContent = deptMap[activeDept].pa;
