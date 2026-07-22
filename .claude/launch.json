@@ -4,7 +4,7 @@
     {
       "name": "BMH HMS — Static File Server",
       "runtimeExecutable": "/usr/bin/python3",
-      "runtimeArgs": ["/tmp/bmh_serve.py"],
+      "runtimeArgs": ["-m", "http.server", "5500", "--directory", "src/public"],
       "port": 5500
     },
     {
