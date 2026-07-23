@@ -8486,9 +8486,7 @@ function ipdDeptTemplate(deptKey, context) {
 window.PATIENT_VISIT_CACHE = window.PATIENT_VISIT_CACHE || {};
 function cachePatientVisits(bmhId, visitsObj) {
   if(!bmhId) return {};
-  const safe = visitsObj && typeof visitsObj === 'object'
-    ? (bmhFastPsychSaveEnabled() ? visitsObj : JSON.parse(JSON.stringify(visitsObj)))
-    : {};
+  const safe = visitsObj && typeof visitsObj === 'object' ? JSON.parse(JSON.stringify(visitsObj)) : {};
   window.PATIENT_VISIT_CACHE[bmhId] = safe;
   return safe;
 }
@@ -39991,16 +39989,16 @@ function bmhSafePerfPatchesEnabled() {
 }
 function bmhScopedPatientBootstrapEnabled() {
   try {
-    return bmhSafePerfPatchesEnabled() && localStorage.getItem('bmh_disable_scoped_patient_bootstrap') !== '1';
+    return bmhSafePerfPatchesEnabled() && localStorage.getItem('bmh_enable_scoped_patient_bootstrap') === '1';
   } catch (e) {
-    return bmhSafePerfPatchesEnabled();
+    return false;
   }
 }
 function bmhFastPsychSaveEnabled() {
   try {
-    return bmhSafePerfPatchesEnabled() && localStorage.getItem('bmh_disable_fast_psych_save') !== '1';
+    return bmhSafePerfPatchesEnabled() && localStorage.getItem('bmh_enable_fast_psych_save') === '1';
   } catch (e) {
-    return bmhSafePerfPatchesEnabled();
+    return false;
   }
 }
 function bmhDeferNonCriticalWork(fn, delayMs) {
