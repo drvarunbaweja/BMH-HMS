@@ -28,8 +28,8 @@ body { display:flex; flex-direction:column; min-height:100vh; padding:36px 56px;
 .lnc-hdr { display:flex; align-items:center; justify-content:center; gap:24px; flex:0 0 auto; margin-bottom:28px }
 .lnc-hdr img { height:64px; object-fit:contain; mix-blend-mode:multiply }
 .lnc-title { text-align:center; flex:0 0 auto; margin-bottom:8px }
-.lnc-title h1 { font-size:46px; font-weight:900; color:var(--blue); letter-spacing:-.5px }
-.lnc-title p  { font-size:22px; color:var(--teal); font-weight:700; margin-top:4px }
+.lnc-title h1 { font-size:46px; font-weight:900; color:var(--blue); letter-spacing:-.5px; line-height:1.25 }
+.lnc-title p  { font-size:22px; color:var(--teal); font-weight:700; line-height:1.4; margin-top:10px }
 
 /* Centre columns — Flexbox, not CSS Grid, for the same legacy Android
    TV / Smart TV browser compatibility reasons as the main queue page. */
@@ -45,8 +45,8 @@ body { display:flex; flex-direction:column; min-height:100vh; padding:36px 56px;
   box-shadow:0 10px 34px rgba(18,59,109,.08);
 }
 .lnc-col-head { font-size:34px; font-weight:900; color:var(--blue);
-  text-align:center; margin-bottom:6px; letter-spacing:-.3px }
-.lnc-col-head span { display:block; font-size:.5em; font-weight:700; color:var(--teal); margin-top:2px }
+  text-align:center; margin-bottom:6px; letter-spacing:-.3px; line-height:1.25 }
+.lnc-col-head span { display:block; font-size:.5em; font-weight:700; color:var(--teal); line-height:1.4; margin-top:8px }
 
 .lnc-btn {
   display:flex; align-items:center; justify-content:center; gap:12px;
@@ -56,7 +56,7 @@ body { display:flex; flex-direction:column; min-height:100vh; padding:36px 56px;
   transition:transform .15s, box-shadow .15s, border-color .15s, background .15s;
   line-height:1.3;
 }
-.lnc-btn .lnc-btn-pa { display:block; font-size:.6em; font-weight:600; color:var(--muted); margin-top:3px }
+.lnc-btn .lnc-btn-pa { display:block; font-size:.6em; font-weight:600; color:var(--teal); line-height:1.4; margin-top:9px }
 .lnc-btn:focus, .lnc-btn:hover {
   outline:none; border-color:var(--blue); background:#eaf3ff;
   transform:scale(1.035);
