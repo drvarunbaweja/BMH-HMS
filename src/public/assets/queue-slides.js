@@ -475,7 +475,7 @@
     info('EEG — What is it?',
          'EEG — ਇਹ ਕੀ ਹੈ?',
          [['EEG records the brain\'s electrical activity through small sensors on the scalp.',
-           'EEG ਖੋਪੜੀ ਤੇ ਛੋਟੇ ਸੈਂਸਰ ਲਗਾ ਕੇ ਦਿਮਾਗ਼ ਦੀ ਬਿਜਲੀ ਸਰਗਰਮੀ ਰਿਕਾਰਡ ਕਰਦਾ ਹੈ।'],
+           'EEG ਸਿਰ ਤੇ ਛੋਟੇ ਸੈਂਸਰ ਲਗਾ ਕੇ ਦਿਮਾਗ਼ ਦੀ ਬਿਜਲੀ ਸਰਗਰਮੀ ਰਿਕਾਰਡ ਕਰਦਾ ਹੈ।'],
           ['It is completely painless and harmless — takes 30–45 minutes.',
            'ਇਹ ਪੂਰੀ ਤਰ੍ਹਾਂ ਦਰਦ ਰਹਿਤ ਅਤੇ ਨੁਕਸਾਨਰਹਿਤ ਹੈ — 30–45 ਮਿੰਟ ਲੱਗਦੇ ਹਨ।'],
           ['Used for epilepsy, seizures, sleep disorders and brain function assessment.',
