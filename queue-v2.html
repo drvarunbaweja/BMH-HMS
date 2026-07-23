@@ -986,6 +986,7 @@ if (IS_MULTI) {
 var slides   = [];
 var slideIdx = 0;
 var slotA    = true;
+var langToggleTimer = null;
 
 function deptCls(dept) {
   var m = {
@@ -1002,17 +1003,17 @@ function slideColour(dept) {
 }
 var STEP_CLR = ['#00b4ff','#00c878','#ffd044','#ff6fa8','#b47aff','#ff8c44'];
 
-function renderSlide(s) {
+function renderSlide(s, lang) {
   switch (s.kind) {
     case 'poster':   return rPoster(s);
     case 'doctor':   return rDoctor(s);
-    case 'info':     return rInfo(s);
-    case 'myth':     return rMyth(s);
-    case 'steps':    return rSteps(s);
-    case 'dd':       return rDD(s);
+    case 'info':     return rInfo(s, lang);
+    case 'myth':     return rMyth(s, lang);
+    case 'steps':    return rSteps(s, lang);
+    case 'dd':       return rDD(s, lang);
     case 'services': return rSvc(s);
     case 'motion':   return rMotion(s);
-    case 'photo':    return rPhotoInfo(s);
+    case 'photo':    return rPhotoInfo(s, lang);
     case 'services4': return rSvcAll(s);
     case 'tpa':      return rTpa(s);
     default: return '<div class="sl doc-bg-eye"></div>';
@@ -1072,23 +1073,36 @@ function rDoctor(s) {
     + '</div></div>';
 }
 
-function rPhotoInfo(s) {
-  var c = deptCls(s.department);
-  var col = slideColour(s.department);
-  var bulletHtml = (s.bullets || []).map(function(b) {
+/* Bilingual body text (bullets/myth/steps/do's&don'ts) shows English
+   only for the slide's first dwell, then swaps in place to Punjabi
+   only for a second, equal dwell — headings and photo never move.
+   This replaced showing both languages stacked at once, which on
+   older TVs (different/fallback Gurmukhi font metrics) could render
+   the Punjabi line overlapping the English line above it. */
+function bilingualLineHtml(enClass, paClass, en, pa, lang) {
+  if (lang === 'pa' && pa) return '<div class="' + paClass + '">' + esc(pa) + '</div>';
+  return '<div class="' + enClass + '">' + esc(en) + '</div>';
+}
+
+function bulletsBodyHtml(s, col, lang) {
+  var items = (s.bullets || []).map(function(b) {
     var en = Array.isArray(b) ? b[0] : b;
     var pa = Array.isArray(b) ? b[1] : '';
     var icon = (Array.isArray(b) && b[2]) ? b[2] : '●';
     return '<div class="pc-bullet" style="border-color:' + col + '">'
       + '<span class="pc-bullet-icon">' + icon + '</span>'
-      + '<div><div class="pc-bullet-en">' + esc(en) + '</div>'
-      + (pa ? '<div class="pc-bullet-pa">' + esc(pa) + '</div>' : '')
-      + '</div></div>';
+      + '<div>' + bilingualLineHtml('pc-bullet-en', 'pc-bullet-pa', en, pa, lang) + '</div></div>';
   }).join('');
+  return '<div class="pc-bullets bl-body">' + items + '</div>';
+}
+
+function rPhotoInfo(s, lang) {
+  var c = deptCls(s.department);
+  var col = slideColour(s.department);
   return '<div class="sl-photo doc-bg-' + c + '">'
     + pcImgHtml(s)
     + '<div class="pc-body">' + pcHeaderHtml(s, col)
-    + '<div class="pc-bullets">' + bulletHtml + '</div>'
+    + bulletsBodyHtml(s, col, lang || 'en')
     + '</div></div>';
 }
 
@@ -1109,70 +1123,74 @@ function pcHeaderHtml(s, col) {
     + (s.pa ? '<div class="pc-title-pa">' + esc(s.pa) + '</div>' : '');
 }
 
-function rInfo(s) {
-  var c = deptCls(s.department);
-  var col = slideColour(s.department);
-  var pts = (s.points || []).map(function(p) {
+function pointsBodyHtml(s, col, lang) {
+  var items = (s.points || []).map(function(p) {
     var en = Array.isArray(p) ? p[0] : p;
     var pa = Array.isArray(p) ? p[1] : '';
     return '<div class="pc-bullet" style="border-color:' + col + '">'
       + '<span class="pc-bullet-icon">◆</span>'
-      + '<div><div class="pc-bullet-en">' + esc(en) + '</div>'
-      + (pa ? '<div class="pc-bullet-pa">' + esc(pa) + '</div>' : '')
-      + '</div></div>';
+      + '<div>' + bilingualLineHtml('pc-bullet-en', 'pc-bullet-pa', en, pa, lang) + '</div></div>';
   }).join('');
+  return '<div class="pc-bullets bl-body">' + items + '</div>';
+}
+
+function rInfo(s, lang) {
+  var c = deptCls(s.department);
+  var col = slideColour(s.department);
   return '<div class="sl-photo doc-bg-' + c + '">'
     + pcImgHtml(s)
     + '<div class="pc-body">' + pcHeaderHtml(s, col)
-    + '<div class="pc-bullets">' + pts + '</div>'
+    + pointsBodyHtml(s, col, lang || 'en')
     + '</div></div>';
 }
 
-function rMyth(s) {
-  var c = deptCls(s.department);
-  var col = slideColour(s.department);
+function mythBodyHtml(s, lang) {
   var mythEn  = Array.isArray(s.myth)  ? s.myth[0]  : s.myth;
   var mythPa  = Array.isArray(s.myth)  ? s.myth[1]  : '';
   var truthEn = Array.isArray(s.truth) ? s.truth[0] : s.truth;
   var truthPa = Array.isArray(s.truth) ? s.truth[1] : '';
-  return '<div class="sl-photo doc-bg-' + c + '">'
-    + pcImgHtml(s)
-    + '<div class="pc-body">' + pcHeaderHtml(s, col)
-    + '<div class="pc-myth-wrap">'
+  return '<div class="pc-myth-wrap bl-body">'
     + '<div class="pc-myth-box m"><div class="pc-myth-lbl">✗ MYTH</div>'
-    + '<div class="pc-myth-en">' + esc(mythEn) + '</div>'
-    + (mythPa ? '<div class="pc-myth-pa">' + esc(mythPa) + '</div>' : '')
+    + bilingualLineHtml('pc-myth-en', 'pc-myth-pa', mythEn, mythPa, lang)
     + '</div>'
     + '<div class="pc-myth-box t"><div class="pc-myth-lbl">✓ TRUTH</div>'
-    + '<div class="pc-myth-en">' + esc(truthEn) + '</div>'
-    + (truthPa ? '<div class="pc-myth-pa">' + esc(truthPa) + '</div>' : '')
-    + '</div></div>'
+    + bilingualLineHtml('pc-myth-en', 'pc-myth-pa', truthEn, truthPa, lang)
     + '</div></div>';
 }
 
-function rSteps(s) {
+function rMyth(s, lang) {
   var c = deptCls(s.department);
   var col = slideColour(s.department);
+  return '<div class="sl-photo doc-bg-' + c + '">'
+    + pcImgHtml(s)
+    + '<div class="pc-body">' + pcHeaderHtml(s, col)
+    + mythBodyHtml(s, lang || 'en')
+    + '</div></div>';
+}
+
+function stepsBodyHtml(s, lang) {
   var items = (s.steps || []).map(function(st, i) {
     var en = Array.isArray(st) ? st[0] : st;
     var pa = Array.isArray(st) ? st[1] : '';
     return '<div class="pc-step-row">'
       + '<div class="pc-step-n" style="color:' + STEP_CLR[i % STEP_CLR.length] + '">'
       + pad2(i+1) + '</div>'
-      + '<div><div class="pc-step-en">' + esc(en) + '</div>'
-      + (pa ? '<div class="pc-step-pa">' + esc(pa) + '</div>' : '')
-      + '</div></div>';
+      + '<div>' + bilingualLineHtml('pc-step-en', 'pc-step-pa', en, pa, lang) + '</div></div>';
   }).join('');
+  return '<div class="pc-steps bl-body">' + items + '</div>';
+}
+
+function rSteps(s, lang) {
+  var c = deptCls(s.department);
+  var col = slideColour(s.department);
   return '<div class="sl-photo doc-bg-' + c + '">'
     + pcImgHtml(s)
     + '<div class="pc-body">' + pcHeaderHtml(s, col)
-    + '<div class="pc-steps">' + items + '</div>'
+    + stepsBodyHtml(s, lang || 'en')
     + '</div></div>';
 }
 
-function rDD(s) {
-  var c = deptCls(s.department);
-  var col = slideColour(s.department);
+function ddBodyHtml(s, lang) {
   function col2(items, isDo) {
     return (items || []).map(function(item) {
       var en = Array.isArray(item) ? item[0] : item;
@@ -1180,19 +1198,32 @@ function rDD(s) {
       return '<div class="pc-dd-row">'
         + '<div class="pc-dd-icon" style="color:' + (isDo ? '#0e8a5f' : '#e0334a') + '">'
         + (isDo ? '✓' : '✗') + '</div>'
-        + '<div><div class="pc-dd-en">' + esc(en) + '</div>'
-        + (pa ? '<div class="pc-dd-pa">' + esc(pa) + '</div>' : '')
-        + '</div></div>';
+        + '<div>' + bilingualLineHtml('pc-dd-en', 'pc-dd-pa', en, pa, lang) + '</div></div>';
     }).join('');
   }
+  return '<div class="pc-dd bl-body">'
+    + '<div class="pc-dd-col do"><div class="pc-dd-head">✓ Do\'s</div>' + col2(s.dos, true) + '</div>'
+    + '<div class="pc-dd-col dont"><div class="pc-dd-head">✗ Don\'ts</div>' + col2(s.donts, false) + '</div>'
+    + '</div>';
+}
+
+function rDD(s, lang) {
+  var c = deptCls(s.department);
+  var col = slideColour(s.department);
   return '<div class="sl-photo doc-bg-' + c + '">'
     + pcImgHtml(s)
     + '<div class="pc-body">' + pcHeaderHtml(s, col)
-    + '<div class="pc-dd">'
-    + '<div class="pc-dd-col do"><div class="pc-dd-head">✓ Do\'s</div>' + col2(s.dos, true) + '</div>'
-    + '<div class="pc-dd-col dont"><div class="pc-dd-head">✗ Don\'ts</div>' + col2(s.donts, false) + '</div>'
-    + '</div></div></div>';
+    + ddBodyHtml(s, lang || 'en')
+    + '</div></div>';
 }
+
+var BILINGUAL_BODY_FN = {
+  photo: bulletsBodyHtml,
+  info:  pointsBodyHtml,
+  myth:  function(s, col, lang) { return mythBodyHtml(s, lang); },
+  steps: function(s, col, lang) { return stepsBodyHtml(s, lang); },
+  dd:    function(s, col, lang) { return ddBodyHtml(s, lang); }
+};
 
 function rSvc(s) {
   var c = deptCls(s.department);
@@ -1414,12 +1445,28 @@ function showNextSlide() {
   var outgoing  = document.getElementById(slotA ? 'sl-b' : 'sl-a');
   slotA = !slotA;
 
-  incoming.innerHTML   = renderSlide(s);
+  if (langToggleTimer) { clearTimeout(langToggleTimer); langToggleTimer = null; }
+
+  incoming.innerHTML   = renderSlide(s, 'en');
   incoming.className   = 'sl';
   void incoming.offsetWidth;
   incoming.className   = 'sl on';
   outgoing.className   = 'sl out';
   setTimeout(function() { outgoing.className = 'sl'; }, 800);
+
+  /* Bilingual body kinds get a second, equal dwell after the first —
+     English first, then swap the body (only) to Punjabi in place. */
+  var bodyFn = BILINGUAL_BODY_FN[s.kind];
+  if (bodyFn) {
+    modeDur = MEDIA_MS * 2;
+    var col = slideColour(s.department);
+    langToggleTimer = setTimeout(function() {
+      var body = incoming.querySelector('.bl-body');
+      if (body) body.outerHTML = bodyFn(s, col, 'pa');
+    }, MEDIA_MS);
+  } else {
+    modeDur = MEDIA_MS;
+  }
 }
 
 /* ── Queue ↔ Slide rotation ──────────────────────── */
