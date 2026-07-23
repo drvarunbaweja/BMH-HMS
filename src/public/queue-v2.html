@@ -161,15 +161,6 @@ html, body {
   border-color:rgba(11,95,138,.3);
 }
 
-/* Token number */
-.pt-token {
-  font-size:76px; font-weight:900; min-width:96px; text-align:center;
-  color:var(--blue); line-height:1; font-variant-numeric:tabular-nums;
-  flex-shrink:0;
-}
-.pt-row.pt-active .pt-token { color:var(--ok) }
-.pt-row.pt-next   .pt-token { color:var(--next) }
-
 /* Name & status label */
 .pt-body { flex:1; min-width:0 }
 .pt-label {
@@ -905,7 +896,6 @@ function renderQueue() {
   el.innerHTML = active.slice(0, 4).map(function(row, idx) {
     var isActive = idx === 0;
     var isNext   = idx === 1;
-    var tokenNum = row.tokenNumber || row.token || row.queueNumber || (idx + 1);
     var timeStr  = '';
     var stamp    = queueStamp(row);
     if (stamp) {
@@ -927,7 +917,6 @@ function renderQueue() {
       : esc(displayName(row));
 
     return '<div class="' + rowCls + '">'
-      + '<div class="pt-token">' + esc(tokenNum) + '</div>'
       + '<div class="pt-body">'
       + label
       + '<div class="pt-name">' + nameLine + '</div>'
