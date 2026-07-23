@@ -856,7 +856,7 @@ function isActiveRow(row) {
   if (!row || row.queueRemoved || row.inactive || row.mergedInto) return false;
   var st = String(row.status || '').toLowerCase();
   if (['seen','done','removed','merged','inactive'].indexOf(st) >= 0 ||
-      row.seen || row.seenAt) return false;
+      row.seen || row.seenAt || row.surgeryToday) return false;
   if (!isTodayRow(row) || !rowMatchesCentre(row)) return false;
   var rd = normDept(row.dept || row.department);
   return rd === activeDept();
