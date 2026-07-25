@@ -25529,6 +25529,23 @@ function checkSurgeryPurpose() {
 function normalizeReceptionPhoneDigits(value) {
   return String(value || '').replace(/\D/g, '');
 }
+function getPatientPhoneFieldValues(record) {
+  if (!record) return [];
+  return [
+    record.mob,
+    record.mobile,
+    record.phone,
+    record.phoneNumber,
+    record.mobileNo,
+    record.mobileNumber,
+    record.contact,
+    record.contactNo,
+    record.whatsapp,
+    record.whatsappNo,
+    record.mob2,
+    record.altMobile
+  ];
+}
 function getAllKnownPatientRecords() {
   const cache = Array.isArray(window._BMH_ALL_PATIENTS_CACHE) ? window._BMH_ALL_PATIENTS_CACHE : [];
   return cache.length ? cache : (window.PATIENTS || []);
@@ -25554,7 +25571,7 @@ function buildReceptionPatientLookupIndex() {
   pool.forEach(function (p) {
     const bmh = String(p.bmhId || '').trim().toUpperCase();
     if (bmh && !byBmh.has(bmh)) byBmh.set(bmh, p);
-    [p.mob, p.mobile, p.mob2, p.altMobile].forEach(function (rawPhone) {
+    getPatientPhoneFieldValues(p).forEach(function (rawPhone) {
       const digits = normalizeReceptionPhoneDigits(rawPhone);
       if (digits.length < 7) return;
       [7, 8, 9, 10].forEach(function (len) {
@@ -25596,7 +25613,7 @@ function findReceptionPatientsByPhone(value) {
   const exact = idx.phoneTokens.get(tail) || [];
   if (exact.length || digits.length >= 10) return exact.slice(0, 20);
   return getReceptionLookupPool().filter(function (p) {
-    return [p.mob, p.mobile, p.mob2, p.altMobile].some(function (raw) {
+    return getPatientPhoneFieldValues(p).some(function (raw) {
       const n = normalizeReceptionPhoneDigits(raw);
       return n && n.includes(digits);
     });
@@ -25671,7 +25688,7 @@ function lookupByBMHID(val) {
   const digits = String(val || '').replace(/\D/g, '');
   // Search by BMSH ID, phone, or name
   const activePatients = getReceptionLookupPool();
-  const mergedById = (PATIENTS || []).find(function (p) {
+  const mergedById = getAllKnownPatientRecords().find(function (p) {
     return String(p?.bmhId || '').toUpperCase() === v && p?.mergedInto;
   });
   const byId = (mergedById && activePatients.find(function (p) { return String(p?.bmhId || '') === String(mergedById.mergedInto || ''); }))
@@ -25764,12 +25781,9 @@ function completeQrLookup(rawId) {
   const search = document.getElementById('rc-bmhid-search');
   if (search) search.value = clean;
   lookupByBMHID(clean);
-  const patient = (PATIENTS || []).find(function (p) {
-    const pid = String(p?.bmhId || '').toUpperCase();
-    return pid === clean || pid === id || pid.includes(clean.replace('BMSH-', ''));
-  }) || null;
+  const patient = findReceptionPatientByBmh(clean) || findReceptionPatientByBmh(id) || null;
   const resolvedPatient = patient?.mergedInto
-    ? (PATIENTS || []).find(function (p) { return String(p?.bmhId || '') === String(patient.mergedInto || ''); }) || patient
+    ? findReceptionPatientByBmh(patient.mergedInto) || patient
     : patient;
   closeQRScanner();
   if (resolvedPatient && resolvedPatient.bmhId) {
@@ -25885,7 +25899,8 @@ function lookupByPhone(val) {
 }
 function prefillExistingPatient(bmhId) {
   const p = (typeof resolveExistingPatientForRegistration === 'function' ? resolveExistingPatientForRegistration(bmhId) : null)
-    || PATIENTS.find(function (x) { return String(x?.bmhId || '') === String(bmhId || ''); });
+    || findReceptionPatientByBmh(bmhId)
+    || getAllKnownPatientRecords().find(function (x) { return String(x?.bmhId || '') === String(bmhId || ''); });
   if(!p) { showToast('Patient not found for prefill', 'w'); return; }
   const name = String(p.name || p.patient || '').trim();
   const fn = document.getElementById('rc-fn'); if(fn) fn.value = name.split(' ')[0]||'';
@@ -25904,6 +25919,7 @@ function prefillExistingPatient(bmhId) {
   const prefillBadge = document.getElementById('rc-prefill-badge');
   if (prefillBadge) {
     prefillBadge.textContent = 'Prefilled from existing patient: ' + p.bmhId;
+    prefillBadge.dataset.bmhId = p.bmhId;
     prefillBadge.style.display = 'inline-flex';
   }
   const forceNew = document.getElementById('rc-force-new-bmsh'); if (forceNew) forceNew.checked = false;
@@ -26482,6 +26498,24 @@ async function updateExistingPatientFromReceptionForm(bmhId) {
 }
 window.updateExistingPatientFromReceptionForm = updateExistingPatientFromReceptionForm;
 
+function shouldReuseDisplayedReceptionPatient(candidate, formIdentity) {
+  if (!candidate || isMergedPatientRecord(candidate)) return false;
+  const candidateId = String(candidate.bmhId || '').trim();
+  const prefillBadge = document.getElementById('rc-prefill-badge');
+  const explicitlyPrefilled = !!(prefillBadge
+    && prefillBadge.style.display !== 'none'
+    && String(prefillBadge.dataset.bmhId || '').trim() === candidateId);
+  if (explicitlyPrefilled) return true;
+  if (typeof samePersonRecordVsForm === 'function' && samePersonRecordVsForm(candidate, formIdentity)) return true;
+  const formNameKey = patientNameIdentityKey(formIdentity?.name || '');
+  const candidateNameKey = patientNameIdentityKey(candidate.name || candidate.patient || '');
+  if (!formNameKey || !candidateNameKey || formNameKey !== candidateNameKey) return false;
+  const formPhoneKeys = getPatientPhoneKeys(formIdentity || {});
+  const candidatePhoneKeys = getPatientPhoneKeys(candidate);
+  if (!formPhoneKeys.length || !candidatePhoneKeys.length) return true;
+  return candidatePhoneKeys.some(function (key) { return formPhoneKeys.includes(key); });
+}
+
 /** Reception — Register & Generate Token (full-width form) */
 async function registerPatient() {
   const uidDisplayed = (document.getElementById('rc-uid')?.textContent || '').trim();
@@ -26507,7 +26541,26 @@ async function registerPatient() {
   const name = toTitleCaseName((fn + ' ' + ln).trim());
   const emailEarly = document.getElementById('rc-email')?.value?.trim() || '';
   const forceNewBmsh = !!document.getElementById('rc-force-new-bmsh')?.checked;
-  const hintedExistingPt = (!forceNewBmsh && uidDisplayed) ? resolveExistingPatientForRegistration(uidDisplayed) : null;
+  const formIdentity = { name: name, mob: mob, mob2: mob2, age: age, dob: dob };
+  const hintedCandidate = (!forceNewBmsh && uidDisplayed) ? resolveExistingPatientForRegistration(uidDisplayed) : null;
+  const hintedExistingPt = shouldReuseDisplayedReceptionPatient(hintedCandidate, formIdentity) ? hintedCandidate : null;
+  if (hintedCandidate && !hintedExistingPt) {
+    console.warn('Reception stale BMSH ID ignored to prevent patient overwrite', {
+      displayed: uidDisplayed,
+      existingName: hintedCandidate.name || hintedCandidate.patient || '',
+      enteredName: name
+    });
+    try {
+      fbPush && fbPush('auditLog', {
+        user: CURRENT_USER?.name || 'Reception',
+        role: CURRENT_USER?.role || '',
+        action: 'STALE_RECEPTION_BMSH_ID_IGNORED',
+        item: uidDisplayed,
+        details: { existingName: hintedCandidate.name || hintedCandidate.patient || '', enteredName: name },
+        timestamp: new Date().toISOString()
+      });
+    } catch (e) {}
+  }
   const existingPt = hintedExistingPt || findSamePersonForRegistration({
     uidDisplayed: uidDisplayed,
     name: name,
@@ -26872,6 +26925,7 @@ function resetRegistrationForm() {
   if (prefillBadge) {
     prefillBadge.style.display = 'none';
     prefillBadge.textContent = 'Prefilled from existing patient';
+    prefillBadge.dataset.bmhId = '';
   }
   const sex=document.getElementById('rc-sex'); if(sex) sex.value='Male';
   const dept=document.getElementById('rc-dept'); if(dept) dept.value='ophtho';
@@ -36308,7 +36362,7 @@ function isMergedPatientRecord(p) {
 }
 function getPatientPhoneKeys(record) {
   return Array.from(new Set(
-    [record?.mob, record?.mobile, record?.mob2, record?.altMobile]
+    getPatientPhoneFieldValues(record)
       .map(normalizePatientPhoneKey)
       .filter(Boolean)
   ));
@@ -36318,12 +36372,13 @@ function getPatientIdentityMatches(input, opts) {
   const exclude = String(options.excludeBmhId || '').trim();
   const nameKey = patientNameIdentityKey(input?.name || input?.patient || (((input?.fn || '') + ' ' + (input?.ln || '')).trim()));
   const phoneKeys = Array.from(new Set(
-    [input?.mob, input?.mobile, input?.mob2, input?.altMobile]
+    getPatientPhoneFieldValues(input)
       .map(normalizePatientPhoneKey)
       .filter(Boolean)
   ));
   if (!nameKey || !phoneKeys.length) return [];
-  return (PATIENTS || []).filter(function (p) {
+  const source = typeof getReceptionLookupPool === 'function' ? getReceptionLookupPool() : (getAllKnownPatientRecords ? getAllKnownPatientRecords() : (PATIENTS || []));
+  return (source || []).filter(function (p) {
     if (!p || isMergedPatientRecord(p)) return false;
     if (exclude && String(p.bmhId || '').trim() === exclude) return false;
     if (patientNameIdentityKey(p.name || p.patient) !== nameKey) return false;
@@ -46468,10 +46523,17 @@ function searchPatientByPhone(val) {
   const list    = document.getElementById('rc-phone-matches-list');
   if(!results || !list) return;
 
-  const v = (val||'').replace(/\s/g,'');
+  const v = normalizeReceptionPhoneDigits(val || '');
   if(v.length < 5) { results.style.display='none'; return; }
 
-  const matches = PATIENTS.filter(p => p.mob && p.mob.replace(/\s/g,'').includes(v)).slice(0,8);
+  const matches = v.length >= 7
+    ? findReceptionPatientsByPhone(v).slice(0, 8)
+    : getReceptionLookupPool().filter(function (p) {
+        return getPatientPhoneFieldValues(p).some(function (raw) {
+          const n = normalizeReceptionPhoneDigits(raw);
+          return n && n.includes(v);
+        });
+      }).slice(0, 8);
   if(!matches.length) { results.style.display='none'; return; }
 
   results.style.display = 'block';
@@ -46490,7 +46552,9 @@ function searchPatientByPhone(val) {
 }
 
 function selectExistingPatient(bmhId) {
-  const p = PATIENTS.find(x => x.bmhId === bmhId);
+  const p = (typeof resolveExistingPatientForRegistration === 'function' ? resolveExistingPatientForRegistration(bmhId) : null)
+    || findReceptionPatientByBmh(bmhId)
+    || PATIENTS.find(x => x.bmhId === bmhId);
   if(!p) return;
   // Close dropdown
   const r = document.getElementById('rc-phone-results');
