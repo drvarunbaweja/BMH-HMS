@@ -1866,9 +1866,15 @@
       function initials(row) {
         return displayName(row).split(/\s+/).filter(Boolean).slice(0, 2).map(function (x) { return x[0]; }).join('').toUpperCase() || 'PT';
       }
+      function getActiveQueueRows() {
+        return rows.filter(isActiveRow).sort(function (a, b) { return queueStamp(a) - queueStamp(b); });
+      }
+      function hasActiveQueueRows() {
+        return getActiveQueueRows().length > 0;
+      }
       function renderQueue() {
         var el = document.getElementById('queue-list');
-        var active = rows.filter(isActiveRow).sort(function (a, b) { return queueStamp(a) - queueStamp(b); });
+        var active = getActiveQueueRows();
         document.getElementById('queue-updated').textContent = active.length ? (active.length + ' waiting / ਉਡੀਕ ਵਿੱਚ') : 'No active patients / ਕੋਈ ਮਰੀਜ਼ ਉਡੀਕ ਵਿੱਚ ਨਹੀਂ';
         if (!active.length) {
           el.innerHTML = '<div class="empty-queue">Please wait for your turn.<br><span style="font-size:.72em;color:var(--teal)">ਕਿਰਪਾ ਕਰਕੇ ਆਪਣੀ ਵਾਰੀ ਦੀ ਉਡੀਕ ਕਰੋ।</span></div>';
@@ -1942,6 +1948,7 @@
         '</div>';
       }
       function setPanel(mode) {
+        if (mode === 'queue' && !hasActiveQueueRows()) mode = 'media';
         activeMode = mode;
         modeStartedAt = Date.now();
         modeDuration = mode === 'queue' ? queueMs : mediaMs;
@@ -1958,6 +1965,10 @@
         document.getElementById('clock-date').textContent = now.toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' });
         var pct = Math.min(100, Math.max(0, ((Date.now() - modeStartedAt) / modeDuration) * 100));
         document.getElementById('progress-bar').style.width = pct + '%';
+        if (activeMode === 'queue' && !hasActiveQueueRows()) {
+          setPanel('media');
+          return;
+        }
         if (Date.now() - modeStartedAt >= modeDuration) setPanel(activeMode === 'queue' ? 'media' : 'queue');
       }
       function startRotation() {
@@ -1982,7 +1993,8 @@
               row.bmhId = row.bmhId || key;
               return row;
             });
-            renderQueue();
+            if (activeMode === 'queue' && !hasActiveQueueRows()) setPanel('media');
+            else if (activeMode === 'queue') renderQueue();
           }, function (err) {
             document.getElementById('live-text').textContent = 'Queue unavailable';
             document.getElementById('queue-list').innerHTML = '<div class="empty-queue">Queue unavailable.<br><span style="font-size:.72em;color:var(--teal)">' + safeText(err && err.message || 'Please check network') + '</span></div>';

@@ -852,6 +852,32 @@ function isActiveRow(row) {
   var rd = normDept(row.dept || row.department);
   return rd === activeDept();
 }
+function isActiveRowForDept(row, deptKey) {
+  if (!row || row.queueRemoved || row.inactive || row.mergedInto) return false;
+  var st = String(row.status || '').toLowerCase();
+  if (['seen','done','removed','merged','inactive'].indexOf(st) >= 0 ||
+      row.seen || row.seenAt || row.surgeryToday) return false;
+  if (!isTodayRow(row) || !rowMatchesCentre(row)) return false;
+  return normDept(row.dept || row.department) === deptKey;
+}
+function activeRowsForDept(deptKey) {
+  return allRows.filter(function(row) { return isActiveRowForDept(row, deptKey); })
+    .sort(function(a,b){ return queueStamp(a) - queueStamp(b) });
+}
+function activeRowsForCurrentDept() {
+  return activeRowsForDept(activeDept());
+}
+function hasAnyQueuePatients() {
+  return DEPT_CYCLE.some(function(deptKey) { return activeRowsForDept(deptKey).length > 0; });
+}
+function advanceToDeptWithPatients() {
+  if (!IS_MULTI) return activeRowsForCurrentDept().length > 0;
+  for (var i = 0; i < DEPT_CYCLE.length; i++) {
+    if (activeRowsForCurrentDept().length > 0) return true;
+    cycleIdx = (cycleIdx + 1) % DEPT_CYCLE.length;
+  }
+  return activeRowsForCurrentDept().length > 0;
+}
 function queueStamp(row) {
   var cands = [row.checkinAt, row.queueAddedAt, row.createdAt,
                row.queueDate, row.visitDate, row.date];
@@ -875,9 +901,9 @@ function esc(s) {
 
 /* ── Queue rendering ─────────────────────────────── */
 function renderQueue() {
+  advanceToDeptWithPatients();
   updateDeptHeader();
-  var active = allRows.filter(isActiveRow)
-    .sort(function(a,b){ return queueStamp(a) - queueStamp(b) });
+  var active = activeRowsForCurrentDept();
 
   var el = document.getElementById('q-list');
   var cnt = document.getElementById('queue-count');
@@ -965,7 +991,10 @@ function connectFirebase() {
 /* ── Dept header cycling (reception + any multi-dept combo link) ── */
 if (IS_MULTI) {
   setInterval(function() {
-    cycleIdx = (cycleIdx + 1) % DEPT_CYCLE.length;
+    for (var i = 0; i < DEPT_CYCLE.length; i++) {
+      cycleIdx = (cycleIdx + 1) % DEPT_CYCLE.length;
+      if (activeRowsForCurrentDept().length) break;
+    }
     renderQueue();
   }, QUEUE_MS * 4);
 }
@@ -1463,6 +1492,10 @@ var modeStart  = Date.now();
 var modeDur    = QUEUE_MS;
 
 function setMode(mode) {
+  if (mode === 'queue') {
+    advanceToDeptWithPatients();
+    if (!hasAnyQueuePatients()) mode = 'media';
+  }
   activeMode = mode;
   modeStart  = Date.now();
   modeDur    = mode === 'queue' ? QUEUE_MS : MEDIA_MS;
@@ -1476,12 +1509,16 @@ function setMode(mode) {
 }
 
 function rotateTick() {
+  if (activeMode === 'queue' && !hasAnyQueuePatients()) {
+    setMode('media');
+    return;
+  }
   if (Date.now() - modeStart >= modeDur) {
     /* A "Know Your Doctor" card queued right behind the slide that
        triggered it must play immediately — don't let the queue panel
        cut in between the topic slide and its doctor card. */
     var next = activeMode === 'queue' ? 'media'
-      : (pendingDoctorSlide ? 'media' : 'queue');
+      : (pendingDoctorSlide || !hasAnyQueuePatients() ? 'media' : 'queue');
     setMode(next);
   }
 }
