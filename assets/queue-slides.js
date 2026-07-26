@@ -258,6 +258,21 @@
         'Ophthalmology',
         { text:'Frank C. Müller / Wikimedia', url:'https://commons.wikimedia.org/wiki/File:Hinterkammerlinse_02_(fcm).jpg' }),
 
+    photo('Cataract Surgery — How the IOL Is Placed',
+        'ਮੋਤੀਆਬਿੰਦ ਸਰਜਰੀ — IOL ਕਿਵੇਂ ਲਗਾਇਆ ਜਾਂਦਾ ਹੈ',
+        [
+          ['A tiny 2–3mm incision is made — no stitches needed in most cases.',
+           'ਸਿਰਫ਼ 2–3mm ਦਾ ਛੋਟਾ ਕੱਟ ਲਗਾਇਆ ਜਾਂਦਾ ਹੈ — ਜ਼ਿਆਦਾਤਰ ਮਾਮਲਿਆਂ ਵਿੱਚ ਟਾਂਕਿਆਂ ਦੀ ਲੋੜ ਨਹੀਂ।', '✂️'],
+          ['Gentle ultrasound (phacoemulsification) breaks up and removes the cloudy natural lens.',
+           'ਹੌਲੀ ਅਲਟਰਾਸਾਊਂਡ (ਫੇਕੋਇਮਲਸੀਫਿਕੇਸ਼ਨ) ਧੁੰਦਲੇ ਕੁਦਰਤੀ ਲੈਂਸ ਨੂੰ ਤੋੜ ਕੇ ਬਾਹਰ ਕੱਢਦਾ ਹੈ।', '🔊'],
+          ['A soft, foldable IOL is inserted through the same tiny incision and unfolds gently inside the eye.',
+           'ਇੱਕ ਨਰਮ, ਮੁੜਨ ਵਾਲਾ IOL ਉਸੇ ਛੋਟੇ ਕੱਟ ਰਾਹੀਂ ਅੰਦਰ ਪਾਇਆ ਜਾਂਦਾ ਹੈ ਅਤੇ ਅੱਖ ਵਿੱਚ ਹੌਲੀ-ਹੌਲੀ ਖੁੱਲ੍ਹ ਜਾਂਦਾ ਹੈ।', '💠'],
+          ['The whole procedure typically takes 10–15 minutes per eye, with quick recovery.',
+           'ਪੂਰੀ ਪ੍ਰਕਿਰਿਆ ਆਮ ਤੌਰ ਤੇ ਹਰ ਅੱਖ ਲਈ 10–15 ਮਿੰਟ ਲੈਂਦੀ ਹੈ, ਅਤੇ ਜਲਦੀ ਠੀਕ ਹੋ ਜਾਂਦੀ ਹੈ।', '⏱️']
+        ],
+        './assets/queue-media/eye/sourced/cataract-surgery-baweja.jpg',
+        'Ophthalmology'),
+
     info('Eye Emergency Warning Signs',
          'ਅੱਖਾਂ ਦੇ ਐਮਰਜੈਂਸੀ ਸੰਕੇਤ',
          [['Sudden vision loss, new floaters, or flashing lights — seek urgent care immediately.',
