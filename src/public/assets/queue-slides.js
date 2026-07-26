@@ -61,7 +61,7 @@
        and bmhchandigarh.com — first-party sources only.        */
     doc('Dr Varun Baweja',
         'Ophthalmic & Refractive Surgeon',
-        'DNB Ophthalmology, Grewal Eye Institute · MIGS Trained, NHS Cambridgeshire UK · Ex Consultant, Harley Street London · Ex Consultant, CHEC UK · First in India: 4 MIGS Devices Certified · 19+ Yrs · 40,000+ Cataract Surgeries',
+        'DNB Ophthalmology, Grewal Eye Institute · MIGS Trained, NHS Cambridgeshire UK · Ex Consultant, Harley Street London · Ex Consultant, CHEC UK · First in India: 4 MIGS Devices Certified · 19+ Yrs · 20,000+ Cataract Surgeries',
         'ਅੱਖਾਂ ਅਤੇ ਰਿਫ੍ਰੈਕਟਿਵ ਸਰਜਨ',
         './assets/queue-media/doctors/dr-varun-baweja.jpg',
         'Ophthalmology'),
