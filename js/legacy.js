@@ -48227,6 +48227,15 @@ function markCurrentPatientSeen() {
     if (typeof nav === 'function') setTimeout(function () { nav('doctor-queue', null); }, 80);
     return;
   }
+  const pt = PATIENTS.find(function (row) { return row && row.bmhId === bmhId; }) || window.CURRENT_PATIENT;
+  const inferredXref = findActiveCrossRefForDept(pt, activeDept);
+  if (inferredXref && inferredXref.id) {
+    markCrossRefSeen(bmhId, inferredXref.id);
+    window._activeXrefContext = null;
+    window._currentXrefId = null;
+    if (typeof nav === 'function') setTimeout(function () { nav('doctor-queue', null); }, 80);
+    return;
+  }
   markSeen(bmhId);
   showToast('Patient marked seen ✓', 's');
   if (typeof nav === 'function') {
@@ -48600,6 +48609,19 @@ function getActiveCrossRefsForPatient(p) {
   if (Array.isArray(p?.crossRefs)) refs.push.apply(refs, p.crossRefs.filter(Boolean));
   else if (p?.xrefTo) refs.push({ id: 'legacy-xref', toDept: p.xrefTo, toDoctor: p.xrefDoctor, paid: !!p.xrefPaid, active: true });
   return refs.filter(function (r) { return r && r.toDept && r.active !== false; });
+}
+function findActiveCrossRefForDept(p, dept) {
+  const deptKey = normalizeDeptKeyForQueue(dept || '');
+  if (!p || !deptKey) return null;
+  const refs = getActiveCrossRefsForPatient(p).filter(function (r) {
+    return r
+      && !r.seenAt
+      && crossRefQueueDateMatchesToday(r)
+      && normalizeDeptKeyForQueue(r.toDept || '') === deptKey;
+  }).sort(function (a, b) {
+    return (Date.parse(b.createdAt || b.date || '') || 0) - (Date.parse(a.createdAt || a.date || '') || 0);
+  });
+  return refs[0] || null;
 }
 function crossRefQueueDateMatchesToday(xref) {
   const todayKeyLocal = localDateKey(new Date());
@@ -49025,9 +49047,10 @@ function saveVisit(dept, opts) {
     && normalizeDeptKeyForQueue(window._activeXrefContext.dept || '') === dept
     ? Object.assign({}, window._activeXrefContext)
     : null;
-  const activeXrefId = activeXref?.xrefId || window._currentXrefId || '';
+  const inferredXrefForDept = activeXref ? null : findActiveCrossRefForDept(localPt, dept);
+  const activeXrefId = activeXref?.xrefId || inferredXrefForDept?.id || '';
   const isXrefVisit = !!activeXrefId;
-  const xrefVisitKey = activeXref?.visitKey || '';
+  const xrefVisitKey = activeXref?.visitKey || inferredXrefForDept?.lastVisitKey || '';
   const todaysExistingKey = isXrefVisit ? null
     : (localPt?.lastVisitKey && String(localPt?.lastVisitDate || '').startsWith(todayKey) && localPt?.lastDeptVisit === dept)
     ? localPt.lastVisitKey
@@ -49042,7 +49065,7 @@ function saveVisit(dept, opts) {
     id: visitKey,
     bmhId, ptName, dept,
     xrefId: activeXrefId || '',
-    xrefFromDept: activeXref?.fromDept || '',
+    xrefFromDept: activeXref?.fromDept || inferredXrefForDept?.fromDept || '',
     date: now.toISOString(),
     dateLabel: now.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}),
     doctor: getEffectiveDoctorNameForDept(dept),
@@ -49513,7 +49536,7 @@ function saveVisit(dept, opts) {
       };
       if (dept === 'psych' && bmhFastPsychSaveEnabled()) bmhDeferNonCriticalWork(postSaveUiWork, opts.autosave ? 2200 : 1200);
       else postSaveUiWork();
-      if (activeXrefId && !opts.autosave) {
+      if (activeXrefId && !opts.autosave && normalizeDeptKeyForQueue(activeXref?.dept || inferredXrefForDept?.toDept || '') === dept) {
         try {
           const nowSeen = new Date().toISOString();
           const pt = PATIENTS.find(function (x) { return x.bmhId === bmhId; });
@@ -49526,6 +49549,7 @@ function saveVisit(dept, opts) {
             fbUpdate && fbUpdate('patients/' + bmhId, { crossRefs: sanitizeFirebaseValue(refs) }).catch(function () {});
           }
           window._currentXrefId = null;
+          window._activeXrefContext = null;
         } catch (xrefSaveErr) {
           console.warn('cross-ref seen update failed', xrefSaveErr);
         }
