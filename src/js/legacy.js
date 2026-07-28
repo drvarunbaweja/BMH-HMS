@@ -45796,6 +45796,34 @@ async function markKioskAttendance(kind, forceNightDuty) {
   renderAttendanceKioskCard();
   renderAttendanceReport && renderAttendanceReport();
 }
+function latestAttendanceEvent(row) {
+  const ev = row?.events || {};
+  return ['in','lunchOut','lunchIn','out'].map(function (kind) {
+    return ev[kind] ? Object.assign({ kind: kind }, ev[kind]) : null;
+  }).filter(Boolean).sort(function (a, b) {
+    return new Date(b.at || 0).getTime() - new Date(a.at || 0).getTime();
+  })[0] || null;
+}
+function renderRecentKioskAttendanceLocal() {
+  const rows = readAllLocalAttendanceRows().filter(function (row) {
+    return row && (row.kioskStaff || row.markedViaKiosk) && String(row.date || '') === todayKey();
+  }).sort(function (a, b) {
+    return attendanceRowTimestamp(b) - attendanceRowTimestamp(a);
+  });
+  if (!rows.length) {
+    return '<div style="font-size:11px;color:var(--g1);padding:9px 10px;background:var(--g6);border:1px dashed var(--g4);border-radius:10px">No housekeeping attendance marked on this PC today.</div>';
+  }
+  return '<div style="border-top:1px solid var(--g5);margin-top:12px;padding-top:10px">'
+    + '<div style="font-size:11px;font-weight:900;color:var(--bmh-blue);text-transform:uppercase;margin-bottom:6px">Marked today on this PC</div>'
+    + rows.slice(0, 8).map(function (row) {
+      const latest = latestAttendanceEvent(row);
+      return '<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;padding:7px 9px;border:1px solid var(--g5);border-radius:9px;margin-bottom:6px;background:#fff">'
+        + '<div><div style="font-size:12px;font-weight:900;color:var(--tx)">' + escapeHtmlConsent(row.employeeName || 'Housekeeping staff') + '</div><div style="font-size:10.5px;color:var(--g1)">' + escapeHtmlConsent(row.centre || '') + (row.nightDuty ? ' · Night duty' : '') + '</div></div>'
+        + '<div style="text-align:right"><div style="font-size:12px;font-weight:900;color:var(--bmh-teal)">' + formatAttendanceTime(latest?.at) + '</div><div style="font-size:10.5px;color:var(--g1)">' + attendanceEventLabel(latest?.kind) + '</div></div>'
+        + '</div>';
+    }).join('')
+    + '</div>';
+}
 function renderAttendanceKioskCard() {
   const el = document.getElementById('att-kiosk-card');
   if (!el) return;
@@ -45826,6 +45854,7 @@ function renderAttendanceKioskCard() {
       + '<button class="btn btn-outline" type="button" onclick="markKioskAttendance(\'lunchIn\', false)">Lunch In</button>'
       + '<button class="btn btn-red" type="button" onclick="markKioskAttendance(\'out\', false)">Punch Out</button>'
       + '</div></div>'
+      + renderRecentKioskAttendanceLocal()
       + '<div style="font-size:11px;color:var(--g1);line-height:1.5;margin-top:10px">Night duty out/lunch punches are attached to the previous evening punch-in until punch out is saved.</div>'
       + '</div>';
   });
