@@ -45271,6 +45271,7 @@ var BMH_ATTENDANCE_STAFF_SETTINGS_CACHE = null;
 var BMH_ATTENDANCE_STAFF_SETTINGS_AT = 0;
 var BMH_ATTENDANCE_KIOSK_STAFF_CACHE = null;
 var BMH_ATTENDANCE_KIOSK_STAFF_AT = 0;
+var BMH_ATTENDANCE_SYNC_TIMER = null;
 function attendanceSafeKey(value) {
   return String(value || 'staff').trim().toLowerCase().replace(/[.#$/\[\]\s@]+/g, '_') || 'staff';
 }
@@ -45349,8 +45350,27 @@ function attendanceDistanceMeters(a, b) {
 function requestAttendancePosition() {
   return new Promise(function (resolve, reject) {
     if (!navigator.geolocation) { reject(new Error('Browser location is not available')); return; }
-    navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });
+    const cached = window._bmhLastAttendancePosition;
+    if (cached && cached.at && Date.now() - cached.at < 5 * 60 * 1000 && cached.pos) {
+      resolve(cached.pos);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(function (pos) {
+      window._bmhLastAttendancePosition = { at: Date.now(), pos: pos };
+      resolve(pos);
+    }, reject, { enableHighAccuracy: true, timeout: 12000, maximumAge: 5 * 60 * 1000 });
   });
+}
+function attendanceGeoNeedsReview(error, centre) {
+  const msg = error && error.message ? error.message : 'Location could not be verified';
+  return {
+    status: 'needs-review',
+    centre: patientCentreKey(centre || getEffectiveCentre?.() || CURRENT_USER?.centre || 'CHD'),
+    location: null,
+    ok: true,
+    message: 'Location not verified - admin review',
+    error: msg
+  };
 }
 function evaluateAttendanceLocation(pos, centre, config) {
   const c = patientCentreKey(centre || getEffectiveCentre?.() || CURRENT_USER?.centre || 'CHD');
@@ -45431,13 +45451,92 @@ function setAttendanceLocalForDate(dateKey, row, userKey) {
 function setMyTodayAttendanceLocal(row) {
   setAttendanceLocalForDate(todayKey(), row, attendanceUserKey());
 }
+function attendanceRowTimestamp(row) {
+  const value = row && (row.updatedAt || row.syncedAt || row.localSavedAt || '');
+  const time = value ? new Date(value).getTime() : 0;
+  return Number.isFinite(time) ? time : 0;
+}
+function readAllLocalAttendanceRows() {
+  const rows = [];
+  const prefix = 'bmh_attendance_';
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k || !k.startsWith(prefix) || !k.includes(':')) continue;
+      const row = JSON.parse(localStorage.getItem(k) || 'null');
+      if (row) rows.push(row);
+    }
+  } catch (e) {}
+  return rows;
+}
+function schedulePendingAttendanceSync(delayMs) {
+  if (BMH_ATTENDANCE_SYNC_TIMER) return;
+  BMH_ATTENDANCE_SYNC_TIMER = setTimeout(function () {
+    BMH_ATTENDANCE_SYNC_TIMER = null;
+    syncPendingAttendanceRows();
+  }, Math.max(1000, Number(delayMs || 8000)));
+}
+function saveAttendanceRowToCloud(dateKey, userKey, row) {
+  if (!window.FBDB || typeof fbSet !== 'function') {
+    schedulePendingAttendanceSync(15000);
+    return Promise.reject(new Error('Database offline'));
+  }
+  const synced = Object.assign({}, row, {
+    syncStatus: 'synced',
+    syncError: '',
+    syncedAt: new Date().toISOString()
+  });
+  return fbSet(getAttendancePathForDate(dateKey, userKey), synced).then(function () {
+    const local = getLocalAttendanceForDate(dateKey, userKey);
+    if (!local || attendanceRowTimestamp(local) <= attendanceRowTimestamp(row)) {
+      setAttendanceLocalForDate(dateKey, synced, userKey);
+    }
+    BMH_ATTENDANCE_CACHE = null;
+    return synced;
+  });
+}
+function saveAttendanceRowLocalFirst(dateKey, userKey, row) {
+  const pending = Object.assign({}, row, {
+    localSavedAt: row.localSavedAt || new Date().toISOString(),
+    syncStatus: 'pending',
+    syncError: ''
+  });
+  setAttendanceLocalForDate(dateKey, pending, userKey);
+  BMH_ATTENDANCE_CACHE = null;
+  saveAttendanceRowToCloud(dateKey, userKey, pending).catch(function (e) {
+    const latest = Object.assign({}, getLocalAttendanceForDate(dateKey, userKey) || pending, {
+      syncStatus: 'pending',
+      syncError: e && e.message ? e.message : 'Cloud sync pending',
+      syncLastAttemptAt: new Date().toISOString()
+    });
+    setAttendanceLocalForDate(dateKey, latest, userKey);
+    schedulePendingAttendanceSync(15000);
+  });
+  return pending;
+}
+function syncPendingAttendanceRows() {
+  if (!window.FBDB || typeof fbSet !== 'function') return;
+  const pending = readAllLocalAttendanceRows().filter(function (row) {
+    return row && row.date && row.userKey && row.syncStatus !== 'synced';
+  }).slice(0, 20);
+  if (!pending.length) return;
+  Promise.allSettled(pending.map(function (row) {
+    return saveAttendanceRowToCloud(row.date, row.userKey, row);
+  })).then(function (results) {
+    if (results.some(function (r) { return r.status === 'rejected'; })) schedulePendingAttendanceSync(30000);
+    renderAttendancePage && renderAttendancePage();
+    renderAttendanceReport && renderAttendanceReport();
+  });
+}
 function fetchAttendanceForDate(dateKey, userKey) {
   if (!CURRENT_USER) return Promise.resolve(null);
   const dk = dateKey || todayKey();
   const uk = userKey || attendanceUserKey();
   if (!window.FBDB) return Promise.resolve(getLocalAttendanceForDate(dk, uk));
   return window.FBDB.ref(getAttendancePathForDate(dk, uk)).once('value').then(function (snap) {
-    const row = snap.val() || getLocalAttendanceForDate(dk, uk);
+    const remote = snap.val();
+    const local = getLocalAttendanceForDate(dk, uk);
+    const row = local && (!remote || local.syncStatus === 'pending' || attendanceRowTimestamp(local) >= attendanceRowTimestamp(remote)) ? local : (remote || local);
     if (row) setAttendanceLocalForDate(dk, row, uk);
     return row;
   }).catch(function () { return getLocalAttendanceForDate(dk, uk); });
@@ -45579,12 +45678,7 @@ async function markKioskAttendance(kind, forceNightDuty) {
     pos = await requestAttendancePosition();
     geo = evaluateAttendanceLocation(pos, staff.centre || CURRENT_USER?.centre || getEffectiveCentre?.(), config);
   } catch (e) {
-    showToast('Location permission is required for attendance', 'w');
-    return;
-  }
-  if (geo && geo.status === 'outside') {
-    showToast(geo.message + '. Attendance not saved.', 'w');
-    return;
+    geo = attendanceGeoNeedsReview(e, staff.centre || CURRENT_USER?.centre || getEffectiveCentre?.());
   }
   const nowDate = new Date();
   const now = nowDate.toISOString();
@@ -45629,17 +45723,11 @@ async function markKioskAttendance(kind, forceNightDuty) {
     updatedAt: now,
     events: Object.assign({}, existing.events || {}, { [kind]: event })
   });
-  setAttendanceLocalForDate(targetDate, row, staff.userKey);
-  fbSet(getAttendancePathForDate(targetDate, staff.userKey), row).then(function () {
-    BMH_ATTENDANCE_CACHE = null;
-    showToast(attendanceEventLabel(kind) + ' saved for ' + staff.employeeName + ' ✓' + (row.nightDuty ? ' · Night duty' : ''), 's');
-    renderAttendanceKioskCard();
-    renderAttendanceReport && renderAttendanceReport();
-  }).catch(function (e) {
-    console.warn('Kiosk attendance save error:', e);
-    showToast('Saved on this device; cloud sync failed', 'w');
-    renderAttendanceKioskCard();
-  });
+  saveAttendanceRowLocalFirst(targetDate, staff.userKey, row);
+  const reviewText = geo.status === 'inside' ? '' : ' · location review';
+  showToast(attendanceEventLabel(kind) + ' saved for ' + staff.employeeName + ' ✓' + (row.nightDuty ? ' · Night duty' : '') + reviewText, geo.status === 'inside' ? 's' : 'w');
+  renderAttendanceKioskCard();
+  renderAttendanceReport && renderAttendanceReport();
 }
 function renderAttendanceKioskCard() {
   const el = document.getElementById('att-kiosk-card');
@@ -45685,12 +45773,7 @@ async function markStaffAttendance(kind) {
     pos = await requestAttendancePosition();
     geo = evaluateAttendanceLocation(pos, CURRENT_USER.centre || getEffectiveCentre?.(), config);
   } catch (e) {
-    showToast('Location permission is required for attendance', 'w');
-    return;
-  }
-  if (geo && geo.status === 'outside') {
-    showToast(geo.message + '. Attendance not saved.', 'w');
-    return;
+    geo = attendanceGeoNeedsReview(e, CURRENT_USER.centre || getEffectiveCentre?.());
   }
   const nowDate = new Date();
   const now = nowDate.toISOString();
@@ -45736,18 +45819,11 @@ async function markStaffAttendance(kind) {
     updatedAt: now,
     events: Object.assign({}, existing.events || {}, { [kind]: event })
   });
-  setAttendanceLocalForDate(targetDate, row, attendanceUserKey());
-  const path = getAttendancePathForDate(targetDate, attendanceUserKey());
-  fbSet(path, row).then(function () {
-    BMH_ATTENDANCE_CACHE = null;
-    const nightText = row.nightDuty ? ' · Night duty' : '';
-    showToast(attendanceEventLabel(kind) + ' saved ✓' + nightText + (geo.status === 'not-configured' ? ' (geofence pending)' : ''), geo.status === 'not-configured' ? 'w' : 's');
-    renderAttendancePage();
-  }).catch(function (e) {
-    console.warn('Attendance save error:', e);
-    showToast('Saved on this device; cloud sync failed', 'w');
-    renderAttendancePage();
-  });
+  saveAttendanceRowLocalFirst(targetDate, attendanceUserKey(), row);
+  const nightText = row.nightDuty ? ' · Night duty' : '';
+  const reviewText = geo.status === 'inside' ? '' : ' · location review';
+  showToast(attendanceEventLabel(kind) + ' saved ✓' + nightText + reviewText, geo.status === 'inside' ? 's' : 'w');
+  renderAttendancePage();
 }
 function renderAttendanceGeofenceAdmin(config) {
   if (!CURRENT_USER?.isAdmin) return '';
@@ -45769,6 +45845,11 @@ function renderAttendanceRowCard(row) {
   const lunch = attendanceMinutesBetween(ev.lunchOut?.at, ev.lunchIn?.at);
   const gross = attendanceMinutesBetween(ev.in?.at, ev.out?.at);
   const net = gross ? Math.max(0, gross - lunch) : 0;
+  const syncBadge = row.syncStatus === 'pending'
+    ? '<span class="badge bd-orange">Saved locally - syncing</span>'
+    : row.syncStatus === 'synced'
+      ? '<span class="badge bd-green">Synced</span>'
+      : '';
   const cells = ['in','lunchOut','lunchIn','out'].map(function (kind) {
     const item = ev[kind];
     const status = item?.geoStatus || '';
@@ -45783,9 +45864,11 @@ function renderAttendanceRowCard(row) {
     + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'
     + '<span class="badge bd-blue">Lunch: ' + attendanceDurationText(lunch) + '</span>'
     + '<span class="badge bd-green">Total: ' + attendanceDurationText(net || gross) + '</span>'
+    + syncBadge
     + '</div>';
 }
 function renderAttendancePage() {
+  schedulePendingAttendanceSync && schedulePendingAttendanceSync(2000);
   const card = document.getElementById('att-today-card');
   const sub = document.getElementById('att-status-sub');
   const recent = document.getElementById('att-my-recent');
@@ -45827,8 +45910,7 @@ function fetchAttendanceRowsForReport() {
   const now = Date.now();
   if (BMH_ATTENDANCE_CACHE && now - BMH_ATTENDANCE_CACHE_AT < 60000) return Promise.resolve(BMH_ATTENDANCE_CACHE.slice());
   if (!window.FBDB) {
-    const mine = getMyTodayAttendance();
-    return Promise.resolve(mine ? [mine] : []);
+    return Promise.resolve(readAllLocalAttendanceRows());
   }
   return window.FBDB.ref('staffAttendance').once('value').then(function (snap) {
     const val = snap.val() || {};
@@ -45839,12 +45921,18 @@ function fetchAttendanceRowsForReport() {
         if (row) rows.push(Object.assign({ date: date, userKey: userKey }, row));
       });
     });
+    readAllLocalAttendanceRows().forEach(function (localRow) {
+      if (!localRow || !localRow.date || !localRow.userKey) return;
+      const idx = rows.findIndex(function (row) { return row.date === localRow.date && row.userKey === localRow.userKey; });
+      if (idx < 0) rows.push(localRow);
+      else if (localRow.syncStatus === 'pending' || attendanceRowTimestamp(localRow) >= attendanceRowTimestamp(rows[idx])) rows[idx] = localRow;
+    });
     BMH_ATTENDANCE_CACHE = rows;
     BMH_ATTENDANCE_CACHE_AT = Date.now();
     return rows.slice();
   }).catch(function (e) {
     console.warn('Attendance report load error:', e);
-    return [];
+    return readAllLocalAttendanceRows();
   });
 }
 function getFilteredAttendanceReportRows(rows) {
