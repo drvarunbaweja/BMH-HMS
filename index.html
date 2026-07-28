@@ -2773,6 +2773,9 @@
               <div class="form-group"><label class="fl">TT Due</label><input type="date" id="obg-tt-due-inline" onchange="document.getElementById('obg-tt-due').value=this.value;updateObgComputedFields()"></div>
               <div class="form-group"><label class="fl">Follow-up Plan</label><select id="obg-followup-plan"><option>Routine review</option><option>Review in 1 week</option><option>High-risk surveillance</option><option>Admit if symptoms</option><option>Refer to labour room</option></select></div>
             </div>
+            <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+              <button type="button" class="btn btn-purple btn-sm" onclick="openCurrentObgIPDAdmit()">+ Add Current Patient to IPD</button>
+            </div>
             <div id="anc-visit-list" style="background:var(--g6);border-radius:12px;padding:16px;border:1px solid var(--g5);color:var(--g1);font-size:12px">
               Save the current review here. Full prior visit history, prescription details, diagnosis, ANC notes, infertility notes, and procedures are available in the new `Past Visits` tab.
             </div>
@@ -6050,7 +6053,7 @@
 <div class="modal-ov" id="m-add-rx-drug">
 <div class="modal"><div class="modal-hd"><div class="modal-title">💊 Add Drug / Drop</div><button class="modal-close" onclick="closeM('m-add-rx-drug')">✕</button></div>
 <div class="fg fg1" style="gap:9px">
-  <div class="form-group"><label class="fl">Type</label><select id="new-rx-type" onchange="syncAddRxDrugModalType()"><option>Eye Drop</option><option>Tablet</option><option>Capsule</option><option>Ointment</option><option>Injection</option><option>Syrup</option><option>Pessary</option><option>Gel</option><option>Cream</option><option>Lotion</option><option>Spray</option></select></div>
+  <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">Type <button type="button" onclick="addCustomRxOption('type')" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></label><select id="new-rx-type" onchange="syncAddRxDrugModalType()"><option>Eye Drop</option><option>Tablet</option><option>Capsule</option><option>Ointment</option><option>Cream</option><option>Gel</option><option>Serum</option><option>Shampoo</option><option>Injection</option><option>Syrup</option><option>Pessary</option><option>Lotion</option><option>Spray</option></select></div>
   <div class="form-group"><label class="fl">Trade Name (Brand)</label>
     <input type="text" id="new-rx-trade" placeholder="e.g. Vigamox" oninput="lookupGeneric(this.value)" list="drug-trade-list">
     <datalist id="drug-trade-list"></datalist>
