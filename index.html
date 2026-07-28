@@ -5181,7 +5181,7 @@
 
 <div class="page" id="pg-attendance">
   <div class="card-hd" style="margin-bottom:14px">
-    <div><div class="card-title">🕒 Staff Attendance</div><div class="card-sub">Punch attendance from your own login. Location is checked before saving.</div></div>
+    <div><div class="card-title">🕒 Staff Attendance</div><div class="card-sub">Punches save immediately on this device and sync to Firebase in the background.</div></div>
   </div>
   <div class="g2">
     <div class="card">
@@ -5193,7 +5193,7 @@
         <button class="btn btn-outline" type="button" onclick="markStaffAttendance('lunchIn')">Lunch In</button>
         <button class="btn btn-red" type="button" onclick="markStaffAttendance('out')">Punch Out</button>
       </div>
-      <div style="font-size:11px;color:var(--g1);line-height:1.5;margin-top:10px">The browser may ask for location permission. Attendance is saved only after permission is granted or marked for admin review if the location cannot be verified.</div>
+      <div style="font-size:11px;color:var(--g1);line-height:1.5;margin-top:10px">The browser may ask for location permission. If location fails, the punch is still saved locally and marked for admin review while cloud sync retries.</div>
     </div>
     <div class="card">
       <div class="card-hd"><div><div class="card-title">My Recent Attendance</div><div class="card-sub">Last few saved punches from this login</div></div></div>
