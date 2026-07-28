@@ -22474,6 +22474,43 @@ function addCustomRxOption(kind) {
   }
   showToast('Saved for ' + (CURRENT_USER?.name || 'doctor') + ' ✓', 's');
 }
+function deleteCustomRxOptionValue(kind, raw) {
+  const value = String(raw || '').trim();
+  if (!value) return false;
+  const lc = value.toLowerCase();
+  const defaults = (RX_CUSTOM_OPTION_DEFAULTS[kind] || []).map(function (x) { return String(x || '').trim().toLowerCase(); });
+  if (defaults.includes(lc)) {
+    showToast('Default prescription type cannot be deleted', 'w');
+    return false;
+  }
+  const removeFromBucket = function (bucket) {
+    if (!bucket || !Array.isArray(bucket[kind])) return false;
+    const before = bucket[kind].length;
+    bucket[kind] = bucket[kind].filter(function (x) { return String(x || '').trim().toLowerCase() !== lc; });
+    return bucket[kind].length !== before;
+  };
+  let changed = false;
+  changed = removeFromBucket(getDoctorCustomRxOptions()) || changed;
+  changed = removeFromBucket(ensureSharedRxCustomOptions()) || changed;
+  Object.keys(window.DOCTOR_RX_CUSTOM_OPTIONS || {}).forEach(function (scope) {
+    changed = removeFromBucket(window.DOCTOR_RX_CUSTOM_OPTIONS[scope]) || changed;
+  });
+  if (!changed) {
+    showToast('Only custom prescription types can be deleted', 'w');
+    return false;
+  }
+  saveDoctorCustomRxOptions();
+  refreshCustomRxOptionSelects();
+  renderRxDrugs && renderRxDrugs();
+  showToast('Prescription type deleted ✓', 's');
+  return true;
+}
+function promptDeleteCustomRxOption(kind, currentValue) {
+  const value = String(currentValue || '').trim();
+  if (!value) { showToast('Select a custom type first', 'w'); return; }
+  if (!confirm('Delete custom prescription type "' + value + '"?')) return;
+  deleteCustomRxOptionValue(kind, value);
+}
 function addCustomRxMealTiming(drugIdx, taperIdx) {
   const raw = window.prompt('Add meal / intake note (for example: 1/2 Tablet, 5ml syrup, 2ml syrup):')?.trim();
   const value = saveCustomRxOptionValue('meal', raw);
@@ -34849,6 +34886,7 @@ function _renderRxDrugsNow() {
   });
 
   const esc = (s) => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  const escJs = (s) => String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, ' ');
   const inputBase = 'width:100%;box-sizing:border-box;min-height:34px;font-size:12px;padding:6px 8px;border:1.5px solid #c7c7cc;border-radius:8px;background:#fff;color:#111';
   const nameInput = 'width:100%;box-sizing:border-box;min-height:34px;font-size:12.5px;padding:6px 8px;border:1.5px solid #1A3C6E;border-radius:8px;background:#fff;color:#1A3C6E;font-weight:800';
   const subInput = 'width:100%;box-sizing:border-box;min-height:28px;font-size:10.5px;padding:4px 8px;border:1.5px solid #d1d1d6;border-radius:8px;background:#fff;color:#6a6a6a;font-style:italic;margin-top:4px';
@@ -34888,7 +34926,7 @@ function _renderRxDrugsNow() {
             ? `<div style="min-height:34px;display:flex;align-items:center;padding:6px 8px;background:#fff;border:1.5px solid #1A3C6E;border-radius:8px;font-size:12px;font-weight:800;color:#1A3C6E">${esc(combinedName || 'Medicine')}</div><div style="min-height:28px;display:flex;align-items:center;padding:4px 8px;background:#fff4df;border:1px dashed rgba(212,160,23,.6);border-radius:8px;font-size:10.5px;font-weight:800;color:#8a4200;margin-top:4px">Taper step</div>`
             : `<input value="${esc(combinedName || '')}" onchange="const m=(this.value||'').match(/^(.*?)(?:\\s*\\((.*)\\))?\\s*$/);${prefix}.trade=(m&&m[1]?m[1].trim():this.value.trim());${prefix}.brand=${prefix}.trade;${prefix}.generic=(m&&m[2]?m[2].trim():'');${prefix}.name=${prefix}.generic;renderRxDrugs()" placeholder="Trade name (Generic)" style="${nameInput}"><div style="padding:4px 8px;font-size:10.5px;color:#6a6a6a;line-height:1.25">${genericName ? 'Edit as Trade name (Generic)' : 'Use brackets for generic if needed'}</div>`}
         </div>
-        <div><div style="display:flex;align-items:center;gap:5px"><select onchange="${prefix}.drugType=this.value;${prefix}.type=this.value;renderRxDrugs()" style="${inputBase};flex:1;min-width:0">${typeOpts.map(t=>`<option${selectedType===t?' selected':''}>${t}</option>`).join('')}</select><button type="button" title="Add medicine type" onclick="addCustomRxOption('type');renderRxDrugs()" style="width:24px;height:24px;border-radius:50%;border:none;background:var(--blue);color:#fff;font-size:14px;font-weight:900;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</button></div></div>
+        <div><div style="display:flex;align-items:center;gap:5px"><select onchange="${prefix}.drugType=this.value;${prefix}.type=this.value;renderRxDrugs()" style="${inputBase};flex:1;min-width:0">${typeOpts.map(t=>`<option${selectedType===t?' selected':''}>${t}</option>`).join('')}</select><button type="button" title="Add medicine type" onclick="addCustomRxOption('type');renderRxDrugs()" style="width:24px;height:24px;border-radius:50%;border:none;background:var(--blue);color:#fff;font-size:14px;font-weight:900;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</button><button type="button" title="Delete selected custom type" onclick="promptDeleteCustomRxOption('type','${escJs(selectedType)}')" style="width:24px;height:24px;border-radius:50%;border:1px solid #f0b8b8;background:#fff5f5;color:#b42318;font-size:13px;font-weight:900;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">x</button></div></div>
         ${showRouteSite ? `<div><select onchange="${prefix}.eye=[this.value];renderRxDrugs()" style="${inputBase}">${eyeOpts.map(e=>`<option${(((row.eye && row.eye[0]) || (baseDrug.eye && baseDrug.eye[0]) || 'Oral')===e)?' selected':''}>${e}</option>`).join('')}</select></div>` : ''}
         <div>
           <select onchange="${prefix}.freq=this.value;window.syncRxDrugDates(${i})" style="${inputBase}">${freqOpts.map(f=>`<option${rowFreq===f?' selected':''}>${f}</option>`).join('')}</select>
@@ -45832,12 +45870,16 @@ async function markKioskAttendance(kind, forceNightDuty) {
   const staff = selectedAttendanceKioskStaff();
   if (!staff) { showToast('Select staff first', 'w'); return; }
   if (!verifyAttendanceKioskPin(staff)) return;
-  showToast('Checking hospital location for ' + staff.employeeName + '…', 'i');
-  let config, pos, geo;
+  showToast('Saving attendance for ' + staff.employeeName + '…', 'i');
+  let config, geo;
   try {
     config = await loadAttendanceGeofenceConfig();
-    pos = await requestAttendancePosition();
-    geo = evaluateAttendanceLocation(pos, staff.centre || CURRENT_USER?.centre || getEffectiveCentre?.(), config);
+    const cached = window._bmhLastAttendancePosition || null;
+    if (cached && cached.pos && Date.now() - Number(cached.at || 0) < 5 * 60 * 1000) {
+      geo = evaluateAttendanceLocation(cached.pos, staff.centre || CURRENT_USER?.centre || getEffectiveCentre?.(), config);
+    } else {
+      geo = attendanceGeoNeedsReview(new Error('Reception kiosk saved without browser location prompt'), staff.centre || CURRENT_USER?.centre || getEffectiveCentre?.());
+    }
   } catch (e) {
     geo = attendanceGeoNeedsReview(e, staff.centre || CURRENT_USER?.centre || getEffectiveCentre?.());
   }
@@ -45897,14 +45939,14 @@ function renderAttendanceKioskCard() {
     el.innerHTML = '';
     return;
   }
-  el.innerHTML = '<div class="card"><div class="card-hd"><div><div class="card-title">Reception Attendance Kiosk</div><div class="card-sub">For housekeeping or staff without phones. Uses this device location.</div></div><button class="btn btn-outline btn-xs" onclick="renderAttendanceKioskCard()">Refresh</button></div><div style="padding:16px;text-align:center;color:var(--g1)">Loading kiosk staff…</div></div>';
+  el.innerHTML = '<div class="card"><div class="card-hd"><div><div class="card-title">Reception Attendance Kiosk</div><div class="card-sub">For housekeeping or staff without phones. Saves on this PC first.</div></div><button class="btn btn-outline btn-xs" onclick="renderAttendanceKioskCard()">Refresh</button></div><div style="padding:16px;text-align:center;color:var(--g1)">Loading kiosk staff…</div></div>';
   fetchAttendanceKioskStaff().then(function (rows) {
     const active = rows.filter(function (row) { return row.active !== false; });
     const options = '<option value="">Select employee</option>' + active.map(function (row) {
       return '<option value="' + escapeHtmlConsent(row.userKey) + '">' + escapeHtmlConsent(row.employeeName + ' · ' + row.centre) + '</option>';
     }).join('');
     el.innerHTML = '<div class="card">'
-      + '<div class="card-hd"><div><div class="card-title">Reception Attendance Kiosk</div><div class="card-sub">Mark day or night duty for staff who do not have phones.</div></div><button class="btn btn-outline btn-xs" onclick="renderAttendanceKioskCard()">Refresh</button></div>'
+      + '<div class="card-hd"><div><div class="card-title">Reception Attendance Kiosk</div><div class="card-sub">Mark day or night duty for staff who do not have phones. It saves immediately; location can be reviewed if unavailable.</div></div><button class="btn btn-outline btn-xs" onclick="renderAttendanceKioskCard()">Refresh</button></div>'
       + '<div class="fg">'
       + '<div class="form-group"><label class="fl">Staff Name</label><input id="att-kiosk-name" placeholder="Housekeeping staff name"></div>'
       + '<div class="form-group"><label class="fl">Centre</label><select id="att-kiosk-centre"><option value="CHD">Chandigarh</option><option value="RPR">Ropar</option></select></div>'
