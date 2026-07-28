@@ -34752,7 +34752,7 @@ function _renderRxDrugsNow() {
             ? `<div style="min-height:34px;display:flex;align-items:center;padding:6px 8px;background:#fff;border:1.5px solid #1A3C6E;border-radius:8px;font-size:12px;font-weight:800;color:#1A3C6E">${esc(combinedName || 'Medicine')}</div><div style="min-height:28px;display:flex;align-items:center;padding:4px 8px;background:#fff4df;border:1px dashed rgba(212,160,23,.6);border-radius:8px;font-size:10.5px;font-weight:800;color:#8a4200;margin-top:4px">Taper step</div>`
             : `<input value="${esc(combinedName || '')}" onchange="const m=(this.value||'').match(/^(.*?)(?:\\s*\\((.*)\\))?\\s*$/);${prefix}.trade=(m&&m[1]?m[1].trim():this.value.trim());${prefix}.brand=${prefix}.trade;${prefix}.generic=(m&&m[2]?m[2].trim():'');${prefix}.name=${prefix}.generic;renderRxDrugs()" placeholder="Trade name (Generic)" style="${nameInput}"><div style="padding:4px 8px;font-size:10.5px;color:#6a6a6a;line-height:1.25">${genericName ? 'Edit as Trade name (Generic)' : 'Use brackets for generic if needed'}</div>`}
         </div>
-        <div><select onchange="${prefix}.drugType=this.value;${prefix}.type=this.value;renderRxDrugs()" style="${inputBase}">${typeOpts.map(t=>`<option${selectedType===t?' selected':''}>${t}</option>`).join('')}</select></div>
+        <div><div style="display:flex;align-items:center;gap:5px"><select onchange="${prefix}.drugType=this.value;${prefix}.type=this.value;renderRxDrugs()" style="${inputBase};flex:1;min-width:0">${typeOpts.map(t=>`<option${selectedType===t?' selected':''}>${t}</option>`).join('')}</select><button type="button" title="Add medicine type" onclick="addCustomRxOption('type');renderRxDrugs()" style="width:24px;height:24px;border-radius:50%;border:none;background:var(--blue);color:#fff;font-size:14px;font-weight:900;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</button></div></div>
         ${showRouteSite ? `<div><select onchange="${prefix}.eye=[this.value];renderRxDrugs()" style="${inputBase}">${eyeOpts.map(e=>`<option${(((row.eye && row.eye[0]) || (baseDrug.eye && baseDrug.eye[0]) || 'Oral')===e)?' selected':''}>${e}</option>`).join('')}</select></div>` : ''}
         <div>
           <select onchange="${prefix}.freq=this.value;window.syncRxDrugDates(${i})" style="${inputBase}">${freqOpts.map(f=>`<option${rowFreq===f?' selected':''}>${f}</option>`).join('')}</select>
@@ -37566,7 +37566,28 @@ function rxPlainIsEyeDrop(d) {
 }
 function rxPlainIsTopicalCream(d) {
   const form = String(d.drugType || d.type || '').toLowerCase();
-  return /ointment|gel|cream|lotion/i.test(form);
+  return /ointment|gel|cream|lotion|serum|shampoo|foam|solution|soap|wash|oil|paste/i.test(form);
+}
+function rxTopicalFormPlain(d, lang) {
+  const form = String(d.drugType || d.type || '').trim().toLowerCase();
+  let key = '';
+  if (/ointment/.test(form)) key = 'ointment';
+  else if (/serum/.test(form)) key = 'serum';
+  else if (/shampoo/.test(form)) key = 'shampoo';
+  else if (/gel/.test(form)) key = 'gel';
+  else if (/lotion/.test(form)) key = 'lotion';
+  else if (/foam/.test(form)) key = 'foam';
+  else if (/soap|wash/.test(form)) key = 'wash';
+  else if (/oil/.test(form)) key = 'oil';
+  else if (/paste/.test(form)) key = 'paste';
+  else if (/solution/.test(form)) key = 'solution';
+  else key = 'cream';
+  const maps = {
+    en: { ointment:'ointment', serum:'serum', shampoo:'shampoo', gel:'gel', lotion:'lotion', foam:'foam', wash:'wash', oil:'oil', paste:'paste', solution:'solution', cream:'cream' },
+    hi: { ointment:'ऑइंटमेंट', serum:'सीरम', shampoo:'शैम्पू', gel:'जेल', lotion:'लोशन', foam:'फोम', wash:'वॉश', oil:'तेल', paste:'पेस्ट', solution:'सॉल्यूशन', cream:'क्रीम' },
+    pa: { ointment:'ਮਲਹਮ', serum:'ਸੀਰਮ', shampoo:'ਸ਼ੈਂਪੂ', gel:'ਜੈਲ', lotion:'ਲੋਸ਼ਨ', foam:'ਫੋਮ', wash:'ਵਾਸ਼', oil:'ਤੇਲ', paste:'ਪੇਸਟ', solution:'ਸੋਲੂਸ਼ਨ', cream:'ਕਰੀਮ' }
+  };
+  return (maps[lang] || maps.en)[key] || key;
 }
 function isRxPlainOral(d) {
   if (rxPlainIsEyeDrop(d) || rxPlainIsTopicalCream(d)) return false;
@@ -37591,7 +37612,8 @@ function buildRxPlainInstructionLine(d, lang, fmtIN) {
     if (dropEn) {
       line = eyeTxt + ' में 1 बूंद डालें, ' + freq + ', ' + dur + ', ' + df + ' से ' + dt + ' तक।';
     } else if (topicalEn) {
-      line = eyeTxt + ' पर लगाएं, ' + freq + ', ' + dur + ', ' + df + ' से ' + dt + ' तक।';
+      const topicalForm = rxTopicalFormPlain(d, lang);
+      line = (eyeTxt || 'प्रभावित जगह') + ' पर ' + topicalForm + ' लगाएं, ' + freq + ', ' + dur + ', ' + df + ' से ' + dt + ' तक।';
     } else if (/injection/i.test(form)) {
       line = 'निर्देशानुसार दें, ' + freq + ', ' + dur + ', ' + df + ' से ' + dt + ' तक।';
     } else if (oralEn) {
@@ -37604,7 +37626,8 @@ function buildRxPlainInstructionLine(d, lang, fmtIN) {
     if (dropEn) {
       line = eyeTxt + ' ਵਿੱਚ 1 ਬੂੰਦ ਪਾਓ, ' + freq + ', ' + dur + ', ' + df + ' ਤੋਂ ' + dt + ' ਤੱਕ।';
     } else if (topicalEn) {
-      line = eyeTxt + ' ਤੇ ਲਗਾਓ, ' + freq + ', ' + dur + ', ' + df + ' ਤੋਂ ' + dt + ' ਤੱਕ।';
+      const topicalForm = rxTopicalFormPlain(d, lang);
+      line = (eyeTxt || 'ਪ੍ਰਭਾਵਿਤ ਥਾਂ') + ' ਤੇ ' + topicalForm + ' ਲਗਾਓ, ' + freq + ', ' + dur + ', ' + df + ' ਤੋਂ ' + dt + ' ਤੱਕ।';
     } else if (/injection/i.test(form)) {
       line = 'ਨਿਰਦੇਸ਼ ਅਨੁਸਾਰ ਦਿਓ, ' + freq + ', ' + dur + ', ' + df + ' ਤੋਂ ' + dt + ' ਤੱਕ।';
     } else if (oralEn) {
@@ -37618,7 +37641,9 @@ function buildRxPlainInstructionLine(d, lang, fmtIN) {
     if (dropEn) {
       line = 'Instill one drop in ' + (eyeEn || 'the affected eye') + ', ' + freq + ', for ' + dur + ', from ' + df + ' to ' + dt + '.';
     } else if (topicalEn) {
-      line = 'Apply to ' + (eyeEn || 'the affected area') + ', ' + freq + ', for ' + dur + ', from ' + df + ' to ' + dt + '.';
+      const topicalForm = rxTopicalFormPlain(d, lang);
+      const prep = /ointment|paste/i.test(form) ? ' on ' : ' to ';
+      line = 'Apply ' + topicalForm + prep + (eyeEn || 'the affected area') + ', ' + freq + ', for ' + dur + ', from ' + df + ' to ' + dt + '.';
     } else if (/injection/i.test(form)) {
       line = 'Use as directed ' + freq + ' for ' + dur + ', from ' + df + ' to ' + dt + '.';
     } else if (/spray/i.test(form)) {
