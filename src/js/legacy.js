@@ -24728,7 +24728,9 @@ function loadOTCasesFromLocalStorage() {
 }
 function getOTCaseLastTouchedAt(otCase) {
   const row = otCase || {};
-  return String(row.lastUpdated || row.updatedAt || row.createdAt || '').trim();
+  const raw = row.lastUpdated || row.updatedAt || row.syncAttemptAt || row.syncedAt || row.createdAt || row.date || '';
+  const parsed = raw ? Date.parse(raw) : 0;
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 function stripLocalOTSyncFields(otCase) {
   const row = Object.assign({}, otCase || {});
@@ -30180,7 +30182,7 @@ function normalizePersonNameForMatch(name) {
 function normalizeDeptKeyForQueue(dept) {
   const d = String(dept || '').toLowerCase().trim();
   if (!d) return '';
-  if (d === 'ophtho' || d.includes('ophthalm')) return 'ophtho';
+  if (d === 'ophtho' || d === 'eye' || d === 'eye ot' || d.includes('ophthalm')) return 'ophtho';
   if (d === 'obg' || d.includes('gyn') || d.includes('obst')) return 'obg';
   if (d === 'psych' || d.includes('psychi')) return 'psych';
   if (d === 'skin' || d.includes('derma') || d.includes('cosmet')) return 'skin';
@@ -48750,6 +48752,16 @@ function findActiveCrossRefForDept(p, dept) {
   });
   return refs[0] || null;
 }
+function patientHasUnseenCrossRefForDept(p, dept) {
+  const deptKey = normalizeDeptKeyForQueue(dept || '');
+  if (!p || !deptKey) return false;
+  return getActiveCrossRefsForPatient(p).some(function (xref) {
+    return xref
+      && !xref.seenAt
+      && crossRefQueueDateMatchesToday(xref)
+      && normalizeDeptKeyForQueue(xref.toDept || '') === deptKey;
+  });
+}
 function crossRefQueueDateMatchesToday(xref) {
   const todayKeyLocal = localDateKey(new Date());
   return [xref?.createdAt, xref?.date].filter(Boolean).some(function (raw) {
@@ -49032,7 +49044,7 @@ function _renderDocQueueImpl() {
       return !userDept || ptDept === userDept || (!ptDept && userDept === 'ophtho');
     });
   })();
-  const filteredPts = dedupeQueueRowsByPatientDept(searchQ ? myPts.filter(function (p) {
+  let filteredPts = dedupeQueueRowsByPatientDept(searchQ ? myPts.filter(function (p) {
     const hay = [
       p.name,
       p.bmhId,
@@ -49050,6 +49062,13 @@ function _renderDocQueueImpl() {
     const waitDiff = queueWaitMinutes(b) - queueWaitMinutes(a);
     if (waitDiff !== 0) return waitDiff;
     return String(a.bmhId || a._queueKey || '').localeCompare(String(b.bmhId || b._queueKey || ''));
+  });
+  filteredPts = filteredPts.filter(function (row) {
+    if (!row || row._xrefEntry || row._deptQueueEntry) return true;
+    const rowDept = normalizeDeptKeyForQueue(row.dept || row.department || effectiveQueueDept || userDept || '');
+    if (!rowDept) return true;
+    const source = (PATIENTS || []).find(function (p) { return p && String(p.bmhId || '') === String(row.bmhId || ''); }) || row;
+    return !patientHasUnseenCrossRefForDept(source, rowDept);
   });
 
   const visibleQueuePts = filteredPts.filter(function (p) {
