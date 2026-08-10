@@ -37384,6 +37384,62 @@ function patientHasTodayExplicitQueueStamp(p, todayKeyLocal) {
     return localDateKey(raw) === day || String(raw || '').slice(0, 10) === day;
   });
 }
+function patientHasTodayQueueRecoveryEvidence(p, todayKeyLocal) {
+  if (!p || !p.bmhId) return false;
+  const status = String(p.status || '').toLowerCase();
+  if (status === 'removed' || status === 'merged' || status === 'ipd' || status === 'discharged') return false;
+  const day = todayKeyLocal || localDateKey(new Date());
+  const id = String(p.bmhId || '');
+  if ([p.queueAddedAt, p.enqueuedAt, p.checkedInAt, p.checkinAt].filter(Boolean).some(function (raw) {
+    return localDateKey(raw) === day || String(raw || '').slice(0, 10) === day;
+  })) return true;
+  const chargeRows = (window.BMH_PATIENT_CHARGES && window.BMH_PATIENT_CHARGES[id]) || [];
+  if (Array.isArray(chargeRows) && chargeRows.some(function (row) {
+    if (!row) return false;
+    const amount = Number(row.amount != null ? row.amount : ((Number(row.qty) || 1) * (Number(row.rate) || 0))) || 0;
+    if (amount < 0) return false;
+    return localDateKey(row.ts || row.date || row.createdAt || row.updatedAt) === day;
+  })) return true;
+  if ((TRANSACTIONS || []).some(function (txn) {
+    if (!txn || String(txn.bmhId || '') !== id) return false;
+    if (Number(txn.amount || 0) < 0) return false;
+    return localDateKey(txn.date || txn.createdAt || txn.ts || txn.updatedAt) === day;
+  })) return true;
+  return (PAY_REQUESTS || []).some(function (pr) {
+    if (!pr || String(pr.bmhId || '') !== id) return false;
+    return localDateKey(pr.date || pr.createdAt || pr.updatedAt) === day;
+  });
+}
+function repairPatientQueueStampFromRecoveryEvidence(p, todayKeyLocal) {
+  const status = String(p?.status || '').toLowerCase();
+  if (!p || !p.bmhId || isQueueRowMarkedSeen(p) || p.queueRemoved || status === 'removed' || status === 'merged' || status === 'ipd' || status === 'discharged') return;
+  const day = todayKeyLocal || localDateKey(new Date());
+  if (localDateKey(p.queueDate) === day && localDateKey(p.visitDate) === day) return;
+  if (!patientHasTodayQueueRecoveryEvidence(p, day)) return;
+  const nowIso = new Date().toISOString();
+  const patch = {
+    queueDate: day,
+    visitDate: day,
+    queueRemoved: false,
+    status: 'waiting',
+    seen: false,
+    seenAt: null,
+    queueSource: p.queueSource || 'recovered-charge',
+    updatedAt: nowIso
+  };
+  if (!p.queueAddedAt) patch.queueAddedAt = nowIso;
+  Object.assign(p, patch);
+  const repairKey = String(p.bmhId) + ':' + day;
+  window._bmhQueueStampRepairs = window._bmhQueueStampRepairs || {};
+  if (window._bmhQueueStampRepairs[repairKey]) return;
+  window._bmhQueueStampRepairs[repairKey] = true;
+  try {
+    fbUpdate && fbUpdate('patients/' + p.bmhId, patch).catch(function () {});
+  } catch (e) {}
+  if (typeof window.patchPatientFirestore === 'function') {
+    window.patchPatientFirestore(p.bmhId, patch).catch(function () {});
+  }
+}
 function patientHasLegacySameDayCreationQueue(p, todayKeyLocal) {
   const day = todayKeyLocal || localDateKey(new Date());
   if (!p) return false;
@@ -37404,12 +37460,14 @@ function patientQueueDateMatchesToday(p) {
     if (!patientHasTodayReceptionVisitEvidence(p, todayKeyLocal) || String(p.queueSource || '').toLowerCase() === 'ot') return false;
   }
   if (patientHasTodayExplicitQueueStamp(p, todayKeyLocal) || patientHasLegacySameDayCreationQueue(p, todayKeyLocal)) return true;
+  if (patientHasTodayQueueRecoveryEvidence(p, todayKeyLocal)) return true;
   return false;
 }
 function getTodayQueueBasePatients() {
   return dedupeQueueEntriesByKey(PATIENTS.filter(function (p) {
     if (!p || p.queueRemoved || String(p.status || '').toLowerCase() === 'removed') return false;
     if (!centreMatch(p)) return false;
+    repairPatientQueueStampFromRecoveryEvidence(p, localDateKey(new Date()));
     if (!patientQueueDateMatchesToday(p)) return false;
     return true;
   }));
