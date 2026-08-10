@@ -26210,13 +26210,18 @@ function receptionQueueRestoreButtonHtml(bmhId, opts) {
   const id = String(bmhId || '').trim();
   if (!id) return '';
   const matches = (window.PATIENTS || []).filter(function (p) {
-    return String(p?.bmhId || '').trim() === id;
+    return getBmhIdLookupCandidates(id).indexOf(String(p?.bmhId || '').trim()) >= 0;
   });
-  if (!matches.length || !matches.some(function (patient) { return patientNeedsReceptionQueueRestore(patient); })) return '';
+  const hasRestorePatient = matches.some(function (patient) { return patientNeedsReceptionQueueRestore(patient); });
+  const hasFinancialEvidence = !matches.length && getTodayFinancialQueuePatientIds && getTodayFinancialQueuePatientIds(localDateKey(new Date())).some(function (knownId) {
+    return getBmhIdLookupCandidates(id).indexOf(String(knownId || '').trim()) >= 0 || getBmhIdLookupCandidates(knownId).indexOf(id) >= 0;
+  });
+  if (!hasRestorePatient && !hasFinancialEvidence) return '';
   const title = String(opts?.title || 'Restore to queue');
   const label = String(opts?.label || '↩');
   const style = String(opts?.style || 'background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1px solid var(--bmh-blue);border-radius:6px;padding:3px 7px;font-size:10px;font-weight:800;cursor:pointer;flex-shrink:0');
-  return '<button type="button" title="' + escapeHtmlConsent(title) + '" onclick="event.stopPropagation();restorePatientToDoctorQueue(\'' + id.replace(/'/g, "\\'") + '\')" style="' + style + '">' + escapeHtmlConsent(label) + '</button>';
+  const action = hasRestorePatient ? 'restorePatientToDoctorQueue' : 'restoreFinancialQueuePatientToDoctorQueue';
+  return '<button type="button" title="' + escapeHtmlConsent(title) + '" onclick="event.stopPropagation();' + action + '(\'' + id.replace(/'/g, "\\'") + '\')" style="' + style + '">' + escapeHtmlConsent(label) + '</button>';
 }
 
 function genRcUID() {
@@ -37256,11 +37261,13 @@ function patientHasTodayQueueRecoveryEvidence(p, todayKeyLocal) {
   const status = String(p.status || '').toLowerCase();
   if (status === 'removed' || status === 'merged' || status === 'ipd' || status === 'discharged') return false;
   const day = todayKeyLocal || localDateKey(new Date());
-  const id = String(p.bmhId || '');
+  const ids = getBmhIdLookupCandidates ? getBmhIdLookupCandidates(p.bmhId) : [String(p.bmhId || '')];
   if ([p.queueAddedAt, p.enqueuedAt, p.checkedInAt, p.checkinAt].filter(Boolean).some(function (raw) {
     return localDateKey(raw) === day || String(raw || '').slice(0, 10) === day;
   })) return true;
-  const chargeRows = (window.BMH_PATIENT_CHARGES && window.BMH_PATIENT_CHARGES[id]) || [];
+  const chargeRows = ids.reduce(function (out, id) {
+    return out.concat((window.BMH_PATIENT_CHARGES && window.BMH_PATIENT_CHARGES[id]) || []);
+  }, []);
   if (Array.isArray(chargeRows) && chargeRows.some(function (row) {
     if (!row) return false;
     const amount = Number(row.amount != null ? row.amount : ((Number(row.qty) || 1) * (Number(row.rate) || 0))) || 0;
@@ -37268,13 +37275,19 @@ function patientHasTodayQueueRecoveryEvidence(p, todayKeyLocal) {
     return localDateKey(row.ts || row.date || row.createdAt || row.updatedAt) === day;
   })) return true;
   if ((TRANSACTIONS || []).some(function (txn) {
-    if (!txn || String(txn.bmhId || '') !== id) return false;
+    if (!txn || ids.indexOf(String(txn.bmhId || '').trim()) < 0) return false;
     if (Number(txn.amount || 0) < 0) return false;
     return localDateKey(txn.date || txn.createdAt || txn.ts || txn.updatedAt) === day;
   })) return true;
-  return (PAY_REQUESTS || []).some(function (pr) {
-    if (!pr || String(pr.bmhId || '') !== id) return false;
+  if ((PAY_REQUESTS || []).some(function (pr) {
+    if (!pr || ids.indexOf(String(pr.bmhId || '').trim()) < 0) return false;
     return localDateKey(pr.date || pr.createdAt || pr.updatedAt) === day;
+  })) return true;
+  return (bmhGetSavedBillsForHistory ? (bmhGetSavedBillsForHistory() || []) : (window.BMH_SAVED_BILLS || [])).some(function (bill) {
+    if (!bill || ids.indexOf(String(bill.bmhId || '').trim()) < 0) return false;
+    if (String(bill.status || '').toLowerCase() === 'void') return false;
+    if (!(Math.max(0, Number(bill.amountReceived || bill.patientPays || 0)) > 0)) return false;
+    return localDateKey(bill.createdAt || bill.date || bill.updatedAt) === day;
   });
 }
 function repairPatientQueueStampFromRecoveryEvidence(p, todayKeyLocal) {
@@ -37329,6 +37342,13 @@ function getTodayFinancialQueuePatientIds(todayKeyLocal) {
     if (!rowMatchesCentre(pr, getEffectiveCentre(), { allowUncentredToday: true, dateKey: day })) return;
     if (localDateKey(pr.date || pr.createdAt || pr.updatedAt) === day) ids.add(String(pr.bmhId || '').trim());
   });
+  (bmhGetSavedBillsForHistory ? (bmhGetSavedBillsForHistory() || []) : (window.BMH_SAVED_BILLS || [])).forEach(function (bill) {
+    if (!bill || !bill.bmhId) return;
+    if (String(bill.status || '').toLowerCase() === 'void') return;
+    if (!(Math.max(0, Number(bill.amountReceived || bill.patientPays || 0)) > 0)) return;
+    if (!rowMatchesCentre(bill, getEffectiveCentre(), { allowUncentredToday: true, dateKey: day })) return;
+    if (localDateKey(bill.createdAt || bill.date || bill.updatedAt) === day) ids.add(String(bill.bmhId || '').trim());
+  });
   return Array.from(ids).filter(Boolean);
 }
 function getBmhIdLookupCandidates(id) {
@@ -37336,7 +37356,11 @@ function getBmhIdLookupCandidates(id) {
   if (!raw) return [];
   const out = [raw];
   const digits = raw.replace(/\D/g, '');
-  if (digits && !/^BMSH-/i.test(raw)) out.push('BMSH-' + digits.padStart(6, '0'));
+  if (digits) {
+    out.push(digits);
+    out.push('BMSH-' + digits);
+    out.push('BMSH-' + digits.padStart(6, '0'));
+  }
   return Array.from(new Set(out));
 }
 function findLoadedPatientByBmhId(id) {
@@ -37415,6 +37439,37 @@ function hydratePatientsFromTodayFinancialQueueEvidence(opts) {
   });
   return window._bmhFinancialQueueHydratePromise;
 }
+function getTodayFinancialQueueDeptForPatient(bmhId, todayKeyLocal) {
+  const day = todayKeyLocal || localDateKey(new Date());
+  const ids = getBmhIdLookupCandidates(bmhId);
+  const rows = bmhGetCollectionTransactionsForDate ? bmhGetCollectionTransactionsForDate(getCollectionViewCentre ? getCollectionViewCentre() : getEffectiveCentre(), day) : [];
+  const hit = (rows || []).find(function (row) {
+    return row && ids.indexOf(String(row.bmhId || '').trim()) >= 0 && normalizeDeptKeyForQueue(row.dept || '');
+  });
+  return normalizeDeptKeyForQueue(hit?.dept || '') || 'ophtho';
+}
+function restoreFinancialQueuePatientToDoctorQueue(bmhId, deptHint) {
+  const id = String(bmhId || '').trim();
+  if (!id) return;
+  const dept = normalizeDeptKeyForQueue(deptHint || getTodayFinancialQueueDeptForPatient(id));
+  hydratePatientsFromTodayFinancialQueueEvidence({ force: true, render: false }).then(function () {
+    const p = findLoadedPatientByBmhId(id);
+    if (!p) {
+      showToast('Patient record not loaded yet. Please refresh and try restore again.', 'w');
+      return;
+    }
+    if (dept && normalizeDeptKeyForQueue(p.dept || p.department || '') !== dept) p.dept = dept;
+    const restored = bmhEnsurePatientInTodayDeptQueue(p.bmhId, { dept: dept || p.dept || p.department || 'ophtho', silentToast: true, allowRestoreRemoved: true, queueSource: 'reception' });
+    if (!restored) repairPatientQueueStampFromRecoveryEvidence(p, localDateKey(new Date()));
+    renderDocQueue && renderDocQueue({ force: true, immediate: true });
+    renderReceptionPage && renderReceptionPage();
+    renderDashboard && renderDashboard();
+    showToast((p.name || 'Patient') + ' restored to doctor queue ✓', 's');
+  }).catch(function () {
+    showToast('Could not restore patient to queue. Please refresh and retry.', 'w');
+  });
+}
+window.restoreFinancialQueuePatientToDoctorQueue = restoreFinancialQueuePatientToDoctorQueue;
 function patientHasLegacySameDayCreationQueue(p, todayKeyLocal) {
   const day = todayKeyLocal || localDateKey(new Date());
   if (!p) return false;
