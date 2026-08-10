@@ -9452,6 +9452,7 @@ function startBmhFinancialsFirebaseSync() {
     renderInventoryTransfers && renderInventoryTransfers();
     renderInventoryTodayEntries && renderInventoryTodayEntries({ preserveVisibility: true });
     renderBillingPageIfActive && renderBillingPageIfActive();
+    hydratePatientsFromTodayFinancialQueueEvidence && hydratePatientsFromTodayFinancialQueueEvidence({ render: true });
   });
 }
 function loadBmhFinancials() {
@@ -9477,6 +9478,7 @@ function loadBmhFinancials() {
     const ir = localStorage.getItem('bmh_inventory_removals'); if (ir) { window.BMH_INVENTORY_REMOVALS.length = 0; JSON.parse(ir).forEach(x=>window.BMH_INVENTORY_REMOVALS.push(x)); }
   } catch (e) { /* noop */ }
   startBmhFinancialsFirebaseSync();
+  hydratePatientsFromTodayFinancialQueueEvidence && hydratePatientsFromTodayFinancialQueueEvidence({ render: true });
   Object.keys(window.BMH_PATIENT_CHARGES || {}).forEach(function (bmhId) {
     bmhRemoveLegacyEEGConcessionLines(bmhId);
   });
@@ -9489,6 +9491,7 @@ function loadBmhFinancials() {
         window._bmhFinancialsHydrating = true;
         applyBmhFinancialsSnapshot(remote, { persistLocal: true });
         window._bmhFinancialsHydrating = false;
+        hydratePatientsFromTodayFinancialQueueEvidence && hydratePatientsFromTodayFinancialQueueEvidence({ render: true });
       } else if (localTs || Object.keys(window.BMH_PATIENT_CHARGES || {}).length || (window.BMH_PURCHASES || []).length || (window.BMH_INVENTORY_USAGE || []).length) {
         if (remote) _bmhMergeRemoteVendorBills(remote.vendorBills);
         queueBmhFinancialsRemoteSync();
@@ -37304,6 +37307,114 @@ function repairPatientQueueStampFromRecoveryEvidence(p, todayKeyLocal) {
     window.patchPatientFirestore(p.bmhId, patch).catch(function () {});
   }
 }
+function getTodayFinancialQueuePatientIds(todayKeyLocal) {
+  const day = todayKeyLocal || localDateKey(new Date());
+  const ids = new Set();
+  Object.keys(window.BMH_PATIENT_CHARGES || {}).forEach(function (bmhId) {
+    const hasTodayCharge = ((window.BMH_PATIENT_CHARGES || {})[bmhId] || []).some(function (row) {
+      if (!row) return false;
+      const amount = Number(row.amount != null ? row.amount : ((Number(row.qty) || 1) * (Number(row.rate) || 0))) || 0;
+      if (amount < 0) return false;
+      return localDateKey(row.ts || row.date || row.createdAt || row.updatedAt) === day;
+    });
+    if (hasTodayCharge) ids.add(String(bmhId || '').trim());
+  });
+  (TRANSACTIONS || []).forEach(function (txn) {
+    if (!txn || !txn.bmhId || Number(txn.amount || 0) < 0) return;
+    if (!rowMatchesCentre(txn, getEffectiveCentre(), { allowUncentredToday: true, dateKey: day })) return;
+    if (localDateKey(txn.date || txn.createdAt || txn.ts || txn.updatedAt) === day) ids.add(String(txn.bmhId || '').trim());
+  });
+  (PAY_REQUESTS || []).forEach(function (pr) {
+    if (!pr || !pr.bmhId) return;
+    if (!rowMatchesCentre(pr, getEffectiveCentre(), { allowUncentredToday: true, dateKey: day })) return;
+    if (localDateKey(pr.date || pr.createdAt || pr.updatedAt) === day) ids.add(String(pr.bmhId || '').trim());
+  });
+  return Array.from(ids).filter(Boolean);
+}
+function getBmhIdLookupCandidates(id) {
+  const raw = String(id || '').trim();
+  if (!raw) return [];
+  const out = [raw];
+  const digits = raw.replace(/\D/g, '');
+  if (digits && !/^BMSH-/i.test(raw)) out.push('BMSH-' + digits.padStart(6, '0'));
+  return Array.from(new Set(out));
+}
+function findLoadedPatientByBmhId(id) {
+  const candidates = getBmhIdLookupCandidates(id);
+  return (PATIENTS || []).find(function (p) {
+    return p && candidates.indexOf(String(p.bmhId || '').trim()) >= 0;
+  }) || (window._BMH_ALL_PATIENTS_CACHE || []).find(function (p) {
+    return p && candidates.indexOf(String(p.bmhId || '').trim()) >= 0;
+  }) || null;
+}
+function upsertHydratedQueuePatient(row) {
+  if (!row || !row.bmhId) return;
+  const upsert = function (list) {
+    if (!Array.isArray(list)) return;
+    const idx = list.findIndex(function (p) { return p && String(p.bmhId || '') === String(row.bmhId || ''); });
+    if (idx >= 0) list[idx] = row;
+    else list.push(row);
+  };
+  upsert(window._BMH_ALL_PATIENTS_CACHE);
+  upsert(PATIENTS);
+  rebuildPatientCacheIndex && rebuildPatientCacheIndex(window._BMH_ALL_PATIENTS_CACHE || []);
+  buildReceptionPatientLookupIndex && buildReceptionPatientLookupIndex();
+  updatePatientCountStatus && updatePatientCountStatus();
+}
+function hydratePatientsFromTodayFinancialQueueEvidence(opts) {
+  opts = opts || {};
+  if (!window.FBDB) return Promise.resolve([]);
+  const day = localDateKey(new Date());
+  const ids = getTodayFinancialQueuePatientIds(day);
+  if (!ids.length) return Promise.resolve([]);
+  const missing = ids.filter(function (id) {
+    const loaded = findLoadedPatientByBmhId(id);
+    return !loaded || !patientQueueDateMatchesToday(loaded);
+  });
+  if (!missing.length) return Promise.resolve([]);
+  const key = day + ':' + missing.slice().sort().join('|');
+  if (window._bmhFinancialQueueHydrateInFlight === key) return window._bmhFinancialQueueHydratePromise || Promise.resolve([]);
+  if (!opts.force && window._bmhFinancialQueueHydrateKey === key && Date.now() - Number(window._bmhFinancialQueueHydrateAt || 0) < 15000) return Promise.resolve([]);
+  window._bmhFinancialQueueHydrateInFlight = key;
+  const readOne = function (id) {
+    const candidates = getBmhIdLookupCandidates(id);
+    let chain = Promise.resolve(null);
+    candidates.forEach(function (candidate) {
+      chain = chain.then(function (found) {
+        if (found) return found;
+        return window.FBDB.ref('patients/' + candidate).once('value').then(function (snap) {
+          const val = snap && snap.val && snap.val();
+          return val ? Object.assign({}, val, { bmhId: val.bmhId || candidate }) : null;
+        }).catch(function () { return null; });
+      });
+    });
+    return chain;
+  };
+  window._bmhFinancialQueueHydratePromise = Promise.all(missing.map(readOne)).then(function (rows) {
+    const added = [];
+    rows.filter(Boolean).forEach(function (raw) {
+      const row = normalizePatientRecord(raw);
+      if (!row || !row.bmhId) return;
+      if (isMergedPatientRecord && isMergedPatientRecord(row)) return;
+      if (!rowMatchesCentre(row, effectivePatientListCentreScope && effectivePatientListCentreScope(), { allowUncentredToday: true, dateKey: day })) return;
+      if (!patientHasTodayQueueRecoveryEvidence(row, day)) return;
+      repairPatientQueueStampFromRecoveryEvidence(row, day);
+      upsertHydratedQueuePatient(row);
+      added.push(row);
+    });
+    if (added.length && opts.render !== false) {
+      renderDocQueue && renderDocQueue({ force: true, immediate: true });
+      renderReceptionPage && renderReceptionPage();
+      renderDashboard && renderDashboard();
+    }
+    window._bmhFinancialQueueHydrateKey = key;
+    window._bmhFinancialQueueHydrateAt = Date.now();
+    return added;
+  }).finally(function () {
+    if (window._bmhFinancialQueueHydrateInFlight === key) window._bmhFinancialQueueHydrateInFlight = '';
+  });
+  return window._bmhFinancialQueueHydratePromise;
+}
 function patientHasLegacySameDayCreationQueue(p, todayKeyLocal) {
   const day = todayKeyLocal || localDateKey(new Date());
   if (!p) return false;
@@ -37328,6 +37439,7 @@ function patientQueueDateMatchesToday(p) {
   return false;
 }
 function getTodayQueueBasePatients() {
+  hydratePatientsFromTodayFinancialQueueEvidence && hydratePatientsFromTodayFinancialQueueEvidence({ render: true });
   return dedupeQueueEntriesByKey(PATIENTS.filter(function (p) {
     if (!p || p.queueRemoved || String(p.status || '').toLowerCase() === 'removed') return false;
     if (!centreMatch(p)) return false;
@@ -40794,6 +40906,7 @@ function listenPayRequests(opts) {
     if(nb) nb.textContent = PAY_REQUESTS.filter(function (r) {
       return r.status === 'pending' && isTodayReceptionPayRequest(r, { centre: centre });
     }).length;
+    hydratePatientsFromTodayFinancialQueueEvidence && hydratePatientsFromTodayFinancialQueueEvidence({ render: true });
     const activeId = getActivePageId();
     if (activeId === 'pg-reception') renderReceptionPage && renderReceptionPage();
     else if (activeId === 'pg-dashboard') renderDashboard && renderDashboard();
@@ -40889,6 +41002,7 @@ function applyRealtimeTransactionRecord(txn, key) {
     bmhSyncPatientAdvanceBalance(next.bmhId, { localOnly: true });
   }
   renderCollectionDashboard && renderCollectionDashboard();
+  hydratePatientsFromTodayFinancialQueueEvidence && hydratePatientsFromTodayFinancialQueueEvidence({ render: true });
   if (getActivePageId && getActivePageId() === 'pg-reception') renderReceptionPage && renderReceptionPage();
 }
 function removeRealtimeTransactionRecord(key) {
