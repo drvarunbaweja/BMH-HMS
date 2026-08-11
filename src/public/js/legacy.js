@@ -29364,7 +29364,7 @@ function addOTCase() {
     normalized.iol = 'N/A';
     normalized.iolType = '';
     normalized.iolPower = '';
-    if (!normalized.room || /^eye ot$/i.test(normalized.room)) normalized.room = 'Laser Room';
+    if (!normalized.room) normalized.room = 'Laser Room';
   }
   if (editId) {
     const idx = OT_CASES.findIndex(function (c) { return c.id === editId; });
@@ -49122,6 +49122,11 @@ function findActiveCrossRefForDept(p, dept) {
   });
   return refs[0] || null;
 }
+function crossRefTargetsDept(xref, dept) {
+  const deptKey = normalizeDeptKeyForQueue(dept || '');
+  if (!xref || !deptKey) return false;
+  return normalizeDeptKeyForQueue(xref.toDept || '') === deptKey;
+}
 function patientHasUnseenCrossRefForDept(p, dept) {
   const deptKey = normalizeDeptKeyForQueue(dept || '');
   if (!p || !deptKey) return false;
@@ -49564,7 +49569,9 @@ function saveVisit(dept, opts) {
     ? Object.assign({}, window._activeXrefContext)
     : null;
   const inferredXrefForDept = activeXref ? null : findActiveCrossRefForDept(localPt, dept);
-  const activeXrefId = activeXref?.xrefId || inferredXrefForDept?.id || '';
+  const activeXrefId = (activeXref && normalizeDeptKeyForQueue(activeXref.dept || '') === dept)
+    ? activeXref.xrefId
+    : (crossRefTargetsDept(inferredXrefForDept, dept) ? inferredXrefForDept?.id : '');
   const isXrefVisit = !!activeXrefId;
   const xrefVisitKey = activeXref?.visitKey || inferredXrefForDept?.lastVisitKey || '';
   const todaysExistingKey = isXrefVisit ? null
@@ -50059,6 +50066,7 @@ function saveVisit(dept, opts) {
           if (pt && Array.isArray(pt.crossRefs)) {
             const refs = pt.crossRefs.map(function (r) {
               if (!r || String(r.id) !== String(activeXrefId)) return r;
+              if (!crossRefTargetsDept(r, dept)) return r;
               return Object.assign({}, r, { seenAt: r.seenAt || nowSeen, lastVisitKey: visitKey, lastSavedAt: nowSeen });
             });
             pt.crossRefs = refs;
