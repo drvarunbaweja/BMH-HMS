@@ -5073,10 +5073,27 @@ function unmarkDilated(id) {
 function setQueueVisitPurpose(bmhId, purpose) {
   const p = PATIENTS.find(x=>x.bmhId===bmhId); if (!p) return;
   const val = String(purpose || '').trim() || 'Consultation';
+  const needsCheckIn = /need\s*to\s*check\s*in/i.test(val);
   p.purpose = val;
   p.surgeryToday = /^surgery today$/i.test(val);
+  p.preRegistered = needsCheckIn;
+  p.status = needsCheckIn ? 'waiting' : (isQueueRowMarkedSeen(p) ? p.status : 'waiting');
+  if (needsCheckIn) {
+    p.seen = false;
+    p.seenAt = null;
+    p.dilated = false;
+    p.dilatedTime = null;
+  }
   p.updatedAt = new Date().toISOString();
-  fbUpdate && fbUpdate('patients/'+bmhId,{purpose:p.purpose,surgeryToday:p.surgeryToday,updatedAt:p.updatedAt}).catch(()=>{});
+  const patch = {
+    purpose: p.purpose,
+    surgeryToday: p.surgeryToday,
+    preRegistered: p.preRegistered,
+    status: p.status,
+    updatedAt: p.updatedAt
+  };
+  if (needsCheckIn) Object.assign(patch, { seen:false, seenAt:null, dilated:false, dilatedTime:null });
+  fbUpdate && fbUpdate('patients/'+bmhId, patch).catch(()=>{});
   showToast((p.name || 'Patient') + ' marked as ' + val + ' ✓','s');
   renderDocQueue && renderDocQueue();
   renderReceptionPage && renderReceptionPage();
@@ -48428,6 +48445,7 @@ function buildQTableRow(p, sno, opts) {
         <option value="Consultation"${/^consultation$/i.test(String(p.purpose || '')) || !String(p.purpose || '').trim() ? ' selected' : ''}>Consultation</option>
         <option value="Follow-up"${/follow/i.test(String(p.purpose || '')) ? ' selected' : ''}>Follow-up</option>
         <option value="Surgery Today"${isSurgeryToday ? ' selected' : ''}>Surgery Today</option>
+        <option value="Need to Check In"${/need\s*to\s*check\s*in/i.test(String(p.purpose || '')) ? ' selected' : ''}>Need to Check In</option>
       </select>`
     : (p.purpose || '—');
   const restoreSeenAction = seenRow
