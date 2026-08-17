@@ -5074,6 +5074,7 @@ function setQueueVisitPurpose(bmhId, purpose) {
   const p = PATIENTS.find(x=>x.bmhId===bmhId); if (!p) return;
   const val = String(purpose || '').trim() || 'Consultation';
   const needsCheckIn = /need\s*to\s*check\s*in/i.test(val);
+  const today = localDateKey(new Date());
   p.purpose = val;
   p.surgeryToday = /^surgery today$/i.test(val);
   p.preRegistered = needsCheckIn;
@@ -5083,6 +5084,10 @@ function setQueueVisitPurpose(bmhId, purpose) {
     p.seenAt = null;
     p.dilated = false;
     p.dilatedTime = null;
+    p.queueDate = today;
+    p.visitDate = today;
+    p.queueRemoved = false;
+    p.queueSource = p.queueSource || 'reception';
   }
   p.updatedAt = new Date().toISOString();
   const patch = {
@@ -5092,7 +5097,7 @@ function setQueueVisitPurpose(bmhId, purpose) {
     status: p.status,
     updatedAt: p.updatedAt
   };
-  if (needsCheckIn) Object.assign(patch, { seen:false, seenAt:null, dilated:false, dilatedTime:null });
+  if (needsCheckIn) Object.assign(patch, { seen:false, seenAt:null, dilated:false, dilatedTime:null, queueDate:today, visitDate:today, queueRemoved:false, queueSource:p.queueSource });
   fbUpdate && fbUpdate('patients/'+bmhId, patch).catch(()=>{});
   showToast((p.name || 'Patient') + ' marked as ' + val + ' ✓','s');
   renderDocQueue && renderDocQueue();
@@ -12693,6 +12698,45 @@ function bmhPayRequestToSyntheticCollectionTxn(pr) {
     billCats: [normalizeChargeCollectionCategoryValue(pr.cat || pr.category || pr.kind) || inferChargeCategoryFromService(pr.for || pr.service || pr.desc || '') || 'other']
   };
 }
+function bmhCollectionDedupeKey(txn) {
+  if (!txn) return '';
+  const date = txnIsoDate(txn);
+  const bmhId = String(txn.bmhId || '').trim().toLowerCase();
+  const dept = normalizeDeptKeyForQueue(txn.dept || '');
+  const amount = Math.round(getNetTransactionAmount(txn) * 100) / 100;
+  const cat = getTransactionPrimaryChargeCategory(txn);
+  const text = [txn.service, txn.for, txn.desc, txn.purpose].filter(Boolean).join(' ');
+  if (cat === 'consultation' || String(txn.type || '').toLowerCase() === 'consultation-synthetic' || isConsultationPurposeText(text)) {
+    return ['consultation', date, bmhId, dept, amount].join('|');
+  }
+  const billId = String(txn.billId || '').trim();
+  if (billId) return 'bill|' + billId;
+  const prId = String(txn.payRequestId || '').trim();
+  if (prId) return 'pay-request|' + prId;
+  const id = String(txn.id || '').trim();
+  if (id) return 'id|' + id;
+  return ['row', date, bmhId, dept, amount, String(text || '').trim().toLowerCase()].join('|');
+}
+function bmhCollectionDedupePriority(txn) {
+  const source = String(txn?.source || '').toLowerCase();
+  const type = String(txn?.type || '').toLowerCase();
+  if (type === 'consultation-synthetic') return 1;
+  if (source === 'pay-request') return 2;
+  if (source === 'saved-bill') return 3;
+  return 4;
+}
+function bmhDedupeCollectionTransactions(rows) {
+  const byKey = new Map();
+  (rows || []).forEach(function (txn) {
+    const key = bmhCollectionDedupeKey(txn);
+    if (!key) return;
+    const existing = byKey.get(key);
+    if (!existing || bmhCollectionDedupePriority(txn) > bmhCollectionDedupePriority(existing)) {
+      byKey.set(key, txn);
+    }
+  });
+  return Array.from(byKey.values());
+}
 function bmhPatientCollectionVisitDateRaw(p) {
   if (!p) return '';
   return p.queueAddedAt || p.enqueuedAt || p.checkedInAt || p.checkinAt || p.queueDate || p.visitDate || p.registeredAt || p.date || p.createdAt || '';
@@ -12747,6 +12791,7 @@ function bmhGetCollectionTransactionsForDate(centreOrCentres, dateKey) {
     const visitDateRaw = bmhPatientCollectionVisitDateRaw(p);
     const visitDate = localDateKey(visitDateRaw);
     if (visitDate !== dateKey) return;
+    if (p.preRegistered && !patientHasTodayPaidQueueEvidence(p.bmhId, dateKey)) return;
     if (!isConsultationPurposeText([p.purpose, p.consultationFeeLabel].filter(Boolean).join(' '))) return;
     const fee = resolveConsultationChargeAmountForVisit(p);
     if (!(fee > 0)) return;
@@ -12798,7 +12843,7 @@ function bmhGetCollectionTransactionsForDate(centreOrCentres, dateKey) {
     const synthetic = bmhPayRequestToSyntheticCollectionTxn(pr);
     if (synthetic) rows.push(synthetic);
   });
-  return rows;
+  return bmhDedupeCollectionTransactions(rows);
 }
 function bmhGetCollectionTransactionsForRange(centreOrCentres, fromKey, toKey) {
   const start = localDateKey(fromKey || todayKey());
@@ -37307,6 +37352,42 @@ function patientHasTodayQueueRecoveryEvidence(p, todayKeyLocal) {
     return localDateKey(bill.createdAt || bill.date || bill.updatedAt) === day;
   });
 }
+function patientHasTodayPaidQueueEvidence(bmhId, todayKeyLocal) {
+  const day = todayKeyLocal || localDateKey(new Date());
+  const ids = getBmhIdLookupCandidates ? getBmhIdLookupCandidates(bmhId) : [String(bmhId || '').trim()];
+  if (!ids.length) return false;
+  const isSamePatient = function (id) { return ids.indexOf(String(id || '').trim()) >= 0; };
+  const hasPositiveAmount = function (row) {
+    if (!row) return false;
+    const paid = Number(row.paidAmount || row.amountReceived || row.patientPays || 0) || 0;
+    if (paid > 0 || row.paid === true || row.collected === true) return true;
+    return Array.isArray(row.paymentAllocations) && row.paymentAllocations.some(function (pa) { return Number(pa?.amount || 0) > 0; });
+  };
+  const charges = ids.reduce(function (out, id) {
+    return out.concat((window.BMH_PATIENT_CHARGES && window.BMH_PATIENT_CHARGES[id]) || []);
+  }, []);
+  if (charges.some(function (row) {
+    if (!hasPositiveAmount(row)) return false;
+    return localDateKey(row.ts || row.date || row.createdAt || row.updatedAt) === day;
+  })) return true;
+  if ((TRANSACTIONS || []).some(function (txn) {
+    if (!txn || !isSamePatient(txn.bmhId)) return false;
+    if (!isCollectedTxn(txn) && !(getNetTransactionAmount(txn) > 0)) return false;
+    return localDateKey(txn.date || txn.createdAt || txn.ts || txn.updatedAt) === day;
+  })) return true;
+  if ((PAY_REQUESTS || []).some(function (pr) {
+    if (!pr || !isSamePatient(pr.bmhId)) return false;
+    if (String(pr.status || '').toLowerCase() !== 'paid') return false;
+    if (!(Number(pr.amount || 0) > 0)) return false;
+    return localDateKey(pr.updatedAt || pr.date || pr.createdAt) === day;
+  })) return true;
+  return (bmhGetSavedBillsForHistory ? (bmhGetSavedBillsForHistory() || []) : (window.BMH_SAVED_BILLS || [])).some(function (bill) {
+    if (!bill || !isSamePatient(bill.bmhId)) return false;
+    if (String(bill.status || '').toLowerCase() === 'void') return false;
+    if (!(Math.max(0, Number(bill.amountReceived || bill.patientPays || 0)) > 0)) return false;
+    return localDateKey(bill.createdAt || bill.date || bill.updatedAt) === day;
+  });
+}
 function repairPatientQueueStampFromRecoveryEvidence(p, todayKeyLocal) {
   const status = String(p?.status || '').toLowerCase();
   if (!p || !p.bmhId || isQueueRowMarkedSeen(p) || p.queueRemoved || status === 'removed' || status === 'merged' || status === 'ipd' || status === 'discharged') return;
@@ -48621,7 +48702,8 @@ function checkInPatient(bmhId) {
   // Collect fee and change status from pre-registered → waiting
   const p = PATIENTS.find(x=>x.bmhId===bmhId);
   if(!p) return;
-  const fee = parseFloat(prompt(`Check in ${p.name}\nConsultation fee (₹):`, '200')||'200')||200;
+  const alreadyPaidToday = patientHasTodayPaidQueueEvidence(bmhId);
+  const fee = alreadyPaidToday ? 0 : (parseFloat(prompt(`Check in ${p.name}\nConsultation fee (₹):`, '200')||'200')||200);
   if(fee > 0) {
     const txnId = 'TXN'+Date.now();
     const txn = {
@@ -48644,7 +48726,7 @@ function checkInPatient(bmhId) {
   const today = localDateKey(new Date());
   p.status='waiting'; p.preRegistered=false; p.seen=false; p.seenAt=null; p.checkinAt=Date.now(); p.queueDate=today; p.visitDate=today; p.queueRemoved=false; p.queueAddedAt=nowIso; p.queueSource='reception'; p.updatedAt=nowIso;
   fbUpdate&&fbUpdate('patients/'+bmhId,{status:'waiting',preRegistered:false,seen:false,seenAt:null,checkinAt:p.checkinAt,queueAddedAt:nowIso,queueDate:today,visitDate:today,queueRemoved:false,queueSource:'reception',updatedAt:nowIso});
-  showToast(`✅ ${p.name} checked in — Token issued`,'s');
+  showToast(`✅ ${p.name} checked in${alreadyPaidToday ? ' — payment already recorded' : ' — Token issued'}`,'s');
   renderDocQueue && renderDocQueue();
   renderReceptionPage && renderReceptionPage();
   renderDashboard && renderDashboard();
