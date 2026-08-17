@@ -3259,7 +3259,7 @@ function nav(id, el, opts) {
   else if(pageKey==='obg')             deferPageWork(function(){ renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); initObgSelects && initObgSelects(); toggleObgWorkflow && toggleObgWorkflow(); populateObgPatientFromCurrent && populateObgPatientFromCurrent(); updateObgComputedFields && updateObgComputedFields(); renderDeptSmartSuggestions && renderDeptSmartSuggestions('obg'); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); renderDeptSmartSuggestions&&renderDeptSmartSuggestions('obg'); }, 120); });
   else if(pageKey==='psych')           deferPageWork(function(){ renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); togglePsychTracks && togglePsychTracks(); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); }, 120); });
   else if(pageKey==='skin')            deferPageWork(function(){ renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); }, 120); });
-  else if(pageKey==='reception')       deferPageWork(function(){ renderReceptionPage && renderReceptionPage(); setTimeout(()=>{renderCollectionDashboard&&renderCollectionDashboard();loadCustomPurposes&&loadCustomPurposes();},100); });
+  else if(pageKey==='reception')       deferPageWork(function(){ renderReceptionPage && renderReceptionPage(); setTimeout(()=>{bmhRenderCollectionDashboardIfVisible&&bmhRenderCollectionDashboardIfVisible();loadCustomPurposes&&loadCustomPurposes();},100); });
   else if(pageKey==='lab')             deferPageWork(function(){ initLab && initLab(); renderLabOrders && renderLabOrders(); });
   else if(pageKey==='ipd')             deferPageWork(function(){ loadIPDPatientsFromFirebase && loadIPDPatientsFromFirebase(); renderIPD && renderIPD(); });
   else if(pageKey==='ot')              deferPageWork(function(){ loadOTCasesFromFirebase && loadOTCasesFromFirebase(); renderOTList && renderOTList(); setTimeout(()=>{ const w=document.getElementById('who-signin-list'); const t=document.getElementById('ot-t-in'); if(w) w.style.display=''; if(t&&t.closest('.card')) t.closest('.card').style.display=''; },100); });
@@ -9662,6 +9662,7 @@ function loadBmhFinancials() {
   bmhRunEndOfDayEegPurge();
 }
 function saveBmhFinancials(opts) {
+  if (typeof bmhInvalidateCollectionCache === 'function') bmhInvalidateCollectionCache();
   try {
     localStorage.setItem('bmh_patient_charges', JSON.stringify(window.BMH_PATIENT_CHARGES));
     localStorage.setItem('bmh_vendor_bills', JSON.stringify(window.BMH_VENDOR_BILLS));
@@ -12911,6 +12912,17 @@ function bmhGetCollectionTransactionsForDate(centreOrCentres, dateKey) {
     return !raw || raw === 'both' || raw === 'all';
   });
   const wanted = showAllCentres ? null : new Set(centres.map(function (c) { return normalizeAppointmentCentreValue(c || 'CHD'); }));
+  const cacheKey = [
+    dateKey,
+    showAllCentres ? 'all' : Array.from(wanted || []).sort().join(',')
+  ].join('|');
+  const cacheTtl = Number(window.BMH_COLLECTION_CACHE_TTL_MS || 1500);
+  const cacheEnabled = typeof bmhSafePerfPatchesEnabled === 'function' ? bmhSafePerfPatchesEnabled() : true;
+  const cache = window._bmhCollectionTxnCache || (window._bmhCollectionTxnCache = {});
+  const cached = cacheEnabled ? cache[cacheKey] : null;
+  if (cached && (Date.now() - Number(cached.at || 0)) < cacheTtl && Array.isArray(cached.rows)) {
+    return cached.rows.slice();
+  }
   const centreAllowed = function (row) {
     if (!wanted) return true;
     return Array.from(wanted).some(function (centre) {
@@ -12979,7 +12991,9 @@ function bmhGetCollectionTransactionsForDate(centreOrCentres, dateKey) {
     const synthetic = bmhPayRequestToSyntheticCollectionTxn(pr);
     if (synthetic) rows.push(synthetic);
   });
-  return bmhDedupeCollectionTransactions(rows);
+  const finalRows = bmhDedupeCollectionTransactions(rows);
+  if (cacheEnabled) cache[cacheKey] = { at: Date.now(), rows: finalRows.slice() };
+  return finalRows;
 }
 function bmhGetCollectionTransactionsForRange(centreOrCentres, fromKey, toKey) {
   const start = localDateKey(fromKey || todayKey());
@@ -40232,7 +40246,33 @@ function getConcessionAdjustedCollectionTotal(transactions) {
 function getCollectionViewCentre() {
   return normalizeAppointmentCentreValue(getEffectiveCentre() || CURRENT_USER?.centre || 'CHD');
 }
+function bmhInvalidateCollectionCache() {
+  window._bmhCollectionTxnCache = {};
+}
+function bmhElementLooksVisible(el) {
+  if (!el) return false;
+  if (el.classList && el.classList.contains('active')) return true;
+  return !!(el.offsetWidth || el.offsetHeight || (el.getClientRects && el.getClientRects().length));
+}
+function bmhReceptionCollectionTabVisible() {
+  const activePage = typeof getActivePageId === 'function' ? getActivePageId() : '';
+  if (activePage && activePage !== 'pg-reception') return true;
+  const tab = document.getElementById('rc-charges');
+  return !!(tab && tab.classList && tab.classList.contains('active') && bmhElementLooksVisible(tab));
+}
+function bmhRenderCollectionDashboardIfVisible() {
+  if (typeof bmhSafePerfPatchesEnabled === 'function' && !bmhSafePerfPatchesEnabled()) {
+    renderCollectionDashboard && renderCollectionDashboard();
+    return;
+  }
+  if (bmhReceptionCollectionTabVisible()) renderCollectionDashboard && renderCollectionDashboard();
+  else window._bmhReceptionCollectionRenderPending = true;
+}
 function renderCollectionDashboard() {
+  if (typeof bmhSafePerfPatchesEnabled === 'function' && bmhSafePerfPatchesEnabled() && !bmhReceptionCollectionTabVisible()) {
+    window._bmhReceptionCollectionRenderPending = true;
+    return;
+  }
   clearTimeout(window._renderCollectionDashboardTimer);
   window._renderCollectionDashboardTimer = setTimeout(function () {
     if (window._renderCollectionDashboardBusy) {
@@ -40606,11 +40646,14 @@ function printRcCollectionDetail(dept, catKey) {
 
 // Also render when ptab clicks rc-charges
 document.addEventListener('click', function(e) {
-  if(e.target.textContent && e.target.textContent.includes('Collection') && e.target.classList.contains('ptab')) {
-    setTimeout(renderCollectionDashboard, 50);
+  if(e.target.textContent && /Collection|Charges/.test(e.target.textContent) && e.target.classList.contains('ptab')) {
+    setTimeout(function () {
+      window._bmhReceptionCollectionRenderPending = false;
+      renderCollectionDashboard && renderCollectionDashboard();
+    }, 50);
   }
 });
-setTimeout(renderCollectionDashboard, 500);
+setTimeout(function () { bmhRenderCollectionDashboardIfVisible && bmhRenderCollectionDashboardIfVisible(); }, 500);
 
 // ═══════════════════════════════════════════════════════════
 // FIREBASE DATA LAYER
@@ -40746,7 +40789,7 @@ function renderActivePageAfterRealtimeUpdate(opts) {
   }
   if (activeId === 'pg-reception') {
     renderReceptionPage && renderReceptionPage();
-    renderCollectionDashboard && renderCollectionDashboard();
+    bmhRenderCollectionDashboardIfVisible && bmhRenderCollectionDashboardIfVisible();
     return;
   }
   if (activeId === 'pg-doctor-queue') {
@@ -41269,6 +41312,7 @@ function listenAppointments(opts) {
 
 // ── TRANSACTIONS / COLLECTIONS ───────────────────────────────
 function saveTodayTransactionsToLocal() {
+  if (typeof bmhInvalidateCollectionCache === 'function') bmhInvalidateCollectionCache();
   try { localStorage.setItem('bmh_transactions_' + todayKey(), JSON.stringify(TRANSACTIONS || [])); } catch (e) { /* noop */ }
 }
 function applyRealtimeTransactionRecord(txn, key) {
@@ -48012,7 +48056,7 @@ function _renderReceptionPageImpl() {
 
   updateReceptionDeptSummaryTabBadge && updateReceptionDeptSummaryTabBadge();
   renderRcDeptDues && renderRcDeptDues();
-  renderCollectionDashboard && renderCollectionDashboard();
+  bmhRenderCollectionDashboardIfVisible && bmhRenderCollectionDashboardIfVisible();
 
   if(document.getElementById('rc-dept-summary')?.classList.contains('active')) renderDeptSummary && renderDeptSummary();
   if(document.getElementById('rc-insurance')?.classList.contains('active')) renderInsuranceTab && renderInsuranceTab();
