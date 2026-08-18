@@ -9525,8 +9525,27 @@ function loadBmhFinancials() {
   saveBmhFinancials({ localOnly: true });
   bmhRunEndOfDayEegPurge();
 }
+function bmhCanDeferFinancialSave(opts) {
+  if (opts && (opts.localOnly || opts.immediate)) return false;
+  if (typeof bmhSafePerfPatchesEnabled === 'function' && !bmhSafePerfPatchesEnabled()) return false;
+  return typeof getActivePageId === 'function' && getActivePageId() === 'pg-reception';
+}
+function bmhScheduleDeferredFinancialSave(opts) {
+  window._bmhDeferredFinancialSaveOpts = Object.assign({}, window._bmhDeferredFinancialSaveOpts || {}, opts || {});
+  if (window._bmhDeferredFinancialSaveTimer) return;
+  window._bmhDeferredFinancialSaveTimer = setTimeout(function () {
+    window._bmhDeferredFinancialSaveTimer = null;
+    const pending = window._bmhDeferredFinancialSaveOpts || {};
+    window._bmhDeferredFinancialSaveOpts = null;
+    saveBmhFinancials(Object.assign({}, pending, { immediate: true }));
+  }, Number(window.BMH_DEFER_FINANCIAL_SAVE_MS || 350));
+}
 function saveBmhFinancials(opts) {
   if (typeof bmhInvalidateCollectionCache === 'function') bmhInvalidateCollectionCache();
+  if (bmhCanDeferFinancialSave(opts)) {
+    bmhScheduleDeferredFinancialSave(opts);
+    return;
+  }
   try {
     localStorage.setItem('bmh_patient_charges', JSON.stringify(window.BMH_PATIENT_CHARGES));
     localStorage.setItem('bmh_vendor_bills', JSON.stringify(window.BMH_VENDOR_BILLS));
@@ -41179,6 +41198,14 @@ function saveTodayTransactionsToLocal() {
   if (typeof bmhInvalidateCollectionCache === 'function') bmhInvalidateCollectionCache();
   try { localStorage.setItem('bmh_transactions_' + todayKey(), JSON.stringify(TRANSACTIONS || [])); } catch (e) { /* noop */ }
 }
+function bmhScheduleReceptionRealtimeRender(delayMs) {
+  if (typeof getActivePageId === 'function' && getActivePageId() !== 'pg-reception') return;
+  clearTimeout(window._bmhReceptionRealtimeRenderTimer);
+  window._bmhReceptionRealtimeRenderTimer = setTimeout(function () {
+    window._bmhReceptionRealtimeRenderTimer = null;
+    renderReceptionPage && renderReceptionPage();
+  }, Math.max(120, Number(delayMs || 350)));
+}
 function applyRealtimeTransactionRecord(txn, key) {
   if (!txn || typeof txn !== 'object') return;
   const id = String(txn.id || key || '').trim();
@@ -41198,9 +41225,13 @@ function applyRealtimeTransactionRecord(txn, key) {
   if (isNewFromRemote && next.bmhId && typeof bmhSyncPatientAdvanceBalance === 'function') {
     bmhSyncPatientAdvanceBalance(next.bmhId, { localOnly: true });
   }
-  renderCollectionDashboard && renderCollectionDashboard();
-  hydratePatientsFromTodayFinancialQueueEvidence && hydratePatientsFromTodayFinancialQueueEvidence({ render: true });
-  if (getActivePageId && getActivePageId() === 'pg-reception') renderReceptionPage && renderReceptionPage();
+  bmhRenderCollectionDashboardIfVisible && bmhRenderCollectionDashboardIfVisible();
+  if (isNewFromRemote) {
+    hydratePatientsFromTodayFinancialQueueEvidence && hydratePatientsFromTodayFinancialQueueEvidence({ render: true });
+    if (getActivePageId && getActivePageId() === 'pg-reception') bmhScheduleReceptionRealtimeRender(350);
+  } else {
+    bmhScheduleReceptionRealtimeRender(600);
+  }
 }
 function removeRealtimeTransactionRecord(key) {
   const id = String(key || '').trim();
@@ -41211,8 +41242,8 @@ function removeRealtimeTransactionRecord(key) {
     TRANSACTIONS.splice(idx, 1);
     saveTodayTransactionsToLocal();
     if (bmhId && typeof bmhSyncPatientAdvanceBalance === 'function') bmhSyncPatientAdvanceBalance(bmhId, { localOnly: true });
-    renderCollectionDashboard && renderCollectionDashboard();
-    if (getActivePageId && getActivePageId() === 'pg-reception') renderReceptionPage && renderReceptionPage();
+    bmhRenderCollectionDashboardIfVisible && bmhRenderCollectionDashboardIfVisible();
+    bmhScheduleReceptionRealtimeRender(350);
   }
 }
 function startTodayTransactionsRealtimeUpdates(dateKey) {
