@@ -7043,6 +7043,13 @@ function ptab(el, cId, opts) {
   });
   updateDepartmentRailVisibility(pageKey, cId);
   if (pageKey === 'inventory' && cId === 'inv-use') renderInventoryUsageLog && renderInventoryUsageLog();
+  if (pageKey === 'reception' && (cId === 'rc-exist' || cId === 'rc-charges')) {
+    setTimeout(function () {
+      window._bmhReceptionRealtimeRenderPending = false;
+      renderReceptionPage && renderReceptionPage();
+      if (cId === 'rc-charges') renderCollectionDashboard && renderCollectionDashboard();
+    }, 20);
+  }
   if (pageKey === 'inventory' && cId === 'inv-stock') renderInventoryTodayEntries && renderInventoryTodayEntries();
   if (/-uploads$/.test(String(cId || '')) || cId === 'oe-biometry') renderCurrentPatientInvestigationUploads && renderCurrentPatientInvestigationUploads();
   if (!opts.silentHistory && !window._appHistoryRestoring) pushAppNavState(false);
@@ -37761,7 +37768,10 @@ function patientQueueDateMatchesToday(p) {
   return false;
 }
 function getTodayQueueBasePatients() {
-  hydratePatientsFromTodayFinancialQueueEvidence && hydratePatientsFromTodayFinancialQueueEvidence({ render: true });
+  if (hydratePatientsFromTodayFinancialQueueEvidence && (!window._bmhLastQueueHydrateAt || Date.now() - Number(window._bmhLastQueueHydrateAt || 0) > 30000)) {
+    window._bmhLastQueueHydrateAt = Date.now();
+    hydratePatientsFromTodayFinancialQueueEvidence({ render: false });
+  }
   return dedupeQueueEntriesByKey(PATIENTS.filter(function (p) {
     if (!p || p.queueRemoved || String(p.status || '').toLowerCase() === 'removed') return false;
     if (!centreMatch(p)) return false;
@@ -41336,6 +41346,10 @@ function saveTodayTransactionsToLocal() {
 }
 function bmhScheduleReceptionRealtimeRender(delayMs) {
   if (typeof getActivePageId === 'function' && getActivePageId() !== 'pg-reception') return;
+  if (typeof bmhReceptionSubtabActive === 'function' && bmhReceptionSubtabActive('rc-new')) {
+    window._bmhReceptionRealtimeRenderPending = true;
+    return;
+  }
   clearTimeout(window._bmhReceptionRealtimeRenderTimer);
   window._bmhReceptionRealtimeRenderTimer = setTimeout(function () {
     window._bmhReceptionRealtimeRenderTimer = null;
@@ -48007,6 +48021,10 @@ function computeReceptionQueuePts() {
     return String(a.bmhId || '').localeCompare(String(b.bmhId || ''));
   });
 }
+function bmhReceptionSubtabActive(id) {
+  const el = document.getElementById(id);
+  return !!(el && el.classList && el.classList.contains('active'));
+}
 
 // ── renderReceptionPage — live computed ──────────
 let _renderReceptionPageTimer;
@@ -48038,7 +48056,11 @@ function _renderReceptionPageImpl() {
   syncReceptionConsultationFee && syncReceptionConsultationFee();
 
   const list = document.getElementById('rc-exist-list');
+  const queueTabActive = bmhReceptionSubtabActive('rc-exist');
   if(list) {
+    if (!queueTabActive) {
+      if (list.innerHTML) list.innerHTML = '';
+    } else {
     const basePts = getReceptionBasePts();
     const summaryEl = document.getElementById('rc-queue-summary');
     if(summaryEl) {
@@ -48065,13 +48087,18 @@ function _renderReceptionPageImpl() {
         _bmhQueueRenderCache = null;
       }
     }
+    }
   }
 
   const prEl = document.getElementById('rc-pay-list');
-  const visiblePayRequests = PAY_REQUESTS.filter(function (r) {
+  const chargesTabActive = bmhReceptionSubtabActive('rc-charges');
+  const visiblePayRequests = (chargesTabActive || document.getElementById('rc-pr-ct')) ? PAY_REQUESTS.filter(function (r) {
     return isTodayReceptionPayRequest(r, { centre: getEffectiveCentre() });
-  });
+  }) : [];
   if(prEl) {
+    if (!chargesTabActive) {
+      if (prEl.innerHTML) prEl.innerHTML = '';
+    } else
     if(!visiblePayRequests.length) {
       prEl.innerHTML = '<div style="padding:16px;text-align:center;color:var(--g1);font-size:12px">No payment requests</div>';
     } else {
@@ -48086,7 +48113,7 @@ function _renderReceptionPageImpl() {
   }
 
   updateReceptionDeptSummaryTabBadge && updateReceptionDeptSummaryTabBadge();
-  renderRcDeptDues && renderRcDeptDues();
+  if (chargesTabActive || bmhReceptionSubtabActive('rc-dept-summary')) renderRcDeptDues && renderRcDeptDues();
   bmhRenderCollectionDashboardIfVisible && bmhRenderCollectionDashboardIfVisible();
 
   if(document.getElementById('rc-dept-summary')?.classList.contains('active')) renderDeptSummary && renderDeptSummary();
