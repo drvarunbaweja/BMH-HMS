@@ -37664,6 +37664,12 @@ function upsertHydratedQueuePatient(row) {
 function hydratePatientsFromTodayFinancialQueueEvidence(opts) {
   opts = opts || {};
   if (!window.FBDB) return Promise.resolve([]);
+  if (
+    !opts.force &&
+    typeof bmhReceptionPerfCacheEnabled === 'function' &&
+    bmhReceptionPerfCacheEnabled() &&
+    (window._bmhPatientsHydrating || window._bmhPatientsRefreshInFlight)
+  ) return Promise.resolve([]);
   const day = localDateKey(new Date());
   const ids = getTodayFinancialQueuePatientIds(day);
   if (!ids.length) return Promise.resolve([]);
