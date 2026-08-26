@@ -37585,6 +37585,21 @@ function hydratePatientsFromTodayFinancialQueueEvidence(opts) {
   });
   return window._bmhFinancialQueueHydratePromise;
 }
+function bmhMaybeHydratePatientsFromTodayFinancialQueueEvidence(opts) {
+  opts = opts || {};
+  if (
+    !opts.force &&
+    typeof bmhReceptionPerfCacheEnabled === 'function' &&
+    bmhReceptionPerfCacheEnabled()
+  ) {
+    if (window._bmhPatientsHydrating || window._bmhPatientsRefreshInFlight) return Promise.resolve([]);
+    const key = [localDateKey(new Date()), getEffectiveCentre ? getEffectiveCentre() : '', bmhReceptionFinancialDataVersionKey()].join('|');
+    if (!window._bmhFinancialQueueEvidenceDirty && window._bmhFinancialQueueHydrateRequestedKey === key) return Promise.resolve([]);
+    window._bmhFinancialQueueEvidenceDirty = false;
+    window._bmhFinancialQueueHydrateRequestedKey = key;
+  }
+  return hydratePatientsFromTodayFinancialQueueEvidence ? hydratePatientsFromTodayFinancialQueueEvidence(opts) : Promise.resolve([]);
+}
 function getTodayFinancialQueueDeptForPatient(bmhId, todayKeyLocal) {
   const day = todayKeyLocal || localDateKey(new Date());
   const ids = getBmhIdLookupCandidates(bmhId);
@@ -37640,7 +37655,7 @@ function patientQueueDateMatchesToday(p) {
   return false;
 }
 function getTodayQueueBasePatients() {
-  hydratePatientsFromTodayFinancialQueueEvidence && hydratePatientsFromTodayFinancialQueueEvidence({ render: true });
+  bmhMaybeHydratePatientsFromTodayFinancialQueueEvidence && bmhMaybeHydratePatientsFromTodayFinancialQueueEvidence({ render: true });
   const todayKeyLocal = localDateKey(new Date());
   const previousEvidenceSet = window._bmhTodayQueueEvidenceActiveSet;
   window._bmhTodayQueueEvidenceActiveSet = bmhGetTodayQueueEvidenceIdSet(todayKeyLocal);
@@ -40151,7 +40166,30 @@ function getConcessionAdjustedCollectionTotal(transactions) {
 function getCollectionViewCentre() {
   return normalizeAppointmentCentreValue(getEffectiveCentre() || CURRENT_USER?.centre || 'CHD');
 }
+function bmhMarkReceptionFinancialDataDirty(reason) {
+  window._bmhReceptionFinancialDataVersion = Number(window._bmhReceptionFinancialDataVersion || 0) + 1;
+  window._bmhReceptionFinancialDataDirty = true;
+  window._bmhFinancialQueueEvidenceDirty = true;
+  window._bmhTodayQueueEvidenceCache = null;
+  window._bmhReceptionFinancialDataReason = reason || '';
+}
+function bmhReceptionFinancialDataVersionKey() {
+  return [
+    todayKey(),
+    getCollectionViewCentre(),
+    Number(window._bmhReceptionFinancialDataVersion || 0),
+    (TRANSACTIONS || []).length,
+    (PAY_REQUESTS || []).length
+  ].join('|');
+}
 function renderCollectionDashboard() {
+  const versionKey = bmhReceptionFinancialDataVersionKey();
+  if (
+    typeof bmhReceptionPerfCacheEnabled === 'function' &&
+    bmhReceptionPerfCacheEnabled() &&
+    window._bmhCollectionDashboardRenderedKey === versionKey &&
+    !window._bmhReceptionFinancialDataDirty
+  ) return;
   clearTimeout(window._renderCollectionDashboardTimer);
   window._renderCollectionDashboardTimer = setTimeout(function () {
     if (window._renderCollectionDashboardBusy) {
@@ -40160,6 +40198,8 @@ function renderCollectionDashboard() {
     }
     window._renderCollectionDashboardBusy = true;
     try {
+      window._bmhReceptionFinancialDataDirty = false;
+      window._bmhCollectionDashboardRenderedKey = bmhReceptionFinancialDataVersionKey();
       _renderCollectionDashboardImpl();
     } finally {
       window._renderCollectionDashboardBusy = false;
@@ -40765,6 +40805,7 @@ function applyPatientsPayload(data, opts) {
       window._renderReceptionAfterHydration = false;
       renderReceptionPage && renderReceptionPage();
     }
+    bmhMarkReceptionFinancialDataDirty && bmhMarkReceptionFinancialDataDirty('patients-refresh');
     _debouncedRenderDash();
   };
   const pump = function () {
@@ -41104,6 +41145,7 @@ function listenPayRequests(opts) {
     Object.values((data && typeof data.val === 'function') ? (data.val() || {}) : (data || {})).forEach(r => {
       if(r.status === 'pending' && isTodayReceptionPayRequest(r, { centre: centre })) PAY_REQUESTS.push(r);
     });
+    bmhMarkReceptionFinancialDataDirty && bmhMarkReceptionFinancialDataDirty('pay-requests');
     if (!window._bmhPendingDuesCleanupRan) {
       window._bmhPendingDuesCleanupRan = true;
       runOneTimePendingDuesCleanup && runOneTimePendingDuesCleanup();
@@ -41202,6 +41244,7 @@ function applyRealtimeTransactionRecord(txn, key) {
   if (idx >= 0) TRANSACTIONS[idx] = next;
   else TRANSACTIONS.push(next);
   saveTodayTransactionsToLocal();
+  bmhMarkReceptionFinancialDataDirty && bmhMarkReceptionFinancialDataDirty('transaction');
   // Only sync advance balance for transactions genuinely new to this device.
   // Firebase RTDB fires child_added synchronously (optimistic local echo) when fbSet() is called,
   // so for locally-created transactions the advance was already handled by the caller — recomputing
@@ -41221,6 +41264,7 @@ function removeRealtimeTransactionRecord(key) {
     const bmhId = TRANSACTIONS[idx]?.bmhId || '';
     TRANSACTIONS.splice(idx, 1);
     saveTodayTransactionsToLocal();
+    bmhMarkReceptionFinancialDataDirty && bmhMarkReceptionFinancialDataDirty('transaction-removed');
     if (bmhId && typeof bmhSyncPatientAdvanceBalance === 'function') bmhSyncPatientAdvanceBalance(bmhId, { localOnly: true });
     renderCollectionDashboard && renderCollectionDashboard();
     if (getActivePageId && getActivePageId() === 'pg-reception') renderReceptionPage && renderReceptionPage();
@@ -41793,6 +41837,7 @@ function loadTodayTransactions() {
         localRows.forEach(function (t) {
           if (rowMatchesCentre(t, centre, { allowUncentredToday: true, dateKey: today, requireDate: true })) TRANSACTIONS.push(t);
         });
+        bmhMarkReceptionFinancialDataDirty && bmhMarkReceptionFinancialDataDirty('transactions-local');
         bmhRunEndOfDayEegPurge && bmhRunEndOfDayEegPurge();
         renderCollectionDashboard && renderCollectionDashboard();
       }
@@ -41813,6 +41858,7 @@ function loadTodayTransactions() {
       if (rowMatchesCentre(t, centre, { allowUncentredToday: true, dateKey: today, requireDate: true })) TRANSACTIONS.push(t);
     });
     saveTodayTransactionsToLocal();
+    bmhMarkReceptionFinancialDataDirty && bmhMarkReceptionFinancialDataDirty('transactions-firebase');
     bmhRunEndOfDayEegPurge && bmhRunEndOfDayEegPurge();
     renderCollectionDashboard && renderCollectionDashboard();
     startTodayTransactionsRealtimeUpdates(today);
@@ -50856,6 +50902,7 @@ function renderOphthoRecap(opts) {
     'computeReceptionQueuePts',
     'getTodayQueueBasePatients',
     'bmhGetTodayQueueEvidenceIdSet',
+    'bmhMaybeHydratePatientsFromTodayFinancialQueueEvidence',
     'hydratePatientsFromTodayFinancialQueueEvidence',
     'renderRcDeptDues',
     'renderCollectionDashboard',
