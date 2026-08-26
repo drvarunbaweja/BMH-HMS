@@ -35923,6 +35923,13 @@ function loginUser() {
 
 function activateUserSession(user, profile, opts) {
   opts = opts || {};
+  function isAttendanceOnlyProfile(p) {
+    if (!p || p.isAdmin || p.canSeeAllCentres) return false;
+    const role = String(p.role || '').trim().toLowerCase();
+    if (role !== 'staff') return false;
+    const modules = Array.isArray(p.access?.modules) ? p.access.modules.map(function (m) { return String(m || '').toLowerCase(); }) : [];
+    return p.attendanceEnabled === true || modules.length === 0 || (modules.length === 1 && modules[0] === 'attendance');
+  }
   function deferBootstrap(fn, delay) {
     const runner = function(){ try { fn(); } catch (e) { console.warn('Deferred bootstrap error:', e); } };
     if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
@@ -35993,6 +36000,14 @@ function activateUserSession(user, profile, opts) {
 
   setTimeout(function() {
     try {
+      const attendanceOnly = isAttendanceOnlyProfile(profile);
+      if (attendanceOnly) {
+        if (opts.auditLogin && typeof fbPush === 'function') {
+          fbPush('auditLog', { user: profile.name, role: profile.role, centre: profile.centre, action: 'LOGIN', timestamp: new Date().toISOString() });
+        }
+        if (typeof showToast === 'function') showToast('Connected to attendance database ✓', 's');
+        return;
+      }
       if (typeof loadChargesFromFirebase === 'function') loadChargesFromFirebase();
       if (typeof loadPatientsFromFirebase === 'function')  loadPatientsFromFirebase();
       deferBootstrap(function() {
