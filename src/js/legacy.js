@@ -48262,9 +48262,20 @@ function queueRawStamp(value) {
 function queueStampIsDateOnly(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(value || '').trim());
 }
+function queueDateOnlyFallbackStamp(value) {
+  const raw = String(value || '').trim();
+  if (!queueStampIsDateOnly(raw)) return 0;
+  const parsed = Date.parse(raw + 'T23:59:59+05:30');
+  return Number.isFinite(parsed) ? parsed : 0;
+}
 function patientQueueCandidateStamps(p, now) {
   const todayKeyLocal = localDateKey(Number.isFinite(now) ? new Date(now) : new Date());
   return [
+    p?.queueAddedAt,
+    p?.enqueuedAt,
+    p?.checkedInAt,
+    p?._deptQueueCreatedAt,
+    p?._xrefCreatedAt,
     p?.checkinAt,
     p?.createdAt,
     p?.registeredAt,
@@ -48299,7 +48310,7 @@ function getPatientQueueStamp(p, now, opts) {
     return item.stamp < min.stamp ? item : min;
   }, source[0]);
   if (!chosen || !chosen.stamp) return opts.fallbackNow ? refNow : 0;
-  if (chosen.dateOnly) return opts.fallbackNow ? refNow : 0;
+  if (chosen.dateOnly) return queueDateOnlyFallbackStamp(chosen.raw) || (opts.fallbackNow ? refNow : 0);
   return chosen.stamp;
 }
 function getPatientQueueWaitMinutes(p, now) {
