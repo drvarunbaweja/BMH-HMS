@@ -5143,7 +5143,7 @@
         <div class="form-group"><label class="fl">Date From</label><input type="date" id="att-rep-from"></div>
         <div class="form-group"><label class="fl">Date To</label><input type="date" id="att-rep-to"></div>
         <div class="form-group"><label class="fl">Centre</label><select id="att-rep-centre"><option value="">Both Centres</option><option value="CHD">Chandigarh</option><option value="RPR">Ropar</option></select></div>
-        <div class="form-group"><label class="fl">Employee</label><input type="text" id="att-rep-user" placeholder="All employees"></div>
+        <div class="form-group"><label class="fl">Employee</label><select id="att-rep-user" onchange="renderAttendanceReport()"><option value="">All Employees</option></select></div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
         <button class="btn btn-outline btn-sm" type="button" onclick="setAttendanceReportPeriod('day')">Today</button>
