@@ -46478,13 +46478,11 @@ function getFilteredAttendanceReportRows(rows) {
   const from = document.getElementById('att-rep-from')?.value || todayKey();
   const to = document.getElementById('att-rep-to')?.value || from;
   const centre = document.getElementById('att-rep-centre')?.value || '';
-  const q = String(document.getElementById('att-rep-user')?.value || '').trim().toLowerCase();
   return (rows || []).filter(function (row) {
     const d = String(row.date || '');
     if (from && d < from) return false;
     if (to && d > to) return false;
     if (centre && patientCentreKey(row.centre) !== centre) return false;
-    if (q && !String([row.employeeName, row.username, row.role, row.dept].join(' ')).toLowerCase().includes(q)) return false;
     return true;
   }).sort(function (a, b) {
     return String(a.date || '').localeCompare(String(b.date || '')) || String(a.employeeName || '').localeCompare(String(b.employeeName || ''));
@@ -46603,7 +46601,6 @@ function attendanceRowsWithEmployees(rawRows, settings, kioskStaff) {
   const from = document.getElementById('att-rep-from')?.value || todayKey();
   const to = document.getElementById('att-rep-to')?.value || from;
   const centre = document.getElementById('att-rep-centre')?.value || '';
-  const q = String(document.getElementById('att-rep-user')?.value || '').trim().toLowerCase();
   const dateKeys = attendanceDateRangeKeys(from, to);
   const rawMap = new Map();
   const rawIdentityMap = new Map();
@@ -46617,7 +46614,6 @@ function attendanceRowsWithEmployees(rawRows, settings, kioskStaff) {
   });
   return attendanceStaffEmployees(kioskStaff).filter(function (emp) {
     if (centre && patientCentreKey(emp.centre) !== centre) return false;
-    if (q && !String([emp.employeeName, emp.username, emp.role, emp.dept].join(' ')).toLowerCase().includes(q)) return false;
     return true;
   }).flatMap(function (emp) {
     const empIdentity = attendanceSafeKey((emp.employeeName || emp.username || '') + '__' + (emp.centre || ''));
@@ -46640,6 +46636,29 @@ function attendanceRowMinutes(row) {
   const lunch = attendanceMinutesBetween(ev.lunchOut?.at, ev.lunchIn?.at);
   const gross = attendanceMinutesBetween(ev.in?.at, ev.out?.at);
   return { lunch: lunch, gross: gross, net: gross ? Math.max(0, gross - lunch) : 0 };
+}
+function attendanceSelectedEmployeeKey() {
+  return String(document.getElementById('att-rep-user')?.value || '').trim();
+}
+function populateAttendanceReportEmployeeSelect(kioskStaff) {
+  const sel = document.getElementById('att-rep-user');
+  if (!sel || String(sel.tagName || '').toLowerCase() !== 'select') return;
+  const current = attendanceSelectedEmployeeKey();
+  const centre = document.getElementById('att-rep-centre')?.value || '';
+  const employees = attendanceStaffEmployees(kioskStaff).filter(function (emp) {
+    return !centre || patientCentreKey(emp.centre) === centre;
+  });
+  const optionHtml = '<option value="">All Employees</option>' + employees.map(function (emp) {
+    const label = (emp.employeeName || emp.username || emp.userKey || 'Employee') + (emp.centre ? ' - ' + emp.centre : '');
+    return '<option value="' + escapeHtmlConsent(emp.userKey || '') + '"' + (current && current === emp.userKey ? ' selected' : '') + '>' + escapeHtmlConsent(label) + '</option>';
+  }).join('');
+  if (sel.innerHTML !== optionHtml) sel.innerHTML = optionHtml;
+  if (current && !employees.some(function (emp) { return emp.userKey === current; })) sel.value = '';
+}
+function filterAttendanceRowsBySelectedEmployee(rows) {
+  const selected = attendanceSelectedEmployeeKey();
+  if (!selected) return rows || [];
+  return (rows || []).filter(function (row) { return String(row.userKey || '') === selected; });
 }
 function attendanceStatusSelect(row) {
   const cur = attendanceStatusValue(row);
@@ -46754,7 +46773,8 @@ function renderAttendanceReport() {
   const el = document.getElementById('att-report-result');
   if (el) el.innerHTML = '<div style="padding:18px;text-align:center;color:var(--g1)">Loading attendance…</div>';
   Promise.all([fetchAttendanceRowsForReport(), fetchAttendanceStaffSettings(), fetchAttendanceKioskStaff()]).then(function ([rows, settings, kioskStaff]) {
-    const filtered = attendanceRowsWithEmployees(getFilteredAttendanceReportRows(rows), settings, kioskStaff);
+    populateAttendanceReportEmployeeSelect(kioskStaff);
+    const filtered = filterAttendanceRowsBySelectedEmployee(attendanceRowsWithEmployees(getFilteredAttendanceReportRows(rows), settings, kioskStaff));
     if (el) el.innerHTML = attendanceReportTableHtml(filtered);
   });
 }
@@ -46778,18 +46798,88 @@ function attendanceReportSummaryRows(rows) {
     return String(a.centre || '').localeCompare(String(b.centre || '')) || String(a.employeeName || '').localeCompare(String(b.employeeName || ''));
   });
 }
-function attendanceReportPrintHtml(rows) {
+function attendanceMoneyText(value) {
+  const n = Number(value || 0);
+  if (!Number.isFinite(n) || !n) return 'Not set';
+  return 'Rs ' + Math.round(n).toLocaleString('en-IN');
+}
+function attendanceHoursDecimal(mins) {
+  const n = Number(mins || 0) / 60;
+  return n ? n.toFixed(2) : '0.00';
+}
+function attendanceRowsByEmployee(rows) {
+  const map = new Map();
+  (rows || []).forEach(function (row) {
+    const key = row.userKey || attendanceSafeKey(row.username || row.employeeName || '');
+    if (!map.has(key)) map.set(key, { employee: row, rows: [] });
+    map.get(key).rows.push(row);
+  });
+  return Array.from(map.values()).sort(function (a, b) {
+    return String(a.employee.centre || '').localeCompare(String(b.employee.centre || '')) || String(a.employee.employeeName || '').localeCompare(String(b.employee.employeeName || ''));
+  });
+}
+function attendanceSalaryCalc(rows) {
+  const dates = attendanceDateRangeKeys(document.getElementById('att-rep-from')?.value || todayKey(), document.getElementById('att-rep-to')?.value || todayKey());
+  const salary = Number((rows[0]?._staffSettings || {}).salary || 0);
+  let present = 0, leave = 0, paidLeave = 0, absent = 0, total = 0;
+  (rows || []).forEach(function (row) {
+    const status = attendanceStatusValue(row);
+    const mins = attendanceRowMinutes(row);
+    total += mins.net || mins.gross || 0;
+    if (status === 'Present') present += 1;
+    else if (status === 'Leave') leave += 1;
+    else if (status === 'Pay Without Leave') paidLeave += 1;
+    else absent += 1;
+  });
+  const days = Math.max(1, dates.length);
+  const payableDays = present + paidLeave;
+  const perDay = salary ? salary / days : 0;
+  return { salary: salary, days: days, present: present, leave: leave, paidLeave: paidLeave, absent: absent, payableDays: payableDays, perDay: perDay, payable: perDay * payableDays, total: total };
+}
+function attendanceIndividualPrintHtml(rows) {
   const from = document.getElementById('att-rep-from')?.value || todayKey();
   const to = document.getElementById('att-rep-to')?.value || from;
-  const summary = attendanceReportSummaryRows(rows);
-  const body = summary.map(function (row) {
-    return '<tr><td>' + escapeHtmlConsent(row.employeeName) + '</td><td>' + escapeHtmlConsent(row.centre) + '</td><td>' + escapeHtmlConsent(row.role) + '</td><td>' + escapeHtmlConsent(row.dept) + '</td><td>' + row.present + '</td><td>' + row.leave + '</td><td>' + row.paidLeave + '</td><td>' + row.absent + '</td><td><strong>' + attendanceDurationText(row.total) + '</strong></td></tr>';
+  const emp = rows[0] || {};
+  const calc = attendanceSalaryCalc(rows);
+  const body = (rows || []).map(function (row) {
+    const ev = row.events || {};
+    const mins = attendanceRowMinutes(row);
+    return '<tr><td>' + escapeHtmlConsent(formatAttendanceDate(row.date)) + '</td><td>' + escapeHtmlConsent(attendanceStatusValue(row)) + '</td><td>' + formatAttendanceTime(ev.in?.at) + '</td><td>' + formatAttendanceTime(ev.lunchOut?.at) + '</td><td>' + formatAttendanceTime(ev.lunchIn?.at) + '</td><td>' + formatAttendanceTime(ev.out?.at) + '</td><td>' + attendanceDurationText(mins.lunch) + '</td><td><strong>' + attendanceDurationText(mins.net || mins.gross) + '</strong></td></tr>';
   }).join('');
-  return '<!doctype html><html><head><meta charset="utf-8"><title>Attendance Report</title><style>@page{size:A4 landscape;margin:8mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;font-size:10px}h1{font-size:17px;margin:0 0 4px;color:#1A3C6E}.sub{font-size:11px;margin-bottom:10px;color:#555}table{width:100%;border-collapse:collapse}th{background:#1A3C6E;color:#fff;text-align:left;padding:5px;font-size:9px}td{border:1px solid #ddd;padding:4px;vertical-align:top}tr:nth-child(even){background:#f8fafc}</style></head><body><h1>Baweja Hospital - Staff Attendance Summary</h1><div class="sub">Period: ' + escapeHtmlConsent(formatAttendanceDate(from)) + ' to ' + escapeHtmlConsent(formatAttendanceDate(to)) + '</div><table><thead><tr><th>Employee</th><th>Centre</th><th>Role</th><th>Dept</th><th>Present Days</th><th>Leaves</th><th>Pay Without Leave</th><th>Absent</th><th>Total Hours</th></tr></thead><tbody>' + body + '</tbody></table></body></html>';
+  return '<!doctype html><html><head><meta charset="utf-8"><title>Attendance - ' + escapeHtmlConsent(emp.employeeName || 'Employee') + '</title><style>@page{size:A4 portrait;margin:8mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;font-size:9.5px}h1{font-size:17px;margin:0;color:#1A3C6E}.sub{font-size:11px;margin:3px 0 8px;color:#555}.top{display:grid;grid-template-columns:1.2fr .8fr;gap:8px;margin:8px 0}.box{border:1px solid #cfd8e3;padding:7px;border-radius:6px}.box b{color:#1A3C6E}table{width:100%;border-collapse:collapse}th{background:#1A3C6E;color:#fff;text-align:left;padding:4px;font-size:8.5px}td{border:1px solid #ddd;padding:3.5px;vertical-align:top}tr:nth-child(even){background:#f8fafc}.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin:8px 0}.pill{border:1px solid #cfd8e3;border-radius:6px;padding:5px;font-size:9px}.pill strong{display:block;font-size:12px;color:#111}</style></head><body><h1>Baweja Hospital - Employee Attendance</h1><div class="sub">Period: ' + escapeHtmlConsent(formatAttendanceDate(from)) + ' to ' + escapeHtmlConsent(formatAttendanceDate(to)) + '</div><div class="top"><div class="box"><b>' + escapeHtmlConsent(emp.employeeName || emp.username || 'Employee') + '</b><br>' + escapeHtmlConsent([emp.role, emp.dept, emp.centre].filter(Boolean).join(' - ')) + '</div><div class="box"><b>Salary Calculation</b><br>Monthly salary: ' + attendanceMoneyText(calc.salary) + '<br>Payable days: ' + calc.payableDays + ' of ' + calc.days + '<br>Calculated payable: ' + attendanceMoneyText(calc.payable) + '</div></div><div class="summary"><div class="pill">Present<strong>' + calc.present + '</strong></div><div class="pill">Leave<strong>' + calc.leave + '</strong></div><div class="pill">Pay Without Leave<strong>' + calc.paidLeave + '</strong></div><div class="pill">Absent<strong>' + calc.absent + '</strong></div></div><table><thead><tr><th>Date</th><th>Status</th><th>In</th><th>Lunch Out</th><th>Lunch In</th><th>Out</th><th>Lunch</th><th>Total Hours</th></tr></thead><tbody>' + body + '</tbody></table><div class="sub">Month total: ' + attendanceDurationText(calc.total) + ' (' + attendanceHoursDecimal(calc.total) + ' hrs)</div></body></html>';
+}
+function attendanceAllEmployeesPrintHtml(rows) {
+  const from = document.getElementById('att-rep-from')?.value || todayKey();
+  const to = document.getElementById('att-rep-to')?.value || from;
+  const dates = attendanceDateRangeKeys(from, to);
+  const groups = attendanceRowsByEmployee(rows);
+  const head = dates.map(function (date) { return '<th>' + escapeHtmlConsent(formatAttendanceDate(date).replace(/\//g, '.')) + '</th>'; }).join('');
+  const body = groups.map(function (group) {
+    const byDate = new Map(group.rows.map(function (row) { return [String(row.date || ''), row]; }));
+    let total = 0;
+    const cells = dates.map(function (date) {
+      const row = byDate.get(date) || {};
+      const ev = row.events || {};
+      const mins = attendanceRowMinutes(row);
+      const worked = mins.net || mins.gross || 0;
+      total += worked;
+      const status = attendanceStatusValue(row);
+      if (status !== 'Present') return '<td><b>' + escapeHtmlConsent(status) + '</b></td>';
+      return '<td><b>' + formatAttendanceTime(ev.in?.at) + '-' + formatAttendanceTime(ev.out?.at) + '</b><br>' + attendanceHoursDecimal(worked) + 'h</td>';
+    }).join('');
+    const emp = group.employee || {};
+    return '<tr><td class="emp"><b>' + escapeHtmlConsent(emp.employeeName || emp.username || 'Employee') + '</b><br>' + escapeHtmlConsent(emp.centre || '') + '</td>' + cells + '<td><b>' + attendanceHoursDecimal(total) + 'h</b></td></tr>';
+  }).join('');
+  return '<!doctype html><html><head><meta charset="utf-8"><title>Attendance - All Employees</title><style>@page{size:A4 landscape;margin:5mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;font-size:6.4px;margin:0}h1{font-size:13px;margin:0 0 2px;color:#1A3C6E}.sub{font-size:8px;margin-bottom:4px;color:#555}table{width:100%;border-collapse:collapse;table-layout:fixed}th{background:#1A3C6E;color:#fff;text-align:center;padding:2px;font-size:5.8px;line-height:1.1}td{border:1px solid #d7dde6;padding:2px;text-align:center;vertical-align:top;line-height:1.12;word-break:break-word}.emp{width:78px;text-align:left}.total{width:34px}tr:nth-child(even){background:#f8fafc}@media print{body{zoom:.78}}</style></head><body><h1>Baweja Hospital - Staff Attendance Matrix</h1><div class="sub">Period: ' + escapeHtmlConsent(formatAttendanceDate(from)) + ' to ' + escapeHtmlConsent(formatAttendanceDate(to)) + '</div><table><thead><tr><th class="emp">Employee</th>' + head + '<th class="total">Total Hrs</th></tr></thead><tbody>' + body + '</tbody></table></body></html>';
+}
+function attendanceReportPrintHtml(rows) {
+  if (attendanceSelectedEmployeeKey()) return attendanceIndividualPrintHtml(rows);
+  return attendanceAllEmployeesPrintHtml(rows);
 }
 function printAttendanceReport() {
   Promise.all([fetchAttendanceRowsForReport(), fetchAttendanceStaffSettings(), fetchAttendanceKioskStaff()]).then(function ([rows, settings, kioskStaff]) {
-    const filtered = attendanceRowsWithEmployees(getFilteredAttendanceReportRows(rows), settings, kioskStaff);
+    populateAttendanceReportEmployeeSelect(kioskStaff);
+    const filtered = filterAttendanceRowsBySelectedEmployee(attendanceRowsWithEmployees(getFilteredAttendanceReportRows(rows), settings, kioskStaff));
     const html = attendanceReportPrintHtml(filtered);
     const w = window.open('', '_blank');
     if (!w) { showToast('Popup blocked', 'w'); return; }
