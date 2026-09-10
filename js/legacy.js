@@ -5073,6 +5073,7 @@ function unmarkDilated(id) {
 function setQueueVisitPurpose(bmhId, purpose) {
   const p = PATIENTS.find(x=>x.bmhId===bmhId); if (!p) return;
   const originalQueueStamp = getPatientQueueStamp(p, Date.now(), { fallbackNow: true });
+  const wasPreCheckin = isQueuePreCheckinPatient(p);
   const val = String(purpose || '').trim() || 'Consultation';
   const needsCheckIn = /need\s*to\s*check\s*in/i.test(val);
   const today = localDateKey(new Date());
@@ -5082,9 +5083,11 @@ function setQueueVisitPurpose(bmhId, purpose) {
   p.status = needsCheckIn ? 'waiting' : (isQueueRowMarkedSeen(p) ? p.status : 'waiting');
   if (!p.queueAddedAt && originalQueueStamp) p.queueAddedAt = new Date(originalQueueStamp).toISOString();
   p.queueSource = p.queueSource || 'reception';
-  if (needsCheckIn) {
+  if (needsCheckIn || wasPreCheckin) {
+    p.seenByDept = clearPatientSeenStateForDept(p, p.dept || p.department || '');
     p.seen = false;
     p.seenAt = null;
+    p.status = 'waiting';
     p.dilated = false;
     p.dilatedTime = null;
     p.queueDate = today;
@@ -5101,7 +5104,7 @@ function setQueueVisitPurpose(bmhId, purpose) {
     queueAddedAt: p.queueAddedAt,
     queueSource: p.queueSource
   };
-  if (needsCheckIn) Object.assign(patch, { seen:false, seenAt:null, dilated:false, dilatedTime:null, queueDate:today, visitDate:today, queueRemoved:false, queueSource:p.queueSource });
+  if (needsCheckIn || wasPreCheckin) Object.assign(patch, { seen:false, seenAt:null, seenByDept:sanitizeFirebaseValue(p.seenByDept || {}), dilated:false, dilatedTime:null, queueDate:today, visitDate:today, queueRemoved:false, queueSource:p.queueSource });
   fbUpdate && fbUpdate('patients/'+bmhId, patch).catch(()=>{});
   showToast((p.name || 'Patient') + ' marked as ' + val + ' ✓','s');
   renderDocQueue && renderDocQueue();
@@ -11608,7 +11611,7 @@ function addBmhPatientCharge(bmhId, row) {
   saveBmhFinancials();
   bmhSyncPatientRunningBalance(bmhId);
 }
-function buildPaidReceptionChargeRow(txnId, desc, fee, category) {
+function buildPaidReceptionChargeRow(txnId, desc, fee, category, dept) {
   const amount = Math.max(0, Number(fee) || 0);
   return {
     id: 'chg-' + txnId,
@@ -11619,6 +11622,7 @@ function buildPaidReceptionChargeRow(txnId, desc, fee, category) {
     amount: amount,
     paidAmount: amount,
     source: 'reception',
+    dept: normalizeDeptKeyForQueue(dept || ''),
     ref: txnId,
     ts: new Date().toISOString(),
     paymentAllocations: amount > 0 ? [{
@@ -14989,7 +14993,7 @@ function bmhEnsurePatientInTodayDeptQueue(bmhId, opts) {
   const targetDept = normalizeDeptKeyForQueue(o.dept || p.dept || p.department || '');
   const currentDept = normalizeDeptKeyForQueue(p.dept || p.department || '');
   const inTodayQueue = patientQueueDateMatchesToday(p);
-  if (!p.queueRemoved && inTodayQueue && (!targetDept || !currentDept || currentDept === targetDept)) return false;
+  if (!p.queueRemoved && inTodayQueue && (!targetDept || !currentDept || currentDept === targetDept) && !isQueueRowMarkedSeen(p)) return false;
   if (inTodayQueue && targetDept && currentDept && currentDept !== targetDept) {
     bmhRememberSameDayDeptQueueEntry(id, {
       dept: currentDept,
@@ -15003,14 +15007,17 @@ function bmhEnsurePatientInTodayDeptQueue(bmhId, opts) {
   }
   const nowIso = new Date().toISOString();
   const today = localDateKey(new Date());
+  const seenByDept = clearPatientSeenStateForDept(p, targetDept || currentDept);
   const patch = {
     status: 'waiting',
     seen: false,
+    seenAt: null,
+    seenByDept: sanitizeFirebaseValue(seenByDept),
     queueRemoved: false,
     queueRemovedAt: null,
     queueRemovedBy: '',
-    checkinAt: Date.now(),
-    queueAddedAt: nowIso,
+    checkinAt: inTodayQueue && p.checkinAt ? p.checkinAt : Date.now(),
+    queueAddedAt: inTodayQueue && p.queueAddedAt ? p.queueAddedAt : nowIso,
     queueDate: today,
     visitDate: today,
     queueSource: freshQueueSource,
@@ -26408,6 +26415,35 @@ function isTodayReceptionPayRequest(pr, opts) {
   if (patient.queueRemoved || String(patient.status || '').toLowerCase() === 'removed') return false;
   return patientQueueDateMatchesToday(patient);
 }
+function patientHasTodayReceptionConsultationForDept(bmhId, dept, dateKey) {
+  const ids = getBmhIdLookupCandidates(bmhId);
+  const day = dateKey || localDateKey(new Date());
+  const deptKey = normalizeDeptKeyForQueue(dept || '');
+  const matchesPatientAndDept = function (row) {
+    if (!row || ids.indexOf(String(row.bmhId || '').trim()) < 0) return false;
+    if (localDateKey(row.date || row.createdAt || row.ts || row.updatedAt) !== day) return false;
+    const rowDept = normalizeDeptKeyForQueue(row.dept || row.department || '');
+    return !deptKey || !rowDept || rowDept === deptKey;
+  };
+  if ((TRANSACTIONS || []).some(function (txn) {
+    return matchesPatientAndDept(txn)
+      && /reception/i.test(String(txn.source || txn.createdBy || ''))
+      && isConsultationTransaction(txn);
+  })) return true;
+  if ((PAY_REQUESTS || []).some(function (pr) {
+    return matchesPatientAndDept(pr)
+      && /reception/i.test(String(pr.from || pr.source || pr.createdBy || ''))
+      && isConsultationChargeEntry(pr);
+  })) return true;
+  return ids.some(function (id) {
+    return ((window.BMH_PATIENT_CHARGES && window.BMH_PATIENT_CHARGES[id]) || []).some(function (row) {
+      if (!row || localDateKey(row.ts || row.date || row.createdAt || row.updatedAt) !== day) return false;
+      const rowDept = normalizeDeptKeyForQueue(row.dept || row.department || '');
+      if (deptKey && rowDept !== deptKey) return false;
+      return /reception/i.test(String(row.source || row.from || '')) && isDuplicateIdentityConsultationChargeRow(row);
+    });
+  });
+}
 function receptionQueueRestoreButtonHtml(bmhId, opts) {
   const id = String(bmhId || '').trim();
   if (!id) return '';
@@ -26960,6 +26996,8 @@ async function registerPatient() {
     source: existingPt.queueSource || 'reception',
     wasToday: patientQueueDateMatchesToday(existingPt)
   } : null;
+  const seenByDeptForVisit = Object.assign({}, existingPt?.seenByDept || existingPt?.deptSeenAt || {});
+  delete seenByDeptForVisit[normalizeDeptKeyForQueue(dept)];
 
   const patient = Object.assign({}, existingPt || {}, {
     bmhId: uid, name, initials, color,
@@ -26970,7 +27008,7 @@ async function registerPatient() {
     advance: Number(existingPt?.advance || 0),
     advancePurpose: advPurpose || existingPt?.advancePurpose || (advAmt > 0 ? 'Advance on account' : ''),
     consultationNoFee: !!noFee,
-    seen:false, dilated:false,
+    seen:false, seenAt:null, seenByDept:seenByDeptForVisit, dilated:false,
     queueRemoved: false,
     queueRemovedAt: null,
     queueRemovedBy: '',
@@ -27076,9 +27114,13 @@ async function registerPatient() {
     dueReceivedNow = confirm(`${name} has a pending due of ₹${previousDue.toLocaleString('en-IN')}.\n\nDue received now?`);
   }
 
-  if(noFee) {
+  const consultationAlreadyRecordedToday = isExistingRegistration && patientHasTodayReceptionConsultationForDept(uid, dept, queueDateToday);
+  if(consultationAlreadyRecordedToday) {
+    patient.balance = bmhSyncPatientRunningBalance(uid);
+    showToast(`✅ ${name} returned to the queue — today's consultation payment was already recorded`, 's');
+  } else if(noFee) {
     const txnId = 'TXN'+Date.now();
-    addBmhPatientCharge(uid, { id: 'chg-' + txnId, cat: 'consultation', desc: consultationDesc, qty: 1, rate: 0, amount: 0, source: 'reception', ref: txnId, ts: new Date().toISOString(), noFee: true });
+    addBmhPatientCharge(uid, { id: 'chg-' + txnId, cat: 'consultation', desc: consultationDesc, qty: 1, rate: 0, amount: 0, source: 'reception', dept: dept, ref: txnId, ts: new Date().toISOString(), noFee: true });
     const txn = {
       id:txnId, patient:name, bmhId:uid, service: consultationDesc, amount:0,
       mode:isInsurance ? payMode : 'No Fee', collected:true, dept,
@@ -27103,14 +27145,14 @@ async function registerPatient() {
     const claim = {id:claimId, patient:name, bmhId:uid, for:consultationDesc, amount:claimAmount, approvedAmount:claimAmount, claimedAmount:claimAmount, status:'pending', mode:payMode, ins:insName||payMode, policy:policyNo, dept, centre, date:new Date().toISOString(), from:'Reception'};
     PAY_REQUESTS.push(claim);
     fbSet&&fbSet('payRequests/'+claimId, claim);
-    addBmhPatientCharge(uid, { id: 'chg-' + claimId, cat: 'consultation', desc: consultationDesc, qty: 1, rate: fee, amount: fee, source: 'reception', ref: claimId, ts: claim.date });
+    addBmhPatientCharge(uid, { id: 'chg-' + claimId, cat: 'consultation', desc: consultationDesc, qty: 1, rate: fee, amount: fee, source: 'reception', dept: dept, ref: claimId, ts: claim.date });
     patient.ins = insName||payMode;
     patient.policy = policyNo || patient.policy || '';
     patient.claimedAmount = claimAmount;
     patient.balance = Math.max(Number(patient.balance || 0), Number(fee || 0));
     showToast(`🏦 TPA/Insurance patient — claim pending ₹${fee.toLocaleString('en-IN')}`,'i');
   } else if(isCreditDue) {
-    addBmhPatientCharge(uid, { id: 'chg-credit-' + Date.now(), cat: 'consultation', desc: consultationDesc, qty: 1, rate: fee, amount: fee, source: 'reception', ts: new Date().toISOString() });
+    addBmhPatientCharge(uid, { id: 'chg-credit-' + Date.now(), cat: 'consultation', desc: consultationDesc, qty: 1, rate: fee, amount: fee, source: 'reception', dept: dept, ts: new Date().toISOString() });
     patient.balance = (patient.balance||0) + fee;
     showToast(`📋 ₹${fee} noted as credit/due for ${name}`,'i');
   } else if(fee > 0) {
@@ -27126,7 +27168,7 @@ async function registerPatient() {
       consultationFeeLabel: feeChoice?.label || '',
       billCats: ['consultation']
     };
-    addBmhPatientCharge(uid, buildPaidReceptionChargeRow(txnId, consultationDesc, fee, 'consultation'));
+    addBmhPatientCharge(uid, buildPaidReceptionChargeRow(txnId, consultationDesc, fee, 'consultation', dept));
     TRANSACTIONS.push(txn);
     saveTransactionToFirebase&&saveTransactionToFirebase(txn);
     patient.balance = bmhSyncPatientRunningBalance(uid);
@@ -27147,7 +27189,7 @@ async function registerPatient() {
   }
 
   fbUpdate&&fbUpdate('patients/'+uid,{
-	    status: patient.status, seen: patient.seen, dilated: patient.dilated, dept: patient.dept, centre: patient.centre, ipdAdmitted: false,
+	    status: patient.status, seen: patient.seen, seenAt: null, seenByDept: sanitizeFirebaseValue(patient.seenByDept || {}), dilated: patient.dilated, dept: patient.dept, centre: patient.centre, ipdAdmitted: false,
     balance: patient.balance, checkinAt:patient.checkinAt,purpose,surgeryToday: patient.surgeryToday,visitCount:patient.visitCount,ins:patient.ins||'', policy: patient.policy || '',
     advance:patient.advance, advancePurpose:patient.advancePurpose, consultationNoFee:patient.consultationNoFee,
     consultationFee: patient.consultationFee, consultationFeeType: patient.consultationFeeType || '', consultationFeeLabel: patient.consultationFeeLabel || '',
@@ -27158,6 +27200,8 @@ async function registerPatient() {
     window.patchPatientFirestore(uid, {
 	      status: patient.status,
 	      seen: patient.seen,
+	      seenAt: null,
+	      seenByDept: sanitizeFirebaseValue(patient.seenByDept || {}),
 	      dilated: patient.dilated,
 	      ipdAdmitted: false,
       dept: patient.dept,
@@ -37102,10 +37146,15 @@ async function mergeDuplicatePatientRecord(canonicalId, duplicateId) {
     merged.obgDxLedger = Array.from(map.values());
   })();
   if (duplicate.lastVisit) merged.lastVisit = pickNewerRecordByDate(merged.lastVisit || {}, duplicate.lastVisit || {});
-  if (patientQueueDateMatchesToday(duplicate) && !patientQueueDateMatchesToday(merged)) {
-    ['checkinAt','status','seen','seenAt','updatedAt','purpose','doctor','assignedDoctor','dept','centre','queueDate'].forEach(function (key) {
+  const duplicateIsToday = patientQueueDateMatchesToday(duplicate);
+  const mergedIsToday = patientQueueDateMatchesToday(merged);
+  const duplicateIsActive = duplicateIsToday && !isQueueRowMarkedSeen(duplicate);
+  const mergedIsActive = mergedIsToday && !isQueueRowMarkedSeen(merged);
+  if (duplicateIsToday && (!mergedIsToday || (duplicateIsActive && !mergedIsActive))) {
+    ['checkinAt','status','seen','seenAt','updatedAt','purpose','doctor','assignedDoctor','dept','centre','queueDate','visitDate','queueAddedAt','queueSource','preRegistered'].forEach(function (key) {
       if (duplicate[key] != null) merged[key] = duplicate[key];
     });
+    if (duplicateIsActive) merged.seenByDept = clearPatientSeenStateForDept(merged, duplicate.dept || duplicate.department || '');
     merged.queueRemoved = false;
   }
   normalizePatientRecord(merged);
@@ -37317,9 +37366,20 @@ function isQueueRowMarkedSeen(p) {
   const rowDept = normalizeDeptKeyForQueue(p._queueDept || p.dept || p.department || '');
   const seenByDept = p.seenByDept || p.deptSeenAt || {};
   if (rowDept && seenByDept && typeof seenByDept === 'object' && Object.keys(seenByDept).length) {
-    return !!seenByDept[rowDept];
+    const seenStamp = seenByDept[rowDept];
+    if (!seenStamp) return false;
+    const queueDay = localDateKey(p.queueDate || p.visitDate || p.queueAddedAt || p.checkinAt || new Date());
+    const seenDay = localDateKey(seenStamp);
+    return !queueDay || !seenDay || queueDay === seenDay;
   }
   return isPatientMarkedSeen(p);
+}
+function clearPatientSeenStateForDept(p, deptOverride) {
+  const deptKey = normalizeDeptKeyForQueue(deptOverride || p?.dept || p?.department || '');
+  const seenByDept = Object.assign({}, p?.seenByDept || p?.deptSeenAt || {});
+  if (deptKey) delete seenByDept[deptKey];
+  if (p) p.seenByDept = seenByDept;
+  return seenByDept;
 }
 function dedupeQueueEntriesByKey(rows) {
   const map = new Map();
@@ -37351,11 +37411,10 @@ function dedupeQueueRowsByPatientDept(rows) {
     const bmhId = String(row.bmhId || '').trim();
     const deptKey = getQueueRowDeptKey(row);
     const fallbackKey = String(row._queueKey || '').trim();
-    const identityKey = getPatientIdentitySignature(row);
     const key = row._xrefEntry && fallbackKey
       ? fallbackKey
       : deptKey
-      ? ((identityKey || bmhId) ? ((identityKey || bmhId) + '::dept::' + deptKey) : fallbackKey)
+      ? (bmhId ? (bmhId + '::dept::' + deptKey) : fallbackKey)
       : fallbackKey;
     if (!key) return;
     const existing = map.get(key);
@@ -37373,12 +37432,6 @@ function dedupeQueueRowsByPatientDept(rows) {
     const nextXref = !!row._xrefEntry;
     if (existingXref !== nextXref) {
       map.set(key, nextXref ? row : existing);
-      return;
-    }
-    const existingIdNum = extractBmhNumericId(existing?.bmhId);
-    const nextIdNum = extractBmhNumericId(row?.bmhId);
-    if (existingIdNum !== nextIdNum) {
-      map.set(key, nextIdNum < existingIdNum ? row : existing);
       return;
     }
     if (getQueueRowFreshness(row) >= getQueueRowFreshness(existing)) map.set(key, row);
@@ -48942,6 +48995,7 @@ function restorePatientToActiveQueue(bmhId) {
   p.seen = false;
   p.status = 'waiting';
   p.seenAt = null;
+  p.seenByDept = clearPatientSeenStateForDept(p, p.dept || p.department || '');
   p.updatedAt = nowIso;
   if (!p.checkinAt) p.checkinAt = Date.now();
   fbUpdate && fbUpdate('patients/' + bmhId, {
@@ -48949,6 +49003,7 @@ function restorePatientToActiveQueue(bmhId) {
     seen: false,
     status: 'waiting',
     seenAt: null,
+    seenByDept: sanitizeFirebaseValue(p.seenByDept || {}),
     updatedAt: nowIso,
     checkinAt: p.checkinAt
   }).catch(function () {});
@@ -49091,15 +49146,15 @@ function checkInPatient(bmhId) {
       consultationFeeLabel: p.consultationFeeLabel || 'Consultation',
       billCats: ['consultation']
     };
-    addBmhPatientCharge(bmhId, buildPaidReceptionChargeRow(txnId, p.purpose || 'Consultation', fee, 'consultation'));
+    addBmhPatientCharge(bmhId, buildPaidReceptionChargeRow(txnId, p.purpose || 'Consultation', fee, 'consultation', p.dept || p.department || ''));
     TRANSACTIONS.push(txn);
     saveTransactionToFirebase&&saveTransactionToFirebase(txn);
   }
   const nowIso = new Date().toISOString();
   const today = localDateKey(new Date());
   const queueAddedAt = p.queueAddedAt || nowIso;
-  p.status='waiting'; p.preRegistered=false; p.seen=false; p.seenAt=null; p.checkinAt=Date.now(); p.queueDate=today; p.visitDate=today; p.queueRemoved=false; p.queueAddedAt=queueAddedAt; p.queueSource='reception'; p.updatedAt=nowIso;
-  fbUpdate&&fbUpdate('patients/'+bmhId,{status:'waiting',preRegistered:false,seen:false,seenAt:null,checkinAt:p.checkinAt,queueAddedAt:queueAddedAt,queueDate:today,visitDate:today,queueRemoved:false,queueSource:'reception',updatedAt:nowIso});
+  p.status='waiting'; p.preRegistered=false; p.seen=false; p.seenAt=null; p.seenByDept=clearPatientSeenStateForDept(p, p.dept || p.department || ''); p.checkinAt=Date.now(); p.queueDate=today; p.visitDate=today; p.queueRemoved=false; p.queueAddedAt=queueAddedAt; p.queueSource='reception'; p.updatedAt=nowIso;
+  fbUpdate&&fbUpdate('patients/'+bmhId,{status:'waiting',preRegistered:false,seen:false,seenAt:null,seenByDept:sanitizeFirebaseValue(p.seenByDept || {}),checkinAt:p.checkinAt,queueAddedAt:queueAddedAt,queueDate:today,visitDate:today,queueRemoved:false,queueSource:'reception',updatedAt:nowIso});
   showToast(`✅ ${p.name} checked in${alreadyPaidToday ? ' — payment already recorded' : ' — Token issued'}`,'s');
   renderDocQueue && renderDocQueue();
   renderReceptionPage && renderReceptionPage();
