@@ -3251,7 +3251,7 @@ function nav(id, el, opts) {
   deferPageWork(ensureRealtimeDataForPage);
   // Page-specific init
   if(pageKey==='dashboard')            deferPageWork(function(){ renderDashboard && renderDashboard(); });
-  else if(pageKey==='doctor-queue')    deferPageWork(function(){ renderDocQueue && renderDocQueue(bmhResponsiveUiPatchesEnabled() ? { immediate:true, navigation:true } : undefined); });
+  else if(pageKey==='doctor-queue')    deferPageWork(function(){ renderDocQueue && renderDocQueue(bmhResponsiveUiPatchesEnabled() ? { immediate:true, navigation:true } : undefined); loadIPDPatientsFromFirebase && loadIPDPatientsFromFirebase(); });
   else if(pageKey==='appointments')    deferPageWork(function(){ const d=document.getElementById('apt-date-inp'); if(d)d.value=todayKey(); renderAptDay && renderAptDay(); renderFollowupRegister && renderFollowupRegister(); });
   else if(pageKey==='print-templates') deferPageWork(function(){ renderPrintTemplates && renderPrintTemplates(); });
   else if(pageKey==='consents')        deferPageWork(function(){ renderConsent && renderConsent(); updateConsentPatientHeader(); refreshConsentLibrary && refreshConsentLibrary(); });
@@ -3261,7 +3261,7 @@ function nav(id, el, opts) {
   else if(pageKey==='skin')            deferPageWork(function(){ renderRxDrugs && renderRxDrugs(); typeof refreshRxTemplateSelects==='function'&&refreshRxTemplateSelects(); setTimeout(function(){ loadAdviceTemplates&&loadAdviceTemplates(); }, 120); });
   else if(pageKey==='reception')       deferPageWork(function(){ renderReceptionPage && renderReceptionPage(bmhResponsiveUiPatchesEnabled() ? { immediate:true, navigation:true } : undefined); setTimeout(()=>{renderCollectionDashboard&&renderCollectionDashboard();loadCustomPurposes&&loadCustomPurposes();},100); });
   else if(pageKey==='lab')             deferPageWork(function(){ initLab && initLab(); renderLabOrders && renderLabOrders(); });
-  else if(pageKey==='ipd')             deferPageWork(function(){ loadIPDPatientsFromFirebase && loadIPDPatientsFromFirebase(); renderIPD && renderIPD(); });
+  else if(pageKey==='ipd')             deferPageWork(function(){ loadIPDPatientsFromFirebase && loadIPDPatientsFromFirebase({ force:true }); renderIPD && renderIPD(); });
   else if(pageKey==='ot')              deferPageWork(function(){ loadOTCasesFromFirebase && loadOTCasesFromFirebase(); renderOTList && renderOTList(); setTimeout(()=>{ const w=document.getElementById('who-signin-list'); const t=document.getElementById('ot-t-in'); if(w) w.style.display=''; if(t&&t.closest('.card')) t.closest('.card').style.display=''; },100); });
   else if(pageKey==='inventory')       deferPageWork(function(){ initInventory && initInventory(); });
   else if(pageKey==='billing')         deferPageWork(function(){ renderBillingPage && renderBillingPage(); });
@@ -5224,16 +5224,18 @@ function sendCharge() {
   const amt = parseInt(fr.match(/\d+/)?.[0]||0);
   if (!pt) return;
   const serviceName = fr.split(' ₹')[0];
+  const _pt2 = PATIENTS.find(x=>x.bmhId===pt);
+  const chargeDept = normalizeDeptKeyForQueue(window._activePatientDeptOverride || CURRENT_USER?.dept || _pt2?.dept || '') || 'ophtho';
   const dup = (PAY_REQUESTS || []).find(function (r) {
     return r.bmhId === pt
       && String(r.for || '').trim().toLowerCase() === String(serviceName || '').trim().toLowerCase()
       && Number(r.amount || 0) === Number(amt || 0)
+      && normalizeDeptKeyForQueue(r.dept || '') === chargeDept
       && (r.status === 'pending' || r.status === 'paid');
   });
   if (dup) { showToast('Same charge already sent/collected for this patient', 'i'); return; }
-  const _pt2 = PATIENTS.find(x=>x.bmhId===pt);
   const _prId2 = 'PR'+Date.now();
-  const _pr2 = {id:_prId2,patient:_pt2?.name||pt,bmhId:pt,for:serviceName,amount:amt,status:'pending',from:document.getElementById('sbnm').textContent,dept:_pt2?.dept||'ophtho',centre:_pt2?.centre||CURRENT_USER?.centre||'CHD',date:new Date().toISOString()};
+  const _pr2 = {id:_prId2,patient:_pt2?.name||pt,bmhId:pt,for:serviceName,amount:amt,status:'pending',from:document.getElementById('sbnm').textContent,dept:chargeDept,centre:_pt2?.centre||CURRENT_USER?.centre||'CHD',date:new Date().toISOString()};
   PAY_REQUESTS.push(_pr2);
   syncPayRequestToPatientCharges(_pr2);
   fbSet&&fbSet('payRequests/'+_prId2,_pr2);
@@ -5246,13 +5248,14 @@ function sendQuickCharge(name, amount, bmhIdOverride) {
   const pt = window.CURRENT_PATIENT || PATIENTS.find(p=>p.bmhId===bmhIdOverride);
   const ptName = pt?.name || 'Unknown Patient';
   const ptId = pt?.bmhId || bmhIdOverride || 'BMSH-000000';
-  const dept = normalizeDeptKeyForQueue(pt?.dept || CURRENT_USER?.dept || getDeptKeyForSendCharge() || 'ophtho') || 'ophtho';
+  const dept = normalizeDeptKeyForQueue(window._activePatientDeptOverride || getDeptKeyForSendCharge() || CURRENT_USER?.dept || pt?.dept || 'ophtho') || 'ophtho';
   const centre = pt?.centre || CURRENT_USER?.centre || 'CHD';
   const amtNum = parseInt(amount) || 0;
   const dup = (PAY_REQUESTS || []).find(function (r) {
     return r.bmhId === ptId
       && String(r.for || '').trim().toLowerCase() === String(name || '').trim().toLowerCase()
       && Number(r.amount || 0) === Number(amtNum)
+      && normalizeDeptKeyForQueue(r.dept || '') === dept
       && (r.status === 'pending' || r.status === 'paid');
   });
   if (dup) { showToast('Same charge already sent/collected for this patient', 'i'); return; }
@@ -11646,6 +11649,7 @@ function syncPayRequestToPatientCharges(pr) {
     rate: pr.amount,
     amount: pr.amount,
     source: 'doctor',
+    dept: normalizeDeptKeyForQueue(pr.dept || ''),
     ref: pr.id,
     ts: pr.date || new Date().toISOString(),
     paidAmount: pr.status === 'paid' ? Math.max(0, Number(pr.amount) || 0) : 0
@@ -12906,6 +12910,9 @@ function bmhIsRealSameDayConsultationCollection(txn, patient, dateKey, fee) {
   if (txnIsoDate(txn) !== dateKey) return false;
   if (String(txn.type || '').toLowerCase() === 'consultation-synthetic') return false;
   if (bmhIsCrossRefCollectionTxn(txn)) return false;
+  const patientDept = normalizeDeptKeyForQueue(patient.dept || patient.department || '');
+  const txnDept = normalizeDeptKeyForQueue(txn.dept || txn.department || '');
+  if (patientDept && txnDept && patientDept !== txnDept) return false;
   if (getTransactionPrimaryChargeCategory(txn) === 'consultation') return true;
   const text = [txn.service, txn.for, txn.desc, txn.purpose, txn.consultationFeeLabel].filter(Boolean).join(' ');
   if (isConsultationPurposeText(text)) return true;
@@ -20092,7 +20099,7 @@ function doXRef(){
         id:'PR'+Date.now(), patient:ptName, bmhId,
         for:`Cross-refer to ${toDoctor}` + (reason ? ` (${reason.slice(0,40)})` : ''), amount:xrFee, status:'pending',
         from: CURRENT_USER?.name||'Doctor',
-        dept: p?.dept || toDept,
+        dept: toDept,
         centre: CURRENT_USER?.centre || p?.centre || 'CHD',
         date: new Date().toISOString(),
         xref: true, xrefDept: toDept, xrefDoctor: toDoctor,
@@ -42042,13 +42049,18 @@ function loadOTCasesFromFirebase() {
   }).catch(e => console.warn('OT load error:', e));
 }
 // ── Load IPD Patients from Firebase on login ──────────────────────────────────
-function loadIPDPatientsFromFirebase() {
-  if(!window.FBDB) return;
-  window.FBDB.ref('ipdPatients').once('value').then(snap => {
+function loadIPDPatientsFromFirebase(opts) {
+  opts = opts || {};
+  if(!window.FBDB) return Promise.resolve(window.IPD_PATIENTS || IPD_PATIENTS || []);
+  const maxAgeMs = 60000;
+  if (!opts.force && window._bmhIpdPatientsLoadedAt && Date.now() - window._bmhIpdPatientsLoadedAt < maxAgeMs) {
+    return Promise.resolve(window.IPD_PATIENTS || IPD_PATIENTS || []);
+  }
+  if (window._bmhIpdPatientsLoadPromise) return window._bmhIpdPatientsLoadPromise;
+  window._bmhIpdPatientsLoadPromise = window.FBDB.ref('ipdPatients').once('value').then(snap => {
     const data = snap.val();
-    if(!data) return;
     const arr = window.IPD_PATIENTS || IPD_PATIENTS;
-    Object.values(data).forEach(p => {
+    Object.values(data || {}).forEach(p => {
       if(!p.centre) p.centre = getEffectiveCentre() || CURRENT_USER?.centre || 'CHD';
       if(!Array.isArray(p.chartRows) || !p.chartRows.length) {
         p.chartRows = ipdDeptTemplate(normalizeDeptKeyForQueue(p.dept || p.department || 'general'), { type: p.type, procedure: p.surgery, surgery: p.surgery });
@@ -42059,7 +42071,15 @@ function loadIPDPatientsFromFirebase() {
     });
     renderIPD && renderIPD();
     renderDocQueue && renderDocQueue();
-  }).catch(e => console.warn('IPD load error:', e));
+    window._bmhIpdPatientsLoadedAt = Date.now();
+    return arr;
+  }).catch(e => {
+    console.warn('IPD load error:', e);
+    return window.IPD_PATIENTS || IPD_PATIENTS || [];
+  }).finally(function () {
+    window._bmhIpdPatientsLoadPromise = null;
+  });
+  return window._bmhIpdPatientsLoadPromise;
 }
 
 function loadDeletionRequests() {
@@ -49700,6 +49720,45 @@ function crossRefQueueDateMatchesToday(xref) {
     return localDateKey(raw) === todayKeyLocal || String(raw || '').slice(0, 10) === todayKeyLocal;
   });
 }
+function getDoctorQueueCrossRefLogRows(effectiveDept) {
+  const deptKey = normalizeDeptKeyForQueue(effectiveDept || '');
+  const filterDept = deptKey && deptKey !== 'all' && deptKey !== 'reception' ? deptKey : '';
+  const byKey = new Map();
+  const addRow = function (row, patient) {
+    if (!row || !crossRefQueueDateMatchesToday(row)) return;
+    if (patient && !centreMatch(patient)) return;
+    const fromDept = normalizeDeptKeyForQueue(row.fromDept || '');
+    const toDept = normalizeDeptKeyForQueue(row.toDept || '');
+    if (filterDept && fromDept !== filterDept && toDept !== filterDept) return;
+    const createdAt = row.createdAt || row.date || '';
+    const key = String(row.id || [row.bmhId || patient?.bmhId || '', fromDept, toDept, createdAt].join('|'));
+    if (!key) return;
+    byKey.set(key, Object.assign({}, row, {
+      bmhId: row.bmhId || patient?.bmhId || '',
+      ptName: row.ptName || row.patient || patient?.name || 'Patient',
+      fromDept: fromDept || row.fromDept || '',
+      toDept: toDept || row.toDept || '',
+      toDoctor: row.toDoctor || patient?.xrefDoctor || 'Referred department',
+      fee: !!row.fee,
+      paid: row.paid !== false,
+      time: row.time || (createdAt ? new Date(createdAt).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' }) : ''),
+      createdAt: createdAt
+    }));
+  };
+  (window.XREF_LOG || []).forEach(function (row) {
+    const patient = (PATIENTS || []).find(function (p) { return String(p?.bmhId || '') === String(row?.bmhId || ''); });
+    addRow(row, patient);
+  });
+  (PATIENTS || []).forEach(function (patient) {
+    if (!patient || !centreMatch(patient)) return;
+    (Array.isArray(patient.crossRefs) ? patient.crossRefs : []).forEach(function (xref) {
+      addRow(Object.assign({}, xref, { bmhId: patient.bmhId, ptName: patient.name }), patient);
+    });
+  });
+  return Array.from(byKey.values()).sort(function (a, b) {
+    return (Date.parse(b.createdAt || b.date || '') || 0) - (Date.parse(a.createdAt || a.date || '') || 0);
+  });
+}
 function buildCrossRefQueuePatient(p, xref, fallbackDept) {
   const toKey = normalizeDeptKeyForQueue(xref?.toDept || fallbackDept || '');
   const xrefSeen = !!xref?.seenAt;
@@ -50015,7 +50074,7 @@ function _renderDocQueueImpl() {
     return patientDoneQueueMatchesToday(p, todayKeyLocal);
   });
   const serialMap = new Map(visibleQueuePts.map(function (p, idx) { return [p._queueKey || p.bmhId, idx + 1]; }));
-  const xrefs   = (window.XREF_LOG||[]).filter(x => crossRefQueueDateMatchesToday(x) && (!effectiveQueueDept || x.fromDept===effectiveQueueDept || x.toDept===effectiveQueueDept));
+  const xrefs   = getDoctorQueueCrossRefLogRows(effectiveQueueDept);
   const ipdPts  = (window.IPD_PATIENTS||[]).filter(p => {
     const ipdDept = normalizeDeptKeyForQueue(p.dept || p.department || '');
     return isActiveIpdAdmission(p) && centreMatch(p) && (!effectiveQueueDept || ipdDept === effectiveQueueDept || CURRENT_USER?.isAdmin);
@@ -50084,7 +50143,7 @@ function _renderDocQueueImpl() {
   const ie = ipdEl;
   if(ie) ie.innerHTML = ipdPts.length ? ipdPts.map(ip => `
     <div style="display:flex;align-items:center;gap:9px;padding:10px 12px;background:var(--purple-lt);border-radius:var(--rsm);margin-bottom:6px;border-left:3px solid var(--purple)">
-      <div style="width:32px;height:32px;border-radius:50%;background:${ip.color||'var(--purple)'};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:11px;flex-shrink:0">${ip.initials||ip.name[0]||'?'}</div>
+      <div style="width:32px;height:32px;border-radius:50%;background:${ip.color||'var(--purple)'};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:11px;flex-shrink:0">${ip.initials||(ip.name||'?')[0]||'?'}</div>
       <div style="flex:1">
         <div style="font-size:12.5px;font-weight:800">${ip.name}</div>
         <div style="font-size:10.5px;color:var(--tx3);margin-top:1px">🛏️ ${ip.ward||'—'} · ${ip.type||'—'}</div>
