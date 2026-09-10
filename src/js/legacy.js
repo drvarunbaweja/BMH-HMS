@@ -3309,7 +3309,8 @@ function syncTopbarHeaderForPage(pageKey) {
     deptEl.style.display = isClinical ? '' : 'none';
     if (isClinical) {
       const activeQueueDept = String(
-        window._pendingTopbarQueueDept
+        window._activeAdminQueueDept
+        || window._pendingTopbarQueueDept
         || document.getElementById('dq-admin-dept-filter')?.value
         || normalizeDeptKeyForQueue(CURRENT_USER?.dept || '')
         || 'ophtho'
@@ -3337,10 +3338,13 @@ function handleTopbarDeptChange() {
   const deptEl = document.getElementById('tb-dept-jump');
   const nextDept = String(deptEl?.value || '').trim().toLowerCase();
   if (!nextDept) return;
+  window._activeAdminQueueDept = nextDept;
   window._pendingTopbarQueueDept = nextDept;
   const queueDeptEl = document.getElementById('dq-admin-dept-filter');
   if (queueDeptEl) queueDeptEl.value = nextDept;
   nav('doctor-queue', null);
+  window._bmhLastDocQueueSignature = '';
+  renderDocQueue && renderDocQueue({ immediate:true, navigation:true });
 }
 window.handleTopbarDeptChange = handleTopbarDeptChange;
 function handleTopbarSearchInput() {
@@ -49862,7 +49866,8 @@ function augmentQueueBasePatientsWithCrossRefs(basePts, targetDeptKey) {
 }
 function getSelectedQueueDeptForAdmin() {
   const sel = document.getElementById('dq-admin-dept-filter');
-  return String(sel?.value || 'all').trim().toLowerCase() || 'all';
+  const selected = window._activeAdminQueueDept || window._pendingTopbarQueueDept || sel?.value || 'all';
+  return String(selected).trim().toLowerCase() || 'all';
 }
 function _renderDocQueueImpl() {
   const todayKeyLocal = localDateKey(new Date());
