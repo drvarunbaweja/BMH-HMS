@@ -4720,7 +4720,7 @@ function addReceptionPatientCharges(bmhId, printAfter) {
         && String(x.source || '').toLowerCase().includes('reception');
     });
     if (existing) { skipped += 1; return; }
-    addBmhPatientCharge(bmhId, { id: 'rcx' + Date.now() + Math.random().toString(36).slice(2, 5), cat: inferChargeCategoryFromService(desc), desc: desc, qty: 1, rate: amt, amount: amt, source: 'reception-extra', ts: new Date().toISOString() });
+    addBmhPatientCharge(bmhId, { id: 'rcx' + Date.now() + Math.random().toString(36).slice(2, 5), cat: inferChargeCategoryFromService(desc), desc: desc, qty: 1, rate: amt, amount: amt, source: 'reception-extra', ts: new Date().toISOString() }, { deferPersistence: true });
 	    queued = bmhEnsurePatientInTodayDeptQueue ? (bmhEnsurePatientInTodayDeptQueue(bmhId, { silentToast: true, queueSource: 'reception' }) || queued) : queued;
     added += 1;
   });
@@ -11720,10 +11720,19 @@ function addBmhPatientCharge(bmhId, row, opts) {
   window.BMH_PATIENT_CHARGES[bmhId].push(row);
   bmhEnsureEEGConcessionLine(bmhId, row);
   if (opts?.deferPersistence) {
-    bmhDeferNonCriticalWork(function () {
-      saveBmhFinancials();
-      bmhSyncPatientRunningBalance(bmhId);
-    }, 80);
+    window._bmhDeferredFinancialPatientIds = window._bmhDeferredFinancialPatientIds || new Set();
+    window._bmhDeferredFinancialPatientIds.add(String(bmhId));
+    if (!window._bmhDeferredFinancialPersistTimer) {
+      window._bmhDeferredFinancialPersistTimer = setTimeout(function () {
+        window._bmhDeferredFinancialPersistTimer = null;
+        const patientIds = Array.from(window._bmhDeferredFinancialPatientIds || []);
+        window._bmhDeferredFinancialPatientIds = new Set();
+        bmhDeferNonCriticalWork(function () {
+          saveBmhFinancials();
+          patientIds.forEach(function (id) { bmhSyncPatientRunningBalance(id); });
+        }, 0);
+      }, 80);
+    }
   } else {
     saveBmhFinancials();
     bmhSyncPatientRunningBalance(bmhId);
@@ -11752,7 +11761,7 @@ function buildPaidReceptionChargeRow(txnId, desc, fee, category, dept) {
     }] : []
   };
 }
-function syncPayRequestToPatientCharges(pr) {
+function syncPayRequestToPatientCharges(pr, opts) {
   if (!pr || !pr.bmhId) return;
   const arr = window.BMH_PATIENT_CHARGES[pr.bmhId] || [];
   if (arr.some(x => x.ref === pr.id)) return;
@@ -11768,7 +11777,7 @@ function syncPayRequestToPatientCharges(pr) {
     ref: pr.id,
     ts: pr.date || new Date().toISOString(),
     paidAmount: pr.status === 'paid' ? Math.max(0, Number(pr.amount) || 0) : 0
-  });
+  }, opts);
 }
 function bmhGetChargeLinePaidAmount(line) {
   if (!line) return 0;
@@ -20175,6 +20184,7 @@ function doXRef(){
   }[toVal] || 'ophtho';
   const toDoctor = toVal.split(' — ')[0] || toVal;
   const fee  = document.getElementById('xref-fee-sel')?.value === 'yes';
+  const xrFee = fee ? (parseInt(document.getElementById('xref-fee-amt')?.value || '800', 10) || 800) : 0;
   const reason = document.getElementById('xref-reason')?.value?.trim() || '';
   const now  = new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
   const nowMs = Date.now();
@@ -20184,7 +20194,7 @@ function doXRef(){
   const xref = {
     id:'XR'+Date.now(), bmhId, ptName, toDoctor, toDept,
     fromDept: p?.dept || CURRENT_USER?.dept || '',
-    fee, paid: !fee, reason, time: now,
+    fee, feeAmount: xrFee, amount: xrFee, paid: !fee, reason, time: now,
     createdBy: CURRENT_USER?.name || '—',
     createdAt: new Date().toISOString()
   };
@@ -20200,6 +20210,8 @@ function doXRef(){
       toDoctor: toDoctor,
       fromDept: p?.dept || CURRENT_USER?.dept || '',
       fee: !!fee,
+      feeAmount: xrFee,
+      amount: xrFee,
       paid: !fee,
       active: true,
       reason: reason,
@@ -20219,18 +20231,19 @@ function doXRef(){
       showToast(`↔️ ${ptName} added to ${toDoctor}'s queue ✓`,'s');
     } else {
       // Paid → send to reception as pulsating payment request
-      const xrFee = parseInt(document.getElementById('xref-fee-amt')?.value||'800')||800;
       const xrPR = {
         id:'PR'+Date.now(), patient:ptName, bmhId,
         for:`Cross-refer to ${toDoctor}` + (reason ? ` (${reason.slice(0,40)})` : ''), amount:xrFee, status:'pending',
         from: CURRENT_USER?.name||'Doctor',
         dept: toDept,
-        centre: CURRENT_USER?.centre || p?.centre || 'CHD',
+        centre: p?.centre || getEffectiveCentre?.() || CURRENT_USER?.centre || 'CHD',
         date: new Date().toISOString(),
         xref: true, xrefDept: toDept, xrefDoctor: toDoctor,
         xrefId: xref.id
       };
       PAY_REQUESTS.push(xrPR);
+      syncPayRequestToPatientCharges(xrPR, { deferPersistence: true });
+      bmhMarkReceptionFinancialDataDirty && bmhMarkReceptionFinancialDataDirty('cross-ref-charge');
       fbSet&&fbSet('payRequests/'+xrPR.id, xrPR);
       fbUpdate && fbUpdate('patients/' + bmhId, {
         crossRefs: sanitizeFirebaseValue(refs),
@@ -38142,6 +38155,11 @@ function upsertHydratedQueuePatient(row) {
   };
   upsert(window._BMH_ALL_PATIENTS_CACHE);
   upsert(PATIENTS);
+  if (patientHasTodayExplicitQueueStamp(row, localDateKey(new Date()))) {
+    window._bmhTodayQueuePatientIds = window._bmhTodayQueuePatientIds || new Set();
+    window._bmhTodayQueuePatientIds.add(String(row.bmhId));
+    window._bmhTodayQueuePatientIdsDay = localDateKey(new Date());
+  }
   window._bmhPatientsCacheVersion = (window._bmhPatientsCacheVersion || 0) + 1;
   rebuildPatientCacheIndex && rebuildPatientCacheIndex(window._BMH_ALL_PATIENTS_CACHE || []);
   buildReceptionPatientLookupIndex && buildReceptionPatientLookupIndex();
@@ -38341,12 +38359,23 @@ function mergeTodayQueueContinuityRows(rows) {
 }
 function getTodayQueueBasePatients() {
   const todayKeyLocal = localDateKey(new Date());
-  const useFinancialRecovery = !bmhRoleScopedStartupEnabled() || !isDoctorQueueProfile(CURRENT_USER);
+  const indexedTodayIds = window._bmhTodayQueuePatientIdsReady && window._bmhTodayQueuePatientIdsDay === todayKeyLocal && window._bmhTodayQueuePatientIds instanceof Set
+    ? window._bmhTodayQueuePatientIds
+    : null;
+  const patientCache = Array.isArray(window._BMH_ALL_PATIENTS_CACHE) ? window._BMH_ALL_PATIENTS_CACHE : [];
+  const patientIndex = window._BMH_ALL_PATIENTS_INDEX_BY_ID instanceof Map && window._BMH_ALL_PATIENTS_INDEX_SOURCE === patientCache
+    ? window._BMH_ALL_PATIENTS_INDEX_BY_ID
+    : rebuildPatientCacheIndex(patientCache);
+  const queueCandidates = indexedTodayIds ? Array.from(indexedTodayIds).map(function (id) {
+    const idx = patientIndex.get(String(id));
+    return idx != null ? patientCache[idx] : (PATIENTS || []).find(function (p) { return String(p?.bmhId || '') === String(id); });
+  }).filter(Boolean) : (PATIENTS || []);
+  const useFinancialRecovery = !bmhRoleScopedStartupEnabled();
   const cacheKey = [
     todayKeyLocal,
     getEffectiveCentre ? getEffectiveCentre() : '',
     window._bmhPatientsCacheVersion || 0,
-    (PATIENTS || []).length,
+    queueCandidates.length,
     useFinancialRecovery ? (TRANSACTIONS || []).length : 'scoped',
     useFinancialRecovery ? (PAY_REQUESTS || []).length : 'scoped',
     useFinancialRecovery ? Object.keys(window.BMH_PATIENT_CHARGES || {}).length : 'scoped'
@@ -38359,7 +38388,7 @@ function getTodayQueueBasePatients() {
   const previousEvidenceSet = window._bmhTodayQueueEvidenceActiveSet;
   window._bmhTodayQueueEvidenceActiveSet = useFinancialRecovery ? bmhGetTodayQueueEvidenceIdSet(todayKeyLocal) : new Set();
   try {
-    const liveRows = dedupeQueueEntriesByKey(PATIENTS.filter(function (p) {
+    const liveRows = dedupeQueueEntriesByKey(queueCandidates.filter(function (p) {
       if (!p || p.queueRemoved || String(p.status || '').toLowerCase() === 'removed') return false;
       if (!centreMatch(p)) return false;
       repairPatientQueueStampFromRecoveryEvidence(p, todayKeyLocal);
@@ -41839,7 +41868,9 @@ function refreshTodayQueuePatientsFromFirebase() {
 }
 window.refreshTodayQueuePatientsFromFirebase = refreshTodayQueuePatientsFromFirebase;
 function mergeSelectedCentreTodayQueuePayload(data, scope) {
+  const day = localDateKey(new Date());
   const cache = Array.isArray(window._BMH_ALL_PATIENTS_CACHE) ? window._BMH_ALL_PATIENTS_CACHE.slice() : [];
+  const todayIds = new Set();
   const index = new Map(cache.map(function (row, idx) {
     return [String(row?.bmhId || ''), idx];
   }).filter(function (entry) { return !!entry[0]; }));
@@ -41849,6 +41880,7 @@ function mergeSelectedCentreTodayQueuePayload(data, scope) {
     const row = normalizePatientRecord(Object.assign({}, raw, { bmhId: raw.bmhId || key }));
     const id = String(row.bmhId || '');
     if (!id) return;
+    todayIds.add(id);
     const existing = index.has(id) ? cache[index.get(id)] : null;
     preserveNewerPatientPurpose(row, existing);
     if (index.has(id)) cache[index.get(id)] = row;
@@ -41858,6 +41890,13 @@ function mergeSelectedCentreTodayQueuePayload(data, scope) {
     }
   });
   overlayPendingLocalPatientQueueWrites(cache);
+  Object.values(window._bmhPendingLocalPatientQueueWrites || {}).forEach(function (entry) {
+    const row = entry?.row;
+    if (row && row.bmhId && patientHasTodayExplicitQueueStamp(row, day)) todayIds.add(String(row.bmhId));
+  });
+  window._bmhTodayQueuePatientIds = todayIds;
+  window._bmhTodayQueuePatientIdsDay = day;
+  window._bmhTodayQueuePatientIdsReady = true;
   window._BMH_ALL_PATIENTS_CACHE = cache;
   rebuildPatientCacheIndex(cache);
   window._bmhPatientsCacheVersion = (window._bmhPatientsCacheVersion || 0) + 1;
@@ -41870,6 +41909,7 @@ function refreshSelectedCentreTodayQueue(opts) {
   const scope = effectivePatientListCentreScope();
   const requestKey = day + ':' + (scope || 'ALL');
   if (window._bmhFastQueueRequestKey === requestKey && window._bmhFastQueuePromise) return window._bmhFastQueuePromise;
+  window._bmhTodayQueuePatientIdsReady = false;
   window._bmhFastQueueRequestKey = requestKey;
   const promise = window.FBDB.ref('patients').orderByChild('queueDate').equalTo(day).once('value').then(function (snap) {
     const data = snap && typeof snap.val === 'function' ? (snap.val() || {}) : {};
@@ -42059,6 +42099,11 @@ function startTodayQueuePatientsRealtimeUpdates(force) {
   const scope = effectivePatientListCentreScope();
   const role = String(CURRENT_USER?.role || '').trim().toLowerCase();
   const retainFullHistory = !!(CURRENT_USER?.isAdmin || CURRENT_USER?.canSeeAllCentres || CURRENT_USER?.centre === 'BOTH' || role === 'reception');
+  if (window._bmhTodayQueuePatientIdsDay !== today || !(window._bmhTodayQueuePatientIds instanceof Set)) {
+    window._bmhTodayQueuePatientIds = new Set();
+    window._bmhTodayQueuePatientIdsDay = today;
+    window._bmhTodayQueuePatientIdsReady = false;
+  }
   if (!force && window._bmhTodayQueuePatientsRealtimeDay === today && window._bmhTodayQueuePatientsRealtime) return;
   stopTodayQueuePatientsRealtimeUpdates();
   const ref = window.FBDB.ref('patients').orderByChild('queueDate').equalTo(today);
@@ -42066,11 +42111,13 @@ function startTodayQueuePatientsRealtimeUpdates(force) {
     added: function (snap) {
       const row = snap.val();
       if (!retainFullHistory && scope && patientCentreKey(row?.centre) !== scope) return;
+      if (!scope || rowMatchesCentre(row, scope, { allowUncentredToday: true, dateKey: today })) window._bmhTodayQueuePatientIds.add(String(row?.bmhId || snap.key));
       applyRealtimePatientRecord(row, snap.key);
     },
     changed: function (snap) {
       const row = snap.val();
       if (!retainFullHistory && scope && patientCentreKey(row?.centre) !== scope) return;
+      if (!scope || rowMatchesCentre(row, scope, { allowUncentredToday: true, dateKey: today })) window._bmhTodayQueuePatientIds.add(String(row?.bmhId || snap.key));
       applyRealtimePatientRecord(row, snap.key);
     }
   };
