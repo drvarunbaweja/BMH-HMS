@@ -3308,10 +3308,15 @@ function syncTopbarHeaderForPage(pageKey) {
   if (deptEl) {
     deptEl.style.display = isClinical ? '' : 'none';
     if (isClinical) {
+      const visibleDept = /^(ophtho|obg|psych|skin)$/.test(String(deptEl.value || '').trim().toLowerCase())
+        ? String(deptEl.value).trim().toLowerCase()
+        : '';
+      const hiddenDept = String(document.getElementById('dq-admin-dept-filter')?.value || '').trim().toLowerCase();
       const activeQueueDept = String(
         window._activeAdminQueueDept
         || window._pendingTopbarQueueDept
-        || document.getElementById('dq-admin-dept-filter')?.value
+        || visibleDept
+        || (hiddenDept !== 'all' ? hiddenDept : '')
         || normalizeDeptKeyForQueue(CURRENT_USER?.dept || '')
         || 'ophtho'
       ).trim().toLowerCase();
@@ -49902,7 +49907,12 @@ function augmentQueueBasePatientsWithCrossRefs(basePts, targetDeptKey) {
 }
 function getSelectedQueueDeptForAdmin() {
   const sel = document.getElementById('dq-admin-dept-filter');
-  const selected = window._activeAdminQueueDept || window._pendingTopbarQueueDept || sel?.value || 'all';
+  const visibleDept = String(document.getElementById('tb-dept-jump')?.value || '').trim().toLowerCase();
+  const selected = window._activeAdminQueueDept
+    || window._pendingTopbarQueueDept
+    || (/^(ophtho|obg|psych|skin)$/.test(visibleDept) ? visibleDept : '')
+    || sel?.value
+    || 'all';
   return String(selected).trim().toLowerCase() || 'all';
 }
 function _renderDocQueueImpl() {
