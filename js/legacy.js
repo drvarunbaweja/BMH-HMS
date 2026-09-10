@@ -4415,7 +4415,7 @@ function openPatient(bmhId, opts) {
 
 /** Reception queue: open patient finances & visits — does not navigate to doctor examination. */
 function openReceptionPatient(bmhId) {
-  const p = PATIENTS.find(x => x.bmhId === bmhId);
+  const p = findReceptionPatientByBmh(bmhId) || PATIENTS.find(x => x.bmhId === bmhId);
   if(!p) { showToast('Patient not found', 'w'); return; }
   window.CURRENT_PATIENT = p;
   nav('reception', null);
@@ -7021,14 +7021,18 @@ function setCentre(c, btn) {
   syncReceptionConsultationFee && syncReceptionConsultationFee();
   window._bmhTodayTransactionsLoadedKey = '';
   rebuildPatientsArrayFromGlobalCache && rebuildPatientsArrayFromGlobalCache();
-  refreshPatientsFromFirebase && refreshPatientsFromFirebase();
+  window._bmhLastDocQueueSignature = '';
+  refreshSelectedCentreTodayQueue && refreshSelectedCentreTodayQueue({ render:true });
+  startTodayQueuePatientsRealtimeUpdates && startTodayQueuePatientsRealtimeUpdates(true);
   listenPayRequests && listenPayRequests({ force: true });
   listenAppointments && listenAppointments({ force: true });
   loadTodayTransactions && loadTodayTransactions();
-  // Refresh all views after centre switch
-  renderReceptionPage && renderReceptionPage();
-  renderDocQueue && renderDocQueue();
-  renderIPD && renderIPD();
+  // Redraw only the visible module; each other module refreshes on navigation.
+  const activePage = getActivePageId ? getActivePageId() : '';
+  if (activePage === 'pg-reception') renderReceptionPage && renderReceptionPage();
+  else if (activePage === 'pg-doctor-queue') renderDocQueue && renderDocQueue({ immediate:true });
+  else if (activePage === 'pg-ipd') renderIPD && renderIPD();
+  else if (activePage === 'pg-dashboard') renderDashboard && renderDashboard();
 }
 function renderPaymentsPage() {
   const el = document.getElementById('pg-pay-content');
@@ -38062,7 +38066,10 @@ function mergeTodayQueueContinuityRows(rows) {
       continuity.delete(id);
     }
   });
-  (rows || []).forEach(rememberTodayQueueContinuityRow);
+  (rows || []).forEach(function (row) {
+    if (!row || !row.bmhId) return;
+    continuity.set(String(row.bmhId), { day: day, row: row });
+  });
   const merged = (rows || []).slice();
   const present = new Set(merged.map(function (row) { return String(row?.bmhId || ''); }));
   continuity.forEach(function (entry, id) {
@@ -41416,7 +41423,63 @@ function refreshTodayQueuePatientsFromFirebase() {
   });
 }
 window.refreshTodayQueuePatientsFromFirebase = refreshTodayQueuePatientsFromFirebase;
+function mergeSelectedCentreTodayQueuePayload(data, scope) {
+  const cache = Array.isArray(window._BMH_ALL_PATIENTS_CACHE) ? window._BMH_ALL_PATIENTS_CACHE.slice() : [];
+  const index = new Map(cache.map(function (row, idx) {
+    return [String(row?.bmhId || ''), idx];
+  }).filter(function (entry) { return !!entry[0]; }));
+  Object.keys(data || {}).forEach(function (key) {
+    const raw = data[key];
+    if (!raw || (scope && patientCentreKey(raw.centre) !== scope)) return;
+    const row = normalizePatientRecord(Object.assign({}, raw, { bmhId: raw.bmhId || key }));
+    const id = String(row.bmhId || '');
+    if (!id) return;
+    const existing = index.has(id) ? cache[index.get(id)] : null;
+    preserveNewerPatientPurpose(row, existing);
+    if (index.has(id)) cache[index.get(id)] = row;
+    else {
+      index.set(id, cache.length);
+      cache.push(row);
+    }
+  });
+  overlayPendingLocalPatientQueueWrites(cache);
+  window._BMH_ALL_PATIENTS_CACHE = cache;
+  rebuildPatientCacheIndex(cache);
+  window._bmhPatientsCacheVersion = (window._bmhPatientsCacheVersion || 0) + 1;
+  rebuildPatientsArrayFromGlobalCache();
+}
+function refreshSelectedCentreTodayQueue(opts) {
+  opts = opts || {};
+  if (!window.FBDB) return Promise.resolve([]);
+  const day = localDateKey(new Date());
+  const scope = effectivePatientListCentreScope();
+  const requestKey = day + ':' + (scope || 'ALL');
+  if (window._bmhFastQueueRequestKey === requestKey && window._bmhFastQueuePromise) return window._bmhFastQueuePromise;
+  window._bmhFastQueueRequestKey = requestKey;
+  const promise = window.FBDB.ref('patients').orderByChild('queueDate').equalTo(day).once('value').then(function (snap) {
+    const data = snap && typeof snap.val === 'function' ? (snap.val() || {}) : {};
+    mergeSelectedCentreTodayQueuePayload(data, scope);
+    window._bmhLastDocQueueSignature = '';
+    if (opts.render !== false) {
+      const activePage = getActivePageId ? getActivePageId() : '';
+      if (activePage === 'pg-doctor-queue') renderDocQueue && renderDocQueue({ immediate:true });
+      else if (activePage === 'pg-reception') renderReceptionPage && renderReceptionPage({ immediate:true });
+      else window._bmhDocQueueRenderDirty = true;
+    }
+    return Object.values(data || {});
+  }).catch(function (e) {
+    console.warn('selected-centre queue refresh failed', e);
+    return [];
+  }).finally(function () {
+    if (window._bmhFastQueuePromise === promise) window._bmhFastQueuePromise = null;
+  });
+  window._bmhFastQueuePromise = promise;
+  return promise;
+}
+window.refreshSelectedCentreTodayQueue = refreshSelectedCentreTodayQueue;
 function isRealtimePatientRecordRelevant(record) {
+  const role = String(CURRENT_USER?.role || '').trim().toLowerCase();
+  if (CURRENT_USER?.isAdmin || CURRENT_USER?.canSeeAllCentres || CURRENT_USER?.centre === 'BOTH' || role === 'reception') return true;
   const scope = effectivePatientListCentreScope();
   if (!scope) return true;
   return patientCentreKey(record?.centre) === scope;
@@ -41578,21 +41641,20 @@ function startTodayQueuePatientsRealtimeUpdates(force) {
   if (!window.FBDB) return;
   const today = localDateKey(new Date());
   const scope = effectivePatientListCentreScope();
+  const role = String(CURRENT_USER?.role || '').trim().toLowerCase();
+  const retainFullHistory = !!(CURRENT_USER?.isAdmin || CURRENT_USER?.canSeeAllCentres || CURRENT_USER?.centre === 'BOTH' || role === 'reception');
   if (!force && window._bmhTodayQueuePatientsRealtimeDay === today && window._bmhTodayQueuePatientsRealtime) return;
   stopTodayQueuePatientsRealtimeUpdates();
   const ref = window.FBDB.ref('patients').orderByChild('queueDate').equalTo(today);
   const callbacks = {
     added: function (snap) {
       const row = snap.val();
-      if (scope && patientCentreKey(row?.centre) !== scope) return;
+      if (!retainFullHistory && scope && patientCentreKey(row?.centre) !== scope) return;
       applyRealtimePatientRecord(row, snap.key);
     },
     changed: function (snap) {
       const row = snap.val();
-      if (scope && patientCentreKey(row?.centre) !== scope) {
-        removeRealtimePatientRecord(snap.key);
-        return;
-      }
+      if (!retainFullHistory && scope && patientCentreKey(row?.centre) !== scope) return;
       applyRealtimePatientRecord(row, snap.key);
     }
   };
@@ -41632,12 +41694,14 @@ function loadPatientsFromFirebase() {
   window._bmhRtdbPatientsListening = true;
   window._bmhRtdbPatientsScope = scope;
   scheduleQueueCalendarDayRefresh && scheduleQueueCalendarDayRefresh();
-  const bootstrap = shouldUseScopedPatientBootstrap()
+  const scopedBootstrap = shouldUseScopedPatientBootstrap();
+  if (!scopedBootstrap) refreshSelectedCentreTodayQueue({ render:true });
+  startTodayQueuePatientsRealtimeUpdates(true);
+  const bootstrap = scopedBootstrap
     ? refreshTodayQueuePatientsFromFirebase()
     : refreshPatientsFromFirebase();
   bootstrap.then(function () {
     if (!shouldUseScopedPatientBootstrap()) startPatientsRealtimeUpdates();
-    startTodayQueuePatientsRealtimeUpdates(true);
   });
   schedulePatientsRefreshLoop();
 }
@@ -44606,7 +44670,7 @@ function filterRcExist(val) {
 
   if(isPhone && phoneMatches) {
     const d = val.replace(/\s/g,'').replace(/\D/g,'');
-    const phoneHits = PATIENTS.filter(function (p) {
+    const phoneHits = pool.filter(function (p) {
       if (!p || isMergedPatientRecord(p)) return false;
       return [p.mob, p.mobile, p.mob2].map(function (x) { return String(x || '').replace(/\D/g,''); }).some(function (n) {
         return d.length >= 6 && (n.includes(d) || (d.length >= 10 && n.slice(-10) === d.slice(-10)));
@@ -44645,7 +44709,7 @@ function filterRcExist(val) {
 }
 
 function selectFollowUpPatient(bmhId) {
-  const p = PATIENTS.find(x => x.bmhId === bmhId);
+  const p = findReceptionPatientByBmh(bmhId) || PATIENTS.find(x => x.bmhId === bmhId);
   if(!p) return;
   const pm = document.getElementById('rc-phone-matches');
   if(pm) pm.style.display = 'none';
@@ -49214,6 +49278,7 @@ function buildQTableRow(p, sno, opts) {
       ${isOphtho&&p.dilated&&!seenRow?`<button type="button" title="Undo dilation" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="unmarkDilated('${p.bmhId}')">Undo 💧</button>`:''}
       ${isOphtho&&!seenRow?`<button type="button" title="${isSurgeryToday?'Revert to Consultation':'Mark Surgery Today'}" style="background:${isSurgeryToday?'#fff':'var(--orange-lt)'};color:#8a4200;border:1.5px solid var(--orange);border-radius:5px;padding:2px 5px;font-size:9px;font-weight:800;cursor:pointer" onclick="setQueueVisitPurpose('${p.bmhId}','${isSurgeryToday?'Consultation':'Surgery Today'}')">${isSurgeryToday?'Consult':'Sx Today'}</button>`:''}
       ${receptionQueue ? `<button type="button" title="Restore to doctor queue" style="background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1.5px solid var(--bmh-blue);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="event.stopPropagation();restorePatientToDoctorQueue('${p.bmhId}')">↩</button>` : ''}
+      <button type="button" title="Edit reception details" aria-label="Edit reception details" style="background:rgba(26,60,110,.08);color:var(--bmh-blue);border:1.5px solid rgba(26,60,110,.35);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="openEditPatientModal('${String(p.bmhId).replace(/'/g, "\\'")}')">✏️</button>
       <button type="button" title="Cross-ref" style="background:rgba(11,123,140,.1);color:var(--teal);border:1.5px solid var(--teal);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="openXRefModal('${p.bmhId}')">↔️</button>
       <button type="button" title="IPD" style="background:rgba(175,82,222,.1);color:var(--purple);border:1.5px solid var(--purple);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="openIPDFromQueue('${p.bmhId}')">🛏️</button>
       <button type="button" title="OT" style="background:rgba(255,149,0,.1);color:var(--orange);border:1.5px solid var(--orange);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="openOTFromQueue('${p.bmhId}')">🔬</button>
@@ -49585,7 +49650,8 @@ function deletePatientPendingCharges(bmhId) {
 function openEditPatientModal(bmhId) {
   const bid = bmhId || document.getElementById('rc-uid')?.textContent?.trim();
   if(!bid) { showToast('No patient selected','w'); return; }
-  const p = PATIENTS.find(x=>x.bmhId===bid)
+  const p = (typeof findReceptionPatientByBmh === 'function' ? findReceptionPatientByBmh(bid) : null)
+    || PATIENTS.find(x=>x.bmhId===bid)
     || (window.CURRENT_PATIENT && window.CURRENT_PATIENT.bmhId === bid ? window.CURRENT_PATIENT : null)
     || {
       bmhId: bid,
@@ -49683,7 +49749,14 @@ async function saveUpdatedPatientDetails() {
   updates.initials = computePatientInitials(updates.name);
   Object.assign(p, updates);
   normalizePatientRecord(p);
-  if (!PATIENTS.find(x=>x.bmhId===bid)) PATIENTS.push(p);
+  const patientCache = Array.isArray(window._BMH_ALL_PATIENTS_CACHE) ? window._BMH_ALL_PATIENTS_CACHE : [];
+  const cachedPatientIndex = patientCache.findIndex(function (row) { return String(row?.bmhId || '') === bid; });
+  if (cachedPatientIndex >= 0) patientCache[cachedPatientIndex] = p;
+  else patientCache.push(p);
+  window._BMH_ALL_PATIENTS_CACHE = patientCache;
+  rebuildPatientCacheIndex(patientCache);
+  window._bmhPatientsCacheVersion = (window._bmhPatientsCacheVersion || 0) + 1;
+  rebuildPatientsArrayFromGlobalCache();
   savePatientToFirebase && savePatientToFirebase(p);
   try {
     const today = localDateKey(new Date());
@@ -49788,6 +49861,8 @@ async function saveUpdatedPatientDetails() {
   showToast(`✅ ${updates.name} — details updated`,'s');
   closeM('m-update-details');
   renderReceptionPage && renderReceptionPage();
+  window._bmhLastDocQueueSignature = '';
+  renderDocQueue && renderDocQueue({ immediate:true });
   renderTpaPage && renderTpaPage();
   // Refresh open patient card if visible
   if(typeof renderPatientCard==='function') renderPatientCard(bid);
