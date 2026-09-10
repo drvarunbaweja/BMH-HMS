@@ -6718,11 +6718,11 @@ function printDischarge() {
   if (!existingPtId || existingPtId === '—') renderDischargeBuilder();
   const dischargeSel = document.getElementById('dc-specialty-sel')?.value || 'ophtho';
   persistDischargeSnapshotToOtCase(dischargeSel);
-  saveCurrentDischargeCard({ markPrinted: true, silent: true });
+  const dischargeRecord = saveCurrentDischargeCard({ markPrinted: true, silent: true });
   const html = buildDischargeCardPrintHtml();
   if (!html) { showToast('Select a patient first', 'w'); return; }
   safePrint(html);
-  autoDischargeCurrentIpdPatientFromSurgery();
+  autoDischargeCurrentIpdPatientFromSurgery(dischargeRecord);
   showToast('Discharge card ready to print ✓', 's');
 }
 function printRx() { if (typeof window.printUnifiedRx === 'function') window.printUnifiedRx('oe'); }
@@ -8866,12 +8866,18 @@ function markPatientIpdDischarged(bmhId, atIso, by) {
   if (pt && String(pt.status || '').toLowerCase() === 'seen') patch.status = 'seen';
   fbUpdate && fbUpdate('patients/' + key, patch).catch(function () {});
 }
-function autoDischargeCurrentIpdPatientFromSurgery() {
-  const bmhId = document.getElementById('dc-pt-id')?.textContent?.trim() || activeOTCase?.bmhId || window.CURRENT_PATIENT?.bmhId;
+function autoDischargeCurrentIpdPatientFromSurgery(dischargeRecord) {
+  const record = dischargeRecord || getDischargeSelectedRecord?.() || null;
+  const bmhId = record?.bmhId || document.getElementById('dc-pt-id')?.textContent?.trim() || activeOTCase?.bmhId || window.CURRENT_PATIENT?.bmhId;
+  const ipdAdmissionId = String(record?.ipdAdmissionId || '').trim();
+  const otCaseId = String(record?.otCaseId || activeOTCase?.id || '').trim();
   const list = window.IPD_PATIENTS || IPD_PATIENTS || [];
   if (!bmhId) return;
   const match = list.find(function (p) {
-    return isActiveIpdAdmission(p) && (p.bmhId === bmhId || (activeOTCase?.id && p.otCaseId === activeOTCase.id));
+    if (!isActiveIpdAdmission(p)) return false;
+    if (ipdAdmissionId && String(p.id || '') === ipdAdmissionId) return true;
+    if (otCaseId && String(p.otCaseId || '') === otCaseId) return true;
+    return String(p.bmhId || '') === String(bmhId);
   });
   if (match) {
     dischargeIPDPatientById(match.id, { skipConfirm: true, silentToast: true });
@@ -8880,9 +8886,116 @@ function autoDischargeCurrentIpdPatientFromSurgery() {
   const atIso = new Date().toISOString();
   const by = CURRENT_USER?.name || 'System';
   markPatientIpdDischarged(bmhId, atIso, by);
-  markLinkedOtCaseIpdDischarged(activeOTCase?.id || '', bmhId, atIso, by);
+  markLinkedOtCaseIpdDischarged(otCaseId, bmhId, atIso, by);
   renderIPD && renderIPD();
   renderDocQueue && renderDocQueue();
+}
+function flattenPrintedDischargeCardRecords(cardsByPatient) {
+  const rows = [];
+  Object.keys(cardsByPatient || {}).forEach(function (bmhId) {
+    const raw = cardsByPatient[bmhId];
+    const values = Array.isArray(raw) ? raw : Object.values(raw || {});
+    values.forEach(function (entry) {
+      const record = normalizeDischargeCardRecord(Object.assign({ bmhId: bmhId }, entry || {}));
+      if (record?.printedAt) rows.push(record);
+    });
+  });
+  return rows;
+}
+function reconcilePrintedDischargesInIpd(cardsByPatient, opts) {
+  opts = opts || {};
+  const list = window.IPD_PATIENTS || IPD_PATIENTS || [];
+  const cardsByBmhId = new Map();
+  flattenPrintedDischargeCardRecords(cardsByPatient || {}).forEach(function (record) {
+    const key = String(record.bmhId || '');
+    if (!cardsByBmhId.has(key)) cardsByBmhId.set(key, []);
+    cardsByBmhId.get(key).push(record);
+  });
+  const otById = new Map((window.OT_CASES || OT_CASES || []).filter(Boolean).map(function (row) {
+    return [String(row.id || ''), row];
+  }));
+  const rootPatch = {};
+  let changed = 0;
+  list.forEach(function (ipd) {
+    if (!isActiveIpdAdmission(ipd)) return;
+    const admittedMs = Date.parse(ipd.admittedAt || ipd.admittedDate || '') || 0;
+    const otCase = ipd.otCaseId ? otById.get(String(ipd.otCaseId)) : null;
+    let evidenceAt = String(otCase?.ipdDischargedAt || otCase?.dischargePrintedAt || '');
+    if (!evidenceAt) {
+      const match = (cardsByBmhId.get(String(ipd.bmhId || '')) || []).find(function (record) {
+        const printedMs = Date.parse(record.printedAt || '') || 0;
+        if (record.ipdAdmissionId && String(record.ipdAdmissionId) === String(ipd.id || '')) return true;
+        if (record.otCaseId && ipd.otCaseId && String(record.otCaseId) === String(ipd.otCaseId)) return true;
+        return admittedMs > 0 && printedMs >= admittedMs;
+      });
+      evidenceAt = String(match?.printedAt || '');
+    }
+    if (!evidenceAt) return;
+    const atIso = Number.isNaN(Date.parse(evidenceAt)) ? new Date().toISOString() : new Date(evidenceAt).toISOString();
+    const by = 'Discharge card print reconciliation';
+    ipd.status = 'discharged';
+    ipd.dischargedAt = atIso;
+    ipd.dischargedBy = ipd.dischargedBy || by;
+    ipd.dischargePrintedAt = ipd.dischargePrintedAt || atIso;
+    rootPatch['ipdPatients/' + ipd.id + '/status'] = 'discharged';
+    rootPatch['ipdPatients/' + ipd.id + '/dischargedAt'] = atIso;
+    rootPatch['ipdPatients/' + ipd.id + '/dischargedBy'] = ipd.dischargedBy;
+    rootPatch['ipdPatients/' + ipd.id + '/dischargePrintedAt'] = ipd.dischargePrintedAt;
+    const patient = PATIENTS.find(function (row) { return String(row?.bmhId || '') === String(ipd.bmhId || ''); });
+    if (patient) {
+      patient.ipdAdmitted = false;
+      patient.ipdDischargedAt = atIso;
+      patient.ipdDischargedBy = by;
+      if (String(patient.status || '').toLowerCase() === 'ipd') {
+        patient.status = 'seen';
+        rootPatch['patients/' + ipd.bmhId + '/status'] = 'seen';
+      }
+    }
+    if (ipd.bmhId) {
+      rootPatch['patients/' + ipd.bmhId + '/ipdAdmitted'] = false;
+      rootPatch['patients/' + ipd.bmhId + '/ipdDischargedAt'] = atIso;
+      rootPatch['patients/' + ipd.bmhId + '/ipdDischargedBy'] = by;
+    }
+    if (otCase) {
+      otCase.ipdStatus = 'discharged';
+      otCase.ipdDischargedAt = atIso;
+      otCase.ipdDischargedBy = by;
+      otCase.dischargePrintedAt = otCase.dischargePrintedAt || atIso;
+      otCase.admitToIpd = false;
+      rootPatch['otCases/' + otCase.id + '/ipdStatus'] = 'discharged';
+      rootPatch['otCases/' + otCase.id + '/ipdDischargedAt'] = atIso;
+      rootPatch['otCases/' + otCase.id + '/ipdDischargedBy'] = by;
+      rootPatch['otCases/' + otCase.id + '/dischargePrintedAt'] = otCase.dischargePrintedAt;
+      rootPatch['otCases/' + otCase.id + '/admitToIpd'] = false;
+    }
+    changed += 1;
+  });
+  if (changed && opts.persist !== false && window.FBDB) {
+    window.FBDB.ref().update(rootPatch).catch(function (e) { console.warn('IPD discharge reconciliation save failed:', e); });
+  }
+  if (changed) {
+    saveOTCasesToLocalStorage && saveOTCasesToLocalStorage();
+    if (opts.render !== false) {
+      renderIPD && renderIPD();
+      renderDocQueue && renderDocQueue();
+    }
+  }
+  return changed;
+}
+function schedulePrintedDischargeIpdReconciliation() {
+  if (!window.FBDB || window._bmhPrintedDischargeReconcilePromise) return;
+  if (Date.now() - Number(window._bmhPrintedDischargeReconciledAt || 0) < 300000) return;
+  bmhDeferNonCriticalWork(function () {
+    window._bmhPrintedDischargeReconcilePromise = window.FBDB.ref('dischargeCards').once('value').then(function (snap) {
+      return reconcilePrintedDischargesInIpd(snap?.val?.() || {}, { persist: true, render: true });
+    }).catch(function (e) {
+      console.warn('Printed discharge reconciliation unavailable:', e);
+      return 0;
+    }).finally(function () {
+      window._bmhPrintedDischargeReconciledAt = Date.now();
+      window._bmhPrintedDischargeReconcilePromise = null;
+    });
+  }, 250);
 }
 function dischargeIPDPatientById(id, opts) {
   opts = opts || {};
@@ -42782,8 +42895,11 @@ function loadIPDPatientsFromFirebase(opts) {
       if(idx >= 0) arr[idx] = Object.assign({}, arr[idx], p);
       else arr.push(p);
     });
+    const shouldReconcilePrintedDischarges = getActivePageId?.() === 'pg-ipd';
+    if (shouldReconcilePrintedDischarges) reconcilePrintedDischargesInIpd(readDischargeCardsCache(), { persist: true, render: false });
     renderIPD && renderIPD();
     renderDocQueue && renderDocQueue();
+    if (shouldReconcilePrintedDischarges) schedulePrintedDischargeIpdReconciliation();
     window._bmhIpdPatientsLoadedAt = Date.now();
     return arr;
   }).catch(e => {
@@ -43246,6 +43362,7 @@ function normalizeDischargeCardRecord(record) {
     printedAt: String(record.printedAt || ''),
     source: String(record.source || 'discharge-module'),
     otCaseId: String(record.otCaseId || ''),
+    ipdAdmissionId: String(record.ipdAdmissionId || ''),
     summaryLabel: String(record.summaryLabel || ''),
     snapshot: {
       surgeon: String(snapshot.surgeon || ''),
@@ -43662,6 +43779,7 @@ function collectDischargeCardRecordFromDom(opts) {
     printedAt: opts.markPrinted ? nowIso : (existing?.printedAt || ''),
     source: data.lastOtCase?.id ? 'ot-linked' : 'discharge-module',
     otCaseId: data.lastOtCase?.id || existing?.otCaseId || '',
+    ipdAdmissionId: data.ipdStay?.id || existing?.ipdAdmissionId || '',
     summaryLabel: document.getElementById('dc-procedure')?.textContent?.trim() || data.procedureName || '',
     snapshot: Object.assign({}, snap, {
       surgeon: document.getElementById('dc-surgeon')?.textContent?.trim() || '',
