@@ -11576,15 +11576,22 @@ function transactionHasChargeCategory(txn, category) {
   if (!txn || !want) return false;
   return getTransactionPrimaryChargeCategory(txn) === want;
 }
-function addBmhPatientCharge(bmhId, row) {
+function addBmhPatientCharge(bmhId, row, opts) {
   if (!bmhId) return;
   if (!window.BMH_PATIENT_CHARGES[bmhId]) window.BMH_PATIENT_CHARGES[bmhId] = [];
   if (!row.amount && row.rate != null) row.amount = (Number(row.qty) || 1) * (Number(row.rate) || 0);
   row.paidAmount = Math.max(0, Number(row.paidAmount) || 0);
   window.BMH_PATIENT_CHARGES[bmhId].push(row);
   bmhEnsureEEGConcessionLine(bmhId, row);
-  saveBmhFinancials();
-  bmhSyncPatientRunningBalance(bmhId);
+  if (opts?.deferPersistence) {
+    bmhDeferNonCriticalWork(function () {
+      saveBmhFinancials();
+      bmhSyncPatientRunningBalance(bmhId);
+    }, 80);
+  } else {
+    saveBmhFinancials();
+    bmhSyncPatientRunningBalance(bmhId);
+  }
 }
 function buildPaidReceptionChargeRow(txnId, desc, fee, category, dept) {
   const amount = Math.max(0, Number(fee) || 0);
@@ -27288,13 +27295,14 @@ async function registerPatient() {
     dueReceivedNow = confirm(`${name} has a pending due of ₹${previousDue.toLocaleString('en-IN')}.\n\nDue received now?`);
   }
 
+  window._bmhReceptionFastRegistrationUntil = Date.now() + 3000;
   const consultationAlreadyRecordedToday = isExistingRegistration && patientHasTodayReceptionConsultationForDept(uid, dept, queueDateToday);
   if(consultationAlreadyRecordedToday) {
-    patient.balance = bmhSyncPatientRunningBalance(uid);
+    bmhDeferNonCriticalWork(function () { bmhSyncPatientRunningBalance(uid); }, 80);
     showToast(`✅ ${name} returned to the queue — today's consultation payment was already recorded`, 's');
   } else if(noFee) {
     const txnId = 'TXN'+Date.now();
-    addBmhPatientCharge(uid, { id: 'chg-' + txnId, cat: 'consultation', desc: consultationDesc, qty: 1, rate: 0, amount: 0, source: 'reception', dept: dept, ref: txnId, ts: new Date().toISOString(), noFee: true });
+    addBmhPatientCharge(uid, { id: 'chg-' + txnId, cat: 'consultation', desc: consultationDesc, qty: 1, rate: 0, amount: 0, source: 'reception', dept: dept, ref: txnId, ts: new Date().toISOString(), noFee: true }, { deferPersistence: true });
     const txn = {
       id:txnId, patient:name, bmhId:uid, service: consultationDesc, amount:0,
       mode:isInsurance ? payMode : 'No Fee', collected:true, dept,
@@ -27310,7 +27318,6 @@ async function registerPatient() {
     };
     TRANSACTIONS.push(txn);
     saveTransactionToFirebase&&saveTransactionToFirebase(txn);
-    patient.balance = bmhSyncPatientRunningBalance(uid);
     fbUpdate&&fbUpdate('patients/'+uid,{balance:patient.balance});
     showToast(`✅ No fee consultation registered for ${name}`,'s');
   } else if(isInsurance) {
@@ -27319,14 +27326,14 @@ async function registerPatient() {
     const claim = {id:claimId, patient:name, bmhId:uid, for:consultationDesc, amount:claimAmount, approvedAmount:claimAmount, claimedAmount:claimAmount, status:'pending', mode:payMode, ins:insName||payMode, policy:policyNo, dept, centre, date:new Date().toISOString(), from:'Reception'};
     PAY_REQUESTS.push(claim);
     fbSet&&fbSet('payRequests/'+claimId, claim);
-    addBmhPatientCharge(uid, { id: 'chg-' + claimId, cat: 'consultation', desc: consultationDesc, qty: 1, rate: fee, amount: fee, source: 'reception', dept: dept, ref: claimId, ts: claim.date });
+    addBmhPatientCharge(uid, { id: 'chg-' + claimId, cat: 'consultation', desc: consultationDesc, qty: 1, rate: fee, amount: fee, source: 'reception', dept: dept, ref: claimId, ts: claim.date }, { deferPersistence: true });
     patient.ins = insName||payMode;
     patient.policy = policyNo || patient.policy || '';
     patient.claimedAmount = claimAmount;
     patient.balance = Math.max(Number(patient.balance || 0), Number(fee || 0));
     showToast(`🏦 TPA/Insurance patient — claim pending ₹${fee.toLocaleString('en-IN')}`,'i');
   } else if(isCreditDue) {
-    addBmhPatientCharge(uid, { id: 'chg-credit-' + Date.now(), cat: 'consultation', desc: consultationDesc, qty: 1, rate: fee, amount: fee, source: 'reception', dept: dept, ts: new Date().toISOString() });
+    addBmhPatientCharge(uid, { id: 'chg-credit-' + Date.now(), cat: 'consultation', desc: consultationDesc, qty: 1, rate: fee, amount: fee, source: 'reception', dept: dept, ts: new Date().toISOString() }, { deferPersistence: true });
     patient.balance = (patient.balance||0) + fee;
     showToast(`📋 ₹${fee} noted as credit/due for ${name}`,'i');
   } else if(fee > 0) {
@@ -27342,10 +27349,9 @@ async function registerPatient() {
       consultationFeeLabel: feeChoice?.label || '',
       billCats: ['consultation']
     };
-    addBmhPatientCharge(uid, buildPaidReceptionChargeRow(txnId, consultationDesc, fee, 'consultation', dept));
+    addBmhPatientCharge(uid, buildPaidReceptionChargeRow(txnId, consultationDesc, fee, 'consultation', dept), { deferPersistence: true });
     TRANSACTIONS.push(txn);
     saveTransactionToFirebase&&saveTransactionToFirebase(txn);
-    patient.balance = bmhSyncPatientRunningBalance(uid);
     fbUpdate&&fbUpdate('patients/'+uid,{balance:patient.balance});
   }
 
@@ -27408,17 +27414,22 @@ async function registerPatient() {
     }).catch(() => {});
   }
 
-  const todayPts = getTodayQueueBasePatients ? getTodayQueueBasePatients() : PATIENTS.filter(p=> patientQueueDateMatchesToday(p));
-  const token = todayPts.length;
+  const token = new Set((PATIENTS || []).filter(function (p) {
+    if (!p || !p.bmhId || p.queueRemoved || !centreMatch(p)) return false;
+    return patientHasTodayExplicitQueueStamp(p, queueDateToday)
+      || localDateKey(p.queueDate || p.visitDate || p.checkinAt || p.createdAt) === queueDateToday;
+  }).map(function (p) { return String(p.bmhId); })).size;
 
   showToast(`✅ ${name} registered — Token #${token}`, 's');
   setTimeout(function () {
     sendPatientRegistrationWhatsApp(patient, { silent: true, auto: true });
   }, 0);
   if (isExistingRegistration || prevVisits > 0) {
-    repairDuplicatePatientsForIdentity({ name, mob, mob2 }).catch(function (e) {
-      console.warn('duplicate patient merge after registration failed', e);
-    });
+    bmhDeferNonCriticalWork(function () {
+      repairDuplicatePatientsForIdentity({ name, mob, mob2 }).catch(function (e) {
+        console.warn('duplicate patient merge after registration failed', e);
+      });
+    }, 500);
   }
 
   maybeScheduleSameDaySurgeryOTFromRegistration(patient);
@@ -27445,11 +27456,14 @@ async function registerPatient() {
   }
 
   resetRegistrationForm();
-  renderDocQueue && renderDocQueue();
-  renderDashboard && renderDashboard();
-  renderReceptionPage && renderReceptionPage();
-  renderInsuranceTab && renderInsuranceTab();
-  renderTpaPage && renderTpaPage();
+  renderReceptionPage && renderReceptionPage({ queueOnly: true });
+  bmhScheduleReceptionPostRegistrationRefresh && bmhScheduleReceptionPostRegistrationRefresh();
+  bmhDeferNonCriticalWork(function () {
+    renderDocQueue && renderDocQueue();
+    renderDashboard && renderDashboard();
+    renderInsuranceTab && renderInsuranceTab();
+    renderTpaPage && renderTpaPage();
+  }, 500);
 }
 window.registerPatient = registerPatient;
 
@@ -41214,6 +41228,21 @@ function bmhDeferNonCriticalWork(fn, delayMs) {
     setTimeout(run, delay || 0);
   }
 }
+function bmhFastReceptionRegistrationActive() {
+  return Date.now() < Number(window._bmhReceptionFastRegistrationUntil || 0);
+}
+function bmhScheduleReceptionPostRegistrationRefresh() {
+  if (!bmhFastReceptionRegistrationActive()) return false;
+  if (window._bmhReceptionPostRegistrationRefreshTimer) clearTimeout(window._bmhReceptionPostRegistrationRefreshTimer);
+  window._bmhReceptionPostRegistrationRefreshTimer = setTimeout(function () {
+    window._bmhReceptionPostRegistrationRefreshTimer = null;
+    bmhDeferNonCriticalWork(function () {
+      hydratePatientsFromTodayFinancialQueueEvidence && hydratePatientsFromTodayFinancialQueueEvidence({ render: false });
+      renderReceptionPage && renderReceptionPage({ queueOnly: false });
+    }, 0);
+  }, 450);
+  return true;
+}
 function shouldUseScopedPatientBootstrap() {
   if (!CURRENT_USER) return false;
   const roleScopedDoctor = bmhRoleScopedStartupEnabled() && isDoctorQueueProfile(CURRENT_USER);
@@ -42040,6 +42069,7 @@ function listenPayRequests(opts) {
     if(nb) nb.textContent = PAY_REQUESTS.filter(function (r) {
       return r.status === 'pending' && isTodayReceptionPayRequest(r, { centre: centre });
     }).length;
+    if (bmhScheduleReceptionPostRegistrationRefresh && bmhScheduleReceptionPostRegistrationRefresh()) return;
     hydratePatientsFromTodayFinancialQueueEvidence && hydratePatientsFromTodayFinancialQueueEvidence({ render: true });
     const activeId = getActivePageId();
     if (activeId === 'pg-reception') renderReceptionPage && renderReceptionPage();
@@ -42136,6 +42166,7 @@ function applyRealtimeTransactionRecord(txn, key) {
   if (isNewFromRemote && next.bmhId && typeof bmhSyncPatientAdvanceBalance === 'function') {
     bmhSyncPatientAdvanceBalance(next.bmhId, { localOnly: true });
   }
+  if (bmhScheduleReceptionPostRegistrationRefresh && bmhScheduleReceptionPostRegistrationRefresh()) return;
   renderCollectionDashboard && renderCollectionDashboard();
   hydratePatientsFromTodayFinancialQueueEvidence && hydratePatientsFromTodayFinancialQueueEvidence({ render: true });
   if (getActivePageId && getActivePageId() === 'pg-reception') renderReceptionPage && renderReceptionPage();
@@ -48880,8 +48911,11 @@ function computeReceptionQueuePts(basePtsOverride) {
 }
 // ── renderReceptionPage — live computed ──────────
 let _renderReceptionPageTimer;
+let _renderReceptionPagePendingOptions = {};
 function renderReceptionPage(opts) {
   opts = opts || {};
+  if (bmhFastReceptionRegistrationActive() && opts.queueOnly !== false) opts.queueOnly = true;
+  _renderReceptionPagePendingOptions = Object.assign({}, _renderReceptionPagePendingOptions, opts);
   if (window._bmhPatientsHydrating) {
     window._renderReceptionAfterHydration = true;
     return;
@@ -48892,9 +48926,11 @@ function renderReceptionPage(opts) {
       window._renderReceptionPageQueued = true;
       return;
     }
+    const renderOptions = _renderReceptionPagePendingOptions;
+    _renderReceptionPagePendingOptions = {};
     window._renderReceptionPageBusy = true;
     try {
-      _renderReceptionPageImpl();
+      _renderReceptionPageImpl(renderOptions);
     } finally {
       window._renderReceptionPageBusy = false;
       if (window._renderReceptionPageQueued) {
@@ -48904,7 +48940,8 @@ function renderReceptionPage(opts) {
     }
   }, bmhResponsiveUiPatchesEnabled() && opts.immediate ? 0 : 60);
 }
-function _renderReceptionPageImpl() {
+function _renderReceptionPageImpl(opts) {
+  opts = opts || {};
   ensureDailyReceptionReset && ensureDailyReceptionReset();
   syncReceptionConsultationFee && syncReceptionConsultationFee();
 
@@ -48937,6 +48974,8 @@ function _renderReceptionPageImpl() {
       }
     }
   }
+
+  if (opts.queueOnly) return;
 
   const prEl = document.getElementById('rc-pay-list');
   const visiblePayRequests = PAY_REQUESTS.filter(function (r) {

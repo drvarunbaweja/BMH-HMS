@@ -871,9 +871,14 @@ if (document.readyState === 'loading') {
   loadSavedLogin()
 }
 
-// Legacy hooks — registration saves to RTDB + must mirror to Firestore for live PATIENTS[]
-window.upsertPatientFirestore = upsertPatientFirestore
-window.patchPatientFirestore = (bmhId, data) => updatePatient(bmhId, data)
+// RTDB drives the live HMS. Keep the dormant Firestore mirror fully off with its listeners.
+window.BMH_USE_FIRESTORE_PATIENT_SYNC = USE_FIRESTORE_REALTIME_AFTER_LOGIN
+window.upsertPatientFirestore = USE_FIRESTORE_REALTIME_AFTER_LOGIN
+  ? upsertPatientFirestore
+  : () => Promise.resolve()
+window.patchPatientFirestore = USE_FIRESTORE_REALTIME_AFTER_LOGIN
+  ? (bmhId, data) => updatePatient(bmhId, data)
+  : () => Promise.resolve()
 
 // Bills module — exposed globally so legacy.js billing functions can call them
 window.bmhSaveBillToCloud        = saveBill
