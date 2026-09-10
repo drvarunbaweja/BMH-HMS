@@ -26890,8 +26890,10 @@ async function registerPatient() {
   });
   normalizePatientRecord(patient);
 
-  const exists = PATIENTS.findIndex(p=>p.bmhId===uid);
-  if(exists >= 0) PATIENTS[exists] = patient; else PATIENTS.push(patient);
+  // Keep the live queue and the full patient cache on the same object. A later
+  // cache rebuild must not restore the pre-registration copy and hide this row.
+  upsertHydratedQueuePatient(patient);
+  rememberPendingLocalPatientQueueWrite(patient);
   if (isExistingRegistration && previousDeptSnapshot?.wasToday && previousDeptSnapshot.dept && previousDeptSnapshot.dept !== normalizeDeptKeyForQueue(dept)) {
     bmhRememberSameDayDeptQueueEntry(uid, previousDeptSnapshot);
     const refreshed = PATIENTS.find(function (p) { return p.bmhId === uid; });
@@ -37590,6 +37592,7 @@ function findLoadedPatientByBmhId(id) {
 }
 function upsertHydratedQueuePatient(row) {
   if (!row || !row.bmhId) return;
+  if (!Array.isArray(window._BMH_ALL_PATIENTS_CACHE)) window._BMH_ALL_PATIENTS_CACHE = [];
   const upsert = function (list) {
     if (!Array.isArray(list)) return;
     const idx = list.findIndex(function (p) { return p && String(p.bmhId || '') === String(row.bmhId || ''); });
@@ -37601,6 +37604,32 @@ function upsertHydratedQueuePatient(row) {
   rebuildPatientCacheIndex && rebuildPatientCacheIndex(window._BMH_ALL_PATIENTS_CACHE || []);
   buildReceptionPatientLookupIndex && buildReceptionPatientLookupIndex();
   updatePatientCountStatus && updatePatientCountStatus();
+}
+function rememberPendingLocalPatientQueueWrite(row) {
+  if (!row || !row.bmhId) return;
+  window._bmhPendingLocalPatientQueueWrites = window._bmhPendingLocalPatientQueueWrites || {};
+  window._bmhPendingLocalPatientQueueWrites[String(row.bmhId)] = { row: row, at: Date.now() };
+}
+function overlayPendingLocalPatientQueueWrites(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  const pending = window._bmhPendingLocalPatientQueueWrites || {};
+  const now = Date.now();
+  Object.keys(pending).forEach(function (id) {
+    const entry = pending[id];
+    if (!entry?.row || now - Number(entry.at || 0) > 10 * 60 * 1000) {
+      delete pending[id];
+      return;
+    }
+    const idx = list.findIndex(function (p) { return p && String(p.bmhId || '') === id; });
+    const remote = idx >= 0 ? list[idx] : null;
+    const localStamp = Date.parse(entry.row.updatedAt || entry.row.lastUpdated || '') || Number(entry.at || 0);
+    const remoteStamp = Date.parse(remote?.updatedAt || remote?.lastUpdated || '') || 0;
+    if (!remote || localStamp >= remoteStamp) {
+      if (idx >= 0) list[idx] = entry.row;
+      else list.push(entry.row);
+    }
+  });
+  return list;
 }
 function hydratePatientsFromTodayFinancialQueueEvidence(opts) {
   opts = opts || {};
@@ -40865,6 +40894,7 @@ function applyPatientsPayload(data, opts) {
   }
   window._bmhPatientsHydrating = true;
   const finish = function () {
+    overlayPendingLocalPatientQueueWrites(normalized);
     window._BMH_ALL_PATIENTS_CACHE = normalized;
     rebuildPatientCacheIndex(normalized);
     window._bmhPatientsCacheVersion = (window._bmhPatientsCacheVersion || 0) + 1;
@@ -41031,6 +41061,12 @@ function applyRealtimePatientRecord(record, key) {
   if (!record || typeof record !== 'object') return;
   const row = normalizePatientRecord(Object.assign({}, record, { bmhId: record.bmhId || key }));
   if (!row.bmhId) return;
+  const pending = window._bmhPendingLocalPatientQueueWrites?.[String(row.bmhId)];
+  if (pending) {
+    const remoteStamp = Date.parse(row.updatedAt || row.lastUpdated || '') || 0;
+    const localStamp = Date.parse(pending.row?.updatedAt || pending.row?.lastUpdated || '') || Number(pending.at || 0);
+    if (remoteStamp >= localStamp) delete window._bmhPendingLocalPatientQueueWrites[String(row.bmhId)];
+  }
   if (!isRealtimePatientRecordRelevant(row)) {
     removeRealtimePatientRecord(row.bmhId);
     return;
