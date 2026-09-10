@@ -850,6 +850,7 @@ import { initializeInventoryFirebaseSync, syncInventoryWithFirebase } from './in
 
 const SAVED_LOGIN_KEY = 'bmh_saved_login_v1'
 const USE_FIRESTORE_REALTIME_AFTER_LOGIN = false
+const USE_FIRESTORE_BILLS_REALTIME_AFTER_LOGIN = false
 
 function loadSavedLogin() {
   try {
@@ -873,6 +874,7 @@ if (document.readyState === 'loading') {
 
 // RTDB drives the live HMS. Keep the dormant Firestore mirror fully off with its listeners.
 window.BMH_USE_FIRESTORE_PATIENT_SYNC = USE_FIRESTORE_REALTIME_AFTER_LOGIN
+window.BMH_USE_FIRESTORE_BILLS_REALTIME = USE_FIRESTORE_BILLS_REALTIME_AFTER_LOGIN
 window.upsertPatientFirestore = USE_FIRESTORE_REALTIME_AFTER_LOGIN
   ? upsertPatientFirestore
   : () => Promise.resolve()
@@ -904,6 +906,7 @@ const listeners = []
 let billsListenerStarted = false
 
 window.ensureBillsFirestoreListener = function (centre) {
+  if (!USE_FIRESTORE_BILLS_REALTIME_AFTER_LOGIN || !auth.currentUser) return
   if (billsListenerStarted) return
   try {
     listeners.push(watchBills(centre || window.CURRENT_USER?.centre || 'CHD'))
