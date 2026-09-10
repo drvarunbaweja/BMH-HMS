@@ -5237,6 +5237,7 @@ function markPaid(id) {
   const pr = PAY_REQUESTS.find(x=>x.id===id); if (!pr) return;
   pr.status = 'paid';
   pr.updatedAt = new Date().toISOString();
+  bmhMarkReceptionFinancialDataDirty && bmhMarkReceptionFinancialDataDirty('payment-collected');
   // Record as collected transaction
   const txnId = 'TXN'+Date.now();
   const txn = {
@@ -5337,6 +5338,7 @@ function sendCharge() {
   const _prId2 = 'PR'+Date.now();
   const _pr2 = {id:_prId2,patient:_pt2?.name||pt,bmhId:pt,for:serviceName,amount:amt,status:'pending',from:document.getElementById('sbnm').textContent,dept:chargeDept,centre:_pt2?.centre||CURRENT_USER?.centre||'CHD',date:new Date().toISOString()};
   PAY_REQUESTS.push(_pr2);
+  bmhMarkReceptionFinancialDataDirty && bmhMarkReceptionFinancialDataDirty('charge-request');
   syncPayRequestToPatientCharges(_pr2);
   fbSet&&fbSet('payRequests/'+_prId2,_pr2);
   if (_pt2) bmhSyncPatientRunningBalance(pt);
@@ -5362,6 +5364,7 @@ function sendQuickCharge(name, amount, bmhIdOverride) {
   const prId = 'PR'+Date.now()+Math.floor(Math.random()*1000);
   const pr = {id:prId, patient:ptName, bmhId:ptId, for:name, amount:amtNum, status:'pending', from:CURRENT_USER?.name||'Doctor', dept, centre, date:new Date().toISOString()};
   PAY_REQUESTS.push(pr);
+  bmhMarkReceptionFinancialDataDirty && bmhMarkReceptionFinancialDataDirty('charge-request');
   syncPayRequestToPatientCharges(pr);
   fbSet&&fbSet('payRequests/'+prId, pr);
   if (pt) bmhSyncPatientRunningBalance(ptId);
@@ -13168,6 +13171,18 @@ function bmhIsRealSameDayConsultationCollection(txn, patient, dateKey, fee) {
 }
 function bmhGetCollectionTransactionsForDate(centreOrCentres, dateKey) {
   const centres = Array.isArray(centreOrCentres) ? centreOrCentres : [centreOrCentres || getEffectiveCentre()];
+  const cacheKey = [
+    centres.map(function (c) { return String(c || '').toUpperCase(); }).sort().join(','),
+    dateKey,
+    Number(window._bmhReceptionFinancialDataVersion || 0),
+    Number(window._bmhPatientsCacheVersion || 0),
+    (TRANSACTIONS || []).length,
+    (PAY_REQUESTS || []).length,
+    (window.BMH_SAVED_BILLS || []).length,
+    (window.BILLS || []).length
+  ].join('|');
+  const cached = window._bmhCollectionTransactionsForDateCache;
+  if (cached && cached.key === cacheKey && Date.now() - Number(cached.at || 0) < 1500) return cached.rows.slice();
   const showAllCentres = centres.some(function (c) {
     const raw = String(c || '').trim().toLowerCase();
     return !raw || raw === 'both' || raw === 'all';
@@ -13182,13 +13197,25 @@ function bmhGetCollectionTransactionsForDate(centreOrCentres, dateKey) {
   const rows = (TRANSACTIONS || []).filter(function (t) {
     return centreAllowed(t) && txnIsoDate(t) === dateKey && isCollectionDashboardTxn(t);
   });
-  (PATIENTS || []).forEach(function (p) {
+  let collectionPatients = PATIENTS || [];
+  if (dateKey === localDateKey(new Date()) && window._bmhTodayQueuePatientIdsReady && window._bmhTodayQueuePatientIds instanceof Set) {
+    const allCache = Array.isArray(window._BMH_ALL_PATIENTS_CACHE) ? window._BMH_ALL_PATIENTS_CACHE : [];
+    const allIndex = window._BMH_ALL_PATIENTS_INDEX_BY_ID instanceof Map && window._BMH_ALL_PATIENTS_INDEX_SOURCE === allCache
+      ? window._BMH_ALL_PATIENTS_INDEX_BY_ID
+      : rebuildPatientCacheIndex(allCache);
+    const visibleById = new Map((PATIENTS || []).filter(Boolean).map(function (p) { return [String(p.bmhId || ''), p]; }));
+    collectionPatients = Array.from(window._bmhTodayQueuePatientIds).map(function (id) {
+      const idx = allIndex.get(String(id));
+      return idx != null ? allCache[idx] : visibleById.get(String(id));
+    }).filter(Boolean);
+  }
+  collectionPatients.forEach(function (p) {
     if (!p || !p.bmhId || !centreAllowed(p)) return;
-    if (patientShouldWaitForLinkedOtQueueCheck(p, dateKey)) return;
-    if (patientHasNonTodayLinkedOtCase(p, dateKey) && !patientQueueSourceAllowsFreshVisit(p)) return;
     const visitDateRaw = bmhPatientCollectionVisitDateRaw(p);
     const visitDate = localDateKey(visitDateRaw);
     if (visitDate !== dateKey) return;
+    if (patientShouldWaitForLinkedOtQueueCheck(p, dateKey)) return;
+    if (patientHasNonTodayLinkedOtCase(p, dateKey) && !patientQueueSourceAllowsFreshVisit(p)) return;
     if (p.preRegistered && !patientHasTodayPaidQueueEvidence(p.bmhId, dateKey)) return;
     if (!isConsultationPurposeText([p.purpose, p.consultationFeeLabel].filter(Boolean).join(' '))) return;
     const fee = resolveConsultationChargeAmountForVisit(p);
@@ -13241,7 +13268,9 @@ function bmhGetCollectionTransactionsForDate(centreOrCentres, dateKey) {
     const synthetic = bmhPayRequestToSyntheticCollectionTxn(pr);
     if (synthetic) rows.push(synthetic);
   });
-  return bmhDedupeCollectionTransactions(rows);
+  const result = bmhDedupeCollectionTransactions(rows);
+  window._bmhCollectionTransactionsForDateCache = { key: cacheKey, at: Date.now(), rows: result };
+  return result.slice();
 }
 function bmhGetCollectionTransactionsForRange(centreOrCentres, fromKey, toKey) {
   const start = localDateKey(fromKey || todayKey());
@@ -26828,6 +26857,10 @@ function isTodayReceptionPayRequest(pr, opts) {
   if (patient.queueRemoved || String(patient.status || '').toLowerCase() === 'removed') return false;
   return patientQueueDateMatchesToday(patient);
 }
+function getReceptionPayRequestDeptKey(pr) {
+  const patient = findPatientForPayRequest(pr);
+  return normalizeDeptKeyForQueue(pr?.dept || pr?.department || patient?.dept || patient?.department || '') || 'ophtho';
+}
 function patientHasTodayReceptionConsultationForDept(bmhId, dept, dateKey) {
   const ids = getBmhIdLookupCandidates(bmhId);
   const day = dateKey || localDateKey(new Date());
@@ -27999,7 +28032,7 @@ function renderDeptSummary() {
   }
   el.innerHTML = (selectedDept ? '<div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button type="button" class="btn btn-xs btn-outline" onclick="window._rcDeptSummaryFilterDept=\\\'\\\';window._rcDeptSummaryPendingOnly=false;renderDeptSummary()">Show all departments</button></div>' : '') + depts.map(d=>{
     if (selectedDept && d.k !== selectedDept) return '';
-    let dPRs = todayPRs.filter(r=>r.dept===d.k);
+    let dPRs = todayPRs.filter(function (r) { return getReceptionPayRequestDeptKey(r) === d.k; });
     if (onlyPending) dPRs = dPRs.filter(function (r) { return r.status === 'pending'; });
     if(!dPRs.length) return '';
     const pending = dPRs.filter(r=>r.status==='pending');
@@ -41015,6 +41048,7 @@ function bmhMarkReceptionFinancialDataDirty(reason) {
   window._bmhReceptionFinancialDataDirty = true;
   window._bmhFinancialQueueEvidenceDirty = true;
   window._bmhTodayQueueEvidenceCache = null;
+  window._bmhCollectionTransactionsForDateCache = null;
   window._bmhReceptionFinancialDataReason = reason || '';
 }
 function bmhReceptionFinancialDataVersionKey() {
@@ -42358,6 +42392,7 @@ function listenPayRequests(opts) {
     if (!window._bmhPendingDuesCleanupRan) {
       window._bmhPendingDuesCleanupRan = true;
       runOneTimePendingDuesCleanup && runOneTimePendingDuesCleanup();
+      repairErroneouslyCancelledTodayDues && repairErroneouslyCancelledTodayDues();
     }
     bmhRunEndOfDayEegPurge && bmhRunEndOfDayEegPurge();
     // Update badge
@@ -42376,24 +42411,34 @@ function listenPayRequests(opts) {
 }
 function runOneTimePendingDuesCleanup() {
   const cleanupKey = 'bmh_pending_dues_cleanup_20260409';
-  try {
-    if (localStorage.getItem(cleanupKey) === 'done') return;
-  } catch (e) {}
-  const pending = (PAY_REQUESTS || []).filter(function (r) {
-    return r && r.status === 'pending' && !isInsuranceLikeMode(r.mode || r.ins || '');
-  });
-  if (!pending.length) {
-    try { localStorage.setItem(cleanupKey, 'done'); } catch (e) {}
-    return;
-  }
-  pending.forEach(function (pr) {
-    pr.status = 'cancelled';
-    pr.cancelledAt = new Date().toISOString();
-    pr.cancelledBy = CURRENT_USER?.name || 'System cleanup';
-    try { if (window.firebase && firebase.database) firebase.database().ref('payRequests/' + pr.id).update({ status:'cancelled', cancelledAt: pr.cancelledAt, cancelledBy: pr.cancelledBy }); } catch (e) {}
-  });
   try { localStorage.setItem(cleanupKey, 'done'); } catch (e) {}
-  showToast('Pending dues cleaned up ✓', 's');
+}
+function repairErroneouslyCancelledTodayDues() {
+  if (!window.FBDB) return;
+  const day = localDateKey(new Date());
+  if (window._bmhPendingDuesRepairDay === day) return;
+  window._bmhPendingDuesRepairDay = day;
+  bmhDeferNonCriticalWork(function () {
+    window.FBDB.ref('payRequests').once('value').then(function (snap) {
+      const patch = {};
+      let restored = 0;
+      Object.keys(snap?.val?.() || {}).forEach(function (key) {
+        const row = snap.val()[key] || {};
+        const status = String(row.status || '').toLowerCase();
+        if (status !== 'cancelled' && status !== 'canceled') return;
+        if (!row.cancelledAt || row.clearedAt || row.cancelReason) return;
+        if (localDateKey(row.date || row.createdAt || row.cancelledAt) !== day) return;
+        patch[key + '/status'] = 'pending';
+        patch[key + '/cancelledAt'] = null;
+        patch[key + '/cancelledBy'] = null;
+        restored += 1;
+      });
+      if (!restored) return;
+      return window.FBDB.ref('payRequests').update(patch).then(function () {
+        showToast(restored + (restored === 1 ? ' pending due restored' : ' pending dues restored') + ' ✓', 's');
+      });
+    }).catch(function (e) { console.warn('Pending dues repair unavailable:', e); });
+  }, 250);
 }
 
 // ── APPOINTMENTS ─────────────────────────────────────────────
@@ -49358,7 +49403,7 @@ function renderRcDeptDues() {
   const hasDues = pending.length > 0;
   if(!hasDues) { el.innerHTML='<div style="font-size:11px;color:var(--g1);padding:8px;text-align:center">No pending dues</div>'; return; }
   el.innerHTML = depts.map(d=>{
-    const dPend = pending.filter(r=>r.dept===d.k);
+    const dPend = pending.filter(function (r) { return getReceptionPayRequestDeptKey(r) === d.k; });
     if(!dPend.length) return '';
     const amt = dPend.reduce((s,r)=>s+r.amount,0);
     return `<div onclick="(function(){window._rcDeptSummaryFilterDept='${d.k}';window._rcDeptSummaryPendingOnly=true;const t=Array.from(document.querySelectorAll('#pg-reception .ptab')).find(x=>x.textContent.includes('Dept Summary'));if(t){ptab(t,'rc-dept-summary');renderDeptSummary&&renderDeptSummary();}})()"
