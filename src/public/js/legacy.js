@@ -12010,7 +12010,15 @@ function _buildQueueRenderCache() {
       .reduce(function (s, t) { return s + Math.max(0, Number(t.amount) || 0); }, 0);
     if (received > 0 || adjusted > 0) advanceByBmhId.set(bmhId, Math.max(0, received - adjusted));
   });
-  _bmhQueueRenderCache = { payByBmhId, txnByBmhId, advanceByBmhId };
+  const chargeDueByBmhId = new Map();
+  Object.keys(window.BMH_PATIENT_CHARGES || {}).forEach(function (bmhId) {
+    const due = ((window.BMH_PATIENT_CHARGES || {})[bmhId] || []).reduce(function (sum, line) {
+      if (!line || line.isConcession) return sum;
+      return sum + bmhGetChargeLineOutstanding(line);
+    }, 0);
+    if (due > 0) chargeDueByBmhId.set(bmhId, due);
+  });
+  _bmhQueueRenderCache = { payByBmhId, txnByBmhId, advanceByBmhId, chargeDueByBmhId };
 }
 
 function getQueueDisplayDueState(bmhId) {
@@ -12020,7 +12028,9 @@ function getQueueDisplayDueState(bmhId) {
   const pendingPRs = allPay.filter(function (r) { return r.status === 'pending'; });
   const paidPRs   = allPay.filter(function (r) { return r.status === 'paid'; });
   const pendingAmt = pendingPRs.reduce(function (s, r) { return s + (Number(r.amount) || 0); }, 0);
-  const computedDue = typeof bmhComputeBalanceDue === 'function' ? Number(bmhComputeBalanceDue(bmhId) || 0) : 0;
+  const computedDue = _bmhQueueRenderCache
+    ? Number(_bmhQueueRenderCache.chargeDueByBmhId.get(bmhId) || 0)
+    : (typeof bmhComputeBalanceDue === 'function' ? Number(bmhComputeBalanceDue(bmhId) || 0) : 0);
   const due = pendingAmt > 0 ? Math.max(pendingAmt, computedDue) : 0;
   return { due: due, pendingPRs: pendingPRs, paidPRs: paidPRs, pendingAmt: pendingAmt };
 }
@@ -37910,6 +37920,7 @@ function upsertHydratedQueuePatient(row) {
   };
   upsert(window._BMH_ALL_PATIENTS_CACHE);
   upsert(PATIENTS);
+  window._bmhPatientsCacheVersion = (window._bmhPatientsCacheVersion || 0) + 1;
   rebuildPatientCacheIndex && rebuildPatientCacheIndex(window._BMH_ALL_PATIENTS_CACHE || []);
   buildReceptionPatientLookupIndex && buildReceptionPatientLookupIndex();
   updatePatientCountStatus && updatePatientCountStatus();
@@ -38107,8 +38118,19 @@ function mergeTodayQueueContinuityRows(rows) {
   return merged;
 }
 function getTodayQueueBasePatients() {
-  bmhMaybeHydratePatientsFromTodayFinancialQueueEvidence && bmhMaybeHydratePatientsFromTodayFinancialQueueEvidence({ render: true });
   const todayKeyLocal = localDateKey(new Date());
+  const cacheKey = [
+    todayKeyLocal,
+    getEffectiveCentre ? getEffectiveCentre() : '',
+    window._bmhPatientsCacheVersion || 0,
+    (PATIENTS || []).length,
+    (TRANSACTIONS || []).length,
+    (PAY_REQUESTS || []).length,
+    Object.keys(window.BMH_PATIENT_CHARGES || {}).length
+  ].join('|');
+  const cached = window._bmhTodayQueueRowsCache;
+  if (cached && cached.key === cacheKey && Date.now() - Number(cached.at || 0) < 400) return cached.rows.slice();
+  bmhMaybeHydratePatientsFromTodayFinancialQueueEvidence && bmhMaybeHydratePatientsFromTodayFinancialQueueEvidence({ render: true });
   const previousEvidenceSet = window._bmhTodayQueueEvidenceActiveSet;
   window._bmhTodayQueueEvidenceActiveSet = bmhGetTodayQueueEvidenceIdSet(todayKeyLocal);
   try {
@@ -38119,7 +38141,9 @@ function getTodayQueueBasePatients() {
       if (!patientQueueDateMatchesToday(p)) return false;
       return true;
     }));
-    return dedupeQueueEntriesByKey(mergeTodayQueueContinuityRows(liveRows));
+    const rows = dedupeQueueEntriesByKey(mergeTodayQueueContinuityRows(liveRows));
+    window._bmhTodayQueueRowsCache = { key: cacheKey, at: Date.now(), rows: rows };
+    return rows.slice();
   } finally {
     window._bmhTodayQueueEvidenceActiveSet = previousEvidenceSet || null;
   }
@@ -49135,7 +49159,7 @@ function buildQCard(p, sno) {
   return `<div class="q-card compact ${p.status}" onclick="${cardClick}" style="cursor:${cardCursor};padding:6px 9px;margin-bottom:4px;border-radius:8px;border:${cardBorder};background:${cardBg};display:flex;align-items:center;gap:7px;opacity:${isPreCheckin?'.75':'1'}"
     onmouseover="this.style.background='var(--g6)'" onmouseout="this.style.background='${cardBg}'">
     ${sno!==undefined?`<div style="font-size:12px;font-weight:900;color:var(--g2);width:20px;text-align:center;flex-shrink:0">${sno}</div>`:''}
-    <div style="width:30px;height:30px;border-radius:50%;background:${p.color||'#1A3C6E'};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:11px;flex-shrink:0">${p.initials||p.name[0]||'?'}</div>
+    <div style="width:30px;height:30px;border-radius:50%;background:${p.color||'#1A3C6E'};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:11px;flex-shrink:0">${p.initials||(p.name||p.patient||'?')[0]}</div>
     <div style="flex:1;min-width:0">
       <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
         <span style="font-weight:800;font-size:14px;white-space:nowrap">${p.name}</span>
@@ -49160,7 +49184,7 @@ function buildQCard(p, sno) {
         ${isPreCheckin
           ? `<button title="Check In & Collect Fee" style="background:var(--green);color:#fff;border:none;border-radius:5px;padding:2px 8px;font-size:9px;font-weight:800;cursor:pointer;line-height:1.6;animation:pulse 2s infinite" onclick="markSeen('${String(p.bmhId).replace(/'/g, "\\'")}')">✓ Check In</button>`
           : `${!isQueueRowMarkedSeen(p)?`<button title="Mark Seen" style="background:var(--green);color:#fff;border:none;border-radius:5px;padding:2px 6px;font-size:9px;font-weight:800;cursor:pointer;line-height:1.4" onclick="${p._xrefId ? `markCrossRefSeen('${String(p.bmhId).replace(/'/g, "\\'")}','${xrefIdEsc}')` : (p._deptQueueId ? `markDeptQueueSeen('${String(p.bmhId).replace(/'/g, "\\'")}','${deptQueueIdEsc}')` : `markSeen('${p.bmhId}','${String(p.dept || '').replace(/'/g, "\\'")}')`)}">✓</button>`:`<button title="Move to Active" style="background:rgba(26,60,110,.1);color:var(--bmh-blue);border:1.5px solid var(--bmh-blue);border-radius:5px;padding:2px 6px;font-size:9px;font-weight:800;cursor:pointer;line-height:1.4" onclick="${p._xrefId ? `restoreCrossRefToActive('${String(p.bmhId).replace(/'/g, "\\'")}','${xrefIdEsc}')` : (p._deptQueueId ? `restoreDeptQueueToActive('${String(p.bmhId).replace(/'/g, "\\'")}','${deptQueueIdEsc}')` : `restorePatientToActiveQueue('${p.bmhId}')`)}">↩ Active</button>`}
-        ${isOphtho&&!p.dilated&&!isQueueRowMarkedSeen(p)?`<button title="Dilate" style="background:var(--blue-lt);color:var(--blue);border:1.5px solid var(--blue);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="markDilated('${p.bmhId}','${p.name.replace(/'/g,"\\'")}')">💧</button>`:''}
+        ${isOphtho&&!p.dilated&&!isQueueRowMarkedSeen(p)?`<button title="Dilate" style="background:var(--blue-lt);color:var(--blue);border:1.5px solid var(--blue);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="markDilated('${p.bmhId}','${String(p.name||p.patient||'Patient').replace(/'/g,"\\'")}')">💧</button>`:''}
         ${isOphtho&&p.dilated&&!isQueueRowMarkedSeen(p)?`<button title="Undo dilation" style="background:#fff;color:var(--blue);border:1.5px solid var(--blue);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="unmarkDilated('${p.bmhId}')">Undo 💧</button>`:''}
         ${isOphtho&&!isQueueRowMarkedSeen(p)?`<button title="${isSurgeryToday?'Revert to Consultation':'Mark Surgery Today'}" style="background:${isSurgeryToday?'#fff':'var(--orange-lt)'};color:#8a4200;border:1.5px solid var(--orange);border-radius:5px;padding:2px 5px;font-size:9px;font-weight:800;cursor:pointer" onclick="setQueueVisitPurpose('${p.bmhId}','${isSurgeryToday?'Consultation':'Surgery Today'}')">${isSurgeryToday?'Consult':'Sx Today'}</button>`:''}
         <button title="Cross-Refer" style="background:rgba(11,123,140,.1);color:var(--teal);border:1.5px solid var(--teal);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="openXRefModal('${p.bmhId}')">↔️</button>
@@ -49286,7 +49310,7 @@ function buildQTableRow(p, sno, opts) {
   const actionCellStyle = isPreRegRow ? 'opacity:1;color:initial' : '';
   return `<tr class="${rowClass}" onclick="${onRow}" style="${rowStyle}">
     <td style="font-weight:900;color:var(--g2);font-size:12.5px">${sno}</td>
-    <td><div style="display:flex;align-items:center;gap:6px"><span style="width:28px;height:28px;border-radius:50%;background:${p.color||'#1A3C6E'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:900;font-size:10px;flex-shrink:0">${p.initials||p.name[0]||'?'}</span>
+    <td><div style="display:flex;align-items:center;gap:6px"><span style="width:28px;height:28px;border-radius:50%;background:${p.color||'#1A3C6E'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:900;font-size:10px;flex-shrink:0">${p.initials||(p.name||p.patient||'?')[0]}</span>
       <div><div style="font-weight:800;font-size:15px;line-height:1.05;display:flex;align-items:center;flex-wrap:nowrap;gap:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name || ''}${vulnBadge}${surgeryTodayBadge}${labReadyBadge}${xrefOutBadge}${xrefInBadge}${deptQueueBadge}</div>
       <div style="font-size:11px;color:var(--g1)">${p.age||'?'}Y · ${(p.sex||'?')[0]} · ${p.mob||'—'}</div>${chargeHint?`<div style="margin-top:2px">${chargeHint}</div>`:''}</div></div></td>
     <td style="font-family:var(--mono);font-size:12px;color:var(--bmh-teal);font-weight:800;white-space:nowrap">${p.bmhId}</td>
@@ -49957,8 +49981,47 @@ function renderDocQueue(opts) {
       return;
     }
     _renderDocQueueLastAt = Date.now();
-    _renderDocQueueImpl();
+    try {
+      _renderDocQueueImpl();
+    } catch (error) {
+      console.error('My Patient Queue render failed', error);
+      renderDocQueueRecovery(error);
+    }
   }, wait);
+}
+function renderDocQueueRecovery(error) {
+  const activeEl = document.getElementById('dq-active-list');
+  const doneEl = document.getElementById('dq-done-list');
+  if (!activeEl || !doneEl) return;
+  try {
+    const role = String(CURRENT_USER?.role || '').trim().toLowerCase();
+    const adminView = !!(CURRENT_USER?.isAdmin || CURRENT_USER?.canSeeAllCentres || role === 'admin');
+    const deptMap = { Ophthalmology:'ophtho', OBG:'obg', Neuropsychiatry:'psych', Psychiatry:'psych', Skin:'skin', Cosmetology:'skin', Dermatology:'skin', 'Skin & Cosmetology':'skin' };
+    const selectedDept = adminView
+      ? getSelectedQueueDeptForAdmin()
+      : normalizeDeptKeyForQueue(deptMap[CURRENT_USER?.dept] || CURRENT_USER?.dept || '');
+    const today = localDateKey(new Date());
+    const rows = getTodayQueueBasePatients().filter(function (patient) {
+      return selectedDept === 'all' || !selectedDept || normalizeDeptKeyForQueue(patient.dept || patient.department || '') === selectedDept;
+    });
+    const rowHtml = function (patient, idx) {
+      const id = String(patient.bmhId || '');
+      const safeId = id.replace(/'/g, "\\'");
+      const name = escapeHtmlConsent(patient.name || patient.patient || 'Patient');
+      const status = isQueueRowMarkedSeen(patient) ? 'Seen' : 'Waiting';
+      return '<tr onclick="openPatient(\'' + safeId + '\')" style="cursor:pointer">'
+        + '<td>' + (idx + 1) + '</td><td><strong>' + name + '</strong><div style="font-size:10px;color:var(--g1)">' + escapeHtmlConsent(patient.age || '') + ' · ' + escapeHtmlConsent(patient.mob || patient.mobile || '') + '</div></td>'
+        + '<td style="font-family:var(--mono)">' + escapeHtmlConsent(id) + '</td><td>' + escapeHtmlConsent(normalizeDeptKeyForQueue(patient.dept || '') || '—') + '</td>'
+        + '<td>' + escapeHtmlConsent(patient.assignedDoctor || patient.doctor || '—') + '</td><td>' + escapeHtmlConsent(patient.purpose || '—') + '</td><td>—</td><td>' + escapeHtmlConsent(formatQueueWaitMinutes(getPatientQueueWaitMinutes(patient))) + '</td><td>' + status + '</td><td></td></tr>';
+    };
+    const active = rows.filter(function (patient) { return patientActiveQueueMatchesToday(patient, today); });
+    const done = rows.filter(function (patient) { return patientDoneQueueMatchesToday(patient, today); });
+    activeEl.innerHTML = active.length ? active.map(rowHtml).join('') : '<tr><td colspan="10" style="text-align:center;padding:20px">No active patients</td></tr>';
+    doneEl.innerHTML = done.length ? done.map(rowHtml).join('') : '<tr><td colspan="10" style="text-align:center;padding:20px">No done patients</td></tr>';
+  } catch (fallbackError) {
+    console.error('My Patient Queue recovery render failed', fallbackError, error);
+    activeEl.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--red)">Queue could not render. Please reload once.</td></tr>';
+  }
 }
 function getActiveCrossRefsForPatient(p) {
   const refs = [];
@@ -50004,6 +50067,9 @@ function getDoctorQueueCrossRefLogRows(effectiveDept) {
   const deptKey = normalizeDeptKeyForQueue(effectiveDept || '');
   const filterDept = deptKey && deptKey !== 'all' && deptKey !== 'reception' ? deptKey : '';
   const byKey = new Map();
+  const patientById = new Map((PATIENTS || []).filter(Boolean).map(function (patient) {
+    return [String(patient.bmhId || ''), patient];
+  }).filter(function (entry) { return !!entry[0]; }));
   const addRow = function (row, patient) {
     if (!row || !crossRefQueueDateMatchesToday(row)) return;
     if (patient && !centreMatch(patient)) return;
@@ -50026,7 +50092,7 @@ function getDoctorQueueCrossRefLogRows(effectiveDept) {
     }));
   };
   (window.XREF_LOG || []).forEach(function (row) {
-    const patient = (PATIENTS || []).find(function (p) { return String(p?.bmhId || '') === String(row?.bmhId || ''); });
+    const patient = patientById.get(String(row?.bmhId || ''));
     addRow(row, patient);
   });
   (PATIENTS || []).forEach(function (patient) {
@@ -50178,6 +50244,11 @@ function getSelectedQueueDeptForAdmin() {
 }
 function _renderDocQueueImpl() {
   const todayKeyLocal = localDateKey(new Date());
+  const queueAdminView = !!(CURRENT_USER && (
+    CURRENT_USER.isAdmin
+    || CURRENT_USER.canSeeAllCentres
+    || String(CURRENT_USER.role || '').trim().toLowerCase() === 'admin'
+  ));
   const queueSortStamp = function (p) {
     return getPatientQueueStamp(p, Date.now(), { fallbackNow: true });
   };
@@ -50194,9 +50265,9 @@ function _renderDocQueueImpl() {
   const mappedFromDept = deptMap[rawUserDept]
     || deptMap[Object.keys(deptMap).find(function (k) { return k.toLowerCase() === rawUserDept.toLowerCase(); }) || ''];
   const userDept = normalizeDeptKeyForQueue(mappedFromDept || normalizeQueueDeptForUser(CURRENT_USER?.dept) || rawUserDept || '');
-  const adminDeptFilter = (CURRENT_USER?.isAdmin || CURRENT_USER?.role === 'Reception') ? getSelectedQueueDeptForAdmin() : 'all';
+  const adminDeptFilter = (queueAdminView || CURRENT_USER?.role === 'Reception') ? getSelectedQueueDeptForAdmin() : 'all';
   const effectiveQueueDept = adminDeptFilter !== 'all' ? adminDeptFilter : userDept;
-  const queueDoctor = (CURRENT_USER?.isAdmin && adminDeptFilter === 'all')
+  const queueDoctor = (queueAdminView && adminDeptFilter === 'all')
     ? 'Hospital'
     : getEffectiveDoctorNameForDept(effectiveQueueDept || CURRENT_USER?.dept || '');
   const deptLabelMap = {
@@ -50215,7 +50286,7 @@ function _renderDocQueueImpl() {
   }
   const adminDeptSel = document.getElementById('dq-admin-dept-filter');
   if (adminDeptSel) {
-    adminDeptSel.style.display = (CURRENT_USER?.isAdmin || CURRENT_USER?.role === 'Reception') ? '' : 'none';
+    adminDeptSel.style.display = (queueAdminView || CURRENT_USER?.role === 'Reception') ? '' : 'none';
     if (!adminDeptSel.dataset.filled) {
       adminDeptSel.innerHTML = [
         '<option value="all">All Departments</option>',
@@ -50231,13 +50302,13 @@ function _renderDocQueueImpl() {
   const searchQ = String(document.getElementById('dq-search')?.value || '').trim().toLowerCase();
   // Use the same "today's visible queue" basis as Reception, then narrow by department for doctors.
   let queueBasePts = getTodayQueueBasePatients();
-  const xrefAugmentDept = (CURRENT_USER?.isAdmin || CURRENT_USER?.role === 'Reception')
+  const xrefAugmentDept = (queueAdminView || CURRENT_USER?.role === 'Reception')
     ? (adminDeptFilter !== 'all' ? adminDeptFilter : 'all')
     : userDept;
   if (xrefAugmentDept) {
     queueBasePts = augmentQueueBasePatientsWithCrossRefs(queueBasePts, xrefAugmentDept);
   }
-  if (CURRENT_USER?.isAdmin || CURRENT_USER?.role === 'Reception') {
+  if (queueAdminView || CURRENT_USER?.role === 'Reception') {
     const allDeptQueueKeys = new Set(queueBasePts.map(function (p) { return String(p?._queueKey || p?.bmhId || ''); }));
     const allDeptQueueRows = [];
     queueBasePts.forEach(function (p) {
@@ -50251,7 +50322,7 @@ function _renderDocQueueImpl() {
     if (allDeptQueueRows.length) queueBasePts = queueBasePts.concat(allDeptQueueRows);
   }
   const myPts = (() => {
-    if (CURRENT_USER?.isAdmin || CURRENT_USER?.role === 'Reception') {
+    if (queueAdminView || CURRENT_USER?.role === 'Reception') {
       if (adminDeptFilter === 'all') return queueBasePts;
       const adminRows = [];
       const seenAdminKeys = new Set();
@@ -50323,6 +50394,9 @@ function _renderDocQueueImpl() {
       return !userDept || ptDept === userDept || (!ptDept && userDept === 'ophtho');
     });
   })();
+  const queuePatientById = new Map((PATIENTS || []).filter(Boolean).map(function (patient) {
+    return [String(patient.bmhId || ''), patient];
+  }).filter(function (entry) { return !!entry[0]; }));
   let filteredPts = dedupeQueueRowsByPatientDept(searchQ ? myPts.filter(function (p) {
     const hay = [
       p.name,
@@ -50346,7 +50420,7 @@ function _renderDocQueueImpl() {
     if (!row || row._xrefEntry || row._deptQueueEntry) return true;
     const rowDept = normalizeDeptKeyForQueue(row.dept || row.department || effectiveQueueDept || userDept || '');
     if (!rowDept) return true;
-    const source = (PATIENTS || []).find(function (p) { return p && String(p.bmhId || '') === String(row.bmhId || ''); }) || row;
+    const source = queuePatientById.get(String(row.bmhId || '')) || row;
     return !patientHasUnseenCrossRefForDept(source, rowDept);
   });
 
@@ -50363,7 +50437,7 @@ function _renderDocQueueImpl() {
   const xrefs   = getDoctorQueueCrossRefLogRows(effectiveQueueDept);
   const ipdPts  = (window.IPD_PATIENTS||[]).filter(p => {
     const ipdDept = normalizeDeptKeyForQueue(p.dept || p.department || '');
-    return isActiveIpdAdmission(p) && centreMatch(p) && (!effectiveQueueDept || ipdDept === effectiveQueueDept || CURRENT_USER?.isAdmin);
+    return isActiveIpdAdmission(p) && centreMatch(p) && (!effectiveQueueDept || ipdDept === effectiveQueueDept || queueAdminView);
   });
 
   const emptyRow = label => `<tr><td colspan="10" style="text-align:center;padding:24px;color:var(--g2);font-size:12.5px">No ${label} patients</td></tr>`;
@@ -50410,7 +50484,7 @@ function _renderDocQueueImpl() {
 
   // Dilated tab visibility — only show for ophtho
   const dilTab = document.getElementById('dq-tab-dil');
-  if(dilTab) dilTab.style.display = (effectiveQueueDept==='ophtho'||adminDeptFilter==='all'||CURRENT_USER?.isAdmin) ? '' : 'none';
+  if(dilTab) dilTab.style.display = (effectiveQueueDept==='ophtho'||adminDeptFilter==='all'||queueAdminView) ? '' : 'none';
 
   // Cross-refer log
   const xe = xrefEl;
