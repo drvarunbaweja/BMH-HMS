@@ -30778,15 +30778,15 @@ function isPrintableDoctorName(name) {
 }
 function defaultTreatingDoctorForDept(dept) {
   const key = normalizeDeptKeyForQueue(dept || '');
-  if (key === 'obg') return patientCentreKey(CURRENT_PATIENT?.centre || CURRENT_USER?.centre || getEffectiveCentre?.()) === 'RPR' ? 'Dr. Namrata Baweja' : 'Dr. Geeta Baweja';
+  if (key === 'obg') return patientCentreKey(window.CURRENT_PATIENT?.centre || CURRENT_USER?.centre || getEffectiveCentre?.()) === 'RPR' ? 'Dr. Namrata Baweja' : 'Dr. Geeta Baweja';
   if (key === 'psych') return 'Dr. Tarun Baweja';
   if (key === 'skin') return 'Dr. Pooja Baweja';
   return 'Dr. Varun Baweja';
 }
 function resolveTreatingDoctorForPrint(dept, candidates) {
   const values = [].concat(candidates || [], [
-    CURRENT_PATIENT?.assignedDoctor,
-    CURRENT_PATIENT?.doctor,
+    window.CURRENT_PATIENT?.assignedDoctor,
+    window.CURRENT_PATIENT?.doctor,
     /^doctor$/i.test(String(CURRENT_USER?.role || '')) || CURRENT_USER?.isAdmin ? CURRENT_USER?.name : ''
   ]).filter(Boolean);
   const found = values.find(isPrintableDoctorName);
@@ -30802,7 +30802,7 @@ function getEffectiveDoctorNameForDept(dept) {
   const key = normalizeDeptKeyForQueue(dept);
   const currentName = String(CURRENT_USER?.name || document.getElementById('sbnm')?.textContent || '').trim();
   const currentNormalized = normalizePersonNameForMatch(currentName);
-  const patientDoctor = CURRENT_PATIENT?.assignedDoctor || CURRENT_PATIENT?.doctor || '';
+  const patientDoctor = window.CURRENT_PATIENT?.assignedDoctor || window.CURRENT_PATIENT?.doctor || '';
   if (key === 'obg') return resolveTreatingDoctorForPrint(key, [patientDoctor, getSelectedObgDoctorName(), currentName]);
   if (key === 'psych') {
     return resolveTreatingDoctorForPrint(key, [patientDoctor, currentNormalized.includes('tarun') ? currentName : '']);
@@ -30825,7 +30825,7 @@ function syncObgDoctorSelector(forceName) {
   const sel = document.getElementById('obg-doc-select');
   const sub = document.getElementById('obg-pt-doc');
   if (!sel) return;
-  const target = String(forceName || sel.value || CURRENT_PATIENT?.doctor || 'Dr. Namrata Baweja').trim();
+  const target = String(forceName || sel.value || window.CURRENT_PATIENT?.doctor || 'Dr. Namrata Baweja').trim();
   const hasMatch = Array.from(sel.options || []).some(function (opt) { return String(opt.value) === target; });
   if (hasMatch) sel.value = target;
   else if (!sel.value) sel.value = 'Dr. Namrata Baweja';
@@ -38327,20 +38327,23 @@ function mergeTodayQueueContinuityRows(rows) {
 }
 function getTodayQueueBasePatients() {
   const todayKeyLocal = localDateKey(new Date());
+  const useFinancialRecovery = !bmhRoleScopedStartupEnabled() || !isDoctorQueueProfile(CURRENT_USER);
   const cacheKey = [
     todayKeyLocal,
     getEffectiveCentre ? getEffectiveCentre() : '',
     window._bmhPatientsCacheVersion || 0,
     (PATIENTS || []).length,
-    (TRANSACTIONS || []).length,
-    (PAY_REQUESTS || []).length,
-    Object.keys(window.BMH_PATIENT_CHARGES || {}).length
+    useFinancialRecovery ? (TRANSACTIONS || []).length : 'scoped',
+    useFinancialRecovery ? (PAY_REQUESTS || []).length : 'scoped',
+    useFinancialRecovery ? Object.keys(window.BMH_PATIENT_CHARGES || {}).length : 'scoped'
   ].join('|');
   const cached = window._bmhTodayQueueRowsCache;
   if (cached && cached.key === cacheKey && Date.now() - Number(cached.at || 0) < 400) return cached.rows.slice();
-  bmhMaybeHydratePatientsFromTodayFinancialQueueEvidence && bmhMaybeHydratePatientsFromTodayFinancialQueueEvidence({ render: true });
+  if (useFinancialRecovery) {
+    bmhMaybeHydratePatientsFromTodayFinancialQueueEvidence && bmhMaybeHydratePatientsFromTodayFinancialQueueEvidence({ render: true });
+  }
   const previousEvidenceSet = window._bmhTodayQueueEvidenceActiveSet;
-  window._bmhTodayQueueEvidenceActiveSet = bmhGetTodayQueueEvidenceIdSet(todayKeyLocal);
+  window._bmhTodayQueueEvidenceActiveSet = useFinancialRecovery ? bmhGetTodayQueueEvidenceIdSet(todayKeyLocal) : new Set();
   try {
     const liveRows = dedupeQueueEntriesByKey(PATIENTS.filter(function (p) {
       if (!p || p.queueRemoved || String(p.status || '').toLowerCase() === 'removed') return false;
@@ -41445,10 +41448,23 @@ function schedulePatientDirectoryCacheWrite(rows) {
     window._bmhPatientDirectoryCacheWriteTimer = null;
     bmhDeferNonCriticalWork(function () {
       try {
-        const compact = (Array.isArray(rows) ? rows : []).map(compactPatientDirectoryRecord).filter(Boolean);
-        localStorage.setItem(BMH_PATIENT_DIRECTORY_CACHE_KEY, JSON.stringify(compact));
+        const compact = (Array.isArray(rows) ? rows : []).map(compactPatientDirectoryRecord).filter(Boolean).sort(function (a, b) {
+          return (Date.parse(b.updatedAt || b.lastUpdated || b.registeredAt || b.createdAt || '') || 0)
+            - (Date.parse(a.updatedAt || a.lastUpdated || a.registeredAt || a.createdAt || '') || 0);
+        }).slice(0, 4000);
+        let payload = JSON.stringify(compact);
+        while (payload.length > 1500000 && compact.length > 500) {
+          compact.length = Math.max(500, Math.floor(compact.length * 0.75));
+          payload = JSON.stringify(compact);
+        }
+        try {
+          localStorage.setItem(BMH_PATIENT_DIRECTORY_CACHE_KEY, payload);
+        } catch (quotaError) {
+          localStorage.removeItem(BMH_PATIENT_DIRECTORY_CACHE_KEY);
+          localStorage.setItem(BMH_PATIENT_DIRECTORY_CACHE_KEY, JSON.stringify(compact.slice(0, 500)));
+        }
       } catch (e) {
-        console.warn('patient directory cache write skipped', e);
+        console.warn('patient directory cache unavailable; Firebase lookup remains active');
       }
     }, 0);
   }, 1200);
