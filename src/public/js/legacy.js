@@ -36251,6 +36251,23 @@ function activateUserSession(user, profile, opts) {
   if (uname === 'inventory.rpr@bawejahospital.com') profile = Object.assign({}, profile, { centre: 'RPR', name: 'Inventory RPR' });
   CURRENT_USER = Object.assign({}, profile, {username: user});
   window.CURRENT_USER = CURRENT_USER;
+  const doctorQueueDefaults = [
+    { match:/tarun/i, dept:'psych' },
+    { match:/namrata/i, dept:'obg' },
+    { match:/pooja/i, dept:'skin' },
+    { match:/varun/i, dept:'ophtho' }
+  ];
+  const doctorQueueDefault = doctorQueueDefaults.find(function (entry) {
+    return entry.match.test(String(profile.name || user || ''));
+  });
+  if (doctorQueueDefault) {
+    window._activeAdminQueueDept = doctorQueueDefault.dept;
+    window._pendingTopbarQueueDept = doctorQueueDefault.dept;
+    const topDept = document.getElementById('tb-dept-jump');
+    const queueDept = document.getElementById('dq-admin-dept-filter');
+    if (topDept) topDept.value = doctorQueueDefault.dept;
+    if (queueDept) queueDept.value = doctorQueueDefault.dept;
+  }
   try { sessionStorage.setItem('bmh_active_session', JSON.stringify({ u: user })); } catch (e) {}
 
   var gate = document.getElementById('login-gate');
