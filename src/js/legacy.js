@@ -4217,6 +4217,7 @@ function openPatient(bmhId, opts) {
   opts = opts || {};
   const p = PATIENTS.find(x => x.bmhId === bmhId);
   if(!p) return;
+  rememberTodayQueueContinuityRow && rememberTodayQueueContinuityRow(p);
   const visitDateKey = function (visit) {
     if (!visit || typeof visit !== 'object') return '';
     const raw = visit.date || visit.createdAt || visit.updatedAt || visit.visitDate || visit.savedAt || '';
@@ -37880,19 +37881,54 @@ function patientQueueDateMatchesToday(p) {
   if (patientHasTodayQueueRecoveryEvidence(p, todayKeyLocal)) return true;
   return false;
 }
+function rememberTodayQueueContinuityRow(row) {
+  if (!row || !row.bmhId || row.queueRemoved) return;
+  const status = String(row.status || '').toLowerCase();
+  if (status === 'removed' || status === 'merged' || status === 'discharged') return;
+  if (!patientQueueDateMatchesToday(row)) return;
+  const day = localDateKey(new Date());
+  window._bmhTodayQueueContinuity = window._bmhTodayQueueContinuity || new Map();
+  window._bmhTodayQueueContinuity.set(String(row.bmhId), { day: day, row: row });
+}
+function mergeTodayQueueContinuityRows(rows) {
+  const day = localDateKey(new Date());
+  const continuity = window._bmhTodayQueueContinuity || new Map();
+  window._bmhTodayQueueContinuity = continuity;
+  const currentById = new Map((PATIENTS || []).filter(Boolean).map(function (row) {
+    return [String(row.bmhId || ''), row];
+  }).filter(function (entry) { return !!entry[0]; }));
+  continuity.forEach(function (entry, id) {
+    const current = currentById.get(id);
+    const status = String(current?.status || '').toLowerCase();
+    if (entry?.day !== day || current?.queueRemoved || status === 'removed' || status === 'merged' || status === 'discharged') {
+      continuity.delete(id);
+    }
+  });
+  (rows || []).forEach(rememberTodayQueueContinuityRow);
+  const merged = (rows || []).slice();
+  const present = new Set(merged.map(function (row) { return String(row?.bmhId || ''); }));
+  continuity.forEach(function (entry, id) {
+    const row = entry?.row;
+    if (!row || present.has(id) || row.queueRemoved || !centreMatch(row) || !patientQueueDateMatchesToday(row)) return;
+    merged.push(row);
+    present.add(id);
+  });
+  return merged;
+}
 function getTodayQueueBasePatients() {
   bmhMaybeHydratePatientsFromTodayFinancialQueueEvidence && bmhMaybeHydratePatientsFromTodayFinancialQueueEvidence({ render: true });
   const todayKeyLocal = localDateKey(new Date());
   const previousEvidenceSet = window._bmhTodayQueueEvidenceActiveSet;
   window._bmhTodayQueueEvidenceActiveSet = bmhGetTodayQueueEvidenceIdSet(todayKeyLocal);
   try {
-    return dedupeQueueEntriesByKey(PATIENTS.filter(function (p) {
+    const liveRows = dedupeQueueEntriesByKey(PATIENTS.filter(function (p) {
       if (!p || p.queueRemoved || String(p.status || '').toLowerCase() === 'removed') return false;
       if (!centreMatch(p)) return false;
       repairPatientQueueStampFromRecoveryEvidence(p, todayKeyLocal);
       if (!patientQueueDateMatchesToday(p)) return false;
       return true;
     }));
+    return dedupeQueueEntriesByKey(mergeTodayQueueContinuityRows(liveRows));
   } finally {
     window._bmhTodayQueueEvidenceActiveSet = previousEvidenceSet || null;
   }
