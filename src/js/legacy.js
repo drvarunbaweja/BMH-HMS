@@ -26925,6 +26925,14 @@ async function registerPatient() {
   const email = emailEarly;
   const currentIso = new Date().toISOString();
   const queueDateToday = localDateKey(new Date());
+  const currentCentre = patientCentreKey(centre);
+  const previousCentre = existingPt ? explicitPatientCentreKey(existingPt.centre) : '';
+  const visitedCentres = Array.from(new Set(
+    (Array.isArray(existingPt?.visitedCentres) ? existingPt.visitedCentres : [])
+      .map(explicitPatientCentreKey)
+      .concat([previousCentre, currentCentre])
+      .filter(Boolean)
+  ));
   const previousDeptSnapshot = existingPt ? {
     dept: normalizeDeptKeyForQueue(existingPt.dept || existingPt.department || ''),
     doctor: existingPt.assignedDoctor || existingPt.doctor || '',
@@ -26942,7 +26950,12 @@ async function registerPatient() {
     bmhId: uid, name, initials, color,
     age, sex, mob, mob2, email, dob, addr,
     dept, doctor: dr, assignedDoctor: dr,
-    centre, status: isPreReg ? 'pre-registered' : 'waiting',
+    centre: currentCentre,
+    visitedCentres,
+    lastReceptionCentre: currentCentre,
+    previousCentre: previousCentre && previousCentre !== currentCentre ? previousCentre : (existingPt?.previousCentre || ''),
+    centreChangedAt: previousCentre && previousCentre !== currentCentre ? currentIso : (existingPt?.centreChangedAt || ''),
+    status: isPreReg ? 'pre-registered' : 'waiting',
     balance: Number(existingPt?.balance || 0),
     advance: Number(existingPt?.advance || 0),
     advancePurpose: advPurpose || existingPt?.advancePurpose || (advAmt > 0 ? 'Advance on account' : ''),
@@ -26969,6 +26982,19 @@ async function registerPatient() {
   // cache rebuild must not restore the pre-registration copy and hide this row.
   upsertHydratedQueuePatient(patient);
   rememberPendingLocalPatientQueueWrite(patient);
+  if (isExistingRegistration && previousCentre && previousCentre !== currentCentre) {
+    showToast('Existing ' + previousCentre + ' patient moved to the ' + currentCentre + ' queue; full history remains linked ✓', 's');
+    try {
+      fbPush && fbPush('auditLog', {
+        user: CURRENT_USER?.name || 'Reception',
+        role: CURRENT_USER?.role || 'Reception',
+        action: 'CROSS_CENTRE_RECHECKIN',
+        item: uid,
+        details: { fromCentre: previousCentre, toCentre: currentCentre },
+        timestamp: currentIso
+      });
+    } catch (e) {}
+  }
   if (isExistingRegistration && previousDeptSnapshot?.wasToday && previousDeptSnapshot.dept && previousDeptSnapshot.dept !== normalizeDeptKeyForQueue(dept)) {
     bmhRememberSameDayDeptQueueEntry(uid, previousDeptSnapshot);
     const refreshed = PATIENTS.find(function (p) { return p.bmhId === uid; });
@@ -50327,7 +50353,7 @@ function saveVisit(dept, opts) {
     date: now.toISOString(),
     dateLabel: now.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}),
     doctor: getEffectiveDoctorNameForDept(dept),
-    centre: CURRENT_USER?.centre || 'CHD',
+    centre: patientCentreKey(localPt?.centre || getEffectiveCentre?.() || CURRENT_USER?.centre || 'CHD'),
     savedBy: CURRENT_USER?.name || 'System',
   };
   const latestSameDeptVisit = (function () {
@@ -50900,6 +50926,11 @@ function loadPastVisits(bmhId, dept) {
     if (!Number.isNaN(t)) return new Date(t).toLocaleDateString('en-IN');
     return String(raw || '');
   };
+  const visitCentreLabel = function (visit) {
+    const centreKey = explicitPatientCentreKey(visit?.centre);
+    if (!centreKey) return '';
+    return centreKey === 'RPR' ? 'Ropar' : 'Chandigarh';
+  };
   const summarizeVisitPrescription = function (visit) {
     const rxRows = Array.isArray(visit?.rx) ? visit.rx : [];
     if (!rxRows.length) return '';
@@ -51118,7 +51149,7 @@ function loadPastVisits(bmhId, dept) {
                   const safeBmhId = String(bmhId || '').replace(/'/g, "\\'");
                   return `<th style="text-align:left;padding:6px;border:1px solid var(--g5)">
                     <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap">
-                      <span>${v.dateLabel || new Date(v.date || Date.now()).toLocaleDateString('en-IN')}</span>
+                      <span>${v.dateLabel || new Date(v.date || Date.now()).toLocaleDateString('en-IN')}${visitCentreLabel(v) ? `<small style="display:block;margin-top:2px;color:var(--g1);font-weight:700">${visitCentreLabel(v)}</small>` : ''}</span>
                       ${safeVisitId ? `<button type="button" class="btn btn-xs btn-outline" style="font-size:9px;padding:2px 6px" onclick="printPastOphthoCaseSheet('${safeBmhId}','${safeVisitId}')">Print case sheet</button>` : ''}
                     </div>
                   </th>`;
@@ -51179,7 +51210,7 @@ function loadPastVisits(bmhId, dept) {
             <tr>
               <th style="text-align:left;padding:8px;border:1px solid var(--g5);width:150px;background:var(--g6)">Field</th>
               ${skinVisits.map(function (v) {
-                return `<th style="text-align:left;padding:8px;border:1px solid var(--g5);min-width:150px;background:#f7fbff;color:var(--bmh-blue)">${v.dateLabel || new Date(v.date || Date.now()).toLocaleDateString('en-IN')}</th>`;
+                return `<th style="text-align:left;padding:8px;border:1px solid var(--g5);min-width:150px;background:#f7fbff;color:var(--bmh-blue)">${v.dateLabel || new Date(v.date || Date.now()).toLocaleDateString('en-IN')}${visitCentreLabel(v) ? `<small style="display:block;margin-top:2px;color:var(--g1)">${visitCentreLabel(v)}</small>` : ''}</th>`;
               }).join('')}
             </tr>
           </thead>
@@ -51216,7 +51247,7 @@ function loadPastVisits(bmhId, dept) {
         : '';
       return `<div style="border:1px solid var(--g5);border-radius:10px;background:#fff;padding:12px;margin-bottom:10px">
         <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px">
-          <div style="font-size:13px;font-weight:900;color:var(--bmh-blue)">${v.dateLabel || new Date(v.date || Date.now()).toLocaleDateString('en-IN')}</div>
+          <div style="font-size:13px;font-weight:900;color:var(--bmh-blue)">${v.dateLabel || new Date(v.date || Date.now()).toLocaleDateString('en-IN')}${visitCentreLabel(v) ? `<span class="badge bd-gray" style="margin-left:6px;font-size:9px">${visitCentreLabel(v)}</span>` : ''}</div>
           <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
             ${dept === 'psych' && rxSummary ? `<button type="button" class="btn btn-xs btn-outline" onclick="applyPrescriptionFromPastVisit('${String(bmhId).replace(/'/g, "\\'")}','psych','${String(v.id || '').replace(/'/g, "\\'")}')">📋 Last Rx</button>` : ''}
             <div style="font-size:10px;color:var(--g1)">${v.savedBy || v.doctor || ''}</div>
