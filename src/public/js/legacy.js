@@ -2381,7 +2381,7 @@ function collectConsentPrintContext(deptOverride) {
   const procedure = ot ? String(ot.procedure || 'Procedure').trim() : '';
   const eye = ot ? String(ot.site || ot.eye || 'Eye').trim() : '';
   const procLine = ot ? [procedure, eye, 'OT ' + String(ot.scheduledTime || ot.date || '')].filter(Boolean).join(' · ') : '';
-  const doctorName = (ot && (ot.surgeon || ot.doctor)) || window.CURRENT_USER?.name || 'Dr. Varun Baweja';
+  const doctorName = treatingDoctorWithCredentialsForPrint(ot?.caseKind === 'obg' ? 'obg' : activeDept, [ot?.surgeon, ot?.doctor, pt.assignedDoctor, pt.doctor]);
   return {
     ptId: ptId, ptNm: ptNm, ptAge: pt.age || '', ptSex: pt.sex || '', ptMob: pt.mob || pt.phone || '',
     today: today, procLine: procLine, doctorName: doctorName, procedure: procedure, eye: eye,
@@ -3251,7 +3251,7 @@ function nav(id, el, opts) {
   deferPageWork(ensureRealtimeDataForPage);
   // Page-specific init
   if(pageKey==='dashboard')            deferPageWork(function(){ renderDashboard && renderDashboard(); });
-  else if(pageKey==='doctor-queue')    deferPageWork(function(){ renderDocQueue && renderDocQueue(bmhResponsiveUiPatchesEnabled() ? { immediate:true, navigation:true } : undefined); loadIPDPatientsFromFirebase && loadIPDPatientsFromFirebase(); });
+  else if(pageKey==='doctor-queue')    deferPageWork(function(){ renderDocQueue && renderDocQueue(bmhResponsiveUiPatchesEnabled() ? { immediate:true, navigation:true } : undefined); loadIPDPatientsFromFirebase && loadIPDPatientsFromFirebase(); loadCustomPurposes && loadCustomPurposes(); });
   else if(pageKey==='appointments')    deferPageWork(function(){ const d=document.getElementById('apt-date-inp'); if(d)d.value=todayKey(); renderAptDay && renderAptDay(); renderFollowupRegister && renderFollowupRegister(); });
   else if(pageKey==='print-templates') deferPageWork(function(){ renderPrintTemplates && renderPrintTemplates(); });
   else if(pageKey==='consents')        deferPageWork(function(){ renderConsent && renderConsent(); updateConsentPatientHeader(); refreshConsentLibrary && refreshConsentLibrary(); });
@@ -5095,9 +5095,13 @@ function setQueueVisitPurpose(bmhId, purpose) {
     p.queueRemoved = false;
   }
   p.updatedAt = new Date().toISOString();
+  p.purposeUpdatedAt = p.updatedAt;
+  p.purposeUpdatedBy = CURRENT_USER?.name || 'Queue';
   const patch = {
     purpose: p.purpose,
     surgeryToday: p.surgeryToday,
+    purposeUpdatedAt: p.purposeUpdatedAt,
+    purposeUpdatedBy: p.purposeUpdatedBy,
     preRegistered: p.preRegistered,
     status: p.status,
     updatedAt: p.updatedAt,
@@ -5105,11 +5109,59 @@ function setQueueVisitPurpose(bmhId, purpose) {
     queueSource: p.queueSource
   };
   if (needsCheckIn || wasPreCheckin) Object.assign(patch, { seen:false, seenAt:null, seenByDept:sanitizeFirebaseValue(p.seenByDept || {}), dilated:false, dilatedTime:null, queueDate:today, visitDate:today, queueRemoved:false, queueSource:p.queueSource });
+  const cached = (window._BMH_ALL_PATIENTS_CACHE || []).find(function (row) { return String(row?.bmhId || '') === String(bmhId || ''); });
+  if (cached && cached !== p) Object.assign(cached, patch);
   fbUpdate && fbUpdate('patients/'+bmhId, patch).catch(()=>{});
+  if (typeof window.patchPatientFirestore === 'function') window.patchPatientFirestore(bmhId, patch).catch(function () {});
   showToast((p.name || 'Patient') + ' marked as ' + val + ' ✓','s');
   renderDocQueue && renderDocQueue();
   renderReceptionPage && renderReceptionPage();
 }
+function queuePurposeVisual(value) {
+  const text = String(value || '').trim();
+  if (/surgery|operation|procedure|laser|injection|ivt/i.test(text)) return { bg:'#fff3e0', border:'#ff9500', text:'#8a4200' };
+  if (/need\s*to\s*check\s*in|not\s*checked/i.test(text)) return { bg:'#f1f3f5', border:'#8e8e93', text:'#555' };
+  if (/follow|review|post[\s-]*op/i.test(text)) return { bg:'#e8f7f6', border:'#0b7b8c', text:'#075b68' };
+  if (/consult|opd|new patient/i.test(text)) return { bg:'#eef3fb', border:'#1a3c6e', text:'#1a3c6e' };
+  const palette = [
+    { bg:'#f4effb', border:'#7b4ab5', text:'#5c338a' },
+    { bg:'#edf8ef', border:'#2f8f4e', text:'#236c3a' },
+    { bg:'#fff0f4', border:'#c33c69', text:'#8f294b' }
+  ];
+  let hash = 0;
+  for (let i = 0; i < text.length; i += 1) hash = ((hash * 31) + text.charCodeAt(i)) >>> 0;
+  return palette[hash % palette.length];
+}
+function queuePurposeOptionsHtml(currentPurpose) {
+  const current = String(currentPurpose || 'Consultation').trim() || 'Consultation';
+  const choices = ['Consultation', 'Follow-up', 'Surgery Today', 'Need to Check In'].concat(window.CUSTOM_PURPOSES || [], [current]);
+  const seen = new Set();
+  return choices.filter(function (value) {
+    const key = String(value || '').trim().toLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).map(function (value) {
+    const selected = String(value).trim().toLowerCase() === current.toLowerCase() ? ' selected' : '';
+    return '<option value="' + escapeHtmlConsent(String(value)) + '"' + selected + '>' + escapeHtmlConsent(String(value)) + '</option>';
+  }).join('');
+}
+function addQueuePurposeOption(bmhId) {
+  const raw = window.prompt('Add purpose of visit');
+  if (raw === null) return;
+  const value = String(raw || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+  if (!value) { showToast('Enter a purpose of visit', 'w'); return; }
+  const existing = (window.CUSTOM_PURPOSES || []).find(function (item) {
+    return String(item || '').trim().toLowerCase() === value.toLowerCase();
+  });
+  const savedValue = existing || value;
+  if (!existing) {
+    window.CUSTOM_PURPOSES = (window.CUSTOM_PURPOSES || []).concat(savedValue);
+    fbSet && fbSet('settings/customPurposes', window.CUSTOM_PURPOSES);
+  }
+  setQueueVisitPurpose(bmhId, savedValue);
+}
+window.addQueuePurposeOption = addQueuePurposeOption;
 function isPatientSurgeryTodayActive(p) {
   if (!p) return false;
   const hasFlag = !!p.surgeryToday || /^surgery today$/i.test(String(p.purpose || ''));
@@ -6019,10 +6071,10 @@ function getRxSiteLabel(d) {
 }
 function getRxDoctorDisplayName() {
   const active = document.querySelector('.page.active')?.id || '';
-  if (active.includes('obg')) return document.getElementById('obg-rx-doctor')?.textContent?.trim() || getEffectiveDoctorNameForDept('obg');
-  if (active.includes('psych')) return document.getElementById('psych-rx-doctor')?.textContent?.trim() || getEffectiveDoctorNameForDept('psych');
-  if (active.includes('skin')) return document.getElementById('skin-rx-doctor')?.textContent?.trim() || getEffectiveDoctorNameForDept('skin');
-  return document.getElementById('ophtho-rx-doctor')?.textContent?.trim() || getEffectiveDoctorNameForDept('ophtho') || document.getElementById('sbnm')?.textContent?.trim() || 'Dr. Varun Baweja';
+  if (active.includes('obg')) return resolveTreatingDoctorForPrint('obg', [document.getElementById('obg-rx-doctor')?.textContent?.trim()]);
+  if (active.includes('psych')) return resolveTreatingDoctorForPrint('psych', [document.getElementById('psych-rx-doctor')?.textContent?.trim()]);
+  if (active.includes('skin')) return resolveTreatingDoctorForPrint('skin', [document.getElementById('skin-rx-doctor')?.textContent?.trim()]);
+  return resolveTreatingDoctorForPrint('ophtho', [document.getElementById('ophtho-rx-doctor')?.textContent?.trim()]);
 }
 
 function buildOphthoCaseSheetHtml(opts) {
@@ -6044,7 +6096,7 @@ function buildOphthoCaseSheetHtml(opts) {
   const visitPrintDate = visitOverride ? (visitOverride.date || visitOverride.visitDate || visitOverride.createdAt || '') : '';
   const today    = visitOverride && visitPrintDate ? formatDateIN(visitPrintDate) : getDeptPrintDateLabel('ophtho');
   const printDate = visitOverride && visitPrintDate ? formatDateDDMMYYYY(visitPrintDate) : formatDateDDMMYYYY(getDeptPrintDateValue('ophtho'));
-  const drName   = window.CURRENT_USER?.name || 'Dr. Varun Baweja';
+  const drName   = resolveTreatingDoctorForPrint('ophtho', [visitOverride?.doctor, currentPt.assignedDoctor, currentPt.doctor]);
   const centre   = window.CURRENT_USER?.centre || 'CHD';
 
   // ── Age/Sex/Address from patient record ──────────────────────────────
@@ -6655,9 +6707,11 @@ function doctorNameMatchesCurrentUser(doctorName) {
 function getDeptPrintDoctorInfo(type) {
   const map = { rx: 'oe', ophtho: 'oe', 'obg-anc-card': 'obg', 'psych-summary': 'psych', 'skin-summary': 'skin' };
   const deptId = map[type] || 'oe';
-  const doctorName = deptId === 'oe'
-    ? (document.getElementById('ophtho-rx-doctor')?.textContent?.trim() || CURRENT_PATIENT?.doctor || CURRENT_USER?.name || 'Dr. Varun Baweja')
-    : (typeof getRxDoctorDisplayName === 'function' ? getRxDoctorDisplayName() : (CURRENT_USER?.name || 'Doctor'));
+  const printDept = deptId === 'oe' ? 'ophtho' : deptId;
+  const doctorName = resolveTreatingDoctorForPrint(printDept, [
+    document.getElementById(deptId === 'oe' ? 'ophtho-rx-doctor' : (deptId + '-rx-doctor'))?.textContent?.trim(),
+    typeof getRxDoctorDisplayName === 'function' ? getRxDoctorDisplayName() : ''
+  ]);
   const clean = String(doctorName || '').split('·')[0].trim() || (CURRENT_USER?.name || 'Doctor');
   const profile = findDoctorProfileByRxName(clean);
   let degrees = String(profile.degrees || '').trim();
@@ -27070,6 +27124,8 @@ async function registerPatient() {
   patient.checkinAt = isPreReg ? null : Date.now();
   patient.purpose = purpose;
   patient.surgeryToday = /^surgery today$/i.test(purpose);
+  patient.purposeUpdatedAt = currentIso;
+  patient.purposeUpdatedBy = CURRENT_USER?.name || 'Reception';
   patient.consultationFee = fee;
   patient.consultationFeeType = feeChoice?.type || '';
   patient.consultationFeeLabel = feeChoice?.label || '';
@@ -27199,7 +27255,7 @@ async function registerPatient() {
 
   fbUpdate&&fbUpdate('patients/'+uid,{
 	    status: patient.status, seen: patient.seen, seenAt: null, seenByDept: sanitizeFirebaseValue(patient.seenByDept || {}), dilated: patient.dilated, dept: patient.dept, centre: patient.centre, ipdAdmitted: false,
-    balance: patient.balance, checkinAt:patient.checkinAt,purpose,surgeryToday: patient.surgeryToday,visitCount:patient.visitCount,ins:patient.ins||'', policy: patient.policy || '',
+    balance: patient.balance, checkinAt:patient.checkinAt,purpose,surgeryToday: patient.surgeryToday,purposeUpdatedAt:patient.purposeUpdatedAt,purposeUpdatedBy:patient.purposeUpdatedBy,visitCount:patient.visitCount,ins:patient.ins||'', policy: patient.policy || '',
     advance:patient.advance, advancePurpose:patient.advancePurpose, consultationNoFee:patient.consultationNoFee,
     consultationFee: patient.consultationFee, consultationFeeType: patient.consultationFeeType || '', consultationFeeLabel: patient.consultationFeeLabel || '',
     refType: patient.refType || '', refName: patient.refName || '', refMobile: patient.refMobile || '', referredBy: patient.referredBy || '',
@@ -27225,6 +27281,8 @@ async function registerPatient() {
       queueSource: patient.queueSource || (isPreReg ? '' : 'reception'),
       otCaseId: patient.otCaseId || null,
       purpose,
+      purposeUpdatedAt: patient.purposeUpdatedAt,
+      purposeUpdatedBy: patient.purposeUpdatedBy,
       visitCount: patient.visitCount,
       ins: patient.ins || '',
       policy: patient.policy || '',
@@ -27504,10 +27562,11 @@ function deletePurposeOption(val) {
 }
 
 function loadCustomPurposes() {
-  if(!window.fbOnce) return;
-  fbOnce('settings/customPurposes').then(data=>{
-    if(!data || !Array.isArray(data) || !data.length) return;
-    const normalized = data.map(toDisplayTitleCase);
+  if(!window.fbOnce) return Promise.resolve(window.CUSTOM_PURPOSES || []);
+  if (window._bmhCustomPurposesLoadPromise) return window._bmhCustomPurposesLoadPromise;
+  if (window._bmhCustomPurposesLoadedAt && Date.now() - window._bmhCustomPurposesLoadedAt < 300000) return Promise.resolve(window.CUSTOM_PURPOSES || []);
+  window._bmhCustomPurposesLoadPromise = fbOnce('settings/customPurposes').then(data=>{
+    const normalized = Array.isArray(data) ? data.map(function (value) { return String(value || '').replace(/\s+/g, ' ').trim(); }).filter(Boolean) : [];
     window.CUSTOM_PURPOSES = normalized;
     // Append to every #rc-purpose dropdown currently in the DOM
     normalized.forEach(val=>{
@@ -27520,7 +27579,13 @@ function loadCustomPurposes() {
     // Also re-run updatePurposeOptions so the active dropdown gets them appended cleanly
     updatePurposeOptions && updatePurposeOptions();
     renderCustomPurposeList();
-  }).catch(()=>{});
+    window._bmhCustomPurposesLoadedAt = Date.now();
+    if (getActivePageId && getActivePageId() === 'pg-doctor-queue') renderDocQueue && renderDocQueue();
+    return normalized;
+  }).catch(()=>window.CUSTOM_PURPOSES || []).finally(function () {
+    window._bmhCustomPurposesLoadPromise = null;
+  });
+  return window._bmhCustomPurposesLoadPromise;
 }
 window.editPurposeOption = editPurposeOption;
 window.deletePurposeOption = deletePurposeOption;
@@ -27941,7 +28006,7 @@ function normalizeOTCaseRecord(c) {
     caseKind,
     dx: src.dx || src.diagnosis || pt.dx || '—',
     procedure: src.procedure || src.surgery || src.operation || 'Procedure',
-    surgeon: src.surgeon || src.doctor || pt.doctor || CURRENT_USER?.name || '—',
+    surgeon: resolveTreatingDoctorForPrint(caseKind === 'obg' ? 'obg' : 'ophtho', [src.surgeon, src.doctor, pt.assignedDoctor, pt.doctor]),
     anaes: src.anaes || src.anaesthesia || '—',
     room: src.room || src.otRoom || (caseKind === 'obg' ? 'Labour Room' : 'Eye OT'),
     centre: src.centre || pt.centre || getEffectiveCentre() || CURRENT_USER?.centre || 'CHD',
@@ -30166,6 +30231,9 @@ function printOTNotes() {
   const today = new Date().toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'});
   const c = activeOTCase;
   const get = id => document.getElementById(id)?.value||'';
+  const otPrintDept = c?.caseKind === 'obg' ? 'obg' : 'ophtho';
+  const surgeonPrintName = resolveTreatingDoctorForPrint(otPrintDept, [document.getElementById('ot-notes-surgeon')?.value, c?.surgeon, c?.doctor]);
+  const surgeonPrintLabel = treatingDoctorWithCredentialsForPrint(otPrintDept, [surgeonPrintName]);
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
   <style>*{margin:0;padding:0;box-sizing:border-box;print-color-adjust:exact;-webkit-print-color-adjust:exact}
   body{font-family:'Nunito',sans-serif;font-size:11.5px;padding:12mm;color:#1C1C1E}
@@ -30239,7 +30307,7 @@ function printOTNotes() {
   <div class="section">
     <div class="sec-title">OT Team</div>
     <div class="grid3">
-      <div class="field"><div class="field-lbl">Surgeon</div><div class="field-val">${document.getElementById('ot-notes-surgeon')?.value||''}</div></div>
+      <div class="field"><div class="field-lbl">Surgeon</div><div class="field-val">${surgeonPrintLabel}</div></div>
       ${(document.getElementById('ot-scrub-nurse')?.value||c?.scrubNurse) ? `<div class="field"><div class="field-lbl">Scrub Nurse</div><div class="field-val">${document.getElementById('ot-scrub-nurse')?.value||c?.scrubNurse||''}</div></div>` : ''}
       ${(document.getElementById('ot-circ-nurse')?.value||c?.circNurse) ? `<div class="field"><div class="field-lbl">Circulating Nurse</div><div class="field-val">${document.getElementById('ot-circ-nurse')?.value||c?.circNurse||''}</div></div>` : ''}
     </div>
@@ -30264,7 +30332,7 @@ function printOTNotes() {
   </div>
 
   <div class="sig-row">
-    <div><div class="field-lbl">Surgeon Signature</div><div class="sig-line"></div><div class="sig-lbl">${document.getElementById('ot-notes-surgeon')?.value||''}</div></div>
+    <div><div class="field-lbl">Surgeon Signature</div><div class="sig-line"></div><div class="sig-lbl">${surgeonPrintLabel}</div></div>
     <div><div class="field-lbl">Anaesthesiologist Signature</div><div class="sig-line"></div><div class="sig-lbl">${get('ot-anaes-dr')||'—'}</div></div>
     <div><div class="field-lbl">Nurse In Charge Signature</div><div class="sig-line"></div><div class="sig-lbl">${document.getElementById('ot-scrub-nurse')?.value||c?.scrubNurse||''}</div></div>
   </div>
@@ -30457,21 +30525,48 @@ function getSelectedObgDoctorName() {
   const sel = document.getElementById('obg-doc-select');
   return String(sel?.value || '').trim() || 'Dr. Namrata Baweja';
 }
+function isPrintableDoctorName(name) {
+  const clean = String(name || '').split('·')[0].trim();
+  if (!clean || !/^dr\.?\s+/i.test(clean)) return false;
+  const folded = normalizePersonNameForMatch(clean);
+  return !/reception|optomet|inventory|staff|technician|executive/.test(folded);
+}
+function defaultTreatingDoctorForDept(dept) {
+  const key = normalizeDeptKeyForQueue(dept || '');
+  if (key === 'obg') return patientCentreKey(CURRENT_PATIENT?.centre || CURRENT_USER?.centre || getEffectiveCentre?.()) === 'RPR' ? 'Dr. Namrata Baweja' : 'Dr. Geeta Baweja';
+  if (key === 'psych') return 'Dr. Tarun Baweja';
+  if (key === 'skin') return 'Dr. Pooja Baweja';
+  return 'Dr. Varun Baweja';
+}
+function resolveTreatingDoctorForPrint(dept, candidates) {
+  const values = [].concat(candidates || [], [
+    CURRENT_PATIENT?.assignedDoctor,
+    CURRENT_PATIENT?.doctor,
+    /^doctor$/i.test(String(CURRENT_USER?.role || '')) || CURRENT_USER?.isAdmin ? CURRENT_USER?.name : ''
+  ]).filter(Boolean);
+  const found = values.find(isPrintableDoctorName);
+  return String(found || defaultTreatingDoctorForDept(dept)).split('·')[0].trim();
+}
+function treatingDoctorWithCredentialsForPrint(dept, candidates) {
+  const name = resolveTreatingDoctorForPrint(dept, candidates);
+  const profile = typeof findDoctorProfileByRxName === 'function' ? findDoctorProfileByRxName(name) : null;
+  const degrees = String(profile?.degrees || (doctorNameMatchesCurrentUser(name) ? CURRENT_USER?.degrees || '' : '')).trim();
+  return [name, degrees].filter(Boolean).join(' · ');
+}
 function getEffectiveDoctorNameForDept(dept) {
   const key = normalizeDeptKeyForQueue(dept);
   const currentName = String(CURRENT_USER?.name || document.getElementById('sbnm')?.textContent || '').trim();
   const currentNormalized = normalizePersonNameForMatch(currentName);
-  if (key === 'obg') return getSelectedObgDoctorName();
+  const patientDoctor = CURRENT_PATIENT?.assignedDoctor || CURRENT_PATIENT?.doctor || '';
+  if (key === 'obg') return resolveTreatingDoctorForPrint(key, [patientDoctor, getSelectedObgDoctorName(), currentName]);
   if (key === 'psych') {
-    if (currentNormalized.includes('tarun')) return currentName || 'Dr. Tarun Baweja';
-    return 'Dr. Tarun Baweja';
+    return resolveTreatingDoctorForPrint(key, [patientDoctor, currentNormalized.includes('tarun') ? currentName : '']);
   }
   if (key === 'skin') {
-    if (currentNormalized.includes('pooja')) return currentName || 'Dr. Pooja Baweja';
-    return 'Dr. Pooja Baweja';
+    return resolveTreatingDoctorForPrint(key, [patientDoctor, currentNormalized.includes('pooja') ? currentName : '']);
   }
-  if (key === 'ophtho') return currentName || 'Dr. Varun Baweja';
-  return currentName || 'Doctor';
+  if (key === 'ophtho') return resolveTreatingDoctorForPrint(key, [patientDoctor, currentName]);
+  return resolveTreatingDoctorForPrint(key, [patientDoctor, currentName]);
 }
 
 function normalizeQueueDeptForUser(dept) {
@@ -36742,6 +36837,20 @@ function normalizePatientRecord(p) {
   if (st === 'seen' || st === 'done') p.seen = true;
   return p;
 }
+function patientPurposeUpdatedMs(row) {
+  return Date.parse(row?.purposeUpdatedAt || '') || 0;
+}
+function preserveNewerPatientPurpose(target, existing) {
+  if (!target || !existing) return target;
+  const existingStamp = patientPurposeUpdatedMs(existing);
+  const targetStamp = patientPurposeUpdatedMs(target);
+  if (!(existingStamp > targetStamp) && !(existingStamp && !targetStamp)) return target;
+  target.purpose = existing.purpose;
+  target.surgeryToday = !!existing.surgeryToday;
+  target.purposeUpdatedAt = existing.purposeUpdatedAt;
+  target.purposeUpdatedBy = existing.purposeUpdatedBy || '';
+  return target;
+}
 function normalizePatientPhoneKey(value) {
   const digits = String(value || '').replace(/\D/g, '');
   if (digits.length < 7) return '';
@@ -40981,6 +41090,7 @@ function realtimePatientQueueProjection(record) {
     createdAt: row.createdAt || '',
     appointmentDate: row.appointmentDate || '',
     purpose: row.purpose || '',
+    purposeUpdatedAt: row.purposeUpdatedAt || '',
     color: row.color || '',
     priority: row.priority || '',
     highRisk: row.highRisk || false,
@@ -41132,6 +41242,9 @@ function _debouncedRenderDash() {
 function applyPatientsPayload(data, opts) {
   const options = opts || {};
   const all = data ? Object.values(data) : [];
+  const existingPurposeById = new Map((window._BMH_ALL_PATIENTS_CACHE || []).map(function (row) {
+    return [String(row?.bmhId || ''), row];
+  }).filter(function (entry) { return !!entry[0]; }));
   const chunkSize = 800;
   const normalized = [];
   let idx = 0;
@@ -41144,6 +41257,9 @@ function applyPatientsPayload(data, opts) {
   }
   window._bmhPatientsHydrating = true;
   const finish = function () {
+    normalized.forEach(function (row) {
+      preserveNewerPatientPurpose(row, existingPurposeById.get(String(row?.bmhId || '')));
+    });
     overlayPendingLocalPatientQueueWrites(normalized);
     window._BMH_ALL_PATIENTS_CACHE = normalized;
     rebuildPatientCacheIndex(normalized);
@@ -41333,6 +41449,11 @@ function applyRealtimePatientRecord(record, key) {
   if (!record || typeof record !== 'object') return;
   const row = normalizePatientRecord(Object.assign({}, record, { bmhId: record.bmhId || key }));
   if (!row.bmhId) return;
+  const currentIndex = window._BMH_ALL_PATIENTS_INDEX_BY_ID instanceof Map
+    ? window._BMH_ALL_PATIENTS_INDEX_BY_ID.get(String(row.bmhId))
+    : -1;
+  const currentRow = currentIndex >= 0 ? window._BMH_ALL_PATIENTS_CACHE?.[currentIndex] : (PATIENTS || []).find(function (p) { return String(p?.bmhId || '') === String(row.bmhId); });
+  preserveNewerPatientPurpose(row, currentRow);
   const pending = window._bmhPendingLocalPatientQueueWrites?.[String(row.bmhId)];
   if (pending) {
     const remoteStamp = Date.parse(row.updatedAt || row.lastUpdated || '') || 0;
@@ -48989,13 +49110,9 @@ function buildQTableRow(p, sno, opts) {
   const labTooltip = buildUnreadLabResultsTooltipHtml(p);
   const labReadyBadge = patientHasUnreadLabResults(p) ? `<span title="${escapeHtmlConsent(labHover || 'Results ready')}" onmouseenter="const tip=this.querySelector('.lab-ready-tip');if(tip)tip.style.display='block'" onmouseleave="const tip=this.querySelector('.lab-ready-tip');if(tip)tip.style.display='none'" style="position:relative;display:inline-flex;align-items:center;gap:4px;padding:1px 6px;border-radius:999px;background:#eafaf1;color:#166534;border:1px solid rgba(22,101,52,.25);font-size:9px;font-weight:900;animation:pulse 1.2s infinite">🧪 Results Ready${labTooltip.replace('<span style="display:none;', '<span class="lab-ready-tip" style="display:none;')}</span>` : '';
   const surgeryTodayBadge = isSurgeryToday ? '<span style="font-size:9px;padding:1px 6px;margin-left:4px;background:var(--orange);color:#fff;border-radius:6px;font-weight:900;vertical-align:middle">SURGERY TODAY</span>' : '';
+  const purposeVisual = queuePurposeVisual(p.purpose || 'Consultation');
   const purposeCell = isOphtho && !isPreRegRow
-    ? `<select title="Purpose of visit" onclick="event.stopPropagation()" onchange="event.stopPropagation();setQueueVisitPurpose('${String(p.bmhId).replace(/'/g, "\\'")}', this.value)" style="max-width:132px;background:${isSurgeryToday?'#fff3e0':'#fff'};border:1.5px solid ${isSurgeryToday?'var(--orange)':'var(--g4)'};border-radius:6px;padding:3px 6px;font-size:10px;font-weight:800;color:${isSurgeryToday?'#8a4200':'var(--tx)'};cursor:pointer">
-        <option value="Consultation"${/^consultation$/i.test(String(p.purpose || '')) || !String(p.purpose || '').trim() ? ' selected' : ''}>Consultation</option>
-        <option value="Follow-up"${/follow/i.test(String(p.purpose || '')) ? ' selected' : ''}>Follow-up</option>
-        <option value="Surgery Today"${isSurgeryToday ? ' selected' : ''}>Surgery Today</option>
-        <option value="Need to Check In"${/need\s*to\s*check\s*in/i.test(String(p.purpose || '')) ? ' selected' : ''}>Need to Check In</option>
-      </select>`
+    ? `<div style="display:flex;align-items:center;gap:4px;max-width:158px"><select title="Purpose of visit" onclick="event.stopPropagation()" onchange="event.stopPropagation();setQueueVisitPurpose('${String(p.bmhId).replace(/'/g, "\\'")}', this.value)" style="min-width:0;max-width:128px;background:${purposeVisual.bg};border:1.5px solid ${purposeVisual.border};border-radius:6px;padding:3px 5px;font-size:10px;font-weight:800;color:${purposeVisual.text};cursor:pointer">${queuePurposeOptionsHtml(p.purpose)}</select><button type="button" title="Add purpose of visit" onclick="event.stopPropagation();addQueuePurposeOption('${String(p.bmhId).replace(/'/g, "\\'")}')" style="width:24px;height:24px;flex:0 0 24px;border:1.5px solid ${purposeVisual.border};border-radius:6px;background:#fff;color:${purposeVisual.text};font-size:16px;font-weight:900;line-height:18px;cursor:pointer">+</button></div>`
     : (p.purpose || '—');
   const restoreSeenAction = seenRow
     ? (p._xrefId
