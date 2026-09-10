@@ -3194,6 +3194,39 @@ function restoreAppNavState(state) {
     window._appHistoryRestoring = false;
   }
 }
+function ensureRoleScopedDataForPage(pageKey) {
+  if (!bmhRoleScopedStartupEnabled()) return;
+  window._bmhRoleScopedDataReady = window._bmhRoleScopedDataReady || {};
+  const once = function (key, loader) {
+    if (window._bmhRoleScopedDataReady[key]) return;
+    window._bmhRoleScopedDataReady[key] = true;
+    try { loader && loader(); } catch (e) {
+      window._bmhRoleScopedDataReady[key] = false;
+      console.warn('Role-scoped page data failed:', key, e);
+    }
+  };
+  const clinicalPages = ['ophtho', 'obg', 'psych', 'skin'];
+  if (clinicalPages.includes(pageKey) || ['reception', 'ot', 'settings'].includes(pageKey)) {
+    once('charges', function () { loadChargesFromFirebase && loadChargesFromFirebase(); });
+  }
+  if (clinicalPages.includes(pageKey) || ['ot', 'settings'].includes(pageKey)) {
+    once('drug-library', function () { loadDrugLibraryFromStorage && loadDrugLibraryFromStorage({ forceRemote: true }); });
+    once('rx-templates', function () { loadRxTemplatesFromStorage && loadRxTemplatesFromStorage(); });
+  }
+  if (clinicalPages.includes(pageKey)) {
+    once('advice-templates', function () { loadAdviceTemplates && loadAdviceTemplates(); });
+  }
+  if (['reception', 'billing', 'payments', 'tpa', 'inventory', 'reports'].includes(pageKey)) {
+    once('financials', function () { loadBmhFinancials && loadBmhFinancials(); });
+    once('firestore-bills', function () {
+      window.ensureBillsFirestoreListener && window.ensureBillsFirestoreListener(getEffectiveCentre ? getEffectiveCentre() : CURRENT_USER?.centre);
+    });
+  }
+  if (pageKey === 'discharge') {
+    once('discharge-ot-cases', function () { loadOTCasesFromFirebase && loadOTCasesFromFirebase(); });
+    once('rx-templates', function () { loadRxTemplatesFromStorage && loadRxTemplatesFromStorage(); });
+  }
+}
 function nav(id, el, opts) {
   opts = opts || {};
   const deferPageWork = function (fn) {
@@ -3234,6 +3267,7 @@ function nav(id, el, opts) {
   syncTopbarHeaderForPage(pageKey);
   const ensureRealtimeDataForPage = function () {
     try {
+      ensureRoleScopedDataForPage(pageKey);
       if (pageKey === 'appointments' || pageKey === 'dashboard') {
         listenAppointments && listenAppointments();
       }
@@ -6971,9 +7005,11 @@ function buildSidebarForRole(role, dept, name) {
       <div class="ngrp">Reception</div>
       ${allowNav('reception', `<div class="ni active" onclick="nav('reception',this)"><div class="ni-ic">🧾</div>Reception<span class="nbadge pulse" id="nb-rec">0</span></div>`)}
       ${allowNav('appointments', `<div class="ni" onclick="nav('appointments',this)"><div class="ni-ic">📅</div>Appointments</div>`)}
+      ${allowNav('consents', `<div class="ni" onclick="nav('consents',this)"><div class="ni-ic">📋</div>Consents</div>`)}
       <div class="ngrp">IPD / OT</div>
       ${allowNav('ipd', `<div class="ni" onclick="nav('ipd',this)"><div class="ni-ic">🛏️</div>IPD Patients<span class="nbadge" id="nb-ipd"></span></div>`)}
       ${allowNav('ot', `<div class="ni" onclick="nav('ot',this)"><div class="ni-ic">🔬</div>OT Module</div>`)}
+      ${allowNav('discharge', `<div class="ni" onclick="nav('discharge',this)"><div class="ni-ic">🏠</div>Discharge Card</div>`)}
       <div class="ngrp">Finance</div>
       ${allowNav('billing', `<div class="ni" onclick="nav('billing',this)"><div class="ni-ic">💳</div>Billing<span class="nbadge pulse" id="nb-pay"></span></div>`)}
       ${allowNav('tpa', `<div class="ni" onclick="nav('tpa',this)"><div class="ni-ic">🏦</div>TPA / Cashless</div>`)}
@@ -25017,7 +25053,15 @@ function populateSelectors() {
 // This prevents "Cannot access X before initialization" TDZ errors
 window.addEventListener('DOMContentLoaded', function() {
   try { loadInventoryStockFromStorage && loadInventoryStockFromStorage(); } catch (e) {}
-  try { setTimeout(function(){ loadChargesFromFirebase && loadChargesFromFirebase(); }, 60); } catch (e) {}
+  try {
+    setTimeout(function(){
+      if (!bmhRoleScopedStartupEnabled() || (CURRENT_USER && !isDoctorQueueProfile(CURRENT_USER))) {
+        loadChargesFromFirebase && loadChargesFromFirebase();
+      } else {
+        loadChargesFromLocalStorage && loadChargesFromLocalStorage();
+      }
+    }, 60);
+  } catch (e) {}
   try { initQR && initQR(); } catch(e) {}
   try { loadInvestigationTemplatesFromStorage && loadInvestigationTemplatesFromStorage(); } catch(e) {}
   try { refreshInvestigationTemplateSelect && refreshInvestigationTemplateSelect(); } catch(e) {}
@@ -26028,7 +26072,8 @@ function scheduleQueueVisitPrefetch(rows) {
   if (!bmhFastDataBootstrapEnabled() || !Array.isArray(rows) || !rows.length) return;
   const role = String(CURRENT_USER?.role || '').trim().toLowerCase();
   if (!['doctor', 'optometrist'].includes(role)) return;
-  const ids = Array.from(new Set(rows.map(function (row) { return String(row?.bmhId || '').trim(); }).filter(Boolean))).slice(0, 12);
+  const queueIds = Array.from(new Set(rows.map(function (row) { return String(row?.bmhId || '').trim(); }).filter(Boolean)));
+  const ids = Array.from(new Set(queueIds.slice(0, 12).concat(queueIds.slice(-3))));
   bmhDeferNonCriticalWork(function () {
     let nextIndex = 0;
     const worker = function () {
@@ -36377,11 +36422,24 @@ function activateUserSession(user, profile, opts) {
         if (typeof showToast === 'function') showToast('Connected to attendance database ✓', 's');
         return;
       }
-      if (typeof loadChargesFromFirebase === 'function') loadChargesFromFirebase();
+      const scopedDoctorStartup = bmhRoleScopedStartupEnabled() && isDoctorQueueProfile(profile);
+      if (!scopedDoctorStartup && !window._bmhRoleScopedDataReady?.charges && typeof loadChargesFromFirebase === 'function') loadChargesFromFirebase();
       if (typeof loadPatientsFromFirebase === 'function')  loadPatientsFromFirebase();
-      deferBootstrap(function() {
-        if (typeof loadBmhFinancials === 'function') loadBmhFinancials();
-      }, 180);
+      if (scopedDoctorStartup) {
+        if (typeof loadDrugLibraryFromStorage === 'function') loadDrugLibraryFromStorage({ localOnly: true });
+        deferBootstrap(function() {
+          if (typeof loadDrugLibraryFromStorage === 'function') loadDrugLibraryFromStorage({ forceRemote: true });
+          if (typeof loadRxTemplatesFromStorage === 'function') loadRxTemplatesFromStorage();
+          if (typeof loadAdviceTemplates === 'function') loadAdviceTemplates();
+        }, 120);
+        deferBootstrap(function() {
+          if (typeof loadDoctorProfilesFromFirebase === 'function') loadDoctorProfilesFromFirebase();
+        }, 900);
+      } else {
+        deferBootstrap(function() {
+          if (!window._bmhFinancialsSyncStarted && typeof loadBmhFinancials === 'function') loadBmhFinancials();
+        }, 180);
+      }
       deferBootstrap(function() {
         var hotRoles = ['Admin', 'Reception', 'TPA'];
         if (hotRoles.indexOf(String(profile.role || '')) !== -1) {
@@ -41117,6 +41175,17 @@ function bmhFastDataBootstrapEnabled() {
     return bmhSafePerfPatchesEnabled();
   }
 }
+function bmhRoleScopedStartupEnabled() {
+  try {
+    return bmhFastDataBootstrapEnabled() && localStorage.getItem('bmh_disable_role_scoped_startup') !== '1';
+  } catch (e) {
+    return bmhFastDataBootstrapEnabled();
+  }
+}
+function isDoctorQueueProfile(profile) {
+  const role = String(profile?.role || '').trim().toLowerCase();
+  return role === 'doctor' || role === 'optometrist';
+}
 function bmhScopedPatientBootstrapEnabled() {
   try {
     return bmhSafePerfPatchesEnabled() && localStorage.getItem('bmh_enable_scoped_patient_bootstrap') === '1';
@@ -41143,7 +41212,9 @@ function bmhDeferNonCriticalWork(fn, delayMs) {
   }
 }
 function shouldUseScopedPatientBootstrap() {
-  if (!bmhScopedPatientBootstrapEnabled() || !CURRENT_USER) return false;
+  if (!CURRENT_USER) return false;
+  const roleScopedDoctor = bmhRoleScopedStartupEnabled() && isDoctorQueueProfile(CURRENT_USER);
+  if (!roleScopedDoctor && !bmhScopedPatientBootstrapEnabled()) return false;
   if (CURRENT_USER.isAdmin || CURRENT_USER.canSeeAllCentres || CURRENT_USER.centre === 'BOTH') return false;
   const role = String(CURRENT_USER.role || '').trim().toLowerCase();
   if (role === 'reception' || role === 'admin') return false;
@@ -41177,6 +41248,16 @@ window.bmhRollbackFastDataBootstrap = function () {
 window.bmhEnableFastDataBootstrap = function () {
   try { localStorage.removeItem('bmh_disable_fast_data_bootstrap'); } catch (e) {}
   showToast && showToast('Fast data bootstrap enabled. Reloading...', 's');
+  setTimeout(function () { window.location.reload(); }, 80);
+};
+window.bmhRollbackRoleScopedStartup = function () {
+  try { localStorage.setItem('bmh_disable_role_scoped_startup', '1'); } catch (e) {}
+  showToast && showToast('Role-scoped startup disabled. Reloading...', 'w');
+  setTimeout(function () { window.location.reload(); }, 80);
+};
+window.bmhEnableRoleScopedStartup = function () {
+  try { localStorage.removeItem('bmh_disable_role_scoped_startup'); } catch (e) {}
+  showToast && showToast('Role-scoped startup enabled. Reloading...', 's');
   setTimeout(function () { window.location.reload(); }, 80);
 };
 const BMH_PATIENT_DIRECTORY_CACHE_KEY = 'bmh_patient_directory_v1';
@@ -41848,8 +41929,8 @@ function loadPatientsFromFirebase() {
   window._bmhRtdbPatientsListening = true;
   window._bmhRtdbPatientsScope = scope;
   scheduleQueueCalendarDayRefresh && scheduleQueueCalendarDayRefresh();
-  hydratePatientDirectoryFromLocalCache();
   const scopedBootstrap = shouldUseScopedPatientBootstrap();
+  if (!scopedBootstrap) hydratePatientDirectoryFromLocalCache();
   if (!scopedBootstrap) refreshSelectedCentreTodayQueue({ render:true });
   startTodayQueuePatientsRealtimeUpdates(true);
   const bootstrap = scopedBootstrap
@@ -51584,23 +51665,28 @@ function loadPastVisits(bmhId, dept) {
       </div>`;
     }).join('');
   };
+  const cachedVisitData = bmhRoleScopedStartupEnabled() && typeof getCachedPatientVisits === 'function' ? getCachedPatientVisits(bmhId) : {};
+  const hasCachedVisitData = !!(cachedVisitData && Object.keys(cachedVisitData).length);
+  if (hasCachedVisitData) renderVisits(cachedVisitData);
   if(typeof fbOnce === 'function') {
     fbOnce(`visits/${bmhId}`).then(function (visitData) {
-      renderVisits(visitData);
+      const freshVisitData = visitData || {};
+      cachePatientVisits && cachePatientVisits(bmhId, freshVisitData);
+      renderVisits(freshVisitData);
       if (dept === 'ophtho') {
         refreshOTCasesForHistory(function (changed) {
-          if (changed) renderVisits(visitData);
+          if (changed) renderVisits(freshVisitData);
         });
       }
     }).catch(function () {
-      renderVisits({});
+      if (!hasCachedVisitData) renderVisits({});
       if (dept === 'ophtho') {
         refreshOTCasesForHistory(function (changed) {
-          if (changed) renderVisits({});
+          if (changed) renderVisits(hasCachedVisitData ? cachedVisitData : {});
         });
       }
     });
-  } else {
+  } else if (!hasCachedVisitData) {
     renderVisits({});
   }
 }

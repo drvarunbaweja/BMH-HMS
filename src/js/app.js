@@ -896,10 +896,23 @@ window.sendUserPasswordResetEmail = async function (email) {
 
 // Active Firestore listeners — stored so they can be unsubscribed on logout
 const listeners = []
+let billsListenerStarted = false
+
+window.ensureBillsFirestoreListener = function (centre) {
+  if (billsListenerStarted) return
+  try {
+    listeners.push(watchBills(centre || window.CURRENT_USER?.centre || 'CHD'))
+    billsListenerStarted = true
+  } catch (error) {
+    billsListenerStarted = false
+    throw error
+  }
+}
 
 function stopListeners() {
   listeners.forEach(unsub => unsub())
   listeners.length = 0
+  billsListenerStarted = false
 }
 
 function runAfterStartup(fn, delay = 1200) {
@@ -1047,6 +1060,8 @@ watchAuthState(
     if (typeof window.syncLegacyCurrentUserFromFirebase === 'function') {
       try { window.syncLegacyCurrentUserFromFirebase() } catch (_) { /* noop */ }
     }
+    const fastClinicalStartup = ['doctor', 'optometrist'].includes(String(user.role || '').toLowerCase())
+      && (typeof window.bmhRoleScopedStartupEnabled !== 'function' || window.bmhRoleScopedStartupEnabled())
 
     runAfterStartup(() => {
       if (typeof window.loadDoctorProfilesFromFirebase === 'function') window.loadDoctorProfilesFromFirebase()
@@ -1064,7 +1079,7 @@ watchAuthState(
       setTimeout(() => {
         try { window.watchDrugLibraryFromFirebase && window.watchDrugLibraryFromFirebase() } catch (_) { /* noop */ }
       }, 500)
-    }, 4500)
+    }, fastClinicalStartup ? 150 : 4500)
     runAfterStartup(() => {
       if (typeof window.loadConsentDataOverridesFromStorage === 'function') window.loadConsentDataOverridesFromStorage()
     }, 2200)
@@ -1086,11 +1101,12 @@ watchAuthState(
       }
     }
 
-    // Always start the bills watcher — this is the new Firestore bills collection
-    // used for cloud-persistent bill storage, independent of the legacy RTDB system.
-    runAfterStartup(() => {
-      listeners.push(watchBills(centre))
-    }, 2500)
+    // Clinical logins defer cloud bills until a finance page is opened.
+    if (!fastClinicalStartup) {
+      runAfterStartup(() => {
+        window.ensureBillsFirestoreListener(centre)
+      }, 2500)
+    }
 
     watchConnectionStatus('fb-status')
 

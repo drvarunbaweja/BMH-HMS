@@ -205,6 +205,8 @@ watchAuthState(
     if (typeof window.syncLegacyCurrentUserFromFirebase === 'function') {
       try { window.syncLegacyCurrentUserFromFirebase() } catch (_) { /* noop */ }
     }
+    const fastClinicalStartup = ['doctor', 'optometrist'].includes(String(user.role || '').toLowerCase())
+      && (typeof window.bmhRoleScopedStartupEnabled !== 'function' || window.bmhRoleScopedStartupEnabled())
 
     runAfterStartup(() => {
       if (typeof window.loadDoctorProfilesFromFirebase === 'function') window.loadDoctorProfilesFromFirebase()
@@ -213,7 +215,7 @@ watchAuthState(
       try { window.loadDrugLibraryFromStorage({ localOnly: true }) } catch (_) { /* noop */ }
       setTimeout(() => {
         try { window.loadDrugLibraryFromStorage({ forceRemote: true }) } catch (_) { /* noop */ }
-      }, 4500)
+      }, fastClinicalStartup ? 150 : 4500)
     }
     runAfterStartup(() => {
       if (typeof window.loadConsentDataOverridesFromStorage === 'function') window.loadConsentDataOverridesFromStorage()
