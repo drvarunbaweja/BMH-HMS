@@ -4222,6 +4222,10 @@ function openPatient(bmhId, opts) {
   opts = opts || {};
   const p = PATIENTS.find(x => x.bmhId === bmhId);
   if(!p) return;
+  if (typeof DRUG_LIBRARY !== 'undefined' && !DRUG_LIBRARY.length && typeof loadDrugLibraryFromStorage === 'function') {
+    loadDrugLibraryFromStorage({ localOnly: true });
+  }
+  prefetchPatientVisitsInBackground && prefetchPatientVisitsInBackground(bmhId);
   rememberTodayQueueContinuityRow && rememberTodayQueueContinuityRow(p);
   const visitDateKey = function (visit) {
     if (!visit || typeof visit !== 'object') return '';
@@ -25901,6 +25905,141 @@ function findReceptionPatientsByPhone(value) {
     });
   }).slice(0, 20);
 }
+function mergeReceptionLookupPatients(rows) {
+  if (!Array.isArray(rows) || !rows.length) return [];
+  const cache = Array.isArray(window._BMH_ALL_PATIENTS_CACHE) ? window._BMH_ALL_PATIENTS_CACHE : [];
+  const index = window._BMH_ALL_PATIENTS_INDEX_BY_ID instanceof Map && window._BMH_ALL_PATIENTS_INDEX_SOURCE === cache
+    ? window._BMH_ALL_PATIENTS_INDEX_BY_ID
+    : rebuildPatientCacheIndex(cache);
+  const merged = [];
+  rows.forEach(function (raw) {
+    if (!raw || !raw.bmhId) return;
+    const id = String(raw.bmhId);
+    const row = normalizePatientRecord(Object.assign({}, index.has(id) ? cache[index.get(id)] : {}, raw));
+    if (index.has(id)) cache[index.get(id)] = row;
+    else {
+      index.set(id, cache.length);
+      cache.push(row);
+    }
+    merged.push(row);
+  });
+  window._BMH_ALL_PATIENTS_CACHE = cache;
+  window._BMH_ALL_PATIENTS_INDEX_BY_ID = index;
+  window._BMH_ALL_PATIENTS_INDEX_SOURCE = cache;
+  window._bmhPatientsCacheVersion = (window._bmhPatientsCacheVersion || 0) + 1;
+  buildReceptionPatientLookupIndex();
+  schedulePatientDirectoryCacheWrite && schedulePatientDirectoryCacheWrite(cache);
+  return merged;
+}
+function fetchReceptionPatientsFromFirebase(value) {
+  if (!bmhFastDataBootstrapEnabled() || !window.FBDB) return Promise.resolve([]);
+  const raw = String(value || '').trim();
+  const digits = normalizeReceptionPhoneDigits(raw);
+  const primaryReads = [];
+  const directIds = new Set();
+  if (/^BMSH[-\s]*\d+$/i.test(raw)) directIds.add('BMSH-' + digits);
+  if (/^\d{4,9}$/.test(raw)) directIds.add('BMSH-' + digits);
+  directIds.forEach(function (id) {
+    primaryReads.push(window.FBDB.ref('patients/' + id).once('value').then(function (snap) {
+      const row = snap.val();
+      return row ? [Object.assign({}, row, { bmhId: row.bmhId || id })] : [];
+    }));
+  });
+  if (digits.length >= 7) {
+    primaryReads.push(window.FBDB.ref('patients').orderByChild('phoneSearch').equalTo(digits.slice(-10)).once('value').then(function (snap) {
+      return Object.entries(snap.val() || {}).map(function (entry) {
+        return Object.assign({}, entry[1] || {}, { bmhId: entry[1]?.bmhId || entry[0] });
+      });
+    }));
+  }
+  if (!primaryReads.length) return Promise.resolve([]);
+  const runReads = function (reads) {
+    return Promise.all(reads.map(function (read) { return read.catch(function () { return []; }); })).then(function (groups) {
+      const byId = new Map();
+      groups.forEach(function (group) {
+        (group || []).forEach(function (row) {
+          if (row?.bmhId) byId.set(String(row.bmhId), row);
+        });
+      });
+      return Array.from(byId.values());
+    });
+  };
+  return runReads(primaryReads).then(function (primaryRows) {
+    if (primaryRows.length || digits.length < 7) return mergeReceptionLookupPatients(primaryRows);
+    const legacyReads = [];
+    const phoneValues = new Set([raw, digits, digits.slice(-10)]);
+    ['mob', 'mobile', 'mob2', 'phone'].forEach(function (field) {
+      phoneValues.forEach(function (phoneValue) {
+        if (!phoneValue) return;
+        legacyReads.push(window.FBDB.ref('patients').orderByChild(field).equalTo(phoneValue).once('value').then(function (snap) {
+          return Object.entries(snap.val() || {}).map(function (entry) {
+            return Object.assign({}, entry[1] || {}, { bmhId: entry[1]?.bmhId || entry[0] });
+          });
+        }));
+      });
+    });
+    return runReads(legacyReads).then(mergeReceptionLookupPatients);
+  });
+}
+function prefetchPatientVisitsInBackground(bmhId) {
+  const id = String(bmhId || '').trim();
+  if (!id || typeof fbOnce !== 'function') return Promise.resolve({});
+  const cached = getCachedPatientVisits(id);
+  window._bmhVisitPrefetchedAt = window._bmhVisitPrefetchedAt || {};
+  if (cached && (Object.keys(cached).length || Date.now() - Number(window._bmhVisitPrefetchedAt[id] || 0) < 60000)) return Promise.resolve(cached);
+  window._bmhVisitPrefetchPromises = window._bmhVisitPrefetchPromises || {};
+  if (window._bmhVisitPrefetchPromises[id]) return window._bmhVisitPrefetchPromises[id];
+  const promise = fbOnce('visits/' + id).then(function (data) {
+    window._bmhVisitPrefetchedAt[id] = Date.now();
+    return cachePatientVisits(id, data || {});
+  }).catch(function () {
+    return getCachedPatientVisits(id);
+  }).finally(function () {
+    delete window._bmhVisitPrefetchPromises[id];
+  });
+  window._bmhVisitPrefetchPromises[id] = promise;
+  return promise;
+}
+function scheduleReceptionRemoteLookup(value, mode) {
+  if (!bmhFastDataBootstrapEnabled() || !window.FBDB) return;
+  const key = String(mode || 'id');
+  const token = String(value || '') + ':' + Date.now();
+  window._bmhReceptionRemoteLookupTokens = window._bmhReceptionRemoteLookupTokens || {};
+  window._bmhReceptionRemoteLookupTimers = window._bmhReceptionRemoteLookupTimers || {};
+  window._bmhReceptionRemoteLookupTokens[key] = token;
+  if (window._bmhReceptionRemoteLookupTimers[key]) clearTimeout(window._bmhReceptionRemoteLookupTimers[key]);
+  window._bmhReceptionRemoteLookupTimers[key] = setTimeout(function () {
+    window._bmhReceptionRemoteLookupTimers[key] = null;
+    fetchReceptionPatientsFromFirebase(value).then(function (rows) {
+      if (window._bmhReceptionRemoteLookupTokens?.[key] !== token) return;
+      if (rows[0]?.bmhId) prefetchPatientVisitsInBackground(rows[0].bmhId);
+      if (key === 'phone') lookupByPhone(value, { skipRemote: true });
+      else lookupByBMHID(value, { skipRemote: true });
+    });
+  }, 220);
+}
+function cancelReceptionRemoteLookup(mode) {
+  const key = String(mode || 'id');
+  if (window._bmhReceptionRemoteLookupTimers?.[key]) clearTimeout(window._bmhReceptionRemoteLookupTimers[key]);
+  if (window._bmhReceptionRemoteLookupTimers) window._bmhReceptionRemoteLookupTimers[key] = null;
+  if (window._bmhReceptionRemoteLookupTokens) window._bmhReceptionRemoteLookupTokens[key] = 'cancelled:' + Date.now();
+}
+function scheduleQueueVisitPrefetch(rows) {
+  if (!bmhFastDataBootstrapEnabled() || !Array.isArray(rows) || !rows.length) return;
+  const role = String(CURRENT_USER?.role || '').trim().toLowerCase();
+  if (!['doctor', 'optometrist'].includes(role)) return;
+  const ids = Array.from(new Set(rows.map(function (row) { return String(row?.bmhId || '').trim(); }).filter(Boolean))).slice(0, 12);
+  bmhDeferNonCriticalWork(function () {
+    let nextIndex = 0;
+    const worker = function () {
+      if (nextIndex >= ids.length) return;
+      const id = ids[nextIndex++];
+      prefetchPatientVisitsInBackground(id).finally(function () { setTimeout(worker, 40); });
+    };
+    worker();
+    worker();
+  }, 300);
+}
 function receptionPatientResultHtml(p, opts) {
   const options = opts || {};
   const safeId = String(p?.bmhId || '').replace(/'/g, "\\'");
@@ -25962,7 +26101,8 @@ function toggleReceptionVisitSummary(bmhId, btn) {
   });
 }
 window.toggleReceptionVisitSummary = toggleReceptionVisitSummary;
-function lookupByBMHID(val) {
+function lookupByBMHID(val, opts) {
+  opts = opts || {};
   const el = document.getElementById('rc-bmhid-result'); if(!el) return;
   if(!val || val.length < 3) { el.innerHTML=''; return; }
   const v = val.trim().toUpperCase();
@@ -25980,6 +26120,8 @@ function lookupByBMHID(val) {
   const byName = val.length >= 3 ? activePatients.filter(p => p.name?.toLowerCase().includes(vLow)) : [];
   const single = byId || byPhone;
   if(single) {
+    cancelReceptionRemoteLookup('id');
+    prefetchPatientVisitsInBackground(single.bmhId);
     el.innerHTML = receptionPatientResultHtml(single, { title: '✅ Found — existing patient' });
   } else if(phoneMatches.length > 1) {
     const hits = phoneMatches.slice(0, 8);
@@ -25995,7 +26137,8 @@ function lookupByBMHID(val) {
       ${hits.map(p=>receptionPatientResultHtml(p, { title: 'Name match', compact: true, bg: '#fff', border: 'var(--blue)', titleColor: 'var(--blue)' })).join('')}
     </div>`;
   } else {
-    el.innerHTML = val.length >= 4 ? `<div style="font-size:11px;color:var(--g1);padding:5px 8px;background:var(--g6);border-radius:6px">🆕 No existing patient found — proceed with new registration below</div>` : '';
+    el.innerHTML = val.length >= 4 ? `<div style="font-size:11px;color:var(--g1);padding:5px 8px;background:var(--g6);border-radius:6px">${!opts.skipRemote && window.FBDB ? 'Searching all patient records...' : '🆕 No existing patient found — proceed with new registration below'}</div>` : '';
+    if (!opts.skipRemote && (digits.length >= 7 || /^BMSH/i.test(v))) scheduleReceptionRemoteLookup(val, 'id');
   }
 }
 
@@ -26169,21 +26312,28 @@ function readQRFromFile(input) {
   reader.readAsDataURL(file);
 }
 
-function lookupByPhone(val) {
+function lookupByPhone(val, opts) {
+  opts = opts || {};
   const matchEl = document.getElementById('rc-phone-match'); if(!matchEl) return;
   if(val.length < 7) { matchEl.innerHTML=''; return; }
   const dig = val.replace(/\s/g,'').replace(/\D/g,'');
   // Find all matches (multiple patients with similar phone)
   const matches = findReceptionPatientsByPhone(dig);
   if(matches.length) {
+    cancelReceptionRemoteLookup('phone');
+    prefetchPatientVisitsInBackground(matches[0].bmhId);
     matchEl.innerHTML = matches.map(match=>receptionPatientResultHtml(match, { title: '✅ Existing patient found' })).join('');
-  } else { matchEl.innerHTML=''; }
+  } else {
+    matchEl.innerHTML = !opts.skipRemote && window.FBDB ? '<div style="font-size:10.5px;color:var(--g1);padding:5px 8px">Searching all patient records...</div>' : '';
+    if (!opts.skipRemote) scheduleReceptionRemoteLookup(val, 'phone');
+  }
 }
 function prefillExistingPatient(bmhId) {
   const p = (typeof resolveExistingPatientForRegistration === 'function' ? resolveExistingPatientForRegistration(bmhId) : null)
     || findReceptionPatientByBmh(bmhId)
     || getAllKnownPatientRecords().find(function (x) { return String(x?.bmhId || '') === String(bmhId || ''); });
   if(!p) { showToast('Patient not found for prefill', 'w'); return; }
+  prefetchPatientVisitsInBackground(p.bmhId);
   const name = String(p.name || p.patient || '').trim();
   const fn = document.getElementById('rc-fn'); if(fn) fn.value = name.split(' ')[0]||'';
   const ln = document.getElementById('rc-ln'); if(ln) ln.value = name.split(' ').slice(1).join(' ')||'';
@@ -40928,6 +41078,7 @@ function savePatientToFirebase(patient) {
   const payload = {
     ...patient,
     centre,
+    phoneSearch: normalizeReceptionPhoneDigits(patient.mob || patient.mobile || patient.phone || '').slice(-10),
     lastUpdated: new Date().toISOString(),
     updatedBy: CURRENT_USER?.name || 'System'
   };
@@ -40955,6 +41106,13 @@ function bmhSafePerfPatchesEnabled() {
 function bmhResponsiveUiPatchesEnabled() {
   try {
     return bmhSafePerfPatchesEnabled() && localStorage.getItem('bmh_disable_responsive_ui_patches') !== '1';
+  } catch (e) {
+    return bmhSafePerfPatchesEnabled();
+  }
+}
+function bmhFastDataBootstrapEnabled() {
+  try {
+    return bmhSafePerfPatchesEnabled() && localStorage.getItem('bmh_disable_fast_data_bootstrap') !== '1';
   } catch (e) {
     return bmhSafePerfPatchesEnabled();
   }
@@ -41011,6 +41169,73 @@ window.bmhEnableResponsiveUi = function () {
   showToast && showToast('Responsive UI changes enabled. Reloading…', 's');
   setTimeout(function () { window.location.reload(); }, 80);
 };
+window.bmhRollbackFastDataBootstrap = function () {
+  try { localStorage.setItem('bmh_disable_fast_data_bootstrap', '1'); } catch (e) {}
+  showToast && showToast('Fast data bootstrap disabled. Reloading...', 'w');
+  setTimeout(function () { window.location.reload(); }, 80);
+};
+window.bmhEnableFastDataBootstrap = function () {
+  try { localStorage.removeItem('bmh_disable_fast_data_bootstrap'); } catch (e) {}
+  showToast && showToast('Fast data bootstrap enabled. Reloading...', 's');
+  setTimeout(function () { window.location.reload(); }, 80);
+};
+const BMH_PATIENT_DIRECTORY_CACHE_KEY = 'bmh_patient_directory_v1';
+function compactPatientDirectoryRecord(patient) {
+  if (!patient || !patient.bmhId) return null;
+  const fields = [
+    'bmhId', 'name', 'patient', 'initials', 'age', 'sex', 'gender', 'dob',
+    'mob', 'mobile', 'phone', 'phoneNumber', 'mob2', 'altMobile', 'email',
+    'addr', 'address', 'rel', 'centre', 'visitedCentres', 'lastReceptionCentre',
+    'previousCentre', 'visitCount', 'createdAt', 'registeredAt', 'updatedAt',
+    'lastUpdated', 'mergedInto', 'inactive', 'status'
+  ];
+  const row = {};
+  fields.forEach(function (field) {
+    const value = patient[field];
+    if (value !== undefined && value !== null && value !== '') row[field] = value;
+  });
+  return row;
+}
+function hydratePatientDirectoryFromLocalCache() {
+  if (!bmhFastDataBootstrapEnabled() || window._bmhPatientDirectoryCacheHydrated) return 0;
+  window._bmhPatientDirectoryCacheHydrated = true;
+  try {
+    const parsed = JSON.parse(localStorage.getItem(BMH_PATIENT_DIRECTORY_CACHE_KEY) || '[]');
+    if (!Array.isArray(parsed) || !parsed.length) return 0;
+    const current = Array.isArray(window._BMH_ALL_PATIENTS_CACHE) ? window._BMH_ALL_PATIENTS_CACHE : [];
+    const byId = new Map(current.filter(Boolean).map(function (row) { return [String(row.bmhId || ''), row]; }));
+    parsed.forEach(function (raw) {
+      if (!raw || !raw.bmhId) return;
+      const id = String(raw.bmhId);
+      byId.set(id, normalizePatientRecord(Object.assign({}, raw, byId.get(id) || {})));
+    });
+    window._BMH_ALL_PATIENTS_CACHE = Array.from(byId.values());
+    rebuildPatientCacheIndex(window._BMH_ALL_PATIENTS_CACHE);
+    window._bmhPatientsCacheVersion = (window._bmhPatientsCacheVersion || 0) + 1;
+    rebuildPatientsArrayFromGlobalCache();
+    buildReceptionPatientLookupIndex && buildReceptionPatientLookupIndex();
+    updatePatientCountStatus && updatePatientCountStatus();
+    return parsed.length;
+  } catch (e) {
+    console.warn('patient directory cache read failed', e);
+    return 0;
+  }
+}
+function schedulePatientDirectoryCacheWrite(rows) {
+  if (!bmhFastDataBootstrapEnabled()) return;
+  if (window._bmhPatientDirectoryCacheWriteTimer) clearTimeout(window._bmhPatientDirectoryCacheWriteTimer);
+  window._bmhPatientDirectoryCacheWriteTimer = setTimeout(function () {
+    window._bmhPatientDirectoryCacheWriteTimer = null;
+    bmhDeferNonCriticalWork(function () {
+      try {
+        const compact = (Array.isArray(rows) ? rows : []).map(compactPatientDirectoryRecord).filter(Boolean);
+        localStorage.setItem(BMH_PATIENT_DIRECTORY_CACHE_KEY, JSON.stringify(compact));
+      } catch (e) {
+        console.warn('patient directory cache write skipped', e);
+      }
+    }, 0);
+  }, 1200);
+}
 function rebuildPatientCacheIndex(cache) {
   const source = Array.isArray(cache) ? cache : (Array.isArray(window._BMH_ALL_PATIENTS_CACHE) ? window._BMH_ALL_PATIENTS_CACHE : []);
   const map = new Map();
@@ -41244,6 +41469,19 @@ function applyPatientsPayload(data, opts) {
       preserveNewerPatientPurpose(row, existingPurposeById.get(String(row?.bmhId || '')));
     });
     overlayPendingLocalPatientQueueWrites(normalized);
+    const normalizedById = new Map(normalized.map(function (row, rowIndex) {
+      return [String(row?.bmhId || ''), rowIndex];
+    }).filter(function (entry) { return !!entry[0]; }));
+    Object.entries(window._bmhRealtimePatientPendingUpserts || {}).forEach(function (entry) {
+      const id = String(entry[0] || '');
+      const liveRow = entry[1];
+      if (!id || !liveRow) return;
+      if (normalizedById.has(id)) normalized[normalizedById.get(id)] = liveRow;
+      else {
+        normalizedById.set(id, normalized.length);
+        normalized.push(liveRow);
+      }
+    });
     window._BMH_ALL_PATIENTS_CACHE = normalized;
     rebuildPatientCacheIndex(normalized);
     window._bmhPatientsCacheVersion = (window._bmhPatientsCacheVersion || 0) + 1;
@@ -41262,6 +41500,7 @@ function applyPatientsPayload(data, opts) {
       renderReceptionPage && renderReceptionPage();
     }
     bmhMarkReceptionFinancialDataDirty && bmhMarkReceptionFinancialDataDirty('patients-refresh');
+    schedulePatientDirectoryCacheWrite(normalized);
     _debouncedRenderDash();
   };
   const pump = function () {
@@ -41463,6 +41702,7 @@ function flushRealtimePatientUpdates() {
     }
     window._bmhPatientsCacheVersion = (window._bmhPatientsCacheVersion || 0) + 1;
     applyRealtimePatientDeltaToVisiblePatients(upserts, deletes);
+    schedulePatientDirectoryCacheWrite(cache);
     _debouncedRenderDash({ realtimePatients: {
       rows: changedRows,
       queueRows: queueRows,
@@ -41608,6 +41848,7 @@ function loadPatientsFromFirebase() {
   window._bmhRtdbPatientsListening = true;
   window._bmhRtdbPatientsScope = scope;
   scheduleQueueCalendarDayRefresh && scheduleQueueCalendarDayRefresh();
+  hydratePatientDirectoryFromLocalCache();
   const scopedBootstrap = shouldUseScopedPatientBootstrap();
   if (!scopedBootstrap) refreshSelectedCentreTodayQueue({ render:true });
   startTodayQueuePatientsRealtimeUpdates(true);
@@ -42402,6 +42643,7 @@ function loadTodayTransactions() {
       }
     }
   } catch (e) { /* noop */ }
+  startTodayTransactionsRealtimeUpdates(today);
   const utcToday = new Date().toISOString().split('T')[0]; // Compatibility read for older UTC-keyed transaction buckets.
   const transactionDays = Array.from(new Set([today, utcToday].filter(Boolean)));
   Promise.all(transactionDays.map(function (day) {
@@ -50338,6 +50580,7 @@ function _renderDocQueueImpl() {
   } finally {
     _bmhQueueRenderCache = null;
   }
+  scheduleQueueVisitPrefetch(active);
 
   // Dilated tab visibility — only show for ophtho
   const dilTab = document.getElementById('dq-tab-dil');
