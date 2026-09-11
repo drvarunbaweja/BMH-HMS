@@ -2199,7 +2199,7 @@
         <div id="rc-search-row" style="display:flex;gap:7px;margin-bottom:10px;align-items:center">
           <div style="flex:1;display:flex;align-items:center;gap:7px;background:#fff;border:1.5px solid var(--g4);border-radius:8px;padding:6px 10px">
             <span style="font-size:14px">🔍</span>
-            <input type="text" id="rc-bmhid-search" placeholder="Search by BMSH ID (e.g. BMSH-056000) or phone…" style="border:none;outline:none;font-size:12px;font-family:var(--font);width:100%" oninput="lookupByBMHID(this.value)">
+            <input type="text" id="rc-bmhid-search" placeholder="Search by patient name, BMSH ID, or phone…" style="border:none;outline:none;font-size:12px;font-family:var(--font);width:100%" oninput="lookupByBMHID(this.value)">
           </div>
           <button class="btn btn-xs btn-outline" id="rc-qr-inline-btn" onclick="openQRScanner()" title="Scan QR from prescription">📷 QR</button>
         </div>
@@ -6765,7 +6765,7 @@
 <div id="dx-dropdown" style="display:none;z-index:100000;background:#fff;border:2px solid var(--blue);border-radius:var(--rsm);max-height:280px;overflow-y:auto;box-shadow:var(--sh-md)"></div>
 
 <!-- ═══ MAIN APP SCRIPT (legacy — being migrated to modules) ═══ -->
-<script defer src="%BASE_URL%js/legacy.js?v=20260911-dept-rx-doctor-v13"></script>
+<script defer src="%BASE_URL%js/legacy.js?v=20260911-reception-scope-v14"></script>
 
 <!-- ═══ QR DECODER BRIDGE ═══ -->
 <script type="module" src="./js/qr-decoder.js"></script>
