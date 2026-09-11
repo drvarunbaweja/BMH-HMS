@@ -5080,6 +5080,7 @@ function populateOphthoForm(v) {
   // Advice text
   setV('rx-advice-text', v.advice || '');
   setV('rx-extra-advice-text', v.extraAdvice || '');
+  restorePrescriptionLayoutOverride('ophtho', v);
   restoreProcedureDoneState('ophtho', v.procDone || null);
   refreshPreviousDiagnosisPanel('ophtho', v);
   renderDeptSmartSuggestions && renderDeptSmartSuggestions('ophtho');
@@ -7143,6 +7144,116 @@ function renderPaymentsPage() {
 }
 function editTemplate(id) { showToast('Template editor opened ✓','i'); }
 
+const BMH_RX_LAYOUT_OPTIONS = [
+  { key: 'old_software', label: 'Old Software' },
+  { key: 'tabular_1', label: 'Tabular 1' },
+  { key: 'tabular_2', label: 'Tabular 2' },
+  { key: 'old_software_compact', label: 'Old Software Compact' }
+];
+const BMH_RX_LAYOUT_KEYS = BMH_RX_LAYOUT_OPTIONS.map(function (option) { return option.key; });
+
+function normalizePrescriptionLayoutKey(value) {
+  const key = String(value || '').trim().toLowerCase();
+  return BMH_RX_LAYOUT_KEYS.includes(key) ? key : '';
+}
+
+function prescriptionLayoutDeptKey(value) {
+  const key = normalizeDeptKeyForQueue(value || '');
+  return key === 'ophtho' || key === 'obg' || key === 'psych' || key === 'skin' ? key : '';
+}
+
+function getPrescriptionLayoutRoot(dept) {
+  const key = prescriptionLayoutDeptKey(dept);
+  const selectors = {
+    ophtho: '#pg-ophtho #oe-rx',
+    obg: '#pg-obg #obg-rx',
+    psych: '#pg-psych #psych-rx',
+    skin: '#pg-skin #skin-rx'
+  };
+  return key ? document.querySelector(selectors[key]) : null;
+}
+
+function getPrescriptionLayoutSelect(dept) {
+  return getPrescriptionLayoutRoot(dept)?.querySelector('[data-bmh-rx-layout-select]') || null;
+}
+
+function getPrescriptionLayoutOverride(dept) {
+  return normalizePrescriptionLayoutKey(getPrescriptionLayoutSelect(dept)?.value || '');
+}
+
+function setPrescriptionLayoutOverride(dept, value, opts) {
+  const key = prescriptionLayoutDeptKey(dept);
+  const select = getPrescriptionLayoutSelect(key);
+  const layout = normalizePrescriptionLayoutKey(value);
+  if (select && select.value !== layout) select.value = layout;
+  if (!(opts && opts.silent)) {
+    scheduleActiveClinicRxAutosave && scheduleActiveClinicRxAutosave();
+    showToast(layout ? ('Prescription layout: ' + (BMH_RX_LAYOUT_OPTIONS.find(function (row) { return row.key === layout; })?.label || layout)) : 'Using doctor default prescription layout', 's');
+  }
+}
+window.setPrescriptionLayoutOverride = setPrescriptionLayoutOverride;
+
+function directChildWithin(root, element) {
+  let node = element;
+  while (node && node.parentElement && node.parentElement !== root) node = node.parentElement;
+  return node && node.parentElement === root ? node : null;
+}
+
+function ensurePrescriptionWorkflowControls(dept, savedLayout) {
+  const key = prescriptionLayoutDeptKey(dept);
+  const root = getPrescriptionLayoutRoot(key);
+  if (!root) return;
+  let workflow = root.querySelector(':scope > [data-bmh-rx-priority-workflow]');
+  if (!workflow) {
+    workflow = document.createElement('section');
+    workflow.dataset.bmhRxPriorityWorkflow = key;
+    workflow.style.cssText = 'display:flex;flex-direction:column;gap:8px;margin-bottom:10px';
+    root.insertBefore(workflow, root.firstChild);
+
+    const chooser = document.createElement('div');
+    chooser.style.cssText = 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:7px 9px;border:1px solid var(--g4);border-radius:8px;background:#fff';
+    chooser.innerHTML = '<label style="font-size:10px;font-weight:900;text-transform:uppercase;color:var(--g1);white-space:nowrap">Print layout</label>'
+      + '<select data-bmh-rx-layout-select style="width:auto;min-width:190px;max-width:260px;padding:5px 8px;font-size:11px;border:1.5px solid var(--g4);border-radius:6px;background:#fff" onchange="setPrescriptionLayoutOverride(\'' + key + '\',this.value)">'
+      + '<option value="">Doctor default</option>'
+      + BMH_RX_LAYOUT_OPTIONS.map(function (option) { return '<option value="' + option.key + '">' + option.label + '</option>'; }).join('')
+      + '</select>';
+    workflow.appendChild(chooser);
+
+    const quickInput = root.querySelector('#rx-quick-search');
+    const quickWrap = directChildWithin(root, quickInput);
+    const drugs = directChildWithin(root, root.querySelector('#rx-drugs'));
+    const drugActions = drugs && drugs.nextElementSibling;
+    const followInput = getDeptFollowUpDateInput(key === 'ophtho' ? 'oe' : key);
+    const followWrap = directChildWithin(root, followInput);
+    [quickWrap, drugs, drugActions, followWrap].forEach(function (node) {
+      if (node && node !== workflow && !workflow.contains(node)) workflow.appendChild(node);
+    });
+
+    if (key !== 'ophtho') {
+      const adviceId = { obg: 'obg-advice', psych: 'psych-advice', skin: 'skin-advice' }[key];
+      const advicePanel = document.getElementById(adviceId)?.closest('.plan-panel');
+      if (advicePanel && !workflow.contains(advicePanel)) {
+        advicePanel.style.borderWidth = '2px';
+        workflow.appendChild(advicePanel);
+      }
+    }
+  }
+  const select = getPrescriptionLayoutSelect(key);
+  const restored = normalizePrescriptionLayoutKey(savedLayout);
+  const patientId = String(window.CURRENT_PATIENT?.bmhId || '');
+  if (select && select.dataset.bmhPatientId !== patientId) {
+    select.value = restored;
+    select.dataset.bmhPatientId = patientId;
+  } else if (select && savedLayout === undefined && !normalizePrescriptionLayoutKey(select.value)) {
+    select.value = '';
+  }
+}
+
+function restorePrescriptionLayoutOverride(dept, visit) {
+  ensurePrescriptionWorkflowControls(dept, visit && visit.rxDesignOverride);
+}
+window.ensurePrescriptionWorkflowControls = ensurePrescriptionWorkflowControls;
+
 // TABS / MODAL / TOAST / MOB
 function ptab(el, cId, opts) {
   opts = opts || {};
@@ -7186,6 +7297,11 @@ function ptab(el, cId, opts) {
   else if (cId === 'obg-rx') restoreCurrentPatientRxForDeptIfEmpty('obg');
   else if (cId === 'psych-rx') restoreCurrentPatientRxForDeptIfEmpty('psych');
   else if (cId === 'skin-rx') restoreCurrentPatientRxForDeptIfEmpty('skin');
+  const rxDeptForTab = { 'oe-rx':'ophtho', 'obg-rx':'obg', 'psych-rx':'psych', 'skin-rx':'skin' }[cId];
+  if (rxDeptForTab) {
+    const rxVisit = window.CURRENT_PATIENT?.bmhId ? getLatestSavedVisitForDept(window.CURRENT_PATIENT.bmhId, rxDeptForTab) : null;
+    ensurePrescriptionWorkflowControls(rxDeptForTab, rxVisit?.rxDesignOverride);
+  }
   ['obg-rx-send-bar', 'psych-plan-send-bar', 'skin-rx-send-bar'].forEach(function (id) {
     const legacyBar = document.getElementById(id);
     if (legacyBar) legacyBar.style.display = 'none';
@@ -25756,6 +25872,7 @@ function applyLastRx(useTodayDates) {
       return;
     }
     restoreRxFromVisitData(visit);
+    restorePrescriptionLayoutOverride(dept, visit);
     if (dept === 'ophtho') {
       const procContainer = document.getElementById('rx-proc-advised');
       if (procContainer && Array.isArray(visit.procedures)) {
@@ -39253,9 +39370,9 @@ function getDoctorPrescriptionPrintMode(profile) {
 function getDoctorPrescriptionDesign(profile, centre) {
   const ctr = normalizeAppointmentCentreValue(centre || getEffectiveCentre?.() || CURRENT_USER?.centre || profile?.centre || 'CHD');
   const centreMode = String(ctr === 'RPR' ? (profile?.rxDesignRPR || '') : (profile?.rxDesignCHD || '')).trim().toLowerCase();
-  if (['current','option_a','option_b','signature_classic','clinical_blocks','ribbon_timeline','compact_bilingual','editorial_columns','left_label_ledger','vertical_dx_column','mono_chart'].includes(centreMode)) return centreMode;
+  if (['current','option_a','option_b','signature_classic','clinical_blocks','ribbon_timeline','compact_bilingual','editorial_columns','left_label_ledger','vertical_dx_column','mono_chart','old_software','tabular_1','tabular_2','old_software_compact'].includes(centreMode)) return centreMode;
   const mode = String(profile?.rxDesign || '').trim().toLowerCase();
-  if (['current','option_a','option_b','signature_classic','clinical_blocks','ribbon_timeline','compact_bilingual','editorial_columns','left_label_ledger','vertical_dx_column','mono_chart'].includes(mode)) return mode;
+  if (['current','option_a','option_b','signature_classic','clinical_blocks','ribbon_timeline','compact_bilingual','editorial_columns','left_label_ledger','vertical_dx_column','mono_chart','old_software','tabular_1','tabular_2','old_software_compact'].includes(mode)) return mode;
   return 'current';
 }
 
@@ -39698,6 +39815,7 @@ window.printUnifiedRx = function(deptId) {
       date: new Date().toISOString(),
       source: 'printedRx'
     };
+    printedSnapshot.rxDesignOverride = getPrescriptionLayoutOverride(saveDept);
     saveLastPrintedRxSnapshot(currentBmhId, saveDept, printedSnapshot);
   }
 
@@ -39711,7 +39829,8 @@ window.printUnifiedRx = function(deptId) {
   }
   const cpt = window.CURRENT_PATIENT || {};
   const rxPrintMode = getDoctorPrescriptionPrintMode(doctorProfile);
-  const rxDesign = getDoctorPrescriptionDesign(doctorProfile, cpt.centre || CURRENT_USER?.centre || getEffectiveCentre?.() || 'CHD');
+  const doctorDefaultRxDesign = getDoctorPrescriptionDesign(doctorProfile, cpt.centre || CURRENT_USER?.centre || getEffectiveCentre?.() || 'CHD');
+  const rxDesign = getPrescriptionLayoutOverride(saveDept) || doctorDefaultRxDesign;
   const doctorSpec    = String(doctorProfile.dept || '').trim() || ({oe:'Ophthalmologist',obg:'Obstetrician & Gynaecologist',psych:'Neuropsychiatrist',skin:'Skin & Cosmetology'}[deptId]||'Specialist');
   const doctorReg     = String(doctorProfile.reg || '').trim();
   const doctorPhone   = '6280048805';
@@ -39935,6 +40054,70 @@ window.printUnifiedRx = function(deptId) {
   const designedDiagnosis = renderDiagnosisByDesign();
   const designedMeds = renderMedsByDesign();
   const designedAdviceFollow = renderAdviceFollowByDesign();
+  const isBmhPrescriptionLayout = BMH_RX_LAYOUT_KEYS.includes(rxDesign);
+  const bmhMedicineFormLabel = function (form) {
+    const value = String(form || '').trim();
+    if (/^eye\s*drop/i.test(value)) return 'EYEDROPS';
+    return value ? value.toUpperCase() : 'MEDICINE';
+  };
+  const bmhPlainInstruction = function (drug) {
+    let line = buildRxPlainInstructionLine(drug, rxPlainLang, fmtIN) || '';
+    if (rxPlainLang === 'en' && rxPlainIsEyeDrop(drug)) line = line.replace(/\bone drop\b/i, 'one eyedrop');
+    return line;
+  };
+  const bmhExtraDrugInstruction = function (drug, plainLine) {
+    const translated = String(drug?.lang?.[rxPlainLang] || '').trim();
+    if (!translated || translated.toLowerCase() === String(plainLine || '').trim().toLowerCase()) return '';
+    return translated;
+  };
+  const bmhDiagnosisHtml = dxList.length
+    ? dxList.map(function (line, index) { return '<div>' + (index + 1) + '. ' + escapeHtmlConsent(line) + '</div>'; }).join('')
+    : '<div>—</div>';
+  const bmhTableHeader = function () {
+    return '<tr><th class="bmh-rx-no">Rx</th><th>Medicine</th>' + (deptId === 'oe' ? '<th class="bmh-rx-eye">Eye</th>' : '') + '<th class="bmh-rx-frequency">Frequency</th><th class="bmh-rx-duration">Duration</th><th>Instructions</th></tr>';
+  };
+  const bmhTableRows = function () {
+    return drugs.map(function (drug, index) {
+      const trade = rxDrugTradeName(drug) || '—';
+      const generic = rxDrugGenericName(drug) || '';
+      const plain = bmhPlainInstruction(drug);
+      const extra = bmhExtraDrugInstruction(drug, plain);
+      const start = fmtIN(drug.dateFrom);
+      const end = fmtIN(drug.dateTo);
+      return '<tr><td class="bmh-rx-no">' + (index + 1) + '</td>'
+        + '<td class="bmh-rx-med"><strong>' + escapeHtmlConsent(trade) + '</strong><span>' + escapeHtmlConsent(bmhMedicineFormLabel(drug.drugType || drug.type)) + '</span>' + (generic ? '<small>' + escapeHtmlConsent(generic) + '</small>' : '') + '</td>'
+        + (deptId === 'oe' ? '<td class="bmh-rx-eye">' + escapeHtmlConsent(getRxSiteLabel(drug) || '—') + '</td>' : '')
+        + '<td class="bmh-rx-frequency">' + escapeHtmlConsent(drug.freq || '—') + '</td>'
+        + '<td class="bmh-rx-duration"><strong>' + escapeHtmlConsent(drug.dur || '—') + '</strong><small>Start: ' + escapeHtmlConsent(start || '—') + '<br>End: ' + escapeHtmlConsent(end || '—') + '</small></td>'
+        + '<td>' + escapeHtmlConsent(plain || '—') + (extra ? '<div class="bmh-rx-added-instruction">' + escapeHtmlConsent(extra) + '</div>' : '') + '</td></tr>';
+    }).join('');
+  };
+  const bmhOldRows = function (compact) {
+    return '<ol class="bmh-old-rx-list ' + (compact ? 'compact' : '') + '">' + drugs.map(function (drug) {
+      const trade = rxDrugTradeName(drug) || '—';
+      const generic = rxDrugGenericName(drug) || '';
+      const plain = bmhPlainInstruction(drug);
+      const extra = bmhExtraDrugInstruction(drug, plain);
+      const heading = '<strong>' + escapeHtmlConsent(trade) + '</strong> (' + escapeHtmlConsent(bmhMedicineFormLabel(drug.drugType || drug.type)) + ')' + (generic ? ' - <span>' + escapeHtmlConsent(generic) + '</span>' : '');
+      return '<li><div class="bmh-old-med-heading">' + heading + '</div><div class="bmh-old-med-line">' + escapeHtmlConsent(plain || '—') + '</div>' + (extra ? '<div class="bmh-rx-added-instruction">' + escapeHtmlConsent(extra) + '</div>' : '') + '</li>';
+    }).join('') + '</ol>';
+  };
+  const bmhApprovedMeds = rxDesign === 'tabular_1' || rxDesign === 'tabular_2'
+    ? '<table class="bmh-approved-table ' + (rxDesign === 'tabular_2' ? 'roomy' : 'compact') + '"><thead>' + bmhTableHeader() + '</thead><tbody>' + bmhTableRows() + '</tbody></table>'
+    : bmhOldRows(rxDesign === 'old_software_compact');
+  const bmhApprovedLayoutHtml = isBmhPrescriptionLayout ? `
+    <section class="bmh-approved-layout bmh-${rxDesign}">
+      <div class="bmh-approved-identity">
+        <div><div class="bmh-approved-patient">${escapeHtmlConsent(ptName)}</div><div><strong>Age/Sex:</strong> ${escapeHtmlConsent(ptAge)}</div><div><strong>BMSH ID:</strong> ${escapeHtmlConsent(ptId)}</div>${ptMob ? `<div><strong>Phone:</strong> ${escapeHtmlConsent(ptMob)}</div>` : ''}<div class="bmh-approved-date"><strong>Date:</strong> ${escapeHtmlConsent(today)}</div></div>
+        <div class="bmh-approved-doctor"><div>${escapeHtmlConsent(doctorName)}</div>${doctorSpec ? `<span>${escapeHtmlConsent(doctorSpec)}</span>` : ''}${doctorDegrees ? `<span>${escapeHtmlConsent(doctorDegrees)}</span>` : ''}${doctorReg ? `<span>Regd. No.: ${escapeHtmlConsent(doctorReg)}</span>` : ''}</div>
+      </div>
+      <div class="bmh-approved-diagnosis"><strong>Diagnosis</strong><div>${bmhDiagnosisHtml}</div></div>
+      <div class="bmh-approved-rx-mark">Rx</div>
+      ${bmhApprovedMeds}
+      ${fuFormatted ? `<div class="bmh-approved-follow"><strong>Follow-up:</strong> ${escapeHtmlConsent(fuFormatted)}</div>` : ''}
+      ${incAdvFinal && adviceHtml ? `<div class="bmh-approved-advice"><strong>Instructions</strong><div>${adviceHtml}</div></div>` : ''}
+      ${!psychPrescriptionPrintOnly && incPrcFinal && procs.length ? `<div class="bmh-approved-procedures"><strong>Procedure / Surgery Advised</strong><div>${procs.map(function (proc) { return escapeHtmlConsent(expandProcedureLabelForPrint(proc)); }).join('<br>')}</div></div>` : ''}
+    </section>` : '';
   // option_a and option_b are CSS-only variants of the 'current' rx-list layout.
   // They must use the same inline rx-list renderer — NOT the designedMeds block.
   const isListDesign = rxDesign === 'current' || rxDesign === 'option_a' || rxDesign === 'option_b';
@@ -39949,6 +40132,23 @@ body{font-family:'Lato',sans-serif;font-size:9.2px;color:#1a1a1a;background:#fff
 @media print{body{zoom:.94}}
 body > *:not(.lh-img){filter:grayscale(1)}
 .lh-img{width:100%;max-width:100%;height:auto;display:block;margin-bottom:6px;filter:none!important}
+.bmh-approved-layout{color:#000;font-family:Arial,Helvetica,sans-serif;font-size:10.5px;line-height:1.35}
+.bmh-approved-layout *{color:#000!important;background:#fff!important;border-color:#000!important;box-shadow:none!important}
+.bmh-approved-identity{display:grid;grid-template-columns:1fr minmax(190px,.7fr);gap:28px;border-bottom:1.5px solid #000;padding:2px 0 8px;margin-bottom:9px}
+.bmh-approved-patient,.bmh-approved-doctor>div{font-size:17px;font-weight:900;margin-bottom:2px}
+.bmh-approved-doctor{text-align:right}.bmh-approved-doctor span{display:block;line-height:1.42}.bmh-approved-date{margin-top:4px}
+.bmh-approved-diagnosis{text-align:left;border-top:1px solid #000;border-bottom:1px solid #000;padding:5px 0;margin:5px 0 7px;font-size:11.5px}
+.bmh-approved-diagnosis>strong{display:inline-block;text-transform:uppercase;margin-right:18px}.bmh-old_software .bmh-approved-diagnosis,.bmh-old_software_compact .bmh-approved-diagnosis{text-align:center;border:0;padding:3px 50px 7px}.bmh-old_software .bmh-approved-diagnosis>strong,.bmh-old_software_compact .bmh-approved-diagnosis>strong{display:block;font-size:14px;margin:0 0 2px}
+.bmh-approved-rx-mark{font-family:Georgia,'Times New Roman',serif;font-size:27px;line-height:1;margin:4px 0 5px}
+.bmh-old-rx-list{padding-left:25px;margin:0}.bmh-old-rx-list li{padding:0 0 8px 3px;break-inside:avoid}.bmh-old-rx-list.compact li{padding-bottom:7px}
+.bmh-old-med-heading{font-size:11.5px;line-height:1.35}.bmh-old-med-heading strong{font-size:16px}.bmh-old-med-heading span{font-size:10.5px;font-weight:400}
+.bmh-old-med-line{font-size:11.7px;line-height:1.45;margin-top:2px}.bmh-rx-added-instruction{font-size:10.5px;font-weight:800;margin-top:2px}
+.bmh-approved-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:9.5px;margin:0}.bmh-approved-table th,.bmh-approved-table td{border:1px solid #000;padding:5px;vertical-align:top;text-align:left}.bmh-approved-table th{text-align:center;font-weight:900;text-transform:none}.bmh-approved-table.roomy td{padding:7px 6px;height:58px}
+.bmh-approved-table .bmh-rx-no{width:25px;text-align:center;vertical-align:middle}.bmh-approved-table .bmh-rx-eye{width:74px;text-align:center}.bmh-approved-table .bmh-rx-frequency{width:105px;text-align:center}.bmh-approved-table .bmh-rx-duration{width:92px;text-align:center}
+.bmh-rx-med strong{display:block;font-size:14px;line-height:1.2}.bmh-rx-med>span{display:block;font-size:9px;font-weight:900}.bmh-rx-med small{display:block;font-size:9px;line-height:1.25}.bmh-rx-duration small{display:block;border-top:1px solid #000;margin-top:4px;padding-top:3px;font-size:8.5px}
+.bmh-approved-follow{font-size:12px;border-top:1px solid #000;border-bottom:1px solid #000;padding:6px 0;margin-top:9px}
+.bmh-approved-advice,.bmh-approved-procedures{border:1.5px solid #000;padding:7px 9px;margin-top:8px;font-size:11px;break-inside:avoid}.bmh-approved-advice>strong,.bmh-approved-procedures>strong{display:block;text-transform:uppercase;font-size:11px;margin-bottom:4px}.bmh-approved-advice>div{font-weight:800;font-size:12px;line-height:1.5}
+.rx-approved-layout .legacy-rx-body{display:none}
 /* Patient header */
 .pt-name-bar{display:flex;align-items:baseline;justify-content:space-between;border-bottom:1.5px solid #333;padding-bottom:3px;margin-bottom:2px}
 .pt-name{font-family:'Playfair Display','Georgia',serif;font-size:16px;font-weight:700;color:#111;letter-spacing:.2px}
@@ -40140,11 +40340,14 @@ tr:nth-child(even) td{background:#fafafa}
 .design-follow.editorial_columns,.design-follow.left_label_ledger,.design-follow.vertical_dx_column,.design-follow.mono_chart{background:#f3f3f3;border:1px solid #d0d0d0;color:#111}
 ${typographyCss}
 ${designCss}
-</style></head><body class="rx-print rx-${rxDesign}">
+</style></head><body class="rx-print rx-${rxDesign}${isBmhPrescriptionLayout ? ' rx-approved-layout' : ''}">
 
 <div class="watermark">BMSH</div>
 
 ${lhImgSrc ? `<img src="${lhImgSrc}" class="lh-img" alt="Baweja Multispeciality Hospital">` : '<div style="height:70px;background:#f0f0f0;border-radius:3px;display:flex;align-items:center;justify-content:center;color:#888;font-size:12px;margin-bottom:6px">Baweja Multispeciality Hospital Letterhead</div>'}
+
+${bmhApprovedLayoutHtml}
+<div class="legacy-rx-body">
 
 <div class="pt-name-bar">
   <div>
@@ -40367,6 +40570,7 @@ ${!isListDesign ? designedAdviceFollow : ''}
     <div class="dr-spec">${doctorSpec}</div>
     ${doctorReg ? `<div class="dr-reg">Reg: ${doctorReg}</div>` : ''}
   </div>
+</div>
 </div>
 ${footerSrc ? `<div style="margin-top:10px;padding-top:8px;border-top:1px solid #ddd;text-align:center"><img src="${footerSrc}" style="max-width:100%;height:auto;display:block;margin:0 auto" alt="Footer"></div>` : ''}
 
@@ -46313,6 +46517,10 @@ let activeDrDesignCentre = 'CHD';
 let doctorProfileAutosaveTimer = null;
 const RX_DESIGN_OPTIONS = [
   { key: 'current', label: 'Premium Letterhead' },
+  { key: 'old_software', label: 'Old Software' },
+  { key: 'tabular_1', label: 'Tabular 1' },
+  { key: 'tabular_2', label: 'Tabular 2' },
+  { key: 'old_software_compact', label: 'Old Software Compact' },
   { key: 'option_a', label: 'Clinical Document' },
   { key: 'option_b', label: 'Modern Clinical' },
   { key: 'signature_classic', label: 'Signature Classic' },
@@ -46484,6 +46692,11 @@ function startDoctorProfilesLiveSync() {
 
 function _renderDesignThumbnail(key) {
   // A tiny visual snippet matching each design's vibe
+  if (BMH_RX_LAYOUT_KEYS.includes(key)) {
+    const tabular = key === 'tabular_1' || key === 'tabular_2';
+    if (tabular) return `<div style="border:1px solid #111;background:#fff"><div style="display:grid;grid-template-columns:1.3fr .7fr .8fr;border-bottom:1px solid #111;font-size:7px;font-weight:900;text-align:center"><span>Medicine</span><span>Duration</span><span>Instructions</span></div><div style="display:grid;grid-template-columns:1.3fr .7fr .8fr;font-size:7px"><strong style="padding:3px">ELINAC OD</strong><span style="padding:3px;text-align:center">1 month</span><span style="padding:3px">Once daily</span></div></div>`;
+    return `<div style="text-align:center;font-size:8px;font-weight:900;margin-bottom:4px">DIAGNOSIS</div><div style="font-size:9px;line-height:1.35"><strong style="font-size:11px">ELINAC OD</strong> (EYEDROPS) - Nepafenac<div style="font-size:7px;margin-top:2px">Instil one eyedrop once daily.</div></div>`;
+  }
   if (key === 'current') {
     return `<div style="font-family:Georgia,serif;border-bottom:1px solid #333;padding-bottom:2px;margin-bottom:3px"><span style="font-size:10px;font-weight:700;color:#111">Patient Name</span></div>
       <div style="border-top:1px solid #111;border-bottom:1px solid #111;text-align:center;font-size:8px;font-weight:700;color:#111;padding:2px 0;margin-bottom:3px">Diagnosis</div>
@@ -46700,6 +46913,8 @@ function generateRxDesignSampleHtml(designKey, profile, doctorName, centre) {
   const drReg = String(profile.reg || 'PMC-XXXXX').trim();
   const drSpec = String(profile.dept || 'Specialist').trim();
   const previewDiagnosisHtml = (function () {
+    if (designKey === 'old_software' || designKey === 'old_software_compact') return `<div style="text-align:center;padding:8px 30px"><div style="font-size:13px;font-weight:900;text-transform:uppercase;margin-bottom:3px">Diagnosis</div><div style="font-size:11px;font-weight:700">1. Sample diagnosis</div></div>`;
+    if (designKey === 'tabular_1' || designKey === 'tabular_2') return `<div style="border-top:1px solid #000;border-bottom:1px solid #000;padding:5px 0;font-size:11px"><strong style="margin-right:18px">DIAGNOSIS</strong> Sample diagnosis</div>`;
     if (designKey === 'editorial_columns') return `<div class="design-dx editorial"><div class="design-dx-title">Assessment</div><div class="design-dx-body">Sample Diagnosis · Type 2</div></div>`;
     if (designKey === 'left_label_ledger') return `<div class="design-dx ledger"><div class="design-dx-ledger-label">Dx</div><div class="design-dx-body">Sample Diagnosis · Type 2</div></div>`;
     if (designKey === 'vertical_dx_column') return `<div class="design-dx vertical"><div class="design-dx-rail">Diagnosis</div><div class="design-dx-body">Dry eye syndrome · Chronic allergy · Review after 2 weeks</div></div>`;
@@ -46707,6 +46922,12 @@ function generateRxDesignSampleHtml(designKey, profile, doctorName, centre) {
     return `<div class="diag-rule-top"></div><div class="diag-text">Sample Diagnosis · Type 2</div><div class="diag-rule-bot"></div>`;
   })();
   const previewRxHtml = (function () {
+    if (designKey === 'old_software' || designKey === 'old_software_compact') {
+      return `<div style="font-family:Arial,sans-serif;color:#000;padding:8px 0"><div style="font-family:Georgia,serif;font-size:24px;margin-bottom:6px">Rx</div><ol style="padding-left:24px;margin:0"><li style="margin-bottom:9px"><div><strong style="font-size:16px">ELINAC OD</strong> (EYEDROPS) - <span style="font-size:10px">Nepafenac 0.3%</span></div><div style="font-size:11px;margin-top:2px">Instil one eyedrop once daily in both eyes for 1 month from 11-Sep-2026 to 10-Oct-2026.</div></li><li><div><strong style="font-size:16px">VITAMIN D3</strong> (CAPSULE) - <span style="font-size:10px">Cholecalciferol</span></div><div style="font-size:11px;margin-top:2px">Take one capsule once weekly after breakfast for 3 months.</div></li></ol></div>`;
+    }
+    if (designKey === 'tabular_1' || designKey === 'tabular_2') {
+      return `<table style="width:100%;border-collapse:collapse;table-layout:fixed;font-family:Arial,sans-serif;color:#000;margin-top:8px"><thead><tr><th style="border:1px solid #000;padding:5px">Medicine</th><th style="border:1px solid #000;padding:5px;width:85px">Eye</th><th style="border:1px solid #000;padding:5px;width:100px">Duration</th><th style="border:1px solid #000;padding:5px">Instructions</th></tr></thead><tbody><tr><td style="border:1px solid #000;padding:7px"><strong style="font-size:15px">ELINAC OD</strong><div style="font-size:9px">EYEDROPS<br>Nepafenac 0.3%</div></td><td style="border:1px solid #000;padding:7px;text-align:center">Both Eyes</td><td style="border:1px solid #000;padding:7px;text-align:center"><strong>1 month</strong><div style="border-top:1px solid #000;margin-top:4px;padding-top:3px;font-size:8px">11-Sep to 10-Oct</div></td><td style="border:1px solid #000;padding:7px">Instil one eyedrop once daily.</td></tr></tbody></table>`;
+    }
     if (designKey === 'editorial_columns') {
       return `<div class="design-rx design-editorial_columns">
         <div class="design-med editorial"><div class="design-med-kicker">Rx 01</div><div class="design-med-top"><div><div class="design-med-name">Metformin 500</div><div class="design-med-sub">Metformin HCl · Tablet</div></div><div class="design-med-right">Twice daily · 1 month</div></div><div class="design-med-columns"><div class="design-med-col-label">Directions</div><div class="design-med-instr">Take one tablet twice a day for 1 month.</div></div></div>
@@ -51767,6 +51988,7 @@ function saveVisit(dept, opts) {
     visit.rx = JSON.parse(JSON.stringify(RX_DRUGS || []));
     visit.procDone = getProcedureDoneStateForDept('skin');
   }
+  visit.rxDesignOverride = getPrescriptionLayoutOverride(dept);
   if (!Array.isArray(visit.investigations)) {
     const preservedUploads = Array.isArray(localPt?.lastVisit?.investigations) ? localPt.lastVisit.investigations : [];
     if (preservedUploads.length) visit.investigations = JSON.parse(JSON.stringify(preservedUploads));

@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bimla Devi Prescription Layout Samples</title>
+  <style>
+    *{box-sizing:border-box;color:#000}
+    body{margin:0;background:#fff;font-family:Arial,Helvetica,sans-serif;color:#000}
+    main{max-width:980px;margin:0 auto;padding:32px 20px}
+    h1{margin:0 0 8px;font-size:28px}
+    .intro{max-width:760px;margin:0 0 26px;line-height:1.55}
+    .notice{padding:12px 14px;border:2px solid #000;margin-bottom:24px;font-weight:700;line-height:1.45}
+    .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+    article{display:flex;flex-direction:column;min-height:220px;border:1px solid #000;padding:18px}
+    article h2{margin:0 0 8px;font-size:19px}
+    article p{margin:0 0 16px;line-height:1.5;flex:1}
+    .actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    a{display:inline-flex;justify-content:center;padding:10px 12px;border:1px solid #000;border-radius:4px;background:#000;color:#fff;font-weight:700;text-decoration:none}
+    a.secondary{background:#fff;color:#000}
+    ul{margin:25px 0 0;padding-left:20px;line-height:1.6}
+    @media(max-width:760px){.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Bimla Devi - Prescription Layout Samples</h1>
+    <p class="intro">Three A4 print previews based on the supplied references. They use Bimla Devi’s medicines from today and intentionally include illustrative clinical content so every requested section can be reviewed before any layout is added to Settings.</p>
+    <div class="notice">Review samples only. The sample diagnosis, general instructions, advised procedure, and follow-up are illustrative and are not written back to the patient record.</div>
+    <section class="grid">
+      <article><h2>Old Software</h2><p>Numbered prescription with EYEDROPS terminology, full sentence directions, a selected-language instruction line, and treatment dates.</p><div class="actions"><a href="./bimla-old-software-sample.html">Preview</a><a class="secondary" href="./Bimla-Devi-Old-Software-Sample.pdf">PDF</a></div></article>
+      <article><h2>Tabular 1</h2><p>A compact grid with a dedicated Eye column and start/end dates directly beneath each duration.</p><div class="actions"><a href="./bimla-tabular-1-sample.html">Preview</a><a class="secondary" href="./Bimla-Devi-Tabular-1-Sample.pdf">PDF</a></div></article>
+      <article><h2>Tabular 2</h2><p>A roomier table with more detailed medicine directions while retaining the dedicated Eye and dated Duration columns.</p><div class="actions"><a href="./bimla-tabular-2-sample.html">Preview</a><a class="secondary" href="./Bimla-Devi-Tabular-2-Sample.pdf">PDF</a></div></article>
+      <article><h2>Old Software Compact</h2><p>A centered diagnosis followed by one-line medicine headings and natural-language directions, closely matching the original software reference while using less vertical space.</p><div class="actions"><a href="./bimla-old-software-compact-sample.html">Preview</a><a class="secondary" href="./Bimla-Devi-Old-Software-Compact-Sample.pdf">PDF</a></div></article>
+    </section>
+    <ul>
+      <li>Patient details and visit date are on the left; current-department doctor credentials are on the right.</li>
+      <li>Only black regular or bold text is used in prescription content.</li>
+      <li>The Eye column is intended to appear only for ophthalmology prescriptions when integrated.</li>
+      <li>The current configured hospital header and footer are loaded without copying either from the reference photographs.</li>
+    </ul>
+  </main>
+</body>
+</html>
