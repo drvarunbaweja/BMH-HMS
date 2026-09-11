@@ -27274,8 +27274,23 @@ function shouldReuseDisplayedReceptionPatient(candidate, formIdentity) {
   return candidatePhoneKeys.some(function (key) { return formPhoneKeys.includes(key); });
 }
 
+function findSamePatientInTodayReceptionDeptQueue(formIdentity, existingPatient, dept, centre) {
+  const targetId = String(existingPatient?.bmhId || '').trim();
+  const targetDept = normalizeDeptKeyForQueue(dept || '');
+  const targetCentre = patientCentreKey(centre || getEffectiveCentre());
+  const form = Object.assign({}, formIdentity || {});
+  return getAllKnownPatientRecords().find(function (row) {
+    if (!row || isMergedPatientRecord(row) || row.queueRemoved || String(row.status || '').toLowerCase() === 'removed') return false;
+    if (!patientQueueDateMatchesToday(row)) return false;
+    if (targetCentre && patientCentreKey(row.centre) !== targetCentre) return false;
+    if (targetDept && normalizeDeptKeyForQueue(row.dept || row.department || '') !== targetDept) return false;
+    if (targetId && String(row.bmhId || '').trim() === targetId) return true;
+    return samePersonRecordVsForm(row, form);
+  }) || null;
+}
+
 /** Reception — Register & Generate Token (full-width form) */
-async function registerPatient() {
+async function _registerPatientImpl() {
   const uidDisplayed = (document.getElementById('rc-uid')?.textContent || '').trim();
   const fn  = normalizeReceptionFieldValue('rc-fn', document.getElementById('rc-fn')?.value  || '');
   const ln  = normalizeReceptionFieldValue('rc-ln', document.getElementById('rc-ln')?.value  || '');
@@ -27329,30 +27344,22 @@ async function registerPatient() {
     forceNewId: forceNewBmsh
   });
   const isExistingRegistration = !!existingPt;
+  const existingQueueRow = findSamePatientInTodayReceptionDeptQueue(formIdentity, existingPt, dept, centre);
+  if (existingQueueRow) {
+    const existingId = String(existingQueueRow.bmhId || '').trim();
+    if (existingId) {
+      const uidEl = document.getElementById('rc-uid');
+      if (uidEl) uidEl.textContent = existingId;
+    }
+    renderReceptionPage && renderReceptionPage({ queueOnly: true });
+    showToast((existingQueueRow.name || name) + ' is already in today\'s ' + bmhDeptLabel(dept) + ' queue', 'i');
+    return existingQueueRow;
+  }
   let uid = String(isExistingRegistration ? (existingPt && existingPt.bmhId) : (await reserveNextUniqueBmhId()) || '').trim();
   if(isExistingRegistration) {
     if(!uid) { showToast('Could not reuse the existing BMSH ID','e'); return; }
   } else if(!/^BMSH-\d{6,9}$/.test(uid)) { showToast('Could not generate a valid BMSH ID','e'); return; }
-  if (!isExistingRegistration) {
-    const safeUid = await (async function () {
-      let candidate = String(uid || '').trim();
-      let nextNum = parseBmhSequenceNumber(candidate);
-      let tries = 0;
-      while (tries < 250) {
-        if (candidate && !await isBmhIdAllocatedAnywhere(candidate, existingPt?.bmhId || '')) return candidate;
-        nextNum = Number.isFinite(nextNum) ? nextNum + 1 : (getKnownHighestBmhNumber() + 1);
-        candidate = 'BMSH-' + String(nextNum).padStart(6, '0');
-        tries += 1;
-      }
-      return '';
-    })();
-    if (!safeUid) { showToast('Could not generate a conflict-free BMSH ID', 'e'); return; }
-    if (safeUid !== uid) {
-      uid = safeUid;
-      showToast('Previous BMSH ID already existed — assigned next available ID ' + uid, 'i');
-    }
-    syncBmhSequenceFloor(uid);
-  }
+  if (!isExistingRegistration) syncBmhSequenceFloor(uid);
   const uidEl = document.getElementById('rc-uid');
   if (uidEl) uidEl.textContent = uid;
   if (isExistingRegistration && String(uidDisplayed || '').trim() && String(uidDisplayed).trim() !== String(uid)) {
@@ -27704,6 +27711,34 @@ async function registerPatient() {
     renderInsuranceTab && renderInsuranceTab();
     renderTpaPage && renderTpaPage();
   }, 500);
+}
+async function registerPatient() {
+  if (window._bmhReceptionRegistrationInFlight) {
+    showToast('Registration is already being saved. Please wait a moment.', 'i');
+    return window._bmhReceptionRegistrationPromise || null;
+  }
+  const button = document.getElementById('rc-register-btn');
+  window._bmhReceptionRegistrationInFlight = true;
+  if (button) {
+    button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
+    button.dataset.readyLabel = button.innerHTML;
+    button.innerHTML = 'Saving patient…';
+  }
+  const promise = Promise.resolve().then(_registerPatientImpl);
+  window._bmhReceptionRegistrationPromise = promise;
+  try {
+    return await promise;
+  } finally {
+    window._bmhReceptionRegistrationInFlight = false;
+    window._bmhReceptionRegistrationPromise = null;
+    if (button) {
+      button.disabled = false;
+      button.removeAttribute('aria-busy');
+      button.innerHTML = button.dataset.readyLabel || '✅ Register &amp; Generate Token';
+      delete button.dataset.readyLabel;
+    }
+  }
 }
 window.registerPatient = registerPatient;
 
@@ -37930,6 +37965,17 @@ function getQueueRowDeptKey(row) {
 function getQueueRowFreshness(row) {
   return Date.parse(row?._deptQueueCreatedAt || row?._xrefCreatedAt || row?.updatedAt || row?.createdAt || row?.queueDate || '') || Number(row?.checkinAt || 0) || 0;
 }
+function getQueueRowPatientIdentityKey(row) {
+  if (!row || row._xrefEntry || row._deptQueueEntry) return '';
+  const nameKey = patientNameIdentityKey(row.name || row.patient || '');
+  const phoneKeys = getPatientPhoneKeys(row).sort();
+  if (!nameKey || !phoneKeys.length) return '';
+  const dobKey = normalizeDobIsoForSave(row.dob || '', { toast: false }) || '';
+  const ageYears = patientApproxAgeYears(row);
+  const ageKey = dobKey || (ageYears == null ? '' : String(ageYears));
+  if (!ageKey) return '';
+  return [patientCentreKey(row.centre), getQueueRowDeptKey(row), nameKey, phoneKeys.join(','), ageKey].join('::');
+}
 function dedupeQueueRowsByPatientDept(rows) {
   const map = new Map();
   (rows || []).forEach(function (row) {
@@ -37937,7 +37983,10 @@ function dedupeQueueRowsByPatientDept(rows) {
     const bmhId = String(row.bmhId || '').trim();
     const deptKey = getQueueRowDeptKey(row);
     const fallbackKey = String(row._queueKey || '').trim();
-    const key = row._xrefEntry && fallbackKey
+    const identityKey = getQueueRowPatientIdentityKey(row);
+    const key = identityKey
+      ? 'identity::' + identityKey
+      : row._xrefEntry && fallbackKey
       ? fallbackKey
       : deptKey
       ? (bmhId ? (bmhId + '::dept::' + deptKey) : fallbackKey)
@@ -37959,6 +38008,14 @@ function dedupeQueueRowsByPatientDept(rows) {
     if (existingXref !== nextXref) {
       map.set(key, nextXref ? row : existing);
       return;
+    }
+    if (identityKey) {
+      const existingId = extractBmhNumericId(existing.bmhId);
+      const nextId = extractBmhNumericId(row.bmhId);
+      if (nextId !== existingId) {
+        map.set(key, nextId < existingId ? row : existing);
+        return;
+      }
     }
     if (getQueueRowFreshness(row) >= getQueueRowFreshness(existing)) map.set(key, row);
   });
@@ -41851,7 +41908,8 @@ function applyPatientsPayload(data, opts) {
   const existingPurposeById = new Map((window._BMH_ALL_PATIENTS_CACHE || []).map(function (row) {
     return [String(row?.bmhId || ''), row];
   }).filter(function (entry) { return !!entry[0]; }));
-  const chunkSize = 800;
+  const role = String(CURRENT_USER?.role || '').trim().toLowerCase();
+  const chunkSize = role === 'reception' ? 200 : 800;
   const normalized = [];
   let idx = 0;
   if (window._bmhPatientsApplyTimer) {
@@ -49875,7 +49933,7 @@ function buildQTableRow(p, sno, opts) {
       <button type="button" title="Cross-ref" style="background:rgba(11,123,140,.1);color:var(--teal);border:1.5px solid var(--teal);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="openXRefModal('${p.bmhId}')">↔️</button>
       <button type="button" title="IPD" style="background:rgba(175,82,222,.1);color:var(--purple);border:1.5px solid var(--purple);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="openIPDFromQueue('${p.bmhId}')">🛏️</button>
       <button type="button" title="OT" style="background:rgba(255,149,0,.1);color:var(--orange);border:1.5px solid var(--orange);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="openOTFromQueue('${p.bmhId}')">🔬</button>
-      <button type="button" title="Remove" style="background:rgba(204,0,0,.08);color:#c0392b;border:1.5px solid rgba(192,57,43,.45);border-radius:5px;padding:2px 5px;font-size:10px;cursor:pointer" onclick="${p._deptQueueId ? `removeDeptQueueEntry('${String(p.bmhId).replace(/'/g, "\\'")}','${deptQueueIdEsc}')` : `removePatientFromQueue('${p.bmhId}')`}">🗑️</button>`
+      <button type="button" title="Delete mistaken queue entry" style="background:rgba(204,0,0,.08);color:#c0392b;border:1.5px solid rgba(192,57,43,.45);border-radius:5px;padding:2px 5px;font-size:10px;font-weight:800;cursor:pointer" onclick="${p._deptQueueId ? `removeDeptQueueEntry('${String(p.bmhId).replace(/'/g, "\\'")}','${deptQueueIdEsc}')` : `removePatientFromQueue('${p.bmhId}')`}">${receptionQueue ? 'Delete' : '🗑️'}</button>`
       }
     </td>
   </tr>`;
