@@ -467,9 +467,9 @@
       #rc-qr-mobile-btn { display:flex !important; width:100%; justify-content:center; }
     }
   </style>
-  <script type="module" crossorigin src="/BMH-HMS/assets/main-DBhUp3KO.js"></script>
+  <script type="module" crossorigin src="/BMH-HMS/assets/main-C2MKbwxh.js"></script>
   <link rel="modulepreload" crossorigin href="/BMH-HMS/assets/firebase-core-CsWAQJdo.js">
-  <link rel="modulepreload" crossorigin href="/BMH-HMS/assets/firebase-db-DrmBL0lh.js">
+  <link rel="modulepreload" crossorigin href="/BMH-HMS/assets/firebase-db-DuihUEt3.js">
   <link rel="stylesheet" crossorigin href="/BMH-HMS/assets/main-CwQjwrre.css">
 </head>
 <body>
@@ -4413,11 +4413,11 @@
     <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;margin-bottom:10px;align-items:end">
       <div class="form-group" style="margin:0">
         <label class="fl">BMSH ID, patient name, or bill number</label>
-        <input type="text" id="bmh-bill-history-search" placeholder="e.g. BMSH-123456 or patient name…" oninput="bmhSearchBillHistory(this.value)">
+        <input type="text" id="bmh-bill-history-search" placeholder="e.g. BMSH-123456 or patient name…" oninput="bmhScheduleBillHistorySearch(this.value)">
       </div>
       <div class="form-group" style="margin:0">
         <label class="fl">Date</label>
-        <input type="date" id="bmh-bill-history-date" onchange="bmhSearchBillHistory(document.getElementById('bmh-bill-history-search').value)">
+        <input type="date" id="bmh-bill-history-date" onchange="bmhScheduleBillHistorySearch(document.getElementById('bmh-bill-history-search').value, true)">
       </div>
       <button type="button" class="btn btn-blue btn-sm" style="align-self:flex-end" onclick="bmhSearchBillHistory(document.getElementById('bmh-bill-history-search').value)">Search</button>
     </div>
@@ -6768,7 +6768,7 @@
 <div id="dx-dropdown" style="display:none;z-index:100000;background:#fff;border:2px solid var(--blue);border-radius:var(--rsm);max-height:280px;overflow-y:auto;box-shadow:var(--sh-md)"></div>
 
 <!-- ═══ MAIN APP SCRIPT (legacy — being migrated to modules) ═══ -->
-<script defer src="/BMH-HMS/js/legacy.js?v=20260911-fast-collections-v8"></script>
+<script defer src="/BMH-HMS/js/legacy.js?v=20260911-rtdb-billing-v9"></script>
 
 <!-- ═══ QR DECODER BRIDGE ═══ -->
 
