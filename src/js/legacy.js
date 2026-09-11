@@ -498,7 +498,9 @@ function otChargeLooksLikeProcedure(row) {
   const name = String(row?.name || '').toLowerCase();
   const parent = String(row?.parent || '').toLowerCase();
   const blob = [cat, kind, name, parent].join(' ');
-  if (/consult|follow.?up|biometry|oct|field|photo|microscopy|scan|x-?ray|ultra.?sound|usg|ecg|echo|lab|investigation|test|registration|admission|bed|room|ward|nursing|medicine|drug|optical|spectacle|lens/.test(blob)) return false;
+  const surgicalLens = /\biol\b|\bicl\b|collamer|implantable\s+(?:collamer|contact)\s+lens|intraocular\s+lens|cataract|phaco|pmics/.test(blob);
+  if (/consult|follow.?up|biometry|oct|field|photo|microscopy|scan|x-?ray|ultra.?sound|usg|ecg|echo|lab|investigation|test|registration|admission|bed|room|ward|nursing|medicine|drug|optical|spectacle/.test(blob)) return false;
+  if (/\blens\b/.test(blob) && !surgicalLens) return false;
   if (parent && !/consult|follow.?up|biometry|oct|field|photo|microscopy|scan|test|lab|investigation/.test(parent)) return true;
   return /surgery|procedure|laser|minor/.test(kind)
     || /sx|surgery|procedure|laser|delivery|lap|operation|ot/.test(cat)
@@ -518,28 +520,13 @@ function getStructuredConsentDept(key) {
   if (/skin|peel|laser|prp/.test(raw)) return 'skin';
   return 'ophtho';
 }
-function otProcedureBelongsToCaseKind(text, kind) {
-  const val = String(text || '').toLowerCase();
-  if (!val) return kind !== 'obg';
-  const looksObg = /lscs|caes|cesare|delivery|labour|mtp|suction|evacuat|abortion|terminat|pregnan|iucd|cu-t|obg|gynae|hyster|lapar|ovarian|fibroid|cyst/.test(val);
-  if (kind === 'obg') return looksObg;
-  return !looksObg;
-}
 function getOtProcedureMainHeadings() {
-  const caseKind = getSelectedOTCaseKind && getSelectedOTCaseKind();
   const out = new Set();
   (CHARGES_DATA || []).filter(otChargeLooksLikeProcedure).forEach(function (row) {
     const p = normalizeOtProcedureName(row.parent || '');
     const n = normalizeOtProcedureName(row.name || '');
-    const target = p || n;
-    if (!otProcedureBelongsToCaseKind(target, caseKind)) return;
     if (p) out.add(p);
     else if (n && !normalizeOtProcedureName(row.parent || '')) out.add(n);
-  });
-  const customDept = caseKind === 'obg' ? 'obg' : 'ophtho';
-  getMergedDeptTemplateOptions('procedure', customDept).forEach(function (name) {
-    const label = normalizeOtProcedureName(name);
-    if (label) out.add(label);
   });
   return Array.from(out).filter(Boolean).sort();
 }
@@ -555,15 +542,13 @@ function populateOTProcedureMainSelect(selectedMain) {
   if ([].slice.call(sel.options).some(function (o) { return o.value === current; })) sel.value = current;
 }
 function getOtProcedureSubheadingOptions(parent) {
-  const caseKind = getSelectedOTCaseKind && getSelectedOTCaseKind();
   const target = normalizeOtProcedureName(parent);
   if (!target) return [];
   return Array.from(new Set((CHARGES_DATA || []).filter(function (row) {
     const name = normalizeOtProcedureName(row.name || '');
     return otChargeLooksLikeProcedure(row)
       && normalizeOtProcedureName(row.parent || '') === target
-      && name !== target
-      && otProcedureBelongsToCaseKind(target || name, caseKind);
+      && name !== target;
   }).map(function (row) {
     return normalizeOtProcedureName(row.name || '');
   }).filter(Boolean))).sort();
@@ -578,8 +563,7 @@ function getOtProcedureOptions() {
       return otChargeLooksLikeProcedure(row)
         && parent
         && name
-        && name !== parent
-        && otProcedureBelongsToCaseKind((row.parent || row.name || ''), caseKind);
+        && name !== parent;
     })
     .map(function (row) {
       return normalizeOtProcedureName(row.name || '');
@@ -616,11 +600,7 @@ function getOtProcedureOptions() {
     'Other — specify in notes'
   ];
   const fallbacks = caseKind === 'obg' ? obgFallbacks : eyeFallbacks;
-  const customDept = caseKind === 'obg' ? 'obg' : 'ophtho';
-  const customOptions = getMergedDeptTemplateOptions('procedure', customDept).map(function (name) {
-    return normalizeOtProcedureName(name);
-  }).filter(Boolean);
-  const chargeOptions = Array.from(new Set(mainHeadings.concat(subHeadings).concat(customOptions).filter(Boolean)));
+  const chargeOptions = Array.from(new Set(mainHeadings.concat(subHeadings).filter(Boolean)));
   return chargeOptions.length ? chargeOptions : Array.from(new Set(fallbacks.filter(Boolean)));
 }
 function parseOtProcedureSelection(value) {
@@ -946,10 +926,6 @@ function loadOTAnaesthesiaOptions() {
     populateOTAnaesthesiaOptions(document.getElementById('ot-add-anaes')?.value || '');
   });
 }
-function saveOtProcedureOption(rawValue, deptOverride) {
-  const dept = deptOverride || (getSelectedOTCaseKind && getSelectedOTCaseKind() === 'obg' ? 'obg' : 'ophtho');
-  return saveDeptTemplateOption('procedure', dept, rawValue);
-}
 function addOTAnaesthesiaOption() {
   const current = document.getElementById('ot-add-anaes')?.value || '';
   const typed = normalizeDeptTemplateLabel(current || window.prompt('Enter anaesthesia option to reuse in OT cases:') || '');
@@ -962,11 +938,7 @@ function addOTProcedureOption() {
   const value = normalizeDeptTemplateLabel(procEl?.value || window.prompt('Enter OT procedure / surgery to reuse:') || '');
   if (!value) return;
   if (procEl) procEl.value = value;
-  saveOtProcedureOption(value, getSelectedOTCaseKind && getSelectedOTCaseKind() === 'obg' ? 'obg' : 'ophtho');
-  populateOTProcedureOptions(value);
-  renderDeptProcedureLibrary(getSelectedOTCaseKind && getSelectedOTCaseKind() === 'obg' ? 'obg' : 'ophtho');
-  renderDeptProcedureSelect(getSelectedOTCaseKind && getSelectedOTCaseKind() === 'obg' ? 'obg' : 'ophtho');
-  showToast('OT procedure saved for reuse ✓', 's');
+  otQuickAddProcedureToCharges();
 }
 function getOtIolChoices() {
   return getIolCatalogNormalizedRows().map(function (row) {
@@ -25184,7 +25156,7 @@ function loadOTCasesFromLocalStorage() {
 }
 function getOTCaseLastTouchedAt(otCase) {
   const row = otCase || {};
-  const raw = row.lastUpdated || row.updatedAt || row.syncAttemptAt || row.syncedAt || row.createdAt || row.date || '';
+  const raw = row.lastUpdated || row.updatedAt || row.createdAt || row.date || '';
   const parsed = raw ? Date.parse(raw) : 0;
   return Number.isFinite(parsed) ? parsed : 0;
 }
@@ -25226,7 +25198,7 @@ function persistOTCaseToCloud(otCase) {
     queueOTCaseForSync(normalized, 'Database offline or unavailable');
     return Promise.reject(new Error('Database offline or unavailable'));
   }
-  const payload = stripLocalOTSyncFields(normalized);
+  const payload = sanitizeFirebaseValue(stripLocalOTSyncFields(normalized));
   return window.FBDB.ref('otCases/' + normalized.id).set(payload).then(function () {
     markOTCaseSynced(normalized.id);
     return payload;
@@ -27856,7 +27828,9 @@ function createOTCaseFromReceptionPanel(ptId, patientNameTrim) {
   OT_CASES.push(normalized);
   keepPatientInQueueAfterOT(normalized.bmhId, normalized.caseKind === 'obg' ? 'obg' : 'ophtho', normalized.id);
   saveOTCasesToLocalStorage();
-  fbSet('otCases/' + caseId, normalized);
+  persistOTCaseToCloud(normalized).catch(function (e) {
+    console.warn('Reception OT cloud save failed:', e);
+  });
   return normalized;
 }
 
@@ -28434,6 +28408,7 @@ function normalizeOTCaseRecord(c) {
     sex: src.sex || pt.sex || '—',
     caseKind,
     dx: src.dx || src.diagnosis || pt.dx || '—',
+    postopDx: src.postopDx || src.postOpDx || '',
     procedure: src.procedure || src.surgery || src.operation || 'Procedure',
     surgeon: resolveTreatingDoctorForPrint(caseKind === 'obg' ? 'obg' : 'ophtho', [src.surgeon, src.doctor, pt.assignedDoctor, pt.doctor]),
     anaes: src.anaes || src.anaesthesia || '—',
@@ -29959,12 +29934,10 @@ function addOTCase() {
     updatedBy: CURRENT_USER?.name || 'System'
   };
   const normalized = normalizeOTCaseRecord(Object.assign({}, existing || {}, newCase));
-  if (normalized.procedure) saveOtProcedureOption(normalized.procedure, caseKind === 'obg' ? 'obg' : 'ophtho');
-  if (normalized.procedureMain) saveOtProcedureOption(normalized.procedureMain, caseKind === 'obg' ? 'obg' : 'ophtho');
   if (normalized.anaes) normalized.anaes = saveOTAnaesthesiaOption(normalized.anaes) || normalized.anaes;
   if (normalized.dx) rememberManualDiagnosis(normalized.dx, normalized.caseKind === 'obg' ? 'obg' : 'ophtho');
   if (!normalized.dx) normalized.dx = getPreferredOtDiagnosis(normalized.procedure || proc) || normalized.dx;
-  if (!normalized.postopDx) normalized.postopDx = getPreferredOtPostDiagnosis(normalized.procedure || proc) || normalized.postopDx;
+  if (!normalized.postopDx) normalized.postopDx = getPreferredOtPostDiagnosis(normalized.procedure || proc) || '';
   if (caseKind === 'obg') {
     normalized.site = 'N/A';
     normalized.eye = 'N/A';
@@ -30117,15 +30090,7 @@ function prefillOtObgFieldsFromPatient(p) {
     return values.map(function (value) { return String(value || '').trim(); }).filter(Boolean).join(' · ');
   };
   const obgType = inferOtObgTypeFromVisit(visit, document.getElementById('ot-add-proc')?.value || '');
-  const suggestedProcedure = String(document.getElementById('ot-add-proc')?.value || '').trim()
-    || (Array.isArray(visit.obgProcAdvised) && visit.obgProcAdvised[0])
-    || (Array.isArray(visit.planProcedures) && visit.planProcedures[0])
-    || visit['obg-obs-mode-delivery']
-    || '';
-  if (suggestedProcedure) {
-    setV('ot-add-proc', suggestedProcedure);
-    populateOTProcedureOptions(suggestedProcedure);
-  }
+  const suggestedProcedure = String(document.getElementById('ot-add-proc')?.value || '').trim();
   if (visit.dx || visit.clinicalImpression) {
     populateOTDiagnosisOptions(visit.dx || visit.clinicalImpression || '');
     setV('ot-add-dx', visit.dx || visit.clinicalImpression || '');
@@ -30554,7 +30519,10 @@ function saveOTNotes() {
   activeOTCase.followupTemplateKey = document.getElementById('ot-followup-template')?.value || activeOTCase.followupTemplateKey || '';
   if (activeOTCase.followupTemplateKey) scheduleDefaultSurgeryFollowups(activeOTCase);
   // Save to Firebase
-  fbSet('otCases/' + activeOTCase.id, { ...activeOTCase, lastUpdated: new Date().toISOString(), updatedBy: CURRENT_USER?.name || 'System' })
+  activeOTCase.lastUpdated = new Date().toISOString();
+  activeOTCase.updatedBy = CURRENT_USER?.name || 'System';
+  saveOTCasesToLocalStorage();
+  persistOTCaseToCloud(activeOTCase)
     .then(() => showToast('Operative notes saved to database ✓', 's'))
     .catch(e => showToast('Save failed: ' + e.message, 'w'));
   renderOTList();
@@ -42970,6 +42938,12 @@ function loadOTCasesFromFirebase() {
     localRows.forEach(function (row) {
       if (!row?.id) return;
       mergedById[row.id] = normalizeOTCaseRecord(row);
+    });
+    arr.forEach(function (row) {
+      if (!row?.id) return;
+      const current = normalizeOTCaseRecord(row);
+      const existing = mergedById[current.id];
+      if (!existing || getOTCaseLastTouchedAt(current) >= getOTCaseLastTouchedAt(existing)) mergedById[current.id] = current;
     });
     if (data) Object.values(data).forEach(function (c) {
       const normalizedRemote = normalizeOTCaseRecord(c);
