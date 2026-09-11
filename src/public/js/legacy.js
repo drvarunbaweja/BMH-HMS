@@ -31255,7 +31255,18 @@ function isPrintableDoctorName(name) {
 }
 function defaultTreatingDoctorForDept(dept) {
   const key = normalizeDeptKeyForQueue(dept || '');
-  if (key === 'obg') return patientCentreKey(window.CURRENT_PATIENT?.centre || CURRENT_USER?.centre || getEffectiveCentre?.()) === 'RPR' ? 'Dr. Namrata Baweja' : 'Dr. Geeta Baweja';
+  const centre = patientCentreKey(window.CURRENT_PATIENT?.centre || CURRENT_USER?.centre || getEffectiveCentre?.());
+  const savedDoctor = Object.keys(typeof DOCTOR_PROFILES === 'undefined' ? {} : DOCTOR_PROFILES).find(function (name) {
+    const profile = DOCTOR_PROFILES[name] || {};
+    if (normalizeDeptKeyForQueue(profile.dept || '') !== key) return false;
+    const profileCentre = String(profile.centre || '').trim().toUpperCase();
+    if (!profileCentre || /BOTH|CHD\s*&\s*RPR|CHD.*RPR|RPR.*CHD/.test(profileCentre)) return true;
+    return centre === 'RPR'
+      ? /RPR|ROPAR|RUPNAGAR/.test(profileCentre)
+      : /CHD|CHANDIGARH/.test(profileCentre);
+  });
+  if (savedDoctor) return savedDoctor;
+  if (key === 'obg') return centre === 'RPR' ? 'Dr. Namrata Baweja' : 'Dr. Geeta Baweja';
   if (key === 'psych') return 'Dr. Tarun Baweja';
   if (key === 'skin') return 'Dr. Pooja Baweja';
   return 'Dr. Varun Baweja';
@@ -39819,8 +39830,13 @@ window.printUnifiedRx = function(deptId) {
     saveLastPrintedRxSnapshot(currentBmhId, saveDept, printedSnapshot);
   }
 
-  // ── Doctor info (logged-in doctor on prescription) — prefer saved Settings → Doctors credentials ──
-  const doctorDisplay = typeof getRxDoctorDisplayName === 'function' ? getRxDoctorDisplayName() : (CURRENT_USER?.name || 'Dr. Varun Baweja');
+  // Resolve the treating doctor for this department, then use the saved Settings profile as the credential source.
+  const doctorDisplay = resolveTreatingDoctorForPrint(saveDept || deptId, [
+    document.getElementById(deptId === 'oe' ? 'ophtho-rx-doctor' : (deptId + '-rx-doctor'))?.textContent?.trim(),
+    deptId === 'obg' && typeof getSelectedObgDoctorName === 'function' ? getSelectedObgDoctorName() : '',
+    window.CURRENT_PATIENT?.assignedDoctor,
+    window.CURRENT_PATIENT?.doctor
+  ]);
   const doctorName = String(doctorDisplay).split('·')[0].trim();
   const doctorProfile = findDoctorProfileByRxName(doctorName);
   let doctorDegrees = String(doctorProfile.degrees || '').trim();
@@ -40065,14 +40081,9 @@ window.printUnifiedRx = function(deptId) {
     if (rxPlainLang === 'en' && rxPlainIsEyeDrop(drug)) line = line.replace(/\bone drop\b/i, 'one eyedrop');
     return line;
   };
-  const bmhExtraDrugInstruction = function (drug, plainLine) {
-    const translated = String(drug?.lang?.[rxPlainLang] || '').trim();
-    if (!translated || translated.toLowerCase() === String(plainLine || '').trim().toLowerCase()) return '';
-    return translated;
-  };
   const bmhDiagnosisHtml = dxList.length
     ? dxList.map(function (line, index) { return '<div>' + (index + 1) + '. ' + escapeHtmlConsent(line) + '</div>'; }).join('')
-    : '<div>—</div>';
+    : '';
   const bmhTableHeader = function () {
     return '<tr><th class="bmh-rx-no">Rx</th><th>Medicine</th>' + (deptId === 'oe' ? '<th class="bmh-rx-eye">Eye</th>' : '') + '<th class="bmh-rx-frequency">Frequency</th><th class="bmh-rx-duration">Duration</th><th>Instructions</th></tr>';
   };
@@ -40081,7 +40092,6 @@ window.printUnifiedRx = function(deptId) {
       const trade = rxDrugTradeName(drug) || '—';
       const generic = rxDrugGenericName(drug) || '';
       const plain = bmhPlainInstruction(drug);
-      const extra = bmhExtraDrugInstruction(drug, plain);
       const start = fmtIN(drug.dateFrom);
       const end = fmtIN(drug.dateTo);
       return '<tr><td class="bmh-rx-no">' + (index + 1) + '</td>'
@@ -40089,7 +40099,7 @@ window.printUnifiedRx = function(deptId) {
         + (deptId === 'oe' ? '<td class="bmh-rx-eye">' + escapeHtmlConsent(getRxSiteLabel(drug) || '—') + '</td>' : '')
         + '<td class="bmh-rx-frequency">' + escapeHtmlConsent(drug.freq || '—') + '</td>'
         + '<td class="bmh-rx-duration"><strong>' + escapeHtmlConsent(drug.dur || '—') + '</strong><small>Start: ' + escapeHtmlConsent(start || '—') + '<br>End: ' + escapeHtmlConsent(end || '—') + '</small></td>'
-        + '<td>' + escapeHtmlConsent(plain || '—') + (extra ? '<div class="bmh-rx-added-instruction">' + escapeHtmlConsent(extra) + '</div>' : '') + '</td></tr>';
+        + '<td>' + escapeHtmlConsent(plain || '—') + '</td></tr>';
     }).join('');
   };
   const bmhOldRows = function (compact) {
@@ -40097,9 +40107,8 @@ window.printUnifiedRx = function(deptId) {
       const trade = rxDrugTradeName(drug) || '—';
       const generic = rxDrugGenericName(drug) || '';
       const plain = bmhPlainInstruction(drug);
-      const extra = bmhExtraDrugInstruction(drug, plain);
       const heading = '<strong>' + escapeHtmlConsent(trade) + '</strong> (' + escapeHtmlConsent(bmhMedicineFormLabel(drug.drugType || drug.type)) + ')' + (generic ? ' - <span>' + escapeHtmlConsent(generic) + '</span>' : '');
-      return '<li><div class="bmh-old-med-heading">' + heading + '</div><div class="bmh-old-med-line">' + escapeHtmlConsent(plain || '—') + '</div>' + (extra ? '<div class="bmh-rx-added-instruction">' + escapeHtmlConsent(extra) + '</div>' : '') + '</li>';
+      return '<li><div class="bmh-old-med-heading">' + heading + '</div><div class="bmh-old-med-line">' + escapeHtmlConsent(plain || '—') + '</div></li>';
     }).join('') + '</ol>';
   };
   const bmhApprovedMeds = rxDesign === 'tabular_1' || rxDesign === 'tabular_2'
@@ -40111,7 +40120,7 @@ window.printUnifiedRx = function(deptId) {
         <div><div class="bmh-approved-patient">${escapeHtmlConsent(ptName)}</div><div><strong>Age/Sex:</strong> ${escapeHtmlConsent(ptAge)}</div><div><strong>BMSH ID:</strong> ${escapeHtmlConsent(ptId)}</div>${ptMob ? `<div><strong>Phone:</strong> ${escapeHtmlConsent(ptMob)}</div>` : ''}<div class="bmh-approved-date"><strong>Date:</strong> ${escapeHtmlConsent(today)}</div></div>
         <div class="bmh-approved-doctor"><div>${escapeHtmlConsent(doctorName)}</div>${doctorSpec ? `<span>${escapeHtmlConsent(doctorSpec)}</span>` : ''}${doctorDegrees ? `<span>${escapeHtmlConsent(doctorDegrees)}</span>` : ''}${doctorReg ? `<span>Regd. No.: ${escapeHtmlConsent(doctorReg)}</span>` : ''}</div>
       </div>
-      <div class="bmh-approved-diagnosis"><strong>Diagnosis</strong><div>${bmhDiagnosisHtml}</div></div>
+      ${dxList.length ? `<div class="bmh-approved-diagnosis"><strong>Diagnosis</strong><div>${bmhDiagnosisHtml}</div></div>` : ''}
       <div class="bmh-approved-rx-mark">Rx</div>
       ${bmhApprovedMeds}
       ${fuFormatted ? `<div class="bmh-approved-follow"><strong>Follow-up:</strong> ${escapeHtmlConsent(fuFormatted)}</div>` : ''}
@@ -40129,7 +40138,11 @@ window.printUnifiedRx = function(deptId) {
 @page{size:A4 portrait;margin:0}
 html,body{width:210mm;min-height:297mm}
 body{font-family:'Lato',sans-serif;font-size:9.2px;color:#1a1a1a;background:#fff;padding:2.4mm 6mm 2.2mm;line-height:1.24;overflow:visible}
-@media print{body{zoom:.94}}
+@media print{
+body{zoom:.94}
+.legacy-rx-body,.legacy-rx-body *,.legacy-rx-body *::before,.legacy-rx-body *::after,.bmh-approved-layout,.bmh-approved-layout *,.bmh-approved-layout *::before,.bmh-approved-layout *::after{color:#000!important;-webkit-text-fill-color:#000!important;background-color:#fff!important;background-image:none!important;border-color:#000!important;box-shadow:none!important;text-shadow:none!important}
+.watermark{display:none!important}
+}
 body > *:not(.lh-img){filter:grayscale(1)}
 .lh-img{width:100%;max-width:100%;height:auto;display:block;margin-bottom:6px;filter:none!important}
 .bmh-approved-layout{color:#000;font-family:Arial,Helvetica,sans-serif;font-size:10.5px;line-height:1.35}
@@ -40142,7 +40155,7 @@ body > *:not(.lh-img){filter:grayscale(1)}
 .bmh-approved-rx-mark{font-family:Georgia,'Times New Roman',serif;font-size:27px;line-height:1;margin:4px 0 5px}
 .bmh-old-rx-list{padding-left:25px;margin:0}.bmh-old-rx-list li{padding:0 0 8px 3px;break-inside:avoid}.bmh-old-rx-list.compact li{padding-bottom:7px}
 .bmh-old-med-heading{font-size:11.5px;line-height:1.35}.bmh-old-med-heading strong{font-size:16px}.bmh-old-med-heading span{font-size:10.5px;font-weight:400}
-.bmh-old-med-line{font-size:11.7px;line-height:1.45;margin-top:2px}.bmh-rx-added-instruction{font-size:10.5px;font-weight:800;margin-top:2px}
+.bmh-old-med-line{font-size:11.7px;line-height:1.45;margin:3px 0 0 22px}
 .bmh-approved-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:9.5px;margin:0}.bmh-approved-table th,.bmh-approved-table td{border:1px solid #000;padding:5px;vertical-align:top;text-align:left}.bmh-approved-table th{text-align:center;font-weight:900;text-transform:none}.bmh-approved-table.roomy td{padding:7px 6px;height:58px}
 .bmh-approved-table .bmh-rx-no{width:25px;text-align:center;vertical-align:middle}.bmh-approved-table .bmh-rx-eye{width:74px;text-align:center}.bmh-approved-table .bmh-rx-frequency{width:105px;text-align:center}.bmh-approved-table .bmh-rx-duration{width:92px;text-align:center}
 .bmh-rx-med strong{display:block;font-size:14px;line-height:1.2}.bmh-rx-med>span{display:block;font-size:9px;font-weight:900}.bmh-rx-med small{display:block;font-size:9px;line-height:1.25}.bmh-rx-duration small{display:block;border-top:1px solid #000;margin-top:4px;padding-top:3px;font-size:8.5px}
