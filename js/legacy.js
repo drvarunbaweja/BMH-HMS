@@ -1779,7 +1779,9 @@ function sanitizeSlChipsMap(map) {
     const bucket = map[key] || {};
     out[safeKey] = {
       od: Array.isArray(bucket.od) ? bucket.od.slice() : [],
-      os: Array.isArray(bucket.os) ? bucket.os.slice() : []
+      os: Array.isArray(bucket.os) ? bucket.os.slice() : [],
+      odText: String(bucket.odText || '').trim(),
+      osText: String(bucket.osText || '').trim()
     };
   });
   return out;
@@ -2684,7 +2686,7 @@ function buildSavedOphthoCaseSheetPageForPatient(bmhId) {
     + '<div><b>Visit date:</b> ' + esc(dateLabel) + '</div></div>'
     + '<div style="border:1px solid #d8deea;border-radius:8px;padding:8px;background:#fffdf8"><div style="font-weight:900;color:#8a4200;text-transform:uppercase;font-size:10px;margin-bottom:4px">Summary</div>'
     + '<div><b>Chief complaints:</b> ' + esc(cc || '—') + '</div>'
-    + '<div><b>Positive findings:</b> ' + esc(visit.positiveFindings || '—') + '</div>'
+    + '<div><b>Positive findings:</b> ' + esc(cleanStoredOphthoPositiveFindings(visit.positiveFindings) || '—') + '</div>'
     + '<div><b>Advice:</b> ' + esc(visit.advice || '—') + '</div></div></div>'
     + '<div style="margin-top:8px;border:1px solid #d8deea;border-radius:8px;padding:8px;background:#fff"><div style="font-weight:900;color:#1A3C6E;text-transform:uppercase;font-size:10px;margin-bottom:4px">Refraction & Vision</div>'
     + '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;font-size:10px">'
@@ -2697,7 +2699,7 @@ function buildSavedOphthoCaseSheetPageForPatient(bmhId) {
     + '<div><b>OS:</b> IOP ' + esc(iopOS) + ' · Pachy ' + esc(pachyOS) + ' · Corrected IOP ' + esc(corrOS) + '</div>'
     + '</div></div>'
     + '<div style="margin-top:8px;border:1px solid #d8deea;border-radius:8px;padding:8px;background:#fff"><div style="font-weight:900;color:#1A3C6E;text-transform:uppercase;font-size:10px;margin-bottom:4px">Diagnosis</div><div style="font-size:10.4px;line-height:1.5">' + diagnoses + '</div></div>'
-    + '<div style="margin-top:8px;border:1px solid #d8deea;border-radius:8px;padding:8px;background:#fff"><div style="font-weight:900;color:#1A3C6E;text-transform:uppercase;font-size:10px;margin-bottom:4px">Positive Findings</div><div style="font-size:10.4px;line-height:1.5">' + esc(visit.positiveFindings || '—') + '</div></div>'
+    + '<div style="margin-top:8px;border:1px solid #d8deea;border-radius:8px;padding:8px;background:#fff"><div style="font-weight:900;color:#1A3C6E;text-transform:uppercase;font-size:10px;margin-bottom:4px">Positive Findings</div><div style="font-size:10.4px;line-height:1.5">' + esc(cleanStoredOphthoPositiveFindings(visit.positiveFindings) || '—') + '</div></div>'
     + '<div style="margin-top:8px;border:1px solid #d8deea;border-radius:8px;padding:8px;background:#fff"><div style="font-weight:900;color:#1A3C6E;text-transform:uppercase;font-size:10px;margin-bottom:4px">Slit lamp & Fundus</div>'
     + (slEntries ? '<table style="width:100%;border-collapse:collapse;font-size:10px"><thead><tr style="background:#eef2f9"><th style="border:1px solid #bbb;padding:4px">Finding</th><th style="border:1px solid #bbb;padding:4px">OD</th><th style="border:1px solid #bbb;padding:4px">OS</th></tr></thead><tbody>' + slEntries + '</tbody></table>' : '<div style="font-size:10px;color:#666">No slit lamp findings saved.</div>')
     + ((visit.fundODtext || visit.fundOStext) ? '<div style="margin-top:6px;font-size:10px"><b>Fundus notes:</b> OD ' + esc(visit.fundODtext || '—') + ' · OS ' + esc(visit.fundOStext || '—') + '</div>' : '')
@@ -3953,6 +3955,42 @@ function toggleEye(drugIdx, eye, el) {
 function toggleChip(el) { el.classList.toggle('sl-chip'); el.classList.toggle('sl-chip sel'); }
 // Normal chip labels per section — selecting any non-normal chip auto-removes these
 const SL_NORMAL_CHIPS = ['Normal','Clear','Deep & Clear','Round & Reacting'];
+function ensureSlitLampFreeTextInputs() {
+  document.querySelectorAll('#oe-slitlamp .sl-sl-row, #oe-slitlamp [style*="grid-template-columns:90px"]').forEach(function (row) {
+    const cols = row.querySelectorAll('[style*="background:rgba"]');
+    ['od', 'os'].forEach(function (eye, index) {
+      const col = cols[index];
+      if (!col || col.querySelector('.sl-free-text')) return;
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'sl-free-text';
+      input.dataset.eye = eye;
+      input.placeholder = 'Other finding...';
+      input.autocomplete = 'off';
+      input.style.cssText = 'background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:5px;padding:4px 6px;font-size:11px;width:100%;margin-top:5px';
+      col.appendChild(input);
+    });
+  });
+}
+function collectSlitLampData() {
+  ensureSlitLampFreeTextInputs();
+  const data = {};
+  document.querySelectorAll('#oe-slitlamp .sl-sl-row, #oe-slitlamp [style*="grid-template-columns:90px"]').forEach(function (row) {
+    const label = row.querySelector('[style*="9.5px"]')?.textContent?.trim();
+    const cols = row.querySelectorAll('[style*="background:rgba"]');
+    if (!label || cols.length < 2) return;
+    data[label] = {
+      od: [...cols[0].querySelectorAll('.sl-chip.sel')].map(function (c) { return c.textContent.trim(); }).filter(Boolean),
+      os: [...cols[1].querySelectorAll('.sl-chip.sel')].map(function (c) { return c.textContent.trim(); }).filter(Boolean),
+      odText: cols[0].querySelector('.sl-free-text')?.value?.trim() || '',
+      osText: cols[1].querySelector('.sl-free-text')?.value?.trim() || ''
+    };
+  });
+  return data;
+}
+window.collectSlitLampDataForPrint = collectSlitLampData;
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ensureSlitLampFreeTextInputs, { once: true });
+else ensureSlitLampFreeTextInputs();
 function toggleChipEye(el, eye) {
   const chipText = el.textContent.trim();
   const isNormal = SL_NORMAL_CHIPS.includes(chipText);
@@ -4004,7 +4042,7 @@ function addSlitLampRow() {
         <span class="sl-chip" onclick="toggleChipEye(this,'od')">Abnormal</span>
         <span class="sl-chip" onclick="addCustomChip(this,'od')">+ Add</span>
       </div>
-      <input type="text" placeholder="Free text OD…" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:5px;padding:3px 6px;font-size:11px;width:100%;margin-top:5px">
+      <input type="text" class="sl-free-text" data-eye="od" placeholder="Free text OD…" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:5px;padding:3px 6px;font-size:11px;width:100%;margin-top:5px">
     </div>
     <div style="background:rgba(30,160,80,.15);border-radius:6px;padding:6px 8px">
       <div style="font-size:8.5px;font-weight:800;color:rgba(100,220,140,.8);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">OS</div>
@@ -4013,7 +4051,7 @@ function addSlitLampRow() {
         <span class="sl-chip" onclick="toggleChipEye(this,'os')">Abnormal</span>
         <span class="sl-chip" onclick="addCustomChip(this,'os')">+ Add</span>
       </div>
-      <input type="text" placeholder="Free text OS…" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:5px;padding:3px 6px;font-size:11px;width:100%;margin-top:5px">
+      <input type="text" class="sl-free-text" data-eye="os" placeholder="Free text OS…" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:5px;padding:3px 6px;font-size:11px;width:100%;margin-top:5px">
     </div>`;
   container.appendChild(d);
   showToast('Row "'+label+'" added ✓','s');
@@ -4034,6 +4072,7 @@ function addCustomChip(triggerEl, eye) {
 
 // Reset slit lamp examination blocks for new patient
 function resetSlitLampExamination() {
+  ensureSlitLampFreeTextInputs();
   // Remove custom/extra rows added dynamically
   const extraRowsContainer = document.getElementById('sl-extra-rows');
   if (extraRowsContainer) extraRowsContainer.innerHTML = '';
@@ -4935,6 +4974,7 @@ function populateOphthoForm(v) {
 
   // Slit lamp chips
   if(v.slChips && typeof v.slChips === 'object') {
+    ensureSlitLampFreeTextInputs();
     // First reset all to deselected
     document.querySelectorAll('.sl-chip').forEach(c => c.classList.remove('sel'));
     // Restore saved chip state per structure/eye
@@ -4949,6 +4989,8 @@ function populateOphthoForm(v) {
         cols[i].querySelectorAll('.sl-chip').forEach(chip => {
           chip.classList.toggle('sel', saved.includes(chip.textContent.trim()));
         });
+        const freeText = cols[i].querySelector('.sl-free-text');
+        if (freeText) freeText.value = savedBucket[eye + 'Text'] || '';
       });
     });
   } else {
@@ -5669,7 +5711,7 @@ function buildOphthoPositiveFindingsList() {
   const lines = [];
   const addLine = function (label, value, eye) {
     const text = String(value || '').trim();
-    if (!text || /^normal$/i.test(text) || /^pink\s*&?\s*healthy$/i.test(text) || /^normal calibre$/i.test(text) || /^clear$/i.test(text)) return;
+    if (!text || SL_NORMAL_CHIPS.some(function (normal) { return normal.toLowerCase() === text.toLowerCase(); }) || /^pink\s*&?\s*healthy$/i.test(text) || /^normal calibre$/i.test(text)) return;
     const eyeLabel = normalizeRxDiagnosisEyeLabel(eye);
     lines.push(eyeLabel ? (label + ' ' + eyeLabel.toLowerCase() + ' - ' + text) : (label + ' - ' + text));
   };
@@ -5689,19 +5731,31 @@ function buildOphthoPositiveFindingsList() {
       return data;
     })();
   Object.entries(slRows || {}).forEach(function ([label, val]) {
-    const odVals = (val?.od || []).filter(v => !/^clear$/i.test(v));
-    const osVals = (val?.os || []).filter(v => !/^clear$/i.test(v));
+    const isNormalSlitValue = function (value) {
+      return SL_NORMAL_CHIPS.some(function (normal) { return normal.toLowerCase() === String(value || '').trim().toLowerCase(); });
+    };
+    const odVals = (val?.od || []).filter(function (v) { return !isNormalSlitValue(v); });
+    const osVals = (val?.os || []).filter(function (v) { return !isNormalSlitValue(v); });
     if (odVals.length && osVals.length && odVals.join(', ') === osVals.join(', ')) addLine(label, odVals.join(', '), 'Both Eyes');
     else {
       if (odVals.length) addLine(label, odVals.join(', '), 'Right Eye');
       if (osVals.length) addLine(label, osVals.join(', '), 'Left Eye');
     }
+    addLine(label, val?.odText || '', 'Right Eye');
+    addLine(label, val?.osText || '', 'Left Eye');
   });
   addLine('Fundus', document.getElementById('fundus-od')?.value || '', 'Right Eye');
   addLine('Fundus', document.getElementById('fundus-os')?.value || '', 'Left Eye');
   const slNotes = (document.getElementById('sl-notes-text')?.value || '').trim();
   if (slNotes) lines.push('Slit Lamp Notes - ' + slNotes);
   return [...new Set(lines.filter(Boolean))];
+}
+function cleanStoredOphthoPositiveFindings(value) {
+  return String(value || '').split(';').map(function (part) { return part.trim(); }).filter(function (part) {
+    if (!part) return false;
+    const finding = part.includes(' - ') ? part.split(' - ').slice(1).join(' - ').trim() : part;
+    return !SL_NORMAL_CHIPS.some(function (normal) { return normal.toLowerCase() === finding.toLowerCase(); });
+  }).join('; ');
 }
 const OPHTHO_PHX_LABELS = {
   'phx-allergy':'Allergy',
@@ -6235,7 +6289,9 @@ function buildOphthoCaseSheetHtml(opts) {
       if(cols.length<2) return;
       slData[label] = {
         od: [...cols[0].querySelectorAll('.sl-chip.sel')].map(c=>c.textContent.trim()),
-        os: [...cols[1].querySelectorAll('.sl-chip.sel')].map(c=>c.textContent.trim())
+        os: [...cols[1].querySelectorAll('.sl-chip.sel')].map(c=>c.textContent.trim()),
+        odText: cols[0].querySelector('.sl-free-text')?.value?.trim() || '',
+        osText: cols[1].querySelector('.sl-free-text')?.value?.trim() || ''
       };
     });
   }
@@ -6417,7 +6473,7 @@ function buildOphthoCaseSheetHtml(opts) {
   const fieldLinePrint = (label, val) => ocularField(label, val);
   const slJoin = function (struct, eye) {
     const bucket = slData[struct] || slData[sanitizeFirebaseKey(struct)] || {};
-    return (bucket[eye] || []).join(', ');
+    return (bucket[eye] || []).concat(bucket[eye + 'Text'] ? [bucket[eye + 'Text']] : []).join(', ');
   };
   const anteriorPrint = (eye) => `<table style="border-collapse:collapse;width:100%">${fieldLinePrint('Lids/Lashes', slJoin('Lids/Lashes', eye))}${fieldLinePrint('Conjunctiva', slJoin('Conjunctiva', eye))}${fieldLinePrint('Cornea', slJoin('Cornea', eye))}${fieldLinePrint('Iris / Pupil', [slJoin('Iris', eye), slJoin('Pupil', eye)].filter(Boolean).join(' · '))}${fieldLinePrint('A/C', slJoin('AC', eye))}${fieldLinePrint('Lens', slJoin('Lens', eye))}</table>`;
   const posteriorPrint = (eye) => {
@@ -26262,10 +26318,13 @@ function getReceptionLookupPool() {
 function buildReceptionPatientLookupIndex() {
   const byBmh = new Map();
   const phoneTokens = new Map();
+  const nameRows = [];
   const pool = getReceptionLookupPool();
   pool.forEach(function (p) {
     const bmh = String(p.bmhId || '').trim().toUpperCase();
     if (bmh && !byBmh.has(bmh)) byBmh.set(bmh, p);
+    const nameKey = patientNameIdentityKey(p.name || p.patient || '');
+    if (nameKey) nameRows.push({ key: nameKey, patient: p });
     getPatientPhoneFieldValues(p).forEach(function (rawPhone) {
       const digits = normalizeReceptionPhoneDigits(rawPhone);
       if (digits.length < 7) return;
@@ -26278,7 +26337,8 @@ function buildReceptionPatientLookupIndex() {
       });
     });
   });
-  window._bmhReceptionPatientLookupIndex = { sourceVersion: window._bmhPatientsCacheVersion || 0, sourceLength: pool.length, byBmh: byBmh, phoneTokens: phoneTokens };
+  nameRows.sort(function (a, b) { return a.key.localeCompare(b.key); });
+  window._bmhReceptionPatientLookupIndex = { sourceVersion: window._bmhPatientsCacheVersion || 0, sourceLength: pool.length, byBmh: byBmh, phoneTokens: phoneTokens, nameRows: nameRows };
   return window._bmhReceptionPatientLookupIndex;
 }
 function getReceptionPatientLookupIndex() {
@@ -26313,6 +26373,18 @@ function findReceptionPatientsByPhone(value) {
       return n && n.includes(digits);
     });
   }).slice(0, 20);
+}
+function findReceptionPatientsByName(value) {
+  const key = patientNameIdentityKey(value);
+  if (key.length < 3) return [];
+  const rows = getReceptionPatientLookupIndex().nameRows || [];
+  const starts = [];
+  const contains = [];
+  rows.forEach(function (entry) {
+    if (entry.key.startsWith(key) || entry.key.split(' ').some(function (part) { return part.startsWith(key); })) starts.push(entry.patient);
+    else if (entry.key.includes(key)) contains.push(entry.patient);
+  });
+  return starts.concat(contains).slice(0, 25);
 }
 function mergeReceptionLookupPatients(rows) {
   if (!Array.isArray(rows) || !rows.length) return [];
@@ -26372,8 +26444,6 @@ function fetchReceptionPatientsFromFirebase(value) {
       });
     };
     primaryReads.push(prefixRead('nameSearch', nameKey));
-    primaryReads.push(prefixRead('name', toTitleCaseName(raw)));
-    primaryReads.push(prefixRead('patient', toTitleCaseName(raw)));
   }
   if (!primaryReads.length) return Promise.resolve([]);
   const runReads = function (reads) {
@@ -26439,7 +26509,7 @@ function scheduleReceptionRemoteLookup(value, mode) {
       if (key === 'phone') lookupByPhone(value, { skipRemote: true });
       else lookupByBMHID(value, { skipRemote: true });
     });
-  }, 220);
+  }, key === 'name' ? 100 : 180);
 }
 function cancelReceptionRemoteLookup(mode) {
   const key = String(mode || 'id');
@@ -26541,7 +26611,7 @@ function lookupByBMHID(val, opts) {
     || findReceptionPatientByBmh(v);
   const phoneMatches = digits.length >= 7 ? findReceptionPatientsByPhone(digits) : [];
   const byPhone = phoneMatches.length === 1 ? phoneMatches[0] : null;
-  const byName = val.length >= 3 ? activePatients.filter(p => p.name?.toLowerCase().includes(vLow)) : [];
+  const byName = val.length >= 3 ? findReceptionPatientsByName(vLow) : [];
   const single = byId || byPhone;
   if(single) {
     cancelReceptionRemoteLookup('id');
@@ -26560,10 +26630,10 @@ function lookupByBMHID(val, opts) {
       <div style="padding:5px 10px;background:var(--blue-lt);font-size:10px;font-weight:800;color:var(--blue);text-transform:uppercase">Found ${byName.length} patient${byName.length>1?'s':''} matching "${val}"</div>
       ${hits.map(p=>receptionPatientResultHtml(p, { title: 'Name match', compact: true, bg: '#fff', border: 'var(--blue)', titleColor: 'var(--blue)' })).join('')}
     </div>`;
-    if (!opts.skipRemote) scheduleReceptionRemoteLookup(val, 'id');
+    if (!opts.skipRemote) scheduleReceptionRemoteLookup(val, 'name');
   } else {
-    el.innerHTML = val.length >= 4 ? `<div style="font-size:11px;color:var(--g1);padding:5px 8px;background:var(--g6);border-radius:6px">${!opts.skipRemote && window.FBDB ? 'Searching all patient records...' : '🆕 No existing patient found — proceed with new registration below'}</div>` : '';
-    if (!opts.skipRemote && (digits.length >= 7 || /^BMSH/i.test(v) || (vLow.length >= 3 && /[a-z]/i.test(vLow)))) scheduleReceptionRemoteLookup(val, 'id');
+    el.innerHTML = val.length >= 3 ? `<div style="font-size:11px;color:var(--g1);padding:5px 8px;background:var(--g6);border-radius:6px">${!opts.skipRemote && window.FBDB ? 'Searching all patient records...' : 'No existing patient found — proceed with new registration below'}</div>` : '';
+    if (!opts.skipRemote && (digits.length >= 7 || /^BMSH/i.test(v) || (vLow.length >= 3 && /[a-z]/i.test(vLow)))) scheduleReceptionRemoteLookup(val, (vLow.length >= 3 && /[a-z]/i.test(vLow) && !/^BMSH/i.test(v)) ? 'name' : 'id');
   }
 }
 
@@ -41801,7 +41871,7 @@ function compactPatientDirectoryRecord(patient) {
     'mob', 'mobile', 'phone', 'phoneNumber', 'mob2', 'altMobile', 'email',
     'addr', 'address', 'rel', 'centre', 'visitedCentres', 'lastReceptionCentre',
     'previousCentre', 'visitCount', 'createdAt', 'registeredAt', 'updatedAt',
-    'lastUpdated', 'mergedInto', 'inactive', 'status'
+    'lastUpdated', 'mergedInto', 'inactive', 'status', 'nameSearch', 'phoneSearch'
   ];
   const row = {};
   fields.forEach(function (field) {
@@ -51382,7 +51452,7 @@ function saveVisit(dept, opts) {
     date: now.toISOString(),
     dateLabel: now.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}),
     doctor: getEffectiveDoctorNameForDept(dept),
-    centre: patientCentreKey(localPt?.centre || getEffectiveCentre?.() || CURRENT_USER?.centre || 'CHD'),
+    centre: patientCentreKey(getEffectiveCentre?.() || CURRENT_USER?.centre || localPt?.centre || 'CHD'),
     savedBy: CURRENT_USER?.name || 'System',
   };
   const latestSameDeptVisit = (function () {
@@ -51481,17 +51551,7 @@ function saveVisit(dept, opts) {
     visit.fundOSves  = document.getElementById('fund-os-ves')?.value  || '';
     visit.fundOSper  = document.getElementById('fund-os-per')?.value  || '';
     visit.fundOStext = document.getElementById('fundus-os')?.value    || '';
-    const slChips = {};
-    document.querySelectorAll('#oe-slitlamp .sl-sl-row, #oe-slitlamp [style*="grid-template-columns:90px"]').forEach(row => {
-      const label = row.querySelector('[style*="9.5px"]')?.textContent?.trim();
-      if(!label) return;
-      const cols = row.querySelectorAll('[style*="background:rgba"]');
-      if(cols.length < 2) return;
-      slChips[sanitizeFirebaseKey(label)] = {
-        od: [...cols[0].querySelectorAll('.sl-chip.sel')].map(c=>c.textContent.trim()),
-        os: [...cols[1].querySelectorAll('.sl-chip.sel')].map(c=>c.textContent.trim())
-      };
-    });
+    const slChips = collectSlitLampData();
     visit.slChips = sanitizeSlChipsMap(slChips);
     visit.slNotes = document.getElementById('sl-notes-text')?.value || '';
     const dxRows = getOphthoDiagnosisRows();
@@ -51956,8 +52016,16 @@ function loadPastVisits(bmhId, dept) {
     return String(raw || '');
   };
   const visitCentreLabel = function (visit) {
-    const centreKey = explicitPatientCentreKey(visit?.centre);
-    if (!centreKey) return '';
+    const patient = window.CURRENT_PATIENT || (PATIENTS || []).find(function (p) { return String(p?.bmhId || '') === String(bmhId || ''); }) || {};
+    const patientCentre = explicitPatientCentreKey(patient.centre);
+    const knownCentres = new Set((Array.isArray(patient.visitedCentres) ? patient.visitedCentres : []).map(explicitPatientCentreKey).filter(Boolean));
+    const previousCentre = explicitPatientCentreKey(patient.previousCentre);
+    if (patientCentre) knownCentres.add(patientCentre);
+    if (previousCentre) knownCentres.add(previousCentre);
+    let centreKey = explicitPatientCentreKey(visit?.centre);
+    if (centreKey && patientCentre && centreKey !== patientCentre && !knownCentres.has(centreKey)) centreKey = patientCentre;
+    const viewingCentre = explicitPatientCentreKey(getEffectiveCentre?.() || CURRENT_USER?.centre);
+    if (!centreKey || centreKey === viewingCentre) return '';
     return centreKey === 'RPR' ? 'Ropar' : 'Chandigarh';
   };
   const summarizeVisitPrescription = function (visit) {
@@ -52123,7 +52191,7 @@ function loadPastVisits(bmhId, dept) {
         { label: 'CPR', get: function (v) { return summarizeOphthoCprHistory(v) || '—'; } },
         { label: 'Near Add', get: function (v) { return summarizeOphthoNearAdd(v) || '—'; } },
         { label: 'Past Ocular Hx / Surgery', get: function (v) { return summarizeOphthoPastOcularHistory(v) || '—'; } },
-        { label: 'Positive Findings', get: function (v) { return v.positiveFindings || '—'; } },
+        { label: 'Positive Findings', get: function (v) { return cleanStoredOphthoPositiveFindings(v.positiveFindings) || '—'; } },
         { label: 'Diagnosis', get: function (v) { return Array.isArray(v.diagnoses) ? v.diagnoses.map(formatDxLineForPrint).filter(Boolean).join(', ') : (v.diagnosisText || '—'); } },
         { label: 'Procedure done', get: function (v) { return summarizeProcedureDoneLine(v) || '—'; } },
         { label: 'Consumables used', get: function (v) { return summarizeProcedureDoneConsumables(v) || '—'; } },
