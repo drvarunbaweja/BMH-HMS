@@ -7165,7 +7165,8 @@ function ptab(el, cId, opts) {
   updateDepartmentRailVisibility(pageKey, cId);
   if (pageKey === 'inventory' && cId === 'inv-use') renderInventoryUsageLog && renderInventoryUsageLog();
   if (pageKey === 'inventory' && cId === 'inv-stock') renderInventoryTodayEntries && renderInventoryTodayEntries();
-  if (/-uploads$/.test(String(cId || '')) || cId === 'oe-biometry') renderCurrentPatientInvestigationUploads && renderCurrentPatientInvestigationUploads();
+  if (cId === 'oe-biometry') prepareBiometryTab && prepareBiometryTab();
+  else if (/-uploads$/.test(String(cId || ''))) renderCurrentPatientInvestigationUploads && renderCurrentPatientInvestigationUploads();
   if (!opts.silentHistory && !window._appHistoryRestoring) pushAppNavState(false);
 }
 
@@ -13439,7 +13440,7 @@ async function bmhDeleteSavedBillRecord(billId) {
 }
 window.bmhDeleteSavedBillRecord = bmhDeleteSavedBillRecord;
 
-// ── Bill history search (searches Firestore BILLS array) ──────────────────────
+// Bill history search uses the merged realtime and local saved-bill archive.
 function bmhScheduleBillHistorySearch(q, immediate) {
   if (window._bmhBillHistorySearchTimer) clearTimeout(window._bmhBillHistorySearchTimer);
   window._bmhBillHistorySearchTimer = null;
@@ -13453,11 +13454,49 @@ function bmhScheduleBillHistorySearch(q, immediate) {
   }, 180);
 }
 window.bmhScheduleBillHistorySearch = bmhScheduleBillHistorySearch;
+function bmhOpenSavedBillDetails(billId) {
+  const id = String(billId || '').trim();
+  const bill = bmhGetSavedBillsForHistory().find(function (row) { return String(row?.id || '') === id; });
+  if (!bill) { showToast('Saved bill not found', 'w'); return; }
+  const esc = function (value) { return escapeHtmlConsent(String(value == null ? '' : value)); };
+  const money = function (value) { return '₹' + Number(value || 0).toLocaleString('en-IN'); };
+  const items = Array.isArray(bill.items) ? bill.items : Object.values(bill.items || {});
+  const itemRows = items.length ? items.map(function (item, idx) {
+    const qty = Math.max(1, Number(item?.qty || 1));
+    const amount = Number(item?.amount != null ? item.amount : qty * Number(item?.rate || 0)) || 0;
+    return '<tr><td style="padding:7px;border-bottom:1px solid var(--g5);font-size:11px">' + (idx + 1) + '</td>'
+      + '<td style="padding:7px;border-bottom:1px solid var(--g5);font-size:11px;font-weight:700">' + esc(item?.desc || item?.name || item?.service || 'Charge') + '</td>'
+      + '<td style="padding:7px;border-bottom:1px solid var(--g5);font-size:11px;text-align:center">' + qty + '</td>'
+      + '<td style="padding:7px;border-bottom:1px solid var(--g5);font-size:11px;text-align:right">' + money(item?.rate != null ? item.rate : amount / qty) + '</td>'
+      + '<td style="padding:7px;border-bottom:1px solid var(--g5);font-size:11px;text-align:right;font-weight:800">' + money(amount) + '</td></tr>';
+  }).join('') : '<tr><td colspan="5" style="padding:16px;text-align:center;color:var(--g1);font-size:11px">No itemized charge lines saved</td></tr>';
+  const net = Number(bill.netPayable || bill.total || bill.subtotal || 0);
+  const received = Number(bill.amountReceived || bill.patientPays || 0);
+  const due = Math.max(0, net - received);
+  let modal = document.getElementById('m-bmh-saved-bill-detail');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'm-bmh-saved-bill-detail';
+    modal.className = 'modal-ov';
+    document.body.appendChild(modal);
+  }
+  const idArg = id.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  modal.innerHTML = '<div class="modal modal-lg" style="max-width:820px;max-height:90vh;overflow:auto"><div class="modal-hd"><div><div class="modal-title">Bill Details</div><div style="font-size:10px;color:var(--g1);margin-top:2px">' + esc(bill.billNo || bill.id || '') + '</div></div><button class="modal-close" onclick="closeM(\'m-bmh-saved-bill-detail\')">×</button></div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px"><div style="background:var(--g6);padding:10px;border-radius:8px"><div style="font-size:9px;color:var(--g1);font-weight:800;text-transform:uppercase">Patient</div><div style="font-size:14px;font-weight:900;margin-top:3px">' + esc(bill.patientName || 'Patient') + '</div><div style="font-family:var(--mono);font-size:10px;color:var(--bmh-teal);margin-top:2px">' + esc(bill.bmhId || '') + '</div></div>'
+    + '<div style="background:var(--g6);padding:10px;border-radius:8px"><div style="font-size:9px;color:var(--g1);font-weight:800;text-transform:uppercase">Bill information</div><div style="font-size:11px;font-weight:700;margin-top:3px">' + esc(String(bill.date || bill.createdAt || '').slice(0, 10) || '—') + ' · ' + esc(bill.centre || '') + '</div><div style="font-size:10px;color:var(--g1);margin-top:3px">' + esc([bill.dept, bill.doctor].filter(Boolean).join(' · ')) + '</div></div></div>'
+    + '<div style="overflow:auto;border:1px solid var(--g4);border-radius:8px"><table style="width:100%;border-collapse:collapse"><thead><tr style="background:var(--bmh-blue);color:#fff"><th style="padding:7px;text-align:left">#</th><th style="padding:7px;text-align:left">Description</th><th style="padding:7px;text-align:center">Qty</th><th style="padding:7px;text-align:right">Rate</th><th style="padding:7px;text-align:right">Amount</th></tr></thead><tbody>' + itemRows + '</tbody></table></div>'
+    + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(105px,1fr));gap:7px;margin-top:12px">'
+    + [['Subtotal', bill.subtotal], ['Discount', bill.discount], ['Advance', bill.advanceApplied], ['Received', received], ['Due', due]].map(function (row) { return '<div style="background:var(--g6);padding:9px;border-radius:8px;text-align:right"><div style="font-size:9px;color:var(--g1);font-weight:800;text-transform:uppercase">' + row[0] + '</div><div style="font-size:13px;font-weight:900;margin-top:3px">' + money(row[1]) + '</div></div>'; }).join('') + '</div>'
+    + '<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-top:12px;padding:10px;background:var(--blue-lt);border-radius:8px"><div style="font-size:11px"><strong>Payment:</strong> ' + esc(bill.paymentMode || '—') + (bill.paymentRef ? ' · ' + esc(bill.paymentRef) : '') + (bill.isTPA ? '<br><strong>TPA:</strong> ' + esc(bill.tpaCompany || 'Insurance') + ' · ' + money(bill.tpaAmount) : '') + '</div><div style="display:flex;gap:7px"><button class="btn btn-outline btn-sm" onclick="closeM(\'m-bmh-saved-bill-detail\')">Close</button><button class="btn btn-blue btn-sm" onclick="bmhPrintSavedBill(bmhGetSavedBillsForHistory().find(function(x){return String(x.id)===\'' + idArg + '\';}))">Print</button></div></div></div>';
+  openM('m-bmh-saved-bill-detail');
+}
+window.bmhOpenSavedBillDetails = bmhOpenSavedBillDetails;
 function bmhSearchBillHistory(q, _skipRemote) {
   const resultEl = document.getElementById('bmh-bill-history-results');
   if (!resultEl) return;
   const dateFilter = document.getElementById('bmh-bill-history-date')?.value || '';
   const sq = String(q || '').trim().toLowerCase();
+  const searchingPatientHistory = sq.length >= 2;
 
   // Filter from in-memory BILLS cache populated by watchBills()
   let bills = bmhGetSavedBillsForHistory().filter(function (b) { return b.status !== 'void'; });
@@ -13469,7 +13508,7 @@ function bmhSearchBillHistory(q, _skipRemote) {
         || String(b.mobile || '').toLowerCase().includes(sq);
     });
   }
-  if (dateFilter) {
+  if (dateFilter && !searchingPatientHistory) {
     bills = bills.filter(function (b) { return String(b.date || '').startsWith(dateFilter); });
   }
   // Default view (no query, no date): show today's bills; if none, show last 50 overall
@@ -13477,12 +13516,12 @@ function bmhSearchBillHistory(q, _skipRemote) {
     const today = todayKey();
     const todayBills = bills.filter(function (b) { return String(b.date || '').startsWith(today); });
     bills = todayBills.length ? todayBills : bills.slice(0, 50);
-  } else {
+  } else if (!searchingPatientHistory) {
     bills = bills.slice(0, 50);
   }
 
   if (!bills.length) {
-    if (dateFilter && !_skipRemote && window.BMH_USE_FIRESTORE_BILLS_REALTIME === true && window.fetchBillsByDate) {
+    if (dateFilter && !searchingPatientHistory && !_skipRemote && window.BMH_USE_FIRESTORE_BILLS_REALTIME === true && window.fetchBillsByDate) {
       const centre = (window.CURRENT_USER && window.CURRENT_USER.centre) || document.getElementById('rc-centre')?.value || 'CHD';
       resultEl.innerHTML = '<div style="text-align:center;color:var(--g1);padding:24px;font-size:13px">Searching older records...</div>';
       window.fetchBillsByDate(centre, dateFilter, dateFilter).then(function (remoteBills) {
@@ -13494,7 +13533,7 @@ function bmhSearchBillHistory(q, _skipRemote) {
       }).catch(function () { bmhSearchBillHistory(q, true); });
       return;
     }
-    const msg = !window.BILLS || window.BILLS.length === 0
+    const msg = bmhGetSavedBillsForHistory().length === 0
       ? 'No saved bills yet — use Save or Save & Print on the New Bill tab to create them'
       : 'No bills found for this search';
     resultEl.innerHTML = '<div style="text-align:center;color:var(--g1);padding:24px;font-size:13px">' + msg + '</div>';
@@ -13505,7 +13544,8 @@ function bmhSearchBillHistory(q, _skipRemote) {
   resultEl.innerHTML = bills.map(function (b) {
     const dateStr = b.date || (b.createdAt ? String(b.createdAt).slice(0, 10) : '');
     const tpaTag = b.isTPA ? '<span style="font-size:9px;background:#e0f0ff;color:#1a5c8c;padding:1px 5px;border-radius:4px;font-weight:800">TPA</span> ' : '';
-    return '<div style="display:grid;grid-template-columns:minmax(0,1.4fr) 140px 120px 80px auto;gap:8px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--g5);font-size:12px">'
+    const bid = String(b.id || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    return '<div onclick="bmhOpenSavedBillDetails(\'' + bid + '\')" style="display:grid;grid-template-columns:minmax(0,1.4fr) 140px 120px 80px auto;gap:8px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--g5);font-size:12px;cursor:pointer">'
       + '<div><div style="font-weight:800">' + esc(b.patientName || '—') + ' ' + tpaTag + '</div>'
       + '<div style="font-family:var(--mono);font-size:10px;color:var(--bmh-teal)">' + esc(b.bmhId || '') + '</div>'
       + '<div style="font-size:10px;color:var(--g1)">' + esc(b.billNo || b.id || '') + (b.dept ? ' · ' + esc(b.dept) : '') + '</div>'
@@ -13515,8 +13555,9 @@ function bmhSearchBillHistory(q, _skipRemote) {
       + '<div style="font-weight:900;color:var(--bmh-blue)">₹' + Number(b.netPayable || 0).toLocaleString('en-IN') + '<div style="font-size:9.5px;font-weight:400;color:var(--g1)">' + esc(b.paymentMode || '') + (b.isTPA ? ' + TPA' : '') + '</div></div>'
       + '<div style="font-size:10px">' + (b.printCount > 0 ? 'Printed ' + b.printCount + 'x' : 'Not printed') + '</div>'
       + '<div style="display:flex;gap:6px;justify-content:flex-end">'
-      + '<button type="button" class="btn btn-outline btn-sm" onclick="bmhPrintSavedBill((bmhGetSavedBillsForHistory()||[]).find(function(x){return x.id===\'' + b.id + '\';}))">Print</button>'
-      + ((CURRENT_USER?.isAdmin || CURRENT_USER?.role === 'Reception') ? '<button type="button" class="btn btn-xs btn-gray" onclick="bmhDeleteSavedBillRecord(\'' + b.id + '\')">Delete</button>' : '')
+      + '<button type="button" class="btn btn-outline btn-sm" onclick="event.stopPropagation();bmhOpenSavedBillDetails(\'' + bid + '\')">Details</button>'
+      + '<button type="button" class="btn btn-outline btn-sm" onclick="event.stopPropagation();bmhPrintSavedBill((bmhGetSavedBillsForHistory()||[]).find(function(x){return String(x.id)===\'' + bid + '\';}))">Print</button>'
+      + ((CURRENT_USER?.isAdmin || CURRENT_USER?.role === 'Reception') ? '<button type="button" class="btn btn-xs btn-gray" onclick="event.stopPropagation();bmhDeleteSavedBillRecord(\'' + bid + '\')">Delete</button>' : '')
       + '</div>'
       + '</div>';
   }).join('');
@@ -30965,6 +31006,21 @@ function toggleBiometryCalcPanel() {
     loadBiometryIolConstants();
     syncBiometryFromEyeExam();
   }
+}
+function prepareBiometryTab() {
+  const run = function () {
+    try {
+      const tbody = document.getElementById('bio-iol-rows');
+      if (document.getElementById('bio-calc-enable')?.checked && tbody && !tbody.children.length) loadBiometryIolConstants();
+      syncBiometryFromEyeExam();
+      renderCurrentPatientInvestigationUploads();
+    } catch (e) {
+      console.error('Biometry tab initialization failed:', e);
+      showToast('Biometry could not finish loading', 'w');
+    }
+  };
+  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
+  else setTimeout(run, 0);
 }
 function getBiometryIolRowsFromDom() {
   const tbody = document.getElementById('bio-iol-rows');
