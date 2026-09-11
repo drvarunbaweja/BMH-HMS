@@ -13440,6 +13440,19 @@ async function bmhDeleteSavedBillRecord(billId) {
 window.bmhDeleteSavedBillRecord = bmhDeleteSavedBillRecord;
 
 // ── Bill history search (searches Firestore BILLS array) ──────────────────────
+function bmhScheduleBillHistorySearch(q, immediate) {
+  if (window._bmhBillHistorySearchTimer) clearTimeout(window._bmhBillHistorySearchTimer);
+  window._bmhBillHistorySearchTimer = null;
+  if (immediate) {
+    bmhSearchBillHistory(q);
+    return;
+  }
+  window._bmhBillHistorySearchTimer = setTimeout(function () {
+    window._bmhBillHistorySearchTimer = null;
+    bmhSearchBillHistory(q);
+  }, 180);
+}
+window.bmhScheduleBillHistorySearch = bmhScheduleBillHistorySearch;
 function bmhSearchBillHistory(q, _skipRemote) {
   const resultEl = document.getElementById('bmh-bill-history-results');
   if (!resultEl) return;
@@ -13469,7 +13482,7 @@ function bmhSearchBillHistory(q, _skipRemote) {
   }
 
   if (!bills.length) {
-    if (dateFilter && !_skipRemote && window.fetchBillsByDate) {
+    if (dateFilter && !_skipRemote && window.BMH_USE_FIRESTORE_BILLS_REALTIME === true && window.fetchBillsByDate) {
       const centre = (window.CURRENT_USER && window.CURRENT_USER.centre) || document.getElementById('rc-centre')?.value || 'CHD';
       resultEl.innerHTML = '<div style="text-align:center;color:var(--g1);padding:24px;font-size:13px">Searching older records...</div>';
       window.fetchBillsByDate(centre, dateFilter, dateFilter).then(function (remoteBills) {
