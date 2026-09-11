@@ -40044,7 +40044,7 @@ window.printUnifiedRx = function(deptId) {
     return line;
   };
   const bmhTableHeader = function () {
-    return '<tr><th class="bmh-rx-no">Rx</th><th>Medicine</th>' + (deptId === 'oe' ? '<th class="bmh-rx-eye">Eye</th>' : '') + '<th class="bmh-rx-frequency">Frequency</th><th class="bmh-rx-duration">Duration</th><th>Instructions</th></tr>';
+    return '<tr><th class="bmh-rx-no">Rx</th><th class="bmh-rx-med">Medicine</th>' + (deptId === 'oe' ? '<th class="bmh-rx-eye">Eye</th>' : '') + '<th class="bmh-rx-frequency">Frequency</th><th class="bmh-rx-duration">Duration</th><th class="bmh-rx-instructions">Instructions</th></tr>';
   };
   const bmhTableRows = function () {
     return drugs.map(function (drug, index) {
@@ -40058,7 +40058,7 @@ window.printUnifiedRx = function(deptId) {
         + (deptId === 'oe' ? '<td class="bmh-rx-eye">' + escapeHtmlConsent(getRxSiteLabel(drug) || '—') + '</td>' : '')
         + '<td class="bmh-rx-frequency">' + escapeHtmlConsent(drug.freq || '—') + '</td>'
         + '<td class="bmh-rx-duration"><strong>' + escapeHtmlConsent(drug.dur || '—') + '</strong><small>Start: ' + escapeHtmlConsent(start || '—') + '<br>End: ' + escapeHtmlConsent(end || '—') + '</small></td>'
-        + '<td>' + escapeHtmlConsent(plain || '—') + '</td></tr>';
+        + '<td class="bmh-rx-instructions">' + escapeHtmlConsent(plain || '—') + '</td></tr>';
       const taperRows = bmhTaperRowsForDrug(drug).map(function (taper, taperIndex) {
         const taperData = bmhTaperData(drug, taper);
         const taperStart = fmtIN(taperData.dateFrom);
@@ -40067,7 +40067,7 @@ window.printUnifiedRx = function(deptId) {
           + (deptId === 'oe' ? '<td class="bmh-rx-eye">' + escapeHtmlConsent(getRxSiteLabel(taperData) || '—') + '</td>' : '')
           + '<td class="bmh-rx-frequency"><small>Taper ' + (taperIndex + 1) + '</small>' + escapeHtmlConsent(taperData.freq || '—') + '</td>'
           + '<td class="bmh-rx-duration"><strong>' + escapeHtmlConsent(taperData.dur || '—') + '</strong><small>Start: ' + escapeHtmlConsent(taperStart || '—') + '<br>End: ' + escapeHtmlConsent(taperEnd || '—') + '</small></td>'
-          + '<td>' + escapeHtmlConsent(bmhTaperInstruction(drug, taper) || '—') + '</td></tr>';
+          + '<td class="bmh-rx-instructions">' + escapeHtmlConsent(bmhTaperInstruction(drug, taper) || '—') + '</td></tr>';
       }).join('');
       return medicineRow + taperRows;
     }).join('');
@@ -46601,7 +46601,11 @@ const DEFAULT_RX_TYPOGRAPHY = {
   headingSize: 8.5,
   diagnosisSize: 11.2,
   medicineSize: 14,
+  genericSize: 9,
   instructionSize: 12,
+  tableEyeSize: 9.5,
+  tableFrequencySize: 9.5,
+  tableDurationSize: 9.5,
   eyeBlockScale: 1,
   headingWeight: 700,
   headingItalic: false,
@@ -46633,7 +46637,11 @@ function normalizeDoctorRxTypography(raw) {
   next.headingSize = clampRxTypographyNumber(next.headingSize, DEFAULT_RX_TYPOGRAPHY.headingSize, 8, 18);
   next.diagnosisSize = clampRxTypographyNumber(next.diagnosisSize, DEFAULT_RX_TYPOGRAPHY.diagnosisSize, 8, 18);
   next.medicineSize = clampRxTypographyNumber(next.medicineSize, DEFAULT_RX_TYPOGRAPHY.medicineSize, 11, 22);
+  next.genericSize = clampRxTypographyNumber(next.genericSize, DEFAULT_RX_TYPOGRAPHY.genericSize, 8, 16);
   next.instructionSize = clampRxTypographyNumber(next.instructionSize, DEFAULT_RX_TYPOGRAPHY.instructionSize, 9, 18);
+  next.tableEyeSize = clampRxTypographyNumber(next.tableEyeSize, DEFAULT_RX_TYPOGRAPHY.tableEyeSize, 8, 16);
+  next.tableFrequencySize = clampRxTypographyNumber(next.tableFrequencySize, DEFAULT_RX_TYPOGRAPHY.tableFrequencySize, 8, 16);
+  next.tableDurationSize = clampRxTypographyNumber(next.tableDurationSize, DEFAULT_RX_TYPOGRAPHY.tableDurationSize, 8, 16);
   next.eyeBlockScale = clampRxTypographyNumber(next.eyeBlockScale, DEFAULT_RX_TYPOGRAPHY.eyeBlockScale, 0.8, 1.4);
   next.headingWeight = clampRxTypographyNumber(next.headingWeight, DEFAULT_RX_TYPOGRAPHY.headingWeight, 400, 900);
   next.headingItalic = !!next.headingItalic;
@@ -46663,17 +46671,29 @@ function buildDoctorRxTypographyCss(typography) {
   const headingDecoration = t.headingUnderline ? 'underline' : 'none';
   const headingStyle = t.headingItalic ? 'italic' : 'normal';
   const medicineSize = Number(t.medicineSize || DEFAULT_RX_TYPOGRAPHY.medicineSize);
+  const genericSize = Number(t.genericSize || DEFAULT_RX_TYPOGRAPHY.genericSize).toFixed(1);
   const diagnosisSize = Number(t.diagnosisSize || DEFAULT_RX_TYPOGRAPHY.diagnosisSize).toFixed(1);
   const instructionSize = Number(t.instructionSize || DEFAULT_RX_TYPOGRAPHY.instructionSize).toFixed(1);
+  const tableEyeSize = Number(t.tableEyeSize || DEFAULT_RX_TYPOGRAPHY.tableEyeSize).toFixed(1);
+  const tableFrequencySize = Number(t.tableFrequencySize || DEFAULT_RX_TYPOGRAPHY.tableFrequencySize).toFixed(1);
+  const tableDurationSize = Number(t.tableDurationSize || DEFAULT_RX_TYPOGRAPHY.tableDurationSize).toFixed(1);
   const procedureSize = Math.max(11.2, Math.min(18, medicineSize * 0.84)).toFixed(1);
   return `
 body{font-family:${fonts.body}}
 .pt-name{font-family:${fonts.heading};font-size:${t.patientNameSize}px}
 .pt-date{font-family:${fonts.body};font-size:${t.dateSize}px;font-weight:${t.headingWeight};font-style:${headingStyle};text-decoration:${headingDecoration}}
 .sec-label,.design-dx-title,.design-side-title,.design-taper-title,.design-med-tag,.section-pill,.rx-heading-accent{font-family:${fonts.heading};font-size:${t.headingSize}px;font-weight:${t.headingWeight};font-style:${headingStyle};text-decoration:${headingDecoration}}
-.rx-item-name,.design-med-name{font-family:${fonts.heading};font-size:${t.medicineSize}px}
+.rx-item-name,.design-med-name,.bmh-old-med-heading strong,.bmh-rx-med strong{font-family:${fonts.heading};font-size:${t.medicineSize}px!important;overflow-wrap:anywhere;word-break:normal}
+.rx-item-gen,.design-med-sub,.bmh-old-med-heading span,.bmh-rx-med>span,.bmh-rx-med small{font-size:${genericSize}px!important;overflow-wrap:anywhere;word-break:normal}
 .diag-text,.design-dx-body,.design-dx-lines{font-family:${fonts.body};font-size:${diagnosisSize}px!important}
-.rx-item-instr,.design-med-instr{font-size:${instructionSize}px!important;line-height:1.58!important}
+.rx-item-instr,.design-med-instr,.bmh-old-med-line,.bmh-old-taper-line,.bmh-approved-table td.bmh-rx-instructions{font-size:${instructionSize}px!important;line-height:1.48!important;overflow-wrap:anywhere;word-break:normal;white-space:normal}
+.bmh-approved-table th{font-size:${t.headingSize}px!important}
+.bmh-approved-table td.bmh-rx-eye{font-size:${tableEyeSize}px!important;overflow-wrap:anywhere;white-space:normal}
+.bmh-approved-table td.bmh-rx-frequency{font-size:${tableFrequencySize}px!important;overflow-wrap:anywhere;white-space:normal}
+.bmh-approved-table td.bmh-rx-duration{font-size:${tableDurationSize}px!important;overflow-wrap:anywhere;white-space:normal}
+.bmh-approved-table .bmh-rx-duration small{font-size:calc(${tableDurationSize}px * .88)!important}
+.bmh-approved-table th,.bmh-approved-table td{overflow:hidden;overflow-wrap:anywhere;word-break:normal;white-space:normal}
+.design-med-top>div,.design-med-ledger-body,.design-med-vertical-body{min-width:0}
 .proc-item{font-size:${procedureSize}px!important;line-height:1.45!important}
 .oe-eye-block .sec-label{font-size:calc(${t.headingSize}px * ${t.eyeBlockScale})}
 .oe-eye-table{font-size:calc(9.6px * ${t.eyeBlockScale})}
@@ -46842,8 +46862,12 @@ function renderDrCredentials() {
         <div class="form-group" style="margin:0"><label class="fl">Date Size (<span id="dr-typo-${key}-dateSize-value">${typography.dateSize}</span>px)</label><input type="range" min="8" max="18" step="0.5" value="${typography.dateSize}" oninput="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','dateSize',this.value,'number')"></div>
         <div class="form-group" style="margin:0"><label class="fl">Heading Size (<span id="dr-typo-${key}-headingSize-value">${typography.headingSize}</span>px)</label><input type="range" min="8" max="18" step="0.5" value="${typography.headingSize}" oninput="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','headingSize',this.value,'number')"></div>
         <div class="form-group" style="margin:0"><label class="fl">Diagnosis Text Size (<span id="dr-typo-${key}-diagnosisSize-value">${typography.diagnosisSize}</span>px)</label><input type="range" min="8" max="18" step="0.5" value="${typography.diagnosisSize}" oninput="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','diagnosisSize',this.value,'number')"></div>
-        <div class="form-group" style="margin:0"><label class="fl">Medicine Size (<span id="dr-typo-${key}-medicineSize-value">${typography.medicineSize}</span>px)</label><input type="range" min="11" max="22" step="0.5" value="${typography.medicineSize}" oninput="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','medicineSize',this.value,'number')"></div>
-        <div class="form-group" style="margin:0"><label class="fl">Medicine Plain Line Size (<span id="dr-typo-${key}-instructionSize-value">${typography.instructionSize}</span>px)</label><input type="range" min="9" max="18" step="0.5" value="${typography.instructionSize}" oninput="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','instructionSize',this.value,'number')"></div>
+        <div class="form-group" style="margin:0"><label class="fl">Medicine Name Size (<span id="dr-typo-${key}-medicineSize-value">${typography.medicineSize}</span>px)</label><input type="range" min="11" max="22" step="0.5" value="${typography.medicineSize}" oninput="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','medicineSize',this.value,'number')"></div>
+        <div class="form-group" style="margin:0"><label class="fl">Generic / Form Size (<span id="dr-typo-${key}-genericSize-value">${typography.genericSize}</span>px)</label><input type="range" min="8" max="16" step="0.5" value="${typography.genericSize}" oninput="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','genericSize',this.value,'number')"></div>
+        <div class="form-group" style="margin:0"><label class="fl">Medicine Instructions Size (<span id="dr-typo-${key}-instructionSize-value">${typography.instructionSize}</span>px)</label><input type="range" min="9" max="18" step="0.5" value="${typography.instructionSize}" oninput="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','instructionSize',this.value,'number')"></div>
+        <div class="form-group" style="margin:0"><label class="fl">Table Eye Size (<span id="dr-typo-${key}-tableEyeSize-value">${typography.tableEyeSize}</span>px)</label><input type="range" min="8" max="16" step="0.5" value="${typography.tableEyeSize}" oninput="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','tableEyeSize',this.value,'number')"></div>
+        <div class="form-group" style="margin:0"><label class="fl">Table Frequency Size (<span id="dr-typo-${key}-tableFrequencySize-value">${typography.tableFrequencySize}</span>px)</label><input type="range" min="8" max="16" step="0.5" value="${typography.tableFrequencySize}" oninput="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','tableFrequencySize',this.value,'number')"></div>
+        <div class="form-group" style="margin:0"><label class="fl">Table Duration Size (<span id="dr-typo-${key}-tableDurationSize-value">${typography.tableDurationSize}</span>px)</label><input type="range" min="8" max="16" step="0.5" value="${typography.tableDurationSize}" oninput="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','tableDurationSize',this.value,'number')"></div>
         ${isEyeDoctor ? `<div class="form-group" style="margin:0"><label class="fl">Eye VA / Refraction / IOP Block (<span id="dr-typo-${key}-eyeBlockScale-value">${Number(typography.eyeBlockScale || 1).toFixed(2)}</span>x)</label><input type="range" min="0.8" max="1.4" step="0.05" value="${typography.eyeBlockScale || 1}" oninput="updateDoctorTypographySetting('${name.replace(/'/g, "\\'")}','eyeBlockScale',this.value,'number')"></div>` : ''}
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">
@@ -46979,10 +47003,10 @@ function generateRxDesignSampleHtml(designKey, profile, doctorName, centre) {
   })();
   const previewRxHtml = (function () {
     if (designKey === 'old_software' || designKey === 'old_software_compact') {
-      return `<div style="font-family:Arial,sans-serif;color:#000;padding:8px 0"><div style="font-family:Georgia,serif;font-size:24px;margin-bottom:6px">Rx</div><ol style="padding-left:24px;margin:0"><li style="margin-bottom:9px"><div><strong style="font-size:16px">ELINAC OD</strong> (EYEDROPS) - <span style="font-size:10px">Nepafenac 0.3%</span></div><div style="font-size:11px;margin-top:2px">Instil one eyedrop once daily in both eyes for 1 month from 11-Sep-2026 to 10-Oct-2026.</div></li><li><div><strong style="font-size:16px">VITAMIN D3</strong> (CAPSULE) - <span style="font-size:10px">Cholecalciferol</span></div><div style="font-size:11px;margin-top:2px">Take one capsule once weekly after breakfast for 3 months.</div></li></ol></div>`;
+      return `<div class="bmh-approved-layout bmh-${designKey}"><div class="bmh-approved-rx-mark">Rx</div><ol class="bmh-old-rx-list ${designKey === 'old_software_compact' ? 'compact' : ''}"><li><div class="bmh-old-med-heading"><strong>ELINAC OD</strong> (EYEDROPS) - <span>Nepafenac 0.3%</span></div><div class="bmh-old-med-line">Instil one eyedrop once daily in both eyes for 1 month from 11-Sep-2026 to 10-Oct-2026.</div></li><li><div class="bmh-old-med-heading"><strong>VITAMIN D3</strong> (CAPSULE) - <span>Cholecalciferol</span></div><div class="bmh-old-med-line">Take one capsule once weekly after breakfast for 3 months.</div></li></ol></div>`;
     }
     if (designKey === 'tabular_1' || designKey === 'tabular_2') {
-      return `<table style="width:100%;border-collapse:collapse;table-layout:fixed;font-family:Arial,sans-serif;color:#000;margin-top:8px"><thead><tr><th style="border:1px solid #000;padding:5px">Medicine</th><th style="border:1px solid #000;padding:5px;width:85px">Eye</th><th style="border:1px solid #000;padding:5px;width:100px">Duration</th><th style="border:1px solid #000;padding:5px">Instructions</th></tr></thead><tbody><tr><td style="border:1px solid #000;padding:7px"><strong style="font-size:15px">ELINAC OD</strong><div style="font-size:9px">EYEDROPS<br>Nepafenac 0.3%</div></td><td style="border:1px solid #000;padding:7px;text-align:center">Both Eyes</td><td style="border:1px solid #000;padding:7px;text-align:center"><strong>1 month</strong><div style="border-top:1px solid #000;margin-top:4px;padding-top:3px;font-size:8px">11-Sep to 10-Oct</div></td><td style="border:1px solid #000;padding:7px">Instil one eyedrop once daily.</td></tr></tbody></table>`;
+      return `<table class="bmh-approved-table ${designKey === 'tabular_2' ? 'roomy' : 'compact'}"><thead><tr><th class="bmh-rx-med">Medicine</th><th class="bmh-rx-eye">Eye</th><th class="bmh-rx-frequency">Frequency</th><th class="bmh-rx-duration">Duration</th><th class="bmh-rx-instructions">Instructions</th></tr></thead><tbody><tr><td class="bmh-rx-med"><strong>ELINAC OD</strong><span>EYEDROPS</span><small>Nepafenac 0.3%</small></td><td class="bmh-rx-eye">Both Eyes</td><td class="bmh-rx-frequency">Once daily</td><td class="bmh-rx-duration"><strong>1 month</strong><small>Start: 11-Sep<br>End: 10-Oct</small></td><td class="bmh-rx-instructions">Instil one eyedrop once daily.</td></tr></tbody></table>`;
     }
     if (designKey === 'editorial_columns') {
       return `<div class="design-rx design-editorial_columns">
@@ -47073,6 +47097,15 @@ body{font-family:'Lato',sans-serif;font-size:10px;color:#1a1a1a;background:#fff;
 .rx-detail-item{display:flex;align-items:center;gap:4px;font-size:9.5px;color:#444}
 .rx-detail-dot{width:3px;height:3px;border-radius:50%;background:#aaa;flex-shrink:0}
 .rx-item-instr{font-size:11.2px;color:#222;font-style:normal;line-height:1.45;padding-left:9px;border-left:2px solid #ccc;margin-top:4px;font-weight:600}
+.bmh-approved-layout{color:#000;font-family:Arial,Helvetica,sans-serif;font-size:10.5px;line-height:1.35}
+.bmh-approved-rx-mark{font-family:Georgia,'Times New Roman',serif;font-size:27px;line-height:1;margin:4px 0 5px}
+.bmh-old-rx-list{padding-left:25px;margin:0}.bmh-old-rx-list li{padding:0 0 8px 3px}.bmh-old-rx-list.compact li{padding-bottom:7px}
+.bmh-old-med-heading{font-size:11.5px;line-height:1.35}.bmh-old-med-heading strong{font-size:16px}.bmh-old-med-heading span{font-size:10.5px;font-weight:400}
+.bmh-old-med-line{font-size:11.7px;line-height:1.45;margin:3px 0 0 22px}
+.bmh-approved-table{width:100%;border-collapse:collapse;table-layout:fixed;font-family:Arial,Helvetica,sans-serif;font-size:9.5px;margin-top:8px}
+.bmh-approved-table th,.bmh-approved-table td{border:1px solid #000;padding:5px;vertical-align:top;text-align:left;overflow:hidden;overflow-wrap:anywhere;word-break:normal;white-space:normal}.bmh-approved-table th{text-align:center;font-weight:900}.bmh-approved-table.roomy td{padding:7px 6px;height:58px}
+.bmh-approved-table .bmh-rx-eye{width:74px;text-align:center}.bmh-approved-table .bmh-rx-frequency{width:105px;text-align:center}.bmh-approved-table .bmh-rx-duration{width:92px;text-align:center}
+.bmh-rx-med strong{display:block;font-size:14px;line-height:1.2}.bmh-rx-med>span{display:block;font-size:9px;font-weight:900}.bmh-rx-med small{display:block;font-size:9px;line-height:1.25}.bmh-rx-duration small{display:block;border-top:1px solid #000;margin-top:4px;padding-top:3px;font-size:8.5px}
 .taper-card{margin:4px 0 5px;border:1px solid #d5dbe2;border-radius:10px;overflow:hidden;font-size:9.5px;background:#fbfbfb}
 .taper-card-hdr{background:#f2f4f6;color:#333;padding:5px 10px;font-size:8.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;border-bottom:1px solid #d5dbe2}
 .taper-steps-row{display:flex;align-items:stretch;background:#fafafa}
