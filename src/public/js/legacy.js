@@ -8721,6 +8721,27 @@ function buildVisitSummaryCards(visits, dept) {
     </div>`;
   }).join('');
 }
+function bmhSaveActiveIpdAdmission(entry) {
+  if (!entry?.id || !fbSet) return Promise.resolve();
+  return Promise.all([
+    fbSet('ipdPatients/' + entry.id, entry),
+    fbSet('activeIpdPatients/' + entry.id, entry)
+  ]);
+}
+function bmhUpdateActiveIpdAdmission(id, patch) {
+  if (!id || !fbUpdate) return Promise.resolve();
+  return Promise.all([
+    fbUpdate('ipdPatients/' + id, patch),
+    fbUpdate('activeIpdPatients/' + id, patch)
+  ]);
+}
+function bmhCloseActiveIpdAdmission(id, patch) {
+  if (!id) return Promise.resolve();
+  const writes = [];
+  if (fbUpdate) writes.push(fbUpdate('ipdPatients/' + id, patch));
+  if (fbSet) writes.push(fbSet('activeIpdPatients/' + id, null));
+  return Promise.all(writes);
+}
 function ensureIpdAdmissionFromOTCase(otCase, patient) {
   if (!otCase || !otCase.bmhId || !otCase.admitToIpd) return null;
   const pt = patient || PATIENTS.find(function (p) { return p.bmhId === otCase.bmhId; }) || {};
@@ -8771,7 +8792,7 @@ function ensureIpdAdmissionFromOTCase(otCase, patient) {
   pt.status = 'ipd';
   pt.dept = dept;
   keepPatientInQueueAfterOT(otCase.bmhId, dept, otCase.id);
-  fbSet && fbSet('ipdPatients/' + entry.id, entry).catch(function (e) { console.warn('OT→IPD save error:', e); });
+  bmhSaveActiveIpdAdmission(entry).catch(function (e) { console.warn('OT→IPD save error:', e); });
   const patientPatch = {
     ipdAdmitted:true,
     status:'ipd',
@@ -8791,6 +8812,7 @@ function ensureIpdAdmissionFromOTCase(otCase, patient) {
   return entry;
 }
 function reconcileIpdAdmissionsFromOTCases() {
+  if (!window._bmhIpdPatientsSnapshotApplied) return 0;
   const otRows = (window.OT_CASES || OT_CASES || []).map(normalizeOTCaseRecord);
   if (!otRows.length) return 0;
   const ipdRows = window.IPD_PATIENTS || IPD_PATIENTS || [];
@@ -8945,6 +8967,7 @@ function reconcilePrintedDischargesInIpd(cardsByPatient, opts) {
     rootPatch['ipdPatients/' + ipd.id + '/dischargedAt'] = atIso;
     rootPatch['ipdPatients/' + ipd.id + '/dischargedBy'] = ipd.dischargedBy;
     rootPatch['ipdPatients/' + ipd.id + '/dischargePrintedAt'] = ipd.dischargePrintedAt;
+    rootPatch['activeIpdPatients/' + ipd.id] = null;
     const patient = PATIENTS.find(function (row) { return String(row?.bmhId || '') === String(ipd.bmhId || ''); });
     if (patient) {
       patient.ipdAdmitted = false;
@@ -9014,7 +9037,7 @@ function dischargeIPDPatientById(id, opts) {
   ipd.status = 'discharged';
   ipd.dischargedAt = atIso;
   ipd.dischargedBy = by;
-  fbUpdate && fbUpdate('ipdPatients/' + ipd.id, { status:'discharged', dischargedAt:ipd.dischargedAt, dischargedBy:ipd.dischargedBy }).catch(function(){});
+  bmhCloseActiveIpdAdmission(ipd.id, { status:'discharged', dischargedAt:ipd.dischargedAt, dischargedBy:ipd.dischargedBy }).catch(function(){});
   list.splice(idx, 1);
   markPatientIpdDischarged(bmhId, atIso, by);
   markLinkedOtCaseIpdDischarged(ipd.otCaseId || activeOTCase?.id || '', bmhId, atIso, by);
@@ -9299,7 +9322,7 @@ function updateIPDChartRow(idx, field, value) {
   if (!activeIPDPatient || !Array.isArray(activeIPDPatient.chartRows) || !activeIPDPatient.chartRows[idx]) return;
   activeIPDPatient.chartRows[idx][field] = field === 'checked' ? !!value : value;
   if (field === 'checked' && value && !activeIPDPatient.chartRows[idx].value) activeIPDPatient.chartRows[idx].value = 'Done';
-  if (fbUpdate) fbUpdate('ipdPatients/' + activeIPDPatient.id, { chartRows: activeIPDPatient.chartRows }).catch(()=>{});
+  bmhUpdateActiveIpdAdmission(activeIPDPatient.id, { chartRows: activeIPDPatient.chartRows }).catch(()=>{});
 }
 
 function renderIPDMonitoringSheet(id) {
@@ -9418,7 +9441,7 @@ function saveIPDMonitorVitals() {
     nextDue.recordedAt = new Date().toISOString();
     nextDue.by = nurse;
   }
-  fbUpdate && fbUpdate('ipdPatients/' + activeIPDPatient.id, { vitals: activeIPDPatient.vitals, vitalSigns: activeIPDPatient.vitalSigns, monitoringPlan: activeIPDPatient.monitoringPlan }).catch(()=>{});
+  bmhUpdateActiveIpdAdmission(activeIPDPatient.id, { vitals: activeIPDPatient.vitals, vitalSigns: activeIPDPatient.vitalSigns, monitoringPlan: activeIPDPatient.monitoringPlan }).catch(()=>{});
   openIPDPatient(activeIPDPatient.id);
   renderIPDMonitoringSheet(activeIPDPatient.id);
   renderIPD && renderIPD();
@@ -9439,7 +9462,7 @@ function saveIPDMonitoringSheet() {
     activeIPDPatient.labourBleeding = document.getElementById('ipdm-bleeding')?.value || '';
     activeIPDPatient.labourMedicine = document.getElementById('ipdm-labour-med')?.value || '';
   }
-  fbUpdate && fbUpdate('ipdPatients/' + activeIPDPatient.id, {
+  bmhUpdateActiveIpdAdmission(activeIPDPatient.id, {
     chartRows: activeIPDPatient.chartRows,
     inLabour: !!activeIPDPatient.inLabour,
     labourContractions: activeIPDPatient.labourContractions || '',
@@ -9529,7 +9552,7 @@ function saveIPDDoctorInstruction(id) {
     createdAt: new Date().toISOString(),
     createdBy: CURRENT_USER?.name || 'Doctor'
   });
-  fbUpdate && fbUpdate('ipdPatients/' + p.id, { ipdInstructions: p.ipdInstructions }).catch(function () {});
+  bmhUpdateActiveIpdAdmission(p.id, { ipdInstructions: p.ipdInstructions }).catch(function () {});
   closeM('m-ipd-doctor');
   openIPDPatient(p.id);
   renderIPD && renderIPD();
@@ -9556,7 +9579,7 @@ function completeIPDInstruction(instructionId) {
     doctor: row.createdBy || '',
     recordedAt: new Date().toISOString()
   });
-  fbUpdate && fbUpdate('ipdPatients/' + activeIPDPatient.id, { ipdInstructions: activeIPDPatient.ipdInstructions, notes: activeIPDPatient.notes }).catch(function () {});
+  bmhUpdateActiveIpdAdmission(activeIPDPatient.id, { ipdInstructions: activeIPDPatient.ipdInstructions, notes: activeIPDPatient.notes }).catch(function () {});
   renderIPDMonitoringSheet(activeIPDPatient.id);
   openIPDPatient(activeIPDPatient.id);
   renderIPD && renderIPD();
@@ -9723,7 +9746,7 @@ function saveProgressNote() {
     nextDue.status = 'done';
     nextDue.recordedAt = new Date(date + 'T' + time).toISOString();
   }
-  if (fbUpdate) fbUpdate('ipdPatients/' + activeIPDPatient.id, activeIPDPatient).catch(()=>{});
+  bmhUpdateActiveIpdAdmission(activeIPDPatient.id, activeIPDPatient).catch(()=>{});
   showToast('Progress note saved ✓','s');
   closeM('m-ipd-note');
   openIPDPatient(activeIPDPatient.id);
@@ -12421,11 +12444,10 @@ function bmhCatLabel(cat) {
 function bmhGetTodayBillPatients() {
   const today = todayKey();
   const isToday = (p) => {
-    if (p.createdAt && String(p.createdAt).startsWith(today)) return true;
-    if (p.checkinAt && new Date(p.checkinAt).toISOString().startsWith(today)) return true;
-    if (p.preRegistered) return true;
-    if (!p.createdAt && !p.checkinAt) return true;
-    return false;
+    if (typeof patientQueueDateMatches === 'function' && patientQueueDateMatches(p, today)) return true;
+    return [p.createdAt, p.registeredAt].filter(Boolean).some(function (raw) {
+      return localDateKey(raw) === today || String(raw).slice(0, 10) === today;
+    });
   };
   let pts = PATIENTS.filter(p => (p.status === 'waiting' || p.status === 'pre-registered' || p.seen || p.dilated) && isToday(p));
   if (typeof centreMatch === 'function') pts = pts.filter(centreMatch);
@@ -12627,9 +12649,9 @@ function bmhBillQuickSearch(val) {
   const box = document.getElementById('bmh-bill-quick-results');
   if (!box) return;
   if (q.length < 1) { box.style.display = 'none'; return; }
-  const allPts = window.PATIENTS || [];
+  const allPts = bmhGetTodayBillPatients();
   if (!allPts.length) {
-    box.innerHTML = '<div style="padding:10px;color:var(--g1);font-size:12px">Patient list loading — please wait a moment</div>';
+    box.innerHTML = '<div style="padding:10px;color:var(--g1);font-size:12px">No patients checked in today</div>';
     box.style.display = '';
     return;
   }
@@ -13748,6 +13770,11 @@ function bmhSelectBillPatient(bmhId) {
   bmhRenderBillLines();
   bmhUpdateBillTotals();
   if (window._bmhBillingTab === 'current') bmhRenderBillingAdvanceRows(true);
+  if (window._bmhBillingTab === 'search') {
+    const historySearch = document.getElementById('bmh-bill-history-search');
+    if (historySearch) historySearch.value = bmhId;
+    bmhSearchBillHistory(bmhId);
+  }
 }
 function bmhRenderBillPatientList() {
   const el = document.getElementById('bmh-bill-pt-list'); if (!el) return;
@@ -20854,7 +20881,7 @@ function confirmIPDAdmit() {
   }
 
   // Save to Firebase
-  fbSet('ipdPatients/'+ipdEntry.id, ipdEntry).catch(e=>console.warn('IPD save error:',e));
+  bmhSaveActiveIpdAdmission(ipdEntry).catch(e=>console.warn('IPD save error:',e));
   const patientPatch = { ipdAdmitted:true, status:'ipd', dept, doctor };
   if (admitContext.removeQueue) {
     patientPatch.queueRemoved = true;
@@ -42997,9 +43024,10 @@ function loadIPDPatientsFromFirebase(opts) {
     return Promise.resolve(window.IPD_PATIENTS || IPD_PATIENTS || []);
   }
   if (window._bmhIpdPatientsLoadPromise) return window._bmhIpdPatientsLoadPromise;
-  window._bmhIpdPatientsLoadPromise = window.FBDB.ref('ipdPatients').once('value').then(snap => {
+  window._bmhIpdPatientsLoadPromise = window.FBDB.ref('activeIpdPatients').once('value').then(snap => {
     const data = snap.val();
     const arr = window.IPD_PATIENTS || IPD_PATIENTS;
+    arr.length = 0;
     Object.values(data || {}).forEach(p => {
       if(!p.centre) p.centre = getEffectiveCentre() || CURRENT_USER?.centre || 'CHD';
       if(!Array.isArray(p.chartRows) || !p.chartRows.length) {
@@ -43009,6 +43037,7 @@ function loadIPDPatientsFromFirebase(opts) {
       if(idx >= 0) arr[idx] = Object.assign({}, arr[idx], p);
       else arr.push(p);
     });
+    window._bmhIpdPatientsSnapshotApplied = true;
     const shouldReconcilePrintedDischarges = getActivePageId?.() === 'pg-ipd';
     if (shouldReconcilePrintedDischarges) reconcilePrintedDischargesInIpd(readDischargeCardsCache(), { persist: true, render: false });
     renderIPD && renderIPD();
