@@ -1,0 +1,408 @@
+:root {
+  color: #000;
+  background: #fff;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  color: #000;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+@page {
+  size: A4 portrait;
+  margin: 0;
+}
+
+body {
+  margin: 0;
+  background: #fff;
+  color: #000;
+  font-size: 11px;
+  line-height: 1.32;
+}
+
+.screen-tools {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px;
+  border-bottom: 1px solid #000;
+  background: #fff;
+}
+
+.screen-tools a,
+.screen-tools button {
+  min-height: 34px;
+  padding: 7px 14px;
+  border: 1px solid #000;
+  border-radius: 4px;
+  background: #fff;
+  color: #000;
+  font: 700 12px/1 Arial, Helvetica, sans-serif;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.screen-tools .primary {
+  background: #000;
+  color: #fff;
+}
+
+.page {
+  position: relative;
+  width: 210mm;
+  min-height: 297mm;
+  margin: 0 auto;
+  padding: 7mm 11mm 9mm;
+  background: #fff;
+}
+
+.letterhead {
+  min-height: 26mm;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  margin-bottom: 4mm;
+  border-bottom: 2px solid #000;
+}
+
+.letterhead img {
+  display: block;
+  width: 100%;
+  max-height: 34mm;
+  object-fit: contain;
+  object-position: center top;
+}
+
+.letterhead-fallback {
+  display: none;
+  width: 100%;
+  padding: 4mm 0;
+  text-align: center;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.identity-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(54mm, .72fr);
+  gap: 10mm;
+  align-items: start;
+  margin-bottom: 5mm;
+}
+
+.patient-name,
+.doctor-name {
+  margin: 0 0 1.2mm;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.patient-details,
+.doctor-details {
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.doctor {
+  text-align: right;
+}
+
+.visit-date {
+  margin-top: 2mm;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.section {
+  margin-top: 4mm;
+}
+
+.section-title {
+  margin: 0 0 1.5mm;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.diagnosis {
+  border-top: 1px solid #000;
+  border-bottom: 1px solid #000;
+  padding: 2mm 0;
+  font-size: 12px;
+}
+
+.diagnosis strong {
+  margin-right: 4mm;
+}
+
+.diagnosis-centered {
+  border: 0;
+  padding: 1mm 12mm 3mm;
+  text-align: center;
+}
+
+.diagnosis-centered .section-title {
+  display: block;
+  margin-bottom: 1mm;
+  font-size: 15px;
+}
+
+.diagnosis-centered .diagnosis-text {
+  font-size: 12.5px;
+}
+
+.rx-mark {
+  margin: 4mm 0 2mm;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 30px;
+  line-height: 1;
+}
+
+.old-rx-list {
+  margin: 0;
+  padding-left: 8mm;
+}
+
+.old-rx-list li {
+  padding: 0 0 3.2mm 1mm;
+}
+
+.old-med-name {
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.generic {
+  font-size: 10.5px;
+  font-weight: 400;
+}
+
+.instruction-line {
+  margin-top: 1mm;
+  font-size: 12px;
+}
+
+.language-line {
+  margin-top: .6mm;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.meta-line {
+  margin-top: .8mm;
+  font-size: 10.5px;
+}
+
+.compact-old-list {
+  margin: 0;
+  padding-left: 9mm;
+}
+
+.compact-old-list li {
+  padding: 0 0 3.5mm 1mm;
+}
+
+.compact-old-heading {
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.compact-old-heading strong {
+  font-size: 14px;
+  text-transform: uppercase;
+}
+
+.compact-old-direction {
+  margin-top: 1mm;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.rx-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 10.5px;
+}
+
+.rx-table th,
+.rx-table td {
+  border: 1px solid #000;
+  padding: 2.2mm 1.8mm;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.rx-table th {
+  text-align: center;
+  font-weight: 700;
+}
+
+.rx-table .serial {
+  width: 8mm;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.rx-table .medicine {
+  width: 48mm;
+}
+
+.rx-table .eye {
+  width: 22mm;
+  text-align: center;
+}
+
+.rx-table .frequency {
+  width: 31mm;
+  text-align: center;
+}
+
+.rx-table .duration {
+  width: 30mm;
+  text-align: center;
+}
+
+.rx-table .instructions {
+  width: auto;
+}
+
+.table-med-type,
+.table-med-name {
+  display: block;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.table-med-name {
+  font-size: 11.5px;
+}
+
+.duration-label {
+  display: block;
+  font-weight: 700;
+}
+
+.duration-dates {
+  display: block;
+  margin-top: 1mm;
+  padding-top: 1mm;
+  border-top: 1px solid #000;
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.compact .rx-table th,
+.compact .rx-table td {
+  padding: 1.7mm 1.5mm;
+}
+
+.detailed .rx-table td {
+  height: 24mm;
+}
+
+.detailed .rx-table .medicine {
+  width: 45mm;
+}
+
+.detailed .rx-table .eye {
+  width: 23mm;
+}
+
+.detailed .rx-table .frequency {
+  width: 30mm;
+}
+
+.detailed .rx-table .duration {
+  width: 31mm;
+}
+
+.bottom-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5mm;
+  margin-top: 4mm;
+}
+
+.bottom-box {
+  border: 1px solid #000;
+  padding: 2.5mm 3mm;
+  min-height: 17mm;
+}
+
+.bottom-box h3 {
+  margin: 0 0 1.4mm;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.bottom-box p {
+  margin: 0;
+}
+
+.follow-up {
+  margin-top: 4mm;
+  padding-top: 2mm;
+  border-top: 1px solid #000;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.footer-letterhead {
+  margin-top: 5mm;
+  border-top: 1px solid #000;
+  padding-top: 2mm;
+}
+
+.footer-letterhead:empty {
+  display: none;
+}
+
+.footer-letterhead img {
+  display: block;
+  width: 100%;
+  max-height: 24mm;
+  object-fit: contain;
+}
+
+.sample-flag {
+  margin-top: 4mm;
+  text-align: center;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+@media screen {
+  body {
+    padding: 18px 0 40px;
+  }
+
+  .page {
+    border: 1px solid #000;
+  }
+}
+
+@media print {
+  .screen-tools,
+  .sample-flag {
+    display: none !important;
+  }
+
+  body {
+    padding: 0;
+  }
+
+  .page {
+    margin: 0;
+    border: 0;
+  }
+}
