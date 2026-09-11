@@ -8809,6 +8809,8 @@ function reconcileIpdAdmissionsFromOTCases() {
   let added = 0;
   otRows.forEach(function (otCase) {
     if (!otCase || !otCase.bmhId || !otCase.admitToIpd) return;
+    // Historical OT cases must never recreate admissions that were already closed.
+    if (getOTCaseDateKey(otCase) !== localDateKey(new Date())) return;
     if (otCase.ipdStatus === 'discharged' || otCase.ipdDischargedAt || otCase.dischargePrintedAt) return;
     if (!centreMatch(otCase)) return;
     if (activeKeys.has('ot:' + otCase.id) || activeKeys.has('bmh:' + otCase.bmhId)) return;
@@ -43059,16 +43061,23 @@ function bindDeptAdviceLibraryAutosave() {
 }
 
 // ── Load OT Cases from Firebase on login ─────────────────────────────────────
-function loadOTCasesFromFirebase() {
+function loadOTCasesFromFirebase(opts) {
+  opts = opts || {};
   const arr = window.OT_CASES || OT_CASES;
-  const localRows = loadOTCasesFromLocalStorage();
-  if (localRows.length) {
+  const maxAgeMs = 60000;
+  if (!opts.force && window._bmhOTCasesLoadedAt && Date.now() - window._bmhOTCasesLoadedAt < maxAgeMs) {
+    return Promise.resolve(arr);
+  }
+  if (window._bmhOTCasesLoadPromise) return window._bmhOTCasesLoadPromise;
+  const localRows = window._bmhOTCasesLocalApplied ? [] : loadOTCasesFromLocalStorage();
+  if (localRows.length && !arr.length) {
     arr.length = 0;
     localRows.forEach(function (row) { arr.push(normalizeOTCaseRecord(row)); });
     renderOTListSafe && renderOTListSafe();
   }
-  if(!window.FBDB) return;
-  window.FBDB.ref('otCases').once('value').then(snap => {
+  window._bmhOTCasesLocalApplied = true;
+  if(!window.FBDB) return Promise.resolve(arr);
+  window._bmhOTCasesLoadPromise = window.FBDB.ref('otCases').once('value').then(snap => {
     const data = snap.val();
     const mergedById = {};
     localRows.forEach(function (row) {
@@ -43113,7 +43122,15 @@ function loadOTCasesFromFirebase() {
     }).catch(function (err) {
       console.warn('OT resync error:', err);
     });
-  }).catch(e => console.warn('OT load error:', e));
+    window._bmhOTCasesLoadedAt = Date.now();
+    return arr;
+  }).catch(function (e) {
+    console.warn('OT load error:', e);
+    return arr;
+  }).finally(function () {
+    window._bmhOTCasesLoadPromise = null;
+  });
+  return window._bmhOTCasesLoadPromise;
 }
 // ── Load IPD Patients from Firebase on login ──────────────────────────────────
 function loadIPDPatientsFromFirebase(opts) {
@@ -43128,7 +43145,14 @@ function loadIPDPatientsFromFirebase(opts) {
     const data = snap.val();
     const arr = window.IPD_PATIENTS || IPD_PATIENTS;
     arr.length = 0;
-    Object.values(data || {}).forEach(p => {
+    const staleActiveIds = [];
+    Object.entries(data || {}).forEach(function (entry) {
+      const id = entry[0];
+      const p = entry[1];
+      if (!isActiveIpdAdmission(p)) {
+        staleActiveIds.push(id);
+        return;
+      }
       if(!p.centre) p.centre = getEffectiveCentre() || CURRENT_USER?.centre || 'CHD';
       if(!Array.isArray(p.chartRows) || !p.chartRows.length) {
         p.chartRows = ipdDeptTemplate(normalizeDeptKeyForQueue(p.dept || p.department || 'general'), { type: p.type, procedure: p.surgery, surgery: p.surgery });
@@ -43137,12 +43161,16 @@ function loadIPDPatientsFromFirebase(opts) {
       if(idx >= 0) arr[idx] = Object.assign({}, arr[idx], p);
       else arr.push(p);
     });
+    if (staleActiveIds.length) {
+      const cleanup = {};
+      staleActiveIds.forEach(function (id) { cleanup['activeIpdPatients/' + id] = null; });
+      window.FBDB.ref().update(cleanup).catch(function (e) { console.warn('Stale active IPD cleanup failed:', e); });
+    }
     window._bmhIpdPatientsSnapshotApplied = true;
     const shouldReconcilePrintedDischarges = getActivePageId?.() === 'pg-ipd';
     if (shouldReconcilePrintedDischarges) reconcilePrintedDischargesInIpd(readDischargeCardsCache(), { persist: true, render: false });
     renderIPD && renderIPD();
     renderDocQueue && renderDocQueue();
-    if (shouldReconcilePrintedDischarges) schedulePrintedDischargeIpdReconciliation();
     window._bmhIpdPatientsLoadedAt = Date.now();
     return arr;
   }).catch(e => {
@@ -49622,7 +49650,6 @@ function renderIPD() {
   if(window.IPD_PATIENTS && window.IPD_PATIENTS !== IPD_PATIENTS) {
     IPD_PATIENTS.length=0; window.IPD_PATIENTS.forEach(p=>IPD_PATIENTS.push(p));
   }
-  reconcileIpdAdmissionsFromOTCases && reconcileIpdAdmissionsFromOTCases();
   const detailEl = document.getElementById('ipd-detail');
   const deptFilter = window._ipdDeptFilter || 'all';
   const visibleIPD = IPD_PATIENTS.filter(p => {
@@ -49692,7 +49719,7 @@ function renderOTList() {
   const emptyHTML = '<div style="padding:30px;text-align:center;color:var(--g1)"><div style="font-size:36px;margin-bottom:8px">🏥</div><div style="font-size:13px;font-weight:700">No OT cases scheduled</div><div style="font-size:11px;color:var(--g2);margin-top:4px">Click + Add Case to schedule a procedure</div></div>';
 
   // Load from Firebase if empty
-  if(!OT_CASES.length && window.fbOnce) {
+  if(!OT_CASES.length && window.fbOnce && !window._bmhOTCasesLoadPromise) {
     fbOnce('otCases').then(data=>{
       if(data) {
         Object.values(data).forEach(c=>{ if(!OT_CASES.find(x=>x.id===c.id)) OT_CASES.push(c); });
@@ -49705,10 +49732,10 @@ function renderOTList() {
   if (dateInp && !dateInp.value) dateInp.value = todayKey();
   const dateFilter = dateInp?.value || '';
   const surgeonFilter = document.getElementById('ot-surgeon-sel')?.value || '';
-  OT_CASES.forEach(function (c, idx) { OT_CASES[idx] = normalizeOTCaseRecord(c); });
   let cases = OT_CASES.filter(c => centreMatch(c));
   if(dateFilter) cases = cases.filter(c => getOTCaseDateKey(c) === dateFilter);
   if(surgeonFilter && surgeonFilter !== 'All Surgeons') cases = cases.filter(c => c.surgeon === surgeonFilter);
+  cases = cases.map(normalizeOTCaseRecord);
 
   const buildCard = (c,i) => {
     try {
