@@ -6127,7 +6127,7 @@ window.handlePreviousDiagnosisStatusChange = function (dept, value) {
 function rxDrugTradeName(d) {
   if (!d) return '';
   const s = (d.trade || d.brand || d.name || '').trim();
-  return s ? String(s) : '';
+  return s ? String(s).toLocaleUpperCase('en-IN') : '';
 }
 function rxDrugGenericName(d) {
   if (!d) return '';
@@ -7145,16 +7145,29 @@ function renderPaymentsPage() {
 function editTemplate(id) { showToast('Template editor opened ✓','i'); }
 
 const BMH_RX_LAYOUT_OPTIONS = [
+  { key: 'current', label: 'Premium Letterhead' },
   { key: 'old_software', label: 'Old Software' },
   { key: 'tabular_1', label: 'Tabular 1' },
   { key: 'tabular_2', label: 'Tabular 2' },
-  { key: 'old_software_compact', label: 'Old Software Compact' }
+  { key: 'old_software_compact', label: 'Old Software Compact' },
+  { key: 'option_a', label: 'Clinical Document' },
+  { key: 'option_b', label: 'Modern Clinical' },
+  { key: 'signature_classic', label: 'Signature Classic' },
+  { key: 'clinical_blocks', label: 'Clinical Blocks' },
+  { key: 'ribbon_timeline', label: 'Ribbon Timeline' },
+  { key: 'compact_bilingual', label: 'Compact Bilingual' },
+  { key: 'editorial_columns', label: 'Editorial Columns' },
+  { key: 'left_label_ledger', label: 'Left Label Ledger' },
+  { key: 'vertical_dx_column', label: 'Vertical Diagnosis Rail' },
+  { key: 'mono_chart', label: 'Mono Chart' }
 ];
-const BMH_RX_LAYOUT_KEYS = BMH_RX_LAYOUT_OPTIONS.map(function (option) { return option.key; });
+const BMH_RX_LAYOUT_KEYS = ['old_software', 'tabular_1', 'tabular_2', 'old_software_compact'];
+const BMH_RX_SELECTABLE_LAYOUT_KEYS = BMH_RX_LAYOUT_OPTIONS.map(function (option) { return option.key; });
+const BMH_RX_LAST_LAYOUT_STORAGE_KEY = 'bmh_rx_last_layout_v1';
 
 function normalizePrescriptionLayoutKey(value) {
   const key = String(value || '').trim().toLowerCase();
-  return BMH_RX_LAYOUT_KEYS.includes(key) ? key : '';
+  return BMH_RX_SELECTABLE_LAYOUT_KEYS.includes(key) ? key : '';
 }
 
 function prescriptionLayoutDeptKey(value) {
@@ -7181,12 +7194,61 @@ function getPrescriptionLayoutOverride(dept) {
   return normalizePrescriptionLayoutKey(getPrescriptionLayoutSelect(dept)?.value || '');
 }
 
+function prescriptionLayoutPreferenceKey(dept) {
+  const userKey = String(CURRENT_USER?.username || CURRENT_USER?.name || 'doctor').trim().toLowerCase();
+  return userKey + '::' + prescriptionLayoutDeptKey(dept);
+}
+
+function getLastUsedPrescriptionLayout(dept) {
+  const key = prescriptionLayoutDeptKey(dept);
+  if (!key) return '';
+  try {
+    const saved = JSON.parse(localStorage.getItem(BMH_RX_LAST_LAYOUT_STORAGE_KEY) || '{}');
+    const localLayout = normalizePrescriptionLayoutKey(saved[prescriptionLayoutPreferenceKey(key)] || '');
+    if (localLayout) return localLayout;
+  } catch (e) {}
+  const doctorName = typeof getEffectiveDoctorNameForDept === 'function' ? getEffectiveDoctorNameForDept(key) : CURRENT_USER?.name;
+  const profile = typeof findDoctorProfileByRxName === 'function' ? findDoctorProfileByRxName(doctorName) : null;
+  return normalizePrescriptionLayoutKey(profile?.lastRxLayouts?.[key] || '');
+}
+
+function rememberLastUsedPrescriptionLayout(dept, layout) {
+  const key = prescriptionLayoutDeptKey(dept);
+  const normalized = normalizePrescriptionLayoutKey(layout);
+  if (!key) return;
+  try {
+    const saved = JSON.parse(localStorage.getItem(BMH_RX_LAST_LAYOUT_STORAGE_KEY) || '{}');
+    if (normalized) saved[prescriptionLayoutPreferenceKey(key)] = normalized;
+    else delete saved[prescriptionLayoutPreferenceKey(key)];
+    localStorage.setItem(BMH_RX_LAST_LAYOUT_STORAGE_KEY, JSON.stringify(saved));
+  } catch (e) {}
+  const doctorName = typeof getEffectiveDoctorNameForDept === 'function' ? getEffectiveDoctorNameForDept(key) : CURRENT_USER?.name;
+  const profile = typeof findDoctorProfileByRxName === 'function' ? findDoctorProfileByRxName(doctorName) : null;
+  if (profile) {
+    const nextLayouts = Object.assign({}, profile.lastRxLayouts || {});
+    if (normalized) nextLayouts[key] = normalized;
+    else delete nextLayouts[key];
+    profile.lastRxLayouts = nextLayouts;
+    if (typeof scheduleDoctorProfilesAutosave === 'function') scheduleDoctorProfilesAutosave();
+  }
+}
+
+function refreshPrescriptionLayoutPreferences() {
+  ['ophtho', 'obg', 'psych', 'skin'].forEach(function (dept) {
+    const select = getPrescriptionLayoutSelect(dept);
+    const preferred = getLastUsedPrescriptionLayout(dept);
+    if (select && preferred && !normalizePrescriptionLayoutKey(select.value)) select.value = preferred;
+  });
+}
+window.refreshPrescriptionLayoutPreferences = refreshPrescriptionLayoutPreferences;
+
 function setPrescriptionLayoutOverride(dept, value, opts) {
   const key = prescriptionLayoutDeptKey(dept);
   const select = getPrescriptionLayoutSelect(key);
   const layout = normalizePrescriptionLayoutKey(value);
   if (select && select.value !== layout) select.value = layout;
   if (!(opts && opts.silent)) {
+    rememberLastUsedPrescriptionLayout(key, layout);
     scheduleActiveClinicRxAutosave && scheduleActiveClinicRxAutosave();
     showToast(layout ? ('Prescription layout: ' + (BMH_RX_LAYOUT_OPTIONS.find(function (row) { return row.key === layout; })?.label || layout)) : 'Using doctor default prescription layout', 's');
   }
@@ -7199,7 +7261,7 @@ function directChildWithin(root, element) {
   return node && node.parentElement === root ? node : null;
 }
 
-function ensurePrescriptionWorkflowControls(dept, savedLayout) {
+function ensurePrescriptionWorkflowControls(dept) {
   const key = prescriptionLayoutDeptKey(dept);
   const root = getPrescriptionLayoutRoot(key);
   if (!root) return;
@@ -7252,18 +7314,18 @@ function ensurePrescriptionWorkflowControls(dept, savedLayout) {
     }
   }
   const select = getPrescriptionLayoutSelect(key);
-  const restored = normalizePrescriptionLayoutKey(savedLayout);
+  const restored = getLastUsedPrescriptionLayout(key);
   const patientId = String(window.CURRENT_PATIENT?.bmhId || '');
   if (select && select.dataset.bmhPatientId !== patientId) {
     select.value = restored;
     select.dataset.bmhPatientId = patientId;
-  } else if (select && savedLayout === undefined && !normalizePrescriptionLayoutKey(select.value)) {
+  } else if (select && !normalizePrescriptionLayoutKey(select.value)) {
     select.value = '';
   }
 }
 
-function restorePrescriptionLayoutOverride(dept, visit) {
-  ensurePrescriptionWorkflowControls(dept, visit && visit.rxDesignOverride);
+function restorePrescriptionLayoutOverride(dept) {
+  ensurePrescriptionWorkflowControls(dept);
 }
 window.ensurePrescriptionWorkflowControls = ensurePrescriptionWorkflowControls;
 
@@ -37020,6 +37082,10 @@ function activateUserSession(user, profile, opts) {
   if (uname === 'inventory.rpr@bawejahospital.com') profile = Object.assign({}, profile, { centre: 'RPR', name: 'Inventory RPR' });
   CURRENT_USER = Object.assign({}, profile, {username: user});
   window.CURRENT_USER = CURRENT_USER;
+  try { if (typeof loadDoctorProfilesFromLocalStorage === 'function') loadDoctorProfilesFromLocalStorage(); } catch (e) {}
+  setTimeout(function () {
+    try { if (typeof loadDoctorProfilesFromFirebase === 'function') loadDoctorProfilesFromFirebase({ retry: true }); } catch (e) {}
+  }, 0);
   const doctorQueueDefaults = [
     { match:/tarun/i, dept:'psych' },
     { match:/namrata/i, dept:'obg' },
@@ -47305,12 +47371,33 @@ function saveDoctorCredentials() {
   persistDoctorProfilesState({ notify: true });
 }
 
-function loadDoctorProfilesFromFirebase() {
+let _doctorProfilesRemoteLoadPromise = null;
+let _doctorProfilesRemoteReady = false;
+let _doctorProfilesRemoteRetryTimer = null;
+let _doctorProfilesRemoteRetryCount = 0;
+function scheduleDoctorProfilesRemoteRetry() {
+  if (_doctorProfilesRemoteReady || _doctorProfilesRemoteRetryTimer || _doctorProfilesRemoteRetryCount >= 16) return;
+  const delay = Math.min(1500, 150 + (_doctorProfilesRemoteRetryCount * 100));
+  _doctorProfilesRemoteRetryCount += 1;
+  _doctorProfilesRemoteRetryTimer = setTimeout(function () {
+    _doctorProfilesRemoteRetryTimer = null;
+    loadDoctorProfilesFromFirebase({ retry: true });
+  }, delay);
+}
+function loadDoctorProfilesFromFirebase(opts) {
   loadDoctorProfilesFromLocalStorage();
   renderDrCredentials && renderDrCredentials();
-  if (!window.FBDB) return;
+  if (_doctorProfilesRemoteReady) {
+    refreshPrescriptionLayoutPreferences && refreshPrescriptionLayoutPreferences();
+    return Promise.resolve(true);
+  }
+  if (!window.FBDB) {
+    scheduleDoctorProfilesRemoteRetry();
+    return Promise.resolve(false);
+  }
+  if (_doctorProfilesRemoteLoadPromise) return _doctorProfilesRemoteLoadPromise;
   const localSavedAt = Number(localStorage.getItem('bmh_doctor_profiles_saved_at') || 0);
-  Promise.all([
+  _doctorProfilesRemoteLoadPromise = Promise.all([
     window.FBDB.ref('doctorProfiles').once('value'),
     window.FBDB.ref('doctorProfilesMeta').once('value')
   ]).then(function (pairs) {
@@ -47336,9 +47423,19 @@ function loadDoctorProfilesFromFirebase() {
         window.FBDB.ref('doctorProfilesMeta').set({ _savedAt: Date.now() }).catch(function () {});
       }
     }
+    _doctorProfilesRemoteReady = true;
+    _doctorProfilesRemoteRetryCount = 0;
     typeof renderDrCredentials === 'function' && renderDrCredentials();
+    typeof refreshPrescriptionLayoutPreferences === 'function' && refreshPrescriptionLayoutPreferences();
     startDoctorProfilesLiveSync();
-  }).catch(function () {});
+    return true;
+  }).catch(function () {
+    if (opts && opts.retry) scheduleDoctorProfilesRemoteRetry();
+    return false;
+  }).finally(function () {
+    _doctorProfilesRemoteLoadPromise = null;
+  });
+  return _doctorProfilesRemoteLoadPromise;
 }
 window.loadDoctorProfilesFromFirebase = loadDoctorProfilesFromFirebase;
 
