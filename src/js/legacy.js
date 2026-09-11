@@ -7211,21 +7211,34 @@ function ensurePrescriptionWorkflowControls(dept, savedLayout) {
     root.insertBefore(workflow, root.firstChild);
 
     const chooser = document.createElement('div');
-    chooser.style.cssText = 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:7px 9px;border:1px solid var(--g4);border-radius:8px;background:#fff';
+    chooser.dataset.bmhRxLayoutChooser = key;
+    chooser.style.cssText = 'display:flex;align-items:center;justify-content:flex-end;gap:7px;min-width:0;padding:7px 9px;border:1px solid var(--g4);border-radius:8px;background:#fff';
     chooser.innerHTML = '<label style="font-size:10px;font-weight:900;text-transform:uppercase;color:var(--g1);white-space:nowrap">Print layout</label>'
-      + '<select data-bmh-rx-layout-select style="width:auto;min-width:190px;max-width:260px;padding:5px 8px;font-size:11px;border:1.5px solid var(--g4);border-radius:6px;background:#fff" onchange="setPrescriptionLayoutOverride(\'' + key + '\',this.value)">'
+      + '<select data-bmh-rx-layout-select style="width:100%;min-width:130px;max-width:210px;padding:5px 8px;font-size:11px;border:1.5px solid var(--g4);border-radius:6px;background:#fff" onchange="setPrescriptionLayoutOverride(\'' + key + '\',this.value)">'
       + '<option value="">Doctor default</option>'
       + BMH_RX_LAYOUT_OPTIONS.map(function (option) { return '<option value="' + option.key + '">' + option.label + '</option>'; }).join('')
       + '</select>';
-    workflow.appendChild(chooser);
-
     const quickInput = root.querySelector('#rx-quick-search');
     const quickWrap = directChildWithin(root, quickInput);
     const drugs = directChildWithin(root, root.querySelector('#rx-drugs'));
     const drugActions = drugs && drugs.nextElementSibling;
+    const historyActions = directChildWithin(root, root.querySelector('[onclick^="applyLastRx"]'));
     const followInput = getDeptFollowUpDateInput(key === 'ophtho' ? 'oe' : key);
     const followWrap = directChildWithin(root, followInput);
-    [quickWrap, drugs, drugActions, followWrap].forEach(function (node) {
+    const searchLayoutRow = document.createElement('div');
+    searchLayoutRow.dataset.bmhRxSearchLayoutRow = key;
+    searchLayoutRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;align-items:start';
+    if (quickWrap) {
+      quickWrap.style.marginBottom = '0';
+      quickWrap.style.minWidth = '0';
+      quickWrap.style.flex = '1 1 360px';
+      searchLayoutRow.appendChild(quickWrap);
+    }
+    chooser.style.flex = '0 1 270px';
+    searchLayoutRow.appendChild(chooser);
+    workflow.appendChild(searchLayoutRow);
+
+    [historyActions, drugs, drugActions, followWrap].forEach(function (node) {
       if (node && node !== workflow && !workflow.contains(node)) workflow.appendChild(node);
     });
 
@@ -39975,6 +39988,70 @@ window.printUnifiedRx = function(deptId) {
       return '<li><div class="bmh-old-med-heading">' + heading + '</div><div class="bmh-old-med-line">' + escapeHtmlConsent(plain || '—') + '</div></li>';
     }).join('') + '</ol>';
   };
+  const bmhClinicalSection = function (title, body) {
+    return body ? '<div class="bmh-clinical-section"><strong>' + escapeHtmlConsent(title) + '</strong><div>' + body + '</div></div>' : '';
+  };
+  const bmhComplaint = (deptId === 'oe' && incCC && cc) ? cc
+    : (deptId === 'obg' && obgIncComplaint && obgComplaint) ? obgComplaint
+    : (deptId === 'skin' && skinChief) ? skinChief
+    : '';
+  const bmhObgHistoryHtml = deptId === 'obg' && obgIncObsHistory
+    ? (obgPrescriptionPregnancySummary.historyLines.length
+      ? bmhClinicalSection('Obstetric History', obgPrescriptionPregnancySummary.historyLines.map(function (line) {
+          return '<div><b>' + escapeHtmlConsent(line.label) + ':</b> ' + escapeHtmlConsent(line.text) + '</div>';
+        }).join(''))
+      : (obgObsHistoryFindings.length ? bmhClinicalSection('Obstetric History', escapeHtmlConsent(obgObsHistoryFindings.join(' | '))) : ''))
+    : '';
+  const bmhObgPresentHtml = deptId === 'obg' && obgIncAnc && obgAncOn && obgPrescriptionPregnancySummary.presentLines.length
+    ? bmhClinicalSection('Present Pregnancy', obgPrescriptionPregnancySummary.presentLines.map(function (line) {
+        return '<div>' + escapeHtmlConsent(line) + '</div>';
+      }).join(''))
+    : '';
+  const bmhObgVitalLines = deptId === 'obg' && obgIncVitals
+    ? obgVitalsSummary.filter(function (row) { return row[1] && row[1] !== '—' && row[1] !== '/'; })
+    : [];
+  const bmhObgVitalsHtml = bmhObgVitalLines.length
+    ? bmhClinicalSection('ANC Vitals / LMP', bmhObgVitalLines.map(function (row) {
+        return '<span><b>' + escapeHtmlConsent(row[0]) + ':</b> ' + escapeHtmlConsent(row[1]) + '</span>';
+      }).join(' &nbsp; | &nbsp; '))
+    : '';
+  const bmhEyeVitalsHtml = deptId === 'oe' && showEyeVitals
+    ? bmhClinicalSection(showVA && showIOP ? 'Visual Acuity / IOP' : (showIOP ? 'IOP' : 'Visual Acuity'),
+        '<table class="bmh-clinical-table"><thead><tr><th>Eye</th>'
+        + (showVA ? '<th>UCDVA</th>' : '')
+        + (showIOP ? '<th>IOP (GAT)</th>' : '')
+        + (showIOP && (iopNctOD || iopNctOS) ? '<th>IOP (NCT)</th>' : '')
+        + (showCorrectedIOP ? '<th>Corrected IOP</th>' : '')
+        + (showVA ? '<th>DVA</th>' : '')
+        + (showNearVaColumn ? '<th>NVA</th>' : '') + '</tr></thead><tbody>'
+        + '<tr><td><b>OD</b></td>' + (showVA ? '<td>' + escapeHtmlConsent(vaOD || '—') + '</td>' : '') + (showIOP ? '<td>' + escapeHtmlConsent(iopGatOD ? iopGatOD + ' mmHg' : '—') + '</td>' : '') + (showIOP && (iopNctOD || iopNctOS) ? '<td>' + escapeHtmlConsent(iopNctOD ? iopNctOD + ' mmHg' : '—') + '</td>' : '') + (showCorrectedIOP ? '<td>' + escapeHtmlConsent(iopCorrOD || '—') + '</td>' : '') + (showVA ? '<td>' + escapeHtmlConsent(subjODva || '—') + '</td>' : '') + (showNearVaColumn ? '<td>' + escapeHtmlConsent(nvOD || '—') + '</td>' : '') + '</tr>'
+        + '<tr><td><b>OS</b></td>' + (showVA ? '<td>' + escapeHtmlConsent(vaOS || '—') + '</td>' : '') + (showIOP ? '<td>' + escapeHtmlConsent(iopGatOS ? iopGatOS + ' mmHg' : '—') + '</td>' : '') + (showIOP && (iopNctOD || iopNctOS) ? '<td>' + escapeHtmlConsent(iopNctOS ? iopNctOS + ' mmHg' : '—') + '</td>' : '') + (showCorrectedIOP ? '<td>' + escapeHtmlConsent(iopCorrOS || '—') + '</td>' : '') + (showVA ? '<td>' + escapeHtmlConsent(subjOSva || '—') + '</td>' : '') + (showNearVaColumn ? '<td>' + escapeHtmlConsent(nvOS || '—') + '</td>' : '') + '</tr></tbody></table>')
+    : '';
+  const bmhEyeGlassHtml = deptId === 'oe' && showGL
+    ? bmhClinicalSection('Glass Prescription', '<table class="bmh-clinical-table"><thead><tr><th>Eye</th><th>SPH</th><th>CYL</th><th>AXIS</th>' + (showNearAddColumn ? '<th>ADD</th>' : '') + '<th>DVA</th>' + (showNearVaColumn ? '<th>NVA</th>' : '') + '</tr></thead><tbody>'
+        + '<tr><td><b>OD</b></td><td>' + escapeHtmlConsent(rfODSph || '0') + '</td><td>' + escapeHtmlConsent(rfODCyl || '0') + '</td><td>' + escapeHtmlConsent(rfODAx || '0°') + '</td>' + (showNearAddColumn ? '<td>' + escapeHtmlConsent(addOD || '—') + '</td>' : '') + '<td>' + escapeHtmlConsent(subjODva || vaOD || '—') + '</td>' + (showNearVaColumn ? '<td>' + escapeHtmlConsent(nvOD || '—') + '</td>' : '') + '</tr>'
+        + '<tr><td><b>OS</b></td><td>' + escapeHtmlConsent(rfOSSph || '0') + '</td><td>' + escapeHtmlConsent(rfOSCyl || '0') + '</td><td>' + escapeHtmlConsent(rfOSAx || '0°') + '</td>' + (showNearAddColumn ? '<td>' + escapeHtmlConsent(addOS || '—') + '</td>' : '') + '<td>' + escapeHtmlConsent(subjOSva || vaOS || '—') + '</td>' + (showNearVaColumn ? '<td>' + escapeHtmlConsent(nvOS || '—') + '</td>' : '') + '</tr></tbody></table>' + (showIpdLine ? '<div class="bmh-clinical-note"><b>IPD:</b> ' + escapeHtmlConsent(ipdVal) + '</div>' : ''))
+    : '';
+  const bmhColourVisionHtml = deptId === 'oe' && showCV
+    ? bmhClinicalSection('Colour Vision', '<b>OD:</b> ' + escapeHtmlConsent(colorVision.od) + ' &nbsp; | &nbsp; <b>OS:</b> ' + escapeHtmlConsent(colorVision.os))
+    : '';
+  const bmhPositiveFindings = deptId === 'oe' && incPos && typeof buildOphthoPositiveFindingsList === 'function'
+    ? buildOphthoPositiveFindingsList()
+    : [];
+  const bmhPositiveFindingsHtml = bmhPositiveFindings.length
+    ? bmhClinicalSection('Positive Findings', bmhPositiveFindings.map(escapeHtmlConsent).join('; '))
+    : '';
+  const bmhApprovedPreRxHtml = (bmhComplaint ? bmhClinicalSection('Chief Complaints', escapeHtmlConsent(bmhComplaint)) : '')
+    + bmhObgHistoryHtml + bmhObgPresentHtml + bmhObgVitalsHtml
+    + bmhEyeVitalsHtml + bmhEyeGlassHtml + bmhColourVisionHtml + bmhPositiveFindingsHtml;
+  const bmhProcedureDoneHtml = procDonePrintLine
+    ? bmhClinicalSection('Procedure Done', escapeHtmlConsent(procDonePrintLine))
+    : '';
+  const bmhInvestigationsHtml = incInvFinal && patientInvestigationPrintRows.length
+    ? bmhClinicalSection('Investigations Ordered', patientInvestigationPrintRows.map(function (row, index) {
+        return '<div><b>' + (index + 1) + '.</b> ' + escapeHtmlConsent(row.name || 'Investigation') + (row.notes ? ' - ' + escapeHtmlConsent(row.notes) : '') + '</div>';
+      }).join(''))
+    : '';
   const bmhApprovedMeds = rxDesign === 'tabular_1' || rxDesign === 'tabular_2'
     ? '<table class="bmh-approved-table ' + (rxDesign === 'tabular_2' ? 'roomy' : 'compact') + '"><thead>' + bmhTableHeader() + '</thead><tbody>' + bmhTableRows() + '</tbody></table>'
     : bmhOldRows(rxDesign === 'old_software_compact');
@@ -39985,8 +40062,11 @@ window.printUnifiedRx = function(deptId) {
         <div class="bmh-approved-doctor"><div>${escapeHtmlConsent(doctorName)}</div>${doctorSpec ? `<span>${escapeHtmlConsent(doctorSpec)}</span>` : ''}${doctorDegrees ? `<span>${escapeHtmlConsent(doctorDegrees)}</span>` : ''}${doctorReg ? `<span>Regd. No.: ${escapeHtmlConsent(doctorReg)}</span>` : ''}</div>
       </div>
       ${dxList.length ? `<div class="bmh-approved-diagnosis"><strong>Diagnosis</strong><div>${bmhDiagnosisHtml}</div></div>` : ''}
+      ${bmhApprovedPreRxHtml}
       <div class="bmh-approved-rx-mark">Rx</div>
       ${bmhApprovedMeds}
+      ${bmhProcedureDoneHtml}
+      ${bmhInvestigationsHtml}
       ${fuFormatted ? `<div class="bmh-approved-follow"><strong>Follow-up:</strong> ${escapeHtmlConsent(fuFormatted)}</div>` : ''}
       ${incAdvFinal && adviceHtml ? `<div class="bmh-approved-advice"><strong>Instructions</strong><div>${adviceHtml}</div></div>` : ''}
       ${!psychPrescriptionPrintOnly && incPrcFinal && procs.length ? `<div class="bmh-approved-procedures"><strong>Procedure / Surgery Advised</strong><div>${procs.map(function (proc) { return escapeHtmlConsent(expandProcedureLabelForPrint(proc)); }).join('<br>')}</div></div>` : ''}
@@ -40016,6 +40096,7 @@ body > *:not(.lh-img){filter:grayscale(1)}
 .bmh-approved-doctor{text-align:right}.bmh-approved-doctor span{display:block;line-height:1.42}.bmh-approved-date{margin-top:4px}
 .bmh-approved-diagnosis{text-align:left;border-top:1px solid #000;border-bottom:1px solid #000;padding:5px 0;margin:5px 0 7px;font-size:11.5px}
 .bmh-approved-diagnosis>strong{display:inline-block;text-transform:uppercase;margin-right:18px}.bmh-old_software .bmh-approved-diagnosis,.bmh-old_software_compact .bmh-approved-diagnosis{text-align:center;border:0;padding:3px 50px 7px}.bmh-old_software .bmh-approved-diagnosis>strong,.bmh-old_software_compact .bmh-approved-diagnosis>strong{display:block;font-size:14px;margin:0 0 2px}
+.bmh-clinical-section{border-top:1px solid #000;padding:5px 0;margin:4px 0;font-size:10.5px;line-height:1.4;break-inside:avoid}.bmh-clinical-section>strong{display:block;text-transform:uppercase;font-size:10.5px;margin-bottom:3px}.bmh-clinical-section>div>div{margin:1px 0}.bmh-clinical-table{width:100%;border-collapse:collapse;table-layout:auto;margin:3px 0 0;font-size:9.5px}.bmh-clinical-table th,.bmh-clinical-table td{border:1px solid #000;padding:3px 5px;text-align:center}.bmh-clinical-table th{font-weight:900}.bmh-clinical-note{margin-top:3px;text-align:right}
 .bmh-approved-rx-mark{font-family:Georgia,'Times New Roman',serif;font-size:27px;line-height:1;margin:4px 0 5px}
 .bmh-old-rx-list{padding-left:25px;margin:0}.bmh-old-rx-list li{padding:0 0 8px 3px;break-inside:avoid}.bmh-old-rx-list.compact li{padding-bottom:7px}
 .bmh-old-med-heading{font-size:11.5px;line-height:1.35}.bmh-old-med-heading strong{font-size:16px}.bmh-old-med-heading span{font-size:10.5px;font-weight:400}
