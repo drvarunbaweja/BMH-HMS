@@ -40027,6 +40027,22 @@ window.printUnifiedRx = function(deptId) {
   const bmhDiagnosisHtml = dxList.length
     ? dxList.map(function (line, index) { return '<div>' + (index + 1) + '. ' + escapeHtmlConsent(line) + '</div>'; }).join('')
     : '';
+  const bmhTaperRowsForDrug = function (drug) {
+    return Array.isArray(drug.taperRows) ? drug.taperRows : (drug.taperRow ? [drug.taperRow] : []);
+  };
+  const bmhTaperData = function (drug, taper) {
+    return Object.assign({}, drug, taper || {}, {
+      eye: taper?.eye || drug.eye,
+      mealTiming: taper?.mealTiming || drug.mealTiming || '',
+      activeTimes: taper?.activeTimes || taper?.times || [],
+      taperRows: []
+    });
+  };
+  const bmhTaperInstruction = function (drug, taper) {
+    let line = buildRxPlainInstructionLine(bmhTaperData(drug, taper), rxPlainLang, fmtIN) || '';
+    if (rxPlainLang === 'en' && rxPlainIsEyeDrop(drug)) line = line.replace(/\bone drop\b/i, 'one eyedrop');
+    return line;
+  };
   const bmhTableHeader = function () {
     return '<tr><th class="bmh-rx-no">Rx</th><th>Medicine</th>' + (deptId === 'oe' ? '<th class="bmh-rx-eye">Eye</th>' : '') + '<th class="bmh-rx-frequency">Frequency</th><th class="bmh-rx-duration">Duration</th><th>Instructions</th></tr>';
   };
@@ -40037,12 +40053,23 @@ window.printUnifiedRx = function(deptId) {
       const plain = bmhPlainInstruction(drug);
       const start = fmtIN(drug.dateFrom);
       const end = fmtIN(drug.dateTo);
-      return '<tr><td class="bmh-rx-no">' + (index + 1) + '</td>'
+      const medicineRow = '<tr><td class="bmh-rx-no">' + (index + 1) + '</td>'
         + '<td class="bmh-rx-med"><strong>' + escapeHtmlConsent(trade) + '</strong><span>' + escapeHtmlConsent(bmhMedicineFormLabel(drug.drugType || drug.type)) + '</span>' + (generic ? '<small>' + escapeHtmlConsent(generic) + '</small>' : '') + '</td>'
         + (deptId === 'oe' ? '<td class="bmh-rx-eye">' + escapeHtmlConsent(getRxSiteLabel(drug) || '—') + '</td>' : '')
         + '<td class="bmh-rx-frequency">' + escapeHtmlConsent(drug.freq || '—') + '</td>'
         + '<td class="bmh-rx-duration"><strong>' + escapeHtmlConsent(drug.dur || '—') + '</strong><small>Start: ' + escapeHtmlConsent(start || '—') + '<br>End: ' + escapeHtmlConsent(end || '—') + '</small></td>'
         + '<td>' + escapeHtmlConsent(plain || '—') + '</td></tr>';
+      const taperRows = bmhTaperRowsForDrug(drug).map(function (taper, taperIndex) {
+        const taperData = bmhTaperData(drug, taper);
+        const taperStart = fmtIN(taperData.dateFrom);
+        const taperEnd = fmtIN(taperData.dateTo);
+        return '<tr class="bmh-taper-row"><td class="bmh-rx-no"></td><td class="bmh-rx-med"></td>'
+          + (deptId === 'oe' ? '<td class="bmh-rx-eye">' + escapeHtmlConsent(getRxSiteLabel(taperData) || '—') + '</td>' : '')
+          + '<td class="bmh-rx-frequency"><small>Taper ' + (taperIndex + 1) + '</small>' + escapeHtmlConsent(taperData.freq || '—') + '</td>'
+          + '<td class="bmh-rx-duration"><strong>' + escapeHtmlConsent(taperData.dur || '—') + '</strong><small>Start: ' + escapeHtmlConsent(taperStart || '—') + '<br>End: ' + escapeHtmlConsent(taperEnd || '—') + '</small></td>'
+          + '<td>' + escapeHtmlConsent(bmhTaperInstruction(drug, taper) || '—') + '</td></tr>';
+      }).join('');
+      return medicineRow + taperRows;
     }).join('');
   };
   const bmhOldRows = function (compact) {
@@ -40051,7 +40078,10 @@ window.printUnifiedRx = function(deptId) {
       const generic = rxDrugGenericName(drug) || '';
       const plain = bmhPlainInstruction(drug);
       const heading = '<strong>' + escapeHtmlConsent(trade) + '</strong> (' + escapeHtmlConsent(bmhMedicineFormLabel(drug.drugType || drug.type)) + ')' + (generic ? ' - <span>' + escapeHtmlConsent(generic) + '</span>' : '');
-      return '<li><div class="bmh-old-med-heading">' + heading + '</div><div class="bmh-old-med-line">' + escapeHtmlConsent(plain || '—') + '</div></li>';
+      const taperLines = bmhTaperRowsForDrug(drug).map(function (taper, taperIndex) {
+        return '<div class="bmh-old-taper-line"><strong>Taper ' + (taperIndex + 1) + ':</strong> ' + escapeHtmlConsent(bmhTaperInstruction(drug, taper) || '—') + '</div>';
+      }).join('');
+      return '<li><div class="bmh-old-med-heading">' + heading + '</div><div class="bmh-old-med-line">' + escapeHtmlConsent(plain || '—') + '</div>' + taperLines + '</li>';
     }).join('') + '</ol>';
   };
   const bmhClinicalSection = function (title, body) {
@@ -40154,8 +40184,8 @@ body{zoom:.94}
 .watermark{display:none!important}
 }
 body > *:not(.lh-img){filter:grayscale(1)}
-.lh-img{width:100%;max-width:100%;height:auto;display:block;margin-bottom:6px;filter:none!important}
-.bmh-approved-layout{color:#000;font-family:Arial,Helvetica,sans-serif;font-size:10.5px;line-height:1.35}
+.lh-img{width:100%;max-width:100%;height:auto;display:block;margin-bottom:0;filter:none!important}
+.bmh-approved-layout{color:#000;font-family:Arial,Helvetica,sans-serif;font-size:10.5px;line-height:1.35;margin-top:0}
 .bmh-approved-layout *{color:#000!important;background:#fff!important;border-color:#000!important;box-shadow:none!important}
 .bmh-approved-identity{display:grid;grid-template-columns:1fr minmax(190px,.7fr);gap:28px;border-bottom:1.5px solid #000;padding:2px 0 8px;margin-bottom:9px}
 .bmh-approved-patient,.bmh-approved-doctor>div{font-size:17px;font-weight:900;margin-bottom:2px}
@@ -40167,9 +40197,11 @@ body > *:not(.lh-img){filter:grayscale(1)}
 .bmh-old-rx-list{padding-left:25px;margin:0}.bmh-old-rx-list li{padding:0 0 8px 3px;break-inside:avoid}.bmh-old-rx-list.compact li{padding-bottom:7px}
 .bmh-old-med-heading{font-size:11.5px;line-height:1.35}.bmh-old-med-heading strong{font-size:16px}.bmh-old-med-heading span{font-size:10.5px;font-weight:400}
 .bmh-old-med-line{font-size:11.7px;line-height:1.45;margin:3px 0 0 22px}
+.bmh-old-taper-line{font-size:10.8px;line-height:1.42;margin:2px 0 0 34px}.bmh-old-taper-line strong{font-weight:900}
 .bmh-approved-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:9.5px;margin:0}.bmh-approved-table th,.bmh-approved-table td{border:1px solid #000;padding:5px;vertical-align:top;text-align:left}.bmh-approved-table th{text-align:center;font-weight:900;text-transform:none}.bmh-approved-table.roomy td{padding:7px 6px;height:58px}
 .bmh-approved-table .bmh-rx-no{width:25px;text-align:center;vertical-align:middle}.bmh-approved-table .bmh-rx-eye{width:74px;text-align:center}.bmh-approved-table .bmh-rx-frequency{width:105px;text-align:center}.bmh-approved-table .bmh-rx-duration{width:92px;text-align:center}
 .bmh-rx-med strong{display:block;font-size:14px;line-height:1.2}.bmh-rx-med>span{display:block;font-size:9px;font-weight:900}.bmh-rx-med small{display:block;font-size:9px;line-height:1.25}.bmh-rx-duration small{display:block;border-top:1px solid #000;margin-top:4px;padding-top:3px;font-size:8.5px}
+.bmh-taper-row td{border-top:1.5px solid #000}.bmh-taper-row .bmh-rx-frequency small{display:block;font-size:8px;font-weight:900;text-transform:uppercase;margin-bottom:3px}
 .bmh-approved-follow{font-size:12px;border-top:1px solid #000;border-bottom:1px solid #000;padding:6px 0;margin-top:9px}
 .bmh-approved-advice,.bmh-approved-procedures{border:1.5px solid #000;padding:7px 9px;margin-top:8px;font-size:11px;break-inside:avoid}.bmh-approved-advice>strong,.bmh-approved-procedures>strong{display:block;text-transform:uppercase;font-size:11px;margin-bottom:4px}.bmh-approved-advice>div{font-weight:800;font-size:12px;line-height:1.5}
 .rx-approved-layout .legacy-rx-body{display:none}
