@@ -2333,7 +2333,7 @@
           New BMSH ID (same phone as spouse / family — use next sequential BMSH number)
         </label>
         <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
-          <button class="btn btn-gold" style="flex:1;justify-content:center" onclick="registerPatient()">✅ Register &amp; Generate Token</button>
+          <button type="button" id="rc-register-btn" class="btn btn-gold" style="flex:1;justify-content:center" onclick="registerPatient()">✅ Register &amp; Generate Token</button>
           <button type="button" class="btn btn-blue btn-sm" style="justify-content:center" onclick="updateExistingPatientFromReceptionForm((document.getElementById('rc-uid')||{}).textContent||'')">💾 Update patient</button>
           <button class="btn btn-gray btn-sm" onclick="showToast('Token printed ✓','s')">🖨️ Token</button>
           <button class="btn btn-outline btn-sm" onclick="openM('m-rec-bill')">🧾 Bill</button>
@@ -6768,7 +6768,7 @@
 <div id="dx-dropdown" style="display:none;z-index:100000;background:#fff;border:2px solid var(--blue);border-radius:var(--rsm);max-height:280px;overflow-y:auto;box-shadow:var(--sh-md)"></div>
 
 <!-- ═══ MAIN APP SCRIPT (legacy — being migrated to modules) ═══ -->
-<script defer src="/BMH-HMS/js/legacy.js?v=20260911-billing-ipd-reset-v11"></script>
+<script defer src="/BMH-HMS/js/legacy.js?v=20260911-reception-dedupe-v12"></script>
 
 <!-- ═══ QR DECODER BRIDGE ═══ -->
 
