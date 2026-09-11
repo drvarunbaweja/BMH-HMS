@@ -6404,10 +6404,10 @@
   <div class="form-group"><label class="fl">BMSH ID</label><input type="text" id="ot-bmsh-id" readonly style="background:var(--green-lt);color:#1a8c3c;font-weight:800;font-family:var(--mono)"></div>
   <div class="form-group"><label class="fl">Age / Sex</label><input type="text" id="ot-age-sex" readonly style="background:var(--g6)"></div>
   <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">Pre-op Diagnosis <span style="display:flex;align-items:center;gap:6px"><button type="button" onclick="showToast('Type to search saved OT diagnoses. Use + to add a reusable diagnosis for future cases.','i')" style="background:var(--g6);color:var(--blue);border:1px solid var(--g4);border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">?</button><button type="button" onclick="addOTDiagnosisOption()" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></span></label><input type="text" id="ot-add-dx" list="ot-dx-list" placeholder="Type diagnosis to search or add"><datalist id="ot-dx-list"></datalist></div>
-  <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between;gap:8px">Procedure / Surgery <button type="button" class="btn btn-xs btn-outline" onclick="otQuickAddProcedureToCharges()">+ Add to charges</button></label>
+  <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between;gap:8px">Procedure / Surgery (Settings catalogue) <button type="button" class="btn btn-xs btn-outline" onclick="otQuickAddProcedureToCharges()">+ Add to charges</button></label>
     <select id="ot-add-proc-main" onchange="onOTProcedureMainChange(this.value)"><option value="">— Select main heading —</option></select>
   </div>
-  <div class="form-group"><label class="fl" style="display:flex;align-items:center;justify-content:space-between">Final procedure label <button type="button" onclick="addOTProcedureOption()" style="background:var(--blue);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1">+</button></label>
+  <div class="form-group"><label class="fl">Final procedure label</label>
     <input type="text" id="ot-add-proc" list="ot-proc-list" placeholder="Type procedure to search or add" readonly onfocus="this.removeAttribute('readonly');populateOTProcedureOptions(this.value||'');" oninput="onOTProcedureInputChange(this.value)" onchange="onOTProcedureInputChange(this.value)"><datalist id="ot-proc-list"></datalist>
   </div>
   <div class="form-group" id="ot-add-proc-sub-wrap" style="display:none"><label class="fl">Procedure subheading / package</label>
@@ -6768,7 +6768,7 @@
 <div id="dx-dropdown" style="display:none;z-index:100000;background:#fff;border:2px solid var(--blue);border-radius:var(--rsm);max-height:280px;overflow-y:auto;box-shadow:var(--sh-md)"></div>
 
 <!-- ═══ MAIN APP SCRIPT (legacy — being migrated to modules) ═══ -->
-<script defer src="/BMH-HMS/js/legacy.js?v=20260911-reception-scope-v14"></script>
+<script defer src="/BMH-HMS/js/legacy.js?v=20260911-ot-persistence-v15"></script>
 
 <!-- ═══ QR DECODER BRIDGE ═══ -->
 
