@@ -30936,13 +30936,31 @@ function defaultTreatingDoctorForDept(dept) {
   if (key === 'skin') return 'Dr. Pooja Baweja';
   return 'Dr. Varun Baweja';
 }
+function doctorMatchesPrintDepartment(doctorName, dept) {
+  const name = String(doctorName || '').split('·')[0].trim();
+  const targetDept = normalizeDeptKeyForQueue(dept || '');
+  if (!name || !targetDept || !isPrintableDoctorName(name)) return false;
+  if (doctorNameMatchesCurrentUser(name)) {
+    const userDept = normalizeDeptKeyForQueue(CURRENT_USER?.dept || '');
+    if (userDept) return userDept === targetDept;
+  }
+  const profile = typeof findDoctorProfileByRxName === 'function' ? findDoctorProfileByRxName(name) : null;
+  const profileDept = normalizeDeptKeyForQueue(profile?.dept || '');
+  return !!profileDept && profileDept === targetDept;
+}
 function resolveTreatingDoctorForPrint(dept, candidates) {
-  const values = [].concat(candidates || [], [
+  const currentDoctor = /^doctor$/i.test(String(CURRENT_USER?.role || '')) || CURRENT_USER?.isAdmin
+    ? CURRENT_USER?.name
+    : '';
+  const values = [].concat([
+    currentDoctor
+  ], candidates || [], [
     window.CURRENT_PATIENT?.assignedDoctor,
-    window.CURRENT_PATIENT?.doctor,
-    /^doctor$/i.test(String(CURRENT_USER?.role || '')) || CURRENT_USER?.isAdmin ? CURRENT_USER?.name : ''
+    window.CURRENT_PATIENT?.doctor
   ]).filter(Boolean);
-  const found = values.find(isPrintableDoctorName);
+  const found = values.find(function (name) {
+    return doctorMatchesPrintDepartment(name, dept);
+  });
   return String(found || defaultTreatingDoctorForDept(dept)).split('·')[0].trim();
 }
 function treatingDoctorWithCredentialsForPrint(dept, candidates) {
