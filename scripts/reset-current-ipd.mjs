@@ -52,17 +52,21 @@ async function rollbackFromFile(path) {
   try {
     const db = getDatabase(app)
     await applyInBatches(db, entries)
-    const restoredAdmissions = Object.entries(await fetchPath('ipdPatients')).filter(([, row]) => isActiveIpdAdmission(row))
-    const latestByPatient = new Map()
-    restoredAdmissions.forEach(([id, row]) => {
-      const key = String(row?.bmhId || id)
-      const existing = latestByPatient.get(key)
-      const currentTime = Date.parse(row?.admittedAt || row?.admittedDate || '') || 0
-      const existingTime = Date.parse(existing?.[1]?.admittedAt || existing?.[1]?.admittedDate || '') || 0
-      if (!existing || currentTime >= existingTime) latestByPatient.set(key, [id, row])
-    })
     await set(ref(db, 'activeIpdPatients'), null)
-    await applyInBatches(db, Array.from(latestByPatient.values()).map(([id, row]) => [`activeIpdPatients/${id}`, row]))
+    if (saved.activeIpdPatients && Object.keys(saved.activeIpdPatients).length) {
+      await set(ref(db, 'activeIpdPatients'), saved.activeIpdPatients)
+    } else {
+      const restoredAdmissions = Object.entries(await fetchPath('ipdPatients')).filter(([, row]) => isActiveIpdAdmission(row))
+      const latestByPatient = new Map()
+      restoredAdmissions.forEach(([id, row]) => {
+        const key = String(row?.bmhId || id)
+        const existing = latestByPatient.get(key)
+        const currentTime = Date.parse(row?.admittedAt || row?.admittedDate || '') || 0
+        const existingTime = Date.parse(existing?.[1]?.admittedAt || existing?.[1]?.admittedDate || '') || 0
+        if (!existing || currentTime >= existingTime) latestByPatient.set(key, [id, row])
+      })
+      await applyInBatches(db, Array.from(latestByPatient.values()).map(([id, row]) => [`activeIpdPatients/${id}`, row]))
+    }
     console.log(`Rollback complete using ${path}`)
   } finally {
     await deleteApp(app)
@@ -70,8 +74,9 @@ async function rollbackFromFile(path) {
 }
 
 async function buildReset() {
-  const [ipdPatients, patients, otCases] = await Promise.all([
+  const [ipdPatients, activeIpdPatients, patients, otCases] = await Promise.all([
     fetchPath('ipdPatients'),
+    fetchPath('activeIpdPatients'),
     fetchPath('patients'),
     fetchPath('otCases')
   ])
@@ -111,11 +116,13 @@ async function buildReset() {
   return {
     changedAt,
     activeAdmissions: activeAdmissions.length,
+    liveAdmissions: Object.keys(activeIpdPatients).length,
     distinctPatients: activeBmhIds.size,
     patientRecords: patientRows.length,
     activeOtCases: activeOtCases.length,
     changes,
-    rollback
+    rollback,
+    activeIpdPatients
   }
 }
 
@@ -130,6 +137,7 @@ async function main() {
   const plan = await buildReset()
   console.log(JSON.stringify({
     activeAdmissions: plan.activeAdmissions,
+    liveAdmissions: plan.liveAdmissions,
     distinctPatients: plan.distinctPatients,
     patientRecords: plan.patientRecords,
     activeOtCases: plan.activeOtCases,
@@ -144,19 +152,27 @@ async function main() {
   writeFileSync(backupPath, JSON.stringify({
     createdAt: plan.changedAt,
     resetBy,
-    rollback: plan.rollback
+    rollback: plan.rollback,
+    activeIpdPatients: plan.activeIpdPatients
   }))
   console.log(`Rollback data written before update: ${backupPath}`)
 
   const app = initializeApp(FIREBASE_CONFIG, `bmh-ipd-reset-${Date.now()}`)
   try {
-    await applyInBatches(getDatabase(app), Object.entries(plan.changes))
+    const db = getDatabase(app)
+    await applyInBatches(db, Object.entries(plan.changes))
+    await set(ref(db, 'activeIpdPatients'), null)
   } finally {
     await deleteApp(app)
   }
 
-  const remaining = Object.values(await fetchPath('ipdPatients')).filter(isActiveIpdAdmission).length
-  if (remaining) throw new Error(`Reset incomplete: ${remaining} active IPD admission records remain`)
+  const [remainingHistory, remainingLive] = await Promise.all([
+    fetchPath('ipdPatients'),
+    fetchPath('activeIpdPatients')
+  ])
+  const remaining = Object.values(remainingHistory).filter(isActiveIpdAdmission).length
+  const liveRemaining = Object.keys(remainingLive).length
+  if (remaining || liveRemaining) throw new Error(`Reset incomplete: ${remaining} historical and ${liveRemaining} live IPD records remain`)
   console.log(`Verified: 0 active IPD admissions remain. Rollback: node scripts/reset-current-ipd.mjs --rollback ${backupPath}`)
 }
 
